@@ -690,6 +690,10 @@ struct huge_bootmem_page {
 };
 
 int isolate_or_dissolve_huge_page(struct page *page, struct list_head *list);
+struct folio *hugetlb_alloc_folio(struct hstate *h, struct mempolicy *mpol,
+				  int nid, nodemask_t *nodemask,
+				  bool charge_cgroup_reservation,
+				  bool use_hstate_resv);
 struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 				unsigned long addr, int avoid_reserve);
 struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
@@ -1025,6 +1029,14 @@ static inline int isolate_or_dissolve_huge_page(struct page *page,
 						struct list_head *list)
 {
 	return -ENOMEM;
+}
+
+static inline struct folio *
+hugetlb_alloc_folio(struct hstate *h, struct mempolicy *mpol, int nid,
+		    nodemask_t *nodemask, bool charge_cgroup_reservation,
+		    bool use_hstate_resv)
+{
+	return NULL;
 }
 
 static inline struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,

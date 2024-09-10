@@ -3106,6 +3106,75 @@ int isolate_or_dissolve_huge_page(struct page *page, struct list_head *list)
 	return ret;
 }
 
+/**
+ * Allocates a hugetlb folio either by dequeueing or from buddy allocator.
+ */
+struct folio *hugetlb_alloc_folio(struct hstate *h, struct mempolicy *mpol,
+				  int nid, nodemask_t *nodemask,
+				  bool charge_cgroup_reservation,
+				  bool use_hstate_resv)
+{
+	struct hugetlb_cgroup *h_cg = NULL;
+	struct folio *folio;
+	int ret;
+	int idx;
+
+	idx = hstate_index(h);
+
+	if (charge_cgroup_reservation) {
+		ret = hugetlb_cgroup_charge_cgroup_rsvd(
+			idx, pages_per_huge_page(h), &h_cg);
+		if (ret)
+			return NULL;
+	}
+
+	ret = hugetlb_cgroup_charge_cgroup(idx, pages_per_huge_page(h), &h_cg);
+	if (ret)
+		goto err_uncharge_cgroup_reservation;
+
+	spin_lock_irq(&hugetlb_lock);
+
+	folio = dequeue_hugetlb_folio(h, mpol, nid, nodemask, use_hstate_resv);
+	if (!folio) {
+		spin_unlock_irq(&hugetlb_lock);
+
+		folio = alloc_buddy_hugetlb_folio_from_node(h, mpol, nid, nodemask);
+		if (!folio)
+			goto err_uncharge_cgroup;
+
+		spin_lock_irq(&hugetlb_lock);
+		if (use_hstate_resv) {
+			folio_set_hugetlb_restore_reserve(folio);
+			h->resv_huge_pages--;
+		}
+		list_add(&folio->lru, &h->hugepage_activelist);
+		folio_ref_unfreeze(folio, 1);
+		/* Fall through */
+	}
+
+	hugetlb_cgroup_commit_charge(idx, pages_per_huge_page(h), h_cg, folio);
+
+	if (charge_cgroup_reservation) {
+		hugetlb_cgroup_commit_charge_rsvd(idx, pages_per_huge_page(h),
+						  h_cg, folio);
+	}
+
+	spin_unlock_irq(&hugetlb_lock);
+
+	return folio;
+
+err_uncharge_cgroup:
+	hugetlb_cgroup_uncharge_cgroup(idx, pages_per_huge_page(h), h_cg);
+
+err_uncharge_cgroup_reservation:
+	if (charge_cgroup_reservation) {
+		hugetlb_cgroup_uncharge_cgroup_rsvd(idx, pages_per_huge_page(h),
+						    h_cg);
+	}
+
+	return NULL;
+}
+
 struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 				    unsigned long addr, int avoid_reserve)
 {
@@ -3114,11 +3183,10 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 	struct folio *folio;
 	long map_chg, map_commit, nr_pages = pages_per_huge_page(h);
 	long gbl_chg;
-	int memcg_charge_ret, ret, idx;
-	struct hugetlb_cgroup *h_cg = NULL;
+	int memcg_charge_ret;
 	struct mem_cgroup *memcg;
-	bool deferred_reserve;
-	gfp_t gfp = htlb_alloc_mask(h) | __GFP_RETRY_MAYFAIL;
+	bool charge_cgroup_reservation;
+	gfp_t gfp = htlb_alloc_mask(h);
 	bool use_hstate_resv;
 	struct mempolicy *mpol;
 	nodemask_t *nodemask;
@@ -3126,13 +3194,14 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 	int nid;
 
 	memcg = get_mem_cgroup_from_current();
-	memcg_charge_ret = mem_cgroup_hugetlb_try_charge(memcg, gfp, nr_pages);
+	memcg_charge_ret =
+		mem_cgroup_hugetlb_try_charge(memcg, gfp | __GFP_RETRY_MAYFAIL,
+					      nr_pages);
 	if (memcg_charge_ret == -ENOMEM) {
 		mem_cgroup_put(memcg);
 		return ERR_PTR(-ENOMEM);
 	}
 
-	idx = hstate_index(h);
 	/*
 	 * Examine the region/reserve map to determine if the process
 	 * has a reservation for the page to be allocated.  A return
@@ -3160,57 +3229,22 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 
 	}
 
-	/* If this allocation is not consuming a reservation, charge it now.
-	 */
-	deferred_reserve = map_chg || avoid_reserve;
-	if (deferred_reserve) {
-		ret = hugetlb_cgroup_charge_cgroup_rsvd(
-			idx, pages_per_huge_page(h), &h_cg);
-		if (ret)
-			goto out_subpool_put;
-	}
-
-	ret = hugetlb_cgroup_charge_cgroup(idx, pages_per_huge_page(h), &h_cg);
-	if (ret)
-		goto out_uncharge_cgroup_reservation;
-
 	use_hstate_resv = should_use_hstate_resv(vma, gbl_chg, avoid_reserve);
 
-	spin_lock_irq(&hugetlb_lock);
+	/*
+	 * charge_cgroup_reservation if this allocation is not consuming a
+	 * reservation
+	 */
+	charge_cgroup_reservation = map_chg || avoid_reserve;
 
 	mpol = get_vma_policy(vma, addr, hstate_vma(vma)->order, &ilx);
-	nid = policy_node_nodemask(mpol, htlb_alloc_mask(h), ilx, &nodemask);
-	folio = dequeue_hugetlb_folio(h, mpol, nid, nodemask, use_hstate_resv);
-	if (!folio) {
-		spin_unlock_irq(&hugetlb_lock);
-
-		folio = alloc_buddy_hugetlb_folio_from_node(h, mpol, nid, nodemask);
-		if (!folio) {
-			mpol_cond_put(mpol);
-			goto out_uncharge_cgroup;
-		}
-
-		spin_lock_irq(&hugetlb_lock);
-		if (use_hstate_resv) {
-			folio_set_hugetlb_restore_reserve(folio);
-			h->resv_huge_pages--;
-		}
-		list_add(&folio->lru, &h->hugepage_activelist);
-		folio_ref_unfreeze(folio, 1);
-		/* Fall through */
-	}
+	nid = policy_node_nodemask(mpol, gfp, ilx, &nodemask);
+	folio = hugetlb_alloc_folio(h, mpol, nid, nodemask,
+				    charge_cgroup_reservation, use_hstate_resv);
 	mpol_cond_put(mpol);
 
-	hugetlb_cgroup_commit_charge(idx, pages_per_huge_page(h), h_cg, folio);
-	/* If allocation is not consuming a reservation, also store the
-	 * hugetlb_cgroup pointer on the page.
-	 */
-	if (deferred_reserve) {
-		hugetlb_cgroup_commit_charge_rsvd(idx, pages_per_huge_page(h),
-						  h_cg, folio);
-	}
-
-	spin_unlock_irq(&hugetlb_lock);
+	if (!folio)
+		goto out_subpool_put;
 
 	hugetlb_set_folio_subpool(folio, spool);
 
@@ -3229,7 +3263,7 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 
 		rsv_adjust = hugepage_subpool_put_pages(spool, 1);
 		hugetlb_acct_memory(h, -rsv_adjust);
-		if (deferred_reserve) {
+		if (charge_cgroup_reservation) {
 			spin_lock_irq(&hugetlb_lock);
 			hugetlb_cgroup_uncharge_folio_rsvd(hstate_index(h),
 					pages_per_huge_page(h), folio);
@@ -3243,12 +3277,6 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 
 	return folio;
 
-out_uncharge_cgroup:
-	hugetlb_cgroup_uncharge_cgroup(idx, pages_per_huge_page(h), h_cg);
-out_uncharge_cgroup_reservation:
-	if (deferred_reserve)
-		hugetlb_cgroup_uncharge_cgroup_rsvd(idx, pages_per_huge_page(h),
-						    h_cg);
 out_subpool_put:
 	if (map_chg || avoid_reserve)
 		hugepage_subpool_put_pages(spool, 1);
