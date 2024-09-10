@@ -284,6 +284,20 @@ bool is_hugetlb_entry_migration(pte_t pte);
 bool is_hugetlb_entry_hwpoisoned(pte_t pte);
 void hugetlb_unshare_all_pmds(struct vm_area_struct *vma);
 
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+int hugetlb_vmemmap_restore_folio(const struct hstate *h, struct folio *folio);
+void hugetlb_vmemmap_optimize_folio(const struct hstate *h, struct folio *folio);
+#else
+static inline int hugetlb_vmemmap_restore_folio(const struct hstate *h, struct folio *folio)
+{
+	return 0;
+}
+
+static inline void hugetlb_vmemmap_optimize_folio(const struct hstate *h, struct folio *folio)
+{
+}
+#endif
+
 #else /* !CONFIG_HUGETLB_PAGE */
 
 static inline void hugetlb_dup_vma_private(struct vm_area_struct *vma)
