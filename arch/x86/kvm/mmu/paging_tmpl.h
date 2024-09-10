@@ -84,7 +84,7 @@ struct guest_walker {
 	pt_element_t ptes[PT_MAX_FULL_LEVELS];
 	pt_element_t prefetch_ptes[PTE_PREFETCH_NUM];
 	gpa_t pte_gpa[PT_MAX_FULL_LEVELS];
-	pt_element_t __user *ptep_user[PT_MAX_FULL_LEVELS];
+	struct gfn_to_pfn_cache ptep_caches[PT_MAX_FULL_LEVELS];
 	bool pte_writable[PT_MAX_FULL_LEVELS];
 	unsigned int pt_access[PT_MAX_FULL_LEVELS];
 	unsigned int pte_access;
@@ -201,7 +201,7 @@ static int FNAME(update_accessed_dirty_bits)(struct kvm_vcpu *vcpu,
 {
 	unsigned level, index;
 	pt_element_t pte, orig_pte;
-	pt_element_t __user *ptep_user;
+	struct gfn_to_pfn_cache *pte_cache;
 	gfn_t table_gfn;
 	int ret;
 
@@ -210,10 +210,12 @@ static int FNAME(update_accessed_dirty_bits)(struct kvm_vcpu *vcpu,
 		return 0;
 
 	for (level = walker->max_level; level >= walker->level; --level) {
+		unsigned long flags;
+
 		pte = orig_pte = walker->ptes[level - 1];
 		table_gfn = walker->table_gfn[level - 1];
-		ptep_user = walker->ptep_user[level - 1];
-		index = offset_in_page(ptep_user) / sizeof(pt_element_t);
+		pte_cache = &walker->ptep_caches[level - 1];
+		index = offset_in_page(pte_cache->khva) / sizeof(pt_element_t);
 		if (!(pte & PT_GUEST_ACCESSED_MASK)) {
 			trace_kvm_mmu_set_accessed_bit(table_gfn, index, sizeof(pte));
 			pte |= PT_GUEST_ACCESSED_MASK;
@@ -246,11 +248,26 @@ static int FNAME(update_accessed_dirty_bits)(struct kvm_vcpu *vcpu,
 		if (unlikely(!walker->pte_writable[level - 1]))
 			continue;
 
-		ret = __try_cmpxchg_user(ptep_user, &orig_pte, pte, fault);
+		read_lock_irqsave(&pte_cache->lock, flags);
+		if (!kvm_gpc_check(pte_cache, sizeof(pte))) {
+			read_unlock_irqrestore(&pte_cache->lock, flags);
+			/*
+			 * If the gpc got invalidated, then the page table
+			 * it contained probably changed, so we probably need
+			 * to redo the entire walk.
+			 */
+			return 1;
+		}
+		ret = __try_cmpxchg((pt_element_t *)pte_cache->khva, &orig_pte, pte, sizeof(pte));
+
+		if (!ret)
+			kvm_gpc_mark_dirty_in_slot(pte_cache);
+
+		read_unlock_irqrestore(&pte_cache->lock, flags);
+
 		if (ret)
 			return ret;
 
-		kvm_vcpu_mark_page_dirty(vcpu, table_gfn);
 		walker->ptes[level - 1] = pte;
 	}
 	return 0;
@@ -296,6 +313,13 @@ static inline bool FNAME(is_last_gpte)(struct kvm_mmu *mmu,
 
 	return gpte & PT_PAGE_SIZE_MASK;
 }
+
+static void FNAME(walk_deactivate_gpcs)(struct guest_walker *walker) {
+	for (unsigned int level = 0; level < PT_MAX_FULL_LEVELS; ++level)
+		if (walker->ptep_caches[level].active)
+			kvm_gpc_deactivate(&walker->ptep_caches[level]);
+}
+
 /*
  * Fetch a guest pte for a guest virtual address, or for an L2's GPA.
  */
@@ -305,7 +329,6 @@ static int FNAME(walk_addr_generic)(struct guest_walker *walker,
 {
 	int ret;
 	pt_element_t pte;
-	pt_element_t __user *ptep_user;
 	gfn_t table_gfn;
 	u64 pt_access, pte_access;
 	unsigned index, accessed_dirty, pte_pkey;
@@ -320,8 +343,17 @@ static int FNAME(walk_addr_generic)(struct guest_walker *walker,
 	u16 errcode = 0;
 	gpa_t real_gpa;
 	gfn_t gfn;
+	struct gfn_to_pfn_cache *pte_cache;
 
 	trace_kvm_mmu_pagetable_walk(addr, access);
+
+	for (unsigned int level = 0; level < PT_MAX_FULL_LEVELS; ++level) {
+		pte_cache = &walker->ptep_caches[level];
+
+		memset(pte_cache, 0, sizeof(*pte_cache));
+		kvm_gpc_init(pte_cache, vcpu->kvm);
+	}
+
 retry_walk:
 	walker->level = mmu->cpu_role.base.level;
 	pte           = kvm_mmu_get_guest_pgd(vcpu, mmu);
@@ -362,10 +394,12 @@ retry_walk:
 
 	do {
 		struct kvm_memory_slot *slot;
-		unsigned long host_addr;
+		unsigned long flags;
 
 		pt_access = pte_access;
 		--walker->level;
+
+		pte_cache = &walker->ptep_caches[walker->level - 1];
 
 		index = PT_INDEX(addr, walker->level);
 		table_gfn = gpte_to_gfn(pte);
@@ -396,15 +430,36 @@ retry_walk:
 		if (!kvm_is_visible_memslot(slot))
 			goto error;
 
-		host_addr = gfn_to_hva_memslot_prot(slot, gpa_to_gfn(real_gpa),
-					    &walker->pte_writable[walker->level - 1]);
-		if (unlikely(kvm_is_error_hva(host_addr)))
-			goto error;
+		/*
+		 * gfn_to_pfn_cache expects the memory to be writable. However,
+		 * if the memory is not writable, we do not need caching in the
+		 * first place, as we only need it to later potentially write
+		 * the access bit (which we cannot do anyway if the memory is
+		 * readonly).
+		 */
+		if (slot->flags & KVM_MEM_READONLY) {
+			if (kvm_vcpu_read_guest(vcpu, real_gpa + offset, &pte, sizeof(pte)))
+				goto error;
+		} else {
+			if (kvm_gpc_activate(pte_cache, real_gpa + offset,
+					     sizeof(pte)))
+				goto error;
 
-		ptep_user = (pt_element_t __user *)((void *)host_addr + offset);
-		if (unlikely(__get_user(pte, ptep_user)))
-			goto error;
-		walker->ptep_user[walker->level - 1] = ptep_user;
+			read_lock_irqsave(&pte_cache->lock, flags);
+			while (!kvm_gpc_check(pte_cache, sizeof(pte))) {
+				read_unlock_irqrestore(&pte_cache->lock, flags);
+
+				if (kvm_gpc_refresh(pte_cache, sizeof(pte)))
+					goto error;
+
+				read_lock_irqsave(&pte_cache->lock, flags);
+			}
+
+			pte = *(pt_element_t *)pte_cache->khva;
+			read_unlock_irqrestore(&pte_cache->lock, flags);
+
+			walker->pte_writable[walker->level - 1] = true;
+		}
 
 		trace_kvm_mmu_paging_element(pte, walker->level);
 
@@ -467,13 +522,19 @@ retry_walk:
 							addr, write_fault);
 		if (unlikely(ret < 0))
 			goto error;
-		else if (ret)
+		else if (ret) {
+			FNAME(walk_deactivate_gpcs)(walker);
 			goto retry_walk;
+		}
 	}
+
+	FNAME(walk_deactivate_gpcs)(walker);
 
 	return 1;
 
 error:
+	FNAME(walk_deactivate_gpcs)(walker);
+
 	errcode |= write_fault | user_fault;
 	if (fetch_fault && (is_efer_nx(mmu) || is_cr4_smep(mmu)))
 		errcode |= PFERR_FETCH_MASK;
