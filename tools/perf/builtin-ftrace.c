@@ -1471,6 +1471,24 @@ static int parse_sort_key(const struct option *opt, const char *str, int unset)
 	return 0;
 }
 
+static bool is_ftrace_supported(void)
+{
+	char *file;
+	bool supported = false;
+
+	file = get_tracing_file("set_ftrace_pid");
+	if (!file) {
+		pr_debug("cannot get tracing file set_ftrace_pid\n");
+		return false;
+	}
+
+	if (!access(file, F_OK))
+		supported = true;
+
+	put_tracing_file(file);
+	return supported;
+}
+
 enum perf_ftrace_subcommand {
 	PERF_FTRACE_NONE,
 	PERF_FTRACE_TRACE,
@@ -1638,6 +1656,12 @@ int cmd_ftrace(int argc, const char **argv)
 	default:
 		pr_err("Invalid subcommand\n");
 		ret = -EINVAL;
+		goto out_delete_filters;
+	}
+
+	if (!is_ftrace_supported()) {
+		pr_err("ftrace is not supported on this system\n");
+		ret = -ENOTSUP;
 		goto out_delete_filters;
 	}
 
