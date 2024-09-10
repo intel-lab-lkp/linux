@@ -909,6 +909,13 @@ err_fd:
 	return err;
 }
 
+static inline bool kvm_gmem_hugetlb_page_aligned(u32 flags, u64 value)
+{
+	int page_size_log = (flags >> KVM_GUEST_MEMFD_HUGE_SHIFT) & KVM_GUEST_MEMFD_HUGE_MASK;
+	u64 page_size = 1ULL << page_size_log;
+	return IS_ALIGNED(value, page_size);
+}
+
 #define KVM_GUEST_MEMFD_ALL_FLAGS KVM_GUEST_MEMFD_HUGETLB
 
 int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
@@ -921,12 +928,18 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 		if (flags & ~(KVM_GUEST_MEMFD_ALL_FLAGS |
 			      (KVM_GUEST_MEMFD_HUGE_MASK << KVM_GUEST_MEMFD_HUGE_SHIFT)))
 			return -EINVAL;
+
+		if (!kvm_gmem_hugetlb_page_aligned(flags, size))
+			return -EINVAL;
 	} else {
 		if (flags & ~KVM_GUEST_MEMFD_ALL_FLAGS)
 			return -EINVAL;
+
+		if (!PAGE_ALIGNED(size))
+			return -EINVAL;
 	}
 
-	if (size <= 0 || !PAGE_ALIGNED(size))
+	if (size <= 0)
 		return -EINVAL;
 
 	return __kvm_gmem_create(kvm, size, flags);
