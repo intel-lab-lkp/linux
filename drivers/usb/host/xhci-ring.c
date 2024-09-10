@@ -2606,7 +2606,7 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	int ep_index;
 	struct xhci_td *td = NULL;
 	dma_addr_t ep_trb_dma;
-	struct xhci_segment *ep_seg;
+	struct xhci_segment *ep_seg = NULL;
 	union xhci_trb *ep_trb;
 	int status = -EINPROGRESS;
 	struct xhci_ep_ctx *ep_ctx;
@@ -2793,28 +2793,12 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		 * TD list.
 		 */
 		if (list_empty(&ep_ring->td_list)) {
-			/*
-			 * Don't print wanings if it's due to a stopped endpoint
-			 * generating an extra completion event if the device
-			 * was suspended. Or, a event for the last TRB of a
-			 * short TD we already got a short event for.
-			 * The short TD is already removed from the TD list.
-			 */
-
-			if (!(trb_comp_code == COMP_STOPPED ||
-			      trb_comp_code == COMP_STOPPED_LENGTH_INVALID ||
-			      ep_ring->last_td_was_short)) {
-				xhci_warn(xhci, "WARN Event TRB for slot %u ep %d with no TDs queued?\n",
-					  slot_id, ep_index);
-			}
 			if (ep->skip) {
 				ep->skip = false;
 				xhci_dbg(xhci, "td_list is empty while skip flag set. Clear skip flag for slot %u ep %u.\n",
 					 slot_id, ep_index);
 			}
-
-			td = NULL;
-			goto check_endpoint_halted;
+			break;
 		}
 
 		td = list_first_entry(&ep_ring->td_list, struct xhci_td,
@@ -2848,11 +2832,8 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	if (!ep_seg) {
 
 		/*
-		 * Skip the Force Stopped Event. The 'ep_trb' of FSE is not in the current
-		 * TD pointed by 'ep_ring->dequeue' because that the hardware dequeue
-		 * pointer still at the previous TRB of the current TD. The previous TRB
-		 * maybe a Link TD or the last TRB of the previous TD. The command
-		 * completion handle will take care the rest.
+		 * Ignore the Force Stopped Event. The endpoint may stop on
+		 * some Link or No-Op TRB outside our TDs. We don't care.
 		 */
 		if (trb_comp_code == COMP_STOPPED ||
 		    trb_comp_code == COMP_STOPPED_LENGTH_INVALID) {
@@ -2870,13 +2851,25 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		}
 
 		/* HC is busted, give up! */
-		xhci_err(xhci,
-			"ERROR Transfer event TRB DMA ptr not "
-			"part of current TD ep_index %d "
-			"comp_code %u\n", ep_index,
-			trb_comp_code);
-		trb_in_td(xhci, td, ep_trb_dma, true);
-		return -ESHUTDOWN;
+		if (list_empty(&ep_ring->td_list)) {
+			xhci_warn(xhci, "WARN Event TRB for slot %u ep %d comp_code %u with no TDs queued?\n",
+					slot_id, ep_index, trb_comp_code);
+		} else {
+			xhci_err(xhci, "ERROR Transfer event TRB DMA ptr not part of current TD ep_index %d comp_code %u\n",
+					ep_index, trb_comp_code);
+			trb_in_td(xhci, td, ep_trb_dma, true);
+		}
+
+		/*
+		 * Bugs (in HW or SW) may cause the xHC to execute transfers as
+		 * they are being cancelled and forgotten about. Then we get some
+		 * event and have no idea which transfer caused it. If the event
+		 * indicates that the EP halted, try to fix that at least.
+		 */
+		if (xhci_halted_host_endpoint(ep_ctx, trb_comp_code))
+			xhci_handle_halted_endpoint(xhci, ep, td, EP_HARD_RESET);
+
+		return 0;
 	}
 
 	if (trb_comp_code == COMP_SHORT_PACKET)
@@ -2887,16 +2880,6 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	ep_trb = &ep_seg->trbs[(ep_trb_dma - ep_seg->dma) / sizeof(*ep_trb)];
 	trace_xhci_handle_transfer(ep_ring, (struct xhci_generic_trb *) ep_trb);
 
-	/*
-	 * No-op TRB could trigger interrupts in a case where a URB was killed
-	 * and a STALL_ERROR happens right after the endpoint ring stopped.
-	 * Reset the halted endpoint. Otherwise, the endpoint remains stalled
-	 * indefinitely.
-	 */
-
-	if (trb_is_noop(ep_trb))
-		goto check_endpoint_halted;
-
 	td->status = status;
 
 	/* update the urb's actual_length and give back to the core */
@@ -2906,11 +2889,6 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		process_isoc_td(xhci, ep, ep_ring, td, ep_trb, event);
 	else
 		process_bulk_intr_td(xhci, ep, ep_ring, td, ep_trb, event);
-	return 0;
-
-check_endpoint_halted:
-	if (xhci_halted_host_endpoint(ep_ctx, trb_comp_code))
-		xhci_handle_halted_endpoint(xhci, ep, td, EP_HARD_RESET);
 
 	return 0;
 
