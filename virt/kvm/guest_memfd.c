@@ -7,6 +7,7 @@
 #include <linux/set_memory.h>
 
 #include "kvm_mm.h"
+#include "trace/events/kvm.h"
 
 struct kvm_gmem {
 	struct kvm *kvm;
@@ -204,8 +205,10 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, unsi
 	if (r)
 		goto out_err;
 
-	if (share)
+	if (share) {
 		refcount_inc(folio_get_private(folio));
+		trace_kvm_gmem_share(folio, index);
+	}
 
 out:
 	/*
@@ -758,6 +761,8 @@ int kvm_gmem_put_shared_pfn(kvm_pfn_t pfn) {
 
 	if (refcount_read(sharing_count) == 1)
 		r = kvm_gmem_folio_set_private(folio);
+
+	trace_kvm_gmem_unshare(pfn);
 
 	return r;
 }

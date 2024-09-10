@@ -489,6 +489,49 @@ TRACE_EVENT(kvm_test_age_hva,
 	TP_printk("mmu notifier test age hva: %#016lx", __entry->hva)
 );
 
+#ifdef CONFIG_KVM_PRIVATE_MEM
+TRACE_EVENT(kvm_gmem_share,
+	TP_PROTO(struct folio *folio, pgoff_t index),
+	TP_ARGS(folio, index),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, sharing_count)
+		__field(kvm_pfn_t, pfn)
+		__field(pgoff_t, index)
+		__field(unsigned long,  npages)
+	),
+
+	TP_fast_assign(
+		__entry->sharing_count = refcount_read(folio_get_private(folio));
+		__entry->pfn = folio_pfn(folio);
+		__entry->index = index;
+		__entry->npages = folio_nr_pages(folio);
+	),
+
+	TP_printk("pfn=0x%llx index=%lu pages=%lu (refcount now %d)",
+	          __entry->pfn, __entry->index, __entry->npages, __entry->sharing_count - 1)
+);
+
+TRACE_EVENT(kvm_gmem_unshare,
+	TP_PROTO(kvm_pfn_t pfn),
+	TP_ARGS(pfn),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, sharing_count)
+		__field(kvm_pfn_t, pfn)
+	),
+
+	TP_fast_assign(
+		__entry->sharing_count = refcount_read(folio_get_private(pfn_folio(pfn)));
+		__entry->pfn = pfn;
+	),
+
+	TP_printk("pfn=0x%llx (refcount now %d)",
+	          __entry->pfn, __entry->sharing_count - 1)
+)
+
+#endif
+
 #endif /* _TRACE_KVM_MAIN_H */
 
 /* This part must be outside protection */
