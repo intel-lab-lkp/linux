@@ -500,3 +500,20 @@ Description:
 		console drivers from the device.  Raw users of pci-sysfs
 		resourceN attributes must be terminated prior to resizing.
 		Success of the resizing operation is not guaranteed.
+
+What:		/sys/bus/pci/devices/.../power_budget
+Date:		September 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This file provides information about the PCIe power budget
+		for the device. It is a read-only file that outputs the values
+		of the Power Budgeting Data Register for each power state as a
+		series of 32-bit hexadecimal values. Each line represents a
+		single Power Budgeting Data register entry, containing the
+		power budget for a specific power state.
+
+		The specific interpretation of these values depends on the
+		device and the PCIe specification. Refer to the PCIe
+		specification for detailed information about the Power
+		Budgeting Data register, including the encoding	of power
+		states and the interpretation of Base Power and Data Scale.
