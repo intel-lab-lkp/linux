@@ -433,6 +433,8 @@ static inline void vm_mem_set_shared(struct kvm_vm *vm, uint64_t gpa,
 void vm_guest_mem_fallocate(struct kvm_vm *vm, uint64_t gpa, uint64_t size,
 			    bool punch_hole);
 
+void vm_guest_mem_madvise(struct kvm_vm *vm, vm_paddr_t gpa_start, uint64_t size,
+			  int advice);
 static inline void vm_guest_mem_punch_hole(struct kvm_vm *vm, uint64_t gpa,
 					   uint64_t size)
 {

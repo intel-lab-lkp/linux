@@ -1416,6 +1416,36 @@ void vm_guest_mem_fallocate(struct kvm_vm *vm, uint64_t base, uint64_t size,
 	}
 }
 
+void vm_guest_mem_madvise(struct kvm_vm *vm, vm_paddr_t gpa_start, uint64_t size,
+			  int advice)
+{
+	size_t madvise_len;
+	vm_paddr_t gpa_end;
+	vm_paddr_t gpa;
+
+	gpa_end = gpa_start + size;
+	for (gpa = gpa_start; gpa < gpa_end; gpa += madvise_len) {
+		struct userspace_mem_region *region;
+		void *hva_start;
+		uint64_t memslot_end;
+		int ret;
+
+		region = userspace_mem_region_find(vm, gpa, gpa);
+		TEST_ASSERT(region, "Memory region not found for GPA 0x%lx", gpa);
+
+		hva_start = addr_gpa2hva(vm, gpa);
+		memslot_end = region->region.userspace_addr +
+			      region->region.memory_size;
+		madvise_len = min_t(size_t, memslot_end - (uint64_t)hva_start,
+				    gpa_end - gpa);
+
+		ret = madvise(hva_start, madvise_len, advice);
+		TEST_ASSERT(!ret, "madvise(addr=%p, len=%lx, advice=%x) failed\n",
+			    hva_start, madvise_len, advice);
+	}
+}
+
+
 /* Returns the size of a vCPU's kvm_run structure. */
 static int vcpu_mmap_sz(void)
 {

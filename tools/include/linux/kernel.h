@@ -54,8 +54,8 @@
 	_min1 < _min2 ? _min1 : _min2; })
 #endif
 
-#define max_t(type, x, y)	max((type)x, (type)y)
-#define min_t(type, x, y)	min((type)x, (type)y)
+#define max_t(type, x, y)	max((type)(x), (type)(y))
+#define min_t(type, x, y)	min((type)(x), (type)(y))
 #define clamp(val, lo, hi)	min((typeof(val))max(val, lo), hi)
 
 #ifndef BUG_ON
