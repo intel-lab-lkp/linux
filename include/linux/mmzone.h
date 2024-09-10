@@ -1134,6 +1134,12 @@ static inline bool is_zone_device_page(const struct page *page)
 	return page_zonenum(page) == ZONE_DEVICE;
 }
 
+static inline struct dev_pagemap *page_dev_pagemap(const struct page *page)
+{
+	WARN_ON(!is_zone_device_page(page));
+	return page_folio(page)->pgmap;
+}
+
 /*
  * Consecutive zone device pages should not be merged into the same sgl
  * or bvec segment with other types of pages or if they belong to different
@@ -1149,7 +1155,7 @@ static inline bool zone_device_pages_have_same_pgmap(const struct page *a,
 		return false;
 	if (!is_zone_device_page(a))
 		return true;
-	return a->pgmap == b->pgmap;
+	return page_dev_pagemap(a) == page_dev_pagemap(b);
 }
 
 extern void memmap_init_zone_device(struct zone *, unsigned long,
