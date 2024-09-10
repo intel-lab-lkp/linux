@@ -57,6 +57,8 @@
 #define F_SET_RW_HINT		(F_LINUX_SPECIFIC_BASE + 12)
 #define F_GET_FILE_RW_HINT	(F_LINUX_SPECIFIC_BASE + 13)
 #define F_SET_FILE_RW_HINT	(F_LINUX_SPECIFIC_BASE + 14)
+#define F_GET_RW_HINT_EX	(F_LINUX_SPECIFIC_BASE + 15)
+#define F_SET_RW_HINT_EX	(F_LINUX_SPECIFIC_BASE + 16)
 
 /*
  * Valid hint values for F_{GET,SET}_RW_HINT. 0 is "not set", or can be
@@ -75,6 +77,18 @@
  * v4.13-rc1~212^2~51.
  */
 #define RWF_WRITE_LIFE_NOT_SET	RWH_WRITE_LIFE_NOT_SET
+
+enum rw_hint_type {
+	TYPE_RW_LIFETIME_HINT = 1,
+	TYPE_RW_PLACEMENT_HINT
+};
+
+/* Exchange information with F_{GET/SET}_RW_HINT fcntl */
+struct rw_hint_ex {
+	__u8	type;
+	__u8	pad[7];
+	__u64	val;
+};
 
 /*
  * Types of directory notifications that may be requested.

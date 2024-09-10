@@ -291,6 +291,14 @@ static bool rw_lifetime_hint_valid(u64 hint)
 	}
 }
 
+static inline bool rw_placement_hint_valid(u64 val)
+{
+	if (val <= MAX_PLACEMENT_HINT_VAL)
+		return true;
+
+	return false;
+}
+
 static long fcntl_get_rw_lifetime_hint(struct file *file, unsigned int cmd,
 			      unsigned long arg)
 {
@@ -321,6 +329,59 @@ static long fcntl_set_rw_lifetime_hint(struct file *file, unsigned int cmd,
 	 * file->f_mapping->host may differ from inode. As an example,
 	 * blkdev_open() modifies file->f_mapping.
 	 */
+	if (file->f_mapping->host != inode)
+		WRITE_ONCE(file->f_mapping->host->i_write_hint, hint);
+
+	return 0;
+}
+
+static long fcntl_get_rw_hint_ex(struct file *file, unsigned int cmd,
+			      unsigned long arg)
+{
+	struct rw_hint_ex __user *rw_hint_ex_p = (void __user *)arg;
+	struct rw_hint_ex rwh = {};
+	struct inode *inode = file_inode(file);
+	u8 hint = READ_ONCE(inode->i_write_hint);
+
+	rwh.type = WRITE_HINT_TYPE(hint);
+	rwh.val = WRITE_HINT_VAL(hint);
+
+	if (copy_to_user(rw_hint_ex_p, &rwh, sizeof(rwh)))
+		return -EFAULT;
+
+	return 0;
+}
+
+static long fcntl_set_rw_hint_ex(struct file *file, unsigned int cmd,
+			      unsigned long arg)
+{
+	struct rw_hint_ex __user *rw_hint_ex_p = (void __user *)arg;
+	struct rw_hint_ex rwh;
+	struct inode *inode = file_inode(file);
+	u64 hint;
+	int i;
+
+	if (copy_from_user(&rwh, rw_hint_ex_p, sizeof(rwh)))
+		return -EFAULT;
+	for (i = 0; i < ARRAY_SIZE(rwh.pad); i++)
+		if (rwh.pad[i])
+			return -EINVAL;
+	switch (rwh.type) {
+	case TYPE_RW_LIFETIME_HINT:
+		if (!rw_lifetime_hint_valid(rwh.val))
+			return -EINVAL;
+		hint = rwh.val;
+		break;
+	case TYPE_RW_PLACEMENT_HINT:
+		if (!rw_placement_hint_valid(rwh.val))
+			return -EINVAL;
+		hint = PLACEMENT_HINT_TYPE | rwh.val;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	WRITE_ONCE(inode->i_write_hint, hint);
 	if (file->f_mapping->host != inode)
 		WRITE_ONCE(file->f_mapping->host->i_write_hint, hint);
 
@@ -453,6 +514,12 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		break;
 	case F_SET_RW_HINT:
 		err = fcntl_set_rw_lifetime_hint(filp, cmd, arg);
+		break;
+	case F_GET_RW_HINT_EX:
+		err = fcntl_get_rw_hint_ex(filp, cmd, arg);
+		break;
+	case F_SET_RW_HINT_EX:
+		err = fcntl_set_rw_hint_ex(filp, cmd, arg);
 		break;
 	default:
 		break;
