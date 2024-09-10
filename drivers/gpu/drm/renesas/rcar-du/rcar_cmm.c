@@ -32,7 +32,7 @@ struct rcar_cmm {
 	} lut;
 };
 
-static inline int rcar_cmm_read(struct rcar_cmm *rcmm, u32 reg)
+static inline __maybe_unused int rcar_cmm_read(struct rcar_cmm *rcmm, u32 reg)
 {
 	return ioread32(rcmm->base + reg);
 }
