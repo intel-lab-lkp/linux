@@ -55,6 +55,11 @@ static bool kvm_gmem_test_no_direct_map(struct inode *inode)
 	return ((unsigned long)inode->i_private & KVM_GMEM_NO_DIRECT_MAP) == KVM_GMEM_NO_DIRECT_MAP;
 }
 
+static bool kvm_gmem_test_accessible(struct kvm *kvm)
+{
+	return kvm->arch.vm_type == KVM_X86_SW_PROTECTED_VM;
+}
+
 static int kvm_gmem_folio_set_private(struct folio *folio)
 {
 	unsigned long start, npages, i;
@@ -110,10 +115,11 @@ static int kvm_gmem_folio_clear_private(struct folio *folio)
 	return r;
 }
 
-static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool prepare)
+static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, unsigned long flags)
 {
 	int r;
 	struct folio *folio;
+	bool share = flags & KVM_GMEM_GET_PFN_SHARED;
 
 	/* TODO: Support huge pages. */
 	folio = filemap_grab_folio(inode->i_mapping, index);
@@ -139,7 +145,7 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool
 		folio_mark_uptodate(folio);
 	}
 
-	if (prepare) {
+	if (flags & KVM_GMEM_GET_PFN_PREPARE) {
 		r = kvm_gmem_prepare_folio(inode, index, folio);
 		if (r < 0)
 			goto out_err;
@@ -148,11 +154,14 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, bool
 	if (!kvm_gmem_test_no_direct_map(inode))
 		goto out;
 
-	if (!folio_test_private(folio)) {
+	if (folio_test_private(folio) && share) {
+		r = kvm_gmem_folio_clear_private(folio);
+	} else if (!folio_test_private(folio) && !share) {
 		r = kvm_gmem_folio_set_private(folio);
-		if (r)
-			goto out_err;
 	}
+
+	if (r)
+		goto out_err;
 
 out:
 	/*
@@ -264,7 +273,7 @@ static long kvm_gmem_allocate(struct inode *inode, loff_t offset, loff_t len)
 			break;
 		}
 
-		folio = kvm_gmem_get_folio(inode, index, true);
+		folio = kvm_gmem_get_folio(inode, index, KVM_GMEM_GET_PFN_PREPARE);
 		if (IS_ERR(folio)) {
 			r = PTR_ERR(folio);
 			break;
@@ -624,7 +633,7 @@ void kvm_gmem_unbind(struct kvm_memory_slot *slot)
 }
 
 static int __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
-		       gfn_t gfn, kvm_pfn_t *pfn, int *max_order, bool prepare)
+		       gfn_t gfn, kvm_pfn_t *pfn, int *max_order, unsigned long flags)
 {
 	pgoff_t index = gfn - slot->base_gfn + slot->gmem.pgoff;
 	struct kvm_gmem *gmem = file->private_data;
@@ -643,7 +652,7 @@ static int __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
 		return -EIO;
 	}
 
-	folio = kvm_gmem_get_folio(file_inode(file), index, prepare);
+	folio = kvm_gmem_get_folio(file_inode(file), index, flags);
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 
@@ -667,19 +676,36 @@ static int __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
 }
 
 int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
-		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order)
+		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order, unsigned long flags)
 {
 	struct file *file = kvm_gmem_get_file(slot);
 	int r;
+	int valid_flags = KVM_GMEM_GET_PFN_SHARED;
+
+	if ((flags & valid_flags) != flags)
+		return -EINVAL;
+
+	if ((flags & KVM_GMEM_GET_PFN_SHARED) && !kvm_gmem_test_accessible(kvm))
+		return -EPERM;
 
 	if (!file)
 		return -EFAULT;
 
-	r = __kvm_gmem_get_pfn(file, slot, gfn, pfn, max_order, true);
+	r = __kvm_gmem_get_pfn(file, slot, gfn, pfn, max_order, flags | KVM_GMEM_GET_PFN_PREPARE);
 	fput(file);
 	return r;
 }
 EXPORT_SYMBOL_GPL(kvm_gmem_get_pfn);
+
+int kvm_gmem_put_shared_pfn(kvm_pfn_t pfn) {
+	struct folio *folio = pfn_folio(pfn);
+
+	if (!kvm_gmem_test_no_direct_map(folio_inode(folio)))
+		return 0;
+
+	return kvm_gmem_folio_set_private(folio);
+}
+EXPORT_SYMBOL_GPL(kvm_gmem_put_shared_pfn);
 
 long kvm_gmem_populate(struct kvm *kvm, gfn_t start_gfn, void __user *src, long npages,
 		       kvm_gmem_populate_cb post_populate, void *opaque)

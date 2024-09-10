@@ -2432,15 +2432,23 @@ static inline bool kvm_mem_is_private(struct kvm *kvm, gfn_t gfn)
 }
 #endif /* CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES */
 
+#define KVM_GMEM_GET_PFN_SHARED         BIT(0)
+#define KVM_GMEM_GET_PFN_PREPARE        BIT(31)  /* internal */
+
 #ifdef CONFIG_KVM_PRIVATE_MEM
 int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
-		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order);
+		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order, unsigned long flags);
+int kvm_gmem_put_shared_pfn(kvm_pfn_t pfn);
 #else
 static inline int kvm_gmem_get_pfn(struct kvm *kvm,
 				   struct kvm_memory_slot *slot, gfn_t gfn,
-				   kvm_pfn_t *pfn, int *max_order)
+				   kvm_pfn_t *pfn, int *max_order, int flags)
 {
 	KVM_BUG_ON(1, kvm);
+	return -EIO;
+}
+static inline int kvm_gmem_put_shared_pfn(kvm_pfn_t pfn)
+{
 	return -EIO;
 }
 #endif /* CONFIG_KVM_PRIVATE_MEM */
