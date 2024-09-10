@@ -129,6 +129,12 @@ static int p2pmem_alloc_mmap(struct file *filp, struct kobject *kobj,
 	}
 
 	/*
+	 * Initialise the refcount for the freshly allocated page. As we have
+	 * just allocated the page no one else should be using it.
+	 */
+	set_page_count(virt_to_page(kaddr), 1);
+
+	/*
 	 * vm_insert_page() can sleep, so a reference is taken to mapping
 	 * such that rcu_read_unlock() can be done before inserting the
 	 * pages
