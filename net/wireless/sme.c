@@ -1582,7 +1582,7 @@ void cfg80211_autodisconnect_wk(struct work_struct *work)
 		container_of(work, struct wireless_dev, disconnect_wk);
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
 
-	wiphy_lock(wdev->wiphy);
+	wiphy_lock(&rdev->wiphy);
 
 	if (wdev->conn_owner_nlportid) {
 		switch (wdev->iftype) {
@@ -1619,5 +1619,5 @@ void cfg80211_autodisconnect_wk(struct work_struct *work)
 		}
 	}
 
-	wiphy_unlock(wdev->wiphy);
+	wiphy_unlock(&rdev->wiphy);
 }
