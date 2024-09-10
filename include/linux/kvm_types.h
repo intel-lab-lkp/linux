@@ -70,6 +70,7 @@ struct gfn_to_pfn_cache {
 	kvm_pfn_t pfn;
 	bool active;
 	bool valid;
+	bool private;
 };
 
 #ifdef KVM_ARCH_NR_OBJS_PER_MEMORY_CACHE

@@ -16,6 +16,7 @@
 #include <linux/highmem.h>
 #include <linux/module.h>
 #include <linux/errno.h>
+#include <linux/pagemap.h>
 
 #include "kvm_mm.h"
 
@@ -145,13 +146,20 @@ static void *gpc_map(kvm_pfn_t pfn)
 #endif
 }
 
-static void gpc_unmap(kvm_pfn_t pfn, void *khva)
+static void gpc_unmap(kvm_pfn_t pfn, void *khva, bool private)
 {
 	/* Unmap the old pfn/page if it was mapped before. */
 	if (is_error_noslot_pfn(pfn) || !khva)
 		return;
 
 	if (pfn_valid(pfn)) {
+		if (private) {
+			struct folio *folio = pfn_folio(pfn);
+
+			folio_lock(folio);
+			kvm_gmem_put_shared_pfn(pfn);
+			folio_unlock(folio);
+		}
 		kunmap(pfn_to_page(pfn));
 		return;
 	}
@@ -203,6 +211,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	void *old_khva = (void *)PAGE_ALIGN_DOWN((uintptr_t)gpc->khva);
 	kvm_pfn_t new_pfn = KVM_PFN_ERR_FAULT;
 	void *new_khva = NULL;
+	bool private = gpc->private;
 	unsigned long mmu_seq;
 
 	lockdep_assert_held(&gpc->refresh_lock);
@@ -235,17 +244,43 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 			 * the existing mapping and didn't create a new one.
 			 */
 			if (new_khva != old_khva)
-				gpc_unmap(new_pfn, new_khva);
+				gpc_unmap(new_pfn, new_khva, private);
 
 			kvm_release_pfn_clean(new_pfn);
 
 			cond_resched();
 		}
 
-		/* We always request a writeable mapping */
-		new_pfn = hva_to_pfn(gpc->uhva, false, false, NULL, true, NULL);
-		if (is_error_noslot_pfn(new_pfn))
-			goto out_error;
+		/*
+		 * If we do not have a GPA, we cannot immediately determine
+		 * whether the area of guest memory gpc->uhva pointed to
+		 * is currently set to shared. So assume that uhva-based gpcs
+		 * never have their underlying guest memory switched to
+		 * private (which we can do as uhva-based gpcs are only used
+		 * with Xen, and guest_memfd is not supported there).
+		 */
+		if (gpc->gpa != INVALID_GPA) {
+			/*
+			 * mmu_notifier events can be due to shared/private conversions,
+			 * thus recheck this every iteration.
+			 */
+			private = kvm_mem_is_private(gpc->kvm, gpa_to_gfn(gpc->gpa));
+		} else {
+			private = false;
+		}
+
+		if (private) {
+			int r = kvm_gmem_get_pfn(gpc->kvm, gpc->memslot, gpa_to_gfn(gpc->gpa),
+						 &new_pfn, NULL, KVM_GMEM_GET_PFN_SHARED);
+			if (r)
+				goto out_error;
+		} else {
+			/* We always request a writeable mapping */
+			new_pfn = hva_to_pfn(gpc->uhva, false, false, NULL,
+					     true, NULL);
+			if (is_error_noslot_pfn(new_pfn))
+				goto out_error;
+		}
 
 		/*
 		 * Obtain a new kernel mapping if KVM itself will access the
@@ -274,6 +309,7 @@ static kvm_pfn_t hva_to_pfn_retry(struct gfn_to_pfn_cache *gpc)
 	gpc->valid = true;
 	gpc->pfn = new_pfn;
 	gpc->khva = new_khva + offset_in_page(gpc->uhva);
+	gpc->private = private;
 
 	/*
 	 * Put the reference to the _new_ pfn.  The pfn is now tracked by the
@@ -298,6 +334,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	kvm_pfn_t old_pfn;
 	bool hva_change = false;
 	void *old_khva;
+	bool old_private;
 	int ret;
 
 	/* Either gpa or uhva must be valid, but not both */
@@ -316,6 +353,7 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 	old_pfn = gpc->pfn;
 	old_khva = (void *)PAGE_ALIGN_DOWN((uintptr_t)gpc->khva);
 	old_uhva = PAGE_ALIGN_DOWN(gpc->uhva);
+	old_private = gpc->private;
 
 	if (kvm_is_error_gpa(gpa)) {
 		page_offset = offset_in_page(uhva);
@@ -338,6 +376,11 @@ static int __kvm_gpc_refresh(struct gfn_to_pfn_cache *gpc, gpa_t gpa, unsigned l
 			gpc->gpa = gpa;
 			gpc->generation = slots->generation;
 			gpc->memslot = __gfn_to_memslot(slots, gfn);
+			/*
+			 * compute the uhva even for private memory, in case an
+			 * invalidation event flips memory from private to
+			 * shared while in hva_to_pfn_retry
+			 */
 			gpc->uhva = gfn_to_hva_memslot(gpc->memslot, gfn);
 
 			if (kvm_is_error_hva(gpc->uhva)) {
@@ -395,7 +438,7 @@ out_unlock:
 	write_unlock_irq(&gpc->lock);
 
 	if (unmap_old)
-		gpc_unmap(old_pfn, old_khva);
+		gpc_unmap(old_pfn, old_khva, old_private);
 
 	return ret;
 }
@@ -486,6 +529,7 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 	struct kvm *kvm = gpc->kvm;
 	kvm_pfn_t old_pfn;
 	void *old_khva;
+	bool old_private;
 
 	guard(mutex)(&gpc->refresh_lock);
 
@@ -508,6 +552,9 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 		old_khva = gpc->khva - offset_in_page(gpc->khva);
 		gpc->khva = NULL;
 
+		old_private = gpc->private;
+		gpc->private = false;
+
 		old_pfn = gpc->pfn;
 		gpc->pfn = KVM_PFN_ERR_FAULT;
 		write_unlock_irq(&gpc->lock);
@@ -516,6 +563,6 @@ void kvm_gpc_deactivate(struct gfn_to_pfn_cache *gpc)
 		list_del(&gpc->list);
 		spin_unlock(&kvm->gpc_lock);
 
-		gpc_unmap(old_pfn, old_khva);
+		gpc_unmap(old_pfn, old_khva, old_private);
 	}
 }
