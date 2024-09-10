@@ -432,6 +432,24 @@ static int ltr390_probe(struct i2c_client *client)
 	return devm_iio_device_register(dev, indio_dev);
 }
 
+static int ltr390_suspend(struct device *dev)
+{
+	struct ltr390_data *data = iio_priv(i2c_get_clientdata(
+						to_i2c_client(dev)));
+
+	return regmap_clear_bits(data->regmap, LTR390_MAIN_CTRL, LTR390_SENSOR_ENABLE);
+}
+
+static int ltr390_resume(struct device *dev)
+{
+	struct ltr390_data *data = iio_priv(i2c_get_clientdata(
+						to_i2c_client(dev)));
+
+	return regmap_set_bits(data->regmap, LTR390_MAIN_CTRL, LTR390_SENSOR_ENABLE);
+}
+
+static DEFINE_SIMPLE_DEV_PM_OPS(ltr390_pm_ops, ltr390_suspend, ltr390_resume);
+
 static const struct i2c_device_id ltr390_id[] = {
 	{ "ltr390" },
 	{ /* Sentinel */ }
@@ -448,6 +466,7 @@ static struct i2c_driver ltr390_driver = {
 	.driver = {
 		.name = "ltr390",
 		.of_match_table = ltr390_of_table,
+		.pm	= pm_sleep_ptr(&ltr390_pm_ops),
 	},
 	.probe = ltr390_probe,
 	.id_table = ltr390_id,
