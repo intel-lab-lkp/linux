@@ -35,6 +35,7 @@
 #define MC_VECTOR 18
 #define XM_VECTOR 19
 #define VE_VECTOR 20
+#define HV_VECTOR 28
 
 /* Select x86 specific features in <linux/kvm.h> */
 #define __KVM_HAVE_PIT
