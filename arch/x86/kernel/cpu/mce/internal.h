@@ -7,7 +7,7 @@
 
 #include <linux/device.h>
 #include <asm/mce.h>
-
+#include <linux/spinlock.h>
 enum severity_level {
 	MCE_NO_SEVERITY,
 	MCE_DEFERRED_SEVERITY,
@@ -334,11 +334,16 @@ static __always_inline u32 mca_msr_reg(int bank, enum mca_msr reg)
 }
 
 extern void (*mc_poll_banks)(void);
+#define CMCI_STORM_THRESHOLD    32749
+extern raw_spinlock_t cmci_discover_lock;
+extern u16 cmci_threshold[MAX_NR_BANKS];
 #ifdef CONFIG_X86_MCE_ZHAOXIN
 void mce_zhaoxin_feature_init(struct cpuinfo_x86 *c);
 void mce_zhaoxin_feature_clear(struct cpuinfo_x86 *c);
+void mce_zhaoxin_handle_storm(int bank, bool on);
 #else
 static inline void mce_zhaoxin_feature_init(struct cpuinfo_x86 *c) { }
 static inline void mce_zhaoxin_feature_clear(struct cpuinfo_x86 *c) { }
+static inline void mce_zhaoxin_handle_storm(int bank, bool on) { }
 #endif
 #endif /* __X86_MCE_INTERNAL_H__ */
