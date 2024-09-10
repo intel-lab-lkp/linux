@@ -374,10 +374,6 @@ int cec_register_adapter(struct cec_adapter *adap,
 	}
 
 	dev_set_drvdata(&adap->devnode.dev, adap);
-#ifdef CONFIG_DEBUG_FS
-	if (!top_cec_dir)
-		return 0;
-
 	adap->cec_dir = debugfs_create_dir(dev_name(&adap->devnode.dev),
 					   top_cec_dir);
 
@@ -388,7 +384,6 @@ int cec_register_adapter(struct cec_adapter *adap,
 		return 0;
 	debugfs_create_file("error-inj", 0644, adap->cec_dir, adap,
 			    &cec_error_inj_fops);
-#endif
 	return 0;
 }
 EXPORT_SYMBOL_GPL(cec_register_adapter);
@@ -439,13 +434,7 @@ static int __init cec_devnode_init(void)
 		return ret;
 	}
 
-#ifdef CONFIG_DEBUG_FS
 	top_cec_dir = debugfs_create_dir("cec", NULL);
-	if (IS_ERR_OR_NULL(top_cec_dir)) {
-		pr_warn("cec: Failed to create debugfs cec dir\n");
-		top_cec_dir = NULL;
-	}
-#endif
 
 	ret = bus_register(&cec_bus_type);
 	if (ret < 0) {
