@@ -62,7 +62,11 @@ static void test_private_access_memslot_deleted(void)
 
 	virt_map(vm, EXITS_TEST_GVA, EXITS_TEST_GPA, EXITS_TEST_NPAGES);
 
-	/* Request to access page privately */
+	/*
+	 * Request to access page privately. madvise(MADV_DONTNEED) not required
+	 * since memory was never mmap()-ed from guest_memfd. Anonymous memory
+	 * was used instead for this memslot's userspace_addr.
+	 */
 	vm_mem_set_private(vm, EXITS_TEST_GPA, EXITS_TEST_SIZE);
 
 	pthread_create(&vm_thread, NULL,
@@ -98,7 +102,10 @@ static void test_private_access_memslot_not_private(void)
 
 	virt_map(vm, EXITS_TEST_GVA, EXITS_TEST_GPA, EXITS_TEST_NPAGES);
 
-	/* Request to access page privately */
+	/*
+	 * Request to access page privately. madvise(MADV_DONTNEED) not required
+	 * since the affected memslot doesn't use guest_memfd.
+	 */
 	vm_mem_set_private(vm, EXITS_TEST_GPA, EXITS_TEST_SIZE);
 
 	exit_reason = run_vcpu_get_exit_reason(vcpu);
