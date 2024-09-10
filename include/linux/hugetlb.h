@@ -124,6 +124,9 @@ long hugepage_subpool_put_pages(struct hugepage_subpool *spool, long delta);
 
 int hugetlb_acct_memory(struct hstate *h, long delta);
 
+void hugetlb_zero_partial_page(struct hstate *h, struct address_space *mapping,
+			       loff_t start, loff_t end);
+
 void hugetlb_dup_vma_private(struct vm_area_struct *vma);
 void clear_vma_resv_huge_pages(struct vm_area_struct *vma);
 int move_hugetlb_page_tables(struct vm_area_struct *vma,
