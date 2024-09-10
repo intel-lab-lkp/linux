@@ -366,14 +366,20 @@ static void *__test_mem_conversions(void *__vcpu)
 	}
 }
 
-static void test_mem_conversions(enum vm_mem_backing_src_type src_type, uint32_t nr_vcpus,
-				 uint32_t nr_memslots)
+static void
+test_mem_conversions(enum vm_mem_backing_src_type src_type,
+		     enum vm_private_mem_backing_src_type private_mem_src_type,
+		     uint32_t nr_vcpus,
+		     uint32_t nr_memslots)
 {
 	/*
 	 * Allocate enough memory so that each vCPU's chunk of memory can be
 	 * naturally aligned with respect to the size of the backing store.
 	 */
-	const size_t alignment = max_t(size_t, SZ_2M, get_backing_src_pagesz(src_type));
+	const size_t alignment = max_t(size_t, SZ_2M,
+				       max_t(size_t,
+					     get_private_mem_backing_src_pagesz(private_mem_src_type),
+					     get_backing_src_pagesz(src_type)));
 	const size_t per_cpu_size = align_up(PER_CPU_DATA_SIZE, alignment);
 	const size_t memfd_size = per_cpu_size * nr_vcpus;
 	const size_t slot_size = memfd_size / nr_memslots;
@@ -394,7 +400,9 @@ static void test_mem_conversions(enum vm_mem_backing_src_type src_type, uint32_t
 
 	vm_enable_cap(vm, KVM_CAP_EXIT_HYPERCALL, (1 << KVM_HC_MAP_GPA_RANGE));
 
-	memfd = vm_create_guest_memfd(vm, memfd_size, 0);
+	memfd = vm_create_guest_memfd(
+		vm, memfd_size,
+		vm_private_mem_backing_src_alias(private_mem_src_type)->flag);
 
 	for (i = 0; i < nr_memslots; i++)
 		vm_mem_add(vm, src_type, BASE_DATA_GPA + slot_size * i,
@@ -440,9 +448,11 @@ static void test_mem_conversions(enum vm_mem_backing_src_type src_type, uint32_t
 static void usage(const char *cmd)
 {
 	puts("");
-	printf("usage: %s [-h] [-m nr_memslots] [-s mem_type] [-n nr_vcpus]\n", cmd);
+	printf("usage: %s [-h] [-m nr_memslots] [-s mem_type] [-p private_mem_type] [-n nr_vcpus]\n", cmd);
 	puts("");
 	backing_src_help("-s");
+	puts("");
+	private_mem_backing_src_help("-p");
 	puts("");
 	puts(" -n: specify the number of vcpus (default: 1)");
 	puts("");
@@ -453,16 +463,20 @@ static void usage(const char *cmd)
 int main(int argc, char *argv[])
 {
 	enum vm_mem_backing_src_type src_type = DEFAULT_VM_MEM_SRC;
+	enum vm_private_mem_backing_src_type private_mem_src_type = DEFAULT_VM_PRIVATE_MEM_SRC;
 	uint32_t nr_memslots = 1;
 	uint32_t nr_vcpus = 1;
 	int opt;
 
 	TEST_REQUIRE(kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_SW_PROTECTED_VM));
 
-	while ((opt = getopt(argc, argv, "hm:s:n:")) != -1) {
+	while ((opt = getopt(argc, argv, "hm:s:p:n:")) != -1) {
 		switch (opt) {
 		case 's':
 			src_type = parse_backing_src_type(optarg);
+			break;
+		case 'p':
+			private_mem_src_type = parse_private_mem_backing_src_type(optarg);
 			break;
 		case 'n':
 			nr_vcpus = atoi_positive("nr_vcpus", optarg);
@@ -477,7 +491,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	test_mem_conversions(src_type, nr_vcpus, nr_memslots);
+	test_mem_conversions(src_type, private_mem_src_type, nr_vcpus, nr_memslots);
 
 	return 0;
 }
