@@ -60,10 +60,37 @@ static bool kvm_gmem_test_accessible(struct kvm *kvm)
 	return kvm->arch.vm_type == KVM_X86_SW_PROTECTED_VM;
 }
 
+static int kvm_gmem_init_sharing_count(struct folio *folio)
+{
+	refcount_t *sharing_count = kmalloc(sizeof(*sharing_count), GFP_KERNEL);
+
+	if (!sharing_count)
+		return -ENOMEM;
+
+	/*
+	 * we need to use sharing_count == 1 to mean "no sharing", because
+	 * dropping a refcount_t to 0 and later incrementing it again would
+	 * result in a WARN.
+	 */
+	refcount_set(sharing_count, 1);
+	folio_change_private(folio, (void *)sharing_count);
+
+	return 0;
+}
+
 static int kvm_gmem_folio_set_private(struct folio *folio)
 {
 	unsigned long start, npages, i;
 	int r;
+	unsigned int sharing_refcount = refcount_read(folio_get_private(folio));
+
+	/*
+	 * We must only remove direct map entries after the last internal
+	 * reference has gone away, e.g. after the refcount dropped back
+	 * to 1.
+	 */
+	WARN_ONCE(sharing_refcount != 1, "%d unexpected sharing_refcounts pfn=%lx",
+		  sharing_refcount - 1, folio_pfn(folio));
 
 	start = (unsigned long) folio_address(folio);
 	npages = folio_nr_pages(folio);
@@ -97,6 +124,15 @@ static int kvm_gmem_folio_clear_private(struct folio *folio)
 {
 	unsigned long npages, i;
 	int r = 0;
+	unsigned int sharing_refcount = refcount_read(folio_get_private(folio));
+
+	/*
+	 * We must restore direct map entries on acquiring the first "sharing
+	 * reference". The refcount is lifted _after_ the call to
+	 * kvm_gmem_folio_clear_private, so it will still be 1 here.
+	 */
+	WARN_ONCE(sharing_refcount != 1, "%d unexpected sharing_refcounts pfn=%lx",
+		  sharing_refcount - 1, folio_pfn(folio));
 
 	npages = folio_nr_pages(folio);
 
@@ -156,12 +192,20 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index, unsi
 
 	if (folio_test_private(folio) && share) {
 		r = kvm_gmem_folio_clear_private(folio);
-	} else if (!folio_test_private(folio) && !share) {
-		r = kvm_gmem_folio_set_private(folio);
+	} else if (!folio_test_private(folio)) {
+		r = kvm_gmem_init_sharing_count(folio);
+		if (r)
+			goto out_err;
+
+		if (!share)
+			r = kvm_gmem_folio_set_private(folio);
 	}
 
 	if (r)
 		goto out_err;
+
+	if (share)
+		refcount_inc(folio_get_private(folio));
 
 out:
 	/*
@@ -429,7 +473,10 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 static void kvm_gmem_invalidate_folio(struct folio *folio, size_t start, size_t end)
 {
 	if (start == 0 && end == folio_size(folio)) {
+		refcount_t *sharing_count = folio_get_private(folio);
+
 		kvm_gmem_folio_clear_private(folio);
+		kfree(sharing_count);
 	}
 }
 
@@ -699,12 +746,20 @@ int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
 EXPORT_SYMBOL_GPL(kvm_gmem_get_pfn);
 
 int kvm_gmem_put_shared_pfn(kvm_pfn_t pfn) {
+	int r = 0;
 	struct folio *folio = pfn_folio(pfn);
+	refcount_t *sharing_count;
 
 	if (!kvm_gmem_test_no_direct_map(folio_inode(folio)))
 		return 0;
 
-	return kvm_gmem_folio_set_private(folio);
+	sharing_count = folio_get_private(folio);
+	refcount_dec(sharing_count);
+
+	if (refcount_read(sharing_count) == 1)
+		r = kvm_gmem_folio_set_private(folio);
+
+	return r;
 }
 EXPORT_SYMBOL_GPL(kvm_gmem_put_shared_pfn);
 
