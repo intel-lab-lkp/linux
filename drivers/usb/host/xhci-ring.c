@@ -2726,14 +2726,10 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		 * Underrun Event for OUT Isoch endpoint.
 		 */
 		xhci_dbg(xhci, "Underrun event on slot %u ep %u\n", slot_id, ep_index);
-		if (ep->skip)
-			break;
-		return 0;
+		break;
 	case COMP_RING_OVERRUN:
 		xhci_dbg(xhci, "Overrun event on slot %u ep %u\n", slot_id, ep_index);
-		if (ep->skip)
-			break;
-		return 0;
+		break;
 	case COMP_MISSED_SERVICE_ERROR:
 		/*
 		 * When encounter missed service error, one or more isoc tds
@@ -2823,6 +2819,15 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		xhci_dbg(xhci, "Skipped %d isoc TDs, TD %sfound, clear skip flag for slot %u ep %u\n",
 				skipped, td ? "":"not ", slot_id, ep_index);
 	}
+
+	/*
+	 * In these events ep_trb_dma is NULL or points at enqueue from the time
+	 * of error occurrence. If it matches a new TD queued since then, don't
+	 * complete the TD now. And otherwise, don't print senseless warnings.
+	 */
+	if (trb_comp_code == COMP_RING_UNDERRUN ||
+			trb_comp_code == COMP_RING_OVERRUN)
+		return 0;
 
 	if (!ep_seg) {
 
