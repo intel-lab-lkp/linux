@@ -343,7 +343,13 @@ static unsigned long clk_double_div_recalc_rate(struct clk_hw *hw,
 	div = get_div(double_div->reg1, double_div->shift1);
 	div *= get_div(double_div->reg2, double_div->shift2);
 
-	return DIV_ROUND_UP_ULL((u64)parent_rate, div);
+	if (!div) {
+		pr_err("Can't recalculate the rate of clock %s\n",
+										hw->init->name);
+		return 0;
+	} else {
+		return DIV_ROUND_UP_ULL((u64)parent_rate, div);
+	}
 }
 
 static const struct clk_ops clk_double_div_ops = {
