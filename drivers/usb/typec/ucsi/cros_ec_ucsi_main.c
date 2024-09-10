@@ -19,6 +19,7 @@
 #define CREATE_TRACE_POINTS
 #include "ucsi.h"
 #include "cros_ec_ucsi_trace.h"
+#include "cros_ec_ucsi_nl.h"
 
 /*
  * Maximum size in bytes of a UCSI message between AP and EC
@@ -43,6 +44,43 @@ struct cros_ucsi_data {
 	unsigned long flags;
 };
 
+/*
+ * When set to true the cros_ec_ucsi driver will forward all UCSI messages
+ * exchanged between OPM <-> PPM to userspace through netlink
+ */
+static bool is_ap_sniffer_en;
+
+static ssize_t enable_ap_sniffer_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	return sprintf(buf, "%d\n", is_ap_sniffer_en);
+}
+
+static ssize_t enable_ap_sniffer_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	u8 value;
+
+	if (kstrtou8(buf, 0, &value))
+		return -EINVAL;
+
+	is_ap_sniffer_en = value ? 1 : 0;
+	return count;
+}
+
+static DEVICE_ATTR_RW(enable_ap_sniffer);
+
+static struct attribute *cros_ec_ucsi_attrs[] = {
+	&dev_attr_enable_ap_sniffer.attr,
+	NULL
+};
+
+static const struct attribute_group cros_ec_ucsi_attrs_grp = {
+	.attrs = cros_ec_ucsi_attrs,
+};
+
 static int cros_ucsi_read(struct ucsi *ucsi, unsigned int offset, void *val,
 			  size_t val_len)
 {
@@ -65,6 +103,9 @@ static int cros_ucsi_read(struct ucsi *ucsi, unsigned int offset, void *val,
 		return ret;
 	}
 
+	if (is_ap_sniffer_en)
+		nl_cros_ec_bcast_msg(NL_CROS_EC_TO_PPM, NL_CROS_EC_RD, offset,
+				     val, val_len);
 	trace_cros_ec_opm_to_ppm_rd(offset, val, val_len);
 	return 0;
 }
@@ -101,6 +142,9 @@ static int cros_ucsi_async_control(struct ucsi *ucsi, u64 cmd)
 		return ret;
 	}
 
+	if (is_ap_sniffer_en)
+		nl_cros_ec_bcast_msg(NL_CROS_EC_TO_PPM, NL_CROS_EC_WR,
+				     req->offset, (u8 *) &cmd, sizeof(cmd));
 	trace_cros_ec_opm_to_ppm_wr(req->offset, &cmd, sizeof(cmd));
 	return 0;
 }
@@ -144,6 +188,8 @@ static void cros_ucsi_work(struct work_struct *work)
 	struct cros_ucsi_data *udata = container_of(work, struct cros_ucsi_data, work);
 	u32 cci;
 
+	if (is_ap_sniffer_en)
+		nl_cros_ec_bcast_msg(NL_CROS_EC_TO_OPM, 0, 0, NULL, 0);
 	trace_cros_ec_ppm_to_opm(0);
 
 	if (cros_ucsi_read_cci(udata->ucsi, &cci))
@@ -229,13 +275,29 @@ static int cros_ucsi_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = nl_cros_ec_register();
+	if (ret) {
+		dev_err(dev, "failed to register netlink: error=%d", ret);
+		cros_ucsi_destroy(udata);
+		return ret;
+	}
+
+	ret = sysfs_create_group(&dev->kobj, &cros_ec_ucsi_attrs_grp);
+	if (ret) {
+		dev_err(dev, "failed to register sysfs group: error=%d", ret);
+		cros_ucsi_destroy(udata);
+		return ret;
+	}
+
 	return 0;
 }
 
-static void cros_ucsi_remove(struct platform_device *dev)
+static void cros_ucsi_remove(struct platform_device *pdev)
 {
-	struct cros_ucsi_data *udata = platform_get_drvdata(dev);
+	struct cros_ucsi_data *udata = platform_get_drvdata(pdev);
 
+	sysfs_remove_group(&pdev->dev.kobj, &cros_ec_ucsi_attrs_grp);
+	nl_cros_ec_unregister();
 	ucsi_unregister(udata->ucsi);
 	cros_ucsi_destroy(udata);
 }
