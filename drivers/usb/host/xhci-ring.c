@@ -2592,6 +2592,15 @@ static int handle_transferless_tx_event(struct xhci_hcd *xhci, struct xhci_virt_
 }
 
 /*
+ * Return the first TD pending on a transfer ring, or NULL if none.
+ */
+static struct xhci_td *xhci_ring_pending_td(struct xhci_ring *ring)
+{
+	return list_first_entry_or_null(&ring->td_list,
+					struct xhci_td, td_list);
+}
+
+/*
  * If this function returns an error condition, it means it got a Transfer
  * event with a corrupted Slot ID, Endpoint ID, or TRB DMA address.
  * At this point, the host controller is probably hosed and should be reset.
@@ -2777,8 +2786,7 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	 * We wait for the final IOC event, but if we get an event
 	 * anywhere outside this TD, just give it back already.
 	 */
-	td = list_first_entry_or_null(&ep_ring->td_list,
-						struct xhci_td, td_list);
+	td = xhci_ring_pending_td(ep_ring);
 
 	if (td && td->error_mid_td && !trb_in_td(xhci, td, ep_trb_dma, false)) {
 		xhci_dbg(xhci, "Missing TD completion event after mid TD error\n");
@@ -2786,48 +2794,35 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 		ep_ring->deq_seg = td->last_trb_seg;
 		inc_deq(xhci, ep_ring);
 		xhci_td_cleanup(xhci, td, ep_ring, td->status);
+
+		td = xhci_ring_pending_td(ep_ring);
 	}
 
-	do {
-		/* This TRB should be in the TD at the head of this ring's
-		 * TD list.
-		 */
-		if (list_empty(&ep_ring->td_list)) {
-			if (ep->skip) {
-				ep->skip = false;
-				xhci_dbg(xhci, "td_list is empty while skip flag set. Clear skip flag for slot %u ep %u.\n",
-					 slot_id, ep_index);
-			}
-			break;
-		}
-
-		td = list_first_entry(&ep_ring->td_list, struct xhci_td,
-				      td_list);
-
-		/* Is this a TRB in the currently executing TD? */
+	/* Is this a TRB in the currently executing TD? */
+	if (td)
 		ep_seg = trb_in_td(xhci, td, ep_trb_dma, false);
 
+	if (ep->skip) {
+		int skipped = 0;
 		/*
 		 * If ep->skip is set, it means there are missed tds on the
 		 * endpoint ring need to take care of.
 		 * Process them as short transfer until reach the td pointed by
 		 * the event.
 		 */
-		if (ep->skip) {
-			if (ep_seg) {
-				xhci_dbg(xhci,
-					 "Found td. Clear skip flag for slot %u ep %u.\n",
-					 slot_id, ep_index);
-				ep->skip = false;
-			} else {
-				if (usb_endpoint_xfer_isoc(&td->urb->ep->desc))
-					skip_isoc_td(xhci, td, ep, status);
-				else
-					break;
-			}
-		}
 
-	} while (ep->skip);
+		while (td && !ep_seg &&
+				usb_endpoint_xfer_isoc(&td->urb->ep->desc)) {
+			skip_isoc_td(xhci, td, ep, status);
+			td = xhci_ring_pending_td(ep_ring);
+			if (td)
+				ep_seg = trb_in_td(xhci, td, ep_trb_dma, false);
+			skipped++;
+		}
+		ep->skip = false;
+		xhci_dbg(xhci, "Skipped %d isoc TDs, TD %sfound, clear skip flag for slot %u ep %u\n",
+				skipped, td ? "":"not ", slot_id, ep_index);
+	}
 
 	if (!ep_seg) {
 
