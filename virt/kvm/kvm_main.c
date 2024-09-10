@@ -3286,11 +3286,51 @@ static int __kvm_read_guest_page(struct kvm_memory_slot *slot, gfn_t gfn,
 	return 0;
 }
 
+static int __kvm_read_guest_private_page(struct kvm *kvm,
+					 struct kvm_memory_slot *memslot, gfn_t gfn,
+					 void *data, int offset, int len)
+{
+	kvm_pfn_t pfn;
+	int r;
+	struct folio *folio;
+
+	r = kvm_gmem_get_pfn(kvm, memslot, gfn, &pfn, NULL,
+			     KVM_GMEM_GET_PFN_SHARED | KVM_GMEM_GET_PFN_LOCKED);
+
+	if (r < 0)
+		return r;
+
+	folio = pfn_folio(pfn);
+	memcpy(data, folio_address(folio) + offset, len);
+	r =  kvm_gmem_put_shared_pfn(pfn);
+	folio_unlock(folio);
+	folio_put(folio);
+	return r;
+}
+
+static int __kvm_vcpu_read_guest_private_page(struct kvm_vcpu *vcpu,
+					       struct kvm_memory_slot *memslot, gfn_t gfn,
+					       void *data, int offset, int len)
+{
+	int r = __kvm_read_guest_private_page(vcpu->kvm, memslot, gfn, data, offset, len);
+
+	/* kvm not allowed to access gmem */
+	if (r == -EPERM) {
+		kvm_prepare_memory_fault_exit(vcpu, gfn + offset, len, false,
+					      false, true);
+		return -EFAULT;
+	}
+
+	return r;
+}
+
 int kvm_read_guest_page(struct kvm *kvm, gfn_t gfn, void *data, int offset,
 			int len)
 {
 	struct kvm_memory_slot *slot = gfn_to_memslot(kvm, gfn);
 
+	if (kvm_mem_is_private(kvm, gfn))
+		return __kvm_read_guest_private_page(kvm, slot, gfn, data, offset, len);
 	return __kvm_read_guest_page(slot, gfn, data, offset, len);
 }
 EXPORT_SYMBOL_GPL(kvm_read_guest_page);
@@ -3300,6 +3340,8 @@ int kvm_vcpu_read_guest_page(struct kvm_vcpu *vcpu, gfn_t gfn, void *data,
 {
 	struct kvm_memory_slot *slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
 
+	if (kvm_mem_is_private(vcpu->kvm, gfn))
+		return __kvm_vcpu_read_guest_private_page(vcpu, slot, gfn, data, offset, len);
 	return __kvm_read_guest_page(slot, gfn, data, offset, len);
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_read_guest_page);
@@ -3390,11 +3432,50 @@ static int __kvm_write_guest_page(struct kvm *kvm,
 	return 0;
 }
 
+static int __kvm_write_guest_private_page(struct kvm *kvm,
+					  struct kvm_memory_slot *memslot, gfn_t gfn,
+					  const void *data, int offset, int len)
+{
+	kvm_pfn_t pfn;
+	int r;
+	struct folio *folio;
+
+	r = kvm_gmem_get_pfn(kvm, memslot, gfn, &pfn, NULL,
+			     KVM_GMEM_GET_PFN_SHARED | KVM_GMEM_GET_PFN_LOCKED);
+
+	if (r < 0)
+		return r;
+
+	folio = pfn_folio(pfn);
+	memcpy(folio_address(folio) + offset, data, len);
+	r =  kvm_gmem_put_shared_pfn(pfn);
+	folio_unlock(folio);
+	folio_put(folio);
+	return r;
+}
+
+static int __kvm_vcpu_write_guest_private_page(struct kvm_vcpu *vcpu,
+					       struct kvm_memory_slot *memslot, gfn_t gfn,
+					       const void *data, int offset, int len)
+{
+	int r = __kvm_write_guest_private_page(vcpu->kvm, memslot, gfn, data, offset, len);
+
+	if (r == -EPERM) {
+		kvm_prepare_memory_fault_exit(vcpu, gfn + offset, len, true,
+					      false, true);
+		return -EFAULT;
+	}
+
+	return r;
+}
+
 int kvm_write_guest_page(struct kvm *kvm, gfn_t gfn,
 			 const void *data, int offset, int len)
 {
 	struct kvm_memory_slot *slot = gfn_to_memslot(kvm, gfn);
 
+	if (kvm_mem_is_private(kvm, gfn))
+		return __kvm_write_guest_private_page(kvm, slot, gfn, data, offset, len);
 	return __kvm_write_guest_page(kvm, slot, gfn, data, offset, len);
 }
 EXPORT_SYMBOL_GPL(kvm_write_guest_page);
@@ -3404,6 +3485,8 @@ int kvm_vcpu_write_guest_page(struct kvm_vcpu *vcpu, gfn_t gfn,
 {
 	struct kvm_memory_slot *slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
 
+	if (kvm_mem_is_private(vcpu->kvm, gfn))
+		return __kvm_vcpu_write_guest_private_page(vcpu, slot, gfn, data, offset, len);
 	return __kvm_write_guest_page(vcpu->kvm, slot, gfn, data, offset, len);
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_write_guest_page);
