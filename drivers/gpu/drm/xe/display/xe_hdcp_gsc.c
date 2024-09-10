@@ -138,42 +138,43 @@ static const struct i915_hdcp_ops gsc_hdcp_ops = {
 	.close_hdcp_session = intel_hdcp_gsc_close_session,
 };
 
-int intel_hdcp_gsc_init(struct xe_device *xe)
+int intel_hdcp_gsc_init(struct intel_display *display)
 {
 	struct i915_hdcp_arbiter *data;
+	struct xe_device *xe = to_xe_device(display->drm);
 	int ret;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
-	mutex_lock(&xe->display.hdcp.hdcp_mutex);
-	xe->display.hdcp.arbiter = data;
-	xe->display.hdcp.arbiter->hdcp_dev = xe->drm.dev;
-	xe->display.hdcp.arbiter->ops = &gsc_hdcp_ops;
+	mutex_lock(&display->hdcp.hdcp_mutex);
+	display->hdcp.arbiter = data;
+	display->hdcp.arbiter->hdcp_dev = display->drm->dev;
+	display->hdcp.arbiter->ops = &gsc_hdcp_ops;
 	ret = intel_hdcp_gsc_hdcp2_init(xe);
 	if (ret)
 		kfree(data);
 
-	mutex_unlock(&xe->display.hdcp.hdcp_mutex);
+	mutex_unlock(&display->hdcp.hdcp_mutex);
 
 	return ret;
 }
 
-void intel_hdcp_gsc_fini(struct xe_device *xe)
+void intel_hdcp_gsc_fini(struct intel_display *display)
 {
 	struct intel_hdcp_gsc_message *hdcp_message =
-					xe->display.hdcp.hdcp_message;
-	struct i915_hdcp_arbiter *arb = xe->display.hdcp.arbiter;
+					display->hdcp.hdcp_message;
+	struct i915_hdcp_arbiter *arb = display->hdcp.arbiter;
 
 	if (hdcp_message) {
 		xe_bo_unpin_map_no_vm(hdcp_message->hdcp_bo);
 		kfree(hdcp_message);
-		xe->display.hdcp.hdcp_message = NULL;
+		display->hdcp.hdcp_message = NULL;
 	}
 
 	kfree(arb);
-	xe->display.hdcp.arbiter = NULL;
+	display->hdcp.arbiter = NULL;
 }
 
 static int xe_gsc_send_sync(struct xe_device *xe,
