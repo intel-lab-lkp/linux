@@ -7,7 +7,7 @@
 #include <uapi/linux/fcntl.h>
 
 /* Block storage write lifetime hint values. */
-enum rw_hint {
+enum rw_lifetime_hint {
 	WRITE_LIFE_NOT_SET	= RWH_WRITE_LIFE_NOT_SET,
 	WRITE_LIFE_NONE		= RWH_WRITE_LIFE_NONE,
 	WRITE_LIFE_SHORT	= RWH_WRITE_LIFE_SHORT,
@@ -18,7 +18,7 @@ enum rw_hint {
 
 /* Sparse ignores __packed annotations on enums, hence the #ifndef below. */
 #ifndef __CHECKER__
-static_assert(sizeof(enum rw_hint) == 1);
+static_assert(sizeof(enum rw_lifetime_hint) == 1);
 #endif
 
 #endif /* _LINUX_RW_HINT_H */
