@@ -92,6 +92,7 @@ static int num_fault_mutexes;
 struct mutex *hugetlb_fault_mutex_table ____cacheline_aligned_in_smp;
 
 /* Forward declaration */
+static int __hugetlb_acct_memory(struct hstate *h, long delta, bool use_surplus);
 static int hugetlb_acct_memory(struct hstate *h, long delta);
 static void hugetlb_vma_lock_free(struct vm_area_struct *vma);
 static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma);
@@ -129,7 +130,7 @@ static inline void unlock_or_release_subpool(struct hugepage_subpool *spool,
 }
 
 struct hugepage_subpool *hugepage_new_subpool(struct hstate *h, long max_hpages,
-						long min_hpages)
+					      long min_hpages, bool use_surplus)
 {
 	struct hugepage_subpool *spool;
 
@@ -143,7 +144,8 @@ struct hugepage_subpool *hugepage_new_subpool(struct hstate *h, long max_hpages,
 	spool->hstate = h;
 	spool->min_hpages = min_hpages;
 
-	if (min_hpages != -1 && hugetlb_acct_memory(h, min_hpages)) {
+	if (min_hpages != -1 &&
+	    __hugetlb_acct_memory(h, min_hpages, use_surplus)) {
 		kfree(spool);
 		return NULL;
 	}
@@ -2592,6 +2594,21 @@ static nodemask_t *policy_mbind_nodemask(gfp_t gfp)
 	return NULL;
 }
 
+static int hugetlb_hstate_reserve_pages(struct hstate *h,
+					long num_pages_to_reserve)
+	__must_hold(&hugetlb_lock)
+{
+	long needed;
+
+	needed = (h->resv_huge_pages + num_pages_to_reserve) - h->free_huge_pages;
+	if (needed <= 0) {
+		h->resv_huge_pages += num_pages_to_reserve;
+		return 0;
+	}
+
+	return needed;
+}
+
 /*
  * Increase the hugetlb pool such that it can accommodate a reservation
  * of size 'delta'.
@@ -2608,13 +2625,7 @@ static int gather_surplus_pages(struct hstate *h, long delta)
 	int node;
 	nodemask_t *mbind_nodemask = policy_mbind_nodemask(htlb_alloc_mask(h));
 
-	lockdep_assert_held(&hugetlb_lock);
-	needed = (h->resv_huge_pages + delta) - h->free_huge_pages;
-	if (needed <= 0) {
-		h->resv_huge_pages += delta;
-		return 0;
-	}
-
+	needed = delta;
 	allocated = 0;
 
 	ret = -ENOMEM;
@@ -5104,7 +5115,7 @@ unsigned long hugetlb_total_pages(void)
 	return nr_total_pages;
 }
 
-static int hugetlb_acct_memory(struct hstate *h, long delta)
+static int __hugetlb_acct_memory(struct hstate *h, long delta, bool use_surplus)
 {
 	int ret = -ENOMEM;
 
@@ -5136,7 +5147,12 @@ static int hugetlb_acct_memory(struct hstate *h, long delta)
 	 * above.
 	 */
 	if (delta > 0) {
-		if (gather_surplus_pages(h, delta) < 0)
+		long required_surplus = hugetlb_hstate_reserve_pages(h, delta);
+
+		if (!use_surplus && required_surplus > 0)
+			goto out;
+
+		if (gather_surplus_pages(h, required_surplus) < 0)
 			goto out;
 
 		if (delta > allowed_mems_nr(h)) {
@@ -5152,6 +5168,11 @@ static int hugetlb_acct_memory(struct hstate *h, long delta)
 out:
 	spin_unlock_irq(&hugetlb_lock);
 	return ret;
+}
+
+static int hugetlb_acct_memory(struct hstate *h, long delta)
+{
+	return __hugetlb_acct_memory(h, delta, true);
 }
 
 static void hugetlb_vm_op_open(struct vm_area_struct *vma)
