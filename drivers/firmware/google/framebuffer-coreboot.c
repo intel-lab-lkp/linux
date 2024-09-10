@@ -62,7 +62,8 @@ static int framebuffer_probe(struct coreboot_device *dev)
 		return -EINVAL;
 
 	pdev = platform_device_register_resndata(&dev->dev,
-						 "simple-framebuffer", 0,
+						 "simple-framebuffer",
+						 PLATFORM_DEVID_AUTO,
 						 &res, 1, &pdata,
 						 sizeof(pdata));
 	if (IS_ERR(pdev))
