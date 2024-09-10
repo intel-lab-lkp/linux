@@ -2564,6 +2564,8 @@ static int kvm_vm_set_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		KVM_BUG_ON(r, kvm);
 	}
 
+	kvm_gmem_clear_prepared_vm(kvm, start, end);
+
 	kvm_handle_gfn_range(kvm, &post_set_range);
 
 out_unlock:

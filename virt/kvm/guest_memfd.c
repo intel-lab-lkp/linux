@@ -129,11 +129,27 @@ static int __kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slo
 }
 
 /**
- * Use the uptodate flag to indicate that the folio is prepared for KVM's usage.
+ * Use folio's up-to-date flag to indicate that this folio is prepared for usage
+ * by the guest.
+ *
+ * This flag can be used whether the folio is prepared for PRIVATE or SHARED
+ * usage.
  */
 static inline void kvm_gmem_mark_prepared(struct folio *folio)
 {
 	folio_mark_uptodate(folio);
+}
+
+/**
+ * Use folio's up-to-date flag to indicate that this folio is not yet prepared for
+ * usage by the guest.
+ *
+ * This flag can be used whether the folio is prepared for PRIVATE or SHARED
+ * usage.
+ */
+static inline void kvm_gmem_clear_prepared(struct folio *folio)
+{
+	folio_clear_uptodate(folio);
 }
 
 /*
@@ -148,6 +164,12 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 	pgoff_t index;
 	int r;
 
+	/*
+	 * Defensively zero folio to avoid leaking kernel memory in
+	 * uninitialized pages. This is important since pages can now be mapped
+	 * into userspace, where hardware (e.g. TDX) won't be clearing those
+	 * pages.
+	 */
 	if (folio_test_hugetlb(folio)) {
 		folio_zero_user(folio, folio->index << PAGE_SHIFT);
 	} else {
@@ -1017,6 +1039,7 @@ static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
 {
 	struct inode *inode;
 	struct folio *folio;
+	bool is_prepared;
 
 	inode = file_inode(vmf->vma->vm_file);
 	if (!kvm_gmem_is_faultable(inode, vmf->pgoff))
@@ -1025,6 +1048,31 @@ static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
 	folio = kvm_gmem_get_folio(inode, vmf->pgoff);
 	if (!folio)
 		return VM_FAULT_SIGBUS;
+
+	is_prepared = folio_test_uptodate(folio);
+	if (!is_prepared) {
+		unsigned long nr_pages;
+		unsigned long i;
+
+		if (folio_test_hugetlb(folio)) {
+			folio_zero_user(folio, folio->index << PAGE_SHIFT);
+		} else {
+			/*
+			 * Defensively zero folio to avoid leaking kernel memory in
+			 * uninitialized pages. This is important since pages can now be
+			 * mapped into userspace, where hardware (e.g. TDX) won't be
+			 * clearing those pages.
+			 *
+			 * Will probably need a version of kvm_gmem_prepare_folio() to
+			 * prepare the page for SHARED use.
+			 */
+			nr_pages = folio_nr_pages(folio);
+			for (i = 0; i < nr_pages; i++)
+				clear_highpage(folio_page(folio, i));
+		}
+
+		kvm_gmem_mark_prepared(folio);
+	}
 
 	vmf->page = folio_file_page(folio, vmf->pgoff);
 	return VM_FAULT_LOCKED;
@@ -1592,6 +1640,87 @@ put_folio_and_exit:
 	return ret && !i ? ret : i;
 }
 EXPORT_SYMBOL_GPL(kvm_gmem_populate);
+
+static void kvm_gmem_clear_prepared_range(struct inode *inode, pgoff_t start,
+					  pgoff_t end)
+{
+	pgoff_t index;
+
+	filemap_invalidate_lock_shared(inode->i_mapping);
+
+	/* TODO: replace iteration with filemap_get_folios() for efficiency. */
+	for (index = start; index < end;) {
+		struct folio *folio;
+
+		/* Don't use kvm_gmem_get_folio to avoid allocating */
+		folio = filemap_lock_folio(inode->i_mapping, index);
+		if (IS_ERR(folio)) {
+			++index;
+			continue;
+		}
+
+		kvm_gmem_clear_prepared(folio);
+
+		index = folio_next_index(folio);
+		folio_unlock(folio);
+		folio_put(folio);
+	}
+
+	filemap_invalidate_unlock_shared(inode->i_mapping);
+}
+
+/**
+ * Clear the prepared flag for all folios in gfn range [@start, @end) in memslot
+ * @slot.
+ */
+static void kvm_gmem_clear_prepared_slot(struct kvm_memory_slot *slot, gfn_t start,
+					 gfn_t end)
+{
+	pgoff_t start_offset;
+	pgoff_t end_offset;
+	struct file *file;
+
+	file = kvm_gmem_get_file(slot);
+	if (!file)
+		return;
+
+	start_offset = start - slot->base_gfn + slot->gmem.pgoff;
+	end_offset = end - slot->base_gfn + slot->gmem.pgoff;
+
+	kvm_gmem_clear_prepared_range(file_inode(file), start_offset, end_offset);
+
+	fput(file);
+}
+
+/**
+ * Clear the prepared flag for all folios for any slot in gfn range
+ * [@start, @end) in @kvm.
+ */
+void kvm_gmem_clear_prepared_vm(struct kvm *kvm, gfn_t start, gfn_t end)
+{
+	int i;
+
+	lockdep_assert_held(&kvm->slots_lock);
+
+	for (i = 0; i < kvm_arch_nr_memslot_as_ids(kvm); i++) {
+		struct kvm_memslot_iter iter;
+		struct kvm_memslots *slots;
+
+		slots = __kvm_memslots(kvm, i);
+		kvm_for_each_memslot_in_gfn_range(&iter, slots, start, end) {
+			struct kvm_memory_slot *slot;
+			gfn_t gfn_start;
+			gfn_t gfn_end;
+
+			slot = iter.slot;
+			gfn_start = max(start, slot->base_gfn);
+			gfn_end = min(end, slot->base_gfn + slot->npages);
+
+			if (iter.slot->flags & KVM_MEM_GUEST_MEMFD)
+				kvm_gmem_clear_prepared_slot(iter.slot, gfn_start, gfn_end);
+		}
+	}
+}
 
 /**
  * Returns true if pages in range [@start, @end) in inode @inode have no
