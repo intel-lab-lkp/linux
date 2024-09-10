@@ -93,7 +93,7 @@ struct mutex *hugetlb_fault_mutex_table ____cacheline_aligned_in_smp;
 
 /* Forward declaration */
 static int __hugetlb_acct_memory(struct hstate *h, long delta, bool use_surplus);
-static int hugetlb_acct_memory(struct hstate *h, long delta);
+int hugetlb_acct_memory(struct hstate *h, long delta);
 static void hugetlb_vma_lock_free(struct vm_area_struct *vma);
 static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma);
 static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma);
@@ -5170,7 +5170,7 @@ out:
 	return ret;
 }
 
-static int hugetlb_acct_memory(struct hstate *h, long delta)
+int hugetlb_acct_memory(struct hstate *h, long delta)
 {
 	return __hugetlb_acct_memory(h, delta, true);
 }
