@@ -2704,40 +2704,24 @@ static int ps_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 	}
 
-	ret = hid_hw_start(hdev, HID_CONNECT_HIDRAW);
-	if (ret) {
-		hid_err(hdev, "Failed to start HID device\n");
+	ret = devm_hid_hw_start_and_open(hdev, HID_CONNECT_HIDRAW);
+	if (ret)
 		return ret;
-	}
-
-	ret = hid_hw_open(hdev);
-	if (ret) {
-		hid_err(hdev, "Failed to open HID device\n");
-		goto err_stop;
-	}
 
 	if (id->driver_data == PS_TYPE_PS4_DUALSHOCK4) {
 		dev = dualshock4_create(hdev);
 		if (IS_ERR(dev)) {
 			hid_err(hdev, "Failed to create dualshock4.\n");
-			ret = PTR_ERR(dev);
-			goto err_close;
+			return PTR_ERR(dev);
 		}
 	} else if (id->driver_data == PS_TYPE_PS5_DUALSENSE) {
 		dev = dualsense_create(hdev);
 		if (IS_ERR(dev)) {
 			hid_err(hdev, "Failed to create dualsense.\n");
-			ret = PTR_ERR(dev);
-			goto err_close;
+			return PTR_ERR(dev);
 		}
 	}
 
-	return ret;
-
-err_close:
-	hid_hw_close(hdev);
-err_stop:
-	hid_hw_stop(hdev);
 	return ret;
 }
 
@@ -2750,9 +2734,6 @@ static void ps_remove(struct hid_device *hdev)
 
 	if (dev->remove)
 		dev->remove(dev);
-
-	hid_hw_close(hdev);
-	hid_hw_stop(hdev);
 }
 
 static const struct hid_device_id ps_devices[] = {
