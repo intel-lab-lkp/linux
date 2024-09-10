@@ -255,7 +255,7 @@ Conduit network device (e.g.: e1000e):
 2. net/ethernet/eth.c::
 
           eth_type_trans(skb, dev)
-                  if (dev->dsa_ptr != NULL)
+                  if (netdev_uses_dsa_currently(dev))
                           -> skb->protocol = ETH_P_XDSA
 
 3. drivers/net/ethernet/\*::
@@ -656,14 +656,14 @@ Switch configuration
   represents the index of the user port, and the ``conduit`` argument represents
   the new DSA conduit ``net_device``. The CPU port associated with the new
   conduit can be retrieved by looking at ``struct dsa_port *cpu_dp =
-  conduit->dsa_ptr``. Additionally, the conduit can also be a LAG device where
-  all the slave devices are physical DSA conduits. LAG DSA  also have a
-  valid ``conduit->dsa_ptr`` pointer, however this is not unique, but rather a
-  duplicate of the first physical DSA conduit's (LAG slave) ``dsa_ptr``. In case
-  of a LAG DSA conduit, a further call to ``port_lag_join`` will be emitted
-  separately for the physical CPU ports associated with the physical DSA
-  conduits, requesting them to create a hardware LAG associated with the LAG
-  interface.
+  rtnl_dereference(conduit->dsa_ptr)``. Additionally, the conduit can also be a
+  LAG device where all the slave devices are physical DSA conduits. LAG DSA
+  also have a valid ``conduit->dsa_ptr`` pointer, however this is not unique,
+  but rather a duplicate of the first physical DSA conduit's (LAG slave)
+  ``dsa_ptr``. In case of a LAG DSA conduit, a further call to ``port_lag_join``
+  will be emitted separately for the physical CPU ports associated with the
+  physical DSA conduits, requesting them to create a hardware LAG associated
+  with the LAG interface.
 
 PHY devices and link management
 -------------------------------
