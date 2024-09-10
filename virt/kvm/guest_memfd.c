@@ -3,6 +3,7 @@
 #include <linux/mount.h>
 #include <linux/backing-dev.h>
 #include <linux/falloc.h>
+#include <linux/hugetlb.h>
 #include <linux/kvm_host.h>
 #include <linux/pseudo_fs.h>
 #include <linux/pagemap.h>
@@ -17,6 +18,16 @@ struct kvm_gmem {
 	struct xarray bindings;
 	struct list_head entry;
 };
+
+struct kvm_gmem_hugetlb {
+	struct hstate *h;
+	struct hugepage_subpool *spool;
+};
+
+static struct kvm_gmem_hugetlb *kvm_gmem_hgmem(struct inode *inode)
+{
+	return inode->i_mapping->i_private_data;
+}
 
 /**
  * folio_file_pfn - like folio_file_page, but return a pfn.
@@ -153,6 +164,82 @@ static void kvm_gmem_invalidate_end(struct kvm_gmem *gmem, pgoff_t start,
 		KVM_MMU_UNLOCK(kvm);
 	}
 }
+
+static inline void kvm_gmem_hugetlb_filemap_remove_folio(struct folio *folio)
+{
+	folio_lock(folio);
+
+	folio_clear_dirty(folio);
+	folio_clear_uptodate(folio);
+	filemap_remove_folio(folio);
+
+	folio_unlock(folio);
+}
+
+/**
+ * Removes folios in range [@lstart, @lend) from page cache/filemap (@mapping),
+ * returning the number of pages freed.
+ */
+static int kvm_gmem_hugetlb_filemap_remove_folios(struct address_space *mapping,
+						  struct hstate *h,
+						  loff_t lstart, loff_t lend)
+{
+	const pgoff_t end = lend >> PAGE_SHIFT;
+	pgoff_t next = lstart >> PAGE_SHIFT;
+	struct folio_batch fbatch;
+	int num_freed = 0;
+
+	folio_batch_init(&fbatch);
+	while (filemap_get_folios(mapping, &next, end - 1, &fbatch)) {
+		int i;
+		for (i = 0; i < folio_batch_count(&fbatch); ++i) {
+			struct folio *folio;
+			pgoff_t hindex;
+			u32 hash;
+
+			folio = fbatch.folios[i];
+			hindex = folio->index >> huge_page_order(h);
+			hash = hugetlb_fault_mutex_hash(mapping, hindex);
+
+			mutex_lock(&hugetlb_fault_mutex_table[hash]);
+			kvm_gmem_hugetlb_filemap_remove_folio(folio);
+			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
+
+			num_freed++;
+		}
+		folio_batch_release(&fbatch);
+		cond_resched();
+	}
+
+	return num_freed;
+}
+
+/**
+ * Removes folios in range [@lstart, @lend) from page cache of inode, updates
+ * inode metadata and hugetlb reservations.
+ */
+static void kvm_gmem_hugetlb_truncate_folios_range(struct inode *inode,
+						   loff_t lstart, loff_t lend)
+{
+	struct kvm_gmem_hugetlb *hgmem;
+	struct hstate *h;
+	int gbl_reserve;
+	int num_freed;
+
+	hgmem = kvm_gmem_hgmem(inode);
+	h = hgmem->h;
+
+	num_freed = kvm_gmem_hugetlb_filemap_remove_folios(inode->i_mapping,
+							   h, lstart, lend);
+
+	gbl_reserve = hugepage_subpool_put_pages(hgmem->spool, num_freed);
+	hugetlb_acct_memory(h, -gbl_reserve);
+
+	spin_lock(&inode->i_lock);
+	inode->i_blocks -= blocks_per_huge_page(h) * num_freed;
+	spin_unlock(&inode->i_lock);
+}
+
 
 static long kvm_gmem_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 {
@@ -307,8 +394,33 @@ static inline struct file *kvm_gmem_get_file(struct kvm_memory_slot *slot)
 	return get_file_active(&slot->gmem.file);
 }
 
+static void kvm_gmem_hugetlb_teardown(struct inode *inode)
+{
+	struct kvm_gmem_hugetlb *hgmem;
+
+	truncate_inode_pages_final_prepare(inode->i_mapping);
+	kvm_gmem_hugetlb_truncate_folios_range(inode, 0, LLONG_MAX);
+
+	hgmem = kvm_gmem_hgmem(inode);
+	hugepage_put_subpool(hgmem->spool);
+	kfree(hgmem);
+}
+
+static void kvm_gmem_evict_inode(struct inode *inode)
+{
+	u64 flags = (u64)inode->i_private;
+
+	if (flags & KVM_GUEST_MEMFD_HUGETLB)
+		kvm_gmem_hugetlb_teardown(inode);
+	else
+		truncate_inode_pages_final(inode->i_mapping);
+
+	clear_inode(inode);
+}
+
 static const struct super_operations kvm_gmem_super_operations = {
 	.statfs		= simple_statfs,
+	.evict_inode	= kvm_gmem_evict_inode,
 };
 
 static int kvm_gmem_init_fs_context(struct fs_context *fc)
@@ -431,6 +543,42 @@ static const struct inode_operations kvm_gmem_iops = {
 	.setattr	= kvm_gmem_setattr,
 };
 
+static int kvm_gmem_hugetlb_setup(struct inode *inode, loff_t size, u64 flags)
+{
+	struct kvm_gmem_hugetlb *hgmem;
+	struct hugepage_subpool *spool;
+	int page_size_log;
+	struct hstate *h;
+	long hpages;
+
+	page_size_log = (flags >> KVM_GUEST_MEMFD_HUGE_SHIFT) & KVM_GUEST_MEMFD_HUGE_MASK;
+	h = hstate_sizelog(page_size_log);
+
+	/* Round up to accommodate size requests that don't align with huge pages */
+	hpages = round_up(size, huge_page_size(h)) >> huge_page_shift(h);
+
+	spool = hugepage_new_subpool(h, hpages, hpages, false);
+	if (!spool)
+		goto err;
+
+	hgmem = kzalloc(sizeof(*hgmem), GFP_KERNEL);
+	if (!hgmem)
+		goto err_subpool;
+
+	inode->i_blkbits = huge_page_shift(h);
+
+	hgmem->h = h;
+	hgmem->spool = spool;
+	inode->i_mapping->i_private_data = hgmem;
+
+	return 0;
+
+err_subpool:
+	kfree(spool);
+err:
+	return -ENOMEM;
+}
+
 static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 						      loff_t size, u64 flags)
 {
@@ -443,9 +591,13 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 		return inode;
 
 	err = security_inode_init_security_anon(inode, &qname, NULL);
-	if (err) {
-		iput(inode);
-		return ERR_PTR(err);
+	if (err)
+		goto out;
+
+	if (flags & KVM_GUEST_MEMFD_HUGETLB) {
+		err = kvm_gmem_hugetlb_setup(inode, size, flags);
+		if (err)
+			goto out;
 	}
 
 	inode->i_private = (void *)(unsigned long)flags;
@@ -459,6 +611,11 @@ static struct inode *kvm_gmem_inode_make_secure_inode(const char *name,
 	WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
 
 	return inode;
+
+out:
+	iput(inode);
+
+	return ERR_PTR(err);
 }
 
 static struct file *kvm_gmem_inode_create_getfile(void *priv, loff_t size,
@@ -526,14 +683,22 @@ err_fd:
 	return err;
 }
 
+#define KVM_GUEST_MEMFD_ALL_FLAGS KVM_GUEST_MEMFD_HUGETLB
+
 int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 {
 	loff_t size = args->size;
 	u64 flags = args->flags;
-	u64 valid_flags = 0;
 
-	if (flags & ~valid_flags)
-		return -EINVAL;
+	if (flags & KVM_GUEST_MEMFD_HUGETLB) {
+		/* Allow huge page size encoding in flags */
+		if (flags & ~(KVM_GUEST_MEMFD_ALL_FLAGS |
+			      (KVM_GUEST_MEMFD_HUGE_MASK << KVM_GUEST_MEMFD_HUGE_SHIFT)))
+			return -EINVAL;
+	} else {
+		if (flags & ~KVM_GUEST_MEMFD_ALL_FLAGS)
+			return -EINVAL;
+	}
 
 	if (size <= 0 || !PAGE_ALIGNED(size))
 		return -EINVAL;
