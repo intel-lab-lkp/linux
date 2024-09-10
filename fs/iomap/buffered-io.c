@@ -1188,8 +1188,13 @@ static void iomap_write_delalloc_release(struct inode *inode, loff_t start_byte,
 	 * folios and dirtying them via ->page_mkwrite whilst we walk the
 	 * cache and perform delalloc extent removal. Failing to do this can
 	 * leave dirty pages with no space reservation in the cache.
+	 *
+	 * For zeroing operations the callers already hold invalidate_lock.
 	 */
-	filemap_invalidate_lock(inode->i_mapping);
+	if (flags & IOMAP_ZERO)
+		rwsem_assert_held_write(&inode->i_mapping->invalidate_lock);
+	else
+		filemap_invalidate_lock(inode->i_mapping);
 	while (start_byte < scan_end_byte) {
 		loff_t		data_end;
 
@@ -1240,7 +1245,8 @@ static void iomap_write_delalloc_release(struct inode *inode, loff_t start_byte,
 		punch(inode, punch_start_byte, end_byte - punch_start_byte,
 				iomap);
 out_unlock:
-	filemap_invalidate_unlock(inode->i_mapping);
+	if (!(flags & IOMAP_ZERO))
+		filemap_invalidate_unlock(inode->i_mapping);
 }
 
 /*
