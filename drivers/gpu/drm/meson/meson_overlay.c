@@ -484,7 +484,7 @@ static void meson_overlay_atomic_update(struct drm_plane *plane,
 
 	interlace_mode = new_state->crtc->mode.flags & DRM_MODE_FLAG_INTERLACE;
 
-	spin_lock_irqsave(&priv->drm->event_lock, flags);
+	spin_lock_irqsave(&priv->drm.event_lock, flags);
 
 	if ((fb->modifier & DRM_FORMAT_MOD_AMLOGIC_FBC(0, 0)) ==
 			    DRM_FORMAT_MOD_AMLOGIC_FBC(0, 0)) {
@@ -717,7 +717,7 @@ static void meson_overlay_atomic_update(struct drm_plane *plane,
 
 	priv->viu.vd1_enabled = true;
 
-	spin_unlock_irqrestore(&priv->drm->event_lock, flags);
+	spin_unlock_irqrestore(&priv->drm.event_lock, flags);
 
 	DRM_DEBUG_DRIVER("\n");
 }
@@ -838,7 +838,7 @@ int meson_overlay_create(struct meson_drm *priv)
 
 	DRM_DEBUG_DRIVER("\n");
 
-	meson_overlay = devm_kzalloc(priv->drm->dev, sizeof(*meson_overlay),
+	meson_overlay = devm_kzalloc(priv->drm.dev, sizeof(*meson_overlay),
 				   GFP_KERNEL);
 	if (!meson_overlay)
 		return -ENOMEM;
@@ -846,7 +846,7 @@ int meson_overlay_create(struct meson_drm *priv)
 	meson_overlay->priv = priv;
 	plane = &meson_overlay->base;
 
-	drm_universal_plane_init(priv->drm, plane, 0xFF,
+	drm_universal_plane_init(&priv->drm, plane, 0xFF,
 				 &meson_overlay_funcs,
 				 supported_drm_formats,
 				 ARRAY_SIZE(supported_drm_formats),
