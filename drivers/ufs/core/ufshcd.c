@@ -8907,16 +8907,12 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool init_dev_params)
 static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 {
 	struct ufs_hba *hba = (struct ufs_hba *)data;
-	ktime_t device_init_start;
 	int ret;
 
 	down(&hba->host_sem);
 	/* Initialize hba, detect and initialize UFS device */
-	device_init_start = ktime_get();
-	ret = ufshcd_device_init(hba, /*init_dev_params=*/true);
-	if (ret == 0)
-		ret = ufshcd_probe_hba(hba, true);
-	ufshcd_process_device_init_result(hba, device_init_start, ret);
+	ret = ufshcd_probe_hba(hba, true);
+	ufshcd_process_device_init_result(hba, hba->device_init_start, ret);
 	up(&hba->host_sem);
 	if (ret)
 		goto out;
@@ -10387,7 +10383,7 @@ static int ufshcd_add_scsi_host(struct ufs_hba *hba)
 {
 	int err;
 
-	if (!is_mcq_supported(hba)) {
+	if (!hba->scsi_host_added) {
 		err = scsi_add_host(hba->host, hba->dev);
 		if (err) {
 			dev_err(hba->dev, "scsi_add_host failed\n");
@@ -10609,6 +10605,12 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	 * ufshcd_probe_hba().
 	 */
 	ufshcd_set_ufs_dev_active(hba);
+
+	/* Initialize hba, detect and initialize UFS device */
+	hba->device_init_start = ktime_get();
+	err = ufshcd_device_init(hba, /*init_dev_params=*/true);
+	if (err)
+		goto out_disable;
 
 	err = ufshcd_add_scsi_host(hba);
 	if (err)

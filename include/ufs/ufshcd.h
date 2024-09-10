@@ -839,6 +839,7 @@ enum ufshcd_mcq_opr {
  * @dev: device handle
  * @ufs_device_wlun: WLUN that controls the entire UFS device.
  * @hwmon_device: device instance registered with the hwmon core.
+ * @device_init_start: start time of first ufshcd_device_init() call.
  * @curr_dev_pwr_mode: active UFS device power mode.
  * @uic_link_state: active state of the link to the UFS device.
  * @rpm_lvl: desired UFS power management level during runtime PM.
@@ -971,6 +972,8 @@ struct ufs_hba {
 #ifdef CONFIG_SCSI_UFS_HWMON
 	struct device *hwmon_device;
 #endif
+
+	ktime_t device_init_start;
 
 	enum ufs_dev_pwr_mode curr_dev_pwr_mode;
 	enum uic_link_state uic_link_state;
