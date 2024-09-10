@@ -2536,32 +2536,31 @@ static struct folio *alloc_migrate_hugetlb_folio(struct hstate *h, gfp_t gfp_mas
 }
 
 /*
- * Use the VMA's mpolicy to allocate a huge page from the buddy.
+ * Allocate a huge page from the buddy allocator, given memory policy, node id
+ * and nodemask.
  */
-static
-struct folio *alloc_buddy_hugetlb_folio_with_mpol(struct hstate *h,
-		struct vm_area_struct *vma, unsigned long addr)
+static struct folio *alloc_buddy_hugetlb_folio_from_node(struct hstate *h,
+							 struct mempolicy *mpol,
+							 int nid,
+							 nodemask_t *nodemask)
 {
-	struct folio *folio = NULL;
-	struct mempolicy *mpol;
 	gfp_t gfp_mask = htlb_alloc_mask(h);
-	int nid;
-	nodemask_t *nodemask;
+	struct folio *folio = NULL;
 
-	nid = huge_node(vma, addr, gfp_mask, &mpol, &nodemask);
 	if (mpol_is_preferred_many(mpol)) {
 		gfp_t gfp = gfp_mask | __GFP_NOWARN;
 
 		gfp &=  ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
 		folio = alloc_surplus_hugetlb_folio(h, gfp, nid, nodemask);
-
-		/* Fallback to all nodes if page==NULL */
-		nodemask = NULL;
 	}
 
-	if (!folio)
+	if (!folio) {
+		/* Fallback to all nodes if earlier allocation failed */
+		nodemask = NULL;
+
 		folio = alloc_surplus_hugetlb_folio(h, gfp_mask, nid, nodemask);
-	mpol_cond_put(mpol);
+	}
+
 	return folio;
 }
 
@@ -3187,8 +3186,18 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 	spin_lock_irq(&hugetlb_lock);
 	folio = dequeue_hugetlb_folio_vma(h, vma, addr, use_hstate_resv);
 	if (!folio) {
+		struct mempolicy *mpol;
+		nodemask_t *nodemask;
+		pgoff_t ilx;
+		int nid;
+
 		spin_unlock_irq(&hugetlb_lock);
-		folio = alloc_buddy_hugetlb_folio_with_mpol(h, vma, addr);
+
+		mpol = get_vma_policy(vma, addr, hstate_vma(vma)->order, &ilx);
+		nid = policy_node_nodemask(mpol, htlb_alloc_mask(h), ilx, &nodemask);
+		folio = alloc_buddy_hugetlb_folio_from_node(h, mpol, nid, nodemask);
+		mpol_cond_put(mpol);
+
 		if (!folio)
 			goto out_uncharge_cgroup;
 		spin_lock_irq(&hugetlb_lock);
