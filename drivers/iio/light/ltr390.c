@@ -40,6 +40,7 @@
 #define LTR390_ALS_DATA			0x0D
 #define LTR390_UVS_DATA			0x10
 #define LTR390_INT_CFG			0x19
+#define LTR390_INT_PST			0x1A
 #define LTR390_THRESH_UP		0x21
 #define LTR390_THRESH_LOW		0x24
 
@@ -48,6 +49,8 @@
 #define LTR390_ALS_UVS_MEAS_RATE_MASK	0x07
 #define LTR390_ALS_UVS_INT_TIME_MASK	0x70
 #define LTR390_ALS_UVS_INT_TIME(x)	FIELD_PREP(LTR390_ALS_UVS_INT_TIME_MASK, (x))
+#define LTR390_INT_PST_MASK		0xF0
+#define LTR390_INT_PST_VAL(x)		FIELD_PREP(LTR390_INT_PST_MASK, (x))
 
 #define LTR390_SW_RESET	      BIT(4)
 #define LTR390_UVS_MODE	      BIT(3)
@@ -77,6 +80,11 @@
 enum ltr390_mode {
 	LTR390_SET_ALS_MODE,
 	LTR390_SET_UVS_MODE,
+};
+
+enum ltr390_meas_rate {
+	LTR390_GET_FREQ,
+	LTR390_GET_PERIOD,
 };
 
 struct ltr390_data {
@@ -156,7 +164,7 @@ static int ltr390_counts_per_uvi(struct ltr390_data *data)
 	return DIV_ROUND_CLOSEST(23 * data->gain * data->int_time_us, 10 * orig_gain * orig_int_time);
 }
 
-static int ltr390_get_samp_freq(struct ltr390_data *data)
+static int ltr390_get_samp_freq_or_period(struct ltr390_data *data, enum ltr390_meas_rate option)
 {
 	int ret, value;
 
@@ -165,7 +173,7 @@ static int ltr390_get_samp_freq(struct ltr390_data *data)
 		return ret;
 	value &= LTR390_ALS_UVS_MEAS_RATE_MASK;
 
-	return ltr390_samp_freq_table[value][0];
+	return ltr390_samp_freq_table[value][option];
 }
 
 static int ltr390_read_raw(struct iio_dev *iio_device,
@@ -225,7 +233,7 @@ static int ltr390_read_raw(struct iio_dev *iio_device,
 		return IIO_VAL_INT;
 
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		*val = ltr390_get_samp_freq(data);
+		*val = ltr390_get_samp_freq_or_period(data, LTR390_GET_FREQ);
 		return IIO_VAL_INT;
 
 	default:
@@ -250,7 +258,8 @@ static const struct iio_event_spec ltr390_event_spec[] = {
 	}, {
 		.type = IIO_EV_TYPE_THRESH,
 		.dir = IIO_EV_DIR_EITHER,
-		.mask_separate = BIT(IIO_EV_INFO_ENABLE),
+		.mask_separate = BIT(IIO_EV_INFO_ENABLE) |
+				BIT(IIO_EV_INFO_PERIOD),
 	}
 };
 
@@ -398,6 +407,44 @@ static int ltr390_write_raw(struct iio_dev *indio_dev, struct iio_chan_spec cons
 	}
 }
 
+static int ltr390_read_intr_prst(struct ltr390_data *data, int *val)
+{
+	int ret, prst, samp_period;
+
+	samp_period = ltr390_get_samp_freq_or_period(data, LTR390_GET_PERIOD);
+	ret = regmap_read(data->regmap, LTR390_INT_PST, &prst);
+	if (ret < 0)
+		return ret;
+	*val = prst * samp_period;
+
+	return IIO_VAL_INT;
+}
+
+static int ltr390_write_intr_prst(struct ltr390_data *data, int val)
+{
+	int ret, samp_period, new_val;
+
+	samp_period = ltr390_get_samp_freq_or_period(data, LTR390_GET_PERIOD);
+
+	/* persist period should be greater than or equal to samp period */
+	if (val < samp_period)
+		return -EINVAL;
+
+	new_val = DIV_ROUND_UP(val, samp_period);
+	if (new_val < 0 || new_val > 0x0f)
+		return -EINVAL;
+
+	guard(mutex)(&data->lock);
+	ret = regmap_update_bits(data->regmap,
+				LTR390_INT_PST,
+				LTR390_INT_PST_MASK,
+				LTR390_INT_PST_VAL(new_val));
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static int ltr390_read_threshold(const struct iio_dev *indio_dev,
 				enum iio_event_direction dir,
 				int *val, int *val2)
@@ -458,6 +505,10 @@ static int ltr390_read_event_value(struct iio_dev *indio_dev,
 	switch (info) {
 	case IIO_EV_INFO_VALUE:
 		return ltr390_read_threshold(indio_dev, dir, val, val2);
+
+	case IIO_EV_INFO_PERIOD:
+		return ltr390_read_intr_prst(iio_priv(indio_dev), val);
+
 	default:
 		return -EINVAL;
 	}
@@ -476,6 +527,13 @@ static int ltr390_write_event_value(struct iio_dev *indio_dev,
 			return -EINVAL;
 
 		return ltr390_write_threshold(indio_dev, dir, val, val2);
+
+	case IIO_EV_INFO_PERIOD:
+		if (val2 != 0)
+			return -EINVAL;
+
+		return ltr390_write_intr_prst(iio_priv(indio_dev), val);
+
 	default:
 		return -EINVAL;
 	}
