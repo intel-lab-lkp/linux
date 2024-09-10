@@ -341,6 +341,7 @@ pldm_parse_one_record(struct pldmfw_priv *data,
 		return err;
 
 	record_len = get_unaligned_le16(&__record->record_len);
+	record->device_update_flags = get_unaligned_le32(&__record->device_update_flags);
 	record->package_data_len = get_unaligned_le16(&__record->package_data_len);
 	record->version_len = __record->version_len;
 	record->version_type = __record->version_type;
