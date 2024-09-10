@@ -516,6 +516,47 @@ struct ghcb {
 	u32 ghcb_usage;
 } __packed;
 
+/*
+ * Hypervisor doorbell page:
+ *
+ * Used when restricted injection is enabled for a VM. One page in size that
+ * is shared between the guest and hypervisor to communicate exception and
+ * interrupt events.
+ */
+struct hvdb_events {
+	/* First 64 bytes of HV doorbell page defined in GHCB specification */
+	union {
+		struct {
+			/* Interrupt vector being injected */
+			u8 vector;
+
+			/* Non-maskable event field (NMI, etc.) */
+			u8 nm_events;
+		};
+
+		struct {
+			/* Non-maskable event indicators */
+			u16 reserved1:		8,
+			    nmi:		1,
+			    mce:		1,
+			    reserved2:		5,
+			    no_further_signal:	1;
+		};
+
+		u16 pending_events;
+	};
+
+	u8 no_eoi_required;
+
+	u8 reserved3[61];
+};
+
+struct hvdb {
+	struct hvdb_events events;
+
+	/* Remainder of the page is for software use */
+	u8 reserved[PAGE_SIZE - sizeof(struct hvdb_events)];
+};
 
 #define EXPECTED_VMCB_SAVE_AREA_SIZE		744
 #define EXPECTED_GHCB_SAVE_AREA_SIZE		1032
