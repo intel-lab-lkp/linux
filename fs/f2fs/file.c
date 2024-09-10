@@ -906,14 +906,11 @@ int f2fs_getattr(struct mnt_idmap *idmap, const struct path *path,
 	 * f2fs sometimes supports DIO reads but not DIO writes.  STATX_DIOALIGN
 	 * cannot represent that, so in that case we report no DIO support.
 	 */
-	if ((request_mask & STATX_DIOALIGN) && S_ISREG(inode->i_mode)) {
-		unsigned int bsize = i_blocksize(inode);
-
+	if ((request_mask & STATX_DIOALIGN) && S_ISREG(inode->i_mode) &&
+				!f2fs_force_buffered_io(inode, WRITE)) {
+		stat->dio_mem_align = F2FS_BLKSIZE;
+		stat->dio_offset_align = F2FS_BLKSIZE;
 		stat->result_mask |= STATX_DIOALIGN;
-		if (!f2fs_force_buffered_io(inode, WRITE)) {
-			stat->dio_mem_align = bsize;
-			stat->dio_offset_align = bsize;
-		}
 	}
 
 	flags = fi->i_flags;
