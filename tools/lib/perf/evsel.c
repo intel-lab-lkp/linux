@@ -484,6 +484,16 @@ int perf_evsel__disable(struct perf_evsel *evsel)
 	return err;
 }
 
+int perf_evsel__id(struct perf_evsel *evsel, __u64 ids[])
+{
+	int i;
+	int err = 0;
+
+	for (i = 0; i < xyarray__max_x(evsel->fd) && !err; i++)
+		err = perf_evsel__run_ioctl(evsel, PERF_EVENT_IOC_ID, (unsigned long)&ids[i], i);
+	return err;
+}
+
 int perf_evsel__apply_filter(struct perf_evsel *evsel, const char *filter)
 {
 	int err = 0, i;
