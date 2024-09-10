@@ -951,6 +951,7 @@ static void free_pfn_range(u64 paddr, unsigned long size)
 static int follow_phys(struct vm_area_struct *vma, unsigned long *prot,
 		resource_size_t *phys)
 {
+	struct folio *folio;
 	pte_t *ptep, pte;
 	spinlock_t *ptl;
 
@@ -960,7 +961,8 @@ static int follow_phys(struct vm_area_struct *vma, unsigned long *prot,
 	pte = ptep_get(ptep);
 
 	/* Never return PFNs of anon folios in COW mappings. */
-	if (vm_normal_folio(vma, vma->vm_start, pte)) {
+	folio = vm_normal_folio(vma, vma->vm_start, pte);
+	if (folio || (folio && !folio_is_device_dax(folio))) {
 		pte_unmap_unlock(ptep, ptl);
 		return -EINVAL;
 	}
