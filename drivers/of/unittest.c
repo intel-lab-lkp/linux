@@ -3585,7 +3585,7 @@ OVERLAY_INFO_EXTERN(overlay_bad_symbol);
 OVERLAY_INFO_EXTERN(overlay_bad_unresolved);
 
 /* entries found by name */
-static struct overlay_info overlays[] = {
+static __initdata struct overlay_info overlays[] = {
 	OVERLAY_INFO(overlay_base, -9999, 0),
 	OVERLAY_INFO(overlay, 0, 0),
 	OVERLAY_INFO(overlay_0, 0, 0),
@@ -4054,7 +4054,8 @@ static const struct pci_device_id testdrv_pci_ids[] = {
 	{ 0, }
 };
 
-static int testdrv_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+/* testdrv_probe() references overlays[], which is discarded data  */
+static int __ref testdrv_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct overlay_info *info;
 	struct device_node *dn;
