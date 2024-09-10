@@ -2715,9 +2715,7 @@ int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
  */
 bool noop_dirty_folio(struct address_space *mapping, struct folio *folio)
 {
-	if (!folio_test_dirty(folio))
-		return !folio_test_set_dirty(folio);
-	return false;
+	return !folio_test_set_dirty(folio);
 }
 EXPORT_SYMBOL(noop_dirty_folio);
 
