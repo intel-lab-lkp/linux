@@ -465,7 +465,7 @@ void mt8365_afe_set_i2s_out_enable(struct mtk_base_afe *afe, bool enable)
 	int i;
 	unsigned long flags;
 	struct mt8365_afe_private *afe_priv = afe->platform_priv;
-	struct mtk_afe_i2s_priv *i2s_data;
+	struct mtk_afe_i2s_priv *i2s_data = NULL;
 
 	for (i = 0; i < DAI_I2S_NUM; i++) {
 		if (mt8365_i2s_priv[i].adda_link)
@@ -473,6 +473,11 @@ void mt8365_afe_set_i2s_out_enable(struct mtk_base_afe *afe, bool enable)
 	}
 
 	spin_lock_irqsave(&afe_priv->afe_ctrl_lock, flags);
+
+	if (!i2s_data) {
+		spin_unlock_irqrestore(&afe_priv->afe_ctrl_lock, flags);
+		return;
+	}
 
 	if (enable) {
 		i2s_data->i2s_out_on_ref_cnt++;
