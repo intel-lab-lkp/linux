@@ -486,31 +486,6 @@ static bool nouveau_fence_is_signaled(struct dma_fence *f)
 	return ret;
 }
 
-static bool nouveau_fence_no_signaling(struct dma_fence *f)
-{
-	struct nouveau_fence *fence = from_fence(f);
-
-	/*
-	 * caller should have a reference on the fence,
-	 * else fence could get freed here
-	 */
-	WARN_ON(kref_read(&fence->base.refcount) <= 1);
-
-	/*
-	 * This needs uevents to work correctly, but dma_fence_add_callback relies on
-	 * being able to enable signaling. It will still get signaled eventually,
-	 * just not right away.
-	 */
-	if (nouveau_fence_is_signaled(f)) {
-		list_del(&fence->head);
-
-		dma_fence_put(&fence->base);
-		return false;
-	}
-
-	return true;
-}
-
 static void nouveau_fence_release(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = from_fence(f);
@@ -523,7 +498,6 @@ static void nouveau_fence_release(struct dma_fence *f)
 static const struct dma_fence_ops nouveau_fence_ops_legacy = {
 	.get_driver_name = nouveau_fence_get_get_driver_name,
 	.get_timeline_name = nouveau_fence_get_timeline_name,
-	.enable_signaling = nouveau_fence_no_signaling,
 	.signaled = nouveau_fence_is_signaled,
 	.wait = nouveau_fence_wait_legacy,
 	.release = nouveau_fence_release
@@ -533,18 +507,27 @@ static bool nouveau_fence_enable_signaling(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = from_fence(f);
 	struct nouveau_fence_chan *fctx = nouveau_fctx(fence);
-	bool ret;
+
+	/*
+	 * caller should have a reference on the fence,
+	 * else fence could get freed here
+	 */
+	WARN_ON(kref_read(&fence->base.refcount) <= 1);
 
 	if (!fctx->notify_ref++)
 		nvif_event_allow(&fctx->event);
 
-	ret = nouveau_fence_no_signaling(f);
-	if (ret)
-		set_bit(DMA_FENCE_FLAG_USER_BITS, &fence->base.flags);
-	else if (!--fctx->notify_ref)
-		nvif_event_block(&fctx->event);
+	if (nouveau_fence_is_signaled(f)) {
+		list_del(&fence->head);
 
-	return ret;
+		dma_fence_put(&fence->base);
+		if (!--fctx->notify_ref)
+			nvif_event_block(&fctx->event);
+		return false;
+	} else {
+		set_bit(DMA_FENCE_FLAG_USER_BITS, &fence->base.flags);
+		return true;
+	}
 }
 
 static const struct dma_fence_ops nouveau_fence_ops_uevent = {
