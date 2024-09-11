@@ -465,4 +465,12 @@
 	 | ((vbm) & 0x3) << 15 | (curr) << 14 | ((vbi) & 0x3f) << 7	\
 	 | ((gi) & 0x3f) << 1 | (ct))
 
+/* PD Timer definitions */
+/* tTypeCSinkWaitCap (Table 6-68 Time Values, USB PD3.1 Spec) */
+#define PD_TIMER_SINK_WAIT_CAP		0
+/* tPSSourceOff (Table 6-68 Time Values, USB PD3.1 Spec) */
+#define PD_TIMER_PS_SOURCE_OFF		1
+/* tCCDebounce (Table 4-33 CC Timing, USB Type-C Cable & Connector Spec Rel2.2) */
+#define PD_TIMER_CC_DEBOUNCE		2
+
 #endif /* __DT_POWER_DELIVERY_H */

@@ -253,6 +253,16 @@ properties:
 
     additionalProperties: false
 
+  pd-timers:
+    description: An array of u32 integers, where an even index (i) is the timer (referenced in
+      dt-bindings/usb/pd.h) and the odd index (i+1) is the timer value in ms (refer
+      "Table 6-68 Time Values" of "USB Power Delivery Specification Revision 3.0, Version 1.2 " for
+      the appropriate value). For certain timers the PD spec defines a range rather than a fixed
+      value. The timers may need to be tuned based on the platform. This dt property allows the user
+      to assign specific values based on the platform. If these values are not explicitly defined,
+      TCPM will use a valid default value for such timers.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
 dependencies:
   sink-vdos-v1: [ sink-vdos ]
   sink-vdos: [ sink-vdos-v1 ]
@@ -476,5 +486,18 @@ examples:
                     };
                 };
             };
+        };
+    };
+
+  # USB-C connector with PD timers
+  - |
+    #include <dt-bindings/usb/pd.h>
+    usb {
+        connector {
+            compatible = "usb-c-connector";
+            label = "USB-C";
+            pd-timers =
+                <PD_TIMER_SINK_WAIT_CAP 600>,
+                <PD_TIMER_CC_DEBOUNCE 170>;
         };
     };
