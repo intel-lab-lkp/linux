@@ -1016,7 +1016,9 @@ static int mtk_pcie_setup(struct mtk_gen3_pcie *pcie)
 	 * Deassert the line in order to avoid unbalance in deassert_count
 	 * counter since the bulk is shared.
 	 */
-	reset_control_bulk_deassert(pcie->soc->phy_resets.num_resets, pcie->phy_resets);
+	err = reset_control_bulk_deassert(pcie->soc->phy_resets.num_resets, pcie->phy_resets);
+	if (err)
+		return err;
 	/*
 	 * The controller may have been left out of reset by the bootloader
 	 * so make sure that we get a clean start by asserting resets here.
