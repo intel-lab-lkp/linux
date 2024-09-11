@@ -641,7 +641,7 @@ static bool memremap_is_setup_data(resource_size_t phys_addr,
 
 	paddr = boot_params.hdr.setup_data;
 	while (paddr) {
-		unsigned int len;
+		unsigned int len, sd_size;
 
 		if (phys_addr == paddr)
 			return true;
@@ -653,6 +653,8 @@ static bool memremap_is_setup_data(resource_size_t phys_addr,
 			return false;
 		}
 
+		sd_size = sizeof(*data);
+
 		paddr_next = data->next;
 		len = data->len;
 
@@ -663,7 +665,9 @@ static bool memremap_is_setup_data(resource_size_t phys_addr,
 
 		if (data->type == SETUP_INDIRECT) {
 			memunmap(data);
-			data = memremap(paddr, sizeof(*data) + len,
+
+			sd_size += len;
+			data = memremap(paddr, sd_size,
 					MEMREMAP_WB | MEMREMAP_DEC);
 			if (!data) {
 				pr_warn("failed to memremap indirect setup_data\n");
@@ -702,7 +706,7 @@ static bool __init early_memremap_is_setup_data(resource_size_t phys_addr,
 
 	paddr = boot_params.hdr.setup_data;
 	while (paddr) {
-		unsigned int len, size;
+		unsigned int len, sd_size;
 
 		if (phys_addr == paddr)
 			return true;
@@ -713,7 +717,7 @@ static bool __init early_memremap_is_setup_data(resource_size_t phys_addr,
 			return false;
 		}
 
-		size = sizeof(*data);
+		sd_size = sizeof(*data);
 
 		paddr_next = data->next;
 		len = data->len;
@@ -724,9 +728,9 @@ static bool __init early_memremap_is_setup_data(resource_size_t phys_addr,
 		}
 
 		if (data->type == SETUP_INDIRECT) {
-			size += len;
+			sd_size += len;
 			early_memunmap(data, sizeof(*data));
-			data = early_memremap_decrypted(paddr, size);
+			data = early_memremap_decrypted(paddr, sd_size);
 			if (!data) {
 				pr_warn("failed to early memremap indirect setup_data\n");
 				return false;
@@ -740,7 +744,7 @@ static bool __init early_memremap_is_setup_data(resource_size_t phys_addr,
 			}
 		}
 
-		early_memunmap(data, size);
+		early_memunmap(data, sd_size);
 
 		if ((phys_addr > paddr) && (phys_addr < (paddr + len)))
 			return true;
