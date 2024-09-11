@@ -3477,7 +3477,8 @@ restart:
 			if (inode->i_nlink)
 				set_page_private_inline(ipage);
 			goto out;
-		}
+		} else if (f2fs_exist_data(inode))
+			f2fs_do_read_inline_data(page_folio(page), ipage);
 	}
 
 	if (!f2fs_lookup_read_extent_cache_block(inode, index,
