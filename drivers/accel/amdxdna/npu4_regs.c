@@ -7,8 +7,9 @@
 #include <drm/drm_device.h>
 #include <linux/sizes.h>
 
-#include "aie2_pci.h"
+#include "amdxdna_mailbox.h"
 #include "amdxdna_pci_drv.h"
+#include "aie2_pci.h"
 
 /* NPU Public Registers on MpNPUAxiXbar (refer to Diag npu_registers.h) */
 #define MPNPU_PUB_SEC_INTR             0x3010060
