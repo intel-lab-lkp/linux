@@ -2394,6 +2394,35 @@ void ktime_get_coarse_real_ts64(struct timespec64 *ts)
 }
 EXPORT_SYMBOL(ktime_get_coarse_real_ts64);
 
+/**
+ * ktime_get_coarse_real_ts64_with_floor - get later of coarse grained time or floor
+ * @ts: timespec64 to be filled
+ * @floor: monotonic floor value
+ *
+ * Adjust @floor to realtime and compare that to the coarse time. Fill
+ * @ts with the later of the two.
+ */
+void ktime_get_coarse_real_ts64_with_floor(struct timespec64 *ts, ktime_t floor)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	unsigned int seq;
+	ktime_t f_real, offset, coarse;
+
+	WARN_ON(timekeeping_suspended);
+
+	do {
+		seq = read_seqcount_begin(&tk_core.seq);
+		*ts = tk_xtime(tk);
+		offset = *offsets[TK_OFFS_REAL];
+	} while (read_seqcount_retry(&tk_core.seq, seq));
+
+	coarse = timespec64_to_ktime(*ts);
+	f_real = ktime_add(floor, offset);
+	if (ktime_after(f_real, coarse))
+		*ts = ktime_to_timespec64(f_real);
+}
+EXPORT_SYMBOL_GPL(ktime_get_coarse_real_ts64_with_floor);
+
 void ktime_get_coarse_ts64(struct timespec64 *ts)
 {
 	struct timekeeper *tk = &tk_core.timekeeper;

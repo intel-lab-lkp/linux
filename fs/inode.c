@@ -2256,25 +2256,6 @@ int file_remove_privs(struct file *file)
 EXPORT_SYMBOL(file_remove_privs);
 
 /**
- * coarse_ctime - return the current coarse-grained time
- * @floor: current (monotonic) ctime_floor value
- *
- * Get the coarse-grained time, and then determine whether to
- * return it or the current floor value. Returns the later of the
- * floor and coarse grained timestamps, converted to realtime
- * clock value.
- */
-static ktime_t coarse_ctime(ktime_t floor)
-{
-	ktime_t coarse = ktime_get_coarse();
-
-	/* If coarse time is already newer, return that */
-	if (!ktime_after(floor, coarse))
-		return ktime_get_coarse_real();
-	return ktime_mono_to_real(floor);
-}
-
-/**
  * current_time - Return FS time (possibly fine-grained)
  * @inode: inode.
  *
@@ -2285,10 +2266,10 @@ static ktime_t coarse_ctime(ktime_t floor)
 struct timespec64 current_time(struct inode *inode)
 {
 	ktime_t floor = atomic64_read(&ctime_floor);
-	ktime_t now = coarse_ctime(floor);
-	struct timespec64 now_ts = ktime_to_timespec64(now);
+	struct timespec64 now_ts;
 	u32 cns;
 
+	ktime_get_coarse_real_ts64_with_floor(&now_ts, floor);
 	if (!is_mgtime(inode))
 		goto out;
 
@@ -2745,7 +2726,7 @@ EXPORT_SYMBOL(timestamp_truncate);
  *
  * Set the inode's ctime to the current value for the inode. Returns the
  * current value that was assigned. If this is not a multigrain inode, then we
- * just set it to whatever the coarse_ctime is.
+ * set it to the later of the coarse time and floor value.
  *
  * If it is multigrain, then we first see if the coarse-grained timestamp is
  * distinct from what we have. If so, then we'll just use that. If we have to
@@ -2756,15 +2737,15 @@ EXPORT_SYMBOL(timestamp_truncate);
  */
 struct timespec64 inode_set_ctime_current(struct inode *inode)
 {
-	ktime_t now, floor = atomic64_read(&ctime_floor);
+	ktime_t floor = atomic64_read(&ctime_floor);
 	struct timespec64 now_ts;
 	u32 cns, cur;
 
-	now = coarse_ctime(floor);
+	ktime_get_coarse_real_ts64_with_floor(&now_ts, floor);
 
 	/* Just return that if this is not a multigrain fs */
 	if (!is_mgtime(inode)) {
-		now_ts = timestamp_truncate(ktime_to_timespec64(now), inode);
+		now_ts = timestamp_truncate(now_ts, inode);
 		inode_set_ctime_to_ts(inode, now_ts);
 		goto out;
 	}
@@ -2777,6 +2758,7 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 	cns = smp_load_acquire(&inode->i_ctime_nsec);
 	if (cns & I_CTIME_QUERIED) {
 		ktime_t ctime = ktime_set(inode->i_ctime_sec, cns & ~I_CTIME_QUERIED);
+		ktime_t now = timespec64_to_ktime(now_ts);
 
 		if (!ktime_after(now, ctime)) {
 			ktime_t old, fine;
@@ -2797,10 +2779,11 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 			else
 				fine = old;
 			now = ktime_mono_to_real(fine);
+			now_ts = ktime_to_timespec64(now);
 		}
 	}
 	mgtime_counter_inc(mg_ctime_updates);
-	now_ts = timestamp_truncate(ktime_to_timespec64(now), inode);
+	now_ts = timestamp_truncate(now_ts, inode);
 	cur = cns;
 
 	/* No need to cmpxchg if it's exactly the same */
