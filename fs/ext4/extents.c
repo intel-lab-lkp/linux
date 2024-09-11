@@ -3347,7 +3347,8 @@ out:
 static struct ext4_ext_path *ext4_split_extent(handle_t *handle,
 					       struct inode *inode,
 					       struct ext4_ext_path *path,
-					       struct ext4_map_blocks *map,
+					       ext4_lblk_t lblk,
+					       unsigned int len,
 					       int split_flag, int flags,
 					       unsigned int *allocated)
 {
@@ -3363,7 +3364,7 @@ static struct ext4_ext_path *ext4_split_extent(handle_t *handle,
 	ee_len = ext4_ext_get_actual_len(ex);
 	unwritten = ext4_ext_is_unwritten(ex);
 
-	if (map->m_lblk + map->m_len < ee_block + ee_len) {
+	if (lblk + len < ee_block + ee_len) {
 		split_flag1 = split_flag & EXT4_EXT_MAY_ZEROOUT;
 		flags1 = flags | EXT4_GET_BLOCKS_PRE_IO;
 		if (unwritten)
@@ -3372,28 +3373,28 @@ static struct ext4_ext_path *ext4_split_extent(handle_t *handle,
 		if (split_flag & EXT4_EXT_DATA_VALID2)
 			split_flag1 |= EXT4_EXT_DATA_VALID1;
 		path = ext4_split_extent_at(handle, inode, path,
-				map->m_lblk + map->m_len, split_flag1, flags1);
+				lblk + len, split_flag1, flags1);
 		if (IS_ERR(path))
 			return path;
 		/*
 		 * Update path is required because previous ext4_split_extent_at
 		 * may result in split of original leaf or extent zeroout.
 		 */
-		path = ext4_find_extent(inode, map->m_lblk, path, flags);
+		path = ext4_find_extent(inode, lblk, path, flags);
 		if (IS_ERR(path))
 			return path;
 		depth = ext_depth(inode);
 		ex = path[depth].p_ext;
 		if (!ex) {
 			EXT4_ERROR_INODE(inode, "unexpected hole at %lu",
-					(unsigned long) map->m_lblk);
+					(unsigned long) lblk);
 			ext4_free_ext_path(path);
 			return ERR_PTR(-EFSCORRUPTED);
 		}
 		unwritten = ext4_ext_is_unwritten(ex);
 	}
 
-	if (map->m_lblk >= ee_block) {
+	if (lblk >= ee_block) {
 		split_flag1 = split_flag & EXT4_EXT_DATA_VALID2;
 		if (unwritten) {
 			split_flag1 |= EXT4_EXT_MARK_UNWRIT1;
@@ -3401,16 +3402,16 @@ static struct ext4_ext_path *ext4_split_extent(handle_t *handle,
 						     EXT4_EXT_MARK_UNWRIT2);
 		}
 		path = ext4_split_extent_at(handle, inode, path,
-				map->m_lblk, split_flag1, flags);
+				lblk, split_flag1, flags);
 		if (IS_ERR(path))
 			return path;
 	}
 
 	if (allocated) {
-		if (map->m_lblk + map->m_len > ee_block + ee_len)
-			*allocated = ee_len - (map->m_lblk - ee_block);
+		if (lblk + len > ee_block + ee_len)
+			*allocated = ee_len - (lblk - ee_block);
 		else
-			*allocated = map->m_len;
+			*allocated = len;
 	}
 	ext4_ext_show_leaf(inode, path);
 	return path;
@@ -3658,8 +3659,8 @@ ext4_ext_convert_to_initialized(handle_t *handle, struct inode *inode,
 	}
 
 fallback:
-	path = ext4_split_extent(handle, inode, path, &split_map, split_flag,
-				 flags, NULL);
+	path = ext4_split_extent(handle, inode, path, split_map.m_lblk,
+				 split_map.m_len, split_flag, flags, NULL);
 	if (IS_ERR(path))
 		return path;
 out:
@@ -3699,11 +3700,11 @@ errout:
  * allocated pointer. Return an extent path pointer on success, or an error
  * pointer on failure.
  */
-static struct ext4_ext_path *ext4_split_convert_extents(handle_t *handle,
-					struct inode *inode,
-					struct ext4_map_blocks *map,
-					struct ext4_ext_path *path,
-					int flags, unsigned int *allocated)
+static struct ext4_ext_path *
+ext4_split_convert_extents(handle_t *handle, struct inode *inode,
+			   ext4_lblk_t lblk, unsigned int len,
+			   struct ext4_ext_path *path, int flags,
+			   unsigned int *allocated)
 {
 	ext4_lblk_t eof_block;
 	ext4_lblk_t ee_block;
@@ -3712,12 +3713,12 @@ static struct ext4_ext_path *ext4_split_convert_extents(handle_t *handle,
 	int split_flag = 0, depth;
 
 	ext_debug(inode, "logical block %llu, max_blocks %u\n",
-		  (unsigned long long)map->m_lblk, map->m_len);
+		  (unsigned long long)lblk, len);
 
 	eof_block = (EXT4_I(inode)->i_disksize + inode->i_sb->s_blocksize - 1)
 			>> inode->i_sb->s_blocksize_bits;
-	if (eof_block < map->m_lblk + map->m_len)
-		eof_block = map->m_lblk + map->m_len;
+	if (eof_block < lblk + len)
+		eof_block = lblk + len;
 	/*
 	 * It is safe to convert extent to initialized via explicit
 	 * zeroout only if extent is fully inside i_size or new_size.
@@ -3737,8 +3738,8 @@ static struct ext4_ext_path *ext4_split_convert_extents(handle_t *handle,
 		split_flag |= (EXT4_EXT_MARK_UNWRIT2 | EXT4_EXT_DATA_VALID2);
 	}
 	flags |= EXT4_GET_BLOCKS_PRE_IO;
-	return ext4_split_extent(handle, inode, path, map, split_flag, flags,
-				 allocated);
+	return ext4_split_extent(handle, inode, path, lblk, len, split_flag,
+				 flags, allocated);
 }
 
 static struct ext4_ext_path *
@@ -3773,7 +3774,7 @@ ext4_convert_unwritten_extents_endio(handle_t *handle, struct inode *inode,
 			     inode->i_ino, (unsigned long long)ee_block, ee_len,
 			     (unsigned long long)map->m_lblk, map->m_len);
 #endif
-		path = ext4_split_convert_extents(handle, inode, map, path,
+		path = ext4_split_convert_extents(handle, inode, map->m_lblk, map->m_len, path,
 						EXT4_GET_BLOCKS_CONVERT, NULL);
 		if (IS_ERR(path))
 			return path;
@@ -3837,8 +3838,9 @@ convert_initialized_extent(handle_t *handle, struct inode *inode,
 		  (unsigned long long)ee_block, ee_len);
 
 	if (ee_block != map->m_lblk || ee_len > map->m_len) {
-		path = ext4_split_convert_extents(handle, inode, map, path,
-				EXT4_GET_BLOCKS_CONVERT_UNWRITTEN, NULL);
+		path = ext4_split_convert_extents(
+			handle, inode, map->m_lblk, map->m_len, path,
+			EXT4_GET_BLOCKS_CONVERT_UNWRITTEN, NULL);
 		if (IS_ERR(path))
 			return path;
 
@@ -3909,8 +3911,9 @@ ext4_ext_handle_unwritten_extents(handle_t *handle, struct inode *inode,
 
 	/* get_block() before submitting IO, split the extent */
 	if (flags & EXT4_GET_BLOCKS_PRE_IO) {
-		path = ext4_split_convert_extents(handle, inode, map, path,
-				flags | EXT4_GET_BLOCKS_CONVERT, allocated);
+		path = ext4_split_convert_extents(
+			handle, inode, map->m_lblk, map->m_len, path,
+			flags | EXT4_GET_BLOCKS_CONVERT, allocated);
 		if (IS_ERR(path))
 			return path;
 		/*
