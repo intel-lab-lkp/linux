@@ -11,5 +11,6 @@
  */
 #define BLOCK_URING_CMD_DISCARD			_IO(0x12, 0)
 #define BLOCK_URING_CMD_WRITE_ZEROES		_IO(0x12, 1)
+#define BLOCK_URING_CMD_WRITE_ZERO_PAGE		_IO(0x12, 2)
 
 #endif
