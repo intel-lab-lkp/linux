@@ -1417,10 +1417,8 @@ struct dc_sink *link_add_remote_sink(
 			dc_sink))
 		goto fail_add_sink;
 
-	edid_status = dm_helpers_parse_edid_caps(
-			link,
-			&dc_sink->dc_edid,
-			&dc_sink->edid_caps);
+	edid_status = dm_helpers_parse_edid_caps(link,
+						 &dc_sink->edid_caps);
 
 	/*
 	 * Treat device as no EDID device if EDID
