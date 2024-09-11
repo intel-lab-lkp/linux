@@ -574,6 +574,31 @@ static const char * const pd_rev[] = {
 	[PD_REV30]		= "rev3",
 };
 
+/*
+ * Though "pd-timers" is a 1D array, it can be imagined as a table with 2
+ * columns, key at even index (that represents timer definition) & value
+ * at odd index (that represents timer values in ms).
+ */
+#define NUM_TIMER_TABLE_COLS		2
+
+/*
+ * PD Timer definitions for timers that can be tuned based on platform/board via DT.
+ * The timer definition value should always match that of macros defined in
+ * dt-bindings/usb/pd.h.
+ */
+enum pd_timer {
+	PD_TIMER_SINK_WAIT_CAP,
+	PD_TIMER_PS_SOURCE_OFF,
+	PD_TIMER_CC_DEBOUNCE,
+	PD_NUM_TIMERS
+};
+
+static u32 pd_timers[PD_NUM_TIMERS] = {
+	[PD_TIMER_SINK_WAIT_CAP] = PD_T_SINK_WAIT_CAP,
+	[PD_TIMER_PS_SOURCE_OFF] = PD_T_PS_SOURCE_OFF,
+	[PD_TIMER_CC_DEBOUNCE] = PD_T_CC_DEBOUNCE,
+};
+
 #define tcpm_cc_is_sink(cc) \
 	((cc) == TYPEC_CC_RP_DEF || (cc) == TYPEC_CC_RP_1_5 || \
 	 (cc) == TYPEC_CC_RP_3_0)
@@ -4601,7 +4626,7 @@ static void run_state_machine(struct tcpm_port *port)
 {
 	int ret;
 	enum typec_pwr_opmode opmode;
-	unsigned int msecs;
+	unsigned int msecs, timer_val_msecs;
 	enum tcpm_state upcoming_state;
 
 	if (port->tcpc->check_contaminant && port->state != CHECK_CONTAMINANT)
@@ -4637,17 +4662,18 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, SNK_UNATTACHED, PD_T_DRP_SNK);
 		break;
 	case SRC_ATTACH_WAIT:
+		timer_val_msecs = pd_timers[PD_TIMER_CC_DEBOUNCE];
 		if (tcpm_port_is_debug(port))
 			tcpm_set_state(port, DEBUG_ACC_ATTACHED,
-				       PD_T_CC_DEBOUNCE);
+				       timer_val_msecs);
 		else if (tcpm_port_is_audio(port))
 			tcpm_set_state(port, AUDIO_ACC_ATTACHED,
-				       PD_T_CC_DEBOUNCE);
+				       timer_val_msecs);
 		else if (tcpm_port_is_source(port) && port->vbus_vsafe0v)
 			tcpm_set_state(port,
 				       tcpm_try_snk(port) ? SNK_TRY
 							  : SRC_ATTACHED,
-				       PD_T_CC_DEBOUNCE);
+				       timer_val_msecs);
 		break;
 
 	case SNK_TRY:
@@ -4698,7 +4724,7 @@ static void run_state_machine(struct tcpm_port *port)
 		}
 		break;
 	case SRC_TRYWAIT_DEBOUNCE:
-		tcpm_set_state(port, SRC_ATTACHED, PD_T_CC_DEBOUNCE);
+		tcpm_set_state(port, SRC_ATTACHED, pd_timers[PD_TIMER_CC_DEBOUNCE]);
 		break;
 	case SRC_TRYWAIT_UNATTACHED:
 		tcpm_set_state(port, SNK_UNATTACHED, 0);
@@ -4896,12 +4922,13 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, SRC_UNATTACHED, PD_T_DRP_SRC);
 		break;
 	case SNK_ATTACH_WAIT:
+		timer_val_msecs = pd_timers[PD_TIMER_CC_DEBOUNCE];
 		if ((port->cc1 == TYPEC_CC_OPEN &&
 		     port->cc2 != TYPEC_CC_OPEN) ||
 		    (port->cc1 != TYPEC_CC_OPEN &&
 		     port->cc2 == TYPEC_CC_OPEN))
 			tcpm_set_state(port, SNK_DEBOUNCED,
-				       PD_T_CC_DEBOUNCE);
+				       timer_val_msecs);
 		else if (tcpm_port_is_disconnected(port))
 			tcpm_set_state(port, SNK_UNATTACHED,
 				       PD_T_PD_DEBOUNCE);
@@ -4941,7 +4968,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case SNK_TRYWAIT:
 		tcpm_set_cc(port, TYPEC_CC_RD);
-		tcpm_set_state(port, SNK_TRYWAIT_VBUS, PD_T_CC_DEBOUNCE);
+		tcpm_set_state(port, SNK_TRYWAIT_VBUS, pd_timers[PD_TIMER_CC_DEBOUNCE]);
 		break;
 	case SNK_TRYWAIT_VBUS:
 		/*
@@ -5014,7 +5041,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case SNK_DISCOVERY_DEBOUNCE:
 		tcpm_set_state(port, SNK_DISCOVERY_DEBOUNCE_DONE,
-			       PD_T_CC_DEBOUNCE);
+			       pd_timers[PD_TIMER_CC_DEBOUNCE]);
 		break;
 	case SNK_DISCOVERY_DEBOUNCE_DONE:
 		if (!tcpm_port_is_disconnected(port) &&
@@ -5032,6 +5059,7 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, SNK_READY, 0);
 			break;
 		}
+		timer_val_msecs = pd_timers[PD_TIMER_SINK_WAIT_CAP];
 		/*
 		 * If VBUS has never been low, and we time out waiting
 		 * for source cap, try a soft reset first, in case we
@@ -5041,10 +5069,10 @@ static void run_state_machine(struct tcpm_port *port)
 		if (port->vbus_never_low) {
 			port->vbus_never_low = false;
 			tcpm_set_state(port, SNK_SOFT_RESET,
-				       PD_T_SINK_WAIT_CAP);
+				       timer_val_msecs);
 		} else {
 			tcpm_set_state(port, SNK_WAIT_CAPABILITIES_TIMEOUT,
-				       PD_T_SINK_WAIT_CAP);
+				       timer_val_msecs);
 		}
 		break;
 	case SNK_WAIT_CAPABILITIES_TIMEOUT:
@@ -5054,7 +5082,7 @@ static void run_state_machine(struct tcpm_port *port)
 		 * sending Source Capability messages after a soft reset. The
 		 * specification suggests to do a hard reset when no Source
 		 * capability message is received within PD_T_SINK_WAIT_CAP,
-		 * but that might effectively kil the machine's power source.
+		 * but that might effectively kill the machine's power source.
 		 *
 		 * This slightly diverges from the specification and tries to
 		 * recover from this by explicitly asking for the capabilities
@@ -5066,7 +5094,8 @@ static void run_state_machine(struct tcpm_port *port)
 		if (tcpm_pd_send_control(port, PD_CTRL_GET_SOURCE_CAP, TCPC_TX_SOP))
 			tcpm_set_state_cond(port, hard_reset_state(port), 0);
 		else
-			tcpm_set_state(port, hard_reset_state(port), PD_T_SINK_WAIT_CAP);
+			tcpm_set_state(port, hard_reset_state(port),
+				       pd_timers[PD_TIMER_SINK_WAIT_CAP]);
 		break;
 	case SNK_NEGOTIATE_CAPABILITIES:
 		port->pd_capable = true;
@@ -5203,7 +5232,7 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, ACC_UNATTACHED, 0);
 		break;
 	case AUDIO_ACC_DEBOUNCE:
-		tcpm_set_state(port, ACC_UNATTACHED, PD_T_CC_DEBOUNCE);
+		tcpm_set_state(port, ACC_UNATTACHED, pd_timers[PD_TIMER_CC_DEBOUNCE]);
 		break;
 
 	/* Hard_Reset states */
@@ -5420,7 +5449,7 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state(port, ERROR_RECOVERY, 0);
 		break;
 	case FR_SWAP_SNK_SRC_TRANSITION_TO_OFF:
-		tcpm_set_state(port, ERROR_RECOVERY, PD_T_PS_SOURCE_OFF);
+		tcpm_set_state(port, ERROR_RECOVERY, pd_timers[PD_TIMER_PS_SOURCE_OFF]);
 		break;
 	case FR_SWAP_SNK_SRC_NEW_SINK_READY:
 		if (port->vbus_source)
@@ -5475,7 +5504,7 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_cc(port, TYPEC_CC_RD);
 		/* allow CC debounce */
 		tcpm_set_state(port, PR_SWAP_SRC_SNK_SOURCE_OFF_CC_DEBOUNCED,
-			       PD_T_CC_DEBOUNCE);
+			       pd_timers[PD_TIMER_CC_DEBOUNCE]);
 		break;
 	case PR_SWAP_SRC_SNK_SOURCE_OFF_CC_DEBOUNCED:
 		/*
@@ -5510,7 +5539,7 @@ static void run_state_machine(struct tcpm_port *port)
 						       port->pps_data.active, 0);
 		tcpm_set_charge(port, false);
 		tcpm_set_state(port, hard_reset_state(port),
-			       PD_T_PS_SOURCE_OFF);
+			       pd_timers[PD_TIMER_PS_SOURCE_OFF]);
 		break;
 	case PR_SWAP_SNK_SRC_SOURCE_ON:
 		tcpm_enable_auto_vbus_discharge(port, true);
@@ -5666,7 +5695,7 @@ static void run_state_machine(struct tcpm_port *port)
 	case PORT_RESET_WAIT_OFF:
 		tcpm_set_state(port,
 			       tcpm_default_state(port),
-			       port->vbus_present ? PD_T_PS_SOURCE_OFF : 0);
+			       port->vbus_present ? pd_timers[PD_TIMER_PS_SOURCE_OFF] : 0);
 		break;
 
 	/* AMS intermediate state */
@@ -6157,7 +6186,7 @@ static void _tcpm_pd_vbus_vsafe0v(struct tcpm_port *port)
 	case SRC_ATTACH_WAIT:
 		if (tcpm_port_is_source(port))
 			tcpm_set_state(port, tcpm_try_snk(port) ? SNK_TRY : SRC_ATTACHED,
-				       PD_T_CC_DEBOUNCE);
+				       pd_timers[PD_TIMER_CC_DEBOUNCE]);
 		break;
 	case SRC_STARTUP:
 	case SRC_SEND_CAPABILITIES:
@@ -7273,6 +7302,47 @@ static int tcpm_fw_get_snk_vdos(struct tcpm_port *port, struct fwnode_handle *fw
 	return 0;
 }
 
+static int tcpm_fw_get_pd_timers(struct tcpm_port *port, struct fwnode_handle *fwnode)
+{
+	int ret, i, len;
+	u32 *buf;
+
+	/* pd-timers is an optional property */
+	ret = fwnode_property_count_u32(fwnode, "pd-timers");
+	if (ret < 0) {
+		tcpm_log(port, "Unable to locate 'pd-timers' connector property (%d)", ret);
+		return 0;
+	}
+
+	if (ret % NUM_TIMER_TABLE_COLS || ret == 0) {
+		tcpm_log(port, "Incorrect 'pd-timers' value. Found %d u32 elements in array", ret);
+		return 0;
+	}
+
+	len = min(ret, PD_NUM_TIMERS * NUM_TIMER_TABLE_COLS);
+
+	buf = kcalloc(len, sizeof(*buf), GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	ret = fwnode_property_read_u32_array(fwnode, "pd-timers", buf, len);
+	if (ret) {
+		dev_err(port->dev, "Unable to read pd-timers property (%d)", ret);
+		goto done;
+	}
+
+	for (i = 0; i < len - 1; i += NUM_TIMER_TABLE_COLS) {
+		if (buf[i] >= PD_NUM_TIMERS)
+			tcpm_log(port, "Unable to find timer index %d, skipping.", buf[i]);
+		else
+			pd_timers[buf[i]] = buf[i + 1];
+	}
+
+done:
+	kfree(buf);
+	return ret;
+}
+
 /* Power Supply access to expose source power information */
 enum tcpm_psy_online_states {
 	TCPM_PSY_OFFLINE = 0,
@@ -7607,6 +7677,10 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 	init_completion(&port->swap_complete);
 	init_completion(&port->pps_complete);
 	tcpm_debugfs_init(port);
+
+	err = tcpm_fw_get_pd_timers(port, tcpc->fwnode);
+	if (err)
+		goto out_destroy_wq;
 
 	err = tcpm_fw_get_caps(port, tcpc->fwnode);
 	if (err < 0)
