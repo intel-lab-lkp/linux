@@ -1524,12 +1524,15 @@ int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res,
 	struct creq_destroy_qp_resp resp = {};
 	struct bnxt_qplib_cmdqmsg msg = {};
 	struct cmdq_destroy_qp req = {};
+	unsigned long flags;
 	u32 tbl_indx;
 	int rc;
 
+	spin_lock_irqsave(&rcfw->tbl_lock, flags);
 	tbl_indx = map_qp_id_to_tbl_indx(qp->id, rcfw);
 	rcfw->qp_tbl[tbl_indx].qp_id = BNXT_QPLIB_QP_ID_INVALID;
 	rcfw->qp_tbl[tbl_indx].qp_handle = NULL;
+	spin_unlock_irqrestore(&rcfw->tbl_lock, flags);
 
 	bnxt_qplib_rcfw_cmd_prep((struct cmdq_base *)&req,
 				 CMDQ_BASE_OPCODE_DESTROY_QP,
@@ -1540,8 +1543,10 @@ int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res,
 				sizeof(resp), 0);
 	rc = bnxt_qplib_rcfw_send_message(rcfw, &msg);
 	if (rc) {
+		spin_lock_irqsave(&rcfw->tbl_lock, flags);
 		rcfw->qp_tbl[tbl_indx].qp_id = qp->id;
 		rcfw->qp_tbl[tbl_indx].qp_handle = qp;
+		spin_unlock_irqrestore(&rcfw->tbl_lock, flags);
 		return rc;
 	}
 
