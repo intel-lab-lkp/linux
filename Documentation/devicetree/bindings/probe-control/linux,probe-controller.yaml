@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (c) 2024 Sony Group Corporation
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/linux,probe-controller.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Probe control device
+
+maintainers:
+  - Nayeemahmed Badebade <nayeemahmed.badebade@sony.com>
+  - Toyama Yoshihiro <yoshihiro.toyama@sony.com>
+
+description: |
+  This binding is for controlling the probes of a set of devices in the system.
+  Probe control device is a dummy device that can be used to control the probe
+  of a group of devices. To have finer control, the devices can further be
+  divided into multiple groups and for each group a probe control device can
+  be assigned. This way, individual groups can be managed independently.
+  For example, one group can be for pcie based devices and other can be
+  scsi or usb devices.
+  Probe control device is provider node and the devices whose probes need to be
+  controlled, are consumer nodes. To establish control over consumer device
+  probes, each consumer device node need to refer the probe control provider
+  node by the phandle.
+
+properties:
+  compatible:
+    const: linux,probe-control
+
+  probe-control-supply:
+    description:
+      Phandle to the probe control provider node.
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    // The node below defines a probe control device/provider node
+    prb_ctrl_dev_0: prb_ctrl_dev_0 {
+        compatible = "linux,probe-control";
+    };
+
+    // The node below is the consumer device node that refers to provider
+    // node by its phandle and a result will not be probed until provider
+    // node is probed.
+    pcie@1ffc000 {
+        reg = <0x01ffc000 0x04000>, <0x01f00000 0x80000>;
+        #address-cells = <3>;
+        #size-cells = <2>;
+        device_type = "pci";
+        ranges = <0x81000000 0 0          0x01f80000 0 0x00010000>,
+                 <0x82000000 0 0x01000000 0x01000000 0 0x00f00000>;
+
+        probe-control-supply = <&prb_ctrl_dev_0>;
+    };
