@@ -645,9 +645,16 @@ static int do_recover_data(struct f2fs_sb_info *sbi, struct inode *inode,
 		goto out;
 	}
 
+	err = f2fs_recover_inline_tail(inode, page);
+	if (err)
+		goto out;
+
 	/* step 3: recover data indices */
 	start = f2fs_start_bidx_of_node(ofs_of_node(page), inode);
-	end = start + ADDRS_PER_PAGE(page, inode);
+	if (f2fs_has_inline_tail(inode))
+		end = COMPACT_ADDRS_PER_INODE;
+	else
+		end = start + ADDRS_PER_PAGE(page, inode);
 
 	set_new_dnode(&dn, inode, NULL, NULL, 0);
 retry_dn:

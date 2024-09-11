@@ -414,6 +414,57 @@ process_inline:
 	return 0;
 }
 
+int f2fs_recover_inline_tail(struct inode *inode, struct page *npage)
+{
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	struct f2fs_inode *ri = NULL;
+	void *src_addr, *dst_addr;
+	struct page *ipage;
+
+	if (IS_INODE(npage))
+		ri = F2FS_INODE(npage);
+
+	if (f2fs_has_inline_tail(inode) &&
+			ri && (le32_to_cpu(ri->i_flags) & F2FS_INLINE_TAIL)) {
+process_inline:
+		if (!(ri->i_inline & F2FS_DATA_EXIST))
+			return 0;
+
+		ipage = f2fs_get_node_page(sbi, inode->i_ino);
+		if (IS_ERR(ipage))
+			return PTR_ERR(ipage);
+
+		f2fs_wait_on_page_writeback(ipage, NODE, true, true);
+
+		src_addr = inline_data_addr(inode, npage);
+		dst_addr = inline_data_addr(inode, ipage);
+		memcpy(dst_addr, src_addr, MAX_INLINE_DATA(inode));
+
+		set_inode_flag(inode, FI_DATA_EXIST);
+
+		set_page_dirty(ipage);
+		f2fs_put_page(ipage, 1);
+		return 0;
+	}
+
+	if (f2fs_has_inline_tail(inode)) {
+		ipage = f2fs_get_node_page(sbi, inode->i_ino);
+		if (IS_ERR(ipage))
+			return PTR_ERR(ipage);
+		f2fs_truncate_inline_inode(inode, ipage, 0);
+		clear_inode_flag(inode, FI_INLINE_TAIL);
+		f2fs_put_page(ipage, 1);
+	} else if (ri && (le32_to_cpu(ri->i_inline) & F2FS_INLINE_TAIL)) {
+		int ret;
+
+		ret = f2fs_truncate_blocks(inode,
+				COMPACT_ADDRS_PER_INODE >> PAGE_SHIFT, false);
+		if (ret)
+			return ret;
+		goto process_inline;
+	}
+	return 0;
+}
 struct f2fs_dir_entry *f2fs_find_in_inline_dir(struct inode *dir,
 					const struct f2fs_filename *fname,
 					struct page **res_page)
