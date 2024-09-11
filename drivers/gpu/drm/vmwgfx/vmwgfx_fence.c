@@ -143,7 +143,7 @@ static const char *vmw_fence_get_timeline_name(struct dma_fence *f)
 	return "svga";
 }
 
-static bool vmw_fence_enable_signaling(struct dma_fence *f)
+static bool vmw_fence_signaled(struct dma_fence *f)
 {
 	struct vmw_fence_obj *fence =
 		container_of(f, struct vmw_fence_obj, base);
@@ -153,9 +153,9 @@ static bool vmw_fence_enable_signaling(struct dma_fence *f)
 
 	u32 seqno = vmw_fence_read(dev_priv);
 	if (seqno - fence->base.seqno < VMW_FENCE_WRAP)
-		return false;
+		return true;
 
-	return true;
+	return false;
 }
 
 struct vmwgfx_wait_cb {
@@ -251,7 +251,7 @@ out:
 static const struct dma_fence_ops vmw_fence_ops = {
 	.get_driver_name = vmw_fence_get_driver_name,
 	.get_timeline_name = vmw_fence_get_timeline_name,
-	.enable_signaling = vmw_fence_enable_signaling,
+	.signaled = vmw_fence_signaled,
 	.wait = vmw_fence_wait,
 	.release = vmw_fence_obj_destroy,
 };
