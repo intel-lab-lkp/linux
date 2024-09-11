@@ -85,7 +85,7 @@ static int sanitycheck(void *arg)
 
 	chain = mock_chain(NULL, f, 1);
 	if (chain)
-		dma_fence_enable_sw_signaling(chain);
+		dma_fence_enable_signaling(chain);
 	else
 		err = -ENOMEM;
 
@@ -146,7 +146,7 @@ static int fence_chains_init(struct fence_chains *fc, unsigned int count,
 
 		fc->tail = fc->chains[i];
 
-		dma_fence_enable_sw_signaling(fc->chains[i]);
+		dma_fence_enable_signaling(fc->chains[i]);
 	}
 
 	fc->chain_length = i;

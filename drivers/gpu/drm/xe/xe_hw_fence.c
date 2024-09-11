@@ -168,7 +168,7 @@ static bool xe_hw_fence_signaled(struct dma_fence *dma_fence)
 		!__dma_fence_is_later(dma_fence->seqno, seqno, dma_fence->ops);
 }
 
-static bool xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)
+static void xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)
 {
 	struct xe_hw_fence *fence = to_xe_hw_fence(dma_fence);
 	struct xe_hw_fence_irq *irq = xe_hw_fence_irq(fence);
@@ -179,8 +179,6 @@ static bool xe_hw_fence_enable_signaling(struct dma_fence *dma_fence)
 	/* SW completed (no HW IRQ) so kick handler to signal fence */
 	if (xe_hw_fence_signaled(dma_fence))
 		xe_hw_fence_irq_run(irq);
-
-	return true;
 }
 
 static void xe_hw_fence_release(struct dma_fence *dma_fence)

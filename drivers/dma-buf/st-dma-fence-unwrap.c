@@ -102,7 +102,7 @@ static int sanitycheck(void *arg)
 	if (!f)
 		return -ENOMEM;
 
-	dma_fence_enable_sw_signaling(f);
+	dma_fence_enable_signaling(f);
 
 	array = mock_array(1, f);
 	if (!array)
@@ -126,7 +126,7 @@ static int unwrap_array(void *arg)
 	if (!f1)
 		return -ENOMEM;
 
-	dma_fence_enable_sw_signaling(f1);
+	dma_fence_enable_signaling(f1);
 
 	f2 = mock_fence();
 	if (!f2) {
@@ -134,7 +134,7 @@ static int unwrap_array(void *arg)
 		return -ENOMEM;
 	}
 
-	dma_fence_enable_sw_signaling(f2);
+	dma_fence_enable_signaling(f2);
 
 	array = mock_array(2, f1, f2);
 	if (!array)
@@ -170,7 +170,7 @@ static int unwrap_chain(void *arg)
 	if (!f1)
 		return -ENOMEM;
 
-	dma_fence_enable_sw_signaling(f1);
+	dma_fence_enable_signaling(f1);
 
 	f2 = mock_fence();
 	if (!f2) {
@@ -178,7 +178,7 @@ static int unwrap_chain(void *arg)
 		return -ENOMEM;
 	}
 
-	dma_fence_enable_sw_signaling(f2);
+	dma_fence_enable_signaling(f2);
 
 	chain = mock_chain(f1, f2);
 	if (!chain)
@@ -214,7 +214,7 @@ static int unwrap_chain_array(void *arg)
 	if (!f1)
 		return -ENOMEM;
 
-	dma_fence_enable_sw_signaling(f1);
+	dma_fence_enable_signaling(f1);
 
 	f2 = mock_fence();
 	if (!f2) {
@@ -222,7 +222,7 @@ static int unwrap_chain_array(void *arg)
 		return -ENOMEM;
 	}
 
-	dma_fence_enable_sw_signaling(f2);
+	dma_fence_enable_signaling(f2);
 
 	array = mock_array(2, f1, f2);
 	if (!array)
@@ -262,7 +262,7 @@ static int unwrap_merge(void *arg)
 	if (!f1)
 		return -ENOMEM;
 
-	dma_fence_enable_sw_signaling(f1);
+	dma_fence_enable_signaling(f1);
 
 	f2 = mock_fence();
 	if (!f2) {
@@ -270,7 +270,7 @@ static int unwrap_merge(void *arg)
 		goto error_put_f1;
 	}
 
-	dma_fence_enable_sw_signaling(f2);
+	dma_fence_enable_signaling(f2);
 
 	f3 = dma_fence_unwrap_merge(f1, f2);
 	if (!f3) {
@@ -314,13 +314,13 @@ static int unwrap_merge_complex(void *arg)
 	if (!f1)
 		return -ENOMEM;
 
-	dma_fence_enable_sw_signaling(f1);
+	dma_fence_enable_signaling(f1);
 
 	f2 = mock_fence();
 	if (!f2)
 		goto error_put_f1;
 
-	dma_fence_enable_sw_signaling(f2);
+	dma_fence_enable_signaling(f2);
 
 	f3 = dma_fence_unwrap_merge(f1, f2);
 	if (!f3)

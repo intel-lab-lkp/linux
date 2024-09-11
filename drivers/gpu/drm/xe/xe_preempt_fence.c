@@ -56,7 +56,7 @@ preempt_fence_get_timeline_name(struct dma_fence *fence)
 	return "preempt";
 }
 
-static bool preempt_fence_enable_signaling(struct dma_fence *fence)
+static void preempt_fence_enable_signaling(struct dma_fence *fence)
 {
 	struct xe_preempt_fence *pfence =
 		container_of(fence, typeof(*pfence), base);
@@ -64,7 +64,6 @@ static bool preempt_fence_enable_signaling(struct dma_fence *fence)
 
 	pfence->error = q->ops->suspend(q);
 	queue_work(q->vm->xe->preempt_fence_wq, &pfence->preempt_work);
-	return true;
 }
 
 static const struct dma_fence_ops preempt_fence_ops = {

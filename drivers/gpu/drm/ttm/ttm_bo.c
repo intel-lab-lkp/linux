@@ -219,7 +219,7 @@ static void ttm_bo_flush_all_fences(struct ttm_buffer_object *bo)
 	dma_resv_iter_begin(&cursor, resv, DMA_RESV_USAGE_BOOKKEEP);
 	dma_resv_for_each_fence_unlocked(&cursor, fence) {
 		if (!fence->ops->signaled)
-			dma_fence_enable_sw_signaling(fence);
+			dma_fence_enable_signaling(fence);
 	}
 	dma_resv_iter_end(&cursor);
 }

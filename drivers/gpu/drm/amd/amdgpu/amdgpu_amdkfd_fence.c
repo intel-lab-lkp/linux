@@ -116,24 +116,24 @@ static const char *amdkfd_fence_get_timeline_name(struct dma_fence *f)
  *
  *  @f: dma_fence
  */
-static bool amdkfd_fence_enable_signaling(struct dma_fence *f)
+static void amdkfd_fence_enable_signaling(struct dma_fence *f)
 {
 	struct amdgpu_amdkfd_fence *fence = to_amdgpu_amdkfd_fence(f);
 
 	if (!fence)
-		return false;
+		return;
 
 	if (dma_fence_is_signaled(f))
-		return true;
+		return;
 
 	if (!fence->svm_bo) {
 		if (!kgd2kfd_schedule_evict_and_restore_process(fence->mm, f))
-			return true;
+			return;
 	} else {
 		if (!svm_range_schedule_evict_svm_bo(fence))
-			return true;
+			return;
 	}
-	return false;
+	dma_fence_signal(f);
 }
 
 /**

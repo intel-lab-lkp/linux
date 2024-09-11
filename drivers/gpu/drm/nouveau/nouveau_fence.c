@@ -503,10 +503,11 @@ static const struct dma_fence_ops nouveau_fence_ops_legacy = {
 	.release = nouveau_fence_release
 };
 
-static bool nouveau_fence_enable_signaling(struct dma_fence *f)
+static void nouveau_fence_enable_signaling(struct dma_fence *f)
 {
 	struct nouveau_fence *fence = from_fence(f);
 	struct nouveau_fence_chan *fctx = nouveau_fctx(fence);
+	unsigned long flags;
 
 	/*
 	 * caller should have a reference on the fence,
@@ -514,6 +515,7 @@ static bool nouveau_fence_enable_signaling(struct dma_fence *f)
 	 */
 	WARN_ON(kref_read(&fence->base.refcount) <= 1);
 
+	spin_lock_irqsave(&fctx->lock, flags);
 	if (!fctx->notify_ref++)
 		nvif_event_allow(&fctx->event);
 
@@ -523,10 +525,11 @@ static bool nouveau_fence_enable_signaling(struct dma_fence *f)
 		dma_fence_put(&fence->base);
 		if (!--fctx->notify_ref)
 			nvif_event_block(&fctx->event);
-		return false;
+		spin_unlock_irqrestore(&fctx->lock, flags);
+		dma_fence_signal(f);
 	} else {
 		set_bit(DMA_FENCE_FLAG_USER_BITS, &fence->base.flags);
-		return true;
+		spin_unlock_irqrestore(&fctx->lock, flags);
 	}
 }
 

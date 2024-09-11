@@ -67,7 +67,7 @@ static void dma_fence_array_cb_func(struct dma_fence *f,
 		dma_fence_put(&array->base);
 }
 
-static bool dma_fence_array_enable_signaling(struct dma_fence *fence)
+static void dma_fence_array_enable_signaling(struct dma_fence *fence)
 {
 	struct dma_fence_array *array = to_dma_fence_array(fence);
 	struct dma_fence_array_cb *cb = array->callbacks;
@@ -92,12 +92,11 @@ static bool dma_fence_array_enable_signaling(struct dma_fence *fence)
 			dma_fence_put(&array->base);
 			if (atomic_dec_and_test(&array->num_pending)) {
 				dma_fence_array_clear_pending_error(array);
-				return false;
+				dma_fence_signal(&array->base);
+				return;
 			}
 		}
 	}
-
-	return true;
 }
 
 static bool dma_fence_array_signaled(struct dma_fence *fence)

@@ -158,39 +158,24 @@ struct dma_fence_ops {
 	/**
 	 * @enable_signaling:
 	 *
-	 * Enable software signaling of fence.
+	 * Guarantee that installed callbacks are called at some point.
 	 *
-	 * For fence implementations that have the capability for hw->hw
-	 * signaling, they can implement this op to enable the necessary
-	 * interrupts, or insert commands into cmdstream, etc, to avoid these
-	 * costly operations for the common case where only hw->hw
-	 * synchronization is required.  This is called in the first
-	 * dma_fence_wait() or dma_fence_add_callback() path to let the fence
-	 * implementation know that there is another driver waiting on the
-	 * signal (ie. hw->sw case).
+	 * Drivers can implement this op to enable the necessary interrupts or
+	 * tell the hardware through other means that somebody is requesting
+	 * this fence to signal. This is called in the first dma_fence_wait()
+	 * or dma_fence_add_callback() path.
 	 *
 	 * This function can be called from atomic context, but not
 	 * from irq context, so normal spinlocks can be used.
 	 *
-	 * A return value of false indicates the fence already passed,
-	 * or some failure occurred that made it impossible to enable
-	 * signaling. True indicates successful enabling.
-	 *
-	 * &dma_fence.error may be set in enable_signaling, but only when false
-	 * is returned.
-	 *
-	 * Since many implementations can call dma_fence_signal() even when before
-	 * @enable_signaling has been called there's a race window, where the
-	 * dma_fence_signal() might result in the final fence reference being
-	 * released and its memory freed. To avoid this, implementations of this
-	 * callback should grab their own reference using dma_fence_get(), to be
-	 * released when the fence is signalled (through e.g. the interrupt
-	 * handler).
+	 * dma_fence_set_error() as well as dma_fence_signal() may be used in
+	 * enable_signaling if the implementation detects an error or that the
+	 * fence already completed succesfully.
 	 *
 	 * This callback is optional. If this callback is not present, then the
 	 * driver must always have signaling enabled.
 	 */
-	bool (*enable_signaling)(struct dma_fence *fence);
+	void (*enable_signaling)(struct dma_fence *fence);
 
 	/**
 	 * @signaled:
@@ -400,7 +385,7 @@ int dma_fence_add_callback(struct dma_fence *fence,
 			   dma_fence_func_t func);
 bool dma_fence_remove_callback(struct dma_fence *fence,
 			       struct dma_fence_cb *cb);
-void dma_fence_enable_sw_signaling(struct dma_fence *fence);
+void dma_fence_enable_signaling(struct dma_fence *fence);
 
 /**
  * dma_fence_is_signaled_locked - Return an indication if the fence

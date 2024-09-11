@@ -90,9 +90,17 @@ static bool i915_fence_signaled(struct dma_fence *fence)
 	return i915_request_completed(to_request(fence));
 }
 
-static bool i915_fence_enable_signaling(struct dma_fence *fence)
+static void i915_fence_enable_signaling(struct dma_fence *fence)
 {
-	return i915_request_enable_breadcrumb(to_request(fence));
+	struct i915_request *rq = to_request(fence);
+	unsigned long flags;
+	bool ret;
+
+	spin_lock_irqsave(&rq->lock, flags);
+	ret = i915_request_enable_breadcrumb(to_request(fence));
+	spin_unlock_irqrestore(&rq->lock, flags);
+	if (!ret)
+		dma_fence_signal(fence);
 }
 
 static signed long i915_fence_wait(struct dma_fence *fence,
