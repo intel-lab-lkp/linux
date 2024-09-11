@@ -839,6 +839,8 @@ static void bnxt_get_ringparam(struct net_device *dev,
 	else
 		kernel_ering->tcp_data_split = ETHTOOL_TCP_DATA_SPLIT_DISABLED;
 
+	kernel_ering->tcp_data_split_thresh = bp->hds_threshold;
+
 	ering->tx_max_pending = BNXT_MAX_TX_DESC_CNT;
 
 	ering->rx_pending = bp->rx_ring_size;
@@ -864,6 +866,12 @@ static int bnxt_set_ringparam(struct net_device *dev,
 		return -EINVAL;
 	}
 
+	if (kernel_ering->tcp_data_split_thresh > BNXT_HDS_THRESHOLD_MAX) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "tcp-data-split-thresh size too big");
+		return -EINVAL;
+	}
+
 	if (netif_running(dev))
 		bnxt_close_nic(bp, false, false);
 
@@ -871,6 +879,7 @@ static int bnxt_set_ringparam(struct net_device *dev,
 	case ETHTOOL_TCP_DATA_SPLIT_UNKNOWN:
 	case ETHTOOL_TCP_DATA_SPLIT_ENABLED:
 		bp->flags |= BNXT_FLAG_HDS;
+		bp->hds_threshold = (u16)kernel_ering->tcp_data_split_thresh;
 		break;
 	case ETHTOOL_TCP_DATA_SPLIT_DISABLED:
 		bp->flags &= ~BNXT_FLAG_HDS;

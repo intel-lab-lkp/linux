@@ -2311,6 +2311,8 @@ struct bnxt {
 	int			rx_agg_nr_pages;
 	int			rx_nr_rings;
 	int			rsscos_nr_ctxs;
+#define BNXT_HDS_THRESHOLD_MAX	256
+	u16			hds_threshold;
 
 	u32			tx_ring_size;
 	u32			tx_ring_mask;
