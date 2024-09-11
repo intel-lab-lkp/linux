@@ -767,6 +767,8 @@ try_again:
 
 			switch (stat_handle_error(counter)) {
 			case COUNTER_FATAL:
+				if (forks)
+					evlist__cancel_workload(evsel_list);
 				return -1;
 			case COUNTER_RETRY:
 				goto try_again;
@@ -808,6 +810,8 @@ try_again_reset:
 
 				switch (stat_handle_error(counter)) {
 				case COUNTER_FATAL:
+					if (forks)
+						evlist__cancel_workload(evsel_list);
 					return -1;
 				case COUNTER_RETRY:
 					goto try_again_reset;
