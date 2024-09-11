@@ -11,7 +11,7 @@
 
 #include <asm/kvm_host.h>
 
-#define cpu_reg(ctxt, r)	(ctxt)->regs.regs[r]
+#define cpu_reg(ctxt, r)	(ctxt_gp_regs((ctxt))->regs[r])
 #define DECLARE_REG(type, name, ctxt, reg)	\
 				type name = (type)cpu_reg(ctxt, (reg))
 

@@ -950,7 +950,8 @@ struct kvm_vcpu_arch {
 #define vcpu_clear_on_unsupported_cpu(vcpu)				\
 	vcpu_clear_flag(vcpu, ON_UNSUPPORTED_CPU)
 
-#define vcpu_gp_regs(v)		(&(v)->arch.ctxt.regs)
+#define ctxt_gp_regs(ctxt)	(&(ctxt)->regs)
+#define vcpu_gp_regs(v)		(ctxt_gp_regs(&(v)->arch.ctxt))
 
 /*
  * Only use __vcpu_sys_reg/ctxt_sys_reg if you know you want the

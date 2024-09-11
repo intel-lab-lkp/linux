@@ -125,13 +125,13 @@ static inline void __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 
 static inline void __sysreg_save_el2_return_state(struct kvm_cpu_context *ctxt)
 {
-	ctxt->regs.pc			= read_sysreg_el2(SYS_ELR);
+	ctxt_gp_regs(ctxt)->pc		= read_sysreg_el2(SYS_ELR);
 	/*
 	 * Guest PSTATE gets saved at guest fixup time in all
 	 * cases. We still need to handle the nVHE host side here.
 	 */
 	if (!has_vhe() && ctxt->__hyp_running_vcpu)
-		ctxt->regs.pstate	= read_sysreg_el2(SYS_SPSR);
+		ctxt_gp_regs(ctxt)->pstate = read_sysreg_el2(SYS_SPSR);
 
 	if (cpus_have_final_cap(ARM64_HAS_RAS_EXTN))
 		ctxt_sys_reg(ctxt, DISR_EL1) = read_sysreg_s(SYS_VDISR_EL2);
@@ -229,7 +229,7 @@ static inline void __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt)
 /* Read the VCPU state's PSTATE, but translate (v)EL2 to EL1. */
 static inline u64 to_hw_pstate(const struct kvm_cpu_context *ctxt)
 {
-	u64 mode = ctxt->regs.pstate & (PSR_MODE_MASK | PSR_MODE32_BIT);
+	u64 mode = ctxt_gp_regs(ctxt)->pstate & (PSR_MODE_MASK | PSR_MODE32_BIT);
 
 	switch (mode) {
 	case PSR_MODE_EL2t:
@@ -240,7 +240,7 @@ static inline u64 to_hw_pstate(const struct kvm_cpu_context *ctxt)
 		break;
 	}
 
-	return (ctxt->regs.pstate & ~(PSR_MODE_MASK | PSR_MODE32_BIT)) | mode;
+	return (ctxt_gp_regs(ctxt)->pstate & ~(PSR_MODE_MASK | PSR_MODE32_BIT)) | mode;
 }
 
 static inline void __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctxt)
@@ -262,7 +262,7 @@ static inline void __sysreg_restore_el2_return_state(struct kvm_cpu_context *ctx
 	if (!(mode & PSR_MODE32_BIT) && mode >= PSR_MODE_EL2t)
 		pstate = PSR_MODE_EL2h | PSR_IL_BIT;
 
-	write_sysreg_el2(ctxt->regs.pc,			SYS_ELR);
+	write_sysreg_el2(ctxt_gp_regs(ctxt)->pc,	SYS_ELR);
 	write_sysreg_el2(pstate,			SYS_SPSR);
 
 	if (cpus_have_final_cap(ARM64_HAS_RAS_EXTN))

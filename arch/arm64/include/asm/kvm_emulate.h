@@ -170,7 +170,7 @@ static __always_inline void vcpu_set_reg(struct kvm_vcpu *vcpu, u8 reg_num,
 
 static inline bool vcpu_is_el2_ctxt(const struct kvm_cpu_context *ctxt)
 {
-	switch (ctxt->regs.pstate & (PSR_MODE32_BIT | PSR_MODE_MASK)) {
+	switch (ctxt_gp_regs(ctxt)->pstate & (PSR_MODE32_BIT | PSR_MODE_MASK)) {
 	case PSR_MODE_EL2h:
 	case PSR_MODE_EL2t:
 		return true;
