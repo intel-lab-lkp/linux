@@ -3319,8 +3319,10 @@ static int mvneta_poll(struct napi_struct *napi, int budget)
 	}
 
 	if (rx_done < budget) {
-		cause_rx_tx = 0;
-		napi_complete_done(napi, rx_done);
+		if (rx_done)
+			napi_complete_done(napi, rx_done);
+		else
+			napi_complete(napi);
 
 		if (pp->neta_armada3700) {
 			unsigned long flags;
