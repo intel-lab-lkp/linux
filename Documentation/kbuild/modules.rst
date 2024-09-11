@@ -72,14 +72,23 @@ executed to make module versioning work.
 2.1 Command Syntax
 ==================
 
-	The command to build an external module is::
+	The full command to build an external module is::
 
-		$ make -C <path_to_kernel_src> M=$PWD
+		$ make -C <kernel_src> O=<kernel_out> S=<module_src> M=<module_out>
 
-	The kbuild system knows that an external module is being built
-	due to the "M=<dir>" option given in the command.
+	If <kernel_out> is the same as <kernel_src>, "O=" can be omitted::
 
-	To build against the running kernel use::
+		$ make -C <kernel_src> S=<module_src> M=<module_out>
+
+	If <module_out> is the same as <module_src>, "S=" can be omitted::
+
+		$ make -C <kernel_src> O=<kernel_out> M=<module_src>
+
+	If both of the above are satisfied, the command is::
+
+		$ make -C <kernel_src> M=<module_src>
+
+	So to build against the running kernel can use::
 
 		$ make -C /lib/modules/`uname -r`/build M=$PWD
 
@@ -91,20 +100,29 @@ executed to make module versioning work.
 2.2 Options
 ===========
 
-	($KDIR refers to the path of the kernel source directory.)
+	make -C <kernel_src> O=<kernel_out> S=<module_src> M=<module_out>
 
-	make -C $KDIR M=$PWD
-
-	-C $KDIR
+	-C <kernel_src>
 		The directory where the kernel source is located.
 		"make" will actually change to the specified directory
 		when executing and will change back when finished.
 
-	M=$PWD
+	O=<kernel_out>
+		The value given to "O" is the absolute path of the
+		directory where the kernel output (.config file) is located.
+		If <kernel_out> is the same as <kernel_src>,
+		"O=<kernel_out>" can be omitted.
+
+	S=<module_src>
+		The value given to "S" is the absolute path of the
+		directory where the external module source (kbuild file)
+		is located. If <module_out> is the same as <module_src>,
+		"S=<module_src>" can be omitted.
+
+	M=<module_out>
 		Informs kbuild that an external module is being built.
 		The value given to "M" is the absolute path of the
-		directory where the external module (kbuild file) is
-		located.
+		directory where the external module output is located.
 
 2.3 Targets
 ===========
@@ -112,7 +130,7 @@ executed to make module versioning work.
 	When building an external module, only a subset of the "make"
 	targets are available.
 
-	make -C $KDIR M=$PWD [target]
+	make -C <kernel_src> O=<kernel_out> S=<module_src> M=<module_out> [target]
 
 	The default will build the module(s) located in the current
 	directory, so a target does not need to be specified. All
@@ -151,6 +169,7 @@ executed to make module versioning work.
 		make -C $KDIR M=$PWD foo.ko
 		make -C $KDIR M=$PWD ./
 
+	($KDIR refers to the path of the kernel source directory.)
 
 3. Creating a Kbuild File for an External Module
 ================================================
