@@ -755,11 +755,11 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 	if (static_key_false((&paravirt_steal_rq_enabled))) {
 		steal = paravirt_steal_clock(cpu_of(rq));
 		steal -= rq->prev_steal_time_rq;
+		rq->prev_steal_time_rq += steal;
 
 		if (unlikely(steal > delta))
 			steal = delta;
 
-		rq->prev_steal_time_rq += steal;
 		delta -= steal;
 	}
 #endif
