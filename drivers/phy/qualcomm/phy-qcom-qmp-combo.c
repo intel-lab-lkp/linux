@@ -3671,6 +3671,7 @@ static int qmp_combo_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	qmp->dev = dev;
+	dev_set_drvdata(dev, qmp);
 
 	qmp->orientation = TYPEC_ORIENTATION_NORMAL;
 
@@ -3746,8 +3747,6 @@ static int qmp_combo_probe(struct platform_device *pdev)
 	}
 
 	phy_set_drvdata(qmp->dp_phy, qmp);
-
-	dev_set_drvdata(dev, qmp);
 
 	if (usb_np == dev->of_node)
 		phy_provider = devm_of_phy_provider_register(dev, qmp_combo_phy_xlate);
