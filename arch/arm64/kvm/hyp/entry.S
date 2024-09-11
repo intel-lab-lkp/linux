@@ -28,6 +28,9 @@ SYM_FUNC_START(__guest_enter)
 
 	adr_this_cpu x1, kvm_hyp_ctxt, x2
 
+	// Get gp-regs pointer from the context
+	get_ctxt_gp_regs x1, x1
+
 	// Store the hyp regs
 	save_callee_saved_regs x1
 
@@ -61,6 +64,9 @@ alternative_else_nop_endif
 	// as it may cause Pointer Authentication key signing mismatch errors
 	// when this feature is enabled for kernel code.
 	ptrauth_switch_to_guest x29, x0, x1, x2
+
+	// Get gp-regs pointer from the context
+	get_ctxt_gp_regs x29, x29
 
 	// Restore the guest's sp_el0
 	restore_sp_el0 x29, x0
@@ -108,6 +114,7 @@ SYM_INNER_LABEL(__guest_exit_panic, SYM_L_GLOBAL)
 	// current state is saved to the guest context but it will only be
 	// accurate if the guest had been completely restored.
 	adr_this_cpu x0, kvm_hyp_ctxt, x1
+	get_ctxt_gp_regs x0, x0
 	adr_l	x1, hyp_panic
 	str	x1, [x0, #CPU_XREG_OFFSET(30)]
 
@@ -120,6 +127,7 @@ SYM_INNER_LABEL(__guest_exit, SYM_L_GLOBAL)
 	// vcpu x0-x1 on the stack
 
 	add	x1, x1, #VCPU_CONTEXT
+	get_ctxt_gp_regs x1, x1
 
 	ALTERNATIVE(nop, SET_PSTATE_PAN(1), ARM64_HAS_PAN, CONFIG_ARM64_PAN)
 
@@ -145,6 +153,10 @@ SYM_INNER_LABEL(__guest_exit, SYM_L_GLOBAL)
 	// Store the guest's sp_el0
 	save_sp_el0	x1, x2
 
+	// Recover vCPU context to x1
+	get_vcpu_ptr    x1, x2
+	add     x1, x1, #VCPU_CONTEXT
+
 	adr_this_cpu x2, kvm_hyp_ctxt, x3
 
 	// Macro ptrauth_switch_to_hyp format:
@@ -156,6 +168,9 @@ SYM_INNER_LABEL(__guest_exit, SYM_L_GLOBAL)
 
 	// mte_switch_to_hyp(g_ctxt, h_ctxt, reg1)
 	mte_switch_to_hyp x1, x2, x3
+
+	// Get gp-regs pointer from the context
+	get_ctxt_gp_regs x2, x2
 
 	// Restore hyp's sp_el0
 	restore_sp_el0 x2, x3

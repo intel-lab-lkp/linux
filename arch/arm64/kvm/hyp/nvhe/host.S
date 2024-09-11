@@ -17,6 +17,12 @@
 SYM_FUNC_START(__host_exit)
 	get_host_ctxt	x0, x1
 
+	/* Keep host context in x1 */
+	mov	x1, x0
+
+	/* Get gp-regs pointer from the context */
+	get_ctxt_gp_regs x0, x0
+
 	/* Store the host regs x2 and x3 */
 	stp	x2, x3,   [x0, #CPU_XREG_OFFSET(2)]
 
@@ -36,7 +42,10 @@ SYM_FUNC_START(__host_exit)
 	/* Store the host regs x18-x29, lr */
 	save_callee_saved_regs x0
 
-	/* Save the host context pointer in x29 across the function call */
+	/* Save the host context pointer in x28 across the function call */
+	mov	x28, x1
+
+	/* Save the host gp-regs pointer in x29 across the function call */
 	mov	x29, x0
 
 #ifdef CONFIG_ARM64_PTR_AUTH_KERNEL
@@ -46,7 +55,7 @@ alternative_else_nop_endif
 
 alternative_if ARM64_KVM_PROTECTED_MODE
 	/* Save kernel ptrauth keys. */
-	add x18, x29, #CPU_APIAKEYLO_EL1
+	add x18, x28, #CPU_APIAKEYLO_EL1
 	ptrauth_save_state x18, x19, x20
 
 	/* Use hyp keys. */
@@ -58,6 +67,7 @@ alternative_else_nop_endif
 __skip_pauth_save:
 #endif /* CONFIG_ARM64_PTR_AUTH_KERNEL */
 
+	mov	x0, x28
 	bl	handle_trap
 
 __host_enter_restore_full:
@@ -68,7 +78,7 @@ b __skip_pauth_restore
 alternative_else_nop_endif
 
 alternative_if ARM64_KVM_PROTECTED_MODE
-	add x18, x29, #CPU_APIAKEYLO_EL1
+	add x18, x28, #CPU_APIAKEYLO_EL1
 	ptrauth_restore_state x18, x19, x20
 alternative_else_nop_endif
 __skip_pauth_restore:
@@ -101,7 +111,8 @@ SYM_FUNC_END(__host_exit)
  * void __noreturn __host_enter(struct kvm_cpu_context *host_ctxt);
  */
 SYM_FUNC_START(__host_enter)
-	mov	x29, x0
+	mov	x28, x0
+	get_ctxt_gp_regs x0, x29
 	b	__host_enter_restore_full
 SYM_FUNC_END(__host_enter)
 
@@ -141,6 +152,7 @@ SYM_FUNC_START(__hyp_do_panic)
 
 	/* Enter the host, conditionally restoring the host context. */
 	cbz	x29, __host_enter_without_restoring
+	get_ctxt_gp_regs x29, x29
 	b	__host_enter_for_panic
 SYM_FUNC_END(__hyp_do_panic)
 

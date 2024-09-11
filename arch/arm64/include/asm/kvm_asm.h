@@ -314,6 +314,10 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr, u64 elr_virt,
 	str	\vcpu, [\ctxt, #HOST_CONTEXT_VCPU]
 .endm
 
+.macro get_ctxt_gp_regs ctxt, regs
+	add	\regs, \ctxt, #CPU_USER_PT_REGS
+.endm
+
 /*
  * KVM extable for unexpected exceptions.
  * Create a struct kvm_exception_table_entry output to a section that can be
@@ -330,7 +334,7 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr, u64 elr_virt,
 	.popsection
 .endm
 
-#define CPU_XREG_OFFSET(x)	(CPU_USER_PT_REGS + 8*x)
+#define CPU_XREG_OFFSET(x)	(8 * (x))
 #define CPU_LR_OFFSET		CPU_XREG_OFFSET(30)
 #define CPU_SP_EL0_OFFSET	(CPU_LR_OFFSET + 8)
 
@@ -338,34 +342,34 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr, u64 elr_virt,
  * We treat x18 as callee-saved as the host may use it as a platform
  * register (e.g. for shadow call stack).
  */
-.macro save_callee_saved_regs ctxt
-	str	x18,      [\ctxt, #CPU_XREG_OFFSET(18)]
-	stp	x19, x20, [\ctxt, #CPU_XREG_OFFSET(19)]
-	stp	x21, x22, [\ctxt, #CPU_XREG_OFFSET(21)]
-	stp	x23, x24, [\ctxt, #CPU_XREG_OFFSET(23)]
-	stp	x25, x26, [\ctxt, #CPU_XREG_OFFSET(25)]
-	stp	x27, x28, [\ctxt, #CPU_XREG_OFFSET(27)]
-	stp	x29, lr,  [\ctxt, #CPU_XREG_OFFSET(29)]
+.macro save_callee_saved_regs regs
+	str	x18,      [\regs, #CPU_XREG_OFFSET(18)]
+	stp	x19, x20, [\regs, #CPU_XREG_OFFSET(19)]
+	stp	x21, x22, [\regs, #CPU_XREG_OFFSET(21)]
+	stp	x23, x24, [\regs, #CPU_XREG_OFFSET(23)]
+	stp	x25, x26, [\regs, #CPU_XREG_OFFSET(25)]
+	stp	x27, x28, [\regs, #CPU_XREG_OFFSET(27)]
+	stp	x29, lr,  [\regs, #CPU_XREG_OFFSET(29)]
 .endm
 
-.macro restore_callee_saved_regs ctxt
-	// We require \ctxt is not x18-x28
-	ldr	x18,      [\ctxt, #CPU_XREG_OFFSET(18)]
-	ldp	x19, x20, [\ctxt, #CPU_XREG_OFFSET(19)]
-	ldp	x21, x22, [\ctxt, #CPU_XREG_OFFSET(21)]
-	ldp	x23, x24, [\ctxt, #CPU_XREG_OFFSET(23)]
-	ldp	x25, x26, [\ctxt, #CPU_XREG_OFFSET(25)]
-	ldp	x27, x28, [\ctxt, #CPU_XREG_OFFSET(27)]
-	ldp	x29, lr,  [\ctxt, #CPU_XREG_OFFSET(29)]
+.macro restore_callee_saved_regs regs
+	// We require \regs is not x18-x28
+	ldr	x18,      [\regs, #CPU_XREG_OFFSET(18)]
+	ldp	x19, x20, [\regs, #CPU_XREG_OFFSET(19)]
+	ldp	x21, x22, [\regs, #CPU_XREG_OFFSET(21)]
+	ldp	x23, x24, [\regs, #CPU_XREG_OFFSET(23)]
+	ldp	x25, x26, [\regs, #CPU_XREG_OFFSET(25)]
+	ldp	x27, x28, [\regs, #CPU_XREG_OFFSET(27)]
+	ldp	x29, lr,  [\regs, #CPU_XREG_OFFSET(29)]
 .endm
 
-.macro save_sp_el0 ctxt, tmp
+.macro save_sp_el0 regs, tmp
 	mrs	\tmp,	sp_el0
-	str	\tmp,	[\ctxt, #CPU_SP_EL0_OFFSET]
+	str	\tmp,	[\regs, #CPU_SP_EL0_OFFSET]
 .endm
 
-.macro restore_sp_el0 ctxt, tmp
-	ldr	\tmp,	  [\ctxt, #CPU_SP_EL0_OFFSET]
+.macro restore_sp_el0 regs, tmp
+	ldr	\tmp,	  [\regs, #CPU_SP_EL0_OFFSET]
 	msr	sp_el0, \tmp
 .endm
 
