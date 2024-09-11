@@ -15,7 +15,6 @@
 #include <linux/err.h>
 #include <linux/delay.h>
 #include <linux/regmap.h>
-#include <linux/acpi.h>
 #include <linux/regulator/consumer.h>
 
 #include <linux/iio/iio.h>
@@ -1422,17 +1421,6 @@ static int ltr501_powerdown(struct ltr501_data *data)
 				  data->ps_contr & ~LTR501_CONTR_ACTIVE);
 }
 
-static const char *ltr501_match_acpi_device(struct device *dev, int *chip_idx)
-{
-	const struct acpi_device_id *id;
-
-	id = acpi_match_device(dev->driver->acpi_match_table, dev);
-	if (!id)
-		return NULL;
-	*chip_idx = id->driver_data;
-	return dev_name(dev);
-}
-
 static int ltr501_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
@@ -1523,8 +1511,6 @@ static int ltr501_probe(struct i2c_client *client)
 	if (id) {
 		name = id->name;
 		chip_idx = id->driver_data;
-	} else  if (ACPI_HANDLE(&client->dev)) {
-		name = ltr501_match_acpi_device(&client->dev, &chip_idx);
 	} else {
 		return -ENODEV;
 	}
@@ -1609,14 +1595,6 @@ static int ltr501_resume(struct device *dev)
 
 static DEFINE_SIMPLE_DEV_PM_OPS(ltr501_pm_ops, ltr501_suspend, ltr501_resume);
 
-static const struct acpi_device_id ltr_acpi_match[] = {
-	{ "LTER0501", ltr501 },
-	{ "LTER0559", ltr559 },
-	{ "LTER0301", ltr301 },
-	{ },
-};
-MODULE_DEVICE_TABLE(acpi, ltr_acpi_match);
-
 static const struct i2c_device_id ltr501_id[] = {
 	{ "ltr501", ltr501 },
 	{ "ltr559", ltr559 },
@@ -1640,7 +1618,6 @@ static struct i2c_driver ltr501_driver = {
 		.name   = LTR501_DRV_NAME,
 		.of_match_table = ltr501_of_match,
 		.pm	= pm_sleep_ptr(&ltr501_pm_ops),
-		.acpi_match_table = ltr_acpi_match,
 	},
 	.probe = ltr501_probe,
 	.remove	= ltr501_remove,
