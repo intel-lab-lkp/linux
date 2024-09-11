@@ -9,6 +9,7 @@ Compute Accelerators
 
    introduction
    qaic/index
+   amdxdna/index
 
 .. only::  subproject and html
 
