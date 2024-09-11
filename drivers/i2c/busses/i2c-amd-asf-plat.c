@@ -25,13 +25,17 @@
 #define ASF_CLK_EN	17
 
 /* ASF address offsets */
+#define ASFINDEX	(7 + piix4_smba)
 #define ASFLISADDR	(9 + piix4_smba)
 #define ASFSTA		(0xA + piix4_smba)
 #define ASFSLVSTA	(0xD + piix4_smba)
+#define ASFDATARWPTR	(0x11 + piix4_smba)
+#define ASFSETDATARDPTR	(0x12 + piix4_smba)
 #define ASFDATABNKSEL	(0x13 + piix4_smba)
 #define ASFSLVEN	(0x15 + piix4_smba)
 
 #define ASF_BLOCK_MAX_BYTES		72
+#define SB800_ASF_ERROR_STATUS		0xE
 
 static const char *amd_asf_port_name = " port 1";
 
@@ -39,9 +43,70 @@ struct amd_asf_dev {
 	struct device *dev;
 	struct i2c_adapter adap;
 	struct i2c_client *target;
+	struct delayed_work work_buf;
 	struct sb800_mmio_cfg mmio_cfg;
 	unsigned short port_addr;
 };
+
+static void amd_asf_process_target(struct work_struct *work)
+{
+	struct amd_asf_dev *dev = container_of(work, struct amd_asf_dev, work_buf.work);
+	unsigned short piix4_smba = dev->port_addr;
+	u8 data[ASF_BLOCK_MAX_BYTES];
+	u8 len, idx, val = 0;
+	u8 bank, reg, cmd;
+
+	/* Read target status register */
+	reg = inb_p(ASFSLVSTA);
+
+	/* Check if no error bits are set in target status register */
+	if (reg & SB800_ASF_ERROR_STATUS) {
+		/* Set bank as full */
+		cmd = 0;
+		reg = reg | GENMASK(3, 2);
+		outb_p(reg, ASFDATABNKSEL);
+	} else {
+		/* Read data bank */
+		reg = inb_p(ASFDATABNKSEL);
+		bank = (reg & BIT(3)) ? 1 : 0;
+
+		/* Set read data bank */
+		if (bank) {
+			reg = reg | BIT(4);
+			reg = reg & ~BIT(3);
+		} else {
+			reg = reg & ~BIT(4);
+			reg = reg & ~BIT(2);
+		}
+
+		/* Read command register */
+		outb_p(reg, ASFDATABNKSEL);
+		cmd = inb_p(ASFINDEX);
+		len = inb_p(ASFDATARWPTR);
+		for (idx = 0; idx < len; idx++)
+			data[idx] = inb_p(ASFINDEX);
+
+		/* Clear data bank status */
+		if (bank) {
+			reg = reg | BIT(3);
+			outb_p(reg, ASFDATABNKSEL);
+		} else {
+			reg = reg | BIT(2);
+			outb_p(reg, ASFDATABNKSEL);
+		}
+	}
+
+	outb_p(0, ASFSETDATARDPTR);
+	if (cmd & BIT(0))
+		return;
+
+	i2c_slave_event(dev->target, I2C_SLAVE_WRITE_REQUESTED, &val);
+	for (idx = 0; idx < len; idx++) {
+		val = data[idx];
+		i2c_slave_event(dev->target, I2C_SLAVE_WRITE_RECEIVED, &val);
+	}
+	i2c_slave_event(dev->target, I2C_SLAVE_STOP, &val);
+}
 
 static void amd_asf_update_bits(unsigned short piix4_smba, u8 bit,
 				unsigned long offset, bool set)
@@ -208,13 +273,31 @@ static const struct i2c_algorithm amd_asf_smbus_algorithm = {
 	.functionality = amd_asf_func,
 };
 
+static irqreturn_t amd_asf_irq_handler(int irq, void *ptr)
+{
+	struct amd_asf_dev *dev = ptr;
+	unsigned short piix4_smba = dev->port_addr;
+	u8 target_int = inb_p(ASFSTA);
+
+	if (target_int & BIT(6)) {
+		/* Target Interrupt */
+		outb_p(target_int | BIT(6), ASFSTA);
+		schedule_delayed_work(&dev->work_buf, HZ);
+	} else {
+		/* Controller Interrupt */
+		amd_asf_update_bits(piix4_smba, ASF_SLV_INTR, SMBHSTSTS, true);
+	}
+
+	return IRQ_HANDLED;
+}
+
 static int amd_asf_probe(struct platform_device *pdev)
 {
 	struct resource_entry *rentry;
 	struct amd_asf_dev *asf_dev;
 	struct acpi_device *adev;
 	LIST_HEAD(res_list);
-	int ret;
+	int ret, irq;
 
 	adev = ACPI_COMPANION(&pdev->dev);
 	if (!adev)
@@ -241,6 +324,9 @@ static int amd_asf_probe(struct platform_device *pdev)
 		case IORESOURCE_IO:
 			asf_dev->port_addr = rentry->res->start;
 			break;
+		case IORESOURCE_IRQ:
+			irq = rentry->res->start;
+			break;
 		default:
 			dev_warn(&adev->dev, "Invalid ASF resource\n");
 			break;
@@ -253,6 +339,12 @@ static int amd_asf_probe(struct platform_device *pdev)
 
 	snprintf(asf_dev->adap.name, sizeof(asf_dev->adap.name),
 		 "SMBus ASF adapter%s at %04x", amd_asf_port_name, asf_dev->port_addr);
+
+	INIT_DELAYED_WORK(&asf_dev->work_buf, amd_asf_process_target);
+	ret = devm_request_irq(&pdev->dev, irq, amd_asf_irq_handler, IRQF_SHARED,
+			       "amd_smbus_asf", asf_dev);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Unable to request irq: %d for use\n", irq);
 
 	i2c_set_adapdata(&asf_dev->adap, asf_dev);
 	ret = i2c_add_adapter(&asf_dev->adap);
@@ -267,6 +359,7 @@ static int amd_asf_probe(struct platform_device *pdev)
 static void amd_asf_remove(struct platform_device *pdev)
 {
 	struct amd_asf_dev *dev = platform_get_drvdata(pdev);
+	cancel_delayed_work_sync(&dev->work_buf);
 
 	if (dev->port_addr) {
 		i2c_del_adapter(&dev->adap);
