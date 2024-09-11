@@ -4141,6 +4141,10 @@ static int f2fs_swap_activate(struct swap_info_struct *sis, struct file *file,
 	if (ret)
 		return ret;
 
+	ret = f2fs_convert_inline_tail(inode);
+	if (ret)
+		return ret;
+
 	if (!f2fs_disable_compressed_file(inode))
 		return -EINVAL;
 

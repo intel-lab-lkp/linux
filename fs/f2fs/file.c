@@ -84,6 +84,10 @@ static vm_fault_t f2fs_vm_page_mkwrite(struct vm_fault *vmf)
 	if (err)
 		goto out;
 
+	err = f2fs_convert_inline_tail(inode);
+	if (err)
+		goto out;
+
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (f2fs_compressed_file(inode)) {
 		int ret = f2fs_is_compressed_cluster(inode, page->index);
@@ -1070,6 +1074,12 @@ int f2fs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 				return err;
 		}
 
+		if (attr->ia_size > MAX_INLINE_TAIL(inode)) {
+			err = f2fs_convert_inline_tail(inode);
+			if (err)
+				return err;
+		}
+
 		f2fs_down_write(&fi->i_gc_rwsem[WRITE]);
 		filemap_invalidate_lock(inode->i_mapping);
 
@@ -1188,6 +1198,10 @@ static int f2fs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 	int ret;
 
 	ret = f2fs_convert_inline_inode(inode);
+	if (ret)
+		return ret;
+
+	ret = f2fs_convert_inline_tail(inode);
 	if (ret)
 		return ret;
 
@@ -1501,6 +1515,10 @@ static int f2fs_collapse_range(struct inode *inode, loff_t offset, loff_t len)
 	if (ret)
 		return ret;
 
+	ret = f2fs_convert_inline_tail(inode);
+	if (ret)
+		return ret;
+
 	/* write out all dirty pages from offset */
 	ret = filemap_write_and_wait_range(inode->i_mapping, offset, LLONG_MAX);
 	if (ret)
@@ -1588,6 +1606,10 @@ static int f2fs_zero_range(struct inode *inode, loff_t offset, loff_t len,
 		return ret;
 
 	ret = f2fs_convert_inline_inode(inode);
+	if (ret)
+		return ret;
+
+	ret = f2fs_convert_inline_tail(inode);
 	if (ret)
 		return ret;
 
@@ -1702,6 +1724,10 @@ static int f2fs_insert_range(struct inode *inode, loff_t offset, loff_t len)
 		return -EINVAL;
 
 	ret = f2fs_convert_inline_inode(inode);
+	if (ret)
+		return ret;
+
+	ret = f2fs_convert_inline_tail(inode);
 	if (ret)
 		return ret;
 
@@ -2012,6 +2038,9 @@ static int f2fs_setflags_common(struct inode *inode, u32 iflags, u32 mask)
 			int err = f2fs_convert_inline_inode(inode);
 			if (err)
 				return err;
+			err = f2fs_convert_inline_tail(inode);
+			if (err)
+				return err;
 
 			f2fs_down_write(&fi->i_sem);
 			if (!f2fs_may_compress(inode) ||
@@ -2169,6 +2198,10 @@ static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 		goto out;
 
 	ret = f2fs_convert_inline_inode(inode);
+	if (ret)
+		goto out;
+
+	ret = f2fs_convert_inline_tail(inode);
 	if (ret)
 		goto out;
 
@@ -2966,8 +2999,14 @@ static int f2fs_move_file_range(struct file *file_in, loff_t pos_in,
 	ret = f2fs_convert_inline_inode(src);
 	if (ret)
 		goto out_unlock;
+	ret = f2fs_convert_inline_tail(src);
+	if (ret)
+		goto out_unlock;
 
 	ret = f2fs_convert_inline_inode(dst);
+	if (ret)
+		goto out_unlock;
+	ret = f2fs_convert_inline_tail(dst);
 	if (ret)
 		goto out_unlock;
 
@@ -3350,6 +3389,10 @@ static int f2fs_ioc_set_pin_file(struct file *filp, unsigned long arg)
 	}
 
 	ret = f2fs_convert_inline_inode(inode);
+	if (ret)
+		goto out;
+
+	ret = f2fs_convert_inline_tail(inode);
 	if (ret)
 		goto out;
 
@@ -3995,6 +4038,10 @@ static int f2fs_sec_trim_file(struct file *filp, unsigned long arg)
 	pg_end = DIV_ROUND_UP(end_addr, F2FS_BLKSIZE);
 
 	ret = f2fs_convert_inline_inode(inode);
+	if (ret)
+		goto err;
+
+	ret = f2fs_convert_inline_tail(inode);
 	if (ret)
 		goto err;
 
