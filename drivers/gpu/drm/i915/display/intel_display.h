@@ -583,5 +583,6 @@ bool assert_port_valid(struct drm_i915_private *i915, enum port port);
 })
 
 bool intel_scanout_needs_vtd_wa(struct drm_i915_private *i915);
+int intel_joiner_num_pipes(const struct intel_crtc_state *crtc_state);
 
 #endif
