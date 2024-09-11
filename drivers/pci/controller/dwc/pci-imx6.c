@@ -1017,13 +1017,14 @@ static u64 imx_pcie_cpu_addr_fixup(struct dw_pcie *pcie, u64 cpu_addr)
 	struct imx_pcie *imx_pcie = to_imx_pcie(pcie);
 	struct dw_pcie_rp *pp = &pcie->pp;
 	struct resource_entry *entry;
-	unsigned int offset;
+	unsigned int offset = 0;
 
 	if (!(imx_pcie->drvdata->flags & IMX_PCIE_FLAG_CPU_ADDR_FIXUP))
 		return cpu_addr;
 
 	entry = resource_list_first_type(&pp->bridge->windows, IORESOURCE_MEM);
-	offset = entry->offset;
+	if (entry)
+		offset = entry->offset;
 
 	return (cpu_addr - offset);
 }
