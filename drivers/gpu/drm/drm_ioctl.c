@@ -540,6 +540,32 @@ int drm_version(struct drm_device *dev, void *data,
 	return err;
 }
 
+static int drm_set_name(struct drm_device *dev, void *data,
+			struct drm_file *file_priv)
+{
+	struct drm_set_name *name = data;
+	void *user_ptr;
+	char *new_name;
+
+	if (name->name_len >= NAME_MAX)
+		return -EINVAL;
+
+	user_ptr = u64_to_user_ptr(name->name);
+
+	new_name = memdup_user_nul(user_ptr, name->name_len);
+
+	if (IS_ERR(new_name))
+		return PTR_ERR(new_name);
+
+	mutex_lock(&file_priv->name_lock);
+	if (file_priv->name)
+		kvfree(file_priv->name);
+	file_priv->name = new_name;
+	mutex_unlock(&file_priv->name_lock);
+
+	return 0;
+}
+
 static int drm_ioctl_permit(u32 flags, struct drm_file *file_priv)
 {
 	/* ROOT_ONLY is only for CAP_SYS_ADMIN */
@@ -609,6 +635,8 @@ static const struct drm_ioctl_desc drm_ioctls[] = {
 
 	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_HANDLE_TO_FD, drm_prime_handle_to_fd_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_FD_TO_HANDLE, drm_prime_fd_to_handle_ioctl, DRM_RENDER_ALLOW),
+
+	DRM_IOCTL_DEF(DRM_IOCTL_SET_NAME, drm_set_name, DRM_RENDER_ALLOW),
 
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETPLANERESOURCES, drm_mode_getplane_res, 0),
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETCRTC, drm_mode_getcrtc, 0),
