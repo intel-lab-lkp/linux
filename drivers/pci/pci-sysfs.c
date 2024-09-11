@@ -182,6 +182,33 @@ static ssize_t resource_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(resource);
 
+static ssize_t power_budget_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	size_t len = 0;
+	int i, pos;
+	u32 data;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	for (i = 0; i < 0xff; i++) {
+		pci_write_config_byte(pci_dev, pos + PCI_PWR_DSR, (u8)i);
+		pci_read_config_dword(pci_dev, pos + PCI_PWR_DATA, &data);
+		if (!data) {
+			if (len == 0)
+				return -EINVAL;
+			break;
+		}
+		len += sysfs_emit_at(buf, len, "%04x\n", data);
+	}
+
+	return len;
+}
+static DEVICE_ATTR_RO(power_budget);
+
 static ssize_t max_link_speed_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -629,6 +656,7 @@ static struct attribute *pcie_dev_attrs[] = {
 	&dev_attr_current_link_width.attr,
 	&dev_attr_max_link_width.attr,
 	&dev_attr_max_link_speed.attr,
+	&dev_attr_power_budget.attr,
 	NULL,
 };
 
