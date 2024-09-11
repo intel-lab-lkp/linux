@@ -1501,6 +1501,8 @@ bool can_modify_mm(struct mm_struct *mm, unsigned long start,
 		unsigned long end);
 bool can_modify_mm_madv(struct mm_struct *mm, unsigned long start,
 		unsigned long end, int behavior);
+/* mm's mmap write lock must be taken before seal/unseal operation */
+int do_mseal(unsigned long start, unsigned long end, bool seal);
 #else
 static inline int can_do_mseal(unsigned long flags)
 {
@@ -1517,6 +1519,11 @@ static inline bool can_modify_mm_madv(struct mm_struct *mm, unsigned long start,
 		unsigned long end, int behavior)
 {
 	return true;
+}
+
+static inline int do_mseal(unsigned long start, unsigned long end, bool seal)
+{
+	return -EINVAL;
 }
 #endif
 
