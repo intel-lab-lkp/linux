@@ -1143,6 +1143,28 @@ static int lan743x_get_lsd(int speed, int duplex, u8 mss)
 	return lsd;
 }
 
+static int pci11x1x_pcs_read(struct mii_bus *bus, int addr, int devnum,
+			     int regnum)
+{
+	struct lan743x_adapter *adapter = bus->priv;
+
+	if (addr)
+		return -EOPNOTSUPP;
+
+	return lan743x_sgmii_read(adapter, devnum, regnum);
+}
+
+static int pci11x1x_pcs_write(struct mii_bus *bus, int addr, int devnum,
+			      int regnum, u16 val)
+{
+	struct lan743x_adapter *adapter = bus->priv;
+
+	if (addr)
+		return -EOPNOTSUPP;
+
+	return lan743x_sgmii_write(adapter, devnum, regnum, val);
+}
+
 static int lan743x_sgmii_mpll_set(struct lan743x_adapter *adapter,
 				  u16 baud)
 {
@@ -3201,6 +3223,19 @@ void lan743x_mac_eee_enable(struct lan743x_adapter *adapter, bool enable)
 	lan743x_csr_write(adapter, MAC_CR, mac_cr);
 }
 
+static struct phylink_pcs *
+lan743x_phylink_mac_select_pcs(struct phylink_config *config,
+			       phy_interface_t interface)
+{
+	struct net_device *netdev = to_net_dev(config->dev);
+	struct lan743x_adapter *adapter = netdev_priv(netdev);
+
+	if (adapter->xpcs)
+		return &adapter->xpcs->pcs;
+
+	return NULL;
+}
+
 static void lan743x_phylink_mac_config(struct phylink_config *config,
 				       unsigned int link_an_mode,
 				       const struct phylink_link_state *state)
@@ -3302,6 +3337,7 @@ static void lan743x_phylink_mac_link_up(struct phylink_config *config,
 }
 
 static const struct phylink_mac_ops lan743x_phylink_mac_ops = {
+	.mac_select_pcs = lan743x_phylink_mac_select_pcs,
 	.mac_config = lan743x_phylink_mac_config,
 	.mac_link_down = lan743x_phylink_mac_link_down,
 	.mac_link_up = lan743x_phylink_mac_link_up,
@@ -3654,6 +3690,9 @@ static void lan743x_hardware_cleanup(struct lan743x_adapter *adapter)
 
 static void lan743x_mdiobus_cleanup(struct lan743x_adapter *adapter)
 {
+	if (adapter->xpcs)
+		xpcs_destroy(adapter->xpcs);
+
 	mdiobus_unregister(adapter->mdiobus);
 }
 
@@ -3763,6 +3802,7 @@ static int lan743x_hardware_init(struct lan743x_adapter *adapter,
 
 static int lan743x_mdiobus_init(struct lan743x_adapter *adapter)
 {
+	struct dw_xpcs *xpcs;
 	u32 sgmii_ctl;
 	int ret;
 
@@ -3783,8 +3823,17 @@ static int lan743x_mdiobus_init(struct lan743x_adapter *adapter)
 				  "SGMII operation\n");
 			adapter->mdiobus->read = lan743x_mdiobus_read_c22;
 			adapter->mdiobus->write = lan743x_mdiobus_write_c22;
-			adapter->mdiobus->read_c45 = lan743x_mdiobus_read_c45;
-			adapter->mdiobus->write_c45 = lan743x_mdiobus_write_c45;
+			if (adapter->is_sfp_support_en) {
+				adapter->mdiobus->read_c45 =
+					pci11x1x_pcs_read;
+				adapter->mdiobus->write_c45 =
+					pci11x1x_pcs_write;
+			} else {
+				adapter->mdiobus->read_c45 =
+					 lan743x_mdiobus_read_c45;
+				adapter->mdiobus->write_c45 =
+					 lan743x_mdiobus_write_c45;
+			}
 			adapter->mdiobus->name = "lan743x-mdiobus-c45";
 			netif_dbg(adapter, drv, adapter->netdev,
 				  "lan743x-mdiobus-c45\n");
@@ -3820,9 +3869,28 @@ static int lan743x_mdiobus_init(struct lan743x_adapter *adapter)
 	ret = mdiobus_register(adapter->mdiobus);
 	if (ret < 0)
 		goto return_error;
+
+	if (adapter->is_sfp_support_en) {
+		if (!adapter->phy_interface)
+			lan743x_phy_interface_select(adapter);
+
+		xpcs = xpcs_create_mdiodev(adapter->mdiobus, 0,
+					   adapter->phy_interface);
+		if (IS_ERR(xpcs)) {
+			netdev_err(adapter->netdev, "failed to create xpcs\n");
+			ret = PTR_ERR(xpcs);
+			goto err_destroy_xpcs;
+		}
+		adapter->xpcs = xpcs;
+	}
+
 	return 0;
 
+err_destroy_xpcs:
+	xpcs_destroy(xpcs);
+
 return_error:
+	mdiobus_free(adapter->mdiobus);
 	return ret;
 }
 

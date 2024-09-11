@@ -10,6 +10,7 @@
 #include <linux/i2c.h>
 #include <linux/gpio/machine.h>
 #include <linux/auxiliary_bus.h>
+#include <linux/pcs/pcs-xpcs.h>
 #include "lan743x_ptp.h"
 
 #define DRIVER_AUTHOR   "Bryan Whitehead <Bryan.Whitehead@microchip.com>"
@@ -1130,6 +1131,7 @@ struct lan743x_adapter {
 	struct lan743x_sw_nodes	*nodes;
 	struct i2c_adapter	*i2c_adap;
 	struct platform_device	*sfp_dev;
+	struct dw_xpcs		*xpcs;
 };
 
 #define LAN743X_COMPONENT_FLAG_RX(channel)  BIT(20 + (channel))
