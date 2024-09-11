@@ -2807,6 +2807,14 @@ static int f2fs_quota_enable(struct super_block *sb, int type, int format_id,
 		return PTR_ERR(qf_inode);
 	}
 
+	err = f2fs_convert_inline_inode(qf_inode);
+	if (err)
+		goto out;
+
+	err = f2fs_convert_inline_tail(qf_inode);
+	if (err)
+		goto out;
+
 	/* Don't account quota for quota files to avoid recursion */
 	inode_lock(qf_inode);
 	qf_inode->i_flags |= S_NOQUOTA;
@@ -2818,6 +2826,8 @@ static int f2fs_quota_enable(struct super_block *sb, int type, int format_id,
 	inode_unlock(qf_inode);
 
 	err = dquot_load_quota_inode(qf_inode, type, format_id, flags);
+
+out:
 	iput(qf_inode);
 	return err;
 }
