@@ -1760,6 +1760,9 @@ static int tn40_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_unset_drvdata;
 	}
 
+	/* essential for identification of some PHYs is bit 3 set */
+	ret = tn40_read_reg(priv, TN40_REG_MDIO_CMD_STAT);
+	tn40_write_reg(priv, TN40_REG_MDIO_CMD_STAT, ret | 0x8);
 	ret = tn40_mdiobus_init(priv);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to initialize mdio bus.\n");
@@ -1832,6 +1835,7 @@ static const struct pci_device_id tn40_id_table[] = {
 			 PCI_VENDOR_ID_ASUSTEK, 0x8709) },
 	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_TEHUTI, 0x4022,
 			 PCI_VENDOR_ID_EDIMAX, 0x8103) },
+	{ PCI_VDEVICE(TEHUTI, 0x4025), 0 },
 	{ }
 };
 
