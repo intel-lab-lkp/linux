@@ -1129,6 +1129,7 @@ struct lan743x_adapter {
 	struct phylink_config	phylink_config;
 	struct lan743x_sw_nodes	*nodes;
 	struct i2c_adapter	*i2c_adap;
+	struct platform_device	*sfp_dev;
 };
 
 #define LAN743X_COMPONENT_FLAG_RX(channel)  BIT(20 + (channel))
