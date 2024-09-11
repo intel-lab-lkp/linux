@@ -2127,12 +2127,23 @@ out:
 }
 EXPORT_SYMBOL(phy_loopback);
 
+static bool phy_can_isolate(struct phy_device *phydev)
+{
+	if (phydev->drv)
+		return !(phydev->drv->flags & PHY_NO_ISOLATE);
+
+	return true;
+}
+
 int phy_isolate(struct phy_device *phydev, bool enable)
 {
 	int ret = 0;
 
 	if (!phydev->drv)
 		return -EIO;
+
+	if (!phy_can_isolate(phydev))
+		return -EOPNOTSUPP;
 
 	mutex_lock(&phydev->lock);
 
