@@ -1140,6 +1140,7 @@ struct phy_device;
 struct phy_tdr_config;
 struct phy_plca_cfg;
 struct phy_plca_status;
+struct phy_device_config;
 
 /**
  * struct ethtool_phy_ops - Optional PHY device options
@@ -1151,6 +1152,8 @@ struct phy_plca_status;
  * @get_plca_status: Get PLCA configuration.
  * @start_cable_test: Start a cable test
  * @start_cable_test_tdr: Start a Time Domain Reflectometry cable test
+ * @get_config: Retrieve phy device configuration parameters
+ * @set_config: Set phy device configuration parameters
  *
  * All operations are optional (i.e. the function pointer may be set to %NULL)
  * and callers must take this into account. Callers must hold the RTNL lock.
@@ -1172,6 +1175,11 @@ struct ethtool_phy_ops {
 	int (*start_cable_test_tdr)(struct phy_device *phydev,
 				    struct netlink_ext_ack *extack,
 				    const struct phy_tdr_config *config);
+	int (*get_config)(struct phy_device *phydev,
+			  struct phy_device_config *phy_cfg);
+	int (*set_config)(struct phy_device *phydev,
+			  const struct phy_device_config *phy_cfg,
+			  struct netlink_ext_ack *extack);
 };
 
 /**

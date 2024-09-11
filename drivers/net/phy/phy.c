@@ -1811,3 +1811,62 @@ int phy_ethtool_nway_reset(struct net_device *ndev)
 	return ret;
 }
 EXPORT_SYMBOL(phy_ethtool_nway_reset);
+
+/**
+ * phy_get_config - Get PHY configuration parameters
+ * @phydev: the PHY device to act upon
+ * @phy_cfg:  The configuration to apply
+ */
+
+int phy_get_config(struct phy_device *phydev,
+		   struct phy_device_config *phy_cfg)
+{
+	mutex_lock(&phydev->lock);
+	phy_cfg->isolate = phydev->isolated;
+	phy_cfg->loopback = phydev->loopback_enabled;
+	mutex_unlock(&phydev->lock);
+
+	return 0;
+}
+
+/**
+ * phy_set_config - Set PHY configuration parameters
+ * @phydev: the PHY device to act upon
+ * @phy_cfg: the configuration to apply
+ * @extack: a netlink extack for useful error reporting
+ */
+
+int phy_set_config(struct phy_device *phydev,
+		   const struct phy_device_config *phy_cfg,
+		   struct netlink_ext_ack *extack)
+{
+	bool loopback_change, isolate_change;
+	int ret;
+
+	/* As the phydev's loopback and isolation state are protected by the
+	 * phy lock, check first if we'll need to perform the action,
+	 * then do them as a second step.
+	 */
+	mutex_lock(&phydev->lock);
+	isolate_change = (phy_cfg->isolate != phydev->isolated);
+	loopback_change = (phy_cfg->loopback != phydev->loopback_enabled);
+	mutex_unlock(&phydev->lock);
+
+	if (isolate_change) {
+		ret = phy_isolate(phydev, phy_cfg->isolate);
+		if (ret) {
+			NL_SET_ERR_MSG(extack, "Error while configuring PHY isolation");
+			return ret;
+		}
+	}
+
+	if (loopback_change) {
+		ret = phy_loopback(phydev, phy_cfg->loopback);
+		if (ret) {
+			NL_SET_ERR_MSG(extack, "Error while configuring PHY loopback");
+			return ret;
+		}
+	}
+
+	return 0;
+}

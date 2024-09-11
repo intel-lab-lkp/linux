@@ -3845,6 +3845,8 @@ static const struct ethtool_phy_ops phy_ethtool_phy_ops = {
 	.get_plca_status	= phy_ethtool_get_plca_status,
 	.start_cable_test	= phy_start_cable_test,
 	.start_cable_test_tdr	= phy_start_cable_test_tdr,
+	.get_config		= phy_get_config,
+	.set_config		= phy_set_config,
 };
 
 static const struct phylib_stubs __phylib_stubs = {
