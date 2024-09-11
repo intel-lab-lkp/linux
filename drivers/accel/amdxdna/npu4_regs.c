@@ -5,6 +5,7 @@
 
 #include <drm/amdxdna_accel.h>
 #include <drm/drm_device.h>
+#include <drm/gpu_scheduler.h>
 #include <linux/sizes.h>
 
 #include "amdxdna_mailbox.h"
