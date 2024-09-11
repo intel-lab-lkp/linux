@@ -334,6 +334,9 @@ static bool check_quota_exceeded(struct inode *inode, enum quota_check_op op,
 	u64 max, rvalue;
 	bool exceeded = false;
 
+	if (capable(CAP_SYS_RESOURCE))
+		return false;
+
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return false;
 
