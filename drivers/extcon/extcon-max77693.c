@@ -2,7 +2,7 @@
 //
 // extcon-max77693.c - MAX77693 extcon driver to support MAX77693 MUIC
 //
-// Copyright (C) 2012 Samsung Electrnoics
+// Copyright (C) 2012 Samsung Electronics
 // Chanwoo Choi <cw00.choi@samsung.com>
 
 #include <linux/devm-helpers.h>
@@ -250,7 +250,7 @@ static int max77693_muic_set_debounce_time(struct max77693_muic_info *info,
  * @value: the path according to attached cable
  * @attached: the state of cable (true:attached, false:detached)
  *
- * The max77693 MUIC device share outside H/W line among a varity of cables
+ * The max77693 MUIC device share outside H/W line among a variety of cables
  * so, this function set internal path of H/W line according to the type of
  * attached cable.
  */
@@ -689,7 +689,7 @@ static int max77693_muic_adc_handler(struct max77693_muic_info *info)
 		 *
 		 * The MAX77693 MUIC device can detect total 34 cable type
 		 * except of charger cable and MUIC device didn't define
-		 * specfic role of cable in the range of from 0x01 to 0x12
+		 * specific role of cable in the range of from 0x01 to 0x12
 		 * of ADC value. So, can use/define cable with no role according
 		 * to schema of hardware board.
 		 */
@@ -708,7 +708,7 @@ static int max77693_muic_adc_handler(struct max77693_muic_info *info)
 		 *
 		 * The MAX77693 MUIC device can detect total 34 cable type
 		 * except of charger cable and MUIC device didn't define
-		 * specfic role of cable in the range of from 0x01 to 0x12
+		 * specific role of cable in the range of from 0x01 to 0x12
 		 * of ADC value. So, can use/define cable with no role according
 		 * to schema of hardware board.
 		 */
@@ -878,7 +878,7 @@ static int max77693_muic_chg_handler(struct max77693_muic_info *info)
 			 *    MHL/Dock-Audio.
 			 * - 'MAX77693_MUIC_IRQ_INT2_CHGTYP' for detecting
 			 *    USB/TA cable connected to MHL or Dock-Audio.
-			 * Always, happen eariler MAX77693_MUIC_IRQ_INT1_ADC
+			 * Always, happen earlier MAX77693_MUIC_IRQ_INT1_ADC
 			 * irq than MAX77693_MUIC_IRQ_INT2_CHGTYP irq.
 			 *
 			 * If user attach MHL (with USB/TA cable and immediately
