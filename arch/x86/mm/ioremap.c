@@ -658,7 +658,7 @@ static bool memremap_is_setup_data(resource_size_t phys_addr,
 		paddr_next = data->next;
 		len = data->len;
 
-		if ((phys_addr > paddr) && (phys_addr < (paddr + len))) {
+		if ((phys_addr > paddr) && (phys_addr < (paddr + sd_size + len))) {
 			memunmap(data);
 			return true;
 		}
@@ -722,7 +722,7 @@ static bool __init early_memremap_is_setup_data(resource_size_t phys_addr,
 		paddr_next = data->next;
 		len = data->len;
 
-		if ((phys_addr > paddr) && (phys_addr < (paddr + len))) {
+		if ((phys_addr > paddr) && (phys_addr < (paddr + sd_size + len))) {
 			early_memunmap(data, sizeof(*data));
 			return true;
 		}
