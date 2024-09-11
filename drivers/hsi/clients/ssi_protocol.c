@@ -1155,6 +1155,7 @@ static int ssi_protocol_remove(struct device *dev)
 	unregister_netdev(ssi->netdev);
 	ssip_free_cmds(ssi);
 	hsi_client_set_drvdata(cl, NULL);
+	cancel_work_sync(&ssi->work)
 	kfree(ssi);
 
 	return 0;
