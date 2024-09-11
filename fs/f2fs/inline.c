@@ -224,7 +224,8 @@ int f2fs_clear_inline_tail(struct inode *inode, bool force)
 	if (IS_ERR(ipage))
 		return PTR_ERR(ipage);
 
-	f2fs_truncate_inline_inode(inode, ipage, 0);
+	if (f2fs_exist_data(inode))
+		f2fs_truncate_inline_inode(inode, ipage, 0);
 	clear_page_private_inline(ipage);
 
 	if (force || end_index >= COMPACT_ADDRS_PER_INODE)
