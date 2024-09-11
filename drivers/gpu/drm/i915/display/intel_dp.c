@@ -1305,6 +1305,8 @@ int intel_dp_compute_joiner_pipes(struct intel_dp *intel_dp,
 	case 1:
 		fallthrough;
 	case 2:
+		fallthrough;
+	case 4:
 		return connector->force_joined_pipes;
 	default:
 		MISSING_CASE(connector->force_joined_pipes);

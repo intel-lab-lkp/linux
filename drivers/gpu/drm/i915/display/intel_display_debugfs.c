@@ -1552,6 +1552,12 @@ static ssize_t i915_joiner_write(struct file *file,
 		else
 			drm_dbg(display->drm, "Force joiner not supported for the config\n");
 		break;
+	case 4:
+		if (intel_display_can_use_ultrajoiner(display))
+			connector->force_joined_pipes = force_join_pipes;
+		else
+			drm_dbg(display->drm, "Force ultrajoiner not supported for the config\n");
+		break;
 	default:
 		drm_dbg(display->drm, "Ignoring Invalid num of pipes %d for force joining\n",
 			force_join_pipes);
