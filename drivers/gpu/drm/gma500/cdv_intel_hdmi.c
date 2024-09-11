@@ -128,23 +128,25 @@ static enum drm_connector_status cdv_hdmi_detect(
 {
 	struct gma_encoder *gma_encoder = gma_attached_encoder(connector);
 	struct mid_intel_hdmi_priv *hdmi_priv = gma_encoder->dev_priv;
-	struct edid *edid = NULL;
+	const struct drm_edid *drm_edid;
+	int ret;
 	enum drm_connector_status status = connector_status_disconnected;
 
-	edid = drm_get_edid(connector, connector->ddc);
+	drm_edid = drm_edid_read_ddc(connector, connector->ddc);
+	ret = drm_edid_connector_update(connector, drm_edid);
 
 	hdmi_priv->has_hdmi_sink = false;
 	hdmi_priv->has_hdmi_audio = false;
-	if (edid) {
-		if (edid->input & DRM_EDID_INPUT_DIGITAL) {
-			status = connector_status_connected;
-			hdmi_priv->has_hdmi_sink =
-						drm_detect_hdmi_monitor(edid);
-			hdmi_priv->has_hdmi_audio =
-						drm_detect_monitor_audio(edid);
-		}
-		kfree(edid);
+	if (ret)
+		return status;
+
+	if (drm_edid_is_digital(drm_edid)) {
+		status = connector_status_connected;
+		hdmi_priv->has_hdmi_sink = connector->display_info.is_hdmi;
+		hdmi_priv->has_hdmi_audio = connector->display_info.has_audio;
 	}
+	drm_edid_free(drm_edid);
+
 	return status;
 }
 
