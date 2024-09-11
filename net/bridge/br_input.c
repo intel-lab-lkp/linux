@@ -77,7 +77,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 {
 	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
 	enum br_pkt_type pkt_type = BR_PKT_UNICAST;
-	struct net_bridge_fdb_entry *dst = NULL;
+	struct net_bridge_fdb_entry *fdb_src, *dst = NULL;
 	struct net_bridge_mcast_port *pmctx;
 	struct net_bridge_mdb_entry *mdst;
 	bool local_rcv, mcast_hit = false;
@@ -108,10 +108,14 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 				&state, &vlan))
 		goto out;
 
-	if (p->flags & BR_PORT_LOCKED) {
-		struct net_bridge_fdb_entry *fdb_src =
-			br_fdb_find_rcu(br, eth_hdr(skb)->h_source, vid);
-
+	fdb_src = br_fdb_find_rcu(br, eth_hdr(skb)->h_source, vid);
+	if (fdb_src && test_bit(BR_FDB_LOCAL, &fdb_src->flags)) {
+		/* Spoofer or short-curcuit on the network. Drop the packet. */
+		if (net_ratelimit())
+			br_warn(br, "received packet on %s with own address as source address (addr:%pM, vlan:%u)\n",
+				p->dev->name, eth_hdr(skb)->h_source, vid);
+		goto drop;
+	} else if (p->flags & BR_PORT_LOCKED) {
 		if (!fdb_src) {
 			/* FDB miss. Create locked FDB entry if MAB is enabled
 			 * and drop the packet.
@@ -120,8 +124,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 				br_fdb_update(br, p, eth_hdr(skb)->h_source,
 					      vid, BIT(BR_FDB_LOCKED));
 			goto drop;
-		} else if (READ_ONCE(fdb_src->dst) != p ||
-			   test_bit(BR_FDB_LOCAL, &fdb_src->flags)) {
+		} else if (READ_ONCE(fdb_src->dst) != p) {
 			/* FDB mismatch. Drop the packet without roaming. */
 			goto drop;
 		} else if (test_bit(BR_FDB_LOCKED, &fdb_src->flags)) {
