@@ -111,6 +111,7 @@
 #define EXYNOS7_TMU_REG_EMUL_CON		0x160
 
 #define EXYNOS7_TMU_TEMP_MASK			0x1ff
+#define EXYNOS7_TMU_TEMP_SHIFT			9
 #define EXYNOS7_PD_DET_EN_SHIFT			23
 #define EXYNOS7_TMU_INTEN_RISE0_SHIFT		0
 #define EXYNOS7_EMUL_DATA_SHIFT			7
@@ -152,6 +153,8 @@ enum soc_type {
  * @max_efuse_value: maximum valid trimming data
  * @temp_error1: fused value of the first point trim.
  * @temp_error2: fused value of the second point trim.
+ * @temp_mask: SoC specific temperature mask
+ * @temp_85_shift: SoC specific address shift
  * @gain: gain of amplifier in the positive-TC generator block
  *	0 < gain <= 15
  * @reference_voltage: reference voltage of amplifier
@@ -182,6 +185,8 @@ struct exynos_tmu_data {
 	u32 min_efuse_value;
 	u32 max_efuse_value;
 	u16 temp_error1, temp_error2;
+	u16 temp_mask;
+	int temp_85_shift;
 	u8 gain;
 	u8 reference_voltage;
 	struct thermal_zone_device *tzd;
@@ -229,25 +234,26 @@ static int code_to_temp(struct exynos_tmu_data *data, u16 temp_code)
 		EXYNOS_FIRST_POINT_TRIM;
 }
 
+/*
+ * Sanitize sensor calibration values, according to minimum and maximum
+ * values defined for each SoC.
+ */
 static void sanitize_temp_error(struct exynos_tmu_data *data, u32 trim_info)
 {
-	u16 tmu_temp_mask =
-		(data->soc == SOC_ARCH_EXYNOS7) ? EXYNOS7_TMU_TEMP_MASK
-						: EXYNOS_TMU_TEMP_MASK;
-
-	data->temp_error1 = trim_info & tmu_temp_mask;
-	data->temp_error2 = ((trim_info >> EXYNOS_TRIMINFO_85_SHIFT) &
-				EXYNOS_TMU_TEMP_MASK);
-
+	data->temp_error1 = trim_info & data->temp_mask;
 	if (!data->temp_error1 ||
 	    (data->min_efuse_value > data->temp_error1) ||
 	    (data->temp_error1 > data->max_efuse_value))
-		data->temp_error1 = data->efuse_value & EXYNOS_TMU_TEMP_MASK;
+		data->temp_error1 = data->efuse_value & data->temp_mask;
 
-	if (!data->temp_error2)
-		data->temp_error2 =
-			(data->efuse_value >> EXYNOS_TRIMINFO_85_SHIFT) &
-			EXYNOS_TMU_TEMP_MASK;
+	if (data->cal_type == TYPE_TWO_POINT_TRIMMING) {
+		data->temp_error2 = (trim_info >> data->temp_85_shift) &
+				    data->temp_mask;
+		if (!data->temp_error2)
+			data->temp_error2 =
+				(data->efuse_value >> data->temp_85_shift) &
+				data->temp_mask;
+	}
 }
 
 static int exynos_tmu_initialize(struct platform_device *pdev)
@@ -510,7 +516,6 @@ static void exynos5433_tmu_initialize(struct platform_device *pdev)
 	int sensor_id, cal_type;
 
 	trim_info = readl(data->base + EXYNOS_TMU_REG_TRIMINFO);
-	sanitize_temp_error(data, trim_info);
 
 	/* Read the temperature sensor id */
 	sensor_id = (trim_info & EXYNOS5433_TRIMINFO_SENSOR_ID_MASK)
@@ -531,6 +536,8 @@ static void exynos5433_tmu_initialize(struct platform_device *pdev)
 		data->cal_type = TYPE_ONE_POINT_TRIMMING;
 		break;
 	}
+
+	sanitize_temp_error(data, trim_info);
 
 	dev_info(&pdev->dev, "Calibration type is %d-point calibration\n",
 			cal_type ?  2 : 1);
@@ -876,6 +883,7 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_control = exynos4210_tmu_control;
 		data->tmu_read = exynos4210_tmu_read;
 		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->temp_mask = EXYNOS_TMU_TEMP_MASK;
 		data->gain = 15;
 		data->reference_voltage = 7;
 		data->efuse_value = 55;
@@ -898,6 +906,7 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_read = exynos4412_tmu_read;
 		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
 		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->temp_mask = EXYNOS_TMU_TEMP_MASK;
 		data->gain = 8;
 		data->reference_voltage = 16;
 		data->efuse_value = 55;
@@ -919,6 +928,8 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_read = exynos4412_tmu_read;
 		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
 		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->temp_mask = EXYNOS_TMU_TEMP_MASK;
+		data->temp_85_shift = EXYNOS_TRIMINFO_85_SHIFT;
 		data->gain = 8;
 		if (res.start == EXYNOS5433_G3D_BASE)
 			data->reference_voltage = 23;
@@ -939,6 +950,7 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->tmu_read = exynos7_tmu_read;
 		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
 		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->temp_mask = EXYNOS7_TMU_TEMP_MASK;
 		data->gain = 9;
 		data->reference_voltage = 17;
 		data->efuse_value = 75;
