@@ -8264,6 +8264,9 @@ static int max_dotclock(struct drm_i915_private *i915)
 	if (intel_display_can_use_joiner(display))
 		max_dotclock *= 2;
 
+	if (intel_display_can_use_ultrajoiner(display))
+		max_dotclock *= 2;
+
 	return max_dotclock;
 }
 
