@@ -23,7 +23,7 @@
 /* The PacketOffset field is measured in units of 32 bytes and is 3 bits wide,
  * so the maximum offset is 7 * 32 = 224
  */
-#define MVPP2_SKB_HEADROOM	min(max(XDP_PACKET_HEADROOM, NET_SKB_PAD), 224)
+#define MVPP2_SKB_HEADROOM	clamp_t(int, XDP_PACKET_HEADROOM, NET_SKB_PAD, 224)
 
 #define MVPP2_XDP_PASS		0
 #define MVPP2_XDP_DROPPED	BIT(0)
