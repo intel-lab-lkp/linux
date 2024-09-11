@@ -28,9 +28,9 @@
 
 #define RFE_RD_FIFO_TH_3_DWORDS	0x3
 
-static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
+static int pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 {
-	u32 chip_rev;
+	u32 fpga_rev;
 	u32 cfg_load;
 	u32 hw_cfg;
 	u32 strap;
@@ -41,7 +41,7 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 	if (ret < 0) {
 		netif_err(adapter, drv, adapter->netdev,
 			  "Sys Lock acquire failed ret:%d\n", ret);
-		return;
+		return ret;
 	}
 
 	cfg_load = lan743x_csr_read(adapter, ETH_SYS_CONFIG_LOAD_STARTED_REG);
@@ -55,10 +55,15 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 			adapter->is_sgmii_en = true;
 		else
 			adapter->is_sgmii_en = false;
+
+		if ((strap & STRAP_SFP_USE_EN_) && (strap & STRAP_SFP_EN_))
+			adapter->is_sfp_support_en = true;
+		else
+			adapter->is_sfp_support_en = false;
 	} else {
-		chip_rev = lan743x_csr_read(adapter, FPGA_REV);
-		if (chip_rev) {
-			if (chip_rev & FPGA_SGMII_OP)
+		fpga_rev = lan743x_csr_read(adapter, FPGA_REV);
+		if (fpga_rev) {
+			if (fpga_rev & FPGA_SGMII_OP)
 				adapter->is_sgmii_en = true;
 			else
 				adapter->is_sgmii_en = false;
@@ -66,8 +71,21 @@ static void pci11x1x_strap_get_status(struct lan743x_adapter *adapter)
 			adapter->is_sgmii_en = false;
 		}
 	}
+
+	if (adapter->is_pci11x1x && !adapter->is_sgmii_en &&
+	    adapter->is_sfp_support_en) {
+		netif_err(adapter, drv, adapter->netdev,
+			  "Invalid eeprom cfg: sfp enabled with sgmii disabled");
+		return -EINVAL;
+	}
+
 	netif_dbg(adapter, drv, adapter->netdev,
 		  "SGMII I/F %sable\n", adapter->is_sgmii_en ? "En" : "Dis");
+	netif_dbg(adapter, drv, adapter->netdev,
+		  "SFP support %sable\n", adapter->is_sfp_support_en ?
+		  "En" : "Dis");
+
+	return 0;
 }
 
 static bool is_pci11x1x_chip(struct lan743x_adapter *adapter)
@@ -3470,7 +3488,9 @@ static int lan743x_hardware_init(struct lan743x_adapter *adapter,
 		adapter->max_tx_channels = PCI11X1X_MAX_TX_CHANNELS;
 		adapter->used_tx_channels = PCI11X1X_USED_TX_CHANNELS;
 		adapter->max_vector_count = PCI11X1X_MAX_VECTOR_COUNT;
-		pci11x1x_strap_get_status(adapter);
+		ret = pci11x1x_strap_get_status(adapter);
+		if (ret < 0)
+			return ret;
 		spin_lock_init(&adapter->eth_syslock_spinlock);
 		mutex_init(&adapter->sgmii_rw_lock);
 		pci11x1x_set_rfe_rd_fifo_threshold(adapter);
