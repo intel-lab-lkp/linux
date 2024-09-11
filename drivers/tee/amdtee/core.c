@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/uaccess.h>
 #include <linux/firmware.h>
+#include <linux/uuid.h>
 #include "amdtee_private.h"
 #include <linux/psp-tee.h>
 
@@ -172,21 +173,11 @@ static int copy_ta_binary(struct tee_context *ctx, void *ptr, void **ta,
 {
 	const struct firmware *fw;
 	char fw_name[TA_PATH_MAX];
-	struct {
-		u32 lo;
-		u16 mid;
-		u16 hi_ver;
-		u8 seq_n[8];
-	} *uuid = ptr;
 	int n, rc = 0;
+	guid_t uuid;
 
-	n = snprintf(fw_name, TA_PATH_MAX,
-		     "%s/%08x-%04x-%04x-%02x%02x%02x%02x%02x%02x%02x%02x.bin",
-		     TA_LOAD_PATH, uuid->lo, uuid->mid, uuid->hi_ver,
-		     uuid->seq_n[0], uuid->seq_n[1],
-		     uuid->seq_n[2], uuid->seq_n[3],
-		     uuid->seq_n[4], uuid->seq_n[5],
-		     uuid->seq_n[6], uuid->seq_n[7]);
+	import_guid(&uuid, ptr);
+	n = snprintf(fw_name, TA_PATH_MAX, "%s/%pUl.bin", TA_LOAD_PATH, &uuid);
 	if (n < 0 || n >= TA_PATH_MAX) {
 		pr_err("failed to get firmware name\n");
 		return -EINVAL;
