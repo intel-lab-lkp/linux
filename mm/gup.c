@@ -1076,7 +1076,7 @@ struct page *follow_page(struct vm_area_struct *vma, unsigned long address,
 	struct follow_page_context ctx = { NULL };
 	struct page *page;
 
-	if (vma_is_secretmem(vma))
+	if (!can_access_secretmem_vma(vma))
 		return NULL;
 
 	if (WARN_ON_ONCE(foll_flags & FOLL_PIN))
@@ -1281,7 +1281,7 @@ static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
 	if ((gup_flags & FOLL_LONGTERM) && vma_is_fsdax(vma))
 		return -EOPNOTSUPP;
 
-	if (vma_is_secretmem(vma))
+	if (!can_access_secretmem_vma(vma))
 		return -EFAULT;
 
 	if (write) {

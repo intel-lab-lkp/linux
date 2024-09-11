@@ -1168,6 +1168,16 @@ config SECRETMEM
 	  memory areas visible only in the context of the owning process and
 	  not mapped to other processes and other kernel page tables.
 
+config KERNEL_SECRETMEM
+	default y
+	bool "Enable kernel usage of memfd_secret()" if EXPERT
+	depends on SECRETMEM
+	depends on MMU
+	help
+	  Enable the kernel usage of memfd_secret() for kernel memory allocations,
+	  The allocated memory is visible only to the kernel in the context of
+	  the owning process.
+
 config ANON_VMA_NAME
 	bool "Anonymous VMA name support"
 	depends on PROC_FS && ADVISE_SYSCALLS && MMU

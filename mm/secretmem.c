@@ -13,13 +13,17 @@
 #include <linux/bitops.h>
 #include <linux/printk.h>
 #include <linux/pagemap.h>
+#include <linux/hugetlb.h>
 #include <linux/syscalls.h>
 #include <linux/pseudo_fs.h>
 #include <linux/secretmem.h>
 #include <linux/set_memory.h>
 #include <linux/sched/signal.h>
+#include <linux/sched/mm.h>
 
+#include <uapi/asm-generic/mman-common.h>
 #include <uapi/linux/magic.h>
+#include <uapi/linux/mman.h>
 
 #include <asm/tlbflush.h>
 
@@ -41,6 +45,16 @@ MODULE_PARM_DESC(secretmem_enable,
 		 "Enable secretmem and memfd_secret(2) system call");
 
 static atomic_t secretmem_users;
+
+/* secretmem file private context */
+struct secretmem_ctx {
+	struct secretmem_area _area;
+	struct page **_pages;
+	unsigned long _nr_pages;
+	struct file *_file;
+	struct mm_struct *_mm;
+};
+
 
 bool secretmem_active(void)
 {
@@ -116,6 +130,7 @@ static const struct vm_operations_struct secretmem_vm_ops = {
 
 static int secretmem_release(struct inode *inode, struct file *file)
 {
+	kfree(file->private_data);
 	atomic_dec(&secretmem_users);
 	return 0;
 }
@@ -123,12 +138,22 @@ static int secretmem_release(struct inode *inode, struct file *file)
 static int secretmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	unsigned long len = vma->vm_end - vma->vm_start;
+	struct secretmem_ctx *ctx = file->private_data;
+	unsigned long kernel_no_permissions;
+
+	kernel_no_permissions = (VM_READ | VM_WRITE | VM_EXEC | VM_MAYEXEC);
 
 	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
 		return -EINVAL;
 
+	if (ctx && (vma->vm_flags & kernel_no_permissions))
+		return -EINVAL;
+
 	if (!mlock_future_ok(vma->vm_mm, vma->vm_flags | VM_LOCKED, len))
 		return -EAGAIN;
+
+	if (ctx)
+		vm_flags_set(vma, VM_MIXEDMAP);
 
 	vm_flags_set(vma, VM_LOCKED | VM_DONTDUMP);
 	vma->vm_ops = &secretmem_vm_ops;
@@ -229,6 +254,194 @@ err_free_inode:
 	iput(inode);
 	return file;
 }
+
+#ifdef CONFIG_KERNEL_SECRETMEM
+
+struct secretmem_area *secretmem_allocate_pages(unsigned int order)
+{
+	unsigned long uvaddr, uvaddr_inc, unused, nr_pages, bytes_length;
+	struct file *kernel_secfile;
+	struct vm_area_struct *vma;
+	struct secretmem_ctx *ctx;
+	struct page **sec_pages;
+	struct mm_struct *mm;
+	long nr_pinned_pages;
+	pte_t pte, old_pte;
+	spinlock_t *ptl;
+	pte_t *upte;
+	int rc;
+
+	nr_pages = (1 << order);
+	bytes_length = nr_pages * PAGE_SIZE;
+	mm = current->mm;
+
+	if (!mm || !mmget_not_zero(mm))
+		return NULL;
+
+	/* Create secret memory file / truncate it */
+	kernel_secfile = secretmem_file_create(0);
+	if (IS_ERR(kernel_secfile))
+		goto put_mm;
+
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (IS_ERR(ctx))
+		goto close_secfile;
+	kernel_secfile->private_data = ctx;
+
+	rc = do_truncate(file_mnt_idmap(kernel_secfile),
+			 file_dentry(kernel_secfile), bytes_length, 0, NULL);
+	if (rc)
+		goto close_secfile;
+
+	if (mmap_write_lock_killable(mm))
+		goto close_secfile;
+
+	/* Map pages to the secretmem file */
+	uvaddr = do_mmap(kernel_secfile, 0, bytes_length, PROT_NONE,
+			 MAP_SHARED, 0, 0, &unused, NULL);
+	if (IS_ERR_VALUE(uvaddr))
+		goto unlock_mmap;
+
+	/* mseal() the VMA to make sure it won't change */
+	rc = do_mseal(uvaddr, uvaddr + bytes_length, true);
+	if (rc)
+		goto unmap_pages;
+
+	/* Make sure VMA is there, and is kernel-secure */
+	vma = find_vma(current->mm, uvaddr);
+	if (!vma)
+		goto unseal_vma;
+
+	if (!vma_is_secretmem(vma) ||
+	    !can_access_secretmem_vma(vma))
+		goto unseal_vma;
+
+	/* Pin user pages; fault them in */
+	sec_pages = kzalloc(sizeof(struct page *) * nr_pages, GFP_KERNEL);
+	if (!sec_pages)
+		goto unseal_vma;
+
+	nr_pinned_pages = pin_user_pages(uvaddr, nr_pages, FOLL_FORCE | FOLL_LONGTERM, sec_pages);
+	if (nr_pinned_pages < 0)
+		goto free_sec_pages;
+	if (nr_pinned_pages != nr_pages)
+		goto unpin_pages;
+
+	/* Modify the existing mapping to be kernel accessible, local to this process mm */
+	uvaddr_inc = uvaddr;
+	while (uvaddr_inc < uvaddr + bytes_length) {
+		upte = get_locked_pte(mm, uvaddr_inc, &ptl);
+		if (!upte)
+			goto unpin_pages;
+		old_pte = ptep_modify_prot_start(vma, uvaddr_inc, upte);
+		pte = pte_modify(old_pte, PAGE_KERNEL);
+		ptep_modify_prot_commit(vma, uvaddr_inc, upte, old_pte, pte);
+		pte_unmap_unlock(upte, ptl);
+		uvaddr_inc += PAGE_SIZE;
+	}
+	flush_tlb_range(vma, uvaddr, uvaddr + bytes_length);
+
+	/* Return data */
+	mmgrab(mm);
+	ctx->_area.ptr = (void *) uvaddr;
+	ctx->_pages = sec_pages;
+	ctx->_nr_pages = nr_pages;
+	ctx->_mm = mm;
+	ctx->_file = kernel_secfile;
+
+	mmap_write_unlock(mm);
+	mmput(mm);
+
+	return &ctx->_area;
+
+unpin_pages:
+	unpin_user_pages(sec_pages, nr_pinned_pages);
+free_sec_pages:
+	kfree(sec_pages);
+unseal_vma:
+	rc = do_mseal(uvaddr, uvaddr + bytes_length, false);
+	if (rc)
+		BUG();
+unmap_pages:
+	rc = do_munmap(mm, uvaddr, bytes_length, NULL);
+	if (rc)
+		BUG();
+unlock_mmap:
+	mmap_write_unlock(mm);
+close_secfile:
+	fput(kernel_secfile);
+put_mm:
+	mmput(mm);
+	return NULL;
+}
+
+void secretmem_release_pages(struct secretmem_area *data)
+{
+	unsigned long uvaddr, bytes_length;
+	struct secretmem_ctx *ctx;
+	int rc;
+
+	if (!data || !data->ptr)
+		BUG();
+
+	ctx = container_of(data, struct secretmem_ctx, _area);
+	if (!ctx || !ctx->_file || !ctx->_pages || !ctx->_mm)
+		BUG();
+
+	bytes_length = ctx->_nr_pages * PAGE_SIZE;
+	uvaddr = (unsigned long) data->ptr;
+
+	/*
+	 * Remove the mapping if mm is still in use.
+	 * Not secure to continue if unmapping failed.
+	 */
+	if (mmget_not_zero(ctx->_mm)) {
+		mmap_write_lock(ctx->_mm);
+		rc = do_mseal(uvaddr, uvaddr + bytes_length, false);
+		if (rc) {
+			mmap_write_unlock(ctx->_mm);
+			BUG();
+		}
+		rc = do_munmap(ctx->_mm, uvaddr, bytes_length, NULL);
+		if (rc) {
+			mmap_write_unlock(ctx->_mm);
+			BUG();
+		}
+		mmap_write_unlock(ctx->_mm);
+		mmput(ctx->_mm);
+	}
+
+	mmdrop(ctx->_mm);
+	unpin_user_pages(ctx->_pages, ctx->_nr_pages);
+	fput(ctx->_file);
+	kfree(ctx->_pages);
+
+	ctx->_nr_pages = 0;
+	ctx->_pages = NULL;
+	ctx->_file = NULL;
+	ctx->_mm = NULL;
+	ctx->_area.ptr = NULL;
+}
+
+bool can_access_secretmem_vma(struct vm_area_struct *vma)
+{
+	struct secretmem_ctx *ctx;
+
+	if (!vma_is_secretmem(vma))
+		return true;
+
+	/*
+	 * If VMA is owned by running process, and marked for kernel
+	 * usage, then allow access.
+	 */
+	ctx = vma->vm_file->private_data;
+	if (ctx && current->mm == vma->vm_mm)
+		return true;
+
+	return false;
+}
+
+#endif /* CONFIG_KERNEL_SECRETMEM */
 
 SYSCALL_DEFINE1(memfd_secret, unsigned int, flags)
 {
