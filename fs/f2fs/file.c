@@ -748,6 +748,9 @@ int f2fs_do_truncate_blocks(struct inode *inode, u64 from, bool lock)
 		goto out;
 	}
 
+	if (f2fs_has_inline_tail(inode) && f2fs_exist_data(inode))
+		f2fs_truncate_inline_inode(inode, ipage, 0);
+
 	set_new_dnode(&dn, inode, ipage, NULL, 0);
 	err = f2fs_get_dnode_of_data(&dn, free_from, LOOKUP_NODE_RA);
 	if (err) {
@@ -4699,6 +4702,13 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 		if (pos + count <= MAX_INLINE_DATA(inode))
 			return 0;
 		ret = f2fs_convert_inline_inode(inode);
+		if (ret)
+			return ret;
+	}
+
+	if (f2fs_has_inline_tail(inode) &&
+			(pos + count > MAX_INLINE_TAIL(inode))) {
+		ret = f2fs_clear_inline_tail(inode, true);
 		if (ret)
 			return ret;
 	}

@@ -3322,6 +3322,21 @@ static inline int f2fs_has_inline_dentry(struct inode *inode)
 	return is_inode_flag_set(inode, FI_INLINE_DENTRY);
 }
 
+static inline bool support_tail_inline(struct inode *inode, loff_t i_size)
+{
+	const pgoff_t tail_index = ((unsigned long long)i_size) >> PAGE_SHIFT;
+	unsigned long tail_len = i_size & (PAGE_SIZE - 1);
+
+	if (tail_index > COMPACT_ADDRS_PER_INODE)
+		return false;
+	if (!tail_len)
+		return false;
+	if (tail_len > MAX_INLINE_DATA(inode))
+		return false;
+
+	return true;
+}
+
 static inline int is_file(struct inode *inode, int type)
 {
 	return F2FS_I(inode)->i_advise & type;
@@ -4197,6 +4212,7 @@ void f2fs_truncate_inline_inode(struct inode *inode,
 int f2fs_read_inline_data(struct inode *inode, struct folio *folio);
 int f2fs_convert_inline_page(struct dnode_of_data *dn, struct page *page);
 int f2fs_convert_inline_inode(struct inode *inode);
+int f2fs_clear_inline_tail(struct inode *inode, bool force);
 int f2fs_try_convert_inline_dir(struct inode *dir, struct dentry *dentry);
 int f2fs_write_inline_data(struct inode *inode, struct page *page);
 int f2fs_recover_inline_data(struct inode *inode, struct page *npage);
