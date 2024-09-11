@@ -593,10 +593,12 @@ int amdxdna_drm_get_bo_info_ioctl(struct drm_device *dev, void *data, struct drm
 int amdxdna_drm_sync_bo_ioctl(struct drm_device *dev,
 			      void *data, struct drm_file *filp)
 {
+	struct amdxdna_client *client = filp->driver_priv;
 	struct amdxdna_dev *xdna = to_xdna_dev(dev);
 	struct amdxdna_drm_sync_bo *args = data;
 	struct amdxdna_gem_obj *abo;
 	struct drm_gem_object *gobj;
+	u32 hwctx_hdl;
 	int ret;
 
 	gobj = drm_gem_object_lookup(filp, args->handle);
@@ -619,10 +621,89 @@ int amdxdna_drm_sync_bo_ioctl(struct drm_device *dev,
 
 	amdxdna_gem_unpin(abo);
 
+	if (abo->assigned_hwctx != AMDXDNA_INVALID_CTX_HANDLE &&
+	    args->direction == SYNC_DIRECT_FROM_DEVICE) {
+		u64 seq;
+
+		hwctx_hdl = amdxdna_gem_get_assigned_hwctx(client, args->handle);
+		if (hwctx_hdl == AMDXDNA_INVALID_CTX_HANDLE ||
+		    args->direction != SYNC_DIRECT_FROM_DEVICE) {
+			XDNA_ERR(xdna, "Sync failed, dir %d", args->direction);
+			ret = -EINVAL;
+			goto put_obj;
+		}
+
+		ret = amdxdna_cmd_submit(client, AMDXDNA_INVALID_BO_HANDLE,
+					 &args->handle, 1, hwctx_hdl, &seq);
+		if (ret) {
+			XDNA_ERR(xdna, "Submit command failed");
+			goto put_obj;
+		}
+
+		ret = amdxdna_cmd_wait(client, hwctx_hdl, seq, 3000 /* ms */);
+	}
+
 	XDNA_DBG(xdna, "Sync bo %d offset 0x%llx, size 0x%llx\n",
 		 args->handle, args->offset, args->size);
 
 put_obj:
 	drm_gem_object_put(gobj);
 	return ret;
+}
+
+u32 amdxdna_gem_get_assigned_hwctx(struct amdxdna_client *client, u32 bo_hdl)
+{
+	struct amdxdna_gem_obj *abo = amdxdna_gem_get_obj(client, bo_hdl, AMDXDNA_BO_INVALID);
+	u32 ctxid;
+
+	if (!abo) {
+		XDNA_DBG(client->xdna, "Get bo %d failed", bo_hdl);
+		return AMDXDNA_INVALID_CTX_HANDLE;
+	}
+
+	mutex_lock(&abo->lock);
+	ctxid = abo->assigned_hwctx;
+	if (!idr_find(&client->hwctx_idr, ctxid))
+		ctxid = AMDXDNA_INVALID_CTX_HANDLE;
+	mutex_unlock(&abo->lock);
+
+	amdxdna_gem_put_obj(abo);
+	return ctxid;
+}
+
+int amdxdna_gem_set_assigned_hwctx(struct amdxdna_client *client, u32 bo_hdl, u32 ctxid)
+{
+	struct amdxdna_gem_obj *abo = amdxdna_gem_get_obj(client, bo_hdl, AMDXDNA_BO_INVALID);
+	int ret = 0;
+
+	if (!abo) {
+		XDNA_DBG(client->xdna, "Get bo %d failed", bo_hdl);
+		return -EINVAL;
+	}
+
+	mutex_lock(&abo->lock);
+	if (!idr_find(&client->hwctx_idr, abo->assigned_hwctx))
+		abo->assigned_hwctx = ctxid;
+	else if (ctxid != abo->assigned_hwctx)
+		ret = -EBUSY;
+	mutex_unlock(&abo->lock);
+
+	amdxdna_gem_put_obj(abo);
+	return ret;
+}
+
+void amdxdna_gem_clear_assigned_hwctx(struct amdxdna_client *client, u32 bo_hdl)
+{
+	struct amdxdna_gem_obj *abo = amdxdna_gem_get_obj(client, bo_hdl, AMDXDNA_BO_INVALID);
+
+	if (!abo) {
+		XDNA_DBG(client->xdna, "Get bo %d failed", bo_hdl);
+		return;
+	}
+
+	mutex_lock(&abo->lock);
+	abo->assigned_hwctx = AMDXDNA_INVALID_CTX_HANDLE;
+	mutex_unlock(&abo->lock);
+
+	amdxdna_gem_put_obj(abo);
 }
