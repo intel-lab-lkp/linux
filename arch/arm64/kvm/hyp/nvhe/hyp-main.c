@@ -32,7 +32,7 @@ static void __hyp_sve_save_guest(struct kvm_vcpu *vcpu)
 	 * on the VL, so use a consistent (i.e., the maximum) guest VL.
 	 */
 	sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
-	__sve_save_state(vcpu_sve_pffr(vcpu), &vcpu->arch.ctxt.fp_regs.fpsr, true);
+	__sve_save_state(vcpu_sve_pffr(vcpu), &vcpu_fp_regs(vcpu)->fpsr, true);
 	write_sysreg_s(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
 }
 
@@ -71,7 +71,7 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 	if (vcpu_has_sve(vcpu))
 		__hyp_sve_save_guest(vcpu);
 	else
-		__fpsimd_save_state(&vcpu->arch.ctxt.fp_regs);
+		__fpsimd_save_state(vcpu_fp_regs(vcpu));
 
 	if (system_supports_sve())
 		__hyp_sve_restore_host();

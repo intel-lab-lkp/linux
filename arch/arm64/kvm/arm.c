@@ -2512,7 +2512,7 @@ static void finalize_init_hyp_mode(void)
 		for_each_possible_cpu(cpu) {
 			struct user_fpsimd_state *fpsimd_state;
 
-			fpsimd_state = &per_cpu_ptr_nvhe_sym(kvm_host_data, cpu)->host_ctxt.fp_regs;
+			fpsimd_state = ctxt_fp_regs(&per_cpu_ptr_nvhe_sym(kvm_host_data, cpu)->host_ctxt);
 			per_cpu_ptr_nvhe_sym(kvm_host_data, cpu)->fpsimd_state =
 				kern_hyp_va(fpsimd_state);
 		}

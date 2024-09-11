@@ -972,6 +972,8 @@ static __always_inline struct user_pt_regs *ctxt_gp_regs(const struct kvm_cpu_co
 	return regs;
 }
 #define vcpu_gp_regs(v)		(ctxt_gp_regs(&(v)->arch.ctxt))
+#define ctxt_fp_regs(ctxt)	(&(ctxt).fp_regs)
+#define vcpu_fp_regs(v)		(ctxt_fp_regs(&(v)->arch.ctxt))
 
 /*
  * Only use __vcpu_sys_reg/ctxt_sys_reg if you know you want the
