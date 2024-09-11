@@ -476,6 +476,14 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 		if (!vcpu->arch.ctxt.regs_area)
 			return -ENOMEM;
 		vcpu->arch.ctxt.regs = vcpu->arch.ctxt.regs_area->ptr;
+
+		pages_needed = (sizeof(*vcpu_fp_regs(vcpu)) + PAGE_SIZE - 1) / PAGE_SIZE;
+		vcpu->arch.ctxt.fp_regs_area = secretmem_allocate_pages(fls(pages_needed - 1));
+		if (!vcpu->arch.ctxt.fp_regs_area) {
+			err = -ENOMEM;
+			goto free_vcpu_ctxt;
+		}
+		vcpu->arch.ctxt.fp_regs = vcpu->arch.ctxt.fp_regs_area->ptr;
 	}
 
 	/* Set up the timer */
@@ -503,8 +511,10 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	return kvm_share_hyp(vcpu, vcpu + 1);
 
 free_vcpu_ctxt:
-	if (kvm_use_dynamic_regs())
+	if (kvm_use_dynamic_regs()) {
 		secretmem_release_pages(vcpu->arch.ctxt.regs_area);
+		secretmem_release_pages(vcpu->arch.ctxt.fp_regs_area);
+	}
 	return err;
 }
 
@@ -523,8 +533,10 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_vgic_vcpu_destroy(vcpu);
 	kvm_arm_vcpu_destroy(vcpu);
 
-	if (kvm_use_dynamic_regs())
+	if (kvm_use_dynamic_regs()) {
 		secretmem_release_pages(vcpu->arch.ctxt.regs_area);
+		secretmem_release_pages(vcpu->arch.ctxt.fp_regs_area);
+	}
 }
 
 void kvm_arch_vcpu_blocking(struct kvm_vcpu *vcpu)
@@ -2734,12 +2746,25 @@ static int init_hyp_hve_mode(void)
 		per_cpu(kvm_host_data, cpu).host_ctxt.regs = kvm_host_data_regs;
 	}
 
+	/* Allocate fp-regs */
+	for_each_possible_cpu(cpu) {
+		void *kvm_host_data_regs;
+
+		kvm_host_data_regs = kzalloc(sizeof(struct user_fpsimd_state), GFP_KERNEL);
+		if (!kvm_host_data_regs) {
+			err = -ENOMEM;
+			goto free_regs;
+		}
+		per_cpu(kvm_host_data, cpu).host_ctxt.fp_regs = kvm_host_data_regs;
+	}
+
 	return 0;
 
 free_regs:
 	for_each_possible_cpu(cpu) {
 		kfree(per_cpu(kvm_hyp_ctxt, cpu).regs);
 		kfree(per_cpu(kvm_host_data, cpu).host_ctxt.regs);
+		kfree(per_cpu(kvm_host_data, cpu).host_ctxt.fp_regs);
 	}
 
 	return err;

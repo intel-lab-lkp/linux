@@ -185,10 +185,12 @@ void __init kvm_update_va_mask(struct alt_instr *alt,
 	}
 }
 
-void __init kvm_update_ctxt_gp_regs(struct alt_instr *alt,
-				    __le32 *origptr, __le32 *updptr, int nr_inst)
+static __always_inline void __init kvm_update_ctxt_regs(struct alt_instr *alt,
+							__le32 *origptr,
+							__le32 *updptr,
+							int nr_inst, u32 imm)
 {
-	u32 rd, rn, imm, insn, oinsn;
+	u32 rd, rn, insn, oinsn;
 
 	BUG_ON(nr_inst != 1);
 
@@ -198,7 +200,6 @@ void __init kvm_update_ctxt_gp_regs(struct alt_instr *alt,
 	oinsn = le32_to_cpu(origptr[0]);
 	rd = aarch64_insn_decode_register(AARCH64_INSN_REGTYPE_RD, oinsn);
 	rn = aarch64_insn_decode_register(AARCH64_INSN_REGTYPE_RN, oinsn);
-	imm = offsetof(struct kvm_cpu_context, regs);
 
 	insn = aarch64_insn_gen_load_store_imm(rd, rn, imm,
 					       AARCH64_INSN_SIZE_64,
@@ -206,6 +207,20 @@ void __init kvm_update_ctxt_gp_regs(struct alt_instr *alt,
 	BUG_ON(insn == AARCH64_BREAK_FAULT);
 
 	updptr[0] = cpu_to_le32(insn);
+}
+
+void __init kvm_update_ctxt_gp_regs(struct alt_instr *alt,
+				    __le32 *origptr, __le32 *updptr, int nr_inst)
+{
+	u32 offset = offsetof(struct kvm_cpu_context, regs);
+	kvm_update_ctxt_regs(alt, origptr, updptr, nr_inst, offset);
+}
+
+void __init kvm_update_ctxt_fp_regs(struct alt_instr *alt,
+				    __le32 *origptr, __le32 *updptr, int nr_inst)
+{
+	u32 offset = offsetof(struct kvm_cpu_context, fp_regs);
+	kvm_update_ctxt_regs(alt, origptr, updptr, nr_inst, offset);
 }
 
 void kvm_patch_vector_branch(struct alt_instr *alt,

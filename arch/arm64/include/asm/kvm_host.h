@@ -554,7 +554,9 @@ struct kvm_cpu_context {
 	u64	spsr_irq;
 	u64	spsr_fiq;
 
-	struct user_fpsimd_state fp_regs;
+	struct user_fpsimd_state *fp_regs;
+	struct user_fpsimd_state fp_regs_storage;
+	struct secretmem_area *fp_regs_area;
 
 	u64 sys_regs[NR_SYS_REGS];
 
@@ -972,7 +974,17 @@ static __always_inline struct user_pt_regs *ctxt_gp_regs(const struct kvm_cpu_co
 	return regs;
 }
 #define vcpu_gp_regs(v)		(ctxt_gp_regs(&(v)->arch.ctxt))
-#define ctxt_fp_regs(ctxt)	(&(ctxt).fp_regs)
+
+static __always_inline struct user_fpsimd_state *ctxt_fp_regs(const struct kvm_cpu_context *ctxt)
+{
+	struct user_fpsimd_state *fp_regs = (void *) ctxt;
+	asm volatile(ALTERNATIVE_CB("add %0, %0, %1\n",
+				    ARM64_HAS_VIRT_HOST_EXTN,
+				    kvm_update_ctxt_fp_regs)
+		    : "+r" (fp_regs)
+		    : "I" (offsetof(struct kvm_cpu_context, fp_regs_storage)));
+	return fp_regs;
+}
 #define vcpu_fp_regs(v)		(ctxt_fp_regs(&(v)->arch.ctxt))
 
 /*
