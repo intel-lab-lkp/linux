@@ -354,7 +354,7 @@ int aqr_firmware_load(struct phy_device *phydev)
 	int ret;
 
 	ret = aqr_wait_reset_complete(phydev);
-	if (ret)
+	if (ret != -ETIMEDOUT)
 		return ret;
 
 	/* Check if the firmware is not already loaded by pooling
