@@ -1,0 +1,14 @@
+What:		/sys/kernel/debug/probe_control_status
+Date:		September 2024
+KernelVersion:	6.11.0
+Contact:	Nayeemahmed Badebade <nayeemahmed.badebade@sony.com>
+		Toyama Yoshihiro <yoshihiro.toyama@sony.com>
+Description:
+		Probe control driver debug interface, that shows registered
+		probe control devices which were defined in platform's device
+		tree, their probe status and respective consumer devices.
+		Sample output::
+
+		    # cat /sys/kernel/debug/probe_control_status
+		    prb_ctrl_dev_0: [not triggered]
+		     Consumers: 1ffc000.pcie

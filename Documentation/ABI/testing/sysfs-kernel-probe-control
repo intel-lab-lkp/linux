@@ -1,0 +1,13 @@
+What:		/sys/kernel/probe_control/trigger
+Date:		September 2024
+KernelVersion:	6.11.0
+Contact:	Nayeemahmed Badebade <nayeemahmed.badebade@sony.com>
+		Toyama Yoshihiro <yoshihiro.toyama@sony.com>
+Description:
+		Write-only attribute that allows user to trigger probing of
+		probe control devices.
+		Write specific probe control device name to trigger probing
+		of only that device or write 'all' to trigger probing of all
+		probe control devices.
+		Writing a probe control device name that is already probed,
+		will result in an error.
