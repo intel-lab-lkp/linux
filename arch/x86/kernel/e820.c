@@ -538,6 +538,12 @@ u64 __init e820__range_update_table(struct e820_table *t, u64 start, u64 size,
 	return __e820__range_update(t, start, size, old_type, new_type);
 }
 
+u64 __init e820__range_update_firmware(u64 start, u64 size, enum e820_type old_type,
+				       enum e820_type new_type)
+{
+	return __e820__range_update(e820_table_firmware, start, size, old_type, new_type);
+}
+
 /* Remove a range of memory from the E820 table: */
 u64 __init e820__range_remove(u64 start, u64 size, enum e820_type old_type, bool check_type)
 {

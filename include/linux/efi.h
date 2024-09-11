@@ -1369,4 +1369,11 @@ extern struct blocking_notifier_head efivar_ops_nh;
 void efivars_generic_ops_register(void);
 void efivars_generic_ops_unregister(void);
 
+#ifdef CONFIG_X86_64
+void __init arch_update_firmware_area(u64 addr, u64 size);
+#else
+static inline void __init arch_update_firmware_area(u64 addr, u64 size)
+{
+}
+#endif
 #endif /* _LINUX_EFI_H */

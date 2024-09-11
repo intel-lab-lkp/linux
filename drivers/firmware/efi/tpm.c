@@ -60,6 +60,7 @@ int __init efi_tpm_eventlog_init(void)
 	}
 
 	tbl_size = sizeof(*log_tbl) + log_tbl->size;
+	arch_update_firmware_area(efi.tpm_log, tbl_size);
 	memblock_reserve(efi.tpm_log, tbl_size);
 
 	if (efi.tpm_final_log == EFI_INVALID_TABLE_ADDR) {
@@ -107,4 +108,3 @@ out:
 	early_memunmap(log_tbl, sizeof(*log_tbl));
 	return ret;
 }
-

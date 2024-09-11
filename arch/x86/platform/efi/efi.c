@@ -171,6 +171,15 @@ static void __init do_add_efi_memmap(void)
 	e820__update_table(e820_table);
 }
 
+/* Reserve firmware area if it was marked as RAM */
+void arch_update_firmware_area(u64 addr, u64 size)
+{
+	if (e820__get_entry_type(addr, addr + size) == E820_TYPE_RAM) {
+		e820__range_update_firmware(addr, size, E820_TYPE_RAM, E820_TYPE_RESERVED);
+		e820__update_table(e820_table_firmware);
+	}
+}
+
 /*
  * Given add_efi_memmap defaults to 0 and there is no alternative
  * e820 mechanism for soft-reserved memory, import the full EFI memory
