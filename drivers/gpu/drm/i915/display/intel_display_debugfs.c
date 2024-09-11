@@ -1543,6 +1543,9 @@ static ssize_t i915_joiner_write(struct file *file,
 	switch (force_join_pipes) {
 	case 0:
 		break;
+	case 1:
+		connector->force_joined_pipes = force_join_pipes;
+		break;
 	case 2:
 		if (intel_dp_has_joiner(intel_dp))
 			connector->force_joined_pipes = force_join_pipes;

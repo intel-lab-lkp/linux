@@ -1273,6 +1273,8 @@ int intel_dp_compute_joiner_pipes(struct intel_dp *intel_dp,
 				  int hdisplay, int clock)
 {
 	switch (connector->force_joined_pipes) {
+	case 1:
+		fallthrough;
 	case 2:
 		return connector->force_joined_pipes;
 	default:
@@ -1284,7 +1286,7 @@ int intel_dp_compute_joiner_pipes(struct intel_dp *intel_dp,
 			return 2;
 	}
 
-	return 0;
+	return 1;
 }
 
 bool intel_dp_has_dsc(const struct intel_connector *connector)
