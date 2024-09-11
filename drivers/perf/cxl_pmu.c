@@ -63,7 +63,7 @@
 
 #define CXL_PMU_COUNTER_REG(n)		(0xc00 + 8 * (n))
 
-/* CXL rev 3.0 Table 13-5 Events under CXL Vendor ID */
+/* CXL rev 3.1 Table 13-5 Events under CXL Vendor ID */
 #define CXL_PMU_GID_CLOCK_TICKS		0x00
 #define CXL_PMU_GID_D2H_REQ		0x0010
 #define CXL_PMU_GID_D2H_RSP		0x0011
@@ -338,7 +338,7 @@ static ssize_t cxl_pmu_event_sysfs_show(struct device *dev,
 
 static struct attribute *cxl_pmu_event_attrs[] = {
 	CXL_PMU_EVENT_CXL_ATTR(clock_ticks,			CXL_PMU_GID_CLOCK_TICKS, BIT(0)),
-	/* CXL rev 3.0 Table 3-17 - Device to Host Requests */
+	/* CXL rev 3.1 Table 3-22 - Device to Host Requests */
 	CXL_PMU_EVENT_CXL_ATTR(d2h_req_rdcurr,			CXL_PMU_GID_D2H_REQ, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_req_rdown,			CXL_PMU_GID_D2H_REQ, BIT(2)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_req_rdshared,		CXL_PMU_GID_D2H_REQ, BIT(3)),
@@ -354,7 +354,7 @@ static struct attribute *cxl_pmu_event_attrs[] = {
 	CXL_PMU_EVENT_CXL_ATTR(d2h_req_wowrinvf,		CXL_PMU_GID_D2H_REQ, BIT(13)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_req_wrinv,			CXL_PMU_GID_D2H_REQ, BIT(14)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_req_cacheflushed,		CXL_PMU_GID_D2H_REQ, BIT(16)),
-	/* CXL rev 3.0 Table 3-20 - D2H Repsonse Encodings */
+	/* CXL rev 3.1 Table 3-25 - D2H Response Encodings */
 	CXL_PMU_EVENT_CXL_ATTR(d2h_rsp_rspihiti,		CXL_PMU_GID_D2H_RSP, BIT(4)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_rsp_rspvhitv,		CXL_PMU_GID_D2H_RSP, BIT(6)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_rsp_rspihitse,		CXL_PMU_GID_D2H_RSP, BIT(5)),
@@ -362,11 +362,11 @@ static struct attribute *cxl_pmu_event_attrs[] = {
 	CXL_PMU_EVENT_CXL_ATTR(d2h_rsp_rspsfwdm,		CXL_PMU_GID_D2H_RSP, BIT(7)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_rsp_rspifwdm,		CXL_PMU_GID_D2H_RSP, BIT(15)),
 	CXL_PMU_EVENT_CXL_ATTR(d2h_rsp_rspvfwdv,		CXL_PMU_GID_D2H_RSP, BIT(22)),
-	/* CXL rev 3.0 Table 3-21 - CXL.cache - Mapping of H2D Requests to D2H Responses */
+	/* CXL rev 3.1 Table 3-26 - CXL.cache - Mapping of H2D Requests to D2H Responses */
 	CXL_PMU_EVENT_CXL_ATTR(h2d_req_snpdata,			CXL_PMU_GID_H2D_REQ, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(h2d_req_snpinv,			CXL_PMU_GID_H2D_REQ, BIT(2)),
 	CXL_PMU_EVENT_CXL_ATTR(h2d_req_snpcur,			CXL_PMU_GID_H2D_REQ, BIT(3)),
-	/* CXL rev 3.0 Table 3-22 - H2D Response Opcode Encodings */
+	/* CXL rev 3.1 Table 3-27 - H2D Response Opcode Encodings */
 	CXL_PMU_EVENT_CXL_ATTR(h2d_rsp_writepull,		CXL_PMU_GID_H2D_RSP, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(h2d_rsp_go,			CXL_PMU_GID_H2D_RSP, BIT(4)),
 	CXL_PMU_EVENT_CXL_ATTR(h2d_rsp_gowritepull,		CXL_PMU_GID_H2D_RSP, BIT(5)),
@@ -374,45 +374,50 @@ static struct attribute *cxl_pmu_event_attrs[] = {
 	CXL_PMU_EVENT_CXL_ATTR(h2d_rsp_gowritepulldrop,		CXL_PMU_GID_H2D_RSP, BIT(8)),
 	CXL_PMU_EVENT_CXL_ATTR(h2d_rsp_fastgowritepull,		CXL_PMU_GID_H2D_RSP, BIT(13)),
 	CXL_PMU_EVENT_CXL_ATTR(h2d_rsp_goerrwritepull,		CXL_PMU_GID_H2D_RSP, BIT(15)),
-	/* CXL rev 3.0 Table 13-5 directly lists these */
+	/* CXL rev 3.1 Table 13-5 directly lists these */
 	CXL_PMU_EVENT_CXL_ATTR(cachedata_d2h_data,		CXL_PMU_GID_CACHE_DATA, BIT(0)),
 	CXL_PMU_EVENT_CXL_ATTR(cachedata_h2d_data,		CXL_PMU_GID_CACHE_DATA, BIT(1)),
-	/* CXL rev 3.0 Table 3-29 M2S Req Memory Opcodes */
+	/* CXL rev 3.1 Table 3-35 M2S Req Memory Opcodes */
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_meminv,			CXL_PMU_GID_M2S_REQ, BIT(0)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memrd,			CXL_PMU_GID_M2S_REQ, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memrddata,		CXL_PMU_GID_M2S_REQ, BIT(2)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memrdfwd,		CXL_PMU_GID_M2S_REQ, BIT(3)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memwrfwd,		CXL_PMU_GID_M2S_REQ, BIT(4)),
+	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memrdtee,		CXL_PMU_GID_M2S_REQ, BIT(5)),
+	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memrddatatee,		CXL_PMU_GID_M2S_REQ, BIT(6)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memspecrd,		CXL_PMU_GID_M2S_REQ, BIT(8)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_meminvnt,		CXL_PMU_GID_M2S_REQ, BIT(9)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_req_memcleanevict,		CXL_PMU_GID_M2S_REQ, BIT(10)),
-	/* CXL rev 3.0 Table 3-35 M2S RwD Memory Opcodes */
+	/* CXL rev 3.1 Table 3-41 M2S RwD Memory Opcodes */
 	CXL_PMU_EVENT_CXL_ATTR(m2s_rwd_memwr,			CXL_PMU_GID_M2S_RWD, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_rwd_memwrptl,		CXL_PMU_GID_M2S_RWD, BIT(2)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_rwd_biconflict,		CXL_PMU_GID_M2S_RWD, BIT(4)),
-	/* CXL rev 3.0 Table 3-38 M2S BIRsp Memory Opcodes */
+	/* CXL rev 3.1 Table 3-45 M2S BIRsp Memory Opcodes */
 	CXL_PMU_EVENT_CXL_ATTR(m2s_birsp_i,			CXL_PMU_GID_M2S_BIRSP, BIT(0)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_birsp_s,			CXL_PMU_GID_M2S_BIRSP, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_birsp_e,			CXL_PMU_GID_M2S_BIRSP, BIT(2)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_birsp_iblk,			CXL_PMU_GID_M2S_BIRSP, BIT(4)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_birsp_sblk,			CXL_PMU_GID_M2S_BIRSP, BIT(5)),
 	CXL_PMU_EVENT_CXL_ATTR(m2s_birsp_eblk,			CXL_PMU_GID_M2S_BIRSP, BIT(6)),
-	/* CXL rev 3.0 Table 3-40 S2M BISnp Opcodes */
+	/* CXL rev 3.1 Table 3-47 S2M BISnp Opcodes */
 	CXL_PMU_EVENT_CXL_ATTR(s2m_bisnp_cur,			CXL_PMU_GID_S2M_BISNP, BIT(0)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_bisnp_data,			CXL_PMU_GID_S2M_BISNP, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_bisnp_inv,			CXL_PMU_GID_S2M_BISNP, BIT(2)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_bisnp_curblk,		CXL_PMU_GID_S2M_BISNP, BIT(4)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_bisnp_datblk,		CXL_PMU_GID_S2M_BISNP, BIT(5)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_bisnp_invblk,		CXL_PMU_GID_S2M_BISNP, BIT(6)),
-	/* CXL rev 3.0 Table 3-43 S2M NDR Opcopdes */
+	/* CXL rev 3.1 Table 3-50 S2M NDR Opcopdes */
 	CXL_PMU_EVENT_CXL_ATTR(s2m_ndr_cmp,			CXL_PMU_GID_S2M_NDR, BIT(0)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_ndr_cmps,			CXL_PMU_GID_S2M_NDR, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_ndr_cmpe,			CXL_PMU_GID_S2M_NDR, BIT(2)),
+	CXL_PMU_EVENT_CXL_ATTR(s2m_ndr_cmpm,			CXL_PMU_GID_S2M_NDR, BIT(3)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_ndr_biconflictack,		CXL_PMU_GID_S2M_NDR, BIT(4)),
-	/* CXL rev 3.0 Table 3-46 S2M DRS opcodes */
+	CXL_PMU_EVENT_CXL_ATTR(s2m_ndr_cmptee,			CXL_PMU_GID_S2M_NDR, BIT(5)),
+	/* CXL rev 3.1 Table 3-53 S2M DRS opcodes */
 	CXL_PMU_EVENT_CXL_ATTR(s2m_drs_memdata,			CXL_PMU_GID_S2M_DRS, BIT(0)),
 	CXL_PMU_EVENT_CXL_ATTR(s2m_drs_memdatanxm,		CXL_PMU_GID_S2M_DRS, BIT(1)),
-	/* CXL rev 3.0 Table 13-5 directly lists these */
+	CXL_PMU_EVENT_CXL_ATTR(s2m_drs_memdatatee,		CXL_PMU_GID_S2M_DRS, BIT(2)),
+	/* CXL rev 3.1 Table 13-5 directly lists these */
 	CXL_PMU_EVENT_CXL_ATTR(ddr_act,				CXL_PMU_GID_DDR, BIT(0)),
 	CXL_PMU_EVENT_CXL_ATTR(ddr_pre,				CXL_PMU_GID_DDR, BIT(1)),
 	CXL_PMU_EVENT_CXL_ATTR(ddr_casrd,			CXL_PMU_GID_DDR, BIT(2)),
