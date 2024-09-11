@@ -357,15 +357,10 @@ static void exynos_tmu_update_bit(struct exynos_tmu_data *data, int reg_off,
 static void exynos_tmu_update_temp(struct exynos_tmu_data *data, int reg_off,
 				   int bit_off, u8 temp)
 {
-	u16 tmu_temp_mask;
 	u32 th;
 
-	tmu_temp_mask =
-		(data->soc == SOC_ARCH_EXYNOS7) ? EXYNOS7_TMU_TEMP_MASK
-						: EXYNOS_TMU_TEMP_MASK;
-
 	th = readl(data->base + reg_off);
-	th &= ~(tmu_temp_mask << bit_off);
+	th &= ~(data->temp_mask << bit_off);
 	th |= temp_to_code(data, temp) << bit_off;
 	writel(th, data->base + reg_off);
 }
