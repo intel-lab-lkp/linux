@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/spinlock.h>
 
 #include <sound/core.h>
 #include <sound/dmaengine_pcm.h>
@@ -113,6 +114,7 @@ struct mchp_pdmc_chmap {
 
 struct mchp_pdmc {
 	struct mic_map channel_mic_map[MCHP_PDMC_MAX_CHANNELS];
+	spinlock_t busy_lock;		/* lock protecting busy */
 	struct device *dev;
 	struct snd_dmaengine_dai_dma_data addr;
 	struct regmap *regmap;
@@ -124,6 +126,7 @@ struct mchp_pdmc {
 	int mic_no;
 	int sinc_order;
 	bool audio_filter_en;
+	u8 busy:1;
 };
 
 static const char *const mchp_pdmc_sinc_filter_order_text[] = {
@@ -167,10 +170,19 @@ static int mchp_pdmc_sinc_order_put(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 
 	val = snd_soc_enum_item_to_val(e, item[0]) << e->shift_l;
-	if (val == dd->sinc_order)
+
+	spin_lock(&dd->busy_lock);
+	if (dd->busy) {
+		spin_unlock((&dd->busy_lock));
+		return -EBUSY;
+	}
+	if (val == dd->sinc_order) {
+		spin_unlock((&dd->busy_lock));
 		return 0;
+	}
 
 	dd->sinc_order = val;
+	spin_unlock((&dd->busy_lock));
 
 	return 1;
 }
@@ -193,10 +205,18 @@ static int mchp_pdmc_af_put(struct snd_kcontrol *kcontrol,
 	struct mchp_pdmc *dd = snd_soc_component_get_drvdata(component);
 	bool af = uvalue->value.integer.value[0] ? true : false;
 
-	if (dd->audio_filter_en == af)
+	spin_lock(&dd->busy_lock);
+	if (dd->busy) {
+		spin_unlock((&dd->busy_lock));
+		return -EBUSY;
+	}
+	if (dd->audio_filter_en == af) {
+		spin_unlock((&dd->busy_lock));
 		return 0;
+	}
 
 	dd->audio_filter_en = af;
+	spin_unlock((&dd->busy_lock));
 
 	return 1;
 }
@@ -379,52 +399,10 @@ static const struct snd_kcontrol_new mchp_pdmc_snd_controls[] = {
 	},
 };
 
-static int mchp_pdmc_close(struct snd_soc_component *component,
-			   struct snd_pcm_substream *substream)
-{
-	return snd_soc_add_component_controls(component, mchp_pdmc_snd_controls,
-					      ARRAY_SIZE(mchp_pdmc_snd_controls));
-}
-
-static int mchp_pdmc_open(struct snd_soc_component *component,
-			  struct snd_pcm_substream *substream)
-{
-	int i;
-
-	/* remove controls that can't be changed at runtime */
-	for (i = 0; i < ARRAY_SIZE(mchp_pdmc_snd_controls); i++) {
-		const struct snd_kcontrol_new *control = &mchp_pdmc_snd_controls[i];
-		struct snd_ctl_elem_id id;
-		int err;
-
-		if (component->name_prefix)
-			snprintf(id.name, sizeof(id.name), "%s %s", component->name_prefix,
-				 control->name);
-		else
-			strscpy(id.name, control->name, sizeof(id.name));
-
-		id.numid = 0;
-		id.iface = control->iface;
-		id.device = control->device;
-		id.subdevice = control->subdevice;
-		id.index = control->index;
-		err = snd_ctl_remove_id(component->card->snd_card, &id);
-		if (err < 0)
-			dev_err(component->dev, "%d: Failed to remove %s\n", err,
-				control->name);
-	}
-
-	return 0;
-}
-
 static const struct snd_soc_component_driver mchp_pdmc_dai_component = {
 	.name = "mchp-pdmc",
 	.controls = mchp_pdmc_snd_controls,
 	.num_controls = ARRAY_SIZE(mchp_pdmc_snd_controls),
-	.open = &mchp_pdmc_open,
-	.close = &mchp_pdmc_close,
-	.legacy_dai_naming = 1,
-	.trigger_start = SND_SOC_TRIGGER_ORDER_LDC,
 };
 
 static const unsigned int mchp_pdmc_1mic[] = {1};
@@ -587,6 +565,13 @@ static int mchp_pdmc_hw_params(struct snd_pcm_substream *substream,
 			cfgr_val |= MCHP_PDMC_CFGR_BSSEL(i);
 	}
 
+	/*
+	 * from these point forward, we consider the controller busy, so the
+	 * audio filter and SINC order can't be changed
+	 */
+	spin_lock(&dd->busy_lock);
+	dd->busy = 1;
+	spin_unlock((&dd->busy_lock));
 	for (osr_start = dd->audio_filter_en ? 64 : 8;
 	     osr_start <= 256 && best_diff_rate; osr_start *= 2) {
 		long round_rate;
@@ -1099,6 +1084,7 @@ static int mchp_pdmc_probe(struct platform_device *pdev)
 	 */
 	dd->audio_filter_en = true;
 	dd->sinc_order = 3;
+	spin_lock_init(&dd->busy_lock);
 
 	dd->addr.addr = (dma_addr_t)res->start + MCHP_PDMC_RHR;
 	platform_set_drvdata(pdev, dd);
@@ -1142,6 +1128,10 @@ pm_runtime_suspend:
 static void mchp_pdmc_remove(struct platform_device *pdev)
 {
 	struct mchp_pdmc *dd = platform_get_drvdata(pdev);
+
+	spin_lock(&dd->busy_lock);
+	dd->busy = 0;
+	spin_unlock((&dd->busy_lock));
 
 	if (!pm_runtime_status_suspended(dd->dev))
 		mchp_pdmc_runtime_suspend(dd->dev);
