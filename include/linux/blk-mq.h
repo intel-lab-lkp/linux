@@ -1156,6 +1156,11 @@ static inline unsigned short blk_rq_nr_phys_segments(struct request *rq)
 	return rq->nr_phys_segments;
 }
 
+static inline unsigned short blk_rq_nr_integrity_segments(struct request *rq)
+{
+	return rq->nr_integrity_segments;
+}
+
 /*
  * Number of discard segments (or ranges) the driver needs to fill in.
  * Each discard bio merged into a request is counted as one segment.
