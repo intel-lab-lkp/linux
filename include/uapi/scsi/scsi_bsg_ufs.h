@@ -162,11 +162,13 @@ struct utp_upiu_cmd {
  */
 struct utp_upiu_req {
 	struct utp_upiu_header header;
-	union {
-		struct utp_upiu_cmd		sc;
-		struct utp_upiu_query		qr;
-		struct utp_upiu_query		uc;
-	};
+	struct_group(utp_upiu,
+		union {
+			struct utp_upiu_cmd	sc;
+			struct utp_upiu_query	qr;
+			struct utp_upiu_query	uc;
+		};
+	);
 };
 
 struct ufs_arpmb_meta {

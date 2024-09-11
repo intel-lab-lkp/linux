@@ -2735,6 +2735,11 @@ ufshcd_prepare_req_desc_hdr(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 	req_desc->prd_table_length = 0;
 }
 
+static void zero_utp_upiu(struct utp_upiu_req *req)
+{
+	memset(&req->utp_upiu, 0, sizeof(req->utp_upiu));
+}
+
 /**
  * ufshcd_prepare_utp_scsi_cmd_upiu() - fills the utp_transfer_req_desc,
  * for scsi commands
@@ -2758,10 +2763,11 @@ void ufshcd_prepare_utp_scsi_cmd_upiu(struct ufshcd_lrb *lrbp, u8 upiu_flags)
 
 	WARN_ON_ONCE(ucd_req_ptr->header.task_tag != lrbp->task_tag);
 
+	zero_utp_upiu(ucd_req_ptr);
+
 	ucd_req_ptr->sc.exp_data_transfer_len = cpu_to_be32(cmd->sdb.length);
 
 	cdb_len = min_t(unsigned short, cmd->cmd_len, UFS_CDB_SIZE);
-	memset(ucd_req_ptr->sc.cdb, 0, UFS_CDB_SIZE);
 	memcpy(ucd_req_ptr->sc.cdb, cmd->cmnd, cdb_len);
 
 	memset(lrbp->ucd_rsp_ptr, 0, sizeof(struct utp_upiu_rsp));
@@ -2794,6 +2800,8 @@ static void ufshcd_prepare_utp_query_req_upiu(struct ufs_hba *hba,
 				cpu_to_be16(len) :
 				0,
 	};
+
+	zero_utp_upiu(ucd_req_ptr);
 
 	/* Copy the Query Request buffer as is */
 	memcpy(&ucd_req_ptr->qr, &query->request.upiu_req,
@@ -7170,6 +7178,8 @@ static int ufshcd_issue_devman_upiu_cmd(struct ufs_hba *hba,
 	/* update the task tag in the request upiu */
 	req_upiu->header.task_tag = tag;
 
+	zero_utp_upiu(lrbp->ucd_req_ptr);
+
 	/* just copy the upiu request as it is */
 	memcpy(lrbp->ucd_req_ptr, req_upiu, sizeof(*lrbp->ucd_req_ptr));
 	if (desc_buff && desc_op == UPIU_QUERY_OPCODE_WRITE_DESC) {
@@ -7321,6 +7331,8 @@ int ufshcd_advanced_rpmb_req_handler(struct ufs_hba *hba, struct utp_upiu_req *r
 
 	/* update the task tag */
 	req_upiu->header.task_tag = tag;
+
+	zero_utp_upiu(lrbp->ucd_req_ptr);
 
 	/* copy the UPIU(contains CDB) request as it is */
 	memcpy(lrbp->ucd_req_ptr, req_upiu, sizeof(*lrbp->ucd_req_ptr));
