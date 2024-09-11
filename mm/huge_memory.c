@@ -987,16 +987,20 @@ static void __pmd_thp_fault_success_stats(struct vm_area_struct *vma)
 static void map_pmd_thp(struct folio *folio, struct vm_fault *vmf,
 			struct vm_area_struct *vma, unsigned long haddr)
 {
-	pmd_t entry;
+	pmd_t entry, old_pmd;
+	bool is_pmd_none = pmd_none(*vmf->pmd);
 
 	entry = mk_huge_pmd(&folio->page, vma->vm_page_prot);
 	entry = maybe_pmd_mkwrite(pmd_mkdirty(entry), vma);
 	folio_add_new_anon_rmap(folio, vma, haddr, RMAP_EXCLUSIVE);
 	folio_add_lru_vma(folio, vma);
+	if (!is_pmd_none)
+		old_pmd = pmdp_huge_clear_flush(vma, haddr, vmf->pmd);
 	set_pmd_at(vma->vm_mm, haddr, vmf->pmd, entry);
 	update_mmu_cache_pmd(vma, vmf->address, vmf->pmd);
 	add_mm_counter(vma->vm_mm, MM_ANONPAGES, HPAGE_PMD_NR);
-	mm_inc_nr_ptes(vma->vm_mm);
+	if (is_pmd_none)
+		mm_inc_nr_ptes(vma->vm_mm);
 }
 
 static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
@@ -1576,6 +1580,41 @@ unlock:
 	spin_unlock(vmf->ptl);
 }
 
+static vm_fault_t do_huge_zero_wp_pmd(struct vm_fault *vmf, unsigned long haddr)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	gfp_t gfp = vma_thp_gfp_mask(vma);
+	struct mmu_notifier_range range;
+	struct folio *folio;
+	vm_fault_t ret = 0;
+
+	folio = pmd_thp_fault_alloc(gfp, vma, haddr, vmf->address);
+	if (unlikely(!folio)) {
+		ret = VM_FAULT_FALLBACK;
+		goto out;
+	}
+
+	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm, haddr,
+				haddr + HPAGE_PMD_SIZE);
+	mmu_notifier_invalidate_range_start(&range);
+	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	if (unlikely(!pmd_same(pmdp_get(vmf->pmd), vmf->orig_pmd)))
+		goto release;
+	ret = check_stable_address_space(vma->vm_mm);
+	if (ret)
+		goto release;
+	map_pmd_thp(folio, vmf, vma, haddr);
+	__pmd_thp_fault_success_stats(vma);
+	goto unlock;
+release:
+	folio_put(folio);
+unlock:
+	spin_unlock(vmf->ptl);
+	mmu_notifier_invalidate_range_end(&range);
+out:
+	return ret;
+}
+
 vm_fault_t do_huge_pmd_wp_page(struct vm_fault *vmf)
 {
 	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
@@ -1588,8 +1627,15 @@ vm_fault_t do_huge_pmd_wp_page(struct vm_fault *vmf)
 	vmf->ptl = pmd_lockptr(vma->vm_mm, vmf->pmd);
 	VM_BUG_ON_VMA(!vma->anon_vma, vma);
 
-	if (is_huge_zero_pmd(orig_pmd))
+	if (is_huge_zero_pmd(orig_pmd)) {
+		vm_fault_t ret = do_huge_zero_wp_pmd(vmf, haddr);
+
+		if (!(ret & VM_FAULT_FALLBACK))
+			return ret;
+
+		/* Fallback to splitting PMD if THP cannot be allocated */
 		goto fallback;
+	}
 
 	spin_lock(vmf->ptl);
 
