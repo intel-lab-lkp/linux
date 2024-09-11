@@ -1495,7 +1495,10 @@ static void lan743x_phy_interface_select(struct lan743x_adapter *adapter)
 	data = lan743x_csr_read(adapter, MAC_CR);
 	id_rev = adapter->csr.id_rev & ID_REV_ID_MASK_;
 
-	if (adapter->is_pci11x1x && adapter->is_sgmii_en)
+	if (adapter->is_pci11x1x && adapter->is_sgmii_en &&
+	    adapter->is_sfp_support_en)
+		adapter->phy_interface = PHY_INTERFACE_MODE_2500BASEX;
+	else if (adapter->is_pci11x1x && adapter->is_sgmii_en)
 		adapter->phy_interface = PHY_INTERFACE_MODE_SGMII;
 	else if (id_rev == ID_REV_ID_LAN7430_)
 		adapter->phy_interface = PHY_INTERFACE_MODE_GMII;
@@ -3359,6 +3362,7 @@ static int lan743x_phylink_create(struct lan743x_adapter *adapter)
 	lan743x_phy_interface_select(adapter);
 
 	switch (adapter->phy_interface) {
+	case PHY_INTERFACE_MODE_2500BASEX:
 	case PHY_INTERFACE_MODE_SGMII:
 		__set_bit(PHY_INTERFACE_MODE_SGMII,
 			  adapter->phylink_config.supported_interfaces);
@@ -3412,12 +3416,13 @@ static int lan743x_phylink_connect(struct lan743x_adapter *adapter)
 	struct device_node *dn = adapter->pdev->dev.of_node;
 	struct net_device *dev = adapter->netdev;
 	struct phy_device *phydev;
-	int ret;
+	int ret = 0;
 
 	if (dn)
 		ret = phylink_of_phy_connect(adapter->phylink, dn, 0);
 
-	if (!dn || (ret && !lan743x_phy_handle_exists(dn))) {
+	if (!adapter->is_sfp_support_en &&
+	    (!dn || (ret && !lan743x_phy_handle_exists(dn)))) {
 		phydev = phy_find_first(adapter->mdiobus);
 		if (phydev) {
 			/* attach the mac to the phy */
