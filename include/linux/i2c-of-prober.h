@@ -83,6 +83,7 @@ int i2c_of_probe_component(struct device *dev, const struct i2c_of_probe_cfg *cf
  *
  * The following helpers are provided:
  * * i2c_of_probe_simple_get_res()
+ * * i2c_of_probe_simple_free_res_early()
  * * i2c_of_probe_simple_free_res_late()
  * * i2c_of_probe_simple_enable()
  * * i2c_of_probe_simple_cleanup()
@@ -92,24 +93,33 @@ int i2c_of_probe_component(struct device *dev, const struct i2c_of_probe_cfg *cf
  * struct i2c_of_probe_simple_opts - Options for simple I2C component prober callbacks
  * @res_node_compatible: Compatible string of device node to retrieve resources from.
  * @supply_name: Name of regulator supply.
+ * @gpio_name: Name of GPIO.
  * @post_power_on_delay_ms: Delay in ms after regulators are powered on. Passed to msleep().
+ * @post_reset_deassert_delay_ms: Delay in ms after GPIOs are set. Passed to msleep().
+ * @gpio_high_to_enable: %true if GPIO should be set to electrical high to enable component.
  */
 struct i2c_of_probe_simple_opts {
 	const char *res_node_compatible;
 	const char *supply_name;
+	const char *gpio_name;
 	unsigned int post_power_on_delay_ms;
+	unsigned int post_reset_deassert_delay_ms;
+	bool gpio_high_to_enable;
 };
 
 struct regulator;
+struct gpio_desc;
 
 struct i2c_of_probe_simple_ctx {
 	/* public: provided by user before helpers are used. */
 	const struct i2c_of_probe_simple_opts *opts;
 	/* private: internal fields for helpers. */
 	struct regulator *supply;
+	struct gpio_desc *gpiod;
 };
 
 int i2c_of_probe_simple_get_res(struct device *dev, struct device_node *bus_node, void *data);
+void i2c_of_probe_simple_free_res_early(void *data);
 void i2c_of_probe_simple_free_res_late(void *data);
 int i2c_of_probe_simple_enable(struct device *dev, void *data);
 int i2c_of_probe_simple_cleanup(struct device *dev, void *data);
