@@ -147,6 +147,15 @@ static int __scm_smc_do(struct device *dev, struct arm_smccc_args *smc,
 	return 0;
 }
 
+static void smc_args_free(void *ptr)
+{
+	if (likely(qcom_scm_get_tzmem_pool()))
+		qcom_tzmem_free(ptr);
+	else
+		kfree(ptr);
+}
+
+DEFINE_FREE(smc_args, void *, if (!IS_ERR_OR_NULL(_T)) smc_args_free(_T));
 
 int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 		   enum qcom_scm_convention qcom_convention,
@@ -155,7 +164,7 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 	struct qcom_tzmem_pool *mempool = qcom_scm_get_tzmem_pool();
 	int arglen = desc->arginfo & 0xf;
 	int i, ret;
-	void *args_virt __free(qcom_tzmem) = NULL;
+	void *args_virt __free(smc_args) = NULL;
 	gfp_t flag = atomic ? GFP_ATOMIC : GFP_KERNEL;
 	u32 smccc_call_type = atomic ? ARM_SMCCC_FAST_CALL : ARM_SMCCC_STD_CALL;
 	u32 qcom_smccc_convention = (qcom_convention == SMC_CONVENTION_ARM_32) ?
@@ -173,9 +182,20 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 		smc.args[i + SCM_SMC_FIRST_REG_IDX] = desc->args[i];
 
 	if (unlikely(arglen > SCM_SMC_N_REG_ARGS)) {
-		args_virt = qcom_tzmem_alloc(mempool,
-					     SCM_SMC_N_EXT_ARGS * sizeof(u64),
-					     flag);
+		/*
+		 * Older platforms don't have an entry for SCM in device-tree
+		 * and so no device is bound to the SCM driver. This means there
+		 * is no struct device for the TZ Mem API. Fall back to
+		 * kcalloc() on such platforms.
+		 */
+		if (mempool)
+			args_virt = qcom_tzmem_alloc(
+					mempool,
+					SCM_SMC_N_EXT_ARGS * sizeof(u64),
+					flag);
+		else
+			args_virt = kcalloc(SCM_SMC_N_EXT_ARGS, sizeof(u64),
+					    flag);
 		if (!args_virt)
 			return -ENOMEM;
 
