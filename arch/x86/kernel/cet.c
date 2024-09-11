@@ -81,6 +81,23 @@ static void do_user_cp_fault(struct pt_regs *regs, unsigned long error_code)
 
 static __ro_after_init bool ibt_fatal = true;
 
+/*
+ * The WFE (WAIT_FOR_ENDBRANCH) bit in the augmented CS of FRED stack frame is
+ * set to 1 in missing-ENDBRANCH #CP exceptions.
+ *
+ * If the WFE bit is left as 1, the CPU will generate another missing-ENDBRANCH
+ * #CP because the indirect branch tracker will be set in the WAIT_FOR_ENDBRANCH
+ * state upon completion of the following ERETS instruction and the CPU will
+ * restart from the IP that just caused a previous missing-ENDBRANCH #CP.
+ *
+ * Clear the WFE bit to avoid dead looping due to the above reason.
+ */
+static void ibt_clear_fred_wfe(struct pt_regs *regs)
+{
+	if (cpu_feature_enabled(X86_FEATURE_FRED))
+		regs->fred_cs.wfe = 0;
+}
+
 static void do_kernel_cp_fault(struct pt_regs *regs, unsigned long error_code)
 {
 	if ((error_code & CP_EC) != CP_ENDBR) {
@@ -90,6 +107,7 @@ static void do_kernel_cp_fault(struct pt_regs *regs, unsigned long error_code)
 
 	if (unlikely(regs->ip == (unsigned long)&ibt_selftest_noendbr)) {
 		regs->ax = 0;
+		ibt_clear_fred_wfe(regs);
 		return;
 	}
 
@@ -97,6 +115,7 @@ static void do_kernel_cp_fault(struct pt_regs *regs, unsigned long error_code)
 	if (!ibt_fatal) {
 		printk(KERN_DEFAULT CUT_HERE);
 		__warn(__FILE__, __LINE__, (void *)regs->ip, TAINT_WARN, regs, NULL);
+		ibt_clear_fred_wfe(regs);
 		return;
 	}
 	BUG();
