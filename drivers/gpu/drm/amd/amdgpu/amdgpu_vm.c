@@ -2370,7 +2370,7 @@ static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
  *
  * @vm: vm for which to set the info
  */
-void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
+void amdgpu_vm_set_task_info(struct amdgpu_vm *vm, struct drm_file *file)
 {
 	if (!vm->task_info)
 		return;
@@ -2385,7 +2385,23 @@ void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
 		return;
 
 	vm->task_info->tgid = current->group_leader->pid;
-	get_task_comm(vm->task_info->process_name, current->group_leader);
+	__get_task_comm(vm->task_info->process_name, TASK_COMM_LEN,
+			current->group_leader);
+	/* Append drm_client_name if set. */
+	if (file && file->name) {
+		int n;
+
+		mutex_lock(&file->name_lock);
+		n = strlen(vm->task_info->process_name);
+		if (n < NAME_MAX) {
+			if (file->name) {
+				vm->task_info->process_name[n] = '/';
+				strscpy_pad(&vm->task_info->process_name[n + 1],
+					    file->name, NAME_MAX - (n + 1));
+			}
+		}
+		mutex_unlock(&file->name_lock);
+	}
 }
 
 /**
