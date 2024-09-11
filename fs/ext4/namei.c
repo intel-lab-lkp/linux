@@ -2394,8 +2394,7 @@ static int ext4_add_entry(handle_t *handle, struct dentry *dentry,
 		return -ENOKEY;
 
 #if IS_ENABLED(CONFIG_UNICODE)
-	if (sb_has_strict_encoding(sb) && IS_CASEFOLDED(dir) &&
-	    utf8_validate(sb->s_encoding, &dentry->d_name))
+	if (!generic_ci_validate_strict_name(dir, &dentry->d_name))
 		return -EINVAL;
 #endif
 
