@@ -32,7 +32,7 @@ skip_if_no_debuginfo() {
 # check if perf is compiled with libtraceevent support
 skip_no_probe_record_support() {
 	if [ $had_vfs_getname -eq 1 ] ; then
-		perf check feature -q libtraceevent && return 1
+		perf check feature -q libtraceevent >/dev/null 2>&1 && return 1
 		return 2
 	fi
 }
