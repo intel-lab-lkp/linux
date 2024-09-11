@@ -301,6 +301,11 @@ int ethnl_phy_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 
 			ctx->phy_index = 0;
 		}
+
+		/* Clear the context netdev pointer so avoid a netdev_put from
+		 * the .done() callback
+		 */
+		ctx->phy_req_info->base.dev = NULL;
 	}
 	rtnl_unlock();
 
