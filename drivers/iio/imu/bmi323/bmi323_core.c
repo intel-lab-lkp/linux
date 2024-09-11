@@ -2226,7 +2226,7 @@ static int bmi323_core_runtime_resume(struct device *dev)
 	 * after being reset in the lower power state by runtime-pm.
 	 */
 	ret = bmi323_init(data);
-	if (!ret)
+	if (ret)
 		return ret;
 
 	/* Register must be cleared before changing an active config */
