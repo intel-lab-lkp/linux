@@ -244,7 +244,7 @@ struct ifreq {
 		struct	sockaddr ifru_broadaddr;
 		struct	sockaddr ifru_netmask;
 		struct  sockaddr ifru_hwaddr;
-		short	ifru_flags;
+		unsigned int	ifru_flags;
 		int	ifru_ivalue;
 		int	ifru_mtu;
 		struct  ifmap ifru_map;
