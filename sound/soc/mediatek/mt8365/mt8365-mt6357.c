@@ -258,8 +258,8 @@ static int mt8365_mt6357_gpio_probe(struct snd_soc_card *card)
 							   mt8365_mt6357_pin_str[i]);
 		if (IS_ERR(priv->pin_states[i])) {
 			ret = PTR_ERR(priv->pin_states[i]);
-			dev_warn(card->dev, "No pin state for %s\n",
-				 mt8365_mt6357_pin_str[i]);
+			dev_warn(card->dev, "No pin state(%d) for %s\n",
+				 ret, mt8365_mt6357_pin_str[i]);
 		} else {
 			ret = pinctrl_select_state(priv->pinctrl,
 						   priv->pin_states[i]);
