@@ -224,6 +224,75 @@ static void hv_machine_crash_shutdown(struct pt_regs *regs)
 	hyperv_cleanup();
 }
 #endif /* CONFIG_CRASH_DUMP */
+
+static u64 hv_sched_clock_offset_saved;
+static void (*old_save_sched_clock_state)(void);
+static void (*old_restore_sched_clock_state)(void);
+
+/*
+ * Hyper-V clock counter resets during hibernation. Save and restore clock
+ * offset during suspend/resume, while also considering the time passed
+ * before suspend. This is to make sure that sched_clock using hv tsc page
+ * based clocksource, proceeds from where it left off during suspend and
+ * it shows correct time for the timestamps of kernel messages after resume.
+ */
+static void save_hv_clock_tsc_state(void)
+{
+	hv_sched_clock_offset_saved = hv_read_reference_counter();
+}
+
+static void restore_hv_clock_tsc_state(void)
+{
+	/*
+	 * hv_sched_clock_offset = offset that is used by hyperv_timer clocksource driver
+	 *                         to get time.
+	 * Time passed before suspend = hv_sched_clock_offset_saved
+	 *                            - hv_sched_clock_offset (old)
+	 *
+	 * After Hyper-V clock counter resets, hv_sched_clock_offset needs a correction.
+	 *
+	 * New time = hv_read_reference_counter() (future) - hv_sched_clock_offset (new)
+	 * New time = Time passed before suspend + hv_read_reference_counter() (future)
+	 *                                       - hv_read_reference_counter() (now)
+	 *
+	 * Solving the above two equations gives:
+	 *
+	 * hv_sched_clock_offset (new) = hv_sched_clock_offset (old)
+	 *                             - hv_sched_clock_offset_saved
+	 *                             + hv_read_reference_counter() (now))
+	 */
+	hv_adj_sched_clock_offset(hv_sched_clock_offset_saved - hv_read_reference_counter());
+}
+
+/*
+ * Functions to override save_sched_clock_state and restore_sched_clock_state
+ * functions of x86_platform. The Hyper-V clock counter is reset during
+ * suspend-resume and the offset used to measure time needs to be
+ * corrected, post resume.
+ */
+static void hv_save_sched_clock_state(void)
+{
+	old_save_sched_clock_state();
+	save_hv_clock_tsc_state();
+}
+
+static void hv_restore_sched_clock_state(void)
+{
+	restore_hv_clock_tsc_state();
+	old_restore_sched_clock_state();
+}
+
+static void __init x86_setup_ops_for_tsc_pg_clock(void)
+{
+	if (!(ms_hyperv.features & HV_MSR_REFERENCE_TSC_AVAILABLE))
+		return;
+
+	old_save_sched_clock_state = x86_platform.save_sched_clock_state;
+	x86_platform.save_sched_clock_state = hv_save_sched_clock_state;
+
+	old_restore_sched_clock_state = x86_platform.restore_sched_clock_state;
+	x86_platform.restore_sched_clock_state = hv_restore_sched_clock_state;
+}
 #endif /* CONFIG_HYPERV */
 
 static uint32_t  __init ms_hyperv_platform(void)
@@ -575,6 +644,7 @@ static void __init ms_hyperv_init_platform(void)
 
 	/* Register Hyper-V specific clocksource */
 	hv_init_clocksource();
+	x86_setup_ops_for_tsc_pg_clock();
 	hv_vtl_init_platform();
 #endif
 	/*
