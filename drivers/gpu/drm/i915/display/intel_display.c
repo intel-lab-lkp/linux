@@ -3743,7 +3743,6 @@ static u8 fixup_ultrajoiner_secondary_pipes(u8 ultrajoiner_primary_pipes,
 	return ultrajoiner_secondary_pipes | ultrajoiner_primary_pipes << 3;
 }
 
-static
 bool intel_display_can_use_ultrajoiner(struct intel_display *display)
 {
 	struct drm_i915_private *i915 = to_i915(display->drm);

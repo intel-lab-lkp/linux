@@ -52,6 +52,7 @@ struct intel_atomic_state;
 struct intel_crtc;
 struct intel_crtc_state;
 struct intel_digital_port;
+struct intel_display;
 struct intel_dp;
 struct intel_encoder;
 struct intel_initial_plane_config;
@@ -595,5 +596,7 @@ bool assert_port_valid(struct drm_i915_private *i915, enum port port);
 
 bool intel_scanout_needs_vtd_wa(struct drm_i915_private *i915);
 int intel_joiner_num_pipes(const struct intel_crtc_state *crtc_state);
+
+bool intel_display_can_use_ultrajoiner(struct intel_display *display);
 
 #endif

@@ -859,24 +859,34 @@ u32 get_max_compressed_bpp_with_joiner(struct drm_i915_private *i915,
 				       int num_joined_pipes)
 {
 	u32 max_bpp_small_joiner_ram;
+	u32 max_bpp_joiner;
 
 	/* Small Joiner Check: output bpp <= joiner RAM (bits) / Horiz. width */
 	max_bpp_small_joiner_ram = small_joiner_ram_size_bits(i915) / mode_hdisplay;
+	max_bpp_joiner = max_bpp_small_joiner_ram;
 
-	if (num_joined_pipes == 2) {
-		int bigjoiner_interface_bits = DISPLAY_VER(i915) >= 14 ? 36 : 24;
+	/* if ultra joiner is enabled, we have 2 bigjoiners enabled */
+	if (num_joined_pipes == 2 ||
+	    num_joined_pipes == 4) {
+		int joiner_interface_bits = DISPLAY_VER(i915) >= 14 ? 36 : 24;
 		/* With bigjoiner multiple dsc engines are used in parallel so PPC is 2 */
 		int ppc = 2;
-		u32 max_bpp_bigjoiner =
-			i915->display.cdclk.max_cdclk_freq * ppc * bigjoiner_interface_bits /
+		max_bpp_joiner =
+			i915->display.cdclk.max_cdclk_freq * ppc * joiner_interface_bits /
 			intel_dp_mode_to_fec_clock(mode_clock);
 
 		max_bpp_small_joiner_ram *= 2;
 
-		return min(max_bpp_small_joiner_ram, max_bpp_bigjoiner);
+	}
+	if (num_joined_pipes == 4) {
+		/* TODO: Check for ultrajoiner ram constraints */
+
+		/* both get multiplied by 2, because ram bits/ppc now doubled */
+		max_bpp_small_joiner_ram *= 2;
+		max_bpp_joiner *= 2;
 	}
 
-	return max_bpp_small_joiner_ram;
+	return min(max_bpp_small_joiner_ram, max_bpp_joiner);
 }
 
 u16 intel_dp_dsc_get_max_compressed_bpp(struct drm_i915_private *i915,
@@ -980,6 +990,10 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 
 		/* big joiner needs small joiner to be enabled */
 		if (num_pipes == 2 && test_slice_count < 4)
+			continue;
+
+		/* ultrajoiner needs 2 bigjoiners to be enabled */
+		if (num_pipes == 4 && test_slice_count < 8)
 			continue;
 
 		if (min_slice_count <= test_slice_count)
@@ -1259,6 +1273,19 @@ intel_dp_mode_valid_downstream(struct intel_connector *connector,
 }
 
 static
+bool intel_dp_needs_ultrajoiner(struct intel_dp *dp, int clock)
+{
+	const struct intel_encoder *encoder = &dp_to_dig_port(dp)->base;
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct intel_display *display = to_intel_display(encoder);
+
+	if (!intel_display_can_use_ultrajoiner(display))
+		return false;
+
+	return clock > (i915->display.cdclk.max_dotclk_freq * 2);
+}
+
+static
 bool intel_dp_needs_bigjoiner(struct intel_dp *intel_dp,
 			      struct intel_connector *connector,
 			      int hdisplay, int clock)
@@ -1272,6 +1299,8 @@ int intel_dp_compute_joiner_pipes(struct intel_dp *intel_dp,
 				  struct intel_connector *connector,
 				  int hdisplay, int clock)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
+
 	switch (connector->force_joined_pipes) {
 	case 1:
 		fallthrough;
@@ -1281,8 +1310,11 @@ int intel_dp_compute_joiner_pipes(struct intel_dp *intel_dp,
 		MISSING_CASE(connector->force_joined_pipes);
 		fallthrough;
 	case 0:
-		if (intel_dp_has_joiner(intel_dp) &&
-		    intel_dp_needs_bigjoiner(intel_dp, connector, hdisplay, clock))
+		if (intel_display_can_use_ultrajoiner(display) &&
+		    intel_dp_needs_ultrajoiner(intel_dp, clock))
+			return 4;
+		else if (intel_dp_has_joiner(intel_dp) &&
+			 intel_dp_needs_bigjoiner(intel_dp, connector, hdisplay, clock))
 			return 2;
 	}
 
@@ -1350,6 +1382,8 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 
 	if (num_joined_pipes == 2)
 		max_dotclk *= 2;
+	else if (num_joined_pipes == 4)
+		max_dotclk *= 4;
 
 	if (target_clock > max_dotclk)
 		return MODE_CLOCK_HIGH;
@@ -2524,8 +2558,10 @@ bool intel_dp_joiner_needs_dsc(struct drm_i915_private *i915,
 	 * Pipe joiner needs compression up to display 12 due to bandwidth
 	 * limitation. DG2 onwards pipe joiner can be enabled without
 	 * compression.
+	 * Ultrajoiner always needs compression.
 	 */
-	return DISPLAY_VER(i915) < 13 && (num_joined_pipes == 2);
+	return (DISPLAY_VER(i915) < 13 && (num_joined_pipes == 2)) ||
+		num_joined_pipes == 4;
 }
 
 static int
@@ -2553,7 +2589,10 @@ intel_dp_compute_link_config(struct intel_encoder *encoder,
 	num_joined_pipes = intel_dp_compute_joiner_pipes(intel_dp, connector,
 							 adjusted_mode->crtc_hdisplay,
 							 adjusted_mode->crtc_clock);
-	if (num_joined_pipes == 2)
+
+	if (num_joined_pipes == 4)
+		pipe_config->joiner_pipes = GENMASK(crtc->pipe + 3, crtc->pipe);
+	else if (num_joined_pipes == 2)
 		pipe_config->joiner_pipes = GENMASK(crtc->pipe + 1, crtc->pipe);
 
 	joiner_needs_dsc = intel_dp_joiner_needs_dsc(i915, num_joined_pipes);
