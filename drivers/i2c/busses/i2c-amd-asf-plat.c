@@ -40,6 +40,7 @@
 static const char *amd_asf_port_name = " port 1";
 
 struct amd_asf_dev {
+	void __iomem *eoi_base;
 	struct device *dev;
 	struct i2c_adapter adap;
 	struct i2c_client *target;
@@ -288,11 +289,13 @@ static irqreturn_t amd_asf_irq_handler(int irq, void *ptr)
 		amd_asf_update_bits(piix4_smba, ASF_SLV_INTR, SMBHSTSTS, true);
 	}
 
+	iowrite32(irq, dev->eoi_base);
 	return IRQ_HANDLED;
 }
 
 static int amd_asf_probe(struct platform_device *pdev)
 {
+	resource_size_t eoi_addr, eoi_sz;
 	struct resource_entry *rentry;
 	struct amd_asf_dev *asf_dev;
 	struct acpi_device *adev;
@@ -327,6 +330,10 @@ static int amd_asf_probe(struct platform_device *pdev)
 		case IORESOURCE_IRQ:
 			irq = rentry->res->start;
 			break;
+		case IORESOURCE_MEM:
+			eoi_addr = rentry->res->start;
+			eoi_sz = resource_size(rentry->res);
+			break;
 		default:
 			dev_warn(&adev->dev, "Invalid ASF resource\n");
 			break;
@@ -345,6 +352,10 @@ static int amd_asf_probe(struct platform_device *pdev)
 			       "amd_smbus_asf", asf_dev);
 	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "Unable to request irq: %d for use\n", irq);
+
+	asf_dev->eoi_base = devm_ioremap(&pdev->dev, eoi_addr, eoi_sz);
+	if (!asf_dev->eoi_base)
+		return dev_err_probe(&pdev->dev, -ENOMEM, "Invalid remapped address\n");
 
 	i2c_set_adapdata(&asf_dev->adap, asf_dev);
 	ret = i2c_add_adapter(&asf_dev->adap);
