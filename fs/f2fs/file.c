@@ -400,12 +400,21 @@ static bool __found_offset(struct address_space *mapping,
 	block_t blkaddr = f2fs_data_blkaddr(dn);
 	struct inode *inode = mapping->host;
 	bool compressed_cluster = false;
+	bool inline_tail = false;
 
 	if (f2fs_compressed_file(inode)) {
 		block_t first_blkaddr = data_blkaddr(dn->inode, dn->node_page,
 		    ALIGN_DOWN(dn->ofs_in_node, F2FS_I(inode)->i_cluster_size));
 
 		compressed_cluster = first_blkaddr == COMPRESS_ADDR;
+	}
+
+	if (f2fs_has_inline_tail(inode)) {
+		loff_t isize = i_size_read(inode);
+		if ((isize >> PAGE_SHIFT == index) &&
+		    (f2fs_exist_data(inode) ||
+		     xa_get_mark(&mapping->i_pages, index, PAGECACHE_TAG_DIRTY)))
+			inline_tail = true;
 	}
 
 	switch (whence) {
@@ -417,11 +426,13 @@ static bool __found_offset(struct address_space *mapping,
 			return true;
 		if (compressed_cluster)
 			return true;
+		if (inline_tail)
+			return true;
 		break;
 	case SEEK_HOLE:
 		if (compressed_cluster)
 			return false;
-		if (blkaddr == NULL_ADDR)
+		if (blkaddr == NULL_ADDR && !inline_tail)
 			return true;
 		break;
 	}
@@ -473,6 +484,8 @@ static loff_t f2fs_seek_block(struct file *file, loff_t offset, int whence)
 		}
 
 		end_offset = ADDRS_PER_PAGE(dn.node_page, inode);
+		if (f2fs_has_inline_tail(inode))
+			end_offset = COMPACT_ADDRS_PER_INODE + 1;
 
 		/* find data/hole in dnode block */
 		for (; dn.ofs_in_node < end_offset;
@@ -496,6 +509,8 @@ static loff_t f2fs_seek_block(struct file *file, loff_t offset, int whence)
 			}
 		}
 		f2fs_put_dnode(&dn);
+		if (f2fs_has_inline_tail(inode) && dn.ofs_in_node == end_offset)
+			goto fail;
 	}
 
 	if (whence == SEEK_DATA)
