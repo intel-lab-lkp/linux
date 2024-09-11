@@ -15101,7 +15101,9 @@ static void find_equal_scalars(struct bpf_verifier_state *vstate,
 			continue;
 		if ((!(reg->id & BPF_ADD_CONST) && !(known_reg->id & BPF_ADD_CONST)) ||
 		    reg->off == known_reg->off) {
+			s32 subreg_def = reg->subreg_def;
 			copy_register_state(reg, known_reg);
+			reg->subreg_def = subreg_def;
 		} else {
 			s32 saved_off = reg->off;
 
@@ -15109,7 +15111,9 @@ static void find_equal_scalars(struct bpf_verifier_state *vstate,
 			__mark_reg_known(&fake_reg, (s32)reg->off - (s32)known_reg->off);
 
 			/* reg = known_reg; reg += delta */
+			s32 subreg_def = reg->subreg_def;
 			copy_register_state(reg, known_reg);
+			reg->subreg_def = subreg_def;
 			/*
 			 * Must preserve off, id and add_const flag,
 			 * otherwise another find_equal_scalars() will be incorrect.
