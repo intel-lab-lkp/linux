@@ -117,6 +117,41 @@
 #define EXYNOS7_EMUL_DATA_SHIFT			7
 #define EXYNOS7_EMUL_DATA_MASK			0x1ff
 
+/* Exynos850 specific registers */
+#define EXYNOS850_TMU_REG_CURRENT_TEMP0_1	0x40
+#define EXYNOS850_TMU_REG_THD_TEMP0_RISE	0x50
+#define EXYNOS850_TMU_REG_THD_TEMP0_FALL	0x60
+
+#define EXYNOS850_TMU_TRIMINFO_SHIFT		4
+#define EXYNOS850_TMU_TRIMINFO_OFFSET(n) \
+	(EXYNOS_TMU_REG_TRIMINFO + (n) * EXYNOS850_TMU_TRIMINFO_SHIFT)
+#define EXYNOS850_TMU_T_TRIM0_SHIFT		18
+
+#define EXYNOS850_TMU_REG_CONTROL1		0x24
+#define EXYNOS850_TMU_LPI_MODE_MASK		1
+#define EXYNOS850_TMU_LPI_MODE_SHIFT		10
+
+#define EXYNOS850_TMU_REG_COUNTER_VALUE0	0x30
+#define EXYNOS850_TMU_EN_TEMP_SEN_OFF_MASK	0xffff
+#define EXYNOS850_TMU_EN_TEMP_SEN_OFF_SHIFT	0
+
+#define EXYNOS850_TMU_REG_COUNTER_VALUE1	0x34
+#define EXYNOS850_TMU_CLK_SENSE_ON_MASK		0xffff
+#define EXYNOS850_TMU_CLK_SENSE_ON_SHIFT	16
+
+#define EXYNOS850_TMU_REG_AVG_CON		0x38
+#define EXYNOS850_TMU_AVG_MODE_MASK		0x7
+#define EXYNOS850_TMU_DEM_ENABLE		BIT(4)
+
+#define EXYNOS850_TMU_REG_TRIM0			0x3c
+#define EXYNOS850_TMU_TRIM0_MASK		0xf
+#define EXYNOS850_TMU_VBEI_TRIM_SHIFT		8
+#define EXYNOS850_TMU_VREF_TRIM_SHIFT		12
+#define EXYNOS850_TMU_BGRI_TRIM_SHIFT		20
+
+#define EXYNOS850_TMU_TEM1051X_SENSE_VALUE	0x028a
+#define EXYNOS850_TMU_TEM1456X_SENSE_VALUE	0x0a28
+
 #define EXYNOS_FIRST_POINT_TRIM			25
 #define EXYNOS_SECOND_POINT_TRIM		85
 
@@ -134,6 +169,7 @@ enum soc_type {
 	SOC_ARCH_EXYNOS5420_TRIMINFO,
 	SOC_ARCH_EXYNOS5433,
 	SOC_ARCH_EXYNOS7,
+	SOC_ARCH_EXYNOS850,
 };
 
 /**
@@ -584,6 +620,114 @@ static void exynos7_tmu_initialize(struct platform_device *pdev)
 	sanitize_temp_error(data, trim_info);
 }
 
+static void exynos850_tmu_set_low_temp(struct exynos_tmu_data *data, u8 temp)
+{
+	exynos_tmu_update_temp(data, EXYNOS850_TMU_REG_THD_TEMP0_FALL + 12, 0,
+			       temp);
+	exynos_tmu_update_bit(data, EXYNOS7_TMU_REG_INTEN,
+			      EXYNOS_TMU_INTEN_FALL0_SHIFT + 0, true);
+}
+
+static void exynos850_tmu_set_high_temp(struct exynos_tmu_data *data, u8 temp)
+{
+	exynos_tmu_update_temp(data, EXYNOS850_TMU_REG_THD_TEMP0_RISE + 12, 16,
+			       temp);
+	exynos_tmu_update_bit(data, EXYNOS7_TMU_REG_INTEN,
+			      EXYNOS7_TMU_INTEN_RISE0_SHIFT + 1, true);
+}
+
+static void exynos850_tmu_disable_low(struct exynos_tmu_data *data)
+{
+	exynos_tmu_update_bit(data, EXYNOS7_TMU_REG_INTEN,
+			      EXYNOS_TMU_INTEN_FALL0_SHIFT + 0, false);
+}
+
+static void exynos850_tmu_disable_high(struct exynos_tmu_data *data)
+{
+	exynos_tmu_update_bit(data, EXYNOS7_TMU_REG_INTEN,
+			      EXYNOS7_TMU_INTEN_RISE0_SHIFT + 1, false);
+}
+
+static void exynos850_tmu_set_crit_temp(struct exynos_tmu_data *data, u8 temp)
+{
+	exynos_tmu_update_temp(data, EXYNOS850_TMU_REG_THD_TEMP0_RISE + 0, 16,
+			       temp);
+	exynos_tmu_update_bit(data, EXYNOS_TMU_REG_CONTROL,
+			      EXYNOS_TMU_THERM_TRIP_EN_SHIFT, true);
+	exynos_tmu_update_bit(data, EXYNOS7_TMU_REG_INTEN,
+			      EXYNOS7_TMU_INTEN_RISE0_SHIFT + 7, true);
+}
+
+static void exynos850_tmu_initialize(struct platform_device *pdev)
+{
+	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
+	u32 cal_type, avg_mode, reg, bgri, vref, vbei;
+
+	reg = readl(data->base + EXYNOS850_TMU_TRIMINFO_OFFSET(0));
+	cal_type = (reg & EXYNOS5433_TRIMINFO_CALIB_SEL_MASK) >>
+		   EXYNOS5433_TRIMINFO_CALIB_SEL_SHIFT;
+	data->reference_voltage = (reg >> EXYNOS850_TMU_T_TRIM0_SHIFT) &
+				  EXYNOS_TMU_REF_VOLTAGE_MASK;
+	reg = readl(data->base + EXYNOS850_TMU_TRIMINFO_OFFSET(1));
+	data->gain = (reg >> EXYNOS850_TMU_T_TRIM0_SHIFT) &
+		     EXYNOS_TMU_BUF_SLOPE_SEL_MASK;
+	reg = readl(data->base + EXYNOS850_TMU_TRIMINFO_OFFSET(2));
+	avg_mode = (reg >> EXYNOS850_TMU_T_TRIM0_SHIFT) &
+		   EXYNOS850_TMU_AVG_MODE_MASK;
+	reg = readl(data->base + EXYNOS850_TMU_TRIMINFO_OFFSET(3));
+	bgri = (reg >> EXYNOS850_TMU_T_TRIM0_SHIFT) & EXYNOS850_TMU_TRIM0_MASK;
+	reg = readl(data->base + EXYNOS850_TMU_TRIMINFO_OFFSET(4));
+	vref = (reg >> EXYNOS850_TMU_T_TRIM0_SHIFT) & EXYNOS850_TMU_TRIM0_MASK;
+	reg = readl(data->base + EXYNOS850_TMU_TRIMINFO_OFFSET(5));
+	vbei = (reg >> EXYNOS850_TMU_T_TRIM0_SHIFT) & EXYNOS850_TMU_TRIM0_MASK;
+
+	data->cal_type = cal_type == EXYNOS5433_TRIMINFO_TWO_POINT_TRIMMING ?
+				 TYPE_TWO_POINT_TRIMMING :
+				 TYPE_ONE_POINT_TRIMMING;
+
+	reg = readl(data->base + EXYNOS850_TMU_TRIMINFO_OFFSET(0));
+	sanitize_temp_error(data, reg);
+
+	dev_info(&pdev->dev, "Calibration type is %d-point calibration\n",
+		 cal_type ? 2 : 1);
+
+	reg = readl(data->base + EXYNOS850_TMU_REG_AVG_CON);
+	reg &= ~EXYNOS850_TMU_AVG_MODE_MASK;
+	reg &= ~EXYNOS850_TMU_DEM_ENABLE;
+	if (avg_mode) {
+		reg |= avg_mode;
+		reg |= EXYNOS850_TMU_DEM_ENABLE;
+	}
+	writel(reg, data->base + EXYNOS850_TMU_REG_AVG_CON);
+
+	reg = readl(data->base + EXYNOS850_TMU_REG_COUNTER_VALUE0);
+	reg &= ~(EXYNOS850_TMU_EN_TEMP_SEN_OFF_MASK
+		 << EXYNOS850_TMU_EN_TEMP_SEN_OFF_SHIFT);
+	reg |= EXYNOS850_TMU_TEM1051X_SENSE_VALUE
+	       << EXYNOS850_TMU_EN_TEMP_SEN_OFF_SHIFT;
+	writel(reg, data->base + EXYNOS850_TMU_REG_COUNTER_VALUE0);
+
+	reg = readl(data->base + EXYNOS850_TMU_REG_COUNTER_VALUE1);
+	reg &= ~(EXYNOS850_TMU_CLK_SENSE_ON_MASK
+		 << EXYNOS850_TMU_CLK_SENSE_ON_SHIFT);
+	reg |= EXYNOS850_TMU_TEM1051X_SENSE_VALUE
+	       << EXYNOS850_TMU_CLK_SENSE_ON_SHIFT;
+	writel(reg, data->base + EXYNOS850_TMU_REG_COUNTER_VALUE1);
+
+	reg = readl(data->base + EXYNOS850_TMU_REG_TRIM0);
+	reg &= ~(EXYNOS850_TMU_TRIM0_MASK << EXYNOS850_TMU_BGRI_TRIM_SHIFT);
+	reg &= ~(EXYNOS850_TMU_TRIM0_MASK << EXYNOS850_TMU_VREF_TRIM_SHIFT);
+	reg &= ~(EXYNOS850_TMU_TRIM0_MASK << EXYNOS850_TMU_VBEI_TRIM_SHIFT);
+	reg |= bgri << EXYNOS850_TMU_BGRI_TRIM_SHIFT;
+	reg |= vref << EXYNOS850_TMU_VREF_TRIM_SHIFT;
+	reg |= vbei << EXYNOS850_TMU_VBEI_TRIM_SHIFT;
+	writel(reg, data->base + EXYNOS850_TMU_REG_TRIM0);
+
+	reg = readl(data->base + EXYNOS850_TMU_REG_CONTROL1);
+	reg &= ~(EXYNOS850_TMU_LPI_MODE_MASK << EXYNOS850_TMU_LPI_MODE_SHIFT);
+	writel(reg, data->base + EXYNOS850_TMU_REG_CONTROL1);
+}
+
 static void exynos4210_tmu_control(struct platform_device *pdev, bool on)
 {
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
@@ -673,7 +817,8 @@ static u32 get_emul_con_reg(struct exynos_tmu_data *data, unsigned int val,
 
 		val &= ~(EXYNOS_EMUL_TIME_MASK << EXYNOS_EMUL_TIME_SHIFT);
 		val |= (EXYNOS_EMUL_TIME << EXYNOS_EMUL_TIME_SHIFT);
-		if (data->soc == SOC_ARCH_EXYNOS7) {
+		if (data->soc == SOC_ARCH_EXYNOS7 ||
+		    data->soc == SOC_ARCH_EXYNOS850) {
 			val &= ~(EXYNOS7_EMUL_DATA_MASK <<
 				EXYNOS7_EMUL_DATA_SHIFT);
 			val |= (temp_to_code(data, temp) <<
@@ -703,7 +848,8 @@ static void exynos4412_tmu_set_emulation(struct exynos_tmu_data *data,
 		emul_con = EXYNOS5260_EMUL_CON;
 	else if (data->soc == SOC_ARCH_EXYNOS5433)
 		emul_con = EXYNOS5433_TMU_EMUL_CON;
-	else if (data->soc == SOC_ARCH_EXYNOS7)
+	else if (data->soc == SOC_ARCH_EXYNOS7 ||
+		 data->soc == SOC_ARCH_EXYNOS850)
 		emul_con = EXYNOS7_TMU_REG_EMUL_CON;
 	else
 		emul_con = EXYNOS_EMUL_CON;
@@ -758,6 +904,12 @@ static int exynos7_tmu_read(struct exynos_tmu_data *data)
 		EXYNOS7_TMU_TEMP_MASK;
 }
 
+static int exynos850_tmu_read(struct exynos_tmu_data *data)
+{
+	return readw(data->base + EXYNOS850_TMU_REG_CURRENT_TEMP0_1) &
+	       EXYNOS7_TMU_TEMP_MASK;
+}
+
 static irqreturn_t exynos_tmu_threaded_irq(int irq, void *id)
 {
 	struct exynos_tmu_data *data = id;
@@ -784,7 +936,8 @@ static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
 	if (data->soc == SOC_ARCH_EXYNOS5260) {
 		tmu_intstat = EXYNOS5260_TMU_REG_INTSTAT;
 		tmu_intclear = EXYNOS5260_TMU_REG_INTCLEAR;
-	} else if (data->soc == SOC_ARCH_EXYNOS7) {
+	} else if (data->soc == SOC_ARCH_EXYNOS7 ||
+		   data->soc == SOC_ARCH_EXYNOS850) {
 		tmu_intstat = EXYNOS7_TMU_REG_INTPEND;
 		tmu_intclear = EXYNOS7_TMU_REG_INTPEND;
 	} else if (data->soc == SOC_ARCH_EXYNOS5433) {
@@ -835,6 +988,9 @@ static const struct of_device_id exynos_tmu_match[] = {
 	}, {
 		.compatible = "samsung,exynos7-tmu",
 		.data = (const void *)SOC_ARCH_EXYNOS7,
+	}, {
+		.compatible = "samsung,exynos850-tmu",
+		.data = (const void *)SOC_ARCH_EXYNOS850,
 	},
 	{ },
 };
@@ -951,6 +1107,23 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 		data->efuse_value = 75;
 		data->min_efuse_value = 15;
 		data->max_efuse_value = 100;
+		break;
+	case SOC_ARCH_EXYNOS850:
+		data->tmu_set_low_temp = exynos850_tmu_set_low_temp;
+		data->tmu_set_high_temp = exynos850_tmu_set_high_temp;
+		data->tmu_disable_low = exynos850_tmu_disable_low;
+		data->tmu_disable_high = exynos850_tmu_disable_high;
+		data->tmu_set_crit_temp = exynos850_tmu_set_crit_temp;
+		data->tmu_initialize = exynos850_tmu_initialize;
+		data->tmu_control = exynos4210_tmu_control;
+		data->tmu_read = exynos850_tmu_read;
+		data->tmu_set_emulation = exynos4412_tmu_set_emulation;
+		data->tmu_clear_irqs = exynos4210_tmu_clear_irqs;
+		data->temp_mask = EXYNOS7_TMU_TEMP_MASK;
+		data->temp_85_shift = EXYNOS7_TMU_TEMP_SHIFT;
+		data->efuse_value = 55;
+		data->min_efuse_value = 0;
+		data->max_efuse_value = 511;
 		break;
 	default:
 		dev_err(&pdev->dev, "Platform not supported\n");
