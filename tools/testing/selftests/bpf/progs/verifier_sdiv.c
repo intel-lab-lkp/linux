@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/bpf.h>
+#include <limits.h>
 #include <bpf/bpf_helpers.h>
 #include "bpf_misc.h"
 
@@ -768,6 +769,74 @@ __naked void smod64_zero_divisor(void)
 	r0 = r2;					\
 	exit;						\
 "	::: __clobber_all);
+}
+
+SEC("socket")
+__description("SDIV64, overflow, LLONG_MIN/-1")
+__success __retval(1)
+__arch_x86_64
+__xlated("0: r2 = 0x8000000000000000")
+__xlated("2: r3 = -1")
+__xlated("3: r4 = r2")
+__xlated("4: if r3 != 0x0 goto pc+2")
+__xlated("5: w2 ^= w2")
+__xlated("6: goto pc+8")
+__xlated("7: if r3 != 0xffffffff goto pc+6")
+__xlated("8: r3 = 0x8000000000000000")
+__xlated("10: if r2 != r3 goto pc+2")
+__xlated("11: r3 = -1")
+__xlated("12: goto pc+2")
+__xlated("13: r3 = -1")
+__xlated("14: r2 s/= r3")
+__xlated("15: r0 = 0")
+__xlated("16: if r2 != r4 goto pc+1")
+__xlated("17: r0 = 1")
+__xlated("18: exit")
+__naked void sdiv64_overflow(void)
+{
+	asm volatile ("					\
+	r2 = %[llong_min] ll;				\
+	r3 = -1;					\
+	r4 = r2;					\
+	r2 s/= r3;					\
+	r0 = 0;						\
+	if r2 != r4 goto +1;				\
+	r0 = 1;						\
+	exit;						\
+"	:
+	: __imm_const(llong_min, LLONG_MIN)
+	: __clobber_all);
+}
+
+SEC("socket")
+__description("SDIV64, divisor -1")
+__success __retval(-5)
+__arch_x86_64
+__xlated("0: r2 = 5")
+__xlated("1: r3 = -1")
+__xlated("2: if r3 != 0x0 goto pc+2")
+__xlated("3: w2 ^= w2")
+__xlated("4: goto pc+8")
+__xlated("5: if r3 != 0xffffffff goto pc+6")
+__xlated("6: r3 = 0x8000000000000000")
+__xlated("8: if r2 != r3 goto pc+2")
+__xlated("9: r3 = -1")
+__xlated("10: goto pc+2")
+__xlated("11: r3 = -1")
+__xlated("12: r2 s/= r3")
+__xlated("13: r0 = r2")
+__xlated("14: exit")
+__naked void sdiv64_divisor_neg_1(void)
+{
+	asm volatile ("					\
+	r2 = 5;						\
+	r3 = -1;					\
+	r2 s/= r3;					\
+	r0 = r2;					\
+	exit;						\
+"	:
+	: __imm_const(llong_min, LLONG_MIN)
+	: __clobber_all);
 }
 
 #else
