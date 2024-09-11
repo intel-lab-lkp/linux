@@ -324,14 +324,37 @@ exit:
 static int aqr_firmware_load_fs(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
+	struct fwnode_handle *fw_node;
 	const struct firmware *fw;
 	const char *fw_name;
+	u32 phy_id;
 	int ret;
 
 	ret = of_property_read_string(dev->of_node, "firmware-name",
 				      &fw_name);
-	if (ret)
+	/* check if there is an fwnode connected to mdio */
+	if (ret && dev->parent->fwnode) {
+		fw_node = fwnode_get_phy_node(dev->parent->fwnode);
+		if (fw_node) {
+			ret = fwnode_get_phy_id(fw_node, &phy_id);
+			if (ret)
+				goto cleanup_fwnode;
+			phy_id &= phydev->drv->phy_id_mask;
+			if (phy_id != (phydev->drv->phy_id &
+				       phydev->drv->phy_id_mask))
+				goto cleanup_fwnode;
+
+			ret = fwnode_property_read_string(fw_node,
+							  "firmware-name",
+							  &fw_name);
+		}
+cleanup_fwnode:
+		fwnode_handle_put(fw_node);
+	}
+	if (ret) {
+		phydev_err(phydev, "failed to read firmware name: %d\n", ret);
 		return ret;
+	}
 
 	ret = request_firmware(&fw, fw_name, dev);
 	if (ret) {
