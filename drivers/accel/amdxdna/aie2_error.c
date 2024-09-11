@@ -3,6 +3,7 @@
  * Copyright (C) 2023-2024, Advanced Micro Devices, Inc.
  */
 
+#include <drm/amdxdna_accel.h>
 #include <drm/drm_cache.h>
 #include <drm/drm_device.h>
 #include <drm/drm_print.h>
