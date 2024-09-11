@@ -545,7 +545,9 @@ struct kvm_sysreg_masks {
 };
 
 struct kvm_cpu_context {
-	struct user_pt_regs regs;	/* sp = sp_el0 */
+	struct user_pt_regs *regs;	/* sp = sp_el0 */
+	struct user_pt_regs regs_storage;
+	struct secretmem_area *regs_area;
 
 	u64	spsr_abt;
 	u64	spsr_und;
@@ -950,7 +952,25 @@ struct kvm_vcpu_arch {
 #define vcpu_clear_on_unsupported_cpu(vcpu)				\
 	vcpu_clear_flag(vcpu, ON_UNSUPPORTED_CPU)
 
-#define ctxt_gp_regs(ctxt)	(&(ctxt)->regs)
+/* Static allocation is used if NVHE-host or if KERNEL_SECRETMEM is not enabled */
+static __inline bool kvm_use_dynamic_regs(void)
+{
+#ifndef CONFIG_KERNEL_SECRETMEM
+	return false;
+#endif
+	return cpus_have_cap(ARM64_HAS_VIRT_HOST_EXTN);
+}
+
+static __always_inline struct user_pt_regs *ctxt_gp_regs(const struct kvm_cpu_context *ctxt)
+{
+	struct user_pt_regs *regs = (void *) ctxt;
+	asm volatile(ALTERNATIVE_CB("add %0, %0, %1\n",
+				    ARM64_HAS_VIRT_HOST_EXTN,
+				    kvm_update_ctxt_gp_regs)
+		     : "+r" (regs)
+		     : "I" (offsetof(struct kvm_cpu_context, regs_storage)));
+	return regs;
+}
 #define vcpu_gp_regs(v)		(ctxt_gp_regs(&(v)->arch.ctxt))
 
 /*

@@ -16,6 +16,7 @@
 #include <linux/fs.h>
 #include <linux/mman.h>
 #include <linux/sched.h>
+#include <linux/secretmem.h>
 #include <linux/kvm.h>
 #include <linux/kvm_irqfd.h>
 #include <linux/irqbypass.h>
@@ -451,6 +452,7 @@ int kvm_arch_vcpu_precreate(struct kvm *kvm, unsigned int id)
 
 int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 {
+	unsigned long pages_needed;
 	int err;
 
 	spin_lock_init(&vcpu->arch.mp_state_lock);
@@ -467,6 +469,14 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	vcpu_clear_flag(vcpu, VCPU_INITIALIZED);
 
 	vcpu->arch.mmu_page_cache.gfp_zero = __GFP_ZERO;
+
+	if (kvm_use_dynamic_regs()) {
+		pages_needed = (sizeof(*vcpu_gp_regs(vcpu)) + PAGE_SIZE - 1) / PAGE_SIZE;
+		vcpu->arch.ctxt.regs_area = secretmem_allocate_pages(fls(pages_needed - 1));
+		if (!vcpu->arch.ctxt.regs_area)
+			return -ENOMEM;
+		vcpu->arch.ctxt.regs = vcpu->arch.ctxt.regs_area->ptr;
+	}
 
 	/* Set up the timer */
 	kvm_timer_vcpu_init(vcpu);
@@ -488,9 +498,14 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 
 	err = kvm_vgic_vcpu_init(vcpu);
 	if (err)
-		return err;
+		goto free_vcpu_ctxt;
 
 	return kvm_share_hyp(vcpu, vcpu + 1);
+
+free_vcpu_ctxt:
+	if (kvm_use_dynamic_regs())
+		secretmem_release_pages(vcpu->arch.ctxt.regs_area);
+	return err;
 }
 
 void kvm_arch_vcpu_postcreate(struct kvm_vcpu *vcpu)
@@ -507,6 +522,9 @@ void kvm_arch_vcpu_destroy(struct kvm_vcpu *vcpu)
 	kvm_pmu_vcpu_destroy(vcpu);
 	kvm_vgic_vcpu_destroy(vcpu);
 	kvm_arm_vcpu_destroy(vcpu);
+
+	if (kvm_use_dynamic_regs())
+		secretmem_release_pages(vcpu->arch.ctxt.regs_area);
 }
 
 void kvm_arch_vcpu_blocking(struct kvm_vcpu *vcpu)
@@ -2688,6 +2706,45 @@ out_err:
 	return err;
 }
 
+static int init_hyp_hve_mode(void)
+{
+	int cpu;
+	int err = 0;
+
+	if (!kvm_use_dynamic_regs())
+		return 0;
+
+	/* Allocate gp-regs */
+	for_each_possible_cpu(cpu) {
+		void *hyp_ctxt_regs;
+		void *kvm_host_data_regs;
+
+		hyp_ctxt_regs = kzalloc(sizeof(struct user_pt_regs), GFP_KERNEL);
+		if (!hyp_ctxt_regs) {
+			err = -ENOMEM;
+			goto free_regs;
+		}
+		per_cpu(kvm_hyp_ctxt, cpu).regs = hyp_ctxt_regs;
+
+		kvm_host_data_regs = kzalloc(sizeof(struct user_pt_regs), GFP_KERNEL);
+		if (!kvm_host_data_regs) {
+			err = -ENOMEM;
+			goto free_regs;
+		}
+		per_cpu(kvm_host_data, cpu).host_ctxt.regs = kvm_host_data_regs;
+	}
+
+	return 0;
+
+free_regs:
+	for_each_possible_cpu(cpu) {
+		kfree(per_cpu(kvm_hyp_ctxt, cpu).regs);
+		kfree(per_cpu(kvm_host_data, cpu).host_ctxt.regs);
+	}
+
+	return err;
+}
+
 struct kvm_vcpu *kvm_mpidr_to_vcpu(struct kvm *kvm, unsigned long mpidr)
 {
 	struct kvm_vcpu *vcpu = NULL;
@@ -2809,6 +2866,10 @@ static __init int kvm_arm_init(void)
 
 	if (!in_hyp_mode) {
 		err = init_hyp_mode();
+		if (err)
+			goto out_err;
+	} else {
+		err = init_hyp_hve_mode();
 		if (err)
 			goto out_err;
 	}

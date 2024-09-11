@@ -315,7 +315,9 @@ void __noreturn __cold nvhe_hyp_panic_handler(u64 esr, u64 spsr, u64 elr_virt,
 .endm
 
 .macro get_ctxt_gp_regs ctxt, regs
-	add	\regs, \ctxt, #CPU_USER_PT_REGS
+alternative_cb ARM64_HAS_VIRT_HOST_EXTN, kvm_update_ctxt_gp_regs
+	add	\regs, \ctxt, #CPU_USER_PT_REGS_STRG
+alternative_cb_end
 .endm
 
 /*
