@@ -1518,6 +1518,9 @@ static ssize_t i915_joiner_write(struct file *file,
 	struct seq_file *m = file->private_data;
 	struct intel_connector *connector = m->private;
 	struct intel_display *display = to_intel_display(connector);
+	struct intel_encoder *intel_encoder = intel_attached_encoder(connector);
+	struct intel_dp *intel_dp;
+	int connector_type = connector->base.connector_type;
 	int force_join_pipes = 0;
 	int ret;
 
@@ -1528,16 +1531,27 @@ static ssize_t i915_joiner_write(struct file *file,
 	if (ret < 0)
 		return ret;
 
+	/* Currently joiner is only supported for eDP/DP */
+	if (connector_type != DRM_MODE_CONNECTOR_DisplayPort &&
+	    connector_type != DRM_MODE_CONNECTOR_eDP)
+		return 0;
+
+	intel_dp = enc_to_intel_dp(intel_encoder);
+
+	connector->force_joined_pipes = 0;
+
 	switch (force_join_pipes) {
 	case 0:
-		fallthrough;
+		break;
 	case 2:
-		connector->force_joined_pipes = force_join_pipes;
+		if (intel_dp_has_joiner(intel_dp))
+			connector->force_joined_pipes = force_join_pipes;
+		else
+			drm_dbg(display->drm, "Force joiner not supported for the config\n");
 		break;
 	default:
 		drm_dbg(display->drm, "Ignoring Invalid num of pipes %d for force joining\n",
 			force_join_pipes);
-		connector->force_joined_pipes = 0;
 	}
 
 	*offp += len;
