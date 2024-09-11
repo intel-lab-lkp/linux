@@ -652,7 +652,7 @@ need_to_wait:
 			fl->fl_u.afs.state = AFS_LOCK_PENDING;
 			goto try_to_lock;
 		case AFS_LOCK_PENDING:
-			if (ret > 0) {
+			if (ret < 0) {
 				/* We need to retry the lock.  We may not be
 				 * notified by the server if it just expired
 				 * rather than being released.
