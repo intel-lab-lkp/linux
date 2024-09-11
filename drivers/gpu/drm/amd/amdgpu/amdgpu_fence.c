@@ -126,6 +126,19 @@ static u32 amdgpu_fence_read(struct amdgpu_ring *ring)
 }
 
 /**
+ * amdgpu_fence_schedule_fallback - schedule fallback check
+ *
+ * @ring: pointer to struct amdgpu_ring
+ *
+ * Start a timer as fallback to our interrupts.
+ */
+static void amdgpu_fence_schedule_fallback(struct amdgpu_ring *ring)
+{
+	mod_timer(&ring->fence_drv.fallback_timer,
+		  jiffies + AMDGPU_FENCE_JIFFIES_TIMEOUT);
+}
+
+/**
  * amdgpu_fence_emit - emit a fence on the requested ring
  *
  * @ring: ring the fence is associated with
@@ -206,6 +219,9 @@ int amdgpu_fence_emit(struct amdgpu_ring *ring, struct dma_fence **f, struct amd
 
 	*f = fence;
 
+	if (!timer_pending(&ring->fence_drv.fallback_timer))
+		amdgpu_fence_schedule_fallback(ring);
+
 	return 0;
 }
 
@@ -242,19 +258,6 @@ int amdgpu_fence_emit_polling(struct amdgpu_ring *ring, uint32_t *s,
 	*s = seq;
 
 	return 0;
-}
-
-/**
- * amdgpu_fence_schedule_fallback - schedule fallback check
- *
- * @ring: pointer to struct amdgpu_ring
- *
- * Start a timer as fallback to our interrupts.
- */
-static void amdgpu_fence_schedule_fallback(struct amdgpu_ring *ring)
-{
-	mod_timer(&ring->fence_drv.fallback_timer,
-		  jiffies + AMDGPU_FENCE_JIFFIES_TIMEOUT);
 }
 
 /**
@@ -786,39 +789,6 @@ static const char *amdgpu_job_fence_get_timeline_name(struct dma_fence *f)
 }
 
 /**
- * amdgpu_fence_enable_signaling - enable signalling on fence
- * @f: fence
- *
- * This function is called with fence_queue lock held, and adds a callback
- * to fence_queue that checks if this fence is signaled, and if so it
- * signals the fence and removes itself.
- */
-static bool amdgpu_fence_enable_signaling(struct dma_fence *f)
-{
-	if (!timer_pending(&to_amdgpu_fence(f)->ring->fence_drv.fallback_timer))
-		amdgpu_fence_schedule_fallback(to_amdgpu_fence(f)->ring);
-
-	return true;
-}
-
-/**
- * amdgpu_job_fence_enable_signaling - enable signalling on job fence
- * @f: fence
- *
- * This is the simliar function with amdgpu_fence_enable_signaling above, it
- * only handles the job embedded fence.
- */
-static bool amdgpu_job_fence_enable_signaling(struct dma_fence *f)
-{
-	struct amdgpu_job *job = container_of(f, struct amdgpu_job, hw_fence);
-
-	if (!timer_pending(&to_amdgpu_ring(job->base.sched)->fence_drv.fallback_timer))
-		amdgpu_fence_schedule_fallback(to_amdgpu_ring(job->base.sched));
-
-	return true;
-}
-
-/**
  * amdgpu_fence_free - free up the fence memory
  *
  * @rcu: RCU callback head
@@ -877,14 +847,12 @@ static void amdgpu_job_fence_release(struct dma_fence *f)
 static const struct dma_fence_ops amdgpu_fence_ops = {
 	.get_driver_name = amdgpu_fence_get_driver_name,
 	.get_timeline_name = amdgpu_fence_get_timeline_name,
-	.enable_signaling = amdgpu_fence_enable_signaling,
 	.release = amdgpu_fence_release,
 };
 
 static const struct dma_fence_ops amdgpu_job_fence_ops = {
 	.get_driver_name = amdgpu_fence_get_driver_name,
 	.get_timeline_name = amdgpu_job_fence_get_timeline_name,
-	.enable_signaling = amdgpu_job_fence_enable_signaling,
 	.release = amdgpu_job_fence_release,
 };
 
