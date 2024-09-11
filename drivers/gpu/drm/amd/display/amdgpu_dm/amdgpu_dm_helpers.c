@@ -83,31 +83,23 @@ static void apply_edid_quirks(struct drm_edid_product_id *product_id,
  * dm_helpers_parse_edid_caps() - Parse edid caps
  *
  * @link: current detected link
- * @edid:	[in] pointer to edid
  * @edid_caps:	[in] pointer to edid caps
  *
  * Return: void
  */
-enum dc_edid_status dm_helpers_parse_edid_caps(
-		struct dc_link *link,
-		const struct dc_edid *edid,
-		struct dc_edid_caps *edid_caps)
+enum dc_edid_status dm_helpers_parse_edid_caps(struct dc_link *link,
+					       struct dc_edid_caps *edid_caps)
 {
 	struct amdgpu_dm_connector *aconnector = link->priv;
 	struct drm_connector *connector = &aconnector->base;
 	const struct drm_edid *drm_edid = aconnector->drm_edid;
 	struct drm_edid_product_id product_id;
-	struct edid *edid_buf = edid ? (struct edid *) edid->raw_edid : NULL;
 	int sad_count;
 	int i = 0;
-
 	enum dc_edid_status result = EDID_OK;
 
-	if (!edid_caps || !edid)
+	if (!edid_caps || !drm_edid)
 		return EDID_BAD_INPUT;
-
-	if (!drm_edid_is_valid(edid_buf))
-		result = EDID_BAD_CHECKSUM;
 
 	drm_edid_get_product_id(drm_edid, &product_id);
 
@@ -920,19 +912,23 @@ enum dc_edid_status dm_helpers_read_local_edid(
 		if (!drm_edid)
 			return EDID_NO_RESPONSE;
 
-		edid = drm_edid_raw(drm_edid); // FIXME: Get rid of drm_edid_raw()
+		/* FIXME: Get rid of drm_edid_raw()
+		 * Raw edid is still needed for dm_helpers_dp_write_dpcd()
+		 */
+		edid = drm_edid_raw(drm_edid);
 		sink->dc_edid.length = EDID_LENGTH * (edid->extensions + 1);
 		memmove(sink->dc_edid.raw_edid, (uint8_t *)edid, sink->dc_edid.length);
 
 		edid_status = dm_helpers_parse_edid_caps(
 						link,
-						&sink->dc_edid,
 						&sink->edid_caps);
 
-		/* We don't need the original edid anymore */
-		drm_edid_free(drm_edid);
-
-	} while (edid_status == EDID_BAD_CHECKSUM && --retry > 0);
+		if (edid_status != EDID_OK) {
+			/* We can discard the drm_edid and retry */
+			drm_edid_free(drm_edid);
+			drm_edid_connector_update(connector, drm_edid);
+		}
+	} while (edid_status != EDID_OK && --retry > 0);
 
 	if (edid_status != EDID_OK)
 		DRM_ERROR("EDID err: %d, on connector: %s",
