@@ -26,6 +26,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/errname.h>
+#include <linux/irqflags.h>
 #include <linux/gfp.h>
 #include <linux/highmem.h>
 #include <linux/mutex.h>
@@ -84,6 +85,28 @@ void rust_helper_spin_unlock(spinlock_t *lock)
 	spin_unlock(lock);
 }
 EXPORT_SYMBOL_GPL(rust_helper_spin_unlock);
+
+unsigned long rust_helper_local_irq_save(void)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+
+	return flags;
+}
+EXPORT_SYMBOL_GPL(rust_helper_local_irq_save);
+
+void rust_helper_local_irq_restore(unsigned long flags)
+{
+	local_irq_restore(flags);
+}
+EXPORT_SYMBOL_GPL(rust_helper_local_irq_restore);
+
+bool rust_helper_irqs_disabled(void)
+{
+	return irqs_disabled();
+}
+EXPORT_SYMBOL_GPL(rust_helper_irqs_disabled);
 
 void rust_helper_init_wait(struct wait_queue_entry *wq_entry)
 {
