@@ -166,7 +166,7 @@ int prepare_config(const char *path, struct config *config)
 	configfile = fopen(path, "r");
 	if (configfile == NULL) {
 		perror("fopen");
-		fprintf(stderr, "error: unable to read configfile\n");
+		fprintf(stderr, "error: unable to read configfile: %s\n", path);
 		free(config);
 		return 1;
 	}
