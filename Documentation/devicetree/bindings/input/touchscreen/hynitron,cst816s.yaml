@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/touchscreen/hynitron,cst816s.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Hynitron CST816S Touchscreen controller
+
+description:
+  The CST816S is a touchscreen controller from Hynitron, which supports gesture
+  recognition for swipe directions, tap, and long-press actions. This binding
+  document defines the necessary properties for integrating the CST816S with
+  a Linux system.
+
+maintainers:
+  - Oleh Kuzhylnyi <kuzhylol@gmail.com>
+
+properties:
+  compatible:
+    enum:
+      - hynitron,cst816s
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  reset-gpios:
+    maxItems: 1
+    description:
+      Optional GPIO line used to reset the touchscreen controller.
+    optional: true
+
+  gestures:
+    type: object
+    description:
+      A list of gestures supported by the CST816S touchscreen controller and
+      their associated Linux input event codes.
+    optional: true
+
+    properties:
+      "^.*$":
+        type: object
+        description:
+          Each child node represents a gesture that the touchscreen controller
+          can recognize.
+
+        properties:
+          cst816x,gesture:
+            description:
+              Numeric value representing the gesture ID recognized by the
+              CST816S touchscreen controller.
+            $ref: /schemas/types.yaml#/definitions/uint32
+
+          linux,code:
+            description:
+              Linux input event code (from linux/input-event-codes.h) that
+              corresponds to the gesture.
+            $ref: /schemas/types.yaml#/definitions/uint32
+
+        required:
+          - cst816x,gesture
+          - linux,code
+
+        additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/input/linux-event-codes.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      touchscreen@15 {
+        compatible = "hynitron,cst816s";
+        reg = <0x15>;
+        interrupt-parent = <&gpio0>;
+        interrupts = <4 IRQ_TYPE_EDGE_RISING>;
+        reset-gpios = <&gpio 17 GPIO_ACTIVE_LOW>;
+
+        gestures {
+          swipe_up {
+            cst816x,gesture = <0x1>;
+            linux,code = <BTN_FORWARD>;
+          };
+
+          swipe_down {
+            cst816x,gesture = <0x2>;
+            linux,code = <BTN_BACK>;
+          };
+
+          swipe_left {
+            cst816x,gesture = <0x3>;
+            linux,code = <BTN_LEFT>;
+          };
+
+          swipe_right {
+            cst816x,gesture = <0x4>;
+            linux,code = <BTN_RIGHT>;
+          };
+
+          single_tap {
+            cst816x,gesture = <0x5>;
+            linux,code = <BTN_TOUCH>;
+          };
+
+          long_press {
+            cst816x,gesture = <0xC>;
+            linux,code = <BTN_TOOL_TRIPLETAP>;
+          };
+        };
+      };
+    };
+
+...
