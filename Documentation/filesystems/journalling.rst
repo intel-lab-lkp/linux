@@ -147,16 +147,16 @@ blocks.
 
 File system is free to perform fast commits as and when it wants as long as it
 gets permission from JBD2 to do so by calling the function
-:c:func:`jbd2_fc_begin_commit()`. Once a fast commit is done, the client
+`jbd2_fc_begin_commit()`. Once a fast commit is done, the client
 file  system should tell JBD2 about it by calling
-:c:func:`jbd2_fc_end_commit()`. If file system wants JBD2 to perform a full
+`jbd2_fc_end_commit()`. If file system wants JBD2 to perform a full
 commit immediately after stopping the fast commit it can do so by calling
-:c:func:`jbd2_fc_end_commit_fallback()`. This is useful if fast commit operation
+`jbd2_fc_end_commit_fallback()`. This is useful if fast commit operation
 fails for some reason and the only way to guarantee consistency is for JBD2 to
 perform the full traditional commit.
 
 JBD2 helper functions to manage fast commit buffers. File system can use
-:c:func:`jbd2_fc_get_buf()` and :c:func:`jbd2_fc_wait_bufs()` to allocate
+`jbd2_fc_get_buf()` and `jbd2_fc_wait_bufs()` to allocate
 and wait on IO completion of fast commit buffers.
 
 Currently, only Ext4 implements fast commits. For details of its implementation
