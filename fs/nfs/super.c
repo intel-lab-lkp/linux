@@ -911,6 +911,7 @@ static struct nfs_server *nfs_try_mount_request(struct fs_context *fc)
 	struct nfs_fs_context *ctx = nfs_fc2context(fc);
 	int status;
 	unsigned int i;
+	int first_err = 0;
 	bool tried_auth_unix = false;
 	bool auth_null_in_list = false;
 	struct nfs_server *server = ERR_PTR(-EACCES);
@@ -947,7 +948,8 @@ static struct nfs_server *nfs_try_mount_request(struct fs_context *fc)
 	/*
 	 * No sec= option was provided. RFC 2623, section 2.7 suggests we
 	 * SHOULD prefer the flavor listed first. However, some servers list
-	 * AUTH_NULL first. Avoid ever choosing AUTH_NULL.
+	 * AUTH_NULL first. So skip AUTH_NULL here and try it as an absolutely
+	 * last chance at the end of this function.
 	 */
 	for (i = 0; i < authlist_len; ++i) {
 		rpc_authflavor_t flavor;
@@ -971,20 +973,46 @@ static struct nfs_server *nfs_try_mount_request(struct fs_context *fc)
 		server = ctx->nfs_mod->rpc_ops->create_server(fc);
 		if (!IS_ERR(server))
 			return server;
+		if (!first_err)
+			first_err = PTR_ERR(server);
 	}
 
 	/*
-	 * Nothing we tried so far worked. At this point, give up if we've
-	 * already tried AUTH_UNIX or if the server's list doesn't contain
-	 * AUTH_NULL
+	 * If AUTH_UNIX was not available in the server's list and AUTH_NULL was
+	 * then for compatibility with old NFS3 servers try also AUTH_UNIX.
 	 */
-	if (tried_auth_unix || !auth_null_in_list)
+	if (!tried_auth_unix && auth_null_in_list) {
+		dfprintk(MOUNT,
+			 "NFS: attempting to use auth flavor %u%s\n",
+			 RPC_AUTH_UNIX,
+			 ", even it was not announced by server");
+		ctx->selected_flavor = RPC_AUTH_UNIX;
+		server = ctx->nfs_mod->rpc_ops->create_server(fc);
+		if (!IS_ERR(server))
+			return server;
+		tried_auth_unix = true;
+	}
+
+	/*
+	 * Linux MNTv3 server rpc.mountd since nfs-utils version 1.1.3, commit
+	 * https://git.linux-nfs.org/?p=steved/nfs-utils.git;a=commit;h=3c1bb23c0379
+	 * does not include AUTH_NULL into server's list export response even
+	 * when AUTH_NULL is supported and enabled for that export on Linux
+	 * NFS3 server. AUTH_NULL was skipped when processing server's list,
+	 * so always try AUTH_NULL as an absolutely last chance and also when
+	 * it was not available in the server's list.
+	 */
+	dfprintk(MOUNT,
+		 "NFS: attempting to use auth flavor %u%s\n",
+		 RPC_AUTH_NULL,
+		 auth_null_in_list ? "" : ", even it was not announced by server");
+	ctx->selected_flavor = RPC_AUTH_NULL;
+	server = ctx->nfs_mod->rpc_ops->create_server(fc);
+	if (!IS_ERR(server))
 		return server;
 
-	/* Last chance! Try AUTH_UNIX */
-	dfprintk(MOUNT, "NFS: attempting to use auth flavor %u\n", RPC_AUTH_UNIX);
-	ctx->selected_flavor = RPC_AUTH_UNIX;
-	return ctx->nfs_mod->rpc_ops->create_server(fc);
+	/* Prefer error code from the first attempt of server's list. */
+	return first_err ? ERR_PTR(first_err) : server;
 }
 
 int nfs_try_get_tree(struct fs_context *fc)
