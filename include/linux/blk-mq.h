@@ -740,6 +740,17 @@ void blk_mq_free_request(struct request *rq);
 int blk_rq_poll(struct request *rq, struct io_comp_batch *iob,
 		unsigned int poll_flags);
 
+/* The alignment of the block in terms of LBA and size */
+u32 __blk_rq_lba_algn(struct request *req);
+static inline u32 blk_rq_lba_algn(struct request *req)
+{
+	if ((req_op(req) != REQ_OP_WRITE) && (req_op(req) != REQ_OP_READ) &&
+	    !(req->__data_len))
+		return 0;
+
+	return __blk_rq_lba_algn(req);
+}
+
 bool blk_mq_queue_inflight(struct request_queue *q);
 
 enum {

@@ -1433,6 +1433,12 @@ static inline int blk_rq_aligned(struct request_queue *q, unsigned long addr,
 	return !(addr & alignment) && !(len & alignment);
 }
 
+static inline bool blk_rq_lba_aligned(u32 len, u32 algn_len, u32 lba,
+				      u32 algn_lba)
+{
+	return !(len % algn_len) && !(lba % algn_lba);
+}
+
 /* assumes size > 256 */
 static inline unsigned int blksize_bits(unsigned int size)
 {

@@ -202,6 +202,7 @@ DECLARE_EVENT_CLASS(block_rq,
 		__array(  char,		rwbs,	RWBS_LEN	)
 		__array(  char,         comm,   TASK_COMM_LEN   )
 		__dynamic_array( char,	cmd,	1		)
+		__field(  unsigned int,	algn			)
 	),
 
 	TP_fast_assign(
@@ -210,20 +211,22 @@ DECLARE_EVENT_CLASS(block_rq,
 		__entry->nr_sector = blk_rq_trace_nr_sectors(rq);
 		__entry->bytes     = blk_rq_bytes(rq);
 		__entry->ioprio	   = rq->ioprio;
+		__entry->algn      = blk_rq_lba_algn(rq);
 
 		blk_fill_rwbs(__entry->rwbs, rq->cmd_flags);
 		__get_str(cmd)[0] = '\0';
 		memcpy(__entry->comm, current->comm, TASK_COMM_LEN);
 	),
 
-	TP_printk("%d,%d %s %u (%s) %llu + %u %s,%u,%u [%s]",
+	TP_printk("%d,%d %s %u (%s) %llu + %u %s,%u,%u |%u| [%s]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  __entry->rwbs, __entry->bytes, __get_str(cmd),
 		  (unsigned long long)__entry->sector, __entry->nr_sector,
 		  __print_symbolic(IOPRIO_PRIO_CLASS(__entry->ioprio),
 				   IOPRIO_CLASS_STRINGS),
 		  IOPRIO_PRIO_HINT(__entry->ioprio),
-		  IOPRIO_PRIO_LEVEL(__entry->ioprio), __entry->comm)
+		  IOPRIO_PRIO_LEVEL(__entry->ioprio), __entry->algn,
+		  __entry->comm)
 );
 
 /**

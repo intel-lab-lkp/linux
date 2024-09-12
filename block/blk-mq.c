@@ -4920,6 +4920,35 @@ int blk_rq_poll(struct request *rq, struct io_comp_batch *iob,
 }
 EXPORT_SYMBOL_GPL(blk_rq_poll);
 
+u32 __blk_rq_lba_algn(struct request *req)
+{
+	u32 lbs = queue_logical_block_size(req->q);
+	u32 lba_shift = ilog2(lbs);
+	u32 lba = req->__sector >> (lba_shift - SECTOR_SHIFT);
+	u32 len = req->__data_len;
+	u32 algn_len = len;
+	u32 algn_lba = len / lbs;
+	u32 alignment = lbs;
+
+	if (is_power_of_2(len) &&
+	    blk_rq_lba_aligned(len, algn_len, lba, algn_lba))
+		return len;
+
+	algn_len = lbs << 1U;
+	algn_lba = algn_len / lbs;
+
+	while (algn_len < len) {
+		if (!blk_rq_lba_aligned(len, algn_len, lba, algn_lba))
+			break;
+
+		alignment = algn_len;
+		algn_len = algn_len << 1U;
+		algn_lba = algn_len / lbs;
+	}
+
+	return alignment;
+}
+
 unsigned int blk_mq_rq_cpu(struct request *rq)
 {
 	return rq->mq_ctx->cpu;
