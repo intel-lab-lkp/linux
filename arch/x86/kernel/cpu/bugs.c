@@ -2842,8 +2842,14 @@ static void __init srso_select_mitigation(void)
 	}
 
 	/* Default mitigation */
-	if (srso_mitigation == SRSO_MITIGATION_AUTO)
-		srso_mitigation = SRSO_MITIGATION_SAFE_RET;
+	if (srso_mitigation == SRSO_MITIGATION_AUTO) {
+		if (should_mitigate_vuln(SRSO))
+			srso_mitigation = SRSO_MITIGATION_SAFE_RET;
+		else {
+			srso_mitigation = SRSO_MITIGATION_NONE;
+			return;
+		}
+	}
 
 	if (has_microcode) {
 		/*
