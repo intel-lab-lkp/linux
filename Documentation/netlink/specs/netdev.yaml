@@ -633,6 +633,17 @@ operations:
             - rx-bytes
             - tx-packets
             - tx-bytes
+    -
+      name: napi-set
+      doc: Set configurable NAPI instance settings.
+      attribute-set: napi
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - napi-id
+            - defer-hard-irqs
+            - gro-flush-timeout
 
 mcast-groups:
   list:
