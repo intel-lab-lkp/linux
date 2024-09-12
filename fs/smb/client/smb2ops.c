@@ -5066,26 +5066,32 @@ static int __cifs_sfu_make_node(unsigned int xid, struct inode *inode,
 	struct cifs_fid fid;
 	unsigned int bytes_written;
 	struct win_dev pdev = {};
+	size_t pdev_len = 0;
 	struct kvec iov[2];
 	__u32 oplock = server->oplocks ? REQ_OPLOCK : 0;
 	int rc;
 
 	switch (mode & S_IFMT) {
 	case S_IFCHR:
+		pdev_len = sizeof(pdev);
 		memcpy(pdev.type, "IntxCHR\0", 8);
 		pdev.major = cpu_to_le64(MAJOR(dev));
 		pdev.minor = cpu_to_le64(MINOR(dev));
 		break;
 	case S_IFBLK:
+		pdev_len = sizeof(pdev);
 		memcpy(pdev.type, "IntxBLK\0", 8);
 		pdev.major = cpu_to_le64(MAJOR(dev));
 		pdev.minor = cpu_to_le64(MINOR(dev));
 		break;
 	case S_IFSOCK:
-		strscpy(pdev.type, "LnxSOCK");
+		/* SFU socket is system file with one zero byte */
+		pdev_len = 1;
+		pdev.type[0] = '\0';
 		break;
 	case S_IFIFO:
-		strscpy(pdev.type, "LnxFIFO");
+		/* SFU fifo is system file which is empty */
+		pdev_len = 0;
 		break;
 	default:
 		return -EPERM;
@@ -5100,14 +5106,17 @@ static int __cifs_sfu_make_node(unsigned int xid, struct inode *inode,
 	if (rc)
 		return rc;
 
-	io_parms.pid = current->tgid;
-	io_parms.tcon = tcon;
-	io_parms.length = sizeof(pdev);
-	iov[1].iov_base = &pdev;
-	iov[1].iov_len = sizeof(pdev);
+	if (pdev_len > 0) {
+		io_parms.pid = current->tgid;
+		io_parms.tcon = tcon;
+		io_parms.length = pdev_len;
+		iov[1].iov_base = &pdev;
+		iov[1].iov_len = pdev_len;
 
-	rc = server->ops->sync_write(xid, &fid, &io_parms,
-				     &bytes_written, iov, 1);
+		rc = server->ops->sync_write(xid, &fid, &io_parms,
+					     &bytes_written, iov, 1);
+	}
+
 	server->ops->close(xid, tcon, &fid);
 	return rc;
 }
@@ -5149,7 +5158,7 @@ static int smb2_make_node(unsigned int xid, struct inode *inode,
 	/*
 	 * Check if mounted with mount parm 'sfu' mount parm.
 	 * SFU emulation should work with all servers, but only
-	 * supports block and char device (no socket & fifo),
+	 * supports block and char device, socket & fifo,
 	 * and was used by default in earlier versions of Windows
 	 */
 	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_UNX_EMUL) {
