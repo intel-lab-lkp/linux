@@ -23,6 +23,13 @@
 
 #include <asm/processor.h>
 
+#ifdef CONFIG_ARCH_HAS_ACQUIRE_RELEASE
+# define USE_LOAD_ACQUIRE	true
+# define USE_COND_LOAD_ACQUIRE	!IS_ENABLED(CONFIG_PREEMPT_RT)
+#else
+# define USE_LOAD_ACQUIRE	false
+# define USE_COND_LOAD_ACQUIRE	false
+#endif
 /*
  * The seqlock seqcount_t interface does not prescribe a precise sequence of
  * read begin/retry/end. For readers, typically there is a call to
@@ -132,6 +139,17 @@ static inline void seqcount_lockdep_reader_access(const seqcount_t *s)
 #define seqcount_rwlock_init(s, lock)		seqcount_LOCKNAME_init(s, lock, rwlock)
 #define seqcount_mutex_init(s, lock)		seqcount_LOCKNAME_init(s, lock, mutex)
 
+static __always_inline unsigned __seqprop_load_sequence(const seqcount_t *s, bool acquire)
+{
+	if (!acquire || !USE_LOAD_ACQUIRE)
+		return READ_ONCE(s->sequence);
+
+	if (USE_COND_LOAD_ACQUIRE)
+		return smp_cond_load_acquire((unsigned int *)&s->sequence, (s->sequence & 1) == 0);
+
+	return smp_load_acquire(&s->sequence);
+}
+
 /*
  * SEQCOUNT_LOCKNAME()	- Instantiate seqcount_LOCKNAME_t and helpers
  * seqprop_LOCKNAME_*()	- Property accessors for seqcount_LOCKNAME_t
@@ -155,9 +173,10 @@ __seqprop_##lockname##_const_ptr(const seqcount_##lockname##_t *s)	\
 }									\
 									\
 static __always_inline unsigned						\
-__seqprop_##lockname##_sequence(const seqcount_##lockname##_t *s)	\
+__seqprop_##lockname##_sequence(const seqcount_##lockname##_t *s,	\
+				bool acquire)				\
 {									\
-	unsigned seq = READ_ONCE(s->seqcount.sequence);			\
+	unsigned seq = __seqprop_load_sequence(&s->seqcount, acquire);	\
 									\
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))				\
 		return seq;						\
@@ -170,7 +189,7 @@ __seqprop_##lockname##_sequence(const seqcount_##lockname##_t *s)	\
 		 * Re-read the sequence counter since the (possibly	\
 		 * preempted) writer made progress.			\
 		 */							\
-		seq = READ_ONCE(s->seqcount.sequence);			\
+		seq = __seqprop_load_sequence(&s->seqcount, acquire);	\
 	}								\
 									\
 	return seq;							\
@@ -206,9 +225,9 @@ static inline const seqcount_t *__seqprop_const_ptr(const seqcount_t *s)
 	return s;
 }
 
-static inline unsigned __seqprop_sequence(const seqcount_t *s)
+static inline unsigned __seqprop_sequence(const seqcount_t *s, bool acquire)
 {
-	return READ_ONCE(s->sequence);
+	return __seqprop_load_sequence(s, acquire);
 }
 
 static inline bool __seqprop_preemptible(const seqcount_t *s)
@@ -258,18 +277,44 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
 
 #define seqprop_ptr(s)			__seqprop(s, ptr)(s)
 #define seqprop_const_ptr(s)		__seqprop(s, const_ptr)(s)
-#define seqprop_sequence(s)		__seqprop(s, sequence)(s)
+#define seqprop_sequence(s, a)		__seqprop(s, sequence)(s, a)
 #define seqprop_preemptible(s)		__seqprop(s, preemptible)(s)
 #define seqprop_assert(s)		__seqprop(s, assert)(s)
+
+/**
+ * read_seqcount_begin_cond_acquire() - begin a seqcount_t read section
+ * @s:	     Pointer to seqcount_t or any of the seqcount_LOCKNAME_t variants
+ * @acquire: If true, the read of the sequence count uses smp_load_acquire()
+ *	     if the architecure provides and enabled it.
+ *
+ * Return: count to be passed to read_seqcount_retry()
+ */
+#define read_seqcount_begin_cond_acquire(s, acquire)			\
+({									\
+	unsigned __seq;							\
+									\
+	if (acquire && USE_COND_LOAD_ACQUIRE) {				\
+		__seq = seqprop_sequence(s, acquire);			\
+	} else {							\
+		while ((__seq = seqprop_sequence(s, acquire)) & 1)	\
+			cpu_relax();					\
+	}								\
+									\
+	kcsan_atomic_next(KCSAN_SEQLOCK_REGION_MAX);			\
+	__seq;								\
+})
 
 /**
  * __read_seqcount_begin() - begin a seqcount_t read section w/o barrier
  * @s: Pointer to seqcount_t or any of the seqcount_LOCKNAME_t variants
  *
- * __read_seqcount_begin is like read_seqcount_begin, but has no smp_rmb()
- * barrier. Callers should ensure that smp_rmb() or equivalent ordering is
- * provided before actually loading any of the variables that are to be
- * protected in this critical section.
+ * __read_seqcount_begin is like read_seqcount_begin, but it neither
+ * provides a smp_rmb() barrier nor does it use smp_load_acquire() on
+ * architectures which provide it.
+ *
+ * Callers should ensure that smp_rmb() or equivalent ordering is provided
+ * before actually loading any of the variables that are to be protected in
+ * this critical section.
  *
  * Use carefully, only in critical code, and comment how the barrier is
  * provided.
@@ -277,15 +322,7 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
  * Return: count to be passed to read_seqcount_retry()
  */
 #define __read_seqcount_begin(s)					\
-({									\
-	unsigned __seq;							\
-									\
-	while ((__seq = seqprop_sequence(s)) & 1)			\
-		cpu_relax();						\
-									\
-	kcsan_atomic_next(KCSAN_SEQLOCK_REGION_MAX);			\
-	__seq;								\
-})
+	read_seqcount_begin_cond_acquire(s, false)
 
 /**
  * raw_read_seqcount_begin() - begin a seqcount_t read section w/o lockdep
@@ -295,9 +332,10 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
  */
 #define raw_read_seqcount_begin(s)					\
 ({									\
-	unsigned _seq = __read_seqcount_begin(s);			\
+	unsigned _seq = read_seqcount_begin_cond_acquire(s, true);	\
 									\
-	smp_rmb();							\
+	if (!IS_ENABLED(CONFIG_ARCH_HAS_ACQUIRE_RELEASE))		\
+		smp_rmb();						\
 	_seq;								\
 })
 
@@ -326,9 +364,10 @@ SEQCOUNT_LOCKNAME(mutex,        struct mutex,    true,     mutex)
  */
 #define raw_read_seqcount(s)						\
 ({									\
-	unsigned __seq = seqprop_sequence(s);				\
+	unsigned __seq = seqprop_sequence(s, true);			\
 									\
-	smp_rmb();							\
+	if (!IS_ENABLED(CONFIG_ARCH_HAS_ACQUIRE_RELEASE))		\
+		smp_rmb();						\
 	kcsan_atomic_next(KCSAN_SEQLOCK_REGION_MAX);			\
 	__seq;								\
 })
