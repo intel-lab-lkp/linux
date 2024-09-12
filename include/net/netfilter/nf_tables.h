@@ -1192,6 +1192,9 @@ struct nft_hook {
 	u8			ifnamelen;
 };
 
+struct nf_hook_ops *nft_hook_find_ops(const struct nft_hook *hook,
+				      const struct net_device *dev);
+
 /**
  *	struct nft_base_chain - nf_tables base chain
  *
