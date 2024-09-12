@@ -445,12 +445,10 @@ static bool plane_has_modifier(struct drm_i915_private *i915,
 	    HAS_FLAT_CCS(i915) != !md->ccs.packed_aux_planes)
 		return false;
 
-	if (md->modifier == I915_FORMAT_MOD_4_TILED_BMG_CCS &&
-	    (GRAPHICS_VER(i915) < 20 || !IS_DGFX(i915)))
+	if (md->modifier == I915_FORMAT_MOD_4_TILED_BMG_CCS && !IS_DGFX(i915))
 		return false;
 
-	if (md->modifier == I915_FORMAT_MOD_4_TILED_LNL_CCS &&
-	    (GRAPHICS_VER(i915) < 20 || IS_DGFX(i915)))
+	if (md->modifier == I915_FORMAT_MOD_4_TILED_LNL_CCS && IS_DGFX(i915))
 		return false;
 
 	return true;
