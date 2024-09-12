@@ -660,6 +660,16 @@ static int udf_extend_file(struct inode *inode, loff_t newsize)
 	udf_discard_prealloc(inode);
 
 	etype = inode_bmap(inode, first_block, &epos, &eloc, &elen, &offset);
+
+	/*
+	 * when ftruncate attempt to access beyond end of device, sb_read will
+	 * fail with epos.bh be null and return etype be -1, just return EIO.
+	 */
+	if (etype == -1 && !epos.bh && epos.offset == sizeof(struct allocExtDesc)) {
+		err = -EIO;
+		goto out;
+	}
+
 	within_last_ext = (etype != -1);
 	/* We don't expect extents past EOF... */
 	WARN_ON_ONCE(within_last_ext &&
