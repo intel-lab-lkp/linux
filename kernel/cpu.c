@@ -3201,6 +3201,22 @@ enum cpu_mitigations {
 
 static enum cpu_mitigations cpu_mitigations __ro_after_init = CPU_MITIGATIONS_AUTO;
 
+/*
+ * All except the cross-thread attack vector are mitigated by default.
+ * Cross-thread mitigation often requires disabling SMT which is too expensive
+ * to be enabled by default.
+ *
+ * Guest-to-Host and Guest-to-Guest vectors are only needed if KVM support is
+ * present.
+ */
+static bool cpu_mitigate_attack_vectors[NR_CPU_ATTACK_VECTORS] __ro_after_init = {
+	[CPU_MITIGATE_USER_KERNEL] = true,
+	[CPU_MITIGATE_USER_USER] = true,
+	[CPU_MITIGATE_GUEST_HOST] = IS_ENABLED(CONFIG_KVM),
+	[CPU_MITIGATE_GUEST_GUEST] = IS_ENABLED(CONFIG_KVM),
+	[CPU_MITIGATE_CROSS_THREAD] = false
+};
+
 static int __init mitigations_parse_cmdline(char *arg)
 {
 	if (!strcmp(arg, "off"))
@@ -3229,11 +3245,53 @@ bool cpu_mitigations_auto_nosmt(void)
 	return cpu_mitigations == CPU_MITIGATIONS_AUTO_NOSMT;
 }
 EXPORT_SYMBOL_GPL(cpu_mitigations_auto_nosmt);
+
+#define DEFINE_ATTACK_VECTOR(opt, v) \
+static int __init v##_parse_cmdline(char *arg) \
+{ \
+	if (!strcmp(arg, "off")) \
+		cpu_mitigate_attack_vectors[v] = false; \
+	else if (!strcmp(arg, "on")) \
+		cpu_mitigate_attack_vectors[v] = true; \
+	else \
+		pr_warn("Unsupported " opt "=%s\n", arg); \
+	return 0; \
+} \
+early_param(opt, v##_parse_cmdline)
+
+bool cpu_mitigate_attack_vector(enum cpu_attack_vectors v)
+{
+	BUG_ON(v >= NR_CPU_ATTACK_VECTORS);
+	return cpu_mitigate_attack_vectors[v];
+}
+EXPORT_SYMBOL_GPL(cpu_mitigate_attack_vector);
+
 #else
 static int __init mitigations_parse_cmdline(char *arg)
 {
 	pr_crit("Kernel compiled without mitigations, ignoring 'mitigations'; system may still be vulnerable\n");
 	return 0;
 }
+
+#define DEFINE_ATTACK_VECTOR(opt, v) \
+static int __init v##_parse_cmdline(char *arg) \
+{ \
+	pr_crit("Kernel compiled without mitigations, ignoring %s; system may still be vulnerable\n", opt); \
+	return 0; \
+} \
+early_param(opt, v##_parse_cmdline)
+
+bool cpu_mitigate_attack_vector(enum cpu_attack_vectors v)
+{
+	return false;
+}
+EXPORT_SYMBOL_GPL(cpu_mitigate_attack_vector);
+
 #endif
 early_param("mitigations", mitigations_parse_cmdline);
+
+DEFINE_ATTACK_VECTOR("mitigate_user_kernel", CPU_MITIGATE_USER_KERNEL);
+DEFINE_ATTACK_VECTOR("mitigate_user_user", CPU_MITIGATE_USER_USER);
+DEFINE_ATTACK_VECTOR("mitigate_guest_host", CPU_MITIGATE_GUEST_HOST);
+DEFINE_ATTACK_VECTOR("mitigate_guest_guest", CPU_MITIGATE_GUEST_GUEST);
+DEFINE_ATTACK_VECTOR("mitigate_cross_thread", CPU_MITIGATE_CROSS_THREAD);
