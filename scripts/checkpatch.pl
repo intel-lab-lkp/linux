@@ -838,6 +838,8 @@ our %deprecated_apis = (
 	"kunmap"				=> "kunmap_local",
 	"kmap_atomic"				=> "kmap_local_page",
 	"kunmap_atomic"				=> "kunmap_local",
+	"del_timer"				=> "timer_delete",
+	"del_timer_sync"			=> "timer_delete_sync",
 );
 
 #Create a search pattern for all these strings to speed up a loop below
