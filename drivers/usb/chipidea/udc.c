@@ -612,9 +612,16 @@ static int _hardware_enqueue(struct ci_hw_ep *hwep, struct ci_hw_req *hwreq)
 		do {
 			hw_write(ci, OP_USBCMD, USBCMD_ATDTW, USBCMD_ATDTW);
 			tmp_stat = hw_read(ci, OP_ENDPTSTAT, BIT(n));
-		} while (!hw_read(ci, OP_USBCMD, USBCMD_ATDTW));
+		} while (!hw_read(ci, OP_USBCMD, USBCMD_ATDTW) && tmp_stat);
 		hw_write(ci, OP_USBCMD, USBCMD_ATDTW, 0);
 		if (tmp_stat)
+			goto done;
+
+		/* In case of error, ENDPTSTAT will also turn into 0, then
+		 * don't push this dTD to dQH head if current dTD pointer
+		 * is not the last dTD in previous request.
+		 */
+		if (hwep->qh.ptr->curr != prevlastnode->dma)
 			goto done;
 	}
 
