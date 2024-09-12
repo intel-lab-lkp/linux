@@ -614,20 +614,26 @@ static void __init mmio_select_mitigation(void)
 	if (mmio_mitigation == MMIO_MITIGATION_OFF)
 		return;
 
-	/*
-	 * Check if the system has the right microcode.
-	 *
-	 * CPU Fill buffer clear mitigation is enumerated by either an explicit
-	 * FB_CLEAR or by the presence of both MD_CLEAR and L1D_FLUSH on MDS
-	 * affected systems.
-	 */
-	if ((x86_arch_cap_msr & ARCH_CAP_FB_CLEAR) ||
-	    (boot_cpu_has(X86_FEATURE_MD_CLEAR) &&
-	     boot_cpu_has(X86_FEATURE_FLUSH_L1D) &&
-	     !(x86_arch_cap_msr & ARCH_CAP_MDS_NO)))
-		mmio_mitigation = MMIO_MITIGATION_VERW;
-	else
-		mmio_mitigation = MMIO_MITIGATION_UCODE_NEEDED;
+	if (mmio_mitigation == MMIO_MITIGATION_AUTO) {
+		if (should_mitigate_vuln(MMIO)) {
+			/*
+			 * Check if the system has the right microcode.
+			 *
+			 * CPU Fill buffer clear mitigation is enumerated by either an explicit
+			 * FB_CLEAR or by the presence of both MD_CLEAR and L1D_FLUSH on MDS
+			 * affected systems.
+			 */
+			if ((x86_arch_cap_msr & ARCH_CAP_FB_CLEAR) ||
+			    (boot_cpu_has(X86_FEATURE_MD_CLEAR) &&
+			     boot_cpu_has(X86_FEATURE_FLUSH_L1D) &&
+			     !(x86_arch_cap_msr & ARCH_CAP_MDS_NO)))
+				mmio_mitigation = MMIO_MITIGATION_VERW;
+			else
+				mmio_mitigation = MMIO_MITIGATION_UCODE_NEEDED;
+		} else {
+			mmio_mitigation = MMIO_MITIGATION_OFF;
+		}
+	}
 }
 
 static void __init mmio_update_mitigation(void)
@@ -675,7 +681,8 @@ static void __init mmio_apply_mitigation(void)
 	if (!(x86_arch_cap_msr & ARCH_CAP_FBSDP_NO))
 		static_branch_enable(&mds_idle_clear);
 
-	if (mmio_nosmt || cpu_mitigations_auto_nosmt())
+	if (mmio_nosmt || cpu_mitigations_auto_nosmt() ||
+	    cpu_mitigate_attack_vector(CPU_MITIGATE_CROSS_THREAD))
 		cpu_smt_disable(false);
 }
 
