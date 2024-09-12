@@ -1932,7 +1932,8 @@ static void tcf_chain_tp_remove(struct tcf_chain *chain,
 static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 					   struct tcf_chain_info *chain_info,
 					   u32 protocol, u32 prio,
-					   bool prio_allocate);
+					   bool prio_allocate,
+					   struct netlink_ext_ack *extack);
 
 /* Try to insert new proto.
  * If proto with specified priority already exists, free new proto
@@ -1957,7 +1958,7 @@ static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 	}
 
 	tp = tcf_chain_tp_find(chain, &chain_info,
-			       protocol, prio, false);
+			       protocol, prio, false, NULL);
 	if (!tp)
 		err = tcf_chain_tp_insert(chain, &chain_info, tp_new);
 	mutex_unlock(&chain->filter_chain_lock);
@@ -2017,7 +2018,8 @@ static void tcf_chain_tp_delete_empty(struct tcf_chain *chain,
 static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 					   struct tcf_chain_info *chain_info,
 					   u32 protocol, u32 prio,
-					   bool prio_allocate)
+					   bool prio_allocate,
+					   struct netlink_ext_ack *extack)
 {
 	struct tcf_proto **pprev;
 	struct tcf_proto *tp;
@@ -2028,9 +2030,14 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 	     pprev = &tp->next) {
 		if (tp->prio >= prio) {
 			if (tp->prio == prio) {
-				if (prio_allocate ||
-				    (tp->protocol != protocol && protocol))
+				if (prio_allocate) {
+					NL_SET_ERR_MSG(extack, "Lowest ID from auto-alloc range already in use");
+					return ERR_PTR(-ENOSPC);
+				}
+				if (tp->protocol != protocol && protocol) {
+					NL_SET_ERR_MSG(extack, "Protocol mismatch for filter with specified priority");
 					return ERR_PTR(-EINVAL);
+				}
 			} else {
 				tp = NULL;
 			}
@@ -2043,6 +2050,7 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 		tcf_proto_get(tp);
 	} else {
 		chain_info->next = NULL;
+		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
 	}
 	return tp;
 }
@@ -2311,9 +2319,8 @@ replay:
 
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
-			       prio, prio_allocate);
+			       prio, prio_allocate, extack);
 	if (IS_ERR(tp)) {
-		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
 		err = PTR_ERR(tp);
 		goto errout_locked;
 	}
@@ -2538,9 +2545,8 @@ static int tc_del_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
-			       prio, false);
+			       prio, false, extack);
 	if (!tp || IS_ERR(tp)) {
-		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
 		err = tp ? PTR_ERR(tp) : -ENOENT;
 		goto errout_locked;
 	} else if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], tp->ops->kind)) {
@@ -2678,10 +2684,9 @@ static int tc_get_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
-			       prio, false);
+			       prio, false, extack);
 	mutex_unlock(&chain->filter_chain_lock);
 	if (!tp || IS_ERR(tp)) {
-		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
 		err = tp ? PTR_ERR(tp) : -ENOENT;
 		goto errout;
 	} else if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], tp->ops->kind)) {
