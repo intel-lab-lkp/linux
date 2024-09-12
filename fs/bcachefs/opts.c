@@ -444,7 +444,7 @@ void bch2_opt_to_text(struct printbuf *out,
 }
 
 void bch2_opts_to_text(struct printbuf *out,
-		       struct bch_opts opts,
+		       const struct bch_opts *opts,
 		       struct bch_fs *c, struct bch_sb *sb,
 		       unsigned show_mask, unsigned hide_mask,
 		       unsigned flags)
@@ -457,7 +457,7 @@ void bch2_opts_to_text(struct printbuf *out,
 		if ((opt->flags & hide_mask) || !(opt->flags & show_mask))
 			continue;
 
-		u64 v = bch2_opt_get_by_id(&opts, i);
+		u64 v = bch2_opt_get_by_id(opts, i);
 		if (v == bch2_opt_get_by_id(&bch2_opts_default, i))
 			continue;
 

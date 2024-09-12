@@ -606,7 +606,7 @@ int bch2_opt_parse(struct bch_fs *, const struct bch_option *,
 void bch2_opt_to_text(struct printbuf *, struct bch_fs *, struct bch_sb *,
 		      const struct bch_option *, u64, unsigned);
 void bch2_opts_to_text(struct printbuf *,
-		       struct bch_opts,
+		       const struct bch_opts *,
 		       struct bch_fs *, struct bch_sb *,
 		       unsigned, unsigned, unsigned);
 
