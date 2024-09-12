@@ -321,7 +321,7 @@ static const char *nfs_pseudoflavour_to_name(rpc_authflavor_t flavour)
 		const char *str;
 	} sec_flavours[NFS_AUTH_INFO_MAX_FLAVORS] = {
 		/* update NFS_AUTH_INFO_MAX_FLAVORS when this list changes! */
-		{ RPC_AUTH_NULL, "null" },
+		{ RPC_AUTH_NULL, "none" },
 		{ RPC_AUTH_UNIX, "sys" },
 		{ RPC_AUTH_GSS_KRB5, "krb5" },
 		{ RPC_AUTH_GSS_KRB5I, "krb5i" },
