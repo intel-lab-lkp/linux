@@ -864,7 +864,19 @@ static int nfs_probe_fsinfo(struct nfs_server *server, struct nfs_fh *mntfh, str
 		pathinfo.fattr = fattr;
 		nfs_fattr_init(fattr);
 
-		if (clp->rpc_ops->pathconf(server, mntfh, &pathinfo) >= 0)
+		error = clp->rpc_ops->pathconf(server, mntfh, &pathinfo);
+		/*
+		 * Linux NFS3 server for PATHCONF procedure returns back error
+		 * NFS3ERR_ACCESS when selected auth flavor is not enabled for
+		 * export. For auth flavors without authentication (none and
+		 * sys) propagate error back to nfs_probe_server() caller and
+		 * allow to choose different auth flavor.
+		 */
+		if (error == -EACCES && (
+		     server->client->cl_auth->au_flavor == RPC_AUTH_UNIX ||
+		     server->client->cl_auth->au_flavor == RPC_AUTH_NULL))
+			return error;
+		else if (error >= 0)
 			server->namelen = pathinfo.max_namelen;
 	}
 
