@@ -513,11 +513,17 @@ static void __init taa_select_mitigation(void)
 	if (taa_mitigation == TAA_MITIGATION_OFF)
 		return;
 
-	/* This handles the AUTO case. */
-	if (boot_cpu_has(X86_FEATURE_MD_CLEAR))
-		taa_mitigation = TAA_MITIGATION_VERW;
-	else
-		taa_mitigation = TAA_MITIGATION_UCODE_NEEDED;
+	if (taa_mitigation == TAA_MITIGATION_AUTO) {
+		if (should_mitigate_vuln(TAA)) {
+			if (boot_cpu_has(X86_FEATURE_MD_CLEAR))
+				taa_mitigation = TAA_MITIGATION_VERW;
+			else
+				taa_mitigation = TAA_MITIGATION_UCODE_NEEDED;
+		} else {
+			taa_mitigation = TAA_MITIGATION_OFF;
+			return;
+		}
+	}
 
 	/*
 	 * VERW doesn't clear the CPU buffers when MD_CLEAR=1 and MDS_NO=1.
@@ -560,7 +566,8 @@ static void __init taa_apply_mitigation(void)
 		 */
 		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
 
-		if (taa_nosmt || cpu_mitigations_auto_nosmt())
+		if (taa_nosmt || cpu_mitigations_auto_nosmt() ||
+		    cpu_mitigate_attack_vector(CPU_MITIGATE_CROSS_THREAD))
 			cpu_smt_disable(false);
 	}
 
