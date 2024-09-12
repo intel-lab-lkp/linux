@@ -214,6 +214,12 @@ extern u64 __read_mostly shadow_nonpresent_or_rsvd_mask;
  */
 #define FROZEN_SPTE	(SHADOW_NONPRESENT_VALUE | 0x5a0ULL)
 
+#define EXTERNAL_SPTE_IGNORE_CHANGE_MASK		\
+	(shadow_acc_track_mask |			\
+	 (SHADOW_ACC_TRACK_SAVED_BITS_MASK <<		\
+	  SHADOW_ACC_TRACK_SAVED_BITS_SHIFT) |		\
+	 shadow_dirty_mask | shadow_accessed_mask)
+
 /* Removed SPTEs must not be misconstrued as shadow present PTEs. */
 static_assert(!(FROZEN_SPTE & SPTE_MMU_PRESENT_MASK));
 

@@ -503,8 +503,6 @@ static int __must_check set_external_spte_present(struct kvm *kvm, tdp_ptep_t sp
 	kvm_pfn_t new_pfn = spte_to_pfn(new_spte);
 	int ret = 0;
 
-	KVM_BUG_ON(was_present, kvm);
-
 	lockdep_assert_held(&kvm->mmu_lock);
 	/*
 	 * We need to lock out other updates to the SPTE until the external
@@ -519,10 +517,34 @@ static int __must_check set_external_spte_present(struct kvm *kvm, tdp_ptep_t sp
 	 * external page table, or leaf.
 	 */
 	if (is_leaf) {
-		ret = static_call(kvm_x86_set_external_spte)(kvm, gfn, level, new_pfn);
+		/*
+		 * SPTE is state machine with software available bits used.
+		 * Check if the change is interesting to the backend.
+		 */
+		if (!was_present)
+			ret = static_call(kvm_x86_set_external_spte)(kvm, gfn, level, new_pfn);
+		else {
+			/*
+			 * The external PTEs don't need updates for some bits,
+			 * but if others are changed, bug the VM.
+			 */
+			if (KVM_BUG_ON(~EXTERNAL_SPTE_IGNORE_CHANGE_MASK &
+				       (old_spte ^ new_spte), kvm)) {
+				ret = -EIO;
+			}
+		}
+
+		/*
+		 * The backend shouldn't return an error except EAGAIN.
+		 * It's hard to debug without those info.
+		 */
+		if (ret && ret != EAGAIN)
+			pr_debug("gfn 0x%llx old_spte 0x%llx new_spte 0x%llx level %d\n",
+				 gfn, old_spte, new_spte, level);
 	} else {
 		void *external_spt = get_external_spt(gfn, new_spte, level);
 
+		KVM_BUG_ON(was_present, kvm);
 		KVM_BUG_ON(!external_spt, kvm);
 		ret = static_call(kvm_x86_link_external_spt)(kvm, gfn, level, external_spt);
 	}
