@@ -666,3 +666,67 @@
 	pinctrl-0 = <&uart9m0_xfer>;
 	status = "okay";
 };
+
+/* USB 0: USB 2.0 only, OTG-capable */
+&u2phy0 {
+	status = "okay";
+};
+
+&u2phy0_otg {
+	status = "okay";
+};
+
+&usbdp_phy0 {
+	/*
+	 * TODO: On the RK1, USBDP0 drives the DisplayPort pins, and is not
+	 * involved in this USB2-only bus.  However, if the USB3 port is
+	 * enabled in the xHCI below, the controller will expect this PHY to be
+	 * powered up and holding RX_STATUS idle, or else it will generate an
+	 * endless stream of CSC events whenever a device is plugged in.  Until
+	 * there is a way to communicate to usb_host0_xhci that it doesn't have
+	 * a USB3 port, we have no choice but to power up USBDP0.
+	 */
+	status = "okay";
+};
+
+&usb_host0_xhci {
+	extcon = <&u2phy0>;
+	maximum-speed = "high-speed";
+	status = "okay";
+};
+
+/* USB 1: USB 3.0, host only */
+&u2phy1 {
+	status = "okay";
+};
+
+&u2phy1_otg {
+	status = "okay";
+};
+
+&usbdp_phy1 {
+	status = "okay";
+};
+
+&usb_host1_xhci {
+	extcon = <&u2phy1>;
+	dr_mode = "host";
+	status = "okay";
+};
+
+/* USB 2: USB 2.0, host only */
+&u2phy2 {
+	status = "okay";
+};
+
+&u2phy2_host {
+	status = "okay";
+};
+
+&usb_host0_ehci {
+	status = "okay";
+};
+
+&usb_host0_ohci {
+	status = "okay";
+};
