@@ -162,15 +162,6 @@ static void hv_kbd_on_receive(struct hv_device *hv_dev,
 			serio_interrupt(kbd_dev->hv_serio, scan_code, 0);
 		}
 		spin_unlock_irqrestore(&kbd_dev->lock, flags);
-
-		/*
-		 * Only trigger a wakeup on key down, otherwise
-		 * "echo freeze > /sys/power/state" can't really enter the
-		 * state because the Enter-UP can trigger a wakeup at once.
-		 */
-		if (!(info & IS_BREAK))
-			pm_wakeup_hard_event(&hv_dev->device);
-
 		break;
 
 	default:
@@ -356,9 +347,6 @@ static int hv_kbd_probe(struct hv_device *hv_dev,
 		goto err_close_vmbus;
 
 	serio_register_port(kbd_dev->hv_serio);
-
-	device_init_wakeup(&hv_dev->device, true);
-
 	return 0;
 
 err_close_vmbus:
