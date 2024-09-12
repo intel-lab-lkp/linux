@@ -2700,10 +2700,15 @@ static void __init l1tf_select_mitigation(void)
 	}
 
 	if (l1tf_mitigation == L1TF_MITIGATION_AUTO) {
-		if (cpu_mitigations_auto_nosmt())
-			l1tf_mitigation = L1TF_MITIGATION_FLUSH_NOSMT;
-		else
-			l1tf_mitigation = L1TF_MITIGATION_FLUSH;
+		if (!should_mitigate_vuln(L1TF))
+			l1tf_mitigation = L1TF_MITIGATION_OFF;
+		else {
+			if (cpu_mitigations_auto_nosmt() ||
+			    cpu_mitigate_attack_vector(CPU_MITIGATE_CROSS_THREAD))
+				l1tf_mitigation = L1TF_MITIGATION_FLUSH_NOSMT;
+			else
+				l1tf_mitigation = L1TF_MITIGATION_FLUSH;
+		}
 	}
 
 }
