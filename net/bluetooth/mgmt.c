@@ -1453,6 +1453,11 @@ static void cmd_status_rsp(struct mgmt_pending_cmd *cmd, void *data)
 
 static void cmd_complete_rsp(struct mgmt_pending_cmd *cmd, void *data)
 {
+	/* dequeue cmd_sync entries using cmd as data as that is about to be
+	 * removed/freed.
+	 */
+	hci_cmd_sync_dequeue(cmd->hdev, NULL, cmd, NULL);
+
 	if (cmd->cmd_complete) {
 		u8 *status = data;
 
