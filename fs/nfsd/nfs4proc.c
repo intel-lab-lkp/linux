@@ -259,7 +259,7 @@ nfsd4_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		return nfserrno(host_err);
 
 	if (is_create_with_attrs(open))
-		nfsd4_acl_to_attr(NF4REG, open->op_acl, &attrs);
+		nfsd4_acl_to_attr(NF4REG, open->op_acl, &attrs, NULL);
 
 	inode_lock_nested(inode, I_MUTEX_PARENT);
 
@@ -791,6 +791,7 @@ nfsd4_create(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	};
 	struct svc_fh resfh;
 	__be32 status;
+	int dir_sticky;
 	dev_t rdev;
 
 	fh_init(&resfh, NFS4_FHSIZE);
@@ -804,7 +805,7 @@ nfsd4_create(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (status)
 		return status;
 
-	status = nfsd4_acl_to_attr(create->cr_type, create->cr_acl, &attrs);
+	status = nfsd4_acl_to_attr(create->cr_type, create->cr_acl, &attrs, &dir_sticky);
 	current->fs->umask = create->cr_umask;
 	switch (create->cr_type) {
 	case NF4LNK:
@@ -848,6 +849,11 @@ nfsd4_create(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		break;
 
 	case NF4DIR:
+		if (dir_sticky == 1) {
+			/* Set directory sticky bit deduced from the ACL attr. */
+			create->cr_iattr.ia_valid |= ATTR_MODE;
+			create->cr_iattr.ia_mode |= S_ISVTX;
+		}
 		create->cr_iattr.ia_valid &= ~ATTR_SIZE;
 		status = nfsd_create(rqstp, &cstate->current_fh,
 				     create->cr_name, create->cr_namelen,
@@ -1144,6 +1150,7 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct inode *inode;
 	__be32 status = nfs_ok;
 	bool save_no_wcc;
+	int dir_sticky;
 	int err;
 
 	if (setattr->sa_iattr.ia_valid & ATTR_SIZE) {
@@ -1165,10 +1172,26 @@ nfsd4_setattr(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	inode = cstate->current_fh.fh_dentry->d_inode;
 	status = nfsd4_acl_to_attr(S_ISDIR(inode->i_mode) ? NF4DIR : NF4REG,
-				   setattr->sa_acl, &attrs);
-
+				   setattr->sa_acl, &attrs, &dir_sticky);
 	if (status)
 		goto out;
+
+	if (S_ISDIR(inode->i_mode) && dir_sticky != -1 && !!(inode->i_mode & S_ISVTX) != dir_sticky) {
+		/*
+		 * Set directory sticky bit deduced from the ACL attr.
+		 * Do not clear sticky bit if it was explicitly set in MODE attr
+		 * but was not deduced from ACL attr because clients can send
+		 * both MODE and ACL attrs where sticky bit is only in MODE attr.
+		 */
+		if (!(attrs.na_iattr->ia_valid & ATTR_MODE))
+			attrs.na_iattr->ia_mode = inode->i_mode;
+		if (dir_sticky)
+			attrs.na_iattr->ia_mode |= S_ISVTX;
+		else if (!(attrs.na_iattr->ia_valid & ATTR_MODE))
+			attrs.na_iattr->ia_mode &= ~S_ISVTX;
+		attrs.na_iattr->ia_valid |= ATTR_MODE;
+	}
+
 	save_no_wcc = cstate->current_fh.fh_no_wcc;
 	cstate->current_fh.fh_no_wcc = true;
 	status = nfsd_setattr(rqstp, &cstate->current_fh, &attrs, NULL);
