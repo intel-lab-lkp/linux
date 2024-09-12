@@ -938,8 +938,6 @@ static struct nfs_server *nfs_try_mount_request(struct fs_context *fc)
 	 */
 	if (ctx->auth_info.flavor_len > 0) {
 		status = nfs_verify_authflavors(ctx, authlist, authlist_len);
-		dfprintk(MOUNT, "NFS: using auth flavor %u\n",
-			 ctx->selected_flavor);
 		if (status)
 			return ERR_PTR(status);
 		return ctx->nfs_mod->rpc_ops->create_server(fc);
