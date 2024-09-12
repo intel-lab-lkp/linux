@@ -62,7 +62,6 @@
  */
 
 static char *server_ip = "192.168.1.4";
-static char *client_ip = "192.168.1.2";
 static char *port = "5201";
 static int start_queue = 8;
 static int num_queues = 8;
@@ -228,8 +227,8 @@ static int configure_channels(unsigned int rx, unsigned int tx)
 
 static int configure_flow_steering(void)
 {
-	return run_command("sudo ethtool -N %s flow-type tcp4 src-ip %s dst-ip %s src-port %s dst-port %s queue %d >&2",
-			   ifname, client_ip, server_ip, port, port, start_queue);
+	return run_command("sudo ethtool -N %s flow-type tcp4 dst-ip %s dst-port %s queue %d >&2",
+			   ifname, server_ip, port, start_queue);
 }
 
 static int bind_rx_queue(unsigned int ifindex, unsigned int dmabuf_fd,
@@ -552,9 +551,6 @@ int main(int argc, char *argv[])
 			break;
 		case 's':
 			server_ip = optarg;
-			break;
-		case 'c':
-			client_ip = optarg;
 			break;
 		case 'p':
 			port = optarg;
