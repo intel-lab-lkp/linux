@@ -94,7 +94,8 @@ void __init pti_check_boottime_disable(void)
 	if (pti_mode == PTI_FORCE_ON)
 		pti_print_if_secure("force enabled on command line.");
 
-	if (pti_mode == PTI_AUTO && !boot_cpu_has_bug(X86_BUG_CPU_MELTDOWN))
+	if (pti_mode == PTI_AUTO && (!boot_cpu_has_bug(X86_BUG_CPU_MELTDOWN) ||
+				     !cpu_mitigate_attack_vector(CPU_MITIGATE_USER_KERNEL)))
 		return;
 
 	setup_force_cpu_cap(X86_FEATURE_PTI);
