@@ -7393,6 +7393,14 @@ tx_recovery:
 	return work_done;
 }
 
+static void tg3_napi_set_irq(struct tg3 *tp)
+{
+	int i;
+
+	for (i = 0; i < tp->irq_cnt; i++)
+		netif_napi_set_irq(&tp->napi[i].napi, tp->napi[i].irq_vec);
+}
+
 static void tg3_napi_disable(struct tg3 *tp)
 {
 	int i;
@@ -11652,7 +11660,7 @@ static int tg3_start(struct tg3 *tp, bool reset_phy, bool test_irq,
 		goto out_ints_fini;
 
 	tg3_napi_init(tp);
-
+	tg3_napi_set_irq(tp);
 	tg3_napi_enable(tp);
 
 	for (i = 0; i < tp->irq_cnt; i++) {
