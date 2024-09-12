@@ -220,6 +220,9 @@ static int pinctrl_register_one_pin(struct pinctrl_dev *pctldev,
 
 	/* Set owner */
 	pindesc->pctldev = pctldev;
+#ifdef CONFIG_PINMUX
+	spin_lock_init(&pindesc->lock);
+#endif
 
 	/* Copy basic pin info */
 	if (pin->name) {

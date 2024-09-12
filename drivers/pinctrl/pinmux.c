@@ -115,6 +115,7 @@ static int pin_request(struct pinctrl_dev *pctldev,
 	struct pin_desc *desc;
 	const struct pinmux_ops *ops = pctldev->desc->pmxops;
 	int status = -EINVAL;
+	unsigned long flags;
 
 	desc = pin_desc_get(pctldev, pin);
 	if (desc == NULL) {
@@ -127,6 +128,7 @@ static int pin_request(struct pinctrl_dev *pctldev,
 	dev_dbg(pctldev->dev, "request pin %d (%s) for %s\n",
 		pin, desc->name, owner);
 
+	spin_lock_irqsave(&desc->lock, flags);
 	if ((!gpio_range || ops->strict) &&
 	    desc->mux_usecount && strcmp(desc->mux_owner, owner)) {
 		dev_err(pctldev->dev,
@@ -151,6 +153,7 @@ static int pin_request(struct pinctrl_dev *pctldev,
 
 		desc->mux_owner = owner;
 	}
+	spin_unlock_irqrestore(&desc->lock, flags);
 
 	/* Let each pin increase references to this module */
 	if (!try_module_get(pctldev->owner)) {
@@ -178,6 +181,7 @@ static int pin_request(struct pinctrl_dev *pctldev,
 
 out_free_pin:
 	if (status) {
+		spin_lock_irqsave(&desc->lock, flags);
 		if (gpio_range) {
 			desc->gpio_owner = NULL;
 		} else {
@@ -185,6 +189,7 @@ out_free_pin:
 			if (!desc->mux_usecount)
 				desc->mux_owner = NULL;
 		}
+		spin_unlock_irqrestore(&desc->lock, flags);
 	}
 out:
 	if (status)
@@ -211,6 +216,7 @@ static const char *pin_free(struct pinctrl_dev *pctldev, int pin,
 	const struct pinmux_ops *ops = pctldev->desc->pmxops;
 	struct pin_desc *desc;
 	const char *owner;
+	unsigned long flags;
 
 	desc = pin_desc_get(pctldev, pin);
 	if (desc == NULL) {
@@ -223,11 +229,13 @@ static const char *pin_free(struct pinctrl_dev *pctldev, int pin,
 		/*
 		 * A pin should not be freed more times than allocated.
 		 */
+		spin_lock_irqsave(&desc->lock, flags);
 		if (WARN_ON(!desc->mux_usecount))
-			return NULL;
+			goto out;
 		desc->mux_usecount--;
 		if (desc->mux_usecount)
-			return NULL;
+			goto out;
+		spin_unlock_irqrestore(&desc->lock, flags);
 	}
 
 	/*
@@ -239,6 +247,7 @@ static const char *pin_free(struct pinctrl_dev *pctldev, int pin,
 	else if (ops->free)
 		ops->free(pctldev, pin);
 
+	spin_lock_irqsave(&desc->lock, flags);
 	if (gpio_range) {
 		owner = desc->gpio_owner;
 		desc->gpio_owner = NULL;
@@ -247,10 +256,14 @@ static const char *pin_free(struct pinctrl_dev *pctldev, int pin,
 		desc->mux_owner = NULL;
 		desc->mux_setting = NULL;
 	}
+	spin_unlock_irqrestore(&desc->lock, flags);
 
 	module_put(pctldev->owner);
 
 	return owner;
+out:
+	spin_unlock_irqrestore(&desc->lock, flags);
+	return NULL;
 }
 
 /**
@@ -583,6 +596,7 @@ static int pinmux_pins_show(struct seq_file *s, void *what)
 	const struct pinctrl_ops *pctlops = pctldev->desc->pctlops;
 	const struct pinmux_ops *pmxops = pctldev->desc->pmxops;
 	unsigned int i, pin;
+	unsigned long flags;
 
 	if (!pmxops)
 		return 0;
@@ -608,6 +622,7 @@ static int pinmux_pins_show(struct seq_file *s, void *what)
 		if (desc == NULL)
 			continue;
 
+		spin_lock_irqsave(&desc->lock, flags);
 		if (desc->mux_owner &&
 		    !strcmp(desc->mux_owner, pinctrl_dev_get_name(pctldev)))
 			is_hog = true;
@@ -642,6 +657,8 @@ static int pinmux_pins_show(struct seq_file *s, void *what)
 					desc->mux_setting->group));
 		else
 			seq_putc(s, '\n');
+
+		spin_unlock_irqrestore(&desc->lock, flags);
 	}
 
 	mutex_unlock(&pctldev->mutex);
