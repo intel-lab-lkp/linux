@@ -369,6 +369,24 @@ static int mana_set_channels(struct net_device *ndev,
 	return err;
 }
 
+static int mana_get_link_ksettings(struct net_device *ndev,
+				   struct ethtool_link_ksettings *cmd)
+{
+	cmd->base.duplex = DUPLEX_FULL;
+	cmd->base.autoneg = AUTONEG_ENABLE;
+	cmd->base.port = PORT_DA;
+
+	ethtool_link_ksettings_zero_link_mode(cmd, supported);
+	ethtool_link_ksettings_zero_link_mode(cmd, advertising);
+
+	ethtool_link_ksettings_add_link_mode(cmd, supported,
+					     Autoneg);
+	ethtool_link_ksettings_add_link_mode(cmd, advertising,
+					     Autoneg);
+
+	return 0;
+}
+
 const struct ethtool_ops mana_ethtool_ops = {
 	.get_ethtool_stats	= mana_get_ethtool_stats,
 	.get_sset_count		= mana_get_sset_count,
@@ -380,4 +398,6 @@ const struct ethtool_ops mana_ethtool_ops = {
 	.set_rxfh		= mana_set_rxfh,
 	.get_channels		= mana_get_channels,
 	.set_channels		= mana_set_channels,
+	.get_link_ksettings	= mana_get_link_ksettings,
+	.get_link		= ethtool_op_get_link,
 };
