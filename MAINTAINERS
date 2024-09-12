@@ -1934,6 +1934,28 @@ S:	Odd Fixes
 F:	arch/arm/boot/dts/airoha/
 F:	arch/arm64/boot/dts/airoha/
 
+ARM/ADI SoC Support
+M:	Arturs Artamonovs <arturs.artamonovs@analog.com>
+M:	Greg Malysa <greg.malysa@timesys.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/arm/analog/adi,sc5xx.yaml
+F:	Documentation/devicetree/bindings/clock/adi,sc5xx-clocks.yaml
+F:	Documentation/devicetree/bindings/gpio/adi,adsp-port-gpio.yaml
+F:	Documentation/devicetree/bindings/i2c/adi,twi.yaml
+F:	Documentation/devicetree/bindings/interrupt-controller/adi,adsp-pint.yaml
+F:	Documentation/devicetree/bindings/pinctrl/adi,adsp-pinctrl.yaml
+F:	Documentation/devicetree/bindings/serial/adi,uart.yaml
+F:	Documentation/devicetree/bindings/serial/adi,uart.yaml
+F:	Documentation/devicetree/bindings/soc/adi/*
+F:	arch/arm64/boot/dts/adi/*
+F:	drivers/clk/adi/*
+F:	drivers/gpio/gpio-adi-adsp-port.c
+F:	drivers/i2c/busses/i2c-adi-twi.c
+F:	drivers/irqchip/irq-adi-adsp.c
+F:	drivers/soc/adi/*
+F:	drivers/tty/serial/adi_uart.c
+
+
 ARM/Allwinner SoC Clock Support
 M:	Emilio López <emilio@elopez.com.ar>
 S:	Maintained
