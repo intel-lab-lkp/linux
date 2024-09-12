@@ -819,6 +819,20 @@ static int nfs_verify_authflavors(struct nfs_fs_context *ctx,
 		goto out;
 	}
 
+	/*
+	 * Linux MNTv3 server does not announce AUTH_NULL in auth_info response.
+	 * This is a MNTv3 server bug and prevents kernel to mount exports with
+	 * AUTH_NULL flavor. So as a workaround when user explicitly specifies
+	 * only AUTH_NULL flavor via mount option -o sec=none then allow to
+	 * continue mounting export via AUTH_NULL.
+	 */
+	if (ctx->auth_info.flavor_len == 1 && ctx->auth_info.flavors[0] == RPC_AUTH_NULL) {
+		dfprintk(MOUNT,
+			 "NFS: requested auth flavor \"none\" is not announced by server, continuing anyway\n");
+		flavor = RPC_AUTH_NULL;
+		goto out;
+	}
+
 	dfprintk(MOUNT,
 		 "NFS: specified auth flavors not supported by server\n");
 	return -EACCES;
