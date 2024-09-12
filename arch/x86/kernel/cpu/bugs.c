@@ -1270,13 +1270,17 @@ static void __init retbleed_select_mitigation(void)
 	}
 
 	if (retbleed_mitigation == RETBLEED_MITIGATION_AUTO) {
-		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
-		    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON) {
-			if (IS_ENABLED(CONFIG_MITIGATION_UNRET_ENTRY))
-				retbleed_mitigation = RETBLEED_MITIGATION_UNRET;
-			else if (IS_ENABLED(CONFIG_MITIGATION_IBPB_ENTRY) &&
-				 boot_cpu_has(X86_FEATURE_IBPB))
-				retbleed_mitigation = RETBLEED_MITIGATION_IBPB;
+		if (should_mitigate_vuln(RETBLEED)) {
+			if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
+			    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON) {
+				if (IS_ENABLED(CONFIG_MITIGATION_UNRET_ENTRY))
+					retbleed_mitigation = RETBLEED_MITIGATION_UNRET;
+				else if (IS_ENABLED(CONFIG_MITIGATION_IBPB_ENTRY) &&
+					 boot_cpu_has(X86_FEATURE_IBPB))
+					retbleed_mitigation = RETBLEED_MITIGATION_IBPB;
+			}
+		} else {
+			retbleed_mitigation = RETBLEED_MITIGATION_NONE;
 		}
 	}
 }
@@ -1354,7 +1358,8 @@ static void __init retbleed_apply_mitigation(void)
 	}
 
 	if (mitigate_smt && !boot_cpu_has(X86_FEATURE_STIBP) &&
-	    (retbleed_nosmt || cpu_mitigations_auto_nosmt()))
+	    (retbleed_nosmt || cpu_mitigations_auto_nosmt() ||
+	     cpu_mitigate_attack_vector(CPU_MITIGATE_CROSS_THREAD)))
 		cpu_smt_disable(false);
 
 }
