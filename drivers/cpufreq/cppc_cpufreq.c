@@ -748,18 +748,33 @@ static unsigned int cppc_cpufreq_get_rate(unsigned int cpu)
 
 	ret = cppc_get_perf_ctrs(cpu, &fb_ctrs_t0);
 	if (ret)
-		return 0;
+		goto out_err;
 
 	udelay(2); /* 2usec delay between sampling */
 
 	ret = cppc_get_perf_ctrs(cpu, &fb_ctrs_t1);
 	if (ret)
-		return 0;
+		goto out_err;
 
 	delivered_perf = cppc_perf_from_fbctrs(cpu_data, &fb_ctrs_t0,
 					       &fb_ctrs_t1);
 
 	return cppc_perf_to_khz(&cpu_data->perf_caps, delivered_perf);
+
+out_err:
+	/*
+	 * Feedback counters could be 0 when cores are powered down.
+	 * Take desired perf for reflecting frequency in this case.
+	 */
+	if (ret == -EFAULT) {
+		ret = cppc_get_desired_perf(cpu, &delivered_perf);
+		if (ret)
+			return 0;
+
+		return cppc_perf_to_khz(&cpu_data->perf_caps, delivered_perf);
+	}
+
+	return 0;
 }
 
 static int cppc_cpufreq_set_boost(struct cpufreq_policy *policy, int state)
