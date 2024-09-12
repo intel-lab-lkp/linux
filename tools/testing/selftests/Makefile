@@ -65,6 +65,7 @@ TARGETS += net
 TARGETS += net/af_unix
 TARGETS += net/forwarding
 TARGETS += net/hsr
+TARGETS += net/lib
 TARGETS += net/mptcp
 TARGETS += net/netfilter
 TARGETS += net/openvswitch
