@@ -172,20 +172,41 @@ enum {
 DEFINE_STATIC_KEY_FALSE(kill_ftrace_graph);
 int ftrace_graph_active;
 
-static struct fgraph_ops *fgraph_array[FGRAPH_ARRAY_SIZE];
+static int ftrace_graph_entry_stub(struct ftrace_graph_ent *trace,
+				   struct fgraph_ops *gops)
+{
+	return 0;
+}
+
+static void ftrace_graph_ret_stub(struct ftrace_graph_ret *trace,
+				  struct fgraph_ops *gops)
+{
+}
+
+static struct fgraph_ops fgraph_stub = {
+	.entryfunc = ftrace_graph_entry_stub,
+	.retfunc = ftrace_graph_ret_stub,
+};
+
+static struct fgraph_ops *fgraph_array[FGRAPH_ARRAY_SIZE] = {
+	[0 ... FGRAPH_ARRAY_SIZE - 1] = &fgraph_stub,
+};
 static unsigned long fgraph_array_bitmask;
 
 /* LRU index table for fgraph_array */
 static int fgraph_lru_table[FGRAPH_ARRAY_SIZE];
-static int fgraph_lru_next;
-static int fgraph_lru_last;
+static int fgraph_lru_next = -1;
+static int fgraph_lru_last = -1;
 
 /* Initialize fgraph_lru_table with unused index */
 static void fgraph_lru_init(void)
 {
-	int i;
+	if ((fgraph_lru_next >= 0) && (fgraph_lru_last >= 0))
+		return;
 
-	for (i = 0; i < FGRAPH_ARRAY_SIZE; i++)
+	fgraph_lru_next = fgraph_lru_last = 0;
+
+	for (int i = 0; i < FGRAPH_ARRAY_SIZE; i++)
 		fgraph_lru_table[i] = i;
 }
 
@@ -482,22 +503,6 @@ int __weak ftrace_disable_ftrace_graph_caller(void)
 	return 0;
 }
 #endif
-
-int ftrace_graph_entry_stub(struct ftrace_graph_ent *trace,
-			    struct fgraph_ops *gops)
-{
-	return 0;
-}
-
-static void ftrace_graph_ret_stub(struct ftrace_graph_ret *trace,
-				  struct fgraph_ops *gops)
-{
-}
-
-static struct fgraph_ops fgraph_stub = {
-	.entryfunc = ftrace_graph_entry_stub,
-	.retfunc = ftrace_graph_ret_stub,
-};
 
 static struct fgraph_ops *fgraph_direct_gops = &fgraph_stub;
 DEFINE_STATIC_CALL(fgraph_func, ftrace_graph_entry_stub);
@@ -1250,12 +1255,7 @@ int register_ftrace_graph(struct fgraph_ops *gops)
 
 	mutex_lock(&ftrace_lock);
 
-	if (!fgraph_array[0]) {
-		/* The array must always have real data on it */
-		for (i = 0; i < FGRAPH_ARRAY_SIZE; i++)
-			fgraph_array[i] = &fgraph_stub;
-		fgraph_lru_init();
-	}
+	fgraph_lru_init();
 
 	i = fgraph_lru_alloc_index();
 	if (i < 0 || WARN_ON_ONCE(fgraph_array[i] != &fgraph_stub)) {
