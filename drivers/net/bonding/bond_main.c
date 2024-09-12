@@ -2220,7 +2220,9 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 		/* if there is a primary slave, remember it */
 		if (strcmp(bond->params.primary, new_slave->dev->name) == 0) {
 			rcu_assign_pointer(bond->primary_slave, new_slave);
-			bond->force_primary = true;
+            if (bond->params.primary_reselect != BOND_PRI_RESELECT_FAILURE  &&
+                bond->params.primary_reselect != BOND_PRI_RESELECT_BETTER)
+			    bond->force_primary = true;
 		}
 	}
 
