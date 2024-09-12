@@ -183,3 +183,4 @@ struct hlist_head                   page_pools
 struct dim_irq_moder*               irq_moder
 unsigned_long                       gro_flush_timeout
 u32                                 napi_defer_hard_irqs
+struct napi_config*                 napi_config
