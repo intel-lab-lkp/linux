@@ -100,6 +100,8 @@ enum cpu_type_enum {
 #define CPU_FEATURE_HYPERVISOR		25	/* CPU has hypervisor (running in VM) */
 #define CPU_FEATURE_PTW			26	/* CPU has hardware page table walker */
 #define CPU_FEATURE_AVECINT		27	/* CPU has avec interrupt */
+#define CPU_FEATURE_IOCSR		28	/* CPU has IOCSR */
+#define CPU_FEATURE_LSPW		29	/* CPU has LSPW */
 
 #define LOONGARCH_CPU_CPUCFG		BIT_ULL(CPU_FEATURE_CPUCFG)
 #define LOONGARCH_CPU_LAM		BIT_ULL(CPU_FEATURE_LAM)
@@ -129,5 +131,7 @@ enum cpu_type_enum {
 #define LOONGARCH_CPU_HYPERVISOR	BIT_ULL(CPU_FEATURE_HYPERVISOR)
 #define LOONGARCH_CPU_PTW		BIT_ULL(CPU_FEATURE_PTW)
 #define LOONGARCH_CPU_AVECINT		BIT_ULL(CPU_FEATURE_AVECINT)
+#define LOONGARCH_CPU_IOCSR		BIT_ULL(CPU_FEATURE_IOCSR)
+#define LOONGARCH_CPU_LSPW		BIT_ULL(CPU_FEATURE_LSPW)
 
 #endif /* _ASM_CPU_H */
