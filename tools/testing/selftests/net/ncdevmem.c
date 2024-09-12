@@ -64,24 +64,13 @@
 static char *server_ip = "192.168.1.4";
 static char *client_ip = "192.168.1.2";
 static char *port = "5201";
-static size_t do_validation;
 static int start_queue = 8;
 static int num_queues = 8;
 static char *ifname = "eth1";
 static unsigned int ifindex;
 static unsigned int dmabuf_id;
 
-void print_bytes(void *ptr, size_t size)
-{
-	unsigned char *p = ptr;
-	int i;
-
-	for (i = 0; i < size; i++)
-		printf("%02hhX ", p[i]);
-	printf("\n");
-}
-
-void print_nonzero_bytes(void *ptr, size_t size)
+static void print_nonzero_bytes(void *ptr, size_t size)
 {
 	unsigned char *p = ptr;
 	unsigned int i;
@@ -89,30 +78,6 @@ void print_nonzero_bytes(void *ptr, size_t size)
 	for (i = 0; i < size; i++)
 		putchar(p[i]);
 	printf("\n");
-}
-
-void validate_buffer(void *line, size_t size)
-{
-	static unsigned char seed = 1;
-	unsigned char *ptr = line;
-	int errors = 0;
-	size_t i;
-
-	for (i = 0; i < size; i++) {
-		if (ptr[i] != seed) {
-			fprintf(stderr,
-				"Failed validation: expected=%u, actual=%u, index=%lu\n",
-				seed, ptr[i], i);
-			errors++;
-			if (errors > 20)
-				error(1, 0, "validation failed.");
-		}
-		seed++;
-		if (seed == do_validation)
-			seed = 0;
-	}
-
-	fprintf(stdout, "Validated buffer\n");
 }
 
 #define run_command(cmd, ...)                                           \
@@ -414,16 +379,10 @@ int do_server(void)
 			sync.flags = DMA_BUF_SYNC_READ | DMA_BUF_SYNC_START;
 			ioctl(buf, DMA_BUF_IOCTL_SYNC, &sync);
 
-			if (do_validation)
-				validate_buffer(
-					((unsigned char *)buf_mem) +
-						dmabuf_cmsg->frag_offset,
-					dmabuf_cmsg->frag_size);
-			else
-				print_nonzero_bytes(
-					((unsigned char *)buf_mem) +
-						dmabuf_cmsg->frag_offset,
-					dmabuf_cmsg->frag_size);
+			print_nonzero_bytes(
+				((unsigned char *)buf_mem) +
+					dmabuf_cmsg->frag_offset,
+				dmabuf_cmsg->frag_size);
 
 			sync.flags = DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END;
 			ioctl(buf, DMA_BUF_IOCTL_SYNC, &sync);
@@ -525,7 +484,7 @@ int main(int argc, char *argv[])
 	int is_server = 0, opt;
 	int probe = 0;
 
-	while ((opt = getopt(argc, argv, "ls:c:p:v:q:t:f:P")) != -1) {
+	while ((opt = getopt(argc, argv, "ls:c:p:q:t:f:P")) != -1) {
 		switch (opt) {
 		case 'l':
 			is_server = 1;
@@ -538,9 +497,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'p':
 			port = optarg;
-			break;
-		case 'v':
-			do_validation = atoll(optarg);
 			break;
 		case 'q':
 			num_queues = atoi(optarg);
