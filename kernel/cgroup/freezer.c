@@ -35,27 +35,34 @@ static bool cgroup_update_frozen_flag(struct cgroup *cgrp, bool frozen)
  */
 static void cgroup_propagate_frozen(struct cgroup *cgrp, bool frozen)
 {
-	int desc = 1;
-
+	int deta;
+	struct cgroup *parent;
 	/*
 	 * If the new state is frozen, some freezing ancestor cgroups may change
 	 * their state too, depending on if all their descendants are frozen.
 	 *
 	 * Otherwise, all ancestor cgroups are forced into the non-frozen state.
 	 */
-	while ((cgrp = cgroup_parent(cgrp))) {
+	for (cgrp = cgrp; cgrp; cgrp = cgroup_parent(cgrp)) {
 		if (frozen) {
-			cgrp->freezer.nr_frozen_descendants += desc;
+			/* If freezer is not set, or cgrp has descendants
+			 * that are not frozen, cgrp can't be frozen
+			 */
 			if (!test_bit(CGRP_FREEZE, &cgrp->flags) ||
 			    (cgrp->freezer.nr_frozen_descendants !=
-			    cgrp->nr_descendants))
-				continue;
+			     cgrp->nr_descendants))
+				break;
+			deta = cgrp->freezer.nr_frozen_descendants + 1;
 		} else {
-			cgrp->freezer.nr_frozen_descendants -= desc;
+			deta = -(cgrp->freezer.nr_frozen_descendants + 1);
 		}
 
-		if (cgroup_update_frozen_flag(cgrp, frozen))
-			desc++;
+		/* No change, stop propagate */
+		if (!cgroup_update_frozen_flag(cgrp, frozen))
+			break;
+
+		parent = cgroup_parent(cgrp);
+		parent->freezer.nr_frozen_descendants += deta;
 	}
 }
 
@@ -75,9 +82,7 @@ void cgroup_update_frozen(struct cgroup *cgrp)
 	frozen = test_bit(CGRP_FREEZE, &cgrp->flags) &&
 		cgrp->freezer.nr_frozen_tasks == __cgroup_task_count(cgrp);
 
-	/* If flags is updated, update the state of ancestor cgroups. */
-	if (cgroup_update_frozen_flag(cgrp, frozen))
-		cgroup_propagate_frozen(cgrp, frozen);
+	cgroup_propagate_frozen(cgrp, frozen);
 }
 
 /*

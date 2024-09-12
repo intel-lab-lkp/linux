@@ -401,7 +401,9 @@ struct cgroup_freezer_state {
 
 	/* Fields below are protected by css_set_lock */
 
-	/* Number of frozen descendant cgroups */
+	/* Aggregating frozen descendant cgroups, only when all
+	 * descendants of a child are frozen will the count increase.
+	 */
 	int nr_frozen_descendants;
 
 	/*
