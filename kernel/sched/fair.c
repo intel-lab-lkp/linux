@@ -606,8 +606,8 @@ static inline s64 entity_key(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * Which we track using:
  *
  *                    v0 := cfs_rq->min_vruntime
- * \Sum (v_i - v0) * w_i := cfs_rq->avg_vruntime
- *              \Sum w_i := cfs_rq->avg_load
+ * \Sum (v_i - v0) * w_i := cfs_rq->tot_vruntime
+ *              \Sum w_i := cfs_rq->tot_load
  *
  * Since min_vruntime is a monotonic increasing variable that closely tracks
  * the per-task service, these deltas: (v_i - v), will be in the order of the
@@ -617,14 +617,29 @@ static inline s64 entity_key(struct cfs_rq *cfs_rq, struct sched_entity *se)
  *
  * As measured, the max (key * weight) value was ~44 bits for a kernel build.
  */
+static inline void avg_vruntime_update(struct cfs_rq *cfs_rq)
+{
+	s64	tot_vruntime = cfs_rq->tot_vruntime;
+
+	/* sign flips effective floor / ceiling */
+	if (cfs_rq->tot_load) {
+		if (tot_vruntime < 0)
+			tot_vruntime -= (cfs_rq->tot_load - 1);
+		cfs_rq->avg_vruntime = div_s64(tot_vruntime, cfs_rq->tot_load);
+	} else {
+		cfs_rq->avg_vruntime = cfs_rq->tot_vruntime;
+	}
+}
+
 static void
 avg_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	unsigned long weight = scale_load_down(se->load.weight);
 	s64 key = entity_key(cfs_rq, se);
 
-	cfs_rq->avg_vruntime += key * weight;
-	cfs_rq->avg_load += weight;
+	cfs_rq->tot_vruntime += key * weight;
+	cfs_rq->tot_load += weight;
+	avg_vruntime_update(cfs_rq);
 }
 
 static void
@@ -633,17 +648,29 @@ avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	unsigned long weight = scale_load_down(se->load.weight);
 	s64 key = entity_key(cfs_rq, se);
 
-	cfs_rq->avg_vruntime -= key * weight;
-	cfs_rq->avg_load -= weight;
+	cfs_rq->tot_vruntime -= key * weight;
+	cfs_rq->tot_load -= weight;
+	avg_vruntime_update(cfs_rq);
 }
 
 static inline
-void avg_vruntime_update(struct cfs_rq *cfs_rq, s64 delta)
+void avg_vruntime_update_for_curr(struct cfs_rq *cfs_rq, s64 delta)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	unsigned long weight = scale_load_down(curr->load.weight);
+
+	cfs_rq->tot_vruntime += delta * weight;
+	avg_vruntime_update(cfs_rq);
+}
+
+static inline
+void avg_vruntime_update_for_minv(struct cfs_rq *cfs_rq, s64 delta)
 {
 	/*
-	 * v' = v + d ==> avg_vruntime' = avg_runtime - d*avg_load
+	 * v' = v + d ==> avg_runtime' = tot_runtime - d*tot_load
 	 */
-	cfs_rq->avg_vruntime -= cfs_rq->avg_load * delta;
+	cfs_rq->tot_vruntime -= cfs_rq->tot_load * delta;
+	avg_vruntime_update(cfs_rq);
 }
 
 /*
@@ -652,25 +679,7 @@ void avg_vruntime_update(struct cfs_rq *cfs_rq, s64 delta)
  */
 u64 avg_vruntime(struct cfs_rq *cfs_rq)
 {
-	struct sched_entity *curr = cfs_rq->curr;
-	s64 avg = cfs_rq->avg_vruntime;
-	long load = cfs_rq->avg_load;
-
-	if (curr && curr->on_rq) {
-		unsigned long weight = scale_load_down(curr->load.weight);
-
-		avg += entity_key(cfs_rq, curr) * weight;
-		load += weight;
-	}
-
-	if (load) {
-		/* sign flips effective floor / ceiling */
-		if (avg < 0)
-			avg -= (load - 1);
-		avg = div_s64(avg, load);
-	}
-
-	return cfs_rq->min_vruntime + avg;
+	return cfs_rq->min_vruntime + cfs_rq->avg_vruntime;
 }
 
 /*
@@ -725,18 +734,10 @@ static void update_entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se)
  */
 static int vruntime_eligible(struct cfs_rq *cfs_rq, u64 vruntime)
 {
-	struct sched_entity *curr = cfs_rq->curr;
-	s64 avg = cfs_rq->avg_vruntime;
-	long load = cfs_rq->avg_load;
+	s64 total = cfs_rq->tot_vruntime;
+	long load = cfs_rq->tot_load;
 
-	if (curr && curr->on_rq) {
-		unsigned long weight = scale_load_down(curr->load.weight);
-
-		avg += entity_key(cfs_rq, curr) * weight;
-		load += weight;
-	}
-
-	return avg >= (s64)(vruntime - cfs_rq->min_vruntime) * load;
+	return total >= (s64)(vruntime - cfs_rq->min_vruntime) * load;
 }
 
 int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se)
@@ -752,7 +753,7 @@ static u64 __update_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
 	 */
 	s64 delta = (s64)(vruntime - min_vruntime);
 	if (delta > 0) {
-		avg_vruntime_update(cfs_rq, delta);
+		avg_vruntime_update_for_minv(cfs_rq, delta);
 		min_vruntime = vruntime;
 	}
 	return min_vruntime;
@@ -822,7 +823,6 @@ RB_DECLARE_CALLBACKS(static, min_vruntime_cb, struct sched_entity,
  */
 static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	avg_vruntime_add(cfs_rq, se);
 	se->min_vruntime = se->vruntime;
 	rb_add_augmented_cached(&se->run_node, &cfs_rq->tasks_timeline,
 				__entity_less, &min_vruntime_cb);
@@ -832,7 +832,6 @@ static void __dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	rb_erase_augmented_cached(&se->run_node, &cfs_rq->tasks_timeline,
 				  &min_vruntime_cb);
-	avg_vruntime_sub(cfs_rq, se);
 }
 
 struct sched_entity *__pick_root_entity(struct cfs_rq *cfs_rq)
@@ -1157,6 +1156,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *curr = cfs_rq->curr;
 	s64 delta_exec;
+	s64 vdelta_exec;
 
 	if (unlikely(!curr))
 		return;
@@ -1165,8 +1165,10 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	if (unlikely(delta_exec <= 0))
 		return;
 
-	curr->vruntime += calc_delta_fair(delta_exec, curr);
+	vdelta_exec = calc_delta_fair(delta_exec, curr);
+	curr->vruntime += vdelta_exec;
 	update_deadline(cfs_rq, curr);
+	avg_vruntime_update_for_curr(cfs_rq, vdelta_exec);
 	update_min_vruntime(cfs_rq);
 
 	if (entity_is_task(curr))
@@ -3794,6 +3796,8 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 		avruntime = avg_vruntime(cfs_rq);
 		if (!curr)
 			__dequeue_entity(cfs_rq, se);
+
+		avg_vruntime_sub(cfs_rq, se);
 		update_load_sub(&cfs_rq->load, se->load.weight);
 	}
 	dequeue_load_avg(cfs_rq, se);
@@ -3823,6 +3827,8 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 		update_load_add(&cfs_rq->load, se->load.weight);
 		if (!curr)
 			__enqueue_entity(cfs_rq, se);
+
+		avg_vruntime_add(cfs_rq, se);
 
 		/*
 		 * The entity's vruntime has been adjusted, so let's check
@@ -5190,7 +5196,6 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 * EEVDF: placement strategy #1 / #2
 	 */
 	if (sched_feat(PLACE_LAG) && cfs_rq->nr_running) {
-		struct sched_entity *curr = cfs_rq->curr;
 		unsigned long load;
 
 		lag = se->vlag;
@@ -5247,9 +5252,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		 *
 		 *   vl_i = (W + w_i)*vl'_i / W
 		 */
-		load = cfs_rq->avg_load;
-		if (curr && curr->on_rq)
-			load += scale_load_down(curr->load.weight);
+		load = cfs_rq->tot_load;
 
 		lag *= load + scale_load_down(se->load.weight);
 		if (WARN_ON_ONCE(!load))
@@ -5327,6 +5330,8 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	update_stats_enqueue_fair(cfs_rq, se, flags);
 	if (!curr)
 		__enqueue_entity(cfs_rq, se);
+
+	avg_vruntime_add(cfs_rq, se);
 	se->on_rq = 1;
 
 	if (cfs_rq->nr_running == 1) {
@@ -5397,6 +5402,8 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	update_entity_lag(cfs_rq, se);
 	if (se != cfs_rq->curr)
 		__dequeue_entity(cfs_rq, se);
+
+	avg_vruntime_sub(cfs_rq, se);
 	se->on_rq = 0;
 	account_entity_dequeue(cfs_rq, se);
 
