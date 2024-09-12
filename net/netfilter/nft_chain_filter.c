@@ -372,6 +372,10 @@ static int nf_tables_netdev_event(struct notifier_block *this,
 		.net	= dev_net(dev),
 	};
 
+	if (event == NETDEV_CHANGENAME) {
+		nf_tables_netdev_event(this, NETDEV_UNREGISTER, ptr);
+		event = NETDEV_REGISTER;
+	}
 	if (event != NETDEV_REGISTER &&
 	    event != NETDEV_UNREGISTER)
 		return NOTIFY_DONE;
