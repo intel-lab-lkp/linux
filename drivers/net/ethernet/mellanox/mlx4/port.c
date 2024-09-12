@@ -2198,14 +2198,7 @@ int mlx4_get_module_info(struct mlx4_dev *dev, u8 port,
 			  MLX4_ATTR_CABLE_INFO, port, i2c_addr, offset, size,
 			  ret, cable_info_mad_err_str(ret));
 
-		if (i2c_addr == I2C_ADDR_HIGH &&
-		    MAD_STATUS_2_CABLE_ERR(ret) == CABLE_INF_I2C_ADDR)
-			/* Some SFP cables do not support i2c slave
-			 * address 0x51 (high page), abort silently.
-			 */
-			ret = 0;
-		else
-			ret = -ret;
+		ret = -ret;
 		goto out;
 	}
 	cable_info = (struct mlx4_cable_info *)outmad->data;
