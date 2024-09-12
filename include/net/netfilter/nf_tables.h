@@ -1128,6 +1128,8 @@ int nft_setelem_validate(const struct nft_ctx *ctx, struct nft_set *set,
 int nft_set_catchall_validate(const struct nft_ctx *ctx, struct nft_set *set);
 int nf_tables_bind_chain(const struct nft_ctx *ctx, struct nft_chain *chain);
 void nf_tables_unbind_chain(const struct nft_ctx *ctx, struct nft_chain *chain);
+void nf_tables_chain_device_notify(const struct nft_chain *chain,
+				   const struct net_device *dev, int event);
 
 enum nft_chain_types {
 	NFT_CHAIN_T_DEFAULT = 0,

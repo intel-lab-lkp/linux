@@ -357,6 +357,7 @@ static void nft_netdev_event(unsigned long event, struct net_device *dev,
 			kfree(ops);
 			continue;
 		}
+		nf_tables_chain_device_notify(ctx->chain, dev, event);
 	}
 }
 
