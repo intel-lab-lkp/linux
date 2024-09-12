@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/err.h>
+#include <linux/loongson/iocsr.h>
 #include <linux/module.h>
 #include <linux/reboot.h>
 #include <linux/jiffies.h>
@@ -9,7 +10,6 @@
 #include <loongson.h>
 #include <boot_param.h>
 #include <loongson_hwmon.h>
-#include <loongson_regs.h>
 
 static int csr_temp_enable;
 
@@ -24,7 +24,7 @@ int loongson3_cpu_temp(int cpu)
 	u32 reg, prid_rev;
 
 	if (csr_temp_enable) {
-		reg = (csr_readl(LOONGSON_CSR_CPUTEMP) & 0xff);
+		reg = (iocsr_read32(LOONGSON_IOCSR_CPUTEMP) & 0xff);
 		goto out;
 	}
 
@@ -136,8 +136,7 @@ static int __init loongson_hwmon_init(void)
 	pr_info("Loongson Hwmon Enter...\n");
 
 	if (cpu_has_csr())
-		csr_temp_enable = csr_readl(LOONGSON_CSR_FEATURES) &
-				  LOONGSON_CSRF_TEMP;
+		csr_temp_enable = iocsr_read32(LOONGSON_IOCSR_FEATURES) & IOCSRF_TEMP;
 
 	if (!csr_temp_enable && !loongson_chiptemp[0])
 		return -ENODEV;

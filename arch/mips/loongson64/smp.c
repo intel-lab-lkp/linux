@@ -7,6 +7,7 @@
 #include <irq.h>
 #include <linux/init.h>
 #include <linux/cpu.h>
+#include <linux/loongson/iocsr.h>
 #include <linux/sched.h>
 #include <linux/sched/hotplug.h>
 #include <linux/sched/task_stack.h>
@@ -19,7 +20,6 @@
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
 #include <loongson.h>
-#include <loongson_regs.h>
 #include <workarounds.h>
 
 #include "smp.h"
@@ -45,19 +45,19 @@ static void csr_mail_send(uint64_t data, int cpu, int mailbox)
 {
 	uint64_t val;
 
-	/* send high 32 bits */
-	val = CSR_MAIL_SEND_BLOCK;
-	val |= (CSR_MAIL_SEND_BOX_HIGH(mailbox) << CSR_MAIL_SEND_BOX_SHIFT);
-	val |= (cpu << CSR_MAIL_SEND_CPU_SHIFT);
-	val |= (data & CSR_MAIL_SEND_H32_MASK);
-	csr_writeq(val, LOONGSON_CSR_MAIL_SEND);
+	/* Send high 32 bits */
+	val = IOCSR_MBUF_SEND_BLOCKING;
+	val |= (IOCSR_MBUF_SEND_BOX_HI(mailbox) << IOCSR_MBUF_SEND_BOX_SHIFT);
+	val |= (cpu << IOCSR_MBUF_SEND_CPU_SHIFT);
+	val |= (data & IOCSR_MBUF_SEND_H32_MASK);
+	iocsr_write64(val, LOONGSON_IOCSR_MBUF_SEND);
 
-	/* send low 32 bits */
-	val = CSR_MAIL_SEND_BLOCK;
-	val |= (CSR_MAIL_SEND_BOX_LOW(mailbox) << CSR_MAIL_SEND_BOX_SHIFT);
-	val |= (cpu << CSR_MAIL_SEND_CPU_SHIFT);
-	val |= (data << CSR_MAIL_SEND_BUF_SHIFT);
-	csr_writeq(val, LOONGSON_CSR_MAIL_SEND);
+	/* Send low 32 bits */
+	val = IOCSR_MBUF_SEND_BLOCKING;
+	val |= (IOCSR_MBUF_SEND_BOX_LO(mailbox) << IOCSR_MBUF_SEND_BOX_SHIFT);
+	val |= (cpu << IOCSR_MBUF_SEND_CPU_SHIFT);
+	val |= (data << IOCSR_MBUF_SEND_BUF_SHIFT);
+	iocsr_write64(val, LOONGSON_IOCSR_MBUF_SEND);
 };
 
 static u32 csr_ipi_read_clear(int cpu)
@@ -65,9 +65,9 @@ static u32 csr_ipi_read_clear(int cpu)
 	u32 action;
 
 	/* Load the ipi register to figure out what we're supposed to do */
-	action = csr_readl(LOONGSON_CSR_IPI_STATUS);
+	action = iocsr_read32(LOONGSON_IOCSR_IPI_STATUS);
 	/* Clear the ipi register to clear the interrupt */
-	csr_writel(action, LOONGSON_CSR_IPI_CLEAR);
+	iocsr_write32(action, LOONGSON_IOCSR_IPI_CLEAR);
 
 	return action;
 }
@@ -77,22 +77,22 @@ static void csr_ipi_write_action(int cpu, u32 action)
 	unsigned int irq = 0;
 
 	while ((irq = ffs(action))) {
-		uint32_t val = CSR_IPI_SEND_BLOCK;
+		uint32_t val = IOCSR_IPI_SEND_BLOCKING;
 		val |= (irq - 1);
-		val |= (cpu << CSR_IPI_SEND_CPU_SHIFT);
-		csr_writel(val, LOONGSON_CSR_IPI_SEND);
+		val |= (cpu << IOCSR_IPI_SEND_CPU_SHIFT);
+		iocsr_write32(val, LOONGSON_IOCSR_IPI_SEND);
 		action &= ~BIT(irq - 1);
 	}
 }
 
 static void csr_ipi_write_enable(int cpu)
 {
-	csr_writel(0xffffffff, LOONGSON_CSR_IPI_EN);
+	iocsr_write32(0xffffffff, LOONGSON_IOCSR_IPI_EN);
 }
 
 static void csr_ipi_clear_buf(int cpu)
 {
-	csr_writeq(0, LOONGSON_CSR_MAIL_BUF0);
+	iocsr_write64(0, LOONGSON_IOCSR_MBUF0);
 }
 
 static void csr_ipi_write_buf(int cpu, struct task_struct *idle)
@@ -169,7 +169,7 @@ static void legacy_ipi_write_buf(int cpu, struct task_struct *idle)
 
 static void csr_ipi_probe(void)
 {
-	if (cpu_has_csr() && csr_readl(LOONGSON_CSR_FEATURES) & LOONGSON_CSRF_IPI) {
+	if (cpu_has_iocsr() && iocsr_read32(LOONGSON_IOCSR_FEATURES) & IOCSRF_CSRIPI) {
 		ipi_read_clear = csr_ipi_read_clear;
 		ipi_write_action = csr_ipi_write_action;
 		ipi_write_enable = csr_ipi_write_enable;
