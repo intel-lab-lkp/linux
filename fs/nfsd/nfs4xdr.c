@@ -62,6 +62,9 @@
 #include <linux/security.h>
 #endif
 
+static bool send_implementation_id = true;
+module_param(send_implementation_id, bool, 0644);
+MODULE_PARM_DESC(send_implementation_id, "Send implementation ID with NFSv4.1 exchange_id");
 
 #define NFSDDBG_FACILITY		NFSDDBG_XDR
 
@@ -4833,6 +4836,53 @@ nfsd4_encode_server_owner4(struct xdr_stream *xdr, struct svc_rqst *rqstp)
 	return nfsd4_encode_opaque(xdr, nn->nfsd_name, strlen(nn->nfsd_name));
 }
 
+#define IMPL_NAME_LIMIT (sizeof(utsname()->sysname) + sizeof(utsname()->release) + \
+			 sizeof(utsname()->version) + sizeof(utsname()->machine) + 8)
+
+static __be32
+nfsd4_encode_server_impl_id(struct xdr_stream *xdr)
+{
+	char impl_name[IMPL_NAME_LIMIT];
+	int impl_name_len;
+	__be32 *p;
+
+	impl_name_len = 0;
+	if (send_implementation_id &&
+	    sizeof(CONFIG_NFSD_V4_1_IMPLEMENTATION_ID_DOMAIN) > 1 &&
+	    sizeof(CONFIG_NFSD_V4_1_IMPLEMENTATION_ID_DOMAIN) <= NFS4_OPAQUE_LIMIT)
+		impl_name_len = snprintf(impl_name, sizeof(impl_name), "%s %s %s %s",
+			       utsname()->sysname, utsname()->release,
+			       utsname()->version, utsname()->machine);
+
+	if (impl_name_len <= 0) {
+		if (xdr_stream_encode_u32(xdr, 0) != XDR_UNIT)
+			return nfserr_resource;
+		return nfs_ok;
+	}
+
+	if (xdr_stream_encode_u32(xdr, 1) != XDR_UNIT)
+		return nfserr_resource;
+
+	p = xdr_reserve_space(xdr,
+		4 /* nii_domain.len */ +
+		(XDR_QUADLEN(sizeof(CONFIG_NFSD_V4_1_IMPLEMENTATION_ID_DOMAIN) - 1) * 4) +
+		4 /* nii_name.len */ +
+		(XDR_QUADLEN(impl_name_len) * 4) +
+		8 /* nii_time.tv_sec */ +
+		4 /* nii_time.tv_nsec */);
+	if (!p)
+		return nfserr_resource;
+
+	p = xdr_encode_opaque(p, CONFIG_NFSD_V4_1_IMPLEMENTATION_ID_DOMAIN,
+				sizeof(CONFIG_NFSD_V4_1_IMPLEMENTATION_ID_DOMAIN) - 1);
+	p = xdr_encode_opaque(p, impl_name, impl_name_len);
+	/* just send zeros for nii_date - the date is in nii_name */
+	p = xdr_encode_hyper(p, 0); /* tv_sec */
+	*p++ = cpu_to_be32(0); /* tv_nsec */
+
+	return nfs_ok;
+}
+
 static __be32
 nfsd4_encode_exchange_id(struct nfsd4_compoundres *resp, __be32 nfserr,
 			 union nfsd4_op_u *u)
@@ -4867,8 +4917,9 @@ nfsd4_encode_exchange_id(struct nfsd4_compoundres *resp, __be32 nfserr,
 	if (nfserr != nfs_ok)
 		return nfserr;
 	/* eir_server_impl_id<1> */
-	if (xdr_stream_encode_u32(xdr, 0) != XDR_UNIT)
-		return nfserr_resource;
+	nfserr = nfsd4_encode_server_impl_id(xdr);
+	if (nfserr != nfs_ok)
+		return nfserr;
 
 	return nfs_ok;
 }

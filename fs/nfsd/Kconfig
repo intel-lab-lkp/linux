@@ -136,6 +136,18 @@ config NFSD_FLEXFILELAYOUT
 
 	  If unsure, say N.
 
+config NFSD_V4_1_IMPLEMENTATION_ID_DOMAIN
+	string "NFSv4.1 Implementation ID Domain"
+	depends on NFSD_V4
+	default "kernel.org"
+	help
+	  This option defines the domain portion of the implementation ID that
+	  may be sent in the NFS exchange_id operation.  The value must be in
+	  the format of a DNS domain name and should be set to the DNS domain
+	  name of the distribution.
+	  If the NFS server is unchanged from the upstream kernel, this
+	  option should be set to the default "kernel.org".
+
 config NFSD_V4_2_INTER_SSC
 	bool "NFSv4.2 inter server to server COPY"
 	depends on NFSD_V4 && NFS_V4_2
