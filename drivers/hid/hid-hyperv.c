@@ -293,9 +293,6 @@ static void mousevsc_on_receive(struct hv_device *device,
 		memcpy(input_dev->input_buf, input_report->buffer, len);
 		hid_input_report(input_dev->hid_device, HID_INPUT_REPORT,
 				 input_dev->input_buf, len, 1);
-
-		pm_wakeup_hard_event(&input_dev->device->device);
-
 		break;
 	default:
 		pr_err("unsupported hid msg type - type %d len %d\n",
@@ -502,8 +499,6 @@ static int mousevsc_probe(struct hv_device *device,
 		goto probe_err2;
 	}
 
-	device_init_wakeup(&device->device, true);
-
 	input_dev->connected = true;
 	input_dev->init_complete = true;
 
@@ -526,7 +521,6 @@ static void mousevsc_remove(struct hv_device *dev)
 {
 	struct mousevsc_dev *input_dev = hv_get_drvdata(dev);
 
-	device_init_wakeup(&dev->device, false);
 	vmbus_close(dev->channel);
 	hid_hw_stop(input_dev->hid_device);
 	hid_destroy_device(input_dev->hid_device);
