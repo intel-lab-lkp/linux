@@ -9308,15 +9308,41 @@ static void nft_flowtable_event(unsigned long event, struct net_device *dev,
 	struct nft_hook *hook;
 
 	list_for_each_entry(hook, &flowtable->hook_list, list) {
-		ops = nft_hook_find_ops(hook, dev);
-		if (!ops)
-			continue;
+		switch (event) {
+		case NETDEV_UNREGISTER:
+			ops = nft_hook_find_ops(hook, dev);
+			if (!ops)
+				continue;
 
-		/* flow_offload_netdev_event() cleans up entries for us. */
-		nft_unregister_flowtable_ops(dev_net(dev), flowtable, ops);
-		list_del(&ops->list);
-		kfree(ops);
-		break;
+			/* flow_offload_netdev_event() cleans up entries for us. */
+			nft_unregister_flowtable_ops(dev_net(dev),
+						     flowtable, ops);
+			list_del(&ops->list);
+			kfree(ops);
+			break;
+		case NETDEV_REGISTER:
+			if (strcmp(hook->ifname, dev->name))
+				continue;
+			ops = kzalloc(sizeof(struct nf_hook_ops),
+				      GFP_KERNEL_ACCOUNT);
+			if (ops) {
+				ops->pf		= NFPROTO_NETDEV;
+				ops->hooknum	= flowtable->hooknum;
+				ops->priority	= flowtable->data.priority;
+				ops->priv	= &flowtable->data;
+				ops->hook	= flowtable->data.type->hook;
+				ops->dev	= dev;
+			}
+			if (ops && !nft_register_flowtable_ops(dev_net(dev),
+							       flowtable, ops)) {
+				list_add_tail(&ops->list, &hook->ops_list);
+				break;
+			}
+			printk(KERN_ERR "flowtable %s: Can't hook into device %s\n",
+			       flowtable->name, dev->name);
+			kfree(ops);
+			continue;
+		}
 	}
 }
 
@@ -9329,8 +9355,9 @@ static int nf_tables_flowtable_event(struct notifier_block *this,
 	struct nft_table *table;
 	struct net *net;
 
-	if (event != NETDEV_UNREGISTER)
-		return 0;
+	if (event != NETDEV_REGISTER &&
+	    event != NETDEV_UNREGISTER)
+		return NOTIFY_DONE;
 
 	net = dev_net(dev);
 	nft_net = nft_pernet(net);
