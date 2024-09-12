@@ -321,7 +321,7 @@ static int tipc_mcast_send_sync(struct net *net, struct sk_buff *skb,
 	struct tipc_msg *hdr, *_hdr;
 	struct sk_buff_head tmpq;
 	struct sk_buff *_skb;
-	u16 cong_link_cnt;
+	u16 cong_link_cnt = 0;
 	int rc = 0;
 
 	/* Is a cluster supporting with new capabilities ? */
