@@ -11,4 +11,13 @@ TEST_PROGS := \
 	stats.py \
 # end of TEST_PROGS
 
+# YNL files, must be before "include ..lib.mk"
+EXTRA_CLEAN += $(OUTPUT)/libynl.a $(OUTPUT)/ncdevmem
+YNL_GEN_FILES := ncdevmem
+TEST_GEN_FILES += $(YNL_GEN_FILES)
+
 include ../../lib.mk
+
+# YNL build
+YNL_GENS := ethtool netdev
+include ../../net/ynl.mk
