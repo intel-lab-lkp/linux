@@ -32,6 +32,7 @@
 
 #include <linux/dim.h>
 #include <linux/ethtool_netlink.h>
+#include <linux/sfp.h>
 
 #include "en.h"
 #include "en/channels.h"
@@ -1899,36 +1900,39 @@ static int mlx5e_get_module_info(struct net_device *netdev,
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 	struct mlx5_core_dev *dev = priv->mdev;
-	int size_read = 0;
+	int ret;
 	u8 data[4] = {0};
 
-	size_read = mlx5_query_module_eeprom(dev, 0, 2, data);
-	if (size_read < 2)
+	/* Read first 2 bytes to get Module & REV ID */
+	ret = mlx5_query_module_eeprom(dev,
+				       0 /*offset*/, 2 /*size*/, data);
+	if (ret < 2)
 		return -EIO;
 
 	/* data[0] = identifier byte */
 	switch (data[0]) {
-	case MLX5_MODULE_ID_QSFP:
+	case SFF8024_ID_QSFP_8438:
 		modinfo->type       = ETH_MODULE_SFF_8436;
 		modinfo->eeprom_len = ETH_MODULE_SFF_8436_MAX_LEN;
 		break;
-	case MLX5_MODULE_ID_QSFP_PLUS:
-	case MLX5_MODULE_ID_QSFP28:
+	case SFF8024_ID_QSFP_8436_8636:
 		/* data[1] = revision id */
-		if (data[0] == MLX5_MODULE_ID_QSFP28 || data[1] >= 0x3) {
-			modinfo->type       = ETH_MODULE_SFF_8636;
-			modinfo->eeprom_len = ETH_MODULE_SFF_8636_MAX_LEN;
-		} else {
+		if (data[1] < 0x3) {
 			modinfo->type       = ETH_MODULE_SFF_8436;
 			modinfo->eeprom_len = ETH_MODULE_SFF_8436_MAX_LEN;
+			break;
 		}
+		fallthrough;
+	case SFF8024_ID_QSFP28_8636:
+		modinfo->type       = ETH_MODULE_SFF_8636;
+		modinfo->eeprom_len = ETH_MODULE_SFF_8636_MAX_LEN;
 		break;
-	case MLX5_MODULE_ID_SFP:
+	case SFF8024_ID_SFP:
 		modinfo->type       = ETH_MODULE_SFF_8472;
 		modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN;
 		break;
 	default:
-		netdev_err(priv->netdev, "%s: cable type not recognized:0x%x\n",
+		netdev_err(priv->netdev, "%s: cable type not recognized: 0x%x\n",
 			   __func__, data[0]);
 		return -EINVAL;
 	}

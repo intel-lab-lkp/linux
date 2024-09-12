@@ -40,6 +40,7 @@
 #include <net/ip.h>
 #include <linux/bitmap.h>
 #include <linux/mii.h>
+#include <linux/sfp.h>
 
 #include "mlx4_en.h"
 #include "en_port.h"
@@ -2029,33 +2030,35 @@ static int mlx4_en_get_module_info(struct net_device *dev,
 
 	/* Read first 2 bytes to get Module & REV ID */
 	ret = mlx4_get_module_info(mdev->dev, priv->port,
-				   0/*offset*/, 2/*size*/, data);
+				   0 /*offset*/, 2 /*size*/, data);
 	if (ret < 2)
 		return -EIO;
 
-	switch (data[0] /* identifier */) {
-	case MLX4_MODULE_ID_QSFP:
-		modinfo->type = ETH_MODULE_SFF_8436;
+	/* data[0] = identifier byte */
+	switch (data[0]) {
+	case SFF8024_ID_QSFP_8438:
+		modinfo->type       = ETH_MODULE_SFF_8436;
 		modinfo->eeprom_len = ETH_MODULE_SFF_8436_MAX_LEN;
 		break;
-	case MLX4_MODULE_ID_QSFP_PLUS:
-		if (data[1] >= 0x3) { /* revision id */
-			modinfo->type = ETH_MODULE_SFF_8636;
-			modinfo->eeprom_len = ETH_MODULE_SFF_8636_MAX_LEN;
-		} else {
-			modinfo->type = ETH_MODULE_SFF_8436;
+	case SFF8024_ID_QSFP_8436_8636:
+		/* data[1] = revision id */
+		if (data[1] < 0x3) {
+			modinfo->type       = ETH_MODULE_SFF_8436;
 			modinfo->eeprom_len = ETH_MODULE_SFF_8436_MAX_LEN;
+			break;
 		}
-		break;
-	case MLX4_MODULE_ID_QSFP28:
-		modinfo->type = ETH_MODULE_SFF_8636;
+		fallthrough;
+	case SFF8024_ID_QSFP28_8636:
+		modinfo->type       = ETH_MODULE_SFF_8636;
 		modinfo->eeprom_len = ETH_MODULE_SFF_8636_MAX_LEN;
 		break;
-	case MLX4_MODULE_ID_SFP:
-		modinfo->type = ETH_MODULE_SFF_8472;
+	case SFF8024_ID_SFP:
+		modinfo->type       = ETH_MODULE_SFF_8472;
 		modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN;
 		break;
 	default:
+		netdev_err(dev, "%s: cable type not recognized: 0x%x\n",
+			   __func__, data[0]);
 		return -EINVAL;
 	}
 

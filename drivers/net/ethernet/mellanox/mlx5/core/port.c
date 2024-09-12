@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <linux/sfp.h>
 #include <linux/mlx5/port.h>
 #include "mlx5_core.h"
 
@@ -425,12 +426,12 @@ int mlx5_query_module_eeprom(struct mlx5_core_dev *dev,
 		return err;
 
 	switch (module_id) {
-	case MLX5_MODULE_ID_SFP:
+	case SFF8024_ID_SFP:
 		mlx5_sfp_eeprom_params_set(&query.i2c_address, &query.page, &offset);
 		break;
-	case MLX5_MODULE_ID_QSFP:
-	case MLX5_MODULE_ID_QSFP_PLUS:
-	case MLX5_MODULE_ID_QSFP28:
+	case SFF8024_ID_QSFP_8438:
+	case SFF8024_ID_QSFP_8436_8636:
+	case SFF8024_ID_QSFP28_8636:
 		mlx5_qsfp_eeprom_params_set(&query.i2c_address, &query.page, &offset);
 		break;
 	default:

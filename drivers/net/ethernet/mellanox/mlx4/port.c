@@ -34,6 +34,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
 #include <linux/export.h>
+#include <linux/sfp.h>
 
 #include <linux/mlx4/cmd.h>
 
@@ -2139,12 +2140,12 @@ int mlx4_get_module_info(struct mlx4_dev *dev, u8 port,
 		return ret;
 
 	switch (module_id) {
-	case MLX4_MODULE_ID_SFP:
+	case SFF8024_ID_SFP:
 		mlx4_sfp_eeprom_params_set(&i2c_addr, &page_num, &offset);
 		break;
-	case MLX4_MODULE_ID_QSFP:
-	case MLX4_MODULE_ID_QSFP_PLUS:
-	case MLX4_MODULE_ID_QSFP28:
+	case SFF8024_ID_QSFP_8438:
+	case SFF8024_ID_QSFP_8436_8636:
+	case SFF8024_ID_QSFP28_8636:
 		mlx4_qsfp_eeprom_params_set(&i2c_addr, &page_num, &offset);
 		break;
 	default:
