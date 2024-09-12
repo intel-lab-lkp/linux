@@ -5420,6 +5420,41 @@ unsigned int f2fs_usable_segs_in_sec(struct f2fs_sb_info *sbi)
 	return SEGS_PER_SEC(sbi);
 }
 
+unsigned long long get_section_mtime(struct f2fs_sb_info *sbi,
+	unsigned int segno)
+{
+	unsigned int usable_segs_per_sec = f2fs_usable_segs_in_sec(sbi);
+	unsigned int secno = 0, start = 0;
+	struct free_segmap_info *free_i = FREE_I(sbi);
+	unsigned int valid_seg_count = 0;
+	unsigned long long mtime = 0;
+	unsigned int i = 0;
+
+	if (segno == NULL_SEGNO)
+		return 0;
+
+	secno = GET_SEC_FROM_SEG(sbi, segno);
+	start = GET_SEG_FROM_SEC(sbi, secno);
+
+	if (!__is_large_section(sbi))
+		return get_seg_entry(sbi, start + i)->mtime;
+
+	for (i = 0; i < usable_segs_per_sec; i++) {
+		/* for large section, only check the mtime of valid segments */
+		spin_lock(&free_i->segmap_lock);
+		if (test_bit(start + i, free_i->free_segmap)) {
+			mtime += get_seg_entry(sbi, start + i)->mtime;
+			valid_seg_count++;
+		}
+		spin_unlock(&free_i->segmap_lock);
+	}
+
+	if (valid_seg_count == 0)
+		return 0;
+
+	return div_u64(mtime, valid_seg_count);
+}
+
 /*
  * Update min, max modified time for cost-benefit GC algorithm
  */
@@ -5433,13 +5468,9 @@ static void init_min_max_mtime(struct f2fs_sb_info *sbi)
 	sit_i->min_mtime = ULLONG_MAX;
 
 	for (segno = 0; segno < MAIN_SEGS(sbi); segno += SEGS_PER_SEC(sbi)) {
-		unsigned int i;
 		unsigned long long mtime = 0;
 
-		for (i = 0; i < SEGS_PER_SEC(sbi); i++)
-			mtime += get_seg_entry(sbi, segno + i)->mtime;
-
-		mtime = div_u64(mtime, SEGS_PER_SEC(sbi));
+		mtime = get_section_mtime(sbi, segno);
 
 		if (sit_i->min_mtime > mtime)
 			sit_i->min_mtime = mtime;
