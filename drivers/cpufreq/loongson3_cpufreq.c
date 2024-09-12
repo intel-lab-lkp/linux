@@ -10,6 +10,7 @@
 #include <linux/cpufreq.h>
 #include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/loongson/iocsr.h>
 #include <linux/platform_device.h>
 #include <linux/units.h>
 
@@ -182,7 +183,7 @@ static inline int do_service_request(u32 id, u32 info, u32 cmd, u32 val, u32 ext
 
 	mutex_lock(&cpufreq_mutex[package]);
 
-	last.value = iocsr_read32(LOONGARCH_IOCSR_SMCMBX);
+	last.value = iocsr_read32(LOONGSON_IOCSR_SMCMBX);
 	if (!last.complete) {
 		mutex_unlock(&cpufreq_mutex[package]);
 		return -EPERM;
@@ -195,12 +196,12 @@ static inline int do_service_request(u32 id, u32 info, u32 cmd, u32 val, u32 ext
 	msg.extra	= extra;
 	msg.complete	= 0;
 
-	iocsr_write32(msg.value, LOONGARCH_IOCSR_SMCMBX);
-	iocsr_write32(iocsr_read32(LOONGARCH_IOCSR_MISC_FUNC) | IOCSR_MISC_FUNC_SOFT_INT,
-		      LOONGARCH_IOCSR_MISC_FUNC);
+	iocsr_write32(msg.value, LOONGSON_IOCSR_SMCMBX);
+	iocsr_write32(iocsr_read32(LOONGSON_IOCSR_MISC_FUNC) | IOCSR_MISC_FUNC_SOFT_INT,
+		      LOONGSON_IOCSR_MISC_FUNC);
 
 	for (retries = 0; retries < 10000; retries++) {
-		msg.value = iocsr_read32(LOONGARCH_IOCSR_SMCMBX);
+		msg.value = iocsr_read32(LOONGSON_IOCSR_SMCMBX);
 		if (msg.complete)
 			break;
 
