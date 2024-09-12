@@ -276,7 +276,8 @@ static int nf_ip_reroute(struct sk_buff *skb, const struct nf_queue_entry *entry
 #ifdef CONFIG_INET
 	const struct ip_rt_info *rt_info = nf_queue_entry_reroute(entry);
 
-	if (entry->state.hook == NF_INET_LOCAL_OUT) {
+	if (entry->state.hook == NF_INET_LOCAL_OUT ||
+	    entry->state.hook == NF_INET_POST_ROUTING) {
 		const struct iphdr *iph = ip_hdr(skb);
 
 		if (!(iph->tos == rt_info->tos &&
