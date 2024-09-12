@@ -831,9 +831,9 @@ static int iowarrior_probe(struct usb_interface *interface,
 			 dev->int_in_buffer, dev->report_size,
 			 iowarrior_callback, dev,
 			 dev->int_in_endpoint->bInterval);
-	/* create an internal buffer for interrupt data from the device */
+	/* create an internal buffer for interrupt data from the device and initialize it */
 	dev->read_queue =
-	    kmalloc_array(dev->report_size + 1, MAX_INTERRUPT_BUFFER,
+	    kcalloc(dev->report_size + 1, MAX_INTERRUPT_BUFFER,
 			  GFP_KERNEL);
 	if (!dev->read_queue)
 		goto error;
