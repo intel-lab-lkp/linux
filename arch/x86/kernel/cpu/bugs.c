@@ -1530,6 +1530,13 @@ spectre_v2_user_select_mitigation(void)
 		spectre_v2_user_stibp = SPECTRE_V2_USER_STRICT;
 		break;
 	case SPECTRE_V2_USER_CMD_AUTO:
+		if (should_mitigate_vuln(SPECTRE_V2_USER)) {
+			spectre_v2_user_ibpb = SPECTRE_V2_USER_PRCTL;
+			spectre_v2_user_stibp = SPECTRE_V2_USER_PRCTL;
+		} else {
+			return;
+		}
+		break;
 	case SPECTRE_V2_USER_CMD_PRCTL:
 		spectre_v2_user_ibpb = SPECTRE_V2_USER_PRCTL;
 		spectre_v2_user_stibp = SPECTRE_V2_USER_PRCTL;
