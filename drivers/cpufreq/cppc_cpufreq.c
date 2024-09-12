@@ -715,7 +715,8 @@ static int cppc_perf_from_fbctrs(struct cppc_cpudata *cpu_data,
 				 struct cppc_perf_fb_ctrs *fb_ctrs_t1)
 {
 	u64 delta_reference, delta_delivered;
-	u64 reference_perf;
+	u64 reference_perf, desired_perf;
+	int cpu, ret;
 
 	reference_perf = fb_ctrs_t0->reference_perf;
 
@@ -725,8 +726,14 @@ static int cppc_perf_from_fbctrs(struct cppc_cpudata *cpu_data,
 				    fb_ctrs_t0->delivered);
 
 	/* Check to avoid divide-by zero and invalid delivered_perf */
-	if (!delta_reference || !delta_delivered)
-		return cpu_data->perf_ctrls.desired_perf;
+	if (!delta_reference || !delta_delivered) {
+		cpu = cpumask_first(cpu_data->shared_cpu_map);
+		ret = cppc_get_desired_perf(cpu, &desired_perf);
+		if (ret)
+			return cpu_data->perf_ctrls.desired_perf;
+
+		return desired_perf;
+	}
 
 	return (reference_perf * delta_delivered) / delta_reference;
 }
