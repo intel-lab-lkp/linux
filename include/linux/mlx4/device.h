@@ -264,7 +264,7 @@ enum {
 	MLX4_FUNC_CAP_DMFS_A0_STATIC	= 1L << 2
 };
 
-
+#define MLX4_ATTR_PORT_INFO		0x0015
 #define MLX4_ATTR_CABLE_INFO		0xff60
 
 enum {

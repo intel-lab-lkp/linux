@@ -1054,10 +1054,15 @@ unlock:
 	return ret;
 }
 
+struct mlx4_mad_port_info {
+	u8 reserved[20];
+	__be32 cap_mask;
+};
+
 int mlx4_get_port_ib_caps(struct mlx4_dev *dev, u8 port, __be32 *caps)
 {
 	struct mlx4_cmd_mailbox *inmailbox, *outmailbox;
-	u8 *inbuf, *outbuf;
+	struct mlx4_mad_ifc *inmad, *outmad;
 	int err;
 
 	inmailbox = mlx4_alloc_cmd_mailbox(dev);
@@ -1070,20 +1075,21 @@ int mlx4_get_port_ib_caps(struct mlx4_dev *dev, u8 port, __be32 *caps)
 		return PTR_ERR(outmailbox);
 	}
 
-	inbuf = inmailbox->buf;
-	outbuf = outmailbox->buf;
-	inbuf[0] = 1;
-	inbuf[1] = 1;
-	inbuf[2] = 1;
-	inbuf[3] = 1;
-	*(__be16 *) (&inbuf[16]) = cpu_to_be16(0x0015);
-	*(__be32 *) (&inbuf[20]) = cpu_to_be32(port);
+	inmad = (struct mlx4_mad_ifc *)(inmailbox->buf);
+	outmad = (struct mlx4_mad_ifc *)(outmailbox->buf);
+
+	inmad->method = 0x1; /* Get */
+	inmad->class_version = 0x1;
+	inmad->mgmt_class = 0x1;
+	inmad->base_version = 0x1;
+	inmad->attr_id = cpu_to_be16(MLX4_ATTR_PORT_INFO);
+	inmad->attr_mod = cpu_to_be32(port);
 
 	err = mlx4_cmd_box(dev, inmailbox->dma, outmailbox->dma, port, 3,
 			   MLX4_CMD_MAD_IFC, MLX4_CMD_TIME_CLASS_C,
 			   MLX4_CMD_NATIVE);
 	if (!err)
-		*caps = *(__be32 *) (outbuf + 84);
+		*caps = ((struct mlx4_mad_port_info *)outmad->data)->cap_mask;
 	mlx4_free_cmd_mailbox(dev, inmailbox);
 	mlx4_free_cmd_mailbox(dev, outmailbox);
 	return err;
