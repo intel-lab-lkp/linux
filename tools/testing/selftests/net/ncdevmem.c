@@ -523,8 +523,9 @@ void run_devmem_tests(void)
 int main(int argc, char *argv[])
 {
 	int is_server = 0, opt;
+	int probe = 0;
 
-	while ((opt = getopt(argc, argv, "ls:c:p:v:q:t:f:")) != -1) {
+	while ((opt = getopt(argc, argv, "ls:c:p:v:q:t:f:P")) != -1) {
 		switch (opt) {
 		case 'l':
 			is_server = 1;
@@ -550,6 +551,9 @@ int main(int argc, char *argv[])
 		case 'f':
 			ifname = optarg;
 			break;
+		case 'P':
+			probe = 1;
+			break;
 		case '?':
 			printf("unknown option: %c\n", optopt);
 			break;
@@ -561,7 +565,10 @@ int main(int argc, char *argv[])
 	for (; optind < argc; optind++)
 		printf("extra arguments: %s\n", argv[optind]);
 
-	run_devmem_tests();
+	if (probe) {
+		run_devmem_tests();
+		return 0;
+	}
 
 	if (is_server)
 		return do_server();
