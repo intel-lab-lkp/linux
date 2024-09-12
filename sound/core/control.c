@@ -1397,9 +1397,9 @@ struct user_element {
 };
 
 // check whether the addition (in bytes) of user ctl element may overflow the limit.
-static bool check_user_elem_overflow(struct snd_card *card, ssize_t add)
+static bool check_user_elem_overflow(struct snd_card *card, size_t add)
 {
-	return (ssize_t)card->user_ctl_alloc_size + add > max_user_ctl_alloc_size;
+	return size_add(card->user_ctl_alloc_size, add) > max_user_ctl_alloc_size;
 }
 
 static int snd_ctl_elem_user_info(struct snd_kcontrol *kcontrol,
@@ -1593,7 +1593,7 @@ static int snd_ctl_elem_init_enum_names(struct user_element *ue)
 
 static size_t compute_user_elem_size(size_t size, unsigned int count)
 {
-	return sizeof(struct user_element) + size * count;
+	return size_add(sizeof(struct user_element), size_mul(size, count));
 }
 
 static void snd_ctl_elem_user_free(struct snd_kcontrol *kcontrol)
