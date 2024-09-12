@@ -570,12 +570,26 @@ static inline void memcg_rstat_updated(struct mem_cgroup *memcg, int val)
 	}
 }
 
-static void do_flush_stats(struct mem_cgroup *memcg)
+static void do_flush_stats(struct mem_cgroup *memcg, bool wait_for_flush)
 {
-	if (mem_cgroup_is_root(memcg))
-		WRITE_ONCE(flush_last_time, jiffies_64);
+	bool flushed = cgroup_rstat_flush_relaxed(memcg->css.cgroup,
+						  wait_for_flush);
 
-	cgroup_rstat_flush(memcg->css.cgroup);
+	if (mem_cgroup_is_root(memcg) && flushed)
+		    WRITE_ONCE(flush_last_time, jiffies_64);
+}
+
+static void __mem_cgroup_flush_stats(struct mem_cgroup *memcg,
+				     bool wait_for_flush)
+{
+	if (mem_cgroup_disabled())
+		return;
+
+	if (!memcg)
+		memcg = root_mem_cgroup;
+
+	if (memcg_vmstats_needs_flush(memcg->vmstats))
+		do_flush_stats(memcg, wait_for_flush);
 }
 
 /*
@@ -589,21 +603,19 @@ static void do_flush_stats(struct mem_cgroup *memcg)
  */
 void mem_cgroup_flush_stats(struct mem_cgroup *memcg)
 {
-	if (mem_cgroup_disabled())
-		return;
+	__mem_cgroup_flush_stats(memcg, true);
+}
 
-	if (!memcg)
-		memcg = root_mem_cgroup;
-
-	if (memcg_vmstats_needs_flush(memcg->vmstats))
-		do_flush_stats(memcg);
+void mem_cgroup_flush_stats_relaxed(struct mem_cgroup *memcg)
+{
+	__mem_cgroup_flush_stats(memcg, false);
 }
 
 void mem_cgroup_flush_stats_ratelimited(struct mem_cgroup *memcg)
 {
 	/* Only flush if the periodic flusher is one full cycle late */
 	if (time_after64(jiffies_64, READ_ONCE(flush_last_time) + 2*FLUSH_TIME))
-		mem_cgroup_flush_stats(memcg);
+		mem_cgroup_flush_stats_relaxed(memcg);
 }
 
 static void flush_memcg_stats_dwork(struct work_struct *w)
@@ -612,7 +624,7 @@ static void flush_memcg_stats_dwork(struct work_struct *w)
 	 * Deliberately ignore memcg_vmstats_needs_flush() here so that flushing
 	 * in latency-sensitive paths is as cheap as possible.
 	 */
-	do_flush_stats(root_mem_cgroup);
+	do_flush_stats(root_mem_cgroup, false);
 	queue_delayed_work(system_unbound_wq, &stats_flush_dwork, FLUSH_TIME);
 }
 
@@ -5237,7 +5249,7 @@ bool obj_cgroup_may_zswap(struct obj_cgroup *objcg)
 		 * mem_cgroup_flush_stats() ignores small changes. Use
 		 * do_flush_stats() directly to get accurate stats for charging.
 		 */
-		do_flush_stats(memcg);
+		do_flush_stats(memcg, true);
 		pages = memcg_page_state(memcg, MEMCG_ZSWAP_B) / PAGE_SIZE;
 		if (pages < max)
 			continue;
