@@ -182,7 +182,13 @@ static int mba_run_test(const struct resctrl_test *test, const struct user_param
 		fill_buf.memflush = uparams->fill_buf->memflush;
 		param.fill_buf = &fill_buf;
 	} else if (!uparams->benchmark_cmd[0]) {
-		fill_buf.buf_size = DEFAULT_SPAN;
+		unsigned long cache_total_size = 0;
+
+		ret = get_cache_size(uparams->cpu, "L3", &cache_total_size);
+		if (ret)
+			return ret;
+		fill_buf.buf_size = cache_total_size * 2 > DEFAULT_SPAN ?
+				    cache_total_size * 2 : DEFAULT_SPAN;
 		fill_buf.memflush = 1;
 		param.fill_buf = &fill_buf;
 	}
