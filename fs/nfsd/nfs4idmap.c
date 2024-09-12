@@ -620,7 +620,7 @@ numeric_name_to_id(struct svc_rqst *rqstp, int type, const char *name, u32 namel
 static __be32
 do_name_to_id(struct svc_rqst *rqstp, int type, const char *name, u32 namelen, u32 *id)
 {
-	if (nfs4_disable_idmapping && rqstp->rq_cred.cr_flavor < RPC_AUTH_GSS)
+	if (nfs4_disable_idmapping && rqstp->rq_cred.cr_flavor == RPC_AUTH_UNIX)
 		if (numeric_name_to_id(rqstp, type, name, namelen, id))
 			return 0;
 		/*
@@ -633,7 +633,7 @@ do_name_to_id(struct svc_rqst *rqstp, int type, const char *name, u32 namelen, u
 static __be32 encode_name_from_id(struct xdr_stream *xdr,
 				  struct svc_rqst *rqstp, int type, u32 id)
 {
-	if (nfs4_disable_idmapping && rqstp->rq_cred.cr_flavor < RPC_AUTH_GSS)
+	if (nfs4_disable_idmapping && rqstp->rq_cred.cr_flavor == RPC_AUTH_UNIX)
 		return encode_ascii_id(xdr, id);
 	return idmap_id_to_name(xdr, rqstp, type, id);
 }
