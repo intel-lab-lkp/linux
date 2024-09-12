@@ -29,7 +29,6 @@
 #include "smc_ism.h"
 #include "smc_core.h"
 
-static struct net_device *__pnet_find_base_ndev(struct net_device *ndev);
 static struct net_device *pnet_find_base_ndev(struct net_device *ndev);
 
 static const struct nla_policy smc_pnet_policy[SMC_PNETID_MAX + 1] = {
@@ -791,7 +790,7 @@ static void smc_pnet_add_base_pnetid(struct net *net, struct net_device *dev,
 {
 	struct net_device *base_dev;
 
-	base_dev = __pnet_find_base_ndev(dev);
+	base_dev = pnet_find_base_ndev(dev);
 	if (base_dev->flags & IFF_UP &&
 	    !smc_pnetid_by_dev_port(base_dev->dev.parent, base_dev->dev_port,
 				    ndev_pnetid)) {
@@ -857,7 +856,7 @@ static int smc_pnet_netdev_event(struct notifier_block *this,
 		smc_pnet_add_base_pnetid(net, event_dev, ndev_pnetid);
 		return NOTIFY_OK;
 	case NETDEV_DOWN:
-		event_dev = __pnet_find_base_ndev(event_dev);
+		event_dev = pnet_find_base_ndev(event_dev);
 		if (!smc_pnetid_by_dev_port(event_dev->dev.parent,
 					    event_dev->dev_port, ndev_pnetid)) {
 			/* remove from PNETIDs list */
@@ -925,7 +924,6 @@ static struct net_device *__pnet_find_base_ndev(struct net_device *ndev)
 {
 	int i, nest_lvl;
 
-	ASSERT_RTNL();
 	nest_lvl = ndev->lower_level;
 	for (i = 0; i < nest_lvl; i++) {
 		struct list_head *lower = &ndev->adj_list.lower;
@@ -933,7 +931,9 @@ static struct net_device *__pnet_find_base_ndev(struct net_device *ndev)
 		if (list_empty(lower))
 			break;
 		lower = lower->next;
-		ndev = netdev_lower_get_next(ndev, &lower);
+		ndev = netdev_next_lower_dev_rcu(ndev, &lower);
+		if (!ndev)
+			break;
 	}
 	return ndev;
 }
@@ -945,9 +945,9 @@ static struct net_device *__pnet_find_base_ndev(struct net_device *ndev)
  */
 static struct net_device *pnet_find_base_ndev(struct net_device *ndev)
 {
-	rtnl_lock();
+	rcu_read_lock();
 	ndev = __pnet_find_base_ndev(ndev);
-	rtnl_unlock();
+	rcu_read_unlock();
 	return ndev;
 }
 
