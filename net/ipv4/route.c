@@ -2360,8 +2360,12 @@ local_input:
 
 	RT_CACHE_STAT_INC(in_slow_tot);
 	if (res->type == RTN_UNREACHABLE) {
-		rth->dst.input= ip_error;
-		rth->dst.error= -err;
+		if (IPCB(skb)->opt.router_alert)
+			rth->dst.input = ip_forward;
+		else
+			rth->dst.input = ip_error;
+
+		rth->dst.error = -err;
 		rth->rt_flags	&= ~RTCF_LOCAL;
 	}
 
