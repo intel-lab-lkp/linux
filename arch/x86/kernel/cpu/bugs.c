@@ -287,6 +287,81 @@ static void x86_amd_ssb_disable(void)
 		wrmsrl(MSR_AMD64_LS_CFG, msrval);
 }
 
+enum vulnerabilities {
+	SPECTRE_V1,
+	SPECTRE_V2,
+	RETBLEED,
+	SPECTRE_V2_USER,
+	L1TF,
+	MDS,
+	TAA,
+	MMIO,
+	RFDS,
+	SRBDS,
+	SRSO,
+	GDS,
+};
+
+/*
+ * Returns true if vulnerability should be mitigated based on the
+ * selected attack vector controls
+ *
+ * See Documentation/admin-guide/hw-vuln/attack_vector_controls.rst
+ */
+static bool __init should_mitigate_vuln(enum vulnerabilities vuln)
+{
+	switch (vuln) {
+	/*
+	 * The only spectre_v1 mitigations in the kernel are related to
+	 * SWAPGS protection on kernel entry.  Therefore, protection is
+	 * only required for the user->kernel attack vector.
+	 */
+	case SPECTRE_V1:
+		return cpu_mitigate_attack_vector(CPU_MITIGATE_USER_KERNEL);
+
+	/*
+	 * Both spectre_v2 and srso may allow user->kernel or
+	 * guest->host attacks through branch predictor manipulation.
+	 */
+	case SPECTRE_V2:
+	case SRSO:
+		return cpu_mitigate_attack_vector(CPU_MITIGATE_USER_KERNEL) ||
+			cpu_mitigate_attack_vector(CPU_MITIGATE_GUEST_HOST);
+
+	/*
+	 * spectre_v2_user refers to user->user or guest->guest branch
+	 * predictor attacks only.  Other indirect branch predictor attacks
+	 * are covered by the spectre_v2 vulnerability.
+	 */
+	case SPECTRE_V2_USER:
+		return cpu_mitigate_attack_vector(CPU_MITIGATE_USER_USER) ||
+			cpu_mitigate_attack_vector(CPU_MITIGATE_GUEST_GUEST);
+
+	/* L1TF is only possible as a guest->host attack */
+	case L1TF:
+		return cpu_mitigate_attack_vector(CPU_MITIGATE_GUEST_HOST);
+
+	/*
+	 * All the vulnerabilities below allow potentially leaking data
+	 * across address spaces.  Therefore, mitigation is required for
+	 * any of these 4 attack vectors.
+	 */
+	case MDS:
+	case TAA:
+	case MMIO:
+	case RFDS:
+	case SRBDS:
+	case GDS:
+		return cpu_mitigate_attack_vector(CPU_MITIGATE_USER_KERNEL) ||
+			cpu_mitigate_attack_vector(CPU_MITIGATE_GUEST_HOST) ||
+			cpu_mitigate_attack_vector(CPU_MITIGATE_USER_USER) ||
+			cpu_mitigate_attack_vector(CPU_MITIGATE_GUEST_GUEST);
+	default:
+		return false;
+	}
+}
+
+
 /* Default mitigation for MDS-affected CPUs */
 static enum mds_mitigations mds_mitigation __ro_after_init =
 	IS_ENABLED(CONFIG_MITIGATION_MDS) ? MDS_MITIGATION_AUTO : MDS_MITIGATION_OFF;
