@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0
+# SPDX-License-Identifier: GPL-2.0 OR MIT
 
 tidss-y := tidss_crtc.o \
 	tidss_drv.o \
