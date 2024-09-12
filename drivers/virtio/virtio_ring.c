@@ -194,7 +194,7 @@ struct vring_virtqueue {
 	u16 last_used_idx;
 
 	/* Hint for event idx: already triggered no need to disable. */
-	bool event_triggered;
+	bool __data_racy event_triggered;
 
 	union {
 		/* Available for split ring */
