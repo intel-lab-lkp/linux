@@ -181,6 +181,7 @@ enum pl2303_type {
 	TYPE_TA,
 	TYPE_TB,
 	TYPE_HXD,
+	TYPE_HXD_CLONE,
 	TYPE_HXN,
 	TYPE_COUNT
 };
@@ -192,6 +193,7 @@ struct pl2303_type_data {
 	unsigned int no_autoxonxoff:1;
 	unsigned int no_divisors:1;
 	unsigned int alt_divisors:1;
+	unsigned int no_break_getline:1;
 };
 
 struct pl2303_serial_private {
@@ -231,6 +233,11 @@ static const struct pl2303_type_data pl2303_type_data[TYPE_COUNT] = {
 	[TYPE_HXD] = {
 		.name			= "HXD",
 		.max_baud_rate		= 12000000,
+	},
+	[TYPE_HXD_CLONE] = {
+		.name			= "HXD",
+		.max_baud_rate		= 12000000,
+		.no_break_getline	= true,
 	},
 	[TYPE_HXN] = {
 		.name			= "G",
@@ -466,6 +473,28 @@ static int pl2303_detect_type(struct usb_serial *serial)
 	return -ENODEV;
 }
 
+static bool pl2303_is_hxd_clone(struct usb_serial *serial)
+{
+	struct usb_device *udev = serial->dev;
+	unsigned char *buf;
+	int ret;
+
+	buf = kmalloc(7, GFP_KERNEL);
+	if (!buf) {
+		dev_err(&serial->interface->dev,
+			"could not check for clone type, not enough memory\n");
+		return false;
+	}
+
+	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
+			      GET_LINE_REQUEST, GET_LINE_REQUEST_TYPE,
+			      0, 0, buf, 7, 100);
+
+	kfree(buf);
+
+	return ret == -EPIPE;
+}
+
 static int pl2303_startup(struct usb_serial *serial)
 {
 	struct pl2303_serial_private *spriv;
@@ -483,6 +512,9 @@ static int pl2303_startup(struct usb_serial *serial)
 	spriv = kzalloc(sizeof(*spriv), GFP_KERNEL);
 	if (!spriv)
 		return -ENOMEM;
+
+	if (type == TYPE_HXD && pl2303_is_hxd_clone(serial))
+		type = TYPE_HXD_CLONE;
 
 	spriv->type = &pl2303_type_data[type];
 	spriv->quirks = (unsigned long)usb_get_serial_data(serial);
@@ -724,8 +756,17 @@ static void pl2303_encode_baud_rate(struct tty_struct *tty,
 static int pl2303_get_line_request(struct usb_serial_port *port,
 							unsigned char buf[7])
 {
-	struct usb_device *udev = port->serial->dev;
+	struct usb_serial *serial = port->serial;
+	struct pl2303_serial_private *spriv = usb_get_serial_data(serial);
+	struct usb_device *udev = serial->dev;
 	int ret;
+
+	if (spriv->type->no_break_getline) {
+		struct pl2303_private *priv = usb_get_serial_port_data(port);
+
+		memcpy(buf, priv->line_settings, 7);
+		return 0;
+	}
 
 	ret = usb_control_msg(udev, usb_rcvctrlpipe(udev, 0),
 				GET_LINE_REQUEST, GET_LINE_REQUEST_TYPE,
@@ -1063,8 +1104,12 @@ static int pl2303_carrier_raised(struct usb_serial_port *port)
 static int pl2303_set_break(struct usb_serial_port *port, bool enable)
 {
 	struct usb_serial *serial = port->serial;
+	struct pl2303_serial_private *spriv = usb_get_serial_data(serial);
 	u16 state;
 	int result;
+
+	if (spriv->type->no_break_getline)
+		return -ENOTTY;
 
 	if (enable)
 		state = BREAK_ON;
