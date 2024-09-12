@@ -31,6 +31,18 @@ config DEBUG_PINCTRL
 	help
 	  Say Y here to add some extra checks and diagnostics to PINCTRL calls.
 
+config PINCTRL_ADSP
+	bool "ADSP-SC5XX pinctrl driver"
+	depends on ARCH_SC59X_64
+	depends on OF
+	select PINMUX
+	select GPIOLIB
+	select GENERIC_PINCONF
+	help
+	  Say Y here to enable the ADSP-SC5XX pinctrl driver. This is required for
+	  correct peripheral functionality on the SoC.
+
+
 config PINCTRL_AMD
 	bool "AMD GPIO pin control"
 	depends on HAS_IOMEM
