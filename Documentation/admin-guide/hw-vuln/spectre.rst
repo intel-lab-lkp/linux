@@ -332,22 +332,24 @@ vulnerable, and which mitigations are active.
 
 The sysfs file showing Spectre variant 1 mitigation status is:
 
-   /sys/devices/system/cpu/vulnerabilities/spectre_v1
+  /sys/devices/system/cpu/vulnerabilities/spectre_v1
 
 The possible values in this file are:
 
-  .. list-table::
+.. list-table::
 
-     * - 'Not affected'
-       - The processor is not vulnerable.
-     * - 'Vulnerable: __user pointer sanitization and usercopy barriers only; no swapgs barriers'
-       - The swapgs protections are disabled; otherwise it has
-         protection in the kernel on a case by case base with explicit
-         pointer sanitation and usercopy LFENCE barriers.
-     * - 'Mitigation: usercopy/swapgs barriers and __user pointer sanitization'
-       - Protection in the kernel on a case by case base with explicit
-         pointer sanitation, usercopy LFENCE barriers, and swapgs LFENCE
-         barriers.
+  * - 'Not affected'
+    - The processor is not vulnerable.
+
+  * - 'Vulnerable: __user pointer sanitization and usercopy barriers only; no
+      swapgs barriers'
+    - The swapgs protections are disabled; otherwise it has protection in the
+      kernel on a case by case base with explicit pointer sanitation and
+      usercopy LFENCE barriers.
+
+  * - 'Mitigation: usercopy/swapgs barriers and __user pointer sanitization'
+    - Protection in the kernel on a case by case base with explicit pointer
+      sanitation, usercopy LFENCE barriers, and swapgs LFENCE barriers.
 
 However, the protections are put in place on a case by case basis,
 and there is no guarantee that all possible attack vectors for Spectre
@@ -370,81 +372,116 @@ per process on a case-by-case base.
 
 The sysfs file showing Spectre variant 2 mitigation status is:
 
-   /sys/devices/system/cpu/vulnerabilities/spectre_v2
+  /sys/devices/system/cpu/vulnerabilities/spectre_v2
 
 The possible values in this file are:
 
   - Kernel status:
 
-  ========================================  =================================
-  'Not affected'                            The processor is not vulnerable
-  'Mitigation: None'                        Vulnerable, no mitigation
-  'Mitigation: Retpolines'                  Use Retpoline thunks
-  'Mitigation: LFENCE'                      Use LFENCE instructions
-  'Mitigation: Enhanced IBRS'               Hardware-focused mitigation
-  'Mitigation: Enhanced IBRS + Retpolines'  Hardware-focused + Retpolines
-  'Mitigation: Enhanced IBRS + LFENCE'      Hardware-focused + LFENCE
-  ========================================  =================================
+    .. list-table::
+
+      * - 'Not affected'
+        - The processor is not vulnerable.
+
+      * - 'Mitigation: None'
+        - Vulnerable, no mitigation.
+
+      * - 'Mitigation: Retpolines'
+        - Use Retpoline thunks.
+
+      * - 'Mitigation: LFENCE'
+        - Use LFENCE instructions.
+
+      * - 'Mitigation: Enhanced IBRS'
+        - Hardware-focused mitigation.
+
+      * - 'Mitigation: Enhanced IBRS + Retpolines'
+        - Hardware-focused + Retpolines.
+
+      * - 'Mitigation: Enhanced IBRS + LFENCE'
+        - Hardware-focused + LFENCE.
 
   - Firmware status: Show if Indirect Branch Restricted Speculation (IBRS) is
     used to protect against Spectre variant 2 attacks when calling firmware (x86 only).
 
-  ========== =============================================================
-  'IBRS_FW'  Protection against user program attacks when calling firmware
-  ========== =============================================================
+    .. list-table::
+
+      * - 'IBRS_FW'
+        - Protection against user program attacks when calling firmware.
 
   - Indirect branch prediction barrier (IBPB) status for protection between
     processes of different users. This feature can be controlled through
     prctl() per process, or through kernel command line options. This is
     an x86 only feature. For more details see below.
 
-  ===================   ========================================================
-  'IBPB: disabled'      IBPB unused
-  'IBPB: always-on'     Use IBPB on all tasks
-  'IBPB: conditional'   Use IBPB on SECCOMP or indirect branch restricted tasks
-  ===================   ========================================================
+    .. list-table::
+
+      * - 'IBPB: disabled'
+        - IBPB unused.
+
+      * - 'IBPB: always-on'
+        - Use IBPB on all tasks.
+
+      * - 'IBPB: conditional'
+        - Use IBPB on SECCOMP or indirect branch restricted tasks.
 
   - Single threaded indirect branch prediction (STIBP) status for protection
     between different hyper threads. This feature can be controlled through
     prctl per process, or through kernel command line options. This is x86
     only feature. For more details see below.
 
-  ====================  ========================================================
-  'STIBP: disabled'     STIBP unused
-  'STIBP: forced'       Use STIBP on all tasks
-  'STIBP: conditional'  Use STIBP on SECCOMP or indirect branch restricted tasks
-  ====================  ========================================================
+    .. list-table::
+
+      * - 'STIBP: disabled'
+        - STIBP unused.
+
+      * - 'STIBP: forced'
+        - Use STIBP on all tasks.
+
+      * - 'STIBP: conditional'
+        - Use STIBP on SECCOMP or indirect branch restricted tasks.
 
   - Return stack buffer (RSB) protection status:
 
-  =============   ===========================================
-  'RSB filling'   Protection of RSB on context switch enabled
-  =============   ===========================================
+    .. list-table::
+
+      * - 'RSB filling'
+        - Protection of RSB on context switch enabled.
 
   - EIBRS Post-barrier Return Stack Buffer (PBRSB) protection status:
 
-  ===========================  =======================================================
-  'PBRSB-eIBRS: SW sequence'   CPU is affected and protection of RSB on VMEXIT enabled
-  'PBRSB-eIBRS: Vulnerable'    CPU is vulnerable
-  'PBRSB-eIBRS: Not affected'  CPU is not affected by PBRSB
-  ===========================  =======================================================
+    .. list-table::
+
+      * - 'PBRSB-eIBRS: SW sequence'
+        - CPU is affected and protection of RSB on VMEXIT enabled.
+
+      * - 'PBRSB-eIBRS: Vulnerable'
+        - CPU is vulnerable.
+
+      * - 'PBRSB-eIBRS: Not affected'
+        - CPU is not affected by PBRSB.
 
   - Branch History Injection (BHI) protection status:
 
-.. list-table::
+    .. list-table::
 
- * - BHI: Not affected
-   - System is not affected
- * - BHI: Retpoline
-   - System is protected by retpoline
- * - BHI: BHI_DIS_S
-   - System is protected by BHI_DIS_S
- * - BHI: SW loop, KVM SW loop
-   - System is protected by software clearing sequence
- * - BHI: Vulnerable
-   - System is vulnerable to BHI
- * - BHI: Vulnerable, KVM: SW loop
-   - System is vulnerable; KVM is protected by software clearing sequence
+      * - 'BHI: Not affected'
+        - System is not affected.
+
+      * - 'BHI: Retpoline'
+        - System is protected by retpoline.
+
+      * - 'BHI: BHI_DIS_S'
+        - System is protected by BHI_DIS_S.
+
+      * - 'BHI: SW loop, KVM SW loop'
+        - System is protected by software clearing sequence.
+
+      * - 'BHI: Vulnerable'
+        - System is vulnerable to BHI.
+
+      * - 'BHI: Vulnerable, KVM: SW loop'
+        - System is vulnerable; KVM is protected by software clearing sequence.
 
 Full mitigation might require a microcode update from the CPU
 vendor. When the necessary microcode is not available, the kernel will

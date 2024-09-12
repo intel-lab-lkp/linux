@@ -81,27 +81,35 @@ GDS System Information
 The kernel provides vulnerability status information through sysfs. For
 GDS this can be accessed by the following sysfs file:
 
-/sys/devices/system/cpu/vulnerabilities/gather_data_sampling
+  /sys/devices/system/cpu/vulnerabilities/gather_data_sampling
 
 The possible values contained in this file are:
 
- ============================== =============================================
- Not affected                   Processor not vulnerable.
- Vulnerable                     Processor vulnerable and mitigation disabled.
- Vulnerable: No microcode       Processor vulnerable and microcode is missing
-                                mitigation.
- Mitigation: AVX disabled,
- no microcode                   Processor is vulnerable and microcode is missing
-                                mitigation. AVX disabled as mitigation.
- Mitigation: Microcode          Processor is vulnerable and mitigation is in
-                                effect.
- Mitigation: Microcode (locked) Processor is vulnerable and mitigation is in
-                                effect and cannot be disabled.
- Unknown: Dependent on
- hypervisor status              Running on a virtual guest processor that is
-                                affected but with no way to know if host
-                                processor is mitigated or vulnerable.
- ============================== =============================================
+.. list-table::
+
+  * - 'Not affected'
+    - Processor not vulnerable.
+
+  * - 'Vulnerable'
+    - Processor vulnerable and mitigation disabled.
+
+  * - 'Vulnerable: No microcode'
+    - Processor vulnerable and microcode is missing migitation.
+
+  * - 'Mitigation: AVX disabled, no microcode'
+    - Processor is vulnerable and microcode is missing mitigation. AVX disabled
+      as mitigation.
+
+  * - 'Mitigation: Microcode'
+    - Processor is vulnerable and mitigation is in effect.
+
+  * - 'Mitigation: Microcode (locked)'
+    - Processor is vulnerable and mitigation is in effect and cannot be
+      disabled.
+
+  * - 'Unknown: Dependent on hypervisor status'
+    - Running on a virtual guest processor that is affected but with no way to
+      know if host processor is mitigated or vulnerable.
 
 GDS Default mitigation
 ----------------------

@@ -214,36 +214,39 @@ The Linux kernel provides a sysfs interface to enumerate the current
 vulnerability status of the system: whether the system is vulnerable, and
 which mitigations are active. The relevant sysfs file is:
 
-	/sys/devices/system/cpu/vulnerabilities/mmio_stale_data
+  /sys/devices/system/cpu/vulnerabilities/mmio_stale_data
 
 The possible values in this file are:
 
-  .. list-table::
+.. list-table::
 
-     * - 'Not affected'
-       - The processor is not vulnerable
-     * - 'Vulnerable'
-       - The processor is vulnerable, but no mitigation enabled
-     * - 'Vulnerable: Clear CPU buffers attempted, no microcode'
-       - The processor is vulnerable but microcode is not updated. The
-         mitigation is enabled on a best effort basis.
+  * - 'Not affected'
+    - The processor is not vulnerable.
 
-         If the processor is vulnerable but the availability of the microcode
-         based mitigation mechanism is not advertised via CPUID, the kernel
-         selects a best effort mitigation mode. This mode invokes the mitigation
-         instructions without a guarantee that they clear the CPU buffers.
+  * - 'Vulnerable'
+    - The processor is vulnerable, but no mitigation enabled.
 
-         This is done to address virtualization scenarios where the host has the
-         microcode update applied, but the hypervisor is not yet updated to
-         expose the CPUID to the guest. If the host has updated microcode the
-         protection takes effect; otherwise a few CPU cycles are wasted
-         pointlessly.
-     * - 'Mitigation: Clear CPU buffers'
-       - The processor is vulnerable and the CPU buffer clearing mitigation is
-         enabled.
-     * - 'Unknown: No mitigations'
-       - The processor vulnerability status is unknown because it is
-	 out of Servicing period. Mitigation is not attempted.
+  * - 'Vulnerable: Clear CPU buffers attempted, no microcode'
+    - The processor is vulnerable but microcode is not updated. The mitigation
+      is enabled on a best effort basis.
+
+      If the processor is vulnerable but the availability of the microcode
+      based mitigation mechanism is not advertised via CPUID, the kernel
+      selects a best effort mitigation mode. This mode invokes the mitigation
+      instructions without a guarantee that they clear the CPU buffers.
+
+      This is done to address virtualization scenarios where the host has the
+      microcode update applied, but the hypervisor is not yet updated to expose
+      the CPUID to the guest. If the host has updated microcode the protection
+      takes effect; otherwise a few CPU cycles are wasted pointlessly.
+
+  * - 'Mitigation: Clear CPU buffers'
+    - The processor is vulnerable and the CPU buffer clearing mitigation is
+      enabled.
+
+  * - 'Unknown: No mitigations'
+    - The processor vulnerability status is unknown because it is out of
+      Servicing period. Mitigation is not attempted.
 
 Definitions:
 ------------
@@ -259,11 +262,16 @@ processes. ESU dates will typically be aligned to end of quarter.
 If the processor is vulnerable then the following information is appended to
 the above information:
 
-  ========================  ===========================================
-  'SMT vulnerable'          SMT is enabled
-  'SMT disabled'            SMT is disabled
-  'SMT Host state unknown'  Kernel runs in a VM, Host SMT state unknown
-  ========================  ===========================================
+.. list-table::
+
+  * - 'SMT vulnerable'
+    - SMT is enabled.
+
+  * - 'SMT disabled'
+    - SMT is disabled.
+
+  * - 'SMT Host state unknown'
+    - Kernel runs in a VM, Host SMT state unknown.
 
 References
 ----------

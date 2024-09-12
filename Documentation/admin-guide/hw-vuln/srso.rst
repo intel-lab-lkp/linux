@@ -42,67 +42,62 @@ The sysfs file showing SRSO mitigation status is:
 
 The possible values in this file are:
 
- * 'Not affected':
+.. list-table::
 
-   The processor is not vulnerable
+  * - 'Not affected'
+    - The processor is not vulnerable.
 
-* 'Vulnerable':
+  * - 'Vulnerable'
+    - The processor is vulnerable and no mitigations have been applied.
 
-   The processor is vulnerable and no mitigations have been applied.
+  * - 'Vulnerable: No microcode'
+    - The processor is vulnerable, no microcode extending IBPB functionality to
+      address the vulnerability has been applied.
 
- * 'Vulnerable: No microcode':
+  * - 'Vulnerable: Safe RET, no microcode'
+    - The "Safe RET" mitigation (see below) has been applied to protect the
+      kernel, but the IBPB-extending microcode has not been applied. User space
+      tasks may still be vulnerable.
 
-   The processor is vulnerable, no microcode extending IBPB
-   functionality to address the vulnerability has been applied.
+  * - 'Vulnerable: Microcode, no safe RET'
+    - Extended IBPB functionality microcode patch has been applied. It does not
+      address User->Kernel and Guest->Host transitions protection but it does
+      address User->User and VM->VM attack vectors.
 
- * 'Vulnerable: Safe RET, no microcode':
+      Note that User->User mitigation is controlled by how the IBPB aspect in
+      the Spectre v2 mitigation is selected:
 
-   The "Safe RET" mitigation (see below) has been applied to protect the
-   kernel, but the IBPB-extending microcode has not been applied.  User
-   space tasks may still be vulnerable.
+      * 'conditional IBPB'
 
- * 'Vulnerable: Microcode, no safe RET':
+        where each process can select whether it needs an IBPB issued around it
+        PR_SPEC_DISABLE/_ENABLE etc, see :doc:`spectre`
 
-   Extended IBPB functionality microcode patch has been applied. It does
-   not address User->Kernel and Guest->Host transitions protection but it
-   does address User->User and VM->VM attack vectors.
+      * 'strict'
 
-   Note that User->User mitigation is controlled by how the IBPB aspect in
-   the Spectre v2 mitigation is selected:
+        i.e., always on - by supplying spectre_v2_user=on on the kernel command
+        line
 
-    * conditional IBPB:
+      (spec_rstack_overflow=microcode)
 
-      where each process can select whether it needs an IBPB issued
-      around it PR_SPEC_DISABLE/_ENABLE etc, see :doc:`spectre`
+  * - 'Mitigation: Safe RET'
+    - Combined microcode/software mitigation. It complements the extended IBPB
+      microcode patch functionality by addressing User->Kernel and Guest->Host
+      transitions protection.
 
-    * strict:
+      Selected by default or by spec_rstack_overflow=safe-ret
 
-      i.e., always on - by supplying spectre_v2_user=on on the kernel
-      command line
+  * - 'Mitigation: IBPB'
+    - Similar protection as "safe RET" above but employs an IBPB barrier on
+      privilege domain crossings (User->Kernel, Guest->Host).
 
-   (spec_rstack_overflow=microcode)
+      (spec_rstack_overflow=ibpb)
 
- * 'Mitigation: Safe RET':
+  * - 'Mitigation: IBPB on VMEXIT'
 
-   Combined microcode/software mitigation. It complements the
-   extended IBPB microcode patch functionality by addressing
-   User->Kernel and Guest->Host transitions protection.
+    - Mitigation addressing the cloud provider scenario - the Guest->Host
+      transitions only.
 
-   Selected by default or by spec_rstack_overflow=safe-ret
-
- * 'Mitigation: IBPB':
-
-   Similar protection as "safe RET" above but employs an IBPB barrier on
-   privilege domain crossings (User->Kernel, Guest->Host).
-
-  (spec_rstack_overflow=ibpb)
-
- * 'Mitigation: IBPB on VMEXIT':
-
-   Mitigation addressing the cloud provider scenario - the Guest->Host
-   transitions only.
-
-   (spec_rstack_overflow=ibpb-vmexit)
+      (spec_rstack_overflow=ibpb-vmexit)
 
 
 

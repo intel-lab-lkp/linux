@@ -70,22 +70,28 @@ The Linux kernel provides a sysfs interface to enumerate the current iTLB
 multihit status of the system:whether the system is vulnerable and which
 mitigations are active. The relevant sysfs file is:
 
-/sys/devices/system/cpu/vulnerabilities/itlb_multihit
+  /sys/devices/system/cpu/vulnerabilities/itlb_multihit
 
 The possible values in this file are:
 
 .. list-table::
 
-     * - Not affected
-       - The processor is not vulnerable.
-     * - KVM: Mitigation: Split huge pages
-       - Software changes mitigate this issue.
-     * - KVM: Mitigation: VMX unsupported
-       - KVM is not vulnerable because Virtual Machine Extensions (VMX) is not supported.
-     * - KVM: Mitigation: VMX disabled
-       - KVM is not vulnerable because Virtual Machine Extensions (VMX) is disabled.
-     * - KVM: Vulnerable
-       - The processor is vulnerable, but no mitigation enabled
+  * - 'Not affected'
+    - The processor is not vulnerable.
+
+  * - 'KVM: Mitigation: Split huge pages'
+    - Software changes mitigate this issue.
+
+  * - 'KVM: Mitigation: VMX unsupported'
+    - KVM is not vulnerable because Virtual Machine Extensions (VMX) is not
+      supported.
+
+  * - 'KVM: Mitigation: VMX disabled'
+    - KVM is not vulnerable because Virtual Machine Extensions (VMX) is
+      disabled.
+
+  * - 'KVM: Vulnerable'
+    - The processor is vulnerable, but no mitigation enabled.
 
 
 Enumeration of the erratum
