@@ -338,7 +338,7 @@ static void nft_netdev_event(unsigned long event, struct net_device *dev,
 			kfree(ops);
 			break;
 		case NETDEV_REGISTER:
-			if (strcmp(hook->ifname, dev->name))
+			if (strncmp(hook->ifname, dev->name, hook->ifnamelen))
 				continue;
 			ops = kzalloc(sizeof(struct nf_hook_ops),
 				      GFP_KERNEL_ACCOUNT);
