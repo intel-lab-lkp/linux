@@ -265,7 +265,7 @@ enum {
 };
 
 
-#define MLX4_ATTR_EXTENDED_PORT_INFO	cpu_to_be16(0xff90)
+#define MLX4_ATTR_CABLE_INFO		0xff60
 
 enum {
 	MLX4_BMME_FLAG_WIN_TYPE_2B	= 1 <<  1,

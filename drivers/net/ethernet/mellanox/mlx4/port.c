@@ -2052,7 +2052,7 @@ static int mlx4_get_module_id(struct mlx4_dev *dev, u8 port, u8 *module_id)
 	inmad->class_version = 0x1;
 	inmad->mgmt_class = 0x1;
 	inmad->base_version = 0x1;
-	inmad->attr_id = cpu_to_be16(0xFF60); /* Module Info */
+	inmad->attr_id = cpu_to_be16(MLX4_ATTR_CABLE_INFO);
 
 	cable_info = (struct mlx4_cable_info *)inmad->data;
 	cable_info->dev_mem_address = 0;
@@ -2071,7 +2071,7 @@ static int mlx4_get_module_id(struct mlx4_dev *dev, u8 port, u8 *module_id)
 		ret = be16_to_cpu(outmad->status);
 		mlx4_warn(dev,
 			  "MLX4_CMD_MAD_IFC Get Module ID attr(%x) port(%d) i2c_addr(%x) offset(%d) size(%d): Response Mad Status(%x) - %s\n",
-			  0xFF60, port, I2C_ADDR_LOW, 0, 1, ret,
+			  MLX4_ATTR_CABLE_INFO, port, I2C_ADDR_LOW, 0, 1, ret,
 			  cable_info_mad_err_str(ret));
 		ret = -ret;
 		goto out;
@@ -2170,7 +2170,7 @@ int mlx4_get_module_info(struct mlx4_dev *dev, u8 port,
 	inmad->class_version = 0x1;
 	inmad->mgmt_class = 0x1;
 	inmad->base_version = 0x1;
-	inmad->attr_id = cpu_to_be16(0xFF60); /* Module Info */
+	inmad->attr_id = cpu_to_be16(MLX4_ATTR_CABLE_INFO);
 
 	if (offset < I2C_PAGE_SIZE && offset + size > I2C_PAGE_SIZE)
 		/* Cross pages reads are not allowed
@@ -2195,7 +2195,7 @@ int mlx4_get_module_info(struct mlx4_dev *dev, u8 port,
 		ret = be16_to_cpu(outmad->status);
 		mlx4_warn(dev,
 			  "MLX4_CMD_MAD_IFC Get Module info attr(%x) port(%d) i2c_addr(%x) offset(%d) size(%d): Response Mad Status(%x) - %s\n",
-			  0xFF60, port, i2c_addr, offset, size,
+			  MLX4_ATTR_CABLE_INFO, port, i2c_addr, offset, size,
 			  ret, cable_info_mad_err_str(ret));
 
 		if (i2c_addr == I2C_ADDR_HIGH &&
