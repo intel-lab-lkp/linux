@@ -215,7 +215,7 @@ struct dentry_operations {
 
 #define DCACHE_NOKEY_NAME		BIT(25) /* Encrypted name encoded without key */
 #define DCACHE_OP_REAL			BIT(26)
-
+#define DCACHE_FILE_REMOVE		BIT(27) /* remove this dentry when file is removed */
 #define DCACHE_PAR_LOOKUP		BIT(28) /* being looked up (with parent locked shared) */
 #define DCACHE_DENTRY_CURSOR		BIT(29)
 #define DCACHE_NORCU			BIT(30) /* No RCU delay for freeing */

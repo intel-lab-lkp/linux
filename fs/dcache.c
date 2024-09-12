@@ -1672,7 +1672,10 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	smp_store_release(&dentry->d_name.name, dname); /* ^^^ */
 
 	dentry->d_lockref.count = 1;
-	dentry->d_flags = 0;
+	if (current->flags & PF_REMOVE_DENTRY)
+		dentry->d_flags = DCACHE_FILE_REMOVE;
+	else
+		dentry->d_flags = 0;
 	spin_lock_init(&dentry->d_lock);
 	seqcount_spinlock_init(&dentry->d_seq, &dentry->d_lock);
 	dentry->d_inode = NULL;
@@ -2399,6 +2402,8 @@ void d_delete(struct dentry * dentry)
 	 * Are we the only user?
 	 */
 	if (dentry->d_lockref.count == 1) {
+		if (dentry->d_flags & DCACHE_FILE_REMOVE)
+			__d_drop(dentry);
 		dentry->d_flags &= ~DCACHE_CANT_MOUNT;
 		dentry_unlink_inode(dentry);
 	} else {

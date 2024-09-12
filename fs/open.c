@@ -1428,7 +1428,14 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
 	struct open_how how = build_open_how(flags, mode);
-	return do_sys_openat2(dfd, filename, &how);
+	long err;
+
+	if (flags & O_NODENTRY)
+		current->flags |= PF_REMOVE_DENTRY;
+	err = do_sys_openat2(dfd, filename, &how);
+	if (flags & O_NODENTRY)
+		current->flags &= ~PF_REMOVE_DENTRY;
+	return err;
 }
 
 
