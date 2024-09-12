@@ -68,12 +68,12 @@ static const struct resource tqmx_watchdog_resources[] = {
 	DEFINE_RES_IO(TQMX86_IOBASE_WATCHDOG, TQMX86_IOSIZE_WATCHDOG),
 };
 
-/*
- * The IRQ resource must be first, since it is updated with the
- * configured IRQ in the probe function.
- */
 static struct resource tqmx_gpio_resources[] = {
-	DEFINE_RES_IRQ(0),
+	/*
+	 * Placeholder for IRQ resource - must come first to be filled in by the
+	 * probe function.
+	 */
+	{},
 	DEFINE_RES_IO(TQMX86_IOBASE_GPIO, TQMX86_IOSIZE_GPIO),
 };
 
@@ -258,13 +258,9 @@ static int tqmx86_probe(struct platform_device *pdev)
 	if (gpio_irq) {
 		err = tqmx86_setup_irq(dev, "GPIO", gpio_irq, io_base,
 				       TQMX86_REG_IO_EXT_INT_GPIO_SHIFT);
-		if (err)
-			return err;
-
-		/* Assumes the IRQ resource is first. */
-		tqmx_gpio_resources[0].start = gpio_irq;
-	} else {
-		tqmx_gpio_resources[0].flags = 0;
+		if (!err)
+			/* Assumes the IRQ resource placeholder is first */
+			tqmx_gpio_resources[0] = DEFINE_RES_IRQ(gpio_irq);
 	}
 
 	ocores_platform_data.clock_khz = tqmx86_board_id_to_clk_rate(dev, board_id);
