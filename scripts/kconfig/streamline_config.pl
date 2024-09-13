@@ -459,7 +459,9 @@ sub parse_config_depends
 		next;
 	    }
 
-	    if (!defined($configs{$conf})) {
+	    # This script does not turn on any modules, so make sure the config
+	    # options are on in the original.
+	    if (!defined($configs{$conf}) && defined($orig_configs{$conf})) {
 		# We must make sure that this config has its
 		# dependencies met.
 		$repeat = 1; # do again
