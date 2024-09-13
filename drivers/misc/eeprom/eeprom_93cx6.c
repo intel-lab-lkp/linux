@@ -18,6 +18,11 @@ MODULE_VERSION("1.0");
 MODULE_DESCRIPTION("EEPROM 93cx6 chip driver");
 MODULE_LICENSE("GPL");
 
+static inline bool has_quirk_extra_read_cycle(struct eeprom_93cx6 *eeprom)
+{
+	return eeprom->quirks & PCI_EEPROM_QUIRK_EXTRA_READ_CYCLE;
+}
+
 static inline void eeprom_93cx6_pulse_high(struct eeprom_93cx6 *eeprom)
 {
 	eeprom->reg_data_clock = 1;
@@ -186,6 +191,11 @@ void eeprom_93cx6_read(struct eeprom_93cx6 *eeprom, const u8 word,
 	eeprom_93cx6_write_bits(eeprom, command,
 		PCI_EEPROM_WIDTH_OPCODE + eeprom->width);
 
+	if (has_quirk_extra_read_cycle(eeprom)) {
+		eeprom_93cx6_pulse_high(eeprom);
+		eeprom_93cx6_pulse_low(eeprom);
+	}
+
 	/*
 	 * Read the requested 16 bits.
 	 */
@@ -251,6 +261,11 @@ void eeprom_93cx6_readb(struct eeprom_93cx6 *eeprom, const u8 byte,
 	command = (PCI_EEPROM_READ_OPCODE << (eeprom->width + 1)) | byte;
 	eeprom_93cx6_write_bits(eeprom, command,
 		PCI_EEPROM_WIDTH_OPCODE + eeprom->width + 1);
+
+	if (has_quirk_extra_read_cycle(eeprom)) {
+		eeprom_93cx6_pulse_high(eeprom);
+		eeprom_93cx6_pulse_low(eeprom);
+	}
 
 	/*
 	 * Read the requested 8 bits.
