@@ -941,7 +941,20 @@ int smb2_query_path_info(const unsigned int xid,
 		if (rc || !data->reparse_point)
 			goto out;
 
-		cmds[num_cmds++] = SMB2_OP_QUERY_WSL_EA;
+		/*
+		 * Skip SMB2_OP_QUERY_WSL_EA if reparse point is not WSL.
+		 * The server file system does not have to support Extended
+		 * Attributes and in this case returns STATUS_EAS_NOT_SUPPORTED
+		 * which smb2_compound_op() translate to -EOPNOTSUPP. This will
+		 * present failure during reading of non-WSL special files.
+		 */
+		if (data->reparse.tag == IO_REPARSE_TAG_LX_SYMLINK ||
+		    data->reparse.tag == IO_REPARSE_TAG_AF_UNIX ||
+		    data->reparse.tag == IO_REPARSE_TAG_LX_FIFO ||
+		    data->reparse.tag == IO_REPARSE_TAG_LX_CHR ||
+		    data->reparse.tag == IO_REPARSE_TAG_LX_BLK)
+			cmds[num_cmds++] = SMB2_OP_QUERY_WSL_EA;
+
 		/*
 		 * Skip SMB2_OP_GET_REPARSE if symlink already parsed in create
 		 * response.
