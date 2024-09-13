@@ -1552,3 +1552,27 @@ SYM_FUNC_START(clear_bhb_loop)
 SYM_FUNC_END(clear_bhb_loop)
 EXPORT_SYMBOL_GPL(clear_bhb_loop)
 STACK_FRAME_NON_STANDARD(clear_bhb_loop)
+
+/*
+ * Aborting a TSX transactional region by invoking TSX abort also clears
+ * the BHB. This software sequence is an alternative to clear_bhb_loop,
+ * but it only works on processors that support Intel TSX. The TSX
+ * sequence is effective on all current processors with Intel TSX support
+ * that do not enumerate BHI_NO and should not be needed on parts that do
+ * enumerate BHI_NO. This sequence would be effective on all current
+ * processors with Intel TSX support whether or not XBEGIN is configured
+ * to always abort, such as when the IA32_TSX_CTRL (0x122) RTM_DISABLE
+ * control is set.
+ */
+SYM_FUNC_START(clear_bhb_tsx_abort)
+	push	%rbp
+	mov	%rsp, %rbp
+	xbegin label
+	xabort $0
+	lfence
+label:
+	pop	%rbp
+	RET
+SYM_FUNC_END(clear_bhb_tsx_abort)
+EXPORT_SYMBOL_GPL(clear_bhb_tsx_abort)
+STACK_FRAME_NON_STANDARD(clear_bhb_tsx_abort)

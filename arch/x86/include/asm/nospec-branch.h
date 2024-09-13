@@ -328,11 +328,14 @@
 
 #ifdef CONFIG_X86_64
 .macro CLEAR_BRANCH_HISTORY
-	ALTERNATIVE "", "call clear_bhb_loop", X86_FEATURE_CLEAR_BHB_LOOP
+	ALTERNATIVE_2 "", "call clear_bhb_loop", X86_FEATURE_CLEAR_BHB_LOOP, \
+			  "call clear_bhb_tsx_abort", X86_FEATURE_CLEAR_BHB_TSX
 .endm
 
 .macro CLEAR_BRANCH_HISTORY_VMEXIT
-	ALTERNATIVE "", "call clear_bhb_loop", X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT
+	ALTERNATIVE_2 "", "call clear_bhb_loop", X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT, \
+			  "call clear_bhb_tsx_abort", X86_FEATURE_CLEAR_BHB_TSX_ON_VMEXIT
+
 .endm
 #else
 #define CLEAR_BRANCH_HISTORY
@@ -383,6 +386,7 @@ extern void entry_ibpb(void);
 
 #ifdef CONFIG_X86_64
 extern void clear_bhb_loop(void);
+extern void clear_bhb_tsx_abort(void);
 #endif
 
 extern void (*x86_return_thunk)(void);

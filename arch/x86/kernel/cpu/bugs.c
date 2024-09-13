@@ -1662,8 +1662,16 @@ static void __init bhi_select_mitigation(void)
 			return;
 	}
 
-	/* Mitigate in hardware if supported */
-	if (spec_ctrl_bhi_dis())
+	/*
+	 * Mitigate in hardware if appropriate.
+	 * Note: for vmexit only, do not mitigate in hardware to avoid changing
+	 * the value of MSR_IA32_SPEC_CTRL to include SPEC_CTRL_BHI_DIS_S. If a
+	 * guest does not also set their own SPEC_CTRL to include this, KVM has
+	 * to toggle on every vmexit and vmentry if the host value does not
+	 * match the guest value. Instead, depend on software loop mitigation
+	 * only.
+	 */
+	if (bhi_mitigation != BHI_MITIGATION_VMEXIT_ONLY && spec_ctrl_bhi_dis())
 		return;
 
 	if (!IS_ENABLED(CONFIG_X86_64))
@@ -1671,13 +1679,21 @@ static void __init bhi_select_mitigation(void)
 
 	if (bhi_mitigation == BHI_MITIGATION_VMEXIT_ONLY) {
 		pr_info("Spectre BHI mitigation: SW BHB clearing on VM exit only\n");
-		setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT);
+		if (boot_cpu_has(X86_FEATURE_RTM))
+			setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_TSX_ON_VMEXIT);
+		else
+			setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT);
 		return;
 	}
 
 	pr_info("Spectre BHI mitigation: SW BHB clearing on syscall and VM exit\n");
-	setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP);
-	setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT);
+	if (boot_cpu_has(X86_FEATURE_RTM)) {
+		setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_TSX);
+		setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_TSX_ON_VMEXIT);
+	} else {
+		setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP);
+		setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT);
+	}
 }
 
 static void __init spectre_v2_select_mitigation(void)
