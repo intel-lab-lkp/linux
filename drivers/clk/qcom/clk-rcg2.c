@@ -153,13 +153,20 @@ static int clk_rcg2_set_parent(struct clk_hw *hw, u8 index)
  *
  *          parent_rate     m
  *   rate = ----------- x  ---
- *            hid_div       n
+ *          pre_div_pure    n
+ *
+ * @param rate - Parent rate.
+ * @param m - Multiplier.
+ * @param n - Divisor.
+ * @param mode - Use zero to ignore m/n calculation.
+ * @param pre_div - Pre divisor register value. Pure pre divisor value
+ *                  related to pre_div as pre_div_pure = (pre_div + 1) / 2
  */
 static unsigned long
-calc_rate(unsigned long rate, u32 m, u32 n, u32 mode, u32 hid_div)
+calc_rate(unsigned long rate, u32 m, u32 n, u32 mode, u32 pre_div)
 {
-	if (hid_div)
-		rate = mult_frac(rate, 2, hid_div + 1);
+	if (pre_div)
+		rate = mult_frac(rate, 2, pre_div + 1);
 
 	if (mode)
 		rate = mult_frac(rate, m, n);
@@ -171,7 +178,7 @@ static unsigned long
 __clk_rcg2_recalc_rate(struct clk_hw *hw, unsigned long parent_rate, u32 cfg)
 {
 	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
-	u32 hid_div, m = 0, n = 0, mode = 0, mask;
+	u32 pre_div, m = 0, n = 0, mode = 0, mask;
 
 	if (rcg->mnd_width) {
 		mask = BIT(rcg->mnd_width) - 1;
@@ -186,10 +193,10 @@ __clk_rcg2_recalc_rate(struct clk_hw *hw, unsigned long parent_rate, u32 cfg)
 	}
 
 	mask = BIT(rcg->hid_width) - 1;
-	hid_div = cfg >> CFG_SRC_DIV_SHIFT;
-	hid_div &= mask;
+	pre_div = cfg >> CFG_SRC_DIV_SHIFT;
+	pre_div &= mask;
 
-	return calc_rate(parent_rate, m, n, mode, hid_div);
+	return calc_rate(parent_rate, m, n, mode, pre_div);
 }
 
 static unsigned long
@@ -715,7 +722,7 @@ static int clk_edp_pixel_set_rate(struct clk_hw *hw, unsigned long rate,
 	s64 src_rate = parent_rate;
 	s64 request;
 	u32 mask = BIT(rcg->hid_width) - 1;
-	u32 hid_div;
+	u32 pre_div;
 
 	if (src_rate == 810000000)
 		frac = frac_table_810m;
@@ -731,8 +738,8 @@ static int clk_edp_pixel_set_rate(struct clk_hw *hw, unsigned long rate,
 			continue;
 
 		regmap_read(rcg->clkr.regmap, rcg->cmd_rcgr + CFG_REG,
-				&hid_div);
-		f.pre_div = hid_div;
+				&pre_div);
+		f.pre_div = pre_div;
 		f.pre_div >>= CFG_SRC_DIV_SHIFT;
 		f.pre_div &= mask;
 		f.m = frac->num;
@@ -760,7 +767,7 @@ static int clk_edp_pixel_determine_rate(struct clk_hw *hw,
 	int delta = 100000;
 	s64 request;
 	u32 mask = BIT(rcg->hid_width) - 1;
-	u32 hid_div;
+	u32 pre_div;
 	int index = qcom_find_src_index(hw, rcg->parent_map, f->src);
 
 	/* Force the correct parent */
@@ -781,13 +788,13 @@ static int clk_edp_pixel_determine_rate(struct clk_hw *hw,
 			continue;
 
 		regmap_read(rcg->clkr.regmap, rcg->cmd_rcgr + CFG_REG,
-				&hid_div);
-		hid_div >>= CFG_SRC_DIV_SHIFT;
-		hid_div &= mask;
+				&pre_div);
+		pre_div >>= CFG_SRC_DIV_SHIFT;
+		pre_div &= mask;
 
 		req->rate = calc_rate(req->best_parent_rate,
 				      frac->num, frac->den,
-				      !!frac->den, hid_div);
+				      !!frac->den, pre_div);
 		return 0;
 	}
 
@@ -974,7 +981,7 @@ static int clk_pixel_set_rate(struct clk_hw *hw, unsigned long rate,
 	unsigned long request;
 	int delta = 100000;
 	u32 mask = BIT(rcg->hid_width) - 1;
-	u32 hid_div, cfg;
+	u32 pre_div, cfg;
 	int i, num_parents = clk_hw_get_num_parents(hw);
 
 	regmap_read(rcg->clkr.regmap, rcg->cmd_rcgr + CFG_REG, &cfg);
@@ -995,8 +1002,8 @@ static int clk_pixel_set_rate(struct clk_hw *hw, unsigned long rate,
 			continue;
 
 		regmap_read(rcg->clkr.regmap, rcg->cmd_rcgr + CFG_REG,
-				&hid_div);
-		f.pre_div = hid_div;
+				&pre_div);
+		f.pre_div = pre_div;
 		f.pre_div >>= CFG_SRC_DIV_SHIFT;
 		f.pre_div &= mask;
 		f.m = frac->num;
@@ -1564,7 +1571,7 @@ static int clk_rcg2_dp_set_rate(struct clk_hw *hw, unsigned long rate,
 	struct clk_rcg2 *rcg = to_clk_rcg2(hw);
 	struct freq_tbl f = { 0 };
 	u32 mask = BIT(rcg->hid_width) - 1;
-	u32 hid_div, cfg;
+	u32 pre_div, cfg;
 	int i, num_parents = clk_hw_get_num_parents(hw);
 	unsigned long num, den;
 
@@ -1576,7 +1583,7 @@ static int clk_rcg2_dp_set_rate(struct clk_hw *hw, unsigned long rate,
 		return -EINVAL;
 
 	regmap_read(rcg->clkr.regmap, rcg->cmd_rcgr + CFG_REG, &cfg);
-	hid_div = cfg;
+	pre_div = cfg;
 	cfg &= CFG_SRC_SEL_MASK;
 	cfg >>= CFG_SRC_SEL_SHIFT;
 
@@ -1587,7 +1594,7 @@ static int clk_rcg2_dp_set_rate(struct clk_hw *hw, unsigned long rate,
 		}
 	}
 
-	f.pre_div = hid_div;
+	f.pre_div = pre_div;
 	f.pre_div >>= CFG_SRC_DIV_SHIFT;
 	f.pre_div &= mask;
 
