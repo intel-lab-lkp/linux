@@ -6202,7 +6202,7 @@ EXPORT_SYMBOL(napi_schedule_prep);
  */
 void __napi_schedule_irqoff(struct napi_struct *n)
 {
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+	if (!force_irqthreads())
 		____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	else
 		__napi_schedule(n);
