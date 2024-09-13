@@ -8,6 +8,7 @@
  * Supported chipsets: 93c46 & 93c66.
  */
 
+#include <linux/bits.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -107,7 +108,7 @@ static void eeprom_93cx6_write_bits(struct eeprom_93cx6 *eeprom,
 		/*
 		 * Check if this bit needs to be set.
 		 */
-		eeprom->reg_data_in = !!(data & (1 << (i - 1)));
+		eeprom->reg_data_in = !!(data & BIT(i - 1));
 
 		/*
 		 * Write the bit to the eeprom register.
@@ -157,7 +158,7 @@ static void eeprom_93cx6_read_bits(struct eeprom_93cx6 *eeprom,
 		 * Read if the bit has been set.
 		 */
 		if (eeprom->reg_data_out)
-			buf |= (1 << (i - 1));
+			buf |= BIT(i - 1);
 
 		eeprom_93cx6_pulse_low(eeprom);
 	}
