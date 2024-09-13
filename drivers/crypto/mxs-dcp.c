@@ -944,7 +944,11 @@ static struct skcipher_alg dcp_aes_algs[] = {
 		.base.cra_driver_name	= "ecb-paes-dcp",
 		.base.cra_priority	= 401,
 		.base.cra_alignmask	= 15,
+#ifdef CONFIG_CRYPTO_DEV_MXS_DCP_USER_PAES
+		.base.cra_flags		= CRYPTO_ALG_ASYNC,
+#else
 		.base.cra_flags		= CRYPTO_ALG_ASYNC | CRYPTO_ALG_INTERNAL,
+#endif
 		.base.cra_blocksize	= AES_BLOCK_SIZE,
 		.base.cra_ctxsize	= sizeof(struct dcp_async_ctx),
 		.base.cra_module	= THIS_MODULE,
@@ -960,7 +964,11 @@ static struct skcipher_alg dcp_aes_algs[] = {
 		.base.cra_driver_name	= "cbc-paes-dcp",
 		.base.cra_priority	= 401,
 		.base.cra_alignmask	= 15,
+#ifdef CONFIG_CRYPTO_DEV_MXS_DCP_USER_PAES
+		.base.cra_flags		= CRYPTO_ALG_ASYNC,
+#else
 		.base.cra_flags		= CRYPTO_ALG_ASYNC | CRYPTO_ALG_INTERNAL,
+#endif
 		.base.cra_blocksize	= AES_BLOCK_SIZE,
 		.base.cra_ctxsize	= sizeof(struct dcp_async_ctx),
 		.base.cra_module	= THIS_MODULE,

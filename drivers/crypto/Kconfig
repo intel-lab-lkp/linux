@@ -460,6 +460,19 @@ config CRYPTO_DEV_MXS_DCP
 	  To compile this driver as a module, choose M here: the module
 	  will be called mxs-dcp.
 
+config CRYPTO_DEV_MXS_DCP_USER_PAES
+	bool "Enable user-space access to AES with hardware-bound keys"
+	depends on CRYPTO_DEV_MXS_DCP && CRYPTO_USER_API_SKCIPHER
+	default n
+	help
+	  Say Y to enable user-space access to cbc(paes) and ecb(paes)
+	  cipher algorithms via AF_ALG.
+
+	  In scenarios with untrustworthy users-pace, this may enable
+	  decryption of sensitive information.
+
+	  If unsure, say N.
+
 source "drivers/crypto/cavium/cpt/Kconfig"
 source "drivers/crypto/cavium/nitrox/Kconfig"
 source "drivers/crypto/marvell/Kconfig"
