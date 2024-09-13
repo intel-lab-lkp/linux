@@ -431,6 +431,9 @@ config HAVE_USER_UNWIND
 config HAVE_USER_UNWIND_SFRAME
 	bool
 
+config HAVE_PERF_CALLCHAIN_DEFERRED
+	bool
+
 config HAVE_PERF_REGS
 	bool
 	help
