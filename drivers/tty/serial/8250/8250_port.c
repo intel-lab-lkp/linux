@@ -691,12 +691,22 @@ static void serial8250_set_sleep(struct uart_8250_port *p, int sleep)
 	serial8250_rpm_put(p);
 }
 
-static void serial8250_clear_IER(struct uart_8250_port *up)
+/*
+ * Only to be used directly by the console write callbacks, which may not
+ * require the port lock. Use serial8250_clear_IER() instead for all other
+ * cases.
+ */
+static void __serial8250_clear_IER(struct uart_8250_port *up)
 {
 	if (up->capabilities & UART_CAP_UUE)
 		serial_out(up, UART_IER, UART_IER_UUE);
 	else
 		serial_out(up, UART_IER, 0);
+}
+
+static inline void serial8250_clear_IER(struct uart_8250_port *up)
+{
+	__serial8250_clear_IER(up);
 }
 
 #ifdef CONFIG_SERIAL_8250_RSA
@@ -1864,6 +1874,8 @@ unsigned int serial8250_modem_status(struct uart_8250_port *up)
 	struct uart_port *port = &up->port;
 	unsigned int status = serial_in(up, UART_MSR);
 
+	lockdep_assert_held_once(&port->lock);
+
 	status |= up->msr_saved_flags;
 	up->msr_saved_flags = 0;
 	if (status & UART_MSR_ANY_DELTA && up->ier & UART_IER_MSI &&
@@ -1883,6 +1895,21 @@ unsigned int serial8250_modem_status(struct uart_8250_port *up)
 	return status;
 }
 EXPORT_SYMBOL_GPL(serial8250_modem_status);
+
+/*
+ * irq_work handler to perform modem control. Only triggered via
+ * write_atomic() callback because it may be in a scheduler or NMI
+ * context, unable to wake tasks.
+ */
+static void modem_status_handler(struct irq_work *iwp)
+{
+	struct uart_8250_port *up = container_of(iwp, struct uart_8250_port, modem_status_work);
+	struct uart_port *port = &up->port;
+
+	uart_port_lock(port);
+	serial8250_modem_status(up);
+	uart_port_unlock(port);
+}
 
 static bool handle_rx_dma(struct uart_8250_port *up, unsigned int iir)
 {
@@ -3296,6 +3323,11 @@ static void serial8250_console_putchar(struct uart_port *port, unsigned char ch)
 
 	wait_for_xmitr(up, UART_LSR_THRE);
 	serial_port_out(port, UART_TX, ch);
+
+	if (ch == '\n')
+		up->console_line_ended = true;
+	else
+		up->console_line_ended = false;
 }
 
 /*
@@ -3324,65 +3356,68 @@ static void serial8250_console_restore(struct uart_8250_port *up)
 	serial8250_out_MCR(up, up->mcr | UART_MCR_DTR | UART_MCR_RTS);
 }
 
-/*
- * Print a string to the serial port using the device FIFO
- *
- * It sends fifosize bytes and then waits for the fifo
- * to get empty.
- */
-static void serial8250_console_fifo_write(struct uart_8250_port *up,
-					  const char *s, unsigned int count)
+static void __serial8250_console_write_thread(struct uart_8250_port *up,
+					      struct nbcon_write_context *wctxt)
 {
-	int i;
-	const char *end = s + count;
-	unsigned int fifosize = up->tx_loadsz;
-	bool cr_sent = false;
+	unsigned int len = READ_ONCE(wctxt->len);
+	struct uart_port *port = &up->port;
+	unsigned int i;
 
-	while (s != end) {
-		wait_for_lsr(up, UART_LSR_THRE);
+	if (nbcon_exit_unsafe(wctxt)) {
+		/*
+		 * Write out the message. Toggle unsafe for each byte in order
+		 * to give another (higher priority) context the opportunity
+		 * for a friendly takeover. If such a takeover occurs, this
+		 * must abort writing since wctxt->outbuf and wctxt->len are
+		 * no longer valid.
+		 */
+		for (i = 0; i < len; i++) {
+			if (!nbcon_enter_unsafe(wctxt))
+				break;
 
-		for (i = 0; i < fifosize && s != end; ++i) {
-			if (*s == '\n' && !cr_sent) {
-				serial_out(up, UART_TX, '\r');
-				cr_sent = true;
-			} else {
-				serial_out(up, UART_TX, *s++);
-				cr_sent = false;
-			}
+			uart_console_write(port, wctxt->outbuf + i, 1, serial8250_console_putchar);
+
+			if (!nbcon_exit_unsafe(wctxt))
+				break;
 		}
 	}
+
+	/*
+	 * If ownership was lost, this context must reacquire ownership in
+	 * order to perform final actions (such as re-enabling interrupts).
+	 */
+	while (!nbcon_enter_unsafe(wctxt))
+		nbcon_reacquire_nobuf(wctxt);
 }
 
-/*
- *	Print a string to the serial port trying not to disturb
- *	any possible real use of the port...
- *
- *	The console_lock must be held when we get here.
- *
- *	Doing runtime PM is really a bad idea for the kernel console.
- *	Thus, we assume the function is called when device is powered up.
- */
-void serial8250_console_write(struct uart_8250_port *up, const char *s,
-			      unsigned int count)
+static void __serial8250_console_write_atomic(struct uart_8250_port *up,
+					      struct nbcon_write_context *wctxt)
+{
+	struct uart_port *port = &up->port;
+
+	if (!up->console_line_ended)
+		uart_console_write(port, "\n", 1, serial8250_console_putchar);
+	uart_console_write(port, wctxt->outbuf, wctxt->len, serial8250_console_putchar);
+}
+
+static void serial8250_console_write(struct uart_8250_port *up,
+				     struct nbcon_write_context *wctxt,
+				     bool is_atomic)
 {
 	struct uart_8250_em485 *em485 = up->em485;
 	struct uart_port *port = &up->port;
-	unsigned long flags;
-	unsigned int ier, use_fifo;
-	int locked = 1;
+	unsigned int ier;
 
-	touch_nmi_watchdog();
-
-	if (oops_in_progress)
-		locked = uart_port_trylock_irqsave(port, &flags);
-	else
-		uart_port_lock_irqsave(port, &flags);
+	if (!nbcon_enter_unsafe(wctxt))
+		return;
 
 	/*
-	 *	First save the IER then disable the interrupts
+	 * First save IER then disable the interrupts. The special variant
+	 * to clear IER is used because console printing may occur without
+	 * holding the port lock.
 	 */
 	ier = serial_port_in(port, UART_IER);
-	serial8250_clear_IER(up);
+	__serial8250_clear_IER(up);
 
 	/* check scratch reg to see if port powered off during system sleep */
 	if (up->canary && (up->canary != serial_port_in(port, UART_SCR))) {
@@ -3396,30 +3431,10 @@ void serial8250_console_write(struct uart_8250_port *up, const char *s,
 		mdelay(port->rs485.delay_rts_before_send);
 	}
 
-	use_fifo = (up->capabilities & UART_CAP_FIFO) &&
-		/*
-		 * BCM283x requires to check the fifo
-		 * after each byte.
-		 */
-		!(up->capabilities & UART_CAP_MINI) &&
-		/*
-		 * tx_loadsz contains the transmit fifo size
-		 */
-		up->tx_loadsz > 1 &&
-		(up->fcr & UART_FCR_ENABLE_FIFO) &&
-		port->state &&
-		test_bit(TTY_PORT_INITIALIZED, &port->state->port.iflags) &&
-		/*
-		 * After we put a data in the fifo, the controller will send
-		 * it regardless of the CTS state. Therefore, only use fifo
-		 * if we don't use control flow.
-		 */
-		!(up->port.flags & UPF_CONS_FLOW);
-
-	if (likely(use_fifo))
-		serial8250_console_fifo_write(up, s, count);
+	if (is_atomic)
+		__serial8250_console_write_atomic(up, wctxt);
 	else
-		uart_console_write(port, s, count, serial8250_console_putchar);
+		__serial8250_console_write_thread(up, wctxt);
 
 	/*
 	 *	Finally, wait for transmitter to become empty
@@ -3442,11 +3457,32 @@ void serial8250_console_write(struct uart_8250_port *up, const char *s,
 	 *	call it if we have saved something in the saved flags
 	 *	while processing with interrupts off.
 	 */
-	if (up->msr_saved_flags)
-		serial8250_modem_status(up);
+	if (up->msr_saved_flags) {
+		/*
+		 * For atomic, it must be deferred to irq_work because this
+		 * may be a context that does not permit waking up tasks.
+		 */
+		if (is_atomic)
+			irq_work_queue(&up->modem_status_work);
+		else
+			serial8250_modem_status(up);
+	}
 
-	if (locked)
-		uart_port_unlock_irqrestore(port, flags);
+	nbcon_exit_unsafe(wctxt);
+}
+
+void serial8250_console_write_thread(struct uart_8250_port *up,
+				     struct nbcon_write_context *wctxt)
+{
+	serial8250_console_write(up, wctxt, false);
+}
+
+void serial8250_console_write_atomic(struct uart_8250_port *up,
+				     struct nbcon_write_context *wctxt)
+{
+	touch_nmi_watchdog();
+
+	serial8250_console_write(up, wctxt, true);
 }
 
 static unsigned int probe_baud(struct uart_port *port)
@@ -3466,6 +3502,7 @@ static unsigned int probe_baud(struct uart_port *port)
 
 int serial8250_console_setup(struct uart_port *port, char *options, bool probe)
 {
+	struct uart_8250_port *up = up_to_u8250p(port);
 	int baud = 9600;
 	int bits = 8;
 	int parity = 'n';
@@ -3474,6 +3511,9 @@ int serial8250_console_setup(struct uart_port *port, char *options, bool probe)
 
 	if (!port->iobase && !port->membase)
 		return -ENODEV;
+
+	up->console_line_ended = true;
+	up->modem_status_work = IRQ_WORK_INIT(modem_status_handler);
 
 	if (options)
 		uart_parse_options(options, &baud, &parity, &bits, &flow);
