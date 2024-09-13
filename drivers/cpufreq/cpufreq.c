@@ -752,6 +752,16 @@ __weak unsigned int arch_freq_get_on_cpu(int cpu)
 	return 0;
 }
 
+__weak int arch_freq_avg_get_on_cpu(int cpu)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline bool cpufreq_avg_freq_supported(struct cpufreq_policy *policy)
+{
+	return arch_freq_avg_get_on_cpu(policy->cpu) >= 0;
+}
+
 static ssize_t show_scaling_cur_freq(struct cpufreq_policy *policy, char *buf)
 {
 	ssize_t ret;
@@ -798,6 +808,20 @@ static ssize_t show_cpuinfo_cur_freq(struct cpufreq_policy *policy,
 
 	if (cur_freq)
 		return sysfs_emit(buf, "%u\n", cur_freq);
+
+	return sysfs_emit(buf, "<unknown>\n");
+}
+
+/*
+ * show_cpuinfo_avg_freq - average CPU frequency as detected by hardware
+ */
+static ssize_t show_cpuinfo_avg_freq(struct cpufreq_policy *policy,
+				     char *buf)
+{
+	int avg_freq = arch_freq_avg_get_on_cpu(policy->cpu);
+
+	if (avg_freq > 0)
+		return sysfs_emit(buf, "%u\n", avg_freq);
 
 	return sysfs_emit(buf, "<unknown>\n");
 }
@@ -964,6 +988,7 @@ static ssize_t show_bios_limit(struct cpufreq_policy *policy, char *buf)
 }
 
 cpufreq_freq_attr_ro_perm(cpuinfo_cur_freq, 0400);
+cpufreq_freq_attr_ro(cpuinfo_avg_freq);
 cpufreq_freq_attr_ro(cpuinfo_min_freq);
 cpufreq_freq_attr_ro(cpuinfo_max_freq);
 cpufreq_freq_attr_ro(cpuinfo_transition_latency);
@@ -1087,6 +1112,12 @@ static int cpufreq_add_dev_interface(struct cpufreq_policy *policy)
 	}
 	if (cpufreq_driver->get) {
 		ret = sysfs_create_file(&policy->kobj, &cpuinfo_cur_freq.attr);
+		if (ret)
+			return ret;
+	}
+
+	if (cpufreq_avg_freq_supported(policy)) {
+		ret = sysfs_create_file(&policy->kobj, &cpuinfo_avg_freq.attr);
 		if (ret)
 			return ret;
 	}
