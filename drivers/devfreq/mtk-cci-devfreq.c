@@ -29,12 +29,13 @@ struct mtk_ccifreq_drv {
 	struct clk *inter_clk;
 	int inter_voltage;
 	unsigned long pre_freq;
-	/* Avoid race condition for regulators between notify and policy */
-	struct mutex reg_lock;
 	struct notifier_block opp_nb;
 	const struct mtk_ccifreq_platform_data *soc_data;
 	int vtrack_max;
 };
+
+/* Avoid race condition for regulators between notify and policy */
+static DEFINE_MUTEX(reg_lock);
 
 static int mtk_ccifreq_set_voltage(struct mtk_ccifreq_drv *drv, int new_voltage)
 {
@@ -125,22 +126,20 @@ static int mtk_ccifreq_set_voltage(struct mtk_ccifreq_drv *drv, int new_voltage)
 static int mtk_ccifreq_target(struct device *dev, unsigned long *freq,
 			      u32 flags)
 {
-	struct mtk_ccifreq_drv *drv = dev_get_drvdata(dev);
+	struct mtk_ccifreq_drv *drv;
 	struct clk *cci_pll;
 	struct dev_pm_opp *opp;
 	unsigned long opp_rate;
 	int voltage, pre_voltage, inter_voltage, target_voltage, ret;
 
+	mutex_lock(&reg_lock);
+
+	drv = dev_get_drvdata(dev);
 	if (!drv)
 		return -EINVAL;
 
-	if (drv->pre_freq == *freq)
-		return 0;
-
-	mutex_lock(&drv->reg_lock);
-
-	inter_voltage = drv->inter_voltage;
 	cci_pll = clk_get_parent(drv->cci_clk);
+	inter_voltage = drv->inter_voltage;
 
 	opp_rate = *freq;
 	opp = devfreq_recommended_opp(dev, &opp_rate, 1);
@@ -206,7 +205,7 @@ static int mtk_ccifreq_target(struct device *dev, unsigned long *freq,
 	}
 
 	drv->pre_freq = *freq;
-	mutex_unlock(&drv->reg_lock);
+	mutex_unlock(&reg_lock);
 
 	return 0;
 
@@ -214,21 +213,23 @@ out_restore_voltage:
 	mtk_ccifreq_set_voltage(drv, pre_voltage);
 
 out_unlock:
-	mutex_unlock(&drv->reg_lock);
+	mutex_unlock(&reg_lock);
 	return ret;
 }
 
 static int mtk_ccifreq_opp_notifier(struct notifier_block *nb,
 				    unsigned long event, void *data)
 {
-	struct dev_pm_opp *opp = data;
+	struct dev_pm_opp *opp;
 	struct mtk_ccifreq_drv *drv;
 	unsigned long freq, volt;
 
+	mutex_lock(&reg_lock);
+
+	opp = data;
 	drv = container_of(nb, struct mtk_ccifreq_drv, opp_nb);
 
 	if (event == OPP_EVENT_ADJUST_VOLTAGE) {
-		mutex_lock(&drv->reg_lock);
 		freq = dev_pm_opp_get_freq(opp);
 
 		/* current opp item is changed */
@@ -236,8 +237,8 @@ static int mtk_ccifreq_opp_notifier(struct notifier_block *nb,
 			volt = dev_pm_opp_get_voltage(opp);
 			mtk_ccifreq_set_voltage(drv, volt);
 		}
-		mutex_unlock(&drv->reg_lock);
 	}
+	mutex_unlock(&reg_lock);
 
 	return 0;
 }
@@ -262,7 +263,6 @@ static int mtk_ccifreq_probe(struct platform_device *pdev)
 	drv->dev = dev;
 	drv->soc_data = (const struct mtk_ccifreq_platform_data *)
 				of_device_get_match_data(&pdev->dev);
-	mutex_init(&drv->reg_lock);
 	platform_set_drvdata(pdev, drv);
 
 	drv->cci_clk = devm_clk_get(dev, "cci");
