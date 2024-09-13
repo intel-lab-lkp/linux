@@ -859,12 +859,25 @@ void page_pool_put_page_bulk(struct page_pool *pool, void **data,
 {
 	int i, bulk_len = 0;
 	bool allow_direct;
+	netmem_ref netmem;
+	struct page *page;
 	bool in_softirq;
 
 	allow_direct = page_pool_napi_local(pool);
 
 	for (i = 0; i < count; i++) {
-		netmem_ref netmem = page_to_netmem(virt_to_head_page(data[i]));
+		page = virt_to_head_page(data[i]);
+
+		/* GCC 14 powerpc compiler will optimize reads into the
+		 * resulting netmem_ref into unaligned reads as it sees address
+		 * arithmetic in _compound_head() call that the page has come
+		 * from.
+		 *
+		 * The READ_ONCE here gets around that by breaking the
+		 * optimization chain between the address arithmetic and later
+		 * indexing.
+		 */
+		netmem = page_to_netmem(READ_ONCE(page));
 
 		/* It is not the last user for the page frag case */
 		if (!page_pool_is_last_ref(netmem))
