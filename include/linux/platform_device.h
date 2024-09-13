@@ -68,6 +68,12 @@ platform_find_device_by_driver(struct device *start,
 extern void __iomem *
 devm_platform_get_and_ioremap_resource(struct platform_device *pdev,
 				unsigned int index, struct resource **res);
+
+extern void __iomem *
+devm_platform_get_and_ioremap_resource_byname(struct platform_device *pdev,
+					      const char *name,
+					      struct resource **res);
+
 extern void __iomem *
 devm_platform_ioremap_resource(struct platform_device *pdev,
 			       unsigned int index);
@@ -83,6 +89,13 @@ devm_platform_get_and_ioremap_resource(struct platform_device *pdev,
 	return ERR_PTR(-EINVAL);
 }
 
+static inline void __iomem *
+devm_platform_get_and_ioremap_resource_byname(struct platform_device *pdev,
+					      const char *name,
+					      struct resource **res)
+{
+	return ERR_PTR(-EINVAL);
+}
 
 static inline void __iomem *
 devm_platform_ioremap_resource(struct platform_device *pdev,

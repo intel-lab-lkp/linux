@@ -109,6 +109,34 @@ devm_platform_get_and_ioremap_resource(struct platform_device *pdev,
 EXPORT_SYMBOL_GPL(devm_platform_get_and_ioremap_resource);
 
 /**
+ * devm_platform_get_and_ioremap_resource_byname - call devm_ioremap_resource()
+ *					    for a platform device and get
+ *					    a resource by its name instead
+ *					    of the index
+ *
+ * @pdev: platform device to use both for memory resource lookup as well as
+ *        resource management
+ * @name: resource name
+ * @res: optional output parameter to store a pointer to the obtained resource.
+ *
+ * Return: a pointer to the remapped memory or an ERR_PTR() encoded error code
+ * on failure.
+ */
+void __iomem *
+devm_platform_get_and_ioremap_resource_byname(struct platform_device *pdev,
+					      const char *name,
+					      struct resource **res)
+{
+	struct resource *r;
+
+	r = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
+	if (res)
+		*res = r;
+	return devm_ioremap_resource(&pdev->dev, r);
+}
+EXPORT_SYMBOL_GPL(devm_platform_get_and_ioremap_resource_byname);
+
+/**
  * devm_platform_ioremap_resource - call devm_ioremap_resource() for a platform
  *				    device
  *
