@@ -11137,8 +11137,8 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 			 * idle CPUs.
 			 */
 			env->migration_type = migrate_task;
-			env->imbalance = max_t(long, 0,
-					       (local->idle_cpus - busiest->idle_cpus));
+			env->imbalance = local->idle_cpus;
+			lsub_positive(&env->imbalance, busiest->idle_cpus);
 		}
 
 #ifdef CONFIG_NUMA
