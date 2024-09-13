@@ -125,8 +125,8 @@ properties:
   io-supply:
     description: |
       Phandle to the regulator node necessary for the I/O power.
-      See Documentation/devicetree/bindings/regulator/mt6323-regulator.txt for
-      details for the regulator setup on these boards.
+      See Documentation/devicetree/bindings/regulator/mediatek,mt6323-regulator.yaml
+      for details for the regulator setup on these boards.
 
   mediatek,mcm:
     type: boolean

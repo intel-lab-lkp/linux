@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/mediatek,mt6323-regulator.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6323 Regulator
+
+maintainers:
+  - John Crispin <john@phrozen.org>
+  - Sen Chu <sen.chu@mediatek.com>
+  - Macpaul Lin <macpaul.lin@mediatek.com>
+
+description: |
+  Regulator node of the PMIC. This node should under the PMIC's device node.
+  All voltage regulators provided by the PMIC are described as sub-nodes of
+  this node.
+
+properties:
+  compatible:
+    items:
+      - const: mediatek,mt6323-regulator
+
+patternProperties:
+  "^buck_v(pa|proc|sys)$":
+    description: Buck regulators
+    type: object
+    $ref: regulator.yaml#
+
+    properties:
+      regulator-allowed-modes: false
+
+    unevaluatedProperties: false
+
+    required:
+      - regulator-name
+
+  "^ldo_v(camio|cn18)$":
+    description: LDO with fixed 1.8V output and 0~100/10mV tuning
+    type: object
+    $ref: regulator.yaml#
+
+    properties:
+      regulator-allowed-modes: false
+
+    unevaluatedProperties: false
+
+    required:
+      - regulator-name
+
+  "^ldo_v((io|rf)18)$":
+    description: LDOs with fixed 1.825V output and 0~100/10mV tuning
+    type: object
+    $ref: regulator.yaml#
+
+    properties:
+      regulator-allowed-modes: false
+
+    unevaluatedProperties: false
+
+    required:
+      - regulator-name
+
+  "^ldo_v(a|rtc|tcxo|(cn|io)28)$":
+    description: LDOs with fixed 2.8V output and 0~100/10mV tuning
+    type: object
+    $ref: regulator.yaml#
+
+    properties:
+      regulator-allowed-modes: false
+
+    unevaluatedProperties: false
+
+    required:
+      - regulator-name
+
+  "^ldo_v(usb)$":
+    description: LDOs with fixed 3.3V output and 0~100/10mV tuning
+    type: object
+    $ref: regulator.yaml#
+
+    properties:
+      regulator-allowed-modes: false
+
+    unevaluatedProperties: false
+
+    required:
+      - regulator-name
+
+  "^ldo_v(cn33_(bt|wifi))$":
+    description: LDOs with variable 3.3V output and 0~100/10mV tuning
+    type: object
+    $ref: regulator.yaml#
+
+    properties:
+      regulator-allowed-modes: false
+
+    unevaluatedProperties: false
+
+    required:
+      - regulator-name
+
+  "^ldo_v(cama|camaf|camd|emc3v3|gp[123]|ibr|m|mc|mch|sim[12])$":
+    description: LDOs with variable output and 0~100/10mV tuning
+    type: object
+    $ref: regulator.yaml#
+
+    properties:
+      regulator-allowed-modes: false
+
+    unevaluatedProperties: false
+
+    required:
+      - regulator-name
+
+required:
+  - compatible
+
+additionalProperties: false
+
