@@ -30,6 +30,9 @@ ALL_TESTS="
 	ctrl_test
 "
 
+# time to wait for delete and flush to complete
+: "${SETTLE_DELAY:=0.1}"
+
 NUM_NETIFS=4
 source lib.sh
 source tc_common.sh
@@ -152,6 +155,7 @@ cfg_test_host_common()
 	check_fail $? "Managed to replace $name host entry"
 
 	bridge mdb del dev br0 port br0 grp $grp $state vid 10
+	sleep "$SETTLE_DELAY"
 	bridge mdb get dev br0 grp $grp vid 10 &> /dev/null
 	check_fail $? "Failed to delete $name host entry"
 
@@ -208,6 +212,7 @@ cfg_test_port_common()
 	check_err $? "Failed to replace $name entry"
 
 	bridge mdb del dev br0 port $swp1 $grp_key permanent vid 10
+	sleep "$SETTLE_DELAY"
 	bridge mdb get dev br0 $grp_key vid 10 &> /dev/null
 	check_fail $? "Failed to delete $name entry"
 
@@ -230,6 +235,7 @@ cfg_test_port_common()
 	check_err $? "$name entry with VLAN 20 not added when VLAN was not specified"
 
 	bridge mdb del dev br0 port $swp1 $grp_key permanent
+	sleep "$SETTLE_DELAY"
 	bridge mdb get dev br0 $grp_key vid 10 &> /dev/null
 	check_fail $? "$name entry with VLAN 10 not deleted when VLAN was not specified"
 	bridge mdb get dev br0 $grp_key vid 20 &> /dev/null
@@ -310,6 +316,7 @@ __cfg_test_port_ip_star_g()
 	bridge -d mdb get dev br0 grp $grp src $src1 vid 10 &> /dev/null
 	check_err $? "(S, G) entry not created"
 	bridge mdb del dev br0 port $swp1 grp $grp vid 10
+	sleep "$SETTLE_DELAY"
 	bridge -d mdb get dev br0 grp $grp vid 10 &> /dev/null
 	check_fail $? "(*, G) entry not deleted"
 	bridge -d mdb get dev br0 grp $grp src $src1 vid 10 &> /dev/null
@@ -828,6 +835,7 @@ cfg_test_flush()
 	bridge mdb add dev br0 port $swp1 grp 239.1.1.8 vid 10 temp
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 	num_entries=$(bridge mdb show dev br0 | wc -l)
 	[[ $num_entries -eq 0 ]]
 	check_err $? 0 "Not all entries flushed after flush all"
@@ -840,6 +848,7 @@ cfg_test_flush()
 	bridge mdb add dev br0 port br0 grp 239.1.1.1 vid 10
 
 	bridge mdb flush dev br0 port $swp1
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 | grep -q "port $swp1"
 	check_fail $? "Entry not flushed by specified port"
@@ -849,11 +858,13 @@ cfg_test_flush()
 	check_err $? "Host entry flushed by wrong port"
 
 	bridge mdb flush dev br0 port br0
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 | grep -q "port br0"
 	check_fail $? "Host entry not flushed by specified port"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Check that when flushing by VLAN ID only entries programmed with the
 	# specified VLAN ID are flushed and the rest are not.
@@ -864,6 +875,7 @@ cfg_test_flush()
 	bridge mdb add dev br0 port $swp2 grp 239.1.1.1 vid 20
 
 	bridge mdb flush dev br0 vid 10
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 &> /dev/null
 	check_fail $? "Entry not flushed by specified VLAN ID"
@@ -871,6 +883,7 @@ cfg_test_flush()
 	check_err $? "Entry flushed by wrong VLAN ID"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Check that all permanent entries are flushed when "permanent" is
 	# specified and that temporary entries are not.
@@ -879,6 +892,7 @@ cfg_test_flush()
 	bridge mdb add dev br0 port $swp2 grp 239.1.1.1 temp vid 10
 
 	bridge mdb flush dev br0 permanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 | grep -q "port $swp1"
 	check_fail $? "Entry not flushed by \"permanent\" state"
@@ -886,6 +900,7 @@ cfg_test_flush()
 	check_err $? "Entry flushed by wrong state (\"permanent\")"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Check that all temporary entries are flushed when "nopermanent" is
 	# specified and that permanent entries are not.
@@ -894,6 +909,7 @@ cfg_test_flush()
 	bridge mdb add dev br0 port $swp2 grp 239.1.1.1 temp vid 10
 
 	bridge mdb flush dev br0 nopermanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 | grep -q "port $swp1"
 	check_err $? "Entry flushed by wrong state (\"nopermanent\")"
@@ -901,6 +917,7 @@ cfg_test_flush()
 	check_fail $? "Entry not flushed by \"nopermanent\" state"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Check that L2 host entries are not flushed when "nopermanent" is
 	# specified, but flushed when "permanent" is specified.
@@ -908,16 +925,19 @@ cfg_test_flush()
 	bridge mdb add dev br0 port br0 grp 01:02:03:04:05:06 permanent vid 10
 
 	bridge mdb flush dev br0 nopermanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 01:02:03:04:05:06 vid 10 &> /dev/null
 	check_err $? "L2 host entry flushed by wrong state (\"nopermanent\")"
 
 	bridge mdb flush dev br0 permanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 01:02:03:04:05:06 vid 10 &> /dev/null
 	check_fail $? "L2 host entry not flushed by \"permanent\" state"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Check that IPv4 host entries are not flushed when "permanent" is
 	# specified, but flushed when "nopermanent" is specified.
@@ -925,16 +945,19 @@ cfg_test_flush()
 	bridge mdb add dev br0 port br0 grp 239.1.1.1 temp vid 10
 
 	bridge mdb flush dev br0 permanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 &> /dev/null
 	check_err $? "IPv4 host entry flushed by wrong state (\"permanent\")"
 
 	bridge mdb flush dev br0 nopermanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 &> /dev/null
 	check_fail $? "IPv4 host entry not flushed by \"nopermanent\" state"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Check that IPv6 host entries are not flushed when "permanent" is
 	# specified, but flushed when "nopermanent" is specified.
@@ -942,16 +965,19 @@ cfg_test_flush()
 	bridge mdb add dev br0 port br0 grp ff0e::1 temp vid 10
 
 	bridge mdb flush dev br0 permanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp ff0e::1 vid 10 &> /dev/null
 	check_err $? "IPv6 host entry flushed by wrong state (\"permanent\")"
 
 	bridge mdb flush dev br0 nopermanent
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp ff0e::1 vid 10 &> /dev/null
 	check_fail $? "IPv6 host entry not flushed by \"nopermanent\" state"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Check that when flushing by routing protocol only entries programmed
 	# with the specified routing protocol are flushed and the rest are not.
@@ -961,6 +987,7 @@ cfg_test_flush()
 	bridge mdb add dev br0 port br0 grp 239.1.1.1 vid 10
 
 	bridge mdb flush dev br0 proto bgp
+	sleep "$SETTLE_DELAY"
 
 	bridge mdb get dev br0 grp 239.1.1.1 vid 10 | grep -q "port $swp1"
 	check_fail $? "Entry not flushed by specified routing protocol"
@@ -970,20 +997,25 @@ cfg_test_flush()
 	check_err $? "Host entry flushed by wrong routing protocol"
 
 	bridge mdb flush dev br0
+	sleep "$SETTLE_DELAY"
 
 	# Test that an error is returned when trying to flush using unsupported
 	# parameters.
 
 	bridge mdb flush dev br0 src_vni 10 &> /dev/null
+	sleep "$SETTLE_DELAY"
 	check_fail $? "Managed to flush by source VNI"
 
 	bridge mdb flush dev br0 dst 198.51.100.1 &> /dev/null
+	sleep "$SETTLE_DELAY"
 	check_fail $? "Managed to flush by destination IP"
 
 	bridge mdb flush dev br0 dst_port 4789 &> /dev/null
+	sleep "$SETTLE_DELAY"
 	check_fail $? "Managed to flush by UDP destination port"
 
 	bridge mdb flush dev br0 vni 10 &> /dev/null
+	sleep "$SETTLE_DELAY"
 	check_fail $? "Managed to flush by destination VNI"
 
 	log_test "Flush tests"
