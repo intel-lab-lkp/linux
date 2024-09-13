@@ -2883,7 +2883,19 @@ int cmd_stat(int argc, const char **argv)
 			evlist__reset_prev_raw_counts(evsel_list);
 
 		status = run_perf_stat(argc, argv, run_idx);
-		if (forever && status != -1 && !interval) {
+
+		/*
+		 * Returns -1 for fatal errors which signifies to not continue
+		 * when in repeat mode.
+		 *
+		 * Returns < -1 error codes when stat record is used. These
+		 * result in the stat information being displayed, but writing
+		 * to the file fails and is non fatal.
+		 */
+		if (status == -1)
+			break;
+
+		if (forever && !interval) {
 			print_counters(NULL, argc, argv);
 			perf_stat__reset_stats();
 		}
