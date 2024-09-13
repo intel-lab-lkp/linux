@@ -182,22 +182,6 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 	if (config & CPUCFG6_PMP)
 		c->options |= LOONGARCH_CPU_PMP;
 
-	config = iocsr_read32(LOONGARCH_IOCSR_FEATURES);
-	if (config & IOCSRF_CSRIPI)
-		c->options |= LOONGARCH_CPU_CSRIPI;
-	if (config & IOCSRF_EXTIOI)
-		c->options |= LOONGARCH_CPU_EXTIOI;
-	if (config & IOCSRF_FREQSCALE)
-		c->options |= LOONGARCH_CPU_SCALEFREQ;
-	if (config & IOCSRF_FLATMODE)
-		c->options |= LOONGARCH_CPU_FLATMODE;
-	if (config & IOCSRF_EIODECODE)
-		c->options |= LOONGARCH_CPU_EIODECODE;
-	if (config & IOCSRF_AVEC)
-		c->options |= LOONGARCH_CPU_AVECINT;
-	if (config & IOCSRF_VM)
-		c->options |= LOONGARCH_CPU_HYPERVISOR;
-
 	config = csr_read32(LOONGARCH_CSR_ASID);
 	config = (config & CSR_ASID_BIT) >> CSR_ASID_BIT_SHIFT;
 	asid_mask = GENMASK(config - 1, 0);
@@ -240,15 +224,10 @@ static char cpu_full_name[MAX_NAME_LEN] = "        -        ";
 
 static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int cpu)
 {
+	uint32_t config;
+	const char *core_name = "Unknown";
 	uint64_t *vendor = (void *)(&cpu_full_name[VENDOR_OFFSET]);
 	uint64_t *cpuname = (void *)(&cpu_full_name[CPUNAME_OFFSET]);
-	const char *core_name = "Unknown";
-
-	if (!__cpu_full_name[cpu])
-		__cpu_full_name[cpu] = cpu_full_name;
-
-	*vendor = iocsr_read64(LOONGARCH_IOCSR_VENDOR);
-	*cpuname = iocsr_read64(LOONGARCH_IOCSR_CPUNAME);
 
 	switch (BIT(fls(c->isa_level) - 1)) {
 	case LOONGARCH_CPU_ISA_LA32R:
@@ -284,6 +263,31 @@ static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int 
 	}
 
 	pr_info("%s Processor probed (%s Core)\n", __cpu_family[cpu], core_name);
+
+	if (!(c->options & LOONGARCH_CPU_IOCSR))
+		return;
+
+	*vendor = iocsr_read64(LOONGARCH_IOCSR_VENDOR);
+	*cpuname = iocsr_read64(LOONGARCH_IOCSR_CPUNAME);
+
+	if (!__cpu_full_name[cpu])
+		__cpu_full_name[cpu] = cpu_full_name;
+
+	config = iocsr_read32(LOONGARCH_IOCSR_FEATURES);
+	if (config & IOCSRF_CSRIPI)
+		c->options |= LOONGARCH_CPU_CSRIPI;
+	if (config & IOCSRF_EXTIOI)
+		c->options |= LOONGARCH_CPU_EXTIOI;
+	if (config & IOCSRF_FREQSCALE)
+		c->options |= LOONGARCH_CPU_SCALEFREQ;
+	if (config & IOCSRF_FLATMODE)
+		c->options |= LOONGARCH_CPU_FLATMODE;
+	if (config & IOCSRF_EIODECODE)
+		c->options |= LOONGARCH_CPU_EIODECODE;
+	if (config & IOCSRF_AVEC)
+		c->options |= LOONGARCH_CPU_AVECINT;
+	if (config & IOCSRF_VM)
+		c->options |= LOONGARCH_CPU_HYPERVISOR;
 }
 
 #ifdef CONFIG_64BIT
