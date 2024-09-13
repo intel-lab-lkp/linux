@@ -1370,7 +1370,6 @@ static void serial8250_stop_rx(struct uart_port *port)
 	serial8250_rpm_get(up);
 
 	up->ier &= ~(UART_IER_RLSI | UART_IER_RDI);
-	up->port.read_status_mask &= ~UART_LSR_DR;
 	serial_port_out(port, UART_IER, up->ier);
 
 	serial8250_rpm_put(up);
@@ -1543,16 +1542,20 @@ static inline void __start_tx(struct uart_port *port)
  *
  * Generic callback usable by 8250 uart drivers to start rs485 transmission.
  * Assumes that setting the RTS bit in the MCR register means RTS is high.
- * (Some chips use inverse semantics.)  Further assumes that reception is
- * stoppable by disabling the UART_IER_RDI interrupt.  (Some chips set the
- * UART_LSR_DR bit even when UART_IER_RDI is disabled, foiling this approach.)
+ * (Some chips use inverse semantics.)
+ * It does not disable RX interrupts. Use the wrapper function
+ * serial8250_rs485_start_tx() if that is also needed.
  */
 void serial8250_em485_start_tx(struct uart_8250_port *up)
 {
 	unsigned char mcr = serial8250_in_MCR(up);
 
+	/*
+	 * Some chips set the UART_LSR_DR bit even when UART_IER_RDI is
+	 * disabled, so explicitly mask it.
+	 */
 	if (!(up->port.rs485.flags & SER_RS485_RX_DURING_TX))
-		serial8250_stop_rx(&up->port);
+		up->port.read_status_mask &= ~UART_LSR_DR;
 
 	if (up->port.rs485.flags & SER_RS485_RTS_ON_SEND)
 		mcr |= UART_MCR_RTS;
@@ -1561,6 +1564,18 @@ void serial8250_em485_start_tx(struct uart_8250_port *up)
 	serial8250_out_MCR(up, mcr);
 }
 EXPORT_SYMBOL_GPL(serial8250_em485_start_tx);
+
+/**
+ * serial8250_rs485_start_tx() - stop rs485 reception, enable transmission
+ * @up: uart 8250 port
+ */
+void serial8250_rs485_start_tx(struct uart_8250_port *up)
+{
+	if (!(up->port.rs485.flags & SER_RS485_RX_DURING_TX))
+		serial8250_stop_rx(&up->port);
+
+	up->rs485_start_tx(up);
+}
 
 /* Returns false, if start_tx_timer was setup to defer TX start */
 static bool start_tx_rs485(struct uart_port *port)
@@ -1585,7 +1600,7 @@ static bool start_tx_rs485(struct uart_port *port)
 	if (em485->tx_stopped) {
 		em485->tx_stopped = false;
 
-		up->rs485_start_tx(up);
+		serial8250_rs485_start_tx(up);
 
 		if (up->port.rs485.delay_rts_before_send > 0) {
 			em485->active_timer = &em485->start_tx_timer;
