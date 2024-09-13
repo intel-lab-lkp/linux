@@ -92,11 +92,29 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 	unsigned long asid_mask;
 
 	c->options = LOONGARCH_CPU_CPUCFG | LOONGARCH_CPU_CSR |
-		     LOONGARCH_CPU_TLB | LOONGARCH_CPU_VINT | LOONGARCH_CPU_WATCH;
+		     LOONGARCH_CPU_VINT | LOONGARCH_CPU_WATCH;
 
 	elf_hwcap = HWCAP_LOONGARCH_CPUCFG;
 
 	config = read_cpucfg(LOONGARCH_CPUCFG1);
+
+	switch (config & CPUCFG1_ISA) {
+	case 0:
+		set_isa(c, LOONGARCH_CPU_ISA_LA32R);
+		break;
+	case 1:
+		set_isa(c, LOONGARCH_CPU_ISA_LA32S);
+		break;
+	case 2:
+		set_isa(c, LOONGARCH_CPU_ISA_LA64);
+		break;
+	default:
+		pr_warn("Warning: unknown ISA level\n");
+	}
+	if (config & CPUCFG1_PAGING)
+		c->options |= LOONGARCH_CPU_TLB;
+	if (config & CPUCFG1_IOCSR)
+		c->options |= LOONGARCH_CPU_IOCSR;
 	if (config & CPUCFG1_UAL) {
 		c->options |= LOONGARCH_CPU_UAL;
 		elf_hwcap |= HWCAP_LOONGARCH_UAL;
@@ -157,6 +175,8 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 		elf_hwcap |= HWCAP_LOONGARCH_LBT_MIPS;
 	}
 #endif
+	if (config & CPUCFG2_LSPW)
+		c->options |= LOONGARCH_CPU_LSPW;
 
 	config = read_cpucfg(LOONGARCH_CPUCFG6);
 	if (config & CPUCFG6_PMP)
@@ -222,6 +242,7 @@ static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int 
 {
 	uint64_t *vendor = (void *)(&cpu_full_name[VENDOR_OFFSET]);
 	uint64_t *cpuname = (void *)(&cpu_full_name[CPUNAME_OFFSET]);
+	const char *core_name = "Unknown";
 
 	if (!__cpu_full_name[cpu])
 		__cpu_full_name[cpu] = cpu_full_name;
@@ -229,43 +250,40 @@ static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int 
 	*vendor = iocsr_read64(LOONGARCH_IOCSR_VENDOR);
 	*cpuname = iocsr_read64(LOONGARCH_IOCSR_CPUNAME);
 
+	switch (BIT(fls(c->isa_level) - 1)) {
+	case LOONGARCH_CPU_ISA_LA32R:
+		c->cputype = CPU_LOONGSON32;
+		__cpu_family[cpu] = "Loongson-32bit Reduced";
+		break;
+	case LOONGARCH_CPU_ISA_LA32S:
+		c->cputype = CPU_LOONGSON32;
+		__cpu_family[cpu] = "Loongson-32bit Standard";
+		break;
+	case LOONGARCH_CPU_ISA_LA64:
+		c->cputype = CPU_LOONGSON64;
+		__cpu_family[cpu] = "Loongson-64bit";
+		break;
+	}
+
 	switch (c->processor_id & PRID_SERIES_MASK) {
 	case PRID_SERIES_LA132:
-		c->cputype = CPU_LOONGSON32;
-		set_isa(c, LOONGARCH_CPU_ISA_LA32S);
-		__cpu_family[cpu] = "Loongson-32bit";
-		pr_info("32-bit Loongson Processor probed (LA132 Core)\n");
+		core_name = "LA132";
 		break;
 	case PRID_SERIES_LA264:
-		c->cputype = CPU_LOONGSON64;
-		set_isa(c, LOONGARCH_CPU_ISA_LA64);
-		__cpu_family[cpu] = "Loongson-64bit";
-		pr_info("64-bit Loongson Processor probed (LA264 Core)\n");
+		core_name = "LA264";
 		break;
 	case PRID_SERIES_LA364:
-		c->cputype = CPU_LOONGSON64;
-		set_isa(c, LOONGARCH_CPU_ISA_LA64);
-		__cpu_family[cpu] = "Loongson-64bit";
-		pr_info("64-bit Loongson Processor probed (LA364 Core)\n");
+		core_name = "LA364";
 		break;
 	case PRID_SERIES_LA464:
-		c->cputype = CPU_LOONGSON64;
-		set_isa(c, LOONGARCH_CPU_ISA_LA64);
-		__cpu_family[cpu] = "Loongson-64bit";
-		pr_info("64-bit Loongson Processor probed (LA464 Core)\n");
+		core_name = "LA464";
 		break;
 	case PRID_SERIES_LA664:
-		c->cputype = CPU_LOONGSON64;
-		set_isa(c, LOONGARCH_CPU_ISA_LA64);
-		__cpu_family[cpu] = "Loongson-64bit";
-		pr_info("64-bit Loongson Processor probed (LA664 Core)\n");
+		core_name = "LA664";
 		break;
-	default: /* Default to 64 bit */
-		c->cputype = CPU_LOONGSON64;
-		set_isa(c, LOONGARCH_CPU_ISA_LA64);
-		__cpu_family[cpu] = "Loongson-64bit";
-		pr_info("64-bit Loongson Processor probed (Unknown Core)\n");
 	}
+
+	pr_info("%s Processor probed (%s Core)\n", __cpu_family[cpu], core_name);
 }
 
 #ifdef CONFIG_64BIT
