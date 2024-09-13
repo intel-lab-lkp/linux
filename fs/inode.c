@@ -21,6 +21,8 @@
 #include <linux/list_lru.h>
 #include <linux/iversion.h>
 #include <linux/rw_hint.h>
+#include <linux/seq_file.h>
+#include <linux/debugfs.h>
 #include <trace/events/writeback.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/timestamp.h>
@@ -100,6 +102,69 @@ long get_nr_dirty_inodes(void)
 	long nr_dirty = get_nr_inodes() - get_nr_inodes_unused();
 	return nr_dirty > 0 ? nr_dirty : 0;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static DEFINE_PER_CPU(unsigned long, mg_ctime_updates);
+static DEFINE_PER_CPU(unsigned long, mg_fine_stamps);
+static DEFINE_PER_CPU(unsigned long, mg_ctime_swaps);
+
+static long get_mg_ctime_updates(void)
+{
+	int i;
+	long sum = 0;
+
+	for_each_possible_cpu(i)
+		sum += per_cpu(mg_ctime_updates, i);
+	return sum < 0 ? 0 : sum;
+}
+
+static long get_mg_fine_stamps(void)
+{
+	int i;
+	long sum = 0;
+
+	for_each_possible_cpu(i)
+		sum += per_cpu(mg_fine_stamps, i);
+	return sum < 0 ? 0 : sum;
+}
+
+static long get_mg_ctime_swaps(void)
+{
+	int i;
+	long sum = 0;
+
+	for_each_possible_cpu(i)
+		sum += per_cpu(mg_ctime_swaps, i);
+	return sum < 0 ? 0 : sum;
+}
+
+#define mgtime_counter_inc(__var)	this_cpu_inc(__var)
+
+static int mgts_show(struct seq_file *s, void *p)
+{
+	long ctime_updates = get_mg_ctime_updates();
+	long ctime_swaps = get_mg_ctime_swaps();
+	long fine_stamps = get_mg_fine_stamps();
+
+	seq_printf(s, "%lu %lu %lu\n",
+		   ctime_updates, ctime_swaps, fine_stamps);
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(mgts);
+
+static int __init mg_debugfs_init(void)
+{
+	debugfs_create_file("multigrain_timestamps", S_IFREG | S_IRUGO, NULL, NULL, &mgts_fops);
+	return 0;
+}
+late_initcall(mg_debugfs_init);
+
+#else /* ! CONFIG_DEBUG_FS */
+
+#define mgtime_counter_inc(__var)	do { } while (0)
+
+#endif /* CONFIG_DEBUG_FS */
 
 /*
  * Handle nr_inode sysctl
@@ -2650,10 +2715,9 @@ EXPORT_SYMBOL(timestamp_truncate);
  *
  * If it is multigrain, then we first see if the coarse-grained timestamp is
  * distinct from what we have. If so, then we'll just use that. If we have to
- * get a fine-grained timestamp, then do so, and try to swap it into the floor.
- * We accept the new floor value regardless of the outcome of the cmpxchg.
- * After that, we try to swap the new value into i_ctime_nsec. Again, we take
- * the resulting ctime, regardless of the outcome of the swap.
+ * get a fine-grained timestamp, then do so. After that, we try to swap the new
+ * value into i_ctime_nsec. We take the resulting ctime, regardless of the
+ * outcome of the swap.
  */
 struct timespec64 inode_set_ctime_current(struct inode *inode)
 {
@@ -2680,8 +2744,10 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 		struct timespec64 ctime = { .tv_sec = inode->i_ctime_sec,
 					    .tv_nsec = cns & ~I_CTIME_QUERIED };
 
-		if (timespec64_compare(&now, &ctime) <= 0)
+		if (timespec64_compare(&now, &ctime) <= 0) {
+			mgtime_counter_inc(mg_fine_stamps);
 			ktime_get_real_ts64_mg(&now, cookie);
+		}
 	}
 	now = timestamp_truncate(now, inode);
 
@@ -2696,6 +2762,7 @@ retry:
 		/* If swap occurred, then we're (mostly) done */
 		inode->i_ctime_sec = now.tv_sec;
 		trace_ctime_ns_xchg(inode, cns, now.tv_nsec, cur);
+		mgtime_counter_inc(mg_ctime_swaps);
 	} else {
 		/*
 		 * Was the change due to someone marking the old ctime QUERIED?
