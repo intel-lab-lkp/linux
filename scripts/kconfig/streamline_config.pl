@@ -466,6 +466,11 @@ foreach my $line (@config_file) {
 
     if (/(CONFIG_[$valid]*)=(m|y)/) {
 	$orig_configs{$1} = $2;
+	# all configs options set to 'y' need to be processed
+	if($2 eq "y") {
+            $configs{$1}= $2;
+        }
+
     }
 }
 
@@ -596,9 +601,11 @@ sub loop_depend {
       forloop:
 	foreach my $config (keys %configs) {
 
-	    # If this config is not a module, we do not need to process it
-	    if (defined($orig_configs{$config}) && $orig_configs{$config} ne "m") {
-		next forloop;
+           # If this config is not set in the original config,
+	    # we do not need to process it
+           if (defined($orig_configs{$config}) && $orig_configs{$config} ne "m"
+		    	&& $orig_configs{$config} ne "y")  {
+		    next forloop;
 	    }
 
 	    $config =~ s/^CONFIG_//;
