@@ -285,7 +285,8 @@ static struct dsa_port *dsa_tree_find_port_by_node(struct dsa_switch_tree *dst,
 }
 
 static struct dsa_link *dsa_link_touch(struct dsa_port *dp,
-				       struct dsa_port *link_dp)
+				       struct dsa_port *link_dp,
+				       bool adjacent)
 {
 	struct dsa_switch *ds = dp->ds;
 	struct dsa_switch_tree *dst;
@@ -307,9 +308,23 @@ static struct dsa_link *dsa_link_touch(struct dsa_port *dp,
 	INIT_LIST_HEAD(&dl->list);
 	list_add_tail(&dl->list, &dst->rtable);
 
+	if (adjacent)
+		dp->link_dp = link_dp;
+
 	return dl;
 }
 
+/**
+ * dsa_port_setup_routing_table(): Set up tree routing table based on
+ *	information from this cascade port
+ * @dp: cascade port
+ *
+ * Parse the device tree node for the "link" array of phandles to other cascade
+ * ports, creating routing table elements from this source to each destination
+ * list element found. One assumption is being made, which is backed by the
+ * device tree bindings: that the first "link" element is the directly
+ * connected cascade port.
+ */
 static bool dsa_port_setup_routing_table(struct dsa_port *dp)
 {
 	struct dsa_switch *ds = dp->ds;
@@ -317,6 +332,7 @@ static bool dsa_port_setup_routing_table(struct dsa_port *dp)
 	struct device_node *dn = dp->dn;
 	struct of_phandle_iterator it;
 	struct dsa_port *link_dp;
+	bool adjacent = true;
 	struct dsa_link *dl;
 	int err;
 
@@ -327,11 +343,13 @@ static bool dsa_port_setup_routing_table(struct dsa_port *dp)
 			return false;
 		}
 
-		dl = dsa_link_touch(dp, link_dp);
+		dl = dsa_link_touch(dp, link_dp, adjacent);
 		if (!dl) {
 			of_node_put(it.node);
 			return false;
 		}
+
+		adjacent = false;
 	}
 
 	return true;

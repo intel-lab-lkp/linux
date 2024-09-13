@@ -265,6 +265,7 @@ struct dsa_port {
 
 	const char		*name;
 	struct dsa_port		*cpu_dp;
+	struct dsa_port		*link_dp;
 	u8			mac[ETH_ALEN];
 
 	u8			stp_state;
@@ -332,10 +333,10 @@ dsa_phylink_to_port(struct phylink_config *config)
 	return container_of(config, struct dsa_port, pl_config);
 }
 
-/* TODO: ideally DSA ports would have a single dp->link_dp member,
- * and no dst->rtable nor this struct dsa_link would be needed,
- * but this would require some more complex tree walking,
- * so keep it stupid at the moment and list them all.
+/* TODO: DSA ports do have a dp->link_dp member which represents their direct
+ * connection. However, dsa_routing_port() requires full routing information,
+ * which _could_ be deduced based on just the adjacency, but it requires some
+ * complex tree walking. So keep it stupid at the moment and list them all.
  */
 struct dsa_link {
 	struct dsa_port *dp;
