@@ -17,10 +17,7 @@ pub fn err(args: fmt::Arguments<'_>) {
     // are passing.
     #[cfg(CONFIG_PRINTK)]
     unsafe {
-        bindings::_printk(
-            b"\x013%pA\0".as_ptr() as _,
-            &args as *const _ as *const c_void,
-        );
+        bindings::_printk(b"\x013%pA\0".as_ptr(), &args as *const _ as *const c_void);
     }
 }
 
@@ -33,10 +30,7 @@ pub fn info(args: fmt::Arguments<'_>) {
     // are passing.
     #[cfg(CONFIG_PRINTK)]
     unsafe {
-        bindings::_printk(
-            b"\x016%pA\0".as_ptr() as _,
-            &args as *const _ as *const c_void,
-        );
+        bindings::_printk(b"\x016%pA\0".as_ptr(), &args as *const _ as *const c_void);
     }
 }
 
