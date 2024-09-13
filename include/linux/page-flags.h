@@ -241,8 +241,8 @@ static __always_inline unsigned long _compound_head(const struct page *page)
 {
 	unsigned long head = READ_ONCE(page->compound_head);
 
-	if (unlikely(head & 1))
-		return head - 1;
+	if (unlikely(head & 1UL))
+		return head & ~1UL;
 	return (unsigned long)page_fixed_fake_head(page);
 }
 
