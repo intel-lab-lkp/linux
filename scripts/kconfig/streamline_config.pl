@@ -238,7 +238,7 @@ sub read_kconfig {
 	    }
 
 	# configs without prompts must be selected
-	} elsif ($state ne "NONE" && /^\s*(tristate\s+\S|prompt\b)/) {
+	} elsif ($state ne "NONE" && /^\s*((bool|tristate)\s+\S|prompt\b)/) {
 	    # note if the config has a prompt
 	    $prompts{$config} = 1;
 
