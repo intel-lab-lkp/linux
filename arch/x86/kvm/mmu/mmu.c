@@ -4524,29 +4524,33 @@ static int direct_page_fault(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 	if (r != RET_PF_INVALID)
 		return r;
 
+	mutex_lock(&vcpu->arch.mmu_memory_cache_lock);
 	r = mmu_topup_memory_caches(vcpu, false);
 	if (r)
-		return r;
+		goto out_mmu_memory_cache_unlock;
 
 	r = kvm_faultin_pfn(vcpu, fault, ACC_ALL);
 	if (r != RET_PF_CONTINUE)
-		return r;
+		goto out_mmu_memory_cache_unlock;
 
 	r = RET_PF_RETRY;
 	write_lock(&vcpu->kvm->mmu_lock);
 
 	if (is_page_fault_stale(vcpu, fault))
-		goto out_unlock;
+		goto out_mmu_unlock;
 
 	r = make_mmu_pages_available(vcpu);
 	if (r)
-		goto out_unlock;
+		goto out_mmu_unlock;
 
 	r = direct_map(vcpu, fault);
 
-out_unlock:
+out_mmu_unlock:
 	write_unlock(&vcpu->kvm->mmu_lock);
 	kvm_release_pfn_clean(fault->pfn);
+out_mmu_memory_cache_unlock:
+	mutex_unlock(&vcpu->arch.mmu_memory_cache_lock);
+
 	return r;
 }
 
@@ -4617,25 +4621,28 @@ static int kvm_tdp_mmu_page_fault(struct kvm_vcpu *vcpu,
 	if (r != RET_PF_INVALID)
 		return r;
 
+	mutex_lock(&vcpu->arch.mmu_memory_cache_lock);
 	r = mmu_topup_memory_caches(vcpu, false);
 	if (r)
-		return r;
+		goto out_mmu_memory_cache_unlock;
 
 	r = kvm_faultin_pfn(vcpu, fault, ACC_ALL);
 	if (r != RET_PF_CONTINUE)
-		return r;
+		goto out_mmu_memory_cache_unlock;
 
 	r = RET_PF_RETRY;
 	read_lock(&vcpu->kvm->mmu_lock);
 
 	if (is_page_fault_stale(vcpu, fault))
-		goto out_unlock;
+		goto out_mmu_unlock;
 
 	r = kvm_tdp_mmu_map(vcpu, fault);
 
-out_unlock:
+out_mmu_unlock:
 	read_unlock(&vcpu->kvm->mmu_lock);
 	kvm_release_pfn_clean(fault->pfn);
+out_mmu_memory_cache_unlock:
+	mutex_unlock(&vcpu->arch.mmu_memory_cache_lock);
 	return r;
 }
 #endif
@@ -5691,6 +5698,7 @@ int kvm_mmu_load(struct kvm_vcpu *vcpu)
 {
 	int r;
 
+	mutex_lock(&vcpu->arch.mmu_memory_cache_lock);
 	r = mmu_topup_memory_caches(vcpu, !vcpu->arch.mmu->root_role.direct);
 	if (r)
 		goto out;
@@ -5717,6 +5725,7 @@ int kvm_mmu_load(struct kvm_vcpu *vcpu)
 	 */
 	kvm_x86_call(flush_tlb_current)(vcpu);
 out:
+	mutex_unlock(&vcpu->arch.mmu_memory_cache_lock);
 	return r;
 }
 
@@ -6303,6 +6312,7 @@ int kvm_mmu_create(struct kvm_vcpu *vcpu)
 	if (!vcpu->arch.mmu_shadow_page_cache.init_value)
 		vcpu->arch.mmu_shadow_page_cache.gfp_zero = __GFP_ZERO;
 
+	mutex_init(&vcpu->arch.mmu_memory_cache_lock);
 	vcpu->arch.mmu = &vcpu->arch.root_mmu;
 	vcpu->arch.walk_mmu = &vcpu->arch.root_mmu;
 
@@ -6997,13 +7007,50 @@ void kvm_mmu_invalidate_mmio_sptes(struct kvm *kvm, u64 gen)
 static unsigned long mmu_shrink_scan(struct shrinker *shrink,
 				     struct shrink_control *sc)
 {
-	return SHRINK_STOP;
+	struct kvm *kvm, *next_kvm, *first_kvm = NULL;
+	unsigned long i, freed = 0;
+	struct kvm_vcpu *vcpu;
+
+	mutex_lock(&kvm_lock);
+	list_for_each_entry_safe(kvm, next_kvm, &vm_list, vm_list) {
+		if (!first_kvm)
+			first_kvm = kvm;
+		else if (first_kvm == kvm)
+			break;
+
+		list_move_tail(&kvm->vm_list, &vm_list);
+
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			if (!mutex_trylock(&vcpu->arch.mmu_memory_cache_lock))
+				continue;
+			freed += kvm_mmu_empty_memory_cache(&vcpu->arch.mmu_shadow_page_cache);
+			freed += kvm_mmu_empty_memory_cache(&vcpu->arch.mmu_shadowed_info_cache);
+			mutex_unlock(&vcpu->arch.mmu_memory_cache_lock);
+			if (freed >= sc->nr_to_scan)
+				goto out;
+		}
+	}
+out:
+	mutex_unlock(&kvm_lock);
+	return freed;
 }
 
 static unsigned long mmu_shrink_count(struct shrinker *shrink,
 				      struct shrink_control *sc)
 {
-	return SHRINK_EMPTY;
+	unsigned long i, count = 0;
+	struct kvm_vcpu *vcpu;
+	struct kvm *kvm;
+
+	mutex_lock(&kvm_lock);
+	list_for_each_entry(kvm, &vm_list, vm_list) {
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			count += READ_ONCE(vcpu->arch.mmu_shadow_page_cache.nobjs);
+			count += READ_ONCE(vcpu->arch.mmu_shadowed_info_cache.nobjs);
+		}
+	}
+	mutex_unlock(&kvm_lock);
+	return !count ? SHRINK_EMPTY : count;
 }
 
 static struct shrinker *mmu_shrinker;

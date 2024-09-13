@@ -811,6 +811,12 @@ struct kvm_vcpu_arch {
 	 */
 	struct kvm_mmu *walk_mmu;
 
+	/*
+	 * Protect cache from getting emptied in MMU shrinker while vCPU might
+	 * use cache for fault handling or loading MMU.  As this is a per vCPU
+	 * lock, only contention might happen when MMU shrinker runs.
+	 */
+	struct mutex mmu_memory_cache_lock;
 	struct kvm_mmu_memory_cache mmu_pte_list_desc_cache;
 	struct kvm_mmu_memory_cache mmu_shadow_page_cache;
 	struct kvm_mmu_memory_cache mmu_shadowed_info_cache;
