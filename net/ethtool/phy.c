@@ -13,6 +13,7 @@
 struct phy_req_info {
 	struct ethnl_req_info		base;
 	struct phy_device_node		*pdn;
+	u8 dev_start_doit;
 };
 
 #define PHY_REQINFO(__req_base) \
@@ -157,6 +158,9 @@ int ethnl_phy_doit(struct sk_buff *skb, struct genl_info *info)
 	if (ret < 0)
 		return ret;
 
+	if (req_info.base.dev)
+		req_info.dev_start_doit = 0;
+
 	rtnl_lock();
 
 	ret = ethnl_phy_parse_request(&req_info.base, tb, info->extack);
@@ -223,9 +227,13 @@ int ethnl_phy_start(struct netlink_callback *cb)
 					 false);
 	ctx->ifindex = 0;
 	ctx->phy_index = 0;
+	ctx->phy_req_info->dev_start_doit = 0;
 
 	if (ret)
 		kfree(ctx->phy_req_info);
+
+	if (ctx->phy_req_info->base.dev)
+		ctx->phy_req_info->dev_start_doit = 1;
 
 	return ret;
 }
@@ -234,7 +242,7 @@ int ethnl_phy_done(struct netlink_callback *cb)
 {
 	struct ethnl_phy_dump_ctx *ctx = (void *)cb->ctx;
 
-	if (ctx->phy_req_info->base.dev)
+	if (ctx->phy_req_info->base.dev && ctx->phy_req_info->dev_start_doit)
 		ethnl_parse_header_dev_put(&ctx->phy_req_info->base);
 
 	kfree(ctx->phy_req_info);
