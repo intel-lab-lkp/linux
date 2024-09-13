@@ -85,9 +85,25 @@ FTRACE_ENTRY_PACKED(funcgraph_entry, ftrace_graph_ent_entry,
 	F_printk("--> %ps (%d)", (void *)__entry->func, __entry->depth)
 );
 
-/* Function return entry */
+/* Function call entry with a return address */
+FTRACE_ENTRY_PACKED(fgraph_retaddr_entry, fgraph_retaddr_ent_entry,
+
+	TRACE_GRAPH_RETADDR_ENT,
+
+	F_STRUCT(
+		__field_struct(	struct fgraph_retaddr_ent,	graph_ent	)
+		__field_packed(	unsigned long,	graph_ent,	func		)
+		__field_packed(	int,		graph_ent,	depth		)
+		__field_packed(	unsigned long,	graph_ent,	retaddr		)
+	),
+
+	F_printk("--> %ps (%d) <- %ps", (void *)__entry->func, __entry->depth,
+		(void *)__entry->retaddr)
+);
+
 #ifdef CONFIG_FUNCTION_GRAPH_RETVAL
 
+/* Function return entry */
 FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 
 	TRACE_GRAPH_RET,
@@ -110,6 +126,7 @@ FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 
 #else
 
+/* Function return entry */
 FTRACE_ENTRY_PACKED(funcgraph_exit, ftrace_graph_ret_entry,
 
 	TRACE_GRAPH_RET,
