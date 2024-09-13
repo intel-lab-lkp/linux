@@ -170,6 +170,19 @@ int virtio_device_restore(struct virtio_device *dev);
 void virtio_reset_device(struct virtio_device *dev);
 
 size_t virtio_max_dma_size(const struct virtio_device *vdev);
+const struct cpumask *virtio_get_vq_affinity(struct virtio_device *dev,
+					     int index);
+
+#ifdef CONFIG_BLK_MQ_VIRTIO
+const struct cpumask *virtio_get_blk_mq_affinity(void *dev_data,
+						 int offset, int queue);
+#else
+static inline const struct cpumask *virtio_get_blk_mq_affinity(void *dev_data,
+							       int offset, int queue)
+{
+	return cpu_possible_mask;
+}
+#endif
 
 #define virtio_device_for_each_vq(vdev, vq) \
 	list_for_each_entry(vq, &vdev->vqs, list)

@@ -6370,6 +6370,26 @@ int pci_set_vga_state(struct pci_dev *dev, bool decode,
 	return 0;
 }
 
+#ifdef CONFIG_BLK_MQ_PCI
+/**
+ * pci_get_blk_mq_affinity - get affinity mask queue mapping for PCI device
+ * @dev_data:	Pointer to struct pci_dev.
+ * @offset:	Offset to use for the pci irq vector
+ * @queue:	Queue index
+ *
+ * This function returns for a queue the affinity mask for a PCI device.
+ * It is usually used as callback for blk_mq_hctx_map_queues().
+ */
+const struct cpumask *pci_get_blk_mq_affinity(void *dev_data, int offset,
+					      int queue)
+{
+	struct pci_dev *pdev = dev_data;
+
+	return pci_irq_get_affinity(pdev, offset + queue);
+}
+EXPORT_SYMBOL_GPL(pci_get_blk_mq_affinity);
+#endif
+
 #ifdef CONFIG_ACPI
 bool pci_pr3_present(struct pci_dev *pdev)
 {

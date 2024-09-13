@@ -1633,6 +1633,17 @@ resource_size_t pcibios_window_alignment(struct pci_bus *bus,
 int pci_set_vga_state(struct pci_dev *pdev, bool decode,
 		      unsigned int command_bits, u32 flags);
 
+#ifdef CONFIG_BLK_MQ_PCI
+const struct cpumask *pci_get_blk_mq_affinity(void *dev_data,
+		int offset, int queue);
+#else
+static inline const struct cpumask *pci_get_blk_mq_affinity(void *dev_data,
+		int offset, int queue)
+{
+	return cpu_possible_mask;
+}
+#endif
+
 /*
  * Virtual interrupts allow for more interrupts to be allocated
  * than the device has interrupts for. These are not programmed

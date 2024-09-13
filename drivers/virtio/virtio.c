@@ -592,6 +592,37 @@ err:
 EXPORT_SYMBOL_GPL(virtio_device_restore);
 #endif
 
+const struct cpumask *virtio_get_vq_affinity(struct virtio_device *dev,
+		int index)
+{
+	if (!dev->config->get_vq_affinity)
+		return NULL;
+
+	return dev->config->get_vq_affinity(dev, index);
+}
+EXPORT_SYMBOL_GPL(virtio_get_vq_affinity);
+
+#ifdef CONFIG_BLK_MQ_VIRTIO
+/**
+ * virtio_get_blk_mq_affinity - get affinity mask queue mapping for
+ * virtio device
+ * @dev_data:	Pointer to struct virtio_device.
+ * @offset:	Offset to use for the virtio irq vector
+ * @queue:	Queue index
+ *
+ * This function returns for a queue the affinity mask for a virtio device.
+ * It is usually used as callback for blk_mq_hctx_map_queues().
+ */
+const struct cpumask *virtio_get_blk_mq_affinity(void *dev_data,
+						 int offset, int queue)
+{
+	struct virtio_device *vdev = dev_data;
+
+	return virtio_get_vq_affinity(vdev, offset + queue);
+}
+EXPORT_SYMBOL_GPL(virtio_get_blk_mq_affinity);
+#endif
+
 static int virtio_init(void)
 {
 	if (bus_register(&virtio_bus) != 0)
