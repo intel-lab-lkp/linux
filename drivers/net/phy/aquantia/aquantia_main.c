@@ -499,6 +499,12 @@ static int aqr107_config_init(struct phy_device *phydev)
 	if (!ret)
 		aqr107_chip_info(phydev);
 
+	/* AQR115c supports speed up to 2.5Gbps */
+	if (phydev->interface == PHY_INTERFACE_MODE_2500BASEX) {
+		phy_set_max_speed(phydev, SPEED_2500);
+		phydev->autoneg = AUTONEG_ENABLE;
+	}
+
 	ret = aqr107_set_downshift(phydev, MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT);
 	if (ret)
 		return ret;
@@ -1036,6 +1042,7 @@ static struct phy_driver aqr_driver[] = {
 	.get_sset_count = aqr107_get_sset_count,
 	.get_strings    = aqr107_get_strings,
 	.get_stats      = aqr107_get_stats,
+	.get_features	= genphy_c45_pma_read_abilities,
 	.link_change_notify = aqr107_link_change_notify,
 	.led_brightness_set = aqr_phy_led_brightness_set,
 	.led_hw_is_supported = aqr_phy_led_hw_is_supported,
