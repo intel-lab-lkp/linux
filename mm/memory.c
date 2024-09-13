@@ -4617,26 +4617,27 @@ out_release:
 	return ret;
 }
 
-static bool pte_range_none(pte_t *pte, int nr_pages)
+static int pte_range_none(pte_t *pte, int nr_pages)
 {
 	int i;
 
 	for (i = 0; i < nr_pages; i++) {
 		if (!pte_none(ptep_get_lockless(pte + i)))
-			return false;
+			return i;
 	}
 
-	return true;
+	return nr_pages;
 }
 
 static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	pte_t *first_set_pte = NULL, *align_pte, *pte;
 	unsigned long orders;
 	struct folio *folio;
 	unsigned long addr;
-	pte_t *pte;
+	int max_empty;
 	gfp_t gfp;
 	int order;
 
@@ -4671,8 +4672,23 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 	order = highest_order(orders);
 	while (orders) {
 		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
-		if (pte_range_none(pte + pte_index(addr), 1 << order))
+		align_pte = pte + pte_index(addr);
+
+		/* Range to be scanned known to be empty */
+		if (align_pte + (1 << order) <= first_set_pte)
 			break;
+
+		/* Range to be scanned contains first_set_pte */
+		if (align_pte <= first_set_pte)
+			goto repeat;
+
+		/* align_pte > first_set_pte, so need to check properly */
+		max_empty = pte_range_none(align_pte, 1 << order);
+		if (max_empty == 1 << order)
+			break;
+
+		first_set_pte = align_pte + max_empty;
+repeat:
 		order = next_order(&orders, order);
 	}
 
@@ -4787,7 +4803,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	if (nr_pages == 1 && vmf_pte_changed(vmf)) {
 		update_mmu_tlb(vma, addr, vmf->pte);
 		goto release;
-	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
+	} else if (nr_pages > 1 && pte_range_none(vmf->pte, nr_pages) != nr_pages) {
 		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
 		goto release;
 	}
@@ -5121,7 +5137,7 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 		update_mmu_tlb(vma, addr, vmf->pte);
 		ret = VM_FAULT_NOPAGE;
 		goto unlock;
-	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
+	} else if (nr_pages > 1 && pte_range_none(vmf->pte, nr_pages) != nr_pages) {
 		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
 		ret = VM_FAULT_NOPAGE;
 		goto unlock;
