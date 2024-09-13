@@ -114,6 +114,13 @@ static struct tk_fast tk_fast_raw  ____cacheline_aligned = {
 	.base[1] = FAST_TK_INIT,
 };
 
+/*
+ * This represents the latest fine-grained time that we have handed out as a
+ * timestamp on the system. Tracked as a monotonic ktime_t, and converted to the
+ * realtime clock on an as-needed basis.
+ */
+static __cacheline_aligned_in_smp atomic64_t mg_floor;
+
 static inline void tk_normalize_xtime(struct timekeeper *tk)
 {
 	while (tk->tkr_mono.xtime_nsec >= ((u64)NSEC_PER_SEC << tk->tkr_mono.shift)) {
@@ -2393,6 +2400,80 @@ void ktime_get_coarse_real_ts64(struct timespec64 *ts)
 	} while (read_seqcount_retry(&tk_core.seq, seq));
 }
 EXPORT_SYMBOL(ktime_get_coarse_real_ts64);
+
+/**
+ * ktime_get_coarse_real_ts64_mg - get later of coarse grained time or floor
+ * @ts: timespec64 to be filled
+ *
+ * Adjust floor to realtime and compare it to the coarse time. Fill
+ * @ts with the latest one. Returns opaque cookie suitable for passing
+ * to ktime_get_real_ts64_mg().
+ */
+u64 ktime_get_coarse_real_ts64_mg(struct timespec64 *ts)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	u64 floor = atomic64_read(&mg_floor);
+	ktime_t f_real, offset, coarse;
+	unsigned int seq;
+
+	WARN_ON(timekeeping_suspended);
+
+	do {
+		seq = read_seqcount_begin(&tk_core.seq);
+		*ts = tk_xtime(tk);
+		offset = *offsets[TK_OFFS_REAL];
+	} while (read_seqcount_retry(&tk_core.seq, seq));
+
+	coarse = timespec64_to_ktime(*ts);
+	f_real = ktime_add(floor, offset);
+	if (ktime_after(f_real, coarse))
+		*ts = ktime_to_timespec64(f_real);
+	return floor;
+}
+EXPORT_SYMBOL_GPL(ktime_get_coarse_real_ts64_mg);
+
+/**
+ * ktime_get_real_ts64_mg - attempt to update floor value and return result
+ * @ts:		pointer to the timespec to be set
+ * @cookie:	opaque cookie from earlier call to ktime_get_coarse_real_ts64_mg()
+ *
+ * Get a current monotonic fine-grained time value and attempt to swap
+ * it into the floor using @cookie as the "old" value. @ts will be
+ * filled with the resulting floor value, regardless of the outcome of
+ * the swap.
+ */
+void ktime_get_real_ts64_mg(struct timespec64 *ts, u64 cookie)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	ktime_t offset, mono, old = (ktime_t)cookie;
+	unsigned int seq;
+	u64 nsecs;
+
+	WARN_ON(timekeeping_suspended);
+
+	do {
+		seq = read_seqcount_begin(&tk_core.seq);
+
+		ts->tv_sec = tk->xtime_sec;
+		mono = tk->tkr_mono.base;
+		nsecs = timekeeping_get_ns(&tk->tkr_mono);
+		offset = *offsets[TK_OFFS_REAL];
+	} while (read_seqcount_retry(&tk_core.seq, seq));
+
+	mono = ktime_add_ns(mono, nsecs);
+
+	if (atomic64_try_cmpxchg(&mg_floor, &old, mono)) {
+		ts->tv_nsec = 0;
+		timespec64_add_ns(ts, nsecs);
+	} else {
+		/*
+		 * Something has changed mg_floor since "old" was
+		 * fetched. That value is just as valid, so accept it.
+		 */
+		*ts = ktime_to_timespec64(ktime_add(old, offset));
+	}
+}
+EXPORT_SYMBOL(ktime_get_real_ts64_mg);
 
 void ktime_get_coarse_ts64(struct timespec64 *ts)
 {
