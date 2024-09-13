@@ -772,7 +772,9 @@ ascend_to_node:
 	for (; slot < ASSOC_ARRAY_FAN_OUT; slot++) {
 		ptr = READ_ONCE(node->slots[slot]);
 
-		if (assoc_array_ptr_is_meta(ptr) && node->back_pointer)
+		if ((assoc_array_ptr_is_meta(ptr) && node->back_pointer) ||
+		    (assoc_array_ptr_is_meta(ptr) &&
+		     assoc_array_ptr_is_shortcut(ptr)))
 			goto descend_to_node;
 
 		if (!keyring_ptr_is_keyring(ptr))
