@@ -245,6 +245,43 @@ struct sja1105_flow_block {
 	int num_virtual_links;
 };
 
+/**
+ * sja1105_mgmt_route_port: Representation of one port in a management route
+ * @dp: DSA user or cascade port
+ * @list: List node element for the mgmt_route->ports list membership
+ */
+struct sja1105_mgmt_route_port {
+	struct dsa_port *dp;
+	struct list_head list;
+};
+
+/**
+ * sja1105_mgmt_route: Structure to represent a SJA1105 management route
+ * @ports: List of ports on which the management route needs to be installed,
+ *	   starting with the downstream-facing cascade port of the switch which
+ *	   has the CPU connection, and ending with the user port of the leaf
+ *	   switch.
+ * @list: List node element for the mgmt_tree->routes list membership.
+ */
+struct sja1105_mgmt_route {
+	struct list_head ports;
+	struct list_head list;
+};
+
+/**
+ * sja1105_mgmt_tree: DSA switch tree-level structure for management routes
+ * @lock: Serializes transmission of management frames across the tree, so that
+ *	  the switches don't confuse them with one another.
+ * @routes: List of sja1105_mgmt_route structures, one for each user port in
+ *	    the tree.
+ * @refcount: Reference count.
+ */
+struct sja1105_mgmt_tree {
+	struct mutex lock;
+	struct list_head routes;
+	refcount_t refcount;
+};
+
 struct sja1105_private {
 	struct sja1105_static_config static_config;
 	int rgmii_rx_delay_ps[SJA1105_MAX_NUM_PORTS];
@@ -259,13 +296,11 @@ struct sja1105_private {
 	size_t max_xfer_len;
 	struct spi_device *spidev;
 	struct dsa_switch *ds;
+	struct sja1105_mgmt_tree *mgmt_tree;
+	struct sja1105_mgmt_route **mgmt_routes;
 	u16 bridge_pvid[SJA1105_MAX_NUM_PORTS];
 	u16 tag_8021q_pvid[SJA1105_MAX_NUM_PORTS];
 	struct sja1105_flow_block flow_block;
-	/* Serializes transmission of management frames so that
-	 * the switch doesn't confuse them with one another.
-	 */
-	struct mutex mgmt_lock;
 	/* Serializes accesses to the FDB */
 	struct mutex fdb_lock;
 	/* PTP two-step TX timestamp ID, and its serialization lock */

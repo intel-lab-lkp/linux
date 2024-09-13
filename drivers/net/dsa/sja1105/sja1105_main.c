@@ -2302,8 +2302,8 @@ int sja1105_static_config_reload(struct sja1105_private *priv,
 	int rc, i;
 	s64 now;
 
+	mutex_lock(&priv->mgmt_tree->lock);
 	mutex_lock(&priv->fdb_lock);
-	mutex_lock(&priv->mgmt_lock);
 
 	mac = priv->static_config.tables[BLK_IDX_MAC_CONFIG].entries;
 
@@ -2414,8 +2414,8 @@ int sja1105_static_config_reload(struct sja1105_private *priv,
 	if (rc < 0)
 		goto out;
 out:
-	mutex_unlock(&priv->mgmt_lock);
 	mutex_unlock(&priv->fdb_lock);
+	mutex_unlock(&priv->mgmt_tree->lock);
 
 	return rc;
 }
@@ -2668,39 +2668,41 @@ static int sja1105_prechangeupper(struct dsa_switch *ds, int port,
 	return 0;
 }
 
-static int sja1105_mgmt_xmit(struct dsa_switch *ds, int port, int slot,
-			     struct sk_buff *skb, bool takets)
+static int sja1105_mgmt_route_install(struct dsa_port *dp, const u8 *addr,
+				      bool takets, int slot)
 {
-	struct sja1105_mgmt_entry mgmt_route = {0};
-	struct sja1105_private *priv = ds->priv;
-	struct ethhdr *hdr;
-	int timeout = 10;
-	int rc;
+	struct sja1105_mgmt_entry mgmt_route = {};
+	struct dsa_switch *ds = dp->ds;
+	int port = dp->index;
 
-	hdr = eth_hdr(skb);
-
-	mgmt_route.macaddr = ether_addr_to_u64(hdr->h_dest);
+	mgmt_route.macaddr = ether_addr_to_u64(addr);
 	mgmt_route.destports = BIT(port);
 	mgmt_route.enfport = 1;
 	mgmt_route.tsreg = 0;
-	mgmt_route.takets = takets;
+	/* Only the leaf port takes the TX timestamp, the cascade ports just
+	 * route the packet towards the leaf switch
+	 */
+	mgmt_route.takets = dsa_port_is_user(dp) ? takets : false;
 
-	rc = sja1105_dynamic_config_write(priv, BLK_IDX_MGMT_ROUTE,
-					  slot, &mgmt_route, true);
-	if (rc < 0) {
-		kfree_skb(skb);
-		return rc;
-	}
+	return sja1105_dynamic_config_write(ds->priv, BLK_IDX_MGMT_ROUTE,
+					    slot, &mgmt_route, true);
+}
 
-	/* Transfer skb to the host port. */
-	dsa_enqueue_skb(skb, dsa_to_port(ds, port)->user);
+static void sja1105_mgmt_route_poll(struct dsa_port *dp, int slot)
+{
+	struct sja1105_mgmt_entry mgmt_route = {};
+	struct dsa_switch *ds = dp->ds;
+	struct sja1105_private *priv;
+	int timeout = 10;
+	int rc;
 
-	/* Wait until the switch has processed the frame */
+	priv = ds->priv;
+
 	do {
 		rc = sja1105_dynamic_config_read(priv, BLK_IDX_MGMT_ROUTE,
 						 slot, &mgmt_route);
 		if (rc < 0) {
-			dev_err_ratelimited(priv->ds->dev,
+			dev_err_ratelimited(ds->dev,
 					    "failed to poll for mgmt route\n");
 			continue;
 		}
@@ -2720,8 +2722,36 @@ static int sja1105_mgmt_xmit(struct dsa_switch *ds, int port, int slot,
 		 */
 		sja1105_dynamic_config_write(priv, BLK_IDX_MGMT_ROUTE,
 					     slot, &mgmt_route, false);
-		dev_err_ratelimited(priv->ds->dev, "xmit timed out\n");
+		dev_err_ratelimited(ds->dev, "xmit timed out\n");
 	}
+}
+
+static int sja1105_mgmt_xmit(struct dsa_switch *ds, int port, int slot,
+			     struct sk_buff *skb, bool takets)
+{
+	struct sja1105_mgmt_route_port *route_port;
+	struct sja1105_private *priv = ds->priv;
+	struct ethhdr *hdr = eth_hdr(skb);
+	struct sja1105_mgmt_route *route;
+	int rc;
+
+	route = priv->mgmt_routes[port];
+
+	list_for_each_entry(route_port, &route->ports, list) {
+		rc = sja1105_mgmt_route_install(route_port->dp, hdr->h_dest,
+						takets, slot);
+		if (rc) {
+			kfree_skb(skb);
+			return rc;
+		}
+	}
+
+	/* Transfer skb to the host port. */
+	dsa_enqueue_skb(skb, dsa_to_port(ds, port)->user);
+
+	/* Wait until the switches have processed the frame */
+	list_for_each_entry(route_port, &route->ports, list)
+		sja1105_mgmt_route_poll(route_port->dp, slot);
 
 	return NETDEV_TX_OK;
 }
@@ -2743,7 +2773,7 @@ static void sja1105_port_deferred_xmit(struct kthread_work *work)
 
 	clone = SJA1105_SKB_CB(skb)->clone;
 
-	mutex_lock(&priv->mgmt_lock);
+	mutex_lock(&priv->mgmt_tree->lock);
 
 	sja1105_mgmt_xmit(ds, port, 0, skb, !!clone);
 
@@ -2751,7 +2781,7 @@ static void sja1105_port_deferred_xmit(struct kthread_work *work)
 	if (clone)
 		sja1105_ptp_txtstamp_skb(ds, port, clone);
 
-	mutex_unlock(&priv->mgmt_lock);
+	mutex_unlock(&priv->mgmt_tree->lock);
 
 	kfree(xmit_work);
 }
@@ -3078,6 +3108,165 @@ static int sja1105_port_bridge_flags(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static struct sja1105_mgmt_tree *sja1105_mgmt_tree_find(struct dsa_switch *ds)
+{
+	struct dsa_switch_tree *dst = ds->dst;
+	struct sja1105_private *priv;
+	struct dsa_port *dp;
+
+	list_for_each_entry(dp, &dst->ports, list) {
+		priv = dp->ds->priv;
+		if (priv->mgmt_tree)
+			return priv->mgmt_tree;
+	}
+
+	return NULL;
+}
+
+static struct sja1105_mgmt_tree *sja1105_mgmt_tree_get(struct dsa_switch *ds)
+{
+	struct sja1105_mgmt_tree *mgmt_tree = sja1105_mgmt_tree_find(ds);
+
+	if (mgmt_tree) {
+		refcount_inc(&mgmt_tree->refcount);
+		return mgmt_tree;
+	}
+
+	mgmt_tree = kzalloc(sizeof(*mgmt_tree), GFP_KERNEL);
+	if (!mgmt_tree)
+		return NULL;
+
+	INIT_LIST_HEAD(&mgmt_tree->routes);
+	refcount_set(&mgmt_tree->refcount, 1);
+	mutex_init(&mgmt_tree->lock);
+
+	return mgmt_tree;
+}
+
+static void sja1105_mgmt_tree_put(struct sja1105_mgmt_tree *mgmt_tree)
+{
+	if (!refcount_dec_and_test(&mgmt_tree->refcount))
+		return;
+
+	WARN_ON(!list_empty(&mgmt_tree->routes));
+	kfree(mgmt_tree);
+}
+
+static void sja1105_mgmt_route_destroy(struct sja1105_mgmt_route *mgmt_route)
+{
+	struct sja1105_mgmt_route_port *mgmt_route_port, *next;
+
+	list_for_each_entry_safe(mgmt_route_port, next, &mgmt_route->ports,
+				 list) {
+		list_del(&mgmt_route_port->list);
+		kfree(mgmt_route_port);
+	}
+
+	kfree(mgmt_route);
+}
+
+static int sja1105_mgmt_route_create(struct dsa_port *dp)
+{
+	struct sja1105_mgmt_route_port *mgmt_route_port;
+	struct sja1105_mgmt_route *mgmt_route;
+	struct dsa_switch *ds = dp->ds;
+	struct sja1105_private *priv;
+	struct dsa_port *upstream_dp;
+	int upstream, rc;
+
+	priv = ds->priv;
+
+	mgmt_route = kzalloc(sizeof(*mgmt_route), GFP_KERNEL);
+	if (!mgmt_route)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(&mgmt_route->ports);
+
+	priv->mgmt_routes[dp->index] = mgmt_route;
+
+	while (dp) {
+		mgmt_route_port = kzalloc(sizeof(*mgmt_route_port), GFP_KERNEL);
+		if (!mgmt_route_port) {
+			rc = -ENOMEM;
+			goto err_free_route;
+		}
+
+		mgmt_route_port->dp = dp;
+		list_add(&mgmt_route_port->list, &mgmt_route->ports);
+
+		upstream = dsa_upstream_port(dp->ds, dp->index);
+		upstream_dp = dsa_to_port(dp->ds, upstream);
+		if (dsa_port_is_cpu(upstream_dp))
+			break;
+
+		/* upstream_dp is a cascade port. Jump hop by hop towards the
+		 * CPU port using the dp->link_dp adjacency information.
+		 */
+		dp = upstream_dp->link_dp;
+	}
+
+	list_add_tail(&mgmt_route->list, &priv->mgmt_tree->routes);
+
+	return 0;
+
+err_free_route:
+	sja1105_mgmt_route_destroy(mgmt_route);
+
+	return rc;
+}
+
+static int sja1105_mgmt_setup(struct dsa_switch *ds)
+{
+	struct sja1105_private *priv = ds->priv;
+	struct dsa_port *dp;
+	int rc;
+
+	if (priv->info->tag_proto != DSA_TAG_PROTO_SJA1105)
+		return 0;
+
+	priv->mgmt_tree = sja1105_mgmt_tree_get(ds);
+	if (!priv->mgmt_tree)
+		return -ENOMEM;
+
+	priv->mgmt_routes = kcalloc(ds->num_ports, sizeof(*priv->mgmt_routes),
+				    GFP_KERNEL);
+	if (!priv->mgmt_routes) {
+		rc = -ENOMEM;
+		goto err_put_tree;
+	}
+
+	dsa_switch_for_each_user_port(dp, ds) {
+		rc = sja1105_mgmt_route_create(dp);
+		if (rc)
+			goto err_destroy_routes;
+	}
+
+	return 0;
+
+err_destroy_routes:
+	dsa_switch_for_each_user_port_continue_reverse(dp, ds)
+		sja1105_mgmt_route_destroy(priv->mgmt_routes[dp->index]);
+err_put_tree:
+	sja1105_mgmt_tree_put(priv->mgmt_tree);
+
+	return rc;
+}
+
+static void sja1105_mgmt_teardown(struct dsa_switch *ds)
+{
+	struct sja1105_private *priv = ds->priv;
+	struct dsa_port *dp;
+
+	if (priv->info->tag_proto != DSA_TAG_PROTO_SJA1105)
+		return;
+
+	dsa_switch_for_each_user_port(dp, ds)
+		sja1105_mgmt_route_destroy(priv->mgmt_routes[dp->index]);
+
+	kfree(priv->mgmt_routes);
+	sja1105_mgmt_tree_put(priv->mgmt_tree);
+}
+
 /* The programming model for the SJA1105 switch is "all-at-once" via static
  * configuration tables. Some of these can be dynamically modified at runtime,
  * but not the xMII mode parameters table.
@@ -3095,13 +3284,17 @@ static int sja1105_setup(struct dsa_switch *ds)
 	struct sja1105_private *priv = ds->priv;
 	int rc;
 
+	rc = sja1105_mgmt_setup(ds);
+	if (rc)
+		return rc;
+
 	if (priv->info->disable_microcontroller) {
 		rc = priv->info->disable_microcontroller(priv);
 		if (rc < 0) {
 			dev_err(ds->dev,
 				"Failed to disable microcontroller: %pe\n",
 				ERR_PTR(rc));
-			return rc;
+			goto out_mgmt_teardown;
 		}
 	}
 
@@ -3109,7 +3302,7 @@ static int sja1105_setup(struct dsa_switch *ds)
 	rc = sja1105_static_config_load(priv);
 	if (rc < 0) {
 		dev_err(ds->dev, "Failed to load static config: %d\n", rc);
-		return rc;
+		goto out_mgmt_teardown;
 	}
 
 	/* Configure the CGU (PHY link modes and speeds) */
@@ -3181,6 +3374,8 @@ out_flower_teardown:
 	sja1105_tas_teardown(ds);
 out_static_config_free:
 	sja1105_static_config_free(&priv->static_config);
+out_mgmt_teardown:
+	sja1105_mgmt_teardown(ds);
 
 	return rc;
 }
@@ -3199,6 +3394,7 @@ static void sja1105_teardown(struct dsa_switch *ds)
 	sja1105_flower_teardown(ds);
 	sja1105_tas_teardown(ds);
 	sja1105_static_config_free(&priv->static_config);
+	sja1105_mgmt_teardown(ds);
 }
 
 static const struct phylink_mac_ops sja1105_phylink_mac_ops = {
@@ -3388,7 +3584,6 @@ static int sja1105_probe(struct spi_device *spi)
 
 	mutex_init(&priv->ptp_data.lock);
 	mutex_init(&priv->dynamic_config_lock);
-	mutex_init(&priv->mgmt_lock);
 	mutex_init(&priv->fdb_lock);
 	spin_lock_init(&priv->ts_id_lock);
 
