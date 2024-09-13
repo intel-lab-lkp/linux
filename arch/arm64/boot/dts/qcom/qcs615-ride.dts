@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+/dts-v1/;
+
+#include "qcs615.dtsi"
+/ {
+	model = "Qualcomm Technologies, Inc. QCS615 Ride";
+	compatible = "qcom,qcs615-ride", "qcom,qcs615";
+	chassis-type = "embedded";
+
+	chosen {
+		bootargs = "console=hvc0";
+	};
+
+	clocks {
+		sleep_clk: sleep-clk {
+			compatible = "fixed-clock";
+			clock-frequency = <32000>;
+			#clock-cells = <0>;
+		};
+
+		xo_board_clk: xo-board-clk {
+			compatible = "fixed-clock";
+			clock-frequency = <38400000>;
+			#clock-cells = <0>;
+		};
+	};
+};
+
+&watchdog {
+	clocks = <&sleep_clk>;
+};
