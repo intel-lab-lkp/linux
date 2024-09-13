@@ -75,10 +75,10 @@ static int plantronics_input_mapping(struct hid_device *hdev,
 		}
 	}
 	/* handle standard types - plt_type is 0xffa0uuuu or 0xffa2uuuu */
-	/* 'basic telephony compliant' - allow default consumer page map */
+	/* 'basic telephony compliant' - allow default consumer & telephony page map */
 	else if ((plt_type & HID_USAGE) >= PLT_BASIC_TELEPHONY &&
 		 (plt_type & HID_USAGE) != PLT_BASIC_EXCEPTION) {
-		if (PLT_ALLOW_CONSUMER)
+		if (PLT_ALLOW_CONSUMER || (usage->hid & HID_USAGE_PAGE) == HID_UP_TELEPHONY)
 			goto defaulted;
 	}
 	/* not 'basic telephony' - apply legacy mapping */
