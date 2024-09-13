@@ -558,7 +558,7 @@ static int serial8250_em485_init(struct uart_8250_port *p)
 
 deassert_rts:
 	if (p->em485->tx_stopped)
-		p->rs485_stop_tx(p);
+		serial8250_rs485_stop_tx(p);
 
 	return 0;
 }
@@ -1380,13 +1380,12 @@ static void serial8250_stop_rx(struct uart_port *port)
  * @p: uart 8250 port
  *
  * Generic callback usable by 8250 uart drivers to stop rs485 transmission.
+ * It does not restore RX interrupts. Use the wrapper function
+ * serial8250_rs485_stop_tx() if that is also needed.
  */
 void serial8250_em485_stop_tx(struct uart_8250_port *p)
 {
 	unsigned char mcr = serial8250_in_MCR(p);
-
-	/* Port locked to synchronize UART_IER access against the console. */
-	lockdep_assert_held_once(&p->port.lock);
 
 	if (p->port.rs485.flags & SER_RS485_RTS_AFTER_SEND)
 		mcr |= UART_MCR_RTS;
@@ -1397,16 +1396,29 @@ void serial8250_em485_stop_tx(struct uart_8250_port *p)
 	/*
 	 * Empty the RX FIFO, we are not interested in anything
 	 * received during the half-duplex transmission.
-	 * Enable previously disabled RX interrupts.
 	 */
-	if (!(p->port.rs485.flags & SER_RS485_RX_DURING_TX)) {
+	if (!(p->port.rs485.flags & SER_RS485_RX_DURING_TX))
 		serial8250_clear_and_reinit_fifos(p);
+}
+EXPORT_SYMBOL_GPL(serial8250_em485_stop_tx);
 
+/**
+ * serial8250_rs485_stop_tx() - stop rs485 transmission, restore RX interrupts
+ * @p: uart 8250 port
+ */
+void serial8250_rs485_stop_tx(struct uart_8250_port *p)
+{
+	/* Port locked to synchronize UART_IER access against the console. */
+	lockdep_assert_held_once(&p->port.lock);
+
+	p->rs485_stop_tx(p);
+
+	/* Enable previously disabled RX interrupts. */
+	if (!(p->port.rs485.flags & SER_RS485_RX_DURING_TX)) {
 		p->ier |= UART_IER_RLSI | UART_IER_RDI;
 		serial_port_out(&p->port, UART_IER, p->ier);
 	}
 }
-EXPORT_SYMBOL_GPL(serial8250_em485_stop_tx);
 
 static enum hrtimer_restart serial8250_em485_handle_stop_tx(struct hrtimer *t)
 {
@@ -1418,7 +1430,7 @@ static enum hrtimer_restart serial8250_em485_handle_stop_tx(struct hrtimer *t)
 	serial8250_rpm_get(p);
 	uart_port_lock_irqsave(&p->port, &flags);
 	if (em485->active_timer == &em485->stop_tx_timer) {
-		p->rs485_stop_tx(p);
+		serial8250_rs485_stop_tx(p);
 		em485->active_timer = NULL;
 		em485->tx_stopped = true;
 	}
@@ -1450,7 +1462,7 @@ static void __stop_tx_rs485(struct uart_8250_port *p, u64 stop_delay)
 		em485->active_timer = &em485->stop_tx_timer;
 		hrtimer_start(&em485->stop_tx_timer, ns_to_ktime(stop_delay), HRTIMER_MODE_REL);
 	} else {
-		p->rs485_stop_tx(p);
+		serial8250_rs485_stop_tx(p);
 		em485->active_timer = NULL;
 		em485->tx_stopped = true;
 	}
