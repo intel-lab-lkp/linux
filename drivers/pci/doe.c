@@ -647,12 +647,16 @@ int pci_doe(struct pci_doe_mb *doe_mb, u16 vendor, u8 type,
 		.private = &c,
 	};
 	int rc;
+	unsigned long timeout_jiffies = jiffies + (PCI_DOE_TIMEOUT * 1);
 
-	rc = pci_doe_submit_task(doe_mb, &task);
-	if (rc)
-		return rc;
+	do {
+		rc = pci_doe_submit_task(doe_mb, &task);
 
-	wait_for_completion(&c);
+		if (rc)
+			return rc;
+
+		wait_for_completion(&c);
+	} while (task.rv == -EBUSY && !time_after(jiffies, timeout_jiffies));
 
 	return task.rv;
 }
