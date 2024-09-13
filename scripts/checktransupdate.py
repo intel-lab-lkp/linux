@@ -25,6 +25,7 @@ commit 42fb9cfd5b18 ("Documentation: dev-tools: Add link to RV docs")
 
 import os
 import time
+import re
 import logging
 from argparse import ArgumentParser, ArgumentTypeError, BooleanOptionalAction
 from datetime import datetime
@@ -32,6 +33,18 @@ from datetime import datetime
 
 def get_origin_path(file_path):
     """Get the origin path from the translation path"""
+    with open(file_path, "r") as f:
+        content = f.read()
+    # find the origin path in the content
+    match = re.search(r":Original:\s*(?::ref:`|:doc:`)?([^\s`]+)", content)
+    if match:
+        f = match.group(1)
+        if os.path.exists(f):
+            logging.debug("Origin tag found: %s", f)
+            return f
+        else:
+            logging.warning("Origin tag found but file not exists: %s", f)
+
     paths = file_path.split("/")
     tidx = paths.index("translations")
     opaths = paths[:tidx]
