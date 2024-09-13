@@ -162,6 +162,10 @@ sub read_kconfig {
 
     my $source = "$ksource/$kconfig";
     my $last_source = "";
+    my $choice_activated = 0;
+    my $distribute = 0;
+    my $dist_string;
+
 
     # Check for any environment variables used
     while ($source =~ /\$\((\w+)\)/ && $last_source ne $source) {
@@ -214,6 +218,19 @@ sub read_kconfig {
 		$state = "DEP";
 	    }
 
+           if($choice_activated) {
+               $distribute = 0;
+               my $config_lines = "$_\n" . "$dist_string";
+               my $tmpconfig = ".choice.kconfig";
+               open (my $FH, '>', $tmpconfig);
+               print $FH $config_lines;
+               close($FH);
+
+               read_kconfig($tmpconfig);
+               unlink($tmpconfig) or die "Can't delete $tmpconfig: $!\n";
+           }
+
+
 	# collect the depends for the config
 	} elsif ($state eq "NEW" && /^\s*depends\s+on\s+(.*)$/) {
 	    $state = "DEP";
@@ -258,8 +275,27 @@ sub read_kconfig {
 	    $iflevel-- if ($iflevel);
 
 	# stop on "help" and keywords that end a menu entry
-	} elsif (/^\s*(---)?help(---)?\s*$/ || /^(comment|choice|menu)\b/) {
-	    $state = "NONE";
+	} elsif (/^\s*(---)?help(---)?\s*$/ || /^(comment|menu)\b/) {
+            $state = "NONE";
+
+	# for choice, distribute the lines before each config entry
+	# to each config entry
+	} elsif (/^\s*choice\b/) {
+	    $state = "CHOICE";
+	    $choice_activated = 1;
+	    $distribute = 1;
+	} elsif(/^\s*endchoice/) {
+	    $choice_activated = 0;
+	    $dist_string = "";
+	}
+
+	if($choice_activated && $distribute) {
+	    # do not put 'choice' inside of string to distribute
+	    if($state eq "CHOICE") {
+		    $state = "NONE";
+	    } else {
+		$dist_string .= "$_\n";
+	    }
 	}
     }
     close($kinfile);
