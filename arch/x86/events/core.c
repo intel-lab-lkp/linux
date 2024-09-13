@@ -2861,6 +2861,7 @@ static int __perf_callchain_user32(struct pt_regs *regs,
 static void __perf_callchain_user(struct perf_callchain_entry_ctx *entry,
 				  struct pt_regs *regs, bool atomic)
 {
+	bool unwind_type = USER_UNWIND_TYPE_AUTO;
 	struct user_unwind_state state;
 
 	if (perf_guest_state()) {
@@ -2879,13 +2880,14 @@ static void __perf_callchain_user(struct perf_callchain_entry_ctx *entry,
 	if (atomic) {
 		if (!nmi_uaccess_okay())
 			return;
+		unwind_type = USER_UNWIND_TYPE_FP;
 		pagefault_disable();
 	}
 
 	if (__perf_callchain_user32(regs, entry))
 		goto done;
 
-	for_each_user_frame(&state, USER_UNWIND_TYPE_FP) {
+	for_each_user_frame(&state, unwind_type) {
 		if (perf_callchain_store(entry, state.ip))
 			goto done;
 	}
