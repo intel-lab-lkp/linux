@@ -63,6 +63,12 @@ properties:
       necessary for example, if there are several multiplexers on the bus and
       the devices behind them use same I2C addresses.
 
+  i2c-mux-timeout-reset:
+    type: boolean
+    description: Sends reset pulse if channel selection or deselection times
+      out. Works only if reset GPIO provided. Do not use if other chips share
+      the same reset line.
+
   idle-state:
     description: if present, overrides i2c-mux-idle-disconnect
     $ref: /schemas/mux/mux-controller.yaml#/properties/idle-state
@@ -146,6 +152,8 @@ examples:
             interrupt-parent = <&ipic>;
             interrupts = <17 IRQ_TYPE_LEVEL_LOW>;
             interrupt-controller;
+            i2c-mux-idle-disconnect;
+            i2c-mux-timeout-reset;
             #interrupt-cells = <2>;
 
             i2c@2 {
