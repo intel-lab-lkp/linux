@@ -33,6 +33,7 @@ struct omnia_leds {
 	struct i2c_client *client;
 	struct mutex lock;
 	bool has_gamma_correction;
+	struct kernfs_node *brightness_kn;
 	struct omnia_led leds[];
 };
 
@@ -357,6 +358,21 @@ static struct attribute *omnia_led_controller_attrs[] = {
 };
 ATTRIBUTE_GROUPS(omnia_led_controller);
 
+static irqreturn_t omnia_brightness_changed_handler(int irq, void *dev_id)
+{
+	struct omnia_leds *leds = dev_id;
+
+	if (unlikely(!leds->brightness_kn)) {
+		leds->brightness_kn = sysfs_get_dirent(leds->client->dev.kobj.sd, "brightness");
+		if (!leds->brightness_kn)
+			return IRQ_NONE;
+	}
+
+	sysfs_notify_dirent(leds->brightness_kn);
+
+	return IRQ_HANDLED;
+}
+
 static int omnia_mcu_get_features(const struct i2c_client *client)
 {
 	struct i2c_client mcu_client = *client;
@@ -420,6 +436,14 @@ static int omnia_leds_probe(struct i2c_client *client)
 			 "Consider upgrading MCU firmware with the omnia-mcutool utility.\n");
 	}
 
+	if (ret & OMNIA_FEAT_BRIGHTNESS_INT) {
+		ret = devm_request_any_context_irq(dev, client->irq,
+						   omnia_brightness_changed_handler, IRQF_ONESHOT,
+						   "leds-turris-omnia", leds);
+		if (ret <= 0)
+			return dev_err_probe(dev, ret ?: -ENXIO, "Cannot request brightness IRQ\n");
+	}
+
 	mutex_init(&leds->lock);
 
 	ret = devm_led_trigger_register(dev, &omnia_hw_trigger);
@@ -442,6 +466,19 @@ static int omnia_leds_probe(struct i2c_client *client)
 
 static void omnia_leds_remove(struct i2c_client *client)
 {
+	struct omnia_leds *leds = i2c_get_clientdata(client);
+
+	/*
+	 * We need to free the brightness IRQ here, before putting away the brightness sysfs node.
+	 * Otherwise devres would free the interrupt only after the sysfs node is removed, and if
+	 * an interrupt occurred between those two events, it would use a removed sysfs node.
+	 */
+	devm_free_irq(&client->dev, client->irq, leds);
+
+	/* Now put away the sysfs node we got the first time the interrupt handler was called */
+	if (leds->brightness_kn)
+		sysfs_put(leds->brightness_kn);
+
 	/* put all LEDs into default (HW triggered) mode */
 	omnia_cmd_write_u8(client, OMNIA_CMD_LED_MODE, OMNIA_CMD_LED_MODE_LED(OMNIA_BOARD_LEDS));
 
