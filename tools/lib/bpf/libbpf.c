@@ -7343,7 +7343,7 @@ static int libbpf_prepare_prog_load(struct bpf_program *prog,
 
 	/* old kernels might not support specifying expected_attach_type */
 	if ((def & SEC_EXP_ATTACH_OPT) && !kernel_supports(prog->obj, FEAT_EXP_ATTACH_TYPE))
-		opts->expected_attach_type = 0;
+		prog->expected_attach_type = 0;
 
 	if (def & SEC_SLEEPABLE)
 		opts->prog_flags |= BPF_F_SLEEPABLE;
