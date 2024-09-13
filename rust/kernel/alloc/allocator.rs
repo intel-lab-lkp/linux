@@ -28,7 +28,7 @@ pub(crate) unsafe fn krealloc_aligned(ptr: *mut u8, new_layout: Layout, flags: F
     //   function safety requirement.
     // - `size` is greater than 0 since it's from `layout.size()` (which cannot be zero according
     //   to the function safety requirement)
-    unsafe { bindings::krealloc(ptr as *const core::ffi::c_void, size, flags.0) as *mut u8 }
+    unsafe { bindings::krealloc(ptr as *const crate::ffi::c_void, size, flags.0) as *mut u8 }
 }
 
 unsafe impl GlobalAlloc for KernelAllocator {
@@ -40,7 +40,7 @@ unsafe impl GlobalAlloc for KernelAllocator {
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
         unsafe {
-            bindings::kfree(ptr as *const core::ffi::c_void);
+            bindings::kfree(ptr as *const crate::ffi::c_void);
         }
     }
 

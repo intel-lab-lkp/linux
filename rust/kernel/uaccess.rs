@@ -8,11 +8,11 @@ use crate::{
     alloc::Flags,
     bindings,
     error::Result,
+    ffi::{c_ulong, c_void},
     prelude::*,
     types::{AsBytes, FromBytes},
 };
 use alloc::vec::Vec;
-use core::ffi::{c_ulong, c_void};
 use core::mem::{size_of, MaybeUninit};
 
 /// The type used for userspace addresses.
@@ -47,7 +47,7 @@ pub type UserPtr = usize;
 ///
 /// ```no_run
 /// use alloc::vec::Vec;
-/// use core::ffi::c_void;
+/// use kernel::ffi::c_void;
 /// use kernel::error::Result;
 /// use kernel::uaccess::{UserPtr, UserSlice};
 ///
@@ -70,7 +70,7 @@ pub type UserPtr = usize;
 ///
 /// ```no_run
 /// use alloc::vec::Vec;
-/// use core::ffi::c_void;
+/// use kernel::ffi::c_void;
 /// use kernel::error::{code::EINVAL, Result};
 /// use kernel::uaccess::{UserPtr, UserSlice};
 ///
