@@ -31,10 +31,11 @@ properties:
 
   link:
     description:
-      Should be a list of phandles to other switch's DSA port. This
-      port is used as the outgoing port towards the phandle ports. The
-      full routing information must be given, not just the one hop
-      routes to neighbouring switches
+      Should be a list of phandles to other switch's DSA port. This port is
+      used as the outgoing port towards the phandle ports. In case of trees
+      with more than 2 switches, the full routing information must be given.
+      The first element of the list must be the directly connected DSA port
+      of the adjacent switch.
     $ref: /schemas/types.yaml#/definitions/phandle-array
     items:
       maxItems: 1
