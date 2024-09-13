@@ -117,6 +117,17 @@
 static u8 nlink_tid __ro_after_init;
 static u8 nlink_tgid __ro_after_init;
 
+struct vma_info {
+	struct list_head page_list_head;
+	uintptr_t vma_start_addr;
+	uintptr_t vma_end_addr;
+};
+
+struct page_list_item {
+	struct list_head list;
+	struct page *page;
+};
+
 struct pid_entry {
 	const char *name;
 	unsigned int len;
@@ -926,12 +937,130 @@ static int mem_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static void mem_vma_close(struct vm_area_struct *vma)
+{
+	struct vma_info *info;
+	struct page_list_item *item, *tmp;
+
+	info = vma->vm_private_data;
+
+	if (info) {
+		/* Avoid cleanup if we are being split, instead print warning */
+		if (info->vma_start_addr == vma->vm_start &&
+			info->vma_end_addr == vma->vm_end) {
+			/* Iterate over the list and free each item and call put_page */
+			list_for_each_entry_safe(item, tmp,
+						 &info->page_list_head, list) {
+				list_del(&item->list);
+				put_page(item->page);
+				kfree(item);
+			}
+
+			kfree(info);
+			vma->vm_private_data = NULL;
+		} else {
+			pr_warn("%s: VMA has been split, operation not supported\n", __func__);
+		}
+	}
+}
+
+static const struct vm_operations_struct mem_vm_ops = {
+	.close = mem_vma_close,
+};
+
+/**
+ * mem_mmap - Memory mapping function
+ *
+ * This function implements mmap call for /proc/<pid>/mem.
+ *
+ * Assumptions and Limitations:
+ * - This function does not handle reverse mapping, which is required for swapping.
+ * - The VMA is not expected to be split with an unmap call.
+ */
+static int mem_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	uintptr_t addr, target_start_addr, target_end_addr;
+	struct page_list_item *item;
+	struct page *page, *zero_page;
+	unsigned long zero_page_pfn;
+	struct vma_info *info;
+	long pinned;
+	int ret;
+
+	/* Retrieve mm of the target process*/
+	struct mm_struct *mm = (struct mm_struct *)file->private_data;
+	size_t size = vma->vm_end - vma->vm_start;
+	uintptr_t start_addr = vma->vm_start;
+
+	target_start_addr = vma->vm_pgoff << PAGE_SHIFT; /* Multiply by PAGE_SIZE */
+	target_end_addr = target_start_addr + size;
+
+	if (!mm)
+		return -EINVAL;
+
+	info = kmalloc(sizeof(struct vma_info), GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+	INIT_LIST_HEAD(&info->page_list_head);
+	info->vma_start_addr = vma->vm_start;
+	info->vma_end_addr = vma->vm_end;
+
+	vma->vm_private_data = info;
+	vma->vm_ops = &mem_vm_ops;
+
+	zero_page = ZERO_PAGE(0);
+	zero_page_pfn = page_to_pfn(zero_page);
+
+	/* Acquire the mmap_lock before pinning the page (get_user_pages_remote) */
+	down_read(&mm->mmap_lock);
+
+	for (addr = target_start_addr; addr < target_end_addr; addr += PAGE_SIZE) {
+		unsigned long pfn;
+
+		/* Pin the user page */
+		pinned = get_user_pages_remote(mm, addr, 1, FOLL_GET | FOLL_NOFAULT,
+						&page, NULL, NULL);
+		/* Page is not resident (FOLL_NOFAULT), we will skip to the next address */
+		if (pinned <= 0) {
+			ret = remap_pfn_range(vma, start_addr, zero_page_pfn, PAGE_SIZE,
+					vma->vm_page_prot);
+			if (ret)
+				goto err_unlock;
+			start_addr += PAGE_SIZE;
+			continue;
+		}
+
+		/* We need to keep track of pages which are pinned */
+		item = kmalloc(sizeof(struct page_list_item), GFP_KERNEL);
+		if (!item) {
+			kfree(info);
+			return -ENOMEM;
+		}
+
+		item->page = page;
+		list_add(&item->list, &info->page_list_head);
+		pfn = page_to_pfn(page);
+
+		/* Remap the page frame under current vma */
+		ret = remap_pfn_range(vma, start_addr, pfn, PAGE_SIZE,
+					vma->vm_page_prot);
+		if (ret)
+			kfree(item);
+
+		start_addr += PAGE_SIZE;
+	}
+err_unlock:
+	up_read(&mm->mmap_lock);
+	return 0;
+}
+
 static const struct file_operations proc_mem_operations = {
 	.llseek		= mem_lseek,
 	.read		= mem_read,
 	.write		= mem_write,
 	.open		= mem_open,
 	.release	= mem_release,
+	.mmap		= mem_mmap,
 };
 
 static int environ_open(struct inode *inode, struct file *file)
