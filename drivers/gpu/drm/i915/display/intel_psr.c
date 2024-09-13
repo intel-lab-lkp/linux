@@ -33,6 +33,7 @@
 #include "intel_cursor_regs.h"
 #include "intel_ddi.h"
 #include "intel_de.h"
+#include "intel_display_irq.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
 #include "intel_dp_aux.h"
@@ -967,6 +968,9 @@ static void dg2_activate_panel_replay(struct intel_dp *intel_dp)
 		intel_de_write(display, EDP_PSR2_CTL(display, cpu_transcoder),
 			       val);
 	}
+
+	if (intel_dp_is_edp(intel_dp))
+		block_dc6_on_vblank_get(&intel_crtc_for_pipe(display, intel_dp->psr.pipe)->base);
 
 	intel_de_rmw(display,
 		     PSR2_MAN_TRK_CTL(display, intel_dp->psr.transcoder),
@@ -2003,6 +2007,9 @@ static void intel_psr_exit(struct intel_dp *intel_dp)
 	}
 
 	if (intel_dp->psr.panel_replay_enabled) {
+		if (intel_dp_is_edp(intel_dp))
+			block_dc6_on_vblank_put(drm_crtc_from_index(display->drm,
+								    intel_dp->psr.pipe));
 		intel_de_rmw(display, TRANS_DP2_CTL(intel_dp->psr.transcoder),
 			     TRANS_DP2_PANEL_REPLAY_ENABLE, 0);
 	} else if (intel_dp->psr.sel_update_enabled) {

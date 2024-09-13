@@ -1356,6 +1356,34 @@ static bool gen11_dsi_configure_te(struct intel_crtc *intel_crtc,
 	return true;
 }
 
+/**
+ * block_dc6_on_vblank_get - get block DC6 entry reference
+ *
+ * @_crtc: drm crtc pointer
+ *
+ * This function is called from Panel Replay code when Panel Replay gets
+ * activated. Intention is to block DC6 entry when VBI is enabled and Panel
+ * Replay is active.
+ */
+void block_dc6_on_vblank_get(struct drm_crtc *_crtc)
+{
+	to_intel_crtc(_crtc)->block_dc6_needed++;
+}
+
+/**
+ * block_dc6_on_vblank_put - free block DC6 entry reference
+ *
+ * @crtc: drm crtc pointer
+ *
+ * This function is called from Panel Replay code when Panel Replay is
+ * deactivated. Intention is to block DC6 entry when VBI is enabled and Panel
+ * Replay is active.
+ */
+void block_dc6_on_vblank_put(struct drm_crtc *crtc)
+{
+	to_intel_crtc(crtc)->block_dc6_needed--;
+}
+
 int bdw_enable_vblank(struct drm_crtc *_crtc)
 {
 	struct intel_crtc *crtc = to_intel_crtc(_crtc);

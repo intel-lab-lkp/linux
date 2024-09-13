@@ -77,6 +77,9 @@ void i965_pipestat_irq_handler(struct drm_i915_private *i915, u32 iir, u32 pipe_
 void valleyview_pipestat_irq_handler(struct drm_i915_private *i915, u32 pipe_stats[I915_MAX_PIPES]);
 void i8xx_pipestat_irq_handler(struct drm_i915_private *i915, u16 iir, u32 pipe_stats[I915_MAX_PIPES]);
 
+void block_dc6_on_vblank_get(struct drm_crtc *crtc);
+void block_dc6_on_vblank_put(struct drm_crtc *crtc);
+
 void intel_display_irq_init(struct drm_i915_private *i915);
 
 #endif /* __INTEL_DISPLAY_IRQ_H__ */
