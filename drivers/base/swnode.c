@@ -783,6 +783,7 @@ static struct fwnode_handle *
 swnode_register(const struct software_node *node, struct swnode *parent,
 		unsigned int allocated)
 {
+	struct kobject *kobj_parent = parent ? &parent->kobj : NULL;
 	struct swnode *swnode;
 	int ret;
 
@@ -809,12 +810,10 @@ swnode_register(const struct software_node *node, struct swnode *parent,
 
 	if (node->name)
 		ret = kobject_init_and_add(&swnode->kobj, &software_node_type,
-					   parent ? &parent->kobj : NULL,
-					   "%s", node->name);
+					   kobj_parent, "%s", node->name);
 	else
 		ret = kobject_init_and_add(&swnode->kobj, &software_node_type,
-					   parent ? &parent->kobj : NULL,
-					   "node%d", swnode->id);
+					   kobj_parent, "node%d", swnode->id);
 	if (ret) {
 		kobject_put(&swnode->kobj);
 		return ERR_PTR(ret);
