@@ -5,6 +5,7 @@
  * Copyright (C) 2022 Loongson Technology Corporation Limited
  */
 
+#include <linux/loongson/iocsr.h>
 #include <linux/kexec.h>
 
 #include <asm/asm.h>
@@ -88,14 +89,14 @@ SYM_CODE_END(relocate_new_kernel)
 #ifdef CONFIG_SMP
 /*
  * Other CPUs should wait until code is relocated and
- * then start at the entry point from LOONGARCH_IOCSR_MBUF0.
+ * then start at the entry point from LOONGSON_IOCSR_MBUF0.
  */
 SYM_CODE_START(kexec_smp_wait)
 	UNWIND_HINT_UNDEFINED
 1:	li.w		t0, 0x100			/* wait for init loop */
 2:	addi.w		t0, t0, -1			/* limit mailbox access */
 	bnez		t0, 2b
-	li.w		t1, LOONGARCH_IOCSR_MBUF0
+	li.w		t1, LOONGSON_IOCSR_MBUF0
 	iocsrrd.w	s0, t1				/* check PC as an indicator */
 	beqz		s0, 1b
 	iocsrrd.d	s0, t1				/* get PC via mailbox */

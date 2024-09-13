@@ -6,6 +6,7 @@
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
+#include <linux/loongson/iocsr.h>
 #include <linux/ptrace.h>
 #include <linux/smp.h>
 #include <linux/stddef.h>
@@ -267,13 +268,13 @@ static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int 
 	if (!(c->options & LOONGARCH_CPU_IOCSR))
 		return;
 
-	*vendor = iocsr_read64(LOONGARCH_IOCSR_VENDOR);
-	*cpuname = iocsr_read64(LOONGARCH_IOCSR_CPUNAME);
+	*vendor = iocsr_read64(LOONGSON_IOCSR_VENDOR);
+	*cpuname = iocsr_read64(LOONGSON_IOCSR_CPUNAME);
 
 	if (!__cpu_full_name[cpu])
 		__cpu_full_name[cpu] = cpu_full_name;
 
-	config = iocsr_read32(LOONGARCH_IOCSR_FEATURES);
+	config = iocsr_read32(LOONGSON_IOCSR_FEATURES);
 	if (config & IOCSRF_CSRIPI)
 		c->options |= LOONGARCH_CPU_CSRIPI;
 	if (config & IOCSRF_EXTIOI)

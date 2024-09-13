@@ -10,6 +10,7 @@
 #include <linux/irqchip.h>
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
+#include <linux/loongson/iocsr.h>
 #include <linux/kernel.h>
 #include <linux/msi.h>
 #include <linux/radix-tree.h>
@@ -378,9 +379,9 @@ static int __init avecintc_init(struct irq_domain *parent)
 				  "irqchip/loongarch/avecintc:starting",
 				  avecintc_cpu_online, avecintc_cpu_offline);
 #endif
-	value = iocsr_read64(LOONGARCH_IOCSR_MISC_FUNC);
+	value = iocsr_read64(LOONGSON_IOCSR_MISC_FUNC);
 	value |= IOCSR_MISC_FUNC_AVEC_EN;
-	iocsr_write64(value, LOONGARCH_IOCSR_MISC_FUNC);
+	iocsr_write64(value, LOONGSON_IOCSR_MISC_FUNC);
 
 	return ret;
 
