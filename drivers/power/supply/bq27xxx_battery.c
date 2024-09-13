@@ -2029,7 +2029,7 @@ static int bq27xxx_battery_get_property(struct power_supply *psy,
 		bq27xxx_battery_update_unlocked(di);
 	mutex_unlock(&di->lock);
 
-	if (psp != POWER_SUPPLY_PROP_PRESENT && di->cache.flags < 0)
+	if (psp != POWER_SUPPLY_PROP_PRESENT && di->cache.flags < 0 && di->cache.flags != -EBUSY)
 		return -ENODEV;
 
 	switch (psp) {
