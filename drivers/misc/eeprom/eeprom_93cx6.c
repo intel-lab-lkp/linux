@@ -378,7 +378,7 @@ void eeprom_93cx6_write(struct eeprom_93cx6 *eeprom, u8 addr, u16 data)
 		usleep_range(1000, 2000);
 
 		if (--timeout <= 0) {
-			printk(KERN_ERR "%s: timeout\n", __func__);
+			pr_err("%s: timeout\n", __func__);
 			break;
 		}
 	}
