@@ -29,6 +29,7 @@
 #include <linux/device.h>
 #include <linux/nospec.h>
 #include <linux/static_call.h>
+#include <linux/user_unwind.h>
 
 #include <asm/apic.h>
 #include <asm/stacktrace.h>
@@ -2862,8 +2863,7 @@ perf_callchain_user32(struct pt_regs *regs, struct perf_callchain_entry_ctx *ent
 void
 perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs)
 {
-	struct stack_frame frame;
-	const struct stack_frame __user *fp;
+	struct user_unwind_state state;
 
 	if (perf_guest_state()) {
 		/* TODO: We don't support guest os callchain now */
@@ -2876,8 +2876,6 @@ perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs
 	if (regs->flags & (X86_VM_MASK | PERF_EFLAGS_VM))
 		return;
 
-	fp = (void __user *)regs->bp;
-
 	perf_callchain_store(entry, regs->ip);
 
 	if (!nmi_uaccess_okay())
@@ -2887,18 +2885,12 @@ perf_callchain_user(struct perf_callchain_entry_ctx *entry, struct pt_regs *regs
 		return;
 
 	pagefault_disable();
-	while (entry->nr < entry->max_stack) {
-		if (!valid_user_frame(fp, sizeof(frame)))
-			break;
 
-		if (__get_user(frame.next_frame, &fp->next_frame))
+	for_each_user_frame(&state, USER_UNWIND_TYPE_FP) {
+		if (perf_callchain_store(entry, state.ip))
 			break;
-		if (__get_user(frame.return_address, &fp->return_address))
-			break;
-
-		perf_callchain_store(entry, frame.return_address);
-		fp = (void __user *)frame.next_frame;
 	}
+
 	pagefault_enable();
 }
 
