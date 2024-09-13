@@ -401,6 +401,11 @@ void f2fs_init_read_extent_tree(struct inode *inode, struct page *ipage)
 	if (atomic_read(&et->node_cnt) || !ei.len)
 		goto skip;
 
+	if (IS_DEVICE_ALIASING(inode)) {
+		et->largest = ei;
+		goto skip;
+	}
+
 	en = __attach_extent_node(sbi, et, &ei, NULL,
 				&et->root.rb_root.rb_node, true);
 	if (en) {
@@ -460,6 +465,11 @@ static bool __lookup_extent_tree(struct inode *inode, pgoff_t pgofs,
 		*ei = et->largest;
 		ret = true;
 		stat_inc_largest_node_hit(sbi);
+		goto out;
+	}
+
+	if (IS_DEVICE_ALIASING(inode)) {
+		ret = false;
 		goto out;
 	}
 
