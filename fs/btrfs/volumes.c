@@ -1270,8 +1270,8 @@ void btrfs_release_disk_super(struct btrfs_super_block *super)
 	put_page(page);
 }
 
-static struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev,
-						       u64 bytenr, u64 bytenr_orig)
+struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev, u64 bytenr,
+						u64 bytenr_orig)
 {
 	struct btrfs_super_block *disk_super;
 	struct page *page;
@@ -2101,7 +2101,7 @@ void btrfs_scratch_superblocks(struct btrfs_fs_info *fs_info, struct btrfs_devic
 
 	for (copy_num = 0; copy_num < BTRFS_SUPER_MIRROR_MAX; copy_num++) {
 		if (bdev_is_zoned(bdev))
-			btrfs_reset_sb_log_zones(bdev, copy_num);
+			btrfs_reset_sb_log_zones(device, copy_num);
 		else
 			btrfs_scratch_superblock(fs_info, bdev, copy_num);
 	}

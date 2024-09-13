@@ -989,30 +989,70 @@ int btrfs_advance_sb_log(struct btrfs_device *device, int mirror)
 	return -EIO;
 }
 
-int btrfs_reset_sb_log_zones(struct block_device *bdev, int mirror)
+int btrfs_reset_sb_log_zones(struct btrfs_device *device, int mirror)
 {
-	unsigned int nofs_flags;
-	sector_t zone_sectors;
-	sector_t nr_sectors;
-	u8 zone_sectors_shift;
-	u32 sb_zone;
-	u32 nr_zones;
-	int ret;
+	struct btrfs_zoned_device_info *zinfo = device->zone_info;
+	u32 sb_zone = sb_zone_number(zinfo->zone_size_shift, mirror);
+	struct blk_zone *zone;
+	int ret = 0;
 
-	zone_sectors = bdev_zone_sectors(bdev);
-	zone_sectors_shift = ilog2(zone_sectors);
-	nr_sectors = bdev_nr_sectors(bdev);
-	nr_zones = nr_sectors >> zone_sectors_shift;
-
-	sb_zone = sb_zone_number(zone_sectors_shift + SECTOR_SHIFT, mirror);
-	if (sb_zone + 1 >= nr_zones)
+	if (sb_zone + BTRFS_NR_SB_LOG_ZONES > zinfo->nr_zones)
 		return -ENOENT;
 
-	nofs_flags = memalloc_nofs_save();
-	ret = blkdev_zone_mgmt(bdev, REQ_OP_ZONE_RESET,
-			       zone_start_sector(sb_zone, bdev),
-			       zone_sectors * BTRFS_NR_SB_LOG_ZONES);
-	memalloc_nofs_restore(nofs_flags);
+	zone = &zinfo->sb_zones[BTRFS_NR_SB_LOG_ZONES * mirror];
+	if (zone->type == BLK_ZONE_TYPE_CONVENTIONAL) {
+		/*
+		 * If the first zone is conventional, the SB is placed at the
+		 * first zone.
+		 */
+
+		u64 bytenr = zone->start << SECTOR_SHIFT;
+		u64 bytenr_orig = btrfs_sb_offset(mirror);
+		struct btrfs_super_block *disk_super;
+		const size_t len = sizeof(disk_super->magic);
+
+		disk_super = btrfs_read_disk_super(device->bdev, bytenr, bytenr_orig);
+		if (IS_ERR(disk_super))
+			return PTR_ERR(disk_super);
+
+		memset(&disk_super->magic, 0, len);
+		folio_mark_dirty(virt_to_folio(disk_super));
+		btrfs_release_disk_super(disk_super);
+
+		ret = sync_blockdev_range(device->bdev, bytenr, bytenr + len - 1);
+	} else {
+		unsigned int nofs_flags;
+
+		/*
+		 * For the other case, all zones must be a sequential required
+		 * zone.
+		 */
+#ifdef CONFIG_BTRFS_ASSERT
+		for (int i = 0; i < BTRFS_NR_SB_LOG_ZONES; i++) {
+			ASSERT(zone->type != BLK_ZONE_TYPE_CONVENTIONAL);
+			zone++;
+		}
+		zone = &zinfo->sb_zones[BTRFS_NR_SB_LOG_ZONES * mirror];
+#endif
+
+		nofs_flags = memalloc_nofs_save();
+		ret = blkdev_zone_mgmt(device->bdev, REQ_OP_ZONE_RESET, zone->start,
+				       zone->len * BTRFS_NR_SB_LOG_ZONES);
+		memalloc_nofs_restore(nofs_flags);
+
+		if (!ret) {
+			for (int i = 0; i < BTRFS_NR_SB_LOG_ZONES; i++) {
+				zone->cond = BLK_ZONE_COND_EMPTY;
+				zone->wp = zone->start;
+				zone++;
+			}
+		}
+	}
+
+	if (ret)
+		btrfs_warn(device->fs_info, "error clearing superblock number %d (%d)", mirror,
+			   ret);
+
 	return ret;
 }
 
