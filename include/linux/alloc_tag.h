@@ -18,6 +18,9 @@
 struct alloc_tag_counters {
 	u64 bytes;
 	u64 calls;
+#ifdef CONFIG_MEM_ALLOC_PROFILING_ACCUMULATIVE_CALL_COUNTER
+	u64 accu_calls;
+#endif
 };
 
 /*
@@ -103,13 +106,19 @@ static inline bool mem_alloc_profiling_enabled(void)
 static inline struct alloc_tag_counters alloc_tag_read(struct alloc_tag *tag)
 {
 	struct alloc_tag_counters v = { 0, 0 };
+#ifdef CONFIG_MEM_ALLOC_PROFILING_ACCUMULATIVE_CALL_COUNTER
+	v.accu_calls = 0;
+#endif
 	struct alloc_tag_counters *counter;
 	int cpu;
 
 	for_each_possible_cpu(cpu) {
-		counter = per_cpu_ptr(tag->counters, cpu);
-		v.bytes += counter->bytes;
-		v.calls += counter->calls;
+		counter		= per_cpu_ptr(tag->counters, cpu);
+		v.bytes		+= counter->bytes;
+		v.calls		+= counter->calls;
+#ifdef CONFIG_MEM_ALLOC_PROFILING_ACCUMULATIVE_CALL_COUNTER
+		v.accu_calls	+= counter->accu_calls;
+#endif
 	}
 
 	return v;
@@ -145,6 +154,9 @@ static inline void __alloc_tag_ref_set(union codetag_ref *ref, struct alloc_tag 
 	 * counter because when we free each part the counter will be decremented.
 	 */
 	this_cpu_inc(tag->counters->calls);
+#ifdef CONFIG_MEM_ALLOC_PROFILING_ACCUMULATIVE_CALL_COUNTER
+	this_cpu_inc(tag->counters->accu_calls);
+#endif
 }
 
 static inline void alloc_tag_ref_set(union codetag_ref *ref, struct alloc_tag *tag)
