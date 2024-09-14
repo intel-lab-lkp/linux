@@ -694,7 +694,7 @@ static unsigned long batch_rw(struct pfn_batch *batch, void *data,
 /* pfn_reader_user is just the pin_user_pages() path */
 struct pfn_reader_user {
 	struct page **upages;
-	size_t upages_len;
+	unsigned long upages_num;
 	struct file *file;
 	unsigned long upages_start;
 	unsigned long upages_end;
@@ -783,6 +783,7 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 {
 	bool remote_mm = pages->source_mm != current->mm;
 	unsigned long npages, start;
+	size_t len;
 	uintptr_t uptr;
 	long rc;
 
@@ -792,11 +793,11 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 
 	if (!user->upages) {
 		/* All undone in pfn_reader_destroy() */
-		user->upages_len =
-			(last_index - start_index + 1) * sizeof(*user->upages);
-		user->upages = temp_kmalloc(&user->upages_len, NULL, 0);
+		len = (last_index - start_index + 1) * sizeof(*user->upages);
+		user->upages = temp_kmalloc(&len, NULL, 0);
 		if (!user->upages)
 			return -ENOMEM;
+		user->upages_num = len / sizeof(*user->upages);
 	}
 
 	if (!user->file && user->locked == -1) {
@@ -813,7 +814,7 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 	}
 
 	npages = min_t(unsigned long, last_index - start_index + 1,
-		       user->upages_len / sizeof(*user->upages));
+		       user->upages_num);
 
 	if (iommufd_should_fail())
 		return -EFAULT;
@@ -1756,7 +1757,7 @@ int iopt_pages_fill_xarray(struct iopt_pages *pages, unsigned long start_index,
 	lockdep_assert_held(&pages->mutex);
 
 	pfn_reader_user_init(&user, pages);
-	user.upages_len = (last_index - start_index + 1) * sizeof(*out_pages);
+	user.upages_num = last_index - start_index + 1;
 	interval_tree_for_each_double_span(&span, &pages->access_itree,
 					   &pages->domains_itree, start_index,
 					   last_index) {
