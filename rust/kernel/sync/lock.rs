@@ -27,6 +27,7 @@ pub mod spinlock;
 ///
 /// [`lock`]: Backend::lock
 /// [`unlock`]: Backend::unlock
+/// [`try_lock`]: Backend::try_lock
 /// [`relock`]: Backend::relock
 pub unsafe trait Backend {
     /// The state required by the lock.
@@ -64,6 +65,13 @@ pub unsafe trait Backend {
     ///
     /// It must only be called by the current owner of the lock.
     unsafe fn unlock(ptr: *mut Self::State, guard_state: &Self::GuardState);
+
+    /// Tries to acquire the mutex without blocking.
+    ///
+    /// # Safety
+    ///
+    /// Returns `Some(state)` if successful, `None` if already locked.
+    unsafe fn try_lock(ptr: *mut Self::State) -> Option<Self::GuardState>;
 
     /// Reacquires the lock, making the caller its owner.
     ///
@@ -127,6 +135,13 @@ impl<T: ?Sized, B: Backend> Lock<T, B> {
         let state = unsafe { B::lock(self.state.get()) };
         // SAFETY: The lock was just acquired.
         unsafe { Guard::new(self, state) }
+    }
+
+    /// Tries to acquire the lock without blocking and returns a guard that can be used
+    /// to access the data protected by the lock if successful.
+    pub fn try_lock(&self) -> Option<Guard<'_, T, B>> {
+        // SAFETY: The backend `try_lock` method has been implemented securely.
+        unsafe { B::try_lock(self.state.get()).map(|state| Guard::new(self, state)) }
     }
 }
 
