@@ -347,24 +347,32 @@ static void batch_destroy(struct pfn_batch *batch, void *backup)
 }
 
 /* true if the pfn was added, false otherwise */
-static bool batch_add_pfn(struct pfn_batch *batch, unsigned long pfn)
+static bool batch_add_pfn_num(struct pfn_batch *batch, unsigned long pfn,
+			      unsigned long nr)
 {
 	const unsigned int MAX_NPFNS = type_max(typeof(*batch->npfns));
+	unsigned long max_npfns = MAX_NPFNS - nr;
 
 	if (batch->end &&
 	    pfn == batch->pfns[batch->end - 1] + batch->npfns[batch->end - 1] &&
-	    batch->npfns[batch->end - 1] != MAX_NPFNS) {
-		batch->npfns[batch->end - 1]++;
-		batch->total_pfns++;
+	    batch->npfns[batch->end - 1] <= max_npfns) {
+		batch->npfns[batch->end - 1] += nr;
+		batch->total_pfns += nr;
 		return true;
 	}
 	if (batch->end == batch->array_size)
 		return false;
-	batch->total_pfns++;
+	batch->total_pfns += nr;
 	batch->pfns[batch->end] = pfn;
-	batch->npfns[batch->end] = 1;
+	batch->npfns[batch->end] = nr;
 	batch->end++;
 	return true;
+}
+
+/* true if the pfn was added, false otherwise */
+static bool batch_add_pfn(struct pfn_batch *batch, unsigned long pfn)
+{
+	return batch_add_pfn_num(batch, pfn, 1);
 }
 
 /*
@@ -622,6 +630,20 @@ static void batch_from_pages(struct pfn_batch *batch, struct page **pages,
 			break;
 }
 
+static void batch_from_pages_num(struct pfn_batch *batch, struct page **pages,
+				 u32 *npages,
+				 size_t total_pages)
+{
+	unsigned long num;
+
+	while (total_pages) {
+		num = min_t(unsigned long, *npages++, total_pages);
+		if (!batch_add_pfn_num(batch, page_to_pfn(*pages++), num))
+			break;
+		total_pages -= num;
+	}
+}
+
 static void batch_unpin(struct pfn_batch *batch, struct iopt_pages *pages,
 			unsigned int first_page_off, size_t npages)
 {
@@ -695,6 +717,7 @@ static unsigned long batch_rw(struct pfn_batch *batch, void *data,
 struct pfn_reader_user {
 	struct page **upages;
 	unsigned long upages_num;
+	u32 *nupages;
 	struct file *file;
 	unsigned long upages_start;
 	unsigned long upages_end;
@@ -714,6 +737,7 @@ static void pfn_reader_user_init(struct pfn_reader_user *user,
 	user->upages_end = 0;
 	user->locked = -1;
 	user->file = (pages->type == IOPT_ADDRESS_FILE) ? pages->file : NULL;
+	user->nupages = NULL;
 
 	user->gup_flags = FOLL_LONGTERM;
 	if (pages->writable)
@@ -733,6 +757,8 @@ static void pfn_reader_user_destroy(struct pfn_reader_user *user,
 
 	kfree(user->upages);
 	user->upages = NULL;
+	kfree(user->nupages);
+	user->nupages = NULL;
 }
 
 static long pin_memfd_pages(struct pfn_reader_user *user,
@@ -764,8 +790,13 @@ static long pin_memfd_pages(struct pfn_reader_user *user,
 			nr = folio_nr_pages(folio);
 			npin = min(nr - pgoff, npages);
 			repin_folio_unhugely(folio, npin);
-			for (j = pgoff; j < pgoff + npin; j++)
-				user->upages[k++] = folio_page(folio, j);
+			if (user->nupages) {
+				user->upages[k] = &folio->page;
+				user->nupages[k++] = npin;
+			} else {
+				for (j = pgoff; j < pgoff + npin; j++, k++)
+					user->upages[k] = folio_page(folio, j);
+			}
 			npages -= npin;
 			start += npin << PAGE_SHIFT;
 			pgoff = 0;
@@ -798,6 +829,17 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 		if (!user->upages)
 			return -ENOMEM;
 		user->upages_num = len / sizeof(*user->upages);
+
+		if (user->file) {
+			len = user->upages_num * sizeof(*user->nupages);
+			user->nupages = temp_kmalloc(&len, NULL, 0);
+			if (!user->nupages ||
+			    len != user->upages_num * sizeof(*user->nupages)) {
+				kfree(user->upages);
+				user->upages = NULL;
+				/* nupages is optional.  proceed without it. */
+			}
+		}
 	}
 
 	if (!user->file && user->locked == -1) {
@@ -1025,6 +1067,7 @@ static int pfn_reader_fill_span(struct pfn_reader *pfns)
 {
 	struct interval_tree_double_span_iter *span = &pfns->span;
 	unsigned long start_index = pfns->batch_end_index;
+	unsigned long npages;
 	struct iopt_area *area;
 	int rc;
 
@@ -1062,10 +1105,18 @@ static int pfn_reader_fill_span(struct pfn_reader *pfns)
 			return rc;
 	}
 
-	batch_from_pages(&pfns->batch,
-			 pfns->user.upages +
-				 (start_index - pfns->user.upages_start),
-			 pfns->user.upages_end - start_index);
+	npages = pfns->user.upages_end - start_index;
+	start_index -= pfns->user.upages_start;
+
+	if (pfns->user.nupages)
+		batch_from_pages_num(&pfns->batch,
+				     pfns->user.upages + start_index,
+				     pfns->user.nupages + start_index,
+				     npages);
+	else
+		batch_from_pages(&pfns->batch,
+				 pfns->user.upages + start_index,
+				 npages);
 	return 0;
 }
 
