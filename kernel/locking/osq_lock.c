@@ -2,7 +2,10 @@
 #include <linux/percpu.h>
 #include <linux/sched.h>
 #include <linux/osq_lock.h>
-
+#ifdef CONFIG_LOCK_SPIN_ON_OWNER_NUMA
+#include "numa.h"
+#include "numa_osq.h"
+#endif
 /*
  * An MCS like lock especially tailored for optimistic spinning for sleeping
  * lock implementations (mutex, rwsem, etc).
@@ -12,12 +15,34 @@
  * spinning.
  */
 
+#ifdef CONFIG_LOCK_SPIN_ON_OWNER_NUMA
+DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
+/*
+ * We use the value 0 to represent "no CPU", thus the encoded value
+ * will be the CPU number incremented by 1.
+ */
+inline int encode_cpu(int cpu_nr)
+{
+	return cpu_nr + 1;
+}
+
+inline int node_cpu(struct optimistic_spin_node *node)
+{
+	return node->cpu - 1;
+}
+
+inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
+{
+	int cpu_nr = encoded_cpu_val - 1;
+
+	return per_cpu_ptr(&osq_node, cpu_nr);
+}
+#else
 struct optimistic_spin_node {
 	struct optimistic_spin_node *next, *prev;
 	int locked; /* 1 if lock acquired */
 	int cpu; /* encoded CPU # + 1 value */
 };
-
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
 
 /*
@@ -40,6 +65,7 @@ static inline struct optimistic_spin_node *decode_cpu(int encoded_cpu_val)
 
 	return per_cpu_ptr(&osq_node, cpu_nr);
 }
+#endif
 
 /*
  * Get a stable @node->next pointer, either for unlock() or unqueue() purposes.
@@ -97,6 +123,14 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	int curr = encode_cpu(smp_processor_id());
 	int old;
 
+#ifdef CONFIG_LOCK_SPIN_ON_OWNER_NUMA
+	if (unlikely(enable_zx_numa_osq_lock > 1)) {
+		node->numa = 1;
+		return x_osq_lock(lock);
+	}
+	node->numa = 0;
+#endif
+
 	node->locked = 0;
 	node->next = NULL;
 	node->cpu = curr;
@@ -108,6 +142,11 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * the lock tail.
 	 */
 	old = atomic_xchg(&lock->tail, curr);
+#ifdef CONFIG_LOCK_SPIN_ON_OWNER_NUMA
+	if (enable_zx_numa_osq_lock > 0)
+	//enable means all cpu cores are less tan 65534.
+		old = old & 0xffff;
+#endif
 	if (old == OSQ_UNLOCKED_VAL)
 		return true;
 
@@ -212,6 +251,14 @@ void osq_unlock(struct optimistic_spin_queue *lock)
 	struct optimistic_spin_node *node, *next;
 	int curr = encode_cpu(smp_processor_id());
 
+	node = this_cpu_ptr(&osq_node);
+
+#ifdef CONFIG_LOCK_SPIN_ON_OWNER_NUMA
+	if (unlikely(enable_zx_numa_osq_lock > 1 &&
+		node->numa == 1))
+		return x_osq_unlock(lock);
+#endif
+
 	/*
 	 * Fast path for the uncontended case.
 	 */
@@ -222,7 +269,6 @@ void osq_unlock(struct optimistic_spin_queue *lock)
 	/*
 	 * Second most likely case.
 	 */
-	node = this_cpu_ptr(&osq_node);
 	next = xchg(&node->next, NULL);
 	if (next) {
 		WRITE_ONCE(next->locked, 1);
@@ -233,3 +279,13 @@ void osq_unlock(struct optimistic_spin_queue *lock)
 	if (next)
 		WRITE_ONCE(next->locked, 1);
 }
+#ifdef CONFIG_LOCK_SPIN_ON_OWNER_NUMA
+bool osq_is_locked(struct optimistic_spin_queue *lock)
+{
+	if (unlikely(enable_zx_numa_osq_lock > 1))
+		return x_osq_is_locked(lock);
+	return atomic_read(&lock->tail) != OSQ_UNLOCKED_VAL;
+}
+#endif
+
+
