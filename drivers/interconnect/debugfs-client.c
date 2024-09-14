@@ -147,8 +147,13 @@ int icc_debugfs_client_init(struct dentry *icc_dir)
 
 	client_dir = debugfs_create_dir("test_client", icc_dir);
 
-	debugfs_create_str("src_node", 0600, client_dir, &src_node);
-	debugfs_create_str("dst_node", 0600, client_dir, &dst_node);
+	src_node = kzalloc(sizeof(src_node), GFP_KERNEL);
+	dst_node = kzalloc(sizeof(dst_node), GFP_KERNEL);
+
+	if (src_node)
+		debugfs_create_str("src_node", 0600, client_dir, &src_node);
+	if (dst_node)
+		debugfs_create_str("dst_node", 0600, client_dir, &dst_node);
 	debugfs_create_file("get", 0200, client_dir, NULL, &icc_get_fops);
 	debugfs_create_u32("avg_bw", 0600, client_dir, &avg_bw);
 	debugfs_create_u32("peak_bw", 0600, client_dir, &peak_bw);
