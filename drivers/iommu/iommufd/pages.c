@@ -695,6 +695,7 @@ static unsigned long batch_rw(struct pfn_batch *batch, void *data,
 struct pfn_reader_user {
 	struct page **upages;
 	size_t upages_len;
+	struct file *file;
 	unsigned long upages_start;
 	unsigned long upages_end;
 	unsigned int gup_flags;
@@ -712,6 +713,7 @@ static void pfn_reader_user_init(struct pfn_reader_user *user,
 	user->upages_start = 0;
 	user->upages_end = 0;
 	user->locked = -1;
+	user->file = (pages->type == IOPT_ADDRESS_FILE) ? pages->file : NULL;
 
 	user->gup_flags = FOLL_LONGTERM;
 	if (pages->writable)
@@ -733,13 +735,54 @@ static void pfn_reader_user_destroy(struct pfn_reader_user *user,
 	user->upages = NULL;
 }
 
+static long pin_memfd_pages(struct pfn_reader_user *user,
+			    unsigned long start,
+			    unsigned long npages)
+{
+	unsigned long end, nr, i, j, k, npin, nfolios, pgoff, max_folios;
+	unsigned long npages_orig = npages;
+	struct folio *folio;
+	size_t size = npages * sizeof(folio);
+	struct folio **folios = temp_kmalloc(&size, NULL, 0);
+
+	if (!folios)
+		return -ENOMEM;
+
+	k = 0;
+	max_folios = size / sizeof(folio);
+	end = start + (npages << PAGE_SHIFT) - 1;
+
+	while (npages > 0) {
+		nfolios = memfd_pin_folios(user->file, start, end,
+					   folios, max_folios, &pgoff);
+		if (nfolios <= 0)
+			return nfolios;
+
+		pgoff >>= PAGE_SHIFT;
+		for (i = 0; i < nfolios; i++) {
+			folio = folios[i];
+			nr = folio_nr_pages(folio);
+			npin = min(nr - pgoff, npages);
+			repin_folio_unhugely(folio, npin);
+			for (j = pgoff; j < pgoff + npin; j++)
+				user->upages[k++] = folio_page(folio, j);
+			npages -= npin;
+			start += npin << PAGE_SHIFT;
+			pgoff = 0;
+		}
+	}
+
+	kfree(folios);
+	return npages_orig;
+}
+
 static int pfn_reader_user_pin(struct pfn_reader_user *user,
 			       struct iopt_pages *pages,
 			       unsigned long start_index,
 			       unsigned long last_index)
 {
 	bool remote_mm = pages->source_mm != current->mm;
-	unsigned long npages;
+	unsigned long npages, start;
 	uintptr_t uptr;
 	long rc;
 
@@ -756,7 +799,7 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 			return -ENOMEM;
 	}
 
-	if (user->locked == -1) {
+	if (!user->file && user->locked == -1) {
 		/*
 		 * The majority of usages will run the map task within the mm
 		 * providing the pages, so we can optimize into
@@ -772,15 +815,18 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 	npages = min_t(unsigned long, last_index - start_index + 1,
 		       user->upages_len / sizeof(*user->upages));
 
-
 	if (iommufd_should_fail())
 		return -EFAULT;
 
-	uptr = (uintptr_t)(pages->uptr + start_index * PAGE_SIZE);
-	if (!remote_mm)
+	if (user->file) {
+		start = pages->start + (start_index * PAGE_SIZE);
+		rc = pin_memfd_pages(user, start, npages);
+	} else if (!remote_mm) {
+		uptr = (uintptr_t)(pages->uptr + start_index * PAGE_SIZE);
 		rc = pin_user_pages_fast(uptr, npages, user->gup_flags,
 					 user->upages);
-	else {
+	} else {
+		uptr = (uintptr_t)(pages->uptr + start_index * PAGE_SIZE);
 		if (!user->locked) {
 			mmap_read_lock(pages->source_mm);
 			user->locked = 1;
