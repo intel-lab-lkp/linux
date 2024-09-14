@@ -3262,7 +3262,7 @@ static int lan743x_netdev_open(struct net_device *netdev)
 		phy_support_eee(netdev->phydev);
 
 #ifdef CONFIG_PM
-	if (adapter->netdev->phydev) {
+	if (netdev->phydev) {
 		struct ethtool_wolinfo wol = { .cmd = ETHTOOL_GWOL };
 
 		phy_ethtool_get_wol(netdev->phydev, &wol);
