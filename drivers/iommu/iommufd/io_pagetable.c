@@ -260,7 +260,10 @@ static int iopt_alloc_area_pages(struct io_pagetable *iopt,
 		/* Use the first entry to guess the ideal IOVA alignment */
 		elm = list_first_entry(pages_list, struct iopt_pages_list,
 				       next);
-		start = elm->start_byte + (uintptr_t)elm->pages->uptr;
+		if (elm->pages->type == IOPT_ADDRESS_FILE)
+			start = elm->start_byte + elm->pages->start;
+		else
+			start = elm->start_byte + (uintptr_t)elm->pages->uptr;
 		rc = iopt_alloc_iova(iopt, dst_iova, start, length);
 		if (rc)
 			goto out_unlock;
@@ -440,6 +443,27 @@ int iopt_map_user_pages(struct iommufd_ctx *ictx, struct io_pagetable *iopt,
 
 	return iopt_map_common(ictx, iopt, pages, iova, length,
 			       uptr - pages->uptr,
+			       iommu_prot, flags);
+}
+
+/**
+ * iopt_map_file_pages() - Like iopt_map_user_pages, but map @file starting
+ * at byte offset @start.
+ */
+int iopt_map_file_pages(struct iommufd_ctx *ictx, struct io_pagetable *iopt,
+			unsigned long *iova,
+			struct file *file, unsigned long start,
+			unsigned long length, int iommu_prot,
+			unsigned int flags)
+{
+	struct iopt_pages *pages;
+
+	pages = iopt_alloc_file_pages(file, start, length,
+				      iommu_prot & IOMMU_WRITE);
+	if (IS_ERR(pages))
+		return PTR_ERR(pages);
+	return iopt_map_common(ictx, iopt, pages, iova, length,
+			       start - pages->start,
 			       iommu_prot, flags);
 }
 
