@@ -1065,7 +1065,6 @@ void *fgraph_retrieve_parent_data(int idx, int *size_bytes, int depth);
 struct ftrace_ret_stack {
 	unsigned long ret;
 	unsigned long func;
-	unsigned long long calltime;
 #ifdef HAVE_FUNCTION_GRAPH_FP_TEST
 	unsigned long fp;
 #endif
