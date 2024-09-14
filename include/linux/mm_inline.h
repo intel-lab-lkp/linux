@@ -225,6 +225,7 @@ static inline bool lru_gen_add_folio(struct lruvec *lruvec, struct folio *folio,
 	int gen = folio_lru_gen(folio);
 	int type = folio_is_file_lru(folio);
 	int zone = folio_zonenum(folio);
+	int lazyfree = type ? folio_test_anon(folio) : 0;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 
 	VM_WARN_ON_ONCE_FOLIO(gen != -1, folio);
@@ -262,9 +263,9 @@ static inline bool lru_gen_add_folio(struct lruvec *lruvec, struct folio *folio,
 	lru_gen_update_size(lruvec, folio, -1, gen);
 	/* for folio_rotate_reclaimable() */
 	if (reclaiming)
-		list_add_tail(&folio->lru, &lrugen->folios[gen][type][zone]);
+		list_add_tail(&folio->lru, &lrugen->folios[gen][type + lazyfree][zone]);
 	else
-		list_add(&folio->lru, &lrugen->folios[gen][type][zone]);
+		list_add(&folio->lru, &lrugen->folios[gen][type + lazyfree][zone]);
 
 	return true;
 }

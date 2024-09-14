@@ -3725,21 +3725,25 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, bool can_swap)
 
 	/* prevent cold/hot inversion if force_scan is true */
 	for (zone = 0; zone < MAX_NR_ZONES; zone++) {
-		struct list_head *head = &lrugen->folios[old_gen][type][zone];
+		int list_num = type ? 2 : 1;
+		struct list_head *head;
 
-		while (!list_empty(head)) {
-			struct folio *folio = lru_to_folio(head);
+		for (int i = list_num - 1; i >= 0; i--) {
+			head = &lrugen->folios[old_gen][type + i][zone];
+			while (!list_empty(head)) {
+				struct folio *folio = lru_to_folio(head);
 
-			VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio), folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_zonenum(folio) != zone, folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio), folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_zonenum(folio) != zone, folio);
 
-			new_gen = folio_inc_gen(lruvec, folio, false);
-			list_move_tail(&folio->lru, &lrugen->folios[new_gen][type][zone]);
+				new_gen = folio_inc_gen(lruvec, folio, false);
+				list_move_tail(&folio->lru, &lrugen->folios[new_gen][type + i][zone]);
 
-			if (!--remaining)
-				return false;
+				if (!--remaining)
+					return false;
+			}
 		}
 	}
 done:
@@ -4291,6 +4295,7 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 	int refs = folio_lru_refs(folio);
 	int tier = lru_tier_from_refs(refs);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	int lazyfree = type ? folio_test_anon(folio) : 0;
 
 	VM_WARN_ON_ONCE_FOLIO(gen >= MAX_NR_GENS, folio);
 
@@ -4306,7 +4311,7 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 
 	/* promoted */
 	if (gen != lru_gen_from_seq(lrugen->min_seq[type])) {
-		list_move(&folio->lru, &lrugen->folios[gen][type][zone]);
+		list_move(&folio->lru, &lrugen->folios[gen][type + lazyfree][zone]);
 		return true;
 	}
 
@@ -4315,7 +4320,7 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 		int hist = lru_hist_from_seq(lrugen->min_seq[type]);
 
 		gen = folio_inc_gen(lruvec, folio, false);
-		list_move_tail(&folio->lru, &lrugen->folios[gen][type][zone]);
+		list_move_tail(&folio->lru, &lrugen->folios[gen][type + lazyfree][zone]);
 
 		WRITE_ONCE(lrugen->protected[hist][type][tier - 1],
 			   lrugen->protected[hist][type][tier - 1] + delta);
@@ -4325,7 +4330,7 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 	/* ineligible */
 	if (!folio_test_lru(folio) || zone > sc->reclaim_idx) {
 		gen = folio_inc_gen(lruvec, folio, false);
-		list_move_tail(&folio->lru, &lrugen->folios[gen][type][zone]);
+		list_move_tail(&folio->lru, &lrugen->folios[gen][type + lazyfree][zone]);
 		return true;
 	}
 
@@ -4333,7 +4338,7 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 	if (folio_test_locked(folio) || folio_test_writeback(folio) ||
 	    (type == LRU_GEN_FILE && folio_test_dirty(folio))) {
 		gen = folio_inc_gen(lruvec, folio, true);
-		list_move(&folio->lru, &lrugen->folios[gen][type][zone]);
+		list_move(&folio->lru, &lrugen->folios[gen][type + lazyfree][zone]);
 		return true;
 	}
 
@@ -4377,7 +4382,7 @@ static bool isolate_folio(struct lruvec *lruvec, struct folio *folio, struct sca
 static int scan_folios(struct lruvec *lruvec, struct scan_control *sc,
 		       int type, int tier, struct list_head *list)
 {
-	int i;
+	int i, j;
 	int gen;
 	enum vm_event_item item;
 	int sorted = 0;
@@ -4399,33 +4404,38 @@ static int scan_folios(struct lruvec *lruvec, struct scan_control *sc,
 		LIST_HEAD(moved);
 		int skipped_zone = 0;
 		int zone = (sc->reclaim_idx + i) % MAX_NR_ZONES;
-		struct list_head *head = &lrugen->folios[gen][type][zone];
+		int list_num = type ? 2 : 1;
+		struct list_head *head;
 
-		while (!list_empty(head)) {
-			struct folio *folio = lru_to_folio(head);
-			int delta = folio_nr_pages(folio);
+		for (j = list_num - 1; j >= 0; j--) {
+			head = &lrugen->folios[gen][type + j][zone];
+			while (!list_empty(head)) {
+				struct folio *folio = lru_to_folio(head);
+				int delta = folio_nr_pages(folio);
 
-			VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio), folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
-			VM_WARN_ON_ONCE_FOLIO(folio_zonenum(folio) != zone, folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_test_unevictable(folio), folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_test_active(folio), folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_is_file_lru(folio) != type, folio);
+				VM_WARN_ON_ONCE_FOLIO(folio_zonenum(folio) != zone, folio);
 
-			scanned += delta;
+				scanned += delta;
 
-			if (sort_folio(lruvec, folio, sc, tier))
-				sorted += delta;
-			else if (isolate_folio(lruvec, folio, sc)) {
-				list_add(&folio->lru, list);
-				isolated += delta;
-			} else {
-				list_move(&folio->lru, &moved);
-				skipped_zone += delta;
+				if (sort_folio(lruvec, folio, sc, tier))
+					sorted += delta;
+				else if (isolate_folio(lruvec, folio, sc)) {
+					list_add(&folio->lru, list);
+					isolated += delta;
+				} else {
+					list_move(&folio->lru, &moved);
+					skipped_zone += delta;
+				}
+
+				if (!--remaining || max(isolated, skipped_zone) >= MIN_LRU_BATCH)
+					goto isolate_done;
 			}
-
-			if (!--remaining || max(isolated, skipped_zone) >= MIN_LRU_BATCH)
-				break;
 		}
 
+isolate_done:
 		if (skipped_zone) {
 			list_splice(&moved, head);
 			__count_zid_vm_events(PGSCAN_SKIP, zone, skipped_zone);
@@ -5586,8 +5596,15 @@ void lru_gen_init_lruvec(struct lruvec *lruvec)
 	for (i = 0; i <= MIN_NR_GENS + 1; i++)
 		lrugen->timestamps[i] = jiffies;
 
-	for_each_gen_type_zone(gen, type, zone)
+	for_each_gen_type_zone(gen, type, zone) {
 		INIT_LIST_HEAD(&lrugen->folios[gen][type][zone]);
+		/*
+		 * lazyfree anon folios have a separate list while using
+		 * file as type
+		 */
+		if (type)
+			INIT_LIST_HEAD(&lrugen->folios[gen][type + 1][zone]);
+	}
 
 	if (mm_state)
 		mm_state->seq = MIN_NR_GENS;
