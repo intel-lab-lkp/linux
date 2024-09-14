@@ -352,12 +352,7 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 	 */
 	if (ret < 0) {
 		pci_info(dev, "%s %pR: can't assign; no space\n", res_name, res);
-		ret = pci_revert_fw_address(res, dev, resno, size);
-	}
-
-	if (ret < 0) {
-		pci_info(dev, "%s %pR: failed to assign\n", res_name, res);
-		return ret;
+		return pci_revert_fw_address(res, dev, resno, size);
 	}
 
 	res->flags &= ~IORESOURCE_UNSET;
