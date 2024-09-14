@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+menu "NUMA Lock Supporting (OSQ)"
+
+config LOCK_SPIN_ON_OWNER_NUMA
+	bool "Enable dynamic numa-aware osq lock"
+	depends on LOCK_SPIN_ON_OWNER && X86_64
+	default n
+	help
+	  According the cpu numa architecture, the numa-aware lock
+	  always unlocks the process waiting on the same numa node
+	  first. It is different from the kernel inbox osq_lock.
+	  The dynamic numa-aware osq lock switchies between osq_lock and
+	  numa-aware lock automatically, according contention level.
+	  Enable: echo 1 > /proc/zx_numa_lock/dynamic_enable.
+
+endmenu #  NUMA Lock Supporting
