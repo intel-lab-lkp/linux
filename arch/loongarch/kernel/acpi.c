@@ -9,6 +9,7 @@
 
 #include <linux/init.h>
 #include <linux/acpi.h>
+#include <linux/efi-bgrt.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/memblock.h>
@@ -39,14 +40,14 @@ void __init __iomem * __acpi_map_table(unsigned long phys, unsigned long size)
 	if (!phys || !size)
 		return NULL;
 
-	return early_memremap(phys, size);
+	return (void __iomem *)early_memremap(phys, size);
 }
 void __init __acpi_unmap_table(void __iomem *map, unsigned long size)
 {
 	if (!map || !size)
 		return;
 
-	early_memunmap(map, size);
+	early_memunmap((void *)map, size);
 }
 
 void __iomem *acpi_os_ioremap(acpi_physical_address phys, acpi_size size)
@@ -211,6 +212,9 @@ void __init acpi_boot_table_init(void)
 
 	/* Do not enable ACPI SPCR console by default */
 	acpi_parse_spcr(earlycon_acpi_spcr_enable, false);
+
+	if (IS_ENABLED(CONFIG_ACPI_BGRT))
+		acpi_table_parse(ACPI_SIG_BGRT, acpi_parse_bgrt);
 
 	return;
 

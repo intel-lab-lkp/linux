@@ -10,15 +10,13 @@
 
 #include <asm/addrspace.h>
 #include <asm/cpu.h>
+#include <asm/early_ioremap.h>
 #include <asm/page.h>
 #include <asm/pgtable-bits.h>
 #include <asm/string.h>
 
 extern void __init __iomem *early_ioremap(u64 phys_addr, unsigned long size);
 extern void __init early_iounmap(void __iomem *addr, unsigned long size);
-
-#define early_memremap early_ioremap
-#define early_memunmap early_iounmap
 
 #ifdef CONFIG_ARCH_IOREMAP
 

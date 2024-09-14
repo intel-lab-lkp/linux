@@ -16,6 +16,15 @@ void __init early_iounmap(void __iomem *addr, unsigned long size)
 
 }
 
+void __init *early_memremap(resource_size_t phys_addr, unsigned long size)
+{
+	return (__force void *)early_ioremap(phys_addr, size);
+}
+
+void __init early_memunmap(void *addr, unsigned long size)
+{
+}
+
 void *early_memremap_ro(resource_size_t phys_addr, unsigned long size)
 {
 	return early_memremap(phys_addr, size);
