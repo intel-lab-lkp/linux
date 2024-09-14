@@ -158,8 +158,6 @@ u8 acpi_ut_valid_nameseg(char *signature);
 
 u8 acpi_ut_valid_name_char(char character, u32 position);
 
-void acpi_ut_check_and_repair_ascii(u8 *name, char *repaired_name, u32 count);
-
 /*
  * utcksum - Checksum utilities
  */

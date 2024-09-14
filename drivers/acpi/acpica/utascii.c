@@ -74,33 +74,3 @@ u8 acpi_ut_valid_name_char(char character, u32 position)
 
 	return (TRUE);
 }
-
-/*******************************************************************************
- *
- * FUNCTION:    acpi_ut_check_and_repair_ascii
- *
- * PARAMETERS:  name                - Ascii string
- *              count               - Number of characters to check
- *
- * RETURN:      None
- *
- * DESCRIPTION: Ensure that the requested number of characters are printable
- *              Ascii characters. Sets non-printable and null chars to <space>.
- *
- ******************************************************************************/
-
-void acpi_ut_check_and_repair_ascii(u8 *name, char *repaired_name, u32 count)
-{
-	u32 i;
-
-	for (i = 0; i < count; i++) {
-		repaired_name[i] = (char)name[i];
-
-		if (!name[i]) {
-			return;
-		}
-		if (!isprint(name[i])) {
-			repaired_name[i] = ' ';
-		}
-	}
-}
