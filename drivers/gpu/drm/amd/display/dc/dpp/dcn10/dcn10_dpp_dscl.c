@@ -248,6 +248,9 @@ static void dpp1_dscl_set_scaler_filter(
 	int pair;
 	uint16_t odd_coef, even_coef;
 
+	if (!filter)
+		return;
+
 	REG_SET_3(SCL_COEF_RAM_TAP_SELECT, 0,
 		SCL_COEF_RAM_TAP_PAIR_IDX, 0,
 		SCL_COEF_RAM_PHASE, 0,
