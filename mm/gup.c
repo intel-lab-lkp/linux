@@ -3704,3 +3704,21 @@ err:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(memfd_pin_folios);
+
+/**
+ * repin_folio_unhugely() - repin a folio at small page granularity
+ * @folio: the folio to repin
+ * @npin:  the number of pages pinned in the folio
+ *
+ * Given a huge page folio that is already pinned, and the number of small
+ * pages that are pinned in it, adjust the pincount to reflect small-page
+ * granularity.  Each small page can later be unpinned individually.
+ */
+void repin_folio_unhugely(struct folio *folio, unsigned long npin)
+{
+	if (!folio_test_large(folio) || is_huge_zero_folio(folio) || npin == 1)
+		return;
+	atomic_add(npin - 1, &folio->_refcount);
+	atomic_add(npin - 1, &folio->_pincount);
+}
+EXPORT_SYMBOL_GPL(repin_folio_unhugely);
