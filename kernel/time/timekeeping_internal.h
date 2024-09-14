@@ -11,8 +11,11 @@
  */
 #ifdef CONFIG_DEBUG_FS
 extern void tk_debug_account_sleep_time(const struct timespec64 *t);
+DECLARE_PER_CPU(long, mg_floor_swaps);
+#define mgtime_counter_inc(__var)	this_cpu_inc(__var)
 #else
 #define tk_debug_account_sleep_time(x)
+#define mgtime_counter_inc()	do { } while (0)
 #endif
 
 #ifdef CONFIG_CLOCKSOURCE_VALIDATE_LAST_CYCLE

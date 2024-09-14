@@ -2440,7 +2440,7 @@ EXPORT_SYMBOL_GPL(ktime_get_coarse_real_ts64_mg);
  * regardless of the outcome of the swap. Note that this is a filesystem
  * specific interface and should be avoided outside of that context.
  */
-void ktime_get_real_ts64_mg(struct timespec64 *ts, u64 cookie)
+void ktime_get_real_ts64_mg(struct timespec64 *ts)
 {
 	struct timekeeper *tk = &tk_core.timekeeper;
 	ktime_t old = atomic64_read(&mg_floor);
@@ -2464,6 +2464,7 @@ void ktime_get_real_ts64_mg(struct timespec64 *ts, u64 cookie)
 	if (atomic64_try_cmpxchg(&mg_floor, &old, mono)) {
 		ts->tv_nsec = 0;
 		timespec64_add_ns(ts, nsecs);
+		mgtime_counter_inc(mg_floor_swaps);
 	} else {
 		/*
 		 * Something has changed mg_floor since "old" was
