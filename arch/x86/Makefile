@@ -179,6 +179,12 @@ else
         cflags-$(CONFIG_MCORE2)		+= -march=core2
         cflags-$(CONFIG_MATOM)		+= -march=atom
         cflags-$(CONFIG_GENERIC_CPU)	+= -mtune=generic
+        cflags-$(CONFIG_MAMD_CPU_V2)	+= -march=x86-64-v2
+        cflags-$(CONFIG_MAMD_CPU_V3)	+= -march=x86-64-v3
+        cflags-$(CONFIG_MAMD_CPU_V4)	+= -march=x86-64-v4
+        cflags-$(CONFIG_MINTEL_CPU_V2)	+= -march=x86-64-v2
+        cflags-$(CONFIG_MINTEL_CPU_V3)	+= -march=x86-64-v3
+        cflags-$(CONFIG_MINTEL_CPU_V4)	+= -march=x86-64-v4
         KBUILD_CFLAGS += $(cflags-y)
 
         rustflags-$(CONFIG_MK8)		+= -Ctarget-cpu=k8
