@@ -120,7 +120,7 @@
 /* format 21 is packed YUV444 10-bit */
 
 /*
- * Sub-engines listed bellow are unused for now. The EN registers are here only
+ * Sub-engines listed below are unused for now. The EN registers are here only
  * to be used to disable these sub-engines.
  */
 #define SUN8I_MIXER_FCE_EN			0xa0000
