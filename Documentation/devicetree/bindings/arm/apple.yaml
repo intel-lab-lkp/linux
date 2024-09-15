@@ -204,10 +204,10 @@ properties:
         items:
           - enum:
               - apple,j105a # Apple TV 4K (1st Generation)
-              - apple,j120  # Apple iPad Pro 2 (12.9-inch) (Wi-Fi)
-              - apple,j121  # Apple iPad Pro 2 (12.9-inch) (Cellular)
-              - apple,j207  # Apple iPad Pro 2 (10.5-inch) (Wi-Fi)
-              - apple,j208  # Apple iPad Pro 2 (10.5-inch) (Cellular)
+              - apple,j120  # iPad Pro 2 (12.9-inch) (Wi-Fi)
+              - apple,j121  # iPad Pro 2 (12.9-inch) (Cellular)
+              - apple,j207  # iPad Pro 2 (10.5-inch) (Wi-Fi)
+              - apple,j208  # iPad Pro 2 (10.5-inch) (Cellular)
           - const: apple,t8011
           - const: apple,arm-platform
 
