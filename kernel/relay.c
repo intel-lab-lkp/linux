@@ -560,7 +560,7 @@ static void __relay_set_buf_dentry(void *info)
  *	Use to setup files for a previously buffer-only channel created
  *	by relay_open() with a NULL parent dentry.
  *
- *	For example, this is useful for perfomring early tracing in kernel,
+ *	For example, this is useful for performing early tracing in kernel,
  *	before VFS is up and then exposing the early results once the dentry
  *	is available.
  */
@@ -837,7 +837,7 @@ static int relay_file_mmap(struct file *filp, struct vm_area_struct *vma)
  *	@filp: the file
  *	@wait: poll table
  *
- *	Poll implemention.
+ *	Poll implementation.
  */
 static __poll_t relay_file_poll(struct file *filp, poll_table *wait)
 {
