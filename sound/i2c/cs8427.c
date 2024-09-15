@@ -397,18 +397,25 @@ static int snd_cs8427_qsubcode_get(struct snd_kcontrol *kcontrol,
 	if (err != 1) {
 		dev_err(device->bus->card->dev,
 			"unable to send register 0x%x byte to CS8427\n", reg);
-		snd_i2c_unlock(device->bus);
-		return err < 0 ? err : -EIO;
+		goto recheck_err;
 	}
 	err = snd_i2c_readbytes(device, ucontrol->value.bytes.data, 10);
 	if (err != 10) {
 		dev_err(device->bus->card->dev,
 			"unable to read Q-subcode bytes from CS8427\n");
-		snd_i2c_unlock(device->bus);
-		return err < 0 ? err : -EIO;
+		goto recheck_err;
 	}
+
+	err = 0;
+unlock:
 	snd_i2c_unlock(device->bus);
-	return 0;
+	return err;
+
+recheck_err:
+	if (err >= 0)
+		err = -EIO;
+
+	goto unlock;
 }
 
 static int snd_cs8427_spdif_info(struct snd_kcontrol *kcontrol,
