@@ -2,7 +2,7 @@
 #
 
 CFLAGS += $(shell pkg-config --cflags alsa) $(KHDR_INCLUDES)
-LDLIBS += $(shell pkg-config --libs alsa)
+LDLIBS += $(shell pkg-config --silence-errors --libs alsa)
 ifeq ($(LDLIBS),)
 LDLIBS += -lasound
 endif
