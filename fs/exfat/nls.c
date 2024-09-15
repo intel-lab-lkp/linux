@@ -699,6 +699,7 @@ static int exfat_load_upcase_table(struct super_block *sb,
 
 	exfat_err(sb, "failed to load upcase table (idx : 0x%08x, chksum : 0x%08x, utbl_chksum : 0x%08x)",
 		  index, chksum, utbl_checksum);
+	exfat_free_upcase_table(sbi);
 	return -EINVAL;
 }
 
