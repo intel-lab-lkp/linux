@@ -24,7 +24,7 @@ on building.
 Please make sure your Mesa tool is compiled with "-Dtools=intel" and
 "-Ddri-drivers=i965", and run this script from IGT source root directory"
 
-The instructions bellow assume:
+The instructions below assume:
     *  IGT gpu tools source code is located on your home directory (~) as ~/igt
     *  Mesa source code is located on your home directory (~) as ~/mesa
        and built under the ~/mesa/build directory
