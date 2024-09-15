@@ -4,7 +4,7 @@
  *           of the aspire one netbook, turns on/off the fan
  *           as soon as the upper/lower threshold is reached.
  *
- * (C) 2009 - Peter Kaestle     peter (a) piie.net
+ * (C) 2024 - Peter Kaestle     peter (a) piie.net
  *                              https://piie.net
  *     2009 Borislav Petkov	bp (a) alien8.de
  *
@@ -37,7 +37,7 @@
  */
 #undef START_IN_KERNEL_MODE
 
-#define DRV_VER "0.7.0"
+#define DRV_VER "1.0.0"
 
 /*
  * According to the Atom N270 datasheet,
@@ -51,6 +51,7 @@
 #define ACERHDF_TEMP_CRIT 89000
 #define ACERHDF_FAN_OFF 0
 #define ACERHDF_FAN_AUTO 1
+#define ACERHDF_INTERVAL 1000
 
 /*
  * No matter what value the user puts into the fanon variable, turn on the fan
@@ -58,20 +59,12 @@
  */
 #define ACERHDF_MAX_FANON 80000
 
-/*
- * Maximum interval between two temperature checks is 15 seconds, as the die
- * can get hot really fast under heavy load (plus we shouldn't forget about
- * possible impact of _external_ aggressive sources such as heaters, sun etc.)
- */
-#define ACERHDF_MAX_INTERVAL 15
-
 #ifdef START_IN_KERNEL_MODE
 static int kernelmode = 1;
 #else
 static int kernelmode;
 #endif
 
-static unsigned int interval = 10;
 static unsigned int fanon = ACERHDF_DEFAULT_TEMP_FANON;
 static unsigned int fanoff = ACERHDF_DEFAULT_TEMP_FANOFF;
 static unsigned int verbose;
@@ -328,7 +321,7 @@ static void acerhdf_change_fanstate(int state)
 	}
 }
 
-static void acerhdf_check_param(struct thermal_zone_device *thermal)
+static void acerhdf_check_param(void)
 {
 	if (fanon > ACERHDF_MAX_FANON) {
 		pr_err("fanon temperature too high, set to %d\n",
@@ -344,24 +337,10 @@ static void acerhdf_check_param(struct thermal_zone_device *thermal)
 
 	trips[0].temperature = fanon;
 	trips[0].hysteresis  = fanon - fanoff;
-
-	if (kernelmode) {
-		if (interval > ACERHDF_MAX_INTERVAL) {
-			pr_err("interval too high, set to %d\n",
-			       ACERHDF_MAX_INTERVAL);
-			interval = ACERHDF_MAX_INTERVAL;
-		}
-
-		if (verbose)
-			pr_notice("interval changed to: %d\n", interval);
-	}
 }
 
 /*
- * This is the thermal zone callback which does the delayed polling of the fan
- * state. We do check /sysfs-originating settings here in acerhdf_check_param()
- * as late as the polling interval is since we can't do that in the respective
- * accessors of the module parameters.
+ * Thermal zone callback used to poll the temperature
  */
 static int acerhdf_get_ec_temp(struct thermal_zone_device *thermal, int *t)
 {
@@ -410,32 +389,8 @@ static int acerhdf_unbind(struct thermal_zone_device *thermal,
 static inline void acerhdf_revert_to_bios_mode(void)
 {
 	acerhdf_change_fanstate(ACERHDF_FAN_AUTO);
-	kernelmode = 0;
 
 	pr_notice("kernel mode fan control OFF\n");
-}
-static inline void acerhdf_enable_kernelmode(void)
-{
-	kernelmode = 1;
-
-	pr_notice("kernel mode fan control ON\n");
-}
-
-/*
- * set operation mode;
- * enabled: the thermal layer of the kernel takes care about
- *          the temperature and the fan.
- * disabled: the BIOS takes control of the fan.
- */
-static int acerhdf_change_mode(struct thermal_zone_device *thermal,
-			       enum thermal_device_mode mode)
-{
-	if (mode == THERMAL_DEVICE_DISABLED && kernelmode)
-		acerhdf_revert_to_bios_mode();
-	else if (mode == THERMAL_DEVICE_ENABLED && !kernelmode)
-		acerhdf_enable_kernelmode();
-
-	return 0;
 }
 
 static int acerhdf_get_crit_temp(struct thermal_zone_device *thermal,
@@ -450,7 +405,6 @@ static struct thermal_zone_device_ops acerhdf_dev_ops = {
 	.bind = acerhdf_bind,
 	.unbind = acerhdf_unbind,
 	.get_temp = acerhdf_get_ec_temp,
-	.change_mode = acerhdf_change_mode,
 	.get_crit_temp = acerhdf_get_crit_temp,
 };
 
@@ -584,13 +538,11 @@ static int __init acerhdf_check_hardware(void)
 	if (force_bios[0]) {
 		version = force_bios;
 		pr_info("forcing BIOS version: %s\n", version);
-		kernelmode = 0;
 	}
 
 	if (force_product[0]) {
 		product = force_product;
 		pr_info("forcing BIOS product: %s\n", product);
-		kernelmode = 0;
 	}
 
 	if (verbose)
@@ -627,10 +579,8 @@ static int __init acerhdf_check_hardware(void)
 	 * if started with kernel mode off, prevent the kernel from switching
 	 * off the fan
 	 */
-	if (!kernelmode) {
-		pr_notice("Fan control off, to enable do:\n");
-		pr_notice("echo -n \"enabled\" > /sys/class/thermal/thermal_zoneN/mode # N=0,1,2...\n");
-	}
+	if (!kernelmode)
+		pr_notice("Fan control off, to enable insmod/modprobe with 'kernelmode=1'\n");
 
 	return 0;
 }
@@ -669,7 +619,7 @@ static void acerhdf_unregister_platform(void)
 
 static int __init acerhdf_register_thermal(void)
 {
-	int ret;
+	int ret = 0;
 
 	cl_dev = thermal_cooling_device_register("acerhdf-fan", NULL,
 						 &acerhdf_cooling_ops);
@@ -677,10 +627,12 @@ static int __init acerhdf_register_thermal(void)
 	if (IS_ERR(cl_dev))
 		return -EINVAL;
 
+	acerhdf_check_param();
+
 	thz_dev = thermal_zone_device_register_with_trips("acerhdf", trips, ARRAY_SIZE(trips),
 							  NULL, &acerhdf_dev_ops,
 							  &acerhdf_zone_params, 0,
-							  (kernelmode) ? interval*1000 : 0);
+							  ACERHDF_INTERVAL);
 	if (IS_ERR(thz_dev))
 		return -EINVAL;
 
@@ -688,10 +640,8 @@ static int __init acerhdf_register_thermal(void)
 		ret = thermal_zone_device_enable(thz_dev);
 	else
 		ret = thermal_zone_device_disable(thz_dev);
-	if (ret)
-		return ret;
 
-	return 0;
+	return ret;
 }
 
 static void acerhdf_unregister_thermal(void)
@@ -769,24 +719,3 @@ MODULE_ALIAS("dmi:*:*Acer*:pnExtensa*5420*:");
 
 module_init(acerhdf_init);
 module_exit(acerhdf_exit);
-
-static int interval_set_uint(const char *val, const struct kernel_param *kp)
-{
-	int ret;
-
-	ret = param_set_uint(val, kp);
-	if (ret)
-		return ret;
-
-	acerhdf_check_param(thz_dev);
-
-	return 0;
-}
-
-static const struct kernel_param_ops interval_ops = {
-	.set = interval_set_uint,
-	.get = param_get_uint,
-};
-
-module_param_cb(interval, &interval_ops, &interval, 0000);
-MODULE_PARM_DESC(interval, "Polling interval of temperature check");
