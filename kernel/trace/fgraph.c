@@ -290,7 +290,8 @@ static inline unsigned long make_data_type_val(int idx, int size, int offset)
 }
 
 /* ftrace_graph_entry set to this to tell some archs to run function graph */
-static int entry_run(struct ftrace_graph_ent *trace, struct fgraph_ops *ops)
+static int entry_run(struct ftrace_graph_ent *trace, struct fgraph_ops *ops,
+		     struct fgraph_extras *extras)
 {
 	return 0;
 }
@@ -484,7 +485,8 @@ int __weak ftrace_disable_ftrace_graph_caller(void)
 #endif
 
 int ftrace_graph_entry_stub(struct ftrace_graph_ent *trace,
-			    struct fgraph_ops *gops)
+			    struct fgraph_ops *gops,
+			    struct fgraph_extras *extras)
 {
 	return 0;
 }
@@ -616,12 +618,19 @@ int function_graph_enter(unsigned long ret, unsigned long func,
 			 unsigned long frame_pointer, unsigned long *retp)
 {
 	struct ftrace_graph_ent trace;
+	struct fgraph_extras extras;
 	unsigned long bitmap = 0;
 	int offset;
 	int i;
+	int idx = 0;
 
 	trace.func = func;
 	trace.depth = ++current->curr_ret_depth;
+
+	extras.flags = graph_tracer_flags_get(TRACE_GRAPH_PRINT_RETADDR);
+	if (IS_ENABLED(CONFIG_FUNCTION_GRAPH_RETADDR)
+		&& extras.flags & TRACE_GRAPH_PRINT_RETADDR)
+		extras.retaddr = ftrace_graph_ret_addr(current, &idx, ret, retp);
 
 	offset = ftrace_push_return_trace(ret, func, frame_pointer, retp, 0);
 	if (offset < 0)
@@ -631,7 +640,7 @@ int function_graph_enter(unsigned long ret, unsigned long func,
 	if (static_branch_likely(&fgraph_do_direct)) {
 		int save_curr_ret_stack = current->curr_ret_stack;
 
-		if (static_call(fgraph_func)(&trace, fgraph_direct_gops))
+		if (static_call(fgraph_func)(&trace, fgraph_direct_gops, &extras))
 			bitmap |= BIT(fgraph_direct_gops->idx);
 		else
 			/* Clear out any saved storage */
@@ -649,7 +658,7 @@ int function_graph_enter(unsigned long ret, unsigned long func,
 
 			save_curr_ret_stack = current->curr_ret_stack;
 			if (ftrace_ops_test(&gops->ops, func, NULL) &&
-			    gops->entryfunc(&trace, gops))
+			    gops->entryfunc(&trace, gops, &extras))
 				bitmap |= BIT(i);
 			else
 				/* Clear out any saved storage */
@@ -1119,7 +1128,8 @@ void ftrace_graph_exit_task(struct task_struct *t)
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 static int fgraph_pid_func(struct ftrace_graph_ent *trace,
-			   struct fgraph_ops *gops)
+			   struct fgraph_ops *gops,
+			   struct fgraph_extras *extras)
 {
 	struct trace_array *tr = gops->ops.private;
 	int pid;
@@ -1133,7 +1143,7 @@ static int fgraph_pid_func(struct ftrace_graph_ent *trace,
 			return 0;
 	}
 
-	return gops->saved_func(trace, gops);
+	return gops->saved_func(trace, gops, NULL);
 }
 
 void fgraph_update_pid_func(void)
