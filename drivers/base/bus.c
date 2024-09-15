@@ -673,7 +673,7 @@ int bus_add_driver(struct device_driver *drv)
 	klist_add_tail(&priv->knode_bus, &sp->klist_drivers);
 	if (sp->drivers_autoprobe) {
 		error = driver_attach(drv);
-		if (error)
+		if (WARN_ON(error))
 			goto out_del_list;
 	}
 	error = module_add_driver(drv->owner, drv);
