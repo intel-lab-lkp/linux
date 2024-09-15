@@ -6535,6 +6535,13 @@ static int __ext4_remount(struct fs_context *fc, struct super_block *sb)
 	flush_work(&sbi->s_sb_upd_work);
 
 	if ((bool)(fc->sb_flags & SB_RDONLY) != sb_rdonly(sb)) {
+
+		/*
+		 * Make sure we read the updated s_ext4_flags.
+		 * Pairs with smp_wmb() in ext4_handle_error().
+		 */
+		smp_rmb();
+
 		if (ext4_forced_shutdown(sb)) {
 			err = -EROFS;
 			goto restore_opts;
