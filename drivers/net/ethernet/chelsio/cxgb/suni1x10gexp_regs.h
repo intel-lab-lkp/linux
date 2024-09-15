@@ -49,7 +49,7 @@
 /******************************************************************************/
 /** S/UNI-1x10GE-XP REGISTER ADDRESS MAP                                     **/
 /******************************************************************************/
-/* Refer to the Register Bit Masks bellow for the naming of each register and */
+/* Refer to the Register Bit Masks below for the naming of each register and  */
 /* to the S/UNI-1x10GE-XP Data Sheet for the signification of each bit        */
 /******************************************************************************/
 
