@@ -3213,7 +3213,6 @@ static inline void mast_split_data(struct maple_subtree_state *mast,
 	mte_set_pivot(mast->r->node, 0, mast->r->max);
 	mab_mas_cp(mast->bn, split + 1, mast->bn->b_end, mast->r, false);
 	mast->l->offset = mte_parent_slot(mas->node);
-	mast->l->max = mast->bn->pivot[split];
 	mast->r->min = mast->l->max + 1;
 	if (mte_is_leaf(mas->node))
 		return;
