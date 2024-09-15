@@ -818,8 +818,7 @@ svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 		svc_sock_update_bufs(serv);
 		wake_up_process(task);
 
-		/* load_acquire ensures we get value stored in svc_thread_init_status() */
-		wait_var_event(&rqstp->rq_err, smp_load_acquire(&rqstp->rq_err) != -EAGAIN);
+		wait_var_event(&rqstp->rq_err, rqstp->rq_err != -EAGAIN);
 		err = rqstp->rq_err;
 		if (err) {
 			svc_exit_thread(rqstp);

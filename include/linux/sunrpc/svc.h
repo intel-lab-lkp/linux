@@ -326,8 +326,11 @@ static inline bool svc_thread_should_stop(struct svc_rqst *rqstp)
  */
 static inline void svc_thread_init_status(struct svc_rqst *rqstp, int err)
 {
-	/* store_release ensures svc_start_kthreads() sees the error */
-	smp_store_release(&rqstp->rq_err, err);
+	rqstp->rq_err = err;
+	/* memory barrier ensures assignment to error above is visible before
+	 * waitqueue_active() test below completes.
+	 */
+	smb_mb();
 	wake_up_var(&rqstp->rq_err);
 	if (err)
 		kthread_exit(1);
