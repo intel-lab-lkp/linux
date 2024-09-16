@@ -3,6 +3,7 @@
  * Copyright (C) 2012-2013 Samsung Electronics Co., Ltd.
  */
 
+#include <cerrno>
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/buffer_head.h>
@@ -779,8 +780,13 @@ int exfat_create_upcase_table(struct super_block *sb)
 				le32_to_cpu(ep->dentry.upcase.checksum));
 
 			brelse(bh);
-			if (ret && ret != -EIO)
+			if (ret && ret != -EIO) {
+				/* free memory from exfat_load_upcase_table call */
+				if (ret == -EINVAL) {
+					exfat_free_upcase_table(sbi);
+				}
 				goto load_default;
+			}
 
 			/* load successfully */
 			return ret;
