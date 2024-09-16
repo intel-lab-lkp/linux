@@ -68,6 +68,12 @@
 		regulator-boot-on;
 		enable-active-high;
 	};
+
+	/* This represents Vbus coming from the USB Type-C connector */
+	reg_src_ppvar_usbc_vbus: regulator-src-ppvar-usbc-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "src_ppvar_usbc_vbus";
+	};
 };
 
 &ext_24_5m {
@@ -90,6 +96,51 @@
 &hsi2c_12 {
 	status = "okay";
 	/* TODO: add the devices once drivers exist */
+
+	ovp: ovp@35 {
+		compatible = "maxim,max20339";
+		reg = <0x35>;
+		/* TODO: add interrupt once driver for max77759-gpio exists */
+		/* TODO: Update this once PMIC is implemented (PP1800_L2M_ALIVE) */
+		dig-supply = <&reg_placeholder>;
+
+		insw-supply = <&reg_src_ppvar_usbc_vbus>;
+		/* TODO: update this once boost regulator exists */
+		lsw1-supply = <&reg_placeholder>;
+		lsw2-supply = <&reg_placeholder>;
+
+		gpio {
+			gpio-controller;
+			#gpio-cells = <2>;
+			/*
+			 * "Human-readable name [SIGNAL_LABEL]" where the
+			 * latter comes from the schematic
+			 */
+			gpio-line-names = "Vin valid [SRC_PPVAR_USBC_VBUS]";
+		};
+
+		regulators {
+			insw_reg: insw {
+				regulator-name = "PPVAR_VBUS_OVP";
+				regulator-active-discharge = <0>;
+				regulator-min-microvolt = <5850000>;
+				regulator-max-microvolt = <14500000>;
+				regulator-ov-protection-microvolt = <14500000>;
+			};
+			lsw1_reg: lsw1 {
+				regulator-name = "PPVAR_VBUS_OVP_LSW1";
+				regulator-oc-protection-microamp = <1460000>;
+				regulator-ov-protection-microvolt = <1>;
+				shunt-resistor-micro-ohms = <120000000>;
+			};
+			lsw2_reg: lsw2 {
+				regulator-name = "PPVAR_QI_VOUT_TX";
+				regulator-oc-protection-microamp = <1230000>;
+				regulator-ov-protection-microvolt = <1>;
+				shunt-resistor-micro-ohms = <143000000>;
+			};
+		};
+	};
 };
 
 &pinctrl_far_alive {
