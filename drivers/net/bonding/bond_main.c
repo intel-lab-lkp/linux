@@ -5551,27 +5551,30 @@ bond_xdp_get_xmit_slave(struct net_device *bond_dev, struct xdp_buff *xdp)
 static int bond_xdp_xmit(struct net_device *bond_dev,
 			 int n, struct xdp_frame **frames, u32 flags)
 {
-	int nxmit, err = -ENXIO;
+	struct bonding *bond = netdev_priv(bond_dev);
+	int nxmit = 0, err = -ENXIO;
 
 	rcu_read_lock();
 
-	for (nxmit = 0; nxmit < n; nxmit++) {
-		struct xdp_frame *frame = frames[nxmit];
-		struct xdp_frame *frames1[] = {frame};
-		struct net_device *slave_dev;
-		struct xdp_buff xdp;
+	if (bond_xdp_check(bond)) {
+		for (nxmit = 0; nxmit < n; nxmit++) {
+			struct xdp_frame *frame = frames[nxmit];
+			struct xdp_frame *frames1[] = {frame};
+			struct net_device *slave_dev;
+			struct xdp_buff xdp;
 
-		xdp_convert_frame_to_buff(frame, &xdp);
+			xdp_convert_frame_to_buff(frame, &xdp);
 
-		slave_dev = bond_xdp_get_xmit_slave(bond_dev, &xdp);
-		if (!slave_dev) {
-			err = -ENXIO;
-			break;
+			slave_dev = bond_xdp_get_xmit_slave(bond_dev, &xdp);
+			if (!slave_dev) {
+				err = -ENXIO;
+				break;
+			}
+
+			err = slave_dev->netdev_ops->ndo_xdp_xmit(slave_dev, 1, frames1, flags);
+			if (err < 1)
+				break;
 		}
-
-		err = slave_dev->netdev_ops->ndo_xdp_xmit(slave_dev, 1, frames1, flags);
-		if (err < 1)
-			break;
 	}
 
 	rcu_read_unlock();
