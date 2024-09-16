@@ -2390,6 +2390,10 @@ static int iommu_reconfig_notifier(struct notifier_block *nb, unsigned long acti
 
 	switch (action) {
 	case OF_RECONFIG_DETACH_NODE:
+		if (pci && pci->table_group)
+			iommu_pseries_free_group(pci->table_group,
+					np->full_name);
+
 		/*
 		 * Removing the property will invoke the reconfig
 		 * notifier again, which causes dead-lock on the
@@ -2399,10 +2403,6 @@ static int iommu_reconfig_notifier(struct notifier_block *nb, unsigned long acti
 		 */
 		if (remove_dma_window_named(np, false, DIRECT64_PROPNAME, true))
 			remove_dma_window_named(np, false, DMA64_PROPNAME, true);
-
-		if (pci && pci->table_group)
-			iommu_pseries_free_group(pci->table_group,
-					np->full_name);
 
 		spin_lock(&dma_win_list_lock);
 		list_for_each_entry(window, &dma_win_list, list) {
