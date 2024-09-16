@@ -13998,6 +13998,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/regulator/maxim,max20086.yaml
 F:	drivers/regulator/max20086-regulator.c
 
+MAXIM MAX20339 OVERVOLTAGE PROTECTOR WITH LOAD SWITCHES DRIVER
+M:	André Draszik <andre.draszik@linaro.org>
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/regulator/maxim,max20339.yaml
+
 MAXIM MAX30208 TEMPERATURE SENSOR DRIVER
 M:	Rajat Khandelwal <rajat.khandelwal@linux.intel.com>
 L:	linux-iio@vger.kernel.org

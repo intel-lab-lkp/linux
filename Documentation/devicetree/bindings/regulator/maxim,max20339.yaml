@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/maxim,max20339.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Maxim Integrated MAX20339 overvoltage protector with load switches
+
+maintainers:
+  - André Draszik <andre.draszik@linaro.org>
+
+description: |
+  The MAX20339 is an overvoltage protection (OVP) device with integrated load
+  switches and ESD Protection for USB Type-C applications. It protects low
+  voltage systems against voltage faults and surges. It also integrates two
+  load switches with current limiting, configurable by hard- and software.
+
+properties:
+  compatible:
+    enum:
+      - maxim,max20339
+
+  dig-supply:
+    description:
+      Input supply for the device itself (DIG pin, 1.7V to 1.9V). In absence of
+      Vdig, the IN pin will power the device.
+
+  gpio:
+    type: object
+
+    properties:
+      "#gpio-cells":
+        const: 2
+
+      gpio-controller: true
+
+      gpio-line-names:
+        description: Strings describing the names of each gpio line.
+        maxItems: 1
+
+    required:
+      - "#gpio-cells"
+      - gpio-controller
+
+    additionalProperties: false
+
+  insw-supply:
+    description:
+      Input supply for the outputs (IN pin, 3.9V to 28.0V). Also used as supply
+      for the device itself in case dig-supply is not wired up.
+
+  interrupts:
+    maxItems: 1
+
+  lsw1-supply:
+    description: Input supply for the outputs (LSW1IN pin, 4.0V to 10.0V)
+
+  lsw2-supply:
+    description: Input supply for the outputs (LSW2IN pin, 4.0V to 10.0V)
+
+  reg:
+    maxItems: 1
+
+  regulators:
+    type: object
+
+    properties:
+      insw:
+        type: object
+        $ref: regulator.yaml#
+        description: Represents the switch connecting IN to OUT, INSW.
+
+        properties:
+          regulator-ov-protection-microvolt:
+            enum: [5850000, 9700000, 14500000]
+
+        unevaluatedProperties: false
+
+    patternProperties:
+      "^lsw[12]$":
+        type: object
+        $ref: regulator.yaml#
+        description: Represents the load switches LSW1 and LSW2.
+
+        properties:
+          regulator-ov-protection-microvolt:
+            enum: [0, 1]
+
+          shunt-resistor-micro-ohms:
+            description:
+              Value in micro Ohm of the resistor connected between the SETx
+              pin and GND. This value is required to be able to calculate and
+              program the current limiting threshold register.
+
+        required:
+          - shunt-resistor-micro-ohms
+
+        unevaluatedProperties: false
+
+    required:
+      - lsw1
+      - lsw2
+
+    additionalProperties: false
+
+anyOf:
+  - oneOf:
+      - required:
+          - dig-supply
+      - required:
+          - insw-supply
+  - required:
+      - dig-supply
+      - insw-supply
+
+required:
+  - compatible
+  - reg
+  - regulators
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        ovp@35 {
+            compatible = "maxim,max20339";
+            reg = <0x35>;
+
+            dig-supply = <&reg_1v8>;
+            insw-supply = <&reg_5v3>;
+            lsw1-supply = <&reg_5v3>;
+            lsw2-supply = <&reg_5v3>;
+
+            interrupts-extended = <&gpa8 1 IRQ_TYPE_LEVEL_LOW>;
+
+            gpio {
+                gpio-controller;
+                #gpio-cells = <2>;
+            };
+
+            regulators {
+                insw {
+                    regulator-name = "PPVAR_VBUS_OVP";
+                    regulator-active-discharge = <0>;
+                    regulator-min-microvolt = <5850000>;
+                    regulator-max-microvolt = <14500000>;
+                    regulator-ov-protection-microvolt = <14500000>;
+                };
+                lsw1 {
+                    regulator-name = "PPVAR_VBUS_OVP_LSW1";
+                    regulator-oc-protection-microamp = <1460000>;
+                    regulator-ov-protection-microvolt = <1>;
+                    shunt-resistor-micro-ohms = <120000000>;
+                };
+                lsw2 {
+                    regulator-name = "PPVAR_QI_VOUT_TX";
+                    regulator-oc-protection-microamp = <1230000>;
+                    regulator-ov-protection-microvolt = <1>;
+                    shunt-resistor-micro-ohms = <147000000>;
+                };
+            };
+        };
+    };
+...
