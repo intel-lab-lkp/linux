@@ -336,6 +336,7 @@ void aa_label_destroy(struct aa_label *label)
 			rcu_assign_pointer(label->proxy->label, NULL);
 		aa_put_proxy(label->proxy);
 	}
+	percpu_ref_exit(&label->count);
 	aa_free_secid(label->secid);
 
 	label->proxy = (struct aa_proxy *) PROXY_POISON + 1;
@@ -369,9 +370,9 @@ static void label_free_rcu(struct rcu_head *head)
 	label_free_switch(label);
 }
 
-void aa_label_kref(struct kref *kref)
+void aa_label_percpu_ref(struct percpu_ref *ref)
 {
-	struct aa_label *label = container_of(kref, struct aa_label, count);
+	struct aa_label *label = container_of(ref, struct aa_label, count);
 	struct aa_ns *ns = labels_ns(label);
 
 	if (!ns) {
@@ -408,7 +409,11 @@ bool aa_label_init(struct aa_label *label, int size, gfp_t gfp)
 
 	label->size = size;			/* doesn't include null */
 	label->vec[size] = NULL;		/* null terminate */
-	kref_init(&label->count);
+	if (percpu_ref_init(&label->count, aa_label_percpu_ref, PERCPU_REF_INIT_ATOMIC, gfp)) {
+		aa_free_secid(label->secid);
+		return false;
+	}
+
 	RB_CLEAR_NODE(&label->node);
 
 	return true;
