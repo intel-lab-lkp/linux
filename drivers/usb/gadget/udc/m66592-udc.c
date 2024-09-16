@@ -110,7 +110,7 @@ static inline u16 control_reg_get_pid(struct m66592 *m66592, u16 pipenum)
 		offset = get_pipectr_addr(pipenum);
 		pid = m66592_read(m66592, offset) & M66592_PID;
 	} else
-		pr_err("unexpect pipe num (%d)\n", pipenum);
+		pr_err("unexpected pipe num (%d)\n", pipenum);
 
 	return pid;
 }
@@ -126,7 +126,7 @@ static inline void control_reg_set_pid(struct m66592 *m66592, u16 pipenum,
 		offset = get_pipectr_addr(pipenum);
 		m66592_mdfy(m66592, pid, M66592_PID, offset);
 	} else
-		pr_err("unexpect pipe num (%d)\n", pipenum);
+		pr_err("unexpected pipe num (%d)\n", pipenum);
 }
 
 static inline void pipe_start(struct m66592 *m66592, u16 pipenum)
@@ -155,7 +155,7 @@ static inline u16 control_reg_get(struct m66592 *m66592, u16 pipenum)
 		offset = get_pipectr_addr(pipenum);
 		ret = m66592_read(m66592, offset);
 	} else
-		pr_err("unexpect pipe num (%d)\n", pipenum);
+		pr_err("unexpected pipe num (%d)\n", pipenum);
 
 	return ret;
 }
@@ -172,7 +172,7 @@ static inline void control_reg_sqclr(struct m66592 *m66592, u16 pipenum)
 		offset = get_pipectr_addr(pipenum);
 		m66592_bset(m66592, M66592_SQCLR, offset);
 	} else
-		pr_err("unexpect pipe num(%d)\n", pipenum);
+		pr_err("unexpected pipe num(%d)\n", pipenum);
 }
 
 static inline int get_buffer_size(struct m66592 *m66592, u16 pipenum)
@@ -293,7 +293,7 @@ static void pipe_buffer_release(struct m66592 *m66592,
 		if (info->type == M66592_BULK)
 			m66592->bulk--;
 	} else
-		pr_err("ep_release: unexpect pipenum (%d)\n",
+		pr_err("ep_release: unexpected pipenum (%d)\n",
 				info->pipe);
 }
 
@@ -428,7 +428,7 @@ static int alloc_pipe_config(struct m66592_ep *ep,
 		counter = &m66592->isochronous;
 		break;
 	default:
-		pr_err("unexpect xfer type\n");
+		pr_err("unexpected xfer type\n");
 		return -EINVAL;
 	}
 	ep->type = info.type;
@@ -579,7 +579,7 @@ static void start_ep0(struct m66592_ep *ep, struct m66592_request *req)
 		control_end(ep->m66592, 0);
 		break;
 	default:
-		pr_err("start_ep0: unexpect ctsq(%x)\n", ctsq);
+		pr_err("%s: unexpected ctsq(%x)\n", __func__, ctsq);
 		break;
 	}
 }
@@ -599,7 +599,7 @@ static void init_controller(struct m66592 *m66592)
 		m66592_bclr(m66592, M66592_DPRPU, M66592_SYSCFG);
 		m66592_bset(m66592, M66592_USBE, M66592_SYSCFG);
 
-		/* This is a workaound for SH7722 2nd cut */
+		/* This is a workaround for SH7722 2nd cut */
 		m66592_bset(m66592, 0x8000, M66592_DVSTCTR);
 		m66592_bset(m66592, 0x1000, M66592_TESTMODE);
 		m66592_bclr(m66592, 0x8000, M66592_DVSTCTR);
@@ -1186,7 +1186,7 @@ __acquires(m66592->lock)
 		control_end(m66592, 0);
 		break;
 	default:
-		pr_err("ctrl_stage: unexpect ctsq(%x)\n", ctsq);
+		pr_err("ctrl_stage: unexpected ctsq(%x)\n", ctsq);
 		break;
 	}
 }
