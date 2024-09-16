@@ -259,6 +259,7 @@ ifdef INSTALL_PATH
 	@ret=1;	\
 	for TARGET in $(TARGETS) $(INSTALL_DEP_TARGETS); do \
 		BUILD_TARGET=$$BUILD/$$TARGET;	\
+		mkdir -p $$BUILD_TARGET;	\
 		$(MAKE) OUTPUT=$$BUILD_TARGET -C $$TARGET install \
 				INSTALL_PATH=$(INSTALL_PATH)/$$TARGET \
 				SRC_PATH=$(shell readlink -e $$(pwd)) \
