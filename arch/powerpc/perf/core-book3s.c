@@ -895,7 +895,7 @@ static int any_pmc_overflown(struct cpu_hw_events *cpuhw)
 /* Called from sysrq_handle_showregs() */
 void perf_event_print_debug(void)
 {
-	unsigned long sdar, sier, flags;
+	unsigned long sdar, sier;
 	u32 pmcs[MAX_HWEVENTS];
 	int i;
 
@@ -907,7 +907,7 @@ void perf_event_print_debug(void)
 	if (!ppmu->n_counter)
 		return;
 
-	local_irq_save(flags);
+	guard(irqsave)();
 
 	pr_info("CPU: %d PMU registers, ppmu = %s n_counters = %d",
 		 smp_processor_id(), ppmu->name, ppmu->n_counter);
@@ -949,8 +949,6 @@ void perf_event_print_debug(void)
 #endif
 	pr_info("SIAR:  %016lx SDAR:  %016lx SIER:  %016lx\n",
 		mfspr(SPRN_SIAR), sdar, sier);
-
-	local_irq_restore(flags);
 }
 
 /*
@@ -1298,11 +1296,12 @@ static void write_mmcr0(struct cpu_hw_events *cpuhw, unsigned long mmcr0)
 static void power_pmu_disable(struct pmu *pmu)
 {
 	struct cpu_hw_events *cpuhw;
-	unsigned long flags, mmcr0, val, mmcra;
+	unsigned long mmcr0, val, mmcra;
 
 	if (!ppmu)
 		return;
-	local_irq_save(flags);
+
+	guard(irqsave)();
 	cpuhw = this_cpu_ptr(&cpu_hw_events);
 
 	if (!cpuhw->disabled) {
@@ -1398,8 +1397,6 @@ static void power_pmu_disable(struct pmu *pmu)
 		}
 #endif
 	}
-
-	local_irq_restore(flags);
 }
 
 /*
@@ -1411,7 +1408,6 @@ static void power_pmu_enable(struct pmu *pmu)
 {
 	struct perf_event *event;
 	struct cpu_hw_events *cpuhw;
-	unsigned long flags;
 	long i;
 	unsigned long val, mmcr0;
 	s64 left;
@@ -1422,15 +1418,16 @@ static void power_pmu_enable(struct pmu *pmu)
 
 	if (!ppmu)
 		return;
-	local_irq_save(flags);
+
+	guard(irqsave)();
 
 	cpuhw = this_cpu_ptr(&cpu_hw_events);
 	if (!cpuhw->disabled)
-		goto out;
+		return;
 
 	if (cpuhw->n_events == 0) {
 		ppc_set_pmu_inuse(0);
-		goto out;
+		return;
 	}
 
 	cpuhw->disabled = 0;
@@ -1474,7 +1471,7 @@ static void power_pmu_enable(struct pmu *pmu)
 			       &cpuhw->mmcr, cpuhw->event, ppmu->flags)) {
 		/* shouldn't ever get here */
 		printk(KERN_ERR "oops compute_mmcr failed\n");
-		goto out;
+		return;
 	}
 
 	if (!(ppmu->flags & PPMU_ARCH_207S)) {
@@ -1577,10 +1574,6 @@ static void power_pmu_enable(struct pmu *pmu)
 		mb();
 		mtspr(SPRN_MMCRA, cpuhw->mmcr.mmcra);
 	}
-
- out:
-
-	local_irq_restore(flags);
 }
 
 static int collect_events(struct perf_event *group, int max_count,
@@ -1619,11 +1612,10 @@ static int collect_events(struct perf_event *group, int max_count,
 static int power_pmu_add(struct perf_event *event, int ef_flags)
 {
 	struct cpu_hw_events *cpuhw;
-	unsigned long flags;
 	int n0;
 	int ret = -EAGAIN;
 
-	local_irq_save(flags);
+	guard(irqsave)();
 	perf_pmu_disable(event->pmu);
 
 	/*
@@ -1685,7 +1677,6 @@ nocheck:
 	}
 
 	perf_pmu_enable(event->pmu);
-	local_irq_restore(flags);
 	return ret;
 }
 
@@ -1696,9 +1687,8 @@ static void power_pmu_del(struct perf_event *event, int ef_flags)
 {
 	struct cpu_hw_events *cpuhw;
 	long i;
-	unsigned long flags;
 
-	local_irq_save(flags);
+	guard(irqsave)();
 	perf_pmu_disable(event->pmu);
 
 	power_pmu_read(event);
@@ -1740,7 +1730,6 @@ static void power_pmu_del(struct perf_event *event, int ef_flags)
 		power_pmu_bhrb_disable(event);
 
 	perf_pmu_enable(event->pmu);
-	local_irq_restore(flags);
 }
 
 /*
@@ -1750,7 +1739,6 @@ static void power_pmu_del(struct perf_event *event, int ef_flags)
 
 static void power_pmu_start(struct perf_event *event, int ef_flags)
 {
-	unsigned long flags;
 	s64 left;
 	unsigned long val;
 
@@ -1763,7 +1751,7 @@ static void power_pmu_start(struct perf_event *event, int ef_flags)
 	if (ef_flags & PERF_EF_RELOAD)
 		WARN_ON_ONCE(!(event->hw.state & PERF_HES_UPTODATE));
 
-	local_irq_save(flags);
+	guard(irqsave)();
 	perf_pmu_disable(event->pmu);
 
 	event->hw.state = 0;
@@ -1777,20 +1765,17 @@ static void power_pmu_start(struct perf_event *event, int ef_flags)
 
 	perf_event_update_userpage(event);
 	perf_pmu_enable(event->pmu);
-	local_irq_restore(flags);
 }
 
 static void power_pmu_stop(struct perf_event *event, int ef_flags)
 {
-	unsigned long flags;
-
 	if (!event->hw.idx || !event->hw.sample_period)
 		return;
 
 	if (event->hw.state & PERF_HES_STOPPED)
 		return;
 
-	local_irq_save(flags);
+	guard(irqsave)();
 	perf_pmu_disable(event->pmu);
 
 	power_pmu_read(event);
@@ -1799,7 +1784,6 @@ static void power_pmu_stop(struct perf_event *event, int ef_flags)
 
 	perf_event_update_userpage(event);
 	perf_pmu_enable(event->pmu);
-	local_irq_restore(flags);
 }
 
 /*
@@ -1996,7 +1980,7 @@ static bool is_event_blacklisted(u64 ev)
 static int power_pmu_event_init(struct perf_event *event)
 {
 	u64 ev;
-	unsigned long flags, irq_flags;
+	unsigned long flags;
 	struct perf_event *ctrs[MAX_HWEVENTS];
 	u64 events[MAX_HWEVENTS];
 	unsigned int cflags[MAX_HWEVENTS];
@@ -2115,43 +2099,41 @@ static int power_pmu_event_init(struct perf_event *event)
 	if (check_excludes(ctrs, cflags, n, 1))
 		return -EINVAL;
 
-	local_irq_save(irq_flags);
-	cpuhw = this_cpu_ptr(&cpu_hw_events);
+	{
+		guard(irqsave)();
+		cpuhw = this_cpu_ptr(&cpu_hw_events);
 
-	err = power_check_constraints(cpuhw, events, cflags, n + 1, ctrs);
+		err = power_check_constraints(cpuhw, events, cflags, n + 1, ctrs);
 
-	if (has_branch_stack(event)) {
-		u64 bhrb_filter = -1;
+		if (has_branch_stack(event)) {
+			u64 bhrb_filter = -1;
 
-		/*
-		 * Currently no PMU supports having multiple branch filters
-		 * at the same time. Branch filters are set via MMCRA IFM[32:33]
-		 * bits for Power8 and above. Return EOPNOTSUPP when multiple
-		 * branch filters are requested in the event attr.
-		 *
-		 * When opening event via perf_event_open(), branch_sample_type
-		 * gets adjusted in perf_copy_attr(). Kernel will automatically
-		 * adjust the branch_sample_type based on the event modifier
-		 * settings to include PERF_SAMPLE_BRANCH_PLM_ALL. Hence drop
-		 * the check for PERF_SAMPLE_BRANCH_PLM_ALL.
-		 */
-		if (hweight64(event->attr.branch_sample_type & ~PERF_SAMPLE_BRANCH_PLM_ALL) > 1) {
-			local_irq_restore(irq_flags);
-			return -EOPNOTSUPP;
+			/*
+			 * Currently no PMU supports having multiple branch filters
+			 * at the same time. Branch filters are set via MMCRA IFM[32:33]
+			 * bits for Power8 and above. Return EOPNOTSUPP when multiple
+			 * branch filters are requested in the event attr.
+			 *
+			 * When opening event via perf_event_open(), branch_sample_type
+			 * gets adjusted in perf_copy_attr(). Kernel will automatically
+			 * adjust the branch_sample_type based on the event modifier
+			 * settings to include PERF_SAMPLE_BRANCH_PLM_ALL. Hence drop
+			 * the check for PERF_SAMPLE_BRANCH_PLM_ALL.
+			 */
+			if (hweight64(event->attr.branch_sample_type & ~PERF_SAMPLE_BRANCH_PLM_ALL)
+			    > 1)
+				return -EOPNOTSUPP;
+
+			if (ppmu->bhrb_filter_map)
+				bhrb_filter = ppmu->bhrb_filter_map(event->attr.branch_sample_type);
+
+			if (bhrb_filter == -1)
+				return -EOPNOTSUPP;
+
+			cpuhw->bhrb_filter = bhrb_filter;
 		}
-
-		if (ppmu->bhrb_filter_map)
-			bhrb_filter = ppmu->bhrb_filter_map(
-					event->attr.branch_sample_type);
-
-		if (bhrb_filter == -1) {
-			local_irq_restore(irq_flags);
-			return -EOPNOTSUPP;
-		}
-		cpuhw->bhrb_filter = bhrb_filter;
 	}
 
-	local_irq_restore(irq_flags);
 	if (err)
 		return -EINVAL;
 
