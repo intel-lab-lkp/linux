@@ -1024,6 +1024,12 @@ struct drm_crtc_queue_sequence {
 	__u64 user_data;	/* user data passed to event */
 };
 
+struct drm_set_name {
+	__u64 name_len;
+	__u64 name;
+};
+
+
 #if defined(__cplusplus)
 }
 #endif
@@ -1287,6 +1293,14 @@ extern "C" {
  * framebuffers attached to a plane can be read back by the next DRM master.
  */
 #define DRM_IOCTL_MODE_CLOSEFB		DRM_IOWR(0xD0, struct drm_mode_closefb)
+
+/**
+ * DRM_IOCTL_SET_NAME - Attach a name to a drm_file
+ *
+ * This ioctl is similar to DMA_BUF_SET_NAME - it allows for easier tracking
+ * and debugging.
+ */
+#define DRM_IOCTL_SET_NAME		DRM_IOWR(0xD1, struct drm_set_name)
 
 /*
  * Device specific ioctls should only be in their respective headers

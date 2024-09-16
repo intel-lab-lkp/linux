@@ -388,6 +388,15 @@ struct drm_file {
 	 * Per-file buffer caches used by the PRIME buffer sharing code.
 	 */
 	struct drm_prime_file_private prime;
+
+	/**
+	 * @name:
+	 *
+	 * Userspace-provided name; useful for accounting and debugging.
+	 */
+	const char *name;
+	/** @name_lock: Protects @name. */
+	struct mutex name_lock;
 };
 
 /**
