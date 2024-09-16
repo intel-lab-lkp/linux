@@ -9669,6 +9669,7 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/chrome-platform/linux.git
 F:	drivers/firmware/google/
 
 GOOGLE TENSOR SoC SUPPORT
+M:	André Draszik <andre.draszik@linaro.org>
 M:	Peter Griffin <peter.griffin@linaro.org>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 L:	linux-samsung-soc@vger.kernel.org
