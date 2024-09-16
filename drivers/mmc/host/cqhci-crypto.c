@@ -16,8 +16,20 @@ static const struct cqhci_crypto_alg_entry {
 	enum cqhci_crypto_alg alg;
 	enum cqhci_crypto_key_size key_size;
 } cqhci_crypto_algs[BLK_ENCRYPTION_MODE_MAX] = {
+	[BLK_ENCRYPTION_MODE_AES_128_XTS] = {
+		.alg = CQHCI_CRYPTO_ALG_AES_XTS,
+		.key_size = CQHCI_CRYPTO_KEY_SIZE_128,
+	},
 	[BLK_ENCRYPTION_MODE_AES_256_XTS] = {
 		.alg = CQHCI_CRYPTO_ALG_AES_XTS,
+		.key_size = CQHCI_CRYPTO_KEY_SIZE_256,
+	},
+	[BLK_ENCRYPTION_MODE_AES_128_CBC] = {
+		.alg = CQHCI_CRYPTO_ALG_BITLOCKER_AES_CBC,
+		.key_size = CQHCI_CRYPTO_KEY_SIZE_128,
+	},
+	[BLK_ENCRYPTION_MODE_AES_256_CBC] = {
+		.alg = CQHCI_CRYPTO_ALG_BITLOCKER_AES_CBC,
 		.key_size = CQHCI_CRYPTO_KEY_SIZE_256,
 	},
 };
