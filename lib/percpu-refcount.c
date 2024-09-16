@@ -11,6 +11,8 @@
 #include <linux/mm.h>
 #include <linux/percpu-refcount.h>
 
+#include "percpu-refcount.h"
+
 /*
  * Initially, a percpu refcount is just a set of percpu counters. Initially, we
  * don't try to detect the ref hitting 0 - which means that get/put can just
@@ -677,6 +679,7 @@ static void percpu_ref_release_work_fn(struct work_struct *work)
 	struct percpu_ref *ref;
 	int count = 0;
 	bool held;
+	struct llist_node *last_node = READ_ONCE(last_percpu_ref_node);
 
 	first = READ_ONCE(percpu_ref_manage_head.first);
 	if (!first)
@@ -711,7 +714,7 @@ static void percpu_ref_release_work_fn(struct work_struct *work)
 	 * +----------+  +------+  +------+    +------+    +------+
 	 *
 	 */
-	if (last_percpu_ref_node == NULL || last_percpu_ref_node->next == NULL) {
+	if (last_node == NULL || last_node->next == NULL) {
 retry_sentinel_get:
 		sen_node = percpu_ref_get_sen_node();
 		/*
@@ -741,11 +744,10 @@ retry_sentinel_get:
 			head = prev->next;
 		}
 	} else {
-		prev = last_percpu_ref_node;
+		prev = last_node;
 		head = prev->next;
 	}
 
-	last_percpu_ref_node = NULL;
 	llist_for_each_safe(pos, next, head) {
 		/* Free sentinel node which is present in the list */
 		if (percpu_ref_is_sen_node(pos)) {
@@ -773,17 +775,52 @@ retry_sentinel_get:
 			continue;
 		__percpu_ref_switch_to_percpu_checked(ref, false);
 		count++;
-		if (count == max_scan_count) {
-			last_percpu_ref_node = pos;
-			break;
+		if (count == READ_ONCE(max_scan_count)) {
+			WRITE_ONCE(last_percpu_ref_node, pos);
+			goto queue_release_work;
 		}
 		prev = pos;
 	}
 
+	WRITE_ONCE(last_percpu_ref_node, NULL);
 queue_release_work:
 	queue_delayed_work(percpu_ref_release_wq, &percpu_ref_release_work,
 			   scan_interval);
 }
+
+bool percpu_ref_test_is_percpu(struct percpu_ref *ref)
+{
+	unsigned long __percpu *percpu_count;
+
+	return __ref_is_percpu(ref, &percpu_count);
+}
+EXPORT_SYMBOL_GPL(percpu_ref_test_is_percpu);
+
+void percpu_ref_test_flush_release_work(void)
+{
+	int max_flush = READ_ONCE(max_scan_count);
+	int max_count = 1000;
+
+	/* Complete any executing release work */
+	flush_delayed_work(&percpu_ref_release_work);
+	/* Scan till the end of the llist */
+	WRITE_ONCE(max_scan_count, INT_MAX);
+	/* max scan count update visible to release work */
+	smp_mb();
+	flush_delayed_work(&percpu_ref_release_work);
+	/* max scan count update visible to release work */
+	smp_mb();
+	WRITE_ONCE(max_scan_count, 1);
+	/* max scan count update visible to work */
+	smp_mb();
+	flush_delayed_work(&percpu_ref_release_work);
+	while (READ_ONCE(last_percpu_ref_node) != NULL && max_count--)
+		flush_delayed_work(&percpu_ref_release_work);
+	/* max scan count update visible to work */
+	smp_mb();
+	WRITE_ONCE(max_scan_count, max_flush);
+}
+EXPORT_SYMBOL_GPL(percpu_ref_test_flush_release_work);
 
 static __init int percpu_ref_setup(void)
 {

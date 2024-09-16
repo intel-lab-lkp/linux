@@ -4677,6 +4677,63 @@
 
 			Default: 5000 ms
 
+	percpu_refcount_torture.busted_early_ref_release= [KNL]
+			Enable testing buggy release of percpu ref while
+			there are active users. Used for testing failure
+			scenarios in the test.
+
+			Default: 0 (disabled)
+
+	percpu_refcount_torture.busted_late_ref_release= [KNL]
+			Enable testing buggy non-zero reference count after
+			all ref users have dropped their reference. Used for
+			testing failure scenarios in the test.
+
+			Default: 0 (disabled)
+
+	percpu_refcount_torture.delay_us= [KNL]
+			Delay (in us) between reference increment and decrement
+			operations of ref users.
+
+			Default: 10
+
+	percpu_refcount_torture.niterations= [KNL]
+			Number of iterations of ref increment and decrement by
+			ref users.
+
+			Default: 100
+
+	percpu_refcount_torture.nrefs= [KNL]
+			Number of percpu ref instances.
+
+			Default: 2
+
+	percpu_refcount_torture.nusers= [KNL]
+			Number of percpu ref user threads which increment and
+			decrement a percpu ref.
+
+			Default: 2
+
+	percpu_refcount_torture.onoff_holdoff= [KNL]
+			Set time (s) after boot for CPU-hotplug testing.
+
+			Default: 0
+
+	percpu_refcount_torture.onoff_interval= [KNL]
+			Set time (jiffies) between CPU-hotplug operations,
+			or zero to disable CPU-hotplug testing.
+
+	percpu_refcount_torture.stutter= [KNL]
+			Set wait time (jiffies) between two iterations of
+			percpu ref operations.
+
+			Default: 0
+
+	percpu_refcount_torture.verbose= [KNL]
+			Enable additional printk() statements.
+
+			Default: 0 (Disabled)
+
 	pirq=		[SMP,APIC] Manual mp-table setup
 			See Documentation/arch/x86/i386/IO-APIC.rst.
 
