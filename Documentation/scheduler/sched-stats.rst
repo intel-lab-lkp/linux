@@ -6,6 +6,8 @@ Version 16 of schedstats changed the order of definitions within
 'enum cpu_idle_type', which changed the order of [CPU_MAX_IDLE_TYPES]
 columns in show_schedstat(). In particular the position of CPU_IDLE
 and __CPU_NOT_IDLE changed places. The size of the array is unchanged.
+With CONFIG_SCHED_DEBUG enabled, the domain field can also print the
+name of the corresponding sched domain.
 
 Version 15 of schedstats dropped counters for some sched_yield:
 yld_exp_empty, yld_act_empty and yld_both_empty. Otherwise, it is
@@ -71,9 +73,11 @@ Domain statistics
 -----------------
 One of these is produced per domain for each cpu described. (Note that if
 CONFIG_SMP is not defined, *no* domains are utilized and these lines
-will not appear in the output.)
+will not appear in the output. [:<name>] is an optional extension to the domain
+field that prints the name of the corresponding sched domain. It can appear in
+schedstat version 16 and above, and requires CONFIG_SCHED_DEBUG.)
 
-domain<N> <cpumask> 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36
+domain<N>[:<name>] <cpumask> 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36
 
 The first field is a bit mask indicating what cpus this domain operates over.
 

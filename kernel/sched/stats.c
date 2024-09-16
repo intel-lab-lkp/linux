@@ -138,7 +138,11 @@ static int show_schedstat(struct seq_file *seq, void *v)
 		for_each_domain(cpu, sd) {
 			enum cpu_idle_type itype;
 
-			seq_printf(seq, "domain%d %*pb", dcount++,
+			seq_printf(seq, "domain%d", dcount++);
+#ifdef CONFIG_SCHED_DEBUG
+			seq_printf(seq, ":%s", sd->name);
+#endif
+			seq_printf(seq, " %*pb",
 				   cpumask_pr_args(sched_domain_span(sd)));
 			for (itype = 0; itype < CPU_MAX_IDLE_TYPES; itype++) {
 				seq_printf(seq, " %u %u %u %u %u %u %u %u",
