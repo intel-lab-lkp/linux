@@ -723,6 +723,7 @@ EXPORT_SYMBOL_GPL(percpu_ref_test_is_percpu);
 void percpu_ref_test_flush_release_work(void)
 {
 	int max_flush = READ_ONCE(max_scan_count);
+	struct list_head *next;
 	int max_count = 1000;
 
 	/* Complete any executing release work */
@@ -738,8 +739,17 @@ void percpu_ref_test_flush_release_work(void)
 	/* max scan count update visible to work */
 	smp_mb();
 	flush_delayed_work(&percpu_ref_release_work);
-	while (READ_ONCE(last_percpu_ref_node) != NULL && max_count--)
+
+	while (true) {
+		if (!max_count--)
+			break;
+		spin_lock(&percpu_ref_manage_lock);
+		next = next_percpu_ref_node;
+		spin_unlock(&percpu_ref_manage_lock);
+		if (list_is_head(next, &percpu_ref_manage_head))
+			break;
 		flush_delayed_work(&percpu_ref_release_work);
+	}
 	/* max scan count update visible to work */
 	smp_mb();
 	WRITE_ONCE(max_scan_count, max_flush);

@@ -3,6 +3,7 @@
 #include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/mutex.h>
 #include <linux/percpu-refcount.h>
 #include <linux/torture.h>
 
@@ -59,6 +60,7 @@ static struct task_struct **busted_late_release_tasks;
 
 static struct percpu_ref *refs;
 static long *num_per_ref_users;
+static struct mutex *ref_switch_mutexes;
 
 static atomic_t running;
 static atomic_t *ref_running;
@@ -97,19 +99,36 @@ static int percpu_ref_manager_thread(void *data)
 static int percpu_ref_test_thread(void *data)
 {
 	struct percpu_ref *ref = (struct percpu_ref *)data;
+	DEFINE_TORTURE_RANDOM(rand);
+	int ref_idx = ref - refs;
+	int do_switch;
 	int i = 0;
 
 	percpu_ref_get(ref);
 
 	do {
 		percpu_ref_get(ref);
+		/* Perform checks once per 256 iterations */
+		do_switch = (torture_random(&rand) & 0xff);
 		udelay(delay_us);
+		if (do_switch) {
+			mutex_lock(&ref_switch_mutexes[ref_idx]);
+			percpu_ref_switch_to_unmanaged(ref);
+			udelay(delay_us);
+			percpu_ref_switch_to_atomic_sync(ref);
+			if (do_switch & 1)
+				percpu_ref_switch_to_percpu(ref);
+			udelay(delay_us);
+			percpu_ref_switch_to_managed(ref);
+			mutex_unlock(&ref_switch_mutexes[ref_idx]);
+			udelay(delay_us);
+		}
 		percpu_ref_put(ref);
 		stutter_wait("percpu_ref_test_thread");
 		i++;
 	} while (i < niterations);
 
-	atomic_dec(&ref_running[ref - refs]);
+	atomic_dec(&ref_running[ref_idx]);
 	/* Order ref release with ref_running[ref_idx] == 0 */
 	smp_mb();
 	percpu_ref_put(ref);
@@ -213,6 +232,13 @@ static void percpu_ref_test_cleanup(void)
 	kfree(num_per_ref_users);
 	num_per_ref_users = NULL;
 
+	if (ref_switch_mutexes) {
+		for (i = 0; i < nrefs; i++)
+			mutex_destroy(&ref_switch_mutexes[i]);
+		kfree(ref_switch_mutexes);
+		ref_switch_mutexes = NULL;
+	}
+
 	if (refs) {
 		for (i = 0; i < nrefs; i++)
 			percpu_ref_exit(&refs[i]);
@@ -251,7 +277,8 @@ static int __init percpu_ref_torture_init(void)
 		goto init_err;
 	}
 	for (i = 0; i < nrefs; i++) {
-		flags = torture_random(trsp) & 1 ? PERCPU_REF_INIT_ATOMIC : PERCPU_REF_REL_MANAGED;
+		flags = (torture_random(trsp) & 1) ? PERCPU_REF_INIT_ATOMIC :
+							PERCPU_REF_REL_MANAGED;
 		err = percpu_ref_init(&refs[i], percpu_ref_test_release,
 				      flags, GFP_KERNEL);
 		if (err)
@@ -268,6 +295,16 @@ static int __init percpu_ref_torture_init(void)
 	}
 	for (i = 0; i < nrefs; i++)
 		num_per_ref_users[i] = 0;
+
+	ref_switch_mutexes = kcalloc(nrefs, sizeof(ref_switch_mutexes[0]), GFP_KERNEL);
+	if (!ref_switch_mutexes) {
+		TOROUT_ERRSTRING("out of memory");
+		err = -ENOMEM;
+		goto init_err;
+	}
+
+	for (i = 0; i < nrefs; i++)
+		mutex_init(&ref_switch_mutexes[i]);
 
 	ref_user_tasks = kcalloc(nusers, sizeof(ref_user_tasks[0]), GFP_KERNEL);
 	if (!ref_user_tasks) {
