@@ -994,6 +994,10 @@ static int amdgpu_debugfs_gem_info_show(struct seq_file *m, void *unused)
 	if (r)
 		return r;
 
+	r = mutex_lock_interruptible(&file->name_lock);
+	if (r)
+		goto out;
+
 	list_for_each_entry(file, &dev->filelist, lhead) {
 		struct task_struct *task;
 		struct drm_gem_object *gobj;
@@ -1009,8 +1013,13 @@ static int amdgpu_debugfs_gem_info_show(struct seq_file *m, void *unused)
 		rcu_read_lock();
 		pid = rcu_dereference(file->pid);
 		task = pid_task(pid, PIDTYPE_TGID);
-		seq_printf(m, "pid %8d command %s:\n", pid_nr(pid),
-			   task ? task->comm : "<unknown>");
+		seq_printf(m, "pid %8d command %s", pid_nr(pid),
+				   task ? task->comm : "<unknown>");
+		if (file->name) {
+			seq_putc(m, '/');
+			seq_puts(m, file->name);
+		}
+		seq_puts(m, ":\n");
 		rcu_read_unlock();
 
 		spin_lock(&file->table_lock);
@@ -1021,7 +1030,8 @@ static int amdgpu_debugfs_gem_info_show(struct seq_file *m, void *unused)
 		}
 		spin_unlock(&file->table_lock);
 	}
-
+	mutex_unlock(&file->name_lock);
+out:
 	mutex_unlock(&dev->filelist_mutex);
 	return 0;
 }
