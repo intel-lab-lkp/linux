@@ -1288,8 +1288,10 @@ int tpm2_sessions_init(struct tpm_chip *chip)
 	int rc;
 
 	rc = tpm2_create_null_primary(chip);
-	if (rc)
+	if (rc) {
 		dev_err(&chip->dev, "TPM: security failed (NULL seed derivation): %d\n", rc);
+		return rc;
+	}
 
 	chip->auth = kmalloc(sizeof(*chip->auth), GFP_KERNEL);
 	if (!chip->auth)
