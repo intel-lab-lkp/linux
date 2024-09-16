@@ -34,6 +34,8 @@
 
 #include <linux/pm_qos.h>
 
+#include <linux/intel_dg_spi_aux.h>
+
 #include <drm/ttm/ttm_device.h>
 
 #include "display/intel_display_limits.h"
@@ -314,6 +316,8 @@ struct drm_i915_private {
 	struct intel_runtime_pm runtime_pm;
 
 	struct i915_perf perf;
+
+	struct intel_dg_spi_dev spi;
 
 	struct i915_hwmon *hwmon;
 
