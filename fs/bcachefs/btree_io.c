@@ -121,7 +121,7 @@ static void *btree_bounce_alloc(struct bch_fs *c, size_t size,
 	BUG_ON(size > c->opts.btree_node_size);
 
 	*used_mempool = false;
-	p = kvmalloc(size, __GFP_NOWARN|GFP_NOWAIT);
+	p = kvmalloc(size, __GFP_ZERO|__GFP_NOWARN|GFP_NOWAIT);
 	if (!p) {
 		*used_mempool = true;
 		p = mempool_alloc(&c->btree_bounce_pool, GFP_NOFS);
