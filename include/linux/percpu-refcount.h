@@ -68,6 +68,11 @@ enum {
 	__PERCPU_REF_FLAG_BITS	= 2,
 };
 
+/* Auxiliary flags */
+enum  {
+	__PERCPU_REL_MANAGED	= 1LU << 0,	/* operating in managed mode */
+};
+
 /* @flags for percpu_ref_init() */
 enum {
 	/*
@@ -90,6 +95,10 @@ enum {
 	 * Allow switching from atomic mode to percpu mode.
 	 */
 	PERCPU_REF_ALLOW_REINIT	= 1 << 2,
+	/*
+	 * Manage release of the percpu ref.
+	 */
+	PERCPU_REF_REL_MANAGED	= 1 << 3,
 };
 
 struct percpu_ref_data {
@@ -100,6 +109,9 @@ struct percpu_ref_data {
 	bool			allow_reinit:1;
 	struct rcu_head		rcu;
 	struct percpu_ref	*ref;
+	unsigned int		aux_flags;
+	struct llist_node	node;
+
 };
 
 struct percpu_ref {
@@ -126,6 +138,7 @@ void percpu_ref_switch_to_atomic(struct percpu_ref *ref,
 				 percpu_ref_func_t *confirm_switch);
 void percpu_ref_switch_to_atomic_sync(struct percpu_ref *ref);
 void percpu_ref_switch_to_percpu(struct percpu_ref *ref);
+int percpu_ref_switch_to_managed(struct percpu_ref *ref);
 void percpu_ref_kill_and_confirm(struct percpu_ref *ref,
 				 percpu_ref_func_t *confirm_kill);
 void percpu_ref_resurrect(struct percpu_ref *ref);

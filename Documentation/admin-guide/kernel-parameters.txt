@@ -4665,6 +4665,18 @@
 			allocator.  This parameter is primarily	for debugging
 			and performance comparison.
 
+	percpu_refcount.max_scan_count= [KNL]
+			Specifies the maximum number of percpu ref nodes which
+			are processed in one run of percpu ref manager thread.
+
+			Default: 100
+
+	percpu_refcount.scan_interval= [KNL]
+			Specifies the duration (ms) between two runs of manager
+			thread.
+
+			Default: 5000 ms
+
 	pirq=		[SMP,APIC] Manual mp-table setup
 			See Documentation/arch/x86/i386/IO-APIC.rst.
 
