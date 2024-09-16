@@ -2525,7 +2525,18 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 {
 	struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
-	int ret;
+	struct intel_connector *connector;
+	struct intel_digital_connector_state *conn_state;
+	int ret, i;
+
+	for_each_new_intel_connector_in_state(state, connector, conn_state, i) {
+		struct intel_encoder *encoder = connector->encoder;
+
+		if (conn_state->base.crtc != &crtc->base)
+			continue;
+
+		intel_crtc_adjust_vblank_delay(crtc_state, encoder);
+	}
 
 	ret = intel_dpll_crtc_compute_clock(state, crtc);
 	if (ret)
@@ -3934,6 +3945,26 @@ bool intel_crtc_get_pipe_config(struct intel_crtc_state *crtc_state)
 	intel_crtc_readout_derived_state(crtc_state);
 
 	return true;
+}
+
+void intel_crtc_adjust_vblank_delay(struct intel_crtc_state *crtc_state,
+				    struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+
+	/*
+	 * wa_14015401596 for display versions 13, 14.
+	 * Program Set Context Latency in TRANS_SET_CONTEXT_LATENCY register
+	 * to at least a value of 1 when PSR1/PSR2/Panel Replay is enabled with VRR.
+	 * Value for TRANS_SET_CONTEXT_LATENCY is calculated by substracting
+	 * crtc_vdisplay from crtc_vblank_start, so incrementing crtc_vblank_start
+	 * by 1 if both are equal.
+	 */
+	if (crtc_state->vrr.enable && crtc_state->has_psr &&
+	    adjusted_mode->crtc_vblank_start == adjusted_mode->crtc_vdisplay &&
+	    IS_DISPLAY_VER(display, 13, 14))
+		adjusted_mode->crtc_vblank_start += 1;
 }
 
 int intel_dotclock_calculate(int link_freq,
