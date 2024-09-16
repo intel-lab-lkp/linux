@@ -85,6 +85,91 @@ static void set_dte_entry(struct amd_iommu *iommu,
  *
  ****************************************************************************/
 
+static void write_upper(struct dev_table_entry *ptr, struct dev_table_entry *new)
+{
+	struct dev_table_entry old = {};
+
+	do {
+		old.data128[1] = ptr->data128[1];
+		new->data[2] &= ~DTE_INTR_MASK;
+		new->data[2] |= (old.data[2] & DTE_INTR_MASK);
+	} while (!try_cmpxchg128(&ptr->data128[1], &old.data128[1], new->data128[1]));
+}
+
+static void write_lower(struct dev_table_entry *ptr, struct dev_table_entry *new)
+{
+	struct dev_table_entry old = {};
+
+	do {
+		old.data128[0] = ptr->data128[0];
+	} while (!try_cmpxchg128(&ptr->data128[0], &old.data128[0], new->data128[0]));
+}
+
+/*
+ * Note:
+ * IOMMU reads the entire Device Table entry in a single 256-bit transaction
+ * but the driver is programming DTE using 2 128-bit cmpxchg. So, the driver
+ * need to ensure the following:
+ *   - DTE[V|GV] bit is being written last when setting.
+ *   - DTE[V|GV] bit is being written first when clearing.
+ *
+ * This function is used only by code, which updates DMA translation part of the DTE.
+ * So, only consider control bits related to DMA when updating the entry.
+ */
+static void update_dte256(struct amd_iommu *iommu, struct iommu_dev_data *dev_data,
+			  struct dev_table_entry *new)
+{
+	struct dev_table_entry *dev_table = get_dev_table(iommu);
+	struct dev_table_entry *ptr = &dev_table[dev_data->devid];
+
+	spin_lock(&dev_data->dte_lock);
+
+	if (!(ptr->data[0] & DTE_FLAG_V)) {
+		/* Existing DTE is not valid. */
+		write_upper(ptr, new);
+		write_lower(ptr, new);
+		iommu_flush_sync_dte(iommu, dev_data->devid);
+	} else if (!(new->data[0] & DTE_FLAG_V)) {
+		/* Existing DTE is valid. New DTE is not valid.  */
+		write_lower(ptr, new);
+		write_upper(ptr, new);
+		iommu_flush_sync_dte(iommu, dev_data->devid);
+	} else {
+		/* Existing & new DTEs are valid. */
+		if (!FIELD_GET(DTE_FLAG_GV, ptr->data[0])) {
+			/* Existing DTE has no guest page table. */
+			write_upper(ptr, new);
+			write_lower(ptr, new);
+			iommu_flush_sync_dte(iommu, dev_data->devid);
+		} else if (!FIELD_GET(DTE_FLAG_GV, new->data[0])) {
+			/*
+			 * Existing DTE has guest page table,
+			 * new DTE has no guest page table,
+			 */
+			write_lower(ptr, new);
+			write_upper(ptr, new);
+			iommu_flush_sync_dte(iommu, dev_data->devid);
+		} else {
+			/*
+			 * Existing DTE has guest page table,
+			 * new DTE has guest page table.
+			 */
+			struct dev_table_entry clear = {};
+
+			/* First disable DTE */
+			write_lower(ptr, &clear);
+			iommu_flush_sync_dte(iommu, dev_data->devid);
+
+			/* Then update DTE */
+			write_upper(ptr, new);
+			write_lower(ptr, new);
+			iommu_flush_sync_dte(iommu, dev_data->devid);
+		}
+	}
+
+	spin_unlock(&dev_data->dte_lock);
+}
+
 static inline bool pdom_is_v2_pgtbl_mode(struct protection_domain *pdom)
 {
 	return (pdom && (pdom->pd_mode == PD_MODE_V2));
@@ -205,6 +290,7 @@ static struct iommu_dev_data *alloc_dev_data(struct amd_iommu *iommu, u16 devid)
 		return NULL;
 
 	spin_lock_init(&dev_data->lock);
+	spin_lock_init(&dev_data->dte_lock);
 	dev_data->devid = devid;
 	ratelimit_default_init(&dev_data->rs);
 
@@ -1254,6 +1340,16 @@ static int iommu_flush_dte(struct amd_iommu *iommu, u16 devid)
 	build_inv_dte(&cmd, devid);
 
 	return iommu_queue_command(iommu, &cmd);
+}
+
+int iommu_flush_sync_dte(struct amd_iommu *iommu, u16 devid)
+{
+	int ret;
+
+	ret = iommu_flush_dte(iommu, devid);
+	if (!ret)
+		iommu_completion_wait(iommu);
+	return ret;
 }
 
 static void amd_iommu_flush_dte_all(struct amd_iommu *iommu)
