@@ -4617,16 +4617,16 @@ out_release:
 	return ret;
 }
 
-static bool pte_range_none(pte_t *pte, int nr_pages)
+static int pte_range_none(pte_t *pte, int nr_pages)
 {
 	int i;
 
 	for (i = 0; i < nr_pages; i++) {
 		if (!pte_none(ptep_get_lockless(pte + i)))
-			return false;
+			return i;
 	}
 
-	return true;
+	return nr_pages;
 }
 
 static struct folio *alloc_anon_folio(struct vm_fault *vmf)
@@ -4671,7 +4671,7 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 	order = highest_order(orders);
 	while (orders) {
 		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
-		if (pte_range_none(pte + pte_index(addr), 1 << order))
+		if (pte_range_none(pte + pte_index(addr), 1 << order) == 1 << order)
 			break;
 		order = next_order(&orders, order);
 	}
@@ -4787,7 +4787,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	if (nr_pages == 1 && vmf_pte_changed(vmf)) {
 		update_mmu_tlb(vma, addr, vmf->pte);
 		goto release;
-	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
+	} else if (nr_pages > 1 && pte_range_none(vmf->pte, nr_pages) != nr_pages) {
 		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
 		goto release;
 	}
@@ -5121,7 +5121,7 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 		update_mmu_tlb(vma, addr, vmf->pte);
 		ret = VM_FAULT_NOPAGE;
 		goto unlock;
-	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
+	} else if (nr_pages > 1 && pte_range_none(vmf->pte, nr_pages) != nr_pages) {
 		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
 		ret = VM_FAULT_NOPAGE;
 		goto unlock;
