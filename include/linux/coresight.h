@@ -336,6 +336,7 @@ enum cs_mode {
 #define helper_ops(csdev)	csdev->ops->helper_ops
 #define ect_ops(csdev)		csdev->ops->ect_ops
 #define panic_ops(csdev)	csdev->ops->panic_ops
+#define crashdata_ops(csdev)	csdev->ops->crashdata_ops
 
 /**
  * struct coresight_ops_sink - basic operations for a sink
@@ -415,12 +416,23 @@ struct coresight_ops_panic {
 	int (*sync)(struct coresight_device *csdev);
 };
 
+/**
+ * struct coresight_ops_crashdata - Generic device ops for crashdata mode
+ *
+ * @prepare	: Preparation for reading crashdata mode
+ */
+struct coresight_ops_crashdata {
+	int (*prepare)(struct coresight_device *csdev);
+	int (*unprepare)(struct coresight_device *csdev);
+};
+
 struct coresight_ops {
 	const struct coresight_ops_sink *sink_ops;
 	const struct coresight_ops_link *link_ops;
 	const struct coresight_ops_source *source_ops;
 	const struct coresight_ops_helper *helper_ops;
 	const struct coresight_ops_panic *panic_ops;
+	const struct coresight_ops_crashdata *crashdata_ops;
 };
 
 static inline u32 csdev_access_relaxed_read32(struct csdev_access *csa,

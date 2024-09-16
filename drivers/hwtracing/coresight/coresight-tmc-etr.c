@@ -1887,6 +1887,55 @@ out:
 	return 0;
 }
 
+static int tmc_etr_prepare_crashdata(struct coresight_device *csdev)
+{
+	u32 status;
+	u64 rrp, rwp, dba;
+	struct tmc_resrv_buf *rbuf;
+	struct tmc_crash_metadata *mdata;
+	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+
+	rbuf = &drvdata->resrv_buf;
+	mdata = drvdata->crash_mdata.vaddr;
+
+	rrp = mdata->rrp;
+	rwp = mdata->rwp;
+	dba = mdata->dba;
+	status = mdata->sts;
+
+	rbuf->full = !!(status & TMC_STS_FULL);
+
+	/* Sync the buffer pointers */
+	rbuf->offset = rrp - dba;
+	if (rbuf->full)
+		rbuf->len = rbuf->size;
+	else
+		rbuf->len = rwp - rrp;
+
+	/* Additional sanity checks for validating metadata */
+	if ((rbuf->offset > rbuf->size) ||
+	    (rbuf->len > rbuf->size)) {
+		dev_dbg(&drvdata->csdev->dev,
+			"Offset and length invalid in tmc crash metadata\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int tmc_etr_unprepare_crashdata(struct coresight_device *csdev)
+{
+	struct tmc_resrv_buf *rbuf;
+	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+
+	rbuf = &drvdata->resrv_buf;
+
+	/* Reset valid length */
+	rbuf->len = 0;
+
+	return 0;
+}
+
 static const struct coresight_ops_sink tmc_etr_sink_ops = {
 	.enable		= tmc_enable_etr_sink,
 	.disable	= tmc_disable_etr_sink,
@@ -1899,9 +1948,15 @@ static const struct coresight_ops_panic tmc_etr_sync_ops = {
 	.sync		= tmc_panic_sync_etr,
 };
 
+static const struct coresight_ops_crashdata tmc_etr_crashdata_ops = {
+	.prepare	= tmc_etr_prepare_crashdata,
+	.unprepare	= tmc_etr_unprepare_crashdata,
+};
+
 const struct coresight_ops tmc_etr_cs_ops = {
 	.sink_ops	= &tmc_etr_sink_ops,
 	.panic_ops	= &tmc_etr_sync_ops,
+	.crashdata_ops	= &tmc_etr_crashdata_ops,
 };
 
 int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
@@ -1934,6 +1989,14 @@ int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
 		__tmc_etr_disable_hw(drvdata);
 
 	drvdata->reading = true;
+
+	/*
+	 * The only other place we mark the metadata invalid is during
+	 * panic handler. Normally this won't race with panic handler,
+	 * as all cpus would be stopped before running panic handler.
+	 */
+	if (drvdata->etr_mode == ETR_MODE_RESRV)
+		tmc_crashdata_set_invalid(drvdata);
 out:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 

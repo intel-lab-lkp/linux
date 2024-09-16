@@ -662,6 +662,36 @@ out:
 	return 0;
 }
 
+static int tmc_etb_prepare_crashdata(struct coresight_device *csdev)
+{
+	unsigned long size;
+	struct tmc_resrv_buf *rbuf;
+	struct tmc_crash_metadata *mdata;
+	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+
+	rbuf = &drvdata->resrv_buf;
+	mdata = drvdata->crash_mdata.vaddr;
+	size = mdata->size << 2;
+
+	rbuf->len = size;
+	rbuf->offset = 0;
+	rbuf->full = 0;
+
+	return 0;
+}
+
+static int tmc_etb_unprepare_crashdata(struct coresight_device *csdev)
+{
+	struct tmc_resrv_buf *rbuf;
+	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+
+	rbuf = &drvdata->resrv_buf;
+	/* Reset valid length */
+	rbuf->len = 0;
+
+	return 0;
+}
+
 static const struct coresight_ops_sink tmc_etf_sink_ops = {
 	.enable		= tmc_enable_etf_sink,
 	.disable	= tmc_disable_etf_sink,
@@ -679,6 +709,11 @@ static const struct coresight_ops_panic tmc_etf_sync_ops = {
 	.sync		= tmc_panic_sync_etf,
 };
 
+static const struct coresight_ops_crashdata tmc_etf_crashdata_ops = {
+	.prepare	= tmc_etb_prepare_crashdata,
+	.unprepare	= tmc_etb_unprepare_crashdata,
+};
+
 const struct coresight_ops tmc_etb_cs_ops = {
 	.sink_ops	= &tmc_etf_sink_ops,
 };
@@ -687,6 +722,7 @@ const struct coresight_ops tmc_etf_cs_ops = {
 	.sink_ops	= &tmc_etf_sink_ops,
 	.link_ops	= &tmc_etf_link_ops,
 	.panic_ops	= &tmc_etf_sync_ops,
+	.crashdata_ops	= &tmc_etf_crashdata_ops,
 };
 
 int tmc_read_prepare_etb(struct tmc_drvdata *drvdata)
