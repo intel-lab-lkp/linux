@@ -1276,6 +1276,22 @@ out:
 	return 0;
 }
 
+static int g4x_compute_watermarks(struct intel_atomic_state *state,
+				  struct intel_crtc *crtc)
+{
+	int ret;
+
+	ret = g4x_compute_pipe_wm(state, crtc);
+	if (ret)
+		return ret;
+
+	ret = g4x_compute_intermediate_wm(state, crtc);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static void g4x_merge_wm(struct drm_i915_private *dev_priv,
 			 struct g4x_wm_values *wm)
 {
@@ -1898,6 +1914,22 @@ out:
 	 */
 	if (memcmp(intermediate, optimal, sizeof(*intermediate)) != 0)
 		new_crtc_state->wm.need_postvbl_update = true;
+
+	return 0;
+}
+
+static int vlv_compute_watermarks(struct intel_atomic_state *state,
+				  struct intel_crtc *crtc)
+{
+	int ret;
+
+	ret = vlv_compute_pipe_wm(state, crtc);
+	if (ret)
+		return ret;
+
+	ret = vlv_compute_intermediate_wm(state, crtc);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -2923,6 +2955,22 @@ static int ilk_compute_intermediate_wm(struct intel_atomic_state *state,
 	 */
 	if (memcmp(a, &new_crtc_state->wm.ilk.optimal, sizeof(*a)) != 0)
 		new_crtc_state->wm.need_postvbl_update = true;
+
+	return 0;
+}
+
+static int ilk_compute_watermarks(struct intel_atomic_state *state,
+				  struct intel_crtc *crtc)
+{
+	int ret;
+
+	ret = ilk_compute_pipe_wm(state, crtc);
+	if (ret)
+		return ret;
+
+	ret = ilk_compute_intermediate_wm(state, crtc);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -3971,16 +4019,14 @@ static void ilk_wm_get_hw_state(struct drm_i915_private *dev_priv)
 }
 
 static const struct intel_wm_funcs ilk_wm_funcs = {
-	.compute_pipe_wm = ilk_compute_pipe_wm,
-	.compute_intermediate_wm = ilk_compute_intermediate_wm,
+	.compute_watermarks = ilk_compute_watermarks,
 	.initial_watermarks = ilk_initial_watermarks,
 	.optimize_watermarks = ilk_optimize_watermarks,
 	.get_hw_state = ilk_wm_get_hw_state,
 };
 
 static const struct intel_wm_funcs vlv_wm_funcs = {
-	.compute_pipe_wm = vlv_compute_pipe_wm,
-	.compute_intermediate_wm = vlv_compute_intermediate_wm,
+	.compute_watermarks = vlv_compute_watermarks,
 	.initial_watermarks = vlv_initial_watermarks,
 	.optimize_watermarks = vlv_optimize_watermarks,
 	.atomic_update_watermarks = vlv_atomic_update_fifo,
@@ -3988,8 +4034,7 @@ static const struct intel_wm_funcs vlv_wm_funcs = {
 };
 
 static const struct intel_wm_funcs g4x_wm_funcs = {
-	.compute_pipe_wm = g4x_compute_pipe_wm,
-	.compute_intermediate_wm = g4x_compute_intermediate_wm,
+	.compute_watermarks = g4x_compute_watermarks,
 	.initial_watermarks = g4x_initial_watermarks,
 	.optimize_watermarks = g4x_optimize_watermarks,
 	.get_hw_state = g4x_wm_get_hw_state_and_sanitize,
