@@ -4633,10 +4633,11 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	pte_t *first_set_pte = NULL, *align_pte, *pte;
 	unsigned long orders;
 	struct folio *folio;
 	unsigned long addr;
-	pte_t *pte;
+	int max_empty;
 	gfp_t gfp;
 	int order;
 
@@ -4671,8 +4672,23 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 	order = highest_order(orders);
 	while (orders) {
 		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
-		if (pte_range_none(pte + pte_index(addr), 1 << order) == 1 << order)
+		align_pte = pte + pte_index(addr);
+
+		/* Range to be scanned known to be empty */
+		if (align_pte + (1 << order) <= first_set_pte)
 			break;
+
+		/* Range to be scanned contains first_set_pte */
+		if (align_pte <= first_set_pte)
+			goto repeat;
+
+		/* align_pte > first_set_pte, so need to check properly */
+		max_empty = pte_range_none(align_pte, 1 << order);
+		if (max_empty == 1 << order)
+			break;
+
+		first_set_pte = align_pte + max_empty;
+repeat:
 		order = next_order(&orders, order);
 	}
 
