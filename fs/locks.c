@@ -191,6 +191,7 @@ locks_get_lock_context(struct inode *inode, int type)
 	INIT_LIST_HEAD(&ctx->flc_flock);
 	INIT_LIST_HEAD(&ctx->flc_posix);
 	INIT_LIST_HEAD(&ctx->flc_lease);
+	atomic_set(&ctx->flc_deleg_blockers, 0);
 
 	/*
 	 * Assign the pointer if it's not already assigned. If it is, then
@@ -255,6 +256,7 @@ locks_free_lock_context(struct inode *inode)
 	struct file_lock_context *ctx = locks_inode_context(inode);
 
 	if (unlikely(ctx)) {
+		WARN_ON(atomic_read(&ctx->flc_deleg_blockers) != 0);
 		locks_check_ctx_lists(inode);
 		kmem_cache_free(flctx_cache, ctx);
 	}
@@ -1743,9 +1745,15 @@ check_conflicting_open(struct file *filp, const int arg, int flags)
 
 	if (flags & FL_LAYOUT)
 		return 0;
-	if (flags & FL_DELEG)
-		/* We leave these checks to the caller */
+	if (flags & FL_DELEG) {
+		struct file_lock_context *ctx = locks_inode_context(inode);
+
+		if (ctx && atomic_read(&ctx->flc_deleg_blockers) > 0)
+			return -EAGAIN;
+
+		/* We leave the remaining checks to the caller */
 		return 0;
+	}
 
 	if (arg == F_RDLCK)
 		return inode_is_open_for_write(inode) ? -EAGAIN : 0;

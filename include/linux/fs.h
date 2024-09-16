@@ -1902,7 +1902,8 @@ struct renamedata {
 	struct mnt_idmap *new_mnt_idmap;
 	struct inode *new_dir;
 	struct dentry *new_dentry;
-	struct inode **delegated_inode;
+	struct inode **delegated_inode_old;
+	struct inode **delegated_inode_new;
 	unsigned int flags;
 } __randomize_layout;
 

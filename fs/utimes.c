@@ -67,8 +67,8 @@ retry_deleg:
 			      &delegated_inode);
 	inode_unlock(inode);
 	if (delegated_inode) {
-		error = break_deleg_wait(&delegated_inode);
-		if (!error)
+		error = break_deleg_wait(&delegated_inode, error);
+		if (error == -EWOULDBLOCK)
 			goto retry_deleg;
 	}
 

@@ -144,6 +144,7 @@ struct file_lock_context {
 	struct list_head	flc_flock;
 	struct list_head	flc_posix;
 	struct list_head	flc_lease;
+	atomic_t		flc_deleg_blockers;
 };
 
 #ifdef CONFIG_FILE_LOCKING
@@ -450,21 +451,37 @@ static inline int try_break_deleg(struct inode *inode, struct inode **delegated_
 {
 	int ret;
 
+	if (delegated_inode && *delegated_inode) {
+		if (*delegated_inode == inode)
+			/* Don't need to count this */
+			return break_deleg(inode, O_WRONLY|O_NONBLOCK);
+
+		/* inode changed, forget the old one */
+		atomic_dec(&(*delegated_inode)->i_flctx->flc_deleg_blockers);
+		iput(*delegated_inode);
+		*delegated_inode = NULL;
+	}
 	ret = break_deleg(inode, O_WRONLY|O_NONBLOCK);
 	if (ret == -EWOULDBLOCK && delegated_inode) {
 		*delegated_inode = inode;
+		atomic_inc(&(*delegated_inode)->i_flctx->flc_deleg_blockers);
 		ihold(inode);
 	}
 	return ret;
 }
 
-static inline int break_deleg_wait(struct inode **delegated_inode)
+static inline int break_deleg_wait(struct inode **delegated_inode, int ret)
 {
-	int ret;
-
-	ret = break_deleg(*delegated_inode, O_WRONLY);
-	iput(*delegated_inode);
-	*delegated_inode = NULL;
+	if (ret == -EWOULDBLOCK) {
+		ret = break_deleg(*delegated_inode, O_WRONLY);
+		if (ret == 0)
+			ret = -EWOULDBLOCK;
+	}
+	if (ret != -EWOULDBLOCK) {
+		atomic_dec(&(*delegated_inode)->i_flctx->flc_deleg_blockers);
+		iput(*delegated_inode);
+		*delegated_inode = NULL;
+	}
 	return ret;
 }
 
@@ -494,7 +511,7 @@ static inline int try_break_deleg(struct inode *inode, struct inode **delegated_
 	return 0;
 }
 
-static inline int break_deleg_wait(struct inode **delegated_inode)
+static inline int break_deleg_wait(struct inode **delegated_inode, int ret)
 {
 	BUG();
 	return 0;

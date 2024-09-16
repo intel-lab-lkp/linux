@@ -4493,8 +4493,8 @@ exit3:
 		iput(inode);	/* truncate the inode here */
 	inode = NULL;
 	if (delegated_inode) {
-		error = break_deleg_wait(&delegated_inode);
-		if (!error)
+		error = break_deleg_wait(&delegated_inode, error);
+		if (error == -EWOULDBLOCK)
 			goto retry_deleg;
 	}
 	mnt_drop_write(path.mnt);
@@ -4764,8 +4764,8 @@ retry:
 out_dput:
 	done_path_create(&new_path, new_dentry);
 	if (delegated_inode) {
-		error = break_deleg_wait(&delegated_inode);
-		if (!error) {
+		error = break_deleg_wait(&delegated_inode, error);
+		if (error == -EWOULDBLOCK) {
 			path_put(&old_path);
 			goto retry;
 		}
@@ -4848,7 +4848,8 @@ int vfs_rename(struct renamedata *rd)
 	struct inode *old_dir = rd->old_dir, *new_dir = rd->new_dir;
 	struct dentry *old_dentry = rd->old_dentry;
 	struct dentry *new_dentry = rd->new_dentry;
-	struct inode **delegated_inode = rd->delegated_inode;
+	struct inode **delegated_inode_old = rd->delegated_inode_old;
+	struct inode **delegated_inode_new = rd->delegated_inode_new;
 	unsigned int flags = rd->flags;
 	bool is_dir = d_is_dir(old_dentry);
 	struct inode *source = old_dentry->d_inode;
@@ -4954,12 +4955,12 @@ int vfs_rename(struct renamedata *rd)
 			goto out;
 	}
 	if (!is_dir) {
-		error = try_break_deleg(source, delegated_inode);
+		error = try_break_deleg(source, delegated_inode_old);
 		if (error)
 			goto out;
 	}
 	if (target && !new_is_dir) {
-		error = try_break_deleg(target, delegated_inode);
+		error = try_break_deleg(target, delegated_inode_new);
 		if (error)
 			goto out;
 	}
@@ -5011,7 +5012,8 @@ int do_renameat2(int olddfd, struct filename *from, int newdfd,
 	struct path old_path, new_path;
 	struct qstr old_last, new_last;
 	int old_type, new_type;
-	struct inode *delegated_inode = NULL;
+	struct inode *delegated_inode_old = NULL;
+	struct inode *delegated_inode_new = NULL;
 	unsigned int lookup_flags = 0, target_flags = LOOKUP_RENAME_TARGET;
 	bool should_retry = false;
 	int error = -EINVAL;
@@ -5118,7 +5120,8 @@ retry_deleg:
 	rd.new_dir	   = new_path.dentry->d_inode;
 	rd.new_dentry	   = new_dentry;
 	rd.new_mnt_idmap   = mnt_idmap(new_path.mnt);
-	rd.delegated_inode = &delegated_inode;
+	rd.delegated_inode_old = &delegated_inode_old;
+	rd.delegated_inode_new = &delegated_inode_new;
 	rd.flags	   = flags;
 	error = vfs_rename(&rd);
 exit5:
@@ -5128,9 +5131,14 @@ exit4:
 exit3:
 	unlock_rename(new_path.dentry, old_path.dentry);
 exit_lock_rename:
-	if (delegated_inode) {
-		error = break_deleg_wait(&delegated_inode);
-		if (!error)
+	if (delegated_inode_old) {
+		error = break_deleg_wait(&delegated_inode_old, error);
+		if (error == -EWOULDBLOCK)
+			goto retry_deleg;
+	}
+	if (delegated_inode_new) {
+		error = break_deleg_wait(&delegated_inode_new, error);
+		if (error == -EWOULDBLOCK)
 			goto retry_deleg;
 	}
 	mnt_drop_write(old_path.mnt);
