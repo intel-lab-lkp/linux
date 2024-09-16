@@ -81,12 +81,44 @@ static void do_user_cp_fault(struct pt_regs *regs, unsigned long error_code)
 
 static __ro_after_init bool ibt_fatal = true;
 
+/*
+ * By definition, all missing-ENDBRANCH #CPs are a result of WFE && !ENDBR.
+ *
+ * But, in original CET under IDT delivery, any transfer for
+ * interrupt/exception/etc that does not change privilege will clobber the
+ * WFE state because MSR_{U,S}_CET.WFE is intentionally set by microcode so
+ * as to expect to find an ENDBR at the interrupt/exception/syscall entrypoint.
+ *
+ * In practice, this means interrupts and exceptions hitting the kernel, or
+ * user interrupts, lose the WFE state of the interrupted context.  And
+ * yes, this means that a well timed interrupt (to the precise instruction
+ * boundary) will let an attacker sneak a bad function pointer past the
+ * CET-IBT enforcement.
+ *
+ * In FRED, the WFE state of the interrupted context (even if it is the
+ * same privilege) is preserved and restored, in order to close this hole.
+ *
+ * Therefore, the missing-ENDBRANCH #CP handler needs to clear WFE to avoid
+ * dead looping, now that FRED is causing the state not to get lost.  Otherwise
+ * if the WFE bit is left set in an intentional ibt selftest or when !ibt_fatal,
+ * the CPU will generate another missing-ENDBRANCH #CP because the IBT will be
+ * set in the WFE state upon completion of the following ERETS instruction and
+ * then the CPU will resume from the instruction that just caused the previous
+ * missing-ENDBRANCH #CP.
+ */
+static void ibt_clear_fred_wfe(struct pt_regs *regs)
+{
+	regs->fred_cs.wfe = 0;
+}
+
 static void do_kernel_cp_fault(struct pt_regs *regs, unsigned long error_code)
 {
 	if ((error_code & CP_EC) != CP_ENDBR) {
 		do_unexpected_cp(regs, error_code);
 		return;
 	}
+
+	ibt_clear_fred_wfe(regs);
 
 	if (unlikely(regs->ip == (unsigned long)&ibt_selftest_noendbr)) {
 		regs->ax = 0;
