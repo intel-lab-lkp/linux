@@ -794,26 +794,16 @@ out:
 	return rc;
 }
 
-static int match_free_decoder(struct device *dev, void *data)
+static int match_decoder_id(struct device *dev, void *data)
 {
 	struct cxl_decoder *cxld;
-	int *id = data;
+	int id = *(int *)data;
 
 	if (!is_switch_decoder(dev))
 		return 0;
 
 	cxld = to_cxl_decoder(dev);
-
-	/* enforce ordered allocation */
-	if (cxld->id != *id)
-		return 0;
-
-	if (!cxld->region)
-		return 1;
-
-	(*id)++;
-
-	return 0;
+	return cxld->id == id;
 }
 
 static int match_auto_decoder(struct device *dev, void *data)
@@ -840,16 +830,31 @@ cxl_region_find_decoder(struct cxl_port *port,
 			struct cxl_region *cxlr)
 {
 	struct device *dev;
-	int id = 0;
 
 	if (port == cxled_to_port(cxled))
 		return &cxled->cxld;
 
-	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags))
+	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		dev = device_find_child(&port->dev, &cxlr->params,
 					match_auto_decoder);
-	else
-		dev = device_find_child(&port->dev, &id, match_free_decoder);
+	} else {
+		int id, last;
+
+		/*
+		 * Find next available decoder, but fail new decoder
+		 * allocations if out-of-order region destruction has
+		 * occurred
+		 */
+		last = find_last_bit(port->decoder_alloc, CXL_DECODER_NR_MAX);
+		if (last >= CXL_DECODER_NR_MAX)
+			id = 0;
+		else if (last + 1 < CXL_DECODER_NR_MAX)
+			id = last + 1;
+		else
+			return NULL;
+
+		dev = device_find_child(&port->dev, &id, match_decoder_id);
+	}
 	if (!dev)
 		return NULL;
 	/*
@@ -943,6 +948,9 @@ static void cxl_rr_free_decoder(struct cxl_region_ref *cxl_rr)
 
 	dev_WARN_ONCE(&cxlr->dev, cxld->region != cxlr, "region mismatch\n");
 	if (cxld->region == cxlr) {
+		struct cxl_port *port = to_cxl_port(cxld->dev.parent);
+
+		clear_bit(cxld->id, port->decoder_alloc);
 		cxld->region = NULL;
 		put_device(&cxlr->dev);
 	}
@@ -977,6 +985,7 @@ static int cxl_rr_ep_add(struct cxl_region_ref *cxl_rr,
 	cxl_rr->nr_eps++;
 
 	if (!cxld->region) {
+		set_bit(cxld->id, port->decoder_alloc);
 		cxld->region = cxlr;
 		get_device(&cxlr->dev);
 	}

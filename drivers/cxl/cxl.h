@@ -578,6 +578,9 @@ struct cxl_dax_region {
 	struct range hpa_range;
 };
 
+/* Max as of CXL 3.1 (8.2.4.20.1 CXL HDM Decoder Capability Register) */
+#define CXL_DECODER_NR_MAX 32
+
 /**
  * struct cxl_port - logical collection of upstream port devices and
  *		     downstream port devices to construct a CXL memory
@@ -591,6 +594,7 @@ struct cxl_dax_region {
  * @regions: cxl_region_ref instances, regions mapped by this port
  * @parent_dport: dport that points to this port in the parent
  * @decoder_ida: allocator for decoder ids
+ * @decoder_alloc: decoder busy/free (@cxld->region set) bitmap
  * @reg_map: component and ras register mapping parameters
  * @nr_dports: number of entries in @dports
  * @hdm_end: track last allocated HDM decoder instance for allocation ordering
@@ -611,6 +615,7 @@ struct cxl_port {
 	struct xarray regions;
 	struct cxl_dport *parent_dport;
 	struct ida decoder_ida;
+	DECLARE_BITMAP(decoder_alloc, CXL_DECODER_NR_MAX);
 	struct cxl_register_map reg_map;
 	int nr_dports;
 	int hdm_end;

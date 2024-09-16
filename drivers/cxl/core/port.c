@@ -1750,7 +1750,8 @@ static int cxl_decoder_init(struct cxl_port *port, struct cxl_decoder *cxld)
 	struct device *dev;
 	int rc;
 
-	rc = ida_alloc(&port->decoder_ida, GFP_KERNEL);
+	rc = ida_alloc_max(&port->decoder_ida, CXL_DECODER_NR_MAX - 1,
+			   GFP_KERNEL);
 	if (rc < 0)
 		return rc;
 
