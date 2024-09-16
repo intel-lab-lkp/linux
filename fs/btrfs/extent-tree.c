@@ -1239,7 +1239,7 @@ static int btrfs_issue_discard(struct block_device *bdev, u64 start, u64 len,
 			       u64 *discarded_bytes)
 {
 	int j, ret = 0;
-	u64 bytes_left, end;
+	u64 bytes_left, bytes_to_discard, end;
 	u64 aligned_start = ALIGN(start, 1 << SECTOR_SHIFT);
 
 	/* Adjust the range to be aligned to 512B sectors if necessary. */
@@ -1300,13 +1300,27 @@ static int btrfs_issue_discard(struct block_device *bdev, u64 start, u64 len,
 		bytes_left = end - start;
 	}
 
-	if (bytes_left) {
+	while (bytes_left) {
+		if (bytes_left > BTRFS_MAX_DATA_CHUNK_SIZE)
+			bytes_to_discard = BTRFS_MAX_DATA_CHUNK_SIZE;
+		else
+			bytes_to_discard = bytes_left;
+
 		ret = blkdev_issue_discard(bdev, start >> SECTOR_SHIFT,
-					   bytes_left >> SECTOR_SHIFT,
+					   bytes_to_discard >> SECTOR_SHIFT,
 					   GFP_NOFS);
-		if (!ret)
-			*discarded_bytes += bytes_left;
+
+		if (ret) {
+			if (ret != -EOPNOTSUPP)
+				break;
+			continue;
+		}
+
+		start += bytes_to_discard;
+		bytes_left -= bytes_to_discard;
+		*discarded_bytes += bytes_to_discard;
 	}
+
 	return ret;
 }
 
