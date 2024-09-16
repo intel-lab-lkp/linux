@@ -4,31 +4,31 @@
  * Copyright 2024 NXP
  */
 
-&qm_lvds0_lis_lpcg {
+&lvds0_lis_lpcg {
 	clocks = <&lvds_ipg_clk>;
 	clock-indices = <IMX_LPCG_CLK_4>;
 };
 
-&qm_lvds0_pwm_lpcg {
+&lvds0_pwm_lpcg {
 	clocks = <&clk IMX_SC_R_LVDS_0_PWM_0 IMX_SC_PM_CLK_PER>,
 		 <&lvds_ipg_clk>;
 	clock-indices = <IMX_LPCG_CLK_0>, <IMX_LPCG_CLK_4>;
 };
 
-&qm_lvds0_i2c0_lpcg {
+&lvds0_i2c0_lpcg {
 	clocks = <&clk IMX_SC_R_LVDS_0_I2C_0 IMX_SC_PM_CLK_PER>,
 		 <&lvds_ipg_clk>;
 	clock-indices = <IMX_LPCG_CLK_0>, <IMX_LPCG_CLK_4>;
 };
 
-&qm_pwm_lvds0 {
-	clocks = <&qm_lvds0_pwm_lpcg IMX_LPCG_CLK_4>,
-		 <&qm_lvds0_pwm_lpcg IMX_LPCG_CLK_0>;
+&pwm_lvds0 {
+	clocks = <&lvds0_pwm_lpcg IMX_LPCG_CLK_4>,
+		 <&lvds0_pwm_lpcg IMX_LPCG_CLK_0>;
 };
 
-&qm_i2c0_lvds0 {
-	clocks = <&qm_lvds0_i2c0_lpcg IMX_LPCG_CLK_0>,
-		 <&qm_lvds0_i2c0_lpcg IMX_LPCG_CLK_4>;
+&i2c0_lvds0 {
+	clocks = <&lvds0_i2c0_lpcg IMX_LPCG_CLK_0>,
+		 <&lvds0_i2c0_lpcg IMX_LPCG_CLK_4>;
 };
 
 &lvds0_subsys {
@@ -41,7 +41,7 @@
 		interrupt-controller;
 		interrupt-parent = <&gic>;
 		#interrupt-cells = <1>;
-		clocks = <&qm_lvds0_lis_lpcg IMX_LPCG_CLK_4>;
+		clocks = <&lvds0_lis_lpcg IMX_LPCG_CLK_4>;
 		clock-names = "ipg";
 		power-domains = <&pd IMX_SC_R_LVDS_0>;
 

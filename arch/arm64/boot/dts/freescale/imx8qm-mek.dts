@@ -96,7 +96,7 @@
 
 	lvds_backlight0: backlight-lvds0 {
 		compatible = "pwm-backlight";
-		pwms = <&qm_pwm_lvds0 0 100000 0>;
+		pwms = <&pwm_lvds0 0 100000 0>;
 		brightness-levels = <0 100>;
 		num-interpolated-steps = <100>;
 		default-brightness-level = <80>;
@@ -541,7 +541,7 @@
 	status = "okay";
 };
 
-&qm_pwm_lvds0 {
+&pwm_lvds0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pwm_lvds0>;
 	status = "okay";
