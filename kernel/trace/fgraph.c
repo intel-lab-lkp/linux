@@ -890,9 +890,8 @@ ftrace_graph_get_ret_stack(struct task_struct *task, int idx)
 unsigned long ftrace_graph_ret_addr(struct task_struct *task, int *idx,
 				    unsigned long ret, unsigned long *retp)
 {
-	struct ftrace_ret_stack *ret_stack;
 	unsigned long return_handler = (unsigned long)dereference_kernel_function_descriptor(return_to_handler);
-	int i = task->curr_ret_stack;
+	int i;
 
 	if (ret != return_handler)
 		return ret;
@@ -902,7 +901,7 @@ unsigned long ftrace_graph_ret_addr(struct task_struct *task, int *idx,
 
 	i = *idx ? : task->curr_ret_stack;
 	while (i > 0) {
-		ret_stack = get_ret_stack(task, i, &i);
+		struct ftrace_ret_stack *ret_stack = get_ret_stack(task, i, &i);
 		if (!ret_stack)
 			break;
 		/*
