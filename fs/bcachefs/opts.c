@@ -420,8 +420,12 @@ void bch2_opt_to_text(struct printbuf *out,
 	case BCH_OPT_STR:
 		if (flags & OPT_SHOW_FULL_LIST)
 			prt_string_option(out, opt->choices, v);
-		else
-			prt_str(out, opt->choices[v]);
+		else {
+			if (opt->choices[v] == NULL)
+				pr_err("Invalid flags or index v passed to the function\n");
+			else
+				prt_str(out, opt->choices[v]);
+		}
 		break;
 	case BCH_OPT_FN:
 		opt->fn.to_text(out, c, sb, v);
