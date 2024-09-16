@@ -80,7 +80,7 @@ enum {
  */
 static const unsigned int ata_eh_reset_timeouts[] = {
 	10000,	/* most drives spin up by 10sec */
-	10000,	/* > 99% working drives spin up before 20sec */
+	20000,	/* > 99% working drives spin up before 30sec */
 	35000,	/* give > 30 secs of idleness for outlier devices */
 	 5000,	/* and sweet one last chance */
 	UINT_MAX, /* > 1 min has elapsed, give up */
