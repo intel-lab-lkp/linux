@@ -512,6 +512,7 @@ static int kvm_eiointc_write(struct kvm_vcpu *vcpu,
 	default:
 		WARN_ONCE(1, "%s: Abnormal address access:addr 0x%llx,size %d\n",
 						__func__, addr, len);
+		ret = -EINVAL;
 	}
 	loongarch_ext_irq_unlock(eiointc, flags);
 	return ret;
@@ -716,6 +717,7 @@ static int kvm_eiointc_read(struct kvm_vcpu *vcpu,
 	default:
 		WARN_ONCE(1, "%s: Abnormal address access:addr 0x%llx,size %d\n",
 						__func__, addr, len);
+		ret = -EINVAL;
 	}
 	loongarch_ext_irq_unlock(eiointc, flags);
 	return ret;
