@@ -6,8 +6,8 @@
 //! spinlocks, raw spinlocks) to be provided with minimal effort.
 
 use super::LockClassKey;
-use crate::{init::PinInit, pin_init, str::CStr, types::Opaque, types::ScopeGuard};
-use core::{cell::UnsafeCell, marker::PhantomData, marker::PhantomPinned};
+use crate::{init::PinInit, pin_init, prelude::*, str::CStr, types::Opaque, types::ScopeGuard};
+use core::{cell::UnsafeCell, marker::PhantomData, marker::PhantomPinned, mem};
 use macros::pin_data;
 
 pub mod mutex;
@@ -81,6 +81,7 @@ pub unsafe trait Backend {
 ///
 /// Exposes one of the kernel locking primitives. Which one is exposed depends on the lock
 /// [`Backend`] specified as the generic parameter `B`.
+#[repr(C)]
 #[pin_data]
 pub struct Lock<T: ?Sized, B: Backend> {
     /// The kernel lock object.
@@ -116,6 +117,33 @@ impl<T, B: Backend> Lock<T, B> {
                 B::init(slot, name.as_char_ptr(), key.as_ptr())
             }),
         })
+    }
+
+    /// Constructs a [`Lock`] from a raw pointer.
+    ///
+    /// This can be useful for interacting with a lock which was initialised outside of rust. This
+    /// can only be used when `T` is a ZST type.
+    ///
+    /// # Safety
+    ///
+    /// - The caller promises that `ptr` points to a valid initialised instance of [`State`].
+    /// - The caller promises that `T` is a type that it is allowed to create (e.g. `!` would not be
+    ///   allowed)
+    ///
+    /// [`State`]: Backend::State
+    pub unsafe fn from_raw<'a>(ptr: *mut B::State) -> &'a Self {
+        build_assert!(
+            mem::size_of::<T>() == 0,
+            "Lock::<T, B>::from_raw() can only be used if T is a ZST"
+        );
+
+        // SAFETY:
+        // * By the safety contract `ptr` must point to a valid initialised instance of `B::State`
+        // * We just asserted that `T` is a ZST, making `state` the only non-ZST member of the
+        //   struct
+        // * Combined with `#[repr(C)]`, this guarantees `Self` has an equivalent data layout to
+        //   `B::State`.
+        unsafe { &*ptr.cast() }
     }
 }
 
