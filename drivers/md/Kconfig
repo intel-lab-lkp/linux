@@ -270,6 +270,14 @@ config DM_CRYPT
 
 	  If unsure, say N.
 
+config DM_INLINE_CRYPT
+	tristate "Inline crypt target support"
+	depends on BLK_DEV_DM || COMPILE_TEST
+	help
+	  This inline crypt device-mapper target allows to create a device
+	  that transparently encrypts the data on it using inline crypto HW
+	  engine.
+
 config DM_SNAPSHOT
        tristate "Snapshot target"
        depends on BLK_DEV_DM
