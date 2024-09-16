@@ -977,8 +977,6 @@ static struct ehci_qtd *ehci_qtd_alloc(struct oxu_hcd *oxu)
 	int i;
 	struct ehci_qtd *qtd = NULL;
 
-	spin_lock(&oxu->mem_lock);
-
 	for (i = 0; i < QTD_NUM; i++)
 		if (!oxu->qtd_used[i])
 			break;
@@ -996,8 +994,6 @@ static struct ehci_qtd *ehci_qtd_alloc(struct oxu_hcd *oxu)
 
 		oxu->qtd_used[i] = 1;
 	}
-
-	spin_unlock(&oxu->mem_lock);
 
 	return qtd;
 }
@@ -1601,7 +1597,9 @@ static struct list_head *qh_urb_transaction(struct oxu_hcd *oxu,
 	/*
 	 * URBs map to sequences of QTDs: one logical transaction
 	 */
+	spin_lock(&oxu->mem_lock);
 	qtd = ehci_qtd_alloc(oxu);
+	spin_unlock(&oxu->mem_lock);
 	if (unlikely(!qtd))
 		return NULL;
 	list_add_tail(&qtd->qtd_list, head);
@@ -1630,7 +1628,9 @@ static struct list_head *qh_urb_transaction(struct oxu_hcd *oxu,
 		/* ... and always at least one more pid */
 		token ^= QTD_TOGGLE;
 		qtd_prev = qtd;
+		spin_lock(&oxu->mem_lock);
 		qtd = ehci_qtd_alloc(oxu);
+		spin_unlock(&oxu->mem_lock);
 		if (unlikely(!qtd))
 			goto cleanup;
 		qtd->urb = urb;
@@ -1686,7 +1686,9 @@ static struct list_head *qh_urb_transaction(struct oxu_hcd *oxu,
 			break;
 
 		qtd_prev = qtd;
+		spin_lock(&oxu->mem_lock);
 		qtd = ehci_qtd_alloc(oxu);
+		spin_unlock(&oxu->mem_lock);
 		if (unlikely(!qtd))
 			goto cleanup;
 		if (likely(len > 0)) {
@@ -1724,7 +1726,9 @@ static struct list_head *qh_urb_transaction(struct oxu_hcd *oxu,
 		}
 		if (one_more) {
 			qtd_prev = qtd;
+			spin_lock(&oxu->mem_lock);
 			qtd = ehci_qtd_alloc(oxu);
+			spin_unlock(&oxu->mem_lock);
 			if (unlikely(!qtd))
 				goto cleanup;
 			qtd->urb = urb;
