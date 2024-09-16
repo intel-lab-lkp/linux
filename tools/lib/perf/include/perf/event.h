@@ -463,6 +463,12 @@ struct perf_record_schedstat_cpu_v15 {
 #undef CPU_FIELD
 };
 
+struct perf_record_schedstat_cpu_v16 {
+#define CPU_FIELD(_type, _name, _ver)		_type _name;
+#include "schedstat-cpu-v16.h"
+#undef CPU_FIELD
+};
+
 struct perf_record_schedstat_cpu {
 	struct perf_event_header header;
 	__u16			 version;
@@ -470,12 +476,19 @@ struct perf_record_schedstat_cpu {
 	__u32			 cpu;
 	union {
 		struct perf_record_schedstat_cpu_v15 v15;
+		struct perf_record_schedstat_cpu_v16 v16;
 	};
 };
 
 struct perf_record_schedstat_domain_v15 {
 #define DOMAIN_FIELD(_type, _name, _ver)	_type _name;
 #include "schedstat-domain-v15.h"
+#undef DOMAIN_FIELD
+};
+
+struct perf_record_schedstat_domain_v16 {
+#define DOMAIN_FIELD(_type, _name, _ver)	_type _name;
+#include "schedstat-domain-v16.h"
 #undef DOMAIN_FIELD
 };
 
@@ -490,6 +503,7 @@ struct perf_record_schedstat_domain {
 	char			 name[DOMAIN_NAME_LEN];
 	union {
 		struct perf_record_schedstat_domain_v15 v15;
+		struct perf_record_schedstat_domain_v16 v16;
 	};
 	__u16			 nr_cpus;
 	__u8			 cpu_mask[];

@@ -2546,6 +2546,8 @@ static union perf_event *__synthesize_schedstat_cpu(struct io *io, __u16 version
 
 	if (version == 15) {
 #include <perf/schedstat-cpu-v15.h>
+	} else if (version == 16) {
+#include <perf/schedstat-cpu-v16.h>
 	}
 #undef CPU_FIELD
 
@@ -2667,6 +2669,8 @@ static union perf_event *__synthesize_schedstat_domain(struct io *io, __u16 vers
 
 	if (version == 15) {
 #include <perf/schedstat-domain-v15.h>
+	} else if (version == 16) {
+#include <perf/schedstat-domain-v16.h>
 	}
 #undef DOMAIN_FIELD
 
@@ -2709,6 +2713,8 @@ int perf_event__synthesize_schedstat(const struct perf_tool *tool,
 
 	if (!strcmp(line, "version 15\n")) {
 		version = 15;
+	} else if (!strcmp(line, "version 16\n")) {
+		version = 16;
 	} else {
 		pr_err("Unsupported /proc/schedstat version: %s", line + 8);
 		goto out_free_line;
