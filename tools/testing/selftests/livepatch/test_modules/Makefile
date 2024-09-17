@@ -11,7 +11,8 @@ obj-m += test_klp_atomic_replace.o \
 	test_klp_state2.o \
 	test_klp_state3.o \
 	test_klp_shadow_vars.o \
-	test_klp_syscall.o
+	test_klp_syscall.o \
+	test_klp_kprobe.o
 
 # Ensure that KDIR exists, otherwise skip the compilation
 modules:
