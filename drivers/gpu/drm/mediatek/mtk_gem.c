@@ -259,13 +259,13 @@ int mtk_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)
 
 	mtk_gem->kvaddr = vmap(mtk_gem->pages, npages, VM_MAP,
 			       pgprot_writecombine(PAGE_KERNEL));
+	sg_free_table(sgt);
 	if (!mtk_gem->kvaddr) {
-		sg_free_table(sgt);
 		kfree(sgt);
 		kfree(mtk_gem->pages);
 		return -ENOMEM;
 	}
-	sg_free_table(sgt);
+
 	kfree(sgt);
 
 out:
