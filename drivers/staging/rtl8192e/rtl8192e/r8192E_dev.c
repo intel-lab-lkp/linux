@@ -1153,7 +1153,7 @@ static void _rtl92e_query_rxphystatus(struct r8192_priv *priv,
 				      bool bpacket_match_bssid,
 				      bool bpacket_toself,
 				      bool packet_beacon,
-				      bool bToSelfBA)
+				      bool to_self_ba)
 {
 	struct phy_sts_ofdm_819xpci *pofdm_buf;
 	struct phy_sts_cck_819xpci *pcck_buf;
@@ -1175,7 +1175,7 @@ static void _rtl92e_query_rxphystatus(struct r8192_priv *priv,
 	pstats->packet_to_self = precord_stats->packet_to_self = bpacket_toself;
 	pstats->is_cck = precord_stats->is_cck = is_cck_rate;
 	pstats->packet_beacon = precord_stats->packet_beacon = packet_beacon;
-	pstats->bToSelfBA = precord_stats->bToSelfBA = bToSelfBA;
+	pstats->to_self_ba = precord_stats->to_self_ba = to_self_ba;
 	if (check_reg824 == 0) {
 		reg824_bit9 = rtl92e_get_bb_reg(priv->rtllib->dev,
 						rFPGA0_XA_HSSIParameter2,
@@ -1363,7 +1363,7 @@ static void _rtl92e_process_phyinfo(struct r8192_priv *priv, u8 *buffer,
 	priv->stats.signal_strength = rtl92e_translate_to_dbm(priv, tmp_val);
 	curr_st->rssi = priv->stats.signal_strength;
 	if (!prev_st->packet_match_bssid) {
-		if (!prev_st->bToSelfBA)
+		if (!prev_st->to_self_ba)
 			return;
 	}
 
@@ -1417,7 +1417,7 @@ static void _rtl92e_process_phyinfo(struct r8192_priv *priv, u8 *buffer,
 			prev_st->RxPWDBAll -= 3;
 	}
 	if (prev_st->packet_to_self || prev_st->packet_beacon ||
-	    prev_st->bToSelfBA) {
+	    prev_st->to_self_ba) {
 		if (priv->undecorated_smoothed_pwdb < 0)
 			priv->undecorated_smoothed_pwdb = prev_st->RxPWDBAll;
 		if (prev_st->RxPWDBAll > (u32)priv->undecorated_smoothed_pwdb) {
@@ -1438,7 +1438,7 @@ static void _rtl92e_process_phyinfo(struct r8192_priv *priv, u8 *buffer,
 
 	if (prev_st->signal_quality != 0) {
 		if (prev_st->packet_to_self || prev_st->packet_beacon ||
-		    prev_st->bToSelfBA) {
+		    prev_st->to_self_ba) {
 			if (slide_evm_statistics++ >= PHY_RSSI_SLID_WIN_MAX) {
 				slide_evm_statistics = PHY_RSSI_SLID_WIN_MAX;
 				last_evm =
@@ -1460,7 +1460,7 @@ static void _rtl92e_process_phyinfo(struct r8192_priv *priv, u8 *buffer,
 
 		if (prev_st->packet_to_self ||
 		    prev_st->packet_beacon ||
-		    prev_st->bToSelfBA) {
+		    prev_st->to_self_ba) {
 			for (ij = 0; ij < 2; ij++) {
 				if (prev_st->RxMIMOSignalQuality[ij] != -1) {
 					if (priv->stats.rx_evm_percentage[ij] == 0)
@@ -1487,7 +1487,7 @@ static void _rtl92e_translate_rx_signal_stats(struct net_device *dev,
 	bool bpacket_match_bssid, bpacket_toself;
 	bool packet_beacon = false;
 	struct ieee80211_hdr_3addr *hdr;
-	bool bToSelfBA = false;
+	bool to_self_ba = false;
 	static struct rtllib_rx_stats  previous_stats;
 	u16 fc, type;
 	u8 *tmp_buf;
@@ -1514,7 +1514,7 @@ static void _rtl92e_translate_rx_signal_stats(struct net_device *dev,
 	_rtl92e_process_phyinfo(priv, tmp_buf, &previous_stats, pstats);
 	_rtl92e_query_rxphystatus(priv, pstats, pdesc, pdrvinfo,
 				  &previous_stats, bpacket_match_bssid,
-				  bpacket_toself, packet_beacon, bToSelfBA);
+				  bpacket_toself, packet_beacon, to_self_ba);
 	rtl92e_copy_mpdu_stats(pstats, &previous_stats);
 }
 

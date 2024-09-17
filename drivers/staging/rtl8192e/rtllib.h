@@ -486,7 +486,7 @@ struct rtllib_rx_stats {
 	bool  is_cck;
 	bool  packet_to_self;
 	bool   packet_beacon;
-	bool   bToSelfBA;
+	bool   to_self_ba;
 };
 
 /* IEEE 802.11 requires that STA supports concurrent reception of at least
