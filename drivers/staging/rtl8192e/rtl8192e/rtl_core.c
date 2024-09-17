@@ -924,11 +924,11 @@ static void _rtl92e_update_rxcounts(struct r8192_priv *priv, u32 *TotalRxBcnNum,
 			(priv->rtllib->link_detect_info.slot_num);
 	priv->rtllib->link_detect_info.RxBcnNum[slot_index] =
 			priv->rtllib->link_detect_info.num_recv_bcn_in_period;
-	priv->rtllib->link_detect_info.RxDataNum[slot_index] =
+	priv->rtllib->link_detect_info.rx_data_num[slot_index] =
 			priv->rtllib->link_detect_info.num_recv_data_in_period;
 	for (i = 0; i < priv->rtllib->link_detect_info.slot_num; i++) {
 		*TotalRxBcnNum += priv->rtllib->link_detect_info.RxBcnNum[i];
-		*TotalRxDataNum += priv->rtllib->link_detect_info.RxDataNum[i];
+		*TotalRxDataNum += priv->rtllib->link_detect_info.rx_data_num[i];
 	}
 }
 
