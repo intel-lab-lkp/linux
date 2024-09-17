@@ -714,6 +714,8 @@ int elv_iosched_load_module(struct gendisk *disk, const char *buf,
 		return -EOPNOTSUPP;
 
 	strscpy(elevator_name, buf, sizeof(elevator_name));
+	if (!strncmp(elevator_name, "none", 4))
+		return 0;
 
 	return request_module("%s-iosched", strstrip(elevator_name));
 }
