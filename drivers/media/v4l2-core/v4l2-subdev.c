@@ -1478,10 +1478,9 @@ bool v4l2_subdev_has_pad_interdep(struct media_entity *entity,
 {
 	struct v4l2_subdev *sd = media_entity_to_v4l2_subdev(entity);
 	struct v4l2_subdev_krouting *routing;
-	struct v4l2_subdev_state *state;
 	unsigned int i;
 
-	state = v4l2_subdev_lock_and_get_active_state(sd);
+	CLASS(v4l2_subdev_lock_and_get_active_state, state)(sd);
 
 	routing = &state->routing;
 
@@ -1492,13 +1491,9 @@ bool v4l2_subdev_has_pad_interdep(struct media_entity *entity,
 			continue;
 
 		if ((route->sink_pad == pad0 && route->source_pad == pad1) ||
-		    (route->source_pad == pad0 && route->sink_pad == pad1)) {
-			v4l2_subdev_unlock_state(state);
+		    (route->source_pad == pad0 && route->sink_pad == pad1))
 			return true;
-		}
 	}
-
-	v4l2_subdev_unlock_state(state);
 
 	return false;
 }
@@ -2393,7 +2388,6 @@ EXPORT_SYMBOL_GPL(v4l2_subdev_disable_streams);
 
 int v4l2_subdev_s_stream_helper(struct v4l2_subdev *sd, int enable)
 {
-	struct v4l2_subdev_state *state;
 	struct v4l2_subdev_route *route;
 	struct media_pad *pad;
 	u64 source_mask = 0;
@@ -2419,12 +2413,10 @@ int v4l2_subdev_s_stream_helper(struct v4l2_subdev *sd, int enable)
 		 * As there's a single source pad, just collect all the source
 		 * streams.
 		 */
-		state = v4l2_subdev_lock_and_get_active_state(sd);
+		CLASS(v4l2_subdev_lock_and_get_active_state, state)(sd);
 
 		for_each_active_route(&state->routing, route)
 			source_mask |= BIT_ULL(route->source_stream);
-
-		v4l2_subdev_unlock_state(state);
 	} else {
 		/*
 		 * For non-streams subdevices, there's a single implicit stream
