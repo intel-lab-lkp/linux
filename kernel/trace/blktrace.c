@@ -208,6 +208,39 @@ static const u32 ddir_act[2] = { BLK_TC_ACT(BLK_TC_READ),
 #define MASK_TC_BIT(rw, __name) ((__force u32)(rw & REQ_ ## __name) <<	\
 	  (ilog2(BLK_TC_ ## __name) + BLK_TC_SHIFT - __REQ_ ## __name))
 
+static inline bool blk_trace_lba_aligned(u32 len, u32 algn_len, u64 lba,
+				      u32 algn_lba)
+{
+	return !(len % algn_len) && !(lba % algn_lba);
+}
+
+static inline u32 blk_trace_align(struct blk_trace *bt, u64 sector,
+					u32 len)
+{
+	u64 lba = sector >> (bt->lba_shift - SECTOR_SHIFT);
+	u32 align_len = len;
+	u32 align_lba = align_len / bt->lbs;
+	u32 alignment = bt->lbs;
+
+	if (is_power_of_2(len) &&
+	    blk_trace_lba_aligned(len, align_len, lba, align_lba))
+		return len;
+
+	align_len = bt->lbs << 1UL;
+	align_lba = align_len / bt->lbs;
+
+	while (align_len < len) {
+		if (!blk_trace_lba_aligned(len, align_len, lba, align_lba))
+			break;
+
+		alignment = align_len;
+		align_len = align_len << 1UL;
+		align_lba = align_len / bt->lbs;
+	}
+
+	return alignment;
+}
+
 /*
  * The worker for the various blk_add_trace*() types. Fills out a
  * blk_io_trace structure and places it in a per-cpu subbuffer.
@@ -296,6 +329,9 @@ record_it:
 		t->device = bt->dev;
 		t->error = error;
 		t->pdu_len = pdu_len + cgid_len;
+		if (((what & 0xffff) & ~__BLK_TA_CGROUP) == __BLK_TA_ISSUE)
+			t->alignment =
+				blk_trace_align(bt, sector, bytes);
 
 		if (cgid_len)
 			memcpy((void *)t + sizeof(*t), &cgid, cgid_len);
@@ -597,6 +633,8 @@ static int do_blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 		bt->act_mask = (u16) -1;
 
 	blk_trace_setup_lba(bt, bdev);
+	bt->lbs = queue_logical_block_size(q);
+	bt->lba_shift = ilog2(bt->lbs);
 
 	/* overwrite with user settings */
 	if (buts->start_lba)

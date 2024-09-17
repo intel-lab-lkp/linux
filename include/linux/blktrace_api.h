@@ -26,6 +26,8 @@ struct blk_trace {
 	struct dentry *dir;
 	struct list_head running_list;
 	atomic_t dropped;
+	u32 lbs;
+	u8 lba_shift;
 };
 
 extern int blk_trace_ioctl(struct block_device *, unsigned, char __user *);

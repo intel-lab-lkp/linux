@@ -110,6 +110,7 @@ struct blk_io_trace {
 	__u32 cpu;		/* on what cpu did it happen */
 	__u16 error;		/* completion error */
 	__u16 pdu_len;		/* length of data after this trace */
+	__u32 alignment;	/* i/o alignment boundaries */
 	/* cgroup id will be stored here if exists */
 };
 
