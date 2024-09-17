@@ -590,6 +590,7 @@ static int scom_remove(struct device *dev)
 
 static const struct of_device_id scom_of_ids[] = {
 	{ .compatible = "ibm,fsi2pib" },
+	{ .compatible = "ibm,p9-scom" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, scom_of_ids);
