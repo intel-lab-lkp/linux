@@ -70,6 +70,66 @@
 //! pr_info!("Counted to 5\n");
 //! # Ok::<(), kernel::error::Error>(())
 //! ```
+//!
+//! Using a stack based timer:
+//! ```
+//! use kernel::{
+//!     hrtimer::{Timer, TimerCallback, ScopedTimerPointer, TimerRestart},
+//!     impl_has_timer, new_condvar, new_mutex,
+//!     prelude::*,
+//!     stack_try_pin_init,
+//!     sync::{CondVar, Mutex},
+//!     time::Ktime,
+//! };
+//!
+//! #[pin_data]
+//! struct IntrusiveTimer {
+//!     #[pin]
+//!     timer: Timer<Self>,
+//!     #[pin]
+//!     flag: Mutex<bool>,
+//!     #[pin]
+//!     cond: CondVar,
+//! }
+//!
+//! impl IntrusiveTimer {
+//!     fn new() -> impl PinInit<Self, kernel::error::Error> {
+//!         try_pin_init!(Self {
+//!             timer <- Timer::new(),
+//!             flag <- new_mutex!(false),
+//!             cond <- new_condvar!(),
+//!         })
+//!     }
+//! }
+//!
+//! impl TimerCallback for IntrusiveTimer {
+//!     type CallbackTarget<'a> = Pin<&'a Self>;
+//!
+//!     fn run(this: Self::CallbackTarget<'_>) -> TimerRestart {
+//!         pr_info!("Timer called\n");
+//!         *this.flag.lock() = true;
+//!         this.cond.notify_all();
+//!         TimerRestart::NoRestart
+//!     }
+//! }
+//!
+//! impl_has_timer! {
+//!     impl HasTimer<Self> for IntrusiveTimer { self.timer }
+//! }
+//!
+//!
+//! stack_try_pin_init!( let has_timer =? IntrusiveTimer::new() );
+//! has_timer.as_ref().schedule_scoped(Ktime::from_ns(200_000_000), || {
+//!     let mut guard = has_timer.flag.lock();
+//!
+//!     while !*guard {
+//!         has_timer.cond.wait(&mut guard);
+//!     }
+//! });
+//!
+//! pr_info!("Flag raised\n");
+//! # Ok::<(), kernel::error::Error>(())
+//! ```
 
 use crate::{init::PinInit, prelude::*, time::Ktime, types::Opaque};
 use core::marker::PhantomData;
@@ -222,6 +282,39 @@ pub unsafe trait UnsafeTimerPointer: Sync + Sized {
     /// Caller promises keep the timer structure alive until the timer is dead.
     /// Caller can ensure this by not leaking the returned `Self::TimerHandle`.
     unsafe fn schedule(self, expires: Ktime) -> Self::TimerHandle;
+}
+
+/// A trait for stack allocated timers.
+///
+/// # Safety
+///
+/// Implementers must ensure that `schedule_scoped` does not until the timer is
+/// dead and the timer handler is not running.
+pub unsafe trait ScopedTimerPointer {
+    /// Schedule the timer to run after `expires` time units and immediately
+    /// after call `f`. When `f` returns, the timer is cancelled.
+    fn schedule_scoped<T, F>(self, expires: Ktime, f: F) -> T
+    where
+        F: FnOnce() -> T;
+}
+
+// SAFETY: By the safety requirement of `UnsafeTimerPointer`, dropping the
+// handle returned by `UnsafeTimerPointer::schedule` ensures that the timer is
+// killed.
+unsafe impl<U> ScopedTimerPointer for U
+where
+    U: UnsafeTimerPointer,
+{
+    fn schedule_scoped<T, F>(self, expires: Ktime, f: F) -> T
+    where
+        F: FnOnce() -> T,
+    {
+        // SAFETY: We drop the timer handle below before returning.
+        let handle = unsafe { UnsafeTimerPointer::schedule(self, expires) };
+        let t = f();
+        drop(handle);
+        t
+    }
 }
 
 /// Implemented by [`TimerPointer`] implementers to give the C timer callback a
