@@ -1196,7 +1196,7 @@ struct rtllib_device {
 
 	struct list_head		tx_ts_admit_list;
 	struct list_head		tx_ts_pending_list;
-	struct list_head		Tx_TS_Unused_List;
+	struct list_head		tx_ts_unused_list;
 	struct tx_ts_record tx_ts_records[TOTAL_TS_NUM];
 	struct list_head		Rx_TS_Admit_List;
 	struct list_head		rx_ts_pending_list;

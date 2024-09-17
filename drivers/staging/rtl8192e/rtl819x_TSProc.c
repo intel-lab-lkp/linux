@@ -126,7 +126,7 @@ void rtllib_ts_init(struct rtllib_device *ieee)
 
 	INIT_LIST_HEAD(&ieee->tx_ts_admit_list);
 	INIT_LIST_HEAD(&ieee->tx_ts_pending_list);
-	INIT_LIST_HEAD(&ieee->Tx_TS_Unused_List);
+	INIT_LIST_HEAD(&ieee->tx_ts_unused_list);
 
 	for (count = 0; count < TOTAL_TS_NUM; count++) {
 		pTxTS->num = count;
@@ -139,7 +139,7 @@ void rtllib_ts_init(struct rtllib_device *ieee)
 
 		ResetTxTsEntry(pTxTS);
 		list_add_tail(&pTxTS->ts_common_info.list,
-				&ieee->Tx_TS_Unused_List);
+				&ieee->tx_ts_unused_list);
 		pTxTS++;
 	}
 
@@ -275,7 +275,7 @@ bool rtllib_get_ts(struct rtllib_device *ieee, struct ts_common_info **ppTS,
 	}
 
 	pUnusedList = (tx_rx_select == TX_DIR) ?
-				(&ieee->Tx_TS_Unused_List) :
+				(&ieee->tx_ts_unused_list) :
 				(&ieee->Rx_TS_Unused_List);
 
 	pAddmitList = (tx_rx_select == TX_DIR) ?
@@ -370,7 +370,7 @@ void remove_peer_ts(struct rtllib_device *ieee, u8 *addr)
 		if (memcmp(ts->addr, addr, 6) == 0) {
 			RemoveTsEntry(ieee, ts, TX_DIR);
 			list_del_init(&ts->list);
-			list_add_tail(&ts->list, &ieee->Tx_TS_Unused_List);
+			list_add_tail(&ts->list, &ieee->tx_ts_unused_list);
 		}
 	}
 
@@ -380,7 +380,7 @@ void remove_peer_ts(struct rtllib_device *ieee, u8 *addr)
 				    "====>remove Tx_TS_admin_list\n");
 			RemoveTsEntry(ieee, ts, TX_DIR);
 			list_del_init(&ts->list);
-			list_add_tail(&ts->list, &ieee->Tx_TS_Unused_List);
+			list_add_tail(&ts->list, &ieee->tx_ts_unused_list);
 		}
 	}
 
@@ -409,13 +409,13 @@ void remove_all_ts(struct rtllib_device *ieee)
 	list_for_each_entry_safe(ts, pTmpTS, &ieee->tx_ts_pending_list, list) {
 		RemoveTsEntry(ieee, ts, TX_DIR);
 		list_del_init(&ts->list);
-		list_add_tail(&ts->list, &ieee->Tx_TS_Unused_List);
+		list_add_tail(&ts->list, &ieee->tx_ts_unused_list);
 	}
 
 	list_for_each_entry_safe(ts, pTmpTS, &ieee->tx_ts_admit_list, list) {
 		RemoveTsEntry(ieee, ts, TX_DIR);
 		list_del_init(&ts->list);
-		list_add_tail(&ts->list, &ieee->Tx_TS_Unused_List);
+		list_add_tail(&ts->list, &ieee->tx_ts_unused_list);
 	}
 
 	list_for_each_entry_safe(ts, pTmpTS, &ieee->rx_ts_pending_list, list) {
