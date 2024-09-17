@@ -485,7 +485,7 @@ struct rtllib_rx_stats {
 	bool  bPacketMatchBSSID;
 	bool  is_cck;
 	bool  packet_to_self;
-	bool   bPacketBeacon;
+	bool   packet_beacon;
 	bool   bToSelfBA;
 };
 
