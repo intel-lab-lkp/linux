@@ -254,7 +254,7 @@ void __page_table_check_pud_set(struct mm_struct *mm, pud_t *pudp, pud_t pud)
 	if (&init_mm == mm)
 		return;
 
-	__page_table_check_pud_clear(mm, *pudp);
+	__page_table_check_pud_clear(mm, pudp_get(pudp));
 	if (pud_user_accessible_page(pud)) {
 		page_table_check_set(pud_pfn(pud), PUD_SIZE >> PAGE_SHIFT,
 				     pud_write(pud));

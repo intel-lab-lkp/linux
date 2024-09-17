@@ -197,9 +197,9 @@ static bool shadow_mapped(unsigned long addr)
 	if (p4d_none(*p4d))
 		return false;
 	pud = pud_offset(p4d, addr);
-	if (pud_none(*pud))
+	if (pud_none(pudp_get(pud)))
 		return false;
-	if (pud_leaf(*pud))
+	if (pud_leaf(pudp_get(pud)))
 		return true;
 	pmd = pmd_offset(pud, addr);
 	if (pmd_none(pmdp_get(pmd)))

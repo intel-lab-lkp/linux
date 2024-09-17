@@ -200,7 +200,7 @@ static int vmap_try_huge_pud(pud_t *pud, unsigned long addr, unsigned long end,
 	if (!IS_ALIGNED(phys_addr, PUD_SIZE))
 		return 0;
 
-	if (pud_present(*pud) && !pud_free_pmd_page(pud, addr))
+	if (pud_present(pudp_get(pud)) && !pud_free_pmd_page(pud, addr))
 		return 0;
 
 	return pud_set_huge(pud, phys_addr, prot);
@@ -396,7 +396,7 @@ static void vunmap_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 		next = pud_addr_end(addr, end);
 
 		cleared = pud_clear_huge(pud);
-		if (cleared || pud_bad(*pud))
+		if (cleared || pud_bad(pudp_get(pud)))
 			*mask |= PGTBL_PUD_MODIFIED;
 
 		if (cleared)
@@ -742,7 +742,7 @@ struct page *vmalloc_to_page(const void *vmalloc_addr)
 	struct page *page = NULL;
 	pgd_t *pgd = pgd_offset_k(addr);
 	p4d_t *p4d;
-	pud_t *pud;
+	pud_t *pud, old_pud;
 	pmd_t *pmd, old_pmd;
 	pte_t *ptep, pte;
 
@@ -768,11 +768,12 @@ struct page *vmalloc_to_page(const void *vmalloc_addr)
 		return NULL;
 
 	pud = pud_offset(p4d, addr);
-	if (pud_none(*pud))
+	old_pud = pudp_get(pud);
+	if (pud_none(old_pud))
 		return NULL;
-	if (pud_leaf(*pud))
-		return pud_page(*pud) + ((addr & ~PUD_MASK) >> PAGE_SHIFT);
-	if (WARN_ON_ONCE(pud_bad(*pud)))
+	if (pud_leaf(old_pud))
+		return pud_page(old_pud) + ((addr & ~PUD_MASK) >> PAGE_SHIFT);
+	if (WARN_ON_ONCE(pud_bad(old_pud)))
 		return NULL;
 
 	pmd = pmd_offset(pud, addr);

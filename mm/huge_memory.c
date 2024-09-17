@@ -1243,17 +1243,18 @@ static void insert_pfn_pud(struct vm_area_struct *vma, unsigned long addr,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	pgprot_t prot = vma->vm_page_prot;
-	pud_t entry;
+	pud_t entry, old_pud;
 	spinlock_t *ptl;
 
 	ptl = pud_lock(mm, pud);
-	if (!pud_none(*pud)) {
+	old_pud = pudp_get(pud);
+	if (!pud_none(old_pud)) {
 		if (write) {
-			if (pud_pfn(*pud) != pfn_t_to_pfn(pfn)) {
-				WARN_ON_ONCE(!is_huge_zero_pud(*pud));
+			if (pud_pfn(old_pud) != pfn_t_to_pfn(pfn)) {
+				WARN_ON_ONCE(!is_huge_zero_pud(old_pud));
 				goto out_unlock;
 			}
-			entry = pud_mkyoung(*pud);
+			entry = pud_mkyoung(old_pud);
 			entry = maybe_pud_mkwrite(pud_mkdirty(entry), vma);
 			if (pudp_set_access_flags(vma, addr, pud, entry, 1))
 				update_mmu_cache_pud(vma, addr, pud);
@@ -1476,7 +1477,7 @@ void touch_pud(struct vm_area_struct *vma, unsigned long addr,
 {
 	pud_t _pud;
 
-	_pud = pud_mkyoung(*pud);
+	_pud = pud_mkyoung(pudp_get(pud));
 	if (write)
 		_pud = pud_mkdirty(_pud);
 	if (pudp_set_access_flags(vma, addr & HPAGE_PUD_MASK,
@@ -2284,9 +2285,10 @@ spinlock_t *__pmd_trans_huge_lock(pmd_t *pmd, struct vm_area_struct *vma)
 spinlock_t *__pud_trans_huge_lock(pud_t *pud, struct vm_area_struct *vma)
 {
 	spinlock_t *ptl;
+	pud_t old_pud = pudp_get(pud);
 
 	ptl = pud_lock(vma->vm_mm, pud);
-	if (likely(pud_trans_huge(*pud) || pud_devmap(*pud)))
+	if (likely(pud_trans_huge(old_pud) || pud_devmap(old_pud)))
 		return ptl;
 	spin_unlock(ptl);
 	return NULL;
@@ -2317,10 +2319,12 @@ int zap_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 static void __split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
 		unsigned long haddr)
 {
+	pud_t old_pud = pudp_get(pud);
+
 	VM_BUG_ON(haddr & ~HPAGE_PUD_MASK);
 	VM_BUG_ON_VMA(vma->vm_start > haddr, vma);
 	VM_BUG_ON_VMA(vma->vm_end < haddr + HPAGE_PUD_SIZE, vma);
-	VM_BUG_ON(!pud_trans_huge(*pud) && !pud_devmap(*pud));
+	VM_BUG_ON(!pud_trans_huge(old_pud) && !pud_devmap(old_pud));
 
 	count_vm_event(THP_SPLIT_PUD);
 
@@ -2332,13 +2336,15 @@ void __split_huge_pud(struct vm_area_struct *vma, pud_t *pud,
 {
 	spinlock_t *ptl;
 	struct mmu_notifier_range range;
+	pud_t old_pud;
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
 				address & HPAGE_PUD_MASK,
 				(address & HPAGE_PUD_MASK) + HPAGE_PUD_SIZE);
 	mmu_notifier_invalidate_range_start(&range);
 	ptl = pud_lock(vma->vm_mm, pud);
-	if (unlikely(!pud_trans_huge(*pud) && !pud_devmap(*pud)))
+	old_pud = pudp_get(pud);
+	if (unlikely(!pud_trans_huge(old_pud) && !pud_devmap(old_pud)))
 		goto out;
 	__split_huge_pud_locked(vma, pud, range.start);
 
