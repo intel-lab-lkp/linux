@@ -145,9 +145,11 @@ int fsi_master_i2cr_read(struct fsi_master_i2cr *i2cr, u32 addr, u64 *data)
 	if (ret)
 		goto unlock;
 
-	ret = i2cr_check_status(i2cr->client);
-	if (ret)
-		goto unlock;
+	if (*data == 0xffffffffffffffffull) {
+		ret = i2cr_check_status(i2cr->client);
+		if (ret)
+			goto unlock;
+	}
 
 	trace_i2cr_read(i2cr->client, command, data);
 
