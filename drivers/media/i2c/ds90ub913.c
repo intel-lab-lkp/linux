@@ -351,7 +351,6 @@ static int ub913_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 	const struct v4l2_subdev_krouting *routing;
 	struct v4l2_mbus_frame_desc source_fd;
 	struct v4l2_subdev_route *route;
-	struct v4l2_subdev_state *state;
 	int ret;
 
 	if (pad != UB913_PAD_SOURCE)
@@ -364,7 +363,7 @@ static int ub913_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 
 	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL;
 
-	state = v4l2_subdev_lock_and_get_active_state(sd);
+	CLASS(v4l2_subdev_lock_and_get_active_state, state)(sd);
 
 	routing = &state->routing;
 
@@ -382,8 +381,7 @@ static int ub913_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 		if (i == source_fd.num_entries) {
 			dev_err(&priv->client->dev,
 				"Failed to find stream from source frame desc\n");
-			ret = -EPIPE;
-			goto out_unlock;
+			return -EPIPE;
 		}
 
 		fd->entry[fd->num_entries].stream = route->source_stream;
@@ -395,10 +393,7 @@ static int ub913_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 		fd->num_entries++;
 	}
 
-out_unlock:
-	v4l2_subdev_unlock_state(state);
-
-	return ret;
+	return 0;
 }
 
 static int ub913_set_fmt(struct v4l2_subdev *sd,

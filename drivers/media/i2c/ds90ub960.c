@@ -2777,7 +2777,6 @@ static int ub960_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 {
 	struct ub960_data *priv = sd_to_ub960(sd);
 	struct v4l2_subdev_route *route;
-	struct v4l2_subdev_state *state;
 	int ret = 0;
 	struct device *dev = &priv->client->dev;
 	u8 vc_map[UB960_MAX_RX_NPORTS] = {};
@@ -2787,7 +2786,7 @@ static int ub960_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 
 	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
 
-	state = v4l2_subdev_lock_and_get_active_state(&priv->sd);
+	CLASS(v4l2_subdev_lock_and_get_active_state, state)(&priv->sd);
 
 	ub960_get_vc_maps(priv, state, vc_map);
 
@@ -2810,7 +2809,7 @@ static int ub960_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			dev_err(dev,
 				"Failed to get source frame desc for pad %u\n",
 				route->sink_pad);
-			goto out_unlock;
+			return ret;
 		}
 
 		for (i = 0; i < source_fd.num_entries; i++) {
@@ -2823,8 +2822,7 @@ static int ub960_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 		if (!source_entry) {
 			dev_err(dev,
 				"Failed to find stream from source frame desc\n");
-			ret = -EPIPE;
-			goto out_unlock;
+			return -EPIPE;
 		}
 
 		fd->entry[fd->num_entries].stream = route->source_stream;
@@ -2844,16 +2842,13 @@ static int ub960_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 			fmt = v4l2_subdev_state_get_format(state, pad,
 							   route->source_stream);
 
-			if (!fmt) {
-				ret = -EINVAL;
-				goto out_unlock;
-			}
+			if (!fmt)
+				return -EINVAL;
 
 			ub960_fmt = ub960_find_format(fmt->code);
 			if (!ub960_fmt) {
 				dev_err(dev, "Unable to find format\n");
-				ret = -EINVAL;
-				goto out_unlock;
+				return -EINVAL;
 			}
 
 			fd->entry[fd->num_entries].bus.csi2.dt =
@@ -2863,10 +2858,7 @@ static int ub960_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 		fd->num_entries++;
 	}
 
-out_unlock:
-	v4l2_subdev_unlock_state(state);
-
-	return ret;
+	return 0;
 }
 
 static int ub960_set_fmt(struct v4l2_subdev *sd,
@@ -2944,14 +2936,13 @@ static int ub960_log_status(struct v4l2_subdev *sd)
 {
 	struct ub960_data *priv = sd_to_ub960(sd);
 	struct device *dev = &priv->client->dev;
-	struct v4l2_subdev_state *state;
 	unsigned int nport;
 	unsigned int i;
 	u16 v16 = 0;
 	u8 v = 0;
 	u8 id[UB960_SR_FPD3_RX_ID_LEN];
 
-	state = v4l2_subdev_lock_and_get_active_state(sd);
+	CLASS(v4l2_subdev_lock_and_get_active_state, state)(sd);
 
 	for (i = 0; i < sizeof(id); i++)
 		ub960_read(priv, UB960_SR_FPD3_RX_ID(i), &id[i]);
@@ -3077,8 +3068,6 @@ static int ub960_log_status(struct v4l2_subdev *sd)
 				 (v >> ctl_shift) & 0xf);
 		}
 	}
-
-	v4l2_subdev_unlock_state(state);
 
 	return 0;
 }
