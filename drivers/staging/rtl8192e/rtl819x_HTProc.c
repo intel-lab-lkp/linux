@@ -357,7 +357,7 @@ static u8 ht_pick_mcs_rate(struct rtllib_device *ieee, u8 *pOperateMCS)
 	return true;
 }
 
-u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *pMCSRateSet,
+u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *mcs_rate_set,
 		       u8 *pMCSFilter)
 {
 	u8		i, j;
@@ -365,14 +365,14 @@ u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *pMCSRateSet,
 	u8		mcsRate = 0;
 	u8		availableMcsRate[16];
 
-	if (!pMCSRateSet || !pMCSFilter) {
+	if (!mcs_rate_set || !pMCSFilter) {
 		netdev_warn(ieee->dev,
-			    "%s(): pMCSRateSet and pMCSFilter are null\n",
+			    "%s(): mcs_rate_set and pMCSFilter are null\n",
 			    __func__);
 		return false;
 	}
 	for (i = 0; i < 16; i++)
-		availableMcsRate[i] = pMCSRateSet[i] & pMCSFilter[i];
+		availableMcsRate[i] = mcs_rate_set[i] & pMCSFilter[i];
 
 	for (i = 0; i < 16; i++) {
 		if (availableMcsRate[i] != 0)
