@@ -321,16 +321,14 @@ static int imx8qxp_pc_bridge_probe(struct platform_device *pdev)
 		}
 
 		ch->next_bridge = of_drm_find_bridge(remote);
+		of_node_put(remote);
 		if (!ch->next_bridge) {
-			of_node_put(remote);
 			ret = -EPROBE_DEFER;
 			DRM_DEV_DEBUG_DRIVER(dev,
 					     "channel%u failed to find next bridge: %d\n",
 					     i, ret);
 			goto free_child;
 		}
-
-		of_node_put(remote);
 
 		ch->bridge.driver_private = ch;
 		ch->bridge.funcs = &imx8qxp_pc_bridge_funcs;
