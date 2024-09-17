@@ -137,7 +137,7 @@ static inline u16 Mk16_le(u16 *v)
 	return *v;
 }
 
-static const u16 Sbox[256] = {
+static const u16 box[256] = {
 	0xC6A5, 0xF884, 0xEE99, 0xF68D, 0xFF0D, 0xD6BD, 0xDEB1, 0x9154,
 	0x6050, 0x0203, 0xCEA9, 0x567D, 0xE719, 0xB562, 0x4DE6, 0xEC9A,
 	0x8F45, 0x1F9D, 0x8940, 0xFA87, 0xEF15, 0xB2EB, 0x8EC9, 0xFB0B,
@@ -174,8 +174,8 @@ static const u16 Sbox[256] = {
 
 static inline u16 _S_(u16 v)
 {
-	u16 t = Sbox[Hi8(v)];
-	return Sbox[Lo8(v)] ^ ((t << 8) | (t >> 8));
+	u16 t = box[Hi8(v)];
+	return box[Lo8(v)] ^ ((t << 8) | (t >> 8));
 }
 
 #define PHASE1_LOOP_COUNT 8
