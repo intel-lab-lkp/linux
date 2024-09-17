@@ -1371,7 +1371,7 @@ struct rtllib_device {
 	enum fsync_state fsync_state;
 	bool		bis_any_nonbepkts;
 	struct bandwidth_autoswitch bandwidth_auto_switch;
-	bool FwRWRF;
+	bool fw_rw_rf;
 
 	struct rt_link_detect link_detect_info;
 	bool is_aggregate_frame;

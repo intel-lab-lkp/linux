@@ -613,7 +613,7 @@ start:
 		priv->rtllib->rf_off_reason = 0;
 	}
 
-	if (priv->rtllib->FwRWRF)
+	if (priv->rtllib->fw_rw_rf)
 		priv->rf_mode = RF_OP_By_FW;
 	else
 		priv->rf_mode = RF_OP_By_SW_3wire;

@@ -747,7 +747,7 @@ static void _rtl92e_dm_init_tx_power_tracking_thermal(struct net_device *dev)
 {
 	struct r8192_priv *priv = rtllib_priv(dev);
 
-	if (priv->rtllib->FwRWRF)
+	if (priv->rtllib->fw_rw_rf)
 		priv->btxpower_tracking = true;
 	else
 		priv->btxpower_tracking = false;
