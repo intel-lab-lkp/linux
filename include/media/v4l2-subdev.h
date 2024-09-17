@@ -8,6 +8,7 @@
 #ifndef _V4L2_SUBDEV_H
 #define _V4L2_SUBDEV_H
 
+#include <linux/cleanup.h>
 #include <linux/types.h>
 #include <linux/v4l2-subdev.h>
 #include <media/media-entity.h>
@@ -1853,6 +1854,15 @@ v4l2_subdev_lock_and_get_active_state(struct v4l2_subdev *sd)
 		v4l2_subdev_lock_state(sd->active_state);
 	return sd->active_state;
 }
+
+DEFINE_CLASS(v4l2_subdev_lock_and_get_active_state, struct v4l2_subdev_state *,
+	     v4l2_subdev_unlock_state(_T),
+	     v4l2_subdev_lock_and_get_active_state(sd), struct v4l2_subdev *sd);
+
+#define scoped_v4l2_subdev_lock_and_get_active_state(sd)              \
+	for (CLASS(v4l2_subdev_lock_and_get_active_state, state)(sd), \
+	     *done = NULL;                                            \
+	     !done; done = (void *)1)
 
 /**
  * v4l2_subdev_init - initializes the sub-device struct
