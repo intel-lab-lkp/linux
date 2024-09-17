@@ -51,6 +51,8 @@ properties:
 
   interrupt-controller: true
 
+  interrupt-parent: true
+
   '#interrupt-cells':
     const: 2
     description:
@@ -155,6 +157,7 @@ required:
   - '#gpio-cells'
   - gpio-ranges
   - interrupt-controller
+  - interrupt-parent
   - '#interrupt-cells'
   - clocks
   - power-domains
@@ -174,6 +177,7 @@ examples:
             gpio-ranges = <&pinctrl 0 0 392>;
             interrupt-controller;
             #interrupt-cells = <2>;
+            interrupt-parent = <&irqc>;
             clocks = <&cpg CPG_MOD R9A07G044_GPIO_HCLK>;
             resets = <&cpg R9A07G044_GPIO_RSTN>,
                      <&cpg R9A07G044_GPIO_PORT_RESETN>,
