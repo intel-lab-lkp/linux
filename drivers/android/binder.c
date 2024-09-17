@@ -54,6 +54,7 @@
 #include <linux/poll.h>
 #include <linux/debugfs.h>
 #include <linux/rbtree.h>
+#include <linux/rbtree_augmented.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/mm.h>
 #include <linux/seq_file.h>
@@ -1043,62 +1044,42 @@ static struct binder_ref *binder_get_ref_olocked(struct binder_proc *proc,
 	return NULL;
 }
 
-/* Find the smallest unused descriptor the "slow way" */
-static u32 slow_desc_lookup_olocked(struct binder_proc *proc, u32 offset)
-{
-	struct binder_ref *ref;
-	struct rb_node *n;
-	u32 desc;
-
-	desc = offset;
-	for (n = rb_first(&proc->refs_by_desc); n; n = rb_next(n)) {
-		ref = rb_entry(n, struct binder_ref, rb_node_desc);
-		if (ref->data.desc > desc)
-			break;
-		desc = ref->data.desc + 1;
-	}
-
-	return desc;
-}
-
-/*
- * Find an available reference descriptor ID. The proc->outer_lock might
- * be released in the process, in which case -EAGAIN is returned and the
- * @desc should be considered invalid.
+/**
+ * binder_ref_rb_node_desc_compute_size() - Maintain the rb_node_desc_size
+ * @ref:         struct binder_ref to maintain
+ *
+ * Maintain the rb_node_desc_size of the ref_by_desc map in binder_proc for
+ * key as desc and value as binder_ref.
+ * Using augmented rb_tree functions with binder_ref_rb_node_desc_callbacks.
  */
-static int get_ref_desc_olocked(struct binder_proc *proc,
-				struct binder_node *node,
-				u32 *desc)
+static inline bool
+binder_ref_rb_node_desc_compute_size(struct binder_ref *ref, bool exit)
 {
-	struct dbitmap *dmap = &proc->dmap;
-	unsigned int nbits, offset;
-	unsigned long *new, bit;
+	struct binder_ref *child;
+	size_t size = 1;
 
-	/* 0 is reserved for the context manager */
-	offset = (node == proc->context->binder_context_mgr_node) ? 0 : 1;
-
-	if (!dbitmap_enabled(dmap)) {
-		*desc = slow_desc_lookup_olocked(proc, offset);
-		return 0;
+	if (ref->rb_node_desc.rb_left) {
+		child = rb_entry(ref->rb_node_desc.rb_left, struct binder_ref,
+				 rb_node_desc);
+		size += child->rb_node_desc_size;
 	}
 
-	if (dbitmap_acquire_next_zero_bit(dmap, offset, &bit) == 0) {
-		*desc = bit;
-		return 0;
+	if (ref->rb_node_desc.rb_right) {
+		child = rb_entry(ref->rb_node_desc.rb_right, struct binder_ref,
+				 rb_node_desc);
+		size += child->rb_node_desc_size;
 	}
 
-	/*
-	 * The dbitmap is full and needs to grow. The proc->outer_lock
-	 * is briefly released to allocate the new bitmap safely.
-	 */
-	nbits = dbitmap_grow_nbits(dmap);
-	binder_proc_unlock(proc);
-	new = bitmap_zalloc(nbits, GFP_KERNEL);
-	binder_proc_lock(proc);
-	dbitmap_grow(dmap, new, nbits);
+	if (exit && ref->rb_node_desc_size == size)
+		return true;
 
-	return -EAGAIN;
+	ref->rb_node_desc_size = size;
+	return false;
 }
+
+RB_DECLARE_CALLBACKS(static, binder_ref_rb_node_desc_callbacks,
+		     struct binder_ref, rb_node_desc, rb_node_desc_size,
+		     binder_ref_rb_node_desc_compute_size)
 
 /**
  * binder_get_ref_for_node_olocked() - get the ref associated with given node
@@ -1123,14 +1104,12 @@ static struct binder_ref *binder_get_ref_for_node_olocked(
 					struct binder_node *node,
 					struct binder_ref *new_ref)
 {
-	struct binder_ref *ref;
-	struct rb_node *parent;
-	struct rb_node **p;
-	u32 desc;
+	struct binder_context *context = proc->context;
+	struct rb_node **p = &proc->refs_by_node.rb_node;
+	struct rb_node *parent = NULL;
+	struct binder_ref *ref, *left;
+	uint32_t desc = 0, smaller_count;
 
-retry:
-	p = &proc->refs_by_node.rb_node;
-	parent = NULL;
 	while (*p) {
 		parent = *p;
 		ref = rb_entry(parent, struct binder_ref, rb_node_node);
@@ -1145,9 +1124,13 @@ retry:
 	if (!new_ref)
 		return NULL;
 
-	/* might release the proc->outer_lock */
-	if (get_ref_desc_olocked(proc, node, &desc) == -EAGAIN)
-		goto retry;
+	/* Avoid integer overflow, zero may reserved */
+	if (!RB_EMPTY_ROOT(&proc->refs_by_desc)) {
+		ref = rb_entry(proc->refs_by_desc.rb_node, struct binder_ref,
+		       rb_node_desc);
+		if (ref->rb_node_desc_size >= U32_MAX - 1)
+			return NULL;
+	}
 
 	binder_stats_created(BINDER_STAT_REF);
 	new_ref->data.debug_id = atomic_inc_return(&binder_last_id);
@@ -1156,21 +1139,35 @@ retry:
 	rb_link_node(&new_ref->rb_node_node, parent, p);
 	rb_insert_color(&new_ref->rb_node_node, &proc->refs_by_node);
 
-	new_ref->data.desc = desc;
+	if (node != context->binder_context_mgr_node &&
+	    !proc->have_ref_with_zero_desc)
+		desc = 1;
 	p = &proc->refs_by_desc.rb_node;
 	while (*p) {
 		parent = *p;
 		ref = rb_entry(parent, struct binder_ref, rb_node_desc);
-
-		if (new_ref->data.desc < ref->data.desc)
+		smaller_count = desc;
+		ref->rb_node_desc_size++;
+		if (parent->rb_left) {
+			left = rb_entry(parent->rb_left, struct binder_ref,
+					rb_node_desc);
+			smaller_count += left->rb_node_desc_size;
+		}
+		if (smaller_count < ref->data.desc) {
 			p = &(*p)->rb_left;
-		else if (new_ref->data.desc > ref->data.desc)
+		} else {
+			desc = smaller_count + 1;
 			p = &(*p)->rb_right;
-		else
-			BUG();
+		}
 	}
+
+	if (desc == 0)
+		proc->have_ref_with_zero_desc = true;
+	new_ref->data.desc = desc;
+	new_ref->rb_node_desc_size = 1;
 	rb_link_node(&new_ref->rb_node_desc, parent, p);
-	rb_insert_color(&new_ref->rb_node_desc, &proc->refs_by_desc);
+	rb_insert_augmented(&new_ref->rb_node_desc, &proc->refs_by_desc,
+			    &binder_ref_rb_node_desc_callbacks);
 
 	binder_node_lock(node);
 	hlist_add_head(&new_ref->node_entry, &node->refs);
@@ -1185,7 +1182,6 @@ retry:
 
 static void binder_cleanup_ref_olocked(struct binder_ref *ref)
 {
-	struct dbitmap *dmap = &ref->proc->dmap;
 	bool delete_node = false;
 
 	binder_debug(BINDER_DEBUG_INTERNAL_REFS,
@@ -1193,9 +1189,10 @@ static void binder_cleanup_ref_olocked(struct binder_ref *ref)
 		      ref->proc->pid, ref->data.debug_id, ref->data.desc,
 		      ref->node->debug_id);
 
-	if (dbitmap_enabled(dmap))
-		dbitmap_clear_bit(dmap, ref->data.desc);
-	rb_erase(&ref->rb_node_desc, &ref->proc->refs_by_desc);
+	if (ref->data.desc == 0)
+		ref->proc->have_ref_with_zero_desc = false;
+	rb_erase_augmented(&ref->rb_node_desc, &ref->proc->refs_by_desc,
+			   &binder_ref_rb_node_desc_callbacks);
 	rb_erase(&ref->rb_node_node, &ref->proc->refs_by_node);
 
 	binder_node_inner_lock(ref->node);
@@ -1355,25 +1352,6 @@ static void binder_free_ref(struct binder_ref *ref)
 	kfree(ref);
 }
 
-/* shrink descriptor bitmap if needed */
-static void try_shrink_dmap(struct binder_proc *proc)
-{
-	unsigned long *new;
-	int nbits;
-
-	binder_proc_lock(proc);
-	nbits = dbitmap_shrink_nbits(&proc->dmap);
-	binder_proc_unlock(proc);
-
-	if (!nbits)
-		return;
-
-	new = bitmap_zalloc(nbits, GFP_KERNEL);
-	binder_proc_lock(proc);
-	dbitmap_shrink(&proc->dmap, new, nbits);
-	binder_proc_unlock(proc);
-}
-
 /**
  * binder_update_ref_for_handle() - inc/dec the ref for given handle
  * @proc:	proc containing the ref
@@ -1412,7 +1390,6 @@ static int binder_update_ref_for_handle(struct binder_proc *proc,
 
 	if (delete_ref) {
 		binder_free_ref(ref);
-		try_shrink_dmap(proc);
 	}
 	return ret;
 
@@ -1471,6 +1448,11 @@ static int binder_inc_ref_for_node(struct binder_proc *proc,
 			return -ENOMEM;
 		binder_proc_lock(proc);
 		ref = binder_get_ref_for_node_olocked(proc, node, new_ref);
+		if (!ref) {
+			binder_proc_unlock(proc);
+			kfree(new_ref);
+			return -ENOSPC;
+		}
 	}
 	ret = binder_inc_ref_olocked(ref, strong, target_list);
 	*rdata = ref->data;
@@ -5010,7 +4992,6 @@ static void binder_free_proc(struct binder_proc *proc)
 	put_task_struct(proc->tsk);
 	put_cred(proc->cred);
 	binder_stats_deleted(BINDER_STAT_PROC);
-	dbitmap_free(&proc->dmap);
 	kfree(proc);
 }
 
@@ -5715,7 +5696,6 @@ static int binder_open(struct inode *nodp, struct file *filp)
 	if (proc == NULL)
 		return -ENOMEM;
 
-	dbitmap_init(&proc->dmap);
 	spin_lock_init(&proc->inner_lock);
 	spin_lock_init(&proc->outer_lock);
 	get_task_struct(current->group_leader);

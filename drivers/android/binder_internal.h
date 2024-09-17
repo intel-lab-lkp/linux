@@ -14,7 +14,6 @@
 #include <linux/uidgid.h>
 #include <uapi/linux/android/binderfs.h>
 #include "binder_alloc.h"
-#include "dbitmap.h"
 
 struct binder_context {
 	struct binder_node *binder_context_mgr_node;
@@ -299,6 +298,7 @@ struct binder_ref_data {
  * struct binder_ref - struct to track references on nodes
  * @data:        binder_ref_data containing id, handle, and current refcounts
  * @rb_node_desc: node for lookup by @data.desc in proc's rb_tree
+ * @rb_node_desc_size: size of the subtree of @rb_node_desc
  * @rb_node_node: node for lookup by @node in proc's rb_tree
  * @node_entry:  list entry for node->refs list in target node
  *               (protected by @node->lock)
@@ -319,6 +319,7 @@ struct binder_ref {
 	/*   node => refs + procs (proc exit) */
 	struct binder_ref_data data;
 	struct rb_node rb_node_desc;
+	uint32_t rb_node_desc_size;
 	struct rb_node rb_node_node;
 	struct hlist_node node_entry;
 	struct binder_proc *proc;
@@ -369,8 +370,6 @@ struct binder_ref {
  * @freeze_wait:          waitqueue of processes waiting for all outstanding
  *                        transactions to be processed
  *                        (protected by @inner_lock)
- * @dmap                  dbitmap to manage available reference descriptors
- *                        (protected by @outer_lock)
  * @todo:                 list of work for this process
  *                        (protected by @inner_lock)
  * @stats:                per-process binder statistics
@@ -399,6 +398,9 @@ struct binder_ref {
  * @binderfs_entry:       process-specific binderfs log file
  * @oneway_spam_detection_enabled: process enabled oneway spam detection
  *                        or not
+ * @have_ref_with_zero_desc: have a binder_ref reverse for context manager
+ *                        with desc zero.
+ *                        (protected by @outer_lock)
  *
  * Bookkeeping structure for binder processes
  */
@@ -420,7 +422,6 @@ struct binder_proc {
 	bool sync_recv;
 	bool async_recv;
 	wait_queue_head_t freeze_wait;
-	struct dbitmap dmap;
 	struct list_head todo;
 	struct binder_stats stats;
 	struct list_head delivered_death;
@@ -436,6 +437,7 @@ struct binder_proc {
 	spinlock_t outer_lock;
 	struct dentry *binderfs_entry;
 	bool oneway_spam_detection_enabled;
+	bool have_ref_with_zero_desc;
 };
 
 /**
