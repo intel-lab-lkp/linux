@@ -266,7 +266,7 @@ static void rx_complete(struct usb_ep *ep, struct usb_request *req)
 			/* no buffer copies needed, unless hardware can't
 			 * use skb buffers.
 			 */
-			status = netif_rx(skb2);
+			status = __netif_rx(skb2);
 next_frame:
 			skb2 = skb_dequeue(&dev->rx_frames);
 		}
