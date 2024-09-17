@@ -18,6 +18,7 @@
 #include <sys/timerfd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 
 #include "../kselftest.h"
 
@@ -133,6 +134,7 @@ void suspend(void)
 	int timerfd;
 	int err;
 	struct itimerspec spec = {};
+	clock_t t;
 
 	if (getuid() != 0)
 		ksft_exit_skip("Please run the test as root - Exiting.\n");
@@ -152,8 +154,11 @@ void suspend(void)
 	if (err < 0)
 		ksft_exit_fail_msg("timerfd_settime() failed\n");
 
-	if (write(power_state_fd, "mem", strlen("mem")) != strlen("mem"))
-		ksft_exit_fail_msg("Failed to enter Suspend state\n");
+	t = clock();
+	write(power_state_fd, "mem", strlen("mem"));
+	t = clock()-t;
+	if ((int)(t) < 4)
+			ksft_exit_fail_msg("Failed to enter Suspend state %d\n",errno);
 
 	close(timerfd);
 	close(power_state_fd);
