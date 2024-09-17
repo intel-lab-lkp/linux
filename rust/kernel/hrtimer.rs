@@ -38,6 +38,7 @@
 //!
 //! impl TimerCallback for ArcIntrusiveTimer {
 //!     type CallbackTarget<'a> = Arc<Self>;
+//!     type CallbackPointer<'a> = Arc<Self>;
 //!
 //!     fn run(this: Self::CallbackTarget<'_>) -> TimerRestart {
 //!         pr_info!("Timer called\n");
@@ -104,6 +105,7 @@
 //!
 //! impl TimerCallback for IntrusiveTimer {
 //!     type CallbackTarget<'a> = Pin<&'a Self>;
+//!     type CallbackPointer<'a> = Pin<&'a Self>;
 //!
 //!     fn run(this: Self::CallbackTarget<'_>) -> TimerRestart {
 //!         pr_info!("Timer called\n");
@@ -335,8 +337,11 @@ pub trait TimerCallback {
     /// The type that was used for scheduling the timer.
     type CallbackTarget<'a>: RawTimerCallback;
 
+    /// The type passed to the timer callback function.
+    type CallbackPointer<'a>;
+
     /// Called by the timer logic when the timer fires.
-    fn run(this: Self::CallbackTarget<'_>) -> TimerRestart
+    fn run(this: Self::CallbackPointer<'_>) -> TimerRestart
     where
         Self: Sized;
 }

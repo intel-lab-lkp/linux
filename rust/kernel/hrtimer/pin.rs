@@ -74,6 +74,7 @@ impl<'a, U> RawTimerCallback for Pin<&'a U>
 where
     U: HasTimer<U>,
     U: TimerCallback<CallbackTarget<'a> = Self>,
+    U: TimerCallback<CallbackPointer<'a> = Self>,
 {
     unsafe extern "C" fn run(ptr: *mut bindings::hrtimer) -> bindings::hrtimer_restart {
         // `Timer` is `repr(transparent)`

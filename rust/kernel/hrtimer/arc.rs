@@ -67,6 +67,7 @@ impl<U> RawTimerCallback for Arc<U>
 where
     U: HasTimer<U>,
     U: for<'a> TimerCallback<CallbackTarget<'a> = Self>,
+    U: for<'a> TimerCallback<CallbackPointer<'a> = Self>,
 {
     unsafe extern "C" fn run(ptr: *mut bindings::hrtimer) -> bindings::hrtimer_restart {
         // `Timer` is `repr(transparent)`
