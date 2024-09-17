@@ -12,6 +12,7 @@
 
 #include "selftests/i915_random.h"
 #include "selftests/librapl.h"
+#include "intel_rps.h"
 
 static u64 rc6_residency(struct intel_rc6 *rc6)
 {
@@ -38,6 +39,8 @@ int live_rc6_manual(void *arg)
 	ktime_t dt;
 	u64 res[2];
 	int err = 0;
+	u32 rc0_freq, rc6_freq;
+	struct intel_rps *rps = &gt->rps;
 
 	/*
 	 * Our claim is that we can "encourage" the GPU to enter rc6 at will.
@@ -66,6 +69,7 @@ int live_rc6_manual(void *arg)
 	rc0_power = librapl_energy_uJ() - rc0_power;
 	dt = ktime_sub(ktime_get(), dt);
 	res[1] = rc6_residency(rc6);
+	rc0_freq = intel_rps_read_actual_frequency(rps);
 	if ((res[1] - res[0]) >> 10) {
 		pr_err("RC6 residency increased by %lldus while disabled for 1000ms!\n",
 		       (res[1] - res[0]) >> 10);
@@ -91,6 +95,7 @@ int live_rc6_manual(void *arg)
 	dt = ktime_get();
 	rc6_power = librapl_energy_uJ();
 	msleep(100);
+	rc6_freq = intel_rps_read_actual_frequency(rps);
 	rc6_power = librapl_energy_uJ() - rc6_power;
 	dt = ktime_sub(ktime_get(), dt);
 	res[1] = rc6_residency(rc6);
@@ -109,6 +114,7 @@ int live_rc6_manual(void *arg)
 			rc0_power, rc6_power);
 		if (2 * rc6_power > rc0_power) {
 			pr_err("GPU leaked energy while in RC6!\n");
+			pr_info("GPU Freq: %u in RC6 and %u in RC0\n", rc6_freq, rc0_freq);
 			err = -EINVAL;
 			goto out_unlock;
 		}
