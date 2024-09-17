@@ -171,7 +171,7 @@ static void sev_misc_cg_uncharge(struct kvm_sev_info *sev)
 	misc_cg_uncharge(type, sev->misc_cg, 1);
 }
 
-static int sev_asid_new(struct kvm_sev_info *sev)
+static int sev_asid_new(struct kvm_sev_info *sev, unsigned long vm_type)
 {
 	/*
 	 * SEV-enabled guests must use asid from min_sev_asid to max_sev_asid.
@@ -199,6 +199,18 @@ static int sev_asid_new(struct kvm_sev_info *sev)
 
 	mutex_lock(&sev_bitmap_lock);
 
+	/*
+	 * When CipherTextHiding is enabled, all SNP guests must have an
+	 * ASID less than or equal to MAX_SNP_ASID provided on the
+	 * SNP_INIT_EX command and all the SEV-ES guests must have
+	 * an ASID greater than MAX_SNP_ASID.
+	 */
+	if (snp_cipher_text_hiding && sev->es_active) {
+		if (vm_type == KVM_X86_SNP_VM)
+			max_asid = snp_max_snp_asid;
+		else
+			min_asid = snp_max_snp_asid + 1;
+	}
 again:
 	asid = find_next_zero_bit(sev_asid_bitmap, max_asid + 1, min_asid);
 	if (asid > max_asid) {
@@ -440,7 +452,7 @@ static int __sev_guest_init(struct kvm *kvm, struct kvm_sev_cmd *argp,
 	if (vm_type == KVM_X86_SNP_VM)
 		sev->vmsa_features |= SVM_SEV_FEAT_SNP_ACTIVE;
 
-	ret = sev_asid_new(sev);
+	ret = sev_asid_new(sev, vm_type);
 	if (ret)
 		goto e_no_asid;
 
@@ -3057,14 +3069,18 @@ out:
 								       "unusable" :
 								       "disabled",
 			min_sev_asid, max_sev_asid);
-	if (boot_cpu_has(X86_FEATURE_SEV_ES))
+	if (boot_cpu_has(X86_FEATURE_SEV_ES)) {
+		if (snp_max_snp_asid >= (min_sev_asid - 1))
+			sev_es_supported = false;
 		pr_info("SEV-ES %s (ASIDs %u - %u)\n",
 			sev_es_supported ? "enabled" : "disabled",
-			min_sev_asid > 1 ? 1 : 0, min_sev_asid - 1);
+			min_sev_asid > 1 ? snp_max_snp_asid ? snp_max_snp_asid + 1 : 1 :
+							      0, min_sev_asid - 1);
+	}
 	if (boot_cpu_has(X86_FEATURE_SEV_SNP))
 		pr_info("SEV-SNP %s (ASIDs %u - %u)\n",
 			sev_snp_supported ? "enabled" : "disabled",
-			min_sev_asid > 1 ? 1 : 0, min_sev_asid - 1);
+			min_sev_asid > 1 ? 1 : 0, snp_max_snp_asid ? : min_sev_asid - 1);
 
 	sev_enabled = sev_supported;
 	sev_es_enabled = sev_es_supported;

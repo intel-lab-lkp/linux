@@ -73,10 +73,26 @@ static bool psp_init_on_probe = true;
 module_param(psp_init_on_probe, bool, 0444);
 MODULE_PARM_DESC(psp_init_on_probe, "  if true, the PSP will be initialized on module init. Else the PSP will be initialized on the first command requiring it");
 
+static bool cipher_text_hiding = true;
+module_param(cipher_text_hiding, bool, 0444);
+MODULE_PARM_DESC(cipher_text_hiding, "  if true, the PSP will enable Cipher Text Hiding");
+
+static int max_snp_asid;
+module_param(max_snp_asid, int, 0444);
+MODULE_PARM_DESC(max_snp_asid, "  override MAX_SNP_ASID for Cipher Text Hiding");
+
 MODULE_FIRMWARE("amd/amd_sev_fam17h_model0xh.sbin"); /* 1st gen EPYC */
 MODULE_FIRMWARE("amd/amd_sev_fam17h_model3xh.sbin"); /* 2nd gen EPYC */
 MODULE_FIRMWARE("amd/amd_sev_fam19h_model0xh.sbin"); /* 3rd gen EPYC */
 MODULE_FIRMWARE("amd/amd_sev_fam19h_model1xh.sbin"); /* 4th gen EPYC */
+
+/* Cipher Text Hiding Enabled */
+bool snp_cipher_text_hiding;
+EXPORT_SYMBOL(snp_cipher_text_hiding);
+
+/* MAX_SNP_ASID */
+unsigned int snp_max_snp_asid;
+EXPORT_SYMBOL(snp_max_snp_asid);
 
 static bool psp_dead;
 static int psp_timeout;
@@ -1064,6 +1080,38 @@ static void snp_set_hsave_pa(void *arg)
 	wrmsrl(MSR_VM_HSAVE_PA, 0);
 }
 
+static void sev_snp_enable_ciphertext_hiding(struct sev_data_snp_init_ex *data, int *error)
+{
+	struct psp_device *psp = psp_master;
+	struct sev_device *sev;
+	unsigned int edx;
+
+	sev = psp->sev_data;
+
+	/*
+	 * Check if CipherTextHiding feature is supported and enabled
+	 * in the Platform/BIOS.
+	 */
+	if ((sev->feat_info.ecx & SNP_CIPHER_TEXT_HIDING_SUPPORTED) &&
+	    sev->snp_plat_status.ciphertext_hiding_cap) {
+		/* Retrieve SEV CPUID information */
+		edx = cpuid_edx(0x8000001f);
+		/* Do sanity checks on user-defined MAX_SNP_ASID */
+		if (max_snp_asid >= edx) {
+			dev_info(sev->dev, "max_snp_asid module parameter is not valid, limiting to %d\n",
+				 edx - 1);
+			max_snp_asid = edx - 1;
+		}
+		snp_max_snp_asid = max_snp_asid ? : (edx - 1) / 2;
+
+		snp_cipher_text_hiding = 1;
+		data->ciphertext_hiding_en = 1;
+		data->max_snp_asid = snp_max_snp_asid;
+
+		dev_dbg(sev->dev, "SEV-SNP CipherTextHiding feature support enabled\n");
+	}
+}
+
 static void snp_get_platform_data(void)
 {
 	struct sev_device *sev = psp_master->sev_data;
@@ -1199,6 +1247,10 @@ static int __sev_snp_init_locked(int *error)
 		}
 
 		memset(&data, 0, sizeof(data));
+
+		if (cipher_text_hiding)
+			sev_snp_enable_ciphertext_hiding(&data, error);
+
 		data.init_rmp = 1;
 		data.list_paddr_en = 1;
 		data.list_paddr = __psp_pa(snp_range_list);
