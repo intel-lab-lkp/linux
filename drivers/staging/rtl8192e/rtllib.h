@@ -1737,7 +1737,7 @@ void ht_reset_self_and_save_peer_setting(struct rtllib_device *ieee,
 void HT_update_self_and_peer_setting(struct rtllib_device *ieee,
 				     struct rtllib_network *network);
 u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *mcs_rate_set,
-		       u8 *pMCSFilter);
+		       u8 *mcs_filter);
 extern u8 MCS_FILTER_ALL[];
 extern u16 MCS_DATA_RATE[2][2][77];
 u8 ht_c_check(struct rtllib_device *ieee, u8 *frame);
