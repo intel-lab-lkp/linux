@@ -191,6 +191,39 @@ pub trait TimerPointer: Sync + Sized {
     fn schedule(self, expires: Ktime) -> Self::TimerHandle;
 }
 
+/// Unsafe version of [`TimerPointer`] for situations where leaking the
+/// `TimerHandle` returned by `schedule` would be unsound. This is the case for
+/// stack allocated timers.
+///
+/// Typical implementers are pinned references such as [`Pin<&T>].
+///
+/// # Safety
+///
+/// Implementers of this trait must ensure that instances of types implementing
+/// [`UnsafeTimerPointer`] outlives any associated [`TimerPointer::TimerHandle`]
+/// instances.
+///
+/// [`Pin<&T>`]: Box
+pub unsafe trait UnsafeTimerPointer: Sync + Sized {
+    /// A handle representing a scheduled timer.
+    ///
+    /// # Safety
+    ///
+    /// If the timer is armed, or if the timer callback is running when the
+    /// handle is dropped, the drop method of `TimerHandle` must not return
+    /// until the timer is unarmed and the callback has completed.
+    type TimerHandle: TimerHandle;
+
+    /// Schedule the timer after `expires` time units. If the timer was already
+    /// scheduled, it is rescheduled at the new expiry time.
+    ///
+    /// # Safety
+    ///
+    /// Caller promises keep the timer structure alive until the timer is dead.
+    /// Caller can ensure this by not leaking the returned `Self::TimerHandle`.
+    unsafe fn schedule(self, expires: Ktime) -> Self::TimerHandle;
+}
+
 /// Implemented by [`TimerPointer`] implementers to give the C timer callback a
 /// function to call.
 // This is split from `TimerPointer` to make it easier to specify trait bounds.
