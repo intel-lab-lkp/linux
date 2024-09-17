@@ -29,6 +29,7 @@ struct btrfs_trans_handle;
 struct btrfs_zoned_device_info;
 
 #define BTRFS_MAX_DATA_CHUNK_SIZE	(10ULL * SZ_1G)
+#define BTRFS_MAX_DISCARD_CHUNK_SIZE	(1ULL * SZ_1G)
 
 extern struct mutex uuid_mutex;
 
