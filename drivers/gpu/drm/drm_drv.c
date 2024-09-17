@@ -497,6 +497,43 @@ void drm_dev_unplug(struct drm_device *dev)
 }
 EXPORT_SYMBOL(drm_dev_unplug);
 
+const char *const wedge_recovery_opts[] = {
+	[DRM_WEDGE_RECOVERY_REBIND] = "rebind",
+	[DRM_WEDGE_RECOVERY_BUS_RESET] = "bus-reset",
+	[DRM_WEDGE_RECOVERY_REBOOT] = "reboot",
+};
+
+/**
+ * drm_dev_wedged_event - generate a device wedged uevent
+ * @dev: DRM device
+ * @method: method to be used for recovery
+ *
+ * This generates a device wedged uevent for the DRM device specified by @dev.
+ * Recovery @method from wedge_recovery_opts[] (if supprted by the device) is
+ * sent in the uevent environment as WEDGED=<method>, on the basis of which,
+ * userspace may take respective action to recover the device.
+ *
+ * Returns: 0 on success, or negative error code otherwise.
+ */
+int drm_dev_wedged_event(struct drm_device *dev, enum wedge_recovery_method method)
+{
+	char event_string[32] = "WEDGED=";
+	char *envp[] = { event_string, NULL };
+	bool supported;
+
+	supported = test_bit(method, &dev->wedge_recovery);
+	if (unlikely(!supported)) {
+		drm_err(dev, "device wedged, recovery method not supported\n");
+		return -EOPNOTSUPP;
+	}
+
+	strcat(event_string, wedge_recovery_opts[method]);
+
+	drm_info(dev, "device wedged, generating uevent\n");
+	return kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+}
+EXPORT_SYMBOL(drm_dev_wedged_event);
+
 /*
  * DRM internal mount
  * We want to be able to allocate our own "struct address_space" to control
