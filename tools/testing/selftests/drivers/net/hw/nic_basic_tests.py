@@ -42,6 +42,14 @@ from lib.py import ethtool
 """Global variables"""
 common_link_modes = []
 
+def check_autonegotiation(ifname: str) -> None:
+    autoneg = get_ethtool_content(ifname, "Supports auto-negotiation:")
+    partner_autoneg = get_ethtool_content(ifname, "Link partner advertised auto-negotiation:")
+
+    """Check if auto-neg supported by local and partner NIC"""
+    if autoneg[0] != "Yes" or partner_autoneg[0] != "Yes":
+        raise KsftSkipEx(f"Interface {ifname} or partner does not support auto-negotiation")
+
 def get_ethtool_content(ifname: str, field: str):
     capture = False
     content = []
@@ -112,6 +120,25 @@ def verify_autonegotiation(ifname: str, expected_state: str) -> None:
 
     ksft_eq(actual_state, expected_state)
 
+def set_speed_and_duplex(ifname: str, speed: str, duplex: str) -> None:
+    """Set the speed and duplex state for the interface"""
+    process = ethtool(f"--change {ifname} speed {speed} duplex {duplex} autoneg on")
+
+    if process.ret != 0:
+        raise KsftFailEx(f"Not able to set speed and duplex parameters for {ifname}")
+    ksft_pr(f"Speed: {speed} Mbps, Duplex: {duplex} set for Interface: {ifname}")
+
+def verify_speed_and_duplex(ifname: str, expected_speed: str, expected_duplex: str) -> None:
+    verify_link_up(ifname)
+    """Verifying the speed and duplex state for the interface"""
+    with open(f"/sys/class/net/{ifname}/speed", "r") as fp:
+        actual_speed = fp.read().strip()
+    with open(f"/sys/class/net/{ifname}/duplex", "r") as fp:
+        actual_duplex = fp.read().strip()
+
+    ksft_eq(actual_speed, expected_speed)
+    ksft_eq(actual_duplex, expected_duplex)
+
 def test_link_modes(cfg) -> None:
     global common_link_modes
     link_modes = get_ethtool_content(cfg.ifname, "Supported link modes:")
@@ -135,6 +162,25 @@ def test_autonegotiation(cfg) -> None:
             verify_autonegotiation(cfg.ifname, state)
     else:
         raise KsftSkipEx(f"Auto-Negotiation is not supported for interface {cfg.ifname}")
+
+def test_network_speed(cfg) -> None:
+    check_autonegotiation(cfg.ifname)
+    if not common_link_modes:
+        KsftSkipEx("No common link modes exist")
+    speeds, duplex_modes = get_speed_duplex(common_link_modes)
+
+    if speeds and duplex_modes and len(speeds) == len(duplex_modes):
+        for idx in range(len(speeds)):
+            speed = speeds[idx]
+            duplex = duplex_modes[idx]
+            set_speed_and_duplex(cfg.ifname, speed, duplex)
+            time.sleep(sleep_time)
+            verify_speed_and_duplex(cfg.ifname, speed, duplex)
+    else:
+        if not speeds or not duplex_modes:
+            KsftSkipEx(f"No supported speeds or duplex modes found for interface {cfg.ifname}")
+        else:
+            KsftSkipEx("Mismatch in the number of speeds and duplex modes")
 
 def main() -> None:
     with NetDrvEpEnv(__file__) as cfg:
