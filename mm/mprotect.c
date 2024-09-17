@@ -381,7 +381,7 @@ again:
 			break;
 		}
 
-		if (pmd_none(*pmd))
+		if (pmd_none(pmdp_get(pmd)))
 			goto next;
 
 		/* invoke the mmu notifier if the pmd is populated */

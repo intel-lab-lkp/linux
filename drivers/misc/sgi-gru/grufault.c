@@ -208,7 +208,7 @@ static int atomic_pte_lookup(struct vm_area_struct *vma, unsigned long vaddr,
 	pgd_t *pgdp;
 	p4d_t *p4dp;
 	pud_t *pudp;
-	pmd_t *pmdp;
+	pmd_t *pmdp, old_pmd;
 	pte_t pte;
 
 	pgdp = pgd_offset(vma->vm_mm, vaddr);
@@ -224,10 +224,11 @@ static int atomic_pte_lookup(struct vm_area_struct *vma, unsigned long vaddr,
 		goto err;
 
 	pmdp = pmd_offset(pudp, vaddr);
-	if (unlikely(pmd_none(*pmdp)))
+	old_pmd = pmdp_get(pmdp);
+	if (unlikely(pmd_none(old_pmd)))
 		goto err;
 #ifdef CONFIG_X86_64
-	if (unlikely(pmd_leaf(*pmdp)))
+	if (unlikely(pmd_leaf(old_pmd)))
 		pte = ptep_get((pte_t *)pmdp);
 	else
 #endif
