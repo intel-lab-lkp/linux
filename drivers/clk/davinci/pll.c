@@ -777,16 +777,13 @@ int of_davinci_pll_init(struct device *dev, struct device_node *node,
 		int i;
 
 		clk_data = kzalloc(sizeof(*clk_data), GFP_KERNEL);
-		if (!clk_data) {
-			of_node_put(child);
-			return -ENOMEM;
-		}
+		if (!clk_data)
+			goto put_node;
 
 		clks = kmalloc_array(n_clks, sizeof(*clks), GFP_KERNEL);
 		if (!clks) {
 			kfree(clk_data);
-			of_node_put(child);
-			return -ENOMEM;
+			goto put_node;
 		}
 
 		clk_data->clks = clks;
@@ -838,6 +835,10 @@ int of_davinci_pll_init(struct device *dev, struct device_node *node,
 	of_node_put(child);
 
 	return 0;
+
+put_node:
+	of_node_put(child);
+	return -ENOMEM;
 }
 
 static struct davinci_pll_platform_data *davinci_pll_get_pdata(struct device *dev)
