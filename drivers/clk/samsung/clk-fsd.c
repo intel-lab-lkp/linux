@@ -1637,8 +1637,9 @@ static const struct samsung_pll_rate_table pll_cam_csi_rate_table[] __initconst 
 };
 
 static const struct samsung_pll_clock cam_csi_pll_clks[] __initconst = {
-	PLL(pll_142xx, 0, "fout_pll_cam_csi", "fin_pll",
-	    PLL_LOCKTIME_PLL_CAM_CSI, PLL_CON0_PLL_CAM_CSI, pll_cam_csi_rate_table),
+	__PLL(pll_142xx, 0, "fout_pll_cam_csi", "fin_pll",
+		CLK_GET_RATE_NOCACHE | CLK_IS_CRITICAL, PLL_LOCKTIME_PLL_CAM_CSI,
+		PLL_CON0_PLL_CAM_CSI, pll_cam_csi_rate_table),
 };
 
 PNAME(mout_cam_csi_pll_p) = { "fin_pll", "fout_pll_cam_csi" };
