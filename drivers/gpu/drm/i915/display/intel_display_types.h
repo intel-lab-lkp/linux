@@ -1540,6 +1540,13 @@ struct intel_crtc {
 #ifdef CONFIG_DEBUG_FS
 	struct intel_pipe_crc pipe_crc;
 #endif
+
+	/*
+	 * We need to block DC6 entry in case of Panel Replay as enabling VBI doesn't
+	 * prevent DC6 in case of Panel Replay. This causes problems if user-space is
+	 * polling for vblank events.
+	 */
+	u8 block_dc6_needed;
 };
 
 struct intel_plane {
