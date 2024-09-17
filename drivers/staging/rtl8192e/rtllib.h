@@ -1194,7 +1194,7 @@ struct rtllib_device {
 	u8	tx_enable_fw_calc_dur;
 	atomic_t	atm_swbw;
 
-	struct list_head		Tx_TS_Admit_List;
+	struct list_head		tx_ts_admit_list;
 	struct list_head		Tx_TS_Pending_List;
 	struct list_head		Tx_TS_Unused_List;
 	struct tx_ts_record tx_ts_records[TOTAL_TS_NUM];
