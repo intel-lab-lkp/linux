@@ -251,8 +251,7 @@ int mtk_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)
 	mtk_gem->pages = kcalloc(npages, sizeof(*mtk_gem->pages), GFP_KERNEL);
 	if (!mtk_gem->pages) {
 		sg_free_table(sgt);
-		kfree(sgt);
-		return -ENOMEM;
+		goto free_sgt;
 	}
 
 	drm_prime_sg_to_page_array(sgt, mtk_gem->pages, npages);
@@ -261,9 +260,8 @@ int mtk_gem_prime_vmap(struct drm_gem_object *obj, struct iosys_map *map)
 			       pgprot_writecombine(PAGE_KERNEL));
 	sg_free_table(sgt);
 	if (!mtk_gem->kvaddr) {
-		kfree(sgt);
 		kfree(mtk_gem->pages);
-		return -ENOMEM;
+		goto free_sgt;
 	}
 
 	kfree(sgt);
@@ -272,6 +270,10 @@ out:
 	iosys_map_set_vaddr(map, mtk_gem->kvaddr);
 
 	return 0;
+
+free_sgt:
+	kfree(sgt);
+	return -ENOMEM;
 }
 
 void mtk_gem_prime_vunmap(struct drm_gem_object *obj, struct iosys_map *map)
