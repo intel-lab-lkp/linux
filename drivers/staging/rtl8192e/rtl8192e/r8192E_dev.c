@@ -1506,7 +1506,7 @@ static void _rtl92e_translate_rx_signal_stats(struct net_device *dev,
 				  (fc & IEEE80211_FCTL_TODS) ? hdr->addr1 :
 				  (fc & IEEE80211_FCTL_FROMDS) ? hdr->addr2 :
 				  hdr->addr3) &&
-		 (!pstats->hw_error) && (!pstats->bCRC) && (!pstats->bICV));
+		 (!pstats->hw_error) && (!pstats->crc) && (!pstats->bICV));
 	bpacket_toself = bpacket_match_bssid &&		/* check this */
 			 ether_addr_equal(praddr, priv->rtllib->dev->dev_addr);
 	if (ieee80211_is_beacon(hdr->frame_control))
@@ -1525,7 +1525,7 @@ static void _rtl92e_update_received_rate_histogram_stats(struct net_device *dev,
 	u32 rcvType = 1;
 	u32 rate_index;
 
-	if (pstats->bCRC)
+	if (pstats->crc)
 		rcvType = 2;
 	else if (pstats->bICV)
 		rcvType = 3;
@@ -1629,7 +1629,7 @@ bool rtl92e_get_rx_stats(struct net_device *dev, struct rtllib_rx_stats *stats,
 	struct rx_fwinfo *pDrvInfo = NULL;
 
 	stats->bICV = pdesc->ICV;
-	stats->bCRC = pdesc->CRC32;
+	stats->crc = pdesc->CRC32;
 	stats->hw_error = pdesc->CRC32 | pdesc->ICV;
 
 	stats->Length = pdesc->Length;

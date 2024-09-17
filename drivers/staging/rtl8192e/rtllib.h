@@ -468,7 +468,7 @@ struct rtllib_rx_stats {
 	s32 RecvSignalPower;
 	u8  signal_strength;
 	u16 hw_error:1;
-	u16 bCRC:1;
+	u16 crc:1;
 	u16 bICV:1;
 	u16 decrypted:1;
 	u32 time_stamp_low;
