@@ -282,6 +282,26 @@ impl<T: ?Sized> Arc<T> {
         unsafe { Self::from_inner(ptr) }
     }
 
+    /// Clones an [`Arc`] instance from a pointer to the contained data.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must point to an allocation that is contained within a live [`Arc<T>`].
+    pub unsafe fn clone_from_raw(ptr: *const T) -> Self {
+        // SAFETY: The caller promises that this pointer points to data
+        // contained in an `Arc` that is still valid.
+        let inner = unsafe { ArcInner::container_of(ptr).as_ref() };
+
+        // INVARIANT: C `refcount_inc` saturates the refcount, so it cannot
+        // overflow to zero. SAFETY: By the function safety requirement, there
+        // is necessarily a reference to the object, so it is safe to increment
+        // the refcount.
+        unsafe { bindings::refcount_inc(inner.refcount.get()) };
+
+        // SAFETY: We just incremented the refcount. This increment is now owned by the new `Arc`.
+        unsafe { Self::from_inner(inner.into()) }
+    }
+
     /// Returns an [`ArcBorrow`] from the given [`Arc`].
     ///
     /// This is useful when the argument of a function call is an [`ArcBorrow`] (e.g., in a method
