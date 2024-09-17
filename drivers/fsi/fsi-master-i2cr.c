@@ -273,6 +273,7 @@ static int i2cr_probe(struct i2c_client *client)
 	i2cr->master.dev.release = i2cr_release;
 
 	i2cr->master.n_links = 1;
+	i2cr->master.flags = FSI_MASTER_FLAG_NO_BREAK_SID;
 	i2cr->master.read = i2cr_read;
 	i2cr->master.write = i2cr_write;
 
