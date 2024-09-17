@@ -471,7 +471,7 @@ static int dwmac4_write_vlan_filter(struct net_device *dev,
 				    u8 index, u32 data)
 {
 	void __iomem *ioaddr = (void __iomem *)dev->base_addr;
-	int i, timeout = 10;
+	int i, timeout = 500000;
 	u32 val;
 
 	if (index >= hw->num_vlan)
