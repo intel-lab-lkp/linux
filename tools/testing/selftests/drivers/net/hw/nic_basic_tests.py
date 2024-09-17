@@ -182,6 +182,45 @@ def test_network_speed(cfg) -> None:
         else:
             KsftSkipEx("Mismatch in the number of speeds and duplex modes")
 
+def test_tcp_throughput(cfg) -> None:
+    check_autonegotiation(cfg.ifname)
+    if not common_link_modes:
+        KsftSkipEx("No common link modes found")
+    cfg.require_cmd("iperf3", remote=True)
+    """iperf3 server to be run in the partner pc"""
+    speeds, duplex_modes = get_speed_duplex(common_link_modes)
+    """Test duration in seconds"""
+    duration = test_duration
+    target_ip = cfg.remote_addr
+
+    for idx in range(len(speeds)-1, -1, -1):
+        set_speed_and_duplex(cfg.ifname, speeds[idx], duplex_modes[idx])
+        time.sleep(sleep_time)
+        verify_link_up(cfg.ifname)
+        send_command=f"iperf3 -c {target_ip} -t {duration} --json"
+        receive_command=f"iperf3 -c {target_ip} -t {duration} --reverse --json"
+        send_result = cmd(send_command)
+        receive_result = cmd(receive_command)
+        if send_result.ret != 0 or receive_result.ret != 0:
+            raise KsftSkipEx("No server is running")
+
+        send_output = send_result.stdout
+        receive_output = receive_result.stdout
+
+        send_data = json.loads(send_output)
+        receive_data = json.loads(receive_output)
+        """Convert throughput to Mbps"""
+        send_throughput = round(send_data['end']['sum_sent']['bits_per_second'] / 1e6, 2)
+        receive_throughput = round(receive_data['end']['sum_received']['bits_per_second'] / 1e6, 2)
+
+        ksft_pr(f"Send throughput: {send_throughput} Mbps, Receive throughput: {receive_throughput} Mbps")
+        """Check whether throughput is not below the threshold (default:80% of set speed)"""
+        threshold = float(speeds[idx]) * float(throughput_threshold)
+        if send_throughput < threshold:
+            raise KsftFailEx("Send throughput is below threshold")
+        elif receive_throughput < threshold:
+            raise KsftFailEx("Receive throughput is below threshold")
+
 def main() -> None:
     with NetDrvEpEnv(__file__) as cfg:
         ksft_run(globs=globals(), case_pfx={"test_"}, args=(cfg,))
