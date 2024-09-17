@@ -253,6 +253,7 @@
 		};
 
 		pm8921_l6: l6 {
+			regulator-always-on;
 			regulator-min-microvolt = <2950000>;
 			regulator-max-microvolt = <2950000>;
 			bias-pull-down;
