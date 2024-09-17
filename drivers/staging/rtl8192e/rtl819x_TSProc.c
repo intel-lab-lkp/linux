@@ -144,7 +144,7 @@ void rtllib_ts_init(struct rtllib_device *ieee)
 	}
 
 	INIT_LIST_HEAD(&ieee->Rx_TS_Admit_List);
-	INIT_LIST_HEAD(&ieee->Rx_TS_Pending_List);
+	INIT_LIST_HEAD(&ieee->rx_ts_pending_list);
 	INIT_LIST_HEAD(&ieee->Rx_TS_Unused_List);
 	for (count = 0; count < TOTAL_TS_NUM; count++) {
 		rxts->num = count;
@@ -384,7 +384,7 @@ void remove_peer_ts(struct rtllib_device *ieee, u8 *addr)
 		}
 	}
 
-	list_for_each_entry_safe(ts, pTmpTS, &ieee->Rx_TS_Pending_List, list) {
+	list_for_each_entry_safe(ts, pTmpTS, &ieee->rx_ts_pending_list, list) {
 		if (memcmp(ts->addr, addr, 6) == 0) {
 			RemoveTsEntry(ieee, ts, RX_DIR);
 			list_del_init(&ts->list);
@@ -418,7 +418,7 @@ void remove_all_ts(struct rtllib_device *ieee)
 		list_add_tail(&ts->list, &ieee->Tx_TS_Unused_List);
 	}
 
-	list_for_each_entry_safe(ts, pTmpTS, &ieee->Rx_TS_Pending_List, list) {
+	list_for_each_entry_safe(ts, pTmpTS, &ieee->rx_ts_pending_list, list) {
 		RemoveTsEntry(ieee, ts, RX_DIR);
 		list_del_init(&ts->list);
 		list_add_tail(&ts->list, &ieee->Rx_TS_Unused_List);
