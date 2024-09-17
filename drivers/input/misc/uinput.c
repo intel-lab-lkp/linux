@@ -350,6 +350,7 @@ static int uinput_create_device(struct uinput_device *udev)
 		dev->ff->playback = uinput_dev_playback;
 		dev->ff->set_gain = uinput_dev_set_gain;
 		dev->ff->set_autocenter = uinput_dev_set_autocenter;
+		dev->ff->max_concurrent_playbacks = udev->ff_effects_max;
 		/*
 		 * The standard input_ff_flush() implementation does
 		 * not quite work for uinput as we can't reasonably
