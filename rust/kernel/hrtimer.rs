@@ -9,7 +9,7 @@
 //!
 //! ```
 //! use kernel::{
-//!     hrtimer::{Timer, TimerCallback, TimerPointer},
+//!     hrtimer::{Timer, TimerCallback, TimerPointer, TimerRestart},
 //!     impl_has_timer, new_condvar, new_mutex,
 //!     prelude::*,
 //!     sync::{Arc, CondVar, Mutex},
@@ -21,7 +21,7 @@
 //!     #[pin]
 //!     timer: Timer<Self>,
 //!     #[pin]
-//!     flag: Mutex<bool>,
+//!     flag: Mutex<u64>,
 //!     #[pin]
 //!     cond: CondVar,
 //! }
@@ -30,7 +30,7 @@
 //!     fn new() -> impl PinInit<Self, kernel::error::Error> {
 //!         try_pin_init!(Self {
 //!             timer <- Timer::new(),
-//!             flag <- new_mutex!(false),
+//!             flag <- new_mutex!(0),
 //!             cond <- new_condvar!(),
 //!         })
 //!     }
@@ -39,10 +39,18 @@
 //! impl TimerCallback for ArcIntrusiveTimer {
 //!     type CallbackTarget<'a> = Arc<Self>;
 //!
-//!     fn run(this: Self::CallbackTarget<'_>) {
+//!     fn run(this: Self::CallbackTarget<'_>) -> TimerRestart {
 //!         pr_info!("Timer called\n");
-//!         *this.flag.lock() = true;
+//!         let mut guard = this.flag.lock();
+//!         *guard += 1;
 //!         this.cond.notify_all();
+//!         if *guard == 5 {
+//!             TimerRestart::NoRestart
+//!         }
+//!         else {
+//!             TimerRestart::Restart
+//!
+//!         }
 //!     }
 //! }
 //!
@@ -55,11 +63,11 @@
 //! let _handle = has_timer.clone().schedule(Ktime::from_ns(200_000_000));
 //! let mut guard = has_timer.flag.lock();
 //!
-//! while !*guard {
+//! while *guard != 5 {
 //!     has_timer.cond.wait(&mut guard);
 //! }
 //!
-//! pr_info!("Flag raised\n");
+//! pr_info!("Counted to 5\n");
 //! # Ok::<(), kernel::error::Error>(())
 //! ```
 
@@ -202,7 +210,7 @@ pub trait TimerCallback {
     type CallbackTarget<'a>: RawTimerCallback;
 
     /// Called by the timer logic when the timer fires.
-    fn run(this: Self::CallbackTarget<'_>)
+    fn run(this: Self::CallbackTarget<'_>) -> TimerRestart
     where
         Self: Sized;
 }
@@ -292,6 +300,32 @@ pub unsafe trait HasTimer<U> {
                 0,
                 bindings::hrtimer_mode_HRTIMER_MODE_REL,
             );
+        }
+    }
+}
+
+/// Restart policy for timers.
+pub enum TimerRestart {
+    /// Timer should not be restarted.
+    NoRestart,
+    /// Timer should be restarted.
+    Restart,
+}
+
+impl From<u32> for TimerRestart {
+    fn from(value: bindings::hrtimer_restart) -> Self {
+        match value {
+            0 => Self::NoRestart,
+            _ => Self::Restart,
+        }
+    }
+}
+
+impl From<TimerRestart> for bindings::hrtimer_restart {
+    fn from(value: TimerRestart) -> Self {
+        match value {
+            TimerRestart::NoRestart => bindings::hrtimer_restart_HRTIMER_NORESTART,
+            TimerRestart::Restart => bindings::hrtimer_restart_HRTIMER_RESTART,
         }
     }
 }
