@@ -5921,7 +5921,12 @@ static int intel_atomic_check_planes(struct intel_atomic_state *state)
 		if (ret)
 			return ret;
 
-		intel_sharpness_scaler_compute_config(new_crtc_state);
+		if (sharp_compute(new_crtc_state)) {
+			intel_sharpness_scaler_compute_config(new_crtc_state);
+			ret = intel_sharpness_filter_compute_config(new_crtc_state);
+			if (ret)
+				return ret;
+		}
 
 		/*
 		 * On some platforms the number of active planes affects
