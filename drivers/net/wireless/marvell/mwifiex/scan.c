@@ -32,7 +32,7 @@
 #define WILDCARD_SSID_TLV_MAX_SIZE  \
 	(MWIFIEX_MAX_SSID_LIST_LENGTH *					\
 		(sizeof(struct mwifiex_ie_types_wildcard_ssid_params)	\
-			+ IEEE80211_MAX_SSID_LEN))
+			+ IEEE80211_MAX_SSID_LEN + 1))
 
 /* Maximum memory needed for a mwifiex_scan_cmd_config with all TLVs at max */
 #define MAX_SCAN_CFG_ALLOC (sizeof(struct mwifiex_scan_cmd_config)        \
