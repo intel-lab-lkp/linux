@@ -35,6 +35,7 @@
 #include <linux/slab.h>
 #include <linux/torture.h>
 #include <linux/types.h>
+#include <linux/hazptr.h>
 
 #include "rcu.h"
 
@@ -314,6 +315,82 @@ static struct ref_scale_ops refcnt_ops = {
 	.readsection	= ref_refcnt_section,
 	.delaysection	= ref_refcnt_delay_section,
 	.name		= "refcnt"
+};
+
+struct hazptr_data {
+	struct callback_head head;
+	int i;
+};
+
+static struct hazptr_data *hazptr_data;
+
+static bool hazptr_scale_init(void)
+{
+	hazptr_data = kmalloc(sizeof(*hazptr_data), GFP_KERNEL);
+
+	return !!hazptr_data;
+}
+
+static void free_hazptr_data(struct callback_head *head)
+{
+	struct hazptr_data *tofree = container_of(head, struct hazptr_data, head);
+
+	kfree(tofree);
+}
+
+static void hazptr_scale_cleanup(void)
+{
+	if (hazptr_data) {
+		struct hazptr_data *tmp = hazptr_data;
+		WRITE_ONCE(hazptr_data, NULL);
+
+		call_hazptr(&tmp->head, free_hazptr_data);
+	}
+}
+
+static void hazptr_section(const int nloops)
+{
+	int i;
+	struct hazptr_context ctx;
+	hazptr_t *hzptr;
+
+	init_hazptr_context(&ctx);
+	hzptr = hazptr_alloc(&ctx);
+
+	for (i = nloops; i >= 0; i--) {
+		BUG_ON(!hazptr_protect(hzptr, hazptr_data, head));
+		hazptr_clear(hzptr);
+	}
+
+	hazptr_free(&ctx, hzptr);
+	cleanup_hazptr_context(&ctx);
+}
+
+static void hazptr_delay_section(const int nloops, const int udl, const int ndl)
+{
+	int i;
+	struct hazptr_context ctx;
+	hazptr_t *hzptr;
+
+	init_hazptr_context(&ctx);
+	hzptr = hazptr_alloc(&ctx);
+
+	for (i = nloops; i >= 0; i--) {
+		BUG_ON(!hazptr_protect(hzptr, hazptr_data, head));
+		un_delay(udl, ndl);
+		hazptr_clear(hzptr);
+	}
+
+	hazptr_free(&ctx, hzptr);
+	cleanup_hazptr_context(&ctx);
+}
+
+static struct ref_scale_ops hazptr_ops = {
+	.init		= hazptr_scale_init,
+	.cleanup	= hazptr_scale_cleanup,
+	.readsection	= hazptr_section,
+	.delaysection	= hazptr_delay_section,
+	.name		= "hazptr"
 };
 
 // Definitions for rwlock
@@ -1081,7 +1158,7 @@ ref_scale_init(void)
 	static struct ref_scale_ops *scale_ops[] = {
 		&rcu_ops, &srcu_ops, RCU_TRACE_OPS RCU_TASKS_OPS &refcnt_ops, &rwlock_ops,
 		&rwsem_ops, &lock_ops, &lock_irq_ops, &acqrel_ops, &clock_ops, &jiffies_ops,
-		&typesafe_ref_ops, &typesafe_lock_ops, &typesafe_seqlock_ops,
+		&typesafe_ref_ops, &typesafe_lock_ops, &typesafe_seqlock_ops, &hazptr_ops,
 	};
 
 	if (!torture_init_begin(scale_type, verbose))
