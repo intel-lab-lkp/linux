@@ -674,7 +674,8 @@ int bus_add_driver(struct device_driver *drv)
 	if (sp->drivers_autoprobe) {
 		error = driver_attach(drv);
 		if (error)
-			goto out_del_list;
+			pr_warn("%s: failed to attach driver '%s' to bus '%s'\n",
+				__func__, drv->name, sp->bus->name);
 	}
 	error = module_add_driver(drv->owner, drv);
 	if (error) {
@@ -708,7 +709,6 @@ int bus_add_driver(struct device_driver *drv)
 
 out_detach:
 	driver_detach(drv);
-out_del_list:
 	klist_del(&priv->knode_bus);
 out_unregister:
 	kobject_put(&priv->kobj);
