@@ -1483,7 +1483,7 @@ void rtl92e_copy_mpdu_stats(struct rtllib_rx_stats *psrc_stats,
 			    struct rtllib_rx_stats *ptarget_stats)
 {
 	ptarget_stats->bIsAMPDU = psrc_stats->bIsAMPDU;
-	ptarget_stats->bFirstMPDU = psrc_stats->bFirstMPDU;
+	ptarget_stats->first_mpdu = psrc_stats->first_mpdu;
 }
 
 static void _rtl92e_rx_normal(struct net_device *dev)

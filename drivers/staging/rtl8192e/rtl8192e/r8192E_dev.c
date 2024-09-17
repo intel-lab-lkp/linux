@@ -1651,7 +1651,7 @@ bool rtl92e_get_rx_stats(struct net_device *dev, struct rtllib_rx_stats *stats,
 	_rtl92e_update_received_rate_histogram_stats(dev, stats);
 
 	stats->bIsAMPDU = (pDrvInfo->PartAggr == 1);
-	stats->bFirstMPDU = (pDrvInfo->PartAggr == 1) &&
+	stats->first_mpdu = (pDrvInfo->PartAggr == 1) &&
 			    (pDrvInfo->FirstAGGR == 1);
 
 	stats->time_stamp_low = pDrvInfo->TSFL;

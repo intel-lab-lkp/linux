@@ -477,7 +477,7 @@ struct rtllib_rx_stats {
 	u8    rx_drv_info_size;
 	u8    rx_buf_shift;
 	bool  bIsAMPDU;
-	bool  bFirstMPDU;
+	bool  first_mpdu;
 	bool  contain_htc;
 	u32   RxPWDBAll;
 	u8    RxMIMOSignalStrength[2];
