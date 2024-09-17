@@ -482,7 +482,7 @@ struct rtllib_rx_stats {
 	u32   RxPWDBAll;
 	u8    RxMIMOSignalStrength[2];
 	s8    RxMIMOSignalQuality[2];
-	bool  bPacketMatchBSSID;
+	bool  packet_match_bssid;
 	bool  is_cck;
 	bool  packet_to_self;
 	bool   packet_beacon;

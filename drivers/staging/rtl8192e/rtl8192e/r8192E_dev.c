@@ -1170,7 +1170,7 @@ static void _rtl92e_query_rxphystatus(struct r8192_priv *priv,
 
 	is_cck_rate = rx_hal_is_cck_rate(pdrvinfo);
 	memset(precord_stats, 0, sizeof(struct rtllib_rx_stats));
-	pstats->bPacketMatchBSSID = precord_stats->bPacketMatchBSSID =
+	pstats->packet_match_bssid = precord_stats->packet_match_bssid =
 				    bpacket_match_bssid;
 	pstats->packet_to_self = precord_stats->packet_to_self = bpacket_toself;
 	pstats->is_cck = precord_stats->is_cck = is_cck_rate;
@@ -1362,7 +1362,7 @@ static void _rtl92e_process_phyinfo(struct r8192_priv *priv, u8 *buffer,
 	tmp_val = priv->stats.slide_rssi_total / slide_rssi_statistics;
 	priv->stats.signal_strength = rtl92e_translate_to_dbm(priv, tmp_val);
 	curr_st->rssi = priv->stats.signal_strength;
-	if (!prev_st->bPacketMatchBSSID) {
+	if (!prev_st->packet_match_bssid) {
 		if (!prev_st->bToSelfBA)
 			return;
 	}
