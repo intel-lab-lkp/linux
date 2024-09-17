@@ -1081,7 +1081,8 @@ static inline int pgd_same(pgd_t pgd_a, pgd_t pgd_b)
 
 #define set_p4d_safe(p4dp, p4d) \
 ({ \
-	WARN_ON_ONCE(p4d_present(*p4dp) && !p4d_same(*p4dp, p4d)); \
+	p4d_t __old = p4dp_get(p4dp); \
+	WARN_ON_ONCE(p4d_present(__old) && !p4d_same(__old, p4d)); \
 	set_p4d(p4dp, p4d); \
 })
 
@@ -1251,9 +1252,11 @@ static inline int pgd_none_or_clear_bad(pgd_t *pgd)
 
 static inline int p4d_none_or_clear_bad(p4d_t *p4d)
 {
-	if (p4d_none(*p4d))
+	p4d_t old_p4d = p4dp_get(p4d);
+
+	if (p4d_none(old_p4d))
 		return 1;
-	if (unlikely(p4d_bad(*p4d))) {
+	if (unlikely(p4d_bad(old_p4d))) {
 		p4d_clear_bad(p4d);
 		return 1;
 	}

@@ -2889,7 +2889,7 @@ static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 				     pte_fn_t fn, void *data, bool create,
 				     pgtbl_mod_mask *mask)
 {
-	p4d_t *p4d;
+	p4d_t *p4d, old_p4d;
 	unsigned long next;
 	int err = 0;
 
@@ -2902,11 +2902,12 @@ static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 	}
 	do {
 		next = p4d_addr_end(addr, end);
-		if (p4d_none(*p4d) && !create)
+		old_p4d = p4dp_get(p4d);
+		if (p4d_none(old_p4d) && !create)
 			continue;
-		if (WARN_ON_ONCE(p4d_leaf(*p4d)))
+		if (WARN_ON_ONCE(p4d_leaf(old_p4d)))
 			return -EINVAL;
-		if (!p4d_none(*p4d) && WARN_ON_ONCE(p4d_bad(*p4d))) {
+		if (!p4d_none(old_p4d) && WARN_ON_ONCE(p4d_bad(old_p4d))) {
 			if (!create)
 				continue;
 			p4d_clear_bad(p4d);
@@ -6058,7 +6059,7 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 		return -ENOMEM;
 
 	spin_lock(&mm->page_table_lock);
-	if (!p4d_present(*p4d)) {
+	if (!p4d_present(p4dp_get(p4d))) {
 		mm_inc_nr_puds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
 		p4d_populate(mm, p4d, new);
@@ -6126,7 +6127,7 @@ int follow_pte(struct vm_area_struct *vma, unsigned long address,
 {
 	struct mm_struct *mm = vma->vm_mm;
 	pgd_t *pgd;
-	p4d_t *p4d;
+	p4d_t *p4d, old_p4d;
 	pud_t *pud;
 	pmd_t *pmd;
 	pte_t *ptep;
@@ -6143,7 +6144,8 @@ int follow_pte(struct vm_area_struct *vma, unsigned long address,
 		goto out;
 
 	p4d = p4d_offset(pgd, address);
-	if (p4d_none(*p4d) || unlikely(p4d_bad(*p4d)))
+	old_p4d = p4dp_get(p4d);
+	if (p4d_none(old_p4d) || unlikely(p4d_bad(old_p4d)))
 		goto out;
 
 	pud = pud_offset(p4d, address);

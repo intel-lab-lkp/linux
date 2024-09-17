@@ -216,7 +216,7 @@ static int atomic_pte_lookup(struct vm_area_struct *vma, unsigned long vaddr,
 		goto err;
 
 	p4dp = p4d_offset(pgdp, vaddr);
-	if (unlikely(p4d_none(*p4dp)))
+	if (unlikely(p4d_none(p4dp_get(p4dp))))
 		goto err;
 
 	pudp = pud_offset(p4dp, vaddr);

@@ -414,7 +414,7 @@ static unsigned long dev_pagemap_mapping_shift(struct vm_area_struct *vma,
 	if (!pgd_present(*pgd))
 		return 0;
 	p4d = p4d_offset(pgd, address);
-	if (!p4d_present(*p4d))
+	if (!p4d_present(p4dp_get(p4d)))
 		return 0;
 	pud = pud_offset(p4d, address);
 	if (!pud_present(pudp_get(pud)))

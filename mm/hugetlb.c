@@ -7454,7 +7454,7 @@ pte_t *huge_pte_offset(struct mm_struct *mm,
 	if (!pgd_present(*pgd))
 		return NULL;
 	p4d = p4d_offset(pgd, addr);
-	if (!p4d_present(*p4d))
+	if (!p4d_present(p4dp_get(p4d)))
 		return NULL;
 
 	pud = pud_offset(p4d, addr);
