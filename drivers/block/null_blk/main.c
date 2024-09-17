@@ -762,7 +762,7 @@ static struct nullb_device *null_alloc_dev(void)
 		return NULL;
 	}
 
-	dev->size = g_gb * 1024;
+	dev->size = (unsigned long)g_gb * 1024;
 	dev->completion_nsec = g_completion_nsec;
 	dev->submit_queues = g_submit_queues;
 	dev->prev_submit_queues = g_submit_queues;
