@@ -1060,7 +1060,8 @@ static inline int pgd_same(pgd_t pgd_a, pgd_t pgd_b)
  */
 #define set_pte_safe(ptep, pte) \
 ({ \
-	WARN_ON_ONCE(pte_present(*ptep) && !pte_same(*ptep, pte)); \
+	pte_t __old = ptep_get(ptep); \
+	WARN_ON_ONCE(pte_present(__old) && !pte_same(__old, pte)); \
 	set_pte(ptep, pte); \
 })
 
