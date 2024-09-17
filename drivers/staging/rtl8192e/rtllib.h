@@ -1400,7 +1400,7 @@ struct rtllib_device {
 		struct rtllib_rxb *stats_IndicateArray[REORDER_WIN_SIZE];
 		struct rtllib_rxb *prxb_indicate_array[REORDER_WIN_SIZE];
 		struct {
-			struct sw_chnl_cmd PreCommonCmd[MAX_PRECMD_CNT];
+			struct sw_chnl_cmd precommon_cmd[MAX_PRECMD_CNT];
 			struct sw_chnl_cmd PostCommonCmd[MAX_POSTCMD_CNT];
 			struct sw_chnl_cmd RfDependCmd[MAX_RFDEPENDCMD_CNT];
 		};
