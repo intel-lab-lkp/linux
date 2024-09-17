@@ -1073,9 +1073,11 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 	}
 
 	err = 0;
+
+	sockopt_lock_sock(sk);
+
 	if (needs_rtnl)
 		rtnl_lock();
-	sockopt_lock_sock(sk);
 
 	switch (optname) {
 	case IP_OPTIONS:
