@@ -483,7 +483,7 @@ struct rtllib_rx_stats {
 	u8    RxMIMOSignalStrength[2];
 	s8    RxMIMOSignalQuality[2];
 	bool  bPacketMatchBSSID;
-	bool  bIsCCK;
+	bool  is_cck;
 	bool  packet_to_self;
 	bool   bPacketBeacon;
 	bool   bToSelfBA;
