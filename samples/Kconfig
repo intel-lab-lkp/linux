@@ -293,6 +293,12 @@ config SAMPLE_CGROUP
 
 source "samples/rust/Kconfig"
 
+config SAMPLE_HAZPTR
+	bool "Build hazptr sample code"
+	help
+	  Build samples that shows hazard pointer usage. Currently only
+	  builtin usage is supported.
+
 endif # SAMPLES
 
 config HAVE_SAMPLE_FTRACE_DIRECT
