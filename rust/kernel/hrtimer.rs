@@ -132,6 +132,52 @@
 //! pr_info!("Flag raised\n");
 //! # Ok::<(), kernel::error::Error>(())
 //! ```
+//!
+//! Using a helper:
+//! ```
+//! use kernel::{
+//!     hrtimer::schedule_function,
+//!     impl_has_timer, new_condvar, new_mutex,
+//!     prelude::*,
+//!     stack_try_pin_init,
+//!     sync::{Arc, CondVar, Mutex},
+//!     time::Ktime,
+//! };
+//!
+//! #[pin_data]
+//! struct Data {
+//!     #[pin]
+//!     flag: Mutex<bool>,
+//!     #[pin]
+//!     cond: CondVar,
+//! }
+//!
+//! impl Data {
+//!     fn new() -> impl PinInit<Self, kernel::error::Error> {
+//!         try_pin_init!(Self {
+//!             flag <- new_mutex!(false),
+//!             cond <- new_condvar!(),
+//!         })
+//!     }
+//! }
+//!
+//! let data = Arc::pin_init(Data::new(), GFP_KERNEL)?;
+//! let data2 = data.clone();
+//!
+//! let handle = schedule_function(Ktime::from_ns(200_000_000), move || {
+//!     pr_info!("Hello from the future");
+//!     *data2.flag.lock() = true;
+//!     data2.cond.notify_all();
+//! });
+//!
+//! let mut guard = data.flag.lock();
+//! while !*guard {
+//!     data.cond.wait(&mut guard);
+//! }
+//!
+//! pr_info!("Flag raised\n");
+//! # Ok::<(), kernel::error::Error>(())
+//! ```
 
 use crate::{init::PinInit, prelude::*, time::Ktime, types::Opaque};
 use core::marker::PhantomData;
@@ -497,5 +543,8 @@ macro_rules! impl_has_timer {
 mod tbox;
 
 mod arc;
+mod closure;
 mod pin;
 mod pin_mut;
+
+pub use closure::schedule_function;
