@@ -238,7 +238,6 @@ static int rzg2l_csi2_calc_mbps(struct rzg2l_csi2 *csi2)
 	struct v4l2_subdev *source = csi2->remote_source;
 	const struct rzg2l_csi2_format *format;
 	const struct v4l2_mbus_framefmt *fmt;
-	struct v4l2_subdev_state *state;
 	struct v4l2_ctrl *ctrl;
 	u64 mbps;
 
@@ -250,10 +249,10 @@ static int rzg2l_csi2_calc_mbps(struct rzg2l_csi2 *csi2)
 		return -EINVAL;
 	}
 
-	state = v4l2_subdev_lock_and_get_active_state(&csi2->subdev);
-	fmt = v4l2_subdev_state_get_format(state, RZG2L_CSI2_SINK);
-	format = rzg2l_csi2_code_to_fmt(fmt->code);
-	v4l2_subdev_unlock_state(state);
+	scoped_v4l2_subdev_lock_and_get_active_state(&csi2->subdev) {
+		fmt = v4l2_subdev_state_get_format(state, RZG2L_CSI2_SINK);
+		format = rzg2l_csi2_code_to_fmt(fmt->code);
+	}
 
 	/*
 	 * Calculate hsfreq in Mbps

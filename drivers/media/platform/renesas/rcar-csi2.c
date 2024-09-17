@@ -1163,27 +1163,24 @@ static void rcsi2_stop(struct rcar_csi2 *priv)
 static int rcsi2_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct rcar_csi2 *priv = sd_to_csi2(sd);
-	struct v4l2_subdev_state *state;
 	int ret = 0;
 
 	if (!priv->remote)
 		return -ENODEV;
 
-	state = v4l2_subdev_lock_and_get_active_state(&priv->subdev);
+	CLASS(v4l2_subdev_lock_and_get_active_state, state)(&priv->subdev);
 
 	if (enable && priv->stream_count == 0) {
 		ret = rcsi2_start(priv, state);
 		if (ret)
-			goto out;
+			return ret;
 	} else if (!enable && priv->stream_count == 1) {
 		rcsi2_stop(priv);
 	}
 
 	priv->stream_count += enable ? 1 : -1;
-out:
-	v4l2_subdev_unlock_state(state);
 
-	return ret;
+	return 0;
 }
 
 static int rcsi2_set_pad_format(struct v4l2_subdev *sd,
@@ -1274,17 +1271,14 @@ static irqreturn_t rcsi2_irq(int irq, void *data)
 
 static irqreturn_t rcsi2_irq_thread(int irq, void *data)
 {
-	struct v4l2_subdev_state *state;
 	struct rcar_csi2 *priv = data;
 
-	state = v4l2_subdev_lock_and_get_active_state(&priv->subdev);
+	CLASS(v4l2_subdev_lock_and_get_active_state, state)(&priv->subdev);
 
 	rcsi2_stop(priv);
 	usleep_range(1000, 2000);
 	if (rcsi2_start(priv, state))
 		dev_warn(priv->dev, "Failed to restart CSI-2 receiver\n");
-
-	v4l2_subdev_unlock_state(state);
 
 	return IRQ_HANDLED;
 }

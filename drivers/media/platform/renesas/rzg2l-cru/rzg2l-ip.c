@@ -36,14 +36,9 @@ static const struct rzg2l_cru_ip_format *rzg2l_cru_ip_code_to_fmt(unsigned int c
 
 struct v4l2_mbus_framefmt *rzg2l_cru_ip_get_src_fmt(struct rzg2l_cru_dev *cru)
 {
-	struct v4l2_subdev_state *state;
-	struct v4l2_mbus_framefmt *fmt;
+	CLASS(v4l2_subdev_lock_and_get_active_state, state)(&cru->ip.subdev);
 
-	state = v4l2_subdev_lock_and_get_active_state(&cru->ip.subdev);
-	fmt = v4l2_subdev_state_get_format(state, 1);
-	v4l2_subdev_unlock_state(state);
-
-	return fmt;
+	return v4l2_subdev_state_get_format(state, 1);
 }
 
 static int rzg2l_cru_ip_s_stream(struct v4l2_subdev *sd, int enable)
