@@ -562,7 +562,7 @@ static u8 _rtl92e_phy_switch_channel_step(struct net_device *dev, u8 channel,
 
 		PostCommonCmdCnt = 0;
 
-		_rtl92e_phy_set_sw_chnl_cmd_array(dev, ieee->PostCommonCmd,
+		_rtl92e_phy_set_sw_chnl_cmd_array(dev, ieee->postcommon_cmd,
 						  PostCommonCmdCnt++,
 						  MAX_POSTCMD_CNT, cmd_id_end,
 						  0, 0, 0);
@@ -597,7 +597,7 @@ static u8 _rtl92e_phy_switch_channel_step(struct net_device *dev, u8 channel,
 				CurrentCmd = &ieee->RfDependCmd[*step];
 				break;
 			case 2:
-				CurrentCmd = &ieee->PostCommonCmd[*step];
+				CurrentCmd = &ieee->postcommon_cmd[*step];
 				break;
 			}
 
