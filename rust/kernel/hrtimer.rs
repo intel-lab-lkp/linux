@@ -4,6 +4,64 @@
 //!
 //! Allows scheduling timer callbacks without doing allocations at the time of
 //! scheduling. For now, only one timer per type is allowed.
+//!
+//! # Example
+//!
+//! ```
+//! use kernel::{
+//!     hrtimer::{Timer, TimerCallback, TimerPointer},
+//!     impl_has_timer, new_condvar, new_mutex,
+//!     prelude::*,
+//!     sync::{Arc, CondVar, Mutex},
+//!     time::Ktime,
+//! };
+//!
+//! #[pin_data]
+//! struct ArcIntrusiveTimer {
+//!     #[pin]
+//!     timer: Timer<Self>,
+//!     #[pin]
+//!     flag: Mutex<bool>,
+//!     #[pin]
+//!     cond: CondVar,
+//! }
+//!
+//! impl ArcIntrusiveTimer {
+//!     fn new() -> impl PinInit<Self, kernel::error::Error> {
+//!         try_pin_init!(Self {
+//!             timer <- Timer::new(),
+//!             flag <- new_mutex!(false),
+//!             cond <- new_condvar!(),
+//!         })
+//!     }
+//! }
+//!
+//! impl TimerCallback for ArcIntrusiveTimer {
+//!     type CallbackTarget<'a> = Arc<Self>;
+//!
+//!     fn run(this: Self::CallbackTarget<'_>) {
+//!         pr_info!("Timer called\n");
+//!         *this.flag.lock() = true;
+//!         this.cond.notify_all();
+//!     }
+//! }
+//!
+//! impl_has_timer! {
+//!     impl HasTimer<Self> for ArcIntrusiveTimer { self.timer }
+//! }
+//!
+//!
+//! let has_timer = Arc::pin_init(ArcIntrusiveTimer::new(), GFP_KERNEL)?;
+//! let _handle = has_timer.clone().schedule(Ktime::from_ns(200_000_000));
+//! let mut guard = has_timer.flag.lock();
+//!
+//! while !*guard {
+//!     has_timer.cond.wait(&mut guard);
+//! }
+//!
+//! pr_info!("Flag raised\n");
+//! # Ok::<(), kernel::error::Error>(())
+//! ```
 
 use crate::{init::PinInit, prelude::*, time::Ktime, types::Opaque};
 use core::marker::PhantomData;
@@ -72,6 +130,25 @@ impl<T> Timer<T> {
         // allocation of at least the size of `Self`.
         unsafe { Opaque::raw_get(core::ptr::addr_of!((*ptr).timer)) }
     }
+
+    /// Cancel an initialized and potentially armed timer.
+    ///
+    /// If the timer handler is running, this will block until the handler is
+    /// finished.
+    ///
+    /// # Safety
+    ///
+    /// `self_ptr` must point to a valid `Self`.
+    unsafe fn raw_cancel(self_ptr: *const Self) -> bool {
+        // SAFETY: timer_ptr points to an allocation of at least `Timer` size.
+        let c_timer_ptr = unsafe { Timer::raw_get(self_ptr) };
+
+        // If handler is running, this will wait for handler to finish before
+        // returning.
+        // SAFETY: `c_timer_ptr` is initialized and valid. Synchronization is
+        // handled on C side.
+        unsafe { bindings::hrtimer_cancel(c_timer_ptr) != 0 }
+    }
 }
 
 /// Implemented by pointer types that point to structs that embed a [`Timer`].
@@ -139,7 +216,11 @@ pub trait TimerCallback {
 /// When dropped, the timer represented by this handle must be cancelled, if it
 /// is armed. If the timer handler is running when the handle is dropped, the
 /// drop method must wait for the handler to finish before returning.
-pub unsafe trait TimerHandle {}
+pub unsafe trait TimerHandle {
+    /// Cancel the timer, if it is armed. If the timer handler is running, block
+    /// till the handler has finished.
+    fn cancel(&mut self) -> bool;
+}
 
 /// Implemented by structs that contain timer nodes.
 ///
@@ -196,6 +277,23 @@ pub unsafe trait HasTimer<U> {
         // SAFETY: timer_ptr points to an allocation of at least `Timer` size.
         unsafe { Timer::raw_get(timer_ptr) }
     }
+
+    /// Schedule the timer contained in the `Self` pointed to by `self_ptr`. If
+    /// it is already scheduled it is removed and inserted.
+    ///
+    /// # Safety
+    ///
+    /// `self_ptr` must point to a valid `Self`.
+    unsafe fn schedule(self_ptr: *const Self, expires: Ktime) {
+        unsafe {
+            bindings::hrtimer_start_range_ns(
+                Self::c_timer_ptr(self_ptr).cast_mut(),
+                expires.to_ns(),
+                0,
+                bindings::hrtimer_mode_HRTIMER_MODE_REL,
+            );
+        }
+    }
 }
 
 /// Use to implement the [`HasTimer<T>`] trait.
@@ -229,3 +327,5 @@ macro_rules! impl_has_timer {
         }
     }
 }
+
+mod arc;
