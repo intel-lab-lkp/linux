@@ -1392,6 +1392,16 @@ config CRYPTO_USER_API_SKCIPHER
 	  See Documentation/crypto/userspace-if.rst and
 	  https://www.chronox.de/libkcapi/html/index.html
 
+config CRYPTO_USER_API_SKCIPHER_INTERNAL
+	bool "Enable access to internal symmetric key cipher algorithms"
+	depends on CRYPTO_USER_API_SKCIPHER
+	default n
+	help
+	  Enable the userspace interface for symmetric key cipher algorithms
+	  marked as internal (CRYPTO_ALG_INTERNAL).
+
+	  Say N unless you know what you are doing.
+
 config CRYPTO_USER_API_RNG
 	tristate "RNG (random number generator) algorithms"
 	depends on NET

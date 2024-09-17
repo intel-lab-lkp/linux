@@ -342,6 +342,10 @@ static struct proto_ops algif_skcipher_ops_nokey = {
 
 static void *skcipher_bind(const char *name, u32 type, u32 mask)
 {
+#ifdef CONFIG_CRYPTO_USER_API_SKCIPHER_INTERNAL
+	type |= CRYPTO_ALG_INTERNAL;
+#endif
+
 	return crypto_alloc_skcipher(name, type, mask);
 }
 
