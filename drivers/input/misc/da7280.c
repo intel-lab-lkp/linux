@@ -1239,6 +1239,7 @@ static int da7280_probe(struct i2c_client *client)
 	ff = input_dev->ff;
 	ff->upload = da7280_haptics_upload_effect;
 	ff->playback = da7280_haptics_playback;
+	ff->max_concurrent_playbacks = DA7280_FF_EFFECT_COUNT_MAX;
 
 	error = input_register_device(input_dev);
 	if (error) {
