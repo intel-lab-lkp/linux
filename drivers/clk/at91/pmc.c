@@ -162,20 +162,18 @@ static int __init pmc_register_ops(void)
 	if (!np)
 		return -ENODEV;
 
-	if (!of_device_is_available(np)) {
-		of_node_put(np);
-		return -ENODEV;
-	}
+	if (!of_device_is_available(np))
+		goto put_node;
+
 	of_node_put(np);
 
 	np = of_find_compatible_node(NULL, NULL, "atmel,sama5d2-securam");
 	if (!np)
 		return -ENODEV;
 
-	if (!of_device_is_available(np)) {
-		of_node_put(np);
-		return -ENODEV;
-	}
+	if (!of_device_is_available(np))
+		goto put_node;
+
 	of_node_put(np);
 
 	at91_pmc_backup_suspend = of_iomap(np, 0);
@@ -187,6 +185,10 @@ static int __init pmc_register_ops(void)
 	register_syscore_ops(&pmc_syscore_ops);
 
 	return 0;
+
+put_node:
+	of_node_put(np);
+	return -ENODEV;
 }
 /* This has to happen before arch_initcall because of the tcb_clksrc driver */
 postcore_initcall(pmc_register_ops);
