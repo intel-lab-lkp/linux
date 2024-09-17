@@ -201,6 +201,8 @@ vmxnet3_check_link(struct vmxnet3_adapter *adapter, bool affectTxQueue)
 
 	adapter->link_speed = ret >> 16;
 	if (ret & 1) { /* Link is up. */
+		if (VMXNET3_VERSION_GE_9(adapter) && adapter->link_speed < 10000)
+			adapter->link_speed = adapter->link_speed * 1000;
 		netdev_info(adapter->netdev, "NIC Link is Up %d Mbps\n",
 			    adapter->link_speed);
 		netif_carrier_on(adapter->netdev);
