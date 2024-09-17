@@ -258,6 +258,14 @@ impl<T: ?Sized> Arc<T> {
         unsafe { core::ptr::addr_of!((*ptr).data) }
     }
 
+    /// Return a raw pointer to the data in this arc.
+    pub fn as_ptr(&self) -> *const T {
+        let ptr = self.ptr.as_ptr();
+        // SAFETY: As we derive the pointer from a reference above, the pointer
+        // must be valid.
+        unsafe { core::ptr::addr_of!((*ptr).data) }
+    }
+
     /// Recreates an [`Arc`] instance previously deconstructed via [`Arc::into_raw`].
     ///
     /// # Safety
