@@ -34,5 +34,6 @@ struct intel_sharpness_filter {
 
 void intel_sharpness_filter_enable(struct intel_crtc_state *crtc_state);
 void intel_sharpness_scaler_compute_config(struct intel_crtc_state *crtc_state);
+int intel_sharpness_filter_compute_config(struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_SHARPEN_FILTER_H__ */
