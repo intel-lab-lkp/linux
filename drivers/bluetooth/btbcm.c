@@ -551,6 +551,8 @@ static const char *btbcm_get_board_name(struct device *dev)
 	/* get rid of any '/' in the compatible string */
 	len = strlen(tmp) + 1;
 	board_type = devm_kzalloc(dev, len, GFP_KERNEL);
+	if (!board_type)
+		return NULL;
 	strscpy(board_type, tmp, len);
 	for (i = 0; i < len; i++) {
 		if (board_type[i] == '/')
