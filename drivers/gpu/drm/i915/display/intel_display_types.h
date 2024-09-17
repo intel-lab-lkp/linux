@@ -56,6 +56,7 @@
 #include "intel_display_power.h"
 #include "intel_dpll_mgr.h"
 #include "intel_wm_types.h"
+#include "intel_sharpness_filter.h"
 
 struct drm_printer;
 struct __intel_global_objs_state;
@@ -1072,6 +1073,7 @@ struct intel_crtc_state {
 		struct drm_property_blob *degamma_lut, *gamma_lut, *ctm;
 		struct drm_display_mode mode, pipe_mode, adjusted_mode;
 		enum drm_scaling_filter scaling_filter;
+		struct intel_sharpness_filter casf_params;
 	} hw;
 
 	/* actual state of LUTs */
