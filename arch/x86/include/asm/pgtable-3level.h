@@ -10,14 +10,14 @@
  */
 
 #define pte_ERROR(e)							\
-	pr_err("%s:%d: bad pte %p(%08lx%08lx)\n",			\
-	       __FILE__, __LINE__, &(e), (e).pte_high, (e).pte_low)
+	pr_err("%s:%d: bad pte (%08lx%08lx)\n",			\
+	       __FILE__, __LINE__, (e).pte_high, (e).pte_low)
 #define pmd_ERROR(e)							\
-	pr_err("%s:%d: bad pmd %p(%016Lx)\n",				\
-	       __FILE__, __LINE__, &(e), pmd_val(e))
+	pr_err("%s:%d: bad pmd (%016Lx)\n",				\
+	       __FILE__, __LINE__, pmd_val(e))
 #define pgd_ERROR(e)							\
-	pr_err("%s:%d: bad pgd %p(%016Lx)\n",				\
-	       __FILE__, __LINE__, &(e), pgd_val(e))
+	pr_err("%s:%d: bad pgd (%016Lx)\n",				\
+	       __FILE__, __LINE__, pgd_val(e))
 
 #define pxx_xchg64(_pxx, _ptr, _val) ({					\
 	_pxx##val_t *_p = (_pxx##val_t *)_ptr;				\

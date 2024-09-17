@@ -32,24 +32,24 @@ extern void paging_init(void);
 static inline void sync_initial_page_table(void) { }
 
 #define pte_ERROR(e)					\
-	pr_err("%s:%d: bad pte %p(%016lx)\n",		\
-	       __FILE__, __LINE__, &(e), pte_val(e))
+	pr_err("%s:%d: bad pte (%016lx)\n",		\
+	       __FILE__, __LINE__, pte_val(e))
 #define pmd_ERROR(e)					\
-	pr_err("%s:%d: bad pmd %p(%016lx)\n",		\
-	       __FILE__, __LINE__, &(e), pmd_val(e))
+	pr_err("%s:%d: bad pmd (%016lx)\n",		\
+	       __FILE__, __LINE__, pmd_val(e))
 #define pud_ERROR(e)					\
-	pr_err("%s:%d: bad pud %p(%016lx)\n",		\
-	       __FILE__, __LINE__, &(e), pud_val(e))
+	pr_err("%s:%d: bad pud (%016lx)\n",		\
+	       __FILE__, __LINE__, pud_val(e))
 
 #if CONFIG_PGTABLE_LEVELS >= 5
 #define p4d_ERROR(e)					\
-	pr_err("%s:%d: bad p4d %p(%016lx)\n",		\
-	       __FILE__, __LINE__, &(e), p4d_val(e))
+	pr_err("%s:%d: bad p4d (%016lx)\n",		\
+	       __FILE__, __LINE__, p4d_val(e))
 #endif
 
 #define pgd_ERROR(e)					\
-	pr_err("%s:%d: bad pgd %p(%016lx)\n",		\
-	       __FILE__, __LINE__, &(e), pgd_val(e))
+	pr_err("%s:%d: bad pgd (%016lx)\n",		\
+	       __FILE__, __LINE__, pgd_val(e))
 
 struct mm_struct;
 
