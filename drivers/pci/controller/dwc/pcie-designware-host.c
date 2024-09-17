@@ -531,7 +531,8 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	}
 
 	/* Ignore errors, the link may come up later */
-	dw_pcie_wait_for_link(pci);
+	if (!pp->bypass_link_up_wait)
+		dw_pcie_wait_for_link(pci);
 
 	bridge->sysdata = pp;
 
