@@ -11,6 +11,7 @@
 #include "lapic.h"
 #include "mmu.h"
 #include "mmu/mmu_internal.h"
+#include "cpuid.h"
 
 static int vcpu_get_timer_advance_ns(void *data, u64 *val)
 {
@@ -56,6 +57,19 @@ static int vcpu_get_tsc_scaling_frac_bits(void *data, u64 *val)
 
 DEFINE_SIMPLE_ATTRIBUTE(vcpu_tsc_scaling_frac_fops, vcpu_get_tsc_scaling_frac_bits, NULL, "%llu\n");
 
+static int vcpu_get_steal_time(void *data, u64 *val)
+{
+	struct kvm_vcpu *vcpu = (struct kvm_vcpu *) data;
+
+	if (!guest_pv_has(vcpu, KVM_FEATURE_STEAL_TIME))
+		return 1;
+
+	*val = vcpu->arch.st.steal_total;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(vcpu_steal_time_fops, vcpu_get_steal_time, NULL, "%llu\n");
+
 void kvm_arch_create_vcpu_debugfs(struct kvm_vcpu *vcpu, struct dentry *debugfs_dentry)
 {
 	debugfs_create_file("guest_mode", 0444, debugfs_dentry, vcpu,
@@ -76,6 +90,9 @@ void kvm_arch_create_vcpu_debugfs(struct kvm_vcpu *vcpu, struct dentry *debugfs_
 				    debugfs_dentry, vcpu,
 				    &vcpu_tsc_scaling_frac_fops);
 	}
+
+	debugfs_create_file("steal-time", 0444, debugfs_dentry, vcpu,
+			    &vcpu_steal_time_fops);
 }
 
 /*

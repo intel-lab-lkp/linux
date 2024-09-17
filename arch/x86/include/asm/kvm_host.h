@@ -897,6 +897,7 @@ struct kvm_vcpu_arch {
 		u64 msr_val;
 		u64 last_steal;
 		struct gfn_to_hva_cache cache;
+		u64 steal_total;
 	} st;
 
 	u64 l1_tsc_offset;
