@@ -393,6 +393,54 @@ static struct ref_scale_ops hazptr_ops = {
 	.name		= "hazptr"
 };
 
+struct percpu_ref percpu_ref;
+
+static void percpu_ref_dummy(struct percpu_ref *ref) {}
+
+static bool percpu_ref_scale_init(void)
+{
+	int ret;
+
+	ret = percpu_ref_init(&percpu_ref, percpu_ref_dummy, PERCPU_REF_INIT_ATOMIC, GFP_KERNEL);
+	percpu_ref_switch_to_percpu(&percpu_ref);
+
+	return !ret;
+}
+
+static void percpu_ref_scale_cleanup(void)
+{
+	percpu_ref_exit(&percpu_ref);
+}
+
+static void percpu_ref_section(const int nloops)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		percpu_ref_get(&percpu_ref);
+		percpu_ref_put(&percpu_ref);
+	}
+}
+
+static void percpu_ref_delay_section(const int nloops, const int udl, const int ndl)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		percpu_ref_get(&percpu_ref);
+		un_delay(udl, ndl);
+		percpu_ref_put(&percpu_ref);
+	}
+}
+
+static struct ref_scale_ops percpu_ref_ops = {
+	.init		= percpu_ref_scale_init,
+	.cleanup	= percpu_ref_scale_cleanup,
+	.readsection	= percpu_ref_section,
+	.delaysection	= percpu_ref_delay_section,
+	.name		= "percpu_ref"
+};
+
 // Definitions for rwlock
 static rwlock_t test_rwlock;
 
@@ -1158,7 +1206,7 @@ ref_scale_init(void)
 	static struct ref_scale_ops *scale_ops[] = {
 		&rcu_ops, &srcu_ops, RCU_TRACE_OPS RCU_TASKS_OPS &refcnt_ops, &rwlock_ops,
 		&rwsem_ops, &lock_ops, &lock_irq_ops, &acqrel_ops, &clock_ops, &jiffies_ops,
-		&typesafe_ref_ops, &typesafe_lock_ops, &typesafe_seqlock_ops, &hazptr_ops,
+		&typesafe_ref_ops, &typesafe_lock_ops, &typesafe_seqlock_ops, &hazptr_ops, &percpu_ref_ops,
 	};
 
 	if (!torture_init_begin(scale_type, verbose))
