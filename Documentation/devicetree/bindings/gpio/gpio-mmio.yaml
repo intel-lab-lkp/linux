@@ -20,6 +20,7 @@ properties:
   compatible:
     enum:
       - brcm,bcm6345-gpio
+      - brcm,bcmbca-gpio
       - ni,169445-nand-gpio
       - wd,mbl-gpio # Western Digital MyBook Live memory-mapped GPIO controller
 
