@@ -2925,7 +2925,7 @@ static int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 				 unsigned long size, pte_fn_t fn,
 				 void *data, bool create)
 {
-	pgd_t *pgd;
+	pgd_t *pgd, old_pgd;
 	unsigned long start = addr, next;
 	unsigned long end = addr + size;
 	pgtbl_mod_mask mask = 0;
@@ -2937,11 +2937,12 @@ static int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 	pgd = pgd_offset(mm, addr);
 	do {
 		next = pgd_addr_end(addr, end);
-		if (pgd_none(*pgd) && !create)
+		old_pgd = pgdp_get(pgd);
+		if (pgd_none(old_pgd) && !create)
 			continue;
-		if (WARN_ON_ONCE(pgd_leaf(*pgd)))
+		if (WARN_ON_ONCE(pgd_leaf(old_pgd)))
 			return -EINVAL;
-		if (!pgd_none(*pgd) && WARN_ON_ONCE(pgd_bad(*pgd))) {
+		if (!pgd_none(old_pgd) && WARN_ON_ONCE(pgd_bad(old_pgd))) {
 			if (!create)
 				continue;
 			pgd_clear_bad(pgd);
@@ -6036,7 +6037,7 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
 		return -ENOMEM;
 
 	spin_lock(&mm->page_table_lock);
-	if (pgd_present(*pgd)) {	/* Another has populated it */
+	if (pgd_present(pgdp_get(pgd))) {	/* Another has populated it */
 		p4d_free(mm, new);
 	} else {
 		smp_wmb(); /* See comment in pmd_install() */
@@ -6126,7 +6127,7 @@ int follow_pte(struct vm_area_struct *vma, unsigned long address,
 	       pte_t **ptepp, spinlock_t **ptlp)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	pgd_t *pgd;
+	pgd_t *pgd, old_pgd;
 	p4d_t *p4d, old_p4d;
 	pud_t *pud;
 	pmd_t *pmd;
@@ -6140,7 +6141,8 @@ int follow_pte(struct vm_area_struct *vma, unsigned long address,
 		goto out;
 
 	pgd = pgd_offset(mm, address);
-	if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd)))
+	old_pgd = pgdp_get(pgd);
+	if (pgd_none(old_pgd) || unlikely(pgd_bad(old_pgd)))
 		goto out;
 
 	p4d = p4d_offset(pgd, address);

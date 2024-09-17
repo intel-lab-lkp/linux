@@ -1088,7 +1088,8 @@ static inline int pgd_same(pgd_t pgd_a, pgd_t pgd_b)
 
 #define set_pgd_safe(pgdp, pgd) \
 ({ \
-	WARN_ON_ONCE(pgd_present(*pgdp) && !pgd_same(*pgdp, pgd)); \
+	pgd_t __old = pgdp_get(pgdp); \
+	WARN_ON_ONCE(pgd_present(__old) && !pgd_same(__old, pgd)); \
 	set_pgd(pgdp, pgd); \
 })
 
@@ -1241,9 +1242,11 @@ void pmd_clear_bad(pmd_t *);
 
 static inline int pgd_none_or_clear_bad(pgd_t *pgd)
 {
-	if (pgd_none(*pgd))
+	pgd_t old_pgd = pgdp_get(pgd);
+
+	if (pgd_none(old_pgd))
 		return 1;
-	if (unlikely(pgd_bad(*pgd))) {
+	if (unlikely(pgd_bad(old_pgd))) {
 		pgd_clear_bad(pgd);
 		return 1;
 	}
