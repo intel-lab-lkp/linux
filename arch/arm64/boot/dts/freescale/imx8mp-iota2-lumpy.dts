@@ -38,6 +38,17 @@
 		      <0x1 0x00000000 0 0x80000000>;
 	};
 
+	reg_typec: regulator-typec {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_usbc_vbus>;
+		regulator-max-microvolt = <5000000>;
+		regulator-min-microvolt = <5000000>;
+		regulator-name = "typec";
+	};
+
 	reg_usb_host: regulator-usb-host {
 		compatible = "regulator-fixed";
 		enable-active-high;
@@ -218,6 +229,47 @@
 	pinctrl-0 = <&pinctrl_i2c2>;
 	status = "okay";
 
+	tcpc@d {
+		compatible = "diodes,pi5usb30213a";
+		reg = <0xd>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_typec>;
+		interrupts-extended = <&gpio1 5 IRQ_TYPE_LEVEL_LOW>;
+		status = "okay";
+
+		connector {
+			compatible = "usb-c-connector";
+			label = "USB-C";
+			vbus-supply = <&reg_typec>;
+			power-role = "source";
+			data-role = "dual";
+			typec-power-opmode = "default";
+			self-powered;
+			pd-disable;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					usb_con_hs: endpoint {
+						remote-endpoint = <&typec_hs>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					usb_con_ss: endpoint {
+						remote-endpoint = <&typec_ss>;
+					};
+				};
+			};
+		};
+	};
+
 	rtc: rtc@68 {
 		compatible = "dallas,ds1341";
 		reg = <0x68>;
@@ -235,6 +287,38 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart2>;
 	status = "okay";
+};
+
+&usb3_phy0 {
+	status = "okay";
+};
+
+&usb3_0 {
+	status = "okay";
+};
+
+&usb_dwc3_0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	dr_mode = "otg";
+	usb-role-switch;
+	status = "okay";
+
+	port@0 {
+		reg = <0>;
+
+		typec_hs: endpoint {
+			remote-endpoint = <&usb_con_hs>;
+		};
+	};
+
+	port@1 {
+		reg = <1>;
+
+		typec_ss: endpoint {
+			remote-endpoint = <&usb_con_ss>;
+		};
+	};
 };
 
 &usb3_phy1 {
@@ -356,10 +440,22 @@
 		>;
 	};
 
+	pinctrl_typec: typecgrp {
+		fsl,pins = <
+			MX8MP_IOMUXC_GPIO1_IO05__GPIO1_IO05	0x1c0
+		>;
+	};
+
 	pinctrl_uart2: uart2grp {
 		fsl,pins = <
 			MX8MP_IOMUXC_UART2_RXD__UART2_DCE_RX	0x0
 			MX8MP_IOMUXC_UART2_TXD__UART2_DCE_TX	0x0
+		>;
+	};
+
+	pinctrl_usbc_vbus: usbcgrp {
+		fsl,pins =
+			<MX8MP_IOMUXC_GPIO1_IO12__GPIO1_IO12	0x0
 		>;
 	};
 
