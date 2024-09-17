@@ -1,0 +1,48 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+/*
+ * This header provides constants for Renesas RZ/V2H(P) SoC ICU bindings.
+ *
+ * Copyright (C) 2024 Renesas Electronics Corp.
+ *
+ */
+
+#ifndef __DT_BINDINGS_ICU_RZV2H_H
+#define __DT_BINDINGS_ICU_RZV2H_H
+
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/* NMI maps to SPI0 */
+#define RZV2H_NMI	0
+
+/* IRQ0-15 map to SPI1-16 */
+#define RZV2H_IRQ0	1
+#define RZV2H_IRQ1	2
+#define RZV2H_IRQ2	3
+#define RZV2H_IRQ3	4
+#define RZV2H_IRQ4	5
+#define RZV2H_IRQ5	6
+#define RZV2H_IRQ6	7
+#define RZV2H_IRQ7	8
+#define RZV2H_IRQ8	9
+#define RZV2H_IRQ9	10
+#define RZV2H_IRQ10	11
+#define RZV2H_IRQ11	12
+#define RZV2H_IRQ12	13
+#define RZV2H_IRQ13	14
+#define RZV2H_IRQ14	15
+#define RZV2H_IRQ15	16
+
+#define RZV2H_NMI_TYPE_EDGE_RISING		IRQ_TYPE_EDGE_RISING
+#define RZV2H_NMI_TYPE_EDGE_FALLING		IRQ_TYPE_EDGE_FALLING
+
+#define RZV2H_IRQ_TYPE_EDGE_RISING		IRQ_TYPE_EDGE_RISING
+#define RZV2H_IRQ_TYPE_EDGE_FALLING		IRQ_TYPE_EDGE_FALLING
+#define RZV2H_IRQ_TYPE_EDGE_BOTH		IRQ_TYPE_EDGE_BOTH
+#define RZV2H_IRQ_TYPE_LEVEL_LOW		IRQ_TYPE_LEVEL_LOW
+
+#define RZV2H_TINT_TYPE_EDGE_RISING		IRQ_TYPE_EDGE_RISING
+#define RZV2H_TINT_TYPE_EDGE_FALLING		IRQ_TYPE_EDGE_FALLING
+#define RZV2H_TINT_TYPE_LEVEL_HIGH		IRQ_TYPE_LEVEL_HIGH
+#define RZV2H_TINT_TYPE_LEVEL_LOW		IRQ_TYPE_LEVEL_LOW
+
+#endif /* __DT_BINDINGS_ICU_RZV2H_H */
