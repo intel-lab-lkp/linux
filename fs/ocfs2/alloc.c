@@ -4843,6 +4843,13 @@ int ocfs2_add_clusters_in_btree(handle_t *handle,
 	}
 
 	block = ocfs2_clusters_to_blocks(osb->sb, bit_off);
+	if (block == 0) {
+		mlog(ML_ERROR, "Conversion resulted in zero block number");
+		status = -EIO;
+		need_free = 1;
+		goto bail;
+	}
+
 	trace_ocfs2_add_clusters_in_btree(
 	     (unsigned long long)ocfs2_metadata_cache_owner(et->et_ci),
 	     bit_off, num_bits);
