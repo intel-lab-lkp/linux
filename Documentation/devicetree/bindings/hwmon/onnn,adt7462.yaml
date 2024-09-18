@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/onnn,adt7462.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ON Semiconductor ADT7462 Temperature, Voltage Monitor and Fan Controller
+
+maintainers:
+  - Chanh Nguyen <chanh@os.amperecomputing.com>
+
+description: |
+  The ADT7462 has temperature monitors, voltage monitors and multiple PWN Fan
+  controllers.
+
+  The ADT7462 supports monitoring and controlling up to four PWM Fan Drive
+  Outputs and eight TACH Inputs Measures. The ADT7462 supports reading a single
+  on chip temperature sensor and three remote temperature sensors. There are up
+  to 13 voltage monitoring inputs, ranging from 12V to 0.9V.
+
+  Datasheets:
+    https://www.onsemi.com/pub/Collateral/ADT7462-D.PDF
+
+properties:
+  compatible:
+    const: onnn,adt7462
+
+  reg:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      hwmon@5c {
+        compatible = "onnn,adt7462";
+        reg = <0x5c>;
+        resets = <&reset 0>;
+      };
+    };
