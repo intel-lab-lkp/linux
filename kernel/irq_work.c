@@ -295,9 +295,17 @@ void irq_work_sync(struct irq_work *work)
 		return;
 	}
 
-	while (irq_work_is_busy(work))
+	int retry_count = 0;
+
+	while (irq_work_is_busy(work)) {
 		cpu_relax();
+
+	if (retry_count++ > 1000) {
+		cond_resched();
+		retry_count = 0;
+	}
 }
+
 EXPORT_SYMBOL_GPL(irq_work_sync);
 
 static void run_irq_workd(unsigned int cpu)
