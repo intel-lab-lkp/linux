@@ -38,6 +38,7 @@
 #define AMD_SPI_FIFO_SIZE	70
 #define AMD_SPI_MEM_SIZE	200
 #define AMD_SPI_MAX_DATA	64
+#define AMD_SPI_HID2_DMA_SIZE   4096
 
 #define AMD_SPI_ENA_REG		0x20
 #define AMD_SPI_ALT_SPD_SHIFT	20
@@ -50,6 +51,21 @@
 
 #define AMD_SPI_MAX_HZ		100000000
 #define AMD_SPI_MIN_HZ		800000
+
+/* SPI read command opcodes */
+#define AMD_SPI_OP_READ          0x03	/* Read data bytes (low frequency) */
+#define AMD_SPI_OP_READ_FAST     0x0b	/* Read data bytes (high frequency) */
+#define AMD_SPI_OP_READ_1_1_2    0x3b	/* Read data bytes (Dual Output SPI) */
+#define AMD_SPI_OP_READ_1_2_2    0xbb	/* Read data bytes (Dual I/O SPI) */
+#define AMD_SPI_OP_READ_1_1_4    0x6b	/* Read data bytes (Quad Output SPI) */
+#define AMD_SPI_OP_READ_1_4_4    0xeb	/* Read data bytes (Quad I/O SPI) */
+
+/* SPI read command opcodes - 4B address */
+#define AMD_SPI_OP_READ_FAST_4B		0x0c    /* Read data bytes (high frequency) */
+#define AMD_SPI_OP_READ_1_1_2_4B	0x3c    /* Read data bytes (Dual Output SPI) */
+#define AMD_SPI_OP_READ_1_2_2_4B	0xbc    /* Read data bytes (Dual I/O SPI) */
+#define AMD_SPI_OP_READ_1_1_4_4B	0x6c    /* Read data bytes (Quad Output SPI) */
+#define AMD_SPI_OP_READ_1_4_4_4B	0xec    /* Read data bytes (Quad I/O SPI) */
 
 /**
  * enum amd_spi_versions - SPI controller versions
@@ -377,20 +393,82 @@ fin_msg:
 	return message->status;
 }
 
+static inline bool amd_is_spi_read_cmd_4b(const u16 op)
+{
+	switch (op) {
+	case AMD_SPI_OP_READ_FAST_4B:
+	case AMD_SPI_OP_READ_1_1_2_4B:
+	case AMD_SPI_OP_READ_1_2_2_4B:
+	case AMD_SPI_OP_READ_1_1_4_4B:
+	case AMD_SPI_OP_READ_1_4_4_4B:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool amd_is_spi_read_cmd(const u16 op)
+{
+	switch (op) {
+	case AMD_SPI_OP_READ:
+	case AMD_SPI_OP_READ_FAST:
+	case AMD_SPI_OP_READ_1_1_2:
+	case AMD_SPI_OP_READ_1_2_2:
+	case AMD_SPI_OP_READ_1_1_4:
+	case AMD_SPI_OP_READ_1_4_4:
+		return true;
+	default:
+		return amd_is_spi_read_cmd_4b(op);
+	}
+}
+
 static bool amd_spi_supports_op(struct spi_mem *mem,
 				const struct spi_mem_op *op)
 {
+	struct amd_spi *amd_spi = spi_controller_get_devdata(mem->spi->controller);
+
 	/* bus width is number of IO lines used to transmit */
-	if (op->cmd.buswidth > 1 || op->addr.buswidth > 4 ||
-	    op->data.buswidth > 4 || op->data.nbytes > AMD_SPI_MAX_DATA)
+	if (op->cmd.buswidth > 1 || op->addr.buswidth > 4)
 		return false;
+
+	/* AMD SPI controllers support quad mode only for read operations */
+	if (amd_is_spi_read_cmd(op->cmd.opcode)) {
+		if (op->data.buswidth > 4)
+			return false;
+
+		/*
+		 * HID2 SPI controller supports DMA read up to 4K bytes and
+		 * doesn't support 4-byte address commands.
+		 */
+		if (amd_spi->version == AMD_HID2_SPI) {
+			if (amd_is_spi_read_cmd_4b(op->cmd.opcode) ||
+			    op->data.nbytes > AMD_SPI_HID2_DMA_SIZE)
+				return false;
+		} else if (op->data.nbytes > AMD_SPI_MAX_DATA) {
+			return false;
+		}
+	} else if (op->data.buswidth > 1 || op->data.nbytes > AMD_SPI_MAX_DATA) {
+		return false;
+	}
 
 	return spi_mem_default_supports_op(mem, op);
 }
 
 static int amd_spi_adjust_op_size(struct spi_mem *mem, struct spi_mem_op *op)
 {
-	op->data.nbytes = clamp_val(op->data.nbytes, 0, AMD_SPI_MAX_DATA);
+	struct amd_spi *amd_spi = spi_controller_get_devdata(mem->spi->controller);
+
+	/*
+	 * HID2 SPI controller DMA read mode supports reading up to 4k
+	 * bytes in single transaction, where as SPI0 and HID2 SPI
+	 * controller index mode supports maximum of 64 bytes in a single
+	 * transaction.
+	 */
+	if (amd_spi->version == AMD_HID2_SPI && amd_is_spi_read_cmd(op->cmd.opcode))
+		op->data.nbytes = clamp_val(op->data.nbytes, 0, AMD_SPI_HID2_DMA_SIZE);
+	else
+		op->data.nbytes = clamp_val(op->data.nbytes, 0, AMD_SPI_MAX_DATA);
+
 	return 0;
 }
 
