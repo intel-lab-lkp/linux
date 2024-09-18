@@ -350,13 +350,12 @@ static void sfh_init_work(struct work_struct *work)
 	int rc;
 
 	rc = amd_sfh_hid_client_init(mp2);
+	amd_sfh_clear_intr(mp2);
 	if (rc) {
-		amd_sfh_clear_intr(mp2);
 		dev_err(&pdev->dev, "amd_sfh_hid_client_init failed err %d\n", rc);
 		return;
 	}
 
-	amd_sfh_clear_intr(mp2);
 	mp2->init_done = 1;
 }
 
