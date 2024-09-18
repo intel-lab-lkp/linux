@@ -312,6 +312,8 @@ static int pci9111_ai_do_cmd_test(struct comedi_device *dev,
 	 */
 	if (cmd->scan_begin_src == TRIG_TIMER) {
 		arg = cmd->chanlist_len * cmd->convert_arg;
+		if (!arg)
+			return 4;
 
 		if (arg < cmd->scan_begin_arg)
 			arg *= (cmd->scan_begin_arg / arg);
