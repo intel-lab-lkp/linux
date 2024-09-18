@@ -1835,6 +1835,13 @@ static bool can_steal_fallback(unsigned int order, int start_mt)
 	if (order >= pageblock_order)
 		return true;
 
+	/*
+	 * The reasons why unmovable and reclaimable allocations can steal from
+	 * moveable pageblocks by default aside from the above comments, a different
+	 * and better understood scenario is: System initializations are all movable
+	 * pageblocks. If you want to alloc unmovable and reclaimable pages,
+	 * you have to steal from moveable pageblocks or it may fail.
+	 */
 	if (order >= pageblock_order / 2 ||
 		start_mt == MIGRATE_RECLAIMABLE ||
 		start_mt == MIGRATE_UNMOVABLE ||
