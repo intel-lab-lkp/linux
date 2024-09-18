@@ -242,7 +242,7 @@ s_uGetDataDuration(
 )
 {
 	bool last_frag = false;
-	unsigned int ack_time = 0, uNextPktTime = 0, len;
+	unsigned int ack_time = 0, next_pkt_time = 0, len;
 
 	if (frag_idx == (mac_frag_num - 1))
 		last_frag = true;
@@ -265,11 +265,11 @@ s_uGetDataDuration(
 				return 0;
 		} else {
 			/* First Frag or Mid Frag */
-			uNextPktTime = s_uGetTxRsvTime(priv, pkt_type,
-						       len, rate, need_ack);
+			next_pkt_time = s_uGetTxRsvTime(priv, pkt_type,
+							len, rate, need_ack);
 		}
 
-		return priv->uSIFS + ack_time + uNextPktTime;
+		return priv->uSIFS + ack_time + next_pkt_time;
 
 	case DATADUR_A:    /* DATADUR_A */
 		if (need_ack) {
@@ -283,11 +283,11 @@ s_uGetDataDuration(
 				return 0;
 		} else {
 			/* First Frag or Mid Frag */
-			uNextPktTime = s_uGetTxRsvTime(priv, pkt_type,
-						       len, rate, need_ack);
+			next_pkt_time = s_uGetTxRsvTime(priv, pkt_type,
+							len, rate, need_ack);
 		}
 
-		return priv->uSIFS + ack_time + uNextPktTime;
+		return priv->uSIFS + ack_time + next_pkt_time;
 
 	case DATADUR_A_F0:    /* DATADUR_A_F0 */
 	case DATADUR_A_F1:    /* DATADUR_A_F1 */
@@ -314,11 +314,11 @@ s_uGetDataDuration(
 			else
 				rate = fb_opt1[FB_RATE0][rate];
 
-			uNextPktTime = s_uGetTxRsvTime(priv, pkt_type,
-						       len, rate, need_ack);
+			next_pkt_time = s_uGetTxRsvTime(priv, pkt_type,
+							len, rate, need_ack);
 		}
 
-		return priv->uSIFS + ack_time + uNextPktTime;
+		return priv->uSIFS + ack_time + next_pkt_time;
 
 	default:
 		break;
