@@ -65,4 +65,16 @@ config PROTECTED_NVHE_STACKTRACE
 
 	  If unsure, or not using protected nVHE (pKVM), say N.
 
+config HAVE_KVM_PAGE_TRACKING_DEVICE
+	bool "Support for hardware accelerated dirty tracking"
+	default n
+	help
+	  Say Y to enable hardware accelerated dirty tracking
+
+	  Adds support for hardware accelerated dirty tracking during live
+	  migration of a virtual machine. Requires a hardware accelerator.
+
+	  If there is no required hardware, say N.
+
+
 endif # VIRTUALIZATION
