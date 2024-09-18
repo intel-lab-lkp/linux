@@ -620,7 +620,7 @@ static void fs_path_unreverse(struct fs_path *p)
 	len = p->end - p->start;
 	p->start = p->buf;
 	p->end = p->start + len;
-	memmove(p->start, tmp, len + 1);
+	memmove(p->start, tmp, len);
 	p->reversed = 0;
 }
 
