@@ -33,7 +33,7 @@
 #define TRACE_INCLUDE_FILE amdgpu_trace
 
 #define AMDGPU_JOB_GET_TIMELINE_NAME(job) \
-	 job->base.s_fence->finished.ops->get_timeline_name(&job->base.s_fence->finished)
+	dma_fence_timeline_name(&job->base.s_fence->finished)
 
 TRACE_EVENT(amdgpu_device_rreg,
 	    TP_PROTO(unsigned did, uint32_t reg, uint32_t value),

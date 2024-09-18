@@ -538,8 +538,8 @@ void dma_fence_release(struct kref *kref)
 	if (WARN(!list_empty(&fence->cb_list) &&
 		 !test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags),
 		 "Fence %s:%s:%llx:%llx released with pending signals!\n",
-		 fence->ops->get_driver_name(fence),
-		 fence->ops->get_timeline_name(fence),
+		 dma_fence_driver_name(fence),
+		 dma_fence_timeline_name(fence),
 		 fence->context, fence->seqno)) {
 		unsigned long flags;
 
@@ -974,6 +974,37 @@ void dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 EXPORT_SYMBOL(dma_fence_set_deadline);
 
 /**
+ * dma_fence_driver_name - return the driver name for a fence
+ * @fence:	the fence to query the driver name on
+ *
+ * Returns the driver name or empty string if the fence is already signaled.
+ */
+const char *dma_fence_driver_name(struct dma_fence *fence)
+{
+	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
+		return "";
+
+	return fence->ops->get_driver_name(fence);
+}
+EXPORT_SYMBOL(dma_fence_driver_name);
+
+/**
+ * dma_fence_timeline_name - return the name of the fence context
+ * @fence:	the fence to query the context on
+ *
+ * Returns the name of the context this fence belongs to or empty string if the
+ * fence is already signaled.
+ */
+const char *dma_fence_timeline_name(struct dma_fence *fence)
+{
+	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
+		return "";
+
+	return fence->ops->get_timeline_name(fence);
+}
+EXPORT_SYMBOL(dma_fence_timeline_name);
+
+/**
  * dma_fence_describe - Dump fence description into seq_file
  * @fence: the fence to describe
  * @seq: the seq_file to put the textual description into
@@ -983,8 +1014,8 @@ EXPORT_SYMBOL(dma_fence_set_deadline);
 void dma_fence_describe(struct dma_fence *fence, struct seq_file *seq)
 {
 	seq_printf(seq, "%s %s seq %llu %ssignalled\n",
-		   fence->ops->get_driver_name(fence),
-		   fence->ops->get_timeline_name(fence), fence->seqno,
+		   dma_fence_driver_name(fence),
+		   dma_fence_timeline_name(fence), fence->seqno,
 		   dma_fence_is_signaled(fence) ? "" : "un");
 }
 EXPORT_SYMBOL(dma_fence_describe);
