@@ -3061,6 +3061,9 @@ static int rtw89_pci_setup_mapping(struct rtw89_dev *rtwdev,
 		goto err;
 	}
 
+	if (test_bit(RTW89_QUIRK_PCI_NO_36BIT_DMA, rtwdev->quirks))
+		goto no_36bit_dma;
+
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(36));
 	if (!ret) {
 		rtwpci->enable_dac = true;
@@ -3074,6 +3077,7 @@ static int rtw89_pci_setup_mapping(struct rtw89_dev *rtwdev,
 		}
 	}
 
+no_36bit_dma:
 	resource_len = pci_resource_len(pdev, bar_id);
 	rtwpci->mmap = pci_iomap(pdev, bar_id, resource_len);
 	if (!rtwpci->mmap) {

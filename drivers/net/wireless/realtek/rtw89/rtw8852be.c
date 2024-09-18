@@ -62,9 +62,21 @@ static const struct rtw89_pci_info rtw8852b_pci_info = {
 	.recognize_intrs	= rtw89_pci_recognize_intrs,
 };
 
+static const struct dmi_system_id rtw8852b_pci_quirks[] = {
+	{
+		.ident = "ASUSTeK COMPUTER INC. TUF GAMING B550M-PLUS",
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "ASUSTeK COMPUTER INC."),
+			DMI_MATCH(DMI_BOARD_NAME, "TUF GAMING B550M-PLUS"),
+		},
+		.driver_data = (void *)RTW89_QUIRK_PCI_NO_36BIT_DMA,
+	},
+	{},
+};
+
 static const struct rtw89_driver_info rtw89_8852be_info = {
 	.chip = &rtw8852b_chip_info,
-	.quirks = NULL,
+	.quirks = rtw8852b_pci_quirks,
 	.bus = {
 		.pci = &rtw8852b_pci_info,
 	},

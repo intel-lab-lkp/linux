@@ -4710,6 +4710,7 @@ enum rtw89_flags {
 
 enum rtw89_quirks {
 	RTW89_QUIRK_PCI_BER,
+	RTW89_QUIRK_PCI_NO_36BIT_DMA,
 
 	NUM_OF_RTW89_QUIRKS,
 };
