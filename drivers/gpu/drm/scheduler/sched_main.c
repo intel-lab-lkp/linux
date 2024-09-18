@@ -1332,17 +1332,34 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 
 	drm_sched_wqueue_stop(sched);
 
+	/*
+	 * Tearing down the scheduler wile there are still unprocessed jobs can
+	 * lead to use after free issues in the scheduler fence.
+	 */
+	WARN_ON(!list_empty(&sched->pending_list));
+
 	for (i = DRM_SCHED_PRIORITY_KERNEL; i < sched->num_rqs; i++) {
 		struct drm_sched_rq *rq = sched->sched_rq[i];
 
 		spin_lock(&rq->lock);
-		list_for_each_entry(s_entity, &rq->entities, list)
+		list_for_each_entry(s_entity, &rq->entities, list) {
+			/*
+			 * The justification for this BUG_ON() is that tearing
+			 * down the scheduler while jobs are pending leaves
+			 * dma_fences unsignaled. Since we have dependencies
+			 * from the core memory management to eventually signal
+			 * dma_fences this can trivially lead to a system wide
+			 * stop because of a locked up memory management.
+			 */
+			BUG_ON(spsc_queue_count(&s_entity->job_queue));
+
 			/*
 			 * Prevents reinsertion and marks job_queue as idle,
 			 * it will removed from rq in drm_sched_entity_fini
 			 * eventually
 			 */
 			s_entity->stopped = true;
+		}
 		spin_unlock(&rq->lock);
 		kfree(sched->sched_rq[i]);
 	}
