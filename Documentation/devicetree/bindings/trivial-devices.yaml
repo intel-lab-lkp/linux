@@ -315,6 +315,8 @@ properties:
           - oki,ml86v7667
             # 48-Lane, 12-Port PCI Express Gen 2 (5.0 GT/s) Switch
           - plx,pex8648
+            # Generic PMBus devices
+          - pmbus
             # Pulsedlight LIDAR range-finding sensor
           - pulsedlight,lidar-lite-v2
             # Renesas HS3001 Temperature and Relative Humidity Sensors
