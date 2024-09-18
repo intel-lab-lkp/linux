@@ -85,7 +85,7 @@ void udf_truncate_tail_extent(struct inode *inode)
 		BUG();
 
 	/* Find the last extent in the file */
-	while ((netype = udf_next_aext(inode, &epos, &eloc, &elen, 1)) != -1) {
+	while (!udf_next_aext(inode, &epos, &eloc, &elen, &netype, 1)) {
 		etype = netype;
 		lbcount += elen;
 		if (lbcount > inode->i_size) {
@@ -101,7 +101,7 @@ void udf_truncate_tail_extent(struct inode *inode)
 			epos.offset -= adsize;
 			extent_trunc(inode, &epos, &eloc, etype, elen, nelen);
 			epos.offset += adsize;
-			if (udf_next_aext(inode, &epos, &eloc, &elen, 1) != -1)
+			if (!udf_next_aext(inode, &epos, &eloc, &elen, &netype, 1))
 				udf_err(inode->i_sb,
 					"Extent after EOF in inode %u\n",
 					(unsigned)inode->i_ino);
@@ -132,13 +132,13 @@ void udf_discard_prealloc(struct inode *inode)
 	epos.block = iinfo->i_location;
 
 	/* Find the last extent in the file */
-	while (udf_next_aext(inode, &epos, &eloc, &elen, 0) != -1) {
+	while (!udf_next_aext(inode, &epos, &eloc, &elen, &etype, 0)) {
 		brelse(prev_epos.bh);
 		prev_epos = epos;
 		if (prev_epos.bh)
 			get_bh(prev_epos.bh);
 
-		etype = udf_next_aext(inode, &epos, &eloc, &elen, 1);
+		udf_next_aext(inode, &epos, &eloc, &elen, &etype, 1);
 		lbcount += elen;
 	}
 	if (etype == (EXT_NOT_RECORDED_ALLOCATED >> 30)) {

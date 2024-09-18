@@ -384,7 +384,7 @@ static void udf_table_free_blocks(struct super_block *sb,
 	epos.bh = oepos.bh = NULL;
 
 	while (count &&
-	       (etype = udf_next_aext(table, &epos, &eloc, &elen, 1)) != -1) {
+	       !udf_next_aext(table, &epos, &eloc, &elen, &etype, 1)) {
 		if (((eloc.logicalBlockNum +
 			(elen >> sb->s_blocksize_bits)) == start)) {
 			if ((0x3FFFFFFF - elen) <
@@ -517,7 +517,7 @@ static int udf_table_prealloc_blocks(struct super_block *sb,
 	eloc.logicalBlockNum = 0xFFFFFFFF;
 
 	while (first_block != eloc.logicalBlockNum &&
-	       (etype = udf_next_aext(table, &epos, &eloc, &elen, 1)) != -1) {
+	       !udf_next_aext(table, &epos, &eloc, &elen, &etype, 1)) {
 		udf_debug("eloc=%u, elen=%u, first_block=%u\n",
 			  eloc.logicalBlockNum, elen, first_block);
 		; /* empty loop body */
@@ -584,7 +584,7 @@ static udf_pblk_t udf_table_new_block(struct super_block *sb,
 	epos.bh = goal_epos.bh = NULL;
 
 	while (spread &&
-	       (etype = udf_next_aext(table, &epos, &eloc, &elen, 1)) != -1) {
+	       !udf_next_aext(table, &epos, &eloc, &elen, &etype, 1)) {
 		if (goal >= eloc.logicalBlockNum) {
 			if (goal < eloc.logicalBlockNum +
 					(elen >> sb->s_blocksize_bits))
