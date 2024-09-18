@@ -9,7 +9,7 @@ use crate::{
     block::mq::request::RequestDataWrapper,
     block::mq::Request,
     error::{from_result, Result},
-    types::ARef,
+    sync::aref::ARef,
 };
 use core::{marker::PhantomData, sync::atomic::AtomicU64, sync::atomic::Ordering};
 

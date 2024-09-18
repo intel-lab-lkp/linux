@@ -4,10 +4,8 @@
 //!
 //! C header: [`include/linux/device.h`](srctree/include/linux/device.h)
 
-use crate::{
-    bindings,
-    types::{ARef, Opaque},
-};
+use crate::{bindings, sync::aref::ARef, types::Opaque};
+
 use core::ptr;
 
 /// A reference-counted device.
@@ -85,7 +83,7 @@ impl Device {
 }
 
 // SAFETY: Instances of `Device` are always reference-counted.
-unsafe impl crate::types::AlwaysRefCounted for Device {
+unsafe impl crate::sync::aref::AlwaysRefCounted for Device {
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
         unsafe { bindings::get_device(self.as_raw()) };
