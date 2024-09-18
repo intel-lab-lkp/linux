@@ -149,6 +149,7 @@ static struct attribute *pcie_pmu_format_attrs[] = {
 
 static struct attribute *nvlink_c2c_pmu_format_attrs[] = {
 	ARM_CSPMU_FORMAT_EVENT_ATTR,
+	ARM_CSPMU_FORMAT_ATTR(port, "config1:0-1"),
 	NULL,
 };
 
@@ -193,7 +194,7 @@ static u32 nv_cspmu_event_filter(const struct perf_event *event)
 	const struct nv_cspmu_ctx *ctx =
 		to_nv_cspmu_ctx(to_arm_cspmu(event->pmu));
 
-	if (ctx->filter_mask == 0)
+	if (ctx->filter_mask == 0 || event->attr.config1 == 0)
 		return ctx->filter_default_val;
 
 	return event->attr.config1 & ctx->filter_mask;
@@ -229,7 +230,7 @@ static const struct nv_cspmu_match nv_cspmu_match[] = {
 	{
 	  .prodid = 0x104,
 	  .prodid_mask = NV_PRODID_MASK,
-	  .filter_mask = 0x0,
+	  .filter_mask = NV_NVL_C2C_FILTER_ID_MASK,
 	  .filter_default_val = NV_NVL_C2C_FILTER_ID_MASK,
 	  .name_pattern = "nvidia_nvlink_c2c1_pmu_%u",
 	  .name_fmt = NAME_FMT_SOCKET,
@@ -239,7 +240,7 @@ static const struct nv_cspmu_match nv_cspmu_match[] = {
 	{
 	  .prodid = 0x105,
 	  .prodid_mask = NV_PRODID_MASK,
-	  .filter_mask = 0x0,
+	  .filter_mask = NV_NVL_C2C_FILTER_ID_MASK,
 	  .filter_default_val = NV_NVL_C2C_FILTER_ID_MASK,
 	  .name_pattern = "nvidia_nvlink_c2c0_pmu_%u",
 	  .name_fmt = NAME_FMT_SOCKET,
