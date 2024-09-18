@@ -2184,8 +2184,8 @@ unsigned long wait_task_inactive(struct task_struct *p, unsigned int match_state
 		 * NOTE! Since we don't hold any locks, it's not
 		 * even sure that "rq" stays as the right runqueue!
 		 * But we don't care, since "task_on_cpu()" will
-		 * return false if the runqueue has changed and p
-		 * is actually now running somewhere else!
+		 * return true as long as p is running on a CPU,
+		 * regardless of any changes to the runqueue.
 		 */
 		while (task_on_cpu(rq, p)) {
 			if (!task_state_match(p, match_state))
