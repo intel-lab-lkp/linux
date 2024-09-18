@@ -1531,6 +1531,9 @@ static int match_server(struct TCP_Server_Info *server,
 	if (server->nosharesock)
 		return 0;
 
+	if (!match_super && (ctx->dfs_conn || server->dfs_conn))
+		return 0;
+
 	/* If multidialect negotiation see if existing sessions match one */
 	if (strcmp(ctx->vals->version_string, SMB3ANY_VERSION_STRING) == 0) {
 		if (server->vals->protocol_id < SMB30_PROT_ID)
@@ -1724,6 +1727,7 @@ cifs_get_tcp_session(struct smb3_fs_context *ctx,
 
 	if (ctx->nosharesock)
 		tcp_ses->nosharesock = true;
+	tcp_ses->dfs_conn = ctx->dfs_conn;
 
 	tcp_ses->ops = ctx->ops;
 	tcp_ses->vals = ctx->vals;
@@ -1874,13 +1878,15 @@ out_err:
 }
 
 /* this function must be called with ses_lock and chan_lock held */
-static int match_session(struct cifs_ses *ses, struct smb3_fs_context *ctx)
+static int match_session(struct cifs_ses *ses,
+			 struct smb3_fs_context *ctx,
+			 bool match_super)
 {
 	if (ctx->sectype != Unspecified &&
 	    ctx->sectype != ses->sectype)
 		return 0;
 
-	if (ctx->dfs_root_ses != ses->dfs_root_ses)
+	if (!match_super && ctx->dfs_root_ses != ses->dfs_root_ses)
 		return 0;
 
 	/*
@@ -1999,7 +2005,7 @@ cifs_find_smb_ses(struct TCP_Server_Info *server, struct smb3_fs_context *ctx)
 			continue;
 		}
 		spin_lock(&ses->chan_lock);
-		if (match_session(ses, ctx)) {
+		if (match_session(ses, ctx, false)) {
 			spin_unlock(&ses->chan_lock);
 			spin_unlock(&ses->ses_lock);
 			ret = ses;
@@ -2383,8 +2389,6 @@ cifs_get_smb_ses(struct TCP_Server_Info *server, struct smb3_fs_context *ctx)
 	 * need to lock before changing something in the session.
 	 */
 	spin_lock(&cifs_tcp_ses_lock);
-	if (ctx->dfs_root_ses)
-		cifs_smb_ses_inc_refcount(ctx->dfs_root_ses);
 	ses->dfs_root_ses = ctx->dfs_root_ses;
 	list_add(&ses->smb_ses_list, &server->smb_ses_list);
 	spin_unlock(&cifs_tcp_ses_lock);
@@ -2459,6 +2463,7 @@ cifs_put_tcon(struct cifs_tcon *tcon, enum smb3_tcon_ref_trace trace)
 {
 	unsigned int xid;
 	struct cifs_ses *ses;
+	LIST_HEAD(ses_list);
 
 	/*
 	 * IPC tcon share the lifetime of their session and are
@@ -2483,6 +2488,9 @@ cifs_put_tcon(struct cifs_tcon *tcon, enum smb3_tcon_ref_trace trace)
 
 	list_del_init(&tcon->tcon_list);
 	tcon->status = TID_EXITING;
+#ifdef CONFIG_CIFS_DFS_UPCALL
+	list_replace_init(&tcon->dfs_ses_list, &ses_list);
+#endif
 	spin_unlock(&tcon->tc_lock);
 	spin_unlock(&cifs_tcp_ses_lock);
 
@@ -2510,6 +2518,9 @@ cifs_put_tcon(struct cifs_tcon *tcon, enum smb3_tcon_ref_trace trace)
 	cifs_fscache_release_super_cookie(tcon);
 	tconInfoFree(tcon, netfs_trace_tcon_ref_free);
 	cifs_put_smb_ses(ses);
+#ifdef CONFIG_CIFS_DFS_UPCALL
+	dfs_put_root_smb_sessions(&ses_list);
+#endif
 }
 
 /**
@@ -2893,7 +2904,7 @@ cifs_match_super(struct super_block *sb, void *data)
 	spin_lock(&ses->chan_lock);
 	spin_lock(&tcon->tc_lock);
 	if (!match_server(tcp_srv, ctx, true) ||
-	    !match_session(ses, ctx) ||
+	    !match_session(ses, ctx, true) ||
 	    !match_tcon(tcon, ctx) ||
 	    !match_prepath(sb, tcon, mnt_data)) {
 		rc = 0;
@@ -3624,13 +3635,12 @@ out:
 int cifs_mount(struct cifs_sb_info *cifs_sb, struct smb3_fs_context *ctx)
 {
 	struct cifs_mount_ctx mnt_ctx = { .cifs_sb = cifs_sb, .fs_ctx = ctx, };
-	bool isdfs;
 	int rc;
 
-	rc = dfs_mount_share(&mnt_ctx, &isdfs);
+	rc = dfs_mount_share(&mnt_ctx);
 	if (rc)
 		goto error;
-	if (!isdfs)
+	if (!ctx->dfs_conn)
 		goto out;
 
 	/*
@@ -4035,7 +4045,7 @@ cifs_set_vol_auth(struct smb3_fs_context *ctx, struct cifs_ses *ses)
 }
 
 static struct cifs_tcon *
-__cifs_construct_tcon(struct cifs_sb_info *cifs_sb, kuid_t fsuid)
+cifs_construct_tcon(struct cifs_sb_info *cifs_sb, kuid_t fsuid)
 {
 	int rc;
 	struct cifs_tcon *master_tcon = cifs_sb_master_tcon(cifs_sb);
@@ -4131,17 +4141,6 @@ out:
 	kfree(ctx);
 
 	return tcon;
-}
-
-static struct cifs_tcon *
-cifs_construct_tcon(struct cifs_sb_info *cifs_sb, kuid_t fsuid)
-{
-	struct cifs_tcon *ret;
-
-	cifs_mount_lock();
-	ret = __cifs_construct_tcon(cifs_sb, fsuid);
-	cifs_mount_unlock();
-	return ret;
 }
 
 struct cifs_tcon *
