@@ -478,7 +478,9 @@ struct tcp_sock {
 #endif
 #if IS_ENABLED(CONFIG_SMC)
 	bool	syn_smc;	/* SYN includes SMC */
-	bool	(*smc_hs_congested)(const struct sock *sk);
+	void	(*smc_openreq_init)(struct request_sock *req,
+			     const struct tcp_options_received *rx_opt,
+			     struct sk_buff *skb, const struct sock *sk);
 #endif
 
 #if defined(CONFIG_TCP_MD5SIG) || defined(CONFIG_TCP_AO)
