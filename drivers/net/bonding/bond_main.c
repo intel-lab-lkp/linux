@@ -1353,6 +1353,10 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 				call_netdevice_notifiers(NETDEV_NOTIFY_PEERS,
 							 bond->dev);
 			}
+
+#ifdef CONFIG_XFRM_OFFLOAD
+			netdev_update_features(bond->dev);
+#endif /* CONFIG_XFRM_OFFLOAD */
 		}
 	}
 
@@ -1524,6 +1528,11 @@ static netdev_features_t bond_fix_features(struct net_device *dev,
 		features = netdev_increment_features(features,
 						     slave->dev->features,
 						     mask);
+#ifdef CONFIG_XFRM_OFFLOAD
+		if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP &&
+		    slave == rtnl_dereference(bond->curr_active_slave))
+			features &= slave->dev->features & BOND_XFRM_FEATURES;
+#endif /* CONFIG_XFRM_OFFLOAD */
 	}
 	features = netdev_add_tso_features(features, mask);
 
