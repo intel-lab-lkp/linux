@@ -83,6 +83,17 @@ static inline u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 }
 #endif
 
+static inline struct page_pool *page_pool_to_pp(struct page *page)
+{
+	struct page_pool_item *item = page->pp_item;
+	struct page_pool *pool;
+
+	item -= item->pp_idx;
+	pool = (struct page_pool *)item;
+
+	return --pool;
+}
+
 /**
  * page_pool_dev_alloc_pages() - allocate a page.
  * @pool:	pool from which to allocate
