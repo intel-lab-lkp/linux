@@ -259,6 +259,7 @@ static void rds_ib_cq_comp_handler_recv(struct ib_cq *cq, void *context)
 static void poll_scq(struct rds_ib_connection *ic, struct ib_cq *cq,
 		     struct ib_wc *wcs)
 {
+	int ncompleted = 0;
 	int nr, i;
 	struct ib_wc *wc;
 
@@ -276,7 +277,10 @@ static void poll_scq(struct rds_ib_connection *ic, struct ib_cq *cq,
 				rds_ib_mr_cqe_handler(ic, wc);
 
 		}
+		ncompleted += nr;
 	}
+	if (cq->dim)
+		rdma_dim(cq->dim, ncompleted);
 }
 
 static void rds_ib_tasklet_fn_send(unsigned long data)
@@ -304,6 +308,7 @@ static void poll_rcq(struct rds_ib_connection *ic, struct ib_cq *cq,
 		     struct ib_wc *wcs,
 		     struct rds_ib_ack_state *ack_state)
 {
+	int ncompleted = 0;
 	int nr, i;
 	struct ib_wc *wc;
 
@@ -316,7 +321,10 @@ static void poll_rcq(struct rds_ib_connection *ic, struct ib_cq *cq,
 
 			rds_ib_recv_cqe_handler(ic, wc, ack_state);
 		}
+		ncompleted += nr;
 	}
+	if (cq->dim)
+		rdma_dim(cq->dim, ncompleted);
 }
 
 static void rds_ib_tasklet_fn_recv(unsigned long data)
@@ -542,6 +550,7 @@ static int rds_ib_setup_qp(struct rds_connection *conn)
 	ic->i_scq_vector = ibdev_get_unused_vector(rds_ibdev);
 	cq_attr.cqe = ic->i_send_ring.w_nr + fr_queue_space + 1;
 	cq_attr.comp_vector = ic->i_scq_vector;
+	cq_attr.flags |= IB_CQ_MODERATE;
 	ic->i_send_cq = ib_create_cq(dev, rds_ib_cq_comp_handler_send,
 				     rds_ib_cq_event_handler, conn,
 				     &cq_attr);
@@ -556,6 +565,7 @@ static int rds_ib_setup_qp(struct rds_connection *conn)
 	ic->i_rcq_vector = ibdev_get_unused_vector(rds_ibdev);
 	cq_attr.cqe = ic->i_recv_ring.w_nr;
 	cq_attr.comp_vector = ic->i_rcq_vector;
+	cq_attr.flags |= IB_CQ_MODERATE;
 	ic->i_recv_cq = ib_create_cq(dev, rds_ib_cq_comp_handler_recv,
 				     rds_ib_cq_event_handler, conn,
 				     &cq_attr);
