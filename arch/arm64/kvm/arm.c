@@ -1882,17 +1882,21 @@ int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot
 
 	r = page_tracking_disable(kvm->arch.page_tracking_ctx, -1);
 
-	if (r == -EBUSY) {
-		r = 0;
-	} else {
-		page_tracking_release(kvm->arch.page_tracking_ctx);
-		kvm->arch.page_tracking_ctx = NULL;
+	if (r == -EBUSY)
+		return 0;
 
-		if (kvm->arch.page_tracking_pg) {
-			free_page((unsigned long)kvm->arch.page_tracking_pg);
-			kvm->arch.page_tracking_pg = NULL;
-		}
+	/* Flush only when dirty tracking is disabled */
+	if (!r)
+		r = page_tracking_flush(kvm->arch.page_tracking_ctx);
+
+	/* But release resources anyway */
+	page_tracking_release(kvm->arch.page_tracking_ctx);
+	kvm->arch.page_tracking_ctx = NULL;
+	if (kvm->arch.page_tracking_pg) {
+		free_page((unsigned long)kvm->arch.page_tracking_pg);
+		kvm->arch.page_tracking_pg = NULL;
 	}
+
 	return r;
 }
 
