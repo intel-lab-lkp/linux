@@ -220,13 +220,11 @@ static int query_engines(struct xe_device *xe,
 
 	engines->num_engines = i;
 
-	if (copy_to_user(query_ptr, engines, size)) {
+	{
+		unsigned long ctu = copy_to_user(query_ptr, engines, size);
 		kfree(engines);
-		return -EFAULT;
+		return ctu ? -EFAULT : 0;
 	}
-	kfree(engines);
-
-	return 0;
 }
 
 static size_t calc_mem_regions_size(struct xe_device *xe)
@@ -344,13 +342,11 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
 	config->info[DRM_XE_QUERY_CONFIG_MAX_EXEC_QUEUE_PRIORITY] =
 		xe_exec_queue_device_get_max_priority(xe);
 
-	if (copy_to_user(query_ptr, config, size)) {
+	{
+		unsigned long ctu = copy_to_user(query_ptr, config, size);
 		kfree(config);
-		return -EFAULT;
+		return ctu ? -EFAULT : 0;
 	}
-	kfree(config);
-
-	return 0;
 }
 
 static int query_gt_list(struct xe_device *xe, struct drm_xe_device_query *query)
@@ -414,13 +410,11 @@ static int query_gt_list(struct xe_device *xe, struct drm_xe_device_query *query
 			REG_FIELD_GET(GMD_ID_REVID, gt->info.gmdid);
 	}
 
-	if (copy_to_user(query_ptr, gt_list, size)) {
+	{
+		unsigned long ctu = copy_to_user(query_ptr, gt_list, size);
 		kfree(gt_list);
-		return -EFAULT;
+		return ctu ? -EFAULT : 0;
 	}
-	kfree(gt_list);
-
-	return 0;
 }
 
 static int query_hwconfig(struct xe_device *xe,
@@ -444,13 +438,11 @@ static int query_hwconfig(struct xe_device *xe,
 
 	xe_guc_hwconfig_copy(&gt->uc.guc, hwconfig);
 
-	if (copy_to_user(query_ptr, hwconfig, size)) {
+	{
+		unsigned long ctu = copy_to_user(query_ptr, hwconfig, size);
 		kfree(hwconfig);
-		return -EFAULT;
+		return ctu ? -EFAULT : 0;
 	}
-	kfree(hwconfig);
-
-	return 0;
 }
 
 static size_t calc_topo_query_size(struct xe_device *xe)
