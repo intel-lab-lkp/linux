@@ -310,7 +310,7 @@ static int pci9111_ai_do_cmd_test(struct comedi_device *dev,
 	 * There's only one timer on this card, so the scan_begin timer
 	 * must be a multiple of chanlist_len*convert_arg
 	 */
-	if (cmd->scan_begin_src == TRIG_TIMER) {
+	if (cmd->scan_begin_src == TRIG_TIMER && cmd->chanlist_len) {
 		arg = cmd->chanlist_len * cmd->convert_arg;
 
 		if (arg < cmd->scan_begin_arg)
