@@ -230,7 +230,7 @@ static
 unsigned int
 s_uGetDataDuration(
 	struct vnt_private *priv,
-	unsigned char byDurType,
+	unsigned char dur_type,
 	unsigned int cbFrameLength,
 	unsigned char byPktType,
 	unsigned short wRate,
@@ -252,7 +252,7 @@ s_uGetDataDuration(
 	else
 		len = cbFrameLength;
 
-	switch (byDurType) {
+	switch (dur_type) {
 	case DATADUR_B:    /* DATADUR_B */
 		if (bNeedAck) {
 			uAckTime = bb_get_frame_time(priv->preamble_type,
