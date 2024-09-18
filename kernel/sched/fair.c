@@ -714,11 +714,11 @@ static void update_entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se)
  *
  * lag_i >= 0 -> V >= v_i
  *
- *     \Sum (v_i - v)*w_i
- * V = ------------------ + v
+ *     \Sum (v_i - v0)*w_i
+ * V = ------------------ + v0
  *          \Sum w_i
  *
- * lag_i >= 0 -> \Sum (v_i - v)*w_i >= (v_i - v)*(\Sum w_i)
+ * lag_i >= 0 -> \Sum (v_i - v0)*w_i >= (v_i - v0)*(\Sum w_i)
  *
  * Note: using 'avg_vruntime() > se->vruntime' is inaccurate due
  *       to the loss in precision caused by the division.
