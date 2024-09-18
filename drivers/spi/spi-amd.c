@@ -364,8 +364,8 @@ static bool amd_spi_supports_op(struct spi_mem *mem,
 				const struct spi_mem_op *op)
 {
 	/* bus width is number of IO lines used to transmit */
-	if (op->cmd.buswidth > 1 || op->addr.buswidth > 1 ||
-	    op->data.buswidth > 1 || op->data.nbytes > AMD_SPI_MAX_DATA)
+	if (op->cmd.buswidth > 1 || op->addr.buswidth > 4 ||
+	    op->data.buswidth > 4 || op->data.nbytes > AMD_SPI_MAX_DATA)
 		return false;
 
 	return spi_mem_default_supports_op(mem, op);
@@ -514,7 +514,7 @@ static int amd_spi_probe(struct platform_device *pdev)
 	/* Initialize the spi_controller fields */
 	host->bus_num = 0;
 	host->num_chipselect = 4;
-	host->mode_bits = 0;
+	host->mode_bits = SPI_TX_DUAL | SPI_TX_QUAD | SPI_RX_DUAL | SPI_RX_QUAD;
 	host->flags = SPI_CONTROLLER_HALF_DUPLEX;
 	host->max_speed_hz = AMD_SPI_MAX_HZ;
 	host->min_speed_hz = AMD_SPI_MIN_HZ;
