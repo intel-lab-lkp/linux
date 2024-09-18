@@ -1338,7 +1338,13 @@ static int tpm2_create_null_primary(struct tpm_chip *chip)
 		tpm2_flush_context(chip, null_key);
 	}
 
-	return rc;
+	if (rc < 0)
+		dev_err(&chip->dev, "saving the null key failed with error %d\n", rc);
+	else if (rc > 0)
+		dev_err(&chip->dev, "saving the null key failed with TPM error 0x%04X\n", rc);
+
+	/* Map all errors to -ENODEV: */
+	return rc ? -ENODEV : rc;
 }
 
 /**
@@ -1354,7 +1360,7 @@ int tpm2_sessions_init(struct tpm_chip *chip)
 
 	rc = tpm2_create_null_primary(chip);
 	if (rc)
-		dev_err(&chip->dev, "TPM: security failed (NULL seed derivation): %d\n", rc);
+		return rc;
 
 	chip->auth = kmalloc(sizeof(*chip->auth), GFP_KERNEL);
 	if (!chip->auth)
