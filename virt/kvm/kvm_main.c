@@ -1690,11 +1690,12 @@ static int kvm_prepare_memory_region(struct kvm *kvm,
 	return r;
 }
 
-static void kvm_commit_memory_region(struct kvm *kvm,
-				     struct kvm_memory_slot *old,
-				     const struct kvm_memory_slot *new,
-				     enum kvm_mr_change change)
+static int kvm_commit_memory_region(struct kvm *kvm,
+				    struct kvm_memory_slot *old,
+				    const struct kvm_memory_slot *new,
+				    enum kvm_mr_change change)
 {
+	int r;
 	int old_flags = old ? old->flags : 0;
 	int new_flags = new ? new->flags : 0;
 	/*
@@ -1710,6 +1711,10 @@ static void kvm_commit_memory_region(struct kvm *kvm,
 		int change = (new_flags & KVM_MEM_LOG_DIRTY_PAGES) ? 1 : -1;
 		atomic_set(&kvm->nr_memslots_dirty_logging,
 			   atomic_read(&kvm->nr_memslots_dirty_logging) + change);
+		if (change > 0)
+			r = kvm_arch_enable_dirty_logging(kvm, new);
+		else
+			r = kvm_arch_disable_dirty_logging(kvm, new);
 	}
 
 	kvm_arch_commit_memory_region(kvm, old, new, change);
@@ -1741,6 +1746,8 @@ static void kvm_commit_memory_region(struct kvm *kvm,
 	default:
 		BUG();
 	}
+
+	return r;
 }
 
 /*
@@ -1955,9 +1962,7 @@ static int kvm_set_memslot(struct kvm *kvm,
 	 * will directly hit the final, active memslot.  Architectures are
 	 * responsible for knowing that new->arch may be stale.
 	 */
-	kvm_commit_memory_region(kvm, old, new, change);
-
-	return 0;
+	return kvm_commit_memory_region(kvm, old, new, change);
 }
 
 static bool kvm_check_memslot_overlap(struct kvm_memslots *slots, int id,

@@ -6486,6 +6486,16 @@ static int kvm_vm_ioctl_reinject(struct kvm *kvm,
 	return 0;
 }
 
+int kvm_arch_enable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot)
+{
+	return 0;
+}
+
+int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot)
+{
+	return 0;
+}
+
 void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
 

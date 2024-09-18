@@ -1460,6 +1460,8 @@ void kvm_arch_mmu_enable_log_dirty_pt_masked(struct kvm *kvm,
 					struct kvm_memory_slot *slot,
 					gfn_t gfn_offset,
 					unsigned long mask);
+int kvm_arch_enable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot);
+int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot);
 void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot);
 
 #ifndef CONFIG_KVM_GENERIC_DIRTYLOG_READ_PROTECT

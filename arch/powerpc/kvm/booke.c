@@ -1814,6 +1814,16 @@ int kvm_arch_vcpu_ioctl_translate(struct kvm_vcpu *vcpu,
 	return r;
 }
 
+int kvm_arch_enable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot)
+{
+	return -EOPNOTSUPP;
+}
+
+int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot)
+{
+	return -EOPNOTSUPP;
+}
+
 void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
 

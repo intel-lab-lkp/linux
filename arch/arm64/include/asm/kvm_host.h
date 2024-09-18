@@ -377,6 +377,11 @@ struct kvm_arch {
 	 * the associated pKVM instance in the hypervisor.
 	 */
 	struct kvm_protected_vm pkvm;
+
+	/*
+	 * Stores page tracking context if page tracking device is in use
+	 */
+	void *page_tracking_ctx;
 };
 
 struct kvm_vcpu_fault_info {

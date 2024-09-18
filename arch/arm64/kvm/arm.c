@@ -266,6 +266,9 @@ static void kvm_destroy_mpidr_data(struct kvm *kvm)
  */
 void kvm_arch_destroy_vm(struct kvm *kvm)
 {
+	if (kvm->arch.page_tracking_ctx)
+		page_tracking_release(kvm->arch.page_tracking_ctx);
+
 	bitmap_free(kvm->arch.pmu_filter);
 	free_cpumask_var(kvm->arch.supported_cpus);
 
@@ -1818,6 +1821,57 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 		r = -EINVAL;
 	}
 
+	return r;
+}
+
+int kvm_arch_enable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot)
+{
+	void *ctx = NULL;
+	struct pt_config config;
+	int r;
+
+	if (!page_tracking_device_registered())
+		return 0;
+
+	if (!kvm->arch.page_tracking_ctx) {
+		config.vmid = (u32)kvm->arch.mmu.vmid.id.counter;
+		config.mode = dirty_pages;
+		ctx = page_tracking_allocate(config);
+		if (!ctx)
+			return -ENOENT;
+
+		kvm->arch.page_tracking_ctx = ctx;
+	}
+
+	r = page_tracking_enable(kvm->arch.page_tracking_ctx, -1);
+
+	if (r) {
+		if (ctx) {
+			page_tracking_release(ctx);
+			kvm->arch.page_tracking_ctx = NULL;
+		}
+	}
+	return r;
+}
+
+int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot)
+{
+	int r = 0;
+
+	if (!page_tracking_device_registered())
+		return 0;
+
+	if (!kvm->arch.page_tracking_ctx)
+		return -ENOENT;
+
+	r = page_tracking_disable(kvm->arch.page_tracking_ctx, -1);
+
+	if (r == -EBUSY) {
+		r = 0;
+	} else {
+		page_tracking_release(kvm->arch.page_tracking_ctx);
+		kvm->arch.page_tracking_ctx = NULL;
+	}
 	return r;
 }
 
