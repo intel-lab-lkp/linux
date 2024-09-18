@@ -4,10 +4,7 @@
 dtb-y := system.dtb
 
 ifneq ($(DTB),)
-obj-y += linked_dtb.o
-
-# Ensure system.dtb exists
-$(obj)/linked_dtb.o: $(obj)/system.dtb
+obj-y += system.dtb.o
 
 # Generate system.dtb from $(DTB).dtb
 ifneq ($(DTB),system)

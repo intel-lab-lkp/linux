@@ -95,7 +95,7 @@ big_endian:
 	bnei	r11, no_fdt_arg			/* No - get out of here */
 _prepare_copy_fdt:
 	or	r11, r0, r0 /* incremment */
-	ori	r4, r0, TOPHYS(_fdt_start)
+	ori	r4, r0, TOPHYS(__dtb_start)
 	ori	r3, r0, (0x10000 - 4)
 _copy_fdt:
 	lw	r12, r7, r11 /* r12 = r7 + r11 */
