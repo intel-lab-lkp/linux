@@ -1827,6 +1827,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 int kvm_arch_enable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot *memslot)
 {
 	void *ctx = NULL;
+	unsigned long read_buffer;
 	struct pt_config config;
 	int r;
 
@@ -1841,16 +1842,31 @@ int kvm_arch_enable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot 
 			return -ENOENT;
 
 		kvm->arch.page_tracking_ctx = ctx;
+
+		read_buffer = __get_free_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
+		if (!read_buffer) {
+			r = -ENOMEM;
+			goto out_free;
+		}
+
+		kvm->arch.page_tracking_pg = (gpa_t *)read_buffer;
 	}
 
 	r = page_tracking_enable(kvm->arch.page_tracking_ctx, -1);
 
+out_free:
 	if (r) {
 		if (ctx) {
 			page_tracking_release(ctx);
 			kvm->arch.page_tracking_ctx = NULL;
 		}
+
+		if (read_buffer) {
+			free_page(read_buffer);
+			kvm->arch.page_tracking_pg = NULL;
+		}
 	}
+
 	return r;
 }
 
@@ -1871,13 +1887,41 @@ int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot
 	} else {
 		page_tracking_release(kvm->arch.page_tracking_ctx);
 		kvm->arch.page_tracking_ctx = NULL;
+
+		if (kvm->arch.page_tracking_pg) {
+			free_page((unsigned long)kvm->arch.page_tracking_pg);
+			kvm->arch.page_tracking_pg = NULL;
+		}
 	}
 	return r;
 }
 
-void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
+int kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
+	int r;
+	u32 i;
+	u32 max_pages = PAGE_SIZE/sizeof(gpa_t);
 
+	if (!kvm->arch.page_tracking_ctx)
+		return 0;
+
+	if (!kvm->arch.page_tracking_pg)
+		return -ENOENT;
+
+	r = page_tracking_read_dirty_pages(kvm->arch.page_tracking_ctx, -1,
+					   kvm->arch.page_tracking_pg, max_pages);
+
+	while (r > 0) {
+		for (i = 0; i < r; ++i) {
+			u32 gfn =  kvm->arch.page_tracking_pg[i] >> PAGE_SHIFT;
+
+			memslot = gfn_to_memslot(kvm, gfn);
+			mark_page_dirty_in_slot(kvm, memslot, gfn);
+		}
+		r = page_tracking_read_dirty_pages(kvm->arch.page_tracking_ctx, -1,
+						   kvm->arch.page_tracking_pg, max_pages);
+	}
+	return r < 0 ? r : 0;
 }
 
 static int kvm_vm_ioctl_set_device_addr(struct kvm *kvm,

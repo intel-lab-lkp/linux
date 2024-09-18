@@ -379,9 +379,10 @@ struct kvm_arch {
 	struct kvm_protected_vm pkvm;
 
 	/*
-	 * Stores page tracking context if page tracking device is in use
+	 * Stores page tracking context and buffer if page tracking device is in use
 	 */
 	void *page_tracking_ctx;
+	gpa_t *page_tracking_pg;
 };
 
 struct kvm_vcpu_fault_info {
