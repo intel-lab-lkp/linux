@@ -39,7 +39,11 @@
 #include <sys/syscall.h>
 int clock_adjtime(clockid_t id, struct timex *tx)
 {
+#if !defined(__NR_clock_adjtime) && defined(__NR_clock_adjtime64)
+	return syscall(__NR_clock_adjtime64, id, tx);
+#else
 	return syscall(__NR_clock_adjtime, id, tx);
+#endif
 }
 
 
