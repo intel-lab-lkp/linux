@@ -29,6 +29,9 @@
 /* Total number of instructions retired within the measured section. */
 #define NUM_INSNS_RETIRED		(NUM_LOOPS * NUM_INSNS_PER_LOOP + NUM_EXTRA_INSNS)
 
+/* AMD counting one extra branch. Probably at loop boundary condition. */
+#define NUM_BRANCH_INSNS_RETIRED_AMD	(NUM_LOOPS+1)
+#define NUM_INSNS_RETIRED_AMD		(NUM_INSNS_RETIRED+1)
 
 /*
  * Limit testing to MSRs that are actually defined by Intel (in the SDM).  MSRs
@@ -109,7 +112,7 @@ static uint8_t guest_get_pmu_version(void)
  * Sanity check that in all cases, the event doesn't count when it's disabled,
  * and that KVM correctly emulates the write of an arbitrary value.
  */
-static void guest_assert_event_count(uint8_t idx,
+static void guest_assert_intel_event_count(uint8_t idx,
 				     struct kvm_x86_pmu_feature event,
 				     uint32_t pmc, uint32_t pmc_msr)
 {
@@ -151,6 +154,33 @@ sanity_checks:
 	GUEST_ASSERT_EQ(_rdpmc(pmc), 0xdead);
 }
 
+static void guest_assert_amd_event_count(uint8_t evt_idx, uint8_t cnt_idx, uint32_t pmc_msr)
+{
+	uint64_t count;
+	uint64_t count_pmc;
+
+	count = rdmsr(pmc_msr);
+	count_pmc = _rdpmc(cnt_idx);
+	GUEST_ASSERT_EQ(count, count_pmc);
+
+	switch (evt_idx) {
+	case AMD_ZEN_CORE_CYCLES_INDEX:
+		GUEST_ASSERT_NE(count, 0);
+		break;
+	case AMD_ZEN_INSTRUCTIONS_INDEX:
+		GUEST_ASSERT_EQ(count, NUM_INSNS_RETIRED_AMD);
+		break;
+	case AMD_ZEN_BRANCHES_INDEX:
+		GUEST_ASSERT_EQ(count, NUM_BRANCH_INSNS_RETIRED_AMD);
+		break;
+	case AMD_ZEN_BRANCH_MISSES_INDEX:
+		GUEST_ASSERT_NE(count, 0);
+		break;
+	default:
+		break;
+	}
+
+}
 /*
  * Enable and disable the PMC in a monolithic asm blob to ensure that the
  * compiler can't insert _any_ code into the measured sequence.  Note, ECX
@@ -183,28 +213,29 @@ do {										\
 	);									\
 } while (0)
 
-#define GUEST_TEST_EVENT(_idx, _event, _pmc, _pmc_msr, _ctrl_msr, _value, FEP)	\
+#define GUEST_TEST_EVENT(_pmc_msr, _ctrl_msr, _ctrl_value, FEP)			\
 do {										\
 	wrmsr(_pmc_msr, 0);							\
 										\
 	if (this_cpu_has(X86_FEATURE_CLFLUSHOPT))				\
-		GUEST_MEASURE_EVENT(_ctrl_msr, _value, "clflushopt .", FEP);	\
+		GUEST_MEASURE_EVENT(_ctrl_msr, _ctrl_value, "clflushopt .", FEP);	\
 	else if (this_cpu_has(X86_FEATURE_CLFLUSH))				\
-		GUEST_MEASURE_EVENT(_ctrl_msr, _value, "clflush .", FEP);	\
+		GUEST_MEASURE_EVENT(_ctrl_msr, _ctrl_value, "clflush .", FEP);	\
 	else									\
-		GUEST_MEASURE_EVENT(_ctrl_msr, _value, "nop", FEP);		\
-										\
-	guest_assert_event_count(_idx, _event, _pmc, _pmc_msr);			\
+		GUEST_MEASURE_EVENT(_ctrl_msr, _ctrl_value, "nop", FEP);		\
 } while (0)
 
 static void __guest_test_arch_event(uint8_t idx, struct kvm_x86_pmu_feature event,
 				    uint32_t pmc, uint32_t pmc_msr,
 				    uint32_t ctrl_msr, uint64_t ctrl_msr_value)
 {
-	GUEST_TEST_EVENT(idx, event, pmc, pmc_msr, ctrl_msr, ctrl_msr_value, "");
+	GUEST_TEST_EVENT(pmc_msr, ctrl_msr, ctrl_msr_value, "");
+	guest_assert_intel_event_count(idx, event, pmc, pmc_msr);
 
-	if (is_forced_emulation_enabled)
-		GUEST_TEST_EVENT(idx, event, pmc, pmc_msr, ctrl_msr, ctrl_msr_value, KVM_FEP);
+	if (is_forced_emulation_enabled) {
+		GUEST_TEST_EVENT(pmc_msr, ctrl_msr, ctrl_msr_value, KVM_FEP);
+		guest_assert_intel_event_count(idx, event, pmc, pmc_msr);
+	}
 }
 
 #define X86_PMU_FEATURE_NULL						\
@@ -697,9 +728,45 @@ static void guest_test_rdwr_core_counters(void)
 	}
 }
 
+static void __guest_test_core_event(uint8_t event_idx, uint8_t counter_idx)
+{
+	/* One fortunate area of actual compatibility! This register
+	 * layout is the same for both AMD and Intel.
+	 */
+	uint64_t eventsel = ARCH_PERFMON_EVENTSEL_OS |
+		ARCH_PERFMON_EVENTSEL_ENABLE |
+		amd_pmu_zen_events[event_idx];
+	bool core_ext = this_cpu_has(X86_FEATURE_PERF_CTR_EXT_CORE);
+	uint64_t esel_msr_base = core_ext ? MSR_F15H_PERF_CTL : MSR_K7_EVNTSEL0;
+	uint64_t cnt_msr_base = core_ext ? MSR_F15H_PERF_CTR : MSR_K7_PERFCTR0;
+	uint64_t msr_step = core_ext ? 2 : 1;
+	uint64_t esel_msr = esel_msr_base + msr_step * counter_idx;
+	uint64_t cnt_msr = cnt_msr_base + msr_step * counter_idx;
+
+	GUEST_TEST_EVENT(cnt_msr, esel_msr, eventsel, "");
+	guest_assert_amd_event_count(event_idx, counter_idx, cnt_msr);
+
+	if (is_forced_emulation_enabled) {
+		GUEST_TEST_EVENT(cnt_msr, esel_msr, eventsel, KVM_FEP);
+		guest_assert_amd_event_count(event_idx, counter_idx, cnt_msr);
+	}
+
+}
+
+static void guest_test_core_events(void)
+{
+	uint8_t nr_counters = guest_nr_core_counters();
+
+	for (uint8_t i = 0; i < NR_AMD_ZEN_EVENTS; i++) {
+		for (uint8_t j = 0; j < nr_counters; j++)
+			__guest_test_core_event(i, j);
+	}
+}
+
 static void guest_test_core_counters(void)
 {
 	guest_test_rdwr_core_counters();
+	guest_test_core_events();
 	GUEST_DONE();
 }
 
