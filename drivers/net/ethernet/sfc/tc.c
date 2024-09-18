@@ -1581,7 +1581,7 @@ static int efx_tc_flower_replace_foreign_lhs(struct efx_nic *efx,
 
 	type = efx_tc_indr_netdev_type(net_dev);
 	if (type == EFX_ENCAP_TYPE_NONE) {
-		NL_SET_ERR_MSG_MOD(extack, "Egress encap match on unsupported tunnel device\n");
+		NL_SET_ERR_MSG_MOD(extack, "Egress encap match on unsupported tunnel device");
 		return -EOPNOTSUPP;
 	}
 
