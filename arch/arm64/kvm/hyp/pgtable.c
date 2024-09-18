@@ -658,7 +658,7 @@ u64 kvm_get_vtcr(u64 mmfr0, u64 mmfr1, u32 phys_shift)
 
 #ifdef CONFIG_ARM64_HW_AFDBM
 	/*
-	 * Enable the Hardware Access Flag management, unconditionally
+	 * Enable the Hardware Access Flag and Dirty State management, unconditionally
 	 * on all CPUs. In systems that have asymmetric support for the feature
 	 * this allows KVM to leverage hardware support on the subset of cores
 	 * that implement the feature.
@@ -669,8 +669,10 @@ u64 kvm_get_vtcr(u64 mmfr0, u64 mmfr1, u32 phys_shift)
 	 * happen to be running on a design that has unadvertised support for
 	 * HAFDBS. Here be dragons.
 	 */
-	if (!cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_38))
+	if (!cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_38)) {
 		vtcr |= VTCR_EL2_HA;
+		vtcr |= VTCR_EL2_HD;
+	}
 #endif /* CONFIG_ARM64_HW_AFDBM */
 
 	if (kvm_lpa2_is_enabled())
