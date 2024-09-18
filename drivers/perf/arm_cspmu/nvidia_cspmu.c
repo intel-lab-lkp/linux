@@ -112,6 +112,25 @@ static struct attribute *mcf_pmu_event_attrs[] = {
 	NULL,
 };
 
+static struct attribute *mcf_cnvlink_pmu_event_attrs[] = {
+	ARM_CSPMU_EVENT_ATTR(rd_bytes_cmem,			0x0),
+	ARM_CSPMU_EVENT_ATTR(rd_bytes_gmem,			0x1),
+	ARM_CSPMU_EVENT_ATTR(wr_bytes_cmem,			0x2),
+	ARM_CSPMU_EVENT_ATTR(wr_bytes_gmem,			0x3),
+	ARM_CSPMU_EVENT_ATTR(total_bytes_cmem,			0x4),
+	ARM_CSPMU_EVENT_ATTR(total_bytes_gmem,			0x5),
+	ARM_CSPMU_EVENT_ATTR(rd_req_cmem,			0x6),
+	ARM_CSPMU_EVENT_ATTR(rd_req_gmem,			0x7),
+	ARM_CSPMU_EVENT_ATTR(wr_req_cmem,			0x8),
+	ARM_CSPMU_EVENT_ATTR(wr_req_gmem,			0x9),
+	ARM_CSPMU_EVENT_ATTR(total_req_cmem,			0xa),
+	ARM_CSPMU_EVENT_ATTR(total_req_gmem,			0xb),
+	ARM_CSPMU_EVENT_ATTR(rd_cum_outs_cmem,			0xc),
+	ARM_CSPMU_EVENT_ATTR(rd_cum_outs_gmem,			0xd),
+	ARM_CSPMU_EVENT_ATTR(cycles, ARM_CSPMU_EVT_CYCLES_DEFAULT),
+	NULL,
+};
+
 static struct attribute *generic_pmu_event_attrs[] = {
 	ARM_CSPMU_EVENT_ATTR(cycles, ARM_CSPMU_EVT_CYCLES_DEFAULT),
 	NULL,
@@ -234,7 +253,7 @@ static const struct nv_cspmu_match nv_cspmu_match[] = {
 	  .filter_default_val = NV_CNVL_FILTER_ID_MASK,
 	  .name_pattern = "nvidia_cnvlink_pmu_%u",
 	  .name_fmt = NAME_FMT_SOCKET,
-	  .event_attr = mcf_pmu_event_attrs,
+	  .event_attr = mcf_cnvlink_pmu_event_attrs,
 	  .format_attr = cnvlink_pmu_format_attrs
 	},
 	{
