@@ -577,6 +577,13 @@ struct panthor_group {
 	int csg_id;
 
 	/**
+	 * @csg_id: Priority of the FW group slot.
+	 *
+	 * -1 when the group is not scheduled/active.
+	 */
+	int csg_priority;
+
+	/**
 	 * @destroyed: True when the group has been destroyed.
 	 *
 	 * If a group is destroyed it becomes useless: no further jobs can be submitted
@@ -896,11 +903,12 @@ group_get(struct panthor_group *group)
  * group_bind_locked() - Bind a group to a group slot
  * @group: Group.
  * @csg_id: Slot.
+ * @csg_priority: Priority of the slot.
  *
  * Return: 0 on success, a negative error code otherwise.
  */
 static int
-group_bind_locked(struct panthor_group *group, u32 csg_id)
+group_bind_locked(struct panthor_group *group, u32 csg_id, u32 csg_priority)
 {
 	struct panthor_device *ptdev = group->ptdev;
 	struct panthor_csg_slot *csg_slot;
@@ -919,6 +927,7 @@ group_bind_locked(struct panthor_group *group, u32 csg_id)
 	csg_slot = &ptdev->scheduler->csg_slots[csg_id];
 	group_get(group);
 	group->csg_id = csg_id;
+	group->csg_priority = csg_priority;
 
 	/* Dummy doorbell allocation: doorbell is assigned to the group and
 	 * all queues use the same doorbell.
@@ -958,6 +967,7 @@ group_unbind_locked(struct panthor_group *group)
 	slot = &ptdev->scheduler->csg_slots[group->csg_id];
 	panthor_vm_idle(group->vm);
 	group->csg_id = -1;
+	group->csg_priority = -1;
 
 	/* Tiler OOM events will be re-issued next time the group is scheduled. */
 	atomic_set(&group->tiler_oom, 0);
@@ -2195,8 +2205,9 @@ tick_ctx_apply(struct panthor_scheduler *sched, struct panthor_sched_tick_ctx *c
 
 			csg_iface = panthor_fw_get_csg_iface(ptdev, csg_id);
 			csg_slot = &sched->csg_slots[csg_id];
-			group_bind_locked(group, csg_id);
-			csg_slot_prog_locked(ptdev, csg_id, new_csg_prio--);
+			group_bind_locked(group, csg_id, new_csg_prio);
+			csg_slot_prog_locked(ptdev, csg_id, new_csg_prio);
+			new_csg_prio--;
 			csgs_upd_ctx_queue_reqs(ptdev, &upd_ctx, csg_id,
 						group->state == PANTHOR_CS_GROUP_SUSPENDED ?
 						CSG_STATE_RESUME : CSG_STATE_START,
@@ -3113,6 +3124,7 @@ int panthor_group_create(struct panthor_file *pfile,
 	kref_init(&group->refcount);
 	group->state = PANTHOR_CS_GROUP_CREATED;
 	group->csg_id = -1;
+	group->csg_priority = -1;
 
 	group->ptdev = ptdev;
 	group->max_compute_cores = group_args->max_compute_cores;
