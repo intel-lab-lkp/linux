@@ -8,6 +8,7 @@
 #include <linux/device.h>
 #include <linux/mfd/rn5t618.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/watchdog.h>
 
@@ -181,16 +182,25 @@ static int rn5t618_wdt_probe(struct platform_device *pdev)
 	return devm_watchdog_register_device(dev, &wdt->wdt_dev);
 }
 
+static const struct platform_device_id rn5t618_wdt_id[] = {
+	{
+		.name = "rn5t618-wdt",
+	}, {
+		/* sentinel */
+	}
+};
+MODULE_DEVICE_TABLE(platform, rn5t618_wdt_id);
+
 static struct platform_driver rn5t618_wdt_driver = {
 	.probe = rn5t618_wdt_probe,
 	.driver = {
 		.name	= DRIVER_NAME,
 	},
+	.id_table = rn5t618_wdt_id,
 };
 
 module_platform_driver(rn5t618_wdt_driver);
 
-MODULE_ALIAS("platform:rn5t618-wdt");
 MODULE_AUTHOR("Beniamino Galvani <b.galvani@gmail.com>");
 MODULE_DESCRIPTION("RN5T618 watchdog driver");
 MODULE_LICENSE("GPL v2");
