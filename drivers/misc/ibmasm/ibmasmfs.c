@@ -280,14 +280,15 @@ static ssize_t command_file_read(struct file *file, char __user *buf, size_t cou
 	spin_unlock_irqrestore(&command_data->sp->lock, flags);
 
 	if (cmd->status != IBMASM_CMD_COMPLETE) {
-		command_put(cmd);
-		return -EIO;
+		len = -EIO;
+		goto put_command;
 	}
 	len = min(count, cmd->buffer_size);
 	if (copy_to_user(buf, cmd->buffer, len)) {
-		command_put(cmd);
-		return -EFAULT;
+		len = -EFAULT;
+		goto put_command;
 	}
+put_command:
 	command_put(cmd);
 
 	return len;
