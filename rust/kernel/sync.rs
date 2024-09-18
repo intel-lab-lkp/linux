@@ -8,6 +8,7 @@
 use crate::types::Opaque;
 
 mod arc;
+pub mod aref;
 mod condvar;
 pub mod lock;
 mod locked_by;
