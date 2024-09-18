@@ -63,11 +63,24 @@
 };
 
 &dsp {
-	memory-region = <&dsp_reserved>;
+	memory-region = <&dsp_vdev0buffer>, <&dsp_vdev0vring0>,
+			<&dsp_vdev0vring1>, <&dsp_reserved>;
 	status = "okay";
 };
 
 &dsp_reserved {
+	status = "okay";
+};
+
+&dsp_vdev0buffer {
+	status = "okay";
+};
+
+&dsp_vdev0vring0 {
+	status = "okay";
+};
+
+&dsp_vdev0vring1 {
 	status = "okay";
 };
 
