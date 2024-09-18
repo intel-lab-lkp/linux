@@ -1418,6 +1418,11 @@ static bool kvm_vma_mte_allowed(struct vm_area_struct *vma)
 	return vma->vm_flags & VM_MTE_ALLOWED;
 }
 
+static bool is_hw_logging_enabled(struct kvm *kvm)
+{
+	return kvm->arch.page_tracking_ctx != NULL;
+}
+
 static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 			  struct kvm_s2_trans *nested,
 			  struct kvm_memory_slot *memslot, unsigned long hva,
@@ -1650,6 +1655,9 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	if (writable)
 		prot |= KVM_PGTABLE_PROT_W;
+
+	if (is_hw_logging_enabled(kvm))
+		prot |= KVM_PGTABLE_PROT_HWDBM;
 
 	if (exec_fault)
 		prot |= KVM_PGTABLE_PROT_X;

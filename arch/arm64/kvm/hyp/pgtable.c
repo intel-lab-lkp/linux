@@ -46,6 +46,8 @@
 
 #define KVM_PTE_LEAF_ATTR_HI_S1_GP	BIT(50)
 
+#define KVM_PTE_LEAF_ATTR_HI_S2_DBM	BIT(51)
+
 #define KVM_PTE_LEAF_ATTR_S2_PERMS	(KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R | \
 					 KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W | \
 					 KVM_PTE_LEAF_ATTR_HI_S2_XN)
@@ -746,7 +748,13 @@ static int stage2_set_prot_attr(struct kvm_pgtable *pgt, enum kvm_pgtable_prot p
 	if (prot & KVM_PGTABLE_PROT_R)
 		attr |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R;
 
-	if (prot & KVM_PGTABLE_PROT_W)
+	/*
+	 * If hardware dirty state management is enabled then S2AP_W is interpreted
+	 * as dirty state, don't set S2AP_W in this case
+	 */
+	if (prot & KVM_PGTABLE_PROT_HWDBM)
+		attr |= KVM_PTE_LEAF_ATTR_HI_S2_DBM;
+	else if (prot & KVM_PGTABLE_PROT_W)
 		attr |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
 
 	if (!kvm_lpa2_is_enabled())
@@ -768,7 +776,10 @@ enum kvm_pgtable_prot kvm_pgtable_stage2_pte_prot(kvm_pte_t pte)
 
 	if (pte & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R)
 		prot |= KVM_PGTABLE_PROT_R;
-	if (pte & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W)
+
+	if (pte & KVM_PTE_LEAF_ATTR_HI_S2_DBM)
+		prot |= KVM_PGTABLE_PROT_HWDBM | KVM_PGTABLE_PROT_W;
+	else if (pte & KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W)
 		prot |= KVM_PGTABLE_PROT_W;
 	if (!(pte & KVM_PTE_LEAF_ATTR_HI_S2_XN))
 		prot |= KVM_PGTABLE_PROT_X;
@@ -1367,7 +1378,13 @@ int kvm_pgtable_stage2_relax_perms(struct kvm_pgtable *pgt, u64 addr,
 	if (prot & KVM_PGTABLE_PROT_R)
 		set |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R;
 
-	if (prot & KVM_PGTABLE_PROT_W)
+	/*
+	 * If hardware dirty state management is enabled then S2AP_W is interpreted
+	 * as dirty state, don't set S2AP_W in this case
+	 */
+	if (prot & KVM_PGTABLE_PROT_HWDBM)
+		set |= KVM_PTE_LEAF_ATTR_HI_S2_DBM;
+	else if (prot & KVM_PGTABLE_PROT_W)
 		set |= KVM_PTE_LEAF_ATTR_LO_S2_S2AP_W;
 
 	if (prot & KVM_PGTABLE_PROT_X)
