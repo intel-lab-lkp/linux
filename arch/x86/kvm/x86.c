@@ -6496,7 +6496,7 @@ int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot
 	return 0;
 }
 
-void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
+int kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
 
 	/*
@@ -6508,11 +6508,12 @@ void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 	struct kvm_vcpu *vcpu;
 	unsigned long i;
 
-	if (!kvm_x86_ops.cpu_dirty_log_size)
-		return;
+	if (kvm_x86_ops.cpu_dirty_log_size) {
+		kvm_for_each_vcpu(i, vcpu, kvm)
+			kvm_vcpu_kick(vcpu);
+	}
 
-	kvm_for_each_vcpu(i, vcpu, kvm)
-		kvm_vcpu_kick(vcpu);
+	return 0;
 }
 
 int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_event,

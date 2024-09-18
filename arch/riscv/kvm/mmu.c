@@ -402,8 +402,9 @@ void kvm_arch_mmu_enable_log_dirty_pt_masked(struct kvm *kvm,
 	gstage_wp_range(kvm, start, end);
 }
 
-void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
+int kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
+	return 0;
 }
 
 void kvm_arch_free_memslot(struct kvm *kvm, struct kvm_memory_slot *free)

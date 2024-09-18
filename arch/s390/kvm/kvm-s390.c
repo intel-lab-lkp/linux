@@ -677,7 +677,7 @@ int kvm_arch_disable_dirty_logging(struct kvm *kvm, const struct kvm_memory_slot
 	return 0;
 }
 
-void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
+int kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 {
 	int i;
 	gfn_t cur_gfn, last_gfn;
@@ -705,6 +705,7 @@ void kvm_arch_sync_dirty_log(struct kvm *kvm, struct kvm_memory_slot *memslot)
 			return;
 		cond_resched();
 	}
+	return 0;
 }
 
 /* Section: vm related */

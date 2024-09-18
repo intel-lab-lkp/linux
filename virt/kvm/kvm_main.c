@@ -2146,6 +2146,7 @@ int kvm_get_dirty_log(struct kvm *kvm, struct kvm_dirty_log *log,
 	int i, as_id, id;
 	unsigned long n;
 	unsigned long any = 0;
+	int r;
 
 	/* Dirty ring tracking may be exclusive to dirty log tracking */
 	if (!kvm_use_dirty_bitmap(kvm))
@@ -2164,7 +2165,9 @@ int kvm_get_dirty_log(struct kvm *kvm, struct kvm_dirty_log *log,
 	if (!(*memslot) || !(*memslot)->dirty_bitmap)
 		return -ENOENT;
 
-	kvm_arch_sync_dirty_log(kvm, *memslot);
+	r = kvm_arch_sync_dirty_log(kvm, *memslot);
+	if (r)
+		return r;
 
 	n = kvm_dirty_bitmap_bytes(*memslot);
 
@@ -2211,6 +2214,7 @@ static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 	unsigned long *dirty_bitmap;
 	unsigned long *dirty_bitmap_buffer;
 	bool flush;
+	int r;
 
 	/* Dirty ring tracking may be exclusive to dirty log tracking */
 	if (!kvm_use_dirty_bitmap(kvm))
@@ -2228,7 +2232,9 @@ static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 
 	dirty_bitmap = memslot->dirty_bitmap;
 
-	kvm_arch_sync_dirty_log(kvm, memslot);
+	r = kvm_arch_sync_dirty_log(kvm, memslot);
+	if (r)
+		return r;
 
 	n = kvm_dirty_bitmap_bytes(memslot);
 	flush = false;
@@ -2323,6 +2329,7 @@ static int kvm_clear_dirty_log_protect(struct kvm *kvm,
 	unsigned long *dirty_bitmap;
 	unsigned long *dirty_bitmap_buffer;
 	bool flush;
+	int r;
 
 	/* Dirty ring tracking may be exclusive to dirty log tracking */
 	if (!kvm_use_dirty_bitmap(kvm))
@@ -2350,7 +2357,9 @@ static int kvm_clear_dirty_log_protect(struct kvm *kvm,
 	    (log->num_pages < memslot->npages - log->first_page && (log->num_pages & 63)))
 	    return -EINVAL;
 
-	kvm_arch_sync_dirty_log(kvm, memslot);
+	r = kvm_arch_sync_dirty_log(kvm, memslot);
+	if (r)
+		return r;
 
 	flush = false;
 	dirty_bitmap_buffer = kvm_second_dirty_bitmap(memslot);
