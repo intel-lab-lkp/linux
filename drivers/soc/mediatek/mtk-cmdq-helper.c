@@ -336,7 +336,7 @@ int cmdq_pkt_wfe(struct cmdq_pkt *pkt, u16 event, bool clear)
 	struct cmdq_instruction inst = { {0} };
 	u32 clear_option = clear ? CMDQ_WFE_UPDATE : 0;
 
-	if (event >= CMDQ_MAX_EVENT)
+	if (unlikely(event >= CMDQ_MAX_EVENT))
 		return -EINVAL;
 
 	inst.op = CMDQ_CODE_WFE;
@@ -351,7 +351,7 @@ int cmdq_pkt_acquire_event(struct cmdq_pkt *pkt, u16 event)
 {
 	struct cmdq_instruction inst = {};
 
-	if (event >= CMDQ_MAX_EVENT)
+	if (unlikely(event >= CMDQ_MAX_EVENT))
 		return -EINVAL;
 
 	inst.op = CMDQ_CODE_WFE;
@@ -366,7 +366,7 @@ int cmdq_pkt_clear_event(struct cmdq_pkt *pkt, u16 event)
 {
 	struct cmdq_instruction inst = { {0} };
 
-	if (event >= CMDQ_MAX_EVENT)
+	if (unlikely(event >= CMDQ_MAX_EVENT))
 		return -EINVAL;
 
 	inst.op = CMDQ_CODE_WFE;
@@ -381,7 +381,7 @@ int cmdq_pkt_set_event(struct cmdq_pkt *pkt, u16 event)
 {
 	struct cmdq_instruction inst = {};
 
-	if (event >= CMDQ_MAX_EVENT)
+	if (unlikely(event >= CMDQ_MAX_EVENT))
 		return -EINVAL;
 
 	inst.op = CMDQ_CODE_WFE;
@@ -476,7 +476,7 @@ int cmdq_pkt_logic_command(struct cmdq_pkt *pkt, u16 result_reg_idx,
 {
 	struct cmdq_instruction inst = { {0} };
 
-	if (!left_operand || !right_operand || s_op >= CMDQ_LOGIC_MAX)
+	if (unlikely(!left_operand || !right_operand || s_op >= CMDQ_LOGIC_MAX))
 		return -EINVAL;
 
 	inst.op = CMDQ_CODE_LOGIC;
