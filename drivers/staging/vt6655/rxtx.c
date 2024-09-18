@@ -241,11 +241,11 @@ s_uGetDataDuration(
 	unsigned char fb_option
 )
 {
-	bool bLastFrag = false;
+	bool last_frag = false;
 	unsigned int uAckTime = 0, uNextPktTime = 0, len;
 
 	if (frag_idx == (mac_frag_num - 1))
-		bLastFrag = true;
+		last_frag = true;
 
 	if (frag_idx == (mac_frag_num - 2))
 		len = last_fragment_size;
@@ -260,7 +260,7 @@ s_uGetDataDuration(
 						     priv->byTopCCKBasicRate);
 		}
 		/* Non Frag or Last Frag */
-		if ((mac_frag_num == 1) || bLastFrag) {
+		if ((mac_frag_num == 1) || last_frag) {
 			if (!need_ack)
 				return 0;
 		} else {
@@ -278,7 +278,7 @@ s_uGetDataDuration(
 						     priv->byTopOFDMBasicRate);
 		}
 		/* Non Frag or Last Frag */
-		if ((mac_frag_num == 1) || bLastFrag) {
+		if ((mac_frag_num == 1) || last_frag) {
 			if (!need_ack)
 				return 0;
 		} else {
@@ -297,7 +297,7 @@ s_uGetDataDuration(
 						     priv->byTopOFDMBasicRate);
 		}
 		/* Non Frag or Last Frag */
-		if ((mac_frag_num == 1) || bLastFrag) {
+		if ((mac_frag_num == 1) || last_frag) {
 			if (!need_ack)
 				return 0;
 		} else {
