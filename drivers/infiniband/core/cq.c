@@ -7,6 +7,7 @@
 #include <rdma/ib_verbs.h>
 
 #include "core_priv.h"
+#include "cq.h"
 
 #include <trace/events/rdma_core.h>
 /* Max size for shared CQ, may require tuning */
@@ -50,7 +51,7 @@ static void ib_cq_rdma_dim_work(struct work_struct *w)
 	cq->device->ops.modify_cq(cq, comps, usec);
 }
 
-static void rdma_dim_init(struct ib_cq *cq)
+void rdma_dim_init(struct ib_cq *cq)
 {
 	struct dim *dim;
 
@@ -70,8 +71,9 @@ static void rdma_dim_init(struct ib_cq *cq)
 
 	INIT_WORK(&dim->work, ib_cq_rdma_dim_work);
 }
+EXPORT_SYMBOL(rdma_dim_init);
 
-static void rdma_dim_destroy(struct ib_cq *cq)
+void rdma_dim_destroy(struct ib_cq *cq)
 {
 	if (!cq->dim)
 		return;
@@ -79,6 +81,7 @@ static void rdma_dim_destroy(struct ib_cq *cq)
 	cancel_work_sync(&cq->dim->work);
 	kfree(cq->dim);
 }
+EXPORT_SYMBOL(rdma_dim_destroy);
 
 static int __poll_cq(struct ib_cq *cq, int num_entries, struct ib_wc *wc)
 {

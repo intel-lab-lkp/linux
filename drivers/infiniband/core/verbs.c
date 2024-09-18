@@ -53,6 +53,7 @@
 #include <rdma/lag.h>
 
 #include "core_priv.h"
+#include "cq.h"
 #include <trace/events/rdma_core.h>
 
 static int ib_resolve_eth_dmac(struct ib_device *device,
@@ -2161,6 +2162,9 @@ struct ib_cq *__ib_create_cq(struct ib_device *device,
 		return ERR_PTR(ret);
 	}
 
+	if (cq_attr->flags & IB_CQ_MODERATE)
+		rdma_dim_init(cq);
+
 	rdma_restrack_add(&cq->res);
 	return cq;
 }
@@ -2186,6 +2190,8 @@ int ib_destroy_cq_user(struct ib_cq *cq, struct ib_udata *udata)
 
 	if (atomic_read(&cq->usecnt))
 		return -EBUSY;
+
+	rdma_dim_destroy(cq);
 
 	ret = cq->device->ops.destroy_cq(cq, udata);
 	if (ret)
