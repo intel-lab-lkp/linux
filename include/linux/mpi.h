@@ -19,6 +19,8 @@
 
 #include <linux/types.h>
 #include <linux/scatterlist.h>
+#include <linux/cleanup.h>
+#include <linux/err.h>
 
 #define BYTES_PER_MPI_LIMB	(BITS_PER_LONG / 8)
 #define BITS_PER_MPI_LIMB	BITS_PER_LONG
@@ -44,6 +46,8 @@ typedef struct gcry_mpi *MPI;
 /*-- mpiutil.c --*/
 MPI mpi_alloc(unsigned nlimbs);
 void mpi_free(MPI a);
+DEFINE_FREE(mpi_free, MPI, if (!IS_ERR_OR_NULL(_T)) mpi_free(_T))
+
 int mpi_resize(MPI a, unsigned nlimbs);
 
 MPI mpi_copy(MPI a);
