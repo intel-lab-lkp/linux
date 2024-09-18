@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 /* Copyright 2023 Collabora ltd. */
 
+#include <drm/drm_debugfs.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_exec.h>
 #include <drm/drm_gem_shmem_helper.h>
@@ -3583,3 +3584,129 @@ int panthor_sched_init(struct panthor_device *ptdev)
 	ptdev->scheduler = sched;
 	return 0;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static const char *panthor_csg_priority_names[PANTHOR_CSG_PRIORITY_COUNT] = {
+	"LOW",
+	"MEDIUM",
+	"HIGH",
+	"REALTIME"
+};
+
+static const char *panthor_group_state_names[PANTHOR_CS_GROUP_UNKNOWN_STATE] = {
+	"CREATED",
+	"ACTIVE",
+	"SUSPENDED",
+	"TERMINATED"
+};
+
+static void show_panthor_queue(const struct panthor_queue *queue,
+			       u32 queue_index,
+			       struct seq_file *m)
+{
+	seq_printf(m, "queue %u:", queue_index);
+	seq_printf(m, " priority %u", queue->priority);
+	seq_printf(m, " doorbell_id %d", queue->doorbell_id);
+	seq_puts(m, "\n");
+}
+
+static void show_panthor_group(struct panthor_group *group,
+			       u32 group_handle,
+			       struct seq_file *m)
+{
+	u32 i;
+
+	group_get(group);
+
+	seq_printf(m, "group %u:", group_handle);
+	seq_printf(m, " priority %s", group->priority < PANTHOR_CSG_PRIORITY_COUNT ?
+		   panthor_csg_priority_names[group->priority] : "UNKNOWN");
+	seq_printf(m, " state %s", group->state < PANTHOR_CS_GROUP_UNKNOWN_STATE ?
+		   panthor_group_state_names[group->state] : "UNKNOWN");
+	seq_printf(m, " csg_id %d", group->csg_id);
+	seq_printf(m, " csg_priority %d", group->csg_priority);
+	seq_printf(m, " compute_core_mask 0x%016llx", group->compute_core_mask);
+	seq_printf(m, " fragment_core_mask 0x%016llx", group->fragment_core_mask);
+	seq_printf(m, " tiler_core_mask 0x%016llx", group->tiler_core_mask);
+	seq_printf(m, " max_compute_cores %d", group->max_compute_cores);
+	seq_printf(m, " max_fragment_cores %d", group->max_fragment_cores);
+	seq_printf(m, " max_tiler_cores %d", group->max_tiler_cores);
+	seq_puts(m, "\n");
+
+	for (i = 0; i < group->queue_count; i++)
+		show_panthor_queue(group->queues[i], i, m);
+
+	group_put(group);
+}
+
+static int show_file_group_pool(const struct panthor_file *pfile, struct seq_file *m)
+{
+	struct panthor_group_pool *gpool = pfile->groups;
+	struct panthor_group *group;
+	unsigned long i;
+
+	if (IS_ERR_OR_NULL(gpool))
+		return 0;
+
+	xa_for_each(&gpool->xa, i, group)
+		show_panthor_group(group, i, m);
+
+	return 0;
+}
+
+static int show_each_file(struct seq_file *m, void *arg)
+{
+	struct drm_info_node *node = (struct drm_info_node *)m->private;
+	struct drm_device *ddev = node->minor->dev;
+	int (*show)(const struct panthor_file *, struct seq_file *) = node->info_ent->data;
+	struct drm_file *file;
+	int ret;
+
+	ret = mutex_lock_interruptible(&ddev->filelist_mutex);
+	if (ret)
+		return ret;
+
+	list_for_each_entry(file, &ddev->filelist, lhead) {
+		struct task_struct *task;
+		struct panthor_file *pfile = file->driver_priv;
+		struct pid *pid;
+
+		/*
+		 * Although we have a valid reference on file->pid, that does
+		 * not guarantee that the task_struct who called get_pid() is
+		 * still alive (e.g. get_pid(current) => fork() => exit()).
+		 * Therefore, we need to protect this ->comm access using RCU.
+		 */
+		rcu_read_lock();
+		pid = rcu_dereference(file->pid);
+		task = pid_task(pid, PIDTYPE_TGID);
+		seq_printf(m, "client_id %8llu pid %8d command %s:\n", file->client_id,
+			   pid_nr(pid), task ? task->comm : "<unknown>");
+		rcu_read_unlock();
+
+		ret = show(pfile, m);
+		if (ret < 0)
+			break;
+
+		seq_puts(m, "\n");
+	}
+
+	mutex_unlock(&ddev->filelist_mutex);
+	return ret;
+}
+
+static struct drm_info_list panthor_sched_debugfs_list[] = {
+	{ "sched_groups", show_each_file, 0, show_file_group_pool },
+};
+
+/**
+ * panthor_sched_debugfs_init() - Initialize scheduler debugfs entries
+ * @minor: Minor.
+ */
+void panthor_sched_debugfs_init(struct drm_minor *minor)
+{
+	drm_debugfs_create_files(panthor_sched_debugfs_list,
+				 ARRAY_SIZE(panthor_sched_debugfs_list),
+				 minor->debugfs_root, minor);
+}
+#endif /* CONFIG_DEBUG_FS */
