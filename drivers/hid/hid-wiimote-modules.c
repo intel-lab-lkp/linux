@@ -1424,15 +1424,12 @@ static ssize_t wiimod_bboard_calib_show(struct device *dev,
 		return ret;
 
 	ret = wiimote_cmd_read(wdata, 0xa40024, buf, 12);
-	if (ret != 12) {
-		wiimote_cmd_release(wdata);
-		return ret < 0 ? ret : -EIO;
-	}
+	if (ret != 12)
+		goto release_wdata;
+
 	ret = wiimote_cmd_read(wdata, 0xa40024 + 12, buf + 12, 12);
-	if (ret != 12) {
-		wiimote_cmd_release(wdata);
-		return ret < 0 ? ret : -EIO;
-	}
+	if (ret != 12)
+		goto release_wdata;
 
 	wiimote_cmd_release(wdata);
 
@@ -1460,6 +1457,10 @@ static ssize_t wiimod_bboard_calib_show(struct device *dev,
 	}
 
 	return ret;
+
+release_wdata:
+	wiimote_cmd_release(wdata);
+	return ret < 0 ? ret : -EIO;
 }
 
 static DEVICE_ATTR(bboard_calib, S_IRUGO, wiimod_bboard_calib_show, NULL);
@@ -1473,15 +1474,12 @@ static int wiimod_bboard_probe(const struct wiimod_ops *ops,
 	wiimote_cmd_acquire_noint(wdata);
 
 	ret = wiimote_cmd_read(wdata, 0xa40024, buf, 12);
-	if (ret != 12) {
-		wiimote_cmd_release(wdata);
-		return ret < 0 ? ret : -EIO;
-	}
+	if (ret != 12)
+		goto release_wdata;
+
 	ret = wiimote_cmd_read(wdata, 0xa40024 + 12, buf + 12, 12);
-	if (ret != 12) {
-		wiimote_cmd_release(wdata);
-		return ret < 0 ? ret : -EIO;
-	}
+	if (ret != 12)
+		goto release_wdata;
 
 	wiimote_cmd_release(wdata);
 
@@ -1546,6 +1544,10 @@ err_free:
 	input_free_device(wdata->extension.input);
 	wdata->extension.input = NULL;
 	return ret;
+
+release_wdata:
+	wiimote_cmd_release(wdata);
+	return ret < 0 ? ret : -EIO;
 }
 
 static void wiimod_bboard_remove(const struct wiimod_ops *ops,
