@@ -519,7 +519,7 @@ static const struct qcom_pdm_domain_data *sm8550_domains[] = {
 
 static const struct qcom_pdm_domain_data *x1e80100_domains[] = {
 	&adsp_audio_pd,
-	&adsp_root_pd,
+	&adsp_root_pd_pdr,
 	&adsp_charger_pd,
 	&adsp_sensor_pd,
 	&cdsp_root_pd,
