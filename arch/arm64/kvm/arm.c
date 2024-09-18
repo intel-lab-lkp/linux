@@ -40,6 +40,7 @@
 #include <asm/kvm_nested.h>
 #include <asm/kvm_pkvm.h>
 #include <asm/kvm_ptrauth.h>
+#include <asm/page_tracking.h>
 #include <asm/sections.h>
 
 #include <kvm/arm_hypercalls.h>
@@ -148,6 +149,19 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			}
 		}
 		mutex_unlock(&kvm->slots_lock);
+		break;
+	case KVM_CAP_ARM_PAGE_TRACKING_DEVICE:
+		if (page_tracking_device_registered() &&
+		    !kvm->dirty_ring_size /* Does not support dirty ring yet */) {
+
+			r = 0;
+			if (cap->args[0])
+				set_bit(KVM_ARCH_FLAG_PAGE_TRACKING_DEVICE_ENABLED,
+					&kvm->arch.flags);
+			else
+				clear_bit(KVM_ARCH_FLAG_PAGE_TRACKING_DEVICE_ENABLED,
+					  &kvm->arch.flags);
+		}
 		break;
 	default:
 		break;
@@ -414,6 +428,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		break;
 	case KVM_CAP_ARM_SUPPORTED_REG_MASK_RANGES:
 		r = BIT(0);
+		break;
+	case KVM_CAP_ARM_PAGE_TRACKING_DEVICE:
+		r = page_tracking_device_registered();
 		break;
 	default:
 		r = 0;

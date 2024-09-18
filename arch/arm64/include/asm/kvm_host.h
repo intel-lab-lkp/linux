@@ -326,6 +326,8 @@ struct kvm_arch {
 #define KVM_ARCH_FLAG_ID_REGS_INITIALIZED		7
 	/* Fine-Grained UNDEF initialised */
 #define KVM_ARCH_FLAG_FGU_INITIALIZED			8
+	/* Page tracking device enabled */
+#define KVM_ARCH_FLAG_PAGE_TRACKING_DEVICE_ENABLED	9
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */

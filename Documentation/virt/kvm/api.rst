@@ -8950,6 +8950,23 @@ Do not use KVM_X86_SW_PROTECTED_VM for "real" VMs, and especially not in
 production.  The behavior and effective ABI for software-protected VMs is
 unstable.
 
+8.42 KVM_CAP_ARM_PAGE_TRACKING_DEVICE
+_____________________________________
+
+:Capability: KVM_CAP_ARM_PAGE_TRACKING_DEVICE
+:Architecture: arm64
+:Type: vm
+:Parameters: arg[0] whether feature should be enabled or not
+:Returns 0 on success, -errno on failure
+
+This capability enables or disables hardware assistance for dirty page logging.
+
+In case page tracking device is available (i.e. if the host supports the
+KVM_CAP_ARM_PAGE_TRACKING_DEVICE extension), the device can be used to accelerate
+dirty logging. This capability turns the acceleration on and off.
+
+Not compatible with KVM_CAP_DIRTY_LOG_RING/KVM_CAP_DIRTY_LOG_RING_ACQ_REL.
+
 9. Known KVM API problems
 =========================
 
