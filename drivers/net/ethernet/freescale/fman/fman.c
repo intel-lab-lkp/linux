@@ -2776,14 +2776,12 @@ static struct fman *read_dts_node(struct platform_device *of_dev)
 
 	err = of_address_to_resource(muram_node, 0,
 				     &fman->dts_params.muram_res);
+	of_node_put(muram_node);
 	if (err) {
-		of_node_put(muram_node);
 		dev_err(&of_dev->dev, "%s: of_address_to_resource() = %d\n",
 			__func__, err);
 		goto fman_free;
 	}
-
-	of_node_put(muram_node);
 
 	err = devm_request_irq(&of_dev->dev, irq, fman_irq, IRQF_SHARED,
 			       "fman", fman);
