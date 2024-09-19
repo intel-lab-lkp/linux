@@ -5055,6 +5055,9 @@ static int rtm_to_fib6_config(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (rtm->rtm_flags & RTM_F_CLONED)
 		cfg->fc_flags |= RTF_CACHE;
 
+	if (rtm->rtm_flags & RTM_F_RA_ROUTER)
+		cfg->fc_flags |= RTF_RA_ROUTER;
+
 	cfg->fc_flags |= (rtm->rtm_flags & RTNH_F_ONLINK);
 
 	if (tb[RTA_NH_ID]) {
