@@ -90,6 +90,7 @@ allOf:
                 - mediatek,mt8173-dpi
                 - mediatek,mt8183-dpi
                 - mediatek,mt8186-dpi
+                - mediatek,mt8195-dp-intf
     then:
       properties:
         power-domains: false
