@@ -88,6 +88,7 @@ allOf:
               enum:
                 - mediatek,mt6795-dpi
                 - mediatek,mt8173-dpi
+                - mediatek,mt8183-dpi
                 - mediatek,mt8186-dpi
     then:
       properties:
