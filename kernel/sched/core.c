@@ -4994,7 +4994,7 @@ prepare_task_switch(struct rq *rq, struct task_struct *prev,
 	fire_sched_out_preempt_notifiers(prev, next);
 	kmap_local_sched_out();
 	prepare_task(next);
-	prepare_arch_switch(next);
+	prepare_arch_switch(prev, next);
 }
 
 /**

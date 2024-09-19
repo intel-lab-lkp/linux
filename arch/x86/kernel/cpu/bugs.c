@@ -128,6 +128,27 @@ DEFINE_STATIC_KEY_FALSE(switch_mm_cond_l1d_flush);
 DEFINE_STATIC_KEY_FALSE(mmio_stale_data_clear);
 EXPORT_SYMBOL_GPL(mmio_stale_data_clear);
 
+inline void cpu_mitigation_skip(struct task_struct *prev,
+				struct task_struct *next)
+{
+	bool prev_skip = false, next_skip = false;
+
+	if (prev->mm)
+		prev_skip = task_dfl_cgroup(prev)->cpu_skip_mitigation;
+	if (next->mm)
+		next_skip = task_dfl_cgroup(next)->cpu_skip_mitigation;
+
+	if (!prev_skip && !next_skip)
+		return;
+	if (prev_skip == next_skip)
+		return;
+
+	if (next_skip)
+		wrmsrl(MSR_LSTAR, (unsigned long)entry_SYSCALL_64_unmitigated);
+	else
+		wrmsrl(MSR_LSTAR, (unsigned long)entry_SYSCALL_64_mitigated);
+}
+
 void __init cpu_select_mitigations(void)
 {
 	/*

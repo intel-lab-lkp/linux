@@ -546,6 +546,9 @@ struct cgroup {
 	struct bpf_local_storage __rcu  *bpf_cgrp_storage;
 #endif
 
+	/* Used to bypass the CPU mitigations for tasks in a cgroup */
+	bool cpu_skip_mitigation;
+
 	/* All ancestors including self */
 	struct cgroup *ancestors[];
 };

@@ -2045,6 +2045,7 @@ static void init_cgroup_housekeeping(struct cgroup *cgrp)
 	cgrp->dom_cgrp = cgrp;
 	cgrp->max_descendants = INT_MAX;
 	cgrp->max_depth = INT_MAX;
+	cgrp->cpu_skip_mitigation = 0;
 	INIT_LIST_HEAD(&cgrp->rstat_css_list);
 	prev_cputime_init(&cgrp->prev_cputime);
 
@@ -3751,6 +3752,41 @@ static int cpu_stat_show(struct seq_file *seq, void *v)
 	return ret;
 }
 
+static int cpu_skip_mitigation_show(struct seq_file *seq, void *v)
+{
+	struct cgroup *cgrp = seq_css(seq)->cgroup;
+	int ret = 0;
+
+	seq_printf(seq, "%d\n", cgrp->cpu_skip_mitigation);
+
+	return ret;
+}
+
+static ssize_t cgroup_skip_mitigation_write(struct kernfs_open_file *of,
+					    char *buf, size_t nbytes,
+					    loff_t off)
+{
+	struct cgroup *cgrp = of->kn->parent->priv;
+	struct cgroup_file_ctx *ctx = of->priv;
+	u64 skip_mitigation;
+	int ret;
+
+	/* Only privileged user in init namespace is allowed to set skip_mitigation */
+	if ((ctx->ns != &init_cgroup_ns) || !capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	ret = kstrtoull(buf, 0, &skip_mitigation);
+	if (ret)
+		return -EINVAL;
+
+	if (skip_mitigation > 1)
+		return -EINVAL;
+
+	cgrp->cpu_skip_mitigation = skip_mitigation;
+
+	return nbytes;
+}
+
 static int cpu_local_stat_show(struct seq_file *seq, void *v)
 {
 	struct cgroup __maybe_unused *cgrp = seq_css(seq)->cgroup;
@@ -5289,6 +5325,12 @@ static struct cftype cgroup_base_files[] = {
 	{
 		.name = "cpu.stat.local",
 		.seq_show = cpu_local_stat_show,
+	},
+	{
+		.name = "cpu.skip_mitigation",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = cpu_skip_mitigation_show,
+		.write = cgroup_skip_mitigation_write,
 	},
 	{ }	/* terminate */
 };

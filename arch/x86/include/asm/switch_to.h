@@ -46,6 +46,16 @@ struct fork_frame {
 	struct pt_regs regs;
 };
 
+extern inline void cpu_mitigation_skip(struct task_struct *prev, struct task_struct *next);
+
+#define prepare_arch_switch prepare_arch_switch
+
+static inline void prepare_arch_switch(struct task_struct *prev,
+				       struct task_struct *next)
+{
+	cpu_mitigation_skip(prev, next);
+}
+
 #define switch_to(prev, next, last)					\
 do {									\
 	((last) = __switch_to_asm((prev), (next)));			\
