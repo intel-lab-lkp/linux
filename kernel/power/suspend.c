@@ -507,6 +507,19 @@ int suspend_devices_and_enter(suspend_state_t state)
 
 	pm_suspend_target_state = state;
 
+	/*
+	 * Linux does not have the concept of a "Screen Off" state, so call
+	 * the platform functions for screen off prior to beginning the suspend
+	 * sequence, mirroring Windows which calls them outside of it as well.
+	 *
+	 * If Linux ever gains a "Screen Off" state, the following callbacks can
+	 * be replaced with a call that checks if we are in "Screen Off", in which
+	 * case they will NOOP and if not call them as a fallback.
+	 */
+	error = platform_suspend_screen_off();
+	if (error)
+		goto Screen_on;
+
 	if (state == PM_SUSPEND_TO_IDLE)
 		pm_set_suspend_no_platform();
 
@@ -540,6 +553,9 @@ int suspend_devices_and_enter(suspend_state_t state)
  Close:
 	platform_resume_end(state);
 	pm_suspend_target_state = PM_SUSPEND_ON;
+
+ Screen_on:
+	platform_suspend_screen_on();
 	return error;
 
  Recover_platform:
