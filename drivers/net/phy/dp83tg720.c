@@ -12,6 +12,9 @@
 
 #define DP83TG720_PHY_ID			0x2000a284
 
+#define MMD1F							0x1f
+#define MMD1							0x1
+
 /* MDIO_MMD_VEND2 registers */
 #define DP83TG720_MII_REG_10			0x10
 #define DP83TG720_STS_MII_INT			BIT(7)
@@ -68,6 +71,13 @@
 #define DP83TG720_SQI_OUT			GENMASK(3, 1)
 
 #define DP83TG720_SQI_MAX			7
+
+/* SGMII CTRL Registers/bits */
+#define DP83TG720_SGMII_CTRL			0x0608
+#define SGMII_CONFIG_VAL				0x027B
+#define DP83TG720_SGMII_AUTO_NEG_EN		BIT(0)
+#define DP83TG720_SGMII_EN				BIT(9)
+
 
 /**
  * dp83tg720_cable_test_start - Start the cable test for the DP83TG720 PHY.
@@ -306,7 +316,7 @@ static int dp83tg720_config_rgmii_delay(struct phy_device *phydev)
 
 static int dp83tg720_config_init(struct phy_device *phydev)
 {
-	int ret;
+	int value, ret;
 
 	/* Software Restart is not enough to recover from a link failure.
 	 * Using Hardware Reset instead.
@@ -326,6 +336,19 @@ static int dp83tg720_config_init(struct phy_device *phydev)
 		if (ret)
 			return ret;
 	}
+
+	value = phy_read_mmd(phydev, MMD1F, DP83TG720_SGMII_CTRL);
+	if (value < 0)
+		return value;
+
+	if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
+		value |= DP83TG720_SGMII_EN;
+	else
+		value &= ~DP83TG720_SGMII_EN;
+
+	ret = phy_write_mmd(phydev, MMD1F, DP83TG720_SGMII_CTRL, value);
+	if (ret < 0)
+		return ret;
 
 	/* In case the PHY is bootstrapped in managed mode, we need to
 	 * wake it.
