@@ -2259,6 +2259,7 @@ EXPORT_SYMBOL(drm_dp_stop_crc);
 struct dpcd_quirk {
 	u8 oui[3];
 	u8 device_id[6];
+	u8 vendor_data[4];
 	bool is_branch;
 	u32 quirks;
 };
@@ -2266,26 +2267,31 @@ struct dpcd_quirk {
 #define OUI(first, second, third) { (first), (second), (third) }
 #define DEVICE_ID(first, second, third, fourth, fifth, sixth) \
 	{ (first), (second), (third), (fourth), (fifth), (sixth) }
+#define VENDOR_DATA(first, second, third, fourth) \
+	{ (first), (second), (third), (fourth) }
 
 #define DEVICE_ID_ANY	DEVICE_ID(0, 0, 0, 0, 0, 0)
+#define VENDOR_DATA_ANY	VENDOR_DATA(0, 0, 0, 0)
 
 static const struct dpcd_quirk dpcd_quirk_list[] = {
 	/* Analogix 7737 needs reduced M and N at HBR2 link rates */
-	{ OUI(0x00, 0x22, 0xb9), DEVICE_ID_ANY, true, BIT(DP_DPCD_QUIRK_CONSTANT_N) },
+	{ OUI(0x00, 0x22, 0xb9), DEVICE_ID_ANY, VENDOR_DATA_ANY, true, BIT(DP_DPCD_QUIRK_CONSTANT_N) },
 	/* LG LP140WF6-SPM1 eDP panel */
-	{ OUI(0x00, 0x22, 0xb9), DEVICE_ID('s', 'i', 'v', 'a', 'r', 'T'), false, BIT(DP_DPCD_QUIRK_CONSTANT_N) },
+	{ OUI(0x00, 0x22, 0xb9), DEVICE_ID('s', 'i', 'v', 'a', 'r', 'T'), VENDOR_DATA_ANY, false, BIT(DP_DPCD_QUIRK_CONSTANT_N) },
 	/* Apple panels need some additional handling to support PSR */
-	{ OUI(0x00, 0x10, 0xfa), DEVICE_ID_ANY, false, BIT(DP_DPCD_QUIRK_NO_PSR) },
+	{ OUI(0x00, 0x10, 0xfa), DEVICE_ID_ANY, VENDOR_DATA_ANY, false, BIT(DP_DPCD_QUIRK_NO_PSR) },
 	/* CH7511 seems to leave SINK_COUNT zeroed */
-	{ OUI(0x00, 0x00, 0x00), DEVICE_ID('C', 'H', '7', '5', '1', '1'), false, BIT(DP_DPCD_QUIRK_NO_SINK_COUNT) },
+	{ OUI(0x00, 0x00, 0x00), DEVICE_ID('C', 'H', '7', '5', '1', '1'), VENDOR_DATA_ANY, false, BIT(DP_DPCD_QUIRK_NO_SINK_COUNT) },
 	/* Synaptics DP1.4 MST hubs can support DSC without virtual DPCD */
-	{ OUI(0x90, 0xCC, 0x24), DEVICE_ID_ANY, true, BIT(DP_DPCD_QUIRK_DSC_WITHOUT_VIRTUAL_DPCD) },
+	{ OUI(0x90, 0xCC, 0x24), DEVICE_ID_ANY, VENDOR_DATA_ANY, true, BIT(DP_DPCD_QUIRK_DSC_WITHOUT_VIRTUAL_DPCD) },
 	/* Synaptics DP1.4 MST hubs require DSC for some modes on which it applies HBLANK expansion. */
-	{ OUI(0x90, 0xCC, 0x24), DEVICE_ID_ANY, true, BIT(DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC) },
+	{ OUI(0x90, 0xCC, 0x24), DEVICE_ID_ANY, VENDOR_DATA_ANY, true, BIT(DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC) },
 	/* MediaTek panels (at least in U3224KBA) require DSC for modes with a short HBLANK on UHBR links. */
-	{ OUI(0x00, 0x0C, 0xE7), DEVICE_ID_ANY, false, BIT(DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC) },
+	{ OUI(0x00, 0x0C, 0xE7), DEVICE_ID_ANY, VENDOR_DATA_ANY, false, BIT(DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC) },
 	/* Apple MacBookPro 2017 15 inch eDP Retina panel reports too low DP_MAX_LINK_RATE */
-	{ OUI(0x00, 0x10, 0xfa), DEVICE_ID(101, 68, 21, 101, 98, 97), false, BIT(DP_DPCD_QUIRK_CAN_DO_MAX_LINK_RATE_3_24_GBPS) },
+	{ OUI(0x00, 0x10, 0xfa), DEVICE_ID(101, 68, 21, 101, 98, 97), VENDOR_DATA_ANY, false, BIT(DP_DPCD_QUIRK_CAN_DO_MAX_LINK_RATE_3_24_GBPS) },
+	/* Lenovo dock that needs root branch for dsc */
+	{ OUI(0x90, 0xCC, 0x24), DEVICE_ID(83, 89, 78, 65, 83, 50), VENDOR_DATA(4, 6, 90, 0), true, BIT(DP_DPCD_QUIRK_DSC_MUST_ROOT_DECOMPRESSION) },
 };
 
 #undef OUI
@@ -2305,6 +2311,7 @@ drm_dp_get_quirks(const struct drm_dp_dpcd_ident *ident, bool is_branch)
 	u32 quirks = 0;
 	int i;
 	u8 any_device[] = DEVICE_ID_ANY;
+	u8 any_vendor[] = VENDOR_DATA_ANY;
 
 	for (i = 0; i < ARRAY_SIZE(dpcd_quirk_list); i++) {
 		quirk = &dpcd_quirk_list[i];
@@ -2317,6 +2324,10 @@ drm_dp_get_quirks(const struct drm_dp_dpcd_ident *ident, bool is_branch)
 
 		if (memcmp(quirk->device_id, any_device, sizeof(any_device)) != 0 &&
 		    memcmp(quirk->device_id, ident->device_id, sizeof(ident->device_id)) != 0)
+			continue;
+
+		if (memcmp(quirk->vendor_data, any_vendor, sizeof(any_vendor)) != 0 &&
+		    memcmp(quirk->vendor_data, ident->vendor_data, sizeof(ident->vendor_data)) != 0)
 			continue;
 
 		quirks |= quirk->quirks;
@@ -2344,10 +2355,11 @@ static void drm_dp_dump_desc(struct drm_dp_aux *aux,
 	const struct drm_dp_dpcd_ident *ident = &desc->ident;
 
 	drm_dbg_kms(aux->drm_dev,
-		    "%s: %s: OUI %*phD dev-ID %*pE HW-rev %d.%d SW-rev %d.%d quirks 0x%04x\n",
+		    "%s: %s: OUI %*phD dev-ID %*pE vendor-DATA %*pE HW-rev %d.%d SW-rev %d.%d quirks 0x%04x\n",
 		    aux->name, device_name,
 		    (int)sizeof(ident->oui), ident->oui,
 		    (int)strnlen(ident->device_id, sizeof(ident->device_id)), ident->device_id,
+		    (int)strnlen(ident->vendor_data, sizeof(ident->vendor_data)), ident->vendor_data,
 		    ident->hw_rev >> 4, ident->hw_rev & 0xf,
 		    ident->sw_major_rev, ident->sw_minor_rev,
 		    desc->quirks);

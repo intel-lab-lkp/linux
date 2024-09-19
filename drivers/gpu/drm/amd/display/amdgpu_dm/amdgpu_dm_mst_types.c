@@ -183,8 +183,8 @@ amdgpu_dm_mst_connector_early_unregister(struct drm_connector *connector)
 		dc_sink_release(dc_sink);
 		aconnector->dc_sink = NULL;
 		aconnector->edid = NULL;
-		aconnector->dsc_aux = NULL;
-		port->passthrough_aux = NULL;
+		aconnector->mst_output_port->dsc_aux = NULL;
+		aconnector->mst_output_port->dsc_passthrough_aux = NULL;
 	}
 
 	aconnector->mst_status = MST_STATUS_DEFAULT;
@@ -214,21 +214,6 @@ bool needs_dsc_aux_workaround(struct dc_link *link)
 }
 
 #if defined(CONFIG_DRM_AMD_DC_FP)
-static bool is_synaptics_cascaded_panamera(struct dc_link *link, struct drm_dp_mst_port *port)
-{
-	u8 branch_vendor_data[4] = { 0 }; // Vendor data 0x50C ~ 0x50F
-
-	if (drm_dp_dpcd_read(port->mgr->aux, DP_BRANCH_VENDOR_SPECIFIC_START, &branch_vendor_data, 4) == 4) {
-		if (link->dpcd_caps.branch_dev_id == DP_BRANCH_DEVICE_ID_90CC24 &&
-				IS_SYNAPTICS_CASCADED_PANAMERA(link->dpcd_caps.branch_dev_name, branch_vendor_data)) {
-			DRM_INFO("Synaptics Cascaded MST hub\n");
-			return true;
-		}
-	}
-
-	return false;
-}
-
 static bool validate_dsc_caps_on_connector(struct amdgpu_dm_connector *aconnector)
 {
 	struct dc_sink *dc_sink = aconnector->dc_sink;
@@ -237,32 +222,14 @@ static bool validate_dsc_caps_on_connector(struct amdgpu_dm_connector *aconnecto
 	u8 dsc_branch_dec_caps_raw[3] = { 0 };	// DSC branch decoder caps 0xA0 ~ 0xA2
 	u8 *dsc_branch_dec_caps = NULL;
 
-	aconnector->dsc_aux = drm_dp_mst_dsc_aux_for_port(port);
-
-	/*
-	 * drm_dp_mst_dsc_aux_for_port() will return NULL for certain configs
-	 * because it only check the dsc/fec caps of the "port variable" and not the dock
-	 *
-	 * This case will return NULL: DSC capabe MST dock connected to a non fec/dsc capable display
-	 *
-	 * Workaround: explicitly check the use case above and use the mst dock's aux as dsc_aux
-	 *
-	 */
-	if (!aconnector->dsc_aux && !port->parent->port_parent &&
-	    needs_dsc_aux_workaround(aconnector->dc_link))
-		aconnector->dsc_aux = &aconnector->mst_root->dm_dp_aux.aux;
-
-	/* synaptics cascaded MST hub case */
-	if (is_synaptics_cascaded_panamera(aconnector->dc_link, port))
-		aconnector->dsc_aux = port->mgr->aux;
-
-	if (!aconnector->dsc_aux)
+	drm_dp_mst_dsc_aux_for_port(port);
+	if (!aconnector->mst_output_port->dsc_aux)
 		return false;
 
-	if (drm_dp_dpcd_read(aconnector->dsc_aux, DP_DSC_SUPPORT, dsc_caps, 16) < 0)
+	if (drm_dp_dpcd_read(aconnector->mst_output_port->dsc_aux, DP_DSC_SUPPORT, dsc_caps, 16) < 0)
 		return false;
 
-	if (drm_dp_dpcd_read(aconnector->dsc_aux,
+	if (drm_dp_dpcd_read(aconnector->mst_output_port->dsc_aux,
 			DP_DSC_BRANCH_OVERALL_THROUGHPUT_0, dsc_branch_dec_caps_raw, 3) == 3)
 		dsc_branch_dec_caps = dsc_branch_dec_caps_raw;
 
@@ -279,10 +246,10 @@ static bool retrieve_downstream_port_device(struct amdgpu_dm_connector *aconnect
 {
 	union dp_downstream_port_present ds_port_present;
 
-	if (!aconnector->dsc_aux)
+	if (!aconnector->mst_output_port->dsc_aux)
 		return false;
 
-	if (drm_dp_dpcd_read(aconnector->dsc_aux, DP_DOWNSTREAMPORT_PRESENT, &ds_port_present, 1) < 0) {
+	if (drm_dp_dpcd_read(aconnector->mst_output_port->dsc_aux, DP_DOWNSTREAMPORT_PRESENT, &ds_port_present, 1) < 0) {
 		DRM_INFO("Failed to read downstream_port_present 0x05 from DFP of branch device\n");
 		return false;
 	}
@@ -501,8 +468,8 @@ dm_dp_mst_detect(struct drm_connector *connector,
 		dc_sink_release(aconnector->dc_sink);
 		aconnector->dc_sink = NULL;
 		aconnector->edid = NULL;
-		aconnector->dsc_aux = NULL;
-		port->passthrough_aux = NULL;
+		aconnector->mst_output_port->dsc_aux = NULL;
+		aconnector->mst_output_port->dsc_passthrough_aux = NULL;
 
 		amdgpu_dm_set_mst_status(&aconnector->mst_status,
 			MST_REMOTE_EDID | MST_ALLOCATE_NEW_PAYLOAD | MST_CLEAR_ALLOCATED_PAYLOAD,
@@ -1293,7 +1260,7 @@ static bool is_dsc_need_re_compute(
 			continue;
 
 		aconnector = (struct amdgpu_dm_connector *) stream->dm_stream_context;
-		if (!aconnector || !aconnector->dsc_aux)
+		if (!aconnector || !aconnector->mst_output_port->dsc_aux)
 			continue;
 
 		stream_on_link[new_stream_on_link_num] = aconnector;
@@ -1778,13 +1745,13 @@ enum dc_status dm_dp_mst_is_port_support_mode(
 	}
 
 	/*DSC necessary case*/
-	if (!aconnector->dsc_aux)
+	if (!aconnector->mst_output_port->dsc_aux)
 		return DC_FAIL_BANDWIDTH_VALIDATE;
 
 	if (is_dsc_common_config_possible(stream, &bw_range)) {
 
 		/*capable of dsc passthough. dsc bitstream along the entire path*/
-		if (aconnector->mst_output_port->passthrough_aux) {
+		if (aconnector->mst_output_port->dsc_passthrough_aux) {
 			if (bw_range.min_kbps > end_to_end_bw_in_kbps) {
 				DRM_DEBUG_DRIVER("MST_DSC dsc passthrough and decode at endpoint"
 						 "Max dsc compression bw can't fit into end-to-end bw\n");

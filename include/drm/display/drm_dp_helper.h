@@ -643,6 +643,7 @@ struct drm_dp_dpcd_ident {
 	u8 hw_rev;
 	u8 sw_major_rev;
 	u8 sw_minor_rev;
+	u8 vendor_data[4];
 } __packed;
 
 /**
@@ -711,6 +712,13 @@ enum drm_dp_quirk {
 	 * requires enabling DSC.
 	 */
 	DP_DPCD_QUIRK_HBLANK_EXPANSION_REQUIRES_DSC,
+	/**
+	 * @DP_DPCD_QUIRK_DSC_MUST_ROOT_DECOMPRESSION:
+	 *
+	 * The device has internal virutual dpcd with dsc decoding cap,
+	 * but dsc decoding must be done at root mstb.
+	 */
+	DP_DPCD_QUIRK_DSC_MUST_ROOT_DECOMPRESSION,
 };
 
 /**

@@ -1370,7 +1370,7 @@ static int dp_dsc_fec_support_show(struct seq_file *m, void *data)
 			 * enable DSC on the sink device or on MST branch
 			 * its connected to.
 			 */
-			if (aconnector->dsc_aux) {
+			if (aconnector->mst_output_port->dsc_aux) {
 				is_fec_supported = true;
 				is_dsc_supported = true;
 			}

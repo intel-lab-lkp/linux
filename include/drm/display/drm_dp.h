@@ -980,6 +980,7 @@
 #define DP_BRANCH_REVISION_START            0x509
 #define DP_BRANCH_HW_REV                    0x509
 #define DP_BRANCH_SW_REV                    0x50A
+#define DP_BRANCH_VENDOR_SPECIFIC_START     0x50C
 
 /* Link/Sink Device Power Control */
 #define DP_SET_POWER                        0x600
