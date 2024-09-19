@@ -321,8 +321,7 @@ static void _rtl92e_read_eeprom_info(struct net_device *dev)
 
 		if (priv->epromtype == EEPROM_93C46) {
 			if (!priv->autoload_fail_flag) {
-				usValue = rtl92e_eeprom_read(dev,
-					  EEPROM_TxPwDiff_CrystalCap >> 1);
+				usValue = rtl92e_eeprom_read(dev, EEPROM_TxPwDiff_CrystalCap >> 1);
 				priv->eeprom_ant_pwr_diff = usValue & 0x0fff;
 				priv->eeprom_crystal_cap = (usValue & 0xf000)
 							 >> 12;
@@ -335,8 +334,9 @@ static void _rtl92e_read_eeprom_info(struct net_device *dev)
 
 			for (i = 0; i < 14; i += 2) {
 				if (!priv->autoload_fail_flag)
-					usValue = rtl92e_eeprom_read(dev,
-						  (EEPROM_TxPwIndex_CCK + i) >> 1);
+					usValue =
+						rtl92e_eeprom_read(dev,
+								   (EEPROM_TxPwIndex_CCK + i) >> 1);
 				else
 					usValue = EEPROM_Default_TxPower;
 				*((u16 *)(&priv->eeprom_tx_pwr_level_cck[i])) =
@@ -345,7 +345,8 @@ static void _rtl92e_read_eeprom_info(struct net_device *dev)
 			for (i = 0; i < 14; i += 2) {
 				if (!priv->autoload_fail_flag)
 					usValue = rtl92e_eeprom_read(dev,
-						(EEPROM_TxPwIndex_OFDM_24G + i) >> 1);
+								     (EEPROM_TxPwIndex_OFDM_24G + i)
+								     >> 1);
 				else
 					usValue = EEPROM_Default_TxPower;
 				*((u16 *)(&priv->eeprom_tx_pwr_level_ofdm24g[i]))
@@ -1325,8 +1326,8 @@ static void _rtl92e_query_rxphystatus(struct r8192_priv *priv,
 	} else {
 		if (rf_rx_num != 0)
 			pstats->signal_strength = precord_stats->signal_strength =
-					 _rtl92e_signal_scale_mapping(priv,
-					 (long)(total_rssi /= rf_rx_num));
+					 _rtl92e_signal_scale_mapping(priv, (long)
+								      (total_rssi /= rf_rx_num));
 	}
 }
 
@@ -1737,7 +1738,7 @@ void rtl92e_update_ratr_table(struct net_device *dev)
 	    ieee->ht_info->cur_short_gi_40mhz)
 		ratr_value |= 0x80000000;
 	else if (!ieee->ht_info->cur_tx_bw40mhz &&
-		  ieee->ht_info->cur_short_gi_20mhz)
+		 ieee->ht_info->cur_short_gi_20mhz)
 		ratr_value |= 0x80000000;
 	rtl92e_writel(dev, RATR0 + rate_index * 4, ratr_value);
 	rtl92e_writeb(dev, UFWP, 1);
@@ -1898,8 +1899,7 @@ bool rtl92e_get_nmode_support_by_sec(struct net_device *dev)
 	struct rtllib_device *ieee = priv->rtllib;
 
 	if (ieee->rtllib_ap_sec_type &&
-	   (ieee->rtllib_ap_sec_type(priv->rtllib) & (SEC_ALG_WEP |
-				     SEC_ALG_TKIP))) {
+	    (ieee->rtllib_ap_sec_type(priv->rtllib) & (SEC_ALG_WEP | SEC_ALG_TKIP))) {
 		return false;
 	} else {
 		return true;

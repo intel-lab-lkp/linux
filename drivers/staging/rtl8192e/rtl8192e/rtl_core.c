@@ -253,7 +253,7 @@ static void _rtl92e_update_cap(struct net_device *dev, u16 cap)
 		u8	cur_slot_time = priv->slot_time;
 
 		if ((cap & WLAN_CAPABILITY_SHORT_SLOT_TIME) &&
-		   (!priv->rtllib->ht_info->current_rt2rt_long_slot_time)) {
+		    (!priv->rtllib->ht_info->current_rt2rt_long_slot_time)) {
 			if (cur_slot_time != SHORT_SLOT_TIME) {
 				slot_time_val = SHORT_SLOT_TIME;
 				priv->rtllib->set_hw_reg_handler(dev,
@@ -326,9 +326,8 @@ static int _rtl92e_qos_handle_probe_response(struct r8192_priv *priv,
 			network->qos_data.active = network->qos_data.supported;
 
 		if ((network->qos_data.active == 1) && (active_network == 1) &&
-				(network->flags & NETWORK_HAS_QOS_PARAMETERS) &&
-				(network->qos_data.old_param_count !=
-				network->qos_data.param_count)) {
+		    (network->flags & NETWORK_HAS_QOS_PARAMETERS) &&
+		    (network->qos_data.old_param_count != network->qos_data.param_count)) {
 			network->qos_data.old_param_count =
 				network->qos_data.param_count;
 			priv->rtllib->wmm_acm = network->qos_data.wmm_acm;
@@ -390,7 +389,7 @@ static int _rtl92e_qos_assoc_resp(struct r8192_priv *priv,
 			network->qos_data.param_count;
 	} else {
 		memcpy(&priv->rtllib->current_network.qos_data.parameters,
-		&def_qos_parameters, size);
+		       &def_qos_parameters, size);
 		priv->rtllib->current_network.qos_data.active = 0;
 		priv->rtllib->current_network.qos_data.supported = 0;
 		set_qos_param = 1;
@@ -406,8 +405,8 @@ static int _rtl92e_qos_assoc_resp(struct r8192_priv *priv,
 }
 
 static int _rtl92e_handle_assoc_response(struct net_device *dev,
-				 struct rtllib_assoc_response_frame *resp,
-				 struct rtllib_network *network)
+					 struct rtllib_assoc_response_frame *resp,
+					 struct rtllib_network *network)
 {
 	struct r8192_priv *priv = rtllib_priv(dev);
 
@@ -819,7 +818,7 @@ static short _rtl92e_is_tx_queue_empty(struct net_device *dev)
 			continue;
 		if (skb_queue_len(&(&priv->tx_ring[i])->queue) > 0) {
 			netdev_info(dev, "===>tx queue is not empty:%d, %d\n",
-			       i, skb_queue_len(&(&priv->tx_ring[i])->queue));
+				    i, skb_queue_len(&(&priv->tx_ring[i])->queue));
 			return 0;
 		}
 	}
@@ -905,7 +904,7 @@ static void _rtl92e_if_check_reset(struct net_device *dev)
 		RxResetType = _rtl92e_rx_check_stuck(dev);
 
 	if (TxResetType == RESET_TYPE_SILENT ||
-		   RxResetType == RESET_TYPE_SILENT) {
+	    RxResetType == RESET_TYPE_SILENT) {
 		netdev_info(dev, "%s(): TxResetType is %d, RxResetType is %d\n",
 			    __func__, TxResetType, RxResetType);
 	}
@@ -970,7 +969,7 @@ static void _rtl92e_watchdog_wq_cb(void *data)
 	}
 	if ((ieee->link_state == MAC80211_LINKED) && (ieee->iw_mode == IW_MODE_INFRA)) {
 		if (ieee->link_detect_info.num_rx_ok_in_period > 100 ||
-		ieee->link_detect_info.num_tx_ok_in_period > 100)
+		    ieee->link_detect_info.num_tx_ok_in_period > 100)
 			busy_traffic = true;
 
 		if (ieee->link_detect_info.num_rx_ok_in_period > 4000 ||
@@ -1030,8 +1029,7 @@ static void _rtl92e_watchdog_wq_cb(void *data)
 
 			ieee->link_state = RTLLIB_ASSOCIATING;
 
-			remove_peer_ts(priv->rtllib,
-				     priv->rtllib->current_network.bssid);
+			remove_peer_ts(priv->rtllib, priv->rtllib->current_network.bssid);
 			ieee->is_roaming = true;
 			ieee->is_set_key = false;
 			ieee->link_change(dev);
@@ -1170,7 +1168,7 @@ static int _rtl92e_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if (queue_index != TXCMD_QUEUE) {
 		if ((priv->rtllib->rf_power_state == rf_off) ||
-		     !priv->up) {
+		    !priv->up) {
 			kfree_skb(skb);
 			return 0;
 		}
@@ -1571,7 +1569,7 @@ static void _rtl92e_tx_resume(struct net_device *dev)
 	for (queue_index = BK_QUEUE;
 	     queue_index < MAX_QUEUE_SIZE; queue_index++) {
 		while ((!skb_queue_empty(&ieee->skb_waitq[queue_index])) &&
-		(priv->rtllib->check_nic_enough_desc(dev, queue_index) > 0)) {
+		       (priv->rtllib->check_nic_enough_desc(dev, queue_index) > 0)) {
 			skb = skb_dequeue(&ieee->skb_waitq[queue_index]);
 			ieee->softmac_data_hard_start_xmit(skb, dev, 0);
 		}
@@ -1640,7 +1638,7 @@ static int _rtl92e_close(struct net_device *dev)
 	int ret;
 
 	if ((rtllib_act_scanning(priv->rtllib, false)) &&
-		!(priv->rtllib->softmac_features & IEEE_SOFTMAC_SCAN)) {
+	    !(priv->rtllib->softmac_features & IEEE_SOFTMAC_SCAN)) {
 		rtllib_stop_scan(priv->rtllib);
 	}
 
@@ -1952,7 +1950,7 @@ static void _rtl92e_pci_disconnect(struct pci_dev *pdev)
 		if (dev->mem_start != 0) {
 			iounmap((void __iomem *)dev->mem_start);
 			release_mem_region(pci_resource_start(pdev, 1),
-					pci_resource_len(pdev, 1));
+					   pci_resource_len(pdev, 1));
 		}
 
 		free_rtllib(dev);

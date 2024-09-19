@@ -228,7 +228,7 @@ void ht_reset_iot_setting(struct rt_hi_throughput *ht_info)
 }
 
 void ht_construct_capability_element(struct rtllib_device *ieee, u8 *pos_ht_cap,
-				  u8 *len, u8 is_encrypt, bool assoc)
+				     u8 *len, u8 is_encrypt, bool assoc)
 {
 	struct rt_hi_throughput *ht = ieee->ht_info;
 	struct ht_capab_ele *cap_ele = NULL;
@@ -308,8 +308,7 @@ void ht_construct_capability_element(struct rtllib_device *ieee, u8 *pos_ht_cap,
 	}
 }
 
-void ht_construct_rt2rt_agg_element(struct rtllib_device *ieee, u8 *posRT2RTAgg,
-				u8 *len)
+void ht_construct_rt2rt_agg_element(struct rtllib_device *ieee, u8 *posRT2RTAgg, u8 *len)
 {
 	if (!posRT2RTAgg) {
 		netdev_warn(ieee->dev, "%s(): posRT2RTAgg is null\n", __func__);
@@ -357,8 +356,7 @@ static u8 ht_pick_mcs_rate(struct rtllib_device *ieee, u8 *pOperateMCS)
 	return true;
 }
 
-u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *pMCSRateSet,
-		       u8 *pMCSFilter)
+u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *pMCSRateSet, u8 *pMCSFilter)
 {
 	u8		i, j;
 	u8		bitMap;
@@ -398,7 +396,7 @@ u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *pMCSRateSet,
 }
 
 static u8 ht_filter_mcs_rate(struct rtllib_device *ieee, u8 *pSupportMCS,
-			  u8 *pOperateMCS)
+			     u8 *pOperateMCS)
 {
 	u8 i;
 
@@ -418,8 +416,8 @@ static u8 ht_filter_mcs_rate(struct rtllib_device *ieee, u8 *pSupportMCS,
 }
 
 void ht_set_connect_bw_mode(struct rtllib_device *ieee,
-			enum ht_channel_width bandwidth,
-			enum ht_extchnl_offset Offset);
+			    enum ht_channel_width bandwidth,
+			    enum ht_extchnl_offset Offset);
 
 void ht_on_assoc_rsp(struct rtllib_device *ieee)
 {
@@ -453,7 +451,7 @@ void ht_on_assoc_rsp(struct rtllib_device *ieee)
 			     pPeerHTCap, sizeof(struct ht_capab_ele));
 #endif
 	ht_set_connect_bw_mode(ieee, (enum ht_channel_width)(pPeerHTCap->chl_width),
-			   (enum ht_extchnl_offset)(pPeerHTInfo->ExtChlOffset));
+			       (enum ht_extchnl_offset)(pPeerHTInfo->ExtChlOffset));
 	ht_info->cur_tx_bw40mhz = ((pPeerHTInfo->RecommemdedTxWidth == 1) ?
 				 true : false);
 
@@ -494,8 +492,8 @@ void ht_on_assoc_rsp(struct rtllib_device *ieee)
 
 	pMcsFilter = MCS_FILTER_ALL;
 	ieee->HTHighestOperaRate = ht_get_highest_mcs_rate(ieee,
-						       ieee->dot11ht_oper_rate_set,
-						       pMcsFilter);
+							   ieee->dot11ht_oper_rate_set,
+							   pMcsFilter);
 	ieee->ht_curr_op_rate = ieee->HTHighestOperaRate;
 
 	ht_info->current_op_mode = pPeerHTInfo->opt_mode;
@@ -559,7 +557,7 @@ void ht_initialize_bss_desc(struct bss_ht *bss_ht)
 }
 
 void ht_reset_self_and_save_peer_setting(struct rtllib_device *ieee,
-				   struct rtllib_network *network)
+					 struct rtllib_network *network)
 {
 	struct rt_hi_throughput *ht_info = ieee->ht_info;
 	u8	bIOTAction = 0;
@@ -661,8 +659,8 @@ static void ht_set_connect_bw_mode_callback(struct rtllib_device *ieee)
 }
 
 void ht_set_connect_bw_mode(struct rtllib_device *ieee,
-			enum ht_channel_width bandwidth,
-			enum ht_extchnl_offset Offset)
+			    enum ht_channel_width bandwidth,
+			    enum ht_extchnl_offset Offset)
 {
 	struct rt_hi_throughput *ht_info = ieee->ht_info;
 

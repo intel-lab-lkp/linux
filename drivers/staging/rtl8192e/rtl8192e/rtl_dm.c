@@ -540,11 +540,9 @@ static void _rtl92e_dm_tx_power_tracking_callback_tssi(struct net_device *dev)
 
 			for (k = 0; k < 5; k++) {
 				if (k != 4)
-					tmp_report[k] = rtl92e_readb(dev,
-							 Tssi_Report_Value1 + k);
+					tmp_report[k] = rtl92e_readb(dev, Tssi_Report_Value1 + k);
 				else
-					tmp_report[k] = rtl92e_readb(dev,
-							 Tssi_Report_Value2);
+					tmp_report[k] = rtl92e_readb(dev, Tssi_Report_Value2);
 
 				if (tmp_report[k] <= 20) {
 					viviflag = true;
@@ -1765,8 +1763,8 @@ static void _rtl92e_dm_check_fsync(struct net_device *dev)
 				   (REG_C38_TH + 5)) {
 				if (reg_c38_State) {
 					rtl92e_writeb(dev,
-						rOFDM0_RxDetector3,
-						priv->framesync);
+						      rOFDM0_RxDetector3,
+						      priv->framesync);
 					reg_c38_State = RegC38_Default;
 				}
 			}

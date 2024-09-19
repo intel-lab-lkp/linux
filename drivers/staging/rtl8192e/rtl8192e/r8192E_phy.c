@@ -632,10 +632,9 @@ static u8 _rtl92e_phy_switch_channel_step(struct net_device *dev, u8 channel,
 			case cmd_id_rf_write_reg:
 				for (eRFPath = 0; eRFPath <
 				     priv->num_total_rf_path; eRFPath++)
-					rtl92e_set_rf_reg(dev,
-						 (enum rf90_radio_path)eRFPath,
-						 CurrentCmd->para1, bMask12Bits,
-						 CurrentCmd->para2 << 7);
+					rtl92e_set_rf_reg(dev, (enum rf90_radio_path)eRFPath,
+							  CurrentCmd->para1, bMask12Bits,
+							  CurrentCmd->para2 << 7);
 				break;
 			default:
 				break;
@@ -992,7 +991,7 @@ static bool _rtl92e_set_rf_power_state(struct net_device *dev,
 	switch (rf_power_state) {
 	case rf_on:
 		if ((priv->rtllib->rf_power_state == rf_off) &&
-		     RT_IN_PS_LEVEL(psc, RT_RF_OFF_LEVL_HALT_NIC)) {
+		    RT_IN_PS_LEVEL(psc, RT_RF_OFF_LEVL_HALT_NIC)) {
 			bool rtstatus;
 			u32 InitilizeCount = 3;
 
@@ -1013,7 +1012,7 @@ static bool _rtl92e_set_rf_power_state(struct net_device *dev,
 			rtl92e_writeb(dev, ANAPAR, 0x37);
 			mdelay(1);
 			rtl92e_set_bb_reg(dev, rFPGA0_AnalogParameter1,
-					 0x4, 0x1);
+					  0x4, 0x1);
 			priv->hw_rf_off_action = 0;
 			rtl92e_set_bb_reg(dev, rFPGA0_XA_RFInterfaceOE,
 					  BIT(4), 0x1);

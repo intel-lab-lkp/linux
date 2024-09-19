@@ -795,8 +795,9 @@ static inline u8 frame_qos_tid(u8 *buf)
 
 	hdr = (struct ieee80211_hdr_3addr *)buf;
 	fc = le16_to_cpu(hdr->frame_control);
-	return (u8)((union frameqos *)(buf + (((fc & IEEE80211_FCTL_TODS) &&
-		    (fc & IEEE80211_FCTL_FROMDS)) ? 30 : 24)))->field.tid;
+	return (u8)((union frameqos *)
+		(buf + (((fc & IEEE80211_FCTL_TODS) &&
+			 (fc & IEEE80211_FCTL_FROMDS)) ? 30 : 24)))->field.tid;
 }
 
 struct eapol {
@@ -1416,7 +1417,7 @@ struct rtllib_device {
 	 * This function can't sleep.
 	 */
 	int (*softmac_hard_start_xmit)(struct sk_buff *skb,
-			       struct net_device *dev);
+				       struct net_device *dev);
 
 	/* used instead of hard_start_xmit (not softmac_hard_start_xmit)
 	 * if the IEEE_SOFTMAC_TX_QUEUE feature is used to TX data
@@ -1425,7 +1426,7 @@ struct rtllib_device {
 	 * This function can't sleep.
 	 */
 	void (*softmac_data_hard_start_xmit)(struct sk_buff *skb,
-			       struct net_device *dev, int rate);
+					     struct net_device *dev, int rate);
 
 	/* ask to the driver to retune the radio.
 	 * This function can sleep. the driver should ensure
@@ -1461,8 +1462,7 @@ struct rtllib_device {
 	bool (*get_half_nmode_support_by_aps_handler)(struct net_device *dev);
 	u8   (*rtllib_ap_sec_type)(struct rtllib_device *ieee);
 	void (*init_gain_handler)(struct net_device *dev, u8 operation);
-	void (*scan_operation_backup_handler)(struct net_device *dev,
-					   u8 operation);
+	void (*scan_operation_backup_handler)(struct net_device *dev, u8 operation);
 	void (*set_hw_reg_handler)(struct net_device *dev, u8 variable, u8 *val);
 
 	void (*allow_all_dest_addr_handler)(struct net_device *dev,
@@ -1721,23 +1721,23 @@ int rtllib_wx_get_rts(struct rtllib_device *ieee, struct iw_request_info *info,
 #define MAX_RECEIVE_BUFFER_SIZE 9100
 
 void ht_set_connect_bw_mode(struct rtllib_device *ieee,
-			enum ht_channel_width bandwidth,
-			enum ht_extchnl_offset Offset);
+			    enum ht_channel_width bandwidth,
+			    enum ht_extchnl_offset Offset);
 void ht_update_default_setting(struct rtllib_device *ieee);
 void ht_construct_capability_element(struct rtllib_device *ieee,
-				  u8 *pos_ht_cap, u8 *len,
-				  u8 is_encrypt, bool assoc);
+				     u8 *pos_ht_cap, u8 *len,
+				     u8 is_encrypt, bool assoc);
 void ht_construct_rt2rt_agg_element(struct rtllib_device *ieee,
-				u8 *posRT2RTAgg, u8 *len);
+				    u8 *posRT2RTAgg, u8 *len);
 void ht_on_assoc_rsp(struct rtllib_device *ieee);
 void ht_initialize_ht_info(struct rtllib_device *ieee);
 void ht_initialize_bss_desc(struct bss_ht *bss_ht);
 void ht_reset_self_and_save_peer_setting(struct rtllib_device *ieee,
-				   struct rtllib_network *network);
+					 struct rtllib_network *network);
 void HT_update_self_and_peer_setting(struct rtllib_device *ieee,
 				     struct rtllib_network *network);
 u8 ht_get_highest_mcs_rate(struct rtllib_device *ieee, u8 *pMCSRateSet,
-		       u8 *pMCSFilter);
+			   u8 *pMCSFilter);
 extern u8 MCS_FILTER_ALL[];
 extern u16 MCS_DATA_RATE[2][2][77];
 u8 ht_c_check(struct rtllib_device *ieee, u8 *frame);
@@ -1757,10 +1757,10 @@ void rtllib_tx_ba_inact_timeout(struct timer_list *t);
 void rtllib_rx_ba_inact_timeout(struct timer_list *t);
 void rtllib_reset_ba_entry(struct ba_record *ba);
 bool rtllib_get_ts(struct rtllib_device *ieee, struct ts_common_info **ppTS, u8 *addr,
-	   u8 TID, enum tr_select tx_rx_select, bool add_new_ts);
+		   u8 TID, enum tr_select tx_rx_select, bool add_new_ts);
 void rtllib_ts_init(struct rtllib_device *ieee);
 void rtllib_ts_start_add_ba_process(struct rtllib_device *ieee,
-			 struct tx_ts_record *pTxTS);
+				    struct tx_ts_record *pTxTS);
 void remove_peer_ts(struct rtllib_device *ieee, u8 *addr);
 void remove_all_ts(struct rtllib_device *ieee);
 

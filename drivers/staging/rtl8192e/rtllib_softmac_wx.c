@@ -16,7 +16,7 @@
 #include "rtllib.h"
 
 int rtllib_wx_set_freq(struct rtllib_device *ieee, struct iw_request_info *a,
-			     union iwreq_data *wrqu, char *b)
+		       union iwreq_data *wrqu, char *b)
 {
 	int ret;
 	struct iw_freq *fwrq = &wrqu->freq;
@@ -59,8 +59,8 @@ out:
 EXPORT_SYMBOL(rtllib_wx_set_freq);
 
 int rtllib_wx_get_freq(struct rtllib_device *ieee,
-			     struct iw_request_info *a,
-			     union iwreq_data *wrqu, char *b)
+		       struct iw_request_info *a,
+		       union iwreq_data *wrqu, char *b)
 {
 	struct iw_freq *fwrq = &wrqu->freq;
 
@@ -74,8 +74,8 @@ int rtllib_wx_get_freq(struct rtllib_device *ieee,
 EXPORT_SYMBOL(rtllib_wx_get_freq);
 
 int rtllib_wx_get_wap(struct rtllib_device *ieee,
-			    struct iw_request_info *info,
-			    union iwreq_data *wrqu, char *extra)
+		      struct iw_request_info *info,
+		      union iwreq_data *wrqu, char *extra)
 {
 	unsigned long flags;
 
@@ -88,8 +88,8 @@ int rtllib_wx_get_wap(struct rtllib_device *ieee,
 	spin_lock_irqsave(&ieee->lock, flags);
 
 	if (ieee->link_state != MAC80211_LINKED &&
-		ieee->link_state != MAC80211_LINKED_SCANNING &&
-		ieee->wap_set == 0)
+	    ieee->link_state != MAC80211_LINKED_SCANNING &&
+	    ieee->wap_set == 0)
 
 		eth_zero_addr(wrqu->ap_addr.sa_data);
 	else
@@ -103,9 +103,9 @@ int rtllib_wx_get_wap(struct rtllib_device *ieee,
 EXPORT_SYMBOL(rtllib_wx_get_wap);
 
 int rtllib_wx_set_wap(struct rtllib_device *ieee,
-			 struct iw_request_info *info,
-			 union iwreq_data *awrq,
-			 char *extra)
+		      struct iw_request_info *info,
+		      union iwreq_data *awrq,
+		      char *extra)
 {
 	int ret = 0;
 	unsigned long flags;
@@ -155,7 +155,7 @@ out:
 EXPORT_SYMBOL(rtllib_wx_set_wap);
 
 int rtllib_wx_get_essid(struct rtllib_device *ieee, struct iw_request_info *a,
-			 union iwreq_data *wrqu, char *b)
+			union iwreq_data *wrqu, char *b)
 {
 	int len, ret = 0;
 	unsigned long flags;
@@ -167,14 +167,14 @@ int rtllib_wx_get_essid(struct rtllib_device *ieee, struct iw_request_info *a,
 	spin_lock_irqsave(&ieee->lock, flags);
 
 	if (ieee->current_network.ssid[0] == '\0' ||
-		ieee->current_network.ssid_len == 0) {
+	    ieee->current_network.ssid_len == 0) {
 		ret = -1;
 		goto out;
 	}
 
 	if (ieee->link_state != MAC80211_LINKED &&
-		ieee->link_state != MAC80211_LINKED_SCANNING &&
-		ieee->ssid_set == 0) {
+	    ieee->link_state != MAC80211_LINKED_SCANNING &&
+	    ieee->ssid_set == 0) {
 		ret = -1;
 		goto out;
 	}
@@ -191,8 +191,8 @@ out:
 EXPORT_SYMBOL(rtllib_wx_get_essid);
 
 int rtllib_wx_set_rate(struct rtllib_device *ieee,
-			     struct iw_request_info *info,
-			     union iwreq_data *wrqu, char *extra)
+		       struct iw_request_info *info,
+		       union iwreq_data *wrqu, char *extra)
 {
 	u32 target_rate = wrqu->bitrate.value;
 
@@ -202,13 +202,13 @@ int rtllib_wx_set_rate(struct rtllib_device *ieee,
 EXPORT_SYMBOL(rtllib_wx_set_rate);
 
 int rtllib_wx_get_rate(struct rtllib_device *ieee,
-			     struct iw_request_info *info,
-			     union iwreq_data *wrqu, char *extra)
+		       struct iw_request_info *info,
+		       union iwreq_data *wrqu, char *extra)
 {
 	u32 tmp_rate;
 
 	tmp_rate = tx_count_to_data_rate(ieee,
-				     ieee->softmac_stats.CurrentShowTxate);
+					 ieee->softmac_stats.CurrentShowTxate);
 	wrqu->bitrate.value = tmp_rate * 500000;
 
 	return 0;
@@ -216,14 +216,14 @@ int rtllib_wx_get_rate(struct rtllib_device *ieee,
 EXPORT_SYMBOL(rtllib_wx_get_rate);
 
 int rtllib_wx_set_rts(struct rtllib_device *ieee,
-			     struct iw_request_info *info,
-			     union iwreq_data *wrqu, char *extra)
+		      struct iw_request_info *info,
+		      union iwreq_data *wrqu, char *extra)
 {
 	if (wrqu->rts.disabled || !wrqu->rts.fixed) {
 		ieee->rts = DEFAULT_RTS_THRESHOLD;
 	} else {
 		if (wrqu->rts.value < MIN_RTS_THRESHOLD ||
-				wrqu->rts.value > MAX_RTS_THRESHOLD)
+		    wrqu->rts.value > MAX_RTS_THRESHOLD)
 			return -EINVAL;
 		ieee->rts = wrqu->rts.value;
 	}
@@ -232,8 +232,8 @@ int rtllib_wx_set_rts(struct rtllib_device *ieee,
 EXPORT_SYMBOL(rtllib_wx_set_rts);
 
 int rtllib_wx_get_rts(struct rtllib_device *ieee,
-			     struct iw_request_info *info,
-			     union iwreq_data *wrqu, char *extra)
+		      struct iw_request_info *info,
+		      union iwreq_data *wrqu, char *extra)
 {
 	wrqu->rts.value = ieee->rts;
 	wrqu->rts.fixed = 0;	/* no auto select */
@@ -243,7 +243,7 @@ int rtllib_wx_get_rts(struct rtllib_device *ieee,
 EXPORT_SYMBOL(rtllib_wx_get_rts);
 
 int rtllib_wx_set_mode(struct rtllib_device *ieee, struct iw_request_info *a,
-			     union iwreq_data *wrqu, char *b)
+		       union iwreq_data *wrqu, char *b)
 {
 	int set_mode_status = 0;
 
@@ -359,7 +359,7 @@ out:
 }
 
 int rtllib_wx_set_scan(struct rtllib_device *ieee, struct iw_request_info *a,
-			     union iwreq_data *wrqu, char *b)
+		       union iwreq_data *wrqu, char *b)
 {
 	int ret = 0;
 
@@ -447,8 +447,8 @@ EXPORT_SYMBOL(rtllib_wx_get_name);
 
 /* this is mostly stolen from hostap */
 int rtllib_wx_set_power(struct rtllib_device *ieee,
-				 struct iw_request_info *info,
-				 union iwreq_data *wrqu, char *extra)
+			struct iw_request_info *info,
+			union iwreq_data *wrqu, char *extra)
 {
 	int ret = 0;
 
@@ -499,8 +499,8 @@ EXPORT_SYMBOL(rtllib_wx_set_power);
 
 /* this is stolen from hostap */
 int rtllib_wx_get_power(struct rtllib_device *ieee,
-				 struct iw_request_info *info,
-				 union iwreq_data *wrqu, char *extra)
+			struct iw_request_info *info,
+			union iwreq_data *wrqu, char *extra)
 {
 	mutex_lock(&ieee->wx_mutex);
 
