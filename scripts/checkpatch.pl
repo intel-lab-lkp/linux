@@ -6,6 +6,7 @@
 # (c) 2007,2008, Andy Whitcroft <apw@uk.ibm.com> (new conditions, test suite)
 # (c) 2008-2010 Andy Whitcroft <apw@canonical.com>
 # (c) 2010-2018 Joe Perches <joe@perches.com>
+# (c) 2024 Tóth János <gomba007@gmail.com>
 
 use strict;
 use warnings;
@@ -3716,6 +3717,26 @@ sub process {
 
 			WARN("DEPRECATED_VARIABLE",
 			     "Use of $flag is deprecated, please use \`$replacement->{$flag} instead.\n" . $herecurr) if ($replacement->{$flag});
+		}
+
+		if ($realfile =~ /Makefile.*/ && $rawline !~ /^\+\#/) {
+			if ($rawline =~ /  /) {
+				my $herevet = "$here\n" . cat_vet($rawline) . "\n";
+				WARN("MULTIPLE_SPACES",
+				     "please, use tabs\n" . $herevet)
+			}
+
+			if ($rawline =~ / \t/) {
+				my $herevet = "$here\n" . cat_vet($rawline) . "\n";
+				WARN("SPACE_BEFORE_TAB",
+				     "please, no space before tabs, use tabs\n" . $herevet)
+			}
+
+			if ($rawline =~ /\t /) {
+				my $herevet = "$here\n" . cat_vet($rawline) . "\n";
+				WARN("TAB_BEFORE_SPACE",
+				     "please, no tab before spaces, use tabs\n" . $herevet)
+			}
 		}
 
 # check for DT compatible documentation
