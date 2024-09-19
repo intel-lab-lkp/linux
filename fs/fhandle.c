@@ -146,26 +146,6 @@ SYSCALL_DEFINE5(name_to_handle_at, int, dfd, const char __user *, name,
 	return err;
 }
 
-static int get_path_from_fd(int fd, struct path *root)
-{
-	if (fd == AT_FDCWD) {
-		struct fs_struct *fs = current->fs;
-		spin_lock(&fs->lock);
-		*root = fs->pwd;
-		path_get(root);
-		spin_unlock(&fs->lock);
-	} else {
-		struct fd f = fdget(fd);
-		if (!f.file)
-			return -EBADF;
-		*root = f.file->f_path;
-		path_get(root);
-		fdput(f);
-	}
-
-	return 0;
-}
-
 enum handle_to_path_flags {
 	HANDLE_CHECK_PERMS   = (1 << 0),
 	HANDLE_CHECK_SUBTREE = (1 << 1),
@@ -175,7 +155,35 @@ struct handle_to_path_ctx {
 	struct path root;
 	enum handle_to_path_flags flags;
 	unsigned int fh_flags;
+	unsigned int o_flags;
 };
+
+static int get_path_from_fd(int fd, struct handle_to_path_ctx *ctx)
+{
+	if (fd == AT_FDCWD) {
+		struct fs_struct *fs = current->fs;
+		spin_lock(&fs->lock);
+		ctx->root = fs->pwd;
+		path_get(&ctx->root);
+		spin_unlock(&fs->lock);
+	} else {
+		struct fd f = fdget_raw(fd);
+		if (!f.file)
+			return -EBADF;
+		ctx->root = f.file->f_path;
+		path_get(&ctx->root);
+		/*
+		 * Use O_PATH mount fd and requested O_PATH fd as a hint for
+		 * decoding an fd with connected path, that is accessible from
+		 * the mount fd path.
+		 */
+		if (ctx->o_flags & O_PATH && f.file->f_mode & FMODE_PATH)
+			ctx->flags |= HANDLE_CHECK_SUBTREE;
+		fdput(f);
+	}
+
+	return 0;
+}
 
 static int vfs_dentry_acceptable(void *context, struct dentry *dentry)
 {
@@ -224,7 +232,13 @@ static int vfs_dentry_acceptable(void *context, struct dentry *dentry)
 
 	if (!(ctx->flags & HANDLE_CHECK_SUBTREE) || d == root)
 		retval = 1;
-	WARN_ON_ONCE(d != root && d != root->d_sb->s_root);
+	/*
+	 * exportfs_decode_fh_raw() does not call acceptable() callback with
+	 * a disconnected directory dentry, so we should have reached either
+	 * mount fd directory or sb root.
+	 */
+	if (ctx->fh_flags & EXPORT_FH_DIR_ONLY)
+		WARN_ON_ONCE(d != root && d != root->d_sb->s_root);
 	dput(d);
 	return retval;
 }
@@ -265,8 +279,7 @@ static int do_handle_to_path(struct file_handle *handle, struct path *path,
  * filesystem but that only applies to procfs and sysfs neither of which
  * support decoding file handles.
  */
-static inline bool may_decode_fh(struct handle_to_path_ctx *ctx,
-				 unsigned int o_flags)
+static inline bool may_decode_fh(struct handle_to_path_ctx *ctx)
 {
 	struct path *root = &ctx->root;
 
@@ -276,7 +289,7 @@ static inline bool may_decode_fh(struct handle_to_path_ctx *ctx,
 	 *
 	 * There's only one dentry for each directory inode (VFS rule)...
 	 */
-	if (!(o_flags & O_DIRECTORY))
+	if (!(ctx->o_flags & O_DIRECTORY))
 		return false;
 
 	if (ns_capable(root->mnt->mnt_sb->s_user_ns, CAP_SYS_ADMIN))
@@ -303,13 +316,13 @@ static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
 	int retval = 0;
 	struct file_handle f_handle;
 	struct file_handle *handle = NULL;
-	struct handle_to_path_ctx ctx = {};
+	struct handle_to_path_ctx ctx = { .o_flags = o_flags };
 
-	retval = get_path_from_fd(mountdirfd, &ctx.root);
+	retval = get_path_from_fd(mountdirfd, &ctx);
 	if (retval)
 		goto out_err;
 
-	if (!capable(CAP_DAC_READ_SEARCH) && !may_decode_fh(&ctx, o_flags)) {
+	if (!capable(CAP_DAC_READ_SEARCH) && !may_decode_fh(&ctx)) {
 		retval = -EPERM;
 		goto out_path;
 	}
