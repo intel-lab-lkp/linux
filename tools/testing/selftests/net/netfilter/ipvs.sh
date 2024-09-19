@@ -107,6 +107,10 @@ client_connect() {
 }
 
 verify_data() {
+	waitpid -t 3 "${server_pid}"
+	if [ $? -eq 3 ]; then
+		kill "${server_pid}"
+	fi
 	wait "${server_pid}"
 	cmp "$infile" "$outfile" 2>/dev/null
 }
