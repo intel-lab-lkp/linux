@@ -104,6 +104,40 @@ static bool pcie_port_is_p2p_supported(struct pci_dev *dev)
 	return false;
 }
 
+/**
+ * pcie_port_is_p2p_link_available: Determine if a P2P link is available
+ * between the two upstream bridges. The serial number of the two devices
+ * will be compared and if they are same then it is considered that the P2P
+ * link is available.
+ *
+ * Return value: true if inter switch P2P is available, return false otherwise.
+ */
+bool pcie_port_is_p2p_link_available(struct pci_dev *a, struct pci_dev *b)
+{
+	u64 dsn_a, dsn_b;
+
+	/*
+	 * Check if the devices support Inter switch P2P.
+	 */
+	if (!pcie_port_is_p2p_supported(a) ||
+	    !pcie_port_is_p2p_supported(b))
+		return false;
+
+	dsn_a = pci_get_dsn(a);
+	if (!dsn_a)
+		return false;
+
+	dsn_b = pci_get_dsn(b);
+	if (!dsn_b)
+		return false;
+
+	if (dsn_a == dsn_b)
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(pcie_port_is_p2p_link_available);
+
 /*
  * Traverse list of all PCI bridges and find devices that support Inter switch P2P
  * and have the same serial number to create report the BDF over sysfs.

@@ -21,6 +21,8 @@
 #include <linux/seq_buf.h>
 #include <linux/xarray.h>
 
+extern bool pcie_port_is_p2p_link_available(struct pci_dev *a, struct pci_dev *b);
+
 struct pci_p2pdma {
 	struct gen_pool *pool;
 	bool p2pmem_published;
@@ -576,7 +578,7 @@ calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 		int *dist, bool verbose)
 {
 	enum pci_p2pdma_map_type map_type = PCI_P2PDMA_MAP_THRU_HOST_BRIDGE;
-	struct pci_dev *a = provider, *b = client, *bb;
+	struct pci_dev *a = provider, *b = client, *bb, *b_p2p_link = NULL;
 	bool acs_redirects = false;
 	struct pci_p2pdma *p2pdma;
 	struct seq_buf acs_list;
@@ -606,6 +608,16 @@ calc_map_type_and_dist(struct pci_dev *provider, struct pci_dev *client,
 			if (a == bb)
 				goto check_b_path_acs;
 
+			/*
+			 * If both upstream bridges have Inter switch P2P link
+			 * available, P2P DMA distance can account for optimized
+			 * path.
+			 */
+			if (pcie_port_is_p2p_link_available(a, bb)) {
+				b_p2p_link = bb;
+				goto check_b_path_acs;
+			}
+
 			bb = pci_upstream_bridge(bb);
 			dist_b++;
 		}
@@ -628,6 +640,9 @@ check_b_path_acs:
 			seq_buf_print_bus_devfn(&acs_list, bb);
 			acs_cnt++;
 		}
+
+		if (bb == b_p2p_link)
+			break;
 
 		bb = pci_upstream_bridge(bb);
 	}
