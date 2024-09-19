@@ -295,8 +295,7 @@ void irq_work_sync(struct irq_work *work)
 		return;
 	}
 
-	while (irq_work_is_busy(work))
-		cpu_relax();
+	rcuwait_wait_event(&work->irqwait, !irq_work_is_busy(work), TASK_UNINTERRUPTIBLE);
 }
 EXPORT_SYMBOL_GPL(irq_work_sync);
 
