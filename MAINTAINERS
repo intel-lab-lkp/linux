@@ -17157,8 +17157,8 @@ S:	Maintained
 T:	git git://linuxtv.org/media_tree.git
 F:	drivers/media/i2c/ov9734.c
 
-ONBOARD USB HUB DRIVER
-M:	Matthias Kaehlcke <mka@chromium.org>
+ONBOARD USB DEV DRIVER
+M:	Matthias Kaehlcke <matthias@kaehlcke.net>
 L:	linux-usb@vger.kernel.org
 S:	Maintained
 F:	Documentation/ABI/testing/sysfs-bus-platform-onboard-usb-dev
