@@ -42,15 +42,19 @@ static inline struct snapshot_t *__snapshot_t(struct snapshot_table *t, u32 id)
 
 static inline const struct snapshot_t *snapshot_t(struct bch_fs *c, u32 id)
 {
-	return __snapshot_t(rcu_dereference(c->snapshots), id);
+	struct snapshot_table *temp;
+
+	rcu_read_lock();
+	temp = rcu_dereference(c->snapshots);
+	rcu_read_unlock();
+
+	return __snapshot_t(temp, id);
 }
 
 static inline u32 bch2_snapshot_tree(struct bch_fs *c, u32 id)
 {
-	rcu_read_lock();
 	const struct snapshot_t *s = snapshot_t(c, id);
 	id = s ? s->tree : 0;
-	rcu_read_unlock();
 
 	return id;
 }
@@ -63,9 +67,7 @@ static inline u32 __bch2_snapshot_parent_early(struct bch_fs *c, u32 id)
 
 static inline u32 bch2_snapshot_parent_early(struct bch_fs *c, u32 id)
 {
-	rcu_read_lock();
 	id = __bch2_snapshot_parent_early(c, id);
-	rcu_read_unlock();
 
 	return id;
 }
@@ -89,19 +91,15 @@ static inline u32 __bch2_snapshot_parent(struct bch_fs *c, u32 id)
 
 static inline u32 bch2_snapshot_parent(struct bch_fs *c, u32 id)
 {
-	rcu_read_lock();
 	id = __bch2_snapshot_parent(c, id);
-	rcu_read_unlock();
 
 	return id;
 }
 
 static inline u32 bch2_snapshot_nth_parent(struct bch_fs *c, u32 id, u32 n)
 {
-	rcu_read_lock();
 	while (n--)
 		id = __bch2_snapshot_parent(c, id);
-	rcu_read_unlock();
 
 	return id;
 }
@@ -112,10 +110,8 @@ static inline u32 bch2_snapshot_root(struct bch_fs *c, u32 id)
 {
 	u32 parent;
 
-	rcu_read_lock();
 	while ((parent = __bch2_snapshot_parent(c, id)))
 		id = parent;
-	rcu_read_unlock();
 
 	return id;
 }
@@ -128,19 +124,15 @@ static inline u32 __bch2_snapshot_equiv(struct bch_fs *c, u32 id)
 
 static inline u32 bch2_snapshot_equiv(struct bch_fs *c, u32 id)
 {
-	rcu_read_lock();
 	id = __bch2_snapshot_equiv(c, id);
-	rcu_read_unlock();
 
 	return id;
 }
 
 static inline int bch2_snapshot_is_internal_node(struct bch_fs *c, u32 id)
 {
-	rcu_read_lock();
 	const struct snapshot_t *s = snapshot_t(c, id);
 	int ret = s ? s->children[0] : -BCH_ERR_invalid_snapshot_node;
-	rcu_read_unlock();
 
 	return ret;
 }
@@ -157,9 +149,7 @@ static inline u32 bch2_snapshot_depth(struct bch_fs *c, u32 parent)
 {
 	u32 depth;
 
-	rcu_read_lock();
 	depth = parent ? snapshot_t(c, parent)->depth + 1 : 0;
-	rcu_read_unlock();
 
 	return depth;
 }
@@ -175,10 +165,8 @@ static inline bool bch2_snapshot_is_ancestor(struct bch_fs *c, u32 id, u32 ances
 
 static inline bool bch2_snapshot_has_children(struct bch_fs *c, u32 id)
 {
-	rcu_read_lock();
 	const struct snapshot_t *t = snapshot_t(c, id);
 	bool ret = t && (t->children[0]|t->children[1]) != 0;
-	rcu_read_unlock();
 
 	return ret;
 }
