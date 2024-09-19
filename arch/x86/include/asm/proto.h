@@ -11,10 +11,17 @@ struct task_struct;
 void syscall_init(void);
 
 #ifdef CONFIG_X86_64
-void entry_SYSCALL_64(void);
-void entry_SYSCALL_64_safe_stack(void);
-void entry_SYSRETQ_unsafe_stack(void);
-void entry_SYSRETQ_end(void);
+
+void entry_SYSCALL_64_unmitigated(void);
+void entry_SYSCALL_64_safe_stack_unmitigated(void);
+void entry_SYSRETQ_unsafe_stack_unmitigated(void);
+void entry_SYSRETQ_end_unmitigated(void);
+
+void entry_SYSCALL_64_mitigated(void);
+void entry_SYSCALL_64_safe_stack_mitigated(void);
+void entry_SYSRETQ_unsafe_stack_mitigated(void);
+void entry_SYSRETQ_end_mitigated(void);
+
 long do_arch_prctl_64(struct task_struct *task, int option, unsigned long arg2);
 #endif
 

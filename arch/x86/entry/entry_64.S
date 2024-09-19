@@ -84,7 +84,7 @@
  * with them due to bugs in both AMD and Intel CPUs.
  */
 
-SYM_CODE_START(entry_SYSCALL_64)
+.macro __entry_SYSCALL_64 mitigated=0
 	UNWIND_HINT_ENTRY
 	ENDBR
 
@@ -94,7 +94,12 @@ SYM_CODE_START(entry_SYSCALL_64)
 	SWITCH_TO_KERNEL_CR3 scratch_reg=%rsp
 	movq	PER_CPU_VAR(pcpu_hot + X86_top_of_stack), %rsp
 
-SYM_INNER_LABEL(entry_SYSCALL_64_safe_stack, SYM_L_GLOBAL)
+.if \mitigated
+SYM_INNER_LABEL(entry_SYSCALL_64_safe_stack_mitigated, SYM_L_GLOBAL)
+.else
+SYM_INNER_LABEL(entry_SYSCALL_64_safe_stack_unmitigated, SYM_L_GLOBAL)
+.endif
+
 	ANNOTATE_NOENDBR
 
 	/* Construct struct pt_regs on stack */
@@ -103,7 +108,11 @@ SYM_INNER_LABEL(entry_SYSCALL_64_safe_stack, SYM_L_GLOBAL)
 	pushq	%r11					/* pt_regs->flags */
 	pushq	$__USER_CS				/* pt_regs->cs */
 	pushq	%rcx					/* pt_regs->ip */
+
+.if \mitigated
 SYM_INNER_LABEL(entry_SYSCALL_64_after_hwframe, SYM_L_GLOBAL)
+.endif
+
 	pushq	%rax					/* pt_regs->orig_ax */
 
 	PUSH_AND_CLEAR_REGS rax=$-ENOSYS
@@ -113,10 +122,12 @@ SYM_INNER_LABEL(entry_SYSCALL_64_after_hwframe, SYM_L_GLOBAL)
 	/* Sign extend the lower 32bit as syscall numbers are treated as int */
 	movslq	%eax, %rsi
 
+.if \mitigated
 	/* clobbers %rax, make sure it is after saving the syscall nr */
 	IBRS_ENTER
 	UNTRAIN_RET
 	CLEAR_BRANCH_HISTORY
+.endif
 
 	call	do_syscall_64		/* returns with IRQs disabled */
 
@@ -127,15 +138,26 @@ SYM_INNER_LABEL(entry_SYSCALL_64_after_hwframe, SYM_L_GLOBAL)
 	 * In the Xen PV case we must use iret anyway.
 	 */
 
-	ALTERNATIVE "testb %al, %al; jz swapgs_restore_regs_and_return_to_usermode", \
-		"jmp swapgs_restore_regs_and_return_to_usermode", X86_FEATURE_XENPV
+.if \mitigated
+	push %rax
+	IBRS_EXIT
+	CLEAR_CPU_BUFFERS
+	pop %rax
+.endif
+
+	ALTERNATIVE "testb %al, %al; jz swapgs_restore_regs_and_return_to_usermode_from_syscall", \
+		"jmp swapgs_restore_regs_and_return_to_usermode_from_syscall", X86_FEATURE_XENPV
 
 	/*
 	 * We win! This label is here just for ease of understanding
 	 * perf profiles. Nothing jumps here.
 	 */
-syscall_return_via_sysret:
-	IBRS_EXIT
+.if \mitigated
+syscall_return_via_sysret_mitigated:
+.else
+syscall_return_via_sysret_unmitigated:
+.endif
+
 	POP_REGS pop_rdi=0
 
 	/*
@@ -159,15 +181,36 @@ syscall_return_via_sysret:
 
 	popq	%rdi
 	popq	%rsp
-SYM_INNER_LABEL(entry_SYSRETQ_unsafe_stack, SYM_L_GLOBAL)
+
+.if \mitigated
+SYM_INNER_LABEL(entry_SYSRETQ_unsafe_stack_mitigated, SYM_L_GLOBAL)
+.else
+SYM_INNER_LABEL(entry_SYSRETQ_unsafe_stack_unmitigated, SYM_L_GLOBAL)
+.endif
+
 	ANNOTATE_NOENDBR
 	swapgs
-	CLEAR_CPU_BUFFERS
+
+.if \mitigated
+SYM_INNER_LABEL(entry_SYSRETQ_end_mitigated, SYM_L_GLOBAL)
+.else
+SYM_INNER_LABEL(entry_SYSRETQ_end_unmitigated, SYM_L_GLOBAL)
+.endif
 	sysretq
-SYM_INNER_LABEL(entry_SYSRETQ_end, SYM_L_GLOBAL)
+
+.endm /* __entry_SYSCALL_64 */
+
+SYM_CODE_START(entry_SYSCALL_64_unmitigated)
+	__entry_SYSCALL_64 mitigated=0
 	ANNOTATE_NOENDBR
 	int3
-SYM_CODE_END(entry_SYSCALL_64)
+SYM_CODE_END(entry_SYSCALL_64_unmitigated)
+
+SYM_CODE_START(entry_SYSCALL_64_mitigated)
+	__entry_SYSCALL_64 mitigated=1
+	ANNOTATE_NOENDBR
+	int3
+SYM_CODE_END(entry_SYSCALL_64_mitigated)
 
 /*
  * %rdi: prev task
@@ -559,6 +602,8 @@ __irqentry_text_end:
 SYM_CODE_START_LOCAL(common_interrupt_return)
 SYM_INNER_LABEL(swapgs_restore_regs_and_return_to_usermode, SYM_L_GLOBAL)
 	IBRS_EXIT
+	CLEAR_CPU_BUFFERS
+SYM_INNER_LABEL(swapgs_restore_regs_and_return_to_usermode_from_syscall, SYM_L_GLOBAL)
 #ifdef CONFIG_XEN_PV
 	ALTERNATIVE "", "jmp xenpv_restore_regs_and_return_to_usermode", X86_FEATURE_XENPV
 #endif
@@ -573,7 +618,6 @@ SYM_INNER_LABEL(swapgs_restore_regs_and_return_to_usermode, SYM_L_GLOBAL)
 
 .Lswapgs_and_iret:
 	swapgs
-	CLEAR_CPU_BUFFERS
 	/* Assert that the IRET frame indicates user mode. */
 	testb	$3, 8(%rsp)
 	jnz	.Lnative_iret

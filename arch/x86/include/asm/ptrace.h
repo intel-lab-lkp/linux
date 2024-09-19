@@ -261,11 +261,18 @@ static inline bool any_64bit_mode(struct pt_regs *regs)
 
 static __always_inline bool ip_within_syscall_gap(struct pt_regs *regs)
 {
-	bool ret = (regs->ip >= (unsigned long)entry_SYSCALL_64 &&
-		    regs->ip <  (unsigned long)entry_SYSCALL_64_safe_stack);
+	bool ret = (regs->ip >= (unsigned long)entry_SYSCALL_64_unmitigated &&
+		    regs->ip <  (unsigned long)entry_SYSCALL_64_safe_stack_unmitigated);
 
-	ret = ret || (regs->ip >= (unsigned long)entry_SYSRETQ_unsafe_stack &&
-		      regs->ip <  (unsigned long)entry_SYSRETQ_end);
+	ret = ret || (regs->ip >= (unsigned long)entry_SYSRETQ_unsafe_stack_unmitigated &&
+		      regs->ip <  (unsigned long)entry_SYSRETQ_end_unmitigated);
+
+	ret = ret || (regs->ip >= (unsigned long)entry_SYSCALL_64_mitigated &&
+		      regs->ip <  (unsigned long)entry_SYSCALL_64_safe_stack_mitigated);
+
+	ret = ret || (regs->ip >= (unsigned long)entry_SYSRETQ_unsafe_stack_mitigated &&
+		      regs->ip <  (unsigned long)entry_SYSRETQ_end_mitigated);
+
 #ifdef CONFIG_IA32_EMULATION
 	ret = ret || (regs->ip >= (unsigned long)entry_SYSCALL_compat &&
 		      regs->ip <  (unsigned long)entry_SYSCALL_compat_safe_stack);
