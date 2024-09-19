@@ -173,6 +173,7 @@ static bool nft_flowtable_find_dev(const struct net_device *dev,
 	struct nft_hook *hook;
 	bool found = false;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(hook, &ft->hook_list, list) {
 		if (hook->ops.dev != dev)
 			continue;
@@ -180,6 +181,7 @@ static bool nft_flowtable_find_dev(const struct net_device *dev,
 		found = true;
 		break;
 	}
+	rcu_read_unlock();
 
 	return found;
 }
