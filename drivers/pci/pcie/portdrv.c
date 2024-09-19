@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/aer.h>
+#include <linux/bitops.h>
 
 #include "../pci.h"
 #include "portdrv.h"
@@ -35,6 +36,134 @@ struct portdrv_service_data {
 	struct pcie_port_service_driver *drv;
 	struct device *dev;
 	u32 service;
+};
+
+/**
+ * pcie_brcm_is_p2p_supported - Broadcom device specific handler
+ *       to check if the upstream port supports inter switch P2P.
+ *
+ * @dev: PCIe upstream port to check
+ *
+ * This function assumes the PCIe upstream port is a Broadcom
+ * PCIe device.
+ */
+static bool pcie_brcm_is_p2p_supported(struct pci_dev *dev)
+{
+	u64 dsn;
+	u16 vsec;
+	u32 vsec_data;
+
+	dsn = pci_get_dsn(dev);
+	if (!dsn) {
+		pci_dbg(dev, "DSN capability is not present\n");
+		return false;
+	}
+
+	vsec = pci_find_vsec_capability(dev, PCI_VENDOR_ID_LSI_LOGIC,
+					PCIE_BRCM_SW_P2P_VSEC_ID);
+	if (!vsec) {
+		pci_dbg(dev, "Failed to get VSEC capability\n");
+		return false;
+	}
+
+	pci_read_config_dword(dev, vsec + PCIE_BRCM_SW_P2P_MODE_VSEC_OFFSET,
+			      &vsec_data);
+
+	pci_dbg(dev, "Serial Number: 0x%llx VSEC 0x%x\n",
+		dsn, vsec_data);
+
+	if (!PCIE_BRCM_SW_IS_SECURE_PART(dsn))
+		return false;
+
+	if (FIELD_GET(PCIE_BRCM_SW_P2P_MODE_MASK, vsec_data) !=
+		PCIE_BRCM_SW_P2P_MODE_INTER_SW_LINK)
+		return false;
+
+	return true;
+}
+
+/**
+ * Determine if device supports Inter switch P2P links.
+ *
+ * Return value: true if inter switch P2P is supported, return false otherwise.
+ */
+static bool pcie_port_is_p2p_supported(struct pci_dev *dev)
+{
+	/* P2P link attribute is supported on upstream ports only */
+	if (pci_pcie_type(dev) != PCI_EXP_TYPE_UPSTREAM)
+		return false;
+
+	/*
+	 * Currently Broadcom PEX switches are supported.
+	 */
+	if (dev->vendor == PCI_VENDOR_ID_LSI_LOGIC &&
+	    (dev->device == PCI_DEVICE_ID_BRCM_PEX_89000_HLC ||
+	     dev->device == PCI_DEVICE_ID_BRCM_PEX_89000_LLC))
+		return pcie_brcm_is_p2p_supported(dev);
+
+	return false;
+}
+
+/*
+ * Traverse list of all PCI bridges and find devices that support Inter switch P2P
+ * and have the same serial number to create report the BDF over sysfs.
+ */
+static ssize_t p2p_link_show(struct device *dev, struct device_attribute *attr,
+			     char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev), *pdev_link = NULL;
+	size_t len = 0;
+	u64 dsn, dsn_link;
+
+	dsn = pci_get_dsn(pdev);
+
+	/* Traverse list of PCI bridges to determine any available P2P links */
+	while ((pdev_link = pci_get_class(PCI_CLASS_BRIDGE_PCI << 8, pdev_link))
+			!= NULL) {
+		if (pdev_link == pdev)
+			continue;
+
+		if (!pcie_port_is_p2p_supported(pdev_link))
+			continue;
+
+		dsn_link = pci_get_dsn(pdev_link);
+		if (!dsn_link)
+			continue;
+
+		if (dsn == dsn_link)
+			len += sysfs_emit_at(buf, len, "%04x:%02x:%02x.%d\n",
+					     pci_domain_nr(pdev_link->bus),
+					     pdev_link->bus->number, PCI_SLOT(pdev_link->devfn),
+					     PCI_FUNC(pdev_link->devfn));
+	}
+
+	return len;
+}
+
+/* P2P link sysfs attribute. */
+static struct device_attribute dev_attr_p2p_link =
+	__ATTR(p2p_link, 0444, p2p_link_show, NULL);
+
+static struct attribute *pcie_port_p2p_link_attrs[] = {
+	&dev_attr_p2p_link.attr,
+	NULL
+};
+
+static umode_t pcie_port_p2p_link_attrs_is_visible(struct kobject *kobj,
+						   struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (!pcie_port_is_p2p_supported(pdev))
+		return 0;
+
+	return a->mode;
+}
+
+const struct attribute_group pcie_port_p2p_link_attr_group = {
+	.attrs = pcie_port_p2p_link_attrs,
+	.is_visible = pcie_port_p2p_link_attrs_is_visible,
 };
 
 /**
@@ -714,6 +843,8 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 		pm_runtime_put_autosuspend(&dev->dev);
 		pm_runtime_allow(&dev->dev);
 	}
+
+	sysfs_update_group(&dev->dev.kobj, &pcie_port_p2p_link_attr_group);
 
 	return 0;
 }

@@ -25,6 +25,16 @@
 
 #define PCIE_PORT_DEVICE_MAXSERVICES   5
 
+/* P2P Link supported device IDs */
+#define PCI_DEVICE_ID_BRCM_PEX_89000_HLC	0xC030
+#define PCI_DEVICE_ID_BRCM_PEX_89000_LLC	0xC034
+
+#define PCIE_BRCM_SW_P2P_VSEC_ID		0x1
+#define PCIE_BRCM_SW_P2P_MODE_VSEC_OFFSET	0xC
+#define PCIE_BRCM_SW_P2P_MODE_MASK		GENMASK(9, 8)
+#define PCIE_BRCM_SW_P2P_MODE_INTER_SW_LINK	0x2
+#define PCIE_BRCM_SW_IS_SECURE_PART(dsn)	((dsn) & 0x8)
+
 extern bool pcie_ports_dpc_native;
 
 #ifdef CONFIG_PCIEAER
