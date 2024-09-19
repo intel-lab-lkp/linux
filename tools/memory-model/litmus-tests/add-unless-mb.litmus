@@ -1,0 +1,27 @@
+C add_unless_mb
+
+(*
+ * Result: Never
+ *
+ * This litmus test demonstrates that a successful atomic_add_unless
+ * acts as a full memory barrier, ensuring that *x=1 propagates to P1
+ * before P1 executes *x=2.
+ *)
+
+{}
+
+P0(atomic_t *x, atomic_t *y, atomic_t *z)
+{
+	WRITE_ONCE(*x, 1);
+	int r0 = atomic_add_unless(z,1,5);
+	WRITE_ONCE(*y, 1);
+}
+
+P1(atomic_t *x, atomic_t *y)
+{
+	int r0 = READ_ONCE(*y);
+	if (r0 == 1)
+		WRITE_ONCE(*x, 2);
+}
+
+exists (1:r0=1 /\ x=1)
