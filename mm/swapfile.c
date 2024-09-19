@@ -3177,6 +3177,9 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	if (p->bdev && bdev_synchronous(p->bdev))
 		p->flags |= SWP_SYNCHRONOUS_IO;
 
+	if (p->bdev && bdev_read_synchronous(p->bdev))
+		p->flags |= SWP_READ_SYNCHRONOUS_IO;
+
 	if (p->bdev && bdev_nonrot(p->bdev)) {
 		int cpu, i;
 		unsigned long ci, nr_cluster;

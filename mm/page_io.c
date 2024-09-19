@@ -499,7 +499,7 @@ static void swap_read_folio_bdev_async(struct folio *folio,
 void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 {
 	struct swap_info_struct *sis = swp_swap_info(folio->swap);
-	bool synchronous = sis->flags & SWP_SYNCHRONOUS_IO;
+	bool synchronous = sis->flags & (SWP_SYNCHRONOUS_IO | SWP_READ_SYNCHRONOUS_IO);
 	bool workingset = folio_test_workingset(folio);
 	unsigned long pflags;
 	bool in_thrashing;
