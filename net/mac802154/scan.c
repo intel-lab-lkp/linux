@@ -180,6 +180,7 @@ void mac802154_scan_worker(struct work_struct *work)
 	unsigned int scan_duration = 0;
 	struct wpan_phy *wpan_phy;
 	u8 scan_req_duration;
+	enum nl802154_scan_types scan_req_type;
 	u8 page, channel;
 	int ret;
 
@@ -210,6 +211,7 @@ void mac802154_scan_worker(struct work_struct *work)
 
 	wpan_phy = scan_req->wpan_phy;
 	scan_req_duration = scan_req->duration;
+	scan_req_type = scan_req->type;
 
 	/* Look for the next valid chan */
 	page = local->scan_page;
@@ -246,7 +248,7 @@ void mac802154_scan_worker(struct work_struct *work)
 		goto end_scan;
 	}
 
-	if (scan_req->type == NL802154_SCAN_ACTIVE) {
+	if (scan_req_type == NL802154_SCAN_ACTIVE) {
 		ret = mac802154_transmit_beacon_req(local, sdata);
 		if (ret)
 			dev_err(&sdata->dev->dev,
