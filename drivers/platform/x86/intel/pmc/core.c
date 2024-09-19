@@ -1275,6 +1275,10 @@ static void pmc_core_acpi_pm_timer_suspend_resume(void *data, bool suspend)
 	if (!map->acpi_pm_tmr_ctl_offset)
 		return;
 
+	/* Check if the suspend will actually use S0ix */
+	if (suspend && pm_suspend_via_firmware())
+		return;
+
 	guard(mutex)(&pmcdev->lock);
 
 	if (!suspend && !pmcdev->enable_acpi_pm_timer_on_resume)
