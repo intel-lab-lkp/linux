@@ -23,60 +23,10 @@ pub mod code {
             pub const $err: super::Error = super::Error(-(crate::bindings::$err as i32));
         };
     }
-
-    declare_err!(EPERM, "Operation not permitted.");
-    declare_err!(ENOENT, "No such file or directory.");
-    declare_err!(ESRCH, "No such process.");
-    declare_err!(EINTR, "Interrupted system call.");
-    declare_err!(EIO, "I/O error.");
-    declare_err!(ENXIO, "No such device or address.");
-    declare_err!(E2BIG, "Argument list too long.");
-    declare_err!(ENOEXEC, "Exec format error.");
-    declare_err!(EBADF, "Bad file number.");
-    declare_err!(ECHILD, "No child processes.");
-    declare_err!(EAGAIN, "Try again.");
-    declare_err!(ENOMEM, "Out of memory.");
-    declare_err!(EACCES, "Permission denied.");
-    declare_err!(EFAULT, "Bad address.");
-    declare_err!(ENOTBLK, "Block device required.");
-    declare_err!(EBUSY, "Device or resource busy.");
-    declare_err!(EEXIST, "File exists.");
-    declare_err!(EXDEV, "Cross-device link.");
-    declare_err!(ENODEV, "No such device.");
-    declare_err!(ENOTDIR, "Not a directory.");
-    declare_err!(EISDIR, "Is a directory.");
-    declare_err!(EINVAL, "Invalid argument.");
-    declare_err!(ENFILE, "File table overflow.");
-    declare_err!(EMFILE, "Too many open files.");
-    declare_err!(ENOTTY, "Not a typewriter.");
-    declare_err!(ETXTBSY, "Text file busy.");
-    declare_err!(EFBIG, "File too large.");
-    declare_err!(ENOSPC, "No space left on device.");
-    declare_err!(ESPIPE, "Illegal seek.");
-    declare_err!(EROFS, "Read-only file system.");
-    declare_err!(EMLINK, "Too many links.");
-    declare_err!(EPIPE, "Broken pipe.");
-    declare_err!(EDOM, "Math argument out of domain of func.");
-    declare_err!(ERANGE, "Math result not representable.");
-    declare_err!(ERESTARTSYS, "Restart the system call.");
-    declare_err!(ERESTARTNOINTR, "System call was interrupted by a signal and will be restarted.");
-    declare_err!(ERESTARTNOHAND, "Restart if no handler.");
-    declare_err!(ENOIOCTLCMD, "No ioctl command.");
-    declare_err!(ERESTART_RESTARTBLOCK, "Restart by calling sys_restart_syscall.");
-    declare_err!(EPROBE_DEFER, "Driver requests probe retry.");
-    declare_err!(EOPENSTALE, "Open found a stale dentry.");
-    declare_err!(ENOPARAM, "Parameter not supported.");
-    declare_err!(EBADHANDLE, "Illegal NFS file handle.");
-    declare_err!(ENOTSYNC, "Update synchronization mismatch.");
-    declare_err!(EBADCOOKIE, "Cookie is stale.");
-    declare_err!(ENOTSUPP, "Operation is not supported.");
-    declare_err!(ETOOSMALL, "Buffer or request is too small.");
-    declare_err!(ESERVERFAULT, "An untranslatable error occurred.");
-    declare_err!(EBADTYPE, "Type not supported by server.");
-    declare_err!(EJUKEBOX, "Request initiated, but will not complete before timeout.");
-    declare_err!(EIOCBQUEUED, "iocb queued, will get completion event.");
-    declare_err!(ERECALLCONFLICT, "Conflict with recalled state.");
-    declare_err!(ENOGRACE, "NFS file lock reclaim refused.");
+    include!(concat!(
+        env!("OBJTREE"),
+        "/rust/kernel/errno_generated.rs"
+    ));
 }
 
 /// Generic integer kernel error.
