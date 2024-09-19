@@ -472,6 +472,12 @@ int bch2_parse_one_mount_opt(struct bch_fs *c, struct bch_opts *opts,
 	u64 v;
 	int ret, id;
 
+	if (!val) {
+		pr_err("Bad mount option, value is NULL");
+		ret = -BCH_ERR_option_value;
+		goto out;
+	}
+
 	id = bch2_mount_opt_lookup(name);
 
 	/* Check for the form "noopt", negation of a boolean opt: */
