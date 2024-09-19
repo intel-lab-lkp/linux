@@ -2465,7 +2465,8 @@ static int ip_route_input_rcu(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 }
 
 int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
-			 u8 tos, struct net_device *dev)
+			 u8 tos, struct net_device *dev,
+			 enum skb_drop_reason *reason)
 {
 	struct fib_result res;
 	int err;
