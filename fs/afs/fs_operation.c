@@ -197,12 +197,11 @@ void afs_wait_for_operation(struct afs_operation *op)
 			op->call_abort_code = op->call->abort_code;
 			op->call_error = op->call->error;
 			op->call_responded = op->call->responded;
+			if (op->call_responded)
+				set_bit(AFS_SERVER_FL_RESPONDING, &op->server->flags);
 			afs_put_call(op->call);
 		}
 	}
-
-	if (op->call_responded)
-		set_bit(AFS_SERVER_FL_RESPONDING, &op->server->flags);
 
 	if (!afs_op_error(op)) {
 		_debug("success");
