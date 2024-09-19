@@ -10,7 +10,7 @@
 
 #include "open_alliance_helpers.h"
 
-#define DP83TG720_CS_1_1_PHY_ID				0x2000a284
+#define DP83TG720_CS_1_1_PHY_ID			0x2000a284
 #define DP83TG721_CS_1_0_PHY_ID			0x2000a290
 #define MMD1F							0x1f
 #define MMD1							0x1
@@ -349,10 +349,10 @@ static int dp83tg720_reset(struct phy_device *phydev, bool hw_reset)
 
 	if (hw_reset)
 		ret = phy_write_mmd(phydev, MMD1F, DP83TG720_PHY_RESET_CTRL,
-				DP83TG720_HW_RESET);
+				    DP83TG720_HW_RESET);
 	else
 		ret = phy_write_mmd(phydev, MMD1F, DP83TG720_PHY_RESET_CTRL,
-				DP83TG720_SW_RESET);
+				    DP83TG720_SW_RESET);
 	if (ret)
 		return ret;
 
@@ -377,16 +377,17 @@ static int dp83tg720_phy_reset(struct phy_device *phydev)
 }
 
 static int DP83TG720_write_seq(struct phy_device *phydev,
-			     const struct DP83TG720_init_reg *init_data, int size)
+			       const struct DP83TG720_init_reg *init_data,
+			       int size)
 {
 	int ret;
 	int i;
 
 	for (i = 0; i < size; i++) {
-			ret = phy_write_mmd(phydev, init_data[i].MMD, init_data[i].reg,
-				init_data[i].val);
-			if (ret)
-					return ret;
+		ret = phy_write_mmd(phydev, init_data[i].MMD, init_data[i].reg,
+				    init_data[i].val);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -635,20 +636,20 @@ static int dp83tg720_chip_init(struct phy_device *phydev)
 	ret = dp83tg720_reset(phydev, true);
 	if (ret)
 		return ret;
-	
+
 	phydev->autoneg = AUTONEG_DISABLE;
-    phydev->speed = SPEED_1000;
+	phydev->speed = SPEED_1000;
 	phydev->duplex = DUPLEX_FULL;
-    linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, phydev->supported);
+	linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, phydev->supported);
 
 	switch (DP83TG720->chip) {
 	case DP83TG720_CS1_1:
 		if (DP83TG720->is_master)
 			ret = DP83TG720_write_seq(phydev, DP83TG720_cs1_1_master_init,
-						ARRAY_SIZE(DP83TG720_cs1_1_master_init));
+						  ARRAY_SIZE(DP83TG720_cs1_1_master_init));
 		else
 			ret = DP83TG720_write_seq(phydev, DP83TG720_cs1_1_slave_init,
-						ARRAY_SIZE(DP83TG720_cs1_1_slave_init));
+						  ARRAY_SIZE(DP83TG720_cs1_1_slave_init));
 
 		ret = dp83tg720_reset(phydev, false);
 
@@ -656,10 +657,10 @@ static int dp83tg720_chip_init(struct phy_device *phydev)
 	case DP83TG721_CS1:
 		if (DP83TG720->is_master)
 			ret = DP83TG720_write_seq(phydev, DP83TG721_cs1_master_init,
-						ARRAY_SIZE(DP83TG721_cs1_master_init));
+						  ARRAY_SIZE(DP83TG721_cs1_master_init));
 		else
 			ret = DP83TG720_write_seq(phydev, DP83TG721_cs1_slave_init,
-						ARRAY_SIZE(DP83TG721_cs1_slave_init));
+						  ARRAY_SIZE(DP83TG721_cs1_slave_init));
 
 		ret = dp83tg720_reset(phydev, false);
 
@@ -736,7 +737,7 @@ static int dp83tg720_probe(struct phy_device *phydev)
 	int ret;
 
 	DP83TG720 = devm_kzalloc(&phydev->mdio.dev, sizeof(*DP83TG720),
-			       GFP_KERNEL);
+				 GFP_KERNEL);
 	if (!DP83TG720)
 		return -ENOMEM;
 
@@ -760,33 +761,33 @@ static int dp83tg720_probe(struct phy_device *phydev)
 	return dp83tg720_config_init(phydev);
 }
 
-#define DP83TG720_PHY_DRIVER(_id, _name)                                \
-{                                                                       \
-    PHY_ID_MATCH_EXACT(_id),                                            \
-    .name                   = (_name),                                  \
-    .probe                  = dp83tg720_probe,                          \
-	.soft_reset				= dp83tg720_phy_reset,						\
-    .flags                  = PHY_POLL_CABLE_TEST,                      \
-    .config_aneg            = dp83tg720_config_aneg,                    \
-    .read_status            = dp83tg720_read_status,                    \
-    .get_features           = genphy_c45_pma_read_ext_abilities,        \
-    .config_init            = dp83tg720_config_init,                    \
-    .get_sqi                = dp83tg720_get_sqi,                        \
-    .get_sqi_max            = dp83tg720_get_sqi_max,                    \
-    .cable_test_start       = dp83tg720_cable_test_start,               \
-    .cable_test_get_status  = dp83tg720_cable_test_get_status,          \
-    .suspend                = genphy_suspend,                           \
-    .resume                 = genphy_resume,                            \
+#define DP83TG720_PHY_DRIVER(_id, _name)				\
+{									\
+	PHY_ID_MATCH_EXACT(_id),					\
+	.name                   = (_name),				\
+	.probe                  = dp83tg720_probe,			\
+	.soft_reset		= dp83tg720_phy_reset,			\
+	.flags                  = PHY_POLL_CABLE_TEST,			\
+	.config_aneg            = dp83tg720_config_aneg,		\
+	.read_status            = dp83tg720_read_status,		\
+	.get_features           = genphy_c45_pma_read_ext_abilities,	\
+	.config_init            = dp83tg720_config_init,		\
+	.get_sqi                = dp83tg720_get_sqi,			\
+	.get_sqi_max            = dp83tg720_get_sqi_max,		\
+	.cable_test_start       = dp83tg720_cable_test_start,		\
+	.cable_test_get_status  = dp83tg720_cable_test_get_status,	\
+	.suspend                = genphy_suspend,			\
+	.resume                 = genphy_resume,			\
 }
 
 static struct phy_driver dp83tg720_driver[] = {
-    DP83TG720_PHY_DRIVER(DP83TG720_CS_1_1_PHY_ID, "TI DP83TG720CS1.1"),
+	DP83TG720_PHY_DRIVER(DP83TG720_CS_1_1_PHY_ID, "TI DP83TG720CS1.1"),
 	DP83TG720_PHY_DRIVER(DP83TG721_CS_1_0_PHY_ID, "TI DP83TG721CS1.0"),
 };
 module_phy_driver(dp83tg720_driver);
 
 static struct mdio_device_id __maybe_unused dp83tg720_tbl[] = {
-    { PHY_ID_MATCH_EXACT(DP83TG720_CS_1_1_PHY_ID) },
+	{ PHY_ID_MATCH_EXACT(DP83TG720_CS_1_1_PHY_ID) },
 	{ PHY_ID_MATCH_EXACT(DP83TG721_CS_1_0_PHY_ID) },
 	{ },
 };
