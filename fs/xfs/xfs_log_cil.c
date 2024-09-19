@@ -171,13 +171,12 @@ xlog_cil_insert_pcp_aggregate(
 	 * structures that could have a nonzero space_used.
 	 */
 	for_each_cpu(cpu, &ctx->cil_pcpmask) {
-		int	old, prev;
+		int	old;
 
 		cilpcp = per_cpu_ptr(cil->xc_pcp, cpu);
+		old = READ_ONCE(cilpcp->space_used);
 		do {
-			old = cilpcp->space_used;
-			prev = cmpxchg(&cilpcp->space_used, old, 0);
-		} while (old != prev);
+		} while (!try_cmpxchg(&cilpcp->space_used, &old, 0));
 		count += old;
 	}
 	atomic_add(count, &ctx->space_used);
