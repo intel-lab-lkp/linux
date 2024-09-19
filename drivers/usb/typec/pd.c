@@ -519,7 +519,7 @@ EXPORT_SYMBOL_GPL(usb_power_delivery_register_capabilities);
  */
 void usb_power_delivery_unregister_capabilities(struct usb_power_delivery_capabilities *cap)
 {
-	if (!cap)
+	if (IS_ERR_OR_NULL(cap))
 		return;
 
 	device_for_each_child(&cap->dev, NULL, remove_pdo);
