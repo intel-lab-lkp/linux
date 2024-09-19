@@ -31,6 +31,11 @@ static long do_sys_name_to_handle(const struct path *path,
 	if (!exportfs_can_encode_fh(path->dentry->d_sb->s_export_op, fh_flags))
 		return -EOPNOTSUPP;
 
+	/* Do not encode a connectable handle for a disconnected dentry */
+	if (fh_flags & EXPORT_FH_CONNECTABLE &&
+	    path->dentry->d_flags & DCACHE_DISCONNECTED)
+		return -EACCES;
+
 	if (copy_from_user(&f_handle, ufh, sizeof(struct file_handle)))
 		return -EFAULT;
 
@@ -45,7 +50,7 @@ static long do_sys_name_to_handle(const struct path *path,
 	/* convert handle size to multiple of sizeof(u32) */
 	handle_dwords = f_handle.handle_bytes >> 2;
 
-	/* we ask for a non connectable maybe decodeable file handle */
+	/* Encode a possibly decodeable/connectable file handle */
 	retval = exportfs_encode_fh(path->dentry,
 				    (struct fid *)handle->f_handle,
 				    &handle_dwords, fh_flags);
@@ -109,15 +114,26 @@ SYSCALL_DEFINE5(name_to_handle_at, int, dfd, const char __user *, name,
 {
 	struct path path;
 	int lookup_flags;
-	int fh_flags;
+	int fh_flags = 0;
 	int err;
 
 	if (flag & ~(AT_SYMLINK_FOLLOW | AT_EMPTY_PATH | AT_HANDLE_FID |
-		     AT_HANDLE_MNT_ID_UNIQUE))
+		     AT_HANDLE_MNT_ID_UNIQUE | AT_HANDLE_CONNECTABLE))
 		return -EINVAL;
 
+	/*
+	 * AT_HANDLE_FID means there is no intention to decode file handle
+	 * AT_HANDLE_CONNECTABLE means there is an intention to decode a
+	 * connected fd (with known path), so these flags are conflicting.
+	 */
+	if (flag & AT_HANDLE_CONNECTABLE && flag & AT_HANDLE_FID)
+		return -EINVAL;
+	else if (flag & AT_HANDLE_FID)
+		fh_flags |= EXPORT_FH_FID;
+	else if (flag & AT_HANDLE_CONNECTABLE)
+		fh_flags |= EXPORT_FH_CONNECTABLE;
+
 	lookup_flags = (flag & AT_SYMLINK_FOLLOW) ? LOOKUP_FOLLOW : 0;
-	fh_flags = (flag & AT_HANDLE_FID) ? EXPORT_FH_FID : 0;
 	if (flag & AT_EMPTY_PATH)
 		lookup_flags |= LOOKUP_EMPTY;
 	err = user_path_at(dfd, name, lookup_flags, &path);
