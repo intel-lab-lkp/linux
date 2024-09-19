@@ -2220,6 +2220,8 @@ int8_t udf_current_aext(struct inode *inode, struct extent_position *epos,
 
 	switch (iinfo->i_alloc_type) {
 	case ICBTAG_FLAG_AD_SHORT:
+		if (unlikely(alen < 0 && epos->offset == epos->bh->b_size))
+			return -1;
 		sad = udf_get_fileshortad(ptr, alen, &epos->offset, inc);
 		if (!sad)
 			return -1;
