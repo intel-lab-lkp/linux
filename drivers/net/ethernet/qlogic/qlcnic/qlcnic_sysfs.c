@@ -959,8 +959,8 @@ static ssize_t qlcnic_83xx_sysfs_flash_read_handler(struct file *filp,
 	if (!p_read_buf)
 		return -ENOMEM;
 	if (qlcnic_83xx_lock_flash(adapter) != 0) {
-		kfree(p_read_buf);
-		return -EIO;
+		ret = -EIO;
+		goto free_read_buf;
 	}
 
 	ret = qlcnic_83xx_lockless_flash_read32(adapter, offset, p_read_buf,
@@ -968,8 +968,7 @@ static ssize_t qlcnic_83xx_sysfs_flash_read_handler(struct file *filp,
 
 	if (ret) {
 		qlcnic_83xx_unlock_flash(adapter);
-		kfree(p_read_buf);
-		return ret;
+		goto free_read_buf;
 	}
 
 	qlcnic_83xx_unlock_flash(adapter);
@@ -978,6 +977,10 @@ static ssize_t qlcnic_83xx_sysfs_flash_read_handler(struct file *filp,
 	kfree(p_read_buf);
 
 	return size;
+
+free_read_buf:
+	kfree(p_read_buf);
+	return ret;
 }
 
 static int qlcnic_83xx_sysfs_flash_bulk_write(struct qlcnic_adapter *adapter,
@@ -996,18 +999,13 @@ static int qlcnic_83xx_sysfs_flash_bulk_write(struct qlcnic_adapter *adapter,
 	memcpy(p_cache, buf, size);
 	p_src = p_cache;
 
-	if (qlcnic_83xx_lock_flash(adapter) != 0) {
-		kfree(p_cache);
-		return -EIO;
-	}
+	if (qlcnic_83xx_lock_flash(adapter))
+		goto free_cache;
 
 	if (adapter->ahw->fdt.mfg_id == adapter->flash_mfg_id) {
 		ret = qlcnic_83xx_enable_flash_write(adapter);
-		if (ret) {
-			kfree(p_cache);
-			qlcnic_83xx_unlock_flash(adapter);
-			return -EIO;
-		}
+		if (ret)
+			goto unlock_adapter;
 	}
 
 	for (i = 0; i < count / QLC_83XX_FLASH_WRITE_MAX; i++) {
@@ -1018,16 +1016,11 @@ static int qlcnic_83xx_sysfs_flash_bulk_write(struct qlcnic_adapter *adapter,
 		if (ret) {
 			if (adapter->ahw->fdt.mfg_id == adapter->flash_mfg_id) {
 				ret = qlcnic_83xx_disable_flash_write(adapter);
-				if (ret) {
-					kfree(p_cache);
-					qlcnic_83xx_unlock_flash(adapter);
-					return -EIO;
-				}
+				if (ret)
+					goto unlock_adapter;
 			}
 
-			kfree(p_cache);
-			qlcnic_83xx_unlock_flash(adapter);
-			return -EIO;
+			goto unlock_adapter;
 		}
 
 		p_src = p_src + sizeof(u32)*QLC_83XX_FLASH_WRITE_MAX;
@@ -1036,17 +1029,20 @@ static int qlcnic_83xx_sysfs_flash_bulk_write(struct qlcnic_adapter *adapter,
 
 	if (adapter->ahw->fdt.mfg_id == adapter->flash_mfg_id) {
 		ret = qlcnic_83xx_disable_flash_write(adapter);
-		if (ret) {
-			kfree(p_cache);
-			qlcnic_83xx_unlock_flash(adapter);
-			return -EIO;
-		}
+		if (ret)
+			goto unlock_adapter;
 	}
 
 	kfree(p_cache);
 	qlcnic_83xx_unlock_flash(adapter);
 
 	return 0;
+
+unlock_adapter:
+	qlcnic_83xx_unlock_flash(adapter);
+free_cache:
+	kfree(p_cache);
+	return -EIO;
 }
 
 static int qlcnic_83xx_sysfs_flash_write(struct qlcnic_adapter *adapter,
@@ -1064,18 +1060,13 @@ static int qlcnic_83xx_sysfs_flash_write(struct qlcnic_adapter *adapter,
 	p_src = p_cache;
 	count = size / sizeof(u32);
 
-	if (qlcnic_83xx_lock_flash(adapter) != 0) {
-		kfree(p_cache);
-		return -EIO;
-	}
+	if (qlcnic_83xx_lock_flash(adapter))
+		goto free_cache;
 
 	if (adapter->ahw->fdt.mfg_id == adapter->flash_mfg_id) {
 		ret = qlcnic_83xx_enable_flash_write(adapter);
-		if (ret) {
-			kfree(p_cache);
-			qlcnic_83xx_unlock_flash(adapter);
-			return -EIO;
-		}
+		if (ret)
+			goto unlock_adapter;
 	}
 
 	for (i = 0; i < count; i++) {
@@ -1083,15 +1074,11 @@ static int qlcnic_83xx_sysfs_flash_write(struct qlcnic_adapter *adapter,
 		if (ret) {
 			if (adapter->ahw->fdt.mfg_id == adapter->flash_mfg_id) {
 				ret = qlcnic_83xx_disable_flash_write(adapter);
-				if (ret) {
-					kfree(p_cache);
-					qlcnic_83xx_unlock_flash(adapter);
-					return -EIO;
-				}
+				if (ret)
+					goto unlock_adapter;
 			}
-			kfree(p_cache);
-			qlcnic_83xx_unlock_flash(adapter);
-			return -EIO;
+
+			goto unlock_adapter;
 		}
 
 		p_src = p_src + sizeof(u32);
@@ -1100,17 +1087,20 @@ static int qlcnic_83xx_sysfs_flash_write(struct qlcnic_adapter *adapter,
 
 	if (adapter->ahw->fdt.mfg_id == adapter->flash_mfg_id) {
 		ret = qlcnic_83xx_disable_flash_write(adapter);
-		if (ret) {
-			kfree(p_cache);
-			qlcnic_83xx_unlock_flash(adapter);
-			return -EIO;
-		}
+		if (ret)
+			goto unlock_adapter;
 	}
 
 	kfree(p_cache);
 	qlcnic_83xx_unlock_flash(adapter);
 
 	return 0;
+
+unlock_adapter:
+	qlcnic_83xx_unlock_flash(adapter);
+free_cache:
+	kfree(p_cache);
+	return -EIO;
 }
 
 static ssize_t qlcnic_83xx_sysfs_flash_write_handler(struct file *filp,
