@@ -101,6 +101,7 @@ static const struct inet6_protocol icmpv6_protocol = {
 
 /* Called with BH disabled */
 static struct sock *icmpv6_xmit_lock(struct net *net)
+	__acquires(&sk->sk_lock.slock)
 {
 	struct sock *sk;
 
@@ -117,6 +118,7 @@ static struct sock *icmpv6_xmit_lock(struct net *net)
 }
 
 static void icmpv6_xmit_unlock(struct sock *sk)
+	__releases(&sk->sk_lock.slock)
 {
 	sock_net_set(sk, &init_net);
 	spin_unlock(&sk->sk_lock.slock);
