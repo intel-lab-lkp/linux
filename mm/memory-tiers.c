@@ -138,7 +138,6 @@ static DEFINE_MUTEX(default_dram_perf_lock);
 static bool default_dram_perf_error;
 static struct access_coordinate default_dram_perf;
 static int default_dram_perf_ref_nid = NUMA_NO_NODE;
-static const char *default_dram_perf_ref_source;
 
 static inline struct memory_tier *to_memory_tier(struct device *device)
 {
@@ -747,7 +746,6 @@ int mt_set_default_dram_perf(int nid, struct access_coordinate *perf,
 	if (default_dram_perf_ref_nid == NUMA_NO_NODE) {
 		default_dram_perf = *perf;
 		default_dram_perf_ref_nid = nid;
-		default_dram_perf_ref_source = kstrdup(source, GFP_KERNEL);
 		return 0;
 	}
 
