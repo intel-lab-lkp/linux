@@ -48,6 +48,7 @@
 
 struct amd_asf_dev {
 	struct i2c_adapter adap;
+	void __iomem *eoi_base;
 	struct i2c_client *target;
 	struct delayed_work work_buf;
 	struct sb800_mmio_cfg mmio_cfg;
@@ -292,12 +293,14 @@ static irqreturn_t amd_asf_irq_handler(int irq, void *ptr)
 		amd_asf_update_ioport_target(piix4_smba, ASF_SLV_INTR, SMBHSTSTS, true);
 	}
 
+	iowrite32(irq, dev->eoi_base);
 	return IRQ_HANDLED;
 }
 
 static int amd_asf_probe(struct platform_device *pdev)
 {
 	struct amd_asf_dev *asf_dev;
+	struct resource *eoi_addr;
 	int ret, irq;
 
 	asf_dev = devm_kzalloc(&pdev->dev, sizeof(*asf_dev), GFP_KERNEL);
@@ -308,6 +311,21 @@ static int amd_asf_probe(struct platform_device *pdev)
 	asf_dev->port_addr = platform_get_resource(pdev, IORESOURCE_IO, 0);
 	if (!asf_dev->port_addr)
 		return dev_err_probe(&pdev->dev, -EINVAL, "missing IO resources\n");
+
+	/*
+	 * The resource obtained via ACPI might not belong to the ASF device address space. Instead,
+	 * it could be within other IP blocks of the ASIC, which are crucial for generating
+	 * subsequent interrupts. Therefore, we avoid using devm_platform_ioremap_resource() and
+	 * instead use platform_get_resource() and devm_ioremap() separately to prevent any address
+	 * space conflicts.
+	 */
+	eoi_addr = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!eoi_addr)
+		return dev_err_probe(&pdev->dev, -EINVAL, "missing MEM resources\n");
+
+	asf_dev->eoi_base = devm_ioremap(&pdev->dev, eoi_addr->start, resource_size(eoi_addr));
+	if (!asf_dev->eoi_base)
+		return dev_err_probe(&pdev->dev, -EBUSY, "failed mapping IO region\n");
 
 	ret = devm_delayed_work_autocancel(&pdev->dev, &asf_dev->work_buf, amd_asf_process_target);
 	if (ret)
