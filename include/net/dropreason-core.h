@@ -366,7 +366,7 @@ enum skb_drop_reason {
 	SKB_DROP_REASON_IP_INADDRERRORS,
 	/**
 	 * @SKB_DROP_REASON_IP_INNOROUTES: network unreachable, corresponding to
-	 * IPSTATS_MIB_INADDRERRORS
+	 * IPSTATS_MIB_INNOROUTES
 	 */
 	SKB_DROP_REASON_IP_INNOROUTES,
 	/** @SKB_DROP_REASON_IP_LOCAL_SOURCE: the source ip is local */
