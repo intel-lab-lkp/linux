@@ -1788,6 +1788,7 @@ static int __mkroute_input(struct sk_buff *skb,
 	err = fib_validate_source(skb, saddr, daddr, tos, FIB_RES_OIF(*res),
 				  in_dev->dev, in_dev, &itag);
 	if (err < 0) {
+		err = -EINVAL;
 		ip_handle_martian_source(in_dev->dev, in_dev, skb, daddr,
 					 saddr);
 
@@ -2162,8 +2163,10 @@ int ip_route_use_hint(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 
 	tos &= INET_DSCP_MASK;
 	err = fib_validate_source(skb, saddr, daddr, tos, 0, dev, in_dev, &tag);
-	if (err < 0)
+	if (err < 0) {
+		err = -EINVAL;
 		goto martian_source;
+	}
 
 skip_validate_source:
 	skb_dst_copy(skb, hint);
@@ -2313,8 +2316,11 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	if (res->type == RTN_LOCAL) {
 		err = fib_validate_source(skb, saddr, daddr, tos,
 					  0, dev, in_dev, &itag);
-		if (err < 0)
+		if (err < 0) {
+			__reason = -err;
+			err = -EINVAL;
 			goto martian_source;
+		}
 		goto local_input;
 	}
 
@@ -2339,8 +2345,11 @@ brd_input:
 	if (!ipv4_is_zeronet(saddr)) {
 		err = fib_validate_source(skb, saddr, 0, tos, 0, dev,
 					  in_dev, &itag);
-		if (err < 0)
+		if (err < 0) {
+			err = -EINVAL;
+			__reason = -err;
 			goto martian_source;
+		}
 	}
 	flags |= RTCF_BROADCAST;
 	res->type = RTN_BROADCAST;
