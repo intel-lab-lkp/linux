@@ -643,6 +643,16 @@ config GPIO_SIOX
 	  Say yes here to support SIOX I/O devices. These are units connected
 	  via a SIOX bus and have a number of fixed-direction I/O lines.
 
+config GPIO_SIUL2_S32G2
+        tristate "GPIO driver for S32G2/S32G3"
+        depends on ARCH_S32 || COMPILE_TEST
+        depends on OF_GPIO
+        select REGMAP_MMIO
+        help
+          This enables support for the SIUL2 GPIOs found on the S32G2/S32G3
+          chips. Say yes here to enable the SIUL2 to be used as an GPIO
+          controller for S32G2/S32G3 platforms.
+
 config GPIO_SNPS_CREG
 	bool "Synopsys GPIO via CREG (Control REGisters) driver"
 	depends on ARC || COMPILE_TEST
