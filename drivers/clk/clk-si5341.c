@@ -855,7 +855,7 @@ static int si5341_output_clk_determine_rate(struct clk_hw *hw,
 	} else {
 		/* We cannot change our parent's rate, report what we can do */
 		r /= rate;
-		rate = req->best_parent_rate / (r << 1);
+		rate = r ? req->best_parent_rate / (r << 1) : req->best_parent_rate;
 	}
 
 	req->rate = rate;
