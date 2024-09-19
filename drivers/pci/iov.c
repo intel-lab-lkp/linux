@@ -181,6 +181,86 @@ bool pci_iov_memory_decoding_enabled(struct pci_dev *dev)
 	return cmd & PCI_SRIOV_CTRL_MSE;
 }
 
+static void pci_iov_resource_do_extend(struct pci_dev *dev, int resno, u16 num_vfs)
+{
+	resource_size_t size;
+	int ret, old, i;
+	u32 sizes;
+
+	pci_config_pm_runtime_get(dev);
+
+	if (pci_iov_memory_decoding_enabled(dev)) {
+		ret = -EBUSY;
+		goto err;
+	}
+
+	sizes = pci_rebar_get_possible_sizes(dev, resno);
+	if (!sizes) {
+		ret = -ENOTSUPP;
+		goto err;
+	}
+
+	old = pci_rebar_get_current_size(dev, resno);
+	if (old < 0) {
+		ret = old;
+		goto err;
+	}
+
+	while (sizes > 0) {
+		i = __fls(sizes);
+		size = pci_rebar_size_to_bytes(i);
+		if (size * num_vfs <= pci_resource_len(dev, resno)) {
+			if (i != old) {
+				ret = pci_rebar_set_size(dev, resno, size);
+				if (ret)
+					goto err;
+
+				pci_iov_resource_set_size(dev, resno, size);
+				pci_iov_update_resource(dev, resno);
+			}
+			break;
+		}
+		sizes &= ~BIT(i);
+	}
+
+	pci_config_pm_runtime_put(dev);
+
+	return;
+
+err:
+	dev_WARN(&dev->dev, "Failed to extend %s: %d\n",
+		 pci_resource_name(dev, resno), ret);
+
+	pci_config_pm_runtime_put(dev);
+}
+
+static void pci_iov_resource_do_restore(struct pci_dev *dev, int resno)
+{
+	if (dev->sriov->rebar_extend[resno - PCI_IOV_RESOURCES])
+		pci_iov_resource_do_extend(dev, resno, dev->sriov->total_VFs);
+}
+
+int pci_iov_resource_extend(struct pci_dev *dev, int resno, bool enable)
+{
+	if (!pci_resource_is_iov(dev, resno)) {
+		dev_WARN(&dev->dev, "%s is not an IOV resource\n",
+			 pci_resource_name(dev, resno));
+
+		return -ENODEV;
+	}
+
+	if (!pci_rebar_get_possible_sizes(dev, resno))
+		return -ENOTSUPP;
+
+	if (!enable)
+		pci_iov_resource_do_restore(dev, resno);
+
+	dev->sriov->rebar_extend[resno - PCI_IOV_RESOURCES] = enable;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_iov_resource_extend);
+
 static void pci_read_vf_config_common(struct pci_dev *virtfn)
 {
 	struct pci_dev *physfn = virtfn->physfn;
@@ -445,7 +525,7 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 				  const char *buf, size_t count)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	int ret = 0;
+	int i, ret = 0;
 	u16 num_vfs;
 
 	if (kstrtou16(buf, 0, &num_vfs) < 0)
@@ -485,6 +565,11 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 			 pdev->sriov->num_VFs, num_vfs);
 		ret = -EBUSY;
 		goto exit;
+	}
+
+	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
+		if (pdev->sriov->rebar_extend[i])
+			pci_iov_resource_do_extend(pdev, i + PCI_IOV_RESOURCES, num_vfs);
 	}
 
 	ret = pdev->driver->sriov_configure(pdev, num_vfs);
@@ -881,7 +966,12 @@ failed:
 
 static void sriov_release(struct pci_dev *dev)
 {
+	int i;
+
 	BUG_ON(dev->sriov->num_VFs);
+
+	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++)
+		pci_iov_resource_do_restore(dev, i + PCI_IOV_RESOURCES);
 
 	if (dev != dev->sriov->dev)
 		pci_dev_put(dev->sriov->dev);
