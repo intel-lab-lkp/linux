@@ -1286,6 +1286,13 @@ static int btrfs_remount_rw(struct btrfs_fs_info *fs_info)
 		return -EINVAL;
 	}
 
+	/*
+	 * Re-check the options. The check inside btrfs_reconfigure() can be
+	 * skipped to support different RO/RW flags for different subvolumes.
+	 */
+	if (!btrfs_check_options(fs_info, &fs_info->mount_opt, 0))
+		return -EINVAL;
+
 	if (fs_info->fs_devices->rw_devices == 0)
 		return -EACCES;
 
