@@ -427,13 +427,44 @@ void pci_release_resource(struct pci_dev *dev, int resno)
 }
 EXPORT_SYMBOL(pci_release_resource);
 
+static bool pci_memory_decoding_enabled(struct pci_dev *dev)
+{
+	u16 cmd;
+
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+
+	return cmd & PCI_COMMAND_MEMORY;
+}
+
+static int pci_resize_check_memory_decoding(struct pci_dev *dev, int resno)
+{
+	if (!pci_resource_is_iov(dev, resno) && pci_memory_decoding_enabled(dev))
+		return -EBUSY;
+	else if (pci_resource_is_iov(dev, resno) && pci_iov_memory_decoding_enabled(dev))
+		return -EBUSY;
+
+	return 0;
+}
+
+static void pci_resize_resource_set_size(struct pci_dev *dev, int resno, int size)
+{
+	resource_size_t res_size = pci_rebar_size_to_bytes(size);
+	struct resource *res = dev->resource + resno;
+
+	if (!pci_resource_is_iov(dev, resno)) {
+		res->end = res->start + res_size - 1;
+	} else {
+		res->end = res->start + res_size * pci_sriov_get_totalvfs(dev) - 1;
+		pci_iov_resource_set_size(dev, resno, res_size);
+	}
+}
+
 int pci_resize_resource(struct pci_dev *dev, int resno, int size)
 {
 	struct resource *res = dev->resource + resno;
 	struct pci_host_bridge *host;
 	int old, ret;
 	u32 sizes;
-	u16 cmd;
 
 	/* Check if we must preserve the firmware's resource assignment */
 	host = pci_find_host_bridge(dev->bus);
@@ -444,9 +475,9 @@ int pci_resize_resource(struct pci_dev *dev, int resno, int size)
 	if (!(res->flags & IORESOURCE_UNSET))
 		return -EBUSY;
 
-	pci_read_config_word(dev, PCI_COMMAND, &cmd);
-	if (cmd & PCI_COMMAND_MEMORY)
-		return -EBUSY;
+	ret = pci_resize_check_memory_decoding(dev, resno);
+	if (ret)
+		return ret;
 
 	sizes = pci_rebar_get_possible_sizes(dev, resno);
 	if (!sizes)
@@ -463,7 +494,7 @@ int pci_resize_resource(struct pci_dev *dev, int resno, int size)
 	if (ret)
 		return ret;
 
-	res->end = res->start + pci_rebar_size_to_bytes(size) - 1;
+	pci_resize_resource_set_size(dev, resno, size);
 
 	/* Check if the new config works by trying to assign everything. */
 	if (dev->bus->self) {
@@ -475,7 +506,8 @@ int pci_resize_resource(struct pci_dev *dev, int resno, int size)
 
 error_resize:
 	pci_rebar_set_size(dev, resno, old);
-	res->end = res->start + pci_rebar_size_to_bytes(old) - 1;
+	pci_resize_resource_set_size(dev, resno, old);
+
 	return ret;
 }
 EXPORT_SYMBOL(pci_resize_resource);

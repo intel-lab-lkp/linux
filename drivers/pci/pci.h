@@ -556,6 +556,9 @@ void pci_restore_iov_state(struct pci_dev *dev);
 int pci_iov_bus_range(struct pci_bus *bus);
 extern const struct attribute_group sriov_pf_dev_attr_group;
 extern const struct attribute_group sriov_vf_dev_attr_group;
+bool pci_resource_is_iov(struct pci_dev *dev, int resno);
+bool pci_iov_memory_decoding_enabled(struct pci_dev *dev);
+void pci_iov_resource_set_size(struct pci_dev *dev, int resno, resource_size_t size);
 #else
 static inline int pci_iov_init(struct pci_dev *dev)
 {
@@ -568,7 +571,16 @@ static inline int pci_iov_bus_range(struct pci_bus *bus)
 {
 	return 0;
 }
-
+static inline bool pci_iov_memory_decoding_enabled(struct pci_dev *dev)
+{
+	return false;
+}
+static inline bool pci_resource_is_iov(struct pci_dev *dev, int resno)
+{
+	return false;
+}
+static inline void pci_iov_resource_set_size(struct pci_dev *dev, int resno,
+					     resource_size_t size) { }
 #endif /* CONFIG_PCI_IOV */
 
 #ifdef CONFIG_PCIE_PTM
