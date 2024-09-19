@@ -6,6 +6,7 @@
  */
 
 #include <dwarf.h>
+#include <errno.h>
 #include <elfutils/libdw.h>
 #include <elfutils/libdwfl.h>
 #include <elfutils/version.h>
