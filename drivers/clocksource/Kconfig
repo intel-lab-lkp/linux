@@ -494,8 +494,8 @@ config MTK_CPUX_TIMER
 config SPRD_TIMER
 	bool "Spreadtrum timer driver" if EXPERT
 	depends on HAS_IOMEM
-	depends on (ARCH_SPRD || COMPILE_TEST)
-	default ARCH_SPRD
+	depends on (ARM || ARM64 || COMPILE_TEST)
+	default y
 	select TIMER_OF
 	help
 	  Enables support for the Spreadtrum timer driver.
