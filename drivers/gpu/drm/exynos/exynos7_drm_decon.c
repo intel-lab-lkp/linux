@@ -152,7 +152,7 @@ static void decon_commit(struct exynos_drm_crtc *crtc)
 	struct drm_display_mode *mode = &crtc->base.state->adjusted_mode;
 	u32 val, clkdiv;
 
-	if (ctx->suspended)
+	if (!ctx->suspended)
 		return;
 
 	/* nothing to do if we haven't set the mode yet */
