@@ -227,6 +227,10 @@ insert_msg:
 	info->attr.mq_curmsgs++;
 	info->qsize += msg->m_ts;
 	list_add_tail(&msg->m_list, &leaf->msg_list);
+
+	if (info->node_cache == NULL)
+		kfree(leaf);
+
 	return 0;
 }
 
