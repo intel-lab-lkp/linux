@@ -132,6 +132,7 @@ struct platform_suspend_ops {
 };
 
 struct platform_s2idle_ops {
+	int (*screen_off)(void);
 	int (*begin)(void);
 	int (*prepare)(void);
 	int (*prepare_late)(void);
@@ -140,6 +141,7 @@ struct platform_s2idle_ops {
 	void (*restore_early)(void);
 	void (*restore)(void);
 	void (*end)(void);
+	int (*screen_on)(void);
 };
 
 #ifdef CONFIG_SUSPEND
@@ -159,6 +161,9 @@ extern unsigned int pm_suspend_global_flags;
 #define PM_SUSPEND_FLAG_FW_SUSPEND	BIT(0)
 #define PM_SUSPEND_FLAG_FW_RESUME	BIT(1)
 #define PM_SUSPEND_FLAG_NO_PLATFORM	BIT(2)
+
+int platform_suspend_screen_off(void);
+int platform_suspend_screen_on(void);
 
 static inline void pm_suspend_clear_flags(void)
 {
