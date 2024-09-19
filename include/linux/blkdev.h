@@ -332,6 +332,9 @@ typedef unsigned int __bitwise blk_features_t;
 #define BLK_FEAT_RAID_PARTIAL_STRIPES_EXPENSIVE \
 	((__force blk_features_t)(1u << 15))
 
+/* read operations always completes in submit context */
+#define BLK_FEAT_READ_SYNCHRONOUS	((__force blk_features_t)(1u << 16))
+
 /*
  * Flags automatically inherited when stacking limits.
  */
@@ -1308,6 +1311,11 @@ static inline bool bdev_nonrot(struct block_device *bdev)
 static inline bool bdev_synchronous(struct block_device *bdev)
 {
 	return bdev->bd_disk->queue->limits.features & BLK_FEAT_SYNCHRONOUS;
+}
+
+static inline bool bdev_read_synchronous(struct block_device *bdev)
+{
+	return bdev->bd_disk->queue->limits.features & BLK_FEAT_READ_SYNCHRONOUS;
 }
 
 static inline bool bdev_stable_writes(struct block_device *bdev)
