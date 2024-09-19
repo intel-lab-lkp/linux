@@ -8,6 +8,7 @@
 
 static bool dw_dma_acpi_filter(struct dma_chan *chan, void *param)
 {
+	struct dw_dma *dw = to_dw_dma(chan->device);
 	struct acpi_dma_spec *dma_spec = param;
 	struct dw_dma_slave slave = {
 		.dma_dev = dma_spec->dev,
@@ -16,6 +17,13 @@ static bool dw_dma_acpi_filter(struct dma_chan *chan, void *param)
 		.m_master = 0,
 		.p_master = 1,
 	};
+
+	/*
+	 * Fallback to using a single interface for both memory and peripheral
+	 * device if there is only one master I/F supported (e.g. iDMA32)
+	 */
+	if (dw->pdata->nr_masters == 1)
+		slave.p_master = 0;
 
 	return dw_dma_filter(chan, &slave);
 }
