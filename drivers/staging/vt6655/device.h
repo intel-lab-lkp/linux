@@ -140,7 +140,7 @@ struct vnt_private {
 
 	struct vnt_rx_desc *aRD0Ring;
 	struct vnt_rx_desc *aRD1Ring;
-	struct vnt_rx_desc *pCurrRD[TYPE_MAXRD];
+	struct vnt_rx_desc *p_curr_rd[TYPE_MAXRD];
 
 	struct vnt_options opts;
 

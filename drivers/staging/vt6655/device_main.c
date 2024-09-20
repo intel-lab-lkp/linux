@@ -623,7 +623,7 @@ static int device_init_rd0_ring(struct vnt_private *priv)
 
 	if (i > 0)
 		priv->aRD0Ring[i - 1].next_desc = cpu_to_le32(priv->rd0_pool_dma);
-	priv->pCurrRD[0] = &priv->aRD0Ring[0];
+	priv->p_curr_rd[0] = &priv->aRD0Ring[0];
 
 	return 0;
 
@@ -669,7 +669,7 @@ static int device_init_rd1_ring(struct vnt_private *priv)
 
 	if (i > 0)
 		priv->aRD1Ring[i - 1].next_desc = cpu_to_le32(priv->rd1_pool_dma);
-	priv->pCurrRD[1] = &priv->aRD1Ring[0];
+	priv->p_curr_rd[1] = &priv->aRD1Ring[0];
 
 	return 0;
 
@@ -823,7 +823,7 @@ static int device_rx_srv(struct vnt_private *priv, unsigned int idx)
 	struct vnt_rx_desc *rd;
 	int works = 0;
 
-	for (rd = priv->pCurrRD[idx];
+	for (rd = priv->p_curr_rd[idx];
 	     rd->rd0.owner == OWNED_BY_HOST;
 	     rd = rd->next) {
 		if (works++ > 15)
@@ -842,7 +842,7 @@ static int device_rx_srv(struct vnt_private *priv, unsigned int idx)
 		rd->rd0.owner = OWNED_BY_NIC;
 	}
 
-	priv->pCurrRD[idx] = rd;
+	priv->p_curr_rd[idx] = rd;
 
 	return works;
 }

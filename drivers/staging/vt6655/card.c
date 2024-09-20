@@ -435,8 +435,8 @@ void card_v_safe_reset_rx(struct vnt_private *priv)
 	struct vnt_rx_desc *p_desc;
 
 	/* initialize RD index */
-	priv->pCurrRD[0] = &priv->aRD0Ring[0];
-	priv->pCurrRD[1] = &priv->aRD1Ring[0];
+	priv->p_curr_rd[0] = &priv->aRD0Ring[0];
+	priv->p_curr_rd[1] = &priv->aRD1Ring[0];
 
 	/* init state, all RD is chip's */
 	for (uu = 0; uu < priv->opts.rx_descs0; uu++) {
