@@ -307,10 +307,10 @@ static const struct ad7606_bus_ops ad7606B_spi_bops = {
 
 static int ad7606_spi_probe(struct spi_device *spi)
 {
-	const struct spi_device_id *id = spi_get_device_id(spi);
+	const struct ad7606_chip_info *chip_info = spi_get_device_match_data(spi);
 	const struct ad7606_bus_ops *bops;
 
-	switch (id->driver_data) {
+	switch (chip_info->id) {
 	case ID_AD7616:
 		bops = &ad7616_spi_bops;
 		break;
@@ -323,28 +323,27 @@ static int ad7606_spi_probe(struct spi_device *spi)
 	}
 
 	return ad7606_probe(&spi->dev, spi->irq, NULL,
-			    id->name, id->driver_data,
-			    bops);
+			    chip_info, bops);
 }
 
 static const struct spi_device_id ad7606_id_table[] = {
-	{ "ad7605-4", ID_AD7605_4 },
-	{ "ad7606-4", ID_AD7606_4 },
-	{ "ad7606-6", ID_AD7606_6 },
-	{ "ad7606-8", ID_AD7606_8 },
-	{ "ad7606b",  ID_AD7606B },
-	{ "ad7616",   ID_AD7616 },
+	{ "ad7605-4", (kernel_ulong_t)&ad7605_4_info },
+	{ "ad7606-4", (kernel_ulong_t)&ad7606_4_info },
+	{ "ad7606-6", (kernel_ulong_t)&ad7606_6_info },
+	{ "ad7606-8", (kernel_ulong_t)&ad7606_8_info },
+	{ "ad7606b",  (kernel_ulong_t)&ad7606b_info },
+	{ "ad7616",   (kernel_ulong_t)&ad7616_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad7606_id_table);
 
 static const struct of_device_id ad7606_of_match[] = {
-	{ .compatible = "adi,ad7605-4" },
-	{ .compatible = "adi,ad7606-4" },
-	{ .compatible = "adi,ad7606-6" },
-	{ .compatible = "adi,ad7606-8" },
-	{ .compatible = "adi,ad7606b" },
-	{ .compatible = "adi,ad7616" },
+	{ .compatible = "adi,ad7605-4", &ad7605_4_info },
+	{ .compatible = "adi,ad7606-4", &ad7606_4_info },
+	{ .compatible = "adi,ad7606-6", &ad7606_6_info },
+	{ .compatible = "adi,ad7606-8", &ad7606_8_info },
+	{ .compatible = "adi,ad7606b", &ad7606b_info },
+	{ .compatible = "adi,ad7616", &ad7616_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ad7606_of_match);
