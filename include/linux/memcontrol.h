@@ -648,6 +648,8 @@ static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 		memcg == target;
 }
 
+unsigned long get_cgroup_local_usage(struct mem_cgroup *memcg, bool flush);
+
 static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
 					struct mem_cgroup *memcg)
 {

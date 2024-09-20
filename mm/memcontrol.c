@@ -855,6 +855,30 @@ unsigned long memcg_events_local(struct mem_cgroup *memcg, int event)
 	return READ_ONCE(memcg->vmstats->events_local[i]);
 }
 
+/* Usage is in pages. */
+unsigned long get_cgroup_local_usage(struct mem_cgroup *memcg, bool flush)
+{
+	struct lruvec *lruvec;
+	const int local_nid = 0;
+
+	if (!memcg)
+		return 0;
+
+	if (flush)
+		mem_cgroup_flush_stats_ratelimited(memcg);
+
+	lruvec = mem_cgroup_lruvec(memcg, NODE_DATA(local_nid));
+	unsigned long anon = lruvec_page_state(lruvec, NR_ANON_MAPPED);
+	unsigned long file = lruvec_page_state(lruvec, NR_FILE_PAGES);
+	unsigned long shmem = lruvec_page_state(lruvec, NR_SHMEM);
+	/* Slab size are in bytes */
+	unsigned long slab =
+		lruvec_page_state(lruvec, NR_SLAB_RECLAIMABLE_B) / PAGE_SIZE
+		+ lruvec_page_state(lruvec, NR_SLAB_UNRECLAIMABLE_B) / PAGE_SIZE;
+
+	return anon + file + shmem + slab;
+}
+
 struct mem_cgroup *mem_cgroup_from_task(struct task_struct *p)
 {
 	/*
