@@ -23,6 +23,24 @@
 	((type *)(__mptr - offsetof(type, member))); })
 
 /**
+ * container_first - cast first member of a structure out to the containing
+ *		     structure
+ * @ptr:	     the pointer to the member.
+ * @type:	     the type of the container struct this is embedded in.
+ * @member:	     the name of the member within the struct.
+ *
+ * WARNING: any const qualifier of @ptr is lost.
+ */
+#define container_first(ptr, type, member) ({				\
+	void *__mptr = (void *)(ptr);                                   \
+	static_assert(__same_type(*(ptr), ((type *)0)->member) ||       \
+		      __same_type(*(ptr), void),                        \
+		      "pointer type mismatch in container_of()");       \
+	static_assert(offsetof(type, member) == 0, "not first member");	\
+	((type *)(__mptr - offsetof(type, member))); })
+
+
+/**
  * container_of_const - cast a member of a structure out to the containing
  *			structure and preserve the const-ness of the pointer
  * @ptr:		the pointer to the member
