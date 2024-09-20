@@ -1088,6 +1088,7 @@ static __be32 nfsd4_decode_share_access(struct nfsd4_compoundargs *argp, u32 *sh
 	case NFS4_SHARE_PUSH_DELEG_WHEN_UNCONTENDED:
 	case (NFS4_SHARE_SIGNAL_DELEG_WHEN_RESRC_AVAIL |
 	      NFS4_SHARE_PUSH_DELEG_WHEN_UNCONTENDED):
+	case NFS4_SHARE_WANT_DELEG_TIMESTAMPS:
 		return nfs_ok;
 	}
 	return nfserr_bad_xdr;
