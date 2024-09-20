@@ -3995,13 +3995,28 @@ generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 }
 EXPORT_SYMBOL(generic_file_direct_write);
 
+static size_t generic_mapping_max_folio_size(struct address_space *mapping,
+					     loff_t pos)
+{
+	struct inode *inode = mapping->host;
+	pgoff_t index = pos >> PAGE_SHIFT;
+
+	if (!shmem_mapping(mapping))
+		goto out;
+
+	if (!shmem_allowable_huge_orders(inode, NULL, index, 0, false))
+		return PAGE_SIZE;
+out:
+	return mapping_max_folio_size(mapping);
+}
+
 ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 {
 	struct file *file = iocb->ki_filp;
 	loff_t pos = iocb->ki_pos;
 	struct address_space *mapping = file->f_mapping;
 	const struct address_space_operations *a_ops = mapping->a_ops;
-	size_t chunk = mapping_max_folio_size(mapping);
+	size_t chunk = generic_mapping_max_folio_size(mapping, pos);
 	long status = 0;
 	ssize_t written = 0;
 
