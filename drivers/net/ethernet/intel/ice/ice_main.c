@@ -4548,34 +4548,27 @@ ice_init_tx_topology(struct ice_hw *hw, const struct firmware *firmware)
  *
  * This function loads DDP file from the disk, then initializes Tx
  * topology. At the end DDP package is loaded on the card.
- *
- * Return: zero when init was successful, negative values otherwise.
  */
-static int ice_init_ddp_config(struct ice_hw *hw, struct ice_pf *pf)
+static void ice_init_ddp_config(struct ice_hw *hw, struct ice_pf *pf)
 {
 	struct device *dev = ice_pf_to_dev(pf);
 	const struct firmware *firmware = NULL;
 	int err;
 
 	err = ice_request_fw(pf, &firmware);
-	if (err) {
+	if (err)
 		dev_err(dev, "Fail during requesting FW: %d\n", err);
-		return err;
-	}
 
 	err = ice_init_tx_topology(hw, firmware);
 	if (err) {
 		dev_err(dev, "Fail during initialization of Tx topology: %d\n",
 			err);
 		release_firmware(firmware);
-		return err;
 	}
 
 	/* Download firmware to device */
 	ice_load_pkg(firmware, pf);
 	release_firmware(firmware);
-
-	return 0;
 }
 
 /**
@@ -4748,9 +4741,7 @@ int ice_init_dev(struct ice_pf *pf)
 
 	ice_init_feature_support(pf);
 
-	err = ice_init_ddp_config(hw, pf);
-	if (err)
-		return err;
+	ice_init_ddp_config(hw, pf);
 
 	/* if ice_init_ddp_config fails, ICE_FLAG_ADV_FEATURES bit won't be
 	 * set in pf->state, which will cause ice_is_safe_mode to return
