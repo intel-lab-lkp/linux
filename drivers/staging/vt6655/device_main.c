@@ -517,7 +517,7 @@ static bool device_init_rings(struct vnt_private *priv)
 		return false;
 	}
 
-	priv->aRD0Ring = vir_pool;
+	priv->a_rd0_ring = vir_pool;
 	priv->aRD1Ring = vir_pool +
 		priv->opts.rx_descs0 * sizeof(struct vnt_rx_desc);
 
@@ -584,7 +584,7 @@ static void device_free_rings(struct vnt_private *priv)
 			  priv->opts.rx_descs1 * sizeof(struct vnt_rx_desc) +
 			  priv->opts.tx_descs[0] * sizeof(struct vnt_tx_desc) +
 			  priv->opts.tx_descs[1] * sizeof(struct vnt_tx_desc),
-			  priv->aRD0Ring, priv->pool_dma);
+			  priv->a_rd0_ring, priv->pool_dma);
 
 	dma_free_coherent(&priv->pcid->dev,
 			  priv->opts.tx_descs[0] * PKT_BUF_SZ +
@@ -604,7 +604,7 @@ static int device_init_rd0_ring(struct vnt_private *priv)
 	/* Init the RD0 ring entries */
 	for (i = 0; i < priv->opts.rx_descs0;
 	     i ++, curr += sizeof(struct vnt_rx_desc)) {
-		desc = &priv->aRD0Ring[i];
+		desc = &priv->a_rd0_ring[i];
 		desc->rd_info = kzalloc(sizeof(*desc->rd_info), GFP_KERNEL);
 		if (!desc->rd_info) {
 			ret = -ENOMEM;
@@ -617,13 +617,13 @@ static int device_init_rd0_ring(struct vnt_private *priv)
 			goto err_free_rd;
 		}
 
-		desc->next = &priv->aRD0Ring[(i + 1) % priv->opts.rx_descs0];
+		desc->next = &priv->a_rd0_ring[(i + 1) % priv->opts.rx_descs0];
 		desc->next_desc = cpu_to_le32(curr + sizeof(struct vnt_rx_desc));
 	}
 
 	if (i > 0)
-		priv->aRD0Ring[i - 1].next_desc = cpu_to_le32(priv->rd0_pool_dma);
-	priv->p_curr_rd[0] = &priv->aRD0Ring[0];
+		priv->a_rd0_ring[i - 1].next_desc = cpu_to_le32(priv->rd0_pool_dma);
+	priv->p_curr_rd[0] = &priv->a_rd0_ring[0];
 
 	return 0;
 
@@ -632,7 +632,7 @@ err_free_rd:
 
 err_free_desc:
 	while (i--) {
-		desc = &priv->aRD0Ring[i];
+		desc = &priv->a_rd0_ring[i];
 		device_free_rx_buf(priv, desc);
 		kfree(desc->rd_info);
 	}
@@ -691,7 +691,7 @@ static void device_free_rd0_ring(struct vnt_private *priv)
 	int i;
 
 	for (i = 0; i < priv->opts.rx_descs0; i++) {
-		struct vnt_rx_desc *desc = &priv->aRD0Ring[i];
+		struct vnt_rx_desc *desc = &priv->a_rd0_ring[i];
 
 		device_free_rx_buf(priv, desc);
 		kfree(desc->rd_info);

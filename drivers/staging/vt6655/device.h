@@ -138,7 +138,7 @@ struct vnt_private {
 	struct vnt_tx_desc *ap_td0_rings;
 	struct vnt_tx_desc *ap_td1_rings;
 
-	struct vnt_rx_desc *aRD0Ring;
+	struct vnt_rx_desc *a_rd0_ring;
 	struct vnt_rx_desc *aRD1Ring;
 	struct vnt_rx_desc *p_curr_rd[TYPE_MAXRD];
 
