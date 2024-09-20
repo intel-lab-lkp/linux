@@ -1589,13 +1589,11 @@ static int ath10k_sdio_hif_power_up(struct ath10k *ar,
 	sdio_claim_host(func);
 
 	ret = sdio_enable_func(func);
+	sdio_release_host(func);
 	if (ret) {
 		ath10k_warn(ar, "unable to enable sdio function: %d)\n", ret);
-		sdio_release_host(func);
 		return ret;
 	}
-
-	sdio_release_host(func);
 
 	/* Wait for hardware to initialise. It should take a lot less than
 	 * 20 ms but let's be conservative here.
@@ -1884,13 +1882,11 @@ static int ath10k_sdio_hif_start(struct ath10k *ar)
 
 	/* Register the isr */
 	ret =  sdio_claim_irq(ar_sdio->func, ath10k_sdio_irq_handler);
+	sdio_release_host(ar_sdio->func);
 	if (ret) {
 		ath10k_warn(ar, "failed to claim sdio interrupt: %d\n", ret);
-		sdio_release_host(ar_sdio->func);
 		return ret;
 	}
-
-	sdio_release_host(ar_sdio->func);
 
 	ret = ath10k_sdio_enable_intrs(ar);
 	if (ret)
