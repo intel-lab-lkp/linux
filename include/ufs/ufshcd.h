@@ -148,6 +148,7 @@ enum ufs_pm_level {
 enum ufs_abort_by {
 	UFS_NO_ABORT,
 	UFS_ERR_HANDLER,
+	UFS_SCSI_ABORT
 };
 
 struct ufs_pm_lvl_states {

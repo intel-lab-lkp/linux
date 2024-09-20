@@ -5550,6 +5550,27 @@ void ufshcd_compl_one_cqe(struct ufs_hba *hba, int task_tag,
 			ufshcd_update_monitor(hba, lrbp);
 		ufshcd_add_command_trace(hba, task_tag, UFS_CMD_COMP);
 		cmd->result = ufshcd_transfer_rsp_status(hba, lrbp, cqe);
+
+		/*
+		 * Let the SCSI layer decide how to handle the ufshcd_abort
+		 * situation, neither releasing nor notifying scsi_done in MCQ
+		 * mode. SDB mode should release because outstanding_reqs is
+		 * clear by ISR.
+		 */
+		if (lrbp->abort_initiated_by == UFS_SCSI_ABORT) {
+			ocs = ufshcd_get_tr_ocs(lrbp, cqe);
+			if ((hba->mcq_enabled) && (ocs == OCS_ABORTED))
+				 return;
+
+			if ((!hba->mcq_enabled) &&
+			    ((ocs == OCS_INVALID_COMMAND_STATUS) ||
+			     ((hba->quirks & UFSHCD_QUIRK_OCS_ABORTED) &&
+			      (ocs == OCS_ABORTED)))) {
+				ufshcd_release_scsi_cmd(hba, lrbp);
+				return;
+			}
+		}
+
 		ufshcd_release_scsi_cmd(hba, lrbp);
 		/* Do not touch lrbp after scsi done */
 		scsi_done(cmd);
@@ -7667,6 +7688,12 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 		ufshcd_set_req_abort_skip(hba, hba->outstanding_reqs);
 		goto release;
 	}
+
+	/*
+	 * In SDB mode, set this variable so that the ISR posted by
+	 * the host controller clear UTRLCLR can be skipped.
+	 */
+	lrbp->abort_initiated_by = UFS_SCSI_ABORT;
 
 	err = ufshcd_try_to_abort_task(hba, tag);
 	if (err) {

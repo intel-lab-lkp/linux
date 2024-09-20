@@ -700,6 +700,12 @@ int ufshcd_mcq_abort(struct scsi_cmnd *cmd)
 	}
 
 	/*
+	 * In MCQ mode, set this variable so that the ISR posted by
+	 * the host controller can be skipped.
+	 */
+	lrbp->abort_initiated_by = UFS_SCSI_ABORT;
+
+	/*
 	 * The command is not in the submission queue, and it is not
 	 * in the completion queue either. Query the device to see if
 	 * the command is being processed in the device.
