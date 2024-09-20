@@ -243,9 +243,8 @@ inline void softmac_mgmt_xmit(struct sk_buff *skb, struct rtllib_device *ieee)
 			 * as for the completion function, it does not need
 			 * to check it any more.
 			 */
-			netdev_info(ieee->dev,
-			       "%s():insert to waitqueue, queue_index:%d!\n",
-			       __func__, tcb_desc->queue_index);
+			netdev_info(ieee->dev, "%s():insert to waitqueue, queue_index:%d!\n",
+				    __func__, tcb_desc->queue_index);
 			skb_queue_tail(&ieee->skb_waitq[tcb_desc->queue_index],
 				       skb);
 		} else {
@@ -348,8 +347,7 @@ static inline struct sk_buff *rtllib_probe_req(struct rtllib_device *ieee)
 }
 
 /* Enables network monitor mode, all rx packets will be received. */
-void rtllib_enable_net_monitor_mode(struct net_device *dev,
-		bool init_state)
+void rtllib_enable_net_monitor_mode(struct net_device *dev, bool init_state)
 {
 	struct rtllib_device *ieee = netdev_priv_rsl(dev);
 
@@ -719,8 +717,7 @@ rtllib_association_req(struct rtllib_network *beacon,
 	else
 		encrypt = 0;
 
-	if ((ieee->rtllib_ap_sec_type &&
-	    (ieee->rtllib_ap_sec_type(ieee) & SEC_ALG_TKIP)) ||
+	if ((ieee->rtllib_ap_sec_type && (ieee->rtllib_ap_sec_type(ieee) & SEC_ALG_TKIP)) ||
 	    ieee->forced_bg_mode) {
 		ieee->ht_info->enable_ht = 0;
 		ieee->mode = WIRELESS_MODE_G;
@@ -729,14 +726,12 @@ rtllib_association_req(struct rtllib_network *beacon,
 	if (ieee->ht_info->current_ht_support && ieee->ht_info->enable_ht) {
 		ht_cap_buf = (u8 *)&ieee->ht_info->self_ht_cap;
 		ht_cap_len = sizeof(ieee->ht_info->self_ht_cap);
-		ht_construct_capability_element(ieee, ht_cap_buf, &ht_cap_len,
-					     encrypt, true);
+		ht_construct_capability_element(ieee, ht_cap_buf, &ht_cap_len, encrypt, true);
 		if (ieee->ht_info->current_rt2rt_aggregation) {
 			realtek_ie_buf = ieee->ht_info->sz_rt2rt_agg_buf;
 			realtek_ie_len =
 				 sizeof(ieee->ht_info->sz_rt2rt_agg_buf);
-			ht_construct_rt2rt_agg_element(ieee, realtek_ie_buf,
-						   &realtek_ie_len);
+			ht_construct_rt2rt_agg_element(ieee, realtek_ie_buf, &realtek_ie_len);
 		}
 	}
 
@@ -1042,8 +1037,8 @@ static void rtllib_associate_complete_wq(void *data)
 {
 	struct rtllib_device *ieee = (struct rtllib_device *)
 				     container_of(data,
-				     struct rtllib_device,
-				     associate_complete_wq);
+						  struct rtllib_device,
+						  associate_complete_wq);
 	struct rt_pwr_save_ctrl *psc = &ieee->pwr_save_ctrl;
 
 	netdev_info(ieee->dev, "Associated successfully with %pM\n",
@@ -1177,10 +1172,10 @@ inline void rtllib_softmac_new_net(struct rtllib_device *ieee,
 		 * and the network does broadcast and that those two bssid match
 		 */
 		if ((apset && apmatch &&
-		   ((ssidset && ssidbroad && ssidmatch) ||
-		   (ssidbroad && !ssidset) || (!ssidbroad && ssidset))) ||
-		   (!apset && ssidset && ssidbroad && ssidmatch) ||
-		   (ieee->is_roaming && ssidset && ssidbroad && ssidmatch)) {
+		     ((ssidset && ssidbroad && ssidmatch) ||
+		      (ssidbroad && !ssidset) || (!ssidbroad && ssidset))) ||
+		    (!apset && ssidset && ssidbroad && ssidmatch) ||
+		    (ieee->is_roaming && ssidset && ssidbroad && ssidmatch)) {
 			/* Save the essid so that if it is hidden, it is
 			 * replaced with the essid provided by the user.
 			 */
@@ -1190,7 +1185,7 @@ inline void rtllib_softmac_new_net(struct rtllib_device *ieee,
 				tmp_ssid_len = ieee->current_network.ssid_len;
 			}
 			memcpy(&ieee->current_network, net,
-				sizeof(ieee->current_network));
+			       sizeof(ieee->current_network));
 			if (!ssidbroad) {
 				memcpy(ieee->current_network.ssid, tmp_ssid,
 				       tmp_ssid_len);
@@ -1218,7 +1213,7 @@ inline void rtllib_softmac_new_net(struct rtllib_device *ieee,
 				if ((ieee->current_network.qos_data.supported == 1) &&
 				    ieee->current_network.bssht.bd_support_ht)
 					ht_reset_self_and_save_peer_setting(ieee,
-						 &ieee->current_network);
+									    &ieee->current_network);
 				else
 					ieee->ht_info->current_ht_support = false;
 
@@ -1314,10 +1309,10 @@ static inline u16 assoc_parse(struct rtllib_device *ieee, struct sk_buff *skb,
 
 	status_code = le16_to_cpu(response_head->status);
 	if ((status_code == WLAN_STATUS_ASSOC_DENIED_RATES ||
-	   status_code == WLAN_STATUS_CAPS_UNSUPPORTED) &&
-	   ((ieee->mode == WIRELESS_MODE_G) &&
-	   (ieee->current_network.mode == WIRELESS_MODE_N_24G) &&
-	   (ieee->asoc_retry_count++ < (RT_ASOC_RETRY_LIMIT - 1)))) {
+	     status_code == WLAN_STATUS_CAPS_UNSUPPORTED) &&
+	    ((ieee->mode == WIRELESS_MODE_G) &&
+	     (ieee->current_network.mode == WIRELESS_MODE_N_24G) &&
+	     (ieee->asoc_retry_count++ < (RT_ASOC_RETRY_LIMIT - 1)))) {
 		ieee->ht_info->iot_action |= HT_IOT_ACT_PURE_N_MODE;
 	} else {
 		ieee->asoc_retry_count = 0;
@@ -1581,13 +1576,12 @@ rtllib_rx_assoc_resp(struct rtllib_device *ieee, struct sk_buff *skb,
 		   WLAN_FC_GET_STYPE(frame_ctl));
 
 	if ((ieee->softmac_features & IEEE_SOFTMAC_ASSOCIATE) &&
-	     ieee->link_state == RTLLIB_ASSOCIATING_AUTHENTICATED &&
-	     (ieee->iw_mode == IW_MODE_INFRA)) {
+	    ieee->link_state == RTLLIB_ASSOCIATING_AUTHENTICATED &&
+	    (ieee->iw_mode == IW_MODE_INFRA)) {
 		errcode = assoc_parse(ieee, skb, &aid);
 		if (!errcode) {
-			struct rtllib_network *network =
-				 kzalloc(sizeof(struct rtllib_network),
-				 GFP_ATOMIC);
+			struct rtllib_network *network = kzalloc(sizeof(struct rtllib_network),
+								 GFP_ATOMIC);
 
 			if (!network)
 				return 1;
@@ -1599,8 +1593,8 @@ rtllib_rx_assoc_resp(struct rtllib_device *ieee, struct sk_buff *skb,
 			assoc_resp = (struct rtllib_assoc_response_frame *)skb->data;
 			if (ieee->current_network.qos_data.supported == 1) {
 				if (rtllib_parse_info_param(ieee, assoc_resp->info_element,
-							rx_stats->len - sizeof(*assoc_resp),
-							network, rx_stats)) {
+							    rx_stats->len - sizeof(*assoc_resp),
+							    network, rx_stats)) {
 					kfree(network);
 					return 1;
 				}
@@ -2225,10 +2219,8 @@ u8 rtllib_ap_sec_type(struct rtllib_device *ieee)
 	if (encrypt && (wpa_ie_len == 0)) {
 		return SEC_ALG_WEP;
 	} else if ((wpa_ie_len != 0)) {
-		if (((ieee->wpa_ie[0] == 0xdd) &&
-		    (!memcmp(&ieee->wpa_ie[14], ccmp_ie, 4))) ||
-		    ((ieee->wpa_ie[0] == 0x30) &&
-		    (!memcmp(&ieee->wpa_ie[10], ccmp_rsn_ie, 4))))
+		if (((ieee->wpa_ie[0] == 0xdd) && (!memcmp(&ieee->wpa_ie[14], ccmp_ie, 4))) ||
+		    ((ieee->wpa_ie[0] == 0x30) && (!memcmp(&ieee->wpa_ie[10], ccmp_rsn_ie, 4))))
 			return SEC_ALG_CCMP;
 		else
 			return SEC_ALG_TKIP;
