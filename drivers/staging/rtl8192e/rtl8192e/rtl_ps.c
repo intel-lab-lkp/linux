@@ -118,7 +118,7 @@ void rtl92e_ips_enter(struct net_device *dev)
 
 	rt_state = priv->rtllib->rf_power_state;
 	if (rt_state == rf_on && !psc->bSwRfProcessing &&
-		(priv->rtllib->link_state != MAC80211_LINKED)) {
+	    (priv->rtllib->link_state != MAC80211_LINKED)) {
 		psc->eInactivePowerState = rf_off;
 		_rtl92e_ps_update_rf_state(dev);
 	}
