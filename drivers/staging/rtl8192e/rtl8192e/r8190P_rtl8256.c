@@ -101,12 +101,9 @@ bool rtl92e_config_rf(struct net_device *dev)
 		RF3_Final_Value = 0;
 		while (RF3_Final_Value != RegValueToBeCheck &&
 		       RetryTimes != 0) {
-			ret = rtl92e_config_rf_path(dev,
-						(enum rf90_radio_path)eRFPath);
-			RF3_Final_Value = rtl92e_get_rf_reg(dev,
-						(enum rf90_radio_path)eRFPath,
-						RegOffSetToBeCheck,
-						bMask12Bits);
+			ret = rtl92e_config_rf_path(dev, (enum rf90_radio_path)eRFPath);
+			RF3_Final_Value = rtl92e_get_rf_reg(dev, (enum rf90_radio_path)eRFPath,
+							    RegOffSetToBeCheck, bMask12Bits);
 			RetryTimes--;
 		}
 
