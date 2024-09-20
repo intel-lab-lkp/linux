@@ -20,7 +20,9 @@ description: |
 
 properties:
   $nodename:
-    pattern: "^mmc(@.*)?$"
+    oneOf:
+      - pattern: "^mmc(@.*)?$"
+      - pattern: "^slot(@.*)?$"
 
   "#address-cells":
     const: 1
