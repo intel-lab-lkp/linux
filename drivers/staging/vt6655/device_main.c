@@ -737,7 +737,7 @@ static int device_init_td0_ring(struct vnt_private *priv)
 
 	if (i > 0)
 		priv->ap_td0_rings[i - 1].next_desc = cpu_to_le32(priv->td0_pool_dma);
-	priv->tail_td[0] = priv->apCurrTD[0] = &priv->ap_td0_rings[0];
+	priv->tail_td[0] = priv->ap_curr_td[0] = &priv->ap_td0_rings[0];
 
 	return 0;
 
@@ -777,7 +777,7 @@ static int device_init_td1_ring(struct vnt_private *priv)
 
 	if (i > 0)
 		priv->ap_td1_rings[i - 1].next_desc = cpu_to_le32(priv->td1_pool_dma);
-	priv->tail_td[1] = priv->apCurrTD[1] = &priv->ap_td1_rings[0];
+	priv->tail_td[1] = priv->ap_curr_td[1] = &priv->ap_td1_rings[0];
 
 	return 0;
 
@@ -1235,7 +1235,7 @@ static int vnt_tx_packet(struct vnt_private *priv, struct sk_buff *skb)
 		return -ENOMEM;
 	}
 
-	head_td = priv->apCurrTD[dma_idx];
+	head_td = priv->ap_curr_td[dma_idx];
 
 	head_td->td1.tcr = 0;
 
@@ -1244,7 +1244,7 @@ static int vnt_tx_packet(struct vnt_private *priv, struct sk_buff *skb)
 	if (dma_idx == TYPE_AC0DMA)
 		head_td->td_info->flags = TD_FLAGS_NETIF_SKB;
 
-	priv->apCurrTD[dma_idx] = head_td->next;
+	priv->ap_curr_td[dma_idx] = head_td->next;
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 

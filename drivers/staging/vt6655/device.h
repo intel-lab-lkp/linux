@@ -132,7 +132,7 @@ struct vnt_private {
 
 	volatile int                iTDUsed[TYPE_MAXTD];
 
-	struct vnt_tx_desc *apCurrTD[TYPE_MAXTD];
+	struct vnt_tx_desc *ap_curr_td[TYPE_MAXTD];
 	struct vnt_tx_desc *tail_td[TYPE_MAXTD];
 
 	struct vnt_tx_desc *ap_td0_rings;
