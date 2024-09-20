@@ -540,6 +540,52 @@ int drm_version(struct drm_device *dev, void *data,
 	return err;
 }
 
+static int drm_set_name(struct drm_device *dev, void *data,
+			struct drm_file *file_priv)
+{
+	struct drm_set_name *name = data;
+	void __user *user_ptr;
+	char *new_name;
+	size_t i, len;
+
+	if (name->name_len > DRM_NAME_MAX_LEN)
+		return -EINVAL;
+
+	user_ptr = u64_to_user_ptr(name->name);
+
+	new_name = memdup_user_nul(user_ptr, name->name_len);
+	if (IS_ERR(new_name))
+		return PTR_ERR(new_name);
+
+	len = strlen(new_name);
+
+	if (len != name->name_len) {
+		kfree(new_name);
+		return -EINVAL;
+	}
+
+	/*
+	 * Filter out control char / spaces / new lines etc in the name
+	 * since it's going to be used in dmesg or fdinfo's output.
+	 */
+	for (i = 0; i < len; i++) {
+		if (!isgraph(new_name[i]))
+			new_name[i] = '-';
+	}
+
+	mutex_lock(&file_priv->name_lock);
+	kfree(file_priv->name);
+	if (len > 0) {
+		file_priv->name = new_name;
+	} else {
+		kfree(new_name);
+		file_priv->name = NULL;
+	}
+	mutex_unlock(&file_priv->name_lock);
+
+	return 0;
+}
+
 static int drm_ioctl_permit(u32 flags, struct drm_file *file_priv)
 {
 	/* ROOT_ONLY is only for CAP_SYS_ADMIN */
@@ -609,6 +655,8 @@ static const struct drm_ioctl_desc drm_ioctls[] = {
 
 	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_HANDLE_TO_FD, drm_prime_handle_to_fd_ioctl, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF(DRM_IOCTL_PRIME_FD_TO_HANDLE, drm_prime_fd_to_handle_ioctl, DRM_RENDER_ALLOW),
+
+	DRM_IOCTL_DEF(DRM_IOCTL_SET_NAME, drm_set_name, DRM_RENDER_ALLOW),
 
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETPLANERESOURCES, drm_mode_getplane_res, 0),
 	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETCRTC, drm_mode_getcrtc, 0),
