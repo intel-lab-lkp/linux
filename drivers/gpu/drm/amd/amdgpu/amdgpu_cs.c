@@ -309,9 +309,6 @@ static int amdgpu_cs_pass1(struct amdgpu_cs_parser *p,
 		p->gang_leader->uf_addr = uf_offset;
 	kvfree(chunk_array);
 
-	/* Use this opportunity to fill in task info for the vm */
-	amdgpu_vm_set_task_info(vm);
-
 	return 0;
 
 free_all_kdata:
@@ -1179,6 +1176,9 @@ static int amdgpu_cs_vm_handling(struct amdgpu_cs_parser *p)
 
 		job->vm_pd_addr = amdgpu_gmc_pd_addr(vm->root.bo);
 	}
+
+	/* Use this opportunity to fill in task info for the vm */
+	amdgpu_vm_set_task_info(vm);
 
 	if (adev->debug_vm) {
 		/* Invalidate all BOs to test for userspace bugs */
