@@ -192,5 +192,7 @@ struct vhost_vdpa_iova_range {
 #define VHOST_BACKEND_F_DESC_ASID    0x7
 /* IOTLB don't flush memory mapping across device reset */
 #define VHOST_BACKEND_F_IOTLB_PERSIST  0x8
+/* Enables the device to operate in NO-IOMMU mode as well */
+#define VHOST_BACKEND_F_NOIOMMU  0x9
 
 #endif
