@@ -138,10 +138,8 @@ static int axienet_mdio_write(struct mii_bus *bus, int phy_id, int reg,
 	axienet_mdio_mdc_enable(lp);
 
 	ret = axienet_mdio_wait_until_ready(lp);
-	if (ret < 0) {
-		axienet_mdio_mdc_disable(lp);
-		return ret;
-	}
+	if (ret < 0)
+		goto disable_mdc;
 
 	axienet_iow(lp, XAE_MDIO_MWD_OFFSET, (u32)val);
 	axienet_iow(lp, XAE_MDIO_MCR_OFFSET,
@@ -153,12 +151,9 @@ static int axienet_mdio_write(struct mii_bus *bus, int phy_id, int reg,
 		     XAE_MDIO_MCR_OP_WRITE_MASK));
 
 	ret = axienet_mdio_wait_until_ready(lp);
-	if (ret < 0) {
-		axienet_mdio_mdc_disable(lp);
-		return ret;
-	}
+disable_mdc:
 	axienet_mdio_mdc_disable(lp);
-	return 0;
+	return ret;
 }
 
 /**
