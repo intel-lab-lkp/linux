@@ -18,8 +18,10 @@ static bool track_protection(struct page_counter *c)
 	return c->protection_support;
 }
 
+extern unsigned long get_cgroup_local_usage(struct mem_cgroup *memcg, bool flush);
+
 static void propagate_protected_usage(struct page_counter *c,
-				      unsigned long usage)
+				      unsigned long usage, unsigned long local_usage)
 {
 	unsigned long protected, old_protected;
 	long delta;
@@ -44,6 +46,15 @@ static void propagate_protected_usage(struct page_counter *c,
 		if (delta)
 			atomic_long_add(delta, &c->parent->children_low_usage);
 	}
+
+	protected = min(local_usage, READ_ONCE(c->locallow));
+	old_protected = atomic_long_read(&c->locallow_usage);
+	if (protected != old_protected) {
+		old_protected = atomic_long_xchg(&c->locallow_usage, protected);
+		delta = protected - old_protected;
+		if (delta)
+			atomic_long_add(delta, &c->parent->children_locallow_usage);
+	}
 }
 
 /**
@@ -63,7 +74,8 @@ void page_counter_cancel(struct page_counter *counter, unsigned long nr_pages)
 		atomic_long_set(&counter->usage, new);
 	}
 	if (track_protection(counter))
-		propagate_protected_usage(counter, new);
+		propagate_protected_usage(counter, new,
+				get_cgroup_local_usage(counter->memcg, false));
 }
 
 /**
@@ -83,7 +95,8 @@ void page_counter_charge(struct page_counter *counter, unsigned long nr_pages)
 
 		new = atomic_long_add_return(nr_pages, &c->usage);
 		if (protection)
-			propagate_protected_usage(c, new);
+			propagate_protected_usage(c, new,
+					get_cgroup_local_usage(counter->memcg, false));
 		/*
 		 * This is indeed racy, but we can live with some
 		 * inaccuracy in the watermark.
@@ -151,7 +164,8 @@ bool page_counter_try_charge(struct page_counter *counter,
 			goto failed;
 		}
 		if (protection)
-			propagate_protected_usage(c, new);
+			propagate_protected_usage(c, new,
+					get_cgroup_local_usage(counter->memcg, false));
 
 		/* see comment on page_counter_charge */
 		if (new > READ_ONCE(c->local_watermark)) {
@@ -238,7 +252,8 @@ void page_counter_set_min(struct page_counter *counter, unsigned long nr_pages)
 	WRITE_ONCE(counter->min, nr_pages);
 
 	for (c = counter; c; c = c->parent)
-		propagate_protected_usage(c, atomic_long_read(&c->usage));
+		propagate_protected_usage(c, atomic_long_read(&c->usage),
+				get_cgroup_local_usage(counter->memcg, false));
 }
 
 /**
@@ -248,14 +263,17 @@ void page_counter_set_min(struct page_counter *counter, unsigned long nr_pages)
  *
  * The caller must serialize invocations on the same counter.
  */
-void page_counter_set_low(struct page_counter *counter, unsigned long nr_pages)
+void page_counter_set_low(struct page_counter *counter, unsigned long nr_pages,
+				unsigned long nr_pages_local)
 {
 	struct page_counter *c;
 
 	WRITE_ONCE(counter->low, nr_pages);
+	WRITE_ONCE(counter->locallow, nr_pages_local);
 
 	for (c = counter; c; c = c->parent)
-		propagate_protected_usage(c, atomic_long_read(&c->usage));
+		propagate_protected_usage(c, atomic_long_read(&c->usage),
+				get_cgroup_local_usage(counter->memcg, false));
 }
 
 /**
@@ -421,9 +439,9 @@ static unsigned long effective_protection(unsigned long usage,
  */
 void page_counter_calculate_protection(struct page_counter *root,
 				       struct page_counter *counter,
-				       bool recursive_protection)
+				       bool recursive_protection, int is_local)
 {
-	unsigned long usage, parent_usage;
+	unsigned long usage, parent_usage, local_usage, parent_local_usage;
 	struct page_counter *parent = counter->parent;
 
 	/*
@@ -437,16 +455,19 @@ void page_counter_calculate_protection(struct page_counter *root,
 		return;
 
 	usage = page_counter_read(counter);
-	if (!usage)
+	local_usage = get_cgroup_local_usage(counter->memcg, true);
+	if (!usage || !local_usage)
 		return;
 
 	if (parent == root) {
 		counter->emin = READ_ONCE(counter->min);
 		counter->elow = READ_ONCE(counter->low);
+		counter->elocallow = READ_ONCE(counter->locallow);
 		return;
 	}
 
 	parent_usage = page_counter_read(parent);
+	parent_local_usage = get_cgroup_local_usage(parent->memcg, true);
 
 	WRITE_ONCE(counter->emin, effective_protection(usage, parent_usage,
 			READ_ONCE(counter->min),
@@ -454,7 +475,16 @@ void page_counter_calculate_protection(struct page_counter *root,
 			atomic_long_read(&parent->children_min_usage),
 			recursive_protection));
 
-	WRITE_ONCE(counter->elow, effective_protection(usage, parent_usage,
+	if (is_local)
+		WRITE_ONCE(counter->elocallow,
+			effective_protection(local_usage, parent_local_usage,
+			READ_ONCE(counter->locallow),
+			READ_ONCE(parent->elocallow),
+			atomic_long_read(&parent->children_locallow_usage),
+			recursive_protection));
+	else
+		WRITE_ONCE(counter->elow,
+			effective_protection(usage, parent_usage,
 			READ_ONCE(counter->low),
 			READ_ONCE(parent->elow),
 			atomic_long_read(&parent->children_low_usage),

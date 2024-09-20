@@ -13,6 +13,7 @@ struct page_counter {
 	 * memcg->memory.usage is a hot member of struct mem_cgroup.
 	 */
 	atomic_long_t usage;
+	struct mem_cgroup *memcg; /* memcg that owns this counter */
 	CACHELINE_PADDING(_pad1_);
 
 	/* effective memory.min and memory.min usage tracking */
@@ -25,6 +26,10 @@ struct page_counter {
 	atomic_long_t low_usage;
 	atomic_long_t children_low_usage;
 
+	unsigned long elocallow;
+	atomic_long_t locallow_usage;
+	atomic_long_t children_locallow_usage;
+
 	unsigned long watermark;
 	/* Latest cg2 reset watermark */
 	unsigned long local_watermark;
@@ -36,6 +41,7 @@ struct page_counter {
 	bool protection_support;
 	unsigned long min;
 	unsigned long low;
+	unsigned long locallow;
 	unsigned long high;
 	unsigned long max;
 	struct page_counter *parent;
@@ -52,12 +58,13 @@ struct page_counter {
  */
 static inline void page_counter_init(struct page_counter *counter,
 				     struct page_counter *parent,
-				     bool protection_support)
+				     bool protection_support, struct mem_cgroup *memcg)
 {
 	counter->usage = (atomic_long_t)ATOMIC_LONG_INIT(0);
 	counter->max = PAGE_COUNTER_MAX;
 	counter->parent = parent;
 	counter->protection_support = protection_support;
+	counter->memcg = memcg;
 }
 
 static inline unsigned long page_counter_read(struct page_counter *counter)
@@ -72,7 +79,8 @@ bool page_counter_try_charge(struct page_counter *counter,
 			     struct page_counter **fail);
 void page_counter_uncharge(struct page_counter *counter, unsigned long nr_pages);
 void page_counter_set_min(struct page_counter *counter, unsigned long nr_pages);
-void page_counter_set_low(struct page_counter *counter, unsigned long nr_pages);
+void page_counter_set_low(struct page_counter *counter, unsigned long nr_pages,
+					unsigned long nr_pages_local);
 
 static inline void page_counter_set_high(struct page_counter *counter,
 					 unsigned long nr_pages)
@@ -99,11 +107,11 @@ static inline void page_counter_reset_watermark(struct page_counter *counter)
 #ifdef CONFIG_MEMCG
 void page_counter_calculate_protection(struct page_counter *root,
 				       struct page_counter *counter,
-				       bool recursive_protection);
+				       bool recursive_protection, int is_local);
 #else
 static inline void page_counter_calculate_protection(struct page_counter *root,
 						     struct page_counter *counter,
-						     bool recursive_protection) {}
+						     bool recursive_protection, int is_local) {}
 #endif
 
 #endif /* _LINUX_PAGE_COUNTER_H */

@@ -1497,6 +1497,9 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 			       vm_event_name(memcg_vm_event_stat[i]),
 			       memcg_events(memcg, memcg_vm_event_stat[i]));
 	}
+
+	seq_buf_printf(s, "local_usage %lu\n",
+		       get_cgroup_local_usage(memcg, true));
 }
 
 static void memory_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
@@ -3597,8 +3600,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	if (parent) {
 		WRITE_ONCE(memcg->swappiness, mem_cgroup_swappiness(parent));
 
-		page_counter_init(&memcg->memory, &parent->memory, true);
-		page_counter_init(&memcg->swap, &parent->swap, false);
+		page_counter_init(&memcg->memory, &parent->memory, true, memcg);
+		page_counter_init(&memcg->swap, &parent->swap, false, NULL);
 #ifdef CONFIG_MEMCG_V1
 		WRITE_ONCE(memcg->oom_kill_disable, READ_ONCE(parent->oom_kill_disable));
 		page_counter_init(&memcg->kmem, &parent->kmem, false);
@@ -3607,8 +3610,8 @@ mem_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	} else {
 		init_memcg_stats();
 		init_memcg_events();
-		page_counter_init(&memcg->memory, NULL, true);
-		page_counter_init(&memcg->swap, NULL, false);
+		page_counter_init(&memcg->memory, NULL, true, memcg);
+		page_counter_init(&memcg->swap, NULL, false, NULL);
 #ifdef CONFIG_MEMCG_V1
 		page_counter_init(&memcg->kmem, NULL, false);
 		page_counter_init(&memcg->tcpmem, NULL, false);
@@ -3677,7 +3680,7 @@ static void mem_cgroup_css_offline(struct cgroup_subsys_state *css)
 	memcg1_css_offline(memcg);
 
 	page_counter_set_min(&memcg->memory, 0);
-	page_counter_set_low(&memcg->memory, 0);
+	page_counter_set_low(&memcg->memory, 0, 0);
 
 	zswap_memcg_offline_cleanup(memcg);
 
@@ -3748,7 +3751,7 @@ static void mem_cgroup_css_reset(struct cgroup_subsys_state *css)
 	page_counter_set_max(&memcg->tcpmem, PAGE_COUNTER_MAX);
 #endif
 	page_counter_set_min(&memcg->memory, 0);
-	page_counter_set_low(&memcg->memory, 0);
+	page_counter_set_low(&memcg->memory, 0, 0);
 	page_counter_set_high(&memcg->memory, PAGE_COUNTER_MAX);
 	memcg1_soft_limit_reset(memcg);
 	page_counter_set_high(&memcg->swap, PAGE_COUNTER_MAX);
@@ -4051,6 +4054,12 @@ static ssize_t memory_min_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+static int memory_locallow_show(struct seq_file *m, void *v)
+{
+	return seq_puts_memcg_tunable(m,
+		READ_ONCE(mem_cgroup_from_seq(m)->memory.locallow));
+}
+
 static int memory_low_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
@@ -4061,7 +4070,8 @@ static ssize_t memory_low_write(struct kernfs_open_file *of,
 				char *buf, size_t nbytes, loff_t off)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
-	unsigned long low;
+	struct sysinfo si;
+	unsigned long low, locallow, local_capacity, total_capacity;
 	int err;
 
 	buf = strstrip(buf);
@@ -4069,7 +4079,15 @@ static ssize_t memory_low_write(struct kernfs_open_file *of,
 	if (err)
 		return err;
 
-	page_counter_set_low(&memcg->memory, low);
+	/* Hardcoded 0 for local node and 1 for remote. */
+	si_meminfo_node(&si, 0);
+	local_capacity = si.totalram; /* In pages. */
+	total_capacity = local_capacity;
+	si_meminfo_node(&si, 1);
+	total_capacity += si.totalram;
+	locallow = low * local_capacity / total_capacity;
+
+	page_counter_set_low(&memcg->memory, low, locallow);
 
 	return nbytes;
 }
@@ -4395,6 +4413,11 @@ static struct cftype memory_files[] = {
 		.write = memory_low_write,
 	},
 	{
+		.name = "locallow",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_locallow_show,
+	},
+	{
 		.name = "high",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = memory_high_show,
@@ -4483,7 +4506,8 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 	if (!root)
 		root = root_mem_cgroup;
 
-	page_counter_calculate_protection(&root->memory, &memcg->memory, recursive_protection);
+	page_counter_calculate_protection(&root->memory, &memcg->memory,
+					recursive_protection, false);
 }
 
 static int charge_memcg(struct folio *folio, struct mem_cgroup *memcg,
