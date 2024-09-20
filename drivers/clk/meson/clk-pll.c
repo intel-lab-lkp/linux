@@ -316,8 +316,7 @@ static int meson_clk_pll_init(struct clk_hw *hw)
 	 * Keep the clock running, which was already initialized and enabled
 	 * from the bootloader stage, to avoid any glitches.
 	 */
-	if ((pll->flags & CLK_MESON_PLL_NOINIT_ENABLED) &&
-	    meson_clk_pll_is_enabled(hw))
+	if (meson_clk_pll_is_enabled(hw))
 		return 0;
 
 	if (pll->init_count) {
