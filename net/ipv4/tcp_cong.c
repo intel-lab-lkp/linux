@@ -223,13 +223,13 @@ void tcp_assign_congestion_control(struct sock *sk)
 	if (unlikely(!bpf_try_module_get(ca, ca->owner)))
 		ca = &tcp_reno;
 	icsk->icsk_ca_ops = ca;
-	rcu_read_unlock();
 
 	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
 	if (ca->flags & TCP_CONG_NEEDS_ECN)
 		INET_ECN_xmit(sk);
 	else
 		INET_ECN_dontxmit(sk);
+	rcu_read_unlock();
 }
 
 void tcp_init_congestion_control(struct sock *sk)
