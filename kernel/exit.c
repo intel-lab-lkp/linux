@@ -821,6 +821,7 @@ void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
 	int group_dead;
+	__u32 uexit_code;
 
 	WARN_ON(irqs_disabled());
 
@@ -863,6 +864,8 @@ void __noreturn do_exit(long code)
 		tty_audit_exit();
 	audit_free(tsk);
 
+	uexit_code = tsk->exit_code;
+
 	tsk->exit_code = code;
 	taskstats_exit(tsk, group_dead);
 
@@ -900,7 +903,7 @@ void __noreturn do_exit(long code)
 
 	exit_tasks_rcu_start();
 	exit_notify(tsk, group_dead);
-	proc_exit_connector(tsk);
+	proc_exit_connector(tsk, uexit_code);
 	mpol_put_task_policy(tsk);
 #ifdef CONFIG_FUTEX
 	if (unlikely(current->pi_state_cache))

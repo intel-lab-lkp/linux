@@ -320,7 +320,7 @@ void proc_coredump_connector(struct task_struct *task)
 	send_msg(msg);
 }
 
-void proc_exit_connector(struct task_struct *task)
+void proc_exit_connector(struct task_struct *task, __u32 uexit_code)
 {
 	struct cn_msg *msg;
 	struct proc_event *ev;
@@ -337,7 +337,10 @@ void proc_exit_connector(struct task_struct *task)
 	ev->what = PROC_EVENT_EXIT;
 	ev->event_data.exit.process_pid = task->pid;
 	ev->event_data.exit.process_tgid = task->tgid;
-	ev->event_data.exit.exit_code = task->exit_code;
+	if (task->exit_code == 0)
+		ev->event_data.exit.exit_code = uexit_code;
+	else
+		ev->event_data.exit.exit_code = task->exit_code;
 	ev->event_data.exit.exit_signal = task->exit_signal;
 
 	rcu_read_lock();
@@ -413,6 +416,10 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 	if (msg->len == sizeof(*pinput)) {
 		pinput = (struct proc_input *)msg->data;
 		mc_op = pinput->mcast_op;
+		if (mc_op == PROC_CN_MCAST_NOTIFY) {
+			current->exit_code = pinput->uexit_code;
+			return;
+		}
 		ev_type = pinput->event_type;
 	} else if (msg->len == sizeof(mc_op)) {
 		mc_op = *((enum proc_cn_mcast_op *)msg->data);
