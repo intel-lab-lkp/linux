@@ -498,11 +498,14 @@ static int find_group_orlov(struct super_block *sb, struct inode *parent,
 		for (i = 0; i < flex_size; i++) {
 			if (grp+i >= real_ngroups)
 				break;
+			ext4_lock_group(sb, grp+i);
 			desc = ext4_get_group_desc(sb, grp+i, NULL);
 			if (desc && ext4_free_inodes_count(sb, desc)) {
 				*group = grp+i;
+				ext4_unlock_group(sb, grp+i);
 				return 0;
 			}
+			ext4_unlock_group(sb, grp+i);
 		}
 		goto fallback;
 	}
@@ -544,14 +547,17 @@ fallback_retry:
 	parent_group = EXT4_I(parent)->i_block_group;
 	for (i = 0; i < ngroups; i++) {
 		grp = (parent_group + i) % ngroups;
+		ext4_lock_group(sb, grp);
 		desc = ext4_get_group_desc(sb, grp, NULL);
 		if (desc) {
 			grp_free = ext4_free_inodes_count(sb, desc);
 			if (grp_free && grp_free >= avefreei) {
 				*group = grp;
+				ext4_unlock_group(sb, grp);
 				return 0;
 			}
 		}
+		ext4_unlock_group(sb, grp);
 	}
 
 	if (avefreei) {
@@ -590,11 +596,14 @@ static int find_group_other(struct super_block *sb, struct inode *parent,
 		if (last > ngroups)
 			last = ngroups;
 		for  (i = parent_group; i < last; i++) {
+			ext4_lock_group(sb, i);
 			desc = ext4_get_group_desc(sb, i, NULL);
 			if (desc && ext4_free_inodes_count(sb, desc)) {
 				*group = i;
+				ext4_unlock_group(sb, i);
 				return 0;
 			}
+			ext4_unlock_group(sb, i);
 		}
 		if (!retry && EXT4_I(parent)->i_last_alloc_group != ~0) {
 			retry = 1;
@@ -616,10 +625,14 @@ static int find_group_other(struct super_block *sb, struct inode *parent,
 	 * Try to place the inode in its parent directory
 	 */
 	*group = parent_group;
+	ext4_lock_group(sb, *group);
 	desc = ext4_get_group_desc(sb, *group, NULL);
 	if (desc && ext4_free_inodes_count(sb, desc) &&
-	    ext4_free_group_clusters(sb, desc))
+	    ext4_free_group_clusters(sb, desc)) {
+		ext4_unlock_group(sb, *group);
 		return 0;
+	}
+	ext4_unlock_group(sb, *group);
 
 	/*
 	 * We're going to place this inode in a different blockgroup from its
@@ -640,10 +653,14 @@ static int find_group_other(struct super_block *sb, struct inode *parent,
 		*group += i;
 		if (*group >= ngroups)
 			*group -= ngroups;
+		ext4_lock_group(sb, *group);
 		desc = ext4_get_group_desc(sb, *group, NULL);
 		if (desc && ext4_free_inodes_count(sb, desc) &&
-		    ext4_free_group_clusters(sb, desc))
+		    ext4_free_group_clusters(sb, desc)) {
+			ext4_unlock_group(sb, *group);
 			return 0;
+		}
+		ext4_unlock_group(sb, *group);
 	}
 
 	/*
@@ -654,9 +671,13 @@ static int find_group_other(struct super_block *sb, struct inode *parent,
 	for (i = 0; i < ngroups; i++) {
 		if (++*group >= ngroups)
 			*group = 0;
+		ext4_lock_group(sb, *group);
 		desc = ext4_get_group_desc(sb, *group, NULL);
-		if (desc && ext4_free_inodes_count(sb, desc))
+		if (desc && ext4_free_inodes_count(sb, desc)) {
+			ext4_unlock_group(sb, *group);
 			return 0;
+		}
+		ext4_unlock_group(sb, *group);
 	}
 
 	return -1;
