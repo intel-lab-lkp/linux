@@ -952,7 +952,7 @@ static int apic_has_interrupt_for_ppr(struct kvm_lapic *apic, u32 ppr)
 	return highest_irr;
 }
 
-static bool __apic_update_ppr(struct kvm_lapic *apic, u32 *new_ppr)
+bool __kvm_apic_update_ppr(struct kvm_lapic *apic, u32 *new_ppr)
 {
 	u32 tpr, isrv, ppr, old_ppr;
 	int isr;
@@ -973,12 +973,13 @@ static bool __apic_update_ppr(struct kvm_lapic *apic, u32 *new_ppr)
 
 	return ppr < old_ppr;
 }
+EXPORT_SYMBOL_GPL(__kvm_apic_update_ppr);
 
 static void apic_update_ppr(struct kvm_lapic *apic)
 {
 	u32 ppr;
 
-	if (__apic_update_ppr(apic, &ppr) &&
+	if (__kvm_apic_update_ppr(apic, &ppr) &&
 	    apic_has_interrupt_for_ppr(apic, ppr) != -1)
 		kvm_make_request(KVM_REQ_EVENT, apic->vcpu);
 }
@@ -2895,7 +2896,7 @@ int kvm_apic_has_interrupt(struct kvm_vcpu *vcpu)
 	if (!kvm_apic_present(vcpu))
 		return -1;
 
-	__apic_update_ppr(apic, &ppr);
+	__kvm_apic_update_ppr(apic, &ppr);
 	return apic_has_interrupt_for_ppr(apic, ppr);
 }
 EXPORT_SYMBOL_GPL(kvm_apic_has_interrupt);
@@ -2954,7 +2955,7 @@ int kvm_get_apic_interrupt(struct kvm_vcpu *vcpu)
 		 * triggered KVM_REQ_EVENT already.
 		 */
 		apic_set_isr(vector, apic);
-		__apic_update_ppr(apic, &ppr);
+		__kvm_apic_update_ppr(apic, &ppr);
 	}
 
 	return vector;

@@ -3431,10 +3431,11 @@ static int nested_vmx_check_permission(struct kvm_vcpu *vcpu)
 
 static u8 vmx_has_apicv_interrupt(struct kvm_vcpu *vcpu)
 {
+	u32 vppr;
 	u8 rvi = vmx_get_rvi();
-	u8 vppr = kvm_lapic_get_reg(vcpu->arch.apic, APIC_PROCPRI);
+	__kvm_apic_update_ppr(vcpu->arch.apic, &vppr);
 
-	return ((rvi & 0xf0) > (vppr & 0xf0));
+	return ((rvi & 0xf0) > (u8) (vppr & 0xf0));
 }
 
 static void load_vmcs12_host_state(struct kvm_vcpu *vcpu,
