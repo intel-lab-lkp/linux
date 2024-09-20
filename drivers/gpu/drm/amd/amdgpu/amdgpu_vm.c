@@ -2377,9 +2377,20 @@ amdgpu_vm_get_task_info_pasid(struct amdgpu_device *adev, u32 pasid)
 
 static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
 {
-	vm->task_info = kzalloc(sizeof(struct amdgpu_task_info), GFP_KERNEL);
+	char process_name[TASK_COMM_LEN];
+	int desc_len;
+
+	get_task_comm(process_name, current->group_leader);
+	desc_len = strlen(process_name);
+
+	vm->task_info = kzalloc(
+		struct_size(vm->task_info, process_desc, desc_len + 1),
+		GFP_KERNEL);
+
 	if (!vm->task_info)
 		return -ENOMEM;
+
+	strscpy(vm->task_info->process_desc, process_name, desc_len + 1);
 
 	kref_init(&vm->task_info->refcount);
 	return 0;
@@ -2395,8 +2406,6 @@ void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
 	if (!vm->task_info) {
 		if (amdgpu_vm_create_task_info(vm))
 			return;
-
-		get_task_comm(vm->task_info->process_name, current->group_leader);
 	}
 
 	if (vm->task_info->pid == current->pid)
