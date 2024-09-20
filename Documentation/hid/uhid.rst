@@ -106,7 +106,7 @@ UHID_INPUT2:
 
 UHID_GET_REPORT_REPLY:
   If you receive a UHID_GET_REPORT request you must answer with this request.
-  You  must copy the "id" field from the request into the answer. Set the "err"
+  You must copy the "id" field from the request into the answer. Set the "err"
   field to 0 if no error occurred or to EIO if an I/O error occurred.
   If "err" is 0 then you should fill the buffer of the answer with the results
   of the GET_REPORT request and set "size" correspondingly.

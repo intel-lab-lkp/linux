@@ -21,7 +21,7 @@ mainly use HID over I2C or USB. But ISH doesn't use either I2C or USB.
 Overview
 ========
 
-Using a analogy with a usbhid implementation, the ISH follows a similar model
+Using an analogy with a usbhid implementation, the ISH follows a similar model
 for a very high speed communication::
 
 	-----------------		----------------------
