@@ -55,6 +55,14 @@ Description:
 		An attribute which indicates whether the patch supports
 		atomic-replace.
 
+What:           /sys/kernel/livepatch/<patch>/order
+Date:           Sep 2024
+KernelVersion:  6.12.0
+Contact:        live-patching@vger.kernel.org
+Description:
+		This attribute record the order of this livepatch module
+		applied to the running system.
+
 What:		/sys/kernel/livepatch/<patch>/<object>
 Date:		Nov 2014
 KernelVersion:	3.19.0
