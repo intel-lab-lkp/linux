@@ -381,6 +381,9 @@ enum rsc_handling_status {
  * @panic:	optional callback to react to system panic, core will delay
  *		panic at least the returned number of milliseconds
  * @coredump:	  collect firmware dump after the subsystem is shutdown
+ * @synchronize_vqs:	optional callback to guarantee all memory operations
+ *			on the virtqueue before it are visible to the
+ *			rproc_vq_interrupt().
  */
 struct rproc_ops {
 	int (*prepare)(struct rproc *rproc);
@@ -403,6 +406,7 @@ struct rproc_ops {
 	u64 (*get_boot_addr)(struct rproc *rproc, const struct firmware *fw);
 	unsigned long (*panic)(struct rproc *rproc);
 	void (*coredump)(struct rproc *rproc);
+	void (*synchronize_vqs)(struct rproc *rproc);
 };
 
 /**

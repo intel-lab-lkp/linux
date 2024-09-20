@@ -74,6 +74,14 @@ static bool rproc_virtio_notify(struct virtqueue *vq)
 	return true;
 }
 
+static void rproc_virtio_synchronize_cbs(struct virtio_device *vdev)
+{
+	struct rproc *rproc = vdev_to_rproc(vdev);
+
+	if (rproc->ops->synchronize_vqs)
+		rproc->ops->synchronize_vqs(rproc);
+}
+
 /**
  * rproc_vq_interrupt() - tell remoteproc that a virtqueue is interrupted
  * @rproc: handle to the remote processor
@@ -171,6 +179,9 @@ static void __rproc_virtio_del_vqs(struct virtio_device *vdev)
 	list_for_each_entry_safe(vq, n, &vdev->vqs, list) {
 		rvring = vq->priv;
 		rvring->vq = NULL;
+#ifndef CONFIG_VIRTIO_HARDEN_NOTIFICATION
+		rproc_virtio_synchronize_cbs(vdev);
+#endif
 		vring_del_virtqueue(vq);
 	}
 }
@@ -334,6 +345,7 @@ static const struct virtio_config_ops rproc_virtio_config_ops = {
 	.get_status	= rproc_virtio_get_status,
 	.get		= rproc_virtio_get,
 	.set		= rproc_virtio_set,
+	.synchronize_cbs = rproc_virtio_synchronize_cbs,
 };
 
 /*
