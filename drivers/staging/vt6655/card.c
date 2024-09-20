@@ -395,7 +395,7 @@ void card_safe_reset_tx(struct vnt_private *priv)
 	priv->ap_curr_td[1] = &priv->ap_td1_rings[0];
 
 	for (uu = 0; uu < TYPE_MAXTD; uu++)
-		priv->iTDUsed[uu] = 0;
+		priv->i_td_used[uu] = 0;
 
 	for (uu = 0; uu < priv->opts.tx_descs[0]; uu++) {
 		curr_td = &priv->ap_td0_rings[uu];

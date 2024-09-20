@@ -969,7 +969,7 @@ static int device_tx_srv(struct vnt_private *priv, unsigned int idx)
 	unsigned char byTsr0;
 	unsigned char byTsr1;
 
-	for (desc = priv->tail_td[idx]; priv->iTDUsed[idx] > 0; desc = desc->next) {
+	for (desc = priv->tail_td[idx]; priv->i_td_used[idx] > 0; desc = desc->next) {
 		if (desc->td0.owner == OWNED_BY_NIC)
 			break;
 		if (works++ > 15)
@@ -1003,7 +1003,7 @@ static int device_tx_srv(struct vnt_private *priv, unsigned int idx)
 			vnt_int_report_rate(priv, desc->td_info, byTsr0, byTsr1);
 
 			device_free_tx_buf(priv, desc);
-			priv->iTDUsed[idx]--;
+			priv->i_td_used[idx]--;
 		}
 	}
 
@@ -1270,7 +1270,7 @@ static int vnt_tx_packet(struct vnt_private *priv, struct sk_buff *skb)
 	else
 		vt6655_mac_dma_ctl(priv->port_offset, MAC_REG_TXDMACTL0);
 
-	priv->iTDUsed[dma_idx]++;
+	priv->i_td_used[dma_idx]++;
 
 	spin_unlock_irqrestore(&priv->lock, flags);
 

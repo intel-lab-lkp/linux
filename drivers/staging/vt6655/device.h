@@ -70,7 +70,7 @@
 
 /* BUILD OBJ mode */
 
-#define	AVAIL_TD(p, q)	((p)->opts.tx_descs[(q)] - ((p)->iTDUsed[(q)]))
+#define	AVAIL_TD(p, q)	((p)->opts.tx_descs[(q)] - ((p)->i_td_used[(q)]))
 
 /* 0:11A 1:11B 2:11G */
 #define BB_TYPE_11A    0
@@ -130,7 +130,7 @@ struct vnt_private {
 
 	spinlock_t                  lock;
 
-	volatile int                iTDUsed[TYPE_MAXTD];
+	volatile int                i_td_used[TYPE_MAXTD];
 
 	struct vnt_tx_desc *ap_curr_td[TYPE_MAXTD];
 	struct vnt_tx_desc *tail_td[TYPE_MAXTD];
