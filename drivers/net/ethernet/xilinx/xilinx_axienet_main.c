@@ -2813,13 +2813,12 @@ static int axienet_probe(struct platform_device *pdev)
 		cfg.reset = 1;
 		/* As name says VDMA but it has support for DMA channel reset */
 		ret = xilinx_vdma_channel_set_config(tx_chan, &cfg);
+		dma_release_channel(tx_chan);
 		if (ret < 0) {
 			dev_err(&pdev->dev, "Reset channel failed\n");
-			dma_release_channel(tx_chan);
 			goto cleanup_clk;
 		}
 
-		dma_release_channel(tx_chan);
 		lp->use_dmaengine = 1;
 	}
 
@@ -2867,12 +2866,12 @@ static int axienet_probe(struct platform_device *pdev)
 			goto cleanup_mdio;
 		}
 		lp->pcs_phy = of_mdio_find_device(np);
+		of_node_put(np);
 		if (!lp->pcs_phy) {
 			ret = -EPROBE_DEFER;
-			of_node_put(np);
 			goto cleanup_mdio;
 		}
-		of_node_put(np);
+
 		lp->pcs.ops = &axienet_pcs_ops;
 		lp->pcs.neg_mode = true;
 		lp->pcs.poll = true;
