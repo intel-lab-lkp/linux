@@ -1654,6 +1654,7 @@ int kfd_process_device_init_vm(struct kfd_process_device *pdd,
 			       struct file *drm_file)
 {
 	struct amdgpu_fpriv *drv_priv;
+	struct drm_file *filp;
 	struct amdgpu_vm *avm;
 	struct kfd_process *p;
 	struct dma_fence *ef;
@@ -1673,8 +1674,10 @@ int kfd_process_device_init_vm(struct kfd_process_device *pdd,
 
 	p = pdd->process;
 	dev = pdd->dev;
+	filp = drm_file->private_data;
 
 	ret = amdgpu_amdkfd_gpuvm_acquire_process_vm(dev->adev, avm,
+						     filp,
 						     &p->kgd_process_info,
 						     &ef);
 	if (ret) {

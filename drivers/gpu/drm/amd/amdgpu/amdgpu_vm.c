@@ -2375,13 +2375,19 @@ amdgpu_vm_get_task_info_pasid(struct amdgpu_device *adev, u32 pasid)
 			amdgpu_vm_get_vm_from_pasid(adev, pasid));
 }
 
-static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
+static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm, struct drm_file *filp)
 {
 	char process_name[TASK_COMM_LEN];
-	int desc_len;
+	size_t desc_len;
 
 	get_task_comm(process_name, current->group_leader);
 	desc_len = strlen(process_name);
+
+	if (filp) {
+		mutex_lock(&filp->name_lock);
+		if (filp->name)
+			desc_len += 1 + strlen(filp->name);
+	}
 
 	vm->task_info = kzalloc(
 		struct_size(vm->task_info, process_desc, desc_len + 1),
@@ -2391,6 +2397,17 @@ static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
 		return -ENOMEM;
 
 	strscpy(vm->task_info->process_desc, process_name, desc_len + 1);
+	if (filp) {
+		if (filp->name) {
+			size_t p_len = strlen(process_name);
+
+			vm->task_info->process_desc[p_len] = '/';
+			strscpy(&vm->task_info->process_desc[p_len + 1],
+				filp->name, (desc_len + 1) - (p_len + 1));
+		}
+		mutex_unlock(&filp->name_lock);
+	}
+
 
 	kref_init(&vm->task_info->refcount);
 	return 0;
@@ -2400,11 +2417,12 @@ static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
  * amdgpu_vm_set_task_info - Sets VMs task info.
  *
  * @vm: vm for which to set the info
+ * @filp: drm_file instance
  */
-void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
+void amdgpu_vm_set_task_info(struct amdgpu_vm *vm, struct drm_file *filp)
 {
 	if (!vm->task_info) {
-		if (amdgpu_vm_create_task_info(vm))
+		if (amdgpu_vm_create_task_info(vm, filp))
 			return;
 	}
 
