@@ -25,11 +25,13 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/input.h>
+#include <linux/input/touchscreen.h>
 #include <linux/interrupt.h>
+#include <linux/mod_devicetable.h>
 #include <linux/pm.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
-#include <linux/spi/ad7877.h>
 #include <linux/module.h>
 #include <asm/irq.h>
 
@@ -173,6 +175,8 @@ struct ad7877 {
 	u8			acquisition_time;
 	u8			averaging;
 	u8			pen_down_acc_interval;
+
+	struct touchscreen_properties prop;
 
 	struct spi_transfer	xfer[AD7877_NR_SENSE + 2];
 	struct spi_message	msg;
@@ -353,8 +357,7 @@ static int ad7877_process_data(struct ad7877 *ts)
 		if (!timer_pending(&ts->timer))
 			input_report_key(input_dev, BTN_TOUCH, 1);
 
-		input_report_abs(input_dev, ABS_X, x);
-		input_report_abs(input_dev, ABS_Y, y);
+		touchscreen_report_pos(input_dev, &ts->prop, x, y, false);
 		input_report_abs(input_dev, ABS_PRESSURE, Rt);
 		input_sync(input_dev);
 
@@ -667,21 +670,141 @@ static void ad7877_setup_ts_def_msg(struct spi_device *spi, struct ad7877 *ts)
 	}
 }
 
+static int ad7877_parse_props(struct ad7877 *ts)
+{
+	struct device *dev = &ts->spi->dev;
+	u32 value, average;
+	int ret;
+
+	ts->model = (uintptr_t)device_get_match_data(dev);
+	if (!ts->model)
+		ts->model = 7877;
+
+	ret = device_property_match_string(dev, "adi,stopacq-polarity", "low");
+	if (ret < 0) {
+		ret = device_property_match_string(dev, "adi,stopacq-polarity", "high");
+		if (ret < 0)
+			ts->stopacq_polarity = 0;
+		ts->stopacq_polarity = 1;
+	} else {
+		ts->stopacq_polarity = 0;
+	}
+
+	ret = device_property_read_u32(dev, "adi,first-conv-delay-ns", &value);
+	if (!ret) {
+		switch (value) {
+		case 500:
+			ts->first_conversion_delay = 0;
+			break;
+		case 128000:
+			ts->first_conversion_delay = 1;
+			break;
+		case 1000000:
+			ts->first_conversion_delay = 2;
+			break;
+		case 8000000:
+			ts->first_conversion_delay = 3;
+			break;
+		default:
+			return dev_err_probe(dev, -EINVAL,
+					"Invalid adi,first-conv-delay-ns value\n");
+		}
+	}
+
+	device_property_read_u32(dev, "adi,pen-down-acc-interval-us",
+				 &value);
+	if (!ret) {
+		switch (value) {
+		case 0:
+			ts->acquisition_time = 0;
+			break;
+		case 500:
+			ts->acquisition_time = 1;
+			break;
+		case 1000:
+			ts->acquisition_time = 2;
+			break;
+		case 8000:
+			ts->acquisition_time = 3;
+			break;
+		default:
+			return dev_err_probe(dev, -EINVAL,
+					"Invalid adi,pen-down-acc-interval-us value\n");
+		}
+	}
+
+	ret = device_property_read_u32(dev, "adi,acquisition-time-us", &value);
+	if (!ret) {
+		switch (value) {
+		case 2:
+			ts->acquisition_time = 0;
+			break;
+		case 4:
+			ts->acquisition_time = 1;
+			break;
+		case 8:
+			ts->acquisition_time = 2;
+			break;
+		case 16:
+			ts->acquisition_time = 3;
+			break;
+		default:
+			return dev_err_probe(dev, -EINVAL,
+					"Invalid adi,first-conv-delay-ns value\n");
+		}
+	}
+
+	device_property_read_u32(dev, "adi,vref-delay-us",
+				 &value);
+	if (!value)
+		ts->vref_delay_usecs = 100;
+	else
+		ts->vref_delay_usecs = (u16)value;
+
+	device_property_read_u32(dev, "touchscreen-x-plate-ohms", &value);
+	if (value)
+		ts->x_plate_ohms = (u16)value;
+	else
+		ts->x_plate_ohms = 400;
+
+	/*
+	 * The property is parsed also in the touchscreen_parse_properties()
+	 * but is required for the ad7877_process_data() so we need to store it.
+	 */
+	device_property_read_u32(dev, "touchscreen-max-pressure", &value);
+	ts->pressure_max = (u16)value;
+
+	device_property_read_u32(dev, "touchscreen-average-samples", &average);
+	switch (average) {
+	case 1:
+		ts->averaging = 0;
+		break;
+	case 4:
+		ts->averaging = 1;
+		break;
+	case 8:
+		ts->averaging = 2;
+		break;
+	case 16:
+		ts->averaging = 3;
+		break;
+	default:
+		return dev_err_probe(dev, -EINVAL,
+				     "touchscreen-average-samples must be 1, 4, 8, or 16\n");
+	}
+
+	return 0;
+}
+
 static int ad7877_probe(struct spi_device *spi)
 {
 	struct ad7877			*ts;
 	struct input_dev		*input_dev;
-	struct ad7877_platform_data	*pdata = dev_get_platdata(&spi->dev);
 	int				err;
 	u16				verify;
 
 	if (!spi->irq) {
 		dev_dbg(&spi->dev, "no IRQ?\n");
-		return -ENODEV;
-	}
-
-	if (!pdata) {
-		dev_dbg(&spi->dev, "no platform data?\n");
 		return -ENODEV;
 	}
 
@@ -714,20 +837,13 @@ static int ad7877_probe(struct spi_device *spi)
 	ts->spi = spi;
 	ts->input = input_dev;
 
+	err = ad7877_parse_props(ts);
+	if (err)
+		return err;
+
 	timer_setup(&ts->timer, ad7877_timer, 0);
 	mutex_init(&ts->mutex);
 	spin_lock_init(&ts->lock);
-
-	ts->model = pdata->model ? : 7877;
-	ts->vref_delay_usecs = pdata->vref_delay_usecs ? : 100;
-	ts->x_plate_ohms = pdata->x_plate_ohms ? : 400;
-	ts->pressure_max = pdata->pressure_max ? : ~0;
-
-	ts->stopacq_polarity = pdata->stopacq_polarity;
-	ts->first_conversion_delay = pdata->first_conversion_delay;
-	ts->acquisition_time = pdata->acquisition_time;
-	ts->averaging = pdata->averaging;
-	ts->pen_down_acc_interval = pdata->pen_down_acc_interval;
 
 	snprintf(ts->phys, sizeof(ts->phys), "%s/input0", dev_name(&spi->dev));
 
@@ -735,23 +851,14 @@ static int ad7877_probe(struct spi_device *spi)
 	input_dev->phys = ts->phys;
 	input_dev->dev.parent = &spi->dev;
 
+	touchscreen_parse_properties(ts->input, false, &ts->prop);
+
 	__set_bit(EV_KEY, input_dev->evbit);
 	__set_bit(BTN_TOUCH, input_dev->keybit);
 	__set_bit(EV_ABS, input_dev->evbit);
 	__set_bit(ABS_X, input_dev->absbit);
 	__set_bit(ABS_Y, input_dev->absbit);
 	__set_bit(ABS_PRESSURE, input_dev->absbit);
-
-	input_set_abs_params(input_dev, ABS_X,
-			pdata->x_min ? : 0,
-			pdata->x_max ? : MAX_12BIT,
-			0, 0);
-	input_set_abs_params(input_dev, ABS_Y,
-			pdata->y_min ? : 0,
-			pdata->y_max ? : MAX_12BIT,
-			0, 0);
-	input_set_abs_params(input_dev, ABS_PRESSURE,
-			pdata->pressure_min, pdata->pressure_max, 0, 0);
 
 	ad7877_write(spi, AD7877_REG_SEQ1, AD7877_MM_SEQUENCE);
 
@@ -805,10 +912,17 @@ static int ad7877_resume(struct device *dev)
 
 static DEFINE_SIMPLE_DEV_PM_OPS(ad7877_pm, ad7877_suspend, ad7877_resume);
 
+static const struct of_device_id ad7877_of_match[] = {
+	{ .compatible = "adi,ad7877", },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, ad7877_of_match);
+
 static struct spi_driver ad7877_driver = {
 	.driver = {
 		.name		= "ad7877",
 		.dev_groups	= ad7877_groups,
+		.of_match_table = ad7877_of_match,
 		.pm		= pm_sleep_ptr(&ad7877_pm),
 	},
 	.probe		= ad7877_probe,
