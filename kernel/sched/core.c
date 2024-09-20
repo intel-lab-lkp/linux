@@ -6524,7 +6524,11 @@ static void __sched notrace __schedule(int sched_mode)
 	 */
 	prev_state = READ_ONCE(prev->__state);
 	if (sched_mode == SM_IDLE) {
-		if (!rq->nr_running) {
+		/*
+		 * scx needs to check the bpf scheduler to determine
+		 * if rq is empty, so disable this path for it.
+		 */
+		if (!rq->nr_running && !scx_enabled()) {
 			next = prev;
 			goto picked;
 		}
