@@ -1727,14 +1727,21 @@ static inline bool cpupid_valid(int cpupid)
  * advantage of fast memory capacity, all recently accessed slow
  * memory pages will be migrated to fast memory node without
  * considering hot threshold.
+ * This is also used for detecting memory pressure and decide whether
+ * limitting promotion scan size is needed, for which we don't requrie
+ * more free pages than the promo watermark.
  */
-static bool pgdat_free_space_enough(struct pglist_data *pgdat)
+static bool pgdat_free_space_enough(struct pglist_data *pgdat,
+						bool require_extra)
 {
 	int z;
 	unsigned long enough_wmark;
 
-	enough_wmark = max(1UL * 1024 * 1024 * 1024 >> PAGE_SHIFT,
-			   pgdat->node_present_pages >> 4);
+	if (require_extra)
+		enough_wmark = max(1UL * 1024 * 1024 * 1024 >> PAGE_SHIFT,
+				pgdat->node_present_pages >> 4);
+	else
+		enough_wmark = 0;
 	for (z = pgdat->nr_zones - 1; z >= 0; z--) {
 		struct zone *zone = pgdat->node_zones + z;
 
@@ -1846,7 +1853,7 @@ bool should_numa_migrate_memory(struct task_struct *p, struct folio *folio,
 		unsigned int latency, th, def_th;
 
 		pgdat = NODE_DATA(dst_nid);
-		if (pgdat_free_space_enough(pgdat)) {
+		if (pgdat_free_space_enough(pgdat, true)) {
 			/* workload changed, reset hot threshold */
 			pgdat->nbp_threshold = 0;
 			return true;
@@ -3214,10 +3221,14 @@ static void task_numa_work(struct callback_head *work)
 	struct vm_area_struct *vma;
 	unsigned long start, end;
 	unsigned long nr_pte_updates = 0;
-	long pages, virtpages;
+	long pages, virtpages, min_scan_pages;
 	struct vma_iterator vmi;
 	bool vma_pids_skipped;
 	bool vma_pids_forced = false;
+	struct pglist_data *pgdat = NODE_DATA(0);  /* hardcoded node 0 */
+	struct mem_cgroup *memcg;
+	unsigned long cgroup_size, cgroup_locallow;
+	const long min_scan_pages_fraction = 16; /* 1/16th of the scan size */
 
 	SCHED_WARN_ON(p != container_of(work, struct task_struct, numa_work));
 
@@ -3262,6 +3273,39 @@ static void task_numa_work(struct callback_head *work)
 
 	pages = sysctl_numa_balancing_scan_size;
 	pages <<= 20 - PAGE_SHIFT; /* MB in pages */
+
+	min_scan_pages = pages;
+	min_scan_pages /= min_scan_pages_fraction;
+
+	memcg = get_mem_cgroup_from_current();
+	/*
+	 * Reduce the scan size when the local node is under pressure
+	 * (WMARK_PROMO is not satisfied),
+	 * proportional to a cgroup's overage of local memory guarantee.
+	 * 10% over: 68% of scan size
+	 * 20% over: 48% of scan size
+	 * 50% over: 20% of scan size
+	 * 100% over: 6% of scan size
+	 */
+	if (likely(memcg)) {
+		if (!pgdat_free_space_enough(pgdat, false)) {
+			cgroup_size = get_cgroup_local_usage(memcg, false);
+			/*
+			 * Protection needs refreshing, but reclaim on the cgroup
+			 * should have refreshed recently.
+			 */
+			cgroup_locallow = READ_ONCE(memcg->memory.elocallow);
+			if (cgroup_size > cgroup_locallow) {
+				/* 1/x^4 */
+				for (int i = 0; i < 4; i++)
+					pages = pages * cgroup_locallow / (cgroup_size + 1);
+				/* Lower bound to min_scan_pages. */
+				pages = max(pages, min_scan_pages);
+			}
+		}
+		css_put(&memcg->css);
+	}
+
 	virtpages = pages * 8;	   /* Scan up to this much virtual space */
 	if (!pages)
 		return;
