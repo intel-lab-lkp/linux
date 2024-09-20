@@ -96,6 +96,10 @@ properties:
       If "broken-flash-reset" is present then having this property does not
       make any difference.
 
+  vcc-supply:
+    description:
+      Supply for the spi nor power.
+
   spi-cpol: true
   spi-cpha: true
 
