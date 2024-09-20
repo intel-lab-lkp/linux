@@ -145,6 +145,11 @@ enum ufs_pm_level {
 	UFS_PM_LVL_MAX
 };
 
+enum ufs_abort_by {
+	UFS_NO_ABORT,
+	UFS_ERR_HANDLER,
+};
+
 struct ufs_pm_lvl_states {
 	enum ufs_dev_pwr_mode dev_state;
 	enum uic_link_state link_state;
@@ -173,6 +178,8 @@ struct ufs_pm_lvl_states {
  * @crypto_key_slot: the key slot to use for inline crypto (-1 if none)
  * @data_unit_num: the data unit number for the first block for inline crypto
  * @req_abort_skip: skip request abort task flag
+ * @abort_initiated_by: This variable is used to store the scenario in
+ *                      which the abort occurs
  */
 struct ufshcd_lrb {
 	struct utp_transfer_req_desc *utr_descriptor_ptr;
@@ -202,6 +209,7 @@ struct ufshcd_lrb {
 #endif
 
 	bool req_abort_skip;
+	int abort_initiated_by;
 };
 
 /**
