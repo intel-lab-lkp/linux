@@ -17,6 +17,7 @@
 #include <linux/mtd/spi-nor.h>
 #include <linux/mutex.h>
 #include <linux/of_platform.h>
+#include <linux/regulator/consumer.h>
 #include <linux/sched/task_stack.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
@@ -3461,6 +3462,10 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 				      GFP_KERNEL);
 	if (!nor->bouncebuf)
 		return -ENOMEM;
+
+	ret = devm_regulator_get_enable_optional(dev, "vcc");
+	if (ret)
+		return ret;
 
 	ret = spi_nor_hw_reset(nor);
 	if (ret)
