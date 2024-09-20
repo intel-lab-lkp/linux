@@ -46,6 +46,15 @@ EXPORT_SYMBOL(klp_sched_try_switch_key);
 
 #endif /* CONFIG_PREEMPT_DYNAMIC && CONFIG_HAVE_PREEMPT_DYNAMIC_CALL */
 
+static inline int klp_get_patch_order(struct klp_patch *patch)
+{
+	int order = 0;
+
+	klp_for_each_patch(patch)
+		order = order + 1;
+	return order;
+}
+
 /*
  * This work can be performed periodically to finish patching or unpatching any
  * "straggler" tasks which failed to transition in the first attempt.
@@ -590,6 +599,8 @@ void klp_init_transition(struct klp_patch *patch, int state)
 
 	pr_debug("'%s': initializing %s transition\n", patch->mod->name,
 		 klp_target_state == KLP_TRANSITION_PATCHED ? "patching" : "unpatching");
+
+	patch->order = klp_get_patch_order(patch);
 
 	/*
 	 * Initialize all tasks to the initial patch state to prepare them for

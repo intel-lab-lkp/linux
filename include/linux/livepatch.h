@@ -154,6 +154,7 @@ struct klp_state {
  * @forced:	was involved in a forced transition
  * @free_work:	patch cleanup from workqueue-context
  * @finish:	for waiting till it is safe to remove the patch module
+ * @order:	the order of this patch applied to the system
  */
 struct klp_patch {
 	/* external */
@@ -170,6 +171,7 @@ struct klp_patch {
 	bool forced;
 	struct work_struct free_work;
 	struct completion finish;
+	int order;
 };
 
 #define klp_for_each_object_static(patch, obj) \
