@@ -18263,7 +18263,7 @@ F:	Documentation/devicetree/bindings/input/pine64,pinephone-keyboard.yaml
 F:	drivers/input/keyboard/pinephone-keyboard.c
 
 PKTCDVD DRIVER
-M:	linux-block@vger.kernel.org
+L:	linux-block@vger.kernel.org
 S:	Orphan
 F:	drivers/block/pktcdvd.c
 F:	include/linux/pktcdvd.h
