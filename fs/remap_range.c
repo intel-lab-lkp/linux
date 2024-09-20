@@ -42,7 +42,7 @@ static int generic_remap_checks(struct file *file_in, loff_t pos_in,
 
 	/* The start of both ranges must be aligned to an fs block. */
 	if (!IS_ALIGNED(pos_in, bs) || !IS_ALIGNED(pos_out, bs))
-		return -EINVAL;
+		return -EOVERFLOW;
 
 	/* Ensure offsets don't wrap. */
 	if (check_add_overflow(pos_in, count, &tmp) ||
