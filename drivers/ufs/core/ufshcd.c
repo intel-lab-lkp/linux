@@ -5418,7 +5418,8 @@ ufshcd_transfer_rsp_status(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 		}
 		break;
 	case OCS_ABORTED:
-		if (lrbp->abort_initiated_by == UFS_ERR_HANDLER)
+		if ((lrbp->abort_initiated_by == UFS_ERR_HANDLER) ||
+		    (!hba->mcq_enabled && (hba->quirks & UFSHCD_QUIRK_OCS_ABORTED)))
 			result |= DID_REQUEUE << 16;
 		else
 			result |= DID_ABORT << 16;
