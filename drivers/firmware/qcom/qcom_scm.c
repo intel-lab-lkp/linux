@@ -1954,10 +1954,12 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	init_completion(&scm->waitq_comp);
 	mutex_init(&scm->scm_bw_lock);
 
-	scm->path = devm_of_icc_get(&pdev->dev, NULL);
-	if (IS_ERR(scm->path))
-		return dev_err_probe(&pdev->dev, PTR_ERR(scm->path),
-				     "failed to acquire interconnect path\n");
+	if (pdev->dev.of_node) {
+		scm->path = devm_of_icc_get(&pdev->dev, NULL);
+		if (IS_ERR(scm->path))
+			return dev_err_probe(&pdev->dev, PTR_ERR(scm->path),
+					"failed to acquire interconnect path\n");
+	}
 
 	scm->core_clk = devm_clk_get_optional(&pdev->dev, "core");
 	if (IS_ERR(scm->core_clk))
@@ -2012,10 +2014,12 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,sdi-enabled") || !download_mode)
 		qcom_scm_disable_sdi();
 
-	ret = of_reserved_mem_device_init(__scm->dev);
-	if (ret && ret != -ENODEV)
-		return dev_err_probe(__scm->dev, ret,
-				     "Failed to setup the reserved memory region for TZ mem\n");
+	if (pdev->dev.of_node) {
+		ret = of_reserved_mem_device_init(__scm->dev);
+		if (ret && ret != -ENODEV)
+			return dev_err_probe(__scm->dev, ret,
+					"Failed to setup the reserved memory region for TZ mem\n");
+	}
 
 	ret = qcom_tzmem_enable(__scm->dev);
 	if (ret)
@@ -2068,6 +2072,11 @@ static const struct of_device_id qcom_scm_dt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, qcom_scm_dt_match);
 
+static const struct platform_device_id qcom_scm_id_table[] = {
+	{ .name = "qcom-scm" },
+	{}
+};
+
 static struct platform_driver qcom_scm_driver = {
 	.driver = {
 		.name	= "qcom_scm",
@@ -2076,11 +2085,59 @@ static struct platform_driver qcom_scm_driver = {
 	},
 	.probe = qcom_scm_probe,
 	.shutdown = qcom_scm_shutdown,
+	.id_table = qcom_scm_id_table,
 };
+
+static bool is_qcom_machine(void)
+{
+	struct device_node *np __free(device_node) = NULL;
+	struct property *prop;
+	const char *name;
+
+	np = of_find_node_by_path("/");
+	if (!np)
+		return false;
+
+	of_property_for_each_string(np, "compatible", prop, name)
+		if (!strncmp("qcom,", name, 5))
+			return true;
+
+	return false;
+}
 
 static int __init qcom_scm_init(void)
 {
-	return platform_driver_register(&qcom_scm_driver);
+	struct device_node *np __free(device_node) = NULL;
+	struct platform_device *pdev;
+	int ret;
+
+	ret = platform_driver_register(&qcom_scm_driver);
+	if (ret)
+		return ret;
+
+	/* Some devicetrees representing Qualcomm Technologies, Inc. SoCs are
+	 * missing the SCM node. Find out if we don't have a SCM node *and*
+	 * we are a Qualcomm-compatible SoC. If yes, then create a platform
+	 * device for the SCM driver. Assume scanning the root compatible for
+	 * "qcom," vendor prefix will be faster than searching for the
+	 * SCM DT node.
+	 */
+	if (!is_qcom_machine())
+		return 0;
+
+	np = of_find_matching_node_and_match(NULL, qcom_scm_dt_match, NULL);
+	if (np)
+		return 0;
+
+	pdev = platform_device_alloc(qcom_scm_id_table[0].name, PLATFORM_DEVID_NONE);
+	if (!pdev)
+		return -ENOMEM;
+
+	ret = platform_device_add(pdev);
+	if (ret)
+		platform_device_put(pdev);
+
+	return ret;
 }
 subsys_initcall(qcom_scm_init);
 
