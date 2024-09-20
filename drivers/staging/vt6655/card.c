@@ -432,7 +432,7 @@ void card_safe_reset_tx(struct vnt_private *priv)
 void card_v_safe_reset_rx(struct vnt_private *priv)
 {
 	unsigned int uu;
-	struct vnt_rx_desc *pDesc;
+	struct vnt_rx_desc *p_desc;
 
 	/* initialize RD index */
 	priv->pCurrRD[0] = &priv->aRD0Ring[0];
@@ -440,18 +440,18 @@ void card_v_safe_reset_rx(struct vnt_private *priv)
 
 	/* init state, all RD is chip's */
 	for (uu = 0; uu < priv->opts.rx_descs0; uu++) {
-		pDesc = &priv->aRD0Ring[uu];
-		pDesc->rd0.res_count = cpu_to_le16(priv->rx_buf_sz);
-		pDesc->rd0.owner = OWNED_BY_NIC;
-		pDesc->rd1.req_count = cpu_to_le16(priv->rx_buf_sz);
+		p_desc = &priv->aRD0Ring[uu];
+		p_desc->rd0.res_count = cpu_to_le16(priv->rx_buf_sz);
+		p_desc->rd0.owner = OWNED_BY_NIC;
+		p_desc->rd1.req_count = cpu_to_le16(priv->rx_buf_sz);
 	}
 
 	/* init state, all RD is chip's */
 	for (uu = 0; uu < priv->opts.rx_descs1; uu++) {
-		pDesc = &priv->aRD1Ring[uu];
-		pDesc->rd0.res_count = cpu_to_le16(priv->rx_buf_sz);
-		pDesc->rd0.owner = OWNED_BY_NIC;
-		pDesc->rd1.req_count = cpu_to_le16(priv->rx_buf_sz);
+		p_desc = &priv->aRD1Ring[uu];
+		p_desc->rd0.res_count = cpu_to_le16(priv->rx_buf_sz);
+		p_desc->rd0.owner = OWNED_BY_NIC;
+		p_desc->rd1.req_count = cpu_to_le16(priv->rx_buf_sz);
 	}
 
 	/* set perPkt mode */
