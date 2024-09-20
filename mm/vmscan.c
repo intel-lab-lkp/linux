@@ -2377,6 +2377,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	enum scan_balance scan_balance;
 	unsigned long ap, fp;
 	enum lru_list lru;
+	int is_local = (pgdat->node_id == 0) && root_reclaim(sc);
 
 	/* If we have no swap space, do not bother scanning anon folios. */
 	if (!sc->may_swap || !can_reclaim_anon_pages(memcg, pgdat->node_id, sc)) {
@@ -2457,12 +2458,14 @@ out:
 	for_each_evictable_lru(lru) {
 		bool file = is_file_lru(lru);
 		unsigned long lruvec_size;
-		unsigned long low, min;
+		unsigned long low, min, locallow;
 		unsigned long scan;
 
 		lruvec_size = lruvec_lru_size(lruvec, lru, sc->reclaim_idx);
 		mem_cgroup_protection(sc->target_mem_cgroup, memcg,
-				      &min, &low);
+				      &min, &low, &locallow);
+		if (is_local)
+			low = locallow;
 
 		if (min || low) {
 			/*
@@ -2494,7 +2497,12 @@ out:
 			 * again by how much of the total memory used is under
 			 * hard protection.
 			 */
-			unsigned long cgroup_size = mem_cgroup_size(memcg);
+			unsigned long cgroup_size;
+
+			if (is_local)
+				cgroup_size = get_cgroup_local_usage(memcg, true);
+			else
+				cgroup_size = mem_cgroup_size(memcg);
 			unsigned long protection;
 
 			/* memory.low scaling, make sure we retry before OOM */
@@ -5869,6 +5877,7 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 	};
 	struct mem_cgroup_reclaim_cookie *partial = &reclaim;
 	struct mem_cgroup *memcg;
+	int is_local = (pgdat->node_id == 0) && root_reclaim(sc);
 
 	/*
 	 * In most cases, direct reclaimers can do partial walks
@@ -5896,7 +5905,7 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 		 */
 		cond_resched();
 
-		mem_cgroup_calculate_protection(target_memcg, memcg);
+		mem_cgroup_calculate_protection(target_memcg, memcg, is_local);
 
 		if (mem_cgroup_below_min(target_memcg, memcg)) {
 			/*
@@ -5904,7 +5913,7 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 			 * If there is no reclaimable memory, OOM.
 			 */
 			continue;
-		} else if (mem_cgroup_below_low(target_memcg, memcg)) {
+		} else if (mem_cgroup_below_low(target_memcg, memcg, is_local)) {
 			/*
 			 * Soft protection.
 			 * Respect the protection only as long as

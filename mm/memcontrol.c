@@ -4495,7 +4495,7 @@ struct cgroup_subsys memory_cgrp_subsys = {
  *          of a top-down tree iteration, not for isolated queries.
  */
 void mem_cgroup_calculate_protection(struct mem_cgroup *root,
-				     struct mem_cgroup *memcg)
+				     struct mem_cgroup *memcg, int is_local)
 {
 	bool recursive_protection =
 		cgrp_dfl_root.flags & CGRP_ROOT_MEMORY_RECURSIVE_PROT;
@@ -4507,7 +4507,7 @@ void mem_cgroup_calculate_protection(struct mem_cgroup *root,
 		root = root_mem_cgroup;
 
 	page_counter_calculate_protection(&root->memory, &memcg->memory,
-					recursive_protection, false);
+					recursive_protection, is_local);
 }
 
 static int charge_memcg(struct folio *folio, struct mem_cgroup *memcg,

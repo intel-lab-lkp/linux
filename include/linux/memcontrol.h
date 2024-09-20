@@ -586,9 +586,9 @@ static inline bool mem_cgroup_disabled(void)
 static inline void mem_cgroup_protection(struct mem_cgroup *root,
 					 struct mem_cgroup *memcg,
 					 unsigned long *min,
-					 unsigned long *low)
+					 unsigned long *low, unsigned long *locallow)
 {
-	*min = *low = 0;
+	*min = *low = *locallow = 0;
 
 	if (mem_cgroup_disabled())
 		return;
@@ -631,10 +631,11 @@ static inline void mem_cgroup_protection(struct mem_cgroup *root,
 
 	*min = READ_ONCE(memcg->memory.emin);
 	*low = READ_ONCE(memcg->memory.elow);
+	*locallow = READ_ONCE(memcg->memory.elocallow);
 }
 
 void mem_cgroup_calculate_protection(struct mem_cgroup *root,
-				     struct mem_cgroup *memcg);
+				     struct mem_cgroup *memcg, int is_local);
 
 static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 					  struct mem_cgroup *memcg)
@@ -651,13 +652,17 @@ static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 unsigned long get_cgroup_local_usage(struct mem_cgroup *memcg, bool flush);
 
 static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, int is_local)
 {
 	if (mem_cgroup_unprotected(target, memcg))
 		return false;
 
-	return READ_ONCE(memcg->memory.elow) >=
-		page_counter_read(&memcg->memory);
+	if (is_local)
+		return READ_ONCE(memcg->memory.elocallow) >=
+			get_cgroup_local_usage(memcg, true);
+	else
+		return READ_ONCE(memcg->memory.elow) >=
+			page_counter_read(&memcg->memory);
 }
 
 static inline bool mem_cgroup_below_min(struct mem_cgroup *target,
@@ -1159,13 +1164,13 @@ static inline void memcg_memory_event_mm(struct mm_struct *mm,
 static inline void mem_cgroup_protection(struct mem_cgroup *root,
 					 struct mem_cgroup *memcg,
 					 unsigned long *min,
-					 unsigned long *low)
+					 unsigned long *low, unsigned long *locallow)
 {
 	*min = *low = 0;
 }
 
 static inline void mem_cgroup_calculate_protection(struct mem_cgroup *root,
-						   struct mem_cgroup *memcg)
+						   struct mem_cgroup *memcg, int is_local)
 {
 }
 
@@ -1175,7 +1180,7 @@ static inline bool mem_cgroup_unprotected(struct mem_cgroup *target,
 	return true;
 }
 static inline bool mem_cgroup_below_low(struct mem_cgroup *target,
-					struct mem_cgroup *memcg)
+					struct mem_cgroup *memcg, int is_local)
 {
 	return false;
 }
