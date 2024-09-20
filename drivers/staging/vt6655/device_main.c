@@ -461,7 +461,7 @@ static void device_init_registers(struct vnt_private *priv)
 	pr_debug("Network address = %pM\n", priv->abyCurrentNetAddr);
 
 	/* reset Tx pointer */
-	CARDvSafeResetRx(priv);
+	card_v_safe_reset_rx(priv);
 	/* reset Rx pointer */
 	card_safe_reset_tx(priv);
 
