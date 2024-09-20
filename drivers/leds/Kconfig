@@ -146,6 +146,15 @@ config LEDS_BCM6358
 	  This option enables support for LEDs connected to the BCM6358
 	  LED HW controller accessed via MMIO registers.
 
+config LEDS_BCMBCA
+	tristate "LED Support for Broadcom BCMBCA"
+	depends on LEDS_CLASS
+	depends on HAS_IOMEM
+	depends on OF
+	help
+	  This option enables support for LEDs connected to the BCMBCA
+	  LED HW controller accessed via MMIO registers.
+
 config LEDS_CHT_WCOVE
 	tristate "LED support for Intel Cherry Trail Whiskey Cove PMIC"
 	depends on LEDS_CLASS

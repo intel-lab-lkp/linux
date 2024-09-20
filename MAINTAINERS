@@ -4383,6 +4383,13 @@ N:	bcm[9]?6856
 N:	bcm[9]?6858
 N:	bcm[9]?6878
 
+BROADCOM BCMBCA LED DRIVER
+M:	Linus Walleij <linus.walleij@linaro.org>
+L:	linux-leds@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/leds/brcm,bcmbca-leds.yaml
+F:	drivers/leds/leds-bcmbca.c
+
 BROADCOM BDC DRIVER
 M:	Justin Chen <justin.chen@broadcom.com>
 M:	Al Cooper <alcooperx@gmail.com>
