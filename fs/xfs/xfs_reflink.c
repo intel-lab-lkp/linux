@@ -3,6 +3,7 @@
  * Copyright (C) 2016 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <darrick.wong@oracle.com>
  */
+#include "linux/fs.h"
 #include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
@@ -1669,6 +1670,9 @@ xfs_reflink_unshare(
 
 	if (!xfs_is_reflink_inode(ip))
 		return 0;
+	/* don't try to unshare any ranges beyond EOF. */
+	if (offset + len > i_size_read(inode))
+		len = i_size_read(inode) - offset;
 
 	trace_xfs_reflink_unshare(ip, offset, len);
 
