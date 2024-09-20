@@ -575,6 +575,9 @@ static int mxc_isi_m2m_streamoff(struct file *file, void *fh,
 
 	mutex_lock(&m2m->lock);
 
+	if (m2m->usage_count == 0)
+		goto unlock;
+
 	/*
 	 * If the last context is this one, reset it to make sure the device
 	 * will be reconfigured when streaming is restarted.
@@ -594,8 +597,7 @@ static int mxc_isi_m2m_streamoff(struct file *file, void *fh,
 		mxc_isi_channel_release(m2m->pipe);
 	}
 
-	WARN_ON(m2m->usage_count < 0);
-
+unlock:
 	mutex_unlock(&m2m->lock);
 
 	return 0;
