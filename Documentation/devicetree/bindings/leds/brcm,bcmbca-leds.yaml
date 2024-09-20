@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds/brcm,bcmbca-leds.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCMBCA LEDs
+
+maintainers:
+  - Linus Walleij <linus.walleij@linaro.org>
+
+description: |
+  The Broadcom BCA (Broadband Access) SoCs have a LED control
+  block that can support either parallel (directly connected)
+  LEDs or serial (connected to 1-4 shift registers) LEDs.
+  The LEDs can optionally be hardware-triggered by ethernet port
+  traffic.
+
+properties:
+  compatible:
+    const: brcm,bcmbca-leds
+
+  reg:
+    maxItems: 1
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  brcm,serial-shifters:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      This describes the number of 8-bit serial shifters
+      connected to the LED controller block. If this property
+      is definied, it is implicit that the driver is using
+      serial LED control, if it is missing, parallel LED
+      control is assumed.
+
+patternProperties:
+  "^led@[0-9a-f]+$":
+    type: object
+    $ref: common.yaml#
+    unevaluatedProperties: false
+
+    properties:
+      reg:
+        minimum: 0
+
+    required:
+      - reg
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/leds/common.h>
+
+    soc {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        led-controller@800 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            compatible = "brcm,bcmbca-leds";
+            reg = <0x800 0xc8>;
+
+            led@0 {
+                reg = <0>;
+                active-low;
+                function = "ext";
+                color = <LED_COLOR_ID_GREEN>;
+            };
+
+            led@1 {
+                reg = <1>;
+                active-low;
+                function = "ext";
+                color = <LED_COLOR_ID_AMBER>;
+            };
+        };
+    };
