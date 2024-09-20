@@ -348,6 +348,7 @@ struct dw_pcie_rp {
 	bool			use_atu_msg;
 	int			msg_atu_index;
 	struct resource		*msg_res;
+	bool			linkup_irq;
 };
 
 struct dw_pcie_ep_ops {
