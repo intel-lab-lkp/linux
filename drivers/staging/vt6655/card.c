@@ -436,7 +436,7 @@ void card_v_safe_reset_rx(struct vnt_private *priv)
 
 	/* initialize RD index */
 	priv->p_curr_rd[0] = &priv->a_rd0_ring[0];
-	priv->p_curr_rd[1] = &priv->aRD1Ring[0];
+	priv->p_curr_rd[1] = &priv->a_rd1_ring[0];
 
 	/* init state, all RD is chip's */
 	for (uu = 0; uu < priv->opts.rx_descs0; uu++) {
@@ -448,7 +448,7 @@ void card_v_safe_reset_rx(struct vnt_private *priv)
 
 	/* init state, all RD is chip's */
 	for (uu = 0; uu < priv->opts.rx_descs1; uu++) {
-		p_desc = &priv->aRD1Ring[uu];
+		p_desc = &priv->a_rd1_ring[uu];
 		p_desc->rd0.res_count = cpu_to_le16(priv->rx_buf_sz);
 		p_desc->rd0.owner = OWNED_BY_NIC;
 		p_desc->rd1.req_count = cpu_to_le16(priv->rx_buf_sz);

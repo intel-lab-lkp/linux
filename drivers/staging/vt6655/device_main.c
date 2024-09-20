@@ -518,7 +518,7 @@ static bool device_init_rings(struct vnt_private *priv)
 	}
 
 	priv->a_rd0_ring = vir_pool;
-	priv->aRD1Ring = vir_pool +
+	priv->a_rd1_ring = vir_pool +
 		priv->opts.rx_descs0 * sizeof(struct vnt_rx_desc);
 
 	priv->rd0_pool_dma = priv->pool_dma;
@@ -650,7 +650,7 @@ static int device_init_rd1_ring(struct vnt_private *priv)
 	/* Init the RD1 ring entries */
 	for (i = 0; i < priv->opts.rx_descs1;
 	     i ++, curr += sizeof(struct vnt_rx_desc)) {
-		desc = &priv->aRD1Ring[i];
+		desc = &priv->a_rd1_ring[i];
 		desc->rd_info = kzalloc(sizeof(*desc->rd_info), GFP_KERNEL);
 		if (!desc->rd_info) {
 			ret = -ENOMEM;
@@ -663,13 +663,13 @@ static int device_init_rd1_ring(struct vnt_private *priv)
 			goto err_free_rd;
 		}
 
-		desc->next = &priv->aRD1Ring[(i + 1) % priv->opts.rx_descs1];
+		desc->next = &priv->a_rd1_ring[(i + 1) % priv->opts.rx_descs1];
 		desc->next_desc = cpu_to_le32(curr + sizeof(struct vnt_rx_desc));
 	}
 
 	if (i > 0)
-		priv->aRD1Ring[i - 1].next_desc = cpu_to_le32(priv->rd1_pool_dma);
-	priv->p_curr_rd[1] = &priv->aRD1Ring[0];
+		priv->a_rd1_ring[i - 1].next_desc = cpu_to_le32(priv->rd1_pool_dma);
+	priv->p_curr_rd[1] = &priv->a_rd1_ring[0];
 
 	return 0;
 
@@ -678,7 +678,7 @@ err_free_rd:
 
 err_free_desc:
 	while (i--) {
-		desc = &priv->aRD1Ring[i];
+		desc = &priv->a_rd1_ring[i];
 		device_free_rx_buf(priv, desc);
 		kfree(desc->rd_info);
 	}
@@ -703,7 +703,7 @@ static void device_free_rd1_ring(struct vnt_private *priv)
 	int i;
 
 	for (i = 0; i < priv->opts.rx_descs1; i++) {
-		struct vnt_rx_desc *desc = &priv->aRD1Ring[i];
+		struct vnt_rx_desc *desc = &priv->a_rd1_ring[i];
 
 		device_free_rx_buf(priv, desc);
 		kfree(desc->rd_info);
