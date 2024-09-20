@@ -54,13 +54,9 @@ static bool is_extended_socket_device(struct acpi_device *device)
 				 str_buf, sizeof(str_buf) - 1);
 	str_buf[result] = 0;
 
-	if (strncmp(FJES_ACPI_SYMBOL, str_buf, strlen(FJES_ACPI_SYMBOL)) != 0) {
-		kfree(buffer.pointer);
-		return false;
-	}
+	result = strncmp(FJES_ACPI_SYMBOL, str_buf, strlen(FJES_ACPI_SYMBOL));
 	kfree(buffer.pointer);
-
-	return true;
+	return result == 0;
 }
 
 static int acpi_check_extended_socket_status(struct acpi_device *device)
