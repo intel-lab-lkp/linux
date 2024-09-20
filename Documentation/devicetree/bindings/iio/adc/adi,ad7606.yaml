@@ -112,18 +112,32 @@ properties:
       assumed that the pins are hardwired to VDD.
     type: boolean
 
+  parallel-interface:
+    description:
+      If the parallel interface is used, be it directly or through a backend,
+      this property must be defined.
+    type: boolean
+
 required:
   - compatible
   - reg
-  - spi-cpol
   - avcc-supply
   - vdrive-supply
   - interrupts
   - adi,conversion-start-gpios
 
-allOf:
-  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+oneOf:
+  - required:
+      - parallel-interface
+  - allOf:
+      - properties:
+          parallel-interface: false
+          spi-cpol: true
+      - $ref: /schemas/spi/spi-peripheral-props.yaml#
+      - required:
+          - spi-cpol
 
+allOf:
   - if:
       properties:
         compatible:
