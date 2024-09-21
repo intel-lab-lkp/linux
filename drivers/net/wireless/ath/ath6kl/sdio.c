@@ -503,17 +503,15 @@ static void ath6kl_sdio_irq_handler(struct sdio_func *func)
 static int ath6kl_sdio_power_on(struct ath6kl *ar)
 {
 	struct ath6kl_sdio *ar_sdio = ath6kl_sdio_priv(ar);
-	struct sdio_func *func = ar_sdio->func;
-	int ret = 0;
 
 	if (!ar_sdio->is_disabled)
 		return 0;
 
 	ath6kl_dbg(ATH6KL_DBG_BOOT, "sdio power on\n");
-
+	struct sdio_func *func = ar_sdio->func;
 	sdio_claim_host(func);
 
-	ret = sdio_enable_func(func);
+	int ret = sdio_enable_func(func);
 	sdio_release_host(func);
 	if (ret) {
 		ath6kl_err("Unable to enable sdio func: %d)\n", ret);
