@@ -22,7 +22,7 @@ int netfs_buffer_append_folio(struct netfs_io_request *rreq, struct folio *folio
 		return -EIO;
 
 	if (!tail || folioq_full(tail)) {
-		tail = kmalloc(sizeof(*tail), GFP_NOFS);
+		tail = kzalloc(sizeof(*tail), GFP_NOFS);
 		if (!tail)
 			return -ENOMEM;
 		netfs_stat(&netfs_n_folioq);
