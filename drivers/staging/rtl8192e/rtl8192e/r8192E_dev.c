@@ -54,23 +54,23 @@ void rtl92e_set_reg(struct net_device *dev, u8 variable, u8 *val)
 		enum rt_op_mode op_mode = *((enum rt_op_mode *)(val));
 		u8 btMsr = rtl92e_readb(dev, MSR);
 
-		btMsr &= 0xfc;
+		btMsr &= ~MSR_LINK_MASK;
 
 		switch (op_mode) {
 		case RT_OP_MODE_INFRASTRUCTURE:
-			btMsr |= MSR_INFRA;
+			btMsr |= MSR_LINK_MANAGED;
 			break;
 
 		case RT_OP_MODE_IBSS:
-			btMsr |= MSR_ADHOC;
+			btMsr |= MSR_LINK_ADHOC;
 			break;
 
 		case RT_OP_MODE_AP:
-			btMsr |= MSR_AP;
+			btMsr |= MSR_LINK_MASTER;
 			break;
 
 		default:
-			btMsr |= MSR_NOLINK;
+			btMsr |= MSR_LINK_NONE;
 			break;
 		}
 

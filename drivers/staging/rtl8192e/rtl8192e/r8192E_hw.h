@@ -166,11 +166,7 @@ enum _RTL8192PCI_HW {
 #define MSR_LINK_MANAGED   2
 #define MSR_LINK_ADHOC     1
 #define MSR_LINK_MASTER    3
-
-#define	MSR_NOLINK					0x00
-#define	MSR_ADHOC					0x01
-#define	MSR_INFRA					0x02
-#define	MSR_AP						0x03
+#define MSR_LINK_NONE		0
 
 	RETRY_LIMIT		= 0x304,
 #define RETRY_LIMIT_SHORT_SHIFT 8
