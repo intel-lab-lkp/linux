@@ -529,13 +529,11 @@ static int ath6kl_sdio_power_on(struct ath6kl *ar)
 	ret = ath6kl_sdio_config(ar);
 	if (ret) {
 		ath6kl_err("Failed to config sdio: %d\n", ret);
-		goto out;
+		return ret;
 	}
 
 	ar_sdio->is_disabled = false;
-
-out:
-	return ret;
+	return 0;
 }
 
 static int ath6kl_sdio_power_off(struct ath6kl *ar)
