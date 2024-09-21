@@ -514,13 +514,11 @@ static int ath6kl_sdio_power_on(struct ath6kl *ar)
 	sdio_claim_host(func);
 
 	ret = sdio_enable_func(func);
+	sdio_release_host(func);
 	if (ret) {
 		ath6kl_err("Unable to enable sdio func: %d)\n", ret);
-		sdio_release_host(func);
 		return ret;
 	}
-
-	sdio_release_host(func);
 
 	/*
 	 * Wait for hardware to initialise. It should take a lot less than
