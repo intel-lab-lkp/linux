@@ -873,7 +873,7 @@ static const struct iio_info kx022a_info = {
 	.write_raw_get_fmt = &kx022a_write_raw_get_fmt,
 	.read_avail = &kx022a_read_avail,
 
-	.validate_trigger	= iio_validate_own_trigger,
+	.validate_trigger	= iio_trigger_validate_own_device,
 	.hwfifo_set_watermark	= kx022a_set_watermark,
 	.hwfifo_flush_to_buffer	= kx022a_fifo_flush,
 };

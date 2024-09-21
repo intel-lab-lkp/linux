@@ -1386,7 +1386,7 @@ static const struct iio_info bu27008_info = {
 	.write_raw_get_fmt = &bu27008_write_raw_get_fmt,
 	.read_avail = &bu27008_read_avail,
 	.update_scan_mode = bu27008_update_scan_mode,
-	.validate_trigger = iio_validate_own_trigger,
+	.validate_trigger = iio_trigger_validate_own_device,
 };
 
 static int bu27008_trigger_set_state(struct iio_trigger *trig, bool state)
