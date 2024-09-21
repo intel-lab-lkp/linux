@@ -77,20 +77,19 @@ static int __init emu_setup_memblk(struct numa_meminfo *ei,
 }
 
 /*
- * Sets up nr_nodes fake nodes interleaved over physical nodes ranging from addr
- * to max_addr.
+ * Sets up nr_nodes fake nodes interleaved over all physical nodes
  *
  * Returns zero on success or negative on error.
  */
 static int __init split_nodes_interleave(struct numa_meminfo *ei,
 					 struct numa_meminfo *pi,
-					 u64 addr, u64 max_addr, int nr_nodes)
+					 int nr_nodes)
 {
 	nodemask_t physnode_mask = numa_nodes_parsed;
-	u64 size;
-	int big;
-	int nid = 0;
-	int i, ret;
+	int nid = 0, physnodes_with_mem = 0;
+	int i, ret, phys_blk;
+	static u64 sizes[MAX_NUMNODES] __initdata;
+	static int bigs[MAX_NUMNODES] __initdata;
 
 	if (nr_nodes <= 0)
 		return -1;
@@ -100,25 +99,41 @@ static int __init split_nodes_interleave(struct numa_meminfo *ei,
 		nr_nodes = MAX_NUMNODES;
 	}
 
-	/*
-	 * Calculate target node size.  x86_32 freaks on __udivdi3() so do
-	 * the division in ulong number of pages and convert back.
-	 */
-	size = max_addr - addr - mem_hole_size(addr, max_addr);
-	size = PFN_PHYS((unsigned long)(size >> PAGE_SHIFT) / nr_nodes);
+	/* count physical nodes with memory */
+	for_each_node_mask(i, physnode_mask) {
+		phys_blk = emu_find_memblk_by_nid(i, pi);
+		if (phys_blk < 0)
+			continue;
+		physnodes_with_mem++;
+	}
 
 	/*
-	 * Calculate the number of big nodes that can be allocated as a result
-	 * of consolidating the remainder.
+	 * Calculate target fake nodes sizes for each physical node with memory.
+	 * x86_32 freaks on __udivdi3() so do the division in ulong number of
+	 * pages and convert back.
 	 */
-	big = ((size & ~FAKE_NODE_MIN_HASH_MASK) * nr_nodes) /
-		FAKE_NODE_MIN_SIZE;
+	for_each_node_mask(i, physnode_mask) {
+		phys_blk = emu_find_memblk_by_nid(i, pi);
+		if (phys_blk < 0)
+			continue;
 
-	size &= FAKE_NODE_MIN_HASH_MASK;
-	if (!size) {
-		pr_err("Not enough memory for each node.  "
-			"NUMA emulation disabled.\n");
-		return -1;
+		sizes[i] = pi->blk[phys_blk].end - pi->blk[phys_blk].start -
+			   mem_hole_size(pi->blk[phys_blk].start, pi->blk[phys_blk].end);
+		sizes[i] = PFN_PHYS((unsigned long)(sizes[i] >> PAGE_SHIFT) /
+			   nr_nodes * physnodes_with_mem);
+
+		/*
+		 * Calculate the number of big nodes that can be allocated as a result
+		 * of consolidating the remainder.
+		 */
+		bigs[i] = ((sizes[i] & ~FAKE_NODE_MIN_HASH_MASK) * nr_nodes) / physnodes_with_mem /
+			  FAKE_NODE_MIN_SIZE;
+		sizes[i] &= FAKE_NODE_MIN_HASH_MASK;
+		if (!sizes[i]) {
+			pr_err("Not enough memory for each node inside physical numa node %d. NUMA emulation disabled.\n",
+			       i);
+			return -1;
+		}
 	}
 
 	/*
@@ -138,16 +153,16 @@ static int __init split_nodes_interleave(struct numa_meminfo *ei,
 			}
 			start = pi->blk[phys_blk].start;
 			limit = pi->blk[phys_blk].end;
-			end = start + size;
+			end = start + sizes[i];
 
-			if (nid < big)
+			if (nid < bigs[i])
 				end += FAKE_NODE_MIN_SIZE;
 
 			/*
 			 * Continue to add memory to this fake node if its
 			 * non-reserved memory is less than the per-node size.
 			 */
-			while (end - start - mem_hole_size(start, end) < size) {
+			while (end - start - mem_hole_size(start, end) < sizes[i]) {
 				end += FAKE_NODE_MIN_SIZE;
 				if (end > limit) {
 					end = limit;
@@ -169,7 +184,7 @@ static int __init split_nodes_interleave(struct numa_meminfo *ei,
 			 * next node, this one must extend to the end of the
 			 * physical node.
 			 */
-			if (limit - end - mem_hole_size(end, limit) < size)
+			if (limit - end - mem_hole_size(end, limit) < sizes[i])
 				end = limit;
 
 			ret = emu_setup_memblk(ei, pi, nid++ % nr_nodes,
@@ -432,7 +447,7 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 		unsigned long n;
 
 		n = simple_strtoul(emu_cmdline, &emu_cmdline, 0);
-		ret = split_nodes_interleave(&ei, &pi, 0, max_addr, n);
+		ret = split_nodes_interleave(&ei, &pi, n);
 	}
 	if (*emu_cmdline == ':')
 		emu_cmdline++;
