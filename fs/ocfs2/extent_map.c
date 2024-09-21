@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/fiemap.h>
+#include <linux/delay.h>
 
 #include <cluster/masklog.h>
 
@@ -961,6 +962,8 @@ int ocfs2_read_virt_blocks(struct inode *inode, u64 v_block, int nr,
 	int rc = 0;
 	u64 p_block, p_count;
 	int i, count, done = 0;
+	int retries, max_retries = 5;
+	int retry_delay_ms = 30;
 
 	trace_ocfs2_read_virt_blocks(
 	     inode, (unsigned long long)v_block, nr, bhs, flags,
@@ -973,7 +976,18 @@ int ocfs2_read_virt_blocks(struct inode *inode, u64 v_block, int nr,
 	}
 
 	while (done < nr) {
-		down_read(&OCFS2_I(inode)->ip_alloc_sem);
+		retries = 0;
+		while (retries < max_retries) {
+			if (down_read_trylock(&OCFS2_I(inode)->ip_alloc_sem))
+				break; // Lock acquired
+			msleep(retry_delay_ms);
+			retries++;
+		}
+		if (retries == max_retries) {
+			rc = -EAGAIN;
+			mlog(ML_ERROR, "Cannot acquire lock\n");
+			break;
+		}
 		rc = ocfs2_extent_map_get_blocks(inode, v_block + done,
 						 &p_block, &p_count, NULL);
 		up_read(&OCFS2_I(inode)->ip_alloc_sem);
