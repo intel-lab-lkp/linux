@@ -2442,7 +2442,9 @@ static unsigned int ata_scsiop_mode_sense(struct ata_scsi_args *args, u8 *rbuf)
 	if (spg) {
 		switch (spg) {
 		case ALL_SUB_MPAGES:
-			break;
+			if (dev->flags & ATA_DFLAG_CDL)
+				break;
+			fallthrough;
 		case CDL_T2A_SUB_MPAGE:
 		case CDL_T2B_SUB_MPAGE:
 		case ATA_FEATURE_SUB_MPAGE:
