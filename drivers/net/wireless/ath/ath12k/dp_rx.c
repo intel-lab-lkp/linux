@@ -1804,11 +1804,9 @@ static int ath12k_dp_rx_msdu_coalesce(struct ath12k *ar,
 		/* Free up all buffers of the MSDU */
 		while ((skb = __skb_dequeue(msdu_list)) != NULL) {
 			rxcb = ATH12K_SKB_RXCB(skb);
-			if (!rxcb->is_continuation) {
-				dev_kfree_skb_any(skb);
-				break;
-			}
 			dev_kfree_skb_any(skb);
+			if (!rxcb->is_continuation)
+				break;
 		}
 		return -ENOMEM;
 	}

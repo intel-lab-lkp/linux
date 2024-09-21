@@ -2102,16 +2102,14 @@ int ath12k_dp_mon_srng_process(struct ath12k *ar, int mac_id, int *budget,
 								  skb, napi, ppdu_id);
 
 			peer = ath12k_peer_find_by_id(ab, ppdu_info->peer_id);
-
+			dev_kfree_skb_any(skb);
 			if (!peer || !peer->sta) {
 				ath12k_dbg(ab, ATH12K_DBG_DATA,
 					   "failed to find the peer with peer_id %d\n",
 					   ppdu_info->peer_id);
-				dev_kfree_skb_any(skb);
 				continue;
 			}
 
-			dev_kfree_skb_any(skb);
 			pmon->dest_skb_q[i] = NULL;
 		}
 
