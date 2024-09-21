@@ -420,4 +420,52 @@ extern void bpf_iter_num_destroy(struct bpf_iter_num *it) __weak __ksym;
 )
 #endif /* bpf_repeat */
 
+/**
+ * RESIZABLE_ARRAY - Generates annotations for an array that may be resized
+ * @elfsec: the data section of the BPF program in which to place the array
+ * @arr: the name of the array
+ *
+ * libbpf has an API for setting map value sizes. Since data sections (i.e.
+ * bss, data, rodata) themselves are maps, a data section can be resized. If
+ * a data section has an array as its last element, the BTF info for that
+ * array will be adjusted so that length of the array is extended to meet the
+ * new length of the data section. This macro annotates an array to have an
+ * element count of one with the assumption that this array can be resized
+ * within the userspace program. It also annotates the section specifier so
+ * this array exists in a custom sub data section which can be resized
+ * independently.
+ *
+ * See BPF_RESIZE_ARRAY() for the userspace convenience macro for resizing an
+ * array declared with BPF_RESIZABLE_ARRAY().
+ */
+#define BPF_RESIZABLE_ARRAY(elfsec, arr) arr[1] SEC("."#elfsec"."#arr)
+
+/*
+ * BPF_ARRAY_ELEM_PTR - Obtain the verified pointer to an array element
+ * @arr: array to index into
+ * @i: array index
+ * @n: number of elements in array
+ *
+ * Similar to MEMBER_VPTR() but is intended for use with arrays where the
+ * element count needs to be explicit.
+ * It can be used in cases where a global array is defined with an initial
+ * size but is intended to be be resized before loading the BPF program.
+ * Without this version of the macro, MEMBER_VPTR() will use the compile time
+ * size of the array to compute the max, which will result in rejection by
+ * the verifier.
+ */
+#define BPF_ARRAY_ELEM_PTR(arr, i, n) (typeof(arr[i]) *)({	  \
+	u64 __base = (u64)arr;					  \
+	u64 __addr = (u64)&(arr[i]) - __base;			  \
+	asm volatile (						  \
+		"if %0 <= %[max] goto +2\n"		  	  \
+		"%0 = 0\n"					  \
+		"goto +1\n"					  \
+		"%0 += %1\n"					  \
+		: "+r"(__addr)					  \
+		: "r"(__base),					  \
+		  [max]"r"(sizeof(arr[0]) * ((n) - 1)));  \
+	__addr;						  \
+})
+
 #endif
