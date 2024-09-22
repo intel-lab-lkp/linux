@@ -1776,7 +1776,14 @@ static int ext4_xattr_set_entry(struct ext4_xattr_info *i,
 	} else if (s->not_found) {
 		/* Insert new name. */
 		size_t size = EXT4_XATTR_LEN(name_len);
-		size_t rest = (void *)last - (void *)here + sizeof(__u32);
+		size_t rest;
+
+		if (last < here) {
+			ret = -ENOSPC;
+			goto out;
+		} else {
+			rest = (void *)last - (void *)here + sizeof(__u32);
+		}
 
 		memmove((void *)here + size, here, rest);
 		memset(here, 0, size);
