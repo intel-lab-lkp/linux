@@ -1307,9 +1307,14 @@ static void digi_read_bulk_callback(struct urb *urb)
 			__func__, status);
 		return;
 	}
-	if (port->serial == NULL ||
-		(serial_priv = usb_get_serial_data(port->serial)) == NULL) {
-		dev_err(&port->dev, "%s: serial is bad or serial->private "
+	if (port->serial == NULL) {
+		dev_err(&port->dev, "%s: serial is bad,"
+			" status=%d\n", __func__, status);
+		return;
+	}
+	serial_priv = usb_get_serial_data(port->serial);
+	if (serial_priv == NULL) {
+		dev_err(&port->dev, "%s:serial->private "
 			"is NULL, status=%d\n", __func__, status);
 		return;
 	}
