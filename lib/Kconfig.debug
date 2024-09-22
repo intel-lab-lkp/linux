@@ -2624,7 +2624,7 @@ config HASH_KUNIT_TEST
 
 config RESOURCE_KUNIT_TEST
 	tristate "KUnit test for resource API" if !KUNIT_ALL_TESTS
-	depends on KUNIT
+	depends on KUNIT && SPARSEMEM
 	default KUNIT_ALL_TESTS
 	select GET_FREE_REGION
 	help
