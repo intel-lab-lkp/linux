@@ -683,25 +683,44 @@ static void digi_set_termios(struct tty_struct *tty,
 		}
 		switch (baud) {
 		/* drop DTR and RTS on transition to B0 */
-		case 0: digi_set_modem_signals(port, 0, 1); break;
-		case 50: arg = DIGI_BAUD_50; break;
-		case 75: arg = DIGI_BAUD_75; break;
-		case 110: arg = DIGI_BAUD_110; break;
-		case 150: arg = DIGI_BAUD_150; break;
-		case 200: arg = DIGI_BAUD_200; break;
-		case 300: arg = DIGI_BAUD_300; break;
-		case 600: arg = DIGI_BAUD_600; break;
-		case 1200: arg = DIGI_BAUD_1200; break;
-		case 1800: arg = DIGI_BAUD_1800; break;
-		case 2400: arg = DIGI_BAUD_2400; break;
-		case 4800: arg = DIGI_BAUD_4800; break;
-		case 9600: arg = DIGI_BAUD_9600; break;
-		case 19200: arg = DIGI_BAUD_19200; break;
-		case 38400: arg = DIGI_BAUD_38400; break;
-		case 57600: arg = DIGI_BAUD_57600; break;
-		case 115200: arg = DIGI_BAUD_115200; break;
-		case 230400: arg = DIGI_BAUD_230400; break;
-		case 460800: arg = DIGI_BAUD_460800; break;
+		case 0:
+			digi_set_modem_signals(port, 0, 1); break;
+		case 50:
+			arg = DIGI_BAUD_50; break;
+		case 75:
+			arg = DIGI_BAUD_75; break;
+		case 110:
+			arg = DIGI_BAUD_110; break;
+		case 150:
+			arg = DIGI_BAUD_150; break;
+		case 200:
+			arg = DIGI_BAUD_200; break;
+		case 300:
+			arg = DIGI_BAUD_300; break;
+		case 600:
+			arg = DIGI_BAUD_600; break;
+		case 1200:
+			arg = DIGI_BAUD_1200; break;
+		case 1800:
+			arg = DIGI_BAUD_1800; break;
+		case 2400:
+			arg = DIGI_BAUD_2400; break;
+		case 4800:
+			arg = DIGI_BAUD_4800; break;
+		case 9600:
+			arg = DIGI_BAUD_9600; break;
+		case 19200:
+			arg = DIGI_BAUD_19200; break;
+		case 38400:
+			arg = DIGI_BAUD_38400; break;
+		case 57600:
+			arg = DIGI_BAUD_57600; break;
+		case 115200:
+			arg = DIGI_BAUD_115200; break;
+		case 230400:
+			arg = DIGI_BAUD_230400; break;
+		case 460800:
+			arg = DIGI_BAUD_460800; break;
 		default:
 			arg = DIGI_BAUD_9600;
 			baud = 9600;
@@ -735,10 +754,14 @@ static void digi_set_termios(struct tty_struct *tty,
 	if ((cflag & CSIZE) != (old_cflag & CSIZE)) {
 		arg = -1;
 		switch (cflag & CSIZE) {
-		case CS5: arg = DIGI_WORD_SIZE_5; break;
-		case CS6: arg = DIGI_WORD_SIZE_6; break;
-		case CS7: arg = DIGI_WORD_SIZE_7; break;
-		case CS8: arg = DIGI_WORD_SIZE_8; break;
+		case CS5:
+			arg = DIGI_WORD_SIZE_5; break;
+		case CS6:
+			arg = DIGI_WORD_SIZE_6; break;
+		case CS7:
+			arg = DIGI_WORD_SIZE_7; break;
+		case CS8:
+			arg = DIGI_WORD_SIZE_8; break;
 		default:
 			dev_dbg(dev,
 				"digi_set_termios: can't handle word size %d\n",
@@ -965,16 +988,30 @@ static void digi_write_bulk_callback(struct urb *urb)
 	int status = urb->status;
 	bool wakeup;
 
-	/* port and serial sanity check */
-	if (port == NULL || (priv = usb_get_serial_port_data(port)) == NULL) {
-		pr_err("%s: port or port->private is NULL, status=%d\n",
+	/* port sanity check */
+	if (port == NULL) {
+		pr_err("%s: port is NULL, status=%d\n",
+			__func__, status);
+		return;
+	}
+	/* serial sanity check */
+	priv = usb_get_serial_port_data(port);
+	if (priv == NULL) {
+		pr_err("%s: port->private is NULL, status=%d\n",
 			__func__, status);
 		return;
 	}
 	serial = port->serial;
-	if (serial == NULL || (serial_priv = usb_get_serial_data(serial)) == NULL) {
+	if (serial == NULL) {
 		dev_err(&port->dev,
-			"%s: serial or serial->private is NULL, status=%d\n",
+			"%s: serial  is NULL, status=%d\n",
+			__func__, status);
+		return;
+	}
+	serial_priv = usb_get_serial_data(serial);
+	if (serial_priv == NULL) {
+		dev_err(&port->dev,
+			"%s: serial->private is NULL, status=%d\n",
 			__func__, status);
 		return;
 	}
@@ -1307,13 +1344,17 @@ static void digi_read_bulk_callback(struct urb *urb)
 			__func__, status);
 		return;
 	}
-	if (port->serial == NULL ||
-		(serial_priv = usb_get_serial_data(port->serial)) == NULL) {
-		dev_err(&port->dev, "%s: serial is bad or serial->private "
+	if (port->serial == NULL) {
+		dev_err(&port->dev, "%s: serial is bad,"
+			" status=%d\n", __func__, status);
+		return;
+	}
+	serial_priv = usb_get_serial_data(port->serial);
+	if (serial_priv == NULL) {
+		dev_err(&port->dev, "%s:serial->private "
 			"is NULL, status=%d\n", __func__, status);
 		return;
 	}
-
 	/* do not resubmit urb if it has any status error */
 	if (status) {
 		dev_err(&port->dev,
