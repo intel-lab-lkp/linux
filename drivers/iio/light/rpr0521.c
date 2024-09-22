@@ -446,13 +446,8 @@ static irqreturn_t rpr0521_trigger_consumer_handler(int irq, void *p)
 	int err;
 
 	/* Use irq timestamp when reasonable. */
-	if (iio_trigger_using_own(indio_dev) && data->irq_timestamp) {
+	if (iio_trigger_using_own(indio_dev))
 		pf->timestamp = data->irq_timestamp;
-		data->irq_timestamp = 0;
-	}
-	/* Other chained trigger polls get timestamp only here. */
-	if (!pf->timestamp)
-		pf->timestamp = iio_get_time_ns(indio_dev);
 
 	err = regmap_bulk_read(data->regmap, RPR0521_REG_PXS_DATA,
 		data->scan.channels,
@@ -463,7 +458,6 @@ static irqreturn_t rpr0521_trigger_consumer_handler(int irq, void *p)
 	else
 		dev_err(&data->client->dev,
 			"Trigger consumer can't read from sensor.\n");
-	pf->timestamp = 0;
 
 	iio_trigger_notify_done(indio_dev->trig);
 
