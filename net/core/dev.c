@@ -6876,6 +6876,7 @@ static void napi_threaded_poll_loop(struct napi_struct *napi)
 	struct bpf_net_context __bpf_net_ctx, *bpf_net_ctx;
 	struct softnet_data *sd;
 	unsigned long last_qs = jiffies;
+	int budget = READ_ONCE(net_hotdata.netdev_budget);
 
 	for (;;) {
 		bool repoll = false;
@@ -6888,7 +6889,7 @@ static void napi_threaded_poll_loop(struct napi_struct *napi)
 		sd->in_napi_threaded_poll = true;
 
 		have = netpoll_poll_lock(napi);
-		__napi_poll(napi, &repoll);
+		budget -= __napi_poll(napi, &repoll);
 		netpoll_poll_unlock(have);
 
 		sd->in_napi_threaded_poll = false;
@@ -6904,6 +6905,9 @@ static void napi_threaded_poll_loop(struct napi_struct *napi)
 
 		if (!repoll)
 			break;
+
+		if (budget > 0)
+			continue;
 
 		rcu_softirq_qs_periodic(last_qs);
 		cond_resched();
