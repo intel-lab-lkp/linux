@@ -926,7 +926,7 @@ bool dma_addressing_limited(struct device *dev)
 			 dma_get_required_mask(dev))
 		return true;
 
-	if (unlikely(ops))
+	if (unlikely(ops) || use_dma_iommu(dev)
 		return false;
 	return !dma_direct_all_ram_mapped(dev);
 }
