@@ -1363,6 +1363,9 @@ int diAlloc(struct inode *pip, bool dir, struct inode *ip)
 	if (agno < 0 || agno > dn_numag)
 		return -EIO;
 
+	if (unlikely(dn_numag > MAXAG))
+		return -EIO;
+
 	if (atomic_read(&JFS_SBI(pip->i_sb)->bmap->db_active[agno])) {
 		/*
 		 * There is an open file actively growing.  We want to
