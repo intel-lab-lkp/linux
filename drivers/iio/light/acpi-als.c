@@ -171,10 +171,8 @@ static irqreturn_t acpi_als_trigger_handler(int irq, void *p)
 	 *
 	 * If the timestamp was actually 0, the timestamp is set one more time.
 	 */
-	if (!pf->timestamp)
-		pf->timestamp = iio_get_time_ns(indio_dev);
-
-	iio_push_to_buffers_with_timestamp(indio_dev, buffer, pf->timestamp);
+	iio_push_to_buffers_with_timestamp(indio_dev, buffer,
+					   pf->timestamp ?: iio_get_time_ns(indio_dev));
 out:
 	mutex_unlock(&als->lock);
 	iio_trigger_notify_done(indio_dev->trig);
