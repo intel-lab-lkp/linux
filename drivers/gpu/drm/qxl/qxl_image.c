@@ -52,6 +52,35 @@ qxl_allocate_chunk(struct qxl_device *qdev,
 	return 0;
 }
 
+/* For drm panic */
+int
+qxl_image_alloc_objects_without_release(struct qxl_device *qdev,
+					struct qxl_drm_image *image,
+					struct qxl_drm_chunk *chunk,
+					struct qxl_bo *image_bo, struct qxl_bo *chunk_bo,
+					uint8_t *surface_base, int width, int height,
+					int depth, int stride)
+{
+	int ret;
+	unsigned int chunk_size = sizeof(struct qxl_data_chunk) + stride * height;
+
+	INIT_LIST_HEAD(&image->chunk_list);
+	ret = qxl_panic_bo_create(qdev, sizeof(struct qxl_image), image_bo);
+	if (ret)
+		return ret;
+	image->bo = image_bo;
+
+	ret = qxl_panic_bo_create(qdev, chunk_size, chunk_bo);
+	if (ret)
+		return ret;
+	chunk->bo = chunk_bo;
+	list_add_tail(&chunk->head, &image->chunk_list);
+
+	ret = qxl_image_init(qdev, NULL, image, surface_base,
+			     0, 0, width, height, depth, stride);
+	return ret;
+}
+
 int
 qxl_image_alloc_objects(struct qxl_device *qdev,
 			struct qxl_release *release,
