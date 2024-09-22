@@ -716,6 +716,7 @@ static void battery_hook_unregister_unlocked(struct acpi_battery_hook *hook)
 			power_supply_changed(battery->bat);
 	}
 	list_del(&hook->list);
+	hook->dead = true;
 
 	pr_info("extension unregistered: %s\n", hook->name);
 }
@@ -723,7 +724,14 @@ static void battery_hook_unregister_unlocked(struct acpi_battery_hook *hook)
 void battery_hook_unregister(struct acpi_battery_hook *hook)
 {
 	mutex_lock(&hook_mutex);
-	battery_hook_unregister_unlocked(hook);
+	/*
+	 * Ignore already unregistered battery hooks. This might happen
+	 * if a battery hook was previously unloaded due to an error when
+	 * adding a new battery.
+	 */
+	if (!hook->dead)
+		battery_hook_unregister_unlocked(hook);
+
 	mutex_unlock(&hook_mutex);
 }
 EXPORT_SYMBOL_GPL(battery_hook_unregister);
@@ -734,6 +742,7 @@ void battery_hook_register(struct acpi_battery_hook *hook)
 
 	mutex_lock(&hook_mutex);
 	INIT_LIST_HEAD(&hook->list);
+	hook->dead = false;
 	list_add(&hook->list, &battery_hook_list);
 	/*
 	 * Now that the driver is registered, we need
