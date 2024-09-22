@@ -64,7 +64,7 @@ static int bch2_pow(u64 n, u64 p, u64 *res)
 	*res = 1;
 
 	while (p--) {
-		if (*res > div_u64(U64_MAX, n))
+		if (*res > div64_u64(U64_MAX, n))
 			return -ERANGE;
 		*res *= n;
 	}
@@ -140,14 +140,14 @@ static int __bch2_strtou64_h(const char *cp, u64 *res)
 
 	parse_or_ret(cp, parse_unit_suffix(cp, &b));
 
-	if (v > div_u64(U64_MAX, b))
+	if (v > div64_u64(U64_MAX, b))
 		return -ERANGE;
 	v *= b;
 
-	if (f_n > div_u64(U64_MAX, b))
+	if (f_n > div64_u64(U64_MAX, b))
 		return -ERANGE;
 
-	f_n = div_u64(f_n * b, f_d);
+	f_n = div64_u64(f_n * b, f_d);
 	if (v + f_n < v)
 		return -ERANGE;
 	v += f_n;
@@ -360,7 +360,7 @@ void bch2_pr_time_units(struct printbuf *out, u64 ns)
 {
 	const struct time_unit *u = bch2_pick_time_units(ns);
 
-	prt_printf(out, "%llu %s", div_u64(ns, u->nsecs), u->name);
+	prt_printf(out, "%llu %s", div64_u64(ns, u->nsecs), u->name);
 }
 
 static void bch2_pr_time_units_aligned(struct printbuf *out, u64 ns)
@@ -477,7 +477,7 @@ void bch2_time_stats_to_text(struct printbuf *out, struct bch2_time_stats *stats
 			bool is_last = eytzinger0_next(i, NR_QUANTILES) == -1;
 
 			u64 q = max(quantiles->entries[i].m, last_q);
-			prt_printf(out, "%llu ", div_u64(q, u->nsecs));
+			prt_printf(out, "%llu ", div64_u64(q, u->nsecs));
 			if (is_last)
 				prt_newline(out);
 			last_q = q;
@@ -511,7 +511,7 @@ void bch2_ratelimit_increment(struct bch_ratelimit *d, u64 done)
 {
 	u64 now = local_clock();
 
-	d->next += div_u64(done * NSEC_PER_SEC, d->rate);
+	d->next += div64_u64(done * NSEC_PER_SEC, d->rate);
 
 	if (time_before64(now + NSEC_PER_SEC, d->next))
 		d->next = now + NSEC_PER_SEC;
