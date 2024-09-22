@@ -853,12 +853,12 @@ static int veml6030_probe(struct i2c_client *client)
 		indio_dev->info = &veml6030_info_no_irq;
 	}
 
-	ret = veml6030_hw_init(indio_dev);
+	ret = devm_add_action_or_reset(&client->dev,
+				       veml6030_als_shut_down_action, data);
 	if (ret < 0)
 		return ret;
 
-	ret = devm_add_action_or_reset(&client->dev,
-					veml6030_als_shut_down_action, data);
+	ret = veml6030_hw_init(indio_dev);
 	if (ret < 0)
 		return ret;
 
