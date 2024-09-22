@@ -74,7 +74,7 @@ struct nullb_device {
 	bool need_zone_res_mgmt;
 	spinlock_t zone_res_lock;
 
-	unsigned long size; /* device size in MB */
+	u64 size; /* device size in MB */
 	unsigned long completion_nsec; /* time in ns to complete a request */
 	unsigned long cache_size; /* disk cache size in MB */
 	unsigned long zone_size; /* zone size in MB if device is zoned */

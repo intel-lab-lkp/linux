@@ -289,6 +289,11 @@ static inline ssize_t nullb_device_ulong_attr_show(unsigned long val,
 	return snprintf(page, PAGE_SIZE, "%lu\n", val);
 }
 
+static inline ssize_t nullb_device_u64_attr_show(u64 val, char *page)
+{
+	return snprintf(page, PAGE_SIZE, "%llu\n", val);
+}
+
 static inline ssize_t nullb_device_bool_attr_show(bool val, char *page)
 {
 	return snprintf(page, PAGE_SIZE, "%u\n", val);
@@ -315,6 +320,20 @@ static ssize_t nullb_device_ulong_attr_store(unsigned long *val,
 	unsigned long tmp;
 
 	result = kstrtoul(page, 0, &tmp);
+	if (result < 0)
+		return result;
+
+	*val = tmp;
+	return count;
+}
+
+static ssize_t nullb_device_u64_attr_store(u64 *val, const char *page,
+	size_t count)
+{
+	int result;
+	u64 tmp;
+
+	result = kstrtou64(page, 0, &tmp);
 	if (result < 0)
 		return result;
 
@@ -438,7 +457,7 @@ static int nullb_apply_poll_queues(struct nullb_device *dev,
 	return ret;
 }
 
-NULLB_DEVICE_ATTR(size, ulong, NULL);
+NULLB_DEVICE_ATTR(size, u64, NULL);
 NULLB_DEVICE_ATTR(completion_nsec, ulong, NULL);
 NULLB_DEVICE_ATTR(submit_queues, uint, nullb_apply_submit_queues);
 NULLB_DEVICE_ATTR(poll_queues, uint, nullb_apply_poll_queues);
@@ -762,7 +781,7 @@ static struct nullb_device *null_alloc_dev(void)
 		return NULL;
 	}
 
-	dev->size = g_gb * 1024;
+	dev->size = (u64)g_gb * 1024;
 	dev->completion_nsec = g_completion_nsec;
 	dev->submit_queues = g_submit_queues;
 	dev->prev_submit_queues = g_submit_queues;
