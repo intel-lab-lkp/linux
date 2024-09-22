@@ -1196,7 +1196,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	int rc = -EAGAIN;
 	int old_page_state = 0;
 	struct anon_vma *anon_vma = NULL;
-	bool is_lru = !__folio_test_movable(src);
+	bool is_lru;
 	bool locked = false;
 	bool dst_locked = false;
 
@@ -1250,6 +1250,7 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 	locked = true;
 	if (folio_test_mlocked(src))
 		old_page_state |= PAGE_WAS_MLOCKED;
+	is_lru = !__folio_test_movable(src);
 
 	if (folio_test_writeback(src)) {
 		/*
