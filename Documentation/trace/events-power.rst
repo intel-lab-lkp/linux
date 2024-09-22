@@ -102,3 +102,30 @@ And, there are events used for CPU latency QoS add/update/remove request.
   pm_qos_remove_request     "value=%d"
 
 The parameter is the value to be added/updated/removed.
+
+5. Device PM callback events
+============================
+The device PM callback events are placed right before and after an invocation of
+a device PM callback during a system-wide suspend/resume attempt.
+::
+
+  device_pm_callback_start     "%s %s, parent: %s, %s[%s]"
+  device_pm_callback_end       "%s %s, err=%d"
+
+The first two parameters in both events are the same. They are:
+
+  - The name of the driver.
+  - The device whose PM callbacks get called.
+
+For device_pm_callback_start, the rest of the parameters are:
+
+  - The parent device of the device (if any).
+  - Level in the power management hierarchy the callback belongs to (e.g. power
+    domain, type, class, bus, driver). Some stages (e.g. early, late, noirq)
+    will also be explicitly mentioned in this string.
+  - The ongoing PM event. You may find definitions of those events in the
+    PM_EVENT_* macros in include/linux/pm.h
+
+For device_pm_callback_end, the only remaining parameter is:
+
+  - The return value of the PM callback.
