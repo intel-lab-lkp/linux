@@ -2529,18 +2529,27 @@ static int edma_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(dev, "memcpy ddev registration failed (%d)\n",
 				ret);
-			dma_async_device_unregister(&ecc->dma_slave);
-			goto err_reg1;
+			goto err_unregister_dma_slave;
 		}
 	}
 
-	if (node)
-		of_dma_controller_register(node, of_edma_xlate, ecc);
+	if (node) {
+		ret = of_dma_controller_register(node, of_edma_xlate, ecc);
+		if (ret) {
+			dev_err(dev, "Failed to register DMA controller (%d)\n", ret);
+			goto err_unregister_dma_memcpy;
+		}
+	}
 
 	dev_info(dev, "TI EDMA DMA engine driver\n");
 
 	return 0;
 
+err_unregister_dma_memcpy:
+	if (ecc->dma_memcpy)
+		dma_async_device_unregister(ecc->dma_memcpy);
+err_unregister_dma_slave:
+	dma_async_device_unregister(&ecc->dma_slave);
 err_reg1:
 	edma_free_slot(ecc, ecc->dummy_slot);
 err_disable_pm:
