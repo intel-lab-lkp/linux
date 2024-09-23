@@ -210,6 +210,7 @@ static void bond_info_show_slave(struct seq_file *seq,
 	seq_printf(seq, "Permanent HW addr: %*phC\n",
 		   slave->dev->addr_len, slave->perm_hwaddr);
 	seq_printf(seq, "Slave queue ID: %d\n", READ_ONCE(slave->queue_id));
+	seq_printf(seq, "Slave prio: %d\n", READ_ONCE(slave->prio));
 
 	if (BOND_MODE(bond) == BOND_MODE_8023AD) {
 		const struct port *port = &SLAVE_AD_INFO(slave)->port;
