@@ -2058,6 +2058,7 @@ static int npf_interception(struct kvm_vcpu *vcpu)
 
 	u64 fault_address = svm->vmcb->control.exit_info_2;
 	u64 error_code = svm->vmcb->control.exit_info_1;
+	u32 int_type = svm->vmcb->control.exit_int_info & SVM_EXITINTINFO_TYPE_MASK;
 
 	/*
 	 * WARN if hardware generates a fault with an error code that collides
@@ -2070,6 +2071,9 @@ static int npf_interception(struct kvm_vcpu *vcpu)
 
 	if (sev_snp_guest(vcpu->kvm) && (error_code & PFERR_GUEST_ENC_MASK))
 		error_code |= PFERR_PRIVATE_ACCESS;
+
+	if (int_type)
+		error_code |= PFERR_EVT_DELIVERY;
 
 	trace_kvm_page_fault(vcpu, fault_address, error_code);
 	rc = kvm_mmu_page_fault(vcpu, fault_address, error_code,

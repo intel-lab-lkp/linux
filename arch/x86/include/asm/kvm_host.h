@@ -284,6 +284,12 @@ enum x86_intercept_stage;
 				 PFERR_WRITE_MASK |		\
 				 PFERR_PRESENT_MASK)
 
+/*
+ * EVT_DELIVERY is a KVM-defined flag used to indicate that vmexit occurred
+ * during event delivery.
+ */
+#define PFERR_EVT_DELIVERY		BIT_ULL(50)
+
 /* apic attention bits */
 #define KVM_APIC_CHECK_VAPIC	0
 /*

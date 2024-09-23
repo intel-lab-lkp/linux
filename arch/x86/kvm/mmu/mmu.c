@@ -5992,8 +5992,19 @@ int noinline kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 err
 			return -EFAULT;
 
 		r = handle_mmio_page_fault(vcpu, cr2_or_gpa, direct);
-		if (r == RET_PF_EMULATE)
+		if (r == RET_PF_EMULATE) {
+			/*
+			 * Request triple fault if guest accesses MMIO during event delivery.
+			 * It could happen if the guest sets the IDTR base to point to an MMIO
+			 * range. This is not allowed and there is no way to recover after it.
+			 */
+			if (error_code & PFERR_EVT_DELIVERY) {
+				pr_warn("Guest accesses MMIO during event delivery. Requesting triple fault.\n");
+				kvm_make_request(KVM_REQ_TRIPLE_FAULT, vcpu);
+				return 1;
+			}
 			goto emulate;
+		}
 	}
 
 	if (r == RET_PF_INVALID) {
