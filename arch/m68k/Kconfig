@@ -76,6 +76,10 @@ config PGTABLE_LEVELS
 	default 2 if SUN3 || COLDFIRE
 	default 3
 
+config NR_CPUS
+	int
+	default "1"
+
 config MMU
 	bool "MMU-based Paged Memory Management Support"
 	default y
