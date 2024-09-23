@@ -13,6 +13,10 @@ description: |
   This documents describes the devicetree bindings for a mmc-host controller
   child node describing a mmc-card / an eMMC.
 
+  It's possible to define a fixed partition table for an eMMC for the user
+  partition and one of the 2 boot partition (boot0/boot1) if supported by the
+  eMMC.
+
 properties:
   compatible:
     const: mmc-card
@@ -25,6 +29,48 @@ properties:
     description:
       Use this to indicate that the mmc-card has a broken hpi
       implementation, and that hpi should not be used.
+
+  "#address-cells": true
+
+  "#size-cells": true
+
+patternProperties:
+  "^partitions(-boot[01])?$":
+    type: object
+
+    properties:
+      "#address-cells": true
+
+      "#size-cells": true
+
+    patternProperties:
+      "@[0-9a-f]+$":
+        type: object
+
+        properties:
+          reg:
+            description: partition's offset and size within the flash (in sector
+              block, 512byte)
+            maxItems: 1
+
+
+          label:
+            description: The label / name for this partition.
+
+          read-only:
+            description: This parameter, if present, is a hint that this partition
+              should only be mounted read-only. This is usually used for flash
+              partitions containing early-boot firmware images or data which should
+              not be clobbered.
+            type: boolean
+
+        required:
+          - reg
+          - label
+
+        additionalProperties: false
+
+    additionalProperties: false
 
 required:
   - compatible
@@ -42,6 +88,35 @@ examples:
             compatible = "mmc-card";
             reg = <0>;
             broken-hpi;
+
+            #address-cells = <0>;
+            #size-cells = <0>;
+
+            partitions {
+                #address-cells = <1>;
+                #size-cells = <1>;
+
+                partition@0 {
+                    label = "kernel"; /* Kernel */
+                    reg = <0x0 0x10000>; /* 32 MB */
+                };
+
+                partition@3400 {
+                    label = "rootfs";
+                    reg = <0x3400 0x200000>; /* 1GB */
+                };
+            };
+
+            partitions-boot0 {
+                #address-cells = <1>;
+                #size-cells = <1>;
+
+                partition@0 {
+                    label = "bl";
+                    reg = <0x0 0x10000>; /* 32MB */
+                    read-only;
+                };
+            };
         };
     };
 
