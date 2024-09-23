@@ -222,6 +222,11 @@ static int mxc_isi_m2m_vb2_buffer_prepare(struct vb2_buffer *vb2)
 	struct mxc_isi_m2m_ctx *ctx = vb2_get_drv_priv(vq);
 	const struct mxc_isi_m2m_ctx_queue_data *qdata =
 		mxc_isi_m2m_ctx_qdata(ctx, vq->type);
+	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb2);
+
+	v4l2_buf->field = vq->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE ?
+			  ctx->queues.out.format.field :
+			  ctx->queues.cap.format.field;
 
 	return mxc_isi_video_buffer_prepare(ctx->m2m->isi, vb2, qdata->info,
 					    &qdata->format);
