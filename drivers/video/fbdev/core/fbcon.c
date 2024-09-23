@@ -3217,26 +3217,7 @@ err:
 static ssize_t show_cursor_blink(struct device *device,
 				 struct device_attribute *attr, char *buf)
 {
-	struct fb_info *info;
-	struct fbcon_ops *ops;
-	int idx, blink = -1;
-
-	console_lock();
-	idx = con2fb_map[fg_console];
-
-	if (idx == -1 || fbcon_registered_fb[idx] == NULL)
-		goto err;
-
-	info = fbcon_registered_fb[idx];
-	ops = info->fbcon_par;
-
-	if (!ops)
-		goto err;
-
-	blink = delayed_work_pending(&ops->cursor_work);
-err:
-	console_unlock();
-	return sysfs_emit(buf, "%d\n", blink);
+	return sysfs_emit(buf, "%d\n", !fbcon_cursor_noblink);
 }
 
 static ssize_t store_cursor_blink(struct device *device,
@@ -3247,8 +3228,12 @@ static ssize_t store_cursor_blink(struct device *device,
 	int blink, idx;
 	char **last = NULL;
 
+	blink = simple_strtoul(buf, last, 0);
+
 	console_lock();
 	idx = con2fb_map[fg_console];
+
+	fbcon_cursor_noblink = !blink;
 
 	if (idx == -1 || fbcon_registered_fb[idx] == NULL)
 		goto err;
@@ -3258,15 +3243,10 @@ static ssize_t store_cursor_blink(struct device *device,
 	if (!info->fbcon_par)
 		goto err;
 
-	blink = simple_strtoul(buf, last, 0);
-
-	if (blink) {
-		fbcon_cursor_noblink = 0;
+	if (blink)
 		fbcon_add_cursor_work(info);
-	} else {
-		fbcon_cursor_noblink = 1;
+	else
 		fbcon_del_cursor_work(info);
-	}
 
 err:
 	console_unlock();
