@@ -2946,6 +2946,8 @@ static void __ftrace_trace_stack(struct trace_buffer *buffer,
 #ifndef CONFIG_UNWINDER_ORC
 	if (!regs)
 		skip++;
+#else
+	skip++;
 #endif
 
 	preempt_disable_notrace();
