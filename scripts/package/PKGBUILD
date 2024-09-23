@@ -5,7 +5,7 @@
 pkgbase=${PACMAN_PKGBASE:-linux-upstream}
 pkgname=("${pkgbase}" "${pkgbase}-api-headers")
 if grep -q CONFIG_MODULES=y include/config/auto.conf; then
-	pkgname+=("${pkgbase}-headers")
+	pkgname+=("${pkgbase}-headers" "${pkgbase}-dbg")
 fi
 pkgver="${KERNELRELEASE//-/_}"
 # The PKGBUILD is evaluated multiple times.
@@ -98,6 +98,18 @@ _package-api-headers() {
 	cd "${objtree}"
 
 	${MAKE} headers_install INSTALL_HDR_PATH="${pkgdir}/usr"
+}
+
+_package-dbg() {
+	pkgdesc="debuginfo for the ${pkgdesc} kernel"
+
+	export MAKEFLAGS="${KBUILD_MAKEFLAGS}"
+	cd "${objtree}"
+	local builddir="${pkgdir}/usr/${MODLIB}/build"
+	mkdir -p "${builddir}"
+
+	echo "Installing vmlinux..."
+	cp vmlinux "${builddir}/vmlinux"
 }
 
 for _p in "${pkgname[@]}"; do
