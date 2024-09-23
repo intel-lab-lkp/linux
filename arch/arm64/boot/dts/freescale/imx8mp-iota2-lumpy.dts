@@ -32,6 +32,17 @@
 		};
 	};
 
+	reg_typec: regulator-typec {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&pinctrl_usbc_vbus>;
+		pinctrl-names = "default";
+		regulator-max-microvolt = <5000000>;
+		regulator-min-microvolt = <5000000>;
+		regulator-name = "typec";
+	};
+
 	reg_usb_host: regulator-usb-host {
 		compatible = "regulator-fixed";
 		enable-active-high;
@@ -218,6 +229,46 @@
 	pinctrl-names = "default";
 	status = "okay";
 
+	typec@d {
+		compatible = "diodes,pi5usb30213a";
+		reg = <0xd>;
+		interrupts-extended = <&gpio1 5 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&pinctrl_typec>;
+		pinctrl-names = "default";
+
+		connector {
+			compatible = "usb-c-connector";
+			data-role = "dual";
+			label = "USB-C";
+			pd-disable;
+			power-role = "source";
+			self-powered;
+			typec-power-opmode = "default";
+			vbus-supply = <&reg_typec>;
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					usb_con_hs: endpoint {
+						remote-endpoint = <&typec_hs>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+
+					usb_con_ss: endpoint {
+						remote-endpoint = <&typec_ss>;
+					};
+				};
+			};
+		};
+	};
+
 	rtc: rtc@68 {
 		compatible = "dallas,ds1341";
 		reg = <0x68>;
@@ -309,6 +360,12 @@
 		>;
 	};
 
+	pinctrl_typec: typecgrp {
+		fsl,pins = <
+			MX8MP_IOMUXC_GPIO1_IO05__GPIO1_IO05	0x1c0
+		>;
+	};
+
 	pinctrl_uart2: uart2grp {
 		fsl,pins = <
 			MX8MP_IOMUXC_UART2_RXD__UART2_DCE_RX	0x0
@@ -319,6 +376,11 @@
 	pinctrl_usb_host_vbus: usb1grp {
 		fsl,pins = <
 			MX8MP_IOMUXC_GPIO1_IO14__USB2_OTG_PWR	0x0
+		>;
+	};
+
+	pinctrl_usbc_vbus: usbcgrp {
+		fsl,pins = <MX8MP_IOMUXC_GPIO1_IO12__GPIO1_IO12	0x0
 		>;
 	};
 
@@ -389,13 +451,45 @@
 	status = "okay";
 };
 
+&usb3_0 {
+	status = "okay";
+};
+
 &usb3_1 {
+	status = "okay";
+};
+
+&usb3_phy0 {
 	status = "okay";
 };
 
 &usb3_phy1 {
 	vbus-supply = <&reg_usb_host>;
 	status = "okay";
+};
+
+&usb_dwc3_0 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	dr_mode = "otg";
+	usb-role-switch;
+	status = "okay";
+
+	port@0 {
+		reg = <0>;
+
+		typec_hs: endpoint {
+			remote-endpoint = <&usb_con_hs>;
+		};
+	};
+
+	port@1 {
+		reg = <1>;
+
+		typec_ss: endpoint {
+			remote-endpoint = <&usb_con_ss>;
+		};
+	};
 };
 
 &usb_dwc3_1 {
