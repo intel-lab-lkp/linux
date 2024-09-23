@@ -516,12 +516,27 @@ err_attr_init:
 	return retval;
 }
 
+static const struct dmi_system_id sysman_dev_table[] __initconst = {
+	{
+		.ident = "Dell Inc.",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+		},
+	},
+	{
+		.ident = "Alienware",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Alienware"),
+		},
+	},
+	{}
+};
+
 static int __init sysman_init(void)
 {
 	int ret = 0;
 
-	if (!dmi_find_device(DMI_DEV_TYPE_OEM_STRING, "Dell System", NULL) &&
-	    !dmi_find_device(DMI_DEV_TYPE_OEM_STRING, "www.dell.com", NULL)) {
+	if (!dmi_check_system(sysman_dev_table)) {
 		pr_err("Unable to run on non-Dell system\n");
 		return -ENODEV;
 	}
