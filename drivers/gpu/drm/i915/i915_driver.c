@@ -711,6 +711,15 @@ static void i915_welcome_messages(struct drm_i915_private *dev_priv)
 			 "DRM_I915_DEBUG_RUNTIME_PM enabled\n");
 }
 
+static void i915_setup_wedge_recovery(struct drm_i915_private *i915)
+{
+	struct drm_device *dev = &i915->drm;
+
+	/* Support both driver rebind and bus reset based recovery. */
+	set_bit(DRM_WEDGE_RECOVERY_REBIND, &dev->wedge_recovery);
+	set_bit(DRM_WEDGE_RECOVERY_BUS_RESET, &dev->wedge_recovery);
+}
+
 static struct drm_i915_private *
 i915_driver_create(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
@@ -812,6 +821,7 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	enable_rpm_wakeref_asserts(&i915->runtime_pm);
 
+	i915_setup_wedge_recovery(i915);
 	i915_welcome_messages(i915);
 
 	i915->do_release = true;
