@@ -1345,12 +1345,9 @@ struct tegra_xusb_padctl *tegra_xusb_padctl_get(struct device *dev)
 	 * only ever be one per SoC that would be a little overkill.
 	 */
 	pdev = of_find_device_by_node(np);
-	if (!pdev) {
-		of_node_put(np);
-		return ERR_PTR(-ENODEV);
-	}
-
 	of_node_put(np);
+	if (!pdev)
+		return ERR_PTR(-ENODEV);
 
 	padctl = platform_get_drvdata(pdev);
 	if (!padctl) {
