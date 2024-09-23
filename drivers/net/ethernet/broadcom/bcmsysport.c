@@ -2337,6 +2337,9 @@ static int bcm_sysport_map_queues(struct net_device *dev,
 	unsigned int num_tx_queues;
 	unsigned int q, qp, port;
 
+	if (IS_ERR(dp))
+		return PRT_ERR(dp);
+
 	/* We can't be setting up queue inspection for non directly attached
 	 * switches
 	 */
@@ -2391,6 +2394,9 @@ static int bcm_sysport_unmap_queues(struct net_device *dev,
 	struct bcm_sysport_tx_ring *ring;
 	unsigned int num_tx_queues;
 	unsigned int q, qp, port;
+
+	if (IS_ERR(dp))
+		return PTR_ERR(dp);
 
 	port = dp->index;
 
