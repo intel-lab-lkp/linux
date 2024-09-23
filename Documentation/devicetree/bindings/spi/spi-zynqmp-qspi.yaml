@@ -12,14 +12,26 @@ maintainers:
 allOf:
   - $ref: spi-controller.yaml#
 
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: xlnx,zynqmp-qspi-1.0
+    then:
+      properties:
+        reg:
+          maxItems: 2
+
+    else:
+      properties:
+        reg:
+          maxItems: 1
+
 properties:
   compatible:
     enum:
       - xlnx,versal-qspi-1.0
       - xlnx,zynqmp-qspi-1.0
-
-  reg:
-    maxItems: 2
 
   interrupts:
     maxItems: 1
