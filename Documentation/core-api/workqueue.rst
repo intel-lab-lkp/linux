@@ -357,6 +357,11 @@ Guidelines
   difference in execution characteristics between using a dedicated wq
   and a system wq.
 
+  Note: If something is expected to generate a large number of concurrent
+  works, it should utilize its own dedicated workqueue rather than
+  system wq. Because this may saturate system_wq and potentially lead
+  to deadlock.
+
 * Unless work items are expected to consume a huge amount of CPU
   cycles, using a bound wq is usually beneficial due to the increased
   level of locality in wq operations and work item execution.
