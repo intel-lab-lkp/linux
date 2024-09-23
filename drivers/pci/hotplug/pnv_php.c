@@ -697,12 +697,9 @@ static int pnv_php_register_slot(struct pnv_php_slot *php_slot)
 		}
 
 		parent = pnv_php_find_slot(dn);
-		if (parent) {
-			of_node_put(dn);
-			break;
-		}
-
 		of_node_put(dn);
+		if (parent)
+			break;
 	}
 
 	spin_lock_irqsave(&pnv_php_lock, flags);
