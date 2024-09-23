@@ -8857,7 +8857,12 @@ static int handle_emulation_failure(struct kvm_vcpu *vcpu, int emulation_type)
 
 	kvm_queue_exception(vcpu, UD_VECTOR);
 
-	if (!is_guest_mode(vcpu) && kvm_x86_call(get_cpl)(vcpu) == 0) {
+	/*
+	 * Don't return an internal error if the emulation error is caused by a fetch from MMIO
+	 * address. Injecting a #UD should be enough.
+	 */
+	if (!is_guest_mode(vcpu) && kvm_x86_call(get_cpl)(vcpu) == 0 &&
+	    !vcpu->arch.emulate_ctxt->is_mmio_fetch) {
 		prepare_emulation_ctxt_failure_exit(vcpu);
 		return 0;
 	}

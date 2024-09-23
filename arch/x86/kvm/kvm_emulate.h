@@ -362,6 +362,7 @@ struct x86_emulate_ctxt {
 	u8 seg_override;
 	u64 d;
 	unsigned long _eip;
+	bool is_mmio_fetch;
 
 	/* Here begins the usercopy section. */
 	struct operand src;

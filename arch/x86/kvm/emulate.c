@@ -4742,10 +4742,13 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 	ctxt->fetch.end = ctxt->fetch.data + insn_len;
 	ctxt->opcode_len = 1;
 	ctxt->intercept = x86_intercept_none;
+	ctxt->is_mmio_fetch = false;
 	if (insn_len > 0)
 		memcpy(ctxt->fetch.data, insn, insn_len);
 	else {
 		rc = __do_insn_fetch_bytes(ctxt, 1);
+		if (rc == X86EMUL_IO_NEEDED)
+			ctxt->is_mmio_fetch = true;
 		if (rc != X86EMUL_CONTINUE)
 			goto done;
 	}
