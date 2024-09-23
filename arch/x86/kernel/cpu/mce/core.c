@@ -1958,17 +1958,6 @@ static int __mcheck_cpu_apply_quirks(struct cpuinfo_x86 *c)
 			mce_flags.skx_repmov_quirk = 1;
 	}
 
-	if (c->x86_vendor == X86_VENDOR_ZHAOXIN) {
-		/*
-		 * All newer Zhaoxin CPUs support MCE broadcasting. Enable
-		 * synchronization with a one second timeout.
-		 */
-		if (c->x86 > 6 || (c->x86_model == 0x19 || c->x86_model == 0x1f)) {
-			if (cfg->monarch_timeout < 0)
-				cfg->monarch_timeout = USEC_PER_SEC;
-		}
-	}
-
 	if (cfg->monarch_timeout < 0)
 		cfg->monarch_timeout = 0;
 	if (cfg->bootlog != 0)
@@ -2011,49 +2000,6 @@ static void __mcheck_cpu_init_early(struct cpuinfo_x86 *c)
 	}
 }
 
-static void mce_centaur_feature_init(struct cpuinfo_x86 *c)
-{
-	struct mca_config *cfg = &mca_cfg;
-
-	 /*
-	  * All newer Centaur CPUs support MCE broadcasting. Enable
-	  * synchronization with a one second timeout.
-	  */
-	if ((c->x86 == 6 && c->x86_model == 0xf && c->x86_stepping >= 0xe) ||
-	     c->x86 > 6) {
-		if (cfg->monarch_timeout < 0)
-			cfg->monarch_timeout = USEC_PER_SEC;
-	}
-}
-
-static void mce_zhaoxin_feature_init(struct cpuinfo_x86 *c)
-{
-	struct mce_bank *mce_banks = this_cpu_ptr(mce_banks_array);
-
-	/*
-	 * These CPUs have MCA bank 8 which reports only one error type called
-	 * SVAD (System View Address Decoder). The reporting of that error is
-	 * controlled by IA32_MC8.CTL.0.
-	 *
-	 * If enabled, prefetching on these CPUs will cause SVAD MCE when
-	 * virtual machines start and result in a system  panic. Always disable
-	 * bank 8 SVAD error by default.
-	 */
-	if ((c->x86 == 7 && c->x86_model == 0x1b) ||
-	    (c->x86_model == 0x19 || c->x86_model == 0x1f)) {
-		if (this_cpu_read(mce_num_banks) > 8)
-			mce_banks[8].ctl = 0;
-	}
-
-	intel_init_cmci();
-	intel_init_lmce();
-}
-
-static void mce_zhaoxin_feature_clear(struct cpuinfo_x86 *c)
-{
-	intel_clear_lmce();
-}
-
 static void __mcheck_cpu_init_vendor(struct cpuinfo_x86 *c)
 {
 	switch (c->x86_vendor) {
@@ -2071,9 +2017,6 @@ static void __mcheck_cpu_init_vendor(struct cpuinfo_x86 *c)
 		break;
 
 	case X86_VENDOR_CENTAUR:
-		mce_centaur_feature_init(c);
-		break;
-
 	case X86_VENDOR_ZHAOXIN:
 		mce_zhaoxin_feature_init(c);
 		break;

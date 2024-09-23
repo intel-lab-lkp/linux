@@ -334,4 +334,11 @@ static __always_inline u32 mca_msr_reg(int bank, enum mca_msr reg)
 }
 
 extern void (*mc_poll_banks)(void);
+#ifdef CONFIG_X86_MCE_ZHAOXIN
+void mce_zhaoxin_feature_init(struct cpuinfo_x86 *c);
+void mce_zhaoxin_feature_clear(struct cpuinfo_x86 *c);
+#else
+static inline void mce_zhaoxin_feature_init(struct cpuinfo_x86 *c) { }
+static inline void mce_zhaoxin_feature_clear(struct cpuinfo_x86 *c) { }
+#endif
 #endif /* __X86_MCE_INTERNAL_H__ */
