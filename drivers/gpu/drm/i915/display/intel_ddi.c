@@ -78,6 +78,8 @@
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 
+#define FEC_RETRY_COUNT 3
+
 static const u8 index_to_dp_signal_levels[] = {
 	[0] = DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_0,
 	[1] = DP_TRAIN_VOLTAGE_SWING_LEVEL_0 | DP_TRAIN_PRE_EMPH_LEVEL_1,
@@ -2255,6 +2257,57 @@ static int read_fec_detected_status(struct drm_dp_aux *aux)
 	return status;
 }
 
+static void retry_fec_enable(struct intel_encoder *encoder,
+			     const struct intel_crtc_state *crtc_state,
+			     struct drm_dp_aux *aux)
+{
+	struct drm_i915_private *i915 = to_i915(aux->drm_dev);
+	int ret = 0;
+
+	/* Clear FEC enable */
+	intel_de_rmw(i915, dp_tp_ctl_reg(encoder, crtc_state),
+		     DP_TP_CTL_FEC_ENABLE, 0);
+
+	/* Set FEC enable */
+	intel_de_rmw(i915, dp_tp_ctl_reg(encoder, crtc_state),
+		     0, DP_TP_CTL_FEC_ENABLE);
+
+	ret = intel_de_wait_for_set(i915, dp_tp_status_reg(encoder, crtc_state),
+				    DP_TP_STATUS_FEC_ENABLE_LIVE, 1);
+	if (!ret)
+		drm_dbg_kms(&i915->drm,
+			    "Timeout waiting for FEC live state to get enabled");
+}
+
+static void wait_for_fec_detected_with_retry(struct intel_encoder *encoder,
+					     const struct intel_crtc_state *crtc_state,
+					     struct drm_dp_aux *aux)
+{
+	struct drm_i915_private *i915 = to_i915(aux->drm_dev);
+	int status;
+	int err;
+	int retrycount = 0;
+
+	do {
+		err = readx_poll_timeout(read_fec_detected_status, aux, status,
+					 status & DP_FEC_DECODE_EN_DETECTED || status < 0,
+					 500, 5000);
+
+		if (!err && status >= 0)
+			return;
+
+		if (err == -ETIMEDOUT) {
+			drm_dbg_kms(&i915->drm,
+				    "Timeout waiting for FEC ENABLE to get detected, retrying\n");
+			retry_fec_enable(encoder, crtc_state, aux);
+		} else {
+			drm_dbg_kms(&i915->drm, "FEC detected status read error: %d\n", status);
+		}
+	} while (retrycount++ < FEC_RETRY_COUNT);
+
+	drm_err(&i915->drm, "FEC enable Failed after Retry\n");
+}
+
 static void wait_for_fec_detected(struct drm_dp_aux *aux, bool enabled)
 {
 	struct drm_i915_private *i915 = to_i915(aux->drm_dev);
@@ -2303,8 +2356,12 @@ void intel_ddi_wait_for_fec_status(struct intel_encoder *encoder,
 	 * At least the Synoptics MST hub doesn't set the detected flag for
 	 * FEC decoding disabling so skip waiting for that.
 	 */
-	if (enabled)
-		wait_for_fec_detected(&intel_dp->aux, enabled);
+	if (enabled) {
+		if (DISPLAY_VER(i915) >= 30)
+			wait_for_fec_detected_with_retry(encoder, crtc_state, &intel_dp->aux);
+		else
+			wait_for_fec_detected(&intel_dp->aux, enabled);
+	}
 }
 
 static void intel_ddi_enable_fec(struct intel_encoder *encoder,
