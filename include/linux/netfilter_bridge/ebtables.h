@@ -93,7 +93,6 @@ struct ebt_table {
 	char name[EBT_TABLE_MAXNAMELEN];
 	struct ebt_replace_kernel *table;
 	unsigned int valid_hooks;
-	rwlock_t lock;
 	/* the data used by the kernel */
 	struct ebt_table_info *private;
 	struct nf_hook_ops *ops;
@@ -124,4 +123,50 @@ static inline bool ebt_invalid_target(int target)
 
 int ebt_register_template(const struct ebt_table *t, int(*table_init)(struct net *net));
 void ebt_unregister_template(const struct ebt_table *t);
+
+/**
+ * ebt_recseq - recursive seqcount for netfilter use
+ *
+ * Packet processing changes the seqcount only if no recursion happened
+ * get_counters() can use read_seqcount_begin()/read_seqcount_retry(),
+ * because we use the normal seqcount convention :
+ * Low order bit set to 1 if a writer is active.
+ */
+DECLARE_PER_CPU(seqcount_t, ebt_recseq);
+
+/**
+ * ebt_write_recseq_begin - start of a write section
+ *
+ * Begin packet processing : all readers must wait the end
+ * 1) Must be called with preemption disabled
+ * 2) softirqs must be disabled too (or we should use this_cpu_add())
+ * Returns :
+ *  1 if no recursion on this cpu
+ *  0 if recursion detected
+ */
+static inline unsigned int ebt_write_recseq_begin(void)
+{
+	unsigned int addend;
+
+	addend = (__this_cpu_read(ebt_recseq.sequence) + 1) & 1;
+
+	__this_cpu_add(ebt_recseq.sequence, addend);
+	smp_mb();
+
+	return addend;
+}
+
+/**
+ * ebt_write_recseq_end - end of a write section
+ * @addend: return value from previous ebt_write_recseq_begin()
+ *
+ * End packet processing : all readers can proceed
+ * 1) Must be called with preemption disabled
+ * 2) softirqs must be disabled too (or we should use this_cpu_add())
+ */
+static inline void ebt_write_recseq_end(unsigned int addend)
+{
+	smp_wmb();
+	__this_cpu_add(ebt_recseq.sequence, addend);
+}
 #endif
