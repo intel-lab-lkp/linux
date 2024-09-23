@@ -274,12 +274,10 @@ static bool hisi_pcie_pmu_valid_requester_id(struct hisi_pcie_pmu *pcie_pmu, u32
 		return false;
 
 	root_port = pcie_find_root_port(pdev);
-	if (!root_port) {
-		pci_dev_put(pdev);
-		return false;
-	}
-
 	pci_dev_put(pdev);
+	if (!root_port)
+		return false;
+
 	rp_bdf = pci_dev_id(root_port);
 	return rp_bdf >= pcie_pmu->bdf_min && rp_bdf <= pcie_pmu->bdf_max;
 }
