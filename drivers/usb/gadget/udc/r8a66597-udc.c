@@ -1956,9 +1956,6 @@ clean_up2:
 	if (r8a66597->pdata->on_chip)
 		clk_disable_unprepare(r8a66597->clk);
 
-	if (r8a66597->ep0_req)
-		r8a66597_free_request(&r8a66597->ep[0].ep, r8a66597->ep0_req);
-
 	return ret;
 }
 
