@@ -12,6 +12,25 @@ maintainers:
 allOf:
   - $ref: spi-controller.yaml#
 
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: xlnx,axi-quad-spi-1.00.a
+    then:
+      properties:
+        clock-names:
+          items:
+            - const: s_axi_aclk
+            - const: ext_spi_clk
+
+    else:
+      properties:
+        clock-names:
+          items:
+            - const: s_axi4_aclk
+            - const: ext_spi_clk
+
 properties:
   compatible:
     enum:
@@ -24,6 +43,12 @@ properties:
 
   interrupts:
     maxItems: 1
+
+  clocks:
+    maxItems: 2
+
+  clock-names:
+    maxItems: 2
 
   xlnx,num-ss-bits:
     description: Number of chip selects used.
@@ -39,6 +64,8 @@ required:
   - compatible
   - reg
   - interrupts
+  - clocks
+  - clock-names
 
 unevaluatedProperties: false
 
@@ -49,6 +76,8 @@ examples:
       interrupt-parent = <&intc>;
       interrupts = <0 31 1>;
       reg = <0x41e00000 0x10000>;
+      clocks = <&clkc 72>, <&clkc 73>;
+      clock-names = "s_axi4_aclk", "ext_spi_clk";
       xlnx,num-ss-bits = <0x1>;
       xlnx,num-transfer-bits = <32>;
     };
