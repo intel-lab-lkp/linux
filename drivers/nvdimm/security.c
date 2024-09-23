@@ -152,12 +152,10 @@ static int nvdimm_key_revalidate(struct nvdimm *nvdimm)
 	 * verify that the key is good.
 	 */
 	rc = nvdimm->sec.ops->change_key(nvdimm, data, data, NVDIMM_USER);
-	if (rc < 0) {
-		nvdimm_put_key(key);
-		return rc;
-	}
-
 	nvdimm_put_key(key);
+	if (rc < 0)
+		return rc;
+
 	nvdimm->sec.flags = nvdimm_security_flags(nvdimm, NVDIMM_USER);
 	return 0;
 }
