@@ -12,15 +12,31 @@
 #ifndef __LINUX_XHCI_HCD_H
 #define __LINUX_XHCI_HCD_H
 
+#include <linux/bitops.h>
+#include <linux/completion.h>
+#include <linux/dev_printk.h>
+#include <linux/irqreturn.h>
+#include <linux/mutex.h>
+#include <linux/pm.h>
+#include <linux/spinlock.h>
+#include <linux/sprintf.h>
+#include <linux/timer_types.h>
+#include <linux/types.h>
 #include <linux/usb.h>
-#include <linux/timer.h>
-#include <linux/kernel.h>
 #include <linux/usb/hcd.h>
+#include <linux/workqueue.h>
+
 #include <linux/io-64-nonatomic-lo-hi.h>
 #include <linux/io-64-nonatomic-hi-lo.h>
 
+struct clk;
+struct dentry;
+struct dma_pool;
+struct radix_tree_root;
+struct reset_control;
+
 /* Code sharing between pci-quirks and xhci hcd */
-#include	"xhci-ext-caps.h"
+#include "xhci-ext-caps.h"
 #include "pci-quirks.h"
 
 #include "xhci-port.h"
