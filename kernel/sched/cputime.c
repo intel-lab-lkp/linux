@@ -34,7 +34,8 @@ void disable_sched_clock_irqtime(void)
 	sched_clock_irqtime = 0;
 }
 
-static void irqtime_account_delta(struct irqtime *irqtime, u64 delta,
+static void irqtime_account_delta(struct task_struct *curr,
+				  struct irqtime *irqtime, u64 delta,
 				  enum cpu_usage_stat idx)
 {
 	u64 *cpustat = kcpustat_this_cpu->cpustat;
@@ -44,6 +45,9 @@ static void irqtime_account_delta(struct irqtime *irqtime, u64 delta,
 	irqtime->total += delta;
 	irqtime->tick_delta += delta;
 	u64_stats_update_end(&irqtime->sync);
+
+	cgroup_account_cputime(curr, delta);
+	cgroup_account_cputime_field(curr, idx, delta);
 }
 
 /*
@@ -72,9 +76,9 @@ void irqtime_account_irq(struct task_struct *curr, unsigned int offset)
 	 * that do not consume any time, but still wants to run.
 	 */
 	if (pc & HARDIRQ_MASK)
-		irqtime_account_delta(irqtime, delta, CPUTIME_IRQ);
+		irqtime_account_delta(curr, irqtime, delta, CPUTIME_IRQ);
 	else if ((pc & SOFTIRQ_OFFSET) && curr != this_cpu_ksoftirqd())
-		irqtime_account_delta(irqtime, delta, CPUTIME_SOFTIRQ);
+		irqtime_account_delta(curr, irqtime, delta, CPUTIME_SOFTIRQ);
 }
 
 static u64 irqtime_tick_accounted(u64 maxtime)
