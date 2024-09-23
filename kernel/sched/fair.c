@@ -1025,7 +1025,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	/*
 	 * The task has consumed its request, reschedule.
 	 */
-	return true;
+	return (cfs_rq->nr_running > 1);
 }
 
 #include "pelt.h"
