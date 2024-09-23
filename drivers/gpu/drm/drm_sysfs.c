@@ -24,6 +24,7 @@
 #include <drm/drm_accel.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_device.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_file.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_print.h>
@@ -508,6 +509,26 @@ void drm_sysfs_connector_property_event(struct drm_connector *connector,
 }
 EXPORT_SYMBOL(drm_sysfs_connector_property_event);
 
+static ssize_t wedge_recovery_show(struct device *device,
+				   struct device_attribute *attr, char *buf)
+{
+	struct drm_minor *minor = to_drm_minor(device);
+	struct drm_device *dev = minor->dev;
+	int method, count = 0;
+
+	for_each_set_bit(method, &dev->wedge_recovery, DRM_WEDGE_RECOVERY_MAX)
+		count += sysfs_emit_at(buf, count, "%s\n", recovery_method_name(method));
+
+	return count;
+}
+static DEVICE_ATTR_RO(wedge_recovery);
+
+static struct attribute *minor_dev_attrs[] = {
+	&dev_attr_wedge_recovery.attr,
+	NULL
+};
+ATTRIBUTE_GROUPS(minor_dev);
+
 struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 {
 	const char *minor_str;
@@ -532,6 +553,7 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 		kdev->devt = MKDEV(DRM_MAJOR, minor->index);
 		kdev->class = drm_class;
 		kdev->type = &drm_sysfs_device_minor;
+		kdev->groups = minor_dev_groups;
 	}
 
 	kdev->parent = minor->dev->dev;
