@@ -816,10 +816,9 @@ static int perf_copy_chunk(struct perf_thread *pthr,
 	unmap->len = len;
 	unmap->addr[0] = dma_map_page(dma_dev, virt_to_page(src),
 		offset_in_page(src), len, DMA_TO_DEVICE);
-	if (dma_mapping_error(dma_dev, unmap->addr[0])) {
-		ret = -EIO;
-		goto err_free_resource;
-	}
+	if (dma_mapping_error(dma_dev, unmap->addr[0]))
+		goto e_io;
+
 	unmap->to_cnt = 1;
 
 	do {
@@ -829,10 +828,8 @@ static int perf_copy_chunk(struct perf_thread *pthr,
 			msleep(DMA_MDELAY);
 	} while (!tx && (try++ < DMA_TRIES));
 
-	if (!tx) {
-		ret = -EIO;
-		goto err_free_resource;
-	}
+	if (!tx)
+		goto e_io;
 
 	tx->callback = perf_dma_copy_callback;
 	tx->callback_param = pthr;
@@ -850,6 +847,8 @@ static int perf_copy_chunk(struct perf_thread *pthr,
 ret_check_tsync:
 	return likely(atomic_read(&pthr->perf->tsync) > 0) ? 0 : -EINTR;
 
+e_io:
+	ret = -EIO;
 err_free_resource:
 	dmaengine_unmap_put(unmap);
 
