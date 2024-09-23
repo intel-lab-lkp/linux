@@ -71,6 +71,18 @@ static struct dentry *drm_debugfs_root;
 DEFINE_STATIC_SRCU(drm_unplug_srcu);
 
 /*
+ * Available recovery methods for wedged device. To be sent along with device
+ * wedged uevent.
+ */
+#define WEDGE_LEN	32	/* Need 16+ */
+
+const char *const wedge_recovery_opts[] = {
+	[DRM_WEDGE_RECOVERY_REBIND] = "rebind",
+	[DRM_WEDGE_RECOVERY_BUS_RESET] = "bus-reset",
+	[DRM_WEDGE_RECOVERY_REBOOT] = "reboot",
+};
+
+/*
  * DRM Minors
  * A DRM device can provide several char-dev interfaces on the DRM-Major. Each
  * of them is represented by a drm_minor object. Depending on the capabilities
@@ -496,6 +508,35 @@ void drm_dev_unplug(struct drm_device *dev)
 	unmap_mapping_range(dev->anon_inode->i_mapping, 0, 0, 1);
 }
 EXPORT_SYMBOL(drm_dev_unplug);
+
+/**
+ * drm_dev_wedged_event - generate a device wedged uevent
+ * @dev: DRM device
+ * @method: method to be used for recovery
+ *
+ * This generates a device wedged uevent for the DRM device specified by @dev.
+ * Recovery @method from wedge_recovery_opts[] (if supprted by the device) is
+ * sent in the uevent environment as WEDGED=<method>, on the basis of which,
+ * userspace may take respective action to recover the device.
+ *
+ * Returns: 0 on success, or negative error code otherwise.
+ */
+int drm_dev_wedged_event(struct drm_device *dev, enum wedge_recovery_method method)
+{
+	char event_string[WEDGE_LEN] = {};
+	char *envp[] = { event_string, NULL };
+
+	if (!test_bit(method, &dev->wedge_recovery)) {
+		drm_err(dev, "device wedged, recovery method not supported\n");
+		return -EOPNOTSUPP;
+	}
+
+	snprintf(event_string, sizeof(event_string), "WEDGED=%s", recovery_method_name(method));
+
+	drm_info(dev, "device wedged, generating uevent\n");
+	return kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+}
+EXPORT_SYMBOL(drm_dev_wedged_event);
 
 /*
  * DRM internal mount
