@@ -3040,6 +3040,7 @@ struct irqtime {
 };
 
 DECLARE_PER_CPU(struct irqtime, cpu_irqtime);
+DECLARE_STATIC_KEY_FALSE(sched_clock_irqtime);
 
 /*
  * Returns the irqtime minus the softirq time computed by ksoftirqd.
