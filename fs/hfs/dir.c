@@ -20,7 +20,7 @@
 static struct dentry *hfs_lookup(struct inode *dir, struct dentry *dentry,
 				 unsigned int flags)
 {
-	hfs_cat_rec rec;
+	hfs_cat_rec rec = {0};
 	struct hfs_find_data fd;
 	struct inode *inode = NULL;
 	int res;
