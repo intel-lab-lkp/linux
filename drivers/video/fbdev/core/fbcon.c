@@ -166,7 +166,7 @@ static const struct consw fb_con;
 
 #define advance_row(p, delta) (unsigned short *)((unsigned long)(p) + (delta) * vc->vc_size_row)
 
-static int fbcon_cursor_noblink;
+static int fbcon_cursor_blink;
 
 #define divides(a, b)	((!(a) || (b)%(a)) ? 0 : 1)
 
@@ -399,7 +399,7 @@ static void fbcon_add_cursor_work(struct fb_info *info)
 {
 	struct fbcon_ops *ops = info->fbcon_par;
 
-	if (!fbcon_cursor_noblink)
+	if (fbcon_cursor_blink)
 		queue_delayed_work(system_power_efficient_wq, &ops->cursor_work,
 				   ops->cur_blink_jiffies);
 }
@@ -3214,7 +3214,7 @@ err:
 static ssize_t cursor_blink_show(struct device *device,
 				 struct device_attribute *attr, char *buf)
 {
-	return sysfs_emit(buf, "%d\n", !fbcon_cursor_noblink);
+	return sysfs_emit(buf, "%d\n", fbcon_cursor_blink);
 }
 
 static ssize_t cursor_blink_store(struct device *device,
@@ -3230,7 +3230,7 @@ static ssize_t cursor_blink_store(struct device *device,
 	console_lock();
 	idx = con2fb_map[fg_console];
 
-	fbcon_cursor_noblink = !blink;
+	fbcon_cursor_blink = blink;
 
 	if (idx == -1 || fbcon_registered_fb[idx] == NULL)
 		goto err;
