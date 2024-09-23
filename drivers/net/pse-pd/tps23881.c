@@ -139,9 +139,9 @@ static int tps23881_pi_is_enabled(struct pse_controller_dev *pcdev, int id)
 
 	chan = priv->port[id].chan[0];
 	if (chan < 4)
-		enabled = ret & BIT(chan);
+		enabled = !!(ret & BIT(chan));
 	else
-		enabled = ret & BIT(chan + 4);
+		enabled = !!(ret & BIT(chan + 4));
 
 	if (priv->port[id].is_4p) {
 		chan = priv->port[id].chan[1];
@@ -172,11 +172,11 @@ static int tps23881_ethtool_get_status(struct pse_controller_dev *pcdev,
 
 	chan = priv->port[id].chan[0];
 	if (chan < 4) {
-		enabled = ret & BIT(chan);
-		delivering = ret & BIT(chan + 4);
+		enabled = !!(ret & BIT(chan));
+		delivering = !!(ret & BIT(chan + 4));
 	} else {
-		enabled = ret & BIT(chan + 4);
-		delivering = ret & BIT(chan + 8);
+		enabled = !!(ret & BIT(chan + 4));
+		delivering = !!(ret & BIT(chan + 8));
 	}
 
 	if (priv->port[id].is_4p) {
