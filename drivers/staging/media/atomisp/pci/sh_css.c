@@ -5846,8 +5846,8 @@ static int ia_css_pipe_create_cas_scaler_desc_single_output(
 	/* We assume that this function is used only for single output port case. */
 	descr->num_output_stage = 1;
 
-	hor_ds_factor = CEIL_DIV(in_info->res.width, out_info->res.width);
-	ver_ds_factor = CEIL_DIV(in_info->res.height, out_info->res.height);
+	hor_ds_factor = DIV_ROUND_UP(in_info->res.width, out_info->res.width);
+	ver_ds_factor = DIV_ROUND_UP(in_info->res.height, out_info->res.height);
 	/* use the same horizontal and vertical downscaling factor for simplicity */
 	assert(hor_ds_factor == ver_ds_factor);
 
@@ -5987,8 +5987,10 @@ ia_css_pipe_create_cas_scaler_desc(struct ia_css_pipe *pipe,
 		}
 
 		if (out_info[i]) {
-			hor_scale_factor[i] = CEIL_DIV(in_info.res.width, out_info[i]->res.width);
-			ver_scale_factor[i] = CEIL_DIV(in_info.res.height, out_info[i]->res.height);
+			hor_scale_factor[i] =
+				DIV_ROUND_UP(in_info.res.width, out_info[i]->res.width);
+			ver_scale_factor[i] =
+				DIV_ROUND_UP(in_info.res.height, out_info[i]->res.height);
 			/* use the same horizontal and vertical scaling factor for simplicity */
 			assert(hor_scale_factor[i] == ver_scale_factor[i]);
 			scale_factor = 1;

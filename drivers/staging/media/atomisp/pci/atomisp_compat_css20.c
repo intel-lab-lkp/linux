@@ -12,9 +12,11 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- *
  */
+
+#include <linux/io.h>
+#include <linux/math.h>
+#include <linux/pm_runtime.h>
 
 #include <media/v4l2-dev.h>
 #include <media/v4l2-event.h>
@@ -35,9 +37,6 @@
 #include "ia_css_isp_param.h"
 #include "sh_css_hrt.h"
 #include "ia_css_isys.h"
-
-#include <linux/io.h>
-#include <linux/pm_runtime.h>
 
 /* Assume max number of ACC stages */
 #define MAX_ACC_STAGES	20
@@ -1939,10 +1938,8 @@ static void __configure_capture_pp_input(struct atomisp_sub_device *asd,
 	    height * 9 / 10 < pipe_configs->output_info[0].res.height)
 		return;
 	/* here just copy the calculation in css */
-	hor_ds_factor = CEIL_DIV(width >> 1,
-				 pipe_configs->output_info[0].res.width);
-	ver_ds_factor = CEIL_DIV(height >> 1,
-				 pipe_configs->output_info[0].res.height);
+	hor_ds_factor = DIV_ROUND_UP(width >> 1, pipe_configs->output_info[0].res.width);
+	ver_ds_factor = DIV_ROUND_UP(height >> 1, pipe_configs->output_info[0].res.height);
 
 	if ((asd->isp->media_dev.hw_revision <
 	     (ATOMISP_HW_REVISION_ISP2401 << ATOMISP_HW_REVISION_SHIFT) ||
