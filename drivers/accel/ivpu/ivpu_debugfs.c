@@ -4,6 +4,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/firmware.h>
 
 #include <drm/drm_debugfs.h>
 #include <drm/drm_file.h>
@@ -19,6 +20,8 @@
 #include "ivpu_hw.h"
 #include "ivpu_jsm_msg.h"
 #include "ivpu_pm.h"
+
+#include "vpu_boot_api.h"
 
 static inline struct ivpu_device *seq_to_ivpu(struct seq_file *s)
 {
@@ -42,6 +45,14 @@ static int fw_name_show(struct seq_file *s, void *v)
 	struct ivpu_device *vdev = seq_to_ivpu(s);
 
 	seq_printf(s, "%s\n", vdev->fw->name);
+	return 0;
+}
+
+static int fw_version_show(struct seq_file *s, void *v)
+{
+	struct ivpu_device *vdev = seq_to_ivpu(s);
+
+	seq_printf(s, "%s\n", (const char *)vdev->fw->file->data + VPU_FW_HEADER_SIZE);
 	return 0;
 }
 
@@ -111,6 +122,7 @@ static int reset_pending_show(struct seq_file *s, void *v)
 static const struct drm_debugfs_info vdev_debugfs_list[] = {
 	{"bo_list", bo_list_show, 0},
 	{"fw_name", fw_name_show, 0},
+	{"fw_version", fw_version_show, 0},
 	{"fw_trace_capability", fw_trace_capability_show, 0},
 	{"fw_trace_config", fw_trace_config_show, 0},
 	{"last_bootmode", last_bootmode_show, 0},
