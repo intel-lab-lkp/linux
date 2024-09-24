@@ -448,23 +448,6 @@ static void __init rfds_select_mitigation(void)
 		rfds_mitigation = RFDS_MITIGATION_UCODE_NEEDED;
 }
 
-static __init int rfds_parse_cmdline(char *str)
-{
-	if (!str)
-		return -EINVAL;
-
-	if (!boot_cpu_has_bug(X86_BUG_RFDS))
-		return 0;
-
-	if (!strcmp(str, "off"))
-		rfds_mitigation = RFDS_MITIGATION_OFF;
-	else if (!strcmp(str, "on"))
-		rfds_mitigation = RFDS_MITIGATION_VERW;
-
-	return 0;
-}
-early_param("reg_file_data_sampling", rfds_parse_cmdline);
-
 #undef pr_fmt
 #define pr_fmt(fmt)     "" fmt
 
