@@ -969,12 +969,22 @@ static long sgx_enclave_modify_types(struct sgx_encl *encl,
 			/*
 			 * Do not keep encl->lock because of dependency on
 			 * mmap_lock acquired in sgx_zap_enclave_ptes().
+			 *
+			 * Releasing encl->lock leads to a data race: while CPU1
+			 * performs sgx_zap_enclave_ptes() and removes the PTE
+			 * entry for the enclave page, CPU2 may attempt to load
+			 * this page (because the page is still in enclave's
+			 * xarray). To prevent CPU2 from loading the page, mark
+			 * the page as busy before unlock and unmark after lock
+			 * again.
 			 */
+			entry->desc |= SGX_ENCL_PAGE_BUSY;
 			mutex_unlock(&encl->lock);
 
 			sgx_zap_enclave_ptes(encl, addr);
 
 			mutex_lock(&encl->lock);
+			entry->desc &= ~SGX_ENCL_PAGE_BUSY;
 
 			sgx_mark_page_reclaimable(entry->epc_page);
 		}
@@ -1141,7 +1151,14 @@ static long sgx_encl_remove_pages(struct sgx_encl *encl,
 		/*
 		 * Do not keep encl->lock because of dependency on
 		 * mmap_lock acquired in sgx_zap_enclave_ptes().
+		 *
+		 * Releasing encl->lock leads to a data race: while CPU1
+		 * performs sgx_zap_enclave_ptes() and removes the PTE entry
+		 * for the enclave page, CPU2 may attempt to load this page
+		 * (because the page is still in enclave's xarray). To prevent
+		 * CPU2 from loading the page, mark the page as busy.
 		 */
+		entry->desc |= SGX_ENCL_PAGE_BUSY;
 		mutex_unlock(&encl->lock);
 
 		sgx_zap_enclave_ptes(encl, addr);
