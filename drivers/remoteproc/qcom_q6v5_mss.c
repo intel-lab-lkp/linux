@@ -1451,9 +1451,7 @@ static int q6v5_mpss_load(struct q6v5 *qproc)
 				dev_err(qproc->dev,
 					"failed to load segment %d from truncated file %s\n",
 					i, fw_name);
-				ret = -EINVAL;
-				memunmap(ptr);
-				goto release_firmware;
+				goto e_inval_unmap;
 			}
 
 			memcpy(ptr, fw->data + phdr->p_offset, phdr->p_filesz);
@@ -1464,18 +1462,15 @@ static int q6v5_mpss_load(struct q6v5 *qproc)
 							ptr, phdr->p_filesz);
 			if (ret) {
 				dev_err(qproc->dev, "failed to load %s\n", fw_name);
-				memunmap(ptr);
-				goto release_firmware;
+				goto unmap_mem;
 			}
 
 			if (seg_fw->size != phdr->p_filesz) {
 				dev_err(qproc->dev,
 					"failed to load segment %d from truncated file %s\n",
 					i, fw_name);
-				ret = -EINVAL;
 				release_firmware(seg_fw);
-				memunmap(ptr);
-				goto release_firmware;
+				goto e_inval_unmap;
 			}
 
 			release_firmware(seg_fw);
@@ -1528,6 +1523,12 @@ out:
 	kfree(fw_name);
 
 	return ret < 0 ? ret : 0;
+
+e_inval_unmap:
+	ret = -EINVAL;
+unmap_mem:
+	memunmap(ptr);
+	goto release_firmware;
 }
 
 static void qcom_q6v5_dump_segment(struct rproc *rproc,
