@@ -628,6 +628,21 @@
 	cio_ignore=	[S390]
 			See Documentation/arch/s390/common_io.rst for details.
 
+	clear_cpu_buffers=
+			[X86]
+			Controls the mitigations that use
+			X86_FEATURE_CLEAR_CPU_BUF, namely
+			Micro-architectrual Data Sampling (MDS)
+			MMIO Stale Data
+			TSX Async Abort (TAA)
+			Register File Data Sampling (RFDS)
+
+			The options are:
+			on		- Enable cpu buffer clearing
+			on,nosmt	- Enable cpu buffer clearing and disable
+					  SMT
+			off		- Disables cpu buffer clearing
+
 	clearcpuid=X[,X...] [X86]
 			Disable CPUID feature X for the kernel. See
 			arch/x86/include/asm/cpufeatures.h for the valid bit
@@ -3461,6 +3476,7 @@
 				improves system performance, but it may also
 				expose users to several CPU vulnerabilities.
 				Equivalent to: if nokaslr then kpti=0 [ARM64]
+					       clear_cpu_buffers=off [X86]
 					       gather_data_sampling=off [X86]
 					       kvm.nx_huge_pages=off [X86]
 					       l1tf=off [X86]

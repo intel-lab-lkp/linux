@@ -531,6 +531,40 @@ early_param("reg_file_data_sampling", rfds_parse_cmdline);
 #undef pr_fmt
 #define pr_fmt(fmt)     "" fmt
 
+static int __init clear_cpu_buffers_cmdline(char *str)
+{
+	if (!str)
+		return -EINVAL;
+
+	if (!boot_cpu_has_bug(X86_BUG_MDS) &&
+	    !boot_cpu_has_bug(X86_BUG_TAA) &&
+	    !boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA) &&
+	    !boot_cpu_has_bug(X86_BUG_RFDS))
+		return 0;
+
+	if (!strcmp(str, "off")) {
+		mds_mitigation = MDS_MITIGATION_OFF;
+		taa_mitigation = TAA_MITIGATION_OFF;
+		mmio_mitigation = MMIO_MITIGATION_OFF;
+		rfds_mitigation = RFDS_MITIGATION_OFF;
+	} else if (!strcmp(str, "on")) {
+		mds_mitigation = MDS_MITIGATION_FULL;
+		taa_mitigation = TAA_MITIGATION_VERW;
+		mmio_mitigation = MMIO_MITIGATION_VERW;
+		rfds_mitigation = RFDS_MITIGATION_VERW;
+	} else if (!strcmp(str, "on,nosmt")) {
+		mds_mitigation = MDS_MITIGATION_FULL;
+		taa_mitigation = TAA_MITIGATION_VERW;
+		mmio_mitigation = MMIO_MITIGATION_VERW;
+		rfds_mitigation = RFDS_MITIGATION_VERW;
+		mds_nosmt = true;
+		taa_nosmt = true;
+		mmio_nosmt = true;
+	}
+	return 0;
+}
+early_param("clear_cpu_buffers", clear_cpu_buffers_cmdline);
+
 static void __init md_clear_update_mitigation(void)
 {
 	if (cpu_mitigations_off())
