@@ -58,6 +58,7 @@ static inline void netfs_proc_del_rreq(struct netfs_io_request *rreq) {}
 /*
  * misc.c
  */
+struct folio_queue *netfs_buffer_make_space(struct netfs_io_request *rreq);
 int netfs_buffer_append_folio(struct netfs_io_request *rreq, struct folio *folio,
 			      bool needs_put);
 struct folio_queue *netfs_delete_buffer_head(struct netfs_io_request *wreq);
@@ -76,6 +77,7 @@ void netfs_clear_subrequests(struct netfs_io_request *rreq, bool was_async);
 void netfs_put_request(struct netfs_io_request *rreq, bool was_async,
 		       enum netfs_rreq_ref_trace what);
 struct netfs_io_subrequest *netfs_alloc_subrequest(struct netfs_io_request *rreq);
+struct folio_queue *netfs_folioq_alloc(struct netfs_io_request *rreq, gfp_t gfp);
 
 static inline void netfs_see_request(struct netfs_io_request *rreq,
 				     enum netfs_rreq_ref_trace what)
