@@ -3548,6 +3548,10 @@ static inline bool range_in_vma(struct vm_area_struct *vma,
 #ifdef CONFIG_MMU
 pgprot_t vm_get_page_prot(unsigned long vm_flags);
 void vma_set_page_prot(struct vm_area_struct *vma);
+void get_vma_name(struct vm_area_struct *vma,
+			 const struct path **path,
+			 const char **name,
+			 const char **name_fmt);
 #else
 static inline pgprot_t vm_get_page_prot(unsigned long vm_flags)
 {

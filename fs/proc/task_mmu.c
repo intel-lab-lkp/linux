@@ -240,7 +240,7 @@ static int do_maps_open(struct inode *inode, struct file *file,
 				sizeof(struct proc_maps_private));
 }
 
-static void get_vma_name(struct vm_area_struct *vma,
+void get_vma_name(struct vm_area_struct *vma,
 			 const struct path **path,
 			 const char **name,
 			 const char **name_fmt)
@@ -300,6 +300,7 @@ static void get_vma_name(struct vm_area_struct *vma,
 		return;
 	}
 }
+EXPORT_SYMBOL(get_vma_name);
 
 static void show_vma_header_prefix(struct seq_file *m,
 				   unsigned long start, unsigned long end,

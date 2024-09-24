@@ -872,6 +872,7 @@ bit 4  print ftrace buffer
 bit 5  print all printk messages in buffer
 bit 6  print all CPUs backtrace (if available in the arch)
 bit 7  print only tasks in uninterruptible (blocked) state
+bit 8  print task maps info
 =====  ============================================
 
 So for example to print tasks and memory info on panic, user can::

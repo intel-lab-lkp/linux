@@ -75,6 +75,8 @@ EXPORT_SYMBOL_GPL(panic_timeout);
 #define PANIC_PRINT_ALL_PRINTK_MSG	0x00000020
 #define PANIC_PRINT_ALL_CPU_BT		0x00000040
 #define PANIC_PRINT_BLOCKED_TASKS	0x00000080
+#define PANIC_PRINT_TASK_MAPS_INFO	0x00000100
+
 unsigned long panic_print;
 
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
@@ -206,6 +208,53 @@ void nmi_panic(struct pt_regs *regs, const char *msg)
 }
 EXPORT_SYMBOL(nmi_panic);
 
+/*
+ * This function is called in panic proccess if the PANIC_PRINT_TASK_MAPS_INFO
+ * flag is specified in panic_print, which is helpful to debug panic issues due
+ * to an unhandled falut in user mode such as kill init.
+ */
+static void dump_task_maps_info(struct task_struct *tsk)
+{
+	struct pt_regs *user_ret = task_pt_regs(tsk);
+	struct mm_struct *mm = tsk->mm;
+	struct vm_area_struct *vma;
+
+	if (!mm || !user_mode(user_ret))
+		return;
+
+	pr_info("Dump task %s:%d maps start\n", tsk->comm, task_pid_nr(tsk));
+	mmap_read_lock(mm);
+	VMA_ITERATOR(vmi, mm, 0);
+	for_each_vma(vmi, vma) {
+		int flags = vma->vm_flags;
+		unsigned long long pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+		const struct path *path;
+		const char *name_fmt, *name;
+		char name_buf[SZ_256];
+
+		get_vma_name(vma, &path, &name, &name_fmt);
+		if (path) {
+			name = d_path(path, name_buf, sizeof(name_buf));
+			name = IS_ERR(name) ? "?" : name;
+		} else if (name || name_fmt) {
+			snprintf(name_buf, sizeof(name_buf), name_fmt ?: "%s", name);
+			name = name_buf;
+		}
+
+		if (name)
+			pr_info("%08lx-%08lx %c%c%c%c %08llx %s\n",
+				vma->vm_start, vma->vm_end,
+				flags & VM_READ ? 'r' : '-',
+				flags & VM_WRITE ? 'w' : '-',
+				flags & VM_EXEC ? 'x' : '-',
+				flags & VM_MAYSHARE ? 's' : 'p',
+				pgoff, name);
+
+	}
+	mmap_read_unlock(mm);
+	pr_info("Dump task %s:%d maps end\n", tsk->comm, task_pid_nr(tsk));
+}
+
 static void panic_print_sys_info(bool console_flush)
 {
 	if (console_flush) {
@@ -231,6 +280,9 @@ static void panic_print_sys_info(bool console_flush)
 
 	if (panic_print & PANIC_PRINT_BLOCKED_TASKS)
 		show_state_filter(TASK_UNINTERRUPTIBLE);
+
+	if (panic_print & PANIC_PRINT_TASK_MAPS_INFO)
+		dump_task_maps_info(current);
 }
 
 void check_panic_on_warn(const char *origin)
