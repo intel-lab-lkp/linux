@@ -70,6 +70,9 @@ source "lib/math/Kconfig"
 config NO_GENERIC_PCI_IOPORT_MAP
 	bool
 
+config GENERIC_IO_COPY
+	bool
+
 config GENERIC_IOMAP
 	bool
 	select GENERIC_PCI_IOMAP
