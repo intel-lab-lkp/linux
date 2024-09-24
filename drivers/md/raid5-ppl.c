@@ -987,7 +987,7 @@ static int ppl_recover(struct ppl_log *log, struct ppl_header *pplhdr,
 		crc = ~0;
 		crc_stored = le32_to_cpu(e->checksum);
 
-		/* read parial parity for this entry and calculate its checksum */
+		/* read partial parity for this entry and calculate its checksum */
 		while (pp_size) {
 			int s = pp_size > PAGE_SIZE ? PAGE_SIZE : pp_size;
 

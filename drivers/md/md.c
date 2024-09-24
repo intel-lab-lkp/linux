@@ -508,7 +508,7 @@ static void __mddev_resume(struct mddev *mddev, bool recovery_needed)
 		return;
 	}
 
-	/* entred the memalloc scope from mddev_suspend() */
+	/* entered the memalloc scope from mddev_suspend() */
 	memalloc_noio_restore(mddev->noio_flag);
 
 	percpu_ref_resurrect(&mddev->active_io);

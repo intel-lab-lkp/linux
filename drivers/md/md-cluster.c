@@ -549,7 +549,7 @@ static void process_metadata_update(struct mddev *mddev, struct cluster_msg *msg
 
 	dlm_lock_sync(cinfo->no_new_dev_lockres, DLM_LOCK_CR);
 
-	/* daemaon thread must exist */
+	/* daemon thread must exist */
 	thread = rcu_dereference_protected(mddev->thread, true);
 	wait_event(thread->wqueue,
 		   (got_lock = mddev_trylock(mddev)) ||

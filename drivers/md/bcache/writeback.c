@@ -121,7 +121,7 @@ static void __update_writeback_rate(struct cached_dev *dc)
 		}
 		fps = div_s64(dirty, dirty_buckets) * fp_term;
 		if (fragment > 3 && fps > proportional_scaled) {
-			/* Only overrite the p when fragment > 3 */
+			/* Only overwrite the p when fragment > 3 */
 			proportional_scaled = fps;
 		}
 	}
