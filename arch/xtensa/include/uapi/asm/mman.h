@@ -121,4 +121,6 @@
 #define PKEY_ACCESS_MASK	(PKEY_DISABLE_ACCESS |\
 				 PKEY_DISABLE_WRITE)
 
+#define PR_MADV_SELF	(1<<0)		/* process_madvise() flag - apply to self */
+
 #endif /* _XTENSA_MMAN_H */
