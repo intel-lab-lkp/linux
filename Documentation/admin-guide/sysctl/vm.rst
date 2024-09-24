@@ -37,6 +37,7 @@ Currently, these files are in /proc/sys/vm:
 - dirty_writeback_centisecs
 - drop_caches
 - enable_soft_offline
+- enable_hard_offline
 - extfrag_threshold
 - highmem_is_dirtyable
 - hugetlb_shm_group
@@ -305,6 +306,97 @@ following requests to soft offline pages will not be performed:
 - On ARM, the request to soft offline pages from GHES driver.
 
 - On PARISC, the request to soft offline pages from Page Deallocation Table.
+
+
+enable_hard_offline
+===================
+
+This parameter gives userspace the control on whether the kernel should hard
+offline memory that has uncorrectable memory errors.  When set to 1, kernel
+attempts to hard offline the error folio whenever it thinks needed.  When set
+to 0, kernel returns EOPNOTSUPP to the request to hard offline the pages.
+Its default value is 1.
+
+Where will `enable_hard_offline = 0`be useful?
+----------------------------------------------
+
+There are two major use cases from the cloud provider's perspective.
+
+The first use case is 1G HugeTLB, which provides critical optimization for
+Virtual Machines (VM) where database-centric and data-intensive workloads have
+requirements of both large memory size (hundreds of GB or several TB),
+and high performance of address mapping.  These VMs usually also require high
+availability, so tolerating and recovering from inevitable uncorrectable
+memory errors is usually provided by host RAS features for long VM uptime
+(SLA is 99.95% Monthly Uptime).  Due to the 1GB granularity, once a byte
+of memory in a hugepage is hardware corrupted, the kernel discards the whole
+1G hugepage, not only the corrupted bytes but also the healthy portion, from
+HugeTLB system.  In cloud environment this is a great loss of memory to VM,
+putting VM in a dilemma: although the host is able to keep serving the VM,
+the VM itself struggles to continue its data-intensive workload with the
+unnecessary loss of ~1G data.  On the other hand, simply terminating the VM
+greatly reduces its uptime given the frequency of uncorrectable memory errors
+occurrence.
+
+The second use case comes from the discussion of MFR for huge VM_PFNMAP [6],
+which is to greatly improve TLB hits for PCI MMIO bars and kernel unmanaged
+host primary memory.  They are most relevant for VMs that run Machine Learning
+(ML) workloads, which also requires reliable VM uptime.  The MFR behavior for
+huge VM_PFNMAP is: if the driver originally VM_PFNMAP-ed with PUD, it must
+first zap the PUD, then intercept future page faults to either install PTE/PMD
+for clean PFNs, or return VM_FAULT_HWPOISON for poisoned PFNs.  Zapping PUD
+means there will be a huge hole in the EPT or stage-2 (S2) page table,
+causing a lot of EPT or S2 violations that need to be fixed up by the device
+driver.  There will be noticeable VM performance downgrades, not only during
+refilling EPT or S2, but also after the hole is refilled, as EPT or S2 is
+already fragmented.
+
+For both use cases, HARD_OFFLINE behavior in MFR arguably does more harm than
+good to the VM.  For the 1st case, if we simply leave the 1G HugeTLB hugepage
+mapped, VM access to the clean PFNs within the poisoned 1G region still works
+well; we just need to still send SIGBUS to userspace in case of re-access
+poisoned PFNs to stop populating corrupted data.  For the 2nd case, if zapping
+PUD doesn't happen there is no need for the driver to intercept page faults to
+clean memory on HBM or EGM.  In addition, in both cases, there is no EPT or S2
+violation, so no performance cost for accessing clean guest pages already
+mapped in EPT and S2.
+
+It is Global
+------------
+
+This applies to the system **globally** in the sense that
+1. It is for entire *system-level memory managed by the kernel*, regardless
+   of the underlying memory type.
+2. It applies to *all userspace threads*, regardless if the physical memory is
+   currently backing any VMA (free memory) or what VMAs it is backing.
+3. It applies to *PCI(e) device memory* (e.g. HBM on GPU) as well, on the
+   condition that their device driver deliberately wants to follow the
+   kernel’s memory failure recovery, instead of being entirely taken care of
+   by device driver (e.g. drivers/nvdimm/pmem.c).
+
+Implications
+------------
+
+There is one important thing to point out in when `enable_hard_offline` = 0.
+The kernel does NOT set HWPoison flag in the struct page or struct folio.
+This behavior has implications now that no enforcement is done by kernel to
+isolate poisoned page and prevent both userspace and kernel from consuming
+memory error and causing hardware fault again (which used to be 'setting the
+HWPoison flag'):
+
+- Userspace already has sufficient capability to prevent itself from
+  consuming memory error and causing hardware fault: with the poisoned
+  virtual address sent in SIGBUS, it can ask the kernel to remap the poisoned
+  page with data loss, or simply abort the memory load operation. That being
+  said, there is risk that a userspace thread can keep ignoring SIGBUS and
+  generates hardware faults repeatedly.
+
+- Kernel won't be able to forbid the reuse of the free error pages in future
+  memory allocations. If an error page is allocated to the kernel, when the
+  kernel consumes the allocated error page, a kernel panic is most likely to
+  happen. For userspace, it is now not guaranteed that newly allocated memory
+  is free of memory errors.
+
 
 extfrag_threshold
 =================
