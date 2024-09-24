@@ -57,6 +57,7 @@ properties:
   clocks:
     items:
       - description: SPLIT Clock
+    maxItems: 3
 
 required:
   - compatible
