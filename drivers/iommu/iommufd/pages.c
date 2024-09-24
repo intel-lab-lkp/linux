@@ -347,24 +347,32 @@ static void batch_destroy(struct pfn_batch *batch, void *backup)
 }
 
 /* true if the pfn was added, false otherwise */
-static bool batch_add_pfn(struct pfn_batch *batch, unsigned long pfn)
+static bool batch_add_pfn_num(struct pfn_batch *batch, unsigned long pfn,
+			      unsigned long nr)
 {
 	const unsigned int MAX_NPFNS = type_max(typeof(*batch->npfns));
+	unsigned long max_npfns = MAX_NPFNS - nr;
 
 	if (batch->end &&
 	    pfn == batch->pfns[batch->end - 1] + batch->npfns[batch->end - 1] &&
-	    batch->npfns[batch->end - 1] != MAX_NPFNS) {
-		batch->npfns[batch->end - 1]++;
-		batch->total_pfns++;
+	    batch->npfns[batch->end - 1] <= max_npfns) {
+		batch->npfns[batch->end - 1] += nr;
+		batch->total_pfns += nr;
 		return true;
 	}
 	if (batch->end == batch->array_size)
 		return false;
-	batch->total_pfns++;
+	batch->total_pfns += nr;
 	batch->pfns[batch->end] = pfn;
-	batch->npfns[batch->end] = 1;
+	batch->npfns[batch->end] = nr;
 	batch->end++;
 	return true;
+}
+
+/* true if the pfn was added, false otherwise */
+static bool batch_add_pfn(struct pfn_batch *batch, unsigned long pfn)
+{
+	return batch_add_pfn_num(batch, pfn, 1);
 }
 
 /*
@@ -622,6 +630,67 @@ static void batch_from_pages(struct pfn_batch *batch, struct page **pages,
 			break;
 }
 
+static void batch_from_folios(struct pfn_batch *batch, struct folio **folios,
+			      unsigned long offset, unsigned long npages)
+{
+	unsigned long nr, pfn, i = 0;
+	struct folio *folio;
+
+	while (npages) {
+		folio = folios[i++];
+		nr = folio_nr_pages(folio) - offset;
+		nr = min_t(unsigned long, nr, npages);
+		pfn = page_to_pfn(folio_page(folio, offset));
+		batch_add_pfn_num(batch, pfn, nr);
+		offset = 0;
+		npages -= nr;
+	}
+}
+
+/*
+ * Return the folio containing the page which is @start_index pages beyond
+ * page number @offset in folios[0].  Return the index of that page in
+ * @offset_out.
+ */
+static struct folio **folios_start(struct folio **folios, unsigned long offset,
+				   unsigned long start_index,
+				   unsigned long *offset_out)
+{
+	unsigned long nr = folio_nr_pages(*folios);
+
+	while (offset + start_index > nr) {
+		start_index -= (nr - offset);
+		offset = 0;
+		folios++;
+		nr = folio_nr_pages(*folios);
+	}
+
+	*offset_out = offset + start_index;
+	return folios;
+}
+
+static void folios_unpin_partial(struct folio **folios, unsigned long offset,
+				 unsigned long npages)
+{
+	unsigned long nr, j, i = 0;
+	struct folio *folio;
+
+	while (npages) {
+		folio = folios[i++];
+		nr = folio_nr_pages(folio);
+		if (offset == 0 && nr < npages) {
+			unpin_folio(folio);
+		} else {
+			nr = min_t(unsigned long, npages, nr - offset);
+			for (j = 0; j < nr; j++)
+				unpin_user_page(folio_page(folio, offset + j));
+			offset = 0;
+		}
+		npages -= nr;
+	}
+
+}
+
 static void batch_unpin(struct pfn_batch *batch, struct iopt_pages *pages,
 			unsigned int first_page_off, size_t npages)
 {
@@ -708,6 +777,8 @@ struct pfn_reader_user {
 	struct file *file;
 	struct folio **ufolios;
 	unsigned long ufolios_len;
+	unsigned long ufolios_offset;
+	bool ufolios_huge;
 };
 
 static void pfn_reader_user_init(struct pfn_reader_user *user,
@@ -725,6 +796,8 @@ static void pfn_reader_user_init(struct pfn_reader_user *user,
 	user->file = (pages->type == IOPT_ADDRESS_FILE) ? pages->file : NULL;
 	user->ufolios = NULL;
 	user->ufolios_len = 0;
+	user->ufolios_huge = 0;
+	user->ufolios_offset = 0;
 }
 
 static void pfn_reader_user_destroy(struct pfn_reader_user *user,
@@ -762,6 +835,7 @@ static long pin_memfd_pages(struct pfn_reader_user *user,
 		return nfolios;
 
 	offset >>= PAGE_SHIFT;
+	user->ufolios_offset = offset;
 	npages_out = 0;
 
 	for (i = 0; i < nfolios; i++) {
@@ -770,9 +844,11 @@ static long pin_memfd_pages(struct pfn_reader_user *user,
 		npin = min(nr - offset, npages);
 		if (nr > 1) {
 			folio_split_user_page_pin(folio, npin);
+			user->ufolios_huge = true;
 		}
-		for (j = offset; j < offset + npin; j++)
-			*upages++ = folio_page(folio, j);
+		if (upages)
+			for (j = offset; j < offset + npin; j++)
+				*upages++ = folio_page(folio, j);
 		npages -= npin;
 		npages_out += npin;
 		offset = 0;
@@ -796,7 +872,7 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 	    WARN_ON(last_index < start_index))
 		return -EINVAL;
 
-	if (!user->upages) {
+	if (!user->file && !user->upages) {
 		/* All undone in pfn_reader_destroy() */
 		user->upages_len = npages * sizeof(*user->upages);
 		user->upages = temp_kmalloc(&user->upages_len, NULL, 0);
@@ -808,11 +884,6 @@ static int pfn_reader_user_pin(struct pfn_reader_user *user,
 		user->ufolios_len = npages * sizeof(*user->ufolios);
 		user->ufolios = temp_kmalloc(&user->ufolios_len, NULL, 0);
 		if (!user->ufolios)
-			return -ENOMEM;
-
-		/* Bail for now.  Be more robust when we optimize for folios. */
-		if (user->ufolios_len / sizeof(*user->ufolios) <
-		    user->upages_len / sizeof(*user->upages))
 			return -ENOMEM;
 	}
 
@@ -1045,6 +1116,8 @@ static int pfn_reader_fill_span(struct pfn_reader *pfns)
 	unsigned long start_index = pfns->batch_end_index;
 	struct pfn_reader_user *user = &pfns->user;
 	unsigned long npages;
+	unsigned long offset;
+	struct folio **folios;
 	struct iopt_area *area;
 	int rc;
 
@@ -1084,7 +1157,18 @@ static int pfn_reader_fill_span(struct pfn_reader *pfns)
 
 	npages = user->upages_end - start_index;
 	start_index -= user->upages_start;
-	batch_from_pages(&pfns->batch, user->upages + start_index, npages);
+
+	if (!user->file) {
+		batch_from_pages(&pfns->batch, user->upages + start_index,
+				 npages);
+	} else if (!user->ufolios_huge) {
+		batch_from_folios(&pfns->batch, user->ufolios + start_index, 0,
+				  npages);
+	} else {
+		folios = folios_start(user->ufolios, user->ufolios_offset,
+				      start_index, &offset);
+		batch_from_folios(&pfns->batch, folios, offset, npages);
+	}
 	return 0;
 }
 
@@ -1160,13 +1244,26 @@ static void pfn_reader_release_pins(struct pfn_reader *pfns)
 	struct iopt_pages *pages = pfns->pages;
 	struct pfn_reader_user *user = &pfns->user;
 	unsigned long npages, start_index;
+	unsigned long offset;
+	struct folio **folios;
 
 	if (user->upages_end > pfns->batch_end_index) {
 		/* Any pages not transferred to the batch are just unpinned */
 
 		npages = user->upages_end - pfns->batch_end_index;
 		start_index = pfns->batch_end_index - user->upages_start;
-		unpin_user_pages(user->upages + start_index, npages);
+
+		if (!user->file) {
+			unpin_user_pages(user->upages + start_index, npages);
+		} else if (!user->ufolios_huge) {
+			unpin_folios(user->ufolios + start_index, npages);
+		} else {
+			folios = folios_start(user->ufolios,
+					      user->ufolios_offset,
+					      start_index, &offset);
+			folios_unpin_partial(folios, offset, npages);
+		}
+
 		iopt_pages_sub_npinned(pages, npages);
 		user->upages_end = pfns->batch_end_index;
 	}
