@@ -1410,12 +1410,6 @@ intel_dp_128b132b_lane_eq(struct intel_dp *intel_dp,
 	for (try = 0; try < max_tries; try++) {
 		fsleep(delay_us);
 
-		/*
-		 * The delay may get updated. The transmitter shall read the
-		 * delay before link status during link training.
-		 */
-		delay_us = drm_dp_128b132b_read_aux_rd_interval(&intel_dp->aux);
-
 		if (drm_dp_dpcd_read_link_status(&intel_dp->aux, link_status) < 0) {
 			lt_err(intel_dp, DP_PHY_DPRX, "Failed to read link status\n");
 			return false;
@@ -1441,6 +1435,12 @@ intel_dp_128b132b_lane_eq(struct intel_dp *intel_dp,
 
 		if (time_after(jiffies, deadline))
 			timeout = true; /* try one last time after deadline */
+
+		/*
+		 * During LT, Tx shall read DPCD 02216h before DPCD 00202h to 00207h and
+		 * 0200Ch through 0200Fh.
+		 */
+		delay_us = drm_dp_128b132b_read_aux_rd_interval(&intel_dp->aux);
 
 		/* Update signal levels and training set as requested. */
 		intel_dp_get_adjust_train(intel_dp, crtc_state, DP_PHY_DPRX, link_status);
