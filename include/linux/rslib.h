@@ -110,7 +110,7 @@ void free_rs(struct rs_control *rs);
  * rs_modnn() - Modulo replacement for galois field arithmetics
  *
  *  @rs:	Pointer to the RS codec
- *  @x:		the value to reduce
+ *  @x:		the value to reduce (requires x >= 0)
  *
  *  where
  *  rs->mm = number of bits per symbol
@@ -125,6 +125,19 @@ static inline int rs_modnn(struct rs_codec *rs, int x)
 		x = (x >> rs->mm) + (x & rs->nn);
 	}
 	return x;
+}
+
+/**
+ * rs_modnn_fast() - Modulo replacement for galois field arithmetics
+ *
+ *  @rs:	Pointer to the RS codec
+ *  @x:		the value to reduce (requires 0 <= x < 2*nn)
+ *
+ *  Same as rs_modnn(x), but faster, at the cost of limited value range of @x
+*/
+static inline int rs_modnn_fast(struct rs_codec *rs, int x)
+{
+	return x - rs->nn < 0 ? x : x - rs->nn;
 }
 
 #endif
