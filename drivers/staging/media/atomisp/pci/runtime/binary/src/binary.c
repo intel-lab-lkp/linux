@@ -950,7 +950,7 @@ static int __ia_css_binary_find(struct ia_css_binary_descr *descr,
 	unsigned int i;
 
 	assert(descr);
-	/* MW: used after an error check, may accept NULL, but doubtfull */
+	/* MW: used after an error check, may accept NULL, but doubtful */
 	assert(binary);
 
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,
