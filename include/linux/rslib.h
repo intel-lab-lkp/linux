@@ -106,7 +106,8 @@ struct rs_control *init_rs_non_canonical(int symsize, int (*func)(int),
 /* Release a rs control structure */
 void free_rs(struct rs_control *rs);
 
-/** modulo replacement for galois field arithmetics
+/**
+ * rs_modnn() - Modulo replacement for galois field arithmetics
  *
  *  @rs:	Pointer to the RS codec
  *  @x:		the value to reduce
@@ -115,8 +116,7 @@ void free_rs(struct rs_control *rs);
  *  rs->mm = number of bits per symbol
  *  rs->nn = (2^rs->mm) - 1
  *
- *  Simple arithmetic modulo would return a wrong result for values
- *  >= 3 * rs->nn
+ *  Calculate (x % rs->nn), without using a div instruction
 */
 static inline int rs_modnn(struct rs_codec *rs, int x)
 {
