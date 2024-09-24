@@ -366,7 +366,7 @@ get_next_bframe(struct bchannel *bch)
 		if (bch->tx_skb) {
 			bch->next_skb = NULL;
 			test_and_clear_bit(FLG_TX_NEXT, &bch->Flags);
-			/* confirm imediately to allow next data */
+			/* confirm immediately to allow next data */
 			confirm_Bsend(bch);
 			return 1;
 		} else {

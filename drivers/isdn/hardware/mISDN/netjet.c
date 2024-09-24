@@ -379,7 +379,7 @@ read_dma(struct tiger_ch *bc, u32 idx, int cnt)
 		return;
 	}
 	stat = bchannel_get_rxbuf(&bc->bch, cnt);
-	/* only transparent use the count here, HDLC overun is detected later */
+	/* only transparent use the count here, HDLC overrun is detected later */
 	if (stat == -ENOMEM) {
 		pr_warn("%s.B%d: No memory for %d bytes\n",
 			card->name, bc->bch.nr, cnt);

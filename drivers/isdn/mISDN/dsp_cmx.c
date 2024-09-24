@@ -572,7 +572,7 @@ dsp_cmx_hardware(struct dsp_conf *conf, struct dsp *dsp)
 				       __func__, member->dsp->name);
 			goto conf_software;
 		}
-		/* check if member changes volume at an not suppoted level */
+		/* check if member changes volume at an not supported level */
 		if (member->dsp->tx_volume) {
 			if (dsp_debug & DEBUG_DSP_CMX)
 				printk(KERN_DEBUG

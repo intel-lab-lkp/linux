@@ -205,7 +205,7 @@ dsp_audio_generate_seven(void)
 		sorted_alaw[j] = i;
 	}
 
-	/* generate tabels */
+	/* generate tables */
 	for (i = 0; i < 256; i++) {
 		/* spl is the source: the law-sample (converted to alaw) */
 		spl = i;
