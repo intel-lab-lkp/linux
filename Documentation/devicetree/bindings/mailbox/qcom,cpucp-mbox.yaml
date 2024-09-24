@@ -15,8 +15,9 @@ description:
 
 properties:
   compatible:
-    items:
-      - const: qcom,x1e80100-cpucp-mbox
+    enum:
+      - qcom,x1e80100-cpucp-mbox
+      - qcom,sc7280-cpucp-mbox
 
   reg:
     items:
