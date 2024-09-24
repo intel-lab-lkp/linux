@@ -71,6 +71,7 @@ enum geni_i2c_err_code {
 
 #define I2C_AUTO_SUSPEND_DELAY	250
 #define KHZ(freq)		(1000 * freq)
+#define MHZ(freq)		(1000000 * freq)
 #define PACKING_BYTES_PW	4
 
 #define ABORT_TIMEOUT		HZ
@@ -152,10 +153,20 @@ static const struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHZ(1000), 1, 3,  9, 18},
 };
 
+/* source_clock = 32 MHz */
+static const struct geni_i2c_clk_fld geni_i2c_clk_map_32M[] = {
+	{KHZ(100), 7, 14, 18, 40},
+	{KHZ(400), 4,  3, 11, 20},
+	{KHZ(1000), 4, 3,  6, 15},
+};
+
 static int geni_i2c_clk_map_idx(struct geni_i2c_dev *gi2c)
 {
 	int i;
 	const struct geni_i2c_clk_fld *itr = geni_i2c_clk_map;
+
+	if (clk_get_rate(gi2c->se.clk) == MHZ(32))
+		itr = geni_i2c_clk_map_32M;
 
 	for (i = 0; i < ARRAY_SIZE(geni_i2c_clk_map); i++, itr++) {
 		if (itr->clk_freq_out == gi2c->clk_freq_out) {
