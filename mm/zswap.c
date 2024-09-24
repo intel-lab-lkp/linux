@@ -1435,8 +1435,37 @@ static bool zswap_store_entry(struct xarray *tree,
 	return true;
 }
 
+/*
+ * If the zswap store fails or zswap is disabled, we must invalidate the
+ * possibly stale entries which were previously stored at the offsets
+ * corresponding to each page of the folio. Otherwise, writeback could
+ * overwrite the new data in the swapfile.
+ *
+ * This is called after the store of an offset in a large folio has failed.
+ * All zswap entries in the folio must be deleted. This helps make sure
+ * that a swapped-out mTHP is either entirely stored in zswap, or entirely
+ * not stored in zswap.
+ *
+ * This is also called if zswap_store() is invoked, but zswap is not enabled.
+ * All offsets for the folio are deleted from zswap in this case.
+ */
+static void zswap_delete_stored_offsets(struct xarray *tree,
+					pgoff_t offset,
+					long nr_pages)
+{
+	struct zswap_entry *entry;
+	long i;
+
+	for (i = 0; i < nr_pages; ++i) {
+		entry = xa_erase(tree, offset + i);
+		if (entry)
+			zswap_entry_free(entry);
+	}
+}
+
 bool zswap_store(struct folio *folio)
 {
+	long nr_pages = folio_nr_pages(folio);
 	swp_entry_t swp = folio->swap;
 	pgoff_t offset = swp_offset(swp);
 	struct xarray *tree = swap_zswap_tree(swp);
@@ -1541,9 +1570,7 @@ check_old:
 	 * possibly stale entry which was previously stored at this offset.
 	 * Otherwise, writeback could overwrite the new data in the swapfile.
 	 */
-	entry = xa_erase(tree, offset);
-	if (entry)
-		zswap_entry_free(entry);
+	zswap_delete_stored_offsets(tree, offset, nr_pages);
 	return false;
 }
 
