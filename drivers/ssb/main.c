@@ -663,11 +663,9 @@ ssb_bus_register(struct ssb_bus *bus,
 	ssb_extif_init(&bus->extif);
 	ssb_mipscore_init(&bus->mipscore);
 	err = ssb_fetch_invariants(bus, get_invariants);
-	if (err) {
-		ssb_bus_may_powerdown(bus);
-		goto err_pcmcia_exit;
-	}
 	ssb_bus_may_powerdown(bus);
+	if (err)
+		goto err_pcmcia_exit;
 
 	/* Queue it for attach.
 	 * See the comment at the ssb_is_early_boot definition.
