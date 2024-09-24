@@ -39,9 +39,9 @@
 	bf      1f
 	addi    lr, sp, 152
 	br	2f
-1:
+1 :
 	mfcr	lr, usp
-2:
+2 :
 	stw	lr, (sp, 16)
 
 	stw     a0, (sp, 20)
