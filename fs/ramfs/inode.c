@@ -74,6 +74,9 @@ struct inode *ramfs_get_inode(struct super_block *sb,
 		case S_IFREG:
 			inode->i_op = &ramfs_file_inode_operations;
 			inode->i_fop = &ramfs_file_operations;
+			mapping_set_folio_min_order(inode->i_mapping,
+						    sb->s_blocksize_bits -
+							    PAGE_SHIFT);
 			break;
 		case S_IFDIR:
 			inode->i_op = &ramfs_dir_inode_operations;
@@ -211,6 +214,8 @@ static int ramfs_show_options(struct seq_file *m, struct dentry *root)
 
 	if (fsi->mount_opts.mode != RAMFS_DEFAULT_MODE)
 		seq_printf(m, ",mode=%o", fsi->mount_opts.mode);
+	if (fsi->mount_opts.blocksize != PAGE_SIZE)
+		seq_printf(m, ",blocksize=%u", fsi->mount_opts.blocksize);
 	return 0;
 }
 
@@ -235,6 +240,7 @@ static int ramfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct fs_parse_result result;
 	struct ramfs_fs_info *fsi = fc->s_fs_info;
+	size_t max_blocksize = mapping_max_folio_size_supported();
 	int opt;
 
 	opt = fs_parse(fc, ramfs_fs_parameters, param, &result);
@@ -263,8 +269,8 @@ static int ramfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 
 		fsi->mount_opts.blocksize = rounddown_pow_of_two(result.uint_32);
 
-		if (fsi->mount_opts.blocksize > PAGE_SIZE)
-			fsi->mount_opts.blocksize = PAGE_SIZE;
+		if (fsi->mount_opts.blocksize > max_blocksize)
+			fsi->mount_opts.blocksize = max_blocksize;
 
 		if (fsi->mount_opts.blocksize < PAGE_SIZE)
 			fsi->mount_opts.blocksize = PAGE_SIZE;
