@@ -100,7 +100,8 @@
 /* Reserved for per-syscall flags	0xff. */
 #define AT_SYMLINK_NOFOLLOW		0x100   /* Do not follow symbolic
 						   links. */
-/* Reserved for per-syscall flags	0x200 */
+#define AT_EXEC_REASONABLE_COMM		0x200   /* Use argv[0] for comm in
+						   execveat */
 #define AT_SYMLINK_FOLLOW		0x400   /* Follow symbolic links. */
 #define AT_NO_AUTOMOUNT			0x800	/* Suppress terminal automount
 						   traversal. */

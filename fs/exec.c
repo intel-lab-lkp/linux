@@ -1569,11 +1569,15 @@ static void free_bprm(struct linux_binprm *bprm)
 	kfree(bprm);
 }
 
-static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int flags)
+static struct linux_binprm *alloc_bprm(int fd, struct filename *filename,
+				       struct user_arg_ptr argv, int flags)
 {
 	struct linux_binprm *bprm;
 	struct file *file;
 	int retval = -ENOMEM;
+	bool needs_comm_fixup = flags & AT_EXEC_REASONABLE_COMM;
+
+	flags &= ~AT_EXEC_REASONABLE_COMM;
 
 	file = do_open_execat(fd, filename, flags);
 	if (IS_ERR(file))
@@ -1590,11 +1594,20 @@ static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int fl
 	if (fd == AT_FDCWD || filename->name[0] == '/') {
 		bprm->filename = filename->name;
 	} else {
-		if (filename->name[0] == '\0')
+		if (needs_comm_fixup) {
+			const char __user *p = get_user_arg_ptr(argv, 0);
+
+			retval = -EFAULT;
+			if (!p)
+				goto out_free;
+
+			bprm->fdpath = strndup_user(p, MAX_ARG_STRLEN);
+		} else if (filename->name[0] == '\0')
 			bprm->fdpath = kasprintf(GFP_KERNEL, "/dev/fd/%d", fd);
 		else
 			bprm->fdpath = kasprintf(GFP_KERNEL, "/dev/fd/%d/%s",
 						  fd, filename->name);
+		retval = -ENOMEM;
 		if (!bprm->fdpath)
 			goto out_free;
 
@@ -1969,7 +1982,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	 * further execve() calls fail. */
 	current->flags &= ~PF_NPROC_EXCEEDED;
 
-	bprm = alloc_bprm(fd, filename, flags);
+	bprm = alloc_bprm(fd, filename, argv, flags);
 	if (IS_ERR(bprm)) {
 		retval = PTR_ERR(bprm);
 		goto out_ret;
@@ -2034,6 +2047,7 @@ int kernel_execve(const char *kernel_filename,
 	struct linux_binprm *bprm;
 	int fd = AT_FDCWD;
 	int retval;
+	struct user_arg_ptr user_argv = {};
 
 	/* It is non-sense for kernel threads to call execve */
 	if (WARN_ON_ONCE(current->flags & PF_KTHREAD))
@@ -2043,7 +2057,7 @@ int kernel_execve(const char *kernel_filename,
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
 
-	bprm = alloc_bprm(fd, filename, 0);
+	bprm = alloc_bprm(fd, filename, user_argv, 0);
 	if (IS_ERR(bprm)) {
 		retval = PTR_ERR(bprm);
 		goto out_ret;
