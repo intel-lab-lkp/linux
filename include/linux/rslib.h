@@ -18,8 +18,8 @@
  *
  * @mm:		Bits per symbol
  * @nn:		Symbols per block (= (1<<mm)-1)
- * @alpha_to:	log lookup table
- * @index_of:	Antilog lookup table
+ * @alpha_to:	Antilog lookup table
+ * @index_of:	log lookup table
  * @genpoly:	Generator polynomial
  * @nroots:	Number of generator roots = number of parity symbols
  * @fcr:	First consecutive root, index form
