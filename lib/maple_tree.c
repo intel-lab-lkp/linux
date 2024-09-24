@@ -1255,8 +1255,10 @@ static inline void mas_alloc_nodes(struct ma_state *mas, gfp_t gfp)
 	}
 
 	node = mas->alloc;
-	while (requested) {
+	for (; requested; node = node->slot[0]) {
 		max_req = MAPLE_ALLOC_SLOTS - node->node_count;
+		if (unlikely(!max_req))
+			continue;
 		slots = (void **)&node->slot[node->node_count];
 		max_req = min(requested, max_req);
 		count = mt_alloc_bulk(gfp, max_req, slots);
@@ -1270,7 +1272,6 @@ static inline void mas_alloc_nodes(struct ma_state *mas, gfp_t gfp)
 
 		node->node_count += count;
 		allocated += count;
-		node = node->slot[0];
 		requested -= count;
 	}
 	mas->alloc->total = allocated;
