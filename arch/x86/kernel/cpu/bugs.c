@@ -261,27 +261,6 @@ static void __init mds_select_mitigation(void)
 	}
 }
 
-static int __init mds_cmdline(char *str)
-{
-	if (!boot_cpu_has_bug(X86_BUG_MDS))
-		return 0;
-
-	if (!str)
-		return -EINVAL;
-
-	if (!strcmp(str, "off"))
-		mds_mitigation = MDS_MITIGATION_OFF;
-	else if (!strcmp(str, "full"))
-		mds_mitigation = MDS_MITIGATION_FULL;
-	else if (!strcmp(str, "full,nosmt")) {
-		mds_mitigation = MDS_MITIGATION_FULL;
-		mds_nosmt = true;
-	}
-
-	return 0;
-}
-early_param("mds", mds_cmdline);
-
 #undef pr_fmt
 #define pr_fmt(fmt)	"TAA: " fmt
 
