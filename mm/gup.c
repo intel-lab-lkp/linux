@@ -3704,3 +3704,23 @@ err:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(memfd_pin_folios);
+
+/**
+ * folio_split_user_page_pin() - split the pin on a high order folio
+ * @folio: the folio to split
+ * @npages: The new number of pages the folio pin reference should hold
+ *
+ * Given a high order folio that is already pinned, adjust the reference
+ * count to allow unpin_user_page_range() and related to be called on a
+ * the folio. npages is the number of pages that will be passed to a
+ * future unpin_user_page_range().
+ */
+void folio_split_user_page_pin(struct folio *folio, unsigned long npages)
+{
+	if (!folio_test_large(folio) || is_huge_zero_folio(folio) ||
+	    npages == 1)
+		return;
+	atomic_add(npages - 1, &folio->_refcount);
+	atomic_add(npages - 1, &folio->_pincount);
+}
+EXPORT_SYMBOL_GPL(folio_split_user_page_pin);
