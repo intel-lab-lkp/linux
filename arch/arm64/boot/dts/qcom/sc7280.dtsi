@@ -4009,6 +4009,14 @@
 			qcom,bcm-voters = <&apps_bcm_voter>;
 		};
 
+		cpucp_mbox: mailbox@17430000 {
+			compatible = "qcom,sc7280-cpucp-mbox";
+			reg = <0 0x18590000 0 0x2000>,
+			      <0 0x17C00000 0 0x10>;
+			interrupts = <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
+			#mbox-cells = <1>;
+		};
+
 		system-cache-controller@9200000 {
 			compatible = "qcom,sc7280-llcc";
 			reg = <0 0x09200000 0 0x58000>, <0 0x09280000 0 0x58000>,
