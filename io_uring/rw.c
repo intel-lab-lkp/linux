@@ -1016,6 +1016,7 @@ int io_write(struct io_kiocb *req, unsigned int issue_flags)
 	if (unlikely(ret))
 		return ret;
 	req->cqe.res = iov_iter_count(&io->iter);
+	rw->kiocb.ki_write_hint = file_write_hint(rw->kiocb.ki_filp);
 
 	if (force_nonblock) {
 		/* If the file doesn't support async, just async punt */
