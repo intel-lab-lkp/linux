@@ -31,9 +31,9 @@ struct hmac_ctx {
 static int hmac_setkey(struct crypto_shash *parent,
 		       const u8 *inkey, unsigned int keylen)
 {
-	int bs = crypto_shash_blocksize(parent);
-	int ds = crypto_shash_digestsize(parent);
-	int ss = crypto_shash_statesize(parent);
+	unsigned int bs = crypto_shash_blocksize(parent);
+	unsigned int ds = crypto_shash_digestsize(parent);
+	unsigned int ss = crypto_shash_statesize(parent);
 	struct hmac_ctx *tctx = crypto_shash_ctx(parent);
 	struct crypto_shash *hash = tctx->hash;
 	u8 *ipad = &tctx->pads[0];
@@ -108,8 +108,8 @@ static int hmac_update(struct shash_desc *pdesc,
 static int hmac_final(struct shash_desc *pdesc, u8 *out)
 {
 	struct crypto_shash *parent = pdesc->tfm;
-	int ds = crypto_shash_digestsize(parent);
-	int ss = crypto_shash_statesize(parent);
+	unsigned int ds = crypto_shash_digestsize(parent);
+	unsigned int ss = crypto_shash_statesize(parent);
 	const struct hmac_ctx *tctx = crypto_shash_ctx(parent);
 	const u8 *opad = &tctx->pads[ss];
 	struct shash_desc *desc = shash_desc_ctx(pdesc);
@@ -124,8 +124,8 @@ static int hmac_finup(struct shash_desc *pdesc, const u8 *data,
 {
 
 	struct crypto_shash *parent = pdesc->tfm;
-	int ds = crypto_shash_digestsize(parent);
-	int ss = crypto_shash_statesize(parent);
+	unsigned int ds = crypto_shash_digestsize(parent);
+	unsigned int ss = crypto_shash_statesize(parent);
 	const struct hmac_ctx *tctx = crypto_shash_ctx(parent);
 	const u8 *opad = &tctx->pads[ss];
 	struct shash_desc *desc = shash_desc_ctx(pdesc);
