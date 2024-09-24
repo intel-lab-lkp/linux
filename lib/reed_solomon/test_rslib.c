@@ -55,6 +55,7 @@ static struct etab Tab[] = {
 	{8,	0x11d,	1,	1,	30,	100	},
 	{8,	0x187,	112,	11,	32,	100	},
 	{9,	0x211,	1,	1,	33,	80	},
+	{16,  0x1ffed,	65534,	65534,	50,	5	},
 	{0, 0, 0, 0, 0, 0},
 };
 
@@ -232,9 +233,8 @@ static void compute_syndrome(struct rs_control *rsc, uint16_t *data,
 	struct rs_codec *rs = rsc->codec;
 	uint16_t *alpha_to = rs->alpha_to;
 	uint16_t *index_of = rs->index_of;
+	uint16_t *genroot = rs->genroot;
 	int nroots = rs->nroots;
-	int prim = rs->prim;
-	int fcr = rs->fcr;
 	int i, j;
 
 	/* Calculating syndrome */
@@ -245,8 +245,8 @@ static void compute_syndrome(struct rs_control *rsc, uint16_t *data,
 				syn[i] = data[j];
 			} else {
 				syn[i] = data[j] ^
-					alpha_to[rs_modnn(rs, index_of[syn[i]]
-						+ (fcr + i) * prim)];
+					alpha_to[rs_modnn_fast(rs,
+						index_of[syn[i]] + genroot[i])];
 			}
 		}
 	}

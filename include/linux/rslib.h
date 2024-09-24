@@ -21,6 +21,7 @@
  * @alpha_to:	Antilog lookup table
  * @index_of:	log lookup table
  * @genpoly:	Generator polynomial
+ * @genroot:	Roots of generator polynomial, index form
  * @nroots:	Number of generator roots = number of parity symbols
  * @fcr:	First consecutive root, index form
  * @prim:	Primitive element, index form
@@ -36,6 +37,7 @@ struct rs_codec {
 	uint16_t	*alpha_to;
 	uint16_t	*index_of;
 	uint16_t	*genpoly;
+	uint16_t	*genroot;
 	int		nroots;
 	int		fcr;
 	int		prim;
@@ -125,6 +127,27 @@ static inline int rs_modnn(struct rs_codec *rs, int x)
 		x = (x >> rs->mm) + (x & rs->nn);
 	}
 	return x;
+}
+
+/**
+ * rs_modnn_mul() - Modulo replacement for galois field arithmetics
+ *
+ *  @rs:	Pointer to the RS codec
+ *  @a:		a*b is the value to reduce (requires 0 <= a <= nn <= 0xFFFF)
+ *  @b:		a*b is the value to reduce (requires 0 <= b <= nn <= 0xFFFF)
+ *
+ *  Same as rs_modnn(a*b), but avoid integer overflow when calculating a*b
+*/
+static inline int rs_modnn_mul(struct rs_codec *rs, int a, int b)
+{
+	/* nn <= 0xFFFF, so (a * b) will not overflow uint32_t */
+	uint32_t x = (uint32_t)a * (uint32_t)b;
+	uint32_t nn = (uint32_t)rs->nn;
+	while (x >= nn) {
+		x -= nn;
+		x = (x >> rs->mm) + (x & nn);
+	}
+	return (int)x;
 }
 
 /**

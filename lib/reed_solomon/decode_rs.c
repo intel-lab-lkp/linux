@@ -20,6 +20,7 @@
 	int iprim = rs->iprim;
 	uint16_t *alpha_to = rs->alpha_to;
 	uint16_t *index_of = rs->index_of;
+	uint16_t *genroot = rs->genroot;
 	uint16_t u, q, tmp, num1, num2, den, discr_r, syn_error;
 	int count = 0;
 	int num_corrected;
@@ -69,8 +70,8 @@
 			} else {
 				syn[i] = ((((uint16_t) data[j]) ^
 					   invmsk) & msk) ^
-					alpha_to[rs_modnn(rs, index_of[syn[i]] +
-						       (fcr + i) * prim)];
+					alpha_to[rs_modnn_fast(rs,
+						index_of[syn[i]] + genroot[i])];
 			}
 		}
 	}
@@ -81,8 +82,8 @@
 				syn[i] = ((uint16_t) par[j]) & msk;
 			} else {
 				syn[i] = (((uint16_t) par[j]) & msk) ^
-					alpha_to[rs_modnn(rs, index_of[syn[i]] +
-						       (fcr+i)*prim)];
+					alpha_to[rs_modnn_fast(rs,
+						index_of[syn[i]] + genroot[i])];
 			}
 		}
 	}
@@ -108,15 +109,17 @@
 
 	if (no_eras > 0) {
 		/* Init lambda to be the erasure locator polynomial */
-		lambda[1] = alpha_to[rs_modnn(rs,
-					prim * (nn - 1 - (eras_pos[0] + pad)))];
+		lambda[1] = alpha_to[rs_modnn_mul(rs,
+					 prim, (nn - 1 - (eras_pos[0] + pad)))];
 		for (i = 1; i < no_eras; i++) {
-			u = rs_modnn(rs, prim * (nn - 1 - (eras_pos[i] + pad)));
+			u = rs_modnn_mul(rs,
+					 prim, (nn - 1 - (eras_pos[i] + pad)));
 			for (j = i + 1; j > 0; j--) {
 				tmp = index_of[lambda[j - 1]];
 				if (tmp != nn) {
 					lambda[j] ^=
-						alpha_to[rs_modnn(rs, u + tmp)];
+						alpha_to[rs_modnn_fast(rs,
+							 u + tmp)];
 				}
 			}
 		}
@@ -137,9 +140,9 @@
 		for (i = 0; i < r; i++) {
 			if ((lambda[i] != 0) && (s[r - i - 1] != nn)) {
 				discr_r ^=
-					alpha_to[rs_modnn(rs,
-							  index_of[lambda[i]] +
-							  s[r - i - 1])];
+					alpha_to[rs_modnn_fast(rs,
+						 index_of[lambda[i]] +
+						 s[r - i - 1])];
 			}
 		}
 		discr_r = index_of[discr_r];	/* Index form */
@@ -153,8 +156,8 @@
 			for (i = 0; i < nroots; i++) {
 				if (b[i] != nn) {
 					t[i + 1] = lambda[i + 1] ^
-						alpha_to[rs_modnn(rs, discr_r +
-								  b[i])];
+						alpha_to[rs_modnn_fast(rs,
+							 discr_r + b[i])];
 				} else
 					t[i + 1] = lambda[i + 1];
 			}
@@ -166,8 +169,9 @@
 				 */
 				for (i = 0; i <= nroots; i++) {
 					b[i] = (lambda[i] == 0) ? nn :
-						rs_modnn(rs, index_of[lambda[i]]
-							 - discr_r + nn);
+						rs_modnn_fast(rs,
+						        index_of[lambda[i]] +
+							nn - discr_r);
 				}
 			} else {
 				/* 2 lines below: B(x) <-- x*B(x) */
@@ -197,11 +201,11 @@
 	/* Find roots of error+erasure locator polynomial by Chien search */
 	memcpy(&reg[1], &lambda[1], nroots * sizeof(reg[0]));
 	count = 0;		/* Number of roots of lambda(x) */
-	for (i = 1, k = iprim - 1; i <= nn; i++, k = rs_modnn(rs, k + iprim)) {
+	for (i = 1, k = iprim-1; i <= nn; i++, k = rs_modnn_fast(rs, k+iprim)) {
 		q = alpha_to[0];	/* lambda[0] is always 0 */
 		for (j = deg_lambda; j > 0; j--) {
 			if (reg[j] != nn) {
-				reg[j] = rs_modnn(rs, reg[j] + j);
+				reg[j] = rs_modnn_fast(rs, reg[j] + j);
 				q ^= alpha_to[reg[j]];
 			}
 		}
@@ -238,8 +242,8 @@
 		tmp = 0;
 		for (j = i; j >= 0; j--) {
 			if ((s[i - j] != nn) && (lambda[j] != nn))
-				tmp ^=
-				    alpha_to[rs_modnn(rs, s[i - j] + lambda[j])];
+				tmp ^= alpha_to[rs_modnn_fast(rs,
+						s[i - j] + lambda[j])];
 		}
 		omega[i] = index_of[tmp];
 	}
@@ -254,8 +258,9 @@
 		num1 = 0;
 		for (i = deg_omega; i >= 0; i--) {
 			if (omega[i] != nn)
-				num1 ^= alpha_to[rs_modnn(rs, omega[i] +
-							i * root[j])];
+				num1 ^= alpha_to[rs_modnn_fast(rs,
+						 omega[i] +
+						 rs_modnn_mul(rs, i, root[j]))];
 		}
 
 		if (num1 == 0) {
@@ -264,15 +269,18 @@
 			continue;
 		}
 
-		num2 = alpha_to[rs_modnn(rs, root[j] * (fcr - 1) + nn)];
+		num2 = alpha_to[rs_modnn_fast(rs,
+				rs_modnn_mul(rs, root[j], fcr) +
+				nn - root[j])];
 		den = 0;
 
 		/* lambda[i+1] for i even is the formal derivative
 		 * lambda_pr of lambda[i] */
 		for (i = min(deg_lambda, nroots - 1) & ~1; i >= 0; i -= 2) {
 			if (lambda[i + 1] != nn) {
-				den ^= alpha_to[rs_modnn(rs, lambda[i + 1] +
-						       i * root[j])];
+				den ^= alpha_to[rs_modnn_fast(rs,
+						lambda[i + 1] +
+						rs_modnn_mul(rs, i, root[j]))];
 			}
 		}
 
@@ -292,8 +300,8 @@
 			if (b[j] == 0)
 				continue;
 
-			k = (fcr + i) * prim * (nn-loc[j]-1);
-			tmp ^= alpha_to[rs_modnn(rs, index_of[b[j]] + k)];
+			k = rs_modnn_mul(rs, genroot[i], nn - loc[j] - 1);
+			tmp ^= alpha_to[rs_modnn_fast(rs, index_of[b[j]] + k)];
 		}
 
 		if (tmp != alpha_to[s[i]])
