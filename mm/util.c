@@ -42,7 +42,6 @@ void kfree_const(const void *x)
 	if (!is_kernel_rodata((unsigned long)x))
 		kfree(x);
 }
-EXPORT_SYMBOL(kfree_const);
 
 /**
  * kstrdup - allocate space for and copy an existing string
@@ -86,7 +85,6 @@ const char *kstrdup_const(const char *s, gfp_t gfp)
 
 	return kstrdup(s, gfp);
 }
-EXPORT_SYMBOL(kstrdup_const);
 
 /**
  * kstrndup - allocate space for and copy an existing string
