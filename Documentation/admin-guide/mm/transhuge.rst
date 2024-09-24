@@ -530,9 +530,13 @@ anon_fault_fallback_charge
 	instead falls back to using huge pages with lower orders or
 	small pages even though the allocation was successful.
 
-swpout
-	is incremented every time a huge page is swapped out in one
+zswpout
+	is incremented every time a huge page is swapped out to ZSWAP in one
 	piece without splitting.
+
+swpout
+	is incremented every time a huge page is swapped out to a non-ZSWAP
+	swap entity in one piece without splitting.
 
 swpout_fallback
 	is incremented if a huge page has to be split before swapout.
