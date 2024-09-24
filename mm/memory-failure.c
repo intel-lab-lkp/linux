@@ -70,6 +70,8 @@ static int sysctl_memory_failure_recovery __read_mostly = 1;
 
 static int sysctl_enable_soft_offline __read_mostly = 1;
 
+static int sysctl_enable_hard_offline __read_mostly = 1;
+
 atomic_long_t num_poisoned_pages __read_mostly = ATOMIC_LONG_INIT(0);
 
 static bool hw_memory_failure __read_mostly = false;
@@ -147,6 +149,15 @@ static struct ctl_table memory_failure_table[] = {
 		.procname	= "enable_soft_offline",
 		.data		= &sysctl_enable_soft_offline,
 		.maxlen		= sizeof(sysctl_enable_soft_offline),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname	= "enable_hard_offline",
+		.data		= &sysctl_enable_hard_offline,
+		.maxlen		= sizeof(sysctl_enable_hard_offline),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
@@ -2233,6 +2244,14 @@ int memory_failure(unsigned long pfn, int flags)
 
 	p = pfn_to_online_page(pfn);
 	if (!p) {
+		/*
+		 * For ZONE_DEVICE memory and memory on special architectures,
+		 * assume they have opt out core kernel's MFR. Since these
+		 * memory can still be mapped to userspace, let userspace
+		 * know MFR doesn't apply.
+		 */
+		pr_info_once("%#lx: can't apply global MFR policy\n", pfn);
+
 		res = arch_memory_failure(pfn, flags);
 		if (res == 0)
 			goto unlock_mutex;
@@ -2248,6 +2267,20 @@ int memory_failure(unsigned long pfn, int flags)
 		}
 		pr_err("%#lx: memory outside kernel control\n", pfn);
 		res = -ENXIO;
+		goto unlock_mutex;
+	}
+
+	/*
+	 * On ARM64, if APEI failed to claims SEA, (e.g. GHES driver doesn't
+	 * register to SEA notifications from firmware), memory_failure will
+	 * never be synchrounous to the error consumption thread. Notifying
+	 * it via SIGBUS synchrnously has to be done by either core kernel in
+	 * do_mem_abort, or KVM in kvm_handle_guest_abort.
+	 */
+	if (!sysctl_enable_hard_offline) {
+		pr_info_once("%#lx: disabled by /proc/sys/vm/enable_hard_offline\n", pfn);
+		kill_procs_now(p, pfn, flags, page_folio(p));
+		res = -EOPNOTSUPP;
 		goto unlock_mutex;
 	}
 
