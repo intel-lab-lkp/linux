@@ -1828,7 +1828,7 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 
 		} else {
 			if (__ratelimit(&migrate_rs)) {
-				pr_warn("failed to isolate pfn %lx\n", pfn);
+				pr_warn("failed to isolate pfn %lx\n", page_to_pfn(page));
 				dump_page(page, "isolation failed");
 			}
 		}
