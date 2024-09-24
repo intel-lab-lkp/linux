@@ -1463,6 +1463,94 @@ static void zswap_delete_stored_offsets(struct xarray *tree,
 	}
 }
 
+/*
+ * Stores the page at specified "index" in a folio.
+ *
+ * @folio: The folio to store in zswap.
+ * @index: Index into the page in the folio that this function will store.
+ * @objcg: The folio's objcg.
+ * @pool:  The zswap_pool to store the compressed data for the page.
+ */
+static bool __maybe_unused zswap_store_page(struct folio *folio, long index,
+					    struct obj_cgroup *objcg,
+					    struct zswap_pool *pool)
+{
+	swp_entry_t swp = folio->swap;
+	int type = swp_type(swp);
+	pgoff_t offset = swp_offset(swp) + index;
+	struct page *page = folio_page(folio, index);
+	struct xarray *tree = swap_zswap_tree(swp);
+	struct zswap_entry *entry;
+
+	if (objcg)
+		obj_cgroup_get(objcg);
+
+	if (zswap_check_limits())
+		goto reject;
+
+	/* allocate entry */
+	entry = zswap_entry_cache_alloc(GFP_KERNEL, folio_nid(folio));
+	if (!entry) {
+		zswap_reject_kmemcache_fail++;
+		goto reject;
+	}
+
+	/* if entry is successfully added, it keeps the reference */
+	if (!zswap_pool_get(pool))
+		goto freepage;
+
+	entry->pool = pool;
+
+	if (!zswap_compress(page, entry))
+		goto put_pool;
+
+	entry->swpentry = swp_entry(type, offset);
+	entry->objcg = objcg;
+	entry->referenced = true;
+
+	if (!zswap_store_entry(tree, entry))
+		goto store_failed;
+
+	if (objcg) {
+		obj_cgroup_charge_zswap(objcg, entry->length);
+		count_objcg_event(objcg, ZSWPOUT);
+	}
+
+	/*
+	 * We finish initializing the entry while it's already in xarray.
+	 * This is safe because:
+	 *
+	 * 1. Concurrent stores and invalidations are excluded by folio lock.
+	 *
+	 * 2. Writeback is excluded by the entry not being on the LRU yet.
+	 *    The publishing order matters to prevent writeback from seeing
+	 *    an incoherent entry.
+	 */
+	if (entry->length) {
+		INIT_LIST_HEAD(&entry->lru);
+		zswap_lru_add(&zswap_list_lru, entry);
+	}
+
+	/* update stats */
+	atomic_inc(&zswap_stored_pages);
+	count_vm_event(ZSWPOUT);
+
+	return true;
+
+store_failed:
+	zpool_free(entry->pool->zpool, entry->handle);
+put_pool:
+	zswap_pool_put(pool);
+freepage:
+	zswap_entry_cache_free(entry);
+reject:
+	obj_cgroup_put(objcg);
+	if (zswap_pool_reached_full)
+		queue_work(shrink_wq, &zswap_shrink_work);
+
+	return false;
+}
+
 bool zswap_store(struct folio *folio)
 {
 	long nr_pages = folio_nr_pages(folio);
