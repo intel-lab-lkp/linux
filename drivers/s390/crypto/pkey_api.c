@@ -668,32 +668,31 @@ static int pkey_ioctl_kblob2protk3(struct pkey_kblob2pkey3 __user *utp)
 		return PTR_ERR(apqns);
 	kkey = _copy_key_from_user(ktp.key, ktp.keylen);
 	if (IS_ERR(kkey)) {
-		kfree(apqns);
-		return PTR_ERR(kkey);
+		rc = PTR_ERR(kkey);
+		goto free_apqns;
 	}
 	protkey = kmalloc(protkeylen, GFP_KERNEL);
 	if (!protkey) {
-		kfree(apqns);
 		kfree_sensitive(kkey);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto free_apqns;
 	}
 	rc = key2protkey(apqns, ktp.apqn_entries, kkey, ktp.keylen,
 			 protkey, &protkeylen, &ktp.pkeytype);
 	pr_debug("key2protkey()=%d\n", rc);
 	kfree(apqns);
 	kfree_sensitive(kkey);
-	if (rc) {
-		kfree_sensitive(protkey);
-		return rc;
-	}
+	if (rc)
+		goto free_protkey;
+
 	if (ktp.pkey && ktp.pkeylen) {
 		if (protkeylen > ktp.pkeylen) {
-			kfree_sensitive(protkey);
-			return -EINVAL;
+			rc = -EINVAL;
+			goto free_protkey;
 		}
 		if (copy_to_user(ktp.pkey, protkey, protkeylen)) {
-			kfree_sensitive(protkey);
-			return -EFAULT;
+			rc = -EFAULT;
+			goto free_protkey;
 		}
 	}
 	kfree_sensitive(protkey);
@@ -702,6 +701,14 @@ static int pkey_ioctl_kblob2protk3(struct pkey_kblob2pkey3 __user *utp)
 		return -EFAULT;
 
 	return 0;
+
+free_apqns:
+	kfree(apqns);
+	return rc;
+
+free_protkey:
+	kfree_sensitive(protkey);
+	return rc;
 }
 
 static long pkey_unlocked_ioctl(struct file *filp, unsigned int cmd,
