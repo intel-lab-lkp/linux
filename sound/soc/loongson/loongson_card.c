@@ -119,48 +119,77 @@ static int loongson_card_parse_acpi(struct loongson_card_data *data)
 	return 0;
 }
 
-static int loongson_card_parse_of(struct loongson_card_data *data)
+static int loongson_parse_cpu(struct snd_soc_card *card)
 {
-	struct device_node *cpu, *codec;
-	struct snd_soc_card *card = &data->snd_card;
+	struct device_node *dai_node = NULL, *cpu = NULL;
 	struct device *dev = card->dev;
-	int ret, i;
+	int i;
 
 	cpu = of_get_child_by_name(dev->of_node, "cpu");
-	if (!cpu) {
-		dev_err(dev, "platform property missing or invalid\n");
+	if (!cpu)
 		return -EINVAL;
+
+	dai_node = of_parse_phandle(cpu, "sound-dai", 0);
+	of_node_put(cpu);
+	if (!dai_node)
+		return -EINVAL;
+
+	for (i = 0; i < card->num_links; i++) {
+		loongson_dai_links[i].platforms->of_node = dai_node;
+		loongson_dai_links[i].cpus->of_node = dai_node;
 	}
+
+	of_node_put(dai_node);
+	return 0;
+}
+
+static int loongson_parse_codec(struct snd_soc_card *card)
+{
+	struct device_node *codec = NULL, *dai_node = NULL;
+	struct device *dev = card->dev;
+	struct of_phandle_args args;
+	const char *dai_name;
+	int ret = 0, i;
+
 	codec = of_get_child_by_name(dev->of_node, "codec");
-	if (!codec) {
-		dev_err(dev, "audio-codec property missing or invalid\n");
-		of_node_put(cpu);
+	if (!codec)
 		return -EINVAL;
+
+	ret = of_parse_phandle_with_args(codec, "sound-dai", "#sound-dai-cells", 0, &args);
+	if (ret)
+		goto codec_put;
+
+	ret = snd_soc_get_dai_name(&args, &dai_name);
+	of_node_put(args.np);
+	if (ret)
+		goto codec_put;
+
+	dai_node = of_parse_phandle(codec, "sound-dai", 0);
+	if (!dai_node) {
+		ret = -EINVAL;
+		goto codec_put;
 	}
 
 	for (i = 0; i < card->num_links; i++) {
-		ret = snd_soc_of_get_dlc(cpu, NULL, loongson_dai_links[i].cpus, 0);
-		if (ret < 0) {
-			dev_err(dev, "getting cpu dlc error (%d)\n", ret);
-			goto err;
-		}
-
-		ret = snd_soc_of_get_dlc(codec, NULL, loongson_dai_links[i].codecs, 0);
-		if (ret < 0) {
-			dev_err(dev, "getting codec dlc error (%d)\n", ret);
-			goto err;
-		}
+		loongson_dai_links[i].codecs->of_node = dai_node;
+		loongson_dai_links[i].codecs->dai_name = dai_name;
 	}
 
-	of_node_put(cpu);
-	of_node_put(codec);
-
-	return 0;
-
-err:
-	of_node_put(cpu);
+codec_put:
 	of_node_put(codec);
 	return ret;
+}
+
+static int loongson_card_parse_of(struct loongson_card_data *data)
+{
+	struct snd_soc_card *card = &data->snd_card;
+	int ret;
+
+	ret = loongson_parse_cpu(card);
+	if (ret)
+		return ret;
+
+	return loongson_parse_codec(card);
 }
 
 static int loongson_asoc_card_probe(struct platform_device *pdev)
