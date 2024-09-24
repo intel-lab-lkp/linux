@@ -1225,11 +1225,12 @@
 		reg = <0x48>;
 	};
 
-	adc@49 {
+	verdin_som_adc: adc@49 {
 		compatible = "ti,ads1015";
 		reg = <0x49>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		#io-channel-cells = <1>;
 
 		/* Verdin PMIC_I2C (ADC_4 - ADC_3) */
 		channel@0 {
