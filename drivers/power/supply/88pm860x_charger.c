@@ -295,17 +295,15 @@ static int set_charging_fsm(struct pm860x_charger_info *info)
 		return -EINVAL;
 	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_VOLTAGE_NOW,
 			&data);
-	if (ret) {
-		power_supply_put(psy);
-		return ret;
-	}
+	if (ret)
+		goto put_supply;
+
 	vbatt = data.intval / 1000;
 
 	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_PRESENT, &data);
-	if (ret) {
-		power_supply_put(psy);
-		return ret;
-	}
+	if (ret)
+		goto put_supply;
+
 	power_supply_put(psy);
 
 	mutex_lock(&info->lock);
@@ -391,6 +389,10 @@ static int set_charging_fsm(struct pm860x_charger_info *info)
 	mutex_unlock(&info->lock);
 
 	return 0;
+
+put_supply:
+	power_supply_put(psy);
+	return ret;
 }
 
 static irqreturn_t pm860x_charger_handler(int irq, void *data)
