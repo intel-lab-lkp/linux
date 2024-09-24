@@ -6631,7 +6631,7 @@ static int sctp_getsockopt_associnfo(struct sock *sk, int len,
 	    sctp_style(sk, UDP))
 		return -EINVAL;
 
-	/* Values correspoinding to the specific association */
+	/* Values corresponding to the specific association */
 	if (asoc) {
 		assocparams.sasoc_asocmaxrxt = asoc->max_retrans;
 		assocparams.sasoc_peer_rwnd = asoc->peer.rwnd;

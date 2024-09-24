@@ -460,7 +460,7 @@ int sctp_auth_init_hmacs(struct sctp_endpoint *ep, gfp_t gfp)
 	if (ep->auth_hmacs)
 		return 0;
 
-	/* Allocated the array of pointers to transorms */
+	/* Allocated the array of pointers to transforms */
 	ep->auth_hmacs = kcalloc(SCTP_AUTH_NUM_HMACS,
 				 sizeof(struct crypto_shash *),
 				 gfp);
@@ -774,7 +774,7 @@ int sctp_auth_ep_add_chunkid(struct sctp_endpoint *ep, __u8 chunk_id)
 	return 0;
 }
 
-/* Add hmac identifires to the endpoint list of supported hmac ids */
+/* Add hmac identifiers to the endpoint list of supported hmac ids */
 int sctp_auth_ep_set_hmacs(struct sctp_endpoint *ep,
 			   struct sctp_hmacalgo *hmacs)
 {

@@ -68,7 +68,7 @@ void sctp_datamsg_free(struct sctp_datamsg *msg)
 	sctp_datamsg_put(msg);
 }
 
-/* Final destructruction of datamsg memory. */
+/* Final destruction of datamsg memory. */
 static void sctp_datamsg_destroy(struct sctp_datamsg *msg)
 {
 	struct sctp_association *asoc = NULL;
