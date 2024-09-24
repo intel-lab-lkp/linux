@@ -204,11 +204,14 @@ unsigned int ebt_do_table(void *priv, struct sk_buff *skb,
 	const char *base;
 	const struct ebt_table_info *private;
 	struct xt_action_param acpar;
+	unsigned int addend;
 
 	acpar.state   = state;
 	acpar.hotdrop = false;
 
-	read_lock_bh(&table->lock);
+	local_bh_disable();
+	addend = xt_write_recseq_begin();
+
 	private = table->private;
 	cb_base = COUNTER_BASE(private->counters, private->nentries,
 	   smp_processor_id());
@@ -229,10 +232,8 @@ unsigned int ebt_do_table(void *priv, struct sk_buff *skb,
 
 		if (EBT_MATCH_ITERATE(point, ebt_do_match, skb, &acpar) != 0)
 			goto letscontinue;
-		if (acpar.hotdrop) {
-			read_unlock_bh(&table->lock);
-			return NF_DROP;
-		}
+		if (acpar.hotdrop)
+			goto drop_out;
 
 		ADD_COUNTER(*(counter_base + i), skb->len, 1);
 
@@ -251,13 +252,13 @@ unsigned int ebt_do_table(void *priv, struct sk_buff *skb,
 			verdict = t->u.target->target(skb, &acpar);
 		}
 		if (verdict == EBT_ACCEPT) {
-			read_unlock_bh(&table->lock);
+			xt_write_recseq_end(addend);
+			local_bh_enable();
 			return NF_ACCEPT;
 		}
-		if (verdict == EBT_DROP) {
-			read_unlock_bh(&table->lock);
-			return NF_DROP;
-		}
+		if (verdict == EBT_DROP)
+			goto drop_out;
+
 		if (verdict == EBT_RETURN) {
 letsreturn:
 			if (WARN(sp == 0, "RETURN on base chain")) {
@@ -278,10 +279,8 @@ letsreturn:
 		if (verdict == EBT_CONTINUE)
 			goto letscontinue;
 
-		if (WARN(verdict < 0, "bogus standard verdict\n")) {
-			read_unlock_bh(&table->lock);
-			return NF_DROP;
-		}
+		if (WARN(verdict < 0, "bogus standard verdict\n"))
+			goto drop_out;
 
 		/* jump to a udc */
 		cs[sp].n = i + 1;
@@ -290,10 +289,8 @@ letsreturn:
 		i = 0;
 		chaininfo = (struct ebt_entries *) (base + verdict);
 
-		if (WARN(chaininfo->distinguisher, "jump to non-chain\n")) {
-			read_unlock_bh(&table->lock);
-			return NF_DROP;
-		}
+		if (WARN(chaininfo->distinguisher, "jump to non-chain\n"))
+			goto drop_out;
 
 		nentries = chaininfo->nentries;
 		point = (struct ebt_entry *)chaininfo->data;
@@ -309,10 +306,15 @@ letscontinue:
 	if (chaininfo->policy == EBT_RETURN)
 		goto letsreturn;
 	if (chaininfo->policy == EBT_ACCEPT) {
-		read_unlock_bh(&table->lock);
+		xt_write_recseq_end(addend);
+		local_bh_enable();
 		return NF_ACCEPT;
 	}
-	read_unlock_bh(&table->lock);
+
+drop_out:
+	xt_write_recseq_end(addend);
+	local_bh_enable();
+
 	return NF_DROP;
 }
 
@@ -983,8 +985,44 @@ static int translate_table(struct net *net, const char *name,
 	return ret;
 }
 
-/* called under write_lock */
+
 static void get_counters(const struct ebt_counter *oldcounters,
+			 struct ebt_counter *counters, unsigned int nentries)
+{
+	int i, cpu;
+	struct ebt_counter *counter_base;
+	seqcount_t *s;
+
+	/* counters of cpu 0 */
+	memcpy(counters, oldcounters,
+	       sizeof(struct ebt_counter) * nentries);
+
+	/* add other counters to those of cpu 0 */
+	for_each_possible_cpu(cpu) {
+
+		if (cpu == 0)
+			continue;
+
+		s = &per_cpu(ebt_recseq, cpu);
+		counter_base = COUNTER_BASE(oldcounters, nentries, cpu);
+		for (i = 0; i < nentries; i++) {
+			u64 bcnt, pcnt;
+			unsigned int start;
+
+			do {
+				start = read_seqcount_begin(s);
+				bcnt = counter_base[i].bcnt;
+				pcnt = counter_base[i].pcnt;
+			} while (read_seqcount_retry(s, start));
+
+			ADD_COUNTER(counters[i], bcnt, pcnt);
+			cond_resched();
+		}
+	}
+}
+
+
+static void get_old_counters(const struct ebt_counter *oldcounters,
 			 struct ebt_counter *counters, unsigned int nentries)
 {
 	int i, cpu;
@@ -1013,6 +1051,7 @@ static int do_replace_finish(struct net *net, struct ebt_replace *repl,
 	/* used to be able to unlock earlier */
 	struct ebt_table_info *table;
 	struct ebt_table *t;
+	unsigned int cpu;
 
 	/* the user wants counters back
 	 * the check on the size is done later, when we have the lock
@@ -1050,6 +1089,8 @@ static int do_replace_finish(struct net *net, struct ebt_replace *repl,
 		goto free_unlock;
 	}
 
+	local_bh_disable();
+
 	/* we have the mutex lock, so no danger in reading this pointer */
 	table = t->private;
 	/* make sure the table can only be rmmod'ed if it contains no rules */
@@ -1058,15 +1099,31 @@ static int do_replace_finish(struct net *net, struct ebt_replace *repl,
 		goto free_unlock;
 	} else if (table->nentries && !newinfo->nentries)
 		module_put(t->me);
-	/* we need an atomic snapshot of the counters */
-	write_lock_bh(&t->lock);
-	if (repl->num_counters)
-		get_counters(t->private->counters, counterstmp,
-		   t->private->nentries);
 
+	smp_wmb();
 	t->private = newinfo;
-	write_unlock_bh(&t->lock);
+	smp_mb();
+
+	local_bh_enable();
+
+	// wait for even ebt_recseq on all cpus
+	for_each_possible_cpu(cpu) {
+		seqcount_t *s = &per_cpu(ebt_recseq, cpu);
+		u32 seq = raw_read_seqcount(s);
+
+		if (seq & 1) {
+			do {
+				cond_resched();
+				cpu_relax();
+			} while (seq == raw_read_seqcount(s));
+		}
+	}
+
 	mutex_unlock(&ebt_mutex);
+
+	if (repl->num_counters)
+	    get_old_counters(table->counters, counterstmp, table->nentries);
+
 	/* so, a user can change the chains while having messed up her counter
 	 * allocation. Only reason why this is done is because this way the lock
 	 * is held only once, while this doesn't bring the kernel into a
@@ -1093,6 +1150,7 @@ static int do_replace_finish(struct net *net, struct ebt_replace *repl,
 	return 0;
 
 free_unlock:
+	local_bh_enable();
 	mutex_unlock(&ebt_mutex);
 free_iterate:
 	EBT_ENTRY_ITERATE(newinfo->entries, newinfo->entries_size,
@@ -1235,7 +1293,6 @@ int ebt_register_table(struct net *net, const struct ebt_table *input_table,
 		goto free_chainstack;
 
 	table->private = newinfo;
-	rwlock_init(&table->lock);
 	mutex_lock(&ebt_mutex);
 	list_for_each_entry(t, &ebt_net->tables, list) {
 		if (strcmp(t->name, table->name) == 0) {
@@ -1382,6 +1439,7 @@ static int do_update_counters(struct net *net, const char *name,
 	int i, ret;
 	struct ebt_counter *tmp;
 	struct ebt_table *t;
+	unsigned int addend;
 
 	if (num_counters == 0)
 		return -EINVAL;
@@ -1405,14 +1463,16 @@ static int do_update_counters(struct net *net, const char *name,
 		goto unlock_mutex;
 	}
 
-	/* we want an atomic add of the counters */
-	write_lock_bh(&t->lock);
+	local_bh_disable();
+	addend = xt_write_recseq_begin();
 
 	/* we add to the counters of the first cpu */
 	for (i = 0; i < num_counters; i++)
 		ADD_COUNTER(t->private->counters[i], tmp[i].bcnt, tmp[i].pcnt);
 
-	write_unlock_bh(&t->lock);
+	xt_write_recseq_end(addend);
+	local_bh_enable();
+
 	ret = 0;
 unlock_mutex:
 	mutex_unlock(&ebt_mutex);
@@ -1530,9 +1590,7 @@ static int copy_counters_to_user(struct ebt_table *t,
 	if (!counterstmp)
 		return -ENOMEM;
 
-	write_lock_bh(&t->lock);
 	get_counters(oldcounters, counterstmp, nentries);
-	write_unlock_bh(&t->lock);
 
 	if (copy_to_user(user, counterstmp,
 	    array_size(nentries, sizeof(struct ebt_counter))))
