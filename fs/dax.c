@@ -359,9 +359,6 @@ static void dax_associate_entry(void *entry, struct address_space *mapping,
 	unsigned long size = dax_entry_size(entry), pfn, index;
 	int i = 0;
 
-	if (IS_ENABLED(CONFIG_FS_DAX_LIMITED))
-		return;
-
 	index = linear_page_index(vma, address & ~(size - 1));
 	for_each_mapped_pfn(entry, pfn) {
 		struct page *page = pfn_to_page(pfn);
@@ -380,9 +377,6 @@ static void dax_disassociate_entry(void *entry, struct address_space *mapping,
 		bool trunc)
 {
 	unsigned long pfn;
-
-	if (IS_ENABLED(CONFIG_FS_DAX_LIMITED))
-		return;
 
 	for_each_mapped_pfn(entry, pfn) {
 		struct page *page = pfn_to_page(pfn);
@@ -683,12 +677,6 @@ struct page *dax_layout_busy_page_range(struct address_space *mapping,
 	pgoff_t start_idx = start >> PAGE_SHIFT;
 	pgoff_t end_idx;
 	XA_STATE(xas, &mapping->i_pages, start_idx);
-
-	/*
-	 * In the 'limited' case get_user_pages() for dax is disabled.
-	 */
-	if (IS_ENABLED(CONFIG_FS_DAX_LIMITED))
-		return NULL;
 
 	if (!dax_mapping(mapping) || !mapping_mapped(mapping))
 		return NULL;
