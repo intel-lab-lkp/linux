@@ -7566,7 +7566,6 @@ static int fsctl_copychunk(struct ksmbd_work *work,
 	ci_rsp->TotalBytesWritten =
 		cpu_to_le32(ksmbd_server_side_copy_max_total_size());
 
-	chunks = (struct srv_copychunk *)&ci_req->Chunks[0];
 	chunk_count = le32_to_cpu(ci_req->ChunkCount);
 	if (chunk_count == 0)
 		goto out;
@@ -7580,6 +7579,7 @@ static int fsctl_copychunk(struct ksmbd_work *work,
 		return -EINVAL;
 	}
 
+	chunks = (struct srv_copychunk *)&ci_req->Chunks[0];
 	for (i = 0; i < chunk_count; i++) {
 		if (le32_to_cpu(chunks[i].Length) == 0 ||
 		    le32_to_cpu(chunks[i].Length) > ksmbd_server_side_copy_max_chunk_size())

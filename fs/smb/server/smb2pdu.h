@@ -194,7 +194,7 @@ struct copychunk_ioctl_req {
 	__le64 ResumeKey[3];
 	__le32 ChunkCount;
 	__le32 Reserved;
-	__u8 Chunks[]; /* array of srv_copychunk */
+	__u8 Chunks[] __counted_by_le(ChunkCount); /* array of srv_copychunk */
 } __packed;
 
 struct srv_copychunk {
