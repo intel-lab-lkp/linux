@@ -414,27 +414,6 @@ static void __init mmio_select_mitigation(void)
 		cpu_smt_disable(false);
 }
 
-static int __init mmio_stale_data_parse_cmdline(char *str)
-{
-	if (!boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA))
-		return 0;
-
-	if (!str)
-		return -EINVAL;
-
-	if (!strcmp(str, "off")) {
-		mmio_mitigation = MMIO_MITIGATION_OFF;
-	} else if (!strcmp(str, "full")) {
-		mmio_mitigation = MMIO_MITIGATION_VERW;
-	} else if (!strcmp(str, "full,nosmt")) {
-		mmio_mitigation = MMIO_MITIGATION_VERW;
-		mmio_nosmt = true;
-	}
-
-	return 0;
-}
-early_param("mmio_stale_data", mmio_stale_data_parse_cmdline);
-
 #undef pr_fmt
 #define pr_fmt(fmt)	"Register File Data Sampling: " fmt
 
