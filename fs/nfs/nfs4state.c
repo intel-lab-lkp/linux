@@ -1934,6 +1934,8 @@ static int nfs4_do_reclaim(struct nfs_client *clp, const struct nfs4_state_recov
 restart:
 	rcu_read_lock();
 	list_for_each_entry_rcu(server, &clp->cl_superblocks, client_link) {
+		if (!(server->super && nfs_sb_active(server->super)))
+			continue;
 		nfs4_purge_state_owners(server, &freeme);
 		spin_lock(&clp->cl_lock);
 		for (pos = rb_first(&server->state_owners);
@@ -1942,10 +1944,14 @@ restart:
 			sp = rb_entry(pos,
 				struct nfs4_state_owner, so_server_node);
 			if (!test_and_clear_bit(ops->owner_flag_bit,
-							&sp->so_flags))
+							&sp->so_flags)) {
+				nfs_sb_deactive(server->super);
 				continue;
-			if (!atomic_inc_not_zero(&sp->so_count))
+			}
+			if (!atomic_inc_not_zero(&sp->so_count)) {
+				nfs_sb_deactive(server->super);
 				continue;
+			}
 			spin_unlock(&clp->cl_lock);
 			rcu_read_unlock();
 
@@ -1961,9 +1967,11 @@ restart:
 			}
 
 			nfs4_put_state_owner(sp);
+			nfs_sb_deactive(server->super);
 			goto restart;
 		}
 		spin_unlock(&clp->cl_lock);
+		nfs_sb_deactive(server->super);
 	}
 	rcu_read_unlock();
 	nfs4_free_state_owners(&freeme);
