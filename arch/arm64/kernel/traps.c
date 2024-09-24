@@ -247,12 +247,20 @@ static void arm64_show_signal(int signo, const char *str)
 	unsigned long esr = tsk->thread.fault_code;
 	struct pt_regs *regs = task_pt_regs(tsk);
 
+	/*
+	 * The signal sent to the global init needs to be shown,
+	 * which is useful for debugging kill init issue.
+	 */
+	if (unlikely(is_global_init(tsk)))
+		goto dump;
+
 	/* Leave if the signal won't be shown */
 	if (!show_unhandled_signals ||
 	    !unhandled_signal(tsk, signo) ||
 	    !__ratelimit(&rs))
 		return;
 
+dump:
 	pr_info("%s[%d]: unhandled exception: ", tsk->comm, task_pid_nr(tsk));
 	if (esr)
 		pr_cont("%s, ESR 0x%016lx, ", esr_get_class_string(esr), esr);
