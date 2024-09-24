@@ -4290,6 +4290,8 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 	int delta = folio_nr_pages(folio);
 	int refs = folio_lru_refs(folio);
 	int tier = lru_tier_from_refs(refs);
+	bool dirty = folio_test_dirty(folio);
+	bool writeback = folio_test_writeback(folio);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 
 	VM_WARN_ON_ONCE_FOLIO(gen >= MAX_NR_GENS, folio);
@@ -4330,8 +4332,10 @@ static bool sort_folio(struct lruvec *lruvec, struct folio *folio, struct scan_c
 	}
 
 	/* waiting for writeback */
-	if (folio_test_locked(folio) || folio_test_writeback(folio) ||
-	    (type == LRU_GEN_FILE && folio_test_dirty(folio))) {
+	if (folio_test_locked(folio) || dirty ||
+	    (type == LRU_GEN_FILE && writeback)) {
+		if (type == LRU_GEN_FILE && dirty && !writeback)
+			sc->nr.unqueued_dirty += delta;
 		gen = folio_inc_gen(lruvec, folio, true);
 		list_move(&folio->lru, &lrugen->folios[gen][type][zone]);
 		return true;
@@ -4448,6 +4452,7 @@ static int scan_folios(struct lruvec *lruvec, struct scan_control *sc,
 				scanned, skipped, isolated,
 				type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
 
+	sc->nr.taken += isolated;
 	/*
 	 * There might not be eligible folios due to reclaim_idx. Check the
 	 * remaining to prevent livelock if it's not making progress.
@@ -4919,6 +4924,13 @@ static void lru_gen_shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc
 
 	if (try_to_shrink_lruvec(lruvec, sc))
 		lru_gen_rotate_memcg(lruvec, MEMCG_LRU_YOUNG);
+
+	/*
+	 * If too many pages in the coldest generation that cannot
+	 * be isolated, wake up flusher.
+	 */
+	if (sc->nr.unqueued_dirty > sc->nr.taken)
+		wakeup_flusher_threads(WB_REASON_VMSCAN);
 
 	clear_mm_walk();
 
