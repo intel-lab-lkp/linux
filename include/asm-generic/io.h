@@ -102,6 +102,18 @@ static inline void log_post_read_mmio(u64 val, u8 width, const volatile void __i
 
 #endif /* CONFIG_TRACE_MMIO_ACCESS */
 
+#ifndef __memcpy_fromio
+void __memcpy_fromio(void *to, const volatile void __iomem *from, size_t count);
+#endif
+
+#ifndef __memcpy_toio
+void __memcpy_toio(volatile void __iomem *to, const void *from, size_t count);
+#endif
+
+#ifndef __memset_io
+void __memset_io(volatile void __iomem *dst, int c, size_t count);
+#endif
+
 /*
  * __raw_{read,write}{b,w,l,q}() access memory in native endianness.
  *
