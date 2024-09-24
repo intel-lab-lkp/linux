@@ -3121,7 +3121,7 @@ out:
 	}
 	/*
 	 * Now all pages of that extent buffer is unmapped, set UNMAPPED flag,
-	 * so it can be cleaned up without utlizing page->mapping.
+	 * so it can be cleaned up without utilizing page->mapping.
 	 */
 	set_bit(EXTENT_BUFFER_UNMAPPED, &eb->bflags);
 
