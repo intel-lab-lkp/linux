@@ -938,9 +938,16 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 		if (!list_empty(&child->devices)) {
 			dev = list_first_entry(&child->devices,
 					       struct pci_dev, bus_list);
+			/* To avoid pci_reset_bus restore wrong ASPM L1SS
+			 * configuration due to missed saving parent device's
+			 * states, save & restore the parent device's states
+			 * as well.
+			 */
+			pci_save_state(dev->bus->self);
 			ret = pci_reset_bus(dev);
 			if (ret)
 				pci_warn(dev, "can't reset device: %d\n", ret);
+			pci_restore_state(dev->bus->self);
 
 			break;
 		}
