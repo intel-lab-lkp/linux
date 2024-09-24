@@ -6,6 +6,8 @@
 #ifndef __IVPU_FW_H__
 #define __IVPU_FW_H__
 
+#define FW_VERSION_HEADER_SIZE	SZ_4K
+
 struct ivpu_device;
 struct ivpu_bo;
 struct vpu_boot_params;
