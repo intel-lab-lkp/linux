@@ -127,6 +127,14 @@ static bool zswap_shrinker_enabled = IS_ENABLED(
 		CONFIG_ZSWAP_SHRINKER_DEFAULT_ON);
 module_param_named(shrinker_enabled, zswap_shrinker_enabled, bool, 0644);
 
+/*
+ * Enable/disable zswap processing of mTHP folios.
+ * For now, only zswap_store will process mTHP folios.
+ */
+static bool zswap_mthp_enabled = IS_ENABLED(
+		CONFIG_ZSWAP_STORE_THP_DEFAULT_ON);
+module_param_named(mthp_enabled, zswap_mthp_enabled, bool, 0644);
+
 bool zswap_is_enabled(void)
 {
 	return zswap_enabled;
@@ -1471,9 +1479,9 @@ static void zswap_delete_stored_offsets(struct xarray *tree,
  * @objcg: The folio's objcg.
  * @pool:  The zswap_pool to store the compressed data for the page.
  */
-static bool __maybe_unused zswap_store_page(struct folio *folio, long index,
-					    struct obj_cgroup *objcg,
-					    struct zswap_pool *pool)
+static bool zswap_store_page(struct folio *folio, long index,
+			     struct obj_cgroup *objcg,
+			     struct zswap_pool *pool)
 {
 	swp_entry_t swp = folio->swap;
 	int type = swp_type(swp);
@@ -1551,51 +1559,63 @@ reject:
 	return false;
 }
 
+/*
+ * Modified to store mTHP folios. Each page in the mTHP will be compressed
+ * and stored sequentially.
+ */
 bool zswap_store(struct folio *folio)
 {
 	long nr_pages = folio_nr_pages(folio);
 	swp_entry_t swp = folio->swap;
 	pgoff_t offset = swp_offset(swp);
 	struct xarray *tree = swap_zswap_tree(swp);
-	struct zswap_entry *entry;
 	struct obj_cgroup *objcg = NULL;
 	struct mem_cgroup *memcg = NULL;
+	struct zswap_pool *pool;
+	bool ret = false;
+	long index;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
 
-	/* Large folios aren't supported */
-	if (folio_test_large(folio))
+	/* Storing large folios isn't enabled */
+	if (!zswap_mthp_enabled && folio_test_large(folio))
 		return false;
 
 	if (!zswap_enabled)
-		goto check_old;
+		goto reject;
 
-	/* Check cgroup limits */
+	/*
+	 * Check cgroup limits:
+	 *
+	 * The cgroup zswap limit check is done once at the beginning of an
+	 * mTHP store, and not within zswap_store_page() for each page
+	 * in the mTHP. We do however check the zswap pool limits at the
+	 * start of zswap_store_page(). What this means is, the cgroup
+	 * could go over the limits by at most (HPAGE_PMD_NR - 1) pages.
+	 * However, the per-store-page zswap pool limits check should
+	 * hopefully trigger the cgroup aware and zswap LRU aware global
+	 * reclaim implemented in the shrinker. If this assumption holds,
+	 * the cgroup exceeding the zswap limits could potentially be
+	 * resolved before the next zswap_store, and if it is not, the next
+	 * zswap_store would fail the cgroup zswap limit check at the start.
+	 */
 	objcg = get_obj_cgroup_from_folio(folio);
 	if (objcg && !obj_cgroup_may_zswap(objcg)) {
 		memcg = get_mem_cgroup_from_objcg(objcg);
 		if (shrink_memcg(memcg)) {
 			mem_cgroup_put(memcg);
-			goto reject;
+			goto put_objcg;
 		}
 		mem_cgroup_put(memcg);
 	}
 
 	if (zswap_check_limits())
-		goto reject;
+		goto put_objcg;
 
-	/* allocate entry */
-	entry = zswap_entry_cache_alloc(GFP_KERNEL, folio_nid(folio));
-	if (!entry) {
-		zswap_reject_kmemcache_fail++;
-		goto reject;
-	}
-
-	/* if entry is successfully added, it keeps the reference */
-	entry->pool = zswap_pool_current_get();
-	if (!entry->pool)
-		goto freepage;
+	pool = zswap_pool_current_get();
+	if (!pool)
+		goto put_objcg;
 
 	if (objcg) {
 		memcg = get_mem_cgroup_from_objcg(objcg);
@@ -1606,60 +1626,34 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
-	if (!zswap_compress(&folio->page, entry))
-		goto put_pool;
-
-	entry->swpentry = swp;
-	entry->objcg = objcg;
-	entry->referenced = true;
-
-	if (!zswap_store_entry(tree, entry))
-		goto store_failed;
-
-	if (objcg) {
-		obj_cgroup_charge_zswap(objcg, entry->length);
-		count_objcg_event(objcg, ZSWPOUT);
-	}
-
 	/*
-	 * We finish initializing the entry while it's already in xarray.
-	 * This is safe because:
-	 *
-	 * 1. Concurrent stores and invalidations are excluded by folio lock.
-	 *
-	 * 2. Writeback is excluded by the entry not being on the LRU yet.
-	 *    The publishing order matters to prevent writeback from seeing
-	 *    an incoherent entry.
+	 * Store each page of the folio as a separate entry. If we fail to store
+	 * a page, unwind by removing all the previous pages we stored.
 	 */
-	if (entry->length) {
-		INIT_LIST_HEAD(&entry->lru);
-		zswap_lru_add(&zswap_list_lru, entry);
+	for (index = 0; index < nr_pages; ++index) {
+		if (!zswap_store_page(folio, index, objcg, pool))
+			goto put_pool;
 	}
 
-	/* update stats */
-	atomic_inc(&zswap_stored_pages);
-	count_vm_event(ZSWPOUT);
+	ret = true;
 
-	return true;
-
-store_failed:
-	zpool_free(entry->pool->zpool, entry->handle);
 put_pool:
-	zswap_pool_put(entry->pool);
-freepage:
-	zswap_entry_cache_free(entry);
-reject:
+	zswap_pool_put(pool);
+put_objcg:
 	obj_cgroup_put(objcg);
 	if (zswap_pool_reached_full)
 		queue_work(shrink_wq, &zswap_shrink_work);
-check_old:
+reject:
 	/*
-	 * If the zswap store fails or zswap is disabled, we must invalidate the
-	 * possibly stale entry which was previously stored at this offset.
-	 * Otherwise, writeback could overwrite the new data in the swapfile.
+	 * If the zswap store fails or zswap is disabled, we must invalidate
+	 * the possibly stale entries which were previously stored at the
+	 * offsets corresponding to each page of the folio. Otherwise,
+	 * writeback could overwrite the new data in the swapfile.
 	 */
-	zswap_delete_stored_offsets(tree, offset, nr_pages);
-	return false;
+	if (!ret)
+		zswap_delete_stored_offsets(tree, offset, nr_pages);
+
+	return ret;
 }
 
 bool zswap_load(struct folio *folio)
