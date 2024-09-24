@@ -177,36 +177,71 @@ static void flow_offload_fixup_tcp(struct nf_conn *ct)
 	spin_unlock_bh(&ct->lock);
 }
 
-static void flow_offload_fixup_ct(struct nf_conn *ct)
+/**
+ * flow_offload_fixup_ct() - fix ct timeout on flow entry removal
+ * @ct:			conntrack entry
+ * @expired:		true if flowtable entry timed out
+ *
+ * Offload nf_conn entries have their timeout inflated to a very large
+ * value to prevent garbage collection from kicking in during lookup.
+ *
+ * When the flowtable entry is removed for whatever reason, then the
+ * ct entry must have the timeout set to a saner value to prevent it
+ * from remaining in place for a very long time.
+ *
+ * If the offload flow expired, also subtract the flow offload timeout,
+ * this helps to expire conntrack entries faster, especially for UDP.
+ */
+static void flow_offload_fixup_ct(struct nf_conn *ct, bool expired)
 {
+	u32 expires, offload_timeout = 0;
 	struct net *net = nf_ct_net(ct);
 	int l4num = nf_ct_protonum(ct);
 	s32 timeout;
 
 	if (l4num == IPPROTO_TCP) {
-		struct nf_tcp_net *tn = nf_tcp_pernet(net);
+		const struct nf_tcp_net *tn = nf_tcp_pernet(net);
+		u8 tcp_state = READ_ONCE(ct->proto.tcp.state);
+		u32 unacked_timeout;
 
 		flow_offload_fixup_tcp(ct);
 
-		timeout = tn->timeouts[ct->proto.tcp.state];
-		timeout -= tn->offload_timeout;
-	} else if (l4num == IPPROTO_UDP) {
-		struct nf_udp_net *tn = nf_udp_pernet(net);
-		enum udp_conntrack state =
-			test_bit(IPS_SEEN_REPLY_BIT, &ct->status) ?
-			UDP_CT_REPLIED : UDP_CT_UNREPLIED;
+		timeout = READ_ONCE(tn->timeouts[tcp_state]);
+		unacked_timeout = READ_ONCE(tn->timeouts[TCP_CONNTRACK_UNACK]);
 
-		timeout = tn->timeouts[state];
-		timeout -= tn->offload_timeout;
+		/* Limit to unack, in case we missed a possible
+		 * ESTABLISHED -> UNACK transition right before,
+		 * forward path could have updated tcp.state now.
+		 *
+		 * This also won't leave nf_conn hanging around forever
+		 * in case no further packets are received while in
+		 * established state.
+		 */
+		if (timeout > unacked_timeout)
+			timeout = unacked_timeout;
+
+		offload_timeout = READ_ONCE(tn->offload_timeout);
+	} else if (l4num == IPPROTO_UDP) {
+		const struct nf_udp_net *tn = nf_udp_pernet(net);
+		enum udp_conntrack state = test_bit(IPS_SEEN_REPLY_BIT, &ct->status) ?
+						    UDP_CT_REPLIED : UDP_CT_UNREPLIED;
+
+		offload_timeout = READ_ONCE(tn->offload_timeout);
+		timeout = READ_ONCE(tn->timeouts[state]);
 	} else {
 		return;
 	}
 
+	if (expired)
+		timeout -= offload_timeout;
+
 	if (timeout < 0)
 		timeout = 0;
 
-	if (nf_flow_timeout_delta(READ_ONCE(ct->timeout)) > (__s32)timeout)
-		WRITE_ONCE(ct->timeout, nfct_time_stamp + timeout);
+	expires = nf_ct_expires(ct);
+	/* never increase ct->timeout */
+	if (expires > timeout)
+		nf_ct_refresh(ct, timeout);
 }
 
 static void flow_offload_route_release(struct flow_offload *flow)
@@ -350,11 +385,25 @@ static void flow_offload_del(struct nf_flowtable *flow_table,
 	flow_offload_free(flow);
 }
 
+/**
+ * flow_offload_teardown() - un-offload a flow
+ * @flow:	flow that should not be offload anymore
+ *
+ * This is called when @flow has been idle for too long or
+ * when there is a permanent processing problem during
+ * flow offload processing.
+ *
+ * Examples of such errors are:
+ *  - offloaded route/dst entry is stale
+ *  - tx function returns error
+ *  - RST flag set (TCP only)
+ */
 void flow_offload_teardown(struct flow_offload *flow)
 {
 	clear_bit(IPS_OFFLOAD_BIT, &flow->ct->status);
 	set_bit(NF_FLOW_TEARDOWN, &flow->flags);
-	flow_offload_fixup_ct(flow->ct);
+	flow_offload_fixup_ct(flow->ct,
+			      nf_flow_has_expired(flow));
 }
 EXPORT_SYMBOL_GPL(flow_offload_teardown);
 
