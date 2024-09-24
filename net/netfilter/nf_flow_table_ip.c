@@ -28,10 +28,13 @@ static int nf_flow_state_check(struct flow_offload *flow, int proto,
 		return 0;
 
 	tcph = (void *)(skb_network_header(skb) + thoff);
-	if (unlikely(tcph->fin || tcph->rst)) {
+	if (unlikely(tcph->rst)) {
 		flow_offload_teardown(flow);
 		return -1;
 	}
+
+	if (unlikely(tcph->fin))
+		return -1;
 
 	return 0;
 }
