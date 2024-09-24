@@ -43,6 +43,7 @@
 
 struct ramfs_mount_opts {
 	umode_t mode;
+	u32 blocksize;
 };
 
 struct ramfs_fs_info {
@@ -221,10 +222,12 @@ static const struct super_operations ramfs_ops = {
 
 enum ramfs_param {
 	Opt_mode,
+	Opt_blocksize,
 };
 
 const struct fs_parameter_spec ramfs_fs_parameters[] = {
 	fsparam_u32oct("mode",	Opt_mode),
+	fsparam_u32("blocksize", Opt_blocksize),
 	{}
 };
 
@@ -254,6 +257,19 @@ static int ramfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_mode:
 		fsi->mount_opts.mode = result.uint_32 & S_IALLUGO;
 		break;
+	case Opt_blocksize:
+		if (!fsi->mount_opts.blocksize)
+			return -EINVAL;
+
+		fsi->mount_opts.blocksize = rounddown_pow_of_two(result.uint_32);
+
+		if (fsi->mount_opts.blocksize > PAGE_SIZE)
+			fsi->mount_opts.blocksize = PAGE_SIZE;
+
+		if (fsi->mount_opts.blocksize < PAGE_SIZE)
+			fsi->mount_opts.blocksize = PAGE_SIZE;
+
+		break;
 	}
 
 	return 0;
@@ -265,8 +281,8 @@ static int ramfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	struct inode *inode;
 
 	sb->s_maxbytes		= MAX_LFS_FILESIZE;
-	sb->s_blocksize		= PAGE_SIZE;
-	sb->s_blocksize_bits	= PAGE_SHIFT;
+	sb->s_blocksize		= fsi->mount_opts.blocksize;
+	sb->s_blocksize_bits	= ilog2(fsi->mount_opts.blocksize);
 	sb->s_magic		= RAMFS_MAGIC;
 	sb->s_op		= &ramfs_ops;
 	sb->s_time_gran		= 1;
@@ -304,6 +320,7 @@ int ramfs_init_fs_context(struct fs_context *fc)
 		return -ENOMEM;
 
 	fsi->mount_opts.mode = RAMFS_DEFAULT_MODE;
+	fsi->mount_opts.blocksize = PAGE_SIZE;
 	fc->s_fs_info = fsi;
 	fc->ops = &ramfs_context_ops;
 	return 0;
