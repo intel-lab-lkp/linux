@@ -98,6 +98,11 @@ struct io_uring_sqe {
 			__u64	addr3;
 			__u64	__pad2[1];
 		};
+		struct {
+			/* To send per-io hint type/value with write command */
+			__u64	hint_val;
+			__u8	hint_type;
+		};
 		__u64	optval;
 		/*
 		 * If the ring is initialized with IORING_SETUP_SQE128, then
@@ -105,6 +110,11 @@ struct io_uring_sqe {
 		 */
 		__u8	cmd[0];
 	};
+};
+
+enum hint_type {
+	/* this type covers the values supported by F_SET_RW_HINT fcntl */
+	TYPE_WRITE_LIFETIME_HINT = 1,
 };
 
 /*
