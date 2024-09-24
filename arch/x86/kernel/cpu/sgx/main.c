@@ -205,7 +205,7 @@ static void sgx_encl_ewb(struct sgx_epc_page *epc_page,
 	void *va_slot;
 	int ret;
 
-	encl_page->desc &= ~SGX_ENCL_PAGE_BEING_RECLAIMED;
+	encl_page->desc &= ~(SGX_ENCL_PAGE_BUSY | SGX_ENCL_PAGE_PCMD_BUSY);
 
 	va_page = list_first_entry(&encl->va_pages, struct sgx_va_page,
 				   list);
@@ -341,7 +341,7 @@ static void sgx_reclaim_pages(void)
 			goto skip;
 		}
 
-		encl_page->desc |= SGX_ENCL_PAGE_BEING_RECLAIMED;
+		encl_page->desc |= SGX_ENCL_PAGE_BUSY | SGX_ENCL_PAGE_PCMD_BUSY;
 		mutex_unlock(&encl_page->encl->lock);
 		continue;
 

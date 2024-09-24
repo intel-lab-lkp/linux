@@ -46,10 +46,10 @@ static int sgx_encl_lookup_backing(struct sgx_encl *encl, unsigned long page_ind
  * a check if an enclave page sharing the PCMD page is in the process of being
  * reclaimed.
  *
- * The reclaimer sets the SGX_ENCL_PAGE_BEING_RECLAIMED flag when it
- * intends to reclaim that enclave page - it means that the PCMD page
- * associated with that enclave page is about to get some data and thus
- * even if the PCMD page is empty, it should not be truncated.
+ * The reclaimer sets the SGX_ENCL_PAGE_PCMD_BUSY flag when it intends to
+ * reclaim that enclave page - it means that the PCMD page associated with that
+ * enclave page is about to get some data and thus even if the PCMD page is
+ * empty, it should not be truncated.
  *
  * Context: Enclave mutex (&sgx_encl->lock) must be held.
  * Return: 1 if the reclaimer is about to write to the PCMD page
@@ -77,8 +77,7 @@ static int reclaimer_writing_to_pcmd(struct sgx_encl *encl,
 		 * Stop when reaching the SECS page - it does not
 		 * have a page_array entry and its reclaim is
 		 * started and completed with enclave mutex held so
-		 * it does not use the SGX_ENCL_PAGE_BEING_RECLAIMED
-		 * flag.
+		 * it does not use the SGX_ENCL_PAGE_PCMD_BUSY flag.
 		 */
 		if (addr == encl->base + encl->size)
 			break;
@@ -91,8 +90,7 @@ static int reclaimer_writing_to_pcmd(struct sgx_encl *encl,
 		 * VA page slot ID uses same bit as the flag so it is important
 		 * to ensure that the page is not already in backing store.
 		 */
-		if (entry->epc_page &&
-		    (entry->desc & SGX_ENCL_PAGE_BEING_RECLAIMED)) {
+		if (entry->epc_page && (entry->desc & SGX_ENCL_PAGE_PCMD_BUSY)) {
 			reclaimed = 1;
 			break;
 		}
@@ -257,7 +255,7 @@ static struct sgx_encl_page *__sgx_encl_load_page(struct sgx_encl *encl,
 
 	/* Entry successfully located. */
 	if (entry->epc_page) {
-		if (entry->desc & SGX_ENCL_PAGE_BEING_RECLAIMED)
+		if (entry->desc & SGX_ENCL_PAGE_BUSY)
 			return ERR_PTR(-EBUSY);
 
 		return entry;
