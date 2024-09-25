@@ -5417,7 +5417,10 @@ ufshcd_transfer_rsp_status(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 		}
 		break;
 	case OCS_ABORTED:
-		result |= DID_ABORT << 16;
+		if (hba->quirks & UFSHCD_QUIRK_OCS_ABORTED)
+			result |= DID_REQUEUE << 16;
+		else
+			result |= DID_ABORT << 16;
 		dev_warn(hba->dev,
 				"OCS aborted from controller for tag %d\n",
 				lrbp->task_tag);
