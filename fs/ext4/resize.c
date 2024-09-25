@@ -300,8 +300,7 @@ static void free_flex_gd(struct ext4_new_flex_group_data *flex_gd)
  * block group.
  */
 static int ext4_alloc_group_tables(struct super_block *sb,
-				struct ext4_new_flex_group_data *flex_gd,
-				unsigned int flexbg_size)
+				struct ext4_new_flex_group_data *flex_gd)
 {
 	struct ext4_new_group_data *group_data = flex_gd->groups;
 	ext4_fsblk_t start_blk;
@@ -313,7 +312,7 @@ static int ext4_alloc_group_tables(struct super_block *sb,
 	ext4_group_t group;
 	ext4_group_t last_group;
 	unsigned overhead;
-	__u16 uninit_mask = (flexbg_size > 1) ? ~EXT4_BG_BLOCK_UNINIT : ~0;
+	__u16 uninit_mask = (flex_gd->resize_bg > 1) ? ~EXT4_BG_BLOCK_UNINIT : ~0;
 	int i;
 
 	BUG_ON(flex_gd->count == 0 || group_data == NULL);
@@ -321,8 +320,8 @@ static int ext4_alloc_group_tables(struct super_block *sb,
 	src_group = group_data[0].group;
 	last_group  = src_group + flex_gd->count - 1;
 
-	BUG_ON((flexbg_size > 1) && ((src_group & ~(flexbg_size - 1)) !=
-	       (last_group & ~(flexbg_size - 1))));
+	BUG_ON((flex_gd->resize_bg > 1) && ((src_group & ~(flex_gd->resize_bg - 1)) !=
+	       (last_group & ~(flex_gd->resize_bg - 1))));
 next_group:
 	group = group_data[0].group;
 	if (src_group >= group_data[0].group + flex_gd->count)
@@ -403,7 +402,7 @@ next_group:
 
 		printk(KERN_DEBUG "EXT4-fs: adding a flex group with "
 		       "%u groups, flexbg size is %u:\n", flex_gd->count,
-		       flexbg_size);
+		       flex_gd->resize_bg);
 
 		for (i = 0; i < flex_gd->count; i++) {
 			ext4_debug(
@@ -2158,7 +2157,7 @@ retry:
 					 ext4_blocks_count(es));
 			last_update_time = jiffies;
 		}
-		if (ext4_alloc_group_tables(sb, flex_gd, flexbg_size) != 0)
+		if (ext4_alloc_group_tables(sb, flex_gd) != 0)
 			break;
 		err = ext4_flex_group_add(sb, resize_inode, flex_gd);
 		if (unlikely(err))
