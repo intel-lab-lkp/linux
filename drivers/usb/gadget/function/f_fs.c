@@ -808,23 +808,23 @@ static void *ffs_build_sg_list(struct sg_table *sgt, size_t sz)
 
 	n_pages = PAGE_ALIGN(sz) >> PAGE_SHIFT;
 	pages = kvmalloc_array(n_pages, sizeof(struct page *), GFP_KERNEL);
-	if (!pages) {
-		vfree(vaddr);
+	if (!pages)
+		goto free_vaddr;
 
-		return NULL;
-	}
 	for (i = 0, ptr = vaddr; i < n_pages; ++i, ptr += PAGE_SIZE)
 		pages[i] = vmalloc_to_page(ptr);
 
 	if (sg_alloc_table_from_pages(sgt, pages, n_pages, 0, sz, GFP_KERNEL)) {
 		kvfree(pages);
-		vfree(vaddr);
-
-		return NULL;
+		goto free_vaddr;
 	}
 	kvfree(pages);
 
 	return vaddr;
+
+free_vaddr:
+	vfree(vaddr);
+	return NULL;
 }
 
 static inline void *ffs_alloc_buffer(struct ffs_io_data *io_data,
