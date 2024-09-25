@@ -862,6 +862,8 @@ int kset_register(struct kset *k)
 		return -EINVAL;
 
 	if (!k->kobj.ktype) {
+		kfree_const(k->kobj.name);
+		k->kobj.name = NULL;
 		pr_err("must have a ktype to be initialized properly!\n");
 		return -EINVAL;
 	}
