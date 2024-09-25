@@ -1636,10 +1636,6 @@ long do_shmat(int shmid, char __user *shmaddr, int shmflg,
 	sfd->vm_ops = NULL;
 	file->private_data = sfd;
 
-	err = security_mmap_file(file, prot, flags);
-	if (err)
-		goto out_fput;
-
 	if (mmap_write_lock_killable(current->mm)) {
 		err = -EINTR;
 		goto out_fput;

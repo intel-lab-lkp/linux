@@ -681,7 +681,7 @@ static int validate_mmap_request(struct file *file,
 				 unsigned long pgoff,
 				 unsigned long *_capabilities)
 {
-	unsigned long capabilities, rlen;
+	unsigned long capabilities, rlen, reqprot = prot;
 	int ret;
 
 	/* do the simple checks first */
@@ -818,6 +818,9 @@ static int validate_mmap_request(struct file *file,
 	}
 
 	/* allow the security API to have its say */
+	ret = security_mmap_file(file, reqprot, prot, flags);
+	if (ret < 0)
+		return ret;
 	ret = security_mmap_addr(addr);
 	if (ret < 0)
 		return ret;
