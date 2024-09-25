@@ -142,6 +142,9 @@ static ssize_t set_report_filterlist_whitelist(bool whitelist)
 	old_list = rcu_dereference_protected(rp_flist,
 					   lockdep_is_held(&rp_flist_mutex));
 
+	if (old_list->whitelist == whitelist)
+		goto out;
+
 	new_list = kzalloc(sizeof(*new_list), GFP_KERNEL);
 	if (!new_list) {
 		ret = -ENOMEM;
