@@ -4653,6 +4653,8 @@ intel_modeset_pipe_config(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	struct drm_connector *connector;
 	struct drm_connector_state *connector_state;
+	const struct drm_display_mode *fixed_mode;
+	struct intel_dp *intel_dp;
 	int pipe_src_w, pipe_src_h;
 	int base_bpp, ret, i;
 
@@ -4772,6 +4774,24 @@ intel_modeset_pipe_config(struct intel_atomic_state *state,
 		drm_dbg_kms(&i915->drm, "[CRTC:%d:%s] config failure: %d\n",
 			    crtc->base.base.id, crtc->base.name, ret);
 		return ret;
+	}
+
+	for_each_new_connector_in_state(&state->base, connector,
+					connector_state, i) {
+		struct intel_encoder *encoder =
+			to_intel_encoder(connector_state->best_encoder);
+
+		if (connector_state->crtc != &crtc->base)
+			continue;
+
+		intel_dp = enc_to_intel_dp(encoder);
+
+		if (!intel_dp)
+			continue;
+
+		if ((intel_dp_is_edp(intel_dp) && fixed_mode) ||
+		    crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR420)
+			return intel_pch_panel_fitting(crtc_state, connector_state);
 	}
 
 	/* Dithering seems to not pass-through bits correctly when it should, so
