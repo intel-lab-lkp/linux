@@ -695,7 +695,7 @@ static int etm4_parse_event_config(struct coresight_device *csdev,
 
 	/* Only trace contextID when runs in root PID namespace */
 	if ((attr->config & BIT(ETM_OPT_CTXTID)) &&
-	    task_is_in_init_pid_ns(current))
+	    task_is_in_init_pid_ns(event->owner))
 		/* bit[6], Context ID tracing bit */
 		config->cfg |= TRCCONFIGR_CID;
 
@@ -710,7 +710,7 @@ static int etm4_parse_event_config(struct coresight_device *csdev,
 			goto out;
 		}
 		/* Only trace virtual contextID when runs in root PID namespace */
-		if (task_is_in_init_pid_ns(current))
+		if (task_is_in_init_pid_ns(event->owner))
 			config->cfg |= TRCCONFIGR_VMID | TRCCONFIGR_VMIDOPT;
 	}
 
