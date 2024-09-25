@@ -102,6 +102,7 @@ struct page_pool_params {
  * @refill:	an allocation which triggered a refill of the cache
  * @waive:	pages obtained from the ptr ring that cannot be added to
  *		the cache due to a NUMA mismatch
+ * @item_full	items array is full
  */
 struct page_pool_alloc_stats {
 	u64 fast;
@@ -110,6 +111,7 @@ struct page_pool_alloc_stats {
 	u64 empty;
 	u64 refill;
 	u64 waive;
+	u64 item_full;
 };
 
 /**
@@ -142,6 +144,11 @@ struct page_pool_stats {
 };
 #endif
 
+struct page_pool_item {
+	netmem_ref pp_netmem;
+	unsigned int pp_idx;
+};
+
 /* The whole frag API block must stay within one cacheline. On 32-bit systems,
  * sizeof(long) == sizeof(int), so that the block size is ``3 * sizeof(long)``.
  * On 64-bit systems, the actual size is ``2 * sizeof(long) + sizeof(int)``.
@@ -161,6 +168,8 @@ struct page_pool {
 
 	int cpuid;
 	u32 pages_state_hold_cnt;
+	unsigned int item_mask;
+	unsigned int item_idx;
 
 	bool has_init_callback:1;	/* slow::init_callback is set */
 	bool dma_map:1;			/* Perform DMA mapping */
@@ -228,7 +237,11 @@ struct page_pool {
 	 */
 	refcount_t user_cnt;
 
-	u64 destroy_cnt;
+	/* Lock to avoid doing dma unmapping concurrently when
+	 * destroy_cnt > 0.
+	 */
+	spinlock_t destroy_lock;
+	unsigned int destroy_cnt;
 
 	/* Slow/Control-path information follows */
 	struct page_pool_params_slow slow;
@@ -239,6 +252,8 @@ struct page_pool {
 		u32 napi_id;
 		u32 id;
 	} user;
+
+	struct page_pool_item items[] ____cacheline_aligned_in_smp;
 };
 
 struct page *page_pool_alloc_pages(struct page_pool *pool, gfp_t gfp);
