@@ -281,6 +281,10 @@ static int read_btree_nodes(struct find_btree_nodes *f)
 			closure_put(&cl);
 			f->ret = ret;
 			bch_err(c, "error starting kthread: %i", ret);
+			if (IS_ERR(t)) {
+				closure_sync(&cl);
+				return PTR_ERR(t);
+			}
 			break;
 		}
 	}
