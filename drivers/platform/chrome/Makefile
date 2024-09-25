@@ -19,6 +19,7 @@ obj-$(CONFIG_CROS_EC_UART)		+= cros_ec_uart.o
 cros_ec_lpcs-objs			:= cros_ec_lpc.o cros_ec_lpc_mec.o
 cros-ec-typec-objs			:= cros_ec_typec.o cros_typec_vdm.o
 cros-ec-typec-$(CONFIG_TYPEC_DP_ALTMODE) += cros_typec_displayport.o
+cros-ec-typec-$(CONFIG_TYPEC_TBT_ALTMODE) += cros_typec_thunderbolt.o
 obj-$(CONFIG_CROS_EC_TYPEC)		+= cros-ec-typec.o
 
 obj-$(CONFIG_CROS_EC_LPC)		+= cros_ec_lpcs.o
