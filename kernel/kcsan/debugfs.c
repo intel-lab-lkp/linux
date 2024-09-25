@@ -131,13 +131,14 @@ out:
 	return ret;
 }
 
-static void set_report_filterlist_whitelist(bool whitelist)
+static ssize_t set_report_filterlist_whitelist(bool whitelist)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&report_filterlist_lock, flags);
 	report_filterlist.whitelist = whitelist;
 	spin_unlock_irqrestore(&report_filterlist_lock, flags);
+	return 0;
 }
 
 /* Returns 0 on success, error-code otherwise. */
@@ -225,6 +226,7 @@ debugfs_write(struct file *file, const char __user *buf, size_t count, loff_t *o
 	char kbuf[KSYM_NAME_LEN];
 	char *arg;
 	const size_t read_len = min(count, sizeof(kbuf) - 1);
+	ssize_t ret;
 
 	if (copy_from_user(kbuf, buf, read_len))
 		return -EFAULT;
@@ -242,19 +244,19 @@ debugfs_write(struct file *file, const char __user *buf, size_t count, loff_t *o
 			return -EINVAL;
 		microbenchmark(iters);
 	} else if (!strcmp(arg, "whitelist")) {
-		set_report_filterlist_whitelist(true);
+		ret = set_report_filterlist_whitelist(true);
 	} else if (!strcmp(arg, "blacklist")) {
-		set_report_filterlist_whitelist(false);
+		ret = set_report_filterlist_whitelist(false);
 	} else if (arg[0] == '!') {
-		ssize_t ret = insert_report_filterlist(&arg[1]);
-
-		if (ret < 0)
-			return ret;
+		ret = insert_report_filterlist(&arg[1]);
 	} else {
 		return -EINVAL;
 	}
 
-	return count;
+	if (ret < 0)
+		return ret;
+	else
+		return count;
 }
 
 static const struct file_operations debugfs_ops =
