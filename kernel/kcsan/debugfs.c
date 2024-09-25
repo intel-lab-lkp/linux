@@ -40,20 +40,17 @@ static_assert(ARRAY_SIZE(counter_names) == KCSAN_COUNTER_COUNT);
  * Addresses for filtering functions from reporting. This list can be used as a
  * whitelist or blacklist.
  */
-static struct {
+struct report_filterlist {
 	unsigned long	*addrs;		/* array of addresses */
 	size_t		size;		/* current size */
 	int		used;		/* number of elements used */
 	bool		sorted;		/* if elements are sorted */
 	bool		whitelist;	/* if list is a blacklist or whitelist */
-} report_filterlist = {
-	.addrs		= NULL,
-	.size		= 8,		/* small initial size */
-	.used		= 0,
-	.sorted		= false,
-	.whitelist	= false,	/* default is blacklist */
+	struct rcu_head rcu;
 };
-static DEFINE_SPINLOCK(report_filterlist_lock);
+
+static DEFINE_MUTEX(rp_flist_mutex);
+static struct report_filterlist __rcu *rp_flist;
 
 /*
  * The microbenchmark allows benchmarking KCSAN core runtime only. To run
@@ -103,98 +100,141 @@ static int cmp_filterlist_addrs(const void *rhs, const void *lhs)
 bool kcsan_skip_report_debugfs(unsigned long func_addr)
 {
 	unsigned long symbolsize, offset;
-	unsigned long flags;
 	bool ret = false;
+	struct report_filterlist *list;
 
 	if (!kallsyms_lookup_size_offset(func_addr, &symbolsize, &offset))
 		return false;
 	func_addr -= offset; /* Get function start */
 
-	spin_lock_irqsave(&report_filterlist_lock, flags);
-	if (report_filterlist.used == 0)
+	rcu_read_lock();
+	list = rcu_dereference(rp_flist);
+
+	if (!list)
+		goto out;
+
+	if (list->used == 0)
 		goto out;
 
 	/* Sort array if it is unsorted, and then do a binary search. */
-	if (!report_filterlist.sorted) {
-		sort(report_filterlist.addrs, report_filterlist.used,
+	if (!list->sorted) {
+		sort(list->addrs, list->used,
 		     sizeof(unsigned long), cmp_filterlist_addrs, NULL);
-		report_filterlist.sorted = true;
+		list->sorted = true;
 	}
-	ret = !!bsearch(&func_addr, report_filterlist.addrs,
-			report_filterlist.used, sizeof(unsigned long),
+	ret = !!bsearch(&func_addr, list->addrs,
+			list->used, sizeof(unsigned long),
 			cmp_filterlist_addrs);
-	if (report_filterlist.whitelist)
+	if (list->whitelist)
 		ret = !ret;
 
 out:
-	spin_unlock_irqrestore(&report_filterlist_lock, flags);
+	rcu_read_unlock();
 	return ret;
 }
 
 static ssize_t set_report_filterlist_whitelist(bool whitelist)
 {
-	unsigned long flags;
+	struct report_filterlist *new_list, *old_list;
+	ssize_t ret = 0;
 
-	spin_lock_irqsave(&report_filterlist_lock, flags);
-	report_filterlist.whitelist = whitelist;
-	spin_unlock_irqrestore(&report_filterlist_lock, flags);
-	return 0;
+	mutex_lock(&rp_flist_mutex);
+	old_list = rcu_dereference_protected(rp_flist,
+					   lockdep_is_held(&rp_flist_mutex));
+
+	new_list = kzalloc(sizeof(*new_list), GFP_KERNEL);
+	if (!new_list) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	memcpy(new_list, old_list, sizeof(struct report_filterlist));
+	new_list->whitelist = whitelist;
+
+	rcu_assign_pointer(rp_flist, new_list);
+	synchronize_rcu();
+	kfree(old_list);
+
+out:
+	mutex_unlock(&rp_flist_mutex);
+	return ret;
 }
 
 /* Returns 0 on success, error-code otherwise. */
 static ssize_t insert_report_filterlist(const char *func)
 {
-	unsigned long flags;
 	unsigned long addr = kallsyms_lookup_name(func);
 	ssize_t ret = 0;
+	struct report_filterlist *new_list, *old_list;
+	unsigned long *new_addrs;
 
 	if (!addr) {
 		pr_err("could not find function: '%s'\n", func);
 		return -ENOENT;
 	}
 
-	spin_lock_irqsave(&report_filterlist_lock, flags);
+	new_list = kzalloc(sizeof(*new_list), GFP_KERNEL);
+	if (!new_list)
+		return -ENOMEM;
 
-	if (report_filterlist.addrs == NULL) {
+	mutex_lock(&rp_flist_mutex);
+	old_list = rcu_dereference_protected(rp_flist,
+					   lockdep_is_held(&rp_flist_mutex));
+	memcpy(new_list, old_list, sizeof(struct report_filterlist));
+
+	if (new_list->addrs == NULL) {
 		/* initial allocation */
-		report_filterlist.addrs =
-			kmalloc_array(report_filterlist.size,
-				      sizeof(unsigned long), GFP_ATOMIC);
-		if (report_filterlist.addrs == NULL) {
-			ret = -ENOMEM;
-			goto out;
-		}
-	} else if (report_filterlist.used == report_filterlist.size) {
+		new_list->addrs =
+			kmalloc_array(new_list->size,
+					  sizeof(unsigned long), GFP_KERNEL);
+		if (new_list->addrs == NULL)
+			goto out_free;
+	} else if (new_list->used == new_list->size) {
 		/* resize filterlist */
-		size_t new_size = report_filterlist.size * 2;
-		unsigned long *new_addrs =
-			krealloc(report_filterlist.addrs,
-				 new_size * sizeof(unsigned long), GFP_ATOMIC);
+		size_t new_size = new_list->size * 2;
 
-		if (new_addrs == NULL) {
-			/* leave filterlist itself untouched */
-			ret = -ENOMEM;
-			goto out;
-		}
+		new_addrs = kmalloc_array(new_size,
+					  sizeof(unsigned long), GFP_KERNEL);
+		if (new_addrs == NULL)
+			goto out_free;
 
-		report_filterlist.size = new_size;
-		report_filterlist.addrs = new_addrs;
+		memcpy(new_addrs, old_list->addrs,
+				old_list->size * sizeof(unsigned long));
+		new_list->size = new_size;
+		new_list->addrs = new_addrs;
+	} else {
+		new_addrs = kmalloc_array(new_list->size,
+					  sizeof(unsigned long), GFP_KERNEL);
+		if (new_addrs == NULL)
+			goto out_free;
+
+		memcpy(new_addrs, old_list->addrs,
+				old_list->size * sizeof(unsigned long));
+		new_list->addrs = new_addrs;
 	}
 
 	/* Note: deduplicating should be done in userspace. */
-	report_filterlist.addrs[report_filterlist.used++] = addr;
-	report_filterlist.sorted = false;
+	new_list->addrs[new_list->used++] = addr;
+	new_list->sorted = false;
 
+	rcu_assign_pointer(rp_flist, new_list);
+	synchronize_rcu();
+	kfree(old_list->addrs);
+	kfree(old_list);
+	goto out;
+
+out_free:
+	ret = -ENOMEM;
+	kfree(new_list);
 out:
-	spin_unlock_irqrestore(&report_filterlist_lock, flags);
-
+	mutex_unlock(&rp_flist_mutex);
 	return ret;
 }
 
 static int show_info(struct seq_file *file, void *v)
 {
 	int i;
-	unsigned long flags;
+	struct report_filterlist *list;
 
 	/* show stats */
 	seq_printf(file, "enabled: %i\n", READ_ONCE(kcsan_enabled));
@@ -203,14 +243,15 @@ static int show_info(struct seq_file *file, void *v)
 			   atomic_long_read(&kcsan_counters[i]));
 	}
 
+	rcu_read_lock();
+	list = rcu_dereference(rp_flist);
 	/* show filter functions, and filter type */
-	spin_lock_irqsave(&report_filterlist_lock, flags);
 	seq_printf(file, "\n%s functions: %s\n",
-		   report_filterlist.whitelist ? "whitelisted" : "blacklisted",
-		   report_filterlist.used == 0 ? "none" : "");
-	for (i = 0; i < report_filterlist.used; ++i)
-		seq_printf(file, " %ps\n", (void *)report_filterlist.addrs[i]);
-	spin_unlock_irqrestore(&report_filterlist_lock, flags);
+		   list->whitelist ? "whitelisted" : "blacklisted",
+		   list->used == 0 ? "none" : "");
+	for (i = 0; i < list->used; ++i)
+		seq_printf(file, " %ps\n", (void *)list->addrs[i]);
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -269,6 +310,19 @@ static const struct file_operations debugfs_ops =
 
 static int __init kcsan_debugfs_init(void)
 {
+	struct report_filterlist *list;
+
+	list = kzalloc(sizeof(*list), GFP_KERNEL);
+	if (!list)
+		return -ENOMEM;
+
+	list->addrs		= NULL;
+	list->size		= 8;		/* small initial size */
+	list->used		= 0;
+	list->sorted	= false;
+	list->whitelist	= false;	/* default is blacklist */
+	rcu_assign_pointer(rp_flist, list);
+
 	debugfs_create_file("kcsan", 0644, NULL, NULL, &debugfs_ops);
 	return 0;
 }
