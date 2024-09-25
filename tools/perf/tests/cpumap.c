@@ -168,6 +168,16 @@ static int __test__cpu_map_merge(const char *lhs, const char *rhs, int nr, const
 	TEST_ASSERT_VAL("failed to merge map: bad result", !strcmp(buf, expected));
 	perf_cpu_map__put(a);
 	perf_cpu_map__put(b);
+
+	/*
+	 * If 'b' is a superset of 'a', 'c' points to the same map with the
+	 * map 'b'. In this case, the two owners 'b' and 'c' both point to the
+	 * same map. The owner 'b' has released the resource above but 'c'
+	 * still keeps the ownership, so the reference counter should be 1.
+	 */
+	TEST_ASSERT_VAL("unexpected refcnt: bad result",
+			refcount_read(perf_cpu_map__refcnt(c)) == 1);
+
 	perf_cpu_map__put(c);
 	return 0;
 }
@@ -208,6 +218,16 @@ static int __test__cpu_map_intersect(const char *lhs, const char *rhs, int nr, c
 	TEST_ASSERT_VAL("failed to intersect map: bad result", !strcmp(buf, expected));
 	perf_cpu_map__put(a);
 	perf_cpu_map__put(b);
+
+	/*
+	 * If 'b' is a subset of 'a', 'c' points to the same map with the
+	 * map 'b'. In this case, the two owners 'b' and 'c' both point to the
+	 * same map. The owner 'b' has released the resource above but 'c'
+	 * still keeps the ownership, so the reference counter should be 1.
+	 */
+	TEST_ASSERT_VAL("unexpected refcnt: bad result",
+			refcount_read(perf_cpu_map__refcnt(c)) == 1);
+
 	perf_cpu_map__put(c);
 	return 0;
 }
