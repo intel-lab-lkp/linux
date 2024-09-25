@@ -339,7 +339,7 @@ static struct platform_driver wave5_vpu_driver = {
 		.of_match_table = of_match_ptr(wave5_dt_ids),
 		},
 	.probe = wave5_vpu_probe,
-	.remove_new = wave5_vpu_remove,
+	.remove = wave5_vpu_remove,
 };
 
 module_platform_driver(wave5_vpu_driver);
