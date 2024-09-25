@@ -14,6 +14,7 @@
 #include "fdinfo.h"
 #include "cancel.h"
 #include "rsrc.h"
+#include "timeout.h"
 
 #ifdef CONFIG_PROC_FS
 static __cold int io_uring_show_cred(struct seq_file *m, unsigned int id,
@@ -55,6 +56,7 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 	struct io_ring_ctx *ctx = file->private_data;
 	struct io_overflow_cqe *ocqe;
 	struct io_rings *r = ctx->rings;
+	struct io_timeout *timeout;
 	struct rusage sq_usage;
 	unsigned int sq_mask = ctx->sq_entries - 1, cq_mask = ctx->cq_entries - 1;
 	unsigned int sq_head = READ_ONCE(r->sq.head);
@@ -234,5 +236,17 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 		seq_puts(m, "NAPI:\tdisabled\n");
 	}
 #endif
+
+	seq_puts(m, "TimeoutList:\n");
+	spin_lock_irq(&ctx->timeout_lock);
+	list_for_each_entry(timeout, &ctx->timeout_list, list) {
+		struct io_timeout_data *data;
+
+		data = cmd_to_io_kiocb(timeout)->async_data;
+		seq_printf(m, "  off=%u, repeats=%u, sec=%lld, nsec=%ld\n",
+			   timeout->off, timeout->repeats, data->ts.tv_sec,
+			   data->ts.tv_nsec);
+	}
+	spin_unlock_irq(&ctx->timeout_lock);
 }
 #endif
