@@ -12,6 +12,15 @@ Description:
 
 		Valid values are boolean.
 
+What:		/sys/bus/typec/devices/.../auto_enter
+Date:		September 2024
+Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
+Description:
+		Controls whether a mode will be automatically entered when a partner is
+		connected.
+
+		This field is only valid and displayed on a port. Valid values are boolean.
+
 What:		/sys/bus/typec/devices/.../description
 Date:		July 2018
 Contact:	Heikki Krogerus <heikki.krogerus@linux.intel.com>
