@@ -3098,6 +3098,13 @@ static void dm_gpureset_commit_state(struct dc_state *dc_state,
 	for (k = 0; k < dc_state->stream_count; k++) {
 		bundle->stream_update.stream = dc_state->streams[k];
 
+		if (MAX_SURFACES < dc_state->stream_status->plane_count) {
+			drm_warn(dm->ddev, "Not enough dc_surface_update for the "
+					   "number of planes. Please increase "
+					   "MAX_SURFACES inline to MAX_PLANES.\n");
+			continue;
+		}
+
 		for (m = 0; m < dc_state->stream_status->plane_count; m++) {
 			bundle->surface_updates[m].surface =
 				dc_state->stream_status->plane_states[m];
@@ -8954,6 +8961,13 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 		if (!dc_plane)
 			continue;
 
+		if (MAX_SURFACES < planes_count) {
+			drm_warn(dev, "Not enough dc_surface_update for the "
+				      "number of planes. Please increase "
+				      "MAX_SURFACES inline to MAX_PLANES.\n");
+			continue;
+		}
+
 		bundle->surface_updates[planes_count].surface = dc_plane;
 		if (new_pcrtc_state->color_mgmt_changed) {
 			bundle->surface_updates[planes_count].gamma = &dc_plane->gamma_correction;
@@ -9905,6 +9919,12 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 
 		WARN_ON(!status->plane_count);
 
+		if (MAX_SURFACES < status->plane_count) {
+			drm_warn(dev, "Not enough dc_surface_update for the "
+				      "number of planes. Please increase "
+				      "MAX_SURFACES inline to MAX_PLANES.\n");
+			continue;
+		}
 		/*
 		 * TODO: DC refuses to perform stream updates without a dc_surface_update.
 		 * Here we create an empty update on each plane.
