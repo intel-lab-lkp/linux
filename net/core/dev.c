@@ -2285,6 +2285,7 @@ EXPORT_SYMBOL_GPL(dev_nit_active);
 /*
  *	Support routine. Sends outgoing frames to any network
  *	taps currently in use.
+ *	BH must be disabled before calling this.
  */
 
 void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
