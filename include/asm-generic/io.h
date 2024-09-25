@@ -1175,7 +1175,7 @@ static inline void unxlate_dev_mem_ptr(phys_addr_t phys, void *addr)
 static inline void memset_io(volatile void __iomem *addr, int value,
 			     size_t size)
 {
-	memset(__io_virt(addr), value, size);
+	__memset_io(__io_virt(addr), value, size);
 }
 #endif
 
@@ -1193,7 +1193,7 @@ static inline void memcpy_fromio(void *buffer,
 				 const volatile void __iomem *addr,
 				 size_t size)
 {
-	memcpy(buffer, __io_virt(addr), size);
+	__memcpy_fromio(buffer, __io_virt(addr), size);
 }
 #endif
 
@@ -1210,7 +1210,7 @@ static inline void memcpy_fromio(void *buffer,
 static inline void memcpy_toio(volatile void __iomem *addr, const void *buffer,
 			       size_t size)
 {
-	memcpy(__io_virt(addr), buffer, size);
+	__memcpy_toio(__io_virt(addr), buffer, size);
 }
 #endif
 
