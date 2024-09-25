@@ -371,7 +371,13 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
 		return retval;
 	}
 	kobj->parent = parent;
-	return kobject_add_internal(kobj);
+	retval = kobject_add_internal(kobj);
+	if (retval) {
+		kfree_const(kobj->name);
+		kobj->name = NULL;
+	}
+
+	return retval;
 }
 
 /**
