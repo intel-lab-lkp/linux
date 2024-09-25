@@ -331,13 +331,18 @@ static int
 pmc_usb_mux_tbt(struct pmc_usb_port *port, struct typec_mux_state *state)
 {
 	struct typec_thunderbolt_data *data = state->data;
-	u8 cable_rounded = TBT_CABLE_ROUNDED_SUPPORT(data->cable_mode);
-	u8 cable_speed = TBT_CABLE_SPEED(data->cable_mode);
+	u8 cable_rounded, cable_speed;
 	struct altmode_req req = { };
+
+	if (!data)
+		return 0;
 
 	if (IOM_PORT_ACTIVITY_IS(port->iom_status, TBT) ||
 	    IOM_PORT_ACTIVITY_IS(port->iom_status, ALT_MODE_TBT_USB))
 		return 0;
+
+	cable_rounded = TBT_CABLE_ROUNDED_SUPPORT(data->cable_mode);
+	cable_speed = TBT_CABLE_SPEED(data->cable_mode);
 
 	req.usage = PMC_USB_ALT_MODE;
 	req.usage |= port->usb3_port << PMC_USB_MSG_USB3_PORT_SHIFT;
