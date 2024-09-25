@@ -3046,9 +3046,8 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	if (ret)
 		return ret;
 
-	if ((intel_dp_is_edp(intel_dp) && fixed_mode) ||
-	    pipe_config->output_format == INTEL_OUTPUT_FORMAT_YCBCR420) {
-		ret = intel_panel_fitting(pipe_config, conn_state);
+	if (HAS_GMCH(dev_priv)) {
+		ret = intel_gch_panel_fitting(pipe_config, conn_state);
 		if (ret)
 			return ret;
 	}

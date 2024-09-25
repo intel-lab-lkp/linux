@@ -2341,8 +2341,8 @@ int intel_hdmi_compute_config(struct intel_encoder *encoder,
 		return ret;
 	}
 
-	if (intel_hdmi_is_ycbcr420(pipe_config)) {
-		ret = intel_panel_fitting(pipe_config, conn_state);
+	if (HAS_GMCH(display)) {
+		ret = intel_gch_panel_fitting(pipe_config, conn_state);
 		if (ret)
 			return ret;
 	}
