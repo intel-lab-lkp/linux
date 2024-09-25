@@ -393,6 +393,16 @@ enum cxl_devtype {
 	CXL_DEVTYPE_CLASSMEM,
 };
 
+/*
+ * enum cxl_devcoherence - the coherence of the cxl device
+ * @CXL_DEVCOH_DEV      - HDM-D or HDM-DB
+ * @CXL_DEVCOH_HOSTONLY - HDM-H
+ */
+enum cxl_devcoherence {
+	CXL_DEVCOH_DEV,
+	CXL_DEVCOH_HOSTONLY,
+};
+
 /**
  * struct cxl_dpa_perf - DPA performance property entry
  * @dpa_range: range for DPA address
@@ -438,6 +448,7 @@ struct cxl_dev_state {
 	struct resource ram_res;
 	u64 serial;
 	enum cxl_devtype type;
+	enum cxl_devcoherence coherence;
 };
 
 /**

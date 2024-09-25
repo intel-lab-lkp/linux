@@ -328,6 +328,12 @@ enum cxl_decoder_type {
 	CXL_DECODER_EXPANDER = 3,
 };
 
+enum cxl_decoder_coherence {
+	CXL_DECODER_INVALIDCOH,
+	CXL_DECODER_HOSTONLYCOH,
+	CXL_DECODER_DEVCOH,
+};
+
 /*
  * Current specification goes up to 8, double that seems a reasonable
  * software max for the foreseeable future
@@ -356,6 +362,7 @@ struct cxl_decoder {
 	int interleave_ways;
 	int interleave_granularity;
 	enum cxl_decoder_type target_type;
+	enum cxl_decoder_coherence coherence;
 	struct cxl_region *region;
 	unsigned long flags;
 	int (*commit)(struct cxl_decoder *cxld);
@@ -517,6 +524,7 @@ struct cxl_region_params {
  * @id: This region's id. Id is globally unique across all regions
  * @mode: Endpoint decoder allocation / access mode
  * @type: Endpoint decoder target type
+ * @coherence: Endpoint decoder coherence
  * @cxl_nvb: nvdimm bridge for coordinating @cxlr_pmem setup / shutdown
  * @cxlr_pmem: (for pmem regions) cached copy of the nvdimm bridge
  * @flags: Region state flags
@@ -530,6 +538,7 @@ struct cxl_region {
 	int id;
 	enum cxl_decoder_mode mode;
 	enum cxl_decoder_type type;
+	enum cxl_decoder_coherence coherence;
 	struct cxl_nvdimm_bridge *cxl_nvb;
 	struct cxl_pmem_region *cxlr_pmem;
 	unsigned long flags;

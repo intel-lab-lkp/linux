@@ -569,10 +569,10 @@ static void cxld_set_interleave(struct cxl_decoder *cxld, u32 *ctrl)
 	*ctrl |= CXL_HDM_DECODER0_CTRL_COMMIT;
 }
 
-static void cxld_set_type(struct cxl_decoder *cxld, u32 *ctrl)
+static void cxld_set_coherence(struct cxl_decoder *cxld, u32 *ctrl)
 {
 	u32p_replace_bits(ctrl,
-			  !!(cxld->target_type == CXL_DECODER_EXPANDER),
+			  !!(cxld->coherence == CXL_DECODER_HOSTONLYCOH),
 			  CXL_HDM_DECODER0_CTRL_HOSTONLY);
 }
 
@@ -667,7 +667,7 @@ static int cxl_decoder_commit(struct cxl_decoder *cxld)
 	/* common decoder settings */
 	ctrl = readl(hdm + CXL_HDM_DECODER0_CTRL_OFFSET(cxld->id));
 	cxld_set_interleave(cxld, &ctrl);
-	cxld_set_type(cxld, &ctrl);
+	cxld_set_coherence(cxld, &ctrl);
 	base = cxld->hpa_range.start;
 	size = range_len(&cxld->hpa_range);
 
@@ -846,10 +846,13 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 		cxld->flags |= CXL_DECODER_F_ENABLE;
 		if (ctrl & CXL_HDM_DECODER0_CTRL_LOCK)
 			cxld->flags |= CXL_DECODER_F_LOCK;
-		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_HOSTONLY, ctrl))
+		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_HOSTONLY, ctrl)) {
 			cxld->target_type = CXL_DECODER_EXPANDER;
-		else
+			cxld->coherence = CXL_DECODER_HOSTONLYCOH;
+		} else {
 			cxld->target_type = CXL_DECODER_ACCEL;
+			cxld->coherence = CXL_DECODER_DEVCOH;
+		}
 
 		guard(rwsem_write)(&cxl_region_rwsem);
 		if (cxld->id != cxl_num_decoders_committed(port)) {
@@ -879,13 +882,18 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 				cxld->target_type = CXL_DECODER_EXPANDER;
 			else
 				cxld->target_type = CXL_DECODER_ACCEL;
+			if (cxlds->coherence == CXL_DEVCOH_HOSTONLY)
+				cxld->coherence = CXL_DECODER_HOSTONLYCOH;
+			else
+				cxld->coherence = CXL_DECODER_DEVCOH;
 		} else {
-			/* To be overridden by region type at commit time */
+			/* To be overridden by region type/coherence at commit time */
 			cxld->target_type = CXL_DECODER_EXPANDER;
+			cxld->coherence = CXL_DECODER_HOSTONLYCOH;
 		}
 
 		if (!FIELD_GET(CXL_HDM_DECODER0_CTRL_HOSTONLY, ctrl) &&
-		    cxld->target_type == CXL_DECODER_EXPANDER) {
+		    cxld->coherence == CXL_DECODER_HOSTONLYCOH) {
 			ctrl |= CXL_HDM_DECODER0_CTRL_HOSTONLY;
 			writel(ctrl, hdm + CXL_HDM_DECODER0_CTRL_OFFSET(which));
 		}

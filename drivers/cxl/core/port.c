@@ -1769,6 +1769,7 @@ static int cxl_decoder_init(struct cxl_port *port, struct cxl_decoder *cxld)
 	cxld->interleave_ways = 1;
 	cxld->interleave_granularity = PAGE_SIZE;
 	cxld->target_type = CXL_DECODER_EXPANDER;
+	cxld->coherence = CXL_DECODER_HOSTONLYCOH;
 	cxld->hpa_range = (struct range) {
 		.start = 0,
 		.end = -1,
