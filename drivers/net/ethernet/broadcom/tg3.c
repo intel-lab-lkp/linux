@@ -7395,18 +7395,34 @@ tx_recovery:
 
 static void tg3_napi_disable(struct tg3 *tp)
 {
+	struct tg3_napi *tnapi;
 	int i;
 
-	for (i = tp->irq_cnt - 1; i >= 0; i--)
-		napi_disable(&tp->napi[i].napi);
+	ASSERT_RTNL();
+	for (i = tp->irq_cnt - 1; i >= 0; i--) {
+		tnapi = &tp->napi[i];
+		if (tnapi->tx_buffers)
+			netif_queue_set_napi(tp->dev, i, NETDEV_QUEUE_TYPE_TX, NULL);
+		else if (tnapi->rx_rcb)
+			netif_queue_set_napi(tp->dev, i, NETDEV_QUEUE_TYPE_RX, NULL);
+		napi_disable(&tnapi->napi);
+	}
 }
 
 static void tg3_napi_enable(struct tg3 *tp)
 {
+	struct tg3_napi *tnapi;
 	int i;
 
-	for (i = 0; i < tp->irq_cnt; i++)
-		napi_enable(&tp->napi[i].napi);
+	ASSERT_RTNL();
+	for (i = 0; i < tp->irq_cnt; i++) {
+		tnapi = &tp->napi[i];
+		napi_enable(&tnapi->napi);
+		if (tnapi->tx_buffers)
+			netif_queue_set_napi(tp->dev, i, NETDEV_QUEUE_TYPE_TX, &tnapi->napi);
+		else if (tnapi->rx_rcb)
+			netif_queue_set_napi(tp->dev, i, NETDEV_QUEUE_TYPE_RX, &tnapi->napi);
+	}
 }
 
 static void tg3_napi_init(struct tg3 *tp)
