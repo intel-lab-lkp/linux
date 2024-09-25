@@ -324,8 +324,8 @@ resource_size_t cxl_rcd_component_reg_phys(struct device *dev,
 #define CXL_DECODER_F_MASK        GENMASK(5, 0)
 
 enum cxl_decoder_type {
-	CXL_DECODER_DEVMEM = 2,
-	CXL_DECODER_HOSTONLYMEM = 3,
+	CXL_DECODER_ACCEL = 2,
+	CXL_DECODER_EXPANDER = 3,
 };
 
 /*
