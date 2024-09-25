@@ -438,9 +438,7 @@ bool perf_cpu_map__is_subset(const struct perf_cpu_map *a, const struct perf_cpu
 /*
  * Merge two cpumaps
  *
- * orig either gets freed and replaced with a new map, or reused
- * with no reference count change (similar to "realloc")
- * other has its reference count increased.
+ * Return a new map, or reused with its reference count increased.
  */
 
 struct perf_cpu_map *perf_cpu_map__merge(struct perf_cpu_map *orig,
@@ -452,11 +450,9 @@ struct perf_cpu_map *perf_cpu_map__merge(struct perf_cpu_map *orig,
 	struct perf_cpu_map *merged;
 
 	if (perf_cpu_map__is_subset(orig, other))
-		return orig;
-	if (perf_cpu_map__is_subset(other, orig)) {
-		perf_cpu_map__put(orig);
+		return perf_cpu_map__get(orig);
+	if (perf_cpu_map__is_subset(other, orig))
 		return perf_cpu_map__get(other);
-	}
 
 	tmp_len = __perf_cpu_map__nr(orig) + __perf_cpu_map__nr(other);
 	tmp_cpus = malloc(tmp_len * sizeof(struct perf_cpu));
@@ -483,7 +479,6 @@ struct perf_cpu_map *perf_cpu_map__merge(struct perf_cpu_map *orig,
 
 	merged = cpu_map__trim_new(k, tmp_cpus);
 	free(tmp_cpus);
-	perf_cpu_map__put(orig);
 	return merged;
 }
 
