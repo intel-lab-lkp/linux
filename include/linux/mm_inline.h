@@ -291,6 +291,12 @@ static inline bool lru_gen_del_folio(struct lruvec *lruvec, struct folio *folio,
 	return true;
 }
 
+static inline void folio_migrate_refs(struct folio *new_folio, struct folio *folio)
+{
+	unsigned long refs = READ_ONCE(folio->flags) & LRU_REFS_MASK;
+
+	set_mask_bits(&new_folio->flags, LRU_REFS_MASK, refs);
+}
 #else /* !CONFIG_LRU_GEN */
 
 static inline bool lru_gen_enabled(void)
@@ -313,6 +319,8 @@ static inline bool lru_gen_del_folio(struct lruvec *lruvec, struct folio *folio,
 	return false;
 }
 
+static inline void folio_migrate_refs(struct folio *new_folio, struct folio *folio)
+{}
 #endif /* CONFIG_LRU_GEN */
 
 static __always_inline
