@@ -251,6 +251,6 @@ free_soc:
 	kfree(soc_dev_attr);
 	return ret;
 }
-device_initcall(imx8_soc_init);
+late_initcall(imx8_soc_init);
 MODULE_DESCRIPTION("NXP i.MX8M SoC driver");
 MODULE_LICENSE("GPL");
