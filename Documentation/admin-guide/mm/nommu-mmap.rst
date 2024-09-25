@@ -135,14 +135,8 @@ Further notes on no-MMU MMAP
      significant delays during a userspace malloc() as the C library does an
      anonymous mapping and the kernel then does a memset for the entire map.
 
-     However, for memory that isn't required to be precleared - such as that
-     returned by malloc() - mmap() can take a MAP_UNINITIALIZED flag to
-     indicate to the kernel that it shouldn't bother clearing the memory before
-     returning it.  Note that CONFIG_MMAP_ALLOW_UNINITIALIZED must be enabled
-     to permit this, otherwise the flag will be ignored.
-
-     uClibc uses this to speed up malloc(), and the ELF-FDPIC binfmt uses this
-     to allocate the brk and stack region.
+     Previously, Linux also supported a MAP_UNINITIALIZED flag to allocate
+     memory without clearing it, this is no longer support.
 
  (#) A list of all the private copy and anonymous mappings on the system is
      visible through /proc/maps in no-MMU mode.

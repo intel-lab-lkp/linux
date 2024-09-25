@@ -418,8 +418,7 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 
 	current->mm->start_brk = vm_mmap(NULL, 0, stack_size, stack_prot,
 					 MAP_PRIVATE | MAP_ANONYMOUS |
-					 MAP_UNINITIALIZED | MAP_GROWSDOWN,
-					 0);
+					 MAP_GROWSDOWN, 0);
 
 	if (IS_ERR_VALUE(current->mm->start_brk)) {
 		retval = current->mm->start_brk;

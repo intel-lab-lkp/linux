@@ -21,8 +21,6 @@
 /* MAP_SYNC not supported */
 #define MAP_FIXED_NOREPLACE	0x200000/* MAP_FIXED which doesn't unmap underlying mapping */
 
-/* MAP_UNINITIALIZED not supported */
-
 /*
  * Flags for mlockall
  */
