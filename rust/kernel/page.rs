@@ -5,9 +5,9 @@
 use crate::{
     alloc::{AllocError, Flags},
     bindings,
-    error::code::*,
-    error::Result,
+    error::{code::*, Result},
     uaccess::UserSliceReader,
+    validate::Untrusted,
 };
 use core::ptr::{self, NonNull};
 
@@ -237,8 +237,10 @@ impl Page {
             // SAFETY: If `with_pointer_into_page` calls into this closure, then it has performed a
             // bounds check and guarantees that `dst` is valid for `len` bytes. Furthermore, we have
             // exclusive access to the slice since the caller guarantees that there are no races.
-            reader.read_raw(unsafe { core::slice::from_raw_parts_mut(dst.cast(), len) })
+            let slice = unsafe { core::slice::from_raw_parts_mut(dst.cast(), len) };
+            reader.read_raw(Untrusted::new_mut(slice))
         })
+        .map(|_| ())
     }
 }
 

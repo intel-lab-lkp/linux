@@ -10,10 +10,12 @@ use crate::{
     error::Result,
     prelude::*,
     types::{AsBytes, FromBytes},
+    validate::Untrusted,
 };
 use alloc::vec::Vec;
 use core::ffi::{c_ulong, c_void};
 use core::mem::{size_of, MaybeUninit};
+use init::init_from_closure;
 
 /// The type used for userspace addresses.
 pub type UserPtr = usize;
@@ -47,9 +49,26 @@ pub type UserPtr = usize;
 ///
 /// ```no_run
 /// use alloc::vec::Vec;
-/// use core::ffi::c_void;
-/// use kernel::error::Result;
-/// use kernel::uaccess::{UserPtr, UserSlice};
+/// use core::{convert::Infallible, ffi::c_void};
+/// use kernel::{error::Result, uaccess::{UserPtr, UserSlice}, validate::{Unvalidated, Untrusted, Validate}};
+///
+/// struct AddOne<'a>(&'a mut u8);
+///
+/// impl<'a> Validate<&'a mut Unvalidated<u8>> for AddOne<'a> {
+///     type Err = Infallible;
+///
+///     fn validate(unvalidated: &'a mut Unvalidated<u8>) -> Result<Self, Self::Err> {
+///         // We are not doing any kind of validation here on purpose. After all, we only want to
+///         // increment the value and write it back.
+///         Ok(Self(unvalidated.raw_mut()))
+///     }
+/// }
+///
+/// impl AddOne<'_> {
+///     fn inc(&mut self) {
+///         *self.0 = self.0.wrapping_add(1);
+///     }
+/// }
 ///
 /// fn bytes_add_one(uptr: UserPtr, len: usize) -> Result<()> {
 ///     let (read, mut write) = UserSlice::new(uptr, len).reader_writer();
@@ -58,48 +77,11 @@ pub type UserPtr = usize;
 ///     read.read_all(&mut buf, GFP_KERNEL)?;
 ///
 ///     for b in &mut buf {
-///         *b = b.wrapping_add(1);
+///         b.validate_mut::<AddOne<'_>>()?.inc();
 ///     }
 ///
-///     write.write_slice(&buf)?;
+///     write.write_untrusted_slice(Untrusted::transpose_slice(&buf))?;
 ///     Ok(())
-/// }
-/// ```
-///
-/// Example illustrating a TOCTOU (time-of-check to time-of-use) bug.
-///
-/// ```no_run
-/// use alloc::vec::Vec;
-/// use core::ffi::c_void;
-/// use kernel::error::{code::EINVAL, Result};
-/// use kernel::uaccess::{UserPtr, UserSlice};
-///
-/// /// Returns whether the data in this region is valid.
-/// fn is_valid(uptr: UserPtr, len: usize) -> Result<bool> {
-///     let read = UserSlice::new(uptr, len).reader();
-///
-///     let mut buf = Vec::new();
-///     read.read_all(&mut buf, GFP_KERNEL)?;
-///
-///     todo!()
-/// }
-///
-/// /// Returns the bytes behind this user pointer if they are valid.
-/// fn get_bytes_if_valid(uptr: UserPtr, len: usize) -> Result<Vec<u8>> {
-///     if !is_valid(uptr, len)? {
-///         return Err(EINVAL);
-///     }
-///
-///     let read = UserSlice::new(uptr, len).reader();
-///
-///     let mut buf = Vec::new();
-///     read.read_all(&mut buf, GFP_KERNEL)?;
-///
-///     // THIS IS A BUG! The bytes could have changed since we checked them.
-///     //
-///     // To avoid this kind of bug, don't call `UserSlice::new` multiple
-///     // times with the same address.
-///     Ok(buf)
 /// }
 /// ```
 ///
@@ -130,7 +112,7 @@ impl UserSlice {
     /// Reads the entirety of the user slice, appending it to the end of the provided buffer.
     ///
     /// Fails with [`EFAULT`] if the read happens on a bad address.
-    pub fn read_all(self, buf: &mut Vec<u8>, flags: Flags) -> Result {
+    pub fn read_all(self, buf: &mut Vec<Untrusted<u8>>, flags: Flags) -> Result {
         self.reader().read_all(buf, flags)
     }
 
@@ -218,38 +200,47 @@ impl UserSliceReader {
     /// Fails with [`EFAULT`] if the read happens on a bad address, or if the read goes out of
     /// bounds of this [`UserSliceReader`]. This call may modify `out` even if it returns an error.
     ///
+    /// Returns a reference to the initialized bytes in `out`.
+    ///
     /// # Guarantees
     ///
     /// After a successful call to this method, all bytes in `out` are initialized.
-    pub fn read_raw(&mut self, out: &mut [MaybeUninit<u8>]) -> Result {
-        let len = out.len();
-        let out_ptr = out.as_mut_ptr().cast::<c_void>();
-        if len > self.length {
-            return Err(EFAULT);
-        }
-        let Ok(len_ulong) = c_ulong::try_from(len) else {
-            return Err(EFAULT);
+    pub fn read_raw<'a>(
+        &'a mut self,
+        out: &'a mut Untrusted<[MaybeUninit<u8>]>,
+    ) -> Result<&'a mut Untrusted<[u8]>> {
+        let init = |ptr: *mut [u8]| {
+            let out_ptr = ptr.cast::<c_void>();
+            let len = ptr.len();
+            if len > self.length {
+                return Err(EFAULT);
+            }
+            let Ok(len_ulong) = c_ulong::try_from(len) else {
+                return Err(EFAULT);
+            };
+            // SAFETY: `out_ptr` points into a mutable slice of length `len_ulong`, so we may write
+            // that many bytes to it.
+            let res =
+                unsafe { bindings::copy_from_user(out_ptr, self.ptr as *const c_void, len_ulong) };
+            if res != 0 {
+                return Err(EFAULT);
+            }
+            self.ptr = self.ptr.wrapping_add(len);
+            self.length -= len;
+            Ok(())
         };
-        // SAFETY: `out_ptr` points into a mutable slice of length `len_ulong`, so we may write
-        // that many bytes to it.
-        let res =
-            unsafe { bindings::copy_from_user(out_ptr, self.ptr as *const c_void, len_ulong) };
-        if res != 0 {
-            return Err(EFAULT);
-        }
-        self.ptr = self.ptr.wrapping_add(len);
-        self.length -= len;
-        Ok(())
+        out.write_uninit_slice(unsafe { init_from_closure(init) })
     }
 
     /// Reads raw data from the user slice into a kernel buffer.
     ///
     /// Fails with [`EFAULT`] if the read happens on a bad address, or if the read goes out of
     /// bounds of this [`UserSliceReader`]. This call may modify `out` even if it returns an error.
-    pub fn read_slice(&mut self, out: &mut [u8]) -> Result {
+    pub fn read_slice(&mut self, out: &mut Untrusted<[u8]>) -> Result<&mut Untrusted<[u8]>> {
         // SAFETY: The types are compatible and `read_raw` doesn't write uninitialized bytes to
         // `out`.
-        let out = unsafe { &mut *(out as *mut [u8] as *mut [MaybeUninit<u8>]) };
+        let out =
+            unsafe { &mut *(out as *mut Untrusted<[u8]> as *mut Untrusted<[MaybeUninit<u8>]>) };
         self.read_raw(out)
     }
 
@@ -291,13 +282,15 @@ impl UserSliceReader {
     /// Reads the entirety of the user slice, appending it to the end of the provided buffer.
     ///
     /// Fails with [`EFAULT`] if the read happens on a bad address.
-    pub fn read_all(mut self, buf: &mut Vec<u8>, flags: Flags) -> Result {
+    pub fn read_all(mut self, buf: &mut Vec<Untrusted<u8>>, flags: Flags) -> Result {
         let len = self.length;
-        VecExt::<u8>::reserve(buf, len, flags)?;
+        VecExt::<_>::reserve(buf, len, flags)?;
 
         // The call to `try_reserve` was successful, so the spare capacity is at least `len` bytes
         // long.
-        self.read_raw(&mut buf.spare_capacity_mut()[..len])?;
+        self.read_raw(Untrusted::transpose_slice_uninit_mut(
+            &mut buf.spare_capacity_mut()[..len],
+        ))?;
 
         // SAFETY: Since the call to `read_raw` was successful, so the next `len` bytes of the
         // vector have been initialized.
@@ -333,8 +326,18 @@ impl UserSliceWriter {
     /// bounds of this [`UserSliceWriter`]. This call may modify the associated userspace slice even
     /// if it returns an error.
     pub fn write_slice(&mut self, data: &[u8]) -> Result {
-        let len = data.len();
-        let data_ptr = data.as_ptr().cast::<c_void>();
+        self.write_untrusted_slice(Untrusted::new_ref(data))
+    }
+
+    /// Writes raw data to this user pointer from a kernel buffer.
+    ///
+    /// Fails with [`EFAULT`] if the write happens on a bad address, or if the write goes out of
+    /// bounds of this [`UserSliceWriter`]. This call may modify the associated userspace slice even
+    /// if it returns an error.
+    pub fn write_untrusted_slice(&mut self, data: &Untrusted<[u8]>) -> Result {
+        let data_ptr = (data as *const _) as *const [u8];
+        let len = data_ptr.len();
+        let data_ptr = data_ptr.cast::<c_void>();
         if len > self.length {
             return Err(EFAULT);
         }
