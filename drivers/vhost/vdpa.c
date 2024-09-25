@@ -370,13 +370,11 @@ static long vhost_vdpa_get_config(struct vhost_vdpa *v,
 
 	vdpa_get_config(vdpa, config.off, buf, config.len);
 
-	if (copy_to_user(c->buf, buf, config.len)) {
+	{
+		unsigned long ctu = copy_to_user(c->buf, buf, config.len);
 		kvfree(buf);
-		return -EFAULT;
+		return ctu ? -EFAULT : 0;
 	}
-
-	kvfree(buf);
-	return 0;
 }
 
 static long vhost_vdpa_set_config(struct vhost_vdpa *v,
