@@ -6089,6 +6089,21 @@
 			For more information see Documentation/mm/slub.rst.
 			(slub_nomerge legacy name also accepted for now)
 
+	slub.leak_panic= [MM, SLUB]
+			Enabling slub.leak_panic can monitor the slub usage
+			in real time on the slub allocation path. When the
+			slub occupancy is abnormal, the alarm or panic will
+			be triggered.
+			Default: N
+
+	slub.leak_panic_threshold= [MM, SLUB]
+			Upper limit value of the slub usage, expressed as
+			a percentage of memtotal. When the usage exceeds
+			the set value (threshold * memtotal / 100), the
+			slub_leak_panic function will be trigger. The
+			value setting range is [0, 100].
+			Default: 0
+
 	slram=		[HW,MTD]
 
 	smart2=		[HW]
