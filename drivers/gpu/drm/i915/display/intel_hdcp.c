@@ -1509,7 +1509,7 @@ static int hdcp2_authentication_key_exchange(struct intel_connector *connector)
 	} msgs;
 	const struct intel_hdcp_shim *shim = hdcp->shim;
 	size_t size;
-	int ret;
+	int ret, i;
 
 	/* Init for seq_num */
 	hdcp->seq_num_v = 0;
@@ -1519,13 +1519,25 @@ static int hdcp2_authentication_key_exchange(struct intel_connector *connector)
 	if (ret < 0)
 		return ret;
 
-	ret = shim->write_2_2_msg(connector, &msgs.ake_init,
-				  sizeof(msgs.ake_init));
-	if (ret < 0)
-		return ret;
+	for (i = 0; i <= 10; i++) {
+		if (!intel_hdcp2_get_capability(connector)) {
+			msleep(50);
+			continue;
+		}
 
-	ret = shim->read_2_2_msg(connector, HDCP_2_2_AKE_SEND_CERT,
-				 &msgs.send_cert, sizeof(msgs.send_cert));
+		ret = shim->write_2_2_msg(connector, &msgs.ake_init,
+					  sizeof(msgs.ake_init));
+		if (ret < 0)
+			continue;
+
+		ret = shim->read_2_2_msg(connector, HDCP_2_2_AKE_SEND_CERT,
+					 &msgs.send_cert, sizeof(msgs.send_cert));
+		if (ret < 0)
+			continue;
+		else
+			break;
+	}
+
 	if (ret < 0)
 		return ret;
 
