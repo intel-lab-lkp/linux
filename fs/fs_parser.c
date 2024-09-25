@@ -156,6 +156,9 @@ int fs_lookup_param(struct fs_context *fc,
 		f = getname_kernel(param->string);
 		if (IS_ERR(f))
 			return PTR_ERR(f);
+		/* for relative path */
+		if (f->name[0] != '/')
+			param->dirfd = AT_FDCWD;
 		put_f = true;
 		break;
 	case fs_value_is_filename:

@@ -1744,7 +1744,7 @@ static const struct fs_parameter_spec ext4_param_specs[] = {
 	fsparam_u32	("min_batch_time",	Opt_min_batch_time),
 	fsparam_u32	("max_batch_time",	Opt_max_batch_time),
 	fsparam_u32	("journal_dev",		Opt_journal_dev),
-	fsparam_bdev	("journal_path",	Opt_journal_path),
+	fsparam_string	("journal_path",	Opt_journal_path),
 	fsparam_flag	("journal_checksum",	Opt_journal_checksum),
 	fsparam_flag	("nojournal_checksum",	Opt_nojournal_checksum),
 	fsparam_flag	("journal_async_commit",Opt_journal_async_commit),
@@ -2301,7 +2301,7 @@ static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			return -EINVAL;
 		}
 
-		error = fs_lookup_param(fc, param, 1, LOOKUP_FOLLOW, &path);
+		error = fs_lookup_param(fc, param, true, LOOKUP_FOLLOW, &path);
 		if (error) {
 			ext4_msg(NULL, KERN_ERR, "error: could not find "
 				 "journal device path");
