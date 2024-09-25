@@ -453,15 +453,19 @@ static void ufshcd_add_command_trace(struct ufs_hba *hba, unsigned int tag,
 
 	opcode = cmd->cmnd[0];
 
-	if (opcode == READ_10 || opcode == WRITE_10) {
+	if (opcode == READ_10 || opcode == READ_16 ||
+		opcode == WRITE_10 || opcode == WRITE_16) {
 		/*
-		 * Currently we only fully trace read(10) and write(10) commands
+		 * Currently we only fully trace the following commands,
+		 * read(10),read(16),write(10), and write(16)
 		 */
 		transfer_len =
 		       be32_to_cpu(lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
 		lba = scsi_get_lba(cmd);
 		if (opcode == WRITE_10)
 			group_id = lrbp->cmd->cmnd[6];
+		if (opcode == WRITE_16)
+			group_id = lrbp->cmd->cmnd[14];
 	} else if (opcode == UNMAP) {
 		/*
 		 * The number of Bytes to be unmapped beginning with the lba.
