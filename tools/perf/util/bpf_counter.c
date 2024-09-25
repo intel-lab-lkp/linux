@@ -425,18 +425,19 @@ static int bperf_reload_leader_program(struct evsel *evsel, int attr_map_fd,
 	diff_map_fd = bpf_map__fd(skel->maps.diff_readings);
 	entry->link_id = bpf_link_get_id(link_fd);
 	entry->diff_map_id = bpf_map_get_id(diff_map_fd);
-	err = bpf_map_update_elem(attr_map_fd, &evsel->core.attr, entry, BPF_ANY);
-	assert(err == 0);
-
-	evsel->bperf_leader_link_fd = bpf_link_get_fd_by_id(entry->link_id);
-	assert(evsel->bperf_leader_link_fd >= 0);
-
 	/*
 	 * save leader_skel for install_pe, which is called within
 	 * following evsel__open_per_cpu call
 	 */
 	evsel->leader_skel = skel;
-	evsel__open_per_cpu(evsel, all_cpu_map, -1);
+	if (!evsel__open_per_cpu(evsel, all_cpu_map, -1))
+		entry->supported = true;
+
+	err = bpf_map_update_elem(attr_map_fd, &evsel->core.attr, entry, BPF_ANY);
+	assert(err == 0);
+
+	evsel->bperf_leader_link_fd = bpf_link_get_fd_by_id(entry->link_id);
+	assert(evsel->bperf_leader_link_fd >= 0);
 
 out:
 	bperf_leader_bpf__destroy(skel);
@@ -446,7 +447,7 @@ out:
 
 static int bperf__load(struct evsel *evsel, struct target *target)
 {
-	struct perf_event_attr_map_entry entry = {0xffffffff, 0xffffffff};
+	struct perf_event_attr_map_entry entry = {0xffffffff, 0xffffffff, false};
 	int attr_map_fd, diff_map_fd = -1, err;
 	enum bperf_filter_type filter_type;
 	__u32 filter_entry_cnt, i;
@@ -494,6 +495,7 @@ static int bperf__load(struct evsel *evsel, struct target *target)
 		err = -1;
 		goto out;
 	}
+	evsel->supported = entry.supported;
 	/*
 	 * The bpf_link holds reference to the leader program, and the
 	 * leader program holds reference to the maps. Therefore, if
