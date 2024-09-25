@@ -2811,8 +2811,7 @@ static int lpuart_global_reset(struct lpuart_port *sport)
 					      port)) {
 				dev_warn(sport->port.dev,
 					 "timeout waiting for transmit engine to complete\n");
-				clk_disable_unprepare(sport->ipg_clk);
-				return 0;
+				goto disable_unprepare_clk;
 			}
 		}
 
@@ -2828,7 +2827,7 @@ static int lpuart_global_reset(struct lpuart_port *sport)
 			lpuart32_write(port, ctrl, UARTCTRL);
 		}
 	}
-
+disable_unprepare_clk:
 	clk_disable_unprepare(sport->ipg_clk);
 	return 0;
 }
