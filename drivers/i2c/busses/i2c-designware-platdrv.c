@@ -307,6 +307,8 @@ static int dw_i2c_plat_probe(struct platform_device *pdev)
 
 	reset_control_deassert(dev->rst);
 
+	i2c_dw_parse_of(dev);
+
 	t = &dev->timings;
 	i2c_parse_fw_timings(&pdev->dev, t, false);
 

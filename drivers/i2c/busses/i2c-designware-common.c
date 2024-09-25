@@ -332,6 +332,22 @@ void i2c_dw_adjust_bus_speed(struct dw_i2c_dev *dev)
 }
 EXPORT_SYMBOL_GPL(i2c_dw_adjust_bus_speed);
 
+void i2c_dw_parse_of(struct dw_i2c_dev *dev)
+{
+	int ret;
+
+	ret = device_property_read_u32(dev->dev, "bus-loading",
+				       &dev->bus_loading);
+	if (ret || dev->bus_loading < 400)
+		dev->bus_loading = 100;
+	else
+		dev->bus_loading = 400;
+
+	dev->clk_freq_optimized =
+		device_property_read_bool(dev->dev, "clk-freq-optimized");
+
+}
+
 u32 i2c_dw_scl_hcnt(u32 ic_clk, u32 tSYMBOL, u32 tf, int cond, int offset)
 {
 	/*

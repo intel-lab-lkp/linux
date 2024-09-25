@@ -140,16 +140,36 @@ static int i2c_dw_set_timings_master(struct dw_i2c_dev *dev)
 			dev->hs_hcnt = 0;
 			dev->hs_lcnt = 0;
 		} else if (!dev->hs_hcnt || !dev->hs_lcnt) {
+			u32 t_high, t_low;
+
+			if (dev->clk_freq_optimized) {
+				if (dev->bus_loading == 400) {
+					t_high = 160;
+					t_low = 320;
+				} else {
+					t_high = 60;
+					t_low = 120;
+				}
+			} else {
+				if (dev->bus_loading == 400) {
+					t_high = 120;
+					t_low = 320;
+				} else {
+					t_high = 60;
+					t_low = 160;
+				}
+			}
+
 			ic_clk = i2c_dw_clk_rate(dev);
 			dev->hs_hcnt =
 				i2c_dw_scl_hcnt(ic_clk,
-						160,	/* tHIGH = 160 ns */
+						t_high,
 						sda_falling_time,
 						0,	/* DW default */
 						0);	/* No offset */
 			dev->hs_lcnt =
 				i2c_dw_scl_lcnt(ic_clk,
-						320,	/* tLOW = 320 ns */
+						t_low,
 						scl_falling_time,
 						0);	/* No offset */
 		}
