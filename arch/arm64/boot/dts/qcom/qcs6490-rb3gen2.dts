@@ -792,6 +792,7 @@
 
 &wifi {
 	memory-region = <&wlan_fw_mem>;
+	status = "okay";
 };
 
 /* PINCTRL - ADDITIONS TO NODES IN PARENT DEVICE TREE FILES */
