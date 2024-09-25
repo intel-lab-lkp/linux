@@ -1926,7 +1926,10 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		return -ENXIO;
 	}
 
-	if (cxled->cxld.target_type != cxlr->type) {
+	/* Set the type of region to that of the first endpoint */
+	if (cxlr->type == CXL_DECODER_INVALID) {
+		cxlr->type = cxled->cxld.target_type;
+	} else if (cxled->cxld.target_type != cxlr->type) {
 		dev_dbg(&cxlr->dev, "%s:%s type mismatch: %d vs %d\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
 			cxled->cxld.target_type, cxlr->type);
@@ -2482,7 +2485,6 @@ static int cxl_region_calculate_adistance(struct notifier_block *nb,
  * @cxlrd: root decoder
  * @id: memregion id to create, or memregion_free() on failure
  * @mode: mode for the endpoint decoders of this region
- * @type: select whether this is an expander or accelerator (type-2 or type-3)
  *
  * This is the second step of region initialization. Regions exist within an
  * address space which is mapped by a @cxlrd.
@@ -2492,8 +2494,7 @@ static int cxl_region_calculate_adistance(struct notifier_block *nb,
  */
 static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 					      int id,
-					      enum cxl_decoder_mode mode,
-					      enum cxl_decoder_type type)
+					      enum cxl_decoder_mode mode)
 {
 	struct cxl_port *port = to_cxl_port(cxlrd->cxlsd.cxld.dev.parent);
 	struct cxl_region *cxlr;
@@ -2504,7 +2505,7 @@ static struct cxl_region *devm_cxl_add_region(struct cxl_root_decoder *cxlrd,
 	if (IS_ERR(cxlr))
 		return cxlr;
 	cxlr->mode = mode;
-	cxlr->type = type;
+	cxlr->type = CXL_DECODER_INVALID;
 
 	dev = &cxlr->dev;
 	rc = dev_set_name(dev, "region%d", id);
@@ -2576,7 +2577,7 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 		return ERR_PTR(-EBUSY);
 	}
 
-	return devm_cxl_add_region(cxlrd, id, mode, CXL_DECODER_EXPANDER);
+	return devm_cxl_add_region(cxlrd, id, mode);
 }
 
 static ssize_t create_pmem_region_store(struct device *dev,
