@@ -397,17 +397,13 @@ int kasan_populate_vmalloc(unsigned long addr, unsigned long size)
 static int kasan_depopulate_vmalloc_pte(pte_t *ptep, unsigned long addr,
 					void *unused)
 {
+	pte_t orig_pte = ptep_get_and_clear(&init_mm, addr, ptep);
 	unsigned long page;
 
-	page = (unsigned long)__va(pte_pfn(ptep_get(ptep)) << PAGE_SHIFT);
-
-	spin_lock(&init_mm.page_table_lock);
-
-	if (likely(!pte_none(ptep_get(ptep)))) {
-		pte_clear(&init_mm, addr, ptep);
+	if (likely(!pte_none(orig_pte))) {
+		page = (unsigned long)__va(pte_pfn(orig_pte) << PAGE_SHIFT);
 		free_page(page);
 	}
-	spin_unlock(&init_mm.page_table_lock);
 
 	return 0;
 }
