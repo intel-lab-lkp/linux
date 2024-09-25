@@ -3,6 +3,7 @@
  * Copyright (c) 2021 MediaTek Inc.
  */
 
+#include <drm/drm_blend.h>
 #include <drm/drm_fourcc.h>
 #include <linux/clk.h>
 #include <linux/component.h>
@@ -230,6 +231,13 @@ void mtk_mdp_rdma_config(struct device *dev, struct mtk_mdp_rdma_cfg *cfg,
 			   MDP_RDMA_MF_CLIP_SIZE, FLD_MF_CLIP_W);
 	mtk_ddp_write_mask(cmdq_pkt, cfg->height << 16, &priv->cmdq_reg, priv->regs,
 			   MDP_RDMA_MF_CLIP_SIZE, FLD_MF_CLIP_H);
+}
+
+const u32 mtk_mdp_rdma_get_blend_modes(struct device *dev)
+{
+	return BIT(DRM_MODE_BLEND_PREMULTI) |
+	       BIT(DRM_MODE_BLEND_COVERAGE) |
+	       BIT(DRM_MODE_BLEND_PIXEL_NONE);
 }
 
 const u32 *mtk_mdp_rdma_get_formats(struct device *dev)
