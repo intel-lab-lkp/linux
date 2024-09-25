@@ -450,24 +450,17 @@ static int eem_unwrap(struct gether *port,
 
 				ep = port->in_ep;
 				req = usb_ep_alloc_request(ep, GFP_ATOMIC);
-				if (!req) {
-					dev_kfree_skb_any(skb2);
-					goto next;
-				}
+				if (!req)
+					goto free_skb;
 
 				req->buf = kmalloc(skb2->len, GFP_KERNEL);
-				if (!req->buf) {
-					usb_ep_free_request(ep, req);
-					dev_kfree_skb_any(skb2);
-					goto next;
-				}
+				if (!req->buf)
+					goto free_request;
 
 				ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
 				if (!ctx) {
 					kfree(req->buf);
-					usb_ep_free_request(ep, req);
-					dev_kfree_skb_any(skb2);
-					goto next;
+					goto free_request;
 				}
 				ctx->skb = skb2;
 				ctx->ep = ep;
@@ -536,10 +529,9 @@ static int eem_unwrap(struct gether *port,
 						NET_IP_ALIGN,
 						0,
 						GFP_ATOMIC);
-			if (unlikely(!skb3)) {
-				dev_kfree_skb_any(skb2);
-				goto next;
-			}
+			if (unlikely(!skb3))
+				goto free_skb;
+
 			dev_kfree_skb_any(skb2);
 			skb_queue_tail(list, skb3);
 		}
@@ -550,6 +542,12 @@ next:
 error:
 	dev_kfree_skb_any(skb);
 	return status;
+
+free_request:
+	usb_ep_free_request(ep, req);
+free_skb:
+	dev_kfree_skb_any(skb2);
+	goto next;
 }
 
 static inline struct f_eem_opts *to_f_eem_opts(struct config_item *item)
