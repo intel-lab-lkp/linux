@@ -27,15 +27,20 @@
 /*
  * Flags for msync
  */
+#ifndef MS_ASYNC /* different order on alpha and parisc */
 #define MS_ASYNC	1		/* sync memory asynchronously */
 #define MS_INVALIDATE	2		/* invalidate the caches */
 #define MS_SYNC		4		/* synchronous memory sync */
+#endif
 
 #define MADV_NORMAL	0		/* no further special treatment */
 #define MADV_RANDOM	1		/* expect random page references */
 #define MADV_SEQUENTIAL	2		/* expect sequential page references */
 #define MADV_WILLNEED	3		/* will need these pages */
+/* 4 through 6 are different on alpha */
+#ifndef MADV_DONTNEED
 #define MADV_DONTNEED	4		/* don't need these pages */
+#endif
 
 /* common parameters: try to keep these consistent across architectures */
 #define MADV_FREE	8		/* free pages only if memory pressure */
