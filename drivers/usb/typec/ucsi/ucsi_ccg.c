@@ -306,14 +306,14 @@ static int ccg_write(struct ucsi_ccg *uc, u16 rab, const u8 *data, u32 len)
 	status = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
 	if (status < 0) {
 		dev_err(uc->dev, "i2c_transfer failed %d\n", status);
-		pm_runtime_put_sync(uc->dev);
-		kfree(buf);
-		return status;
+		goto put_sync;
 	}
 
+	status = 0;
+put_sync:
 	pm_runtime_put_sync(uc->dev);
 	kfree(buf);
-	return 0;
+	return status;
 }
 
 static int ccg_op_region_update(struct ucsi_ccg *uc, u32 cci)
