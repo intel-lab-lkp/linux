@@ -255,6 +255,17 @@ config SLUB_TINY
 
 	   If unsure, say N.
 
+config SLUB_LEAK_PANIC
+	bool "Trigger panic when slub leaks"
+	default y
+	help
+	  Detect slub leaks by monitoring its usage in real time on the page
+	  allocation path of the slub. When the slub occupancy exceeds the
+	  user-set value, it is considered that the slub is leaking at this
+	  time, and a panic operation will be triggered immediately. Uers
+	  can enable and set leak threshold by using the kernel command line
+	  parameters "slub.leak_panic" and "slub.leak_panic_threshold".
+
 config SLAB_MERGE_DEFAULT
 	bool "Allow slab caches to be merged"
 	default y

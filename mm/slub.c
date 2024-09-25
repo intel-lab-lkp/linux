@@ -42,6 +42,9 @@
 #include <kunit/test.h>
 #include <kunit/test-bug.h>
 #include <linux/sort.h>
+#ifdef CONFIG_SLUB_LEAK_PANIC
+#include <linux/vmstat.h>
+#endif
 
 #include <linux/debugfs.h>
 #include <trace/events/kmem.h>
@@ -217,6 +220,15 @@ DEFINE_STATIC_KEY_TRUE(slub_debug_enabled);
 DEFINE_STATIC_KEY_FALSE(slub_debug_enabled);
 #endif
 #endif		/* CONFIG_SLUB_DEBUG */
+
+/* Internal slub_leak_panic definitions */
+#ifdef CONFIG_SLUB_LEAK_PANIC
+#define K(x) ((x) << (PAGE_SHIFT-10))
+static bool __read_mostly slub_leak_panic_enabled;
+static unsigned int __read_mostly slub_leak_panic_threshold;
+static long max_slab_count, temp_slab_count;
+#endif
+
 
 /* Structure holding parameters for get_partial() call chain */
 struct partial_context {
@@ -2333,6 +2345,21 @@ static inline struct slab *alloc_slab_page(gfp_t flags, int node,
 	if (folio_is_pfmemalloc(folio))
 		slab_set_pfmemalloc(slab);
 
+#ifdef CONFIG_SLUB_LEAK_PANIC
+	if (likely(slub_leak_panic_enabled) && slub_leak_panic_threshold > 0) {
+		max_slab_count = K(totalram_pages()) * slub_leak_panic_threshold / 100;
+		temp_slab_count = K(global_node_page_state_pages(NR_SLAB_RECLAIMABLE_B))
+				+ K(global_node_page_state_pages(NR_SLAB_UNRECLAIMABLE_B))
+				+ K(1 << order);
+		if (temp_slab_count > max_slab_count)
+			panic("SLAB LEAK: %s(temp_count %6luKB > max_count %6luKB):\n"
+				"%s gfp_mask=%#x(%pGg), order=%d kB, oom_score_adj=%d\n",
+				__func__, temp_slab_count, max_slab_count,
+				current->comm, flags, &flags, order,
+				current->signal->oom_score_adj);
+	}
+#endif
+
 	return slab;
 }
 
@@ -4109,6 +4136,19 @@ static void *___kmalloc_large_node(size_t size, gfp_t flags, int node)
 		ptr = folio_address(folio);
 		lruvec_stat_mod_folio(folio, NR_SLAB_UNRECLAIMABLE_B,
 				      PAGE_SIZE << order);
+#ifdef CONFIG_SLUB_LEAK_PANIC
+		if (likely(slub_leak_panic_enabled) && slub_leak_panic_threshold > 0) {
+			max_slab_count = K(totalram_pages()) * slub_leak_panic_threshold / 100;
+			temp_slab_count = K(global_node_page_state_pages(NR_SLAB_RECLAIMABLE_B))
+					+ K(global_node_page_state_pages(NR_SLAB_UNRECLAIMABLE_B));
+			if (temp_slab_count > max_slab_count)
+				panic("SLAB LEAK: %s(temp_count %6luKB > max_count %6luKB):\n"
+					"%s gfp_mask=%#x(%pGg), order=%d kB, oom_score_adj=%d\n",
+					__func__, temp_slab_count, max_slab_count,
+					current->comm, flags, &flags, order,
+					current->signal->oom_score_adj);
+		}
+#endif
 	}
 
 	ptr = kasan_kmalloc_large(ptr, size, flags);
@@ -7307,3 +7347,39 @@ void get_slabinfo(struct kmem_cache *s, struct slabinfo *sinfo)
 	sinfo->cache_order = oo_order(s->oo);
 }
 #endif /* CONFIG_SLUB_DEBUG */
+
+/*
+ * The /sys/module/slub ABI
+ */
+#ifdef CONFIG_SLUB_LEAK_PANIC
+/*
+ * What:          /sys/module/slub/parameters/leak_panic
+ *                /sys/module/slub/parameters/leak_panic_threshold
+ * Date:          Sep 2024
+ * KernelVersion: v6.6+
+ * Description:   Used for slub memory leak check. When the user
+ *                successfully allocates the slub page, it also performs
+ *                statistics on the total slub usage in the system.
+ *                When the usage exceeds the set value
+ *                (threshold * memtotal / 100), it is considered that
+ *                there is a risk of slub leakage in the system at this time.
+ *                A panic operation will be triggered.
+ * Users:         userspace
+ */
+MODULE_PARM_DESC(leak_panic, "Disable/Enable slub_leak_panic");
+module_param_named(leak_panic, slub_leak_panic_enabled, bool, 0644);
+
+static int slub_leak_panic_threshold_set(const char *val, const struct kernel_param *kp)
+{
+	return param_set_uint_minmax(val, kp, 0, 100);
+}
+
+static const struct kernel_param_ops slub_leak_panic_threshold_ops = {
+	.set = slub_leak_panic_threshold_set,
+	.get = param_get_uint,
+};
+
+MODULE_PARM_DESC(leak_panic_threshold,
+		"Upper limit value of slub, expressed as a percentage of memtotal (0 ~ 100)");
+module_param_cb(leak_panic_threshold,
+		&slub_leak_panic_threshold_ops, &slub_leak_panic_threshold, 0644);
