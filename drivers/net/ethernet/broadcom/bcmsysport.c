@@ -2331,11 +2331,15 @@ static const struct net_device_ops bcm_sysport_netdev_ops = {
 static int bcm_sysport_map_queues(struct net_device *dev,
 				  struct net_device *slave_dev)
 {
-	struct dsa_port *dp = dsa_port_from_netdev(slave_dev);
 	struct bcm_sysport_priv *priv = netdev_priv(dev);
 	struct bcm_sysport_tx_ring *ring;
 	unsigned int num_tx_queues;
 	unsigned int q, qp, port;
+	struct dsa_port *dp;
+
+	dp = dsa_port_from_netdev(slave_dev);
+	if (IS_ERR(dp))
+		return PTR_ERR(dp);
 
 	/* We can't be setting up queue inspection for non directly attached
 	 * switches
@@ -2386,11 +2390,15 @@ static int bcm_sysport_map_queues(struct net_device *dev,
 static int bcm_sysport_unmap_queues(struct net_device *dev,
 				    struct net_device *slave_dev)
 {
-	struct dsa_port *dp = dsa_port_from_netdev(slave_dev);
 	struct bcm_sysport_priv *priv = netdev_priv(dev);
 	struct bcm_sysport_tx_ring *ring;
 	unsigned int num_tx_queues;
 	unsigned int q, qp, port;
+	struct dsa_port *dp;
+
+	dp = dsa_port_from_netdev(slave_dev);
+	if (IS_ERR(dp))
+		return PTR_ERR(dp));
 
 	port = dp->index;
 
