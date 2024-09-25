@@ -670,23 +670,19 @@ static void update_property_block(struct tb_xdomain *xd)
 		ret = tb_property_format_dir(dir, NULL, 0);
 		if (ret < 0) {
 			dev_warn(&xd->dev, "local property block creation failed\n");
-			tb_property_free_dir(dir);
-			goto out_unlock;
+			goto out_free_dir;
 		}
 
 		block_len = ret;
 		block = kcalloc(block_len, sizeof(*block), GFP_KERNEL);
-		if (!block) {
-			tb_property_free_dir(dir);
-			goto out_unlock;
-		}
+		if (!block)
+			goto out_free_dir;
 
 		ret = tb_property_format_dir(dir, block, block_len);
 		if (ret) {
 			dev_warn(&xd->dev, "property block generation failed\n");
-			tb_property_free_dir(dir);
 			kfree(block);
-			goto out_unlock;
+			goto out_free_dir;
 		}
 
 		tb_property_free_dir(dir);
@@ -701,6 +697,11 @@ static void update_property_block(struct tb_xdomain *xd)
 out_unlock:
 	mutex_unlock(&xd->lock);
 	mutex_unlock(&xdomain_lock);
+	return;
+
+out_free_dir:
+	tb_property_free_dir(dir);
+	goto out_unlock;
 }
 
 static void start_handshake(struct tb_xdomain *xd)
