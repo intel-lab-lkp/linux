@@ -61,6 +61,7 @@ examples:
       #address-cells = <1>;
       #size-cells = <0>;
       #interrupt-cells = <4>;
+      interrupt-controller;
 
       charger@1000 {
         compatible = "qcom,pmi8998-charger";
