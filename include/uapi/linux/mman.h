@@ -18,6 +18,11 @@
 #define MAP_PRIVATE	0x02		/* Changes are private */
 #define MAP_SHARED_VALIDATE 0x03	/* share + validate extension flags */
 #define MAP_DROPPABLE	0x08		/* Zero memory under memory pressure. */
+/*
+ * 0x10 through 0x200000 are used for architecture specific definitions
+ * in asm/mman.h, numbers 0x400000 through 0x2000000 are currently
+ * available on all architectures.
+ */
 
 /*
  * Huge page size encoding when MAP_HUGETLB is specified, and a huge page
