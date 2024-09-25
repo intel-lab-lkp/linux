@@ -205,7 +205,6 @@ static void bdw_set_fifo_underrun_reporting(struct drm_device *dev,
 					    enum pipe pipe, bool enable)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
-	u32 mask = gen8_de_pipe_underrun_mask(dev_priv);
 
 	if (enable) {
 		if (DISPLAY_VER(dev_priv) >= 11)
@@ -213,9 +212,9 @@ static void bdw_set_fifo_underrun_reporting(struct drm_device *dev,
 				       ICL_PIPESTATUS(dev_priv, pipe),
 				       icl_pipe_status_underrun_mask(dev_priv));
 
-		bdw_enable_pipe_irq(dev_priv, pipe, mask);
+		bdw_enable_pipe_irq(dev_priv, pipe, GEN8_PIPE_FIFO_UNDERRUN);
 	} else {
-		bdw_disable_pipe_irq(dev_priv, pipe, mask);
+		bdw_disable_pipe_irq(dev_priv, pipe, GEN8_PIPE_FIFO_UNDERRUN);
 	}
 }
 
