@@ -36,6 +36,8 @@ void perf_evlist__init(struct perf_evlist *evlist)
 static void __perf_evlist__propagate_maps(struct perf_evlist *evlist,
 					  struct perf_evsel *evsel)
 {
+	struct perf_cpu_map *old_all_cpus;
+
 	if (evsel->system_wide) {
 		/* System wide: set the cpu map of the evsel to all online CPUs. */
 		perf_cpu_map__put(evsel->cpus);
@@ -75,7 +77,9 @@ static void __perf_evlist__propagate_maps(struct perf_evlist *evlist,
 		evsel->threads = perf_thread_map__get(evlist->threads);
 	}
 
+	old_all_cpus = evlist->all_cpus;
 	evlist->all_cpus = perf_cpu_map__merge(evlist->all_cpus, evsel->cpus);
+	perf_cpu_map__put(old_all_cpus);
 }
 
 static void perf_evlist__propagate_maps(struct perf_evlist *evlist)
