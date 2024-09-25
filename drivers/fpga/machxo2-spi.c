@@ -166,7 +166,7 @@ static int machxo2_cleanup(struct fpga_manager *mgr)
 
 	return 0;
 fail:
-	dev_err(&mgr->dev, "Cleanup failed\n");
+	dev_err(&mgr->dev, "Cleanup failed, ret=%d\n", ret);
 
 	return ret;
 }
