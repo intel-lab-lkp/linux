@@ -463,7 +463,6 @@ static void qcom_glink_handle_intent_req_ack(struct qcom_glink *glink,
 
 static void qcom_glink_intent_req_abort(struct glink_channel *channel)
 {
-	WRITE_ONCE(channel->intent_req_result, 0);
 	wake_up_all(&channel->intent_req_wq);
 }
 
@@ -1440,8 +1439,9 @@ static int qcom_glink_request_intent(struct qcom_glink *glink,
 		goto unlock;
 
 	ret = wait_event_timeout(channel->intent_req_wq,
-				 READ_ONCE(channel->intent_req_result) >= 0 &&
-				 READ_ONCE(channel->intent_received),
+				 (READ_ONCE(channel->intent_req_result) >= 0 &&
+				 READ_ONCE(channel->intent_received)) ||
+				 glink->abort_tx,
 				 10 * HZ);
 	if (!ret) {
 		dev_err(glink->dev, "intent request timed out\n");
