@@ -34,8 +34,10 @@ void __cfg80211_ibss_joined(struct net_device *dev, const u8 *bssid,
 	bss = cfg80211_get_bss(wdev->wiphy, channel, bssid, NULL, 0,
 			       IEEE80211_BSS_TYPE_IBSS, IEEE80211_PRIVACY_ANY);
 
-	if (WARN_ON(!bss))
+	if (!bss) {
+		pr_warn("cfg80211: cfg80211_bss with bssid %s not found.\n", bssid);
 		return;
+	}
 
 	if (wdev->u.ibss.current_bss) {
 		cfg80211_unhold_bss(wdev->u.ibss.current_bss);
