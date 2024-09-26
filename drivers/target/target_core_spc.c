@@ -294,7 +294,7 @@ check_t10_vend_desc:
 
 		tpg = lun->lun_tpg;
 		/*
-		 * Relative target port identifer, see spc4r17
+		 * Relative target port identifier, see spc4r17
 		 * section 7.7.3.7
 		 *
 		 * Get the PROTOCOL IDENTIFIER as defined by spc4r17
@@ -305,7 +305,7 @@ check_t10_vend_desc:
 		buf[off] = 0x80; /* Set PIV=1 */
 		/* Set ASSOCIATION == target port: 01b */
 		buf[off] |= 0x10;
-		/* DESIGNATOR TYPE == Relative target port identifer */
+		/* DESIGNATOR TYPE == Relative target port identifier */
 		buf[off++] |= 0x4;
 		off++; /* Skip over Reserved */
 		buf[off++] = 4; /* DESIGNATOR LENGTH */
@@ -388,7 +388,7 @@ check_scsi_name:
 		buf[off++] |= 0x8;
 		off += 2; /* Skip over Reserved and length */
 		/*
-		 * SCSI name string identifer containing, $FABRIC_MOD
+		 * SCSI name string identifier containing, $FABRIC_MOD
 		 * dependent information.  For LIO-Target and iSCSI
 		 * Target Port, this means "<iSCSI name>,t,0x<TPGT> in
 		 * UTF-8 encoding.
@@ -428,7 +428,7 @@ check_scsi_name:
 		buf[off++] |= 0x8;
 		off += 2; /* Skip over Reserved and length */
 		/*
-		 * SCSI name string identifer containing, $FABRIC_MOD
+		 * SCSI name string identifier containing, $FABRIC_MOD
 		 * dependent information.  For LIO-Target and iSCSI
 		 * Target Port, this means "<iSCSI name>" in
 		 * UTF-8 encoding.

@@ -589,7 +589,7 @@ int iscsi_login_post_auth_non_zero_tsih(
 	 * We use the original ExpStatSN sent in the first login request
 	 * to acknowledge commands for the failed connection.
 	 *
-	 * Also note that an explict logout may have already been sent,
+	 * Also note that an explicit logout may have already been sent,
 	 * but the response may not be sent due to additional connection
 	 * loss.
 	 */

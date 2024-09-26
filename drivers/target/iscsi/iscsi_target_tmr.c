@@ -449,7 +449,7 @@ static int iscsit_task_reassign_complete(
 /*
  *	Handles special after-the-fact actions related to TMRs.
  *	Right now the only one that its really needed for is
- *	connection recovery releated TASK_REASSIGN.
+ *	connection recovery related TASK_REASSIGN.
  */
 int iscsit_tmr_post_handler(struct iscsit_cmd *cmd, struct iscsit_conn *conn)
 {

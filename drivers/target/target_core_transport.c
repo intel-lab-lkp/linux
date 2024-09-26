@@ -2146,7 +2146,7 @@ void __target_execute_cmd(struct se_cmd *cmd, bool do_checks)
 		/*
 		 * Check for an existing UNIT ATTENTION condition after
 		 * target_handle_task_attr() has done SAM task attr
-		 * checking, and possibly have already defered execution
+		 * checking, and possibly have already deferred execution
 		 * out to target_restart_delayed_cmds() context.
 		 */
 		ret = target_scsi3_ua_check(cmd);
@@ -3447,7 +3447,7 @@ static const struct sense_detail sense_detail_table[] = {
 		 * REGISTER AND MOVE service actionis attempted,
 		 * but there are insufficient device server resources to complete the
 		 * operation, then the command shall be terminated with CHECK CONDITION
-		 * status, with the sense key set to ILLEGAL REQUEST,and the additonal
+		 * status, with the sense key set to ILLEGAL REQUEST,and the additional
 		 * sense code set to INSUFFICIENT REGISTRATION RESOURCES.
 		 */
 		.key = ILLEGAL_REQUEST,

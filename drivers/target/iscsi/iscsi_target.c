@@ -108,7 +108,7 @@ void iscsit_put_tiqn_for_login(struct iscsi_tiqn *tiqn)
 
 /*
  * Note that IQN formatting is expected to be done in userspace, and
- * no explict IQN format checks are done here.
+ * no explicit IQN format checks are done here.
  */
 struct iscsi_tiqn *iscsit_add_tiqn(unsigned char *buf)
 {
@@ -1033,7 +1033,7 @@ int iscsit_setup_scsi_cmd(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 		 *  Expected Data Transfer Length and/or Bidirectional Read
 		 *  Expected Data Transfer Length are 0"
 		 *
-		 * For this case, go ahead and clear the unnecssary bits
+		 * For this case, go ahead and clear the unnecessary bits
 		 * to avoid any confusion with ->data_direction.
 		 */
 		hdr->flags &= ~ISCSI_FLAG_CMD_READ;
@@ -4591,7 +4591,7 @@ static void iscsit_logout_post_handler_closesession(
 	/*
 	 * Traditional iscsi/tcp will invoke this logic from TX thread
 	 * context during session logout, so clear tx_thread_active and
-	 * sleep if iscsit_close_connection() has not already occured.
+	 * sleep if iscsit_close_connection() has not already occurred.
 	 *
 	 * Since iser-target invokes this logic from it's own workqueue,
 	 * always sleep waiting for RX/TX thread shutdown to complete

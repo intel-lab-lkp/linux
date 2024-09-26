@@ -95,7 +95,7 @@ extern void iscsi_set_session_parameters(struct iscsi_sess_ops *,
 #define OFMARKINT			"OFMarkInt"
 
 /*
- * Parameter names of iSCSI Extentions for RDMA (iSER).  See RFC-5046
+ * Parameter names of iSCSI Extensions for RDMA (iSER).  See RFC-5046
  */
 #define RDMAEXTENSIONS			"RDMAExtensions"
 #define INITIATORRECVDATASEGMENTLENGTH	"InitiatorRecvDataSegmentLength"

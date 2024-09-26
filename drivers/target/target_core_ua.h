@@ -5,7 +5,7 @@
 #include <target/target_core_base.h>
 
 /*
- * From spc4r17, Table D.1: ASC and ASCQ Assignement
+ * From spc4r17, Table D.1: ASC and ASCQ Assignment
  */
 #define ASCQ_29H_POWER_ON_RESET_OR_BUS_DEVICE_RESET_OCCURED	0x00
 #define ASCQ_29H_POWER_ON_OCCURRED				0x01

@@ -343,7 +343,7 @@ static int iscsit_dataout_check_datasn(
 
 	/*
 	 * Considering the target has no method of re-requesting DataOUT
-	 * by DataSN, if we receieve a greater DataSN than expected we
+	 * by DataSN, if we receive a greater DataSN than expected we
 	 * assume the functions for DataPDUInOrder=[Yes,No] below will
 	 * handle it.
 	 *
@@ -394,7 +394,7 @@ static int iscsit_dataout_pre_datapduinorder_yes(
 
 	/*
 	 * For DataSequenceInOrder=Yes: If the offset is greater than the global
-	 * DataPDUInOrder=Yes offset counter in struct iscsit_cmd a protcol error has
+	 * DataPDUInOrder=Yes offset counter in struct iscsit_cmd a protocol error has
 	 * occurred and fail the connection.
 	 *
 	 * For DataSequenceInOrder=No: If the offset is greater than the per

@@ -47,7 +47,7 @@
 #define ALUA_STATUS_ALTERED_BY_IMPLICIT_ALUA		0x02
 
 /*
- * From spc4r17, Table D.1: ASC and ASCQ Assignement
+ * From spc4r17, Table D.1: ASC and ASCQ Assignment
  */
 #define ASCQ_04H_ALUA_STATE_TRANSITION			0x0a
 #define ASCQ_04H_ALUA_TG_PT_STANDBY			0x0b

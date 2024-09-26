@@ -512,7 +512,7 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 			 * PR TYPEs to pass for registered and
 			 * non-registered_nexuxes NOT holding the reservation.
 			 *
-			 * We only make noise for the unregisterd nexuses,
+			 * We only make noise for the unregistered nexuses,
 			 * as we expect registered non-reservation holding
 			 * nexuses to issue CDBs.
 			 */
@@ -1658,7 +1658,7 @@ core_scsi3_decode_spec_i_port(
 			goto out_unmap;
 		}
 		/*
-		 * Locate the desintation struct se_dev_entry pointer for matching
+		 * Locate the destination struct se_dev_entry pointer for matching
 		 * RELATIVE TARGET PORT IDENTIFIER on the receiving I_T Nexus
 		 * Target Port.
 		 */
@@ -1814,7 +1814,7 @@ out_unmap:
 out:
 	/*
 	 * For the failure case, release everything from tid_dest_list
-	 * including *dest_pr_reg and the configfs dependances..
+	 * including *dest_pr_reg and the configfs dependences..
 	 */
 	list_for_each_entry_safe(tidh, tidh_tmp, &tid_dest_list, dest_list) {
 		bool is_local = false;
@@ -3643,7 +3643,7 @@ target_scsi3_emulate_pr_out(struct se_cmd *cmd)
 	}
 	/*
 	 * If the backend device has been configured to force APTPL metadata
-	 * write-out, go ahead and propigate aptpl=1 down now.
+	 * write-out, go ahead and propagate aptpl=1 down now.
 	 */
 	if (dev->dev_attrib.force_pr_aptpl)
 		aptpl = 1;

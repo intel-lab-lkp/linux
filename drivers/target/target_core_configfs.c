@@ -204,7 +204,7 @@ static struct config_group *target_core_register_fabric(
 		 * mkdir -p /sys/kernel/config/target/$MODULE_NAME
 		 *
 		 * Note that this does not limit which TCM fabric module can be
-		 * registered, but simply provids auto loading logic for modules with
+		 * registered, but simply provides auto loading logic for modules with
 		 * mkdir(2) system calls with known TCM fabric modules.
 		 */
 
