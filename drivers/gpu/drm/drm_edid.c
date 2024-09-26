@@ -1916,10 +1916,10 @@ static void edid_block_status_print(enum edid_block_status status,
 		pr_debug("EDID block %d pointer is NULL\n", block_num);
 		break;
 	case EDID_BLOCK_ZERO:
-		pr_notice("EDID block %d is all zeroes\n", block_num);
+		pr_notice_once("EDID block %d is all zeroes\n", block_num);
 		break;
 	case EDID_BLOCK_HEADER_CORRUPT:
-		pr_notice("EDID has corrupt header\n");
+		pr_notice_once("EDID has corrupt header\n");
 		break;
 	case EDID_BLOCK_HEADER_REPAIR:
 		pr_debug("EDID corrupt header needs repair\n");
@@ -1933,13 +1933,13 @@ static void edid_block_status_print(enum edid_block_status status,
 				 block_num, edid_block_tag(block),
 				 edid_block_compute_checksum(block));
 		} else {
-			pr_notice("EDID block %d (tag 0x%02x) checksum is invalid, remainder is %d\n",
+			pr_notice_once("EDID block %d (tag 0x%02x) checksum is invalid, remainder is %d\n",
 				  block_num, edid_block_tag(block),
 				  edid_block_compute_checksum(block));
 		}
 		break;
 	case EDID_BLOCK_VERSION:
-		pr_notice("EDID has major version %d, instead of 1\n",
+		pr_notice_once("EDID has major version %d, instead of 1\n",
 			  block->version);
 		break;
 	default:
