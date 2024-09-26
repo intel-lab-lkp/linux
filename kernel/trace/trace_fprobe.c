@@ -1047,13 +1047,12 @@ static int __trace_fprobe_create(int argc, const char *argv[])
 	if (ret < 0)
 		goto parse_error;
 
+	trace_probe_log_set_index(0);
 	if (!is_return && maxactive) {
-		trace_probe_log_set_index(0);
 		trace_probe_log_err(1, BAD_MAXACT_TYPE);
 		goto parse_error;
 	}
 
-	trace_probe_log_set_index(0);
 	if (event) {
 		ret = traceprobe_parse_event_name(&event, &group, gbuf,
 						  event - argv[0]);
