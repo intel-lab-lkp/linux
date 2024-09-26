@@ -3421,6 +3421,21 @@ void kick_process(struct task_struct *p)
 }
 EXPORT_SYMBOL_GPL(kick_process);
 
+static const struct cpumask *task_cpu_fallback_mask(struct task_struct *t)
+{
+	const struct cpumask *mask;
+
+	mask = task_cpu_possible_mask(p);
+	/*
+	 * Architectures that overrides the task possible mask
+	 * must handle CPU isolation.
+	 */
+	if (mask != cpu_possible_mask)
+		return mask;
+	else
+		return housekeeping_cpumask(HK_TYPE_TICK);
+}
+
 /*
  * ->cpus_ptr is protected by both rq->lock and p->pi_lock
  *
@@ -3489,7 +3504,7 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
 			 *
 			 * More yuck to audit.
 			 */
-			do_set_cpus_allowed(p, task_cpu_possible_mask(p));
+			do_set_cpus_allowed(p, task_cpu_fallback_mask(p));
 			state = fail;
 			break;
 		case fail:
