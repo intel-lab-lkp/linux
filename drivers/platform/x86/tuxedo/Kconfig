@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# TUXEDO X86 Platform Specific Drivers
+#
+
+menuconfig TUXEDO_NB04_WMI_AB
+	tristate "TUXEDO NB04 WMI AB Platform Driver"
+	default m
+	help
+	  This driver implements the WMI AB device found on TUXEDO Notebooks
+	  with board vendor NB04. For the time being only the keyboard backlight
+	  control is implemented.
+
+	  When compiled as a module it will be called tuxedo_nb04_wmi_ab.

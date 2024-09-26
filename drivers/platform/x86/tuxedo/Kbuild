@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# TUXEDO X86 Platform Specific Drivers
+#
+
+tuxedo_nb04_wmi_ab-y			:= tuxedo_nb04_wmi_ab_init.o
+tuxedo_nb04_wmi_ab-y			+= tuxedo_nb04_wmi_util.o
+tuxedo_nb04_wmi_ab-y			+= tuxedo_nb04_wmi_ab_virtual_lamp_array.o
+obj-$(CONFIG_TUXEDO_NB04_WMI_AB)	+= tuxedo_nb04_wmi_ab.o
