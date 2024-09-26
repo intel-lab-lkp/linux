@@ -1949,6 +1949,18 @@ static void edid_block_status_print(enum edid_block_status status,
 	}
 }
 
+static void edid_block_status_print_rl(struct drm_connector *connector,
+				    enum edid_block_status status,
+				    const struct edid *block,
+				    int block_num)
+{
+	if (status != EDID_BLOCK_OK &&
+		!connector->bad_edid_counter++ &&
+		!drm_debug_enabled(DRM_UT_KMS))
+		return;
+	edid_block_status_print(status, block, block_num);
+}
+
 static void edid_block_dump(const char *level, const void *block, int block_num)
 {
 	enum edid_block_status status;
@@ -2375,7 +2387,7 @@ static struct edid *_drm_do_get_edid(struct drm_connector *connector,
 
 	status = edid_block_read(edid, 0, read_block, context);
 
-	edid_block_status_print(status, edid, 0);
+	edid_block_status_print_rl(connector, status, edid, 0);
 
 	if (status == EDID_BLOCK_READ_FAIL)
 		goto fail;
@@ -2409,7 +2421,7 @@ static struct edid *_drm_do_get_edid(struct drm_connector *connector,
 
 		status = edid_block_read(block, i, read_block, context);
 
-		edid_block_status_print(status, block, i);
+		edid_block_status_print_rl(connector, status, block, i);
 
 		if (!edid_block_status_valid(status, edid_block_tag(block))) {
 			if (status == EDID_BLOCK_READ_FAIL)
