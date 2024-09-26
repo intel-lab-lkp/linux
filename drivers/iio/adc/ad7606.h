@@ -46,7 +46,7 @@
  *			oversampling ratios.
  * @oversampling_num	number of elements stored in oversampling_avail array
  * @os_req_reset	some devices require a reset to update oversampling
- * @init_delay_ms	required delay in miliseconds for initialization
+ * @init_delay_ms	required delay in milliseconds for initialization
  *			after a restart
  */
 struct ad7606_chip_info {
