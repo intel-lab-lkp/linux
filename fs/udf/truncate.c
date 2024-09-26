@@ -208,10 +208,12 @@ int udf_truncate_extents(struct inode *inode)
 	else
 		BUG();
 
-	etype = inode_bmap(inode, first_block, &epos, &eloc, &elen, &offset);
+	err = inode_bmap(inode, first_block, &epos, &eloc, &elen, &offset, &etype);
 	byte_offset = (offset << sb->s_blocksize_bits) +
-		(inode->i_size & (sb->s_blocksize - 1));
-	if (etype == -1) {
+		      (inode->i_size & (sb->s_blocksize - 1));
+	if (UDF_EXT_ERR(err))
+		return err;
+	if (UDF_EXT_EOF(err)) {
 		/* We should extend the file? */
 		WARN_ON(byte_offset);
 		return 0;
