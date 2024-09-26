@@ -313,10 +313,9 @@ static const struct soc_device_attribute k3_cpufreq_soc[] = {
 
 static struct ti_cpufreq_soc_data am625_soc_data = {
 	.efuse_xlate = am625_efuse_xlate,
-	.efuse_offset = 0x0018,
+	.efuse_offset = 0x0,
 	.efuse_mask = 0x07c0,
 	.efuse_shift = 0x6,
-	.rev_offset = 0x0014,
 	.multi_regulator = false,
 };
 
@@ -325,7 +324,6 @@ static struct ti_cpufreq_soc_data am62a7_soc_data = {
 	.efuse_offset = 0x0,
 	.efuse_mask = 0x07c0,
 	.efuse_shift = 0x6,
-	.rev_offset = 0x0014,
 	.multi_regulator = false,
 };
 
@@ -334,7 +332,6 @@ static struct ti_cpufreq_soc_data am62p5_soc_data = {
 	.efuse_offset = 0x0,
 	.efuse_mask = 0x07c0,
 	.efuse_shift = 0x6,
-	.rev_offset = 0x0014,
 	.multi_regulator = false,
 };
 
@@ -349,11 +346,26 @@ static int ti_cpufreq_get_efuse(struct ti_cpufreq_data *opp_data,
 				u32 *efuse_value)
 {
 	struct device *dev = opp_data->cpu_dev;
+	struct device_node *np = of_find_node_by_path("/bus@f0000/bus@b00000/syscon@43000000");
 	u32 efuse;
 	int ret;
 
-	ret = regmap_read(opp_data->syscon, opp_data->soc_data->efuse_offset,
-			  &efuse);
+	/*
+	 * This checks for old AM625 Devicetrees where the syscon was a phandle to the
+	 * wkup_conf parent, this required a hard-coded offset to the efuse register.
+	 * This node had the compatibles "syscon", "simple-mfd".
+	 */
+	if (of_device_is_compatible(np, "simple-mfd") &&
+	    of_machine_is_compatible("ti,am625")) {
+		dev_warn(dev,
+			 "%s: An old devicetree is in use, please consider updating at some point!",
+			 __func__);
+		ret = regmap_read(opp_data->syscon, opp_data->soc_data->efuse_offset + 0x0018,
+				  &efuse);
+	} else {
+		ret = regmap_read(opp_data->syscon, opp_data->soc_data->efuse_offset,
+				  &efuse);
+	}
 	if (opp_data->soc_data->quirks & TI_QUIRK_SYSCON_MAY_BE_MISSING && ret == -EIO) {
 		/* not a syscon register! */
 		void __iomem *regs = ioremap(OMAP3_SYSCON_BASE +
