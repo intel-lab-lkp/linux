@@ -867,6 +867,7 @@ static int kvm_mmu_notifier_clear_young(struct mmu_notifier *mn,
 		.may_block	= false,
 		.lockless	=
 			IS_ENABLED(CONFIG_KVM_MMU_NOTIFIER_YOUNG_LOCKLESS),
+		.arg.fast_only		= fast_only,
 	};
 
 	trace_kvm_age_hva(start, end, fast_only);
@@ -902,6 +903,7 @@ static int kvm_mmu_notifier_test_young(struct mmu_notifier *mn,
 		.may_block	= false,
 		.lockless	=
 			IS_ENABLED(CONFIG_KVM_MMU_NOTIFIER_YOUNG_LOCKLESS),
+		.arg.fast_only		= fast_only,
 	};
 
 	trace_kvm_test_age_hva(address, fast_only);
