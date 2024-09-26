@@ -525,15 +525,6 @@
 				compatible = "atmel,24c128";
 				reg = <0x52>;
 			};
-
-			gpio@61 {
-				compatible = "nxp,pca9552";
-				reg = <0x61>;
-				#address-cells = <1>;
-				#size-cells = <0>;
-				gpio-controller;
-				#gpio-cells = <2>;
-			};
 		};
 
 		imux31: i2c@1 {
@@ -576,15 +567,6 @@
 			eeprom@52 {
 				compatible = "atmel,24c128";
 				reg = <0x52>;
-			};
-
-			gpio@61 {
-				compatible = "nxp,pca9552";
-				reg = <0x61>;
-				#address-cells = <1>;
-				#size-cells = <0>;
-				gpio-controller;
-				#gpio-cells = <2>;
 			};
 		};
 	};
