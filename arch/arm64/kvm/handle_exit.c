@@ -405,7 +405,7 @@ int handle_exit(struct kvm_vcpu *vcpu, int exception_index)
 void handle_exit_early(struct kvm_vcpu *vcpu, int exception_index)
 {
 	if (ARM_SERROR_PENDING(exception_index)) {
-		if (this_cpu_has_cap(ARM64_HAS_RAS_EXTN)) {
+		if (kvm_has_feat(vcpu->kvm, ID_AA64PFR0_EL1, RAS, IMP)) {
 			u64 disr = kvm_vcpu_get_disr(vcpu);
 
 			kvm_handle_guest_serror(vcpu, disr_to_esr(disr));
