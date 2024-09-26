@@ -1203,9 +1203,14 @@ static void ath12k_dp_cc_cleanup(struct ath12k_base *ab)
 				continue;
 
 			skb_cb = ATH12K_SKB_CB(skb);
-			ar = skb_cb->ar;
-			if (atomic_dec_and_test(&ar->dp.num_tx_pending))
-				wake_up(&ar->dp.tx_empty_waitq);
+			/* skb_cb's ar is valid only if the skb is associated with
+			 * a valid vif.
+			 */
+			if (skb_cb->vif) {
+				ar = skb_cb->ar;
+				if (atomic_dec_and_test(&ar->dp.num_tx_pending))
+					wake_up(&ar->dp.tx_empty_waitq);
+			}
 
 			dma_unmap_single(ab->dev, ATH12K_SKB_CB(skb)->paddr,
 					 skb->len, DMA_TO_DEVICE);
