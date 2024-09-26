@@ -1014,13 +1014,11 @@ static unsigned long kvm_rmap_get(struct kvm_rmap_head *rmap_head)
  * locking is the same, but the caller is disallowed from modifying the rmap,
  * and so the unlock flow is a nop if the rmap is/was empty.
  */
-__maybe_unused
 static unsigned long kvm_rmap_lock_readonly(struct kvm_rmap_head *rmap_head)
 {
 	return __kvm_rmap_lock(rmap_head);
 }
 
-__maybe_unused
 static void kvm_rmap_unlock_readonly(struct kvm_rmap_head *rmap_head,
 				     unsigned long old_val)
 {
@@ -1736,8 +1734,53 @@ static void rmap_add(struct kvm_vcpu *vcpu, const struct kvm_memory_slot *slot,
 	__rmap_add(vcpu->kvm, cache, slot, spte, gfn, access);
 }
 
-static bool kvm_rmap_age_gfn_range(struct kvm *kvm,
-				   struct kvm_gfn_range *range, bool test_only)
+static bool kvm_rmap_age_gfn_range_lockless(struct kvm *kvm,
+					    struct kvm_gfn_range *range,
+					    bool test_only)
+{
+	struct kvm_rmap_head *rmap_head;
+	struct rmap_iterator iter;
+	unsigned long rmap_val;
+	bool young = false;
+	u64 *sptep;
+	gfn_t gfn;
+	int level;
+	u64 spte;
+
+	for (level = PG_LEVEL_4K; level <= KVM_MAX_HUGEPAGE_LEVEL; level++) {
+		for (gfn = range->start; gfn < range->end;
+		     gfn += KVM_PAGES_PER_HPAGE(level)) {
+			rmap_head = gfn_to_rmap(gfn, level, range->slot);
+			rmap_val = kvm_rmap_lock_readonly(rmap_head);
+
+			for_each_rmap_spte_lockless(rmap_head, &iter, sptep, spte) {
+				if (!is_accessed_spte(spte))
+					continue;
+
+				if (test_only) {
+					kvm_rmap_unlock_readonly(rmap_head, rmap_val);
+					return true;
+				}
+
+				/*
+				 * Marking SPTEs for access tracking outside of
+				 * mmu_lock is unsupported.  Report the page as
+				 * young, but otherwise leave it as-is.
+				 */
+				if (spte_ad_enabled(spte))
+					clear_bit((ffs(shadow_accessed_mask) - 1),
+						  (unsigned long *)sptep);
+				young = true;
+			}
+
+			kvm_rmap_unlock_readonly(rmap_head, rmap_val);
+		}
+	}
+	return young;
+}
+
+static bool __kvm_rmap_age_gfn_range(struct kvm *kvm,
+				     struct kvm_gfn_range *range, bool test_only)
 {
 	struct slot_rmap_walk_iterator iterator;
 	struct rmap_iterator iter;
@@ -1774,6 +1817,21 @@ static bool kvm_rmap_age_gfn_range(struct kvm *kvm,
 		}
 	}
 	return young;
+}
+
+static bool kvm_rmap_age_gfn_range(struct kvm *kvm,
+				   struct kvm_gfn_range *range, bool test_only)
+{
+	/*
+	 * We can always locklessly test if an spte is young. Because marking
+	 * non-A/D sptes for access tracking without holding the mmu_lock is
+	 * not currently supported, we cannot always locklessly clear.
+	 */
+	if (test_only)
+		return kvm_rmap_age_gfn_range_lockless(kvm, range, test_only);
+
+	lockdep_assert_held_write(&kvm->mmu_lock);
+	return __kvm_rmap_age_gfn_range(kvm, range, test_only);
 }
 
 static bool kvm_has_shadow_mmu_sptes(struct kvm *kvm)
