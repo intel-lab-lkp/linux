@@ -1717,10 +1717,12 @@ The following nested keys are defined.
 	entries fault back in or are written out to disk.
 
   memory.zswap.writeback
-	A read-write single value file. The default value is "1".
-	Note that this setting is hierarchical, i.e. the writeback would be
-	implicitly disabled for child cgroups if the upper hierarchy
-	does so.
+	A read-write single value file. The default is to follow the parent
+	cgroup configuration, and the root cgroup follows the global
+	``zswap.writeback_enabled`` module parameter (which is 1 by default).
+	Thus, this setting is hierarchical, i.e. the writeback setting for
+	a child cgroup can be implicitly controlled at runtime by changing
+	any parent value or the global module parameter.
 
 	When this is set to 0, all swapping attempts to swapping devices
 	are disabled. This included both zswap writebacks, and swapping due
@@ -1729,8 +1731,11 @@ The following nested keys are defined.
 	reclaim inefficiency after disabling writeback (because the same
 	pages might be rejected again and again).
 
-	Note that this is subtly different from setting memory.swap.max to
-	0, as it still allows for pages to be written to the zswap pool.
+	Note that this is different from setting memory.swap.max to 0,
+	as it still allows for pages to be written to the zswap pool.
+
+	This can also be set to -1, which would make the cgroup (and its
+	future children) follow the parent/global value again.
 
   memory.pressure
 	A read-only nested-keyed file.

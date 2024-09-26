@@ -129,6 +129,10 @@ static bool zswap_shrinker_enabled = IS_ENABLED(
 		CONFIG_ZSWAP_SHRINKER_DEFAULT_ON);
 module_param_named(shrinker_enabled, zswap_shrinker_enabled, bool, 0644);
 
+/* Enable/disable zswap writeback globally */
+static bool zswap_writeback_enabled = true;
+module_param_named(writeback_enabled, zswap_writeback_enabled, bool, 0644);
+
 bool zswap_is_enabled(void)
 {
 	return zswap_enabled;
@@ -137,6 +141,11 @@ bool zswap_is_enabled(void)
 bool zswap_never_enabled(void)
 {
 	return !static_branch_maybe(CONFIG_ZSWAP_DEFAULT_ON, &zswap_ever_enabled);
+}
+
+bool zswap_writeback_is_enabled(void)
+{
+	return zswap_writeback_enabled;
 }
 
 /*********************************

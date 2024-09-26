@@ -126,9 +126,16 @@ Setting this parameter to 100 will disable the hysteresis.
 
 Some users cannot tolerate the swapping that comes with zswap store failures
 and zswap writebacks. Swapping can be disabled entirely (without disabling
-zswap itself) on a cgroup-basis as follows::
+zswap itself) either globally, using the ``writeback_enabled`` sysfs attribute,
+or on a per-cgroup basis, e.g.::
+
+	echo 0 > /sys/module/zswap/parameters/writeback_enabled
 
 	echo 0 > /sys/fs/cgroup/<cgroup-name>/memory.zswap.writeback
+
+All cgroups follow (i.e. dynamically inherit) the parent configuration
+by default, and the root cgroup follows the module parameter (which can
+thus be considered the global default).
 
 Note that if the store failures are recurring (for e.g if the pages are
 incompressible), users can observe reclaim inefficiency after disabling
