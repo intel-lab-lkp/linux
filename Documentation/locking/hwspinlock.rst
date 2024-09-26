@@ -103,14 +103,14 @@ Should be called from a process context (might sleep).
 Lock a previously-assigned hwspinlock with a timeout limit (specified in
 msecs). If the hwspinlock is already taken, the function will busy loop
 waiting for it to be released, but give up when the timeout elapses.
-Upon a successful return from this function, preemption is disabled so
-the caller must not sleep, and is advised to release the hwspinlock as
-soon as possible, in order to minimize remote cores polling on the
-hardware interconnect.
+Upon a successful return from this function, preemption is disabled on
+non-PREEMPT_RT kernels, so the caller must not sleep, and is advised to
+release the hwspinlock as soon as possible, in order to minimize remote
+cores polling on the hardware interconnect.
 
 Returns 0 when successful and an appropriate error code otherwise (most
 notably -ETIMEDOUT if the hwspinlock is still busy after timeout msecs).
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -120,12 +120,12 @@ Lock a previously-assigned hwspinlock with a timeout limit (specified in
 msecs). If the hwspinlock is already taken, the function will busy loop
 waiting for it to be released, but give up when the timeout elapses.
 Upon a successful return from this function, preemption and the local
-interrupts are disabled, so the caller must not sleep, and is advised to
-release the hwspinlock as soon as possible.
+interrupts are disabled on non-PREEMPT_RT kernels, so the caller must not
+sleep, and is advised to release the hwspinlock as soon as possible.
 
 Returns 0 when successful and an appropriate error code otherwise (most
 notably -ETIMEDOUT if the hwspinlock is still busy after timeout msecs).
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -137,13 +137,13 @@ msecs). If the hwspinlock is already taken, the function will busy loop
 waiting for it to be released, but give up when the timeout elapses.
 Upon a successful return from this function, preemption is disabled,
 local interrupts are disabled and their previous state is saved at the
-given flags placeholder. The caller must not sleep, and is advised to
-release the hwspinlock as soon as possible.
+given flags placeholder on non-PREEMPT_RT kernels. The caller must not sleep,
+and is advised to release the hwspinlock as soon as possible.
 
 Returns 0 when successful and an appropriate error code otherwise (most
 notably -ETIMEDOUT if the hwspinlock is still busy after timeout msecs).
 
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -160,7 +160,7 @@ or sleepable operations under the hardware lock.
 Returns 0 when successful and an appropriate error code otherwise (most
 notably -ETIMEDOUT if the hwspinlock is still busy after timeout msecs).
 
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -176,7 +176,7 @@ value shall not exceed a few msecs.
 Returns 0 when successful and an appropriate error code otherwise (most
 notably -ETIMEDOUT if the hwspinlock is still busy after timeout msecs).
 
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -186,14 +186,14 @@ The function will never sleep.
 Attempt to lock a previously-assigned hwspinlock, but immediately fail if
 it is already taken.
 
-Upon a successful return from this function, preemption is disabled so
-caller must not sleep, and is advised to release the hwspinlock as soon as
-possible, in order to minimize remote cores polling on the hardware
-interconnect.
+Upon a successful return from this function, preemption is disabled on
+non-PREEMPT_RT kernels so caller must not sleep and is advised to release
+the hwspinlock as soon as possible, in order to minimize remote cores polling
+on the hardware interconnect.
 
 Returns 0 on success and an appropriate error code otherwise (most
 notably -EBUSY if the hwspinlock was already taken).
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -204,13 +204,13 @@ Attempt to lock a previously-assigned hwspinlock, but immediately fail if
 it is already taken.
 
 Upon a successful return from this function, preemption and the local
-interrupts are disabled so caller must not sleep, and is advised to
-release the hwspinlock as soon as possible.
+interrupts are disabled on non-PREEMPT_RT kernels so caller must not sleep,
+and is advised to release the hwspinlock as soon as possible.
 
 Returns 0 on success and an appropriate error code otherwise (most
 notably -EBUSY if the hwspinlock was already taken).
 
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -221,12 +221,12 @@ it is already taken.
 
 Upon a successful return from this function, preemption is disabled,
 the local interrupts are disabled and their previous state is saved
-at the given flags placeholder. The caller must not sleep, and is advised
-to release the hwspinlock as soon as possible.
+at the given flags placeholder on non-PREEMPT_RT kernels. The caller must
+not sleep, and is advised to release the hwspinlock as soon as possible.
 
 Returns 0 on success and an appropriate error code otherwise (most
 notably -EBUSY if the hwspinlock was already taken).
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -241,7 +241,7 @@ or sleepable operations under the hardware lock.
 
 Returns 0 on success and an appropriate error code otherwise (most
 notably -EBUSY if the hwspinlock was already taken).
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -254,14 +254,14 @@ This function shall be called only from an atomic context.
 
 Returns 0 on success and an appropriate error code otherwise (most
 notably -EBUSY if the hwspinlock was already taken).
-The function will never sleep.
+The function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
   void hwspin_unlock(struct hwspinlock *hwlock);
 
 Unlock a previously-locked hwspinlock. Always succeed, and can be called
-from any context (the function never sleeps).
+from any context (the function never sleeps on a non-PREEMPT_RT kernel).
 
 .. note::
 
@@ -277,7 +277,8 @@ The caller should **never** unlock an hwspinlock which is already unlocked.
 
 Doing so is considered a bug (there is no protection against this).
 Upon a successful return from this function, preemption and local
-interrupts are enabled. This function will never sleep.
+interrupts are enabled on non-PREEMPT_RT kernels.
+This function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -290,7 +291,8 @@ The caller should **never** unlock an hwspinlock which is already unlocked.
 Doing so is considered a bug (there is no protection against this).
 Upon a successful return from this function, preemption is reenabled,
 and the state of the local interrupts is restored to the state saved at
-the given flags. This function will never sleep.
+the given flags on non-PREEMPT_RT kernels.
+This function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -300,7 +302,7 @@ Unlock a previously-locked hwspinlock.
 
 The caller should **never** unlock an hwspinlock which is already unlocked.
 Doing so is considered a bug (there is no protection against this).
-This function will never sleep.
+This function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 
@@ -310,7 +312,7 @@ Unlock a previously-locked hwspinlock.
 
 The caller should **never** unlock an hwspinlock which is already unlocked.
 Doing so is considered a bug (there is no protection against this).
-This function will never sleep.
+This function will never sleep on a non-PREEMPT_RT kernel.
 
 ::
 

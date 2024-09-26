@@ -73,10 +73,10 @@ static DEFINE_MUTEX(hwspinlock_tree_lock);
  * lock, they need one sleepable lock (like mutex) to protect the operations.
  *
  * If the mode is neither HWLOCK_IN_ATOMIC nor HWLOCK_RAW, upon a successful
- * return from this function, preemption (and possibly interrupts) is disabled,
- * so the caller must not sleep, and is advised to release the hwspinlock as
- * soon as possible. This is required in order to minimize remote cores polling
- * on the hardware interconnect.
+ * return from this function, preemption (and possibly interrupts) is disabled
+ * on non-PREEMPT_RT kernels, so the caller must not sleep, and is advised to
+ * release the hwspinlock as soon as possible. This is required in order to
+ * minimize remote cores polling on the hardware interconnect.
  *
  * The user decides whether local interrupts are disabled or not, and if yes,
  * whether he wants their previous state to be saved. It is up to the user
@@ -87,7 +87,7 @@ static DEFINE_MUTEX(hwspinlock_tree_lock);
  * Returns: %0 if we successfully locked the hwspinlock or -EBUSY if
  * the hwspinlock was already taken.
  *
- * This function will never sleep.
+ * This function will never sleep on a non-PREEMPT_RT kernel.
  */
 int __hwspin_trylock(struct hwspinlock *hwlock, int mode, unsigned long *flags)
 {
@@ -190,10 +190,10 @@ EXPORT_SYMBOL_GPL(__hwspin_trylock);
  * is handled with busy-waiting delays, hence shall not exceed few msecs.
  *
  * If the mode is neither HWLOCK_IN_ATOMIC nor HWLOCK_RAW, upon a successful
- * return from this function, preemption (and possibly interrupts) is disabled,
- * so the caller must not sleep, and is advised to release the hwspinlock as
- * soon as possible. This is required in order to minimize remote cores polling
- * on the hardware interconnect.
+ * return from this function, preemption (and possibly interrupts) is disabled
+ * on non-PREEMPT_RT kernels, so the caller must not sleep, and is advised to
+ * release the hwspinlock as soon as possible. This is required in order to
+ * minimize remote cores polling on the hardware interconnect.
  *
  * The user decides whether local interrupts are disabled or not, and if yes,
  * whether he wants their previous state to be saved. It is up to the user
@@ -204,7 +204,7 @@ EXPORT_SYMBOL_GPL(__hwspin_trylock);
  * error code otherwise (most notably -ETIMEDOUT if the @hwlock is still
  * busy after @timeout msecs).
  *
- * The function will never sleep.
+ * The function will never sleep on a non-PREEMPT_RT kernel.
  */
 int __hwspin_lock_timeout(struct hwspinlock *hwlock, unsigned int to,
 					int mode, unsigned long *flags)
@@ -253,7 +253,8 @@ EXPORT_SYMBOL_GPL(__hwspin_lock_timeout);
  * @flags: previous caller's interrupt state to restore (if requested)
  *
  * This function will unlock a specific hwspinlock, enable preemption and
- * (possibly) enable interrupts or restore their previous state.
+ * (possibly) enable interrupts or restore their previous state on
+ * non-PREEMPT_RT kernels.
  * @hwlock must be already locked before calling this function: it is a bug
  * to call unlock on a @hwlock that is already unlocked.
  *
@@ -263,7 +264,7 @@ EXPORT_SYMBOL_GPL(__hwspin_lock_timeout);
  * same way users decide between spin_unlock, spin_unlock_irq and
  * spin_unlock_irqrestore.
  *
- * The function will never sleep.
+ * The function will never sleep on a non-PREEMPT_RT kernel.
  */
 void __hwspin_unlock(struct hwspinlock *hwlock, int mode, unsigned long *flags)
 {
