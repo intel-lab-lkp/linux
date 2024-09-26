@@ -3454,6 +3454,8 @@ int btrfs_free_tree_block(struct btrfs_trans_handle *trans,
 	}
 
 	bg = btrfs_lookup_block_group(fs_info, buf->start);
+	if (!bg)
+		goto out;
 
 	if (btrfs_header_flag(buf, BTRFS_HEADER_FLAG_WRITTEN)) {
 		pin_down_extent(trans, bg, buf->start, buf->len, 1);
