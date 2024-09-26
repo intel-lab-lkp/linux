@@ -2700,7 +2700,9 @@ R:	Ghennadi Procopciuc <ghennadi.procopciuc@oss.nxp.com>
 L:	NXP S32 Linux Team <s32@nxp.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
+F:	Documentation/devicetree/bindings/gpio/nxp,s32g2-siul2-gpio.yaml
 F:	arch/arm64/boot/dts/freescale/s32g*.dts*
+F:	drivers/gpio/gpio-siul2-s32g2.c
 F:	drivers/pinctrl/nxp/
 
 ARM/Orion SoC/Technologic Systems TS-78xx platform support
