@@ -25,6 +25,7 @@ properties:
           - mediatek,mt8173-mmc
           - mediatek,mt8183-mmc
           - mediatek,mt8516-mmc
+          - mediatek,msdc-v2
       - items:
           - const: mediatek,mt7623-mmc
           - const: mediatek,mt2701-mmc
@@ -154,6 +155,30 @@ properties:
     enum: [32, 64]
     default: 32
 
+  mediatek,stop-dly-sel:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Some SoCs need to set appropriate stop-dly-sel to configure read data clock
+      stops at block gap. The valid range is from 0 to 0xf.
+    minimum: 0
+    maximum: 0xf
+
+  mediatek,pop-en-cnt:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Some SoCs need to set appropriate pop-en-cnt to configure the margins of write
+      and read pointers while begin to pop data transfer. The valid range is from 0
+      to 0xf.
+    minimum: 0
+    maximum: 0xf
+
+  mediatek,prohibit-gate-cg:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Decide if source clock CG could be disabled when CPU access IP registers.
+      If present, source clock CG could not be disabled.
+      If not present, source clock CG could be disabled.
+
   resets:
     maxItems: 1
 
@@ -191,6 +216,7 @@ allOf:
             - mediatek,mt8188-mmc
             - mediatek,mt8195-mmc
             - mediatek,mt8516-mmc
+            - mediatek,msdc-v2
     then:
       properties:
         clocks:
