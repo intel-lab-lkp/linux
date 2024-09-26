@@ -113,19 +113,19 @@
 			d-cache-sets = <128>;
 			next-level-cache = <&l3_cache>;
 		};
-	};
 
-	/*
-	 * There are no private per-core L2 caches, but only the
-	 * L3 cache that appears to the CPU cores as L2 caches
-	 */
-	l3_cache: l3-cache {
-		compatible = "cache";
-		cache-level = <2>;
-		cache-unified;
-		cache-size = <0x80000>;
-		cache-line-size = <64>;
-		cache-sets = <512>;
+		/*
+		 * There are no private per-core L2 caches, but only the
+		 * L3 cache that appears to the CPU cores as L2 caches
+		 */
+		l3_cache: l3-cache {
+			compatible = "cache";
+			cache-level = <2>;
+			cache-unified;
+			cache-size = <0x80000>;
+			cache-line-size = <64>;
+			cache-sets = <512>;
+		};
 	};
 
 	cpu0_opp_table: opp-table-0 {
