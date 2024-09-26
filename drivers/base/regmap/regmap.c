@@ -2441,7 +2441,7 @@ static int _regmap_range_multi_paged_reg_write(struct regmap *map,
 	unsigned int this_page = 0;
 	unsigned int page_change = 0;
 	/*
-	 * the set of registers are not neccessarily in order, but
+	 * the set of registers are not necessarily in order, but
 	 * since the order of write must be preserved this algorithm
 	 * chops the set each time the page changes. This also applies
 	 * if there is a delay required at any point in the sequence.
@@ -2682,7 +2682,7 @@ EXPORT_SYMBOL_GPL(regmap_multi_reg_write_bypassed);
  * If supported by the underlying bus the write will be scheduled
  * asynchronously, helping maximise I/O speed on higher speed buses
  * like SPI.  regmap_async_complete() can be called to ensure that all
- * asynchrnous writes have been completed.
+ * asynchronous writes have been completed.
  *
  * A value of zero will be returned on success, a negative errno will
  * be returned in error cases.

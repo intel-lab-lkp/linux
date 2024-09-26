@@ -50,7 +50,7 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
  *
  * The driver core internals needs to work on the subsys_private structure, not
  * the external struct bus_type pointer.  This function walks the list of
- * registered busses in the system and finds the matching one and returns the
+ * registered buses in the system and finds the matching one and returns the
  * internal struct subsys_private that relates to that bus.
  *
  * Note, the reference count of the return value is INCREMENTED if it is not
@@ -1288,7 +1288,7 @@ EXPORT_SYMBOL_GPL(subsys_system_register);
  * @groups: default attributes for the root device
  *
  * All 'virtual' subsystems have a /sys/devices/system/<name> root device
- * with the name of the subystem.  The root device can carry subsystem-wide
+ * with the name of the subsystem.  The root device can carry subsystem-wide
  * attributes.  All registered devices are below this single root device.
  * There's no restriction on device naming.  This is for kernel software
  * constructs which need sysfs interface.

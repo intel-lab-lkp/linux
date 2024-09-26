@@ -5,7 +5,7 @@
  * Copyright (c) 2005 - James Bottomley <James.Bottomley@steeleye.com>
  *
  * The basic idea here is to enable a device to be attached to an
- * aritrary numer of classes without having to allocate storage for them.
+ * arbitrary number of classes without having to allocate storage for them.
  * Instead, the contained classes select the devices they need to attach
  * to via a matching function.
  */

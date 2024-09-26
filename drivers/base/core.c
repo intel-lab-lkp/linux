@@ -1407,7 +1407,7 @@ void device_links_driver_bound(struct device *dev)
 
 /**
  * __device_links_no_driver - Update links of a device without a driver.
- * @dev: Device without a drvier.
+ * @dev: Device without a driver.
  *
  * Delete all non-persistent links from this device to any suppliers.
  *

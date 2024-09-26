@@ -15,7 +15,7 @@
 #define W1_CMD_WRITE_DATA	0x6C
 
 /*
- * 1-Wire slaves registers with addess 8 bit and data 8 bit
+ * 1-Wire slaves registers with address 8 bit and data 8 bit
  */
 
 static int w1_reg_a8_v8_read(void *context, unsigned int reg, unsigned int *val)
@@ -63,7 +63,7 @@ static int w1_reg_a8_v8_write(void *context, unsigned int reg, unsigned int val)
 }
 
 /*
- * 1-Wire slaves registers with addess 8 bit and data 16 bit
+ * 1-Wire slaves registers with address 8 bit and data 16 bit
  */
 
 static int w1_reg_a8_v16_read(void *context, unsigned int reg,
@@ -115,7 +115,7 @@ static int w1_reg_a8_v16_write(void *context, unsigned int reg,
 }
 
 /*
- * 1-Wire slaves registers with addess 16 bit and data 16 bit
+ * 1-Wire slaves registers with address 16 bit and data 16 bit
  */
 
 static int w1_reg_a16_v16_read(void *context, unsigned int reg,

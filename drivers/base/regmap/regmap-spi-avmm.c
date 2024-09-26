@@ -242,7 +242,7 @@ static int br_trans_tx_prepare(struct spi_avmm_bridge *br, bool is_read, u32 reg
  * before pad ...|7a|7c|00|10| |00|00|04|02| |4b|7d|5a|7b| |40|
  * after pad  ...|7a|7c|00|10| |00|00|04|02| |4b|7d|5a|4a| |4a|4a|7b|40|
  * Then if the slave will not get the entire packet before the tx phase is
- * over, it can't responsed to anything either.
+ * over, it can't respond to anything either.
  */
 static int br_pkt_phy_tx_prepare(struct spi_avmm_bridge *br)
 {
