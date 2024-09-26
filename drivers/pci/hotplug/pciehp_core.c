@@ -330,8 +330,6 @@ static int pciehp_resume_noirq(struct pcie_device *dev)
 		 */
 		if (pciehp_device_replaced(ctrl)) {
 			ctrl_dbg(ctrl, "device replaced during system sleep\n");
-			pci_walk_bus(ctrl->pcie->port->subordinate,
-				     pci_dev_set_disconnected, NULL);
 			pciehp_request(ctrl, PCI_EXP_SLTSTA_PDC);
 		}
 	}
