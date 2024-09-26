@@ -168,9 +168,16 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
 
 #define __guard_ptr(_name) class_##_name##_lock_ptr
 
-#define scoped_guard(_name, args...)					\
-	for (CLASS(_name, scope)(args),					\
-	     *done = NULL; __guard_ptr(_name)(&scope) && !done; done = (void *)1)
+#define scoped_guard(_name, args...)	\
+	__scoped_guard_labeled(__UNIQUE_ID(label), _name, args)
+
+#define __scoped_guard_labeled(_label, _name, args...)	\
+	if (0)						\
+		_label: ;				\
+	else						\
+		for (CLASS(_name, scope)(args);		\
+		     __guard_ptr(_name)(&scope), 1;	\
+		     ({ goto _label; }))
 
 #define scoped_cond_guard(_name, _fail, args...) \
 	for (CLASS(_name, scope)(args), \
