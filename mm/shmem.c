@@ -1672,6 +1672,36 @@ bool shmem_hpage_pmd_enabled(void)
 	return false;
 }
 
+/**
+ * shmem_mapping_size_order - Get maximum folio order for the given file size.
+ * @mapping: Target address_space.
+ * @index: The page index.
+ * @size: The suggested size of the folio to create.
+ *
+ * This returns a high order for folios (when supported) based on the file size
+ * which the mapping currently allows at the given index. The index is relevant
+ * due to alignment considerations the mapping might have. The returned order
+ * may be less than the size passed.
+ *
+ * Like __filemap_get_folio order calculation.
+ *
+ * Return: The order.
+ */
+static inline unsigned int
+shmem_mapping_size_order(struct address_space *mapping, pgoff_t index, size_t size)
+{
+	unsigned int order = get_order(max_t(size_t, size, PAGE_SIZE));
+
+	if (!mapping_large_folio_support(mapping))
+		return 0;
+
+	/* If we're not aligned, allocate a smaller folio */
+	if (index & ((1UL << order) - 1))
+		order = __ffs(index);
+
+	return min_t(size_t, order, MAX_PAGECACHE_ORDER);
+}
+
 unsigned long shmem_allowable_huge_orders(struct inode *inode,
 				struct vm_area_struct *vma, pgoff_t index,
 				loff_t write_end, bool shmem_huge_force)
@@ -1694,11 +1724,26 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 	global_huge = shmem_huge_global_enabled(inode, index, write_end,
 					shmem_huge_force, vma, vm_flags);
 	if (!vma || !vma_is_anon_shmem(vma)) {
+		size_t len;
+
 		/*
-		 * For tmpfs, we now only support PMD sized THP if huge page
-		 * is enabled, otherwise fallback to order 0.
+		 * For tmpfs, if top level huge page is enabled, we just allow
+		 * PMD sized THP to keep interface backward compatibility.
 		 */
-		return global_huge ? BIT(HPAGE_PMD_ORDER) : 0;
+		if (global_huge)
+			return BIT(HPAGE_PMD_ORDER);
+
+		if (!write_end)
+			return 0;
+
+		/*
+		 * Otherwise, get a highest order hint based on the size of
+		 * write and fallocate paths, then will try each allowable
+		 * huge orders.
+		 */
+		len = write_end - (index << PAGE_SHIFT);
+		order = shmem_mapping_size_order(inode->i_mapping, index, len);
+		return order > 0 ? BIT(order + 1) - 1 : 0;
 	}
 
 	/*
