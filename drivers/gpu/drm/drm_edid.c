@@ -1902,10 +1902,17 @@ static bool edid_block_valid(const void *block, bool base)
 				       edid_block_tag(block));
 }
 
-static void edid_block_status_print(enum edid_block_status status,
+static void edid_block_status_print(struct drm_connector *connector,
+				    enum edid_block_status status,
 				    const struct edid *block,
 				    int block_num)
 {
+	if (status != EDID_BLOCK_OK &&
+		connector &&
+		!connector->bad_edid_counter++ &&
+		!drm_debug_enabled(DRM_UT_KMS))
+		return;
+
 	switch (status) {
 	case EDID_BLOCK_OK:
 		break;
@@ -2004,7 +2011,7 @@ static bool drm_edid_block_valid(void *_block, int block_num, bool print_bad_edi
 			*edid_corrupt = true;
 	}
 
-	edid_block_status_print(status, block, block_num);
+	edid_block_status_print(NULL, status, block, block_num);
 
 	/* Determine whether we can use this block with this status. */
 	valid = edid_block_status_valid(status, edid_block_tag(block));
@@ -2375,7 +2382,7 @@ static struct edid *_drm_do_get_edid(struct drm_connector *connector,
 
 	status = edid_block_read(edid, 0, read_block, context);
 
-	edid_block_status_print(status, edid, 0);
+	edid_block_status_print(connector, status, edid, 0);
 
 	if (status == EDID_BLOCK_READ_FAIL)
 		goto fail;
@@ -2409,7 +2416,7 @@ static struct edid *_drm_do_get_edid(struct drm_connector *connector,
 
 		status = edid_block_read(block, i, read_block, context);
 
-		edid_block_status_print(status, block, i);
+		edid_block_status_print(connector, status, block, i);
 
 		if (!edid_block_status_valid(status, edid_block_tag(block))) {
 			if (status == EDID_BLOCK_READ_FAIL)
@@ -2842,7 +2849,7 @@ const struct drm_edid *drm_edid_read_base_block(struct i2c_adapter *adapter)
 
 	status = edid_block_read(base_block, 0, drm_do_probe_ddc_edid, adapter);
 
-	edid_block_status_print(status, base_block, 0);
+	edid_block_status_print(NULL, status, base_block, 0);
 
 	if (!edid_block_status_valid(status, edid_block_tag(base_block))) {
 		edid_block_dump(KERN_NOTICE, base_block, 0);
