@@ -96,7 +96,8 @@ properties:
     maxItems: 1
 
   interrupts:
-    maxItems: 1
+    minItems: 1
+    maxItems: 5
 
   clocks:
     items:
@@ -209,6 +210,28 @@ allOf:
     then:
       required:
         - mediatek,larbs
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8195-iommu-infra
+
+    then:
+      properties:
+        interrupts:
+          description: |
+            The IOMMU of MT8195 has 5 banks: 0/1/2/3/4.
+            Each bank has a set of APB registers corresponding to the
+            normal world, protected world 1/2/3, and secure world, respectively.
+            Therefore, 5 interrupt numbers are needed.
+          maxItems: 5
+
+    else:
+      properties:
+        interrupts:
+          maxItems: 1
 
 additionalProperties: false
 
