@@ -1381,10 +1381,13 @@ static int __sched rt_mutex_slowtrylock(struct rt_mutex_base *lock)
 		return 0;
 
 	/*
-	 * The mutex has currently no owner. Lock the wait lock and try to
-	 * acquire the lock. We use irqsave here to support early boot calls.
+	 * The mutex has currently no owner. Try to lock the wait lock first.
+	 * If successful, try to acquire the lock. We use irqsave here to
+	 * support early boot calls. Trylock is used all the way to avoid
+	 * circular lock dependency.
 	 */
-	raw_spin_lock_irqsave(&lock->wait_lock, flags);
+	if (!raw_spin_trylock_irqsave(&lock->wait_lock, flags))
+		return 0;
 
 	ret = __rt_mutex_slowtrylock(lock);
 
