@@ -3455,6 +3455,13 @@ int btrfs_free_tree_block(struct btrfs_trans_handle *trans,
 
 	bg = btrfs_lookup_block_group(fs_info, buf->start);
 
+	if (WARN_ON(!bg)) {
+	    btrfs_abort_transaction(trans, -ENOENT);
+	    btrfs_err(fs_info, "block group not found for extent buffer %llu generation %llu root %llu transaction %llu",
+				buf->start, btrfs_header_generation(buf), root_id,
+				trans->transid);
+	    return -ENOENT;
+	}
 	if (btrfs_header_flag(buf, BTRFS_HEADER_FLAG_WRITTEN)) {
 		pin_down_extent(trans, bg, buf->start, buf->len, 1);
 		btrfs_put_block_group(bg);
