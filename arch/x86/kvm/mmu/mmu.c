@@ -7708,6 +7708,8 @@ int kvm_mmu_post_init_vm(struct kvm *kvm)
 {
 	int err;
 
+	kvm->mmu_notifier.has_fast_aging = true;
+
 	if (nx_hugepage_mitigation_hard_disabled)
 		return 0;
 
