@@ -1822,16 +1822,24 @@ static bool __kvm_rmap_age_gfn_range(struct kvm *kvm,
 static bool kvm_rmap_age_gfn_range(struct kvm *kvm,
 				   struct kvm_gfn_range *range, bool test_only)
 {
+	bool young;
+
 	/*
 	 * We can always locklessly test if an spte is young. Because marking
 	 * non-A/D sptes for access tracking without holding the mmu_lock is
 	 * not currently supported, we cannot always locklessly clear.
+	 *
+	 * For fast_only, we must not take the mmu_lock, so locklessly age in
+	 * that case even though we will not be able to clear the age for
+	 * non-A/D sptes.
 	 */
-	if (test_only)
+	if (test_only || range->arg.fast_only)
 		return kvm_rmap_age_gfn_range_lockless(kvm, range, test_only);
 
-	lockdep_assert_held_write(&kvm->mmu_lock);
-	return __kvm_rmap_age_gfn_range(kvm, range, test_only);
+	write_lock(&kvm->mmu_lock);
+	young = __kvm_rmap_age_gfn_range(kvm, range, test_only);
+	write_unlock(&kvm->mmu_lock);
+	return young;
 }
 
 static bool kvm_has_shadow_mmu_sptes(struct kvm *kvm)
@@ -1846,11 +1854,8 @@ bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 	if (tdp_mmu_enabled)
 		young = kvm_tdp_mmu_age_gfn_range(kvm, range);
 
-	if (kvm_has_shadow_mmu_sptes(kvm)) {
-		write_lock(&kvm->mmu_lock);
+	if (kvm_has_shadow_mmu_sptes(kvm))
 		young |= kvm_rmap_age_gfn_range(kvm, range, false);
-		write_unlock(&kvm->mmu_lock);
-	}
 
 	return young;
 }
@@ -1862,11 +1867,11 @@ bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 	if (tdp_mmu_enabled)
 		young = kvm_tdp_mmu_test_age_gfn(kvm, range);
 
-	if (!young && kvm_has_shadow_mmu_sptes(kvm)) {
-		write_lock(&kvm->mmu_lock);
+	if (young)
+		return young;
+
+	if (kvm_has_shadow_mmu_sptes(kvm))
 		young |= kvm_rmap_age_gfn_range(kvm, range, true);
-		write_unlock(&kvm->mmu_lock);
-	}
 
 	return young;
 }
