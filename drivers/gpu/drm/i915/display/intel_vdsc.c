@@ -297,6 +297,11 @@ int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 
 	vdsc_cfg->bits_per_pixel = pipe_config->dsc.compressed_bpp_x16;
 
+	if (vdsc_cfg->bites_per_pixel < 8) {
+		drm_dbg_kms(&dev_priv->drm, "DSC bpc requirements not met\n");
+		return -EINVAL;
+	}
+
 	/*
 	 * According to DSC 1.2 specs in Section 4.1 if native_420 is set
 	 * we need to double the current bpp.
