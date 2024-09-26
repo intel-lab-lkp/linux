@@ -144,17 +144,27 @@ static bool cpuid_store(struct cpuid_range *range, u32 f, int subleaf,
 
 	if (!func->leafs) {
 		func->leafs = malloc(sizeof(struct subleaf));
-		if (!func->leafs)
+		if (!func->leafs) {
 			perror("malloc func leaf");
+			return false; // On malloc failure
+		}
 
 		func->nr = 1;
 	} else {
 		s = func->nr;
 		func->leafs = realloc(func->leafs, (s + 1) * sizeof(*leaf));
-		if (!func->leafs)
+		if (!func->leafs) {
 			perror("realloc f->leafs");
+			return false; // On realloc failure
+		}
 
 		func->nr++;
+	}
+
+	// Check for valid index
+	if (s >= func->nr) {
+		fprintf(stderr, "Error: Invalid index for leaf\n");
+		return false;
 	}
 
 	leaf = &func->leafs[s];
@@ -210,8 +220,10 @@ struct cpuid_range *setup_cpuid_range(u32 input_eax)
 	idx_func = (max_func & 0xffff) + 1;
 
 	range = malloc(sizeof(struct cpuid_range));
-	if (!range)
+	if (!range) {
 		perror("malloc range");
+		return NULL; // On malloc failure
+	}
 
 	if (input_eax & 0x80000000)
 		range->is_ext = true;
@@ -219,8 +231,11 @@ struct cpuid_range *setup_cpuid_range(u32 input_eax)
 		range->is_ext = false;
 
 	range->funcs = malloc(sizeof(struct cpuid_func) * idx_func);
-	if (!range->funcs)
+	if (!range->funcs) {
 		perror("malloc range->funcs");
+		free(range);
+		return NULL; // On malloc failure
+	}
 
 	range->nr = idx_func;
 	memset(range->funcs, 0, sizeof(struct cpuid_func) * idx_func);
