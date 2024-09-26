@@ -446,7 +446,7 @@ hblank_expansion_quirk_needs_dsc(const struct intel_connector *connector,
 	if (is_uhbr_sink && !drm_dp_is_uhbr_rate(limits->max_rate))
 		return false;
 
-	if (mode_hblank_period_ns(adjusted_mode) > hblank_limit)
+	if (mode_hblank_period_ns(adjusted_mode) >= hblank_limit)
 		return false;
 
 	return true;
