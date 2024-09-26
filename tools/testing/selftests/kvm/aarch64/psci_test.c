@@ -54,6 +54,15 @@ static uint64_t psci_system_suspend(uint64_t entry_addr, uint64_t context_id)
 	return res.a0;
 }
 
+static uint64_t psci_system_off2(uint64_t type)
+{
+	struct arm_smccc_res res;
+
+	smccc_hvc(PSCI_1_3_FN64_SYSTEM_OFF2, type, 0, 0, 0, 0, 0, 0, &res);
+
+	return res.a0;
+}
+
 static uint64_t psci_features(uint32_t func_id)
 {
 	struct arm_smccc_res res;
@@ -188,11 +197,63 @@ static void host_test_system_suspend(void)
 	kvm_vm_free(vm);
 }
 
+static void guest_test_system_off2(void)
+{
+	uint64_t ret;
+
+	/* assert that SYSTEM_OFF2 is discoverable */
+	GUEST_ASSERT(psci_features(PSCI_1_3_FN_SYSTEM_OFF2) &
+		     BIT(PSCI_1_3_HIBERNATE_TYPE_OFF));
+	GUEST_ASSERT(psci_features(PSCI_1_3_FN64_SYSTEM_OFF2) &
+		     BIT(PSCI_1_3_HIBERNATE_TYPE_OFF));
+
+	ret = psci_system_off2(PSCI_1_3_HIBERNATE_TYPE_OFF);
+	GUEST_SYNC(ret);
+}
+
+static void host_test_system_off2(void)
+{
+	struct kvm_vcpu *source, *target;
+	uint64_t psci_version = 0;
+	struct kvm_run *run;
+	struct kvm_vm *vm;
+
+	vm = setup_vm(guest_test_system_off2, &source, &target);
+	vcpu_get_reg(target, KVM_REG_ARM_PSCI_VERSION, &psci_version);
+	TEST_ASSERT(psci_version >= PSCI_VERSION(0, 2),
+		    "Unexpected PSCI version %lu.%lu",
+		    PSCI_VERSION_MAJOR(psci_version),
+		    PSCI_VERSION_MINOR(psci_version));
+
+	if (psci_version < PSCI_VERSION(1,3))
+		goto skip;
+
+	vcpu_power_off(target);
+	run = source->run;
+
+	enter_guest(source);
+
+	TEST_ASSERT_KVM_EXIT_REASON(source, KVM_EXIT_SYSTEM_EVENT);
+	TEST_ASSERT(run->system_event.type == KVM_SYSTEM_EVENT_SHUTDOWN,
+		    "Unhandled system event: %u (expected: %u)",
+		    run->system_event.type, KVM_SYSTEM_EVENT_SHUTDOWN);
+	TEST_ASSERT(run->system_event.ndata >= 1,
+		    "Unexpected amount of system event data: %u (expected, >= 1)",
+		    run->system_event.ndata);
+	TEST_ASSERT(run->system_event.data[0] & KVM_SYSTEM_EVENT_SHUTDOWN_FLAG_PSCI_OFF2,
+		    "PSCI_OFF2 flag not set. Flags %llu (expected %llu)",
+		    run->system_event.data[0], KVM_SYSTEM_EVENT_SHUTDOWN_FLAG_PSCI_OFF2);
+
+ skip:
+	kvm_vm_free(vm);
+}
+
 int main(void)
 {
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_ARM_SYSTEM_SUSPEND));
 
 	host_test_cpu_on();
 	host_test_system_suspend();
+	host_test_system_off2();
 	return 0;
 }
