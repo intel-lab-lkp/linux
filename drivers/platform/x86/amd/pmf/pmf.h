@@ -725,4 +725,9 @@ void amd_pmf_dump_ta_inputs(struct amd_pmf_dev *dev, struct ta_pmf_enact_table *
 /* Quirk infrastructure */
 void amd_pmf_quirks_init(struct amd_pmf_dev *dev);
 
+/* Manual configuration */
+extern bool pmf_manual_control;
+extern const struct attribute_group manual_attribute_group;
+void amd_pmf_init_manual_control(struct amd_pmf_dev *dev);
+
 #endif /* PMF_H */

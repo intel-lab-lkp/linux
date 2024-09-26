@@ -11,3 +11,13 @@ Description:	Reading this file tells if the AMD Platform Management(PMF)
 		To turn off CnQF user can write "off" to the sysfs node.
 		Note: Systems that support auto mode will not have this sysfs file
 		available.
+
+What:		/sys/devices/platform/*/{spl, fppt, sppt, sppt_apu_only, stt_min, stt_limit_apu, stt_skip_temp}
+Date:		December 2024
+Contact:	Mario Limonciello <mario.limonciello@amd.com>
+Description:	Manual control of AMD PMF APU coefficients
+		.
+		These files are used to manually control the APU coefficients.
+		In order to write to these files the module most be
+		loaded with manual_control=1 and the user must write "custom"
+		to the ACPI platform profile.

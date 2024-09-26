@@ -59,6 +59,10 @@ static bool force_load;
 module_param(force_load, bool, 0444);
 MODULE_PARM_DESC(force_load, "Force load this driver on supported older platforms (experimental)");
 
+bool pmf_manual_control;
+module_param_named(manual_control, pmf_manual_control, bool, 0444);
+MODULE_PARM_DESC(manual_control, "Expose manual control knobs (experimental)");
+
 static int amd_pmf_pwr_src_notify_call(struct notifier_block *nb, unsigned long event, void *data)
 {
 	struct amd_pmf_dev *pmf = container_of(nb, struct amd_pmf_dev, pwr_src_notifier);
@@ -343,6 +347,10 @@ static void amd_pmf_init_features(struct amd_pmf_dev *dev)
 		dev_dbg(dev->dev, "SPS enabled and Platform Profiles registered\n");
 	}
 
+	if (pmf_manual_control) {
+		amd_pmf_init_manual_control(dev);
+		return;
+	}
 	amd_pmf_init_smart_pc(dev);
 	if (dev->smart_pc_enabled) {
 		dev_dbg(dev->dev, "Smart PC Solution Enabled\n");
@@ -479,6 +487,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
 
 static const struct attribute_group *amd_pmf_driver_groups[] = {
 	&cnqf_feature_attribute_group,
+	&manual_attribute_group,
 	NULL,
 };
 

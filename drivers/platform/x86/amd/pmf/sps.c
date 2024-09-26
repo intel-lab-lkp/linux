@@ -305,6 +305,8 @@ int amd_pmf_get_pprof_modes(struct amd_pmf_dev *pmf)
 	case PLATFORM_PROFILE_LOW_POWER:
 		mode = POWER_MODE_POWER_SAVER;
 		break;
+	case PLATFORM_PROFILE_CUSTOM:
+		return 0;
 	default:
 		dev_err(pmf->dev, "Unknown Platform Profile.\n");
 		return -EOPNOTSUPP;
@@ -412,6 +414,8 @@ int amd_pmf_init_sps(struct amd_pmf_dev *dev)
 	set_bit(PLATFORM_PROFILE_LOW_POWER, dev->pprof.choices);
 	set_bit(PLATFORM_PROFILE_BALANCED, dev->pprof.choices);
 	set_bit(PLATFORM_PROFILE_PERFORMANCE, dev->pprof.choices);
+	if (pmf_manual_control)
+		set_bit(PLATFORM_PROFILE_CUSTOM, dev->pprof.choices);
 
 	/* Create platform_profile structure and register */
 	err = platform_profile_register(&dev->pprof);
