@@ -4196,6 +4196,8 @@ int ext4_truncate(struct inode *inode)
 	if (IS_SYNC(inode))
 		ext4_handle_sync(handle);
 
+	inode->i_flags |= S_TRUNCATED;
+
 out_stop:
 	/*
 	 * If this was a simple ftruncate() and the file will remain alive,
@@ -5495,7 +5497,8 @@ int ext4_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		 * Call ext4_truncate() even if i_size didn't change to
 		 * truncate possible preallocated blocks.
 		 */
-		if (attr->ia_size <= oldsize) {
+		if (attr->ia_size < oldsize ||
+			(attr->ia_size == oldsize && !IS_TRUNCATED(inode))) {
 			rc = ext4_truncate(inode);
 			if (rc)
 				error = rc;

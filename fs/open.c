@@ -330,6 +330,9 @@ int vfs_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	if (!file->f_op->fallocate)
 		return -EOPNOTSUPP;
 
+	if (mode & FALLOC_FL_MODE_MASK & FALLOC_FL_KEEP_SIZE)
+		inode->i_flags &= (~S_TRUNCATED);
+
 	file_start_write(file);
 	ret = file->f_op->fallocate(file, mode, offset, len);
 
