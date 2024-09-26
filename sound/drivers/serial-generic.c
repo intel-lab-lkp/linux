@@ -139,6 +139,8 @@ static int snd_serial_generic_ensure_serdev_open(struct snd_serial_generic *drvd
 			drvdata->baudrate, drvdata->card->shortname, actual_baud);
 	}
 
+	serdev_device_set_flow_control(drvdata->serdev, false);
+
 	return 0;
 }
 
