@@ -5108,8 +5108,8 @@ static int scx_ops_enable(struct sched_ext_ops *ops, struct bpf_link *link)
 		spin_unlock_irq(&scx_tasks_lock);
 
 		ret = scx_ops_init_task(p, task_group(p), false);
+		put_task_struct(p);
 		if (ret) {
-			put_task_struct(p);
 			spin_lock_irq(&scx_tasks_lock);
 			scx_task_iter_exit(&sti);
 			spin_unlock_irq(&scx_tasks_lock);
@@ -5118,7 +5118,6 @@ static int scx_ops_enable(struct sched_ext_ops *ops, struct bpf_link *link)
 			goto err_disable_unlock_all;
 		}
 
-		put_task_struct(p);
 		spin_lock_irq(&scx_tasks_lock);
 	}
 	scx_task_iter_exit(&sti);
