@@ -2943,10 +2943,8 @@ static void __ftrace_trace_stack(struct trace_buffer *buffer,
 	 * Add one, for this function and the call to save_stack_trace()
 	 * If regs is set, then these functions will not be in the way.
 	 */
-#ifndef CONFIG_UNWINDER_ORC
-	if (!regs)
+	if (IS_ENABLED(CONFIG_UNWINDER_ORC) || !regs)
 		skip++;
-#endif
 
 	preempt_disable_notrace();
 
