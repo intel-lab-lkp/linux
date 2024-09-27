@@ -1306,7 +1306,7 @@ static ssize_t btrfs_temp_fsid_show(struct kobject *kobj,
 BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
 #ifdef CONFIG_BTRFS_DEBUG
-static const char * const btrfs_read_policy_name[] = { "pid", "rotation", "latency" };
+static const char * const btrfs_read_policy_name[] = { "pid", "rotation", "latency", "devid" };
 #else
 static const char * const btrfs_read_policy_name[] = { "pid" };
 #endif
@@ -1320,14 +1320,22 @@ static ssize_t btrfs_read_policy_show(struct kobject *kobj,
 	int i;
 
 	for (i = 0; i < BTRFS_NR_READ_POLICY; i++) {
-		if (policy == i)
-			ret += sysfs_emit_at(buf, ret, "%s[%s]",
-					 (ret == 0 ? "" : " "),
-					 btrfs_read_policy_name[i]);
-		else
-			ret += sysfs_emit_at(buf, ret, "%s%s",
-					 (ret == 0 ? "" : " "),
-					 btrfs_read_policy_name[i]);
+		if (ret != 0)
+			ret += sysfs_emit_at(buf, ret, " ");
+
+		if (i == policy)
+			ret += sysfs_emit_at(buf, ret, "[");
+
+		ret += sysfs_emit_at(buf, ret, "%s", btrfs_read_policy_name[i]);
+
+#ifdef CONFIG_BTRFS_DEBUG
+		if (i == BTRFS_READ_POLICY_DEVID)
+			ret += sysfs_emit_at(buf, ret, ":%llu",
+							fs_devices->read_devid);
+#endif
+
+		if (i == policy)
+			ret += sysfs_emit_at(buf, ret, "]");
 	}
 
 	ret += sysfs_emit_at(buf, ret, "\n");
@@ -1340,21 +1348,71 @@ static ssize_t btrfs_read_policy_store(struct kobject *kobj,
 				       const char *buf, size_t len)
 {
 	struct btrfs_fs_devices *fs_devices = to_fs_devs(kobj);
+	char *value;
+#ifdef CONFIG_BTRFS_DEBUG
+	u64 devid = 0;
+#endif
+	int index = -1;
 	int i;
+	bool changed = false;
+
+	value = strchr(buf, ':');
+	if (value) {
+		*value = '\0';
+		value = value + 1;
+	}
 
 	for (i = 0; i < BTRFS_NR_READ_POLICY; i++) {
 		if (sysfs_streq(buf, btrfs_read_policy_name[i])) {
-			if (i != READ_ONCE(fs_devices->read_policy)) {
-				WRITE_ONCE(fs_devices->read_policy, i);
-				btrfs_info(fs_devices->fs_info,
-					   "read policy set to '%s'",
-					   btrfs_read_policy_name[i]);
-			}
-			return len;
+			index = i;
+			break;
 		}
 	}
 
-	return -EINVAL;
+	if (index == -1)
+		return -EINVAL;
+
+#ifdef CONFIG_BTRFS_DEBUG
+	/* Extract values from input in devid:value format */
+	if (index == BTRFS_READ_POLICY_DEVID) {
+		BTRFS_DEV_LOOKUP_ARGS(args);
+
+		if (value == NULL || kstrtou64(value, 10, &devid))
+			return -EINVAL;
+
+		args.devid = devid;
+		if (btrfs_find_device(fs_devices, &args) == NULL)
+			return -EINVAL;
+
+		if (READ_ONCE(fs_devices->read_devid) != devid) {
+			WRITE_ONCE(fs_devices->read_devid, devid);
+			changed = true;
+		}
+	}
+#endif
+
+	if (index != READ_ONCE(fs_devices->read_policy)) {
+		WRITE_ONCE(fs_devices->read_policy, index);
+		changed = true;
+	}
+
+	if (changed) {
+#ifdef CONFIG_BTRFS_DEBUG
+		if (devid)
+			btrfs_info(fs_devices->fs_info,
+				   "read policy set to '%s:%llu'",
+				   btrfs_read_policy_name[index], devid);
+		else
+			btrfs_info(fs_devices->fs_info,
+				   "read policy set to '%s'",
+				   btrfs_read_policy_name[index]);
+#else
+		btrfs_info(fs_devices->fs_info, "read policy set to '%s'",
+			   btrfs_read_policy_name[index]);
+#endif
+	}
+
+	return len;
 }
 BTRFS_ATTR_RW(, read_policy, btrfs_read_policy_show, btrfs_read_policy_store);
 

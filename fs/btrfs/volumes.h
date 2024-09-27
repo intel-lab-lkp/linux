@@ -302,6 +302,8 @@ enum btrfs_read_policy {
 	BTRFS_READ_POLICY_ROTATION,
 	/* Use the lowest-latency device dynamically */
 	BTRFS_READ_POLICY_LATENCY,
+	/* Read from the specific device */
+	BTRFS_READ_POLICY_DEVID,
 #endif
 	BTRFS_NR_READ_POLICY,
 };
@@ -433,6 +435,9 @@ struct btrfs_fs_devices {
 #ifdef CONFIG_BTRFS_DEBUG
 	/* read counter for the filesystem */ 
 	atomic_t total_reads;
+
+	/* Device to be used for reading in case of RAID1 */
+	u64 read_devid;
 
 	/* Checksum mode - offload it or do it synchronously. */
 	enum btrfs_offload_csum_mode offload_csum_mode;

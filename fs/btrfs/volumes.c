@@ -5863,6 +5863,23 @@ int btrfs_is_parity_mirror(struct btrfs_fs_info *fs_info, u64 logical, u64 len)
 }
 
 #ifdef CONFIG_BTRFS_DEBUG
+static int btrfs_read_preferred(struct btrfs_chunk_map *map, int first,
+				int num_stripe)
+{
+	int last = first + num_stripe;
+	int stripe_index;
+
+	for (stripe_index = first; stripe_index < last; stripe_index++) {
+		struct btrfs_device *device = map->stripes[stripe_index].dev;
+
+		if (device->devid == READ_ONCE(device->fs_devices->read_devid))
+			return stripe_index;
+	}
+
+	/* If no read-preferred device, use first stripe */
+	return first;
+}
+
 static int btrfs_best_stripe(struct btrfs_fs_info *fs_info,
 			     struct btrfs_chunk_map *map, int first,
 			     int num_stripe)
@@ -5979,6 +5996,9 @@ static int find_live_mirror(struct btrfs_fs_info *fs_info,
 	case BTRFS_READ_POLICY_LATENCY:
 		preferred_mirror = btrfs_best_stripe(fs_info, map, first,
 								num_stripes);
+		break;
+	case BTRFS_READ_POLICY_DEVID:
+		preferred_mirror = btrfs_read_preferred(map, first, num_stripes);
 		break;
 #endif
 	}
