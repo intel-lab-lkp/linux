@@ -869,13 +869,7 @@ static bool f2fs_force_buffered_io(struct inode *inode, int rw)
 	/* disallow direct IO if any of devices has unaligned blksize */
 	if (f2fs_is_multi_device(sbi) && !sbi->aligned_blksize)
 		return true;
-	/*
-	 * for blkzoned device, fallback direct IO to buffered IO, so
-	 * all IOs can be serialized by log-structured write.
-	 */
-	if (f2fs_sb_has_blkzoned(sbi) && (rw == WRITE) &&
-	    !f2fs_is_pinned_file(inode))
-		return true;
+
 	if (is_sbi_flag_set(sbi, SBI_CP_DISABLED))
 		return true;
 
@@ -4815,6 +4809,17 @@ static int f2fs_dio_write_end_io(struct kiocb *iocb, ssize_t size, int error,
 	return 0;
 }
 
+#ifdef CONFIG_BLK_DEV_ZONED
+static void f2fs_dio_zone_write_end_io(struct bio *bio)
+{
+	struct f2fs_bio_info *io = (struct f2fs_bio_info *)bio->bi_private;
+
+	bio->bi_private = io->bi_private;
+	complete(&io->zone_wait);
+	iomap_dio_bio_end_io(bio);
+}
+#endif
+
 static void f2fs_dio_write_submit_io(const struct iomap_iter *iter,
 					struct bio *bio, loff_t file_offset)
 {
@@ -4824,6 +4829,31 @@ static void f2fs_dio_write_submit_io(const struct iomap_iter *iter,
 	enum temp_type temp = f2fs_get_segment_temp(seg_type);
 
 	bio->bi_write_hint = f2fs_io_type_to_rw_hint(sbi, DATA, temp);
+
+#ifdef CONFIG_BLK_DEV_ZONED
+	if (f2fs_sb_has_blkzoned(sbi) && !f2fs_is_pinned_file(inode)) {
+		struct f2fs_bio_info *io = sbi->write_io[DATA] + temp;
+		block_t last_blkaddr = SECTOR_TO_BLOCK(bio_end_sector(bio) - 1);
+
+		f2fs_down_write(&io->io_rwsem);
+		if (io->zone_pending_bio) {
+			wait_for_completion_io(&io->zone_wait);
+			bio_put(io->zone_pending_bio);
+			io->zone_pending_bio = NULL;
+			io->bi_private = NULL;
+		}
+
+		if (is_end_zone_blkaddr(sbi, last_blkaddr)) {
+			bio_get(bio);
+			reinit_completion(&io->zone_wait);
+			io->bi_private = bio->bi_private;
+			bio->bi_private = io;
+			bio->bi_end_io = f2fs_dio_zone_write_end_io;
+			io->zone_pending_bio = bio;
+		}
+		f2fs_up_write(&io->io_rwsem);
+	}
+#endif
 	submit_bio(bio);
 }
 
@@ -4897,6 +4927,10 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 	dio_flags = 0;
 	if (pos + count > inode->i_size)
 		dio_flags |= IOMAP_DIO_FORCE_WAIT;
+
+	if (f2fs_sb_has_blkzoned(sbi) && !f2fs_is_pinned_file(inode))
+		dio_flags |= IOMAP_DIO_FORCE_WAIT;
+
 	dio = __iomap_dio_rw(iocb, from, &f2fs_iomap_ops,
 			     &f2fs_iomap_dio_write_ops, dio_flags, NULL, 0);
 	if (IS_ERR_OR_NULL(dio)) {

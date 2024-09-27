@@ -922,7 +922,7 @@ alloc_new:
 }
 
 #ifdef CONFIG_BLK_DEV_ZONED
-static bool is_end_zone_blkaddr(struct f2fs_sb_info *sbi, block_t blkaddr)
+bool is_end_zone_blkaddr(struct f2fs_sb_info *sbi, block_t blkaddr)
 {
 	struct block_device *bdev = sbi->sb->s_bdev;
 	int devi = 0;
@@ -4211,6 +4211,7 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 			    struct iomap *srcmap)
 {
 	struct f2fs_map_blocks map = {};
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	pgoff_t next_pgofs = 0;
 	int err;
 
@@ -4221,6 +4222,18 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 						inode->i_write_hint);
 	if (flags & IOMAP_WRITE)
 		map.m_may_create = true;
+
+	if (f2fs_sb_has_blkzoned(sbi) && !f2fs_is_pinned_file(inode)) {
+		struct f2fs_rwsem *io_order_lock =
+				&sbi->io_order_lock[map.m_seg_type];
+
+		f2fs_down_write(io_order_lock);
+
+		/* set io order lock */
+		iomap->private = io_order_lock;
+	} else {
+		iomap->private = NULL;
+	}
 
 	err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_DIO);
 	if (err)
@@ -4277,6 +4290,19 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	return 0;
 }
 
+static int f2fs_iomap_end(struct inode *inode, loff_t pos, loff_t length,
+		ssize_t written, unsigned int flags, struct iomap *iomap)
+{
+	struct f2fs_rwsem *io_order_lock = iomap->private;
+
+	/* ordered write */
+	if (io_order_lock)
+		f2fs_up_write(io_order_lock);
+
+	return 0;
+}
+
 const struct iomap_ops f2fs_iomap_ops = {
 	.iomap_begin	= f2fs_iomap_begin,
+	.iomap_end	= f2fs_iomap_end,
 };

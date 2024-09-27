@@ -1582,8 +1582,8 @@ struct f2fs_sb_info {
 
 	/* for bio operations */
 	struct f2fs_bio_info *write_io[NR_PAGE_TYPE];	/* for write bios */
-	/* keep migration IO order for LFS mode */
-	struct f2fs_rwsem io_order_lock;
+	/* keep IO order for LFS mode */
+	struct f2fs_rwsem io_order_lock[NR_CURSEG_DATA_TYPE];
 	pgoff_t page_eio_ofs[NR_PAGE_TYPE];	/* EIO page offset */
 	int page_eio_cnt[NR_PAGE_TYPE];		/* EIO count */
 
@@ -3865,6 +3865,9 @@ void f2fs_submit_merged_ipu_write(struct f2fs_sb_info *sbi,
 void f2fs_flush_merged_writes(struct f2fs_sb_info *sbi);
 int f2fs_submit_page_bio(struct f2fs_io_info *fio);
 int f2fs_merge_page_bio(struct f2fs_io_info *fio);
+#ifdef CONFIG_BLK_DEV_ZONED
+bool is_end_zone_blkaddr(struct f2fs_sb_info *sbi, block_t blkaddr);
+#endif
 void f2fs_submit_page_write(struct f2fs_io_info *fio);
 struct block_device *f2fs_target_device(struct f2fs_sb_info *sbi,
 		block_t blk_addr, sector_t *sector);

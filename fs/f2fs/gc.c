@@ -1352,7 +1352,7 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	fio.new_blkaddr = fio.old_blkaddr = dn.data_blkaddr;
 
 	if (lfs_mode)
-		f2fs_down_write(&fio.sbi->io_order_lock);
+		f2fs_down_write(&fio.sbi->io_order_lock[CURSEG_COLD_DATA]);
 
 	mpage = f2fs_grab_cache_page(META_MAPPING(fio.sbi),
 					fio.old_blkaddr, false);
@@ -1435,7 +1435,7 @@ recover_block:
 							true, true, true);
 up_out:
 	if (lfs_mode)
-		f2fs_up_write(&fio.sbi->io_order_lock);
+		f2fs_up_write(&fio.sbi->io_order_lock[CURSEG_COLD_DATA]);
 put_out:
 	f2fs_put_dnode(&dn);
 out:
