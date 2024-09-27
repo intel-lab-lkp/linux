@@ -87,6 +87,20 @@ properties:
       This value is used to compute the tHIGH period.
     default: 300
 
+  bus-capacitance-pf:
+    description: |
+      This property represents the bus capacitance in picofarad (pF). It
+      affects the high and low pulse width of SCL line in high speed mode.
+      The only legal values for this property are 100 and 400, which are used
+      to calculate the tHIGH and tLOW periods for high speed mode.
+    default: 100
+
+  clk-freq-optimized:
+    description: |
+      If the hardware input clock frequency is reduced by reducing the
+      internal latency, this property must be declared in the device tree. It
+      affects the high period and low period of SCL line.
+
   dmas:
     items:
       - description: TX DMA Channel
