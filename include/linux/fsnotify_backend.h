@@ -277,14 +277,12 @@ struct fsnotify_group {
 static inline void fsnotify_group_lock(struct fsnotify_group *group)
 {
 	mutex_lock(&group->mark_mutex);
-	if (group->flags & FSNOTIFY_GROUP_NOFS)
-		group->owner_flags = memalloc_nofs_save();
+	group->owner_flags = memalloc_nofs_save();
 }
 
 static inline void fsnotify_group_unlock(struct fsnotify_group *group)
 {
-	if (group->flags & FSNOTIFY_GROUP_NOFS)
-		memalloc_nofs_restore(group->owner_flags);
+	memalloc_nofs_restore(group->owner_flags);
 	mutex_unlock(&group->mark_mutex);
 }
 
