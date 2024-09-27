@@ -60,6 +60,7 @@ static int madvise_need_mmap_write(int behavior)
 	case MADV_POPULATE_READ:
 	case MADV_POPULATE_WRITE:
 	case MADV_COLLAPSE:
+	case MADV_GUARD_UNPOISON: /* Only poisoning needs a write lock. */
 		return 0;
 	default:
 		/* be safe, default to 1. list exceptions explicitly */
@@ -1017,6 +1018,157 @@ static long madvise_remove(struct vm_area_struct *vma,
 	return error;
 }
 
+static bool is_valid_guard_vma(struct vm_area_struct *vma, bool allow_locked)
+{
+	vm_flags_t disallowed = VM_SPECIAL | VM_HUGETLB;
+
+	/*
+	 * A user could lock after poisoning but that's fine, as they'd not be
+	 * able to fault in. The issue arises when we try to zap existing locked
+	 * VMAs. We don't want to do that.
+	 */
+	if (!allow_locked)
+		disallowed |= VM_LOCKED;
+
+	if (!vma_is_anonymous(vma))
+		return false;
+
+	if ((vma->vm_flags & (VM_MAYWRITE | disallowed)) != VM_MAYWRITE)
+		return false;
+
+	return true;
+}
+
+static int guard_poison_install_pte(unsigned long addr, unsigned long next,
+				    pte_t *ptep, struct mm_walk *walk)
+{
+	unsigned long *num_installed = (unsigned long *)walk->private;
+
+	(*num_installed)++;
+	/* Simply install a PTE marker, this causes segfault on access. */
+	*ptep = make_pte_marker(PTE_MARKER_GUARD);
+
+	return 0;
+}
+
+static bool is_guard_pte_marker(pte_t ptent)
+{
+	return is_pte_marker(ptent) &&
+		is_guard_swp_entry(pte_to_swp_entry(ptent));
+}
+
+static int guard_poison_pte_entry(pte_t *pte, unsigned long addr,
+				  unsigned long next, struct mm_walk *walk)
+{
+	pte_t ptent = ptep_get(pte);
+
+	/*
+	 * If not a guard marker, simply abort the operation. We return a value
+	 * > 0 indicating a non-error abort.
+	 */
+	return !is_guard_pte_marker(ptent);
+}
+
+static const struct mm_walk_ops guard_poison_walk_ops = {
+	.install_pte		= guard_poison_install_pte,
+	.pte_entry		= guard_poison_pte_entry,
+	/* We might need to install an anon_vma. */
+	.walk_lock		= PGWALK_WRLOCK,
+};
+
+static long madvise_guard_poison(struct vm_area_struct *vma,
+				 struct vm_area_struct **prev,
+				 unsigned long start, unsigned long end)
+{
+	long err;
+	bool retried = false;
+
+	*prev = vma;
+	if (!is_valid_guard_vma(vma, /* allow_locked = */false))
+		return -EINVAL;
+
+	/*
+	 * Optimistically try to install the guard poison pages first. If any
+	 * non-guard pages are encountered, give up and zap the range before
+	 * trying again.
+	 */
+	while (true) {
+		unsigned long num_installed = 0;
+
+		/* Returns < 0 on error, == 0 if success, > 0 if zap needed. */
+		err = walk_page_range_mm(vma->vm_mm, start, end,
+					 &guard_poison_walk_ops,
+					 &num_installed);
+		/*
+		 * If we install poison markers, then the range is no longer
+		 * empty from a page table perspective and therefore it's
+		 * appropriate to have an anon_vma.
+		 *
+		 * This ensures that on fork, we copy page tables correctly.
+		 */
+		if (err >= 0 && num_installed > 0) {
+			int err_anon = anon_vma_prepare(vma);
+
+			if (err_anon)
+				err = err_anon;
+		}
+
+		if (err <= 0)
+			return err;
+
+		if (!retried)
+			/*
+			 * OK some of the range have non-guard pages mapped, zap
+			 * them. This leaves existing guard pages in place.
+			 */
+			zap_page_range_single(vma, start, end - start, NULL);
+		else
+			/*
+			 * If we reach here, then there is a racing fault that
+			 * has populated the PTE after we zapped. Give up and
+			 * let the user know to try again.
+			 */
+			return -EAGAIN;
+
+		retried = true;
+	}
+}
+
+static int guard_unpoison_pte_entry(pte_t *pte, unsigned long addr,
+				    unsigned long next, struct mm_walk *walk)
+{
+	pte_t ptent = ptep_get(pte);
+
+	if (is_guard_pte_marker(ptent)) {
+		/* Simply clear the PTE marker. */
+		pte_clear_not_present_full(walk->mm, addr, pte, true);
+		update_mmu_cache(walk->vma, addr, pte);
+	}
+
+	return 0;
+}
+
+static const struct mm_walk_ops guard_unpoison_walk_ops = {
+	.pte_entry		= guard_unpoison_pte_entry,
+	.walk_lock		= PGWALK_RDLOCK,
+};
+
+static long madvise_guard_unpoison(struct vm_area_struct *vma,
+				   struct vm_area_struct **prev,
+				   unsigned long start, unsigned long end)
+{
+	*prev = vma;
+	/*
+	 * We're ok with unpoisoning mlock()'d ranges, as this is a
+	 * non-destructive action.
+	 */
+	if (!is_valid_guard_vma(vma, /* allow_locked = */true))
+		return -EINVAL;
+
+	return walk_page_range(vma->vm_mm, start, end,
+			       &guard_unpoison_walk_ops, NULL);
+}
+
 /*
  * Apply an madvise behavior to a region of a vma.  madvise_update_vma
  * will handle splitting a vm area into separate areas, each area with its own
@@ -1098,6 +1250,10 @@ static int madvise_vma_behavior(struct vm_area_struct *vma,
 		break;
 	case MADV_COLLAPSE:
 		return madvise_collapse(vma, prev, start, end);
+	case MADV_GUARD_POISON:
+		return madvise_guard_poison(vma, prev, start, end);
+	case MADV_GUARD_UNPOISON:
+		return madvise_guard_unpoison(vma, prev, start, end);
 	}
 
 	anon_name = anon_vma_name(vma);
@@ -1197,6 +1353,8 @@ madvise_behavior_valid(int behavior)
 	case MADV_DODUMP:
 	case MADV_WIPEONFORK:
 	case MADV_KEEPONFORK:
+	case MADV_GUARD_POISON:
+	case MADV_GUARD_UNPOISON:
 #ifdef CONFIG_MEMORY_FAILURE
 	case MADV_SOFT_OFFLINE:
 	case MADV_HWPOISON:

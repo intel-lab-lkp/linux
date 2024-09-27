@@ -113,6 +113,9 @@
 
 #define MADV_COLLAPSE	25		/* Synchronous hugepage collapse */
 
+#define MADV_GUARD_POISON 102		/* fatal signal on access to range */
+#define MADV_GUARD_UNPOISON 103		/* revoke guard poisoning */
+
 /* compatibility flags */
 #define MAP_FILE	0
 
