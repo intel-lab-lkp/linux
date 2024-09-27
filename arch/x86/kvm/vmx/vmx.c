@@ -5828,6 +5828,11 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 static int handle_ept_misconfig(struct kvm_vcpu *vcpu)
 {
 	gpa_t gpa;
+	u64 error_code = PFERR_RSVD_MASK;
+
+	/* Do we have events awaiting delivery? */
+	error_code |= (to_vmx(vcpu)->idt_vectoring_info & VECTORING_INFO_VALID_MASK)
+		     ? PFERR_EVT_DELIVERY : 0;
 
 	if (vmx_check_emulate_instruction(vcpu, EMULTYPE_PF, NULL, 0))
 		return 1;
@@ -5843,7 +5848,7 @@ static int handle_ept_misconfig(struct kvm_vcpu *vcpu)
 		return kvm_skip_emulated_instruction(vcpu);
 	}
 
-	return kvm_mmu_page_fault(vcpu, gpa, PFERR_RSVD_MASK, NULL, 0);
+	return kvm_mmu_page_fault(vcpu, gpa, error_code, NULL, 0);
 }
 
 static int handle_nmi_window(struct kvm_vcpu *vcpu)
@@ -6536,24 +6541,16 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		return 0;
 	}
 
-	/*
-	 * Note:
-	 * Do not try to fix EXIT_REASON_EPT_MISCONFIG if it caused by
-	 * delivery event since it indicates guest is accessing MMIO.
-	 * The vm-exit can be triggered again after return to guest that
-	 * will cause infinite loop.
-	 */
 	if ((vectoring_info & VECTORING_INFO_VALID_MASK) &&
 	    (exit_reason.basic != EXIT_REASON_EXCEPTION_NMI &&
 	     exit_reason.basic != EXIT_REASON_EPT_VIOLATION &&
 	     exit_reason.basic != EXIT_REASON_PML_FULL &&
 	     exit_reason.basic != EXIT_REASON_APIC_ACCESS &&
 	     exit_reason.basic != EXIT_REASON_TASK_SWITCH &&
-	     exit_reason.basic != EXIT_REASON_NOTIFY)) {
+	     exit_reason.basic != EXIT_REASON_NOTIFY &&
+	     exit_reason.basic != EXIT_REASON_EPT_MISCONFIG)) {
 		gpa_t gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
-		bool is_mmio = exit_reason.basic == EXIT_REASON_EPT_MISCONFIG;
-
-		kvm_prepare_ev_delivery_failure_exit(vcpu, gpa, is_mmio);
+		kvm_prepare_ev_delivery_failure_exit(vcpu, gpa, false);
 		return 0;
 	}
 

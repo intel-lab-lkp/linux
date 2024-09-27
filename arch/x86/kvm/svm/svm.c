@@ -2059,6 +2059,10 @@ static int npf_interception(struct kvm_vcpu *vcpu)
 	u64 fault_address = svm->vmcb->control.exit_info_2;
 	u64 error_code = svm->vmcb->control.exit_info_1;
 
+	/* Check if we have events awaiting delivery */
+	if (svm->vmcb->control.exit_int_info & SVM_EXITINTINFO_TYPE_MASK)
+		error_code |= PFERR_EVT_DELIVERY;
+
 	/*
 	 * WARN if hardware generates a fault with an error code that collides
 	 * with KVM-defined sythentic flags.  Clear the flags and continue on,

@@ -282,6 +282,12 @@ enum x86_intercept_stage;
 #define PFERR_PRIVATE_ACCESS   BIT_ULL(49)
 #define PFERR_SYNTHETIC_MASK   (PFERR_IMPLICIT_ACCESS | PFERR_PRIVATE_ACCESS)
 
+/*
+ * EVT_DELIVERY is a KVM-defined flag used to indicate that a fault occurred
+ * during event delivery.
+ */
+#define PFERR_EVT_DELIVERY     BIT_ULL(50)
+
 /* apic attention bits */
 #define KVM_APIC_CHECK_VAPIC	0
 /*

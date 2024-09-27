@@ -6120,8 +6120,21 @@ int noinline kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 err
 			return -EFAULT;
 
 		r = handle_mmio_page_fault(vcpu, cr2_or_gpa, direct);
-		if (r == RET_PF_EMULATE)
+		if (r == RET_PF_EMULATE) {
+			/*
+			 * Check if the guest is accessing MMIO during event delivery. For
+			 * instance, it could happen if the guest sets IDT / GDT descriptor
+			 * base to point to an MMIO address. We can't deliver such an event
+			 * without VMM intervention, so return a corresponding internal error
+			 * instead (otherwise, vCPU will fall into infinite loop trying to
+			 * deliver the event again and again).
+			 */
+			if (error_code & PFERR_EVT_DELIVERY) {
+				kvm_prepare_ev_delivery_failure_exit(vcpu, cr2_or_gpa, true);
+				return 0;
+			}
 			goto emulate;
+		}
 	}
 
 	if (r == RET_PF_INVALID) {
