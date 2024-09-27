@@ -65,6 +65,7 @@ struct mxc_isi_m2m_ctx {
 	} ctrls;
 
 	bool chained;
+	bool in_use[2];
 };
 
 static inline struct mxc_isi_m2m_buffer *
@@ -491,6 +492,7 @@ static int mxc_isi_m2m_streamon(struct file *file, void *fh,
 	const struct mxc_isi_format_info *cap_info = ctx->queues.cap.info;
 	const struct mxc_isi_format_info *out_info = ctx->queues.out.info;
 	struct mxc_isi_m2m *m2m = ctx->m2m;
+	bool already_in_use;
 	bool bypass;
 
 	int ret;
@@ -501,6 +503,8 @@ static int mxc_isi_m2m_streamon(struct file *file, void *fh,
 		ret = -EOVERFLOW;
 		goto unlock;
 	}
+
+	already_in_use = ctx->in_use[type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE];
 
 	bypass = cap_pix->width == out_pix->width &&
 		 cap_pix->height == out_pix->height &&
@@ -520,7 +524,10 @@ static int mxc_isi_m2m_streamon(struct file *file, void *fh,
 		mxc_isi_channel_get(m2m->pipe);
 	}
 
-	m2m->usage_count++;
+	if (!already_in_use) {
+		m2m->usage_count++;
+		ctx->in_use[type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE] = true;
+	}
 
 	/*
 	 * Allocate resources for the channel, counting how many users require
@@ -555,7 +562,12 @@ unchain:
 	ctx->chained = false;
 
 deinit:
-	if (--m2m->usage_count == 0) {
+	if (!already_in_use) {
+		m2m->usage_count--;
+		ctx->in_use[type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE] = false;
+	}
+
+	if (m2m->usage_count == 0) {
 		mxc_isi_channel_put(m2m->pipe);
 		mxc_isi_channel_release(m2m->pipe);
 	}
@@ -575,6 +587,9 @@ static int mxc_isi_m2m_streamoff(struct file *file, void *fh,
 
 	mutex_lock(&m2m->lock);
 
+	if (!ctx->in_use[type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE])
+		goto unlock;
+
 	/*
 	 * If the last context is this one, reset it to make sure the device
 	 * will be reconfigured when streaming is restarted.
@@ -587,6 +602,8 @@ static int mxc_isi_m2m_streamoff(struct file *file, void *fh,
 		mxc_isi_channel_unchain(m2m->pipe);
 	ctx->chained = false;
 
+	ctx->in_use[type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE] = false;
+
 	/* Turn off the light with the last user. */
 	if (--m2m->usage_count == 0) {
 		mxc_isi_channel_disable(m2m->pipe);
@@ -594,8 +611,7 @@ static int mxc_isi_m2m_streamoff(struct file *file, void *fh,
 		mxc_isi_channel_release(m2m->pipe);
 	}
 
-	WARN_ON(m2m->usage_count < 0);
-
+unlock:
 	mutex_unlock(&m2m->lock);
 
 	return 0;
