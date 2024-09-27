@@ -632,7 +632,7 @@ static int fsl_qspi_readl_poll_tout(struct fsl_qspi *q, void __iomem *base,
 	u32 reg;
 
 	if (!q->devtype_data->little_endian)
-		mask = (u32)cpu_to_be32(mask);
+		mask =(__force u32)cpu_to_be32(mask);
 
 	return readl_poll_timeout(base, reg, !(reg & mask), delay_us,
 				  timeout_us);
