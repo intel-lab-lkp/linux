@@ -166,8 +166,21 @@ bool drm_sched_entity_is_ready(struct drm_sched_entity *entity)
  * drm_sched_entity_error - return error of last scheduled job
  * @entity: scheduler entity to check
  *
- * Opportunistically return the error of the last scheduled job. Result can
- * change any time when new jobs are pushed to the hw.
+ * Drivers should use this function in two ways:
+ *
+ * 1. In it's prepare callback so that when one submission fails all following
+ * from the same ctx are marked with an error number as well.
+ *
+ * This is intentionally done in a driver callback so that driver decides if
+ * they want subsequent submissions to fail or not. That can be helpful for
+ * example for in kernel paging queues where submissions don't depend on each
+ * other and a failed submission shouldn't cancel all following.
+ *
+ * 2. In it's submission IOCTL to reject new submissions and inform userspace
+ * that it needs to kick of some error handling.
+ *
+ * Returns the error of the last scheduled job. Result can change any time when
+ * new jobs are pushed to the hw.
  */
 int drm_sched_entity_error(struct drm_sched_entity *entity)
 {
