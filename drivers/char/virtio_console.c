@@ -656,10 +656,14 @@ static ssize_t fill_readbuf(struct port *port, u8 __user *out_buf,
 	struct port_buffer *buf;
 	unsigned long flags;
 
-	if (!out_count || !port_has_data(port))
+	if (!out_count)
 		return 0;
 
-	buf = port->inbuf;
+	spin_lock_irqsave(&port->inbuf_lock, flags);
+	buf = port->inbuf = get_inbuf(port);
+	spin_unlock_irqrestore(&port->inbuf_lock, flags);
+	if (!buf)
+		return 0;
 	out_count = min(out_count, buf->len - buf->offset);
 
 	if (to_user) {
