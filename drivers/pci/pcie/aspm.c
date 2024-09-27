@@ -81,24 +81,47 @@ void pci_configure_aspm_l1ss(struct pci_dev *pdev)
 
 void pci_save_aspm_l1ss_state(struct pci_dev *pdev)
 {
-	struct pci_cap_saved_state *save_state;
-	u16 l1ss = pdev->l1ss;
+	struct pci_cap_saved_state *pl_save_state, *cl_save_state;
+	struct pci_dev *parent;
 	u32 *cap;
 
 	/*
 	 * Save L1 substate configuration. The ASPM L0s/L1 configuration
 	 * in PCI_EXP_LNKCTL_ASPMC is saved by pci_save_pcie_state().
 	 */
-	if (!l1ss)
+	if (!pdev->l1ss)
 		return;
 
-	save_state = pci_find_saved_ext_cap(pdev, PCI_EXT_CAP_ID_L1SS);
-	if (!save_state)
+	cl_save_state = pci_find_saved_ext_cap(pdev, PCI_EXT_CAP_ID_L1SS);
+	if (!cl_save_state)
 		return;
 
-	cap = &save_state->cap.data[0];
-	pci_read_config_dword(pdev, l1ss + PCI_L1SS_CTL2, cap++);
-	pci_read_config_dword(pdev, l1ss + PCI_L1SS_CTL1, cap++);
+	cap = &cl_save_state->cap.data[0];
+	pci_read_config_dword(pdev, pdev->l1ss + PCI_L1SS_CTL2, cap++);
+	pci_read_config_dword(pdev, pdev->l1ss + PCI_L1SS_CTL1, cap++);
+
+	/*
+	 * If here is a parent device and it has not saved state, save parent's
+	 * L1 substate configuration, too. This is symmetric on
+	 * pci_restore_aspm_l1ss_state().
+	 */
+	if (!pdev->bus || !pdev->bus->self)
+		return;
+
+	parent = pdev->bus->self;
+	if (!parent->l1ss)
+		return;
+
+	pl_save_state = pci_find_saved_ext_cap(parent, PCI_EXT_CAP_ID_L1SS);
+	if (!pl_save_state)
+		return;
+
+	if (parent->state_saved)
+		return;
+
+	cap = &pl_save_state->cap.data[0];
+	pci_read_config_dword(parent, parent->l1ss + PCI_L1SS_CTL2, cap++);
+	pci_read_config_dword(parent, parent->l1ss + PCI_L1SS_CTL1, cap++);
 }
 
 void pci_restore_aspm_l1ss_state(struct pci_dev *pdev)
