@@ -662,6 +662,13 @@ struct sched_ext_ops {
 	 */
 	u64 hotplug_seq;
 
+	/*
+	 * enable_seq - unique per-scheduler counter that can be accessed from
+	 * user-space to determine if a scheduler (within a specific hierarchy)
+	 * has been restarted.
+	 */
+	s64 enable_seq;
+
 	/**
 	 * name - BPF scheduler's name
 	 *
@@ -4210,8 +4217,16 @@ static ssize_t scx_attr_ops_show(struct kobject *kobj,
 }
 SCX_ATTR(ops);
 
+static ssize_t scx_attr_seq_show(struct kobject *kobj,
+				 struct kobj_attribute *ka, char *buf)
+{
+	return sysfs_emit(buf, "%lld\n", scx_ops.enable_seq);
+}
+SCX_ATTR(seq);
+
 static struct attribute *scx_sched_attrs[] = {
 	&scx_attr_ops.attr,
+	&scx_attr_seq.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(scx_sched);
@@ -5237,7 +5252,11 @@ static int scx_ops_enable(struct sched_ext_ops *ops, struct bpf_link *link)
 	kobject_uevent(scx_root_kobj, KOBJ_ADD);
 	mutex_unlock(&scx_ops_enable_mutex);
 
-	atomic_long_inc(&scx_enable_seq);
+	/*
+	 * Update scheduler's sequence counter (add 1 to keep it consistent
+	 * with the global scx_enable_seq counter).
+	 */
+	scx_ops.enable_seq = atomic_long_fetch_inc(&scx_enable_seq) + 1;
 
 	return 0;
 
