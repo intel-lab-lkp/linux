@@ -90,6 +90,9 @@ KBUILD_CFLAGS_32 += -DDISABLE_BRANCH_PROFILING
 KBUILD_CFLAGS_32 += -mv8plus
 $(obj)/vdso32.so.dbg: KBUILD_CFLAGS = $(KBUILD_CFLAGS_32)
 
+CFLAGS_vclock_gettime.o += -Wno-missing-prototypes -Wno-missing-declarations
+CFLAGS_vdso32/vclock_gettime.o += -Wno-missing-prototypes -Wno-missing-declarations
+
 $(obj)/vdso32.so.dbg: FORCE \
 			$(obj)/vdso32/vdso32.lds \
 			$(obj)/vdso32/vclock_gettime.o \

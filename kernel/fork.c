@@ -2893,7 +2893,6 @@ SYSCALL_DEFINE2(clone3, struct clone_args __user *, uargs, size_t, size)
 	pid_t set_tid[MAX_PID_NS_LEVEL];
 
 #ifdef __ARCH_BROKEN_SYS_CLONE3
-#warning clone3() entry point is missing, please fix
 	return -ENOSYS;
 #endif
 
