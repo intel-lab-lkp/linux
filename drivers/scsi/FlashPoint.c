@@ -6472,7 +6472,7 @@ static void FPT_BusMasterInit(u32 p_port)
  *
  * Function: FPT_DiagEEPROM
  *
- * Description: Verfiy checksum and 'Key' and initialize the EEPROM if
+ * Description: Verify checksum and 'Key' and initialize the EEPROM if
  *              necessary.
  *
  *---------------------------------------------------------------------*/

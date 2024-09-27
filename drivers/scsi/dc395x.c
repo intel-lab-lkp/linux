@@ -106,7 +106,7 @@
 
 
 /*
- * Output a kernel mesage at the specified level and append the
+ * Output a kernel message at the specified level and append the
  * driver name and a ": " to the start of the message
  */
 #define dprintkl(level, format, arg...)  \
@@ -115,10 +115,10 @@
 
 #ifdef DEBUG_MASK
 /*
- * print a debug message - this is formated with KERN_DEBUG, then the
+ * print a debug message - this is formatted with KERN_DEBUG, then the
  * driver name followed by a ": " and then the message is output. 
  * This also checks that the specified debug level is enabled before
- * outputing the message
+ * outputting the message
  */
 #define dprintkdbg(type, format, arg...) \
 	do { \
@@ -788,7 +788,7 @@ static void waiting_process_next(struct AdapterCtlBlk *acb)
 
 	/*
 	 * Loop over the dcb, but we start somewhere (potentially) in
-	 * the middle of the loop so we need to manully do this.
+	 * the middle of the loop so we need to manually do this.
 	 */
 	pos = start;
 	do {
@@ -1027,7 +1027,7 @@ complete:
 	/*
 	 * Complete the command immediatey, and then return 0 to
 	 * indicate that we have handled the command. This is usually
-	 * done when the commad is for things like non existent
+	 * done when the command is for things like non existent
 	 * devices.
 	 */
 	done(cmd);
@@ -1940,7 +1940,7 @@ static void data_out_phase0(struct AdapterCtlBlk *acb, struct ScsiReqBlk *srb,
 				DC395x_read32(acb, TRM_S1040_DMA_CXCNT));
 		}
 		/*
-		 * calculate all the residue data that not yet tranfered
+		 * calculate all the residue data that not yet transferred
 		 * SCSI transfer counter + left in SCSI FIFO data
 		 *
 		 * .....TRM_S1040_SCSI_COUNTER (24bits)
@@ -3429,7 +3429,7 @@ static void set_basic_config(struct AdapterCtlBlk *acb)
 	DC395x_write8(acb, TRM_S1040_SCSI_CONFIG1, 0x03);	/* was 0x13: default */
 	/* program Host ID                  */
 	DC395x_write8(acb, TRM_S1040_SCSI_HOSTID, acb->scsi_host->this_id);
-	/* set ansynchronous transfer       */
+	/* set asynchronous transfer       */
 	DC395x_write8(acb, TRM_S1040_SCSI_OFFSET, 0x00);
 	/* Turn LED control off */
 	wval = DC395x_read16(acb, TRM_S1040_GEN_CONTROL) & 0x7F;
@@ -3530,7 +3530,7 @@ static void request_sense(struct AdapterCtlBlk *acb, struct DeviceCtlBlk *dcb,
 /**
  * device_alloc - Allocate a new device instance. This create the
  * devices instance and sets up all the data items. The adapter
- * instance is required to obtain confiuration information for this
+ * instance is required to obtain configuration information for this
  * device. This does *not* add this device to the adapters device
  * list.
  *

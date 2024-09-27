@@ -1694,7 +1694,7 @@ out:
 	return retval;
 } /* End twa_reset_sequence() */
 
-/* This funciton returns unit geometry in cylinders/heads/sectors */
+/* This function returns unit geometry in cylinders/heads/sectors */
 static int twa_scsi_biosparam(struct scsi_device *sdev, struct block_device *bdev, sector_t capacity, int geom[])
 {
 	int heads, sectors, cylinders;
