@@ -616,10 +616,10 @@ EXPORT_SYMBOL(devfreq_monitor_resume);
  */
 void devfreq_update_interval(struct devfreq *devfreq, unsigned int *delay)
 {
+	mutex_lock(&devfreq->lock);
 	unsigned int cur_delay = devfreq->profile->polling_ms;
 	unsigned int new_delay = *delay;
 
-	mutex_lock(&devfreq->lock);
 	devfreq->profile->polling_ms = new_delay;
 
 	if (IS_SUPPORTED_FLAG(devfreq->governor->flags, IRQ_DRIVEN))
