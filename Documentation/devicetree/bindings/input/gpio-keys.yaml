@@ -15,6 +15,9 @@ properties:
       - gpio-keys
       - gpio-keys-polled
 
+  interrupt-parent:
+    description: Common interrupt parent for the following subnodes
+
   autorepeat: true
 
   label:
