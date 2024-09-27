@@ -419,6 +419,9 @@ int main(int argc, char **argv)
 	if (argc >= 2) {
 		/* If we are invoked with an argument, don't run tests. */
 		const char *in_test = getenv("IN_TEST");
+		/* TASK_COMM_LEN == 16 */
+		char buf[32];
+		int fd;
 
 		if (verbose) {
 			ksft_print_msg("invoked with:\n");
@@ -429,6 +432,28 @@ int main(int argc, char **argv)
 		/* Check expected environment transferred. */
 		if (!in_test || strcmp(in_test, "yes") != 0) {
 			ksft_print_msg("no IN_TEST=yes in env\n");
+			return 1;
+		}
+
+		fd = open("/proc/self/comm", O_RDONLY);
+		if (fd < 0) {
+			perror("open comm");
+			return 1;
+		}
+
+		if (read(fd, buf, sizeof(buf)) < 0) {
+			close(fd);
+			perror("read comm");
+			return 1;
+		}
+		close(fd);
+
+		/*
+		 * /proc/self/comm should fail to convert to an integer, i.e.
+		 * atoi() should return 0.
+		 */
+		if (atoi(buf) != 0) {
+			ksft_print_msg("bad /proc/self/comm: %s", buf);
 			return 1;
 		}
 
