@@ -372,6 +372,20 @@ static void i2c_dw_adjust_bus_speed(struct dw_i2c_dev *dev)
 		t->bus_freq_hz = I2C_MAX_FAST_MODE_FREQ;
 }
 
+static void i2c_dw_fw_parse_hw_params(struct dw_i2c_dev *dev)
+{
+	struct device *device = dev->dev;
+	int ret;
+
+	ret = device_property_read_u32(device, "bus-capacitance-pf", &dev->bus_capacitance_pf);
+	if (ret || dev->bus_capacitance_pf < 400)
+		dev->bus_capacitance_pf = 100;
+	else
+		dev->bus_capacitance_pf = 400;
+
+	dev->clk_freq_optimized = device_property_read_bool(device, "clk-freq-optimized");
+}
+
 int i2c_dw_fw_parse_and_configure(struct dw_i2c_dev *dev)
 {
 	struct i2c_timings *t = &dev->timings;
@@ -379,6 +393,8 @@ int i2c_dw_fw_parse_and_configure(struct dw_i2c_dev *dev)
 	struct fwnode_handle *fwnode = dev_fwnode(device);
 
 	i2c_parse_fw_timings(device, t, false);
+
+	i2c_dw_fw_parse_hw_params(dev);
 
 	i2c_dw_adjust_bus_speed(dev);
 

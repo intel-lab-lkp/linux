@@ -240,6 +240,10 @@ struct reset_control;
  * @set_sda_hold_time: callback to retrieve IP specific SDA hold timing
  * @mode: operation mode - DW_IC_MASTER or DW_IC_SLAVE
  * @rinfo: I²C GPIO recovery information
+ * @bus_capacitance_pf: bus capacitance in picofarad
+ * @clk_freq_optimized: indicate whether the hardware input clock frequency is
+ *	reduced by reducing the internal latency required to generate the high
+ *	period and low period of the SCL line
  *
  * HCNT and LCNT parameters can be used if the platform knows more accurate
  * values than the one computed based only on the input clock frequency.
@@ -297,6 +301,8 @@ struct dw_i2c_dev {
 	int			(*set_sda_hold_time)(struct dw_i2c_dev *dev);
 	int			mode;
 	struct i2c_bus_recovery_info rinfo;
+	u32			bus_capacitance_pf;
+	bool			clk_freq_optimized;
 };
 
 #define ACCESS_INTR_MASK			BIT(0)
