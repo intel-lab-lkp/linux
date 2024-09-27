@@ -1457,15 +1457,20 @@ static int dwc3_core_init(struct dwc3 *dwc)
 
 	dwc3_config_threshold(dwc);
 
-	/*
-	 * Modify this for all supported Super Speed ports when
-	 * multiport support is added.
-	 */
-	if (hw_mode != DWC3_GHWPARAMS0_MODE_GADGET &&
-	    (DWC3_IP_IS(DWC31)) &&
-	    dwc->maximum_speed == USB_SPEED_SUPER) {
+	if (DWC3_IP_IS(DWC31)) {
 		reg = dwc3_readl(dwc->regs, DWC3_LLUCTL);
-		reg |= DWC3_LLUCTL_FORCE_GEN1;
+
+		/*
+		 * Modify this for all supported Super Speed ports when
+		 * multiport support is added.
+		 */
+		if (hw_mode != DWC3_GHWPARAMS0_MODE_GADGET &&
+		    dwc->maximum_speed == USB_SPEED_SUPER)
+			reg |= DWC3_LLUCTL_FORCE_GEN1;
+
+		if (dwc->inv_sync_hdr_quirk)
+			reg |= DWC3_LLUCTL_INV_SYNC_HDR;
+
 		dwc3_writel(dwc->regs, DWC3_LLUCTL, reg);
 	}
 
@@ -1796,6 +1801,9 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 
 	dwc->dis_split_quirk = device_property_read_bool(dev,
 				"snps,dis-split-quirk");
+
+	dwc->inv_sync_hdr_quirk = device_property_read_bool(dev,
+				"snps,inv-sync-hdr-quirk");
 
 	dwc->lpm_nyet_threshold = lpm_nyet_threshold;
 	dwc->tx_de_emphasis = tx_de_emphasis;

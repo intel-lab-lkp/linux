@@ -674,6 +674,9 @@
 /* Force Gen1 speed on Gen2 link */
 #define DWC3_LLUCTL_FORCE_GEN1		BIT(10)
 
+/* Link uses data block sync header for Gen2 polarity detection */
+#define DWC3_LLUCTL_INV_SYNC_HDR	BIT(30)
+
 /* Structures */
 
 struct dwc3_trb;
@@ -1147,6 +1150,8 @@ struct dwc3_scratchpad_array {
  *	3	- Reserved
  * @dis_metastability_quirk: set to disable metastability quirk.
  * @dis_split_quirk: set to disable split boundary.
+ * @inv_sync_hdr_quirk: set if the third-party PHY does not correct the sync
+ *			header of the SYNC OS in case of inverse polarity.
  * @sys_wakeup: set if the device may do system wakeup.
  * @wakeup_configured: set if the device is configured for remote wakeup.
  * @suspended: set to track suspend event due to U3/L2.
@@ -1378,6 +1383,7 @@ struct dwc3 {
 	unsigned		dis_metastability_quirk:1;
 
 	unsigned		dis_split_quirk:1;
+	unsigned		inv_sync_hdr_quirk:1;
 	unsigned		async_callbacks:1;
 	unsigned		sys_wakeup:1;
 	unsigned		wakeup_configured:1;
