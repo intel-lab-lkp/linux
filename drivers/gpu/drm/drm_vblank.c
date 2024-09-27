@@ -525,8 +525,18 @@ static void drm_vblank_init_release(struct drm_device *dev, void *ptr)
  */
 int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
 {
+	struct drm_crtc *crtc;
 	int ret;
 	unsigned int i;
+
+	// Confirm that the required vblank functions have been filled out for all CRTCS
+	drm_for_each_crtc(crtc, dev) {
+		if (!crtc->funcs->enable_vblank || !crtc->funcs->disable_vblank) {
+			drm_err(dev, "CRTC vblank functions not initialized for %s, abort\n",
+				crtc->name);
+			return -EINVAL;
+		}
+	}
 
 	spin_lock_init(&dev->vbl_lock);
 	spin_lock_init(&dev->vblank_time_lock);
