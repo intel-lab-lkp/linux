@@ -643,8 +643,13 @@ static int inotify_update_watch(struct fsnotify_group *group, struct inode *inod
 	/* try to update and existing watch with the new arg */
 	ret = inotify_update_existing_watch(group, inode, arg);
 	/* no mark present, try to add a new one */
-	if (ret == -ENOENT)
+	if (ret == -ENOENT) {
+		unsigned int nofs_flag;
+
+		nofs_flag = memalloc_nofs_save();
 		ret = inotify_new_watch(group, inode, arg);
+		memalloc_nofs_restore(nofs_flag);
+	}
 	fsnotify_group_unlock(group);
 
 	return ret;
