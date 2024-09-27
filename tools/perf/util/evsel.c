@@ -2965,7 +2965,6 @@ int evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 		array++;
 	}
 
-	data->intr_regs.abi = PERF_SAMPLE_REGS_ABI_NONE;
 	if (type & PERF_SAMPLE_REGS_INTR) {
 		OVERFLOW_CHECK_u64(array);
 		data->intr_regs.abi = *array;
@@ -2982,25 +2981,21 @@ int evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 		}
 	}
 
-	data->phys_addr = 0;
 	if (type & PERF_SAMPLE_PHYS_ADDR) {
 		data->phys_addr = *array;
 		array++;
 	}
 
-	data->cgroup = 0;
 	if (type & PERF_SAMPLE_CGROUP) {
 		data->cgroup = *array;
 		array++;
 	}
 
-	data->data_page_size = 0;
 	if (type & PERF_SAMPLE_DATA_PAGE_SIZE) {
 		data->data_page_size = *array;
 		array++;
 	}
 
-	data->code_page_size = 0;
 	if (type & PERF_SAMPLE_CODE_PAGE_SIZE) {
 		data->code_page_size = *array;
 		array++;
