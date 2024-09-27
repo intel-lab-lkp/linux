@@ -976,6 +976,7 @@ xfs_buffered_write_iomap_begin(
 	int			error = 0;
 	unsigned int		lockmode = XFS_ILOCK_EXCL;
 	u64			seq;
+	xfs_fileoff_t eof_fsb;
 
 	if (xfs_is_shutdown(mp))
 		return -EIO;
@@ -1016,6 +1017,13 @@ xfs_buffered_write_iomap_begin(
 	if (eof)
 		imap.br_startoff = end_fsb; /* fake hole until the end */
 
+	/* Don't try to unshare any blocks beyond EOF. */
+	eof_fsb = XFS_B_TO_FSB(mp, XFS_ISIZE(ip));
+	if (flags & IOMAP_UNSHARE && end_fsb > eof_fsb) {
+		xfs_trim_extent(&imap, offset_fsb, eof_fsb - offset_fsb);
+		end_fsb = eof_fsb;
+	}
+
 	/* We never need to allocate blocks for zeroing or unsharing a hole. */
 	if ((flags & (IOMAP_UNSHARE | IOMAP_ZERO)) &&
 	    imap.br_startoff > offset_fsb) {
@@ -1030,7 +1038,6 @@ xfs_buffered_write_iomap_begin(
 	 */
 	if ((flags & IOMAP_ZERO) && imap.br_startoff <= offset_fsb &&
 	    isnullstartblock(imap.br_startblock)) {
-		xfs_fileoff_t eof_fsb = XFS_B_TO_FSB(mp, XFS_ISIZE(ip));
 
 		if (offset_fsb >= eof_fsb)
 			goto convert_delay;
