@@ -9,3 +9,13 @@ int cxl_acpi_get_extended_linear_cache_size(struct resource *backing_res,
 {
 	return hmat_get_extended_linear_cache_size(backing_res, nid, size);
 }
+
+int cxl_acpi_extended_linear_cache_address_xlat(u64 *address, u64 alias, int nid)
+{
+	return hmat_extended_linear_cache_address_xlat(address, alias, nid);
+}
+
+int cxl_acpi_extended_linear_cache_alias_xlat(u64 address, u64 *alias, int nid)
+{
+	return hmat_extended_linear_cache_alias_xlat(address, alias, nid);
+}

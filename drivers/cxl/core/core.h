@@ -30,8 +30,13 @@ int cxl_get_poison_by_endpoint(struct cxl_port *port);
 struct cxl_region *cxl_dpa_to_region(const struct cxl_memdev *cxlmd, u64 dpa);
 u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 		   u64 dpa);
+int cxl_region_nid(struct cxl_region *cxlr);
 
 #else
+static inline int cxl_region_nid(struct cxl_region *cxlr)
+{
+	return NUMA_NO_NODE;
+}
 static inline u64 cxl_dpa_to_hpa(struct cxl_region *cxlr,
 				 const struct cxl_memdev *cxlmd, u64 dpa)
 {
@@ -110,5 +115,7 @@ bool cxl_need_node_perf_attrs_update(int nid);
 
 int cxl_acpi_get_extended_linear_cache_size(struct resource *backing_res,
 					    int nid, resource_size_t *size);
+int cxl_acpi_extended_linear_cache_address_xlat(u64 *address, u64 alias, int nid);
+int cxl_acpi_extended_linear_cache_alias_xlat(u64 address, u64 *alias, int nid);
 
 #endif /* __CXL_CORE_H__ */
