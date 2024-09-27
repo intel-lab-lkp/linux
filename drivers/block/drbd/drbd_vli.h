@@ -15,7 +15,7 @@
 
 /*
  * At a granularity of 4KiB storage represented per bit,
- * and stroage sizes of several TiB,
+ * and storage sizes of several TiB,
  * and possibly small-bandwidth replication,
  * the bitmap transfer time can take much too long,
  * if transmitted in plain text.
@@ -179,7 +179,7 @@ static inline int __vli_encode_bits(u64 *out, const u64 in)
 
 #undef VLI_L_1_1
 
-/* code from here down is independend of actually used bit code */
+/* code from here down is independent of actually used bit code */
 
 /*
  * Code length is determined by some unique (e.g. unary) prefix.

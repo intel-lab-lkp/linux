@@ -622,7 +622,7 @@ void drbd_debugfs_connection_add(struct drbd_connection *connection)
 	struct dentry *conns_dir = connection->resource->debugfs_res_connections;
 	struct dentry *dentry;
 
-	/* Once we enable mutliple peers,
+	/* Once we enable multiple peers,
 	 * these connections will have descriptive names.
 	 * For now, it is just the one connection to the (only) "peer". */
 	dentry = debugfs_create_dir("peer", conns_dir);

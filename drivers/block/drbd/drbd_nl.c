@@ -572,7 +572,7 @@ bool conn_try_outdate_peer(struct drbd_connection *connection)
 	spin_lock_irq(&resource->req_lock);
 	if (connection->cstate < C_WF_REPORT_PARAMS && !test_bit(STATE_SENT, &connection->flags)) {
 		if (connection->connect_cnt != connect_cnt)
-			/* In case the connection was established and droped
+			/* In case the connection was established and dropped
 			   while the fence-peer handler was running, ignore it */
 			drbd_info(connection, "Ignoring fence-peer exit code\n");
 		else
@@ -3918,7 +3918,7 @@ next_resource:
 
 		if (!device) {
 			/* This is a connection without a single volume.
-			 * Suprisingly enough, it may have a network
+			 * Surprisingly enough, it may have a network
 			 * configuration. */
 			struct drbd_connection *connection;
 
@@ -4852,7 +4852,7 @@ static int get_initial_state(struct sk_buff *skb, struct netlink_callback *cb)
 	int err = 0;
 
 	/* There is no need for taking notification_mutex here: it doesn't
-	   matter if the initial state events mix with later state chage
+	   matter if the initial state events mix with later state change
 	   events; we can always tell the events apart by the NOTIFY_EXISTS
 	   flag. */
 
