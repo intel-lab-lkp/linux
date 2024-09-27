@@ -3833,7 +3833,10 @@ static void init_sb_info(struct f2fs_sb_info *sbi)
 
 	INIT_LIST_HEAD(&sbi->s_list);
 	mutex_init(&sbi->umount_mutex);
-	init_f2fs_rwsem(&sbi->io_order_lock);
+
+	for (i = 0; i < NR_CURSEG_DATA_TYPE; i++)
+		init_f2fs_rwsem(&sbi->io_order_lock[i]);
+
 	spin_lock_init(&sbi->cp_lock);
 
 	sbi->dirty_device = 0;
