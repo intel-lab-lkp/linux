@@ -105,3 +105,6 @@ quiet_cmd_vdso = VDSO    $@
 		       -T $(filter %.lds,$^) $(filter %.o,$^)
 
 VDSO_LDFLAGS = -shared --hash-style=both --build-id=sha1 -Bsymbolic --no-undefined
+
+CFLAGS_vclock_gettime.o += -Wno-missing-prototypes -Wno-missing-declarations
+CFLAGS_vdso32/vclock_gettime.o += -Wno-missing-prototypes -Wno-missing-declarations
