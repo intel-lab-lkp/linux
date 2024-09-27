@@ -134,6 +134,19 @@ static int netvsc_open(struct net_device *net)
 	}
 
 	if (vf_netdev) {
+		if (!net_eq(dev_net(net), dev_net(vf_netdev))) {
+			ret = dev_change_net_namespace(vf_netdev, dev_net(net),
+						       "eth%d");
+			if (ret)
+				netdev_err(vf_netdev,
+					"Cannot move to same namespace as %s: %d\n",
+					net->name, ret);
+			else
+				netdev_info(vf_netdev,
+					"Moved VF to namespace with: %s\n",
+					net->name);
+		}
+
 		/* Setting synthetic device up transparently sets
 		 * slave as up. If open fails, then slave will be
 		 * still be offline (and not used).
