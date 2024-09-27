@@ -55,7 +55,7 @@ static bool bw_validate(char *buf, unsigned long *data, struct rdt_resource *r)
 		return false;
 	}
 
-	*data = roundup(bw, (unsigned long)r->membw.bw_gran);
+	*data = is_mba_sc(r) ? bw : roundup(bw, (unsigned long)r->membw.bw_gran);
 	return true;
 }
 
