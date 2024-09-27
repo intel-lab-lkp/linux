@@ -110,6 +110,9 @@ struct xol_area {
 	 * the vma go away, and we must handle that reasonably gracefully.
 	 */
 	unsigned long 			vaddr;		/* Page(s) of instruction slots */
+	struct list_head		gc_list;	/* The list for the
+							   garbage slots */
+	raw_spinlock_t			gc_lock;	/* Hold for gc_list */
 };
 
 static void uprobe_warn(struct task_struct *t, const char *msg)
@@ -1551,6 +1554,8 @@ static struct xol_area *__create_xol_area(unsigned long vaddr)
 
 	area->vaddr = vaddr;
 	init_waitqueue_head(&area->wq);
+	INIT_LIST_HEAD(&area->gc_list);
+	raw_spin_lock_init(&area->gc_lock);
 	/* Reserve the 1st slot for get_trampoline_vaddr() */
 	set_bit(0, area->bitmap);
 	atomic_set(&area->slot_count, 1);
@@ -1627,36 +1632,106 @@ void uprobe_dup_mmap(struct mm_struct *oldmm, struct mm_struct *newmm)
 }
 
 /*
+ * Use the slot_ref to track the status of utask and avoid racing on
+ * the insn_slot field of utask instances linked on area->gc_list.
+ *  - 1->2, insn_slot is in use.
+ *  - 1->0, insn_slot is being recycled.
+ *  - 2->1, insn_slot is free to use or recycle.
+ */
+static __always_inline
+struct uprobe_task *test_and_get_task_slot(struct uprobe_task *utask)
+{
+	return refcount_inc_not_zero(&utask->slot_ref) ? utask : NULL;
+}
+
+static __always_inline
+struct uprobe_task *test_and_put_task_slot(struct uprobe_task *utask)
+{
+	return refcount_dec_if_one(&utask->slot_ref) ? utask : NULL;
+}
+
+static __always_inline
+void put_task_slot(struct uprobe_task *utask)
+{
+	refcount_dec(&utask->slot_ref);
+}
+
+static __always_inline
+int recycle_utask_slot(struct uprobe_task *utask, struct xol_area *area)
+{
+	int slot = UINSNS_PER_PAGE;
+
+	/*
+	 * Ensure that the slot is not in use on other CPU. However, this
+	 * check is unnecessary when called in the context of an exiting
+	 * thread. See xol_free_insn_slot() called from uprobe_free_utask()
+	 * for more details.
+	 */
+	if (test_and_put_task_slot(utask)) {
+		list_del(&utask->gc);
+		clear_bit(utask->insn_slot, area->bitmap);
+		atomic_dec(&area->slot_count);
+		utask->insn_slot = UINSNS_PER_PAGE;
+		refcount_set(&utask->slot_ref, 1);
+	}
+
+	return slot;
+}
+
+/*
+ * xol_recycle_insn_slot - recycle a slot from the garbage collection list.
+ */
+static int xol_recycle_insn_slot(struct xol_area *area)
+{
+	struct uprobe_task *utask;
+	int slot = UINSNS_PER_PAGE;
+
+	raw_spin_lock(&area->gc_lock);
+	list_for_each_entry(utask, &area->gc_list, gc) {
+		slot = recycle_utask_slot(utask, area);
+		if (slot != UINSNS_PER_PAGE)
+			break;
+	}
+	raw_spin_unlock(&area->gc_lock);
+
+	return slot;
+}
+
+/*
  *  - search for a free slot.
  */
-static unsigned long xol_take_insn_slot(struct xol_area *area)
+static int xol_take_insn_slot(struct xol_area *area)
 {
-	unsigned long slot_addr;
 	int slot_nr;
 
 	do {
 		slot_nr = find_first_zero_bit(area->bitmap, UINSNS_PER_PAGE);
-		if (slot_nr < UINSNS_PER_PAGE) {
-			if (!test_and_set_bit(slot_nr, area->bitmap))
-				break;
-
-			slot_nr = UINSNS_PER_PAGE;
-			continue;
+		if (slot_nr == UINSNS_PER_PAGE) {
+			/* It recycles slot from GC list upon area runs out */
+			slot_nr = xol_recycle_insn_slot(area);
 		}
-		wait_event(area->wq, (atomic_read(&area->slot_count) < UINSNS_PER_PAGE));
+
+		if (slot_nr == UINSNS_PER_PAGE)
+			wait_event(area->wq,
+				   (atomic_read(&area->slot_count) <
+				    UINSNS_PER_PAGE));
+		else if (!test_and_set_bit(slot_nr, area->bitmap))
+			break;
+
+		slot_nr = UINSNS_PER_PAGE;
 	} while (slot_nr >= UINSNS_PER_PAGE);
 
-	slot_addr = area->vaddr + (slot_nr * UPROBE_XOL_SLOT_BYTES);
 	atomic_inc(&area->slot_count);
 
-	return slot_addr;
+	return slot_nr;
 }
 
 /*
  * xol_get_insn_slot - allocate a slot for xol.
  * Returns the allocated slot address or 0.
  */
-static unsigned long xol_get_insn_slot(struct uprobe *uprobe)
+static unsigned long xol_get_insn_slot(struct uprobe_task *utask,
+				       struct uprobe *uprobe)
 {
 	struct xol_area *area;
 	unsigned long xol_vaddr;
@@ -1665,14 +1740,44 @@ static unsigned long xol_get_insn_slot(struct uprobe *uprobe)
 	if (!area)
 		return 0;
 
-	xol_vaddr = xol_take_insn_slot(area);
-	if (unlikely(!xol_vaddr))
+	/*
+	 * The racing on the utask associated slot_ref can occur unless the
+	 * area runs out of slots. This isn't a common case. Even if it does
+	 * happen, the scalability bottleneck will shift to another point.
+	 */
+	if (!test_and_get_task_slot(utask))
 		return 0;
+
+	if (utask->insn_slot == UINSNS_PER_PAGE) {
+		utask->insn_slot = xol_take_insn_slot(area);
+		raw_spin_lock(&area->gc_lock);
+		list_add(&utask->gc, &area->gc_list);
+		raw_spin_unlock(&area->gc_lock);
+	}
+
+	xol_vaddr = area->vaddr + (utask->insn_slot * UPROBE_XOL_SLOT_BYTES);
 
 	arch_uprobe_copy_ixol(area->page, xol_vaddr,
 			      &uprobe->arch.ixol, sizeof(uprobe->arch.ixol));
 
 	return xol_vaddr;
+}
+
+/*
+ * xol_delay_free_insn_slot - Make the slot available for garbage collection
+ */
+static void xol_delay_free_insn_slot(void)
+{
+	struct xol_area *area = current->mm->uprobes_state.xol_area;
+
+	/*
+	 * This refcount would't cause expensive cache line bouncing
+	 * between CPUs, as it is unlikely that multiple CPUs take the
+	 * slot_ref of same utask.
+	 */
+	put_task_slot(current->utask);
+	if (waitqueue_active(&area->wq))
+		wake_up(&area->wq);
 }
 
 /*
@@ -1683,35 +1788,21 @@ static unsigned long xol_get_insn_slot(struct uprobe *uprobe)
 static void xol_free_insn_slot(struct task_struct *tsk)
 {
 	struct xol_area *area;
-	unsigned long vma_end;
-	unsigned long slot_addr;
 
 	if (!tsk->mm || !tsk->mm->uprobes_state.xol_area || !tsk->utask)
 		return;
 
-	slot_addr = tsk->utask->xol_vaddr;
-	if (unlikely(!slot_addr))
-		return;
-
 	area = tsk->mm->uprobes_state.xol_area;
-	vma_end = area->vaddr + PAGE_SIZE;
-	if (area->vaddr <= slot_addr && slot_addr < vma_end) {
-		unsigned long offset;
-		int slot_nr;
 
-		offset = slot_addr - area->vaddr;
-		slot_nr = offset / UPROBE_XOL_SLOT_BYTES;
-		if (slot_nr >= UINSNS_PER_PAGE)
-			return;
+	raw_spin_lock(&area->gc_lock);
+	recycle_utask_slot(tsk->utask, area);
+	raw_spin_unlock(&area->gc_lock);
 
-		clear_bit(slot_nr, area->bitmap);
-		atomic_dec(&area->slot_count);
-		smp_mb__after_atomic(); /* pairs with prepare_to_wait() */
-		if (waitqueue_active(&area->wq))
-			wake_up(&area->wq);
+	smp_mb__after_atomic(); /* pairs with prepare_to_wait() */
+	if (waitqueue_active(&area->wq))
+		wake_up(&area->wq);
 
-		tsk->utask->xol_vaddr = 0;
-	}
+	tsk->utask->xol_vaddr = 0;
 }
 
 void __weak arch_uprobe_copy_ixol(struct page *page, unsigned long vaddr,
@@ -1792,8 +1883,12 @@ void uprobe_free_utask(struct task_struct *t)
  */
 static struct uprobe_task *get_utask(void)
 {
-	if (!current->utask)
+	if (!current->utask) {
 		current->utask = kzalloc(sizeof(struct uprobe_task), GFP_KERNEL);
+		current->utask->insn_slot = UINSNS_PER_PAGE;
+		INIT_LIST_HEAD(&current->utask->gc);
+		refcount_set(&current->utask->slot_ref, 1);
+	}
 	return current->utask;
 }
 
@@ -1991,7 +2086,7 @@ pre_ssout(struct uprobe *uprobe, struct pt_regs *regs, unsigned long bp_vaddr)
 	if (!try_get_uprobe(uprobe))
 		return -EINVAL;
 
-	xol_vaddr = xol_get_insn_slot(uprobe);
+	xol_vaddr = xol_get_insn_slot(utask, uprobe);
 	if (!xol_vaddr) {
 		err = -ENOMEM;
 		goto err_out;
@@ -2001,10 +2096,8 @@ pre_ssout(struct uprobe *uprobe, struct pt_regs *regs, unsigned long bp_vaddr)
 	utask->vaddr = bp_vaddr;
 
 	err = arch_uprobe_pre_xol(&uprobe->arch, regs);
-	if (unlikely(err)) {
-		xol_free_insn_slot(current);
+	if (unlikely(err))
 		goto err_out;
-	}
 
 	utask->active_uprobe = uprobe;
 	utask->state = UTASK_SSTEP;
@@ -2353,7 +2446,7 @@ static void handle_singlestep(struct uprobe_task *utask, struct pt_regs *regs)
 	put_uprobe(uprobe);
 	utask->active_uprobe = NULL;
 	utask->state = UTASK_RUNNING;
-	xol_free_insn_slot(current);
+	xol_delay_free_insn_slot();
 
 	spin_lock_irq(&current->sighand->siglock);
 	recalc_sigpending(); /* see uprobe_deny_signal() */
