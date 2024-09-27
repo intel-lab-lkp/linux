@@ -656,18 +656,18 @@ int intel_plane_atomic_check_with_state(const struct intel_crtc_state *old_crtc_
 	    intel_plane_is_scaled(new_plane_state))
 		new_crtc_state->scaled_planes |= BIT(plane->id);
 
-	if (new_plane_state->uapi.visible &&
+	if (new_plane_state->uapi.visible && fb &&
 	    intel_format_info_is_yuv_semiplanar(fb->format, fb->modifier))
 		new_crtc_state->nv12_planes |= BIT(plane->id);
 
-	if (new_plane_state->uapi.visible &&
+	if (new_plane_state->uapi.visible && fb &&
 	    fb->format->format == DRM_FORMAT_C8)
 		new_crtc_state->c8_planes |= BIT(plane->id);
 
 	if (new_plane_state->uapi.visible || old_plane_state->uapi.visible)
 		new_crtc_state->update_planes |= BIT(plane->id);
 
-	if (new_plane_state->uapi.visible &&
+	if (new_plane_state->uapi.visible && fb &&
 	    intel_format_info_is_yuv_semiplanar(fb->format, fb->modifier)) {
 		new_crtc_state->data_rate_y[plane->id] =
 			intel_plane_data_rate(new_crtc_state, new_plane_state, 0);
