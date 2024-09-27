@@ -1210,6 +1210,8 @@ static int acm_probe(struct usb_interface *intf,
 	if (quirks == NO_UNION_NORMAL) {
 		data_interface = usb_ifnum_to_if(usb_dev, 1);
 		control_interface = usb_ifnum_to_if(usb_dev, 0);
+		if (!data_interface)
+			data_interface = control_interface;
 		/* we would crash */
 		if (!data_interface || !control_interface)
 			return -ENODEV;
@@ -1284,6 +1286,8 @@ static int acm_probe(struct usb_interface *intf,
 	if (data_intf_num != call_intf_num)
 		dev_dbg(&intf->dev, "Separate call control interface. That is not fully supported.\n");
 
+skip_normal_probe:
+
 	if (control_interface == data_interface) {
 		/* some broken devices designed for windows work this way */
 		dev_warn(&intf->dev,"Control and data interfaces are not separated!\n");
@@ -1302,8 +1306,6 @@ look_for_collapsed_interface:
 
 		goto made_compressed_probe;
 	}
-
-skip_normal_probe:
 
 	/*workaround for switched interfaces */
 	if (data_interface->cur_altsetting->desc.bInterfaceClass != USB_CLASS_CDC_DATA) {
@@ -1786,6 +1788,9 @@ static const struct usb_device_id acm_ids[] = {
 	},
 	{ USB_DEVICE(0x0572, 0x1349), /* Hiro (Conexant) USB MODEM H50228 */
 	.driver_info = NO_UNION_NORMAL, /* has no union descriptor */
+	},
+	{ USB_DEVICE(0x233c, 0x7633), /* JULABO PRESTO */
+	.driver_info = NO_UNION_NORMAL,
 	},
 	{ USB_DEVICE(0x20df, 0x0001), /* Simtec Electronics Entropy Key */
 	.driver_info = QUIRK_CONTROL_LINE_STATE, },
