@@ -110,7 +110,7 @@ static const struct scsi_host_template fnic_host_template = {
 	.eh_timed_out = fc_eh_timed_out,
 	.eh_abort_handler = fnic_abort_cmd,
 	.eh_device_reset_handler = fnic_device_reset,
-	.eh_host_reset_handler = fnic_host_reset,
+	.eh_host_reset_handler = fnic_eh_host_reset_handler,
 	.slave_alloc = fnic_slave_alloc,
 	.change_queue_depth = scsi_change_queue_depth,
 	.this_id = -1,
@@ -923,8 +923,10 @@ static int fnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	INIT_WORK(&fnic->link_work, fnic_handle_link);
 	INIT_WORK(&fnic->frame_work, fnic_handle_frame);
-	skb_queue_head_init(&fnic->frame_queue);
+	INIT_WORK(&fnic->tport_work, fnic_tport_event_handler);
+	INIT_LIST_HEAD(&fnic->frame_queue);
 	INIT_LIST_HEAD(&fnic->tx_queue);
+	INIT_LIST_HEAD(&fnic->tport_event_list);
 
 	fc_fabric_login(lp);
 
@@ -1006,7 +1008,7 @@ static void fnic_remove(struct pci_dev *pdev)
 	 * be no event queued for this fnic device in the workqueue
 	 */
 	flush_workqueue(fnic_event_queue);
-	skb_queue_purge(&fnic->frame_queue);
+	fnic_free_txq(&fnic->frame_queue);
 	fnic_free_txq(&fnic->tx_queue);
 
 	if (fnic->config.flags & VFCF_FIP_CAPABLE) {
@@ -1043,8 +1045,6 @@ static void fnic_remove(struct pci_dev *pdev)
 	 * cleaned up
 	 */
 	fnic_cleanup(fnic);
-
-	BUG_ON(!skb_queue_empty(&fnic->frame_queue));
 
 	spin_lock_irqsave(&fnic_list_lock, flags);
 	list_del(&fnic->list);
