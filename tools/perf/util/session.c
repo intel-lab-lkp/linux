@@ -1229,6 +1229,16 @@ static int evlist__deliver_sample(struct evlist *evlist, const struct perf_tool 
 	u64 sample_type = evsel->core.attr.sample_type;
 	u64 read_format = evsel->core.attr.read_format;
 
+	/* parse sample the second time to get embedded data from raw_data */
+	if (evsel__is_offcpu_event(evsel) && sample->raw_data) {
+		int err = evsel__parse_sample(evsel, event, sample);
+
+		if (err) {
+			pr_err("Failed to parse BPF ouput embedded data, err = %d\n", err);
+			return err;
+		}
+	}
+
 	/* Standard sample delivery. */
 	if (!(sample_type & PERF_SAMPLE_READ))
 		return tool->sample(tool, event, sample, evsel, machine);
@@ -1339,7 +1349,7 @@ static int perf_session__deliver_event(struct perf_session *session,
 				       u64 file_offset,
 				       const char *file_path)
 {
-	struct perf_sample sample;
+	struct perf_sample sample = { .raw_data = NULL }; /* avoid accidental read of embedded data */
 	int ret = evlist__parse_sample(session->evlist, event, &sample);
 
 	if (ret) {

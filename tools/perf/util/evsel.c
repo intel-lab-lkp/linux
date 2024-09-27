@@ -1105,11 +1105,6 @@ static void evsel__set_default_freq_period(struct record_opts *opts,
 	}
 }
 
-static bool evsel__is_offcpu_event(struct evsel *evsel)
-{
-	return evsel__is_bpf_output(evsel) && evsel__name_is(evsel, OFFCPU_EVENT);
-}
-
 /*
  * The enable_on_exec/disabled value strategy:
  *
@@ -2677,6 +2672,7 @@ int evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 	u16 max_size = event->header.size;
 	const void *endp = (void *)event + max_size;
 	u64 sz;
+	bool ip_in_callchain = false;
 
 	/*
 	 * used for cross-endian analysis. See git commit 65014ab3
@@ -2684,22 +2680,31 @@ int evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 	 */
 	union u64_swap u;
 
-	memset(data, 0, sizeof(*data));
-	data->cpu = data->pid = data->tid = -1;
-	data->stream_id = data->id = data->time = -1ULL;
-	data->period = evsel->core.attr.sample_period;
-	data->cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
-	data->misc    = event->header.misc;
-	data->data_src = PERF_MEM_DATA_SRC_NONE;
-	data->vcpu = -1;
+	/*
+	 * For sample data embedded in BPF output, don't clear the sample we read in the first pass,
+	 * and read the embedded data from raw_data in the second pass.
+	 */
+	if (evsel__is_offcpu_event(evsel) && data->raw_data) {
+		type = OFFCPU_EMBEDDED_SAMPLE_TYPES;
+		array = data->raw_data;
+		ip_in_callchain = true;
+	} else { /* for normal samples, clear to zero before reading */
+		array = event->sample.array;
+		memset(data, 0, sizeof(*data));
+		data->cpu = data->pid = data->tid = -1;
+		data->stream_id = data->id = data->time = -1ULL;
+		data->period = evsel->core.attr.sample_period;
+		data->cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
+		data->misc    = event->header.misc;
+		data->data_src = PERF_MEM_DATA_SRC_NONE;
+		data->vcpu = -1;
+	}
 
 	if (event->header.type != PERF_RECORD_SAMPLE) {
 		if (!evsel->core.attr.sample_id_all)
 			return 0;
 		return perf_evsel__parse_id_sample(evsel, event, data);
 	}
-
-	array = event->sample.array;
 
 	if (perf_event__check_size(event, evsel->sample_size))
 		return -EFAULT;
@@ -2822,6 +2827,10 @@ int evsel__parse_sample(struct evsel *evsel, union perf_event *event,
 		data->callchain = (struct ip_callchain *)array++;
 		if (data->callchain->nr > max_callchain_nr)
 			return -EFAULT;
+
+		if (ip_in_callchain && data->callchain->nr > 1)
+			data->ip = data->callchain->ips[1];
+
 		sz = data->callchain->nr * sizeof(u64);
 		OVERFLOW_CHECK(array, sz, max_size);
 		array = (void *)array + sz;

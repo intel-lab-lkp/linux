@@ -11,6 +11,7 @@
 #include <perf/evsel.h>
 #include "symbol_conf.h"
 #include "pmus.h"
+#include "off_cpu.h"
 
 struct bpf_object;
 struct cgroup;
@@ -579,5 +580,10 @@ bool arch_evsel__must_be_in_group(const struct evsel *evsel);
 u64 evsel__bitfield_swap_branch_flags(u64 value);
 void evsel__set_config_if_unset(struct perf_pmu *pmu, struct evsel *evsel,
 				const char *config_name, u64 val);
+
+static inline bool evsel__is_offcpu_event(struct evsel *evsel)
+{
+	return evsel__is_bpf_output(evsel) && evsel__name_is(evsel, OFFCPU_EVENT);
+}
 
 #endif /* __PERF_EVSEL_H */
