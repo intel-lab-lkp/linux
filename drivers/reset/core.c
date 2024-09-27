@@ -676,25 +676,20 @@ int reset_control_acquire(struct reset_control *rstc)
 	if (reset_control_is_array(rstc))
 		return reset_control_array_acquire(rstc_to_array(rstc));
 
-	mutex_lock(&reset_list_mutex);
+	guard(mutex)(&reset_list_mutex);
 
-	if (rstc->acquired) {
-		mutex_unlock(&reset_list_mutex);
+	if (rstc->acquired)
 		return 0;
-	}
 
 	list_for_each_entry(rc, &rstc->rcdev->reset_control_head, list) {
 		if (rstc != rc && rstc->id == rc->id) {
-			if (rc->acquired) {
-				mutex_unlock(&reset_list_mutex);
+			if (rc->acquired)
 				return -EBUSY;
-			}
 		}
 	}
 
 	rstc->acquired = true;
 
-	mutex_unlock(&reset_list_mutex);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(reset_control_acquire);
@@ -1041,29 +1036,27 @@ __of_reset_control_get(struct device_node *node, const char *id, int index,
 		}
 	}
 
-	mutex_lock(&reset_list_mutex);
+	guard(mutex)(&reset_list_mutex);
 	rcdev = __reset_find_rcdev(&args, gpio_fallback);
 	if (!rcdev) {
 		rstc = ERR_PTR(-EPROBE_DEFER);
-		goto out_unlock;
+		goto out_put;
 	}
 
 	if (WARN_ON(args.args_count != rcdev->of_reset_n_cells)) {
 		rstc = ERR_PTR(-EINVAL);
-		goto out_unlock;
+		goto out_put;
 	}
 
 	rstc_id = rcdev->of_xlate(rcdev, &args);
 	if (rstc_id < 0) {
 		rstc = ERR_PTR(rstc_id);
-		goto out_unlock;
+		goto out_put;
 	}
 
 	/* reset_list_mutex also protects the rcdev's reset_control list */
 	rstc = __reset_control_get_internal(rcdev, rstc_id, shared, acquired);
 
-out_unlock:
-	mutex_unlock(&reset_list_mutex);
 out_put:
 	of_node_put(args.np);
 
@@ -1098,7 +1091,7 @@ __reset_control_get_from_lookup(struct device *dev, const char *con_id,
 	const char *dev_id = dev_name(dev);
 	struct reset_control *rstc = NULL;
 
-	mutex_lock(&reset_lookup_mutex);
+	guard(mutex)(&reset_lookup_mutex);
 
 	list_for_each_entry(lookup, &reset_lookup_list, list) {
 		if (strcmp(lookup->dev_id, dev_id))
@@ -1107,11 +1100,9 @@ __reset_control_get_from_lookup(struct device *dev, const char *con_id,
 		if ((!con_id && !lookup->con_id) ||
 		    ((con_id && lookup->con_id) &&
 		     !strcmp(con_id, lookup->con_id))) {
-			mutex_lock(&reset_list_mutex);
+			guard(mutex)(&reset_list_mutex);
 			rcdev = __reset_controller_by_name(lookup->provider);
 			if (!rcdev) {
-				mutex_unlock(&reset_list_mutex);
-				mutex_unlock(&reset_lookup_mutex);
 				/* Reset provider may not be ready yet. */
 				return ERR_PTR(-EPROBE_DEFER);
 			}
@@ -1119,12 +1110,9 @@ __reset_control_get_from_lookup(struct device *dev, const char *con_id,
 			rstc = __reset_control_get_internal(rcdev,
 							    lookup->index,
 							    shared, acquired);
-			mutex_unlock(&reset_list_mutex);
 			break;
 		}
 	}
-
-	mutex_unlock(&reset_lookup_mutex);
 
 	if (!rstc)
 		return optional ? NULL : ERR_PTR(-ENOENT);
