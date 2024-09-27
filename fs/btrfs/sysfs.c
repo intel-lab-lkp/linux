@@ -1306,7 +1306,7 @@ static ssize_t btrfs_temp_fsid_show(struct kobject *kobj,
 BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
 #ifdef CONFIG_BTRFS_DEBUG
-static const char * const btrfs_read_policy_name[] = { "pid", "rotation" };
+static const char * const btrfs_read_policy_name[] = { "pid", "rotation", "latency" };
 #else
 static const char * const btrfs_read_policy_name[] = { "pid" };
 #endif
