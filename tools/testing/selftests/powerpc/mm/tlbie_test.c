@@ -314,7 +314,6 @@ static inline void end_verification_log(unsigned int tid, unsigned nr_anamolies)
 	fclose(f);
 
 	if (nr_anamolies == 0) {
-		remove(path);
 		return;
 	}
 
