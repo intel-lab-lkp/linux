@@ -152,6 +152,142 @@ int hmat_get_extended_linear_cache_size(struct resource *backing_res, int nid,
 }
 EXPORT_SYMBOL_NS_GPL(hmat_get_extended_linear_cache_size, CXL);
 
+static int alias_address_find_iohole(struct memory_target *target,
+				     u64 address, u64 alias, struct range *hole)
+{
+	struct resource *alias_res = NULL;
+	struct resource *res, *prev;
+
+	*hole = (struct range) {
+		.start = 0,
+		.end = -1,
+	};
+
+	/* First find the resource that the address is in */
+	prev = target->memregions.child;
+	for (res = target->memregions.child; res; res = res->sibling) {
+		if (alias >= res->start && alias <= res->end) {
+			alias_res = res;
+			break;
+		}
+		prev = res;
+	}
+	if (!alias_res)
+		return -EINVAL;
+
+	/* No memory hole */
+	if (alias_res == prev)
+		return 0;
+
+	/* If address is within the current resource, no need to deal with memory hole */
+	if (address >= alias_res->start)
+		return 0;
+
+	*hole = (struct range) {
+		.start = prev->end + 1,
+		.end = alias_res->start - 1,
+	};
+
+	return 0;
+}
+
+int hmat_extended_linear_cache_alias_xlat(u64 address, u64 *alias, int nid)
+{
+	unsigned int pxm = node_to_pxm(nid);
+	struct memory_target *target;
+	struct range iohole;
+	int rc;
+
+	target = find_mem_target(pxm);
+	if (!target)
+		return -EINVAL;
+
+	rc = alias_address_find_iohole(target, address, *alias, &iohole);
+	if (rc)
+		return rc;
+
+	if (!range_len(&iohole))
+		return 0;
+
+	if (address < iohole.start) {
+		if (*alias > iohole.start) {
+			*alias = *alias + range_len(&iohole);
+			return 0;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(hmat_extended_linear_cache_alias_xlat, CXL);
+
+static int target_address_find_iohole(struct memory_target *target,
+				      u64 address, u64 alias,
+				      struct range *hole)
+{
+	struct resource *addr_res = NULL;
+	struct resource *res, *next;
+
+	*hole = (struct range) {
+		.start = 0,
+		.end = -1,
+	};
+
+	/* First find the resource that the address is in */
+	for (res = target->memregions.child; res; res = res->sibling) {
+		if (address >= res->start && address <= res->end) {
+			addr_res = res;
+			break;
+		}
+	}
+	if (!addr_res)
+		return -EINVAL;
+
+	next = res->sibling;
+	/* No memory hole after the region */
+	if (!next)
+		return 0;
+
+	/* If alias is within the current resource, no need to deal with memory hole */
+	if (alias <= addr_res->end)
+		return 0;
+
+	*hole = (struct range) {
+		.start = addr_res->end + 1,
+		.end = next->start - 1,
+	};
+
+	return 0;
+}
+
+int hmat_extended_linear_cache_address_xlat(u64 *address, u64 alias, int nid)
+{
+	unsigned int pxm = node_to_pxm(nid);
+	struct memory_target *target;
+	struct range iohole;
+	int rc;
+
+	target = find_mem_target(pxm);
+	if (!target)
+		return -EINVAL;
+
+	rc = target_address_find_iohole(target, *address, alias, &iohole);
+	if (rc)
+		return rc;
+
+	if (!range_len(&iohole))
+		return 0;
+
+	if (alias > iohole.end) {
+		if (*address < iohole.end) {
+			*address = *address - range_len(&iohole);
+			return 0;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(hmat_extended_linear_cache_address_xlat, CXL);
+
 static struct memory_target *acpi_find_genport_target(u32 uid)
 {
 	struct memory_target *target;

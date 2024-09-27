@@ -437,6 +437,8 @@ int thermal_acpi_critical_trip_temp(struct acpi_device *adev, int *ret_temp);
 int acpi_get_genport_coordinates(u32 uid, struct access_coordinate *coord);
 int hmat_get_extended_linear_cache_size(struct resource *backing_res, int nid,
 					resource_size_t *size);
+int hmat_extended_linear_cache_alias_xlat(u64 address, u64 *alias, int nid);
+int hmat_extended_linear_cache_address_xlat(u64 *address, u64 alias, int nid);
 #else
 static inline int acpi_get_genport_coordinates(u32 uid,
 					       struct access_coordinate *coord)
@@ -446,6 +448,18 @@ static inline int acpi_get_genport_coordinates(u32 uid,
 
 static inline int hmat_get_extended_linear_cache_size(struct resource *backing_res,
 						      int nid, resource_size_t *size)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int hmat_extended_linear_cache_alias_xlat(u64 address,
+							u64 *alias, int nid)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int hmat_extended_linear_cache_address_xlat(u64 *address,
+							  u64 alias, int nid)
 {
 	return -EOPNOTSUPP;
 }
