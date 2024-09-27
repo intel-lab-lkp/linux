@@ -280,6 +280,12 @@ properties:
       asserts utmi_sleep_n.
     type: boolean
 
+  snps,inv-sync-hdr-quirk:
+    description:
+      Set if the third-party PHY does not correct the sync header of the
+      SYNC OS in the case of inverse polarity.
+    type: boolean
+
   snps,hird-threshold:
     description: HIRD threshold
     $ref: /schemas/types.yaml#/definitions/uint8
