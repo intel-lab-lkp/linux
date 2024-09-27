@@ -1323,7 +1323,16 @@ EXPORT_SYMBOL(drm_sched_init);
  *
  * @sched: scheduler instance
  *
- * Tears down and cleans up the scheduler.
+ * Before calling this function all entities which potentially used this
+ * scheduler instance should be forced idle using drm_sched_entity_flush() and
+ * detached from their scheduler using drm_entity_fini().
+ *
+ * Special care must be taken if drivers allocate scheduler instances
+ * dynamically. Since the dma_fence signaling doesn't guarantee any processing
+ * order of callbacks it is possible that the scheduler is still cleaning up
+ * when fences have already signaled. The easiest way to avoid that is to keep a
+ * reference from the job to the scheduler and tear down the scheduler from a
+ * work item after the last job was cleaned up.
  */
 void drm_sched_fini(struct drm_gpu_scheduler *sched)
 {
@@ -1332,17 +1341,35 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 
 	drm_sched_wqueue_stop(sched);
 
+	/*
+	 * Tearing down the scheduler wile there are still unprocessed jobs can
+	 * lead to use after free issues in the scheduler fence.
+	 */
+	drm_WARN_ON(sched, !list_empty(&sched->pending_list));
+
 	for (i = DRM_SCHED_PRIORITY_KERNEL; i < sched->num_rqs; i++) {
 		struct drm_sched_rq *rq = sched->sched_rq[i];
 
 		spin_lock(&rq->lock);
-		list_for_each_entry(s_entity, &rq->entities, list)
+		drm_WARN_ON(sched, !list_empty(&rq->entities));
+		list_for_each_entry(s_entity, &rq->entities, list) {
+			/*
+			 * The justification for this BUG_ON() is that tearing
+			 * down the scheduler while jobs are pending leaves
+			 * dma_fences unsignaled. Since we have dependencies
+			 * from the core memory management to eventually signal
+			 * dma_fences this can lead to a system wide stop
+			 * because of a locked up memory management.
+			 */
+			BUG_ON(spsc_queue_count(&s_entity->job_queue));
+
 			/*
 			 * Prevents reinsertion and marks job_queue as idle,
 			 * it will removed from rq in drm_sched_entity_fini
 			 * eventually
 			 */
 			s_entity->stopped = true;
+		}
 		spin_unlock(&rq->lock);
 		kfree(sched->sched_rq[i]);
 	}
