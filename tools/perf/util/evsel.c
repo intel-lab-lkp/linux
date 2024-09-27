@@ -2368,6 +2368,9 @@ retry_open:
 
 			test_attr__ready();
 
+			if (evsel__is_offcpu_event(evsel))
+				pid = -1;
+
 			/* Debug message used by test scripts */
 			pr_debug2_peo("sys_perf_event_open: pid %d  cpu %d  group_fd %d  flags %#lx",
 				pid, perf_cpu_map__cpu(cpus, idx).cpu, group_fd, evsel->open_flags);
