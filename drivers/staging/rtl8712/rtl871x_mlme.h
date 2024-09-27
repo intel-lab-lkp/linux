@@ -18,43 +18,47 @@
 #include "drv_types.h"
 #include "wlan_bssdef.h"
 
-#define	MAX_BSS_CNT	64
-#define   MAX_JOIN_TIMEOUT	6000
+#define MAX_BSS_CNT 64
+#define MAX_JOIN_TIMEOUT 6000
 
-#define		SCANNING_TIMEOUT	4500
+#define SCANNING_TIMEOUT 4500
 
-#define	SCANQUEUE_LIFETIME 20 /* unit:sec */
+#define SCANQUEUE_LIFETIME 20 /* unit:sec */
 
-#define		WIFI_NULL_STATE	0x00000000
-#define	WIFI_ASOC_STATE		0x00000001	/* Under Linked state...*/
-#define		WIFI_REASOC_STATE 0x00000002
-#define	WIFI_SLEEP_STATE	0x00000004
-#define	WIFI_STATION_STATE	0x00000008
-#define	WIFI_AP_STATE		0x00000010
-#define	WIFI_ADHOC_STATE	0x00000020
-#define   WIFI_ADHOC_MASTER_STATE 0x00000040
-#define   WIFI_UNDER_LINKING	0x00000080
-#define WIFI_SITE_MONITOR	0x00000800	/* to indicate the station
+#define WIFI_NULL_STATE 0x00000000
+#define WIFI_ASOC_STATE 0x00000001 /* Under Linked state...*/
+#define WIFI_REASOC_STATE 0x00000002
+#define WIFI_SLEEP_STATE 0x00000004
+#define WIFI_STATION_STATE 0x00000008
+#define WIFI_AP_STATE 0x00000010
+#define WIFI_ADHOC_STATE 0x00000020
+#define WIFI_ADHOC_MASTER_STATE 0x00000040
+#define WIFI_UNDER_LINKING 0x00000080
+#define WIFI_SITE_MONITOR \
+	0x00000800 /* to indicate the station
 						 * is under site surveying
 						 */
-#define	WIFI_MP_STATE		0x00010000
-#define	WIFI_MP_CTX_BACKGROUND	0x00020000	/* in cont. tx background*/
-#define	WIFI_MP_CTX_ST		0x00040000	/* in cont. tx with
+#define WIFI_MP_STATE 0x00010000
+#define WIFI_MP_CTX_BACKGROUND 0x00020000 /* in cont. tx background*/
+#define WIFI_MP_CTX_ST \
+	0x00040000 /* in cont. tx with
 						 * single-tone
 						 */
-#define	WIFI_MP_CTX_BACKGROUND_PENDING	0x00080000 /* pending in cont, tx
+#define WIFI_MP_CTX_BACKGROUND_PENDING \
+	0x00080000 /* pending in cont, tx
 						    * background due
 						    * to out of skb
 						    */
-#define	WIFI_MP_CTX_CCK_HW	0x00100000	/* in continuous tx*/
-#define	WIFI_MP_CTX_CCK_CS	0x00200000	/* in cont, tx with carrier
+#define WIFI_MP_CTX_CCK_HW 0x00100000 /* in continuous tx*/
+#define WIFI_MP_CTX_CCK_CS \
+	0x00200000 /* in cont, tx with carrier
 						 * suppression
 						 */
-#define   WIFI_MP_LPBK_STATE	0x00400000
+#define WIFI_MP_LPBK_STATE 0x00400000
 
-#define _FW_UNDER_LINKING	WIFI_UNDER_LINKING
-#define _FW_LINKED		WIFI_ASOC_STATE
-#define _FW_UNDER_SURVEY	WIFI_SITE_MONITOR
+#define _FW_UNDER_LINKING WIFI_UNDER_LINKING
+#define _FW_LINKED WIFI_ASOC_STATE
+#define _FW_UNDER_SURVEY WIFI_SITE_MONITOR
 
 /*
  * there are several "locks" in mlme_priv,
@@ -66,29 +70,29 @@
  * SHALL not lock up more than one lock at a time!
  */
 
-#define traffic_threshold	10
-#define	traffic_scan_period	500
+#define traffic_threshold 10
+#define traffic_scan_period 500
 
 struct sitesurvey_ctrl {
-	u64	last_tx_pkts;
-	uint	last_rx_pkts;
-	sint	traffic_busy;
+	u64 last_tx_pkts;
+	uint last_rx_pkts;
+	sint traffic_busy;
 	struct timer_list sitesurvey_ctrl_timer;
 };
 
 struct mlme_priv {
 	spinlock_t lock;
 	spinlock_t lock2;
-	sint	fw_state;	/*shall we protect this variable? */
+	sint fw_state; /*shall we protect this variable? */
 	u8 to_join; /*flag*/
 	u8 *nic_hdl;
 	struct list_head *pscanned;
-	struct  __queue free_bss_pool;
-	struct  __queue scanned_queue;
+	struct __queue free_bss_pool;
+	struct __queue scanned_queue;
 	u8 *free_bss_buf;
 	unsigned long num_of_scanned;
 	u8 passive_mode; /*add for Android's SCAN-ACTIVE/SCAN-PASSIVE */
-	struct ndis_802_11_ssid	assoc_ssid;
+	struct ndis_802_11_ssid assoc_ssid;
 	u8 assoc_bssid[6];
 	struct wlan_network cur_network;
 	struct sitesurvey_ctrl sitesurveyctrl;
@@ -98,7 +102,7 @@ struct mlme_priv {
 	struct timer_list scan_to_timer; /* driver handles scan_timeout.*/
 	struct timer_list dhcp_timer; /* set dhcp to if driver in ps mode.*/
 	struct qos_priv qospriv;
-	struct ht_priv	htpriv;
+	struct ht_priv htpriv;
 	struct timer_list wdg_timer; /*watchdog periodic timer*/
 };
 
@@ -151,7 +155,7 @@ static inline void clr_fwstate(struct mlme_priv *pmlmepriv, sint state)
 }
 
 static inline void set_scanned_network_val(struct mlme_priv *pmlmepriv,
-					     sint val)
+					   sint val)
 {
 	unsigned long irqL;
 
@@ -172,22 +176,22 @@ void r8712_free_network_queue(struct _adapter *adapter);
 int r8712_init_mlme_priv(struct _adapter *adapter);
 void r8712_free_mlme_priv(struct mlme_priv *pmlmepriv);
 int r8712_select_and_join_from_scan(struct mlme_priv *pmlmepriv);
-int r8712_set_key(struct _adapter *adapter,
-		  struct security_priv *psecuritypriv, sint keyid);
+int r8712_set_key(struct _adapter *adapter, struct security_priv *psecuritypriv,
+		  sint keyid);
 int r8712_set_auth(struct _adapter *adapter,
 		   struct security_priv *psecuritypriv);
 uint r8712_get_wlan_bssid_ex_sz(struct wlan_bssid_ex *bss);
 void r8712_generate_random_ibss(u8 *pibss);
 u8 *r8712_get_capability_from_ie(u8 *ie);
-struct wlan_network *r8712_get_oldest_wlan_network(
-				struct  __queue *scanned_queue);
+struct wlan_network *
+r8712_get_oldest_wlan_network(struct __queue *scanned_queue);
 void r8712_free_assoc_resources(struct _adapter *adapter);
 void r8712_ind_disconnect(struct _adapter *adapter);
 void r8712_indicate_connect(struct _adapter *adapter);
-int r8712_restruct_sec_ie(struct _adapter *adapter, u8 *in_ie,
-			  u8 *out_ie, uint in_len);
-int r8712_restruct_wmm_ie(struct _adapter *adapter, u8 *in_ie,
-			  u8 *out_ie, uint in_len, uint initial_out_len);
+int r8712_restruct_sec_ie(struct _adapter *adapter, u8 *in_ie, u8 *out_ie,
+			  uint in_len);
+int r8712_restruct_wmm_ie(struct _adapter *adapter, u8 *in_ie, u8 *out_ie,
+			  uint in_len, uint initial_out_len);
 void r8712_init_registrypriv_dev_network(struct _adapter *adapter);
 void r8712_update_registrypriv_dev_network(struct _adapter *adapter);
 void _r8712_sitesurvey_ctrl_handler(struct _adapter *adapter);

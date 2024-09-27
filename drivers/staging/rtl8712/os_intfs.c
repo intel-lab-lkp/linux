@@ -37,21 +37,21 @@ static int chip_version = RTL8712_2ndCUT;
 static int rfintfs = HWPI;
 static int lbkmode = RTL8712_AIR_TRX;
 static int hci = RTL8712_USB;
-static int ampdu_enable = 1;/*for enable tx_ampdu*/
+static int ampdu_enable = 1; /*for enable tx_ampdu*/
 
 /* The video_mode variable is for video mode.*/
 /* It may be specify when inserting module with video_mode=1 parameter.*/
-static int video_mode = 1;   /* enable video mode*/
+static int video_mode = 1; /* enable video mode*/
 
 /*Ndis802_11Infrastructure; infra, ad-hoc, auto*/
 static int network_mode = Ndis802_11IBSS;
-static int channel = 1;/*ad-hoc support requirement*/
+static int channel = 1; /*ad-hoc support requirement*/
 static int wireless_mode = WIRELESS_11BG;
 static int vrtl_carrier_sense = AUTO_VCS;
 static int vcs_type = RTS_CTS;
 static int frag_thresh = 2346;
-static int preamble = PREAMBLE_LONG;/*long, short, auto*/
-static int scan_mode = 1;/*active, passive*/
+static int preamble = PREAMBLE_LONG; /*long, short, auto*/
+static int scan_mode = 1; /*active, passive*/
 static int adhoc_tx_pwr = 1;
 static int soft_ap;
 static int smart_ps = 1;
@@ -65,7 +65,7 @@ static int mp_mode;
 static int software_encrypt;
 static int software_decrypt;
 
-static int wmm_enable;/* default is set to disable the wmm.*/
+static int wmm_enable; /* default is set to disable the wmm.*/
 static int uapsd_enable;
 static int uapsd_max_sp = NO_LIMIT;
 static int uapsd_acbk_en;
@@ -75,7 +75,7 @@ static int uapsd_acvo_en;
 
 static int ht_enable = 1;
 static int cbw40_enable = 1;
-static int rf_config = RTL8712_RF_1T2R;  /* 1T2R*/
+static int rf_config = RTL8712_RF_1T2R; /* 1T2R*/
 static int low_power;
 /* mac address to use instead of the one stored in Efuse */
 char *r8712_initmac;
@@ -113,15 +113,15 @@ MODULE_PARM_DESC(initmac, "MAC-Address, default: use FUSE");
 static int netdev_open(struct net_device *pnetdev);
 static int netdev_close(struct net_device *pnetdev);
 
-static void loadparam(struct _adapter *padapter, struct  net_device *pnetdev)
+static void loadparam(struct _adapter *padapter, struct net_device *pnetdev)
 {
-	struct registry_priv  *registry_par = &padapter->registrypriv;
+	struct registry_priv *registry_par = &padapter->registrypriv;
 
 	registry_par->chip_version = (u8)chip_version;
 	registry_par->rfintfs = (u8)rfintfs;
 	registry_par->lbkmode = (u8)lbkmode;
 	registry_par->hci = (u8)hci;
-	registry_par->network_mode  = (u8)network_mode;
+	registry_par->network_mode = (u8)network_mode;
 	memcpy(registry_par->ssid.Ssid, "ANY", 3);
 	registry_par->ssid.SsidLength = 3;
 	registry_par->channel = (u8)channel;
@@ -211,11 +211,11 @@ struct net_device *r8712_init_netdev(void)
 	pr_info("r8712u: register rtl8712_netdev_ops to netdev_ops\n");
 	pnetdev->netdev_ops = &rtl8712_netdev_ops;
 	pnetdev->watchdog_timeo = HZ; /* 1 second timeout */
-	pnetdev->wireless_handlers = (struct iw_handler_def *)
-				     &r871x_handlers_def;
+	pnetdev->wireless_handlers =
+		(struct iw_handler_def *)&r871x_handlers_def;
 	loadparam(padapter, pnetdev);
 	netif_carrier_off(pnetdev);
-	padapter->pid = 0;  /* Initial the PID value used for HW PBC.*/
+	padapter->pid = 0; /* Initial the PID value used for HW PBC.*/
 	return pnetdev;
 }
 
@@ -255,7 +255,8 @@ void r8712_stop_drv_timers(struct _adapter *padapter)
 	del_timer_sync(&padapter->mlmepriv.scan_to_timer);
 	del_timer_sync(&padapter->mlmepriv.dhcp_timer);
 	del_timer_sync(&padapter->mlmepriv.wdg_timer);
-	del_timer_sync(&padapter->mlmepriv.sitesurveyctrl.sitesurvey_ctrl_timer);
+	del_timer_sync(
+		&padapter->mlmepriv.sitesurveyctrl.sitesurvey_ctrl_timer);
 }
 
 static void init_default_value(struct _adapter *padapter)
@@ -277,9 +278,9 @@ static void init_default_value(struct _adapter *padapter)
 	/*ht_priv*/
 	{
 		int i;
-		struct ht_priv	 *phtpriv = &pmlmepriv->htpriv;
+		struct ht_priv *phtpriv = &pmlmepriv->htpriv;
 
-		phtpriv->ampdu_enable = false;/*set to disabled*/
+		phtpriv->ampdu_enable = false; /*set to disabled*/
 		for (i = 0; i < 16; i++)
 			phtpriv->baddbareq_issued[i] = false;
 	}
@@ -368,7 +369,7 @@ static void enable_video_mode(struct _adapter *padapter, int cbw40_value)
 	 *   1 -> enable STBC
 	 *   0 -> disable STBC
 	 */
-	u32  intcmd = 0xf4000500;   /* enable bit8, bit10*/
+	u32 intcmd = 0xf4000500; /* enable bit8, bit10*/
 
 	if (cbw40_value) {
 		/* if the driver supports the 40M bandwidth,
@@ -398,8 +399,7 @@ static int netdev_open(struct net_device *pnetdev)
 			goto netdev_open_error;
 		if (!r8712_initmac) {
 			/* Use the mac address stored in the Efuse */
-			eth_hw_addr_set(pnetdev,
-					padapter->eeprompriv.mac_addr);
+			eth_hw_addr_set(pnetdev, padapter->eeprompriv.mac_addr);
 		} else {
 			/* We have to inform f/w to use user-supplied MAC
 			 * address.
@@ -416,8 +416,8 @@ static int netdev_open(struct net_device *pnetdev)
 			 * the eeprompriv.mac_addr should store the mac which
 			 * users specify.
 			 */
-			memcpy(padapter->eeprompriv.mac_addr,
-			       pnetdev->dev_addr, ETH_ALEN);
+			memcpy(padapter->eeprompriv.mac_addr, pnetdev->dev_addr,
+			       ETH_ALEN);
 		}
 		if (start_drv_threads(padapter) != _SUCCESS)
 			goto netdev_open_error;

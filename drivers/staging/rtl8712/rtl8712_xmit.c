@@ -74,7 +74,7 @@ int r8712_txframes_sta_ac_pending(struct _adapter *padapter,
 	case 3:
 	default:
 		ptxservq = &psta->sta_xmitpriv.be_q;
-	break;
+		break;
 	}
 	return ptxservq->qcnt;
 }
@@ -124,13 +124,13 @@ static u32 get_ff_hwaddr(struct xmit_frame *pxmitframe)
 		case 3:
 		case 1:
 		case 2:
-			addr = RTL8712_DMA_BEQ;/*RTL8712_EP_LO;*/
+			addr = RTL8712_DMA_BEQ; /*RTL8712_EP_LO;*/
 			break;
 		case 4:
 		case 5:
 		case 6:
 		case 7:
-			addr = RTL8712_DMA_VOQ;/*RTL8712_EP_HI;*/
+			addr = RTL8712_DMA_VOQ; /*RTL8712_EP_HI;*/
 			break;
 		case 0x10:
 		case 0x11:
@@ -139,7 +139,7 @@ static u32 get_ff_hwaddr(struct xmit_frame *pxmitframe)
 			addr = RTL8712_DMA_H2CCMD;
 			break;
 		default:
-			addr = RTL8712_DMA_BEQ;/*RTL8712_EP_LO;*/
+			addr = RTL8712_DMA_BEQ; /*RTL8712_EP_LO;*/
 			break;
 		}
 	}
@@ -147,17 +147,18 @@ static u32 get_ff_hwaddr(struct xmit_frame *pxmitframe)
 }
 
 static struct xmit_frame *dequeue_one_xmitframe(struct xmit_priv *pxmitpriv,
-						struct hw_xmit *phwxmit, struct tx_servq *ptxservq,
-						struct  __queue *pframe_queue)
+						struct hw_xmit *phwxmit,
+						struct tx_servq *ptxservq,
+						struct __queue *pframe_queue)
 {
 	struct list_head *xmitframe_plist, *xmitframe_phead;
-	struct	xmit_frame *pxmitframe = NULL;
+	struct xmit_frame *pxmitframe = NULL;
 
 	xmitframe_phead = &pframe_queue->queue;
 	xmitframe_plist = xmitframe_phead->next;
 	if (!end_of_queue_search(xmitframe_phead, xmitframe_plist)) {
-		pxmitframe = container_of(xmitframe_plist,
-					  struct xmit_frame, list);
+		pxmitframe =
+			container_of(xmitframe_plist, struct xmit_frame, list);
 		list_del_init(&pxmitframe->list);
 		ptxservq->qcnt--;
 		phwxmit->txcmdcnt++;
@@ -166,22 +167,27 @@ static struct xmit_frame *dequeue_one_xmitframe(struct xmit_priv *pxmitpriv,
 }
 
 static struct xmit_frame *dequeue_xframe_ex(struct xmit_priv *pxmitpriv,
-					    struct hw_xmit *phwxmit_i, sint entry)
+					    struct hw_xmit *phwxmit_i,
+					    sint entry)
 {
 	unsigned long irqL0;
 	struct list_head *sta_plist, *sta_phead;
 	struct hw_xmit *phwxmit;
 	struct tx_servq *ptxservq = NULL;
-	struct  __queue *pframe_queue = NULL;
-	struct	xmit_frame *pxmitframe = NULL;
+	struct __queue *pframe_queue = NULL;
+	struct xmit_frame *pxmitframe = NULL;
 	int i, inx[4];
 	int j, acirp_cnt[4];
 
 	/*entry indx: 0->vo, 1->vi, 2->be, 3->bk.*/
-	inx[0] = 0; acirp_cnt[0] = pxmitpriv->voq_cnt;
-	inx[1] = 1; acirp_cnt[1] = pxmitpriv->viq_cnt;
-	inx[2] = 2; acirp_cnt[2] = pxmitpriv->beq_cnt;
-	inx[3] = 3; acirp_cnt[3] = pxmitpriv->bkq_cnt;
+	inx[0] = 0;
+	acirp_cnt[0] = pxmitpriv->voq_cnt;
+	inx[1] = 1;
+	acirp_cnt[1] = pxmitpriv->viq_cnt;
+	inx[2] = 2;
+	acirp_cnt[2] = pxmitpriv->beq_cnt;
+	inx[3] = 3;
+	acirp_cnt[3] = pxmitpriv->bkq_cnt;
 	for (i = 0; i < 4; i++) {
 		for (j = i + 1; j < 4; j++) {
 			if (acirp_cnt[j] < acirp_cnt[i]) {
@@ -196,10 +202,11 @@ static struct xmit_frame *dequeue_xframe_ex(struct xmit_priv *pxmitpriv,
 		sta_phead = &phwxmit->sta_queue->queue;
 		sta_plist = sta_phead->next;
 		while (!end_of_queue_search(sta_phead, sta_plist)) {
-			ptxservq = container_of(sta_plist, struct tx_servq, tx_pending);
+			ptxservq = container_of(sta_plist, struct tx_servq,
+						tx_pending);
 			pframe_queue = &ptxservq->sta_pending;
-			pxmitframe = dequeue_one_xmitframe(pxmitpriv, phwxmit, ptxservq,
-							   pframe_queue);
+			pxmitframe = dequeue_one_xmitframe(
+				pxmitpriv, phwxmit, ptxservq, pframe_queue);
 			if (pxmitframe) {
 				phwxmit->accnt--;
 				goto exit_dequeue_xframe_ex;
@@ -219,7 +226,8 @@ exit_dequeue_xframe_ex:
 	return pxmitframe;
 }
 
-void r8712_do_queue_select(struct _adapter *padapter, struct pkt_attrib *pattrib)
+void r8712_do_queue_select(struct _adapter *padapter,
+			   struct pkt_attrib *pattrib)
 {
 	unsigned int qsel = 0;
 	struct dvobj_priv *pdvobj = &padapter->dvobjpriv;
@@ -250,9 +258,8 @@ void r8712_construct_txaggr_cmd_desc(struct xmit_buf *pxmitbuf)
 	/* Fill up TxCmd Descriptor according as USB FW Tx Aggregation info.*/
 	/* dw0 */
 	ptx_desc->txdw0 = cpu_to_le32(CMD_HDR_SZ & 0xffff);
-	ptx_desc->txdw0 |=
-		cpu_to_le32(((TXDESC_SIZE + OFFSET_SZ) << OFFSET_SHT) &
-			    0x00ff0000);
+	ptx_desc->txdw0 |= cpu_to_le32(
+		((TXDESC_SIZE + OFFSET_SZ) << OFFSET_SHT) & 0x00ff0000);
 	ptx_desc->txdw0 |= cpu_to_le32(OWN | FSG | LSG);
 
 	/* dw1 */
@@ -261,12 +268,12 @@ void r8712_construct_txaggr_cmd_desc(struct xmit_buf *pxmitbuf)
 
 void r8712_construct_txaggr_cmd_hdr(struct xmit_buf *pxmitbuf)
 {
-	struct xmit_frame *pxmitframe = (struct xmit_frame *)
-		pxmitbuf->priv_data;
+	struct xmit_frame *pxmitframe =
+		(struct xmit_frame *)pxmitbuf->priv_data;
 	struct _adapter *padapter = pxmitframe->padapter;
 	struct cmd_priv *pcmdpriv = &padapter->cmdpriv;
-	struct cmd_hdr *pcmd_hdr = (struct cmd_hdr  *)
-		(pxmitbuf->pbuf + TXDESC_SIZE);
+	struct cmd_hdr *pcmd_hdr =
+		(struct cmd_hdr *)(pxmitbuf->pbuf + TXDESC_SIZE);
 
 	/* Fill up Cmd Header for USB FW Tx Aggregation.*/
 	/* dw0 */
@@ -288,13 +295,15 @@ void r8712_append_mpdu_unit(struct xmit_buf *pxmitbuf,
 	/* free skb struct */
 	r8712_xmit_complete(padapter, pxmitframe);
 	if (pxmitframe->attrib.ether_type != 0x0806) {
-		if ((pxmitframe->attrib.ether_type != 0x888e) &&
-		    (pxmitframe->attrib.dhcp_pkt != 1)) {
-			r8712_issue_addbareq_cmd(padapter, pxmitframe->attrib.priority);
+		if (pxmitframe->attrib.ether_type != 0x888e &&
+		    pxmitframe->attrib.dhcp_pkt != 1) {
+			r8712_issue_addbareq_cmd(padapter,
+						 pxmitframe->attrib.priority);
 		}
 	}
 	pxmitframe->last[0] = 1;
-	update_txdesc(pxmitframe, (uint *)(pxmitframe->buf_addr), pxmitframe->attrib.last_txcmdsz);
+	update_txdesc(pxmitframe, (uint *)(pxmitframe->buf_addr),
+		      pxmitframe->attrib.last_txcmdsz);
 	/*padding zero */
 	last_txcmdsz = pxmitframe->attrib.last_txcmdsz;
 	padding_sz = (8 - (last_txcmdsz % 8));
@@ -306,10 +315,10 @@ void r8712_append_mpdu_unit(struct xmit_buf *pxmitbuf,
 			  i) = 0;
 	}
 	/* Add the new mpdu's length */
-	ptx_desc->txdw0 = cpu_to_le32((ptx_desc->txdw0 & 0xffff0000) |
+	ptx_desc->txdw0 = cpu_to_le32(
+		(ptx_desc->txdw0 & 0xffff0000) |
 		((ptx_desc->txdw0 & 0x0000ffff) +
-			((TXDESC_SIZE + last_txcmdsz + padding_sz) &
-			 0x0000ffff)));
+		 ((TXDESC_SIZE + last_txcmdsz + padding_sz) & 0x0000ffff)));
 }
 
 void r8712_xmitframe_aggr_1st(struct xmit_buf *pxmitbuf,
@@ -328,21 +337,22 @@ void r8712_xmitframe_aggr_1st(struct xmit_buf *pxmitbuf,
 	pxmitbuf->aggr_nr = 1;
 }
 
-u16 r8712_xmitframe_aggr_next(struct xmit_buf *pxmitbuf, struct xmit_frame *pxmitframe)
+u16 r8712_xmitframe_aggr_next(struct xmit_buf *pxmitbuf,
+			      struct xmit_frame *pxmitframe)
 {
 	pxmitframe->pxmitbuf = pxmitbuf;
 	pxmitbuf->priv_data = pxmitframe;
 	pxmitframe->pxmit_urb[0] = pxmitbuf->pxmit_urb[0];
 	/* buffer addr assoc */
-	pxmitframe->buf_addr = pxmitbuf->pbuf + TXDESC_SIZE +
+	pxmitframe->buf_addr =
+		pxmitbuf->pbuf + TXDESC_SIZE +
 		(((struct tx_desc *)pxmitbuf->pbuf)->txdw0 & 0x0000ffff);
 	r8712_append_mpdu_unit(pxmitbuf, pxmitframe);
-	r8712_free_xmitframe_ex(&pxmitframe->padapter->xmitpriv,
-				pxmitframe);
+	r8712_free_xmitframe_ex(&pxmitframe->padapter->xmitpriv, pxmitframe);
 	pxmitbuf->aggr_nr++;
 
 	return TXDESC_SIZE +
-		(((struct tx_desc *)pxmitbuf->pbuf)->txdw0 & 0x0000ffff);
+	       (((struct tx_desc *)pxmitbuf->pbuf)->txdw0 & 0x0000ffff);
 }
 
 void r8712_dump_aggr_xframe(struct xmit_buf *pxmitbuf,
@@ -351,15 +361,15 @@ void r8712_dump_aggr_xframe(struct xmit_buf *pxmitbuf,
 	struct _adapter *padapter = pxmitframe->padapter;
 	struct dvobj_priv *pdvobj = &padapter->dvobjpriv;
 	struct tx_desc *ptxdesc = pxmitbuf->pbuf;
-	struct cmd_hdr *pcmd_hdr = (struct cmd_hdr *)
-		(pxmitbuf->pbuf + TXDESC_SIZE);
+	struct cmd_hdr *pcmd_hdr =
+		(struct cmd_hdr *)(pxmitbuf->pbuf + TXDESC_SIZE);
 	u16 total_length = (u16)(ptxdesc->txdw0 & 0xffff);
 
 	/* use 1st xmitframe as media */
 	xmitframe_xmitbuf_attach(pxmitframe, pxmitbuf);
-	pcmd_hdr->cmd_dw0 = cpu_to_le32(((total_length - CMD_HDR_SZ) &
-					 0x0000ffff) | (pcmd_hdr->cmd_dw0 &
-							0xffff0000));
+	pcmd_hdr->cmd_dw0 =
+		cpu_to_le32(((total_length - CMD_HDR_SZ) & 0x0000ffff) |
+			    (pcmd_hdr->cmd_dw0 & 0xffff0000));
 
 	/* urb length in cmd_dw1 */
 	pcmd_hdr->cmd_dw1 = cpu_to_le32((pxmitbuf->aggr_nr & 0xff) |
@@ -368,21 +378,21 @@ void r8712_dump_aggr_xframe(struct xmit_buf *pxmitbuf,
 	pxmitframe->bpending[0] = false;
 	pxmitframe->mem_addr = pxmitbuf->pbuf;
 
-	if ((pdvobj->ishighspeed && ((total_length + TXDESC_SIZE) % 0x200) == 0) ||
-	    ((!pdvobj->ishighspeed && ((total_length + TXDESC_SIZE) %
-	    0x40) == 0))) {
-		ptxdesc->txdw0 |= cpu_to_le32
-			(((TXDESC_SIZE + OFFSET_SZ + 8) << OFFSET_SHT) &
-			 0x00ff0000);
+	if ((pdvobj->ishighspeed &&
+	     ((total_length + TXDESC_SIZE) % 0x200) == 0) ||
+	    ((!pdvobj->ishighspeed &&
+	      ((total_length + TXDESC_SIZE) % 0x40) == 0))) {
+		ptxdesc->txdw0 |= cpu_to_le32(
+			((TXDESC_SIZE + OFFSET_SZ + 8) << OFFSET_SHT) &
+			0x00ff0000);
 		/*32 bytes for TX Desc + 8 bytes pending*/
 	} else {
-		ptxdesc->txdw0 |= cpu_to_le32
-			(((TXDESC_SIZE + OFFSET_SZ) << OFFSET_SHT) &
-			 0x00ff0000);
+		ptxdesc->txdw0 |= cpu_to_le32(
+			((TXDESC_SIZE + OFFSET_SZ) << OFFSET_SHT) & 0x00ff0000);
 		/*default = 32 bytes for TX Desc*/
 	}
-	r8712_write_port(pxmitframe->padapter, RTL8712_DMA_H2CCMD, total_length + TXDESC_SIZE,
-			 (u8 *)pxmitframe);
+	r8712_write_port(pxmitframe->padapter, RTL8712_DMA_H2CCMD,
+			 total_length + TXDESC_SIZE, (u8 *)pxmitframe);
 }
 
 #endif
@@ -422,12 +432,13 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 	}
 	if (blnSetTxDescOffset) {
 		/* 32 bytes for TX Desc + 8 bytes pending */
-		ptxdesc->txdw0 |= cpu_to_le32(((TXDESC_SIZE + OFFSET_SZ + 8) <<
-			      OFFSET_SHT) & 0x00ff0000);
+		ptxdesc->txdw0 |= cpu_to_le32(
+			((TXDESC_SIZE + OFFSET_SZ + 8) << OFFSET_SHT) &
+			0x00ff0000);
 	} else {
 		/* default = 32 bytes for TX Desc */
-		ptxdesc->txdw0 |= cpu_to_le32(((TXDESC_SIZE + OFFSET_SZ) <<
-				  OFFSET_SHT) & 0x00ff0000);
+		ptxdesc->txdw0 |= cpu_to_le32(
+			((TXDESC_SIZE + OFFSET_SZ) << OFFSET_SHT) & 0x00ff0000);
 	}
 	ptxdesc->txdw0 |= cpu_to_le32(OWN | FSG | LSG);
 	if (pxmitframe->frame_tag == DATA_FRAMETAG) {
@@ -437,29 +448,28 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 #ifdef CONFIG_R8712_TX_AGGR
 		/* dirty workaround, need to check if it is aggr cmd. */
 		if ((u8 *)pmem != (u8 *)pxmitframe->pxmitbuf->pbuf) {
-			ptxdesc->txdw0 |= cpu_to_le32
-				((0x3 << TYPE_SHT) & TYPE_MSK);
+			ptxdesc->txdw0 |=
+				cpu_to_le32((0x3 << TYPE_SHT) & TYPE_MSK);
 			qsel = (uint)(pattrib->qsel & 0x0000001f);
 			if (qsel == 2)
 				qsel = 0;
-			ptxdesc->txdw1 |= cpu_to_le32
-				((qsel << QSEL_SHT) & 0x00001f00);
-			ptxdesc->txdw2 = cpu_to_le32
-				((qsel << RTS_RC_SHT) & 0x001f0000);
-			ptxdesc->txdw6 |= cpu_to_le32
-				((0x5 << RSVD6_SHT) & RSVD6_MSK);
+			ptxdesc->txdw1 |=
+				cpu_to_le32((qsel << QSEL_SHT) & 0x00001f00);
+			ptxdesc->txdw2 =
+				cpu_to_le32((qsel << RTS_RC_SHT) & 0x001f0000);
+			ptxdesc->txdw6 |=
+				cpu_to_le32((0x5 << RSVD6_SHT) & RSVD6_MSK);
 		} else {
-			ptxdesc->txdw0 |= cpu_to_le32
-				((0x3 << TYPE_SHT) & TYPE_MSK);
-			ptxdesc->txdw1 |= cpu_to_le32
-				((0x13 << QSEL_SHT) & 0x00001f00);
+			ptxdesc->txdw0 |=
+				cpu_to_le32((0x3 << TYPE_SHT) & TYPE_MSK);
+			ptxdesc->txdw1 |=
+				cpu_to_le32((0x13 << QSEL_SHT) & 0x00001f00);
 			qsel = (uint)(pattrib->qsel & 0x0000001f);
 			if (qsel == 2)
 				qsel = 0;
-			ptxdesc->txdw2 = cpu_to_le32
-				((qsel << RTS_RC_SHT) & 0x0001f000);
-			ptxdesc->txdw7 |= cpu_to_le32
-				(pcmdpriv->cmd_seq << 24);
+			ptxdesc->txdw2 =
+				cpu_to_le32((qsel << RTS_RC_SHT) & 0x0001f000);
+			ptxdesc->txdw7 |= cpu_to_le32(pcmdpriv->cmd_seq << 24);
 			pcmdpriv->cmd_seq++;
 		}
 		pattrib->qsel = 0x13;
@@ -468,26 +478,26 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 		ptxdesc->txdw1 |= cpu_to_le32((qsel << QSEL_SHT) & 0x00001f00);
 #endif
 		if (!pqospriv->qos_option)
-			ptxdesc->txdw1 |= cpu_to_le32(BIT(16));/*Non-QoS*/
-		if ((pattrib->encrypt > 0) && !pattrib->bswenc) {
-			switch (pattrib->encrypt) {	/*SEC_TYPE*/
+			ptxdesc->txdw1 |= cpu_to_le32(BIT(16)); /*Non-QoS*/
+		if (pattrib->encrypt > 0 && !pattrib->bswenc) {
+			switch (pattrib->encrypt) { /*SEC_TYPE*/
 			case _WEP40_:
 			case _WEP104_:
-				ptxdesc->txdw1 |= cpu_to_le32((0x01 << 22) &
-						  0x00c00000);
-				/*KEY_ID when WEP is used;*/
 				ptxdesc->txdw1 |=
-					cpu_to_le32((psecuritypriv->PrivacyKeyIndex << 17) &
-						    0x00060000);
+					cpu_to_le32((0x01 << 22) & 0x00c00000);
+				/*KEY_ID when WEP is used;*/
+				ptxdesc->txdw1 |= cpu_to_le32(
+					(psecuritypriv->PrivacyKeyIndex << 17) &
+					0x00060000);
 				break;
 			case _TKIP_:
 			case _TKIP_WTMIC_:
-				ptxdesc->txdw1 |= cpu_to_le32((0x02 << 22) &
-						  0x00c00000);
+				ptxdesc->txdw1 |=
+					cpu_to_le32((0x02 << 22) & 0x00c00000);
 				break;
 			case _AES_:
-				ptxdesc->txdw1 |= cpu_to_le32((0x03 << 22) &
-						  0x00c00000);
+				ptxdesc->txdw1 |=
+					cpu_to_le32((0x03 << 22) & 0x00c00000);
 				break;
 			case _NO_PRIVACY_:
 			default:
@@ -508,10 +518,9 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 		 * the AC Queue list correctly.
 		 */
 		ptxdesc->txdw3 = cpu_to_le32((pattrib->priority << SEQ_SHT) &
-				 0x0fff0000);
-		if ((pattrib->ether_type != 0x888e) &&
-		    (pattrib->ether_type != 0x0806) &&
-		    (pattrib->dhcp_pkt != 1)) {
+					     0x0fff0000);
+		if (pattrib->ether_type != 0x888e &&
+		    pattrib->ether_type != 0x0806 && pattrib->dhcp_pkt != 1) {
 			/*Not EAP & ARP type data packet*/
 			if (phtpriv->ht_option == 1) { /*B/G/N Mode*/
 				if (!phtpriv->ampdu_enable)
@@ -524,7 +533,7 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 			 */
 			/*driver uses data rate*/
 			ptxdesc->txdw4 = cpu_to_le32(0x80000000);
-			ptxdesc->txdw5 = cpu_to_le32(0x001f8000);/*1M*/
+			ptxdesc->txdw5 = cpu_to_le32(0x001f8000); /*1M*/
 		}
 		if (pattrib->pctrl == 1) { /* mp tx packets */
 			struct tx_desc *ptxdesc_mp;
@@ -539,7 +548,7 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 			ptxdesc->txdw4 = ptxdesc_mp->txdw4;
 			/* offset 20 */
 			ptxdesc->txdw5 = ptxdesc_mp->txdw5;
-			pattrib->pctrl = 0;/* reset to zero; */
+			pattrib->pctrl = 0; /* reset to zero; */
 		}
 	} else if (pxmitframe->frame_tag == MGNT_FRAMETAG) {
 		/* offset 4 */
@@ -547,7 +556,7 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 		ptxdesc->txdw1 |= cpu_to_le32((0x05) & 0x1f);
 		qsel = (uint)(pattrib->qsel & 0x0000001f);
 		ptxdesc->txdw1 |= cpu_to_le32((qsel << QSEL_SHT) & 0x00001f00);
-		ptxdesc->txdw1 |= cpu_to_le32(BIT(16));/* Non-QoS */
+		ptxdesc->txdw1 |= cpu_to_le32(BIT(16)); /* Non-QoS */
 		/* offset 8 */
 		if (bmcst)
 			ptxdesc->txdw2 |= cpu_to_le32(BMC);
@@ -561,11 +570,11 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 		 * the AC Queue list correctly.
 		 */
 		ptxdesc->txdw3 = cpu_to_le32((pattrib->priority << SEQ_SHT) &
-					      0x0fff0000);
+					     0x0fff0000);
 		/* offset 16 */
-		ptxdesc->txdw4 = cpu_to_le32(0x80002040);/*gtest*/
+		ptxdesc->txdw4 = cpu_to_le32(0x80002040); /*gtest*/
 		/* offset 20 */
-		ptxdesc->txdw5 = cpu_to_le32(0x001f8000);/* gtest 1M */
+		ptxdesc->txdw5 = cpu_to_le32(0x001f8000); /* gtest 1M */
 	} else if (pxmitframe->frame_tag == TXAGG_FRAMETAG) {
 		/* offset 4 */
 		qsel = 0x13;
@@ -576,12 +585,12 @@ static void update_txdesc(struct xmit_frame *pxmitframe, uint *pmem, int sz)
 		ptxdesc->txdw1 |= cpu_to_le32((qsel << QSEL_SHT) & 0x00001f00);
 		/*offset 8*/
 		/*offset 12*/
-		ptxdesc->txdw3 = cpu_to_le32((pattrib->seqnum << SEQ_SHT) &
-					      0x0fff0000);
+		ptxdesc->txdw3 =
+			cpu_to_le32((pattrib->seqnum << SEQ_SHT) & 0x0fff0000);
 		/*offset 16*/
-		ptxdesc->txdw4 = cpu_to_le32(0x80002040);/*gtest*/
+		ptxdesc->txdw4 = cpu_to_le32(0x80002040); /*gtest*/
 		/*offset 20*/
-		ptxdesc->txdw5 = cpu_to_le32(0x001f9600);/*gtest*/
+		ptxdesc->txdw5 = cpu_to_le32(0x001f9600); /*gtest*/
 	}
 }
 
@@ -617,7 +626,8 @@ int r8712_xmitframe_complete(struct _adapter *padapter,
 		 * 2. aggr if 2nd xframe is dequeued, else dump directly
 		 */
 		if (AGGR_NR_HIGH_BOUND > 1)
-			p2ndxmitframe = dequeue_xframe_ex(pxmitpriv, phwxmits, hwentry);
+			p2ndxmitframe =
+				dequeue_xframe_ex(pxmitpriv, phwxmits, hwentry);
 		if (pxmitframe->frame_tag != DATA_FRAMETAG) {
 			r8712_free_xmitbuf(pxmitpriv, pxmitbuf);
 			return false;
@@ -631,16 +641,18 @@ int r8712_xmitframe_complete(struct _adapter *padapter,
 		if (p2ndxmitframe) {
 			u16 total_length;
 
-			total_length = r8712_xmitframe_aggr_next(pxmitbuf, p2ndxmitframe);
+			total_length = r8712_xmitframe_aggr_next(pxmitbuf,
+								 p2ndxmitframe);
 			do {
-				p2ndxmitframe = dequeue_xframe_ex(pxmitpriv, phwxmits, hwentry);
+				p2ndxmitframe = dequeue_xframe_ex(
+					pxmitpriv, phwxmits, hwentry);
 				if (p2ndxmitframe)
-					total_length =
-						r8712_xmitframe_aggr_next(pxmitbuf, p2ndxmitframe);
+					total_length = r8712_xmitframe_aggr_next(
+						pxmitbuf, p2ndxmitframe);
 				else
 					break;
 			} while (total_length <= 0x1800 &&
-				pxmitbuf->aggr_nr <= AGGR_NR_HIGH_BOUND);
+				 pxmitbuf->aggr_nr <= AGGR_NR_HIGH_BOUND);
 		}
 		if (pxmitbuf->aggr_nr > 0)
 			r8712_dump_aggr_xframe(pxmitbuf, pxmitframe);
@@ -650,8 +662,8 @@ int r8712_xmitframe_complete(struct _adapter *padapter,
 		xmitframe_xmitbuf_attach(pxmitframe, pxmitbuf);
 		if (pxmitframe->frame_tag == DATA_FRAMETAG) {
 			if (pxmitframe->attrib.priority <= 15)
-				res = r8712_xmitframe_coalesce(padapter, pxmitframe->pkt,
-							       pxmitframe);
+				res = r8712_xmitframe_coalesce(
+					padapter, pxmitframe->pkt, pxmitframe);
 			/* always return ndis_packet after
 			 * r8712_xmitframe_coalesce
 			 */
@@ -688,8 +700,8 @@ static void dump_xframe(struct _adapter *padapter,
 	for (t = 0; t < pattrib->nr_frags; t++) {
 		if (t != (pattrib->nr_frags - 1)) {
 			sz = pxmitpriv->frag_len;
-			sz = sz - 4 - (psecuritypriv->sw_encrypt ? 0 :
-			     pattrib->icv_len);
+			sz = sz - 4 -
+			     (psecuritypriv->sw_encrypt ? 0 : pattrib->icv_len);
 			pxmitframe->last[t] = 0;
 		} else {
 			sz = pattrib->last_txcmdsz;

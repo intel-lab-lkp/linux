@@ -24,7 +24,7 @@
 #define NR_RECVBUFF (8)
 
 #define NR_PREALLOC_RECV_SKB (8)
-#define RXDESC_SIZE	24
+#define RXDESC_SIZE 24
 #define RXDESC_OFFSET RXDESC_SIZE
 #define RECV_BLK_SZ 512
 #define RECV_BLK_CNT 16
@@ -33,9 +33,9 @@
 #define RECVBUFF_ALIGN_SZ 512
 #define RSVD_ROOM_SZ (0)
 /*These definition is used for Rx packet reordering.*/
-#define SN_LESS(a, b)		(((a-b) & 0x800) != 0)
-#define SN_EQUAL(a, b)	(a == b)
-#define REORDER_WAIT_TIME	30 /* (ms)*/
+#define SN_LESS(a, b) (((a - b) & 0x800) != 0)
+#define SN_EQUAL(a, b) (a == b)
+#define REORDER_WAIT_TIME 30 /* (ms)*/
 
 struct recv_stat {
 	__le32 rxdw0;
@@ -51,9 +51,9 @@ struct phy_cck_rx_status {
 	 * LSB bit present 0.5. And MSB 7 bts present a signed value.
 	 * Range from -64~+63.5.
 	 */
-	u8	adc_pwdb_X[4];
-	u8	sq_rpt;
-	u8	cck_agc_rpt;
+	u8 adc_pwdb_X[4];
+	u8 sq_rpt;
+	u8 cck_agc_rpt;
 };
 
 struct phy_stat {
@@ -88,13 +88,13 @@ union recvstat {
 struct recv_buf {
 	struct list_head list;
 	spinlock_t recvbuf_lock;
-	u32	ref_cnt;
-	struct _adapter  *adapter;
+	u32 ref_cnt;
+	struct _adapter *adapter;
 	struct urb *purb;
 	_pkt *pskb;
-	u8  irp_pending;
-	u32  transfer_len;
-	uint  len;
+	u8 irp_pending;
+	u32 transfer_len;
+	uint len;
 	u8 *phead;
 	u8 *pdata;
 	u8 *ptail;
@@ -113,12 +113,12 @@ struct recv_buf {
  */
 struct recv_frame_hdr {
 	struct list_head list;
-	_pkt	*pkt;
+	_pkt *pkt;
 	_pkt *pkt_newalloc;
-	struct _adapter  *adapter;
+	struct _adapter *adapter;
 	u8 fragcnt;
 	struct rx_pkt_attrib attrib;
-	uint  len;
+	uint len;
 	u8 *rx_head;
 	u8 *rx_data;
 	u8 *rx_tail;
@@ -142,4 +142,3 @@ s32 r8712_signal_scale_mapping(s32 cur_sig);
 void r8712_reordering_ctrl_timeout_handler(void *pcontext);
 
 #endif
-

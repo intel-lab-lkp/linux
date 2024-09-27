@@ -23,8 +23,8 @@
 #include "osdep_intf.h"
 #include "usb_ops.h"
 
-#define	RTL871X_VENQT_READ	0xc0
-#define	RTL871X_VENQT_WRITE	0x40
+#define RTL871X_VENQT_READ 0xc0
+#define RTL871X_VENQT_WRITE 0x40
 
 uint r8712_usb_init_intf_priv(struct intf_priv *pintfpriv)
 {
@@ -65,7 +65,7 @@ static unsigned int ffaddr2pipehdl(struct dvobj_priv *pdvobj, u32 addr)
 		case RTL8712_DMA_BCNQ:
 			pipe = usb_sndbulkpipe(pusbd, 0x0a);
 			break;
-		case RTL8712_DMA_BMCQ:	/* HI Queue */
+		case RTL8712_DMA_BMCQ: /* HI Queue */
 			pipe = usb_sndbulkpipe(pusbd, 0x0b);
 			break;
 		case RTL8712_DMA_MGTQ:
@@ -134,7 +134,7 @@ static unsigned int ffaddr2pipehdl(struct dvobj_priv *pdvobj, u32 addr)
 static void usb_write_mem_complete(struct urb *purb)
 {
 	struct io_queue *pio_q = (struct io_queue *)purb->context;
-	struct intf_hdl *pintf = &(pio_q->intf);
+	struct intf_hdl *pintf = &pio_q->intf;
 	struct intf_priv *pintfpriv = pintf->pintfpriv;
 	struct _adapter *padapter = (struct _adapter *)pintf->adapter;
 
@@ -157,16 +157,15 @@ void r8712_usb_write_mem(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem)
 	struct usb_device *pusbd = pdvobj->pusbdev;
 	struct urb *piorw_urb = pintfpriv->piorw_urb;
 
-	if ((padapter->driver_stopped) || (padapter->surprise_removed) ||
-	    (padapter->pwrctrlpriv.pnp_bstop_trx))
+	if (padapter->driver_stopped || padapter->surprise_removed ||
+	    padapter->pwrctrlpriv.pnp_bstop_trx)
 		return;
 	/* translate DMA FIFO addr to pipehandle */
 	pipe = ffaddr2pipehdl(pdvobj, addr);
 	if (pipe == 0)
 		return;
-	usb_fill_bulk_urb(piorw_urb, pusbd, pipe,
-			  wmem, cnt, usb_write_mem_complete,
-			  pio_queue);
+	usb_fill_bulk_urb(piorw_urb, pusbd, pipe, wmem, cnt,
+			  usb_write_mem_complete, pio_queue);
 	usb_submit_urb(piorw_urb, GFP_ATOMIC);
 	wait_for_completion_interruptible(&pintfpriv->io_retevt_comp);
 }
@@ -175,17 +174,17 @@ static void r8712_usb_read_port_complete(struct urb *purb)
 {
 	uint isevt;
 	__le32 *pbuf;
-	struct recv_buf	*precvbuf = (struct recv_buf *)purb->context;
+	struct recv_buf *precvbuf = (struct recv_buf *)purb->context;
 	struct _adapter *padapter = (struct _adapter *)precvbuf->adapter;
 	struct recv_priv *precvpriv = &padapter->recvpriv;
 
 	if (padapter->surprise_removed || padapter->driver_stopped)
 		return;
 	if (purb->status == 0) { /* SUCCESS */
-		if ((purb->actual_length > (MAX_RECVBUF_SZ)) ||
-		    (purb->actual_length < RXDESC_SIZE)) {
+		if (purb->actual_length > (MAX_RECVBUF_SZ) ||
+		    purb->actual_length < RXDESC_SIZE) {
 			r8712_read_port(padapter, precvpriv->ff_hwaddr, 0,
-				  (unsigned char *)precvbuf);
+					(unsigned char *)precvbuf);
 		} else {
 			_pkt *pskb = precvbuf->pskb;
 
@@ -224,7 +223,8 @@ static void r8712_usb_read_port_complete(struct urb *purb)
 					(unsigned char *)precvbuf);
 			break;
 		case -EINPROGRESS:
-			netdev_err(padapter->pnetdev, "ERROR: URB IS IN PROGRESS!\n");
+			netdev_err(padapter->pnetdev,
+				   "ERROR: URB IS IN PROGRESS!\n");
 			break;
 		default:
 			break;
@@ -240,7 +240,7 @@ u32 r8712_usb_read_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *rmem)
 	int alignment = 0;
 	u32 ret = _SUCCESS;
 	struct urb *purb = NULL;
-	struct recv_buf	*precvbuf = (struct recv_buf *)rmem;
+	struct recv_buf *precvbuf = (struct recv_buf *)rmem;
 	struct intf_priv *pintfpriv = pintfhdl->pintfpriv;
 	struct dvobj_priv *pdvobj = (struct dvobj_priv *)pintfpriv->intf_dev;
 	struct _adapter *adapter = pdvobj->padapter;
@@ -255,14 +255,13 @@ u32 r8712_usb_read_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *rmem)
 	precvbuf->pskb = skb_dequeue(&precvpriv->free_recv_skb_queue);
 
 	if (!precvbuf->pskb) {
-		precvbuf->pskb = netdev_alloc_skb(adapter->pnetdev,
-				 MAX_RECVBUF_SZ + RECVBUFF_ALIGN_SZ);
+		precvbuf->pskb = netdev_alloc_skb(
+			adapter->pnetdev, MAX_RECVBUF_SZ + RECVBUFF_ALIGN_SZ);
 		if (!precvbuf->pskb)
 			return _FAIL;
 		tmpaddr = (addr_t)precvbuf->pskb->data;
 		alignment = tmpaddr & (RECVBUFF_ALIGN_SZ - 1);
-		skb_reserve(precvbuf->pskb,
-			    (RECVBUFF_ALIGN_SZ - alignment));
+		skb_reserve(precvbuf->pskb, (RECVBUFF_ALIGN_SZ - alignment));
 		precvbuf->phead = precvbuf->pskb->head;
 		precvbuf->pdata = precvbuf->pskb->data;
 		precvbuf->ptail = skb_tail_pointer(precvbuf->pskb);
@@ -278,10 +277,8 @@ u32 r8712_usb_read_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *rmem)
 	purb = precvbuf->purb;
 	/* translate DMA FIFO addr to pipehandle */
 	pipe = ffaddr2pipehdl(pdvobj, addr);
-	usb_fill_bulk_urb(purb, pusbd, pipe,
-			  precvbuf->pbuf, MAX_RECVBUF_SZ,
-			  r8712_usb_read_port_complete,
-			  precvbuf);
+	usb_fill_bulk_urb(purb, pusbd, pipe, precvbuf->pbuf, MAX_RECVBUF_SZ,
+			  r8712_usb_read_port_complete, precvbuf);
 	err = usb_submit_urb(purb, GFP_ATOMIC);
 	if ((err) && (err != (-EPERM)))
 		ret = _FAIL;
@@ -304,13 +301,13 @@ void r8712_usb_read_port_cancel(struct _adapter *padapter)
 void r8712_xmit_bh(struct tasklet_struct *t)
 {
 	int ret = false;
-	struct _adapter *padapter = from_tasklet(padapter, t,
-						 xmitpriv.xmit_tasklet);
+	struct _adapter *padapter =
+		from_tasklet(padapter, t, xmitpriv.xmit_tasklet);
 	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
 
-	if (padapter->driver_stopped ||
-	    padapter->surprise_removed) {
-		netdev_err(padapter->pnetdev, "xmit_bh => driver_stopped or surprise_removed\n");
+	if (padapter->driver_stopped || padapter->surprise_removed) {
+		netdev_err(padapter->pnetdev,
+			   "xmit_bh => driver_stopped or surprise_removed\n");
 		return;
 	}
 	ret = r8712_xmitframe_complete(padapter, pxmitpriv, NULL);
@@ -360,8 +357,8 @@ static void usb_write_port_complete(struct urb *purb)
 	case 0:
 		break;
 	default:
-		netdev_warn(padapter->pnetdev,
-				"r8712u: pipe error: (%d)\n", purb->status);
+		netdev_warn(padapter->pnetdev, "r8712u: pipe error: (%d)\n",
+			    purb->status);
 		break;
 	}
 	/* not to consider tx fragment */
@@ -384,14 +381,14 @@ u32 r8712_usb_write_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem)
 	struct usb_device *pusbd = pdvobj->pusbdev;
 	struct pkt_attrib *pattrib = &pxmitframe->attrib;
 
-	if ((padapter->driver_stopped) || (padapter->surprise_removed) ||
-	    (padapter->pwrctrlpriv.pnp_bstop_trx))
+	if (padapter->driver_stopped || padapter->surprise_removed ||
+	    padapter->pwrctrlpriv.pnp_bstop_trx)
 		return _FAIL;
 	for (i = 0; i < 8; i++) {
 		if (!pxmitframe->bpending[i]) {
 			spin_lock_irqsave(&pxmitpriv->lock, irqL);
 			pxmitpriv->txirp_cnt++;
-			pxmitframe->bpending[i]  = true;
+			pxmitframe->bpending[i] = true;
 			switch (pattrib->priority) {
 			case 1:
 			case 2:
@@ -428,14 +425,13 @@ u32 r8712_usb_write_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem)
 	/* translate DMA FIFO addr to pipehandle */
 	pipe = ffaddr2pipehdl(pdvobj, addr);
 	if (pxmitpriv->free_xmitbuf_cnt % NR_XMITBUFF == 0)
-		purb->transfer_flags  &=  (~URB_NO_INTERRUPT);
+		purb->transfer_flags &= (~URB_NO_INTERRUPT);
 	else
-		purb->transfer_flags  |=  URB_NO_INTERRUPT;
+		purb->transfer_flags |= URB_NO_INTERRUPT;
 	if (bwritezero)
 		cnt += 8;
-	usb_fill_bulk_urb(purb, pusbd, pipe,
-			  pxmitframe->mem_addr,
-			  cnt, usb_write_port_complete,
+	usb_fill_bulk_urb(purb, pusbd, pipe, pxmitframe->mem_addr, cnt,
+			  usb_write_port_complete,
 			  pxmitframe); /* context is xmit_frame */
 	status = usb_submit_urb(purb, GFP_ATOMIC);
 	if (!status)
@@ -448,8 +444,8 @@ u32 r8712_usb_write_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem)
 void r8712_usb_write_port_cancel(struct _adapter *padapter)
 {
 	int i, j;
-	struct xmit_buf	*pxmitbuf = (struct xmit_buf *)
-				     padapter->xmitpriv.pxmitbuf;
+	struct xmit_buf *pxmitbuf =
+		(struct xmit_buf *)padapter->xmitpriv.pxmitbuf;
 
 	for (i = 0; i < NR_XMITBUFF; i++) {
 		for (j = 0; j < 8; j++) {
@@ -461,13 +457,13 @@ void r8712_usb_write_port_cancel(struct _adapter *padapter)
 }
 
 int r8712_usbctrl_vendorreq(struct intf_priv *pintfpriv, u8 request, u16 value,
-		      u16 index, void *pdata, u16 len, u8 requesttype)
+			    u16 index, void *pdata, u16 len, u8 requesttype)
 {
 	unsigned int pipe;
 	int status;
 	u8 reqtype;
-	struct dvobj_priv *pdvobjpriv = (struct dvobj_priv *)
-					 pintfpriv->intf_dev;
+	struct dvobj_priv *pdvobjpriv =
+		(struct dvobj_priv *)pintfpriv->intf_dev;
 	struct usb_device *udev = pdvobjpriv->pusbdev;
 	/* For mstar platform, mstar suggests the address for USB IO
 	 * should be 16 bytes alignment. Trying to fix it here.
@@ -480,10 +476,10 @@ int r8712_usbctrl_vendorreq(struct intf_priv *pintfpriv, u8 request, u16 value,
 	pIo_buf = palloc_buf + 16 - ((addr_t)(palloc_buf) & 0x0f);
 	if (requesttype == 0x01) {
 		pipe = usb_rcvctrlpipe(udev, 0); /* read_in */
-		reqtype =  RTL871X_VENQT_READ;
+		reqtype = RTL871X_VENQT_READ;
 	} else {
 		pipe = usb_sndctrlpipe(udev, 0); /* write_out */
-		reqtype =  RTL871X_VENQT_WRITE;
+		reqtype = RTL871X_VENQT_WRITE;
 		memcpy(pIo_buf, pdata, len);
 	}
 	status = usb_control_msg(udev, pipe, request, reqtype, value, index,

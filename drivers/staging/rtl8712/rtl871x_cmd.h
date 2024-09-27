@@ -16,35 +16,35 @@
 
 #include "wlan_bssdef.h"
 #include "rtl871x_rf.h"
-#define C2H_MEM_SZ (16*1024)
+#define C2H_MEM_SZ (16 * 1024)
 
 #include "osdep_service.h"
 #include "ieee80211.h"
 
-#define FREE_CMDOBJ_SZ	128
-#define MAX_CMDSZ	512
-#define MAX_RSPSZ	512
-#define MAX_EVTSZ	1024
+#define FREE_CMDOBJ_SZ 128
+#define MAX_CMDSZ 512
+#define MAX_RSPSZ 512
+#define MAX_EVTSZ 1024
 #define CMDBUFF_ALIGN_SZ 512
 
 struct cmd_obj {
-	u16	cmdcode;
-	u8	res;
-	u8	*parmbuf;
-	u32	cmdsz;
-	u8	*rsp;
-	u32	rspsz;
+	u16 cmdcode;
+	u8 res;
+	u8 *parmbuf;
+	u32 cmdsz;
+	u8 *rsp;
+	u32 rspsz;
 	struct list_head list;
 };
 
 struct cmd_priv {
 	struct completion cmd_queue_comp;
 	struct completion terminate_cmdthread_comp;
-	struct  __queue	cmd_queue;
+	struct __queue cmd_queue;
 	u8 cmd_seq;
-	u8 *cmd_buf;	/*shall be non-paged, and 4 bytes aligned*/
+	u8 *cmd_buf; /*shall be non-paged, and 4 bytes aligned*/
 	u8 *cmd_allocated_buf;
-	u8 *rsp_buf;	/*shall be non-paged, and 4 bytes aligned*/
+	u8 *rsp_buf; /*shall be non-paged, and 4 bytes aligned*/
 	u8 *rsp_allocated_buf;
 	u32 cmd_issued_cnt;
 	u32 cmd_done_cnt;
@@ -60,27 +60,27 @@ struct evt_obj {
 	struct list_head list;
 };
 
-struct	evt_priv {
-	struct  __queue	evt_queue;
-	u8	event_seq;
-	u8	*evt_buf;	/*shall be non-paged, and 4 bytes aligned*/
-	u8	*evt_allocated_buf;
-	u32	evt_done_cnt;
+struct evt_priv {
+	struct __queue evt_queue;
+	u8 event_seq;
+	u8 *evt_buf; /*shall be non-paged, and 4 bytes aligned*/
+	u8 *evt_allocated_buf;
+	u32 evt_done_cnt;
 };
 
 #define init_h2fwcmd_w_parm_no_rsp(pcmd, pparm, code) \
-do {\
-	INIT_LIST_HEAD(&pcmd->list);\
-	pcmd->cmdcode = code;\
-	pcmd->parmbuf = (u8 *)(pparm);\
-	pcmd->cmdsz = sizeof(*pparm);\
-	pcmd->rsp = NULL;\
-	pcmd->rspsz = 0;\
-} while (0)
+	do {                                          \
+		INIT_LIST_HEAD(&pcmd->list);          \
+		pcmd->cmdcode = code;                 \
+		pcmd->parmbuf = (u8 *)(pparm);        \
+		pcmd->cmdsz = sizeof(*pparm);         \
+		pcmd->rsp = NULL;                     \
+		pcmd->rspsz = 0;                      \
+	} while (0)
 
 void r8712_enqueue_cmd(struct cmd_priv *pcmdpriv, struct cmd_obj *obj);
 void r8712_enqueue_cmd_ex(struct cmd_priv *pcmdpriv, struct cmd_obj *obj);
-struct cmd_obj *r8712_dequeue_cmd(struct  __queue *queue);
+struct cmd_obj *r8712_dequeue_cmd(struct __queue *queue);
 void r8712_free_cmd_obj(struct cmd_obj *pcmd);
 int r8712_cmd_thread(void *context);
 int r8712_init_cmd_priv(struct cmd_priv *pcmdpriv);
@@ -88,11 +88,7 @@ void r8712_free_cmd_priv(struct cmd_priv *pcmdpriv);
 int r8712_init_evt_priv(struct evt_priv *pevtpriv);
 void r8712_free_evt_priv(struct evt_priv *pevtpriv);
 
-enum rtl871x_drvint_cid {
-	NONE_WK_CID,
-	WDG_WK_CID,
-	MAX_WK_CID
-};
+enum rtl871x_drvint_cid { NONE_WK_CID, WDG_WK_CID, MAX_WK_CID };
 
 enum RFINTFS {
 	SWSI,
@@ -132,9 +128,9 @@ struct disconnect_parm {
  * #define IW_MODE_SECOND	5	// Secondary master/repeater (backup)
  * #define IW_MODE_MONITOR	6	// Passive monitor (listen only)
  */
-struct	setopmode_parm {
-	u8	mode;
-	u8	rsvd[3];
+struct setopmode_parm {
+	u8 mode;
+	u8 rsvd[3];
 };
 
 /*
@@ -143,10 +139,10 @@ struct	setopmode_parm {
  * Command-Event Mode
  */
 struct sitesurvey_parm {
-	__le32	passive_mode;	/*active: 1, passive: 0 */
-	__le32	bsslimit;	/* 1 ~ 48 */
-	__le32	ss_ssidlen;
-	u8	ss_ssid[IW_ESSID_MAX_SIZE + 1];
+	__le32 passive_mode; /*active: 1, passive: 0 */
+	__le32 bsslimit; /* 1 ~ 48 */
+	__le32 ss_ssidlen;
+	u8 ss_ssid[IW_ESSID_MAX_SIZE + 1];
 };
 
 /*
@@ -155,8 +151,8 @@ struct sitesurvey_parm {
  * Command Mode
  */
 struct setauth_parm {
-	u8 mode;  /*0: legacy open, 1: legacy shared 2: 802.1x*/
-	u8 _1x;   /*0: PSK, 1: TLS*/
+	u8 mode; /*0: legacy open, 1: legacy shared 2: 802.1x*/
+	u8 _1x; /*0: PSK, 1: TLS*/
 	u8 rsvd[2];
 };
 
@@ -171,14 +167,14 @@ struct setauth_parm {
  * when 802.1x ==> keyid > 2 ==> unicast key
  */
 struct setkey_parm {
-	u8	algorithm;	/* encryption algorithm, could be none, wep40,
+	u8 algorithm; /* encryption algorithm, could be none, wep40,
 				 * TKIP, CCMP, wep104
 				 */
-	u8	keyid;
-	u8	grpkey;		/* 1: this is the grpkey for 802.1x.
+	u8 keyid;
+	u8 grpkey; /* 1: this is the grpkey for 802.1x.
 				 * 0: this is the unicast key for 802.1x
 				 */
-	u8	key[16];	/* this could be 40 or 104 */
+	u8 key[16]; /* this could be 40 or 104 */
 };
 
 /*
@@ -188,19 +184,19 @@ struct setkey_parm {
  * when shared key ==> algorithm/keyid
  */
 struct set_stakey_parm {
-	u8	addr[ETH_ALEN];
-	u8	algorithm;
-	u8	key[16];
+	u8 addr[ETH_ALEN];
+	u8 algorithm;
+	u8 key[16];
 };
 
 struct set_stakey_rsp {
-	u8	addr[ETH_ALEN];
-	u8	keyid;
-	u8	rsvd;
+	u8 addr[ETH_ALEN];
+	u8 keyid;
+	u8 rsvd;
 };
 
 struct SetMacAddr_param {
-	u8	MacAddr[ETH_ALEN];
+	u8 MacAddr[ETH_ALEN];
 };
 
 /*
@@ -214,12 +210,12 @@ struct SetMacAddr_param {
  *
  */
 struct set_assocsta_parm {
-	u8	addr[ETH_ALEN];
+	u8 addr[ETH_ALEN];
 };
 
 struct set_assocsta_rsp {
-	u8	cam_id;
-	u8	rsvd[3];
+	u8 cam_id;
+	u8 rsvd[3];
 };
 
 /*
@@ -233,7 +229,7 @@ struct set_assocsta_rsp {
  *
  */
 struct del_assocsta_parm {
-	u8	addr[ETH_ALEN];
+	u8 addr[ETH_ALEN];
 };
 
 /*
@@ -245,9 +241,9 @@ struct del_assocsta_parm {
  *
  */
 struct setstapwrstate_parm {
-	u8	staid;
-	u8	status;
-	u8	hwaddr[6];
+	u8 staid;
+	u8 status;
+	u8 hwaddr[6];
 };
 
 /*
@@ -258,8 +254,8 @@ struct setstapwrstate_parm {
  *	Command Mode
  *
  */
-struct	setbasicrate_parm {
-	u8	basicrates[NumRates];
+struct setbasicrate_parm {
+	u8 basicrates[NumRates];
 };
 
 /*
@@ -287,8 +283,8 @@ struct getbasicrate_rsp {
  *
  */
 struct setdatarate_parm {
-	u8	mac_id;
-	u8	datarates[NumRates];
+	u8 mac_id;
+	u8 datarates[NumRates];
 };
 
 enum _RT_CHANNEL_DOMAIN {
@@ -311,7 +307,7 @@ enum _RT_CHANNEL_DOMAIN {
 	RT_CHANNEL_DOMAIN_NCC = 13,
 	RT_CHANNEL_DOMAIN_5G = 14,
 	RT_CHANNEL_DOMAIN_5G_40M = 15,
- /*===== Add new channel plan above this line===============*/
+	/*===== Add new channel plan above this line===============*/
 	RT_CHANNEL_DOMAIN_MAX,
 };
 
@@ -329,7 +325,6 @@ struct SetChannelPlan_param {
  */
 struct getdatarate_parm {
 	u32 rsvd;
-
 };
 
 struct getdatarate_rsp {
@@ -367,55 +362,55 @@ struct getdatarate_rsp {
  *	Command-Rsp Mode
  *
  */
-struct	getphy_rsp {
-	u8	rfchannel;
-	u8	modem;
+struct getphy_rsp {
+	u8 rfchannel;
+	u8 modem;
 };
 
 struct readBB_parm {
-	u8	offset;
+	u8 offset;
 };
 
 struct readBB_rsp {
-	u8	value;
+	u8 value;
 };
 
 struct readTSSI_parm {
-	u8	offset;
+	u8 offset;
 };
 
 struct readTSSI_rsp {
-	u8	value;
+	u8 value;
 };
 
 struct writeBB_parm {
-	u8	offset;
-	u8	value;
+	u8 offset;
+	u8 value;
 };
 
 struct writePTM_parm {
-	u8	type;
+	u8 type;
 };
 
 struct readRF_parm {
-	u8	offset;
+	u8 offset;
 };
 
 struct readRF_rsp {
-	u32	value;
+	u32 value;
 };
 
 struct writeRF_parm {
-	u32	offset;
-	u32	value;
+	u32 offset;
+	u32 value;
 };
 
 struct setrfintfs_parm {
-	u8	rfintfs;
+	u8 rfintfs;
 };
 
 struct getrfintfs_parm {
-	u8	rfintfs;
+	u8 rfintfs;
 };
 
 /*
@@ -481,19 +476,19 @@ struct drvint_cmd_parm {
 
 /*------------------- Below are used for RF/BB tuning ---------------------*/
 
-struct	setantenna_parm {
-	u8	tx_antset;
-	u8	rx_antset;
-	u8	tx_antenna;
-	u8	rx_antenna;
+struct setantenna_parm {
+	u8 tx_antset;
+	u8 rx_antset;
+	u8 tx_antenna;
+	u8 rx_antenna;
 };
 
-struct	enrateadaptive_parm {
-	u32	en;
+struct enrateadaptive_parm {
+	u32 en;
 };
 
 struct settxagctbl_parm {
-	u32	txagc[MAX_RATES_LENGTH];
+	u32 txagc[MAX_RATES_LENGTH];
 };
 
 struct gettxagctbl_parm {
@@ -501,82 +496,82 @@ struct gettxagctbl_parm {
 };
 
 struct gettxagctbl_rsp {
-	u32	txagc[MAX_RATES_LENGTH];
+	u32 txagc[MAX_RATES_LENGTH];
 };
 
 struct setagcctrl_parm {
-	u32	agcctrl;	/* 0: pure hw, 1: fw */
+	u32 agcctrl; /* 0: pure hw, 1: fw */
 };
 
-struct setssup_parm	{
-	u32	ss_ForceUp[MAX_RATES_LENGTH];
+struct setssup_parm {
+	u32 ss_ForceUp[MAX_RATES_LENGTH];
 };
 
-struct getssup_parm	{
+struct getssup_parm {
 	u32 rsvd;
 };
 
-struct getssup_rsp	{
-	u8	ss_ForceUp[MAX_RATES_LENGTH];
+struct getssup_rsp {
+	u8 ss_ForceUp[MAX_RATES_LENGTH];
 };
 
-struct setssdlevel_parm	{
-	u8	ss_DLevel[MAX_RATES_LENGTH];
+struct setssdlevel_parm {
+	u8 ss_DLevel[MAX_RATES_LENGTH];
 };
 
-struct getssdlevel_parm	{
+struct getssdlevel_parm {
 	u32 rsvd;
 };
 
-struct getssdlevel_rsp	{
-	u8	ss_DLevel[MAX_RATES_LENGTH];
+struct getssdlevel_rsp {
+	u8 ss_DLevel[MAX_RATES_LENGTH];
 };
 
-struct setssulevel_parm	{
-	u8	ss_ULevel[MAX_RATES_LENGTH];
+struct setssulevel_parm {
+	u8 ss_ULevel[MAX_RATES_LENGTH];
 };
 
-struct getssulevel_parm	{
+struct getssulevel_parm {
 	u32 rsvd;
 };
 
-struct getssulevel_rsp	{
-	u8	ss_ULevel[MAX_RATES_LENGTH];
+struct getssulevel_rsp {
+	u8 ss_ULevel[MAX_RATES_LENGTH];
 };
 
-struct	setcountjudge_parm {
-	u8	count_judge[MAX_RATES_LENGTH];
+struct setcountjudge_parm {
+	u8 count_judge[MAX_RATES_LENGTH];
 };
 
-struct	getcountjudge_parm {
+struct getcountjudge_parm {
 	u32 rsvd;
 };
 
-struct	getcountjudge_rsp {
-	u8	count_judge[MAX_RATES_LENGTH];
+struct getcountjudge_rsp {
+	u8 count_judge[MAX_RATES_LENGTH];
 };
 
-struct setpwrmode_parm  {
-	u8	mode;
-	u8	flag_low_traffic_en;
-	u8	flag_lpnav_en;
-	u8	flag_rf_low_snr_en;
-	u8	flag_dps_en; /* 1: dps, 0: 32k */
-	u8	bcn_rx_en;
-	u8	bcn_pass_cnt;	  /* fw report one beacon information to
+struct setpwrmode_parm {
+	u8 mode;
+	u8 flag_low_traffic_en;
+	u8 flag_lpnav_en;
+	u8 flag_rf_low_snr_en;
+	u8 flag_dps_en; /* 1: dps, 0: 32k */
+	u8 bcn_rx_en;
+	u8 bcn_pass_cnt; /* fw report one beacon information to
 				   * driver  when it receives bcn_pass_cnt
 				   * beacons.
 				   */
-	u8	bcn_to;		  /* beacon TO (ms). ¡§=0¡¨ no limit.*/
-	u16	bcn_itv;
-	u8	app_itv; /* only for VOIP mode. */
-	u8	awake_bcn_itv;
-	u8	smart_ps;
-	u8	bcn_pass_time;	/* unit: 100ms */
+	u8 bcn_to; /* beacon TO (ms). ¡§=0¡¨ no limit.*/
+	u16 bcn_itv;
+	u8 app_itv; /* only for VOIP mode. */
+	u8 awake_bcn_itv;
+	u8 smart_ps;
+	u8 bcn_pass_time; /* unit: 100ms */
 };
 
 struct setatim_parm {
-	u8 op;   /*0: add, 1:del*/
+	u8 op; /*0: add, 1:del*/
 	u8 txid; /* id of dest station.*/
 };
 
@@ -643,12 +638,12 @@ struct getcurtxpwrlevel_rsp {
 
 /*dynamic on/off DIG*/
 struct setdig_parm {
-	unsigned char dig_on;	/* 1:on , 0:off */
+	unsigned char dig_on; /* 1:on , 0:off */
 };
 
 /*dynamic on/off RA*/
 struct setra_parm {
-	unsigned char ra_on;	/* 1:on , 0:off */
+	unsigned char ra_on; /* 1:on , 0:off */
 };
 
 struct setprobereqextraie_parm {
@@ -691,10 +686,10 @@ struct DisconnectCtrlEx_param {
 	unsigned char TryPktCnt;
 	unsigned char TryPktInterval; /* Unit: ms */
 	unsigned char rsvd;
-	unsigned int  FirstStageTO; /* Unit: ms */
+	unsigned int FirstStageTO; /* Unit: ms */
 };
 
-#define GEN_CMD_CODE(cmd)	cmd ## _CMD_
+#define GEN_CMD_CODE(cmd) cmd##_CMD_
 
 /*
  * Result:
@@ -705,46 +700,55 @@ struct DisconnectCtrlEx_param {
  * 0x04: reserved.
  */
 
-#define H2C_RSP_OFFSET			512
-#define H2C_SUCCESS			0x00
-#define H2C_SUCCESS_RSP			0x01
-#define H2C_DUPLICATED			0x02
-#define H2C_DROPPED			0x03
-#define H2C_PARAMETERS_ERROR		0x04
-#define H2C_REJECTED			0x05
-#define H2C_CMD_OVERFLOW		0x06
-#define H2C_RESERVED			0x07
+#define H2C_RSP_OFFSET 512
+#define H2C_SUCCESS 0x00
+#define H2C_SUCCESS_RSP 0x01
+#define H2C_DUPLICATED 0x02
+#define H2C_DROPPED 0x03
+#define H2C_PARAMETERS_ERROR 0x04
+#define H2C_REJECTED 0x05
+#define H2C_CMD_OVERFLOW 0x06
+#define H2C_RESERVED 0x07
 
 void r8712_setMacAddr_cmd(struct _adapter *padapter, const u8 *mac_addr);
-u8 r8712_sitesurvey_cmd(struct _adapter *padapter, struct ndis_802_11_ssid *pssid);
+u8 r8712_sitesurvey_cmd(struct _adapter *padapter,
+			struct ndis_802_11_ssid *pssid);
 int r8712_createbss_cmd(struct _adapter *padapter);
 void r8712_setstakey_cmd(struct _adapter *padapter, u8 *psta, u8 unicast_key);
 int r8712_joinbss_cmd(struct _adapter *padapter, struct wlan_network *pnetwork);
 void r8712_disassoc_cmd(struct _adapter *padapter);
-void r8712_setopmode_cmd(struct _adapter *padapter, enum NDIS_802_11_NETWORK_INFRASTRUCTURE networktype);
+void r8712_setopmode_cmd(struct _adapter *padapter,
+			 enum NDIS_802_11_NETWORK_INFRASTRUCTURE networktype);
 int r8712_setdatarate_cmd(struct _adapter *padapter, u8 *rateset);
-void r8712_set_chplan_cmd(struct _adapter  *padapter, int chplan);
+void r8712_set_chplan_cmd(struct _adapter *padapter, int chplan);
 int r8712_getrfreg_cmd(struct _adapter *padapter, u8 offset, u8 *pval);
-int r8712_setrfreg_cmd(struct _adapter  *padapter, u8 offset, u32 val);
+int r8712_setrfreg_cmd(struct _adapter *padapter, u8 offset, u32 val);
 void r8712_addbareq_cmd(struct _adapter *padapter, u8 tid);
 void r8712_wdg_wk_cmd(struct _adapter *padapter);
-void r8712_survey_cmd_callback(struct _adapter  *padapter, struct cmd_obj *pcmd);
-void r8712_disassoc_cmd_callback(struct _adapter  *padapter, struct cmd_obj *pcmd);
-void r8712_joinbss_cmd_callback(struct _adapter  *padapter, struct cmd_obj *pcmd);
-void r8712_createbss_cmd_callback(struct _adapter *padapter, struct cmd_obj *pcmd);
-void r8712_getbbrfreg_cmdrsp_callback(struct _adapter *padapter, struct cmd_obj *pcmd);
-void r8712_readtssi_cmdrsp_callback(struct _adapter *padapter, struct cmd_obj *pcmd);
-void r8712_setstaKey_cmdrsp_callback(struct _adapter  *padapter, struct cmd_obj *pcmd);
-void r8712_setassocsta_cmdrsp_callback(struct _adapter  *padapter, struct cmd_obj *pcmd);
-void r8712_disconnectCtrlEx_cmd(struct _adapter *adapter, u32 enableDrvCtrl, u32 tryPktCnt,
-				u32 tryPktInterval, u32 firstStageTO);
+void r8712_survey_cmd_callback(struct _adapter *padapter, struct cmd_obj *pcmd);
+void r8712_disassoc_cmd_callback(struct _adapter *padapter,
+				 struct cmd_obj *pcmd);
+void r8712_joinbss_cmd_callback(struct _adapter *padapter,
+				struct cmd_obj *pcmd);
+void r8712_createbss_cmd_callback(struct _adapter *padapter,
+				  struct cmd_obj *pcmd);
+void r8712_getbbrfreg_cmdrsp_callback(struct _adapter *padapter,
+				      struct cmd_obj *pcmd);
+void r8712_readtssi_cmdrsp_callback(struct _adapter *padapter,
+				    struct cmd_obj *pcmd);
+void r8712_setstaKey_cmdrsp_callback(struct _adapter *padapter,
+				     struct cmd_obj *pcmd);
+void r8712_setassocsta_cmdrsp_callback(struct _adapter *padapter,
+				       struct cmd_obj *pcmd);
+void r8712_disconnectCtrlEx_cmd(struct _adapter *adapter, u32 enableDrvCtrl,
+				u32 tryPktCnt, u32 tryPktInterval,
+				u32 firstStageTO);
 
 struct _cmd_callback {
-	u32	cmd_code;
-	void (*callback)(struct _adapter  *padapter, struct cmd_obj *cmd);
+	u32 cmd_code;
+	void (*callback)(struct _adapter *padapter, struct cmd_obj *cmd);
 };
 
 #include "rtl8712_cmd.h"
 
 #endif /* _CMD_H_ */
-

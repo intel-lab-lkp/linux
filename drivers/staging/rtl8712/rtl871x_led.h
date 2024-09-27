@@ -37,20 +37,16 @@ enum LED_CTL_MODE {
 	LED_CTL_STOP_WPS_FAIL_OVERLAP = 13,
 };
 
-#define IS_LED_WPS_BLINKING(_LED_871x)	\
-	(((struct LED_871x *)_LED_871x)->CurrLedState == LED_BLINK_WPS \
-	|| ((struct LED_871x *)_LED_871x)->CurrLedState == LED_BLINK_WPS_STOP \
-	|| ((struct LED_871x *)_LED_871x)->bLedWPSBlinkInProgress)
+#define IS_LED_WPS_BLINKING(_LED_871x)                                         \
+	(((struct LED_871x *)_LED_871x)->CurrLedState == LED_BLINK_WPS ||      \
+	 ((struct LED_871x *)_LED_871x)->CurrLedState == LED_BLINK_WPS_STOP || \
+	 ((struct LED_871x *)_LED_871x)->bLedWPSBlinkInProgress)
 
-#define IS_LED_BLINKING(_LED_871x)	\
-		(((struct LED_871x *)_LED_871x)->bLedWPSBlinkInProgress \
-		|| ((struct LED_871x *)_LED_871x)->bLedScanBlinkInProgress)
+#define IS_LED_BLINKING(_LED_871x)                                 \
+	(((struct LED_871x *)_LED_871x)->bLedWPSBlinkInProgress || \
+	 ((struct LED_871x *)_LED_871x)->bLedScanBlinkInProgress)
 
-enum LED_PIN_871x {
-	LED_PIN_GPIO0,
-	LED_PIN_LED0,
-	LED_PIN_LED1
-};
+enum LED_PIN_871x { LED_PIN_GPIO0, LED_PIN_LED0, LED_PIN_LED1 };
 
 /*===========================================================================
  * LED customization.
@@ -74,32 +70,32 @@ enum LED_STRATEGY_871x {
 };
 
 struct LED_871x {
-	struct _adapter		*padapter;
-	enum LED_PIN_871x	LedPin;	/* Implementation for this SW led. */
-	u32			CurrLedState; /* Current LED state. */
-	u8			bLedOn; /* true if LED is ON */
-	u8			bSWLedCtrl;
-	u8			bLedBlinkInProgress; /*true if blinking */
-	u8			bLedNoLinkBlinkInProgress;
-	u8			bLedLinkBlinkInProgress;
-	u8			bLedStartToLinkBlinkInProgress;
-	u8			bLedScanBlinkInProgress;
-	u8			bLedWPSBlinkInProgress;
-	u32			BlinkTimes; /* No. times to toggle for blink.*/
-	u32			BlinkingLedState; /* Next state for blinking,
+	struct _adapter *padapter;
+	enum LED_PIN_871x LedPin; /* Implementation for this SW led. */
+	u32 CurrLedState; /* Current LED state. */
+	u8 bLedOn; /* true if LED is ON */
+	u8 bSWLedCtrl;
+	u8 bLedBlinkInProgress; /*true if blinking */
+	u8 bLedNoLinkBlinkInProgress;
+	u8 bLedLinkBlinkInProgress;
+	u8 bLedStartToLinkBlinkInProgress;
+	u8 bLedScanBlinkInProgress;
+	u8 bLedWPSBlinkInProgress;
+	u32 BlinkTimes; /* No. times to toggle for blink.*/
+	u32 BlinkingLedState; /* Next state for blinking,
 						   * either LED_ON or OFF.
 						   */
 
-	struct timer_list	BlinkTimer; /* Timer object for led blinking.*/
-	struct work_struct	BlinkWorkItem; /* Workitem used by BlinkTimer */
+	struct timer_list BlinkTimer; /* Timer object for led blinking.*/
+	struct work_struct BlinkWorkItem; /* Workitem used by BlinkTimer */
 };
 
 struct led_priv {
 	/* add for led control */
-	struct LED_871x		SwLed0;
-	struct LED_871x		SwLed1;
-	enum LED_STRATEGY_871x	LedStrategy;
-	u8			bRegUseLed;
+	struct LED_871x SwLed0;
+	struct LED_871x SwLed1;
+	enum LED_STRATEGY_871x LedStrategy;
+	u8 bRegUseLed;
 	void (*LedControlHandler)(struct _adapter *padapter,
 				  enum LED_CTL_MODE LedAction);
 	/* add for led control */
@@ -115,4 +111,3 @@ void LedControl871x(struct _adapter *padapter, enum LED_CTL_MODE LedAction);
 void r8712_flush_led_works(struct _adapter *padapter);
 
 #endif
-

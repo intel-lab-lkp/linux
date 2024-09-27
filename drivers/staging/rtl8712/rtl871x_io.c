@@ -38,10 +38,10 @@
 static uint _init_intf_hdl(struct _adapter *padapter,
 			   struct intf_hdl *pintf_hdl)
 {
-	struct	intf_priv	*pintf_priv;
+	struct intf_priv *pintf_priv;
 	void (*set_intf_option)(u32 *poption) = NULL;
 	void (*set_intf_funs)(struct intf_hdl *pintf_hdl);
-	void (*set_intf_ops)(struct _io_ops	*pops);
+	void (*set_intf_ops)(struct _io_ops *pops);
 	uint (*init_intf_priv)(struct intf_priv *pintfpriv);
 
 	set_intf_option = &(r8712_usb_set_intf_option);
@@ -88,7 +88,7 @@ register_intf_hdl_fail:
 	return false;
 }
 
-static  void unregister_intf_hdl(struct intf_hdl *pintfhdl)
+static void unregister_intf_hdl(struct intf_hdl *pintfhdl)
 {
 	_unload_intf_hdl(pintfhdl->pintfpriv);
 	memset((u8 *)pintfhdl, 0, sizeof(struct intf_hdl));
@@ -107,14 +107,13 @@ uint r8712_alloc_io_queue(struct _adapter *adapter)
 	INIT_LIST_HEAD(&pio_queue->processing);
 	INIT_LIST_HEAD(&pio_queue->pending);
 	spin_lock_init(&pio_queue->lock);
-	pio_queue->pallocated_free_ioreqs_buf = kzalloc(NUM_IOREQ *
-						(sizeof(struct io_req)) + 4,
-						GFP_ATOMIC);
-	if ((pio_queue->pallocated_free_ioreqs_buf) == NULL)
+	pio_queue->pallocated_free_ioreqs_buf =
+		kzalloc(NUM_IOREQ * (sizeof(struct io_req)) + 4, GFP_ATOMIC);
+	if (pio_queue->pallocated_free_ioreqs_buf == NULL)
 		goto alloc_io_queue_fail;
-	pio_queue->free_ioreqs_buf = pio_queue->pallocated_free_ioreqs_buf + 4
-			- ((addr_t)(pio_queue->pallocated_free_ioreqs_buf)
-			& 3);
+	pio_queue->free_ioreqs_buf =
+		pio_queue->pallocated_free_ioreqs_buf + 4 -
+		((addr_t)(pio_queue->pallocated_free_ioreqs_buf) & 3);
 	pio_req = (struct io_req *)(pio_queue->free_ioreqs_buf);
 	for (i = 0; i < NUM_IOREQ; i++) {
 		INIT_LIST_HEAD(&pio_req->list);

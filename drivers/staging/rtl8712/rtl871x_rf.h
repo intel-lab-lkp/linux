@@ -11,34 +11,34 @@
  * Larry Finger <Larry.Finger@lwfinger.net>
  *
  ******************************************************************************/
-#ifndef	__RTL871X_RF_H_
+#ifndef __RTL871X_RF_H_
 #define __RTL871X_RF_H_
 
 #include "rtl871x_cmd.h"
 #include "rtl871x_mp_phy_regdef.h"
 
-#define OFDM_PHY		1
-#define MIXED_PHY		2
-#define CCK_PHY		3
-#define NumRates	(13)
+#define OFDM_PHY 1
+#define MIXED_PHY 2
+#define CCK_PHY 3
+#define NumRates (13)
 #define RTL8711_RF_MAX_SENS 6
 #define RTL8711_RF_DEF_SENS 4
-#define NUM_CHANNELS	15
+#define NUM_CHANNELS 15
 
-struct	regulatory_class {
-	u32	starting_freq;		/*MHz, */
-	u8	channel_set[NUM_CHANNELS];
-	u8	channel_cck_power[NUM_CHANNELS]; /*dbm*/
-	u8	channel_ofdm_power[NUM_CHANNELS];/*dbm*/
-	u8	txpower_limit;		/*dbm*/
-	u8	channel_spacing;	/*MHz*/
-	u8	modem;
+struct regulatory_class {
+	u32 starting_freq; /*MHz, */
+	u8 channel_set[NUM_CHANNELS];
+	u8 channel_cck_power[NUM_CHANNELS]; /*dbm*/
+	u8 channel_ofdm_power[NUM_CHANNELS]; /*dbm*/
+	u8 txpower_limit; /*dbm*/
+	u8 channel_spacing; /*MHz*/
+	u8 modem;
 };
 
-enum	_REG_PREAMBLE_MODE {
-	PREAMBLE_LONG	= 1,
-	PREAMBLE_AUTO	= 2,
-	PREAMBLE_SHORT	= 3,
+enum _REG_PREAMBLE_MODE {
+	PREAMBLE_LONG = 1,
+	PREAMBLE_AUTO = 2,
+	PREAMBLE_SHORT = 3,
 };
 
 enum {

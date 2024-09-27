@@ -41,20 +41,19 @@ static int init_mp_priv(struct mp_priv *pmp_priv)
 	_init_mp_priv_(pmp_priv);
 	_init_queue(&pmp_priv->free_mp_xmitqueue);
 	pmp_priv->pallocated_mp_xmitframe_buf = NULL;
-	pmp_priv->pallocated_mp_xmitframe_buf = kmalloc(NR_MP_XMITFRAME *
-				sizeof(struct mp_xmit_frame) + 4,
-				GFP_ATOMIC);
+	pmp_priv->pallocated_mp_xmitframe_buf = kmalloc(
+		NR_MP_XMITFRAME * sizeof(struct mp_xmit_frame) + 4, GFP_ATOMIC);
 	if (!pmp_priv->pallocated_mp_xmitframe_buf)
 		return -ENOMEM;
 
-	pmp_priv->pmp_xmtframe_buf = pmp_priv->pallocated_mp_xmitframe_buf +
-			 4 -
-			 ((addr_t)(pmp_priv->pallocated_mp_xmitframe_buf) & 3);
+	pmp_priv->pmp_xmtframe_buf =
+		pmp_priv->pallocated_mp_xmitframe_buf + 4 -
+		((addr_t)(pmp_priv->pallocated_mp_xmitframe_buf) & 3);
 	pmp_xmitframe = (struct mp_xmit_frame *)pmp_priv->pmp_xmtframe_buf;
 	for (i = 0; i < NR_MP_XMITFRAME; i++) {
-		INIT_LIST_HEAD(&(pmp_xmitframe->list));
-		list_add_tail(&(pmp_xmitframe->list),
-				 &(pmp_priv->free_mp_xmitqueue.queue));
+		INIT_LIST_HEAD(&pmp_xmitframe->list);
+		list_add_tail(&pmp_xmitframe->list,
+			      &pmp_priv->free_mp_xmitqueue.queue);
 		pmp_xmitframe->pkt = NULL;
 		pmp_xmitframe->frame_tag = MP_FRAMETAG;
 		pmp_xmitframe->padapter = pmp_priv->papdater;
@@ -91,9 +90,9 @@ void mp871xdeinit(struct _adapter *padapter)
 static u32 fw_iocmd_read(struct _adapter *pAdapter, struct IOCMD_STRUCT iocmd)
 {
 	u32 cmd32 = 0, val32 = 0;
-	u8 iocmd_class	= iocmd.cmdclass;
-	u16 iocmd_value	= iocmd.value;
-	u8 iocmd_idx	= iocmd.index;
+	u8 iocmd_class = iocmd.cmdclass;
+	u16 iocmd_value = iocmd.value;
+	u8 iocmd_idx = iocmd.index;
 
 	cmd32 = (iocmd_class << 24) | (iocmd_value << 8) | iocmd_idx;
 	if (r8712_fw_cmd(pAdapter, cmd32))
@@ -103,13 +102,13 @@ static u32 fw_iocmd_read(struct _adapter *pAdapter, struct IOCMD_STRUCT iocmd)
 	return val32;
 }
 
-static u8 fw_iocmd_write(struct _adapter *pAdapter,
-			 struct IOCMD_STRUCT iocmd, u32 value)
+static u8 fw_iocmd_write(struct _adapter *pAdapter, struct IOCMD_STRUCT iocmd,
+			 u32 value)
 {
 	u32 cmd32 = 0;
-	u8 iocmd_class	= iocmd.cmdclass;
-	u32 iocmd_value	= iocmd.value;
-	u8 iocmd_idx	= iocmd.index;
+	u8 iocmd_class = iocmd.cmdclass;
+	u32 iocmd_value = iocmd.value;
+	u8 iocmd_idx = iocmd.index;
 
 	r8712_fw_cmd_data(pAdapter, &value, 0);
 	msleep(100);
@@ -120,14 +119,14 @@ static u8 fw_iocmd_write(struct _adapter *pAdapter,
 /* offset : 0X800~0XFFF */
 u32 r8712_bb_reg_read(struct _adapter *pAdapter, u16 offset)
 {
-	u8 shift = offset & 0x0003;	/* 4 byte access */
-	u16 bb_addr = offset & 0x0FFC;	/* 4 byte access */
+	u8 shift = offset & 0x0003; /* 4 byte access */
+	u16 bb_addr = offset & 0x0FFC; /* 4 byte access */
 	u32 bb_val = 0;
 	struct IOCMD_STRUCT iocmd;
 
-	iocmd.cmdclass	= IOCMD_CLASS_BB_RF;
-	iocmd.value	= bb_addr;
-	iocmd.index	= IOCMD_BB_READ_IDX;
+	iocmd.cmdclass = IOCMD_CLASS_BB_RF;
+	iocmd.value = bb_addr;
+	iocmd.index = IOCMD_BB_READ_IDX;
 	bb_val = fw_iocmd_read(pAdapter, iocmd);
 	if (shift != 0) {
 		u32 bb_val2 = 0;
@@ -144,13 +143,13 @@ u32 r8712_bb_reg_read(struct _adapter *pAdapter, u16 offset)
 /* offset : 0X800~0XFFF */
 u8 r8712_bb_reg_write(struct _adapter *pAdapter, u16 offset, u32 value)
 {
-	u8 shift = offset & 0x0003;	/* 4 byte access */
-	u16 bb_addr = offset & 0x0FFC;	/* 4 byte access */
+	u8 shift = offset & 0x0003; /* 4 byte access */
+	u16 bb_addr = offset & 0x0FFC; /* 4 byte access */
 	struct IOCMD_STRUCT iocmd;
 
-	iocmd.cmdclass	= IOCMD_CLASS_BB_RF;
-	iocmd.value	= bb_addr;
-	iocmd.index	= IOCMD_BB_WRITE_IDX;
+	iocmd.cmdclass = IOCMD_CLASS_BB_RF;
+	iocmd.value = bb_addr;
+	iocmd.index = IOCMD_BB_WRITE_IDX;
 	if (shift != 0) {
 		u32 oldValue = 0;
 		u32 newValue = value;
@@ -174,9 +173,9 @@ u32 r8712_rf_reg_read(struct _adapter *pAdapter, u8 path, u8 offset)
 	u16 rf_addr = (path << 8) | offset;
 	struct IOCMD_STRUCT iocmd;
 
-	iocmd.cmdclass	= IOCMD_CLASS_BB_RF;
-	iocmd.value	= rf_addr;
-	iocmd.index	= IOCMD_RF_READ_IDX;
+	iocmd.cmdclass = IOCMD_CLASS_BB_RF;
+	iocmd.value = rf_addr;
+	iocmd.index = IOCMD_RF_READ_IDX;
 	return fw_iocmd_read(pAdapter, iocmd);
 }
 
@@ -185,9 +184,9 @@ u8 r8712_rf_reg_write(struct _adapter *pAdapter, u8 path, u8 offset, u32 value)
 	u16 rf_addr = (path << 8) | offset;
 	struct IOCMD_STRUCT iocmd;
 
-	iocmd.cmdclass	= IOCMD_CLASS_BB_RF;
-	iocmd.value	= rf_addr;
-	iocmd.index	= IOCMD_RF_WRIT_IDX;
+	iocmd.cmdclass = IOCMD_CLASS_BB_RF;
+	iocmd.value = rf_addr;
+	iocmd.index = IOCMD_RF_WRIT_IDX;
 	return fw_iocmd_write(pAdapter, iocmd, value);
 }
 
@@ -196,7 +195,7 @@ static u32 bitshift(u32 bitmask)
 	u32 i;
 
 	for (i = 0; i <= 31; i++)
-		if (((bitmask >> i) &  0x1) == 1)
+		if (((bitmask >> i) & 0x1) == 1)
 			break;
 	return i;
 }
@@ -210,9 +209,7 @@ static u32 get_bb_reg(struct _adapter *pAdapter, u16 offset, u32 bitmask)
 	return (org_value & bitmask) >> bit_shift;
 }
 
-static u8 set_bb_reg(struct _adapter *pAdapter,
-		     u16 offset,
-		     u32 bitmask,
+static u8 set_bb_reg(struct _adapter *pAdapter, u16 offset, u32 bitmask,
 		     u32 value)
 {
 	u32 org_value, bit_shift, new_value;
@@ -238,7 +235,7 @@ static u32 get_rf_reg(struct _adapter *pAdapter, u8 path, u8 offset,
 }
 
 static u8 set_rf_reg(struct _adapter *pAdapter, u8 path, u8 offset, u32 bitmask,
-	      u32 value)
+		     u32 value)
 {
 	u32 org_value, bit_shift, new_value;
 
@@ -290,8 +287,7 @@ static void SetOFDMTxPower(struct _adapter *pAdapter, u8 TxPower)
 {
 	u32 TxAGC = 0;
 
-	TxAGC |= ((TxPower << 24) | (TxPower << 16) | (TxPower << 8) |
-		  TxPower);
+	TxAGC |= ((TxPower << 24) | (TxPower << 16) | (TxPower << 8) | TxPower);
 	set_bb_reg(pAdapter, rTxAGC_Rate18_06, bTxAGCRate18_06, TxAGC);
 	set_bb_reg(pAdapter, rTxAGC_Rate54_24, bTxAGCRate54_24, TxAGC);
 	set_bb_reg(pAdapter, rTxAGC_Mcs03_Mcs00, bTxAGCRateMCS3_MCS0, TxAGC);
@@ -317,7 +313,7 @@ void r8712_SetTxAGCOffset(struct _adapter *pAdapter, u32 ulTxAGCOffset)
 	TxAGCOffset_D = (ulTxAGCOffset & 0x00ff0000) >> 16;
 	tmpAGC = TxAGCOffset_D << 8 | TxAGCOffset_C << 4 | TxAGCOffset_B;
 	set_bb_reg(pAdapter, rFPGA0_TxGainStage,
-			(bXBTxAGC | bXCTxAGC | bXDTxAGC), tmpAGC);
+		   (bXBTxAGC | bXCTxAGC | bXDTxAGC), tmpAGC);
 }
 
 void r8712_SetDataRate(struct _adapter *pAdapter)
@@ -376,12 +372,12 @@ void r8712_SwitchBandwidth(struct _adapter *pAdapter)
 	/* 3 3.Set RF related register */
 	switch (Bandwidth) {
 	case HT_CHANNEL_WIDTH_20:
-		set_rf_reg(pAdapter, RF_PATH_A, RF_CHNLBW,
-			   BIT(10) | BIT(11), 0x01);
+		set_rf_reg(pAdapter, RF_PATH_A, RF_CHNLBW, BIT(10) | BIT(11),
+			   0x01);
 		break;
 	case HT_CHANNEL_WIDTH_40:
-		set_rf_reg(pAdapter, RF_PATH_A, RF_CHNLBW,
-			   BIT(10) | BIT(11), 0x00);
+		set_rf_reg(pAdapter, RF_PATH_A, RF_CHNLBW, BIT(10) | BIT(11),
+			   0x00);
 		break;
 	default:
 		break;
@@ -390,29 +386,29 @@ void r8712_SwitchBandwidth(struct _adapter *pAdapter)
 
 /*------------------------------Define structure----------------------------*/
 struct R_ANTENNA_SELECT_OFDM {
-	u32	r_tx_antenna:4;
-	u32	r_ant_l:4;
-	u32	r_ant_non_ht:4;
-	u32	r_ant_ht1:4;
-	u32	r_ant_ht2:4;
-	u32	r_ant_ht_s1:4;
-	u32	r_ant_non_ht_s1:4;
-	u32	OFDM_TXSC:2;
-	u32	Reserved:2;
+	u32 r_tx_antenna : 4;
+	u32 r_ant_l : 4;
+	u32 r_ant_non_ht : 4;
+	u32 r_ant_ht1 : 4;
+	u32 r_ant_ht2 : 4;
+	u32 r_ant_ht_s1 : 4;
+	u32 r_ant_non_ht_s1 : 4;
+	u32 OFDM_TXSC : 2;
+	u32 Reserved : 2;
 };
 
 struct R_ANTENNA_SELECT_CCK {
-	u8	r_cckrx_enable_2:2;
-	u8	r_cckrx_enable:2;
-	u8	r_ccktx_enable:4;
+	u8 r_cckrx_enable_2 : 2;
+	u8 r_cckrx_enable : 2;
+	u8 r_ccktx_enable : 4;
 };
 
 void r8712_SwitchAntenna(struct _adapter *pAdapter)
 {
-	u32	ofdm_tx_en_val = 0, ofdm_tx_ant_sel_val = 0;
-	u8	ofdm_rx_ant_sel_val = 0;
-	u8	cck_ant_select_val = 0;
-	u32	cck_ant_sel_val = 0;
+	u32 ofdm_tx_en_val = 0, ofdm_tx_ant_sel_val = 0;
+	u8 ofdm_rx_ant_sel_val = 0;
+	u8 cck_ant_select_val = 0;
+	u32 cck_ant_sel_val = 0;
 	struct R_ANTENNA_SELECT_CCK *p_cck_txrx;
 
 	p_cck_txrx = (struct R_ANTENNA_SELECT_CCK *)&cck_ant_select_val;
@@ -423,17 +419,17 @@ void r8712_SwitchAntenna(struct _adapter *pAdapter)
 		set_bb_reg(pAdapter, rFPGA0_XA_HSSIParameter2, 0xe, 2);
 		set_bb_reg(pAdapter, rFPGA0_XB_HSSIParameter2, 0xe, 1);
 		ofdm_tx_en_val = 0x3;
-		ofdm_tx_ant_sel_val = 0x11111111;/* Power save */
+		ofdm_tx_ant_sel_val = 0x11111111; /* Power save */
 		p_cck_txrx->r_ccktx_enable = 0x8;
 		break;
 	case ANTENNA_B:
 		set_bb_reg(pAdapter, rFPGA0_XA_HSSIParameter2, 0xe, 1);
 		set_bb_reg(pAdapter, rFPGA0_XB_HSSIParameter2, 0xe, 2);
 		ofdm_tx_en_val = 0x3;
-		ofdm_tx_ant_sel_val = 0x22222222;/* Power save */
+		ofdm_tx_ant_sel_val = 0x22222222; /* Power save */
 		p_cck_txrx->r_ccktx_enable = 0x4;
 		break;
-	case ANTENNA_AB:	/* For 8192S */
+	case ANTENNA_AB: /* For 8192S */
 		set_bb_reg(pAdapter, rFPGA0_XA_HSSIParameter2, 0xe, 2);
 		set_bb_reg(pAdapter, rFPGA0_XB_HSSIParameter2, 0xe, 2);
 		ofdm_tx_en_val = 0x3;
@@ -449,12 +445,12 @@ void r8712_SwitchAntenna(struct _adapter *pAdapter)
 	set_bb_reg(pAdapter, rFPGA0_TxInfo, 0x0000000f, ofdm_tx_en_val);
 	switch (pAdapter->mppriv.antenna_rx) {
 	case ANTENNA_A:
-		ofdm_rx_ant_sel_val = 0x1;	/* A */
+		ofdm_rx_ant_sel_val = 0x1; /* A */
 		p_cck_txrx->r_cckrx_enable = 0x0; /* default: A */
 		p_cck_txrx->r_cckrx_enable_2 = 0x0; /* option: A */
 		break;
 	case ANTENNA_B:
-		ofdm_rx_ant_sel_val = 0x2;	/* B */
+		ofdm_rx_ant_sel_val = 0x2; /* B */
 		p_cck_txrx->r_cckrx_enable = 0x1; /* default: B */
 		p_cck_txrx->r_cckrx_enable_2 = 0x1; /* option: B */
 		break;
@@ -515,8 +511,7 @@ void r8712_SetSingleCarrierTx(struct _adapter *pAdapter, u8 bStart)
 	} else { /* Stop Single Carrier.*/
 		/* Turn off all test modes.*/
 		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMContinueTx, bDisable);
-		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleCarrier,
-			   bDisable);
+		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleCarrier, bDisable);
 		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleTone, bDisable);
 		msleep(20);
 		/*BB Reset*/
@@ -614,7 +609,7 @@ static void SetCCKContinuousTx(struct _adapter *pAdapter, u8 bStart)
 		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleCarrier, bDisable);
 		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleTone, bDisable);
 		/*Set CCK Tx Test Rate*/
-		cckrate  = pAdapter->mppriv.curr_rateidx;
+		cckrate = pAdapter->mppriv.curr_rateidx;
 		set_bb_reg(pAdapter, rCCK0_System, bCCKTxRate, cckrate);
 		/*transmit mode*/
 		set_bb_reg(pAdapter, rCCK0_System, bCCKBBMode, 0x2);
@@ -649,8 +644,7 @@ static void SetOFDMContinuousTx(struct _adapter *pAdapter, u8 bStart)
 		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleTone, bDisable);
 	} else {
 		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMContinueTx, bDisable);
-		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleCarrier,
-			   bDisable);
+		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleCarrier, bDisable);
 		set_bb_reg(pAdapter, rOFDM1_LSTF, bOFDMSingleTone, bDisable);
 		msleep(20);
 		/*BB Reset*/
@@ -664,8 +658,8 @@ void r8712_SetContinuousTx(struct _adapter *pAdapter, u8 bStart)
 	/* ADC turn off [bit24-21] adc port0 ~ port1 */
 	if (bStart) {
 		r8712_bb_reg_write(pAdapter, rRx_Wait_CCCA,
-				   r8712_bb_reg_read(pAdapter,
-				   rRx_Wait_CCCA) & 0xFE1FFFFF);
+				   r8712_bb_reg_read(pAdapter, rRx_Wait_CCCA) &
+					   0xFE1FFFFF);
 		msleep(100);
 	}
 	if (pAdapter->mppriv.curr_rateidx <= MPT_RATE_11M)
@@ -676,8 +670,8 @@ void r8712_SetContinuousTx(struct _adapter *pAdapter, u8 bStart)
 	/* ADC turn on [bit24-21] adc port0 ~ port1 */
 	if (!bStart)
 		r8712_bb_reg_write(pAdapter, rRx_Wait_CCCA,
-				   r8712_bb_reg_read(pAdapter,
-				   rRx_Wait_CCCA) | 0x01E00000);
+				   r8712_bb_reg_read(pAdapter, rRx_Wait_CCCA) |
+					   0x01E00000);
 }
 
 void r8712_ResetPhyRxPktCount(struct _adapter *pAdapter)
@@ -686,8 +680,8 @@ void r8712_ResetPhyRxPktCount(struct _adapter *pAdapter)
 
 	for (i = OFDM_PPDU_BIT; i <= HT_MPDU_FAIL_BIT; i++) {
 		phyrx_set = 0;
-		phyrx_set |= (i << 28);		/*select*/
-		phyrx_set |= 0x08000000;	/* set counter to zero*/
+		phyrx_set |= (i << 28); /*select*/
+		phyrx_set |= 0x08000000; /* set counter to zero*/
 		r8712_write32(pAdapter, RXERR_RPT, phyrx_set);
 	}
 }
@@ -708,8 +702,8 @@ static u32 GetPhyRxPktCounts(struct _adapter *pAdapter, u32 selbit)
 u32 r8712_GetPhyRxPktReceived(struct _adapter *pAdapter)
 {
 	u32 OFDM_cnt = GetPhyRxPktCounts(pAdapter, OFDM_MPDU_OK_BIT);
-	u32 CCK_cnt  = GetPhyRxPktCounts(pAdapter, CCK_MPDU_OK_BIT);
-	u32 HT_cnt   = GetPhyRxPktCounts(pAdapter, HT_MPDU_OK_BIT);
+	u32 CCK_cnt = GetPhyRxPktCounts(pAdapter, CCK_MPDU_OK_BIT);
+	u32 HT_cnt = GetPhyRxPktCounts(pAdapter, HT_MPDU_OK_BIT);
 
 	return OFDM_cnt + CCK_cnt + HT_cnt;
 }
@@ -717,8 +711,8 @@ u32 r8712_GetPhyRxPktReceived(struct _adapter *pAdapter)
 u32 r8712_GetPhyRxPktCRC32Error(struct _adapter *pAdapter)
 {
 	u32 OFDM_cnt = GetPhyRxPktCounts(pAdapter, OFDM_MPDU_FAIL_BIT);
-	u32 CCK_cnt  = GetPhyRxPktCounts(pAdapter, CCK_MPDU_FAIL_BIT);
-	u32 HT_cnt   = GetPhyRxPktCounts(pAdapter, HT_MPDU_FAIL_BIT);
+	u32 CCK_cnt = GetPhyRxPktCounts(pAdapter, CCK_MPDU_FAIL_BIT);
+	u32 HT_cnt = GetPhyRxPktCounts(pAdapter, HT_MPDU_FAIL_BIT);
 
 	return OFDM_cnt + CCK_cnt + HT_cnt;
 }

@@ -30,7 +30,7 @@ static u8 validate_ssid(struct ndis_802_11_ssid *ssid)
 		return false;
 	for (i = 0; i < ssid->SsidLength; i++) {
 		/* wifi, printable ascii code must be supported */
-		if (!((ssid->Ssid[i] >= 0x20) && (ssid->Ssid[i] <= 0x7e)))
+		if (!(ssid->Ssid[i] >= 0x20 && ssid->Ssid[i] <= 0x7e))
 			return false;
 	}
 	return true;
@@ -40,8 +40,8 @@ static u8 do_join(struct _adapter *padapter)
 {
 	struct list_head *plist, *phead;
 	u8 *pibss = NULL;
-	struct	mlme_priv	*pmlmepriv = &(padapter->mlmepriv);
-	struct  __queue	*queue	= &(pmlmepriv->scanned_queue);
+	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
+	struct __queue *queue = &pmlmepriv->scanned_queue;
 	int ret;
 
 	phead = &queue->queue;
@@ -78,8 +78,7 @@ static u8 do_join(struct _adapter *padapter)
 				&padapter->registrypriv.dev_network;
 			pmlmepriv->fw_state = WIFI_ADHOC_MASTER_STATE;
 			pibss = padapter->registrypriv.dev_network.MacAddress;
-			memcpy(&pdev_network->Ssid,
-			       &pmlmepriv->assoc_ssid,
+			memcpy(&pdev_network->Ssid, &pmlmepriv->assoc_ssid,
 			       sizeof(struct ndis_802_11_ssid));
 			r8712_update_registrypriv_dev_network(padapter);
 			r8712_generate_random_ibss(pibss);
@@ -89,8 +88,7 @@ static u8 do_join(struct _adapter *padapter)
 		} else {
 			/* can't associate ; reset under-linking */
 			if (pmlmepriv->fw_state & _FW_UNDER_LINKING)
-				pmlmepriv->fw_state ^=
-					_FW_UNDER_LINKING;
+				pmlmepriv->fw_state ^= _FW_UNDER_LINKING;
 			/* when set_ssid/set_bssid for do_join(), but
 			 * there are no desired bss in scanning queue
 			 * we try to issue sitesurvey first
@@ -114,15 +112,13 @@ u8 r8712_set_802_11_bssid(struct _adapter *padapter, u8 *bssid)
 		return status;
 	}
 	spin_lock_irqsave(&pmlmepriv->lock, irqL);
-	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY |
-	    _FW_UNDER_LINKING)) {
+	if (check_fwstate(pmlmepriv, _FW_UNDER_SURVEY | _FW_UNDER_LINKING)) {
 		status = check_fwstate(pmlmepriv, _FW_UNDER_LINKING);
 		goto _Abort_Set_BSSID;
 	}
-	if (check_fwstate(pmlmepriv,
-	    _FW_LINKED | WIFI_ADHOC_MASTER_STATE)) {
+	if (check_fwstate(pmlmepriv, _FW_LINKED | WIFI_ADHOC_MASTER_STATE)) {
 		if (!memcmp(&pmlmepriv->cur_network.network.MacAddress, bssid,
-		    ETH_ALEN)) {
+			    ETH_ALEN)) {
 			if (!check_fwstate(pmlmepriv, WIFI_STATION_STATE))
 				/* driver is in
 				 * WIFI_ADHOC_MASTER_STATE
@@ -134,7 +130,7 @@ u8 r8712_set_802_11_bssid(struct _adapter *padapter, u8 *bssid)
 				r8712_ind_disconnect(padapter);
 			r8712_free_assoc_resources(padapter);
 			if ((check_fwstate(pmlmepriv,
-			     WIFI_ADHOC_MASTER_STATE))) {
+					   WIFI_ADHOC_MASTER_STATE))) {
 				_clr_fwstate_(pmlmepriv,
 					      WIFI_ADHOC_MASTER_STATE);
 				set_fwstate(pmlmepriv, WIFI_ADHOC_STATE);
@@ -166,25 +162,26 @@ void r8712_set_802_11_ssid(struct _adapter *padapter,
 		goto _Abort_Set_SSID;
 	}
 	if (check_fwstate(pmlmepriv, _FW_LINKED | WIFI_ADHOC_MASTER_STATE)) {
-		if ((pmlmepriv->assoc_ssid.SsidLength == ssid->SsidLength) &&
+		if (pmlmepriv->assoc_ssid.SsidLength == ssid->SsidLength &&
 		    (!memcmp(&pmlmepriv->assoc_ssid.Ssid, ssid->Ssid,
-		    ssid->SsidLength))) {
+			     ssid->SsidLength))) {
 			if (!check_fwstate(pmlmepriv, WIFI_STATION_STATE)) {
-				if (!r8712_is_same_ibss(padapter,
-				     pnetwork)) {
+				if (!r8712_is_same_ibss(padapter, pnetwork)) {
 					/* if in WIFI_ADHOC_MASTER_STATE or
 					 *  WIFI_ADHOC_STATE, create bss or
 					 * rejoin again
 					 */
 					r8712_disassoc_cmd(padapter);
 					if (check_fwstate(pmlmepriv,
-					    _FW_LINKED))
+							  _FW_LINKED))
 						r8712_ind_disconnect(padapter);
 					r8712_free_assoc_resources(padapter);
-					if (check_fwstate(pmlmepriv,
-					     WIFI_ADHOC_MASTER_STATE)) {
-						_clr_fwstate_(pmlmepriv,
-						    WIFI_ADHOC_MASTER_STATE);
+					if (check_fwstate(
+						    pmlmepriv,
+						    WIFI_ADHOC_MASTER_STATE)) {
+						_clr_fwstate_(
+							pmlmepriv,
+							WIFI_ADHOC_MASTER_STATE);
 						set_fwstate(pmlmepriv,
 							    WIFI_ADHOC_STATE);
 					}
@@ -200,8 +197,7 @@ void r8712_set_802_11_ssid(struct _adapter *padapter,
 			if (check_fwstate(pmlmepriv, _FW_LINKED))
 				r8712_ind_disconnect(padapter);
 			r8712_free_assoc_resources(padapter);
-			if (check_fwstate(pmlmepriv,
-			    WIFI_ADHOC_MASTER_STATE)) {
+			if (check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE)) {
 				_clr_fwstate_(pmlmepriv,
 					      WIFI_ADHOC_MASTER_STATE);
 				set_fwstate(pmlmepriv, WIFI_ADHOC_STATE);
@@ -221,14 +217,15 @@ done:
 	spin_unlock_irqrestore(&pmlmepriv->lock, irqL);
 }
 
-void r8712_set_802_11_infrastructure_mode(struct _adapter *padapter,
+void r8712_set_802_11_infrastructure_mode(
+	struct _adapter *padapter,
 	enum NDIS_802_11_NETWORK_INFRASTRUCTURE networktype)
 {
 	unsigned long irqL;
-	struct mlme_priv	*pmlmepriv = &padapter->mlmepriv;
-	struct wlan_network	*cur_network = &pmlmepriv->cur_network;
+	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
+	struct wlan_network *cur_network = &pmlmepriv->cur_network;
 	enum NDIS_802_11_NETWORK_INFRASTRUCTURE *pold_state =
-				&(cur_network->network.InfrastructureMode);
+		&cur_network->network.InfrastructureMode;
 
 	if (*pold_state != networktype) {
 		spin_lock_irqsave(&pmlmepriv->lock, irqL);
@@ -236,7 +233,7 @@ void r8712_set_802_11_infrastructure_mode(struct _adapter *padapter,
 		    (*pold_state == Ndis802_11IBSS))
 			r8712_disassoc_cmd(padapter);
 		if (check_fwstate(pmlmepriv,
-		    _FW_LINKED | WIFI_ADHOC_MASTER_STATE))
+				  _FW_LINKED | WIFI_ADHOC_MASTER_STATE))
 			r8712_free_assoc_resources(padapter);
 		if (check_fwstate(pmlmepriv, _FW_LINKED) ||
 		    (*pold_state == Ndis802_11Infrastructure) ||
@@ -252,7 +249,8 @@ void r8712_set_802_11_infrastructure_mode(struct _adapter *padapter,
 		 * WIFI_ADHOC_MASTER_STATE
 		 */
 		_clr_fwstate_(pmlmepriv, WIFI_STATION_STATE | WIFI_AP_STATE |
-			      WIFI_ADHOC_STATE | WIFI_ADHOC_MASTER_STATE);
+						 WIFI_ADHOC_STATE |
+						 WIFI_ADHOC_MASTER_STATE);
 		switch (networktype) {
 		case Ndis802_11IBSS:
 			set_fwstate(pmlmepriv, WIFI_ADHOC_STATE);
@@ -310,8 +308,9 @@ u8 r8712_set_802_11_bssid_list_scan(struct _adapter *padapter)
 	return ret;
 }
 
-u8 r8712_set_802_11_authentication_mode(struct _adapter *padapter,
-				enum NDIS_802_11_AUTHENTICATION_MODE authmode)
+u8 r8712_set_802_11_authentication_mode(
+	struct _adapter *padapter,
+	enum NDIS_802_11_AUTHENTICATION_MODE authmode)
 {
 	struct security_priv *psecuritypriv = &padapter->securitypriv;
 	u8 ret;
@@ -329,7 +328,7 @@ u8 r8712_set_802_11_authentication_mode(struct _adapter *padapter,
 int r8712_set_802_11_add_wep(struct _adapter *padapter,
 			     struct NDIS_802_11_WEP *wep)
 {
-	sint	keyid;
+	sint keyid;
 	struct security_priv *psecuritypriv = &padapter->securitypriv;
 
 	keyid = wep->KeyIndex & 0x3fffffff;
@@ -347,7 +346,7 @@ int r8712_set_802_11_add_wep(struct _adapter *padapter,
 		break;
 	}
 	memcpy(psecuritypriv->DefKey[keyid].skey, &wep->KeyMaterial,
-		wep->KeyLength);
+	       wep->KeyLength);
 	psecuritypriv->DefKeylen[keyid] = wep->KeyLength;
 	psecuritypriv->PrivacyKeyIndex = keyid;
 	return r8712_set_key(padapter, psecuritypriv, keyid);

@@ -14,8 +14,7 @@
 #ifndef __INC_ETHERNET_H
 #define __INC_ETHERNET_H
 
-#define ETHERNET_HEADER_SIZE		14	/*!< Ethernet Header Length*/
-#define LLC_HEADER_SIZE			6	/*!< LLC Header Length*/
+#define ETHERNET_HEADER_SIZE 14 /*!< Ethernet Header Length*/
+#define LLC_HEADER_SIZE 6 /*!< LLC Header Length*/
 
 #endif /* #ifndef __INC_ETHERNET_H */
-

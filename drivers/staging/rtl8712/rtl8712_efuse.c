@@ -69,12 +69,12 @@ static u8 efuse_one_byte_read(struct _adapter *adapter, u16 addr, u8 *data)
 
 	/* -----------------e-fuse reg ctrl --------------------------------- */
 	r8712_write8(adapter, EFUSE_CTRL + 1, (u8)(addr & 0xFF)); /* address */
-	r8712_write8(adapter, EFUSE_CTRL + 2, ((u8)((addr >> 8) & 0x03)) |
-	       (r8712_read8(adapter, EFUSE_CTRL + 2) & 0xFC));
+	r8712_write8(adapter, EFUSE_CTRL + 2,
+		     ((u8)((addr >> 8) & 0x03)) |
+			     (r8712_read8(adapter, EFUSE_CTRL + 2) & 0xFC));
 	r8712_write8(adapter, EFUSE_CTRL + 3, 0x72); /* read cmd */
 	/* wait for complete */
-	while (!(0x80 & r8712_read8(adapter, EFUSE_CTRL + 3)) &&
-	       (tmpidx < 100))
+	while (!(0x80 & r8712_read8(adapter, EFUSE_CTRL + 3)) && (tmpidx < 100))
 		tmpidx++;
 	if (tmpidx < 100) {
 		*data = r8712_read8(adapter, EFUSE_CTRL);
@@ -92,13 +92,13 @@ static u8 efuse_one_byte_write(struct _adapter *adapter, u16 addr, u8 data)
 
 	/* -----------------e-fuse reg ctrl -------------------------------- */
 	r8712_write8(adapter, EFUSE_CTRL + 1, (u8)(addr & 0xFF)); /* address */
-	r8712_write8(adapter, EFUSE_CTRL + 2, ((u8)((addr >> 8) & 0x03)) |
-	       (r8712_read8(adapter, EFUSE_CTRL + 2) & 0xFC));
+	r8712_write8(adapter, EFUSE_CTRL + 2,
+		     ((u8)((addr >> 8) & 0x03)) |
+			     (r8712_read8(adapter, EFUSE_CTRL + 2) & 0xFC));
 	r8712_write8(adapter, EFUSE_CTRL, data); /* data */
 	r8712_write8(adapter, EFUSE_CTRL + 3, 0xF2); /* write cmd */
 	/* wait for complete */
-	while ((0x80 &  r8712_read8(adapter, EFUSE_CTRL + 3)) &&
-	       (tmpidx < 100))
+	while ((0x80 & r8712_read8(adapter, EFUSE_CTRL + 3)) && (tmpidx < 100))
 		tmpidx++;
 	if (tmpidx < 100)
 		bResult = true;
@@ -115,10 +115,10 @@ static u8 efuse_one_byte_rw(struct _adapter *adapter, u8 bRead, u16 addr,
 	/* -----------------e-fuse reg ctrl --------------------------------- */
 	r8712_write8(adapter, EFUSE_CTRL + 1, (u8)(addr & 0xFF)); /* address */
 	tmpv8 = ((u8)((addr >> 8) & 0x03)) |
-		 (r8712_read8(adapter, EFUSE_CTRL + 2) & 0xFC);
+		(r8712_read8(adapter, EFUSE_CTRL + 2) & 0xFC);
 	r8712_write8(adapter, EFUSE_CTRL + 2, tmpv8);
 	if (bRead) {
-		r8712_write8(adapter, EFUSE_CTRL + 3,  0x72); /* read cmd */
+		r8712_write8(adapter, EFUSE_CTRL + 3, 0x72); /* read cmd */
 		while (!(0x80 & r8712_read8(adapter, EFUSE_CTRL + 3)) &&
 		       (tmpidx < 100))
 			tmpidx++;
@@ -169,15 +169,15 @@ void r8712_efuse_change_max_size(struct _adapter *adapter)
 	for (i = 0; i < pre_pg_data_size; i++)
 		efuse_one_byte_read(adapter, pre_pg_data_saddr + i,
 				    &pre_pg_data[i]);
-	if ((pre_pg_data[0] == 0x03) && (pre_pg_data[1] == 0x00) &&
-	    (pre_pg_data[2] == 0x00) && (pre_pg_data[3] == 0x00) &&
-	    (pre_pg_data[4] == 0x0C))
+	if (pre_pg_data[0] == 0x03 && pre_pg_data[1] == 0x00 &&
+	    pre_pg_data[2] == 0x00 && pre_pg_data[3] == 0x00 &&
+	    pre_pg_data[4] == 0x0C)
 		efuse_available_max_size -= pre_pg_data_size;
 }
 
 int r8712_efuse_get_max_size(struct _adapter *adapter)
 {
-	return	efuse_available_max_size;
+	return efuse_available_max_size;
 }
 
 static u8 calculate_word_cnts(const u8 word_en)
@@ -213,10 +213,11 @@ u16 r8712_efuse_get_current_size(struct _adapter *adapter)
 	u8 hworden = 0;
 	u8 efuse_data, word_cnts = 0;
 
-	while (bContinual && efuse_one_byte_read(adapter, efuse_addr, &efuse_data) &&
+	while (bContinual &&
+	       efuse_one_byte_read(adapter, efuse_addr, &efuse_data) &&
 	       (efuse_addr < efuse_available_max_size)) {
 		if (efuse_data != 0xFF) {
-			hworden =  efuse_data & 0x0F;
+			hworden = efuse_data & 0x0F;
 			word_cnts = calculate_word_cnts(hworden);
 			/* read next header */
 			efuse_addr = efuse_addr + (word_cnts * 2) + 1;
@@ -246,13 +247,15 @@ u8 r8712_efuse_pg_packet_read(struct _adapter *adapter, u8 offset, u8 *data)
 			if (efuse_data == 0xFF)
 				break;
 			hoffset = (efuse_data >> 4) & 0x0F;
-			hworden =  efuse_data & 0x0F;
+			hworden = efuse_data & 0x0F;
 			word_cnts = calculate_word_cnts(hworden);
 			if (hoffset == offset) {
 				memset(tmpdata, 0xFF, PGPKT_DATA_SIZE);
 				for (tmpidx = 0; tmpidx < word_cnts * 2;
 				     tmpidx++) {
-					if (efuse_one_byte_read(adapter, efuse_addr + 1 + tmpidx,
+					if (efuse_one_byte_read(adapter,
+								efuse_addr + 1 +
+									tmpidx,
 								&efuse_data)) {
 						tmpdata[tmpidx] = efuse_data;
 					} else {
@@ -300,14 +303,11 @@ static u8 fix_header(struct _adapter *adapter, u8 header, u16 header_addr)
 			if (!(BIT(i) & word_en))
 				continue;
 			if (BIT(i) & pkt.word_en) {
-				if (efuse_one_byte_read(adapter,
-							addr,
-							&value))
+				if (efuse_one_byte_read(adapter, addr, &value))
 					pkt.data[i * 2] = value;
 				else
 					return false;
-				if (efuse_one_byte_read(adapter,
-							addr + 1,
+				if (efuse_one_byte_read(adapter, addr + 1,
 							&value))
 					pkt.data[i * 2 + 1] = value;
 				else
@@ -339,9 +339,9 @@ static u8 fix_header(struct _adapter *adapter, u8 header, u16 header_addr)
 			} else if (pkt.data[i * 2 + 1] != value) {
 				ret = false;
 				if (value == 0xFF) /* write again */
-					efuse_one_byte_write(adapter, addr + 1,
-							     pkt.data[i * 2 +
-								      1]);
+					efuse_one_byte_write(
+						adapter, addr + 1,
+						pkt.data[i * 2 + 1]);
 			}
 		}
 		addr += 2;
@@ -370,29 +370,27 @@ u8 r8712_efuse_pg_packet_write(struct _adapter *adapter, const u8 offset,
 	while (efuse_addr < efuse_available_max_size) {
 		curr_size = r8712_efuse_get_current_size(adapter);
 		if ((curr_size + 1 + target_word_cnts * 2) >
-		     efuse_available_max_size)
+		    efuse_available_max_size)
 			return false; /*target_word_cnts + pg header(1 byte)*/
 		efuse_addr = curr_size; /* current size is also the last addr*/
 		efuse_one_byte_write(adapter, efuse_addr, pg_header); /*hdr*/
 		sub_repeat = 0;
 		/* check if what we read is what we write */
-		while (!efuse_one_byte_read(adapter, efuse_addr,
-					    &efuse_data)) {
+		while (!efuse_one_byte_read(adapter, efuse_addr, &efuse_data)) {
 			if (++sub_repeat > _REPEAT_THRESHOLD_) {
 				bResult = false; /* continue to blind write */
 				break; /* continue to blind write */
 			}
 		}
-		if ((sub_repeat > _REPEAT_THRESHOLD_) ||
-		    (pg_header == efuse_data)) {
+		if (sub_repeat > _REPEAT_THRESHOLD_ ||
+		    pg_header == efuse_data) {
 			/* write header ok OR can't check header(creep) */
 			u8 i;
 
 			/* go to next address */
 			efuse_addr++;
 			for (i = 0; i < target_word_cnts * 2; i++) {
-				efuse_one_byte_write(adapter,
-						     efuse_addr + i,
+				efuse_one_byte_write(adapter, efuse_addr + i,
 						     *(data + i));
 				if (!efuse_one_byte_read(adapter,
 							 efuse_addr + i,
@@ -426,8 +424,7 @@ u8 r8712_efuse_access(struct _adapter *adapter, u8 bRead, u16 start_addr,
 
 	if (start_addr > EFUSE_MAX_SIZE)
 		return false;
-	if (!bRead && ((start_addr + cnts) >
-	   efuse_available_max_size))
+	if (!bRead && ((start_addr + cnts) > efuse_available_max_size))
 		return false;
 	if (!bRead && !r8712_efuse_reg_init(adapter))
 		return false;
@@ -462,8 +459,8 @@ u8 r8712_efuse_map_read(struct _adapter *adapter, u16 addr, u16 cnts, u8 *data)
 	}
 	offset = (addr >> 3) & 0xF;
 	ret = r8712_efuse_pg_packet_read(adapter, offset, pktdata);
-	i = addr & 0x7;	/* pktdata index */
-	idx = 0;	/* data index */
+	i = addr & 0x7; /* pktdata index */
+	idx = 0; /* data index */
 
 	do {
 		for (; i < PGPKT_DATA_SIZE; i++) {
@@ -479,8 +476,7 @@ u8 r8712_efuse_map_read(struct _adapter *adapter, u16 addr, u16 cnts, u8 *data)
 	return ret;
 }
 
-u8 r8712_efuse_map_write(struct _adapter *adapter, u16 addr, u16 cnts,
-			 u8 *data)
+u8 r8712_efuse_map_write(struct _adapter *adapter, u16 addr, u16 cnts, u8 *data)
 {
 	u8 offset, word_en, empty;
 	u8 pktdata[PGPKT_DATA_SIZE], newdata[PGPKT_DATA_SIZE];
@@ -504,9 +500,9 @@ u8 r8712_efuse_map_write(struct _adapter *adapter, u16 addr, u16 cnts,
 			return false;
 	word_en = 0xF;
 	memset(newdata, 0xFF, PGPKT_DATA_SIZE);
-	i = addr & 0x7;	/* pktdata index */
-	j = 0;		/* newdata index */
-	idx = 0;	/* data index */
+	i = addr & 0x7; /* pktdata index */
+	j = 0; /* newdata index */
+	idx = 0; /* data index */
 
 	if (i & 0x1) {
 		/*  odd start */
@@ -530,8 +526,8 @@ u8 r8712_efuse_map_write(struct _adapter *adapter, u16 addr, u16 cnts,
 				break;
 			}
 
-			if ((data[idx] != pktdata[i]) || (data[idx + 1] !=
-			     pktdata[i + 1])) {
+			if (data[idx] != pktdata[i] ||
+			    data[idx + 1] != pktdata[i + 1]) {
 				word_en &= ~BIT(i >> 1);
 				newdata[j++] = data[idx];
 				newdata[j++] = data[idx + 1];

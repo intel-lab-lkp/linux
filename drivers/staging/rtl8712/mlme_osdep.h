@@ -11,7 +11,7 @@
  * Larry Finger <Larry.Finger@lwfinger.net>
  *
  ******************************************************************************/
-#ifndef	__MLME_OSDEP_H_
+#ifndef __MLME_OSDEP_H_
 #define __MLME_OSDEP_H_
 
 #include "osdep_service.h"
@@ -27,5 +27,4 @@ int r8712_recv_indicatepkts_in_order(struct _adapter *adapter,
 void r8712_indicate_wx_assoc_event(struct _adapter *padapter);
 void r8712_indicate_wx_disassoc_event(struct _adapter *padapter);
 
-#endif	/*_MLME_OSDEP_H_*/
-
+#endif /*_MLME_OSDEP_H_*/

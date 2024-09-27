@@ -17,57 +17,57 @@
 #include "osdep_service.h"
 #include "osdep_intf.h"
 
-#define NUM_IOREQ		8
+#define NUM_IOREQ 8
 
-#define MAX_PROT_SZ	(64-16)
+#define MAX_PROT_SZ (64 - 16)
 
-#define _IOREADY			0
-#define _IO_WAIT_COMPLETE   1
-#define _IO_WAIT_RSP        2
+#define _IOREADY 0
+#define _IO_WAIT_COMPLETE 1
+#define _IO_WAIT_RSP 2
 
 /* IO COMMAND TYPE */
-#define _IOSZ_MASK_		(0x7F)
-#define _IO_WRITE_		BIT(7)
-#define _IO_FIXED_		BIT(8)
-#define _IO_BURST_		BIT(9)
-#define _IO_BYTE_		BIT(10)
-#define _IO_HW_			BIT(11)
-#define _IO_WORD_		BIT(12)
-#define _IO_SYNC_		BIT(13)
-#define _IO_CMDMASK_	(0x1F80)
+#define _IOSZ_MASK_ (0x7F)
+#define _IO_WRITE_ BIT(7)
+#define _IO_FIXED_ BIT(8)
+#define _IO_BURST_ BIT(9)
+#define _IO_BYTE_ BIT(10)
+#define _IO_HW_ BIT(11)
+#define _IO_WORD_ BIT(12)
+#define _IO_SYNC_ BIT(13)
+#define _IO_CMDMASK_ (0x1F80)
 
 /*
  *	For prompt mode accessing, caller shall free io_req
  *	Otherwise, io_handler will free io_req
  */
 /* IO STATUS TYPE */
-#define _IO_ERR_		BIT(2)
-#define _IO_SUCCESS_	BIT(1)
-#define _IO_DONE_		BIT(0)
-#define IO_RD32			(_IO_SYNC_ | _IO_WORD_)
-#define IO_RD16			(_IO_SYNC_ | _IO_HW_)
-#define IO_RD8			(_IO_SYNC_ | _IO_BYTE_)
-#define IO_RD32_ASYNC	(_IO_WORD_)
-#define IO_RD16_ASYNC	(_IO_HW_)
-#define IO_RD8_ASYNC	(_IO_BYTE_)
-#define IO_WR32			(_IO_WRITE_ | _IO_SYNC_ | _IO_WORD_)
-#define IO_WR16			(_IO_WRITE_ | _IO_SYNC_ | _IO_HW_)
-#define IO_WR8			(_IO_WRITE_ | _IO_SYNC_ | _IO_BYTE_)
-#define IO_WR32_ASYNC	(_IO_WRITE_ | _IO_WORD_)
-#define IO_WR16_ASYNC	(_IO_WRITE_ | _IO_HW_)
-#define IO_WR8_ASYNC	(_IO_WRITE_ | _IO_BYTE_)
+#define _IO_ERR_ BIT(2)
+#define _IO_SUCCESS_ BIT(1)
+#define _IO_DONE_ BIT(0)
+#define IO_RD32 (_IO_SYNC_ | _IO_WORD_)
+#define IO_RD16 (_IO_SYNC_ | _IO_HW_)
+#define IO_RD8 (_IO_SYNC_ | _IO_BYTE_)
+#define IO_RD32_ASYNC (_IO_WORD_)
+#define IO_RD16_ASYNC (_IO_HW_)
+#define IO_RD8_ASYNC (_IO_BYTE_)
+#define IO_WR32 (_IO_WRITE_ | _IO_SYNC_ | _IO_WORD_)
+#define IO_WR16 (_IO_WRITE_ | _IO_SYNC_ | _IO_HW_)
+#define IO_WR8 (_IO_WRITE_ | _IO_SYNC_ | _IO_BYTE_)
+#define IO_WR32_ASYNC (_IO_WRITE_ | _IO_WORD_)
+#define IO_WR16_ASYNC (_IO_WRITE_ | _IO_HW_)
+#define IO_WR8_ASYNC (_IO_WRITE_ | _IO_BYTE_)
 /*
  *	Only Sync. burst accessing is provided.
  */
-#define IO_WR_BURST(x)		(IO_WRITE_ | _IO_SYNC_ | _IO_BURST_ | \
-				((x) & _IOSZ_MASK_))
-#define IO_RD_BURST(x)		(_IO_SYNC_ | _IO_BURST_ | ((x) & _IOSZ_MASK_))
+#define IO_WR_BURST(x) \
+	(IO_WRITE_ | _IO_SYNC_ | _IO_BURST_ | ((x) & _IOSZ_MASK_))
+#define IO_RD_BURST(x) (_IO_SYNC_ | _IO_BURST_ | ((x) & _IOSZ_MASK_))
 /*below is for the intf_option bit definition...*/
-#define _INTF_ASYNC_	BIT(0)	/*support async io*/
+#define _INTF_ASYNC_ BIT(0) /*support async io*/
 struct intf_priv;
-struct	intf_hdl;
+struct intf_hdl;
 struct io_queue;
-struct	_io_ops {
+struct _io_ops {
 	uint (*_sdbus_read_bytes_to_membuf)(struct intf_priv *pintfpriv,
 					    u32 addr, u32 cnt, u8 *pbuf);
 	uint (*_sdbus_read_blocks_to_membuf)(struct intf_priv *pintfpriv,
@@ -100,62 +100,62 @@ struct	_io_ops {
 
 struct io_req {
 	struct list_head list;
-	u32	addr;
-	/*volatile*/ u32	val;
-	u32	command;
-	u32	status;
-	u8	*pbuf;
+	u32 addr;
+	/*volatile*/ u32 val;
+	u32 command;
+	u32 status;
+	u8 *pbuf;
 	void (*_async_io_callback)(struct _adapter *padapter,
 				   struct io_req *pio_req, u8 *cnxt);
 	u8 *cnxt;
 };
 
-struct	intf_hdl {
-	u32	intf_option;
-	u8	*adapter;
-	u8	*intf_dev;
-	struct intf_priv	*pintfpriv;
+struct intf_hdl {
+	u32 intf_option;
+	u8 *adapter;
+	u8 *intf_dev;
+	struct intf_priv *pintfpriv;
 	void (*intf_hdl_init)(u8 *priv);
 	void (*intf_hdl_unload)(u8 *priv);
 	void (*intf_hdl_open)(u8 *priv);
 	void (*intf_hdl_close)(u8 *priv);
-	struct	_io_ops	io_ops;
+	struct _io_ops io_ops;
 };
 
 struct reg_protocol_rd {
 #ifdef __LITTLE_ENDIAN
 	/* DW1 */
-	u32		NumOfTrans:4;
-	u32		Reserved1:4;
-	u32		Reserved2:24;
+	u32 NumOfTrans : 4;
+	u32 Reserved1 : 4;
+	u32 Reserved2 : 24;
 	/* DW2 */
-	u32		ByteCount:7;
-	u32		WriteEnable:1;		/*0:read, 1:write*/
-	u32		FixOrContinuous:1;	/*0:continuous, 1: Fix*/
-	u32		BurstMode:1;
-	u32		Byte1Access:1;
-	u32		Byte2Access:1;
-	u32		Byte4Access:1;
-	u32		Reserved3:3;
-	u32		Reserved4:16;
+	u32 ByteCount : 7;
+	u32 WriteEnable : 1; /*0:read, 1:write*/
+	u32 FixOrContinuous : 1; /*0:continuous, 1: Fix*/
+	u32 BurstMode : 1;
+	u32 Byte1Access : 1;
+	u32 Byte2Access : 1;
+	u32 Byte4Access : 1;
+	u32 Reserved3 : 3;
+	u32 Reserved4 : 16;
 	/*DW3*/
-	u32		BusAddress;
+	u32 BusAddress;
 	/*DW4*/
 #else
-/*DW1*/
-	u32 Reserved1:4;
-	u32 NumOfTrans:4;
-	u32 Reserved2:24;
+	/*DW1*/
+	u32 Reserved1 : 4;
+	u32 NumOfTrans : 4;
+	u32 Reserved2 : 24;
 	/*DW2*/
-	u32 WriteEnable:1;
-	u32 ByteCount:7;
-	u32 Reserved3:3;
-	u32 Byte4Access:1;
-	u32 Byte2Access:1;
-	u32 Byte1Access:1;
-	u32 BurstMode:1;
-	u32 FixOrContinuous:1;
-	u32 Reserved4:16;
+	u32 WriteEnable : 1;
+	u32 ByteCount : 7;
+	u32 Reserved3 : 3;
+	u32 Byte4Access : 1;
+	u32 Byte2Access : 1;
+	u32 Byte1Access : 1;
+	u32 BurstMode : 1;
+	u32 FixOrContinuous : 1;
+	u32 Reserved4 : 16;
 	/*DW3*/
 	u32 BusAddress;
 	/*DW4*/
@@ -165,38 +165,38 @@ struct reg_protocol_rd {
 struct reg_protocol_wt {
 #ifdef __LITTLE_ENDIAN
 	/*DW1*/
-	u32 NumOfTrans:4;
-	u32 Reserved1:4;
-	u32 Reserved2:24;
+	u32 NumOfTrans : 4;
+	u32 Reserved1 : 4;
+	u32 Reserved2 : 24;
 	/*DW2*/
-	u32 ByteCount:7;
-	u32 WriteEnable:1;	/*0:read, 1:write*/
-	u32 FixOrContinuous:1;	/*0:continuous, 1: Fix*/
-	u32 BurstMode:1;
-	u32 Byte1Access:1;
-	u32 Byte2Access:1;
-	u32 Byte4Access:1;
-	u32 Reserved3:3;
-	u32 Reserved4:16;
+	u32 ByteCount : 7;
+	u32 WriteEnable : 1; /*0:read, 1:write*/
+	u32 FixOrContinuous : 1; /*0:continuous, 1: Fix*/
+	u32 BurstMode : 1;
+	u32 Byte1Access : 1;
+	u32 Byte2Access : 1;
+	u32 Byte4Access : 1;
+	u32 Reserved3 : 3;
+	u32 Reserved4 : 16;
 	/*DW3*/
 	u32 BusAddress;
 	/*DW4*/
 	u32 Value;
 #else
 	/*DW1*/
-	u32 Reserved1:4;
-	u32 NumOfTrans:4;
-	u32 Reserved2:24;
+	u32 Reserved1 : 4;
+	u32 NumOfTrans : 4;
+	u32 Reserved2 : 24;
 	/*DW2*/
-	u32 WriteEnable:1;
-	u32 ByteCount:7;
-	u32 Reserved3:3;
-	u32 Byte4Access:1;
-	u32 Byte2Access:1;
-	u32 Byte1Access:1;
-	u32 BurstMode:1;
-	u32 FixOrContinuous:1;
-	u32 Reserved4:16;
+	u32 WriteEnable : 1;
+	u32 ByteCount : 7;
+	u32 Reserved3 : 3;
+	u32 Byte4Access : 1;
+	u32 Byte2Access : 1;
+	u32 Byte1Access : 1;
+	u32 BurstMode : 1;
+	u32 FixOrContinuous : 1;
+	u32 Reserved4 : 16;
 	/*DW3*/
 	u32 BusAddress;
 	/*DW4*/
@@ -216,7 +216,7 @@ struct io_queue {
 	struct list_head processing;
 	u8 *free_ioreqs_buf; /* 4-byte aligned */
 	u8 *pallocated_free_ioreqs_buf;
-	struct	intf_hdl intf;
+	struct intf_hdl intf;
 };
 
 u8 r8712_read8(struct _adapter *adapter, u32 addr);
@@ -233,4 +233,4 @@ void r8712_write_port(struct _adapter *adapter, u32 addr, u32 cnt, u8 *pmem);
 uint r8712_alloc_io_queue(struct _adapter *adapter);
 void r8712_free_io_queue(struct _adapter *adapter);
 
-#endif	/*_RTL871X_IO_H_*/
+#endif /*_RTL871X_IO_H_*/

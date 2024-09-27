@@ -14,18 +14,18 @@
 #ifndef _RTL8712_XMIT_H_
 #define _RTL8712_XMIT_H_
 
-#define HWXMIT_ENTRY	4
+#define HWXMIT_ENTRY 4
 
-#define VO_QUEUE_INX	0
-#define VI_QUEUE_INX	1
-#define BE_QUEUE_INX	2
-#define BK_QUEUE_INX	3
-#define TS_QUEUE_INX	4
-#define MGT_QUEUE_INX	5
-#define BMC_QUEUE_INX	6
-#define BCN_QUEUE_INX	7
+#define VO_QUEUE_INX 0
+#define VI_QUEUE_INX 1
+#define BE_QUEUE_INX 2
+#define BK_QUEUE_INX 3
+#define TS_QUEUE_INX 4
+#define MGT_QUEUE_INX 5
+#define BMC_QUEUE_INX 6
+#define BCN_QUEUE_INX 7
 
-#define HW_QUEUE_ENTRY	8
+#define HW_QUEUE_ENTRY 8
 
 #define TXDESC_SIZE 32
 #define TXDESC_OFFSET TXDESC_SIZE
@@ -47,9 +47,9 @@
 /*OFFSET 0*/
 #define OFFSET_SZ (0)
 #define OFFSET_SHT (16)
-#define OWN	BIT(31)
-#define FSG	BIT(27)
-#define LSG	BIT(26)
+#define OWN BIT(31)
+#define FSG BIT(27)
+#define LSG BIT(26)
 #define TYPE_SHT (24)
 #define TYPE_MSK (0x03000000)
 

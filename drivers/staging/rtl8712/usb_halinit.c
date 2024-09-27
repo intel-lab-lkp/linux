@@ -91,11 +91,12 @@ u8 r8712_usb_hal_bus_init(struct _adapter *adapter)
 		val8 = 0x37;
 		r8712_write8(adapter, CR + 1, val8);
 		/* reduce EndPoint & init it */
-		r8712_write8(adapter, 0x102500ab, r8712_read8(adapter,
-			     0x102500ab) | BIT(6) | BIT(7));
+		r8712_write8(adapter, 0x102500ab,
+			     r8712_read8(adapter, 0x102500ab) | BIT(6) |
+				     BIT(7));
 		/* consideration of power consumption - init */
-		r8712_write8(adapter, 0x10250008, r8712_read8(adapter,
-			     0x10250008) & 0xfffffffb);
+		r8712_write8(adapter, 0x10250008,
+			     r8712_read8(adapter, 0x10250008) & 0xfffffffb);
 	} else if (registrypriv->chip_version == RTL8712_1stCUT) {
 		/* Initialization for power on sequence, */
 		r8712_write8(adapter, SPS0_CTRL + 1, 0x53);
@@ -104,8 +105,8 @@ u8 r8712_usb_hal_bus_init(struct _adapter *adapter)
 		 * Block's Mbias
 		 */
 		val8 = r8712_read8(adapter, AFE_MISC);
-		r8712_write8(adapter, AFE_MISC, (val8 | AFE_MISC_BGEN |
-			     AFE_MISC_MBEN));
+		r8712_write8(adapter, AFE_MISC,
+			     (val8 | AFE_MISC_BGEN | AFE_MISC_MBEN));
 		/* Enable LDOA15 block */
 		val8 = r8712_read8(adapter, LDOA15_CTRL);
 		r8712_write8(adapter, LDOA15_CTRL, (val8 | LDA15_EN));
@@ -191,8 +192,9 @@ u8 r8712_usb_hal_bus_init(struct _adapter *adapter)
 		val8 = r8712_read8(adapter, AFE_MISC);
 		/*Bandgap*/
 		r8712_write8(adapter, AFE_MISC, (val8 | AFE_MISC_BGEN));
-		r8712_write8(adapter, AFE_MISC, (val8 | AFE_MISC_BGEN |
-			     AFE_MISC_MBEN | AFE_MISC_I32_EN));
+		r8712_write8(adapter, AFE_MISC,
+			     (val8 | AFE_MISC_BGEN | AFE_MISC_MBEN |
+			      AFE_MISC_I32_EN));
 		/* Enable PLL Power (LDOA15V) */
 		val8 = r8712_read8(adapter, LDOA15_CTRL);
 		r8712_write8(adapter, LDOA15_CTRL, (val8 | LDA15_EN));
@@ -265,7 +267,7 @@ u8 r8712_usb_hal_bus_init(struct _adapter *adapter)
 			if ((val8 & _TXDMA_INIT_VALUE) == _TXDMA_INIT_VALUE)
 				break;
 			udelay(5); /* PlatformStallExecution(5); */
-		} while (PollingCnt--);	/* Delay 1ms */
+		} while (PollingCnt--); /* Delay 1ms */
 
 		if (PollingCnt <= 0) {
 			val8 = r8712_read8(adapter, CR);
@@ -285,7 +287,7 @@ unsigned int r8712_usb_inirp_init(struct _adapter *adapter)
 	u8 i;
 	struct recv_buf *recvbuf;
 	struct intf_hdl *intfhdl = &adapter->pio_queue->intf;
-	struct recv_priv *recvpriv = &(adapter->recvpriv);
+	struct recv_priv *recvpriv = &adapter->recvpriv;
 
 	recvpriv->ff_hwaddr = RTL8712_DMA_RX0FF; /* mapping rx fifo address */
 	/* issue Rx irp to receive data */

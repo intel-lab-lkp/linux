@@ -87,7 +87,7 @@ out:
 
 static void standby(struct _adapter *padapter)
 {
-	u8   x;
+	u8 x;
 
 	x = r8712_read8(padapter, EE_9346CR);
 	x &= ~(_EECS | _EESK);
@@ -100,8 +100,8 @@ static void standby(struct _adapter *padapter)
 
 static u16 wait_eeprom_cmd_done(struct _adapter *padapter)
 {
-	u8	x;
-	u16	i;
+	u8 x;
+	u16 i;
 
 	standby(padapter);
 	for (i = 0; i < 200; i++) {
@@ -150,9 +150,9 @@ void r8712_eeprom_write16(struct _adapter *padapter, u16 reg, u16 data)
 	x |= _EEM1 | _EECS;
 	r8712_write8(padapter, EE_9346CR, x);
 	shift_out_bits(padapter, EEPROM_EWEN_OPCODE, 5);
-	if (padapter->eeprom_address_size == 8)	/*CF+ and SDIO*/
+	if (padapter->eeprom_address_size == 8) /*CF+ and SDIO*/
 		shift_out_bits(padapter, 0, 6);
-	else	/* USB */
+	else /* USB */
 		shift_out_bits(padapter, 0, 4);
 	standby(padapter);
 	/* Erase this particular word.  Write the erase opcode and register

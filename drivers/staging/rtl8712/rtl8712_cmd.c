@@ -42,7 +42,7 @@
 
 static void check_hw_pbc(struct _adapter *padapter)
 {
-	u8	tmp1byte;
+	u8 tmp1byte;
 
 	r8712_write8(padapter, MAC_PINMUX_CTRL, (GPIOMUX_EN | GPIOSEL_GPIO));
 	tmp1byte = r8712_read8(padapter, GPIO_IO_SEL);
@@ -55,7 +55,8 @@ static void check_hw_pbc(struct _adapter *padapter)
 		/* Here we only set bPbcPressed to true
 		 * After trigger PBC, the variable will be set to false
 		 */
-		netdev_dbg(padapter->pnetdev, "CheckPbcGPIO - PBC is pressed !!!!\n");
+		netdev_dbg(padapter->pnetdev,
+			   "CheckPbcGPIO - PBC is pressed !!!!\n");
 		/* 0 is the default value and it means the application monitors
 		 * the HW PBC doesn't provide its pid to driver.
 		 */
@@ -89,7 +90,7 @@ static void query_fw_rx_phy_status(struct _adapter *padapter)
 			val32 = 0;
 		val32 >>= 4;
 		padapter->recvpriv.fw_rssi =
-			 (u8)r8712_signal_scale_mapping(val32);
+			(u8)r8712_signal_scale_mapping(val32);
 	}
 }
 
@@ -119,7 +120,7 @@ static void r871x_internal_cmd_hdl(struct _adapter *padapter, u8 *pbuf)
 
 static u8 read_bbreg_hdl(struct _adapter *padapter, u8 *pbuf)
 {
-	struct cmd_obj *pcmd  = (struct cmd_obj *)pbuf;
+	struct cmd_obj *pcmd = (struct cmd_obj *)pbuf;
 
 	r8712_free_cmd_obj(pcmd);
 	return H2C_SUCCESS;
@@ -128,7 +129,7 @@ static u8 read_bbreg_hdl(struct _adapter *padapter, u8 *pbuf)
 static u8 write_bbreg_hdl(struct _adapter *padapter, u8 *pbuf)
 {
 	void (*pcmd_callback)(struct _adapter *dev, struct cmd_obj *pcmd);
-	struct cmd_obj *pcmd  = (struct cmd_obj *)pbuf;
+	struct cmd_obj *pcmd = (struct cmd_obj *)pbuf;
 
 	pcmd_callback = cmd_callback[pcmd->cmdcode].callback;
 	if (!pcmd_callback)
@@ -142,7 +143,7 @@ static u8 read_rfreg_hdl(struct _adapter *padapter, u8 *pbuf)
 {
 	u32 val;
 	void (*pcmd_callback)(struct _adapter *dev, struct cmd_obj *pcmd);
-	struct cmd_obj *pcmd  = (struct cmd_obj *)pbuf;
+	struct cmd_obj *pcmd = (struct cmd_obj *)pbuf;
 
 	if (pcmd->rsp && pcmd->rspsz > 0)
 		memcpy(pcmd->rsp, (u8 *)&val, pcmd->rspsz);
@@ -157,7 +158,7 @@ static u8 read_rfreg_hdl(struct _adapter *padapter, u8 *pbuf)
 static u8 write_rfreg_hdl(struct _adapter *padapter, u8 *pbuf)
 {
 	void (*pcmd_callback)(struct _adapter *dev, struct cmd_obj *pcmd);
-	struct cmd_obj *pcmd  = (struct cmd_obj *)pbuf;
+	struct cmd_obj *pcmd = (struct cmd_obj *)pbuf;
 
 	pcmd_callback = cmd_callback[pcmd->cmdcode].callback;
 	if (!pcmd_callback)
@@ -169,7 +170,7 @@ static u8 write_rfreg_hdl(struct _adapter *padapter, u8 *pbuf)
 
 static u8 sys_suspend_hdl(struct _adapter *padapter, u8 *pbuf)
 {
-	struct cmd_obj *pcmd  = (struct cmd_obj *)pbuf;
+	struct cmd_obj *pcmd = (struct cmd_obj *)pbuf;
 
 	r8712_free_cmd_obj(pcmd);
 	return H2C_SUCCESS;
@@ -245,9 +246,9 @@ u8 r8712_fw_cmd(struct _adapter *pAdapter, u32 cmd)
 
 void r8712_fw_cmd_data(struct _adapter *pAdapter, u32 *value, u8 flag)
 {
-	if (flag == 0)	/* set */
+	if (flag == 0) /* set */
 		r8712_write32(pAdapter, IOCMD_DATA_REG, *value);
-	else		/* query */
+	else /* query */
 		*value = r8712_read32(pAdapter, IOCMD_DATA_REG);
 }
 
@@ -259,9 +260,8 @@ int r8712_cmd_thread(void *context)
 	struct tx_desc *pdesc;
 	void (*pcmd_callback)(struct _adapter *dev, struct cmd_obj *pcmd);
 	struct _adapter *padapter = context;
-	struct	cmd_priv *pcmdpriv = &padapter->cmdpriv;
-	struct completion *cmd_queue_comp =
-		&pcmdpriv->cmd_queue_comp;
+	struct cmd_priv *pcmdpriv = &padapter->cmdpriv;
+	struct completion *cmd_queue_comp = &pcmdpriv->cmd_queue_comp;
 	struct mutex *pwctrl_lock = &padapter->pwrctrlpriv.mutex_lock;
 
 	allow_signal(SIGTERM);
@@ -290,8 +290,8 @@ _next:
 			pcmdpriv->cmd_issued_cnt++;
 			cmdsz = round_up(pcmd->cmdsz, 8);
 			wr_sz = TXDESC_SIZE + 8 + cmdsz;
-			pdesc->txdw0 |= cpu_to_le32((wr_sz - TXDESC_SIZE) &
-						     0x0000ffff);
+			pdesc->txdw0 |=
+				cpu_to_le32((wr_sz - TXDESC_SIZE) & 0x0000ffff);
 			if (pdvobj->ishighspeed) {
 				if ((wr_sz % 512) == 0)
 					blnPending = 1;
@@ -300,18 +300,19 @@ _next:
 					blnPending = 1;
 			}
 			if (blnPending) { /* 32 bytes for TX Desc - 8 offset */
-				pdesc->txdw0 |= cpu_to_le32(((TXDESC_SIZE +
-						OFFSET_SZ + 8) << OFFSET_SHT) &
-						0x00ff0000);
+				pdesc->txdw0 |= cpu_to_le32(
+					((TXDESC_SIZE + OFFSET_SZ + 8)
+					 << OFFSET_SHT) &
+					0x00ff0000);
 			} else {
-				pdesc->txdw0 |= cpu_to_le32(((TXDESC_SIZE +
-							      OFFSET_SZ) <<
-							      OFFSET_SHT) &
-							      0x00ff0000);
+				pdesc->txdw0 |=
+					cpu_to_le32(((TXDESC_SIZE + OFFSET_SZ)
+						     << OFFSET_SHT) &
+						    0x00ff0000);
 			}
 			pdesc->txdw0 |= cpu_to_le32(OWN | FSG | LSG);
-			pdesc->txdw1 |= cpu_to_le32((0x13 << QSEL_SHT) &
-						    0x00001f00);
+			pdesc->txdw1 |=
+				cpu_to_le32((0x13 << QSEL_SHT) & 0x00001f00);
 			pcmdbuf += (TXDESC_SIZE >> 2);
 			*pcmdbuf = cpu_to_le32((cmdsz & 0x0000ffff) |
 					       (pcmd->cmdcode << 16) |
@@ -319,7 +320,7 @@ _next:
 			pcmdbuf += 2; /* 8 bytes alignment */
 			memcpy((u8 *)pcmdbuf, pcmd->parmbuf, pcmd->cmdsz);
 			if (blnPending)
-				wr_sz += 8;   /* Append 8 bytes */
+				wr_sz += 8; /* Append 8 bytes */
 			r8712_write_mem(padapter, RTL8712_DMA_H2CCMD, wr_sz,
 					(u8 *)pdesc);
 			pcmdpriv->cmd_seq++;
@@ -365,7 +366,7 @@ void r8712_event_handle(struct _adapter *padapter, __le32 *peventbuf)
 	u8 evt_code, evt_seq;
 	u16 evt_sz;
 	void (*event_callback)(struct _adapter *dev, u8 *pbuf);
-	struct	evt_priv *pevt_priv = &padapter->evtpriv;
+	struct evt_priv *pevt_priv = &padapter->evtpriv;
 
 	if (!peventbuf)
 		goto _abort_event_;
@@ -387,15 +388,15 @@ void r8712_event_handle(struct _adapter *padapter, __le32 *peventbuf)
 		goto _abort_event_;
 	}
 	/* checking if event size match the event parm size */
-	if ((wlanevents[evt_code].parmsize) &&
-	    (wlanevents[evt_code].parmsize != evt_sz)) {
+	if (wlanevents[evt_code].parmsize &&
+	    wlanevents[evt_code].parmsize != evt_sz) {
 		pevt_priv->event_seq = ((evt_seq + 1) & 0x7f);
 		goto _abort_event_;
 	} else if ((evt_sz == 0) && (evt_code != GEN_EVT_CODE(_WPS_PBC))) {
 		pevt_priv->event_seq = ((evt_seq + 1) & 0x7f);
 		goto _abort_event_;
 	}
-	pevt_priv->event_seq++;	/* update evt_seq */
+	pevt_priv->event_seq++; /* update evt_seq */
 	if (pevt_priv->event_seq > 127)
 		pevt_priv->event_seq = 0;
 	/* move to event content, 8 bytes alignment */

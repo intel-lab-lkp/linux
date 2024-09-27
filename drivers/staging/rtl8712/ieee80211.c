@@ -22,25 +22,25 @@
 #include "osdep_service.h"
 #include "wlan_bssdef.h"
 
-static const u8 WPA_OUI_TYPE[] = {0x00, 0x50, 0xf2, 1};
-static const u8 WPA_CIPHER_SUITE_NONE[] = {0x00, 0x50, 0xf2, 0};
-static const u8 WPA_CIPHER_SUITE_WEP40[] = {0x00, 0x50, 0xf2, 1};
-static const u8 WPA_CIPHER_SUITE_TKIP[] = {0x00, 0x50, 0xf2, 2};
-static const u8 WPA_CIPHER_SUITE_CCMP[] = {0x00, 0x50, 0xf2, 4};
-static const u8 WPA_CIPHER_SUITE_WEP104[] = {0x00, 0x50, 0xf2, 5};
+static const u8 WPA_OUI_TYPE[] = { 0x00, 0x50, 0xf2, 1 };
+static const u8 WPA_CIPHER_SUITE_NONE[] = { 0x00, 0x50, 0xf2, 0 };
+static const u8 WPA_CIPHER_SUITE_WEP40[] = { 0x00, 0x50, 0xf2, 1 };
+static const u8 WPA_CIPHER_SUITE_TKIP[] = { 0x00, 0x50, 0xf2, 2 };
+static const u8 WPA_CIPHER_SUITE_CCMP[] = { 0x00, 0x50, 0xf2, 4 };
+static const u8 WPA_CIPHER_SUITE_WEP104[] = { 0x00, 0x50, 0xf2, 5 };
 
-static const u8 RSN_CIPHER_SUITE_NONE[] = {0x00, 0x0f, 0xac, 0};
-static const u8 RSN_CIPHER_SUITE_WEP40[] = {0x00, 0x0f, 0xac, 1};
-static const u8 RSN_CIPHER_SUITE_TKIP[] = {0x00, 0x0f, 0xac, 2};
-static const u8 RSN_CIPHER_SUITE_CCMP[] = {0x00, 0x0f, 0xac, 4};
-static const u8 RSN_CIPHER_SUITE_WEP104[] = {0x00, 0x0f, 0xac, 5};
+static const u8 RSN_CIPHER_SUITE_NONE[] = { 0x00, 0x0f, 0xac, 0 };
+static const u8 RSN_CIPHER_SUITE_WEP40[] = { 0x00, 0x0f, 0xac, 1 };
+static const u8 RSN_CIPHER_SUITE_TKIP[] = { 0x00, 0x0f, 0xac, 2 };
+static const u8 RSN_CIPHER_SUITE_CCMP[] = { 0x00, 0x0f, 0xac, 4 };
+static const u8 RSN_CIPHER_SUITE_WEP104[] = { 0x00, 0x0f, 0xac, 5 };
 
 /*-----------------------------------------------------------
  * for adhoc-master to generate ie and provide supported-rate to fw
  *-----------------------------------------------------------
  */
 
-static u8 WIFI_CCKRATES[] =  {
+static u8 WIFI_CCKRATES[] = {
 	(IEEE80211_CCK_RATE_1MB | IEEE80211_BASIC_RATE_MASK),
 	(IEEE80211_CCK_RATE_2MB | IEEE80211_BASIC_RATE_MASK),
 	(IEEE80211_CCK_RATE_5MB | IEEE80211_BASIC_RATE_MASK),
@@ -48,14 +48,10 @@ static u8 WIFI_CCKRATES[] =  {
 };
 
 static u8 WIFI_OFDMRATES[] = {
-	(IEEE80211_OFDM_RATE_6MB),
-	(IEEE80211_OFDM_RATE_9MB),
-	(IEEE80211_OFDM_RATE_12MB),
-	(IEEE80211_OFDM_RATE_18MB),
-	(IEEE80211_OFDM_RATE_24MB),
-	(IEEE80211_OFDM_RATE_36MB),
-	(IEEE80211_OFDM_RATE_48MB),
-	(IEEE80211_OFDM_RATE_54MB)
+	(IEEE80211_OFDM_RATE_6MB),  (IEEE80211_OFDM_RATE_9MB),
+	(IEEE80211_OFDM_RATE_12MB), (IEEE80211_OFDM_RATE_18MB),
+	(IEEE80211_OFDM_RATE_24MB), (IEEE80211_OFDM_RATE_36MB),
+	(IEEE80211_OFDM_RATE_48MB), (IEEE80211_OFDM_RATE_54MB)
 };
 
 uint r8712_is_cckrates_included(u8 *rate)
@@ -63,8 +59,8 @@ uint r8712_is_cckrates_included(u8 *rate)
 	u32 i = 0;
 
 	while (rate[i] != 0) {
-		if ((((rate[i]) & 0x7f) == 2) || (((rate[i]) & 0x7f) == 4) ||
-		    (((rate[i]) & 0x7f) == 11) || (((rate[i]) & 0x7f) == 22))
+		if (((rate[i] & 0x7f) == 2) || ((rate[i] & 0x7f) == 4) ||
+		    ((rate[i] & 0x7f) == 11) || ((rate[i] & 0x7f) == 22))
 			return true;
 		i++;
 	}
@@ -76,8 +72,8 @@ uint r8712_is_cckratesonly_included(u8 *rate)
 	u32 i = 0;
 
 	while (rate[i] != 0) {
-		if ((((rate[i]) & 0x7f) != 2) && (((rate[i]) & 0x7f) != 4) &&
-		    (((rate[i]) & 0x7f) != 11)  && (((rate[i]) & 0x7f) != 22))
+		if (((rate[i] & 0x7f) != 2) && ((rate[i] & 0x7f) != 4) &&
+		    ((rate[i] & 0x7f) != 11) && ((rate[i] & 0x7f) != 22))
 			return false;
 		i++;
 	}
@@ -147,7 +143,7 @@ static uint r8712_get_rateset_len(u8 *rateset)
 	uint i = 0;
 
 	while (1) {
-		if ((rateset[i]) == 0)
+		if (rateset[i] == 0)
 			break;
 		if (i > 12)
 			break;
@@ -192,8 +188,8 @@ int r8712_generate_ie(struct registry_priv *registrypriv)
 		ie = r8712_set_ie(ie, WLAN_EID_EXT_SUPP_RATES, (rate_len - 8),
 				  (dev_network->rates + 8), &sz);
 	} else {
-		ie = r8712_set_ie(ie, WLAN_EID_SUPP_RATES,
-				  rate_len, dev_network->rates, &sz);
+		ie = r8712_set_ie(ie, WLAN_EID_SUPP_RATES, rate_len,
+				  dev_network->rates, &sz);
 	}
 	/*DS parameter set*/
 	ie = r8712_set_ie(ie, WLAN_EID_DS_PARAMS, 1,
@@ -208,7 +204,7 @@ unsigned char *r8712_get_wpa_ie(unsigned char *ie, uint *wpa_ie_len, int limit)
 {
 	u32 len;
 	u16 val16;
-	unsigned char wpa_oui_type[] = {0x00, 0x50, 0xf2, 0x01};
+	unsigned char wpa_oui_type[] = { 0x00, 0x50, 0xf2, 0x01 };
 	u8 *buf = ie;
 
 	while (1) {
@@ -365,26 +361,25 @@ int r8712_get_sec_ie(u8 *in_ie, uint in_len, u8 *rsn_ie, u16 *rsn_len,
 		     u8 *wpa_ie, u16 *wpa_len)
 {
 	u8 authmode;
-	u8 wpa_oui[4] = {0x0, 0x50, 0xf2, 0x01};
+	u8 wpa_oui[4] = { 0x0, 0x50, 0xf2, 0x01 };
 	uint cnt;
 
 	/*Search required WPA or WPA2 IE and copy to sec_ie[ ]*/
 	cnt = _TIMESTAMP_ + _BEACON_ITERVAL_ + _CAPABILITY_;
 	while (cnt < in_len) {
 		authmode = in_ie[cnt];
-		if ((authmode == _WPA_IE_ID_) &&
+		if (authmode == _WPA_IE_ID_ &&
 		    (!memcmp(&in_ie[cnt + 2], &wpa_oui[0], 4))) {
 			memcpy(wpa_ie, &in_ie[cnt], in_ie[cnt + 1] + 2);
 			*wpa_len = in_ie[cnt + 1] + 2;
-			cnt += in_ie[cnt + 1] + 2;  /*get next */
+			cnt += in_ie[cnt + 1] + 2; /*get next */
 		} else {
 			if (authmode == _WPA2_IE_ID_) {
-				memcpy(rsn_ie, &in_ie[cnt],
-				       in_ie[cnt + 1] + 2);
+				memcpy(rsn_ie, &in_ie[cnt], in_ie[cnt + 1] + 2);
 				*rsn_len = in_ie[cnt + 1] + 2;
-				cnt += in_ie[cnt + 1] + 2;  /*get next*/
+				cnt += in_ie[cnt + 1] + 2; /*get next*/
 			} else {
-				cnt += in_ie[cnt + 1] + 2;   /*get next*/
+				cnt += in_ie[cnt + 1] + 2; /*get next*/
 			}
 		}
 	}
@@ -395,13 +390,13 @@ int r8712_get_wps_ie(u8 *in_ie, uint in_len, u8 *wps_ie, uint *wps_ielen)
 {
 	int match;
 	uint cnt;
-	u8 eid, wps_oui[4] = {0x0, 0x50, 0xf2, 0x04};
+	u8 eid, wps_oui[4] = { 0x0, 0x50, 0xf2, 0x04 };
 
 	cnt = 12;
 	match = false;
 	while (cnt < in_len) {
 		eid = in_ie[cnt];
-		if ((eid == _WPA_IE_ID_) &&
+		if (eid == _WPA_IE_ID_ &&
 		    (!memcmp(&in_ie[cnt + 2], wps_oui, 4))) {
 			memcpy(wps_ie, &in_ie[cnt], in_ie[cnt + 1] + 2);
 			*wps_ielen = in_ie[cnt + 1] + 2;

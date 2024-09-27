@@ -34,16 +34,17 @@ static void _init_stainfo(struct sta_info *psta)
 	INIT_LIST_HEAD(&psta->auth_list);
 }
 
-int _r8712_init_sta_priv(struct	sta_priv *pstapriv)
+int _r8712_init_sta_priv(struct sta_priv *pstapriv)
 {
 	struct sta_info *psta;
 	s32 i;
 
-	pstapriv->pallocated_stainfo_buf = kmalloc(sizeof(struct sta_info) *
-						   NUM_STA + 4, GFP_ATOMIC);
+	pstapriv->pallocated_stainfo_buf =
+		kmalloc(sizeof(struct sta_info) * NUM_STA + 4, GFP_ATOMIC);
 	if (!pstapriv->pallocated_stainfo_buf)
 		return -ENOMEM;
-	pstapriv->pstainfo_buf = pstapriv->pallocated_stainfo_buf + 4 -
+	pstapriv->pstainfo_buf =
+		pstapriv->pallocated_stainfo_buf + 4 -
 		((addr_t)(pstapriv->pallocated_stainfo_buf) & 3);
 	_init_queue(&pstapriv->free_sta_queue);
 	spin_lock_init(&pstapriv->sta_hash_lock);
@@ -53,7 +54,7 @@ int _r8712_init_sta_priv(struct	sta_priv *pstapriv)
 	psta = (struct sta_info *)(pstapriv->pstainfo_buf);
 	for (i = 0; i < NUM_STA; i++) {
 		_init_stainfo(psta);
-		INIT_LIST_HEAD(&(pstapriv->sta_hash[i]));
+		INIT_LIST_HEAD(&pstapriv->sta_hash[i]);
 		list_add_tail(&psta->list, &pstapriv->free_sta_queue.queue);
 		psta++;
 	}
@@ -88,13 +89,13 @@ void _r8712_free_sta_priv(struct sta_priv *pstapriv)
 
 struct sta_info *r8712_alloc_stainfo(struct sta_priv *pstapriv, u8 *hwaddr)
 {
-	s32	index;
+	s32 index;
 	struct list_head *phash_list;
-	struct sta_info	*psta;
-	struct  __queue *pfree_sta_queue;
+	struct sta_info *psta;
+	struct __queue *pfree_sta_queue;
 	struct recv_reorder_ctrl *preorder_ctrl;
 	int i = 0;
-	u16  wRxSeqInitialValue = 0xffff;
+	u16 wRxSeqInitialValue = 0xffff;
 	unsigned long flags;
 
 	pfree_sta_queue = &pstapriv->free_sta_queue;
@@ -114,14 +115,14 @@ struct sta_info *r8712_alloc_stainfo(struct sta_priv *pstapriv, u8 *hwaddr)
 		list_add_tail(&psta->hash_list, phash_list);
 		pstapriv->asoc_sta_count++;
 
-/* For the SMC router, the sequence number of first packet of WPS handshake
+		/* For the SMC router, the sequence number of first packet of WPS handshake
  * will be 0. In this case, this packet will be dropped by recv_decache function
  * if we use the 0x00 as the default value for tid_rxseq variable. So, we
  * initialize the tid_rxseq variable as the 0xffff.
  */
 		for (i = 0; i < 16; i++)
 			memcpy(&psta->sta_recvpriv.rxcache.tid_rxseq[i],
-				&wRxSeqInitialValue, 2);
+			       &wRxSeqInitialValue, 2);
 		/* for A-MPDU Rx reordering buffer control */
 		for (i = 0; i < 16; i++) {
 			preorder_ctrl = &psta->recvreorder_ctrl[i];
@@ -143,32 +144,32 @@ void r8712_free_stainfo(struct _adapter *padapter, struct sta_info *psta)
 {
 	int i;
 	unsigned long irqL0;
-	struct  __queue *pfree_sta_queue;
+	struct __queue *pfree_sta_queue;
 	struct recv_reorder_ctrl *preorder_ctrl;
-	struct	sta_xmit_priv *pstaxmitpriv;
-	struct	xmit_priv *pxmitpriv = &padapter->xmitpriv;
-	struct	sta_priv *pstapriv = &padapter->stapriv;
+	struct sta_xmit_priv *pstaxmitpriv;
+	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
+	struct sta_priv *pstapriv = &padapter->stapriv;
 
 	if (!psta)
 		return;
 	pfree_sta_queue = &pstapriv->free_sta_queue;
 	pstaxmitpriv = &psta->sta_xmitpriv;
-	spin_lock_irqsave(&(pxmitpriv->vo_pending.lock), irqL0);
+	spin_lock_irqsave(&pxmitpriv->vo_pending.lock, irqL0);
 	r8712_free_xmitframe_queue(pxmitpriv, &pstaxmitpriv->vo_q.sta_pending);
-	list_del_init(&(pstaxmitpriv->vo_q.tx_pending));
-	spin_unlock_irqrestore(&(pxmitpriv->vo_pending.lock), irqL0);
-	spin_lock_irqsave(&(pxmitpriv->vi_pending.lock), irqL0);
+	list_del_init(&pstaxmitpriv->vo_q.tx_pending);
+	spin_unlock_irqrestore(&pxmitpriv->vo_pending.lock, irqL0);
+	spin_lock_irqsave(&pxmitpriv->vi_pending.lock, irqL0);
 	r8712_free_xmitframe_queue(pxmitpriv, &pstaxmitpriv->vi_q.sta_pending);
-	list_del_init(&(pstaxmitpriv->vi_q.tx_pending));
-	spin_unlock_irqrestore(&(pxmitpriv->vi_pending.lock), irqL0);
-	spin_lock_irqsave(&(pxmitpriv->bk_pending.lock), irqL0);
+	list_del_init(&pstaxmitpriv->vi_q.tx_pending);
+	spin_unlock_irqrestore(&pxmitpriv->vi_pending.lock, irqL0);
+	spin_lock_irqsave(&pxmitpriv->bk_pending.lock, irqL0);
 	r8712_free_xmitframe_queue(pxmitpriv, &pstaxmitpriv->bk_q.sta_pending);
-	list_del_init(&(pstaxmitpriv->bk_q.tx_pending));
-	spin_unlock_irqrestore(&(pxmitpriv->bk_pending.lock), irqL0);
-	spin_lock_irqsave(&(pxmitpriv->be_pending.lock), irqL0);
+	list_del_init(&pstaxmitpriv->bk_q.tx_pending);
+	spin_unlock_irqrestore(&pxmitpriv->bk_pending.lock, irqL0);
+	spin_lock_irqsave(&pxmitpriv->be_pending.lock, irqL0);
 	r8712_free_xmitframe_queue(pxmitpriv, &pstaxmitpriv->be_q.sta_pending);
-	list_del_init(&(pstaxmitpriv->be_q.tx_pending));
-	spin_unlock_irqrestore(&(pxmitpriv->be_pending.lock), irqL0);
+	list_del_init(&pstaxmitpriv->be_q.tx_pending);
+	spin_unlock_irqrestore(&pxmitpriv->be_pending.lock, irqL0);
 	list_del_init(&psta->hash_list);
 	pstapriv->asoc_sta_count--;
 	/* re-init sta_info; 20061114 */
@@ -181,10 +182,10 @@ void r8712_free_stainfo(struct _adapter *padapter, struct sta_info *psta)
 		preorder_ctrl = &psta->recvreorder_ctrl[i];
 		del_timer(&preorder_ctrl->reordering_ctrl_timer);
 	}
-	spin_lock(&(pfree_sta_queue->lock));
+	spin_lock(&pfree_sta_queue->lock);
 	/* insert into free_sta_queue; 20061114 */
 	list_add_tail(&psta->list, &pfree_sta_queue->queue);
-	spin_unlock(&(pfree_sta_queue->lock));
+	spin_unlock(&pfree_sta_queue->lock);
 }
 
 /* free all stainfo which in sta_hash[all] */
@@ -194,18 +195,17 @@ void r8712_free_all_stainfo(struct _adapter *padapter)
 	struct list_head *plist, *phead;
 	s32 index;
 	struct sta_info *psta = NULL;
-	struct	sta_priv *pstapriv = &padapter->stapriv;
+	struct sta_priv *pstapriv = &padapter->stapriv;
 	struct sta_info *pbcmc_stainfo = r8712_get_bcmc_stainfo(padapter);
 
 	if (pstapriv->asoc_sta_count == 1)
 		return;
 	spin_lock_irqsave(&pstapriv->sta_hash_lock, irqL);
 	for (index = 0; index < NUM_STA; index++) {
-		phead = &(pstapriv->sta_hash[index]);
+		phead = &pstapriv->sta_hash[index];
 		plist = phead->next;
 		while (!end_of_queue_search(phead, plist)) {
-			psta = container_of(plist,
-					    struct sta_info, hash_list);
+			psta = container_of(plist, struct sta_info, hash_list);
 			plist = plist->next;
 			if (pbcmc_stainfo != psta)
 				r8712_free_stainfo(padapter, psta);
@@ -217,16 +217,16 @@ void r8712_free_all_stainfo(struct _adapter *padapter)
 /* any station allocated can be searched by hash list */
 struct sta_info *r8712_get_stainfo(struct sta_priv *pstapriv, u8 *hwaddr)
 {
-	unsigned long	 irqL;
+	unsigned long irqL;
 	struct list_head *plist, *phead;
 	struct sta_info *psta = NULL;
-	u32	index;
+	u32 index;
 
 	if (!hwaddr)
 		return NULL;
 	index = wifi_mac_hash(hwaddr);
 	spin_lock_irqsave(&pstapriv->sta_hash_lock, irqL);
-	phead = &(pstapriv->sta_hash[index]);
+	phead = &pstapriv->sta_hash[index];
 	plist = phead->next;
 	while (!end_of_queue_search(phead, plist)) {
 		psta = container_of(plist, struct sta_info, hash_list);
@@ -243,8 +243,8 @@ struct sta_info *r8712_get_stainfo(struct sta_priv *pstapriv, u8 *hwaddr)
 
 void r8712_init_bcmc_stainfo(struct _adapter *padapter)
 {
-	unsigned char bcast_addr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-	struct	sta_priv *pstapriv = &padapter->stapriv;
+	unsigned char bcast_addr[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+	struct sta_priv *pstapriv = &padapter->stapriv;
 
 	r8712_alloc_stainfo(pstapriv, bcast_addr);
 }
@@ -252,7 +252,7 @@ void r8712_init_bcmc_stainfo(struct _adapter *padapter)
 struct sta_info *r8712_get_bcmc_stainfo(struct _adapter *padapter)
 {
 	struct sta_priv *pstapriv = &padapter->stapriv;
-	u8 bc_addr[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	u8 bc_addr[ETH_ALEN] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
 	return r8712_get_stainfo(pstapriv, bc_addr);
 }

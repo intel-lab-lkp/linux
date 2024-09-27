@@ -23,7 +23,7 @@
 /*
  * Used to report a bss has been scanned
  */
-struct survey_event	{
+struct survey_event {
 	struct wlan_bssid_ex bss;
 };
 
@@ -32,8 +32,7 @@ struct survey_event	{
  * bss_cnt indicates the number of bss that has been reported.
  */
 struct surveydone_event {
-	unsigned int	bss_cnt;
-
+	unsigned int bss_cnt;
 };
 
 /*
@@ -44,7 +43,7 @@ struct surveydone_event {
  *  > 0: TID
  */
 struct joinbss_event {
-	struct	wlan_network	network;
+	struct wlan_network network;
 };
 
 /*
@@ -54,7 +53,7 @@ struct joinbss_event {
 struct stassoc_event {
 	unsigned char macaddr[6];
 	unsigned char rsvd[2];
-	__le32    cam_id;
+	__le32 cam_id;
 };
 
 struct stadel_event {
@@ -66,34 +65,34 @@ struct addba_event {
 	unsigned int tid;
 };
 
-#define GEN_EVT_CODE(event)	event ## _EVT_
+#define GEN_EVT_CODE(event) event##_EVT_
 
 struct fwevent {
-	u32	parmsize;
+	u32 parmsize;
 	void (*event_callback)(struct _adapter *dev, u8 *pbuf);
 };
 
-#define C2HEVENT_SZ			32
+#define C2HEVENT_SZ 32
 struct event_node {
 	unsigned char *node;
 	unsigned char evt_code;
 	unsigned short evt_sz;
 	/*volatile*/ int *caller_ff_tail;
-	int	caller_ff_sz;
+	int caller_ff_sz;
 };
 
 struct c2hevent_queue {
-	/*volatile*/ int	head;
-	/*volatile*/ int	tail;
-	struct	event_node	nodes[C2HEVENT_SZ];
-	unsigned char	seq;
+	/*volatile*/ int head;
+	/*volatile*/ int tail;
+	struct event_node nodes[C2HEVENT_SZ];
+	unsigned char seq;
 };
 
-#define NETWORK_QUEUE_SZ	4
+#define NETWORK_QUEUE_SZ 4
 
 struct network_queue {
-	/*volatile*/ int	head;
-	/*volatile*/ int	tail;
+	/*volatile*/ int head;
+	/*volatile*/ int tail;
 	struct wlan_bssid_ex networks[NETWORK_QUEUE_SZ];
 };
 
@@ -106,4 +105,3 @@ struct ADDBA_Req_Report_parm {
 #include "rtl8712_event.h"
 
 #endif /* _WLANEVENT_H_ */
-

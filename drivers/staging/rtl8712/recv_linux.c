@@ -74,7 +74,7 @@ void r8712_handle_tkip_mic_err(struct _adapter *adapter, u8 bgroup)
 {
 	union iwreq_data wrqu;
 	struct iw_michaelmicfailure ev;
-	struct mlme_priv *mlmepriv  = &adapter->mlmepriv;
+	struct mlme_priv *mlmepriv = &adapter->mlmepriv;
 
 	memset(&ev, 0x00, sizeof(ev));
 	if (bgroup)
@@ -93,7 +93,7 @@ void r8712_recv_indicatepkt(struct _adapter *adapter,
 			    union recv_frame *recvframe)
 {
 	struct recv_priv *recvpriv;
-	struct  __queue	*free_recv_queue;
+	struct __queue *free_recv_queue;
 	_pkt *skb;
 	struct rx_pkt_attrib *attrib = &recvframe->u.hdr.attrib;
 
@@ -105,7 +105,7 @@ void r8712_recv_indicatepkt(struct _adapter *adapter,
 	skb->data = recvframe->u.hdr.rx_data;
 	skb->len = recvframe->u.hdr.len;
 	skb_set_tail_pointer(skb, skb->len);
-	if ((attrib->tcpchk_valid == 1) && (attrib->tcp_chkrpt == 1))
+	if (attrib->tcpchk_valid == 1 && attrib->tcp_chkrpt == 1)
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	else
 		skb->ip_summed = CHECKSUM_NONE;
@@ -118,16 +118,16 @@ void r8712_recv_indicatepkt(struct _adapter *adapter,
 	r8712_free_recvframe(recvframe, free_recv_queue);
 	return;
 _recv_indicatepkt_drop:
-	 /*enqueue back to free_recv_queue*/
+	/*enqueue back to free_recv_queue*/
 	if (recvframe)
 		r8712_free_recvframe(recvframe, free_recv_queue);
 	recvpriv->rx_drop++;
 }
 
-static void _r8712_reordering_ctrl_timeout_handler (struct timer_list *t)
+static void _r8712_reordering_ctrl_timeout_handler(struct timer_list *t)
 {
 	struct recv_reorder_ctrl *reorder_ctrl =
-			 from_timer(reorder_ctrl, t, reordering_ctrl_timer);
+		from_timer(reorder_ctrl, t, reordering_ctrl_timer);
 
 	r8712_reordering_ctrl_timeout_handler(reorder_ctrl);
 }

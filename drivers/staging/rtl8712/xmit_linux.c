@@ -31,8 +31,8 @@
 
 static uint remainder_len(struct pkt_file *pfile)
 {
-	return (uint)(pfile->buf_len - ((addr_t)(pfile->cur_addr) -
-	       (addr_t)(pfile->buf_start)));
+	return (uint)(pfile->buf_len -
+		      ((addr_t)(pfile->cur_addr) - (addr_t)(pfile->buf_start)));
 }
 
 void _r8712_open_pktfile(_pkt *pktptr, struct pkt_file *pfile)
@@ -50,8 +50,8 @@ uint _r8712_pktfile_read(struct pkt_file *pfile, u8 *rmem, uint rlen)
 	len = remainder_len(pfile);
 	len = (rlen > len) ? len : rlen;
 	if (rmem)
-		skb_copy_bits(pfile->pkt, pfile->buf_len - pfile->pkt_len,
-			      rmem, len);
+		skb_copy_bits(pfile->pkt, pfile->buf_len - pfile->pkt_len, rmem,
+			      len);
 	pfile->cur_addr += len;
 	pfile->pkt_len -= len;
 	return len;
@@ -92,9 +92,9 @@ void r8712_set_qos(struct pkt_file *ppktfile, struct pkt_attrib *pattrib)
 
 void r8712_SetFilter(struct work_struct *work)
 {
-	struct _adapter *adapter = container_of(work, struct _adapter,
-						wk_filter_rx_ff0);
-	u8  oldvalue = 0x00, newvalue = 0x00;
+	struct _adapter *adapter =
+		container_of(work, struct _adapter, wk_filter_rx_ff0);
+	u8 oldvalue = 0x00, newvalue = 0x00;
 
 	oldvalue = r8712_read8(adapter, 0x117);
 	newvalue = oldvalue & 0xfe;
@@ -118,7 +118,8 @@ int r8712_xmit_resource_alloc(struct _adapter *padapter,
 				/* handle allocation errors part way through loop */
 				usb_free_urb(pxmitbuf->pxmit_urb[k]);
 			}
-			netdev_err(padapter->pnetdev, "pxmitbuf->pxmit_urb[i] == NULL\n");
+			netdev_err(padapter->pnetdev,
+				   "pxmitbuf->pxmit_urb[i] == NULL\n");
 			return -ENOMEM;
 		}
 		kmemleak_not_leak(pxmitbuf->pxmit_urb[i]);
@@ -146,11 +147,11 @@ void r8712_xmit_complete(struct _adapter *padapter, struct xmit_frame *pxframe)
 	pxframe->pkt = NULL;
 }
 
-netdev_tx_t r8712_xmit_entry(_pkt *pkt, struct  net_device *netdev)
+netdev_tx_t r8712_xmit_entry(_pkt *pkt, struct net_device *netdev)
 {
 	struct xmit_frame *xmitframe = NULL;
 	struct _adapter *adapter = netdev_priv(netdev);
-	struct xmit_priv *xmitpriv = &(adapter->xmitpriv);
+	struct xmit_priv *xmitpriv = &adapter->xmitpriv;
 
 	if (!r8712_if_up(adapter))
 		goto _xmit_entry_drop;

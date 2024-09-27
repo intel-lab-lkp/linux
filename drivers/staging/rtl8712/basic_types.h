@@ -25,4 +25,3 @@
 #define addr_t unsigned long
 
 #endif /*__BASIC_TYPES_H__*/
-
