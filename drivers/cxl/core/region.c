@@ -816,6 +816,17 @@ static int match_free_decoder(struct device *dev, void *data)
 	return 0;
 }
 
+static bool region_res_match_range(struct cxl_region_params *p,
+				   struct range *range)
+{
+	if (p->res &&
+	    p->res->start + p->cache_size == range->start &&
+	    p->res->end == range->end)
+		return true;
+
+	return false;
+}
+
 static int match_auto_decoder(struct device *dev, void *data)
 {
 	struct cxl_region_params *p = data;
@@ -828,7 +839,7 @@ static int match_auto_decoder(struct device *dev, void *data)
 	cxld = to_cxl_decoder(dev);
 	r = &cxld->hpa_range;
 
-	if (p->res && p->res->start == r->start && p->res->end == r->end)
+	if (region_res_match_range(p, r))
 		return 1;
 
 	return 0;
@@ -1406,8 +1417,7 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		if (cxld->interleave_ways != iw ||
 		    cxld->interleave_granularity != ig ||
-		    cxld->hpa_range.start != p->res->start ||
-		    cxld->hpa_range.end != p->res->end ||
+		    !region_res_match_range(p, &cxld->hpa_range) ||
 		    ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)) {
 			dev_err(&cxlr->dev,
 				"%s:%s %s expected iw: %d ig: %d %pr\n",
@@ -1931,7 +1941,7 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		return -ENXIO;
 	}
 
-	if (resource_size(cxled->dpa_res) * p->interleave_ways !=
+	if (resource_size(cxled->dpa_res) * p->interleave_ways + p->cache_size !=
 	    resource_size(p->res)) {
 		dev_dbg(&cxlr->dev,
 			"%s:%s: decoder-size-%#llx * ways-%d != region-size-%#llx\n",
@@ -3226,6 +3236,34 @@ static int match_region_by_range(struct device *dev, void *data)
 	return rc;
 }
 
+static int cxl_extended_linear_cache_resize(struct cxl_region_params *p,
+					    struct resource *res)
+{
+	int nid = phys_to_target_node(res->start);
+	resource_size_t size, cache_size;
+	int rc;
+
+	size = resource_size(res);
+	if (!size)
+		return -EINVAL;
+
+	rc = cxl_acpi_get_extended_linear_cache_size(res, nid, &cache_size);
+	if (rc)
+		return rc;
+
+	if (!cache_size)
+		return 0;
+
+	if (size != cache_size)
+		return -EINVAL;
+
+	res->start -= cache_size;
+	p->cache_size = cache_size;
+
+	return 0;
+}
+
+
 /* Establish an empty region covering the given HPA range */
 static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 					   struct cxl_endpoint_decoder *cxled)
@@ -3272,6 +3310,11 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	*res = DEFINE_RES_MEM_NAMED(hpa->start, range_len(hpa),
 				    dev_name(&cxlr->dev));
+
+	rc = cxl_extended_linear_cache_resize(p, res);
+	if (rc)
+		goto err;
+
 	rc = insert_resource(cxlrd->res, res);
 	if (rc) {
 		/*
