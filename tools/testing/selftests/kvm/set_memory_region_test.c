@@ -553,6 +553,51 @@ static void test_add_overlapping_private_memory_regions(void)
 	close(memfd);
 	kvm_vm_free(vm);
 }
+
+static const struct desc_ptr faulty_idt_desc = {
+	.address = MEM_REGION_GPA,
+	.size = 0xFFF,
+};
+
+static void guest_code_faulty_idt_desc(void)
+{
+	__asm__ __volatile__("lidt %0"::"m"(faulty_idt_desc));
+
+	/* Generate a #GP by dereferencing a non-canonical address */
+	*((uint8_t *)0xDEADBEEFDEADBEEFULL) = 0x1;
+
+	/* We should never reach this point */
+	GUEST_ASSERT(0);
+}
+
+/*
+ * This test tries to point the IDT descriptor base to an MMIO address. This action
+ * should cause a KVM internal error, so the VMM could handle such situations gracefully.
+ */
+static void test_faulty_idt_desc(void)
+{
+	struct kvm_vm *vm;
+	struct kvm_vcpu *vcpu;
+
+	pr_info("Testing a faulty IDT descriptor pointing to an MMIO address\n");
+
+	vm = vm_create_with_one_vcpu(&vcpu, guest_code_faulty_idt_desc);
+	virt_map(vm, MEM_REGION_GPA, MEM_REGION_GPA, 1);
+
+	vcpu_run(vcpu);
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_INTERNAL_ERROR);
+	TEST_ASSERT(vcpu->run->internal.suberror == KVM_INTERNAL_ERROR_DELIVERY_EV,
+		    "Unexpected suberror = %d", vcpu->run->internal.suberror);
+	TEST_ASSERT(vcpu->run->internal.ndata > 4, "Unexpected internal error data array size = %d",
+		    vcpu->run->internal.ndata);
+
+	/* The "faulty" GPA address should be = IDT base + offset of the GP vector */
+	TEST_ASSERT(vcpu->run->internal.data[3] == MEM_REGION_GPA +
+		    GP_VECTOR * sizeof(struct idt_entry),
+		    "Unexpected GPA = %llx", vcpu->run->internal.data[3]);
+
+	kvm_vm_free(vm);
+}
 #endif
 
 int main(int argc, char *argv[])
@@ -568,6 +613,7 @@ int main(int argc, char *argv[])
 	 * KVM_RUN fails with ENOEXEC or EFAULT.
 	 */
 	test_zero_memory_regions();
+	test_faulty_idt_desc();
 #endif
 
 	test_invalid_memory_region_flags();
