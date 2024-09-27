@@ -138,10 +138,17 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 	int ncpus = 1, ntasks = 1, ncgrps = 1;
 	struct strlist *pid_slist = NULL;
 	struct str_node *pos;
+	struct evsel *evsel;
 
 	if (off_cpu_config(evlist) < 0) {
 		pr_err("Failed to config off-cpu BPF event\n");
 		return -1;
+	}
+
+	evsel = evlist__find_evsel_by_str(evlist, OFFCPU_EVENT);
+	if (evsel == NULL) {
+		pr_err("%s evsel not found\n", OFFCPU_EVENT);
+		return -1 ;
 	}
 
 	skel = off_cpu_bpf__open();
@@ -259,7 +266,6 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 	}
 
 	if (evlist__first(evlist)->cgrp) {
-		struct evsel *evsel;
 		u8 val = 1;
 
 		fd = bpf_map__fd(skel->maps.cgroup_filter);
@@ -280,6 +286,7 @@ int off_cpu_prepare(struct evlist *evlist, struct target *target,
 		}
 	}
 
+	skel->bss->sample_type   = OFFCPU_EMBEDDED_SAMPLE_TYPES;
 	skel->bss->offcpu_thresh = opts->off_cpu_thresh * 1000;
 
 	err = off_cpu_bpf__attach(skel);
@@ -305,7 +312,8 @@ int off_cpu_write(struct perf_session *session)
 {
 	int bytes = 0, size;
 	int fd, stack;
-	u64 sample_type, val, sid = 0;
+	u32 raw_size;
+	u64 sample_type_off_cpu, sample_type_bpf_output, val, sid = 0, tstamp = OFF_CPU_TIMESTAMP;
 	struct evsel *evsel;
 	struct perf_data_file *file = &session->data->file;
 	struct off_cpu_key prev, key;
@@ -315,7 +323,6 @@ int off_cpu_write(struct perf_session *session)
 			.misc = PERF_RECORD_MISC_USER,
 		},
 	};
-	u64 tstamp = OFF_CPU_TIMESTAMP;
 
 	skel->bss->enabled = 0;
 
@@ -325,15 +332,10 @@ int off_cpu_write(struct perf_session *session)
 		return 0;
 	}
 
-	sample_type = evsel->core.attr.sample_type;
+	sample_type_off_cpu    = OFFCPU_EMBEDDED_SAMPLE_TYPES;
+	sample_type_bpf_output = evsel->core.attr.sample_type;
 
-	if (sample_type & ~OFFCPU_SAMPLE_TYPES) {
-		pr_err("not supported sample type: %llx\n",
-		       (unsigned long long)sample_type);
-		return -1;
-	}
-
-	if (sample_type & (PERF_SAMPLE_ID | PERF_SAMPLE_IDENTIFIER)) {
+	if (sample_type_bpf_output & (PERF_SAMPLE_ID | PERF_SAMPLE_IDENTIFIER)) {
 		if (evsel->core.id)
 			sid = evsel->core.id[0];
 	}
@@ -344,49 +346,75 @@ int off_cpu_write(struct perf_session *session)
 
 	while (!bpf_map_get_next_key(fd, &prev, &key)) {
 		int n = 1;  /* start from perf_event_header */
-		int ip_pos = -1;
+		int i = 0; /* raw data index */
 
 		bpf_map_lookup_elem(fd, &key, &val);
 
-		if (sample_type & PERF_SAMPLE_IDENTIFIER)
+		/*
+		 * Zero-fill some of these fields first, they will be overwritten by the dummy
+		 * embedded data (in raw_data) below, when parsing the samples. And because embedded
+		 * data is in BPF output, perf script -F without bpf-output field will not work
+		 * properly.
+		 */
+		if (sample_type_bpf_output & PERF_SAMPLE_IDENTIFIER)
 			data.array[n++] = sid;
-		if (sample_type & PERF_SAMPLE_IP) {
-			ip_pos = n;
-			data.array[n++] = 0;  /* will be updated */
-		}
-		if (sample_type & PERF_SAMPLE_TID)
-			data.array[n++] = (u64)key.pid << 32 | key.tgid;
-		if (sample_type & PERF_SAMPLE_TIME)
-			data.array[n++] = tstamp;
-		if (sample_type & PERF_SAMPLE_ID)
-			data.array[n++] = sid;
-		if (sample_type & PERF_SAMPLE_CPU)
+		if (sample_type_bpf_output & PERF_SAMPLE_IP)
 			data.array[n++] = 0;
-		if (sample_type & PERF_SAMPLE_PERIOD)
-			data.array[n++] = val;
-		if (sample_type & PERF_SAMPLE_CALLCHAIN) {
-			int len = 0;
+		if (sample_type_bpf_output & PERF_SAMPLE_TID)
+			data.array[n++] = 0;
+		if (sample_type_bpf_output & PERF_SAMPLE_TIME)
+			data.array[n++] = tstamp; /* we won't overwrite time */
+		if (sample_type_bpf_output & PERF_SAMPLE_CPU)
+			data.array[n++] = 0;
+		if (sample_type_bpf_output & PERF_SAMPLE_PERIOD)
+			data.array[n++] = 0;
+		if (sample_type_bpf_output & PERF_SAMPLE_RAW) {
+			/*
+			 * the format of raw data is as follows:
+			 *
+			 *  [ size ][ data ]
+			 *  [     data     ]
+			 *  [     data     ]
+			 *  [     data     ]
+			 *  [ data ][ empty]
+			 *
+			 */
+			if (sample_type_off_cpu & PERF_SAMPLE_TID)
+				off_cpu_raw_data[i++] = (u64)key.pid << 32 | key.tgid;
+			if (sample_type_off_cpu & PERF_SAMPLE_PERIOD)
+				off_cpu_raw_data[i++] = val;
+			if (sample_type_off_cpu & PERF_SAMPLE_CALLCHAIN) {
+				int len = 0;
 
-			/* data.array[n] is callchain->nr (updated later) */
-			data.array[n + 1] = PERF_CONTEXT_USER;
-			data.array[n + 2] = 0;
+				/* off_cpu_raw_data[n] is callchain->nr (updated later) */
+				off_cpu_raw_data[i + 1] = PERF_CONTEXT_USER;
+				off_cpu_raw_data[i + 2] = 0;
 
-			bpf_map_lookup_elem(stack, &key.stack_id, &data.array[n + 2]);
-			while (data.array[n + 2 + len])
-				len++;
+				bpf_map_lookup_elem(stack, &key.stack_id, &off_cpu_raw_data[i + 2]);
+				while (off_cpu_raw_data[i + 2 + len])
+					len++;
 
-			/* update length of callchain */
-			data.array[n] = len + 1;
+				/* update length of callchain */
+				off_cpu_raw_data[i] = len + 1;
 
-			/* update sample ip with the first callchain entry */
-			if (ip_pos >= 0)
-				data.array[ip_pos] = data.array[n + 2];
+				/* calculate sample callchain off_cpu_raw_data length */
+				i += len + 2;
+			}
+			if (sample_type_off_cpu & PERF_SAMPLE_CGROUP)
+				off_cpu_raw_data[i++] = key.cgroup_id;
 
-			/* calculate sample callchain data array length */
-			n += len + 2;
+			raw_size = i * sizeof(u64) + sizeof(u32); /* 4 empty bytes for alignment */
+
+			/* raw_size */
+			memcpy((void *)data.array + n * sizeof(u64), &raw_size, sizeof(raw_size));
+
+			/* raw_data */
+			memcpy((void *)data.array + n * sizeof(u64) + sizeof(u32), off_cpu_raw_data, i * sizeof(u64));
+
+			n += i + 1;
 		}
-		if (sample_type & PERF_SAMPLE_CGROUP)
-			data.array[n++] = key.cgroup_id;
+		if (sample_type_bpf_output & PERF_SAMPLE_CGROUP)
+			data.array[n++] = 0;
 
 		size = n * sizeof(u64);
 		data.hdr.size = size;
