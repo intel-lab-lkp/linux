@@ -124,8 +124,12 @@ void ext4_xattr_inode_set_class(struct inode *ea_inode)
 	struct ext4_inode_info *ei = EXT4_I(ea_inode);
 
 	lockdep_set_subclass(&ea_inode->i_rwsem, 1);
-	(void) ei;	/* shut up clang warning if !CONFIG_LOCKDEP */
-	lockdep_set_subclass(&ei->i_data_sem, I_DATA_SEM_EA);
+
+	if (ei->i_flags & EXT4_EA_INODE_FL) {
+		lockdep_set_subclass(&ei->i_data_sem, I_DATA_SEM_EA);
+	} else {
+		lockdep_set_subclass(&ei->i_data_sem, I_DATA_SEM_NORMAL);
+	}
 }
 #endif
 
