@@ -10,6 +10,8 @@ struct record_opts;
 
 #define OFFCPU_EVENT  "offcpu-time"
 
+#define OFF_CPU_THRESH_DEFAULT 500000ull
+
 #define OFFCPU_SAMPLE_TYPES  (PERF_SAMPLE_IDENTIFIER | PERF_SAMPLE_IP | \
 			      PERF_SAMPLE_TID | PERF_SAMPLE_TIME | \
 			      PERF_SAMPLE_ID | PERF_SAMPLE_CPU | \
