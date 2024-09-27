@@ -513,7 +513,7 @@ static int fspi_readl_poll_tout(struct nxp_fspi *f, void __iomem *base,
 	u32 reg;
 
 	if (!f->devtype_data->little_endian)
-		mask = (u32)cpu_to_be32(mask);
+		mask = (__force u32)cpu_to_be32(mask);
 
 	if (c)
 		return readl_poll_timeout(base, reg, (reg & mask),
