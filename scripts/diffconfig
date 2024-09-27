@@ -24,6 +24,10 @@ Changed items show the old and new values on a single line.
 If -m is specified, then output will be in "merge" style, which has the
 changed and new values in kernel config option format.
 
+If -v is specified, then diffconfig will validate that config2 is a superset of
+of config1. Only items from config1 not in config2 are printed.
+If items are missing from config2 diffconfig will exit with code 2.
+
 If no config files are specified, .config and .config.old are used.
 
 Example usage:
@@ -77,6 +81,11 @@ def show_diff():
         merge_style = 1
         sys.argv.remove("-m")
 
+    validate = 0
+    if "-v" in sys.argv:
+        validate = 1
+        sys.argv.remove("-v")
+
     argc = len(sys.argv)
     if not (argc==1 or argc == 3):
         print("Error: incorrect number of arguments or unrecognized option")
@@ -123,11 +132,16 @@ def show_diff():
         print_config("->", config, a[config], b[config])
         del b[config]
 
-    # now print items in b but not in a
-    # (items from b that were in a were removed above)
-    new = sorted(b.keys())
-    for config in new:
-        print_config("+", config, None, b[config])
+    if not validate:
+        # now print items in b but not in a
+        # (items from b that were in a were removed above)
+        new = sorted(b.keys())
+        for config in new:
+            print_config("+", config, None, b[config])
+
+    if validate and (old or changed):
+        print('Items from %s missing in %s' % (configa_filename, configb_filename), file=sys.stderr)
+        sys.exit(2)
 
 def main():
     try:
