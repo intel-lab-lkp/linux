@@ -32,6 +32,7 @@
 #include <linux/pagemap.h>
 #include "nilfs.h"
 #include "page.h"
+#include <linux/ratelimit.h>
 
 static inline unsigned int nilfs_rec_len_from_disk(__le16 dlen)
 {
@@ -115,6 +116,7 @@ static bool nilfs_check_folio(struct folio *folio, char *kaddr)
 	size_t limit = folio_size(folio);
 	struct nilfs_dir_entry *p;
 	char *error;
+	static DEFINE_RATELIMIT_STATE(rs, DEFAULT_RATELIMIT_INTERVAL * 5, 1);
 
 	if (dir->i_size < folio_pos(folio) + limit) {
 		limit = dir->i_size - folio_pos(folio);
@@ -148,9 +150,11 @@ out:
 	/* Too bad, we had an error */
 
 Ebadsize:
-	nilfs_error(sb,
-		    "size of directory #%lu is not a multiple of chunk size",
-		    dir->i_ino);
+	if (__ratelimit(&rs)) {
+		nilfs_error(sb,
+			    "size of directory #%lu is not a multiple of chunk size",
+			    dir->i_ino);
+	}
 	goto fail;
 Eshort:
 	error = "rec_len is smaller than minimal";
@@ -167,18 +171,22 @@ Espan:
 Einumber:
 	error = "disallowed inode number";
 bad_entry:
-	nilfs_error(sb,
+	if (__ratelimit(&rs)) {
+		nilfs_error(sb,
 		    "bad entry in directory #%lu: %s - offset=%lu, inode=%lu, rec_len=%zd, name_len=%d",
 		    dir->i_ino, error, (folio->index << PAGE_SHIFT) + offs,
 		    (unsigned long)le64_to_cpu(p->inode),
 		    rec_len, p->name_len);
+	}
 	goto fail;
 Eend:
 	p = (struct nilfs_dir_entry *)(kaddr + offs);
-	nilfs_error(sb,
-		    "entry in directory #%lu spans the page boundary offset=%lu, inode=%lu",
-		    dir->i_ino, (folio->index << PAGE_SHIFT) + offs,
-		    (unsigned long)le64_to_cpu(p->inode));
+	if (__ratelimit(&rs)) {
+		nilfs_error(sb,
+			    "entry in directory #%lu spans the page boundary offset=%lu, inode=%lu",
+			    dir->i_ino, (folio->index << PAGE_SHIFT) + offs,
+			    (unsigned long)le64_to_cpu(p->inode));
+	}
 fail:
 	return false;
 }
