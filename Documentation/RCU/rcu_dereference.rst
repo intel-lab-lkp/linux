@@ -104,11 +104,13 @@ readers working properly:
 	after such branches, but can speculate loads, which can again
 	result in misordering bugs.
 
--	Be very careful about comparing pointers obtained from
-	rcu_dereference() against non-NULL values.  As Linus Torvalds
-	explained, if the two pointers are equal, the compiler could
-	substitute the pointer you are comparing against for the pointer
-	obtained from rcu_dereference().  For example::
+-	Use relational operators which preserve address dependencies
+	(such as "ptr_eq()") to compare pointers obtained from
+	rcu_dereference() against non-NULL values or against pointers
+	obtained from prior loads. As Linus Torvalds explained, if the
+	two pointers are equal, the compiler could substitute the
+	pointer you are comparing against for the pointer obtained from
+	rcu_dereference().  For example::
 
 		p = rcu_dereference(gp);
 		if (p == &default_struct)
@@ -125,6 +127,23 @@ readers working properly:
 	On ARM and Power hardware, the load from "default_struct.a"
 	can now be speculated, such that it might happen before the
 	rcu_dereference().  This could result in bugs due to misordering.
+	Performing the comparison with "ptr_eq()" ensures the compiler
+	does not perform such transformation.
+
+	If the comparison is against a pointer obtained from prior
+	loads, the compiler is allowed to use either register for the
+	following accesses, which loses the address dependency and
+	allows weakly-ordered architectures such as ARM and PowerPC
+	to speculate the address-dependent load before rcu_dereference().
+	For example::
+
+		p1 = READ_ONCE(gp);
+		p2 = rcu_dereference(gp);
+		if (p1 == p2)
+			do_default(p2->a);
+
+	Performing the comparison with "ptr_eq()" ensures the compiler
+	preserves the address dependencies.
 
 	However, comparisons are OK in the following cases:
 
@@ -203,6 +222,11 @@ readers working properly:
 		pointer takes on only one of two values, a not-equal
 		comparison will provide exactly the information that the
 		compiler needs to deduce the value of the pointer.
+
+	When in doubt, use relational operators that preserve address
+	dependencies (such as "ptr_eq()") to compare pointers obtained
+	from rcu_dereference() against non-NULL values or against
+	pointers obtained from prior loads.
 
 -	Disable any value-speculation optimizations that your compiler
 	might provide, especially if you are making use of feedback-based
