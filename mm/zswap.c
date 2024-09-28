@@ -411,6 +411,16 @@ static int __must_check zswap_pool_tryget(struct zswap_pool *pool)
 	return percpu_ref_tryget(&pool->ref);
 }
 
+/*
+ * Note: zswap_pool_get() should only be called after zswap_pool_tryget()
+ * returns success. zswap_pool_tryget() returns success only if the "pool" is
+ * non-NULL and the "&pool->ref" is non-0.
+ */
+static void zswap_pool_get(struct zswap_pool *pool)
+{
+	percpu_ref_get(&pool->ref);
+}
+
 static void zswap_pool_put(struct zswap_pool *pool)
 {
 	percpu_ref_put(&pool->ref);
@@ -1402,38 +1412,35 @@ resched:
 /*********************************
 * main API
 **********************************/
-bool zswap_store(struct folio *folio)
+
+/*
+ * Stores the page at specified "index" in a folio.
+ *
+ * @folio: The folio to store in zswap.
+ * @index: Index into the page in the folio that this function will store.
+ * @objcg: The folio's objcg.
+ * @pool:  The zswap_pool to store the compressed data for the page.
+ *         The caller should have obtained a reference to a valid
+ *         zswap_pool by calling zswap_pool_tryget(), to pass as this
+ *         argument.
+ * @compressed_bytes: The compressed entry->length value is added
+ *                    to this, so that the caller can get the total
+ *                    compressed lengths of all sub-pages in a folio.
+ */
+static bool zswap_store_page(struct folio *folio, long index,
+			     struct obj_cgroup *objcg,
+			     struct zswap_pool *pool,
+			     size_t *compressed_bytes)
 {
+	struct page *page = folio_page(folio, index);
 	swp_entry_t swp = folio->swap;
-	pgoff_t offset = swp_offset(swp);
 	struct xarray *tree = swap_zswap_tree(swp);
+	pgoff_t offset = swp_offset(swp) + index;
 	struct zswap_entry *entry, *old;
-	struct obj_cgroup *objcg = NULL;
-	struct mem_cgroup *memcg = NULL;
+	int type = swp_type(swp);
 
-	VM_WARN_ON_ONCE(!folio_test_locked(folio));
-	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
-
-	/* Large folios aren't supported */
-	if (folio_test_large(folio))
-		return false;
-
-	if (!zswap_enabled)
-		goto check_old;
-
-	/* Check cgroup limits */
-	objcg = get_obj_cgroup_from_folio(folio);
-	if (objcg && !obj_cgroup_may_zswap(objcg)) {
-		memcg = get_mem_cgroup_from_objcg(objcg);
-		if (shrink_memcg(memcg)) {
-			mem_cgroup_put(memcg);
-			goto reject;
-		}
-		mem_cgroup_put(memcg);
-	}
-
-	if (zswap_check_limits())
-		goto reject;
+	if (objcg)
+		obj_cgroup_get(objcg);
 
 	/* allocate entry */
 	entry = zswap_entry_cache_alloc(GFP_KERNEL, folio_nid(folio));
@@ -1442,24 +1449,21 @@ bool zswap_store(struct folio *folio)
 		goto reject;
 	}
 
-	/* if entry is successfully added, it keeps the reference */
-	entry->pool = zswap_pool_current_get();
-	if (!entry->pool)
-		goto freepage;
+	/*
+	 * We get here only after the call to zswap_pool_tryget() in the
+	 * caller, zswap_store(), has returned success. Hence it is safe
+	 * to call zswap_pool_get().
+	 *
+	 * if entry is successfully added, it keeps the reference
+	 */
+	zswap_pool_get(pool);
 
-	if (objcg) {
-		memcg = get_mem_cgroup_from_objcg(objcg);
-		if (memcg_list_lru_alloc(memcg, &zswap_list_lru, GFP_KERNEL)) {
-			mem_cgroup_put(memcg);
-			goto put_pool;
-		}
-		mem_cgroup_put(memcg);
-	}
+	entry->pool = pool;
 
-	if (!zswap_compress(&folio->page, entry))
+	if (!zswap_compress(page, entry))
 		goto put_pool;
 
-	entry->swpentry = swp;
+	entry->swpentry = swp_entry(type, offset);
 	entry->objcg = objcg;
 	entry->referenced = true;
 
@@ -1480,11 +1484,6 @@ bool zswap_store(struct folio *folio)
 	if (old)
 		zswap_entry_free(old);
 
-	if (objcg) {
-		obj_cgroup_charge_zswap(objcg, entry->length);
-		count_objcg_event(objcg, ZSWPOUT);
-	}
-
 	/*
 	 * We finish initializing the entry while it's already in xarray.
 	 * This is safe because:
@@ -1496,36 +1495,140 @@ bool zswap_store(struct folio *folio)
 	 *    an incoherent entry.
 	 */
 	if (entry->length) {
+		*compressed_bytes += entry->length;
 		INIT_LIST_HEAD(&entry->lru);
 		zswap_lru_add(&zswap_list_lru, entry);
 	}
-
-	/* update stats */
-	atomic_long_inc(&zswap_stored_pages);
-	count_vm_event(ZSWPOUT);
 
 	return true;
 
 store_failed:
 	zpool_free(entry->pool->zpool, entry->handle);
 put_pool:
-	zswap_pool_put(entry->pool);
-freepage:
+	zswap_pool_put(pool);
 	zswap_entry_cache_free(entry);
 reject:
 	obj_cgroup_put(objcg);
-	if (zswap_pool_reached_full)
-		queue_work(shrink_wq, &zswap_shrink_work);
-check_old:
-	/*
-	 * If the zswap store fails or zswap is disabled, we must invalidate the
-	 * possibly stale entry which was previously stored at this offset.
-	 * Otherwise, writeback could overwrite the new data in the swapfile.
-	 */
-	entry = xa_erase(tree, offset);
-	if (entry)
-		zswap_entry_free(entry);
 	return false;
+}
+
+bool zswap_store(struct folio *folio)
+{
+	long nr_pages = folio_nr_pages(folio);
+	swp_entry_t swp = folio->swap;
+	struct xarray *tree = swap_zswap_tree(swp);
+	pgoff_t offset = swp_offset(swp);
+	struct obj_cgroup *objcg = NULL;
+	struct mem_cgroup *memcg = NULL;
+	struct zswap_pool *pool;
+	size_t compressed_bytes = 0;
+	bool ret = false;
+	long index;
+
+	VM_WARN_ON_ONCE(!folio_test_locked(folio));
+	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
+
+	if (!zswap_enabled)
+		goto reject;
+
+	/*
+	 * Check cgroup zswap limits:
+	 *
+	 * The cgroup zswap limit check is done once at the beginning of
+	 * zswap_store(). The cgroup charging is done once, at the end
+	 * of a successful folio store. What this means is, if the cgroup
+	 * was within the zswap_max limit at the beginning of a large folio
+	 * store, it could go over the limit by at most (HPAGE_PMD_NR - 1)
+	 * pages.
+	 */
+	objcg = get_obj_cgroup_from_folio(folio);
+	if (objcg && !obj_cgroup_may_zswap(objcg)) {
+		memcg = get_mem_cgroup_from_objcg(objcg);
+		if (shrink_memcg(memcg)) {
+			mem_cgroup_put(memcg);
+			goto put_objcg;
+		}
+		mem_cgroup_put(memcg);
+	}
+
+	/*
+	 * Check zpool utilization against zswap limits:
+	 *
+	 * The zswap zpool utilization is also checked against the limits
+	 * just once, at the start of zswap_store(). If the check passes,
+	 * any breaches of the limits set by zswap_max_pages() or
+	 * zswap_accept_thr_pages() that may happen while storing this
+	 * folio, will only be detected during the next call to
+	 * zswap_store() by any process.
+	 */
+	if (zswap_check_limits())
+		goto put_objcg;
+
+	pool = zswap_pool_current_get();
+	if (!pool)
+		goto put_objcg;
+
+	if (objcg) {
+		memcg = get_mem_cgroup_from_objcg(objcg);
+		if (memcg_list_lru_alloc(memcg, &zswap_list_lru, GFP_KERNEL)) {
+			mem_cgroup_put(memcg);
+			goto put_pool;
+		}
+		mem_cgroup_put(memcg);
+	}
+
+	/*
+	 * Store each page of the folio as a separate entry. If we fail to
+	 * store a page, unwind by deleting all the pages for this folio
+	 * currently in zswap.
+	 */
+	for (index = 0; index < nr_pages; ++index) {
+		if (!zswap_store_page(folio, index, objcg, pool, &compressed_bytes))
+			goto put_pool;
+	}
+
+	/*
+	 * All pages in the folio have been successfully stored.
+	 * Batch update the cgroup zswap charging, zswap_stored_page atomic,
+	 * and ZSWPOUT event stats.
+	 */
+	if (objcg) {
+		obj_cgroup_charge_zswap(objcg, compressed_bytes);
+		count_objcg_events(objcg, ZSWPOUT, nr_pages);
+	}
+
+	/* update stats */
+	atomic_long_add(nr_pages, &zswap_stored_pages);
+	count_vm_events(ZSWPOUT, nr_pages);
+
+	ret = true;
+
+put_pool:
+	zswap_pool_put(pool);
+put_objcg:
+	obj_cgroup_put(objcg);
+reject:
+	/*
+	 * If the zswap store fails or zswap is disabled, we must invalidate
+	 * the possibly stale entries which were previously stored at the
+	 * offsets corresponding to each page of the folio. Otherwise,
+	 * writeback could overwrite the new data in the swapfile.
+	 */
+	if (!ret) {
+		struct zswap_entry *entry;
+		long i;
+
+		for (i = 0; i < nr_pages; ++i) {
+			entry = xa_erase(tree, offset + i);
+			if (entry)
+				zswap_entry_free(entry);
+		}
+
+		if (zswap_pool_reached_full)
+			queue_work(shrink_wq, &zswap_shrink_work);
+	}
+
+	return ret;
 }
 
 bool zswap_load(struct folio *folio)
