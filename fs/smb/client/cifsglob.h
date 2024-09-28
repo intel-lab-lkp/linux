@@ -223,7 +223,7 @@ struct cifs_open_info_data {
 		__u32 tag;
 		union {
 			struct reparse_data_buffer *buf;
-			struct reparse_posix_data *posix;
+			struct reparse_nfs_data *nfs;
 		};
 	} reparse;
 	struct {

@@ -18,7 +18,7 @@
  */
 #define IO_REPARSE_TAG_INTERNAL ((__u32)~0U)
 
-static inline dev_t reparse_nfs_mkdev(struct reparse_posix_data *buf)
+static inline dev_t reparse_nfs_mkdev(struct reparse_nfs_data *buf)
 {
 	u32 major, minor;
 

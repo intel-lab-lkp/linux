@@ -1506,7 +1506,7 @@ struct reparse_symlink_data {
 #define NFS_SPECFILE_BLK	0x00000000004B4C42
 #define NFS_SPECFILE_FIFO	0x000000004F464946
 #define NFS_SPECFILE_SOCK	0x000000004B434F53
-struct reparse_posix_data {
+struct reparse_nfs_data {
 	__le32	ReparseTag;
 	__le16	ReparseDataLength;
 	__u16	Reserved;

@@ -1550,7 +1550,7 @@ struct reparse_symlink_data_buffer {
 	__u8	PathBuffer[]; /* Variable Length */
 } __packed;
 
-/* See MS-FSCC 2.1.2.6 and cifspdu.h for struct reparse_posix_data */
+/* See MS-FSCC 2.1.2.6 and cifspdu.h for struct reparse_nfs_data */
 
 struct validate_negotiate_info_req {
 	__le32 Capabilities;
