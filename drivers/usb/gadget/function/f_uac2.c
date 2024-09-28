@@ -35,8 +35,8 @@
  */
 #define USB_OUT_CLK_ID	(out_clk_src_desc.bClockID)
 #define USB_IN_CLK_ID	(in_clk_src_desc.bClockID)
-#define USB_OUT_FU_ID(_opts)	(_opts->c_alt_1_opts.fu_id)
-#define USB_IN_FU_ID(_opts)	(_opts->p_alt_1_opts.fu_id)
+#define USB_FU_ID(_alt_opts) ((_alt_opts) ? (_alt_opts)->fu_id : 0)
+
 
 #define CONTROL_ABSENT	0
 #define CONTROL_RDONLY	1
@@ -53,7 +53,6 @@
 #define CLSTR_CTRL	6
 #define UNFLW_CTRL	8
 #define OVFLW_CTRL	10
-
 
 #define EP_EN(_alt_opts) ((_alt_opts) && ((_alt_opts)->chmask != 0))
 #define FUIN_EN(_opts) (EP_EN(&_opts->p_alt_1_opts) \
@@ -111,6 +110,59 @@ struct f_uac2_opts *g_audio_to_uac2_opts(struct g_audio *agdev)
 }
 
 static int afunc_notify(struct g_audio *agdev, int unit_id, int cs);
+
+static inline struct f_uac2_alt_opts *get_alt_opts(struct f_uac2_opts *opts, int alt, int dir)
+{
+	struct f_uac2_alt_opts *alt_opts;
+
+	if (alt == 0)
+		return NULL;
+
+	if (alt == 1)
+		return (dir == HOST_TO_DEVICE) ? &opts->c_alt_1_opts : &opts->p_alt_1_opts;
+
+	list_for_each_entry(alt_opts, (dir == HOST_TO_DEVICE) ? &opts->c_alt_opts
+							      : &opts->p_alt_opts, list) {
+		if (alt_opts->c.alt_num == alt)
+			return alt_opts;
+	}
+
+	return NULL;
+}
+
+static struct f_uac2_alt_opts *
+find_feature_unit(struct f_uac2_opts *opts, u8 entity_id, int *is_playback)
+{
+	struct f_uac2_alt_opts *alt_opts;
+
+	if (FUOUT_EN(opts)) {
+		if (is_playback)
+			*is_playback = 0;
+
+		if (entity_id == USB_FU_ID(&opts->c_alt_1_opts))
+			return &opts->c_alt_1_opts;
+
+		list_for_each_entry(alt_opts, &opts->c_alt_opts, list) {
+			if (entity_id == USB_FU_ID(alt_opts))
+				return alt_opts;
+		}
+	}
+
+	if (FUIN_EN(opts)) {
+		if (is_playback)
+			*is_playback = 1;
+
+		if (entity_id == USB_FU_ID(&opts->p_alt_1_opts))
+			return &opts->p_alt_1_opts;
+
+		list_for_each_entry(alt_opts, &opts->p_alt_opts, list) {
+			if (entity_id == USB_FU_ID(alt_opts))
+				return alt_opts;
+		}
+	}
+
+	return NULL;
+}
 
 /* --------- USB Function Interface ------------- */
 
@@ -1243,7 +1295,7 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	agdev->params.p_ssize = uac2_opts->p_ssize;
 
 	if (FUIN_EN(uac2_opts)) {
-		agdev->params.p_fu.id = USB_IN_FU_ID(uac2_opts);
+		agdev->params.p_fu.id = USB_FU_ID(&uac2_opts->p_alt_1_opts);
 		agdev->params.p_fu.mute_present = uac2_opts->p_mute_present;
 		agdev->params.p_fu.volume_present = uac2_opts->p_volume_present;
 		agdev->params.p_fu.volume_min = uac2_opts->p_volume_min;
@@ -1258,7 +1310,7 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	agdev->params.c_ssize = uac2_opts->c_ssize;
 
 	if (FUOUT_EN(uac2_opts)) {
-		agdev->params.c_fu.id = USB_OUT_FU_ID(uac2_opts);
+		agdev->params.c_fu.id = USB_FU_ID(&uac2_opts->c_alt_1_opts);
 		agdev->params.c_fu.mute_present = uac2_opts->c_mute_present;
 		agdev->params.c_fu.volume_present = uac2_opts->c_volume_present;
 		agdev->params.c_fu.volume_min = uac2_opts->c_volume_min;
@@ -1295,17 +1347,55 @@ afunc_notify_complete(struct usb_ep *_ep, struct usb_request *req)
 	usb_ep_free_request(_ep, req);
 }
 
+static int afunc_notify_one(struct g_audio *agdev, int unit_id, int cs);
+
+static int afunc_notify_multiple(struct g_audio *agdev, int unit_id, int cs, int source_id)
+{
+	struct f_uac2 *uac2 = func_to_uac2(&agdev->func);
+	struct f_uac2_opts *opts = g_audio_to_uac2_opts(agdev);
+	int ret;
+	struct f_uac2_alt_opts *alt_opts;
+	struct list_head *alt_opts_list;
+
+	if (!uac2->int_ep->enabled)
+		return 0;
+
+	if (unit_id != source_id) {
+		ret = afunc_notify_one(agdev, unit_id, cs);
+		if (ret)
+			return ret;
+	}
+
+	alt_opts_list = (unit_id == USB_FU_ID(&opts->c_alt_1_opts)) ? &opts->c_alt_opts
+								    : &opts->p_alt_opts;
+
+	/* Notify all other ganged controls */
+	list_for_each_entry(alt_opts, alt_opts_list, list) {
+		if ((USB_FU_ID(alt_opts) > unit_id) && (USB_FU_ID(alt_opts) != source_id)) {
+			unit_id = USB_FU_ID(alt_opts);
+			ret = afunc_notify_one(agdev, unit_id, cs);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int
 afunc_notify(struct g_audio *agdev, int unit_id, int cs)
+{
+	return afunc_notify_multiple(agdev, unit_id, cs, 0);
+}
+
+static int
+afunc_notify_one(struct g_audio *agdev, int unit_id, int cs)
 {
 	struct f_uac2 *uac2 = func_to_uac2(&agdev->func);
 	struct usb_request *req;
 	struct uac2_interrupt_data_msg *msg;
 	u16 w_index, w_value;
 	int ret;
-
-	if (!uac2->int_ep->enabled)
-		return 0;
 
 	if (atomic_inc_return(&uac2->int_count) > UAC2_DEF_INT_REQ_NUM) {
 		atomic_dec(&uac2->int_count);
@@ -1360,15 +1450,11 @@ afunc_set_alt(struct usb_function *fn, unsigned int intf, unsigned int alt)
 	struct usb_composite_dev *cdev = fn->config->cdev;
 	struct f_uac2 *uac2 = func_to_uac2(fn);
 	struct g_audio *agdev = func_to_g_audio(fn);
+	struct f_uac2_opts *opts = g_audio_to_uac2_opts(agdev);
+	struct f_uac2_alt_opts *alt_opts = NULL;
 	struct usb_gadget *gadget = cdev->gadget;
 	struct device *dev = &gadget->dev;
 	int ret = 0;
-
-	/* No i/f has more than 2 alt settings */
-	if (alt > 1) {
-		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
-		return -EINVAL;
-	}
 
 	if (intf == uac2->ac_intf) {
 		/* Control I/f has only 1 AltSetting - 0 */
@@ -1388,6 +1474,12 @@ afunc_set_alt(struct usb_function *fn, unsigned int intf, unsigned int alt)
 	}
 
 	if (intf == uac2->as_out_intf) {
+		alt_opts = get_alt_opts(opts, alt, HOST_TO_DEVICE);
+		if (alt && !alt_opts) {
+			dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+			return -EINVAL;
+		}
+
 		uac2->as_out_alt = alt;
 
 		if (alt)
@@ -1395,6 +1487,12 @@ afunc_set_alt(struct usb_function *fn, unsigned int intf, unsigned int alt)
 		else
 			u_audio_stop_capture(&uac2->g_audio);
 	} else if (intf == uac2->as_in_intf) {
+		alt_opts = get_alt_opts(opts, alt, DEVICE_TO_HOST);
+		if (alt && !alt_opts) {
+			dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+			return -EINVAL;
+		}
+
 		uac2->as_in_alt = alt;
 
 		if (alt)
@@ -1463,6 +1561,8 @@ in_rq_cur(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 	u8 control_selector = w_value >> 8;
 	int value = -EOPNOTSUPP;
 	u32 p_srate, c_srate;
+	unsigned int is_playback = 0;
+	struct f_uac2_alt_opts *alt_opts = find_feature_unit(opts, entity_id, &is_playback);
 
 	u_audio_get_playback_srate(agdev, &p_srate);
 	u_audio_get_capture_srate(agdev, &c_srate);
@@ -1488,13 +1588,7 @@ in_rq_cur(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 				"%s:%d control_selector=%d TODO!\n",
 				__func__, __LINE__, control_selector);
 		}
-	} else if ((FUIN_EN(opts) && (entity_id == USB_IN_FU_ID(opts))) ||
-			(FUOUT_EN(opts) && (entity_id == USB_OUT_FU_ID(opts)))) {
-		unsigned int is_playback = 0;
-
-		if (FUIN_EN(opts) && (entity_id == USB_IN_FU_ID(opts)))
-			is_playback = 1;
-
+	} else if (alt_opts) {
 		if (control_selector == UAC_FU_MUTE) {
 			unsigned int mute;
 
@@ -1539,6 +1633,8 @@ in_rq_range(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 	u8 entity_id = (w_index >> 8) & 0xff;
 	u8 control_selector = w_value >> 8;
 	int value = -EOPNOTSUPP;
+	unsigned int is_playback = 0;
+	struct f_uac2_alt_opts *alt_opts = find_feature_unit(opts, entity_id, &is_playback);
 
 	if ((entity_id == USB_IN_CLK_ID) || (entity_id == USB_OUT_CLK_ID)) {
 		if (control_selector == UAC2_CS_CONTROL_SAM_FREQ) {
@@ -1577,13 +1673,7 @@ in_rq_range(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 				"%s:%d control_selector=%d TODO!\n",
 				__func__, __LINE__, control_selector);
 		}
-	} else if ((FUIN_EN(opts) && (entity_id == USB_IN_FU_ID(opts))) ||
-			(FUOUT_EN(opts) && (entity_id == USB_OUT_FU_ID(opts)))) {
-		unsigned int is_playback = 0;
-
-		if (FUIN_EN(opts) && (entity_id == USB_IN_FU_ID(opts)))
-			is_playback = 1;
-
+	} else if (alt_opts) {
 		if (control_selector == UAC_FU_VOLUME) {
 			struct cntrl_range_lay2 r;
 			s16 max_db, min_db, res_db;
@@ -1654,30 +1744,31 @@ out_rq_cur_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct g_audio *agdev = req->context;
 	struct usb_composite_dev *cdev = agdev->func.config->cdev;
-	struct f_uac2_opts *opts = g_audio_to_uac2_opts(agdev);
 	struct f_uac2 *uac2 = func_to_uac2(&agdev->func);
+	struct f_uac2_opts *opts = g_audio_to_uac2_opts(agdev);
 	struct usb_ctrlrequest *cr = &uac2->setup_cr;
 	u16 w_index = le16_to_cpu(cr->wIndex);
 	u16 w_value = le16_to_cpu(cr->wValue);
 	u8 entity_id = (w_index >> 8) & 0xff;
 	u8 control_selector = w_value >> 8;
+	unsigned int is_playback;
+	struct f_uac2_alt_opts *alt_opts = find_feature_unit(opts, entity_id, &is_playback);
 
 	if (req->status != 0) {
 		dev_dbg(&cdev->gadget->dev, "completion err %d\n", req->status);
 		return;
 	}
 
-	if ((FUIN_EN(opts) && (entity_id == USB_IN_FU_ID(opts))) ||
-		(FUOUT_EN(opts) && (entity_id == USB_OUT_FU_ID(opts)))) {
-		unsigned int is_playback = 0;
-
-		if (FUIN_EN(opts) && (entity_id == USB_IN_FU_ID(opts)))
-			is_playback = 1;
-
+	if (alt_opts) {
 		if (control_selector == UAC_FU_MUTE) {
 			u8 mute = *(u8 *)req->buf;
 
 			u_audio_set_mute(agdev, is_playback, mute);
+
+			/* We also need to send notify for ganged controls */
+			afunc_notify_multiple(agdev, USB_FU_ID(is_playback ? &opts->p_alt_1_opts
+									   : &opts->c_alt_1_opts),
+					      control_selector, entity_id);
 
 			return;
 		} else if (control_selector == UAC_FU_VOLUME) {
@@ -1686,6 +1777,11 @@ out_rq_cur_complete(struct usb_ep *ep, struct usb_request *req)
 
 			volume = le16_to_cpu(c->wCUR);
 			u_audio_set_volume(agdev, is_playback, volume);
+
+			/* We also need to send notify for ganged controls */
+			afunc_notify_multiple(agdev, USB_FU_ID(is_playback ? &opts->p_alt_1_opts
+									   : &opts->c_alt_1_opts),
+					      control_selector, entity_id);
 
 			return;
 		} else {
@@ -1721,8 +1817,7 @@ out_rq_cur(struct usb_function *fn, const struct usb_ctrlrequest *cr)
 			req->complete = uac2_cs_control_sam_freq;
 			return w_length;
 		}
-	} else if ((FUIN_EN(opts) && (entity_id == USB_IN_FU_ID(opts))) ||
-			(FUOUT_EN(opts) && (entity_id == USB_OUT_FU_ID(opts)))) {
+	} else if (find_feature_unit(opts, entity_id, NULL)) {
 		memcpy(&uac2->setup_cr, cr, sizeof(*cr));
 		req->context = agdev;
 		req->complete = out_rq_cur_complete;
