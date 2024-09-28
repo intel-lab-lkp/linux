@@ -32,6 +32,47 @@ properties:
 
   '#clock-cells':
     const: 1
+if:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - fsl,imx8mm-anatop
+
+then:
+  properties:
+    fsl,ssc-clocks:
+      $ref: /schemas/types.yaml#/definitions/phandle-array
+      description:
+        The phandles to the PLLs with spread spectrum clock generation
+        hardware capability.
+      maxItems: 4
+
+    fsl,ssc-modfreq-hz:
+      $ref: /schemas/types.yaml#/definitions/uint32-array
+      description:
+        The values of modulation frequency (Hz unit) of spread spectrum
+        clocking for each PLL.
+      maxItems: 4
+
+    fsl,ssc-modrate-percent:
+      $ref: /schemas/types.yaml#/definitions/uint32-array
+      description:
+        The percentage values of modulation rate of spread spectrum
+        clocking for each PLL.
+      maxItems: 4
+
+    fsl,ssc-modmethod:
+      $ref: /schemas/types.yaml#/definitions/string-array
+      description:
+        The modulation techniques of spread spectrum clocking for
+        each PLL.
+      oneOf:
+        - enum:
+            - down-spread
+            - up-spread
+            - center-spread
+      maxItems: 4
 
 required:
   - compatible
