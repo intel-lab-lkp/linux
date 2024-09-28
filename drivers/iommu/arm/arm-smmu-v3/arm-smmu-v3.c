@@ -83,6 +83,34 @@ static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ 0, NULL},
 };
 
+static const char * const event_str[] = {
+	/* Bad config events */
+	[EVT_ID_BAD_SID_CONFIG] = "C_BAD_STREAMID",
+	[EVT_ID_BAD_STE_CONFIG] = "C_BAD_STE",
+	[EVT_ID_BAD_CD_CONFIG] = "C_BAD_CD",
+	[EVT_ID_BAD_SSID_CONFIG] = "C_BAD_SUBSTREAMID",
+	[EVT_ID_STREAM_DISABLED] = "F_STREAM_DISABLED",
+
+	/* Bad translation events */
+	[EVT_ID_TRANSLATION_FAULT] = "F_TRANSLATION",
+	[EVT_ID_ADDR_SIZE_FAULT] = "F_ADDR_SIZE",
+	[EVT_ID_ACCESS_FAULT] = "F_ACCESS",
+	[EVT_ID_PERMISSION_FAULT] = "F_PERMISSION",
+
+	/* Bad fetch events */
+	[EVT_ID_STE_FETCH_FAULT] = "F_STE_FETCH",
+	[EVT_ID_CD_FETCH_FAULT] = "F_CD_FETCH",
+	[EVT_ID_VMS_FETCH_FAULT] = "F_VMS_FAULT",
+	[EVT_ID_MAX] = NULL,
+};
+
+static const char * const class_str[] = {
+	[0] = "CD fetch",
+	[1] = "Stage 1 translation table fetch",
+	[2] = "Input address caused fault ",
+	[3] = "Reserved",
+};
+
 static int arm_smmu_domain_finalise(struct arm_smmu_domain *smmu_domain,
 				    struct arm_smmu_device *smmu, u32 flags);
 static int arm_smmu_alloc_cd_tables(struct arm_smmu_master *master);
@@ -1756,6 +1784,66 @@ arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 	return rb_entry(node, struct arm_smmu_stream, node)->master;
 }
 
+static void arm_smmu_dump_raw_event(struct arm_smmu_device *smmu,
+				    struct arm_smmu_event *event)
+{
+	int i;
+
+	dev_err(smmu->dev, "event 0x%02x received: master %s:\n",
+		event->id, event->master_name);
+
+	for (i = 0; i < EVTQ_ENT_DWORDS; ++i)
+		dev_err(smmu->dev, "\t0x%016llx\n",
+			 (unsigned long long)event->raw[i]);
+}
+
+static void arm_smmu_dump_event(struct arm_smmu_device *smmu,
+				struct arm_smmu_event *event)
+{
+	char title[256] = {0};
+	char mastr[256] = {0};
+	char addrs[256] = {0};
+	char flags[256] = {0};
+	char other[256] = {0};
+
+	snprintf(title, 256, "Unexpected event received: %s\n",	event_str[event->id]);
+	snprintf(mastr, 256, "\tmaster: %s sid: 0x%08x.0x%05x\n",
+		 event->master_name, event->sid, event->ssid);
+
+	switch (event->id) {
+	case EVT_ID_TRANSLATION_FAULT:
+	case EVT_ID_ADDR_SIZE_FAULT:
+	case EVT_ID_ACCESS_FAULT:
+	case EVT_ID_PERMISSION_FAULT:
+		snprintf(addrs, 256, "\tiova = %#llx ipa = %#llx\n", event->iova, event->ipa);
+		snprintf(flags, 256, "\t%s%s%s%s%s%s\n",
+				event->privileged ? "Priv |" : "Unpriv |",
+				event->instruction ? " Inst |" : " Data |",
+				event->read ? " Read |" : " Write |",
+				event->s2 ? "S2|" : "S1|", class_str[event->class],
+				((event->id == EVT_ID_PERMISSION_FAULT) &&
+				 (event->class == EVTQ_1_CLASS_TT)) ?
+				  (FIELD_GET(EVTQ_1_TT_READ, event->raw[1]) ?
+				  "|TTD Read" : "|TTD Write") : "");
+		snprintf(other, 256, "\tSTAG = %#x Stall = %#x\n",
+				event->stag, event->stall);
+		break;
+
+	case EVT_ID_STE_FETCH_FAULT:
+	case EVT_ID_CD_FETCH_FAULT:
+	case EVT_ID_VMS_FETCH_FAULT:
+		snprintf(addrs, 256, "\tFetch address: %#llx\n", event->ipa);
+		break;
+	}
+
+	dev_err(smmu->dev, "%s%s%s%s%s", title, mastr,
+		strlen(addrs) ? addrs : "",
+		strlen(flags) ? flags : "",
+		strlen(other) ? other : "");
+
+	arm_smmu_dump_raw_event(smmu, event);
+}
+
 /* IRQ and event handlers */
 static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
 {
@@ -1817,9 +1905,39 @@ out_unlock:
 	return ret;
 }
 
+static void arm_smmu_get_evt_info(struct arm_smmu_device *smmu, u64 *evt,
+				  struct arm_smmu_event *event)
+{
+	/* Pick out the good stuff */
+	event->id = FIELD_GET(EVTQ_0_ID, evt[0]);
+	event->sid = FIELD_GET(EVTQ_0_SID, evt[0]);
+	event->ssid_valid = evt[0] & EVTQ_0_SSV;
+	event->ssid = event->ssid_valid ? FIELD_GET(EVTQ_0_SSID, evt[0]) : IOMMU_NO_PASID;
+	event->class = FIELD_GET(EVTQ_1_CLASS, evt[1]);
+	event->iova = FIELD_GET(EVTQ_2_ADDR, evt[2]);
+	event->ipa = FIELD_GET(EVTQ_3_IPA, evt[3]);
+	event->privileged = FIELD_GET(EVTQ_1_PnU, evt[1]);
+	event->instruction = FIELD_GET(EVTQ_1_InD, evt[1]);
+	event->s2 = FIELD_GET(EVTQ_1_S2, evt[1]);
+	event->read = FIELD_GET(EVTQ_1_RnW, evt[1]);
+	event->stag = FIELD_GET(EVTQ_1_STAG, evt[1]);
+	event->stall = evt[1] & EVTQ_1_STALL;
+	event->raw = evt;
+
+	mutex_lock(&smmu->streams_mutex);
+	event->master = arm_smmu_find_master(smmu, event->sid);
+	mutex_unlock(&smmu->streams_mutex);
+
+	if (event->master)
+		event->master_name = dev_name(event->master->dev);
+	else
+		event->master_name = "(unassigned sid)";
+}
+
 static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 {
-	int i, ret;
+	int ret;
+	struct arm_smmu_event event;
 	struct arm_smmu_device *smmu = dev;
 	struct arm_smmu_queue *q = &smmu->evtq.q;
 	struct arm_smmu_ll_queue *llq = &q->llq;
@@ -1829,17 +1947,13 @@ static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 
 	do {
 		while (!queue_remove_raw(q, evt)) {
-			u8 id = FIELD_GET(EVTQ_0_ID, evt[0]);
 
+			arm_smmu_get_evt_info(smmu, evt, &event);
 			ret = arm_smmu_handle_evt(smmu, evt);
 			if (!ret || !__ratelimit(&rs))
 				continue;
 
-			dev_info(smmu->dev, "event 0x%02x received:\n", id);
-			for (i = 0; i < ARRAY_SIZE(evt); ++i)
-				dev_info(smmu->dev, "\t0x%016llx\n",
-					 (unsigned long long)evt[i]);
-
+			arm_smmu_dump_event(smmu, &event);
 			cond_resched();
 		}
 
