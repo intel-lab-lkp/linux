@@ -33,6 +33,7 @@
 			|| (_opts)->p_volume_present)
 #define FUOUT_EN(_opts) ((_opts)->c_mute_present \
 			|| (_opts)->c_volume_present)
+#define EPOUT_FBACK_IN_EN(_opts) ((_opts)->c_sync == USB_ENDPOINT_SYNC_ASYNC)
 
 struct f_uac1 {
 	struct g_audio g_audio;
@@ -305,6 +306,48 @@ static struct uac_iso_endpoint_descriptor as_iso_in_desc = {
 	.wLockDelay =		0,
 };
 
+/* STD AS ISO IN Feedback Endpoint */
+static struct usb_endpoint_descriptor fs_as_in_fback_desc = {
+	.bLength = USB_DT_ENDPOINT_AUDIO_SIZE,
+	.bDescriptorType = USB_DT_ENDPOINT,
+	.bEndpointAddress = USB_DIR_IN,
+	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_USAGE_FEEDBACK,
+	.wMaxPacketSize = cpu_to_le16(3),
+	.bInterval = 1,
+	.bRefresh = 0,
+	.bSynchAddress = 0,
+};
+
+static struct usb_endpoint_descriptor hs_as_in_fback_desc = {
+	.bLength = USB_DT_ENDPOINT_AUDIO_SIZE,
+	.bDescriptorType = USB_DT_ENDPOINT,
+	.bEndpointAddress = USB_DIR_IN,
+	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_USAGE_FEEDBACK,
+	.wMaxPacketSize = cpu_to_le16(4),
+	.bInterval = 4,
+	.bRefresh = 0,
+	.bSynchAddress = 0,
+};
+
+static struct usb_endpoint_descriptor ss_as_in_fback_desc = {
+	.bLength = USB_DT_ENDPOINT_AUDIO_SIZE,
+	.bDescriptorType = USB_DT_ENDPOINT,
+	.bEndpointAddress = USB_DIR_IN,
+	.bmAttributes = USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_USAGE_FEEDBACK,
+	.wMaxPacketSize = cpu_to_le16(4),
+	.bInterval = 4,
+	.bRefresh = 0,
+	.bSynchAddress = 0,
+};
+
+static struct usb_ss_ep_comp_descriptor ss_as_in_fback_desc_comp = {
+	.bLength		= sizeof(ss_as_in_fback_desc_comp),
+	.bDescriptorType	= USB_DT_SS_ENDPOINT_COMP,
+	.bMaxBurst		= 0,
+	.bmAttributes		= 0,
+	.wBytesPerInterval	= cpu_to_le16(4),
+};
+
 static struct usb_descriptor_header *f_audio_fs_desc[] = {
 	(struct usb_descriptor_header *)&ac_interface_desc,
 	(struct usb_descriptor_header *)&ac_header_desc,
@@ -327,6 +370,7 @@ static struct usb_descriptor_header *f_audio_fs_desc[] = {
 
 	(struct usb_descriptor_header *)&fs_as_out_ep_desc,
 	(struct usb_descriptor_header *)&as_iso_out_desc,
+	(struct usb_descriptor_header *)&fs_as_in_fback_desc,
 
 	(struct usb_descriptor_header *)&as_in_interface_alt_0_desc,
 	(struct usb_descriptor_header *)&as_in_interface_alt_1_desc,
@@ -361,6 +405,7 @@ static struct usb_descriptor_header *f_audio_hs_desc[] = {
 
 	(struct usb_descriptor_header *)&hs_as_out_ep_desc,
 	(struct usb_descriptor_header *)&as_iso_out_desc,
+	(struct usb_descriptor_header *)&hs_as_in_fback_desc,
 
 	(struct usb_descriptor_header *)&as_in_interface_alt_0_desc,
 	(struct usb_descriptor_header *)&as_in_interface_alt_1_desc,
@@ -435,6 +480,8 @@ static struct usb_descriptor_header *f_audio_ss_desc[] = {
 	(struct usb_descriptor_header *)&ss_as_out_ep_desc,
 	(struct usb_descriptor_header *)&ss_as_out_ep_desc_comp,
 	(struct usb_descriptor_header *)&as_iso_out_desc,
+	(struct usb_descriptor_header *)&ss_as_in_fback_desc,
+	(struct usb_descriptor_header *)&ss_as_in_fback_desc_comp,
 
 	(struct usb_descriptor_header *)&as_in_interface_alt_0_desc,
 	(struct usb_descriptor_header *)&as_in_interface_alt_1_desc,
@@ -1236,9 +1283,11 @@ static void setup_headers(struct f_uac1_opts *opts,
 {
 	struct usb_ss_ep_comp_descriptor *epout_desc_comp = NULL;
 	struct usb_ss_ep_comp_descriptor *epin_desc_comp = NULL;
+	struct usb_ss_ep_comp_descriptor *epin_fback_desc_comp = NULL;
 	struct usb_ss_ep_comp_descriptor *ep_int_desc_comp = NULL;
 	struct usb_endpoint_descriptor *epout_desc;
 	struct usb_endpoint_descriptor *epin_desc;
+	struct usb_endpoint_descriptor *epin_fback_desc;
 	struct usb_endpoint_descriptor *ep_int_desc;
 	int i;
 
@@ -1246,11 +1295,13 @@ static void setup_headers(struct f_uac1_opts *opts,
 	case USB_SPEED_FULL:
 		epout_desc = &fs_as_out_ep_desc;
 		epin_desc = &fs_as_in_ep_desc;
+		epin_fback_desc = &fs_as_in_fback_desc;
 		ep_int_desc = &fs_ac_int_ep_desc;
 		break;
 	case USB_SPEED_HIGH:
 		epout_desc = &hs_as_out_ep_desc;
 		epin_desc = &hs_as_in_ep_desc;
+		epin_fback_desc = &hs_as_in_fback_desc;
 		ep_int_desc = &hs_ac_int_ep_desc;
 		break;
 	default:
@@ -1258,6 +1309,8 @@ static void setup_headers(struct f_uac1_opts *opts,
 		epin_desc = &ss_as_in_ep_desc;
 		epout_desc_comp = &ss_as_out_ep_desc_comp;
 		epin_desc_comp = &ss_as_in_ep_desc_comp;
+		epin_fback_desc = &ss_as_in_fback_desc;
+		epin_fback_desc_comp = &ss_as_in_fback_desc_comp;
 		ep_int_desc = &ss_ac_int_ep_desc;
 		ep_int_desc_comp = &ss_ac_int_ep_desc_comp;
 	}
@@ -1296,6 +1349,12 @@ static void setup_headers(struct f_uac1_opts *opts,
 			headers[i++] = USBDHDR(epout_desc_comp);
 
 		headers[i++] = USBDHDR(&as_iso_out_desc);
+
+		if (EPOUT_FBACK_IN_EN(opts)) {
+			headers[i++] = USBDHDR(epin_fback_desc);
+			if (epin_fback_desc_comp)
+				headers[i++] = USBDHDR(epin_fback_desc_comp);
+		}
 	}
 	if (EPIN_EN(opts)) {
 		headers[i++] = USBDHDR(&as_in_interface_alt_0_desc);
@@ -1509,6 +1568,7 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	if (status < 0)
 		goto err_free_fu;
 	ac_interface_desc.bInterfaceNumber = status;
+	ac_interface_desc.bNumEndpoints = 1;
 	uac1->ac_intf = status;
 	uac1->ac_alt = 0;
 
@@ -1523,6 +1583,23 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 		ac_header_desc->baInterfaceNr[ba_iface_id++] = status;
 		uac1->as_out_intf = status;
 		uac1->as_out_alt = 0;
+
+		if (EPOUT_FBACK_IN_EN(audio_opts)) {
+			fs_as_out_ep_desc.bmAttributes =
+			  USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC;
+			hs_as_out_ep_desc.bmAttributes =
+			  USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC;
+			ss_as_out_ep_desc.bmAttributes =
+			  USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ASYNC;
+			ac_interface_desc.bNumEndpoints++;
+		} else {
+			fs_as_out_ep_desc.bmAttributes =
+			  USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ADAPTIVE;
+			hs_as_out_ep_desc.bmAttributes =
+			  USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ADAPTIVE;
+			ss_as_out_ep_desc.bmAttributes =
+			  USB_ENDPOINT_XFER_ISOC | USB_ENDPOINT_SYNC_ADAPTIVE;
+		}
 	}
 
 	if (EPIN_EN(audio_opts)) {
@@ -1569,6 +1646,17 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 
 		audio->out_ep = ep;
 		audio->out_ep->desc = &fs_as_out_ep_desc;
+
+		if (EPOUT_FBACK_IN_EN(audio_opts)) {
+			ep = usb_ep_autoconfig(cdev->gadget, &fs_as_in_fback_desc);
+			if (!ep)
+				goto err_free_fu;
+
+			hs_as_in_fback_desc.bEndpointAddress = fs_as_in_fback_desc.bEndpointAddress;
+			ss_as_in_fback_desc.bEndpointAddress = fs_as_in_fback_desc.bEndpointAddress;
+
+			audio->in_ep_fback = ep;
+		}
 	}
 
 	if (EPIN_EN(audio_opts)) {
@@ -1631,7 +1719,7 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 		audio->params.c_fu.volume_res = audio_opts->c_volume_res;
 	}
 	audio->params.req_number = audio_opts->req_number;
-	audio->params.fb_max = FBACK_FAST_MAX;
+	audio->params.fb_max = audio_opts->fb_max;
 	if (FUOUT_EN(audio_opts) || FUIN_EN(audio_opts))
 		audio->notify = audio_notify;
 
@@ -1678,6 +1766,10 @@ static struct configfs_item_operations f_uac1_item_ops = {
 	UAC_ATTRIBUTE(f_uac1_opts, UAC1_ATTR_TO_OPTS, opts,		\
 		      opts->lock, opts->refcnt, type, name)
 
+#define UAC1_ATTRIBUTE_SYNC(name)					\
+	UAC_ATTRIBUTE_SYNC(f_uac1_opts, UAC1_ATTR_TO_OPTS, opts,	\
+			   opts->lock, opts->refcnt, name)
+
 #define UAC1_RATE_ATTRIBUTE(name)					\
 	UAC_RATE_ATTRIBUTE(f_uac1_opts, UAC1_ATTR_TO_OPTS, opts,	\
 			   opts->lock, opts->refcnt, name)
@@ -1688,6 +1780,7 @@ static struct configfs_item_operations f_uac1_item_ops = {
 
 UAC1_ATTRIBUTE(u32, c_chmask);
 UAC1_RATE_ATTRIBUTE(c_srate);
+UAC1_ATTRIBUTE_SYNC(c_sync);
 UAC1_ATTRIBUTE(u32, c_ssize);
 UAC1_ATTRIBUTE(u32, p_chmask);
 UAC1_RATE_ATTRIBUTE(p_srate);
@@ -1706,6 +1799,8 @@ UAC1_ATTRIBUTE(s16, c_volume_min);
 UAC1_ATTRIBUTE(s16, c_volume_max);
 UAC1_ATTRIBUTE(s16, c_volume_res);
 
+UAC1_ATTRIBUTE(u32, fb_max);
+
 UAC1_ATTRIBUTE_STRING(function_name);
 
 UAC1_ATTRIBUTE_STRING(p_it_name);
@@ -1721,11 +1816,13 @@ UAC1_ATTRIBUTE_STRING(c_fu_vol_name);
 static struct configfs_attribute *f_uac1_attrs[] = {
 	&f_uac1_opts_attr_c_chmask,
 	&f_uac1_opts_attr_c_srate,
+	&f_uac1_opts_attr_c_sync,
 	&f_uac1_opts_attr_c_ssize,
 	&f_uac1_opts_attr_p_chmask,
 	&f_uac1_opts_attr_p_srate,
 	&f_uac1_opts_attr_p_ssize,
 	&f_uac1_opts_attr_req_number,
+	&f_uac1_opts_attr_fb_max,
 
 	&f_uac1_opts_attr_p_mute_present,
 	&f_uac1_opts_attr_p_volume_present,
@@ -1784,6 +1881,7 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 
 	opts->c_chmask = UAC1_DEF_CCHMASK;
 	opts->c_srates[0] = UAC1_DEF_CSRATE;
+	opts->c_sync = UAC1_DEF_CSYNC;
 	opts->c_ssize = UAC1_DEF_CSSIZE;
 	opts->p_chmask = UAC1_DEF_PCHMASK;
 	opts->p_srates[0] = UAC1_DEF_PSRATE;
@@ -1802,6 +1900,7 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 	opts->c_volume_res = UAC1_DEF_RES_DB;
 
 	opts->req_number = UAC1_DEF_REQ_NUM;
+	opts->fb_max = FBACK_FAST_MAX;
 
 	scnprintf(opts->function_name, sizeof(opts->function_name), "AC Interface");
 

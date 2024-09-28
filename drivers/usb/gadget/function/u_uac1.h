@@ -14,6 +14,7 @@
 #define UAC1_OUT_EP_MAX_PACKET_SIZE	200
 #define UAC1_DEF_CCHMASK	0x3
 #define UAC1_DEF_CSRATE		48000
+#define UAC1_DEF_CSYNC		USB_ENDPOINT_SYNC_ADAPTIVE
 #define UAC1_DEF_CSSIZE		2
 #define UAC1_DEF_PCHMASK	0x3
 #define UAC1_DEF_PSRATE		48000
@@ -32,6 +33,7 @@ struct f_uac1_opts {
 	struct usb_function_instance	func_inst;
 	int				c_chmask;
 	int				c_srates[UAC_MAX_RATES];
+	int				c_sync;
 	int				c_ssize;
 	int				p_chmask;
 	int				p_srates[UAC_MAX_RATES];
@@ -50,6 +52,7 @@ struct f_uac1_opts {
 	s16				c_volume_res;
 
 	int				req_number;
+	int				fb_max;
 	unsigned			bound:1;
 
 	char			function_name[USB_MAX_STRING_LEN];
