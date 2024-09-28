@@ -1159,6 +1159,32 @@ f_audio_suspend(struct usb_function *f)
 }
 
 /*-------------------------------------------------------------------------*/
+
+static int set_ep_max_packet_size_bint(struct device *dev, const struct f_uac1_opts *opts,
+	struct usb_endpoint_descriptor *ep_desc,
+	enum usb_device_speed speed, bool is_playback)
+{
+	int chmask, srate, ssize, hs_bint, sync;
+
+	if (is_playback) {
+		chmask = opts->p_chmask;
+		srate = get_max_srate(opts->p_srates);
+		ssize = opts->p_ssize;
+		hs_bint = opts->p_hs_bint;
+		sync = USB_ENDPOINT_SYNC_ASYNC;
+	} else {
+		chmask = opts->c_chmask;
+		srate = get_max_srate(opts->c_srates);
+		ssize = opts->c_ssize;
+		hs_bint = opts->c_hs_bint;
+		sync = opts->c_sync;
+	}
+
+	return uac_set_ep_max_packet_size_bint(
+		dev, ep_desc, speed, is_playback, hs_bint, chmask,
+		srate, ssize, sync, opts->fb_max);
+}
+
 static struct uac_feature_unit_descriptor *build_fu_desc(int chmask)
 {
 	struct uac_feature_unit_descriptor *fu_desc;
@@ -1419,6 +1445,15 @@ static int f_audio_validate_opts(struct g_audio *audio, struct device *dev)
 		return -EINVAL;
 	}
 
+	if ((opts->p_hs_bint < 0) || (opts->p_hs_bint > 4)) {
+		dev_err(dev, "Error: incorrect playback HS/SS bInterval (1-4: fixed, 0: auto)\n");
+		return -EINVAL;
+	}
+	if ((opts->c_hs_bint < 0) || (opts->c_hs_bint > 4)) {
+		dev_err(dev, "Error: incorrect capture HS/SS bInterval (1-4: fixed, 0: auto)\n");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -1613,6 +1648,54 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 		uac1->as_in_alt = 0;
 	}
 
+	hs_as_in_ep_desc.bInterval = audio_opts->p_hs_bint;
+	ss_as_in_ep_desc.bInterval = audio_opts->p_hs_bint;
+	hs_as_out_ep_desc.bInterval = audio_opts->c_hs_bint;
+	ss_as_out_ep_desc.bInterval = audio_opts->c_hs_bint;
+
+	/* Calculate wMaxPacketSize according to audio bandwidth */
+	status = set_ep_max_packet_size_bint(dev, audio_opts, &fs_as_in_ep_desc,
+					     USB_SPEED_FULL, true);
+	if (status < 0) {
+		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+		goto err_free_fu;
+	}
+
+	status = set_ep_max_packet_size_bint(dev, audio_opts, &fs_as_out_ep_desc,
+					     USB_SPEED_FULL, false);
+	if (status < 0) {
+		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+		goto err_free_fu;
+	}
+
+	status = set_ep_max_packet_size_bint(dev, audio_opts, &hs_as_in_ep_desc,
+					     USB_SPEED_HIGH, true);
+	if (status < 0) {
+		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+		goto err_free_fu;
+	}
+
+	status = set_ep_max_packet_size_bint(dev, audio_opts, &hs_as_out_ep_desc,
+					     USB_SPEED_HIGH, false);
+	if (status < 0) {
+		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+		goto err_free_fu;
+	}
+
+	status = set_ep_max_packet_size_bint(dev, audio_opts, &ss_as_in_ep_desc,
+					     USB_SPEED_SUPER, true);
+	if (status < 0) {
+		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+		goto err_free_fu;
+	}
+
+	status = set_ep_max_packet_size_bint(dev, audio_opts, &hs_as_out_ep_desc,
+					     USB_SPEED_SUPER, false);
+	if (status < 0) {
+		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
+		goto err_free_fu;
+	}
+
 	audio->gadget = gadget;
 
 	status = -ENODEV;
@@ -1782,9 +1865,11 @@ UAC1_ATTRIBUTE(u32, c_chmask);
 UAC1_RATE_ATTRIBUTE(c_srate);
 UAC1_ATTRIBUTE_SYNC(c_sync);
 UAC1_ATTRIBUTE(u32, c_ssize);
+UAC1_ATTRIBUTE(u8, c_hs_bint);
 UAC1_ATTRIBUTE(u32, p_chmask);
 UAC1_RATE_ATTRIBUTE(p_srate);
 UAC1_ATTRIBUTE(u32, p_ssize);
+UAC1_ATTRIBUTE(u8, p_hs_bint);
 UAC1_ATTRIBUTE(u32, req_number);
 
 UAC1_ATTRIBUTE(bool, p_mute_present);
@@ -1818,9 +1903,11 @@ static struct configfs_attribute *f_uac1_attrs[] = {
 	&f_uac1_opts_attr_c_srate,
 	&f_uac1_opts_attr_c_sync,
 	&f_uac1_opts_attr_c_ssize,
+	&f_uac1_opts_attr_c_hs_bint,
 	&f_uac1_opts_attr_p_chmask,
 	&f_uac1_opts_attr_p_srate,
 	&f_uac1_opts_attr_p_ssize,
+	&f_uac1_opts_attr_p_hs_bint,
 	&f_uac1_opts_attr_req_number,
 	&f_uac1_opts_attr_fb_max,
 
@@ -1883,9 +1970,11 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 	opts->c_srates[0] = UAC1_DEF_CSRATE;
 	opts->c_sync = UAC1_DEF_CSYNC;
 	opts->c_ssize = UAC1_DEF_CSSIZE;
+	opts->c_hs_bint = UAC1_DEF_CHSBINT;
 	opts->p_chmask = UAC1_DEF_PCHMASK;
 	opts->p_srates[0] = UAC1_DEF_PSRATE;
 	opts->p_ssize = UAC1_DEF_PSSIZE;
+	opts->p_hs_bint = UAC1_DEF_PHSBINT;
 
 	opts->p_mute_present = UAC1_DEF_MUTE_PRESENT;
 	opts->p_volume_present = UAC1_DEF_VOLUME_PRESENT;

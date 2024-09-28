@@ -16,9 +16,11 @@
 #define UAC1_DEF_CSRATE		48000
 #define UAC1_DEF_CSYNC		USB_ENDPOINT_SYNC_ADAPTIVE
 #define UAC1_DEF_CSSIZE		2
+#define UAC1_DEF_CHSBINT	0
 #define UAC1_DEF_PCHMASK	0x3
 #define UAC1_DEF_PSRATE		48000
 #define UAC1_DEF_PSSIZE		2
+#define UAC1_DEF_PHSBINT	0
 #define UAC1_DEF_REQ_NUM	2
 #define UAC1_DEF_INT_REQ_NUM	10
 
@@ -35,9 +37,11 @@ struct f_uac1_opts {
 	int				c_srates[UAC_MAX_RATES];
 	int				c_sync;
 	int				c_ssize;
+	u8				c_hs_bint;
 	int				p_chmask;
 	int				p_srates[UAC_MAX_RATES];
 	int				p_ssize;
+	u8				p_hs_bint;
 
 	bool			p_mute_present;
 	bool			p_volume_present;
