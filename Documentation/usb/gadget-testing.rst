@@ -982,9 +982,28 @@ The uac1 function provides these attributes in its function directory:
 	c_fu_vol_name    capture mute/volume functional unit name
 	c_terminal_type  code of the capture terminal type
 	p_terminal_type  code of the playback terminal type
+	c_alt.x/         alternate capture setting x (0-255)
+	p_alt.x/         alternate playback setting x (0-255)
 	================ ====================================================
 
 The attributes have sane default values.
+
+Alternate settings have these attributes settable. Defaults are copied
+from the associated function-wide settings. Alternate setting 0 only
+has a name and no other settings. If p/c_alt.1 doesn't exist
+function-wide settings will be used for alternate setting 1.
+
+	================ ====================================================
+	name             alternate setting name
+	chmask           channel mask
+	ssize            sample size (bytes)
+	sync             synchronization type (async/adaptive) *capture only*
+	hs_bint          bInterval for HS/SS (1-4: fixed, 0: auto)
+	it_name          input terminal name
+	it_ch_name       first input channel name
+	ot_name          output terminal name
+	fu_vol_name      mute/volume functional unit name
+	================ ====================================================
 
 Testing the UAC1 function
 -------------------------

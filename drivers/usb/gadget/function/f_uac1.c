@@ -21,6 +21,9 @@
 #include "u_uac1.h"
 #include "u_uac_utils.h"
 
+#define HOST_TO_DEVICE 0
+#define DEVICE_TO_HOST 1
+
 /* UAC1 spec: 3.7.2.3 Audio Channel Cluster Format */
 #define UAC1_CHANNEL_MASK 0x0FFF
 
@@ -1160,29 +1163,14 @@ f_audio_suspend(struct usb_function *f)
 
 /*-------------------------------------------------------------------------*/
 
-static int set_ep_max_packet_size_bint(struct device *dev, const struct f_uac1_opts *opts,
-	struct usb_endpoint_descriptor *ep_desc,
-	enum usb_device_speed speed, bool is_playback)
+static int set_ep_max_packet_size_bint(struct device *dev, const struct f_uac1_alt_opts *alt_opts,
+					struct usb_endpoint_descriptor *ep_desc,
+					enum usb_device_speed speed, bool is_playback)
 {
-	int chmask, srate, ssize, hs_bint, sync;
-
-	if (is_playback) {
-		chmask = opts->p_chmask;
-		srate = get_max_srate(opts->p_srates);
-		ssize = opts->p_ssize;
-		hs_bint = opts->p_hs_bint;
-		sync = USB_ENDPOINT_SYNC_ASYNC;
-	} else {
-		chmask = opts->c_chmask;
-		srate = get_max_srate(opts->c_srates);
-		ssize = opts->c_ssize;
-		hs_bint = opts->c_hs_bint;
-		sync = opts->c_sync;
-	}
-
 	return uac_set_ep_max_packet_size_bint(
-		dev, ep_desc, speed, is_playback, hs_bint, chmask,
-		srate, ssize, sync, opts->fb_max);
+		dev, ep_desc, speed, is_playback, alt_opts->hs_bint,
+		alt_opts->chmask, get_max_srate(alt_opts->srates),
+		alt_opts->ssize, alt_opts->sync, alt_opts->c.opts->fb_max);
 }
 
 static struct uac_feature_unit_descriptor *build_fu_desc(int chmask)
@@ -1459,6 +1447,52 @@ static int f_audio_validate_opts(struct g_audio *audio, struct device *dev)
 	return 0;
 }
 
+/*-------------------------------------------------------------------------*/
+
+/*
+ * Configfs alt mode handling
+ */
+
+static void init_alt_0_opts(struct f_uac1_alt_0_opts *alt_0_opts,
+			    struct f_uac1_opts *opts, int playback)
+{
+	alt_0_opts->c.opts = opts;
+	alt_0_opts->c.alt_num = 0;
+
+	// Note: Strings are from the host perspective, opt prefixes are from the device perspective
+	scnprintf(alt_0_opts->name, sizeof(alt_0_opts->name),
+		  (!playback) ? "Playback Inactive" : "Capture Inactive");
+}
+
+static void init_alt_opts(struct f_uac1_alt_opts *alt_opts, struct f_uac1_opts *opts,
+			  int alt_num, int playback)
+{
+	alt_opts->c.opts = opts;
+	alt_opts->c.alt_num = alt_num;
+
+	INIT_LIST_HEAD(&alt_opts->list);
+
+	// Note: Strings are from the host perspective, opt prefixes are from the device perspective
+	scnprintf(alt_opts->name, sizeof(alt_opts->name),
+		  (!playback) ? "Playback Active" : "Capture Active");
+	strscpy(alt_opts->it_name, (playback) ? opts->p_it_name : opts->c_it_name,
+		sizeof(alt_opts->it_name));
+	strscpy(alt_opts->it_ch_name, (playback) ? opts->p_it_ch_name : opts->c_it_ch_name,
+		sizeof(alt_opts->it_ch_name));
+	strscpy(alt_opts->ot_name, (playback) ? opts->p_ot_name : opts->c_ot_name,
+		sizeof(alt_opts->ot_name));
+	strscpy(alt_opts->fu_vol_name, (playback) ? opts->p_fu_vol_name : opts->c_fu_vol_name,
+		sizeof(alt_opts->fu_vol_name));
+
+	/* Copy default options from the main opts */
+	alt_opts->chmask = (playback) ? opts->p_chmask : opts->c_chmask;
+	alt_opts->ssize = (playback) ? opts->p_ssize : opts->c_ssize;
+	alt_opts->hs_bint = (playback) ? opts->p_hs_bint : opts->c_hs_bint;
+	alt_opts->srates = (playback) ? opts->p_srates : opts->c_srates;
+	alt_opts->sync = (playback) ? 0 : opts->c_sync;
+	alt_opts->terminal_type = (playback) ? opts->p_terminal_type : opts->c_terminal_type;
+}
+
 /* audio function driver setup/binding */
 static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 {
@@ -1474,11 +1508,23 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	int				status;
 	int				idx, i;
 
+	audio_opts = container_of(f->fi, struct f_uac1_opts, func_inst);
+
+	/* Copy main options to alt modes 0/1 if the groups don't exist
+	 * before validation since they will be checked.
+	 */
+	if (!audio_opts->c_alt_0_opts.c.group.cg_item.ci_name)
+		init_alt_0_opts(&audio_opts->c_alt_0_opts, audio_opts, HOST_TO_DEVICE);
+	if (!audio_opts->p_alt_0_opts.c.group.cg_item.ci_name)
+		init_alt_0_opts(&audio_opts->p_alt_0_opts, audio_opts, DEVICE_TO_HOST);
+	if (!audio_opts->c_alt_1_opts.c.group.cg_item.ci_name)
+		init_alt_opts(&audio_opts->c_alt_1_opts, audio_opts, 1, HOST_TO_DEVICE);
+	if (!audio_opts->p_alt_1_opts.c.group.cg_item.ci_name)
+		init_alt_opts(&audio_opts->p_alt_1_opts, audio_opts, 1, DEVICE_TO_HOST);
+
 	status = f_audio_validate_opts(audio, dev);
 	if (status)
 		return status;
-
-	audio_opts = container_of(f->fi, struct f_uac1_opts, func_inst);
 
 	strings_uac1[STR_AC_IF].s = audio_opts->function_name;
 
@@ -1656,42 +1702,42 @@ static int f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	ss_as_out_ep_desc.bInterval = audio_opts->c_hs_bint;
 
 	/* Calculate wMaxPacketSize according to audio bandwidth */
-	status = set_ep_max_packet_size_bint(dev, audio_opts, &fs_as_in_ep_desc,
+	status = set_ep_max_packet_size_bint(dev, &audio_opts->p_alt_1_opts, &fs_as_in_ep_desc,
 					     USB_SPEED_FULL, true);
 	if (status < 0) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		goto err_free_fu;
 	}
 
-	status = set_ep_max_packet_size_bint(dev, audio_opts, &fs_as_out_ep_desc,
+	status = set_ep_max_packet_size_bint(dev, &audio_opts->c_alt_1_opts, &fs_as_out_ep_desc,
 					     USB_SPEED_FULL, false);
 	if (status < 0) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		goto err_free_fu;
 	}
 
-	status = set_ep_max_packet_size_bint(dev, audio_opts, &hs_as_in_ep_desc,
+	status = set_ep_max_packet_size_bint(dev, &audio_opts->p_alt_1_opts, &hs_as_in_ep_desc,
 					     USB_SPEED_HIGH, true);
 	if (status < 0) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		goto err_free_fu;
 	}
 
-	status = set_ep_max_packet_size_bint(dev, audio_opts, &hs_as_out_ep_desc,
+	status = set_ep_max_packet_size_bint(dev, &audio_opts->c_alt_1_opts, &hs_as_out_ep_desc,
 					     USB_SPEED_HIGH, false);
 	if (status < 0) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		goto err_free_fu;
 	}
 
-	status = set_ep_max_packet_size_bint(dev, audio_opts, &ss_as_in_ep_desc,
+	status = set_ep_max_packet_size_bint(dev, &audio_opts->p_alt_1_opts, &ss_as_in_ep_desc,
 					     USB_SPEED_SUPER, true);
 	if (status < 0) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 		goto err_free_fu;
 	}
 
-	status = set_ep_max_packet_size_bint(dev, audio_opts, &hs_as_out_ep_desc,
+	status = set_ep_max_packet_size_bint(dev, &audio_opts->c_alt_1_opts, &hs_as_out_ep_desc,
 					     USB_SPEED_SUPER, false);
 	if (status < 0) {
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
@@ -1835,6 +1881,108 @@ static inline struct f_uac1_opts *to_f_uac1_opts(struct config_item *item)
 			    func_inst.group);
 }
 
+static inline struct f_uac1_alt_opts *to_f_uac1_alt_opts(struct config_item *item)
+{
+	return container_of(to_config_group(item), struct f_uac1_alt_opts,
+			    c.group);
+}
+
+#define UAC1_ALT_ATTR_TO_OPTS struct f_uac1_alt_opts *alt_opts = to_f_uac1_alt_opts(item)
+#define UAC1_ALT_ATTRIBUTE(type, name)					\
+	UAC_ATTRIBUTE(f_uac1_alt_opts, UAC1_ALT_ATTR_TO_OPTS, alt_opts,	\
+		      alt_opts->c.opts->lock, alt_opts->c.opts->refcnt,	\
+		      type, name)
+
+#define UAC1_ALT_ATTRIBUTE_SYNC(name)					\
+	UAC_ATTRIBUTE_SYNC(f_uac1_alt_opts, UAC1_ALT_ATTR_TO_OPTS,	\
+			   alt_opts, alt_opts->c.opts->lock,		\
+			   alt_opts->c.opts->refcnt, name)
+
+#define UAC1_ALT_ATTRIBUTE_STRING(name)					\
+	UAC_ATTRIBUTE_STRING(f_uac1_alt_opts, UAC1_ALT_ATTR_TO_OPTS,	\
+			     alt_opts, alt_opts->c.opts->lock,		\
+			     alt_opts->c.opts->refcnt, name)
+
+
+UAC1_ALT_ATTRIBUTE_STRING(name);
+UAC1_ALT_ATTRIBUTE_STRING(it_name);
+UAC1_ALT_ATTRIBUTE_STRING(it_ch_name);
+UAC1_ALT_ATTRIBUTE_STRING(ot_name);
+UAC1_ALT_ATTRIBUTE_STRING(fu_vol_name);
+
+UAC1_ALT_ATTRIBUTE(u32, ssize);
+UAC1_ALT_ATTRIBUTE(u8, hs_bint);
+UAC1_ALT_ATTRIBUTE(u32, chmask);
+UAC1_ALT_ATTRIBUTE_SYNC(sync);
+UAC1_ALT_ATTRIBUTE(s16, terminal_type);
+
+static struct configfs_attribute *f_uac1_alt_0_attrs[] = {
+	&f_uac1_alt_opts_attr_name,
+
+	NULL,
+};
+
+static const struct config_item_type alt_mode_0_type = {
+	.ct_attrs	= f_uac1_alt_0_attrs,
+	.ct_owner       = THIS_MODULE,
+};
+
+static struct configfs_attribute *f_uac1_alt_attrs_c[] = {
+	&f_uac1_alt_opts_attr_name,
+	&f_uac1_alt_opts_attr_it_name,
+	&f_uac1_alt_opts_attr_it_ch_name,
+	&f_uac1_alt_opts_attr_ot_name,
+	&f_uac1_alt_opts_attr_fu_vol_name,
+	&f_uac1_alt_opts_attr_ssize,
+	&f_uac1_alt_opts_attr_hs_bint,
+	&f_uac1_alt_opts_attr_chmask,
+	&f_uac1_alt_opts_attr_sync,
+	&f_uac1_alt_opts_attr_terminal_type,
+
+	NULL,
+};
+
+static struct configfs_attribute *f_uac1_alt_attrs_p[] = {
+	&f_uac1_alt_opts_attr_name,
+	&f_uac1_alt_opts_attr_it_name,
+	&f_uac1_alt_opts_attr_it_ch_name,
+	&f_uac1_alt_opts_attr_ot_name,
+	&f_uac1_alt_opts_attr_fu_vol_name,
+	&f_uac1_alt_opts_attr_ssize,
+	&f_uac1_alt_opts_attr_hs_bint,
+	&f_uac1_alt_opts_attr_chmask,
+	&f_uac1_alt_opts_attr_terminal_type,
+
+	NULL,
+};
+
+static void f_uac1_alt_attr_release(struct config_item *item)
+{
+	struct f_uac1_alt_opts *alt_opts = to_f_uac1_alt_opts(item);
+
+	/* Opts 0 and 1 are fixed structures, 2+ are kzalloc'd */
+	if (alt_opts->c.alt_num > 1)
+		kfree(alt_opts);
+}
+
+static struct configfs_item_operations f_uac1_alt_item_ops = {
+	.release	= f_uac1_alt_attr_release,
+};
+
+static const struct config_item_type alt_mode_c_type = {
+	.ct_item_ops	= &f_uac1_alt_item_ops,
+	.ct_attrs	= f_uac1_alt_attrs_c,
+	.ct_owner	= THIS_MODULE,
+};
+
+static const struct config_item_type alt_mode_p_type = {
+	.ct_item_ops	= &f_uac1_alt_item_ops,
+	.ct_attrs	= f_uac1_alt_attrs_p,
+	.ct_owner	= THIS_MODULE,
+};
+
+/*-------------------------------------------------------------------------*/
+
 static void f_uac1_attr_release(struct config_item *item)
 {
 	struct f_uac1_opts *opts = to_f_uac1_opts(item);
@@ -1946,8 +2094,109 @@ static struct configfs_attribute *f_uac1_attrs[] = {
 	NULL,
 };
 
+static struct config_group *f_uac1_group_make(
+		struct config_group *group,
+		const char *name)
+{
+	struct f_uac1_opts *opts = to_f_uac1_opts(&group->cg_item);
+	struct f_uac1_alt_opts *alt_opts;
+	struct f_uac1_alt_opts *pos;
+	struct config_group *ret;
+	unsigned int alt_num;
+	int playback = 0;
+
+	mutex_lock(&opts->lock);
+	if (opts->refcnt) {
+		ret = ERR_PTR(-EBUSY);
+		goto end;
+	}
+
+	if (sscanf(name, "c_alt.%u", &alt_num) != 1) {
+		playback = 1;
+		if (sscanf(name, "p_alt.%u", &alt_num) != 1) {
+			ret = ERR_PTR(-EINVAL);
+			goto end;
+		}
+	}
+
+	if (alt_num > 255) {
+		ret = ERR_PTR(-EINVAL);
+		goto end;
+	}
+
+	/* Alt mode 0 has less properties */
+	if (alt_num == 0) {
+		struct f_uac1_alt_0_opts *alt_0_opts = (playback) ? &opts->p_alt_0_opts
+								  : &opts->c_alt_0_opts;
+		init_alt_0_opts(alt_0_opts, opts, playback);
+		config_group_init_type_name(&alt_0_opts->c.group, name, &alt_mode_0_type);
+		ret = &alt_0_opts->c.group;
+		goto end;
+	}
+
+	if (alt_num == 1) {
+		/* Alt mode 1 always exists */
+		alt_opts = (playback) ? &opts->p_alt_1_opts : &opts->c_alt_1_opts;
+	} else {
+		/* Allocate a structure for alt mode 2+ */
+		alt_opts = kzalloc(sizeof(*alt_opts), GFP_KERNEL);
+		if (!alt_opts) {
+			ret = ERR_PTR(-ENOMEM);
+			goto end;
+		}
+	}
+
+	ret = &alt_opts->c.group;
+
+	config_group_init_type_name(&alt_opts->c.group, name, (playback) ? &alt_mode_p_type
+									 : &alt_mode_c_type);
+
+	init_alt_opts(alt_opts, opts, alt_num, playback);
+
+	/* Alt mode 1 doesn't go in the list. It is handled separately to
+	 * also handle the case where the alt.1 group is not created.
+	 */
+	if (alt_num == 1)
+		goto end;
+
+	/* Insert the new alt mode in the list, sorted by alt_num */
+	list_for_each_entry(pos, (playback) ? &opts->p_alt_opts : &opts->c_alt_opts, list) {
+		if (alt_opts->c.alt_num < pos->c.alt_num) {
+			list_add_tail(&alt_opts->list, &pos->list);
+			goto end;
+		}
+	}
+
+	list_add_tail(&alt_opts->list, (playback) ? &opts->p_alt_opts : &opts->c_alt_opts);
+
+end:
+	mutex_unlock(&opts->lock);
+
+	return ret;
+}
+
+static void f_uac1_group_drop(struct config_group *group, struct config_item *item)
+{
+	struct f_uac1_alt_opts *alt_opts = to_f_uac1_alt_opts(item);
+
+	/* Alt modes 0 and 1 are preallocated and not included in the list */
+	if (alt_opts->c.alt_num > 1) {
+		mutex_lock(&alt_opts->c.opts->lock);
+		list_del(&alt_opts->list);
+		mutex_unlock(&alt_opts->c.opts->lock);
+	}
+
+	config_item_put(item);
+}
+
+static struct configfs_group_operations f_uac1_group_ops = {
+	.make_group     = &f_uac1_group_make,
+	.drop_item      = &f_uac1_group_drop,
+};
+
 static const struct config_item_type f_uac1_func_type = {
 	.ct_item_ops	= &f_uac1_item_ops,
+	.ct_group_ops   = &f_uac1_group_ops,
 	.ct_attrs	= f_uac1_attrs,
 	.ct_owner	= THIS_MODULE,
 };
@@ -1970,6 +2219,9 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 
 	mutex_init(&opts->lock);
 	opts->func_inst.free_func_inst = f_audio_free_inst;
+
+	INIT_LIST_HEAD(&opts->c_alt_opts);
+	INIT_LIST_HEAD(&opts->p_alt_opts);
 
 	config_group_init_type_name(&opts->func_inst.group, "",
 				    &f_uac1_func_type);
@@ -2001,6 +2253,7 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 
 	scnprintf(opts->function_name, sizeof(opts->function_name), "AC Interface");
 
+	// Note: Strings are from the host perspective, opt prefixes are from the device perspective
 	scnprintf(opts->p_it_name, sizeof(opts->p_it_name), "Capture Input terminal");
 	scnprintf(opts->p_it_ch_name, sizeof(opts->p_it_ch_name), "Capture Channels");
 	scnprintf(opts->p_ot_name, sizeof(opts->p_ot_name), "Capture Output terminal");

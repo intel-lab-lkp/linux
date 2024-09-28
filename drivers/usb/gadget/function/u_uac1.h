@@ -33,8 +33,61 @@
 #define UAC1_DEF_P_TERM_TYPE UAC_INPUT_TERMINAL_MICROPHONE
 #define UAC1_DEF_C_TERM_TYPE UAC_OUTPUT_TERMINAL_SPEAKER
 
+
+struct f_uac1_opts;
+
+struct f_uac1_alt_opts_common {
+	struct config_group	group;
+	struct f_uac1_opts	*opts;
+	u8			alt_num;
+};
+
+/* Alt mode 0 only has a name */
+struct f_uac1_alt_0_opts {
+	struct f_uac1_alt_opts_common c;
+
+	char			name[USB_MAX_STRING_LEN];
+};
+
+/* Alt modes 1+ */
+struct f_uac1_alt_opts {
+	struct f_uac1_alt_opts_common c;
+
+	struct list_head	list;
+
+	/* Strings */
+	char			name[USB_MAX_STRING_LEN];
+	char			it_name[USB_MAX_STRING_LEN];
+	char			it_ch_name[USB_MAX_STRING_LEN];
+	char			ot_name[USB_MAX_STRING_LEN];
+	char			fu_vol_name[USB_MAX_STRING_LEN];
+
+	/* Audio options */
+	int			chmask;
+	int			*srates; /* Reference to p/c_srates in opts */
+	int			sync;
+	int			ssize;
+	u8			hs_bint;
+	s16			terminal_type;
+
+};
+
 struct f_uac1_opts {
 	struct usb_function_instance	func_inst;
+
+	/* Alt mode 0 options */
+	struct f_uac1_alt_0_opts	c_alt_0_opts;
+	struct f_uac1_alt_0_opts	p_alt_0_opts;
+
+	/* Alt mode 1 options */
+	struct f_uac1_alt_opts		c_alt_1_opts;
+	struct f_uac1_alt_opts		p_alt_1_opts;
+
+	/* Alt mode 2+ options */
+	struct list_head		c_alt_opts;
+	struct list_head		p_alt_opts;
+
+	/* Default options and Alt mode 1 if no c/p_alt.1 created */
 	int				c_chmask;
 	int				c_srates[UAC_MAX_RATES];
 	int				c_sync;
@@ -45,14 +98,14 @@ struct f_uac1_opts {
 	int				p_ssize;
 	u8				p_hs_bint;
 
-	bool			p_mute_present;
-	bool			p_volume_present;
+	bool				p_mute_present;
+	bool				p_volume_present;
 	s16				p_volume_min;
 	s16				p_volume_max;
 	s16				p_volume_res;
 
-	bool			c_mute_present;
-	bool			c_volume_present;
+	bool				c_mute_present;
+	bool				c_volume_present;
 	s16				c_volume_min;
 	s16				c_volume_max;
 	s16				c_volume_res;
@@ -61,17 +114,17 @@ struct f_uac1_opts {
 	int				fb_max;
 	unsigned			bound:1;
 
-	char			function_name[USB_MAX_STRING_LEN];
+	char				function_name[USB_MAX_STRING_LEN];
 
-	char			p_it_name[USB_MAX_STRING_LEN];
-	char			p_it_ch_name[USB_MAX_STRING_LEN];
-	char			p_ot_name[USB_MAX_STRING_LEN];
-	char			p_fu_vol_name[USB_MAX_STRING_LEN];
+	char				p_it_name[USB_MAX_STRING_LEN];
+	char				p_it_ch_name[USB_MAX_STRING_LEN];
+	char				p_ot_name[USB_MAX_STRING_LEN];
+	char				p_fu_vol_name[USB_MAX_STRING_LEN];
 
-	char			c_it_name[USB_MAX_STRING_LEN];
-	char			c_it_ch_name[USB_MAX_STRING_LEN];
-	char			c_ot_name[USB_MAX_STRING_LEN];
-	char			c_fu_vol_name[USB_MAX_STRING_LEN];
+	char				c_it_name[USB_MAX_STRING_LEN];
+	char				c_it_ch_name[USB_MAX_STRING_LEN];
+	char				c_ot_name[USB_MAX_STRING_LEN];
+	char				c_fu_vol_name[USB_MAX_STRING_LEN];
 
 	s16				p_terminal_type;
 	s16				c_terminal_type;
