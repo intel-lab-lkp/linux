@@ -1363,7 +1363,8 @@ static int mpi3mr_bring_ioc_ready(struct mpi3mr_ioc *mrioc)
 	enum mpi3mr_iocstate ioc_state;
 	u64 base_info;
 	u8 retry = 0;
-	u64 start_time, elapsed_time_sec;
+	u64 start_time = 0;
+	u64 elapsed_time_sec = 0;
 
 retry_bring_ioc_ready:
 
