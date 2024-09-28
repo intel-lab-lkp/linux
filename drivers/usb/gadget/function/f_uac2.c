@@ -93,38 +93,6 @@ static int afunc_notify(struct g_audio *agdev, int unit_id, int cs);
 
 /* --------- USB Function Interface ------------- */
 
-enum {
-	STR_ASSOC,
-	STR_IF_CTRL,
-	STR_CLKSRC_IN,
-	STR_CLKSRC_OUT,
-	STR_USB_IT,
-	STR_USB_IT_CH,
-	STR_IO_IT,
-	STR_IO_IT_CH,
-	STR_USB_OT,
-	STR_IO_OT,
-	STR_FU_IN,
-	STR_FU_OUT,
-	STR_AS_OUT_ALT0,
-	STR_AS_OUT_ALT1,
-	STR_AS_IN_ALT0,
-	STR_AS_IN_ALT1,
-	NUM_STR_DESCRIPTORS,
-};
-
-static struct usb_string strings_fn[NUM_STR_DESCRIPTORS + 1] = {};
-
-static struct usb_gadget_strings str_fn = {
-	.language = 0x0409,	/* en-us */
-	.strings = strings_fn,
-};
-
-static struct usb_gadget_strings *fn_strings[] = {
-	&str_fn,
-	NULL,
-};
-
 static struct usb_interface_assoc_descriptor iad_desc = {
 	.bLength = sizeof iad_desc,
 	.bDescriptorType = USB_DT_INTERFACE_ASSOCIATION,
@@ -649,6 +617,98 @@ struct cntrl_subrange_lay3 {
 
 DECLARE_UAC2_CNTRL_RANGES_LAY3(srates, UAC_MAX_RATES);
 
+/*-------------------------------------------------------------------------*/
+
+/*
+ * String handling
+ */
+
+#define MAX_STRINGS 256
+
+static int add_string(struct usb_string *strings, const char *s)
+{
+	int i;
+
+	if (!s || s[0] == '\0')
+		return 0;
+
+	for (i = 0; i < MAX_STRINGS; i++) {
+		if (!strings[i].s) {
+			strings[i].s = s;
+			return 0; /* IDs aren't allocated yet */
+		}
+
+		if (!strcmp(s, strings[i].s))
+			return strings[i].id;
+	}
+
+	return -1;
+}
+
+static void add_alt_strings(struct usb_string *strings, struct f_uac2_alt_opts *alt_opts, bool fu)
+{
+	add_string(strings, alt_opts->name);
+	add_string(strings, alt_opts->it_name);
+	add_string(strings, alt_opts->it_ch_name);
+	add_string(strings, alt_opts->ot_name);
+	if (fu)
+		add_string(strings, alt_opts->fu_vol_name);
+}
+
+static struct usb_string *attach_strings(struct usb_composite_dev *cdev,
+					 struct f_uac2_opts *audio_opts)
+{
+	struct usb_string	*strings = kzalloc(sizeof(struct usb_string) * MAX_STRINGS,
+						   GFP_KERNEL);
+	struct f_uac2_alt_opts	*alt_opts;
+	struct usb_string	*us;
+	int			strings_fn_length;
+
+	struct usb_gadget_strings strings_fn = {
+		.language = 0x0409,	/* en-us */
+		.strings = strings
+	};
+
+	struct usb_gadget_strings *fn_strings[] = {
+		&strings_fn,
+		NULL,
+	};
+
+	if (!strings)
+		return ERR_PTR(-ENOMEM);
+
+	/* Add all the strings from all the alt mode options */
+	add_string(strings, audio_opts->function_name);
+	add_string(strings, audio_opts->if_ctrl_name);
+	add_string(strings, audio_opts->clksrc_in_name);
+	add_string(strings, audio_opts->clksrc_out_name);
+	add_string(strings, audio_opts->c_alt_0_opts.name);
+	add_string(strings, audio_opts->p_alt_0_opts.name);
+	add_alt_strings(strings, &audio_opts->c_alt_1_opts, FUOUT_EN(audio_opts));
+	add_alt_strings(strings, &audio_opts->p_alt_1_opts, FUIN_EN(audio_opts));
+	list_for_each_entry(alt_opts, &audio_opts->c_alt_opts, list) {
+		add_alt_strings(strings, alt_opts, FUOUT_EN(audio_opts));
+	}
+	list_for_each_entry(alt_opts, &audio_opts->p_alt_opts, list) {
+		add_alt_strings(strings, alt_opts, FUIN_EN(audio_opts));
+	}
+
+	for (strings_fn_length = 0; strings[strings_fn_length].s; strings_fn_length++)
+		;
+
+	/* Attach strings to the composite device and get string IDs assigned */
+	us = usb_gstrings_attach(cdev, fn_strings, strings_fn_length);
+
+	/* Strings are now copied to the composite device and we use the
+	 * copy in "us" going forward, that has all the string IDs.
+	 */
+	kfree(strings);
+
+	return us;
+}
+
+/*-------------------------------------------------------------------------*/
+
 static int set_ep_max_packet_size_bint(struct device *dev, const struct f_uac2_alt_opts *alt_opts,
 	struct usb_endpoint_descriptor *ep_desc,
 	enum usb_device_speed speed, bool is_playback)
@@ -994,26 +1054,11 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	if (ret)
 		return ret;
 
-	strings_fn[STR_ASSOC].s = uac2_opts->function_name;
-	strings_fn[STR_IF_CTRL].s = uac2_opts->if_ctrl_name;
-	strings_fn[STR_CLKSRC_IN].s = uac2_opts->clksrc_in_name;
-	strings_fn[STR_CLKSRC_OUT].s = uac2_opts->clksrc_out_name;
+	/* Past this point, all settings that apply to an alt mode should
+	 * be used from their alt mode opts.
+	 */
 
-	strings_fn[STR_USB_IT].s = uac2_opts->c_it_name;
-	strings_fn[STR_USB_IT_CH].s = uac2_opts->c_it_ch_name;
-	strings_fn[STR_IO_OT].s = uac2_opts->c_ot_name;
-	strings_fn[STR_FU_OUT].s = uac2_opts->c_fu_vol_name;
-	strings_fn[STR_AS_OUT_ALT0].s = "Playback Inactive";
-	strings_fn[STR_AS_OUT_ALT1].s = "Playback Active";
-
-	strings_fn[STR_IO_IT].s = uac2_opts->p_it_name;
-	strings_fn[STR_IO_IT_CH].s = uac2_opts->p_it_ch_name;
-	strings_fn[STR_USB_OT].s = uac2_opts->p_ot_name;
-	strings_fn[STR_FU_IN].s = uac2_opts->p_fu_vol_name;
-	strings_fn[STR_AS_IN_ALT0].s = "Capture Inactive";
-	strings_fn[STR_AS_IN_ALT1].s = "Capture Active";
-
-	us = usb_gstrings_attach(cdev, fn_strings, ARRAY_SIZE(strings_fn));
+	us = attach_strings(cdev, uac2_opts);
 	if (IS_ERR(us))
 		return PTR_ERR(us);
 
@@ -1030,30 +1075,30 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 		}
 	}
 
-	iad_desc.iFunction = us[STR_ASSOC].id;
-	std_ac_if_desc.iInterface = us[STR_IF_CTRL].id;
-	in_clk_src_desc.iClockSource = us[STR_CLKSRC_IN].id;
-	out_clk_src_desc.iClockSource = us[STR_CLKSRC_OUT].id;
-	usb_out_it_desc.iTerminal = us[STR_USB_IT].id;
-	usb_out_it_desc.iChannelNames = us[STR_USB_IT_CH].id;
-	io_in_it_desc.iTerminal = us[STR_IO_IT].id;
-	io_in_it_desc.iChannelNames = us[STR_IO_IT_CH].id;
-	usb_in_ot_desc.iTerminal = us[STR_USB_OT].id;
-	io_out_ot_desc.iTerminal = us[STR_IO_OT].id;
-	std_as_out_if0_desc.iInterface = us[STR_AS_OUT_ALT0].id;
-	std_as_out_if1_desc.iInterface = us[STR_AS_OUT_ALT1].id;
-	std_as_in_if0_desc.iInterface = us[STR_AS_IN_ALT0].id;
-	std_as_in_if1_desc.iInterface = us[STR_AS_IN_ALT1].id;
+	iad_desc.iFunction = add_string(us, uac2_opts->function_name);
+	std_ac_if_desc.iInterface = add_string(us, uac2_opts->if_ctrl_name);
+	in_clk_src_desc.iClockSource = add_string(us, uac2_opts->clksrc_in_name);
+	out_clk_src_desc.iClockSource = add_string(us, uac2_opts->clksrc_out_name);
+	usb_out_it_desc.iTerminal = add_string(us, uac2_opts->c_alt_1_opts.it_name);
+	usb_out_it_desc.iChannelNames = add_string(us, uac2_opts->c_alt_1_opts.it_ch_name);
+	io_in_it_desc.iTerminal = add_string(us, uac2_opts->p_alt_1_opts.it_name);
+	io_in_it_desc.iChannelNames = add_string(us, uac2_opts->p_alt_1_opts.it_ch_name);
+	usb_in_ot_desc.iTerminal = add_string(us, uac2_opts->p_alt_1_opts.ot_name);
+	io_out_ot_desc.iTerminal = add_string(us, uac2_opts->c_alt_1_opts.ot_name);
+	std_as_out_if0_desc.iInterface = add_string(us, uac2_opts->c_alt_0_opts.name);
+	std_as_out_if1_desc.iInterface = add_string(us, uac2_opts->c_alt_1_opts.name);
+	std_as_in_if0_desc.iInterface = add_string(us, uac2_opts->p_alt_0_opts.name);
+	std_as_in_if1_desc.iInterface = add_string(us, uac2_opts->p_alt_0_opts.name);
 
 	if (FUOUT_EN(uac2_opts)) {
 		u8 *i_feature = (u8 *)out_feature_unit_desc +
 				out_feature_unit_desc->bLength - 1;
-		*i_feature = us[STR_FU_OUT].id;
+		*i_feature = add_string(us, uac2_opts->c_alt_1_opts.fu_vol_name);
 	}
 	if (FUIN_EN(uac2_opts)) {
 		u8 *i_feature = (u8 *)in_feature_unit_desc +
 				in_feature_unit_desc->bLength - 1;
-		*i_feature = us[STR_FU_IN].id;
+		*i_feature = add_string(us, uac2_opts->p_alt_1_opts.fu_vol_name);
 	}
 
 
