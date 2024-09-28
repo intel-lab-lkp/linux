@@ -1249,8 +1249,39 @@ static inline bool file_mmap_ok(struct file *file, struct inode *inode,
 	return true;
 }
 
+int mmap_check_prot(struct file *file, unsigned long *prot,
+		    unsigned long flags)
+{
+	unsigned long req_prot = *prot;
+	unsigned long new_prot = req_prot;
+	int err;
+
+	/*
+	 * Does the application expect PROT_READ to imply PROT_EXEC?
+	 *
+	 * (the exception is when the underlying filesystem is noexec
+	 *  mounted, in which case we don't add PROT_EXEC.)
+	 */
+	if (((req_prot & (PROT_READ | PROT_EXEC)) == PROT_READ) &&
+	    (current->personality & READ_IMPLIES_EXEC) &&
+	    !(file && path_noexec(&file->f_path)))
+		new_prot |= PROT_EXEC;
+
+	err = security_mmap_file(file, req_prot, new_prot, flags);
+	if (err)
+		return err;
+
+	*prot = new_prot;
+	return 0;
+}
+
 /*
  * The caller must write-lock current->mm->mmap_lock.
+ * The caller must consider to call mmap_check_prot or
+ * security_mmap_file before if
+ * (file && !IS_PRIVATE(file_inode(file)) || (
+ *  ((prot & PROT_EXEC) || (vm_flags & VM_EXEC)) &&
+ *  ((prot & PROT_WRITE) || (vm_flags & VM_WRITE)))).
  */
 unsigned long do_mmap(struct file *file, unsigned long addr,
 			unsigned long len, unsigned long prot,
@@ -1265,16 +1296,6 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 
 	if (!len)
 		return -EINVAL;
-
-	/*
-	 * Does the application expect PROT_READ to imply PROT_EXEC?
-	 *
-	 * (the exception is when the underlying filesystem is noexec
-	 *  mounted, in which case we don't add PROT_EXEC.)
-	 */
-	if ((prot & PROT_READ) && (current->personality & READ_IMPLIES_EXEC))
-		if (!(file && path_noexec(&file->f_path)))
-			prot |= PROT_EXEC;
 
 	/* force arch specific MAP_FIXED handling in get_unmapped_area */
 	if (flags & MAP_FIXED_NOREPLACE)
@@ -2846,6 +2867,12 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 	return do_vmi_munmap(&vmi, mm, start, len, uf, false);
 }
 
+/*
+ * The caller must write-lock current->mm->mmap_lock.
+ * The caller must consider to call security_mmap_file before if
+ * ((file && !IS_PRIVATE(file_inode(file))) ||
+ *  (vm_flags & VM_EXEC) && (vm_flags & VM_WRITE)).
+ */
 unsigned long mmap_region(struct file *file, unsigned long addr,
 		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff,
 		struct list_head *uf)
@@ -3198,12 +3225,8 @@ SYSCALL_DEFINE5(remap_file_pages, unsigned long, start, unsigned long, size,
 		flags |= MAP_LOCKED;
 
 	file = get_file(vma->vm_file);
-	ret = security_mmap_file(vma->vm_file, prot, flags);
-	if (ret)
-		goto out_fput;
 	ret = do_mmap(vma->vm_file, start, size,
 			prot, flags, 0, pgoff, &populate, NULL);
-out_fput:
 	fput(file);
 out:
 	mmap_write_unlock(mm);

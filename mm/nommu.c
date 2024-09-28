@@ -792,12 +792,6 @@ static int validate_mmap_request(struct file *file,
 		if (path_noexec(&file->f_path)) {
 			if (prot & PROT_EXEC)
 				return -EPERM;
-		} else if ((prot & PROT_READ) && !(prot & PROT_EXEC)) {
-			/* handle implication of PROT_EXEC by PROT_READ */
-			if (current->personality & READ_IMPLIES_EXEC) {
-				if (capabilities & NOMMU_MAP_EXEC)
-					prot |= PROT_EXEC;
-			}
 		} else if ((prot & PROT_READ) &&
 			 (prot & PROT_EXEC) &&
 			 !(capabilities & NOMMU_MAP_EXEC)
@@ -810,11 +804,6 @@ static int validate_mmap_request(struct file *file,
 		 * privately mapped
 		 */
 		capabilities = NOMMU_MAP_COPY;
-
-		/* handle PROT_EXEC implication by PROT_READ */
-		if ((prot & PROT_READ) &&
-		    (current->personality & READ_IMPLIES_EXEC))
-			prot |= PROT_EXEC;
 	}
 
 	/* allow the security API to have its say */
@@ -990,6 +979,44 @@ enomem:
 	       len, current->pid, current->comm);
 	show_mem();
 	return -ENOMEM;
+}
+
+int mmap_check_prot(struct file *file, unsigned long *prot,
+		    unsigned long flags)
+{
+	unsigned long req_prot = *prot;
+	unsigned long new_prot = req_prot;
+	int err;
+
+	/*
+	 * Does the application expect PROT_READ to imply PROT_EXEC?
+	 *
+	 * (the exception is when the underlying filesystem is noexec
+	 *  mounted or the file does not have NOMMU_MAP_EXEC
+	 * (== VM_MAYEXEC), in which case we don't add PROT_EXEC.)
+	 */
+	if ((req_prot & (PROT_READ | PROT_EXEC)) != PROT_READ)
+		goto check;
+	if (!(current->personality & READ_IMPLIES_EXEC))
+		goto check;
+	if (!file) {
+		new_prot |= PROT_EXEC;
+		goto check;
+	}
+	if (file->f_op->mmap_capabilities) {
+		unsigned int caps = file->f_op->mmap_capabilities(file);
+
+		if (!(caps & NOMMU_MAP_EXEC))
+			goto check;
+		new_prot |= PROT_EXEC;
+	}
+check:
+	err = security_mmap_file(file, req_prot, new_prot, flags);
+	if (err)
+		return err;
+
+	*prot = new_prot;
+	return 0;
 }
 
 /*
