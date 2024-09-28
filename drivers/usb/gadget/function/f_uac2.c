@@ -112,16 +112,6 @@ enum {
 
 static struct usb_string strings_fn[NUM_STR_DESCRIPTORS + 1] = {};
 
-static const char *const speed_names[] = {
-	[USB_SPEED_UNKNOWN] = "UNKNOWN",
-	[USB_SPEED_LOW] = "LS",
-	[USB_SPEED_FULL] = "FS",
-	[USB_SPEED_HIGH] = "HS",
-	[USB_SPEED_WIRELESS] = "W",
-	[USB_SPEED_SUPER] = "SS",
-	[USB_SPEED_SUPER_PLUS] = "SS+",
-};
-
 static struct usb_gadget_strings str_fn = {
 	.language = 0x0409,	/* en-us */
 	.strings = strings_fn,
@@ -656,113 +646,29 @@ struct cntrl_subrange_lay3 {
 
 DECLARE_UAC2_CNTRL_RANGES_LAY3(srates, UAC_MAX_RATES);
 
-static int get_max_srate(const int *srates)
+static int set_ep_max_packet_size_bint(struct device *dev, const struct f_uac2_opts *uac2_opts,
+	struct usb_endpoint_descriptor *ep_desc,
+	enum usb_device_speed speed, bool is_playback)
 {
-	int i, max_srate = 0;
-
-	for (i = 0; i < UAC_MAX_RATES; i++) {
-		if (srates[i] == 0)
-			break;
-		if (srates[i] > max_srate)
-			max_srate = srates[i];
-	}
-	return max_srate;
-}
-
-static int get_max_bw_for_bint(const struct f_uac2_opts *uac2_opts,
-	u8 bint, unsigned int factor, bool is_playback)
-{
-	int chmask, srate, ssize;
-	u16 max_size_bw;
+	int chmask, srate, ssize, hs_bint, sync;
 
 	if (is_playback) {
 		chmask = uac2_opts->p_chmask;
 		srate = get_max_srate(uac2_opts->p_srates);
 		ssize = uac2_opts->p_ssize;
+		hs_bint = uac2_opts->p_hs_bint;
+		sync = USB_ENDPOINT_SYNC_ASYNC;
 	} else {
 		chmask = uac2_opts->c_chmask;
 		srate = get_max_srate(uac2_opts->c_srates);
 		ssize = uac2_opts->c_ssize;
+		hs_bint = uac2_opts->c_hs_bint;
+		sync = uac2_opts->c_sync;
 	}
 
-	if (is_playback || (uac2_opts->c_sync == USB_ENDPOINT_SYNC_ASYNC)) {
-		// playback is always async, capture only when configured
-		// Win10 requires max packet size + 1 frame
-		srate = srate * (1000 + uac2_opts->fb_max) / 1000;
-		// updated srate is always bigger, therefore DIV_ROUND_UP always yields +1
-		max_size_bw = num_channels(chmask) * ssize *
-			(DIV_ROUND_UP(srate, factor / (1 << (bint - 1))));
-	} else {
-		// adding 1 frame provision for Win10
-		max_size_bw = num_channels(chmask) * ssize *
-			(DIV_ROUND_UP(srate, factor / (1 << (bint - 1))) + 1);
-	}
-	return max_size_bw;
-}
-
-static int set_ep_max_packet_size_bint(struct device *dev, const struct f_uac2_opts *uac2_opts,
-	struct usb_endpoint_descriptor *ep_desc,
-	enum usb_device_speed speed, bool is_playback)
-{
-	u16 max_size_bw, max_size_ep;
-	u8 bint, opts_bint;
-	char *dir;
-
-	switch (speed) {
-	case USB_SPEED_FULL:
-		max_size_ep = 1023;
-		// fixed
-		bint = ep_desc->bInterval;
-		max_size_bw = get_max_bw_for_bint(uac2_opts, bint, 1000, is_playback);
-		break;
-
-	case USB_SPEED_HIGH:
-	case USB_SPEED_SUPER:
-		max_size_ep = 1024;
-		if (is_playback)
-			opts_bint = uac2_opts->p_hs_bint;
-		else
-			opts_bint = uac2_opts->c_hs_bint;
-
-		if (opts_bint > 0) {
-			/* fixed bint */
-			bint = opts_bint;
-			max_size_bw = get_max_bw_for_bint(uac2_opts, bint, 8000, is_playback);
-		} else {
-			/* checking bInterval from 4 to 1 whether the required bandwidth fits */
-			for (bint = 4; bint > 0; --bint) {
-				max_size_bw = get_max_bw_for_bint(
-					uac2_opts, bint, 8000, is_playback);
-				if (max_size_bw <= max_size_ep)
-					break;
-			}
-		}
-		break;
-
-	default:
-		return -EINVAL;
-	}
-
-	if (is_playback)
-		dir = "Playback";
-	else
-		dir = "Capture";
-
-	if (max_size_bw <= max_size_ep)
-		dev_dbg(dev,
-			"%s %s: Would use wMaxPacketSize %d and bInterval %d\n",
-			speed_names[speed], dir, max_size_bw, bint);
-	else {
-		dev_warn(dev,
-			"%s %s: Req. wMaxPacketSize %d at bInterval %d > max ISOC %d, may drop data!\n",
-			speed_names[speed], dir, max_size_bw, bint, max_size_ep);
-		max_size_bw = max_size_ep;
-	}
-
-	ep_desc->wMaxPacketSize = cpu_to_le16(max_size_bw);
-	ep_desc->bInterval = bint;
-
-	return 0;
+	return uac_set_ep_max_packet_size_bint(
+		dev, ep_desc, speed, is_playback, hs_bint, chmask,
+		srate, ssize, sync, uac2_opts->fb_max);
 }
 
 static struct uac2_feature_unit_descriptor *build_fu_desc(int chmask)
