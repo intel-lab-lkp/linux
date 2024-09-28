@@ -1778,6 +1778,21 @@ static inline void count_objcg_event(struct obj_cgroup *objcg,
 	rcu_read_unlock();
 }
 
+static inline void count_objcg_events(struct obj_cgroup *objcg,
+				      enum vm_event_item idx,
+				      unsigned long count)
+{
+	struct mem_cgroup *memcg;
+
+	if (!memcg_kmem_online())
+		return;
+
+	rcu_read_lock();
+	memcg = obj_cgroup_memcg(objcg);
+	count_memcg_events(memcg, idx, count);
+	rcu_read_unlock();
+}
+
 #else
 static inline bool mem_cgroup_kmem_disabled(void)
 {
@@ -1834,6 +1849,11 @@ static inline void count_objcg_event(struct obj_cgroup *objcg,
 {
 }
 
+static inline void count_objcg_events(struct obj_cgroup *objcg,
+				      enum vm_event_item idx,
+				      unsigned long count)
+{
+}
 #endif /* CONFIG_MEMCG */
 
 #if defined(CONFIG_MEMCG) && defined(CONFIG_ZSWAP)
