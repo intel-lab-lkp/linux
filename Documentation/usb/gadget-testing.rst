@@ -980,6 +980,8 @@ The uac1 function provides these attributes in its function directory:
 	c_it_ch_name     capture channels name
 	c_ot_name        capture output terminal name
 	c_fu_vol_name    capture mute/volume functional unit name
+	c_terminal_type  code of the capture terminal type
+	p_terminal_type  code of the playback terminal type
 	================ ====================================================
 
 The attributes have sane default values.

@@ -1277,6 +1277,8 @@ static void setup_descriptor(struct f_uac1_opts *opts)
 	as_out_header_desc.bTerminalLink = usb_out_it_desc.bTerminalID;
 	as_in_header_desc.bTerminalLink = usb_in_ot_desc.bTerminalID;
 
+	io_in_it_desc.wTerminalType = cpu_to_le16(opts->c_terminal_type);
+	io_out_ot_desc.wTerminalType = cpu_to_le16(opts->p_terminal_type);
 	ac_header_desc->wTotalLength = cpu_to_le16(ac_header_desc->bLength);
 
 	if (EPIN_EN(opts)) {
@@ -1898,6 +1900,9 @@ UAC1_ATTRIBUTE_STRING(c_it_ch_name);
 UAC1_ATTRIBUTE_STRING(c_ot_name);
 UAC1_ATTRIBUTE_STRING(c_fu_vol_name);
 
+UAC1_ATTRIBUTE(s16, p_terminal_type);
+UAC1_ATTRIBUTE(s16, c_terminal_type);
+
 static struct configfs_attribute *f_uac1_attrs[] = {
 	&f_uac1_opts_attr_c_chmask,
 	&f_uac1_opts_attr_c_srate,
@@ -1934,6 +1939,9 @@ static struct configfs_attribute *f_uac1_attrs[] = {
 	&f_uac1_opts_attr_c_it_ch_name,
 	&f_uac1_opts_attr_c_ot_name,
 	&f_uac1_opts_attr_c_fu_vol_name,
+
+	&f_uac1_opts_attr_p_terminal_type,
+	&f_uac1_opts_attr_c_terminal_type,
 
 	NULL,
 };
@@ -2002,6 +2010,9 @@ static struct usb_function_instance *f_audio_alloc_inst(void)
 	scnprintf(opts->c_it_ch_name, sizeof(opts->c_it_ch_name), "Playback Channels");
 	scnprintf(opts->c_ot_name, sizeof(opts->c_ot_name), "Playback Output terminal");
 	scnprintf(opts->c_fu_vol_name, sizeof(opts->c_fu_vol_name), "Playback Volume");
+
+	opts->p_terminal_type = UAC1_DEF_P_TERM_TYPE;
+	opts->c_terminal_type = UAC1_DEF_C_TERM_TYPE;
 
 	return &opts->func_inst;
 }

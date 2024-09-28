@@ -30,6 +30,8 @@
 #define UAC1_DEF_MAX_DB		0		/* 0 dB */
 #define UAC1_DEF_RES_DB		(1*256)	/* 1 dB */
 
+#define UAC1_DEF_P_TERM_TYPE UAC_INPUT_TERMINAL_MICROPHONE
+#define UAC1_DEF_C_TERM_TYPE UAC_OUTPUT_TERMINAL_SPEAKER
 
 struct f_uac1_opts {
 	struct usb_function_instance	func_inst;
@@ -70,6 +72,9 @@ struct f_uac1_opts {
 	char			c_it_ch_name[USB_MAX_STRING_LEN];
 	char			c_ot_name[USB_MAX_STRING_LEN];
 	char			c_fu_vol_name[USB_MAX_STRING_LEN];
+
+	s16				p_terminal_type;
+	s16				c_terminal_type;
 
 	struct mutex			lock;
 	int				refcnt;
