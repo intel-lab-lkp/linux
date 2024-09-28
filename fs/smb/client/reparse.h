@@ -20,9 +20,12 @@
 
 static inline dev_t reparse_nfs_mkdev(struct reparse_posix_data *buf)
 {
-	u64 v = le64_to_cpu(*(__le64 *)buf->DataBuffer);
+	u32 major, minor;
 
-	return MKDEV(v >> 32, v & 0xffffffff);
+	major = le32_to_cpu(((__le32 *)buf->DataBuffer)[0]);
+	minor = le32_to_cpu(((__le32 *)buf->DataBuffer)[1]);
+
+	return MKDEV(major, minor);
 }
 
 static inline dev_t wsl_mkdev(void *ptr)
