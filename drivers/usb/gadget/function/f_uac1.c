@@ -19,6 +19,7 @@
 
 #include "u_audio.h"
 #include "u_uac1.h"
+#include "u_uac_utils.h"
 
 /* UAC1 spec: 3.7.2.3 Audio Channel Cluster Format */
 #define UAC1_CHANNEL_MASK 0x0FFF
@@ -1516,151 +1517,18 @@ static struct configfs_item_operations f_uac1_item_ops = {
 	.release	= f_uac1_attr_release,
 };
 
-#define uac1_kstrtou32			kstrtou32
-#define uac1_kstrtos16			kstrtos16
-#define uac1_kstrtobool(s, base, res)	kstrtobool((s), (res))
-
-static const char *u32_fmt = "%u\n";
-static const char *s16_fmt = "%hd\n";
-static const char *bool_fmt = "%u\n";
-
+#define UAC1_ATTR_TO_OPTS struct f_uac1_opts *opts = to_f_uac1_opts(item)
 #define UAC1_ATTRIBUTE(type, name)					\
-static ssize_t f_uac1_opts_##name##_show(				\
-					  struct config_item *item,	\
-					  char *page)			\
-{									\
-	struct f_uac1_opts *opts = to_f_uac1_opts(item);		\
-	int result;							\
-									\
-	mutex_lock(&opts->lock);					\
-	result = sprintf(page, type##_fmt, opts->name);			\
-	mutex_unlock(&opts->lock);					\
-									\
-	return result;							\
-}									\
-									\
-static ssize_t f_uac1_opts_##name##_store(				\
-					  struct config_item *item,	\
-					  const char *page, size_t len)	\
-{									\
-	struct f_uac1_opts *opts = to_f_uac1_opts(item);		\
-	int ret;							\
-	type num;							\
-									\
-	mutex_lock(&opts->lock);					\
-	if (opts->refcnt) {						\
-		ret = -EBUSY;						\
-		goto end;						\
-	}								\
-									\
-	ret = uac1_kstrto##type(page, 0, &num);				\
-	if (ret)							\
-		goto end;						\
-									\
-	opts->name = num;						\
-	ret = len;							\
-									\
-end:									\
-	mutex_unlock(&opts->lock);					\
-	return ret;							\
-}									\
-									\
-CONFIGFS_ATTR(f_uac1_opts_, name)
+	UAC_ATTRIBUTE(f_uac1_opts, UAC1_ATTR_TO_OPTS, opts,		\
+		      opts->lock, opts->refcnt, type, name)
 
 #define UAC1_RATE_ATTRIBUTE(name)					\
-static ssize_t f_uac1_opts_##name##_show(struct config_item *item,	\
-					 char *page)			\
-{									\
-	struct f_uac1_opts *opts = to_f_uac1_opts(item);		\
-	int result = 0;							\
-	int i;								\
-									\
-	mutex_lock(&opts->lock);					\
-	page[0] = '\0';							\
-	for (i = 0; i < UAC_MAX_RATES; i++) {				\
-		if (opts->name##s[i] == 0)				\
-			break;						\
-		result += sprintf(page + strlen(page), "%u,",		\
-				opts->name##s[i]);			\
-	}								\
-	if (strlen(page) > 0)						\
-		page[strlen(page) - 1] = '\n';				\
-	mutex_unlock(&opts->lock);					\
-									\
-	return result;							\
-}									\
-									\
-static ssize_t f_uac1_opts_##name##_store(struct config_item *item,	\
-					  const char *page, size_t len)	\
-{									\
-	struct f_uac1_opts *opts = to_f_uac1_opts(item);		\
-	char *split_page = NULL;					\
-	int ret = -EINVAL;						\
-	char *token;							\
-	u32 num;							\
-	int i;								\
-									\
-	mutex_lock(&opts->lock);					\
-	if (opts->refcnt) {						\
-		ret = -EBUSY;						\
-		goto end;						\
-	}								\
-									\
-	i = 0;								\
-	memset(opts->name##s, 0x00, sizeof(opts->name##s));		\
-	split_page = kstrdup(page, GFP_KERNEL);				\
-	while ((token = strsep(&split_page, ",")) != NULL) {		\
-		ret = kstrtou32(token, 0, &num);			\
-		if (ret)						\
-			goto end;					\
-									\
-		opts->name##s[i++] = num;				\
-		ret = len;						\
-	};								\
-									\
-end:									\
-	kfree(split_page);						\
-	mutex_unlock(&opts->lock);					\
-	return ret;							\
-}									\
-									\
-CONFIGFS_ATTR(f_uac1_opts_, name)
+	UAC_RATE_ATTRIBUTE(f_uac1_opts, UAC1_ATTR_TO_OPTS, opts,	\
+			   opts->lock, opts->refcnt, name)
 
 #define UAC1_ATTRIBUTE_STRING(name)					\
-static ssize_t f_uac1_opts_##name##_show(struct config_item *item,	\
-					 char *page)			\
-{									\
-	struct f_uac1_opts *opts = to_f_uac1_opts(item);		\
-	int result;							\
-									\
-	mutex_lock(&opts->lock);					\
-	result = scnprintf(page, sizeof(opts->name), "%s", opts->name);	\
-	mutex_unlock(&opts->lock);					\
-									\
-	return result;							\
-}									\
-									\
-static ssize_t f_uac1_opts_##name##_store(struct config_item *item,	\
-					  const char *page, size_t len)	\
-{									\
-	struct f_uac1_opts *opts = to_f_uac1_opts(item);		\
-	int ret = 0;							\
-									\
-	mutex_lock(&opts->lock);					\
-	if (opts->refcnt) {						\
-		ret = -EBUSY;						\
-		goto end;						\
-	}								\
-									\
-	ret = scnprintf(opts->name, min(sizeof(opts->name), len),	\
-			"%s", page);					\
-									\
-end:									\
-	mutex_unlock(&opts->lock);					\
-	return ret;							\
-}									\
-									\
-CONFIGFS_ATTR(f_uac1_opts_, name)
+	UAC_ATTRIBUTE_STRING(f_uac1_opts, UAC1_ATTR_TO_OPTS, opts,	\
+			     opts->lock, opts->refcnt, name)
 
 UAC1_ATTRIBUTE(u32, c_chmask);
 UAC1_RATE_ATTRIBUTE(c_srate);
