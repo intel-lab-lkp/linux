@@ -53,6 +53,9 @@ struct f_uac2_alt_0_opts {
 	struct f_uac2_alt_opts_common c;
 
 	char			name[USB_MAX_STRING_LEN];
+
+	/* Descriptors */
+	struct usb_interface_descriptor	intf_desc;
 };
 
 /* Alt modes 1+ */
@@ -75,6 +78,35 @@ struct f_uac2_alt_opts {
 	u8			hs_bint;
 	s16			terminal_type;
 
+	/* Descriptors */
+	struct usb_interface_descriptor		intf_desc;
+	struct uac2_as_header_descriptor	as_header_desc;
+	struct uac2_format_type_i_descriptor	fmt_desc;
+
+	struct usb_endpoint_descriptor		fs_iso_ep_desc;
+	struct usb_endpoint_descriptor		hs_iso_ep_desc;
+	struct usb_endpoint_descriptor		ss_iso_ep_desc;
+	struct usb_ss_ep_comp_descriptor	ss_iso_ep_desc_comp;
+
+	u8 clk_id; /* Clock Source Descriptor bClockID */
+	u8 it_id;  /* Input Terminal Descriptor bTerminalID */
+	u8 fu_id;  /* Feature Unit Descriptor bUnitID */
+	u8 ot_id;  /* Output Terminal Descriptor bTerminalID */
+};
+
+struct f_uac2_path_descriptors {
+	struct list_head list;
+
+	int dir; /* HOST_TO_DEVICE or DEVICE_TO_HOST */
+
+	/* Alt mode opts this path descriptor is from */
+	struct f_uac2_alt_opts *alt_opts;
+
+	struct uac2_input_terminal_descriptor it_desc;
+	struct uac2_output_terminal_descriptor ot_desc;
+
+	/* Feature unit is optional */
+	struct uac2_feature_unit_descriptor *fu_desc;
 };
 
 struct f_uac2_opts {
