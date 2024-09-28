@@ -22,6 +22,9 @@ static inline dev_t reparse_nfs_mkdev(struct reparse_posix_data *buf)
 {
 	u32 major, minor;
 
+	if (le16_to_cpu(buf->ReparseDataLength) != sizeof(buf->InodeType) + 2*sizeof(__le32))
+		return 0;
+
 	major = le32_to_cpu(((__le32 *)buf->DataBuffer)[0]);
 	minor = le32_to_cpu(((__le32 *)buf->DataBuffer)[1]);
 
