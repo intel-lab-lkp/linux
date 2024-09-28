@@ -762,7 +762,7 @@ The uac2 function provides these attributes in its function directory:
 	p_volume_max     playback volume control max value (in 1/256 dB)
 	p_volume_res     playback volume control resolution (in 1/256 dB)
 	p_hs_bint        playback bInterval for HS/SS (1-4: fixed, 0: auto)
-	req_number       the number of pre-allocated request for both capture
+	req_number       the number of pre-allocated requests for both capture
 	                 and playback
 	function_name    name of the interface
 	if_ctrl_name     topology control name
@@ -778,9 +778,28 @@ The uac2 function provides these attributes in its function directory:
 	c_fu_vol_name    capture functional unit name
 	c_terminal_type  code of the capture terminal type
 	p_terminal_type  code of the playback terminal type
+	c_alt.x/         alternate capture setting x (0-255)
+	p_alt.x/         alternate playback setting x (0-255)
 	================ ====================================================
 
 The attributes have sane default values.
+
+Alternate settings have these attributes settable. Defaults are copied
+from the associated function-wide settings. Alternate setting 0 only
+has a name and no other settings. If p/c_alt.1 doesn't exist
+function-wide settings will be used for alternate setting 1.
+
+	================ ====================================================
+	name             alternate setting name
+	chmask           channel mask
+	ssize            sample size (bytes)
+	sync             synchronization type (async/adaptive) *capture only*
+	hs_bint          bInterval for HS/SS (1-4: fixed, 0: auto)
+	it_name          input terminal name
+	it_ch_name       first input channel name
+	ot_name          output terminal name
+	fu_vol_name      mute/volume functional unit name
+	================ ====================================================
 
 Testing the UAC2 function
 -------------------------
