@@ -914,9 +914,9 @@ int intel_backlight_device_register(struct intel_connector *connector)
 {
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	struct intel_panel *panel = &connector->panel;
+	const char *name, *new_name = NULL;
 	struct backlight_properties props;
 	struct backlight_device *bd;
-	const char *name;
 	int ret = 0;
 
 	if (WARN_ON(panel->backlight.device))
@@ -949,10 +949,7 @@ int intel_backlight_device_register(struct intel_connector *connector)
 	else
 		props.power = BACKLIGHT_POWER_OFF;
 
-	name = kstrdup_const("intel_backlight", GFP_KERNEL);
-	if (!name)
-		return -ENOMEM;
-
+	name = "intel_backlight";
 	bd = backlight_device_get_by_name(name);
 	if (bd) {
 		put_device(&bd->dev);
@@ -963,11 +960,11 @@ int intel_backlight_device_register(struct intel_connector *connector)
 		 * compatibility. Use unique names for subsequent backlight devices as a
 		 * fallback when the default name already exists.
 		 */
-		kfree_const(name);
-		name = kasprintf(GFP_KERNEL, "card%d-%s-backlight",
-				 i915->drm.primary->index, connector->base.name);
-		if (!name)
+		new_name = kasprintf(GFP_KERNEL, "card%d-%s-backlight",
+				     i915->drm.primary->index, connector->base.name);
+		if (!new_name)
 			return -ENOMEM;
+		name = new_name;
 	}
 	bd = backlight_device_register(name, connector->base.kdev, connector,
 				       &intel_backlight_device_ops, &props);
@@ -987,7 +984,7 @@ int intel_backlight_device_register(struct intel_connector *connector)
 		    connector->base.base.id, connector->base.name, name);
 
 out:
-	kfree_const(name);
+	kfree(new_name);
 
 	return ret;
 }
