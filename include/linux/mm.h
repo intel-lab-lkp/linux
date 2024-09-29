@@ -3421,6 +3421,8 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address);
 extern struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr);
 extern struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
 					     struct vm_area_struct **pprev);
+extern void get_vma_name(struct vm_area_struct *vma, const struct path **path,
+			const char **name, const char **name_fmt);
 
 /*
  * Look up the first VMA which intersects the interval [start_addr, end_addr)

@@ -995,6 +995,80 @@ find_vma_prev(struct mm_struct *mm, unsigned long addr,
 	return vma;
 }
 
+/**
+ * get_vma_name() - get VMA name with relevant pieces of data.
+ * @vma: The vma to check
+ * @path: The file path given to the vma
+ * @name: The vma name
+ * @name_fmt: The formatted vma name
+ *
+ * Extract generic logic to fetch relevant pieces of data to describe
+ * VMA name. This could be just some string (either special constant or
+ * user-provided), or a string with some formatted wrapping text (e.g.,
+ * "[anon_shmem:<something>]"), or, commonly, file path.
+ */
+void get_vma_name(struct vm_area_struct *vma,
+			 const struct path **path,
+			 const char **name,
+			 const char **name_fmt)
+{
+	struct anon_vma_name *anon_name = vma->vm_mm ? anon_vma_name(vma) : NULL;
+
+	*name = NULL;
+	*path = NULL;
+	*name_fmt = NULL;
+
+	/*
+	 * Print the dentry name for named mappings, and a
+	 * special [heap] marker for the heap:
+	 */
+	if (vma->vm_file) {
+		/*
+		 * If user named this anon shared memory via
+		 * prctl(PR_SET_VMA ..., use the provided name.
+		 */
+		if (anon_name) {
+			*name_fmt = "[anon_shmem:%s]";
+			*name = anon_name->name;
+		} else {
+			*path = file_user_path(vma->vm_file);
+		}
+		return;
+	}
+
+	if (vma->vm_ops && vma->vm_ops->name) {
+		*name = vma->vm_ops->name(vma);
+		if (*name)
+			return;
+	}
+
+	*name = arch_vma_name(vma);
+	if (*name)
+		return;
+
+	if (!vma->vm_mm) {
+		*name = "[vdso]";
+		return;
+	}
+
+	if (vma_is_initial_heap(vma)) {
+		*name = "[heap]";
+		return;
+	}
+
+	if (vma_is_initial_stack(vma)) {
+		*name = "[stack]";
+		return;
+	}
+
+	if (anon_name) {
+		*name_fmt = "[anon:%s]";
+		*name = anon_name->name;
+		return;
+	}
+}
+EXPORT_SYMBOL(get_vma_name);
+
 /*
  * Verify that the stack growth is acceptable and
  * update accounting. This is shared with both the
