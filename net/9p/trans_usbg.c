@@ -417,6 +417,10 @@ static void usb9pfs_clear_tx(struct f_usb9pfs *usb9pfs)
 {
 	struct p9_req_t *req;
 
+	/* we are not allocated - return */
+	if (usb9pfs->client->status != Connected)
+		return;
+
 	guard(spinlock_irqsave)(&usb9pfs->lock);
 
 	req = usb9pfs->in_req->context;
@@ -442,9 +446,9 @@ static void p9_usbg_close(struct p9_client *client)
 	if (!usb9pfs)
 		return;
 
-	client->status = Disconnected;
-
 	usb9pfs_clear_tx(usb9pfs);
+
+	client->status = Disconnected;
 
 	opts = container_of(usb9pfs->function.fi,
 			    struct f_usb9pfs_opts, func_inst);
