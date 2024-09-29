@@ -36,6 +36,7 @@ struct sec_aead_req {
 	dma_addr_t out_mac_dma;
 	u8 *a_ivin;
 	dma_addr_t a_ivin_dma;
+	size_t authsize;
 	struct aead_request *aead_req;
 };
 
@@ -90,7 +91,6 @@ struct sec_auth_ctx {
 	dma_addr_t a_key_dma;
 	u8 *a_key;
 	u8 a_key_len;
-	u8 mac_len;
 	u8 a_alg;
 	bool fallback;
 	struct crypto_shash *hash_tfm;
