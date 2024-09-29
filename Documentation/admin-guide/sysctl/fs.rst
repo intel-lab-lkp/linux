@@ -38,6 +38,11 @@ requests.  ``aio-max-nr`` allows you to change the maximum value
 ``aio-max-nr`` does not result in the
 pre-allocation or re-sizing of any kernel data structures.
 
+automated_deletion_of_dentry
+----------------------------
+
+Deletes the associated dentry when a file is removed. Set to 1 to enable
+this behavior, and 0 to disable it. By default, this behavior is disabled.
 
 dentry-state
 ------------
