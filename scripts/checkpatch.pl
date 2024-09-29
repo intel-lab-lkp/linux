@@ -3884,6 +3884,13 @@ sub process {
 			}
 		}
 
+# check for consecutive empty /// lines in .rs files
+		if ($realfile =~ /\.rs$/ &&
+		    $rawline =~ /^\+\s*\/\/\/$/ && $prevrawline =~ /^\+\s*\/\/\/$/) {
+			WARN("RUST_DOC_EMPTY",
+			     "avoid using consecutive empty rustdoc comments\n" . $herecurr);
+		}
+
 # check for adding lines without a newline.
 		if ($line =~ /^\+/ && defined $lines[$linenr] && $lines[$linenr] =~ /^\\ No newline at end of file/) {
 			if (WARN("MISSING_EOF_NEWLINE",
