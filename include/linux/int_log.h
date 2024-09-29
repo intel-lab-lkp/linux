@@ -53,4 +53,23 @@ extern unsigned int intlog2(u32 value);
  */
 extern unsigned int intlog10(u32 value);
 
+/**
+ * intloge - computes loge of a value; the result is shifted left by 24 bits
+ *
+ * @value: The value (must be != 0)
+ *
+ * to use rational values you can use the following method:
+ *
+ *   intloge(value) = intloge(value * 10^x) - x * intloge(10)
+ *
+ * Some usecase examples:
+ *
+ *	intloge(10) will give 2.302... * 2^24
+ *
+ *	intloge(2.718) = intloge(2718) - 3 *intloge(10) = 0.999... * 2^24
+ *
+ * return: loge(value) * 2^24
+ */
+extern unsigned int intloge(u32 value);
+
 #endif

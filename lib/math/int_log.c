@@ -131,3 +131,27 @@ unsigned int intlog10(u32 value)
 	return (log * 646456993) >> 31;
 }
 EXPORT_SYMBOL(intlog10);
+
+unsigned int intloge(u32 value)
+{
+	/**
+	 *	returns: loge(value) * 2^24
+	 *	wrong result if value = 0 (loge(0) is undefined)
+	 */
+	u64 log;
+
+	if (unlikely(value == 0)) {
+		WARN_ON(1);
+		return 0;
+	}
+
+	log = intlog2(value);
+
+	/**
+	 *	we use the following method:
+	 *	loge(x) = log2(x) * loge(2)
+	 */
+
+	return (log * 1488522236) >> 31;
+}
+EXPORT_SYMBOL(intloge);
