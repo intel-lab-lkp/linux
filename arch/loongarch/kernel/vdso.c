@@ -85,7 +85,6 @@ static vm_fault_t vvar_fault(const struct vm_special_mapping *sm,
 
 struct loongarch_vdso_info vdso_info = {
 	.vdso = vdso_start,
-	.size = PAGE_SIZE,
 	.code_mapping = {
 		.name = "[vdso]",
 		.pages = vdso_pages,
@@ -103,7 +102,7 @@ static int __init init_vdso(void)
 	unsigned long i, cpu, pfn;
 
 	BUG_ON(!PAGE_ALIGNED(vdso_info.vdso));
-	BUG_ON(!PAGE_ALIGNED(vdso_info.size));
+	vdso_info.size = PAGE_ALIGN(vdso_end - vdso_start);
 
 	for_each_possible_cpu(cpu)
 		vdso_pdata[cpu].node = cpu_to_node(cpu);
