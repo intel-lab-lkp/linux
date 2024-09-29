@@ -207,8 +207,6 @@ void acpi_ps_free_op(union acpi_parse_object *op);
 
 u8 acpi_ps_is_leading_char(u32 c);
 
-u32 acpi_ps_get_name(union acpi_parse_object *op);
-
 void acpi_ps_set_name(union acpi_parse_object *op, u32 name);
 
 /*

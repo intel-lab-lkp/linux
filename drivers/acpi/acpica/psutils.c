@@ -182,23 +182,6 @@ u8 acpi_ps_is_leading_char(u32 c)
 }
 
 /*
- * Get op's name (4-byte name segment) or 0 if unnamed
- */
-u32 acpi_ps_get_name(union acpi_parse_object * op)
-{
-
-	/* The "generic" object has no name associated with it */
-
-	if (op->common.flags & ACPI_PARSEOP_GENERIC) {
-		return (0);
-	}
-
-	/* Only the "Extended" parse objects have a name */
-
-	return (op->named.name);
-}
-
-/*
  * Set op's name
  */
 void acpi_ps_set_name(union acpi_parse_object *op, u32 name)
