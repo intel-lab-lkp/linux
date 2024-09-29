@@ -15,7 +15,6 @@
 #include <linux/kernel.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -61,10 +60,6 @@
 #define CSI2RX_CFG_VID_VC			0x184
 #define CSI2RX_CFG_VID_P_FIFO_SEND_LEVEL	0x188
 #define CSI2RX_CFG_DISABLE_PAYLOAD_1		0x130
-
-enum {
-	ST_POWERED	= 1,
-};
 
 enum imx8mq_mipi_csi_clk {
 	CSI2_CLK_CORE,
@@ -115,9 +110,6 @@ struct csi_state {
 	struct v4l2_subdev *src_sd;
 
 	struct v4l2_mbus_config_mipi_csi2 bus;
-
-	struct mutex lock; /* Protect state */
-	u32 state;
 
 	struct regmap *phy_gpr;
 	u8 phy_gpr_reg;
@@ -400,27 +392,23 @@ static int imx8mq_mipi_csi_s_stream(struct v4l2_subdev *sd, int enable)
 			return ret;
 	}
 
-	mutex_lock(&state->lock);
-
 	if (enable) {
 		sd_state = v4l2_subdev_lock_and_get_active_state(sd);
 		ret = imx8mq_mipi_csi_start_stream(state, sd_state);
 		v4l2_subdev_unlock_state(sd_state);
 
 		if (ret < 0)
-			goto unlock;
+			goto out;
 
 		ret = v4l2_subdev_call(state->src_sd, video, s_stream, 1);
 		if (ret < 0)
-			goto unlock;
+			goto out;
 	} else {
 		v4l2_subdev_call(state->src_sd, video, s_stream, 0);
 		imx8mq_mipi_csi_stop_stream(state);
 	}
 
-unlock:
-	mutex_unlock(&state->lock);
-
+out:
 	if (!enable || ret < 0)
 		pm_runtime_put(state->dev);
 
@@ -638,59 +626,14 @@ err_parse:
  * Suspend/resume
  */
 
-static void imx8mq_mipi_csi_pm_suspend(struct device *dev)
-{
-	struct v4l2_subdev *sd = dev_get_drvdata(dev);
-	struct csi_state *state = mipi_sd_to_csi2_state(sd);
-
-	mutex_lock(&state->lock);
-
-	if (state->state & ST_POWERED) {
-		imx8mq_mipi_csi_stop_stream(state);
-		imx8mq_mipi_csi_clk_disable(state);
-		state->state &= ~ST_POWERED;
-	}
-
-	mutex_unlock(&state->lock);
-}
-
-static int imx8mq_mipi_csi_pm_resume(struct device *dev)
-{
-	struct v4l2_subdev *sd = dev_get_drvdata(dev);
-	struct csi_state *state = mipi_sd_to_csi2_state(sd);
-	int ret = 0;
-
-	mutex_lock(&state->lock);
-
-	if (!(state->state & ST_POWERED)) {
-		state->state |= ST_POWERED;
-		ret = imx8mq_mipi_csi_clk_enable(state);
-	}
-
-	mutex_unlock(&state->lock);
-
-	return ret ? -EAGAIN : 0;
-}
-
-static int imx8mq_mipi_csi_suspend(struct device *dev)
-{
-	imx8mq_mipi_csi_pm_suspend(dev);
-
-	return 0;
-}
-
-static int imx8mq_mipi_csi_resume(struct device *dev)
-{
-	return imx8mq_mipi_csi_pm_resume(dev);
-}
-
 static int imx8mq_mipi_csi_runtime_suspend(struct device *dev)
 {
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct csi_state *state = mipi_sd_to_csi2_state(sd);
 	int ret;
 
-	imx8mq_mipi_csi_pm_suspend(dev);
+	imx8mq_mipi_csi_stop_stream(state);
+	imx8mq_mipi_csi_clk_disable(state);
 
 	ret = icc_set_bw(state->icc_path, 0, 0);
 	if (ret)
@@ -711,13 +654,14 @@ static int imx8mq_mipi_csi_runtime_resume(struct device *dev)
 		return ret;
 	}
 
-	return imx8mq_mipi_csi_pm_resume(dev);
+	ret = imx8mq_mipi_csi_clk_enable(state);
+
+	return ret ? -EAGAIN : 0;
 }
 
 static const struct dev_pm_ops imx8mq_mipi_csi_pm_ops = {
 	RUNTIME_PM_OPS(imx8mq_mipi_csi_runtime_suspend,
 		       imx8mq_mipi_csi_runtime_resume, NULL)
-	SYSTEM_SLEEP_PM_OPS(imx8mq_mipi_csi_suspend, imx8mq_mipi_csi_resume)
 };
 
 /* -----------------------------------------------------------------------------
@@ -854,15 +798,13 @@ static int imx8mq_mipi_csi_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, &state->sd);
 
-	mutex_init(&state->lock);
-
 	ret = imx8mq_mipi_csi_subdev_init(state);
 	if (ret < 0)
-		goto mutex;
+		return ret;
 
 	ret = imx8mq_mipi_csi_init_icc(pdev);
 	if (ret)
-		goto mutex;
+		return ret;
 
 	/* Enable runtime PM. */
 	pm_runtime_enable(dev);
@@ -889,8 +831,6 @@ cleanup:
 	v4l2_async_unregister_subdev(&state->sd);
 icc:
 	imx8mq_mipi_csi_release_icc(pdev);
-mutex:
-	mutex_destroy(&state->lock);
 
 	return ret;
 }
@@ -908,7 +848,6 @@ static void imx8mq_mipi_csi_remove(struct platform_device *pdev)
 	imx8mq_mipi_csi_runtime_suspend(&pdev->dev);
 	media_entity_cleanup(&state->sd.entity);
 	v4l2_subdev_cleanup(&state->sd);
-	mutex_destroy(&state->lock);
 	pm_runtime_set_suspended(&pdev->dev);
 	imx8mq_mipi_csi_release_icc(pdev);
 }
