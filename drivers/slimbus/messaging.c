@@ -223,11 +223,11 @@ static u16 slim_slicesize(int code)
 /**
  * slim_xfer_msg() - Transfer a value info message on slim device
  *
- * @sbdev: slim device to which this msg has to be transfered
+ * @sbdev: slim device to which this msg has to be transferred
  * @msg: value info message pointer
  * @mc: message code of the message
  *
- * Called by drivers which want to transfer a vlaue or info elements.
+ * Called by drivers which want to transfer a value or info elements.
  *
  * Return: -ETIMEDOUT: If transmission of this message timed out
  */

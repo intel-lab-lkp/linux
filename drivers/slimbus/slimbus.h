@@ -260,7 +260,7 @@ enum slim_ch_aux_bit_fmt {
  * struct slim_channel  - SLIMbus channel, used for state machine
  *
  * @id: ID of channel
- * @prrate: Presense rate of channel from Table 66 of SLIMbus 2.0 Specs
+ * @prrate: Presence rate of channel from Table 66 of SLIMbus 2.0 Specs
  * @seg_dist: segment distribution code from Table 20 of SLIMbus 2.0 Specs
  * @data_fmt: Data format of channel.
  * @aux_fmt: Aux format for this channel.
@@ -368,7 +368,7 @@ struct slim_stream_runtime {
  * @get_laddr: It is possible that controller needs to set fixed logical
  *	address table and get_laddr can be used in that case so that controller
  *	can do this assignment. Use case is when the master is on the remote
- *	processor side, who is resposible for allocating laddr.
+ *	processor side, who is responsible for allocating laddr.
  * @wakeup: This function pointer implements controller-specific procedure
  *	to wake it up from clock-pause. Framework will call this to bring
  *	the controller out of clock pause.

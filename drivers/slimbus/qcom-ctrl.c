@@ -124,7 +124,7 @@ static void qcom_slim_queue_tx(struct qcom_slim_ctrl *ctrl, void *buf,
 
 	__iowrite32_copy(ctrl->base + tx_reg, buf, count);
 
-	/* Ensure Oder of subsequent writes */
+	/* Ensure Order of subsequent writes */
 	mb();
 }
 
