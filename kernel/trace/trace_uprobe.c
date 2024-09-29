@@ -676,6 +676,7 @@ static int __trace_uprobe_create(int argc, const char **argv)
 
 	argc -= 2;
 	argv += 2;
+	argc = min(argc, MAX_TRACE_ARGS);
 
 	tu = alloc_trace_uprobe(group, event, argc, is_return);
 	if (IS_ERR(tu)) {
@@ -690,7 +691,7 @@ static int __trace_uprobe_create(int argc, const char **argv)
 	tu->filename = filename;
 
 	/* parse arguments */
-	for (i = 0; i < argc && i < MAX_TRACE_ARGS; i++) {
+	for (i = 0; i < argc; i++) {
 		struct traceprobe_parse_context ctx = {
 			.flags = (is_return ? TPARG_FL_RETURN : 0) | TPARG_FL_USER,
 		};

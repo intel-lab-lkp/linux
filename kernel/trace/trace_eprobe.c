@@ -914,7 +914,7 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 
 	mutex_lock(&event_mutex);
 	event_call = find_and_get_event(sys_name, sys_event);
-	ep = alloc_event_probe(group, event, event_call, argc - 2);
+	ep = alloc_event_probe(group, event, event_call, min(argc - 2, MAX_TRACE_ARGS));
 	mutex_unlock(&event_mutex);
 
 	if (IS_ERR(ep)) {
@@ -936,8 +936,9 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 		ep->filter_str = NULL;
 
 	argc -= 2; argv += 2;
+	argc = min(argc, MAX_TRACE_ARGS);
 	/* parse arguments */
-	for (i = 0; i < argc && i < MAX_TRACE_ARGS; i++) {
+	for (i = 0; i < argc; i++) {
 		trace_probe_log_set_index(i + 2);
 		ret = trace_eprobe_tp_update_arg(ep, argv, i);
 		if (ret)
