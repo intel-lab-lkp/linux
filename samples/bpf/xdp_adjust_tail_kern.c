@@ -57,7 +57,8 @@ static __always_inline void swap_mac(void *data, struct ethhdr *orig_eth)
 
 static __always_inline __u16 csum_fold_helper(__u32 csum)
 {
-	return ~((csum & 0xffff) + (csum >> 16));
+	csum += (csum >> 16) | (csum << 16);
+	return ~(__sum16)(csum >> 16);
 }
 
 static __always_inline void ipv4_csum(void *data_start, int data_size,
