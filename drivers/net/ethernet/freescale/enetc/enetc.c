@@ -2468,8 +2468,6 @@ void enetc_start(struct net_device *ndev)
 
 	enetc_setup_interrupts(priv);
 
-	enetc_enable_tx_bdrs(priv);
-
 	for (i = 0; i < priv->bdr_int_num; i++) {
 		int irq = pci_irq_vector(priv->si->pdev,
 					 ENETC_BDR_INT_BASE_IDX + i);
@@ -2477,6 +2475,8 @@ void enetc_start(struct net_device *ndev)
 		napi_enable(&priv->int_vector[i]->napi);
 		enable_irq(irq);
 	}
+
+	enetc_enable_tx_bdrs(priv);
 
 	enetc_enable_rx_bdrs(priv);
 
@@ -2546,6 +2546,10 @@ void enetc_stop(struct net_device *ndev)
 
 	enetc_disable_rx_bdrs(priv);
 
+	enetc_wait_bdrs(priv);
+
+	enetc_disable_tx_bdrs(priv);
+
 	for (i = 0; i < priv->bdr_int_num; i++) {
 		int irq = pci_irq_vector(priv->si->pdev,
 					 ENETC_BDR_INT_BASE_IDX + i);
@@ -2554,10 +2558,6 @@ void enetc_stop(struct net_device *ndev)
 		napi_synchronize(&priv->int_vector[i]->napi);
 		napi_disable(&priv->int_vector[i]->napi);
 	}
-
-	enetc_wait_bdrs(priv);
-
-	enetc_disable_tx_bdrs(priv);
 
 	enetc_clear_interrupts(priv);
 }
