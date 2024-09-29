@@ -64,7 +64,6 @@
 
 enum {
 	ST_POWERED	= 1,
-	ST_STREAMING	= 2,
 	ST_SUSPENDED	= 4,
 };
 
@@ -420,12 +419,9 @@ static int imx8mq_mipi_csi_s_stream(struct v4l2_subdev *sd, int enable)
 		ret = v4l2_subdev_call(state->src_sd, video, s_stream, 1);
 		if (ret < 0)
 			goto unlock;
-
-		state->state |= ST_STREAMING;
 	} else {
 		v4l2_subdev_call(state->src_sd, video, s_stream, 0);
 		imx8mq_mipi_csi_stop_stream(state);
-		state->state &= ~ST_STREAMING;
 	}
 
 unlock:
@@ -668,7 +664,6 @@ static int imx8mq_mipi_csi_pm_resume(struct device *dev)
 {
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct csi_state *state = mipi_sd_to_csi2_state(sd);
-	struct v4l2_subdev_state *sd_state;
 	int ret = 0;
 
 	mutex_lock(&state->lock);
@@ -677,17 +672,9 @@ static int imx8mq_mipi_csi_pm_resume(struct device *dev)
 		state->state |= ST_POWERED;
 		ret = imx8mq_mipi_csi_clk_enable(state);
 	}
-	if (state->state & ST_STREAMING) {
-		sd_state = v4l2_subdev_lock_and_get_active_state(sd);
-		ret = imx8mq_mipi_csi_start_stream(state, sd_state);
-		v4l2_subdev_unlock_state(sd_state);
-		if (ret)
-			goto unlock;
-	}
 
 	state->state &= ~ST_SUSPENDED;
 
-unlock:
 	mutex_unlock(&state->lock);
 
 	return ret ? -EAGAIN : 0;
