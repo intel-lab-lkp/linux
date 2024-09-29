@@ -1370,6 +1370,12 @@ static int extcon_rtk_type_c_probe(struct platform_device *pdev)
 
 	type_c->type_c_cfg = devm_kzalloc(dev, sizeof(*type_c_cfg), GFP_KERNEL);
 
+	if (!type_c->type_c_cfg) {
+		dev_err(dev, "Failed to allocate memory for type_c_cfg!\n");
+		ret = -ENOMEM;
+		goto err;
+	}
+
 	memcpy(type_c->type_c_cfg, type_c_cfg, sizeof(*type_c_cfg));
 
 	if (setup_type_c_parameter(type_c)) {
