@@ -306,7 +306,7 @@ static struct dentry *psinfo_lock_root(void)
 int pstore_put_backend_records(struct pstore_info *psi)
 {
 	struct pstore_private *pos, *tmp;
-	struct dentry *root;
+	struct dentry *root, *unlink_dentry;
 
 	root = psinfo_lock_root();
 	if (!root)
@@ -316,9 +316,10 @@ int pstore_put_backend_records(struct pstore_info *psi)
 		list_for_each_entry_safe(pos, tmp, &records_list, list) {
 			if (pos->record->psi == psi) {
 				list_del_init(&pos->list);
-				d_invalidate(pos->dentry);
-				simple_unlink(d_inode(root), pos->dentry);
+				unlink_dentry = pos->dentry;
 				pos->dentry = NULL;
+				d_invalidate(unlink_dentry);
+				simple_unlink(d_inode(root), unlink_dentry);
 			}
 		}
 	}
