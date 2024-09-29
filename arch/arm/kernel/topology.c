@@ -119,13 +119,23 @@ static void __init parse_dt_topology(void)
 		if (cpu_eff->compatible == NULL)
 			continue;
 
+		/*
+		 * Use the legacy clock-frequency property (representing the
+		 * maximum achievable clock frequency) as an efficiency
+		 * coefficient (divided by 2^20, roughly 1 MHz) to the table
+		 * value. If no such property is available, use the table value
+		 * directly and assume all CPUs are running at the same
+		 * nominal frequency.
+		 *
+		 * It is assumed that clock-frequency is either provided for all
+		 * CPUs or for none of them.
+		 */
 		rate = of_get_property(cn, "clock-frequency", &len);
-		if (!rate || len != 4) {
-			pr_err("%pOF missing clock-frequency property\n", cn);
-			continue;
-		}
-
-		capacity = ((be32_to_cpup(rate)) >> 20) * cpu_eff->efficiency;
+		if (rate && len == 4)
+			capacity = ((be32_to_cpup(rate)) >> 20) *
+				   cpu_eff->efficiency;
+		else
+			capacity = cpu_eff->efficiency;
 
 		/* Save min capacity of the system */
 		if (capacity < min_capacity)
