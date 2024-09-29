@@ -373,8 +373,19 @@ static int acl_permission_check(struct mnt_idmap *idmap,
 	 */
 	if (mask & (mode ^ (mode >> 3))) {
 		vfsgid_t vfsgid = i_gid_into_vfsgid(idmap, inode);
-		if (vfsgid_in_group_p(vfsgid))
-			mode >>= 3;
+		int idx = vfsgid_in_group_p(vfsgid);
+
+		if (idx) {
+			unsigned int mode_grp = mode >> 3;
+
+			if (mask & ~mode_grp)
+				return -EACCES;
+			idx -= 2;
+			if (idx < 0 || idx >= 32 || !((1U << idx) &
+					current_cred()->group_info->restrict_bitmap))
+				return 0;
+			/* If we hit restrict_bitmap, then check Others. */
+		}
 	}
 
 	/* Bits in 'mode' clear that we require? */
