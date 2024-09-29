@@ -441,6 +441,10 @@ static int lapic_timer_shutdown(struct clock_event_device *evt)
 	v |= (APIC_LVT_MASKED | LOCAL_TIMER_VECTOR);
 	apic_write(APIC_LVTT, v);
 	apic_write(APIC_TMICT, 0);
+
+	if (boot_cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER))
+		wrmsrl(MSR_IA32_TSC_DEADLINE, 0);
+
 	return 0;
 }
 
