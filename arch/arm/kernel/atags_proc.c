@@ -41,10 +41,8 @@ static int __init init_atags_procfs(void)
 	struct buffer *b;
 	size_t size;
 
-	if (tag->hdr.tag != ATAG_CORE) {
-		pr_info("No ATAGs?\n");
+	if (tag->hdr.tag != ATAG_CORE)
 		return -EINVAL;
-	}
 
 	for (; tag->hdr.size; tag = tag_next(tag))
 		;
