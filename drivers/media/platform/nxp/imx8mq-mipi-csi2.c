@@ -64,7 +64,6 @@
 
 enum {
 	ST_POWERED	= 1,
-	ST_SUSPENDED	= 4,
 };
 
 enum imx8mq_mipi_csi_clk {
@@ -404,11 +403,6 @@ static int imx8mq_mipi_csi_s_stream(struct v4l2_subdev *sd, int enable)
 	mutex_lock(&state->lock);
 
 	if (enable) {
-		if (state->state & ST_SUSPENDED) {
-			ret = -EBUSY;
-			goto unlock;
-		}
-
 		sd_state = v4l2_subdev_lock_and_get_active_state(sd);
 		ret = imx8mq_mipi_csi_start_stream(state, sd_state);
 		v4l2_subdev_unlock_state(sd_state);
@@ -673,8 +667,6 @@ static int imx8mq_mipi_csi_pm_resume(struct device *dev)
 		ret = imx8mq_mipi_csi_clk_enable(state);
 	}
 
-	state->state &= ~ST_SUSPENDED;
-
 	mutex_unlock(&state->lock);
 
 	return ret ? -EAGAIN : 0;
@@ -682,24 +674,13 @@ static int imx8mq_mipi_csi_pm_resume(struct device *dev)
 
 static int imx8mq_mipi_csi_suspend(struct device *dev)
 {
-	struct v4l2_subdev *sd = dev_get_drvdata(dev);
-	struct csi_state *state = mipi_sd_to_csi2_state(sd);
-
 	imx8mq_mipi_csi_pm_suspend(dev);
-
-	state->state |= ST_SUSPENDED;
 
 	return 0;
 }
 
 static int imx8mq_mipi_csi_resume(struct device *dev)
 {
-	struct v4l2_subdev *sd = dev_get_drvdata(dev);
-	struct csi_state *state = mipi_sd_to_csi2_state(sd);
-
-	if (!(state->state & ST_SUSPENDED))
-		return 0;
-
 	return imx8mq_mipi_csi_pm_resume(dev);
 }
 
