@@ -269,6 +269,24 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 		rw->kiocb.ki_ioprio = get_current_ioprio();
 	}
 	rw->kiocb.dio_complete = NULL;
+	if (ddir == ITER_SOURCE) {
+		u16 mtype = READ_ONCE(sqe->meta_type);
+
+		rw->kiocb.ki_write_hint = WRITE_LIFE_INVALID;
+		if (mtype) {
+			u64 lhint = READ_ONCE(sqe->lifetime_val);
+
+			if (READ_ONCE(sqe->__pad4[0]) ||
+			    READ_ONCE(sqe->__pad5[0]))
+				return -EINVAL;
+
+			if (mtype != META_TYPE_LIFETIME_HINT ||
+			    !rw_hint_valid(lhint))
+				return -EINVAL;
+
+			rw->kiocb.ki_write_hint = lhint;
+		}
+	}
 
 	rw->addr = READ_ONCE(sqe->addr);
 	rw->len = READ_ONCE(sqe->len);
@@ -1023,7 +1041,12 @@ int io_write(struct io_kiocb *req, unsigned int issue_flags)
 	if (unlikely(ret))
 		return ret;
 	req->cqe.res = iov_iter_count(&io->iter);
-	rw->kiocb.ki_write_hint = file_write_hint(rw->kiocb.ki_filp);
+	/*
+	 * Use per-file hint only if per-io hint is not set.
+	 * We need per-io hint to get precedence.
+	 */
+	if (rw->kiocb.ki_write_hint == WRITE_LIFE_INVALID)
+		rw->kiocb.ki_write_hint = file_write_hint(rw->kiocb.ki_filp);
 
 	if (force_nonblock) {
 		/* If the file doesn't support async, just async punt */

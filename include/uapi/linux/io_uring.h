@@ -92,11 +92,22 @@ struct io_uring_sqe {
 			__u16	addr_len;
 			__u16	__pad3[1];
 		};
+		struct {
+			/* Bit field to express 16 meta types */
+			__u16	meta_type;
+			__u16	__pad4[1];
+		};
 	};
 	union {
 		struct {
 			__u64	addr3;
 			__u64	__pad2[1];
+		};
+		struct {
+			/* First meta type specific fields */
+			__u64	lifetime_val;
+			/* For future use */
+			__u64	__pad5[1];
 		};
 		__u64	optval;
 		/*
@@ -106,6 +117,14 @@ struct io_uring_sqe {
 		__u8	cmd[0];
 	};
 };
+
+enum io_uring_sqe_meta_type_bits {
+	META_TYPE_LIFETIME_HINT_BIT
+};
+
+/* this meta type covers write hint values supported by F_SET_RW_HINT fcntl */
+#define META_TYPE_LIFETIME_HINT	(1U << META_TYPE_LIFETIME_HINT_BIT)
+
 
 /*
  * If sqe->file_index is set to this for opcodes that instantiate a new
