@@ -95,6 +95,10 @@ static const struct drm_mode_config_funcs hibmc_mode_funcs = {
 
 static int hibmc_kms_init(struct hibmc_drm_private *priv)
 {
+#define DP_HOST_SERDES_CTRL		0x1f001c
+#define DP_HOST_SERDES_CTRL_VAL		0x8A00
+#define DP_HOST_SERDES_CTRL_MASK	0x7FFFE
+
 	struct drm_device *dev = &priv->dev;
 	int ret;
 
@@ -118,10 +122,17 @@ static int hibmc_kms_init(struct hibmc_drm_private *priv)
 		return ret;
 	}
 
+	/* if DP existed, init DP */
+	if ((readl(priv->mmio + DP_HOST_SERDES_CTRL) &
+	     DP_HOST_SERDES_CTRL_MASK) == DP_HOST_SERDES_CTRL_VAL) {
+		ret = hibmc_dp_init(priv);
+		if (ret)
+			drm_err(dev, "failed to init dp: %d\n", ret);
+	}
+
 	ret = hibmc_vdac_init(priv);
 	if (ret) {
 		drm_err(dev, "failed to init vdac: %d\n", ret);
-		return ret;
 	}
 
 	return 0;
@@ -241,6 +252,7 @@ static int hibmc_hw_init(struct hibmc_drm_private *priv)
 
 static int hibmc_unload(struct drm_device *dev)
 {
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(dev);
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
 
 	drm_atomic_helper_shutdown(dev);
@@ -248,6 +260,9 @@ static int hibmc_unload(struct drm_device *dev)
 	free_irq(pdev->irq, dev);
 
 	pci_disable_msi(to_pci_dev(dev->dev));
+
+	if (priv->dp.encoder.possible_crtcs)
+		hibmc_dp_uninit(priv);
 
 	return 0;
 }

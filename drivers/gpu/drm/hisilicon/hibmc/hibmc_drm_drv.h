@@ -19,6 +19,7 @@
 #include <linux/i2c.h>
 
 #include <drm/drm_framebuffer.h>
+#include "dp/dp_kapi.h"
 
 struct hibmc_connector {
 	struct drm_connector base;
@@ -37,6 +38,7 @@ struct hibmc_drm_private {
 	struct drm_crtc crtc;
 	struct drm_encoder encoder;
 	struct hibmc_connector connector;
+	struct hibmc_dp dp;
 };
 
 static inline struct hibmc_connector *to_hibmc_connector(struct drm_connector *connector)
@@ -58,5 +60,8 @@ int hibmc_de_init(struct hibmc_drm_private *priv);
 int hibmc_vdac_init(struct hibmc_drm_private *priv);
 
 int hibmc_ddc_create(struct drm_device *drm_dev, struct hibmc_connector *connector);
+
+int hibmc_dp_init(struct hibmc_drm_private *priv);
+void hibmc_dp_uninit(struct hibmc_drm_private *priv);
 
 #endif
