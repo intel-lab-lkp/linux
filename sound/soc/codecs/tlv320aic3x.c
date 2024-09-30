@@ -1367,8 +1367,11 @@ static int aic3x_regulator_event(struct notifier_block *nb,
 		 * Put codec to reset and require cache sync as at least one
 		 * of the supplies was disabled
 		 */
-		if (aic3x->gpio_reset)
+		if (aic3x->gpio_reset) {
 			gpiod_set_value(aic3x->gpio_reset, 1);
+			ndelay(15);
+			gpiod_set_value(aic3x->gpio_reset, 0);
+		}
 		regcache_mark_dirty(aic3x->regmap);
 	}
 
@@ -1812,6 +1815,10 @@ int aic3x_probe(struct device *dev, struct regmap *regmap, kernel_ulong_t driver
 	}
 
 	gpiod_set_consumer_name(aic3x->gpio_reset, "tlv320aic3x reset");
+
+	/* CODEC datasheet says minimum of 10ns */
+	ndelay(15);
+	gpiod_set_value(aic3x->gpio_reset, 0);
 
 	for (i = 0; i < ARRAY_SIZE(aic3x->supplies); i++)
 		aic3x->supplies[i].supply = aic3x_supply_names[i];
