@@ -1029,6 +1029,14 @@ int intel_plane_check_src_coordinates(struct intel_plane_state *plane_state)
 		 * This allows NV12 and P0xx formats to have odd size and/or odd
 		 * source coordinates on DISPLAY_VER(i915) >= 20
 		 */
+		/*
+		 *  Wa_16023981245 for display version 20.
+		 *  Do not support odd x-panning for even xsize for NV12.
+		 */
+		if (DISPLAY_VER(i915) == 20 && fb->format->format == DRM_FORMAT_NV12 &&
+		    src_x % 2 != 0 && src_w % 2 == 0)
+			return -EINVAL;
+
 		hsub = 1;
 		vsub = 1;
 	} else {
