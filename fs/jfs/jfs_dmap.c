@@ -1808,6 +1808,7 @@ dbAllocCtl(struct bmap * bmp, s64 nblocks, int l2nb, s64 blkno, s64 * results)
 	s64 b, lblkno, n;
 	struct metapage *mp;
 	struct dmap *dp;
+	dmtree_t *tp;
 
 	/* check if the allocation request is confined to a single dmap.
 	 */
@@ -1819,6 +1820,10 @@ dbAllocCtl(struct bmap * bmp, s64 nblocks, int l2nb, s64 blkno, s64 * results)
 		if (mp == NULL)
 			return -EIO;
 		dp = (struct dmap *) mp->data;
+		tp = (dmtree_t *) &dp->tree;
+
+		if (tp->dmt_budmin < 0)
+			return -EIO;
 
 		/* try to allocate the blocks.
 		 */
