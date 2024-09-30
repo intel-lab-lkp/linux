@@ -3343,6 +3343,10 @@ xlog_recover_update_agcount(
 	int				error;
 
 	xfs_sb_from_disk(&mp->m_sb, dsb);
+	if (mp->m_sb.sb_agcount < old_agcount) {
+		xfs_alert(mp, "Shrinking AG count in log recovery");
+		return -EFSCORRUPTED;
+	}
 	error = xfs_initialize_perag(mp, old_agcount, mp->m_sb.sb_agcount,
 			mp->m_sb.sb_dblocks, &mp->m_maxagi);
 	if (error) {
