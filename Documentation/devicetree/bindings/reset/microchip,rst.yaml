@@ -25,12 +25,16 @@ properties:
       - microchip,lan966x-switch-reset
 
   reg:
+    minItems: 1
     items:
       - description: global control block registers
+      - description: cpu system block registers
 
   reg-names:
+    minItems: 1
     items:
       - const: gcb
+      - const: cpu
 
   "#reset-cells":
     const: 1
@@ -39,12 +43,29 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: syscon used to access CPU reset
 
+allOf:
+  # Allow to use the second reg item instead of cpu-syscon
+  - if:
+      required:
+        - cpu-syscon
+    then:
+      properties:
+        reg:
+          maxItems: 1
+        reg-names:
+          maxItems: 1
+    else:
+      properties:
+        reg:
+          minItems: 2
+        reg-names:
+          minItems: 2
+
 required:
   - compatible
   - reg
   - reg-names
   - "#reset-cells"
-  - cpu-syscon
 
 additionalProperties: false
 
@@ -56,4 +77,16 @@ examples:
         reg-names = "gcb";
         #reset-cells = <1>;
         cpu-syscon = <&cpu_ctrl>;
+    };
+
+    /*
+     * The following construction can be used if the cpu-syscon device is not
+     * present. This is the case when the LAN966x is used as a PCI device.
+     */
+    reset-controller@22010008 {
+        compatible = "microchip,lan966x-switch-reset";
+        reg = <0xe200400c 0x4>,
+              <0xe00c0000 0xa8>;
+        reg-names = "gcb", "cpu";
+        #reset-cells = <1>;
     };
