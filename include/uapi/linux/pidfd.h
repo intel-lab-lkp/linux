@@ -29,4 +29,7 @@
 #define PIDFD_GET_USER_NAMESPACE              _IO(PIDFS_IOCTL_MAGIC, 9)
 #define PIDFD_GET_UTS_NAMESPACE               _IO(PIDFS_IOCTL_MAGIC, 10)
 
+#define PIDFD_SELF -200 /* Special sentinel value which can be passed as a pidfd
+			 * to refer to the current thread group leader. */
+
 #endif /* _UAPI_LINUX_PIDFD_H */

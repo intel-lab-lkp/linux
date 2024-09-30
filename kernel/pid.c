@@ -539,23 +539,28 @@ struct pid *__pidfd_get_pid(unsigned int pidfd, bool pin_pid,
 			    bool allow_proc, unsigned int *flags,
 			    struct fd *fd)
 {
-	struct fd f;
 	struct pid *pid;
-	struct file *file;
+	struct fd f = {};
+	struct file *file = NULL;
+	unsigned int f_flags = 0;
 
-	f = fdget(fd);
-	file = fd_file(f);
-	if (!file)
-		return ERR_PTR(-EBADF);
+	if (pidfd == PIDFD_SELF) {
+		pid = *task_pid_ptr(current, PIDTYPE_TGID);
+	} else {
+		f = fdget(pidfd);
+		file = fd_file(f);
+		if (!file)
+			return ERR_PTR(-EBADF);
 
-	pid = pidfd_pid(file);
-	/* If we allow opening a pidfd via /proc/<pid>, do so. */
-	if (IS_ERR(pid) && allow_proc)
-		pid = tgid_pidfd_to_pid(file);
+		pid = pidfd_pid(file);
+		/* If we allow opening a pidfd via /proc/<pid>, do so. */
+		if (IS_ERR(pid) && allow_proc)
+			pid = tgid_pidfd_to_pid(file);
 
-	if (IS_ERR(pid)) {
-		fdput(f);
-		return pid;
+		if (IS_ERR(pid)) {
+			fdput(f);
+			return pid;
+		}
 	}
 
 	if (pin_pid)
@@ -563,18 +568,22 @@ struct pid *__pidfd_get_pid(unsigned int pidfd, bool pin_pid,
 	else
 		WARN_ON_ONCE(!fd); /* Nothing to keep pid/pidfd around? */
 
-	if (flags)
-		*flags = file->f_flags;
+	if (file) {
+		f_flags = file->f_flags;
 
-	/*
-	 * If the user provides an fd output then it will handle decrementing
-	 * its reference counter.
-	 */
-	if (fd)
-		*fd = f;
-	else
-		/* Otherwise we release it. */
-		fdput(f);
+		/*
+		 * If the user provides an fd output then it will handle decrementing
+		 * its reference counter.
+		 */
+		if (fd)
+			*fd = f;
+		else
+			/* Otherwise we release it. */
+			fdput(f);
+	}
+
+	if (flags)
+		*flags = f_flags;
 
 	return pid;
 }
