@@ -2342,6 +2342,8 @@ static inline void
 il_enable_interrupts(struct il_priv *il)
 {
 	set_bit(S_INT_ENABLED, &il->status);
+	_il_wr(il, CSR_INT, 0xffffffff);
+	_il_wr(il, CSR_FH_INT_STATUS, 0xffffffff);
 	_il_wr(il, CSR_INT_MASK, il->inta_mask);
 }
 
