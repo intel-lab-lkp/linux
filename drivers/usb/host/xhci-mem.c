@@ -2160,6 +2160,11 @@ static int xhci_setup_port_arrays(struct xhci_hcd *xhci, gfp_t flags)
 	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
 
 	num_ports = HCS_MAX_PORTS(xhci->hcs_params1);
+	if (num_ports == 0) {
+		xhci_warn(xhci, "Host controller has no port enabled\n");
+		return -ENODEV;
+	}
+
 	xhci->hw_ports = kcalloc_node(num_ports, sizeof(*xhci->hw_ports),
 				flags, dev_to_node(dev));
 	if (!xhci->hw_ports)
