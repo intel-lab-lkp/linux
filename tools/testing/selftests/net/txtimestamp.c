@@ -893,6 +893,12 @@ static void do_main(int family)
 		do_test(family, SOF_TIMESTAMPING_TX_SCHED |
 				SOF_TIMESTAMPING_TX_SOFTWARE |
 				SOF_TIMESTAMPING_TX_ACK);
+
+		fprintf(stderr, "\ntest ENQ + SND + ACK with tcp tskey setting\n");
+		do_test(family, SOF_TIMESTAMPING_TX_SCHED |
+				SOF_TIMESTAMPING_TX_SOFTWARE |
+				SOF_TIMESTAMPING_TX_ACK |
+				SOF_TIMESTAMPING_OPT_ID_TCP);
 	}
 }
 
