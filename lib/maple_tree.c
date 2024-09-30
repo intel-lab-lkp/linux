@@ -4332,9 +4332,9 @@ exists:
  * mas_alloc_cyclic() - Internal call to find somewhere to store an entry
  * @mas: The maple state.
  * @startp: Pointer to ID.
+ * @entry: The entry to store.
  * @range_lo: Lower bound of range to search.
  * @range_hi: Upper bound of range to search.
- * @entry: The entry to store.
  * @next: Pointer to next ID to allocate.
  * @gfp: The GFP_FLAGS to use for allocations.
  *
