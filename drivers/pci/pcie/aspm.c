@@ -79,7 +79,7 @@ void pci_configure_aspm_l1ss(struct pci_dev *pdev)
 			ERR_PTR(rc));
 }
 
-void pci_save_aspm_l1ss_state(struct pci_dev *pdev)
+static void __pci_save_aspm_l1ss_state(struct pci_dev *pdev)
 {
 	struct pci_cap_saved_state *save_state;
 	u16 l1ss = pdev->l1ss;
@@ -99,6 +99,24 @@ void pci_save_aspm_l1ss_state(struct pci_dev *pdev)
 	cap = &save_state->cap.data[0];
 	pci_read_config_dword(pdev, l1ss + PCI_L1SS_CTL2, cap++);
 	pci_read_config_dword(pdev, l1ss + PCI_L1SS_CTL1, cap++);
+}
+
+void pci_save_aspm_l1ss_state(struct pci_dev *pdev)
+{
+	struct pci_dev *parent;
+
+	__pci_save_aspm_l1ss_state(pdev);
+
+	/*
+	 * To be symmetric on pci_restore_aspm_l1ss_state(), save parent's L1
+	 * substate configuration, if the parent has not saved state.
+	 */
+	if (!pdev->bus || !pdev->bus->self)
+		return;
+
+	parent = pdev->bus->self;
+	if (!parent->state_saved)
+		__pci_save_aspm_l1ss_state(parent);
 }
 
 void pci_restore_aspm_l1ss_state(struct pci_dev *pdev)
