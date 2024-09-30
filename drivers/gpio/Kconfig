@@ -681,7 +681,7 @@ config GPIO_STP_XWAY
 
 config GPIO_SYSCON
 	tristate "GPIO based on SYSCON"
-	depends on MFD_SYSCON && OF
+	depends on MFD_SYSCON
 	help
 	  Say yes here to support GPIO functionality though SYSCON driver.
 
