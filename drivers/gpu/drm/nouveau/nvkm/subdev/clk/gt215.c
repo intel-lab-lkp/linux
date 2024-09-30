@@ -206,6 +206,9 @@ gt215_clk_info(struct nvkm_clk *base, int idx, u32 khz,
 	default:
 		sclk = read_vco(clk, idx);
 		sdiv = min((sclk * 2) / khz, (u32)65);
+		if (!sdiv)
+			return -EINVAL;
+
 		oclk = (sclk * 2) / sdiv;
 		diff = ((khz + 3000) - oclk);
 
