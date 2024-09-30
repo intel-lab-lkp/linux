@@ -162,7 +162,12 @@ int		xfs_trans_reserve_more(struct xfs_trans *tp,
 			unsigned int blocks, unsigned int rtextents);
 int		xfs_trans_alloc_empty(struct xfs_mount *mp,
 			struct xfs_trans **tpp);
-void		xfs_trans_mod_sb(xfs_trans_t *, uint, int64_t);
+void		xfs_trans_mod_icount(struct xfs_trans *tp, int64_t delta);
+void		xfs_trans_mod_ifree(struct xfs_trans *tp, int64_t delta);
+void		xfs_trans_mod_fdblocks(struct xfs_trans *tp, int64_t delta,
+			bool wasdel);
+void		xfs_trans_mod_frextents(struct xfs_trans *tp, int64_t delta,
+			bool wasdel);
 
 int xfs_trans_get_buf_map(struct xfs_trans *tp, struct xfs_buftarg *target,
 		struct xfs_buf_map *map, int nmaps, xfs_buf_flags_t flags,

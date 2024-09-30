@@ -212,7 +212,7 @@ xfs_growfs_data_private(
 		goto out_trans_cancel;
 
 	if (id.nfree)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, id.nfree);
+		xfs_trans_mod_fdblocks(tp, id.nfree, false);
 
 	error = xfs_growfs_data_update_sb(tp, nagcount, nb, nagimax);
 	if (error)

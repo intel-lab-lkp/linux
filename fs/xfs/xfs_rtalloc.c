@@ -838,7 +838,7 @@ xfs_growfs_rt_bmblock(
 	xfs_rtbuf_cache_relse(&nargs);
 	if (error)
 		goto out_cancel;
-	xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_FREXTENTS, freed_rtx);
+	xfs_trans_mod_frextents(args.tp, freed_rtx, false);
 
 	error = xfs_growfs_rt_update_sb(args.tp, mp, nmp, freed_rtx);
 	if (error)
@@ -1335,9 +1335,7 @@ xfs_rtallocate(
 	if (error)
 		goto out_release;
 
-	xfs_trans_mod_sb(tp, wasdel ?
-			XFS_TRANS_SB_RES_FREXTENTS : XFS_TRANS_SB_FREXTENTS,
-			-(long)len);
+	xfs_trans_mod_frextents(tp, -(long)len, wasdel);
 	*bno = xfs_rtx_to_rtb(args.mp, rtx);
 	*blen = xfs_rtxlen_to_extlen(args.mp, len);
 

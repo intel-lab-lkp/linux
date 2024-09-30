@@ -989,7 +989,8 @@ xfs_rtfree_extent(
 	/*
 	 * Mark more blocks free in the superblock.
 	 */
-	xfs_trans_mod_sb(tp, XFS_TRANS_SB_FREXTENTS, (long)len);
+	xfs_trans_mod_frextents(tp, (long)len, false);
+
 	/*
 	 * If we've now freed all the blocks, reset the file sequence
 	 * number to 0.

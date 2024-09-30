@@ -970,8 +970,8 @@ sparse_alloc:
 	/*
 	 * Modify/log superblock values for inode count and inode free count.
 	 */
-	xfs_trans_mod_sb(tp, XFS_TRANS_SB_ICOUNT, (long)newlen);
-	xfs_trans_mod_sb(tp, XFS_TRANS_SB_IFREE, (long)newlen);
+	xfs_trans_mod_icount(tp, (long)newlen);
+	xfs_trans_mod_ifree(tp, (long)newlen);
 	return 0;
 }
 
@@ -1357,7 +1357,7 @@ alloc_inode:
 		goto error0;
 
 	xfs_btree_del_cursor(cur, XFS_BTREE_NOERROR);
-	xfs_trans_mod_sb(tp, XFS_TRANS_SB_IFREE, -1);
+	xfs_trans_mod_ifree(tp, -1);
 	*inop = ino;
 	return 0;
 error1:
@@ -1660,7 +1660,7 @@ xfs_dialloc_ag(
 	xfs_ialloc_log_agi(tp, agbp, XFS_AGI_FREECOUNT);
 	pag->pagi_freecount--;
 
-	xfs_trans_mod_sb(tp, XFS_TRANS_SB_IFREE, -1);
+	xfs_trans_mod_ifree(tp, -1);
 
 	error = xfs_check_agi_freecount(icur);
 	if (error)
@@ -2139,8 +2139,8 @@ xfs_difree_inobt(
 		xfs_ialloc_log_agi(tp, agbp, XFS_AGI_COUNT | XFS_AGI_FREECOUNT);
 		pag->pagi_freecount -= ilen - 1;
 		pag->pagi_count -= ilen;
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_ICOUNT, -ilen);
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_IFREE, -(ilen - 1));
+		xfs_trans_mod_icount(tp, -ilen);
+		xfs_trans_mod_ifree(tp, -(ilen - 1));
 
 		if ((error = xfs_btree_delete(cur, &i))) {
 			xfs_warn(mp, "%s: xfs_btree_delete returned error %d.",
@@ -2167,7 +2167,7 @@ xfs_difree_inobt(
 		be32_add_cpu(&agi->agi_freecount, 1);
 		xfs_ialloc_log_agi(tp, agbp, XFS_AGI_FREECOUNT);
 		pag->pagi_freecount++;
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_IFREE, 1);
+		xfs_trans_mod_ifree(tp, 1);
 	}
 
 	error = xfs_check_agi_freecount(cur);

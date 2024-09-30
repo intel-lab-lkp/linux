@@ -288,7 +288,7 @@ xfs_trans_get_dqtrx(
 
 /*
  * Make the changes in the transaction structure.
- * The moral equivalent to xfs_trans_mod_sb().
+ *
  * We don't touch any fields in the dquot, so we don't care
  * if it's locked or not (most of the time it won't be).
  */

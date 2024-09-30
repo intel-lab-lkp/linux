@@ -341,7 +341,6 @@ xfs_ag_resv_alloc_extent(
 {
 	struct xfs_ag_resv		*resv;
 	xfs_extlen_t			len;
-	uint				field;
 
 	trace_xfs_ag_resv_alloc_extent(pag, type, args->len);
 
@@ -356,9 +355,8 @@ xfs_ag_resv_alloc_extent(
 		ASSERT(0);
 		fallthrough;
 	case XFS_AG_RESV_NONE:
-		field = args->wasdel ? XFS_TRANS_SB_RES_FDBLOCKS :
-				       XFS_TRANS_SB_FDBLOCKS;
-		xfs_trans_mod_sb(args->tp, field, -(int64_t)args->len);
+		xfs_trans_mod_fdblocks(args->tp, -(int64_t)args->len,
+				args->wasdel);
 		return;
 	}
 
@@ -367,11 +365,11 @@ xfs_ag_resv_alloc_extent(
 	if (type == XFS_AG_RESV_RMAPBT)
 		return;
 	/* Allocations of reserved blocks only need on-disk sb updates... */
-	xfs_trans_mod_sb(args->tp, XFS_TRANS_SB_RES_FDBLOCKS, -(int64_t)len);
+	xfs_trans_mod_fdblocks(args->tp, -(int64_t)len, true);
 	/* ...but non-reserved blocks need in-core and on-disk updates. */
 	if (args->len > len)
-		xfs_trans_mod_sb(args->tp, XFS_TRANS_SB_FDBLOCKS,
-				-((int64_t)args->len - len));
+		xfs_trans_mod_fdblocks(args->tp, -((int64_t)args->len - len),
+				false);
 }
 
 /* Free a block to the reservation. */
@@ -398,7 +396,7 @@ xfs_ag_resv_free_extent(
 		ASSERT(0);
 		fallthrough;
 	case XFS_AG_RESV_NONE:
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, (int64_t)len);
+		xfs_trans_mod_fdblocks(tp, (int64_t)len, false);
 		fallthrough;
 	case XFS_AG_RESV_IGNORE:
 		return;
@@ -409,8 +407,8 @@ xfs_ag_resv_free_extent(
 	if (type == XFS_AG_RESV_RMAPBT)
 		return;
 	/* Freeing into the reserved pool only requires on-disk update... */
-	xfs_trans_mod_sb(tp, XFS_TRANS_SB_RES_FDBLOCKS, len);
+	xfs_trans_mod_fdblocks(tp, len, true);
 	/* ...but freeing beyond that requires in-core and on-disk update. */
 	if (len > leftover)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, len - leftover);
+		xfs_trans_mod_fdblocks(tp, len - leftover, false);
 }

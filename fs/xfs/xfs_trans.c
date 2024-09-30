@@ -334,48 +334,43 @@ xfs_trans_alloc_empty(
 	return xfs_trans_alloc(mp, &resv, 0, 0, XFS_TRANS_NO_WRITECOUNT, tpp);
 }
 
-/*
- * Record the indicated change to the given field for application
- * to the file system's superblock when the transaction commits.
- * For now, just store the change in the transaction structure.
- *
- * Mark the transaction structure to indicate that the superblock
- * needs to be updated before committing.
- *
- * Because we may not be keeping track of allocated/free inodes and
- * used filesystem blocks in the superblock, we do not mark the
- * superblock dirty in this transaction if we modify these fields.
- * We still need to update the transaction deltas so that they get
- * applied to the incore superblock, but we don't want them to
- * cause the superblock to get locked and logged if these are the
- * only fields in the superblock that the transaction modifies.
- */
 void
-xfs_trans_mod_sb(
-	xfs_trans_t	*tp,
-	uint		field,
-	int64_t		delta)
+xfs_trans_mod_icount(
+	struct xfs_trans	*tp,
+	int64_t			delta)
 {
-	uint32_t	flags = (XFS_TRANS_DIRTY|XFS_TRANS_SB_DIRTY);
-	xfs_mount_t	*mp = tp->t_mountp;
+	tp->t_icount_delta += delta;
+	tp->t_flags |= XFS_TRANS_DIRTY;
+	if (!xfs_has_lazysbcount(tp->t_mountp))
+		tp->t_flags |= XFS_TRANS_SB_DIRTY;
+}
 
-	switch (field) {
-	case XFS_TRANS_SB_ICOUNT:
-		tp->t_icount_delta += delta;
-		if (xfs_has_lazysbcount(mp))
-			flags &= ~XFS_TRANS_SB_DIRTY;
-		break;
-	case XFS_TRANS_SB_IFREE:
-		tp->t_ifree_delta += delta;
-		if (xfs_has_lazysbcount(mp))
-			flags &= ~XFS_TRANS_SB_DIRTY;
-		break;
-	case XFS_TRANS_SB_FDBLOCKS:
+void
+xfs_trans_mod_ifree(
+	struct xfs_trans	*tp,
+	int64_t			delta)
+{
+	tp->t_ifree_delta += delta;
+	tp->t_flags |= XFS_TRANS_DIRTY;
+	if (!xfs_has_lazysbcount(tp->t_mountp))
+		tp->t_flags |= XFS_TRANS_SB_DIRTY;
+}
+
+void
+xfs_trans_mod_fdblocks(
+	struct xfs_trans	*tp,
+	int64_t			delta,
+	bool			wasdel)
+{
+	struct xfs_mount	*mp = tp->t_mountp;
+
+	if (wasdel) {
 		/*
-		 * Track the number of blocks allocated in the transaction.
-		 * Make sure it does not exceed the number reserved. If so,
-		 * shutdown as this can lead to accounting inconsistency.
+		 * The allocation has already been applied to the in-core
+		 * counter, only apply it to the on-disk superblock.
 		 */
+		tp->t_res_fdblocks_delta += delta;
+	} else {
 		if (delta < 0) {
 			tp->t_blk_res_used += (uint)-delta;
 			if (tp->t_blk_res_used > tp->t_blk_res)
@@ -396,55 +391,40 @@ xfs_trans_mod_sb(
 			delta -= blkres_delta;
 		}
 		tp->t_fdblocks_delta += delta;
-		if (xfs_has_lazysbcount(mp))
-			flags &= ~XFS_TRANS_SB_DIRTY;
-		break;
-	case XFS_TRANS_SB_RES_FDBLOCKS:
+	}
+
+	tp->t_flags |= XFS_TRANS_DIRTY;
+	if (!xfs_has_lazysbcount(mp))
+		tp->t_flags |= XFS_TRANS_SB_DIRTY;
+}
+
+void
+xfs_trans_mod_frextents(
+	struct xfs_trans	*tp,
+	int64_t			delta,
+	bool			wasdel)
+{
+	if (wasdel) {
 		/*
-		 * The allocation has already been applied to the
-		 * in-core superblock's counter.  This should only
-		 * be applied to the on-disk superblock.
+		 * The allocation has already been applied to the in-core
+		 * counter, only apply it to the on-disk superblock.
 		 */
-		tp->t_res_fdblocks_delta += delta;
-		if (xfs_has_lazysbcount(mp))
-			flags &= ~XFS_TRANS_SB_DIRTY;
-		break;
-	case XFS_TRANS_SB_FREXTENTS:
-		/*
-		 * Track the number of blocks allocated in the
-		 * transaction.  Make sure it does not exceed the
-		 * number reserved.
-		 */
+		ASSERT(delta < 0);
+		tp->t_res_frextents_delta += delta;
+	} else {
 		if (delta < 0) {
 			tp->t_rtx_res_used += (uint)-delta;
 			ASSERT(tp->t_rtx_res_used <= tp->t_rtx_res);
 		}
 		tp->t_frextents_delta += delta;
-		break;
-	case XFS_TRANS_SB_RES_FREXTENTS:
-		/*
-		 * The allocation has already been applied to the
-		 * in-core superblock's counter.  This should only
-		 * be applied to the on-disk superblock.
-		 */
-		ASSERT(delta < 0);
-		tp->t_res_frextents_delta += delta;
-		break;
-	default:
-		ASSERT(0);
-		return;
 	}
 
-	tp->t_flags |= flags;
+	tp->t_flags |= (XFS_TRANS_DIRTY | XFS_TRANS_SB_DIRTY);
 }
 
 /*
- * xfs_trans_apply_sb_deltas() is called from the commit code
- * to bring the superblock buffer into the current transaction
- * and modify it as requested by earlier calls to xfs_trans_mod_sb().
- *
- * For now we just look at each field allowed to change and change
- * it if necessary.
+ * Called from the commit code to bring the superblock buffer into the current
+ * transaction and modify it as based on earlier calls to  xfs_trans_mod_*().
  */
 STATIC void
 xfs_trans_apply_sb_deltas(
