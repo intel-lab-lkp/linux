@@ -39,7 +39,7 @@
 		serial3 = &pb11mp_serial3;
 	};
 
-	memory {
+	memory@70000000 {
 		device_type = "memory";
 		/*
 		 * The PB11MPCore has 512 MiB memory @ 0x70000000

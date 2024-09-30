@@ -17,7 +17,7 @@
 	compatible = "seagate,blackarmor-nas220","marvell,kirkwood-88f6192",
 		     "marvell,kirkwood";
 
-	memory { /* 128 MB */
+	memory@0 { /* 128 MB */
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

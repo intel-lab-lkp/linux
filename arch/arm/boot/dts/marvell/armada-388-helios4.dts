@@ -16,7 +16,7 @@
 	compatible = "kobol,helios4", "marvell,armada388",
 		"marvell,armada385", "marvell,armada380";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x80000000>; /* 2 GB */
 	};

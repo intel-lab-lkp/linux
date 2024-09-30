@@ -16,7 +16,7 @@
 	model = "Amarillo AXM5516";
 	compatible = "lsi,axm5516-amarillo", "lsi,axm5516";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0 0x00000000 0x02 0x00000000>;
 	};

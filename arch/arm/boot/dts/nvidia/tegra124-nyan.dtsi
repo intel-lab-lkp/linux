@@ -26,7 +26,7 @@
 	 *
 	 * The name of this node is effectively ABI and must not be changed.
 	 */
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x0 0x80000000 0x0 0x80000000>;
 	};

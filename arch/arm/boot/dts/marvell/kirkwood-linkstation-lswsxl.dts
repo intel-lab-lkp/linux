@@ -13,7 +13,7 @@
 	model = "Buffalo Linkstation LS-WSXL";
 	compatible = "buffalo,lswsxl", "marvell,kirkwood-88f6281", "marvell,kirkwood";
 
-	memory { /* 128 MB */
+	memory@0 { /* 128 MB */
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

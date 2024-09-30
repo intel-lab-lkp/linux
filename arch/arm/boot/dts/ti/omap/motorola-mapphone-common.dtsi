@@ -10,7 +10,7 @@
 	 * We seem to have only 1021 MB accessible, 1021 - 1022 is locked,
 	 * then 1023 - 1024 seems to contain mbm.
 	 */
-	memory {
+	memory@80000000 {
 		device_type = "memory";
 		reg = <0x80000000 0x3fd00000>;	/* 1021 MB */
 	};

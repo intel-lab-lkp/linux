@@ -11,7 +11,7 @@
 	#size-cells = <1>;
 	interrupt-parent = <&icoll>;
 
-	memory {
+	memory@20000000 {
 		device_type = "memory";
 		reg = <0x20000000 0x2000000>;
 	};

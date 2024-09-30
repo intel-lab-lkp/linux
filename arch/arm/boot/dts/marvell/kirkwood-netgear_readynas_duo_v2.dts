@@ -14,7 +14,7 @@
 	model = "NETGEAR ReadyNAS Duo v2";
 	compatible = "netgear,readynas-duo-v2", "netgear,readynas", "marvell,kirkwood-88f6282", "marvell,kirkwood";
 
-	memory { /* 256 MB */
+	memory@0 { /* 256 MB */
 		device_type = "memory";
 		reg = <0x00000000 0x10000000>;
 	};

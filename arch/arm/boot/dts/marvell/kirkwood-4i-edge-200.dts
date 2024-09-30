@@ -15,7 +15,7 @@
 	model = "Endian 4i Edge 200";
 	compatible = "endian,4i-edge-200", "marvell,kirkwood-88f6281", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

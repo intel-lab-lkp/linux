@@ -14,7 +14,7 @@
 	model = "Zyxel NSA320";
 	compatible = "zyxel,nsa320", "marvell,kirkwood-88f6281", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

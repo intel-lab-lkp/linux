@@ -15,7 +15,7 @@
 	model = "ZyXEL NSA325";
 	compatible = "zyxel,nsa325", "marvell,kirkwood-88f6282", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

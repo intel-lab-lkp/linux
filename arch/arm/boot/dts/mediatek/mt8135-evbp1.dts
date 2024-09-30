@@ -12,7 +12,7 @@
 	model = "MediaTek MT8135 evaluation board";
 	compatible = "mediatek,mt8135-evbp1", "mediatek,mt8135";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0 0x80000000 0 0x40000000>;
 	};

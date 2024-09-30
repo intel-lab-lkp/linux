@@ -17,7 +17,7 @@
 		     "synology,ds210jv30", "synology,ds211j",
 		     "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

@@ -11,7 +11,7 @@
 / {
 	compatible = "zyxel,nsa310a", "zyxel,nsa310", "marvell,kirkwood-88f6281", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x10000000>;
 	};

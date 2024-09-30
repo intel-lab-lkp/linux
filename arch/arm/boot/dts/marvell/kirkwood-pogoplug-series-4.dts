@@ -18,7 +18,7 @@
 	compatible = "cloudengines,pogoplugv4", "marvell,kirkwood-88f6192",
 		     "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x08000000>;
 	};

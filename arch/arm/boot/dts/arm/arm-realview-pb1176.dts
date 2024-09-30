@@ -40,7 +40,7 @@
 		serial4 = &fpga_serial;
 	};
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		/* 128 MiB memory @ 0x0 */
 		reg = <0x00000000 0x08000000>;

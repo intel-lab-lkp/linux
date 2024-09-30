@@ -90,7 +90,7 @@
 	 * Set the minimum memory size here and let the
 	 * bootloader set the real size.
 	 */
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

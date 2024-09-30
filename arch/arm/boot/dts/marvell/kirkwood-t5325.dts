@@ -18,7 +18,7 @@
 	model = "HP t5325 Thin Client";
 	compatible = "hp,t5325", "marvell,kirkwood-88f6281", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

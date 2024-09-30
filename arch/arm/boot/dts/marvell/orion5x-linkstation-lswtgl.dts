@@ -54,7 +54,7 @@
 	model = "Buffalo Linkstation LS-WTGL";
 	compatible = "buffalo,lswtgl", "marvell,orion5x-88f5182", "marvell,orion5x";
 
-	memory { /* 64 MB */
+	memory@0 { /* 64 MB */
 		device_type = "memory";
 		reg = <0x00000000 0x4000000>;
 	};

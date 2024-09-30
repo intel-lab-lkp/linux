@@ -17,7 +17,7 @@
 	model = "Plat'Home OpenBlocksA7";
 	compatible = "plathome,openblocks-a7", "marvell,kirkwood-88f6283", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x40000000>; /* 1 GB */
 	};

@@ -15,7 +15,7 @@
 	model = "Synology RS411 RS812";
 	compatible = "synology,rs411", "synology,rs812", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

@@ -56,7 +56,7 @@
 	model = "Buffalo Linkstation Pro/Live";
 	compatible = "buffalo,lsgl", "marvell,orion5x-88f5182", "marvell,orion5x";
 
-	memory { /* 128 MB */
+	memory@0 { /* 128 MB */
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

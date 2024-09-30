@@ -16,7 +16,7 @@
 	compatible = "synology,ds212jv10", "synology,ds212jv20",
 		     "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

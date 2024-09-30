@@ -7,7 +7,7 @@
 	model = "SolidRun CuBox";
 	compatible = "solidrun,cubox", "marvell,dove";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x40000000>;
 	};

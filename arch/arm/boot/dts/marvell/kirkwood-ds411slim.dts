@@ -15,7 +15,7 @@
 	model = "Synology DS411slim";
 	compatible = "synology,ds411slim", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

@@ -7,7 +7,7 @@
 	model = "Marvell DB-MV88AP510-BP Development Board";
 	compatible = "marvell,dove-db", "marvell,dove";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x40000000>;
 	};

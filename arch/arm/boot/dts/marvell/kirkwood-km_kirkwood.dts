@@ -9,7 +9,7 @@
 	model = "Keymile Kirkwood Reference Design";
 	compatible = "keymile,km_kirkwood", "marvell,kirkwood-98DX4122", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x08000000>;
 	};

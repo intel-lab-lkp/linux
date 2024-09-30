@@ -15,7 +15,7 @@
 	model = "Synology 409slim";
 	compatible = "synology,ds409slim", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};

@@ -20,7 +20,7 @@
 / {
 	model = "Excito B3";
 	compatible = "excito,b3", "marvell,kirkwood-88f6281", "marvell,kirkwood";
-	memory { /* 512 MB */
+	memory@0 { /* 512 MB */
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

@@ -7,7 +7,7 @@
 	model = "Buffalo Linkstation LS-CHLv2";
 	compatible = "buffalo,lschlv2", "buffalo,lsxl", "marvell,kirkwood-88f6281", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x4000000>;
 	};

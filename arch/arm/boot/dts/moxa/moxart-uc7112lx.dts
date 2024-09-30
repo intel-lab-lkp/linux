@@ -11,7 +11,7 @@
 	model = "MOXA UC-7112-LX";
 	compatible = "moxa,moxart-uc-7112-lx", "moxa,moxart";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x0 0x2000000>;
 	};

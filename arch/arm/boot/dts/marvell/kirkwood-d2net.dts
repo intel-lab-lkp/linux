@@ -15,7 +15,7 @@
 	model = "LaCie d2 Network v2";
 	compatible = "lacie,d2net_v2", "lacie,netxbig", "marvell,kirkwood-88f6281", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x10000000>;
 	};

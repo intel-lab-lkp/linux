@@ -16,7 +16,7 @@
 	model = "Marvell RD88F6192 reference design";
 	compatible = "marvell,rd88f6192", "marvell,kirkwood-88f6192", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

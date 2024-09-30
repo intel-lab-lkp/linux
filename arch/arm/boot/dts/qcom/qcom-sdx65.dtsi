@@ -20,7 +20,7 @@
 	qcom,msm-id = <458 0x10000>, <483 0x10000>, <509 0x10000>;
 	interrupt-parent = <&intc>;
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0 0>;
 	};

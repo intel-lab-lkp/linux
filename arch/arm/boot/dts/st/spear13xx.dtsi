@@ -50,7 +50,7 @@
 		    cache-level = <2>;
 	};
 
-	memory {
+	memory@0 {
 		name = "memory";
 		device_type = "memory";
 		reg = <0 0x40000000>;

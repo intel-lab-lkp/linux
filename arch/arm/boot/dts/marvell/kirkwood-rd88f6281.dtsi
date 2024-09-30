@@ -12,7 +12,7 @@
 #include "kirkwood-6281.dtsi"
 
 / {
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x20000000>;
 	};

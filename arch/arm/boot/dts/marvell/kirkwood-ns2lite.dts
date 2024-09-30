@@ -7,7 +7,7 @@
 	model = "LaCie Network Space Lite v2";
 	compatible = "lacie,netspace_lite_v2", "marvell,kirkwood-88f6192", "marvell,kirkwood";
 
-	memory {
+	memory@0 {
 		device_type = "memory";
 		reg = <0x00000000 0x8000000>;
 	};
