@@ -2018,8 +2018,8 @@ struct bpf_prog_array {
 };
 
 struct bpf_empty_prog_array {
-	struct bpf_prog_array hdr;
 	struct bpf_prog *null_prog;
+	struct bpf_prog_array hdr;
 };
 
 /* to avoid allocating empty bpf_prog_array for cgroups that
