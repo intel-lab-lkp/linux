@@ -2336,8 +2336,6 @@ static void smsc911x_drv_remove(struct platform_device *pdev)
 	(void)smsc911x_disable_resources(pdev);
 	smsc911x_free_resources(pdev);
 
-	free_netdev(dev);
-
 	pm_runtime_disable(&pdev->dev);
 }
 
@@ -2417,7 +2415,7 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 		goto out_0;
 	}
 
-	dev = alloc_etherdev(sizeof(struct smsc911x_data));
+	dev = devm_alloc_etherdev(&pdev->dev, sizeof(struct smsc911x_data));
 	if (!dev)
 		return -ENOMEM;
 
@@ -2426,10 +2424,8 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 	pdata = netdev_priv(dev);
 	dev->irq = irq;
 	pdata->ioaddr = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(pdata->ioaddr)) {
-		retval = PTR_ERR(pdata->ioaddr);
-		goto out_ioremap_fail;
-	}
+	if (IS_ERR(pdata->ioaddr))
+		return PTR_ERR(pdata->ioaddr);
 
 	pdata->dev = dev;
 	pdata->msg_enable = ((1 << debug) - 1);
@@ -2438,7 +2434,7 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 
 	retval = smsc911x_request_resources(pdev);
 	if (retval)
-		goto out_ioremap_fail;
+		return retval;
 
 	retval = smsc911x_enable_resources(pdev);
 	if (retval)
@@ -2535,8 +2531,6 @@ out_disable_resources:
 	(void)smsc911x_disable_resources(pdev);
 out_enable_resources_fail:
 	smsc911x_free_resources(pdev);
-out_ioremap_fail:
-	free_netdev(dev);
 out_0:
 	return retval;
 }
