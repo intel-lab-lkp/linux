@@ -2364,6 +2364,8 @@ static int filemap_read_folio(struct file *file, filler_t filler,
 	/* Start the actual read. The read will unlock the page. */
 	if (unlikely(workingset))
 		psi_memstall_enter(&pflags);
+	if (!filler)
+		return -EIO;
 	error = filler(file, folio);
 	if (unlikely(workingset))
 		psi_memstall_leave(&pflags);
