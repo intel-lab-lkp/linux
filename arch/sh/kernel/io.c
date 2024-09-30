@@ -13,7 +13,7 @@
 /*
  * Copy data from IO memory space to "real" memory space.
  */
-void memcpy_fromio(void *to, const volatile void __iomem *from, unsigned long count)
+void memcpy_fromio(void *to, const volatile void __iomem *from, size_t count)
 {
 	/*
 	 * Would it be worthwhile doing byte and long transfers first
@@ -76,7 +76,7 @@ EXPORT_SYMBOL(memcpy_fromio);
 /*
  * Copy data from "real" memory space to IO memory space.
  */
-void memcpy_toio(volatile void __iomem *to, const void *from, unsigned long count)
+void memcpy_toio(volatile void __iomem *to, const void *from, size_t count)
 {
 	if ((((u32)to | (u32)from) & 0x3) == 0) {
 		for ( ; count > 3; count -= 4) {
@@ -100,7 +100,7 @@ EXPORT_SYMBOL(memcpy_toio);
  * "memset" on IO memory space.
  * This needs to be optimized.
  */
-void memset_io(volatile void __iomem *dst, int c, unsigned long count)
+void memset_io(volatile void __iomem *dst, int c, size_t count)
 {
         while (count) {
                 count--;
