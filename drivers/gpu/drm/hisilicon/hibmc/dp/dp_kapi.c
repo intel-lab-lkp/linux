@@ -64,12 +64,12 @@ static void hibmc_dp_set_tu(struct hibmc_dp_dev *dp, struct dp_mode *mode)
 	rate_ks = dp->link.cap.link_rate * DP_LINK_RATE_CAL;
 	value = (pixel_clock * bpp * 5000) / (61 * lane_num * rate_ks);
 
-	if (value % 10 == 9) { /* 10: div, 9: carry */
-		tu_symbol_size = value / 10 + 1; /* 10: div */
+	if (value % 10 == 9) { /* 9 carry */
+		tu_symbol_size = value / 10 + 1;
 		tu_symbol_frac_size = 0;
 	} else {
-		tu_symbol_size = value / 10; /* 10: div */
-		tu_symbol_frac_size = value % 10 + 1; /* 10: div */
+		tu_symbol_size = value / 10;
+		tu_symbol_frac_size = value % 10 + 1;
 	}
 
 	drm_info(dp->dev, "tu value: %u.%u value: %u\n",
@@ -158,7 +158,7 @@ static void hibmc_dp_link_cfg(struct hibmc_dp_dev *dp, struct dp_mode *mode)
 	dp_write_bits(dp->base + DP_VIDEO_CTRL,
 		      DP_CFG_STREAM_HSYNC_POLARITY, mode->h_pol);
 
-	/* MSA mic 0 and 1*/
+	/* MSA mic 0 and 1 */
 	writel(DP_MSA1, dp->base + DP_VIDEO_MSA1);
 	writel(DP_MSA2, dp->base + DP_VIDEO_MSA2);
 
@@ -167,7 +167,7 @@ static void hibmc_dp_link_cfg(struct hibmc_dp_dev *dp, struct dp_mode *mode)
 	dp_write_bits(dp->base + DP_VIDEO_CTRL, DP_CFG_STREAM_RGB_ENABLE, 0x1);
 	dp_write_bits(dp->base + DP_VIDEO_CTRL, DP_CFG_STREAM_VIDEO_MAPPING, 0);
 
-	/*divide 2: up even */
+	/* divide 2: up even */
 	if (timing_delay % 2)
 		timing_delay++;
 
