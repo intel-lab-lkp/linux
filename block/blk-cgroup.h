@@ -239,6 +239,18 @@ static inline bool bio_issue_as_root_blkg(struct bio *bio)
 	return (bio->bi_opf & (REQ_META | REQ_SWAP)) != 0;
 }
 
+static inline bool blkg_print_dev_name(struct seq_file *sf,
+				       struct blkcg_gq *blkg)
+{
+	struct gendisk *disk = blkg->q->disk;
+
+	if (!disk)
+		return false;
+
+	seq_printf(sf, "%u:%u", disk->major, disk->first_minor);
+	return true;
+}
+
 /**
  * blkg_lookup - lookup blkg for the specified blkcg - q pair
  * @blkcg: blkcg of interest
