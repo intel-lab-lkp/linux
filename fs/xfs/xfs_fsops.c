@@ -79,6 +79,46 @@ xfs_resizefs_init_new_ags(
 	return error;
 }
 
+static int
+xfs_growfs_data_update_sb(
+	struct xfs_trans	*tp,
+	xfs_agnumber_t		nagcount,
+	xfs_rfsblock_t		nb,
+	xfs_agnumber_t		nagimax)
+{
+	struct xfs_mount	*mp = tp->t_mountp;
+	struct xfs_dsb		*sbp;
+	struct xfs_buf		*bp;
+	int			error;
+
+	/*
+	 * Update the geometry in the on-disk superblock first, and ensure
+	 * they make it to disk before the superblock can be relogged.
+	 */
+	sbp = xfs_prepare_sb_update(tp, &bp);
+	sbp->sb_agcount = cpu_to_be32(nagcount);
+	sbp->sb_dblocks = cpu_to_be64(nb);
+	error = xfs_commit_sb_update(tp, bp);
+	if (error)
+		goto out_unlock;
+
+	/*
+	 * Propagate the new values to the live mount structure after they made
+	 * it to disk with the superblock buffer still locked.
+	 */
+	mp->m_sb.sb_agcount = nagcount;
+	mp->m_sb.sb_dblocks = nb;
+
+	if (nagimax)
+		mp->m_maxagi = nagimax;
+	xfs_set_low_space_thresholds(mp);
+	mp->m_alloc_set_aside = xfs_alloc_set_aside(mp);
+
+out_unlock:
+	xfs_buf_relse(bp);
+	return error;
+}
+
 /*
  * growfs operations
  */
@@ -171,36 +211,12 @@ xfs_growfs_data_private(
 	if (error)
 		goto out_trans_cancel;
 
-	/*
-	 * Update changed superblock fields transactionally. These are not
-	 * seen by the rest of the world until the transaction commit applies
-	 * them atomically to the superblock.
-	 */
-	if (nagcount > oagcount)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_AGCOUNT, nagcount - oagcount);
-	if (delta)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_DBLOCKS, delta);
 	if (id.nfree)
 		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, id.nfree);
 
-	/*
-	 * Sync sb counters now to reflect the updated values. This is
-	 * particularly important for shrink because the write verifier
-	 * will fail if sb_fdblocks is ever larger than sb_dblocks.
-	 */
-	if (xfs_has_lazysbcount(mp))
-		xfs_log_sb(tp);
-
-	xfs_trans_set_sync(tp);
-	error = xfs_trans_commit(tp);
+	error = xfs_growfs_data_update_sb(tp, nagcount, nb, nagimax);
 	if (error)
 		return error;
-
-	/* New allocation groups fully initialized, so update mount struct */
-	if (nagimax)
-		mp->m_maxagi = nagimax;
-	xfs_set_low_space_thresholds(mp);
-	mp->m_alloc_set_aside = xfs_alloc_set_aside(mp);
 
 	if (delta > 0) {
 		/*
@@ -260,8 +276,9 @@ xfs_growfs_imaxpct(
 	struct xfs_mount	*mp,
 	__u32			imaxpct)
 {
+	struct xfs_dsb		*sbp;
+	struct xfs_buf		*bp;
 	struct xfs_trans	*tp;
-	int			dpct;
 	int			error;
 
 	if (imaxpct > 100)
@@ -272,10 +289,13 @@ xfs_growfs_imaxpct(
 	if (error)
 		return error;
 
-	dpct = imaxpct - mp->m_sb.sb_imax_pct;
-	xfs_trans_mod_sb(tp, XFS_TRANS_SB_IMAXPCT, dpct);
-	xfs_trans_set_sync(tp);
-	return xfs_trans_commit(tp);
+	sbp = xfs_prepare_sb_update(tp, &bp);
+	sbp->sb_imax_pct = imaxpct;
+	error = xfs_commit_sb_update(tp, bp);
+	if (!error)
+		mp->m_sb.sb_imax_pct = imaxpct;
+	xfs_buf_relse(bp);
+	return error;
 }
 
 /*

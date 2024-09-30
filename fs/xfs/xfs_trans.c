@@ -430,31 +430,6 @@ xfs_trans_mod_sb(
 		ASSERT(delta < 0);
 		tp->t_res_frextents_delta += delta;
 		break;
-	case XFS_TRANS_SB_DBLOCKS:
-		tp->t_dblocks_delta += delta;
-		break;
-	case XFS_TRANS_SB_AGCOUNT:
-		ASSERT(delta > 0);
-		tp->t_agcount_delta += delta;
-		break;
-	case XFS_TRANS_SB_IMAXPCT:
-		tp->t_imaxpct_delta += delta;
-		break;
-	case XFS_TRANS_SB_REXTSIZE:
-		tp->t_rextsize_delta += delta;
-		break;
-	case XFS_TRANS_SB_RBMBLOCKS:
-		tp->t_rbmblocks_delta += delta;
-		break;
-	case XFS_TRANS_SB_RBLOCKS:
-		tp->t_rblocks_delta += delta;
-		break;
-	case XFS_TRANS_SB_REXTENTS:
-		tp->t_rextents_delta += delta;
-		break;
-	case XFS_TRANS_SB_REXTSLOG:
-		tp->t_rextslog_delta += delta;
-		break;
 	default:
 		ASSERT(0);
 		return;
@@ -475,12 +450,8 @@ STATIC void
 xfs_trans_apply_sb_deltas(
 	xfs_trans_t	*tp)
 {
-	struct xfs_dsb	*sbp;
-	struct xfs_buf	*bp;
-	int		whole = 0;
-
-	bp = xfs_trans_getsb(tp);
-	sbp = bp->b_addr;
+	struct xfs_buf	*bp = xfs_trans_getsb(tp);
+	struct xfs_dsb	*sbp = bp->b_addr;
 
 	/*
 	 * Only update the superblock counters if we are logging them
@@ -522,53 +493,10 @@ xfs_trans_apply_sb_deltas(
 		spin_unlock(&mp->m_sb_lock);
 	}
 
-	if (tp->t_dblocks_delta) {
-		be64_add_cpu(&sbp->sb_dblocks, tp->t_dblocks_delta);
-		whole = 1;
-	}
-	if (tp->t_agcount_delta) {
-		be32_add_cpu(&sbp->sb_agcount, tp->t_agcount_delta);
-		whole = 1;
-	}
-	if (tp->t_imaxpct_delta) {
-		sbp->sb_imax_pct += tp->t_imaxpct_delta;
-		whole = 1;
-	}
-	if (tp->t_rextsize_delta) {
-		be32_add_cpu(&sbp->sb_rextsize, tp->t_rextsize_delta);
-		whole = 1;
-	}
-	if (tp->t_rbmblocks_delta) {
-		be32_add_cpu(&sbp->sb_rbmblocks, tp->t_rbmblocks_delta);
-		whole = 1;
-	}
-	if (tp->t_rblocks_delta) {
-		be64_add_cpu(&sbp->sb_rblocks, tp->t_rblocks_delta);
-		whole = 1;
-	}
-	if (tp->t_rextents_delta) {
-		be64_add_cpu(&sbp->sb_rextents, tp->t_rextents_delta);
-		whole = 1;
-	}
-	if (tp->t_rextslog_delta) {
-		sbp->sb_rextslog += tp->t_rextslog_delta;
-		whole = 1;
-	}
-
 	xfs_trans_buf_set_type(tp, bp, XFS_BLFT_SB_BUF);
-	if (whole)
-		/*
-		 * Log the whole thing, the fields are noncontiguous.
-		 */
-		xfs_trans_log_buf(tp, bp, 0, sizeof(struct xfs_dsb) - 1);
-	else
-		/*
-		 * Since all the modifiable fields are contiguous, we
-		 * can get away with this.
-		 */
-		xfs_trans_log_buf(tp, bp, offsetof(struct xfs_dsb, sb_icount),
-				  offsetof(struct xfs_dsb, sb_frextents) +
-				  sizeof(sbp->sb_frextents) - 1);
+	xfs_trans_log_buf(tp, bp, offsetof(struct xfs_dsb, sb_icount),
+			  offsetof(struct xfs_dsb, sb_frextents) +
+			  sizeof(sbp->sb_frextents) - 1);
 }
 
 /*
@@ -656,26 +584,7 @@ xfs_trans_unreserve_and_mod_sb(
 	 * must be consistent with the ondisk rtbitmap and must never include
 	 * incore reservations.
 	 */
-	mp->m_sb.sb_dblocks += tp->t_dblocks_delta;
-	mp->m_sb.sb_agcount += tp->t_agcount_delta;
-	mp->m_sb.sb_imax_pct += tp->t_imaxpct_delta;
-	mp->m_sb.sb_rextsize += tp->t_rextsize_delta;
-	if (tp->t_rextsize_delta) {
-		mp->m_rtxblklog = log2_if_power2(mp->m_sb.sb_rextsize);
-		mp->m_rtxblkmask = mask64_if_power2(mp->m_sb.sb_rextsize);
-	}
-	mp->m_sb.sb_rbmblocks += tp->t_rbmblocks_delta;
-	mp->m_sb.sb_rblocks += tp->t_rblocks_delta;
-	mp->m_sb.sb_rextents += tp->t_rextents_delta;
-	mp->m_sb.sb_rextslog += tp->t_rextslog_delta;
 	spin_unlock(&mp->m_sb_lock);
-
-	/*
-	 * Debug checks outside of the spinlock so they don't lock up the
-	 * machine if they fail.
-	 */
-	ASSERT(mp->m_sb.sb_imax_pct >= 0);
-	ASSERT(mp->m_sb.sb_rextslog >= 0);
 }
 
 /* Add the given log item to the transaction's list of log items. */

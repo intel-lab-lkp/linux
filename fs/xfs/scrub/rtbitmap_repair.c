@@ -16,6 +16,7 @@
 #include "xfs_bit.h"
 #include "xfs_bmap.h"
 #include "xfs_bmap_btree.h"
+#include "xfs_sb.h"
 #include "scrub/scrub.h"
 #include "scrub/common.h"
 #include "scrub/trace.h"
@@ -127,20 +128,21 @@ xrep_rtbitmap_geometry(
 	struct xchk_rtbitmap	*rtb)
 {
 	struct xfs_mount	*mp = sc->mp;
-	struct xfs_trans	*tp = sc->tp;
 
 	/* Superblock fields */
-	if (mp->m_sb.sb_rextents != rtb->rextents)
-		xfs_trans_mod_sb(sc->tp, XFS_TRANS_SB_REXTENTS,
-				rtb->rextents - mp->m_sb.sb_rextents);
+	if (mp->m_sb.sb_rextents != rtb->rextents ||
+	    mp->m_sb.sb_rbmblocks != rtb->rbmblocks ||
+	    mp->m_sb.sb_rextslog != rtb->rextslog) {
+		struct xfs_buf		*bp = xfs_trans_getsb(sc->tp);
 
-	if (mp->m_sb.sb_rbmblocks != rtb->rbmblocks)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_RBMBLOCKS,
-				rtb->rbmblocks - mp->m_sb.sb_rbmblocks);
+		mp->m_sb.sb_rextents = rtb->rextents;
+		mp->m_sb.sb_rbmblocks = rtb->rbmblocks;
+		mp->m_sb.sb_rextslog = rtb->rextslog;
+		xfs_sb_to_disk(bp->b_addr, &mp->m_sb);
 
-	if (mp->m_sb.sb_rextslog != rtb->rextslog)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_REXTSLOG,
-				rtb->rextslog - mp->m_sb.sb_rextslog);
+		xfs_trans_buf_set_type(sc->tp, bp, XFS_BLFT_SB_BUF);
+		xfs_trans_log_buf(sc->tp, bp, 0, sizeof(struct xfs_dsb) - 1);
+	}
 
 	/* Fix broken isize */
 	sc->ip->i_disk_size = roundup_64(sc->ip->i_disk_size,

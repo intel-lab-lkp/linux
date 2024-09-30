@@ -699,6 +699,56 @@ out_iolock:
 }
 
 static int
+xfs_growfs_rt_update_sb(
+	struct xfs_trans	*tp,
+	struct xfs_mount	*mp,
+	struct xfs_mount	*nmp,
+	xfs_rtbxlen_t		freed_rtx)
+{
+	struct xfs_dsb		*sbp;
+	struct xfs_buf		*bp;
+	int			error;
+
+	/*
+	 * Update the geometry in the on-disk superblock first, and ensure
+	 * they make it to disk before the superblock can be relogged.
+	 */
+	sbp = xfs_prepare_sb_update(tp, &bp);
+	sbp->sb_rextsize = cpu_to_be32(nmp->m_sb.sb_rextsize);
+	sbp->sb_rbmblocks = cpu_to_be32(nmp->m_sb.sb_rbmblocks);
+	sbp->sb_rblocks = cpu_to_be64(nmp->m_sb.sb_rblocks);
+	sbp->sb_rextents = cpu_to_be64(nmp->m_sb.sb_rextents);
+	sbp->sb_rextslog = nmp->m_sb.sb_rextslog;
+	error = xfs_commit_sb_update(tp, bp);
+	if (error)
+		return error;
+
+	/*
+	 * Propagate the new values to the live mount structure after they made
+	 * it to disk with the superblock buffer still locked.
+	 */
+	mp->m_sb.sb_rextsize = nmp->m_sb.sb_rextsize;
+	mp->m_sb.sb_rbmblocks = nmp->m_sb.sb_rbmblocks;
+	mp->m_sb.sb_rblocks = nmp->m_sb.sb_rblocks;
+	mp->m_sb.sb_rextents = nmp->m_sb.sb_rextents;
+	mp->m_sb.sb_rextslog = nmp->m_sb.sb_rextslog;
+	mp->m_rsumlevels = nmp->m_rsumlevels;
+	mp->m_rsumblocks = nmp->m_rsumblocks;
+
+	/*
+	 * Recompute the growfsrt reservation from the new rsumsize.
+	 */
+	xfs_trans_resv_calc(mp, &mp->m_resv);
+
+	/*
+	 * Ensure the mount RT feature flag is now set.
+	 */
+	mp->m_features |= XFS_FEAT_REALTIME;
+	xfs_buf_relse(bp);
+	return 0;
+}
+
+static int
 xfs_growfs_rt_bmblock(
 	struct xfs_mount	*mp,
 	xfs_rfsblock_t		nrblocks,
@@ -781,25 +831,6 @@ xfs_growfs_rt_bmblock(
 	}
 
 	/*
-	 * Update superblock fields.
-	 */
-	if (nmp->m_sb.sb_rextsize != mp->m_sb.sb_rextsize)
-		xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_REXTSIZE,
-			nmp->m_sb.sb_rextsize - mp->m_sb.sb_rextsize);
-	if (nmp->m_sb.sb_rbmblocks != mp->m_sb.sb_rbmblocks)
-		xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_RBMBLOCKS,
-			nmp->m_sb.sb_rbmblocks - mp->m_sb.sb_rbmblocks);
-	if (nmp->m_sb.sb_rblocks != mp->m_sb.sb_rblocks)
-		xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_RBLOCKS,
-			nmp->m_sb.sb_rblocks - mp->m_sb.sb_rblocks);
-	if (nmp->m_sb.sb_rextents != mp->m_sb.sb_rextents)
-		xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_REXTENTS,
-			nmp->m_sb.sb_rextents - mp->m_sb.sb_rextents);
-	if (nmp->m_sb.sb_rextslog != mp->m_sb.sb_rextslog)
-		xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_REXTSLOG,
-			nmp->m_sb.sb_rextslog - mp->m_sb.sb_rextslog);
-
-	/*
 	 * Free the new extent.
 	 */
 	freed_rtx = nmp->m_sb.sb_rextents - mp->m_sb.sb_rextents;
@@ -807,32 +838,11 @@ xfs_growfs_rt_bmblock(
 	xfs_rtbuf_cache_relse(&nargs);
 	if (error)
 		goto out_cancel;
-
-	/*
-	 * Mark more blocks free in the superblock.
-	 */
 	xfs_trans_mod_sb(args.tp, XFS_TRANS_SB_FREXTENTS, freed_rtx);
 
-	/*
-	 * Update the calculated values in the real mount structure.
-	 */
-	mp->m_rsumlevels = nmp->m_rsumlevels;
-	mp->m_rsumblocks = nmp->m_rsumblocks;
-	xfs_mount_sb_set_rextsize(mp, &mp->m_sb);
-
-	/*
-	 * Recompute the growfsrt reservation from the new rsumsize.
-	 */
-	xfs_trans_resv_calc(mp, &mp->m_resv);
-
-	error = xfs_trans_commit(args.tp);
+	error = xfs_growfs_rt_update_sb(args.tp, mp, nmp, freed_rtx);
 	if (error)
 		goto out_free;
-
-	/*
-	 * Ensure the mount RT feature flag is now set.
-	 */
-	mp->m_features |= XFS_FEAT_REALTIME;
 
 	kfree(nmp);
 	return 0;

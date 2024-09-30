@@ -13,6 +13,9 @@ struct xfs_trans;
 struct xfs_fsop_geom;
 struct xfs_perag;
 
+struct xfs_dsb *xfs_prepare_sb_update(struct xfs_trans *tp,
+			struct xfs_buf **bpp);
+int		xfs_commit_sb_update(struct xfs_trans *tp, struct xfs_buf *bp);
 extern void	xfs_log_sb(struct xfs_trans *tp);
 extern int	xfs_sync_sb(struct xfs_mount *mp, bool wait);
 extern int	xfs_sync_sb_buf(struct xfs_mount *mp);

@@ -1026,6 +1026,80 @@ xfs_sb_mount_common(
 }
 
 /*
+ * Mirror the lazy sb counters to the in-core superblock.
+ *
+ * If this is at unmount, the counters will be exactly correct, but at any other
+ * time they will only be ballpark correct because of reservations that have
+ * been taken out percpu counters.  If we have an unclean shutdown, this will be
+ * corrected by log recovery rebuilding the counters from the AGF block counts.
+ *
+ * Do not update sb_frextents here because it is not part of the lazy sb
+ * counters, despite having a percpu counter.  It is always kept consistent with
+ * the ondisk rtbitmap by xfs_trans_apply_sb_deltas() and hence we don't need
+ * have to update it here.
+ */
+static void
+xfs_flush_sb_counters(
+	struct xfs_mount	*mp)
+{
+	if (xfs_has_lazysbcount(mp)) {
+		mp->m_sb.sb_icount = percpu_counter_sum_positive(&mp->m_icount);
+		mp->m_sb.sb_ifree = min_t(uint64_t,
+				percpu_counter_sum_positive(&mp->m_ifree),
+				mp->m_sb.sb_icount);
+		mp->m_sb.sb_fdblocks =
+				percpu_counter_sum_positive(&mp->m_fdblocks);
+	}
+}
+
+/*
+ * Prepare a direct update to the superblock through the on-disk buffer.
+ *
+ * This locks out other modifications through the buffer lock and then syncs all
+ * in-core values to the on-disk buffer (including the percpu counters).
+ *
+ * The caller then directly manipulates the on-disk fields and calls
+ * xfs_commit_sb_update to the updates to disk them.  The caller is responsible
+ * to also update the in-core field, but it can do so after the transaction has
+ * been committed to disk.
+ *
+ * Updating the in-core field only after xfs_commit_sb_update ensures that other
+ * processes only see the update once it is stable on disk, and is usually the
+ * right thing to do for superblock updates.
+ *
+ * Note that writes to superblock fields updated using this helper are
+ * synchronized using the superblock buffer lock, which must be taken around
+ * all updates to the in-core fields as well.
+ */
+struct xfs_dsb *
+xfs_prepare_sb_update(
+	struct xfs_trans	*tp,
+	struct xfs_buf		**bpp)
+{
+	*bpp = xfs_trans_getsb(tp);
+	xfs_flush_sb_counters(tp->t_mountp);
+	xfs_sb_to_disk((*bpp)->b_addr, &tp->t_mountp->m_sb);
+	return (*bpp)->b_addr;
+}
+
+/*
+ * Commit a direct update to the on-disk superblock.  Keeps @bp locked and
+ * referenced, so the caller must call xfs_buf_relse() manually.
+ */
+int
+xfs_commit_sb_update(
+	struct xfs_trans	*tp,
+	struct xfs_buf		*bp)
+{
+	xfs_trans_bhold(tp, bp);
+	xfs_trans_buf_set_type(tp, bp, XFS_BLFT_SB_BUF);
+	xfs_trans_log_buf(tp, bp, 0, sizeof(struct xfs_dsb) - 1);
+
+	xfs_trans_set_sync(tp);
+	return xfs_trans_commit(tp);
+}
+
+/*
  * xfs_log_sb() can be used to copy arbitrary changes to the in-core superblock
  * into the superblock buffer to be logged.  It does not provide the higher
  * level of locking that is needed to protect the in-core superblock from
@@ -1038,28 +1112,7 @@ xfs_log_sb(
 	struct xfs_mount	*mp = tp->t_mountp;
 	struct xfs_buf		*bp = xfs_trans_getsb(tp);
 
-	/*
-	 * Lazy sb counters don't update the in-core superblock so do that now.
-	 * If this is at unmount, the counters will be exactly correct, but at
-	 * any other time they will only be ballpark correct because of
-	 * reservations that have been taken out percpu counters. If we have an
-	 * unclean shutdown, this will be corrected by log recovery rebuilding
-	 * the counters from the AGF block counts.
-	 *
-	 * Do not update sb_frextents here because it is not part of the lazy
-	 * sb counters, despite having a percpu counter. It is always kept
-	 * consistent with the ondisk rtbitmap by xfs_trans_apply_sb_deltas()
-	 * and hence we don't need have to update it here.
-	 */
-	if (xfs_has_lazysbcount(mp)) {
-		mp->m_sb.sb_icount = percpu_counter_sum_positive(&mp->m_icount);
-		mp->m_sb.sb_ifree = min_t(uint64_t,
-				percpu_counter_sum_positive(&mp->m_ifree),
-				mp->m_sb.sb_icount);
-		mp->m_sb.sb_fdblocks =
-				percpu_counter_sum_positive(&mp->m_fdblocks);
-	}
-
+	xfs_flush_sb_counters(mp);
 	xfs_sb_to_disk(bp->b_addr, &mp->m_sb);
 	xfs_trans_buf_set_type(tp, bp, XFS_BLFT_SB_BUF);
 	xfs_trans_log_buf(tp, bp, 0, sizeof(struct xfs_dsb) - 1);
