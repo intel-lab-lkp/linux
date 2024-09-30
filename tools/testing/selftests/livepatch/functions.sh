@@ -6,7 +6,7 @@
 
 MAX_RETRIES=600
 RETRY_INTERVAL=".1"	# seconds
-KLP_SYSFS_DIR="/sys/kernel/livepatch"
+SYSFS_KLP_DIR="/sys/kernel/livepatch"
 
 # Kselftest framework requirement - SKIP code is 4
 ksft_skip=4
@@ -322,7 +322,7 @@ function check_sysfs_rights() {
 	local rel_path="$1"; shift
 	local expected_rights="$1"; shift
 
-	local path="$KLP_SYSFS_DIR/$mod/$rel_path"
+	local path="$SYSFS_KLP_DIR/$mod/$rel_path"
 	local rights=$(/bin/stat --format '%A' "$path")
 	if test "$rights" != "$expected_rights" ; then
 		die "Unexpected access rights of $path: $expected_rights vs. $rights"
@@ -338,7 +338,7 @@ function check_sysfs_value() {
 	local rel_path="$1"; shift
 	local expected_value="$1"; shift
 
-	local path="$KLP_SYSFS_DIR/$mod/$rel_path"
+	local path="$SYSFS_KLP_DIR/$mod/$rel_path"
 	local value=`cat $path`
 	if test "$value" != "$expected_value" ; then
 		die "Unexpected value in $path: $expected_value vs. $value"
