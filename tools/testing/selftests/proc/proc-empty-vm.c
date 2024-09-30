@@ -213,6 +213,53 @@ static void vsyscall(void)
 }
 #endif
 
+static int test_proc_pid_mem(pid_t pid)
+{
+	char buf[4096];
+	char *line;
+	int vm_size = -1;
+
+	snprintf(buf, sizeof(buf), "/proc/%d/status", pid);
+	int fd = open(buf, O_RDONLY);
+
+	if (fd == -1) {
+		if (errno == ENOENT) {
+			// Process does not exist
+			return EXIT_SUCCESS;
+		}
+	perror("open /proc/[pid]/status");
+	return EXIT_FAILURE;
+	}
+
+	ssize_t rv = read(fd, buf, sizeof(buf) - 1);
+
+	if (rv == -1) {
+		perror("read");
+		close(fd);
+		return EXIT_FAILURE;
+	}
+	buf[rv] = '\0';
+
+	line = strtok(buf, "\n");
+	while (line != NULL) {
+		// Check for VmSize
+		if (strncmp(line, "VmSize:", 7) == 0) {
+			sscanf(line, "VmSize: %d", &vm_size);
+			break;
+		}
+		line = strtok(NULL, "\n");
+	}
+
+	close(fd);
+
+	// Check if VmSize is 0
+	if (vm_size == 0) {
+		return EXIT_SUCCESS;
+	}
+
+	return EXIT_FAILURE;
+}
+
 static int test_proc_pid_maps(pid_t pid)
 {
 	char buf[4096];
@@ -508,6 +555,9 @@ int main(void)
 		 */
 		sleep(1);
 
+		if (rv == EXIT_SUCCESS) {
+			rv = test_proc_pid_mem(pid);
+		}
 		if (rv == EXIT_SUCCESS) {
 			rv = test_proc_pid_maps(pid);
 		}
