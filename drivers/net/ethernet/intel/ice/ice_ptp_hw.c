@@ -874,10 +874,37 @@ static void ice_ptp_exec_tmr_cmd(struct ice_hw *hw)
 	ice_flush(hw);
 }
 
+/**
+ * ice_ptp_cfg_sync_delay - Configure PHC to PHY synchronization delay
+ * @hw: pointer to HW struct
+ * @delay: delay between PHC and PHY SYNC command execution in nanoseconds
+ */
+static void ice_ptp_cfg_sync_delay(struct ice_hw *hw, u32 delay)
+{
+	wr32(hw, GLTSYN_SYNC_DLAY, delay);
+	ice_flush(hw);
+}
+
 /* 56G PHY device functions
  *
  * The following functions operate on devices with the ETH 56G PHY.
  */
+
+/**
+ * ice_ptp_init_phc_e825 - Perform E825 specific PHC initialization
+ * @hw: pointer to HW struct
+ *
+ * Perform E825-specific PTP hardware clock initialization steps.
+ *
+ * Return: 0 on success, negative error code otherwise
+ */
+static int ice_ptp_init_phc_e825(struct ice_hw *hw)
+{
+	ice_ptp_cfg_sync_delay(hw, ICE_E825_SYNC_DELAY);
+
+	/* Initialize the Clock Generation Unit */
+	return ice_init_cgu_e82x(hw);
+}
 
 /**
  * ice_write_phy_eth56g - Write a PHY port register
@@ -2543,42 +2570,6 @@ int ice_start_phy_timer_eth56g(struct ice_hw *hw, u8 port)
 }
 
 /**
- * ice_sb_access_ena_eth56g - Enable SB devices (PHY and others) access
- * @hw: pointer to HW struct
- * @enable: Enable or disable access
- *
- * Enable sideband devices (PHY and others) access.
- */
-static void ice_sb_access_ena_eth56g(struct ice_hw *hw, bool enable)
-{
-	u32 val = rd32(hw, PF_SB_REM_DEV_CTL);
-
-	if (enable)
-		val |= BIT(eth56g_phy_0) | BIT(cgu) | BIT(eth56g_phy_1);
-	else
-		val &= ~(BIT(eth56g_phy_0) | BIT(cgu) | BIT(eth56g_phy_1));
-
-	wr32(hw, PF_SB_REM_DEV_CTL, val);
-}
-
-/**
- * ice_ptp_init_phc_eth56g - Perform E82X specific PHC initialization
- * @hw: pointer to HW struct
- *
- * Perform PHC initialization steps specific to E82X devices.
- *
- * Return:
- * * %0     - success
- * * %other - failed to initialize CGU
- */
-static int ice_ptp_init_phc_eth56g(struct ice_hw *hw)
-{
-	ice_sb_access_ena_eth56g(hw, true);
-	/* Initialize the Clock Generation Unit */
-	return ice_init_cgu_e82x(hw);
-}
-
-/**
  * ice_ptp_read_tx_hwtstamp_status_eth56g - Get TX timestamp status
  * @hw: pointer to the HW struct
  * @ts_status: the timestamp mask pointer
@@ -2665,14 +2656,15 @@ static bool ice_is_muxed_topo(struct ice_hw *hw)
 }
 
 /**
- * ice_ptp_init_phy_e825c - initialize PHY parameters
+ * ice_ptp_init_phy_e825 - initialize PHY parameters
  * @hw: pointer to the HW struct
  */
-static void ice_ptp_init_phy_e825c(struct ice_hw *hw)
+static void ice_ptp_init_phy_e825(struct ice_hw *hw)
 {
 	struct ice_ptp_hw *ptp = &hw->ptp;
 	struct ice_eth56g_params *params;
-	u8 phy;
+	u32 phy_rev;
+	int err;
 
 	ptp->phy_model = ICE_PHY_ETH56G;
 	params = &ptp->phy.eth56g;
@@ -2685,17 +2677,9 @@ static void ice_ptp_init_phy_e825c(struct ice_hw *hw)
 	ptp->ports_per_phy = 4;
 	ptp->num_lports = params->num_phys * ptp->ports_per_phy;
 
-	ice_sb_access_ena_eth56g(hw, true);
-	for (phy = 0; phy < params->num_phys; phy++) {
-		u32 phy_rev;
-		int err;
-
-		err = ice_read_phy_eth56g(hw, phy, PHY_REG_REVISION, &phy_rev);
-		if (err || phy_rev != PHY_REVISION_ETH56G) {
-			ptp->phy_model = ICE_PHY_UNSUP;
-			return;
-		}
-	}
+	err = ice_read_phy_eth56g(hw, hw->pf_id, PHY_REG_REVISION, &phy_rev);
+	if (err || phy_rev != PHY_REVISION_ETH56G)
+		ptp->phy_model = ICE_PHY_UNSUP;
 
 	ptp->is_2x50g_muxed_topo = ice_is_muxed_topo(hw);
 }
@@ -5396,7 +5380,7 @@ void ice_ptp_init_hw(struct ice_hw *hw)
 	else if (ice_is_e810(hw))
 		ice_ptp_init_phy_e810(ptp);
 	else if (ice_is_e825c(hw))
-		ice_ptp_init_phy_e825c(hw);
+		ice_ptp_init_phy_e825(hw);
 	else
 		ptp->phy_model = ICE_PHY_UNSUP;
 }
@@ -5835,7 +5819,7 @@ int ice_ptp_init_phc(struct ice_hw *hw)
 
 	switch (hw->ptp.phy_model) {
 	case ICE_PHY_ETH56G:
-		return ice_ptp_init_phc_eth56g(hw);
+		return ice_ptp_init_phc_e825(hw);
 	case ICE_PHY_E810:
 		return ice_ptp_init_phc_e810(hw);
 	case ICE_PHY_E82X:
