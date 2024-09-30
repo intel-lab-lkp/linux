@@ -105,6 +105,17 @@ struct cpuinfo_topology {
 	// Cache level topology IDs
 	u32			llc_id;
 	u32			l2c_id;
+
+	// Hardware defined CPU-type
+	union {
+		u32		hw_cpu_type;
+		struct {
+			/* CPUID.1A.EAX[23-0] */
+			u32	intel_core_native_model_id:24;
+			/* CPUID.1A.EAX[31-24] */
+			u32	intel_core_type:8;
+		};
+	};
 };
 
 struct cpuinfo_x86 {
