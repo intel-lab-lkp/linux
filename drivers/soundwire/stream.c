@@ -1977,9 +1977,9 @@ EXPORT_SYMBOL(sdw_stream_remove_master);
  *
  * @slave: SDW Slave instance
  * @stream_config: Stream configuration for audio stream
- * @stream: SoundWire stream
  * @port_config: Port configuration for audio stream
  * @num_ports: Number of ports
+ * @stream: SoundWire stream
  *
  * It is expected that Slave is added before adding Master
  * to the Stream.
