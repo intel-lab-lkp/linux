@@ -157,7 +157,7 @@ static void meson_plane_atomic_update(struct drm_plane *plane,
 	 * Update Buffer
 	 * Enable Plane
 	 */
-	spin_lock_irqsave(&priv->drm->event_lock, flags);
+	spin_lock_irqsave(&priv->drm.event_lock, flags);
 
 	/* Check if AFBC decoder is required for this buffer */
 	if ((meson_vpu_is_compatible(priv, VPU_COMPATIBLE_GXM) ||
@@ -393,7 +393,7 @@ static void meson_plane_atomic_update(struct drm_plane *plane,
 
 	priv->viu.osd1_enabled = true;
 
-	spin_unlock_irqrestore(&priv->drm->event_lock, flags);
+	spin_unlock_irqrestore(&priv->drm.event_lock, flags);
 }
 
 static void meson_plane_atomic_disable(struct drm_plane *plane,
@@ -536,7 +536,7 @@ int meson_plane_create(struct meson_drm *priv)
 	const uint64_t *format_modifiers = format_modifiers_default;
 	int ret;
 
-	meson_plane = devm_kzalloc(priv->drm->dev, sizeof(*meson_plane),
+	meson_plane = devm_kzalloc(priv->drm.dev, sizeof(*meson_plane),
 				   GFP_KERNEL);
 	if (!meson_plane)
 		return -ENOMEM;
@@ -549,14 +549,14 @@ int meson_plane_create(struct meson_drm *priv)
 	else if (meson_vpu_is_compatible(priv, VPU_COMPATIBLE_G12A))
 		format_modifiers = format_modifiers_afbc_g12a;
 
-	ret = drm_universal_plane_init(priv->drm, plane, 0xFF,
+	ret = drm_universal_plane_init(&priv->drm, plane, 0xFF,
 					&meson_plane_funcs,
 					supported_drm_formats,
 					ARRAY_SIZE(supported_drm_formats),
 					format_modifiers,
 					DRM_PLANE_TYPE_PRIMARY, "meson_primary_plane");
 	if (ret) {
-		devm_kfree(priv->drm->dev, meson_plane);
+		devm_kfree(priv->drm.dev, meson_plane);
 		return ret;
 	}
 
