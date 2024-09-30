@@ -256,8 +256,8 @@ static const char *pin_free(struct pinctrl_dev *pctldev, int pin,
 /**
  * pinmux_request_gpio() - request pinmuxing for a GPIO pin
  * @pctldev: pin controller device affected
- * @pin: the pin to mux in for GPIO
  * @range: the applicable GPIO range
+ * @pin: the pin to mux in for GPIO
  * @gpio: number of requested GPIO
  */
 int pinmux_request_gpio(struct pinctrl_dev *pctldev,
