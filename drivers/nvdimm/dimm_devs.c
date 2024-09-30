@@ -767,8 +767,8 @@ resource_size_t nd_pmem_max_contiguous_dpa(struct nd_region *nd_region,
 
 /**
  * nd_pmem_available_dpa - for the given dimm+region account unallocated dpa
- * @nd_mapping: container of dpa-resource-root + labels
  * @nd_region: constrain available space check to this reference region
+ * @nd_mapping: container of dpa-resource-root + labels
  *
  * Validate that a PMEM label, if present, aligns with the start of an
  * interleave set.
