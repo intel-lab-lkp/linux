@@ -14,7 +14,7 @@
 
 #include "internal.h"
 
-static void devm_regulator_release(struct device *dev, void *res)
+void devm_regulator_release(struct device *dev, void *res)
 {
 	regulator_put(*(struct regulator **)res);
 }
