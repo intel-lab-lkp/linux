@@ -391,7 +391,7 @@ ltq_etop_mdio_init(struct net_device *dev)
 	struct ltq_etop_priv *priv = netdev_priv(dev);
 	int err;
 
-	priv->mii_bus = mdiobus_alloc();
+	priv->mii_bus = devm_mdiobus_alloc(&dev->dev);
 	if (!priv->mii_bus) {
 		netdev_err(dev, "failed to allocate mii bus\n");
 		err = -ENOMEM;
@@ -404,33 +404,19 @@ ltq_etop_mdio_init(struct net_device *dev)
 	priv->mii_bus->name = "ltq_mii";
 	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
 		 priv->pdev->name, priv->pdev->id);
-	if (mdiobus_register(priv->mii_bus)) {
+	if (devm_mdiobus_register(&dev->dev, priv->mii_bus)) {
 		err = -ENXIO;
-		goto err_out_free_mdiobus;
+		goto err_out;
 	}
 
 	if (ltq_etop_mdio_probe(dev)) {
 		err = -ENXIO;
-		goto err_out_unregister_bus;
+		goto err_out;
 	}
 	return 0;
 
-err_out_unregister_bus:
-	mdiobus_unregister(priv->mii_bus);
-err_out_free_mdiobus:
-	mdiobus_free(priv->mii_bus);
 err_out:
 	return err;
-}
-
-static void
-ltq_etop_mdio_cleanup(struct net_device *dev)
-{
-	struct ltq_etop_priv *priv = netdev_priv(dev);
-
-	phy_disconnect(dev->phydev);
-	mdiobus_unregister(priv->mii_bus);
-	mdiobus_free(priv->mii_bus);
 }
 
 static int
@@ -725,7 +711,7 @@ static void ltq_etop_remove(struct platform_device *pdev)
 	if (dev) {
 		netif_tx_stop_all_queues(dev);
 		ltq_etop_hw_exit(dev);
-		ltq_etop_mdio_cleanup(dev);
+		phy_disconnect(dev->phydev);
 	}
 }
 
