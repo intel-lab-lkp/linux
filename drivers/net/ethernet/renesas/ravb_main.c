@@ -2063,25 +2063,30 @@ out_unlock:
 
 static bool ravb_can_tx_csum_gbeth(struct sk_buff *skb)
 {
-	struct iphdr *ip = ip_hdr(skb);
-
 	/* TODO: Need to add support for VLAN tag 802.1Q */
 	if (skb_vlan_tag_present(skb))
 		return false;
 
-	/* TODO: Need to add hardware checksum for IPv6 */
-	if (skb->protocol != htons(ETH_P_IP))
-		return false;
+	switch (ntohs(skb->protocol)) {
+	case ETH_P_IP:
+		switch (ip_hdr(skb)->protocol) {
+		case IPPROTO_TCP:
+		case IPPROTO_UDP:
+		case IPPROTO_ICMP:
+			return true;
+		}
+		break;
 
-	switch (ip->protocol) {
-	case IPPROTO_TCP:
-	case IPPROTO_UDP:
-	case IPPROTO_ICMP:
-		return true;
-
-	default:
-		return false;
+	case ETH_P_IPV6:
+		switch (ipv6_hdr(skb)->nexthdr) {
+		case IPPROTO_TCP:
+		case IPPROTO_UDP:
+		case IPPROTO_ICMPV6:
+			return true;
+		}
 	}
+
+	return false;
 }
 
 /* Packet transmit function for Ethernet AVB */
