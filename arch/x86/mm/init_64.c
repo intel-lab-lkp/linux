@@ -55,6 +55,7 @@
 #include <asm/uv/uv.h>
 #include <asm/setup.h>
 #include <asm/ftrace.h>
+#include <asm/tdx.h>
 
 #include "mm_internal.h"
 
@@ -972,6 +973,11 @@ int add_pages(int nid, unsigned long start_pfn, unsigned long nr_pages,
 				  nr_pages << PAGE_SHIFT);
 
 	return ret;
+}
+
+int arch_check_hotplug_memory_range(u64 start, u64 size)
+{
+	return tdx_check_hotplug_memory_range(start, size);
 }
 
 int arch_add_memory(int nid, u64 start, u64 size,
