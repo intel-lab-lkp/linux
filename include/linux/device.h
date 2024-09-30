@@ -180,6 +180,10 @@ ssize_t device_show_string(struct device *dev, struct device_attribute *attr,
 #define DEVICE_ATTR_RW(_name) \
 	struct device_attribute dev_attr_##_name = __ATTR_RW(_name)
 
+/* Consider using device_driver.dev_groups instead of this */
+#define DEVICE_ATTR_LOCKED_RW(_name) \
+	struct device_attribute dev_attr_##_name = __ATTR_LOCKED_RW(_name)
+
 /**
  * DEVICE_ATTR_ADMIN_RW - Define an admin-only read-write device attribute.
  * @_name: Attribute name.

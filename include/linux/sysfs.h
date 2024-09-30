@@ -103,6 +103,7 @@ struct attribute_group {
 
 #define SYSFS_PREALLOC		010000
 #define SYSFS_GROUP_INVISIBLE	020000
+#define SYSFS_LOCKED		040000
 
 /*
  * DEFINE_SYSFS_GROUP_VISIBLE(name):
@@ -230,6 +231,20 @@ struct attribute_group {
 	.store	= _store,						\
 }
 
+/*
+ * uevent_show() needs this due to userspace expectations of reading
+ * that attribute flushing device probing, it is not intended to be a
+ * general semantic for other device sysfs attributes. It is broken to
+ * use this with non-device / pure-kobject sysfs attributes, see
+ * sysfs_kf_setup_lock().
+ */
+#define __ATTR_LOCKED(_name, _mode, _show, _store) {			\
+	.attr = {.name = __stringify(_name),				\
+		 .mode = SYSFS_LOCKED | VERIFY_OCTAL_PERMISSIONS(_mode) },\
+	.show	= _show,						\
+	.store	= _store,						\
+}
+
 #define __ATTR_RO(_name) {						\
 	.attr	= { .name = __stringify(_name), .mode = 0444 },		\
 	.show	= _name##_show,						\
@@ -254,6 +269,8 @@ struct attribute_group {
 }
 
 #define __ATTR_RW(_name) __ATTR(_name, 0644, _name##_show, _name##_store)
+
+#define __ATTR_LOCKED_RW(_name) __ATTR_LOCKED(_name, 0644, _name##_show, _name##_store)
 
 #define __ATTR_NULL { .attr = { .name = NULL } }
 

@@ -2765,7 +2765,7 @@ static ssize_t uevent_store(struct device *dev, struct device_attribute *attr,
 
 	return count;
 }
-static DEVICE_ATTR_RW(uevent);
+static DEVICE_ATTR_LOCKED_RW(uevent);
 
 static ssize_t online_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)

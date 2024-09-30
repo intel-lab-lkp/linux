@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
+#include <linux/device.h>
 #include <linux/mm.h>
 
 #include "sysfs.h"
@@ -189,6 +190,26 @@ static int sysfs_kf_bin_open(struct kernfs_open_file *of)
 	return 0;
 }
 
+/* locked attributes are always device attributes */
+static int sysfs_kf_setup_lock(struct kernfs_open_file *of)
+{
+	struct kobject *kobj = of->kn->parent->priv;
+	struct device *dev = kobj_to_dev(kobj);
+
+	get_device(dev);
+	of->op_mutex = &dev->mutex;
+
+	return 0;
+}
+
+static void sysfs_kf_free_lock(struct kernfs_open_file *of)
+{
+	struct kobject *kobj = of->kn->parent->priv;
+	struct device *dev = kobj_to_dev(kobj);
+
+	put_device(dev);
+}
+
 void sysfs_notify(struct kobject *kobj, const char *dir, const char *attr)
 {
 	struct kernfs_node *kn = kobj->sd, *tmp;
@@ -225,6 +246,25 @@ static const struct kernfs_ops sysfs_file_kfops_wo = {
 static const struct kernfs_ops sysfs_file_kfops_rw = {
 	.seq_show	= sysfs_kf_seq_show,
 	.write		= sysfs_kf_write,
+};
+
+static const struct kernfs_ops sysfs_locked_kfops_ro = {
+	.seq_show	= sysfs_kf_seq_show,
+	.open		= sysfs_kf_setup_lock,
+	.release	= sysfs_kf_free_lock,
+};
+
+static const struct kernfs_ops sysfs_locked_kfops_wo = {
+	.write		= sysfs_kf_write,
+	.open		= sysfs_kf_setup_lock,
+	.release	= sysfs_kf_free_lock,
+};
+
+static const struct kernfs_ops sysfs_locked_kfops_rw = {
+	.seq_show	= sysfs_kf_seq_show,
+	.write		= sysfs_kf_write,
+	.open		= sysfs_kf_setup_lock,
+	.release	= sysfs_kf_free_lock,
 };
 
 static const struct kernfs_ops sysfs_prealloc_kfops_ro = {
@@ -287,6 +327,13 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 			ops = &sysfs_prealloc_kfops_ro;
 		else if (sysfs_ops->store)
 			ops = &sysfs_prealloc_kfops_wo;
+	} else if (mode & SYSFS_LOCKED) {
+		if (sysfs_ops->show && sysfs_ops->store)
+			ops = &sysfs_locked_kfops_rw;
+		else if (sysfs_ops->show)
+			ops = &sysfs_locked_kfops_ro;
+		else if (sysfs_ops->store)
+			ops = &sysfs_locked_kfops_wo;
 	} else {
 		if (sysfs_ops->show && sysfs_ops->store)
 			ops = &sysfs_file_kfops_rw;
