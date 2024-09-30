@@ -587,7 +587,7 @@ ltq_etop_init(struct net_device *dev)
 
 	err = ltq_etop_set_mac_address(dev, &mac);
 	if (err)
-		goto err_netdev;
+		goto err_hw;
 
 	/* Set addr_assign_type here, ltq_etop_set_mac_address would reset it. */
 	if (random_mac)
@@ -596,11 +596,9 @@ ltq_etop_init(struct net_device *dev)
 	ltq_etop_set_multicast_list(dev);
 	err = ltq_etop_mdio_init(dev);
 	if (err)
-		goto err_netdev;
+		goto err_hw;
 	return 0;
 
-err_netdev:
-	unregister_netdev(dev);
 err_hw:
 	ltq_etop_hw_exit(dev);
 	return err;
@@ -709,7 +707,7 @@ ltq_etop_probe(struct platform_device *pdev)
 		priv->ch[i].netdev = dev;
 	}
 
-	err = register_netdev(dev);
+	err = devm_register_netdev(&pdev->dev, dev);
 	if (err)
 		goto err_out;
 
@@ -728,7 +726,6 @@ static void ltq_etop_remove(struct platform_device *pdev)
 		netif_tx_stop_all_queues(dev);
 		ltq_etop_hw_exit(dev);
 		ltq_etop_mdio_cleanup(dev);
-		unregister_netdev(dev);
 	}
 }
 
