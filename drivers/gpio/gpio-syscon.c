@@ -9,7 +9,6 @@
 #include <linux/gpio/driver.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
-#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 
@@ -208,12 +207,13 @@ static int syscon_gpio_probe(struct platform_device *pdev)
 	struct device_node *np = dev->of_node;
 	int ret;
 	bool use_parent_regmap = false;
+	unsigned int props[] = { 0, 0 };
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
-	priv->data = of_device_get_match_data(dev);
+	priv->data = device_get_match_data(dev);
 
 	priv->syscon = syscon_regmap_lookup_by_phandle(np, "gpio,syscon-dev");
 	if (IS_ERR(priv->syscon) && np->parent) {
@@ -224,19 +224,15 @@ static int syscon_gpio_probe(struct platform_device *pdev)
 		return PTR_ERR(priv->syscon);
 
 	if (!use_parent_regmap) {
-		ret = of_property_read_u32_index(np, "gpio,syscon-dev", 1,
-						 &priv->dreg_offset);
-		if (ret)
+		ret = device_property_read_u32_array(dev, "gpio,syscon-dev",
+						     props, 2);
+		if (ret < 0)
 			dev_err(dev, "can't read the data register offset!\n");
-
-		priv->dreg_offset <<= 3;
-
-		ret = of_property_read_u32_index(np, "gpio,syscon-dev", 2,
-						 &priv->dir_reg_offset);
-		if (ret)
+		if (ret != 2)
 			dev_dbg(dev, "can't read the dir register offset!\n");
 
-		priv->dir_reg_offset <<= 3;
+		priv->dreg_offset = props[0] << 3;
+		priv->dir_reg_offset = props[1] << 3;
 	}
 
 	priv->chip.parent = dev;
