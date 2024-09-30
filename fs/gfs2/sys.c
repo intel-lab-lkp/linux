@@ -16,6 +16,7 @@
 #include <linux/uaccess.h>
 #include <linux/gfs2_ondisk.h>
 #include <linux/blkdev.h>
+#include <linux/netdevice.h>
 
 #include "gfs2.h"
 #include "incore.h"
@@ -56,6 +57,24 @@ static const struct sysfs_ops gfs2_attr_ops = {
 
 
 static struct kset *gfs2_kset;
+
+#if IS_ENABLED(CONFIG_NET)
+/* gfs2 sysfs is separated by net-namespaces */
+static const struct kobj_ns_type_operations *
+gfs2_sysfs_object_child_ns_type(const struct kobject *kobj)
+{
+	return &net_ns_type_operations;
+}
+#endif
+
+static const struct kobj_type gfs2_kset_ktype = {
+	.sysfs_ops      = &kobj_sysfs_ops,
+	.release	= kset_release,
+	.get_ownership  = kset_get_ownership,
+#if IS_ENABLED(CONFIG_NET)
+	.child_ns_type  = gfs2_sysfs_object_child_ns_type,
+#endif
+};
 
 static ssize_t id_show(struct gfs2_sbd *sdp, char *buf)
 {
@@ -383,10 +402,23 @@ static void gfs2_sbd_release(struct kobject *kobj)
 	complete(&sdp->sd_kobj_unregister);
 }
 
+#if IS_ENABLED(CONFIG_NET)
+/* return the net-namespace the kobj belonging to */
+static const void *gfs2_kobj_namespace(const struct kobject *kobj)
+{
+	struct gfs2_sbd *sdp = container_of(kobj, struct gfs2_sbd, sd_kobj);
+
+	return read_pnet(&sdp->net);
+}
+#endif
+
 static struct kobj_type gfs2_ktype = {
 	.release = gfs2_sbd_release,
 	.default_groups = gfs2_groups,
 	.sysfs_ops     = &gfs2_attr_ops,
+#if IS_ENABLED(CONFIG_NET)
+	.namespace = gfs2_kobj_namespace,
+#endif
 };
 
 
@@ -797,7 +829,8 @@ static const struct kset_uevent_ops gfs2_uevent_ops = {
 
 int gfs2_sys_init(void)
 {
-	gfs2_kset = kset_create_and_add("gfs2", &gfs2_uevent_ops, fs_kobj);
+	gfs2_kset = kset_type_create_and_add("gfs2", &gfs2_uevent_ops,
+					     fs_kobj, &gfs2_kset_ktype);
 	if (!gfs2_kset)
 		return -ENOMEM;
 	return 0;

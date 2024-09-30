@@ -64,6 +64,8 @@ static void gfs2_tune_init(struct gfs2_tune *gt)
 
 void free_sbd(struct gfs2_sbd *sdp)
 {
+	put_net_track(read_pnet(&sdp->net), &sdp->tracker);
+
 	if (sdp->sd_lkstats)
 		free_percpu(sdp->sd_lkstats);
 	kfree(sdp);
@@ -71,6 +73,7 @@ void free_sbd(struct gfs2_sbd *sdp)
 
 static struct gfs2_sbd *init_sbd(struct super_block *sb)
 {
+	struct net *net = current->nsproxy->net_ns;
 	struct gfs2_sbd *sdp;
 	struct address_space *mapping;
 
@@ -78,6 +81,8 @@ static struct gfs2_sbd *init_sbd(struct super_block *sb)
 	if (!sdp)
 		return NULL;
 
+	/* store the net-namespace the sdp is created into */
+	write_pnet(&sdp->net, get_net_track(net, &sdp->tracker, GFP_KERNEL));
 	sdp->sd_vfs = sb;
 	sdp->sd_lkstats = alloc_percpu(struct gfs2_pcpu_lkstats);
 	if (!sdp->sd_lkstats)
