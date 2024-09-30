@@ -114,8 +114,22 @@ static int mchp_sparx5_reset_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	err = mchp_sparx5_map_syscon(pdev, "cpu-syscon", &ctx->cpu_ctrl);
-	if (err)
+	switch (err) {
+	case 0:
+		break;
+	case -ENODEV:
+		/*
+		 * The cpu-syscon device is not available.
+		 * Fall back with IO mapping (i.e. mapping from reg property).
+		 */
+		err = mchp_sparx5_map_io(pdev, 1, &ctx->cpu_ctrl);
+		if (err)
+			return err;
+		break;
+	default:
 		return err;
+	}
+
 	err = mchp_sparx5_map_io(pdev, 0, &ctx->gcb_ctrl);
 	if (err)
 		return err;
