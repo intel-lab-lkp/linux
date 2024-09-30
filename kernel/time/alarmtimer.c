@@ -59,7 +59,6 @@ static DEFINE_SPINLOCK(freezer_delta_lock);
 
 #ifdef CONFIG_RTC_CLASS
 /* rtc timer and device for setting alarm wakeups at suspend */
-static struct rtc_timer		rtctimer;
 static struct rtc_device	*rtcdev;
 static DEFINE_SPINLOCK(rtcdev_lock);
 
@@ -123,11 +122,6 @@ unlock:
 	return ret;
 }
 
-static inline void alarmtimer_rtc_timer_init(void)
-{
-	rtc_timer_init(&rtctimer, NULL, NULL);
-}
-
 static struct class_interface alarmtimer_rtc_interface = {
 	.add_dev = &alarmtimer_rtc_add_device,
 };
@@ -144,7 +138,6 @@ static void alarmtimer_rtc_interface_remove(void)
 #else
 static inline int alarmtimer_rtc_interface_setup(void) { return 0; }
 static inline void alarmtimer_rtc_interface_remove(void) { }
-static inline void alarmtimer_rtc_timer_init(void) { }
 #endif
 
 /**
@@ -287,7 +280,7 @@ static int alarmtimer_suspend(struct device *dev)
 	trace_alarmtimer_suspend(expires, type);
 
 	/* Setup an rtc timer to fire that far in the future */
-	rtc_timer_cancel(rtc, &rtctimer);
+	rtc_timer_cancel(rtc, &rtc->aie_timer);
 	rtc_read_time(rtc, &tm);
 	now = rtc_tm_to_ktime(tm);
 
@@ -304,7 +297,7 @@ static int alarmtimer_suspend(struct device *dev)
 	now = ktime_add(now, min);
 
 	/* Set alarm, if in the past reject suspend briefly to handle */
-	ret = rtc_timer_start(rtc, &rtctimer, now, 0);
+	ret = rtc_timer_start(rtc, &rtc->aie_timer, now, 0);
 	if (ret < 0)
 		pm_wakeup_event(dev, MSEC_PER_SEC);
 	return ret;
@@ -316,7 +309,7 @@ static int alarmtimer_resume(struct device *dev)
 
 	rtc = alarmtimer_get_rtcdev();
 	if (rtc)
-		rtc_timer_cancel(rtc, &rtctimer);
+		rtc_timer_cancel(rtc, &rtc->aie_timer);
 	return 0;
 }
 
@@ -938,8 +931,6 @@ static int __init alarmtimer_init(void)
 {
 	int error;
 	int i;
-
-	alarmtimer_rtc_timer_init();
 
 	/* Initialize alarm bases */
 	alarm_bases[ALARM_REALTIME].base_clockid = CLOCK_REALTIME;
