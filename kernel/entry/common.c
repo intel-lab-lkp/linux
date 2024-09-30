@@ -58,7 +58,7 @@ long syscall_trace_enter(struct pt_regs *regs, long syscall,
 	syscall = syscall_get_nr(current, regs);
 
 	if (unlikely(work & SYSCALL_WORK_SYSCALL_TRACEPOINT)) {
-		trace_sys_enter(regs, syscall);
+		trace_syscall_sys_enter(regs, syscall);
 		/*
 		 * Probes or BPF hooks in the tracepoint may have changed the
 		 * system call number as well.
@@ -166,7 +166,7 @@ static void syscall_exit_work(struct pt_regs *regs, unsigned long work)
 	audit_syscall_exit(regs);
 
 	if (work & SYSCALL_WORK_SYSCALL_TRACEPOINT)
-		trace_sys_exit(regs, syscall_get_return_value(current, regs));
+		trace_syscall_sys_exit(regs, syscall_get_return_value(current, regs));
 
 	step = report_single_step(work);
 	if (step || work & SYSCALL_WORK_SYSCALL_TRACE)
