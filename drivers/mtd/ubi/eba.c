@@ -731,8 +731,8 @@ out_unlock:
  * ubi_eba_read_leb_sg - read data into a scatter gather list.
  * @ubi: UBI device description object
  * @vol: volume description object
- * @lnum: logical eraseblock number
  * @sgl: UBI scatter gather list to store the read data
+ * @lnum: logical eraseblock number
  * @offset: offset from where to read
  * @len: how many bytes to read
  * @check: data CRC check flag
