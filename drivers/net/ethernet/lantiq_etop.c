@@ -601,7 +601,6 @@ ltq_etop_init(struct net_device *dev)
 
 err_netdev:
 	unregister_netdev(dev);
-	free_netdev(dev);
 err_hw:
 	ltq_etop_hw_exit(dev);
 	return err;
@@ -672,7 +671,8 @@ ltq_etop_probe(struct platform_device *pdev)
 		goto err_out;
 	}
 
-	dev = alloc_etherdev_mq(sizeof(struct ltq_etop_priv), 4);
+	dev = devm_alloc_etherdev_mqs(&pdev->dev, sizeof(struct ltq_etop_priv),
+				      4, 4);
 	if (!dev) {
 		err = -ENOMEM;
 		goto err_out;
@@ -690,13 +690,13 @@ ltq_etop_probe(struct platform_device *pdev)
 	err = device_property_read_u32(&pdev->dev, "lantiq,tx-burst-length", &priv->tx_burst_len);
 	if (err < 0) {
 		dev_err(&pdev->dev, "unable to read tx-burst-length property\n");
-		goto err_free;
+		goto err_out;
 	}
 
 	err = device_property_read_u32(&pdev->dev, "lantiq,rx-burst-length", &priv->rx_burst_len);
 	if (err < 0) {
 		dev_err(&pdev->dev, "unable to read rx-burst-length property\n");
-		goto err_free;
+		goto err_out;
 	}
 
 	for (i = 0; i < MAX_DMA_CHAN; i++) {
@@ -711,13 +711,11 @@ ltq_etop_probe(struct platform_device *pdev)
 
 	err = register_netdev(dev);
 	if (err)
-		goto err_free;
+		goto err_out;
 
 	platform_set_drvdata(pdev, dev);
 	return 0;
 
-err_free:
-	free_netdev(dev);
 err_out:
 	return err;
 }
