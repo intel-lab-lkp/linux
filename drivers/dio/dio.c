@@ -11,12 +11,12 @@
  *    This means that framebuffers should pass it as
  *    DIO_ENCODE_ID(DIO_ID_FBUFFER,DIO_ID2_TOPCAT)
  *    (or whatever); everybody else just uses DIO_ID_FOOBAR.
- * unsigned long dio_scodetophysaddr(int scode)
+ * unsigned long dio_scode_to_physaddr(int scode)
  *    Return the physical address corresponding to the given select code.
- * int dio_scodetoipl(int scode)
+ * int dio_scode_to_ipl(int scode)
  *    Every DIO card has a fixed interrupt priority level. This function
  *    returns it, whatever it is.
- * const char *dio_scodetoname(int scode)
+ * const char *dio_scode_to_name(int scode)
  *    Return a character string describing this board [might be "" if
  *    not CONFIG_DIO_CONSTANTS]
  * void dio_config_board(int scode)     mark board as configured in the list
@@ -130,7 +130,7 @@ int __init dio_find(int deviceid)
 		if (DIO_SCINHOLE(scode))
 			continue;
 
-		pa = dio_scodetophysaddr(scode);
+		pa = dio_scode_to_physaddr(scode);
 
 		if (!pa)
 			continue;
@@ -203,7 +203,7 @@ static int __init dio_init(void)
 		if (DIO_SCINHOLE(scode))
 			continue;
 
-		pa = dio_scodetophysaddr(scode);
+		pa = dio_scode_to_physaddr(scode);
 
 		if (!pa)
 			continue;
@@ -274,7 +274,7 @@ subsys_initcall(dio_init);
 /* Bear in mind that this is called in the very early stages of initialisation
  * in order to get the address of the serial port for the console...
  */
-unsigned long dio_scodetophysaddr(int scode)
+unsigned long dio_scode_to_physaddr(int scode)
 {
 	if (scode >= DIOII_SCBASE)
 		return (DIOII_BASE + (scode - 132) * DIOII_DEVSIZE);
