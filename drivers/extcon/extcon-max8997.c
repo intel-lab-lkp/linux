@@ -190,7 +190,7 @@ static int max8997_muic_set_debounce_time(struct max8997_muic_info *info,
  * @value: the path according to attached cable
  * @attached: the state of cable (true:attached, false:detached)
  *
- * The max8997 MUIC device share outside H/W line among a varity of cables,
+ * The max8997 MUIC device share outside H/W line among a variety of cables,
  * so this function set internal path of H/W line according to the type of
  * attached cable.
  */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * extcon-sm5502.c - Silicon Mitus SM5502 extcon drvier to support USB switches
+ * extcon-sm5502.c - Silicon Mitus SM5502 extcon driver to support USB switches
  *
  * Copyright (c) 2014 Samsung Electronics Co., Ltd
  * Author: Chanwoo Choi <cw00.choi@samsung.com>

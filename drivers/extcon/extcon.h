@@ -16,7 +16,7 @@
  *			ending with 0 or be NULL (no mutually exclusive cables).
  *			For example, if it is {0x7, 0x30, 0}, then,
  *			{0, 1}, {0, 1, 2}, {0, 2}, {1, 2}, or {4, 5} cannot
- *			be attached simulataneously. {0x7, 0} is equivalent to
+ *			be attached simultaneously. {0x7, 0} is equivalent to
  *			{0x3, 0x6, 0x5, 0}. If it is {0xFFFFFFFF, 0}, there
  *			can be no simultaneous connections.
  * @dev:		Device of this extcon.

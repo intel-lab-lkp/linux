@@ -269,7 +269,7 @@ static int rt8973a_muic_get_cable_type(struct rt8973a_muic_info *info)
 	}
 	cable_type = adc & RT8973A_REG_ADC_MASK;
 
-	/* Read Device 1 reigster to identify correct cable type */
+	/* Read Device 1 register to identify correct cable type */
 	ret = regmap_read(info->regmap, RT8973A_REG_DEV1, &dev1);
 	if (ret) {
 		dev_err(info->dev, "failed to read DEV1 register\n");
