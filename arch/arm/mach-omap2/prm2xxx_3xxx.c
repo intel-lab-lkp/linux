@@ -62,7 +62,6 @@ int omap2_prm_assert_hardreset(u8 shift, u8 part, s16 prm_mod, u16 offset)
 
 /**
  * omap2_prm_deassert_hardreset - deassert a submodule hardreset line and wait
- * @prm_mod: PRM submodule base (e.g. CORE_MOD)
  * @rst_shift: register bit shift corresponding to the reset line to deassert
  * @st_shift: register bit shift for the status of the deasserted submodule
  * @part: PRM partition, not used for OMAP2
