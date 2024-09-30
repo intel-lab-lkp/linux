@@ -898,12 +898,15 @@ static u64 iolatency_prfill_limit(struct seq_file *sf,
 				  struct blkg_policy_data *pd, int off)
 {
 	struct iolatency_grp *iolat = pd_to_lat(pd);
-	const char *dname = blkg_dev_name(pd->blkg);
 
-	if (!dname || !iolat->min_lat_nsec)
+	if (!iolat->min_lat_nsec)
 		return 0;
-	seq_printf(sf, "%s target=%llu\n",
-		   dname, div_u64(iolat->min_lat_nsec, NSEC_PER_USEC));
+
+	if (!blkg_print_dev_name(sf, pd->blkg))
+		return 0;
+
+	seq_printf(sf, " target=%llu\n",
+		   div_u64(iolat->min_lat_nsec, NSEC_PER_USEC));
 	return 0;
 }
 
