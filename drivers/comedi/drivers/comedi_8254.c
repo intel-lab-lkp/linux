@@ -317,8 +317,8 @@ EXPORT_SYMBOL_GPL(comedi_8254_set_mode);
  * comedi_8254_load - program the mode and initial count of a counter
  * @i8254:	comedi_8254 struct for the timer
  * @counter:	the counter number
- * @mode:	the I8254_MODEx and I8254_BCD|I8254_BINARY
  * @val:	the initial value
+ * @mode:	the I8254_MODEx and I8254_BCD|I8254_BINARY
  */
 int comedi_8254_load(struct comedi_8254 *i8254, unsigned int counter,
 		     unsigned int val, unsigned int mode)
