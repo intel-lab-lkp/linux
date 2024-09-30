@@ -23,6 +23,7 @@ struct netns_core {
 #if IS_ENABLED(CONFIG_RPS) && IS_ENABLED(CONFIG_SYSCTL)
 	struct cpumask *rps_default_mask;
 #endif
+	int	sysctl_tstamp_allow_data;
 };
 
 #endif
