@@ -626,9 +626,9 @@ static u8 dccp_feat_sp_list_ok(u8 feat_num, u8 const *sp_list, u8 sp_len)
 
 /**
  * dccp_feat_insert_opts  -  Generate FN options from current list state
- * @skb: next sk_buff to be sent to the peer
  * @dp: for client during handshake and general negotiation
  * @dreq: used by the server only (all Changes/Confirms in LISTEN/RESPOND)
+ * @skb: next sk_buff to be sent to the peer
  */
 int dccp_feat_insert_opts(struct dccp_sock *dp, struct dccp_request_sock *dreq,
 			  struct sk_buff *skb)
