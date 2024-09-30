@@ -122,8 +122,7 @@ ltq_etop_alloc_skb(struct ltq_etop_chan *ch)
 	return 0;
 }
 
-static void
-ltq_etop_hw_receive(struct ltq_etop_chan *ch)
+static void ltq_etop_hw_receive(struct ltq_etop_chan *ch, struct list_head *lh)
 {
 	struct ltq_etop_priv *priv = netdev_priv(ch->netdev);
 	struct ltq_dma_desc *desc = &ch->dma.desc_base[ch->dma.desc];
@@ -143,7 +142,7 @@ ltq_etop_hw_receive(struct ltq_etop_chan *ch)
 
 	skb_put(skb, len);
 	skb->protocol = eth_type_trans(skb, ch->netdev);
-	netif_receive_skb(skb);
+	list_add_tail(&skb->list, lh);
 }
 
 static int
@@ -151,6 +150,7 @@ ltq_etop_poll_rx(struct napi_struct *napi, int budget)
 {
 	struct ltq_etop_chan *ch = container_of(napi,
 				struct ltq_etop_chan, napi);
+	LIST_HEAD(rx_list);
 	int work_done = 0;
 
 	while (work_done < budget) {
@@ -158,9 +158,12 @@ ltq_etop_poll_rx(struct napi_struct *napi, int budget)
 
 		if ((desc->ctl & (LTQ_DMA_OWN | LTQ_DMA_C)) != LTQ_DMA_C)
 			break;
-		ltq_etop_hw_receive(ch);
+		ltq_etop_hw_receive(ch, &rx_list);
 		work_done++;
 	}
+
+	netif_receive_skb_list(&rx_list);
+
 	if (work_done < budget) {
 		napi_complete_done(&ch->napi, work_done);
 		ltq_dma_ack_irq(&ch->dma);
