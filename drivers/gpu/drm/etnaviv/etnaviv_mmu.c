@@ -310,8 +310,12 @@ int etnaviv_iommu_map_gem(struct etnaviv_iommu_context *context,
 	else
 		ret = etnaviv_iommu_find_iova(context, node,
 					      etnaviv_obj->base.size);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(context->global->dev,
+			"Insert iova failed, va: %llx, size: %zx\n",
+			va, etnaviv_obj->base.size);
 		goto unlock;
+	}
 
 	mapping->iova = node->start;
 	ret = etnaviv_iommu_map(context, node->start, sgt,
