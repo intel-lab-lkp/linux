@@ -49,8 +49,8 @@ static void radeon_debugfs_sa_init(struct radeon_device *rdev);
  *
  * @rdev: radeon_device pointer
  * @ring: ring index the IB is associated with
- * @vm: requested vm
  * @ib: IB object returned
+ * @vm: requested vm
  * @size: requested IB size
  *
  * Request an IB (all asics).  IBs are allocated using the
