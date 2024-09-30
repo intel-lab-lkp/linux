@@ -576,8 +576,8 @@ struct lc_element *lc_element_by_index(struct lru_cache *lc, unsigned i)
 
 /**
  * lc_seq_dump_details - Dump a complete LRU cache to seq in textual form.
- * @lc: the lru cache to operate on
  * @seq: the &struct seq_file pointer to seq_printf into
+ * @lc: the lru cache to operate on
  * @utext: user supplied additional "heading" or other info
  * @detail: function pointer the user may provide to dump further details
  * of the object the lc_element is embedded in. May be NULL.
