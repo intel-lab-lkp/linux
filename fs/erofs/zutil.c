@@ -285,26 +285,11 @@ static void  __erofs_workgroup_free(struct erofs_workgroup *grp)
 	erofs_workgroup_free_rcu(grp);
 }
 
-void erofs_workgroup_put(struct erofs_workgroup *grp)
-{
-	if (lockref_put_or_lock(&grp->lockref))
-		return;
-
-	DBG_BUGON(__lockref_is_dead(&grp->lockref));
-	if (grp->lockref.count == 1)
-		atomic_long_inc(&erofs_global_shrink_cnt);
-	--grp->lockref.count;
-	spin_unlock(&grp->lockref.lock);
-}
-
-static bool erofs_try_to_release_workgroup(struct erofs_sb_info *sbi,
+static bool erofs_prepare_to_release_workgroup(struct erofs_sb_info *sbi,
 					   struct erofs_workgroup *grp)
 {
-	int free = false;
-
-	spin_lock(&grp->lockref.lock);
 	if (grp->lockref.count)
-		goto out;
+		return false;
 
 	/*
 	 * Note that all cached pages should be detached before deleted from
@@ -312,7 +297,7 @@ static bool erofs_try_to_release_workgroup(struct erofs_sb_info *sbi,
 	 * the orphan old workgroup when the new one is available in the tree.
 	 */
 	if (erofs_try_to_free_all_cached_folios(sbi, grp))
-		goto out;
+		return false;
 
 	/*
 	 * It's impossible to fail after the workgroup is freezed,
@@ -322,12 +307,45 @@ static bool erofs_try_to_release_workgroup(struct erofs_sb_info *sbi,
 	DBG_BUGON(__xa_erase(&sbi->managed_pslots, grp->index) != grp);
 
 	lockref_mark_dead(&grp->lockref);
-	free = true;
-out:
+	return true;
+}
+
+static bool erofs_try_to_release_workgroup(struct erofs_sb_info *sbi,
+					   struct erofs_workgroup *grp)
+{
+	bool free = false;
+
+	/* Using trylock to avoid deadlock with erofs_workgroup_put() */
+	if (!spin_trylock(&grp->lockref.lock))
+		return free;
+	free = erofs_prepare_to_release_workgroup(sbi, grp);
 	spin_unlock(&grp->lockref.lock);
 	if (free)
 		__erofs_workgroup_free(grp);
 	return free;
+}
+
+void erofs_workgroup_put(struct erofs_sb_info *sbi, struct erofs_workgroup *grp,
+		bool try_free)
+{
+	bool free = false;
+
+	if (lockref_put_or_lock(&grp->lockref))
+		return;
+
+	DBG_BUGON(__lockref_is_dead(&grp->lockref));
+	if (--grp->lockref.count == 0) {
+		atomic_long_inc(&erofs_global_shrink_cnt);
+
+		if (try_free) {
+			xa_lock(&sbi->managed_pslots);
+			free = erofs_prepare_to_release_workgroup(sbi, grp);
+			xa_unlock(&sbi->managed_pslots);
+		}
+	}
+	spin_unlock(&grp->lockref.lock);
+	if (free)
+		__erofs_workgroup_free(grp);
 }
 
 static unsigned long erofs_shrink_workstation(struct erofs_sb_info *sbi,
