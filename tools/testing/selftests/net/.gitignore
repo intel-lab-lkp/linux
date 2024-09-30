@@ -17,7 +17,6 @@ ipv6_flowlabel
 ipv6_flowlabel_mgr
 log.txt
 msg_zerocopy
-ncdevmem
 nettest
 psock_fanout
 psock_snd
