@@ -1948,6 +1948,12 @@ mt7925_change_vif_links(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 					     GFP_KERNEL);
 		}
 
+		if (!mconf || !mlink) {
+			err = -ENOMEM;
+			goto free;
+		}
+
+
 		mconfs[link_id] = mconf;
 		mlinks[link_id] = mlink;
 		mconf->link_id = link_id;
