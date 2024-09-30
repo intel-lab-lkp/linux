@@ -684,6 +684,28 @@ xlog_recover_do_inode_buffer(
 	return 0;
 }
 
+static int
+xlog_recover_do_sb_buffer(
+	struct xfs_mount		*mp,
+	struct xlog_recover_item	*item,
+	struct xfs_buf			*bp,
+	struct xfs_buf_log_format	*buf_f,
+	xfs_lsn_t			current_lsn)
+{
+	xlog_recover_do_reg_buffer(mp, item, bp, buf_f, current_lsn);
+
+	/*
+	 * Update the in-memory superblock and perag structures from the
+	 * primary SB buffer.
+	 *
+	 * This is required because transactions running after growfs may require
+	 * the updated values to be set in a previous fully commit transaction.
+	 */
+	if (xfs_buf_daddr(bp) != 0)
+		return 0;
+	return xlog_recover_update_agcount(mp, bp->b_addr);
+}
+
 /*
  * V5 filesystems know the age of the buffer on disk being recovered. We can
  * have newer objects on disk than we are replaying, and so for these cases we
@@ -966,6 +988,11 @@ xlog_recover_buf_commit_pass2(
 
 		dirty = xlog_recover_do_dquot_buffer(mp, log, item, bp, buf_f);
 		if (!dirty)
+			goto out_release;
+	} else if (xfs_blft_from_flags(buf_f) & XFS_BLFT_SB_BUF) {
+		error = xlog_recover_do_sb_buffer(mp, item, bp, buf_f,
+				current_lsn);
+		if (error)
 			goto out_release;
 	} else {
 		xlog_recover_do_reg_buffer(mp, item, bp, buf_f, current_lsn);

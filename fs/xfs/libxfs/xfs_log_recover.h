@@ -165,4 +165,6 @@ void xlog_recover_intent_item(struct xlog *log, struct xfs_log_item *lip,
 int xlog_recover_finish_intent(struct xfs_trans *tp,
 		struct xfs_defer_pending *dfp);
 
+int xlog_recover_update_agcount(struct xfs_mount *mp, struct xfs_dsb *dsb);
+
 #endif	/* __XFS_LOG_RECOVER_H__ */
