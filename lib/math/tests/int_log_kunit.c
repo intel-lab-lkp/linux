@@ -24,7 +24,7 @@ static const struct test_case_params intlog2_params[] = {
 
 static const struct test_case_params intlog10_params[] = {
 	{0, 0, "Log base 10 of 0"},
-	{1, 0, "Log bsae 10 of 1"},
+	{1, 0, "Log base 10 of 1"},
 	{6, 13055203, "Log base 10 of 6"},
 	{10, 16777225, "Log base 10 of 10"},
 	{100, 33554450, "Log base 10 of 100"},
