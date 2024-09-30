@@ -86,13 +86,18 @@ static void __init kirkwood_dt_eth_fixup(void)
 		void __iomem *io;
 		u8 *macaddr;
 		u32 reg;
+		int err;
 
 		if (!pnp)
 			continue;
 
-		/* skip disabled nodes or nodes with valid MAC address*/
-		if (!of_device_is_available(pnp) ||
-		    !of_get_mac_address(np, tmpmac))
+		/* skip disabled nodes */
+		if (!of_device_is_available(pnp))
+			goto eth_fixup_skip;
+
+		/* skip nodes with valid MAC address*/
+		err = of_get_mac_address(np, tmpmac);
+		if (err == -EPROBE_DEFER || !err)
 			goto eth_fixup_skip;
 
 		clk = of_clk_get(pnp, 0);
