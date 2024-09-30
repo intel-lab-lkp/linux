@@ -673,10 +673,8 @@ static void ltq_etop_remove(struct platform_device *pdev)
 {
 	struct net_device *dev = platform_get_drvdata(pdev);
 
-	if (dev) {
-		netif_tx_stop_all_queues(dev);
+	if (dev)
 		ltq_etop_hw_exit(dev);
-	}
 }
 
 static struct platform_driver ltq_mii_driver = {
