@@ -41,6 +41,26 @@ enum switch_power_state {
 };
 
 /**
+ * enum drm_wedge_recovery - Recovery method for wedged device in order of
+ * severity. To be set as bit fields in drm_device.wedge_recovery variable.
+ * Drivers can choose to support any one or multiple of them depending on
+ * their needs.
+ */
+enum drm_wedge_recovery {
+	/** @DRM_WEDGE_RECOVERY_REBIND: unbind + rebind driver */
+	DRM_WEDGE_RECOVERY_REBIND,
+
+	/** @DRM_WEDGE_RECOVERY_BUS_RESET: unbind + reset bus device + rebind */
+	DRM_WEDGE_RECOVERY_BUS_RESET,
+
+	/** @DRM_WEDGE_RECOVERY_REBOOT: reboot system */
+	DRM_WEDGE_RECOVERY_REBOOT,
+
+	/** @DRM_WEDGE_RECOVERY_MAX: for bounds checking, do not use */
+	DRM_WEDGE_RECOVERY_MAX
+};
+
+/**
  * struct drm_device - DRM device structure
  *
  * This structure represent a complete card that
@@ -317,6 +337,9 @@ struct drm_device {
 	 * Root directory for debugfs files.
 	 */
 	struct dentry *debugfs_root;
+
+	/** @wedge_recovery: Supported recovery methods for wedged device */
+	unsigned long wedge_recovery;
 };
 
 #endif

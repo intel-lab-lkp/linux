@@ -26,6 +26,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <linux/array_size.h>
+#include <linux/build_bug.h>
 #include <linux/debugfs.h>
 #include <linux/fs.h>
 #include <linux/module.h>
@@ -33,6 +35,7 @@
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/srcu.h>
 #include <linux/xarray.h>
 
@@ -69,6 +72,42 @@ static bool drm_core_init_complete;
 static struct dentry *drm_debugfs_root;
 
 DEFINE_STATIC_SRCU(drm_unplug_srcu);
+
+/*
+ * Available recovery methods for wedged device. To be sent along with device
+ * wedged uevent.
+ */
+static const char *const drm_wedge_recovery_opts[] = {
+	[DRM_WEDGE_RECOVERY_REBIND] = "rebind",
+	[DRM_WEDGE_RECOVERY_BUS_RESET] = "bus-reset",
+	[DRM_WEDGE_RECOVERY_REBOOT] = "reboot",
+};
+
+static bool drm_wedge_recovery_is_valid(enum drm_wedge_recovery method)
+{
+	static_assert(ARRAY_SIZE(drm_wedge_recovery_opts) == DRM_WEDGE_RECOVERY_MAX);
+
+	return method >= DRM_WEDGE_RECOVERY_REBIND && method < DRM_WEDGE_RECOVERY_MAX;
+}
+
+/**
+ * drm_wedge_recovery_name - provide wedge recovery name
+ * @method: method to be used for recovery
+ *
+ * This validates wedge recovery @method against the available ones in
+ * drm_wedge_recovery_opts[] and provides respective recovery name in string
+ * format if found valid.
+ *
+ * Returns: pointer to const recovery string on success, NULL otherwise.
+ */
+const char *drm_wedge_recovery_name(enum drm_wedge_recovery method)
+{
+	if (drm_wedge_recovery_is_valid(method))
+		return drm_wedge_recovery_opts[method];
+
+	return NULL;
+}
+EXPORT_SYMBOL(drm_wedge_recovery_name);
 
 /*
  * DRM Minors
@@ -496,6 +535,44 @@ void drm_dev_unplug(struct drm_device *dev)
 	unmap_mapping_range(dev->anon_inode->i_mapping, 0, 0, 1);
 }
 EXPORT_SYMBOL(drm_dev_unplug);
+
+/**
+ * drm_dev_wedged_event - generate a device wedged uevent
+ * @dev: DRM device
+ * @method: method to be used for recovery
+ *
+ * This generates a device wedged uevent for the DRM device specified by @dev.
+ * Recovery @method from drm_wedge_recovery_opts[] (if supprted by the device)
+ * is sent in the uevent environment as WEDGED=<method>, on the basis of which,
+ * userspace may take respective action to recover the device.
+ *
+ * Returns: 0 on success, or negative error code otherwise.
+ */
+int drm_dev_wedged_event(struct drm_device *dev, enum drm_wedge_recovery method)
+{
+	/* Event string length up to 16+ characters with available methods */
+	char event_string[32] = {};
+	char *envp[] = { event_string, NULL };
+	const char *recovery;
+
+	recovery = drm_wedge_recovery_name(method);
+	if (!recovery) {
+		drm_err(dev, "device wedged, invalid recovery method %d\n", method);
+		return -EINVAL;
+	}
+
+	if (!test_bit(method, &dev->wedge_recovery)) {
+		drm_err(dev, "device wedged, %s based recovery not supported\n",
+			drm_wedge_recovery_name(method));
+		return -EOPNOTSUPP;
+	}
+
+	snprintf(event_string, sizeof(event_string), "WEDGED=%s", recovery);
+
+	drm_info(dev, "device wedged, generating uevent for %s based recovery\n", recovery);
+	return kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+}
+EXPORT_SYMBOL(drm_dev_wedged_event);
 
 /*
  * DRM internal mount

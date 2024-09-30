@@ -462,6 +462,9 @@ bool drm_dev_enter(struct drm_device *dev, int *idx);
 void drm_dev_exit(int idx);
 void drm_dev_unplug(struct drm_device *dev);
 
+const char *drm_wedge_recovery_name(enum drm_wedge_recovery method);
+int drm_dev_wedged_event(struct drm_device *dev, enum drm_wedge_recovery method);
+
 /**
  * drm_dev_is_unplugged - is a DRM device unplugged
  * @dev: DRM device
