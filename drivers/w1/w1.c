@@ -795,10 +795,7 @@ int w1_unref_slave(struct w1_slave *sl)
 
 		w1_family_notify(BUS_NOTIFY_DEL_DEVICE, sl);
 		device_unregister(&sl->dev);
-		#ifdef DEBUG
-		memset(sl, 0, sizeof(*sl));
-		#endif
-		kfree(sl);
+		kfree_sensitive(sl);
 	}
 	atomic_dec(&dev->refcnt);
 	mutex_unlock(&dev->list_mutex);
