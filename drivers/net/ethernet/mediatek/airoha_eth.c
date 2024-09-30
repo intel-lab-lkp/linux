@@ -786,6 +786,7 @@ struct airoha_hw_stats {
 };
 
 struct airoha_qdma {
+	struct airoha_gdm_port *port;
 	struct airoha_eth *eth;
 	void __iomem *regs;
 
@@ -1658,6 +1659,7 @@ static int airoha_qdma_tx_napi_poll(struct napi_struct *napi, int budget)
 
 	while (irq_q->queued > 0 && done < budget) {
 		u32 qid, last, val = irq_q->q[irq_q->head];
+		u32 bytes = 0, count = 0;
 		struct airoha_queue *q;
 
 		if (val == 0xff)
@@ -1684,7 +1686,6 @@ static int airoha_qdma_tx_napi_poll(struct napi_struct *napi, int budget)
 			struct airoha_qdma_desc *desc = &q->desc[q->tail];
 			struct airoha_queue_entry *e = &q->entry[q->tail];
 			u32 desc_ctrl = le32_to_cpu(desc->ctrl);
-			struct sk_buff *skb = e->skb;
 			u16 index = q->tail;
 
 			if (!(desc_ctrl & QDMA_DESC_DONE_MASK) &&
@@ -1700,20 +1701,26 @@ static int airoha_qdma_tx_napi_poll(struct napi_struct *napi, int budget)
 			WRITE_ONCE(desc->msg0, 0);
 			WRITE_ONCE(desc->msg1, 0);
 
-			if (skb) {
-				struct netdev_queue *txq;
+			if (e->skb) {
+				bytes += e->skb->len;
+				count++;
 
-				txq = netdev_get_tx_queue(skb->dev, qid);
-				if (netif_tx_queue_stopped(txq) &&
-				    q->ndesc - q->queued >= q->free_thr)
-					netif_tx_wake_queue(txq);
-
-				dev_kfree_skb_any(skb);
+				dev_kfree_skb_any(e->skb);
 				e->skb = NULL;
 			}
 
 			if (index == last)
 				break;
+		}
+
+		if (qdma->port) {
+			struct netdev_queue *txq;
+
+			txq = netdev_get_tx_queue(qdma->port->dev, qid);
+			netdev_tx_completed_queue(txq, count, bytes);
+			if (netif_tx_queue_stopped(txq) &&
+			    q->ndesc - q->queued >= q->free_thr)
+				netif_tx_wake_queue(txq);
 		}
 
 		spin_unlock_bh(&q->lock);
@@ -2482,6 +2489,7 @@ static netdev_tx_t airoha_dev_xmit(struct sk_buff *skb,
 	q->head = index;
 	q->queued += i;
 
+	netdev_tx_sent_queue(txq, skb->len);
 	skb_tx_timestamp(skb);
 	if (q->ndesc - q->queued < q->free_thr)
 		netif_tx_stop_queue(txq);
@@ -2650,6 +2658,7 @@ static int airoha_alloc_gdm_port(struct airoha_eth *eth, struct device_node *np)
 	port->dev = dev;
 	port->id = id;
 	eth->ports[index] = port;
+	qdma->port = port;
 
 	return register_netdev(dev);
 }
