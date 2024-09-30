@@ -309,6 +309,7 @@ int __cachefiles_write(struct cachefiles_object *object,
 	ki->iocb.ki_pos		= start_pos;
 	ki->iocb.ki_flags	= IOCB_DIRECT | IOCB_WRITE;
 	ki->iocb.ki_ioprio	= get_current_ioprio();
+	ki->iocb.ki_write_hint  = file_write_hint(file);
 	ki->object		= object;
 	ki->start		= start_pos;
 	ki->len			= len;
