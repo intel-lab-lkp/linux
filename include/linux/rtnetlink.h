@@ -55,11 +55,36 @@ void __rtnl_net_unlock(struct net *net);
 void rtnl_net_lock(struct net *net);
 void rtnl_net_unlock(struct net *net);
 int rtnl_net_lock_cmp_fn(const struct lockdep_map *a, const struct lockdep_map *b);
+
+bool rtnl_net_is_locked(struct net *net);
+
+#define ASSERT_RTNL_NET(net)						\
+	WARN_ONCE(!rtnl_net_is_locked(net),				\
+		  "RTNL_NET: assertion failed at %s (%d)\n",		\
+		  __FILE__,  __LINE__)
+
+bool lockdep_rtnl_net_is_held(struct net *net);
+
+#define rcu_dereference_rtnl_net(net, p)				\
+	rcu_dereference_check(p, lockdep_rtnl_net_is_held(net))
+#define rtnl_net_dereference(net, p)					\
+	rcu_dereference_protected(p, lockdep_rtnl_net_is_held(net))
+#define rcu_replace_pointer_rtnl_net(net, rp, p)			\
+	rcu_replace_pointer(rp, p, lockdep_rtnl_net_is_held(net))
 #else
 #define __rtnl_net_lock(net)
 #define __rtnl_net_unlock(net)
 #define rtnl_net_lock(net) rtnl_lock()
 #define rtnl_net_unlock(net) rtnl_unlock()
+
+#define ASSERT_RTNL_NET(net)	ASSERT_RTNL()
+
+#define rcu_dereference_rtnl_net(net, p)		\
+	rcu_dereference_rtnl(p)
+#define rtnl_net_dereference(net, p)			\
+	rtnl_dereference(p)
+#define rcu_replace_pointer_rtnl_net(net, rp, p)	\
+	rcu_replace_pointer_rtnl(rp, p)
 #endif
 
 extern wait_queue_head_t netdev_unregistering_wq;
