@@ -236,8 +236,8 @@ static const struct net_proto_family __rcu *net_families[NPROTO] __read_mostly;
 /**
  *	move_addr_to_kernel	-	copy a socket address into kernel space
  *	@uaddr: Address in user space
- *	@kaddr: Address in kernel space
  *	@ulen: Length in user space
+ *	@kaddr: Address in kernel space
  *
  *	The address is copied into kernel space. If the provided address is
  *	too long an error code of -EINVAL is returned. If the copy gives
