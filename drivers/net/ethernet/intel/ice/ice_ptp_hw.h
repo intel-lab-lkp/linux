@@ -452,8 +452,6 @@ static inline u64 ice_get_base_incval(struct ice_hw *hw)
 	}
 }
 
-#define PFTSYN_SEM_BYTES	4
-
 #define ICE_PTP_CLOCK_INDEX_0	0x00
 #define ICE_PTP_CLOCK_INDEX_1	0x01
 

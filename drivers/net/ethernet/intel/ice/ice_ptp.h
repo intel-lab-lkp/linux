@@ -280,7 +280,6 @@ struct ice_ptp {
 #define ptp_info_to_pf(i) \
 	container_of(__ptp_info_to_ptp((i)), struct ice_pf, ptp)
 
-#define PFTSYN_SEM_BYTES		4
 #define PTP_SHARED_CLK_IDX_VALID	BIT(31)
 #define TS_CMD_MASK			0xF
 #define SYNC_EXEC_CMD			0x3

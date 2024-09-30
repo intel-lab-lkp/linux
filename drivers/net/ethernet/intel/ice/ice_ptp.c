@@ -269,12 +269,12 @@ static void ice_ptp_cfg_tx_interrupt(struct ice_pf *pf)
 	switch (pf->ptp.tx_interrupt_mode) {
 	case ICE_PTP_TX_INTERRUPT_ALL:
 		/* React to interrupts across all quads. */
-		wr32(hw, PFINT_TSYN_MSK + (0x4 * hw->pf_id), (u32)0x1f);
+		wr32(hw, PFINT_TSYN_MSK, 0x1f);
 		enable = true;
 		break;
 	case ICE_PTP_TX_INTERRUPT_NONE:
 		/* Do not react to interrupts on any quad. */
-		wr32(hw, PFINT_TSYN_MSK + (0x4 * hw->pf_id), (u32)0x0);
+		wr32(hw, PFINT_TSYN_MSK, 0);
 		enable = false;
 		break;
 	case ICE_PTP_TX_INTERRUPT_SELF:
@@ -2186,7 +2186,7 @@ ice_ptp_get_syncdevicetime(ktime_t *device,
 
 	for (i = 0; i < MAX_HH_HW_LOCK_TRIES; i++) {
 		/* Get the HW lock */
-		hh_lock = rd32(hw, PFHH_SEM + (PFTSYN_SEM_BYTES * hw->pf_id));
+		hh_lock = rd32(hw, PFHH_SEM);
 		if (hh_lock & PFHH_SEM_BUSY_M) {
 			usleep_range(10000, 15000);
 			continue;
@@ -2236,9 +2236,9 @@ ice_ptp_get_syncdevicetime(ktime_t *device,
 	ice_ptp_src_cmd(hw, ICE_PTP_NOP);
 
 	/* Release HW lock */
-	hh_lock = rd32(hw, PFHH_SEM + (PFTSYN_SEM_BYTES * hw->pf_id));
+	hh_lock = rd32(hw, PFHH_SEM);
 	hh_lock = hh_lock & ~PFHH_SEM_BUSY_M;
-	wr32(hw, PFHH_SEM + (PFTSYN_SEM_BYTES * hw->pf_id), hh_lock);
+	wr32(hw, PFHH_SEM, hh_lock);
 
 	if (i == MAX_HH_CTL_LOCK_TRIES)
 		return -ETIMEDOUT;
