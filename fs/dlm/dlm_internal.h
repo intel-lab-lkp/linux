@@ -64,24 +64,24 @@ struct dlm_msg;
 
 #define log_rinfo(ls, fmt, args...) \
 do { \
-	if (dlm_config.ci_log_info) \
+	if (ls->ls_dn->config.ci_log_info) \
 		printk(KERN_INFO "dlm: %s: " fmt "\n", \
 			(ls)->ls_name, ##args); \
-	else if (dlm_config.ci_log_debug) \
+	else if (ls->ls_dn->config.ci_log_debug) \
 		printk(KERN_DEBUG "dlm: %s: " fmt "\n", \
 		       (ls)->ls_name , ##args); \
 } while (0)
 
 #define log_debug(ls, fmt, args...) \
 do { \
-	if (dlm_config.ci_log_debug) \
+	if (ls->ls_dn->config.ci_log_debug) \
 		printk(KERN_DEBUG "dlm: %s: " fmt "\n", \
 		       (ls)->ls_name , ##args); \
 } while (0)
 
 #define log_limit(ls, fmt, args...) \
 do { \
-	if (dlm_config.ci_log_debug) \
+	if (ls->ls_dn->config.ci_log_debug) \
 		printk_ratelimited(KERN_DEBUG "dlm: %s: " fmt "\n", \
 			(ls)->ls_name , ##args); \
 } while (0)
@@ -561,6 +561,8 @@ struct rcom_lock {
 
 struct dlm_ls {
 	struct list_head	ls_list;	/* list of lockspaces */
+	struct dlm_net		*ls_dn;
+	netns_tracker		ls_tracker;
 	uint32_t		ls_global_id;	/* global unique lockspace ID */
 	uint32_t		ls_generation;
 	uint32_t		ls_exflags;
@@ -816,15 +818,17 @@ void dlm_register_debugfs(void);
 void dlm_unregister_debugfs(void);
 void dlm_create_debug_file(struct dlm_ls *ls);
 void dlm_delete_debug_file(struct dlm_ls *ls);
-void *dlm_create_debug_comms_file(int nodeid, void *data);
-void dlm_delete_debug_comms_file(void *ctx);
+void *dlm_create_debug_comms_file(struct dlm_net *dn, int nodeid, void *data);
+void dlm_delete_debug_comms_file(struct dlm_net *dn, void *ctx);
 #else
 static inline void dlm_register_debugfs(void) { }
 static inline void dlm_unregister_debugfs(void) { }
 static inline void dlm_create_debug_file(struct dlm_ls *ls) { }
 static inline void dlm_delete_debug_file(struct dlm_ls *ls) { }
-static inline void *dlm_create_debug_comms_file(int nodeid, void *data) { return NULL; }
-static inline void dlm_delete_debug_comms_file(void *ctx) { }
+static inline void *dlm_create_debug_comms_file(struct dlm_net *dn, int nodeid,
+						void *data) { return NULL; }
+static inline void dlm_delete_debug_comms_file(struct dlm_net *dn,
+					       void *ctx) { }
 #endif
 
 #endif				/* __DLM_INTERNAL_DOT_H__ */

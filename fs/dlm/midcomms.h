@@ -12,24 +12,29 @@
 #ifndef __MIDCOMMS_DOT_H__
 #define __MIDCOMMS_DOT_H__
 
+#include "config.h"
+
 struct midcomms_node;
 
 int dlm_validate_incoming_buffer(int nodeid, unsigned char *buf, int len);
-int dlm_process_incoming_buffer(int nodeid, unsigned char *buf, int buflen);
-struct dlm_mhandle *dlm_midcomms_get_mhandle(int nodeid, int len, char **ppc);
+int dlm_process_incoming_buffer(struct dlm_net *dn, int nodeid,
+				unsigned char *buf, int len);
+struct dlm_mhandle *dlm_midcomms_get_mhandle(struct dlm_net *dn, int nodeid,
+					     int len, char **ppc);
 void dlm_midcomms_commit_mhandle(struct dlm_mhandle *mh, const void *name,
 				 int namelen);
-int dlm_midcomms_addr(int nodeid, struct sockaddr_storage *addr);
-void dlm_midcomms_version_wait(void);
-int dlm_midcomms_close(int nodeid);
-int dlm_midcomms_start(void);
-void dlm_midcomms_stop(void);
-void dlm_midcomms_init(void);
-void dlm_midcomms_exit(void);
-void dlm_midcomms_shutdown(void);
-void dlm_midcomms_add_member(int nodeid);
-void dlm_midcomms_remove_member(int nodeid);
-void dlm_midcomms_unack_msg_resend(int nodeid);
+int dlm_midcomms_addr(struct dlm_net *dn, int nodeid,
+		      struct sockaddr_storage *addr);
+void dlm_midcomms_version_wait(struct dlm_net *dn);
+int dlm_midcomms_close(struct dlm_net *dn, int nodeid);
+int dlm_midcomms_start(struct dlm_net *dn);
+void dlm_midcomms_init(struct dlm_net *dn);
+void dlm_midcomms_exit(struct dlm_net *dn);
+void dlm_midcomms_stop(struct dlm_net *dn);
+void dlm_midcomms_shutdown(struct dlm_net *dn);
+void dlm_midcomms_add_member(struct dlm_net *dn, int nodeid);
+void dlm_midcomms_remove_member(struct dlm_net *dn, int nodeid);
+void dlm_midcomms_unack_msg_resend(struct dlm_net *dn, int nodeid);
 const char *dlm_midcomms_state(struct midcomms_node *node);
 unsigned long dlm_midcomms_flags(struct midcomms_node *node);
 int dlm_midcomms_send_queue_cnt(struct midcomms_node *node);

@@ -9,6 +9,7 @@
 *******************************************************************************
 ******************************************************************************/
 
+#include <linux/netdevice.h>
 #include <linux/module.h>
 
 #include "dlm_internal.h"
@@ -24,11 +25,6 @@
 #include "requestqueue.h"
 #include "user.h"
 #include "ast.h"
-
-static int			ls_count;
-static struct mutex		ls_lock;
-static struct list_head		lslist;
-static spinlock_t		lslist_lock;
 
 static ssize_t dlm_control_store(struct dlm_ls *ls, const char *buf, size_t len)
 {
@@ -179,12 +175,33 @@ static const struct sysfs_ops dlm_attr_ops = {
 	.store = dlm_attr_store,
 };
 
+static const void *lockspace_kobj_namespace(const struct kobject *k)
+{
+	struct dlm_ls *ls = container_of(k, struct dlm_ls, ls_kobj);
+
+	return read_pnet(&ls->ls_dn->net);
+}
+
 static struct kobj_type dlm_ktype = {
 	.default_groups = dlm_groups,
-	.sysfs_ops     = &dlm_attr_ops,
+	.sysfs_ops      = &dlm_attr_ops,
+	.namespace      = lockspace_kobj_namespace,
 };
 
 static struct kset *dlm_kset;
+
+static const struct kobj_ns_type_operations *
+dlm_sysfs_object_child_ns_type(const struct kobject *kobj)
+{
+	return &net_ns_type_operations;
+}
+
+static const struct kobj_type dlm_kset_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.release   = kset_release,
+	.get_ownership = kset_get_ownership,
+	.child_ns_type = dlm_sysfs_object_child_ns_type,
+};
 
 static int do_uevent(struct dlm_ls *ls, int in)
 {
@@ -218,14 +235,18 @@ static const struct kset_uevent_ops dlm_uevent_ops = {
 	.uevent = dlm_uevent,
 };
 
+void __net_init dlm_lockspace_net_init(struct dlm_net *dn)
+{
+	dn->ls_count = 0;
+	mutex_init(&dn->ls_lock);
+	INIT_LIST_HEAD(&dn->lslist);
+	spin_lock_init(&dn->lslist_lock);
+}
+
 int __init dlm_lockspace_init(void)
 {
-	ls_count = 0;
-	mutex_init(&ls_lock);
-	INIT_LIST_HEAD(&lslist);
-	spin_lock_init(&lslist_lock);
-
-	dlm_kset = kset_create_and_add("dlm", &dlm_uevent_ops, kernel_kobj);
+	dlm_kset = kset_type_create_and_add("dlm", &dlm_uevent_ops,
+					    kernel_kobj, &dlm_kset_ktype);
 	if (!dlm_kset) {
 		printk(KERN_WARNING "%s: can not create kset\n", __func__);
 		return -ENOMEM;
@@ -238,13 +259,13 @@ void dlm_lockspace_exit(void)
 	kset_unregister(dlm_kset);
 }
 
-struct dlm_ls *dlm_find_lockspace_name(const char *lsname)
+struct dlm_ls *dlm_find_lockspace_name(struct dlm_net *dn, const char *lsname)
 {
 	struct dlm_ls *ls;
 
-	spin_lock_bh(&lslist_lock);
+	spin_lock_bh(&dn->lslist_lock);
 
-	list_for_each_entry(ls, &lslist, ls_list) {
+	list_for_each_entry(ls, &dn->lslist, ls_list) {
 		if (!strncmp(ls->ls_name, lsname, DLM_LOCKSPACE_LEN)) {
 			atomic_inc(&ls->ls_count);
 			goto out;
@@ -252,17 +273,17 @@ struct dlm_ls *dlm_find_lockspace_name(const char *lsname)
 	}
 	ls = NULL;
  out:
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 	return ls;
 }
 
-struct dlm_ls *dlm_find_lockspace_global(uint32_t id)
+struct dlm_ls *dlm_find_lockspace_global(struct dlm_net *dn, uint32_t id)
 {
 	struct dlm_ls *ls;
 
-	spin_lock_bh(&lslist_lock);
+	spin_lock_bh(&dn->lslist_lock);
 
-	list_for_each_entry(ls, &lslist, ls_list) {
+	list_for_each_entry(ls, &dn->lslist, ls_list) {
 		if (ls->ls_global_id == id) {
 			atomic_inc(&ls->ls_count);
 			goto out;
@@ -270,7 +291,7 @@ struct dlm_ls *dlm_find_lockspace_global(uint32_t id)
 	}
 	ls = NULL;
  out:
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 	return ls;
 }
 
@@ -282,12 +303,12 @@ struct dlm_ls *dlm_find_lockspace_local(dlm_lockspace_t *lockspace)
 	return ls;
 }
 
-struct dlm_ls *dlm_find_lockspace_device(int minor)
+struct dlm_ls *dlm_find_lockspace_device(struct dlm_net *dn, int minor)
 {
 	struct dlm_ls *ls;
 
-	spin_lock_bh(&lslist_lock);
-	list_for_each_entry(ls, &lslist, ls_list) {
+	spin_lock_bh(&dn->lslist_lock);
+	list_for_each_entry(ls, &dn->lslist, ls_list) {
 		if (ls->ls_device.minor == minor) {
 			atomic_inc(&ls->ls_count);
 			goto out;
@@ -295,7 +316,7 @@ struct dlm_ls *dlm_find_lockspace_device(int minor)
 	}
 	ls = NULL;
  out:
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 	return ls;
 }
 
@@ -307,26 +328,28 @@ void dlm_put_lockspace(struct dlm_ls *ls)
 
 static void remove_lockspace(struct dlm_ls *ls)
 {
+	struct dlm_net *dn = ls->ls_dn;
+
 retry:
 	wait_event(ls->ls_count_wait, atomic_read(&ls->ls_count) == 0);
 
-	spin_lock_bh(&lslist_lock);
+	spin_lock_bh(&dn->lslist_lock);
 	if (atomic_read(&ls->ls_count) != 0) {
-		spin_unlock_bh(&lslist_lock);
+		spin_unlock_bh(&dn->lslist_lock);
 		goto retry;
 	}
 
 	WARN_ON(ls->ls_create_count != 0);
 	list_del(&ls->ls_list);
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 }
 
-static int threads_start(void)
+static int threads_start(struct dlm_net *dn)
 {
 	int error;
 
 	/* Thread for sending/receiving messages for all lockspace's */
-	error = dlm_midcomms_start();
+	error = dlm_midcomms_start(dn);
 	if (error)
 		log_print("cannot start dlm midcomms %d", error);
 
@@ -371,8 +394,8 @@ static void free_lockspace(struct work_struct *work)
 	kfree(ls);
 }
 
-static int new_lockspace(const char *name, const char *cluster,
-			 uint32_t flags, int lvblen,
+static int new_lockspace(struct dlm_net *dn, const char *name,
+			 const char *cluster, uint32_t flags, int lvblen,
 			 const struct dlm_lockspace_ops *ops, void *ops_arg,
 			 int *ops_result, dlm_lockspace_t **lockspace)
 {
@@ -389,14 +412,14 @@ static int new_lockspace(const char *name, const char *cluster,
 	if (!try_module_get(THIS_MODULE))
 		return -EINVAL;
 
-	if (!dlm_user_daemon_available()) {
+	if (!dlm_user_daemon_available(dn)) {
 		log_print("dlm user daemon not available");
 		error = -EUNATCH;
 		goto out;
 	}
 
 	if (ops && ops_result) {
-	       	if (!dlm_config.ci_recover_callbacks)
+		if (!dn->config.ci_recover_callbacks)
 			*ops_result = -EOPNOTSUPP;
 		else
 			*ops_result = 0;
@@ -404,21 +427,21 @@ static int new_lockspace(const char *name, const char *cluster,
 
 	if (!cluster)
 		log_print("dlm cluster name '%s' is being used without an application provided cluster name",
-			  dlm_config.ci_cluster_name);
+			  dn->config.ci_cluster_name);
 
-	if (dlm_config.ci_recover_callbacks && cluster &&
-	    strncmp(cluster, dlm_config.ci_cluster_name, DLM_LOCKSPACE_LEN)) {
+	if (dn->config.ci_recover_callbacks && cluster &&
+	    strncmp(cluster, dn->config.ci_cluster_name, DLM_LOCKSPACE_LEN)) {
 		log_print("dlm cluster name '%s' does not match "
 			  "the application cluster name '%s'",
-			  dlm_config.ci_cluster_name, cluster);
+			  dn->config.ci_cluster_name, cluster);
 		error = -EBADR;
 		goto out;
 	}
 
 	error = 0;
 
-	spin_lock_bh(&lslist_lock);
-	list_for_each_entry(ls, &lslist, ls_list) {
+	spin_lock_bh(&dn->lslist_lock);
+	list_for_each_entry(ls, &dn->lslist, ls_list) {
 		WARN_ON(ls->ls_create_count <= 0);
 		if (ls->ls_namelen != namelen)
 			continue;
@@ -433,7 +456,7 @@ static int new_lockspace(const char *name, const char *cluster,
 		error = 1;
 		break;
 	}
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 
 	if (error)
 		goto out;
@@ -449,8 +472,10 @@ static int new_lockspace(const char *name, const char *cluster,
 	atomic_set(&ls->ls_count, 0);
 	init_waitqueue_head(&ls->ls_count_wait);
 	ls->ls_flags = 0;
+	get_net_track(read_pnet(&dn->net), &ls->ls_tracker, GFP_NOFS);
+	ls->ls_dn = dn;
 
-	if (ops && dlm_config.ci_recover_callbacks) {
+	if (ops && dn->config.ci_recover_callbacks) {
 		ls->ls_ops = ops;
 		ls->ls_ops_arg = ops_arg;
 	}
@@ -548,10 +573,10 @@ static int new_lockspace(const char *name, const char *cluster,
 	spin_lock_init(&ls->ls_scan_lock);
 	timer_setup(&ls->ls_scan_timer, dlm_rsb_scan, TIMER_DEFERRABLE);
 
-	spin_lock_bh(&lslist_lock);
+	spin_lock_bh(&dn->lslist_lock);
 	ls->ls_create_count = 1;
-	list_add(&ls->ls_list, &lslist);
-	spin_unlock_bh(&lslist_lock);
+	list_add(&ls->ls_list, &dn->lslist);
+	spin_unlock_bh(&dn->lslist_lock);
 
 	if (flags & DLM_LSFL_FS)
 		set_bit(LSFL_FS, &ls->ls_flags);
@@ -618,9 +643,9 @@ static int new_lockspace(const char *name, const char *cluster,
  out_callback:
 	dlm_callback_stop(ls);
  out_delist:
-	spin_lock_bh(&lslist_lock);
+	spin_lock_bh(&dn->lslist_lock);
 	list_del(&ls->ls_list);
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 	xa_destroy(&ls->ls_recover_xa);
 	kfree(ls->ls_recover_buf);
  out_lkbxa:
@@ -628,38 +653,39 @@ static int new_lockspace(const char *name, const char *cluster,
 	rhashtable_destroy(&ls->ls_rsbtbl);
  out_lsfree:
 	kobject_put(&ls->ls_kobj);
+	put_net_track(read_pnet(&dn->net), &ls->ls_tracker);
 	kfree(ls);
  out:
 	module_put(THIS_MODULE);
 	return error;
 }
 
-static int __dlm_new_lockspace(const char *name, const char *cluster,
-			       uint32_t flags, int lvblen,
+static int __dlm_new_lockspace(struct dlm_net *dn, const char *name,
+			       const char *cluster, uint32_t flags, int lvblen,
 			       const struct dlm_lockspace_ops *ops,
 			       void *ops_arg, int *ops_result,
 			       dlm_lockspace_t **lockspace)
 {
 	int error = 0;
 
-	mutex_lock(&ls_lock);
-	if (!ls_count)
-		error = threads_start();
+	mutex_lock(&dn->ls_lock);
+	if (!dn->ls_count)
+		error = threads_start(dn);
 	if (error)
 		goto out;
 
-	error = new_lockspace(name, cluster, flags, lvblen, ops, ops_arg,
+	error = new_lockspace(dn, name, cluster, flags, lvblen, ops, ops_arg,
 			      ops_result, lockspace);
 	if (!error)
-		ls_count++;
+		dn->ls_count++;
 	if (error > 0)
 		error = 0;
-	if (!ls_count) {
-		dlm_midcomms_shutdown();
-		dlm_midcomms_stop();
+	if (!dn->ls_count) {
+		dlm_midcomms_shutdown(dn);
+		dlm_midcomms_stop(dn);
 	}
  out:
-	mutex_unlock(&ls_lock);
+	mutex_unlock(&dn->ls_lock);
 	return error;
 }
 
@@ -669,12 +695,14 @@ int dlm_new_lockspace(struct net *net, const char *name, const char *cluster,
 		      void *ops_arg, int *ops_result,
 		      dlm_lockspace_t **lockspace)
 {
-	return __dlm_new_lockspace(name, cluster, flags | DLM_LSFL_FS, lvblen,
+	struct dlm_net *dn = dlm_pernet(net);
+
+	return __dlm_new_lockspace(dn, name, cluster, flags | DLM_LSFL_FS, lvblen,
 				   ops, ops_arg, ops_result, lockspace);
 }
 
-int dlm_new_user_lockspace(const char *name, const char *cluster,
-			   uint32_t flags, int lvblen,
+int dlm_new_user_lockspace(struct dlm_net *dn, const char *name,
+			   const char *cluster, uint32_t flags, int lvblen,
 			   const struct dlm_lockspace_ops *ops,
 			   void *ops_arg, int *ops_result,
 			   dlm_lockspace_t **lockspace)
@@ -682,7 +710,7 @@ int dlm_new_user_lockspace(const char *name, const char *cluster,
 	if (flags & DLM_LSFL_SOFTIRQ)
 		return -EINVAL;
 
-	return __dlm_new_lockspace(name, cluster, flags, lvblen, ops,
+	return __dlm_new_lockspace(dn, name, cluster, flags, lvblen, ops,
 				   ops_arg, ops_result, lockspace);
 }
 
@@ -717,13 +745,13 @@ static int lockspace_busy(struct dlm_ls *ls, int force)
 	return rv;
 }
 
-static int release_lockspace(struct dlm_ls *ls, int force)
+static int release_lockspace(struct dlm_net *dn, struct dlm_ls *ls, int force)
 {
 	int busy, rv;
 
 	busy = lockspace_busy(ls, force);
 
-	spin_lock_bh(&lslist_lock);
+	spin_lock_bh(&dn->lslist_lock);
 	if (ls->ls_create_count == 1) {
 		if (busy) {
 			rv = -EBUSY;
@@ -737,19 +765,19 @@ static int release_lockspace(struct dlm_ls *ls, int force)
 	} else {
 		rv = -EINVAL;
 	}
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 
 	if (rv) {
 		log_debug(ls, "release_lockspace no remove %d", rv);
 		return rv;
 	}
 
-	if (ls_count == 1)
-		dlm_midcomms_version_wait();
+	if (dn->ls_count == 1)
+		dlm_midcomms_version_wait(ls->ls_dn);
 
 	dlm_device_deregister(ls);
 
-	if (force < 3 && dlm_user_daemon_available())
+	if (force < 3 && dlm_user_daemon_available(dn))
 		do_uevent(ls, 0);
 
 	dlm_recoverd_stop(ls);
@@ -760,9 +788,9 @@ static int release_lockspace(struct dlm_ls *ls, int force)
 	clear_bit(LSFL_RUNNING, &ls->ls_flags);
 	timer_shutdown_sync(&ls->ls_scan_timer);
 
-	if (ls_count == 1) {
+	if (dn->ls_count == 1) {
 		dlm_clear_members(ls);
-		dlm_midcomms_shutdown();
+		dlm_midcomms_shutdown(ls->ls_dn);
 	}
 
 	dlm_callback_stop(ls);
@@ -788,6 +816,8 @@ static int release_lockspace(struct dlm_ls *ls, int force)
 
 	log_rinfo(ls, "%s final free", __func__);
 
+	put_net_track(read_pnet(&dn->net), &ls->ls_tracker);
+
 	/* delayed free of data structures see free_lockspace() */
 	queue_work(dlm_wq, &ls->ls_free_work);
 	module_put(THIS_MODULE);
@@ -810,6 +840,7 @@ static int release_lockspace(struct dlm_ls *ls, int force)
 
 int dlm_release_lockspace(void *lockspace, int force)
 {
+	struct dlm_net *dn;
 	struct dlm_ls *ls;
 	int error;
 
@@ -818,36 +849,37 @@ int dlm_release_lockspace(void *lockspace, int force)
 		return -EINVAL;
 	dlm_put_lockspace(ls);
 
-	mutex_lock(&ls_lock);
-	error = release_lockspace(ls, force);
+	dn = ls->ls_dn;
+	mutex_lock(&dn->ls_lock);
+	error = release_lockspace(dn, ls, force);
 	if (!error)
-		ls_count--;
-	if (!ls_count)
-		dlm_midcomms_stop();
-	mutex_unlock(&ls_lock);
+		dn->ls_count--;
+	if (!dn->ls_count)
+		dlm_midcomms_stop(dn);
+	mutex_unlock(&dn->ls_lock);
 
 	return error;
 }
 
-void dlm_stop_lockspaces(void)
+void dlm_stop_lockspaces(struct dlm_net *dn)
 {
 	struct dlm_ls *ls;
 	int count;
 
  restart:
 	count = 0;
-	spin_lock_bh(&lslist_lock);
-	list_for_each_entry(ls, &lslist, ls_list) {
+	spin_lock_bh(&dn->lslist_lock);
+	list_for_each_entry(ls, &dn->lslist, ls_list) {
 		if (!test_bit(LSFL_RUNNING, &ls->ls_flags)) {
 			count++;
 			continue;
 		}
-		spin_unlock_bh(&lslist_lock);
+		spin_unlock_bh(&dn->lslist_lock);
 		log_error(ls, "no userland control daemon, stopping lockspace");
 		dlm_ls_stop(ls);
 		goto restart;
 	}
-	spin_unlock_bh(&lslist_lock);
+	spin_unlock_bh(&dn->lslist_lock);
 
 	if (count)
 		log_print("dlm user daemon left %d lockspaces", count);

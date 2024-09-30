@@ -4,6 +4,7 @@
  */
 
 #include <linux/miscdevice.h>
+#include <linux/netdevice.h>
 #include <linux/init.h>
 #include <linux/wait.h>
 #include <linux/file.h>
@@ -29,8 +30,6 @@
 
 static const char name_prefix[] = "dlm";
 static const struct file_operations device_fops;
-static atomic_t dlm_monitor_opened;
-static int dlm_monitor_unused = 1;
 
 #ifdef CONFIG_COMPAT
 
@@ -345,6 +344,12 @@ static int dlm_device_register(struct dlm_ls *ls, char *name)
 {
 	int error, len;
 
+	/* user lock device created for init_net where it is supported
+	 * for now.
+	 */
+	if (!net_eq(read_pnet(&ls->ls_dn->net), &init_net))
+		return 0;
+
 	/* The device is already registered.  This happens when the
 	   lockspace is created multiple times from userspace. */
 	if (ls->ls_device.name)
@@ -381,6 +386,12 @@ int dlm_device_deregister(struct dlm_ls *ls)
 	if (!ls->ls_device.name)
 		return 0;
 
+	/* user lock device created for init_net where it is supported
+	 * for now. Lets warn if for some reason lockspace switched its
+	 * ns during lifetime which is currently not supported either.
+	 */
+	WARN_ON(!net_eq(read_pnet(&ls->ls_dn->net), &init_net));
+
 	misc_deregister(&ls->ls_device);
 	kfree(ls->ls_device.name);
 	return 0;
@@ -402,7 +413,8 @@ static int device_user_purge(struct dlm_user_proc *proc,
 	return error;
 }
 
-static int device_create_lockspace(struct dlm_lspace_params *params)
+static int device_create_lockspace(struct dlm_net *dn,
+				   struct dlm_lspace_params *params)
 {
 	dlm_lockspace_t *lockspace;
 	struct dlm_ls *ls;
@@ -411,7 +423,7 @@ static int device_create_lockspace(struct dlm_lspace_params *params)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	error = dlm_new_user_lockspace(params->name, dlm_config.ci_cluster_name,
+	error = dlm_new_user_lockspace(dn, params->name, dn->config.ci_cluster_name,
 				       params->flags, DLM_USER_LVB_LEN, NULL,
 				       NULL, NULL, &lockspace);
 	if (error)
@@ -432,7 +444,8 @@ static int device_create_lockspace(struct dlm_lspace_params *params)
 	return error;
 }
 
-static int device_remove_lockspace(struct dlm_lspace_params *params)
+static int device_remove_lockspace(struct dlm_net *dn,
+				   struct dlm_lspace_params *params)
 {
 	dlm_lockspace_t *lockspace;
 	struct dlm_ls *ls;
@@ -441,7 +454,7 @@ static int device_remove_lockspace(struct dlm_lspace_params *params)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	ls = dlm_find_lockspace_device(params->minor);
+	ls = dlm_find_lockspace_device(dn, params->minor);
 	if (!ls)
 		return -ENOENT;
 
@@ -511,6 +524,7 @@ static ssize_t device_write(struct file *file, const char __user *buf,
 			    size_t count, loff_t *ppos)
 {
 	struct dlm_user_proc *proc = file->private_data;
+	struct dlm_net *dn = dlm_pernet(&init_net);
 	struct dlm_write_request *kbuf;
 	int error;
 
@@ -603,7 +617,7 @@ static ssize_t device_write(struct file *file, const char __user *buf,
 			log_print("create/remove only on control device");
 			goto out_free;
 		}
-		error = device_create_lockspace(&kbuf->i.lspace);
+		error = device_create_lockspace(dn, &kbuf->i.lspace);
 		break;
 
 	case DLM_USER_REMOVE_LOCKSPACE:
@@ -611,7 +625,7 @@ static ssize_t device_write(struct file *file, const char __user *buf,
 			log_print("create/remove only on control device");
 			goto out_free;
 		}
-		error = device_remove_lockspace(&kbuf->i.lspace);
+		error = device_remove_lockspace(dn, &kbuf->i.lspace);
 		break;
 
 	case DLM_USER_PURGE:
@@ -638,10 +652,18 @@ static ssize_t device_write(struct file *file, const char __user *buf,
 
 static int device_open(struct inode *inode, struct file *file)
 {
+	struct net *net = current->nsproxy->net_ns;
+	struct dlm_net *dn = dlm_pernet(&init_net);
 	struct dlm_user_proc *proc;
 	struct dlm_ls *ls;
 
-	ls = dlm_find_lockspace_device(iminor(inode));
+	/* Allow open() only on processes for init namespace for now.
+	 * Everything else is not supported. Do deal with this UAPI.
+	 */
+	if (!net_eq(net, &init_net))
+		return -EOPNOTSUPP;
+
+	ls = dlm_find_lockspace_device(dn, iminor(inode));
 	if (!ls)
 		return -ENOENT;
 
@@ -877,12 +899,12 @@ static __poll_t device_poll(struct file *file, poll_table *wait)
 	return 0;
 }
 
-int dlm_user_daemon_available(void)
+int dlm_user_daemon_available(struct dlm_net *dn)
 {
 	/* dlm_controld hasn't started (or, has started, but not
 	   properly populated configfs) */
 
-	if (!dlm_our_nodeid())
+	if (!dlm_our_nodeid(dn))
 		return 0;
 
 	/* This is to deal with versions of dlm_controld that don't
@@ -891,10 +913,10 @@ int dlm_user_daemon_available(void)
 	   was never opened, that it's an old version.  dlm_controld
 	   should open the monitor device before populating configfs. */
 
-	if (dlm_monitor_unused)
+	if (dn->dlm_monitor_unused)
 		return 1;
 
-	return atomic_read(&dlm_monitor_opened) ? 1 : 0;
+	return atomic_read(&dn->dlm_monitor_opened) ? 1 : 0;
 }
 
 static int ctl_device_open(struct inode *inode, struct file *file)
@@ -910,15 +932,20 @@ static int ctl_device_close(struct inode *inode, struct file *file)
 
 static int monitor_device_open(struct inode *inode, struct file *file)
 {
-	atomic_inc(&dlm_monitor_opened);
-	dlm_monitor_unused = 0;
+	struct dlm_net *dn = dlm_pernet(&init_net);
+
+	atomic_inc(&dn->dlm_monitor_opened);
+	dn->dlm_monitor_unused = 0;
 	return 0;
 }
 
 static int monitor_device_close(struct inode *inode, struct file *file)
 {
-	if (atomic_dec_and_test(&dlm_monitor_opened))
-		dlm_stop_lockspaces();
+	struct dlm_net *dn = dlm_pernet(&init_net);
+
+	if (atomic_dec_and_test(&dn->dlm_monitor_opened))
+		dlm_stop_lockspaces(dn);
+
 	return 0;
 }
 
@@ -963,8 +990,6 @@ static struct miscdevice monitor_device = {
 int __init dlm_user_init(void)
 {
 	int error;
-
-	atomic_set(&dlm_monitor_opened, 0);
 
 	error = misc_register(&ctl_device);
 	if (error) {
