@@ -255,8 +255,8 @@ static void xprt_clear_locked(struct rpc_xprt *xprt)
 
 /**
  * xprt_reserve_xprt - serialize write access to transports
- * @task: task that is requesting access to the transport
  * @xprt: pointer to the target transport
+ * @task: task that is requesting access to the transport
  *
  * This prevents mixing the payload of separate requests, and prevents
  * transport connects from colliding with writes.  No congestion control
