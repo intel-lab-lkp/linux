@@ -171,8 +171,8 @@ void hwrm_req_alloc_flags(struct bnxt *bp, void *req, gfp_t gfp)
  *	such as hwrm_req_send(), should thus use req and not new_req (in fact,
  *	calls to HWRM API functions will fail if non-managed request objects
  *	are passed).
- * @len: The length of new_req.
  * @new_req: The pre-built request to copy or reference.
+ * @len: The length of new_req.
  *
  * Replaces the request data in req with that of new_req. This is useful in
  * scenarios where a request object has already been constructed by a third
