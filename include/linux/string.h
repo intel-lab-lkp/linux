@@ -353,6 +353,19 @@ static inline bool strstarts(const char *str, const char *prefix)
 	return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
+/**
+ * strends - does @str end with @suffix?
+ * @str: string to examine
+ * @suffix: suffix to look for.
+ */
+static inline bool strends(const char *str, const char *suffix)
+{
+	size_t n = strlen(str);
+	size_t m = strlen(suffix);
+
+	return n >= m && !memcmp(str + n - m, suffix, m);
+}
+
 size_t memweight(const void *ptr, size_t bytes);
 
 /**
