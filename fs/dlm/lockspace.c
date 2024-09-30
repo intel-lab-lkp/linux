@@ -9,6 +9,7 @@
 *******************************************************************************
 ******************************************************************************/
 
+#include <uapi/linux/nldlm.h>
 #include <linux/netdevice.h>
 #include <linux/module.h>
 
@@ -205,10 +206,18 @@ static const struct kobj_type dlm_kset_ktype = {
 
 static int do_uevent(struct dlm_ls *ls, int in)
 {
-	if (in)
+	int rv;
+
+	if (in) {
 		kobject_uevent(&ls->ls_kobj, KOBJ_ONLINE);
-	else
+		rv = nldlm_ls_event(ls, NLDLM_CMD_NTF_NEW_LS);
+	} else {
 		kobject_uevent(&ls->ls_kobj, KOBJ_OFFLINE);
+		rv = nldlm_ls_event(ls, NLDLM_CMD_NTF_RELEASE_LS);
+	}
+
+	/* ignore if nldlm_ls_event() has no subscribers */
+	WARN_ON(rv && rv != -ESRCH);
 
 	log_rinfo(ls, "%s the lockspace group...", in ? "joining" : "leaving");
 

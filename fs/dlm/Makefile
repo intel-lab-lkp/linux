@@ -11,6 +11,8 @@ dlm-y :=			ast.o \
 				memory.o \
 				midcomms.o \
 				lowcomms.o \
+				nldlm.o \
+				nldlm-kernel.o \
 				plock.o \
 				rcom.o \
 				recover.o \

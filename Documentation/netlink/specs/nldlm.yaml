@@ -1,0 +1,438 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+
+name: nldlm
+protocol: genetlink
+doc: DLM subsystem.
+
+definitions:
+  -
+    type: enum
+    name: protocol
+    doc: |
+      The transport layer protocol that DLM will use.
+    entries:
+      -
+        name: TCP
+      -
+        name: SCTP
+  -
+    type: enum
+    name: log-level
+    doc: |
+      The internal DLM logger log-level.
+    entries:
+      -
+        name: NONE
+        doc: disable all DLM logging
+      -
+        name: INFO
+        doc: enable INFO log-level only
+      -
+        name: DEBUG
+        doc: enable INFO and DEBUG log-level
+  -
+    type: enum
+    name: ls-ctrl-action
+    doc: |
+      The lockspace control actions. Use in combination with
+      ls-add-member and ls-del-member. First stop lockspace
+      then update the members, then start the lockspace to
+      trigger recovery with new membership updates.
+    entries:
+      -
+        name: STOP
+        doc: stopping the lockspace
+      -
+        name: START
+        doc: starting the lockspace
+  -
+    type: enum
+    name: ls-event-result
+    doc: |
+      The result op of the lockspace event ntf-new-ls and
+      ntf-release-ls. The kernel is waiting for this reply
+      when those events occur.
+    entries:
+      -
+        name: SUCCESS
+        doc: the DLM kernel lockspace event action was successful
+      -
+        name: FAILURE
+        doc: the DLM kernel lockspace event action failed
+
+attribute-sets:
+  -
+    name: cfg
+    attributes:
+      -
+        name: our-nodeid
+        type: u32
+        byte-order: little-endian
+      -
+        name: cluster-name
+        type: string
+      -
+        name: protocol
+        type: u32
+      -
+        name: port
+        type: u16
+        byte-order: big-endian
+      -
+        name: recover-timeout
+        type: u32
+      -
+        name: inactive-timeout
+        type: u32
+      -
+        name: log-level
+        type: u32
+      -
+        name: default-mark
+        type: u32
+      -
+        name: recover-callbacks
+        type: flag
+  -
+    name: ls
+    attributes:
+      -
+        name: name
+        type: string
+  -
+    name: ls-member
+    attributes:
+      -
+        name: ls-name
+        type: string
+      -
+        name: nodeid
+        type: u32
+        byte-order: little-endian
+      -
+        name: weight
+        type: u32
+  -
+    name: ls-ctrl
+    attributes:
+      -
+        name: ls-name
+        type: string
+      -
+        name: action
+        type: u32
+  -
+    name: ls-event-result
+    attributes:
+      -
+        name: ls-name
+        type: string
+      -
+        name: ls-global-id
+        type: u32
+        byte-order: little-endian
+      -
+        name: result
+        type: u32
+  -
+    name: node
+    attributes:
+      -
+        name: id
+        type: u32
+        byte-order: little-endian
+      -
+        name: mark
+        type: u32
+      -
+        name: addrs
+        type: nest
+        nested-attributes: addr
+        multi-attr: true
+  -
+    name: addr
+    attributes:
+      -
+        name: family
+        type: u16
+      -
+        name: addr4
+        type: u32
+        byte-order: big-endian
+        display-hint: ipv4
+      -
+        name: addr6
+        type: binary
+        display-hint: ipv6
+        checks:
+          exact-len: 16
+
+operations:
+  list:
+    -
+      name: get-node
+      doc: |
+        get DLM node information from the kernel configuration.
+      attribute-set: node
+      do:
+        request:
+          attributes:
+            - id
+        reply:
+          attributes:
+            - id
+            - mark
+            - addrs
+      dump:
+        reply:
+          attributes:
+            - id
+            - mark
+            - addrs
+    -
+      name: add-node
+      doc: |
+        add a new DLM node to the kernel configuration.
+      attribute-set: node
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - id
+            - mark
+            - addrs
+    -
+      name: del-node
+      doc: |
+        delete a DLM node from the kernel configuration.
+      attribute-set: node
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - id
+    -
+      name: get-ls
+      doc: |
+        get registered DLM lockspace information.
+      attribute-set: ls
+      do:
+        request:
+          attributes:
+            - name
+        reply:
+          attributes:
+            - name
+      dump:
+        reply:
+          attributes:
+            - name
+    -
+      name: get-ls-member
+      doc: |
+        get members information from a registered DLM lockspace.
+      attribute-set: ls-member
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - ls-name
+            - nodeid
+        reply:
+          attributes:
+            - ls-name
+            - nodeid
+            - weight
+      dump:
+        request:
+          attributes:
+            - ls-name
+        reply:
+          attributes:
+            - ls-name
+            - nodeid
+            - weight
+    -
+      name: ls-add-member
+      doc: |
+        add a member to a specific registered lockspace. Should be used
+        when the lockspaces is stopped.
+      attribute-set: ls-member
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - ls-name
+            - nodeid
+            - weight
+    -
+      name: ls-del-member
+      doc: |
+        delete a member to a specific registered lockspace. Should be used
+        when the lockspaces is stopped.
+      attribute-set: ls-member
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - ls-name
+            - nodeid
+    -
+      name: ls-ctrl
+      doc: |
+        do lockspace control actions like stop and start lockspace for
+        membership updates.
+      attribute-set: ls-ctrl
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - ls-name
+            - action
+    -
+      name: ntf-new-ls
+      doc: |
+        notify that the kernel is creating a new lockspace and the user
+        space need to ackknowledge and set a cluster-wide global-id with
+        ls-event-done.
+      notify: get-ls
+      mcgrp: ls-event
+    -
+      name: ntf-release-ls
+      doc: |
+        notify that the kernel is releasing registered lockspace.
+      notify: get-ls
+      mcgrp: ls-event
+    -
+      name: ls-event-done
+      doc: |
+        send back the result from the user space of the ntf-new-ls or
+        ntf-release-ls ls-event. The user space can decide to accept
+        or reject the lockspace creation. Sending the result back requires
+        to tell the DLM lockspace the cluster-wide unique global-id.
+      attribute-set: ls-event-result
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - ls-name
+            - ls-global-id
+            - result
+    -
+      name: get-cfg
+      doc: |
+        get the current DLM kernel configuration attributes.
+      attribute-set: cfg
+      do:
+        reply:
+          attributes:
+            - our-nodeid
+            - cluster-name
+            - protocol
+            - port
+            - recover-timeout
+            - inactive-timeout
+            - log-level
+            - default-mark
+            - recover-callbacks
+    -
+      name: set-our-nodeid
+      doc: |
+        set our nodeid. The node need to be part of the DLM registered
+        nodes.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - our-nodeid
+    -
+      name: set-cluster-name
+      doc: |
+        set the DLM cluster name.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - cluster-name
+    -
+      name: set-protocol
+      doc: |
+        set the DLM used transportation protocol.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - protocol
+    -
+      name: set-port
+      doc: |
+        set the DLM port to listen for the used transportation protocol.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - port
+    -
+      name: set-recover-timeout
+      doc: |
+        The DLM recovery has some wait events that requires other nodes
+        to answer in a time. This is the timeout value how long DLM
+        should wait until giving up in the DLM recovery routines.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - recover-timeout
+    -
+      name: set-inactive-timeout
+      doc: |
+        DLM lock resources are keeping in memory if not being used inside
+        the lockspace anymore to fast reactivate them if they get used after
+        a certain timeout that can be specified here.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - inactive-timeout
+    -
+      name: set-log-level
+      doc: |
+        set the DLM kernel logging level.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - log-level
+    -
+      name: set-default-mark
+      doc: |
+        set the default skb mark value for DLM sockets.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - default-mark
+    -
+      name: set-recover-callbacks
+      doc: |
+        set feature for recover callbacks that is required for some kernel
+        DLM users.
+      attribute-set: cfg
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - recover-callbacks
+
+mcast-groups:
+  list:
+    -
+      name: ls-event
