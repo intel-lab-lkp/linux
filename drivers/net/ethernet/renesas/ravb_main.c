@@ -2076,6 +2076,7 @@ static bool ravb_can_tx_csum_gbeth(struct sk_buff *skb)
 	switch (ip->protocol) {
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
+	case IPPROTO_ICMP:
 		return true;
 
 	default:
