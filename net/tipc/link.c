@@ -461,15 +461,15 @@ u32 tipc_link_state(struct tipc_link *l)
  * @min_win: minimal send window to be used by link
  * @max_win: maximal send window to be used by link
  * @session: session to be used by link
+ * @self: local unicast link id
  * @peer: node id of peer node
+ * @peer_id: 128-bit ID of peer
  * @peer_caps: bitmap describing peer node capabilities
  * @bc_sndlink: the namespace global link used for broadcast sending
  * @bc_rcvlink: the peer specific link used for broadcast reception
  * @inputq: queue to put messages ready for delivery
  * @namedq: queue to put binding table update messages ready for delivery
  * @link: return value, pointer to put the created link
- * @self: local unicast link id
- * @peer_id: 128-bit ID of peer
  *
  * Return: true if link was created, otherwise false
  */
@@ -538,17 +538,17 @@ bool tipc_link_create(struct net *net, char *if_name, int bearer_id,
 /**
  * tipc_link_bc_create - create new link to be used for broadcast
  * @net: pointer to associated network namespace
- * @mtu: mtu to be used initially if no peers
- * @min_win: minimal send window to be used by link
- * @max_win: maximal send window to be used by link
- * @inputq: queue to put messages ready for delivery
- * @namedq: queue to put binding table update messages ready for delivery
- * @link: return value, pointer to put the created link
  * @ownnode: identity of own node
  * @peer: node id of peer node
  * @peer_id: 128-bit ID of peer
+ * @mtu: mtu to be used initially if no peers
+ * @min_win: minimal send window to be used by link
+ * @max_win: maximal send window to be used by link
  * @peer_caps: bitmap describing peer node capabilities
+ * @inputq: queue to put messages ready for delivery
+ * @namedq: queue to put binding table update messages ready for delivery
  * @bc_sndlink: the namespace global link used for broadcast sending
+ * @link: return value, pointer to put the created link
  *
  * Return: true if link was created, otherwise false
  */

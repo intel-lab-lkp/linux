@@ -196,8 +196,8 @@ err:
  * tipc_msg_append(): Append data to tail of an existing buffer queue
  * @_hdr: header to be used
  * @m: the data to be appended
- * @mss: max allowable size of buffer
  * @dlen: size of data to be appended
+ * @mss: max allowable size of buffer
  * @txq: queue to append to
  *
  * Return: the number of 1k blocks appended or errno value
