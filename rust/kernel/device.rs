@@ -51,7 +51,7 @@ impl Device {
     ///
     /// It must also be ensured that `bindings::device::release` can be called from any thread.
     /// While not officially documented, this should be the case for any `struct device`.
-    pub unsafe fn from_raw(ptr: *mut bindings::device) -> ARef<Self> {
+    pub unsafe fn get_device(ptr: *mut bindings::device) -> ARef<Self> {
         // SAFETY: By the safety requirements, ptr is valid.
         // Initially increase the reference count by one to compensate for the final decrement once
         // this newly created `ARef<Device>` instance is dropped.
