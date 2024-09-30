@@ -130,6 +130,8 @@ static void intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
 {
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
+	u8 symbol_size = intel_dp_is_uhbr(crtc_state) ? 32 : 8;
+	u32 hblank;
 
 	/* TODO: Check WA 14013163432 to set data M/N for full BW utilization. */
 	intel_link_compute_m_n(bpp_x16, crtc_state->lane_count,
@@ -139,6 +141,13 @@ static void intel_dp_mst_compute_m_n(const struct intel_crtc_state *crtc_state,
 			       m_n);
 
 	m_n->tu = DIV_ROUND_UP_ULL(mul_u32_u32(m_n->data_m, 64), m_n->data_n);
+
+	/* Calculate min Hblank Link Layer Symbol Cycle Count for 8b/10b MST & 128b/132b */
+	hblank = DIV_ROUND_UP((DIV_ROUND_UP(adjusted_mode->htotal - adjusted_mode->hdisplay, 4) * bpp_x16), symbol_size);
+	if (intel_dp_is_uhbr(crtc_state))
+		m_n->min_hblank = hblank > 5 ? hblank : 5;
+	else
+		m_n->min_hblank = hblank > 3 ? hblank : 3;
 }
 
 static int intel_dp_mst_calc_pbn(int pixel_clock, int bpp_x16, int bw_overhead)

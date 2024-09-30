@@ -2095,6 +2095,7 @@ void intel_modeset_put_crtc_power_domains(struct intel_crtc *crtc,
 static void i9xx_configure_cpu_transcoder(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
 	if (intel_crtc_has_dp_encoder(crtc_state)) {
@@ -2102,6 +2103,11 @@ static void i9xx_configure_cpu_transcoder(const struct intel_crtc_state *crtc_st
 					       &crtc_state->dp_m_n);
 		intel_cpu_transcoder_set_m2_n2(crtc, cpu_transcoder,
 					       &crtc_state->dp_m2_n2);
+
+		if (DISPLAY_VER(i915) >= 20 && crtc_state->dp_m_n.min_hblank)
+			intel_de_write(i915,
+				       DP_MIN_HBLANK_CTL(i915, cpu_transcoder),
+				       crtc_state->dp_m_n.min_hblank);
 	}
 
 	intel_set_transcoder_timings(crtc_state);

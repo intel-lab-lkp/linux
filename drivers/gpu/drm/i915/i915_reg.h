@@ -1109,6 +1109,7 @@
 #define _BCLRPAT_A		0x60020
 #define _TRANS_VSYNCSHIFT_A	0x60028
 #define _TRANS_MULT_A		0x6002c
+#define _DP_MIN_HBLANK_CTL_A	0x600ac
 
 /* Pipe/transcoder B timing regs */
 #define _TRANS_HTOTAL_B		0x61000
@@ -1121,6 +1122,7 @@
 #define _BCLRPAT_B		0x61020
 #define _TRANS_VSYNCSHIFT_B	0x61028
 #define _TRANS_MULT_B		0x6102c
+#define _DP_MIN_HBLANK_CTL_B	0x610ac
 
 /* DSI 0 timing regs */
 #define _TRANS_HTOTAL_DSI0	0x6b000
@@ -1146,6 +1148,7 @@
 #define TRANS_VSYNCSHIFT(dev_priv, trans)	_MMIO_TRANS2(dev_priv, (trans), _TRANS_VSYNCSHIFT_A)
 #define PIPESRC(dev_priv, pipe)		_MMIO_TRANS2(dev_priv, (pipe), _PIPEASRC)
 #define TRANS_MULT(dev_priv, trans)	_MMIO_TRANS2(dev_priv, (trans), _TRANS_MULT_A)
+#define DP_MIN_HBLANK_CTL(dev_priv, trans)	_MMIO_TRANS2(dev_priv, (trans), _DP_MIN_HBLANK_CTL_A)
 
 /* VGA port control */
 #define ADPA			_MMIO(0x61100)
