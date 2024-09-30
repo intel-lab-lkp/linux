@@ -13,6 +13,21 @@
 		backlight = <&backlight>;
 		power-supply = <&reg_tft_vcom>;
 
+		panel-timing {
+			clock-frequency = <68900000>;
+			hactive = <1280>;
+			vactive = <800>;
+			hfront-porch = <30>;
+			hback-porch = <30>;
+			hsync-len = <10>;
+			vfront-porch = <5>;
+			vback-porch = <5>;
+			vsync-len = <5>;
+			hsync-active = <0>;
+			vsync-active = <0>;
+			de-active = <1>;
+		};
+
 		port {
 			in_lvds0: endpoint {
 				remote-endpoint = <&ldb_lvds_ch0>;
