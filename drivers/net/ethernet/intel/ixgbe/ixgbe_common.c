@@ -2635,9 +2635,9 @@ void ixgbe_release_swfw_sync(struct ixgbe_hw *hw, u32 mask)
 /**
  * prot_autoc_read_generic - Hides MAC differences needed for AUTOC read
  * @hw: pointer to hardware structure
- * @reg_val: Value we read from AUTOC
  * @locked: bool to indicate whether the SW/FW lock should be taken.  Never
  *	    true in this the generic case.
+ * @reg_val: Value we read from AUTOC
  *
  * The default case requires no protection so just to the register read.
  **/

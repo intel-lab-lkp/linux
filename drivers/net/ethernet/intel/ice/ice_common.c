@@ -5301,8 +5301,8 @@ ice_aq_get_output_pin_cfg(struct ice_hw *hw, u8 output_idx, u8 *flags,
  * @hw: pointer to the HW struct
  * @dpll_num: DPLL index
  * @ref_state: Reference clock state
- * @config: current DPLL config
  * @dpll_state: current DPLL state
+ * @config: current DPLL config
  * @phase_offset: Phase offset in ns
  * @eec_mode: EEC_mode
  *

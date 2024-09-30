@@ -3839,8 +3839,8 @@ static s32 e1000_spi_eeprom_ready(struct e1000_hw *hw)
  * e1000_read_eeprom - Reads a 16 bit word from the EEPROM.
  * @hw: Struct containing variables accessed by shared code
  * @offset: offset of  word in the EEPROM to read
- * @data: word read from the EEPROM
  * @words: number of words to read
+ * @data: word read from the EEPROM
  */
 s32 e1000_read_eeprom(struct e1000_hw *hw, u16 offset, u16 words, u16 *data)
 {

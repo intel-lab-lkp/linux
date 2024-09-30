@@ -1045,9 +1045,9 @@ void i40e_led_set(struct i40e_hw *hw, u32 mode, bool blink)
 /**
  * i40e_aq_get_phy_capabilities
  * @hw: pointer to the hw struct
- * @abilities: structure for PHY capabilities to be filled
  * @qualified_modules: report Qualified Modules
  * @report_init: report init capabilities (active are default)
+ * @abilities: structure for PHY capabilities to be filled
  * @cmd_details: pointer to command details structure or NULL
  *
  * Returns the various PHY abilities supported on the Port.
@@ -1948,7 +1948,6 @@ int i40e_aq_get_switch_config(struct i40e_hw *hw,
  * i40e_aq_set_switch_config
  * @hw: pointer to the hardware structure
  * @flags: bit flag values to set
- * @mode: cloud filter mode
  * @valid_flags: which bit flags to set
  * @mode: cloud filter mode
  * @cmd_details: pointer to command details structure or NULL
@@ -2534,9 +2533,9 @@ int i40e_aq_add_mirrorrule(struct i40e_hw *hw, u16 sw_seid,
  * @hw: pointer to the hw struct
  * @sw_seid: Switch SEID (to which rule refers)
  * @rule_type: Rule Type (ingress/egress/VLAN)
- * @count: length of the list
  * @rule_id: Rule ID that is returned in the receive desc as part of
  *		add_mirrorrule.
+ * @count: length of the list
  * @mr_list: list of mirrored VLAN IDs to be removed
  * @cmd_details: pointer to command details structure or NULL
  * @rules_used: Number of rules used in internal switch
@@ -3444,8 +3443,8 @@ int i40e_aq_start_lldp(struct i40e_hw *hw, bool persist,
 /**
  * i40e_aq_set_dcb_parameters
  * @hw: pointer to the hw struct
- * @cmd_details: pointer to command details structure or NULL
  * @dcb_enable: True if DCB configuration needs to be applied
+ * @cmd_details: pointer to command details structure or NULL
  *
  **/
 int
