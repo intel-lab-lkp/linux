@@ -682,13 +682,6 @@ static int blkcg_reset_stats(struct cgroup_subsys_state *css,
 	return 0;
 }
 
-const char *blkg_dev_name(struct blkcg_gq *blkg)
-{
-	if (!blkg->q->disk)
-		return NULL;
-	return bdi_dev_name(blkg->q->disk->bdi);
-}
-
 /**
  * blkcg_print_blkgs - helper for printing per-blkg data
  * @sf: seq_file to print to
@@ -740,12 +733,10 @@ EXPORT_SYMBOL_GPL(blkcg_print_blkgs);
  */
 u64 __blkg_prfill_u64(struct seq_file *sf, struct blkg_policy_data *pd, u64 v)
 {
-	const char *dname = blkg_dev_name(pd->blkg);
-
-	if (!dname)
+	if (!blkg_print_dev_name(sf, pd->blkg))
 		return 0;
 
-	seq_printf(sf, "%s %llu\n", dname, (unsigned long long)v);
+	seq_printf(sf, " %llu\n", (unsigned long long)v);
 	return v;
 }
 EXPORT_SYMBOL_GPL(__blkg_prfill_u64);
@@ -1144,18 +1135,16 @@ static void blkcg_print_one_stat(struct blkcg_gq *blkg, struct seq_file *s)
 {
 	struct blkg_iostat_set *bis = &blkg->iostat;
 	u64 rbytes, wbytes, rios, wios, dbytes, dios;
-	const char *dname;
 	unsigned seq;
 	int i;
 
 	if (!blkg->online)
 		return;
 
-	dname = blkg_dev_name(blkg);
-	if (!dname)
+	if (!blkg_print_dev_name(s, blkg))
 		return;
 
-	seq_printf(s, "%s ", dname);
+	seq_putc(s, ' ');
 
 	do {
 		seq = u64_stats_fetch_begin(&bis->sync);

@@ -43,21 +43,22 @@ u64 __blkg_prfill_rwstat(struct seq_file *sf, struct blkg_policy_data *pd,
 		[BLKG_RWSTAT_ASYNC]	= "Async",
 		[BLKG_RWSTAT_DISCARD]	= "Discard",
 	};
-	const char *dname = blkg_dev_name(pd->blkg);
 	u64 v;
 	int i;
 
-	if (!dname)
+	if (!pd->blkg->q->disk)
 		return 0;
 
-	for (i = 0; i < BLKG_RWSTAT_NR; i++)
-		seq_printf(sf, "%s %s %llu\n", dname, rwstr[i],
-			   rwstat->cnt[i]);
+	for (i = 0; i < BLKG_RWSTAT_NR; i++) {
+		blkg_print_dev_name(sf, pd->blkg);
+		seq_printf(sf, " %s %llu\n", rwstr[i], rwstat->cnt[i]);
+	}
 
 	v = rwstat->cnt[BLKG_RWSTAT_READ] +
 		rwstat->cnt[BLKG_RWSTAT_WRITE] +
 		rwstat->cnt[BLKG_RWSTAT_DISCARD];
-	seq_printf(sf, "%s Total %llu\n", dname, v);
+	blkg_print_dev_name(sf, pd->blkg);
+	seq_printf(sf, " Total %llu\n", v);
 	return v;
 }
 EXPORT_SYMBOL_GPL(__blkg_prfill_rwstat);
