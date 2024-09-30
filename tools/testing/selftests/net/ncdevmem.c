@@ -28,10 +28,12 @@
 #include <linux/netlink.h>
 #include <linux/genetlink.h>
 #include <linux/netdev.h>
+#include <linux/ethtool_netlink.h>
 #include <time.h>
 #include <net/if.h>
 
 #include "netdev-user.h"
+#include "ethtool-user.h"
 #include <ynl.h>
 
 #define PAGE_SHIFT 12
@@ -217,8 +219,42 @@ static int reset_flow_steering(void)
 
 static int configure_headersplit(bool on)
 {
-	return run_command("sudo ethtool -G %s tcp-data-split %s >&2", ifname,
-			   on ? "on" : "off");
+	struct ethtool_rings_set_req *req;
+	struct ynl_error yerr;
+	struct ynl_sock *ys;
+	int ret;
+
+	ys = ynl_sock_create(&ynl_ethtool_family, &yerr);
+	if (!ys) {
+		fprintf(stderr, "YNL: %s\n", yerr.msg);
+		return -1;
+	}
+
+	req = ethtool_rings_set_req_alloc();
+	ethtool_rings_set_req_set_header_dev_index(req, ifindex);
+	ethtool_rings_set_req_set_tcp_data_split(req, on ? 2 : 0);
+	ret = ethtool_rings_set(ys, req);
+	if (ret < 0)
+		fprintf(stderr, "YNL failed: %s\n", ys->err.msg);
+	ethtool_rings_set_req_free(req);
+
+	{
+		struct ethtool_rings_get_req *req;
+		struct ethtool_rings_get_rsp *rsp;
+
+		req = ethtool_rings_get_req_alloc();
+		ethtool_rings_get_req_set_header_dev_index(req, ifindex);
+		rsp = ethtool_rings_get(ys, req);
+		ethtool_rings_get_req_free(req);
+		if (rsp)
+			fprintf(stderr, "TCP header split: %d\n",
+				rsp->tcp_data_split);
+		ethtool_rings_get_rsp_free(rsp);
+	}
+
+	ynl_sock_destroy(ys);
+
+	return ret;
 }
 
 static int configure_rss(void)
@@ -353,6 +389,9 @@ int do_server(struct memory_buffer *mem)
 
 	if (reset_flow_steering())
 		error(1, 0, "Failed to reset flow steering\n");
+
+	if (configure_headersplit(1))
+		error(1, 0, "Failed to enable TCP header split\n");
 
 	/* Configure RSS to divert all traffic from our devmem queues */
 	if (configure_rss())
