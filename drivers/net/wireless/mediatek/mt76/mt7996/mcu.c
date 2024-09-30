@@ -799,6 +799,9 @@ mt7996_mcu_bss_he_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
 
 	cap = mt76_connac_get_he_phy_cap(phy->mt76, vif);
 
+	if (!cap)
+		return;
+
 	tlv = mt7996_mcu_add_uni_tlv(skb, UNI_BSS_INFO_HE_BASIC, sizeof(*he));
 
 	he = (struct bss_info_uni_he *)tlv;

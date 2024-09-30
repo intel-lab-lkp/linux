@@ -552,6 +552,9 @@ mt7915_mcu_bss_he_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
 
 	cap = mt76_connac_get_he_phy_cap(phy->mt76, vif);
 
+	if (!cap)
+		return;
+
 	tlv = mt76_connac_mcu_add_tlv(skb, BSS_INFO_HE_BASIC, sizeof(*he));
 
 	he = (struct bss_info_he *)tlv;
@@ -1144,6 +1147,9 @@ mt7915_mcu_sta_bfer_he(struct ieee80211_sta *sta, struct ieee80211_vif *vif,
 	u16 mcs_map = le16_to_cpu(pc->he_mcs_nss_supp.rx_mcs_80);
 	u8 nss_mcs = mt7915_mcu_get_sta_nss(mcs_map);
 	u8 snd_dim, sts;
+
+	if (!vc)
+		return;
 
 	bf->tx_mode = MT_PHY_TYPE_HE_SU;
 
