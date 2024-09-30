@@ -581,9 +581,8 @@ static int drm_gem_afbc_min_size(struct drm_device *dev,
  *			    struct drm_afbc_framebuffer members
  *
  * @dev: DRM device
- * @afbc_fb: afbc-specific framebuffer
  * @mode_cmd: Metadata from the userspace framebuffer creation request
- * @afbc_fb: afbc framebuffer
+ * @afbc_fb: afbc-specific framebuffer
  *
  * This function can be used by drivers which support afbc to complete
  * the preparation of struct drm_afbc_framebuffer. It must be called after
