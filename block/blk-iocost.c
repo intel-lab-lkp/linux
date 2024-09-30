@@ -3067,11 +3067,14 @@ static void ioc_pd_stat(struct blkg_policy_data *pd, struct seq_file *s)
 static u64 ioc_weight_prfill(struct seq_file *sf, struct blkg_policy_data *pd,
 			     int off)
 {
-	const char *dname = blkg_dev_name(pd->blkg);
 	struct ioc_gq *iocg = pd_to_iocg(pd);
 
-	if (dname && iocg->cfg_weight)
-		seq_printf(sf, "%s %u\n", dname, iocg->cfg_weight / WEIGHT_ONE);
+	if (!iocg->cfg_weight)
+		return 0;
+
+	if (blkg_print_dev_name(sf, pd->blkg))
+		seq_printf(sf, " %u\n", iocg->cfg_weight / WEIGHT_ONE);
+
 	return 0;
 }
 
@@ -3160,15 +3163,14 @@ err:
 static u64 ioc_qos_prfill(struct seq_file *sf, struct blkg_policy_data *pd,
 			  int off)
 {
-	const char *dname = blkg_dev_name(pd->blkg);
 	struct ioc *ioc = pd_to_iocg(pd)->ioc;
 
-	if (!dname)
+	if (!blkg_print_dev_name(sf, pd->blkg))
 		return 0;
 
 	spin_lock_irq(&ioc->lock);
-	seq_printf(sf, "%s enable=%d ctrl=%s rpct=%u.%02u rlat=%u wpct=%u.%02u wlat=%u min=%u.%02u max=%u.%02u\n",
-		   dname, ioc->enabled, ioc->user_qos_params ? "user" : "auto",
+	seq_printf(sf, " enable=%d ctrl=%s rpct=%u.%02u rlat=%u wpct=%u.%02u wlat=%u min=%u.%02u max=%u.%02u\n",
+		   ioc->enabled, ioc->user_qos_params ? "user" : "auto",
 		   ioc->params.qos[QOS_RPPM] / 10000,
 		   ioc->params.qos[QOS_RPPM] % 10000 / 100,
 		   ioc->params.qos[QOS_RLAT],
@@ -3359,18 +3361,17 @@ err:
 static u64 ioc_cost_model_prfill(struct seq_file *sf,
 				 struct blkg_policy_data *pd, int off)
 {
-	const char *dname = blkg_dev_name(pd->blkg);
 	struct ioc *ioc = pd_to_iocg(pd)->ioc;
 	u64 *u = ioc->params.i_lcoefs;
 
-	if (!dname)
+	if (!blkg_print_dev_name(sf, pd->blkg))
 		return 0;
 
 	spin_lock_irq(&ioc->lock);
-	seq_printf(sf, "%s ctrl=%s model=linear "
+	seq_printf(sf, " ctrl=%s model=linear "
 		   "rbps=%llu rseqiops=%llu rrandiops=%llu "
 		   "wbps=%llu wseqiops=%llu wrandiops=%llu\n",
-		   dname, ioc->user_cost_model ? "user" : "auto",
+		   ioc->user_cost_model ? "user" : "auto",
 		   u[I_LCOEF_RBPS], u[I_LCOEF_RSEQIOPS], u[I_LCOEF_RRANDIOPS],
 		   u[I_LCOEF_WBPS], u[I_LCOEF_WSEQIOPS], u[I_LCOEF_WRANDIOPS]);
 	spin_unlock_irq(&ioc->lock);
