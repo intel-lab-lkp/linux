@@ -148,7 +148,7 @@
 		regulator-name = "vddio-sd0";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio0 7 0>;
+		gpios = <&gpio0 7 0>;
 	};
 
 	backlight {

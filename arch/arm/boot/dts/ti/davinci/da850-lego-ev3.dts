@@ -140,7 +140,7 @@
 		regulator-name = "vcc5v";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio 101 0>;
+		gpios = <&gpio 101 0>;
 		over-current-gpios = <&gpio 99 GPIO_ACTIVE_LOW>;
 		enable-active-high;
 		regulator-boot-on;
@@ -165,7 +165,7 @@
 	amp: regulator3 {
 		compatible = "regulator-fixed";
 		regulator-name = "amp";
-		gpio = <&gpio 111 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio 111 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

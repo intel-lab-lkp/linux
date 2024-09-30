@@ -133,7 +133,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&gpio_expander 8 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio_expander 8 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -147,7 +147,7 @@
 		regulator-min-microvolt = <1500000>;
 		regulator-max-microvolt = <1500000>;
 
-		gpio = <&pma8084_gpios 14 GPIO_ACTIVE_HIGH>;
+		gpios = <&pma8084_gpios 14 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

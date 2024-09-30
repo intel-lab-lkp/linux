@@ -92,7 +92,7 @@
 		regulator-max-microvolt = <5000000>;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&pio 3 24 GPIO_ACTIVE_HIGH>; /* PD24 */
+		gpios = <&pio 3 24 GPIO_ACTIVE_HIGH>; /* PD24 */
 	};
 
 	wifi_pwrseq: pwrseq {
@@ -118,7 +118,7 @@
 		regulator-max-microvolt = <5000000>;
 		regulator-always-on;
 		enable-active-high;
-		gpio = <&pio 3 25 GPIO_ACTIVE_HIGH>; /* PD25 */
+		gpios = <&pio 3 25 GPIO_ACTIVE_HIGH>; /* PD25 */
 	};
 };
 

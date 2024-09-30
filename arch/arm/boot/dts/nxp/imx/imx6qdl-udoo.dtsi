@@ -63,7 +63,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "lcd_panel";
 		enable-active-high;
-		gpio = <&gpio1 2 0>;
+		gpios = <&gpio1 2 0>;
 	};
 
 	sound {

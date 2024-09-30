@@ -200,7 +200,7 @@
 		regulator-name = "12P0V";
 		regulator-min-microvolt = <12000000>;
 		regulator-max-microvolt = <12000000>;
-		gpio = <&gpio4 25 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 25 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -225,7 +225,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 22 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

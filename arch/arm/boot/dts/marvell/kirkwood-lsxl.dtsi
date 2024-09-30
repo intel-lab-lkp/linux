@@ -198,7 +198,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio0 11 0>;
+			gpios = <&gpio0 11 0>;
 		};
 		hdd_power: regulator@2 {
 			compatible = "regulator-fixed";
@@ -209,7 +209,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio0 10 0>;
+			gpios = <&gpio0 10 0>;
 		};
 	};
 };

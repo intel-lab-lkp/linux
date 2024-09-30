@@ -37,7 +37,7 @@
 
 	vcc_host0_5v: usb-host0-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpio2 13 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 13 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&host0_vbus_drv>;
 		regulator-name = "vcc_host0_5v";
@@ -49,7 +49,7 @@
 
 	vcc_host1_5v: usb-host1-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpio2 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 0 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&host1_vbus_drv>;
 		regulator-name = "vcc_host1_5v";
@@ -61,7 +61,7 @@
 
 	vcc_otg_5v: usb-otg-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpio2 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 12 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&otg_vbus_drv>;
 		regulator-name = "vcc_otg_5v";

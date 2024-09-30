@@ -38,7 +38,7 @@
 		regulator-name = "lcd_panel_pwr";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 17 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 17 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&reg_3v3>;
 		startup-delay-us = <500000>;
@@ -51,7 +51,7 @@
 		regulator-name = "nLCD_RESET";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio5 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&reg_lcd>;
 	};

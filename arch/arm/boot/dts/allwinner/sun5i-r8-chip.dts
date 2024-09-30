@@ -226,7 +226,7 @@
 
 &reg_usb0_vbus {
 	vin-supply = <&reg_vcc5v0>;
-	gpio = <&pio 1 10 GPIO_ACTIVE_HIGH>; /* PB10 */
+	gpios = <&pio 1 10 GPIO_ACTIVE_HIGH>; /* PB10 */
 	status = "okay";
 };
 

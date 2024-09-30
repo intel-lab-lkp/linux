@@ -19,7 +19,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio4 15 0>;
+		gpios = <&gpio4 15 0>;
 		enable-active-high;
 	};
 
@@ -30,7 +30,7 @@
 		regulator-name = "usb_h1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 0 0>;
+		gpios = <&gpio1 0 0>;
 		enable-active-high;
 	};
 

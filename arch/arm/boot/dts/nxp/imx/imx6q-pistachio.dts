@@ -80,7 +80,7 @@
 		regulator-name = "wlan-en-regulator";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio2 24 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 24 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};
@@ -90,7 +90,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 22 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&swbst_reg>;
 	};

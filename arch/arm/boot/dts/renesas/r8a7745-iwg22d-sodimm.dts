@@ -77,7 +77,7 @@
 		regulator-name = "Panel VccQ";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 13 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio1 13 GPIO_ACTIVE_LOW>;
 		enable-active-high;
 	};
 

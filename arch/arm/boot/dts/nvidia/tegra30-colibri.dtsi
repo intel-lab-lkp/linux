@@ -994,7 +994,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		enable-active-high;
-		gpio = <&pmic 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 6 GPIO_ACTIVE_HIGH>;
 		vin-supply = <&reg_1v8_vio>;
 	};
 
@@ -1004,7 +1004,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
-		gpio = <&pmic 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 6 GPIO_ACTIVE_HIGH>;
 		vin-supply = <&reg_module_3v3>;
 	};
 
@@ -1022,7 +1022,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(DD, 2) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(DD, 2) GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_module_3v3: regulator-module-3v3 {

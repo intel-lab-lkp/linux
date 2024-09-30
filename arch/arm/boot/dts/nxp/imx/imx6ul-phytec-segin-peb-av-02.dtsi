@@ -34,7 +34,7 @@
 		regulator-name = "backlight-lcd";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 18 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 18 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

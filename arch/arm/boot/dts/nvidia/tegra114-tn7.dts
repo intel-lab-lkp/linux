@@ -319,7 +319,7 @@
 		regulator-name = "VDD_LCD_BL";
 		regulator-min-microvolt = <16500000>;
 		regulator-max-microvolt = <16500000>;
-		gpio = <&gpio TEGRA_GPIO(H, 2) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(H, 2) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&vs_sys>;
 		regulator-boot-on;
@@ -330,7 +330,7 @@
 		regulator-name = "VD_LCD_1V8";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&palmas_gpio 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&palmas_gpio 4 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&vdd_1v8>;
 		regulator-boot-on;

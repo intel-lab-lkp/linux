@@ -232,7 +232,7 @@
 		regulator-name = "vbus_sled1";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&sled1_ioexp 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&sled1_ioexp 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -241,7 +241,7 @@
 		regulator-name = "vbus_sled2";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&sled2_ioexp 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&sled2_ioexp 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -250,7 +250,7 @@
 		regulator-name = "vbus_sled3";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&sled3_ioexp 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&sled3_ioexp 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -259,7 +259,7 @@
 		regulator-name = "vbus_sled4";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&sled4_ioexp 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&sled4_ioexp 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -268,7 +268,7 @@
 		regulator-name = "vbus_sled5";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&sled5_ioexp 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&sled5_ioexp 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -277,7 +277,7 @@
 		regulator-name = "vbus_sled6";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&sled6_ioexp 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&sled6_ioexp 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

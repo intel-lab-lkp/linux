@@ -12,7 +12,7 @@
 		regulator-name = "ETH_PHY";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio7 13 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio7 13 GPIO_ACTIVE_LOW>;
 	};
 };
 

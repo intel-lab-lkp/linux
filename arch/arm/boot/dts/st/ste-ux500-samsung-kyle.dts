@@ -79,7 +79,7 @@
 		regulator-name = "en-3v3-fixed-supply";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio6 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 31 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <5000>;
 		enable-active-high;
 		pinctrl-names = "default";
@@ -97,7 +97,7 @@
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
 		/* GPIO219 controls this regulator */
-		gpio = <&gpio6 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 27 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		pinctrl-names = "default";
 		pinctrl-0 = <&lcd_pwr_en_default_mode>;
@@ -109,7 +109,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		/* GPIO219 controls this regulator too */
-		gpio = <&gpio6 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 27 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		pinctrl-names = "default";
 		pinctrl-0 = <&lcd_pwr_en_default_mode>;
@@ -122,7 +122,7 @@
 		regulator-max-microvolt = <3000000>;
 		startup-delay-us = <200000>;
 		/* GPIO215 WLAN_EN */
-		gpio = <&gpio6 23 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 23 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		pinctrl-names = "default";
 		pinctrl-0 = <&wlan_en_default_mode>;

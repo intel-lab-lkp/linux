@@ -36,7 +36,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&ldo2_reg>;
-		gpio = <&gpio4 13 GPIO_ACTIVE_HIGH>;   /* gpio4_109 */
+		gpios = <&gpio4 13 GPIO_ACTIVE_HIGH>;   /* gpio4_109 */
 		startup-delay-us = <1000>;
 		enable-active-high;
 	};
@@ -47,7 +47,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&vwlan_pdn_fixed>;
-		gpio = <&gpio4 14 GPIO_ACTIVE_HIGH>;   /* gpio4_110 */
+		gpios = <&gpio4 14 GPIO_ACTIVE_HIGH>;   /* gpio4_110 */
 		startup-delay-us = <1000>;
 		enable-active-high;
 	};

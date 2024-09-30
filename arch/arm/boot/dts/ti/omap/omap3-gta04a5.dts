@@ -20,7 +20,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 
-		gpio = <&gpio5 10 GPIO_ACTIVE_HIGH>;	/* GPIO_138 */
+		gpios = <&gpio5 10 GPIO_ACTIVE_HIGH>;	/* GPIO_138 */
 
 		startup-delay-us = <70000>;
 		enable-active-high;

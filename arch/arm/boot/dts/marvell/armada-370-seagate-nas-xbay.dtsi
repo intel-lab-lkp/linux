@@ -78,7 +78,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 18 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 18 GPIO_ACTIVE_HIGH>;
 	};
 
 	regulator-2 {
@@ -89,7 +89,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 22 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 22 GPIO_ACTIVE_HIGH>;
 	};
 
 	gpio-fan {

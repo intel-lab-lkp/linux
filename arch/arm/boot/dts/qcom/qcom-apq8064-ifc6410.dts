@@ -62,7 +62,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-name = "ext_3p3v";
 		startup-delay-us = <0>;
-		gpio = <&tlmm_pinmux 77 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm_pinmux 77 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
 	};

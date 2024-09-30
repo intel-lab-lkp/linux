@@ -4674,7 +4674,7 @@
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
 		regulator-always-on;
-		gpio = <&gpio TEGRA_GPIO(D, 4) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(D, 4) GPIO_ACTIVE_HIGH>;
 		vin-supply = <&sys_3v3_reg>;
 	};
 
@@ -4684,7 +4684,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(L, 6) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(L, 6) GPIO_ACTIVE_HIGH>;
 		vin-supply = <&sys_3v3_reg>;
 		regulator-always-on;
 	};
@@ -4695,7 +4695,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(T, 0) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(T, 0) GPIO_ACTIVE_HIGH>;
 		vin-supply = <&vdd_5v0_reg>;
 		regulator-boot-on;
 	};
@@ -4707,7 +4707,7 @@
 		regulator-max-microvolt = <1500000>;
 		regulator-always-on;
 		enable-active-high;
-		gpio = <&pmic 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 7 GPIO_ACTIVE_HIGH>;
 		regulator-boot-on;
 		vin-supply = <&vdd_12v_in>;
 	};
@@ -4718,7 +4718,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
-		gpio = <&pmic 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 6 GPIO_ACTIVE_HIGH>;
 		regulator-always-on;
 		regulator-boot-on;
 		vin-supply = <&vdd_12v_in>;
@@ -4730,7 +4730,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&pmic 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 0 GPIO_ACTIVE_HIGH>;
 		regulator-always-on;
 		regulator-boot-on;
 		vin-supply = <&vdd_12v_in>;
@@ -4740,7 +4740,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "vdd_smsc";
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(DD, 5) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(DD, 5) GPIO_ACTIVE_HIGH>;
 	};
 
 	usb3_vbus_reg: regulator-usb3-vbus {
@@ -4749,7 +4749,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(DD, 4) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(DD, 4) GPIO_ACTIVE_HIGH>;
 		vin-supply = <&vdd_5v0_reg>;
 	};
 

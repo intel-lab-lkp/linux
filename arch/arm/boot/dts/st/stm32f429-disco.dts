@@ -94,7 +94,7 @@
 	/* This turns on vbus for otg for host mode (dwc2) */
 	vcc5v_otg: vcc5v-otg-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpioc 4 0>;
+		gpios = <&gpioc 4 0>;
 		regulator-name = "vcc5_host1";
 		regulator-always-on;
 	};

@@ -166,7 +166,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio1 4 0>;
+			gpios = <&gpio1 4 0>;
 		};
 	};
 };

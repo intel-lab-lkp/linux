@@ -63,7 +63,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "vibrator-en";
 		enable-active-high;
-		gpio = <&gpj1 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpj1 1 GPIO_ACTIVE_HIGH>;
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&vibrator_ena>;
@@ -75,7 +75,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
-		gpio = <&gpj3 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpj3 2 GPIO_ACTIVE_HIGH>;
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&touchkey_vdd_ena>;
@@ -85,7 +85,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "VLED";
 		enable-active-high;
-		gpio = <&gpj1 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpj1 4 GPIO_ACTIVE_HIGH>;
 		regulator-min-microvolt = <2800000>;
 		regulator-max-microvolt = <2800000>;
 

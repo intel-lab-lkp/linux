@@ -29,7 +29,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_backlight_power>;
 		regulator-name = "backlight";
-		gpio = <&gpio2 10 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 10 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -100,7 +100,7 @@
 		regulator-name = "SD3_SPWR";
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
-		gpio = <&gpio4 29 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio4 29 GPIO_ACTIVE_LOW>;
 	};
 
 	wifi_pwrseq: wifi_pwrseq {

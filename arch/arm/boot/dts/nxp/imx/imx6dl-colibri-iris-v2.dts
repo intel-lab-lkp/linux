@@ -19,7 +19,7 @@
 		regulator-name = "3v3_vmmc";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 11 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <100>;
 		enable-active-high;
 	};

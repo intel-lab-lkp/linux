@@ -65,7 +65,7 @@
 		regulator-name = "SDHI0 Vcc";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&pfc 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&pfc 15 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -74,7 +74,7 @@
 		regulator-name = "SDHI2 Vcc";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&pfc 14 GPIO_ACTIVE_HIGH>;
+		gpios = <&pfc 14 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

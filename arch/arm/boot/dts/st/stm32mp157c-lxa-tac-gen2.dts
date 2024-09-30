@@ -26,7 +26,7 @@
 	reg_iobus_12v: regulator-iobus-12v {
 		compatible = "regulator-fixed";
 		vin-supply = <&reg_12v>;
-		gpio = <&gpioh 13 GPIO_ACTIVE_LOW>;
+		gpios = <&gpioh 13 GPIO_ACTIVE_LOW>;
 		regulator-max-microvolt = <12000000>;
 		regulator-min-microvolt = <12000000>;
 		regulator-name = "12V_IOBUS";

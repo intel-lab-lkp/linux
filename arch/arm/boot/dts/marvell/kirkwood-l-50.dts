@@ -154,7 +154,7 @@
 
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 3 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio3 3 GPIO_ACTIVE_LOW>;
 		regulator-always-on;
 	};
 
@@ -164,7 +164,7 @@
 
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 4 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio3 4 GPIO_ACTIVE_LOW>;
 		regulator-always-on;
 	};
 
@@ -174,7 +174,7 @@
 
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -185,7 +185,7 @@
 
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};

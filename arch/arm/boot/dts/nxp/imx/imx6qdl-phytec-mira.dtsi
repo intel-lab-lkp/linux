@@ -58,7 +58,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
-		gpio = <&gpio3 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 4 GPIO_ACTIVE_HIGH>;
 		regulator-always-on;
 	};
 
@@ -69,7 +69,7 @@
 		regulator-name = "flexcan1-reg";
 		regulator-min-microvolt = <1500000>;
 		regulator-max-microvolt = <1500000>;
-		gpio = <&gpio2 20 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 20 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -88,7 +88,7 @@
 		regulator-name = "mPCIe_1V5";
 		regulator-min-microvolt = <1500000>;
 		regulator-max-microvolt = <1500000>;
-		gpio = <&gpio3 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -99,7 +99,7 @@
 		regulator-name = "usb_h1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio2 18 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 18 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -110,7 +110,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio2 19 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 19 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

@@ -1981,7 +1981,7 @@
 		regulator-name = "+V1.05_AVDD_HDMI_PLL";
 		regulator-min-microvolt = <1050000>;
 		regulator-max-microvolt = <1050000>;
-		gpio = <&gpio TEGRA_GPIO(H, 7) GPIO_ACTIVE_LOW>;
+		gpios = <&gpio TEGRA_GPIO(H, 7) GPIO_ACTIVE_LOW>;
 		vin-supply = <&reg_1v05_vdd>;
 	};
 
@@ -2010,7 +2010,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		/* PWR_EN_+V3.3 */
-		gpio = <&pmic 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&reg_3v3_mxm>;
 	};

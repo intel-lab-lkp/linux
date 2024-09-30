@@ -15,7 +15,7 @@
 	reg_3v3_mmc: regulator-3v3-mmc {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio2 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 0 GPIO_ACTIVE_HIGH>;
 		off-on-delay-us = <100000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_enable_3v3_mmc>;
@@ -28,7 +28,7 @@
 	reg_3v3_sd: regulator-3v3-sd {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio2 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 1 GPIO_ACTIVE_HIGH>;
 		off-on-delay-us = <100000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_enable_3v3_sd>;
@@ -41,7 +41,7 @@
 	reg_can1: regulator-can1 {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio2 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 3 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_enable_can1_power>;
 		regulator-name = "5V_SW_CAN1";
@@ -51,7 +51,7 @@
 	reg_can2: regulator-can2 {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio2 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 2 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_enable_can2_power>;
 		regulator-name = "5V_SW_CAN2";

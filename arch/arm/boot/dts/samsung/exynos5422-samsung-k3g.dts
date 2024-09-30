@@ -45,7 +45,7 @@
 		regulator-name = "tsp_vdd_en";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpy3 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpy3 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

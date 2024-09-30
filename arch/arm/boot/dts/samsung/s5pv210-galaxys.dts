@@ -77,7 +77,7 @@
 	micbias_reg: regulator-fixed-3 {
 		compatible = "regulator-fixed";
 		regulator-name = "MICBIAS";
-		gpio = <&gpj4 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpj4 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-names = "default";

@@ -54,7 +54,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		/* AB8500 GPIOs start from 1 - offset 25 is GPIO26. */
-		gpio = <&ab8500_gpio 25 0x4>;
+		gpios = <&ab8500_gpio 25 0x4>;
 		startup-delay-us = <5000>;
 		enable-active-high;
 	};

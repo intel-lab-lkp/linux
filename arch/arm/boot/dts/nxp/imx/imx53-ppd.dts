@@ -104,7 +104,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		pinctrl-0 = <&pinctrl_usb_otg_vbus>;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -123,7 +123,7 @@
 		regulator-max-microvolt = <5000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usbh2_vbus>;
-		gpio = <&gpio3 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -134,7 +134,7 @@
 		regulator-max-microvolt = <5000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usbh3_vbus>;
-		gpio = <&gpio5 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 27 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

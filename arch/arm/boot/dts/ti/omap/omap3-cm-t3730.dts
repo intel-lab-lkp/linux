@@ -18,7 +18,7 @@
 		pinctrl-0 = <&wl12xx_gpio>;
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio3 9 GPIO_ACTIVE_HIGH>;   /* gpio73 */
+		gpios = <&gpio3 9 GPIO_ACTIVE_HIGH>;   /* gpio73 */
 		startup-delay-us = <20000>;
 		enable-active-high;
 	};

@@ -115,7 +115,7 @@
 };
 
 &vbus_reg {
-	gpio = <&gpio 2 0>;
+	gpios = <&gpio 2 0>;
 };
 
 / {

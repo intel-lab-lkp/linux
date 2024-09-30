@@ -40,7 +40,7 @@
 		regulator-name = "va-5v0-fixed-supply";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio 124 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio 124 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

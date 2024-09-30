@@ -134,7 +134,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_reg_can1>;
 		regulator-name = "can1_stby";
-		gpio = <&gpio1 2 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 	};
@@ -152,7 +152,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 22 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

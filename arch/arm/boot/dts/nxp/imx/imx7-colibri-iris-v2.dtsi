@@ -7,7 +7,7 @@
 	reg_3v3_vmmc: regulator-3v3-vmmc {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio5 16 GPIO_ACTIVE_HIGH>; /* SODIMM 100 */
+		gpios = <&gpio5 16 GPIO_ACTIVE_HIGH>; /* SODIMM 100 */
 		regulator-max-microvolt = <3300000>;
 		regulator-min-microvolt = <3300000>;
 		regulator-name = "3v3_vmmc";

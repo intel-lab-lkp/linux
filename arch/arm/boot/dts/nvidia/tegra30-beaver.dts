@@ -2027,7 +2027,7 @@
 		regulator-boot-on;
 		regulator-always-on;
 		enable-active-high;
-		gpio = <&pmic 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 0 GPIO_ACTIVE_HIGH>;
 	};
 
 	ddr_reg: regulator-ddr {
@@ -2038,7 +2038,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&pmic 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 7 GPIO_ACTIVE_HIGH>;
 		vin-supply = <&vdd_5v_in_reg>;
 	};
 
@@ -2050,7 +2050,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(D, 6) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(D, 6) GPIO_ACTIVE_HIGH>;
 		vin-supply = <&vdd_5v_in_reg>;
 	};
 
@@ -2060,7 +2060,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(DD, 6) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(DD, 6) GPIO_ACTIVE_HIGH>;
 		gpio-open-drain;
 		vin-supply = <&vdd_5v_in_reg>;
 	};
@@ -2071,7 +2071,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(DD, 4) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(DD, 4) GPIO_ACTIVE_HIGH>;
 		gpio-open-drain;
 		vin-supply = <&vdd_5v_in_reg>;
 	};
@@ -2084,7 +2084,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&pmic 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 6 GPIO_ACTIVE_HIGH>;
 		vin-supply = <&vdd_5v_in_reg>;
 	};
 
@@ -2096,7 +2096,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(L, 7) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(L, 7) GPIO_ACTIVE_HIGH>;
 		vin-supply = <&sys_3v3_reg>;
 	};
 

@@ -68,7 +68,7 @@
 		regulator-name = "V_3V3_SD";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 29 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 29 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		off-on-delay-us = <20000>;
 	};
@@ -80,7 +80,7 @@
 		regulator-name = "LCD_BKLT_EN";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio1 16 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 16 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -91,7 +91,7 @@
 		regulator-name = "LCD_VDD_EN";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio1 17 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 17 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

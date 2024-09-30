@@ -271,7 +271,7 @@
 		regulator-name = "BACKLIGHT_ENVDDIO";
 		pinctrl-names = "default";
 		pinctrl-0 = <&backlight_reset>;
-		gpio = <&gpm0 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpm0 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -282,7 +282,7 @@
 		regulator-max-microvolt = <3300000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&lcd_en>;
-		gpio = <&gpc0 1 GPIO_ACTIVE_HIGH>; /* LCD_EN */
+		gpios = <&gpc0 1 GPIO_ACTIVE_HIGH>; /* LCD_EN */
 		enable-active-high;
 	};
 

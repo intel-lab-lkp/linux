@@ -20,7 +20,7 @@
 		regulator-name = "usb0_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 9 0>;
+		gpios = <&gpio3 9 0>;
 	};
 
 	leds {

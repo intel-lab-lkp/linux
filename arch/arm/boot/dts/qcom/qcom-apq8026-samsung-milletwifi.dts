@@ -140,7 +140,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 
-		gpio = <&tlmm 74 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm 74 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-0 = <&backlight_vddio_default_state>;
@@ -153,7 +153,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 
-		gpio = <&tlmm 114 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm 114 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-0 = <&tsp_en1_default_state>;
@@ -166,7 +166,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&tlmm 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-0 = <&tsp_en_default_state>;

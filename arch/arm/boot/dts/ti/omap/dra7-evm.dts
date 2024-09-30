@@ -75,7 +75,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
-		gpio = <&pcf_gpio_21 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&pcf_gpio_21 5 GPIO_ACTIVE_HIGH>;
 	};
 
 	evm_3v3_sw: fixedregulator-evm_3v3_sw {
@@ -132,7 +132,7 @@
 		regulator-name = "vmmcwl_fixed";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio5 8 0>;
+		gpios = <&gpio5 8 0>;
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};
@@ -146,7 +146,7 @@
 		regulator-boot-on;
 		enable-active-high;
 		vin-supply = <&sysen2>;
-		gpio = <&gpio7 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 11 GPIO_ACTIVE_HIGH>;
 	};
 
 };

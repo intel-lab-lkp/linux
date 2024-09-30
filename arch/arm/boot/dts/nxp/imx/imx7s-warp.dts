@@ -34,7 +34,7 @@
 	reg_brcm: regulator-brcm {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio5 10 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 10 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_brcm_reg>;
 		regulator-name = "brcm_reg";
@@ -48,7 +48,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_bt_reg>;
 		enable-active-high;
-		gpio = <&gpio5 17 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 17 GPIO_ACTIVE_HIGH>;
 		regulator-name = "bt_reg";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;

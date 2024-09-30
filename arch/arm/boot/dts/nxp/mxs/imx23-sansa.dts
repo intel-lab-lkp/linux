@@ -135,7 +135,7 @@
 		regulator-name = "vddio-sd0";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio0 8 0>;
+		gpios = <&gpio0 8 0>;
 	};
 
 	reg_vddio_sd1: regulator-vddio-sd1 {
@@ -143,7 +143,7 @@
 		regulator-name = "vddio-sd1";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 29 0>;
+		gpios = <&gpio1 29 0>;
 	};
 
 	reg_vdd_touchpad: regulator-vdd-touchpad0 {
@@ -151,7 +151,7 @@
 		regulator-name = "vdd-touchpad0";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio0 26 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio0 26 GPIO_ACTIVE_LOW>;
 		regulator-always-on;
 	};
 
@@ -160,7 +160,7 @@
 		regulator-name = "vdd-tuner0";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio0 29 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;
 		regulator-always-on;
 	};
 

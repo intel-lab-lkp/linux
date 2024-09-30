@@ -82,7 +82,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio0 6 0>;
+		gpios = <&gpio0 6 0>;
 	};
 
 	supply-voltage-monitor {

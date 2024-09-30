@@ -82,7 +82,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "vcc50_hdmi";
 		enable-active-high;
-		gpio = <&gpio7 RK_PB4 GPIO_ACTIVE_HIGH>; /* HDMI_EN */
+		gpios = <&gpio7 RK_PB4 GPIO_ACTIVE_HIGH>; /* HDMI_EN */
 		pinctrl-names = "default";
 		pinctrl-0 = <&vcc50_hdmi_en>;
 		regulator-always-on;
@@ -94,7 +94,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "vusb1_5v";
 		enable-active-high;
-		gpio = <&gpio0 RK_PB4 GPIO_ACTIVE_HIGH>; /* OTG_VBUS_DRV */
+		gpios = <&gpio0 RK_PB4 GPIO_ACTIVE_HIGH>; /* OTG_VBUS_DRV */
 		pinctrl-names = "default";
 		pinctrl-0 = <&otg_vbus_drv>;
 		regulator-min-microvolt = <5000000>;
@@ -106,7 +106,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "vusb2_5v";
 		enable-active-high;
-		gpio = <&gpio8 RK_PB1 GPIO_ACTIVE_HIGH>; /* USB2_PWR_EN */
+		gpios = <&gpio8 RK_PB1 GPIO_ACTIVE_HIGH>; /* USB2_PWR_EN */
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb2_pwr_en>;
 		regulator-min-microvolt = <5000000>;

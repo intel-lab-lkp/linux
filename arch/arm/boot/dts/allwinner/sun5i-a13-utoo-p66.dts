@@ -93,7 +93,7 @@
 };
 
 &reg_usb0_vbus {
-	gpio = <&pio 1 4 GPIO_ACTIVE_HIGH>; /* PB4 */
+	gpios = <&pio 1 4 GPIO_ACTIVE_HIGH>; /* PB4 */
 };
 
 &touchscreen {

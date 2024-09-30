@@ -212,7 +212,7 @@
 };
 
 &reg_ahci_5v {
-	gpio = <&pio 2 3 GPIO_ACTIVE_HIGH>;
+	gpios = <&pio 2 3 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -251,7 +251,7 @@
 };
 
 &reg_usb0_vbus {
-	gpio = <&pio 2 17 GPIO_ACTIVE_HIGH>;
+	gpios = <&pio 2 17 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 

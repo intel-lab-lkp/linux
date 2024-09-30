@@ -37,7 +37,7 @@
 		regulator-name = "lcd_3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpiof 10 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpiof 10 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 		power-supply = <&panel_pwr>;
@@ -48,7 +48,7 @@
 		regulator-name = "panel_pwr";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpiob 10 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpiob 10 GPIO_ACTIVE_HIGH>;
 		regulator-always-on;
 	};
 

@@ -39,7 +39,7 @@
 		regulator-name = "lcd-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -50,7 +50,7 @@
 		regulator-name = "wlreg_on";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 16 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 16 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -77,7 +77,7 @@
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio4 5 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio4 5 GPIO_ACTIVE_LOW>;
 	};
 
 	reg_usb_otg2_vbus: regulator-usb-otg2-vbus {

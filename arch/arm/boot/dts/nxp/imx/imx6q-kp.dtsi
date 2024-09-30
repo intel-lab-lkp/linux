@@ -92,7 +92,7 @@
 	reg_audio: regulator-audio {
 		compatible = "regulator-fixed";
 		regulator-name = "sgtl5000-supply";
-		gpio = <&gpio6 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};

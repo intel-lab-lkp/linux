@@ -180,7 +180,7 @@
 		regulator-name = "hub_reset";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

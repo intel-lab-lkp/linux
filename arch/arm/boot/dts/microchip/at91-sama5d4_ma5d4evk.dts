@@ -155,7 +155,7 @@
 
 	vcc_mmc1_reg: fixedregulator_mmc1 {
 		compatible = "regulator-fixed";
-		gpio = <&pioE 17 GPIO_ACTIVE_LOW>;
+		gpios = <&pioE 17 GPIO_ACTIVE_LOW>;
 		regulator-name = "VDD MCI1";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;

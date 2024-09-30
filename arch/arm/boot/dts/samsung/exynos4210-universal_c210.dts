@@ -60,7 +60,7 @@
 		regulator-name = "VMEM_VDD_2_8V";
 		regulator-min-microvolt = <2800000>;
 		regulator-max-microvolt = <2800000>;
-		gpio = <&gpe1 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpe1 3 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -122,7 +122,7 @@
 		regulator-name = "TSP_2_8V";
 		regulator-min-microvolt = <2800000>;
 		regulator-max-microvolt = <2800000>;
-		gpio = <&gpe2 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpe2 3 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -177,7 +177,7 @@
 		regulator-name = "HDMI_5V";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpe0 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpe0 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

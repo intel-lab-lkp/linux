@@ -108,7 +108,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		regulator-boot-on;
-		gpio = <&gpio3 22 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -125,7 +125,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		pinctrl-0 = <&pinctrl_usbotg_vbus>;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

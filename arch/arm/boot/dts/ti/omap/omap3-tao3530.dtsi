@@ -38,7 +38,7 @@
 		regulator-name = "hsusb2_vbus";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&twl_gpio 18 GPIO_ACTIVE_HIGH>;	/* GPIO LEDA */
+		gpios = <&twl_gpio 18 GPIO_ACTIVE_HIGH>;	/* GPIO LEDA */
 		startup-delay-us = <70000>;
 	};
 
@@ -64,7 +64,7 @@
 		regulator-name = "regulator-mmc2-sdio-poweron";
 		regulator-min-microvolt = <3150000>;
 		regulator-max-microvolt = <3150000>;
-		gpio = <&gpio5 29 GPIO_ACTIVE_LOW>;		/* gpio_157 */
+		gpios = <&gpio5 29 GPIO_ACTIVE_LOW>;		/* gpio_157 */
 		startup-delay-us = <10000>;
 	};
 };

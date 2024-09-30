@@ -48,7 +48,7 @@
 	reg_lcd_power: reg-lcd-power {
 		compatible = "regulator-fixed";
 		regulator-name = "reg-lcd-power";
-		gpio = <&pio 7 8 GPIO_ACTIVE_HIGH>; /* PH8 */
+		gpios = <&pio 7 8 GPIO_ACTIVE_HIGH>; /* PH8 */
 		enable-active-high;
 	};
 

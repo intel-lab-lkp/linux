@@ -21,7 +21,7 @@
 		regulator-name = "fec-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 3 0>;
+		gpios = <&gpio2 3 0>;
 		enable-active-high;
 	};
 
@@ -44,7 +44,7 @@
 		regulator-name = "can-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 6 0>;
+		gpios = <&gpio4 6 0>;
 	};
 
 	sound {

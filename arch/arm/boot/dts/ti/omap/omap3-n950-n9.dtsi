@@ -24,7 +24,7 @@
 		regulator-name = "VEMMC";
 		regulator-min-microvolt = <2900000>;
 		regulator-max-microvolt = <2900000>;
-		gpio = <&gpio5 29 GPIO_ACTIVE_HIGH>; /* gpio line 157 */
+		gpios = <&gpio5 29 GPIO_ACTIVE_HIGH>; /* gpio line 157 */
 		startup-delay-us = <150>;
 		enable-active-high;
 	};
@@ -32,7 +32,7 @@
 	vwlan_fixed: fixedregulator2 {
 		compatible = "regulator-fixed";
 		regulator-name = "VWLAN";
-		gpio = <&gpio2 3 GPIO_ACTIVE_HIGH>; /* gpio 35 */
+		gpios = <&gpio2 3 GPIO_ACTIVE_HIGH>; /* gpio 35 */
 		enable-active-high;
 	};
 

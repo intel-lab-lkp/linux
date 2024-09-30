@@ -38,7 +38,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		regulator-name = "lte_on";
-		gpio = <&gpio7 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 12 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -50,14 +50,14 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		regulator-name = "LTE_nReset";
-		gpio = <&gpio6 21 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 21 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
 
 	reg_wifi: regulator-wifi {
 		compatible = "regulator-fixed";
-		gpio = <&gpio2 30 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 30 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_wifi>;
@@ -73,7 +73,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		regulator-name = "wlan_rfkill";
-		gpio = <&gpio2 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 11 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -85,7 +85,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 05 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 05 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

@@ -661,7 +661,7 @@
 		regulator-name = "vdd_1v5";
 		regulator-min-microvolt = <1500000>;
 		regulator-max-microvolt = <1500000>;
-		gpio = <&pmic 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 0 GPIO_ACTIVE_HIGH>;
 	};
 
 	regulator-1v2 {
@@ -669,7 +669,7 @@
 		regulator-name = "vdd_1v2";
 		regulator-min-microvolt = <1200000>;
 		regulator-max-microvolt = <1200000>;
-		gpio = <&pmic 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -678,7 +678,7 @@
 		regulator-name = "vdd_pnl";
 		regulator-min-microvolt = <2800000>;
 		regulator-max-microvolt = <2800000>;
-		gpio = <&gpio TEGRA_GPIO(C, 6) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(C, 6) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -687,7 +687,7 @@
 		regulator-name = "vdd_bl";
 		regulator-min-microvolt = <2800000>;
 		regulator-max-microvolt = <2800000>;
-		gpio = <&gpio TEGRA_GPIO(W, 0) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(W, 0) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

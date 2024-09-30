@@ -70,7 +70,7 @@
 		regulator-name = "usb_nrst";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&portb 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&portb 5 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <70000>;
 		enable-active-high;
 		regulator-always-on;

@@ -44,7 +44,7 @@
 		regulator-name = "CSI_EN";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 24 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio2 24 GPIO_ACTIVE_LOW>;
 		regulator-always-on;
 	};
 

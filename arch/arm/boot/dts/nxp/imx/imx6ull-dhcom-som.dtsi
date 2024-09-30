@@ -45,7 +45,7 @@
 
 	reg_usb_otg2_vbus: regulator-usb-otg2-vbus {
 		compatible = "regulator-fixed";
-		gpio = <&gpio1 5 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio1 5 GPIO_ACTIVE_LOW>;
 		regulator-max-microvolt = <5000000>;
 		regulator-min-microvolt = <5000000>;
 		regulator-name = "usb-otg2-vbus";

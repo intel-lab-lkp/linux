@@ -49,7 +49,7 @@
 		regulator-name = "hdmi";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio2 27 GPIO_ACTIVE_HIGH>;	/* gpio59 */
+		gpios = <&gpio2 27 GPIO_ACTIVE_HIGH>;	/* gpio59 */
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -60,7 +60,7 @@
 		regulator-name = "vwl1271";
 		regulator-min-microvolt = <1650000>;
 		regulator-max-microvolt = <1650000>;
-		gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;	/* gpio94 */
+		gpios = <&gpio3 30 GPIO_ACTIVE_HIGH>;	/* gpio94 */
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};

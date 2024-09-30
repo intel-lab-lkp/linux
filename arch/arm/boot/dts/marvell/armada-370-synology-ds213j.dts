@@ -151,7 +151,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
 		pinctrl-0 = <&sata1_pwr_pin>;
 		pinctrl-names = "default";
 	};
@@ -165,7 +165,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 30 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 30 GPIO_ACTIVE_HIGH>;
 		pinctrl-0 = <&sata2_pwr_pin>;
 		pinctrl-names = "default";
 	};

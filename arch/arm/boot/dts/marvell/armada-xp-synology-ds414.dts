@@ -118,7 +118,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 10 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
 		pinctrl-0 = <&sata1_pwr_pin>;
 		pinctrl-names = "default";
 	};
@@ -132,7 +132,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
 		pinctrl-0 = <&sata2_pwr_pin>;
 		pinctrl-names = "default";
 	};
@@ -146,7 +146,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
 		pinctrl-0 = <&sata3_pwr_pin>;
 		pinctrl-names = "default";
 	};
@@ -160,7 +160,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio1 14 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>;
 		pinctrl-0 = <&sata4_pwr_pin>;
 		pinctrl-names = "default";
 	};

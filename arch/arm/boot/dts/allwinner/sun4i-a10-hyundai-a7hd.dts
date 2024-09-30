@@ -91,7 +91,7 @@
 };
 
 &reg_usb2_vbus {
-	gpio = <&pio 7 6 GPIO_ACTIVE_HIGH>; /* PH6 */
+	gpios = <&pio 7 6 GPIO_ACTIVE_HIGH>; /* PH6 */
 	status = "okay";
 };
 

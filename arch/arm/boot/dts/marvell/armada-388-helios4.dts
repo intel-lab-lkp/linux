@@ -64,7 +64,7 @@
 		regulator-boot-on;
 		regulator-always-on;
 		enable-active-high;
-		gpio = <&expander0 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander0 6 GPIO_ACTIVE_HIGH>;
 		vin-supply = <&reg_12v>;
 	};
 

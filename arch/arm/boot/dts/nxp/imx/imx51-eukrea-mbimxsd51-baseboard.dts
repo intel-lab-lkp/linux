@@ -50,7 +50,7 @@
 		regulator-name = "CAN_RST";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <20000>;
 		enable-active-high;
 	};

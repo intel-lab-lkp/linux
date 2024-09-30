@@ -147,7 +147,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&gpio5 24 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 24 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -170,7 +170,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&gpio5 25 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 25 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

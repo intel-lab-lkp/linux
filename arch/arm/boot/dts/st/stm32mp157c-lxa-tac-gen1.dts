@@ -27,7 +27,7 @@
 		compatible = "regulator-fixed";
 		vin-supply = <&reg_12v>;
 
-		gpio = <&gpioh 13 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpioh 13 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-max-microvolt = <12000000>;
 		regulator-min-microvolt = <12000000>;

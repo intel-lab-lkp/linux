@@ -40,7 +40,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&gpio5 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 7 GPIO_ACTIVE_HIGH>;
 	};
 
 	vmmcwl_fixed: fixedregulator-mmcwl {
@@ -48,7 +48,7 @@
 		regulator-name = "vmmcwl_fixed";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio1 20 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 20 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

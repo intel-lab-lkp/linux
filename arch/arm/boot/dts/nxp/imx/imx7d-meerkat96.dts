@@ -28,7 +28,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <100>;
-		gpio = <&gpio6 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 15 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -53,7 +53,7 @@
 		regulator-name = "usb_otg2_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

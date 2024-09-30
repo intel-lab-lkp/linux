@@ -91,7 +91,7 @@
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&evm_3v3_sw>;
 		enable-active-high;
-		gpio = <&pcf_gpio_21 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&pcf_gpio_21 5 GPIO_ACTIVE_HIGH>;
 	};
 
 	extcon_usb1: extcon_usb1 {
@@ -185,7 +185,7 @@
 		regulator-name = "vmmcwl_fixed";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio5 8 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 8 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

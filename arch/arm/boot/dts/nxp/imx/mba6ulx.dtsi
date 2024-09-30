@@ -84,7 +84,7 @@
 	reg_lcd_pwr: regulator-lcd-pwr {
 		compatible = "regulator-fixed";
 		regulator-name = "lcd-pwr";
-		gpio = <&expander_out0 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander_out0 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		status = "disabled";
 	};
@@ -110,7 +110,7 @@
 		regulator-name = "mpcie-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&expander_out0 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander_out0 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 		startup-delay-us = <500000>;
@@ -119,7 +119,7 @@
 
 	reg_otg2vbus_5v0: regulator-otg2-vbus-5v0 {
 		compatible = "regulator-fixed";
-		gpio = <&expander_out1 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander_out1 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-name = "otg2-vbus-supply-5v0";
 		regulator-min-microvolt = <5000000>;

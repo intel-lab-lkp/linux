@@ -31,7 +31,7 @@
 		regulator-name = "VBUS_VDD_5.0V";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpl2 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpl2 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

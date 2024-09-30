@@ -12,7 +12,7 @@
 		regulator-min-microvolt = <3150000>;
 		regulator-max-microvolt = <3150000>;
 
-		gpio = <&tlmm 69 0>;
+		gpios = <&tlmm 69 0>;
 		enable-active-high;
 
 		vin-supply = <&pm8941_s3>;

@@ -42,7 +42,7 @@
 
 	reg_eth_vio: regulator-eth-vio {
 		compatible = "regulator-fixed";
-		gpio = <&gpio1 7 0>;
+		gpios = <&gpio1 7 0>;
 		pinctrl-0 = <&pinctrl_enet_vio>;
 		pinctrl-names = "default";
 		regulator-always-on;
@@ -56,7 +56,7 @@
 	/* OE pin of the latch is low active */
 	reg_latch_oe_on: regulator-latch-oe-on {
 		compatible = "regulator-fixed";
-		gpio = <&gpio3 22 0>;
+		gpios = <&gpio3 22 0>;
 		regulator-always-on;
 		regulator-name = "latch_oe_on";
 	};
@@ -64,7 +64,7 @@
 	reg_usb_h1_vbus: regulator-usb-h1-vbus {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio3 31 0>;
+		gpios = <&gpio3 31 0>;
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		regulator-name = "usb_h1_vbus";

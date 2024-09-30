@@ -79,7 +79,7 @@
 		regulator-always-on;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_vcc_mmc0_reg_gpio>;
-		gpio = <&pioE 2 GPIO_ACTIVE_LOW>;
+		gpios = <&pioE 2 GPIO_ACTIVE_LOW>;
 	};
 };
 

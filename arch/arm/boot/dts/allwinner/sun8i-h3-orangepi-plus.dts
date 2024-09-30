@@ -58,7 +58,7 @@
 		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <100000>;
 		enable-active-high;
-		gpio = <&pio 3 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&pio 3 6 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_usb3_vbus: usb3-vbus {
@@ -68,7 +68,7 @@
 		regulator-max-microvolt = <5000000>;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&pio 6 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&pio 6 11 GPIO_ACTIVE_HIGH>;
 	};
 };
 

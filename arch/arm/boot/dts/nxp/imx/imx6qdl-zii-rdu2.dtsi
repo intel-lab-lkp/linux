@@ -86,7 +86,7 @@
 		regulator-name = "3V3_SD";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio7 8 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 8 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <1000>;
 		enable-active-high;
 		regulator-always-on;

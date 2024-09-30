@@ -110,75 +110,75 @@
 
 		rf_on {
 			label = "rf on";
-			gpio = <&pioA PIN_PC19 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PC19 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		wifi_on {
 			label = "wifi on";
-			gpio = <&pioA PIN_PC20 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PC20 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		zbe_test_radio {
 			label = "zbe test radio";
-			gpio = <&pioA PIN_PB21 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PB21 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		zbe_rst {
 			label = "zbe rst";
-			gpio = <&pioA PIN_PB25 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PB25 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		io_reset {
 			label = "io reset";
-			gpio = <&pioA PIN_PB30 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PB30 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		io_test_radio {
 			label = "io test radio";
-			gpio = <&pioA PIN_PC9 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PC9 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		io_boot_0 {
 			label = "io boot 0";
-			gpio = <&pioA PIN_PC11 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PC11 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		io_boot_1 {
 			label = "io boot 1";
-			gpio = <&pioA PIN_PC17 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PC17 GPIO_ACTIVE_HIGH>;
 			output;
 			init-low;
 		};
 
 		verbose_bootloader {
 			label = "verbose bootloader";
-			gpio = <&pioA PIN_PB11 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PB11 GPIO_ACTIVE_HIGH>;
 			input;
 		};
 
 		 nail_bed_detection  {
 			label = "nail bed detection";
-			gpio = <&pioA PIN_PB12 GPIO_ACTIVE_HIGH>;
+			gpios = <&pioA PIN_PB12 GPIO_ACTIVE_HIGH>;
 			input;
 		};
 
 		 id_usba {
 			label = "id usba";
-			gpio = <&pioA PIN_PC0 GPIO_ACTIVE_LOW>;
+			gpios = <&pioA PIN_PC0 GPIO_ACTIVE_LOW>;
 			input;
 		};
 	};

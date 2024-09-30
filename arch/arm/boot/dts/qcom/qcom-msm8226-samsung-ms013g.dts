@@ -72,7 +72,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&tlmm 111 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm 111 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-0 = <&motor_en_default>;
@@ -85,7 +85,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&tlmm 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-0 = <&tsp_en_default>;

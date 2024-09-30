@@ -89,7 +89,7 @@
 		regulator-name = "usb_h1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&max7310_b 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&max7310_b 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -98,7 +98,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&max7310_c 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&max7310_c 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -107,7 +107,7 @@
 		regulator-name = "can-en";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&max7310_b 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&max7310_b 6 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -116,7 +116,7 @@
 		regulator-name = "can-stby";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&max7310_b 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&max7310_b 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&reg_can_en>;
 	};

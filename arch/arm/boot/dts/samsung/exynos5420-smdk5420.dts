@@ -67,7 +67,7 @@
 		regulator-name = "VBUS0";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpg0 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpg0 5 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb300_vbus_en>;
 		enable-active-high;
@@ -78,7 +78,7 @@
 		regulator-name = "VBUS1";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpg1 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpg1 4 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb301_vbus_en>;
 		enable-active-high;

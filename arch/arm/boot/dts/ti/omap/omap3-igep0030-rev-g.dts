@@ -18,7 +18,7 @@
 		regulator-name = "regulator-lbep5clwmc-wlen";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio5 11 GPIO_ACTIVE_HIGH>;		/* gpio_139 - WL_EN */
+		gpios = <&gpio5 11 GPIO_ACTIVE_HIGH>;		/* gpio_139 - WL_EN */
 		enable-active-high;
 	};
 };

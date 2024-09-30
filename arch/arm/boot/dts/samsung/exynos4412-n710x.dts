@@ -19,7 +19,7 @@
 		regulator-name = "CAM_SENSOR_CORE_1.2V";
 		regulator-min-microvolt = <1200000>;
 		regulator-max-microvolt = <1200000>;
-		gpio = <&gpm4 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpm4 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };
@@ -29,12 +29,12 @@
 };
 
 &cam_af_reg {
-	gpio = <&gpm1 1 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpm1 1 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
 &cam_io_reg {
-	gpio = <&gpm0 7 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpm0 7 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -110,6 +110,6 @@
 };
 
 &touchkey_reg {
-	gpio = <&gpm0 5 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpm0 5 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };

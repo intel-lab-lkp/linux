@@ -127,7 +127,7 @@
 		regulator-name = "LCD-Supply";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio7 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 9 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -136,7 +136,7 @@
 		regulator-name = "LVDS-Supply";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio7 10 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 10 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

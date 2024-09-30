@@ -614,7 +614,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio0 29 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
 		};
 
 		regulator@2 {
@@ -627,7 +627,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio0 31 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 31 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -649,7 +649,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio0 30 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 30 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -671,7 +671,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio0 30 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 30 GPIO_ACTIVE_HIGH>;
 		};
 
 		regulator@2 {
@@ -684,7 +684,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -707,7 +707,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio0 30 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 30 GPIO_ACTIVE_HIGH>;
 		};
 
 		regulator@2 {
@@ -720,7 +720,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
 		};
 
 		regulator@3 {
@@ -733,7 +733,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
 		};
 
 		regulator@4 {
@@ -746,7 +746,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -768,7 +768,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio0 31 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 31 GPIO_ACTIVE_HIGH>;
 		};
 	};
 
@@ -791,7 +791,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
 		};
 
 		regulator@3 {
@@ -804,7 +804,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
 		};
 
 		regulator@4 {
@@ -817,7 +817,7 @@
 			regulator-always-on;
 			regulator-boot-on;
 			startup-delay-us = <5000000>;
-			gpio = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
 		};
 	};
 };

@@ -41,7 +41,7 @@
 		regulator-name = "usb_otg_switch";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio7 12 0>;
+		gpios = <&gpio7 12 0>;
 		regulator-boot-on;
 		regulator-always-on;
 	};
@@ -51,7 +51,7 @@
 		regulator-name = "usb_host1_en";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 31 0>;
+		gpios = <&gpio3 31 0>;
 		enable-active-high;
 	};
 

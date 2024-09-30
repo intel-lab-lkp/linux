@@ -60,7 +60,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 22 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_LOW>;
 	};
 
 	codec_osc: clock {
@@ -97,7 +97,7 @@
 		regulator-name = "lcd-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 11 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

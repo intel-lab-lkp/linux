@@ -1203,7 +1203,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(H, 5) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(H, 5) GPIO_ACTIVE_HIGH>;
 	};
 
 	usb1_vbus_reg: regulator-usb1 {
@@ -1212,7 +1212,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(N, 4) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(N, 4) GPIO_ACTIVE_HIGH>;
 		gpio-open-drain;
 		vin-supply = <&tps65090_dcdc1_reg>;
 	};
@@ -1223,7 +1223,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio TEGRA_GPIO(K, 6) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(K, 6) GPIO_ACTIVE_HIGH>;
 		gpio-open-drain;
 		vin-supply = <&tps65090_dcdc1_reg>;
 	};
@@ -1242,7 +1242,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		enable-active-high;
-		gpio = <&palmas_gpio 6 0>;
+		gpios = <&palmas_gpio 6 0>;
 	};
 
 	vdd_5v0_hdmi: regulator-hdmicon {
@@ -1250,7 +1250,7 @@
 		regulator-name = "VDD_5V0_HDMI_CON";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio TEGRA_GPIO(K, 1) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(K, 1) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&tps65090_dcdc1_reg>;
 	};

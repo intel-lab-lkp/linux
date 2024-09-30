@@ -41,7 +41,7 @@
 	reg_backlight: regulator-backlight {
 		compatible = "regulator-fixed";
 		regulator-name = "lcd-supply";
-		gpio = <&gpio2 5 0>;
+		gpios = <&gpio2 5 0>;
 		startup-delay-us = <5000>;
 	};
 

@@ -106,7 +106,7 @@
 		regulator-name = "P5.0V_USB3CON0";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gph0 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gph0 0 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb300_vbus_en>;
 		enable-active-high;
@@ -117,7 +117,7 @@
 		regulator-name = "P5.0V_USB3CON1";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gph0 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gph0 1 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb301_vbus_en>;
 		enable-active-high;

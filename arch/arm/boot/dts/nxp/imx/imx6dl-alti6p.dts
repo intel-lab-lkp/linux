@@ -119,7 +119,7 @@
 		regulator-name = "h1-vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -128,7 +128,7 @@
 		regulator-name = "otg-vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 22 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

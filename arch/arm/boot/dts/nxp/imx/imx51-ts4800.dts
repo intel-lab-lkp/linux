@@ -39,7 +39,7 @@
 		regulator-name = "enable_lcd_reg";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 9 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

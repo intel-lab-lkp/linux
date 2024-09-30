@@ -31,7 +31,7 @@
 
 	reg_sdio_pwr: regulator-sdio-pwr {
 		compatible = "regulator-fixed";
-		gpio = <&gpio6 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-name = "SDIO_PWR";
 		regulator-min-microvolt = <3300000>;
@@ -46,7 +46,7 @@
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -57,7 +57,7 @@
 		regulator-name = "usb_otg2_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio4 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 12 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -66,7 +66,7 @@
 		regulator-name = "wlan-en-regulator";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio2 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 12 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};

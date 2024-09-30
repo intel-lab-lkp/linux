@@ -118,7 +118,7 @@
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&vio_3v3>;
 		enable-active-high;
-		gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 21 GPIO_ACTIVE_HIGH>;
 	};
 
 	vio_1v8: fixedregulator-vio_1v8 {
@@ -134,7 +134,7 @@
 		regulator-name = "vmmcwl_fixed";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio5 8 0>;	/* gpio5_8 */
+		gpios = <&gpio5 8 0>;	/* gpio5_8 */
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};

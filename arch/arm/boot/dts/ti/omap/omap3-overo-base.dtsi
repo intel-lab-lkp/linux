@@ -38,7 +38,7 @@
 		regulator-name = "hsusb2_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio6 8 GPIO_ACTIVE_HIGH>;		/* gpio_168: vbus enable */
+		gpios = <&gpio6 8 GPIO_ACTIVE_HIGH>;		/* gpio_168: vbus enable */
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};
@@ -57,7 +57,7 @@
 		regulator-name = "regulator-w3cbw003c-npoweron";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 22 GPIO_ACTIVE_HIGH>;		/* gpio_54: nPoweron */
+		gpios = <&gpio2 22 GPIO_ACTIVE_HIGH>;		/* gpio_54: nPoweron */
 		enable-active-high;
 	};
 
@@ -69,7 +69,7 @@
 		regulator-name = "regulator-w3cbw003c-wifi-nreset";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 16 GPIO_ACTIVE_HIGH>;		/* gpio_16: WiFi nReset */
+		gpios = <&gpio1 16 GPIO_ACTIVE_HIGH>;		/* gpio_16: WiFi nReset */
 		startup-delay-us = <10000>;
 	};
 };

@@ -288,7 +288,7 @@
 		compatible = "regulator-fixed";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_vcc_mmc1_reg>;
-		gpio = <&pioE 4 GPIO_ACTIVE_LOW>;
+		gpios = <&pioE 4 GPIO_ACTIVE_LOW>;
 		regulator-name = "VDD MCI1";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;

@@ -70,7 +70,7 @@
 		regulator-name = "vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 2 0>;
+		gpios = <&gpio1 2 0>;
 	};
 
 	reg_usb_otg_vbus: regulator-usb-otg-vbus {
@@ -78,7 +78,7 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 4 0>;
+		gpios = <&gpio1 4 0>;
 	};
 
 	sound {

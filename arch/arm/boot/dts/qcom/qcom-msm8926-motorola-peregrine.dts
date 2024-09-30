@@ -58,7 +58,7 @@
 	vddio_disp_vreg: regulator-vddio-disp {
 		compatible = "regulator-fixed";
 		regulator-name = "vddio_disp";
-		gpio = <&tlmm 34 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm 34 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <300>;
 		enable-active-high;
 		regulator-boot-on;

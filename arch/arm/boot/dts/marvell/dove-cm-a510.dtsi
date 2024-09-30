@@ -113,7 +113,7 @@
 		regulator-name = "WiFi Power";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 7 GPIO_ACTIVE_HIGH>;
 	};
 };
 

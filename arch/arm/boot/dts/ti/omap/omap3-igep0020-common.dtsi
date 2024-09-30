@@ -46,7 +46,7 @@
 		regulator-name = "hsusb1_vbus";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&twl_gpio 18 GPIO_ACTIVE_LOW>;	/* GPIO LEDA */
+		gpios = <&twl_gpio 18 GPIO_ACTIVE_LOW>;	/* GPIO LEDA */
 		startup-delay-us = <70000>;
 	};
 

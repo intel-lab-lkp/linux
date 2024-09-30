@@ -60,7 +60,7 @@
 		regulator-name = "vwl1807";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&pca9539 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&pca9539 3 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};
@@ -72,7 +72,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio6 14 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 14 GPIO_ACTIVE_HIGH>;
 	};
 
 	sound {

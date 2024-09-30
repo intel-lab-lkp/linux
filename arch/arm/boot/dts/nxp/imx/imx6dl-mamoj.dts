@@ -71,7 +71,7 @@
 		regulator-name = "lcd-dvdd";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 1 0>;
+		gpios = <&gpio3 1 0>;
 		enable-active-high;
 		startup-delay-us = <21000>;
 	};
@@ -81,7 +81,7 @@
 		regulator-name = "lcd-enable";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 6 0>;
+		gpios = <&gpio3 6 0>;
 		enable-active-high;
 		vin-supply = <&reg_lcd_3v3>;
 	};
@@ -91,7 +91,7 @@
 		regulator-name = "lcd-vgl";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 20 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 20 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <6000>;
 		enable-active-high;
 		vin-supply = <&reg_lcd_power>;
@@ -102,7 +102,7 @@
 		regulator-name = "lcd-vgh";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 31 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <6000>;
 		enable-active-high;
 		vin-supply = <&reg_lcd_avdd>;
@@ -113,7 +113,7 @@
 		regulator-name = "lcd-vcom";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 14 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 14 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <11000>;
 		enable-active-high;
 		vin-supply = <&reg_lcd_vgh>;
@@ -124,7 +124,7 @@
 		regulator-name = "lcd-lr";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&reg_lcd_vcom>;
 	};
@@ -134,7 +134,7 @@
 		regulator-name = "lcd-avdd";
 		regulator-min-microvolt = <10280000>;
 		regulator-max-microvolt = <10280000>;
-		gpio = <&gpio2 13 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 13 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <6000>;
 		enable-active-high;
 		vin-supply = <&reg_lcd_vgl>;
@@ -147,7 +147,7 @@
 		pinctrl-0 = <&pinctrl_usbhost>;
 		regulator-min-microvolt = <50000000>;
 		regulator-max-microvolt = <50000000>;
-		gpio = <&gpio6 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 6 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -158,7 +158,7 @@
 		pinctrl-0 = <&pinctrl_wlan>;
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio6 21 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 21 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};

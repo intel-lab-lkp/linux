@@ -19,7 +19,7 @@
 		regulator-name = "fec-phy";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 9 0>;
+		gpios = <&gpio4 9 0>;
 		enable-active-high;
 	};
 

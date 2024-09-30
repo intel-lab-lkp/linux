@@ -118,7 +118,7 @@
 		regulator-name = "lcd_backlight_pwr";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio 47 GPIO_ACTIVE_HIGH>; /* lcd_backlight_pwr */
+		gpios = <&gpio 47 GPIO_ACTIVE_HIGH>; /* lcd_backlight_pwr */
 		enable-active-high;
 	};
 

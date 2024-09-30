@@ -196,7 +196,7 @@
 		regulator-max-microvolt = <5000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_lcd_enable>;
-		gpio = <&gpio3 23 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 23 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
 	};

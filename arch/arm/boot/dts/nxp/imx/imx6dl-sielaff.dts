@@ -117,7 +117,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_reg_backlight>;
 		enable-active-high;
-		gpio = <&gpio1 23 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 23 GPIO_ACTIVE_HIGH>;
 		regulator-name = "backlight";
 		regulator-min-microvolt = <12000000>;
 		regulator-max-microvolt = <12000000>;
@@ -128,7 +128,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_reg_usbotg_vbus>;
 		enable-active-high;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;

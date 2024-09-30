@@ -190,7 +190,7 @@
 };
 
 &reg_usb0_vbus {
-	gpio = <&pio 2 12 GPIO_ACTIVE_HIGH>; /* PC12 */
+	gpios = <&pio 2 12 GPIO_ACTIVE_HIGH>; /* PC12 */
 	status = "okay";
 };
 

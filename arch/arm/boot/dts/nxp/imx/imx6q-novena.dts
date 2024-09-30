@@ -134,7 +134,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		startup-delay-us = <400000>;
-		gpio = <&gpio5 17 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 17 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -144,7 +144,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <200000>;
-		gpio = <&gpio5 28 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 28 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -153,7 +153,7 @@
 		regulator-name = "lcd-lvds-power";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -162,7 +162,7 @@
 		regulator-name = "pcie-bus-power";
 		regulator-min-microvolt = <1500000>;
 		regulator-max-microvolt = <1500000>;
-		gpio = <&gpio7 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 12 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -173,7 +173,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <10000>;
-		gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

@@ -459,7 +459,7 @@
 		startup-delay-us = <200>;
 
 		/* GPIO223 (MEM_LDO_EN) */
-		gpio = <&gpio6 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-names = "default";
@@ -499,7 +499,7 @@
 		startup-delay-us = <100000>;
 
 		/* GPIO215 (WLAN_EN) */
-		gpio = <&gpio6 23 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 23 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-names = "default";
@@ -514,7 +514,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		/* GPIO219 */
-		gpio = <&gpio6 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 27 GPIO_ACTIVE_HIGH>;
 
 		startup-delay-us = <200>;
 		enable-active-high;
@@ -531,7 +531,7 @@
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
 		/* GPIO219 */
-		gpio = <&gpio6 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 27 GPIO_ACTIVE_HIGH>;
 
 		startup-delay-us = <200>;
 		enable-active-high;

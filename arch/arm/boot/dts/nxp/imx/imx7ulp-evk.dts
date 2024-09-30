@@ -37,7 +37,7 @@
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio_ptc 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio_ptc 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -48,7 +48,7 @@
 		regulator-max-microvolt = <3300000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usdhc0_rst>;
-		gpio = <&gpio_ptd 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio_ptd 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

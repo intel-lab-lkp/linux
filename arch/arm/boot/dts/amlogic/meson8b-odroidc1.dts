@@ -62,7 +62,7 @@
 
 		vin-supply = <&vcc_3v3>;
 
-		gpio = <&gpio GPIOY_12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio GPIOY_12 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

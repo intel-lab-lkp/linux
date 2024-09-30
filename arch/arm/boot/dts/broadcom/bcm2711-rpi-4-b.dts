@@ -20,7 +20,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "cam1-reg";
 		enable-active-high;
-		gpio = <&expgpio 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&expgpio 5 GPIO_ACTIVE_HIGH>;
 	};
 
 	sd_io_1v8_reg: regulator-sd-io-1v8 {
@@ -44,7 +44,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&expgpio 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&expgpio 6 GPIO_ACTIVE_HIGH>;
 	};
 };
 

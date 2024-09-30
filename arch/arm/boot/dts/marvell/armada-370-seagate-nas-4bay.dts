@@ -54,7 +54,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&pca9554 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&pca9554 6 GPIO_ACTIVE_HIGH>;
 	};
 
 	regulator-4 {
@@ -65,7 +65,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&pca9554 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&pca9554 7 GPIO_ACTIVE_HIGH>;
 	};
 
 	gpio-leds {

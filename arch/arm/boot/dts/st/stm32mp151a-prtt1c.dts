@@ -49,7 +49,7 @@
 		regulator-name = "pse-t1l1";
 		regulator-min-microvolt = <12000000>;
 		regulator-max-microvolt = <12000000>;
-		gpio = <&gpiog 13 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpiog 13 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -58,7 +58,7 @@
 		regulator-name = "pse-t1l2";
 		regulator-min-microvolt = <12000000>;
 		regulator-max-microvolt = <12000000>;
-		gpio = <&gpiog 14 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpiog 14 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

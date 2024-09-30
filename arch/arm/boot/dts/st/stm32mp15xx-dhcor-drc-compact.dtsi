@@ -41,7 +41,7 @@
 		regulator-name = "vio";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpioh 2 GPIO_ACTIVE_LOW>;
+		gpios = <&gpioh 2 GPIO_ACTIVE_LOW>;
 		regulator-always-on;
 		regulator-boot-on;
 		vin-supply = <&vdd>;

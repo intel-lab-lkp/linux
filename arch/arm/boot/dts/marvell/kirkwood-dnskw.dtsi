@@ -165,7 +165,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio1 7 0>;
+			gpios = <&gpio1 7 0>;
 		};
 		sata1_power: regulator@2 {
 			compatible = "regulator-fixed";
@@ -176,7 +176,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio1 8 0>;
+			gpios = <&gpio1 8 0>;
 		};
 	};
 };

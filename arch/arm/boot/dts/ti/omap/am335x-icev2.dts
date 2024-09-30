@@ -38,7 +38,7 @@
 		regulator-name = "vtt";
 		regulator-min-microvolt = <1500000>;
 		regulator-max-microvolt = <1500000>;
-		gpio = <&gpio0 18 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio0 18 GPIO_ACTIVE_HIGH>;
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;

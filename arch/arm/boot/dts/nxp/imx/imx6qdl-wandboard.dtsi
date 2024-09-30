@@ -85,7 +85,7 @@
 		regulator-max-microvolt = <5000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usbotgvbus>;
-		gpio = <&gpio3 22 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_LOW>;
 	};
 };
 

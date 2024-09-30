@@ -30,7 +30,7 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usb_mmc_reset>;
-		gpio = <&gpio4 19 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio4 19 GPIO_ACTIVE_LOW>;
 		startup-delay-us = <150000>;
 	};
 };

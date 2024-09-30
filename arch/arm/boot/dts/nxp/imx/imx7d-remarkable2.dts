@@ -52,7 +52,7 @@
 		regulator-max-microvolt = <3300000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_brcm_reg>;
-		gpio = <&gpio6 13 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 13 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		startup-delay-us = <150>;
 	};
@@ -65,7 +65,7 @@
 		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&pinctrl_digitizer_reg>;
 		pinctrl-1 = <&pinctrl_digitizer_reg>;
-		gpio = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		startup-delay-us = <100000>; /* 100 ms */
 	};
@@ -77,7 +77,7 @@
 		regulator-max-microvolt = <3300000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_touch_reg>;
-		gpio = <&gpio1 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

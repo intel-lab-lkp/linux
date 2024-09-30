@@ -46,7 +46,7 @@
 		regulator-name = "vcc-wifi";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&pio 1 2 GPIO_ACTIVE_LOW>; /* PB2 WIFI-EN */
+		gpios = <&pio 1 2 GPIO_ACTIVE_LOW>; /* PB2 WIFI-EN */
 		vin-supply = <&reg_dcdc3>;
 		startup-delay-us = <200000>;
 	};

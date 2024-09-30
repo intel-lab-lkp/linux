@@ -239,7 +239,7 @@
 		regulator-name = "VCC_USBO1";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio TEGRA_GPIO(N, 4) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(N, 4) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&reg_5v0>;
 	};
@@ -250,7 +250,7 @@
 		regulator-name = "VCC_USBH(2A|2C|2D|3|4)";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio TEGRA_GPIO(N, 5) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(N, 5) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&reg_5v0>;
 	};

@@ -21,7 +21,7 @@
 		startup-delay-us = <70000>;
 
 		/* WL_EN */
-		gpio = <&gpio0 26 0>;
+		gpios = <&gpio0 26 0>;
 		enable-active-high;
 	};
 };

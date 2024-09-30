@@ -36,7 +36,7 @@
 		enable-active-high;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio0 1 0>;
+		gpios = <&gpio0 1 0>;
 		pinctrl-0 = <&pmx_gpio_1>;
 		pinctrl-names = "default";
 	};

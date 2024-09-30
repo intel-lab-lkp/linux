@@ -516,7 +516,7 @@
 		regulator-name = "vdd_1v05";
 		regulator-min-microvolt = <1050000>;
 		regulator-max-microvolt = <1050000>;
-		gpio = <&pmic 2 0>;
+		gpios = <&pmic 2 0>;
 		enable-active-high;
 	};
 };

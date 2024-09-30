@@ -108,7 +108,7 @@
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
 		startup-delay-us = <300>; /* LAN9215 requires a POR of 200us minimum */
-		gpio = <&gpio0 17 0>;
+		gpios = <&gpio0 17 0>;
 	};
 
 	leds {

@@ -145,7 +145,7 @@
 		regulator-max-microvolt = <3300000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_etnphy_power>;
-		gpio = <&gpio5 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -172,7 +172,7 @@
 		regulator-max-microvolt = <3300000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_flexcan_xcvr>;
-		gpio = <&gpio3 5 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio3 5 GPIO_ACTIVE_LOW>;
 	};
 
 	reg_lcd_pwr: regulator-lcdpwr {
@@ -182,7 +182,7 @@
 		regulator-max-microvolt = <3300000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_lcd_pwr>;
-		gpio = <&gpio5 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 4 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
 		regulator-always-on;
@@ -195,7 +195,7 @@
 		regulator-max-microvolt = <5000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usbh1_vbus &pinctrl_usbh1_oc>;
-		gpio = <&gpio1 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -206,7 +206,7 @@
 		regulator-max-microvolt = <5000000>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usbotg_vbus &pinctrl_usbotg_oc>;
-		gpio = <&gpio1 26 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 26 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

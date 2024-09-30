@@ -28,7 +28,7 @@
 		regulator-name = "vddio-sd0";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 28 0>;
+		gpios = <&gpio3 28 0>;
 	};
 
 	reg_fec_3v3: regulator-fec-3v3 {
@@ -36,7 +36,7 @@
 		regulator-name = "fec-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 15 0>;
+		gpios = <&gpio2 15 0>;
 	};
 
 	reg_usb0_vbus: regulator-usb0-vbus {
@@ -44,7 +44,7 @@
 		regulator-name = "usb0_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 9 0>;
+		gpios = <&gpio3 9 0>;
 		enable-active-high;
 	};
 
@@ -53,7 +53,7 @@
 		regulator-name = "usb1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 8 0>;
+		gpios = <&gpio3 8 0>;
 		enable-active-high;
 	};
 
@@ -62,7 +62,7 @@
 		regulator-name = "lcd-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 30 0>;
+		gpios = <&gpio3 30 0>;
 		enable-active-high;
 	};
 
@@ -71,7 +71,7 @@
 		regulator-name = "can-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 13 0>;
+		gpios = <&gpio2 13 0>;
 		enable-active-high;
 	};
 

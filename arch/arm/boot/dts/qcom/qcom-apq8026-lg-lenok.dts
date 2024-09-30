@@ -51,7 +51,7 @@
 		regulator-min-microvolt = <2950000>;
 		regulator-max-microvolt = <2950000>;
 
-		gpio = <&tlmm 46 GPIO_ACTIVE_HIGH>;
+		gpios = <&tlmm 46 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-names = "default";

@@ -223,7 +223,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&gpio6 4 GPIO_ACTIVE_HIGH>;	/* GPIO_164 */
+		gpios = <&gpio6 4 GPIO_ACTIVE_HIGH>;	/* GPIO_164 */
 	};
 
 	/* wl1251 wifi+bt module */
@@ -234,7 +234,7 @@
 		regulator-max-microvolt = <1800000>;
 		startup-delay-us = <50000>;
 		enable-active-high;
-		gpio = <&gpio1 23 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 23 GPIO_ACTIVE_HIGH>;
 	};
 
 	/* wg7210 (wifi+bt module) 32k clock buffer */
@@ -245,7 +245,7 @@
 		regulator-max-microvolt = <1800000>;
 		regulator-always-on;
 		enable-active-high;
-		gpio = <&twl_gpio 13 GPIO_ACTIVE_HIGH>;
+		gpios = <&twl_gpio 13 GPIO_ACTIVE_HIGH>;
 	};
 };
 

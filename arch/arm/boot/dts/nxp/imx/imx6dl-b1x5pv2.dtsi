@@ -80,7 +80,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		vin-supply = <&reg_5v>;
-		gpio = <&tca6424a 16 GPIO_ACTIVE_HIGH>;
+		gpios = <&tca6424a 16 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		/*
 		 * This must be always-on for da7212, which has some not
@@ -99,7 +99,7 @@
 		vin-supply = <&reg_3v3>;
 		pinctrl-0 = <&pinctrl_q7_hda_reset>;
 		pinctrl-names = "default";
-		gpio = <&gpio6 8 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 8 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -121,7 +121,7 @@
 		vin-supply = <&reg_3v3>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_q7_sdio_power>;
-		gpio = <&gpio4 30 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 30 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		startup-delay-us = <70000>;
 	};
@@ -134,7 +134,7 @@
 		vin-supply = <&reg_syspwr>;
 		pinctrl-0 = <&pinctrl_q7_lcd_power>;
 		pinctrl-names = "default";
-		gpio = <&gpio1 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

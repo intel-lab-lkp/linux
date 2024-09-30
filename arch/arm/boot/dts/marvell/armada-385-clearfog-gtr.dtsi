@@ -104,7 +104,7 @@
 
 	v_usb3_con: regulator-v-usb3-con {
 		compatible = "regulator-fixed";
-		gpio = <&gpio0 22 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio0 22 GPIO_ACTIVE_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&cf_gtr_usb3_con_vbus>;
 		regulator-max-microvolt = <5000000>;

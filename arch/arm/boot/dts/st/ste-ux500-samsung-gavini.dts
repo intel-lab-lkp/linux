@@ -76,7 +76,7 @@
 		regulator-name = "VMEM_3V3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio0 6 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <5000>; // FIXME
 		enable-active-high;
 		pinctrl-names = "default";
@@ -95,7 +95,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		/* GPIO94 controls this regulator */
-		gpio = <&gpio2 30 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 30 GPIO_ACTIVE_HIGH>;
 		/* 70 ms power-on delay */
 		startup-delay-us = <70000>;
 		enable-active-high;
@@ -109,7 +109,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		/* GPIO94 controls this regulator */
-		gpio = <&gpio2 30 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 30 GPIO_ACTIVE_HIGH>;
 		/* 70 ms power-on delay */
 		startup-delay-us = <70000>;
 		enable-active-high;
@@ -128,7 +128,7 @@
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
 		/* GPIO219 controls this regulator */
-		gpio = <&gpio6 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 27 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		pinctrl-names = "default";
 		pinctrl-0 = <&lcd_pwr_en_default_mode>;
@@ -140,7 +140,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		/* GPIO219 controls this regulator too */
-		gpio = <&gpio6 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 27 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		pinctrl-names = "default";
 		pinctrl-0 = <&lcd_pwr_en_default_mode>;
@@ -163,7 +163,7 @@
 		regulator-max-microvolt = <3000000>;
 		startup-delay-us = <100000>;
 		/* GPIO215 (WLAN_RST_N to WL_REG_ON) */
-		gpio = <&gpio6 23 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio6 23 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		pinctrl-names = "default";
 		pinctrl-0 = <&wlan_ldo_en_default>;

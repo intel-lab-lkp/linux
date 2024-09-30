@@ -32,7 +32,7 @@
 			regulator-name = "usb0_vbus";
 			regulator-min-microvolt = <5000000>;
 			regulator-max-microvolt = <5000000>;
-			gpio = <&portb 8 GPIO_ACTIVE_HIGH>;
+			gpios = <&portb 8 GPIO_ACTIVE_HIGH>;
 			enable-active-high;
 		};
 
@@ -41,7 +41,7 @@
 			regulator-name = "usb1_vbus";
 			regulator-min-microvolt = <5000000>;
 			regulator-max-microvolt = <5000000>;
-			gpio = <&portb 10 GPIO_ACTIVE_HIGH>;
+			gpios = <&portb 10 GPIO_ACTIVE_HIGH>;
 			enable-active-high;
 		};
 
@@ -50,7 +50,7 @@
 			regulator-name = "usb2_vbus";
 			regulator-min-microvolt = <5000000>;
 			regulator-max-microvolt = <5000000>;
-			gpio = <&portb 12 GPIO_ACTIVE_HIGH>;
+			gpios = <&portb 12 GPIO_ACTIVE_HIGH>;
 			enable-active-high;
 		};
 
@@ -61,7 +61,7 @@
 			regulator-name = "sdio1_vmmc";
 			enable-active-high;
 			regulator-boot-on;
-			gpio = <&portb 21 GPIO_ACTIVE_HIGH>;
+			gpios = <&portb 21 GPIO_ACTIVE_HIGH>;
 		};
 
 		reg_sdio1_vqmmc: regulator_sido1_vqmmc {

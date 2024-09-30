@@ -41,7 +41,7 @@
 		regulator-name = "s25fl064_hold";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 17 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 17 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -53,7 +53,7 @@
 		regulator-name = "usb_hub_vbus";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio5 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -65,7 +65,7 @@
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 28 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 28 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};

@@ -177,7 +177,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio1 26 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 26 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_usb3_1_vbus: usb3-vbus1 {
@@ -188,7 +188,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&gpio1 27 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 27 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_sata0: pwr-sata0 {
@@ -198,7 +198,7 @@
 		regulator-max-microvolt = <12000000>;
 		enable-active-high;
 		regulator-boot-on;
-		gpio = <&gpio0 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_5v_sata0: v5-sata0 {

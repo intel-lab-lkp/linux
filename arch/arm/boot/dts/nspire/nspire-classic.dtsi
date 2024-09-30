@@ -51,7 +51,7 @@
 
 
 &vbus_reg {
-	gpio = <&gpio 5 0>;
+	gpios = <&gpio 5 0>;
 };
 
 / {

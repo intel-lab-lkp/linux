@@ -51,7 +51,7 @@
 	reg_brcm: brcm-reg {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio3 19 0>;
+		gpios = <&gpio3 19 0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_microsom_brcm_reg>;
 		regulator-name = "brcm_reg";

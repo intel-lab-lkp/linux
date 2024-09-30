@@ -122,7 +122,7 @@
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
 		startup-delay-us = <500>;
-		gpio = <&gpio7 25 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 25 GPIO_ACTIVE_HIGH>;
 	};
 
 	vcc_sdhi1: regulator-vcc-sdhi1 {
@@ -132,7 +132,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&gpio1 16 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio1 16 GPIO_ACTIVE_LOW>;
 	};
 
 	vccq_sdhi1: regulator-vccq-sdhi1 {

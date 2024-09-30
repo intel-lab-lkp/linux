@@ -14,7 +14,7 @@
 	vccio_flash: vccio-flash-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio0 RK_PB3 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio0 RK_PB3 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&flash_vol_sel>;
 		regulator-name = "vccio_flash";

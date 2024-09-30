@@ -48,7 +48,7 @@
 		regulator-name = "backlight";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio 5 4 0>;
+		gpios = <&gpio 5 4 0>;
 		enable-active-high;
 		regulator-boot-on;
 	};
@@ -58,7 +58,7 @@
 		regulator-name = "lcd";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio 5 0 0>;
+		gpios = <&gpio 5 0 0>;
 		enable-active-high;
 		regulator-boot-on;
 	};
@@ -68,7 +68,7 @@
 		regulator-name = "sd";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio 5 5 0>;
+		gpios = <&gpio 5 5 0>;
 		enable-active-high;
 		regulator-boot-on;
 	};

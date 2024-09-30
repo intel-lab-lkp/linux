@@ -70,7 +70,7 @@
 		regulator-name = "VDD_SD1";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio5 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		startup-delay-us = <200000>;
 		off-on-delay-us = <20000>;
@@ -81,7 +81,7 @@
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -92,7 +92,7 @@
 		pinctrl-0 = <&pinctrl_usb_otg2_vbus_reg>;
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -105,7 +105,7 @@
 
 	reg_brcm: regulator-brcm {
 		compatible = "regulator-fixed";
-		gpio = <&gpio4 21 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 21 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-name = "brcm_reg";
 		pinctrl-names = "default";
@@ -120,7 +120,7 @@
 		regulator-name = "lcd-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&extended_io 7 GPIO_ACTIVE_LOW>;
+		gpios = <&extended_io 7 GPIO_ACTIVE_LOW>;
 	};
 
 	reg_can2_3v3: regulator-can2-3v3 {
@@ -130,7 +130,7 @@
 		pinctrl-0 = <&pinctrl_flexcan2_reg>;
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 14 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio2 14 GPIO_ACTIVE_LOW>;
 	};
 
 	reg_fec2_3v3: regulator-fec2-3v3 {
@@ -140,7 +140,7 @@
 		pinctrl-0 = <&pinctrl_enet2_reg>;
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 4 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio1 4 GPIO_ACTIVE_LOW>;
 	};
 
 	backlight: backlight {

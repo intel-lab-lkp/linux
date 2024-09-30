@@ -1935,7 +1935,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&pmic 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&vdd_3v3_sys>;
 	};
@@ -1953,7 +1953,7 @@
 		regulator-name = "+USB0_VBUS_SW";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio TEGRA_GPIO(N, 4) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(N, 4) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		gpio-open-drain;
 		vin-supply = <&vdd_5v0_sys>;
@@ -1964,7 +1964,7 @@
 		regulator-name = "+5V_USB_HS";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio TEGRA_GPIO(N, 5) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(N, 5) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		gpio-open-drain;
 		vin-supply = <&vdd_5v0_sys>;
@@ -1977,7 +1977,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&pmic 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&pmic 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&vdd_3v3_sys>;
 	};
@@ -1987,7 +1987,7 @@
 		regulator-name = "+1.05V_RUN_AVDD_HDMI_PLL";
 		regulator-min-microvolt = <1050000>;
 		regulator-max-microvolt = <1050000>;
-		gpio = <&gpio TEGRA_GPIO(H, 7) GPIO_ACTIVE_LOW>;
+		gpios = <&gpio TEGRA_GPIO(H, 7) GPIO_ACTIVE_LOW>;
 		vin-supply = <&vdd_1v05_run>;
 	};
 
@@ -1996,7 +1996,7 @@
 		regulator-name = "+5V_HDMI_CON";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio TEGRA_GPIO(K, 6) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(K, 6) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&vdd_5v0_sys>;
 	};
@@ -2007,7 +2007,7 @@
 		regulator-name = "+5V_SATA";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio TEGRA_GPIO(EE, 2) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(EE, 2) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&vdd_5v0_sys>;
 	};
@@ -2017,7 +2017,7 @@
 		regulator-name = "+12V_SATA";
 		regulator-min-microvolt = <12000000>;
 		regulator-max-microvolt = <12000000>;
-		gpio = <&gpio TEGRA_GPIO(EE, 2) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(EE, 2) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&vdd_mux>;
 	};

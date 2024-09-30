@@ -19,7 +19,7 @@
 		regulator-name = "vwl1271";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio1 3 0>;   /* gpio_3 */
+		gpios = <&gpio1 3 0>;   /* gpio_3 */
 		startup-delay-us = <70000>;
 		enable-active-high;
 		vin-supply = <&vaux3>;

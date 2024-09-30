@@ -18,7 +18,7 @@
 		regulator-name = "lcd";
 		regulator-min-microvolt = <5050000>;
 		regulator-max-microvolt = <5050000>;
-		gpio = <&gpio4 0 GPIO_ACTIVE_HIGH>;	/* gpio96 */
+		gpios = <&gpio4 0 GPIO_ACTIVE_HIGH>;	/* gpio96 */
 		enable-active-high;
 		vin-supply = <&sw5>;
 	};

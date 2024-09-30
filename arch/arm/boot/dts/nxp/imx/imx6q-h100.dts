@@ -107,7 +107,7 @@
 		pinctrl-0 = <&pinctrl_h100_reg_hdmi>;
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio2 20 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 20 GPIO_ACTIVE_HIGH>;
 		regulator-name = "V_HDMI";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
@@ -117,7 +117,7 @@
 	reg_usbh1_vbus: regulator-usb-h1-vbus {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_h100_usbh1_vbus>;
 		regulator-name = "USB_H1_VBUS";
@@ -128,7 +128,7 @@
 	reg_usbotg_vbus: regulator-usb-otg-vbus {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio3 22 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 22 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_h100_usbotg_vbus>;
 		regulator-name = "USB_OTG_VBUS";

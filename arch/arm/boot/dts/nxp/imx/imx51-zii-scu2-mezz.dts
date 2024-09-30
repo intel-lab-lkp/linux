@@ -30,7 +30,7 @@
 		compatible = "regulator-fixed";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_usb_mmc_reset>;
-		gpio = <&gpio3 13 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio3 13 GPIO_ACTIVE_LOW>;
 		startup-delay-us = <150000>;
 		regulator-name = "usb_vbus";
 		regulator-min-microvolt = <5000000>;

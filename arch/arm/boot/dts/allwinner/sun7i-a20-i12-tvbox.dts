@@ -79,7 +79,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		enable-active-high;
-		gpio = <&pio 7 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&pio 7 2 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_vmmc3_io: vmmc3-io {
@@ -90,7 +90,7 @@
 		/* This controls VCC-PI, must be always on! */
 		regulator-always-on;
 		enable-active-high;
-		gpio = <&pio 7 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&pio 7 12 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_gmac_3v3: gmac-3v3 {
@@ -100,7 +100,7 @@
 		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <50000>;
 		enable-active-high;
-		gpio = <&pio 7 21 GPIO_ACTIVE_HIGH>;
+		gpios = <&pio 7 21 GPIO_ACTIVE_HIGH>;
 	};
 };
 

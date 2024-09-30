@@ -482,7 +482,7 @@
 	};
 
 	regulator-lcd3v {
-		gpio = <&gpio TEGRA_GPIO(BB, 0) GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio TEGRA_GPIO(BB, 0) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

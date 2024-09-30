@@ -74,7 +74,7 @@
 		regulator-name = "VSIL_1.2V";
 		regulator-min-microvolt = <1200000>;
 		regulator-max-microvolt = <1200000>;
-		gpio = <&gpl0 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpl0 4 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		vin-supply = <&buck7_reg>;
 	};
@@ -84,7 +84,7 @@
 		regulator-name = "VCC_3.3_MHL";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpl0 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpl0 4 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -93,7 +93,7 @@
 		regulator-name = "VCC_1.8_MHL";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpl0 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpl0 4 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -119,7 +119,7 @@
 		regulator-name = "MICBIAS_LDO_2.8V";
 		regulator-min-microvolt = <2800000>;
 		regulator-max-microvolt = <2800000>;
-		gpio = <&gpf1 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpf1 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

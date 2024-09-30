@@ -28,7 +28,7 @@
 		regulator-name = "VSD_3V3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -39,7 +39,7 @@
 		regulator-name = "VPERI_3V3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio5 2 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio5 2 GPIO_ACTIVE_LOW>;
 		/*
 		 * If you want to want to make this dynamic please
 		 * check schematics and test all affected peripherals:

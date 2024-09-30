@@ -62,7 +62,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		vin-supply = <&reg_vcc5v0>;
-		gpio = <&r_pio 0 9 GPIO_ACTIVE_HIGH>; /* PL9 */
+		gpios = <&r_pio 0 9 GPIO_ACTIVE_HIGH>; /* PL9 */
 		enable-active-high;
 	};
 
@@ -73,7 +73,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		vin-supply = <&reg_vcc3v3>;
-		gpio = <&r_pio 0 5 GPIO_ACTIVE_LOW>; /* PL5 */
+		gpios = <&r_pio 0 5 GPIO_ACTIVE_LOW>; /* PL5 */
 	};
 
 	reg_vcc_usbwifi: vcc-usbwifi {
@@ -82,7 +82,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&reg_vcc5v0>;
-		gpio = <&pio 6 4 GPIO_ACTIVE_HIGH>; /* PG4 */
+		gpios = <&pio 6 4 GPIO_ACTIVE_HIGH>; /* PG4 */
 		enable-active-high;
 	};
 
@@ -94,7 +94,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 		vin-supply = <&reg_vcc5v0>;
-		gpio = <&r_pio 0 8 GPIO_ACTIVE_HIGH>; /* PL8 */
+		gpios = <&r_pio 0 8 GPIO_ACTIVE_HIGH>; /* PL8 */
 		enable-active-high;
 	};
 };

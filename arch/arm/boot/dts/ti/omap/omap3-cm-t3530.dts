@@ -17,7 +17,7 @@
 		regulator-name = "regulator-mmc2-sdio-reset";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&twl_gpio 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&twl_gpio 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

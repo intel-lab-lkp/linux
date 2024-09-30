@@ -19,7 +19,7 @@
 		regulator-name = "hsusb2_vbus";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio1 22 GPIO_ACTIVE_HIGH>; /* gpio_22 */
+		gpios = <&gpio1 22 GPIO_ACTIVE_HIGH>; /* gpio_22 */
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};
@@ -46,7 +46,7 @@
 		regulator-name = "vwl1271";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio5 22 GPIO_ACTIVE_HIGH>;	/* gpio150 */
+		gpios = <&gpio5 22 GPIO_ACTIVE_HIGH>;	/* gpio150 */
 		startup-delay-us = <70000>;
 		enable-active-high;
 		vin-supply = <&vmmc2>;
@@ -95,7 +95,7 @@
 };
 
 &lcd_3v3 {
-	gpio = <&gpio5 25 GPIO_ACTIVE_LOW>;	/* gpio153 */
+	gpios = <&gpio5 25 GPIO_ACTIVE_LOW>;	/* gpio153 */
 };
 
 &lcd0 {

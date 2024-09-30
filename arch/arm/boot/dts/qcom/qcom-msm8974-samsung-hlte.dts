@@ -54,7 +54,7 @@
 		compatible = "regulator-fixed";
 		regulator-name = "touch-ldo";
 
-		gpio = <&pm8941_gpios 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&pm8941_gpios 9 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
 

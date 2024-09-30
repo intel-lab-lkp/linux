@@ -59,7 +59,7 @@
 		regulator-name = "w2cbw0015";
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
-		gpio = <&gpio2 11 GPIO_ACTIVE_LOW>;		/* gpio_43 */
+		gpios = <&gpio2 11 GPIO_ACTIVE_LOW>;		/* gpio_43 */
 		startup-delay-us = <70000>;
 		enable-active-high;
 		regulator-boot-on;

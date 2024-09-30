@@ -40,7 +40,7 @@
 		regulator-name = "LCD_VDD_2.2V";
 		regulator-min-microvolt = <2200000>;
 		regulator-max-microvolt = <2200000>;
-		gpio = <&gpc0 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpc0 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -49,7 +49,7 @@
 		regulator-name = "LED_A_3.0V";
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
-		gpio = <&gpj0 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpj0 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -91,12 +91,12 @@
 };
 
 &cam_af_reg {
-	gpio = <&gpm0 4 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpm0 4 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
 &cam_io_reg {
-	gpio = <&gpm0 2 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpm0 2 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 
@@ -205,11 +205,11 @@
 };
 
 &submic_bias_reg {
-	gpio = <&gpf2 0 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpf2 0 GPIO_ACTIVE_HIGH>;
 	enable-active-high;
 };
 
 &touchkey_reg {
-	gpio = <&gpm0 0 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpm0 0 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };

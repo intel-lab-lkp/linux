@@ -260,7 +260,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&expander1 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander1 15 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_usb2_0_vbus: v5-vbus0 {
@@ -270,7 +270,7 @@
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
 		regulator-always-on;
-		gpio = <&expander1 14 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander1 14 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_usb2_1_vbus: v5-vbus1 {
@@ -279,7 +279,7 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
-		gpio = <&expander0 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander0 4 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_sata0: pwr-sata0 {
@@ -289,7 +289,7 @@
 		regulator-max-microvolt = <12000000>;
 		enable-active-high;
 		regulator-boot-on;
-		gpio = <&expander0 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander0 2 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_5v_sata0: v5-sata0 {
@@ -315,7 +315,7 @@
 		regulator-max-microvolt = <12000000>;
 		enable-active-high;
 		regulator-boot-on;
-		gpio = <&expander0 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander0 3 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_5v_sata1: v5-sata1 {
@@ -339,7 +339,7 @@
 		regulator-name = "pwr_en_sata2";
 		enable-active-high;
 		regulator-boot-on;
-		gpio = <&expander0 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander0 11 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_5v_sata2: v5-sata2 {
@@ -363,7 +363,7 @@
 		regulator-name = "pwr_en_sata3";
 		enable-active-high;
 		regulator-boot-on;
-		gpio = <&expander0 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&expander0 12 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_5v_sata3: v5-sata3 {

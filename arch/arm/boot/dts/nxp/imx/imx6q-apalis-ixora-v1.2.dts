@@ -60,7 +60,7 @@
 	reg_3v3_vmmc: regulator-3v3-vmmc {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio2 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 0 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_enable_3v3_vmmc>;
 		regulator-max-microvolt = <3300000>;
@@ -72,7 +72,7 @@
 	reg_can1_supply: regulator-can1-supply {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio2 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 3 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_enable_can1_power>;
 		regulator-name = "can1_supply";
@@ -82,7 +82,7 @@
 	reg_can2_supply: regulator-can2-supply {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio3 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 15 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_enable_can2_power>;
 		regulator-name = "can2_supply";

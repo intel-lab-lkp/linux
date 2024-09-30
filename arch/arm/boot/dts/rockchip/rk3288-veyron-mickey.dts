@@ -447,7 +447,7 @@
 
 &vcc50_hdmi {
 	enable-active-high;
-	gpio = <&gpio7 RK_PB3 GPIO_ACTIVE_HIGH>;
+	gpios = <&gpio7 RK_PB3 GPIO_ACTIVE_HIGH>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&power_hdmi_on>;
 };

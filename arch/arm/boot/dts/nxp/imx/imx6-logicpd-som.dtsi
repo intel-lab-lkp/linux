@@ -20,7 +20,7 @@
 		regulator-name = "vwl1837";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio7 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 0 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <70000>;
 		enable-active-high;
 	};

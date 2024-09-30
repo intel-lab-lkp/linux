@@ -125,7 +125,7 @@
 		regulator-name = "usb_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio7 8 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 8 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 };

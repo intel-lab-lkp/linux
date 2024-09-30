@@ -71,7 +71,7 @@
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
 		enable-active-high;
-		gpio = <&pio 7 9 GPIO_ACTIVE_HIGH>; /* PH9 */
+		gpios = <&pio 7 9 GPIO_ACTIVE_HIGH>; /* PH9 */
 	};
 
 	reg_gmac_vdd: regulator-gmac-vdd {
@@ -80,7 +80,7 @@
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
 		enable-active-high;
-		gpio = <&pio 7 16 GPIO_ACTIVE_HIGH>; /* PH16 */
+		gpios = <&pio 7 16 GPIO_ACTIVE_HIGH>; /* PH16 */
 	};
 };
 
@@ -176,12 +176,12 @@
 };
 
 &reg_ahci_5v {
-	gpio = <&pio 7 15 GPIO_ACTIVE_HIGH>; /* PH15 */
+	gpios = <&pio 7 15 GPIO_ACTIVE_HIGH>; /* PH15 */
 	status = "okay";
 };
 
 &reg_usb1_vbus {
-	gpio = <&pio 7 2 GPIO_ACTIVE_HIGH>; /* PH2 */
+	gpios = <&pio 7 2 GPIO_ACTIVE_HIGH>; /* PH2 */
 	status = "okay";
 };
 

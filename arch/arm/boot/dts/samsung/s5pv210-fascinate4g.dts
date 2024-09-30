@@ -40,7 +40,7 @@
 	headset_micbias_reg: regulator-fixed-3 {
 		compatible = "regulator-fixed";
 		regulator-name = "Headset_Micbias";
-		gpio = <&gpj2 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpj2 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-names = "default";
@@ -50,7 +50,7 @@
 	main_micbias_reg: regulator-fixed-4 {
 		compatible = "regulator-fixed";
 		regulator-name = "Main_Micbias";
-		gpio = <&gpj4 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpj4 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-names = "default";

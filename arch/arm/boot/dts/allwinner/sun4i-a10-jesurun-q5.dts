@@ -77,7 +77,7 @@
 		regulator-max-microvolt = <3300000>;
 		startup-delay-us = <20000>;
 		enable-active-high;
-		gpio = <&pio 7 19 GPIO_ACTIVE_HIGH>;   /* PH19 */
+		gpios = <&pio 7 19 GPIO_ACTIVE_HIGH>;   /* PH19 */
 	};
 };
 

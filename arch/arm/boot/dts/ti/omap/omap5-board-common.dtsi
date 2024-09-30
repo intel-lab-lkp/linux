@@ -48,7 +48,7 @@
 		regulator-name = "vmmcsdio_fixed";
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
-		gpio = <&gpio5 12 GPIO_ACTIVE_HIGH>;	/* gpio140 WLAN_EN */
+		gpios = <&gpio5 12 GPIO_ACTIVE_HIGH>;	/* gpio140 WLAN_EN */
 		enable-active-high;
 		startup-delay-us = <70000>;
 		pinctrl-names = "default";

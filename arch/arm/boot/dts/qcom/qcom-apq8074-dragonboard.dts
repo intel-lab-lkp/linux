@@ -60,7 +60,7 @@
 		regulator-always-on;
 		regulator-boot-on;
 
-		gpio = <&pm8941_gpios 21 GPIO_ACTIVE_HIGH>;
+		gpios = <&pm8941_gpios 21 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
 		pinctrl-names = "default";

@@ -55,7 +55,7 @@
 		regulator-name = "VCC_SD3";
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
-		gpio = <&gpio2 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 11 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -66,7 +66,7 @@
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -77,7 +77,7 @@
 		regulator-name = "usb_otg2_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -91,7 +91,7 @@
 	reg_lcd_3v3: regulator-lcd-3v3 {
 		compatible = "regulator-fixed";
 		regulator-name = "lcd-3v3";
-		gpio = <&gpio3 27 0>;
+		gpios = <&gpio3 27 0>;
 		enable-active-high;
 	};
 
@@ -102,7 +102,7 @@
 		regulator-name = "peri_3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 16 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 16 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -114,7 +114,7 @@
 		regulator-name = "enet_3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 6 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio2 6 GPIO_ACTIVE_LOW>;
 		regulator-boot-on;
 		regulator-always-on;
 	};
@@ -126,7 +126,7 @@
 		regulator-name = "MPCIE_3V3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

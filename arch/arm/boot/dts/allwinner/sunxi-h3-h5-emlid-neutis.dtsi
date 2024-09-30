@@ -32,7 +32,7 @@
 };
 
 &reg_usb0_vbus {
-	gpio = <&r_pio 0 9 GPIO_ACTIVE_HIGH>;   /* PL9 */
+	gpios = <&r_pio 0 9 GPIO_ACTIVE_HIGH>;   /* PL9 */
 	status = "okay";
 };
 

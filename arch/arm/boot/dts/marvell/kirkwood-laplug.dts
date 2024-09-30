@@ -93,7 +93,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio0 15 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
 		};
 
 		usb_power_back2: regulator@2 {
@@ -105,7 +105,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio0 28 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio0 28 GPIO_ACTIVE_HIGH>;
 		};
 
 		usb_power_front: regulator@3 {
@@ -117,7 +117,7 @@
 			enable-active-high;
 			regulator-always-on;
 			regulator-boot-on;
-			gpio = <&gpio1 3 GPIO_ACTIVE_HIGH>;
+			gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
 		};
 	};
 };

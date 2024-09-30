@@ -175,7 +175,7 @@
 };
 
 &reg_usb1_vbus {
-	gpio = <&pio 6 13 GPIO_ACTIVE_HIGH>;
+	gpios = <&pio 6 13 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 

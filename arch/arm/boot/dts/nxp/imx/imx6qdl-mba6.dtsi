@@ -92,7 +92,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		/* PCIE.PWR_EN */
-		gpio = <&gpio2 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 		vin-supply = <&reg_mba6_3p3v>;

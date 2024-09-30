@@ -59,7 +59,7 @@
 		regulator-name = "BACKLIGHT ENABLE";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&portd 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&portd 1 GPIO_ACTIVE_HIGH>;
 	};
 
 	blen: blen {
@@ -67,7 +67,7 @@
 		regulator-name = "BACKLIGHT ENABLE";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&portd 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&portd 3 GPIO_ACTIVE_HIGH>;
 	};
 };
 

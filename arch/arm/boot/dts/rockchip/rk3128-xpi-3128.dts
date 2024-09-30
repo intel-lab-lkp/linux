@@ -64,7 +64,7 @@
 	 */
 	host_pwr_5v: host-pwr-5v-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpio3 RK_PC4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 RK_PC4 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <1500>;
 		regulator-name = "HOST_PWR_5V";
 		regulator-min-microvolt = <5000000>;
@@ -153,7 +153,7 @@
 
 	vcc_sd: vcc-sd-regulator {
 		compatible = "regulator-fixed";
-		gpio = <&gpio1 RK_PB6 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio1 RK_PB6 GPIO_ACTIVE_LOW>;
 		startup-delay-us = <500>;
 		regulator-name = "VCC_SD";
 		regulator-min-microvolt = <3300000>;

@@ -23,7 +23,7 @@
 		regulator-name = "vddio-sd0";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 28 0>;
+		gpios = <&gpio3 28 0>;
 	};
 
 	reg_usb0_vbus: regulator-2 {
@@ -31,7 +31,7 @@
 		regulator-name = "usb0_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 12 0>;
+		gpios = <&gpio3 12 0>;
 	};
 
 	reg_usb1_vbus: regulator-3 {
@@ -39,7 +39,7 @@
 		regulator-name = "usb1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio3 13 0>;
+		gpios = <&gpio3 13 0>;
 	};
 
 	sound {

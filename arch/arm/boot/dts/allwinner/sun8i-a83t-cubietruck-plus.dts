@@ -113,7 +113,7 @@
 		regulator-max-microvolt = <5000000>;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&pio 3 29 GPIO_ACTIVE_HIGH>; /* PD29 */
+		gpios = <&pio 3 29 GPIO_ACTIVE_HIGH>; /* PD29 */
 	};
 
 	reg_usb2_vbus: reg-usb2-vbus {
@@ -123,7 +123,7 @@
 		regulator-max-microvolt = <5000000>;
 		regulator-boot-on;
 		enable-active-high;
-		gpio = <&r_pio 0 6 GPIO_ACTIVE_HIGH>; /* PL6 */
+		gpios = <&r_pio 0 6 GPIO_ACTIVE_HIGH>; /* PL6 */
 	};
 
 	sound {

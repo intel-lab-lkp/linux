@@ -63,7 +63,7 @@
 		regulator-boot-on;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_reg_lvds>;
-		gpio = <&gpio1 19 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 19 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

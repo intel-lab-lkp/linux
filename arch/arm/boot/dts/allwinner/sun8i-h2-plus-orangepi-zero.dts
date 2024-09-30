@@ -86,7 +86,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-name = "vcc-wifi";
 		enable-active-high;
-		gpio = <&pio 0 20 GPIO_ACTIVE_HIGH>;
+		gpios = <&pio 0 20 GPIO_ACTIVE_HIGH>;
 	};
 
 	reg_vdd_cpux: vdd-cpux-regulator {

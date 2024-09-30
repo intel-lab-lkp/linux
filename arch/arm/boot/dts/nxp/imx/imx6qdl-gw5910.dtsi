@@ -123,7 +123,7 @@
 		pinctrl-0 = <&pinctrl_reg_wl>;
 		compatible = "regulator-fixed";
 		regulator-name = "wl";
-		gpio = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <100>;
 		enable-active-high;
 		regulator-min-microvolt = <3300000>;

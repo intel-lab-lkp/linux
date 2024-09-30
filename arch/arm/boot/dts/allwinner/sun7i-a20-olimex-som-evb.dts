@@ -239,7 +239,7 @@
 };
 
 &reg_ahci_5v {
-	gpio = <&pio 2 3 GPIO_ACTIVE_HIGH>;
+	gpios = <&pio 2 3 GPIO_ACTIVE_HIGH>;
 	status = "okay";
 };
 

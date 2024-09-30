@@ -101,7 +101,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
-		gpio = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -111,7 +111,7 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
-		gpio = <&gpio2 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -120,7 +120,7 @@
 		regulator-name = "VBUS_USBOTG1";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 5 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 5 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -129,7 +129,7 @@
 		regulator-name = "VBUS_USBOTG2";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio1 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 7 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -138,7 +138,7 @@
 		regulator-name = "VCC1V5_MPCIE";
 		regulator-min-microvolt = <1500000>;
 		regulator-max-microvolt = <1500000>;
-		gpio = <&pca9555 12 GPIO_ACTIVE_HIGH>;
+		gpios = <&pca9555 12 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -148,7 +148,7 @@
 		regulator-name = "VCC3V3_MPCIE";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&pca9555 10 GPIO_ACTIVE_HIGH>;
+		gpios = <&pca9555 10 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-always-on;
 	};
@@ -158,7 +158,7 @@
 		regulator-name = "VCC12V0_MBA7";
 		regulator-min-microvolt = <12000000>;
 		regulator-max-microvolt = <12000000>;
-		gpio = <&pca9555 11 GPIO_ACTIVE_HIGH>;
+		gpios = <&pca9555 11 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -167,7 +167,7 @@
 		regulator-name = "#SHTDN_LVDS";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&pca9555 1 GPIO_ACTIVE_HIGH>;
+		gpios = <&pca9555 1 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

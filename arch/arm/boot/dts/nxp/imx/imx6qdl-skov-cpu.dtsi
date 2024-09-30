@@ -141,7 +141,7 @@
 		regulator-name = "can1-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 31 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio3 31 GPIO_ACTIVE_LOW>;
 	};
 
 	reg_can2_stby: regulator-can2-stby {
@@ -151,7 +151,7 @@
 		regulator-name = "can2-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio4 11 GPIO_ACTIVE_LOW>;
+		gpios = <&gpio4 11 GPIO_ACTIVE_LOW>;
 	};
 
 	reg_tft_vcom: regulator-tft-vcom {
@@ -174,7 +174,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-always-on;
 		regulator-boot-on;
-		gpio = <&gpio7 8 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio7 8 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		startup-delay-us = <100>;
 	};

@@ -51,7 +51,7 @@
 		regulator-name = "usb_otg1_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio4 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 0 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -62,7 +62,7 @@
 		regulator-name = "usb_otg2_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		gpio = <&gpio4 2 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 2 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -87,7 +87,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_reg_lcd_3v3>;
 		regulator-name = "lcd-3v3";
-		gpio = <&gpio4 3 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 3 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -105,7 +105,7 @@
 		regulator-name = "SD1_SPWR";
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
-		gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 30 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 
@@ -124,7 +124,7 @@
 		regulator-name = "SD3_WIFI";
 		regulator-min-microvolt = <3000000>;
 		regulator-max-microvolt = <3000000>;
-		gpio = <&gpio4 4 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 4 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 	};
 

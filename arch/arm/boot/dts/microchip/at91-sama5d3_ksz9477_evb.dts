@@ -28,7 +28,7 @@
 		regulator-name = "mmc0-vcc";
 		regulator-max-microvolt = <3300000>;
 		regulator-min-microvolt = <3300000>;
-		gpio = <&pioE 2 GPIO_ACTIVE_LOW>;
+		gpios = <&pioE 2 GPIO_ACTIVE_LOW>;
 	};
 };
 

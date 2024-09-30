@@ -206,7 +206,7 @@
 		regulator-name = "LCD POWER";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio2 31 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio2 31 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
 	};
@@ -216,7 +216,7 @@
 		regulator-name = "LCD RESET";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 29 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio3 29 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 		regulator-boot-on;
 	};

@@ -71,7 +71,7 @@
 	reg_usbh1_vbus: regulator-usbh1-vbus {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio1 0 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_aristainetos2_usbh1_vbus>;
 		regulator-name = "usb_h1_vbus";
@@ -82,7 +82,7 @@
 	reg_usbotg_vbus: regulator-usbotg-vbus {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 15 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_aristainetos2_usbotg_vbus>;
 		regulator-name = "usb_otg_vbus";

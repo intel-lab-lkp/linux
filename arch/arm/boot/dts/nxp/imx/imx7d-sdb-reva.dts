@@ -12,7 +12,7 @@
 
 	reg_usb_otg2_vbus: regulator-usb-otg2-vbus {
 		pinctrl-0 = <&pinctrl_usb_otg2_vbus_reg_reva>;
-		gpio = <&gpio4 7 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio4 7 GPIO_ACTIVE_HIGH>;
 	};
 };
 
