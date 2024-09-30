@@ -313,6 +313,22 @@ driver separately, with no common DRM interface. Ideally this should be properly
 integrated at DRM scheduler to provide a common ground for all drivers. After a
 reset, KMD should reject new command submissions for affected contexts.
 
+Drivers can optionally make use of device wedged event (implemented as
+drm_dev_wedged_event() in DRM subsystem) which notifies userspace of wedged
+(hanged/unusable) state of the DRM device through a uevent. This is useful
+especially in cases where the device is no longer operating as expected even
+after a hardware reset and has become unrecoverable from driver context.
+Purpose of this implementation is to provide drivers a generic way to recover
+with the help of userspace intervention, and hence the vendor agnostic nature
+of the event.
+
+Different drivers may have different ideas of a "wedged device" depending on
+their hardware implementation. It is up to the drivers to decide when they see
+the need for recovery and how they want to recover from the available methods.
+Current implementation defines three recovery methods, out of which, drivers
+can choose to support any one or multiple of them. Preferred recovery method
+will be sent in the uevent environment as WEDGED=<method>.
+
 User Mode Driver
 ----------------
 
@@ -322,6 +338,32 @@ ioctl to the KMD to check the reset status, and this can be checked more often
 if the UMD requires it. After detecting a reset, UMD will then proceed to report
 it to the application using the appropriate API error code, as explained in the
 section below about robustness.
+
+On device wedged scenario, userspace will receive a uevent from KMD with
+its preferred recovery method in the uevent environment as WEDGED=<method>.
+Userspace consumers (sysadmin) can define udev rules to parse this event
+and take respective action to recover the device.
+
+.. table:: Wedged Device Recovery
+
+    =============== ==================================
+    Recovery method Consumer expectations
+    =============== ==================================
+    rebind          unbind + rebind driver
+    bus-reset       unbind + reset bus device + rebind
+    reboot          reboot system
+    =============== ==================================
+
+Userspace consumers can optionally read the recovery methods supported by the
+device via ``wedge_recovery`` sysfs attribute::
+
+  $ cat /sys/class/drm/card<N>/wedge_recovery
+  rebind
+  bus-reset
+  reboot
+
+This is useful in cases where the device supports multiple recovery methods
+which can be used as fallbacks.
 
 Robustness
 ----------
