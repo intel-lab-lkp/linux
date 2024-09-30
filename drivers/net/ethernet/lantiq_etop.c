@@ -447,6 +447,7 @@ ltq_etop_stop(struct net_device *dev)
 
 	netif_tx_stop_all_queues(dev);
 	phy_stop(dev->phydev);
+	phy_disconnect(dev->phydev);
 	for (i = 0; i < MAX_DMA_CHAN; i++) {
 		struct ltq_etop_chan *ch = &priv->ch[i];
 
@@ -711,7 +712,6 @@ static void ltq_etop_remove(struct platform_device *pdev)
 	if (dev) {
 		netif_tx_stop_all_queues(dev);
 		ltq_etop_hw_exit(dev);
-		phy_disconnect(dev->phydev);
 	}
 }
 
