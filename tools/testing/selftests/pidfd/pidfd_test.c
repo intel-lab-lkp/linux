@@ -85,6 +85,19 @@ static int test_pidfd_send_signal_simple_success(void)
 				   test_name);
 
 	signal_received = 0;
+
+	/* Now try the same thing only using PIDFD_SELF. */
+	ret = sys_pidfd_send_signal(PIDFD_SELF, SIGUSR1, NULL, 0);
+	if (ret < 0)
+		ksft_exit_fail_msg("%s test: Failed to send PIDFD_SELF signal\n",
+				   test_name);
+
+	if (signal_received != 1)
+		ksft_exit_fail_msg("%s test: Failed to receive PIDFD_SELF signal\n",
+				   test_name);
+
+	signal_received = 0;
+
 	ksft_test_result_pass("%s test: Sent signal\n", test_name);
 	return 0;
 }
