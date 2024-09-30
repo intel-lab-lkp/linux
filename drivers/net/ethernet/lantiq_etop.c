@@ -90,7 +90,6 @@ struct ltq_etop_priv {
 	struct net_device *netdev;
 	struct platform_device *pdev;
 	struct ltq_eth_data *pldata;
-	struct resource *res;
 
 	struct mii_bus *mii_bus;
 
@@ -620,28 +619,13 @@ ltq_etop_probe(struct platform_device *pdev)
 {
 	struct net_device *dev;
 	struct ltq_etop_priv *priv;
-	struct resource *res;
 	int err;
 	int i;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "failed to get etop resource");
-		return -ENOENT;
-	}
-
-	res = devm_request_mem_region(&pdev->dev, res->start,
-				      resource_size(res), dev_name(&pdev->dev));
-	if (!res) {
-		dev_err(&pdev->dev, "failed to request etop resource");
-		return -EBUSY;
-	}
-
-	ltq_etop_membase = devm_ioremap(&pdev->dev, res->start,
-					resource_size(res));
-	if (!ltq_etop_membase) {
+	ltq_etop_membase = devm_platformn_ioremap_resource(pdev, 0);
+	if (IS_ERR(ltq_etop_membase)) {
 		dev_err(&pdev->dev, "failed to remap etop engine %d", pdev->id);
-		return -ENOMEM;
+		return PTR_ERR(ltq_etop_membase);
 	}
 
 	dev = devm_alloc_etherdev_mqs(&pdev->dev, sizeof(struct ltq_etop_priv),
@@ -651,7 +635,6 @@ ltq_etop_probe(struct platform_device *pdev)
 	dev->netdev_ops = &ltq_eth_netdev_ops;
 	dev->ethtool_ops = &ltq_etop_ethtool_ops;
 	priv = netdev_priv(dev);
-	priv->res = res;
 	priv->pdev = pdev;
 	priv->pldata = dev_get_platdata(&pdev->dev);
 	priv->netdev = dev;
