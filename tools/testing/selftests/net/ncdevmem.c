@@ -688,16 +688,25 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (!server_ip)
-		error(1, 0, "Missing -s argument\n");
-
-	if (!port)
-		error(1, 0, "Missing -p argument\n");
-
 	if (!ifname)
 		error(1, 0, "Missing -f argument\n");
 
 	ifindex = if_nametoindex(ifname);
+
+	if (!server_ip && !client_ip) {
+		if (start_queue != -1)
+			error(1, 0, "don't support custom start queue for probing\n");
+		if (num_queues != 1)
+			error(1, 0, "don't support custom number of queues for probing\n");
+
+		start_queue = rxq_num(ifindex) - 2;
+		if (start_queue < 0)
+			error(1, 0, "couldn't detect number of queues\n");
+		num_queues = 2; /* make sure can bind to multiple queues */
+
+		run_devmem_tests();
+		return 0;
+	}
 
 	if (start_queue < 0) {
 		start_queue = rxq_num(ifindex) - 1;
@@ -711,7 +720,11 @@ int main(int argc, char *argv[])
 	for (; optind < argc; optind++)
 		fprintf(stderr, "extra arguments: %s\n", argv[optind]);
 
-	run_devmem_tests();
+	if (!server_ip)
+		error(1, 0, "Missing -s argument\n");
+
+	if (!port)
+		error(1, 0, "Missing -p argument\n");
 
 	mem = provider->alloc(getpagesize() * NUM_PAGES);
 	ret = is_server ? do_server(mem) : 1;
