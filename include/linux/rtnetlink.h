@@ -49,6 +49,19 @@ extern bool refcount_dec_and_rtnl_lock(refcount_t *r);
 
 DEFINE_LOCK_GUARD_0(rtnl, rtnl_lock(), rtnl_unlock())
 
+#ifdef CONFIG_DEBUG_NET_SMALL_RTNL
+void __rtnl_net_lock(struct net *net);
+void __rtnl_net_unlock(struct net *net);
+void rtnl_net_lock(struct net *net);
+void rtnl_net_unlock(struct net *net);
+int rtnl_net_lock_cmp_fn(const struct lockdep_map *a, const struct lockdep_map *b);
+#else
+#define __rtnl_net_lock(net)
+#define __rtnl_net_unlock(net)
+#define rtnl_net_lock(net) rtnl_lock()
+#define rtnl_net_unlock(net) rtnl_unlock()
+#endif
+
 extern wait_queue_head_t netdev_unregistering_wq;
 extern atomic_t dev_unreg_count;
 extern struct rw_semaphore pernet_ops_rwsem;
