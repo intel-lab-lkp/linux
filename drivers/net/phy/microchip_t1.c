@@ -226,6 +226,18 @@
 #define MICROCHIP_CABLE_MAX_TIME_DIFF	\
 	(MICROCHIP_CABLE_MIN_TIME_DIFF + MICROCHIP_CABLE_TIME_MARGIN)
 
+#define LAN887X_INT_STS				0xf000
+#define LAN887X_INT_MSK				0xf001
+#define LAN887X_INT_MSK_T1_PHY_INT_MSK		BIT(2)
+#define LAN887X_INT_MSK_LINK_UP_MSK		BIT(1)
+#define LAN887X_INT_MSK_LINK_DOWN_MSK		BIT(0)
+
+#define LAN887X_MX_CHIP_TOP_LINK_MSK	(LAN887X_INT_MSK_LINK_UP_MSK |\
+					 LAN887X_INT_MSK_LINK_DOWN_MSK)
+
+#define LAN887X_MX_CHIP_TOP_ALL_MSK	(LAN887X_INT_MSK_T1_PHY_INT_MSK |\
+					 LAN887X_MX_CHIP_TOP_LINK_MSK)
+
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937x/LAN887x T1 PHY driver"
 
@@ -1474,6 +1486,7 @@ static void lan887x_get_strings(struct phy_device *phydev, u8 *data)
 		ethtool_puts(&data, lan887x_hw_stats[i].string);
 }
 
+static int lan887x_config_intr(struct phy_device *phydev);
 static int lan887x_cd_reset(struct phy_device *phydev,
 			    enum cable_diag_state cd_done)
 {
@@ -1501,6 +1514,10 @@ static int lan887x_cd_reset(struct phy_device *phydev,
 			return rc;
 
 		rc = lan887x_phy_init(phydev);
+		if (rc < 0)
+			return rc;
+
+		rc = lan887x_config_intr(phydev);
 		if (rc < 0)
 			return rc;
 
@@ -1830,6 +1847,50 @@ static int lan887x_cable_test_get_status(struct phy_device *phydev,
 	return lan887x_cable_test_report(phydev);
 }
 
+static int lan887x_config_intr(struct phy_device *phydev)
+{
+	int ret;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		/* Clear the interrupt status before enabling interrupts */
+		ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, LAN887X_INT_STS);
+		if (ret < 0)
+			return ret;
+
+		/* Unmask for enabling interrupt */
+		ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, LAN887X_INT_MSK,
+				    (u16)~LAN887X_MX_CHIP_TOP_ALL_MSK);
+	} else {
+		ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, LAN887X_INT_MSK,
+				    GENMASK(15, 0));
+		if (ret < 0)
+			return ret;
+
+		ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, LAN887X_INT_STS);
+	}
+
+	return ret < 0 ? ret : 0;
+}
+
+static irqreturn_t lan887x_handle_interrupt(struct phy_device *phydev)
+{
+	int ret = IRQ_NONE;
+	int irq_status;
+
+	irq_status = phy_read_mmd(phydev, MDIO_MMD_VEND1, LAN887X_INT_STS);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	if (irq_status & LAN887X_MX_CHIP_TOP_LINK_MSK) {
+		phy_trigger_machine(phydev);
+		ret = IRQ_HANDLED;
+	}
+
+	return ret;
+}
+
 static struct phy_driver microchip_t1_phy_driver[] = {
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_LAN87XX),
@@ -1881,6 +1942,8 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.read_status	= genphy_c45_read_status,
 		.cable_test_start = lan887x_cable_test_start,
 		.cable_test_get_status = lan887x_cable_test_get_status,
+		.config_intr    = lan887x_config_intr,
+		.handle_interrupt = lan887x_handle_interrupt,
 	}
 };
 
