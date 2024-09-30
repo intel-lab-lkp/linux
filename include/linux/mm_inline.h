@@ -165,11 +165,16 @@ static inline int folio_lru_gen(struct folio *folio)
 static inline bool lru_gen_is_active(struct lruvec *lruvec, int gen)
 {
 	unsigned long max_seq = lruvec->lrugen.max_seq;
+	unsigned long min_seq = lruvec->lrugen.min_seq[LRU_GEN_FILE];
 
 	VM_WARN_ON_ONCE(gen >= MAX_NR_GENS);
 
-	/* see the comment on MIN_NR_GENS */
-	return gen == lru_gen_from_seq(max_seq) || gen == lru_gen_from_seq(max_seq - 1);
+	/* see the comment on MIN_NR_GENS
+	 * judge if there is active/inactive inversion by the number of file
+	 * type gens.
+	 */
+	return gen == lru_gen_from_seq(max_seq) ||
+		max_seq - min_seq >= 2 ? gen == lru_gen_from_seq(max_seq - 1) : 0;
 }
 
 static inline void lru_gen_update_size(struct lruvec *lruvec, struct folio *folio,
