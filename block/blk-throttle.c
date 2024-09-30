@@ -1381,15 +1381,8 @@ static u64 tg_prfill_limit(struct seq_file *sf, struct blkg_policy_data *pd,
 			 int off)
 {
 	struct throtl_grp *tg = pd_to_tg(pd);
-	const char *dname = blkg_dev_name(pd->blkg);
-	u64 bps_dft;
-	unsigned int iops_dft;
-
-	if (!dname)
-		return 0;
-
-	bps_dft = U64_MAX;
-	iops_dft = UINT_MAX;
+	u64 bps_dft = U64_MAX;
+	unsigned int iops_dft = UINT_MAX;
 
 	if (tg->bps[READ] == bps_dft &&
 	    tg->bps[WRITE] == bps_dft &&
@@ -1397,7 +1390,9 @@ static u64 tg_prfill_limit(struct seq_file *sf, struct blkg_policy_data *pd,
 	    tg->iops[WRITE] == iops_dft)
 		return 0;
 
-	seq_printf(sf, "%s", dname);
+	if (!blkg_print_dev_name(sf, pd->blkg))
+		return 0;
+
 	if (tg->bps[READ] == U64_MAX)
 		seq_printf(sf, " rbps=max");
 	else
