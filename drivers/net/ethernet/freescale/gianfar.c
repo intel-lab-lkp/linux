@@ -2769,13 +2769,6 @@ static void gfar_netpoll(struct net_device *dev)
 }
 #endif
 
-static void free_grp_irqs(struct gfar_priv_grp *grp)
-{
-	free_irq(gfar_irq(grp, TX)->irq, grp);
-	free_irq(gfar_irq(grp, RX)->irq, grp);
-	free_irq(gfar_irq(grp, ER)->irq, grp);
-}
-
 static int register_grp_irqs(struct gfar_priv_grp *grp)
 {
 	struct gfar_private *priv = grp->priv;
@@ -2789,80 +2782,58 @@ static int register_grp_irqs(struct gfar_priv_grp *grp)
 		/* Install our interrupt handlers for Error,
 		 * Transmit, and Receive
 		 */
-		err = request_irq(gfar_irq(grp, ER)->irq, gfar_error, 0,
-				  gfar_irq(grp, ER)->name, grp);
+		err = devm_request_irq(priv->dev, gfar_irq(grp, ER)->irq,
+				       gfar_error, 0, gfar_irq(grp, ER)->name,
+				       grp);
 		if (err < 0) {
 			netif_err(priv, intr, dev, "Can't get IRQ %d\n",
 				  gfar_irq(grp, ER)->irq);
 
-			goto err_irq_fail;
+			return err;
 		}
 		enable_irq_wake(gfar_irq(grp, ER)->irq);
 
-		err = request_irq(gfar_irq(grp, TX)->irq, gfar_transmit, 0,
-				  gfar_irq(grp, TX)->name, grp);
+		err = devm_request_irq(priv->dev, gfar_irq(grp, TX)->irq,
+				       gfar_transmit, 0,
+				       gfar_irq(grp, TX)->name, grp);
 		if (err < 0) {
 			netif_err(priv, intr, dev, "Can't get IRQ %d\n",
 				  gfar_irq(grp, TX)->irq);
-			goto tx_irq_fail;
+			return err;
 		}
-		err = request_irq(gfar_irq(grp, RX)->irq, gfar_receive, 0,
-				  gfar_irq(grp, RX)->name, grp);
+		err = devm_request_irq(priv->dev, gfar_irq(grp, RX)->irq,
+				       gfar_receive, 0, gfar_irq(grp, RX)->name,
+				       grp);
 		if (err < 0) {
 			netif_err(priv, intr, dev, "Can't get IRQ %d\n",
 				  gfar_irq(grp, RX)->irq);
-			goto rx_irq_fail;
+			return err;
 		}
 		enable_irq_wake(gfar_irq(grp, RX)->irq);
 
 	} else {
-		err = request_irq(gfar_irq(grp, TX)->irq, gfar_interrupt, 0,
-				  gfar_irq(grp, TX)->name, grp);
+		err = devm_request_irq(priv->dev, gfar_irq(grp, TX)->irq,
+				       gfar_interrupt, 0,
+				       gfar_irq(grp, TX)->name, grp);
 		if (err < 0) {
 			netif_err(priv, intr, dev, "Can't get IRQ %d\n",
 				  gfar_irq(grp, TX)->irq);
-			goto err_irq_fail;
+			return err;
 		}
 		enable_irq_wake(gfar_irq(grp, TX)->irq);
 	}
 
 	return 0;
-
-rx_irq_fail:
-	free_irq(gfar_irq(grp, TX)->irq, grp);
-tx_irq_fail:
-	free_irq(gfar_irq(grp, ER)->irq, grp);
-err_irq_fail:
-	return err;
-
-}
-
-static void gfar_free_irq(struct gfar_private *priv)
-{
-	int i;
-
-	/* Free the IRQs */
-	if (priv->device_flags & FSL_GIANFAR_DEV_HAS_MULTI_INTR) {
-		for (i = 0; i < priv->num_grps; i++)
-			free_grp_irqs(&priv->gfargrp[i]);
-	} else {
-		for (i = 0; i < priv->num_grps; i++)
-			free_irq(gfar_irq(&priv->gfargrp[i], TX)->irq,
-				 &priv->gfargrp[i]);
-	}
 }
 
 static int gfar_request_irq(struct gfar_private *priv)
 {
-	int err, i, j;
+	int err, i;
 
 	for (i = 0; i < priv->num_grps; i++) {
 		err = register_grp_irqs(&priv->gfargrp[i]);
-		if (err) {
-			for (j = 0; j < i; j++)
-				free_grp_irqs(&priv->gfargrp[j]);
+		if (err)
 			return err;
-		}
 	}
 
 	return 0;
@@ -2901,8 +2872,6 @@ static int gfar_close(struct net_device *dev)
 
 	/* Disconnect from the PHY */
 	phy_disconnect(dev->phydev);
-
-	gfar_free_irq(priv);
 
 	return 0;
 }
