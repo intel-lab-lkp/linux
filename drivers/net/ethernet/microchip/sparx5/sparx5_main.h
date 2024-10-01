@@ -56,14 +56,14 @@ enum sparx5_vlan_port_type {
 #define SPX5_PORTS             65
 #define SPX5_PORTS_ALL         70 /* Total number of ports */
 
-#define SPX5_PORT_CPU          (SPX5_PORTS)  /* Next port is CPU port */
+#define SPX5_PORT_CPU          SPX5_CONST(n_ports)  /* Next port is CPU port */
 #define SPX5_PORT_CPU_0        (SPX5_PORT_CPU + 0) /* CPU Port 65 */
 #define SPX5_PORT_CPU_1        (SPX5_PORT_CPU + 1) /* CPU Port 66 */
 #define SPX5_PORT_VD0          (SPX5_PORT_CPU + 2) /* VD0/Port 67 used for IPMC */
 #define SPX5_PORT_VD1          (SPX5_PORT_CPU + 3) /* VD1/Port 68 used for AFI/OAM */
 #define SPX5_PORT_VD2          (SPX5_PORT_CPU + 4) /* VD2/Port 69 used for IPinIP*/
 
-#define PGID_BASE              SPX5_PORTS /* Starts after port PGIDs */
+#define PGID_BASE              SPX5_CONST(n_ports) /* Starts after port PGIDs */
 #define PGID_UC_FLOOD          (PGID_BASE + 0)
 #define PGID_MC_FLOOD          (PGID_BASE + 1)
 #define PGID_IPV4_MC_DATA      (PGID_BASE + 2)
@@ -532,7 +532,7 @@ int sparx5_policer_conf_set(struct sparx5 *sparx5, struct sparx5_policer *pol);
 #define SPX5_PSFP_SG_MIN_CYCLE_TIME_NS (1 * NSEC_PER_USEC)
 #define SPX5_PSFP_SG_MAX_CYCLE_TIME_NS ((1 * NSEC_PER_SEC) - 1)
 #define SPX5_PSFP_SG_MAX_IPV (SPX5_PRIOS - 1)
-#define SPX5_PSFP_SG_OPEN (SPX5_PSFP_SG_CNT - 1)
+#define SPX5_PSFP_SG_OPEN (SPX5_CONST(n_gates) - 1)
 #define SPX5_PSFP_SG_CYCLE_TIME_DEFAULT 1000000
 #define SPX5_PSFP_SF_MAX_SDU 16383
 

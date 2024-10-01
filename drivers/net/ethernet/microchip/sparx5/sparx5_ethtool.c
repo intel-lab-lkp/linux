@@ -1122,7 +1122,7 @@ static void sparx5_update_stats(struct sparx5 *sparx5)
 {
 	int idx;
 
-	for (idx = 0; idx < SPX5_PORTS; idx++)
+	for (idx = 0; idx < SPX5_CONST(n_ports); idx++)
 		if (sparx5->ports[idx])
 			sparx5_update_port_stats(sparx5, idx);
 }
@@ -1235,14 +1235,15 @@ int sparx_stats_init(struct sparx5 *sparx5)
 	sparx5->num_stats = spx5_stats_count;
 	sparx5->num_ethtool_stats = ARRAY_SIZE(sparx5_stats_layout);
 	sparx5->stats = devm_kcalloc(sparx5->dev,
-				     SPX5_PORTS_ALL * sparx5->num_stats,
+				     SPX5_CONST(n_ports_all) *
+				     sparx5->num_stats,
 				     sizeof(u64), GFP_KERNEL);
 	if (!sparx5->stats)
 		return -ENOMEM;
 
 	mutex_init(&sparx5->queue_stats_lock);
 	sparx5_config_stats(sparx5);
-	for (portno = 0; portno < SPX5_PORTS; portno++)
+	for (portno = 0; portno < SPX5_CONST(n_ports); portno++)
 		if (sparx5->ports[portno])
 			sparx5_config_port_stats(sparx5, portno);
 

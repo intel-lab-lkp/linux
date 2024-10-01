@@ -32,6 +32,7 @@ static int sparx5_port_attr_pre_bridge_flags(struct sparx5_port *port,
 static void sparx5_port_update_mcast_ip_flood(struct sparx5_port *port, bool flood_flag)
 {
 	bool should_flood = flood_flag || port->is_mrouter;
+	struct sparx5 *sparx5 = port->sparx5; /* Used by PGID_* macros */
 	int pgid;
 
 	for (pgid = PGID_IPV4_MC_DATA; pgid <= PGID_IPV6_MC_CTRL; pgid++)
@@ -41,6 +42,8 @@ static void sparx5_port_update_mcast_ip_flood(struct sparx5_port *port, bool flo
 static void sparx5_port_attr_bridge_flags(struct sparx5_port *port,
 					  struct switchdev_brport_flags flags)
 {
+	struct sparx5 *sparx5 = port->sparx5; /* Used by PGID_* macros */
+
 	if (flags.mask & BR_MCAST_FLOOD) {
 		sparx5_pgid_update_mask(port, PGID_MC_FLOOD, !!(flags.val & BR_MCAST_FLOOD));
 		sparx5_port_update_mcast_ip_flood(port, !!(flags.val & BR_MCAST_FLOOD));
@@ -547,7 +550,7 @@ static int sparx5_handle_port_mdb_add(struct net_device *dev,
 
 	/* Add any mrouter ports to the new entry */
 	if (is_new && ether_addr_is_ip_mcast(v->addr))
-		for (i = 0; i < SPX5_PORTS; i++)
+		for (i = 0; i < SPX5_CONST(n_ports); i++)
 			if (sparx5->ports[i] && sparx5->ports[i]->is_mrouter)
 				sparx5_pgid_update_mask(sparx5->ports[i],
 							entry->pgid_idx,

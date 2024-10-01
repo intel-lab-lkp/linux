@@ -13,7 +13,7 @@
 
 #define SPARX5_MAX_PTP_ID	512
 
-#define TOD_ACC_PIN		0x4
+#define TOD_ACC_PIN            SPX5_CONST(tod_pin)
 
 enum {
 	PTP_PIN_ACTION_IDLE = 0,
@@ -630,7 +630,7 @@ int sparx5_ptp_init(struct sparx5 *sparx5)
 	/* Enable master counters */
 	spx5_wr(PTP_PTP_DOM_CFG_PTP_ENA_SET(0x7), sparx5, PTP_PTP_DOM_CFG);
 
-	for (i = 0; i < SPX5_PORTS; i++) {
+	for (i = 0; i < SPX5_CONST(n_ports); i++) {
 		port = sparx5->ports[i];
 		if (!port)
 			continue;
@@ -646,7 +646,7 @@ void sparx5_ptp_deinit(struct sparx5 *sparx5)
 	struct sparx5_port *port;
 	int i;
 
-	for (i = 0; i < SPX5_PORTS; i++) {
+	for (i = 0; i < SPX5_CONST(n_ports); i++) {
 		port = sparx5->ports[i];
 		if (!port)
 			continue;

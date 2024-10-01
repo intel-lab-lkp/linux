@@ -82,13 +82,13 @@ int sparx5_mact_learn(struct sparx5 *sparx5, int pgid,
 {
 	int addr, type, ret;
 
-	if (pgid < SPX5_PORTS) {
+	if (pgid < SPX5_CONST(n_ports)) {
 		type = MAC_ENTRY_ADDR_TYPE_UPSID_PN;
 		addr = pgid % 32;
 		addr += (pgid / 32) << 5; /* Add upsid */
 	} else {
 		type = MAC_ENTRY_ADDR_TYPE_MC_IDX;
-		addr = pgid - SPX5_PORTS;
+		addr = pgid - SPX5_CONST(n_ports);
 	}
 
 	mutex_lock(&sparx5->lock);
@@ -371,7 +371,7 @@ static void sparx5_mact_handle_entry(struct sparx5 *sparx5,
 		return;
 
 	port = LRN_MAC_ACCESS_CFG_2_MAC_ENTRY_ADDR_GET(cfg2);
-	if (port >= SPX5_PORTS)
+	if (port >= SPX5_CONST(n_ports))
 		return;
 
 	if (!test_bit(port, sparx5->bridge_mask))

@@ -14,7 +14,7 @@
 
 /* Scheduling elements per layer */
 #define SPX5_HSCH_L0_SE_CNT 5040
-#define SPX5_HSCH_L1_SE_CNT 64
+#define SPX5_HSCH_L1_SE_CNT SPX5_CONST(n_hsch_l1_elems)
 #define SPX5_HSCH_L2_SE_CNT 64
 
 /* Calculate Layer 0 Scheduler Element when using normal hierarchy */

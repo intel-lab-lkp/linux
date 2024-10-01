@@ -131,7 +131,7 @@ static enum sparx5_cal_bw sparx5_get_port_cal_speed(struct sparx5 *sparx5,
 {
 	struct sparx5_port *port;
 
-	if (portno >= SPX5_PORTS) {
+	if (portno >= SPX5_CONST(n_ports)) {
 		/* Internal ports */
 		if (portno == SPX5_PORT_CPU_0 || portno == SPX5_PORT_CPU_1) {
 			/* Equals 1.25G */
@@ -174,7 +174,7 @@ int sparx5_config_auto_calendar(struct sparx5 *sparx5)
 	}
 
 	/* Setup the calendar with the bandwidth to each port */
-	for (portno = 0; portno < SPX5_PORTS_ALL; portno++) {
+	for (portno = 0; portno < SPX5_CONST(n_ports_all); portno++) {
 		u64 reg, offset, this_bw;
 
 		spd = sparx5_get_port_cal_speed(sparx5, portno);
@@ -182,7 +182,7 @@ int sparx5_config_auto_calendar(struct sparx5 *sparx5)
 			continue;
 
 		this_bw = sparx5_cal_speed_to_value(spd);
-		if (portno < SPX5_PORTS)
+		if (portno < SPX5_CONST(n_ports))
 			used_port_bw += this_bw;
 		else
 			/* Internal ports are granted half the value */
@@ -213,7 +213,7 @@ int sparx5_config_auto_calendar(struct sparx5 *sparx5)
 		 sparx5, QSYS_CAL_CTRL);
 
 	/* Assign port bandwidth to auto calendar */
-	for (idx = 0; idx < ARRAY_SIZE(cal); idx++)
+	for (idx = 0; idx < SPX5_CONST(n_auto_cals); idx++)
 		spx5_wr(cal[idx], sparx5, QSYS_CAL_AUTO(idx));
 
 	/* Increase grant rate of all ports to account for
@@ -304,7 +304,7 @@ static int sparx5_dsm_calendar_calc(struct sparx5 *sparx5, u32 taxi,
 	for (idx = 0; idx < SPX5_DSM_CAL_MAX_DEVS_PER_TAXI; idx++) {
 		u32 portno = data->taxi_ports[idx];
 
-		if (portno < SPX5_TAXI_PORT_MAX) {
+		if (portno < SPX5_CONST(n_ports_all)) {
 			data->taxi_speeds[idx] = sparx5_cal_speed_to_value
 				(sparx5_get_port_cal_speed(sparx5, portno));
 		} else {
@@ -573,7 +573,7 @@ int sparx5_config_dsm_calendar(struct sparx5 *sparx5)
 	if (!data)
 		return -ENOMEM;
 
-	for (taxi = 0; taxi < SPX5_DSM_CAL_TAXIS; ++taxi) {
+	for (taxi = 0; taxi < SPX5_CONST(n_dsm_cal_taxis); ++taxi) {
 		err = sparx5_dsm_calendar_calc(sparx5, taxi, data);
 		if (err) {
 			dev_err(sparx5->dev, "DSM calendar calculation failed\n");

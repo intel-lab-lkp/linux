@@ -32,7 +32,7 @@
 const struct sparx5_regs *regs;
 
 #define QLIM_WM(fraction) \
-	((SPX5_BUFFER_MEMORY / SPX5_BUFFER_CELL_SZ - 100) * (fraction) / 100)
+	((SPX5_CONST(buf_size) / SPX5_BUFFER_CELL_SZ - 100) * (fraction) / 100)
 #define IO_RANGES 3
 
 struct initial_port_config {
@@ -584,7 +584,7 @@ static void sparx5_board_init(struct sparx5 *sparx5)
 		 GCB_HW_SGPIO_SD_CFG);
 
 	/* Refer to LOS SGPIO */
-	for (idx = 0; idx < SPX5_PORTS; idx++)
+	for (idx = 0; idx < SPX5_CONST(n_ports); idx++)
 		if (sparx5->ports[idx])
 			if (sparx5->ports[idx]->conf.sd_sgpio != ~0)
 				spx5_wr(sparx5->ports[idx]->conf.sd_sgpio,
@@ -608,7 +608,7 @@ static int sparx5_start(struct sparx5 *sparx5)
 	}
 
 	/* Enable CPU ports */
-	for (idx = SPX5_PORTS; idx < SPX5_PORTS_ALL; idx++)
+	for (idx = SPX5_CONST(n_ports); idx < SPX5_CONST(n_ports_all); idx++)
 		spx5_rmw(QFWD_SWITCH_PORT_MODE_PORT_ENA_SET(1),
 			 QFWD_SWITCH_PORT_MODE_PORT_ENA,
 			 sparx5,
