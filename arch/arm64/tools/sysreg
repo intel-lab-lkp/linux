@@ -3142,6 +3142,19 @@ EndEnum
 Field	7:0	Attr
 EndSysreg
 
+Sysreg	TRBMPAM_EL1	3	0	9	11	5
+Res0	63:27
+Field 	26	EN
+UnsignedEnum	25:24	MPAM_SP
+	0b00	SECURE_PARTID
+	0b01	NON_SECURE_PARTID
+	0b10	ROOT_PARTID
+	0b11	REALM_PARTID
+EndEnum
+Field	23:16	PMG
+Field	15:0	PARTID
+EndSysreg
+
 Sysreg	TRBTRG_EL1	3	0	9	11	6
 Res0	63:32
 Field	31:0	TRG
