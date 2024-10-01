@@ -129,6 +129,10 @@ Sysreg	SPMCGCR0_EL1	2	0	9	13	0
 Fields	SPMCGCRx_EL1
 EndSysreg
 
+Sysreg	SPMCGCR1_EL1    2       0       9       13      1
+Fields	SPMCGCRx_EL1
+EndSysreg
+
 Sysreg	SPMACCESSR_EL1	2	0	9	13	3
 Field	63:62	P31
 Field	61:60	P30
