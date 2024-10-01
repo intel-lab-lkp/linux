@@ -8,6 +8,7 @@
  */
 
 #include <linux/cper.h>
+#include <acpi/ghes.h>
 #include "cper_cxl.h"
 
 #define PROT_ERR_VALID_AGENT_TYPE		BIT_ULL(0)
@@ -43,6 +44,66 @@ enum {
 	DSP,	/* CXL Downstream Switch Port */
 	USP,	/* CXL Upstream Switch Port */
 };
+
+struct agent_info {
+	const char *string;
+	bool req_sn;
+	bool req_sbdf;
+};
+
+static const struct agent_info agent_info[] = {
+	[RCD] = {
+		.string = "Restricted CXL Device",
+		.req_sbdf = true,
+		.req_sn = true,
+	},
+	[RCH_DP] = {
+		.string = "Restricted CXL Host Downstream Port",
+		.req_sbdf = false,
+		.req_sn = false,
+	},
+	[DEVICE] = {
+		.string = "CXL Device",
+		.req_sbdf = true,
+		.req_sn = true,
+	},
+	[LD] = {
+		.string = "CXL Logical Device",
+		.req_sbdf = true,
+		.req_sn = true,
+	},
+	[FMLD] = {
+		.string = "CXL Fabric Manager managed Logical Device",
+		.req_sbdf = true,
+		.req_sn = true,
+	},
+	[RP] = {
+		.string = "CXL Root Port",
+		.req_sbdf = true,
+		.req_sn = false,
+	},
+	[DSP] = {
+		.string = "CXL Downstream Switch Port",
+		.req_sbdf = true,
+		.req_sn = false,
+	},
+	[USP] = {
+		.string = "CXL Upstream Switch Port",
+		.req_sbdf = true,
+		.req_sn = false,
+	},
+};
+
+static enum cxl_aer_err_type cper_severity_cxl_aer(int cper_severity)
+{
+	switch (cper_severity) {
+	case CPER_SEV_RECOVERABLE:
+	case CPER_SEV_FATAL:
+		return CXL_AER_UNCORRECTABLE;
+	default:
+		return CXL_AER_CORRECTABLE;
+	}
+}
 
 void cper_print_prot_err(const char *pfx, const struct cper_sec_prot_err *prot_err)
 {
@@ -175,4 +236,58 @@ void cper_print_prot_err(const char *pfx, const struct cper_sec_prot_err *prot_e
 		print_hex_dump(pfx, "", DUMP_PREFIX_OFFSET, 16, 4, cxl_ras->header_log,
 			       sizeof(cxl_ras->header_log), 0);
 	}
+}
+
+int cxl_cper_handle_prot_err_info(struct acpi_hest_generic_data *gdata,
+				  struct cxl_cper_prot_err *rec)
+{
+	struct cper_sec_prot_err *prot_err = acpi_hest_get_payload(gdata);
+	u8 *dvsec_start, *cap_start;
+
+	if (!(prot_err->valid_bits & PROT_ERR_VALID_DEVICE_ID)) {
+		pr_err(FW_WARN "No Device ID\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * The device ID or agent address is required for CXL RCD, CXL
+	 * SLD, CXL LD, CXL Fabric Manager Managed LD, CXL Root Port,
+	 * CXL Downstream Switch Port and CXL Upstream Switch Port.
+	 */
+	if (!(agent_info[prot_err->agent_type].req_sbdf)) {
+		pr_err(FW_WARN "Invalid agent type\n");
+		return -EINVAL;
+	}
+
+	rec->segment = prot_err->agent_addr.segment;
+	rec->bus = prot_err->agent_addr.bus;
+	rec->device = prot_err->agent_addr.device;
+	rec->function = prot_err->agent_addr.function;
+
+	if (!(prot_err->valid_bits & PROT_ERR_VALID_ERROR_LOG)) {
+		pr_err(FW_WARN "Invalid Protocol Error log\n");
+		return -EINVAL;
+	}
+
+	dvsec_start = (u8 *)(prot_err + 1);
+	cap_start = dvsec_start + prot_err->dvsec_len;
+	rec->cxl_ras = *(struct cxl_ras_capability_regs *)cap_start;
+
+	/*
+	 * Set device serial number unconditionally.
+	 *
+	 * Print a warning message if it is not valid. The device serial
+	 * number is required for CXL RCD, CXL SLD, CXL LD and CXL Fabric
+	 * Manager Managed LD.
+	 */
+	if (!(prot_err->valid_bits & PROT_ERR_VALID_SERIAL_NUMBER) ||
+	    !(agent_info[prot_err->agent_type].req_sn))
+		pr_warn(FW_WARN "No Device Serial number\n");
+
+	rec->lower_dw = prot_err->dev_serial_num.lower_dw;
+	rec->upper_dw = prot_err->dev_serial_num.upper_dw;
+
+	rec->severity = cper_severity_cxl_aer(gdata->error_severity);
+
+	return 0;
 }
