@@ -839,6 +839,8 @@ static void lan9303_handle_reset(struct lan9303 *chip)
 	if (!chip->reset_gpio)
 		return;
 
+	gpiod_set_value_cansleep(chip->reset_gpio, 1);
+
 	if (chip->reset_duration != 0)
 		msleep(chip->reset_duration);
 
@@ -863,8 +865,44 @@ static int lan9303_disable_processing(struct lan9303 *chip)
 
 static int lan9303_check_device(struct lan9303 *chip)
 {
+	/*
+	 * Loading of the largest supported EEPROM is expected to take at least
+	 * 5.9s
+	 */
+	int tout = 6000 / 30;
 	int ret;
 	u32 reg;
+
+	do {
+		ret = lan9303_read(chip->regmap, LAN9303_HW_CFG, &reg);
+		if (ret) {
+			dev_err(chip->dev, "failed to read HW_CFG reg: %d\n",
+				ret);
+		}
+		tout--;
+
+		dev_dbg(chip->dev, "%s: HW_CFG: 0x%08x\n", __func__, reg);
+		if ((reg & LAN9303_HW_CFG_READY) || !tout)
+			break;
+
+		/*
+		 * In I2C-managed configurations this polling loop will clash
+		 * with switch's reading of EEPROM right after reset and this
+		 * behaviour is not configurable. While lan9303_read() already
+		 * has quite long retry timeout, seems not all cases are being
+		 * detected as arbitration error.
+		 *
+		 * According to datasheet, EEPROM loader has 30ms timeout
+		 * (in case of missing EEPROM).
+		 */
+		msleep(30);
+	} while (true);
+
+	if (!tout) {
+		dev_err(chip->dev, "%s: HW_CFG not ready: 0x%08x\n",
+			__func__, reg);
+		return -ENODEV;
+	}
 
 	ret = lan9303_read(chip->regmap, LAN9303_CHIP_REV, &reg);
 	if (ret) {
