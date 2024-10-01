@@ -149,6 +149,16 @@ Field	3:2	P1
 Field	1:0	P0
 EndSysreg
 
+Sysreg	SPMIIDR_EL1	2	0	9	13	4
+Res0	63:32
+Field	31:20	ProductID
+Field	19:16	Variant
+Field	15:12	Revision
+Field	11:8	Implementer_high
+Res0	7
+Field	6:0	Implementer_low
+EndSysreg
+
 Sysreg	SPMDEVAFF_EL1	2	0	9	13	6
 Res0	63:40
 Field	39:32	Aff3
