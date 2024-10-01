@@ -244,9 +244,9 @@ struct adp_constants {
 	u8 max_col_num;
 	u8 col_shift;
 	u8 c4_extend_cfg;
-	u8 (*bank) (u8 offset);
-	u8 (*bit) (u8 offset);
-	u8 (*reg) (u8 reg);
+	u8 (*bank)(u8 offset);
+	u8 (*bit)(u8 offset);
+	u8 (*reg)(u8 reg);
 };
 
 struct adp5589_info {
@@ -274,7 +274,7 @@ struct adp5589_kpad {
 	u32 reset2_keys[2];
 	u32 nkeys_reset2;
 	unsigned short gpimapsize;
-	unsigned extend_cfg;
+	unsigned int extend_cfg;
 	unsigned char gpiomap[ADP5589_MAXGPIO];
 	struct gpio_chip gc;
 	struct mutex gpio_lock;	/* Protect cached dir, dat_out */
@@ -416,7 +416,7 @@ static int adp5589_write(struct i2c_client *client, u8 reg, u8 val)
 	return i2c_smbus_write_byte_data(client, reg, val);
 }
 
-static int adp5589_gpio_get_value(struct gpio_chip *chip, unsigned off)
+static int adp5589_gpio_get_value(struct gpio_chip *chip, unsigned int off)
 {
 	struct adp5589_kpad *kpad = gpiochip_get_data(chip);
 	unsigned int bank = kpad->info->var->bank(kpad->gpiomap[off]);
@@ -438,7 +438,7 @@ static int adp5589_gpio_get_value(struct gpio_chip *chip, unsigned off)
 }
 
 static void adp5589_gpio_set_value(struct gpio_chip *chip,
-				   unsigned off, int val)
+				   unsigned int off, int val)
 {
 	struct adp5589_kpad *kpad = gpiochip_get_data(chip);
 	unsigned int bank = kpad->info->var->bank(kpad->gpiomap[off]);
@@ -455,7 +455,8 @@ static void adp5589_gpio_set_value(struct gpio_chip *chip,
 		      bank, kpad->dat_out[bank]);
 }
 
-static int adp5589_gpio_direction_input(struct gpio_chip *chip, unsigned off)
+static int adp5589_gpio_direction_input(struct gpio_chip *chip,
+					unsigned int off)
 {
 	struct adp5589_kpad *kpad = gpiochip_get_data(chip);
 	unsigned int bank = kpad->info->var->bank(kpad->gpiomap[off]);
@@ -470,7 +471,7 @@ static int adp5589_gpio_direction_input(struct gpio_chip *chip, unsigned off)
 }
 
 static int adp5589_gpio_direction_output(struct gpio_chip *chip,
-					 unsigned off, int val)
+					 unsigned int off, int val)
 {
 	struct adp5589_kpad *kpad = gpiochip_get_data(chip);
 	unsigned int bank = kpad->info->var->bank(kpad->gpiomap[off]);
