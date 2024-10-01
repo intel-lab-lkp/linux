@@ -661,12 +661,8 @@ ltq_etop_probe(struct platform_device *pdev)
 		priv->ch[i].netdev = dev;
 	}
 
-	err = devm_register_netdev(&pdev->dev, dev);
-	if (err)
-		return err;
-
 	platform_set_drvdata(pdev, dev);
-	return 0;
+	return devm_register_netdev(&pdev->dev, dev);
 }
 
 static void ltq_etop_remove(struct platform_device *pdev)
