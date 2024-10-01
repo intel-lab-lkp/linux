@@ -359,10 +359,10 @@ static int sparx5_switchdev_event(struct notifier_block *nb,
 	struct sparx5_switchdev_event_work *switchdev_work;
 	struct switchdev_notifier_fdb_info *fdb_info;
 	struct switchdev_notifier_info *info = ptr;
-	struct sparx5 *spx5;
+	struct sparx5 *sparx5;
 	int err;
 
-	spx5 = container_of(nb, struct sparx5, switchdev_nb);
+	sparx5 = container_of(nb, struct sparx5, switchdev_nb);
 
 	switch (event) {
 	case SWITCHDEV_PORT_ATTR_SET:
@@ -379,7 +379,7 @@ static int sparx5_switchdev_event(struct notifier_block *nb,
 
 		switchdev_work->dev = dev;
 		switchdev_work->event = event;
-		switchdev_work->sparx5 = spx5;
+		switchdev_work->sparx5 = sparx5;
 
 		fdb_info = container_of(info,
 					struct switchdev_notifier_fdb_info,
@@ -503,10 +503,10 @@ out:
 	return found;
 }
 
-static void sparx5_cpu_copy_ena(struct sparx5 *spx5, u16 pgid, bool enable)
+static void sparx5_cpu_copy_ena(struct sparx5 *sparx5, u16 pgid, bool enable)
 {
 	spx5_rmw(ANA_AC_PGID_MISC_CFG_PGID_CPU_COPY_ENA_SET(enable),
-		 ANA_AC_PGID_MISC_CFG_PGID_CPU_COPY_ENA, spx5,
+		 ANA_AC_PGID_MISC_CFG_PGID_CPU_COPY_ENA, sparx5,
 		 ANA_AC_PGID_MISC_CFG(pgid));
 }
 
@@ -515,7 +515,7 @@ static int sparx5_handle_port_mdb_add(struct net_device *dev,
 				      const struct switchdev_obj_port_mdb *v)
 {
 	struct sparx5_port *port = netdev_priv(dev);
-	struct sparx5 *spx5 = port->sparx5;
+	struct sparx5 *sparx5 = port->sparx5;
 	struct sparx5_mdb_entry *entry;
 	bool is_host, is_new;
 	int err, i;
@@ -529,40 +529,40 @@ static int sparx5_handle_port_mdb_add(struct net_device *dev,
 	/* When VLAN unaware the vlan value is not parsed and we receive vid 0.
 	 * Fall back to bridge vid 1.
 	 */
-	if (!br_vlan_enabled(spx5->hw_bridge_dev))
+	if (!br_vlan_enabled(sparx5->hw_bridge_dev))
 		vid = 1;
 	else
 		vid = v->vid;
 
 	is_new = false;
-	entry = sparx5_mdb_get_entry(spx5, v->addr, vid);
+	entry = sparx5_mdb_get_entry(sparx5, v->addr, vid);
 	if (!entry) {
-		err = sparx5_alloc_mdb_entry(spx5, v->addr, vid, &entry);
+		err = sparx5_alloc_mdb_entry(sparx5, v->addr, vid, &entry);
 		is_new = true;
 		if (err)
 			return err;
 	}
 
-	mutex_lock(&spx5->mdb_lock);
+	mutex_lock(&sparx5->mdb_lock);
 
 	/* Add any mrouter ports to the new entry */
 	if (is_new && ether_addr_is_ip_mcast(v->addr))
 		for (i = 0; i < SPX5_PORTS; i++)
-			if (spx5->ports[i] && spx5->ports[i]->is_mrouter)
-				sparx5_pgid_update_mask(spx5->ports[i],
+			if (sparx5->ports[i] && sparx5->ports[i]->is_mrouter)
+				sparx5_pgid_update_mask(sparx5->ports[i],
 							entry->pgid_idx,
 							true);
 
 	if (is_host && !entry->cpu_copy) {
-		sparx5_cpu_copy_ena(spx5, entry->pgid_idx, true);
+		sparx5_cpu_copy_ena(sparx5, entry->pgid_idx, true);
 		entry->cpu_copy = true;
 	} else if (!is_host) {
 		sparx5_pgid_update_mask(port, entry->pgid_idx, true);
 		set_bit(port->portno, entry->port_mask);
 	}
-	mutex_unlock(&spx5->mdb_lock);
+	mutex_unlock(&sparx5->mdb_lock);
 
-	sparx5_mact_learn(spx5, entry->pgid_idx, entry->addr, entry->vid);
+	sparx5_mact_learn(sparx5, entry->pgid_idx, entry->addr, entry->vid);
 
 	return 0;
 }
@@ -572,7 +572,7 @@ static int sparx5_handle_port_mdb_del(struct net_device *dev,
 				      const struct switchdev_obj_port_mdb *v)
 {
 	struct sparx5_port *port = netdev_priv(dev);
-	struct sparx5 *spx5 = port->sparx5;
+	struct sparx5 *sparx5 = port->sparx5;
 	struct sparx5_mdb_entry *entry;
 	bool is_host;
 	u16 vid;
@@ -582,18 +582,18 @@ static int sparx5_handle_port_mdb_del(struct net_device *dev,
 
 	is_host = netif_is_bridge_master(v->obj.orig_dev);
 
-	if (!br_vlan_enabled(spx5->hw_bridge_dev))
+	if (!br_vlan_enabled(sparx5->hw_bridge_dev))
 		vid = 1;
 	else
 		vid = v->vid;
 
-	entry = sparx5_mdb_get_entry(spx5, v->addr, vid);
+	entry = sparx5_mdb_get_entry(sparx5, v->addr, vid);
 	if (!entry)
 		return 0;
 
-	mutex_lock(&spx5->mdb_lock);
+	mutex_lock(&sparx5->mdb_lock);
 	if (is_host && entry->cpu_copy) {
-		sparx5_cpu_copy_ena(spx5, entry->pgid_idx, false);
+		sparx5_cpu_copy_ena(sparx5, entry->pgid_idx, false);
 		entry->cpu_copy = false;
 	} else if (!is_host) {
 		clear_bit(port->portno, entry->port_mask);
@@ -602,15 +602,15 @@ static int sparx5_handle_port_mdb_del(struct net_device *dev,
 		if (!port->is_mrouter || !ether_addr_is_ip_mcast(v->addr))
 			sparx5_pgid_update_mask(port, entry->pgid_idx, false);
 	}
-	mutex_unlock(&spx5->mdb_lock);
+	mutex_unlock(&sparx5->mdb_lock);
 
 	if (bitmap_empty(entry->port_mask, SPX5_PORTS) && !entry->cpu_copy) {
 		 /* Clear pgid in case mrouter ports exists
 		  * that are not part of the group.
 		  */
-		sparx5_pgid_clear(spx5, entry->pgid_idx);
-		sparx5_mact_forget(spx5, entry->addr, entry->vid);
-		sparx5_free_mdb_entry(spx5, entry->addr, entry->vid);
+		sparx5_pgid_clear(sparx5, entry->pgid_idx);
+		sparx5_mact_forget(sparx5, entry->addr, entry->vid);
+		sparx5_free_mdb_entry(sparx5, entry->addr, entry->vid);
 	}
 	return 0;
 }
