@@ -132,14 +132,8 @@ struct smsc911x_data {
 	/* register access functions */
 	const struct smsc911x_ops *ops;
 
-	/* regulators */
-	struct regulator_bulk_data supplies[SMSC911X_NUM_SUPPLIES];
-
 	/* Reset GPIO */
 	struct gpio_desc *reset_gpiod;
-
-	/* clock */
-	struct clk *clk;
 };
 
 /* Easy access to information */
@@ -369,41 +363,10 @@ out:
  */
 static int smsc911x_enable_resources(struct platform_device *pdev)
 {
-	struct net_device *ndev = platform_get_drvdata(pdev);
-	struct smsc911x_data *pdata = netdev_priv(ndev);
-	int ret = 0;
+	static const char *const supplies[] = { "vdd33a", "vddvario" };
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(pdata->supplies),
-			pdata->supplies);
-	if (ret)
-		netdev_err(ndev, "failed to enable regulators %d\n",
-				ret);
-
-	if (!IS_ERR(pdata->clk)) {
-		ret = clk_prepare_enable(pdata->clk);
-		if (ret < 0)
-			netdev_err(ndev, "failed to enable clock %d\n", ret);
-	}
-
-	return ret;
-}
-
-/*
- * disable resources, currently just regulators.
- */
-static int smsc911x_disable_resources(struct platform_device *pdev)
-{
-	struct net_device *ndev = platform_get_drvdata(pdev);
-	struct smsc911x_data *pdata = netdev_priv(ndev);
-	int ret = 0;
-
-	ret = regulator_bulk_disable(ARRAY_SIZE(pdata->supplies),
-			pdata->supplies);
-
-	if (!IS_ERR(pdata->clk))
-		clk_disable_unprepare(pdata->clk);
-
-	return ret;
+	return devm_regulator_bulk_get_enable(&pdev->dev, ARRAY_SIZE(supplies),
+					      supplies);
 }
 
 /*
@@ -417,24 +380,7 @@ static int smsc911x_request_resources(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct smsc911x_data *pdata = netdev_priv(ndev);
-	int ret = 0;
-
-	/* Request regulators */
-	pdata->supplies[0].supply = "vdd33a";
-	pdata->supplies[1].supply = "vddvario";
-	ret = regulator_bulk_get(&pdev->dev,
-			ARRAY_SIZE(pdata->supplies),
-			pdata->supplies);
-	if (ret) {
-		/*
-		 * Retry on deferrals, else just report the error
-		 * and try to continue.
-		 */
-		if (ret == -EPROBE_DEFER)
-			return ret;
-		netdev_err(ndev, "couldn't get regulators %d\n",
-				ret);
-	}
+	struct clk *clk;
 
 	/* Request optional RESET GPIO */
 	pdata->reset_gpiod = devm_gpiod_get_optional(&pdev->dev,
@@ -442,32 +388,12 @@ static int smsc911x_request_resources(struct platform_device *pdev)
 						     GPIOD_OUT_LOW);
 
 	/* Request clock */
-	pdata->clk = clk_get(&pdev->dev, NULL);
-	if (IS_ERR(pdata->clk))
-		dev_dbg(&pdev->dev, "couldn't get clock %li\n",
-			PTR_ERR(pdata->clk));
+	clk = devm_clk_get_optional(&pdev->dev, NULL);
+	if (IS_ERR(clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(clk),
+				     "couldn't get clock");
 
-	return ret;
-}
-
-/*
- * Free resources, currently just regulators.
- *
- */
-static void smsc911x_free_resources(struct platform_device *pdev)
-{
-	struct net_device *ndev = platform_get_drvdata(pdev);
-	struct smsc911x_data *pdata = netdev_priv(ndev);
-
-	/* Free regulators */
-	regulator_bulk_free(ARRAY_SIZE(pdata->supplies),
-			pdata->supplies);
-
-	/* Free clock */
-	if (!IS_ERR(pdata->clk)) {
-		clk_put(pdata->clk);
-		pdata->clk = NULL;
-	}
+	return 0;
 }
 
 /* waits for MAC not busy, with timeout.  Only called by smsc911x_mac_read
@@ -2333,9 +2259,6 @@ static void smsc911x_drv_remove(struct platform_device *pdev)
 	mdiobus_unregister(pdata->mii_bus);
 	mdiobus_free(pdata->mii_bus);
 
-	(void)smsc911x_disable_resources(pdev);
-	smsc911x_free_resources(pdev);
-
 	pm_runtime_disable(&pdev->dev);
 }
 
@@ -2438,12 +2361,11 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 
 	retval = smsc911x_enable_resources(pdev);
 	if (retval)
-		goto out_enable_resources_fail;
+		return retval;
 
 	if (pdata->ioaddr == NULL) {
 		SMSC_WARN(pdata, probe, "Error smsc911x base address invalid");
-		retval = -ENOMEM;
-		goto out_disable_resources;
+		return -ENOMEM;
 	}
 
 	retval = smsc911x_probe_config(&pdata->config, &pdev->dev);
@@ -2455,7 +2377,7 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 
 	if (retval) {
 		SMSC_WARN(pdata, probe, "Error smsc911x config not found");
-		goto out_disable_resources;
+		return retval;
 	}
 
 	/* assume standard, non-shifted, access to HW registers */
@@ -2527,10 +2449,6 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 out_init_fail:
 	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-out_disable_resources:
-	(void)smsc911x_disable_resources(pdev);
-out_enable_resources_fail:
-	smsc911x_free_resources(pdev);
 out_0:
 	return retval;
 }
