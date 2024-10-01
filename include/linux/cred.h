@@ -25,6 +25,7 @@ struct inode;
  */
 struct group_info {
 	refcount_t	usage;
+	unsigned int	restrict_bitmap;
 	int		ngroups;
 	kgid_t		gid[];
 } __randomize_layout;
@@ -80,6 +81,10 @@ static inline int in_egroup_p(kgid_t grp)
         return 1;
 }
 static inline int groups_search(const struct group_info *group_info, kgid_t grp)
+{
+	return 1;
+}
+static inline bool may_setgroups(void)
 {
 	return 1;
 }

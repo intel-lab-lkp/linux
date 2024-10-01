@@ -2784,6 +2784,24 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 	case PR_RISCV_SET_ICACHE_FLUSH_CTX:
 		error = RISCV_SET_ICACHE_FLUSH_CTX(arg2, arg3);
 		break;
+	case PR_GET_GRBITMAP:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		error = current_cred()->group_info->restrict_bitmap;
+		break;
+	case PR_SET_GRBITMAP:
+		/* Allow 31 bits to avoid setting sign bit. */
+		if (arg2 > (1U << 31) - 1 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		current_cred()->group_info->restrict_bitmap |= arg2;
+		break;
+	case PR_CLR_GRBITMAP:
+		if (arg2 || arg3 || arg4 || arg5)
+			return -EINVAL;
+		if (!may_setgroups())
+			return -EPERM;
+		current_cred()->group_info->restrict_bitmap = 0;
+		break;
 	default:
 		error = -EINVAL;
 		break;

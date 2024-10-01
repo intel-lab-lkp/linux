@@ -20,6 +20,7 @@ struct group_info *groups_alloc(int gidsetsize)
 		return NULL;
 
 	refcount_set(&gi->usage, 1);
+	gi->restrict_bitmap = 0;
 	gi->ngroups = gidsetsize;
 	return gi;
 }
@@ -88,7 +89,9 @@ void groups_sort(struct group_info *group_info)
 }
 EXPORT_SYMBOL(groups_sort);
 
-/* a simple bsearch */
+/* a simple bsearch
+ * Return: 0 if not found, 1 if found, -1 if found but restricted.
+ */
 int groups_search(const struct group_info *group_info, kgid_t grp)
 {
 	unsigned int left, right;
@@ -104,8 +107,12 @@ int groups_search(const struct group_info *group_info, kgid_t grp)
 			left = mid + 1;
 		else if (gid_lt(grp, group_info->gid[mid]))
 			right = mid;
-		else
-			return 1;
+		else {
+			if (mid >= 31 || !((1 << mid) &
+					group_info->restrict_bitmap))
+				return 1;
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -222,7 +229,7 @@ SYSCALL_DEFINE2(setgroups, int, gidsetsize, gid_t __user *, grouplist)
 }
 
 /*
- * Check whether we're fsgid/egid or in the supplemental group..
+ * Check whether we're fsgid/egid or in the supplemental group.
  */
 int in_group_p(kgid_t grp)
 {
