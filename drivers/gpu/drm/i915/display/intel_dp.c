@@ -3405,9 +3405,6 @@ intel_dp_init_source_oui(struct intel_dp *intel_dp)
 	u8 oui[] = { 0x00, 0xaa, 0x01 };
 	u8 buf[3] = {};
 
-	if (!intel_dp_is_edp(intel_dp))
-		return;
-
 	/*
 	 * During driver init, we want to be careful and avoid changing the source OUI if it's
 	 * already set to what we want, so as to avoid clearing any state by accident
@@ -4222,6 +4219,8 @@ intel_dp_get_dpcd(struct intel_dp *intel_dp)
 
 	if (intel_dp_init_lttpr_and_dprx_caps(intel_dp) < 0)
 		return false;
+
+	intel_dp_init_source_oui(intel_dp);
 
 	/*
 	 * Don't clobber cached eDP rates. Also skip re-reading
@@ -6099,6 +6098,8 @@ intel_dp_hpd_pulse(struct intel_digital_port *dig_port, bool long_hpd)
 
 	if (long_hpd) {
 		intel_dp->reset_link_params = true;
+		intel_dp_invalidate_source_oui(intel_dp);
+
 		return IRQ_NONE;
 	}
 
