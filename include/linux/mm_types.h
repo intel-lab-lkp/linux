@@ -705,7 +705,7 @@ struct vm_area_struct {
 	 * counter reuse can only lead to occasional unnecessary use of the
 	 * slowpath.
 	 */
-	int vm_lock_seq;
+	long vm_lock_seq;
 	struct vma_lock *vm_lock;
 #endif
 
@@ -887,7 +887,7 @@ struct mm_struct {
 		 * Can be read with ACQUIRE semantics if not holding write
 		 * mmap_lock.
 		 */
-		int mm_lock_seq;
+		long mm_lock_seq;
 #endif
 
 

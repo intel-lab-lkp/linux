@@ -105,7 +105,7 @@ static inline void inc_mm_lock_seq(struct mm_struct *mm, bool acquire)
 	}
 }
 
-static inline bool mmap_lock_speculation_start(struct mm_struct *mm, int *seq)
+static inline bool mmap_lock_speculation_start(struct mm_struct *mm, long *seq)
 {
 	/* Pairs with RELEASE semantics in inc_mm_lock_seq(). */
 	*seq = smp_load_acquire(&mm->mm_lock_seq);
@@ -113,7 +113,7 @@ static inline bool mmap_lock_speculation_start(struct mm_struct *mm, int *seq)
 	return (*seq & 1) == 0;
 }
 
-static inline bool mmap_lock_speculation_end(struct mm_struct *mm, int seq)
+static inline bool mmap_lock_speculation_end(struct mm_struct *mm, long seq)
 {
 	/* Pairs with ACQUIRE semantics in inc_mm_lock_seq(). */
 	smp_rmb();
