@@ -991,13 +991,10 @@ static int smsc911x_mii_init(struct platform_device *pdev,
 {
 	struct smsc911x_data *pdata = netdev_priv(dev);
 	struct phy_device *phydev;
-	int err = -ENXIO;
 
-	pdata->mii_bus = mdiobus_alloc();
-	if (!pdata->mii_bus) {
-		err = -ENOMEM;
-		goto err_out_1;
-	}
+	pdata->mii_bus = devm_mdiobus_alloc(&pdev->dev);
+	if (!pdata->mii_bus)
+		return -ENOMEM;
 
 	pdata->mii_bus->name = SMSC_MDIONAME;
 	snprintf(pdata->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
@@ -1028,9 +1025,9 @@ static int smsc911x_mii_init(struct platform_device *pdev,
 		pdata->mii_bus->phy_mask = ~(1 << 1);
 	}
 
-	if (mdiobus_register(pdata->mii_bus)) {
+	if (devm_mdiobus_register(&pdev->dev, pdata->mii_bus)) {
 		SMSC_WARN(pdata, probe, "Error registering mii bus");
-		goto err_out_free_bus_2;
+		return -ENXIO;
 	}
 
 	phydev = phy_find_first(pdata->mii_bus);
@@ -1038,11 +1035,6 @@ static int smsc911x_mii_init(struct platform_device *pdev,
 		phydev->mac_managed_pm = true;
 
 	return 0;
-
-err_out_free_bus_2:
-	mdiobus_free(pdata->mii_bus);
-err_out_1:
-	return err;
 }
 
 /* Gets the number of tx statuses in the fifo */
@@ -2255,9 +2247,6 @@ static void smsc911x_drv_remove(struct platform_device *pdev)
 	SMSC_TRACE(pdata, ifdown, "Stopping driver");
 
 	unregister_netdev(dev);
-
-	mdiobus_unregister(pdata->mii_bus);
-	mdiobus_free(pdata->mii_bus);
 
 	pm_runtime_disable(&pdev->dev);
 }
