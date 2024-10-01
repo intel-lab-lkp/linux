@@ -2246,6 +2246,10 @@ Res0	63:5
 Field	4:0	SEL
 EndSysreg
 
+Sysreg	PMIAR_EL1	3	0	9	14	7
+Field	63:0 ADDRESS
+EndSysreg
+
 SysregFields	CONTEXTIDR_ELx
 Res0	63:32
 Field	31:0	PROCID
