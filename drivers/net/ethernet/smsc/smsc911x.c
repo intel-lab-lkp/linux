@@ -131,9 +131,6 @@ struct smsc911x_data {
 
 	/* register access functions */
 	const struct smsc911x_ops *ops;
-
-	/* Reset GPIO */
-	struct gpio_desc *reset_gpiod;
 };
 
 /* Easy access to information */
@@ -369,14 +366,15 @@ out:
 static int smsc911x_request_resources(struct platform_device *pdev)
 {
 	static const char *const supplies[] = { "vdd33a", "vddvario" };
-	struct net_device *ndev = platform_get_drvdata(pdev);
-	struct smsc911x_data *pdata = netdev_priv(ndev);
+	struct gpio_desc *reset_gpiod;
 	struct clk *clk;
 
 	/* Request optional RESET GPIO */
-	pdata->reset_gpiod = devm_gpiod_get_optional(&pdev->dev,
-						     "reset",
-						     GPIOD_OUT_LOW);
+	reset_gpiod =
+		devm_gpiod_get_optional(&pdev->dev, "reset", GPIOD_OUT_LOW);
+	if (IS_ERR(reset_gpiod))
+		return dev_err_probe(&pdev->dev, PTR_ERR(reset_gpiod),
+				     "GPIO device not found");
 
 	/* Request clock */
 	clk = devm_clk_get_optional(&pdev->dev, NULL);
