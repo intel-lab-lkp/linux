@@ -1445,6 +1445,10 @@ static int adp5589_probe(struct i2c_client *client)
 	if (!kpad->info)
 		return -ENODEV;
 
+	error = devm_regulator_get_enable(&client->dev, "vcc");
+	if (error)
+		return error;
+
 	error = devm_add_action_or_reset(&client->dev, adp5589_clear_config,
 					 kpad);
 	if (error)
