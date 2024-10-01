@@ -2246,6 +2246,21 @@ Res0	63:5
 Field	4:0	SEL
 EndSysreg
 
+Sysreg	PMECR_EL1	3	0	9	14	5
+Res0	63:5
+UnsignedEnum	4:3	SSE
+	0b00	DISABLED
+	0b10	ENABLED_PROHIBITED
+	0b11	ENABLED_ALLOWED
+EndEnum
+Field	2	KPME
+UnsignedEnum	1:0	PMEE
+	0b00	PMUIRQ_E_PMU_D
+	0b10	PMUIRQ_D_PMU_D
+	0b11	PMUIRQ_D_PMU_E
+EndEnum
+EndSysreg
+
 Sysreg	PMIAR_EL1	3	0	9	14	7
 Field	63:0 ADDRESS
 EndSysreg
