@@ -848,16 +848,14 @@ static void pcie_aspm_cap_init(struct pcie_link_state *link, int blacklist)
 /* Configure the ASPM L1 substates */
 static void pcie_config_aspm_l1ss(struct pcie_link_state *link, u32 state)
 {
-	u32 val, enable_req;
+	u32 val;
 	struct pci_dev *child = link->downstream, *parent = link->pdev;
-
-	enable_req = (link->aspm_enabled ^ state) & state;
 
 	/*
 	 * Here are the rules specified in the PCIe spec for enabling L1SS:
 	 * - When enabling L1.x, enable bit at parent first, then at child
 	 * - When disabling L1.x, disable bit at child first, then at parent
-	 * - When enabling ASPM L1.x, need to disable L1
+	 * - When enabling/disabling ASPM L1.x, need to disable L1
 	 *   (at child followed by parent).
 	 * - The ASPM/PCIPM L1.2 must be disabled while programming timing
 	 *   parameters
@@ -866,21 +864,17 @@ static void pcie_config_aspm_l1ss(struct pcie_link_state *link, u32 state)
 	 * what is needed.
 	 */
 
+	/* Disable L1, and it gets enabled later in pcie_config_aspm_link() */
+	pcie_capability_clear_word(child, PCI_EXP_LNKCTL,
+				   PCI_EXP_LNKCTL_ASPM_L1);
+	pcie_capability_clear_word(parent, PCI_EXP_LNKCTL,
+				   PCI_EXP_LNKCTL_ASPM_L1);
+
 	/* Disable all L1 substates */
 	pci_clear_and_set_config_dword(child, child->l1ss + PCI_L1SS_CTL1,
 				       PCI_L1SS_CTL1_L1SS_MASK, 0);
 	pci_clear_and_set_config_dword(parent, parent->l1ss + PCI_L1SS_CTL1,
 				       PCI_L1SS_CTL1_L1SS_MASK, 0);
-	/*
-	 * If needed, disable L1, and it gets enabled later
-	 * in pcie_config_aspm_link().
-	 */
-	if (enable_req & (PCIE_LINK_STATE_L1_1 | PCIE_LINK_STATE_L1_2)) {
-		pcie_capability_clear_word(child, PCI_EXP_LNKCTL,
-					   PCI_EXP_LNKCTL_ASPM_L1);
-		pcie_capability_clear_word(parent, PCI_EXP_LNKCTL,
-					   PCI_EXP_LNKCTL_ASPM_L1);
-	}
 
 	val = 0;
 	if (state & PCIE_LINK_STATE_L1_1)
