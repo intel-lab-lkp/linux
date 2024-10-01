@@ -8,6 +8,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/cleanup.h>
 #include <linux/bitops.h>
 #include <linux/bits.h>
 #include <linux/minmax.h>
@@ -419,13 +420,12 @@ static int adp5589_gpio_get_value(struct gpio_chip *chip, unsigned off)
 	unsigned int bit = kpad->info->var->bit(kpad->gpiomap[off]);
 	int val;
 
-	mutex_lock(&kpad->gpio_lock);
+	guard(mutex)(&kpad->gpio_lock);
 	if (kpad->dir[bank] & bit)
 		val = kpad->dat_out[bank];
 	else
 		val = adp5589_read(kpad->client,
 				   kpad->info->var->reg(ADP5589_GPI_STATUS_A) + bank);
-	mutex_unlock(&kpad->gpio_lock);
 
 	return !!(val & bit);
 }
@@ -437,7 +437,7 @@ static void adp5589_gpio_set_value(struct gpio_chip *chip,
 	unsigned int bank = kpad->info->var->bank(kpad->gpiomap[off]);
 	unsigned int bit = kpad->info->var->bit(kpad->gpiomap[off]);
 
-	mutex_lock(&kpad->gpio_lock);
+	guard(mutex)(&kpad->gpio_lock);
 
 	if (val)
 		kpad->dat_out[bank] |= bit;
@@ -446,8 +446,6 @@ static void adp5589_gpio_set_value(struct gpio_chip *chip,
 
 	adp5589_write(kpad->client, kpad->info->var->reg(ADP5589_GPO_DATA_OUT_A) +
 		      bank, kpad->dat_out[bank]);
-
-	mutex_unlock(&kpad->gpio_lock);
 }
 
 static int adp5589_gpio_direction_input(struct gpio_chip *chip, unsigned off)
@@ -455,18 +453,13 @@ static int adp5589_gpio_direction_input(struct gpio_chip *chip, unsigned off)
 	struct adp5589_kpad *kpad = gpiochip_get_data(chip);
 	unsigned int bank = kpad->info->var->bank(kpad->gpiomap[off]);
 	unsigned int bit = kpad->info->var->bit(kpad->gpiomap[off]);
-	int ret;
 
-	mutex_lock(&kpad->gpio_lock);
+	guard(mutex)(&kpad->gpio_lock);
 
 	kpad->dir[bank] &= ~bit;
-	ret = adp5589_write(kpad->client,
-			    kpad->info->var->reg(ADP5589_GPIO_DIRECTION_A) + bank,
-			    kpad->dir[bank]);
-
-	mutex_unlock(&kpad->gpio_lock);
-
-	return ret;
+	return adp5589_write(kpad->client,
+			     kpad->info->var->reg(ADP5589_GPIO_DIRECTION_A) + bank,
+			     kpad->dir[bank]);
 }
 
 static int adp5589_gpio_direction_output(struct gpio_chip *chip,
@@ -477,7 +470,7 @@ static int adp5589_gpio_direction_output(struct gpio_chip *chip,
 	unsigned int bit = kpad->info->var->bit(kpad->gpiomap[off]);
 	int ret;
 
-	mutex_lock(&kpad->gpio_lock);
+	guard(mutex)(&kpad->gpio_lock);
 
 	kpad->dir[bank] |= bit;
 
@@ -491,8 +484,6 @@ static int adp5589_gpio_direction_output(struct gpio_chip *chip,
 	ret |= adp5589_write(kpad->client,
 			     kpad->info->var->reg(ADP5589_GPIO_DIRECTION_A) + bank,
 			     kpad->dir[bank]);
-
-	mutex_unlock(&kpad->gpio_lock);
 
 	return ret;
 }
@@ -508,10 +499,9 @@ static int adp5589_gpio_set_bias(struct adp5589_kpad *kpad, unsigned int pin,
 				 enum pin_config_param cfg)
 {
 	unsigned int bank, msk;
-	int error;
 	u8 val;
 
-	mutex_lock(&kpad->gpio_lock);
+	guard(mutex)(&kpad->gpio_lock);
 
 	if (cfg == PIN_CONFIG_BIAS_PULL_UP)
 		val = test_bit(pin, &kpad->pull_up_100k_map) ? 2 : 0;
@@ -537,13 +527,9 @@ static int adp5589_gpio_set_bias(struct adp5589_kpad *kpad, unsigned int pin,
 	val <<= __bf_shf(msk);
 	kpad->rpull[bank] = (kpad->rpull[bank] & ~msk) | (val & msk);
 
-	error = adp5589_write(kpad->client,
-			      kpad->info->var->reg(ADP5589_RPULL_CONFIG_A) + bank,
-			      kpad->rpull[bank]);
-
-	mutex_unlock(&kpad->gpio_lock);
-
-	return error;
+	return adp5589_write(kpad->client,
+			     kpad->info->var->reg(ADP5589_RPULL_CONFIG_A) + bank,
+			     kpad->rpull[bank]);
 }
 
 static int adp5589_gpio_set_config(struct gpio_chip *chip,  unsigned int off,
@@ -574,15 +560,15 @@ static int adp5589_gpio_set_config(struct gpio_chip *chip,  unsigned int off,
 			return -EINVAL;
 		}
 
-		mutex_lock(&kpad->gpio_lock);
-		if (!val)
-			kpad->debounce_dis[bank] |= bit;
-		else
-			kpad->debounce_dis[bank] &= bit;
+		scoped_guard(mutex, &kpad->gpio_lock) {
+			if (!val)
+				kpad->debounce_dis[bank] |= bit;
+			else
+				kpad->debounce_dis[bank] &= bit;
 
-		error = adp5589_write(kpad->client, reg,
-				      kpad->debounce_dis[bank]);
-		mutex_unlock(&kpad->gpio_lock);
+			error = adp5589_write(kpad->client, reg,
+					      kpad->debounce_dis[bank]);
+		}
 		return error;
 	default:
 		return -EOPNOTSUPP;
