@@ -1416,7 +1416,18 @@ int begin_new_exec(struct linux_binprm * bprm)
 		set_dumpable(current->mm, SUID_DUMP_USER);
 
 	perf_event_exec();
-	__set_task_comm(me, kbasename(bprm->filename), true);
+
+	/*
+	 * If fdpath was set, execveat() made up a path that will
+	 * probably not be useful to admins running ps or similar.
+	 * Let's fix it up to be something reasonable.
+	 */
+	if (bprm->fdpath) {
+		BUILD_BUG_ON(TASK_COMM_LEN > DNAME_INLINE_LEN);
+		__set_task_comm(me, bprm->file->f_path.dentry->d_name.name, true);
+	} else {
+		__set_task_comm(me, kbasename(bprm->filename), true);
+	}
 
 	/* An exec changes our domain. We are no longer part of the thread
 	   group */
