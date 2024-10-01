@@ -1138,9 +1138,12 @@ static int pt_buffer_reset_markers(struct pt_buffer *buf,
 		buf->intr_te = pt_topa_prev_entry(buf, buf->intr_te);
 	}
 
-	buf->stop_te->stop = 1;
-	buf->stop_te->intr = 1;
-	buf->intr_te->intr = 1;
+	if (buf->stop_te) {
+		buf->stop_te->stop = 1;
+		buf->stop_te->intr = 1;
+	}
+	if (buf->intr_te)
+		buf->intr_te->intr = 1;
 
 	return 0;
 }
