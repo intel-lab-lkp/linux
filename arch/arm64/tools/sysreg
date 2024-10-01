@@ -2762,6 +2762,13 @@ Res0	63:5
 Field	4:0	SEL
 EndSysreg
 
+Sysreg	PMSSCR_EL1	3	0	9	13	3
+Res0	63:33
+Field	32	NC
+Res0	31:1
+Field	0	SS
+EndSysreg
+
 Sysreg	PMUACR_EL1	3	0	9	14	4
 Res0	63:33
 Field	32	FM
