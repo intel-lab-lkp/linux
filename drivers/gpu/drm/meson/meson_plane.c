@@ -20,6 +20,8 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_dma_helper.h>
+#include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_panic.h>
 
 #include "meson_plane.h"
 #include "meson_registers.h"
@@ -419,10 +421,49 @@ static void meson_plane_atomic_disable(struct drm_plane *plane,
 	priv->viu.osd1_enabled = false;
 }
 
+static int meson_plane_get_scanout_buffer(struct drm_plane *plane,
+					  struct drm_scanout_buffer *sb)
+{
+	struct meson_plane *meson_plane = to_meson_plane(plane);
+	struct meson_drm *priv = meson_plane->priv;
+	struct drm_framebuffer *fb;
+
+	if (!meson_plane->enabled)
+		return -ENODEV;
+
+	if (priv->viu.osd1_afbcd) {
+		if (meson_vpu_is_compatible(priv, VPU_COMPATIBLE_GXM)) {
+			writel_relaxed(0, priv->io_base +
+					  _REG(VIU_OSD1_BLK1_CFG_W4));
+			writel_relaxed(0, priv->io_base +
+					  _REG(VIU_OSD1_BLK2_CFG_W4));
+			writel_bits_relaxed(OSD_ENDIANNESS_LE, OSD_ENDIANNESS_LE,
+					    priv->io_base +
+					    _REG(VIU_OSD1_BLK0_CFG_W0));
+			meson_viu_g12a_disable_osd1_afbc(priv);
+		} else if (meson_vpu_is_compatible(priv, VPU_COMPATIBLE_G12A)) {
+			writel_bits_relaxed(OSD_DPATH_MALI_AFBCD, 0,
+					    priv->io_base +
+					    _REG(VIU_OSD1_CTRL_STAT2));
+			meson_viu_gxm_disable_osd1_afbc(priv);
+		}
+	}
+
+	fb = plane->state->fb;
+	sb->format	= fb->format;
+	sb->width	= fb->width;
+	sb->height	= fb->height;
+	sb->pitch[0]	= fb->pitches[0];
+	drm_gem_fb_vmap(fb, sb->map, NULL);
+
+	return 0;
+}
+
 static const struct drm_plane_helper_funcs meson_plane_helper_funcs = {
-	.atomic_check	= meson_plane_atomic_check,
-	.atomic_disable	= meson_plane_atomic_disable,
-	.atomic_update	= meson_plane_atomic_update,
+	.atomic_check		= meson_plane_atomic_check,
+	.atomic_disable		= meson_plane_atomic_disable,
+	.atomic_update		= meson_plane_atomic_update,
+	.get_scanout_buffer	= meson_plane_get_scanout_buffer,
 };
 
 static bool meson_plane_format_mod_supported(struct drm_plane *plane,
