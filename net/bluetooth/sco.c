@@ -208,7 +208,7 @@ static void sco_conn_del(struct hci_conn *hcon, int err)
 	}
 
 	/* Ensure no more work items will run before freeing conn. */
-	cancel_delayed_work_sync(&conn->timeout_work);
+	disable_delayed_work_sync(&conn->timeout_work);
 
 	hcon->sco_data = NULL;
 	kfree(conn);
