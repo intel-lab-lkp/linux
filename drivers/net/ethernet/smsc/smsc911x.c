@@ -2235,17 +2235,6 @@ static int smsc911x_init(struct net_device *dev)
 
 static void smsc911x_drv_remove(struct platform_device *pdev)
 {
-	struct net_device *dev;
-	struct smsc911x_data *pdata;
-
-	dev = platform_get_drvdata(pdev);
-	BUG_ON(!dev);
-	pdata = netdev_priv(dev);
-	BUG_ON(!pdata);
-	BUG_ON(!pdata->ioaddr);
-
-	SMSC_TRACE(pdata, ifdown, "Stopping driver");
-
 	pm_runtime_disable(&pdev->dev);
 }
 
