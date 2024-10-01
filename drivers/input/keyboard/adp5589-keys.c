@@ -676,10 +676,9 @@ static int adp5589_gpio_add(struct adp5589_kpad *kpad)
 	kpad->gc.owner = THIS_MODULE;
 
 	if (device_property_present(dev, "interrupt-controller")) {
-		if (!kpad->client->irq) {
-			dev_err(dev, "Unable to serve as interrupt controller without IRQ\n");
-			return -EINVAL;
-		}
+		if (!kpad->client->irq)
+			return dev_err_probe(dev, -EINVAL,
+					     "Unable to serve as interrupt controller without IRQ\n");
 
 		girq = &kpad->gc.irq;
 		gpio_irq_chip_set_chip(girq, &adp5589_irq_chip);
@@ -935,10 +934,8 @@ static int adp5589_setup(struct adp5589_kpad *kpad)
 
 	ret = adp5589_write(client, reg(ADP5589_INT_EN),
 			    OVRFLOW_IEN | GPI_IEN | EVENT_IEN);
-	if (ret) {
-		dev_err(&client->dev, "Write Error\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(&client->dev, ret, "Write Error\n");
 
 	return 0;
 }
@@ -951,20 +948,15 @@ static int adp5589_validate_key(struct adp5589_kpad *kpad, u32 key, bool is_gpi)
 	if (is_gpi) {
 		u32 gpi = key - kpad->info->gpi_pin_base;
 
-		if (gpi == 5 && !kpad->info->support_row5) {
-			dev_err(&client->dev,
-				"Invalid unlock/reset GPI(%u) not supported\n",
-				gpi);
-			return -EINVAL;
-		}
+		if (gpi == 5 && !kpad->info->support_row5)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid unlock/reset GPI(%u) not supported\n", gpi);
 
 		/* check if it's being used in the keypad */
-		if (BIT(gpi) & kpad->keypad_en_mask) {
-			dev_err(&client->dev,
-				"Invalid unlock/reset GPI(%u) being used in the keypad(%x)\n",
-				gpi, kpad->keypad_en_mask);
-			return -EINVAL;
-		}
+		if (BIT(gpi) & kpad->keypad_en_mask)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid unlock/reset GPI(%u) being used in the keypad(%x)\n",
+					     gpi, kpad->keypad_en_mask);
 
 		return 0;
 	}
@@ -977,10 +969,9 @@ static int adp5589_validate_key(struct adp5589_kpad *kpad, u32 key, bool is_gpi)
 	    BIT(col) << kpad->info->col_shift & kpad->keypad_en_mask)
 		return 0;
 
-	dev_err(&client->dev, "Invalid unlock/reset key(%u) not used in the keypad(%x)\n",
-		key, kpad->keypad_en_mask);
-
-	return -EINVAL;
+	return dev_err_probe(&client->dev, -EINVAL,
+			     "Invalid unlock/reset key(%u) not used in the keypad(%x)\n",
+			     key, kpad->keypad_en_mask);
 }
 
 static int adp5589_parse_key_array(struct adp5589_kpad *kpad, const char *prop,
@@ -997,16 +988,14 @@ static int adp5589_parse_key_array(struct adp5589_kpad *kpad, const char *prop,
 
 	*n_keys = ret;
 
-	if (kpad->info->is_adp5585 && !reset_key) {
-		dev_err(&client->dev, "Unlock keys not supported for adp5585\n");
-		return -EOPNOTSUPP;
-	}
+	if (kpad->info->is_adp5585 && !reset_key)
+		return dev_err_probe(&client->dev, -EOPNOTSUPP,
+				     "Unlock keys not supported for adp5585\n");
 
-	if (*n_keys  > max_keys) {
-		dev_err(&client->dev, "Invalid number of keys(%u > %u) for %s\n",
-			*n_keys, max_keys, prop);
-		return -EINVAL;
-	}
+	if (*n_keys  > max_keys)
+		return dev_err_probe(&client->dev, -EINVAL,
+				     "Invalid number of keys(%u > %u) for %s\n",
+				     *n_keys, max_keys, prop);
 
 	ret = device_property_read_u32_array(&client->dev, prop, keys, *n_keys);
 	if (ret)
@@ -1040,10 +1029,8 @@ static int adp5589_parse_key_array(struct adp5589_kpad *kpad, const char *prop,
 		if (!reset_key && keys[key] == 127)
 			continue;
 
-		dev_err(&client->dev, "Invalid key(%u) for %s\n", keys[key],
-			prop);
-
-		return -EINVAL;
+		return dev_err_probe(&client->dev, -EINVAL,
+				     "Invalid key(%u) for %s\n", keys[key], prop);
 	}
 
 	return 0;
@@ -1066,11 +1053,10 @@ static int adp5589_unlock_parse(struct adp5589_kpad *kpad)
 	error = device_property_read_u32(&client->dev, "adi,unlock-trigger-sec",
 					 &kpad->unlock_time);
 	if (!error) {
-		if (kpad->unlock_time > ADP5589_MAX_UNLOCK_TIME_SEC) {
-			dev_err(&client->dev, "Invalid unlock time(%u > %d)\n",
-				kpad->unlock_time, ADP5589_MAX_UNLOCK_TIME_SEC);
-			return -EINVAL;
-		}
+		if (kpad->unlock_time > ADP5589_MAX_UNLOCK_TIME_SEC)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid unlock time(%u > %d)\n",
+					     kpad->unlock_time, ADP5589_MAX_UNLOCK_TIME_SEC);
 	}
 
 	return 0;
@@ -1092,10 +1078,9 @@ static int adp5589_reset_parse(struct adp5589_kpad *kpad)
 		 * Then R4 is used as reset output. Make sure it's not being used
 		 * in the keypad.
 		 */
-		if (BIT(4) & kpad->keypad_en_mask) {
-			dev_err(&client->dev, "Row4 cannot be used if reset1 is used\n");
-			return -EINVAL;
-		}
+		if (BIT(4) & kpad->keypad_en_mask)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Row4 cannot be used if reset1 is used\n");
 
 		kpad->extend_cfg = R4_EXTEND_CFG;
 	}
@@ -1110,10 +1095,9 @@ static int adp5589_reset_parse(struct adp5589_kpad *kpad)
 		 * Then C4 is used as reset output. Make sure it's not being used
 		 * in the keypad.
 		 */
-		if (BIT(kpad->info->c4_extend_cfg) & kpad->keypad_en_mask) {
-			dev_err(&client->dev, "Col4 cannot be used if reset2 is used\n");
-			return -EINVAL;
-		}
+		if (BIT(kpad->info->c4_extend_cfg) & kpad->keypad_en_mask)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Col4 cannot be used if reset2 is used\n");
 
 		kpad->extend_cfg |= C4_EXTEND_CFG;
 	}
@@ -1159,9 +1143,9 @@ static int adp5589_reset_parse(struct adp5589_kpad *kpad)
 			kpad->reset_cfg |= FIELD_PREP(RESET_TRIGGER_TIME, 7);
 			break;
 		default:
-			dev_err(&client->dev, "Invalid value(%u) for adi,reset-trigger-ms\n",
-				prop_val);
-			return -EINVAL;
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid value(%u) for adi,reset-trigger-ms\n",
+					     prop_val);
 		}
 	}
 
@@ -1182,9 +1166,9 @@ static int adp5589_reset_parse(struct adp5589_kpad *kpad)
 			kpad->reset_cfg |= FIELD_PREP(RESET_PULSE_WIDTH, 3);
 			break;
 		default:
-			dev_err(&client->dev, "Invalid value(%u) for adi,reset-pulse-width-us\n",
-				prop_val);
-			return -EINVAL;
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid value(%u) for adi,reset-pulse-width-us\n",
+					     prop_val);
 		}
 	}
 
@@ -1199,51 +1183,41 @@ static int adp5589_gpio_parse(struct adp5589_kpad *kpad)
 
 	device_for_each_child_node_scoped(&client->dev, child) {
 		error = fwnode_property_read_u32(child, "reg", &reg);
-		if (error) {
-			dev_err(&client->dev, "Failed to get reg property\n");
-			return -EINVAL;
-		}
+		if (error)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Failed to get reg property\n");
 
-		if (reg >= kpad->info->maxgpio) {
-			dev_err(&client->dev, "Invalid gpio(%u > %u)\n",
-				reg, kpad->info->maxgpio);
-			return -EINVAL;
-		}
+		if (reg >= kpad->info->maxgpio)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid gpio(%u > %u)\n",
+					     reg, kpad->info->maxgpio);
 
-		if (BIT(reg) & kpad->keypad_en_mask) {
-			dev_err(&client->dev, "Invalid gpio(%u) used in keypad\n",
-				reg);
-			return -EINVAL;
-		}
+		if (BIT(reg) & kpad->keypad_en_mask)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid gpio(%u) used in keypad\n", reg);
 
-		if (reg == 5 && !kpad->info->support_row5) {
-			dev_err(&client->dev, "Invalid gpio(%u) not supported\n",
-				reg);
-			return -EINVAL;
-		}
+		if (reg == 5 && !kpad->info->support_row5)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid gpio(%u) not supported\n",
+					     reg);
 
 		/* Check if it's gpio4 and R4 is being used as reset */
-		if (kpad->extend_cfg & R4_EXTEND_CFG && reg == 4) {
-			dev_err(&client->dev, "Invalid gpio(%u) used as reset1\n",
-				reg);
-			return -EINVAL;
-		}
+		if (kpad->extend_cfg & R4_EXTEND_CFG && reg == 4)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid gpio(%u) used as reset1\n", reg);
 
 		/* Check if the gpio is being used as reset2 */
-		if (kpad->extend_cfg & C4_EXTEND_CFG && reg == kpad->info->c4_extend_cfg) {
-			dev_err(&client->dev, "Invalid gpio(%u) used as reset2\n",
-				reg);
-			return -EINVAL;
-		}
+		if (kpad->extend_cfg & C4_EXTEND_CFG && reg == kpad->info->c4_extend_cfg)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid gpio(%u) used as reset2\n", reg);
 
 		error = fwnode_property_read_u32(child, "adi,pull-up-ohms",
 						 &pullup);
 		if (!error) {
-			if (pullup != 100 * KILO && pullup != 300 * KILO) {
-				dev_err(&client->dev, "Invalid pullup resistor val(%u)",
-					pullup);
-				return -EINVAL;
-			}
+			if (pullup != 100 * KILO && pullup != 300 * KILO)
+				return dev_err_probe(&client->dev, -EINVAL,
+						     "Invalid pullup resistor val(%u)",
+						     pullup);
 
 			if (pullup == 100 * KILO)
 				__set_bit(reg, &kpad->pull_up_100k_map);
@@ -1262,11 +1236,9 @@ static int adp5589_parse_fw(struct adp5589_kpad *kpad)
 	error = device_property_read_u32(&client->dev, "adi,cols-mask",
 					 &prop_val);
 	if (!error) {
-		if (prop_val > GENMASK(kpad->info->max_col_num, 0)) {
-			dev_err(&client->dev, "Invalid column mask(%x)\n",
-				prop_val);
-			return -EINVAL;
-		}
+		if (prop_val > GENMASK(kpad->info->max_col_num, 0))
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid column mask(%x)\n", prop_val);
 
 		kpad->keypad_en_mask = prop_val << kpad->info->col_shift;
 		/*
@@ -1282,37 +1254,30 @@ static int adp5589_parse_fw(struct adp5589_kpad *kpad)
 	error = device_property_read_u32(&client->dev, "adi,rows-mask",
 					 &prop_val);
 	if (!error) {
-		if (prop_val > GENMASK(kpad->info->max_row_num, 0)) {
-			dev_err(&client->dev, "Invalid row mask(%x)\n",
-				prop_val);
-			return -EINVAL;
-		}
+		if (prop_val > GENMASK(kpad->info->max_row_num, 0))
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid row mask(%x)\n", prop_val);
 
-		if (prop_val & BIT(5) && !kpad->info->support_row5) {
-			dev_err(&client->dev, "Row5 not supported!\n");
-			return -EINVAL;
-		}
+		if (prop_val & BIT(5) && !kpad->info->support_row5)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Row5 not supported!\n");
 
 		kpad->keypad_en_mask |= prop_val;
 		rows = fls(prop_val);
 	}
 
-	if (cols && !rows) {
-		dev_err(&client->dev, "Cannot have columns with no rows!\n");
-		return -EINVAL;
-	}
+	if (cols && !rows)
+		return dev_err_probe(&client->dev, -EINVAL,
+				     "Cannot have columns with no rows!\n");
 
-	if (rows && !cols) {
-		dev_err(&client->dev, "Cannot have rows with no columns!\n");
-		return -EINVAL;
-	}
+	if (rows && !cols)
+		dev_err_probe(&client->dev, -EINVAL,
+			      "Cannot have rows with no columns!\n");
 
 	if (rows && cols) {
-		if (!client->irq) {
-			dev_err(&client->dev,
-				"Keymaps won't work without interrupts\n");
-			return -EINVAL;
-		}
+		if (!client->irq)
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Keymaps won't work without interrupts\n");
 
 		error = matrix_keypad_build_keymap(NULL, NULL, rows, cols,
 						   kpad->keycode, kpad->input);
@@ -1339,9 +1304,9 @@ static int adp5589_parse_fw(struct adp5589_kpad *kpad)
 			kpad->key_poll_time = prop_val / 10 - 1;
 			break;
 		default:
-			dev_err(&client->dev, "Invalid value(%u) for adi,key-poll-ms\n",
-				prop_val);
-			return -EINVAL;
+			return dev_err_probe(&client->dev, -EINVAL,
+					     "Invalid value(%u) for adi,key-poll-ms\n",
+					     prop_val);
 		}
 	}
 
@@ -1384,10 +1349,9 @@ static int adp5589_keypad_add(struct adp5589_kpad *kpad, unsigned int revid)
 		return error;
 
 	error = input_register_device(input);
-	if (error) {
-		dev_err(&client->dev, "unable to register input device\n");
-		return error;
-	}
+	if (error)
+		return dev_err_probe(&client->dev, error,
+				     "unable to register input device\n");
 
 	if (!client->irq)
 		return 0;
@@ -1396,10 +1360,9 @@ static int adp5589_keypad_add(struct adp5589_kpad *kpad, unsigned int revid)
 					  NULL, adp5589_irq,
 					  IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					  client->dev.driver->name, kpad);
-	if (error) {
-		dev_err(&client->dev, "unable to request irq %d\n", client->irq);
-		return error;
-	}
+	if (error)
+		return dev_err_probe(&client->dev, error,
+				     "unable to request irq %d\n", client->irq);
 
 	return 0;
 }
@@ -1468,10 +1431,9 @@ static int adp5589_probe(struct i2c_client *client)
 	u8 id;
 
 	if (!i2c_check_functionality(client->adapter,
-				     I2C_FUNC_SMBUS_BYTE_DATA)) {
-		dev_err(&client->dev, "SMBUS Byte Data not Supported\n");
-		return -EIO;
-	}
+				     I2C_FUNC_SMBUS_BYTE_DATA))
+		return dev_err_probe(&client->dev, -EIO,
+				     "SMBUS Byte Data not Supported\n");
 
 	kpad = devm_kzalloc(&client->dev, sizeof(*kpad), GFP_KERNEL);
 	if (!kpad)
