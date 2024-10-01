@@ -7,13 +7,10 @@
  * Author: Smita Koralahalli <Smita.KoralahalliChannabasappa@amd.com>
  */
 
+#include <cxl/event.h>
+
 #ifndef LINUX_CPER_CXL_H
 #define LINUX_CPER_CXL_H
-
-/* CXL Protocol Error Section */
-#define CPER_SEC_CXL_PROT_ERR						\
-	GUID_INIT(0x80B9EFB4, 0x52B5, 0x4DE3, 0xA7, 0x77, 0x68, 0x78,	\
-		  0x4B, 0x77, 0x10, 0x48)
 
 #pragma pack(1)
 
