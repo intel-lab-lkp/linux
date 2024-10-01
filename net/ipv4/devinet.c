@@ -124,18 +124,38 @@ static u32 inet_addr_hash(const struct net *net, __be32 addr)
 	return hash_32(addr, IN4_ADDR_HSIZE_SHIFT);
 }
 
+static bool inet_ifa_has_lifetime(struct in_ifaddr *ifa)
+{
+	return !(ifa->ifa_flags & IFA_F_PERMANENT);
+}
+
 static void inet_hash_insert(struct net *net, struct in_ifaddr *ifa)
 {
 	u32 hash = inet_addr_hash(net, ifa->ifa_local);
 
 	ASSERT_RTNL();
 	hlist_add_head_rcu(&ifa->addr_lst, &net->ipv4.inet_addr_lst[hash]);
+
+	if (inet_ifa_has_lifetime(ifa)) {
+		WRITE_ONCE(net->ipv4.addr_non_perm, net->ipv4.addr_non_perm + 1);
+		cancel_delayed_work(&net->ipv4.addr_chk_work);
+		queue_delayed_work(system_power_efficient_wq,
+				   &net->ipv4.addr_chk_work, 0);
+	}
 }
 
 static void inet_hash_remove(struct in_ifaddr *ifa)
 {
 	ASSERT_RTNL();
 	hlist_del_init_rcu(&ifa->addr_lst);
+
+	if (inet_ifa_has_lifetime(ifa)) {
+		struct net *net = dev_net(ifa->ifa_dev->dev);
+
+		WRITE_ONCE(net->ipv4.addr_non_perm, net->ipv4.addr_non_perm - 1);
+		if (!net->ipv4.addr_non_perm)
+			cancel_delayed_work(&net->ipv4.addr_chk_work);
+	}
 }
 
 /**
@@ -484,7 +504,6 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 {
 	struct in_ifaddr __rcu **last_primary, **ifap;
 	struct in_device *in_dev = ifa->ifa_dev;
-	struct net *net = dev_net(in_dev->dev);
 	struct in_validator_info ivi;
 	struct in_ifaddr *ifa1;
 	int ret;
@@ -552,9 +571,6 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 	rcu_assign_pointer(*ifap, ifa);
 
 	inet_hash_insert(dev_net(in_dev->dev), ifa);
-
-	cancel_delayed_work(&net->ipv4.addr_chk_work);
-	queue_delayed_work(system_power_efficient_wq, &net->ipv4.addr_chk_work, 0);
 
 	/* Send message first, then call notifier.
 	   Notifier will trigger FIB update, so that
@@ -787,6 +803,9 @@ static void check_lifetime(struct work_struct *work)
 		rtnl_unlock();
 	}
 
+	if (!READ_ONCE(net->ipv4.addr_non_perm))
+		return;
+
 	next_sec = round_jiffies_up(next);
 	next_sched = next;
 
@@ -979,6 +998,7 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 	} else {
 		u32 new_metric = ifa->ifa_rt_priority;
 		u8 new_proto = ifa->ifa_proto;
+		int delta = 0;
 
 		inet_free_ifa(ifa);
 
@@ -996,10 +1016,21 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 		ifa->ifa_proto = new_proto;
 
+		if (inet_ifa_has_lifetime(ifa))
+			delta -= 1;
+
 		set_ifa_lifetime(ifa, valid_lft, prefered_lft);
-		cancel_delayed_work(&net->ipv4.addr_chk_work);
-		queue_delayed_work(system_power_efficient_wq,
-				   &net->ipv4.addr_chk_work, 0);
+
+		if (inet_ifa_has_lifetime(ifa))
+			delta += 1;
+
+		if (delta) {
+			WRITE_ONCE(net->ipv4.addr_non_perm, net->ipv4.addr_non_perm + delta);
+			cancel_delayed_work(&net->ipv4.addr_chk_work);
+			queue_delayed_work(system_power_efficient_wq,
+					   &net->ipv4.addr_chk_work, 0);
+		}
+
 		rtmsg_ifa(RTM_NEWADDR, ifa, nlh, NETLINK_CB(skb).portid);
 	}
 	return 0;
