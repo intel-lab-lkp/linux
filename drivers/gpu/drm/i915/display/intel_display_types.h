@@ -1770,6 +1770,8 @@ struct intel_dp {
 
 	u8 alpm_dpcd;
 
+	u32 min_hblank;
+
 	struct {
 		unsigned long mask;
 	} quirks;

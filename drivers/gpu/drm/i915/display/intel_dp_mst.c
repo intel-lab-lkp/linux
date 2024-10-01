@@ -156,6 +156,30 @@ static int intel_dp_mst_calc_pbn(int pixel_clock, int bpp_x16, int bw_overhead)
 	return DIV_ROUND_UP(effective_data_rate * 64, 54 * 1000);
 }
 
+static void intel_dp_mst_compute_min_hblank(struct intel_crtc_state *crtc_state,
+					    struct intel_connector *intel_connector,
+					    int bpp_x16)
+{
+	struct intel_encoder *intel_encoder = intel_connector->encoder;
+	struct intel_dp_mst_encoder *intel_mst = enc_to_mst(intel_encoder);
+	struct intel_dp *intel_dp = &intel_mst->primary->dp;
+	struct intel_display *intel_display = to_intel_display(intel_encoder);
+	const struct drm_display_mode *adjusted_mode =
+					&crtc_state->hw.adjusted_mode;
+	u32 symbol_size = intel_dp_is_uhbr(crtc_state) ? 32 : 8;
+	u32 hblank;
+
+	if (DISPLAY_VER(intel_display) < 20)
+		return;
+
+	/* Calculate min Hblank Link Layer Symbol Cycle Count for 8b/10b MST & 128b/132b */
+	hblank = DIV_ROUND_UP((DIV_ROUND_UP(adjusted_mode->htotal - adjusted_mode->hdisplay, 4) * bpp_x16), symbol_size);
+	if (intel_dp_is_uhbr(crtc_state))
+		intel_dp->min_hblank = hblank > 5 ? hblank : 5;
+	else
+		intel_dp->min_hblank = hblank > 3 ? hblank : 3;
+}
+
 static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 						struct intel_crtc_state *crtc_state,
 						int max_bpp,
@@ -227,6 +251,8 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 					 local_bw_overhead,
 					 link_bpp_x16,
 					 &crtc_state->dp_m_n);
+
+		intel_dp_mst_compute_min_hblank(crtc_state, connector, link_bpp_x16);
 
 		/*
 		 * The TU size programmed to the HW determines which slots in
@@ -1273,6 +1299,10 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 		intel_de_write(dev_priv, TRANS_DP2_VFREQLOW(pipe_config->cpu_transcoder),
 			       TRANS_DP2_VFREQ_PIXEL_CLOCK(crtc_clock_hz & 0xffffff));
 	}
+
+	if (DISPLAY_VER(dev_priv) >= 20)
+		intel_de_write(dev_priv, DP_MIN_HBLANK_CTL(dev_priv, trans),
+			       intel_dp->min_hblank);
 
 	enable_bs_jitter_was(pipe_config);
 
