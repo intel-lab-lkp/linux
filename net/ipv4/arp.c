@@ -835,7 +835,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	}
 
 	if (arp->ar_op == htons(ARPOP_REQUEST) &&
-	    ip_route_input_noref(skb, tip, sip, 0, dev) == 0) {
+	    ip_route_input_noref(skb, tip, sip, 0, dev, NULL) == 0) {
 
 		rt = skb_rtable(skb);
 		addr_type = rt->rt_type;

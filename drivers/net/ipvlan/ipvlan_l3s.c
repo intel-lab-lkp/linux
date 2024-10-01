@@ -52,7 +52,7 @@ static struct sk_buff *ipvlan_l3_rcv(struct net_device *dev,
 		int err;
 
 		err = ip_route_input_noref(skb, ip4h->daddr, ip4h->saddr,
-					   ip4h->tos, sdev);
+					   ip4h->tos, sdev, NULL);
 		if (unlikely(err))
 			goto out;
 		break;

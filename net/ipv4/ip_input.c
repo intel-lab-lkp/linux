@@ -318,11 +318,10 @@ static int ip_rcv_finish_core(struct net *net, struct sock *sk,
 			      struct sk_buff *skb, struct net_device *dev,
 			      const struct sk_buff *hint)
 {
+	enum skb_drop_reason drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	const struct iphdr *iph = ip_hdr(skb);
-	int err, drop_reason;
+	int err;
 	struct rtable *rt;
-
-	drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 
 	if (ip_can_use_hint(skb, iph, hint)) {
 		err = ip_route_use_hint(skb, iph->daddr, iph->saddr, iph->tos,
@@ -363,7 +362,7 @@ static int ip_rcv_finish_core(struct net *net, struct sock *sk,
 	 */
 	if (!skb_valid_dst(skb)) {
 		err = ip_route_input_noref(skb, iph->daddr, iph->saddr,
-					   iph->tos, dev);
+					   iph->tos, dev, &drop_reason);
 		if (unlikely(err))
 			goto drop_error;
 	} else {
