@@ -166,8 +166,6 @@ struct adp5589_kpad_platform_data {
 	unsigned pullup_en_100k;	/* Pull-Up 100k Enable Mask */
 	unsigned pullup_en_300k;	/* Pull-Up 300k Enable Mask */
 	unsigned pulldown_en_300k;	/* Pull-Down 300k Enable Mask */
-	const struct adp5589_gpi_map *gpimap;
-	unsigned short gpimapsize;
 	const struct adp5589_gpio_platform_data *gpio_data;
 };
 
