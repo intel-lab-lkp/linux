@@ -4723,6 +4723,65 @@ void kvm_calculate_traps(struct kvm_vcpu *vcpu)
 		kvm->arch.fgu[HAFGRTR_GROUP] |= ~(HAFGRTR_EL2_RES0 |
 						  HAFGRTR_EL2_RES1);
 
+	if (!kvm_has_feat_enum(kvm, ID_AA64DFR2_EL1, STEP, IMP))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nMDSTEPOP_EL1;
+
+	if (!kvm_has_feat_enum(kvm, ID_AA64DFR0_EL1, ExtTrcBuff, IMP))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nTRBMPAM_EL1;
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, ITE, IMP))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nTRCITECR_EL1;
+
+	if (!kvm_has_feat_enum(kvm, ID_AA64DFR0_EL1, PMSVer, V1P4))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMSDSFR_EL1;
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, SPMU, IMP))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nSPMDEVAFF_EL1	|
+						 HDFGRTR2_EL2_nSPMID		|
+						 HDFGRTR2_EL2_nSPMSCR_EL1	|
+						 HDFGRTR2_EL2_nSPMACCESSR_EL1	|
+						 HDFGRTR2_EL2_nSPMCR_EL0	|
+						 HDFGRTR2_EL2_nSPMOVS		|
+						 HDFGRTR2_EL2_nSPMINTEN		|
+						 HDFGRTR2_EL2_nSPMCNTEN		|
+						 HDFGRTR2_EL2_nSPMSELR_EL0	|
+						 HDFGRTR2_EL2_nSPMEVTYPERn_EL0	|
+						 HDFGRTR2_EL2_nSPMEVCNTRn_EL0;
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMSS, IMP)) {
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMSSCR_EL1;
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMSSDATA;
+	}
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, DebugVer, V8P9))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nMDSELR_EL1;
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMUVer, V3P9)) {
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMUACR_EL1;
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGWTR2_EL2_nPMZR_EL0;
+	}
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, PMICNTR, IMP)) {
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMICFILTR_EL0;
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMICNTR_EL0;
+	}
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, SEBEP, IMP))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMIAR_EL1;
+
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, EBEP, IMP) &&
+	    !kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMSS, IMP))
+		kvm->arch.fgu[HDFGRTR2_GROUP] |= HDFGRTR2_EL2_nPMECR_EL1;
+
+	if (!kvm_has_feat_enum(kvm, ID_AA64PFR1_EL1, THE, IMP))
+		kvm->arch.fgu[HFGRTR2_GROUP] |= HFGRTR2_EL2_nRCWSMASK_EL1;
+
+	if (!kvm_has_feat_enum(kvm, ID_AA64PFR0_EL1, RAS, V2))
+		kvm->arch.fgu[HFGRTR2_GROUP] |= HFGRTR2_EL2_nERXGSR_EL1;
+
+	if (!kvm_has_feat_enum(kvm, ID_AA64PFR1_EL1, PFAR, IMP))
+		kvm->arch.fgu[HFGRTR2_GROUP] |= HFGRTR2_EL2_nPFAR_EL1;
+
 	set_bit(KVM_ARCH_FLAG_FGU_INITIALIZED, &kvm->arch.flags);
 out:
 	mutex_unlock(&kvm->arch.config_lock);

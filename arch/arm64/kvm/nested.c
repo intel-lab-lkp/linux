@@ -1125,6 +1125,52 @@ int kvm_init_nv_sysregs(struct kvm *kvm)
 		res0 |= HDFGRTR_EL2_nPMSNEVFR_EL1;
 	set_sysreg_masks(kvm, HDFGRTR_EL2, res0 | HDFGRTR_EL2_RES0, res1);
 
+	/* HDFG[RW]TR2_EL2 */
+	res0 = res1 = 0;
+	if (!kvm_has_feat_enum(kvm, ID_AA64DFR2_EL1, STEP, IMP))
+		res0 |= HDFGRTR2_EL2_nMDSTEPOP_EL1;
+	if (!kvm_has_feat_enum(kvm, ID_AA64DFR0_EL1, ExtTrcBuff, IMP))
+		res0 |= HDFGRTR2_EL2_nTRBMPAM_EL1;
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, ITE, IMP))
+		res0 |= HDFGRTR2_EL2_nTRCITECR_EL1;
+	if (!kvm_has_feat_enum(kvm, ID_AA64DFR0_EL1, PMSVer, V1P4))
+		res0 |= HDFGRTR2_EL2_nPMSDSFR_EL1;
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, SPMU, IMP))
+		res0 |= (HDFGRTR2_EL2_nSPMDEVAFF_EL1 | HDFGRTR2_EL2_nSPMID |
+			 HDFGRTR2_EL2_nSPMSCR_EL1 | HDFGRTR2_EL2_nSPMACCESSR_EL1 |
+			 HDFGRTR2_EL2_nSPMCR_EL0 | HDFGRTR2_EL2_nSPMOVS |
+			 HDFGRTR2_EL2_nSPMINTEN | HDFGRTR2_EL2_nSPMCNTEN |
+			 HDFGRTR2_EL2_nSPMSELR_EL0 | HDFGRTR2_EL2_nSPMEVTYPERn_EL0 |
+			 HDFGRTR2_EL2_nSPMEVCNTRn_EL0);
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMSS, IMP))
+		res0 |=	(HDFGRTR2_EL2_nPMSSCR_EL1 | HDFGRTR2_EL2_nPMSSDATA);
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, DebugVer, V8P9))
+		res0 |= HDFGRTR2_EL2_nMDSELR_EL1;
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMUVer, V3P9))
+		res0 |= HDFGRTR2_EL2_nPMUACR_EL1;
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, PMICNTR, IMP))
+		res0 |= (HDFGRTR2_EL2_nPMICFILTR_EL0 | HDFGRTR2_EL2_nPMICNTR_EL0);
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, SEBEP, IMP))
+		res0 |= HDFGRTR2_EL2_nPMIAR_EL1;
+	if (!kvm_has_feat(kvm, ID_AA64DFR1_EL1, EBEP, IMP) &&
+	    !kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMSS, IMP))
+		res0 |= HDFGRTR2_EL2_nPMECR_EL1;
+	set_sysreg_masks(kvm, HDFGRTR2_EL2, res0 | HDFGRTR2_EL2_RES0, res1 | HDFGRTR2_EL2_RES1);
+	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMUVer, V3P9))
+		res0 |= HDFGWTR2_EL2_nPMZR_EL0;
+	set_sysreg_masks(kvm, HDFGWTR2_EL2, res0 | HDFGWTR2_EL2_RES0, res1 | HDFGWTR2_EL2_RES1);
+
+	/* HFG[R|W]TR2_EL2 */
+	res0 = res1 = 0;
+	if (!kvm_has_feat_enum(kvm, ID_AA64PFR1_EL1, THE, IMP))
+		res0 |= HFGRTR2_EL2_nRCWSMASK_EL1;
+	if (!kvm_has_feat_enum(kvm, ID_AA64PFR0_EL1, RAS, V2))
+		res0 |= HFGRTR2_EL2_nERXGSR_EL1;
+	if (!kvm_has_feat_enum(kvm, ID_AA64PFR1_EL1, PFAR, IMP))
+		res0 |= HFGRTR2_EL2_nPFAR_EL1;
+	set_sysreg_masks(kvm, HFGRTR2_EL2, res0 | HFGRTR2_EL2_RES0, res1 | HFGRTR2_EL2_RES1);
+	set_sysreg_masks(kvm, HFGWTR2_EL2, res0 | HFGWTR2_EL2_RES0, res1 | HFGWTR2_EL2_RES1);
+
 	/* Reuse the bits from the read-side and add the write-specific stuff */
 	if (!kvm_has_feat(kvm, ID_AA64DFR0_EL1, PMUVer, IMP))
 		res0 |= (HDFGWTR_EL2_PMCR_EL0 | HDFGWTR_EL2_PMSWINC_EL0);
@@ -1167,6 +1213,12 @@ int kvm_init_nv_sysregs(struct kvm *kvm)
 	if (!kvm_has_feat(kvm, ID_AA64ISAR2_EL1, ATS1A, IMP))
 		res0 |= HFGITR_EL2_ATS1E1A;
 	set_sysreg_masks(kvm, HFGITR_EL2, res0, res1);
+
+	/* HFGITR2_EL2 */
+	res0 = HFGITR2_EL2_RES0;
+	res1 = HFGITR2_EL2_RES1;
+	set_sysreg_masks(kvm, HFGITR2_EL2, res0 | HFGITR2_EL2_RES0, res1 | HFGITR2_EL2_RES1);
+	set_sysreg_masks(kvm, HFGITR2_EL2, res0 | HFGITR2_EL2_RES0, res1 | HFGITR2_EL2_RES1);
 
 	/* HAFGRTR_EL2 - not a lot to see here */
 	res0 = HAFGRTR_EL2_RES0;
