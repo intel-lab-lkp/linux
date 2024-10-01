@@ -433,6 +433,7 @@ enum vcpu_sysreg {
 	PMINTENSET_EL1,	/* Interrupt Enable Set Register */
 	PMOVSSET_EL0,	/* Overflow Flag Status Set Register */
 	PMUSERENR_EL0,	/* User Enable Register */
+	SPMSELR_EL0,	/* System PMU Select Register */
 
 	/* Pointer Authentication Registers in a strict increasing order. */
 	APIAKEYLO_EL1,
@@ -491,6 +492,7 @@ enum vcpu_sysreg {
 	CNTHP_CVAL_EL2,
 	CNTHV_CTL_EL2,
 	CNTHV_CVAL_EL2,
+	SPMACCESSR_EL2, /* System PMU Access Register */
 
 	__VNCR_START__,	/* Any VNCR-capable reg goes after this point */
 

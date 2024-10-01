@@ -323,6 +323,7 @@
 #define MDCR_EL2_TTRF		(UL(1) << 19)
 #define MDCR_EL2_HPMD		(UL(1) << 17)
 #define MDCR_EL2_TPMS		(UL(1) << 14)
+#define MDCR_EL2_EnSPM		(UL(1) << 15)
 #define MDCR_EL2_E2PB_MASK	(UL(0x3))
 #define MDCR_EL2_E2PB_SHIFT	(UL(12))
 #define MDCR_EL2_TDRA		(UL(1) << 11)
@@ -333,6 +334,7 @@
 #define MDCR_EL2_TPM		(UL(1) << 6)
 #define MDCR_EL2_TPMCR		(UL(1) << 5)
 #define MDCR_EL2_HPMN_MASK	(UL(0x1F))
+#define MDCR_EL2_HPMN_SHIFT	(UL(0))
 #define MDCR_EL2_RES0		(GENMASK(63, 37) |	\
 				 GENMASK(35, 30) |	\
 				 GENMASK(25, 24) |	\
