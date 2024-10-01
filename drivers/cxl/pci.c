@@ -1064,12 +1064,28 @@ static void cxl_handle_cper_event(enum cxl_event_type ev_type,
 			       &uuid_null, &rec->event);
 }
 
+static void cxl_handle_prot_err(struct cxl_cper_prot_err *rec)
+{
+	struct cxl_dev_state *cxlds;
+
+	cxlds = get_cxl_devstate(rec->segment, rec->bus,
+				 rec->device, rec->function);
+	if (!cxlds)
+		return;
+
+	cxl_trace_prot_err(cxlds, rec);
+}
+
 static void cxl_cper_work_fn(struct work_struct *work)
 {
 	struct cxl_cper_work_data wd;
 
-	while (cxl_cper_kfifo_get(&wd))
-		cxl_handle_cper_event(wd.event_type, &wd.rec);
+	while (cxl_cper_kfifo_get(&wd)) {
+		if (wd.event_type == CXL_CPER_EVENT_PROT_ERR)
+			cxl_handle_prot_err(&wd.p_rec);
+		else
+			cxl_handle_cper_event(wd.event_type, &wd.rec);
+	}
 }
 static DECLARE_WORK(cxl_cper_work, cxl_cper_work_fn);
 

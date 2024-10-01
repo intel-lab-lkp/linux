@@ -650,6 +650,30 @@ err:
 }
 EXPORT_SYMBOL_NS_GPL(read_cdat_data, CXL);
 
+void cxl_trace_prot_err(struct cxl_dev_state *cxlds,
+			struct cxl_cper_prot_err *rec)
+{
+	u32 status, fe;
+
+	if (rec->severity == CXL_AER_CORRECTABLE) {
+		status = rec->cxl_ras.cor_status & ~rec->cxl_ras.cor_mask;
+
+		trace_cxl_aer_correctable_error(cxlds->cxlmd, status);
+	} else {
+		status = rec->cxl_ras.uncor_status & ~rec->cxl_ras.uncor_mask;
+
+		if (hweight32(status) > 1)
+			fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
+					   rec->cxl_ras.cap_control));
+		else
+			fe = status;
+
+		trace_cxl_aer_uncorrectable_error(cxlds->cxlmd, status, fe,
+						  rec->cxl_ras.header_log);
+	}
+}
+EXPORT_SYMBOL_NS_GPL(cxl_trace_prot_err, CXL);
+
 static void __cxl_handle_cor_ras(struct cxl_dev_state *cxlds,
 				 void __iomem *ras_base)
 {

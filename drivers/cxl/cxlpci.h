@@ -129,4 +129,7 @@ void read_cdat_data(struct cxl_port *port);
 void cxl_cor_error_detected(struct pci_dev *pdev);
 pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 				    pci_channel_state_t state);
+struct cxl_cper_prot_err;
+void cxl_trace_prot_err(struct cxl_dev_state *cxlds,
+			struct cxl_cper_prot_err *rec);
 #endif /* __CXL_PCI_H__ */
