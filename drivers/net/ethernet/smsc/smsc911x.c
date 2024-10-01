@@ -359,25 +359,16 @@ out:
 }
 
 /*
- * enable regulator and clock resources.
- */
-static int smsc911x_enable_resources(struct platform_device *pdev)
-{
-	static const char *const supplies[] = { "vdd33a", "vddvario" };
-
-	return devm_regulator_bulk_get_enable(&pdev->dev, ARRAY_SIZE(supplies),
-					      supplies);
-}
-
-/*
- * Request resources, currently just regulators.
+ * Request and enable resources.
  *
  * The SMSC911x has two power pins: vddvario and vdd33a, in designs where
  * these are not always-on we need to request regulators to be turned on
  * before we can try to access the device registers.
  */
+
 static int smsc911x_request_resources(struct platform_device *pdev)
 {
+	static const char *const supplies[] = { "vdd33a", "vddvario" };
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct smsc911x_data *pdata = netdev_priv(ndev);
 	struct clk *clk;
@@ -393,7 +384,8 @@ static int smsc911x_request_resources(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(clk),
 				     "couldn't get clock");
 
-	return 0;
+	return devm_regulator_bulk_get_enable(&pdev->dev, ARRAY_SIZE(supplies),
+					      supplies);
 }
 
 /* waits for MAC not busy, with timeout.  Only called by smsc911x_mac_read
@@ -2327,10 +2319,6 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dev);
 
 	retval = smsc911x_request_resources(pdev);
-	if (retval)
-		return retval;
-
-	retval = smsc911x_enable_resources(pdev);
 	if (retval)
 		return retval;
 
