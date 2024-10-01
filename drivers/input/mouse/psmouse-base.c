@@ -1930,11 +1930,13 @@ static ssize_t psmouse_attr_set_protocol(struct psmouse *psmouse, void *data, co
 
 		if (serio->drv != &psmouse_drv) {
 			input_free_device(new_dev);
+			mutex_unlock(&psmouse_mutex);
 			return -ENODEV;
 		}
 
 		if (psmouse->protocol == proto) {
 			input_free_device(new_dev);
+			mutex_unlock(&psmouse_mutex);
 			return count; /* switched by other thread */
 		}
 	}
