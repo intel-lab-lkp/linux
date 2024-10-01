@@ -416,17 +416,23 @@ static int mv_cesa_get_sram(struct platform_device *pdev, int idx)
 	return 0;
 }
 
-static void mv_cesa_put_sram(struct platform_device *pdev, int idx)
+static void mv_cesa_put_sram(struct platform_device *pdev)
 {
 	struct mv_cesa_dev *cesa = platform_get_drvdata(pdev);
-	struct mv_cesa_engine *engine = &cesa->engines[idx];
+	const struct mv_cesa_caps *caps = &orion_caps;
+	int i;
 
-	if (engine->pool)
-		gen_pool_free(engine->pool, (unsigned long)engine->sram_pool,
-			      cesa->sram_size);
-	else
-		dma_unmap_resource(cesa->dev, engine->sram_dma,
-				   cesa->sram_size, DMA_BIDIRECTIONAL, 0);
+	for (i = 0; i < caps->nengines; i++) {
+		struct mv_cesa_engine *engine = &cesa->engines[i];
+		if (engine->pool)
+			gen_pool_free(engine->pool,
+				      (unsigned long)engine->sram_pool,
+				      cesa->sram_size);
+		else
+			dma_unmap_resource(cesa->dev, engine->sram_dma,
+					   cesa->sram_size, DMA_BIDIRECTIONAL,
+					   0);
+	}
 }
 
 static int mv_cesa_probe(struct platform_device *pdev)
@@ -562,21 +568,16 @@ static int mv_cesa_probe(struct platform_device *pdev)
 	return 0;
 
 err_cleanup:
-	for (i = 0; i < caps->nengines; i++)
-		mv_cesa_put_sram(pdev, i);
-
+	mv_cesa_put_sram(pdev);
 	return ret;
 }
 
 static void mv_cesa_remove(struct platform_device *pdev)
 {
 	struct mv_cesa_dev *cesa = platform_get_drvdata(pdev);
-	int i;
 
 	mv_cesa_remove_algs(cesa);
-
-	for (i = 0; i < cesa->caps->nengines; i++)
-		mv_cesa_put_sram(pdev, i);
+	mv_cesa_put_sram(pdev);
 }
 
 static const struct platform_device_id mv_cesa_plat_id_table[] = {
