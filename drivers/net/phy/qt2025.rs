@@ -93,8 +93,15 @@ impl Driver for PhyQT2025 {
         // The micro-controller will start running from SRAM.
         dev.write(C45::new(Mmd::PCS, 0xe854), 0x0040)?;
 
-        // TODO: sleep here until the hw becomes ready.
-        Ok(())
+        // sleep here until the hw becomes ready.
+        for _ in 0..60 {
+            kernel::delay::sleep(core::time::Duration::from_millis(50));
+            let val = dev.read(C45::new(Mmd::PCS, 0xd7fd))?;
+            if val != 0x00 && val != 0x10 {
+                return Ok(());
+            }
+        }
+        Err(code::ENODEV)
     }
 
     fn read_status(dev: &mut phy::Device) -> Result<u16> {
