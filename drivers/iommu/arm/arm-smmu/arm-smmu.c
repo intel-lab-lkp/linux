@@ -1437,6 +1437,8 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 			goto out_free;
 	} else {
 		smmu = arm_smmu_get_by_fwnode(fwspec->iommu_fwnode);
+		if (!smmu)
+			return dev_err_probe(dev, -EPROBE_DEFER, "smmu dev has not bound yet\n");
 	}
 
 	ret = -EINVAL;
