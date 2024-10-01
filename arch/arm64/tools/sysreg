@@ -114,6 +114,21 @@ Res0	63:1
 Field	0	OSLK
 EndSysreg
 
+SysregFields	SPMCGCRx_EL1
+Field	63:56	N7
+Field	55:48	N6
+Field	47:40	N5
+Field	39:32	N4
+Field	31:24	N3
+Field	23:16	N2
+Field	15:8	N1
+Field	7:0	N0
+EndSysregFields
+
+Sysreg	SPMCGCR0_EL1	2	0	9	13	0
+Fields	SPMCGCRx_EL1
+EndSysreg
+
 Sysreg	SPMACCESSR_EL1	2	0	9	13	3
 Field	63:62	P31
 Field	61:60	P30
