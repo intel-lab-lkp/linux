@@ -441,6 +441,7 @@ EXPORT_SYMBOL(neigh_changeaddr);
 
 static int __neigh_ifdown(struct neigh_table *tbl, struct net_device *dev,
 			  bool skip_perm)
+	__acquires(&tbl->lock)
 {
 	write_lock_bh(&tbl->lock);
 	neigh_flush_dev(tbl, dev, skip_perm);
@@ -453,6 +454,7 @@ static int __neigh_ifdown(struct neigh_table *tbl, struct net_device *dev,
 }
 
 int neigh_carrier_down(struct neigh_table *tbl, struct net_device *dev)
+	__acquires(&tbl->lock)
 {
 	__neigh_ifdown(tbl, dev, true);
 	return 0;
@@ -460,6 +462,7 @@ int neigh_carrier_down(struct neigh_table *tbl, struct net_device *dev)
 EXPORT_SYMBOL(neigh_carrier_down);
 
 int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
+	__acquires(&tbl->lock)
 {
 	__neigh_ifdown(tbl, dev, false);
 	return 0;
@@ -848,6 +851,7 @@ int pneigh_delete(struct neigh_table *tbl, struct net *net, const void *pkey,
 
 static int pneigh_ifdown_and_unlock(struct neigh_table *tbl,
 				    struct net_device *dev)
+	__releases(&tbl->lock)
 {
 	struct pneigh_entry *n, **np, *freelist = NULL;
 	u32 h;
