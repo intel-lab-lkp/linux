@@ -68,7 +68,7 @@ static inline void file_free(struct file *f)
 	put_cred(f->f_cred);
 	if (unlikely(f->f_mode & FMODE_BACKING)) {
 		path_put(backing_file_user_path(f));
-		kfree(backing_file(f));
+		kfree_rcu_mightsleep(backing_file(f));
 	} else {
 		kmem_cache_free(filp_cachep, f);
 	}
