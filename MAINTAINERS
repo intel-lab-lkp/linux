@@ -15277,7 +15277,6 @@ S:	Maintained
 F:	drivers/usb/image/microtek.*
 
 MIKROTIK CRS3XX 98DX3236 BOARD SUPPORT
-M:	Luka Kovacic <luka.kovacic@sartura.hr>
 M:	Luka Perkov <luka.perkov@sartura.hr>
 S:	Maintained
 F:	arch/arm/boot/dts/marvell/armada-xp-crs305-1g-4s-bit.dts
