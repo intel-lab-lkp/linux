@@ -380,6 +380,7 @@ struct sparx5 {
 
 /* sparx5_main.c */
 extern const struct sparx5_regs *regs;
+bool is_sparx5(struct sparx5 *sparx5);
 
 /* sparx5_switchdev.c */
 int sparx5_register_notifier_blocks(struct sparx5 *sparx5);
