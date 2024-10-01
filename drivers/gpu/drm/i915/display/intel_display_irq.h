@@ -79,4 +79,6 @@ void i8xx_pipestat_irq_handler(struct drm_i915_private *i915, u16 iir, u32 pipe_
 
 void intel_display_irq_init(struct drm_i915_private *i915);
 
+void i915gm_irq_cstate_wa(struct drm_i915_private *i915, bool enable);
+
 #endif /* __INTEL_DISPLAY_IRQ_H__ */
