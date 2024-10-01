@@ -2478,6 +2478,7 @@ void ktime_get_real_ts64_mg(struct timespec64 *ts)
 	if (atomic64_try_cmpxchg(&mg_floor, &old, mono)) {
 		ts->tv_nsec = 0;
 		timespec64_add_ns(ts, nsecs);
+		timekeeping_inc_mg_floor_swaps();
 	} else {
 		/*
 		 * Something has changed mg_floor since "old" was

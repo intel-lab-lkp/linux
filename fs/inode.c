@@ -145,9 +145,10 @@ static int mgts_show(struct seq_file *s, void *p)
 	unsigned long ctime_updates = get_mg_ctime_updates();
 	unsigned long ctime_swaps = get_mg_ctime_swaps();
 	unsigned long fine_stamps = get_mg_fine_stamps();
+	unsigned long floor_swaps = timekeeping_get_mg_floor_swaps();
 
-	seq_printf(s, "%lu %lu %lu\n",
-		   ctime_updates, ctime_swaps, fine_stamps);
+	seq_printf(s, "%lu %lu %lu %lu\n",
+		   ctime_updates, ctime_swaps, fine_stamps, floor_swaps);
 	return 0;
 }
 
