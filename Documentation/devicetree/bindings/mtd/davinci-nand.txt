@@ -44,6 +44,7 @@ Recommended properties :
 				- "none"
 				- "soft"
 				- "hw"
+				- "on-die"
 
 - ti,davinci-ecc-bits:		used ECC bits, currently supported 1 or 4.
 
