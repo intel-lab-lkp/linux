@@ -624,6 +624,7 @@ static struct ieee80211_key_conf *rtw89_wow_gtk_rekey(struct rtw89_dev *rtwdev,
 	kfree(rekey_conf);
 	if (IS_ERR(key)) {
 		rtw89_err(rtwdev, "ieee80211_gtk_rekey_add failed\n");
+		mutex_unlock(&rtwdev->mutex);
 		return NULL;
 	}
 
