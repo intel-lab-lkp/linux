@@ -7,7 +7,8 @@
  * All Rights Reserved.
  *
  */
-
+#define DEBUG
+#include <linux/suspend.h>
 #include "core.h"
 
 /* Cannon Lake: PGD PFET Enable Ack Status Register(s) bitmap */
@@ -206,8 +207,24 @@ const struct pmc_reg_map cnp_reg_map = {
 	.etr3_offset = ETR3_OFFSET,
 };
 
+
+static DEFINE_PER_CPU(u64, pkg_cst_config);
+
 void cnl_suspend(struct pmc_dev *pmcdev)
 {
+	if (!pm_suspend_via_firmware()) {
+		u64 val;
+		int cpunum;
+
+		for_each_online_cpu(cpunum) {
+			rdmsrl_on_cpu(cpunum, MSR_PKG_CST_CONFIG_CONTROL, &val);
+			per_cpu(pkg_cst_config, cpunum) = val;
+			val &= ~NHM_C1_AUTO_DEMOTE;
+			wrmsrl_on_cpu(cpunum, MSR_PKG_CST_CONFIG_CONTROL, val);
+			pr_debug("%s: cpu:%d cst %llx\n", __func__, cpunum, val);
+		}
+	}
+
 	/*
 	 * Due to a hardware limitation, the GBE LTR blocks PC10
 	 * when a cable is attached. To unblock PC10 during suspend,
@@ -219,6 +236,15 @@ void cnl_suspend(struct pmc_dev *pmcdev)
 int cnl_resume(struct pmc_dev *pmcdev)
 {
 	pmc_core_send_ltr_ignore(pmcdev, 3, 0);
+
+	if (!pm_suspend_via_firmware()) {
+		int cpunum;
+
+		for_each_online_cpu(cpunum) {
+			pr_debug("%s: cpu:%d cst %llx\n", __func__, cpunum, per_cpu(pkg_cst_config, cpunum));
+			wrmsrl_on_cpu(cpunum, MSR_PKG_CST_CONFIG_CONTROL, per_cpu(pkg_cst_config, cpunum));
+		}
+	}
 
 	return pmc_core_resume_common(pmcdev);
 }
