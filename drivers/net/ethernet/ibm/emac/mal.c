@@ -582,15 +582,6 @@ static int mal_probe(struct platform_device *ofdev)
 	INIT_LIST_HEAD(&mal->list);
 	spin_lock_init(&mal->lock);
 
-	mal->dummy_dev = alloc_netdev_dummy(0);
-	if (!mal->dummy_dev) {
-		err = -ENOMEM;
-		goto fail_unmap;
-	}
-
-	netif_napi_add_weight(mal->dummy_dev, &mal->napi, mal_poll,
-			      CONFIG_IBM_EMAC_POLL_WEIGHT);
-
 	/* Load power-on reset defaults */
 	mal_reset(mal);
 
@@ -618,7 +609,7 @@ static int mal_probe(struct platform_device *ofdev)
 					  GFP_KERNEL);
 	if (mal->bd_virt == NULL) {
 		err = -ENOMEM;
-		goto fail_dummy;
+		goto fail_unmap;
 	}
 
 	for (i = 0; i < mal->num_tx_chans; ++i)
@@ -684,12 +675,19 @@ static int mal_probe(struct platform_device *ofdev)
 	wmb();
 	platform_set_drvdata(ofdev, mal);
 
+	mal->dummy_dev = alloc_netdev_dummy(0);
+	if (!mal->dummy_dev) {
+		err = -ENOMEM;
+		goto fail2;
+	}
+
+	netif_napi_add_weight(mal->dummy_dev, &mal->napi, mal_poll,
+			      CONFIG_IBM_EMAC_POLL_WEIGHT);
+
 	return 0;
 
  fail2:
 	dma_free_coherent(&ofdev->dev, bd_size, mal->bd_virt, mal->bd_dma);
- fail_dummy:
-	free_netdev(mal->dummy_dev);
  fail_unmap:
 	dcr_unmap(mal->dcr_host, 0x100);
 	return err;
