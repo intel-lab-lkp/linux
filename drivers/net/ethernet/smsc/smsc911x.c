@@ -2110,11 +2110,6 @@ static int smsc911x_init(struct net_device *dev)
 	spin_lock_init(&pdata->dev_lock);
 	spin_lock_init(&pdata->mac_lock);
 
-	if (pdata->ioaddr == NULL) {
-		SMSC_WARN(pdata, probe, "pdata->ioaddr: 0x00000000");
-		return -ENODEV;
-	}
-
 	/*
 	 * poll the READY bit in PMT_CTRL. Any other access to the device is
 	 * forbidden while this bit isn't set. Try for 100ms
@@ -2338,11 +2333,6 @@ static int smsc911x_drv_probe(struct platform_device *pdev)
 	retval = smsc911x_enable_resources(pdev);
 	if (retval)
 		return retval;
-
-	if (pdata->ioaddr == NULL) {
-		SMSC_WARN(pdata, probe, "Error smsc911x base address invalid");
-		return -ENOMEM;
-	}
 
 	retval = smsc911x_probe_config(&pdata->config, &pdev->dev);
 	if (retval && config) {
