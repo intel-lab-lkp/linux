@@ -97,6 +97,21 @@ properties:
       - const: tx
       - const: rx
 
+  snps,bus-capacitance-pf:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: >
+      This property indicates the bus capacitance in picofarads (pF).
+      This value is used to compute the tHIGH and tLOW periods for high speed
+      mode.
+    default: 100
+
+  snps,clk-freq-optimized:
+    description: >
+      This property indicates whether the hardware input clock frequency is
+      reduced by reducing the internal latency. This value is used to compute
+      the tHIGH and tLOW periods for high speed mode.
+    type: boolean
+
 unevaluatedProperties: false
 
 required:
@@ -145,5 +160,14 @@ examples:
       pinctrl-names = "default";
       interrupts = <8>;
       clocks = <&ahb_clk>;
+    };
+  - |
+    i2c@c5000000 {
+      compatible = "snps,designware-i2c";
+      reg = <0xc5000000 0x1000>;
+      interrupts = <37 1>;
+      clock-frequency = <400000>;
+      snps,bus-capacitance-pf = <400>;
+      snps,clk-freq-optimized;
     };
 ...
