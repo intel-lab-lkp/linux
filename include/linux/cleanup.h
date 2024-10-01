@@ -273,6 +273,10 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
  *	an anonymous instance of the (guard) class, not recommended for
  *	conditional locks.
  *
+ * if_not_cond_guard(name, args...) { <error handling> }:
+ *	convenience macro for conditional guards that calls the statement that
+ *	follows only if the lock was not acquired (typically an error return).
+ *
  * scoped_guard (name, args...) { }:
  *	similar to CLASS(name, scope)(args), except the variable (with the
  *	explicit name 'scope') is declard in a for-loop such that its scope is
@@ -303,6 +307,13 @@ static inline class_##_name##_t class_##_name##ext##_constructor(_init_args) \
 	CLASS(_name, __UNIQUE_ID(guard))
 
 #define __guard_ptr(_name) class_##_name##_lock_ptr
+
+#define __if_not_cond_guard(_name, _id, args...)	\
+	CLASS(_name, _id)(args);			\
+	if (!__guard_ptr(_name)(&_id))
+
+#define if_not_cond_guard(_name, args...) \
+	__if_not_cond_guard(_name, __UNIQUE_ID(guard), args)
 
 #define scoped_guard(_name, args...)					\
 	for (CLASS(_name, scope)(args),					\
