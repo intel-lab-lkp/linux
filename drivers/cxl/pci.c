@@ -1021,32 +1021,38 @@ static struct pci_driver cxl_pci_driver = {
 	},
 };
 
+static struct cxl_dev_state *get_cxl_devstate(u16 segment, u8 bus,
+					      u8 device, u8 function)
+{
+	unsigned int devfn = PCI_DEVFN(device, function);
+	struct pci_dev *pdev __free(pci_dev_put) =
+		pci_get_domain_bus_and_slot(segment, bus, devfn);
+
+	if (!pdev)
+		return NULL;
+
+	guard(device)(&pdev->dev);
+	if (pdev->driver != &cxl_pci_driver)
+		return NULL;
+
+	return pci_get_drvdata(pdev);
+}
+
 #define CXL_EVENT_HDR_FLAGS_REC_SEVERITY GENMASK(1, 0)
 static void cxl_handle_cper_event(enum cxl_event_type ev_type,
 				  struct cxl_cper_event_rec *rec)
 {
 	struct cper_cxl_event_devid *device_id = &rec->hdr.device_id;
-	struct pci_dev *pdev __free(pci_dev_put) = NULL;
 	enum cxl_event_log_type log_type;
 	struct cxl_dev_state *cxlds;
-	unsigned int devfn;
 	u32 hdr_flags;
 
 	pr_debug("CPER event %d for device %u:%u:%u.%u\n", ev_type,
 		 device_id->segment_num, device_id->bus_num,
 		 device_id->device_num, device_id->func_num);
 
-	devfn = PCI_DEVFN(device_id->device_num, device_id->func_num);
-	pdev = pci_get_domain_bus_and_slot(device_id->segment_num,
-					   device_id->bus_num, devfn);
-	if (!pdev)
-		return;
-
-	guard(device)(&pdev->dev);
-	if (pdev->driver != &cxl_pci_driver)
-		return;
-
-	cxlds = pci_get_drvdata(pdev);
+	cxlds = get_cxl_devstate(device_id->segment_num, device_id->bus_num,
+				 device_id->device_num, device_id->func_num);
 	if (!cxlds)
 		return;
 
