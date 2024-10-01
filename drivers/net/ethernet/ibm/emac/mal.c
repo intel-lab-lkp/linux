@@ -553,6 +553,18 @@ static int mal_probe(struct platform_device *ofdev)
 	}
 	mal->num_rx_chans = prop[0];
 
+	if (of_device_is_compatible(ofdev->dev.of_node, "ibm,mcmal-405ez")) {
+#if defined(CONFIG_IBM_EMAC_MAL_CLR_ICINTSTAT) && \
+		defined(CONFIG_IBM_EMAC_MAL_COMMON_ERR)
+		mal->features |= (MAL_FTR_CLEAR_ICINTSTAT |
+				MAL_FTR_COMMON_ERR_INT);
+#else
+		printk(KERN_ERR "%pOF: Support for 405EZ not enabled!\n",
+				ofdev->dev.of_node);
+		return -ENODEV;
+#endif
+	}
+
 	dcr_base = dcr_resource_start(ofdev->dev.of_node, 0);
 	if (dcr_base == 0) {
 		printk(KERN_ERR
@@ -564,18 +576,6 @@ static int mal_probe(struct platform_device *ofdev)
 		printk(KERN_ERR
 		       "mal%d: failed to map DCRs !\n", index);
 		return -ENODEV;
-	}
-
-	if (of_device_is_compatible(ofdev->dev.of_node, "ibm,mcmal-405ez")) {
-#if defined(CONFIG_IBM_EMAC_MAL_CLR_ICINTSTAT) && \
-		defined(CONFIG_IBM_EMAC_MAL_COMMON_ERR)
-		mal->features |= (MAL_FTR_CLEAR_ICINTSTAT |
-				MAL_FTR_COMMON_ERR_INT);
-#else
-		printk(KERN_ERR "%pOF: Support for 405EZ not enabled!\n",
-				ofdev->dev.of_node);
-		return -ENODEV;
-#endif
 	}
 
 	INIT_LIST_HEAD(&mal->poll_list);
