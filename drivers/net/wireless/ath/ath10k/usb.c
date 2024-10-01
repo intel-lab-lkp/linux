@@ -504,13 +504,14 @@ static int ath10k_usb_submit_ctrl_out(struct ath10k *ar,
 	if (ret < 0) {
 		ath10k_warn(ar, "Failed to submit usb control message: %d\n",
 			    ret);
-		kfree(buf);
-		return ret;
+		goto free_buf;
 	}
 
+	ret = 0;
+free_buf:
 	kfree(buf);
 
-	return 0;
+	return ret;
 }
 
 static int ath10k_usb_submit_ctrl_in(struct ath10k *ar,
@@ -538,15 +539,15 @@ static int ath10k_usb_submit_ctrl_in(struct ath10k *ar,
 	if (ret < 0) {
 		ath10k_warn(ar, "Failed to read usb control message: %d\n",
 			    ret);
-		kfree(buf);
-		return ret;
+		goto free_buf;
 	}
 
 	memcpy((u8 *)data, buf, size);
-
+	ret = 0;
+free_buf:
 	kfree(buf);
 
-	return 0;
+	return ret;
 }
 
 static int ath10k_usb_ctrl_msg_exchange(struct ath10k *ar,

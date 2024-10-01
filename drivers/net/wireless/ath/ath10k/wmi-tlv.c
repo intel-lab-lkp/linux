@@ -184,8 +184,8 @@ static int ath10k_wmi_tlv_event_bcn_tx_status(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_OFFLOAD_BCN_TX_STATUS_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	tx_status = __le32_to_cpu(ev->tx_status);
@@ -209,8 +209,10 @@ static int ath10k_wmi_tlv_event_bcn_tx_status(struct ath10k *ar,
 	if (arvif && arvif->is_up && arvif->vif->bss_conf.csa_active)
 		ieee80211_queue_work(ar->hw, &arvif->ap_csa_work);
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static void ath10k_wmi_tlv_event_vdev_delete_resp(struct ath10k *ar,
@@ -279,8 +281,8 @@ static int ath10k_wmi_tlv_op_pull_peer_stats_info(struct ath10k *ar,
 	data = tb[WMI_TLV_TAG_ARRAY_STRUCT];
 
 	if (!ev || !data) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	num_peer_stats = __le32_to_cpu(ev->num_peers);
@@ -296,8 +298,10 @@ static int ath10k_wmi_tlv_op_pull_peer_stats_info(struct ath10k *ar,
 	if (ret)
 		ath10k_warn(ar, "failed to parse stats info tlv: %d\n", ret);
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static void ath10k_wmi_tlv_event_peer_stats_info(struct ath10k *ar,
@@ -327,8 +331,8 @@ static int ath10k_wmi_tlv_event_diag_data(struct ath10k *ar,
 	ev = tb[WMI_TLV_TAG_STRUCT_DIAG_DATA_CONTAINER_EVENT];
 	data = tb[WMI_TLV_TAG_ARRAY_BYTE];
 	if (!ev || !data) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	num_items = __le32_to_cpu(ev->num_items);
@@ -367,8 +371,10 @@ static int ath10k_wmi_tlv_event_diag_data(struct ath10k *ar,
 		ath10k_warn(ar, "failed to parse diag data event: num_items %d len %d\n",
 			    num_items, len);
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_event_diag(struct ath10k *ar,
@@ -387,16 +393,17 @@ static int ath10k_wmi_tlv_event_diag(struct ath10k *ar,
 
 	data = tb[WMI_TLV_TAG_ARRAY_BYTE];
 	if (!data) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 	len = ath10k_wmi_tlv_len(data);
 
 	ath10k_dbg(ar, ATH10K_DBG_WMI, "wmi tlv diag event len %d\n", len);
 	trace_ath10k_wmi_diag(ar, data, len);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_event_p2p_noa(struct ath10k *ar,
@@ -418,8 +425,8 @@ static int ath10k_wmi_tlv_event_p2p_noa(struct ath10k *ar,
 	noa = tb[WMI_TLV_TAG_STRUCT_P2P_NOA_INFO];
 
 	if (!ev || !noa) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	vdev_id = __le32_to_cpu(ev->vdev_id);
@@ -429,8 +436,10 @@ static int ath10k_wmi_tlv_event_p2p_noa(struct ath10k *ar,
 		   vdev_id, noa->num_descriptors);
 
 	ath10k_p2p_noa_update_by_vdev_id(ar, vdev_id, noa);
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_event_tx_pause(struct ath10k *ar,
@@ -450,8 +459,8 @@ static int ath10k_wmi_tlv_event_tx_pause(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_TX_PAUSE_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	pause_id = __le32_to_cpu(ev->pause_id);
@@ -494,8 +503,10 @@ static int ath10k_wmi_tlv_event_tx_pause(struct ath10k *ar,
 		break;
 	}
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static void ath10k_wmi_tlv_event_rfkill_state_change(struct ath10k *ar,
@@ -821,8 +832,8 @@ static int ath10k_wmi_tlv_op_pull_scan_ev(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_SCAN_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->event_type = ev->event_type;
@@ -831,9 +842,10 @@ static int ath10k_wmi_tlv_op_pull_scan_ev(struct ath10k *ar,
 	arg->scan_req_id = ev->scan_req_id;
 	arg->scan_id = ev->scan_id;
 	arg->vdev_id = ev->vdev_id;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int
@@ -853,8 +865,8 @@ ath10k_wmi_tlv_op_pull_mgmt_tx_compl_ev(struct ath10k *ar, struct sk_buff *skb,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_MGMT_TX_COMPL_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->desc_id = ev->desc_id;
@@ -865,8 +877,10 @@ ath10k_wmi_tlv_op_pull_mgmt_tx_compl_ev(struct ath10k *ar, struct sk_buff *skb,
 	if (test_bit(WMI_SERVICE_TX_DATA_ACK_RSSI, ar->wmi.svc_map))
 		arg->ack_rssi = ev->ack_rssi;
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 struct wmi_tlv_tx_bundle_compl_parse {
@@ -963,8 +977,8 @@ static int ath10k_wmi_tlv_op_pull_mgmt_rx_ev(struct ath10k *ar,
 	frame = tb[WMI_TLV_TAG_ARRAY_BYTE];
 
 	if (!ev || !frame) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->channel = ev->channel;
@@ -980,8 +994,8 @@ static int ath10k_wmi_tlv_op_pull_mgmt_rx_ev(struct ath10k *ar,
 	msdu_len = __le32_to_cpu(arg->buf_len);
 
 	if (skb->len < (frame - skb->data) + msdu_len) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	/* shift the sk_buff to point to `frame` */
@@ -989,9 +1003,10 @@ static int ath10k_wmi_tlv_op_pull_mgmt_rx_ev(struct ath10k *ar,
 	skb_put(skb, frame - skb->data);
 	skb_pull(skb, frame - skb->data);
 	skb_put(skb, msdu_len);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_op_pull_ch_info_ev(struct ath10k *ar,
@@ -1011,8 +1026,8 @@ static int ath10k_wmi_tlv_op_pull_ch_info_ev(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_CHAN_INFO_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->err_code = ev->err_code;
@@ -1025,8 +1040,10 @@ static int ath10k_wmi_tlv_op_pull_ch_info_ev(struct ath10k *ar,
 		     ar->running_fw->fw_file.fw_features))
 		arg->mac_clk_mhz = ev->mac_clk_mhz;
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int
@@ -1046,8 +1063,8 @@ ath10k_wmi_tlv_op_pull_vdev_start_ev(struct ath10k *ar, struct sk_buff *skb,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_VDEV_START_RESPONSE_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	skb_pull(skb, sizeof(*ev));
@@ -1055,9 +1072,10 @@ ath10k_wmi_tlv_op_pull_vdev_start_ev(struct ath10k *ar, struct sk_buff *skb,
 	arg->req_id = ev->req_id;
 	arg->resp_type = ev->resp_type;
 	arg->status = ev->status;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_op_pull_peer_kick_ev(struct ath10k *ar,
@@ -1077,14 +1095,15 @@ static int ath10k_wmi_tlv_op_pull_peer_kick_ev(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_PEER_STA_KICKOUT_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->mac_addr = ev->peer_macaddr.addr;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 struct wmi_tlv_swba_parse {
@@ -1227,8 +1246,8 @@ static int ath10k_wmi_tlv_op_pull_phyerr_ev_hdr(struct ath10k *ar,
 	phyerrs = tb[WMI_TLV_TAG_ARRAY_BYTE];
 
 	if (!ev || !phyerrs) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->num_phyerrs  = __le32_to_cpu(ev->num_phyerrs);
@@ -1236,9 +1255,10 @@ static int ath10k_wmi_tlv_op_pull_phyerr_ev_hdr(struct ath10k *ar,
 	arg->tsf_u32 = __le32_to_cpu(ev->tsf_u32);
 	arg->buf_len = __le32_to_cpu(ev->buf_len);
 	arg->phyerrs = phyerrs;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 #define WMI_TLV_ABI_VER_NS0 0x5F414351
@@ -1402,17 +1422,18 @@ static int ath10k_wmi_tlv_op_pull_rdy_ev(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_READY_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->sw_version = ev->abi.abi_ver0;
 	arg->abi_version = ev->abi.abi_ver1;
 	arg->status = ev->status;
 	arg->mac_addr = ev->mac_addr.addr;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_svc_avail_parse(struct ath10k *ar, u16 tag, u16 len,
@@ -1515,8 +1536,8 @@ static int ath10k_wmi_tlv_op_pull_fw_stats(struct ath10k *ar,
 	data = tb[WMI_TLV_TAG_ARRAY_BYTE];
 
 	if (!ev || !data) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	data_len = ath10k_wmi_tlv_len(data);
@@ -1539,8 +1560,8 @@ static int ath10k_wmi_tlv_op_pull_fw_stats(struct ath10k *ar,
 
 		src = data;
 		if (data_len < sizeof(*src)) {
-			kfree(tb);
-			return -EPROTO;
+			ret = -EPROTO;
+			goto free_tb;
 		}
 
 		data += sizeof(*src);
@@ -1562,8 +1583,8 @@ static int ath10k_wmi_tlv_op_pull_fw_stats(struct ath10k *ar,
 
 		src = data;
 		if (data_len < sizeof(*src)) {
-			kfree(tb);
-			return -EPROTO;
+			ret = -EPROTO;
+			goto free_tb;
 		}
 
 		data += sizeof(*src);
@@ -1583,8 +1604,8 @@ static int ath10k_wmi_tlv_op_pull_fw_stats(struct ath10k *ar,
 
 		src = data;
 		if (data_len < sizeof(*src)) {
-			kfree(tb);
-			return -EPROTO;
+			ret = -EPROTO;
+			goto free_tb;
 		}
 
 		data += sizeof(*src);
@@ -1621,8 +1642,10 @@ static int ath10k_wmi_tlv_op_pull_fw_stats(struct ath10k *ar,
 		list_add_tail(&dst->list, &stats->peers);
 	}
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_op_pull_roam_ev(struct ath10k *ar,
@@ -1642,16 +1665,17 @@ static int ath10k_wmi_tlv_op_pull_roam_ev(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_ROAM_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->vdev_id = ev->vdev_id;
 	arg->reason = ev->reason;
 	arg->rssi = ev->rssi;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int
@@ -1671,17 +1695,18 @@ ath10k_wmi_tlv_op_pull_wow_ev(struct ath10k *ar, struct sk_buff *skb,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_WOW_EVENT_INFO];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->vdev_id = __le32_to_cpu(ev->vdev_id);
 	arg->flag = __le32_to_cpu(ev->flag);
 	arg->wake_reason = __le32_to_cpu(ev->wake_reason);
 	arg->data_len = __le32_to_cpu(ev->data_len);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath10k_wmi_tlv_op_pull_echo_ev(struct ath10k *ar,
@@ -1701,14 +1726,15 @@ static int ath10k_wmi_tlv_op_pull_echo_ev(struct ath10k *ar,
 
 	ev = tb[WMI_TLV_TAG_STRUCT_ECHO_EVENT];
 	if (!ev) {
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->value = ev->value;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static struct sk_buff *

@@ -4628,14 +4628,15 @@ static int ath12k_pull_vdev_start_resp_tlv(struct ath12k_base *ab, struct sk_buf
 	ev = tb[WMI_TAG_VDEV_START_RESPONSE_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch vdev start resp ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	*vdev_rsp = *ev;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static struct ath12k_reg_rule
@@ -4706,8 +4707,8 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 	ev = tb[WMI_TAG_REG_CHAN_LIST_CC_EXT_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch reg chan list ext update ev\n");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	reg_info->num_2g_reg_rules = le32_to_cpu(ev->num_2g_reg_rules);
@@ -4736,8 +4737,8 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 	if (num_2g_reg_rules > MAX_REG_RULES || num_5g_reg_rules > MAX_REG_RULES) {
 		ath12k_warn(ab, "Num reg rules for 2G/5G exceeds max limit (num_2g_reg_rules: %d num_5g_reg_rules: %d max_rules: %d)\n",
 			    num_2g_reg_rules, num_5g_reg_rules, MAX_REG_RULES);
-		kfree(tb);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_tb;
 	}
 
 	for (i = 0; i < WMI_REG_CURRENT_MAX_AP_TYPE; i++) {
@@ -4746,8 +4747,8 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 		if (num_6g_reg_rules_ap[i] > MAX_6G_REG_RULES) {
 			ath12k_warn(ab, "Num 6G reg rules for AP mode(%d) exceeds max limit (num_6g_reg_rules_ap: %d, max_rules: %d)\n",
 				    i, num_6g_reg_rules_ap[i], MAX_6G_REG_RULES);
-			kfree(tb);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto free_tb;
 		}
 
 		total_reg_rules += num_6g_reg_rules_ap[i];
@@ -4771,15 +4772,15 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 		    num_6g_reg_rules_cl[WMI_REG_VLP_AP][i] >  MAX_6G_REG_RULES) {
 			ath12k_warn(ab, "Num 6g client reg rules exceeds max limit, for client(type: %d)\n",
 				    i);
-			kfree(tb);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto free_tb;
 		}
 	}
 
 	if (!total_reg_rules) {
 		ath12k_warn(ab, "No reg rules available\n");
-		kfree(tb);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_tb;
 	}
 
 	memcpy(reg_info->alpha2, &ev->alpha2, REG_ALPHA2_LEN);
@@ -4894,9 +4895,9 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 						      ext_wmi_reg_rule);
 
 		if (!reg_info->reg_rules_2g_ptr) {
-			kfree(tb);
 			ath12k_warn(ab, "Unable to Allocate memory for 2g rules\n");
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto free_tb;
 		}
 	}
 
@@ -4907,9 +4908,9 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 						      ext_wmi_reg_rule);
 
 		if (!reg_info->reg_rules_5g_ptr) {
-			kfree(tb);
 			ath12k_warn(ab, "Unable to Allocate memory for 5g rules\n");
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto free_tb;
 		}
 	}
 
@@ -4921,9 +4922,9 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 						      ext_wmi_reg_rule);
 
 		if (!reg_info->reg_rules_6g_ap_ptr[i]) {
-			kfree(tb);
 			ath12k_warn(ab, "Unable to Allocate memory for 6g ap rules\n");
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto free_tb;
 		}
 
 		ext_wmi_reg_rule += num_6g_reg_rules_ap[i];
@@ -4936,9 +4937,9 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 							      ext_wmi_reg_rule);
 
 			if (!reg_info->reg_rules_6g_client_ptr[j][i]) {
-				kfree(tb);
 				ath12k_warn(ab, "Unable to Allocate memory for 6g client rules\n");
-				return -ENOMEM;
+				ret = -ENOMEM;
+				goto free_tb;
 			}
 
 			ext_wmi_reg_rule += num_6g_reg_rules_cl[j][i];
@@ -4970,9 +4971,10 @@ static int ath12k_pull_reg_chan_list_ext_update_ev(struct ath12k_base *ab,
 		   reg_info->client_type, reg_info->domain_code_6g_super_id);
 
 	ath12k_dbg(ab, ATH12K_DBG_WMI, "processed regulatory ext channel list\n");
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_pull_peer_del_resp_ev(struct ath12k_base *ab, struct sk_buff *skb,
@@ -4992,8 +4994,8 @@ static int ath12k_pull_peer_del_resp_ev(struct ath12k_base *ab, struct sk_buff *
 	ev = tb[WMI_TAG_PEER_DELETE_RESP_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch peer delete resp ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	memset(peer_del_resp, 0, sizeof(*peer_del_resp));
@@ -5001,9 +5003,10 @@ static int ath12k_pull_peer_del_resp_ev(struct ath12k_base *ab, struct sk_buff *
 	peer_del_resp->vdev_id = ev->vdev_id;
 	ether_addr_copy(peer_del_resp->peer_macaddr.addr,
 			ev->peer_macaddr.addr);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_pull_vdev_del_resp_ev(struct ath12k_base *ab,
@@ -5024,14 +5027,15 @@ static int ath12k_pull_vdev_del_resp_ev(struct ath12k_base *ab,
 	ev = tb[WMI_TAG_VDEV_DELETE_RESP_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch vdev delete resp ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	*vdev_id = le32_to_cpu(ev->vdev_id);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_pull_bcn_tx_status_ev(struct ath12k_base *ab,
@@ -5052,15 +5056,16 @@ static int ath12k_pull_bcn_tx_status_ev(struct ath12k_base *ab,
 	ev = tb[WMI_TAG_OFFLOAD_BCN_TX_STATUS_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch bcn tx status ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	*vdev_id = le32_to_cpu(ev->vdev_id);
 	*tx_status = le32_to_cpu(ev->tx_status);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_pull_vdev_stopped_param_tlv(struct ath12k_base *ab, struct sk_buff *skb,
@@ -5080,14 +5085,15 @@ static int ath12k_pull_vdev_stopped_param_tlv(struct ath12k_base *ab, struct sk_
 	ev = tb[WMI_TAG_VDEV_STOPPED_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch vdev stop ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	*vdev_id = le32_to_cpu(ev->vdev_id);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_wmi_tlv_mgmt_rx_parse(struct ath12k_base *ab,
@@ -5224,16 +5230,17 @@ static int ath12k_pull_mgmt_tx_compl_param_tlv(struct ath12k_base *ab,
 	ev = tb[WMI_TAG_MGMT_TX_COMPL_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch mgmt tx compl ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	param->pdev_id = ev->pdev_id;
 	param->desc_id = ev->desc_id;
 	param->status = ev->status;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static void ath12k_wmi_event_scan_started(struct ath12k *ar)
@@ -5405,8 +5412,8 @@ static int ath12k_pull_scan_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	ev = tb[WMI_TAG_SCAN_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch scan ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	scan_evt_param->event_type = ev->event_type;
@@ -5416,9 +5423,10 @@ static int ath12k_pull_scan_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	scan_evt_param->scan_id = ev->scan_id;
 	scan_evt_param->vdev_id = ev->vdev_id;
 	scan_evt_param->tsf_timestamp = ev->tsf_timestamp;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_pull_peer_sta_kickout_ev(struct ath12k_base *ab, struct sk_buff *skb,
@@ -5438,14 +5446,15 @@ static int ath12k_pull_peer_sta_kickout_ev(struct ath12k_base *ab, struct sk_buf
 	ev = tb[WMI_TAG_PEER_STA_KICKOUT_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch peer sta kickout ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->mac_addr = ev->peer_macaddr.addr;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_pull_roam_ev(struct ath12k_base *ab, struct sk_buff *skb,
@@ -5465,16 +5474,17 @@ static int ath12k_pull_roam_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	ev = tb[WMI_TAG_ROAM_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch roam ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	roam_ev->vdev_id = ev->vdev_id;
 	roam_ev->reason = ev->reason;
 	roam_ev->rssi = ev->rssi;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int freq_to_idx(struct ath12k *ar, int freq)
@@ -5517,8 +5527,8 @@ static int ath12k_pull_chan_info_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	ev = tb[WMI_TAG_CHAN_INFO_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch chan info ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	ch_info_ev->err_code = ev->err_code;
@@ -5533,9 +5543,10 @@ static int ath12k_pull_chan_info_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	ch_info_ev->tx_frame_cnt = ev->tx_frame_cnt;
 	ch_info_ev->mac_clk_mhz = ev->mac_clk_mhz;
 	ch_info_ev->vdev_id = ev->vdev_id;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int
@@ -5556,8 +5567,8 @@ ath12k_pull_pdev_bss_chan_info_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	ev = tb[WMI_TAG_PDEV_BSS_CHAN_INFO_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch pdev bss chan info ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	bss_ch_info_ev->pdev_id = ev->pdev_id;
@@ -5573,9 +5584,10 @@ ath12k_pull_pdev_bss_chan_info_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	bss_ch_info_ev->rx_cycle_count_high = ev->rx_cycle_count_high;
 	bss_ch_info_ev->rx_bss_cycle_count_low = ev->rx_bss_cycle_count_low;
 	bss_ch_info_ev->rx_bss_cycle_count_high = ev->rx_bss_cycle_count_high;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int
@@ -5596,8 +5608,8 @@ ath12k_pull_vdev_install_key_compl_ev(struct ath12k_base *ab, struct sk_buff *sk
 	ev = tb[WMI_TAG_VDEV_INSTALL_KEY_COMPLETE_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch vdev install key compl ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	arg->vdev_id = le32_to_cpu(ev->vdev_id);
@@ -5605,9 +5617,10 @@ ath12k_pull_vdev_install_key_compl_ev(struct ath12k_base *ab, struct sk_buff *sk
 	arg->key_idx = le32_to_cpu(ev->key_idx);
 	arg->key_flags = le32_to_cpu(ev->key_flags);
 	arg->status = le32_to_cpu(ev->status);
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int ath12k_pull_peer_assoc_conf_ev(struct ath12k_base *ab, struct sk_buff *skb,
@@ -5627,15 +5640,16 @@ static int ath12k_pull_peer_assoc_conf_ev(struct ath12k_base *ab, struct sk_buff
 	ev = tb[WMI_TAG_PEER_ASSOC_CONF_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch peer assoc conf ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
 	peer_assoc_conf->vdev_id = le32_to_cpu(ev->vdev_id);
 	peer_assoc_conf->macaddr = ev->peer_macaddr.addr;
-
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static int
@@ -5655,12 +5669,14 @@ ath12k_pull_pdev_temp_ev(struct ath12k_base *ab, struct sk_buff *skb,
 	ev = tb[WMI_TAG_PDEV_TEMPERATURE_EVENT];
 	if (!ev) {
 		ath12k_warn(ab, "failed to fetch pdev temp ev");
-		kfree(tb);
-		return -EPROTO;
+		ret = -EPROTO;
+		goto free_tb;
 	}
 
+	ret = 0;
+free_tb:
 	kfree(tb);
-	return 0;
+	return ret;
 }
 
 static void ath12k_wmi_op_ep_tx_credits(struct ath12k_base *ab)
