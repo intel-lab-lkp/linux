@@ -62,6 +62,9 @@ trap 'rm "$OUT"' EXIT
 	dump_array "x86_bug_flags" "NBUGINTS*32" "X86_BUG_" "NCAPINTS*32" $2
 	echo ""
 
+	dump_array "x86_virt_flags" "NCAPINTS*32" "X86_VIRT_FEATURE_" "" $2
+	echo ""
+
 	echo "#ifdef CONFIG_X86_VMX_FEATURE_NAMES"
 	echo "#ifndef _ASM_X86_VMXFEATURES_H"
 	echo "#include <asm/vmxfeatures.h>"

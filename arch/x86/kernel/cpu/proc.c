@@ -103,6 +103,11 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 		if (cpu_has(c, i) && x86_cap_flags[i] != NULL)
 			seq_printf(m, " %s", x86_cap_flags[i]);
 
+	seq_puts(m, "\nvirt\t\t:");
+	for (i = 0; i < 32*NCAPINTS; i++)
+		if (cpu_has(c, i) && x86_virt_flags[i] != NULL)
+			seq_printf(m, " %s", x86_virt_flags[i]);
+
 #ifdef CONFIG_X86_VMX_FEATURE_NAMES
 	if (cpu_has(c, X86_FEATURE_VMX) && c->vmx_capability[0]) {
 		seq_puts(m, "\nvmx flags\t:");
