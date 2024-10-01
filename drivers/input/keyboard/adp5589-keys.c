@@ -398,14 +398,17 @@ static const struct adp_constants const_adp5585 = {
 	.reg			= adp5585_reg,
 };
 
-static int adp5589_read(struct i2c_client *client, u8 reg)
+static int adp5589_read(struct i2c_client *client, u8 reg, u8 *val)
 {
 	int ret = i2c_smbus_read_byte_data(client, reg);
 
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(&client->dev, "Read Error\n");
+		return ret;
+	}
 
-	return ret;
+	*val = ret;
+	return 0;
 }
 
 static int adp5589_write(struct i2c_client *client, u8 reg, u8 val)
@@ -418,16 +421,18 @@ static int adp5589_gpio_get_value(struct gpio_chip *chip, unsigned off)
 	struct adp5589_kpad *kpad = gpiochip_get_data(chip);
 	unsigned int bank = kpad->info->var->bank(kpad->gpiomap[off]);
 	unsigned int bit = kpad->info->var->bit(kpad->gpiomap[off]);
-	int val;
+	int error;
+	u8 val;
 
 	guard(mutex)(&kpad->gpio_lock);
 	if (kpad->dir[bank] & bit)
 		return !!(kpad->dat_out[bank] & bit);
 
-	val = adp5589_read(kpad->client,
-			   kpad->info->var->reg(ADP5589_GPI_STATUS_A) + bank);
-	if (val < 0)
-		return val;
+	error = adp5589_read(kpad->client,
+			     kpad->info->var->reg(ADP5589_GPI_STATUS_A) + bank,
+			     &val);
+	if (error)
+		return error;
 
 	return !!(val & bit);
 }
@@ -721,28 +726,31 @@ static int adp5589_gpio_add(struct adp5589_kpad *kpad)
 		return error;
 
 	for (i = 0; i <= kpad->info->var->bank(kpad->info->var->maxgpio); i++) {
-		kpad->dat_out[i] = adp5589_read(kpad->client,
-						kpad->info->var->reg(ADP5589_GPO_DATA_OUT_A) + i);
-		if (kpad->dat_out[i] < 0)
-			return kpad->dat_out[i];
+		error = adp5589_read(kpad->client,
+				     kpad->info->var->reg(ADP5589_GPO_DATA_OUT_A) + i,
+				     &kpad->dat_out[i]);
+		if (error)
+			return error;
 
-		kpad->dir[i] = adp5589_read(kpad->client,
-					    kpad->info->var->reg(ADP5589_GPIO_DIRECTION_A) + i);
-		if (kpad->dir[i] < 0)
-			return kpad->dir[i];
+		error = adp5589_read(kpad->client,
+				     kpad->info->var->reg(ADP5589_GPIO_DIRECTION_A) + i,
+				     &kpad->dir[i]);
+		if (error)
+			return error;
 
-		kpad->debounce_dis[i] = adp5589_read(kpad->client,
-						     kpad->info->var->reg(ADP5589_DEBOUNCE_DIS_A)
-						     + i);
-		if (kpad->debounce_dis[i] < 0)
-			return kpad->debounce_dis[i];
+		error = adp5589_read(kpad->client,
+				     kpad->info->var->reg(ADP5589_DEBOUNCE_DIS_A) + i,
+				     &kpad->debounce_dis[i]);
+		if (error)
+			return error;
 	}
 
 	for (i = 0; i < kpad->info->rpull_banks; i++) {
-		kpad->rpull[i] = adp5589_read(kpad->client,
-					      kpad->info->var->reg(ADP5589_RPULL_CONFIG_A) + i);
-		if (kpad->rpull[i] < 0)
-			return kpad->rpull[i];
+		error = adp5589_read(kpad->client,
+				     kpad->info->var->reg(ADP5589_RPULL_CONFIG_A) + i,
+				     &kpad->rpull[i]);
+		if (error)
+			return error;
 	}
 
 	return 0;
@@ -805,10 +813,11 @@ static void adp5589_report_events(struct adp5589_kpad *kpad, int ev_cnt)
 	int i;
 
 	for (i = 0; i < ev_cnt; i++) {
-		int key, key_val, key_press;
+		u8 key, key_val, key_press;
+		int error;
 
-		key = adp5589_read(kpad->client, ADP5589_5_FIFO_1 + i);
-		if (key < 0)
+		error = adp5589_read(kpad->client, ADP5589_5_FIFO_1 + i, &key);
+		if (error)
 			return;
 
 		key_val = key & KEY_EV_MASK;
@@ -837,21 +846,22 @@ static irqreturn_t adp5589_irq(int irq, void *handle)
 {
 	struct adp5589_kpad *kpad = handle;
 	struct i2c_client *client = kpad->client;
-	int status, ev_cnt;
+	u8 status, ev_cnt;
+	int error;
 
-	status = adp5589_read(client, ADP5589_5_INT_STATUS);
-	if (status < 0)
+	error = adp5589_read(client, ADP5589_5_INT_STATUS, &status);
+	if (error)
 		return IRQ_HANDLED;
 
 	if (status & OVRFLOW_INT)	/* Unlikely and should never happen */
 		dev_err(&client->dev, "Event Overflow Error\n");
 
 	if (status & EVENT_INT) {
-		ev_cnt = adp5589_read(client, ADP5589_5_STATUS) & KEC;
-		if (ev_cnt <= 0)
+		error = adp5589_read(client, ADP5589_5_STATUS, &ev_cnt);
+		if (error || !(ev_cnt & KEC))
 			goto out_irq;
 
-		adp5589_report_events(kpad, ev_cnt);
+		adp5589_report_events(kpad, ev_cnt & KEC);
 		input_sync(kpad->input);
 	}
 
@@ -866,6 +876,7 @@ static int adp5589_setup(struct adp5589_kpad *kpad)
 	struct i2c_client *client = kpad->client;
 	u8 (*reg)(u8) = kpad->info->var->reg;
 	int i, ret;
+	u8 dummy;
 
 	ret = adp5589_write(client, reg(ADP5589_PIN_CONFIG_A),
 			    kpad->keypad_en_mask);
@@ -904,8 +915,8 @@ static int adp5589_setup(struct adp5589_kpad *kpad)
 	}
 
 	for (i = 0; i < KEYP_MAX_EVENT; i++) {
-		ret = adp5589_read(client, ADP5589_5_FIFO_1 + i);
-		if (ret < 0)
+		ret = adp5589_read(client, ADP5589_5_FIFO_1 + i, &dummy);
+		if (ret)
 			return ret;
 	}
 
@@ -1456,7 +1467,8 @@ static int adp5589_probe(struct i2c_client *client)
 {
 	struct adp5589_kpad *kpad;
 	unsigned int revid;
-	int error, ret;
+	int error;
+	u8 id;
 
 	if (!i2c_check_functionality(client->adapter,
 				     I2C_FUNC_SMBUS_BYTE_DATA)) {
@@ -1479,11 +1491,11 @@ static int adp5589_probe(struct i2c_client *client)
 	if (error)
 		return error;
 
-	ret = adp5589_read(client, ADP5589_5_ID);
-	if (ret < 0)
-		return ret;
+	error = adp5589_read(client, ADP5589_5_ID, &id);
+	if (error)
+		return error;
 
-	revid = (u8) ret & ADP5589_5_DEVICE_ID_MASK;
+	revid = id & ADP5589_5_DEVICE_ID_MASK;
 
 	error = adp5589_keypad_add(kpad, revid);
 	if (error)
