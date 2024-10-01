@@ -1112,6 +1112,12 @@ struct drm_mode_destroy_dumb {
  * IOCTL returns immediately instead of waiting for the changes to be applied
  * in hardware. Note, the driver will still check that the update can be
  * applied before retuning.
+ *
+ * The driver must not leave the calling thread in a running state for any
+ * extensive period of time to avoid the process receiving SIGKILL by the
+ * realtime scheduler. This means if checking the update needs to wait for an
+ * excessive amount of time, the running state of the calling thread must be
+ * changed accordingly while waiting.
  */
 #define DRM_MODE_ATOMIC_NONBLOCK  0x0200
 /**
