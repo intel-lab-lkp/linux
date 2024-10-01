@@ -213,6 +213,53 @@ static void vsyscall(void)
 }
 #endif
 
+static int test_proc_pid_mem(pid_t pid)
+{
+	char buf[4096];
+	char *line;
+	int vm_size = -1;
+
+	snprintf(buf, sizeof(buf), "/proc/%d/status", pid);
+	int fd = open(buf, O_RDONLY);
+
+	if (fd == -1) {
+		if (errno == ENOENT)
+			/* Process does not exist */
+			return EXIT_SUCCESS;
+
+	perror("open /proc/[pid]/status");
+	return EXIT_FAILURE;
+	}
+
+	ssize_t rv = read(fd, buf, sizeof(buf) - 1);
+
+	if (rv == -1) {
+		perror("read");
+		close(fd);
+		return EXIT_FAILURE;
+	}
+	buf[rv] = '\0';
+
+	line = strtok(buf, "\n");
+	while (line != NULL) {
+		/* Check for VmSize */
+		if (strncmp(line, "VmSize:", 7) == 0) {
+			if (sscanf(line, "VmSize: %d", &vm_size) == 1)
+				break;
+			perror("Failed to parse VmSize.\n");
+		}
+		line = strtok(NULL, "\n");
+	}
+
+	close(fd);
+
+	/* Check if VmSize is 0 */
+	if (vm_size == 0)
+		return EXIT_SUCCESS;
+
+	return EXIT_FAILURE;
+}
+
 static int test_proc_pid_maps(pid_t pid)
 {
 	char buf[4096];
@@ -500,13 +547,10 @@ int main(void)
 #endif
 		return EXIT_FAILURE;
 	} else {
-		/*
-		 * TODO find reliable way to signal parent that munmap(2) completed.
-		 * Child can't do it directly because it effectively doesn't exist
-		 * anymore. Looking at child's VM files isn't 100% reliable either:
-		 * due to a bug they may not become empty or empty-like.
-		 */
 		sleep(1);
+
+		if (rv == EXIT_SUCCESS)
+			rv = test_proc_pid_mem(pid);
 
 		if (rv == EXIT_SUCCESS) {
 			rv = test_proc_pid_maps(pid);
