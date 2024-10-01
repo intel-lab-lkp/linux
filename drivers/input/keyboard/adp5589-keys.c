@@ -422,10 +422,12 @@ static int adp5589_gpio_get_value(struct gpio_chip *chip, unsigned off)
 
 	guard(mutex)(&kpad->gpio_lock);
 	if (kpad->dir[bank] & bit)
-		val = kpad->dat_out[bank];
-	else
-		val = adp5589_read(kpad->client,
-				   kpad->info->var->reg(ADP5589_GPI_STATUS_A) + bank);
+		return !!(kpad->dat_out[bank] & bit);
+
+	val = adp5589_read(kpad->client,
+			   kpad->info->var->reg(ADP5589_GPI_STATUS_A) + bank);
+	if (val < 0)
+		return val;
 
 	return !!(val & bit);
 }
@@ -481,11 +483,12 @@ static int adp5589_gpio_direction_output(struct gpio_chip *chip,
 
 	ret = adp5589_write(kpad->client, kpad->info->var->reg(ADP5589_GPO_DATA_OUT_A)
 			    + bank, kpad->dat_out[bank]);
-	ret |= adp5589_write(kpad->client,
+	if (ret)
+		return ret;
+
+	return adp5589_write(kpad->client,
 			     kpad->info->var->reg(ADP5589_GPIO_DIRECTION_A) + bank,
 			     kpad->dir[bank]);
-
-	return ret;
 }
 
 static const u8 adp5589_rpull_masks[] = {
@@ -720,16 +723,27 @@ static int adp5589_gpio_add(struct adp5589_kpad *kpad)
 	for (i = 0; i <= kpad->info->var->bank(kpad->info->var->maxgpio); i++) {
 		kpad->dat_out[i] = adp5589_read(kpad->client,
 						kpad->info->var->reg(ADP5589_GPO_DATA_OUT_A) + i);
+		if (kpad->dat_out[i] < 0)
+			return kpad->dat_out[i];
+
 		kpad->dir[i] = adp5589_read(kpad->client,
 					    kpad->info->var->reg(ADP5589_GPIO_DIRECTION_A) + i);
+		if (kpad->dir[i] < 0)
+			return kpad->dir[i];
+
 		kpad->debounce_dis[i] = adp5589_read(kpad->client,
 						     kpad->info->var->reg(ADP5589_DEBOUNCE_DIS_A)
 						     + i);
+		if (kpad->debounce_dis[i] < 0)
+			return kpad->debounce_dis[i];
 	}
 
-	for (i = 0; i < kpad->info->rpull_banks; i++)
+	for (i = 0; i < kpad->info->rpull_banks; i++) {
 		kpad->rpull[i] = adp5589_read(kpad->client,
 					      kpad->info->var->reg(ADP5589_RPULL_CONFIG_A) + i);
+		if (kpad->rpull[i] < 0)
+			return kpad->rpull[i];
+	}
 
 	return 0;
 }
@@ -791,9 +805,14 @@ static void adp5589_report_events(struct adp5589_kpad *kpad, int ev_cnt)
 	int i;
 
 	for (i = 0; i < ev_cnt; i++) {
-		int key = adp5589_read(kpad->client, ADP5589_5_FIFO_1 + i);
-		int key_val = key & KEY_EV_MASK;
-		int key_press = key & KEY_EV_PRESSED;
+		int key, key_val, key_press;
+
+		key = adp5589_read(kpad->client, ADP5589_5_FIFO_1 + i);
+		if (key < 0)
+			return;
+
+		key_val = key & KEY_EV_MASK;
+		key_press = key & KEY_EV_PRESSED;
 
 		if (key_val >= kpad->info->var->gpi_pin_base &&
 		    key_val <= kpad->info->var->gpi_pin_end) {
@@ -821,18 +840,22 @@ static irqreturn_t adp5589_irq(int irq, void *handle)
 	int status, ev_cnt;
 
 	status = adp5589_read(client, ADP5589_5_INT_STATUS);
+	if (status < 0)
+		return IRQ_HANDLED;
 
 	if (status & OVRFLOW_INT)	/* Unlikely and should never happen */
 		dev_err(&client->dev, "Event Overflow Error\n");
 
 	if (status & EVENT_INT) {
 		ev_cnt = adp5589_read(client, ADP5589_5_STATUS) & KEC;
-		if (ev_cnt) {
-			adp5589_report_events(kpad, ev_cnt);
-			input_sync(kpad->input);
-		}
+		if (ev_cnt <= 0)
+			goto out_irq;
+
+		adp5589_report_events(kpad, ev_cnt);
+		input_sync(kpad->input);
 	}
 
+out_irq:
 	adp5589_write(client, ADP5589_5_INT_STATUS, status); /* Status is W1C */
 
 	return IRQ_HANDLED;
@@ -846,12 +869,20 @@ static int adp5589_setup(struct adp5589_kpad *kpad)
 
 	ret = adp5589_write(client, reg(ADP5589_PIN_CONFIG_A),
 			    kpad->keypad_en_mask);
-	ret |= adp5589_write(client, reg(ADP5589_PIN_CONFIG_B),
-			     kpad->keypad_en_mask >> kpad->info->var->col_shift);
+	if (ret)
+		return ret;
 
-	if (!kpad->info->is_adp5585)
-		ret |= adp5589_write(client, ADP5589_PIN_CONFIG_C,
-				     kpad->keypad_en_mask >> 16);
+	ret = adp5589_write(client, reg(ADP5589_PIN_CONFIG_B),
+			    kpad->keypad_en_mask >> kpad->info->var->col_shift);
+	if (ret)
+		return ret;
+
+	if (!kpad->info->is_adp5585) {
+		ret = adp5589_write(client, ADP5589_PIN_CONFIG_C,
+				    kpad->keypad_en_mask >> 16);
+		if (ret)
+			return ret;
+	}
 
 	/* unlock keys */
 	for (i = 0; i < kpad->nkeys_unlock; i++) {
@@ -872,8 +903,11 @@ static int adp5589_setup(struct adp5589_kpad *kpad)
 			return ret;
 	}
 
-	for (i = 0; i < KEYP_MAX_EVENT; i++)
-		ret |= adp5589_read(client, ADP5589_5_FIFO_1 + i);
+	for (i = 0; i < KEYP_MAX_EVENT; i++) {
+		ret = adp5589_read(client, ADP5589_5_FIFO_1 + i);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* reset keys */
 	for (i = 0; i < kpad->nkeys_reset1; i++) {
@@ -902,20 +936,27 @@ static int adp5589_setup(struct adp5589_kpad *kpad)
 			return ret;
 	}
 
-	ret |= adp5589_write(client, reg(ADP5589_POLL_PTIME_CFG),
-			     kpad->key_poll_time);
-	ret |= adp5589_write(client, ADP5589_5_INT_STATUS,
-			     (kpad->info->is_adp5585 ? 0 : LOGIC2_INT) |
-			     LOGIC1_INT | OVRFLOW_INT |
-			     (kpad->info->is_adp5585 ? 0 : LOCK_INT) |
-			     GPI_INT | EVENT_INT);	/* Status is W1C */
+	ret = adp5589_write(client, reg(ADP5589_POLL_PTIME_CFG),
+			    kpad->key_poll_time);
+	if (ret)
+		return ret;
 
-	ret |= adp5589_write(client, reg(ADP5589_GENERAL_CFG),
-			     INT_CFG | OSC_EN | CORE_CLK(3));
-	ret |= adp5589_write(client, reg(ADP5589_INT_EN),
-			     OVRFLOW_IEN | GPI_IEN | EVENT_IEN);
+	ret = adp5589_write(client, ADP5589_5_INT_STATUS,
+			    (kpad->info->is_adp5585 ? 0 : LOGIC2_INT) |
+			    LOGIC1_INT | OVRFLOW_INT |
+			    (kpad->info->is_adp5585 ? 0 : LOCK_INT) |
+			    GPI_INT | EVENT_INT);	/* Status is W1C */
+	if (ret)
+		return ret;
 
-	if (ret < 0) {
+	ret = adp5589_write(client, reg(ADP5589_GENERAL_CFG),
+			    INT_CFG | OSC_EN | CORE_CLK(3));
+	if (ret)
+		return ret;
+
+	ret = adp5589_write(client, reg(ADP5589_INT_EN),
+			    OVRFLOW_IEN | GPI_IEN | EVENT_IEN);
+	if (ret) {
 		dev_err(&client->dev, "Write Error\n");
 		return ret;
 	}
