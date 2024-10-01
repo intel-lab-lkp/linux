@@ -55,6 +55,7 @@ config KEYBOARD_ADP5589
 	depends on I2C
 	select GPIOLIB
 	select GPIOLIB_IRQCHIP
+	select INPUT_MATRIXKMAP
 	help
 	  Say Y here if you want to use a ADP5585/ADP5589 attached to your
 	  system I2C bus.

@@ -552,7 +552,6 @@ S:	Supported
 W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/input/adi,adp5589.yaml
 F:	drivers/input/keyboard/adp5589-keys.c
-F:	include/linux/input/adp5589.h
 
 ADP8860 BACKLIGHT DRIVER (ADP8860/ADP8861/ADP8863)
 M:	Michael Hennerich <michael.hennerich@analog.com>
