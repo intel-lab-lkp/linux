@@ -895,11 +895,15 @@ static void smc_fback_replace_callbacks(struct smc_sock *smc)
 	write_unlock_bh(&clcsk->sk_callback_lock);
 }
 
-static int smc_switch_to_fallback(struct smc_sock *smc, int reason_code)
+/* assumes smc->clcsock_release_lock is held during execution
+ * reason for separating locking is to give flexibility in
+ * lock ordering in functions wanting to call smc_switch_to_fallback
+ * so that deadlocks can be avoided.
+ */
+static inline int __smc_switch_to_fallback(struct smc_sock *smc, int reason_code)
 {
 	int rc = 0;
 
-	mutex_lock(&smc->clcsock_release_lock);
 	if (!smc->clcsock) {
 		rc = -EBADF;
 		goto out;
@@ -923,6 +927,13 @@ static int smc_switch_to_fallback(struct smc_sock *smc, int reason_code)
 		smc_fback_replace_callbacks(smc);
 	}
 out:
+	return rc;
+}
+
+static int smc_switch_to_fallback(struct smc_sock *smc, int reason_code)
+{
+	mutex_lock(&smc->clcsock_release_lock);
+	int rc = __smc_switch_to_fallback(smc, reason_code);
 	mutex_unlock(&smc->clcsock_release_lock);
 	return rc;
 }
@@ -2762,13 +2773,15 @@ int smc_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	int rc;
 
 	smc = smc_sk(sk);
+	/* acquire smc lock before sk to avoid deadlock with rtnl */
+	mutex_lock(&smc->clcsock_release_lock);
 	lock_sock(sk);
 
 	/* SMC does not support connect with fastopen */
 	if (msg->msg_flags & MSG_FASTOPEN) {
 		/* not connected yet, fallback */
 		if (sk->sk_state == SMC_INIT && !smc->connect_nonblock) {
-			rc = smc_switch_to_fallback(smc, SMC_CLC_DECL_OPTUNSUPP);
+			rc = __smc_switch_to_fallback(smc, SMC_CLC_DECL_OPTUNSUPP);
 			if (rc)
 				goto out;
 		} else {
@@ -2790,6 +2803,7 @@ int smc_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 out:
 	release_sock(sk);
+	mutex_unlock(&smc->clcsock_release_lock);
 	return rc;
 }
 
