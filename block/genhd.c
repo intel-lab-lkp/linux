@@ -391,8 +391,9 @@ int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode)
  * This function registers the partitioning information in @disk
  * with the kernel.
  */
-int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
-				 const struct attribute_group **groups)
+static int __device_add_disk(struct device *parent, struct gendisk *disk,
+			     const struct attribute_group **groups,
+			     struct fwnode_handle *fwnode)
 
 {
 	struct device *ddev = disk_to_dev(disk);
@@ -452,6 +453,8 @@ int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
 	ddev->parent = parent;
 	ddev->groups = groups;
 	dev_set_name(ddev, "%s", disk->disk_name);
+	if (fwnode)
+		device_set_node(ddev, fwnode);
 	if (!(disk->flags & GENHD_FL_HIDDEN))
 		ddev->devt = MKDEV(disk->major, disk->first_minor);
 	ret = device_add(ddev);
@@ -553,7 +556,21 @@ out_exit_elevator:
 		elevator_exit(disk->queue);
 	return ret;
 }
+
+int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
+				 const struct attribute_group **groups)
+{
+	return __device_add_disk(parent, disk, groups, NULL);
+}
 EXPORT_SYMBOL(device_add_disk);
+
+int __must_check device_add_of_disk(struct device *parent, struct gendisk *disk,
+				    const struct attribute_group **groups,
+				    struct fwnode_handle *fwnode)
+{
+	return __device_add_disk(parent, disk, groups, fwnode);
+}
+EXPORT_SYMBOL(device_add_of_disk);
 
 static void blk_report_disk_dead(struct gendisk *disk, bool surprise)
 {
