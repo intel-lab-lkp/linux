@@ -270,6 +270,12 @@
 #define SYS_TRCVMIDCCTLR1		sys_reg(2, 1, 3, 3, 2)
 #define SYS_TRCVMIDCVR(m)		sys_reg(2, 1, 3, ((m & 7) << 1), 1)
 
+#define SYS_SPMEVCNTR_EL0(m)		sys_reg(2, 3, 14, (0 | (m >> 3)), (m & 7))
+#define SYS_SPMEVTYPER_EL0(m)		sys_reg(2, 3, 14, (2 | (m >> 3)), (m & 7))
+#define SYS_SPMEVFILTR_EL0(m)		sys_reg(2, 3, 14, (4 | (m >> 3)), (m & 7))
+#define SYS_SPMEVFILT2R_EL0(m)		sys_reg(2, 3, 14, (6 | (m >> 3)), (m & 7))
+#define SYS_PMEVCNTSVR_EL1(m)		sys_reg(2, 0, 14, (8 | (m >> 3)), (m & 7))
+
 /* ETM */
 #define SYS_TRCOSLAR			sys_reg(2, 1, 1, 0, 4)
 
