@@ -599,6 +599,7 @@ static void sparx5_board_init(struct sparx5 *sparx5)
 static int sparx5_start(struct sparx5 *sparx5)
 {
 	u8 broadcast[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	const struct sparx5_ops *ops = sparx5->data->ops;
 	char queue_name[32];
 	u32 idx;
 	int err;
@@ -723,7 +724,7 @@ static int sparx5_start(struct sparx5 *sparx5)
 
 	if (sparx5->ptp_irq >= 0) {
 		err = devm_request_threaded_irq(sparx5->dev, sparx5->ptp_irq,
-						NULL, sparx5_ptp_irq_handler,
+						NULL, ops->ptp_irq_handler,
 						IRQF_ONESHOT, "sparx5-ptp",
 						sparx5);
 		if (err)
@@ -987,6 +988,7 @@ static const struct sparx5_ops sparx5_ops = {
 	.get_hsch_max_group_rate = &sparx5_get_hsch_max_group_rate,
 	.get_sdlb_group          = &sparx5_get_sdlb_group,
 	.set_port_mux            = &sparx5_port_mux_set,
+	.ptp_irq_handler         = &sparx5_ptp_irq_handler,
 };
 
 static const struct sparx5_match_data sparx5_desc = {
