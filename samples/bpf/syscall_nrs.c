@@ -2,6 +2,11 @@
 #include <uapi/linux/unistd.h>
 #include <linux/kbuild.h>
 
+#pragma GCC diagnostic push
+#ifndef __clang__
+#pragma GCC diagnostic ignored "-Wmissing-prototypes"
+#endif
+
 #define SYSNR(_NR) DEFINE(SYS ## _NR, _NR)
 
 void syscall_defines(void)
