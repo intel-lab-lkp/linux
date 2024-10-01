@@ -37,6 +37,7 @@
 #include <linux/string.h>
 #include <linux/log2.h>
 #include <linux/inetdevice.h>
+#include <linux/rculist.h>
 #include <net/addrconf.h>
 
 #include <trace/events/neigh.h>
@@ -205,18 +206,13 @@ static void neigh_update_flags(struct neighbour *neigh, u32 flags, int *notify,
 	}
 }
 
-static bool neigh_del(struct neighbour *n, struct neighbour __rcu **np,
-		      struct neigh_table *tbl)
+static bool neigh_del(struct neighbour *n, struct neigh_table *tbl)
 {
 	bool retval = false;
 
 	write_lock(&n->lock);
 	if (refcount_read(&n->refcnt) == 1) {
-		struct neighbour *neigh;
-
-		neigh = rcu_dereference_protected(n->next,
-						  lockdep_is_held(&tbl->lock));
-		rcu_assign_pointer(*np, neigh);
+		hlist_del_rcu(&n->list);
 		neigh_mark_dead(n);
 		retval = true;
 	}
@@ -228,25 +224,7 @@ static bool neigh_del(struct neighbour *n, struct neighbour __rcu **np,
 
 bool neigh_remove_one(struct neighbour *ndel, struct neigh_table *tbl)
 {
-	struct neigh_hash_table *nht;
-	void *pkey = ndel->primary_key;
-	u32 hash_val;
-	struct neighbour *n;
-	struct neighbour __rcu **np;
-
-	nht = rcu_dereference_protected(tbl->nht,
-					lockdep_is_held(&tbl->lock));
-	hash_val = tbl->hash(pkey, ndel->dev, nht->hash_rnd);
-	hash_val = hash_val >> (32 - nht->hash_shift);
-
-	np = &nht->hash_buckets[hash_val];
-	while ((n = rcu_dereference_protected(*np,
-					      lockdep_is_held(&tbl->lock)))) {
-		if (n == ndel)
-			return neigh_del(n, np, tbl);
-		np = &n->next;
-	}
-	return false;
+	return neigh_del(ndel, tbl);
 }
 
 static int neigh_forced_gc(struct neigh_table *tbl)
@@ -388,21 +366,20 @@ static void neigh_flush_dev(struct neigh_table *tbl, struct net_device *dev,
 
 	for (i = 0; i < (1 << nht->hash_shift); i++) {
 		struct neighbour *n;
-		struct neighbour __rcu **np = &nht->hash_buckets[i];
+		struct neighbour __rcu **np =
+			(struct neighbour __rcu **)&nht->hash_buckets[i].first;
 
 		while ((n = rcu_dereference_protected(*np,
 					lockdep_is_held(&tbl->lock))) != NULL) {
 			if (dev && n->dev != dev) {
-				np = &n->next;
+				np = (struct neighbour __rcu **)&n->list.next;
 				continue;
 			}
 			if (skip_perm && n->nud_state & NUD_PERMANENT) {
-				np = &n->next;
+				np = (struct neighbour __rcu **)&n->list.next;
 				continue;
 			}
-			rcu_assign_pointer(*np,
-				   rcu_dereference_protected(n->next,
-						lockdep_is_held(&tbl->lock)));
+			hlist_del_rcu(&n->list);
 			write_lock(&n->lock);
 			neigh_del_timer(n);
 			neigh_mark_dead(n);
@@ -530,9 +507,9 @@ static void neigh_get_hash_rnd(u32 *x)
 
 static struct neigh_hash_table *neigh_hash_alloc(unsigned int shift)
 {
-	size_t size = (1 << shift) * sizeof(struct neighbour *);
+	size_t size = (1 << shift) * sizeof(struct hlist_head);
 	struct neigh_hash_table *ret;
-	struct neighbour __rcu **buckets;
+	struct hlist_head __rcu *buckets;
 	int i;
 
 	ret = kmalloc(sizeof(*ret), GFP_ATOMIC);
@@ -541,7 +518,7 @@ static struct neigh_hash_table *neigh_hash_alloc(unsigned int shift)
 	if (size <= PAGE_SIZE) {
 		buckets = kzalloc(size, GFP_ATOMIC);
 	} else {
-		buckets = (struct neighbour __rcu **)
+		buckets = (struct hlist_head __rcu *)
 			  __get_free_pages(GFP_ATOMIC | __GFP_ZERO,
 					   get_order(size));
 		kmemleak_alloc(buckets, size, 1, GFP_ATOMIC);
@@ -562,8 +539,8 @@ static void neigh_hash_free_rcu(struct rcu_head *head)
 	struct neigh_hash_table *nht = container_of(head,
 						    struct neigh_hash_table,
 						    rcu);
-	size_t size = (1 << nht->hash_shift) * sizeof(struct neighbour *);
-	struct neighbour __rcu **buckets = nht->hash_buckets;
+	size_t size = (1 << nht->hash_shift) * sizeof(struct hlist_head);
+	struct hlist_head __rcu *buckets = nht->hash_buckets;
 
 	if (size <= PAGE_SIZE) {
 		kfree(buckets);
@@ -591,22 +568,18 @@ static struct neigh_hash_table *neigh_hash_grow(struct neigh_table *tbl,
 	for (i = 0; i < (1 << old_nht->hash_shift); i++) {
 		struct neighbour *n, *next;
 
-		for (n = rcu_dereference_protected(old_nht->hash_buckets[i],
-						   lockdep_is_held(&tbl->lock));
+		for (n = (struct neighbour *)
+			rcu_dereference_protected(old_nht->hash_buckets[i].first,
+						  lockdep_is_held(&tbl->lock));
 		     n != NULL;
 		     n = next) {
 			hash = tbl->hash(n->primary_key, n->dev,
 					 new_nht->hash_rnd);
 
 			hash >>= (32 - new_nht->hash_shift);
-			next = rcu_dereference_protected(n->next,
-						lockdep_is_held(&tbl->lock));
-
-			rcu_assign_pointer(n->next,
-					   rcu_dereference_protected(
-						new_nht->hash_buckets[hash],
-						lockdep_is_held(&tbl->lock)));
-			rcu_assign_pointer(new_nht->hash_buckets[hash], n);
+			next = (struct neighbour *)hlist_next_rcu(&n->list);
+			hlist_del_rcu(&n->list);
+			hlist_add_head_rcu(&n->list, &new_nht->hash_buckets[hash]);
 		}
 	}
 
@@ -693,11 +666,10 @@ ___neigh_create(struct neigh_table *tbl, const void *pkey,
 		goto out_tbl_unlock;
 	}
 
-	for (n1 = rcu_dereference_protected(nht->hash_buckets[hash_val],
-					    lockdep_is_held(&tbl->lock));
-	     n1 != NULL;
-	     n1 = rcu_dereference_protected(n1->next,
-			lockdep_is_held(&tbl->lock))) {
+	hlist_for_each_entry_rcu(n1,
+				 &nht->hash_buckets[hash_val],
+				 list,
+				 lockdep_is_held(&tbl->lock)) {
 		if (dev == n1->dev && !memcmp(n1->primary_key, n->primary_key, key_len)) {
 			if (want_ref)
 				neigh_hold(n1);
@@ -713,10 +685,7 @@ ___neigh_create(struct neigh_table *tbl, const void *pkey,
 		list_add_tail(&n->managed_list, &n->tbl->managed_list);
 	if (want_ref)
 		neigh_hold(n);
-	rcu_assign_pointer(n->next,
-			   rcu_dereference_protected(nht->hash_buckets[hash_val],
-						     lockdep_is_held(&tbl->lock)));
-	rcu_assign_pointer(nht->hash_buckets[hash_val], n);
+	hlist_add_head_rcu(&n->list, &nht->hash_buckets[hash_val]);
 	write_unlock_bh(&tbl->lock);
 	neigh_dbg(2, "neigh %p is created\n", n);
 	rc = n;
@@ -976,7 +945,7 @@ static void neigh_periodic_work(struct work_struct *work)
 		goto out;
 
 	for (i = 0 ; i < (1 << nht->hash_shift); i++) {
-		np = &nht->hash_buckets[i];
+		np = (struct neighbour __rcu **)&nht->hash_buckets[i].first;
 
 		while ((n = rcu_dereference_protected(*np,
 				lockdep_is_held(&tbl->lock))) != NULL) {
@@ -999,9 +968,7 @@ static void neigh_periodic_work(struct work_struct *work)
 			    (state == NUD_FAILED ||
 			     !time_in_range_open(jiffies, n->used,
 						 n->used + NEIGH_VAR(n->parms, GC_STALETIME)))) {
-				rcu_assign_pointer(*np,
-					rcu_dereference_protected(n->next,
-						lockdep_is_held(&tbl->lock)));
+				hlist_del_rcu(&n->list);
 				neigh_mark_dead(n);
 				write_unlock(&n->lock);
 				neigh_cleanup_and_release(n);
@@ -1010,7 +977,7 @@ static void neigh_periodic_work(struct work_struct *work)
 			write_unlock(&n->lock);
 
 next_elt:
-			np = &n->next;
+			np = (struct neighbour __rcu **)&n->list.next;
 		}
 		/*
 		 * It's fine to release lock here, even if hash table
@@ -2728,9 +2695,7 @@ static int neigh_dump_table(struct neigh_table *tbl, struct sk_buff *skb,
 	for (h = s_h; h < (1 << nht->hash_shift); h++) {
 		if (h > s_h)
 			s_idx = 0;
-		for (n = rcu_dereference(nht->hash_buckets[h]), idx = 0;
-		     n != NULL;
-		     n = rcu_dereference(n->next)) {
+		hlist_for_each_entry_rcu(n, &nht->hash_buckets[h], list) {
 			if (idx < s_idx || !net_eq(dev_net(n->dev), net))
 				goto next;
 			if (neigh_ifindex_filtered(n->dev, filter->dev_idx) ||
@@ -3097,9 +3062,7 @@ void neigh_for_each(struct neigh_table *tbl, void (*cb)(struct neighbour *, void
 	for (chain = 0; chain < (1 << nht->hash_shift); chain++) {
 		struct neighbour *n;
 
-		for (n = rcu_dereference(nht->hash_buckets[chain]);
-		     n != NULL;
-		     n = rcu_dereference(n->next))
+		hlist_for_each_entry_rcu(n, &nht->hash_buckets[chain], list)
 			cb(n, cookie);
 	}
 	read_unlock_bh(&tbl->lock);
@@ -3120,7 +3083,7 @@ void __neigh_for_each_release(struct neigh_table *tbl,
 		struct neighbour *n;
 		struct neighbour __rcu **np;
 
-		np = &nht->hash_buckets[chain];
+		np = (struct neighbour __rcu **)&nht->hash_buckets[chain].first;
 		while ((n = rcu_dereference_protected(*np,
 					lockdep_is_held(&tbl->lock))) != NULL) {
 			int release;
@@ -3128,12 +3091,10 @@ void __neigh_for_each_release(struct neigh_table *tbl,
 			write_lock(&n->lock);
 			release = cb(n);
 			if (release) {
-				rcu_assign_pointer(*np,
-					rcu_dereference_protected(n->next,
-						lockdep_is_held(&tbl->lock)));
+				hlist_del_rcu(&n->list);
 				neigh_mark_dead(n);
 			} else
-				np = &n->next;
+				np = (struct neighbour __rcu **)&n->list.next;
 			write_unlock(&n->lock);
 			if (release)
 				neigh_cleanup_and_release(n);
@@ -3200,25 +3161,21 @@ static struct neighbour *neigh_get_first(struct seq_file *seq)
 
 	state->flags &= ~NEIGH_SEQ_IS_PNEIGH;
 	for (bucket = 0; bucket < (1 << nht->hash_shift); bucket++) {
-		n = rcu_dereference(nht->hash_buckets[bucket]);
-
-		while (n) {
+		hlist_for_each_entry_rcu(n, &nht->hash_buckets[bucket], list) {
 			if (!net_eq(dev_net(n->dev), net))
-				goto next;
+				continue;
 			if (state->neigh_sub_iter) {
 				loff_t fakep = 0;
 				void *v;
 
 				v = state->neigh_sub_iter(state, n, &fakep);
 				if (!v)
-					goto next;
+					continue;
 			}
 			if (!(state->flags & NEIGH_SEQ_SKIP_NOARP))
 				break;
 			if (READ_ONCE(n->nud_state) & ~NUD_NOARP)
 				break;
-next:
-			n = rcu_dereference(n->next);
 		}
 
 		if (n)
@@ -3242,7 +3199,8 @@ static struct neighbour *neigh_get_next(struct seq_file *seq,
 		if (v)
 			return n;
 	}
-	n = rcu_dereference(n->next);
+
+	n = (struct neighbour *)hlist_next_rcu(&n->list);
 
 	while (1) {
 		while (n) {
@@ -3260,7 +3218,8 @@ static struct neighbour *neigh_get_next(struct seq_file *seq,
 			if (READ_ONCE(n->nud_state) & ~NUD_NOARP)
 				break;
 next:
-			n = rcu_dereference(n->next);
+
+			n = (struct neighbour *)hlist_next_rcu(&n->list);
 		}
 
 		if (n)
@@ -3269,7 +3228,7 @@ next:
 		if (++state->bucket >= (1 << nht->hash_shift))
 			break;
 
-		n = rcu_dereference(nht->hash_buckets[state->bucket]);
+		n = (struct neighbour *)hlist_first_rcu(&nht->hash_buckets[state->bucket]);
 	}
 
 	if (n && pos)
