@@ -1506,7 +1506,7 @@ static int parse_pred(const char *str, void *data,
 	unsigned long offset;
 	unsigned long size;
 	unsigned long ip;
-	char num_buf[24];	/* Big enough to hold an address */
+	char num_buf[24] = {0};	/* Big enough to hold an address */
 	char *field_name;
 	char *name;
 	bool function = false;
@@ -1616,8 +1616,7 @@ static int parse_pred(const char *str, void *data,
 				goto err_free;
 			}
 
-			strncpy(num_buf, str + s, len);
-			num_buf[len] = 0;
+			strscpy(num_buf, str + s, len);
 
 			ret = kstrtoul(num_buf, 0, &ip);
 			if (ret) {
@@ -1694,8 +1693,7 @@ static int parse_pred(const char *str, void *data,
 		if (!pred->regex)
 			goto err_mem;
 		pred->regex->len = len;
-		strncpy(pred->regex->pattern, str + s, len);
-		pred->regex->pattern[len] = 0;
+		strscpy(pred->regex->pattern, str + s, len);
 
 	} else if (!strncmp(str + i, "CPUS", 4)) {
 		unsigned int maskstart;
@@ -1859,8 +1857,7 @@ static int parse_pred(const char *str, void *data,
 		if (!pred->regex)
 			goto err_mem;
 		pred->regex->len = len;
-		strncpy(pred->regex->pattern, str + s, len);
-		pred->regex->pattern[len] = 0;
+		strscpy(pred->regex->pattern, str + s, len);
 
 		filter_build_regex(pred);
 
@@ -1919,8 +1916,7 @@ static int parse_pred(const char *str, void *data,
 			goto err_free;
 		}
 
-		strncpy(num_buf, str + s, len);
-		num_buf[len] = 0;
+		strscpy(num_buf, str + s, len);
 
 		/* Make sure it is a value */
 		if (field->is_signed)
