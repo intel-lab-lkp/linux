@@ -382,8 +382,8 @@ inline void fnic_del_tport_timer_sync(struct fnic *fnic,
 							struct fnic_tport_s *tport);
 void fdls_send_fabric_logo(struct fnic_iport_s *iport);
 int fnic_fdls_validate_and_get_frame_type(struct fnic_iport_s *iport,
-					  void *rx_frame, int len,
-					  int fchdr_offset);
+								  void *rx_frame, int len,
+								  int fchdr_offset);
 void fdls_send_tport_abts(struct fnic_iport_s *iport,
 			  struct fnic_tport_s *tport);
 bool fdls_delete_tport(struct fnic_iport_s *iport,
@@ -399,7 +399,6 @@ int fnic_send_fip_frame(struct fnic_iport_s *iport,
 	void *payload, int payload_sz);
 void fnic_fdls_learn_fcoe_macs(struct fnic_iport_s *iport, void *rx_frame,
 	uint8_t *fcid);
-
 void fnic_fdls_add_tport(struct fnic_iport_s *iport,
 		struct fnic_tport_s *tport, unsigned long flags);
 void fnic_fdls_remove_tport(struct fnic_iport_s *iport,
