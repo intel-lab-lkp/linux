@@ -1048,6 +1048,12 @@ int __init_memblock memblock_reserved_mark_noinit(phys_addr_t base, phys_addr_t 
 				    MEMBLOCK_RSRV_NOINIT);
 }
 
+int __init_memblock memblock_reserved_mark_preserved(phys_addr_t base, phys_addr_t size)
+{
+	return memblock_setclr_flag(&memblock.reserved, base, size, 1,
+				    MEMBLOCK_PRSRV);
+}
+
 static bool should_skip_region(struct memblock_type *type,
 			       struct memblock_region *m,
 			       int nid, int flags)
@@ -2164,7 +2170,8 @@ static void __init memmap_init_reserved_pages(void)
 	 * the MEMBLOCK_RSRV_NOINIT flag set
 	 */
 	for_each_reserved_mem_region(region) {
-		if (!memblock_is_reserved_noinit(region)) {
+		if (!memblock_is_reserved_noinit(region) &&
+			!memblock_is_preserved(region)) {
 			nid = memblock_get_region_node(region);
 			start = region->base;
 			end = start + region->size;

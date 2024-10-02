@@ -837,6 +837,22 @@ static void __init init_unavailable_range(unsigned long spfn,
 			node, zone_names[zone], pgcnt);
 }
 
+static bool pfn_preserved(unsigned long *pfn)
+{
+	struct memblock_region *r;
+
+	for_each_reserved_mem_region(r) {
+		if (memblock_is_preserved(r)) {
+			if (*pfn >= memblock_region_memory_base_pfn(r) &&
+				*pfn < memblock_region_memory_end_pfn(r)) {
+				*pfn = memblock_region_memory_end_pfn(r);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 /*
  * Initially all pages are reserved - free ones are freed
  * up by memblock_free_all() once the early boot process is
@@ -888,6 +904,9 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
 				break;
 			}
 		}
+
+		if (pfn_preserved(&pfn))
+			continue;
 
 		page = pfn_to_page(pfn);
 		__init_single_page(page, pfn, zone, nid);
