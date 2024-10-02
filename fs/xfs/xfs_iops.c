@@ -1289,7 +1289,6 @@ xfs_setup_inode(
 	inode->i_ino = ip->i_ino;
 	inode->i_state |= I_NEW;
 
-	inode_sb_list_add(inode);
 	/* make the inode look hashed for the writeback code */
 	inode_fake_hash(inode);
 

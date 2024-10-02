@@ -18,6 +18,9 @@ struct xfs_icwalk {
 	long		icw_scan_limit;
 };
 
+int xfs_icwalk_vfs_inodes(struct xfs_mount *mp, ino_iter_fn iter_fn,
+		void *private_data, int flags);
+
 /* Flags that reflect xfs_fs_eofblocks functionality. */
 #define XFS_ICWALK_FLAG_SYNC		(1U << 0) /* sync/wait mode scan */
 #define XFS_ICWALK_FLAG_UID		(1U << 1) /* filter by uid */

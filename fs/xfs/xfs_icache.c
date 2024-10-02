@@ -1614,6 +1614,155 @@ xfs_blockgc_free_quota(
 			xfs_inode_dquot(ip, XFS_DQTYPE_PROJ), iwalk_flags);
 }
 
+/* VFS Inode Cache Walking Code */
+
+/* XFS inodes in these states are not visible to the VFS. */
+#define XFS_ITER_VFS_NOGRAB_IFLAGS	(XFS_INEW | \
+					 XFS_NEED_INACTIVE | \
+					 XFS_INACTIVATING | \
+					 XFS_IRECLAIMABLE | \
+					 XFS_IRECLAIM)
+/*
+ * If the inode we found is visible to the VFS inode cache, then return it to
+ * the caller.
+ *
+ * In the normal case, we need to validate the VFS inode state and take a
+ * reference to it here. We will drop that reference once the VFS inode has been
+ * processed by the ino_iter_fn.
+ *
+ * However, if the INO_ITER_UNSAFE flag is set, we do not take references to the
+ * inode - it is the ino_iter_fn's responsibility to validate the inode is still
+ * a VFS inode once we hand it to them. We do not drop references after
+ * processing these inodes; the processing function may have evicted the VFS
+ * inode from cache as part of it's processing.
+ */
+static bool
+xfs_iter_vfs_igrab(
+	struct xfs_inode	*ip,
+	int			flags)
+{
+	struct inode		*inode = VFS_I(ip);
+	bool			ret = false;
+
+	ASSERT(rcu_read_lock_held());
+
+	/* Check for stale RCU freed inode */
+	spin_lock(&ip->i_flags_lock);
+	if (!ip->i_ino)
+		goto out_unlock_noent;
+
+	if (ip->i_flags & XFS_ITER_VFS_NOGRAB_IFLAGS)
+		goto out_unlock_noent;
+
+	if ((flags & INO_ITER_UNSAFE) ||
+	    super_iter_iget(inode, flags))
+		ret = true;
+
+out_unlock_noent:
+	spin_unlock(&ip->i_flags_lock);
+	return ret;
+}
+
+/*
+ * Initial implementation of vfs inode walker. This does not use batched lookups
+ * for initial simplicity and testing, though it could use them quite
+ * efficiently for both safe and unsafe iteration contexts.
+ */
+static int
+xfs_icwalk_vfs_inodes_ag(
+	struct xfs_perag	*pag,
+	ino_iter_fn		iter_fn,
+	void			*private_data,
+	int			flags)
+{
+	struct xfs_mount	*mp = pag->pag_mount;
+	uint32_t		first_index = 0;
+	int			ret = 0;
+	int			nr_found;
+	bool			done = false;
+
+	do {
+		struct xfs_inode *ip;
+
+		rcu_read_lock();
+		nr_found = radix_tree_gang_lookup(&pag->pag_ici_root,
+				(void **)&ip, first_index, 1);
+		if (!nr_found) {
+			rcu_read_unlock();
+			break;
+		}
+
+		/*
+		 * Update the index for the next lookup. Catch
+		 * overflows into the next AG range which can occur if
+		 * we have inodes in the last block of the AG and we
+		 * are currently pointing to the last inode.
+		 */
+		first_index = XFS_INO_TO_AGINO(mp, ip->i_ino + 1);
+		if (first_index < XFS_INO_TO_AGINO(mp, ip->i_ino))
+			done = true;
+
+		if (!xfs_iter_vfs_igrab(ip, flags)) {
+			rcu_read_unlock();
+			continue;
+		}
+
+		/*
+		 * If we are doing an unsafe iteration, we must continue to hold
+		 * the RCU lock across the callback to guarantee the existence
+		 * of inode. We can't hold the rcu lock for reference counted
+		 * inodes because the callback is allowed to block in that case.
+		 */
+		if (!(flags & INO_ITER_UNSAFE))
+			rcu_read_unlock();
+
+		ret = iter_fn(VFS_I(ip), private_data);
+
+		/*
+		 * We've run the callback, so we can drop the existence
+		 * guarantee we hold on the inode now.
+		 */
+		if (!(flags & INO_ITER_UNSAFE))
+			iput(VFS_I(ip));
+		else
+			rcu_read_unlock();
+
+		if (ret == INO_ITER_ABORT) {
+			ret = 0;
+			break;
+		}
+		if (ret < 0)
+			break;
+
+	} while (!done);
+
+	return ret;
+}
+
+int
+xfs_icwalk_vfs_inodes(
+	struct xfs_mount	*mp,
+	ino_iter_fn		iter_fn,
+	void			*private_data,
+	int			flags)
+{
+	struct xfs_perag	*pag;
+	xfs_agnumber_t		agno;
+	int			ret;
+
+	for_each_perag(mp, agno, pag) {
+		ret = xfs_icwalk_vfs_inodes_ag(pag, iter_fn,
+				private_data, flags);
+		if (ret == INO_ITER_ABORT) {
+			ret = 0;
+			break;
+		}
+		if (ret < 0)
+			break;
+	}
+	return ret;
+}
+
 /* XFS Inode Cache Walking Code */
 
 /*
@@ -1623,7 +1772,6 @@ xfs_blockgc_free_quota(
  * be too greedy.
  */
 #define XFS_LOOKUP_BATCH	32
-
 
 /*
  * Decide if we want to grab this inode in anticipation of doing work towards
@@ -1700,7 +1848,6 @@ restart:
 		int		i;
 
 		rcu_read_lock();
-
 		nr_found = radix_tree_gang_lookup_tag(&pag->pag_ici_root,
 				(void **) batch, first_index,
 				XFS_LOOKUP_BATCH, goal);

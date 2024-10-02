@@ -1179,6 +1179,16 @@ xfs_fs_shutdown(
 	xfs_force_shutdown(XFS_M(sb), SHUTDOWN_DEVICE_REMOVED);
 }
 
+static int
+xfs_fs_iter_vfs_inodes(
+	struct super_block	*sb,
+	ino_iter_fn		iter_fn,
+	void			*private_data,
+	int			flags)
+{
+	return xfs_icwalk_vfs_inodes(XFS_M(sb), iter_fn, private_data, flags);
+}
+
 static const struct super_operations xfs_super_operations = {
 	.alloc_inode		= xfs_fs_alloc_inode,
 	.destroy_inode		= xfs_fs_destroy_inode,
@@ -1193,6 +1203,7 @@ static const struct super_operations xfs_super_operations = {
 	.nr_cached_objects	= xfs_fs_nr_cached_objects,
 	.free_cached_objects	= xfs_fs_free_cached_objects,
 	.shutdown		= xfs_fs_shutdown,
+	.iter_vfs_inodes	= xfs_fs_iter_vfs_inodes,
 };
 
 static int
