@@ -532,5 +532,7 @@ unsigned int fnic_count_lun_ioreqs(struct fnic *fnic,
 					   struct scsi_device *device);
 void fnic_scsi_unload(struct fnic *fnic);
 void fnic_scsi_unload_cleanup(struct fnic *fnic);
+int fnic_get_debug_info(struct stats_debug_info *info,
+					struct fnic *fnic);
 
 #endif /* _FNIC_H_ */
