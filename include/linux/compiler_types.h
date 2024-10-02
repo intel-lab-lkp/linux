@@ -153,7 +153,7 @@ static inline void __chk_io_ptr(const volatile void __iomem *ptr) { }
  * being optimized out, but operates at the compiler/IR-level and may still
  * allow unintended removal of objects during linking.
  *
- * Optional: only supported since gcc >= 11, clang >= 13
+ * Optional: only supported since gcc >= 11 (partial), clang >= 13
  *
  *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-retain-function-attribute
  * clang: https://clang.llvm.org/docs/AttributeReference.html#retain

@@ -145,3 +145,12 @@
 #if GCC_VERSION < 90100
 #undef __alloc_size__
 #endif
+
+/*
+ * Most 11.x compilers claim to support it, but only riscv64-linux-gnu-gcc and
+ * x86_64-linux-gnu-gcc actually do.
+ */
+#if GCC_VERSION < 120000
+#undef __retain
+#define __retain
+#endif
