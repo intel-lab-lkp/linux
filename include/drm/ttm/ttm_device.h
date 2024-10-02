@@ -266,6 +266,13 @@ struct ttm_device {
 	 * @wq: Work queue structure for the delayed delete workqueue.
 	 */
 	struct workqueue_struct *wq;
+
+	/**
+	 * @propagate_enospc: Whether -ENOSPC should be propagated to the caller after
+	 * graphics memory allocation failure. If false, this will be converted to
+	 * -ENOMEM, which is the default behaviour.
+	 */
+	bool propagate_enospc;
 };
 
 int ttm_global_swapout(struct ttm_operation_ctx *ctx, gfp_t gfp_flags);
@@ -295,6 +302,12 @@ struct ttm_device_init_flags {
 	u32 use_dma_alloc : 1;
 	/** @use_dma32: If we should use GFP_DMA32 for device memory allocations. */
 	u32 use_dma32 : 1;
+	/**
+	 * @propagate_enospc: Whether -ENOSPC should be propagated to the caller after
+	 * graphics memory allocation failure. If false, this will be converted to
+	 * -ENOMEM, which is the default behaviour.
+	 */
+	u32 propagate_enospc : 1;
 };
 
 int ttm_device_init(struct ttm_device *bdev, const struct ttm_device_funcs *funcs,
