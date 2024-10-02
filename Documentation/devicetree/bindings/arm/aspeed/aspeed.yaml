@@ -89,6 +89,7 @@ properties:
               - ibm,everest-bmc
               - ibm,rainier-bmc
               - ibm,system1-bmc
+              - ibm,sbp1-bmc
               - ibm,tacoma-bmc
               - inventec,starscream-bmc
               - inventec,transformer-bmc
