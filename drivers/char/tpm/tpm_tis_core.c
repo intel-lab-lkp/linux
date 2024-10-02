@@ -432,16 +432,27 @@ static int tpm_tis_recv(struct tpm_chip *chip, u8 *buf, size_t count)
 static int tpm_tis_send_data(struct tpm_chip *chip, const u8 *buf, size_t len)
 {
 	struct tpm_tis_data *priv = dev_get_drvdata(&chip->dev);
-	int rc, status, burstcnt;
+	int rc, status, burstcnt, retry;
+	bool status_fix = test_bit(TPM_TIS_STATUS_WORKAROUND, &priv->flags);
 	size_t count = 0;
 	bool itpm = test_bit(TPM_TIS_ITPM_WORKAROUND, &priv->flags);
 
 	status = tpm_tis_status(chip);
 	if ((status & TPM_STS_COMMAND_READY) == 0) {
-		tpm_tis_ready(chip);
-		if (wait_for_tpm_stat
-		    (chip, TPM_STS_COMMAND_READY, chip->timeout_b,
-		     &priv->int_queue, false) < 0) {
+		retry = status_fix ? 3 : 1;
+
+		while (retry > 0) {
+			tpm_tis_ready(chip);
+			if (wait_for_tpm_stat
+			    (chip, TPM_STS_COMMAND_READY, chip->timeout_b,
+			     &priv->int_queue, false) >= 0) {
+				break;
+			}
+
+			retry--;
+		}
+
+		if (retry == 0) {
 			rc = -ETIME;
 			goto out_err;
 		}
@@ -1143,6 +1154,9 @@ int tpm_tis_core_init(struct device *dev, struct tpm_tis_data *priv, int irq,
 		priv->timeout_min = TIS_TIMEOUT_MIN_ATML;
 		priv->timeout_max = TIS_TIMEOUT_MAX_ATML;
 	}
+
+	if (priv->manufacturer_id == TPM_VID_IFX)
+		set_bit(TPM_TIS_STATUS_WORKAROUND, &priv->flags);
 
 	if (is_bsw()) {
 		priv->ilb_base_addr = ioremap(INTEL_LEGACY_BLK_BASE_ADDR,
