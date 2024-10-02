@@ -87,6 +87,12 @@ static int samsung_ufs_phy_calibrate(struct phy *phy)
 		return -EINVAL;
 	}
 
+	if (ufs_phy->mode == PHY_MODE_UFS_HIBERN8_ENTER)
+		ufs_phy->ufs_phy_state = CFG_POST_HIBERN8_ENTER;
+
+	if (ufs_phy->mode == PHY_MODE_UFS_HIBERN8_EXIT)
+		ufs_phy->ufs_phy_state = CFG_PRE_HIBERN8_EXIT;
+
 	cfg = cfgs[ufs_phy->ufs_phy_state];
 	if (!cfg)
 		goto out;
@@ -105,8 +111,9 @@ static int samsung_ufs_phy_calibrate(struct phy *phy)
 				goto out;
 		}
 
-		if (ufs_phy->ufs_phy_state == CFG_POST_PWR_HS &&
-		    ufs_phy->drvdata->wait_for_cdr) {
+		if ((ufs_phy->ufs_phy_state == CFG_POST_PWR_HS ||
+		     ufs_phy->ufs_phy_state == CFG_PRE_HIBERN8_EXIT) &&
+		     ufs_phy->drvdata->wait_for_cdr) {
 			err = ufs_phy->drvdata->wait_for_cdr(phy, i);
 			if (err)
 				goto out;
@@ -134,6 +141,13 @@ out:
 		ufs_phy->ufs_phy_state = CFG_POST_PWR_HS;
 		break;
 	case CFG_POST_PWR_HS:
+		/* Change back to INIT state */
+		ufs_phy->ufs_phy_state = CFG_PRE_INIT;
+		break;
+	case CFG_POST_HIBERN8_ENTER:
+		ufs_phy->ufs_phy_state = CFG_PRE_HIBERN8_EXIT;
+		break;
+	case CFG_PRE_HIBERN8_EXIT:
 		/* Change back to INIT state */
 		ufs_phy->ufs_phy_state = CFG_PRE_INIT;
 		break;
