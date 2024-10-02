@@ -45,6 +45,8 @@ void purgatory(void)
 {
 	int ret;
 
+	if (IS_ENABLED(CONFIG_KSTATE))
+		return;
 	ret = verify_sha256_digest();
 	if (ret) {
 		/* loop forever */
