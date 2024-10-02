@@ -2286,6 +2286,11 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 	       skb_shinfo(skb),
 	       offsetof(struct skb_shared_info, frags[skb_shinfo(skb)->nr_frags]));
 
+	/* Initialize newly allocated headroom and tailroom
+	 */
+	memset(data, 0, nhead);
+	memset(data + nhead + skb->tail, 0, skb_tailroom(skb) + ntail);
+
 	/*
 	 * if shinfo is shared we must drop the old head gracefully, but if it
 	 * is not we can just drop the old head and let the existing refcount
