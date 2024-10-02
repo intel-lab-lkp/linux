@@ -16,6 +16,22 @@
 #define PIDFD_SIGNAL_THREAD_GROUP	(1UL << 1)
 #define PIDFD_SIGNAL_PROCESS_GROUP	(1UL << 2)
 
+/* Flags for pidfd_info. */
+#define PIDFD_INFO_PID	    	        (1UL << 0)
+#define PIDFD_INFO_CREDS	            (1UL << 1)
+#define PIDFD_INFO_CGROUPID	            (1UL << 2)
+#define PIDFD_INFO_SECURITY_CONTEXT	    (1UL << 3)
+
+struct pidfd_info {
+        __u64 request_mask;
+        __u32 size;
+        uint pid;
+        uint uid;
+        uint gid;
+        __u64 cgroupid;
+        char security_context[NAME_MAX];
+} __packed;
+
 #define PIDFS_IOCTL_MAGIC 0xFF
 
 #define PIDFD_GET_CGROUP_NAMESPACE            _IO(PIDFS_IOCTL_MAGIC, 1)
@@ -28,5 +44,6 @@
 #define PIDFD_GET_TIME_FOR_CHILDREN_NAMESPACE _IO(PIDFS_IOCTL_MAGIC, 8)
 #define PIDFD_GET_USER_NAMESPACE              _IO(PIDFS_IOCTL_MAGIC, 9)
 #define PIDFD_GET_UTS_NAMESPACE               _IO(PIDFS_IOCTL_MAGIC, 10)
+#define PIDFD_GET_INFO                        _IOWR(PIDFS_IOCTL_MAGIC, 11, struct pidfd_info)
 
 #endif /* _UAPI_LINUX_PIDFD_H */

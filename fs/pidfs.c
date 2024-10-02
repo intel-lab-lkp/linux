@@ -114,6 +114,62 @@ static __poll_t pidfd_poll(struct file *file, struct poll_table_struct *pts)
 	return poll_flags;
 }
 
+static long pidfd_info(struct task_struct *task, struct pid *pid, unsigned long arg)
+{
+	struct pidfd_info uinfo = {}, info = {};
+
+	if (copy_from_user(&uinfo, (struct pidfd_info *)arg, sizeof(struct pidfd_info)))
+		return -EFAULT;
+	if (uinfo.size > sizeof(struct pidfd_info))
+		return -E2BIG;
+	if (uinfo.size < sizeof(struct pidfd_info))
+		return -EINVAL; /* First version, no smaller struct possible */
+
+	if (uinfo.request_mask & ~(PIDFD_INFO_PID | PIDFD_INFO_CREDS | PIDFD_INFO_CGROUPID | PIDFD_INFO_SECURITY_CONTEXT))
+		return -EINVAL;
+
+	memcpy(&info, &uinfo, uinfo.size);
+
+	if (uinfo.request_mask & PIDFD_INFO_PID)
+		info.pid = pid_nr_ns(pid, task_active_pid_ns(task));
+
+	if (uinfo.request_mask & PIDFD_INFO_CREDS) {
+		const struct cred *c = get_task_cred(task);
+		if (!c)
+			return -ESRCH;
+
+		info.uid = from_kuid_munged(current_user_ns(), c->uid);
+		info.gid = from_kgid_munged(current_user_ns(), c->gid);
+	}
+
+	if (uinfo.request_mask & PIDFD_INFO_CGROUPID) {
+		struct cgroup *cgrp = task_css_check(task, pids_cgrp_id, 1)->cgroup;
+		if (!cgrp)
+			return -ENODEV;
+
+		info.cgroupid = cgroup_id(cgrp);
+	}
+
+	if (uinfo.request_mask & PIDFD_INFO_SECURITY_CONTEXT) {
+		char *secctx;
+		u32 secid, secctx_len;
+		const struct cred *c = get_task_cred(task);
+		if (!c)
+			return -ESRCH;
+
+		security_cred_getsecid(c, &secid);
+		if (security_secid_to_secctx(secid, &secctx, &secctx_len))
+			return -EFAULT;
+
+		memcpy(info.security_context, secctx, min_t(u32, secctx_len, NAME_MAX-1));
+	}
+
+	if (copy_to_user((void __user *)arg, &info, uinfo.size))
+		return -EFAULT;
+
+	return 0;
+}
+
 static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct task_struct *task __free(put_task) = NULL;
@@ -121,12 +177,15 @@ static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct pid *pid = pidfd_pid(file);
 	struct ns_common *ns_common = NULL;
 
-	if (arg)
+	if (!!arg != (cmd == PIDFD_GET_INFO))
 		return -EINVAL;
 
 	task = get_pid_task(pid, PIDTYPE_PID);
 	if (!task)
 		return -ESRCH;
+
+	if (cmd == PIDFD_GET_INFO)
+		return pidfd_info(task, pid, arg);
 
 	scoped_guard(task_lock, task) {
 		nsp = task->nsproxy;
