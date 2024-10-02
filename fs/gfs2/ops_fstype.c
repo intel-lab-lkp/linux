@@ -1714,53 +1714,10 @@ static int gfs2_meta_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
-/**
- * gfs2_evict_inodes - evict inodes cooperatively
- * @sb: the superblock
- *
- * When evicting an inode with a zero link count, we are trying to upgrade the
- * inode's iopen glock from SH to EX mode in order to determine if we can
- * delete the inode.  The other nodes are supposed to evict the inode from
- * their caches if they can, and to poke the inode's inode glock if they cannot
- * do so.  Either behavior allows gfs2_upgrade_iopen_glock() to proceed
- * quickly, but if the other nodes are not cooperating, the lock upgrading
- * attempt will time out.  Since inodes are evicted sequentially, this can add
- * up quickly.
- *
- * Function evict_inodes() tries to keep the s_inode_list_lock list locked over
- * a long time, which prevents other inodes from being evicted concurrently.
- * This precludes the cooperative behavior we are looking for.  This special
- * version of evict_inodes() avoids that.
- *
- * Modeled after drop_pagecache_sb().
- */
-static void gfs2_evict_inodes(struct super_block *sb)
+/* Nothing to do because we just want to bounce the inode through iput() */
+static int gfs2_evict_inode_fn(struct inode *inode, void *data)
 {
-	struct inode *inode, *toput_inode = NULL;
-	struct gfs2_sbd *sdp = sb->s_fs_info;
-
-	set_bit(SDF_EVICTING, &sdp->sd_flags);
-
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		spin_lock(&inode->i_lock);
-		if ((inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW)) &&
-		    !need_resched()) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-		atomic_inc(&inode->i_count);
-		spin_unlock(&inode->i_lock);
-		spin_unlock(&sb->s_inode_list_lock);
-
-		iput(toput_inode);
-		toput_inode = inode;
-
-		cond_resched();
-		spin_lock(&sb->s_inode_list_lock);
-	}
-	spin_unlock(&sb->s_inode_list_lock);
-	iput(toput_inode);
+	return INO_ITER_DONE;
 }
 
 static void gfs2_kill_sb(struct super_block *sb)
@@ -1779,7 +1736,23 @@ static void gfs2_kill_sb(struct super_block *sb)
 	sdp->sd_master_dir = NULL;
 	shrink_dcache_sb(sb);
 
-	gfs2_evict_inodes(sb);
+	/*
+	 * When evicting an inode with a zero link count, we are trying to
+	 * upgrade the inode's iopen glock from SH to EX mode in order to
+	 * determine if we can delete the inode.  The other nodes are supposed
+	 * to evict the inode from their caches if they can, and to poke the
+	 * inode's inode glock if they cannot do so.  Either behavior allows
+	 * gfs2_upgrade_iopen_glock() to proceed quickly, but if the other nodes
+	 * are not cooperating, the lock upgrading attempt will time out.  Since
+	 * inodes are evicted sequentially, this can add up quickly.
+	 *
+	 * evict_inodes() tries to keep the s_inode_list_lock list locked over a
+	 * long time, which prevents other inodes from being evicted
+	 * concurrently.  This precludes the cooperative behavior we are looking
+	 * for. 
+	 */
+	set_bit(SDF_EVICTING, &sdp->sd_flags);
+	super_iter_inodes(sb, gfs2_evict_inode_fn, NULL, 0);
 
 	/*
 	 * Flush and then drain the delete workqueue here (via

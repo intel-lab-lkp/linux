@@ -28,63 +28,14 @@ void __fsnotify_vfsmount_delete(struct vfsmount *mnt)
 	fsnotify_clear_marks_by_mount(mnt);
 }
 
-/**
- * fsnotify_unmount_inodes - an sb is unmounting.  handle any watched inodes.
- * @sb: superblock being unmounted.
- *
- * Called during unmount with no locks held, so needs to be safe against
- * concurrent modifiers. We temporarily drop sb->s_inode_list_lock and CAN block.
- */
-static void fsnotify_unmount_inodes(struct super_block *sb)
+static int fsnotify_unmount_inode_fn(struct inode *inode, void *data)
 {
-	struct inode *inode, *iput_inode = NULL;
+	spin_unlock(&inode->i_lock);
 
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		/*
-		 * We cannot __iget() an inode in state I_FREEING,
-		 * I_WILL_FREE, or I_NEW which is fine because by that point
-		 * the inode cannot have any associated watches.
-		 */
-		spin_lock(&inode->i_lock);
-		if (inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		/*
-		 * If i_count is zero, the inode cannot have any watches and
-		 * doing an __iget/iput with SB_ACTIVE clear would actually
-		 * evict all inodes with zero i_count from icache which is
-		 * unnecessarily violent and may in fact be illegal to do.
-		 * However, we should have been called /after/ evict_inodes
-		 * removed all zero refcount inodes, in any case.  Test to
-		 * be sure.
-		 */
-		if (!atomic_read(&inode->i_count)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		__iget(inode);
-		spin_unlock(&inode->i_lock);
-		spin_unlock(&sb->s_inode_list_lock);
-
-		iput(iput_inode);
-
-		/* for each watch, send FS_UNMOUNT and then remove it */
-		fsnotify_inode(inode, FS_UNMOUNT);
-
-		fsnotify_inode_delete(inode);
-
-		iput_inode = inode;
-
-		cond_resched();
-		spin_lock(&sb->s_inode_list_lock);
-	}
-	spin_unlock(&sb->s_inode_list_lock);
-
-	iput(iput_inode);
+	/* for each watch, send FS_UNMOUNT and then remove it */
+	fsnotify_inode(inode, FS_UNMOUNT);
+	fsnotify_inode_delete(inode);
+	return INO_ITER_DONE;
 }
 
 void fsnotify_sb_delete(struct super_block *sb)
@@ -95,7 +46,19 @@ void fsnotify_sb_delete(struct super_block *sb)
 	if (!sbinfo)
 		return;
 
-	fsnotify_unmount_inodes(sb);
+	/*
+	 * If i_count is zero, the inode cannot have any watches and
+	 * doing an __iget/iput with SB_ACTIVE clear would actually
+	 * evict all inodes with zero i_count from icache which is
+	 * unnecessarily violent and may in fact be illegal to do.
+	 * However, we should have been called /after/ evict_inodes
+	 * removed all zero refcount inodes, in any case. Hence we use
+	 * INO_ITER_REFERENCED to ensure zero refcount inodes are filtered
+	 * properly.
+	 */
+	super_iter_inodes(sb, fsnotify_unmount_inode_fn, NULL,
+			INO_ITER_REFERENCED);
+
 	fsnotify_clear_marks_by_sb(sb);
 	/* Wait for outstanding object references from connectors */
 	wait_var_event(fsnotify_sb_watched_objects(sb),
