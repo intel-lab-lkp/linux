@@ -39,12 +39,12 @@ static inline void nft_connlimit_do_eval(struct nft_connlimit *priv,
 		zone = nf_ct_zone(ct);
 	} else if (!nf_ct_get_tuplepr(pkt->skb, skb_network_offset(pkt->skb),
 				      nft_pf(pkt), nft_net(pkt), &tuple)) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		return;
 	}
 
 	if (nf_conncount_add(nft_net(pkt), priv->list, tuple_ptr, zone)) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		return;
 	}
 

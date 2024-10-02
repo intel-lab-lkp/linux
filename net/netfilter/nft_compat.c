@@ -85,7 +85,7 @@ static void nft_target_eval_xt(const struct nft_expr *expr,
 	ret = target->target(skb, &xt);
 
 	if (xt.hotdrop)
-		ret = NF_DROP;
+		ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 	switch (ret) {
 	case XT_CONTINUE:
@@ -112,14 +112,14 @@ static void nft_target_eval_bridge(const struct nft_expr *expr,
 	ret = target->target(skb, &xt);
 
 	if (xt.hotdrop)
-		ret = NF_DROP;
+		ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 	switch (ret) {
 	case EBT_ACCEPT:
 		regs->verdict.code = NF_ACCEPT;
 		break;
 	case EBT_DROP:
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		break;
 	case EBT_CONTINUE:
 		regs->verdict.code = NFT_CONTINUE;
@@ -403,7 +403,7 @@ static void __nft_match_eval(const struct nft_expr *expr,
 	ret = match->match(skb, &xt);
 
 	if (xt.hotdrop) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		return;
 	}
 

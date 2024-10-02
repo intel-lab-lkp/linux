@@ -175,7 +175,7 @@ static unsigned int nft_do_chain_inet_ingress(void *priv, struct sk_buff *skb,
 		nft_set_pktinfo(&pkt, skb, &ingress_state);
 
 		if (nft_set_pktinfo_ipv4_ingress(&pkt) < 0)
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		break;
 	case htons(ETH_P_IPV6):
 		ingress_state.pf = NFPROTO_IPV6;
@@ -183,7 +183,7 @@ static unsigned int nft_do_chain_inet_ingress(void *priv, struct sk_buff *skb,
 		nft_set_pktinfo(&pkt, skb, &ingress_state);
 
 		if (nft_set_pktinfo_ipv6_ingress(&pkt) < 0)
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		break;
 	default:
 		return NF_ACCEPT;

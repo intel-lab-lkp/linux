@@ -112,7 +112,7 @@ static void nft_fwd_neigh_eval(const struct nft_expr *expr,
 			goto out;
 		}
 		if (skb_try_make_writable(skb, sizeof(*iph))) {
-			verdict = NF_DROP;
+			verdict = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 			goto out;
 		}
 		iph = ip_hdr(skb);
@@ -128,7 +128,7 @@ static void nft_fwd_neigh_eval(const struct nft_expr *expr,
 			goto out;
 		}
 		if (skb_try_make_writable(skb, sizeof(*ip6h))) {
-			verdict = NF_DROP;
+			verdict = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 			goto out;
 		}
 		ip6h = ipv6_hdr(skb);

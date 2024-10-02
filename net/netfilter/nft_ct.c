@@ -259,7 +259,7 @@ static void nft_ct_set_zone_eval(const struct nft_expr *expr,
 		 */
 		ct = nf_ct_tmpl_alloc(nft_net(pkt), &zone, GFP_ATOMIC);
 		if (!ct) {
-			regs->verdict.code = NF_DROP;
+			regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NOMEM, ENOMEM);
 			return;
 		}
 		__set_bit(IPS_CONFIRMED_BIT, &ct->status);
@@ -917,7 +917,7 @@ static void nft_ct_timeout_obj_eval(struct nft_object *obj,
 	if (!timeout) {
 		timeout = nf_ct_timeout_ext_add(ct, priv->timeout, GFP_ATOMIC);
 		if (!timeout) {
-			regs->verdict.code = NF_DROP;
+			regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NOMEM, ENOMEM);
 			return;
 		}
 	}
@@ -1316,6 +1316,7 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 	enum ip_conntrack_dir dir;
 	u16 l3num = priv->l3num;
 	struct nf_conn *ct;
+	int err;
 
 	ct = nf_ct_get(pkt->skb, &ctinfo);
 	if (!ct || nf_ct_is_confirmed(ct) || nf_ct_is_template(ct)) {
@@ -1328,7 +1329,7 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 	if (!help)
 		help = nf_ct_helper_ext_add(ct, GFP_ATOMIC);
 	if (!help) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NOMEM, ENOMEM);
 		return;
 	}
 
@@ -1341,7 +1342,7 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 
 	exp = nf_ct_expect_alloc(ct);
 	if (exp == NULL) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NOMEM, ENOMEM);
 		return;
 	}
 	nf_ct_expect_init(exp, NF_CT_EXPECT_CLASS_DEFAULT, l3num,
@@ -1350,8 +1351,9 @@ static void nft_ct_expect_obj_eval(struct nft_object *obj,
 		          priv->l4proto, NULL, &priv->dport);
 	exp->timeout.expires = jiffies + priv->timeout * HZ;
 
-	if (nf_ct_expect_related(exp, 0) != 0)
-		regs->verdict.code = NF_DROP;
+	err = nf_ct_expect_related(exp, 0);
+	if (err != 0)
+		regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 }
 
 static const struct nla_policy nft_ct_expect_policy[NFTA_CT_EXPECT_MAX + 1] = {

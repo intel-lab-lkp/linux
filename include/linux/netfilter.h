@@ -25,7 +25,10 @@ static inline int NF_DROP_GETERR(int verdict)
 static __always_inline int
 NF_DROP_REASON(struct sk_buff *skb, enum skb_drop_reason reason, u32 err)
 {
-	BUILD_BUG_ON(err > 0xffff);
+	if (__builtin_constant_p(err))
+		BUILD_BUG_ON(err > 0xffff);
+	else if (WARN_ON_ONCE(err > 0xffff))
+		err = 0;
 
 	kfree_skb_reason(skb, reason);
 

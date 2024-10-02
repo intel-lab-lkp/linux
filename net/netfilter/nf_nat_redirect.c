@@ -71,7 +71,7 @@ nf_nat_redirect_ipv4(struct sk_buff *skb, const struct nf_nat_range2 *range,
 		}
 
 		if (!newdst.ip)
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 	}
 
 	return nf_nat_redirect(skb, range, &newdst);
@@ -130,7 +130,7 @@ nf_nat_redirect_ipv6(struct sk_buff *skb, const struct nf_nat_range2 *range,
 		}
 
 		if (!addr)
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 	}
 
 	return nf_nat_redirect(skb, range, &newdst);

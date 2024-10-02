@@ -664,7 +664,7 @@ ipv4_synproxy_hook(void *priv, struct sk_buff *skb,
 	thoff = ip_hdrlen(skb);
 	th = skb_header_pointer(skb, thoff, sizeof(_th), &_th);
 	if (!th)
-		return NF_DROP;
+		return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 	state = &ct->proto.tcp;
 	switch (state->state) {
@@ -689,7 +689,7 @@ ipv4_synproxy_hook(void *priv, struct sk_buff *skb,
 		fallthrough;
 	case TCP_CONNTRACK_SYN_SENT:
 		if (!synproxy_parse_options(skb, thoff, th, &opts))
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 		if (!th->syn && th->ack &&
 		    CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
@@ -703,7 +703,7 @@ ipv4_synproxy_hook(void *priv, struct sk_buff *skb,
 				consume_skb(skb);
 				return NF_STOLEN;
 			} else {
-				return NF_DROP;
+				return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 			}
 		}
 
@@ -718,7 +718,7 @@ ipv4_synproxy_hook(void *priv, struct sk_buff *skb,
 			break;
 
 		if (!synproxy_parse_options(skb, thoff, th, &opts))
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 		if (opts.options & NF_SYNPROXY_OPT_TIMESTAMP) {
 			synproxy->tsoff = opts.tsval - synproxy->its;
@@ -1087,7 +1087,7 @@ ipv6_synproxy_hook(void *priv, struct sk_buff *skb,
 
 	th = skb_header_pointer(skb, thoff, sizeof(_th), &_th);
 	if (!th)
-		return NF_DROP;
+		return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 	state = &ct->proto.tcp;
 	switch (state->state) {
@@ -1112,7 +1112,7 @@ ipv6_synproxy_hook(void *priv, struct sk_buff *skb,
 		fallthrough;
 	case TCP_CONNTRACK_SYN_SENT:
 		if (!synproxy_parse_options(skb, thoff, th, &opts))
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 		if (!th->syn && th->ack &&
 		    CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
@@ -1126,7 +1126,7 @@ ipv6_synproxy_hook(void *priv, struct sk_buff *skb,
 				consume_skb(skb);
 				return NF_STOLEN;
 			} else {
-				return NF_DROP;
+				return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 			}
 		}
 
@@ -1141,7 +1141,7 @@ ipv6_synproxy_hook(void *priv, struct sk_buff *skb,
 			break;
 
 		if (!synproxy_parse_options(skb, thoff, th, &opts))
-			return NF_DROP;
+			return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 		if (opts.options & NF_SYNPROXY_OPT_TIMESTAMP) {
 			synproxy->tsoff = opts.tsval - synproxy->its;

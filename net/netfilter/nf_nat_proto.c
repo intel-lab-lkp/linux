@@ -439,7 +439,7 @@ unsigned int nf_nat_manip_pkt(struct sk_buff *skb, struct nf_conn *ct,
 		break;
 	}
 
-	return NF_DROP;
+	return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 }
 
 static void nf_nat_ipv4_csum_update(struct sk_buff *skb,
@@ -636,7 +636,7 @@ nf_nat_ipv4_fn(void *priv, struct sk_buff *skb,
 		if (ip_hdr(skb)->protocol == IPPROTO_ICMP) {
 			if (!nf_nat_icmp_reply_translation(skb, ct, ctinfo,
 							   state->hook))
-				return NF_DROP;
+				return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 			else
 				return NF_ACCEPT;
 		}
@@ -781,7 +781,7 @@ nf_nat_ipv4_out(void *priv, struct sk_buff *skb,
 		     ct->tuplehash[!dir].tuple.dst.u.all)) {
 			err = nf_xfrm_me_harder(state->net, skb, AF_INET);
 			if (err < 0)
-				ret = NF_DROP_ERR(err);
+				ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 		}
 	}
 #endif
@@ -809,7 +809,7 @@ nf_nat_ipv4_local_fn(void *priv, struct sk_buff *skb,
 		    ct->tuplehash[!dir].tuple.src.u3.ip) {
 			err = ip_route_me_harder(state->net, state->sk, skb, RTN_UNSPEC);
 			if (err < 0)
-				ret = NF_DROP_ERR(err);
+				ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 		}
 #ifdef CONFIG_XFRM
 		else if (!(IPCB(skb)->flags & IPSKB_XFRM_TRANSFORMED) &&
@@ -818,7 +818,7 @@ nf_nat_ipv4_local_fn(void *priv, struct sk_buff *skb,
 			 ct->tuplehash[!dir].tuple.src.u.all) {
 			err = nf_xfrm_me_harder(state->net, skb, AF_INET);
 			if (err < 0)
-				ret = NF_DROP_ERR(err);
+				ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 		}
 #endif
 	}
@@ -965,7 +965,7 @@ nf_nat_ipv6_fn(void *priv, struct sk_buff *skb,
 			if (!nf_nat_icmpv6_reply_translation(skb, ct, ctinfo,
 							     state->hook,
 							     hdrlen))
-				return NF_DROP;
+				return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 			else
 				return NF_ACCEPT;
 		}
@@ -1040,7 +1040,7 @@ nf_nat_ipv6_out(void *priv, struct sk_buff *skb,
 		     ct->tuplehash[!dir].tuple.dst.u.all)) {
 			err = nf_xfrm_me_harder(state->net, skb, AF_INET6);
 			if (err < 0)
-				ret = NF_DROP_ERR(err);
+				ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 		}
 	}
 #endif
@@ -1069,7 +1069,7 @@ nf_nat_ipv6_local_fn(void *priv, struct sk_buff *skb,
 				      &ct->tuplehash[!dir].tuple.src.u3)) {
 			err = nf_ip6_route_me_harder(state->net, state->sk, skb);
 			if (err < 0)
-				ret = NF_DROP_ERR(err);
+				ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 		}
 #ifdef CONFIG_XFRM
 		else if (!(IP6CB(skb)->flags & IP6SKB_XFRM_TRANSFORMED) &&
@@ -1078,7 +1078,7 @@ nf_nat_ipv6_local_fn(void *priv, struct sk_buff *skb,
 			 ct->tuplehash[!dir].tuple.src.u.all) {
 			err = nf_xfrm_me_harder(state->net, skb, AF_INET6);
 			if (err < 0)
-				ret = NF_DROP_ERR(err);
+				ret = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 		}
 #endif
 	}

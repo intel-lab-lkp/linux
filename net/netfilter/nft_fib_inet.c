@@ -38,7 +38,7 @@ static void nft_fib_inet_eval(const struct nft_expr *expr,
 		break;
 	}
 
-	regs->verdict.code = NF_DROP;
+	regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 }
 
 static struct nft_expr_type nft_fib_inet_type;

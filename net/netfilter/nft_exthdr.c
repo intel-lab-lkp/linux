@@ -365,7 +365,7 @@ err:
 	return;
 drop:
 	/* can't remove, no choice but to drop */
-	regs->verdict.code = NF_DROP;
+	regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 }
 
 static void nft_exthdr_sctp_eval(const struct nft_expr *expr,

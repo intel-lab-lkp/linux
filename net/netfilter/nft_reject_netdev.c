@@ -141,7 +141,7 @@ static void nft_reject_netdev_eval(const struct nft_expr *expr,
 		break;
 	}
 out:
-	regs->verdict.code = NF_DROP;
+	regs->verdict.code = NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 }
 
 static int nft_reject_netdev_validate(const struct nft_ctx *ctx,

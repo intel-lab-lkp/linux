@@ -70,7 +70,10 @@ static unsigned int ipv6_defrag(void *priv,
 	if (err == -EINPROGRESS)
 		return NF_STOLEN;
 
-	return err == 0 ? NF_ACCEPT : NF_DROP;
+	if (err == 0)
+		return NF_ACCEPT;
+
+	return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, -err);
 }
 
 static const struct nf_hook_ops ipv6_defrag_ops[] = {

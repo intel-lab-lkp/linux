@@ -66,7 +66,7 @@ static void nft_synproxy_eval_v4(const struct nft_synproxy *priv,
 			consume_skb(skb);
 			regs->verdict.code = NF_STOLEN;
 		} else {
-			regs->verdict.code = NF_DROP;
+			regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		}
 	}
 }
@@ -97,7 +97,7 @@ static void nft_synproxy_eval_v6(const struct nft_synproxy *priv,
 			consume_skb(skb);
 			regs->verdict.code = NF_STOLEN;
 		} else {
-			regs->verdict.code = NF_DROP;
+			regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		}
 	}
 }
@@ -119,7 +119,7 @@ static void nft_synproxy_do_eval(const struct nft_synproxy *priv,
 	}
 
 	if (nf_ip_checksum(skb, nft_hook(pkt), thoff, IPPROTO_TCP)) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		return;
 	}
 
@@ -127,12 +127,12 @@ static void nft_synproxy_do_eval(const struct nft_synproxy *priv,
 				 sizeof(struct tcphdr),
 				 &_tcph);
 	if (!tcp) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		return;
 	}
 
 	if (!synproxy_parse_options(skb, thoff, tcp, &opts)) {
-		regs->verdict.code = NF_DROP;
+		regs->verdict.code = NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 		return;
 	}
 
