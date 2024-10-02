@@ -154,7 +154,6 @@ again:
 		/* Somebody inserted it, go back and read it. */
 		xa_unlock(&root->delayed_nodes);
 		kmem_cache_free(delayed_node_cache, node);
-		node = NULL;
 		goto again;
 	}
 	ptr = __xa_store(&root->delayed_nodes, ino, node, GFP_ATOMIC);
