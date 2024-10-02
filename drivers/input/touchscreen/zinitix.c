@@ -645,19 +645,30 @@ static int zinitix_ts_probe(struct i2c_client *client)
 		return error;
 	}
 
-	bt541->num_keycodes = device_property_count_u32(&client->dev, "linux,keycodes");
-	if (bt541->num_keycodes > ARRAY_SIZE(bt541->keycodes)) {
-		dev_err(&client->dev, "too many keys defined (%d)\n", bt541->num_keycodes);
-		return -EINVAL;
+	error = device_property_count_u32(&client->dev, "linux,keycodes");
+	if (error == -EINVAL || error == -ENODATA) {
+		bt541->num_keycodes = 0;
+	} else if (error < 0) {
+		dev_err(&client->dev, "Failed to count \"linux,keycodes\" property: %d\n", error);
+		return error;
+	} else {
+		bt541->num_keycodes = error;
 	}
 
-	error = device_property_read_u32_array(&client->dev, "linux,keycodes",
-					       bt541->keycodes,
-					       bt541->num_keycodes);
-	if (error) {
-		dev_err(&client->dev,
-			"Unable to parse \"linux,keycodes\" property: %d\n", error);
-		return error;
+	if (bt541->num_keycodes > 0) {
+		if (bt541->num_keycodes > ARRAY_SIZE(bt541->keycodes)) {
+			dev_err(&client->dev, "too many keys defined (%d)\n", bt541->num_keycodes);
+			return -EINVAL;
+		}
+
+		error = device_property_read_u32_array(&client->dev, "linux,keycodes",
+						       bt541->keycodes,
+						       bt541->num_keycodes);
+		if (error) {
+			dev_err(&client->dev,
+				"Unable to parse \"linux,keycodes\" property: %d\n", error);
+			return error;
+		}
 	}
 
 	error = zinitix_init_input_dev(bt541);
