@@ -427,4 +427,3 @@ struct fnic_tport_s *fnic_find_tport_by_wwpn(struct fnic_iport_s *iport,
 		uint64_t  wwpn);
 
 #endif /* _FNIC_FDLS_H_ */
-
