@@ -1048,8 +1048,8 @@ static int vmw_driver_load(struct vmw_private *dev_priv, u32 pci_id)
 			      dev_priv->drm.dev,
 			      dev_priv->drm.anon_inode->i_mapping,
 			      dev_priv->drm.vma_offset_manager,
-			      dev_priv->map_mode == vmw_dma_alloc_coherent,
-			      false);
+			      (struct ttm_device_init_flags)
+			      {.use_dma_alloc = (dev_priv->map_mode == vmw_dma_alloc_coherent)});
 	if (unlikely(ret != 0)) {
 		drm_err(&dev_priv->drm,
 			"Failed initializing TTM buffer object driver.\n");

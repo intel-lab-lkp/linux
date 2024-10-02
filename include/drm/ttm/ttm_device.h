@@ -287,10 +287,20 @@ static inline void ttm_set_driver_manager(struct ttm_device *bdev, int type,
 	bdev->man_drv[type] = manager;
 }
 
+/**
+ * struct ttm_device_init_flags - Flags for ttm device creation
+ */
+struct ttm_device_init_flags {
+	/** @use_dma_alloc: Whether coherent DMA allocation API should be used. */
+	u32 use_dma_alloc : 1;
+	/** @use_dma32: If we should use GFP_DMA32 for device memory allocations. */
+	u32 use_dma32 : 1;
+};
+
 int ttm_device_init(struct ttm_device *bdev, const struct ttm_device_funcs *funcs,
 		    struct device *dev, struct address_space *mapping,
 		    struct drm_vma_offset_manager *vma_manager,
-		    bool use_dma_alloc, bool use_dma32);
+		    const struct ttm_device_init_flags flags);
 void ttm_device_fini(struct ttm_device *bdev);
 void ttm_device_clear_dma_mappings(struct ttm_device *bdev);
 

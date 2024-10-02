@@ -976,9 +976,10 @@ static int drm_vram_mm_init(struct drm_vram_mm *vmm, struct drm_device *dev,
 	vmm->vram_size = vram_size;
 
 	ret = ttm_device_init(&vmm->bdev, &bo_driver, dev->dev,
-				 dev->anon_inode->i_mapping,
-				 dev->vma_offset_manager,
-				 false, true);
+			      dev->anon_inode->i_mapping,
+			      dev->vma_offset_manager,
+			      (struct ttm_device_init_flags)
+			      {.use_dma32 = true});
 	if (ret)
 		return ret;
 
