@@ -31,6 +31,7 @@ struct kstate_field {
 enum kstate_ids {
 	KSTATE_PAGE_ID,
 	KSTATE_RSVD_MEM_ID,
+	KSTATE_TEST_ID,
 	KSTATE_LAST_ID = -1,
 };
 
