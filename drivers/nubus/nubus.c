@@ -615,7 +615,7 @@ static int __init nubus_get_vendorinfo(struct nubus_board *board,
 	struct nubus_dir dir;
 	struct nubus_dirent ent;
 	static char *vendor_fields[6] = { "ID", "serial", "revision",
-	                                  "part", "date", "unknown field" };
+					  "part", "date", "unknown field" };
 
 	pr_debug("    vendor info:\n");
 	nubus_get_subdir(parent, &dir);
@@ -783,7 +783,7 @@ static void __init nubus_add_board(int slot, int bytelanes)
 	/* Set up the directory pointer */
 	board->directory = board->fblock;
 	nubus_move(&board->directory, nubus_expand32(board->doffset),
-	           board->lanes);
+		   board->lanes);
 
 	nubus_get_root_dir(board, &dir);
 
