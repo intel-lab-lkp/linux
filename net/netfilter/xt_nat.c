@@ -20,6 +20,7 @@ xt_nat_setup_info(struct sk_buff *skb,
 {
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	int ret;
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (WARN_ON(!ct))
@@ -30,7 +31,11 @@ xt_nat_setup_info(struct sk_buff *skb,
 	    (ctinfo == IP_CT_RELATED_REPLY && maniptype == NF_NAT_MANIP_SRC))))
 		return NF_ACCEPT;
 
-	return nf_nat_setup_info(ct, range, maniptype);
+	ret = nf_nat_setup_info(ct, range, maniptype);
+	if (ret != NF_DROP)
+		return ret;
+
+	return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 }
 
 static int xt_nat_checkentry_v0(const struct xt_tgchk_param *par)
