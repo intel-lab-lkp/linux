@@ -124,6 +124,21 @@ struct kfifo_rec_ptr_2 __STRUCT_KFIFO_PTR(unsigned char, 2, void);
 #define DECLARE_KFIFO(fifo, type, size)	STRUCT_KFIFO(type, size) fifo
 
 /**
+ * get_kfifo_data_type - macro to get type of kfifo's member
+ * @fifo: pointer of kfifo
+ */
+#define get_kfifo_data_type(fifo) typeof(*(fifo)->type)
+
+/**
+ * __STACK_SIZE - macro to calculate kfifo's buffer size
+ * @fifo: pointer of kfifo
+ */
+#define __KFIFO_SIZE(fifo)\
+	({\
+		DECLARE_KFIFO_PTR(__tmp_kfifo, get_kfifo_data_type(fifo));\
+		(sizeof(*(fifo)) - sizeof(__tmp_kfifo)) / sizeof(get_kfifo_data_type(fifo));\
+	 })
+/**
  * INIT_KFIFO - Initialize a fifo declared by DECLARE_KFIFO
  * @fifo: name of the declared fifo datatype
  */
@@ -133,7 +148,7 @@ struct kfifo_rec_ptr_2 __STRUCT_KFIFO_PTR(unsigned char, 2, void);
 	struct __kfifo *__kfifo = &__tmp->kfifo; \
 	__kfifo->in = 0; \
 	__kfifo->out = 0; \
-	__kfifo->mask = __is_kfifo_ptr(__tmp) ? 0 : ARRAY_SIZE(__tmp->buf) - 1;\
+	__kfifo->mask = __is_kfifo_ptr(__tmp) ? 0 : __KFIFO_SIZE(__tmp->buf) - 1;\
 	__kfifo->esize = sizeof(*__tmp->buf); \
 	__kfifo->data = __is_kfifo_ptr(__tmp) ?  NULL : __tmp->buf; \
 })
