@@ -390,7 +390,7 @@ int radeon_crtc_do_set_base(struct drm_crtc *crtc,
 
 	DRM_DEBUG_KMS("\n");
 	/* no fb bound */
-	if (!atomic && !crtc->primary->fb) {
+	if (!atomic && !crtc->primary->legacy.fb) {
 		DRM_DEBUG_KMS("No FB bound\n");
 		return 0;
 	}
@@ -398,7 +398,7 @@ int radeon_crtc_do_set_base(struct drm_crtc *crtc,
 	if (atomic)
 		target_fb = fb;
 	else
-		target_fb = crtc->primary->fb;
+		target_fb = crtc->primary->legacy.fb;
 
 	switch (target_fb->format->cpp[0] * 8) {
 	case 8:
@@ -445,7 +445,7 @@ retry:
 		 * We don't shutdown the display controller because new buffer
 		 * will end up in same spot.
 		 */
-		if (!atomic && fb && fb != crtc->primary->fb) {
+		if (!atomic && fb && fb != crtc->primary->legacy.fb) {
 			struct radeon_bo *old_rbo;
 			unsigned long nsize, osize;
 
@@ -555,7 +555,7 @@ retry:
 	WREG32(RADEON_CRTC_OFFSET + radeon_crtc->crtc_offset, crtc_offset);
 	WREG32(RADEON_CRTC_PITCH + radeon_crtc->crtc_offset, crtc_pitch);
 
-	if (!atomic && fb && fb != crtc->primary->fb) {
+	if (!atomic && fb && fb != crtc->primary->legacy.fb) {
 		rbo = gem_to_radeon_bo(fb->obj[0]);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r != 0))
@@ -575,7 +575,7 @@ static bool radeon_set_crtc_timing(struct drm_crtc *crtc, struct drm_display_mod
 	struct drm_device *dev = crtc->dev;
 	struct radeon_device *rdev = dev->dev_private;
 	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
-	const struct drm_framebuffer *fb = crtc->primary->fb;
+	const struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 	struct drm_encoder *encoder;
 	int format;
 	int hsync_start;
@@ -1088,11 +1088,11 @@ static void radeon_crtc_commit(struct drm_crtc *crtc)
 static void radeon_crtc_disable(struct drm_crtc *crtc)
 {
 	radeon_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
-	if (crtc->primary->fb) {
+	if (crtc->primary->legacy.fb) {
 		int r;
 		struct radeon_bo *rbo;
 
-		rbo = gem_to_radeon_bo(crtc->primary->fb->obj[0]);
+		rbo = gem_to_radeon_bo(crtc->primary->legacy.fb->obj[0]);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r))
 			DRM_ERROR("failed to reserve rbo before unpin\n");

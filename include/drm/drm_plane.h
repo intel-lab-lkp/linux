@@ -663,31 +663,33 @@ struct drm_plane {
 	/** @modifier_count: Size of the array pointed at by @modifier_count. */
 	unsigned int modifier_count;
 
-	/**
-	 * @crtc:
-	 *
-	 * Currently bound CRTC, only meaningful for non-atomic drivers. For
-	 * atomic drivers this is forced to be NULL, atomic drivers should
-	 * instead check &drm_plane_state.crtc.
-	 */
-	struct drm_crtc *crtc;
+	struct {
+		/**
+		 * @crtc:
+		 *
+		 * Currently bound CRTC, only meaningful for non-atomic drivers. For
+		 * atomic drivers this is forced to be NULL, atomic drivers should
+		 * instead check &drm_plane_state.crtc.
+		 */
+		struct drm_crtc *crtc;
 
-	/**
-	 * @fb:
-	 *
-	 * Currently bound framebuffer, only meaningful for non-atomic drivers.
-	 * For atomic drivers this is forced to be NULL, atomic drivers should
-	 * instead check &drm_plane_state.fb.
-	 */
-	struct drm_framebuffer *fb;
+		/**
+		 * @fb:
+		 *
+		 * Currently bound framebuffer, only meaningful for non-atomic drivers.
+		 * For atomic drivers this is forced to be NULL, atomic drivers should
+		 * instead check &drm_plane_state.fb.
+		 */
+		struct drm_framebuffer *fb;
 
-	/**
-	 * @old_fb:
-	 *
-	 * Temporary tracking of the old fb while a modeset is ongoing. Only
-	 * used by non-atomic drivers, forced to be NULL for atomic drivers.
-	 */
-	struct drm_framebuffer *old_fb;
+		/**
+		 * @old_fb:
+		 *
+		 * Temporary tracking of the old fb while a modeset is ongoing. Only
+		 * used by non-atomic drivers, forced to be NULL for atomic drivers.
+		 */
+		struct drm_framebuffer *old_fb;
+	} legacy;
 
 	/** @funcs: plane control functions */
 	const struct drm_plane_funcs *funcs;

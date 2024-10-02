@@ -61,7 +61,7 @@ int gma_pipe_set_base(struct drm_crtc *crtc, int x, int y,
 	struct drm_device *dev = crtc->dev;
 	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 	struct gma_crtc *gma_crtc = to_gma_crtc(crtc);
-	struct drm_framebuffer *fb = crtc->primary->fb;
+	struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 	struct psb_gem_object *pobj;
 	int pipe = gma_crtc->pipe;
 	const struct psb_offset *map = &dev_priv->regmap[pipe];
@@ -490,8 +490,8 @@ void gma_crtc_disable(struct drm_crtc *crtc)
 
 	crtc_funcs->dpms(crtc, DRM_MODE_DPMS_OFF);
 
-	if (crtc->primary->fb) {
-		pobj = to_psb_gem_object(crtc->primary->fb->obj[0]);
+	if (crtc->primary->legacy.fb) {
+		pobj = to_psb_gem_object(crtc->primary->legacy.fb->obj[0]);
 		psb_gem_unpin(pobj);
 	}
 }
@@ -515,8 +515,8 @@ int gma_crtc_page_flip(struct drm_crtc *crtc,
 		       struct drm_modeset_acquire_ctx *ctx)
 {
 	struct gma_crtc *gma_crtc = to_gma_crtc(crtc);
-	struct drm_framebuffer *current_fb = crtc->primary->fb;
-	struct drm_framebuffer *old_fb = crtc->primary->old_fb;
+	struct drm_framebuffer *current_fb = crtc->primary->legacy.fb;
+	struct drm_framebuffer *old_fb = crtc->primary->legacy.old_fb;
 	const struct drm_crtc_helper_funcs *crtc_funcs = crtc->helper_private;
 	struct drm_device *dev = crtc->dev;
 	unsigned long flags;
@@ -526,7 +526,7 @@ int gma_crtc_page_flip(struct drm_crtc *crtc,
 		return -EINVAL;
 
 	/* Using mode_set_base requires the new fb to be set already. */
-	crtc->primary->fb = fb;
+	crtc->primary->legacy.fb = fb;
 
 	if (event) {
 		spin_lock_irqsave(&dev->event_lock, flags);
@@ -552,7 +552,7 @@ int gma_crtc_page_flip(struct drm_crtc *crtc,
 
 	/* Restore previous fb in case of failure. */
 	if (ret)
-		crtc->primary->fb = current_fb;
+		crtc->primary->legacy.fb = current_fb;
 
 	return ret;
 }

@@ -544,8 +544,8 @@ int drm_mode_getcrtc(struct drm_device *dev,
 	drm_modeset_lock(&plane->mutex, NULL);
 	if (plane->state && plane->state->fb)
 		crtc_resp->fb_id = plane->state->fb->base.id;
-	else if (!plane->state && plane->fb)
-		crtc_resp->fb_id = plane->fb->base.id;
+	else if (!plane->state && plane->legacy.fb)
+		crtc_resp->fb_id = plane->legacy.fb->base.id;
 	else
 		crtc_resp->fb_id = 0;
 
@@ -600,7 +600,7 @@ static int __drm_mode_set_config_internal(struct drm_mode_set *set,
 	drm_for_each_crtc(tmp, crtc->dev) {
 		struct drm_plane *plane = tmp->primary;
 
-		plane->old_fb = plane->fb;
+		plane->legacy.old_fb = plane->legacy.fb;
 	}
 
 	fb = set->fb;
@@ -609,18 +609,18 @@ static int __drm_mode_set_config_internal(struct drm_mode_set *set,
 	if (ret == 0) {
 		struct drm_plane *plane = crtc->primary;
 
-		plane->crtc = fb ? crtc : NULL;
-		plane->fb = fb;
+		plane->legacy.crtc = fb ? crtc : NULL;
+		plane->legacy.fb = fb;
 	}
 
 	drm_for_each_crtc(tmp, crtc->dev) {
 		struct drm_plane *plane = tmp->primary;
 
-		if (plane->fb)
-			drm_framebuffer_get(plane->fb);
-		if (plane->old_fb)
-			drm_framebuffer_put(plane->old_fb);
-		plane->old_fb = NULL;
+		if (plane->legacy.fb)
+			drm_framebuffer_get(plane->legacy.fb);
+		if (plane->legacy.old_fb)
+			drm_framebuffer_put(plane->legacy.old_fb);
+		plane->legacy.old_fb = NULL;
 	}
 
 	return ret;
@@ -739,7 +739,7 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 			if (plane->state)
 				old_fb = plane->state->fb;
 			else
-				old_fb = plane->fb;
+				old_fb = plane->legacy.fb;
 
 			if (!old_fb) {
 				drm_dbg_kms(dev, "CRTC doesn't have current FB\n");

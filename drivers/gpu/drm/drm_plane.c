@@ -723,23 +723,23 @@ void drm_plane_force_disable(struct drm_plane *plane)
 {
 	int ret;
 
-	if (!plane->fb)
+	if (!plane->legacy.fb)
 		return;
 
 	WARN_ON(drm_drv_uses_atomic_modeset(plane->dev));
 
-	plane->old_fb = plane->fb;
+	plane->legacy.old_fb = plane->legacy.fb;
 	ret = plane->funcs->disable_plane(plane, NULL);
 	if (ret) {
 		DRM_ERROR("failed to disable plane with busy fb\n");
-		plane->old_fb = NULL;
+		plane->legacy.old_fb = NULL;
 		return;
 	}
 	/* disconnect the plane from the fb and crtc: */
-	drm_framebuffer_put(plane->old_fb);
-	plane->old_fb = NULL;
-	plane->fb = NULL;
-	plane->crtc = NULL;
+	drm_framebuffer_put(plane->legacy.old_fb);
+	plane->legacy.old_fb = NULL;
+	plane->legacy.fb = NULL;
+	plane->legacy.crtc = NULL;
 }
 EXPORT_SYMBOL(drm_plane_force_disable);
 
@@ -840,15 +840,15 @@ int drm_mode_getplane(struct drm_device *dev, void *data,
 	drm_modeset_lock(&plane->mutex, NULL);
 	if (plane->state && plane->state->crtc && drm_lease_held(file_priv, plane->state->crtc->base.id))
 		plane_resp->crtc_id = plane->state->crtc->base.id;
-	else if (!plane->state && plane->crtc && drm_lease_held(file_priv, plane->crtc->base.id))
-		plane_resp->crtc_id = plane->crtc->base.id;
+	else if (!plane->state && plane->legacy.crtc && drm_lease_held(file_priv, plane->legacy.crtc->base.id))
+		plane_resp->crtc_id = plane->legacy.crtc->base.id;
 	else
 		plane_resp->crtc_id = 0;
 
 	if (plane->state && plane->state->fb)
 		plane_resp->fb_id = plane->state->fb->base.id;
-	else if (!plane->state && plane->fb)
-		plane_resp->fb_id = plane->fb->base.id;
+	else if (!plane->state && plane->legacy.fb)
+		plane_resp->fb_id = plane->legacy.fb->base.id;
 	else
 		plane_resp->fb_id = 0;
 	drm_modeset_unlock(&plane->mutex);
@@ -1004,13 +1004,13 @@ static int __setplane_internal(struct drm_plane *plane,
 
 	/* No fb means shut it down */
 	if (!fb) {
-		plane->old_fb = plane->fb;
+		plane->legacy.old_fb = plane->legacy.fb;
 		ret = plane->funcs->disable_plane(plane, ctx);
 		if (!ret) {
-			plane->crtc = NULL;
-			plane->fb = NULL;
+			plane->legacy.crtc = NULL;
+			plane->legacy.fb = NULL;
 		} else {
-			plane->old_fb = NULL;
+			plane->legacy.old_fb = NULL;
 		}
 		goto out;
 	}
@@ -1021,22 +1021,22 @@ static int __setplane_internal(struct drm_plane *plane,
 	if (ret)
 		goto out;
 
-	plane->old_fb = plane->fb;
+	plane->legacy.old_fb = plane->legacy.fb;
 	ret = plane->funcs->update_plane(plane, crtc, fb,
 					 crtc_x, crtc_y, crtc_w, crtc_h,
 					 src_x, src_y, src_w, src_h, ctx);
 	if (!ret) {
-		plane->crtc = crtc;
-		plane->fb = fb;
-		drm_framebuffer_get(plane->fb);
+		plane->legacy.crtc = crtc;
+		plane->legacy.fb = fb;
+		drm_framebuffer_get(plane->legacy.fb);
 	} else {
-		plane->old_fb = NULL;
+		plane->legacy.old_fb = NULL;
 	}
 
 out:
-	if (plane->old_fb)
-		drm_framebuffer_put(plane->old_fb);
-	plane->old_fb = NULL;
+	if (plane->legacy.old_fb)
+		drm_framebuffer_put(plane->legacy.old_fb);
+	plane->legacy.old_fb = NULL;
 
 	return ret;
 }
@@ -1178,7 +1178,7 @@ static int drm_mode_cursor_universal(struct drm_crtc *crtc,
 	int ret = 0;
 
 	BUG_ON(!plane);
-	WARN_ON(plane->crtc != crtc && plane->crtc != NULL);
+	WARN_ON(plane->legacy.crtc != crtc && plane->legacy.crtc != NULL);
 
 	/*
 	 * Obtain fb we'll be using (either new or existing) and take an extra
@@ -1204,7 +1204,7 @@ static int drm_mode_cursor_universal(struct drm_crtc *crtc,
 		if (plane->state)
 			fb = plane->state->fb;
 		else
-			fb = plane->fb;
+			fb = plane->legacy.fb;
 
 		if (fb)
 			drm_framebuffer_get(fb);
@@ -1441,7 +1441,7 @@ retry:
 	if (plane->state)
 		old_fb = plane->state->fb;
 	else
-		old_fb = plane->fb;
+		old_fb = plane->legacy.fb;
 
 	if (old_fb == NULL) {
 		/* The framebuffer is currently unbound, presumably
@@ -1506,7 +1506,7 @@ retry:
 		}
 	}
 
-	plane->old_fb = plane->fb;
+	plane->legacy.old_fb = plane->legacy.fb;
 	if (crtc->funcs->page_flip_target)
 		ret = crtc->funcs->page_flip_target(crtc, fb, e,
 						    page_flip->flags,
@@ -1519,10 +1519,10 @@ retry:
 		if (page_flip->flags & DRM_MODE_PAGE_FLIP_EVENT)
 			drm_event_cancel_free(dev, &e->base);
 		/* Keep the old fb, don't unref it. */
-		plane->old_fb = NULL;
+		plane->legacy.old_fb = NULL;
 	} else {
 		if (!plane->state) {
-			plane->fb = fb;
+			plane->legacy.fb = fb;
 			drm_framebuffer_get(fb);
 		}
 	}
@@ -1531,9 +1531,9 @@ out:
 	if (fb)
 		drm_framebuffer_put(fb);
 	fb = NULL;
-	if (plane->old_fb)
-		drm_framebuffer_put(plane->old_fb);
-	plane->old_fb = NULL;
+	if (plane->legacy.old_fb)
+		drm_framebuffer_put(plane->legacy.old_fb);
+	plane->legacy.old_fb = NULL;
 
 	if (ret == -EDEADLK) {
 		ret = drm_modeset_backoff(&ctx);

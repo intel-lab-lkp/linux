@@ -165,7 +165,7 @@ void r100_page_flip(struct radeon_device *rdev, int crtc_id, u64 crtc_base, bool
 {
 	struct radeon_crtc *radeon_crtc = rdev->mode_info.crtcs[crtc_id];
 	uint32_t crtc_pitch, pitch_pixels;
-	struct drm_framebuffer *fb = radeon_crtc->base.primary->fb;
+	struct drm_framebuffer *fb = radeon_crtc->base.primary->legacy.fb;
 	u32 tmp = ((u32)crtc_base) | RADEON_CRTC_OFFSET__OFFSET_LOCK;
 	int i;
 
@@ -3244,7 +3244,7 @@ void r100_bandwidth_update(struct radeon_device *rdev)
 
 	if (rdev->mode_info.crtcs[0]->base.enabled) {
 		const struct drm_framebuffer *fb =
-			rdev->mode_info.crtcs[0]->base.primary->fb;
+			rdev->mode_info.crtcs[0]->base.primary->legacy.fb;
 
 		mode1 = &rdev->mode_info.crtcs[0]->base.mode;
 		pixel_bytes1 = fb->format->cpp[0];
@@ -3252,7 +3252,7 @@ void r100_bandwidth_update(struct radeon_device *rdev)
 	if (!(rdev->flags & RADEON_SINGLE_CRTC)) {
 		if (rdev->mode_info.crtcs[1]->base.enabled) {
 			const struct drm_framebuffer *fb =
-				rdev->mode_info.crtcs[1]->base.primary->fb;
+				rdev->mode_info.crtcs[1]->base.primary->legacy.fb;
 
 			mode2 = &rdev->mode_info.crtcs[1]->base.mode;
 			pixel_bytes2 = fb->format->cpp[0];

@@ -189,7 +189,7 @@ int drm_fb_helper_debug_leave(struct fb_info *info)
 			continue;
 
 		funcs = crtc->helper_private;
-		fb = crtc->primary->fb;
+		fb = crtc->primary->legacy.fb;
 
 		if (!crtc->enabled)
 			continue;

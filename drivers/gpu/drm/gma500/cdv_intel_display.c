@@ -462,7 +462,7 @@ static bool cdv_intel_pipe_enabled(struct drm_device *dev, int pipe)
 	crtc = dev_priv->pipe_to_crtc_mapping[pipe];
 	gma_crtc = to_gma_crtc(crtc);
 
-	if (crtc->primary->fb == NULL || !gma_crtc->active)
+	if (crtc->primary->legacy.fb == NULL || !gma_crtc->active)
 		return false;
 	return true;
 }

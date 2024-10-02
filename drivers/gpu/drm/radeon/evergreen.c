@@ -1417,7 +1417,7 @@ void evergreen_page_flip(struct radeon_device *rdev, int crtc_id, u64 crtc_base,
 			 bool async)
 {
 	struct radeon_crtc *radeon_crtc = rdev->mode_info.crtcs[crtc_id];
-	struct drm_framebuffer *fb = radeon_crtc->base.primary->fb;
+	struct drm_framebuffer *fb = radeon_crtc->base.primary->legacy.fb;
 
 	/* flip at hsync for async, default is vsync */
 	WREG32(EVERGREEN_GRPH_FLIP_CONTROL + radeon_crtc->crtc_offset,

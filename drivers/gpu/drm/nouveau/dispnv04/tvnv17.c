@@ -756,7 +756,7 @@ static int nv17_tv_set_property(struct drm_encoder *encoder,
 		if (crtc)
 			drm_crtc_helper_set_mode(crtc, &crtc->mode,
 						 crtc->x, crtc->y,
-						 crtc->primary->fb);
+						 crtc->primary->legacy.fb);
 	}
 
 	return 0;

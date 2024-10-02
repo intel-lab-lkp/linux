@@ -204,7 +204,7 @@ static void __drm_helper_disable_unused_functions(struct drm_device *dev)
 				(*crtc_funcs->disable)(crtc);
 			else
 				(*crtc_funcs->dpms)(crtc, DRM_MODE_DPMS_OFF);
-			crtc->primary->fb = NULL;
+			crtc->primary->legacy.fb = NULL;
 		}
 	}
 }
@@ -635,17 +635,17 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set,
 	save_set.mode = &set->crtc->mode;
 	save_set.x = set->crtc->x;
 	save_set.y = set->crtc->y;
-	save_set.fb = set->crtc->primary->fb;
+	save_set.fb = set->crtc->primary->legacy.fb;
 
 	/* We should be able to check here if the fb has the same properties
 	 * and then just flip_or_move it */
-	if (set->crtc->primary->fb != set->fb) {
+	if (set->crtc->primary->legacy.fb != set->fb) {
 		/* If we have no fb then treat it as a full mode set */
-		if (set->crtc->primary->fb == NULL) {
+		if (set->crtc->primary->legacy.fb == NULL) {
 			drm_dbg_kms(dev, "[CRTC:%d:%s] no fb, full mode set\n",
 				    set->crtc->base.id, set->crtc->name);
 			mode_changed = true;
-		} else if (set->fb->format != set->crtc->primary->fb->format) {
+		} else if (set->fb->format != set->crtc->primary->legacy.fb->format) {
 			mode_changed = true;
 		} else
 			fb_changed = true;
@@ -768,13 +768,13 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set,
 		if (drm_helper_crtc_in_use(set->crtc)) {
 			drm_dbg_kms(dev, "[CRTC:%d:%s] attempting to set mode from userspace: " DRM_MODE_FMT "\n",
 				    set->crtc->base.id, set->crtc->name, DRM_MODE_ARG(set->mode));
-			set->crtc->primary->fb = set->fb;
+			set->crtc->primary->legacy.fb = set->fb;
 			if (!drm_crtc_helper_set_mode(set->crtc, set->mode,
 						      set->x, set->y,
 						      save_set.fb)) {
 				drm_err(dev, "[CRTC:%d:%s] failed to set mode\n",
 					set->crtc->base.id, set->crtc->name);
-				set->crtc->primary->fb = save_set.fb;
+				set->crtc->primary->legacy.fb = save_set.fb;
 				ret = -EINVAL;
 				goto fail;
 			}
@@ -790,13 +790,13 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set,
 	} else if (fb_changed) {
 		set->crtc->x = set->x;
 		set->crtc->y = set->y;
-		set->crtc->primary->fb = set->fb;
+		set->crtc->primary->legacy.fb = set->fb;
 		ret = crtc_funcs->mode_set_base(set->crtc,
 						set->x, set->y, save_set.fb);
 		if (ret != 0) {
 			set->crtc->x = save_set.x;
 			set->crtc->y = save_set.y;
-			set->crtc->primary->fb = save_set.fb;
+			set->crtc->primary->legacy.fb = save_set.fb;
 			goto fail;
 		}
 	}
@@ -997,7 +997,7 @@ void drm_helper_resume_force_mode(struct drm_device *dev)
 			continue;
 
 		ret = drm_crtc_helper_set_mode(crtc, &crtc->mode,
-					       crtc->x, crtc->y, crtc->primary->fb);
+					       crtc->x, crtc->y, crtc->primary->legacy.fb);
 
 		/* Restoring the old config should never fail! */
 		if (ret == false)

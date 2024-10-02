@@ -186,7 +186,7 @@ static void dce_v8_0_page_flip(struct amdgpu_device *adev,
 			       int crtc_id, u64 crtc_base, bool async)
 {
 	struct amdgpu_crtc *amdgpu_crtc = adev->mode_info.crtcs[crtc_id];
-	struct drm_framebuffer *fb = amdgpu_crtc->base.primary->fb;
+	struct drm_framebuffer *fb = amdgpu_crtc->base.primary->legacy.fb;
 
 	/* flip at hsync for async, default is vsync */
 	WREG32(mmGRPH_FLIP_CONTROL + amdgpu_crtc->crtc_offset, async ?
@@ -1808,7 +1808,7 @@ static int dce_v8_0_crtc_do_set_base(struct drm_crtc *crtc,
 	bool bypass_lut = false;
 
 	/* no fb bound */
-	if (!atomic && !crtc->primary->fb) {
+	if (!atomic && !crtc->primary->legacy.fb) {
 		DRM_DEBUG_KMS("No FB bound\n");
 		return 0;
 	}
@@ -1816,7 +1816,7 @@ static int dce_v8_0_crtc_do_set_base(struct drm_crtc *crtc,
 	if (atomic)
 		target_fb = fb;
 	else
-		target_fb = crtc->primary->fb;
+		target_fb = crtc->primary->legacy.fb;
 
 	/* If atomic, assume fb object is pinned & idle & fenced and
 	 * just update base pointers
@@ -2001,7 +2001,7 @@ static int dce_v8_0_crtc_do_set_base(struct drm_crtc *crtc,
 	/* set pageflip to happen anywhere in vblank interval */
 	WREG32(mmMASTER_UPDATE_MODE + amdgpu_crtc->crtc_offset, 0);
 
-	if (!atomic && fb && fb != crtc->primary->fb) {
+	if (!atomic && fb && fb != crtc->primary->legacy.fb) {
 		abo = gem_to_amdgpu_bo(fb->obj[0]);
 		r = amdgpu_bo_reserve(abo, true);
 		if (unlikely(r != 0))
@@ -2476,11 +2476,11 @@ static void dce_v8_0_crtc_disable(struct drm_crtc *crtc)
 	int i;
 
 	dce_v8_0_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
-	if (crtc->primary->fb) {
+	if (crtc->primary->legacy.fb) {
 		int r;
 		struct amdgpu_bo *abo;
 
-		abo = gem_to_amdgpu_bo(crtc->primary->fb->obj[0]);
+		abo = gem_to_amdgpu_bo(crtc->primary->legacy.fb->obj[0]);
 		r = amdgpu_bo_reserve(abo, true);
 		if (unlikely(r))
 			DRM_ERROR("failed to reserve abo before unpin\n");

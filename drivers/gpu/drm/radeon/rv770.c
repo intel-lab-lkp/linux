@@ -800,7 +800,7 @@ u32 rv770_get_xclk(struct radeon_device *rdev)
 void rv770_page_flip(struct radeon_device *rdev, int crtc_id, u64 crtc_base, bool async)
 {
 	struct radeon_crtc *radeon_crtc = rdev->mode_info.crtcs[crtc_id];
-	struct drm_framebuffer *fb = radeon_crtc->base.primary->fb;
+	struct drm_framebuffer *fb = radeon_crtc->base.primary->legacy.fb;
 	u32 tmp = RREG32(AVIVO_D1GRPH_UPDATE + radeon_crtc->crtc_offset);
 	int i;
 

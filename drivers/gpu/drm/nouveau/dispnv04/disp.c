@@ -76,7 +76,7 @@ nv04_display_fini(struct drm_device *dev, bool runtime, bool suspend)
 
 	/* Un-pin FB and cursors so they'll be evicted to system memory. */
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		struct drm_framebuffer *fb = crtc->primary->fb;
+		struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 		struct nouveau_bo *nvbo;
 
 		if (!fb || !fb->obj[0])
@@ -128,7 +128,7 @@ nv04_display_init(struct drm_device *dev, bool resume, bool runtime)
 
 	/* Re-pin FB/cursors. */
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		struct drm_framebuffer *fb = crtc->primary->fb;
+		struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 		struct nouveau_bo *nvbo;
 
 		if (!fb || !fb->obj[0])

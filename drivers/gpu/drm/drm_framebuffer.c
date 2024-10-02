@@ -1081,7 +1081,7 @@ static void legacy_remove_fb(struct drm_framebuffer *fb)
 	drm_modeset_lock_all(dev);
 	/* remove from any CRTC */
 	drm_for_each_crtc(crtc, dev) {
-		if (crtc->primary->fb == fb) {
+		if (crtc->primary->legacy.fb == fb) {
 			drm_dbg_kms(dev,
 				    "Disabling [CRTC:%d:%s] because [FB:%d] is removed\n",
 				    crtc->base.id, crtc->name, fb->base.id);
@@ -1093,7 +1093,7 @@ static void legacy_remove_fb(struct drm_framebuffer *fb)
 	}
 
 	drm_for_each_plane(plane, dev) {
-		if (plane->fb == fb) {
+		if (plane->legacy.fb == fb) {
 			drm_dbg_kms(dev,
 				    "Disabling [PLANE:%d:%s] because [FB:%d] is removed\n",
 				    plane->base.id, plane->name, fb->base.id);

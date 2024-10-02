@@ -239,7 +239,7 @@ nv_crtc_mode_set_vga(struct drm_crtc *crtc, struct drm_display_mode *mode)
 	struct drm_device *dev = crtc->dev;
 	struct nouveau_crtc *nv_crtc = nouveau_crtc(crtc);
 	struct nv04_crtc_reg *regp = &nv04_display(dev)->mode_reg.crtc_reg[nv_crtc->index];
-	struct drm_framebuffer *fb = crtc->primary->fb;
+	struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 
 	/* Calculate our timings */
 	int horizDisplay	= (mode->crtc_hdisplay >> 3)		- 1;
@@ -465,7 +465,7 @@ nv_crtc_mode_set_regs(struct drm_crtc *crtc, struct drm_display_mode * mode)
 	struct nouveau_crtc *nv_crtc = nouveau_crtc(crtc);
 	struct nv04_crtc_reg *regp = &nv04_display(dev)->mode_reg.crtc_reg[nv_crtc->index];
 	struct nv04_crtc_reg *savep = &nv04_display(dev)->saved_reg.crtc_reg[nv_crtc->index];
-	const struct drm_framebuffer *fb = crtc->primary->fb;
+	const struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 	struct drm_encoder *encoder;
 	bool lvds_output = false, tmds_output = false, tv_output = false,
 		off_chip_digital = false;
@@ -610,7 +610,7 @@ static int
 nv_crtc_swap_fbs(struct drm_crtc *crtc, struct drm_framebuffer *old_fb)
 {
 	struct nv04_display *disp = nv04_display(crtc->dev);
-	struct drm_framebuffer *fb = crtc->primary->fb;
+	struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 	struct nouveau_bo *nvbo = nouveau_gem_object(fb->obj[0]);
 	struct nouveau_crtc *nv_crtc = nouveau_crtc(crtc);
 	int ret;
@@ -826,7 +826,7 @@ nv_crtc_gamma_set(struct drm_crtc *crtc, u16 *r, u16 *g, u16 *b,
 	 * mark the lut values as dirty by setting depth==0, and it'll be
 	 * uploaded on the first mode_set_base()
 	 */
-	if (!nv_crtc->base.primary->fb) {
+	if (!nv_crtc->base.primary->legacy.fb) {
 		nv_crtc->lut.depth = 0;
 		return 0;
 	}
@@ -852,7 +852,7 @@ nv04_crtc_do_mode_set_base(struct drm_crtc *crtc,
 	NV_DEBUG(drm, "index %d\n", nv_crtc->index);
 
 	/* no fb bound */
-	if (!atomic && !crtc->primary->fb) {
+	if (!atomic && !crtc->primary->legacy.fb) {
 		NV_DEBUG(drm, "No FB bound\n");
 		return 0;
 	}
@@ -863,7 +863,7 @@ nv04_crtc_do_mode_set_base(struct drm_crtc *crtc,
 	if (atomic) {
 		drm_fb = passed_fb;
 	} else {
-		drm_fb = crtc->primary->fb;
+		drm_fb = crtc->primary->legacy.fb;
 	}
 
 	nvbo = nouveau_gem_object(drm_fb->obj[0]);
@@ -1157,7 +1157,7 @@ nv04_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	const int swap_interval = (flags & DRM_MODE_PAGE_FLIP_ASYNC) ? 0 : 1;
 	struct drm_device *dev = crtc->dev;
 	struct nouveau_drm *drm = nouveau_drm(dev);
-	struct drm_framebuffer *old_fb = crtc->primary->fb;
+	struct drm_framebuffer *old_fb = crtc->primary->legacy.fb;
 	struct nouveau_bo *old_bo = nouveau_gem_object(old_fb->obj[0]);
 	struct nouveau_bo *new_bo = nouveau_gem_object(fb->obj[0]);
 	struct nv04_page_flip_state *s;
@@ -1237,7 +1237,7 @@ nv04_crtc_page_flip(struct drm_crtc *crtc, struct drm_framebuffer *fb,
 	mutex_unlock(&cli->mutex);
 
 	/* Update the crtc struct and cleanup */
-	crtc->primary->fb = fb;
+	crtc->primary->legacy.fb = fb;
 
 	nouveau_bo_fence(old_bo, fence, false);
 	ttm_bo_unreserve(&old_bo->bo);

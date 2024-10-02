@@ -506,7 +506,7 @@ static int radeon_crtc_page_flip_target(struct drm_crtc *crtc,
 	work->async = (page_flip_flags & DRM_MODE_PAGE_FLIP_ASYNC) != 0;
 
 	/* schedule unpin of the old buffer */
-	obj = crtc->primary->fb->obj[0];
+	obj = crtc->primary->legacy.fb->obj[0];
 
 	/* take a reference to the old object */
 	drm_gem_object_get(obj);
@@ -595,7 +595,7 @@ static int radeon_crtc_page_flip_target(struct drm_crtc *crtc,
 	radeon_crtc->flip_work = work;
 
 	/* update crtc fb */
-	crtc->primary->fb = fb;
+	crtc->primary->legacy.fb = fb;
 
 	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 

@@ -291,7 +291,7 @@ static void nv04_dfp_mode_set(struct drm_encoder *encoder,
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct drm_display_mode *output_mode = &nv_encoder->mode;
 	struct drm_connector *connector = &nv_connector->base;
-	const struct drm_framebuffer *fb = encoder->crtc->primary->fb;
+	const struct drm_framebuffer *fb = encoder->crtc->primary->legacy.fb;
 	uint32_t mode_ratio, panel_ratio;
 
 	NV_DEBUG(drm, "Output mode on CRTC %d:\n", nv_crtc->index);

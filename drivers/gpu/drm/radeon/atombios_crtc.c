@@ -1150,7 +1150,7 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	bool bypass_lut = false;
 
 	/* no fb bound */
-	if (!atomic && !crtc->primary->fb) {
+	if (!atomic && !crtc->primary->legacy.fb) {
 		DRM_DEBUG_KMS("No FB bound\n");
 		return 0;
 	}
@@ -1158,7 +1158,7 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	if (atomic)
 		target_fb = fb;
 	else
-		target_fb = crtc->primary->fb;
+		target_fb = crtc->primary->legacy.fb;
 
 	/* If atomic, assume fb object is pinned & idle & fenced and
 	 * just update base pointers
@@ -1437,7 +1437,7 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	/* set pageflip to happen anywhere in vblank interval */
 	WREG32(EVERGREEN_MASTER_UPDATE_MODE + radeon_crtc->crtc_offset, 0);
 
-	if (!atomic && fb && fb != crtc->primary->fb) {
+	if (!atomic && fb && fb != crtc->primary->legacy.fb) {
 		rbo = gem_to_radeon_bo(fb->obj[0]);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r != 0))
@@ -1470,7 +1470,7 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 	bool bypass_lut = false;
 
 	/* no fb bound */
-	if (!atomic && !crtc->primary->fb) {
+	if (!atomic && !crtc->primary->legacy.fb) {
 		DRM_DEBUG_KMS("No FB bound\n");
 		return 0;
 	}
@@ -1478,7 +1478,7 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 	if (atomic)
 		target_fb = fb;
 	else
-		target_fb = crtc->primary->fb;
+		target_fb = crtc->primary->legacy.fb;
 
 	obj = target_fb->obj[0];
 	rbo = gem_to_radeon_bo(obj);
@@ -1645,7 +1645,7 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 	/* set pageflip to happen only at start of vblank interval (front porch) */
 	WREG32(AVIVO_D1MODE_MASTER_UPDATE_MODE + radeon_crtc->crtc_offset, 3);
 
-	if (!atomic && fb && fb != crtc->primary->fb) {
+	if (!atomic && fb && fb != crtc->primary->legacy.fb) {
 		rbo = gem_to_radeon_bo(fb->obj[0]);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r != 0))
@@ -2150,11 +2150,11 @@ static void atombios_crtc_disable(struct drm_crtc *crtc)
 	int i;
 
 	atombios_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
-	if (crtc->primary->fb) {
+	if (crtc->primary->legacy.fb) {
 		int r;
 		struct radeon_bo *rbo;
 
-		rbo = gem_to_radeon_bo(crtc->primary->fb->obj[0]);
+		rbo = gem_to_radeon_bo(crtc->primary->legacy.fb->obj[0]);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r))
 			DRM_ERROR("failed to reserve rbo before unpin\n");

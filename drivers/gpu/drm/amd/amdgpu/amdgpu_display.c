@@ -216,7 +216,7 @@ int amdgpu_display_crtc_page_flip_target(struct drm_crtc *crtc,
 	work->async = (page_flip_flags & DRM_MODE_PAGE_FLIP_ASYNC) != 0;
 
 	/* schedule unpin of the old buffer */
-	obj = crtc->primary->fb->obj[0];
+	obj = crtc->primary->legacy.fb->obj[0];
 
 	/* take a reference to the old object */
 	work->old_abo = gem_to_amdgpu_bo(obj);
@@ -280,7 +280,7 @@ int amdgpu_display_crtc_page_flip_target(struct drm_crtc *crtc,
 	DRM_DEBUG_DRIVER("crtc:%d[%p], pflip_stat:AMDGPU_FLIP_PENDING, work: %p,\n",
 					 amdgpu_crtc->crtc_id, amdgpu_crtc, work);
 	/* update crtc fb */
-	crtc->primary->fb = fb;
+	crtc->primary->legacy.fb = fb;
 	spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 	amdgpu_display_flip_work_func(&work->flip_work.work);
 	return 0;
@@ -1715,7 +1715,7 @@ int amdgpu_display_suspend_helper(struct amdgpu_device *adev)
 	/* unpin the front buffers and cursors */
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct amdgpu_crtc *amdgpu_crtc = to_amdgpu_crtc(crtc);
-		struct drm_framebuffer *fb = crtc->primary->fb;
+		struct drm_framebuffer *fb = crtc->primary->legacy.fb;
 		struct amdgpu_bo *robj;
 
 		if (amdgpu_crtc->cursor_bo && !adev->enable_virtual_display) {

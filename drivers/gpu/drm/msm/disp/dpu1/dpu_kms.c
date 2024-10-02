@@ -122,11 +122,11 @@ static void _dpu_plane_set_danger_state(struct dpu_kms *kms, bool enable)
 	struct drm_plane *plane;
 
 	drm_for_each_plane(plane, kms->dev) {
-		if (plane->fb && plane->state) {
+		if (plane->legacy.fb && plane->state) {
 			dpu_plane_danger_signal_ctrl(plane, enable);
 			DPU_DEBUG("plane:%d img:%dx%d ",
-				plane->base.id, plane->fb->width,
-				plane->fb->height);
+				plane->base.id, plane->legacy.fb->width,
+				plane->legacy.fb->height);
 			DPU_DEBUG("src[%d,%d,%d,%d] dst[%d,%d,%d,%d]\n",
 				plane->state->src_x >> 16,
 				plane->state->src_y >> 16,
