@@ -1097,7 +1097,7 @@ xfs_buffered_write_iomap_begin(
 		end_fsb = imap.br_startoff + imap.br_blockcount;
 	} else {
 		/*
-		 * We cap the maximum length we map here to MAX_WRITEBACK_PAGES
+		 * We cap the maximum length we map here to 1024
 		 * pages to keep the chunks of work done where somewhat
 		 * symmetric with the work writeback does.  This is a completely
 		 * arbitrary number pulled out of thin air.
