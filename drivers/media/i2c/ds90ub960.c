@@ -527,6 +527,7 @@ struct ub960_data {
 
 	u8 stored_fwd_ctl;
 
+	/* Indexed by pad number */
 	u64 stream_enable_mask[UB960_MAX_NPORTS];
 
 	/* These are common to all ports */
@@ -559,6 +560,16 @@ static inline unsigned int ub960_pad_to_port(struct ub960_data *priv, u32 pad)
 		return pad;
 	else
 		return pad - priv->hw_data->num_rxports;
+}
+
+static inline unsigned int ub960_rxport_to_pad(struct ub960_data *priv, u32 port)
+{
+	return port;
+}
+
+static inline unsigned int ub960_txport_to_pad(struct ub960_data *priv, u32 port)
+{
+	return port + priv->hw_data->num_rxports;
 }
 
 struct ub960_format_info {
@@ -2558,6 +2569,7 @@ static int ub960_enable_streams(struct v4l2_subdev *sd,
 {
 	struct ub960_data *priv = sd_to_ub960(sd);
 	struct device *dev = &priv->client->dev;
+	/* Indexed by rx port number */
 	u64 sink_streams[UB960_MAX_RX_NPORTS] = {};
 	struct v4l2_subdev_route *route;
 	unsigned int failed_port;
@@ -2595,11 +2607,13 @@ static int ub960_enable_streams(struct v4l2_subdev *sd,
 	}
 
 	for (nport = 0; nport < priv->hw_data->num_rxports; nport++) {
+		unsigned int sink_pad = ub960_rxport_to_pad(priv, nport);
+
 		if (!sink_streams[nport])
 			continue;
 
 		/* Enable the RX port if not yet enabled */
-		if (!priv->stream_enable_mask[nport]) {
+		if (!priv->stream_enable_mask[sink_pad]) {
 			ret = ub960_enable_rx_port(priv, nport);
 			if (ret) {
 				failed_port = nport;
@@ -2607,7 +2621,7 @@ static int ub960_enable_streams(struct v4l2_subdev *sd,
 			}
 		}
 
-		priv->stream_enable_mask[nport] |= sink_streams[nport];
+		priv->stream_enable_mask[sink_pad] |= sink_streams[nport];
 
 		dev_dbg(dev, "enable RX port %u streams %#llx\n", nport,
 			sink_streams[nport]);
@@ -2617,9 +2631,9 @@ static int ub960_enable_streams(struct v4l2_subdev *sd,
 			priv->rxports[nport]->source.pad,
 			sink_streams[nport]);
 		if (ret) {
-			priv->stream_enable_mask[nport] &= ~sink_streams[nport];
+			priv->stream_enable_mask[sink_pad] &= ~sink_streams[nport];
 
-			if (!priv->stream_enable_mask[nport])
+			if (!priv->stream_enable_mask[sink_pad])
 				ub960_disable_rx_port(priv, nport);
 
 			failed_port = nport;
@@ -2633,6 +2647,8 @@ static int ub960_enable_streams(struct v4l2_subdev *sd,
 
 err:
 	for (nport = 0; nport < failed_port; nport++) {
+		unsigned int sink_pad = ub960_rxport_to_pad(priv, nport);
+
 		if (!sink_streams[nport])
 			continue;
 
@@ -2646,10 +2662,10 @@ err:
 		if (ret)
 			dev_err(dev, "Failed to disable streams: %d\n", ret);
 
-		priv->stream_enable_mask[nport] &= ~sink_streams[nport];
+		priv->stream_enable_mask[sink_pad] &= ~sink_streams[nport];
 
 		/* Disable RX port if no active streams */
-		if (!priv->stream_enable_mask[nport])
+		if (!priv->stream_enable_mask[sink_pad])
 			ub960_disable_rx_port(priv, nport);
 	}
 
@@ -2689,6 +2705,8 @@ static int ub960_disable_streams(struct v4l2_subdev *sd,
 	}
 
 	for (nport = 0; nport < priv->hw_data->num_rxports; nport++) {
+		unsigned int sink_pad = ub960_rxport_to_pad(priv, nport);
+
 		if (!sink_streams[nport])
 			continue;
 
@@ -2702,10 +2720,10 @@ static int ub960_disable_streams(struct v4l2_subdev *sd,
 		if (ret)
 			dev_err(dev, "Failed to disable streams: %d\n", ret);
 
-		priv->stream_enable_mask[nport] &= ~sink_streams[nport];
+		priv->stream_enable_mask[sink_pad] &= ~sink_streams[nport];
 
 		/* Disable RX port if no active streams */
-		if (!priv->stream_enable_mask[nport])
+		if (!priv->stream_enable_mask[sink_pad])
 			ub960_disable_rx_port(priv, nport);
 	}
 
@@ -3460,6 +3478,7 @@ static int ub960_parse_dt_rxports(struct ub960_data *priv)
 	priv->strobe.manual = fwnode_property_read_bool(links_fwnode, "ti,manual-strobe");
 
 	for (nport = 0; nport < priv->hw_data->num_rxports; nport++) {
+		unsigned int pad = ub960_rxport_to_pad(priv, nport);
 		struct fwnode_handle *link_fwnode;
 		struct fwnode_handle *ep_fwnode;
 
@@ -3468,7 +3487,7 @@ static int ub960_parse_dt_rxports(struct ub960_data *priv)
 			continue;
 
 		ep_fwnode = fwnode_graph_get_endpoint_by_id(dev_fwnode(dev),
-							    nport, 0, 0);
+							    pad, 0, 0);
 		if (!ep_fwnode) {
 			fwnode_handle_put(link_fwnode);
 			continue;
@@ -3503,11 +3522,11 @@ static int ub960_parse_dt_txports(struct ub960_data *priv)
 	int ret;
 
 	for (nport = 0; nport < priv->hw_data->num_txports; nport++) {
-		unsigned int port = nport + priv->hw_data->num_rxports;
+		unsigned int pad = ub960_txport_to_pad(priv, nport);
 		struct fwnode_handle *ep_fwnode;
 
 		ep_fwnode = fwnode_graph_get_endpoint_by_id(dev_fwnode(dev),
-							    port, 0, 0);
+							    pad, 0, 0);
 		if (!ep_fwnode)
 			continue;
 
