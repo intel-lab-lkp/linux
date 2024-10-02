@@ -735,7 +735,8 @@ static void __init nubus_add_board(int slot, int bytelanes)
 	nubus_rewind(&rp, FORMAT_BLOCK_SIZE, bytelanes);
 
 	/* Actually we should probably panic if this fails */
-	if ((board = kzalloc(sizeof(*board), GFP_ATOMIC)) == NULL)
+	board = kzalloc(sizeof(*board), GFP_ATOMIC)
+	if (board == NULL)
 		return;
 	board->fblock = rp;
 
