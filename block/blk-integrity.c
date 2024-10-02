@@ -56,6 +56,7 @@ new_segment:
 
 /**
  * blk_rq_map_integrity_sg - Map integrity metadata into a scatterlist
+ * @rq:		request containing integrity metadata
  * @q:		request queue
  * @bio:	bio with integrity metadata attached
  * @sglist:	target scatterlist
