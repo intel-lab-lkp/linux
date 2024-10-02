@@ -167,6 +167,111 @@ static void super_wake(struct super_block *sb, unsigned int flag)
 	wake_up_var(&sb->s_flags);
 }
 
+/**
+ * super_iter_inodes - iterate all the cached inodes on a superblock
+ * @sb: superblock to iterate
+ * @iter_fn: callback to run on every inode found.
+ *
+ * This function iterates all cached inodes on a superblock that are not in
+ * the process of being initialised or torn down. It will run @iter_fn() with
+ * a valid, referenced inode, so it is safe for the caller to do anything
+ * it wants with the inode except drop the reference the iterator holds.
+ *
+ */
+int super_iter_inodes(struct super_block *sb, ino_iter_fn iter_fn,
+		void *private_data, int flags)
+{
+	struct inode *inode, *old_inode = NULL;
+	int ret = 0;
+
+	spin_lock(&sb->s_inode_list_lock);
+	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+		spin_lock(&inode->i_lock);
+		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
+			spin_unlock(&inode->i_lock);
+			continue;
+		}
+
+		/*
+		 * Skip over zero refcount inode if the caller only wants
+		 * referenced inodes to be iterated.
+		 */
+		if ((flags & INO_ITER_REFERENCED) &&
+		    !atomic_read(&inode->i_count)) {
+			spin_unlock(&inode->i_lock);
+			continue;
+		}
+
+		__iget(inode);
+		spin_unlock(&inode->i_lock);
+		spin_unlock(&sb->s_inode_list_lock);
+		iput(old_inode);
+
+		ret = iter_fn(inode, private_data);
+
+		old_inode = inode;
+		if (ret == INO_ITER_ABORT) {
+			ret = 0;
+			break;
+		}
+		if (ret < 0)
+			break;
+
+		cond_resched();
+		spin_lock(&sb->s_inode_list_lock);
+	}
+	spin_unlock(&sb->s_inode_list_lock);
+	iput(old_inode);
+	return ret;
+}
+
+/**
+ * super_iter_inodes_unsafe - unsafely iterate all the inodes on a superblock
+ * @sb: superblock to iterate
+ * @iter_fn: callback to run on every inode found.
+ *
+ * This is almost certainly not the function you want. It is for internal VFS
+ * operations only. Please use super_iter_inodes() instead. If you must use
+ * this function, please add a comment explaining why it is necessary and the
+ * locking that makes it safe to use this function.
+ *
+ * This function iterates all cached inodes on a superblock that are attached to
+ * the superblock. It will pass each inode to @iter_fn unlocked and without
+ * having performed any existences checks on it.
+
+ * @iter_fn must perform all necessary state checks on the inode itself to
+ * ensure safe operation. super_iter_inodes_unsafe() only guarantees that the
+ * inode exists and won't be freed whilst the callback is running.
+ *
+ * @iter_fn must not block. It is run in an atomic context that is not allowed
+ * to sleep to provide the inode existence guarantees. If the callback needs to
+ * do blocking operations it needs to track the inode itself and defer those
+ * operations until after the iteration completes.
+ *
+ * @iter_fn must provide conditional reschedule checks itself. If rescheduling
+ * or deferred processing is needed, it must return INO_ITER_ABORT to return to
+ * the high level function to perform those operations. It can then restart the
+ * iteration again. The high level code must provide forwards progress
+ * guarantees if they are necessary.
+ *
+ */
+void super_iter_inodes_unsafe(struct super_block *sb, ino_iter_fn iter_fn,
+		void *private_data)
+{
+	struct inode *inode;
+	int ret;
+
+	rcu_read_lock();
+	spin_lock(&sb->s_inode_list_lock);
+	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+		ret = iter_fn(inode, private_data);
+		if (ret == INO_ITER_ABORT)
+			break;
+	}
+	spin_unlock(&sb->s_inode_list_lock);
+	rcu_read_unlock();
+}
+
 /*
  * One thing we have to be careful of with a per-sb shrinker is that we don't
  * drop the last active reference to the superblock from within the shrinker.

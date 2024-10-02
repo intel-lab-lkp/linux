@@ -2220,6 +2220,18 @@ enum freeze_holder {
 	FREEZE_MAY_NEST		= (1U << 2),
 };
 
+/* Inode iteration callback return values */
+#define INO_ITER_DONE		0
+#define INO_ITER_ABORT		1
+
+/* Inode iteration control flags */
+#define INO_ITER_REFERENCED	(1U << 0)
+#define INO_ITER_UNSAFE		(1U << 1)
+
+typedef int (*ino_iter_fn)(struct inode *inode, void *priv);
+int super_iter_inodes(struct super_block *sb, ino_iter_fn iter_fn,
+		void *private_data, int flags);
+
 struct super_operations {
    	struct inode *(*alloc_inode)(struct super_block *sb);
 	void (*destroy_inode)(struct inode *);
