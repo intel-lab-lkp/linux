@@ -246,3 +246,12 @@ static inline int devtmpfs_delete_node(struct device *dev) { return 0; }
 
 void software_node_notify(struct device *dev);
 void software_node_notify_remove(struct device *dev);
+
+/*
+ * "locked" device attributes are an internal exception for the @uevent
+ * attribute.
+ */
+#include "../../fs/sysfs/sysfs.h"
+
+#define DEVICE_ATTR_LOCKED_RW(_name) \
+	struct device_attribute dev_attr_##_name = __ATTR_LOCKED_RW(_name)

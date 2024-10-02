@@ -257,6 +257,7 @@ struct kernfs_open_file {
 
 	/* private fields, do not use outside kernfs proper */
 	struct mutex		mutex;
+	struct mutex		*op_mutex;
 	struct mutex		prealloc_mutex;
 	int			event;
 	struct list_head	list;

@@ -142,6 +142,20 @@ static void kernfs_seq_stop_active(struct seq_file *sf, void *v)
 	kernfs_put_active(of->kn);
 }
 
+static void kernfs_open_file_lock(struct kernfs_open_file *of)
+{
+	mutex_lock(&of->mutex);
+	if (of->op_mutex)
+		mutex_lock(of->op_mutex);
+}
+
+static void kernfs_open_file_unlock(struct kernfs_open_file *of)
+{
+	if (of->op_mutex)
+		mutex_unlock(of->op_mutex);
+	mutex_unlock(&of->mutex);
+}
+
 static void *kernfs_seq_start(struct seq_file *sf, loff_t *ppos)
 {
 	struct kernfs_open_file *of = sf->private;
@@ -151,7 +165,7 @@ static void *kernfs_seq_start(struct seq_file *sf, loff_t *ppos)
 	 * @of->mutex nests outside active ref and is primarily to ensure that
 	 * the ops aren't called concurrently for the same open file.
 	 */
-	mutex_lock(&of->mutex);
+	kernfs_open_file_lock(of);
 	if (!kernfs_get_active(of->kn))
 		return ERR_PTR(-ENODEV);
 
@@ -193,7 +207,7 @@ static void kernfs_seq_stop(struct seq_file *sf, void *v)
 
 	if (v != ERR_PTR(-ENODEV))
 		kernfs_seq_stop_active(sf, v);
-	mutex_unlock(&of->mutex);
+	kernfs_open_file_unlock(of);
 }
 
 static int kernfs_seq_show(struct seq_file *sf, void *v)
@@ -322,9 +336,9 @@ static ssize_t kernfs_fop_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 	 * @of->mutex nests outside active ref and is used both to ensure that
 	 * the ops aren't called concurrently for the same open file.
 	 */
-	mutex_lock(&of->mutex);
+	kernfs_open_file_lock(of);
 	if (!kernfs_get_active(of->kn)) {
-		mutex_unlock(&of->mutex);
+		kernfs_open_file_unlock(of);
 		len = -ENODEV;
 		goto out_free;
 	}
@@ -336,7 +350,7 @@ static ssize_t kernfs_fop_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 		len = -EINVAL;
 
 	kernfs_put_active(of->kn);
-	mutex_unlock(&of->mutex);
+	kernfs_open_file_unlock(of);
 
 	if (len > 0)
 		iocb->ki_pos += len;

@@ -103,6 +103,7 @@ struct attribute_group {
 
 #define SYSFS_PREALLOC		010000
 #define SYSFS_GROUP_INVISIBLE	020000
+/* see fs/sysfs/sysfs.h for private mode-flags */
 
 /*
  * DEFINE_SYSFS_GROUP_VISIBLE(name):

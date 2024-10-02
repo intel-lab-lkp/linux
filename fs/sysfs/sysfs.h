@@ -40,4 +40,22 @@ int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
 int sysfs_create_link_sd(struct kernfs_node *kn, struct kobject *target,
 			 const char *name);
 
+#define SYSFS_LOCKED		040000
+
+/*
+ * uevent_show() needs this due to userspace expectations of reading
+ * that attribute flushing device probing, it is not intended to be a
+ * general semantic for other device sysfs attributes. It is broken to
+ * use this with non-device / pure-kobject sysfs attributes, see
+ * sysfs_kf_setup_lock().
+ */
+#define __ATTR_LOCKED(_name, _mode, _show, _store) {			\
+	.attr = {.name = __stringify(_name),				\
+		 .mode = SYSFS_LOCKED | VERIFY_OCTAL_PERMISSIONS(_mode) },\
+	.show	= _show,						\
+	.store	= _store,						\
+}
+
+#define __ATTR_LOCKED_RW(_name) __ATTR_LOCKED(_name, 0644, _name##_show, _name##_store)
+
 #endif	/* __SYSFS_INTERNAL_H */
