@@ -61,11 +61,9 @@ int pmac_has_backlight_type(const char *type)
 	if (bk_node) {
 		const char *prop = of_get_property(bk_node,
 				"backlight-control", NULL);
-		if (prop && strncmp(prop, type, strlen(type)) == 0) {
-			of_node_put(bk_node);
-			return 1;
-		}
 		of_node_put(bk_node);
+		if (prop && strncmp(prop, type, strlen(type)) == 0)
+			return 1;
 	}
 
 	return 0;
