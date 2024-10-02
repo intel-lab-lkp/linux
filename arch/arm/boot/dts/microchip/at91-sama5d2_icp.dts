@@ -195,7 +195,7 @@
 		i2c-digital-filter-width-ns = <35>;
 		status = "okay";
 
-		mcp16502@5b {
+		pmic@5b {
 			compatible = "microchip,mcp16502";
 			reg = <0x5b>;
 			lvin-supply = <&reg_5v>;
