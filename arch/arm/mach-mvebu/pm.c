@@ -235,6 +235,7 @@ int __init mvebu_pm_suspend_init(void (*board_pm_enter)(void __iomem *sdram_reg,
 {
 	struct device_node *np;
 	struct resource res;
+	int rc;
 
 	np = of_find_compatible_node(NULL, NULL,
 				     "marvell,armada-xp-sdram-controller");
@@ -242,26 +243,26 @@ int __init mvebu_pm_suspend_init(void (*board_pm_enter)(void __iomem *sdram_reg,
 		return -ENODEV;
 
 	if (of_address_to_resource(np, 0, &res)) {
-		of_node_put(np);
-		return -ENODEV;
+		rc = -ENODEV;
+		goto put_node;
 	}
 
 	if (!request_mem_region(res.start, resource_size(&res),
 				np->full_name)) {
-		of_node_put(np);
-		return -EBUSY;
+		rc = -EBUSY;
+		goto put_node;
 	}
 
 	sdram_ctrl = ioremap(res.start, resource_size(&res));
 	if (!sdram_ctrl) {
 		release_mem_region(res.start, resource_size(&res));
-		of_node_put(np);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto put_node;
 	}
 
-	of_node_put(np);
-
 	mvebu_board_pm_enter = board_pm_enter;
-
-	return 0;
+	rc = 0;
+put_node:
+	of_node_put(np);
+	return rc;
 }
