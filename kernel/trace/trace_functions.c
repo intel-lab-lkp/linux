@@ -203,23 +203,21 @@ function_trace_call(unsigned long ip, unsigned long parent_ip,
 	ftrace_test_recursion_unlock(bit);
 }
 
-#ifdef CONFIG_UNWINDER_ORC
-/*
- * Skip 2:
- *
- *   function_stack_trace_call()
- *   ftrace_call()
- */
-#define STACK_SKIP 2
-#else
 /*
  * Skip 3:
- *   __trace_stack()
- *   function_stack_trace_call()
- *   ftrace_call()
+ *   Skipped functions if CONFIG_UNWINDER_ORC is defined
+ *
+ *     __ftrace_trace_stack()
+ *     function_stack_trace_call()
+ *     ftrace_call()
+ *
+ *   Otherwise
+ *
+ *     __trace_stack()
+ *     function_stack_trace_call()
+ *     ftrace_call()
  */
 #define STACK_SKIP 3
-#endif
 
 static void
 function_stack_trace_call(unsigned long ip, unsigned long parent_ip,
