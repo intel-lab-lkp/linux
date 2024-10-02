@@ -1664,7 +1664,7 @@ void mlx5_unload_one(struct mlx5_core_dev *dev, bool suspend)
 	devl_unlock(devlink);
 }
 
-/* In case of light probe, we don't need a full query of hca_caps, but only the bellow caps.
+/* In case of light probe, we don't need a full query of hca_caps, but only the below caps.
  * A full query of hca_caps will be done when the device will reload.
  */
 static int mlx5_query_hca_caps_light(struct mlx5_core_dev *dev)

@@ -80,7 +80,7 @@ irq_pool_request_irq(struct mlx5_irq_pool *pool, struct irq_affinity_desc *af_de
  * isn't subset of req_mask, so we will skip it. irq1_mask is subset of req_mask,
  * we don't skip it.
  * If pool is sf_ctrl_pool, then all IRQs have the same mask, so any IRQ will
- * fit. And since mask is subset of itself, we will pass the first if bellow.
+ * fit. And since mask is subset of itself, we will pass the first if below.
  */
 static struct mlx5_irq *
 irq_pool_find_least_loaded(struct mlx5_irq_pool *pool, const struct cpumask *req_mask)
