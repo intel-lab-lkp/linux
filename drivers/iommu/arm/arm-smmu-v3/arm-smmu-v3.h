@@ -853,6 +853,11 @@ struct arm_smmu_master_domain {
 	ioasid_t ssid;
 };
 
+static inline unsigned int arm_smmu_strtab_max_sid(struct arm_smmu_device *smmu)
+{
+	return (1ULL << smmu->sid_bits);
+}
+
 static inline struct arm_smmu_domain *to_smmu_domain(struct iommu_domain *dom)
 {
 	return container_of(dom, struct arm_smmu_domain, domain);
