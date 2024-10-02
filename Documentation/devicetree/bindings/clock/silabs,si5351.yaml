@@ -187,6 +187,7 @@ allOf:
           maxItems: 1
 
 required:
+  - compatible
   - reg
   - "#address-cells"
   - "#size-cells"
