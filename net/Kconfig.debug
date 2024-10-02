@@ -24,3 +24,14 @@ config DEBUG_NET
 	help
 	  Enable extra sanity checks in networking.
 	  This is mostly used by fuzzers, but is safe to select.
+
+config FAIL_SKB_FORCE_REALLOC
+	bool "Fault-injection capability forcing skb to reallocate"
+	depends on FAULT_INJECTION && DEBUG_NET
+	default n
+	help
+	  Provide fault-injection capability that forces the skb to be
+	  reallocated, caughting possible invalid pointers to the skb.
+
+	  For more information, check
+	  Documentation/dev-tools/fault-injection/fault-injection.rst
