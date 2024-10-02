@@ -151,4 +151,16 @@ config CRASH_MAX_MEMORY_RANGES
 	  the computation behind the value provided through the
 	  /sys/kernel/crash_elfcorehdr_size attribute.
 
+config KSTATE
+	bool "Migrate certain internal kernel state across kexec"
+	default n
+	depends on CRASH_DUMP
+	help
+	  Enable functionality to migrate some internal kernel states to new
+	  kernel across kexec. Currently capable only migrating trace buffers
+	  as an example. Can be extended to other states like IOMMU page tables,
+	  VFIO state of the device...
+	  Description of the trace buffer saved into memory preserved across kexec.
+	  The new kernel reads description to restore the state of trace buffers.
+
 endmenu
