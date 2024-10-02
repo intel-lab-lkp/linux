@@ -22,6 +22,7 @@
 #include <linux/random.h>
 #include <linux/compiler.h>
 #include <linux/ptrace.h>
+#include <linux/sched.h>
 
 #include "../kselftest.h"
 #include "parse_vdso.h"
