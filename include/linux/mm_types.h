@@ -986,9 +986,6 @@ struct mm_struct {
 		atomic_t tlb_flush_batched;
 #endif
 		struct uprobes_state uprobes_state;
-#ifdef CONFIG_PREEMPT_RT
-		struct rcu_head delayed_drop;
-#endif
 #ifdef CONFIG_HUGETLB_PAGE
 		atomic_long_t hugetlb_usage;
 #endif
