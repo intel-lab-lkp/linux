@@ -25,8 +25,12 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - nxp,s32g2-siul2-pinctrl
+    oneOf:
+      - enum:
+          - nxp,s32g2-siul2-pinctrl
+      - items:
+          - const: nxp,s32g3-siul2-pinctrl
+          - const: nxp,s32g2-siul2-pinctrl
 
   reg:
     description: |
