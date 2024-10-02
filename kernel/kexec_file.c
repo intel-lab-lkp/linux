@@ -293,6 +293,11 @@ kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
 	}
 #endif
 
+	if (flags & KEXEC_FILE_MIGRATE) {
+		image->control_page = crashk_res.start;
+		image->type = KEXEC_TYPE_MIGRATE;
+	}
+
 	ret = kimage_file_prepare_segments(image, kernel_fd, initrd_fd,
 					   cmdline_ptr, cmdline_len, flags);
 	if (ret)
@@ -359,6 +364,10 @@ SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
 	} else
 #endif
 		dest_image = &kexec_image;
+
+	if (image_type == KEXEC_TYPE_MIGRATE)
+		if (*dest_image)
+			arch_kexec_unprotect_crashkres();
 
 	if (flags & KEXEC_FILE_UNLOAD)
 		goto exchange;
@@ -428,7 +437,8 @@ exchange:
 	image = xchg(dest_image, image);
 out:
 #ifdef CONFIG_CRASH_DUMP
-	if ((flags & KEXEC_FILE_ON_CRASH) && kexec_crash_image)
+	if (((flags & KEXEC_FILE_ON_CRASH) && kexec_crash_image) ||
+	    ((flags & KEXEC_FILE_MIGRATE) && kexec_image))
 		arch_kexec_protect_crashkres();
 #endif
 
@@ -608,7 +618,8 @@ static int kexec_walk_resources(struct kexec_buf *kbuf,
 				int (*func)(struct resource *, void *))
 {
 #ifdef CONFIG_CRASH_DUMP
-	if (kbuf->image->type == KEXEC_TYPE_CRASH)
+	if (kbuf->image->type == KEXEC_TYPE_CRASH ||
+	    kbuf->image->type == KEXEC_TYPE_MIGRATE)
 		return walk_iomem_res_desc(crashk_res.desc,
 					   IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY,
 					   crashk_res.start, crashk_res.end,

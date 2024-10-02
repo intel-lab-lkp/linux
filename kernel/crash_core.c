@@ -42,7 +42,8 @@ int kimage_crash_copy_vmcoreinfo(struct kimage *image)
 
 	if (!IS_ENABLED(CONFIG_CRASH_DUMP))
 		return 0;
-	if (image->type != KEXEC_TYPE_CRASH)
+	if (image->type != KEXEC_TYPE_CRASH &&
+	    image->type != KEXEC_TYPE_MIGRATE)
 		return 0;
 
 	/*
