@@ -182,6 +182,13 @@ int kstate_register(struct kstate_description *state, void *obj)
 	return 0;
 }
 
+int kstate_page_save(void *mig_stream, void *obj,
+		const struct kstate_field *field)
+{
+	kstate_register_page(*(struct page **)obj, 0);
+	return 0;
+}
+
 static int __init setup_migrate(char *arg)
 {
 	char *end;

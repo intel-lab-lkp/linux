@@ -406,7 +406,7 @@ static int load_migrate_segments(struct kimage *image)
 
 	kbuf.memsz = 8*1024*1024;
 
-	kbuf.buf_align = ELF_CORE_HEADER_ALIGN;
+	kbuf.buf_align = PAGE_SIZE;
 	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
 	ret = kexec_add_buffer(&kbuf);
 	if (ret)

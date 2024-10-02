@@ -29,6 +29,8 @@ struct kstate_field {
 };
 
 enum kstate_ids {
+	KSTATE_PAGE_ID,
+	KSTATE_RSVD_MEM_ID,
 	KSTATE_LAST_ID = -1,
 };
 
@@ -87,6 +89,10 @@ void *save_kstate(void *stream, int id, const struct kstate_description *kstate,
 		void *obj);
 void *restore_kstate(struct kstate_entry *ke, int id,
 		const struct kstate_description *kstate, void *obj);
+
+int kstate_page_save(void *mig_stream, void *obj,
+		const struct kstate_field *field);
+int kstate_register_page(struct page *page, int order);
 #else
 
 #define __kstate_register(state, obj, se)
