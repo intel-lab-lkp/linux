@@ -29,6 +29,7 @@
 #include <crypto/hash.h>
 #include <linux/usb/r8152.h>
 #include <net/gso.h>
+#include <linux/dmi.h>
 
 /* Information for net-next */
 #define NETNEXT_VERSION		"12"
@@ -949,6 +950,7 @@ struct r8152 {
 
 	u32 support_2500full:1;
 	u32 lenovo_macpassthru:1;
+	u32 lg_macpassthru:1;
 	u32 dell_tb_rx_agg_bug:1;
 	u16 ocp_base;
 	u16 speed;
@@ -1724,7 +1726,7 @@ static int vendor_mac_passthru_addr_read(struct r8152 *tp, struct sockaddr *sa)
 	} else {
 		/* test for -AD variant of RTL8153 */
 		ocp_data = ocp_read_word(tp, MCU_TYPE_USB, USB_MISC_0);
-		if ((ocp_data & AD_MASK) == 0x1000) {
+		if ((ocp_data & AD_MASK) == 0x1000 || tp->lg_macpassthru) {
 			/* test for MAC address pass-through bit */
 			ocp_data = ocp_read_byte(tp, MCU_TYPE_USB, EFUSE);
 			if ((ocp_data & PASS_THRU_MASK) != 1) {
@@ -9798,6 +9800,22 @@ static bool rtl8152_supports_lenovo_macpassthru(struct usb_device *udev)
 	return 0;
 }
 
+static bool rtl8152_supports_lg_macpassthru(struct usb_device *udev)
+{
+	int product_id = le16_to_cpu(udev->descriptor.idProduct);
+	int vendor_id = le16_to_cpu(udev->descriptor.idVendor);
+	const char *board = dmi_get_system_info(DMI_BOARD_VENDOR);
+
+	if (!strlen(board))
+		return 0;
+
+	if (!strncmp("LG Electronics", board, sizeof("LG Electronics"))) {
+		if (vendor_id == VENDOR_ID_REALTEK && product_id == 0x8153)
+			return 1;
+	}
+	return 0;
+}
+
 static int rtl8152_probe_once(struct usb_interface *intf,
 			      const struct usb_device_id *id, u8 version)
 {
@@ -9872,6 +9890,7 @@ static int rtl8152_probe_once(struct usb_interface *intf,
 	}
 
 	tp->lenovo_macpassthru = rtl8152_supports_lenovo_macpassthru(udev);
+	tp->lg_macpassthru = rtl8152_supports_lg_macpassthru(udev);
 
 	if (le16_to_cpu(udev->descriptor.bcdDevice) == 0x3011 && udev->serial &&
 	    (!strcmp(udev->serial, "000001000000") ||
