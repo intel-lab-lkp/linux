@@ -39,6 +39,10 @@ properties:
               - mediatek,mt8195-efuse
               - mediatek,mt8516-efuse
           - const: mediatek,efuse
+      - items:
+          - enum:
+              - mediatek,mt8188-efuse
+          - const: mediatek,mt8186-efuse
       - const: mediatek,mt8173-efuse
         deprecated: true
 
