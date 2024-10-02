@@ -10,8 +10,10 @@
 #include <linux/netdevice.h>
 #include <linux/workqueue.h>
 #include <linux/bitops.h>
-#include <scsi/libfc.h>
-#include <scsi/libfcoe.h>
+#include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_transport.h>
+#include <scsi/scsi_transport_fc.h>
+#include <scsi/fc_frame.h>
 #include "fnic_io.h"
 #include "fnic_res.h"
 #include "fnic_trace.h"
@@ -342,8 +344,6 @@ struct fnic {
 	enum fnic_role_e role;
 	struct fnic_iport_s iport;
 	struct Scsi_Host *host;
-	struct fc_lport *lport;
-	struct fcoe_ctlr ctlr;		/* FIP FCoE controller structure */
 	struct vnic_dev_bar bar0;
 
 	struct fnic_msix_entry msix[FNIC_MSIX_INTR_MAX];
@@ -376,9 +376,6 @@ struct fnic {
 	u32 vlan_hw_insert:1;	        /* let hw insert the tag */
 	u32 in_remove:1;                /* fnic device in removal */
 	u32 stop_rx_link_events:1;      /* stop proc. rx frames, link events */
-	u32 link_events:1;              /* set when we get any link event*/
-
-	struct completion *remove_wait; /* device remove thread blocks */
 
 	struct completion *fw_reset_done;
 	u32 reset_in_progress;
