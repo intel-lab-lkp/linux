@@ -1496,7 +1496,7 @@ out:
 void iommu_dma_unmap_sg(struct device *dev, struct scatterlist *sg, int nents,
 		enum dma_data_direction dir, unsigned long attrs)
 {
-	dma_addr_t end = 0, start;
+	dma_addr_t end = 0, start = 0;
 	struct scatterlist *tmp;
 	int i;
 
