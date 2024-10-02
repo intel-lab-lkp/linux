@@ -472,16 +472,28 @@ void bdev_drop(struct block_device *bdev)
 	iput(BD_INODE(bdev));
 }
 
+static int bdev_pages_count(struct inode *inode, void *data)
+{
+	long	*pages = data;
+
+	*pages += inode->i_mapping->nrpages;
+	return INO_ITER_DONE;
+}
+
 long nr_blockdev_pages(void)
 {
-	struct inode *inode;
 	long ret = 0;
 
-	spin_lock(&blockdev_superblock->s_inode_list_lock);
-	list_for_each_entry(inode, &blockdev_superblock->s_inodes, i_sb_list)
-		ret += inode->i_mapping->nrpages;
-	spin_unlock(&blockdev_superblock->s_inode_list_lock);
-
+	/*
+	 * We can be called from contexts where blocking is not
+	 * desirable. The count is advisory at best, and we only
+	 * need to access the inode mapping. Hence as long as we
+	 * have an inode existence guarantee, we can safely count
+	 * the cached pages on each inode without needing reference
+	 * counted inodes.
+	 */
+	super_iter_inodes_unsafe(blockdev_superblock,
+			bdev_pages_count, &ret);
 	return ret;
 }
 

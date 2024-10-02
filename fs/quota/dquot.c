@@ -1075,41 +1075,51 @@ out:
 	return err;
 }
 
+struct dquot_ref_data {
+	int	type;
+	int	reserved;
+};
+
+static int remove_dquot_ref_fn(struct inode *inode, void *data)
+{
+	struct dquot_ref_data *ref = data;
+
+	spin_lock(&dq_data_lock);
+	if (!IS_NOQUOTA(inode)) {
+		struct dquot __rcu **dquots = i_dquot(inode);
+		struct dquot *dquot = srcu_dereference_check(
+			dquots[ref->type], &dquot_srcu,
+			lockdep_is_held(&dq_data_lock));
+
+#ifdef CONFIG_QUOTA_DEBUG
+		if (unlikely(inode_get_rsv_space(inode) > 0))
+			ref->reserved++;
+#endif
+		rcu_assign_pointer(dquots[ref->type], NULL);
+		if (dquot)
+			dqput(dquot);
+	}
+	spin_unlock(&dq_data_lock);
+	return INO_ITER_DONE;
+}
+
 static void remove_dquot_ref(struct super_block *sb, int type)
 {
-	struct inode *inode;
-#ifdef CONFIG_QUOTA_DEBUG
-	int reserved = 0;
-#endif
+	struct dquot_ref_data ref = {
+		.type = type,
+	};
 
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		/*
-		 *  We have to scan also I_NEW inodes because they can already
-		 *  have quota pointer initialized. Luckily, we need to touch
-		 *  only quota pointers and these have separate locking
-		 *  (dq_data_lock).
-		 */
-		spin_lock(&dq_data_lock);
-		if (!IS_NOQUOTA(inode)) {
-			struct dquot __rcu **dquots = i_dquot(inode);
-			struct dquot *dquot = srcu_dereference_check(
-				dquots[type], &dquot_srcu,
-				lockdep_is_held(&dq_data_lock));
-
+	/*
+	 * We have to scan I_NEW inodes because they can already
+	 * have quota pointer initialized. Luckily, we need to touch
+	 * only quota pointers and these have separate locking
+	 * (dq_data_lock) so the existence guarantee that
+	 * super_iter_inodes_unsafe() provides inodes passed to
+	 * remove_dquot_ref_fn() is sufficient for this operation.
+	 */
+	super_iter_inodes_unsafe(sb, remove_dquot_ref_fn, &ref);
 #ifdef CONFIG_QUOTA_DEBUG
-			if (unlikely(inode_get_rsv_space(inode) > 0))
-				reserved = 1;
-#endif
-			rcu_assign_pointer(dquots[type], NULL);
-			if (dquot)
-				dqput(dquot);
-		}
-		spin_unlock(&dq_data_lock);
-	}
-	spin_unlock(&sb->s_inode_list_lock);
-#ifdef CONFIG_QUOTA_DEBUG
-	if (reserved) {
+	if (ref.reserved) {
 		printk(KERN_WARNING "VFS (%s): Writes happened after quota"
 			" was disabled thus quota information is probably "
 			"inconsistent. Please run quotacheck(8).\n", sb->s_id);

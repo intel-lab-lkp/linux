@@ -844,8 +844,11 @@ static void evict(struct inode *inode)
  * Dispose-list gets a local list with local inodes in it, so it doesn't
  * need to worry about list corruption and SMP locks.
  */
-static void dispose_list(struct list_head *head)
+static bool dispose_list(struct list_head *head)
 {
+	if (list_empty(head))
+		return false;
+
 	while (!list_empty(head)) {
 		struct inode *inode;
 
@@ -855,6 +858,7 @@ static void dispose_list(struct list_head *head)
 		evict(inode);
 		cond_resched();
 	}
+	return true;
 }
 
 /**
@@ -866,47 +870,50 @@ static void dispose_list(struct list_head *head)
  * so any inode reaching zero refcount during or after that call will
  * be immediately evicted.
  */
+static int evict_inode_fn(struct inode *inode, void *data)
+{
+	struct list_head *dispose = data;
+
+	spin_lock(&inode->i_lock);
+	if (atomic_read(&inode->i_count) ||
+	    (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE))) {
+		spin_unlock(&inode->i_lock);
+		return INO_ITER_DONE;
+	}
+
+	inode->i_state |= I_FREEING;
+	inode_lru_list_del(inode);
+	spin_unlock(&inode->i_lock);
+	list_add(&inode->i_lru, dispose);
+
+	/*
+	 * If we've run long enough to need rescheduling, abort the
+	 * iteration so we can return to evict_inodes() and dispose of the
+	 * inodes before collecting more inodes to evict.
+	 */
+	if (need_resched())
+		return INO_ITER_ABORT;
+	return INO_ITER_DONE;
+}
+
 void evict_inodes(struct super_block *sb)
 {
-	struct inode *inode, *next;
 	LIST_HEAD(dispose);
 
-again:
-	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry_safe(inode, next, &sb->s_inodes, i_sb_list) {
-		if (atomic_read(&inode->i_count))
-			continue;
-
-		spin_lock(&inode->i_lock);
-		if (atomic_read(&inode->i_count)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		inode->i_state |= I_FREEING;
-		inode_lru_list_del(inode);
-		spin_unlock(&inode->i_lock);
-		list_add(&inode->i_lru, &dispose);
-
+	do {
 		/*
-		 * We can have a ton of inodes to evict at unmount time given
-		 * enough memory, check to see if we need to go to sleep for a
-		 * bit so we don't livelock.
+		 * We do not want to take references to inodes whilst iterating
+		 * because we are trying to evict unreferenced inodes from
+		 * the cache. Hence we need to use the unsafe iteration
+		 * mechanism and do all the required inode validity checks in
+		 * evict_inode_fn() to safely queue unreferenced inodes for
+		 * eviction.
+		 *
+		 * We repeat the iteration until it doesn't find any more
+		 * inodes to dispose of.
 		 */
-		if (need_resched()) {
-			spin_unlock(&sb->s_inode_list_lock);
-			cond_resched();
-			dispose_list(&dispose);
-			goto again;
-		}
-	}
-	spin_unlock(&sb->s_inode_list_lock);
-
-	dispose_list(&dispose);
+		super_iter_inodes_unsafe(sb, evict_inode_fn, &dispose);
+	} while (dispose_list(&dispose));
 }
 EXPORT_SYMBOL_GPL(evict_inodes);
 
