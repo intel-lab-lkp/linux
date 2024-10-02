@@ -545,7 +545,10 @@ static void kexec_mark_crashkres(bool protect)
 	kexec_mark_range(crashk_low_res.start, crashk_low_res.end, protect);
 
 	/* Don't touch the control code page used in crash_kexec().*/
-	control = PFN_PHYS(page_to_pfn(kexec_crash_image->control_code_page));
+	if (kexec_image && kexec_image->type & KEXEC_TYPE_MIGRATE)
+		control = PFN_PHYS(page_to_pfn(kexec_image->control_code_page));
+	else if (kexec_crash_image)
+		control = PFN_PHYS(page_to_pfn(kexec_crash_image->control_code_page));
 	/* Control code page is located in the 2nd page. */
 	kexec_mark_range(crashk_res.start, control + PAGE_SIZE - 1, protect);
 	control += KEXEC_CONTROL_PAGE_SIZE;

@@ -18,6 +18,7 @@
 #include <linux/mm.h>
 #include <linux/efi.h>
 #include <linux/random.h>
+#include <linux/vmalloc.h>
 
 #include <asm/bootparam.h>
 #include <asm/setup.h>
@@ -77,6 +78,11 @@ static int setup_cmdline(struct kimage *image, struct boot_params *params,
 		len = sprintf(cmdline_ptr,
 			"elfcorehdr=0x%lx ", image->elf_load_addr);
 	}
+	if (image->type == KEXEC_TYPE_MIGRATE) {
+		len = sprintf(cmdline_ptr,
+			"migrate_stream=0x0%llx ", crashk_res.start);
+	}
+
 	memcpy(cmdline_ptr + len, cmdline, cmdline_len);
 	cmdline_len += len;
 
@@ -389,6 +395,29 @@ static int bzImage64_probe(const char *buf, unsigned long len)
 	return ret;
 }
 
+static int load_migrate_segments(struct kimage *image)
+{
+	int ret;
+	struct kexec_buf kbuf = { .image = image, .buf_min = 0,
+				  .buf_max = ULONG_MAX, .top_down = false };
+
+	kbuf.bufsz = 4096;
+	kbuf.buffer = vzalloc(kbuf.bufsz);
+
+	kbuf.memsz = 8*1024*1024;
+
+	kbuf.buf_align = ELF_CORE_HEADER_ALIGN;
+	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
+	ret = kexec_add_buffer(&kbuf);
+	if (ret)
+		return ret;
+	image->mig_stream = kbuf.mem;
+	kexec_dprintk("kstate: Loaded mig_stream at 0x%lx bufsz=0x%lx memsz=0x%lx\n",
+		      image->mig_stream, kbuf.bufsz, kbuf.memsz);
+
+	return ret;
+}
+
 static void *bzImage64_load(struct kimage *image, char *kernel,
 			    unsigned long kernel_len, char *initrd,
 			    unsigned long initrd_len, char *cmdline,
@@ -443,6 +472,13 @@ static void *bzImage64_load(struct kimage *image, char *kernel,
 			return ERR_PTR(ret);
 	}
 #endif
+
+	if (image->type == KEXEC_TYPE_MIGRATE) {
+		ret = load_migrate_segments(image);
+		if (ret)
+			return ERR_PTR(ret);
+
+	}
 
 	/*
 	 * Load purgatory. For 64bit entry point, purgatory  code can be

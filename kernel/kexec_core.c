@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/kexec.h>
+#include <linux/kstate.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/highmem.h>
@@ -196,7 +197,8 @@ int sanity_check_segment_list(struct kimage *image)
 	 * kernel could corrupt things.
 	 */
 
-	if (image->type == KEXEC_TYPE_CRASH) {
+	if (image->type == KEXEC_TYPE_CRASH ||
+	    image->type == KEXEC_TYPE_MIGRATE) {
 		for (i = 0; i < nr_segments; i++) {
 			unsigned long mstart, mend;
 
@@ -461,6 +463,7 @@ struct page *kimage_alloc_control_pages(struct kimage *image,
 		break;
 #ifdef CONFIG_CRASH_DUMP
 	case KEXEC_TYPE_CRASH:
+	case KEXEC_TYPE_MIGRATE:
 		pages = kimage_alloc_crash_control_pages(image, order);
 		break;
 #endif
@@ -859,6 +862,7 @@ int kimage_load_segment(struct kimage *image,
 		break;
 #ifdef CONFIG_CRASH_DUMP
 	case KEXEC_TYPE_CRASH:
+	case KEXEC_TYPE_MIGRATE:
 		result = kimage_load_crash_segment(image, segment);
 		break;
 #endif
@@ -1044,8 +1048,12 @@ int kernel_kexec(void)
 		 */
 		cpu_hotplug_enable();
 		pr_notice("Starting new kernel\n");
+		arch_kexec_unprotect_crashkres();
 		machine_shutdown();
 	}
+
+	if (kexec_image->type & KEXEC_TYPE_MIGRATE)
+		save_migrate_state(kexec_image->mig_stream);
 
 	kmsg_dump(KMSG_DUMP_SHUTDOWN);
 	machine_kexec(kexec_image);
