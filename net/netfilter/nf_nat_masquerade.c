@@ -35,6 +35,7 @@ nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 	struct nf_nat_range2 newrange;
 	const struct rtable *rt;
 	__be32 newsrc, nh;
+	int ret;
 
 	WARN_ON(hooknum != NF_INET_POST_ROUTING);
 
@@ -52,10 +53,8 @@ nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 	rt = skb_rtable(skb);
 	nh = rt_nexthop(rt, ip_hdr(skb)->daddr);
 	newsrc = inet_select_addr(out, nh, RT_SCOPE_UNIVERSE);
-	if (!newsrc) {
-		pr_info("%s ate my IP address\n", out->name);
-		return NF_DROP;
-	}
+	if (!newsrc)
+		return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EADDRNOTAVAIL);
 
 	nat = nf_ct_nat_ext_add(ct);
 	if (nat)
@@ -71,7 +70,12 @@ nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 	newrange.max_proto   = range->max_proto;
 
 	/* Hand modified range to generic setup. */
-	return nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+	ret = nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+	if (ret == NF_DROP)
+		return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP,
+				      EPERM);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(nf_nat_masquerade_ipv4);
 
@@ -246,6 +250,7 @@ nf_nat_masquerade_ipv6(struct sk_buff *skb, const struct nf_nat_range2 *range,
 	struct in6_addr src;
 	struct nf_conn *ct;
 	struct nf_nat_range2 newrange;
+	int ret;
 
 	ct = nf_ct_get(skb, &ctinfo);
 	WARN_ON(!(ct && (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED ||
@@ -253,7 +258,7 @@ nf_nat_masquerade_ipv6(struct sk_buff *skb, const struct nf_nat_range2 *range,
 
 	if (nat_ipv6_dev_get_saddr(nf_ct_net(ct), out,
 				   &ipv6_hdr(skb)->daddr, 0, &src) < 0)
-		return NF_DROP;
+		return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EADDRNOTAVAIL);
 
 	nat = nf_ct_nat_ext_add(ct);
 	if (nat)
@@ -265,7 +270,11 @@ nf_nat_masquerade_ipv6(struct sk_buff *skb, const struct nf_nat_range2 *range,
 	newrange.min_proto	= range->min_proto;
 	newrange.max_proto	= range->max_proto;
 
-	return nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+	ret = nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
+	if (ret == NF_DROP)
+		return NF_DROP_REASON(skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(nf_nat_masquerade_ipv6);
 

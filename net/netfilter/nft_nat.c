@@ -108,6 +108,7 @@ static void nft_nat_eval(const struct nft_expr *expr,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct = nf_ct_get(pkt->skb, &ctinfo);
 	struct nf_nat_range2 range;
+	int verdict;
 
 	memset(&range, 0, sizeof(range));
 
@@ -122,7 +123,12 @@ static void nft_nat_eval(const struct nft_expr *expr,
 
 	range.flags = priv->flags;
 
-	regs->verdict.code = nf_nat_setup_info(ct, &range, priv->type);
+	verdict = nf_nat_setup_info(ct, &range, priv->type);
+	if (verdict == NF_DROP)
+		verdict = NF_DROP_REASON(pkt->skb,
+					 SKB_DROP_REASON_NETFILTER_DROP,
+					 EPERM);
+	regs->verdict.code = verdict;
 }
 
 static const struct nla_policy nft_nat_policy[NFTA_NAT_MAX + 1] = {
