@@ -12,6 +12,7 @@ static int duration;
 
 void test_netns_cookie(void)
 {
+	LIBBPF_OPTS(bpf_prog_attach_opts, opta);
 	int server_fd = -1, client_fd = -1, cgroup_fd = -1;
 	int err, val, ret, map, verdict;
 	struct netns_cookie_prog *skel;
@@ -36,6 +37,11 @@ void test_netns_cookie(void)
 	map = bpf_map__fd(skel->maps.sock_map);
 	err = bpf_prog_attach(verdict, map, BPF_SK_MSG_VERDICT, 0);
 	if (!ASSERT_OK(err, "prog_attach"))
+		goto done;
+
+	verdict = bpf_program__fd(skel->progs.get_netns_cookie_tcx);
+	err = bpf_prog_attach_opts(verdict, 1, BPF_TCX_INGRESS, &opta);
+	if (!ASSERT_EQ(err, 0, "prog_attach"))
 		goto done;
 
 	server_fd = start_server(AF_INET6, SOCK_STREAM, "::1", 0, 0);
@@ -68,6 +74,7 @@ void test_netns_cookie(void)
 		goto done;
 
 	ASSERT_EQ(val, cookie_expected_value, "cookie_value");
+	ASSERT_EQ(skel->bss->tcx_netns_cookie, cookie_expected_value, "cookie_value");
 
 done:
 	if (server_fd != -1)
