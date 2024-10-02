@@ -4662,6 +4662,8 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 	sb->s_export_op = &shmem_export_ops;
 	sb->s_flags |= SB_NOSEC | SB_I_VERSION;
+
+	sb->s_d_op = &simple_dentry_operations;
 #else
 	sb->s_flags |= SB_NOUSER;
 #endif
