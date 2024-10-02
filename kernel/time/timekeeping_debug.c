@@ -17,6 +17,9 @@
 
 #define NUM_BINS 32
 
+/* incremented every time mg_floor is updated */
+DEFINE_PER_CPU(unsigned long, timekeeping_mg_floor_swaps);
+
 static unsigned int sleep_time_bin[NUM_BINS] = {0};
 
 static int tk_debug_sleep_time_show(struct seq_file *s, void *data)
@@ -51,5 +54,16 @@ void tk_debug_account_sleep_time(const struct timespec64 *t)
 	sleep_time_bin[bin]++;
 	pm_deferred_pr_dbg("Timekeeping suspended for %lld.%03lu seconds\n",
 			   (s64)t->tv_sec, t->tv_nsec / NSEC_PER_MSEC);
+}
+
+unsigned long timekeeping_get_mg_floor_swaps(void)
+{
+	unsigned long sum = 0;
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		sum += data_race(per_cpu(timekeeping_mg_floor_swaps, cpu));
+
+	return sum;
 }
 
