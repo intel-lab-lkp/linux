@@ -1094,24 +1094,23 @@ struct btrfs_file_extent_item {
 	__u8 type;
 
 	/*
-	 * disk space consumed by the extent, checksum blocks are included
-	 * in these numbers
+	 * The address and size of the referenced extent.  These should exactly
+	 * match an entry in the extent tree.
 	 *
 	 * At this offset in the structure, the inline extent data start.
 	 */
 	__le64 disk_bytenr;
 	__le64 disk_num_bytes;
 	/*
-	 * the logical offset in file blocks (no csums)
-	 * this extent record is for.  This allows a file extent to point
-	 * into the middle of an existing extent on disk, sharing it
-	 * between two snapshots (useful if some bytes in the middle of the
-	 * extent have changed
+	 * The logical offset in bytes this extent record is for.
+	 * This allows a file extent to point into the middle of an existing
+	 * extent on disk, sharing it between two snapshots (useful if some
+	 * bytes in the middle of the extent have changed)
 	 */
 	__le64 offset;
 	/*
-	 * the logical number of file blocks (no csums included).  This
-	 * always reflects the size uncompressed and without encoding.
+	 * The logical number of bytes.  This always reflects the size
+	 * uncompressed and without encoding.
 	 */
 	__le64 num_bytes;
 
