@@ -15,6 +15,7 @@
 #include <linux/init_ohci1394_dma.h>
 #include <linux/initrd.h>
 #include <linux/iscsi_ibft.h>
+#include <linux/kstate.h>
 #include <linux/memblock.h>
 #include <linux/panic_notifier.h>
 #include <linux/pci.h>
@@ -638,6 +639,85 @@ static void __init e820_add_kernel_range(void)
 	e820__range_add(start, size, E820_TYPE_RAM);
 }
 
+#ifdef CONFIG_KSTATE
+struct state_entry mem_kstate;
+
+struct mem_state {
+	unsigned int nr_pages;
+	struct list_head list;
+};
+struct page_state {
+	struct list_head list;
+	int order;
+	struct page *page;
+};
+
+struct mem_state m_state = { .list = LIST_HEAD_INIT(m_state.list) };
+
+int kstate_register_page(struct page *page, int order)
+{
+	struct page_state *state;
+
+	state = kmalloc(sizeof(*state), GFP_KERNEL);
+	if (!state)
+		return -ENOMEM;
+
+	state->page = page;
+	state->order = order;
+	list_add(&state->list, &m_state.list);
+	m_state.nr_pages++;
+	return 0;
+}
+
+static int kstate_pages_save(void *mig_stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct page_state *p_state;
+	void *start = mig_stream;
+
+	list_for_each_entry(p_state, &m_state.list, list) {
+		mig_stream = kstate_save_byte(mig_stream, p_state->order);
+		mig_stream = kstate_save_ulong(mig_stream, page_to_phys(p_state->page));
+	}
+	return mig_stream - start;
+}
+
+static int __init kstate_pages_restore(void *mig_stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct mem_state *m_state = obj;
+	int nr_pages, i;
+
+	nr_pages = m_state->nr_pages;
+	for (i = 0; i < nr_pages; i++) {
+		int order = kstate_get_byte(&mig_stream);
+		unsigned long phys = kstate_get_ulong(&mig_stream);
+
+		memblock_reserve(phys, PAGE_SIZE << order);
+		memblock_reserved_mark_preserved(phys, PAGE_SIZE << order);
+	}
+	return 0;
+}
+
+struct kstate_description kstate_reserved = {
+	.name = "reserved_mem",
+	.id = KSTATE_RSVD_MEM_ID,
+	.state_list = LIST_HEAD_INIT(kstate_reserved.state_list),
+	.fields = (const struct kstate_field[]) {
+		KSTATE_SIMPLE(nr_pages, struct mem_state),
+		{
+			.name = "pages",
+			.flags = KS_CUSTOM,
+			.size = sizeof(struct mem_state),
+			.save = kstate_pages_save,
+			.restore = kstate_pages_restore,
+		},
+
+		KSTATE_END_OF_LIST()
+	},
+};
+#endif
+
 static void __init early_reserve_memory(void)
 {
 	/*
@@ -989,6 +1069,7 @@ void __init setup_arch(char **cmdline_p)
 
 	memblock_set_current_limit(ISA_END_ADDRESS);
 	e820__memblock_setup();
+	__kstate_register(&kstate_reserved, &m_state, &mem_kstate);
 
 	/*
 	 * Needs to run after memblock setup because it needs the physical
