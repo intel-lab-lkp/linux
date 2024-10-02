@@ -172,7 +172,8 @@
 		ranges = <0 0 0 0x80000000>;
 
 		pinctrl: pinctrl@4009c240 {
-			compatible = "nxp,s32g2-siul2-pinctrl";
+			compatible = "nxp,s32g3-siul2-pinctrl",
+				     "nxp,s32g2-siul2-pinctrl";
 				/* MSCR0-MSCR101 registers on siul2_0 */
 			reg = <0x4009c240 0x198>,
 				/* MSCR112-MSCR122 registers on siul2_1 */
