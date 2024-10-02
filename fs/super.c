@@ -167,6 +167,31 @@ static void super_wake(struct super_block *sb, unsigned int flag)
 	wake_up_var(&sb->s_flags);
 }
 
+bool super_iter_iget(struct inode *inode, int flags)
+{
+	bool	ret = false;
+
+	spin_lock(&inode->i_lock);
+	if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE))
+		goto out_unlock;
+
+	/*
+	 * Skip over zero refcount inode if the caller only wants
+	 * referenced inodes to be iterated.
+	 */
+	if ((flags & INO_ITER_REFERENCED) &&
+	    !atomic_read(&inode->i_count))
+		goto out_unlock;
+
+	__iget(inode);
+	ret = true;
+out_unlock:
+	spin_unlock(&inode->i_lock);
+	return ret;
+
+}
+EXPORT_SYMBOL_GPL(super_iter_iget);
+
 /**
  * super_iter_inodes - iterate all the cached inodes on a superblock
  * @sb: superblock to iterate
@@ -184,26 +209,15 @@ int super_iter_inodes(struct super_block *sb, ino_iter_fn iter_fn,
 	struct inode *inode, *old_inode = NULL;
 	int ret = 0;
 
+	if (sb->s_op->iter_vfs_inodes) {
+		return sb->s_op->iter_vfs_inodes(sb, iter_fn,
+				private_data, flags);
+	}
+
 	spin_lock(&sb->s_inode_list_lock);
 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-		spin_lock(&inode->i_lock);
-		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
-			spin_unlock(&inode->i_lock);
+		if (!super_iter_iget(inode, flags))
 			continue;
-		}
-
-		/*
-		 * Skip over zero refcount inode if the caller only wants
-		 * referenced inodes to be iterated.
-		 */
-		if ((flags & INO_ITER_REFERENCED) &&
-		    !atomic_read(&inode->i_count)) {
-			spin_unlock(&inode->i_lock);
-			continue;
-		}
-
-		__iget(inode);
-		spin_unlock(&inode->i_lock);
 		spin_unlock(&sb->s_inode_list_lock);
 		iput(old_inode);
 
@@ -260,6 +274,12 @@ void super_iter_inodes_unsafe(struct super_block *sb, ino_iter_fn iter_fn,
 {
 	struct inode *inode;
 	int ret;
+
+	if (sb->s_op->iter_vfs_inodes) {
+		sb->s_op->iter_vfs_inodes(sb, iter_fn,
+				private_data, INO_ITER_UNSAFE);
+		return;
+	}
 
 	rcu_read_lock();
 	spin_lock(&sb->s_inode_list_lock);

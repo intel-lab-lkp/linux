@@ -2231,6 +2231,7 @@ enum freeze_holder {
 typedef int (*ino_iter_fn)(struct inode *inode, void *priv);
 int super_iter_inodes(struct super_block *sb, ino_iter_fn iter_fn,
 		void *private_data, int flags);
+bool super_iter_iget(struct inode *inode, int flags);
 
 struct super_operations {
    	struct inode *(*alloc_inode)(struct super_block *sb);
@@ -2265,6 +2266,9 @@ struct super_operations {
 	long (*free_cached_objects)(struct super_block *,
 				    struct shrink_control *);
 	void (*shutdown)(struct super_block *sb);
+
+	int (*iter_vfs_inodes)(struct super_block *sb, ino_iter_fn iter_fn,
+			void *private_data, int flags);
 };
 
 /*
