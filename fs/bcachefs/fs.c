@@ -1814,6 +1814,46 @@ again:
 	darray_exit(&grabbed);
 }
 
+static int
+bch2_iter_vfs_inodes(
+        struct super_block      *sb,
+        ino_iter_fn             iter_fn,
+        void                    *private_data,
+        int                     flags)
+{
+	struct bch_inode_info *inode, *old_inode = NULL;
+	int ret = 0;
+
+	mutex_lock(&c->vfs_inodes_lock);
+	list_for_each_entry(inode, &c->vfs_inodes_list, ei_vfs_inode_list) {
+		if (!super_iter_iget(&inode->v, flags))
+			continue;
+
+		if (!(flags & INO_ITER_UNSAFE))
+			mutex_unlock(&c->vfs_inodes_lock);
+
+		ret = iter_fn(VFS_I(ip), private_data);
+		cond_resched();
+
+		if (!(flags & INO_ITER_UNSAFE)) {
+			if (old_inode)
+				iput(&old_inode->v);
+			old_inode = inode;
+			mutex_lock(&c->vfs_inodes_lock);
+		}
+
+		if (ret == INO_ITER_ABORT) {
+			ret = 0;
+			break;
+		}
+		if (ret < 0)
+			break;
+	}
+	if (old_inode)
+		iput(&old_inode->v);
+	return ret;
+}
+
 static int bch2_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct super_block *sb = dentry->d_sb;
@@ -1995,6 +2035,7 @@ static const struct super_operations bch_super_operations = {
 	.put_super	= bch2_put_super,
 	.freeze_fs	= bch2_freeze,
 	.unfreeze_fs	= bch2_unfreeze,
+	.iter_vfs_inodes = bch2_iter_vfs_inodes
 };
 
 static int bch2_set_super(struct super_block *s, void *data)
