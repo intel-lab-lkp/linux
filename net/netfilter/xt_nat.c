@@ -13,6 +13,26 @@
 #include <linux/netfilter/x_tables.h>
 #include <net/netfilter/nf_nat.h>
 
+static unsigned int
+xt_nat_setup_info(struct sk_buff *skb,
+		  const struct nf_nat_range2 *range,
+		  enum nf_nat_manip_type maniptype)
+{
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (WARN_ON(!ct))
+		return NF_ACCEPT;
+
+	if (WARN_ON(!(ctinfo == IP_CT_NEW ||
+		      ctinfo == IP_CT_RELATED ||
+	    (ctinfo == IP_CT_RELATED_REPLY && maniptype == NF_NAT_MANIP_SRC))))
+		return NF_ACCEPT;
+
+	return nf_nat_setup_info(ct, range, maniptype);
+}
+
 static int xt_nat_checkentry_v0(const struct xt_tgchk_param *par)
 {
 	const struct nf_nat_ipv4_multi_range_compat *mr = par->targinfo;
@@ -53,16 +73,10 @@ xt_snat_target_v0(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct nf_nat_ipv4_multi_range_compat *mr = par->targinfo;
 	struct nf_nat_range2 range;
-	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
-
-	ct = nf_ct_get(skb, &ctinfo);
-	WARN_ON(!(ct != NULL &&
-		 (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED ||
-		  ctinfo == IP_CT_RELATED_REPLY)));
 
 	xt_nat_convert_range(&range, &mr->range[0]);
-	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_SRC);
+
+	return xt_nat_setup_info(skb, &range, NF_NAT_MANIP_SRC);
 }
 
 static unsigned int
@@ -70,15 +84,10 @@ xt_dnat_target_v0(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct nf_nat_ipv4_multi_range_compat *mr = par->targinfo;
 	struct nf_nat_range2 range;
-	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
-
-	ct = nf_ct_get(skb, &ctinfo);
-	WARN_ON(!(ct != NULL &&
-		 (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED)));
 
 	xt_nat_convert_range(&range, &mr->range[0]);
-	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+
+	return xt_nat_setup_info(skb, &range, NF_NAT_MANIP_DST);
 }
 
 static unsigned int
@@ -86,18 +95,11 @@ xt_snat_target_v1(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct nf_nat_range *range_v1 = par->targinfo;
 	struct nf_nat_range2 range;
-	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
-
-	ct = nf_ct_get(skb, &ctinfo);
-	WARN_ON(!(ct != NULL &&
-		 (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED ||
-		  ctinfo == IP_CT_RELATED_REPLY)));
 
 	memcpy(&range, range_v1, sizeof(*range_v1));
 	memset(&range.base_proto, 0, sizeof(range.base_proto));
 
-	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_SRC);
+	return xt_nat_setup_info(skb, &range, NF_NAT_MANIP_SRC);
 }
 
 static unsigned int
@@ -105,46 +107,27 @@ xt_dnat_target_v1(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct nf_nat_range *range_v1 = par->targinfo;
 	struct nf_nat_range2 range;
-	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
-
-	ct = nf_ct_get(skb, &ctinfo);
-	WARN_ON(!(ct != NULL &&
-		 (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED)));
 
 	memcpy(&range, range_v1, sizeof(*range_v1));
 	memset(&range.base_proto, 0, sizeof(range.base_proto));
 
-	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
+	return xt_nat_setup_info(skb, &range, NF_NAT_MANIP_DST);
 }
 
 static unsigned int
 xt_snat_target_v2(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct nf_nat_range2 *range = par->targinfo;
-	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
 
-	ct = nf_ct_get(skb, &ctinfo);
-	WARN_ON(!(ct != NULL &&
-		 (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED ||
-		  ctinfo == IP_CT_RELATED_REPLY)));
-
-	return nf_nat_setup_info(ct, range, NF_NAT_MANIP_SRC);
+	return xt_nat_setup_info(skb, range, NF_NAT_MANIP_SRC);
 }
 
 static unsigned int
 xt_dnat_target_v2(struct sk_buff *skb, const struct xt_action_param *par)
 {
 	const struct nf_nat_range2 *range = par->targinfo;
-	enum ip_conntrack_info ctinfo;
-	struct nf_conn *ct;
 
-	ct = nf_ct_get(skb, &ctinfo);
-	WARN_ON(!(ct != NULL &&
-		 (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED)));
-
-	return nf_nat_setup_info(ct, range, NF_NAT_MANIP_DST);
+	return xt_nat_setup_info(skb, range, NF_NAT_MANIP_DST);
 }
 
 static struct xt_target xt_nat_target_reg[] __read_mostly = {
