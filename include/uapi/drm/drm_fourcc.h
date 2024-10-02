@@ -335,6 +335,20 @@ extern "C" {
 
 /*
  * 2 plane YCbCr MSB aligned
+ * index 0 = Y plane, [15:0] Y:x [12:4] little endian
+ * index 1 = Cr:Cb plane, [31:0] Cr:x:Cb:x [12:4:12:4] little endian
+ */
+#define DRM_FORMAT_P212		fourcc_code('P', '2', '1', '2') /* 2x1 subsampled Cr:Cb plane 12 bits per channel */
+
+/*
+ * 2 plane YCbCr MSB aligned
+ * index 0 = Y plane, [15:0] Y:x [14:2] little endian
+ * index 1 = Cr:Cb plane, [31:0] Cr:x:Cb:x [14:2:14:2] little endian
+ */
+#define DRM_FORMAT_P214		fourcc_code('P', '2', '1', '4') /* 2x1 subsampled Cr:Cb plane 14 bits per channel */
+
+/*
+ * 2 plane YCbCr MSB aligned
  * index 0 = Y plane, [15:0] Y:x [10:6] little endian
  * index 1 = Cr:Cb plane, [31:0] Cr:x:Cb:x [10:6:10:6] little endian
  */
@@ -346,6 +360,13 @@ extern "C" {
  * index 1 = Cr:Cb plane, [31:0] Cr:x:Cb:x [12:4:12:4] little endian
  */
 #define DRM_FORMAT_P012		fourcc_code('P', '0', '1', '2') /* 2x2 subsampled Cr:Cb plane 12 bits per channel */
+
+/*
+ * 2 plane YCbCr MSB aligned
+ * index 0 = Y plane, [15:0] Y:x [14:2] little endian
+ * index 1 = Cr:Cb plane, [31:0] Cr:x:Cb:x [14:2:14:2] little endian
+ */
+#define DRM_FORMAT_P014		fourcc_code('P', '0', '1', '4') /* 2x2 subsampled Cr:Cb plane 14 bits per channel */
 
 /*
  * 2 plane YCbCr MSB aligned
