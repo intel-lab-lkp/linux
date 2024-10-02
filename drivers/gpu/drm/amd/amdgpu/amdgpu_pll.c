@@ -348,7 +348,7 @@ int amdgpu_pll_get_shared_nondp_ppll(struct drm_crtc *crtc)
 			}
 			/* for non-DP check the clock */
 			test_adjusted_clock = test_amdgpu_crtc->adjusted_clock;
-			if ((crtc->mode.clock == test_crtc->mode.clock) &&
+			if ((crtc->legacy.mode.clock == test_crtc->legacy.mode.clock) &&
 			    (adjusted_clock == test_adjusted_clock) &&
 			    (amdgpu_crtc->ss_enabled == test_amdgpu_crtc->ss_enabled) &&
 			    (test_amdgpu_crtc->pll_id != ATOM_PPLL_INVALID))

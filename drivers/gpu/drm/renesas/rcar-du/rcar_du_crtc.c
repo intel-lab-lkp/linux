@@ -600,7 +600,7 @@ static void rcar_du_crtc_start(struct rcar_du_crtc *rcrtc)
 	 * sync mode (with the HSYNC and VSYNC signals configured as outputs and
 	 * actively driven).
 	 */
-	interlaced = rcrtc->crtc.mode.flags & DRM_MODE_FLAG_INTERLACE;
+	interlaced = rcrtc->crtc.legacy.mode.flags & DRM_MODE_FLAG_INTERLACE;
 	rcar_du_crtc_dsysr_clr_set(rcrtc, DSYSR_TVM_MASK | DSYSR_SCM_MASK,
 				   (interlaced ? DSYSR_SCM_INT_VIDEO : 0) |
 				   DSYSR_TVM_MASTER);

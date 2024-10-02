@@ -703,17 +703,17 @@ retry:
 			/*
 			 * IMPORTANT: We want to use the adjusted mode (i.e.
 			 * after the panel fitter upscaling) as the initial
-			 * config, not the input mode, which is what crtc->mode
+			 * config, not the input mode, which is what crtc->legacy.mode
 			 * usually contains. But since our current
 			 * code puts a mode derived from the post-pfit timings
-			 * into crtc->mode this works out correctly.
+			 * into crtc->legacy.mode this works out correctly.
 			 *
-			 * This is crtc->mode and not crtc->state->mode for the
+			 * This is crtc->legacy.mode and not crtc->state->mode for the
 			 * fastboot check to work correctly.
 			 */
 			drm_dbg_kms(dev, "[CONNECTOR:%d:%s] looking for current mode\n",
 				    connector->base.id, connector->name);
-			modes[i] = &connector->state->crtc->mode;
+			modes[i] = &connector->state->crtc->legacy.mode;
 		}
 		/*
 		 * In case of tiled modes, if all tiles are not present
@@ -1213,7 +1213,7 @@ static void drm_client_modeset_dpms_legacy(struct drm_client_dev *client, int dp
 
 	DRM_MODESET_LOCK_ALL_BEGIN(dev, ctx, 0, ret);
 	drm_client_for_each_modeset(modeset, client) {
-		if (!modeset->crtc->enabled)
+		if (!modeset->crtc->legacy.enabled)
 			continue;
 
 		for (j = 0; j < modeset->num_connectors; j++) {

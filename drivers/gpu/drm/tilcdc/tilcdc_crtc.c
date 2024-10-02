@@ -71,10 +71,10 @@ static void set_scanout(struct drm_crtc *crtc, struct drm_framebuffer *fb)
 	gem = drm_fb_dma_get_gem_obj(fb, 0);
 
 	start = gem->dma_addr + fb->offsets[0] +
-		crtc->y * fb->pitches[0] +
-		crtc->x * fb->format->cpp[0];
+		crtc->legacy.y * fb->pitches[0] +
+		crtc->legacy.x * fb->format->cpp[0];
 
-	end = start + (crtc->mode.vdisplay * fb->pitches[0]);
+	end = start + (crtc->legacy.mode.vdisplay * fb->pitches[0]);
 
 	/* Write LCDC_DMA_FB_BASE_ADDR_0_REG and LCDC_DMA_FB_CEILING_ADDR_0_REG
 	 * with a single insruction, if available. This should make it more
@@ -211,7 +211,7 @@ static void tilcdc_crtc_set_clk(struct drm_crtc *crtc)
 	clkdiv = 2; /* first try using a standard divider of 2 */
 
 	/* mode.clock is in KHz, set_rate wants parameter in Hz */
-	pclk_rate = crtc->mode.clock * 1000;
+	pclk_rate = crtc->legacy.mode.clock * 1000;
 
 	ret = clk_set_rate(priv->clk, pclk_rate * clkdiv);
 	clk_rate = clk_get_rate(priv->clk);
@@ -252,7 +252,7 @@ static void tilcdc_crtc_set_clk(struct drm_crtc *crtc)
 	tilcdc_crtc->lcd_fck_rate = clk_rate;
 
 	DBG("lcd_clk=%u, mode clock=%d, div=%u",
-	    tilcdc_crtc->lcd_fck_rate, crtc->mode.clock, clkdiv);
+	    tilcdc_crtc->lcd_fck_rate, crtc->legacy.mode.clock, clkdiv);
 
 	/* Configure the LCD clock divisor. */
 	tilcdc_write(dev, LCDC_CTRL_REG, LCDC_CLK_DIVISOR(clkdiv) |

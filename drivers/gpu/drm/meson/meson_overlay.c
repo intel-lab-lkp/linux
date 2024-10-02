@@ -482,7 +482,7 @@ static void meson_overlay_atomic_update(struct drm_plane *plane,
 
 	DRM_DEBUG_DRIVER("\n");
 
-	interlace_mode = new_state->crtc->mode.flags & DRM_MODE_FLAG_INTERLACE;
+	interlace_mode = new_state->crtc->legacy.mode.flags & DRM_MODE_FLAG_INTERLACE;
 
 	spin_lock_irqsave(&priv->drm->event_lock, flags);
 

@@ -83,9 +83,9 @@ sti_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode)
 		goto pix_error;
 	}
 
-	sti_vtg_set_config(compo->vtg[mixer->id], &crtc->mode);
+	sti_vtg_set_config(compo->vtg[mixer->id], &crtc->legacy.mode);
 
-	if (sti_mixer_active_video_area(mixer, &crtc->mode)) {
+	if (sti_mixer_active_video_area(mixer, &crtc->legacy.mode)) {
 		DRM_ERROR("Can't set active video area\n");
 		goto mixer_error;
 	}

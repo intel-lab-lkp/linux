@@ -60,11 +60,11 @@ static void rs780_get_pm_mode_parameters(struct radeon_device *rdev)
 
 	for (i = 0; i < rdev->num_crtc; i++) {
 		crtc = (struct drm_crtc *)minfo->crtcs[i];
-		if (crtc && crtc->enabled) {
+		if (crtc && crtc->legacy.enabled) {
 			radeon_crtc = to_radeon_crtc(crtc);
 			pi->crtc_id = radeon_crtc->crtc_id;
-			if (crtc->mode.htotal && crtc->mode.vtotal)
-				pi->refresh_rate = drm_mode_vrefresh(&crtc->mode);
+			if (crtc->legacy.mode.htotal && crtc->legacy.mode.vtotal)
+				pi->refresh_rate = drm_mode_vrefresh(&crtc->legacy.mode);
 			break;
 		}
 	}

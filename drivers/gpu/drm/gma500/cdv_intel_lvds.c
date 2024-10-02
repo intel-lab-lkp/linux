@@ -373,8 +373,8 @@ static int cdv_intel_lvds_set_property(struct drm_connector *connector,
 		    crtc->saved_mode.vdisplay != 0) {
 			if (!drm_crtc_helper_set_mode(encoder->crtc,
 						      &crtc->saved_mode,
-						      encoder->crtc->x,
-						      encoder->crtc->y,
+						      encoder->crtc->legacy.x,
+						      encoder->crtc->legacy.y,
 						      encoder->crtc->primary->legacy.fb))
 				return -1;
 		}

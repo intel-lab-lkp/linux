@@ -8514,8 +8514,8 @@ static bool is_content_protection_different(struct drm_crtc_state *new_crtc_stat
 	 *
 	 * Handles:	DESIRED -> DESIRED (Special case)
 	 */
-	if (!(old_conn_state->crtc && old_conn_state->crtc->enabled) &&
-		new_conn_state->crtc && new_conn_state->crtc->enabled &&
+	if (!(old_conn_state->crtc && old_conn_state->crtc->legacy.enabled) &&
+		new_conn_state->crtc && new_conn_state->crtc->legacy.enabled &&
 		connector->state->content_protection == DRM_MODE_CONTENT_PROTECTION_DESIRED) {
 		dm_con_state->update_hdcp = false;
 		pr_debug("[HDCP_DM] DESIRED->DESIRED (Stream removed and re-enabled) %s :true\n",
@@ -9651,10 +9651,10 @@ static void dm_set_writeback(struct amdgpu_display_manager *dm,
 	wb_info->dwb_params.cnv_params.cnv_out_bpc = DWB_CNV_OUT_BPC_10BPC;
 
 	/* width & height from crtc */
-	wb_info->dwb_params.cnv_params.src_width = acrtc->base.mode.crtc_hdisplay;
-	wb_info->dwb_params.cnv_params.src_height = acrtc->base.mode.crtc_vdisplay;
-	wb_info->dwb_params.dest_width = acrtc->base.mode.crtc_hdisplay;
-	wb_info->dwb_params.dest_height = acrtc->base.mode.crtc_vdisplay;
+	wb_info->dwb_params.cnv_params.src_width = acrtc->base.legacy.mode.crtc_hdisplay;
+	wb_info->dwb_params.cnv_params.src_height = acrtc->base.legacy.mode.crtc_vdisplay;
+	wb_info->dwb_params.dest_width = acrtc->base.legacy.mode.crtc_hdisplay;
+	wb_info->dwb_params.dest_height = acrtc->base.legacy.mode.crtc_vdisplay;
 
 	wb_info->dwb_params.cnv_params.crop_en = false;
 	wb_info->dwb_params.stereo_params.stereo_enabled = false;
@@ -9896,7 +9896,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 
 		stream_update.stream = dm_new_crtc_state->stream;
 		if (scaling_changed) {
-			update_stream_scaling_settings(&dm_new_con_state->base.crtc->mode,
+			update_stream_scaling_settings(&dm_new_con_state->base.crtc->legacy.mode,
 					dm_new_con_state, dm_new_crtc_state->stream);
 
 			stream_update.src = dm_new_crtc_state->stream->src;

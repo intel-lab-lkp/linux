@@ -92,8 +92,10 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 		int w = 0, h = 0;
 		list_for_each_entry(entry, &lds->active, active) {
 			crtc = &entry->base.crtc;
-			w = max(w, crtc->x + crtc->mode.hdisplay);
-			h = max(h, crtc->y + crtc->mode.vdisplay);
+			w = max(w,
+				crtc->legacy.x + crtc->legacy.mode.hdisplay);
+			h = max(h,
+				crtc->legacy.y + crtc->legacy.mode.vdisplay);
 		}
 
 		if (crtc == NULL)
@@ -123,10 +125,14 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, i);
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_IS_PRIMARY, !i);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_POSITION_X, crtc->x);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_POSITION_Y, crtc->y);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_WIDTH, crtc->mode.hdisplay);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_HEIGHT, crtc->mode.vdisplay);
+		vmw_write(dev_priv, SVGA_REG_DISPLAY_POSITION_X,
+			  crtc->legacy.x);
+		vmw_write(dev_priv, SVGA_REG_DISPLAY_POSITION_Y,
+			  crtc->legacy.y);
+		vmw_write(dev_priv, SVGA_REG_DISPLAY_WIDTH,
+			  crtc->legacy.mode.hdisplay);
+		vmw_write(dev_priv, SVGA_REG_DISPLAY_HEIGHT,
+			  crtc->legacy.mode.vdisplay);
 
 		i++;
 	}

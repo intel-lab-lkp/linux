@@ -1150,7 +1150,7 @@ static void sti_hqvdp_atomic_update(struct drm_plane *drm_plane,
 		return;
 	}
 
-	mode = &crtc->mode;
+	mode = &crtc->legacy.mode;
 	dst_x = newstate->crtc_x;
 	dst_y = newstate->crtc_y;
 	dst_w = clamp_val(newstate->crtc_w, 0, mode->hdisplay - dst_x);

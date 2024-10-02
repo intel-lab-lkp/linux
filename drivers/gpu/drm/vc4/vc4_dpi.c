@@ -134,7 +134,7 @@ static void vc4_dpi_encoder_disable(struct drm_encoder *encoder)
 static void vc4_dpi_encoder_enable(struct drm_encoder *encoder)
 {
 	struct drm_device *dev = encoder->dev;
-	struct drm_display_mode *mode = &encoder->crtc->mode;
+	struct drm_display_mode *mode = &encoder->crtc->legacy.mode;
 	struct vc4_dpi *dpi = to_vc4_dpi(encoder);
 	struct drm_connector_list_iter conn_iter;
 	struct drm_connector *connector = NULL, *connector_scan;

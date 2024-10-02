@@ -198,8 +198,8 @@ static void __drm_helper_disable_unused_functions(struct drm_device *dev)
 	drm_for_each_crtc(crtc, dev) {
 		const struct drm_crtc_helper_funcs *crtc_funcs = crtc->helper_private;
 
-		crtc->enabled = drm_helper_crtc_in_use(crtc);
-		if (!crtc->enabled) {
+		crtc->legacy.enabled = drm_helper_crtc_in_use(crtc);
+		if (!crtc->legacy.enabled) {
 			if (crtc_funcs->disable)
 				(*crtc_funcs->disable)(crtc);
 			else
@@ -298,28 +298,28 @@ bool drm_crtc_helper_set_mode(struct drm_crtc *crtc,
 
 	drm_warn_on_modeset_not_all_locked(dev);
 
-	saved_enabled = crtc->enabled;
-	crtc->enabled = drm_helper_crtc_in_use(crtc);
-	if (!crtc->enabled)
+	saved_enabled = crtc->legacy.enabled;
+	crtc->legacy.enabled = drm_helper_crtc_in_use(crtc);
+	if (!crtc->legacy.enabled)
 		return true;
 
 	adjusted_mode = drm_mode_duplicate(dev, mode);
 	if (!adjusted_mode) {
-		crtc->enabled = saved_enabled;
+		crtc->legacy.enabled = saved_enabled;
 		return false;
 	}
 
-	drm_mode_init(&saved_mode, &crtc->mode);
+	drm_mode_init(&saved_mode, &crtc->legacy.mode);
 	drm_mode_init(&saved_hwmode, &crtc->hwmode);
-	saved_x = crtc->x;
-	saved_y = crtc->y;
+	saved_x = crtc->legacy.x;
+	saved_y = crtc->legacy.y;
 
 	/* Update crtc values up front so the driver can rely on them for mode
 	 * setting.
 	 */
-	drm_mode_copy(&crtc->mode, mode);
-	crtc->x = x;
-	crtc->y = y;
+	drm_mode_copy(&crtc->legacy.mode, mode);
+	crtc->legacy.x = x;
+	crtc->legacy.y = y;
 
 	/* Pass our mode to the connectors and the CRTC to give them a chance to
 	 * adjust it according to limitations or connector properties, and also
@@ -424,11 +424,11 @@ bool drm_crtc_helper_set_mode(struct drm_crtc *crtc,
 done:
 	drm_mode_destroy(dev, adjusted_mode);
 	if (!ret) {
-		crtc->enabled = saved_enabled;
-		drm_mode_copy(&crtc->mode, &saved_mode);
+		crtc->legacy.enabled = saved_enabled;
+		drm_mode_copy(&crtc->legacy.mode, &saved_mode);
 		drm_mode_copy(&crtc->hwmode, &saved_hwmode);
-		crtc->x = saved_x;
-		crtc->y = saved_y;
+		crtc->legacy.x = saved_x;
+		crtc->legacy.y = saved_y;
 	}
 
 	return ret;
@@ -632,9 +632,9 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set,
 	drm_connector_list_iter_end(&conn_iter);
 
 	save_set.crtc = set->crtc;
-	save_set.mode = &set->crtc->mode;
-	save_set.x = set->crtc->x;
-	save_set.y = set->crtc->y;
+	save_set.mode = &set->crtc->legacy.mode;
+	save_set.x = set->crtc->legacy.x;
+	save_set.y = set->crtc->legacy.y;
 	save_set.fb = set->crtc->primary->legacy.fb;
 
 	/* We should be able to check here if the fb has the same properties
@@ -651,13 +651,14 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set,
 			fb_changed = true;
 	}
 
-	if (set->x != set->crtc->x || set->y != set->crtc->y)
+	if (set->x != set->crtc->legacy.x || set->y != set->crtc->legacy.y)
 		fb_changed = true;
 
-	if (!drm_mode_equal(set->mode, &set->crtc->mode)) {
+	if (!drm_mode_equal(set->mode, &set->crtc->legacy.mode)) {
 		drm_dbg_kms(dev, "[CRTC:%d:%s] modes are different, full mode set:\n",
 			    set->crtc->base.id, set->crtc->name);
-		drm_dbg_kms(dev, DRM_MODE_FMT "\n", DRM_MODE_ARG(&set->crtc->mode));
+		drm_dbg_kms(dev, DRM_MODE_FMT "\n",
+			    DRM_MODE_ARG(&set->crtc->legacy.mode));
 		drm_dbg_kms(dev, DRM_MODE_FMT "\n", DRM_MODE_ARG(set->mode));
 		mode_changed = true;
 	}
@@ -788,14 +789,14 @@ int drm_crtc_helper_set_config(struct drm_mode_set *set,
 		}
 		__drm_helper_disable_unused_functions(dev);
 	} else if (fb_changed) {
-		set->crtc->x = set->x;
-		set->crtc->y = set->y;
+		set->crtc->legacy.x = set->x;
+		set->crtc->legacy.y = set->y;
 		set->crtc->primary->legacy.fb = set->fb;
 		ret = crtc_funcs->mode_set_base(set->crtc,
 						set->x, set->y, save_set.fb);
 		if (ret != 0) {
-			set->crtc->x = save_set.x;
-			set->crtc->y = save_set.y;
+			set->crtc->legacy.x = save_set.x;
+			set->crtc->legacy.y = save_set.y;
 			set->crtc->primary->legacy.fb = save_set.fb;
 			goto fail;
 		}
@@ -993,11 +994,12 @@ void drm_helper_resume_force_mode(struct drm_device *dev)
 	drm_modeset_lock_all(dev);
 	drm_for_each_crtc(crtc, dev) {
 
-		if (!crtc->enabled)
+		if (!crtc->legacy.enabled)
 			continue;
 
-		ret = drm_crtc_helper_set_mode(crtc, &crtc->mode,
-					       crtc->x, crtc->y, crtc->primary->legacy.fb);
+		ret = drm_crtc_helper_set_mode(crtc, &crtc->legacy.mode,
+					       crtc->legacy.x, crtc->legacy.y,
+					       crtc->primary->legacy.fb);
 
 		/* Restoring the old config should never fail! */
 		if (ret == false)
@@ -1049,7 +1051,7 @@ int drm_helper_force_disable_all(struct drm_device *dev)
 
 	drm_modeset_lock_all(dev);
 	drm_for_each_crtc(crtc, dev)
-		if (crtc->enabled) {
+		if (crtc->legacy.enabled) {
 			struct drm_mode_set set = {
 				.crtc = crtc,
 			};

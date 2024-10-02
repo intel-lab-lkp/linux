@@ -1002,25 +1002,45 @@ struct drm_crtc {
 	 */
 	int cursor_y;
 
-	/**
-	 * @enabled:
-	 *
-	 * Is this CRTC enabled? Should only be used by legacy drivers, atomic
-	 * drivers should instead consult &drm_crtc_state.enable and
-	 * &drm_crtc_state.active. Atomic drivers can update this by calling
-	 * drm_atomic_helper_update_legacy_modeset_state().
-	 */
-	bool enabled;
+	struct {
+		/**
+		 * @enabled:
+		 *
+		 * Is this CRTC enabled? Should only be used by legacy drivers, atomic
+		 * drivers should instead consult &drm_crtc_state.enable and
+		 * &drm_crtc_state.active. Atomic drivers can update this by calling
+		 * drm_atomic_helper_update_legacy_modeset_state().
+		 */
+		bool enabled;
 
-	/**
-	 * @mode:
-	 *
-	 * Current mode timings. Should only be used by legacy drivers, atomic
-	 * drivers should instead consult &drm_crtc_state.mode. Atomic drivers
-	 * can update this by calling
-	 * drm_atomic_helper_update_legacy_modeset_state().
-	 */
-	struct drm_display_mode mode;
+		/**
+		 * @mode:
+		 *
+		 * Current mode timings. Should only be used by legacy drivers, atomic
+		 * drivers should instead consult &drm_crtc_state.mode. Atomic drivers
+		 * can update this by calling
+		 * drm_atomic_helper_update_legacy_modeset_state().
+		 */
+		struct drm_display_mode mode;
+
+		/**
+		 * @x:
+		 * x position on screen. Should only be used by legacy drivers, atomic
+		 * drivers should look at &drm_plane_state.crtc_x of the primary plane
+		 * instead. Updated by calling
+		 * drm_atomic_helper_update_legacy_modeset_state().
+		 */
+		int x;
+
+		/**
+		 * @y:
+		 * y position on screen. Should only be used by legacy drivers, atomic
+		 * drivers should look at &drm_plane_state.crtc_y of the primary plane
+		 * instead. Updated by calling
+		 * drm_atomic_helper_update_legacy_modeset_state().
+		 */
+		int y;
+	} legacy;
 
 	/**
 	 * @hwmode:
@@ -1037,23 +1057,6 @@ struct drm_crtc {
 	 * which is filled out by calling drm_calc_timestamping_constants().
 	 */
 	struct drm_display_mode hwmode;
-
-	/**
-	 * @x:
-	 * x position on screen. Should only be used by legacy drivers, atomic
-	 * drivers should look at &drm_plane_state.crtc_x of the primary plane
-	 * instead. Updated by calling
-	 * drm_atomic_helper_update_legacy_modeset_state().
-	 */
-	int x;
-	/**
-	 * @y:
-	 * y position on screen. Should only be used by legacy drivers, atomic
-	 * drivers should look at &drm_plane_state.crtc_y of the primary plane
-	 * instead. Updated by calling
-	 * drm_atomic_helper_update_legacy_modeset_state().
-	 */
-	int y;
 
 	/** @funcs: CRTC control functions */
 	const struct drm_crtc_funcs *funcs;

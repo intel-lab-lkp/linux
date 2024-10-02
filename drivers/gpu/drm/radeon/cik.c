@@ -8811,7 +8811,7 @@ static u32 dce8_line_buffer_adjust(struct radeon_device *rdev,
 	 * than 4096, you need use to use 2 display controllers and combine
 	 * them using the stereo blender.
 	 */
-	if (radeon_crtc->base.enabled && mode) {
+	if (radeon_crtc->base.legacy.enabled && mode) {
 		if (mode->crtc_hdisplay < 1920) {
 			tmp = 1;
 			buffer_alloc = 2;
@@ -8843,7 +8843,7 @@ static u32 dce8_line_buffer_adjust(struct radeon_device *rdev,
 		udelay(1);
 	}
 
-	if (radeon_crtc->base.enabled && mode) {
+	if (radeon_crtc->base.legacy.enabled && mode) {
 		switch (tmp) {
 		case 0:
 		default:
@@ -9230,14 +9230,14 @@ static void dce8_program_watermarks(struct radeon_device *rdev,
 				    struct radeon_crtc *radeon_crtc,
 				    u32 lb_size, u32 num_heads)
 {
-	struct drm_display_mode *mode = &radeon_crtc->base.mode;
+	struct drm_display_mode *mode = &radeon_crtc->base.legacy.mode;
 	struct dce8_wm_params wm_low, wm_high;
 	u32 active_time;
 	u32 line_time = 0;
 	u32 latency_watermark_a = 0, latency_watermark_b = 0;
 	u32 tmp, wm_mask;
 
-	if (radeon_crtc->base.enabled && num_heads && mode) {
+	if (radeon_crtc->base.legacy.enabled && num_heads && mode) {
 		active_time = (u32) div_u64((u64)mode->crtc_hdisplay * 1000000,
 					    (u32)mode->clock);
 		line_time = (u32) div_u64((u64)mode->crtc_htotal * 1000000,
@@ -9374,11 +9374,11 @@ void dce8_bandwidth_update(struct radeon_device *rdev)
 	radeon_update_display_priority(rdev);
 
 	for (i = 0; i < rdev->num_crtc; i++) {
-		if (rdev->mode_info.crtcs[i]->base.enabled)
+		if (rdev->mode_info.crtcs[i]->base.legacy.enabled)
 			num_heads++;
 	}
 	for (i = 0; i < rdev->num_crtc; i++) {
-		mode = &rdev->mode_info.crtcs[i]->base.mode;
+		mode = &rdev->mode_info.crtcs[i]->base.legacy.mode;
 		lb_size = dce8_line_buffer_adjust(rdev, rdev->mode_info.crtcs[i], mode);
 		dce8_program_watermarks(rdev, rdev->mode_info.crtcs[i], lb_size, num_heads);
 	}

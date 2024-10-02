@@ -251,7 +251,7 @@ static void meson_plane_atomic_update(struct drm_plane *plane,
 	hf_bank_len = 4;
 	vf_bank_len = 4;
 
-	if (new_state->crtc->mode.flags & DRM_MODE_FLAG_INTERLACE) {
+	if (new_state->crtc->legacy.mode.flags & DRM_MODE_FLAG_INTERLACE) {
 		vsc_bot_rcv_num = 6;
 		vsc_bot_rpt_p0_num = 2;
 	}
@@ -273,7 +273,7 @@ static void meson_plane_atomic_update(struct drm_plane *plane,
 	 * But the vertical scaler can provide such funtionnality if
 	 * is configured for 2:1 scaling with interlace options enabled.
 	 */
-	if (new_state->crtc->mode.flags & DRM_MODE_FLAG_INTERLACE) {
+	if (new_state->crtc->legacy.mode.flags & DRM_MODE_FLAG_INTERLACE) {
 		dest.y1 /= 2;
 		dest.y2 /= 2;
 		dst_h /= 2;
@@ -282,7 +282,7 @@ static void meson_plane_atomic_update(struct drm_plane *plane,
 	hf_phase_step = ((src_w << 18) / dst_w) << 6;
 	vf_phase_step = (src_h << 20) / dst_h;
 
-	if (new_state->crtc->mode.flags & DRM_MODE_FLAG_INTERLACE)
+	if (new_state->crtc->legacy.mode.flags & DRM_MODE_FLAG_INTERLACE)
 		bot_ini_phase = ((vf_phase_step / 2) >> 4);
 	else
 		bot_ini_phase = 0;
@@ -314,7 +314,7 @@ static void meson_plane_atomic_update(struct drm_plane *plane,
 					VSC_TOP_RPT_L0_NUM(vsc_ini_rpt_p0_num) |
 					VSC_VERTICAL_SCALER_EN;
 
-		if (new_state->crtc->mode.flags & DRM_MODE_FLAG_INTERLACE)
+		if (new_state->crtc->legacy.mode.flags & DRM_MODE_FLAG_INTERLACE)
 			priv->viu.osd_sc_v_ctrl0 |=
 					VSC_BOT_INI_RCV_NUM(vsc_bot_rcv_num) |
 					VSC_BOT_RPT_L0_NUM(vsc_bot_rpt_p0_num) |

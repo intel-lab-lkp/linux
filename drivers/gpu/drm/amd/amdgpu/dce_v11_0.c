@@ -637,7 +637,7 @@ static u32 dce_v11_0_line_buffer_adjust(struct amdgpu_device *adev,
 	 * than 4096, you need use to use 2 display controllers and combine
 	 * them using the stereo blender.
 	 */
-	if (amdgpu_crtc->base.enabled && mode) {
+	if (amdgpu_crtc->base.legacy.enabled && mode) {
 		if (mode->crtc_hdisplay < 1920) {
 			mem_cfg = 1;
 			buffer_alloc = 2;
@@ -672,7 +672,7 @@ static u32 dce_v11_0_line_buffer_adjust(struct amdgpu_device *adev,
 		udelay(1);
 	}
 
-	if (amdgpu_crtc->base.enabled && mode) {
+	if (amdgpu_crtc->base.legacy.enabled && mode) {
 		switch (mem_cfg) {
 		case 0:
 		default:
@@ -1059,14 +1059,14 @@ static void dce_v11_0_program_watermarks(struct amdgpu_device *adev,
 					struct amdgpu_crtc *amdgpu_crtc,
 					u32 lb_size, u32 num_heads)
 {
-	struct drm_display_mode *mode = &amdgpu_crtc->base.mode;
+	struct drm_display_mode *mode = &amdgpu_crtc->base.legacy.mode;
 	struct dce10_wm_params wm_low, wm_high;
 	u32 active_time;
 	u32 line_time = 0;
 	u32 latency_watermark_a = 0, latency_watermark_b = 0;
 	u32 tmp, wm_mask, lb_vblank_lead_lines = 0;
 
-	if (amdgpu_crtc->base.enabled && num_heads && mode) {
+	if (amdgpu_crtc->base.legacy.enabled && num_heads && mode) {
 		active_time = (u32) div_u64((u64)mode->crtc_hdisplay * 1000000,
 					    (u32)mode->clock);
 		line_time = (u32) div_u64((u64)mode->crtc_htotal * 1000000,
@@ -1196,11 +1196,11 @@ static void dce_v11_0_bandwidth_update(struct amdgpu_device *adev)
 	amdgpu_display_update_priority(adev);
 
 	for (i = 0; i < adev->mode_info.num_crtc; i++) {
-		if (adev->mode_info.crtcs[i]->base.enabled)
+		if (adev->mode_info.crtcs[i]->base.legacy.enabled)
 			num_heads++;
 	}
 	for (i = 0; i < adev->mode_info.num_crtc; i++) {
-		mode = &adev->mode_info.crtcs[i]->base.mode;
+		mode = &adev->mode_info.crtcs[i]->base.legacy.mode;
 		lb_size = dce_v11_0_line_buffer_adjust(adev, adev->mode_info.crtcs[i], mode);
 		dce_v11_0_program_watermarks(adev, adev->mode_info.crtcs[i],
 					    lb_size, num_heads);
@@ -2116,8 +2116,8 @@ static int dce_v11_0_crtc_do_set_base(struct drm_crtc *crtc,
 	y &= ~1;
 	WREG32(mmVIEWPORT_START + amdgpu_crtc->crtc_offset,
 	       (x << 16) | y);
-	viewport_w = crtc->mode.hdisplay;
-	viewport_h = (crtc->mode.vdisplay + 1) & ~1;
+	viewport_w = crtc->legacy.mode.hdisplay;
+	viewport_h = (crtc->legacy.mode.vdisplay + 1) & ~1;
 	WREG32(mmVIEWPORT_SIZE + amdgpu_crtc->crtc_offset,
 	       (viewport_w << 16) | viewport_h);
 
@@ -2414,9 +2414,10 @@ static int dce_v11_0_cursor_move_locked(struct drm_crtc *crtc,
 	amdgpu_crtc->cursor_y = y;
 
 	/* avivo cursor are offset into the total surface */
-	x += crtc->x;
-	y += crtc->y;
-	DRM_DEBUG("x %d y %d c->x %d c->y %d\n", x, y, crtc->x, crtc->y);
+	x += crtc->legacy.x;
+	y += crtc->legacy.y;
+	DRM_DEBUG("x %d y %d c->x %d c->y %d\n", x, y, crtc->legacy.x,
+		  crtc->legacy.y);
 
 	if (x < 0) {
 		xorigin = min(-x, amdgpu_crtc->max_cursor_width - 1);

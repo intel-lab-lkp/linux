@@ -735,7 +735,7 @@ static void nv_crtc_commit(struct drm_crtc *crtc)
 	struct nouveau_crtc *nv_crtc = nouveau_crtc(crtc);
 
 	nouveau_hw_load_state(dev, nv_crtc->index, &nv04_display(dev)->mode_reg);
-	nv04_crtc_mode_set_base(crtc, crtc->x, crtc->y, NULL);
+	nv04_crtc_mode_set_base(crtc, crtc->legacy.x, crtc->legacy.y, NULL);
 
 #ifdef __BIG_ENDIAN
 	/* turn on LFB swapping */
@@ -899,7 +899,8 @@ nv04_crtc_do_mode_set_base(struct drm_crtc *crtc,
 	nv_set_crtc_base(dev, nv_crtc->index, regp->fb_start);
 
 	/* Update the arbitration parameters. */
-	nouveau_calc_arb(dev, crtc->mode.clock, drm_fb->format->cpp[0] * 8,
+	nouveau_calc_arb(dev, crtc->legacy.mode.clock,
+			 drm_fb->format->cpp[0] * 8,
 			 &arb_burst, &arb_lwm);
 
 	regp->CRTC[NV_CIO_CRE_FF_INDEX] = arb_burst;
@@ -1097,8 +1098,8 @@ nv04_flip_complete(struct nvif_event *event, void *argv, u32 argc)
 
 	if (!nv04_finish_page_flip(chan, &state)) {
 		nv_set_crtc_base(drm->dev, drm_crtc_index(state.crtc),
-				 state.offset + state.crtc->y *
-				 state.pitch + state.crtc->x *
+				 state.offset + state.crtc->legacy.y *
+				 state.pitch + state.crtc->legacy.x *
 				 state.bpp / 8);
 	}
 

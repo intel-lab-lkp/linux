@@ -1139,12 +1139,12 @@ static void dpu_plane_sspp_atomic_update(struct drm_plane *plane)
 			&fmt->pixel_format, MSM_FORMAT_IS_UBWC(fmt));
 
 	dpu_plane_sspp_update_pipe(plane, pipe, pipe_cfg, fmt,
-				   drm_mode_vrefresh(&crtc->mode),
+				   drm_mode_vrefresh(&crtc->legacy.mode),
 				   layout_valid ? &layout : NULL);
 
 	if (r_pipe->sspp) {
 		dpu_plane_sspp_update_pipe(plane, r_pipe, r_pipe_cfg, fmt,
-					   drm_mode_vrefresh(&crtc->mode),
+					   drm_mode_vrefresh(&crtc->legacy.mode),
 					   layout_valid ? &layout : NULL);
 	}
 
@@ -1152,14 +1152,18 @@ static void dpu_plane_sspp_atomic_update(struct drm_plane *plane)
 		pstate->needs_qos_remap = false;
 
 	pstate->plane_fetch_bw = _dpu_plane_calc_bw(pdpu->catalog, fmt,
-						    &crtc->mode, pipe_cfg);
+						    &crtc->legacy.mode,
+						    pipe_cfg);
 
-	pstate->plane_clk = _dpu_plane_calc_clk(&crtc->mode, pipe_cfg);
+	pstate->plane_clk = _dpu_plane_calc_clk(&crtc->legacy.mode, pipe_cfg);
 
 	if (r_pipe->sspp) {
-		pstate->plane_fetch_bw += _dpu_plane_calc_bw(pdpu->catalog, fmt, &crtc->mode, r_pipe_cfg);
+		pstate->plane_fetch_bw += _dpu_plane_calc_bw(pdpu->catalog, fmt,
+							     &crtc->legacy.mode,
+							     r_pipe_cfg);
 
-		pstate->plane_clk = max(pstate->plane_clk, _dpu_plane_calc_clk(&crtc->mode, r_pipe_cfg));
+		pstate->plane_clk = max(pstate->plane_clk,
+					_dpu_plane_calc_clk(&crtc->legacy.mode, r_pipe_cfg));
 	}
 }
 

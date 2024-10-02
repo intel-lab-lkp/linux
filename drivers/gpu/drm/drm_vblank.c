@@ -2042,7 +2042,7 @@ int drm_crtc_get_sequence_ioctl(struct drm_device *dev, void *data,
 	if (crtc->state)
 		get_seq->active = crtc->state->enable;
 	else
-		get_seq->active = crtc->enabled;
+		get_seq->active = crtc->legacy.enabled;
 	drm_modeset_unlock(&crtc->mutex);
 	get_seq->sequence = drm_vblank_count_and_time(dev, pipe, &now);
 	get_seq->sequence_ns = ktime_to_ns(now);

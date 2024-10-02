@@ -140,7 +140,7 @@ void sti_vid_commit(struct sti_vid *vid,
 		    struct drm_plane_state *state)
 {
 	struct drm_crtc *crtc = state->crtc;
-	struct drm_display_mode *mode = &crtc->mode;
+	struct drm_display_mode *mode = &crtc->legacy.mode;
 	int dst_x = state->crtc_x;
 	int dst_y = state->crtc_y;
 	int dst_w = clamp_val(state->crtc_w, 0, mode->hdisplay - dst_x);

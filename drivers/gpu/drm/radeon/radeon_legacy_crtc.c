@@ -1080,7 +1080,7 @@ static void radeon_crtc_commit(struct drm_crtc *crtc)
 	* Reenable the CRTCs that should be running.
 	*/
 	list_for_each_entry(crtci, &dev->mode_config.crtc_list, head) {
-		if (crtci->enabled)
+		if (crtci->legacy.enabled)
 			radeon_crtc_dpms(crtci, DRM_MODE_DPMS_ON);
 	}
 }

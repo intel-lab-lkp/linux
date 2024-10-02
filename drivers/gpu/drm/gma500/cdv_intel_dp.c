@@ -1847,8 +1847,8 @@ cdv_intel_dp_set_property(struct drm_connector *connector,
 done:
 	if (encoder->base.crtc) {
 		struct drm_crtc *crtc = encoder->base.crtc;
-		drm_crtc_helper_set_mode(crtc, &crtc->mode,
-					 crtc->x, crtc->y,
+		drm_crtc_helper_set_mode(crtc, &crtc->legacy.mode,
+					 crtc->legacy.x, crtc->legacy.y,
 					 crtc->primary->legacy.fb);
 	}
 

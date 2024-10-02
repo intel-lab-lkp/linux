@@ -119,8 +119,8 @@ static int drm_plane_helper_check_update(struct drm_plane *plane,
 	};
 	struct drm_crtc_state crtc_state = {
 		.crtc = crtc,
-		.enable = crtc->enabled,
-		.mode = crtc->mode,
+		.enable = crtc->legacy.enabled,
+		.mode = crtc->legacy.mode,
 	};
 	int ret;
 
@@ -172,7 +172,7 @@ int drm_plane_helper_update_primary(struct drm_plane *plane, struct drm_crtc *cr
 	struct drm_mode_set set = {
 		.crtc = crtc,
 		.fb = fb,
-		.mode = &crtc->mode,
+		.mode = &crtc->legacy.mode,
 		.x = src_x >> 16,
 		.y = src_y >> 16,
 	};

@@ -1209,7 +1209,7 @@ static irqreturn_t malidp_de_irq(int irq, void *arg)
 	mask = malidp_hw_read(hwdev, MALIDP_REG_MASKIRQ);
 	/* keep the status of the enabled interrupts, plus the error bits */
 	status &= (mask | de->err_mask);
-	if ((status & de->vsync_irq) && malidp->crtc.enabled)
+	if ((status & de->vsync_irq) && malidp->crtc.legacy.enabled)
 		drm_crtc_handle_vblank(&malidp->crtc);
 
 #ifdef CONFIG_DEBUG_FS

@@ -196,7 +196,7 @@ static void decon_setup_trigger(struct decon_context *ctx)
 static void decon_commit(struct exynos_drm_crtc *crtc)
 {
 	struct decon_context *ctx = crtc->ctx;
-	struct drm_display_mode *m = &crtc->base.mode;
+	struct drm_display_mode *m = &crtc->base.legacy.mode;
 	bool interlaced = false;
 	u32 val;
 
@@ -410,7 +410,7 @@ static void decon_update_plane(struct exynos_drm_crtc *crtc,
 	dma_addr_t dma_addr = exynos_drm_fb_dma_addr(fb, 0);
 	u32 val;
 
-	if (crtc->base.mode.flags & DRM_MODE_FLAG_INTERLACE) {
+	if (crtc->base.legacy.mode.flags & DRM_MODE_FLAG_INTERLACE) {
 		val = COORDINATE_X(state->crtc.x) |
 			COORDINATE_Y(state->crtc.y / 2);
 		writel(val, ctx->addr + DECON_VIDOSDxA(win));

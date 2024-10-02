@@ -1499,7 +1499,7 @@ int r100_cs_packet_parse_vline(struct radeon_cs_parser *p)
 	radeon_crtc = to_radeon_crtc(crtc);
 	crtc_id = radeon_crtc->crtc_id;
 
-	if (!crtc->enabled) {
+	if (!crtc->legacy.enabled) {
 		/* if the CRTC isn't enabled - we need to nop out the wait until */
 		ib[h_idx + 2] = PACKET2(0);
 		ib[h_idx + 3] = PACKET2(0);
@@ -3242,19 +3242,19 @@ void r100_bandwidth_update(struct radeon_device *rdev)
 
 	radeon_update_display_priority(rdev);
 
-	if (rdev->mode_info.crtcs[0]->base.enabled) {
+	if (rdev->mode_info.crtcs[0]->base.legacy.enabled) {
 		const struct drm_framebuffer *fb =
 			rdev->mode_info.crtcs[0]->base.primary->legacy.fb;
 
-		mode1 = &rdev->mode_info.crtcs[0]->base.mode;
+		mode1 = &rdev->mode_info.crtcs[0]->base.legacy.mode;
 		pixel_bytes1 = fb->format->cpp[0];
 	}
 	if (!(rdev->flags & RADEON_SINGLE_CRTC)) {
-		if (rdev->mode_info.crtcs[1]->base.enabled) {
+		if (rdev->mode_info.crtcs[1]->base.legacy.enabled) {
 			const struct drm_framebuffer *fb =
 				rdev->mode_info.crtcs[1]->base.primary->legacy.fb;
 
-			mode2 = &rdev->mode_info.crtcs[1]->base.mode;
+			mode2 = &rdev->mode_info.crtcs[1]->base.legacy.mode;
 			pixel_bytes2 = fb->format->cpp[0];
 		}
 	}

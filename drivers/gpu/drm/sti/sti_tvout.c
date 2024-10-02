@@ -633,7 +633,7 @@ static void sti_dvo_encoder_enable(struct drm_encoder *encoder)
 {
 	struct sti_tvout *tvout = to_sti_tvout(encoder);
 
-	tvout_preformatter_set_matrix(tvout, &encoder->crtc->mode);
+	tvout_preformatter_set_matrix(tvout, &encoder->crtc->legacy.mode);
 
 	tvout_dvo_start(tvout, sti_crtc_is_main(encoder->crtc));
 }
@@ -683,7 +683,7 @@ static void sti_hda_encoder_enable(struct drm_encoder *encoder)
 {
 	struct sti_tvout *tvout = to_sti_tvout(encoder);
 
-	tvout_preformatter_set_matrix(tvout, &encoder->crtc->mode);
+	tvout_preformatter_set_matrix(tvout, &encoder->crtc->legacy.mode);
 
 	tvout_hda_start(tvout, sti_crtc_is_main(encoder->crtc));
 }
@@ -734,7 +734,7 @@ static void sti_hdmi_encoder_enable(struct drm_encoder *encoder)
 {
 	struct sti_tvout *tvout = to_sti_tvout(encoder);
 
-	tvout_preformatter_set_matrix(tvout, &encoder->crtc->mode);
+	tvout_preformatter_set_matrix(tvout, &encoder->crtc->legacy.mode);
 
 	tvout_hdmi_start(tvout, sti_crtc_is_main(encoder->crtc));
 }

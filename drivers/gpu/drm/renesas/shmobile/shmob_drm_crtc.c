@@ -112,7 +112,7 @@ static void shmob_drm_crtc_setup_geometry(struct shmob_drm_crtc *scrtc)
 	struct drm_crtc *crtc = &scrtc->base;
 	struct shmob_drm_device *sdev = to_shmob_device(crtc->dev);
 	const struct drm_display_info *info = &sdev->connector->display_info;
-	const struct drm_display_mode *mode = &crtc->mode;
+	const struct drm_display_mode *mode = &crtc->legacy.mode;
 	unsigned int i;
 	u32 value;
 

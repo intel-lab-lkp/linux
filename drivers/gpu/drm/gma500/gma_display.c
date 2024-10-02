@@ -152,7 +152,7 @@ void gma_crtc_load_lut(struct drm_crtc *crtc)
 	int i;
 
 	/* The clocks have to be on to load the palette. */
-	if (!crtc->enabled)
+	if (!crtc->legacy.enabled)
 		return;
 
 	r = crtc->gamma_store;
@@ -537,7 +537,8 @@ int gma_crtc_page_flip(struct drm_crtc *crtc,
 		spin_unlock_irqrestore(&dev->event_lock, flags);
 
 		/* Call this locked if we want an event at vblank interrupt. */
-		ret = crtc_funcs->mode_set_base(crtc, crtc->x, crtc->y, old_fb);
+		ret = crtc_funcs->mode_set_base(crtc, crtc->legacy.x,
+						crtc->legacy.y, old_fb);
 		if (ret) {
 			spin_lock_irqsave(&dev->event_lock, flags);
 			if (gma_crtc->page_flip_event) {
@@ -547,7 +548,8 @@ int gma_crtc_page_flip(struct drm_crtc *crtc,
 			spin_unlock_irqrestore(&dev->event_lock, flags);
 		}
 	} else {
-		ret = crtc_funcs->mode_set_base(crtc, crtc->x, crtc->y, old_fb);
+		ret = crtc_funcs->mode_set_base(crtc, crtc->legacy.x,
+						crtc->legacy.y, old_fb);
 	}
 
 	/* Restore previous fb in case of failure. */

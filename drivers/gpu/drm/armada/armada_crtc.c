@@ -613,10 +613,12 @@ static int armada_drm_crtc_cursor_update(struct armada_crtc *dcrtc, bool reload)
 		xoff = -dcrtc->cursor_x;
 		xscr = 0;
 		w -= min(xoff, w);
-	} else if (dcrtc->cursor_x + w > dcrtc->crtc.mode.hdisplay) {
+	} else if (dcrtc->cursor_x + w > dcrtc->crtc.legacy.mode.hdisplay) {
 		xoff = 0;
 		xscr = dcrtc->cursor_x;
-		w = max_t(int, dcrtc->crtc.mode.hdisplay - dcrtc->cursor_x, 0);
+		w = max_t(int,
+			  dcrtc->crtc.legacy.mode.hdisplay - dcrtc->cursor_x,
+			  0);
 	} else {
 		xoff = 0;
 		xscr = dcrtc->cursor_x;
@@ -626,10 +628,12 @@ static int armada_drm_crtc_cursor_update(struct armada_crtc *dcrtc, bool reload)
 		yoff = -dcrtc->cursor_y;
 		yscr = 0;
 		h -= min(yoff, h);
-	} else if (dcrtc->cursor_y + h > dcrtc->crtc.mode.vdisplay) {
+	} else if (dcrtc->cursor_y + h > dcrtc->crtc.legacy.mode.vdisplay) {
 		yoff = 0;
 		yscr = dcrtc->cursor_y;
-		h = max_t(int, dcrtc->crtc.mode.vdisplay - dcrtc->cursor_y, 0);
+		h = max_t(int,
+			  dcrtc->crtc.legacy.mode.vdisplay - dcrtc->cursor_y,
+			  0);
 	} else {
 		yoff = 0;
 		yscr = dcrtc->cursor_y;

@@ -56,7 +56,7 @@ static void vbox_do_modeset(struct drm_crtc *crtc)
 	 * screen is programmed this way, so try to fake it.
 	 */
 	if (vbox_crtc->crtc_id == 0 && fb &&
-	    vbox_crtc->fb_offset / pitch < 0xffff - crtc->y &&
+	    vbox_crtc->fb_offset / pitch < 0xffff - crtc->legacy.y &&
 	    vbox_crtc->fb_offset % (bpp / 8) == 0) {
 		vbox_write_ioport(VBE_DISPI_INDEX_XRES, width);
 		vbox_write_ioport(VBE_DISPI_INDEX_YRES, height);

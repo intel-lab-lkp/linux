@@ -116,7 +116,7 @@ static void display_enable(struct drm_simple_display_pipe *pipe,
 	if (!drm_dev_enter(pipe->crtc.dev, &idx))
 		return;
 
-	ret = xen_drm_front_mode_set(pipeline, crtc->x, crtc->y,
+	ret = xen_drm_front_mode_set(pipeline, crtc->legacy.x, crtc->legacy.y,
 				     fb->width, fb->height,
 				     fb->format->cpp[0] * 8,
 				     xen_drm_front_fb_to_cookie(fb));

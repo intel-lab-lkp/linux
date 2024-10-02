@@ -406,11 +406,11 @@ static void vmw_stdu_crtc_mode_set_nofb(struct drm_crtc *crtc)
 	y = vmw_conn_state->gui_y;
 
 	vmw_svga_enable(dev_priv);
-	ret = vmw_stdu_define_st(dev_priv, stdu, &crtc->mode, x, y);
+	ret = vmw_stdu_define_st(dev_priv, stdu, &crtc->legacy.mode, x, y);
 
 	if (ret)
 		DRM_ERROR("Failed to define Screen Target of size %dx%d\n",
-			  crtc->x, crtc->y);
+			  crtc->legacy.x, crtc->legacy.y);
 }
 
 static void vmw_stdu_crtc_atomic_disable(struct drm_crtc *crtc,

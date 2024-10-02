@@ -162,7 +162,7 @@ u32 r600_dpm_get_vblank_time(struct radeon_device *rdev)
 	if (rdev->num_crtc && rdev->mode_info.mode_config_initialized) {
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			radeon_crtc = to_radeon_crtc(crtc);
-			if (crtc->enabled && radeon_crtc->enabled && radeon_crtc->hw_mode.clock) {
+			if (crtc->legacy.enabled && radeon_crtc->enabled && radeon_crtc->hw_mode.clock) {
 				vblank_in_pixels =
 					radeon_crtc->hw_mode.crtc_htotal *
 					(radeon_crtc->hw_mode.crtc_vblank_end -
@@ -188,7 +188,7 @@ u32 r600_dpm_get_vrefresh(struct radeon_device *rdev)
 	if (rdev->num_crtc && rdev->mode_info.mode_config_initialized) {
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			radeon_crtc = to_radeon_crtc(crtc);
-			if (crtc->enabled && radeon_crtc->enabled && radeon_crtc->hw_mode.clock) {
+			if (crtc->legacy.enabled && radeon_crtc->enabled && radeon_crtc->hw_mode.clock) {
 				vrefresh = drm_mode_vrefresh(&radeon_crtc->hw_mode);
 				break;
 			}

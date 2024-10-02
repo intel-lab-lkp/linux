@@ -88,7 +88,7 @@ static void intel_crtc_disable_noatomic_begin(struct intel_crtc *crtc,
 		    crtc->base.base.id, crtc->base.name);
 
 	crtc->active = false;
-	crtc->base.enabled = false;
+	crtc->base.legacy.enabled = false;
 
 	if (crtc_state->shared_dpll)
 		intel_unreference_shared_dpll_crtc(crtc,
@@ -725,7 +725,7 @@ static void intel_modeset_readout_hw_state(struct drm_i915_private *i915)
 
 		crtc_state->hw.enable = crtc_state->hw.active;
 
-		crtc->base.enabled = crtc_state->hw.enable;
+		crtc->base.legacy.enabled = crtc_state->hw.enable;
 		crtc->active = crtc_state->hw.active;
 
 		if (crtc_state->hw.active)

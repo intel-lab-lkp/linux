@@ -807,9 +807,9 @@ nouveau_connector_set_property(struct drm_connector *connector,
 
 	if (connector->encoder && connector->encoder->crtc) {
 		ret = drm_crtc_helper_set_mode(connector->encoder->crtc,
-					      &connector->encoder->crtc->mode,
-					       connector->encoder->crtc->x,
-					       connector->encoder->crtc->y,
+					      &connector->encoder->crtc->legacy.mode,
+					       connector->encoder->crtc->legacy.x,
+					       connector->encoder->crtc->legacy.y,
 					       NULL);
 		if (!ret)
 			return -EINVAL;

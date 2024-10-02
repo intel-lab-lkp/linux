@@ -249,10 +249,11 @@ static void vmw_sou_crtc_mode_set_nofb(struct drm_crtc *crtc)
 		x = vmw_conn_state->gui_x;
 		y = vmw_conn_state->gui_y;
 
-		ret = vmw_sou_fifo_create(dev_priv, sou, x, y, &crtc->mode);
+		ret = vmw_sou_fifo_create(dev_priv, sou, x, y,
+					  &crtc->legacy.mode);
 		if (ret)
 			DRM_ERROR("Failed to define Screen Object %dx%d\n",
-				  crtc->x, crtc->y);
+				  crtc->legacy.x, crtc->legacy.y);
 
 	} else {
 		sou->buffer = NULL;
@@ -993,8 +994,8 @@ static void vmw_sou_surface_fifo_commit(struct vmw_kms_dirty *dirty)
 	struct vmw_kms_sou_surface_dirty *sdirty =
 		container_of(dirty, typeof(*sdirty), base);
 	struct vmw_kms_sou_dirty_cmd *cmd = dirty->cmd;
-	s32 trans_x = dirty->unit->crtc.x - sdirty->dst_x;
-	s32 trans_y = dirty->unit->crtc.y - sdirty->dst_y;
+	s32 trans_x = dirty->unit->crtc.legacy.x - sdirty->dst_x;
+	s32 trans_y = dirty->unit->crtc.legacy.y - sdirty->dst_y;
 	size_t region_size = dirty->num_hits * sizeof(SVGASignedRect);
 	SVGASignedRect *blit = (SVGASignedRect *) &cmd[1];
 	int i;

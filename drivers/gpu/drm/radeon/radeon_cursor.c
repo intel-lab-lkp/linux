@@ -153,8 +153,8 @@ static int radeon_cursor_move_locked(struct drm_crtc *crtc, int x, int y)
 
 	if (ASIC_IS_AVIVO(rdev)) {
 		/* avivo cursor are offset into the total surface */
-		x += crtc->x;
-		y += crtc->y;
+		x += crtc->legacy.x;
+		y += crtc->legacy.y;
 	}
 
 	if (x < 0)
@@ -163,10 +163,11 @@ static int radeon_cursor_move_locked(struct drm_crtc *crtc, int x, int y)
 		yorigin = min(-y, radeon_crtc->max_cursor_height - 1);
 
 	if (!ASIC_IS_AVIVO(rdev)) {
-		x += crtc->x;
-		y += crtc->y;
+		x += crtc->legacy.x;
+		y += crtc->legacy.y;
 	}
-	DRM_DEBUG("x %d y %d c->x %d c->y %d\n", x, y, crtc->x, crtc->y);
+	DRM_DEBUG("x %d y %d c->x %d c->y %d\n", x, y, crtc->legacy.x,
+		  crtc->legacy.y);
 
 	/* fixed on DCE6 and newer */
 	if (ASIC_IS_AVIVO(rdev) && !ASIC_IS_DCE6(rdev)) {
@@ -177,20 +178,20 @@ static int radeon_cursor_move_locked(struct drm_crtc *crtc, int x, int y)
 		 * avivo cursor image can't end on 128 pixel boundary or
 		 * go past the end of the frame if both crtcs are enabled
 		 *
-		 * NOTE: It is safe to access crtc->enabled of other crtcs
+		 * NOTE: It is safe to access crtc->legacy.enabled of other crtcs
 		 * without holding either the mode_config lock or the other
 		 * crtc's lock as long as write access to this flag _always_
 		 * grabs all locks.
 		 */
 		list_for_each_entry(crtc_p, &crtc->dev->mode_config.crtc_list, head) {
-			if (crtc_p->enabled)
+			if (crtc_p->legacy.enabled)
 				i++;
 		}
 		if (i > 1) {
 			int cursor_end, frame_end;
 
 			cursor_end = x + w;
-			frame_end = crtc->x + crtc->mode.crtc_hdisplay;
+			frame_end = crtc->legacy.x + crtc->legacy.mode.crtc_hdisplay;
 			if (cursor_end >= frame_end) {
 				w = w - (cursor_end - frame_end);
 				if (!(frame_end & 0x7f))
@@ -206,9 +207,9 @@ static int radeon_cursor_move_locked(struct drm_crtc *crtc, int x, int y)
 		}
 	}
 
-	if (x <= (crtc->x - w) || y <= (crtc->y - radeon_crtc->cursor_height) ||
-	    x >= (crtc->x + crtc->mode.hdisplay) ||
-	    y >= (crtc->y + crtc->mode.vdisplay))
+	if (x <= (crtc->legacy.x - w) || y <= (crtc->legacy.y - radeon_crtc->cursor_height) ||
+	    x >= (crtc->legacy.x + crtc->legacy.mode.hdisplay) ||
+	    y >= (crtc->legacy.y + crtc->legacy.mode.vdisplay))
 		goto out_of_bounds;
 
 	x += xorigin;
@@ -225,10 +226,10 @@ static int radeon_cursor_move_locked(struct drm_crtc *crtc, int x, int y)
 		WREG32(AVIVO_D1CUR_SIZE + radeon_crtc->crtc_offset,
 		       ((w - 1) << 16) | (radeon_crtc->cursor_height - 1));
 	} else {
-		x -= crtc->x;
-		y -= crtc->y;
+		x -= crtc->legacy.x;
+		y -= crtc->legacy.y;
 
-		if (crtc->mode.flags & DRM_MODE_FLAG_DBLSCAN)
+		if (crtc->legacy.mode.flags & DRM_MODE_FLAG_DBLSCAN)
 			y *= 2;
 
 		WREG32(RADEON_CUR_HORZ_VERT_OFF + radeon_crtc->crtc_offset,

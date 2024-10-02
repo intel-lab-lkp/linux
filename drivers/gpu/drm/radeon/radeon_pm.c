@@ -1783,7 +1783,7 @@ static void radeon_pm_compute_clocks_dpm(struct radeon_device *rdev)
 		list_for_each_entry(crtc,
 				    &ddev->mode_config.crtc_list, head) {
 			radeon_crtc = to_radeon_crtc(crtc);
-			if (crtc->enabled) {
+			if (crtc->legacy.enabled) {
 				rdev->pm.dpm.new_active_crtcs |= (1 << radeon_crtc->crtc_id);
 				rdev->pm.dpm.new_active_crtc_count++;
 				if (!radeon_crtc->connector)

@@ -1342,8 +1342,8 @@ static int vc4_plane_mode_set(struct drm_plane *plane,
 
 	/* crtc_* are already clipped coordinates. */
 	covers_screen = vc4_state->crtc_x == 0 && vc4_state->crtc_y == 0 &&
-			vc4_state->crtc_w == state->crtc->mode.hdisplay &&
-			vc4_state->crtc_h == state->crtc->mode.vdisplay;
+			vc4_state->crtc_w == state->crtc->legacy.mode.hdisplay &&
+			vc4_state->crtc_h == state->crtc->legacy.mode.vdisplay;
 	/* Background fill might be necessary when the plane has per-pixel
 	 * alpha content or a non-opaque plane alpha and could blend from the
 	 * background or does not cover the entire screen.

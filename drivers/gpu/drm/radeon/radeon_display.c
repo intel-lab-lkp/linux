@@ -223,7 +223,7 @@ void radeon_crtc_load_lut(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	struct radeon_device *rdev = dev->dev_private;
 
-	if (!crtc->enabled)
+	if (!crtc->legacy.enabled)
 		return;
 
 	if (ASIC_IS_DCE5(rdev))
@@ -553,11 +553,11 @@ static int radeon_crtc_page_flip_target(struct drm_crtc *crtc,
 				base &= ~0x7ff;
 			} else {
 				int byteshift = fb->format->cpp[0] * 8 >> 4;
-				int tile_addr = (((crtc->y >> 3) * pitch_pixels +  crtc->x) >> (8 - byteshift)) << 11;
-				base += tile_addr + ((crtc->x << byteshift) % 256) + ((crtc->y % 8) << 8);
+				int tile_addr = (((crtc->legacy.y >> 3) * pitch_pixels +  crtc->legacy.x) >> (8 - byteshift)) << 11;
+				base += tile_addr + ((crtc->legacy.x << byteshift) % 256) + ((crtc->legacy.y % 8) << 8);
 			}
 		} else {
-			int offset = crtc->y * pitch_pixels + crtc->x;
+			int offset = crtc->legacy.y * pitch_pixels + crtc->legacy.x;
 			switch (fb->format->cpp[0] * 8) {
 			case 8:
 			default:
@@ -641,7 +641,7 @@ radeon_crtc_set_config(struct drm_mode_set *set,
 	ret = drm_crtc_helper_set_config(set, ctx);
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
-		if (crtc->enabled)
+		if (crtc->legacy.enabled)
 			active = true;
 
 	pm_runtime_mark_last_busy(dev->dev);
@@ -1712,9 +1712,9 @@ bool radeon_crtc_scaling_mode_fixup(struct drm_crtc *crtc,
 			memcpy(&radeon_crtc->native_mode,
 			       &radeon_encoder->native_mode,
 				sizeof(struct drm_display_mode));
-			src_v = crtc->mode.vdisplay;
+			src_v = crtc->legacy.mode.vdisplay;
 			dst_v = radeon_crtc->native_mode.vdisplay;
-			src_h = crtc->mode.hdisplay;
+			src_h = crtc->legacy.mode.hdisplay;
 			dst_h = radeon_crtc->native_mode.hdisplay;
 
 			/* fix up for overscan on hdmi */
@@ -1733,10 +1733,10 @@ bool radeon_crtc_scaling_mode_fixup(struct drm_crtc *crtc,
 				else
 					radeon_crtc->v_border = (mode->vdisplay >> 5) + 16;
 				radeon_crtc->rmx_type = RMX_FULL;
-				src_v = crtc->mode.vdisplay;
-				dst_v = crtc->mode.vdisplay - (radeon_crtc->v_border * 2);
-				src_h = crtc->mode.hdisplay;
-				dst_h = crtc->mode.hdisplay - (radeon_crtc->h_border * 2);
+				src_v = crtc->legacy.mode.vdisplay;
+				dst_v = crtc->legacy.mode.vdisplay - (radeon_crtc->v_border * 2);
+				src_h = crtc->legacy.mode.hdisplay;
+				dst_h = crtc->legacy.mode.hdisplay - (radeon_crtc->h_border * 2);
 			}
 			first = false;
 		} else {

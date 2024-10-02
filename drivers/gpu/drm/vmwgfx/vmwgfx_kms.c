@@ -2352,10 +2352,10 @@ int vmw_kms_helper_dirty(struct vmw_private *dev_priv,
 
 	for (k = 0; k < num_units; k++) {
 		struct vmw_display_unit *unit = units[k];
-		s32 crtc_x = unit->crtc.x;
-		s32 crtc_y = unit->crtc.y;
-		s32 crtc_width = unit->crtc.mode.hdisplay;
-		s32 crtc_height = unit->crtc.mode.vdisplay;
+		s32 crtc_x = unit->crtc.legacy.x;
+		s32 crtc_y = unit->crtc.legacy.y;
+		s32 crtc_width = unit->crtc.legacy.mode.hdisplay;
+		s32 crtc_height = unit->crtc.legacy.mode.vdisplay;
 		const struct drm_clip_rect *clips_ptr = clips;
 		const struct drm_vmw_rect *vclips_ptr = vclips;
 

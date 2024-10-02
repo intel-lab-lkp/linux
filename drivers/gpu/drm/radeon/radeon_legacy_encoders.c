@@ -1538,7 +1538,7 @@ static enum drm_connector_status radeon_legacy_tv_dac_detect(struct drm_encoder 
 	/* find out if crtc2 is in use or if this encoder is using it */
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
-		if ((radeon_crtc->crtc_id == 1) && crtc->enabled) {
+		if ((radeon_crtc->crtc_id == 1) && crtc->legacy.enabled) {
 			if (encoder->crtc != crtc) {
 				return connector_status_disconnected;
 			}

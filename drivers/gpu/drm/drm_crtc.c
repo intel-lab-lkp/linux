@@ -564,11 +564,12 @@ int drm_mode_getcrtc(struct drm_device *dev,
 			crtc_resp->mode_valid = 0;
 		}
 	} else {
-		crtc_resp->x = crtc->x;
-		crtc_resp->y = crtc->y;
+		crtc_resp->x = crtc->legacy.x;
+		crtc_resp->y = crtc->legacy.y;
 
-		if (crtc->enabled) {
-			drm_mode_convert_to_umode(&crtc_resp->mode, &crtc->mode);
+		if (crtc->legacy.enabled) {
+			drm_mode_convert_to_umode(&crtc_resp->mode,
+						  &crtc->legacy.mode);
 			crtc_resp->mode_valid = 1;
 
 		} else {

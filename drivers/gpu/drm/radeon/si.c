@@ -1964,7 +1964,7 @@ static u32 dce6_line_buffer_adjust(struct radeon_device *rdev,
 	 * of crtcs.  Ideally for multiple large displays we'd assign them to
 	 * non-linked crtcs for maximum line buffer allocation.
 	 */
-	if (radeon_crtc->base.enabled && mode) {
+	if (radeon_crtc->base.legacy.enabled && mode) {
 		if (other_mode) {
 			tmp = 0; /* 1/2 */
 			buffer_alloc = 1;
@@ -1989,7 +1989,7 @@ static u32 dce6_line_buffer_adjust(struct radeon_device *rdev,
 		udelay(1);
 	}
 
-	if (radeon_crtc->base.enabled && mode) {
+	if (radeon_crtc->base.legacy.enabled && mode) {
 		switch (tmp) {
 		case 0:
 		default:
@@ -2275,7 +2275,7 @@ static void dce6_program_watermarks(struct radeon_device *rdev,
 					 struct radeon_crtc *radeon_crtc,
 					 u32 lb_size, u32 num_heads)
 {
-	struct drm_display_mode *mode = &radeon_crtc->base.mode;
+	struct drm_display_mode *mode = &radeon_crtc->base.legacy.mode;
 	struct dce6_wm_params wm_low, wm_high;
 	u32 dram_channels;
 	u32 active_time;
@@ -2287,7 +2287,7 @@ static void dce6_program_watermarks(struct radeon_device *rdev,
 	u32 tmp, arb_control3;
 	fixed20_12 a, b, c;
 
-	if (radeon_crtc->base.enabled && num_heads && mode) {
+	if (radeon_crtc->base.legacy.enabled && num_heads && mode) {
 		active_time = (u32) div_u64((u64)mode->crtc_hdisplay * 1000000,
 					    (u32)mode->clock);
 		line_time = (u32) div_u64((u64)mode->crtc_htotal * 1000000,
@@ -2450,12 +2450,12 @@ void dce6_bandwidth_update(struct radeon_device *rdev)
 	radeon_update_display_priority(rdev);
 
 	for (i = 0; i < rdev->num_crtc; i++) {
-		if (rdev->mode_info.crtcs[i]->base.enabled)
+		if (rdev->mode_info.crtcs[i]->base.legacy.enabled)
 			num_heads++;
 	}
 	for (i = 0; i < rdev->num_crtc; i += 2) {
-		mode0 = &rdev->mode_info.crtcs[i]->base.mode;
-		mode1 = &rdev->mode_info.crtcs[i+1]->base.mode;
+		mode0 = &rdev->mode_info.crtcs[i]->base.legacy.mode;
+		mode1 = &rdev->mode_info.crtcs[i + 1]->base.legacy.mode;
 		lb_size = dce6_line_buffer_adjust(rdev, rdev->mode_info.crtcs[i], mode0, mode1);
 		dce6_program_watermarks(rdev, rdev->mode_info.crtcs[i], lb_size, num_heads);
 		lb_size = dce6_line_buffer_adjust(rdev, rdev->mode_info.crtcs[i+1], mode1, mode0);

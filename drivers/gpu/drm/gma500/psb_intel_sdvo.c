@@ -1726,8 +1726,10 @@ set_value:
 done:
 	if (psb_intel_sdvo->base.base.crtc) {
 		struct drm_crtc *crtc = psb_intel_sdvo->base.base.crtc;
-		drm_crtc_helper_set_mode(crtc, &crtc->mode, crtc->x,
-					 crtc->y, crtc->primary->legacy.fb);
+		drm_crtc_helper_set_mode(crtc, &crtc->legacy.mode,
+					 crtc->legacy.x,
+					 crtc->legacy.y,
+					 crtc->primary->legacy.fb);
 	}
 
 	return 0;
@@ -1755,7 +1757,7 @@ static void psb_intel_sdvo_restore(struct drm_connector *connector)
 	/* Force a full mode set on the crtc. We're supposed to have the
 	   mode_config lock already. */
 	if (connector->status == connector_status_connected)
-		drm_crtc_helper_set_mode(crtc, &crtc->mode, crtc->x, crtc->y,
+		drm_crtc_helper_set_mode(crtc, &crtc->legacy.mode, crtc->legacy.x, crtc->legacy.y,
 					 NULL);
 }
 

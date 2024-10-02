@@ -154,24 +154,31 @@ static void imx_lcdc_update_hw_registers(struct drm_simple_display_pipe *pipe,
 		return;
 
 	/* Disable PER clock to make register write possible */
-	if (old_state && old_state->crtc && old_state->crtc->enabled)
+	if (old_state && old_state->crtc && old_state->crtc->legacy.enabled)
 		clk_disable_unprepare(lcdc->clk_per);
 
 	/* Framesize */
-	framesize = FIELD_PREP(IMX21LCDC_LSR_XMAX, crtc->mode.hdisplay >> 4) |
-		FIELD_PREP(IMX21LCDC_LSR_YMAX, crtc->mode.vdisplay);
+	framesize = FIELD_PREP(IMX21LCDC_LSR_XMAX,
+		               crtc->legacy.mode.hdisplay >> 4) |
+		FIELD_PREP(IMX21LCDC_LSR_YMAX, crtc->legacy.mode.vdisplay);
 	writel(framesize, lcdc->base + IMX21LCDC_LSR);
 
 	/* HSYNC */
-	lhcr = FIELD_PREP(IMX21LCDC_LHCR_HFPORCH, crtc->mode.hsync_start - crtc->mode.hdisplay - 1) |
-		FIELD_PREP(IMX21LCDC_LHCR_HWIDTH, crtc->mode.hsync_end - crtc->mode.hsync_start - 1) |
-		FIELD_PREP(IMX21LCDC_LHCR_HBPORCH, crtc->mode.htotal - crtc->mode.hsync_end - 3);
+	lhcr = FIELD_PREP(IMX21LCDC_LHCR_HFPORCH,
+		          crtc->legacy.mode.hsync_start - crtc->legacy.mode.hdisplay - 1) |
+		FIELD_PREP(IMX21LCDC_LHCR_HWIDTH,
+		           crtc->legacy.mode.hsync_end - crtc->legacy.mode.hsync_start - 1) |
+		FIELD_PREP(IMX21LCDC_LHCR_HBPORCH,
+		           crtc->legacy.mode.htotal - crtc->legacy.mode.hsync_end - 3);
 	writel(lhcr, lcdc->base + IMX21LCDC_LHCR);
 
 	/* VSYNC */
-	lvcr = FIELD_PREP(IMX21LCDC_LVCR_VFPORCH, crtc->mode.vsync_start - crtc->mode.vdisplay) |
-		FIELD_PREP(IMX21LCDC_LVCR_VWIDTH, crtc->mode.vsync_end - crtc->mode.vsync_start) |
-		FIELD_PREP(IMX21LCDC_LVCR_VBPORCH, crtc->mode.vtotal - crtc->mode.vsync_end);
+	lvcr = FIELD_PREP(IMX21LCDC_LVCR_VFPORCH,
+		          crtc->legacy.mode.vsync_start - crtc->legacy.mode.vdisplay) |
+		FIELD_PREP(IMX21LCDC_LVCR_VWIDTH,
+		           crtc->legacy.mode.vsync_end - crtc->legacy.mode.vsync_start) |
+		FIELD_PREP(IMX21LCDC_LVCR_VBPORCH,
+		           crtc->legacy.mode.vtotal - crtc->legacy.mode.vsync_end);
 	writel(lvcr, lcdc->base + IMX21LCDC_LVCR);
 
 	lpcr = readl(lcdc->base + IMX21LCDC_LPCR);
@@ -183,7 +190,7 @@ static void imx_lcdc_update_hw_registers(struct drm_simple_display_pipe *pipe,
 	writel(new_state->fb->pitches[0] / 4, lcdc->base + IMX21LCDC_LVPWR);
 
 	/* Enable PER clock */
-	if (new_state->crtc->enabled)
+	if (new_state->crtc->legacy.enabled)
 		clk_prepare_enable(lcdc->clk_per);
 }
 
@@ -195,7 +202,7 @@ static void imx_lcdc_pipe_enable(struct drm_simple_display_pipe *pipe,
 	int clk_div;
 	int bpp;
 	struct imx_lcdc *lcdc = imx_lcdc_from_drmdev(pipe->crtc.dev);
-	struct drm_display_mode *mode = &pipe->crtc.mode;
+	struct drm_display_mode *mode = &pipe->crtc.legacy.mode;
 	struct drm_display_info *disp_info = &lcdc->connector->display_info;
 	const int hsync_pol = (mode->flags & DRM_MODE_FLAG_PHSYNC) ? 0 : 1;
 	const int vsync_pol = (mode->flags & DRM_MODE_FLAG_PVSYNC) ? 0 : 1;
@@ -257,7 +264,7 @@ static void imx_lcdc_pipe_disable(struct drm_simple_display_pipe *pipe)
 	clk_disable_unprepare(lcdc->clk_ahb);
 	clk_disable_unprepare(lcdc->clk_ipg);
 
-	if (pipe->crtc.enabled)
+	if (pipe->crtc.legacy.enabled)
 		clk_disable_unprepare(lcdc->clk_per);
 
 	spin_lock_irq(&lcdc->drm.event_lock);

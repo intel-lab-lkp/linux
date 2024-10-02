@@ -277,7 +277,7 @@ static void sti_cursor_atomic_update(struct drm_plane *drm_plane,
 	if (!crtc || !fb)
 		return;
 
-	mode = &crtc->mode;
+	mode = &crtc->legacy.mode;
 	dst_x = newstate->crtc_x;
 	dst_y = newstate->crtc_y;
 

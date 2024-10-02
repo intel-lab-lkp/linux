@@ -145,7 +145,7 @@ int drm_fb_helper_debug_enter(struct fb_info *info)
 	list_for_each_entry(helper, &kernel_fb_helper_list, kernel_fb_list) {
 		mutex_lock(&helper->client.modeset_mutex);
 		drm_client_for_each_modeset(mode_set, &helper->client) {
-			if (!mode_set->crtc->enabled)
+			if (!mode_set->crtc->legacy.enabled)
 				continue;
 
 			funcs =	mode_set->crtc->helper_private;
@@ -191,7 +191,7 @@ int drm_fb_helper_debug_leave(struct fb_info *info)
 		funcs = crtc->helper_private;
 		fb = crtc->primary->legacy.fb;
 
-		if (!crtc->enabled)
+		if (!crtc->legacy.enabled)
 			continue;
 
 		if (!fb) {
@@ -203,8 +203,10 @@ int drm_fb_helper_debug_leave(struct fb_info *info)
 			continue;
 
 		drm_fb_helper_restore_lut_atomic(mode_set->crtc);
-		funcs->mode_set_base_atomic(mode_set->crtc, fb, crtc->x,
-					    crtc->y, LEAVE_ATOMIC_MODE_SET);
+		funcs->mode_set_base_atomic(mode_set->crtc, fb,
+					    crtc->legacy.x,
+					    crtc->legacy.y,
+					    LEAVE_ATOMIC_MODE_SET);
 	}
 	mutex_unlock(&client->modeset_mutex);
 

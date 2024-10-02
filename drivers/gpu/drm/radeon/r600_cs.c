@@ -892,7 +892,7 @@ int r600_cs_common_vline_parse(struct radeon_cs_parser *p,
 	radeon_crtc = to_radeon_crtc(crtc);
 	crtc_id = radeon_crtc->crtc_id;
 
-	if (!crtc->enabled) {
+	if (!crtc->legacy.enabled) {
 		/* CRTC isn't enabled - we need to nop out the WAIT_REG_MEM */
 		ib[h_idx + 2] = PACKET2(0);
 		ib[h_idx + 3] = PACKET2(0);

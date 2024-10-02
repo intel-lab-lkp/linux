@@ -337,12 +337,12 @@ static void qxl_crtc_update_monitors_config(struct drm_crtc *crtc,
 	head.surface_id = 0;
 	oldcount = qdev->monitors_config->count;
 	if (crtc->state->active) {
-		struct drm_display_mode *mode = &crtc->mode;
+		struct drm_display_mode *mode = &crtc->legacy.mode;
 
 		head.width = mode->hdisplay;
 		head.height = mode->vdisplay;
-		head.x = crtc->x;
-		head.y = crtc->y;
+		head.x = crtc->legacy.x;
+		head.y = crtc->legacy.y;
 		if (qdev->monitors_config->count < i + 1)
 			qdev->monitors_config->count = i + 1;
 		if (qdev->primary_bo == qdev->dumb_shadow_bo)

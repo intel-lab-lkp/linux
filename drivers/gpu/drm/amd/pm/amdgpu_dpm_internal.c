@@ -58,7 +58,7 @@ u32 amdgpu_dpm_get_vblank_time(struct amdgpu_device *adev)
 	if (adev->mode_info.num_crtc && adev->mode_info.mode_config_initialized) {
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			amdgpu_crtc = to_amdgpu_crtc(crtc);
-			if (crtc->enabled && amdgpu_crtc->enabled && amdgpu_crtc->hw_mode.clock) {
+			if (crtc->legacy.enabled && amdgpu_crtc->enabled && amdgpu_crtc->hw_mode.clock) {
 				vblank_in_pixels =
 					amdgpu_crtc->hw_mode.crtc_htotal *
 					(amdgpu_crtc->hw_mode.crtc_vblank_end -
@@ -84,7 +84,7 @@ u32 amdgpu_dpm_get_vrefresh(struct amdgpu_device *adev)
 	if (adev->mode_info.num_crtc && adev->mode_info.mode_config_initialized) {
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			amdgpu_crtc = to_amdgpu_crtc(crtc);
-			if (crtc->enabled && amdgpu_crtc->enabled && amdgpu_crtc->hw_mode.clock) {
+			if (crtc->legacy.enabled && amdgpu_crtc->enabled && amdgpu_crtc->hw_mode.clock) {
 				vrefresh = drm_mode_vrefresh(&amdgpu_crtc->hw_mode);
 				break;
 			}

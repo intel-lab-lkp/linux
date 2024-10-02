@@ -842,8 +842,8 @@ static void mdp5_crtc_atomic_flush(struct drm_crtc *crtc,
 static void get_roi(struct drm_crtc *crtc, uint32_t *roi_w, uint32_t *roi_h)
 {
 	struct mdp5_crtc *mdp5_crtc = to_mdp5_crtc(crtc);
-	uint32_t xres = crtc->mode.hdisplay;
-	uint32_t yres = crtc->mode.vdisplay;
+	uint32_t xres = crtc->legacy.mode.hdisplay;
+	uint32_t yres = crtc->legacy.mode.vdisplay;
 
 	/*
 	 * Cursor Region Of Interest (ROI) is a plane read from cursor

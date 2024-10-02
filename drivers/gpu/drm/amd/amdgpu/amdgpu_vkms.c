@@ -70,7 +70,7 @@ static int amdgpu_vkms_enable_vblank(struct drm_crtc *crtc)
 	struct amdgpu_vkms_output *out = drm_crtc_to_amdgpu_vkms_output(crtc);
 	struct amdgpu_crtc *amdgpu_crtc = to_amdgpu_crtc(crtc);
 
-	drm_calc_timestamping_constants(crtc, &crtc->mode);
+	drm_calc_timestamping_constants(crtc, &crtc->legacy.mode);
 
 	out->period_ns = ktime_set(0, vblank->framedur_ns);
 	hrtimer_start(&amdgpu_crtc->vblank_timer, out->period_ns, HRTIMER_MODE_REL);

@@ -755,7 +755,7 @@ static void sti_gdp_atomic_update(struct drm_plane *drm_plane,
 		clk_prepare_enable(gdp->clk_pix);
 	}
 
-	mode = &crtc->mode;
+	mode = &crtc->legacy.mode;
 	dst_x = newstate->crtc_x;
 	dst_y = newstate->crtc_y;
 	dst_w = clamp_val(newstate->crtc_w, 0, mode->hdisplay - dst_x);

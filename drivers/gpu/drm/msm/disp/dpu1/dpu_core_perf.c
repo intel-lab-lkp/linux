@@ -170,7 +170,7 @@ int dpu_core_perf_crtc_check(struct drm_crtc *crtc,
 	curr_client_type = dpu_crtc_get_client_type(crtc);
 
 	drm_for_each_crtc(tmp_crtc, crtc->dev) {
-		if (tmp_crtc->enabled &&
+		if (tmp_crtc->legacy.enabled &&
 		    dpu_crtc_get_client_type(tmp_crtc) == curr_client_type &&
 		    tmp_crtc != crtc) {
 			struct dpu_crtc_state *tmp_cstate =
@@ -219,7 +219,7 @@ static int _dpu_core_perf_crtc_update_bus(struct dpu_kms *kms,
 		return 0;
 
 	drm_for_each_crtc(tmp_crtc, crtc->dev) {
-		if (tmp_crtc->enabled &&
+		if (tmp_crtc->legacy.enabled &&
 			curr_client_type ==
 				dpu_crtc_get_client_type(tmp_crtc)) {
 			dpu_cstate = to_dpu_crtc_state(tmp_crtc->state);
@@ -291,7 +291,7 @@ static u64 _dpu_core_perf_get_core_clk_rate(struct dpu_kms *kms)
 
 	clk_rate = 0;
 	drm_for_each_crtc(crtc, kms->dev) {
-		if (crtc->enabled) {
+		if (crtc->legacy.enabled) {
 			dpu_cstate = to_dpu_crtc_state(crtc->state);
 			clk_rate = max(dpu_cstate->new_perf.core_clk_rate,
 							clk_rate);
@@ -323,12 +323,13 @@ int dpu_core_perf_crtc_update(struct drm_crtc *crtc,
 	dpu_cstate = to_dpu_crtc_state(crtc->state);
 
 	DRM_DEBUG_ATOMIC("crtc:%d enabled:%d core_clk:%llu\n",
-			crtc->base.id, crtc->enabled, kms->perf.core_clk_rate);
+			crtc->base.id, crtc->legacy.enabled,
+			kms->perf.core_clk_rate);
 
 	old = &dpu_crtc->cur_perf;
 	new = &dpu_cstate->new_perf;
 
-	if (crtc->enabled) {
+	if (crtc->legacy.enabled) {
 		/*
 		 * cases for bus bandwidth update.
 		 * 1. new bandwidth vote - "ab or ib vote" is higher
@@ -361,7 +362,8 @@ int dpu_core_perf_crtc_update(struct drm_crtc *crtc,
 	}
 
 	trace_dpu_perf_crtc_update(crtc->base.id, new->bw_ctl,
-		new->core_clk_rate, !crtc->enabled, update_bus, update_clk);
+		new->core_clk_rate, !crtc->legacy.enabled, update_bus,
+		update_clk);
 
 	if (update_bus) {
 		ret = _dpu_core_perf_crtc_update_bus(kms, crtc);
@@ -381,7 +383,9 @@ int dpu_core_perf_crtc_update(struct drm_crtc *crtc,
 
 		DRM_DEBUG_ATOMIC("clk:%llu\n", clk_rate);
 
-		trace_dpu_core_perf_update_clk(kms->dev, !crtc->enabled, clk_rate);
+		trace_dpu_core_perf_update_clk(kms->dev,
+					       !crtc->legacy.enabled,
+					       clk_rate);
 
 		clk_rate = min(clk_rate, kms->perf.max_core_clk_rate);
 		ret = dev_pm_opp_set_rate(&kms->pdev->dev, clk_rate);

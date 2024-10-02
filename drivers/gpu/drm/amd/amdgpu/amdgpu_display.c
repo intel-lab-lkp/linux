@@ -328,7 +328,7 @@ int amdgpu_display_crtc_set_config(struct drm_mode_set *set,
 	ret = drm_crtc_helper_set_config(set, ctx);
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head)
-		if (crtc->enabled)
+		if (crtc->legacy.enabled)
 			active = true;
 
 	pm_runtime_mark_last_busy(dev->dev);
@@ -1466,9 +1466,9 @@ bool amdgpu_display_crtc_scaling_mode_fixup(struct drm_crtc *crtc,
 		memcpy(&amdgpu_crtc->native_mode,
 		       &amdgpu_encoder->native_mode,
 		       sizeof(struct drm_display_mode));
-		src_v = crtc->mode.vdisplay;
+		src_v = crtc->legacy.mode.vdisplay;
 		dst_v = amdgpu_crtc->native_mode.vdisplay;
-		src_h = crtc->mode.hdisplay;
+		src_h = crtc->legacy.mode.hdisplay;
 		dst_h = amdgpu_crtc->native_mode.hdisplay;
 
 		/* fix up for overscan on hdmi */
@@ -1486,10 +1486,10 @@ bool amdgpu_display_crtc_scaling_mode_fixup(struct drm_crtc *crtc,
 			else
 				amdgpu_crtc->v_border = (mode->vdisplay >> 5) + 16;
 			amdgpu_crtc->rmx_type = RMX_FULL;
-			src_v = crtc->mode.vdisplay;
-			dst_v = crtc->mode.vdisplay - (amdgpu_crtc->v_border * 2);
-			src_h = crtc->mode.hdisplay;
-			dst_h = crtc->mode.hdisplay - (amdgpu_crtc->h_border * 2);
+			src_v = crtc->legacy.mode.vdisplay;
+			dst_v = crtc->legacy.mode.vdisplay - (amdgpu_crtc->v_border * 2);
+			src_h = crtc->legacy.mode.hdisplay;
+			dst_h = crtc->legacy.mode.hdisplay - (amdgpu_crtc->h_border * 2);
 		}
 	}
 	if (amdgpu_crtc->rmx_type != RMX_OFF) {

@@ -1467,8 +1467,9 @@ retry:
 						       state->src_h,
 						       fb);
 	} else {
-		ret = drm_crtc_check_viewport(crtc, crtc->x, crtc->y,
-					      &crtc->mode, fb);
+		ret = drm_crtc_check_viewport(crtc, crtc->legacy.x,
+					      crtc->legacy.y,
+					      &crtc->legacy.mode, fb);
 	}
 	if (ret)
 		goto out;

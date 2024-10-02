@@ -288,7 +288,7 @@ vmw_vkms_enable_vblank(struct drm_crtc *crtc)
 	if (!vmw->vkms_enabled)
 		return -EINVAL;
 
-	drm_calc_timestamping_constants(crtc, &crtc->mode);
+	drm_calc_timestamping_constants(crtc, &crtc->legacy.mode);
 
 	hrtimer_init(&du->vkms.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	du->vkms.timer.function = &vmw_vkms_vblank_simulate;
