@@ -38,7 +38,7 @@ static int panfrost_devfreq_target(struct device *dev, unsigned long *freq,
 		return PTR_ERR(opp);
 	dev_pm_opp_put(opp);
 
-	err =  dev_pm_opp_set_rate(dev, *freq);
+	err = dev_pm_opp_set_rate(dev, *freq);
 	if (!err)
 		ptdev->pfdevfreq.current_frequency = *freq;
 
@@ -176,6 +176,8 @@ int panfrost_devfreq_init(struct panfrost_device *pfdev)
 	 * frequency hasn't been updated yet, so let's just do an early set.
 	 */
 	pfdevfreq->current_frequency = cur_freq;
+
+	dev_pm_opp_put(opp);
 
 	/*
 	 * Set the recommend OPP this will enable and configure the regulator
