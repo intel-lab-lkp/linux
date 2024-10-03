@@ -31,11 +31,20 @@
 #include <linux/input.h>
 #include <linux/leds.h>
 #include <linux/workqueue.h>
+#include <linux/platform_profile.h>
 
 #include "hid-ids.h"
 
 /* Userspace expects F20 for mic-mute KEY_MICMUTE does not work */
 #define LENOVO_KEY_MICMUTE KEY_F20
+
+/* HID raw events for ThinkPas X12 Tabs*/
+#define TP_X12_RAW_HOTKEY_FN_F4		0x000200
+#define TP_X12_RAW_HOTKEY_FN_F8		0x100038
+#define TP_X12_RAW_HOTKEY_FN_F10	0x080000
+#define TP_X12_RAW_HOTKEY_FN_F12	0x040000
+#define TP_X12_RAW_HOTKEY_FN_SPACE	0x100018
+#define TP_X12_RAW_HOTKEY_FN_F7		0x080013
 
 struct lenovo_drvdata {
 	u8 led_report[3]; /* Must be first for proper alignment */
@@ -70,6 +79,14 @@ struct lenovo_drvdata {
 
 #define TP10UBKBD_LED_OFF		1
 #define TP10UBKBD_LED_ON		2
+
+/* Function to report raw_events as key events*/
+static inline void report_key_event(struct input_dev *input, int keycode)
+{
+	input_report_key(input, keycode, 1);
+	input_report_key(input, keycode, 0);
+	input_sync(input);
+}
 
 static int lenovo_led_set_tp10ubkbd(struct hid_device *hdev, u8 led_code,
 				    enum led_brightness value)
@@ -472,6 +489,8 @@ static int lenovo_input_mapping(struct hid_device *hdev,
 	case USB_DEVICE_ID_LENOVO_TP10UBKBD:
 		return lenovo_input_mapping_tp10_ultrabook_kbd(hdev, hi, field,
 							       usage, bit, max);
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
 	case USB_DEVICE_ID_LENOVO_X1_TAB:
 		return lenovo_input_mapping_x1_tab_kbd(hdev, hi, field, usage, bit, max);
 	default:
@@ -581,6 +600,8 @@ static ssize_t attr_fn_lock_store(struct device *dev,
 	case USB_DEVICE_ID_LENOVO_TPIIBTKBD:
 		lenovo_features_set_cptkbd(hdev);
 		break;
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
 	case USB_DEVICE_ID_LENOVO_TP10UBKBD:
 	case USB_DEVICE_ID_LENOVO_X1_TAB:
 		ret = lenovo_led_set_tp10ubkbd(hdev, TP10UBKBD_FN_LOCK_LED, value);
@@ -678,9 +699,63 @@ static const struct attribute_group lenovo_attr_group_cptkbd = {
 	.attrs = lenovo_attributes_cptkbd,
 };
 
+/* Function to handle Lenovo Thinkpad TAB X12's HID raw inputs for fn keys*/
+static int lenovo_raw_event_TP_X12_tab(struct hid_device *hdev, u32 raw_data)
+{
+	struct hid_input *hidinput;
+	struct input_dev *input = NULL;
+
+	/* Iterate through the associated inputs to find the correct input device */
+	list_for_each_entry(hidinput, &hdev->inputs, list) {
+		input = hidinput->input;
+		if (input)
+			break;  /* Use the first valid input device */
+	}
+
+	switch (raw_data) {
+		/* fn-F20 being used here for MIC mute*/
+	case TP_X12_RAW_HOTKEY_FN_F4:
+		report_key_event(input, LENOVO_KEY_MICMUTE);
+		return 1;
+		/* Power-mode or Airplane mode will be called based on the device*/
+	case TP_X12_RAW_HOTKEY_FN_F8:
+		/*
+		 * TP X12 TAB uses Fn-F8 calls Airplanemode
+		 * Whereas TP X12 TAB2 uses Fn-F8 for toggling
+		 * Power modes
+		 */
+		(hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB) ?
+			report_key_event(input, KEY_RFKILL) :
+			platform_profile_cycle();
+		return 1;
+	case TP_X12_RAW_HOTKEY_FN_F10:
+		/* TAB1 has PICKUP Phone and TAB2 use Snipping tool*/
+		(hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB) ?
+		report_key_event(input, KEY_PICKUP_PHONE) :
+		report_key_event(input, KEY_SELECTIVE_SCREENSHOT);
+		return 1;
+	case TP_X12_RAW_HOTKEY_FN_F12:
+		/* BookMarks/STAR key*/
+		report_key_event(input, KEY_BOOKMARKS);
+		return 1;
+	case TP_X12_RAW_HOTKEY_FN_SPACE:
+		/* Keyboard LED backlight toggle*/
+		report_key_event(input, KEY_KBDILLUMTOGGLE);
+		return 1;
+	case TP_X12_RAW_HOTKEY_FN_F7:
+		/* DISPLAY switching when connecting to external monitors*/
+		report_key_event(input, KEY_SWITCHVIDEOMODE);
+		return 1;
+	default:
+		break;
+	}
+	return 0;
+}
+
 static int lenovo_raw_event(struct hid_device *hdev,
 			struct hid_report *report, u8 *data, int size)
 {
+	u32 raw_data;
 	/*
 	 * Compact USB keyboard's Fn-F12 report holds down many other keys, and
 	 * its own key is outside the usage page range. Remove extra
@@ -695,6 +770,32 @@ static int lenovo_raw_event(struct hid_device *hdev,
 		data[2] = 0x01;
 	}
 
+	/*
+	 * Lenovo TP X12 Tab KBD's Fn+XX is HID raw data defined. Report ID is 0x03
+	 * For eg: Raw data received for MIC mute is 0x03000200.
+	 */
+	if (unlikely((hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB
+			|| hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB2)
+			&& size >= 3)) {
+		/*
+		 * data[0] is report ID and is same for all 4byte raw_events from this KBD
+		 * for eg: Fn+F8 0x03,0x10,0x00,0x38
+		 * report ID here for most of the keys are 0x03.
+		 */
+		if (report->id == 0x03)
+			raw_data = (data[1] << 16) | (data[2] << 8) | data[3];
+		/*
+		 * For some Keys the raw data is 6 bytes long but the last 3 bytes
+		 * will be always Zeros. There is no report-id documented.
+		 * For eg: for Fn+F7: 0x08,0x00,0x13,0x00,0x00,0x00.
+		 * In other words the last 3 bytes are dummy for now.
+		 */
+		else
+			raw_data = (data[0] << 16) | (data[1] << 8) | data[2];
+
+		/* Calling function to generate Key events */
+		lenovo_raw_event_TP_X12_tab(hdev, raw_data);
+	}
 	return 0;
 }
 
@@ -774,6 +875,8 @@ static int lenovo_event(struct hid_device *hdev, struct hid_field *field,
 	case USB_DEVICE_ID_LENOVO_TPIIUSBKBD:
 	case USB_DEVICE_ID_LENOVO_TPIIBTKBD:
 		return lenovo_event_cptkbd(hdev, field, usage, value);
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
 	case USB_DEVICE_ID_LENOVO_TP10UBKBD:
 	case USB_DEVICE_ID_LENOVO_X1_TAB:
 		return lenovo_event_tp10ubkbd(hdev, field, usage, value);
@@ -1054,6 +1157,8 @@ static int lenovo_led_brightness_set(struct led_classdev *led_cdev,
 	case USB_DEVICE_ID_LENOVO_TPKBD:
 		lenovo_led_set_tpkbd(hdev);
 		break;
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
 	case USB_DEVICE_ID_LENOVO_TP10UBKBD:
 	case USB_DEVICE_ID_LENOVO_X1_TAB:
 		ret = lenovo_led_set_tp10ubkbd(hdev, tp10ubkbd_led[led_nr], value);
@@ -1239,8 +1344,15 @@ static int lenovo_probe_tp10ubkbd(struct hid_device *hdev)
 	 * We cannot read the state, only set it, so we force it to on here
 	 * (which should be a no-op) to make sure that our state matches the
 	 * keyboard's FN-lock state. This is the same as what Windows does.
+	 *
+	 * For X12 TAB and TAB2, the default windows behavious Fn-lock Off.
+	 * Adding additional check to ensure the behaviour in case of
+	 * Thinkpad X12 Tabs.
 	 */
-	data->fn_lock = true;
+
+	data->fn_lock = !(hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB ||
+			hdev->product == USB_DEVICE_ID_LENOVO_X12_TAB2);
+
 	lenovo_led_set_tp10ubkbd(hdev, TP10UBKBD_FN_LOCK_LED, data->fn_lock);
 
 	ret = sysfs_create_group(&hdev->dev.kobj, &lenovo_attr_group_tp10ubkbd);
@@ -1284,6 +1396,8 @@ static int lenovo_probe(struct hid_device *hdev,
 	case USB_DEVICE_ID_LENOVO_TPIIBTKBD:
 		ret = lenovo_probe_cptkbd(hdev);
 		break;
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
 	case USB_DEVICE_ID_LENOVO_TP10UBKBD:
 	case USB_DEVICE_ID_LENOVO_X1_TAB:
 		ret = lenovo_probe_tp10ubkbd(hdev);
@@ -1370,6 +1484,8 @@ static void lenovo_remove(struct hid_device *hdev)
 	case USB_DEVICE_ID_LENOVO_TPIIBTKBD:
 		lenovo_remove_cptkbd(hdev);
 		break;
+	case USB_DEVICE_ID_LENOVO_X12_TAB:
+	case USB_DEVICE_ID_LENOVO_X12_TAB2:
 	case USB_DEVICE_ID_LENOVO_TP10UBKBD:
 	case USB_DEVICE_ID_LENOVO_X1_TAB:
 		lenovo_remove_tp10ubkbd(hdev);
@@ -1421,6 +1537,10 @@ static const struct hid_device_id lenovo_devices[] = {
 	 */
 	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
 		     USB_VENDOR_ID_LENOVO, USB_DEVICE_ID_LENOVO_X1_TAB) },
+	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
+		     USB_VENDOR_ID_LENOVO, USB_DEVICE_ID_LENOVO_X12_TAB) },
+	{ HID_DEVICE(BUS_USB, HID_GROUP_GENERIC,
+		     USB_VENDOR_ID_LENOVO, USB_DEVICE_ID_LENOVO_X12_TAB2) },
 	{ }
 };
 
