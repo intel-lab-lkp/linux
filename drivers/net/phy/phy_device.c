@@ -3411,6 +3411,11 @@ static int of_phy_leds(struct phy_device *phydev)
 	struct device_node *leds;
 	int err;
 
+	/* Skip LED registration if we are Generic PHY */
+	if (phy_driver_is_genphy(phydev) ||
+	    phy_driver_is_genphy_10g(phydev))
+		return 0;
+
 	if (!IS_ENABLED(CONFIG_OF_MDIO))
 		return 0;
 
