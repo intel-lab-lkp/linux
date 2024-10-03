@@ -4955,6 +4955,7 @@ static int igc_sw_init(struct igc_adapter *adapter)
 void igc_up(struct igc_adapter *adapter)
 {
 	struct igc_hw *hw = &adapter->hw;
+	struct napi_struct *napi;
 	int i = 0;
 
 	/* hardware has been reset, we need to reload some things */
@@ -4962,8 +4963,17 @@ void igc_up(struct igc_adapter *adapter)
 
 	clear_bit(__IGC_DOWN, &adapter->state);
 
-	for (i = 0; i < adapter->num_q_vectors; i++)
-		napi_enable(&adapter->q_vector[i]->napi);
+	for (i = 0; i < adapter->num_q_vectors; i++) {
+		napi = &adapter->q_vector[i]->napi;
+		napi_enable(napi);
+		/* igc only supports combined queues, so link each NAPI to both
+		 * TX and RX
+		 */
+		netif_queue_set_napi(adapter->netdev, i, NETDEV_QUEUE_TYPE_RX,
+				     napi);
+		netif_queue_set_napi(adapter->netdev, i, NETDEV_QUEUE_TYPE_TX,
+				     napi);
+	}
 
 	if (adapter->msix_entries)
 		igc_configure_msix(adapter);
@@ -5192,6 +5202,10 @@ void igc_down(struct igc_adapter *adapter)
 	for (i = 0; i < adapter->num_q_vectors; i++) {
 		if (adapter->q_vector[i]) {
 			napi_synchronize(&adapter->q_vector[i]->napi);
+			netif_queue_set_napi(netdev, i, NETDEV_QUEUE_TYPE_RX,
+					     NULL);
+			netif_queue_set_napi(netdev, i, NETDEV_QUEUE_TYPE_TX,
+					     NULL);
 			napi_disable(&adapter->q_vector[i]->napi);
 		}
 	}
@@ -6021,6 +6035,7 @@ static int __igc_open(struct net_device *netdev, bool resuming)
 	struct igc_adapter *adapter = netdev_priv(netdev);
 	struct pci_dev *pdev = adapter->pdev;
 	struct igc_hw *hw = &adapter->hw;
+	struct napi_struct *napi;
 	int err = 0;
 	int i = 0;
 
@@ -6056,8 +6071,15 @@ static int __igc_open(struct net_device *netdev, bool resuming)
 
 	clear_bit(__IGC_DOWN, &adapter->state);
 
-	for (i = 0; i < adapter->num_q_vectors; i++)
-		napi_enable(&adapter->q_vector[i]->napi);
+	for (i = 0; i < adapter->num_q_vectors; i++) {
+		napi = &adapter->q_vector[i]->napi;
+		napi_enable(napi);
+		/* igc only supports combined queues, so link each NAPI to both
+		 * TX and RX
+		 */
+		netif_queue_set_napi(netdev, i, NETDEV_QUEUE_TYPE_RX, napi);
+		netif_queue_set_napi(netdev, i, NETDEV_QUEUE_TYPE_TX, napi);
+	}
 
 	/* Clear any pending interrupts. */
 	rd32(IGC_ICR);
