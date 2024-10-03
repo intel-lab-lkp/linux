@@ -12401,6 +12401,18 @@ S:	Maintained
 Q:	https://patchwork.kernel.org/project/linux-kselftest/list/
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/shuah/linux-kselftest.git
 F:	Documentation/dev-tools/kselftest*
+F:	tools/testing/selftests/kselftest/
+F:	tools/testing/selftests/lib/
+F:	tools/testing/selftests/lib.mk
+F:	tools/testing/selftests/Makefile
+F:	tools/testing/selftests/*.sh
+F:	tools/testing/selftests/*.h
+
+KERNEL SELFTEST TESTS
+M:	Shuah Khan <shuah@kernel.org>
+M:	Shuah Khan <skhan@linuxfoundation.org>
+L:	linux-kselftest-all@vger.kernel.org
+S:	Maintained
 F:	tools/testing/selftests/
 
 KERNEL SMB3 SERVER (KSMBD)
