@@ -334,6 +334,9 @@ static int siw_tcp_sendpages(struct socket *s, struct page **page, int offset,
 		bvec_set_page(&bvec, page[i], bytes, offset);
 		iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, &bvec, 1, size);
 
+		if (!sendpage_ok(page[i]))
+			msg.msg_flags &= ~MSG_SPLICE_PAGES;
+
 try_page_again:
 		lock_sock(sk);
 		rv = tcp_sendmsg_locked(sk, &msg, size);
