@@ -22,8 +22,6 @@ int xe_ggtt_node_insert_balloon(struct xe_ggtt_node *node,
 void xe_ggtt_node_remove_balloon(struct xe_ggtt_node *node);
 
 int xe_ggtt_node_insert(struct xe_ggtt_node *node, u32 size, u32 align);
-int xe_ggtt_node_insert_locked(struct xe_ggtt_node *node,
-			       u32 size, u32 align, u32 mm_flags);
 void xe_ggtt_node_remove(struct xe_ggtt_node *node, bool invalidate);
 bool xe_ggtt_node_allocated(const struct xe_ggtt_node *node);
 void xe_ggtt_map_bo_unlocked(struct xe_ggtt *ggtt, struct xe_bo *bo);
@@ -47,9 +45,13 @@ static inline void xe_ggtt_might_lock(struct xe_ggtt *ggtt)
 void xe_ggtt_might_lock(struct xe_ggtt *ggtt);
 #endif
 
-u64 xe_ggtt_read_pte(struct xe_ggtt *ggtt, u64 offset);
-
+/* Display specific function calls, don't use outside of xe/display */
+int xe_ggtt_lock_interruptible(struct xe_ggtt *ggtt);
+void xe_ggtt_unlock(struct xe_ggtt *ggtt);
+int xe_ggtt_node_insert_locked(struct xe_ggtt_node *node,
+			       u32 size, u32 align, u32 mm_flags);
 xe_ggtt_pte_encode_bo_fn xe_ggtt_get_encode_pte_bo_fn(struct xe_ggtt *ggtt);
+u64 xe_ggtt_read_pte(struct xe_ggtt *ggtt, u64 offset);
 void xe_ggtt_write_pte(struct xe_ggtt *ggtt, u64 offset, u64 pte);
 
 #endif

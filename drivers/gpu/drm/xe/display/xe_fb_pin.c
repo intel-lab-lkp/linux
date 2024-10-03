@@ -196,13 +196,13 @@ static int __xe_pin_fb_vma_ggtt(const struct intel_framebuffer *fb,
 	/* TODO: Consider sharing framebuffer mapping?
 	 * embed i915_vma inside intel_framebuffer
 	 */
-	xe_pm_runtime_get_noresume(tile_to_xe(ggtt->tile));
-	ret = mutex_lock_interruptible(&ggtt->lock);
+	xe_pm_runtime_get_noresume(xe);
+	ret = xe_ggtt_lock_interruptible(ggtt);
 	if (ret)
 		goto out;
 
 	align = XE_PAGE_SIZE;
-	if (xe_bo_is_vram(bo) && ggtt->flags & XE_GGTT_FLAGS_64K)
+	if (xe_bo_is_vram(bo) && xe->info.vram_flags & XE_VRAM_FLAGS_NEED64K)
 		align = max_t(u32, align, SZ_64K);
 
 	if (bo->ggtt_node && view->type == I915_GTT_VIEW_NORMAL) {
@@ -259,9 +259,9 @@ static int __xe_pin_fb_vma_ggtt(const struct intel_framebuffer *fb,
 	}
 
 out_unlock:
-	mutex_unlock(&ggtt->lock);
+	xe_ggtt_unlock(ggtt);
 out:
-	xe_pm_runtime_put(tile_to_xe(ggtt->tile));
+	xe_pm_runtime_put(xe);
 	return ret;
 }
 

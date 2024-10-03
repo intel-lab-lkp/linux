@@ -871,6 +871,30 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer 
 }
 
 /**
+ * xe_ggtt_lock_interruptible - Lock GGTT for display updates
+ * @ggtt: &xe_ggtt
+ *
+ * There's no reason to want this outside of display, and that is only
+ * there because moving to here would be a layering violation.
+ */
+int xe_ggtt_lock_interruptible(struct xe_ggtt *ggtt)
+{
+	return mutex_lock_interruptible(&ggtt->lock);
+}
+
+/**
+ * xe_ggtt_unlock - Unlock GGTT after display updates
+ * @ggtt: &xe_ggtt
+ *
+ * There's no reason to want this outside of display, and that is only
+ * there because moving to here would be a layering violation.
+ */
+void xe_ggtt_unlock(struct xe_ggtt *ggtt)
+{
+	mutex_unlock(&ggtt->lock);
+}
+
+/**
  * xe_ggtt_read_pte - Read a PTE from the GGTT
  * @ggtt: &xe_ggtt
  * @offset: the offset for which the mapping should be read.
