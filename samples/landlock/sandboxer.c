@@ -16,6 +16,7 @@
 #include <linux/prctl.h>
 #include <linux/socket.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,6 +60,29 @@ static inline int landlock_restrict_self(const int ruleset_fd,
 #define ENV_TCP_CONNECT_NAME "LL_TCP_CONNECT"
 #define ENV_SCOPED_NAME "LL_SCOPED"
 #define ENV_DELIMITER ":"
+
+static int str2num(const char *numstr, __u64 *num_dst)
+{
+	char *endptr = NULL;
+	int err = 1;
+	__u64 num;
+
+	if (*numstr == '\0')
+		goto out;
+
+	errno = 0;
+	num = strtoull(numstr, &endptr, 10);
+	if (errno != 0)
+		goto out;
+
+	if (*endptr != '\0')
+		goto out;
+
+	*num_dst = num;
+	err = 0;
+out:
+	return err;
+}
 
 static int parse_path(char *env_path, const char ***const path_list)
 {
@@ -160,7 +184,6 @@ static int populate_ruleset_net(const char *const env_var, const int ruleset_fd,
 	char *env_port_name, *env_port_name_next, *strport;
 	struct landlock_net_port_attr net_port = {
 		.allowed_access = allowed_access,
-		.port = 0,
 	};
 
 	env_port_name = getenv(env_var);
@@ -171,7 +194,17 @@ static int populate_ruleset_net(const char *const env_var, const int ruleset_fd,
 
 	env_port_name_next = env_port_name;
 	while ((strport = strsep(&env_port_name_next, ENV_DELIMITER))) {
-		net_port.port = atoi(strport);
+		__u64 port;
+
+		if (strcmp(strport, "") == 0)
+			continue;
+
+		if (str2num(strport, &port)) {
+			fprintf(stderr,
+				"Failed to parse port at \"%s\"\n", strport);
+			goto out_free_name;
+		}
+		net_port.port = port;
 		if (landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
 				      &net_port, 0)) {
 			fprintf(stderr,
