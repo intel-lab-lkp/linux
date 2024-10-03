@@ -47,4 +47,7 @@ static inline void xe_ggtt_might_lock(struct xe_ggtt *ggtt)
 void xe_ggtt_might_lock(struct xe_ggtt *ggtt);
 #endif
 
+u64 xe_ggtt_read_pte(struct xe_ggtt *ggtt, u64 offset);
+void xe_ggtt_write_pte(struct xe_ggtt *ggtt, u64 offset, u64 pte);
+
 #endif
