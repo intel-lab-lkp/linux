@@ -95,21 +95,6 @@ MODULE_LICENSE("GPL");
 static u32 busy_phy_map;
 static DEFINE_MUTEX(emac_phy_map_lock);
 
-/* Having stable interface names is a doomed idea. However, it would be nice
- * if we didn't have completely random interface names at boot too :-) It's
- * just a matter of making everybody's life easier. Since we are doing
- * threaded probing, it's a bit harder though. The base idea here is that
- * we make up a list of all emacs in the device-tree before we register the
- * driver. Every emac will then wait for the previous one in the list to
- * initialize before itself. We should also keep that list ordered by
- * cell_index.
- * That list is only 4 entries long, meaning that additional EMACs don't
- * get ordering guarantees unless EMAC_BOOT_LIST_SIZE is increased.
- */
-
-#define EMAC_BOOT_LIST_SIZE	4
-static struct device_node *emac_boot_list[EMAC_BOOT_LIST_SIZE];
-
 /* I don't want to litter system log with timeout errors
  * when we have brain-damaged PHY.
  */
@@ -2330,31 +2315,18 @@ struct emac_depentry {
 #define	EMAC_DEP_RGMII_IDX	2
 #define	EMAC_DEP_TAH_IDX	3
 #define	EMAC_DEP_MDIO_IDX	4
-#define	EMAC_DEP_PREV_IDX	5
-#define	EMAC_DEP_COUNT		6
+#define	EMAC_DEP_COUNT		5
 
 static int emac_check_deps(struct emac_instance *dev,
 			   struct emac_depentry *deps)
 {
 	int i, there = 0;
-	struct device_node *np;
 
 	for (i = 0; i < EMAC_DEP_COUNT; i++) {
 		/* no dependency on that item, allright */
 		if (deps[i].phandle == 0) {
 			there++;
 			continue;
-		}
-		/* special case for blist as the dependency might go away */
-		if (i == EMAC_DEP_PREV_IDX) {
-			np = *(dev->blist - 1);
-			if (np == NULL) {
-				deps[i].phandle = 0;
-				there++;
-				continue;
-			}
-			if (deps[i].node == NULL)
-				deps[i].node = of_node_get(np);
 		}
 		if (deps[i].node == NULL)
 			deps[i].node = of_find_node_by_phandle(deps[i].phandle);
@@ -2397,8 +2369,6 @@ static int emac_wait_deps(struct emac_instance *dev)
 		deps[EMAC_DEP_TAH_IDX].phandle = dev->tah_ph;
 	if (dev->mdio_ph)
 		deps[EMAC_DEP_MDIO_IDX].phandle = dev->mdio_ph;
-	if (dev->blist && dev->blist > emac_boot_list)
-		deps[EMAC_DEP_PREV_IDX].phandle = 0xffffffffu;
 	err = emac_check_deps(dev, deps);
 	for (i = 0; i < EMAC_DEP_COUNT; i++) {
 		of_node_put(deps[i].node);
@@ -2412,7 +2382,6 @@ static int emac_wait_deps(struct emac_instance *dev)
 		dev->tah_dev = deps[EMAC_DEP_TAH_IDX].ofdev;
 		dev->mdio_dev = deps[EMAC_DEP_MDIO_IDX].ofdev;
 	}
-	platform_device_put(deps[EMAC_DEP_PREV_IDX].ofdev);
 	return err;
 }
 
@@ -2993,8 +2962,7 @@ static int emac_probe(struct platform_device *ofdev)
 	struct net_device *ndev;
 	struct emac_instance *dev;
 	struct device_node *np = ofdev->dev.of_node;
-	struct device_node **blist = NULL;
-	int err, i;
+	int err;
 
 	/* Skip unused/unwired EMACS.  We leave the check for an unused
 	 * property here for now, but new flat device trees should set a
@@ -3003,21 +2971,14 @@ static int emac_probe(struct platform_device *ofdev)
 	if (of_property_read_bool(np, "unused") || !of_device_is_available(np))
 		return -ENODEV;
 
-	/* Find ourselves in the bootlist if we are there */
-	for (i = 0; i < EMAC_BOOT_LIST_SIZE; i++)
-		if (emac_boot_list[i] == np)
-			blist = &emac_boot_list[i];
-
 	/* Allocate our net_device structure */
-	err = -ENOMEM;
 	ndev = devm_alloc_etherdev(&ofdev->dev, sizeof(struct emac_instance));
 	if (!ndev)
-		goto err_gone;
+		return -ENOMEM;
 
 	dev = netdev_priv(ndev);
 	dev->ndev = ndev;
 	dev->ofdev = ofdev;
-	dev->blist = blist;
 	SET_NETDEV_DEV(ndev, &ofdev->dev);
 
 	/* Initialize some embedded data structures */
@@ -3029,16 +2990,15 @@ static int emac_probe(struct platform_device *ofdev)
 	/* Init various config data based on device-tree */
 	err = emac_init_config(dev);
 	if (err)
-		goto err_gone;
+		return err;
 
 	/* Setup error IRQ handler */
 	dev->emac_irq = platform_get_irq(ofdev, 0);
 	err = devm_request_irq(&ofdev->dev, dev->emac_irq, emac_irq, 0, "EMAC",
 			       dev);
 	if (err) {
-		dev_err_probe(&ofdev->dev, err, "failed to request IRQ %d",
-			      dev->emac_irq);
-		goto err_gone;
+		return dev_err_probe(&ofdev->dev, err,
+				     "failed to request IRQ %d", dev->emac_irq);
 	}
 
 	ndev->irq = dev->emac_irq;
@@ -3046,14 +3006,13 @@ static int emac_probe(struct platform_device *ofdev)
 	dev->emacp = devm_platform_ioremap_resource(ofdev, 0);
 	if (IS_ERR(dev->emacp)) {
 		dev_err(&ofdev->dev, "can't map device registers");
-		err = PTR_ERR(dev->emacp);
-		goto err_gone;
+		return PTR_ERR(dev->emacp);
 	}
 
 	/* Wait for dependent devices */
 	err = emac_wait_deps(dev);
 	if (err)
-		goto err_gone;
+		return err;
 	dev->mal = platform_get_drvdata(dev->mal_dev);
 	if (dev->mdio_dev != NULL)
 		dev->mdio_instance = platform_get_drvdata(dev->mdio_dev);
@@ -3181,9 +3140,6 @@ static int emac_probe(struct platform_device *ofdev)
 	mal_unregister_commac(dev->mal, &dev->commac);
  err_rel_deps:
 	emac_put_deps(dev);
- err_gone:
-	if (blist)
-		*blist = NULL;
 	return err;
 }
 
@@ -3237,59 +3193,4 @@ static struct platform_driver emac_driver = {
 	.remove_new = emac_remove,
 };
 
-static void __init emac_make_bootlist(void)
-{
-	struct device_node *np = NULL;
-	int j, max, i = 0;
-	int cell_indices[EMAC_BOOT_LIST_SIZE];
-
-	/* Collect EMACs */
-	while((np = of_find_all_nodes(np)) != NULL) {
-		u32 idx;
-
-		if (of_match_node(emac_match, np) == NULL)
-			continue;
-		if (of_property_read_bool(np, "unused"))
-			continue;
-		if (of_property_read_u32(np, "cell-index", &idx))
-			continue;
-		cell_indices[i] = idx;
-		emac_boot_list[i++] = of_node_get(np);
-		if (i >= EMAC_BOOT_LIST_SIZE) {
-			of_node_put(np);
-			break;
-		}
-	}
-	max = i;
-
-	/* Bubble sort them (doh, what a creative algorithm :-) */
-	for (i = 0; max > 1 && (i < (max - 1)); i++)
-		for (j = i; j < max; j++) {
-			if (cell_indices[i] > cell_indices[j]) {
-				swap(emac_boot_list[i], emac_boot_list[j]);
-				swap(cell_indices[i], cell_indices[j]);
-			}
-		}
-}
-
-static int __init emac_init(void)
-{
-	/* Build EMAC boot list */
-	emac_make_bootlist();
-
-	return platform_driver_register(&emac_driver);
-}
-
-static void __exit emac_exit(void)
-{
-	int i;
-
-	platform_driver_unregister(&emac_driver);
-
-	/* Destroy EMAC boot list */
-	for (i = 0; i < EMAC_BOOT_LIST_SIZE; i++)
-		of_node_put(emac_boot_list[i]);
-}
-
-module_init(emac_init);
-module_exit(emac_exit);
+module_platform_driver(emac_driver);
