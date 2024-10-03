@@ -498,16 +498,16 @@ static int kmb_probe(struct platform_device *pdev)
 	}
 	dsi_node = of_graph_get_remote_port_parent(dsi_in);
 	if (!dsi_node) {
-		of_node_put(dsi_in);
 		DRM_ERROR("Failed to get dsi node from DT\n");
-		return -EINVAL;
+		goto err_put_dsi_in;
 	}
 
 	dsi_pdev = of_find_device_by_node(dsi_node);
 	if (!dsi_pdev) {
-		of_node_put(dsi_in);
 		of_node_put(dsi_node);
 		DRM_ERROR("Failed to get dsi platform device\n");
+err_put_dsi_in:
+		of_node_put(dsi_in);
 		return -EINVAL;
 	}
 
