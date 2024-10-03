@@ -2796,7 +2796,7 @@ bool skl_fixup_initial_plane_config(struct intel_crtc *crtc,
 		to_intel_plane_state(plane->base.state);
 	enum plane_id plane_id = plane->id;
 	enum pipe pipe = crtc->pipe;
-	u32 base;
+	u32 base, plane_ctl;
 
 	if (!plane_state->uapi.visible)
 		return false;
@@ -2810,7 +2810,16 @@ bool skl_fixup_initial_plane_config(struct intel_crtc *crtc,
 	if (plane_config->base == base)
 		return false;
 
+	/* Perform an async flip to the new surface. */
+	plane_ctl = intel_read(i915, PLANE_CTL(pipe, plane_id));
+	plane_ctl |= PLANE_CTL_ASYNC_FLIP;
+
+	intel_de_write(i915, PLANE_CTL(pipe, plane_id), plane_ctl);
 	intel_de_write(i915, PLANE_SURF(pipe, plane_id), base);
 
-	return true;
+	if (intel_de_wait_custom(i915, PLANE_SURFLIVE(pipe, plane_id), ~0U, base, 0, 40, NULL) < 0)
+		drm_warn(&i915->drm, "async flip timed out\n");
+
+	/* No need to vblank wait either */
+	return false;
 }
