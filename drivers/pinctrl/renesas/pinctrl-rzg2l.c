@@ -2332,20 +2332,11 @@ static const struct irq_chip rzg2l_gpio_irqchip = {
 
 static int rzg2l_gpio_interrupt_input_mode(struct gpio_chip *chip, unsigned int offset)
 {
-	struct rzg2l_pinctrl *pctrl = gpiochip_get_data(chip);
-	const struct pinctrl_pin_desc *pin_desc = &pctrl->desc.pins[offset];
-	u64 *pin_data = pin_desc->drv_data;
-	u32 off = RZG2L_PIN_CFG_TO_PORT_OFFSET(*pin_data);
-	u8 bit = RZG2L_PIN_ID_TO_PIN(offset);
-	u8 reg8;
 	int ret;
 
-	reg8 = readb(pctrl->base + PMC(off));
-	if (reg8 & BIT(bit)) {
-		ret = rzg2l_gpio_request(chip, offset);
-		if (ret)
-			return ret;
-	}
+	ret = rzg2l_gpio_request(chip, offset);
+	if (ret)
+		return ret;
 
 	return rzg2l_gpio_direction_input(chip, offset);
 }
