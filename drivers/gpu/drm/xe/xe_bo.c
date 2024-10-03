@@ -2359,7 +2359,7 @@ void xe_bo_put(struct xe_bo *bo)
 			might_lock(&bo->client->bos_lock);
 #endif
 		if (bo->ggtt_node && bo->ggtt_node->ggtt)
-			might_lock(&bo->ggtt_node->ggtt->lock);
+			xe_ggtt_might_lock(bo->ggtt_node->ggtt);
 		drm_gem_object_put(&bo->ttm.base);
 	}
 }
