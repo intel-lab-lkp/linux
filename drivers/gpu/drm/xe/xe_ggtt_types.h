@@ -13,6 +13,8 @@
 struct xe_bo;
 struct xe_gt;
 
+typedef u64 (*xe_ggtt_pte_encode_bo_fn)(struct xe_bo *bo, u64 bo_offset, u16 pat_index);
+
 /**
  * struct xe_ggtt - Main GGTT struct
  *
@@ -67,17 +69,6 @@ struct xe_ggtt_node {
 	struct work_struct delayed_removal_work;
 	/** @invalidate_on_remove: If it needs invalidation upon removal */
 	bool invalidate_on_remove;
-};
-
-/**
- * struct xe_ggtt_pt_ops - GGTT Page table operations
- * Which can vary from platform to platform.
- */
-struct xe_ggtt_pt_ops {
-	/** @pte_encode_bo: Encode PTE address for a given BO */
-	u64 (*pte_encode_bo)(struct xe_bo *bo, u64 bo_offset, u16 pat_index);
-	/** @ggtt_set_pte: Directly write into GGTT's PTE */
-	void (*ggtt_set_pte)(struct xe_ggtt *ggtt, u64 addr, u64 pte);
 };
 
 #endif
