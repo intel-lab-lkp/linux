@@ -28,8 +28,6 @@
 #include <linux/sizes.h>
 
 #include <linux/hyperv.h>
-#include <asm/hyperv-tlfs.h>
-
 #include <asm/mshyperv.h>
 
 #define CREATE_TRACE_POINTS
