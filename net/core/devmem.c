@@ -8,6 +8,8 @@
  */
 
 #include <linux/dma-buf.h>
+#include <linux/ethtool.h>
+#include <linux/ethtool_netlink.h>
 #include <linux/genalloc.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
@@ -131,6 +133,8 @@ int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 				    struct net_devmem_dmabuf_binding *binding,
 				    struct netlink_ext_ack *extack)
 {
+	struct kernel_ethtool_ringparam kernel_ringparam = {};
+	struct ethtool_ringparam ringparam = {};
 	struct netdev_rx_queue *rxq;
 	u32 xa_idx;
 	int err;
@@ -144,6 +148,20 @@ int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 	if (rxq->mp_params.mp_priv) {
 		NL_SET_ERR_MSG(extack, "designated queue already memory provider bound");
 		return -EEXIST;
+	}
+
+	if (!dev->ethtool_ops->get_ringparam) {
+		NL_SET_ERR_MSG(extack, "can't get ringparam");
+		return -EINVAL;
+	}
+
+	dev->ethtool_ops->get_ringparam(dev, &ringparam,
+					&kernel_ringparam, extack);
+	if (kernel_ringparam.tcp_data_split != ETHTOOL_TCP_DATA_SPLIT_ENABLED ||
+	    kernel_ringparam.tcp_data_split_thresh) {
+		NL_SET_ERR_MSG(extack,
+			       "tcp-header-data-split is disabled or threshold is not zero");
+		return -EINVAL;
 	}
 
 #ifdef CONFIG_XDP_SOCKETS
