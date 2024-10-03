@@ -328,10 +328,11 @@ static int clps711x_fb_probe(struct platform_device *pdev)
 
 	ret = register_framebuffer(info);
 	if (ret)
-		goto out_fb_dealloc_cmap;
+		goto out_fb_unregister;
 
 	return 0;
 
+out_fb_unregister:
 	unregister_framebuffer(info);
 
 out_fb_dealloc_cmap:
