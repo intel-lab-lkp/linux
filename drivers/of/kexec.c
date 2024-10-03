@@ -300,8 +300,12 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 		goto out;
 	}
 
-	/* Remove memory reservation for the current device tree. */
-	ret = fdt_find_and_del_mem_rsv(fdt, __pa(initial_boot_params),
+	/* Remove memory reservation for the current device tree.
+	 * For arm64, initial_boot_params is a fixmap address, hence __pa(),
+	 * can't be used to get the physical address.
+	 */
+	ret = fdt_find_and_del_mem_rsv(fdt, IS_ENABLED(CONFIG_ARM64) ?
+				       initial_boot_params_pa : __pa(initial_boot_params),
 				       fdt_totalsize(initial_boot_params));
 	if (ret == -EINVAL) {
 		pr_err("Error removing memory reservation.\n");

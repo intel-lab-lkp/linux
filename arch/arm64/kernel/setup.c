@@ -194,6 +194,14 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 	/* Early fixups are done, map the FDT as read-only now */
 	fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL_RO);
 
+	/*
+	 * Save dt_phys address so that it can be used later for kexec. This
+	 * is done as __pa() is only intended to be used for linear map addresses
+	 * and using it for initial_boot_params which is in fixmap will give an
+	 * incorrect value.
+	 */
+	set_initial_boot_params_pa(dt_phys);
+
 	name = of_flat_dt_get_machine_name();
 	if (!name)
 		return;

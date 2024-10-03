@@ -457,6 +457,7 @@ int __initdata dt_root_addr_cells;
 int __initdata dt_root_size_cells;
 
 void *initial_boot_params __ro_after_init;
+phys_addr_t initial_boot_params_pa __ro_after_init;
 
 #ifdef CONFIG_OF_EARLY_FLATTREE
 
@@ -1183,6 +1184,11 @@ bool __init early_init_dt_scan(void *params)
 
 	early_init_dt_scan_nodes();
 	return true;
+}
+
+void __init set_initial_boot_params_pa(phys_addr_t params)
+{
+	initial_boot_params_pa = params;
 }
 
 static void *__init copy_device_tree(void *fdt)
