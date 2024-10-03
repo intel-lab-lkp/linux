@@ -2346,7 +2346,7 @@ amdgpu_vm_get_task_info_vm(struct amdgpu_vm *vm)
 {
 	struct amdgpu_task_info *ti = NULL;
 
-	if (vm) {
+	if (vm && vm->task_info) {
 		ti = vm->task_info;
 		kref_get(&vm->task_info->refcount);
 	}
@@ -2376,6 +2376,10 @@ static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
 	if (!vm->task_info)
 		return -ENOMEM;
 
+	/* Set process attributes now. */
+	vm->task_info->tgid = current->group_leader->pid;
+	get_task_comm(vm->task_info->process_name, current->group_leader);
+
 	kref_init(&vm->task_info->refcount);
 	return 0;
 }
@@ -2387,20 +2391,16 @@ static int amdgpu_vm_create_task_info(struct amdgpu_vm *vm)
  */
 void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
 {
-	if (!vm->task_info)
+	if (!vm->task_info) {
+		if (amdgpu_vm_create_task_info(vm))
+			return;
+	} else if (vm->task_info->pid == current->pid) {
 		return;
+	}
 
-	if (vm->task_info->pid == current->pid)
-		return;
-
+	/* Update task attributes. */
 	vm->task_info->pid = current->pid;
 	get_task_comm(vm->task_info->task_name, current);
-
-	if (current->group_leader->mm != current->mm)
-		return;
-
-	vm->task_info->tgid = current->group_leader->pid;
-	get_task_comm(vm->task_info->process_name, current->group_leader);
 }
 
 /**
@@ -2489,10 +2489,6 @@ int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	r = amdgpu_vm_pt_clear(adev, vm, root, false);
 	if (r)
 		goto error_free_root;
-
-	r = amdgpu_vm_create_task_info(vm);
-	if (r)
-		DRM_DEBUG("Failed to create task info for VM\n");
 
 	amdgpu_bo_unreserve(vm->root.bo);
 	amdgpu_bo_unref(&root_bo);
@@ -2611,7 +2607,8 @@ void amdgpu_vm_fini(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 
 	root = amdgpu_bo_ref(vm->root.bo);
 	amdgpu_bo_reserve(root, true);
-	amdgpu_vm_put_task_info(vm->task_info);
+	if (vm->task_info)
+		amdgpu_vm_put_task_info(vm->task_info);
 	amdgpu_vm_set_pasid(adev, vm, 0);
 	dma_fence_wait(vm->last_unlocked, false);
 	dma_fence_put(vm->last_unlocked);
