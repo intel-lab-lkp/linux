@@ -68,7 +68,7 @@ static int current_check_access_socket(struct socket *const sock,
 		return -EACCES;
 
 	/* Checks if it's a (potential) TCP socket. */
-	if (sock->type != SOCK_STREAM)
+	if (sock->type != SOCK_STREAM || sock->sk->sk_protocol != IPPROTO_TCP)
 		return 0;
 
 	/* Checks for minimal header length to safely read sa_family. */
