@@ -296,8 +296,7 @@ void intel_initial_plane_config(struct drm_i915_private *i915)
 		 */
 		intel_find_initial_plane_obj(crtc, plane_configs);
 
-		if (i915->display.funcs.display->fixup_initial_plane_config(crtc, plane_config))
-			intel_crtc_wait_for_next_vblank(crtc);
+		i915->display.funcs.display->fixup_initial_plane_config(crtc, plane_config);
 
 		plane_config_fini(plane_config);
 	}
