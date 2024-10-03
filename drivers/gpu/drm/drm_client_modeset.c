@@ -638,7 +638,7 @@ retry:
 	for (i = 0; i < count; i++) {
 		struct drm_connector *connector;
 		struct drm_encoder *encoder;
-		struct drm_crtc *new_crtc;
+		struct drm_crtc *crtc;
 		const char *mode_type;
 
 		connector = connectors[i];
@@ -680,7 +680,7 @@ retry:
 
 		num_connectors_enabled++;
 
-		new_crtc = connector->state->crtc;
+		crtc = connector->state->crtc;
 
 		/*
 		 * Make sure we're not trying to drive multiple connectors
@@ -688,7 +688,7 @@ retry:
 		 * match the BIOS.
 		 */
 		for (j = 0; j < count; j++) {
-			if (crtcs[j] == new_crtc) {
+			if (crtcs[j] == crtc) {
 				drm_dbg_kms(dev, "[CONNECTOR:%d:%s] fallback: cloned configuration\n",
 					    connector->base.id, connector->name);
 				goto bail;
@@ -711,7 +711,7 @@ retry:
 		/* last resort: use current mode */
 		if (!mode_valid(&modes[i])) {
 			mode_type = "current";
-			drm_mode_copy(&modes[i], &new_crtc->state->mode);
+			drm_mode_copy(&modes[i], &crtc->state->mode);
 		}
 
 		/*
@@ -723,11 +723,11 @@ retry:
 			mode_type = "non tiled";
 			drm_mode_copy(&modes[i], drm_connector_fallback_non_tiled_mode(connector));
 		}
-		crtcs[i] = new_crtc;
+		crtcs[i] = crtc;
 
 		drm_dbg_kms(dev, "[CONNECTOR::%d:%s] on [CRTC:%d:%s] using %s mode: %s\n",
 			    connector->base.id, connector->name,
-			    new_crtc->base.id, new_crtc->name,
+			    crtc->base.id, crtc->name,
 			    mode_type, modes[i].name);
 
 		fallback = false;
