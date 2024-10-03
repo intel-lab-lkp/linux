@@ -695,9 +695,11 @@ static int drm_atomic_color_set_data_property(struct drm_colorop *colorop,
 		struct drm_colorop_state *state,
 		struct drm_property *property, uint64_t val)
 {
+	struct drm_mode_3dlut_mode *modes;
 	ssize_t elem_size = -1;
 	ssize_t size = -1;
 	bool replaced = false;
+	uint32_t index;
 
 	switch (colorop->type) {
 	case DRM_COLOROP_1D_LUT:
@@ -705,6 +707,15 @@ static int drm_atomic_color_set_data_property(struct drm_colorop *colorop,
 		break;
 	case DRM_COLOROP_CTM_3X4:
 		size = sizeof(struct drm_color_ctm_3x4);
+		break;
+	case DRM_COLOROP_3D_LUT:
+		index = state->lut_3d_mode_index;
+		if (index >= (state->lut_3d_modes->length / sizeof(struct drm_mode_3dlut_mode)))
+			return -EINVAL;
+
+		modes = (struct drm_mode_3dlut_mode *) state->lut_3d_modes->data;
+		size = modes[index].lut_stride[0] * modes[index].lut_stride[1] * modes[index].lut_stride[2] *
+		       sizeof(struct drm_color_lut);
 		break;
 	default:
 		/* should never get here */
@@ -729,6 +740,8 @@ static int drm_atomic_colorop_set_property(struct drm_colorop *colorop,
 		state->curve_1d_type = val;
 	} else if (property == colorop->multiplier_property) {
 		state->multiplier = val;
+	} else if (property == colorop->lut_3d_mode_index_property) {
+		state->lut_3d_mode_index = val;
 	} else if (property == colorop->data_property) {
 		return drm_atomic_color_set_data_property(colorop,
 					state, property, val);
@@ -756,6 +769,10 @@ drm_atomic_colorop_get_property(struct drm_colorop *colorop,
 		*val = state->curve_1d_type;
 	} else if (property == colorop->multiplier_property) {
 		*val = state->multiplier;
+	} else if (property == colorop->lut_3d_modes_property) {
+		*val = (state->lut_3d_modes) ? state->lut_3d_modes->base.id : 0;
+	} else if (property == colorop->lut_3d_mode_index_property) {
+		*val = state->lut_3d_mode_index;
 	} else if (property == colorop->size_property) {
 		*val = state->size;
 	} else if (property == colorop->data_property) {
