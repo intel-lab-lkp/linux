@@ -68,6 +68,16 @@
 		};
 	};
 
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		cfe-stub@0 {
+			reg = <0 0 0 0x10000>;
+		};
+	};
+
 	axi@81000000 {
 		compatible = "simple-bus";
 		#address-cells = <1>;
