@@ -289,6 +289,8 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	fbnic_devlink_register(fbd);
 
+	fbnic_hwmon_register(fbd);
+
 	if (!fbd->dsn) {
 		dev_warn(&pdev->dev, "Reading serial number failed\n");
 		goto init_failure_mode;
@@ -297,7 +299,7 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	netdev = fbnic_netdev_alloc(fbd);
 	if (!netdev) {
 		dev_err(&pdev->dev, "Netdev allocation failed\n");
-		goto init_failure_mode;
+		goto ifm_hwmon_unregister;
 	}
 
 	err = fbnic_netdev_register(netdev);
@@ -308,6 +310,8 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	return 0;
 
+ifm_hwmon_unregister:
+	fbnic_hwmon_unregister(fbd);
 ifm_free_netdev:
 	fbnic_netdev_free(fbd);
 init_failure_mode:
@@ -345,6 +349,7 @@ static void fbnic_remove(struct pci_dev *pdev)
 		fbnic_netdev_free(fbd);
 	}
 
+	fbnic_hwmon_unregister(fbd);
 	fbnic_devlink_unregister(fbd);
 	fbnic_fw_disable_mbx(fbd);
 	fbnic_free_irqs(fbd);
@@ -428,6 +433,7 @@ static int __fbnic_pm_resume(struct device *dev)
 	rtnl_unlock();
 
 	return 0;
+
 err_disable_mbx:
 	rtnl_unlock();
 	fbnic_fw_disable_mbx(fbd);
