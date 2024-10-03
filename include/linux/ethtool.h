@@ -78,6 +78,8 @@ enum {
  * @cqe_size: Size of TX/RX completion queue event
  * @tx_push_buf_len: Size of TX push buffer
  * @tx_push_buf_max_len: Maximum allowed size of TX push buffer
+ * @tcp_data_split_thresh: Threshold value of tcp-data-split
+ * @tcp_data_split_thresh_max: Maximum allowed threshold of tcp-data-split-threshold
  */
 struct kernel_ethtool_ringparam {
 	u32	rx_buf_len;
@@ -87,6 +89,8 @@ struct kernel_ethtool_ringparam {
 	u32	cqe_size;
 	u32	tx_push_buf_len;
 	u32	tx_push_buf_max_len;
+	u32	tcp_data_split_thresh;
+	u32	tcp_data_split_thresh_max;
 };
 
 /**

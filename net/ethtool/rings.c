@@ -61,7 +61,9 @@ static int rings_reply_size(const struct ethnl_req_info *req_base,
 	       nla_total_size(sizeof(u8))  +	/* _RINGS_TX_PUSH */
 	       nla_total_size(sizeof(u8))) +	/* _RINGS_RX_PUSH */
 	       nla_total_size(sizeof(u32)) +	/* _RINGS_TX_PUSH_BUF_LEN */
-	       nla_total_size(sizeof(u32));	/* _RINGS_TX_PUSH_BUF_LEN_MAX */
+	       nla_total_size(sizeof(u32)) +	/* _RINGS_TX_PUSH_BUF_LEN_MAX */
+	       nla_total_size(sizeof(u32)) +	/* _RINGS_TCP_DATA_SPLIT_THRESH */
+	       nla_total_size(sizeof(u32));	/* _RINGS_TCP_DATA_SPLIT_THRESH_MAX */
 }
 
 static int rings_fill_reply(struct sk_buff *skb,
@@ -108,7 +110,13 @@ static int rings_fill_reply(struct sk_buff *skb,
 	     (nla_put_u32(skb, ETHTOOL_A_RINGS_TX_PUSH_BUF_LEN_MAX,
 			  kr->tx_push_buf_max_len) ||
 	      nla_put_u32(skb, ETHTOOL_A_RINGS_TX_PUSH_BUF_LEN,
-			  kr->tx_push_buf_len))))
+			  kr->tx_push_buf_len))) ||
+	    (kr->tcp_data_split == ETHTOOL_TCP_DATA_SPLIT_ENABLED &&
+	     (nla_put_u32(skb, ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH,
+			 kr->tcp_data_split_thresh))) ||
+	    (kr->tcp_data_split == ETHTOOL_TCP_DATA_SPLIT_ENABLED &&
+	     (nla_put_u32(skb, ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH_MAX,
+			 kr->tcp_data_split_thresh_max))))
 		return -EMSGSIZE;
 
 	return 0;
@@ -130,6 +138,7 @@ const struct nla_policy ethnl_rings_set_policy[] = {
 	[ETHTOOL_A_RINGS_TX_PUSH]		= NLA_POLICY_MAX(NLA_U8, 1),
 	[ETHTOOL_A_RINGS_RX_PUSH]		= NLA_POLICY_MAX(NLA_U8, 1),
 	[ETHTOOL_A_RINGS_TX_PUSH_BUF_LEN]	= { .type = NLA_U32 },
+	[ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH]	= { .type = NLA_U32 },
 };
 
 static int
@@ -152,6 +161,14 @@ ethnl_set_rings_validate(struct ethnl_req_info *req_info,
 		NL_SET_ERR_MSG_ATTR(info->extack,
 				    tb[ETHTOOL_A_RINGS_TCP_DATA_SPLIT],
 				    "setting TCP data split is not supported");
+		return -EOPNOTSUPP;
+	}
+
+	if (tb[ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH] &&
+	    !(ops->supported_ring_params & ETHTOOL_RING_USE_TCP_DATA_SPLIT)) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH],
+				    "setting tcp-data-split-thresh is not supported");
 		return -EOPNOTSUPP;
 	}
 
@@ -196,9 +213,9 @@ ethnl_set_rings(struct ethnl_req_info *req_info, struct genl_info *info)
 	struct kernel_ethtool_ringparam kernel_ringparam = {};
 	struct ethtool_ringparam ringparam = {};
 	struct net_device *dev = req_info->dev;
+	bool mod = false, thresh_mod = false;
 	struct nlattr **tb = info->attrs;
 	const struct nlattr *err_attr;
-	bool mod = false;
 	int ret;
 
 	dev->ethtool_ops->get_ringparam(dev, &ringparam,
@@ -222,8 +239,29 @@ ethnl_set_rings(struct ethnl_req_info *req_info, struct genl_info *info)
 			tb[ETHTOOL_A_RINGS_RX_PUSH], &mod);
 	ethnl_update_u32(&kernel_ringparam.tx_push_buf_len,
 			 tb[ETHTOOL_A_RINGS_TX_PUSH_BUF_LEN], &mod);
-	if (!mod)
+	ethnl_update_u32(&kernel_ringparam.tcp_data_split_thresh,
+			 tb[ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH],
+			 &thresh_mod);
+	if (!mod && !thresh_mod)
 		return 0;
+
+	if (kernel_ringparam.tcp_data_split == ETHTOOL_TCP_DATA_SPLIT_DISABLED &&
+	    thresh_mod) {
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH],
+				    "tcp-data-split-thresh can not be updated while tcp-data-split is disabled");
+		return -EINVAL;
+	}
+
+	if (kernel_ringparam.tcp_data_split_thresh >
+	    kernel_ringparam.tcp_data_split_thresh_max) {
+		NL_SET_ERR_MSG_ATTR_FMT(info->extack,
+					tb[ETHTOOL_A_RINGS_TCP_DATA_SPLIT_THRESH_MAX],
+					"Requested tcp-data-split-thresh exceeds the maximum of %u",
+					kernel_ringparam.tcp_data_split_thresh_max);
+
+		return -EINVAL;
+	}
 
 	/* ensure new ring parameters are within limits */
 	if (ringparam.rx_pending > ringparam.rx_max_pending)
