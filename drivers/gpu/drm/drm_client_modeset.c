@@ -710,19 +710,8 @@ retry:
 
 		/* last resort: use current mode */
 		if (!mode_valid(&modes[i])) {
-			/*
-			 * IMPORTANT: We want to use the adjusted mode (i.e.
-			 * after the panel fitter upscaling) as the initial
-			 * config, not the input mode, which is what crtc->mode
-			 * usually contains. But since our current
-			 * code puts a mode derived from the post-pfit timings
-			 * into crtc->mode this works out correctly.
-			 *
-			 * This is crtc->mode and not crtc->state->mode for the
-			 * fastboot check to work correctly.
-			 */
 			mode_type = "current";
-			drm_mode_copy(&modes[i], &connector->state->crtc->mode);
+			drm_mode_copy(&modes[i], &new_crtc->state->mode);
 		}
 
 		/*
