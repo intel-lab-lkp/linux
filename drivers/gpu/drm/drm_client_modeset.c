@@ -265,10 +265,15 @@ static void drm_client_connectors_enabled(struct drm_connector *connectors[],
 		enabled[i] = drm_connector_enabled(connectors[i], false);
 }
 
+static bool mode_valid(const struct drm_display_mode *mode)
+{
+	return mode->clock != 0;
+}
+
 static bool drm_client_target_cloned(struct drm_device *dev,
 				     struct drm_connector *connectors[],
 				     unsigned int connector_count,
-				     const struct drm_display_mode *modes[],
+				     struct drm_display_mode modes[],
 				     struct drm_client_offset offsets[],
 				     bool enabled[], int width, int height)
 {
@@ -296,15 +301,16 @@ static bool drm_client_target_cloned(struct drm_device *dev,
 	for (i = 0; i < connector_count; i++) {
 		if (!enabled[i])
 			continue;
-		modes[i] = drm_connector_pick_cmdline_mode(connectors[i]);
-		if (!modes[i]) {
+
+		drm_mode_copy(&modes[i], drm_connector_pick_cmdline_mode(connectors[i]));
+		if (!mode_valid(&modes[i])) {
 			can_clone = false;
 			break;
 		}
 		for (j = 0; j < i; j++) {
 			if (!enabled[j])
 				continue;
-			if (!drm_mode_match(modes[j], modes[i],
+			if (!drm_mode_match(&modes[j], &modes[i],
 					    DRM_MODE_MATCH_TIMINGS |
 					    DRM_MODE_MATCH_CLOCK |
 					    DRM_MODE_MATCH_FLAGS |
@@ -335,9 +341,9 @@ static bool drm_client_target_cloned(struct drm_device *dev,
 					   DRM_MODE_MATCH_CLOCK |
 					   DRM_MODE_MATCH_FLAGS |
 					   DRM_MODE_MATCH_3D_FLAGS))
-				modes[i] = mode;
+				drm_mode_copy(&modes[i], mode);
 		}
-		if (!modes[i])
+		if (!mode_valid(&modes[i]))
 			can_clone = false;
 	}
 	drm_mode_destroy(dev, dmt_mode);
@@ -354,7 +360,7 @@ fail:
 static int drm_client_get_tile_offsets(struct drm_device *dev,
 				       struct drm_connector *connectors[],
 				       unsigned int connector_count,
-				       const struct drm_display_mode *modes[],
+				       const struct drm_display_mode modes[],
 				       struct drm_client_offset offsets[],
 				       int idx,
 				       int h_idx, int v_idx)
@@ -368,17 +374,17 @@ static int drm_client_get_tile_offsets(struct drm_device *dev,
 		if (!connector->has_tile)
 			continue;
 
-		if (!modes[i] && (h_idx || v_idx)) {
+		if (!mode_valid(&modes[i]) && (h_idx || v_idx)) {
 			drm_dbg_kms(dev,
 				    "[CONNECTOR:%d:%s] no modes for connector tiled %d\n",
 				    connector->base.id, connector->name, i);
 			continue;
 		}
 		if (connector->tile_h_loc < h_idx)
-			hoffset += modes[i]->hdisplay;
+			hoffset += modes[i].hdisplay;
 
 		if (connector->tile_v_loc < v_idx)
-			voffset += modes[i]->vdisplay;
+			voffset += modes[i].vdisplay;
 	}
 	offsets[idx].x = hoffset;
 	offsets[idx].y = voffset;
@@ -389,7 +395,7 @@ static int drm_client_get_tile_offsets(struct drm_device *dev,
 static bool drm_client_target_preferred(struct drm_device *dev,
 					struct drm_connector *connectors[],
 					unsigned int connector_count,
-					const struct drm_display_mode *modes[],
+					struct drm_display_mode modes[],
 					struct drm_client_offset offsets[],
 					bool enabled[], int width, int height)
 {
@@ -445,16 +451,16 @@ retry:
 		}
 
 		mode_type = "cmdline";
-		modes[i] = drm_connector_pick_cmdline_mode(connector);
+		drm_mode_copy(&modes[i], drm_connector_pick_cmdline_mode(connector));
 
-		if (!modes[i]) {
+		if (!mode_valid(&modes[i])) {
 			mode_type = "preferred";
-			modes[i] = drm_connector_preferred_mode(connector, width, height);
+			drm_mode_copy(&modes[i], drm_connector_preferred_mode(connector, width, height));
 		}
 
-		if (!modes[i]) {
+		if (!mode_valid(&modes[i])) {
 			mode_type = "first";
-			modes[i] = drm_connector_first_mode(connector);
+			drm_mode_copy(&modes[i], drm_connector_first_mode(connector));
 		}
 
 		/*
@@ -472,17 +478,17 @@ retry:
 			     connector->tile_v_loc == 0 &&
 			     !drm_connector_get_tiled_mode(connector))) {
 				mode_type = "non tiled";
-				modes[i] = drm_connector_fallback_non_tiled_mode(connector);
+				drm_mode_copy(&modes[i], drm_connector_fallback_non_tiled_mode(connector));
 			} else {
 				mode_type = "tiled";
-				modes[i] = drm_connector_get_tiled_mode(connector);
+				drm_mode_copy(&modes[i], drm_connector_get_tiled_mode(connector));
 			}
 		}
 
-		if (modes[i])
+		if (mode_valid(&modes[i]))
 			drm_dbg_kms(dev, "[CONNECTOR:%d:%s] found %s mode: %s\n",
 				    connector->base.id, connector->name,
-				    mode_type, modes[i]->name);
+				    mode_type, modes[i].name);
 		else
 			drm_dbg_kms(dev, "[CONNECTOR:%d:%s] no mode found\n",
 				    connector->base.id, connector->name);
@@ -514,7 +520,7 @@ static int drm_client_pick_crtcs(struct drm_client_dev *client,
 				 struct drm_connector *connectors[],
 				 unsigned int connector_count,
 				 struct drm_crtc *best_crtcs[],
-				 const struct drm_display_mode *modes[],
+				 const struct drm_display_mode modes[],
 				 int n, int width, int height)
 {
 	struct drm_device *dev = client->dev;
@@ -532,7 +538,7 @@ static int drm_client_pick_crtcs(struct drm_client_dev *client,
 	best_crtcs[n] = NULL;
 	best_score = drm_client_pick_crtcs(client, connectors, connector_count,
 					   best_crtcs, modes, n + 1, width, height);
-	if (modes[n] == NULL)
+	if (!mode_valid(&modes[n]))
 		return best_score;
 
 	crtcs = kcalloc(connector_count, sizeof(*crtcs), GFP_KERNEL);
@@ -566,7 +572,7 @@ static int drm_client_pick_crtcs(struct drm_client_dev *client,
 			if (dev->mode_config.num_crtc > 1)
 				continue;
 
-			if (!drm_mode_equal(modes[o], modes[n]))
+			if (!drm_mode_equal(&modes[o], &modes[n]))
 				continue;
 		}
 
@@ -589,7 +595,7 @@ static bool drm_client_firmware_config(struct drm_client_dev *client,
 				       struct drm_connector *connectors[],
 				       unsigned int connector_count,
 				       struct drm_crtc *crtcs[],
-				       const struct drm_display_mode *modes[],
+				       struct drm_display_mode modes[],
 				       struct drm_client_offset offsets[],
 				       bool enabled[], int width, int height)
 {
@@ -690,20 +696,20 @@ retry:
 		}
 
 		mode_type = "cmdline";
-		modes[i] = drm_connector_pick_cmdline_mode(connector);
+		drm_mode_copy(&modes[i], drm_connector_pick_cmdline_mode(connector));
 
-		if (!modes[i]) {
+		if (!mode_valid(&modes[i])) {
 			mode_type = "preferred";
-			modes[i] = drm_connector_preferred_mode(connector, width, height);
+			drm_mode_copy(&modes[i], drm_connector_preferred_mode(connector, width, height));
 		}
 
-		if (!modes[i]) {
+		if (!mode_valid(&modes[i])) {
 			mode_type = "first";
-			modes[i] = drm_connector_first_mode(connector);
+			drm_mode_copy(&modes[i], drm_connector_first_mode(connector));
 		}
 
 		/* last resort: use current mode */
-		if (!modes[i]) {
+		if (!mode_valid(&modes[i])) {
 			/*
 			 * IMPORTANT: We want to use the adjusted mode (i.e.
 			 * after the panel fitter upscaling) as the initial
@@ -716,7 +722,7 @@ retry:
 			 * fastboot check to work correctly.
 			 */
 			mode_type = "current";
-			modes[i] = &connector->state->crtc->mode;
+			drm_mode_copy(&modes[i], &connector->state->crtc->mode);
 		}
 
 		/*
@@ -726,14 +732,14 @@ retry:
 		if (connector->has_tile &&
 		    num_tiled_conns < connector->num_h_tile * connector->num_v_tile) {
 			mode_type = "non tiled";
-			modes[i] = drm_connector_fallback_non_tiled_mode(connector);
+			drm_mode_copy(&modes[i], drm_connector_fallback_non_tiled_mode(connector));
 		}
 		crtcs[i] = new_crtc;
 
 		drm_dbg_kms(dev, "[CONNECTOR::%d:%s] on [CRTC:%d:%s] using %s mode: %s\n",
 			    connector->base.id, connector->name,
 			    new_crtc->base.id, new_crtc->name,
-			    mode_type, modes[i]->name);
+			    mode_type, modes[i].name);
 
 		fallback = false;
 		conn_configured |= BIT(i);
@@ -789,8 +795,7 @@ int drm_client_modeset_probe(struct drm_client_dev *client, unsigned int width, 
 	unsigned int total_modes_count = 0;
 	struct drm_client_offset *offsets;
 	unsigned int connector_count = 0;
-	/* points to modes protected by mode_config.mutex */
-	const struct drm_display_mode **modes;
+	struct drm_display_mode *modes;
 	struct drm_crtc **crtcs;
 	int i, ret = 0;
 	bool *enabled;
@@ -858,10 +863,12 @@ int drm_client_modeset_probe(struct drm_client_dev *client, unsigned int width, 
 				      crtcs, modes, 0, width, height);
 	}
 
+	mutex_unlock(&dev->mode_config.mutex);
+
 	drm_client_modeset_release(client);
 
 	for (i = 0; i < connector_count; i++) {
-		const struct drm_display_mode *mode = modes[i];
+		const struct drm_display_mode *mode = &modes[i];
 		struct drm_crtc *crtc = crtcs[i];
 		struct drm_client_offset *offset = &offsets[i];
 
@@ -892,7 +899,6 @@ int drm_client_modeset_probe(struct drm_client_dev *client, unsigned int width, 
 			modeset->y = offset->y;
 		}
 	}
-	mutex_unlock(&dev->mode_config.mutex);
 
 	mutex_unlock(&client->modeset_mutex);
 out:
