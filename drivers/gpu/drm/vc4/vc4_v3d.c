@@ -368,7 +368,6 @@ void vc4_v3d_bin_bo_put(struct vc4_dev *vc4)
 	mutex_unlock(&vc4->bin_bo_lock);
 }
 
-#ifdef CONFIG_PM
 static int vc4_v3d_runtime_suspend(struct device *dev)
 {
 	struct vc4_v3d *v3d = dev_get_drvdata(dev);
@@ -397,7 +396,6 @@ static int vc4_v3d_runtime_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
 int vc4_v3d_debugfs_init(struct drm_minor *minor)
 {
@@ -507,7 +505,8 @@ static void vc4_v3d_unbind(struct device *dev, struct device *master,
 }
 
 static const struct dev_pm_ops vc4_v3d_pm_ops = {
-	SET_RUNTIME_PM_OPS(vc4_v3d_runtime_suspend, vc4_v3d_runtime_resume, NULL)
+	RUNTIME_PM_OPS(vc4_v3d_runtime_suspend, vc4_v3d_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
 };
 
 static const struct component_ops vc4_v3d_ops = {
@@ -538,6 +537,6 @@ struct platform_driver vc4_v3d_driver = {
 	.driver = {
 		.name = "vc4_v3d",
 		.of_match_table = vc4_v3d_dt_match,
-		.pm = &vc4_v3d_pm_ops,
+		.pm = pm_ptr(&vc4_v3d_pm_ops),
 	},
 };
