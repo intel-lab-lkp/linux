@@ -857,3 +857,28 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer 
 
 	return total;
 }
+
+/**
+ * xe_ggtt_read_pte - Read a PTE from the GGTT
+ * @ggtt: &xe_ggtt
+ * @offset: the offset for which the mapping should be read.
+ *
+ * Used by display for inheriting a bios set FB.
+ */
+u64 xe_ggtt_read_pte(struct xe_ggtt *ggtt, u64 offset)
+{
+	return ioread64(ggtt->gsm + (offset / XE_PAGE_SIZE));
+}
+
+/**
+ * xe_ggtt_write_pte - Write a PTE to the GGTT
+ * @ggtt: &xe_ggtt
+ * @offset: the offset for which the mapping should be written.
+ * @pte: The page table entry to write
+ *
+ * Used by display for writing normal and rotated GGTT entries for temporary pinned FB's.
+ */
+void xe_ggtt_write_pte(struct xe_ggtt *ggtt, u64 offset, u64 pte)
+{
+	return ggtt->pt_ops->ggtt_set_pte(ggtt, offset, pte);
+}
