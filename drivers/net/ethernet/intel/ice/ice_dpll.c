@@ -10,6 +10,7 @@
 #define ICE_DPLL_PIN_IDX_INVALID		0xff
 #define ICE_DPLL_RCLK_NUM_PER_PF		1
 #define ICE_DPLL_PIN_ESYNC_PULSE_HIGH_PERCENT	25
+#define ICE_DPLL_GEN_OUT_LEN			3
 
 /**
  * enum ice_dpll_pin_type - enumerate ice pin types:
@@ -2064,6 +2065,46 @@ static int ice_dpll_init_worker(struct ice_pf *pf)
 }
 
 /**
+ * ice_dpll_init_info_output_pins_generic - initializes generic output pins info
+ * @pf: board private structure
+ *
+ * Init information for generic output pins, cache them in PF's pins structures.
+ *
+ * Return:
+ * * 0 - success
+ * * negative - init failure reason
+ */
+static int ice_dpll_init_info_output_pins_generic(struct ice_pf *pf)
+{
+	static const char labels[][ICE_DPLL_GEN_OUT_LEN] = {
+		"0", "1", "2", "3", "4", "5", "6", "7", "8",
+		"9", "10", "11", "12", "13", "14", "15" };
+	u32 cap = DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
+	struct ice_dpll_pin *pins = pf->dplls.outputs;
+	int i, ret = -EINVAL;
+
+	if (pf->dplls.num_outputs > sizeof(labels) / ICE_DPLL_GEN_OUT_LEN)
+		return ret;
+	for (i = 0; i < pf->dplls.num_outputs; i++) {
+		pins[i].idx = i;
+		pins[i].prop.board_label = labels[i];
+		pins[i].prop.type = DPLL_PIN_TYPE_EXT;
+		pins[i].prop.phase_range.min =
+			pf->dplls.output_phase_adj_max;
+		pins[i].prop.phase_range.max =
+			-pf->dplls.output_phase_adj_max;
+		pins[i].prop.capabilities = cap;
+		pins[i].pf = pf;
+		ret = ice_dpll_pin_state_update(pf, &pins[i],
+						ICE_DPLL_PIN_TYPE_OUTPUT, NULL);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
+/**
  * ice_dpll_init_info_direct_pins - initializes direct pins info
  * @pf: board private structure
  * @pin_type: type of pins being initialized
@@ -2097,6 +2138,8 @@ ice_dpll_init_info_direct_pins(struct ice_pf *pf,
 		pins = pf->dplls.outputs;
 		num_pins = pf->dplls.num_outputs;
 		input = false;
+		if (num_pins != ice_cgu_get_num_pins(hw, input))
+			return ice_dpll_init_info_output_pins_generic(pf);
 		break;
 	default:
 		return -EINVAL;

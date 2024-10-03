@@ -5965,6 +5965,25 @@ ice_cgu_get_pin_desc(struct ice_hw *hw, bool input, int *size)
 }
 
 /**
+ * ice_cgu_get_num_pins - get pin description array size
+ * @hw: pointer to the hw struct
+ * @input: if request is done against input or output pins
+ *
+ * Return: size of pin description array for given hw.
+ */
+int ice_cgu_get_num_pins(struct ice_hw *hw, bool input)
+{
+	const struct ice_cgu_pin_desc *t;
+	int size;
+
+	t = ice_cgu_get_pin_desc(hw, input, &size);
+	if (t)
+		return size;
+
+	return 0;
+}
+
+/**
  * ice_cgu_get_pin_type - get pin's type
  * @hw: pointer to the hw struct
  * @pin: pin index
