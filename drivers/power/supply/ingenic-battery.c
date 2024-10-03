@@ -79,8 +79,10 @@ static int ingenic_battery_set_scale(struct ingenic_battery *bat)
 		dev_err(bat->dev, "Unable to read channel avail scale\n");
 		return ret;
 	}
-	if (ret != IIO_AVAIL_LIST || scale_type != IIO_VAL_FRACTIONAL_LOG2)
-		return -EINVAL;
+	if (ret != IIO_AVAIL_LIST || scale_type != IIO_VAL_FRACTIONAL_LOG2) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	max_mV = bat->info->voltage_max_design_uv / 1000;
 
@@ -99,7 +101,8 @@ static int ingenic_battery_set_scale(struct ingenic_battery *bat)
 
 	if (best_idx < 0) {
 		dev_err(bat->dev, "Unable to find matching voltage scale\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto out;
 	}
 
 	/* Only set scale if there is more than one (fractional) entry */
@@ -109,10 +112,13 @@ static int ingenic_battery_set_scale(struct ingenic_battery *bat)
 						  scale_raw[best_idx + 1],
 						  IIO_CHAN_INFO_SCALE);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
-	return 0;
+	ret = 0;
+out:
+	kfree(scale_raw);
+	return ret;
 }
 
 static enum power_supply_property ingenic_battery_properties[] = {
