@@ -30,6 +30,37 @@
 
 #include "drm_crtc_internal.h"
 
+/**
+ * DOC: overview
+ *
+ * A colorop represents a single color operation. Colorops are chained
+ * via the NEXT property and make up color pipelines. Color pipelines
+ * are advertised and selected via the COLOR_PIPELINE &drm_plane
+ * property.
+ *
+ * A colorop will be of a certain type, advertised by the read-only TYPE
+ * property. Each type of colorop will advertise a different set of
+ * properties and is programmed in a different manner. Types can be
+ * enumerated 1D curves, 1D LUTs, 3D LUTs, matrices, etc. See the
+ * &drm_colorop_type documentation for information on each type.
+ *
+ * If a colorop advertises the BYPASS property it can be bypassed.
+ *
+ * Since colorops cannot stand-alone and are used to describe colorop
+ * operations on a plane they don't have their own locking mechanism but
+ * are locked and programmed along with their associated &drm_plane.
+ *
+ * Colorops are only advertised and valid for atomic drivers and atomic
+ * userspace that signals the DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE client
+ * cap. When a driver advertises the COLOR_PIPELINE property on a
+ * &drm_plane and userspace signals the
+ * DRM_CLIENT_CAP_PLANE_COLOR_PIPELINE the driver shall ignore all other
+ * plane color properties, such as COLOR_ENCODING and COLOR_RANGE.
+ *
+ * More information about colorops and color pipelines can be found at
+ * rfc/color_pipeline.rst.
+ */
+
 static const struct drm_prop_enum_list drm_colorop_type_enum_list[] = {
 	{ DRM_COLOROP_1D_CURVE, "1D Curve" },
 };
