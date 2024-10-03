@@ -647,9 +647,7 @@ static int ath9k_of_init(struct ath_softc *sc)
 		ah->ah_flags |= AH_NO_EEP_SWAP;
 	}
 
-	of_get_mac_address(np, common->macaddr);
-
-	return 0;
+	return of_get_mac_address(np, common->macaddr);
 }
 
 static int ath9k_init_softc(u16 devid, struct ath_softc *sc,
