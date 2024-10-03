@@ -871,11 +871,11 @@ out:
 	return ret;
 }
 
-static struct drm_property_blob *setcmap_new_gamma_lut(struct drm_crtc *crtc,
+static struct drm_property_blob *setcmap_new_blob_lut(struct drm_crtc *crtc,
 						       struct fb_cmap *cmap)
 {
 	struct drm_device *dev = crtc->dev;
-	struct drm_property_blob *gamma_lut;
+	struct drm_property_blob *blob;
 	struct drm_color_lut *lut;
 	int size = crtc->gamma_size;
 	int i;
@@ -883,11 +883,11 @@ static struct drm_property_blob *setcmap_new_gamma_lut(struct drm_crtc *crtc,
 	if (!size || cmap->start + cmap->len > size)
 		return ERR_PTR(-EINVAL);
 
-	gamma_lut = drm_property_create_blob(dev, sizeof(*lut) * size, NULL);
-	if (IS_ERR(gamma_lut))
-		return gamma_lut;
+	blob = drm_property_create_blob(dev, sizeof(*lut) * size, NULL);
+	if (IS_ERR(blob))
+		return blob;
 
-	lut = gamma_lut->data;
+	lut = blob->data;
 	if (cmap->start || cmap->len != size) {
 		u16 *r = crtc->gamma_store;
 		u16 *g = r + crtc->gamma_size;
@@ -911,14 +911,14 @@ static struct drm_property_blob *setcmap_new_gamma_lut(struct drm_crtc *crtc,
 		lut[cmap->start + i].blue = cmap->blue[i];
 	}
 
-	return gamma_lut;
+	return blob;
 }
 
 static int setcmap_atomic(struct fb_cmap *cmap, struct fb_info *info)
 {
 	struct drm_fb_helper *fb_helper = info->par;
 	struct drm_device *dev = fb_helper->dev;
-	struct drm_property_blob *gamma_lut = NULL;
+	struct drm_property_blob *blob = NULL;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_crtc_state *crtc_state;
 	struct drm_atomic_state *state;
@@ -926,6 +926,9 @@ static int setcmap_atomic(struct fb_cmap *cmap, struct fb_info *info)
 	struct drm_crtc *crtc;
 	u16 *r, *g, *b;
 	bool replaced;
+	u32 gamma_id = dev->mode_config.gamma_lut_property->base.id;
+	u32 degamma_id = dev->mode_config.degamma_lut_property->base.id;
+	bool use_gamma_lut;
 	int ret = 0;
 
 	drm_modeset_acquire_init(&ctx, 0);
@@ -941,11 +944,21 @@ retry:
 	drm_client_for_each_modeset(modeset, &fb_helper->client) {
 		crtc = modeset->crtc;
 
-		if (!gamma_lut)
-			gamma_lut = setcmap_new_gamma_lut(crtc, cmap);
-		if (IS_ERR(gamma_lut)) {
-			ret = PTR_ERR(gamma_lut);
-			gamma_lut = NULL;
+		if (drm_mode_obj_find_prop_id(&crtc->base, gamma_id))
+			use_gamma_lut = true;
+		else if (drm_mode_obj_find_prop_id(&crtc->base, degamma_id))
+			use_gamma_lut = false;
+		else {
+			ret = -ENODEV;
+			blob = NULL;
+			goto out_state;
+		}
+
+		if (!blob)
+			blob = setcmap_new_blob_lut(crtc, cmap);
+		if (IS_ERR(blob)) {
+			ret = PTR_ERR(blob);
+			blob = NULL;
 			goto out_state;
 		}
 
@@ -956,15 +969,14 @@ retry:
 		}
 
 		/*
-		 * FIXME: This always uses gamma_lut. Some HW have only
-		 * degamma_lut, in which case we should reset gamma_lut and set
-		 * degamma_lut. See drm_crtc_legacy_gamma_set().
+		 * Some HW have only degamma_lut, in which case we should
+		 * reset gamma_lut and set degamma_lut.
 		 */
 		replaced  = drm_property_replace_blob(&crtc_state->degamma_lut,
-						      NULL);
+						      use_gamma_lut ? NULL : blob);
 		replaced |= drm_property_replace_blob(&crtc_state->ctm, NULL);
 		replaced |= drm_property_replace_blob(&crtc_state->gamma_lut,
-						      gamma_lut);
+						      use_gamma_lut ? blob : NULL);
 		crtc_state->color_mgmt_changed |= replaced;
 	}
 
@@ -988,7 +1000,7 @@ out_state:
 	if (ret == -EDEADLK)
 		goto backoff;
 
-	drm_property_blob_put(gamma_lut);
+	drm_property_blob_put(blob);
 	drm_atomic_state_put(state);
 out_ctx:
 	drm_modeset_drop_locks(&ctx);
