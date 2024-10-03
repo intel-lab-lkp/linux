@@ -197,7 +197,7 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 	if (ret && ret != -ENODEV) {
 		if (ret != -EPROBE_DEFER)
 			DRM_DEV_ERROR(dev, "Couldn't retrieve/enable sram supply\n");
-		return ret;
+		goto opp_err;
 	}
 
 	/*
@@ -207,7 +207,7 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 	ret = dev_pm_opp_set_opp(dev, opp);
 	if (ret) {
 		DRM_DEV_ERROR(dev, "Couldn't set recommended OPP\n");
-		return ret;
+		goto opp_err;
 	}
 
 	dev_pm_opp_put(opp);
@@ -242,6 +242,10 @@ int panthor_devfreq_init(struct panthor_device *ptdev)
 		DRM_DEV_INFO(dev, "Failed to register cooling device\n");
 
 	return 0;
+
+opp_err:
+	dev_pm_opp_put(opp);
+	return ret;
 }
 
 int panthor_devfreq_resume(struct panthor_device *ptdev)
