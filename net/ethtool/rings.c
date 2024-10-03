@@ -216,7 +216,8 @@ ethnl_set_rings(struct ethnl_req_info *req_info, struct genl_info *info)
 	bool mod = false, thresh_mod = false;
 	struct nlattr **tb = info->attrs;
 	const struct nlattr *err_attr;
-	int ret;
+	struct netdev_rx_queue *rxq;
+	int ret, i;
 
 	dev->ethtool_ops->get_ringparam(dev, &ringparam,
 					&kernel_ringparam, info->extack);
@@ -261,6 +262,18 @@ ethnl_set_rings(struct ethnl_req_info *req_info, struct genl_info *info)
 					kernel_ringparam.tcp_data_split_thresh_max);
 
 		return -EINVAL;
+	}
+
+	if (kernel_ringparam.tcp_data_split != ETHTOOL_TCP_DATA_SPLIT_ENABLED ||
+	    kernel_ringparam.tcp_data_split_thresh) {
+		for (i = 0; i < dev->real_num_rx_queues; i++) {
+			rxq = __netif_get_rx_queue(dev, i);
+			if (rxq->mp_params.mp_priv) {
+				NL_SET_ERR_MSG(info->extack,
+					       "tcp-header-data-split is disabled or threshold is not zero");
+				return -EINVAL;
+			}
+		}
 	}
 
 	/* ensure new ring parameters are within limits */
