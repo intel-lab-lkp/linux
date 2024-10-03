@@ -69,7 +69,7 @@ initial_plane_bo(struct xe_device *xe,
 	flags = XE_BO_FLAG_PINNED | XE_BO_FLAG_SCANOUT | XE_BO_FLAG_GGTT;
 
 	base = round_down(plane_config->base, page_size);
-	if (IS_DGFX(xe)) {
+	if (IS_DGFX(xe) || GRAPHICS_VERx100(xe) >= 1270) {
 		u64 __iomem *gte = tile0->mem.ggtt->gsm;
 		u64 pte;
 
@@ -83,7 +83,6 @@ initial_plane_bo(struct xe_device *xe,
 		}
 
 		phys_base = pte & ~(page_size - 1);
-		flags |= XE_BO_FLAG_VRAM0;
 
 		/*
 		 * We don't currently expect this to ever be placed in the
@@ -105,7 +104,6 @@ initial_plane_bo(struct xe_device *xe,
 		if (!stolen)
 			return NULL;
 		phys_base = base;
-		flags |= XE_BO_FLAG_STOLEN;
 
 		if (XE_WA(xe_root_mmio_gt(xe), 22019338487_display))
 			return NULL;
@@ -119,6 +117,11 @@ initial_plane_bo(struct xe_device *xe,
 		    plane_config->size * 2 >> PAGE_SHIFT >= stolen->size)
 			return NULL;
 	}
+
+	if (IS_DGFX(xe))
+		flags |= XE_BO_FLAG_VRAM0;
+	else
+		flags |= XE_BO_FLAG_STOLEN;
 
 	size = round_up(plane_config->base + plane_config->size,
 			page_size);
