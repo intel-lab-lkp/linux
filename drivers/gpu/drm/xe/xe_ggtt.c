@@ -64,6 +64,18 @@
  * give us the correct placement for free.
  */
 
+/**
+ * struct xe_ggtt_pt_ops - GGTT Page table operations
+ * Which can vary from platform to platform.
+ */
+struct xe_ggtt_pt_ops {
+	/** @pte_encode_bo: Encode PTE address for a given BO */
+	xe_ggtt_pte_encode_bo_fn pte_encode_bo;
+	/** @ggtt_set_pte: Directly write into GGTT's PTE */
+	void (*ggtt_set_pte)(struct xe_ggtt *ggtt, u64 addr, u64 pte);
+};
+
+
 static u64 xelp_ggtt_pte_encode_bo(struct xe_bo *bo, u64 bo_offset,
 				   u16 pat_index)
 {
@@ -881,4 +893,16 @@ u64 xe_ggtt_read_pte(struct xe_ggtt *ggtt, u64 offset)
 void xe_ggtt_write_pte(struct xe_ggtt *ggtt, u64 offset, u64 pte)
 {
 	return ggtt->pt_ops->ggtt_set_pte(ggtt, offset, pte);
+}
+
+/**
+ * xe_ggtt_write_pte - Write a PTE to the GGTT
+ * @ggtt: &xe_ggtt
+ * @offset: the offset for which the mapping should be written.
+ *
+ * Used by display for DPT and GGTT paths to enccode BO's.
+ */
+xe_ggtt_pte_encode_bo_fn xe_ggtt_get_encode_pte_bo_fn(struct xe_ggtt *ggtt)
+{
+	return ggtt->pt_ops->pte_encode_bo;
 }
