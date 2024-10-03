@@ -42,13 +42,11 @@ static int __init armada_xp_pmsu_cpufreq_init(void)
 		return 0;
 
 	ret = of_address_to_resource(np, 1, &res);
+	of_node_put(np);
 	if (ret) {
 		pr_warn(FW_WARN "not enabling cpufreq, deprecated armada-xp-cpu-clock binding\n");
-		of_node_put(np);
 		return 0;
 	}
-
-	of_node_put(np);
 
 	/*
 	 * For each CPU, this loop registers the operating points
