@@ -3660,7 +3660,7 @@ sub process {
 			    $help_length < $min_conf_desc_length) {
 				my $stat_real = get_stat_real($linenr, $ln - 1);
 				WARN("CONFIG_DESCRIPTION",
-				     "please write a help paragraph that fully describes the config symbol\n" . "$here\n$stat_real\n");
+				     "please write a help paragraph with at least $min_conf_desc_length lines that fully describes the config symbol\n" . "$here\n$stat_real\n");
 			}
 		}
 
