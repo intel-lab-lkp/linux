@@ -220,8 +220,8 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 		   coredump->reset_time.tv_nsec);
 
 	if (coredump->reset_task_info.pid)
-		drm_printf(&p, "process_name: %s PID: %d\n",
-			   coredump->reset_task_info.process_name,
+		drm_printf(&p, "process: %s PID: %d\n",
+			   coredump->reset_task_info.process_desc,
 			   coredump->reset_task_info.pid);
 
 	/* SOC Information */

@@ -1701,7 +1701,7 @@ static int sdma_v4_4_2_print_iv_entry(struct amdgpu_device *adev,
 	task_info = amdgpu_vm_get_task_info_pasid(adev, entry->pasid);
 	if (task_info) {
 		dev_dbg_ratelimited(adev->dev, " for process %s pid %d thread %s pid %d\n",
-				    task_info->process_name, task_info->tgid,
+				    task_info->process_desc, task_info->tgid,
 				    task_info->task_name, task_info->pid);
 		amdgpu_vm_put_task_info(task_info);
 	}
