@@ -792,13 +792,11 @@ static int rcar_du_cmm_init(struct rcar_du_device *rcdu)
 		}
 
 		pdev = of_find_device_by_node(cmm);
+		of_node_put(cmm);
 		if (!pdev) {
 			dev_err(rcdu->dev, "No device found for CMM%u\n", i);
-			of_node_put(cmm);
 			return -EINVAL;
 		}
-
-		of_node_put(cmm);
 
 		/*
 		 * -ENODEV is used to report that the CMM config option is
