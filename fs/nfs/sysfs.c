@@ -20,12 +20,6 @@
 
 static struct kset *nfs_kset;
 
-static void nfs_kset_release(struct kobject *kobj)
-{
-	struct kset *kset = container_of(kobj, struct kset, kobj);
-	kfree(kset);
-}
-
 static const struct kobj_ns_type_operations *nfs_netns_object_child_ns_type(
 		const struct kobject *kobj)
 {
@@ -33,34 +27,17 @@ static const struct kobj_ns_type_operations *nfs_netns_object_child_ns_type(
 }
 
 static struct kobj_type nfs_kset_type = {
-	.release = nfs_kset_release,
+	.release = kset_release,
 	.sysfs_ops = &kobj_sysfs_ops,
 	.child_ns_type = nfs_netns_object_child_ns_type,
 };
 
 int nfs_sysfs_init(void)
 {
-	int ret;
-
-	nfs_kset = kzalloc(sizeof(*nfs_kset), GFP_KERNEL);
+	nfs_kset = kset_type_create_and_add("nfs", NULL, fs_kobj,
+					    &nfs_kset_type);
 	if (!nfs_kset)
 		return -ENOMEM;
-
-	ret = kobject_set_name(&nfs_kset->kobj, "nfs");
-	if (ret) {
-		kfree(nfs_kset);
-		return ret;
-	}
-
-	nfs_kset->kobj.parent = fs_kobj;
-	nfs_kset->kobj.ktype = &nfs_kset_type;
-	nfs_kset->kobj.kset = NULL;
-
-	ret = kset_register(nfs_kset);
-	if (ret) {
-		kfree(nfs_kset);
-		return ret;
-	}
 
 	return 0;
 }
