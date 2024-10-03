@@ -760,9 +760,25 @@ static int iio_channel_read_avail(struct iio_channel *chan,
 	if (!iio_channel_has_available(chan->channel, info))
 		return -EINVAL;
 
-	if (iio_info->read_avail)
-		return iio_info->read_avail(chan->indio_dev, chan->channel,
-					    vals, type, length, info);
+	if (iio_info->read_avail) {
+		const int *vals_tmp;
+		int ret;
+
+		ret = iio_info->read_avail(chan->indio_dev, chan->channel,
+					   &vals_tmp, type, length, info);
+		if (ret < 0)
+			return ret;
+
+		*vals = kmemdup_array(vals_tmp, *length, sizeof(int), GFP_KERNEL);
+		if (!*vals)
+			return -ENOMEM;
+
+		if (iio_info->read_avail_release_resource)
+			iio_info->read_avail_release_resource(
+				chan->indio_dev, chan->channel, vals_tmp, info);
+
+		return ret;
+	}
 	return -EINVAL;
 }
 
@@ -789,9 +805,11 @@ int iio_read_avail_channel_raw(struct iio_channel *chan,
 	ret = iio_read_avail_channel_attribute(chan, vals, &type, length,
 					       IIO_CHAN_INFO_RAW);
 
-	if (ret >= 0 && type != IIO_VAL_INT)
+	if (ret >= 0 && type != IIO_VAL_INT) {
 		/* raw values are assumed to be IIO_VAL_INT */
+		kfree(*vals);
 		ret = -EINVAL;
+	}
 
 	return ret;
 }
@@ -820,24 +838,31 @@ static int iio_channel_read_max(struct iio_channel *chan,
 			if (val2)
 				*val2 = vals[5];
 		}
-		return 0;
+		ret = 0;
+		break;
 
 	case IIO_AVAIL_LIST:
-		if (length <= 0)
-			return -EINVAL;
+		if (length <= 0) {
+			ret = -EINVAL;
+			goto out;
+		}
 		switch (*type) {
 		case IIO_VAL_INT:
 			*val = max_array(vals, length);
+			ret = 0;
 			break;
 		default:
 			/* TODO: learn about max for other iio values */
-			return -EINVAL;
+			ret = -EINVAL;
 		}
-		return 0;
+		break;
 
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+out:
+	kfree(vals);
+	return ret;
 }
 
 int iio_read_max_channel_raw(struct iio_channel *chan, int *val)
@@ -876,24 +901,31 @@ static int iio_channel_read_min(struct iio_channel *chan,
 			if (val2)
 				*val2 = vals[1];
 		}
-		return 0;
+		ret = 0;
+		break;
 
 	case IIO_AVAIL_LIST:
-		if (length <= 0)
-			return -EINVAL;
+		if (length <= 0) {
+			ret = -EINVAL;
+			goto out;
+		}
 		switch (*type) {
 		case IIO_VAL_INT:
 			*val = min_array(vals, length);
+			ret = 0;
 			break;
 		default:
 			/* TODO: learn about min for other iio values */
-			return -EINVAL;
+			ret = -EINVAL;
 		}
-		return 0;
+		break;
 
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+out:
+	kfree(vals);
+	return ret;
 }
 
 int iio_read_min_channel_raw(struct iio_channel *chan, int *val)
