@@ -6346,6 +6346,9 @@ static inline void pfnmap_args_setup(struct follow_pfnmap_args *args,
 static inline void pfnmap_lockdep_assert(struct vm_area_struct *vma)
 {
 #ifdef CONFIG_LOCKDEP
+	if (!vma->vm_file)
+		return;
+
 	struct address_space *mapping = vma->vm_file->f_mapping;
 
 	if (mapping)
