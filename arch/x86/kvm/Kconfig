@@ -17,8 +17,8 @@ menuconfig VIRTUALIZATION
 
 if VIRTUALIZATION
 
-config KVM
-	tristate "Kernel-based Virtual Machine (KVM) support"
+config KVM_X86_COMMON
+	def_tristate KVM if KVM_INTEL || KVM_AMD
 	depends on X86_LOCAL_APIC
 	select KVM_COMMON
 	select KVM_GENERIC_MMU_NOTIFIER
@@ -45,6 +45,9 @@ config KVM
 	select KVM_GENERIC_HARDWARE_ENABLING
 	select KVM_GENERIC_PRE_FAULT_MEMORY
 	select KVM_WERROR if WERROR
+
+config KVM
+	tristate "Kernel-based Virtual Machine (KVM) support"
 	help
 	  Support hosting fully virtualized guest machines using hardware
 	  virtualization extensions.  You will need a fairly recent
