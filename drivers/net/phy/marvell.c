@@ -195,6 +195,10 @@
 
 #define MII_88E1510_MSCR_2		0x15
 
+#define MII_88E1510_FSCR2		0x1a
+#define MII_88E1510_FSCR2_BYPASS_ENABLE	BIT(6)
+#define MII_88E1510_FSCR2_BYPASS_STATUS	BIT(5)
+
 #define MII_VCT5_TX_RX_MDI0_COUPLING	0x10
 #define MII_VCT5_TX_RX_MDI1_COUPLING	0x11
 #define MII_VCT5_TX_RX_MDI2_COUPLING	0x12
@@ -1623,11 +1627,21 @@ static void fiber_lpa_mod_linkmode_lpa_t(unsigned long *advertising, u32 lpa)
 static int marvell_read_status_page_an(struct phy_device *phydev,
 				       int fiber, int status)
 {
+	int fscr2;
 	int lpa;
 	int err;
 
 	if (!(status & MII_M1011_PHY_STATUS_RESOLVED)) {
 		phydev->link = 0;
+		if (fiber) {
+			fscr2 = phy_read(phydev, MII_88E1510_FSCR2);
+			if (fscr2 < 0)
+				return fscr2;
+			if ((fscr2 & MII_88E1510_FSCR2_BYPASS_ENABLE) &&
+			    (fscr2 & MII_88E1510_FSCR2_BYPASS_STATUS) &&
+			    (genphy_read_status_fixed(phydev) == 0))
+				phydev->link = 1;
+		}
 		return 0;
 	}
 
