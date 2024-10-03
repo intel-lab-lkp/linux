@@ -211,6 +211,7 @@ config BNXT
 	select FW_LOADER
 	select LIBCRC32C
 	select NET_DEVLINK
+	select NET_DEVMEM
 	select PAGE_POOL
 	select DIMLIB
 	select AUXILIARY_BUS
