@@ -195,6 +195,10 @@
 
 #define MII_88E1510_MSCR_2		0x15
 
+#define MII_88E1510_FSCR2		0x1a
+#define MII_88E1510_FSCR2_BYPASS_ENABLE	(1<<6)
+#define MII_88E1510_FSCR2_BYPASS_STATUS	(1<<5)
+
 #define MII_VCT5_TX_RX_MDI0_COUPLING	0x10
 #define MII_VCT5_TX_RX_MDI1_COUPLING	0x11
 #define MII_VCT5_TX_RX_MDI2_COUPLING	0x12
@@ -1625,9 +1629,26 @@ static int marvell_read_status_page_an(struct phy_device *phydev,
 {
 	int lpa;
 	int err;
+	int fscr2;
 
 	if (!(status & MII_M1011_PHY_STATUS_RESOLVED)) {
-		phydev->link = 0;
+		if (!fiber) {
+			phydev->link = 0;
+		} else {
+			fscr2 = phy_read(phydev, MII_88E1510_FSCR2);
+			if (fscr2 > 0) {
+				if ((fscr2 & MII_88E1510_FSCR2_BYPASS_ENABLE) &&
+				    (fscr2 & MII_88E1510_FSCR2_BYPASS_STATUS)) {
+					if (genphy_read_status_fixed(phydev) < 0)
+						phydev->link = 0;
+				} else {
+					phydev->link = 0;
+				}
+			} else {
+				phydev->link = 0;
+			}
+		}
+
 		return 0;
 	}
 
