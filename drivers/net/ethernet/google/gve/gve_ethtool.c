@@ -52,12 +52,13 @@ static const char gve_gstrings_rx_stats[][ETH_GSTRING_LEN] = {
 	"rx_posted_desc[%u]", "rx_completed_desc[%u]", "rx_consumed_desc[%u]",
 	"rx_bytes[%u]", "rx_hsplit_bytes[%u]", "rx_cont_packet_cnt[%u]",
 	"rx_frag_flip_cnt[%u]", "rx_frag_copy_cnt[%u]", "rx_frag_alloc_cnt[%u]",
-	"rx_dropped_pkt[%u]", "rx_copybreak_pkt[%u]", "rx_copied_pkt[%u]",
-	"rx_queue_drop_cnt[%u]", "rx_no_buffers_posted[%u]",
-	"rx_drops_packet_over_mru[%u]", "rx_drops_invalid_checksum[%u]",
-	"rx_xdp_aborted[%u]", "rx_xdp_drop[%u]", "rx_xdp_pass[%u]",
-	"rx_xdp_tx[%u]", "rx_xdp_redirect[%u]",
-	"rx_xdp_tx_errors[%u]", "rx_xdp_redirect_errors[%u]", "rx_xdp_alloc_fails[%u]",
+	"rx_pp_alloc_fail[%u]", "rx_dropped_pkt[%u]", "rx_copybreak_pkt[%u]",
+	"rx_copied_pkt[%u]", "rx_queue_drop_cnt[%u]",
+	"rx_no_buffers_posted[%u]", "rx_drops_packet_over_mru[%u]",
+	"rx_drops_invalid_checksum[%u]", "rx_xdp_aborted[%u]",
+	"rx_xdp_drop[%u]", "rx_xdp_pass[%u]", "rx_xdp_tx[%u]",
+	"rx_xdp_redirect[%u]", "rx_xdp_tx_errors[%u]",
+	"rx_xdp_redirect_errors[%u]", "rx_xdp_alloc_fails[%u]",
 };
 
 static const char gve_gstrings_tx_stats[][ETH_GSTRING_LEN] = {
@@ -319,6 +320,7 @@ gve_get_ethtool_stats(struct net_device *netdev,
 			data[i++] = rx->rx_frag_flip_cnt;
 			data[i++] = rx->rx_frag_copy_cnt;
 			data[i++] = rx->rx_frag_alloc_cnt;
+			data[i++] = rx->rx_pp_alloc_fail;
 			/* rx dropped packets */
 			data[i++] = tmp_rx_skb_alloc_fail +
 				tmp_rx_buf_alloc_fail +
