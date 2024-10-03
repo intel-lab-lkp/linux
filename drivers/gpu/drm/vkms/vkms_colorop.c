@@ -31,7 +31,7 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 		goto cleanup;
 	}
 
-	ret = drm_colorop_curve_1d_init(dev, ops[i], plane, supported_tfs);
+	ret = drm_colorop_curve_1d_init(dev, ops[i], plane, supported_tfs, true);
 	if (ret)
 		goto cleanup;
 
@@ -48,7 +48,7 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 		goto cleanup;
 	}
 
-	ret = drm_colorop_ctm_3x4_init(dev, ops[i], plane);
+	ret = drm_colorop_ctm_3x4_init(dev, ops[i], plane, true);
 	if (ret)
 		goto cleanup;
 
@@ -64,7 +64,7 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 		goto cleanup;
 	}
 
-	ret = drm_colorop_ctm_3x4_init(dev, ops[i], plane);
+	ret = drm_colorop_ctm_3x4_init(dev, ops[i], plane, true);
 	if (ret)
 		goto cleanup;
 
@@ -80,7 +80,7 @@ static int vkms_initialize_color_pipeline(struct drm_plane *plane, struct drm_pr
 		goto cleanup;
 	}
 
-	ret = drm_colorop_curve_1d_init(dev, ops[i], plane, supported_tfs);
+	ret = drm_colorop_curve_1d_init(dev, ops[i], plane, supported_tfs, true);
 	if (ret)
 		goto cleanup;
 
