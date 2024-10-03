@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 include ../../../scripts/Makefile.arch
+top_srcdir = $(realpath ../../../..)
 
 TEST_GEN_PROGS := vdso_test_gettimeofday
 TEST_GEN_PROGS += vdso_test_getcpu
@@ -11,6 +12,8 @@ endif
 TEST_GEN_PROGS += vdso_test_correctness
 ifeq ($(ARCH)$(CONFIG_X86_32),$(filter $(ARCH)$(CONFIG_X86_32),x86 x86_64 loongarch arm64 powerpc s390))
 TEST_GEN_PROGS += vdso_test_getrandom
+endif
+ifneq ($(wildcard $(top_srcdir)/tools/arch/$(SRCARCH)/vdso/vgetrandom-chacha.S),)
 TEST_GEN_PROGS += vdso_test_chacha
 endif
 
@@ -18,6 +21,7 @@ CFLAGS := -std=gnu99 -O2
 
 ifeq ($(CONFIG_X86_32),y)
 LDLIBS += -lgcc_s
+TEST_GEN_PROGS := $(filter-out vdso_test_chacha,$(TEST_GEN_PROGS))
 endif
 
 include ../lib.mk
