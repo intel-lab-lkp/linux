@@ -848,17 +848,13 @@ static void pcie_aspm_cap_init(struct pcie_link_state *link, int blacklist)
 /* Configure the ASPM L1 substates */
 static void pcie_config_aspm_l1ss(struct pcie_link_state *link, u32 state)
 {
-	u32 val, enable_req;
+	u32 val;
 	struct pci_dev *child = link->downstream, *parent = link->pdev;
 
-	enable_req = (link->aspm_enabled ^ state) & state;
-
 	/*
-	 * Here are the rules specified in the PCIe spec for enabling L1SS:
+	 * Spec r6.2, section 5.5.4, mentions the rules for enabling L1SS:
 	 * - When enabling L1.x, enable bit at parent first, then at child
 	 * - When disabling L1.x, disable bit at child first, then at parent
-	 * - When enabling ASPM L1.x, need to disable L1
-	 *   (at child followed by parent).
 	 * - The ASPM/PCIPM L1.2 must be disabled while programming timing
 	 *   parameters
 	 *
@@ -871,16 +867,6 @@ static void pcie_config_aspm_l1ss(struct pcie_link_state *link, u32 state)
 				       PCI_L1SS_CTL1_L1SS_MASK, 0);
 	pci_clear_and_set_config_dword(parent, parent->l1ss + PCI_L1SS_CTL1,
 				       PCI_L1SS_CTL1_L1SS_MASK, 0);
-	/*
-	 * If needed, disable L1, and it gets enabled later
-	 * in pcie_config_aspm_link().
-	 */
-	if (enable_req & (PCIE_LINK_STATE_L1_1 | PCIE_LINK_STATE_L1_2)) {
-		pcie_capability_clear_word(child, PCI_EXP_LNKCTL,
-					   PCI_EXP_LNKCTL_ASPM_L1);
-		pcie_capability_clear_word(parent, PCI_EXP_LNKCTL,
-					   PCI_EXP_LNKCTL_ASPM_L1);
-	}
 
 	val = 0;
 	if (state & PCIE_LINK_STATE_L1_1)
@@ -937,21 +923,33 @@ static void pcie_config_aspm_link(struct pcie_link_state *link, u32 state)
 		dwstream |= PCI_EXP_LNKCTL_ASPM_L1;
 	}
 
+	/*
+	 * Spec r6.2, section 5.5.4, recommends that setting either or both of
+	 * the enable bits for ASPM L1 PM Substates must be done while ASPM L1
+	 * is disabled. So disable L1 here, and it gets enabled later after the
+	 * L1ss configuration has been completed.
+	 *
+	 * Spec r6.2, section 7.5.3.7, mentions that ASPM L1 must be enabled by
+	 * software in the Upstream component on a Link prior to enabling ASPM
+	 * L1 in the Downstream component on the Link. When disabling L1,
+	 * software must disable ASPM L1 in the Downstream component on a Link
+	 * prior to disabling ASPM L1 in the Upstream component on that Link.
+	 *
+	 * Spec doesn't mention L0s.
+	 *
+	 * Disable L1 and L0s here, and they get enabled later after the L1ss
+	 * configuration has been completed.
+	 */
+	list_for_each_entry(child, &linkbus->devices, bus_list)
+		pcie_config_aspm_dev(child, 0);
+	pcie_config_aspm_dev(parent, 0);
+
 	if (link->aspm_capable & PCIE_LINK_STATE_L1SS)
 		pcie_config_aspm_l1ss(link, state);
 
-	/*
-	 * Spec 2.0 suggests all functions should be configured the
-	 * same setting for ASPM. Enabling ASPM L1 should be done in
-	 * upstream component first and then downstream, and vice
-	 * versa for disabling ASPM L1. Spec doesn't mention L0S.
-	 */
-	if (state & PCIE_LINK_STATE_L1)
-		pcie_config_aspm_dev(parent, upstream);
+	pcie_config_aspm_dev(parent, upstream);
 	list_for_each_entry(child, &linkbus->devices, bus_list)
 		pcie_config_aspm_dev(child, dwstream);
-	if (!(state & PCIE_LINK_STATE_L1))
-		pcie_config_aspm_dev(parent, upstream);
 
 	link->aspm_enabled = state;
 
