@@ -298,24 +298,27 @@ out_unset:
 static void print_help(const char *argv0)
 {
 	fprintf(stderr,
-		"usage: %s=\"...\" %s=\"...\" %s=\"...\" %s=\"...\" %s=\"...\" %s "
+		"usage: %s=\"...\" %s=\"...\" [other environment variables] %s "
 		"<cmd> [args]...\n\n",
-		ENV_FS_RO_NAME, ENV_FS_RW_NAME, ENV_TCP_BIND_NAME,
-		ENV_TCP_CONNECT_NAME, ENV_SCOPED_NAME, argv0);
+		ENV_FS_RO_NAME, ENV_FS_RW_NAME, argv0);
 	fprintf(stderr,
 		"Execute a command in a restricted environment.\n\n");
 	fprintf(stderr,
-		"Environment variables containing paths and ports "
-		"each separated by a colon:\n");
+		"All environment variables can be multi-valued, with a "
+		"colon delimiter.\n"
+		"\n"
+		"Mandatory settings:\n");
 	fprintf(stderr,
 		"* %s: list of paths allowed to be used in a read-only way.\n",
 		ENV_FS_RO_NAME);
 	fprintf(stderr,
-		"* %s: list of paths allowed to be used in a read-write way.\n\n",
+		"* %s: list of paths allowed to be used in a read-write way.\n",
 		ENV_FS_RW_NAME);
 	fprintf(stderr,
-		"Environment variables containing ports are optional "
-		"and could be skipped.\n");
+		"\n"
+		"Optional settings (when not set, their associated access "
+		"check is always allowed, which is different from an empty "
+		"string which means an empty list)\n");
 	fprintf(stderr,
 		"* %s: list of ports allowed to bind (server).\n",
 		ENV_TCP_BIND_NAME);
@@ -325,7 +328,8 @@ static void print_help(const char *argv0)
 	fprintf(stderr, "* %s: list of scoped IPCs.\n",
 		ENV_SCOPED_NAME);
 	fprintf(stderr,
-		"\nexample:\n"
+		"\n"
+		"Example:\n"
 		"%s=\"${PATH}:/lib:/usr:/proc:/etc:/dev/urandom\" "
 		"%s=\"/dev/null:/dev/full:/dev/zero:/dev/pts:/tmp\" "
 		"%s=\"9418\" "
