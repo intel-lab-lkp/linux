@@ -81,8 +81,19 @@ properties:
 
     properties:
       port@0:
-        $ref: /schemas/graph.yaml#/properties/port
+        unevaluatedProperties: false
+        $ref: /schemas/graph.yaml#/$defs/port-base
         description: Parallel RGB input port
+
+        properties:
+          endpoint:
+            $ref: /schemas/graph.yaml#/$defs/endpoint-base
+            unevaluatedProperties: false
+
+            properties:
+              data-lines:
+                $ref: /schemas/types.yaml#/definitions/uint32
+                enum: [ 16, 18, 24 ]
 
       port@1:
         $ref: /schemas/graph.yaml#/properties/port
