@@ -3938,13 +3938,13 @@ static int ppc440spe_adma_setup_irqs(struct ppc440spe_adma_device *adev,
 			goto err_req2;
 		}
 		adev->i2o_reg = of_iomap(np, 0);
+		of_node_put(np);
 		if (!adev->i2o_reg) {
 			pr_err("%s: failed to map I2O registers\n", __func__);
-			of_node_put(np);
 			ret = -EINVAL;
 			goto err_req2;
 		}
-		of_node_put(np);
+
 		/* Unmask 'CS FIFO Attention' interrupts and
 		 * enable generating interrupts on errors
 		 */
