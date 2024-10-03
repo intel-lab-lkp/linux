@@ -233,6 +233,15 @@ wait_remaining_ms_from_jiffies(unsigned long timestamp_jiffies, int to_wait_ms)
 }
 
 /*
+ * until_timeout_ns - Keep retrying (busy spin) until the duration has passed
+ */
+
+#define until_timeout_ns(end, timeout_ns) \
+	for ((end) = ktime_get() + (timeout_ns); \
+			ktime_before(ktime_get(), (end)); \
+			cpu_relax())
+
+/*
  * __wait_for - magic wait macro
  *
  * Macro to help avoid open coding check/wait/timeout patterns. Note that it's
