@@ -28,6 +28,7 @@
 #include <linux/slab.h>
 #include <linux/dma-map-ops.h>
 #include <linux/set_memory.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 
 /*

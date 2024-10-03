@@ -10,6 +10,7 @@
 #include <asm/boot.h>
 #include <asm/desc.h>
 #include <asm/i8259.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 #include <asm/realmode.h>
 #include <../kernel/smpboot.h>

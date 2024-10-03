@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/prefetch.h>
 #include <linux/io.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 
 #include "hyperv_vmbus.h"

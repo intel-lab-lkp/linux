@@ -5,6 +5,7 @@
 #include <linux/types.h>
 
 #include <asm/fpu/api.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 #include <asm/msr.h>
 #include <asm/tlbflush.h>

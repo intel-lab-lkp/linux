@@ -25,6 +25,7 @@
 #include <asm/page.h>
 #include <asm/desc.h>
 #include <asm/cpufeature.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <clocksource/hyperv_timer.h>
 
 #undef _ASM_X86_VVAR_H

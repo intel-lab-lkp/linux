@@ -12,6 +12,7 @@
 
 #include <linux/spinlock.h>
 
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 #include <asm/paravirt.h>
 #include <asm/apic.h>

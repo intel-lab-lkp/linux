@@ -7,6 +7,7 @@
 #include <linux/cpuhotplug.h>
 #include <linux/minmax.h>
 #include <asm/hypervisor.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 #include <asm/apic.h>
 
@@ -176,7 +177,7 @@ int hv_call_create_vp(int node, u64 partition_id, u32 vp_index, u32 flags)
 		input->partition_id = partition_id;
 		input->vp_index = vp_index;
 		input->flags = flags;
-		input->subnode_type = HvSubnodeAny;
+		input->subnode_type = HV_SUBNODE_ANY;
 		input->proximity_domain_info = hv_numa_node_to_pxm_info(node);
 		status = hv_do_hypercall(HVCALL_CREATE_VP, input, NULL);
 		local_irq_restore(irq_flags);

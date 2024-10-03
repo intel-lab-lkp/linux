@@ -13,6 +13,7 @@
 #include <asm/cacheinfo.h>
 #include <asm/cpufeature.h>
 #include <asm/hypervisor.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 #include <asm/tlbflush.h>
 #include <asm/mtrr.h>

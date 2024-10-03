@@ -50,6 +50,7 @@
 #include <linux/irqdomain.h>
 #include <linux/acpi.h>
 #include <linux/sizes.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 
 /*

@@ -9,6 +9,7 @@
 #include <linux/bitfield.h>
 #include <linux/types.h>
 #include <linux/slab.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/svm.h>
 #include <asm/sev.h>
 #include <asm/io.h>

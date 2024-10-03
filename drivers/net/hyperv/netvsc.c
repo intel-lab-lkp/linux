@@ -23,6 +23,7 @@
 #include <linux/filter.h>
 
 #include <asm/sync_bitops.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 
 #include "hyperv_net.h"

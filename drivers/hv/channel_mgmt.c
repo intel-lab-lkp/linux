@@ -20,6 +20,7 @@
 #include <linux/delay.h>
 #include <linux/cpu.h>
 #include <linux/hyperv.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 #include <linux/sched/isolation.h>
 

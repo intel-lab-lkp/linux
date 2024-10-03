@@ -21,6 +21,7 @@
 #include <linux/export.h>
 #include <linux/io.h>
 #include <linux/set_memory.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 
 #include "hyperv_vmbus.h"

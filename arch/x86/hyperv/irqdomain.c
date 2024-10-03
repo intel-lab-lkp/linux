@@ -10,6 +10,7 @@
 
 #include <linux/pci.h>
 #include <linux/irq.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 
 static int hv_map_interrupt(union hv_device_id device_id, bool level,

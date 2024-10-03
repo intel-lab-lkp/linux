@@ -19,6 +19,7 @@
 #include <linux/interrupt.h>
 #include <linux/set_memory.h>
 #include <asm/page.h>
+#define HYPERV_NONTLFS_HEADERS
 #include <asm/mshyperv.h>
 
 #include "hyperv_vmbus.h"
