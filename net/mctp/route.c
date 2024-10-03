@@ -1474,26 +1474,40 @@ static struct pernet_operations mctp_net_ops = {
 	.exit = mctp_routes_net_exit,
 };
 
+static struct rtnl_msg_handler mctp_rtnl_route_msg_handlers[] = {
+	{PF_MCTP, RTM_NEWROUTE, mctp_newroute, NULL, 0},
+	{PF_MCTP, RTM_DELROUTE, mctp_delroute, NULL, 0},
+	{PF_MCTP, RTM_GETROUTE, NULL, mctp_dump_rtinfo, 0},
+};
+
 int __init mctp_routes_init(void)
 {
+	int err;
+
 	dev_add_pack(&mctp_packet_type);
 
-	rtnl_register_module(THIS_MODULE, PF_MCTP, RTM_GETROUTE,
-			     NULL, mctp_dump_rtinfo, 0);
-	rtnl_register_module(THIS_MODULE, PF_MCTP, RTM_NEWROUTE,
-			     mctp_newroute, NULL, 0);
-	rtnl_register_module(THIS_MODULE, PF_MCTP, RTM_DELROUTE,
-			     mctp_delroute, NULL, 0);
+	err = rtnl_register_module_many(mctp_rtnl_route_msg_handlers);
+	if (err)
+		goto fail_rtnl;
 
-	return register_pernet_subsys(&mctp_net_ops);
+	err = register_pernet_subsys(&mctp_net_ops);
+	if (err)
+		goto fail_pernet;
+
+out:
+	return err;
+
+fail_pernet:
+	rtnl_unregister_many(mctp_rtnl_route_msg_handlers);
+fail_rtnl:
+	dev_remove_pack(&mctp_packet_type);
+	goto out;
 }
 
 void mctp_routes_exit(void)
 {
 	unregister_pernet_subsys(&mctp_net_ops);
-	rtnl_unregister(PF_MCTP, RTM_DELROUTE);
-	rtnl_unregister(PF_MCTP, RTM_NEWROUTE);
-	rtnl_unregister(PF_MCTP, RTM_GETROUTE);
+	rtnl_unregister_many(mctp_rtnl_route_msg_handlers);
 	dev_remove_pack(&mctp_packet_type);
 }
 
