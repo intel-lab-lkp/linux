@@ -3362,11 +3362,11 @@ static int of_phy_led(struct phy_device *phydev,
 	if (of_property_read_bool(led, "inactive-high-impedance"))
 		set_bit(PHY_LED_INACTIVE_HIGH_IMPEDANCE, &modes);
 
-	if (modes) {
-		/* Return error if asked to set polarity modes but not supported */
-		if (!phydev->drv->led_polarity_set)
-			return -EINVAL;
+	/* Return error if asked to set polarity modes but not supported */
+	if (modes && !phydev->drv->led_polarity_set)
+		return -EINVAL;
 
+	if (phydev->drv->led_polarity_set) {
 		err = phydev->drv->led_polarity_set(phydev, index, modes);
 		if (err)
 			return err;
