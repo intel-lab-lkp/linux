@@ -17,6 +17,7 @@
 #![feature(dispatch_from_dyn)]
 #![feature(lint_reasons)]
 #![feature(unsize)]
+#![feature(inline_const)]
 
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
