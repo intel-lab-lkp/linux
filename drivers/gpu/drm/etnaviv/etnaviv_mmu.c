@@ -70,8 +70,10 @@ static int etnaviv_context_map(struct etnaviv_iommu_context *context,
 }
 
 static int etnaviv_iommu_map(struct etnaviv_iommu_context *context, u32 iova,
+			     unsigned int user_len,
 			     struct sg_table *sgt, int prot)
-{	struct scatterlist *sg;
+{
+	struct scatterlist *sg;
 	unsigned int da = iova;
 	unsigned int i;
 	int ret;
@@ -81,7 +83,8 @@ static int etnaviv_iommu_map(struct etnaviv_iommu_context *context, u32 iova,
 
 	for_each_sgtable_dma_sg(sgt, sg, i) {
 		phys_addr_t pa = sg_dma_address(sg) - sg->offset;
-		size_t bytes = sg_dma_len(sg) + sg->offset;
+		unsigned int phys_len = sg_dma_len(sg) + sg->offset;
+		size_t bytes = MIN(phys_len, user_len);
 
 		VERB("map[%d]: %08x %pap(%zx)", i, iova, &pa, bytes);
 
@@ -89,6 +92,7 @@ static int etnaviv_iommu_map(struct etnaviv_iommu_context *context, u32 iova,
 		if (ret)
 			goto fail;
 
+		user_len -= bytes;
 		da += bytes;
 	}
 
@@ -104,21 +108,7 @@ fail:
 static void etnaviv_iommu_unmap(struct etnaviv_iommu_context *context, u32 iova,
 				struct sg_table *sgt, unsigned len)
 {
-	struct scatterlist *sg;
-	unsigned int da = iova;
-	int i;
-
-	for_each_sgtable_dma_sg(sgt, sg, i) {
-		size_t bytes = sg_dma_len(sg) + sg->offset;
-
-		etnaviv_context_unmap(context, da, bytes);
-
-		VERB("unmap[%d]: %08x(%zx)", i, iova, bytes);
-
-		BUG_ON(!PAGE_ALIGNED(bytes));
-
-		da += bytes;
-	}
+	etnaviv_context_unmap(context, iova, len);
 
 	context->flush_seq++;
 }
@@ -131,7 +121,7 @@ static void etnaviv_iommu_remove_mapping(struct etnaviv_iommu_context *context,
 	lockdep_assert_held(&context->lock);
 
 	etnaviv_iommu_unmap(context, mapping->vram_node.start,
-			    etnaviv_obj->sgt, etnaviv_obj->base.size);
+			    etnaviv_obj->sgt, etnaviv_obj->user_size);
 	drm_mm_remove_node(&mapping->vram_node);
 }
 
@@ -314,7 +304,7 @@ int etnaviv_iommu_map_gem(struct etnaviv_iommu_context *context,
 		goto unlock;
 
 	mapping->iova = node->start;
-	ret = etnaviv_iommu_map(context, node->start, sgt,
+	ret = etnaviv_iommu_map(context, node->start, user_size, sgt,
 				ETNAVIV_PROT_READ | ETNAVIV_PROT_WRITE);
 
 	if (ret < 0) {
