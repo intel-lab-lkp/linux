@@ -589,6 +589,47 @@ static int _test_ioctl_ioas_unmap(int fd, unsigned int ioas_id, uint64_t iova,
 	EXPECT_ERRNO(_errno, _test_ioctl_ioas_unmap(self->fd, self->ioas_id, \
 						    iova, length, NULL))
 
+static int _test_ioctl_ioas_map_file(int fd, unsigned int ioas_id, int mfd,
+				     size_t start, size_t length, __u64 *iova,
+				     unsigned int flags)
+{
+	struct iommu_ioas_map_file cmd = {
+		.size = sizeof(cmd),
+		.flags = flags,
+		.ioas_id = ioas_id,
+		.fd = mfd,
+		.start = start,
+		.length = length,
+	};
+	int ret;
+
+	if (flags & IOMMU_IOAS_MAP_FIXED_IOVA)
+		cmd.iova = *iova;
+
+	ret = ioctl(fd, IOMMU_IOAS_MAP_FILE, &cmd);
+	*iova = cmd.iova;
+	return ret;
+}
+
+#define test_ioctl_ioas_map_file(mfd, start, length, iova_p)                 \
+	ASSERT_EQ(0, _test_ioctl_ioas_map_file(self->fd, self->ioas_id, mfd, \
+					       start, length, iova_p,        \
+					       IOMMU_IOAS_MAP_WRITEABLE |    \
+						   IOMMU_IOAS_MAP_READABLE))
+
+#define test_err_ioctl_ioas_map_file(_errno, start, length, iova_p)	     \
+	EXPECT_ERRNO(_errno,                                                 \
+		     _test_ioctl_ioas_map_file(self->fd, self->ioas_id, mfd, \
+					       start, length, iova_p,        \
+					       IOMMU_IOAS_MAP_WRITEABLE |    \
+						   IOMMU_IOAS_MAP_READABLE))
+
+#define test_ioctl_ioas_map_id_file(ioas_id, mfd, start, length, iova_p)     \
+	ASSERT_EQ(0, _test_ioctl_ioas_map_file(self->fd, ioas_id, mfd,       \
+					  start, length, iova_p,             \
+					  IOMMU_IOAS_MAP_WRITEABLE |         \
+						  IOMMU_IOAS_MAP_READABLE))
+
 static int _test_ioctl_set_temp_memory_limit(int fd, unsigned int limit)
 {
 	struct iommu_test_cmd memlimit_cmd = {
