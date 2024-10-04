@@ -2345,6 +2345,8 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	if (ret)
 		goto out_clear_bit;
 
+	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_REQUESTED);
+
 	return 0;
 
 out_clear_bit:
@@ -4364,8 +4366,6 @@ struct gpio_desc *gpiod_find_and_request(struct device *consumer,
 		dev_err(consumer, "setup of GPIO %s failed: %d\n", name, ret);
 		return ERR_PTR(ret);
 	}
-
-	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_REQUESTED);
 
 	return desc;
 }
