@@ -7884,6 +7884,10 @@ Note! Detected bus locks may be coincident with other exits to userspace, i.e.
 KVM_RUN_X86_BUS_LOCK should be checked regardless of the primary exit reason if
 userspace wants to take action on all detected bus locks.
 
+Note! On AMD CPUs, the bus lock exit to user space occurs with RIP pointing at
+the offending instruction. In contrast, on Intel CPUs, the RIP points to the
+instruction right after the guilty one after the bus lock exit to user space.
+
 7.23 KVM_CAP_PPC_DAWR1
 ----------------------
 
