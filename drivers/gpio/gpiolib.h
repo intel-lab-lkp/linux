@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/notifier.h>
 #include <linux/srcu.h>
+#include <linux/workqueue.h>
 
 #define GPIOCHIP_NAME	"gpiochip"
 
@@ -137,6 +138,9 @@ struct gpio_array {
 	for_each_gpio_desc(gc, desc)					\
 		if (!test_bit(flag, &desc->flags)) {} else
 
+int gpiod_direction_output_nonotify(struct gpio_desc *desc, int value);
+int gpiod_direction_input_nonotify(struct gpio_desc *desc);
+
 int gpiod_get_array_value_complex(bool raw, bool can_sleep,
 				  unsigned int array_size,
 				  struct gpio_desc **desc_array,
@@ -149,8 +153,6 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
 				  unsigned long *value_bitmap);
 
 int gpiod_set_transitory(struct gpio_desc *desc, bool transitory);
-
-void gpiod_line_state_notify(struct gpio_desc *desc, unsigned long action);
 
 struct gpio_desc_label {
 	struct rcu_head rh;
@@ -165,6 +167,8 @@ struct gpio_desc_label {
  * @label:		Name of the consumer
  * @name:		Line name
  * @hog:		Pointer to the device node that hogs this line (if any)
+ * @line_state_work:	Used to schedule line state updates to user-space from
+ *			atomic context.
  *
  * These are obtained using gpiod_get() and are preferable to the old
  * integer-based handles.
@@ -202,6 +206,7 @@ struct gpio_desc {
 #ifdef CONFIG_OF_DYNAMIC
 	struct device_node	*hog;
 #endif
+	struct work_struct	line_state_work;
 };
 
 #define gpiod_not_found(desc)		(IS_ERR(desc) && PTR_ERR(desc) == -ENOENT)
