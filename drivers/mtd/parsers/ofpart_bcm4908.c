@@ -19,6 +19,7 @@ static long long bcm4908_partitions_fw_offset(void)
 	struct device_node *root;
 	struct property *prop;
 	const char *s;
+	int err;
 
 	root = of_find_node_by_path("/");
 	if (!root)
@@ -27,7 +28,6 @@ static long long bcm4908_partitions_fw_offset(void)
 	of_property_for_each_string(root, "brcm_blparms", prop, s) {
 		size_t len = strlen(BLPARAMS_FW_OFFSET);
 		unsigned long offset;
-		int err;
 
 		if (strncmp(s, BLPARAMS_FW_OFFSET, len) || s[len] != '=')
 			continue;
@@ -35,16 +35,17 @@ static long long bcm4908_partitions_fw_offset(void)
 		err = kstrtoul(s + len + 1, 0, &offset);
 		if (err) {
 			pr_err("failed to parse %s\n", s + len + 1);
-			of_node_put(root);
-			return err;
+			goto put_node;
 		}
 
 		of_node_put(root);
 		return offset << 10;
 	}
 
+	err = -ENOENT;
+put_node:
 	of_node_put(root);
-	return -ENOENT;
+	return err;
 }
 
 int bcm4908_partitions_post_parse(struct mtd_info *mtd, struct mtd_partition *parts, int nr_parts)
