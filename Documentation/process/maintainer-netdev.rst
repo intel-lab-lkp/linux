@@ -355,6 +355,8 @@ just do it. As a result, a sequence of smaller series gets merged quicker and
 with better review coverage. Re-posting large series also increases the mailing
 list traffic.
 
+.. _rcs:
+
 Local variable ordering ("reverse xmas tree", "RCS")
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -390,6 +392,15 @@ Low level cleanup constructs (such as ``__free()``) can be used when building
 APIs and helpers, especially scoped iterators. However, direct use of
 ``__free()`` within networking core and drivers is discouraged.
 Similar guidance applies to declaring variables mid-function.
+
+Clean-Up Patches
+~~~~~~~~~~~~~~~~
+
+Netdev discourages patches which perform simple clean-ups, which are not in
+the context of other work. For example addressing ``checkpatch.pl``
+warnings, or :ref:`local variable ordering<rcs>` issues. This is because it
+is felt that the churn that such changes produce comes at a greater cost
+than the value of such clean-ups.
 
 Resending after review
 ~~~~~~~~~~~~~~~~~~~~~~
