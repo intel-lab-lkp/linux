@@ -276,6 +276,8 @@ enum rdma_ch_state {
  * @state:         channel state. See also enum rdma_ch_state.
  * @using_rdma_cm: Whether the RDMA/CM or IB/CM is used for this channel.
  * @processing_wait_list: Whether or not cmd_wait_list is being processed.
+ * @rsp_buf_cache_idx: @rsp_buf_cache index for slab.
+ * @req_buf_cache_idx: @req_buf_cache index for slab.
  * @rsp_buf_cache: kmem_cache for @ioctx_ring.
  * @ioctx_ring:    Send ring.
  * @req_buf_cache: kmem_cache for @ioctx_recv_ring.
@@ -316,6 +318,8 @@ struct srpt_rdma_ch {
 	u16			imm_data_offset;
 	spinlock_t		spinlock;
 	enum rdma_ch_state	state;
+	int			rsp_buf_cache_idx;
+	int			req_buf_cache_idx;
 	struct kmem_cache	*rsp_buf_cache;
 	struct srpt_send_ioctx	**ioctx_ring;
 	struct kmem_cache	*req_buf_cache;
@@ -443,6 +447,7 @@ struct srpt_port {
  * @srq_size:      SRQ size.
  * @sdev_mutex:	   Serializes use_srq changes.
  * @use_srq:       Whether or not to use SRQ.
+ * @req_buf_cache_idx: @req_buf_cache index for slab.
  * @req_buf_cache: kmem_cache for @ioctx_ring buffers.
  * @ioctx_ring:    Per-HCA SRQ.
  * @event_handler: Per-HCA asynchronous IB event handler.
@@ -459,6 +464,7 @@ struct srpt_device {
 	int			srq_size;
 	struct mutex		sdev_mutex;
 	bool			use_srq;
+	int			req_buf_cache_idx;
 	struct kmem_cache	*req_buf_cache;
 	struct srpt_recv_ioctx	**ioctx_ring;
 	struct ib_event_handler	event_handler;

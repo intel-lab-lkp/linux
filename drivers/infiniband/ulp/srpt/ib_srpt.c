@@ -41,6 +41,7 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>
+#include <linux/idr.h>
 #include <linux/inet.h>
 #include <rdma/ib_cache.h>
 #include <scsi/scsi_proto.h>
@@ -68,6 +69,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 static u64 srpt_service_guid;
 static DEFINE_SPINLOCK(srpt_dev_lock);	/* Protects srpt_dev_list. */
 static LIST_HEAD(srpt_dev_list);	/* List of srpt_device structures. */
+static DEFINE_IDA(cache_ida);
 
 static unsigned srp_max_req_size = DEFAULT_MAX_REQ_SIZE;
 module_param(srp_max_req_size, int, 0444);
@@ -2120,12 +2122,14 @@ static void srpt_release_channel_work(struct work_struct *w)
 			     ch->rsp_buf_cache, DMA_TO_DEVICE);
 
 	kmem_cache_destroy(ch->rsp_buf_cache);
+	ida_free(&cache_ida, ch->rsp_buf_cache_idx);
 
 	srpt_free_ioctx_ring((struct srpt_ioctx **)ch->ioctx_recv_ring,
 			     sdev, ch->rq_size,
 			     ch->req_buf_cache, DMA_FROM_DEVICE);
 
 	kmem_cache_destroy(ch->req_buf_cache);
+	ida_free(&cache_ida, ch->req_buf_cache_idx);
 
 	kref_put(&ch->kref, srpt_free_ch);
 }
@@ -2164,6 +2168,7 @@ static int srpt_cm_req_recv(struct srpt_device *const sdev,
 	u32 it_iu_len;
 	int i, tag_num, tag_size, ret;
 	struct srpt_tpg *stpg;
+	char cache_name[32];
 
 	WARN_ON_ONCE(irqs_disabled());
 
@@ -2245,8 +2250,11 @@ static int srpt_cm_req_recv(struct srpt_device *const sdev,
 	INIT_LIST_HEAD(&ch->cmd_wait_list);
 	ch->max_rsp_size = ch->sport->port_attrib.srp_max_rsp_size;
 
-	ch->rsp_buf_cache = kmem_cache_create("srpt-rsp-buf", ch->max_rsp_size,
-					      512, 0, NULL);
+	ch->rsp_buf_cache_idx = ida_alloc(&cache_ida, GFP_KERNEL);
+	snprintf(cache_name, sizeof(cache_name), "srpt-rsp-buf-%u",
+		 ch->rsp_buf_cache_idx);
+	ch->rsp_buf_cache =
+		kmem_cache_create(cache_name, ch->max_rsp_size, 512, 0, NULL);
 	if (!ch->rsp_buf_cache)
 		goto free_ch;
 
@@ -2280,8 +2288,11 @@ static int srpt_cm_req_recv(struct srpt_device *const sdev,
 		alignment_offset = round_up(imm_data_offset, 512) -
 			imm_data_offset;
 		req_sz = alignment_offset + imm_data_offset + srp_max_req_size;
-		ch->req_buf_cache = kmem_cache_create("srpt-req-buf", req_sz,
-						      512, 0, NULL);
+		ch->req_buf_cache_idx = ida_alloc(&cache_ida, GFP_KERNEL);
+		snprintf(cache_name, sizeof(cache_name), "srpt-req-buf-%u",
+			 ch->req_buf_cache_idx);
+		ch->req_buf_cache =
+			kmem_cache_create(cache_name, req_sz, 512, 0, NULL);
 		if (!ch->req_buf_cache)
 			goto free_rsp_ring;
 
@@ -2479,6 +2490,7 @@ free_recv_ring:
 
 free_recv_cache:
 	kmem_cache_destroy(ch->req_buf_cache);
+	ida_free(&cache_ida, ch->req_buf_cache_idx);
 
 free_rsp_ring:
 	srpt_free_ioctx_ring((struct srpt_ioctx **)ch->ioctx_ring,
@@ -2487,6 +2499,7 @@ free_rsp_ring:
 
 free_rsp_cache:
 	kmem_cache_destroy(ch->rsp_buf_cache);
+	ida_free(&cache_ida, ch->rsp_buf_cache_idx);
 
 free_ch:
 	if (rdma_cm_id)
@@ -3056,6 +3069,7 @@ static void srpt_free_srq(struct srpt_device *sdev)
 			     sdev->srq_size, sdev->req_buf_cache,
 			     DMA_FROM_DEVICE);
 	kmem_cache_destroy(sdev->req_buf_cache);
+	ida_free(&cache_ida, sdev->req_buf_cache_idx);
 	sdev->srq = NULL;
 }
 
@@ -3070,6 +3084,7 @@ static int srpt_alloc_srq(struct srpt_device *sdev)
 	};
 	struct ib_device *device = sdev->device;
 	struct ib_srq *srq;
+	char cache_name[32];
 	int i;
 
 	WARN_ON_ONCE(sdev->srq);
@@ -3082,8 +3097,11 @@ static int srpt_alloc_srq(struct srpt_device *sdev)
 	pr_debug("create SRQ #wr= %d max_allow=%d dev= %s\n", sdev->srq_size,
 		 sdev->device->attrs.max_srq_wr, dev_name(&device->dev));
 
-	sdev->req_buf_cache = kmem_cache_create("srpt-srq-req-buf",
-						srp_max_req_size, 0, 0, NULL);
+	sdev->req_buf_cache_idx = ida_alloc(&cache_ida, GFP_KERNEL);
+	snprintf(cache_name, sizeof(cache_name), "srpt-srq-req-buf-%u",
+		 sdev->req_buf_cache_idx);
+	sdev->req_buf_cache =
+		kmem_cache_create(cache_name, srp_max_req_size, 0, 0, NULL);
 	if (!sdev->req_buf_cache)
 		goto free_srq;
 
@@ -3106,6 +3124,7 @@ static int srpt_alloc_srq(struct srpt_device *sdev)
 
 free_cache:
 	kmem_cache_destroy(sdev->req_buf_cache);
+	ida_free(&cache_ida, sdev->req_buf_cache_idx);
 
 free_srq:
 	ib_destroy_srq(srq);
@@ -3926,6 +3945,7 @@ static void __exit srpt_cleanup_module(void)
 		rdma_destroy_id(rdma_cm_id);
 	ib_unregister_client(&srpt_client);
 	target_unregister_template(&srpt_template);
+	ida_destroy(&cache_ida);
 }
 
 module_init(srpt_init_module);
