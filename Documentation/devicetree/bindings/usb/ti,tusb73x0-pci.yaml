@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/ti,tusb73x0-pci.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TUSB73x0 USB 3.0 xHCI Host Controller (PCIe)
+
+maintainers:
+  - Francesco Dolcini <francesco.dolcini@toradex.com>
+
+description:
+  TUSB73x0 USB 3.0 xHCI Host Controller via PCIe x1 Gen2 interface.
+  The TUSB7320 supports up to two downstream ports, the TUSB7340 supports up
+  to four downstream ports.
+
+properties:
+  compatible:
+    const: pci104C,8241
+
+  reg:
+    maxItems: 1
+
+  ti,tusb7320-pwron-polarity-invert:
+    type: boolean
+    description:
+      Configure the polarity of the PWRONx# signals. When this is false, the PWRONx#
+      pins are active low and their internal pull-down resistors are enabled.
+      When this is true, the PWRONx# pins are active high and their internal pull-down
+      resistors are disabled.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    pcie {
+        #address-cells = <3>;
+        #size-cells = <2>;
+
+        pcie@0 {
+            device_type = "pci";
+            reg = <0x0 0x0 0x0 0x0 0x0>;
+            bus-range = <0x01 0xff>;
+
+            #address-cells = <3>;
+            #size-cells = <2>;
+            ranges;
+
+            usb@0 {
+                  compatible = "pci104C,8241";
+                  reg = <0x10000 0x0 0x0 0x0 0x0>;
+
+                  ti,tusb7320-pwron-polarity-invert;
+            };
+        };
+    };
