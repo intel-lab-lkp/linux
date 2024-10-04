@@ -1132,6 +1132,9 @@ attribute-sets:
       -
         name: downstream-sfp-name
         type: string
+      -
+        name: isolate
+        type: u8
 
 operations:
   enum-model: directional
@@ -1950,4 +1953,16 @@ operations:
             - upstream-index
             - upstream-sfp-name
             - downstream-sfp-name
+            - isolate
       dump: *phy-get-op
+    -
+      name: phy-set
+      doc: Set configuration attributes for attached PHY devices
+
+      attribute-set: phy
+
+      do:
+        request:
+          attributes:
+            - header
+            - isolate
