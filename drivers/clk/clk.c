@@ -332,17 +332,6 @@ static bool clk_core_is_enabled(struct clk_core *core)
 		}
 	}
 
-	/*
-	 * This could be called with the enable lock held, or from atomic
-	 * context. If the parent isn't enabled already, we can't do
-	 * anything here. We can also assume this clock isn't enabled.
-	 */
-	if ((core->flags & CLK_OPS_PARENT_ENABLE) && core->parent)
-		if (!clk_core_is_enabled(core->parent)) {
-			ret = false;
-			goto done;
-		}
-
 	ret = core->ops->is_enabled(core->hw);
 done:
 	if (core->rpm_enabled)
@@ -1454,22 +1443,39 @@ static void clk_core_disable_unprepare(struct clk_core *core)
 	clk_core_unprepare_lock(core);
 }
 
-static void __init clk_unprepare_unused_subtree(struct clk_core *core)
+static bool __init clk_unprepare_unused_subtree(struct clk_core *core,
+						bool parent_prepared)
 {
 	struct clk_core *child;
+	bool prepared;
 
 	lockdep_assert_held(&prepare_lock);
 
+	/*
+	 * Relying on count is not possible at this stage, so consider
+	 * prepared an enabled clock, in case only .is_enabled() is
+	 * implemented
+	 */
+	if (parent_prepared)
+		prepared = (clk_core_is_prepared(core) ||
+			    clk_core_is_enabled(core));
+	else
+		prepared = false;
+
 	hlist_for_each_entry(child, &core->children, child_node)
-		clk_unprepare_unused_subtree(child);
+		if (clk_unprepare_unused_subtree(child, prepared) &&
+		    prepared && !core->prepare_count)
+			core->flags |= CLK_IGNORE_UNUSED;
 
-	if (core->prepare_count)
-		return;
+	if (core->flags & CLK_IGNORE_UNUSED || core->prepare_count)
+		goto out;
 
-	if (core->flags & CLK_IGNORE_UNUSED)
-		return;
+	if (!parent_prepared && (core->flags & CLK_OPS_PARENT_ENABLE))
+		goto out;
 
-	if (clk_core_is_prepared(core)) {
+	/* Do not unprepare an enabled clock */
+	if (clk_core_is_prepared(core) &&
+	    !clk_core_is_enabled(core)) {
 		trace_clk_unprepare(core);
 		if (core->ops->unprepare_unused)
 			core->ops->unprepare_unused(core->hw);
@@ -1477,27 +1483,50 @@ static void __init clk_unprepare_unused_subtree(struct clk_core *core)
 			core->ops->unprepare(core->hw);
 		trace_clk_unprepare_complete(core);
 	}
+
+out:
+	return (core->flags & CLK_IGNORE_UNUSED) && prepared;
 }
 
-static void __init clk_disable_unused_subtree(struct clk_core *core)
+static bool __init clk_disable_unused_subtree(struct clk_core *core,
+					      bool parent_enabled)
 {
 	struct clk_core *child;
 	unsigned long flags;
+	bool enabled;
 
 	lockdep_assert_held(&prepare_lock);
 
-	hlist_for_each_entry(child, &core->children, child_node)
-		clk_disable_unused_subtree(child);
-
-	if (core->flags & CLK_OPS_PARENT_ENABLE)
-		clk_core_prepare_enable(core->parent);
-
 	flags = clk_enable_lock();
 
-	if (core->enable_count)
+	/* Check if the clock is enabled from root to this clock */
+	if (parent_enabled)
+		enabled = clk_core_is_enabled(core);
+	else
+		enabled = false;
+
+	hlist_for_each_entry(child, &core->children, child_node)
+		/*
+		 * If any child ignored disable, this clock should too,
+		 * unless there is, valid reason for the clock to be enabled
+		 */
+		if (clk_disable_unused_subtree(child, enabled) &&
+		    enabled && !core->enable_count)
+			core->flags |= CLK_IGNORE_UNUSED;
+
+	if (core->flags & CLK_IGNORE_UNUSED || core->enable_count)
 		goto unlock_out;
 
-	if (core->flags & CLK_IGNORE_UNUSED)
+	/*
+	 * If the parent is disabled but the gate is open, we should sanitize
+	 * the situation. This will avoid an unexpected enable of the clock as
+	 * soon as the parent is enabled, without control of CCF.
+	 *
+	 * Doing so is not possible with a CLK_OPS_PARENT_ENABLE clock without
+	 * forcefully enabling a whole part of the subtree.  Just let the
+	 * situation resolve it self on the first enable of the clock
+	 */
+	if (!parent_enabled && (core->flags & CLK_OPS_PARENT_ENABLE))
 		goto unlock_out;
 
 	/*
@@ -1516,8 +1545,7 @@ static void __init clk_disable_unused_subtree(struct clk_core *core)
 
 unlock_out:
 	clk_enable_unlock(flags);
-	if (core->flags & CLK_OPS_PARENT_ENABLE)
-		clk_core_disable_unprepare(core->parent);
+	return (core->flags & CLK_IGNORE_UNUSED) && enabled;
 }
 
 static bool clk_ignore_unused __initdata;
@@ -1550,16 +1578,16 @@ static int __init clk_disable_unused(void)
 	clk_prepare_lock();
 
 	hlist_for_each_entry(core, &clk_root_list, child_node)
-		clk_disable_unused_subtree(core);
+		clk_disable_unused_subtree(core, true);
 
 	hlist_for_each_entry(core, &clk_orphan_list, child_node)
-		clk_disable_unused_subtree(core);
+		clk_disable_unused_subtree(core, true);
 
 	hlist_for_each_entry(core, &clk_root_list, child_node)
-		clk_unprepare_unused_subtree(core);
+		clk_unprepare_unused_subtree(core, true);
 
 	hlist_for_each_entry(core, &clk_orphan_list, child_node)
-		clk_unprepare_unused_subtree(core);
+		clk_unprepare_unused_subtree(core, true);
 
 	clk_prepare_unlock();
 
