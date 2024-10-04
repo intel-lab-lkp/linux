@@ -10487,6 +10487,7 @@ int mgmt_init(void)
 
 void mgmt_exit(void)
 {
+	iso_exit();
 	hci_mgmt_chan_unregister(&chan);
 }
 
