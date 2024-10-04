@@ -1510,7 +1510,7 @@ static void arm_iommu_sync_single_for_device(struct device *dev,
 	__dma_page_cpu_to_dev(page, offset, size, dir);
 }
 
-static const struct dma_map_ops iommu_ops = {
+static const struct dma_map_ops arm_dma_iommu_ops = {
 	.alloc		= arm_iommu_alloc_attrs,
 	.free		= arm_iommu_free_attrs,
 	.mmap		= arm_iommu_mmap_attrs,
@@ -1680,7 +1680,7 @@ int arm_iommu_attach_device(struct device *dev,
 	if (err)
 		return err;
 
-	set_dma_ops(dev, &iommu_ops);
+	set_dma_ops(dev, &arm_dma_iommu_ops);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(arm_iommu_attach_device);
@@ -1734,7 +1734,7 @@ static void arm_setup_iommu_dma_ops(struct device *dev)
 		return;
 	}
 
-	set_dma_ops(dev, &iommu_ops);
+	set_dma_ops(dev, &arm_dma_iommu_ops);
 }
 
 static void arm_teardown_iommu_dma_ops(struct device *dev)
