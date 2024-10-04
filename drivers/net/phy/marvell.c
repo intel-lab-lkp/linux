@@ -1092,6 +1092,14 @@ static int m88e1111_set_tunable(struct phy_device *phydev,
 	}
 }
 
+static bool m88e1111_can_isolate(struct phy_device *phydev)
+{
+	if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
+		return false;
+
+	return true;
+}
+
 static int m88e1011_get_downshift(struct phy_device *phydev, u8 *data)
 {
 	int val, cnt, enable;
@@ -3704,6 +3712,7 @@ static struct phy_driver marvell_drivers[] = {
 		.set_tunable = m88e1111_set_tunable,
 		.cable_test_start = m88e1111_vct_cable_test_start,
 		.cable_test_get_status = m88e1111_vct_cable_test_get_status,
+		.can_isolate = m88e1111_can_isolate,
 	},
 	{
 		.phy_id = MARVELL_PHY_ID_88E1111_FINISAR,
