@@ -655,8 +655,11 @@ static inline struct vmw_fpriv *vmw_fpriv(struct drm_file *file_priv)
 /*
  * SVGA v3 has mmio register access and lacks fifo cmds
  */
-static inline bool vmw_is_svga_v3(const struct vmw_private *dev)
+static __always_inline bool vmw_is_svga_v3(const struct vmw_private *dev)
 {
+	if (!IS_ENABLED(CONFIG_HAS_IOPORT))
+		return true;
+
 	return dev->pci_id == VMWGFX_PCI_ID_SVGA3;
 }
 
