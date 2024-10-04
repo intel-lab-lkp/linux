@@ -16,12 +16,13 @@ description:
 
 properties:
   compatible:
-    const: mmc-pwrseq-simple
+    enum:
+      - mmc-pwrseq-simple
+      - mmc-pwrseq-simple-reset
 
   reset-gpios:
     minItems: 1
     # Put some limit to avoid false warnings
-    maxItems: 32
     description:
       contains a list of GPIO specifiers. The reset GPIOs are asserted
       at initialization and prior we start the power up procedure of the card.
@@ -49,6 +50,22 @@ properties:
 
 required:
   - compatible
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mmc-pwrseq-simple-reset
+    then:
+      properties:
+        reset-gpios:
+          maxItems: 1
+    else:
+      properties:
+        reset-gpios:
+          maxItems: 32
 
 additionalProperties: false
 
