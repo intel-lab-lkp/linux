@@ -887,6 +887,20 @@ enum phy_led_modes {
 };
 
 /**
+ * struct phy_device_config - General PHY device configuration parameters for
+ * status reporting and bulk configuration
+ *
+ * A structure containing generic PHY device information, allowing to expose
+ * internal status to userspace, and perform PHY configuration in a controlled
+ * manner.
+ *
+ * @isolate: The MII-side isolation status of the PHY
+ */
+struct phy_device_config {
+	bool isolate;
+};
+
+/**
  * struct phy_led: An LED driven by the PHY
  *
  * @list: List of LEDs
@@ -2085,6 +2099,11 @@ int phy_ethtool_set_plca_cfg(struct phy_device *phydev,
 			     struct netlink_ext_ack *extack);
 int phy_ethtool_get_plca_status(struct phy_device *phydev,
 				struct phy_plca_status *plca_st);
+int phy_get_config(struct phy_device *phydev,
+		   struct phy_device_config *phy_cfg);
+int phy_set_config(struct phy_device *phydev,
+		   const struct phy_device_config *phy_cfg,
+		   struct netlink_ext_ack *extack);
 
 int __phy_hwtstamp_get(struct phy_device *phydev,
 		       struct kernel_hwtstamp_config *config);
