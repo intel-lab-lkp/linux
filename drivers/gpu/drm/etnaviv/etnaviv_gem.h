@@ -36,6 +36,7 @@ struct etnaviv_gem_object {
 	const struct etnaviv_gem_ops *ops;
 	struct mutex lock;
 
+	u32 user_size;
 	u32 flags;
 
 	struct list_head gem_node;

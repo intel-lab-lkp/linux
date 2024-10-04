@@ -281,6 +281,7 @@ int etnaviv_iommu_map_gem(struct etnaviv_iommu_context *context,
 {
 	struct sg_table *sgt = etnaviv_obj->sgt;
 	struct drm_mm_node *node;
+	unsigned int user_size;
 	int ret;
 
 	lockdep_assert_held(&etnaviv_obj->lock);
@@ -303,13 +304,12 @@ int etnaviv_iommu_map_gem(struct etnaviv_iommu_context *context,
 	}
 
 	node = &mapping->vram_node;
+	user_size = etnaviv_obj->user_size;
 
 	if (va)
-		ret = etnaviv_iommu_insert_exact(context, node,
-						 etnaviv_obj->base.size, va);
+		ret = etnaviv_iommu_insert_exact(context, node, user_size, va);
 	else
-		ret = etnaviv_iommu_find_iova(context, node,
-					      etnaviv_obj->base.size);
+		ret = etnaviv_iommu_find_iova(context, node, user_size);
 	if (ret < 0)
 		goto unlock;
 
