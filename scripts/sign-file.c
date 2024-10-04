@@ -56,6 +56,9 @@
 	defined(OPENSSL_NO_CMS)
 #define USE_PKCS7
 #endif
+#if OPENSSL_VERSION_NUMBER > 0x30200000L
+#define HAS_CMS_final_digest 1
+#endif
 #ifndef USE_PKCS7
 #include <openssl/cms.h>
 #else
@@ -80,9 +83,9 @@ static __attribute__((noreturn))
 void format(void)
 {
 	fprintf(stderr,
-		"Usage: scripts/sign-file [-dp] <hash algo> <key> <x509> <module> [<dest>]\n");
+		"Usage: scripts/sign-file [-dpD] <hash algo> <key> <x509> <file> [<dest>]\n");
 	fprintf(stderr,
-		"       scripts/sign-file -s <raw sig> <hash algo> <x509> <module> [<dest>]\n");
+		"       scripts/sign-file -s <raw sig> <hash algo> <x509> <file> [<dest>]\n");
 	exit(2);
 }
 
@@ -229,6 +232,11 @@ int main(int argc, char **argv)
 	unsigned char buf[4096];
 	unsigned long module_size, sig_size;
 	unsigned int use_signed_attrs;
+	bool digest_mode = false;
+#ifdef HAS_CMS_final_digest
+	unsigned char digest_bin[4096];
+	long digest_len;
+#endif
 	const EVP_MD *digest_algo;
 	EVP_PKEY *private_key;
 #ifndef USE_PKCS7
@@ -253,11 +261,20 @@ int main(int argc, char **argv)
 #endif
 
 	do {
-		opt = getopt(argc, argv, "sdpk");
+		opt = getopt(argc, argv, "sdpkD");
 		switch (opt) {
 		case 's': raw_sig = true; break;
 		case 'p': save_sig = true; break;
 		case 'd': sign_only = true; save_sig = true; break;
+		case 'D':
+#ifdef HAS_CMS_final_digest
+			digest_mode = true;
+			break;
+#else
+			fprintf(stderr, "digest signing is not supported by the openssl version in use\n");
+			exit(3);
+			break;
+#endif
 #ifndef USE_PKCS7
 		case 'k': use_keyid = CMS_USE_KEYID; break;
 #endif
@@ -301,6 +318,17 @@ int main(int argc, char **argv)
 	bm = BIO_new_file(module_name, "rb");
 	ERR(!bm, "%s", module_name);
 
+#ifdef HAS_CMS_final_digest
+	if (digest_mode) {
+		digest_len = BIO_read(bm, digest_bin, sizeof(digest_bin));
+		if (digest_len >= sizeof(digest_bin)) {
+			fprintf(stderr, "sign-file: Digest file too large (max %ld)\n", sizeof(digest_bin));
+			exit(3);
+		}
+		ERR(BIO_reset(bm) < 0, "%s", module_name);
+	}
+#endif
+
 	if (!raw_sig) {
 		/* Read the private key and the X.509 cert the PKCS#7 message
 		 * will point to.
@@ -324,10 +352,20 @@ int main(int argc, char **argv)
 		ERR(!CMS_add1_signer(cms, x509, private_key, digest_algo,
 				     CMS_NOCERTS | CMS_BINARY |
 				     CMS_NOSMIMECAP | use_keyid |
+				     (digest_mode ? CMS_KEY_PARAM : 0) |
 				     use_signed_attrs),
 		    "CMS_add1_signer");
-		ERR(CMS_final(cms, bm, NULL, CMS_NOCERTS | CMS_BINARY) != 1,
-		    "CMS_final");
+		if (digest_mode) {
+#if HAS_CMS_final_digest
+			ERR(CMS_final_digest(cms, digest_bin, digest_len, NULL, CMS_NOCERTS | CMS_BINARY) != 1,
+			    "CMS_final_digest");
+#else
+			fprintf(stderr, "digest mode is not supported by the openssl library\n");
+			exit(3);
+#endif
+		} else
+			ERR(CMS_final(cms, bm, NULL, CMS_NOCERTS | CMS_BINARY) != 1,
+			    "CMS_final");
 
 #else
 		pkcs7 = PKCS7_sign(x509, private_key, NULL, bm,
