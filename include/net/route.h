@@ -389,11 +389,11 @@ static inline struct neighbour *ip_neigh_for_gw(struct rtable *rt,
 	struct net_device *dev = rt->dst.dev;
 	struct neighbour *neigh;
 
-	if (likely(rt->rt_gw_family == AF_INET)) {
-		neigh = ip_neigh_gw4(dev, rt->rt_gw4);
-	} else if (rt->rt_gw_family == AF_INET6) {
+	if (likely(rt->rt_gw_family == AF_INET6)) {
 		neigh = ip_neigh_gw6(dev, &rt->rt_gw6);
 		*is_v6gw = true;
+	} else if (rt->rt_gw_family == AF_INET) {
+		neigh = ip_neigh_gw4(dev, rt->rt_gw4);
 	} else {
 		neigh = ip_neigh_gw4(dev, ip_hdr(skb)->daddr);
 	}
