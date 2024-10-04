@@ -49,6 +49,7 @@
 #include <linux/slab.h>
 #include <linux/iommu.h>
 #include <linux/sched/mm.h>
+#include <linux/file.h>
 #include <linux/highmem.h>
 #include <linux/kthread.h>
 #include <linux/iommufd.h>
@@ -1261,6 +1262,22 @@ struct iopt_pages *iopt_alloc_user_pages(void __user *uptr,
 	return pages;
 }
 
+struct iopt_pages *iopt_alloc_file_pages(struct file *file, unsigned long start,
+					 unsigned long length, bool writable)
+
+{
+	struct iopt_pages *pages;
+	unsigned long start_down = ALIGN_DOWN(start, PAGE_SIZE);
+
+	pages = iopt_alloc_pages(length, start - start_down, writable);
+	if (IS_ERR(pages))
+		return pages;
+	pages->file = get_file(file);
+	pages->start = start_down;
+	pages->type = IOPT_ADDRESS_FILE;
+	return pages;
+}
+
 void iopt_release_pages(struct kref *kref)
 {
 	struct iopt_pages *pages = container_of(kref, struct iopt_pages, kref);
@@ -1273,6 +1290,8 @@ void iopt_release_pages(struct kref *kref)
 	mutex_destroy(&pages->mutex);
 	put_task_struct(pages->source_task);
 	free_uid(pages->source_user);
+	if (pages->type == IOPT_ADDRESS_FILE)
+		fput(pages->file);
 	kfree(pages);
 }
 
