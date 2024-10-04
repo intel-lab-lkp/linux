@@ -1217,10 +1217,12 @@ static int dsa_user_set_wol(struct net_device *dev, struct ethtool_wolinfo *w)
 	struct dsa_switch *ds = dp->ds;
 	int ret = -EOPNOTSUPP;
 
-	phylink_ethtool_set_wol(dp->pl, w);
-
-	if (ds->ops->set_wol)
+	if (ds->ops->set_wol) {
 		ret = ds->ops->set_wol(ds, dp->index, w);
+		if (ret)
+			return ret;
+		phylink_ethtool_set_wol(dp->pl, w);
+	}
 
 	return ret;
 }
