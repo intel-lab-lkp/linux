@@ -27,7 +27,7 @@ static inline int rsi_set_memory_range(phys_addr_t start, phys_addr_t end,
 
 	while (start != end) {
 		ret = rsi_set_addr_range_state(start, end, state, flags, &top);
-		if (WARN_ON(ret || top < start || top > end))
+		if (ret || top < start || top > end)
 			return -EINVAL;
 		start = top;
 	}
