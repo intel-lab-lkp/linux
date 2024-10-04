@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/pci-pwrctl.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/pwrseq/consumer.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -30,6 +31,25 @@ static int pci_pwrctl_pwrseq_probe(struct platform_device *pdev)
 	struct pci_pwrctl_pwrseq_data *data;
 	struct device *dev = &pdev->dev;
 	int ret;
+
+	/*
+	 * Old device trees for some platforms already define wifi nodes for
+	 * the WCN family of chips since before power sequencing was added
+	 * upstream.
+	 *
+	 * These nodes don't consume the regulator outputs from the PMU and
+	 * if we allow this driver to bind to one of such "incomplete" nodes,
+	 * we'll see a kernel log error about the indefinite probe deferral.
+	 *
+	 * Let's check the existence of the regulator supply that exists on all
+	 * WCN models before moving forward.
+	 *
+	 * NOTE: If this driver is ever used to support a device other than
+	 * a WCN chip, the following lines should become conditional and depend
+	 * on the compatible string.
+	 */
+	if (!device_property_present(dev, "vddaon-supply"))
+		return -ENODEV;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
