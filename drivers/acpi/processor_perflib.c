@@ -455,7 +455,8 @@ int acpi_processor_pstate_control(void)
 {
 	acpi_status status;
 
-	if (!acpi_gbl_FADT.smi_command || !acpi_gbl_FADT.pstate_control)
+	if (!IS_ENABLED(CONFIG_HAS_IOPORT) ||
+	    !acpi_gbl_FADT.smi_command || !acpi_gbl_FADT.pstate_control)
 		return 0;
 
 	pr_debug("Writing pstate_control [0x%x] to smi_command [0x%x]\n",

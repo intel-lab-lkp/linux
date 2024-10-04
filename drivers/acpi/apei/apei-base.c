@@ -661,12 +661,14 @@ int apei_read(u64 *val, struct acpi_generic_address *reg)
 		if (ACPI_FAILURE(status))
 			return -EIO;
 		break;
+#ifdef CONFIG_HAS_IOPORT
 	case ACPI_ADR_SPACE_SYSTEM_IO:
 		status = acpi_os_read_port(address, (u32 *)val,
 					   access_bit_width);
 		if (ACPI_FAILURE(status))
 			return -EIO;
 		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -694,11 +696,13 @@ int apei_write(u64 val, struct acpi_generic_address *reg)
 		if (ACPI_FAILURE(status))
 			return -EIO;
 		break;
+#ifdef CONFIG_HAS_IOPORT
 	case ACPI_ADR_SPACE_SYSTEM_IO:
 		status = acpi_os_write_port(address, val, access_bit_width);
 		if (ACPI_FAILURE(status))
 			return -EIO;
 		break;
+#endif
 	default:
 		return -EINVAL;
 	}

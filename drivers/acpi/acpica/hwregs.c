@@ -239,7 +239,8 @@ acpi_status acpi_hw_read(u64 *value, struct acpi_generic_address *reg)
 							ACPI_DIV_8
 							(access_width),
 							&value64, access_width);
-			} else {	/* ACPI_ADR_SPACE_SYSTEM_IO, validated earlier */
+			} else if (IS_ENABLED(CONFIG_HAS_IOPORT)) {
+				/* ACPI_ADR_SPACE_SYSTEM_IO, validated earlier */
 
 				status = acpi_hw_read_port((acpi_io_address)
 							   address +
@@ -336,7 +337,8 @@ acpi_status acpi_hw_write(u64 value, struct acpi_generic_address *reg)
 							 ACPI_DIV_8
 							 (access_width),
 							 value64, access_width);
-			} else {	/* ACPI_ADR_SPACE_SYSTEM_IO, validated earlier */
+			} else if (IS_ENABLED(CONFIG_HAS_IOPORT)) {
+				/* ACPI_ADR_SPACE_SYSTEM_IO, validated earlier */
 
 				status = acpi_hw_write_port((acpi_io_address)
 							    address +

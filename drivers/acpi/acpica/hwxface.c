@@ -45,7 +45,8 @@ acpi_status acpi_reset(void)
 		return_ACPI_STATUS(AE_NOT_EXIST);
 	}
 
-	if (reset_reg->space_id == ACPI_ADR_SPACE_SYSTEM_IO) {
+	if (IS_ENABLED(CONFIG_HAS_IOPORT) &&
+	    reset_reg->space_id == ACPI_ADR_SPACE_SYSTEM_IO) {
 		/*
 		 * For I/O space, write directly to the OSL. This bypasses the port
 		 * validation mechanism, which may block a valid write to the reset

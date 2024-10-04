@@ -358,12 +358,13 @@ acpi_ev_install_space_handler(struct acpi_namespace_node *node,
 			handler = acpi_ex_system_memory_space_handler;
 			setup = acpi_ev_system_memory_region_setup;
 			break;
-
+#ifdef CONFIG_HAS_IOPORT
 		case ACPI_ADR_SPACE_SYSTEM_IO:
 
 			handler = acpi_ex_system_io_space_handler;
 			setup = acpi_ev_io_space_region_setup;
 			break;
+#endif
 #ifdef ACPI_PCI_CONFIGURED
 		case ACPI_ADR_SPACE_PCI_CONFIG:
 

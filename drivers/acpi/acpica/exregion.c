@@ -261,6 +261,7 @@ access:
 	return_ACPI_STATUS(status);
 }
 
+#ifdef CONFIG_HAS_IOPORT
 /*******************************************************************************
  *
  * FUNCTION:    acpi_ex_system_io_space_handler
@@ -319,6 +320,7 @@ acpi_ex_system_io_space_handler(u32 function,
 
 	return_ACPI_STATUS(status);
 }
+#endif
 
 #ifdef ACPI_PCI_CONFIGURED
 /*******************************************************************************

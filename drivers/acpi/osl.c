@@ -638,6 +638,7 @@ u64 acpi_os_get_timer(void)
 		(ACPI_100NSEC_PER_SEC / HZ);
 }
 
+#ifdef CONFIG_HAS_IOPORT
 acpi_status acpi_os_read_port(acpi_io_address port, u32 *value, u32 width)
 {
 	u32 dummy;
@@ -680,6 +681,7 @@ acpi_status acpi_os_write_port(acpi_io_address port, u32 value, u32 width)
 }
 
 EXPORT_SYMBOL(acpi_os_write_port);
+#endif
 
 int acpi_os_read_iomem(void __iomem *virt_addr, u64 *value, u32 width)
 {

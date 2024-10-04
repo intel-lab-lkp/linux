@@ -1356,7 +1356,8 @@ static int __init acpi_bus_init(void)
 	 * Do that before calling acpi_initialize_objects() which may trigger EC
 	 * address space accesses.
 	 */
-	acpi_ec_ecdt_probe();
+	if (IS_ENABLED(CONFIG_HAS_IOPORT))
+		acpi_ec_ecdt_probe();
 
 	status = acpi_enable_subsystem(ACPI_NO_ACPI_ENABLE);
 	if (ACPI_FAILURE(status)) {
@@ -1391,7 +1392,8 @@ static int __init acpi_bus_init(void)
 	 * Maybe EC region is required at bus_scan/acpi_get_devices. So it
 	 * is necessary to enable it as early as possible.
 	 */
-	acpi_ec_dsdt_probe();
+	if (IS_ENABLED(CONFIG_HAS_IOPORT))
+		acpi_ec_dsdt_probe();
 
 	pr_info("Interpreter enabled\n");
 
@@ -1464,7 +1466,8 @@ static int __init acpi_init(void)
 	acpi_arm_init();
 	acpi_riscv_init();
 	acpi_scan_init();
-	acpi_ec_init();
+	if (IS_ENABLED(CONFIG_HAS_IOPORT))
+		acpi_ec_init();
 	acpi_debugfs_init();
 	acpi_sleep_proc_init();
 	acpi_wakeup_device_init();

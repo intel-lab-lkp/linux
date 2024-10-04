@@ -80,9 +80,11 @@ acpi-y +=		\
 	hwgpe.o		\
 	hwregs.o	\
 	hwsleep.o	\
-	hwvalid.o	\
 	hwxface.o	\
 	hwxfsleep.o
+
+acpi-$(CONFIG_HAS_IOPORT) += \
+	hwvalid.o
 
 acpi-$(CONFIG_PCI) += hwpci.o
 acpi-$(ACPI_FUTURE_USAGE) += hwtimer.o
