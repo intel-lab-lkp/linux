@@ -172,23 +172,21 @@ futex_setup_timer(ktime_t *time, struct hrtimer_sleeper *timeout,
 static u64 get_inode_sequence_number(struct inode *inode)
 {
 	static atomic64_t i_seq;
-	u64 old;
+	u64 old, new;
 
 	/* Does the inode already have a sequence number? */
 	old = atomic64_read(&inode->i_sequence);
 	if (likely(old))
 		return old;
 
-	for (;;) {
-		u64 new = atomic64_add_return(1, &i_seq);
-		if (WARN_ON_ONCE(!new))
-			continue;
+	do {
+		new = atomic64_inc_return(&i_seq);
+	} while	(WARN_ON_ONCE(!new));
 
-		old = atomic64_cmpxchg_relaxed(&inode->i_sequence, 0, new);
-		if (old)
-			return old;
-		return new;
-	}
+	old = 0;
+	if (!atomic64_try_cmpxchg_relaxed(&inode->i_sequence, &old, new))
+		return old;
+	return new;
 }
 
 /**
