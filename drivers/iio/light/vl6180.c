@@ -33,6 +33,7 @@
 #define VL6180_MODEL_ID_VAL 0xb4
 
 /* Configuration registers */
+#define VL6180_MODE_GPIO1 0x011
 #define VL6180_INTR_CONFIG 0x014
 #define VL6180_INTR_CLEAR 0x015
 #define VL6180_OUT_OF_RESET 0x016
@@ -70,6 +71,9 @@
 /* bits of the HOLD register */
 #define VL6180_HOLD_ON BIT(0)
 
+/* bit for enabling GPIO1 Interrupt Output */
+#define VL6180_GPIO1_INTR_OUT BIT(4)
+
 /* default value for the ALS_IT register */
 #define VL6180_ALS_IT_100 0x63 /* 100 ms */
 
@@ -86,6 +90,7 @@
 struct vl6180_data {
 	struct i2c_client *client;
 	struct mutex lock;
+	struct completion completion;
 	unsigned int als_gain_milli;
 	unsigned int als_it_ms;
 	unsigned int als_meas_rate;
@@ -211,6 +216,7 @@ static int vl6180_write_word(struct i2c_client *client, u16 cmd, u16 val)
 static int vl6180_measure(struct vl6180_data *data, int addr)
 {
 	struct i2c_client *client = data->client;
+	unsigned long time_left;
 	int tries = 20, ret;
 	u16 value;
 
@@ -221,19 +227,26 @@ static int vl6180_measure(struct vl6180_data *data, int addr)
 	if (ret < 0)
 		goto fail;
 
-	while (tries--) {
-		ret = vl6180_read_byte(client, VL6180_INTR_STATUS);
-		if (ret < 0)
+	if (client->irq) {
+		reinit_completion(&data->completion);
+		time_left = wait_for_completion_timeout(&data->completion, HZ/10);
+		if (time_left == 0)
+			return -ETIMEDOUT;
+	} else {
+		while (tries--) {
+			ret = vl6180_read_byte(client, VL6180_INTR_STATUS);
+			if (ret < 0)
+				goto fail;
+
+			if (ret & vl6180_chan_regs_table[addr].drdy_mask)
+				break;
+			msleep(20);
+		}
+
+		if (tries < 0) {
+			ret = -EIO;
 			goto fail;
-
-		if (ret & vl6180_chan_regs_table[addr].drdy_mask)
-			break;
-		msleep(20);
-	}
-
-	if (tries < 0) {
-		ret = -EIO;
-		goto fail;
+		}
 	}
 
 	/* Read result value from appropriate registers */
@@ -479,6 +492,15 @@ static int vl6180_write_raw(struct iio_dev *indio_dev,
 	}
 }
 
+static irqreturn_t vl6180_threaded_irq(int irq, void *priv)
+{
+	struct iio_dev *indio_dev = priv;
+	struct vl6180_data *data = iio_priv(indio_dev);
+
+	complete(&data->completion);
+	return IRQ_HANDLED;
+}
+
 static const struct iio_info vl6180_info = {
 	.read_raw = vl6180_read_raw,
 	.write_raw = vl6180_write_raw,
@@ -513,6 +535,11 @@ static int vl6180_init(struct vl6180_data *data)
 	 */
 	if (ret != 0x01)
 		dev_info(&client->dev, "device is not fresh out of reset\n");
+
+	ret = vl6180_write_byte(client, VL6180_MODE_GPIO1,
+				VL6180_GPIO1_INTR_OUT);
+	if (ret < 0)
+		return ret;
 
 	/* Enable ALS and Range ready interrupts */
 	ret = vl6180_write_byte(client, VL6180_INTR_CONFIG,
@@ -579,6 +606,19 @@ static int vl6180_probe(struct i2c_client *client)
 	ret = vl6180_init(data);
 	if (ret < 0)
 		return ret;
+
+	if (client->irq) {
+		ret = devm_request_threaded_irq(&client->dev, client->irq,
+						NULL, vl6180_threaded_irq,
+						IRQF_ONESHOT,
+						indio_dev->name, indio_dev);
+		if (ret) {
+			dev_err(&client->dev, "devm_request_irq error: %d\n", ret);
+			return ret;
+		}
+
+		init_completion(&data->completion);
+	}
 
 	return devm_iio_device_register(&client->dev, indio_dev);
 }
