@@ -669,6 +669,11 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 	vmcb02->control.iopm_base_pa = vmcb01->control.iopm_base_pa;
 	vmcb02->control.msrpm_base_pa = vmcb01->control.msrpm_base_pa;
 
+	/*
+	 * The bus lock threshold count should keep running across nested
+	 * transitions. Copy the buslock threshold count from vmcb01 to vmcb02.
+	 */
+	vmcb02->control.bus_lock_counter = vmcb01->control.bus_lock_counter;
 	/* Done at vmrun: asid.  */
 
 	/* Also overwritten later if necessary.  */
@@ -1035,6 +1040,11 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 
 	}
 
+	/*
+	 * The bus lock threshold count should keep running across nested
+	 * transitions. Copy the buslock threshold count from vmcb02 to vmcb01.
+	 */
+	vmcb01->control.bus_lock_counter = vmcb02->control.bus_lock_counter;
 	nested_svm_copy_common_state(svm->nested.vmcb02.ptr, svm->vmcb01.ptr);
 
 	svm_switch_vmcb(svm, &svm->vmcb01);
