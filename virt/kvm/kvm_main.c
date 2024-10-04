@@ -451,15 +451,21 @@ int kvm_mmu_memory_cache_nr_free_objects(struct kvm_mmu_memory_cache *mc)
 	return mc->nobjs;
 }
 
-void kvm_mmu_free_memory_cache(struct kvm_mmu_memory_cache *mc)
+int kvm_mmu_empty_memory_cache(struct kvm_mmu_memory_cache *mc)
 {
+	int freed = mc->nobjs;
 	while (mc->nobjs) {
 		if (mc->kmem_cache)
 			kmem_cache_free(mc->kmem_cache, mc->objects[--mc->nobjs]);
 		else
 			free_page((unsigned long)mc->objects[--mc->nobjs]);
 	}
+	return freed;
+}
 
+void kvm_mmu_free_memory_cache(struct kvm_mmu_memory_cache *mc)
+{
+	kvm_mmu_empty_memory_cache(mc);
 	kvfree(mc->objects);
 
 	mc->objects = NULL;

@@ -809,13 +809,14 @@ static int FNAME(page_fault)(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 		return RET_PF_EMULATE;
 	}
 
+	mutex_lock(&vcpu->arch.mmu_memory_cache_lock);
 	r = mmu_topup_memory_caches(vcpu, true);
 	if (r)
-		return r;
+		goto out_mmu_memory_cache_unlock;
 
 	r = kvm_faultin_pfn(vcpu, fault, walker.pte_access);
 	if (r != RET_PF_CONTINUE)
-		return r;
+		goto out_mmu_memory_cache_unlock;
 
 	/*
 	 * Do not change pte_access if the pfn is a mmio page, otherwise
@@ -840,16 +841,19 @@ static int FNAME(page_fault)(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 	write_lock(&vcpu->kvm->mmu_lock);
 
 	if (is_page_fault_stale(vcpu, fault))
-		goto out_unlock;
+		goto out_mmu_unlock;
 
 	r = make_mmu_pages_available(vcpu);
 	if (r)
-		goto out_unlock;
+		goto out_mmu_unlock;
 	r = FNAME(fetch)(vcpu, fault, &walker);
 
-out_unlock:
+out_mmu_unlock:
 	write_unlock(&vcpu->kvm->mmu_lock);
 	kvm_release_pfn_clean(fault->pfn);
+out_mmu_memory_cache_unlock:
+	mutex_unlock(&vcpu->arch.mmu_memory_cache_lock);
+
 	return r;
 }
 
