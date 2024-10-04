@@ -324,7 +324,9 @@ static int speedtch_upload_firmware(struct speedtch_instance_data *instance,
 	   because we're in our own kernel thread anyway. */
 	msleep_interruptible(1000);
 
-	if ((ret = usb_set_interface(usb_dev, INTERFACE_DATA, instance->params.altsetting)) < 0) {
+	ret = usb_set_interface(usb_dev, INTERFACE_DATA, instance->params.altsetting
+
+	if (ret < 0) {
 		usb_err(usbatm, "%s: setting interface to %d failed (%d)!\n", __func__, instance->params.altsetting, ret);
 		goto out_free;
 	}
