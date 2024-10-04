@@ -193,13 +193,6 @@ static int __try_to_reclaim_swap(struct swap_info_struct *si,
 	folio = filemap_get_folio(address_space, swap_cache_index(entry));
 	if (IS_ERR(folio))
 		return 0;
-
-	/* offset could point to the middle of a large folio */
-	entry = folio->swap;
-	offset = swp_offset(entry);
-	nr_pages = folio_nr_pages(folio);
-	ret = -nr_pages;
-
 	/*
 	 * When this function is called from scan_swap_map_slots() and it's
 	 * called by vmscan.c at reclaiming folios. So we hold a folio lock
@@ -209,6 +202,12 @@ static int __try_to_reclaim_swap(struct swap_info_struct *si,
 	 */
 	if (!folio_trylock(folio))
 		goto out;
+
+	/* offset could point to the middle of a large folio */
+	entry = folio->swap;
+	offset = swp_offset(entry);
+	nr_pages = folio_nr_pages(folio);
+	ret = -nr_pages;
 
 	need_reclaim = ((flags & TTRS_ANYWAY) ||
 			((flags & TTRS_UNMAPPED) && !folio_mapped(folio)) ||
