@@ -1575,7 +1575,7 @@ static int ub960_rxport_wait_locks(struct ub960_data *priv,
 		if (missing == 0)
 			break;
 
-		msleep(50);
+		fsleep(10 * 1000);
 	}
 
 	if (lock_mask)
