@@ -4,6 +4,7 @@
  *
  * Copyright (C) 2020, Google LLC.
  */
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <assert.h>
@@ -15,6 +16,8 @@
 #include <sys/syscall.h>
 #include <linux/mman.h>
 #include "linux/kernel.h"
+#include <mntent.h>
+#include <string.h>
 
 #include "test_util.h"
 
@@ -414,4 +417,52 @@ char *sys_get_cur_clocksource(void)
 	fclose(fp);
 
 	return clk_name;
+}
+
+int find_debugfs_root(char *debugfs_path, size_t size)
+{
+	FILE *mtab = setmntent("/etc/mtab", "r");
+	struct mntent *mntent;
+	int r = -ENOENT;
+
+	if (!mtab)
+		return r;
+
+	while ((mntent = getmntent(mtab))) {
+		if (strcmp("debugfs", mntent->mnt_type))
+			continue;
+
+		if (strlen(mntent->mnt_dir) >= size) {
+			r = -EOVERFLOW;
+		} else {
+			strcpy(debugfs_path, mntent->mnt_dir);
+			r = 0;
+		}
+		break;
+	}
+
+	endmntent(mtab);
+	return r;
+}
+
+int find_debugfs_subsystem_path(const char *subsystem,
+				char *debugfs_subsystem_path,
+				size_t max_path_size)
+{
+	char debugfs_path[PATH_MAX];
+	int ret;
+
+	ret = find_debugfs_root(debugfs_path, PATH_MAX);
+	if (ret)
+		return ret;
+
+	/* Add extra 1 for separator "/". */
+	if (strlen(debugfs_path) + 1 + strlen(subsystem) >= max_path_size)
+		return -EOVERFLOW;
+
+	strcpy(debugfs_subsystem_path, debugfs_path);
+	strcat(debugfs_subsystem_path, "/");
+	strcat(debugfs_subsystem_path, subsystem);
+
+	return 0;
 }

@@ -218,4 +218,9 @@ char *strdup_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2), n
 
 char *sys_get_cur_clocksource(void);
 
+int find_debugfs_root(char *debugfs_path, size_t size);
+int find_debugfs_subsystem_path(const char *subsystem,
+				char *debugfs_subsystem_path,
+				size_t max_path_size);
+
 #endif /* SELFTEST_KVM_TEST_UTIL_H */
