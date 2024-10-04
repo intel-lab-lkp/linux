@@ -186,8 +186,8 @@ void __show_regs(struct pt_regs *regs)
 			unsigned int transbase;
 			asm("mrc p15, 0, %0, c2, c0\n\t"
 			    : "=r" (transbase));
-			snprintf(buf, sizeof(buf), "  Table: %08x  DAC: %08x",
-				transbase, domain);
+			scnprintf(buf, sizeof(buf), "  Table: %08x  DAC: %08x",
+				  transbase, domain);
 		}
 #endif
 		asm("mrc p15, 0, %0, c1, c0\n" : "=r" (ctrl));
