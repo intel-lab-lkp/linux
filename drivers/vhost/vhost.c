@@ -41,6 +41,10 @@ static int max_iotlb_entries = 2048;
 module_param(max_iotlb_entries, int, 0444);
 MODULE_PARM_DESC(max_iotlb_entries,
 	"Maximum number of iotlb entries. (default: 2048)");
+bool enforce_inherit_owner = true;
+module_param(enforce_inherit_owner, bool, 0444);
+MODULE_PARM_DESC(enforce_inherit_owner,
+		 "enforce vhost use vhost_task(default: Y)");
 
 enum {
 	VHOST_MEMORY_F_LOG = 0x1,
