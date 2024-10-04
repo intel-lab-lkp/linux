@@ -808,7 +808,8 @@ static void vhost_workers_free(struct vhost_dev *dev)
 	else
 		vhost_workers_free_kthread(dev);
 }
-static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
+
+static struct vhost_worker *vhost_worker_create_task(struct vhost_dev *dev)
 {
 	struct vhost_worker *worker;
 	struct vhost_task *vtsk;
@@ -844,6 +845,50 @@ static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
 
 stop_worker:
 	vhost_task_stop(vtsk);
+free_worker:
+	kfree(worker);
+	return NULL;
+}
+
+static struct vhost_worker *vhost_worker_create_kthread(struct vhost_dev *dev)
+{
+	struct vhost_worker *worker;
+	struct task_struct *task;
+	int ret;
+	u32 id;
+
+	worker = kzalloc(sizeof(*worker), GFP_KERNEL_ACCOUNT);
+	if (!worker)
+		return NULL;
+
+	worker->dev = dev;
+	worker->kcov_handle = kcov_common_handle();
+
+	mutex_init(&worker->mutex);
+	init_llist_head(&worker->work_list);
+
+	task = kthread_create(vhost_run_work_kthread_list, worker, "vhost-%d",
+			      current->pid);
+	if (IS_ERR(task)) {
+		ret = PTR_ERR(task);
+		goto free_worker;
+	}
+
+	worker->task = task;
+	wake_up_process(task); /* avoid contributing to loadavg */
+	ret = xa_alloc(&dev->worker_xa, &id, worker, xa_limit_32b, GFP_KERNEL);
+	if (ret < 0)
+		goto stop_worker;
+	worker->id = id;
+
+	ret = vhost_attach_cgroups(dev);
+	if (ret)
+		goto stop_worker;
+
+	return worker;
+
+stop_worker:
+	kthread_stop(worker->task);
 free_worker:
 	kfree(worker);
 	return NULL;
@@ -935,6 +980,14 @@ static int vhost_vq_attach_worker(struct vhost_virtqueue *vq,
 
 	__vhost_vq_attach_worker(vq, worker);
 	return 0;
+}
+
+static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
+{
+	if (enforce_inherit_owner)
+		return vhost_worker_create_task(dev);
+	else
+		return vhost_worker_create_kthread(dev);
 }
 
 /* Caller must have device mutex */
