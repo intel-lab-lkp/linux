@@ -776,8 +776,8 @@ static int rj54n1_sensor_scale(struct v4l2_subdev *sd, s32 *in_w, s32 *in_h,
 	}
 
 	/* Antiflicker */
-	peak = 12 * RJ54N1_MAX_WIDTH * (1 << 14) * resize / rj54n1->tgclk_mhz /
-		10000;
+	peak = 12 * RJ54N1_MAX_WIDTH * resize / rj54n1->tgclk_mhz / 10000;
+	peak *= 1 << 14;
 	peak_50 = peak / 6;
 	peak_60 = peak / 5;
 
