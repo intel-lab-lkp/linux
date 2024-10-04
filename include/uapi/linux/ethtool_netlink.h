@@ -59,6 +59,7 @@ enum {
 	ETHTOOL_MSG_MM_SET,
 	ETHTOOL_MSG_MODULE_FW_FLASH_ACT,
 	ETHTOOL_MSG_PHY_GET,
+	ETHTOOL_MSG_PHY_SET,
 
 	/* add new constants above here */
 	__ETHTOOL_MSG_USER_CNT,
@@ -1079,6 +1080,7 @@ enum {
 	ETHTOOL_A_PHY_UPSTREAM_INDEX,		/* u32 */
 	ETHTOOL_A_PHY_UPSTREAM_SFP_NAME,	/* string */
 	ETHTOOL_A_PHY_DOWNSTREAM_SFP_NAME,	/* string */
+	ETHTOOL_A_PHY_ISOLATE,			/* u8 */
 
 	/* add new constants above here */
 	__ETHTOOL_A_PHY_CNT,

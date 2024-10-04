@@ -30,9 +30,12 @@ ethnl_phy_reply_size(const struct ethnl_req_info *req_base,
 	struct phy_req_info *req_info = PHY_REQINFO(req_base);
 	struct phy_device_node *pdn = req_info->pdn;
 	struct phy_device *phydev = pdn->phy;
+	const struct ethtool_phy_ops *ops;
 	size_t size = 0;
 
 	ASSERT_RTNL();
+
+	ops = ethtool_phy_ops;
 
 	/* ETHTOOL_A_PHY_INDEX */
 	size += nla_total_size(sizeof(u32));
@@ -66,6 +69,10 @@ ethnl_phy_reply_size(const struct ethnl_req_info *req_base,
 			size += nla_total_size(strlen(sfp_name) + 1);
 	}
 
+	/* ETHTOOL_A_PHY_ISOLATE */
+	if (ops && ops->get_config)
+		size += nla_total_size(sizeof(u8));
+
 	return size;
 }
 
@@ -75,9 +82,19 @@ ethnl_phy_fill_reply(const struct ethnl_req_info *req_base, struct sk_buff *skb)
 	struct phy_req_info *req_info = PHY_REQINFO(req_base);
 	struct phy_device_node *pdn = req_info->pdn;
 	struct phy_device *phydev = pdn->phy;
+	const struct ethtool_phy_ops *ops;
+	struct phy_device_config cfg;
 	enum phy_upstream ptype;
+	int ret;
 
 	ptype = pdn->upstream_type;
+
+	ops = ethtool_phy_ops;
+	if (ops && ops->get_config) {
+		ret = ops->get_config(phydev, &cfg);
+		if (ret)
+			return ret;
+	}
 
 	if (nla_put_u32(skb, ETHTOOL_A_PHY_INDEX, phydev->phyindex) ||
 	    nla_put_string(skb, ETHTOOL_A_PHY_NAME, dev_name(&phydev->mdio.dev)) ||
@@ -113,6 +130,13 @@ ethnl_phy_fill_reply(const struct ethnl_req_info *req_base, struct sk_buff *skb)
 				   sfp_name))
 			return -EMSGSIZE;
 	}
+
+	/* Append PHY configuration, if possible */
+	if (!ops || !ops->get_config)
+		return 0;
+
+	if (nla_put_u8(skb, ETHTOOL_A_PHY_ISOLATE, cfg.isolate))
+		return -EMSGSIZE;
 
 	return 0;
 }
@@ -304,3 +328,47 @@ int ethnl_phy_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 
 	return ret;
 }
+
+const struct nla_policy ethnl_phy_set_policy[] = {
+	[ETHTOOL_A_PHY_HEADER]		=
+		NLA_POLICY_NESTED(ethnl_header_policy_phy),
+	[ETHTOOL_A_PHY_ISOLATE]		= NLA_POLICY_MAX(NLA_U8, 1),
+};
+
+static int ethnl_set_phy(struct ethnl_req_info *req_info, struct genl_info *info)
+{
+	struct netlink_ext_ack *extack = info->extack;
+	const struct ethtool_phy_ops *ops;
+	struct nlattr **tb = info->attrs;
+	struct phy_device_config cfg;
+	struct phy_device *phydev;
+	bool mod = false;
+	int ret;
+
+	ops = ethtool_phy_ops;
+	if (!ops || !ops->set_config || !ops->get_config)
+		return -EOPNOTSUPP;
+
+	/* We're running under rtnl */
+	phydev = ethnl_req_get_phydev(req_info, tb[ETHTOOL_A_PHY_HEADER],
+				      extack);
+	if (IS_ERR_OR_NULL(phydev))
+		return -ENODEV;
+
+	ret = ops->get_config(phydev, &cfg);
+	if (ret)
+		return ret;
+
+	ethnl_update_bool(&cfg.isolate, tb[ETHTOOL_A_PHY_ISOLATE], &mod);
+
+	if (!mod)
+		return 0;
+
+	/* Returning 0 is fine as we don't have a notification */
+	return ops->set_config(phydev, &cfg, extack);
+}
+
+const struct ethnl_request_ops ethnl_phy_request_ops = {
+	.hdr_attr		= ETHTOOL_A_PHY_HEADER,
+	.set			= ethnl_set_phy,
+};

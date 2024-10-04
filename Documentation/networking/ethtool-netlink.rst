@@ -2235,6 +2235,7 @@ Kernel response contents:
                                                 bus, the name of this sfp bus
   ``ETHTOOL_A_PHY_DOWNSTREAM_SFP_NAME`` string  if the phy controls an sfp bus,
                                                 the name of the sfp bus
+  ``ETHTOOL_A_PHY_ISOLATE``             u8      The PHY Isolate status
   ===================================== ======  ===============================
 
 When ``ETHTOOL_A_PHY_UPSTREAM_TYPE`` is PHY_UPSTREAM_PHY, the PHY's parent is
