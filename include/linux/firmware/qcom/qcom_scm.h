@@ -70,6 +70,7 @@ struct qcom_scm_pas_metadata {
 	void *ptr;
 	dma_addr_t phys;
 	ssize_t size;
+	bool shm_bridge_needed;
 };
 
 int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
