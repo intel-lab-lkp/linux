@@ -9,6 +9,10 @@
 #include <linux/gfp.h>
 #include <linux/sync_core.h>
 #include <linux/sched/coredump.h>
+#include <linux/hp.h>
+
+/* Sched lazy mm hazard pointer domain. */
+DECLARE_PER_CPU(struct hp_slot, hp_domain_sched_lazy_mm);
 
 /*
  * Routines for handling mm_structs
@@ -55,61 +59,42 @@ static inline void mmdrop(struct mm_struct *mm)
 		__mmdrop(mm);
 }
 
-#ifdef CONFIG_PREEMPT_RT
-/*
- * RCU callback for delayed mm drop. Not strictly RCU, but call_rcu() is
- * by far the least expensive way to do that.
- */
-static inline void __mmdrop_delayed(struct rcu_head *rhp)
-{
-	struct mm_struct *mm = container_of(rhp, struct mm_struct, delayed_drop);
-
-	__mmdrop(mm);
-}
-
-/*
- * Invoked from finish_task_switch(). Delegates the heavy lifting on RT
- * kernels via RCU.
- */
-static inline void mmdrop_sched(struct mm_struct *mm)
-{
-	/* Provides a full memory barrier. See mmdrop() */
-	if (atomic_dec_and_test(&mm->mm_count))
-		call_rcu(&mm->delayed_drop, __mmdrop_delayed);
-}
-#else
-static inline void mmdrop_sched(struct mm_struct *mm)
-{
-	mmdrop(mm);
-}
-#endif
-
 /* Helpers for lazy TLB mm refcounting */
 static inline void mmgrab_lazy_tlb(struct mm_struct *mm)
 {
-	if (IS_ENABLED(CONFIG_MMU_LAZY_TLB_REFCOUNT))
-		mmgrab(mm);
+	struct hp_ctx ctx;
+
+	/*
+	 * mmgrab_lazy_tlb must provide a full memory barrier, see the
+	 * membarrier comment finish_task_switch which relies on this.
+	 */
+	smp_mb();
+
+	/*
+	 * The caller guarantees existence of mm. Allocate a hazard
+	 * pointer to chain this existence guarantee to a hazard
+	 * pointer.
+	 */
+	ctx = hp_allocate(&hp_domain_sched_lazy_mm, mm);
+
+	/* There is only a single lazy mm per CPU at any time. */
+	WARN_ON_ONCE(!hp_ctx_addr(ctx));
 }
 
 static inline void mmdrop_lazy_tlb(struct mm_struct *mm)
 {
-	if (IS_ENABLED(CONFIG_MMU_LAZY_TLB_REFCOUNT)) {
-		mmdrop(mm);
-	} else {
-		/*
-		 * mmdrop_lazy_tlb must provide a full memory barrier, see the
-		 * membarrier comment finish_task_switch which relies on this.
-		 */
-		smp_mb();
-	}
+	/*
+	 * mmdrop_lazy_tlb must provide a full memory barrier, see the
+	 * membarrier comment finish_task_switch which relies on this.
+	 */
+	smp_mb();
+	WRITE_ONCE(this_cpu_ptr(&hp_domain_sched_lazy_mm)->addr, NULL);
 }
 
 static inline void mmdrop_lazy_tlb_sched(struct mm_struct *mm)
 {
-	if (IS_ENABLED(CONFIG_MMU_LAZY_TLB_REFCOUNT))
-		mmdrop_sched(mm);
-	else
-		smp_mb(); /* see mmdrop_lazy_tlb() above */
+	smp_mb(); /* see mmdrop_lazy_tlb() above */
+	WRITE_ONCE(this_cpu_ptr(&hp_domain_sched_lazy_mm)->addr, NULL);
 }
 
 /**

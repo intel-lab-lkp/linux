@@ -3720,12 +3720,8 @@ static inline void switch_mm_cid(struct rq *rq,
 	if (!next->mm) {                                // to kernel
 		/*
 		 * user -> kernel transition does not guarantee a barrier, but
-		 * we can use the fact that it performs an atomic operation in
-		 * mmgrab().
-		 */
-		if (prev->mm)                           // from user
-			smp_mb__after_mmgrab();
-		/*
+		 * we can use the fact that mmgrab() has a full barrier.
+		 *
 		 * kernel -> kernel transition does not change rq->curr->mm
 		 * state. It stays NULL.
 		 */
