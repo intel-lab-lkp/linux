@@ -41,7 +41,11 @@
 					 PCPU_MIN_ALLOC_SHIFT)
 
 #ifdef CONFIG_RANDOM_KMALLOC_CACHES
+#ifdef CONFIG_PREEMPT_RT
+#define PERCPU_DYNAMIC_SIZE_SHIFT      13
+#else
 #define PERCPU_DYNAMIC_SIZE_SHIFT      12
+#endif
 #else
 #define PERCPU_DYNAMIC_SIZE_SHIFT      10
 #endif
