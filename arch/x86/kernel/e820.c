@@ -1208,15 +1208,165 @@ static unsigned long __init ram_alignment(resource_size_t pos)
 
 #define MAX_RESOURCE_SIZE ((resource_size_t)-1)
 
+static struct resource e820_sr_res = {
+	.name  = "e820 Soft Reserves",
+	.start = 0,
+	.end   = MAX_RESOURCE_SIZE,
+};
+
+void e820__insert_soft_reserves(void)
+{
+	struct resource *res, *next;
+	int rc;
+
+	pr_err("CXL DEBUG Inserting Soft Reserves\n");
+	for (res = e820_sr_res.child; res; res = next) {
+		next = res->sibling;
+
+		pr_err("CXL DEBUG Inserting Soft Reserve %pr\n", res);
+		remove_resource(res);
+		rc = insert_resource(&iomem_resource, res);
+		if (rc)
+			pr_debug("CXL DEBUG Cannot insert %pr\n", res);
+	}
+}
+EXPORT_SYMBOL_GPL(e820__insert_soft_reserves);
+
+static void e820__add_soft_reserve(resource_size_t start, resource_size_t len,
+				   unsigned long flags)
+{
+	struct resource *res;
+
+	res = kzalloc(sizeof(*res), GFP_KERNEL);
+	if (!res) {
+		pr_err("CXL DEBUG Couldn't add Soft Reserved %llx (%llx)\n",
+		       start, len);
+		return;
+	}
+
+	*res = DEFINE_RES_NAMED(start, len, "Soft Reserved", flags);
+	res->desc = IORES_DESC_SOFT_RESERVED;
+	pr_err("CXL DEBUG Inserting new Soft Reserved %pr\n", res);
+	insert_resource(&e820_sr_res, res);
+}
+
+static void e820__trim_soft_reserve(struct resource *res,
+				    const struct resource *cxl_res)
+{
+	resource_size_t new_start, new_end;
+	int rc;
+
+	pr_err("CXL DEBUG Trimming Soft Reserves for %pr\n", cxl_res);
+
+	if (res->start == cxl_res->start && res->end == cxl_res->end) {
+		pr_err("CXL DEBUG Releasing resource %pr\n", res);
+		release_resource(res);
+		kfree(res);
+	} else if (res->start == cxl_res->start || res->end == cxl_res->end) {
+		if (res->start == cxl_res->start) {
+			new_start = cxl_res->end + 1;
+			new_end = res->end;
+		} else {
+			new_start = res->start;
+			new_end = cxl_res->start - 1;
+		}
+
+		pr_err("CXL DEBUG Adjusting resource %pr (%llx - %llx)\n",
+		       res, new_start, new_end);
+		rc = adjust_resource(res, new_start, new_end - new_start + 1);
+		if (rc)
+			pr_debug("Cannot adjust soft reserved resource %pr\n",
+				 res);
+	} else {
+		new_start = res->start;
+		new_end = res->end;
+
+		/*Adjust existing to beginning resource */
+		pr_err("CXL DEBUG Adjusting resource %pr (%llx - %llx)\n", res,
+		       new_start, cxl_res->start);
+		adjust_resource(res, new_start, cxl_res->start - new_start + 1);
+
+		/* Add new resource for end piece */
+		e820__add_soft_reserve(cxl_res->end + 1, new_end - cxl_res->end,
+				       res->flags);
+	}
+}
+
+void e820__trim_soft_reserves(const struct resource *cxl_res)
+{
+	struct resource *res, *next;
+
+	pr_err("CXL DEBUG Trimming Soft Reserves\n");
+	for (res = e820_sr_res.child; res; res = next) {
+		next = res->sibling;
+
+		if (resource_contains(res, cxl_res)) {
+			e820__trim_soft_reserve(res, cxl_res);
+			break;
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(e820__trim_soft_reserves);
+
+static int __init e820_parse_cfmws(union acpi_subtable_headers *hdr, void *arg,
+				   const unsigned long unused)
+{
+	struct acpi_cedt_cfmws *cfmws;
+	struct resource *res = arg;
+	struct resource cfmws_res;
+
+	/* Validation check, remove when finished debugging */
+	if (!res->parent && res->end)
+		pr_err("CXL DEBUG Should insert %pr\n", res);
+
+	if (res->parent || !res->end)
+		return 0;
+
+	cfmws = (struct acpi_cedt_cfmws *)hdr;
+	cfmws_res = DEFINE_RES_MEM(cfmws->base_hpa,
+				   cfmws->base_hpa + cfmws->window_size);
+	pr_err("CXL DEBUG Found CFMWS: %pr\n", &cfmws_res);
+
+	if (resource_overlaps(&cfmws_res, res)) {
+		pr_err("CXL DEBUG Found SOFT RESERVE intersection %llx - %llx : %llx - %llx\n",
+		       res->start, res->end, cfmws_res.start, cfmws_res.end);
+		e820__add_soft_reserve(res->start, resource_size(res),
+				       res->flags);
+		return 1;
+	}
+
+	return 0;
+}
+
 void __init e820__reserve_resources_late(void)
 {
-	int i;
+	int i, rc;
 	struct resource *res;
+
+	/*
+	 * Prior to inserting SOFT_RESERVED resources we want to check for an
+	 * intersection with potential CXL resources. Any SOFT_RESERVED resources
+	 * that do intersect a potential CXL resource are set aside so they
+	 * can be trimmed to accommodate CXL resource intersections and added to
+	 * the iomem resource tree after the CXL drivers have completed their
+	 * device probe.
+	 */
+	pr_err("CXL DEBUG Checking e820 iomem resources\n");
 
 	res = e820_res;
 	for (i = 0; i < e820_table->nr_entries; i++) {
-		if (!res->parent && res->end)
-			insert_resource_expand_to_fit(&iomem_resource, res);
+		pr_err("CXL DEBUG Checking e820 iomem resource %llx - %llx\n",
+		       res->start, res->end);
+		if (res->desc == IORES_DESC_SOFT_RESERVED) {
+			rc = acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS,
+						   e820_parse_cfmws, res);
+			if (rc) {
+				res++;
+				continue;
+			}
+		}
+		pr_err("CXL DEBUG Inserting %llx - %llx\n", res->start, res->end);
+		insert_resource_expand_to_fit(&iomem_resource, res);
 		res++;
 	}
 

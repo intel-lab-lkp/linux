@@ -14,6 +14,10 @@
 #include <cxl.h>
 #include "core.h"
 
+#if CONFIG_X86
+#include <asm/e820/api.h>
+#endif
+
 /**
  * DOC: cxl core region
  *
@@ -3226,6 +3230,14 @@ static int match_region_by_range(struct device *dev, void *data)
 	return rc;
 }
 
+static int insert_region_resource(struct resource *parent, struct resource *res)
+{
+#if CONFIG_X86
+	e820__trim_soft_reserves(res);
+#endif
+	return insert_resource(parent, res);
+}
+
 /* Establish an empty region covering the given HPA range */
 static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 					   struct cxl_endpoint_decoder *cxled)
@@ -3272,7 +3284,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	*res = DEFINE_RES_MEM_NAMED(hpa->start, range_len(hpa),
 				    dev_name(&cxlr->dev));
-	rc = insert_resource(cxlrd->res, res);
+	rc = insert_region_resource(cxlrd->res, res);
 	if (rc) {
 		/*
 		 * Platform-firmware may not have split resources like "System

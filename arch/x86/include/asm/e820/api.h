@@ -44,6 +44,9 @@ extern void e820__register_nosave_regions(unsigned long limit_pfn);
 
 extern int  e820__get_entry_type(u64 start, u64 end);
 
+extern void e820__trim_soft_reserves(const struct resource *cxl_res);
+extern void e820__insert_soft_reserves(void);
+
 /*
  * Returns true iff the specified range [start,end) is completely contained inside
  * the ISA region.

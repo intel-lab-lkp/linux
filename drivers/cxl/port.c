@@ -7,6 +7,10 @@
 #include "cxlmem.h"
 #include "cxlpci.h"
 
+#if CONFIG_X86
+#include <asm/e820/api.h>
+#endif
+
 /**
  * DOC: cxl port
  *
@@ -89,6 +93,35 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 	return -ENXIO;
 }
 
+DECLARE_RWSEM(cxl_sr_rwsem);
+
+static void cxl_sr_update(struct work_struct *w)
+{
+	down_write(&cxl_sr_rwsem);
+	pr_err("CXL DEBUG Updating soft reserves\n");
+	e820__insert_soft_reserves();
+	up_write(&cxl_sr_rwsem);
+}
+
+DECLARE_DELAYED_WORK(cxl_sr_work, cxl_sr_update);
+
+static void schedule_soft_reserve_update(void)
+{
+	static bool update_scheduled;
+	int timeout = 5 * HZ;
+
+	down_write(&cxl_sr_rwsem);
+	if (update_scheduled) {
+		pr_err("CXL DEBUG modifying delayed work timeout\n");
+		mod_delayed_work(system_wq, &cxl_sr_work, timeout);
+	} else {
+		pr_err("CXL DEBUG Adding delayed work\n");
+		schedule_delayed_work(&cxl_sr_work, timeout);
+		update_scheduled = true;
+	}
+	up_write(&cxl_sr_rwsem);
+}
+
 static int cxl_endpoint_port_probe(struct cxl_port *port)
 {
 	struct cxl_endpoint_dvsec_info info = { .port = port };
@@ -140,6 +173,7 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	 */
 	device_for_each_child(&port->dev, root, discover_region);
 
+	schedule_soft_reserve_update();
 	return 0;
 }
 
