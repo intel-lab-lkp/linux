@@ -1422,6 +1422,7 @@ static struct phy_driver mv3310_drivers[] = {
 		.set_loopback	= genphy_c45_loopback,
 		.get_wol	= mv3110_get_wol,
 		.set_wol	= mv3110_set_wol,
+		.can_isolate	= genphy_no_isolate,
 	},
 	{
 		.phy_id		= MARVELL_PHY_ID_88X3310,
@@ -1441,6 +1442,7 @@ static struct phy_driver mv3310_drivers[] = {
 		.set_tunable	= mv3310_set_tunable,
 		.remove		= mv3310_remove,
 		.set_loopback	= genphy_c45_loopback,
+		.can_isolate	= genphy_no_isolate,
 	},
 	{
 		.phy_id		= MARVELL_PHY_ID_88E2110,
