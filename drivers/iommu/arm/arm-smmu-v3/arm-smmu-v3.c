@@ -3624,8 +3624,9 @@ static int arm_smmu_init_strtab_2lvl(struct arm_smmu_device *smmu)
 {
 	u32 l1size;
 	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+	u64 num_sids = arm_smmu_strtab_num_sids(smmu);
 	unsigned int last_sid_idx =
-		arm_smmu_strtab_l1_idx((1 << smmu->sid_bits) - 1);
+		arm_smmu_strtab_l1_idx(num_sids - 1);
 
 	/* Calculate the L1 size, capped to the SIDSIZE. */
 	cfg->l2.num_l1_ents = min(last_sid_idx + 1, STRTAB_MAX_L1_ENTRIES);
@@ -3655,20 +3656,25 @@ static int arm_smmu_init_strtab_2lvl(struct arm_smmu_device *smmu)
 
 static int arm_smmu_init_strtab_linear(struct arm_smmu_device *smmu)
 {
-	u32 size;
+	u64 size;
 	struct arm_smmu_strtab_cfg *cfg = &smmu->strtab_cfg;
+	u64 num_sids = arm_smmu_strtab_num_sids(smmu);
 
-	size = (1 << smmu->sid_bits) * sizeof(struct arm_smmu_ste);
+	size = num_sids * sizeof(struct arm_smmu_ste);
+	/* The max size for dmam_alloc_coherent() is 32-bit */
+	if (size > SIZE_MAX)
+		return -EINVAL;
+
 	cfg->linear.table = dmam_alloc_coherent(smmu->dev, size,
 						&cfg->linear.ste_dma,
 						GFP_KERNEL);
 	if (!cfg->linear.table) {
 		dev_err(smmu->dev,
-			"failed to allocate linear stream table (%u bytes)\n",
+			"failed to allocate linear stream table (%llu bytes)\n",
 			size);
 		return -ENOMEM;
 	}
-	cfg->linear.num_ents = 1 << smmu->sid_bits;
+	cfg->linear.num_ents = num_sids;
 
 	arm_smmu_init_initial_stes(cfg->linear.table, cfg->linear.num_ents);
 	return 0;
