@@ -394,7 +394,7 @@ static void raid1_end_read_request(struct bio *bio)
 
 	if (uptodate) {
 		raid_end_bio_io(r1_bio);
-		rdev_dec_pending(rdev, conf->mddev);
+		mirror_rdev_dec_pending(rdev, conf->mddev);
 	} else {
 		/*
 		 * oops, read error:
@@ -584,6 +584,7 @@ static void update_read_sectors(struct r1conf *conf, int disk,
 	struct raid1_info *info = &conf->mirrors[disk];
 
 	atomic_inc(&info->rdev->nr_pending);
+	atomic_inc(&info->rdev->nr_reads_pending);
 	if (info->next_seq_sect != this_sector)
 		info->seq_start = this_sector;
 	info->next_seq_sect = this_sector + len;
@@ -766,9 +767,11 @@ struct read_balance_ctl {
 	int readable_disks;
 };
 
+#define WRITE_WEIGHT 2
 static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 {
 	int disk;
+	int nonrot = READ_ONCE(conf->nonrot_disks);
 	struct read_balance_ctl ctl = {
 		.closest_dist_disk      = -1,
 		.closest_dist           = MaxSector,
@@ -780,7 +783,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 	for (disk = 0 ; disk < conf->raid_disks * 2 ; disk++) {
 		struct md_rdev *rdev;
 		sector_t dist;
-		unsigned int pending;
+		unsigned int total_pending, reads_pending;
 
 		if (r1_bio->bios[disk] == IO_BLOCKED)
 			continue;
@@ -793,7 +796,21 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 		if (ctl.readable_disks++ == 1)
 			set_bit(R1BIO_FailFast, &r1_bio->state);
 
-		pending = atomic_read(&rdev->nr_pending);
+		total_pending = atomic_read(&rdev->nr_pending);
+		if (nonrot) {
+			/* for nonrot we weigh writes slightly heavier than
+			 * reads when deciding disk based on pending IOs as
+			 * writes typically take longer
+			 */
+			reads_pending = atomic_read(&rdev->nr_reads_pending);
+			if (total_pending > reads_pending) {
+				int writes;
+
+				writes = total_pending - reads_pending;
+				writes += (writes >> WRITE_WEIGHT);
+				total_pending = writes + reads_pending;
+			}
+		}
 		dist = abs(r1_bio->sector - conf->mirrors[disk].head_position);
 
 		/* Don't change to another disk for sequential reads */
@@ -805,7 +822,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 			 * Add 'pending' to avoid choosing this disk if
 			 * there is other idle disk.
 			 */
-			pending++;
+			total_pending++;
 			/*
 			 * If there is no other idle disk, this disk
 			 * will be chosen.
@@ -813,8 +830,8 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 			ctl.sequential_disk = disk;
 		}
 
-		if (ctl.min_pending > pending) {
-			ctl.min_pending = pending;
+		if (ctl.min_pending > total_pending) {
+			ctl.min_pending = total_pending;
 			ctl.min_pending_disk = disk;
 		}
 
@@ -837,8 +854,7 @@ static int choose_best_rdev(struct r1conf *conf, struct r1bio *r1_bio)
 	 * disk is rotational, which might/might not be optimal for raids with
 	 * mixed ratation/non-rotational disks depending on workload.
 	 */
-	if (ctl.min_pending_disk != -1 &&
-	    (READ_ONCE(conf->nonrot_disks) || ctl.min_pending == 0))
+	if (ctl.min_pending_disk != -1 && (nonrot || ctl.min_pending == 0))
 		return ctl.min_pending_disk;
 	else
 		return ctl.closest_dist_disk;
@@ -2628,7 +2644,7 @@ static void handle_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 		r1_bio->bios[r1_bio->read_disk] = IO_BLOCKED;
 	}
 
-	rdev_dec_pending(rdev, conf->mddev);
+	mirror_rdev_dec_pending(rdev, conf->mddev);
 	sector = r1_bio->sector;
 	bio = r1_bio->master_bio;
 

@@ -162,6 +162,9 @@ struct md_rdev {
 					 */
 	};
 
+	atomic_t nr_reads_pending;      /* tracks only mirrored reads pending
+					 * to support a performance optimization
+					 */
 	atomic_t	nr_pending;	/* number of pending requests.
 					 * only maintained for arrays that
 					 * support hot removal
@@ -921,6 +924,12 @@ static inline void rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 		md_wakeup_thread(mddev->thread);
 	}
+}
+
+static inline void mirror_rdev_dec_pending(struct md_rdev *rdev, struct mddev *mddev)
+{
+	atomic_dec(&rdev->nr_reads_pending);
+	rdev_dec_pending(rdev, mddev);
 }
 
 extern const struct md_cluster_operations *md_cluster_ops;
