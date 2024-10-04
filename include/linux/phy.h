@@ -1192,6 +1192,19 @@ struct phy_driver {
 	 */
 	int (*led_polarity_set)(struct phy_device *dev, int index,
 				unsigned long modes);
+
+	/**
+	 * @can_isolate: Query the PHY isolation capability
+	 * @dev: PHY device to query
+	 *
+	 * Although PHY isolation is part of 802.3, not all PHYs support that
+	 * feature. Some PHYs can only support isolation when using a specific
+	 * phy_interface_mode, and some don't support it at all.
+	 *
+	 * Returns true if the PHY can isolate in its current configuration,
+	 * false otherwise.
+	 */
+	bool (*can_isolate)(struct phy_device *dev);
 };
 #define to_phy_driver(d) container_of_const(to_mdio_common_driver(d),		\
 				      struct phy_driver, mdiodrv)
@@ -1910,6 +1923,12 @@ static inline int genphy_no_config_intr(struct phy_device *phydev)
 {
 	return 0;
 }
+
+static inline bool genphy_no_isolate(struct phy_device *phydev)
+{
+	return false;
+}
+
 int genphy_read_mmd_unsupported(struct phy_device *phdev, int devad,
 				u16 regnum);
 int genphy_write_mmd_unsupported(struct phy_device *phdev, int devnum,
