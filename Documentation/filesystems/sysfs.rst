@@ -302,41 +302,62 @@ The top level sysfs directory looks like::
     net/
     power/
 
-devices/ contains a filesystem representation of the device tree. It maps
-directly to the internal kernel device tree, which is a hierarchy of
-struct device.
+block/ contains subdirectories for each block device that has been
+discovered in the system. In each block device's directory are attributes
+that describe many things, including the size of the device and the
+dev_t number that it maps to.
 
 bus/ contains flat directory layout of the various bus types in the
 kernel. Each bus's directory contains two subdirectories::
 
-	devices/
-	drivers/
+	bus/devices/
+	bus/drivers/
 
-devices/ contains symlinks for each device discovered in the system
-that point to the device's directory under root/.
+        bus/devices/ contains symlinks for each device discovered in the system
+        that point to the device's directory under root/.
 
-drivers/ contains a directory for each device driver that is loaded
-for devices on that particular bus (this assumes that drivers do not
-span multiple bus types).
+        bus/drivers/ contains a directory for each device driver that is loaded
+        for devices on that particular bus (this assumes that drivers do not
+        span multiple bus types).
 
-fs/ contains a directory for some filesystems.  Currently each
-filesystem wanting to export attributes must create its own hierarchy
-below fs/ (see ./fuse.rst for an example).
-
-module/ contains parameter values and state information for all
-loaded system modules, for both builtin and loadable modules.
+class/ contains representations of every device class that is registered
+with the kernel. A device class describes a functional type of device.
+Each device class contains subdirectories for each class object that has
+been allocated and registered with that device class. For most of class
+device objects, their directories contain symbolic links to the device
+and driver directories that are associated with that class object.
 
 dev/ contains two directories: char/ and block/. Inside these two
 directories there are symlinks named <major>:<minor>.  These symlinks
 point to the sysfs directory for the given device.  /sys/dev provides a
 quick way to lookup the sysfs interface for a device from the result of
-a stat(2) operation.
+
+devices/ contains a filesystem representation of the device tree. It maps
+directly to the internal kernel device tree, which is a hierarchy of
+struct device.
+
+firmware/ contains interfaces for viewing and manipulating firmware
+specific objects and attributes. Here, firmware refers to the
+platform-specific code that is executed on system power-on.
+
+fs/ contains a directory for some filesystems.  Currently each
+filesystem wanting to export attributes must create its own hierarchy
+below fs/ (see ./fuse.rst for an example).
+
+hypervisor/ is the mount point for hypervisor file systems.
+
+kernel/ contains various files and subdirectories that provide
+information about the running kernel.
+
+module/ contains parameter values and state information for all
+loaded system modules, for both builtin and loadable modules.
+
+net/ is the interface to the networking parts of the kernel.
+
+power/ directory represents the underused power subsystem.
 
 More information on driver-model specific features can be found in
 Documentation/driver-api/driver-model/.
-
-
-TODO: Finish this section.
 
 
 Current Interfaces
