@@ -13,14 +13,19 @@
  */
 struct uf_node *uf_find(struct uf_node *node)
 {
+	struct uf_node *root = node;
 	struct uf_node *parent;
+
+	while (root->parent != root)
+		root = root->parent;
 
 	while (node->parent != node) {
 		parent = node->parent;
-		node->parent = parent->parent;
+		node->parent = root;
 		node = parent;
 	}
-	return node;
+
+	return root;
 }
 EXPORT_SYMBOL(uf_find);
 
