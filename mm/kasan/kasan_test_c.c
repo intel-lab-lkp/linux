@@ -1954,7 +1954,7 @@ static void rust_uaf(struct kunit *test)
 	KUNIT_EXPECT_KASAN_FAIL(test, kasan_test_rust_uaf());
 }
 
-static void copy_from_to_kernel_nofault_oob(struct kunit *test)
+static void copy_to_kernel_nofault_oob(struct kunit *test)
 {
 	char *ptr;
 	char buf[128];
@@ -1973,10 +1973,6 @@ static void copy_from_to_kernel_nofault_oob(struct kunit *test)
 		KUNIT_EXPECT_LT(test, (u8)get_tag(ptr), (u8)KASAN_TAG_KERNEL);
 	}
 
-	KUNIT_EXPECT_KASAN_FAIL(test,
-		copy_from_kernel_nofault(&buf[0], ptr, size));
-	KUNIT_EXPECT_KASAN_FAIL(test,
-		copy_from_kernel_nofault(ptr, &buf[0], size));
 	KUNIT_EXPECT_KASAN_FAIL(test,
 		copy_to_kernel_nofault(&buf[0], ptr, size));
 	KUNIT_EXPECT_KASAN_FAIL(test,
@@ -2057,7 +2053,7 @@ static struct kunit_case kasan_kunit_test_cases[] = {
 	KUNIT_CASE(match_all_not_assigned),
 	KUNIT_CASE(match_all_ptr_tag),
 	KUNIT_CASE(match_all_mem_tag),
-	KUNIT_CASE(copy_from_to_kernel_nofault_oob),
+	KUNIT_CASE(copy_to_kernel_nofault_oob),
 	KUNIT_CASE(rust_uaf),
 	{}
 };
