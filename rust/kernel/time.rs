@@ -167,3 +167,14 @@ impl Delta {
         self.nanos / NSEC_PER_USEC
     }
 }
+
+impl core::ops::Add<Delta> for Ktime {
+    type Output = Ktime;
+
+    #[inline]
+    fn add(self, delta: Delta) -> Ktime {
+        // SAFETY: FFI call.
+        let t = unsafe { bindings::ktime_add_ns(self.inner, delta.as_nanos() as u64) };
+        Ktime::from_raw(t)
+    }
+}
