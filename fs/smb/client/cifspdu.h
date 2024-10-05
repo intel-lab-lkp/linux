@@ -217,6 +217,7 @@
 					  /* of an input/output request       */
 #define SYSTEM_SECURITY       0x01000000  /* The system access control list   */
 					  /* can be read and changed          */
+#define MAXIMUM_ALLOWED       0x02000000
 #define GENERIC_ALL           0x10000000
 #define GENERIC_EXECUTE       0x20000000
 #define GENERIC_WRITE         0x40000000
