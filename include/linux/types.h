@@ -190,6 +190,16 @@ typedef struct {
 
 #define RCUREF_INIT(i)	{ .refcnt = ATOMIC_INIT(i - 1) }
 
+typedef struct {
+#ifdef CONFIG_64BIT
+	atomic64_t refcnt;
+#else
+	atomic_t refcnt;
+#endif
+} rcuref_long_t;
+
+#define RCUREF_LONG_INIT(i)	{ .refcnt = ATOMIC_LONG_INIT(i - 1) }
+
 struct list_head {
 	struct list_head *next, *prev;
 };
