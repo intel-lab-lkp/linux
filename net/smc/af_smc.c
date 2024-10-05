@@ -16,6 +16,8 @@
  *              based on prototype from Frank Blaschka
  */
 
+#include "linux/lockdep_types.h"
+#include "linux/socket.h"
 #define KMSG_COMPONENT "smc"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
@@ -2755,6 +2757,24 @@ int smc_getname(struct socket *sock, struct sockaddr *addr,
 	return smc->clcsock->ops->getname(smc->clcsock, addr, peer);
 }
 
+static struct lock_class_key smc_slock_key[2];
+static struct lock_class_key smc_key[2];
+
+static inline void smc_sock_lock_init(struct sock *sk)
+{
+	bool is_smc = (sk->sk_family == AF_SMC) && sk_is_tcp(sk);
+
+	sock_lock_init_class_and_name(sk,
+				      is_smc ?
+				      "smc_lock-AF_SMC_SOCKSTREAM" :
+				      "smc_lock-INVALID",
+				      &smc_slock_key[is_smc],
+				      is_smc ?
+				      "smc_sk_lock-AF_SMC_SOCKSTREAM" :
+				      "smc_sk_lock-INVALID",
+				      &smc_key[is_smc]);
+}
+
 int smc_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 {
 	struct sock *sk = sock->sk;
@@ -2762,6 +2782,7 @@ int smc_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	int rc;
 
 	smc = smc_sk(sk);
+	smc_sock_lock_init(sk);
 	lock_sock(sk);
 
 	/* SMC does not support connect with fastopen */
