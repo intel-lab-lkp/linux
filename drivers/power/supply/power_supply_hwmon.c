@@ -9,6 +9,8 @@
 #include <linux/slab.h>
 #include "power_supply.h"
 
+#include "power_supply.h"
+
 struct power_supply_hwmon {
 	struct power_supply *psy;
 	unsigned long *props;
