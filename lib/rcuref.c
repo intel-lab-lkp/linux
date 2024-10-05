@@ -176,6 +176,7 @@
 
 #include <linux/export.h>
 #include <linux/rcuref.h>
+#include <linux/rcuref_long.h>
 
 /**
  * rcuref_get_slowpath - Slowpath of rcuref_get()
@@ -216,6 +217,46 @@ bool rcuref_get_slowpath(rcuref_t *ref)
 	return true;
 }
 EXPORT_SYMBOL_GPL(rcuref_get_slowpath);
+
+/**
+ * rcuref_long_get_slowpath - Slowpath of rcuref_long_get()
+ * @ref:	Pointer to the reference count
+ *
+ * Invoked when the reference count is outside of the valid zone.
+ *
+ * Return:
+ *	False if the reference count was already marked dead
+ *
+ *	True if the reference count is saturated, which prevents the
+ *	object from being deconstructed ever.
+ */
+bool rcuref_long_get_slowpath(rcuref_long_t *ref)
+{
+	unsigned long cnt = atomic_long_read(&ref->refcnt);
+
+	/*
+	 * If the reference count was already marked dead, undo the
+	 * increment so it stays in the middle of the dead zone and return
+	 * fail.
+	 */
+	if (cnt >= RCUREF_LONG_RELEASED) {
+		atomic_long_set(&ref->refcnt, RCUREF_LONG_DEAD);
+		return false;
+	}
+
+	/*
+	 * If it was saturated, warn and mark it so. In case the increment
+	 * was already on a saturated value restore the saturation
+	 * marker. This keeps it in the middle of the saturation zone and
+	 * prevents the reference count from overflowing. This leaks the
+	 * object memory, but prevents the obvious reference count overflow
+	 * damage.
+	 */
+	if (WARN_ONCE(cnt > RCUREF_LONG_MAXREF, "rcuref saturated - leaking memory"))
+		atomic_long_set(&ref->refcnt, RCUREF_LONG_SATURATED);
+	return true;
+}
+EXPORT_SYMBOL_GPL(rcuref_long_get_slowpath);
 
 /**
  * rcuref_put_slowpath - Slowpath of __rcuref_put()
@@ -279,3 +320,66 @@ bool rcuref_put_slowpath(rcuref_t *ref)
 	return false;
 }
 EXPORT_SYMBOL_GPL(rcuref_put_slowpath);
+
+/**
+ * rcuref_long_put_slowpath - Slowpath of __rcuref_long_put()
+ * @ref:	Pointer to the reference count
+ *
+ * Invoked when the reference count is outside of the valid zone.
+ *
+ * Return:
+ *	True if this was the last reference with no future references
+ *	possible. This signals the caller that it can safely schedule the
+ *	object, which is protected by the reference counter, for
+ *	deconstruction.
+ *
+ *	False if there are still active references or the put() raced
+ *	with a concurrent get()/put() pair. Caller is not allowed to
+ *	deconstruct the protected object.
+ */
+bool rcuref_long_put_slowpath(rcuref_long_t *ref)
+{
+	unsigned long cnt = atomic_long_read(&ref->refcnt);
+
+	/* Did this drop the last reference? */
+	if (likely(cnt == RCUREF_LONG_NOREF)) {
+		/*
+		 * Carefully try to set the reference count to RCUREF_LONG_DEAD.
+		 *
+		 * This can fail if a concurrent get() operation has
+		 * elevated it again or the corresponding put() even marked
+		 * it dead already. Both are valid situations and do not
+		 * require a retry. If this fails the caller is not
+		 * allowed to deconstruct the object.
+		 */
+		if (!atomic_long_try_cmpxchg_release(&ref->refcnt, &cnt, RCUREF_LONG_DEAD))
+			return false;
+
+		/*
+		 * The caller can safely schedule the object for
+		 * deconstruction. Provide acquire ordering.
+		 */
+		smp_acquire__after_ctrl_dep();
+		return true;
+	}
+
+	/*
+	 * If the reference count was already in the dead zone, then this
+	 * put() operation is imbalanced. Warn, put the reference count back to
+	 * DEAD and tell the caller to not deconstruct the object.
+	 */
+	if (WARN_ONCE(cnt >= RCUREF_LONG_RELEASED, "rcuref - imbalanced put()")) {
+		atomic_long_set(&ref->refcnt, RCUREF_LONG_DEAD);
+		return false;
+	}
+
+	/*
+	 * This is a put() operation on a saturated refcount. Restore the
+	 * mean saturation value and tell the caller to not deconstruct the
+	 * object.
+	 */
+	if (cnt > RCUREF_LONG_MAXREF)
+		atomic_long_set(&ref->refcnt, RCUREF_LONG_SATURATED);
+	return false;
+}
+EXPORT_SYMBOL_GPL(rcuref_long_put_slowpath);
