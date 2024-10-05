@@ -31,14 +31,16 @@ EXPORT_SYMBOL(uf_find);
  *
  * This function merges the sets containing node1 and node2, by comparing
  * the ranks to keep the tree balanced.
+ *
+ * Returns true if the sets were merged, false if they were already in the same set.
  */
-void uf_union(struct uf_node *node1, struct uf_node *node2)
+bool uf_union(struct uf_node *node1, struct uf_node *node2)
 {
 	struct uf_node *root1 = uf_find(node1);
 	struct uf_node *root2 = uf_find(node2);
 
 	if (root1 == root2)
-		return;
+		return false;
 
 	if (root1->rank < root2->rank) {
 		root1->parent = root2;
@@ -48,5 +50,7 @@ void uf_union(struct uf_node *node1, struct uf_node *node2)
 		root2->parent = root1;
 		root1->rank++;
 	}
+
+	return true;
 }
 EXPORT_SYMBOL(uf_union);
