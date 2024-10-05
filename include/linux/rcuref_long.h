@@ -85,11 +85,12 @@ __must_check bool rcuref_long_put_slowpath(rcuref_long_t *ref);
 
 /*
  * Internal helper. Do not invoke directly.
+ *
+ * Ideally we'd RCU_LOCKDEP_WARN() here but we can't since this api is
+ * used with SLAB_TYPSAFE_BY_RCU.
  */
 static __always_inline __must_check bool __rcuref_long_put(rcuref_long_t *ref)
 {
-	RCU_LOCKDEP_WARN(!rcu_read_lock_held() && preemptible(),
-			 "suspicious rcuref_put_rcusafe() usage");
 	/*
 	 * Unconditionally decrease the reference count. The saturation and
 	 * dead zones provide enough tolerance for this.

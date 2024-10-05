@@ -866,10 +866,10 @@ static struct file *__get_file_rcu(struct file __rcu **f)
 	if (!file)
 		return NULL;
 
-	if (unlikely(!atomic_long_inc_not_zero(&file->f_count)))
+	if (unlikely(!rcuref_long_get(&file->f_count)))
 		return ERR_PTR(-EAGAIN);
 
-	file_reloaded = rcu_dereference_raw(*f);
+	file_reloaded = smp_load_acquire(f);
 
 	/*
 	 * Ensure that all accesses have a dependency on the load from
@@ -880,8 +880,8 @@ static struct file *__get_file_rcu(struct file __rcu **f)
 	OPTIMIZER_HIDE_VAR(file_reloaded_cmp);
 
 	/*
-	 * atomic_long_inc_not_zero() above provided a full memory
-	 * barrier when we acquired a reference.
+	 * smp_load_acquire() provided an acquire barrier when we loaded
+	 * the file pointer.
 	 *
 	 * This is paired with the write barrier from assigning to the
 	 * __rcu protected file pointer so that if that pointer still
@@ -979,11 +979,10 @@ static inline struct file *__fget_files_rcu(struct files_struct *files,
 		 * We need to confirm it by incrementing the refcount
 		 * and then check the lookup again.
 		 *
-		 * atomic_long_inc_not_zero() gives us a full memory
-		 * barrier. We only really need an 'acquire' one to
-		 * protect the loads below, but we don't have that.
+		 * rcuref_long_get() doesn't provide a memory barrier so
+		 * we use smp_load_acquire() on the file pointer below.
 		 */
-		if (unlikely(!atomic_long_inc_not_zero(&file->f_count)))
+		if (unlikely(!rcuref_long_get(&file->f_count)))
 			continue;
 
 		/*
@@ -1000,7 +999,7 @@ static inline struct file *__fget_files_rcu(struct files_struct *files,
 		 *
 		 * If so, we need to put our ref and try again.
 		 */
-		if (unlikely(file != rcu_dereference_raw(*fdentry)) ||
+		if (unlikely(file != smp_load_acquire(fdentry)) ||
 		    unlikely(rcu_dereference_raw(files->fdt) != fdt)) {
 			fput(file);
 			continue;
