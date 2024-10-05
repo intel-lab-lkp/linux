@@ -999,13 +999,15 @@ static int gpy_led_polarity_set(struct phy_device *phydev, int index,
 		case PHY_LED_ACTIVE_LOW:
 			active_low = true;
 			break;
+		case PHY_LED_ACTIVE_HIGH:
+			break;
 		default:
 			return -EINVAL;
 		}
 	}
 
 	return phy_modify(phydev, PHY_LED, PHY_LED_POLARITY(index),
-			  active_low ? 0 : PHY_LED_POLARITY(index));
+			  active_low ? PHY_LED_POLARITY(index) : 0);
 }
 
 static struct phy_driver gpy_drivers[] = {
