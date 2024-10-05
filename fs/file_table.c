@@ -40,6 +40,7 @@ static struct files_stat_struct files_stat = {
 
 /* SLAB cache for file structures */
 static struct kmem_cache *filp_cachep __ro_after_init;
+static struct kmem_cache *bfilp_cachep __ro_after_init;
 
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;
 
@@ -68,7 +69,7 @@ static inline void file_free(struct file *f)
 	put_cred(f->f_cred);
 	if (unlikely(f->f_mode & FMODE_BACKING)) {
 		path_put(backing_file_user_path(f));
-		kfree(backing_file(f));
+		kmem_cache_free(bfilp_cachep, backing_file(f));
 	} else {
 		kmem_cache_free(filp_cachep, f);
 	}
@@ -267,13 +268,13 @@ struct file *alloc_empty_backing_file(int flags, const struct cred *cred)
 	struct backing_file *ff;
 	int error;
 
-	ff = kzalloc(sizeof(struct backing_file), GFP_KERNEL);
+	ff = kmem_cache_zalloc(bfilp_cachep, GFP_KERNEL);
 	if (unlikely(!ff))
 		return ERR_PTR(-ENOMEM);
 
 	error = init_file(&ff->file, flags, cred);
 	if (unlikely(error)) {
-		kfree(ff);
+		kmem_cache_free(bfilp_cachep, ff);
 		return ERR_PTR(error);
 	}
 
@@ -528,6 +529,10 @@ void __init files_init(void)
 
 	filp_cachep = kmem_cache_create("filp", sizeof(struct file), &args,
 				SLAB_HWCACHE_ALIGN | SLAB_PANIC |
+				SLAB_ACCOUNT | SLAB_TYPESAFE_BY_RCU);
+
+	bfilp_cachep = kmem_cache_create("bfilp", sizeof(struct backing_file),
+				NULL, SLAB_HWCACHE_ALIGN | SLAB_PANIC |
 				SLAB_ACCOUNT | SLAB_TYPESAFE_BY_RCU);
 	percpu_counter_init(&nr_files, 0, GFP_KERNEL);
 }
