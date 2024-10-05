@@ -233,7 +233,7 @@ ___update_load_sum(u64 now, struct sched_avg *sa,
  * When syncing *_avg with *_sum, we must take into account the current
  * position in the PELT segment otherwise the remaining part of the segment
  * will be considered as idle time whereas it's not yet elapsed and this will
- * generate unwanted oscillation in the range [1002..1024[.
+ * generate unwanted oscillation in the range [1002..1024].
  *
  * The max value of *_sum varies with the position in the time segment and is
  * equals to :
