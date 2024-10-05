@@ -2841,6 +2841,18 @@ config SIPHASH_KUNIT_TEST
 	  This is intended to help people writing architecture-specific
 	  optimized versions.  If unsure, say N.
 
+config UNION_FIND_KUNIT_TEST
+	tristate "KUnit Test for Union find"
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This option enables the KUnit tests for the Union-Find data structure.
+	  These tests verify the functionality and correctness of the Union-Find
+	  implementation, including union and find operations, as well as
+	  edge cases such as handling of duplicate unions.
+
+	  If unsure, say N
+
 config USERCOPY_KUNIT_TEST
 	tristate "KUnit Test for user/kernel boundary protections"
 	depends on KUNIT

@@ -23797,6 +23797,7 @@ F:	Documentation/core-api/union_find.rst
 F:	Documentation/translations/zh_CN/core-api/union_find.rst
 F:	include/linux/union_find.h
 F:	lib/union_find.c
+F:	lib/union_find_kunit.c
 
 UNIVERSAL FLASH STORAGE HOST CONTROLLER DRIVER
 R:	Alim Akhtar <alim.akhtar@samsung.com>
