@@ -203,6 +203,9 @@ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
 
 	might_sleep();
 
+	if (!config || !config->policy)
+		return ERR_PTR(-EINVAL);
+
 	switch (config->policy) {
 	case QCOM_TZMEM_POLICY_STATIC:
 		if (!config->initial_size)
@@ -316,6 +319,9 @@ devm_qcom_tzmem_pool_new(struct device *dev,
 	struct qcom_tzmem_pool *pool;
 	int ret;
 
+	if (!dev || !config)
+		return ERR_PTR(-EINVAL);
+
 	pool = qcom_tzmem_pool_new(config);
 	if (IS_ERR(pool))
 		return pool;
@@ -366,7 +372,7 @@ void *qcom_tzmem_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp)
 	unsigned long vaddr;
 	int ret;
 
-	if (!size)
+	if (!pool || !size)
 		return NULL;
 
 	size = PAGE_ALIGN(size);
@@ -412,6 +418,9 @@ void qcom_tzmem_free(void *vaddr)
 {
 	struct qcom_tzmem_chunk *chunk;
 
+	if (!vaddr)
+		return;
+
 	scoped_guard(spinlock_irqsave, &qcom_tzmem_chunks_lock)
 		chunk = radix_tree_delete_item(&qcom_tzmem_chunks,
 					       (unsigned long)vaddr, NULL);
@@ -446,6 +455,9 @@ phys_addr_t qcom_tzmem_to_phys(void *vaddr)
 	void __rcu **slot;
 	phys_addr_t ret;
 
+	if (!vaddr)
+		return 0;
+
 	guard(spinlock_irqsave)(&qcom_tzmem_chunks_lock);
 
 	radix_tree_for_each_slot(slot, &qcom_tzmem_chunks, &iter, 0) {
@@ -466,6 +478,9 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_to_phys);
 
 int qcom_tzmem_enable(struct device *dev)
 {
+	if (!dev)
+		return -EINVAL;
+
 	if (qcom_tzmem_dev)
 		return -EBUSY;
 
