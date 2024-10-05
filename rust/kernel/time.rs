@@ -5,8 +5,11 @@
 //! This module contains the kernel APIs related to time and timers that
 //! have been ported or wrapped for usage by Rust code in the kernel.
 //!
+//! C header: [`include/linux/delay.h`](srctree/include/linux/delay.h).
 //! C header: [`include/linux/jiffies.h`](srctree/include/linux/jiffies.h).
 //! C header: [`include/linux/ktime.h`](srctree/include/linux/ktime.h).
+
+use core::ffi::c_ulong;
 
 /// The number of nanoseconds per microsecond.
 pub const NSEC_PER_USEC: i64 = bindings::NSEC_PER_USEC as i64;
@@ -177,4 +180,17 @@ impl core::ops::Add<Delta> for Ktime {
         let t = unsafe { bindings::ktime_add_ns(self.inner, delta.as_nanos() as u64) };
         Ktime::from_raw(t)
     }
+}
+
+/// Sleeps for a given duration.
+///
+/// Equivalent to the kernel's [`fsleep`], flexible sleep function,
+/// which automatically chooses the best sleep method based on a duration.
+///
+/// `Delta` must be longer than one microsecond.
+///
+/// This function can only be used in a nonatomic context.
+pub fn fsleep(delta: Delta) {
+    // SAFETY: FFI call.
+    unsafe { bindings::fsleep(delta.as_micros() as c_ulong) }
 }
