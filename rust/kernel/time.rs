@@ -81,3 +81,25 @@ impl core::ops::Sub for Ktime {
         }
     }
 }
+
+impl PartialEq for Ktime {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        // SAFETY: FFI call.
+        let ret = unsafe { bindings::ktime_compare(self.inner, other.inner) };
+        ret == 0
+    }
+}
+
+impl PartialOrd for Ktime {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        // SAFETY: FFI call.
+        let ret = unsafe { bindings::ktime_compare(self.inner, other.inner) };
+        match ret {
+            0 => Some(core::cmp::Ordering::Equal),
+            x if x < 0 => Some(core::cmp::Ordering::Less),
+            _ => Some(core::cmp::Ordering::Greater),
+        }
+    }
+}
