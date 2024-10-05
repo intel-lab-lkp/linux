@@ -50,8 +50,7 @@ static int br_pass_frame_up(struct sk_buff *skb, bool promisc)
 	 * packet is allowed except in promisc mode when someone
 	 * may be running packet capture.
 	 */
-	if (!(brdev->flags & IFF_PROMISC) &&
-	    !br_allowed_egress(vg, skb)) {
+	if (!promisc && !br_allowed_egress(vg, skb)) {
 		kfree_skb(skb);
 		return NET_RX_DROP;
 	}
