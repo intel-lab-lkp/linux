@@ -4,6 +4,8 @@
  * Copyright (c) 2016-2018 Christoph Hellwig.
  * All Rights Reserved.
  */
+#include <linux/writeback.h>
+
 #include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
@@ -745,6 +747,34 @@ xfs_ilock_for_iomap(
 }
 
 /*
+ * We cap the maximum length we map to a sane size to keep the chunks
+ * of work done where somewhat symmetric with the work writeback does.
+ * This is a completely arbitrary number pulled out of thin air as a
+ * best guess for initial testing.
+ *
+ * Following the logic of writeback_chunk_size(), the length will be
+ * rounded to the nearest 4MB boundary.
+ *
+ * Note that the values needs to be less than 32-bits wide until the
+ * lower level functions are updated.
+ */
+static loff_t
+xfs_max_map_length(struct inode *inode, loff_t length)
+{
+	struct bdi_writeback *wb;
+	long pages;
+
+	spin_lock(&inode->i_lock);
+	wb = inode_to_wb(wb);
+	pages = min(wb->avg_write_bandwidth / 2,
+		    global_wb_domain.dirty_limit / DIRTY_SCOPE);
+	spin_unlock(&inode->i_lock);
+	pages = round_down(pages + MIN_WRITEBACK_PAGES, MIN_WRITEBACK_PAGES);
+
+	return min_t(loff_t, length, pages * PAGE_SIZE);
+}
+
+/*
  * Check that the imap we are going to return to the caller spans the entire
  * range that the caller requested for the IO.
  */
@@ -878,16 +908,7 @@ allocate_blocks:
 	if (flags & (IOMAP_NOWAIT | IOMAP_OVERWRITE_ONLY))
 		goto out_unlock;
 
-	/*
-	 * We cap the maximum length we map to a sane size  to keep the chunks
-	 * of work done where somewhat symmetric with the work writeback does.
-	 * This is a completely arbitrary number pulled out of thin air as a
-	 * best guess for initial testing.
-	 *
-	 * Note that the values needs to be less than 32-bits wide until the
-	 * lower level functions are updated.
-	 */
-	length = min_t(loff_t, length, 1024 * PAGE_SIZE);
+	length = xfs_max_map_length(inode, length);
 	end_fsb = xfs_iomap_end_fsb(mp, offset, length);
 
 	if (offset + length > XFS_ISIZE(ip))
@@ -1096,16 +1117,7 @@ xfs_buffered_write_iomap_begin(
 		allocfork = XFS_COW_FORK;
 		end_fsb = imap.br_startoff + imap.br_blockcount;
 	} else {
-		/*
-		 * We cap the maximum length we map here to MAX_WRITEBACK_PAGES
-		 * pages to keep the chunks of work done where somewhat
-		 * symmetric with the work writeback does.  This is a completely
-		 * arbitrary number pulled out of thin air.
-		 *
-		 * Note that the values needs to be less than 32-bits wide until
-		 * the lower level functions are updated.
-		 */
-		count = min_t(loff_t, count, 1024 * PAGE_SIZE);
+		count = xfs_max_map_length(inode, count);
 		end_fsb = xfs_iomap_end_fsb(mp, offset, count);
 
 		if (xfs_is_always_cow_inode(ip))

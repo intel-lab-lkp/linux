@@ -18,6 +18,11 @@ struct bio;
 DECLARE_PER_CPU(int, dirty_throttle_leaks);
 
 /*
+ * 4MB minimal write chunk size
+ */
+#define MIN_WRITEBACK_PAGES	(4096UL >> (PAGE_SHIFT - 10))
+
+/*
  * The global dirty threshold is normally equal to the global dirty limit,
  * except when the system suddenly allocates a lot of anonymous memory and
  * knocks down the global dirty threshold quickly, in which case the global
