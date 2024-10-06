@@ -881,7 +881,7 @@ static ssize_t get_imix_entries(const char __user *buffer,
 		i++;
 		pkt_dev->n_imix_entries++;
 
-		if (pkt_dev->n_imix_entries > MAX_IMIX_ENTRIES)
+		if (pkt_dev->n_imix_entries >= MAX_IMIX_ENTRIES)
 			return -E2BIG;
 	} while (c == ' ');
 
