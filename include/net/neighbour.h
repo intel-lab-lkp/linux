@@ -135,7 +135,7 @@ struct neigh_statistics {
 #define NEIGH_CACHE_STAT_INC(tbl, field) this_cpu_inc((tbl)->stats->field)
 
 struct neighbour {
-	struct neighbour __rcu	*next;
+	struct hlist_node	list;
 	struct neigh_table	*tbl;
 	struct neigh_parms	*parms;
 	unsigned long		confirmed;
@@ -190,7 +190,7 @@ struct pneigh_entry {
 #define NEIGH_NUM_HASH_RND	4
 
 struct neigh_hash_table {
-	struct neighbour __rcu	**hash_buckets;
+	struct hlist_head	*hash_buckets;
 	unsigned int		hash_shift;
 	__u32			hash_rnd[NEIGH_NUM_HASH_RND];
 	struct rcu_head		rcu;
@@ -304,9 +304,9 @@ static inline struct neighbour *___neigh_lookup_noref(
 	u32 hash_val;
 
 	hash_val = hash(pkey, dev, nht->hash_rnd) >> (32 - nht->hash_shift);
-	for (n = rcu_dereference(nht->hash_buckets[hash_val]);
+	for (n = (struct neighbour *)rcu_dereference(hlist_first_rcu(&nht->hash_buckets[hash_val]));
 	     n != NULL;
-	     n = rcu_dereference(n->next)) {
+	     n = (struct neighbour *)rcu_dereference(hlist_next_rcu(&n->list))) {
 		if (n->dev == dev && key_eq(n, pkey))
 			return n;
 	}
