@@ -343,12 +343,12 @@ STATIC int INIT unxz(unsigned char *in, long in_size,
 			}
 		} while (ret == XZ_OK);
 
-		if (must_free_in)
-			free(in);
-
 		if (flush != NULL)
 			free(b.out);
 	}
+
+	if (must_free_in)
+		free(in);
 
 	if (in_used != NULL)
 		*in_used += b.in_pos;
