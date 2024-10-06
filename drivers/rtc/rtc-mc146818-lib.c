@@ -232,8 +232,7 @@ int mc146818_set_time(struct rtc_time *time)
 
 #ifdef CONFIG_MACH_DECSTATION
 	real_yrs = yrs;
-	leap_yr = ((!((yrs + 1900) % 4) && ((yrs + 1900) % 100)) ||
-			!((yrs + 1900) % 400));
+	leap_yr = is_leap_year(yrs + 1900);
 	yrs = 72;
 
 	/*
