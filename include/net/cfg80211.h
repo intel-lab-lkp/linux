@@ -8753,15 +8753,6 @@ void cfg80211_cac_event(struct net_device *netdev,
 			unsigned int link_id);
 
 /**
- * cfg80211_background_cac_abort - Channel Availability Check offchan abort event
- * @wiphy: the wiphy
- *
- * This function is called by the driver when a Channel Availability Check
- * (CAC) is aborted by a offchannel dedicated chain.
- */
-void cfg80211_background_cac_abort(struct wiphy *wiphy);
-
-/**
  * cfg80211_gtk_rekey_notify - notify userspace about driver rekeying
  * @dev: network device
  * @bssid: BSSID of AP (to avoid races)

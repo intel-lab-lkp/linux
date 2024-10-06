@@ -1226,14 +1226,6 @@ void cfg80211_background_cac_abort_wk(struct work_struct *work)
 				      NL80211_RADAR_CAC_ABORTED);
 }
 
-void cfg80211_background_cac_abort(struct wiphy *wiphy)
-{
-	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
-
-	queue_work(cfg80211_wq, &rdev->background_cac_abort_wk);
-}
-EXPORT_SYMBOL(cfg80211_background_cac_abort);
-
 int
 cfg80211_start_background_radar_detection(struct cfg80211_registered_device *rdev,
 					  struct wireless_dev *wdev,
