@@ -1215,14 +1215,17 @@ static int dsa_user_set_wol(struct net_device *dev, struct ethtool_wolinfo *w)
 {
 	struct dsa_port *dp = dsa_user_to_port(dev);
 	struct dsa_switch *ds = dp->ds;
-	int ret = -EOPNOTSUPP;
+	int ret;
 
-	phylink_ethtool_set_wol(dp->pl, w);
+	ret = phylink_ethtool_get_wol(dp->pl, w);
+
+	if (ret != -EOPNOTSUPP)
+		return ret;
 
 	if (ds->ops->set_wol)
-		ret = ds->ops->set_wol(ds, dp->index, w);
+		return ds->ops->set_wol(ds, dp->index, w);
 
-	return ret;
+	return -EOPNOTSUPP;
 }
 
 static int dsa_user_set_eee(struct net_device *dev, struct ethtool_keee *e)
