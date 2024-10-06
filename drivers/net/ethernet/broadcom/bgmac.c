@@ -1546,7 +1546,7 @@ int bgmac_enet_probe(struct bgmac *bgmac)
 
 	bgmac->in_init = false;
 
-	err = register_netdev(bgmac->net_dev);
+	err = devm_register_netdev(bgmac->dev, bgmac->net_dev);
 	if (err) {
 		dev_err(bgmac->dev, "Cannot register net device\n");
 		goto err_phy_disconnect;
@@ -1568,7 +1568,6 @@ EXPORT_SYMBOL_GPL(bgmac_enet_probe);
 
 void bgmac_enet_remove(struct bgmac *bgmac)
 {
-	unregister_netdev(bgmac->net_dev);
 	phy_disconnect(bgmac->net_dev->phydev);
 	netif_napi_del(&bgmac->napi);
 	bgmac_dma_free(bgmac);
