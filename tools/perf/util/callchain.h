@@ -298,10 +298,6 @@ void free_callchain(struct callchain_root *root);
 void decay_callchain(struct callchain_root *root);
 int callchain_node__make_parent_list(struct callchain_node *node);
 
-int callchain_branch_counts(struct callchain_root *root,
-			    u64 *branch_count, u64 *predicted_count,
-			    u64 *abort_count, u64 *cycles_count);
-
 void callchain_param_setup(u64 sample_type, const char *arch);
 
 bool callchain_cnode_matched(struct callchain_node *base_cnode,
