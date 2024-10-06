@@ -1183,6 +1183,11 @@ static void sdhci_msm_set_cdr(struct sdhci_host *host, bool enable)
 	}
 }
 
+static bool sdhci_msm_avoid_reprogram_allkeys(void)
+{
+	return true;
+}
+
 static int sdhci_msm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
@@ -2641,6 +2646,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	host->mmc_host_ops.start_signal_voltage_switch =
 		sdhci_msm_start_signal_voltage_switch;
 	host->mmc_host_ops.execute_tuning = sdhci_msm_execute_tuning;
+	host->mmc_host_ops.avoid_reprogram_allkeys = sdhci_msm_avoid_reprogram_allkeys;
 	if (of_property_read_bool(node, "supports-cqe"))
 		ret = sdhci_msm_cqe_add_host(host, pdev);
 	else
