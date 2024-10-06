@@ -310,6 +310,7 @@
 			compatible = "qcom,scm-x1e80100", "qcom,scm";
 			interconnects = <&aggre2_noc MASTER_CRYPTO QCOM_ICC_TAG_ALWAYS
 					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+			qcom,dload-mode = <&tcsr 0x19000>;
 		};
 	};
 
@@ -3002,14 +3003,16 @@
 
 			clocks = <&gcc GCC_PCIE_6A_PHY_AUX_CLK>,
 				 <&gcc GCC_PCIE_6A_CFG_AHB_CLK>,
-				 <&rpmhcc RPMH_CXO_CLK>,
+				 <&tcsr TCSR_PCIE_4L_CLKREF_EN>,
 				 <&gcc GCC_PCIE_6A_PHY_RCHNG_CLK>,
-				 <&gcc GCC_PCIE_6A_PIPE_CLK>;
+				 <&gcc GCC_PCIE_6A_PIPE_CLK>,
+				 <&gcc GCC_PCIE_6A_PIPEDIV2_CLK>;
 			clock-names = "aux",
 				      "cfg_ahb",
 				      "ref",
 				      "rchng",
-				      "pipe";
+				      "pipe",
+				      "pipediv2";
 
 			resets = <&gcc GCC_PCIE_6A_PHY_BCR>,
 				 <&gcc GCC_PCIE_6A_NOCSR_COM_PHY_BCR>;
@@ -3124,14 +3127,16 @@
 
 			clocks = <&gcc GCC_PCIE_5_AUX_CLK>,
 				 <&gcc GCC_PCIE_5_CFG_AHB_CLK>,
-				 <&rpmhcc RPMH_CXO_CLK>,
+				 <&tcsr TCSR_PCIE_2L_5_CLKREF_EN>,
 				 <&gcc GCC_PCIE_5_PHY_RCHNG_CLK>,
-				 <&gcc GCC_PCIE_5_PIPE_CLK>;
+				 <&gcc GCC_PCIE_5_PIPE_CLK>,
+				 <&gcc GCC_PCIE_5_PIPEDIV2_CLK>;
 			clock-names = "aux",
 				      "cfg_ahb",
 				      "ref",
 				      "rchng",
-				      "pipe";
+				      "pipe",
+				      "pipediv2";
 
 			resets = <&gcc GCC_PCIE_5_PHY_BCR>;
 			reset-names = "phy";
@@ -3254,14 +3259,16 @@
 
 			clocks = <&gcc GCC_PCIE_4_AUX_CLK>,
 				 <&gcc GCC_PCIE_4_CFG_AHB_CLK>,
-				 <&rpmhcc RPMH_CXO_CLK>,
+				 <&tcsr TCSR_PCIE_2L_4_CLKREF_EN>,
 				 <&gcc GCC_PCIE_4_PHY_RCHNG_CLK>,
-				 <&gcc GCC_PCIE_4_PIPE_CLK>;
+				 <&gcc GCC_PCIE_4_PIPE_CLK>,
+				 <&gcc GCC_PCIE_4_PIPEDIV2_CLK>;
 			clock-names = "aux",
 				      "cfg_ahb",
 				      "ref",
 				      "rchng",
-				      "pipe";
+				      "pipe",
+				      "pipediv2";
 
 			resets = <&gcc GCC_PCIE_4_PHY_BCR>;
 			reset-names = "phy";
@@ -3386,7 +3393,7 @@
 			reg = <0x0 0x03d6a000 0x0 0x35000>,
 			      <0x0 0x03d50000 0x0 0x10000>,
 			      <0x0 0x0b280000 0x0 0x10000>;
-			reg-names =  "gmu", "rscc", "gmu_pdc";
+			reg-names = "gmu", "rscc", "gmu_pdc";
 
 			interrupts = <GIC_SPI 304 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 305 IRQ_TYPE_LEVEL_HIGH>;
@@ -5738,6 +5745,8 @@
 
 			#iommu-cells = <2>;
 			#global-interrupts = <1>;
+
+			dma-coherent;
 		};
 
 		intc: interrupt-controller@17000000 {

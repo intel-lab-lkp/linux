@@ -857,7 +857,7 @@ config SM_CAMCC_8450
 	depends on ARM64 || COMPILE_TEST
 	select SM_GCC_8450
 	help
-	  Support for the camera clock controller on SM8450 devices.
+	  Support for the camera clock controller on SM8450 or SM8475 devices.
 	  Say Y if you want to support camera devices and camera functionality.
 
 config SM_CAMCC_8550
@@ -952,7 +952,7 @@ config SM_DISPCC_8450
 	depends on SM_GCC_8450
 	help
 	  Support for the display clock controller on Qualcomm Technologies, Inc
-	  SM8450 devices.
+	  SM8450 or SM8475 devices.
 	  Say Y if you want to support display devices and functionality such as
 	  splash screen.
 
@@ -1050,7 +1050,8 @@ config SM_GCC_8450
 	depends on ARM64 || COMPILE_TEST
 	select QCOM_GDSC
 	help
-	  Support for the global clock controller on SM8450 devices.
+	  Support for the global clock controller on SM8450 or SM8475
+	  devices.
 	  Say Y if you want to use peripheral devices such as UART,
 	  SPI, I2C, USB, SD/UFS, PCIe etc.
 
@@ -1149,7 +1150,8 @@ config SM_GPUCC_8450
 	depends on ARM64 || COMPILE_TEST
 	select SM_GCC_8450
 	help
-	  Support for the graphics clock controller on SM8450 devices.
+	  Support for the graphics clock controller on SM8450 or SM8475
+	  devices.
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
 
@@ -1283,7 +1285,7 @@ config SM_VIDEOCC_8450
 	select QCOM_GDSC
 	help
 	  Support for the video clock controller on Qualcomm Technologies, Inc.
-	  SM8450 devices.
+	  SM8450 or SM8475 devices.
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
 endif
