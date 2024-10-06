@@ -219,6 +219,13 @@ struct mmc_host_ops {
 
 	/* Initialize an SD express card, mandatory for MMC_CAP2_SD_EXP. */
 	int	(*init_sd_express)(struct mmc_host *host, struct mmc_ios *ios);
+
+	/*
+	 * Optional callback to support controllers that dont require to
+	 * reprogram all crypto keys on card suspend/resume.
+	 */
+	bool	(*avoid_reprogram_allkeys)(void);
+
 };
 
 struct mmc_cqe_ops {

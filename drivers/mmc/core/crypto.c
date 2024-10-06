@@ -14,9 +14,11 @@
 
 void mmc_crypto_set_initial_state(struct mmc_host *host)
 {
-	/* Reset might clear all keys, so reprogram all the keys. */
-	if (host->caps2 & MMC_CAP2_CRYPTO)
-		blk_crypto_reprogram_all_keys(&host->crypto_profile);
+	if (host->ops->avoid_reprogram_allkeys && !host->ops->avoid_reprogram_allkeys()) {
+		/* Reset might clear all keys, so reprogram all the keys. */
+		if (host->caps2 & MMC_CAP2_CRYPTO)
+			blk_crypto_reprogram_all_keys(&host->crypto_profile);
+	}
 }
 
 void mmc_crypto_setup_queue(struct request_queue *q, struct mmc_host *host)

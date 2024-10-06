@@ -2685,6 +2685,11 @@ int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 }
 EXPORT_SYMBOL_GPL(sdhci_start_signal_voltage_switch);
 
+static bool sdhci_avoid_reprogram_allkeys(void)
+{
+	return false;
+}
+
 static int sdhci_card_busy(struct mmc_host *mmc)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
@@ -3047,6 +3052,7 @@ static const struct mmc_host_ops sdhci_ops = {
 	.execute_tuning			= sdhci_execute_tuning,
 	.card_event			= sdhci_card_event,
 	.card_busy	= sdhci_card_busy,
+	.avoid_reprogram_allkeys	= sdhci_avoid_reprogram_allkeys,
 };
 
 /*****************************************************************************\
