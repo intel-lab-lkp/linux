@@ -2746,6 +2746,8 @@ static void *alloc_single_from_partial(struct kmem_cache *s,
 
 	if (!alloc_debug_processing(s, slab, object, orig_size)) {
 		remove_partial(n, slab);
+		if (slab->inuse == slab->objects)
+			add_full(s, n, slab);
 		return NULL;
 	}
 
