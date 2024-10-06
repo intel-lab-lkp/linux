@@ -206,6 +206,7 @@ struct mv88e6xxx_gpio_ops;
 struct mv88e6xxx_avb_ops;
 struct mv88e6xxx_ptp_ops;
 struct mv88e6xxx_pcs_ops;
+struct mv88e6xxx_cc_coeffs;
 
 struct mv88e6xxx_irq {
 	u16 masked;
@@ -408,6 +409,7 @@ struct mv88e6xxx_chip {
 	struct cyclecounter	tstamp_cc;
 	struct timecounter	tstamp_tc;
 	struct delayed_work	overflow_work;
+	const struct mv88e6xxx_cc_coeffs *cc_coeffs;
 
 	struct ptp_clock	*ptp_clock;
 	struct ptp_clock_info	ptp_clock_info;
@@ -714,8 +716,6 @@ struct mv88e6xxx_avb_ops {
 	int (*tai_write)(struct mv88e6xxx_chip *chip, int addr, u16 data);
 };
 
-struct mv88e6xxx_cc_coeffs;
-
 struct mv88e6xxx_ptp_ops {
 	u64 (*clock_read)(const struct cyclecounter *cc);
 	int (*ptp_enable)(struct ptp_clock_info *ptp,
@@ -733,7 +733,6 @@ struct mv88e6xxx_ptp_ops {
 	int arr1_sts_reg;
 	int dep_sts_reg;
 	u32 rx_filters;
-	const struct mv88e6xxx_cc_coeffs *cc_coeffs;
 };
 
 struct mv88e6xxx_pcs_ops {
