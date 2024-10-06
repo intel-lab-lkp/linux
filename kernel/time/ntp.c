@@ -657,14 +657,14 @@ rearm:
 	sched_sync_hw_clock(offset_nsec, res != 0);
 }
 
-void ntp_notify_cmos_timer(bool offset_set)
+void ntp_notify_cmos_timer(bool ntp_was_cleared)
 {
 	/*
-	 * If the time jumped (using ADJ_SETOFFSET) cancels sync timer,
-	 * which may have been running if the time was synchronized
-	 * prior to the ADJ_SETOFFSET call.
+	 * If time jumped (clock set), and if ntp_clear() was called,
+	 * cancels sync timer, which may have been running if time was
+	 * previously synchronized.
 	 */
-	if (offset_set)
+	if (ntp_was_cleared)
 		hrtimer_cancel(&sync_hrtimer);
 
 	/*

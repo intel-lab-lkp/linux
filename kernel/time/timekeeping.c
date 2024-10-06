@@ -1503,6 +1503,7 @@ out:
 
 	/* Signal hrtimers about time change */
 	clock_was_set(CLOCK_SET_WALL);
+	ntp_notify_cmos_timer(true);
 
 	if (!ret) {
 		audit_tk_injoffset(ts_delta);
@@ -1553,6 +1554,7 @@ error: /* even if we error out, we forwarded the time, so call update */
 
 	/* Signal hrtimers about time change */
 	clock_was_set(CLOCK_SET_WALL);
+	ntp_notify_cmos_timer(true);
 
 	return ret;
 }
@@ -1928,6 +1930,7 @@ void timekeeping_inject_sleeptime64(const struct timespec64 *delta)
 
 	/* Signal hrtimers about time change */
 	clock_was_set(CLOCK_SET_WALL | CLOCK_SET_BOOT);
+	ntp_notify_cmos_timer(true);
 }
 #endif
 
@@ -2672,7 +2675,6 @@ int do_adjtimex(struct __kernel_timex *txc)
 {
 	struct timekeeper *tk = &tk_core.timekeeper;
 	struct audit_ntp_data ad;
-	bool offset_set = false;
 	bool clock_set = false;
 	struct timespec64 ts;
 	unsigned long flags;
@@ -2695,7 +2697,6 @@ int do_adjtimex(struct __kernel_timex *txc)
 		if (ret)
 			return ret;
 
-		offset_set = delta.tv_sec != 0;
 		audit_tk_injoffset(delta);
 	}
 
@@ -2729,7 +2730,7 @@ int do_adjtimex(struct __kernel_timex *txc)
 	if (clock_set)
 		clock_was_set(CLOCK_SET_WALL);
 
-	ntp_notify_cmos_timer(offset_set);
+	ntp_notify_cmos_timer(false);
 
 	return ret;
 }
