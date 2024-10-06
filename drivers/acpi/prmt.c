@@ -79,8 +79,10 @@ static u64 efi_pa_va_lookup(u64 pa)
 	u64 page = pa & PAGE_MASK;
 
 	for_each_efi_memory_desc(md) {
-		if (md->phys_addr < pa && pa < md->phys_addr + PAGE_SIZE * md->num_pages)
+		if ((md->attribute & EFI_MEMORY_RUNTIME) &&
+			(md->phys_addr < pa && pa < md->phys_addr + PAGE_SIZE * md->num_pages)) {
 			return pa_offset + md->virt_addr + page - md->phys_addr;
+		}
 	}
 
 	return 0;
@@ -149,8 +151,20 @@ acpi_parse_prmt(union acpi_subtable_headers *header, const unsigned long end)
 
 		guid_copy(&th->guid, (guid_t *)handler_info->handler_guid);
 		th->handler_addr = (void *)efi_pa_va_lookup(handler_info->handler_address);
+		if (!th->handler_addr)
+			pr_warn("Idx: %llu, failed to find VA for handler_addr(GUID: %pUL, PA: %p)",
+				cur_handler, &th->guid, th->handler_addr);
+
 		th->static_data_buffer_addr = efi_pa_va_lookup(handler_info->static_data_buffer_address);
+		if (!th->static_data_buffer_addr)
+			pr_warn("Idx: %llu, failed to find VA for data_addr(GUID: %pUL, PA: %p)",
+				cur_handler, &th->guid, (void *)th->static_data_buffer_addr);
+
 		th->acpi_param_buffer_addr = efi_pa_va_lookup(handler_info->acpi_param_buffer_address);
+		if (!th->acpi_param_buffer_addr)
+			pr_warn("Idx: %llu, failed to find VA for param_addr(GUID: %pUL, PA: %p)",
+				cur_handler, &th->guid, (void *)th->acpi_param_buffer_addr);
+
 	} while (++cur_handler < tm->handler_count && (handler_info = get_next_handler(handler_info)));
 
 	return 0;
@@ -276,6 +290,12 @@ static acpi_status acpi_platformrt_space_handler(u32 function,
 		module = find_prm_module(&buffer->handler_guid);
 		if (!handler || !module)
 			goto invalid_guid;
+
+		if (!handler->handler_addr || !handler->static_data_buffer_addr ||
+			!handler->acpi_param_buffer_addr) {
+			buffer->prm_status = PRM_HANDLER_ERROR;
+			return AE_OK;
+		}
 
 		ACPI_COPY_NAMESEG(context.signature, "PRMC");
 		context.revision = 0x0;
