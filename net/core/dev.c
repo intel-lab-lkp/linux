@@ -10615,9 +10615,8 @@ EXPORT_SYMBOL_GPL(init_dummy_netdev);
  *	chain. 0 is returned on success. A negative errno code is returned
  *	on a failure to set up the device, or if the name is a duplicate.
  *
- *	This is a wrapper around register_netdevice that takes the rtnl semaphore
- *	and expands the device name if you passed a format string to
- *	alloc_netdev.
+ *	This is a wrapper around register_netdevice that takes
+ *	the rtnl semaphore.
  */
 int register_netdev(struct net_device *dev)
 {
