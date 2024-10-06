@@ -7807,16 +7807,6 @@ cfg80211_vendor_cmd_alloc_reply_skb(struct wiphy *wiphy, int approxlen)
 int cfg80211_vendor_cmd_reply(struct sk_buff *skb);
 
 /**
- * cfg80211_vendor_cmd_get_sender - get the current sender netlink ID
- * @wiphy: the wiphy
- *
- * Return: the current netlink port ID in a vendor command handler.
- *
- * Context: May only be called from a vendor command handler
- */
-unsigned int cfg80211_vendor_cmd_get_sender(struct wiphy *wiphy);
-
-/**
  * cfg80211_vendor_event_alloc - allocate vendor-specific event skb
  * @wiphy: the wiphy
  * @wdev: the wireless device
@@ -7844,41 +7834,6 @@ cfg80211_vendor_event_alloc(struct wiphy *wiphy, struct wireless_dev *wdev,
 	return __cfg80211_alloc_event_skb(wiphy, wdev, NL80211_CMD_VENDOR,
 					  NL80211_ATTR_VENDOR_DATA,
 					  0, event_idx, approxlen, gfp);
-}
-
-/**
- * cfg80211_vendor_event_alloc_ucast - alloc unicast vendor-specific event skb
- * @wiphy: the wiphy
- * @wdev: the wireless device
- * @event_idx: index of the vendor event in the wiphy's vendor_events
- * @portid: port ID of the receiver
- * @approxlen: an upper bound of the length of the data that will
- *	be put into the skb
- * @gfp: allocation flags
- *
- * This function allocates and pre-fills an skb for an event to send to
- * a specific (userland) socket. This socket would previously have been
- * obtained by cfg80211_vendor_cmd_get_sender(), and the caller MUST take
- * care to register a netlink notifier to see when the socket closes.
- *
- * If wdev != NULL, both the ifindex and identifier of the specified
- * wireless device are added to the event message before the vendor data
- * attribute.
- *
- * When done filling the skb, call cfg80211_vendor_event() with the
- * skb to send the event.
- *
- * Return: An allocated and pre-filled skb. %NULL if any errors happen.
- */
-static inline struct sk_buff *
-cfg80211_vendor_event_alloc_ucast(struct wiphy *wiphy,
-				  struct wireless_dev *wdev,
-				  unsigned int portid, int approxlen,
-				  int event_idx, gfp_t gfp)
-{
-	return __cfg80211_alloc_event_skb(wiphy, wdev, NL80211_CMD_VENDOR,
-					  NL80211_ATTR_VENDOR_DATA,
-					  portid, event_idx, approxlen, gfp);
 }
 
 /**

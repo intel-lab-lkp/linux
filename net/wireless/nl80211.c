@@ -15416,17 +15416,6 @@ int cfg80211_vendor_cmd_reply(struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(cfg80211_vendor_cmd_reply);
 
-unsigned int cfg80211_vendor_cmd_get_sender(struct wiphy *wiphy)
-{
-	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
-
-	if (WARN_ON(!rdev->cur_cmd_info))
-		return 0;
-
-	return rdev->cur_cmd_info->snd_portid;
-}
-EXPORT_SYMBOL_GPL(cfg80211_vendor_cmd_get_sender);
-
 static int nl80211_set_qos_map(struct sk_buff *skb,
 			       struct genl_info *info)
 {
