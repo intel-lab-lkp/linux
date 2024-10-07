@@ -27,6 +27,15 @@ config ALIENWARE_WMI
 	 zones on Alienware machines that don't contain a dedicated AlienFX
 	 USB MCU such as the X51 and X51-R2.
 
+config AWCC_PLATFORM_PROFILE
+	tristate "AWCC Platform Profile support"
+	depends on ACPI_WMI
+	select ACPI_PLATFORM_PROFILE
+	help
+	 This driver provides platform_profile support for selecting thermal
+	 profiles on Dell devices with User Selectable Thermal Tables,
+	 controlled by AWCC's WMI interface.
+
 config DCDBAS
 	tristate "Dell Systems Management Base Driver"
 	default m
