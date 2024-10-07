@@ -1590,6 +1590,7 @@ help:
 	@echo  '* vmlinux	  - Build the bare kernel'
 	@echo  '* modules	  - Build all modules'
 	@echo  '  modules_install - Install all modules to INSTALL_MOD_PATH (default: /)'
+	@echo  '  vmlinux_install - Install vmlinux to INSTALL_MOD_PATH (default: /)'
 	@echo  '  vdso_install    - Install unstripped vdso to INSTALL_MOD_PATH (default: /)'
 	@echo  '  dir/            - Build all files in dir and below'
 	@echo  '  dir/file.[ois]  - Build specified target only'
@@ -1897,6 +1898,19 @@ PHONY += modpost
 modpost: $(if $(single-build),, $(if $(KBUILD_BUILTIN), vmlinux.o)) \
 	 $(if $(KBUILD_MODULES), modules_check)
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost
+
+# ---------------------------------------------------------------------------
+# vmlinux install
+
+PHONY += vmlinux_install
+
+vmlinux_install:
+	@if [ -f vmlinux ]; then \
+		echo "INSTALL ${MODLIB}/vmlinux"; \
+		cp -f vmlinux ${MODLIB}/ ; \
+	else \
+		echo "vmlinux file does not exist."; \
+	fi
 
 # Single targets
 # ---------------------------------------------------------------------------
