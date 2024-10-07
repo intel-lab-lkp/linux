@@ -436,6 +436,72 @@ void pci_epc_unmap_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 EXPORT_SYMBOL_GPL(pci_epc_unmap_addr);
 
 /**
+ * pci_epc_map_align() - Get the offset into and the size of a controller memory
+ *			 address region needed to map a RC PCI address region
+ * @epc: the EPC device on which address is allocated
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @pci_addr: The RC PCI address to map
+ * @pci_size: the number of bytes to map starting from @pci_addr
+ * @map: populate here the actual size and offset into the controller memory
+ *       that must be allocated for the mapping
+ *
+ * If defined, invoke the controller map_align operation to obtain the size and
+ * the offset into a controller address region that must be allocated to map
+ * @pci_size bytes of the RC PCI address space starting from @pci_addr.
+ *
+ * On return, @map->pci_size indicates the effective size of the mapping that
+ * can be handled by the controller. This size may be smaller than the requested
+ * @pci_size. In such case, the endpoint function driver must handle the mapping
+ * using several fragments. The offset into the controller memory for the
+ * effective mapping of the RC PCI address range
+ * @pci_addr..@pci_addr+@map->pci_size is indicated by @map->map_ofst.
+ *
+ * If the target controller does not define a map_align operation, it is assumed
+ * that the controller has no PCI address mapping alignment constraint.
+ */
+int pci_epc_map_align(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+		      u64 pci_addr, size_t pci_size, struct pci_epc_map *map)
+{
+	int ret;
+
+	if (!pci_epc_function_is_valid(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!pci_size || !map)
+		return -EINVAL;
+
+	/*
+	 * Initialize and remember the PCI address region to be mapped. The
+	 * controller ->map_align() operation may change the map->pci_size to a
+	 * smaller value.
+	 */
+	memset(map, 0, sizeof(*map));
+	map->pci_addr = pci_addr;
+	map->pci_size = pci_size;
+
+	if (!epc->ops->map_align) {
+		/*
+		 * Assume that the EP controller has no alignment constraint,
+		 * that is, that the PCI address to map and the size of the
+		 * controller memory needed for the mapping are the same as
+		 * specified by the caller.
+		 */
+		map->map_pci_addr = pci_addr;
+		map->map_size = pci_size;
+		map->map_ofst = 0;
+		return 0;
+	}
+
+	mutex_lock(&epc->lock);
+	ret = epc->ops->map_align(epc, func_no, vfunc_no, map);
+	mutex_unlock(&epc->lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pci_epc_map_align);
+
+/**
  * pci_epc_map_addr() - map CPU address to PCI address
  * @epc: the EPC device on which address is allocated
  * @func_no: the physical endpoint function number in the EPC device
