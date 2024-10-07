@@ -30,3 +30,13 @@ config PHY_RTK_RTD_USB3PHY
 	  of the parameters.
 
 endif # ARCH_REALTEK || COMPILE_TEST
+
+config PHY_RTK_OTTO_SERDES
+	tristate "SerDes driver for the Realtek Otto platform"
+	depends on OF
+	select GENERIC_PHY
+	help
+	  Enable this to support Realtek SerDes in the RTL83xx and
+	  RTL93xx network SoCs. These are based on MIPS32 architecture
+	  and the SerDes connect to one to octa transceivers to build
+	  up switches with up to 52 ports.
