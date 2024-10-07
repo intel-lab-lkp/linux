@@ -322,6 +322,60 @@ impl<T> Opaque<T> {
 /// let left_value: Either<i32, &str> = Either::Left(7);
 /// let right_value: Either<i32, &str> = Either::Right("right value");
 /// ```
+///
+/// The following example demonstrates how we can create a struct
+/// that uses `Either` to hold either an integer or a string.
+/// This struct will be scheduled on the workqueue, and when executed,
+/// we will perform different actions depending on whether it holds
+/// a `Left` value (integer) or a `Right` value (string).
+///
+/// ```
+/// use kernel::prelude::*;
+/// use kernel::sync::Arc;
+/// use kernel::types::Either;
+/// use kernel::workqueue::{self, new_work, Work, WorkItem};
+///
+/// #[pin_data]
+/// struct WorkStruct {
+///     value: Either<i32, &'static str>,
+///     #[pin]
+///     work: Work<WorkStruct>,
+/// }
+///
+/// impl_has_work! {
+///     impl HasWork<Self> for WorkStruct { self.work }
+/// }
+///
+/// impl WorkStruct {
+///     fn new(value: Either<i32, &'static str>) -> Result<Arc<Self>> {
+///         Arc::pin_init(pin_init!(WorkStruct {
+///             value,
+///             work <- new_work!("WorkStruct::work"),
+///         }), GFP_KERNEL)
+///     }
+/// }
+///
+/// impl WorkItem for WorkStruct {
+///     type Pointer = Arc<WorkStruct>;
+///
+///     fn run(this: Arc<WorkStruct>) {
+///         match &this.value {
+///             Either::Left(left_value) => {
+///                 pr_info!("Left value: {}", left_value);
+///                 pr_info!("Left value times two: {}", left_value << 1);
+///             }
+///             Either::Right(right_value) => {
+///                 pr_info!("Right value: {}", right_value);
+///                 pr_info!("Length of right value: {}", right_value.len());
+///             }
+///         }
+///     }
+/// }
+///
+/// fn enqueue_work(work_item: Arc<WorkStruct>) {
+///     let _ = workqueue::system().enqueue(work_item);
+/// }
+/// ```
 pub enum Either<L, R> {
     /// Constructs an instance of [`Either`] containing a value of type `L`.
     Left(L),
