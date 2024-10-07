@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/export.h>
 #include <linux/union_find.h>
 
 /**
@@ -21,6 +22,7 @@ struct uf_node *uf_find(struct uf_node *node)
 	}
 	return node;
 }
+EXPORT_SYMBOL(uf_find);
 
 /**
  * uf_union - Merge two sets, using union by rank
@@ -47,3 +49,4 @@ void uf_union(struct uf_node *node1, struct uf_node *node2)
 		root1->rank++;
 	}
 }
+EXPORT_SYMBOL(uf_union);
