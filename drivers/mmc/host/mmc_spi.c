@@ -222,7 +222,7 @@ static int mmc_spi_response_get(struct mmc_spi_host *host,
 	u8 	leftover = 0;
 	unsigned short rotator;
 	int 	i;
-	char	tag[32];
+	char	tag[43];
 
 	snprintf(tag, sizeof(tag), "  ... CMD%d response SPI_%s",
 		cmd->opcode, maptype(cmd));
