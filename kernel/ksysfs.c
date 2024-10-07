@@ -188,6 +188,27 @@ KERNEL_ATTR_RO(crash_elfcorehdr_size);
 
 #endif /* CONFIG_VMCORE_INFO */
 
+/*
+ * entry to display the current preemption mode
+ */
+static ssize_t preempt_mode_show(struct kobject *kobj,
+			     struct kobj_attribute *attr, char *buf)
+{
+	char *mode = NULL;
+
+	if (preempt_model_rt())
+		mode = "RT";
+	else if (preempt_model_full())
+		mode = "FULL";
+	else if (preempt_model_voluntary())
+		mode = "VOLUNTARY";
+	else
+		mode = "NONE";
+	WARN_ON(mode == NULL);
+	return sysfs_emit(buf, "%s\n", mode);
+}
+KERNEL_ATTR_RO(preempt_mode);
+
 /* whether file capabilities are enabled */
 static ssize_t fscaps_show(struct kobject *kobj,
 				  struct kobj_attribute *attr, char *buf)
@@ -263,6 +284,7 @@ static struct attribute * kernel_attrs[] = {
 	&uevent_seqnum_attr.attr,
 	&cpu_byteorder_attr.attr,
 	&address_bits_attr.attr,
+	&preempt_mode_attr.attr,
 #ifdef CONFIG_UEVENT_HELPER
 	&uevent_helper_attr.attr,
 #endif
