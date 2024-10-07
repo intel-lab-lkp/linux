@@ -228,6 +228,8 @@ bool codetag_unload_module(struct module *mod)
 	if (!mod)
 		return true;
 
+	kvfree_rcu_barrier();
+
 	mutex_lock(&codetag_lock);
 	list_for_each_entry(cttype, &codetag_types, link) {
 		struct codetag_module *found = NULL;
