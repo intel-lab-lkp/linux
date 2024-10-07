@@ -327,6 +327,7 @@ config STM32_RPROC
 	depends on ARCH_STM32 || COMPILE_TEST
 	depends on REMOTEPROC
 	select MAILBOX
+	select REMOTEPROC_TEE
 	help
 	  Say y here to support STM32 MCU processors via the
 	  remote processor framework.
