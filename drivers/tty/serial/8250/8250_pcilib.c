@@ -28,6 +28,10 @@ int serial8250_pci_setup_port(struct pci_dev *dev, struct uart_8250_port *port,
 		port->port.membase = pcim_iomap_table(dev)[bar] + offset;
 		port->port.regshift = regshift;
 	} else {
+		if (!IS_ENABLED(CONFIG_HAS_IOPORT)) {
+			pr_err("Serial port %lx requires I/O port support\n", port->port.iobase);
+			return -EINVAL;
+		}
 		port->port.iotype = UPIO_PORT;
 		port->port.iobase = pci_resource_start(dev, bar) + offset;
 		port->port.mapbase = 0;
