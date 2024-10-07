@@ -1276,8 +1276,7 @@ EXPORT_SYMBOL_GPL(nvmf_free_options);
 				 NVMF_OPT_FAIL_FAST_TMO | NVMF_OPT_DHCHAP_SECRET |\
 				 NVMF_OPT_DHCHAP_CTRL_SECRET)
 
-static struct nvme_ctrl *
-nvmf_create_ctrl(struct device *dev, const char *buf)
+struct nvme_ctrl *nvmf_create_ctrl(struct device *dev, const char *buf)
 {
 	struct nvmf_ctrl_options *opts;
 	struct nvmf_transport_ops *ops;
@@ -1346,6 +1345,7 @@ out_free_opts:
 	nvmf_free_options(opts);
 	return ERR_PTR(ret);
 }
+EXPORT_SYMBOL_NS_GPL(nvmf_create_ctrl, NVME_FABRICS);
 
 static const struct class nvmf_class = {
 	.name = "nvme-fabrics",
