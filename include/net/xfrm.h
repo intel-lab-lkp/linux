@@ -184,6 +184,7 @@ struct xfrm_state {
 	};
 	struct hlist_node	byspi;
 	struct hlist_node	byseq;
+	struct hlist_node	state_cache;
 
 	refcount_t		refcnt;
 	spinlock_t		lock;
@@ -561,6 +562,8 @@ struct xfrm_policy {
 	possible_net_t		xp_net;
 	struct hlist_node	bydst;
 	struct hlist_node	byidx;
+
+	struct hlist_head	state_cache_list;
 
 	/* This lock only affects elements except for entry. */
 	rwlock_t		lock;
