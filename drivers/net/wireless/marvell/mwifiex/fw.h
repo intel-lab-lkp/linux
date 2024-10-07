@@ -875,7 +875,7 @@ struct mwifiex_ietypes_chanstats {
 struct mwifiex_ie_types_wildcard_ssid_params {
 	struct mwifiex_ie_types_header header;
 	u8 max_ssid_length;
-	u8 ssid[];
+	u8 ssid[] __counted_by(max_ssid_length);
 } __packed;
 
 #define TSF_DATA_SIZE            8
