@@ -375,8 +375,11 @@ int vfs_fstatat(int dfd, const char __user *filename,
 	flags &= ~AT_NO_AUTOMOUNT;
 	if (flags == AT_EMPTY_PATH && vfs_empty_path(dfd, filename))
 		return vfs_fstat(dfd, stat);
+	else if ((flags & AT_EMPTY_PATH) && !filename)
+		name = getname_kernel("");
+	else
+		name = getname_flags(filename, getname_statx_lookup_flags(statx_flags));
 
-	name = getname_flags(filename, getname_statx_lookup_flags(statx_flags));
 	ret = vfs_statx(dfd, name, statx_flags, stat, STATX_BASIC_STATS);
 	putname(name);
 
@@ -829,8 +832,11 @@ SYSCALL_DEFINE5(statx,
 	lflags = flags & ~(AT_NO_AUTOMOUNT | AT_STATX_SYNC_TYPE);
 	if (lflags == AT_EMPTY_PATH && vfs_empty_path(dfd, filename))
 		return do_statx_fd(dfd, flags & ~AT_NO_AUTOMOUNT, mask, buffer);
+	else if ((lflags & AT_EMPTY_PATH) && !filename)
+		name = getname_kernel("");
+	else
+		name = getname_flags(filename, getname_statx_lookup_flags(flags));
 
-	name = getname_flags(filename, getname_statx_lookup_flags(flags));
 	ret = do_statx(dfd, name, flags, mask, buffer);
 	putname(name);
 
