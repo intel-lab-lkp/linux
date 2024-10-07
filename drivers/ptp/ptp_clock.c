@@ -235,7 +235,6 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 				     struct device *parent)
 {
 	struct ptp_clock *ptp;
-	struct timestamp_event_queue *queue = NULL;
 	int err, index, major = MAJOR(ptp_devt);
 	char debugfsname[16];
 	size_t size;
@@ -260,20 +259,7 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	ptp->devid = MKDEV(major, index);
 	ptp->index = index;
 	INIT_LIST_HEAD(&ptp->tsevqs);
-	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
-	if (!queue) {
-		err = -ENOMEM;
-		goto no_memory_queue;
-	}
-	list_add_tail(&queue->qlist, &ptp->tsevqs);
 	spin_lock_init(&ptp->tsevqs_lock);
-	queue->mask = bitmap_alloc(PTP_MAX_CHANNELS, GFP_KERNEL);
-	if (!queue->mask) {
-		err = -ENOMEM;
-		goto no_memory_bitmap;
-	}
-	bitmap_set(queue->mask, 0, PTP_MAX_CHANNELS);
-	spin_lock_init(&queue->lock);
 	mutex_init(&ptp->pincfg_mux);
 	mutex_init(&ptp->n_vclocks_mux);
 	init_waitqueue_head(&ptp->tsev_wq);
@@ -380,11 +366,6 @@ no_mem_for_vclocks:
 kworker_err:
 	mutex_destroy(&ptp->pincfg_mux);
 	mutex_destroy(&ptp->n_vclocks_mux);
-	bitmap_free(queue->mask);
-no_memory_bitmap:
-	list_del(&queue->qlist);
-	kfree(queue);
-no_memory_queue:
 	xa_erase(&ptp_clocks_map, index);
 no_slot:
 	kfree(ptp);
