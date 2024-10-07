@@ -23791,6 +23791,7 @@ F:	include/uapi/linux/cdrom.h
 
 UNION-FIND
 M:	Xavier <xavier_qy@163.com>
+M:	Kuan-Wei Chiu <visitorckw@gmail.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/core-api/union_find.rst
