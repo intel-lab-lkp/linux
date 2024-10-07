@@ -119,6 +119,8 @@ properties:
             # if trigger is absent
           - none
             # LED indicates camera torch state
+          - rc-feedback
+            # LED indicates remote control feedback
           - torch
             # LED indicates USB gadget activity
           - usb-gadget
