@@ -16559,6 +16559,8 @@ M:	Damien Le Moal <dlemoal@kernel.org>
 L:	linux-pci@vger.kernel.org
 L:	linux-nvme@lists.infradead.org
 S:	Supported
+F:	Documentation/PCI/endpoint/function/binding/pci-nvme.rst
+F:	Documentation/PCI/endpoint/pci-nvme-*.rst
 F:	drivers/pci/endpoint/functions/pci-epf-nvme.c
 
 NVM EXPRESS DRIVER
