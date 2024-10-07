@@ -86,7 +86,8 @@ struct fastrpc_invoke_v2 {
 	__u64 crc;
 	__u64 perf_kernel;
 	__u64 perf_dsp;
-	__u32 reserved[12];
+	__u64 poll_timeout;
+	__u32 reserved[10];
 };
 
 struct fastrpc_init_create {
