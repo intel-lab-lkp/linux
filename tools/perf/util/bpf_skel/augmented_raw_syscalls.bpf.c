@@ -277,25 +277,31 @@ int sys_enter_rename(struct syscall_enter_args *args)
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *oldpath_arg = (const void *)args->args[0],
 		   *newpath_arg = (const void *)args->args[1];
-	unsigned int len = sizeof(augmented_args->args), oldpath_len, newpath_len;
+	unsigned int len = sizeof(augmented_args->args), oldpath_len, newpath_len, aligned_size;
 
         if (augmented_args == NULL)
-                return 1; /* Failure: don't filter */
+		goto failure;
 
 	len += 2 * sizeof(u64); // The overhead of size and err, just before the payload...
 
 	oldpath_len = augmented_arg__read_str(&augmented_args->arg, oldpath_arg, sizeof(augmented_args->arg.value));
-	augmented_args->arg.size = PERF_ALIGN(oldpath_len + 1, sizeof(u64));
-	len += augmented_args->arg.size;
+	aligned_size = PERF_ALIGN(oldpath_len + 1, sizeof(u64));
+	augmented_args->arg.size = aligned_size;
+	len += aligned_size;
 
-	struct augmented_arg *arg2 = (void *)&augmented_args->arg.value + augmented_args->arg.size;
+	/* Every read from userspace is limited to value size */
+	if (aligned_size > sizeof(augmented_args->arg.value))
+		goto failure;
+
+	struct augmented_arg *arg2 = (void *)&augmented_args->arg.value + aligned_size;
 
 	newpath_len = augmented_arg__read_str(arg2, newpath_arg, sizeof(augmented_args->arg.value));
 	arg2->size = newpath_len;
-
 	len += newpath_len;
 
 	return augmented__output(args, augmented_args, len);
+failure:
+	return 1; /* Failure: don't filter */
 }
 
 SEC("tp/syscalls/sys_enter_renameat2")
@@ -304,25 +310,31 @@ int sys_enter_renameat2(struct syscall_enter_args *args)
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *oldpath_arg = (const void *)args->args[1],
 		   *newpath_arg = (const void *)args->args[3];
-	unsigned int len = sizeof(augmented_args->args), oldpath_len, newpath_len;
+	unsigned int len = sizeof(augmented_args->args), oldpath_len, newpath_len, aligned_size;
 
         if (augmented_args == NULL)
-                return 1; /* Failure: don't filter */
+		goto failure;
 
 	len += 2 * sizeof(u64); // The overhead of size and err, just before the payload...
 
 	oldpath_len = augmented_arg__read_str(&augmented_args->arg, oldpath_arg, sizeof(augmented_args->arg.value));
-	augmented_args->arg.size = PERF_ALIGN(oldpath_len + 1, sizeof(u64));
-	len += augmented_args->arg.size;
+	aligned_size = PERF_ALIGN(oldpath_len + 1, sizeof(u64));
+	augmented_args->arg.size = aligned_size;
+	len += aligned_size;
 
-	struct augmented_arg *arg2 = (void *)&augmented_args->arg.value + augmented_args->arg.size;
+	/* Every read from userspace is limited to value size */
+	if (aligned_size > sizeof(augmented_args->arg.value))
+		goto failure;
+
+	struct augmented_arg *arg2 = (void *)&augmented_args->arg.value + aligned_size;
 
 	newpath_len = augmented_arg__read_str(arg2, newpath_arg, sizeof(augmented_args->arg.value));
 	arg2->size = newpath_len;
-
 	len += newpath_len;
 
 	return augmented__output(args, augmented_args, len);
+failure:
+	return 1; /* Failure: don't filter */
 }
 
 #define PERF_ATTR_SIZE_VER0     64      /* sizeof first published struct */
@@ -422,12 +434,11 @@ static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
 
 static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 {
-	bool augmented, do_output = false;
-	int zero = 0, size, aug_size, index, output = 0,
-	    value_size = sizeof(struct augmented_arg) - offsetof(struct augmented_arg, value);
-	unsigned int nr, *beauty_map;
+	bool do_augment = false;
+	int zero = 0, value_size = sizeof(struct augmented_arg) - sizeof(u64);
+	unsigned int nr, *beauty_map, len = sizeof(struct syscall_enter_args);
 	struct beauty_payload_enter *payload;
-	void *arg, *payload_offset;
+	void *payload_offset, *value_offset;
 
 	/* fall back to do predefined tail call */
 	if (args == NULL)
@@ -436,12 +447,13 @@ static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 	/* use syscall number to get beauty_map entry */
 	nr             = (__u32)args->syscall_nr;
 	beauty_map     = bpf_map_lookup_elem(&beauty_map_enter, &nr);
+	if (beauty_map == NULL)
+		return 1;
 
 	/* set up payload for output */
 	payload        = bpf_map_lookup_elem(&beauty_payload_enter_map, &zero);
 	payload_offset = (void *)&payload->aug_args;
-
-	if (beauty_map == NULL || payload == NULL)
+	if (payload == NULL)
 		return 1;
 
 	/* copy the sys_enter header, which has the syscall_nr */
@@ -457,52 +469,49 @@ static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 	 * buffer: -1 * (index of paired len) -> value of paired len (maximum: TRACE_AUG_MAX_BUF)
 	 */
 	for (int i = 0; i < 6; i++) {
-		arg = (void *)args->args[i];
-		augmented = false;
-		size = beauty_map[i];
-		aug_size = size; /* size of the augmented data read from user space */
+		int augment_size = beauty_map[i], augment_size_with_header;
+		void *addr = (void *)args->args[i];
+		bool is_augmented = false;
 
-		if (size == 0 || arg == NULL)
+		if (augment_size == 0 || addr == NULL)
 			continue;
 
-		if (size == 1) { /* string */
-			aug_size = bpf_probe_read_user_str(((struct augmented_arg *)payload_offset)->value, value_size, arg);
-			/* minimum of 0 to pass the verifier */
-			if (aug_size < 0)
-				aug_size = 0;
+		value_offset = ((struct augmented_arg *)payload_offset)->value;
 
-			augmented = true;
-		} else if (size > 0 && size <= value_size) { /* struct */
-			if (!bpf_probe_read_user(((struct augmented_arg *)payload_offset)->value, size, arg))
-				augmented = true;
-		} else if (size < 0 && size >= -6) { /* buffer */
-			index = -(size + 1);
-			aug_size = args->args[index];
+		if (augment_size == 1) { /* string */
+			augment_size = bpf_probe_read_user_str(value_offset, value_size, addr);
+			is_augmented = true;
+		} else if (augment_size > 1 && augment_size <= value_size) { /* struct */
+			if (!bpf_probe_read_user(value_offset, value_size, addr))
+				is_augmented = true;
+		} else if (augment_size < 0 && augment_size >= -6) { /* buffer */
+			int index = -(augment_size + 1);
 
-			if (aug_size > TRACE_AUG_MAX_BUF)
-				aug_size = TRACE_AUG_MAX_BUF;
-
-			if (aug_size > 0) {
-				if (!bpf_probe_read_user(((struct augmented_arg *)payload_offset)->value, aug_size, arg))
-					augmented = true;
-			}
+			augment_size = args->args[index] > TRACE_AUG_MAX_BUF ? TRACE_AUG_MAX_BUF : args->args[index];
+			if (!bpf_probe_read_user(value_offset, augment_size, addr))
+				is_augmented = true;
 		}
 
-		/* write data to payload */
-		if (augmented) {
-			int written = offsetof(struct augmented_arg, value) + aug_size;
+		/* Augmented data size is limited to value size */
+		if (augment_size > value_size)
+			augment_size = value_size;
 
-			((struct augmented_arg *)payload_offset)->size = aug_size;
-			output += written;
-			payload_offset += written;
-			do_output = true;
+		/* Explicitly define this variable to pass the verifier */
+		augment_size_with_header = sizeof(u64) + augment_size;
+
+		/* Write data to payload */
+		if (is_augmented && augment_size_with_header <= sizeof(struct augmented_arg)) {
+			((struct augmented_arg *)payload_offset)->size = augment_size;
+			do_augment      = true;
+			len            += augment_size_with_header;
+			payload_offset += augment_size_with_header;
 		}
 	}
 
-	if (!do_output)
+	if (!do_augment || len > sizeof(struct beauty_payload_enter))
 		return 1;
 
-	return augmented__beauty_output(ctx, payload, sizeof(struct syscall_enter_args) + output);
+	return augmented__beauty_output(ctx, payload, len);
 }
 
 SEC("tp/raw_syscalls/sys_enter")
