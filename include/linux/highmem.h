@@ -220,18 +220,8 @@ static inline void clear_user_highpage(struct page *page, unsigned long vaddr)
  * Return: A folio containing one allocated and zeroed page or NULL if
  * we are out of memory.
  */
-static inline
-struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
-				   unsigned long vaddr)
-{
-	struct folio *folio;
-
-	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0, vma, vaddr, false);
-	if (folio)
-		clear_user_highpage(&folio->page, vaddr);
-
-	return folio;
-}
+#define vma_alloc_zeroed_movable_folio(vma, vaddr) \
+	vma_alloc_folio(GFP_HIGHUSER_MOVABLE | __GFP_ZERO, 0, vma, vaddr, false)
 #endif
 
 static inline void clear_highpage(struct page *page)
