@@ -222,6 +222,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_RT712_SDCA_DMIC_SDW
 	imply SND_SOC_RT715_SDW
 	imply SND_SOC_RT715_SDCA_SDW
+	imply SND_SOC_RT721_SDCA_SDW
 	imply SND_SOC_RT722_SDCA_SDW
 	imply SND_SOC_RT1308_SDW
 	imply SND_SOC_RT1316_SDW
@@ -1545,6 +1546,11 @@ config SND_SOC_RL6231
 	default m if SND_SOC_RT1305=m
 	default m if SND_SOC_RT1308=m
 
+config SND_SOC_RT_SDW_COMMON
+	tristate
+	default y if SND_SOC_RT721_SDCA_SDW=y
+	default m if SND_SOC_RT721_SDCA_SDW=m
+
 config SND_SOC_RL6347A
 	tristate
 	default y if SND_SOC_RT274=y
@@ -1739,6 +1745,12 @@ config SND_SOC_RT712_SDCA_SDW
 
 config SND_SOC_RT712_SDCA_DMIC_SDW
 	tristate "Realtek RT712 SDCA DMIC Codec - SDW"
+	depends on SOUNDWIRE
+	select REGMAP_SOUNDWIRE
+	select REGMAP_SOUNDWIRE_MBQ
+
+config SND_SOC_RT721_SDCA_SDW
+	tristate "Realtek RT721 SDCA Codec - SDW"
 	depends on SOUNDWIRE
 	select REGMAP_SOUNDWIRE
 	select REGMAP_SOUNDWIRE_MBQ
@@ -2563,6 +2575,19 @@ config SND_SOC_NAU8824
 
 config SND_SOC_NAU8825
 	tristate
+	depends on I2C
+
+config SND_SOC_NTPFW
+	tristate
+
+config SND_SOC_NTP8918
+	select SND_SOC_NTPFW
+	tristate "NeoFidelity NTP8918 amplifier"
+	depends on I2C
+
+config SND_SOC_NTP8835
+	select SND_SOC_NTPFW
+	tristate "NeoFidelity NTP8835 and NTP8835C amplifiers"
 	depends on I2C
 
 config SND_SOC_TPA6130A2
