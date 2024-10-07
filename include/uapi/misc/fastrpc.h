@@ -17,6 +17,7 @@
 #define FASTRPC_IOCTL_MEM_MAP		_IOWR('R', 10, struct fastrpc_mem_map)
 #define FASTRPC_IOCTL_MEM_UNMAP		_IOWR('R', 11, struct fastrpc_mem_unmap)
 #define FASTRPC_IOCTL_GET_DSP_INFO	_IOWR('R', 13, struct fastrpc_ioctl_capability)
+#define FASTRPC_IOCTL_INVOKEV2		_IOWR('R', 14, struct fastrpc_invoke_v2)
 
 /**
  * enum fastrpc_map_flags - control flags for mapping memory on DSP user process
@@ -78,6 +79,12 @@ struct fastrpc_invoke {
 	__u32 handle;
 	__u32 sc;
 	__u64 args;
+};
+
+struct fastrpc_invoke_v2 {
+	struct fastrpc_invoke inv;
+	__u64 crc;
+	__u32 reserved[16];
 };
 
 struct fastrpc_init_create {
