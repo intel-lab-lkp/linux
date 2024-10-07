@@ -2837,6 +2837,32 @@ out:
 /* Defined in kernel/trace/trace.h */
 #define MAX_EVENT_NAME_LEN	64
 
+static char *probe_trace_event__hash_event(const char *event)
+{
+	char *str = NULL;
+	size_t hash;
+
+	str = malloc(MAX_EVENT_NAME_LEN);
+	if (!str)
+		return NULL;
+
+	hash = str_hash(event);
+
+	/*
+	 * Reserve characters for the "__return" suffix for the return probe.
+	 * Thus the string buffer (64 bytes) are used for:
+	 *   Truncated event:  46 bytes
+	 *   '_'            :   1 byte
+	 *   hash string    :   8 bytes
+	 *   reserved       :   8 bytes (for suffix "__return")
+	 *   '\0'           :   1 byte
+	 */
+	strncpy(str, event, 46);
+	/* '_' + hash string + '\0' */
+	snprintf(str + 46, 10, "_%lx", hash);
+	return str;
+}
+
 /* Set new name from original perf_probe_event and namelist */
 static int probe_trace_event__set_name(struct probe_trace_event *tev,
 				       struct perf_probe_event *pev,
@@ -2844,7 +2870,7 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 				       bool allow_suffix)
 {
 	const char *event, *group;
-	char *buf;
+	char *buf, *hash_event = NULL;
 	int ret;
 
 	buf = malloc(MAX_EVENT_NAME_LEN);
@@ -2864,6 +2890,19 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 			event = pev->point.function;
 		else
 			event = tev->point.realname;
+
+		if (strlen(event) >= MAX_EVENT_NAME_LEN) {
+			pr_warning("Probe event='%s' is too long (>= %d bytes).\n",
+				   event, MAX_EVENT_NAME_LEN);
+
+			hash_event = probe_trace_event__hash_event(event);
+			if (!hash_event) {
+				ret = -ENOMEM;
+				goto out;
+			}
+			pr_warning("Generate hashed event name='%s'\n", hash_event);
+			event = hash_event;
+		}
 	}
 	if (pev->group && !pev->sdt)
 		group = pev->group;
@@ -2903,6 +2942,7 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 		strlist__add(namelist, event);
 
 out:
+	free(hash_event);
 	free(buf);
 	return ret < 0 ? ret : 0;
 }
