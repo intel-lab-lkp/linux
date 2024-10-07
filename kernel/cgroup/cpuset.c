@@ -817,6 +817,8 @@ v2:
 	if (root_load_balance && (csn == 1))
 		goto single_root_domain;
 
+	ndoms = csn;
+
 	for (i = 0; i < csn; i++)
 		uf_node_init(&csa[i]->node);
 
@@ -829,15 +831,9 @@ v2:
 				 * partition root cpusets.
 				 */
 				WARN_ON_ONCE(cgrpv2);
-				uf_union(&csa[i]->node, &csa[j]->node);
+				ndoms -= uf_union(&csa[i]->node, &csa[j]->node);
 			}
 		}
-	}
-
-	/* Count the total number of domains */
-	for (i = 0; i < csn; i++) {
-		if (uf_find(&csa[i]->node) == &csa[i]->node)
-			ndoms++;
 	}
 
 	/*
