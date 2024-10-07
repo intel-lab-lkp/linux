@@ -2761,13 +2761,13 @@ vchiq_bulk_xfer_queue_msg_interruptible(struct vchiq_service *service,
 		state->id, service->localport, dir_char, queue->local_insert,
 		queue->remote_insert, queue->process);
 
-        if (bulk_waiter) {
-                bulk_waiter->bulk = bulk;
-                if (wait_for_completion_interruptible(&bulk_waiter->event))
-                        status = -EAGAIN;
-                else if (bulk_waiter->actual == VCHIQ_BULK_ACTUAL_ABORTED)
-                        status = -EINVAL;
-        }
+	if (bulk_waiter) {
+		bulk_waiter->bulk = bulk;
+		if (wait_for_completion_interruptible(&bulk_waiter->event))
+			status = -EAGAIN;
+		else if (bulk_waiter->actual == VCHIQ_BULK_ACTUAL_ABORTED)
+			status = -EINVAL;
+	}
 
 	return status;
 
