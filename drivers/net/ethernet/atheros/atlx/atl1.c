@@ -1656,17 +1656,17 @@ static void atl1_inc_smb(struct atl1_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	struct stats_msg_block *smb = adapter->smb.smb;
 
-	u64 new_rx_errors = smb->rx_frag +
-			    smb->rx_fcs_err +
-			    smb->rx_len_err +
-			    smb->rx_sz_ov +
-			    smb->rx_rxf_ov +
-			    smb->rx_rrd_ov +
-			    smb->rx_align_err;
-	u64 new_tx_errors = smb->tx_late_col +
-			    smb->tx_abort_col +
-			    smb->tx_underrun +
-			    smb->tx_trunc;
+	u64 new_rx_errors = (u64)smb->rx_frag +
+			    (u64)smb->rx_fcs_err +
+			    (u64)smb->rx_len_err +
+			    (u64)smb->rx_sz_ov +
+			    (u64)smb->rx_rxf_ov +
+			    (u64)smb->rx_rrd_ov +
+			    (u64)smb->rx_align_err;
+	u64 new_tx_errors = (u64)smb->tx_late_col +
+			    (u64)smb->tx_abort_col +
+			    (u64)smb->tx_underrun +
+			    (u64)smb->tx_trunc;
 
 	/* Fill out the OS statistics structure */
 	adapter->soft_stats.rx_packets += smb->rx_ok + new_rx_errors;
@@ -1674,10 +1674,10 @@ static void atl1_inc_smb(struct atl1_adapter *adapter)
 	adapter->soft_stats.rx_bytes += smb->rx_byte_cnt;
 	adapter->soft_stats.tx_bytes += smb->tx_byte_cnt;
 	adapter->soft_stats.multicast += smb->rx_mcast;
-	adapter->soft_stats.collisions += smb->tx_1_col +
-					  smb->tx_2_col +
-					  smb->tx_late_col +
-					  smb->tx_abort_col;
+	adapter->soft_stats.collisions += (u64)smb->tx_1_col +
+					  (u64)smb->tx_2_col +
+					  (u64)smb->tx_late_col +
+					  (u64)smb->tx_abort_col;
 
 	/* Rx Errors */
 	adapter->soft_stats.rx_errors += new_rx_errors;
