@@ -290,4 +290,7 @@ config FPGA_MGR_LATTICE_SYSCONFIG_SPI
 
 source "drivers/fpga/tests/Kconfig"
 
+# Driver files
+source "drivers/fpga/amd/Kconfig"
+
 endif # FPGA

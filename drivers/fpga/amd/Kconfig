@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config AMD_VERSAL_MGMT
+	tristate "AMD PCIe Versal Management Driver"
+	select FW_LOADER
+	select FW_UPLOAD
+	select REGMAP_MMIO
+	depends on FPGA_BRIDGE
+	depends on FPGA_REGION
+	depends on HAS_IOMEM
+	depends on PCI
+	help
+	  AMD PCIe Versal Management Driver provides management services to
+	  download firmware, program bitstream, collect sensor data, control
+	  resets, and communicate with the User function.
+
+	  If "M" is selected, the driver module will be amd-vmgmt.
