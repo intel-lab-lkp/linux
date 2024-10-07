@@ -16554,6 +16554,13 @@ S:	Supported
 F:	drivers/platform/x86/nvidia-wmi-ec-backlight.c
 F:	include/linux/platform_data/x86/nvidia-wmi-ec-backlight.h
 
+NVME ENDPOINT DRIVER
+M:	Damien Le Moal <dlemoal@kernel.org>
+L:	linux-pci@vger.kernel.org
+L:	linux-nvme@lists.infradead.org
+S:	Supported
+F:	drivers/pci/endpoint/functions/pci-epf-nvme.c
+
 NVM EXPRESS DRIVER
 M:	Keith Busch <kbusch@kernel.org>
 M:	Jens Axboe <axboe@fb.com>

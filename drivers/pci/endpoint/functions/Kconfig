@@ -47,3 +47,12 @@ config PCI_EPF_MHI
 	   devices such as SDX55.
 
 	   If in doubt, say "N" to disable Endpoint driver for MHI bus.
+
+config PCI_EPF_NVME
+	tristate "PCI Endpoint NVMe function driver"
+	depends on PCI_ENDPOINT && NVME_TARGET
+	help
+	   Enable this configuration option to enable the NVMe PCI endpoint
+	   function driver.
+
+	   If in doubt, say "N".
