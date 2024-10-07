@@ -84,7 +84,9 @@ struct fastrpc_invoke {
 struct fastrpc_invoke_v2 {
 	struct fastrpc_invoke inv;
 	__u64 crc;
-	__u32 reserved[16];
+	__u64 perf_kernel;
+	__u64 perf_dsp;
+	__u32 reserved[12];
 };
 
 struct fastrpc_init_create {
