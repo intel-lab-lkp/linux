@@ -55,17 +55,9 @@ properties:
   spi-cpol: true
   spi-cpha: true
 
-  vcc-supply:
-    description: A 3V to 3.6V supply that powers the chip.
-
-  vlogic-supply:
-    description:
-      A 1.65V to 3.6V supply for the logic pins.
-
-  refio-supply:
-    description:
-      A 2.5V to 3.3V supply for the external reference voltage. When omitted,
-      the internal 2.5V reference is used.
+  vcc-supply: true
+  vlogic-supply: true
+  refio-supply: true
 
   aina-supply:
     description:
