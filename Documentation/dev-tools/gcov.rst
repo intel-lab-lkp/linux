@@ -137,7 +137,7 @@ a) gcov is run on the TEST machine
 
     from the build tree:
       - all C source files + headers
-      - all .gcda and .gcno files
+      - all .gcno files
       - all links to directories
 
     It is important to note that these files need to be placed into the
