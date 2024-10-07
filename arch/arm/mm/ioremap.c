@@ -115,16 +115,31 @@ int ioremap_page(unsigned long virt, unsigned long phys,
 }
 EXPORT_SYMBOL(ioremap_page);
 
+static inline void sync_pgds(struct mm_struct *mm, unsigned long start,
+			     unsigned long end)
+{
+	end = ALIGN(end, PGDIR_SIZE);
+	memcpy(pgd_offset(mm, start), pgd_offset_k(start),
+	       sizeof(pgd_t) * (pgd_index(end) - pgd_index(start)));
+}
+
+static inline void sync_vmalloc_pgds(struct mm_struct *mm)
+{
+	sync_pgds(mm, VMALLOC_START, VMALLOC_END);
+	if (IS_ENABLED(CONFIG_KASAN_VMALLOC))
+		sync_pgds(mm, (unsigned long)kasan_mem_to_shadow(
+					(void *)VMALLOC_START),
+			      (unsigned long)kasan_mem_to_shadow(
+					(void *)VMALLOC_END));
+}
+
 void __check_vmalloc_seq(struct mm_struct *mm)
 {
 	int seq;
 
 	do {
 		seq = atomic_read(&init_mm.context.vmalloc_seq);
-		memcpy(pgd_offset(mm, VMALLOC_START),
-		       pgd_offset_k(VMALLOC_START),
-		       sizeof(pgd_t) * (pgd_index(VMALLOC_END) -
-					pgd_index(VMALLOC_START)));
+		sync_vmalloc_pgds(mm);
 		/*
 		 * Use a store-release so that other CPUs that observe the
 		 * counter's new value are guaranteed to see the results of the
