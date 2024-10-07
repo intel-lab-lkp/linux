@@ -36,6 +36,6 @@ static inline void uf_node_init(struct uf_node *node)
 struct uf_node *uf_find(struct uf_node *node);
 
 /* Merge two intersecting nodes */
-void uf_union(struct uf_node *node1, struct uf_node *node2);
+bool uf_union(struct uf_node *node1, struct uf_node *node2);
 
 #endif /* __LINUX_UNION_FIND_H */
