@@ -107,7 +107,7 @@ static long pll14xx_calc_rate(struct clk_pll14xx *pll, int mdiv, int pdiv,
 	u64 fout = prate;
 
 	/* fout = (m * 65536 + k) * Fin / (p * 65536) / (1 << sdiv) */
-	fout *= (mdiv * 65536 + kdiv);
+	fout *= (mdiv * 65536ULL + kdiv);
 	pdiv *= 65536;
 
 	do_div(fout, pdiv << sdiv);
