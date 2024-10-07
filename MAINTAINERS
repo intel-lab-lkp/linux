@@ -4475,6 +4475,7 @@ M:	Arend van Spriel <arend.vanspriel@broadcom.com>
 L:	linux-wireless@vger.kernel.org
 L:	brcm80211@lists.linux.dev
 L:	brcm80211-dev-list.pdl@broadcom.com
+L:	wlan-kernel-dev-list@infineon.com
 S:	Supported
 F:	drivers/net/wireless/broadcom/brcm80211/
 F:	include/linux/platform_data/brcmfmac.h
