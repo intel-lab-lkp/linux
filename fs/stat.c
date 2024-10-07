@@ -372,6 +372,7 @@ int vfs_fstatat(int dfd, const char __user *filename,
 	 * If AT_EMPTY_PATH is set, we expect the common case to be that
 	 * empty path, and avoid doing all the extra pathname work.
 	 */
+	flags &= ~AT_NO_AUTOMOUNT;
 	if (flags == AT_EMPTY_PATH && vfs_empty_path(dfd, filename))
 		return vfs_fstat(dfd, stat);
 
