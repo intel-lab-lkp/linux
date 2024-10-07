@@ -48,6 +48,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -58,6 +59,43 @@
 #define RING_NUM_FRAMES			20
 
 static uint32_t cfg_max_num_members;
+static int lo_up_down_toggled;
+
+static void loopback_up_down_toggle(void)
+{
+	struct ifreq ifreq = {};
+	int fd, err;
+
+	fd = socket(AF_PACKET, SOCK_RAW, 0);
+	if (fd == -1)
+		return;
+	strcpy(ifreq.ifr_name, "lo");
+	err = ioctl(fd, SIOCGIFFLAGS, &ifreq);
+	if (err) {
+		perror("SIOCGIFFLAGS");
+		exit(1);
+	}
+	ifreq.ifr_flags ^= IFF_UP;
+	err = ioctl(fd, SIOCSIFFLAGS, &ifreq);
+	if (err) {
+		perror("SIOCSIFFLAGS");
+		exit(1);
+	}
+	lo_up_down_toggled ^= 1;
+	close(fd);
+}
+
+static void loopback_up_down_restore(void)
+{
+	if (lo_up_down_toggled)
+		loopback_up_down_toggle();
+}
+
+static int cleanup_and_exit(int status)
+{
+	loopback_up_down_restore();
+	exit(status);
+}
 
 /* Open a socket in a given fanout mode.
  * @return -1 if mode is bad, a valid socket otherwise */
