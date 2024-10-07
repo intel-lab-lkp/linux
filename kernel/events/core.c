@@ -4099,9 +4099,9 @@ static void perf_adjust_period(struct perf_event *event, u64 nsec, u64 count, bo
 	if (!sample_period)
 		sample_period = 1;
 
-	hwc->sample_period = sample_period;
+	hwc->sample_period = event->pmu->adjust_period(event, sample_period);
 
-	if (local64_read(&hwc->period_left) > 8*sample_period) {
+	if (local64_read(&hwc->period_left) > 8*hwc->sample_period) {
 		if (disable)
 			event->pmu->stop(event, PERF_EF_UPDATE);
 
@@ -11357,6 +11357,11 @@ static int perf_event_nop_int(struct perf_event *event, u64 value)
 	return 0;
 }
 
+static u64 perf_pmu_nop_adjust_period(struct perf_event *event, u64 period)
+{
+	return period;
+}
+
 static DEFINE_PER_CPU(unsigned int, nop_txn_flags);
 
 static void perf_pmu_start_txn(struct pmu *pmu, unsigned int flags)
@@ -11634,6 +11639,9 @@ int perf_pmu_register(struct pmu *pmu, const char *name, int type)
 
 	if (!pmu->check_period)
 		pmu->check_period = perf_event_nop_int;
+
+	if (!pmu->adjust_period)
+		pmu->adjust_period = perf_pmu_nop_adjust_period;
 
 	if (!pmu->event_idx)
 		pmu->event_idx = perf_event_idx_default;

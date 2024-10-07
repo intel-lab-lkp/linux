@@ -540,6 +540,11 @@ struct pmu {
 	 * Check period value for PERF_EVENT_IOC_PERIOD ioctl.
 	 */
 	int (*check_period)		(struct perf_event *event, u64 value); /* optional */
+
+	/*
+	 * Adjust period value according to pmu constraints.
+	 */
+	u64 (*adjust_period)		(struct perf_event *event, u64 period); /* optional */
 };
 
 enum perf_addr_filter_action_t {
