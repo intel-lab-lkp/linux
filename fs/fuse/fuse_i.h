@@ -435,6 +435,16 @@ struct fuse_req {
 
 	/** fuse_mount this request belongs to */
 	struct fuse_mount *fm;
+
+	/*
+	 * These fields are only used if the connection enforces request
+	 * timeouts.
+	 *
+	 * timer_entry is the entry on the fuse connection's timeout list.
+	 * create_time (in jiffies) tracks when the request was created.
+	 */
+	struct list_head timer_entry;
+	unsigned long create_time;
 };
 
 struct fuse_iqueue;
@@ -525,6 +535,33 @@ struct fuse_pqueue {
 	struct list_head io;
 };
 
+/* Frequency (in seconds) of request timeout checks, if opted into */
+#define FUSE_TIMEOUT_TIMER_FREQ 60 * HZ
+
+/*
+ * If the connection enforces request timeouts, then all requests get
+ * added to the list when created and removed from the list when fulfilled by
+ * the server.
+ *
+ * The timer is triggered every FUSE_TIMEOUT_TIMER_FREQ seconds. It will
+ * check the head of the list for whether that request's start_time
+ * exceeds the timeout. If so, then the connection will be aborted.
+ *
+ * In the worst case, this guarantees that all requests will take
+ * the specified timeout + FUSE_TIMEOUT_TIMER_FREQ time to fulfill.
+ */
+struct fuse_timeout {
+	struct timer_list timer;
+
+	/* Request timeout (in jiffies). 0 = no timeout */
+	unsigned long req_timeout;
+
+	spinlock_t lock;
+
+	/* List of all requests that haven't been completed yet */
+	struct list_head list;
+};
+
 /**
  * Fuse device instance
  */
@@ -571,6 +608,8 @@ struct fuse_fs_context {
 	enum fuse_dax_mode dax_mode;
 	unsigned int max_read;
 	unsigned int blksize;
+	/*  Request timeout (in minutes). 0 = no timeout (infinite wait) */
+	unsigned int req_timeout;
 	const char *subtype;
 
 	/* DAX device, may be NULL */
@@ -914,6 +953,9 @@ struct fuse_conn {
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
+
+	/** Only used if the connection enforces request timeouts */
+	struct fuse_timeout timeout;
 };
 
 /*
@@ -1174,6 +1216,9 @@ void fuse_request_end(struct fuse_req *req);
 /* Abort all requests */
 void fuse_abort_conn(struct fuse_conn *fc);
 void fuse_wait_aborted(struct fuse_conn *fc);
+
+/* Check if any requests timed out */
+void fuse_check_timeout(struct timer_list *timer);
 
 /**
  * Invalidate inode attributes

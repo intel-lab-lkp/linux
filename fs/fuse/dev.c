@@ -45,14 +45,62 @@ static struct fuse_dev *fuse_get_dev(struct file *file)
 	return READ_ONCE(file->private_data);
 }
 
+void fuse_check_timeout(struct timer_list *timer)
+{
+	struct fuse_conn *fc = container_of(timer, struct fuse_conn, timeout.timer);
+	struct fuse_req *req;
+	bool expired = false;
+
+	spin_lock(&fc->timeout.lock);
+	req = list_first_entry_or_null(&fc->timeout.list, struct fuse_req,
+				       timer_entry);
+	if (req)
+		expired = jiffies > req->create_time + fc->timeout.req_timeout;
+	spin_unlock(&fc->timeout.lock);
+
+	/*
+	 * Don't rearm the timer if the list was empty in case the filesystem
+	 * is inactive. When the next request is sent, it'll rearm the timer.
+	 */
+	if (!req)
+		return;
+
+	if (expired)
+		fuse_abort_conn(fc);
+	else
+		mod_timer(&fc->timeout.timer, jiffies + FUSE_TIMEOUT_TIMER_FREQ);
+}
+
+static void add_req_timeout_entry(struct fuse_conn *fc, struct fuse_req *req)
+{
+	spin_lock(&fc->timeout.lock);
+	if (!timer_pending(&fc->timeout.timer))
+		mod_timer(&fc->timeout.timer, jiffies + FUSE_TIMEOUT_TIMER_FREQ);
+	list_add_tail(&req->timer_entry, &fc->timeout.list);
+	spin_unlock(&fc->timeout.lock);
+}
+
+static void remove_req_timeout_entry(struct fuse_conn *fc, struct fuse_req *req)
+{
+	spin_lock(&fc->timeout.lock);
+	list_del(&req->timer_entry);
+	spin_unlock(&fc->timeout.lock);
+}
+
 static void fuse_request_init(struct fuse_mount *fm, struct fuse_req *req)
 {
+	struct fuse_conn *fc = fm->fc;
+
 	INIT_LIST_HEAD(&req->list);
 	INIT_LIST_HEAD(&req->intr_entry);
 	init_waitqueue_head(&req->waitq);
 	refcount_set(&req->count, 1);
 	__set_bit(FR_PENDING, &req->flags);
 	req->fm = fm;
+	if (fc->timeout.req_timeout) {
+		INIT_LIST_HEAD(&req->timer_entry);
+		req->create_time = jiffies;
+	}
 }
 
 static struct fuse_req *fuse_request_alloc(struct fuse_mount *fm, gfp_t flags)
@@ -359,6 +407,9 @@ void fuse_request_end(struct fuse_req *req)
 	if (test_and_set_bit(FR_FINISHED, &req->flags))
 		goto put_request;
 
+	if (fc->timeout.req_timeout)
+		remove_req_timeout_entry(fc, req);
+
 	trace_fuse_request_end(req);
 	/*
 	 * test_and_set_bit() implies smp_mb() between bit
@@ -450,6 +501,8 @@ static void request_wait_answer(struct fuse_req *req)
 		if (test_bit(FR_PENDING, &req->flags)) {
 			list_del(&req->list);
 			spin_unlock(&fiq->lock);
+			if (fc->timeout.req_timeout)
+				remove_req_timeout_entry(fc, req);
 			__fuse_put_request(req);
 			req->out.h.error = -EINTR;
 			return;
@@ -466,13 +519,16 @@ static void request_wait_answer(struct fuse_req *req)
 
 static void __fuse_request_send(struct fuse_req *req)
 {
-	struct fuse_iqueue *fiq = &req->fm->fc->iq;
+	struct fuse_conn *fc = req->fm->fc;
+	struct fuse_iqueue *fiq = &fc->iq;
 
 	BUG_ON(test_bit(FR_BACKGROUND, &req->flags));
 
 	/* acquire extra reference, since request is still needed after
 	   fuse_request_end() */
 	__fuse_get_request(req);
+	if (fc->timeout.req_timeout)
+		add_req_timeout_entry(fc, req);
 	fuse_send_one(fiq, req);
 
 	request_wait_answer(req);
@@ -598,6 +654,8 @@ static bool fuse_request_queue_background(struct fuse_req *req)
 		if (fc->num_background == fc->max_background)
 			fc->blocked = 1;
 		list_add_tail(&req->list, &fc->bg_queue);
+		if (fc->timeout.req_timeout)
+			add_req_timeout_entry(fc, req);
 		flush_bg_queue(fc);
 		queued = true;
 	}
@@ -2296,6 +2354,9 @@ void fuse_abort_conn(struct fuse_conn *fc)
 		spin_unlock(&fc->lock);
 
 		end_requests(&to_end);
+
+		if (fc->timeout.req_timeout)
+			timer_delete(&fc->timeout.timer);
 	} else {
 		spin_unlock(&fc->lock);
 	}
