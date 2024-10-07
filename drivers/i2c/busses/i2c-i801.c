@@ -144,6 +144,7 @@
 #define SMBNTFDADD(p)	(20 + (p)->smba)	/* ICH3 and later */
 
 /* PCI Address Constants */
+#define SMBBAR_MMIO	0
 #define SMBBAR		4
 #define SMBHSTCFG	0x040
 #define TCOBASE		0x050
@@ -1647,7 +1648,7 @@ static void i801_restore_regs(struct i801_priv *priv)
 
 static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
-	int err, i;
+	int err, i, bar = SMBBAR;
 	struct i801_priv *priv;
 
 	priv = devm_kzalloc(&dev->dev, sizeof(*priv), GFP_KERNEL);
@@ -1692,15 +1693,18 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (i801_acpi_probe(priv))
 		return -ENODEV;
 
-	err = pcim_iomap_regions(dev, 1 << SMBBAR, DRV_NAME);
+	if (pci_resource_flags(dev, SMBBAR_MMIO) & IORESOURCE_MEM)
+		bar = SMBBAR_MMIO;
+
+	err = pcim_iomap_regions(dev, 1 << bar, DRV_NAME);
 	if (err) {
 		pci_err(dev, "Failed to request SMBus region %pr\n",
-			pci_resource_n(dev, SMBBAR));
+			pci_resource_n(dev, bar));
 		i801_acpi_remove(priv);
 		return err;
 	}
 
-	priv->smba = pcim_iomap_table(dev)[SMBBAR];
+	priv->smba = pcim_iomap_table(dev)[bar];
 
 	pci_read_config_byte(dev, SMBHSTCFG, &priv->original_hstcfg);
 	i801_setup_hstcfg(priv);
