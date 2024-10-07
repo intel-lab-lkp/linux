@@ -98,9 +98,10 @@ int bch2_replicas_entry_validate(struct bch_replicas_entry_v1 *r,
 				 struct bch_fs *c,
 				 struct printbuf *err)
 {
-	mutex_lock(&c->sb_lock);
+	int acquired = mutex_trylock(&c->sb_lock);
 	int ret = bch2_replicas_entry_validate_locked(r, c->disk_sb.sb, err);
-	mutex_unlock(&c->sb_lock);
+	if (acquired)
+		mutex_unlock(&c->sb_lock);
 	return ret;
 }
 
