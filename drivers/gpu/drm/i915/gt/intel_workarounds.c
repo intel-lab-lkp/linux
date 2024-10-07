@@ -14,10 +14,29 @@
 #include "intel_gt_mcr.h"
 #include "intel_gt_print.h"
 #include "intel_gt_regs.h"
+#include "intel_pcode.h"
 #include "intel_ring.h"
 #include "intel_workarounds.h"
 
 #include "display/intel_fbc_regs.h"
+
+#ifdef CONFIG_X86
+#include <asm/cpu_device_id.h>
+#include <asm/intel-family.h>
+
+static const struct x86_cpu_id g8_cpu_ids[] = {
+	X86_MATCH_VFM(INTEL_ALDERLAKE,		NULL),
+	X86_MATCH_VFM(INTEL_ALDERLAKE_L,	NULL),
+	X86_MATCH_VFM(INTEL_COMETLAKE,		NULL),
+	X86_MATCH_VFM(INTEL_KABYLAKE,		NULL),
+	X86_MATCH_VFM(INTEL_KABYLAKE_L,		NULL),
+	X86_MATCH_VFM(INTEL_RAPTORLAKE,		NULL),
+	X86_MATCH_VFM(INTEL_RAPTORLAKE_P,	NULL),
+	X86_MATCH_VFM(INTEL_RAPTORLAKE_S,	NULL),
+	X86_MATCH_VFM(INTEL_ROCKETLAKE,		NULL),
+	{}
+};
+#endif
 
 /**
  * DOC: Hardware workarounds
@@ -1770,9 +1789,33 @@ static void wa_list_apply(const struct i915_wa_list *wal)
 	intel_gt_mcr_unlock(gt, flags);
 }
 
+#define DG2_G8_WA_RANGE_1		0x56A0 ... 0x56AF
+#define DG2_G8_WA_RANGE_2		0x56B0 ... 0x56B9
+
+/* Wa_14022698589:dg2 */
+static void intel_enable_g8(struct intel_uncore *uncore)
+{
+	if (IS_DG2(uncore->i915)) {
+		switch (INTEL_DEVID(uncore->i915)) {
+		case DG2_G8_WA_RANGE_1:
+		case DG2_G8_WA_RANGE_2:
+#ifdef CONFIG_X86
+			if (!x86_match_cpu(g8_cpu_ids))
+#endif
+				return;
+		}
+
+		snb_pcode_write_p(uncore, PCODE_POWER_SETUP,
+				  POWER_SETUP_SUBCOMMAND_G8_ENABLE, 0, 0);
+	}
+}
+
 void intel_gt_apply_workarounds(struct intel_gt *gt)
 {
 	wa_list_apply(&gt->wa_list);
+
+	/* Special case for pcode mailbox which can't be on wa_list */
+	intel_enable_g8(gt->uncore);
 }
 
 static bool wa_list_verify(struct intel_gt *gt,
