@@ -2834,6 +2834,9 @@ out:
 	free(buf);
 }
 
+/* Defined in kernel/trace/trace.h */
+#define MAX_EVENT_NAME_LEN	64
+
 /* Set new name from original perf_probe_event and namelist */
 static int probe_trace_event__set_name(struct probe_trace_event *tev,
 				       struct perf_probe_event *pev,
@@ -2841,8 +2844,12 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 				       bool allow_suffix)
 {
 	const char *event, *group;
-	char buf[64];
+	char *buf;
 	int ret;
+
+	buf = malloc(MAX_EVENT_NAME_LEN);
+	if (!buf)
+		return -ENOMEM;
 
 	/* If probe_event or trace_event already have the name, reuse it */
 	if (pev->event && !pev->sdt)
@@ -2866,17 +2873,19 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 		group = PERFPROBE_GROUP;
 
 	/* Get an unused new event name */
-	ret = get_new_event_name(buf, sizeof(buf), event, namelist,
+	ret = get_new_event_name(buf, MAX_EVENT_NAME_LEN, event, namelist,
 				 tev->point.retprobe, allow_suffix);
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	event = buf;
 
 	tev->event = strdup(event);
 	tev->group = strdup(group);
-	if (tev->event == NULL || tev->group == NULL)
-		return -ENOMEM;
+	if (tev->event == NULL || tev->group == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	/*
 	 * Add new event name to namelist if multiprobe event is NOT
@@ -2885,7 +2894,10 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 	 */
 	if (!multiprobe_event_is_supported())
 		strlist__add(namelist, event);
-	return 0;
+
+out:
+	free(buf);
+	return ret < 0 ? ret : 0;
 }
 
 static int __open_probe_file_and_namelist(bool uprobe,
