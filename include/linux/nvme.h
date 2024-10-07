@@ -10,6 +10,7 @@
 #include <linux/bits.h>
 #include <linux/types.h>
 #include <linux/uuid.h>
+#include <asm/byteorder.h>
 
 /* NQN names in commands fields specified one size */
 #define NVMF_NQN_FIELD_LEN	256
@@ -1854,6 +1855,24 @@ static inline bool nvme_is_write(const struct nvme_command *cmd)
 	if (unlikely(nvme_is_fabrics(cmd)))
 		return cmd->fabrics.fctype & 1;
 	return cmd->common.opcode & 1;
+}
+
+static inline __u32 nvme_get_log_page_len(struct nvme_command *cmd)
+{
+	__u32 len = le16_to_cpu(cmd->get_log_page.numdu);
+
+	len <<= 16;
+	len += le16_to_cpu(cmd->get_log_page.numdl);
+	/* NUMD is a 0's based value */
+	len += 1;
+	len *= sizeof(__u32);
+
+	return len;
+}
+
+static inline __u64 nvme_get_log_page_offset(struct nvme_command *cmd)
+{
+	return le64_to_cpu(cmd->get_log_page.lpo);
 }
 
 enum {
