@@ -19,6 +19,7 @@
 #include <linux/pci.h>
 #include <linux/uuid.h>
 #include <linux/regmap.h>
+#include <linux/vmalloc.h>
 
 #define AMD_VMGMT_BAR			0
 #define AMD_VMGMT_BAR_MASK		BIT(0)
@@ -93,8 +94,10 @@ struct vmgmt_device {
 	void __iomem		*tbl;
 	uuid_t			xclbin_uuid;
 	uuid_t			intf_uuid;
-
-	void                    *debugfs_root;
 };
+
+struct rm_device *vmgmt_rm_init(struct vmgmt_device *vdev);
+void vmgmt_rm_fini(struct rm_device *rdev);
+int vmgmt_rm_get_fw_id(struct rm_device *rdev, uuid_t *uuid);
 
 #endif	/* __VMGMT_H */
