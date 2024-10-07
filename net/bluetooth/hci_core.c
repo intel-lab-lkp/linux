@@ -501,12 +501,16 @@ int hci_dev_close(__u16 dev)
 		goto done;
 	}
 
+	set_bit(HCI_CLOSING, &hdev->flags);
+
 	cancel_work_sync(&hdev->power_on);
 	if (hci_dev_test_and_clear_flag(hdev, HCI_AUTO_OFF))
 		cancel_delayed_work(&hdev->power_off);
 
 	err = hci_dev_do_close(hdev);
 
+	if (unlikely(err))
+		clear_bit(HCI_CLOSING, &hdev->flags);
 done:
 	hci_dev_put(hdev);
 	return err;

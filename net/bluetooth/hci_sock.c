@@ -1671,6 +1671,11 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 			goto done;
 		}
 
+		if (unlikely(test_bit(HCI_CLOSING, &hdev->flags))) {
+			err = -ENODEV;
+			goto done;
+		}
+
 		if (hci_dev_test_flag(hdev, HCI_SETUP) ||
 		    hci_dev_test_flag(hdev, HCI_CONFIG) ||
 		    hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
