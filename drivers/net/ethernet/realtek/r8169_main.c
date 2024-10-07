@@ -1872,6 +1872,14 @@ static void rtl8169_get_ethtool_stats(struct net_device *dev,
 	data[10] = le32_to_cpu(counters->rx_multicast);
 	data[11] = le16_to_cpu(counters->tx_aborted);
 	data[12] = le16_to_cpu(counters->tx_underrun);
+
+	if (rtl_is_8125(tp)) {
+		data[4] = le32_to_cpu(counters->rx_mac_missed);
+		data[5] = le32_to_cpu(counters->align_errors32);
+		data[10] = le64_to_cpu(counters->rx_multicast64);
+		data[11] = le32_to_cpu(counters->tx_aborted32);
+		data[12] = le32_to_cpu(counters->tx_underrun32);
+	}
 }
 
 static void rtl8169_get_strings(struct net_device *dev, u32 stringset, u8 *data)
