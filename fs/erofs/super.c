@@ -700,16 +700,19 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 static int erofs_fc_get_tree(struct fs_context *fc)
 {
 	struct erofs_sb_info *sbi = fc->s_fs_info;
+	dev_t dev;
 	int ret;
 
 	if (IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) && sbi->fsid)
 		return get_tree_nodev(fc, erofs_fc_fill_super);
 
-	ret = get_tree_bdev(fc, erofs_fc_fill_super);
+	if (!fc->source)
+		return invalf(fc, "No source specified");
+	ret = lookup_bdev(fc->source, &dev);
+	if (!ret)
+		return get_tree_bdev_by_dev(fc, erofs_fc_fill_super, dev);
 #ifdef CONFIG_EROFS_FS_BACKED_BY_FILE
 	if (ret == -ENOTBLK) {
-		if (!fc->source)
-			return invalf(fc, "No source specified");
 		sbi->fdev = filp_open(fc->source, O_RDONLY | O_LARGEFILE, 0);
 		if (IS_ERR(sbi->fdev))
 			return PTR_ERR(sbi->fdev);
