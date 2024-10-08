@@ -277,7 +277,6 @@ static int lba_device_present(u8 bus, u8 dfn, struct lba_device *d)
  *		smart mode as well.
  */
 
-#define LBA_MASTER_ABORT_ERROR 0xc
 #define LBA_FATAL_ERROR 0x10
 
 #define LBA_CFG_MASTER_ABORT_CHECK(d, base, tok, error) {		\
