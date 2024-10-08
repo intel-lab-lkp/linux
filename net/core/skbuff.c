@@ -5539,6 +5539,21 @@ err:
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
+static bool bpf_skb_tstamp_tx(struct sock *sk, u32 scm_flag,
+			      struct skb_shared_hwtstamps *hwtstamps)
+{
+	struct tcp_sock *tp;
+
+	if (!sk_is_tcp(sk))
+		return false;
+
+	tp = tcp_sk(sk);
+	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG))
+		return true;
+
+	return false;
+}
+
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		     const struct sk_buff *ack_skb,
 		     struct skb_shared_hwtstamps *hwtstamps,
@@ -5549,6 +5564,9 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	u32 tsflags;
 
 	if (!sk)
+		return;
+
+	if (bpf_skb_tstamp_tx(sk, tstype, hwtstamps))
 		return;
 
 	tsflags = READ_ONCE(sk->sk_tsflags);
