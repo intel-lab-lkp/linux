@@ -539,7 +539,6 @@ static ssize_t ac_read (struct file *filp, char __user *buf, size_t count, loff_
 	unsigned long flags;
 	unsigned int i;
 	unsigned char tmp;
-	int ret = 0;
 	DECLARE_WAITQUEUE(wait, current);
 #ifdef DEBUG
 	int loopcount=0;
@@ -570,7 +569,7 @@ static ssize_t ac_read (struct file *filp, char __user *buf, size_t count, loff_
 
 				/* Got a packet for us */
 				memset(&st_loc, 0, sizeof(st_loc));
-				ret = do_ac_read(i, buf, &st_loc, &mailbox);
+				do_ac_read(i, buf, &st_loc, &mailbox);
 				spin_unlock_irqrestore(&apbs[i].mutex, flags);
 				set_current_state(TASK_RUNNING);
 				remove_wait_queue(&FlagSleepRec, &wait);
