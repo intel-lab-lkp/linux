@@ -49,6 +49,12 @@
 		interrupts-extended = <&pio 117 IRQ_TYPE_LEVEL_LOW>;
 		reg = <0x2c>;
 		hid-descr-addr = <0x0020>;
+		/*
+		 * The supply is always on. Adding the delay here
+		 * needlessly delays the readiness of the trackpad.
+		 */
+		/* post-power-on-delay-ms = <100>; */
+		vdd-supply = <&mt6397_vgp6_reg>;
 		wakeup-source;
 	};
 };
