@@ -4,6 +4,7 @@ menu "LPDDR & LPDDR2 PCM memory drivers"
 
 config MTD_LPDDR
 	tristate "Support for LPDDR flash chips"
+	depends on HAS_IOMEM || INDIRECT_IOMEM
 	select MTD_QINFO_PROBE
 	help
 	  This option enables support of LPDDR (Low power double data rate)
