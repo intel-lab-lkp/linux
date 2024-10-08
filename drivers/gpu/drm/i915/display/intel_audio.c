@@ -690,12 +690,11 @@ void intel_audio_sdp_split_update(const struct intel_crtc_state *crtc_state)
 			     crtc_state->sdp_split_enable ? AUD_ENABLE_SDP_SPLIT : 0);
 }
 
-bool intel_audio_compute_config(struct intel_encoder *encoder,
-				struct intel_crtc_state *crtc_state,
+bool intel_audio_compute_config(struct intel_crtc_state *crtc_state,
 				struct drm_connector_state *conn_state)
 {
-	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	struct drm_connector *connector = conn_state->connector;
+	struct drm_i915_private *i915 = to_i915(connector->dev);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 

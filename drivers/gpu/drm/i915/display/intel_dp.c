@@ -3001,7 +3001,7 @@ intel_dp_audio_compute_config(struct intel_encoder *encoder,
 {
 	pipe_config->has_audio =
 		intel_dp_has_audio(encoder, conn_state) &&
-		intel_audio_compute_config(encoder, pipe_config, conn_state);
+		intel_audio_compute_config(pipe_config, conn_state);
 
 	pipe_config->sdp_split_enable = pipe_config->has_audio &&
 					intel_dp_is_uhbr(pipe_config);
