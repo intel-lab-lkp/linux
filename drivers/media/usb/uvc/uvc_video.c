@@ -83,10 +83,10 @@ static int uvc_query_ctrl_error(struct uvc_device *dev, u8 intfnum, void *data)
 	error = *(u8 *)data;
 	*(u8 *)data = tmp;
 
+	uvc_dbg(dev, CONTROL, "Control error %u, ret %d\n", error, ret);
+
 	if (ret != 1)
 		return ret < 0 ? ret : -EPIPE;
-
-	uvc_dbg(dev, CONTROL, "Control error %u\n", error);
 
 	switch (error) {
 	case 0:
