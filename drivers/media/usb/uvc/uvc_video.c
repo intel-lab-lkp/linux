@@ -67,29 +67,11 @@ static const char *uvc_query_name(u8 query)
 	}
 }
 
-int uvc_query_ctrl(struct uvc_device *dev, u8 query, u8 unit,
-			u8 intfnum, u8 cs, void *data, u16 size)
+static int uvc_query_ctrl_error(struct uvc_device *dev, u8 intfnum, void *data)
 {
 	int ret;
 	u8 error;
 	u8 tmp;
-
-	ret = __uvc_query_ctrl(dev, query, unit, intfnum, cs, data, size,
-				UVC_CTRL_CONTROL_TIMEOUT);
-	if (likely(ret == size))
-		return 0;
-
-	if (ret > 0 && ret < size) {
-		memset(data + ret, 0, size - ret);
-		return 0;
-	}
-
-	if (ret != -EPIPE) {
-		dev_err(&dev->udev->dev,
-			"Failed to query (%s) UVC control %u on unit %u: %d (exp. %u).\n",
-			uvc_query_name(query), cs, unit, ret, size);
-		return ret ? ret : -EPIPE;
-	}
 
 	/* Reuse data[0] to request the error code. */
 	tmp = *(u8 *)data;
@@ -133,6 +115,31 @@ int uvc_query_ctrl(struct uvc_device *dev, u8 query, u8 unit,
 	}
 
 	return -EPIPE;
+}
+
+int uvc_query_ctrl(struct uvc_device *dev, u8 query, u8 unit,
+		   u8 intfnum, u8 cs, void *data, u16 size)
+{
+	int ret;
+
+	ret = __uvc_query_ctrl(dev, query, unit, intfnum, cs, data, size,
+			       UVC_CTRL_CONTROL_TIMEOUT);
+	if (likely(ret == size))
+		return 0;
+
+	if (ret == -EPIPE)
+		return uvc_query_ctrl_error(dev, intfnum, data);
+
+	dev_err(&dev->udev->dev,
+		"Failed to query (%s) UVC control %u on unit %u: %d (exp. %u).\n",
+		uvc_query_name(query), cs, unit, ret, size);
+
+	if (ret > 0 && ret < size) {
+		memset(data + ret, 0, size - ret);
+		return 0;
+	}
+
+	return ret ? ret : -EPIPE;
 }
 
 static const struct usb_device_id elgato_cam_link_4k = {
