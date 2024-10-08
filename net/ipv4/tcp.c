@@ -2276,6 +2276,16 @@ out:
 }
 #endif
 
+static bool tcp_bpf_recv_timestamp(struct sock *sk, struct scm_timestamping_internal *tss)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+
+	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_RX_TIMESTAMPING_OPT_CB_FLAG))
+		return true;
+
+	return false;
+}
+
 /* Similar to __sock_recv_timestamp, but does not require an skb */
 void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
 			struct scm_timestamping_internal *tss)
@@ -2283,6 +2293,9 @@ void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
 	int new_tstamp = sock_flag(sk, SOCK_TSTAMP_NEW);
 	u32 tsflags = READ_ONCE(sk->sk_tsflags);
 	bool has_timestamping = false;
+
+	if (tcp_bpf_recv_timestamp(sk, tss))
+		return;
 
 	if (tss->ts[0].tv_sec || tss->ts[0].tv_nsec) {
 		if (sock_flag(sk, SOCK_RCVTSTAMP)) {
