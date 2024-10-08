@@ -29,7 +29,6 @@
 #define LASI_VER	0xC008	/* LASI Version */
 
 #define LASI_IO_CONF	0x7FFFE	/* LASI primary configuration register */
-#define LASI_IO_CONF2	0x7FFFF	/* LASI secondary configuration register */
 
 static void lasi_choose_irq(struct parisc_device *dev, void *ctrl)
 {
