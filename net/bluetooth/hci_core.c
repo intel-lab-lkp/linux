@@ -3793,8 +3793,7 @@ static void hci_acldata_packet(struct hci_dev *hdev, struct sk_buff *skb)
 		l2cap_recv_acldata(conn, skb, flags);
 		return;
 	} else {
-		bt_dev_err(hdev, "ACL packet for unknown connection handle %d",
-			   handle);
+		bt_dev_err(hdev, "ACL packet for unknown connection handle");
 	}
 
 	kfree_skb(skb);
