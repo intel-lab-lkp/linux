@@ -5570,6 +5570,20 @@ intel_dp_detect_sdp_caps(struct intel_dp *intel_dp)
 		drm_dp_as_sdp_supported(&intel_dp->aux, intel_dp->dpcd);
 }
 
+static void
+intel_dp_check_edp_typec_supp(struct intel_encoder *encoder)
+{
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	bool is_tc_port = intel_encoder_is_tc(encoder);
+	u32 ret = 0;
+
+	if (encoder->type != INTEL_OUTPUT_EDP || !is_tc_port)
+		return;
+
+	ret = intel_de_read(i915, PICA_PHY_CONFIG_CONTROL);
+	encoder->typec_supp = ret & EDP_ON_TYPEC;
+}
+
 static int
 intel_dp_detect(struct drm_connector *connector,
 		struct drm_modeset_acquire_ctx *ctx,
@@ -5594,6 +5608,8 @@ intel_dp_detect(struct drm_connector *connector,
 
 	if (!intel_display_driver_check_access(dev_priv))
 		return connector->status;
+
+	intel_dp_check_edp_typec_supp(encoder);
 
 	/* Can't disconnect eDP */
 	if (intel_dp_is_edp(intel_dp))
