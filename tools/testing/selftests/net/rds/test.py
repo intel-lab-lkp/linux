@@ -14,8 +14,9 @@ import sys
 import atexit
 from pwd import getpwuid
 from os import stat
-from lib.py import ip
 
+sys.path.append("..")
+from lib.py.utils import ip
 
 libc = ctypes.cdll.LoadLibrary('libc.so.6')
 setns = libc.setns
