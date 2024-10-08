@@ -10,4 +10,17 @@
  * common definitions are already in linux/ftrace.h.
  */
 
+#ifndef CONFIG_HAVE_DYNAMIC_FTRACE_WITH_ARGS
+struct __arch_ftrace_regs {
+	struct pt_regs		regs;
+};
+
+#define arch_ftrace_get_regs(fregs)					\
+	({ struct __arch_fregs_regs *__f = (struct __arch_ftrace_regs *)(fregs); \
+		&__f->regs;						\
+	})
+
+struct ftrace_regs;
+#define arch_ftrace_regs(fregs) ((struct __arch_ftrace_regs *)(fregs))
+
 #endif /* __ASM_GENERIC_FTRACE_H__ */
