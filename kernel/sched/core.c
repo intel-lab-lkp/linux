@@ -1394,7 +1394,9 @@ void set_load_weight(struct task_struct *p, bool update_load)
  * requests are serialized using a mutex to reduce the risk of conflicting
  * updates or API abuses.
  */
+#if defined(CONFIG_UCLAMP_TASK_GROUP) || defined(CONFIG_SYSCTL)
 static DEFINE_MUTEX(uclamp_mutex);
+#endif
 
 /* Max allowed minimum utilization */
 static unsigned int __maybe_unused sysctl_sched_uclamp_util_min = SCHED_CAPACITY_SCALE;
