@@ -51,9 +51,21 @@ static inline unsigned long sgt_pfn(const struct remap_pfn *r)
 static int remap_sg(pte_t *pte, unsigned long addr, void *data)
 {
 	struct remap_pfn *r = data;
+	unsigned int sgt_offset;
 
 	if (GEM_WARN_ON(!r->sgt.sgp))
 		return -EINVAL;
+
+	if (r->sgt.curr == r->sgt.max) {
+		r->sgt = __sgt_iter(__sg_next(r->sgt.sgp), use_dma(r->iobase));
+	} else if (r->sgt.curr > r->sgt.max) {
+		sgt_offset = r->sgt.curr;
+		while (sgt_offset >= r->sgt.max) {
+			sgt_offset -= r->sgt.max;
+			r->sgt = __sgt_iter(__sg_next(r->sgt.sgp), use_dma(r->iobase));
+		}
+		r->sgt.curr = sgt_offset;
+	}
 
 	/* Special PTE are not associated with any struct page */
 	set_pte_at(r->mm, addr, pte,
