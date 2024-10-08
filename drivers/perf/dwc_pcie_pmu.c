@@ -782,6 +782,16 @@ static void __exit dwc_pcie_pmu_exit(void)
 module_init(dwc_pcie_pmu_init);
 module_exit(dwc_pcie_pmu_exit);
 
+static const struct pci_device_id dwc_pcie_pmu_table[] = {
+	{
+		PCI_DEVICE(PCI_VENDOR_ID_AMPERE, PCI_ANY_ID),
+		.class		= PCI_CLASS_BRIDGE_PCI_NORMAL,
+		.class_mask	= ~0,
+	},
+	{ }
+};
+MODULE_DEVICE_TABLE(pci, dwc_pcie_pmu_table);
+
 MODULE_DESCRIPTION("PMU driver for DesignWare Cores PCI Express Controller");
 MODULE_AUTHOR("Shuai Xue <xueshuai@linux.alibaba.com>");
 MODULE_LICENSE("GPL v2");
