@@ -147,45 +147,30 @@ bool __init acpi_gtdt_c3stop(int type)
  * @table:			The pointer to GTDT table.
  * @platform_timer_count:	It points to a integer variable which is used
  *				for storing the number of platform timers.
- *				This pointer could be NULL, if the caller
- *				doesn't need this info.
- *
- * Return: 0 if success, -EINVAL if error.
  */
-int __init acpi_gtdt_init(struct acpi_table_header *table,
+void __init acpi_gtdt_init(struct acpi_table_header *table,
 			  int *platform_timer_count)
 {
-	void *platform_timer;
 	struct acpi_table_gtdt *gtdt;
 
 	gtdt = container_of(table, struct acpi_table_gtdt, header);
 	acpi_gtdt_desc.gtdt = gtdt;
 	acpi_gtdt_desc.gtdt_end = (void *)table + table->length;
 	acpi_gtdt_desc.platform_timer = NULL;
-	if (platform_timer_count)
-		*platform_timer_count = 0;
 
 	if (table->revision < 2) {
 		pr_warn("Revision:%d doesn't support Platform Timers.\n",
 			table->revision);
-		return 0;
+		return;
 	}
 
 	if (!gtdt->platform_timer_count) {
 		pr_debug("No Platform Timer.\n");
-		return 0;
+		return;
 	}
 
-	platform_timer = (void *)gtdt + gtdt->platform_timer_offset;
-	if (platform_timer < (void *)table + sizeof(struct acpi_table_gtdt)) {
-		pr_err(FW_BUG "invalid timer data.\n");
-		return -EINVAL;
-	}
-	acpi_gtdt_desc.platform_timer = platform_timer;
-	if (platform_timer_count)
-		*platform_timer_count = gtdt->platform_timer_count;
-
-	return 0;
+	acpi_gtdt_desc.platform_timer = (void *)gtdt + gtdt->platform_timer_offset;
+	*platform_timer_count = gtdt->platform_timer_count;
 }
 
 static int __init gtdt_parse_timer_block(struct acpi_gtdt_timer_block *block,
@@ -377,7 +362,7 @@ static int __init gtdt_sbsa_gwdt_init(void)
 {
 	void *platform_timer;
 	struct acpi_table_header *table;
-	int ret, timer_count, gwdt_count = 0;
+	int ret = 0, timer_count = 0, gwdt_count = 0;
 
 	if (acpi_disabled)
 		return 0;
@@ -394,8 +379,8 @@ static int __init gtdt_sbsa_gwdt_init(void)
 	 * to re-initialize them with permanent mapped pointer values to let the
 	 * GTDT parsing possible.
 	 */
-	ret = acpi_gtdt_init(table, &timer_count);
-	if (ret || !timer_count)
+	acpi_gtdt_init(table, &timer_count);
+	if (!timer_count)
 		goto out_put_gtdt;
 
 	for_each_platform_timer(platform_timer) {
