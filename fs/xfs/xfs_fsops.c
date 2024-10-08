@@ -81,6 +81,33 @@ xfs_resizefs_init_new_ags(
 }
 
 /*
+ * Calculate new AG count based on provided AG size. May adjust final nblocks
+ * count if necessary for a valid AG count.
+ */
+static xfs_agnumber_t
+xfs_growfs_calc_agcount(
+	struct xfs_mount	*mp,
+	xfs_agblock_t		nagblocks,
+	xfs_rfsblock_t		*nblocks)
+{
+	xfs_rfsblock_t		nb_div, nb_mod;
+
+	nb_div = *nblocks;
+	nb_mod = do_div(nb_div, nagblocks);
+	if (nb_mod && nb_mod >= XFS_MIN_AG_BLOCKS)
+		nb_div++;
+	else if (nb_mod)
+		*nblocks = nb_div * nagblocks;
+
+	if (nb_div > XFS_MAX_AGNUMBER + 1) {
+		nb_div = XFS_MAX_AGNUMBER + 1;
+		*nblocks = nb_div * nagblocks;
+	}
+
+	return nb_div;
+}
+
+/*
  * growfs operations
  */
 static int
@@ -93,7 +120,7 @@ xfs_growfs_data_private(
 	xfs_agblock_t		nagblocks;
 	xfs_agnumber_t		nagcount;
 	xfs_agnumber_t		nagimax = 0;
-	xfs_rfsblock_t		nb, nb_div, nb_mod;
+	xfs_rfsblock_t		nb;
 	int64_t			delta;
 	bool			lastag_extended = false;
 	xfs_agnumber_t		oagcount;
@@ -117,18 +144,7 @@ xfs_growfs_data_private(
 
 	nagblocks = mp->m_sb.sb_agblocks;
 
-	nb_div = nb;
-	nb_mod = do_div(nb_div, nagblocks);
-	if (nb_mod && nb_mod >= XFS_MIN_AG_BLOCKS)
-		nb_div++;
-	else if (nb_mod)
-		nb = nb_div * nagblocks;
-
-	if (nb_div > XFS_MAX_AGNUMBER + 1) {
-		nb_div = XFS_MAX_AGNUMBER + 1;
-		nb = nb_div * nagblocks;
-	}
-	nagcount = nb_div;
+	nagcount = xfs_growfs_calc_agcount(mp, nagblocks, &nb);
 	delta = nb - mp->m_sb.sb_dblocks;
 	/*
 	 * Reject filesystems with a single AG because they are not
