@@ -60,10 +60,12 @@
  * struct llcc_slice_desc - Cache slice descriptor
  * @slice_id: llcc slice id
  * @slice_size: Size allocated for the llcc slice
+ * @refcount: Counter to track activate/deactivate slice count
  */
 struct llcc_slice_desc {
 	u32 slice_id;
 	size_t slice_size;
+	atomic_t refcount;
 };
 
 /**
@@ -126,6 +128,7 @@ struct llcc_edac_reg_offset {
  * @bitmap: Bit map to track the active slice ids
  * @ecc_irq: interrupt for llcc cache error detection and reporting
  * @version: Indicates the LLCC version
+ * @desc: Array pointer of llcc_slice_desc
  */
 struct llcc_drv_data {
 	struct regmap **regmaps;
@@ -140,6 +143,7 @@ struct llcc_drv_data {
 	unsigned long *bitmap;
 	int ecc_irq;
 	u32 version;
+	struct llcc_slice_desc *desc;
 };
 
 #if IS_ENABLED(CONFIG_QCOM_LLCC)
