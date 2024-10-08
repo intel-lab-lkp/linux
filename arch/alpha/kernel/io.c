@@ -481,7 +481,7 @@ EXPORT_SYMBOL(outsl);
  * Copy data from IO memory space to "real" memory space.
  * This needs to be optimized.
  */
-void memcpy_fromio(void *to, const volatile void __iomem *from, long count)
+void memcpy_fromio(void *to, const volatile void __iomem *from, size_t count)
 {
 	/* Optimize co-aligned transfers.  Everything else gets handled
 	   a byte at a time. */
@@ -535,7 +535,7 @@ EXPORT_SYMBOL(memcpy_fromio);
  * Copy data from "real" memory space to IO memory space.
  * This needs to be optimized.
  */
-void memcpy_toio(volatile void __iomem *to, const void *from, long count)
+void memcpy_toio(volatile void __iomem *to, const void *from, size_t count)
 {
 	/* Optimize co-aligned transfers.  Everything else gets handled
 	   a byte at a time. */

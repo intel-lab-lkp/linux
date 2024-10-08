@@ -591,13 +591,11 @@ extern inline u64 readq_relaxed(const volatile void __iomem *addr)
 /*
  * String version of IO memory access ops:
  */
-extern void memcpy_fromio(void *, const volatile void __iomem *, long);
-extern void memcpy_toio(volatile void __iomem *, const void *, long);
 extern void _memset_c_io(volatile void __iomem *, unsigned long, long);
 
-static inline void memset_io(volatile void __iomem *addr, u8 c, long len)
+static inline void memset_io(volatile void __iomem *dst, int c, size_t count)
 {
-	_memset_c_io(addr, 0x0101010101010101UL * c, len);
+	_memset_c_io(dst, 0x0101010101010101UL * (c & 0xff), count);
 }
 
 #define __HAVE_ARCH_MEMSETW_IO
