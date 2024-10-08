@@ -230,7 +230,7 @@ static void pcipcwd_show_card_info(void)
 	got_fw_rev = send_command(CMD_GET_FIRMWARE_VERSION, &fw_rev_major,
 								&fw_rev_minor);
 	if (got_fw_rev)
-		sprintf(fw_ver_str, "%u.%02u", fw_rev_major, fw_rev_minor);
+		sprintf(fw_ver_str, "%d.%02d", fw_rev_major, fw_rev_minor);
 	else
 		sprintf(fw_ver_str, "<card no answer>");
 
