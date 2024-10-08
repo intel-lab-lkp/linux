@@ -202,6 +202,26 @@ static int mlx4_en_phc_gettime(struct ptp_clock_info *ptp,
 	return 0;
 }
 
+static int mlx4_en_phc_gettimex(struct ptp_clock_info *ptp,
+				struct timespec64 *ts,
+				struct ptp_system_timestamp *sts)
+{
+	struct mlx4_en_dev *mdev = container_of(ptp, struct mlx4_en_dev,
+						ptp_clock_info);
+	unsigned long flags;
+	u64 ns;
+
+	write_seqlock_irqsave(&mdev->clock_lock, flags);
+	/* refresh the clock_cache but get the pre/post ts */
+	mlx4_en_read_clock(mdev, sts);
+	ns = timecounter_read(&mdev->clock);
+	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
+
+	*ts = ns_to_timespec64(ns);
+
+	return 0;
+}
+
 /**
  * mlx4_en_phc_settime - Set the current time on the hardware clock
  * @ptp: ptp clock structure
@@ -255,6 +275,7 @@ static const struct ptp_clock_info mlx4_en_ptp_clock_info = {
 	.adjfine	= mlx4_en_phc_adjfine,
 	.adjtime	= mlx4_en_phc_adjtime,
 	.gettime64	= mlx4_en_phc_gettime,
+	.gettimex64	= mlx4_en_phc_gettimex,
 	.settime64	= mlx4_en_phc_settime,
 	.enable		= mlx4_en_phc_enable,
 };
