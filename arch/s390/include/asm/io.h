@@ -58,10 +58,6 @@ static inline void ioport_unmap(void __iomem *p)
 #define pci_iomap_wc pci_iomap_wc
 #define pci_iomap_wc_range pci_iomap_wc_range
 
-#define memcpy_fromio(dst, src, count)	zpci_memcpy_fromio(dst, src, count)
-#define memcpy_toio(dst, src, count)	zpci_memcpy_toio(dst, src, count)
-#define memset_io(dst, val, count)	zpci_memset_io(dst, val, count)
-
 #define mmiowb()	zpci_barrier()
 
 #define __raw_readb	zpci_read_u8
@@ -72,6 +68,10 @@ static inline void ioport_unmap(void __iomem *p)
 #define __raw_writew	zpci_write_u16
 #define __raw_writel	zpci_write_u32
 #define __raw_writeq	zpci_write_u64
+
+#define memcpy_fromio memcpy_fromio
+#define memcpy_toio memcpy_toio
+#define memset_io memset_io
 
 /* combine single writes by using store-block insn */
 static inline void __iowrite32_copy(void __iomem *to, const void *from,
@@ -87,6 +87,25 @@ static inline void __iowrite64_copy(void __iomem *to, const void *from,
 	zpci_memcpy_toio(to, from, count * 8);
 }
 #define __iowrite64_copy __iowrite64_copy
+
+static inline void memcpy_fromio(void *dst, const volatile void __iomem *src,
+			    size_t n)
+{
+	zpci_memcpy_fromio(dst, src, n);
+}
+
+static inline void memcpy_toio(volatile void __iomem *dst,
+			      const void *src, size_t n)
+{
+	zpci_memcpy_toio(dst, src, n);
+}
+
+static inline void memset_io(volatile void __iomem *dst,
+			    int val, size_t count)
+{
+	zpci_memset_io(dst, val, count);
+}
+
 
 #endif /* CONFIG_PCI */
 
