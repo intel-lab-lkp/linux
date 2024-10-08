@@ -6801,6 +6801,7 @@ qlt_24xx_process_atio_queue(struct scsi_qla_host *vha, uint8_t ha_locked)
 	struct qla_hw_data *ha = vha->hw;
 	struct atio_from_isp *pkt;
 	int cnt, i;
+	unsigned long flags = 0;
 
 	if (!ha->flags.fw_started)
 		return;
@@ -6826,6 +6827,16 @@ qlt_24xx_process_atio_queue(struct scsi_qla_host *vha, uint8_t ha_locked)
 			qlt_send_term_exchange(ha->base_qpair, NULL, pkt,
 			    ha_locked, 0);
 		} else {
+			/*
+			 * If we get correct ATIO, then HBA had enough memory
+			 * to proceed without reset.
+			 */
+			if (!ha_locked)
+				spin_lock_irqsave(&ha->hardware_lock, flags);
+			vha->hw->exch_starvation = 0;
+			if (!ha_locked)
+				spin_unlock_irqrestore(&ha->hardware_lock, flags);
+
 			qlt_24xx_atio_pkt_all_vps(vha,
 			    (struct atio_from_isp *)pkt, ha_locked);
 		}
