@@ -685,6 +685,12 @@ enum ufshcd_quirks {
 	 * single doorbell mode.
 	 */
 	UFSHCD_QUIRK_BROKEN_LSDBS_CAP			= 1 << 25,
+
+	/*
+	 * This quirks needs to be enabled if host controller need to
+	 * do dme_reset and dme_enable after hce.
+	 */
+	UFSHCI_QUIRK_DME_RESET_ENABLE_AFTER_HCE		= 1 << 26,
 };
 
 enum ufshcd_caps {
