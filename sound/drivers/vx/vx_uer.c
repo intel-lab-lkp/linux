@@ -12,7 +12,6 @@
 #include <sound/vx_core.h>
 #include "vx_cmd.h"
 
-
 /*
  * vx_modify_board_clock - tell the board that its clock has been modified
  * @sync: DSP needs to resynchronize its FIFO
@@ -127,7 +126,6 @@ static int vx_read_uer_status(struct vx_core *chip, unsigned int *mode)
 	return freq;
 }
 
-
 /*
  * compute the sample clock value from frequency
  *
@@ -144,7 +142,6 @@ static int vx_read_uer_status(struct vx_core *chip, unsigned int *mode)
  *    case 0x00000700: HexFreq = (dword) (((double) 28224000 / (double) (Frequency*2)) - 1)
  *    default        : HexFreq = (dword) ((double) 28224000 / (double) (Frequency*4)) - 0x000001FF
  */
-
 static int vx_calc_clock_from_freq(struct vx_core *chip, int freq)
 {
 	int hexfreq;
@@ -169,7 +166,6 @@ static int vx_calc_clock_from_freq(struct vx_core *chip, int freq)
 	return 0x5fe; 	/* min freq = 6893 Hz */
 }
 
-
 /*
  * vx_change_clock_source - change the clock source
  * @source: the new source
@@ -185,7 +181,6 @@ static void vx_change_clock_source(struct vx_core *chip, int source)
 	/* unmute */
 	vx_toggle_dac_mute(chip, 0);
 }
-
 
 /*
  * set the internal clock
@@ -209,7 +204,6 @@ void vx_set_internal_clock(struct vx_core *chip, unsigned int freq)
 	mutex_unlock(&chip->lock);
 }
 
-
 /*
  * set the iec958 status bits
  * @bits: 32-bit status bits
@@ -224,7 +218,6 @@ void vx_set_iec958_status(struct vx_core *chip, unsigned int bits)
 	for (i = 0; i < 32; i++)
 		vx_write_one_cbit(chip, i, bits & (1 << i));
 }
-
 
 /*
  * vx_set_clock - change the clock and audio source if necessary
@@ -266,7 +259,6 @@ int vx_set_clock(struct vx_core *chip, unsigned int freq)
 	vx_modify_board_clock(chip, 1);
 	return 0;
 }
-
 
 /*
  * vx_change_frequency - called from interrupt handler
