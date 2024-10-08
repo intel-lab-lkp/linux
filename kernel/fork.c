@@ -150,6 +150,9 @@ DEFINE_PER_CPU(unsigned long, process_counts) = 0;
 
 __cacheline_aligned DEFINE_RWLOCK(tasklist_lock);  /* outer */
 
+/* Sched lazy mm hazard pointer domain. */
+DEFINE_HAZPTR_DOMAIN(hazptr_domain_sched_lazy_mm);
+
 #ifdef CONFIG_PROVE_RCU
 int lockdep_tasklist_lock_is_held(void)
 {
@@ -856,50 +859,24 @@ static void do_shoot_lazy_tlb(void *arg)
 		WARN_ON_ONCE(current->mm);
 		current->active_mm = &init_mm;
 		switch_mm(mm, &init_mm, current);
+		this_cpu_write(hazptr_domain_sched_lazy_mm.percpu_slots->addr, NULL);
 	}
+}
+
+static void remove_lazy_mm_hp(int cpu, struct hazptr_slot *slot, void *addr)
+{
+	smp_call_function_single(cpu, do_shoot_lazy_tlb, addr, 1);
+	smp_call_function_single(cpu, do_check_lazy_tlb, addr, 1);
 }
 
 static void cleanup_lazy_tlbs(struct mm_struct *mm)
 {
-	if (!IS_ENABLED(CONFIG_MMU_LAZY_TLB_SHOOTDOWN)) {
-		/*
-		 * In this case, lazy tlb mms are refounted and would not reach
-		 * __mmdrop until all CPUs have switched away and mmdrop()ed.
-		 */
-		return;
-	}
-
 	/*
-	 * Lazy mm shootdown does not refcount "lazy tlb mm" usage, rather it
-	 * requires lazy mm users to switch to another mm when the refcount
+	 * Require lazy mm users to switch to another mm when the refcount
 	 * drops to zero, before the mm is freed. This requires IPIs here to
 	 * switch kernel threads to init_mm.
-	 *
-	 * archs that use IPIs to flush TLBs can piggy-back that lazy tlb mm
-	 * switch with the final userspace teardown TLB flush which leaves the
-	 * mm lazy on this CPU but no others, reducing the need for additional
-	 * IPIs here. There are cases where a final IPI is still required here,
-	 * such as the final mmdrop being performed on a different CPU than the
-	 * one exiting, or kernel threads using the mm when userspace exits.
-	 *
-	 * IPI overheads have not found to be expensive, but they could be
-	 * reduced in a number of possible ways, for example (roughly
-	 * increasing order of complexity):
-	 * - The last lazy reference created by exit_mm() could instead switch
-	 *   to init_mm, however it's probable this will run on the same CPU
-	 *   immediately afterwards, so this may not reduce IPIs much.
-	 * - A batch of mms requiring IPIs could be gathered and freed at once.
-	 * - CPUs store active_mm where it can be remotely checked without a
-	 *   lock, to filter out false-positives in the cpumask.
-	 * - After mm_users or mm_count reaches zero, switching away from the
-	 *   mm could clear mm_cpumask to reduce some IPIs, perhaps together
-	 *   with some batching or delaying of the final IPIs.
-	 * - A delayed freeing and RCU-like quiescing sequence based on mm
-	 *   switching to avoid IPIs completely.
 	 */
-	on_each_cpu_mask(mm_cpumask(mm), do_shoot_lazy_tlb, (void *)mm, 1);
-	if (IS_ENABLED(CONFIG_DEBUG_VM_SHOOT_LAZIES))
-		on_each_cpu(do_check_lazy_tlb, (void *)mm, 1);
+	hazptr_scan(&hazptr_domain_sched_lazy_mm, mm, remove_lazy_mm_hp);
 }
 
 /*

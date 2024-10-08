@@ -545,8 +545,6 @@ static void exit_mm(void)
 	if (!mm)
 		return;
 	mmap_read_lock(mm);
-	mmgrab_lazy_tlb(mm);
-	BUG_ON(mm != current->active_mm);
 	/* more a memory barrier than a real lock */
 	task_lock(current);
 	/*
@@ -561,6 +559,8 @@ static void exit_mm(void)
 	 */
 	smp_mb__after_spinlock();
 	local_irq_disable();
+	mmgrab_lazy_tlb(mm);
+	BUG_ON(mm != current->active_mm);
 	current->mm = NULL;
 	membarrier_update_current_mm(NULL);
 	enter_lazy_tlb(mm, current);
