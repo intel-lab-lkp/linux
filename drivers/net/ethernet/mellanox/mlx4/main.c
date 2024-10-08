@@ -43,6 +43,7 @@
 #include <linux/io-mapping.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
+#include <linux/ptp_clock_kernel.h>
 #include <net/devlink.h>
 
 #include <uapi/rdma/mlx4-abi.h>
@@ -1925,7 +1926,7 @@ static void unmap_bf_area(struct mlx4_dev *dev)
 		io_mapping_free(mlx4_priv(dev)->bf_mapping);
 }
 
-u64 mlx4_read_clock(struct mlx4_dev *dev)
+u64 mlx4_read_clock(struct mlx4_dev *dev, struct ptp_system_timestamp *sts)
 {
 	u32 clockhi, clocklo, clockhi1;
 	u64 cycles;
@@ -1933,7 +1934,13 @@ u64 mlx4_read_clock(struct mlx4_dev *dev)
 	struct mlx4_priv *priv = mlx4_priv(dev);
 
 	for (i = 0; i < 10; i++) {
-		clockhi = swab32(readl(priv->clock_mapping));
+		if (sts) {
+			ptp_read_system_prets(sts);
+			clockhi = swab32(readl(priv->clock_mapping));
+			ptp_read_system_postts(sts);
+		} else {
+			clockhi = swab32(readl(priv->clock_mapping));
+		}
 		clocklo = swab32(readl(priv->clock_mapping + 4));
 		clockhi1 = swab32(readl(priv->clock_mapping));
 		if (clockhi == clockhi1)
@@ -1945,7 +1952,6 @@ u64 mlx4_read_clock(struct mlx4_dev *dev)
 	return cycles;
 }
 EXPORT_SYMBOL_GPL(mlx4_read_clock);
-
 
 static int map_internal_clock(struct mlx4_dev *dev)
 {

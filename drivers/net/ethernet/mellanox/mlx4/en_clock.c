@@ -36,15 +36,23 @@
 
 #include "mlx4_en.h"
 
-/* mlx4_en_read_clock - read raw cycle counter (to be used by time counter)
+/* mlx4_en_read_clock_cache - read cached raw cycle counter (to be
+ * used by time counter)
  */
-static u64 mlx4_en_read_clock(const struct cyclecounter *tc)
+static u64 mlx4_en_read_clock_cache(const struct cyclecounter *tc)
 {
 	struct mlx4_en_dev *mdev =
 		container_of(tc, struct mlx4_en_dev, cycles);
-	struct mlx4_dev *dev = mdev->dev;
 
-	return mlx4_read_clock(dev) & tc->mask;
+	return READ_ONCE(mdev->clock_cache) & tc->mask;
+}
+
+static void mlx4_en_read_clock(struct mlx4_en_dev *mdev,
+			       struct ptp_system_timestamp *sts)
+{
+	u64 cycles = mlx4_read_clock(mdev->dev, sts);
+
+	WRITE_ONCE(mdev->clock_cache, cycles);
 }
 
 u64 mlx4_en_get_cqe_ts(struct mlx4_cqe *cqe)
@@ -109,6 +117,9 @@ void mlx4_en_ptp_overflow_check(struct mlx4_en_dev *mdev)
 
 	if (timeout) {
 		write_seqlock_irqsave(&mdev->clock_lock, flags);
+		/* refresh the clock_cache */
+		mlx4_en_read_clock(mdev, NULL);
+
 		timecounter_read(&mdev->clock);
 		write_sequnlock_irqrestore(&mdev->clock_lock, flags);
 		mdev->last_overflow_check = jiffies;
@@ -135,6 +146,8 @@ static int mlx4_en_phc_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 	mult = (u32)adjust_by_scaled_ppm(mdev->nominal_c_mult, scaled_ppm);
 
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
+	/* refresh the clock_cache */
+	mlx4_en_read_clock(mdev, NULL);
 	timecounter_read(&mdev->clock);
 	mdev->cycles.mult = mult;
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
@@ -179,6 +192,8 @@ static int mlx4_en_phc_gettime(struct ptp_clock_info *ptp,
 	u64 ns;
 
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
+	/* refresh the clock_cache */
+	mlx4_en_read_clock(mdev, NULL);
 	ns = timecounter_read(&mdev->clock);
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
 
@@ -205,6 +220,8 @@ static int mlx4_en_phc_settime(struct ptp_clock_info *ptp,
 
 	/* reset the timecounter */
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
+	/* refresh the clock_cache */
+	mlx4_en_read_clock(mdev, NULL);
 	timecounter_init(&mdev->clock, &mdev->cycles, ns);
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
 
@@ -273,7 +290,7 @@ void mlx4_en_init_timestamp(struct mlx4_en_dev *mdev)
 	seqlock_init(&mdev->clock_lock);
 
 	memset(&mdev->cycles, 0, sizeof(mdev->cycles));
-	mdev->cycles.read = mlx4_en_read_clock;
+	mdev->cycles.read = mlx4_en_read_clock_cache;
 	mdev->cycles.mask = CLOCKSOURCE_MASK(48);
 	mdev->cycles.shift = freq_to_shift(dev->caps.hca_core_clock);
 	mdev->cycles.mult =
@@ -281,6 +298,8 @@ void mlx4_en_init_timestamp(struct mlx4_en_dev *mdev)
 	mdev->nominal_c_mult = mdev->cycles.mult;
 
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
+	/* initialize the clock_cache */
+	mlx4_en_read_clock(mdev, NULL);
 	timecounter_init(&mdev->clock, &mdev->cycles,
 			 ktime_to_ns(ktime_get_real()));
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
