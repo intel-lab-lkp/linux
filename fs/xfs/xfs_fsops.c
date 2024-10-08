@@ -108,6 +108,64 @@ xfs_growfs_calc_agcount(
 }
 
 /*
+ * Calculate post-grow AG size. AG size remains unchanged for everything other
+ * than agcount=1 filesystems with no format time alignment constraints.
+ *
+ * Otherwise, agcount=1 implies an "image mode" filesystem is being deployed and
+ * grown. To help prevent tiny AG size filesystems from being grown to excessive
+ * AG counts, we have the ability to extend the AG size before growing the
+ * physical size of the fs. The objective is to set a reasonable enough size to
+ * end up with multiple AGs for metadata redundancy.
+ */
+#define XFS_AGSIZE_THRESHOLD	(4ULL << 30)	/* 4GB */
+static xfs_agblock_t
+xfs_growfs_calc_agblocks(
+	struct xfs_mount	*mp,
+	xfs_rfsblock_t		nblocks)
+{
+	xfs_agblock_t		nagblocks = XFS_B_TO_FSB(mp, XFS_AGSIZE_THRESHOLD);
+
+	if (mp->m_sb.sb_agcount > 1 || mp->m_sb.sb_unit ||
+	    mp->m_sb.sb_agblocks >= nagblocks)
+		return mp->m_sb.sb_agblocks;
+
+	/*
+	 * This is a sample image mode growfs heuristic that reuses the 4GB
+	 * threshold from mkfs concurrency logic as a minimum AG size. AG size
+	 * is set to the maximum of 4GB or 25% of the target grow size. IOW,
+	 * filesystems remain single AG until grown to at least 4GB plus the
+	 * minimum number of blocks required to create a runt second AG. The AG
+	 * size is grown larger for grows beyond the 16GB (4 x 4GB AGs) total
+	 * size threshold to target typical 4xAG mkfs time geometry.
+	 *
+	 * The end result is that grows from tiny to very large end up with a
+	 * more typical geometry. Smaller grows may not, but the 4GB minimum AG
+	 * size prevents the situation of growing MB sized AGs to pathological
+	 * AG counts.
+	 *
+	 * XXX: We need to decide how to handle filesystems that remain single
+	 * AG after grow. It should be rare enough to grow a filesystem to a
+	 * sub-4GB size that we may not have to be too paranoid about it, but a
+	 * warning or kernel message is probably warranted at minimum.
+	 */
+	if (nblocks < (nagblocks + XFS_MIN_AG_BLOCKS)) {
+		/* grow too small, remain single AG */
+		nagblocks = nblocks;
+	} else {
+		/*
+		 * Enough space for at least a runt second AG. Use the larger of
+		 * 25% of the new target size and the threshold size.
+		 */
+		do_div(nblocks, 4);
+		nagblocks = max_t(xfs_rfsblock_t, nagblocks, nblocks);
+	}
+
+	/* clamp to current ag size and max allowed */
+	nagblocks = min_t(xfs_rfsblock_t, nagblocks, XFS_B_TO_FSB(mp, XFS_MAX_AG_BYTES));
+	return max_t(xfs_rfsblock_t, nagblocks, mp->m_sb.sb_agblocks);
+}
+
+/*
  * growfs operations
  */
 static int
@@ -117,7 +175,7 @@ xfs_growfs_data_private(
 {
 	struct xfs_buf		*bp;
 	int			error;
-	xfs_agblock_t		nagblocks;
+	xfs_agblock_t		oagblocks, nagblocks;
 	xfs_agnumber_t		nagcount;
 	xfs_agnumber_t		nagimax = 0;
 	xfs_rfsblock_t		nb;
@@ -142,7 +200,9 @@ xfs_growfs_data_private(
 		xfs_buf_relse(bp);
 	}
 
-	nagblocks = mp->m_sb.sb_agblocks;
+	oagcount = mp->m_sb.sb_agcount;
+	oagblocks = mp->m_sb.sb_agblocks;
+	nagblocks = xfs_growfs_calc_agblocks(mp, nb);
 
 	nagcount = xfs_growfs_calc_agcount(mp, nagblocks, &nb);
 	delta = nb - mp->m_sb.sb_dblocks;
@@ -158,7 +218,30 @@ xfs_growfs_data_private(
 	if (delta == 0)
 		return 0;
 
-	oagcount = mp->m_sb.sb_agcount;
+	/*
+	 * Grow agblocks in a separate transaction to ensure that the
+	 * subsequent grow transaction sees the updated superblock. We only
+	 * grow agblocks for single AG filesystems where an outsized AG size is
+	 * harmless, so this doesn't necessarily need to be atomic with the
+	 * broader growfs operation.
+	 *
+	 * Nonetheless, this is included here mainly for prototyping
+	 * convenience. We might want to consider splitting this off into a
+	 * separate FSGROWFSAG operation, but that's open for discussion.
+	 * Single AG fs' may also be exclusive enough to handle here as such.
+	 */
+	if (nagblocks > oagblocks) {
+		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_growdata,
+				XFS_GROWFS_SPACE_RES(mp), 0, XFS_TRANS_RESERVE,
+				&tp);
+		xfs_trans_mod_sb(tp, XFS_TRANS_SB_AGBLOCKS, nagblocks - oagblocks);
+		xfs_trans_set_sync(tp);
+		error = xfs_trans_commit(tp);
+		if (error)
+			return error;
+		oagblocks = nagblocks;
+	}
+
 	/* allocate the new per-ag structures */
 	if (nagcount > oagcount) {
 		error = xfs_initialize_perag(mp, nagcount, nb, &nagimax);
