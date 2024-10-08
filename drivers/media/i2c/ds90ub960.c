@@ -403,6 +403,7 @@
 #define UB960_NUM_EQ_LEVELS (UB960_MAX_EQ_LEVEL - UB960_MIN_EQ_LEVEL + 1)
 
 enum chip_type {
+	UB954,
 	UB960,
 	UB9702,
 };
@@ -815,6 +816,10 @@ static int ub960_txport_select(struct ub960_data *priv, u8 nport)
 
 	lockdep_assert_held(&priv->reg_lock);
 
+	/* TX port registers is shared for UB954 */
+	if (priv->hw_data->chip_type == UB954)
+		return 0;
+
 	if (priv->reg_current.txport == nport)
 		return 0;
 
@@ -1157,10 +1162,18 @@ static int ub960_parse_dt_txport(struct ub960_data *priv,
 	priv->tx_link_freq[0] = vep.link_frequencies[0];
 	priv->tx_data_rate = priv->tx_link_freq[0] * 2;
 
-	if (priv->tx_data_rate != MHZ(1600) &&
-	    priv->tx_data_rate != MHZ(1200) &&
-	    priv->tx_data_rate != MHZ(800) &&
-	    priv->tx_data_rate != MHZ(400)) {
+	switch (priv->tx_data_rate) {
+	case MHZ(1600):
+	case MHZ(800):
+	case MHZ(400):
+		break;
+	case MHZ(1200):
+		/* UB954 does not support 1.2 Gbps */
+		if ((priv->hw_data->chip_type == UB960) ||
+		    (priv->hw_data->chip_type == UB9702))
+			break;
+		fallthrough;
+	default:
 		dev_err(dev, "tx%u: invalid 'link-frequencies' value\n", nport);
 		ret = -EINVAL;
 		goto err_free_vep;
@@ -1310,6 +1323,10 @@ static void ub960_rxport_set_strobe_pos(struct ub960_data *priv,
 					unsigned int nport, s8 strobe_pos)
 {
 	u8 clk_delay, data_delay;
+
+	/* FIXME: After writing to this area the UB954 chip no longer responds */
+	if (priv->hw_data->chip_type == UB954)
+		return;
 
 	clk_delay = UB960_IR_RX_ANA_STROBE_SET_CLK_NO_EXTRA_DELAY;
 	data_delay = UB960_IR_RX_ANA_STROBE_SET_DATA_NO_EXTRA_DELAY;
@@ -3853,6 +3870,9 @@ static int ub960_enable_core_hw(struct ub960_data *priv)
 	}
 
 	switch (priv->hw_data->chip_type) {
+	case UB954:
+		model = "UB954";
+		break;
 	case UB960:
 		model = "UB960";
 		break;
@@ -3873,6 +3893,27 @@ static int ub960_enable_core_hw(struct ub960_data *priv)
 	ret = ub960_read(priv, UB960_XR_REFCLK_FREQ, &refclk_freq);
 	if (ret)
 		goto err_pd_gpio;
+
+	if (priv->hw_data->chip_type == UB954) {
+		/* From DS90UB954-Q1 datasheet:
+		 * "REFCLK_FREQ measurement is not synchronized. Value in this
+		 * register should read twice and only considered valid if
+		 * REFCLK_FREQ is unchanged between reads."
+		 */
+		unsigned long timeout = jiffies + msecs_to_jiffies(100);
+
+		do {
+			u8 refclk_new;
+
+			ret = ub960_read(priv, UB960_XR_REFCLK_FREQ, &refclk_new);
+			if (ret)
+				goto err_pd_gpio;
+
+			if (refclk_new == refclk_freq)
+				break;
+			refclk_freq = refclk_new;
+		} while (time_before(jiffies, timeout));
+	}
 
 	dev_dbg(dev, "refclk valid %u freq %u MHz (clk fw freq %lu MHz)\n",
 		!!(dev_sts & BIT(4)), refclk_freq,
@@ -4045,6 +4086,13 @@ static void ub960_remove(struct i2c_client *client)
 	mutex_destroy(&priv->reg_lock);
 }
 
+static const struct ub960_hw_data ds90ub954_hw = {
+	.chip_type = UB954,
+	.chip_family = FAMILY_FPD3,
+	.num_rxports = 2,
+	.num_txports = 1,
+};
+
 static const struct ub960_hw_data ds90ub960_hw = {
 	.chip_type = UB960,
 	.chip_family = FAMILY_FPD3,
@@ -4060,6 +4108,7 @@ static const struct ub960_hw_data ds90ub9702_hw = {
 };
 
 static const struct i2c_device_id ub960_id[] = {
+	{ "ds90ub954-q1", (kernel_ulong_t)&ds90ub954_hw },
 	{ "ds90ub960-q1", (kernel_ulong_t)&ds90ub960_hw },
 	{ "ds90ub9702-q1", (kernel_ulong_t)&ds90ub9702_hw },
 	{}
@@ -4067,6 +4116,7 @@ static const struct i2c_device_id ub960_id[] = {
 MODULE_DEVICE_TABLE(i2c, ub960_id);
 
 static const struct of_device_id ub960_dt_ids[] = {
+	{ .compatible = "ti,ds90ub954-q1", .data = &ds90ub954_hw },
 	{ .compatible = "ti,ds90ub960-q1", .data = &ds90ub960_hw },
 	{ .compatible = "ti,ds90ub9702-q1", .data = &ds90ub9702_hw },
 	{}
