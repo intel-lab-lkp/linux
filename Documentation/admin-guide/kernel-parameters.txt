@@ -6645,6 +6645,16 @@
 			neutralize any effect of /proc/sys/kernel/sysrq.
 			Useful for debugging.
 
+	tcp_rand_isn
+			[NET]
+			Enables randomized TCP Initial Sequence Number (ISN)
+			generation. When disabled, the kernel will use an
+			algorithm for ISN generation that provides better
+			performance at the cost of potentially leaking timing
+			information over the network. When enabled, TCP ISNs
+			will be randomly generated, providing better security
+			with a potential performance hit.
+
 	tcpmhash_entries= [KNL,NET]
 			Set the number of tcp_metrics_hash slots.
 			Default value is 8192 or 16384 depending on total

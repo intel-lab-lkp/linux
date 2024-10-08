@@ -22,6 +22,14 @@
 static siphash_aligned_key_t net_secret;
 static siphash_aligned_key_t ts_secret;
 
+static bool tcp_rand_isn;
+static int __init parse_tcp_rand_isn(char *arg)
+{
+	tcp_rand_isn = true;
+	return 0;
+}
+early_param("tcp_rand_isn", parse_tcp_rand_isn);
+
 #define EPHEMERAL_PORT_SHUFFLE_PERIOD (10 * HZ)
 
 static __always_inline void net_secret_init(void)
@@ -76,23 +84,33 @@ EXPORT_SYMBOL(secure_tcpv6_ts_off);
 u32 secure_tcpv6_seq(const __be32 *saddr, const __be32 *daddr,
 		     __be16 sport, __be16 dport)
 {
-	const struct {
-		struct in6_addr saddr;
-		struct in6_addr daddr;
-		__be16 sport;
-		__be16 dport;
-	} __aligned(SIPHASH_ALIGNMENT) combined = {
-		.saddr = *(struct in6_addr *)saddr,
-		.daddr = *(struct in6_addr *)daddr,
-		.sport = sport,
-		.dport = dport
-	};
 	u32 hash;
 
-	net_secret_init();
-	hash = siphash(&combined, offsetofend(typeof(combined), dport),
-		       &net_secret);
-	return seq_scale(hash);
+	if (tcp_rand_isn) {
+		get_random_bytes(((char *)&hash), sizeof(hash));
+	} else {
+		const struct {
+			struct in6_addr saddr;
+			struct in6_addr daddr;
+			__be16 sport;
+			__be16 dport;
+		} __aligned(SIPHASH_ALIGNMENT) combined = {
+			.saddr = *(struct in6_addr *)saddr,
+			.daddr = *(struct in6_addr *)daddr,
+			.sport = sport,
+			.dport = dport
+		};
+
+		net_secret_init();
+		hash = siphash(&combined, offsetofend(typeof(combined),
+						      dport),
+			       &net_secret);
+		hash = seq_scale(hash);
+	}
+
+	// TODO: Remove before merge
+	printk("secure_seq: tcpv6 isn: %u", hash);
+	return hash;
 }
 EXPORT_SYMBOL(secure_tcpv6_seq);
 
@@ -138,11 +156,19 @@ u32 secure_tcp_seq(__be32 saddr, __be32 daddr,
 {
 	u32 hash;
 
-	net_secret_init();
-	hash = siphash_3u32((__force u32)saddr, (__force u32)daddr,
-			    (__force u32)sport << 16 | (__force u32)dport,
-			    &net_secret);
-	return seq_scale(hash);
+	if (tcp_rand_isn) {
+		get_random_bytes(((char *)&hash), sizeof(hash));
+	} else {
+		net_secret_init();
+		hash = siphash_3u32((__force u32)saddr, (__force u32)daddr,
+				    (__force u32)sport << 16 | (__force u32)dport,
+				    &net_secret);
+		hash = seq_scale(hash);
+	}
+
+	// TODO: Remove before merge
+	printk("secure_seq: tcp isn: %u", hash);
+	return hash;
 }
 EXPORT_SYMBOL_GPL(secure_tcp_seq);
 
