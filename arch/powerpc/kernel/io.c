@@ -120,7 +120,7 @@ EXPORT_SYMBOL(_outsl_ns);
 #define IO_CHECK_ALIGN(v,a) ((((unsigned long)(v)) & ((a) - 1)) == 0)
 
 notrace void
-_memset_io(volatile void __iomem *addr, int c, unsigned long n)
+_memset_io(volatile void __iomem *addr, int c, size_t n)
 {
 	void *p = (void __force *)addr;
 	u32 lc = c;
@@ -148,7 +148,7 @@ _memset_io(volatile void __iomem *addr, int c, unsigned long n)
 EXPORT_SYMBOL(_memset_io);
 
 void _memcpy_fromio(void *dest, const volatile void __iomem *src,
-		    unsigned long n)
+		    size_t n)
 {
 	void *vsrc = (void __force *) src;
 
@@ -178,7 +178,7 @@ void _memcpy_fromio(void *dest, const volatile void __iomem *src,
 }
 EXPORT_SYMBOL(_memcpy_fromio);
 
-void _memcpy_toio(volatile void __iomem *dest, const void *src, unsigned long n)
+void _memcpy_toio(volatile void __iomem *dest, const void *src, size_t n)
 {
 	void *vdest = (void __force *) dest;
 

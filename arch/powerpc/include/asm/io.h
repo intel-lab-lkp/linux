@@ -246,11 +246,11 @@ extern void _outsl_ns(volatile u32 __iomem *addr, const void *buf, long count);
  * memset_io, memcpy_toio, memcpy_fromio base implementations are out of line
  */
 
-extern void _memset_io(volatile void __iomem *addr, int c, unsigned long n);
+extern void _memset_io(volatile void __iomem *addr, int c, size_t n);
 extern void _memcpy_fromio(void *dest, const volatile void __iomem *src,
-			   unsigned long n);
+			   size_t n);
 extern void _memcpy_toio(volatile void __iomem *dest, const void *src,
-			 unsigned long n);
+			 size_t n);
 
 /*
  *

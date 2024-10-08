@@ -53,9 +53,9 @@ DEF_PCI_AC_NORET(outsw, (unsigned long p, const void *b, unsigned long c),
 DEF_PCI_AC_NORET(outsl, (unsigned long p, const void *b, unsigned long c),
 		 (p, b, c), pio, p)
 
-DEF_PCI_AC_NORET(memset_io, (PCI_IO_ADDR a, int c, unsigned long n),
+DEF_PCI_AC_NORET(memset_io, (PCI_IO_ADDR a, int c, size_t n),
 		 (a, c, n), mem, a)
-DEF_PCI_AC_NORET(memcpy_fromio, (void *d, const PCI_IO_ADDR s, unsigned long n),
+DEF_PCI_AC_NORET(memcpy_fromio, (void *d, const PCI_IO_ADDR s, size_t n),
 		 (d, s, n), mem, s)
-DEF_PCI_AC_NORET(memcpy_toio, (PCI_IO_ADDR d, const void *s, unsigned long n),
+DEF_PCI_AC_NORET(memcpy_toio, (PCI_IO_ADDR d, const void *s, size_t n),
 		 (d, s, n), mem, d)
