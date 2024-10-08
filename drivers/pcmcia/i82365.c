@@ -183,7 +183,6 @@ enum pcic_id {
 #define IS_VADEM	0x0001
 #define IS_CIRRUS	0x0002
 #define IS_VIA		0x0010
-#define IS_UNKNOWN	0x0400
 #define IS_VG_PWR	0x0800
 #define IS_DF_PWR	0x1000
 #define IS_REGISTERED	0x2000
