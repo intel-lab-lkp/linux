@@ -477,12 +477,37 @@ void tcp_init_sock(struct sock *sk)
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
+static u32 bpf_tcp_tx_timestamp(struct sock *sk)
+{
+	u32 flags;
+
+	flags = tcp_call_bpf(sk, BPF_SOCK_OPS_TX_TS_OPT_CB, 0, NULL);
+	if (flags <= 0)
+		return 0;
+
+	if (flags & ~SOF_TIMESTAMPING_MASK)
+		return 0;
+
+	if (!(flags & SOF_TIMESTAMPING_TX_RECORD_MASK))
+		return 0;
+
+	return flags;
+}
+
 static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 {
 	struct sk_buff *skb = tcp_write_queue_tail(sk);
 	u32 tsflags = sockc->tsflags;
+	u32 flags;
 
-	if (tsflags && skb) {
+	if (!skb)
+		return;
+
+	flags = bpf_tcp_tx_timestamp(sk);
+	if (flags)
+		tsflags = flags;
+
+	if (tsflags) {
 		struct skb_shared_info *shinfo = skb_shinfo(skb);
 		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
 

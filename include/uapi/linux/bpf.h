@@ -7034,6 +7034,14 @@ enum {
 					 * feature is on. It indicates the
 					 * recorded timestamp.
 					 */
+	BPF_SOCK_OPS_TX_TS_OPT_CB,	/* Called when the last skb from
+					 * sendmsg is going to push when
+					 * SO_TIMESTAMPING feature is on.
+					 * Let user have a chance to switch
+					 * on BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG
+					 * flag for other three tx timestamp
+					 * use.
+					 */
 };
 
 /* List of TCP states. There is a build check in net/ipv4/tcp.c to detect
