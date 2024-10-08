@@ -642,6 +642,17 @@ restart:
 
 		if (test_bit(NFS_DELEGATION_INODE_FREEING, &delegation->flags))
 			continue;
+		if (test_bit(NFS_DELEGATION_REVOKED, &delegation->flags)) {
+			inode = nfs_delegation_grab_inode(delegation);
+			if (inode) {
+				rcu_read_unlock();
+				if (nfs_detach_delegation(NFS_I(inode), delegation, server))
+					nfs_put_delegation(delegation);
+				iput(inode);
+				cond_resched();
+				goto restart;
+			}
+		}
 		if (!nfs_delegation_need_return(delegation)) {
 			if (nfs4_is_valid_delegation(delegation, 0))
 				prev = delegation;
