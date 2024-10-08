@@ -162,7 +162,7 @@ static ssize_t timestamp0_count_show(struct device *dev,
 	if (ret)
 		return ret;
 
-	return sprintf(buf, "%u\n", count);
+	return sprintf(buf, "%d\n", count);
 };
 
 static DEVICE_ATTR_RO(timestamp0_count);
