@@ -278,6 +278,16 @@ fsl_ldb_mode_valid(struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
+static void fsl_ldb_mode_set(struct drm_bridge *bridge,
+			       const struct drm_display_mode *mode,
+			       const struct drm_display_mode *adj)
+{
+	struct fsl_ldb *fsl_ldb = to_fsl_ldb(bridge);
+	unsigned long requested_link_freq = fsl_ldb_link_frequency(fsl_ldb, mode->clock);
+
+	clk_set_rate(fsl_ldb->clk, requested_link_freq);
+}
+
 static const struct drm_bridge_funcs funcs = {
 	.attach = fsl_ldb_attach,
 	.atomic_enable = fsl_ldb_atomic_enable,
@@ -287,6 +297,7 @@ static const struct drm_bridge_funcs funcs = {
 	.atomic_get_input_bus_fmts = fsl_ldb_atomic_get_input_bus_fmts,
 	.atomic_reset = drm_atomic_helper_bridge_reset,
 	.mode_valid = fsl_ldb_mode_valid,
+	.mode_set = fsl_ldb_mode_set,
 };
 
 static int fsl_ldb_probe(struct platform_device *pdev)
