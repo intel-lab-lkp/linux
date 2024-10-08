@@ -2911,6 +2911,12 @@ static void dbAdjTree(dmtree_t *tp, int leafno, int newval, bool is_ctl)
 		 */
 		tp->dmt_stree[pp] = max;
 
+		/* check to prevent negative value of lp on the
+		 * next iteration.
+		 */
+		if (lp == 1)
+			break;
+
 		/* parent becomes leaf for next go-round.
 		 */
 		lp = pp;
