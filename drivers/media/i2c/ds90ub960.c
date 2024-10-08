@@ -402,12 +402,21 @@
 #define UB960_MAX_EQ_LEVEL  14
 #define UB960_NUM_EQ_LEVELS (UB960_MAX_EQ_LEVEL - UB960_MIN_EQ_LEVEL + 1)
 
+enum chip_type {
+	UB960,
+	UB9702,
+};
+
+enum chip_family {
+	FAMILY_FPD3,
+	FAMILY_FPD4,
+};
+
 struct ub960_hw_data {
-	const char *model;
+	enum chip_type chip_type;
+	enum chip_family chip_family;
 	u8 num_rxports;
 	u8 num_txports;
-	bool is_ub9702;
-	bool is_fpdlink4;
 };
 
 enum ub960_rxport_mode {
@@ -1654,10 +1663,15 @@ static int ub960_rxport_add_serializer(struct ub960_data *priv, u8 nport)
 
 	ser_pdata->port = nport;
 	ser_pdata->atr = priv->atr;
-	if (priv->hw_data->is_ub9702)
+
+	switch (priv->hw_data->chip_type) {
+	case UB9702:
 		ser_pdata->bc_rate = ub960_calc_bc_clk_rate_ub9702(priv, rxport);
-	else
+		break;
+	default:
 		ser_pdata->bc_rate = ub960_calc_bc_clk_rate_ub960(priv, rxport);
+		break;
+	}
 
 	/*
 	 * The serializer is added under the same i2c adapter as the
@@ -1785,7 +1799,7 @@ static int ub960_init_tx_ports(struct ub960_data *priv)
 
 	ub960_write(priv, UB960_SR_CSI_PLL_CTL, speed_select);
 
-	if (priv->hw_data->is_ub9702) {
+	if (priv->hw_data->chip_type == UB9702) {
 		ub960_write(priv, UB960_SR_CSI_PLL_DIV, pll_div);
 
 		switch (priv->tx_data_rate) {
@@ -2140,10 +2154,14 @@ static int ub960_init_rx_ports(struct ub960_data *priv)
 		if (!rxport)
 			continue;
 
-		if (priv->hw_data->is_ub9702)
+		switch (priv->hw_data->chip_type) {
+		case UB9702:
 			ub960_init_rx_port_ub9702(priv, rxport);
-		else
+			break;
+		default:
 			ub960_init_rx_port_ub960(priv, rxport);
+			break;
+		}
 	}
 
 	return 0;
@@ -2486,6 +2504,7 @@ static int ub960_configure_ports_for_streaming(struct ub960_data *priv,
 	for (nport = 0; nport < priv->hw_data->num_rxports; nport++) {
 		struct ub960_rxport *rxport = priv->rxports[nport];
 		u8 vc = vc_map[nport];
+		unsigned int i;
 
 		if (rx_data[nport].num_streams == 0)
 			continue;
@@ -2509,21 +2528,22 @@ static int ub960_configure_ports_for_streaming(struct ub960_data *priv,
 
 		case RXPORT_MODE_CSI2_SYNC:
 		case RXPORT_MODE_CSI2_NONSYNC:
-			if (!priv->hw_data->is_ub9702) {
+			switch (priv->hw_data->chip_type) {
+			case UB9702:
+				/* Map all VCs from this port to VC(nport) */
+				for (i = 0; i < 8; i++)
+					ub960_rxport_write(priv, nport,
+							   UB960_RR_VC_ID_MAP(i),
+							   nport);
+				break;
+			default:
 				/* Map all VCs from this port to the same VC */
 				ub960_rxport_write(priv, nport, UB960_RR_CSI_VC_MAP,
 						   (vc << UB960_RR_CSI_VC_MAP_SHIFT(3)) |
 						   (vc << UB960_RR_CSI_VC_MAP_SHIFT(2)) |
 						   (vc << UB960_RR_CSI_VC_MAP_SHIFT(1)) |
 						   (vc << UB960_RR_CSI_VC_MAP_SHIFT(0)));
-			} else {
-				unsigned int i;
-
-				/* Map all VCs from this port to VC(nport) */
-				for (i = 0; i < 8; i++)
-					ub960_rxport_write(priv, nport,
-							   UB960_RR_VC_ID_MAP(i),
-							   nport);
+				break;
 			}
 
 			break;
@@ -3217,7 +3237,8 @@ ub960_parse_dt_rxport_link_properties(struct ub960_data *priv,
 		return -EINVAL;
 	}
 
-	if (!priv->hw_data->is_fpdlink4 && cdr_mode == RXPORT_CDR_FPD4) {
+	if ((priv->hw_data->chip_family != FAMILY_FPD4) &&
+	    (cdr_mode == RXPORT_CDR_FPD4)) {
 		dev_err(dev, "rx%u: FPD-Link 4 CDR not supported\n", nport);
 		return -EINVAL;
 	}
@@ -3796,6 +3817,7 @@ static int ub960_get_hw_resources(struct ub960_data *priv)
 static int ub960_enable_core_hw(struct ub960_data *priv)
 {
 	struct device *dev = &priv->client->dev;
+	const char *model;
 	u8 rev_mask;
 	int ret;
 	u8 dev_sts;
@@ -3830,8 +3852,19 @@ static int ub960_enable_core_hw(struct ub960_data *priv)
 		goto err_pd_gpio;
 	}
 
-	dev_dbg(dev, "Found %s (rev/mask %#04x)\n", priv->hw_data->model,
-		rev_mask);
+	switch (priv->hw_data->chip_type) {
+	case UB960:
+		model = "UB960";
+		break;
+	case UB9702:
+		model = "UB9702";
+		break;
+	default:
+		model = "Unknown";
+		break;
+	};
+
+	dev_info(dev, "Found %s (rev/mask %#04x)\n", model, rev_mask);
 
 	ret = ub960_read(priv, UB960_SR_DEVICE_STS, &dev_sts);
 	if (ret)
@@ -3851,7 +3884,7 @@ static int ub960_enable_core_hw(struct ub960_data *priv)
 		goto err_pd_gpio;
 
 	/* release GPIO lock */
-	if (priv->hw_data->is_ub9702) {
+	if (priv->hw_data->chip_type == UB9702) {
 		ret = ub960_update_bits(priv, UB960_SR_RESET,
 					UB960_SR_RESET_GPIO_LOCK_RELEASE,
 					UB960_SR_RESET_GPIO_LOCK_RELEASE);
@@ -4013,17 +4046,17 @@ static void ub960_remove(struct i2c_client *client)
 }
 
 static const struct ub960_hw_data ds90ub960_hw = {
-	.model = "ub960",
+	.chip_type = UB960,
+	.chip_family = FAMILY_FPD3,
 	.num_rxports = 4,
 	.num_txports = 2,
 };
 
 static const struct ub960_hw_data ds90ub9702_hw = {
-	.model = "ub9702",
+	.chip_type = UB9702,
+	.chip_family = FAMILY_FPD4,
 	.num_rxports = 4,
 	.num_txports = 2,
-	.is_ub9702 = true,
-	.is_fpdlink4 = true,
 };
 
 static const struct i2c_device_id ub960_id[] = {
