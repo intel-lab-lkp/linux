@@ -3131,14 +3131,14 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 		adjusted_mode->crtc_clock /= n;
 	}
 
-	intel_dp_audio_compute_config(encoder, pipe_config, conn_state);
-
 	intel_link_compute_m_n(link_bpp_x16,
 			       pipe_config->lane_count,
 			       adjusted_mode->crtc_clock,
 			       pipe_config->port_clock,
 			       intel_dp_bw_fec_overhead(pipe_config->fec_enable),
 			       &pipe_config->dp_m_n);
+
+	intel_dp_audio_compute_config(encoder, pipe_config, conn_state);
 
 	/* FIXME: abstract this better */
 	if (pipe_config->splitter.enable)
