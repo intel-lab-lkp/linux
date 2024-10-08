@@ -1596,26 +1596,17 @@ int setup_bdev_super(struct super_block *sb, int sb_flags,
 EXPORT_SYMBOL_GPL(setup_bdev_super);
 
 /**
- * get_tree_bdev - Get a superblock based on a single block device
+ * get_tree_bdev_by_dev - Get a bdev-based superblock with a given device number
  * @fc: The filesystem context holding the parameters
  * @fill_super: Helper to initialise a new superblock
+ * @dev: The device number indicating the target block device
  */
-int get_tree_bdev(struct fs_context *fc,
+int get_tree_bdev_by_dev(struct fs_context *fc,
 		int (*fill_super)(struct super_block *,
-				  struct fs_context *))
+				  struct fs_context *), dev_t dev)
 {
 	struct super_block *s;
 	int error = 0;
-	dev_t dev;
-
-	if (!fc->source)
-		return invalf(fc, "No source specified");
-
-	error = lookup_bdev(fc->source, &dev);
-	if (error) {
-		errorf(fc, "%s: Can't lookup blockdev", fc->source);
-		return error;
-	}
 
 	fc->sb_flags |= SB_NOSEC;
 	s = sget_dev(fc, dev);
@@ -1643,6 +1634,30 @@ int get_tree_bdev(struct fs_context *fc,
 	BUG_ON(fc->root);
 	fc->root = dget(s->s_root);
 	return 0;
+}
+EXPORT_SYMBOL_GPL(get_tree_bdev_by_dev);
+
+/**
+ * get_tree_bdev - Get a superblock based on a single block device
+ * @fc: The filesystem context holding the parameters
+ * @fill_super: Helper to initialise a new superblock
+ */
+int get_tree_bdev(struct fs_context *fc,
+		int (*fill_super)(struct super_block *,
+				  struct fs_context *))
+{
+	int error;
+	dev_t dev;
+
+	if (!fc->source)
+		return invalf(fc, "No source specified");
+
+	error = lookup_bdev(fc->source, &dev);
+	if (error) {
+		errorf(fc, "%s: Can't lookup blockdev", fc->source);
+		return error;
+	}
+	return get_tree_bdev_by_dev(fc, fill_super, dev);
 }
 EXPORT_SYMBOL(get_tree_bdev);
 
