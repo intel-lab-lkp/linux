@@ -33,22 +33,22 @@ static inline void __iomem *ioremap_wt(unsigned long physaddr,
 }
 
 #define memset_io memset_io
-static inline void memset_io(volatile void __iomem *addr, unsigned char val,
-			     int count)
+static inline void memset_io(volatile void __iomem *addr, int val,
+			     size_t count)
 {
 	__builtin_memset((void __force *) addr, val, count);
 }
 
 #define memcpy_fromio memcpy_fromio
 static inline void memcpy_fromio(void *dst, const volatile void __iomem *src,
-				 int count)
+				 size_t count)
 {
 	__builtin_memcpy(dst, (void __force *) src, count);
 }
 
 #define memcpy_toio memcpy_toio
 static inline void memcpy_toio(volatile void __iomem *dst, const void *src,
-			       int count)
+			       size_t count)
 {
 	__builtin_memcpy((void __force *) dst, src, count);
 }
