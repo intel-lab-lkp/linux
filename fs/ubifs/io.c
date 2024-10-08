@@ -1110,6 +1110,22 @@ int ubifs_read_node(const struct ubifs_info *c, void *buf, int type, int len,
 		return err;
 
 	if (type != ch->node_type) {
+		/*
+		 * While recovering, we may face lost data i.e. empty flash.
+		 * Give callsites a hint by returning -ENODATA.
+		 */
+		if (c->replaying) {
+			u8 *b = buf;
+
+			for (l = 0; l < len; l++) {
+				if (b[l] != 0xff)
+					break;
+			}
+			if (l == len) {
+				ubifs_errc(c, "no node, but empty flash");
+				return -ENODATA;
+			}
+		}
 		ubifs_errc(c, "bad node type (%d but expected %d)",
 			   ch->node_type, type);
 		goto out;

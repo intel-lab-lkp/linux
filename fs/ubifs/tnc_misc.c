@@ -300,7 +300,11 @@ static int read_znode(struct ubifs_info *c, struct ubifs_zbranch *zzbr,
 	err = ubifs_read_node(c, idx, UBIFS_IDX_NODE, len, lnum, offs);
 	if (err < 0) {
 		kfree(idx);
-		return err;
+		/*
+		 * While recovering we may face a non written znode.
+		 * Inject an empty znode in this case.
+		 */
+		return (err == -ENODATA) ? 0 : err;
 	}
 
 	err = ubifs_node_check_hash(c, idx, zzbr->hash);
