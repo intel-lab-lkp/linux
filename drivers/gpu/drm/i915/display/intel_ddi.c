@@ -2256,30 +2256,74 @@ static int read_fec_detected_status(struct drm_dp_aux *aux)
 	return status;
 }
 
-static void wait_for_fec_detected(struct drm_dp_aux *aux, bool enabled)
+static void retry_fec_enable(struct intel_encoder *encoder,
+			     const struct intel_crtc_state *crtc_state,
+		struct drm_dp_aux *aux)
+{
+	struct drm_i915_private *i915 = to_i915(aux->drm_dev);
+	int ret = 0;
+
+	ret = intel_de_wait_for_clear(i915, dp_tp_status_reg(encoder, crtc_state),
+				      DP_TP_STATUS_FEC_ENABLE_LIVE, 1);
+
+	if (ret)
+		drm_err(&i915->drm,
+			"Timeout waiting for FEC live state to get disabled during retry\n");
+
+	/* Clear FEC enable */
+	intel_de_rmw(i915, dp_tp_ctl_reg(encoder, crtc_state),
+		     DP_TP_CTL_FEC_ENABLE, 0);
+
+	/* Set FEC enable */
+	intel_de_rmw(i915, dp_tp_ctl_reg(encoder, crtc_state),
+		     0, DP_TP_CTL_FEC_ENABLE);
+
+	ret = intel_de_wait_for_set(i915, dp_tp_status_reg(encoder, crtc_state),
+				    DP_TP_STATUS_FEC_ENABLE_LIVE, 1);
+	if (!ret)
+		drm_dbg_kms(&i915->drm,
+			    "Timeout waiting for FEC live state to get enabled");
+}
+
+static void wait_for_fec_detected(struct intel_encoder *encoder,
+				  const struct intel_crtc_state *crtc_state,
+		struct drm_dp_aux *aux, bool enabled, bool retry)
 {
 	struct drm_i915_private *i915 = to_i915(aux->drm_dev);
 	int mask = enabled ? DP_FEC_DECODE_EN_DETECTED : DP_FEC_DECODE_DIS_DETECTED;
 	int status;
 	int err;
+	int max_retries = retry ? 3 : 1;
 
-	err = readx_poll_timeout(read_fec_detected_status, aux, status,
-				 status & mask || status < 0,
-				 10000, 200000);
+	for (int retrycount = 0; retrycount < max_retries; retrycount++) {
+		err = readx_poll_timeout(read_fec_detected_status, aux, status,
+					 status & mask || status < 0,
+					 retry ? 500 : 10000,
+					 retry ? 5000 : 200000);
 
-	if (!err && status >= 0)
-		return;
+		if (!err && status >= 0)
+			return;
 
-	if (err == -ETIMEDOUT)
-		drm_dbg_kms(&i915->drm, "Timeout waiting for FEC %s to get detected\n",
-			    str_enabled_disabled(enabled));
-	else
-		drm_dbg_kms(&i915->drm, "FEC detected status read error: %d\n", status);
+		if (err == -ETIMEDOUT) {
+			drm_dbg_kms(&i915->drm,
+				    "Timeout waiting for FEC %s to get detected, retrying (%d/%d)\n",
+				    str_enabled_disabled(enabled), retrycount + 1, max_retries);
+
+			if (retry && enabled)
+				retry_fec_enable(encoder, crtc_state, aux);
+		} else {
+			drm_dbg_kms(&i915->drm, "FEC detected status read error: %d\n", status);
+			return;
+		}
+	}
+
+	drm_err(&i915->drm, "FEC %s Failed after %d attempts\n",
+		str_enabled_disabled(enabled), max_retries);
 }
 
 void intel_ddi_wait_for_fec_status(struct intel_encoder *encoder,
 				   const struct intel_crtc_state *crtc_state,
-				   bool enabled)
+				   bool enabled, bool retry)
 {
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 	struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
@@ -2305,7 +2349,7 @@ void intel_ddi_wait_for_fec_status(struct intel_encoder *encoder,
 	 * FEC decoding disabling so skip waiting for that.
 	 */
 	if (enabled)
-		wait_for_fec_detected(&intel_dp->aux, enabled);
+		wait_for_fec_detected(encoder, crtc_state, &intel_dp->aux, enabled, retry);
 }
 
 static void intel_ddi_enable_fec(struct intel_encoder *encoder,
@@ -2318,6 +2362,9 @@ static void intel_ddi_enable_fec(struct intel_encoder *encoder,
 
 	intel_de_rmw(dev_priv, dp_tp_ctl_reg(encoder, crtc_state),
 		     0, DP_TP_CTL_FEC_ENABLE);
+
+	if (DISPLAY_VER(dev_priv) >= 30)
+		intel_ddi_wait_for_fec_status(encoder, crtc_state, true, true);
 }
 
 static void intel_ddi_disable_fec(struct intel_encoder *encoder,
@@ -3010,7 +3057,7 @@ static void intel_disable_ddi_buf(struct intel_encoder *encoder,
 		disable_ddi_buf(encoder, crtc_state);
 	}
 
-	intel_ddi_wait_for_fec_status(encoder, crtc_state, false);
+	intel_ddi_wait_for_fec_status(encoder, crtc_state, false, false);
 }
 
 static void intel_ddi_post_disable_dp(struct intel_atomic_state *state,
@@ -3383,6 +3430,7 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 			     const struct intel_crtc_state *crtc_state,
 			     const struct drm_connector_state *conn_state)
 {
+	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_crtc *pipe_crtc;
 	int i;
@@ -3394,7 +3442,8 @@ static void intel_enable_ddi(struct intel_atomic_state *state,
 
 	intel_enable_transcoder(crtc_state);
 
-	intel_ddi_wait_for_fec_status(encoder, crtc_state, true);
+	if (DISPLAY_VER(i915) < 30)
+		intel_ddi_wait_for_fec_status(encoder, crtc_state, true, false);
 
 	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, crtc_state, i) {
 		const struct intel_crtc_state *pipe_crtc_state =

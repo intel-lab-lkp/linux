@@ -1288,8 +1288,8 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 
 	wait_for_act_sent(encoder, pipe_config);
 
-	if (first_mst_stream)
-		intel_ddi_wait_for_fec_status(encoder, pipe_config, true);
+	if (first_mst_stream && DISPLAY_VER(dev_priv) < 30)
+		intel_ddi_wait_for_fec_status(encoder, pipe_config, true, false);
 
 	ret = drm_dp_add_payload_part2(&intel_dp->mst_mgr,
 				       drm_atomic_get_mst_payload_state(mst_state,
