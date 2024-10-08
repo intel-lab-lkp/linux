@@ -5556,11 +5556,17 @@ static bool bpf_skb_tstamp_tx(struct sock *sk, u32 scm_flag,
 		case SCM_TSTAMP_SCHED:
 			cb_flag = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
 			break;
+		case SCM_TSTAMP_SND:
+			cb_flag = BPF_SOCK_OPS_TS_SW_OPT_CB;
+			break;
 		default:
 			return true;
 		}
 
-		tstamp = ktime_to_timespec64(ktime_get_real());
+		if (hwtstamps)
+			tstamp = ktime_to_timespec64(hwtstamps->hwtstamp);
+		else
+			tstamp = ktime_to_timespec64(ktime_get_real());
 		tcp_call_bpf_2arg(sk, cb_flag, tstamp.tv_sec, tstamp.tv_nsec);
 		return true;
 	}
