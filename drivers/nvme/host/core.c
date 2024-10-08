@@ -42,6 +42,7 @@ struct nvme_ns_info {
 	bool is_readonly;
 	bool is_ready;
 	bool is_removed;
+	bool is_rotational;
 };
 
 unsigned int admin_timeout = 60;
@@ -1624,6 +1625,7 @@ static int nvme_ns_info_from_id_cs_indep(struct nvme_ctrl *ctrl,
 		info->is_shared = id->nmic & NVME_NS_NMIC_SHARED;
 		info->is_readonly = id->nsattr & NVME_NS_ATTR_RO;
 		info->is_ready = id->nstat & NVME_NSTAT_NRDY;
+		info->is_rotational = id->nsfeat & NVME_NS_ROTATIONAL;
 	}
 	kfree(id);
 	return ret;
@@ -2170,6 +2172,9 @@ static int nvme_update_ns_info_block(struct nvme_ns *ns,
 		lim.features |= BLK_FEAT_WRITE_CACHE | BLK_FEAT_FUA;
 	else
 		lim.features &= ~(BLK_FEAT_WRITE_CACHE | BLK_FEAT_FUA);
+
+	if (info->is_rotational)
+		lim.features |= BLK_FEAT_ROTATIONAL | BLK_FEAT_ADD_RANDOM;
 
 	/*
 	 * Register a metadata profile for PI, or the plain non-integrity NVMe
