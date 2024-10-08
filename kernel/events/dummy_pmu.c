@@ -49,6 +49,11 @@ static struct dummy_device *pmu_to_device(struct dummy_pmu *pmu)
 	return container_of(pmu, struct dummy_device, pmu);
 }
 
+static struct dummy_pmu *pmu_to_dummy(struct pmu *pmu)
+{
+	return container_of(pmu, struct dummy_pmu, base);
+}
+
 static ssize_t dummy_pmu_events_sysfs_show(struct device *dev,
 					   struct device_attribute *attr,
 					   char *page)
@@ -92,18 +97,9 @@ static const struct attribute_group *attr_groups[] = {
 	NULL,
 };
 
-static void dummy_pmu_event_destroy(struct perf_event *event)
-{
-	struct dummy_pmu *pmu = event_to_pmu(event);
-	struct dummy_device *d = pmu_to_device(pmu);
-
-	kref_put(&d->refcount, device_release);
-}
-
 static int dummy_pmu_event_init(struct perf_event *event)
 {
 	struct dummy_pmu *pmu = event_to_pmu(event);
-	struct dummy_device *d = pmu_to_device(pmu);
 
 	if (!pmu->registered)
 		return -ENODEV;
@@ -120,10 +116,6 @@ static int dummy_pmu_event_init(struct perf_event *event)
 
 	if (event->cpu < 0)
 		return -EINVAL;
-
-	/* Event keeps a ref to maintain PMU allocated, even if it's unregistered */
-	kref_get(&d->refcount);
-	event->destroy = dummy_pmu_event_destroy;
 
 	return 0;
 }
@@ -195,9 +187,28 @@ static void dummy_pmu_event_del(struct perf_event *event, int flags)
 	dummy_pmu_event_stop(event, PERF_EF_UPDATE);
 }
 
+static struct pmu *dummy_pmu_get(struct pmu *pmu)
+{
+	struct dummy_device *d = pmu_to_device(pmu_to_dummy(pmu));
+
+	kref_get(&d->refcount);
+
+	return pmu;
+}
+
+static void dummy_pmu_put(struct pmu *pmu)
+{
+	struct dummy_device *d = pmu_to_device(pmu_to_dummy(pmu));
+
+	kref_put(&d->refcount, device_release);
+}
+
 static int device_init(struct dummy_device *d)
 {
 	int ret;
+
+	if (WARN_ONCE(d->pmu.name, "Cannot re-register pmu.\n"))
+		return -EINVAL;
 
 	d->pmu.base = (struct pmu){
 		.attr_groups	= attr_groups,
@@ -209,6 +220,8 @@ static int device_init(struct dummy_device *d)
 		.start		= dummy_pmu_event_start,
 		.stop		= dummy_pmu_event_stop,
 		.read		= dummy_pmu_event_read,
+		.get		= dummy_pmu_get,
+		.put		= dummy_pmu_put,
 	};
 
 	d->pmu.name = kasprintf(GFP_KERNEL, "dummy_pmu_%u", d->instance);
@@ -217,12 +230,22 @@ static int device_init(struct dummy_device *d)
 
 	ret = perf_pmu_register(&d->pmu.base, d->pmu.name, -1);
 	if (ret)
-		return ret;
+		goto fail;
 
 	d->pmu.registered = true;
 	pr_info("Device registered: %s\n", d->pmu.name);
 
 	return 0;
+
+fail:
+	/*
+	 * See device_release: if name is non-NULL, dummy_pmu was registered
+	 * with perf and needs cleanup
+	 */
+	kfree(d->pmu.name);
+	d->pmu.name = NULL;
+
+	return ret;
 }
 
 static void device_exit(struct dummy_device *d)
@@ -237,7 +260,10 @@ static void device_release(struct kref *ref)
 {
 	struct dummy_device *d = container_of(ref, struct dummy_device, refcount);
 
-	kfree(d->pmu.name);
+	if (d->pmu.name) {
+		perf_pmu_free(&d->pmu.base);
+		kfree(d->pmu.name);
+	}
 	kfree(d);
 }
 
