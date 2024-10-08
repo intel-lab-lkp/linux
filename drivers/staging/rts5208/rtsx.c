@@ -57,7 +57,7 @@ static const char *host_info(struct Scsi_Host *host)
 	return "SCSI emulation for PCI-Express Mass Storage devices";
 }
 
-static int slave_alloc(struct scsi_device *sdev)
+static int sdev_init(struct scsi_device *sdev)
 {
 	/*
 	 * Set the INQUIRY transfer length to 36.  We don't use any of
@@ -198,7 +198,7 @@ static const struct scsi_host_template rtsx_host_template = {
 	/* unknown initiator id */
 	.this_id =			-1,
 
-	.slave_alloc =			slave_alloc,
+	.sdev_init =			sdev_init,
 	.slave_configure =		slave_configure,
 
 	/* lots of sg segments can be handled */
