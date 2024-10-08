@@ -68,7 +68,7 @@ static int sdev_init(struct scsi_device *sdev)
 	return 0;
 }
 
-static int slave_configure(struct scsi_device *sdev)
+static int sdev_configure(struct scsi_device *sdev, struct queue_limits *lim)
 {
 	/* Set the SCSI level to at least 2.  We'll leave it at 3 if that's
 	 * what is originally reported.  We need this to avoid confusing
@@ -199,7 +199,7 @@ static const struct scsi_host_template rtsx_host_template = {
 	.this_id =			-1,
 
 	.sdev_init =			sdev_init,
-	.slave_configure =		slave_configure,
+	.sdev_configure =		sdev_configure,
 
 	/* lots of sg segments can be handled */
 	.sg_tablesize =			SG_ALL,
