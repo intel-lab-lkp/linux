@@ -7045,6 +7045,11 @@ enum {
 					 * flag for other three tx timestamp
 					 * use.
 					 */
+	BPF_SOCK_OPS_TS_RX_OPT_CB,	/* Called when tcp layer tries to
+					 * receive skbs with timestamps when
+					 * SO_TIMESTAMPING feature is on
+					 * It indicates the recorded timestamp.
+					 */
 };
 
 /* List of TCP states. There is a build check in net/ipv4/tcp.c to detect

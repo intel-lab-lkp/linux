@@ -2278,10 +2278,36 @@ out:
 
 static bool tcp_bpf_recv_timestamp(struct sock *sk, struct scm_timestamping_internal *tss)
 {
+	u32 tsflags = READ_ONCE(sk->sk_tsflags);
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_RX_TIMESTAMPING_OPT_CB_FLAG))
+	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_RX_TIMESTAMPING_OPT_CB_FLAG)) {
+		u32 hw_sec, hw_nsec, sw_sec, sw_nsec;
+
+		if (!(tsflags & (SOF_TIMESTAMPING_RX_SOFTWARE |
+		      SOF_TIMESTAMPING_RX_HARDWARE)))
+			return true;
+
+		if (tsflags & SOF_TIMESTAMPING_RX_SOFTWARE) {
+			sw_sec = tss->ts[0].tv_sec;
+			sw_nsec = tss->ts[0].tv_nsec;
+		} else {
+			sw_sec = 0;
+			sw_nsec = 0;
+		}
+
+		if (tsflags & SOF_TIMESTAMPING_RX_HARDWARE) {
+			hw_sec = tss->ts[2].tv_sec;
+			hw_nsec = tss->ts[2].tv_nsec;
+		} else {
+			hw_sec = 0;
+			hw_nsec = 0;
+		}
+
+		tcp_call_bpf_4arg(sk, BPF_SOCK_OPS_TS_RX_OPT_CB,
+				  sw_sec, sw_nsec, hw_sec, hw_nsec);
 		return true;
+	}
 
 	return false;
 }
