@@ -5,6 +5,7 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/numa.h>
+#include <linux/minmax.h>
 
 #ifdef CONFIG_CMA_AREAS
 #define MAX_CMA_AREAS	CONFIG_CMA_AREAS
@@ -17,7 +18,8 @@
  * -- can deal with only some pageblocks of a higher-order page being
  *  MIGRATE_CMA, we can use pageblock_nr_pages.
  */
-#define CMA_MIN_ALIGNMENT_PAGES pageblock_nr_pages
+#define CMA_MIN_ALIGNMENT_PAGES \
+	(1ULL << min_not_zero(MAX_PAGE_ORDER, pageblock_order))
 #define CMA_MIN_ALIGNMENT_BYTES (PAGE_SIZE * CMA_MIN_ALIGNMENT_PAGES)
 
 struct cma;
