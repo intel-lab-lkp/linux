@@ -5536,7 +5536,24 @@ void sched_tick(void)
 	rq_lock(rq, &rf);
 
 	curr = rq->curr;
-	psi_account_irqtime(rq, curr, NULL);
+
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+	if (static_branch_likely(&sched_clock_irqtime)) {
+		u64 now, irq;
+		s64 delta;
+
+		now = cpu_clock(cpu);
+		irq = irq_time_read(cpu);
+		delta = (s64)(irq - rq->psi_irq_time);
+		if (delta > 0) {
+			rq->psi_irq_time = irq;
+			psi_account_irqtime(rq, curr, NULL, now, delta);
+			cgroup_account_cputime(curr, delta);
+			/* We account both softirq and irq into softirq */
+			cgroup_account_cputime_field(curr, CPUTIME_SOFTIRQ, delta);
+		}
+	}
+#endif
 
 	update_rq_clock(rq);
 	hw_pressure = arch_scale_hw_pressure(cpu_of(rq));
@@ -6600,7 +6617,25 @@ picked:
 		++*switch_count;
 
 		migrate_disable_switch(rq, prev);
-		psi_account_irqtime(rq, prev, next);
+
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+		if (static_branch_likely(&sched_clock_irqtime)) {
+			u64 now, irq;
+			s64 delta;
+
+			now = cpu_clock(cpu);
+			irq = irq_time_read(cpu);
+			delta = (s64)(irq - rq->psi_irq_time);
+			if (delta > 0) {
+				rq->psi_irq_time = irq;
+				psi_account_irqtime(rq, prev, next, now, delta);
+				cgroup_account_cputime(prev, delta);
+				/* We account both softirq and irq into softirq */
+				cgroup_account_cputime_field(prev, CPUTIME_SOFTIRQ, delta);
+			}
+		}
+#endif
+
 		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
 		trace_sched_switch(preempt, prev, next, prev_state);
