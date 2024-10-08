@@ -715,6 +715,7 @@ struct se_dev_attrib {
 	bool		is_nonrot;
 	bool		emulate_rest_reord;
 	bool		unmap_zeroes_data;
+	bool		atomic_supported;
 	u32		hw_block_size;
 	u32		block_size;
 	u32		hw_max_sectors;
@@ -726,6 +727,11 @@ struct se_dev_attrib {
 	u32		unmap_granularity;
 	u32		unmap_granularity_alignment;
 	u32		max_write_same_len;
+	u32		atomic_max_len;
+	u32		atomic_alignment;
+	u32		atomic_granularity;
+	u32		atomic_max_with_boundary;
+	u32		atomic_max_boundary;
 	u8		submit_type;
 	struct se_device *da_dev;
 	struct config_group da_group;
