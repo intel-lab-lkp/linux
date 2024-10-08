@@ -862,6 +862,8 @@ struct drm_color_lut {
  *
  * The plane SIZE_HINTS property blob contains an
  * array of struct drm_plane_size_hint.
+ * @width: Plane width hint
+ * @height: Plane height hint
  */
 struct drm_plane_size_hint {
 	__u16 width;
