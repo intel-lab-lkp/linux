@@ -185,7 +185,7 @@ patternProperties:
               assigned-clock-parents:
                 maxItems: 1
                 description: |
-                  Standard assigned-clocks-parents definition used for selecting
+                  Standard assigned-clock-parents definition used for selecting
                   mux parent (one of the mux input).
 
               reg:
@@ -219,7 +219,7 @@ patternProperties:
               assigned-clock-parents:
                 maxItems: 1
                 description: |
-                  Standard assigned-clocks-parents definition used for selecting
+                  Standard assigned-clock-parents definition used for selecting
                   mux parent (one of the mux input).
 
               reg:
