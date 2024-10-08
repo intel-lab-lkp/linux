@@ -30,7 +30,7 @@
 
 /* Shared structure between driver and FW - do not modify */
 struct ipu6_fw_sys_queue {
-	u64 host_address;
+	uintptr_t host_address;
 	u32 vied_address;
 	u32 size;
 	u32 token_size;
@@ -40,7 +40,7 @@ struct ipu6_fw_sys_queue {
 } __packed;
 
 struct ipu6_fw_sys_queue_res {
-	u64 host_address;
+	uintptr_t host_address;
 	u32 vied_address;
 	u32 reg;
 } __packed;
@@ -242,7 +242,7 @@ void *ipu6_fw_com_prepare(struct ipu6_fw_com_cfg *cfg,
 	/* initialize input queues */
 	offset += specific_size;
 	res.reg = SYSCOM_QPR_BASE_REG;
-	res.host_address = (u64)(ctx->dma_buffer + offset);
+	res.host_address = (uintptr_t)(ctx->dma_buffer + offset);
 	res.vied_address = ctx->dma_addr + offset;
 	for (i = 0; i < cfg->num_input_queues; i++)
 		ipu6_sys_queue_init(ctx->input_queue + i,
@@ -251,7 +251,7 @@ void *ipu6_fw_com_prepare(struct ipu6_fw_com_cfg *cfg,
 
 	/* initialize output queues */
 	offset += sizeinput;
-	res.host_address = (u64)(ctx->dma_buffer + offset);
+	res.host_address = (uintptr_t)(ctx->dma_buffer + offset);
 	res.vied_address = ctx->dma_addr + offset;
 	for (i = 0; i < cfg->num_output_queues; i++) {
 		ipu6_sys_queue_init(ctx->output_queue + i,

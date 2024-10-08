@@ -576,7 +576,7 @@ void update_watermark_setting(struct ipu6_isys *isys)
 	}
 
 	enable_iwake(isys, true);
-	calc_fill_time_us = max_sram_size / isys_pb_datarate_mbs;
+	calc_fill_time_us = div64_u64(max_sram_size, isys_pb_datarate_mbs);
 
 	if (isys->pdata->ipdata->enhanced_iwake) {
 		ltr = isys->pdata->ipdata->ltr;
