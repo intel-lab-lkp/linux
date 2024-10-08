@@ -3025,9 +3025,14 @@ intel_dp_audio_compute_bw_limits(struct intel_crtc_state *crtc_state,
 {
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
 	int hblank_bytes_avail_overhead = 64;
-	int hblank_bytes_req_overhead = 80;
+	int hblank_bytes_req_overhead;
 	int hblank_slots_lanes;
 	int line_freq_khz;
+
+	if (DISPLAY_VER(i915) >= 14)
+		hblank_bytes_req_overhead = 0;
+	else
+		hblank_bytes_req_overhead = 80;
 
 	intel_dp_compute_audio_bwparams(crtc_state, &line_freq_khz,
 					&hblank_slots_lanes);
