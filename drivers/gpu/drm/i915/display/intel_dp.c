@@ -2994,12 +2994,62 @@ intel_dp_compute_output_format(struct intel_encoder *encoder,
 	return ret;
 }
 
+static void
+intel_dp_compute_audio_bwparams(struct intel_crtc_state *crtc_state,
+				int *line_freq_khz, int *hblank_slots_lanes)
+{
+	/* Calculation steps based on Bspec: 67768 */
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int link_rate_mhz = DIV_ROUND_UP(crtc_state->port_clock, 1000);
+	int pixel_clk_mhz = DIV_ROUND_UP(adjusted_mode->crtc_clock, 1000);
+	int htotal = adjusted_mode->crtc_htotal;
+	int hblank_pixels =
+		adjusted_mode->crtc_hblank_end - adjusted_mode->crtc_hblank_start;
+	int mtp_clks_per_slot = DIV_ROUND_UP(4, crtc_state->lane_count);
+	int mtp_size_clks = 64 * mtp_clks_per_slot;
+	int link_clk_mhz = DIV_ROUND_UP(link_rate_mhz, 32);
+	int mtp_size_ns = DIV_ROUND_UP(mtp_size_clks * 1000, link_clk_mhz);
+	int hblank_size_ns = DIV_ROUND_UP(hblank_pixels * 1000, pixel_clk_mhz);
+	int mtps_in_hblank = DIV_ROUND_UP(hblank_size_ns, mtp_size_ns);
+	u32 temp = div_u64(mul_u32_u32(mtp_size_clks, crtc_state->dp_m_n.data_m),
+				crtc_state->dp_m_n.data_n);
+	int hblank_slots = mtps_in_hblank * temp;
+
+	*line_freq_khz = DIV_ROUND_UP(pixel_clk_mhz, htotal) * 1000;
+	*hblank_slots_lanes = hblank_slots * crtc_state->lane_count * 4;
+}
+
+static bool
+intel_dp_audio_compute_bw_limits(struct intel_crtc_state *crtc_state,
+				 struct drm_connector_state *conn_state)
+{
+	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
+	int hblank_bytes_avail_overhead = 64;
+	int hblank_bytes_req_overhead = 80;
+	int hblank_slots_lanes;
+	int line_freq_khz;
+
+	intel_dp_compute_audio_bwparams(crtc_state, &line_freq_khz,
+					&hblank_slots_lanes);
+	drm_dbg_kms(&i915->drm,
+		    "bw params: line_freq_khz: %d hblank_slots_lanes: %d\n",
+		    line_freq_khz, hblank_slots_lanes);
+
+	return intel_audio_compute_eld_config(conn_state, line_freq_khz,
+					      hblank_slots_lanes,
+					      hblank_bytes_avail_overhead,
+					      hblank_bytes_req_overhead);
+}
+
 void
 intel_dp_audio_compute_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *pipe_config,
 			      struct drm_connector_state *conn_state)
 {
 	pipe_config->has_audio = intel_dp_has_audio(encoder, conn_state);
+
+	pipe_config->has_audio = pipe_config->has_audio &&
+		intel_dp_audio_compute_bw_limits(pipe_config, conn_state);
 
 	pipe_config->has_audio = pipe_config->has_audio &&
 		intel_audio_compute_config(pipe_config, conn_state);

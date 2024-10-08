@@ -705,6 +705,113 @@ static bool intel_audio_eld_valid(struct drm_connector_state *conn_state)
 	return true;
 }
 
+static bool
+intel_audio_frequency_feasible(int line_freq_khz, int hblank_slots_lanes,
+			       int avail_overhead, int req_overhead,
+			       int channels, int aud_frequency)
+{
+	int aud_samples_per_line =
+		DIV_ROUND_UP(aud_frequency, line_freq_khz) + 1;
+	int lines_per_audio_sample =
+		max(1, line_freq_khz / aud_frequency);
+	int hblank_bytes_available =
+		(hblank_slots_lanes - avail_overhead) * lines_per_audio_sample;
+	int hblank_bytes_required;
+
+	if (channels > 2)
+		hblank_bytes_required =
+			DIV_ROUND_UP(aud_samples_per_line * 10 + 2, 4) * 16 + req_overhead;
+	else
+		hblank_bytes_required =
+			(DIV_ROUND_UP(DIV_ROUND_UP(aud_samples_per_line, 2) * 5 + 2, 4) + 2) * 16 + req_overhead;
+
+	return hblank_bytes_available > hblank_bytes_required;
+}
+
+static u8
+intel_audio_get_pruned_audfreq(struct drm_i915_private *i915,
+			       int line_freq_khz, int hblank_slots_lanes,
+			       int avail_overhead, int req_overhead,
+			       int channels, u8 in_sad_freq)
+{
+	const unsigned int freq_list_khz[] = { 32, 44, 48, 88, 96, 176, 192 };
+	u8 pruned_sad_freq = in_sad_freq;
+
+	for (int j = ARRAY_SIZE(freq_list_khz) - 1; j >= 0; j--) {
+		int freq = pruned_sad_freq & BIT(j) ? freq_list_khz[j] : 0;
+
+		if (!freq)
+			continue;
+
+		/* If "freq" is ok, then values below are also ok */
+		if (intel_audio_frequency_feasible(line_freq_khz,
+						   hblank_slots_lanes,
+						   avail_overhead,
+						   req_overhead,
+						   channels, freq))
+			break;
+
+		/* "freq" not feasible! Prune it from the list */
+		pruned_sad_freq &= ~BIT(j);
+		drm_dbg_kms(&i915->drm,
+			    "Frequency[%d]: %d channels: %d not feasible\n",
+			    j, freq, channels);
+	}
+
+	return pruned_sad_freq;
+}
+
+static void intel_audio_compute_sad(struct drm_i915_private *i915,
+				    int line_freq_khz, int hblank_slots_lanes,
+				    int avail_overhead, int req_overhead,
+				    struct cea_sad *sad)
+{
+	u8 sad_channels = sad->channels + 1;
+	u8 sad_freq;
+
+	sad_freq = intel_audio_get_pruned_audfreq(i915, line_freq_khz,
+						  hblank_slots_lanes,
+						  avail_overhead,
+						  req_overhead, sad_channels,
+						  sad->freq);
+
+	sad->freq = sad_freq;
+}
+
+bool intel_audio_compute_eld_config(struct drm_connector_state *conn_state,
+				    int line_freq_khz, int hblank_slots_lanes,
+				    int avail_overhead, int req_overhead)
+{
+	struct drm_connector *connector = conn_state->connector;
+	struct drm_i915_private *i915 = to_i915(connector->dev);
+	u8 *eld;
+
+	if (!intel_audio_eld_valid(conn_state))
+		return false;
+
+	eld = connector->eld;
+	for (int i = 0; i < drm_eld_sad_count(eld); i++) {
+		struct cea_sad sad;
+		u8 sad_freq;
+
+		if (drm_eld_sad_get(eld, i, &sad))
+			continue;
+
+		sad_freq = sad.freq;
+		intel_audio_compute_sad(i915, line_freq_khz,
+					hblank_slots_lanes,
+					avail_overhead, req_overhead, &sad);
+
+		/* Update the eld with new sad data if any changes in the list */
+		if (sad_freq != sad.freq) {
+			drm_eld_sad_set(eld, i, &sad);
+			drm_dbg_kms(&i915->drm, "sad updated. Pruned freq list: 0x%x\n", sad.freq);
+		}
+	}
+
+	return true;
+}
+
 bool intel_audio_compute_config(struct intel_crtc_state *crtc_state,
 				struct drm_connector_state *conn_state)
 {

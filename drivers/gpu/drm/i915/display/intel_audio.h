@@ -30,5 +30,8 @@ void intel_audio_init(struct drm_i915_private *dev_priv);
 void intel_audio_register(struct drm_i915_private *i915);
 void intel_audio_deinit(struct drm_i915_private *dev_priv);
 void intel_audio_sdp_split_update(const struct intel_crtc_state *crtc_state);
+bool intel_audio_compute_eld_config(struct drm_connector_state *conn_state,
+				    int line_freq_khz, int hblank_slots_lanes,
+				    int avail_overhead, int req_overhead);
 
 #endif /* __INTEL_AUDIO_H__ */
