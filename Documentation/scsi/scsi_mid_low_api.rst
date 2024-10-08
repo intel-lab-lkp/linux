@@ -150,10 +150,10 @@ scsi devices of which only the first 2 respond::
     scsi_scan_host()  -------+
 			    |
 			sdev_init()
-			slave_configure() -->  scsi_change_queue_depth()
+			sdev_configure() -->  scsi_change_queue_depth()
 			    |
 			sdev_init()
-			slave_configure()
+			sdev_configure()
 			    |
 			sdev_init()   ***
 			sdev_destroy() ***
@@ -163,7 +163,7 @@ scsi devices of which only the first 2 respond::
 	respond, a sdev_init(), sdev_destroy() pair is called.
 
 If the LLD wants to adjust the default queue settings, it can invoke
-scsi_change_queue_depth() in its slave_configure() routine.
+scsi_change_queue_depth() in its sdev_configure() routine.
 
 When an HBA is being removed it could be as part of an orderly shutdown
 associated with the LLD module being unloaded (e.g. with the "rmmod"
@@ -203,7 +203,7 @@ An LLD can use this sequence to make the mid level aware of a SCSI device::
     scsi_add_device()  ------+
 			    |
 			sdev_init()
-			slave_configure()   [--> scsi_change_queue_depth()]
+			sdev_configure()   [--> scsi_change_queue_depth()]
 
 In a similar fashion, an LLD may become aware that a SCSI device has been
 removed (unplugged) or the connection to it has been interrupted. Some
@@ -222,7 +222,7 @@ upper layers with this sequence::
 
 It may be useful for an LLD to keep track of struct scsi_device instances
 (a pointer is passed as the parameter to sdev_init() and
-slave_configure() callbacks). Such instances are "owned" by the mid-level.
+sdev_configure() callbacks). Such instances are "owned" by the mid-level.
 struct scsi_device instances are freed after sdev_destroy().
 
 
@@ -331,7 +331,7 @@ Details::
     *      bus scan when an HBA is added (i.e. scsi_scan_host()). So it
     *      should only be called if the HBA becomes aware of a new scsi
     *      device (lu) after scsi_scan_host() has completed. If successful
-    *      this call can lead to sdev_init() and slave_configure() callbacks
+    *      this call can lead to sdev_init() and sdev_configure() callbacks
     *      into the LLD.
     *
     *      Defined in: drivers/scsi/scsi_scan.c
@@ -374,7 +374,7 @@ Details::
     *      Might block: no
     *
     *      Notes: Can be invoked any time on a SCSI device controlled by this
-    *      LLD. [Specifically during and after slave_configure() and prior to
+    *      LLD. [Specifically during and after sdev_configure() and prior to
     *      sdev_destroy().] Can safely be invoked from interrupt code.
     *
     *      Defined in: drivers/scsi/scsi.c [see source code for more notes]
@@ -627,14 +627,14 @@ Interface functions are supplied (defined) by LLDs and their function
 pointers are placed in an instance of struct scsi_host_template which
 is passed to scsi_host_alloc() [or scsi_register() / init_this_scsi_driver()].
 Some are mandatory. Interface functions should be declared static. The
-accepted convention is that driver "xyz" will declare its slave_configure()
+accepted convention is that driver "xyz" will declare its sdev_configure()
 function as::
 
-    static int xyz_slave_configure(struct scsi_device * sdev);
+    static int xyz_sdev_configure(struct scsi_device * sdev);
 
 and so forth for all interface functions listed below.
 
-A pointer to this function should be placed in the 'slave_configure' member
+A pointer to this function should be placed in the 'sdev_configure' member
 of a "struct scsi_host_template" instance. A pointer to such an instance
 should be passed to the mid level's scsi_host_alloc() [or scsi_register() /
 init_this_scsi_driver()].
@@ -658,7 +658,7 @@ Summary:
   - proc_info - supports /proc/scsi/{driver_name}/{host_no}
   - queuecommand - queue scsi command, invoke 'done' on completion
   - sdev_init - prior to any commands being sent to a new device
-  - slave_configure - driver fine tuning for given device after attach
+  - sdev_configure - driver fine tuning for given device after attach
   - sdev_destroy - given device is about to be shut down
 
 
@@ -975,7 +975,7 @@ Details::
     *      prior to its initial scan. The corresponding scsi device may not
     *      exist but the mid level is just about to scan for it (i.e. send
     *      and INQUIRY command plus ...). If a device is found then
-    *      slave_configure() will be called while if a device is not found
+    *      sdev_configure() will be called while if a device is not found
     *      sdev_destroy() is called.
     *      For more details see the include/scsi/scsi_host.h file.
     *
@@ -985,7 +985,7 @@ Details::
 
 
     /**
-    *      slave_configure - driver fine tuning for given device just after it
+    *      sdev_configure - driver fine tuning for given device just after it
     *                     has been first scanned (i.e. it responded to an
     *                     INQUIRY)
     *      @sdp: device that has just been attached
@@ -1004,7 +1004,7 @@ Details::
     *
     *      Optionally defined in: LLD
     **/
-	int slave_configure(struct scsi_device *sdp)
+	int sdev_configure(struct scsi_device *sdp)
 
 
     /**
@@ -1024,7 +1024,7 @@ Details::
     *      commands will be sent for this sdp instance. [However the device
     *      could be re-attached in the future in which case a new instance
     *      of struct scsi_device would be supplied by future sdev_init()
-    *      and slave_configure() calls.]
+    *      and sdev_configure() calls.]
     *
     *      Optionally defined in: LLD
     **/
