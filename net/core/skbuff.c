@@ -5540,6 +5540,7 @@ err:
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
 static bool bpf_skb_tstamp_tx(struct sock *sk, u32 scm_flag,
+			      struct sk_buff *skb,
 			      struct skb_shared_hwtstamps *hwtstamps)
 {
 	struct tcp_sock *tp;
@@ -5550,7 +5551,7 @@ static bool bpf_skb_tstamp_tx(struct sock *sk, u32 scm_flag,
 	tp = tcp_sk(sk);
 	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG)) {
 		struct timespec64 tstamp;
-		u32 cb_flag;
+		u32 cb_flag, key = 0;
 
 		switch (scm_flag) {
 		case SCM_TSTAMP_SCHED:
@@ -5566,11 +5567,20 @@ static bool bpf_skb_tstamp_tx(struct sock *sk, u32 scm_flag,
 			return true;
 		}
 
+		/* We require user to set OPT_ID_TCP to generate key value
+		 * in a robust way.
+		 */
+		if (READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_OPT_ID &&
+		    READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_OPT_ID_TCP) {
+			key = skb_shinfo(skb)->tskey;
+			key -= atomic_read(&sk->sk_tskey);
+		}
+
 		if (hwtstamps)
 			tstamp = ktime_to_timespec64(hwtstamps->hwtstamp);
 		else
 			tstamp = ktime_to_timespec64(ktime_get_real());
-		tcp_call_bpf_2arg(sk, cb_flag, tstamp.tv_sec, tstamp.tv_nsec);
+		tcp_call_bpf_3arg(sk, cb_flag, key, tstamp.tv_sec, tstamp.tv_nsec);
 		return true;
 	}
 
@@ -5589,7 +5599,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	if (!sk)
 		return;
 
-	if (bpf_skb_tstamp_tx(sk, tstype, hwtstamps))
+	if (bpf_skb_tstamp_tx(sk, tstype, orig_skb, hwtstamps))
 		return;
 
 	tsflags = READ_ONCE(sk->sk_tsflags);

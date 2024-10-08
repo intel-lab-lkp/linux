@@ -477,7 +477,7 @@ void tcp_init_sock(struct sock *sk)
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
-static u32 bpf_tcp_tx_timestamp(struct sock *sk)
+static u32 bpf_tcp_tx_timestamp(struct sock *sk, int copied)
 {
 	u32 flags;
 
@@ -491,10 +491,21 @@ static u32 bpf_tcp_tx_timestamp(struct sock *sk)
 	if (!(flags & SOF_TIMESTAMPING_TX_RECORD_MASK))
 		return 0;
 
+	/* We require users to set both OPT_ID and OPT_ID_TCP flags
+	 * together here, or else the key might be inaccurate.
+	 */
+	if (flags & SOF_TIMESTAMPING_OPT_ID &&
+	    flags & SOF_TIMESTAMPING_OPT_ID_TCP &&
+	    !(sk->sk_tsflags & (SOF_TIMESTAMPING_OPT_ID | SOF_TIMESTAMPING_OPT_ID_TCP))) {
+		atomic_set(&sk->sk_tskey, (tcp_sk(sk)->write_seq - copied));
+		sk->sk_tsflags |= (SOF_TIMESTAMPING_OPT_ID | SOF_TIMESTAMPING_OPT_ID_TCP);
+	}
+
 	return flags;
 }
 
-static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
+static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc,
+			     int copied)
 {
 	struct sk_buff *skb = tcp_write_queue_tail(sk);
 	u32 tsflags = sockc->tsflags;
@@ -503,7 +514,7 @@ static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 	if (!skb)
 		return;
 
-	flags = bpf_tcp_tx_timestamp(sk);
+	flags = bpf_tcp_tx_timestamp(sk, copied);
 	if (flags)
 		tsflags = flags;
 
@@ -1347,7 +1358,7 @@ wait_for_space:
 
 out:
 	if (copied) {
-		tcp_tx_timestamp(sk, &sockc);
+		tcp_tx_timestamp(sk, &sockc, copied);
 		tcp_push(sk, flags, mss_now, tp->nonagle, size_goal);
 	}
 out_nopush:
