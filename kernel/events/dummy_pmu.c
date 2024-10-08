@@ -14,6 +14,7 @@
 #include <linux/random.h>
 #include <linux/seq_file.h>
 #include <linux/types.h>
+#include <linux/xarray.h>
 
 struct dummy_mod {
 	struct dentry *debugfs_root;
@@ -25,6 +26,7 @@ struct dummy_mod {
 struct dummy_pmu {
 	struct pmu base;
 	char *name;
+	struct xarray active_events;
 	bool registered;
 };
 
@@ -97,9 +99,25 @@ static const struct attribute_group *attr_groups[] = {
 	NULL,
 };
 
+static void dummy_pmu_event_destroy(struct perf_event *event)
+{
+	struct dummy_pmu *pmu = event_to_pmu(event);
+	unsigned long idx;
+	struct perf_event *e;
+
+	/* Event not active anymore */
+	xa_for_each(&pmu->active_events, idx, e)
+		if (e == event) {
+			xa_erase(&pmu->active_events, idx);
+			break;
+		}
+}
+
 static int dummy_pmu_event_init(struct perf_event *event)
 {
 	struct dummy_pmu *pmu = event_to_pmu(event);
+	u32 event_id;
+	int ret;
 
 	if (!pmu->registered)
 		return -ENODEV;
@@ -116,6 +134,13 @@ static int dummy_pmu_event_init(struct perf_event *event)
 
 	if (event->cpu < 0)
 		return -EINVAL;
+
+	ret = xa_alloc(&pmu->active_events, &event_id, event,
+			xa_limit_32b, GFP_KERNEL);
+	if (ret)
+		return ret;
+
+	event->destroy = dummy_pmu_event_destroy;
 
 	return 0;
 }
@@ -232,6 +257,8 @@ static int device_init(struct dummy_device *d)
 	if (ret)
 		goto fail;
 
+	xa_init_flags(&d->pmu.active_events, XA_FLAGS_ALLOC);
+
 	d->pmu.registered = true;
 	pr_info("Device registered: %s\n", d->pmu.name);
 
@@ -248,9 +275,22 @@ fail:
 	return ret;
 }
 
+static void disable_active_events(struct dummy_pmu *pmu)
+{
+	struct perf_event *event;
+	unsigned long idx;
+
+	xa_for_each(&pmu->active_events, idx, event) {
+		xa_erase(&pmu->active_events, idx);
+		perf_event_disable(event);
+	}
+}
+
 static void device_exit(struct dummy_device *d)
 {
 	d->pmu.registered = false;
+
+	disable_active_events(&d->pmu);
 	perf_pmu_unregister(&d->pmu.base);
 
 	pr_info("Device released: %s\n", d->pmu.name);
