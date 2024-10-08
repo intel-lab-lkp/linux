@@ -1230,7 +1230,7 @@ static int omap_iommu_probe(struct platform_device *pdev)
 		if (err)
 			return err;
 
-		err = iommu_device_register(&obj->iommu, &omap_iommu_ops, &pdev->dev);
+		err = iommu_device_register(&obj->iommu, &omap_iommu_ops, NULL);
 		if (err)
 			goto out_sysfs;
 		obj->has_iommu_driver = true;
