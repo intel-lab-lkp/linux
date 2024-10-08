@@ -137,7 +137,7 @@ static int tipc_udp_addr2str(struct tipc_media_addr *a, char *buf, int size)
 		snprintf(buf, size, "%pI6:%u", &ua->ipv6, ntohs(ua->port));
 	else {
 		pr_err("Invalid UDP media address\n");
-		return 1;
+		return -EINVAL;
 	}
 
 	return 0;
