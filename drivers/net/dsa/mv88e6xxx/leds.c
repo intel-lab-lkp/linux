@@ -744,7 +744,6 @@ mv88e6xxx_led1_hw_control_get_device(struct led_classdev *ldev)
 
 int mv88e6xxx_port_setup_leds(struct mv88e6xxx_chip *chip, int port)
 {
-	struct fwnode_handle *leds = NULL;
 	struct led_init_data init_data = { };
 	enum led_default_state state;
 	struct mv88e6xxx_port *p;
@@ -763,7 +762,8 @@ int mv88e6xxx_port_setup_leds(struct mv88e6xxx_chip *chip, int port)
 
 	dev = chip->dev;
 
-	leds = fwnode_get_named_child_node(p->fwnode, "leds");
+	struct fwnode_handle *leds __free(fwnode_handle) =
+		fwnode_get_named_child_node(p->fwnode, "leds");
 	if (!leds) {
 		dev_dbg(dev, "No Leds node specified in device tree for port %d!\n",
 			port);
