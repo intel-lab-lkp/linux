@@ -127,8 +127,6 @@ static int dummy;	/* dev_id for request_irq() */
 static int ac_register_board(unsigned long physloc, void __iomem *loc, 
 		      unsigned char boardno)
 {
-	volatile unsigned char byte_reset_it;
-
 	if((readb(loc + CONF_END_TEST)     != 0x00) ||
 	   (readb(loc + CONF_END_TEST + 1) != 0x55) ||
 	   (readb(loc + CONF_END_TEST + 2) != 0xAA) ||
@@ -156,7 +154,6 @@ static int ac_register_board(unsigned long physloc, void __iomem *loc,
 	apbs[boardno].RamIO = loc;
 	init_waitqueue_head(&apbs[boardno].FlagSleepSend);
 	spin_lock_init(&apbs[boardno].mutex);
-	byte_reset_it = readb(loc + RAM_IT_TO_PC);
 
 	numboards++;
 	return boardno + 1;
