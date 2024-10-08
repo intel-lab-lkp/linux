@@ -5216,8 +5216,24 @@ static void perf_pending_task_sync(struct perf_event *event)
 	rcuwait_wait_event(&event->pending_work_wait, !event->pending_work, TASK_UNINTERRUPTIBLE);
 }
 
+static void pmu_module_put(struct pmu **ppmu)
+{
+	struct pmu *pmu = *ppmu;
+	struct module *module = pmu->module;
+
+	if (pmu->put)
+		pmu->put(pmu);
+
+	module_put(module);
+
+	/* Can't touch pmu anymore/ */
+	*ppmu = NULL;
+}
+
 static void _free_event(struct perf_event *event)
 {
+	struct module *module;
+
 	irq_work_sync(&event->pending_irq);
 	irq_work_sync(&event->pending_disable_irq);
 	perf_pending_task_sync(event);
@@ -5271,7 +5287,8 @@ static void _free_event(struct perf_event *event)
 		put_ctx(event->ctx);
 
 	exclusive_event_destroy(event);
-	module_put(event->pmu->module);
+
+	pmu_module_put(&event->pmu);
 
 	call_rcu(&event->rcu_head, free_event_rcu);
 }
@@ -11399,10 +11416,12 @@ static int perf_event_idx_default(struct perf_event *event)
 	return 0;
 }
 
-static void free_pmu_context(struct pmu *pmu)
+void perf_pmu_free(struct pmu *pmu)
 {
 	free_percpu(pmu->cpu_pmu_context);
+	free_percpu(pmu->pmu_disable_count);
 }
+EXPORT_SYMBOL_GPL(perf_pmu_free);
 
 /*
  * Let userspace know that this PMU supports address range filtering:
@@ -11577,6 +11596,11 @@ int perf_pmu_register(struct pmu *pmu, const char *name, int type)
 		goto free_pdc;
 	}
 
+	if (WARN_ONCE((!!pmu->get) ^ (!!pmu->put), "Can not register a pmu with only get or put defined.\n")) {
+		ret = -EINVAL;
+		goto free_pdc;
+	}
+
 	pmu->name = name;
 
 	if (type >= 0)
@@ -11683,8 +11707,8 @@ void perf_pmu_unregister(struct pmu *pmu)
 
 	mutex_unlock(&pmus_lock);
 
-	free_percpu(pmu->pmu_disable_count);
-	free_pmu_context(pmu);
+	if (!pmu->put)
+		perf_pmu_free(pmu);
 }
 EXPORT_SYMBOL_GPL(perf_pmu_unregister);
 
@@ -11718,6 +11742,9 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 		BUG_ON(!ctx);
 	}
 
+	if (pmu->get)
+		pmu->get(pmu);
+
 	event->pmu = pmu;
 	ret = pmu->event_init(event);
 
@@ -11738,7 +11765,7 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 	}
 
 	if (ret)
-		module_put(pmu->module);
+		pmu_module_put(&pmu);
 
 	return ret;
 }

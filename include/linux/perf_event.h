@@ -540,6 +540,17 @@ struct pmu {
 	 * Check period value for PERF_EVENT_IOC_PERIOD ioctl.
 	 */
 	int (*check_period)		(struct perf_event *event, u64 value); /* optional */
+
+	/*
+	 * Optional: get a reference. Typically needed by PMUs that are bound to a device
+	 * that can be hotplugged, either physically or through sysfs' bind/unbind. When provided,
+	 * pmu::put() is mandatory and it's driver responsibility to call perf_pmu_free() when
+	 * resources can be released.
+	 */
+	struct pmu *(*get)		(struct pmu *pmu);
+
+	/* Optional: put a reference. See pmu::get() */
+	 void (*put)			(struct pmu *pmu);
 };
 
 enum perf_addr_filter_action_t {
@@ -1076,6 +1087,7 @@ extern void perf_event_itrace_started(struct perf_event *event);
 
 extern int perf_pmu_register(struct pmu *pmu, const char *name, int type);
 extern void perf_pmu_unregister(struct pmu *pmu);
+extern void perf_pmu_free(struct pmu *pmu);
 
 extern void __perf_event_task_sched_in(struct task_struct *prev,
 				       struct task_struct *task);
