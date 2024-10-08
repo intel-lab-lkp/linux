@@ -512,6 +512,10 @@ static u64 __init fadump_locate_reserve_mem(u64 base, u64 size)
 	phys_addr_t mstart, mend;
 	int idx = 0;
 	u64 i, ret = 0;
+	unsigned long align = PAGE_SIZE;
+
+	if (IS_ENABLED(CONFIG_CMA) && !fw_dump.nocma)
+		align = CMA_MIN_ALIGNMENT_BYTES;
 
 	mrngs = reserved_mrange_info.mem_ranges;
 	for_each_free_mem_range(i, NUMA_NO_NODE, MEMBLOCK_NONE,
@@ -520,7 +524,7 @@ static u64 __init fadump_locate_reserve_mem(u64 base, u64 size)
 			 i, mstart, mend, base);
 
 		if (mstart > base)
-			base = PAGE_ALIGN(mstart);
+			base = ALIGN(mstart, align);
 
 		while ((mend > base) && ((mend - base) >= size)) {
 			if (!overlaps_reserved_ranges(base, base+size, &idx)) {
@@ -529,7 +533,7 @@ static u64 __init fadump_locate_reserve_mem(u64 base, u64 size)
 			}
 
 			base = mrngs[idx].base + mrngs[idx].size;
-			base = PAGE_ALIGN(base);
+			base = ALIGN(base, align);
 		}
 	}
 
