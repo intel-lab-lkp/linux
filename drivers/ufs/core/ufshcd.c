@@ -4824,6 +4824,7 @@ static int ufshcd_hba_execute_hce(struct ufs_hba *hba)
 {
 	int retry_outer = 3;
 	int retry_inner;
+	int ret;
 
 start:
 	if (ufshcd_is_hba_active(hba))
@@ -4869,6 +4870,22 @@ start:
 
 	/* enable UIC related interrupts */
 	ufshcd_enable_intr(hba, UFSHCD_UIC_MASK);
+
+	/*
+	 * Do dme_reset and dme_enable if a UFS host controller need
+	 * this procedure to actually finish HCE.
+	 */
+	if (hba->quirks & UFSHCI_QUIRK_DME_RESET_ENABLE_AFTER_HCE) {
+		ret = ufshcd_dme_reset(hba);
+		if (!ret) {
+			ret = ufshcd_dme_enable(hba);
+			if (ret)
+				dev_err(hba->dev,
+					"Failed to do dme_enable after HCE.\n");
+		} else {
+			dev_err(hba->dev, "Failed to do dme_reset after HCE.\n");
+		}
+	}
 
 	ufshcd_vops_hce_enable_notify(hba, POST_CHANGE);
 
