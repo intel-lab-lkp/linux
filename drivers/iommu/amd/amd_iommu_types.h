@@ -879,6 +879,13 @@ extern struct list_head amd_iommu_list;
 extern struct amd_iommu *amd_iommus[MAX_IOMMUS];
 
 /*
+ * Structure defining one entry in the command buffer
+ */
+struct iommu_cmd {
+	u32 data[4];
+};
+
+/*
  * Structure defining one entry in the device table
  */
 struct dev_table_entry {
