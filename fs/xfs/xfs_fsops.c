@@ -38,6 +38,7 @@ static int
 xfs_resizefs_init_new_ags(
 	struct xfs_trans	*tp,
 	struct aghdr_init_data	*id,
+	xfs_agblock_t		agblocks,
 	xfs_agnumber_t		oagcount,
 	xfs_agnumber_t		nagcount,
 	xfs_rfsblock_t		delta,
@@ -57,9 +58,9 @@ xfs_resizefs_init_new_ags(
 
 		if (id->agno == nagcount - 1)
 			id->agsize = nb - (id->agno *
-					(xfs_rfsblock_t)mp->m_sb.sb_agblocks);
+					(xfs_rfsblock_t)agblocks);
 		else
-			id->agsize = mp->m_sb.sb_agblocks;
+			id->agsize = agblocks;
 
 		error = xfs_ag_init_headers(mp, id);
 		if (error) {
@@ -89,6 +90,7 @@ xfs_growfs_data_private(
 {
 	struct xfs_buf		*bp;
 	int			error;
+	xfs_agblock_t		nagblocks;
 	xfs_agnumber_t		nagcount;
 	xfs_agnumber_t		nagimax = 0;
 	xfs_rfsblock_t		nb, nb_div, nb_mod;
@@ -113,16 +115,18 @@ xfs_growfs_data_private(
 		xfs_buf_relse(bp);
 	}
 
+	nagblocks = mp->m_sb.sb_agblocks;
+
 	nb_div = nb;
-	nb_mod = do_div(nb_div, mp->m_sb.sb_agblocks);
+	nb_mod = do_div(nb_div, nagblocks);
 	if (nb_mod && nb_mod >= XFS_MIN_AG_BLOCKS)
 		nb_div++;
 	else if (nb_mod)
-		nb = nb_div * mp->m_sb.sb_agblocks;
+		nb = nb_div * nagblocks;
 
 	if (nb_div > XFS_MAX_AGNUMBER + 1) {
 		nb_div = XFS_MAX_AGNUMBER + 1;
-		nb = nb_div * mp->m_sb.sb_agblocks;
+		nb = nb_div * nagblocks;
 	}
 	nagcount = nb_div;
 	delta = nb - mp->m_sb.sb_dblocks;
@@ -161,8 +165,8 @@ xfs_growfs_data_private(
 
 	last_pag = xfs_perag_get(mp, oagcount - 1);
 	if (delta > 0) {
-		error = xfs_resizefs_init_new_ags(tp, &id, oagcount, nagcount,
-				delta, last_pag, &lastag_extended);
+		error = xfs_resizefs_init_new_ags(tp, &id, nagblocks, oagcount,
+				nagcount, delta, last_pag, &lastag_extended);
 	} else {
 		xfs_warn_mount(mp, XFS_OPSTATE_WARNED_SHRINK,
 	"EXPERIMENTAL online shrink feature in use. Use at your own risk!");
