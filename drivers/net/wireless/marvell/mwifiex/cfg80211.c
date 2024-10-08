@@ -746,13 +746,18 @@ mwifiex_cfg80211_set_wiphy_params(struct wiphy *wiphy, u32 changed)
 
 	priv = mwifiex_get_priv(adapter, MWIFIEX_BSS_ROLE_ANY);
 
+	/* Because wiphy parameters are global setting, the setting for
+	 * the first interface will apply for other interfaces too.
+	 * If AP and STA are running at same time, these parameters must
+	 * be the same. If the first interface is running, it means wiphy
+	 * parameters are already set. The second setting should be dropped
+	 * without error return, otherwise AP and STA can't run at the same
+	 * time if wiphy parameters are setting.
+	 */
 	switch (priv->bss_role) {
 	case MWIFIEX_BSS_ROLE_UAP:
-		if (priv->bss_started) {
-			mwifiex_dbg(adapter, ERROR,
-				    "cannot change wiphy params when bss started");
-			return -EINVAL;
-		}
+		if (priv->bss_started)
+			break;
 
 		bss_cfg = kzalloc(sizeof(*bss_cfg), GFP_KERNEL);
 		if (!bss_cfg)
@@ -781,11 +786,9 @@ mwifiex_cfg80211_set_wiphy_params(struct wiphy *wiphy, u32 changed)
 		break;
 
 	case MWIFIEX_BSS_ROLE_STA:
-		if (priv->media_connected) {
-			mwifiex_dbg(adapter, ERROR,
-				    "cannot change wiphy params when connected");
-			return -EINVAL;
-		}
+		if (priv->media_connected)
+			break;
+
 		if (changed & WIPHY_PARAM_RTS_THRESHOLD) {
 			ret = mwifiex_set_rts(priv,
 					      wiphy->rts_threshold);
@@ -2069,6 +2072,9 @@ static int mwifiex_cfg80211_start_ap(struct wiphy *wiphy,
 	if (GET_BSS_ROLE(priv) != MWIFIEX_BSS_ROLE_UAP)
 		return -1;
 
+	if (!mwifiex_is_channel_setting_allowable(priv, params->chandef.chan))
+		return -EOPNOTSUPP;
+
 	bss_cfg = kzalloc(sizeof(struct mwifiex_uap_bss_param), GFP_KERNEL);
 	if (!bss_cfg)
 		return -ENOMEM;
@@ -2462,6 +2468,9 @@ mwifiex_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 			    dev->name);
 		return -EFAULT;
 	}
+
+	if (!mwifiex_is_channel_setting_allowable(priv, sme->channel))
+		return -EOPNOTSUPP;
 
 	mwifiex_dbg(adapter, INFO,
 		    "info: Trying to associate to bssid %pM\n", sme->bssid);
@@ -4297,6 +4306,9 @@ mwifiex_cfg80211_authenticate(struct wiphy *wiphy,
 			    priv->wdev.iftype);
 		return -EINVAL;
 	}
+
+	if (!mwifiex_is_channel_setting_allowable(priv, req->bss->channel))
+		return -EOPNOTSUPP;
 
 	if (priv->auth_alg != WLAN_AUTH_SAE &&
 	    (priv->auth_flag & HOST_MLME_AUTH_PENDING)) {
