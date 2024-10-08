@@ -3048,7 +3048,8 @@ intel_dp_audio_compute_config(struct intel_encoder *encoder,
 {
 	pipe_config->has_audio = intel_dp_has_audio(encoder, conn_state);
 
-	pipe_config->has_audio = pipe_config->has_audio &&
+	if (intel_dp_is_uhbr(pipe_config))
+		pipe_config->has_audio = pipe_config->has_audio &&
 		intel_dp_audio_compute_bw_limits(pipe_config, conn_state);
 
 	pipe_config->has_audio = pipe_config->has_audio &&
