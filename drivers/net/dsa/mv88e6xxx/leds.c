@@ -744,7 +744,7 @@ mv88e6xxx_led1_hw_control_get_device(struct led_classdev *ldev)
 
 int mv88e6xxx_port_setup_leds(struct mv88e6xxx_chip *chip, int port)
 {
-	struct fwnode_handle *led = NULL, *leds = NULL;
+	struct fwnode_handle *leds = NULL;
 	struct led_init_data init_data = { };
 	enum led_default_state state;
 	struct mv88e6xxx_port *p;
@@ -770,7 +770,7 @@ int mv88e6xxx_port_setup_leds(struct mv88e6xxx_chip *chip, int port)
 		return 0;
 	}
 
-	fwnode_for_each_child_node(leds, led) {
+	fwnode_for_each_available_child_node_scoped(leds, led) {
 		/* Reg represent the led number of the port, max 2
 		 * LEDs can be connected to each port, in some designs
 		 * only one LED is connected.
