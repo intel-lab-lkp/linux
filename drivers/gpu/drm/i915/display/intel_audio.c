@@ -796,6 +796,7 @@ bool intel_audio_compute_eld_config(struct drm_connector_state *conn_state,
 {
 	struct drm_connector *connector = conn_state->connector;
 	struct drm_i915_private *i915 = to_i915(connector->dev);
+	bool audio_supported = false;
 	u8 *eld;
 
 	if (!intel_audio_eld_valid(conn_state))
@@ -823,9 +824,13 @@ bool intel_audio_compute_eld_config(struct drm_connector_state *conn_state,
 				    "SAD updated. Freq: 0x%x(0x%x) Channels: %d(%d)\n",
 				    sad.freq, sad_freq, sad.channels, sad_channels);
 		}
+
+		/* If no supported freq in any sads, make audio support to false */
+		audio_supported |= sad.freq;
 	}
 
-	return true;
+	drm_dbg_kms(&i915->drm, "audio supported: %d\n", audio_supported);
+	return audio_supported;
 }
 
 bool intel_audio_compute_config(struct intel_crtc_state *crtc_state,
