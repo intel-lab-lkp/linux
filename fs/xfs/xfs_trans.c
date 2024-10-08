@@ -433,6 +433,9 @@ xfs_trans_mod_sb(
 	case XFS_TRANS_SB_DBLOCKS:
 		tp->t_dblocks_delta += delta;
 		break;
+	case XFS_TRANS_SB_AGBLOCKS:
+		tp->t_agblocks_delta += delta;
+		break;
 	case XFS_TRANS_SB_AGCOUNT:
 		ASSERT(delta > 0);
 		tp->t_agcount_delta += delta;
@@ -524,6 +527,16 @@ xfs_trans_apply_sb_deltas(
 
 	if (tp->t_dblocks_delta) {
 		be64_add_cpu(&sbp->sb_dblocks, tp->t_dblocks_delta);
+		whole = 1;
+	}
+	if (tp->t_agblocks_delta) {
+		xfs_agblock_t		agblocks;
+
+		agblocks = be32_to_cpu(sbp->sb_agblocks);
+		agblocks += tp->t_agblocks_delta;
+
+		sbp->sb_agblocks = cpu_to_be32(agblocks);
+		sbp->sb_agblklog = ilog2(roundup_pow_of_two(agblocks));
 		whole = 1;
 	}
 	if (tp->t_agcount_delta) {
@@ -657,6 +670,8 @@ xfs_trans_unreserve_and_mod_sb(
 	 * incore reservations.
 	 */
 	mp->m_sb.sb_dblocks += tp->t_dblocks_delta;
+	mp->m_sb.sb_agblocks += tp->t_agblocks_delta;
+	mp->m_sb.sb_agblklog = ilog2(roundup_pow_of_two(mp->m_sb.sb_agblocks));
 	mp->m_sb.sb_agcount += tp->t_agcount_delta;
 	mp->m_sb.sb_imax_pct += tp->t_imaxpct_delta;
 	mp->m_sb.sb_rextsize += tp->t_rextsize_delta;

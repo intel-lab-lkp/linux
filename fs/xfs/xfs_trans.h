@@ -141,6 +141,7 @@ typedef struct xfs_trans {
 	int64_t			t_frextents_delta;/* superblock freextents chg*/
 	int64_t			t_res_frextents_delta; /* on-disk only chg */
 	int64_t			t_dblocks_delta;/* superblock dblocks change */
+	int64_t			t_agblocks_delta;/* superblock agblocks change */
 	int64_t			t_agcount_delta;/* superblock agcount change */
 	int64_t			t_imaxpct_delta;/* superblock imaxpct change */
 	int64_t			t_rextsize_delta;/* superblock rextsize chg */
