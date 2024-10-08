@@ -5225,6 +5225,9 @@ static int sol_socket_sockopt(struct sock *sk, int optname,
 		break;
 	case SO_BINDTODEVICE:
 		break;
+	case SO_TIMESTAMPING_NEW:
+	case SO_TIMESTAMPING_OLD:
+		break;
 	default:
 		return -EINVAL;
 	}
