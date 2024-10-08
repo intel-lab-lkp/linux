@@ -1,5 +1,6 @@
 config MHI_BUS_EP
 	tristate "Modem Host Interface (MHI) bus Endpoint implementation"
+	depends on HAS_IOMEM || INDIRECT_IOMEM
 	help
 	  Bus driver for MHI protocol. Modem Host Interface (MHI) is a
 	  communication protocol used by a host processor to control
