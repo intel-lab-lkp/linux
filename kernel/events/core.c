@@ -11673,7 +11673,6 @@ void perf_pmu_unregister(struct pmu *pmu)
 	synchronize_srcu(&pmus_srcu);
 	synchronize_rcu();
 
-	free_percpu(pmu->pmu_disable_count);
 	idr_remove(&pmu_idr, pmu->type);
 	if (pmu_bus_running && pmu->dev && pmu->dev != PMU_NULL_DEV) {
 		if (pmu->nr_addr_filters)
@@ -11681,8 +11680,11 @@ void perf_pmu_unregister(struct pmu *pmu)
 		device_del(pmu->dev);
 		put_device(pmu->dev);
 	}
-	free_pmu_context(pmu);
+
 	mutex_unlock(&pmus_lock);
+
+	free_percpu(pmu->pmu_disable_count);
+	free_pmu_context(pmu);
 }
 EXPORT_SYMBOL_GPL(perf_pmu_unregister);
 
