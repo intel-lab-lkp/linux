@@ -5,6 +5,9 @@
 . $(dirname $0)/functions.sh
 
 MOD_LIVEPATCH=test_klp_livepatch
+MOD_LIVEPATCH_NOREPLACE=test_klp_livepatch_noreplace
+MOD_LIVEPATCH_NOREPLACE2=test_klp_livepatch_noreplace2
+MOD_LIVEPATCH_NOREPLACE3=test_klp_livepatch_noreplace3
 
 setup_config
 
@@ -130,5 +133,73 @@ livepatch: '$MOD_LIVEPATCH': starting unpatching transition
 livepatch: '$MOD_LIVEPATCH': completing unpatching transition
 livepatch: '$MOD_LIVEPATCH': unpatching complete
 % rmmod $MOD_LIVEPATCH"
+
+start_test "sysfs test stack_order read"
+
+load_lp $MOD_LIVEPATCH_NOREPLACE
+
+check_sysfs_rights "$MOD_LIVEPATCH_NOREPLACE" "stack_order" "-r--r--r--"
+check_sysfs_value  "$MOD_LIVEPATCH_NOREPLACE" "stack_order" "1"
+
+load_lp $MOD_LIVEPATCH_NOREPLACE2
+
+check_sysfs_rights "$MOD_LIVEPATCH_NOREPLACE2" "stack_order" "-r--r--r--"
+check_sysfs_value  "$MOD_LIVEPATCH_NOREPLACE2" "stack_order" "2"
+
+load_lp $MOD_LIVEPATCH_NOREPLACE3
+
+check_sysfs_rights "$MOD_LIVEPATCH_NOREPLACE3" "stack_order" "-r--r--r--"
+check_sysfs_value  "$MOD_LIVEPATCH_NOREPLACE3" "stack_order" "3"
+
+disable_lp $MOD_LIVEPATCH_NOREPLACE2
+unload_lp $MOD_LIVEPATCH_NOREPLACE2
+
+check_sysfs_rights "$MOD_LIVEPATCH_NOREPLACE" "stack_order" "-r--r--r--"
+check_sysfs_value  "$MOD_LIVEPATCH_NOREPLACE" "stack_order" "1"
+check_sysfs_rights "$MOD_LIVEPATCH_NOREPLACE3" "stack_order" "-r--r--r--"
+check_sysfs_value  "$MOD_LIVEPATCH_NOREPLACE3" "stack_order" "2"
+
+disable_lp $MOD_LIVEPATCH_NOREPLACE3
+unload_lp $MOD_LIVEPATCH_NOREPLACE3
+
+disable_lp $MOD_LIVEPATCH_NOREPLACE
+unload_lp $MOD_LIVEPATCH_NOREPLACE
+
+check_result "% insmod test_modules/$MOD_LIVEPATCH_NOREPLACE.ko
+livepatch: enabling patch '$MOD_LIVEPATCH_NOREPLACE'
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': initializing patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': starting patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': completing patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': patching complete
+% insmod test_modules/$MOD_LIVEPATCH_NOREPLACE2.ko
+livepatch: enabling patch '$MOD_LIVEPATCH_NOREPLACE2'
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': initializing patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': starting patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': completing patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': patching complete
+% insmod test_modules/$MOD_LIVEPATCH_NOREPLACE3.ko
+livepatch: enabling patch '$MOD_LIVEPATCH_NOREPLACE3'
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': initializing patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': starting patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': completing patching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': patching complete
+% echo 0 > /sys/kernel/livepatch/$MOD_LIVEPATCH_NOREPLACE2/enabled
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': initializing unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': completing unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE2': unpatching complete
+% rmmod $MOD_LIVEPATCH_NOREPLACE2
+% echo 0 > /sys/kernel/livepatch/$MOD_LIVEPATCH_NOREPLACE3/enabled
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': initializing unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': completing unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE3': unpatching complete
+% rmmod $MOD_LIVEPATCH_NOREPLACE3
+% echo 0 > /sys/kernel/livepatch/$MOD_LIVEPATCH_NOREPLACE/enabled
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': initializing unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': completing unpatching transition
+livepatch: '$MOD_LIVEPATCH_NOREPLACE': unpatching complete
+% rmmod $MOD_LIVEPATCH_NOREPLACE"
 
 exit 0
