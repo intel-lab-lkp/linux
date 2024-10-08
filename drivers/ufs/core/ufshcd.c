@@ -4539,6 +4539,14 @@ static int ufshcd_get_max_pwr_mode(struct ufs_hba *hba)
 		return -EINVAL;
 	}
 
+	if (pwr_info->lane_rx != pwr_info->lane_tx) {
+		dev_err(hba->dev, "%s: asymmetric connected lanes. rx=%d, tx=%d\n",
+			__func__,
+				pwr_info->lane_rx,
+				pwr_info->lane_tx);
+		return -EINVAL;
+	}
+
 	/*
 	 * First, get the maximum gears of HS speed.
 	 * If a zero value, it means there is no HSGEAR capability.
@@ -8578,7 +8586,8 @@ static int ufshcd_device_params_init(struct ufs_hba *hba)
 		hba->dev_info.f_power_on_wp_en = flag;
 
 	/* Probe maximum power mode co-supported by both UFS host and device */
-	if (ufshcd_get_max_pwr_mode(hba))
+	ret = ufshcd_get_max_pwr_mode(hba);
+	if (ret)
 		dev_err(hba->dev,
 			"%s: Failed getting max supported power mode\n",
 			__func__);
