@@ -16,7 +16,7 @@
  * Assumes the device can cope with 32-bit transfers.  If it can't,
  * don't use this function.
  */
-void memcpy_toio(volatile void __iomem *dst, const void *src, int count)
+void memcpy_toio(volatile void __iomem *dst, const void *src, size_t count)
 {
 	if (((unsigned long)dst & 3) != ((unsigned long)src & 3))
 		goto bytecopy;
@@ -51,7 +51,7 @@ void memcpy_toio(volatile void __iomem *dst, const void *src, int count)
 **      Minimize total number of transfers at cost of CPU cycles.
 **	TODO: only look at src alignment and adjust the stores to dest.
 */
-void memcpy_fromio(void *dst, const volatile void __iomem *src, int count)
+void memcpy_fromio(void *dst, const volatile void __iomem *src, size_t count)
 {
 	/* first compare alignment of src/dst */ 
 	if ( (((unsigned long)dst ^ (unsigned long)src) & 1) || (count < 2) )
@@ -103,9 +103,13 @@ void memcpy_fromio(void *dst, const volatile void __iomem *src, int count)
  * Assumes the device can cope with 32-bit transfers.  If it can't,
  * don't use this function.
  */
-void memset_io(volatile void __iomem *addr, unsigned char val, int count)
+void memset_io(volatile void __iomem *addr, int val, size_t count)
 {
-	u32 val32 = (val << 24) | (val << 16) | (val << 8) | val;
+	u32 val32;
+
+	val &= 0xff;
+	val32 = (val << 24) | (val << 16) | (val << 8) | val;
+
 	while ((unsigned long)addr & 3) {
 		writeb(val, addr++);
 		count--;
