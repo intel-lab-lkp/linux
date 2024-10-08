@@ -2999,8 +2999,9 @@ intel_dp_audio_compute_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *pipe_config,
 			      struct drm_connector_state *conn_state)
 {
-	pipe_config->has_audio =
-		intel_dp_has_audio(encoder, conn_state) &&
+	pipe_config->has_audio = intel_dp_has_audio(encoder, conn_state);
+
+	pipe_config->has_audio = pipe_config->has_audio &&
 		intel_audio_compute_config(pipe_config, conn_state);
 
 	pipe_config->sdp_split_enable = pipe_config->has_audio &&
