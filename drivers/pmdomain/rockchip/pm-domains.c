@@ -621,6 +621,9 @@ static int rockchip_pd_power_off(struct generic_pm_domain *domain)
 {
 	struct rockchip_pm_domain *pd = to_rockchip_pd(domain);
 
+	if (pd->genpd.flags & GENPD_FLAG_RPM_ALWAYS_ON)
+		return 0;
+
 	return rockchip_pd_power(pd, false);
 }
 
