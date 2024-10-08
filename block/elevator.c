@@ -705,19 +705,16 @@ static int elevator_change(struct request_queue *q, const char *elevator_name)
 	return ret;
 }
 
-int elv_iosched_load_module(struct gendisk *disk, const char *buf,
+void elv_iosched_load_module(struct gendisk *disk, const char *buf,
 			    size_t count)
 {
 	char elevator_name[ELV_NAME_MAX];
 
 	if (!elv_support_iosched(disk->queue))
-		return -EOPNOTSUPP;
+		return;
 
 	strscpy(elevator_name, buf, sizeof(elevator_name));
-
 	request_module("%s-iosched", strstrip(elevator_name));
-
-	return 0;
 }
 
 ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
