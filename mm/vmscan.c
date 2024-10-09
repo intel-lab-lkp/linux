@@ -2126,9 +2126,9 @@ static void shrink_active_list(unsigned long nr_to_scan,
 }
 
 static unsigned int reclaim_folio_list(struct list_head *folio_list,
-				      struct pglist_data *pgdat)
+				      struct pglist_data *pgdat,
+				      struct reclaim_stat *stat)
 {
-	struct reclaim_stat dummy_stat;
 	unsigned int nr_reclaimed;
 	struct folio *folio;
 	struct scan_control sc = {
@@ -2139,7 +2139,7 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
 		.no_demotion = 1,
 	};
 
-	nr_reclaimed = shrink_folio_list(folio_list, pgdat, &sc, &dummy_stat, true);
+	nr_reclaimed = shrink_folio_list(folio_list, pgdat, &sc, stat, true);
 	while (!list_empty(folio_list)) {
 		folio = lru_to_folio(folio_list);
 		list_del(&folio->lru);
@@ -2149,16 +2149,40 @@ static unsigned int reclaim_folio_list(struct list_head *folio_list,
 	return nr_reclaimed;
 }
 
+static void reclaim_stat_add(struct reclaim_stat *stat_from,
+			     struct reclaim_stat *stat_to)
+{
+	int type;
+
+	if (!trace_mm_vmscan_reclaim_pages_enabled())
+		return;
+
+	stat_to->nr_dirty += stat_from->nr_dirty;
+	stat_to->nr_unqueued_dirty += stat_from->nr_unqueued_dirty;
+	stat_to->nr_congested += stat_from->nr_congested;
+	stat_to->nr_writeback += stat_from->nr_writeback;
+	stat_to->nr_immediate += stat_from->nr_immediate;
+	stat_to->nr_pageout += stat_from->nr_pageout;
+	for (type = 0; type < ANON_AND_FILE; type++)
+		stat_to->nr_activate[type] += stat_from->nr_activate[type];
+	stat_to->nr_ref_keep += stat_from->nr_ref_keep;
+	stat_to->nr_unmap_fail += stat_from->nr_unmap_fail;
+	stat_to->nr_lazyfree_fail += stat_from->nr_lazyfree_fail;
+}
+
 unsigned long reclaim_pages(struct list_head *folio_list)
 {
 	int nid;
+	unsigned int nr_scanned = 0;
 	unsigned int nr_reclaimed = 0;
 	LIST_HEAD(node_folio_list);
 	unsigned int noreclaim_flag;
+	struct reclaim_stat stat_total, stat_one;
 
 	if (list_empty(folio_list))
 		return nr_reclaimed;
 
+	memset(&stat_total, 0, sizeof(stat_total));
 	noreclaim_flag = memalloc_noreclaim_save();
 
 	nid = folio_nid(lru_to_folio(folio_list));
@@ -2168,14 +2192,20 @@ unsigned long reclaim_pages(struct list_head *folio_list)
 		if (nid == folio_nid(folio)) {
 			folio_clear_active(folio);
 			list_move(&folio->lru, &node_folio_list);
+			nr_scanned += folio_nr_pages(folio);
 			continue;
 		}
 
-		nr_reclaimed += reclaim_folio_list(&node_folio_list, NODE_DATA(nid));
+		nr_reclaimed += reclaim_folio_list(&node_folio_list,
+						   NODE_DATA(nid), &stat_one);
+		reclaim_stat_add(&stat_one, &stat_total);
 		nid = folio_nid(lru_to_folio(folio_list));
 	} while (!list_empty(folio_list));
 
-	nr_reclaimed += reclaim_folio_list(&node_folio_list, NODE_DATA(nid));
+	nr_reclaimed += reclaim_folio_list(&node_folio_list, NODE_DATA(nid),
+					   &stat_one);
+	reclaim_stat_add(&stat_one, &stat_total);
+	trace_mm_vmscan_reclaim_pages(nr_scanned, nr_reclaimed, &stat_total);
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 
