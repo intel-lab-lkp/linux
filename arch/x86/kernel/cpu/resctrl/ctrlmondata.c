@@ -562,7 +562,7 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 	struct rdtgroup *rdtgrp;
 	struct rdt_resource *r;
 	union mon_data_bits md;
-	int ret = 0;
+	int ret = 0, index;
 
 	rdtgrp = rdtgroup_kn_lock_live(of->kn);
 	if (!rdtgrp) {
@@ -575,6 +575,15 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 	domid = md.u.domid;
 	evtid = md.u.evtid;
 	r = &rdt_resources_all[resid].r_resctrl;
+
+	if (resctrl_arch_mbm_cntr_assign_enabled(r) && evtid != QOS_L3_OCCUP_EVENT_ID) {
+		index = MBM_EVENT_ARRAY_INDEX(evtid);
+		if (index != INVALID_CONFIG_INDEX &&
+		    rdtgrp->mon.cntr_id[index] == MON_CNTR_UNSET) {
+			rr.err = -ENOENT;
+			goto checkresult;
+		}
+	}
 
 	if (md.u.sum) {
 		/*
@@ -613,6 +622,8 @@ checkresult:
 		seq_puts(m, "Error\n");
 	else if (rr.err == -EINVAL)
 		seq_puts(m, "Unavailable\n");
+	else if (rr.err == -ENOENT)
+		seq_puts(m, "Unassigned\n");
 	else
 		seq_printf(m, "%llu\n", rr.val);
 
