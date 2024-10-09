@@ -4242,14 +4242,7 @@ static inline void mas_wr_store_type(struct ma_wr_state *wr_mas)
 		return;
 	}
 
-	if (mte_is_root(mas->node) || (new_end >= mt_min_slots[wr_mas->type]) ||
-		(mas->mas_flags & MA_STATE_BULK)) {
-		mas->store_type = wr_node_store;
-		return;
-	}
-
-	mas->store_type = wr_invalid;
-	MAS_WARN_ON(mas, 1);
+	mas->store_type = wr_node_store;
 }
 
 /**
