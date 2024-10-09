@@ -1898,6 +1898,53 @@ int resctrl_arch_config_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
 	return 0;
 }
 
+/*
+ * Assign a hardware counter to the group.
+ * Counter will be assigned to all the domains if rdt_mon_domain is NULL
+ * else the counter will be allocated to specific domain.
+ */
+int rdtgroup_assign_cntr_event(struct rdt_resource *r, struct rdtgroup *rdtgrp,
+			       struct rdt_mon_domain *d, enum resctrl_event_id evtid)
+{
+	int index = MBM_EVENT_ARRAY_INDEX(evtid);
+	int cntr_id = rdtgrp->mon.cntr_id[index];
+	int ret;
+
+	/*
+	 * Allocate a new counter id to the event if the counter is not
+	 * assigned already.
+	 */
+	if (cntr_id == MON_CNTR_UNSET) {
+		cntr_id = mbm_cntr_alloc(r);
+		if (cntr_id < 0) {
+			rdt_last_cmd_puts("Out of MBM assignable counters\n");
+			return -ENOSPC;
+		}
+		rdtgrp->mon.cntr_id[index] = cntr_id;
+	}
+
+	if (!d) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			ret = resctrl_arch_config_cntr(r, d, evtid, rdtgrp->mon.rmid,
+						       rdtgrp->closid, cntr_id, true);
+			if (ret)
+				goto out_done_assign;
+
+			set_bit(cntr_id, d->mbm_cntr_map);
+		}
+	} else {
+		ret = resctrl_arch_config_cntr(r, d, evtid, rdtgrp->mon.rmid,
+					       rdtgrp->closid, cntr_id, true);
+		if (ret)
+			goto out_done_assign;
+
+		set_bit(cntr_id, d->mbm_cntr_map);
+	}
+
+out_done_assign:
+	return ret;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
