@@ -47,12 +47,9 @@ struct ice_sbq_evt_desc {
 };
 
 enum ice_sbq_msg_dev {
-	eth56g_phy_0	= 0x02,
-	rmn_0		= 0x02,
-	rmn_1		= 0x03,
-	rmn_2		= 0x04,
+	phy_0		= 0x02,
 	cgu		= 0x06,
-	eth56g_phy_1	= 0x0D,
+	phy_0_peer	= 0x0D,
 };
 
 enum ice_sbq_msg_opcode {
