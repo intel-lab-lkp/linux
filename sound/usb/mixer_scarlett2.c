@@ -5606,6 +5606,9 @@ static int scarlett2_update_filter_values(struct usb_mixer_interface *mixer)
 			SCARLETT2_BIQUAD_COEFFS,
 		peq_flt_values);
 
+	if (err < 0)
+		return err;
+
 	for (i = 0, dst_idx = 0; i < info->dsp_input_count; i++) {
 		src_idx = i *
 			  info->peq_flt_total_count *
