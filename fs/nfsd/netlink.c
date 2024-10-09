@@ -8,8 +8,6 @@
 
 #include "netlink.h"
 
-#include <uapi/linux/nfsd_netlink.h>
-
 /* Common nested types */
 const struct nla_policy nfsd_sock_nl_policy[NFSD_A_SOCK_TRANSPORT_NAME + 1] = {
 	[NFSD_A_SOCK_ADDR] = { .type = NLA_BINARY, },

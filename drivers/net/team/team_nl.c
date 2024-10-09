@@ -8,8 +8,6 @@
 
 #include "team_nl.h"
 
-#include <uapi/linux/if_team.h>
-
 /* Common nested types */
 const struct nla_policy team_attr_option_nl_policy[TEAM_ATTR_OPTION_ARRAY_INDEX + 1] = {
 	[TEAM_ATTR_OPTION_NAME] = { .type = NLA_STRING, .len = TEAM_STRING_MAX_LEN, },

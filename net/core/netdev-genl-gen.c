@@ -8,7 +8,6 @@
 
 #include "netdev-genl-gen.h"
 
-#include <uapi/linux/netdev.h>
 #include <linux/list.h>
 
 /* Integer value ranges */

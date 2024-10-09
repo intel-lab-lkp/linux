@@ -2678,7 +2678,9 @@ def main():
             if args.out_file:
                 cw.p(f'#include "{hdr_file}"')
             cw.nl()
-        headers = ['uapi/' + parsed.uapi_header]
+            headers = []
+        else:
+            headers = ['uapi/' + parsed.uapi_header]
         headers += parsed.kernel_family.get('headers', [])
     else:
         cw.p('#include <stdlib.h>')

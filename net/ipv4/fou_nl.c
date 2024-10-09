@@ -8,8 +8,6 @@
 
 #include "fou_nl.h"
 
-#include <uapi/linux/fou.h>
-
 /* Global operation policy for fou */
 const struct nla_policy fou_nl_policy[FOU_ATTR_IFINDEX + 1] = {
 	[FOU_ATTR_PORT] = { .type = NLA_U16, },

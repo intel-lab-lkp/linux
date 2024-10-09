@@ -8,8 +8,6 @@
 
 #include "mptcp_pm_gen.h"
 
-#include <uapi/linux/mptcp_pm.h>
-
 /* Common nested types */
 const struct nla_policy mptcp_pm_address_nl_policy[MPTCP_PM_ADDR_ATTR_IF_IDX + 1] = {
 	[MPTCP_PM_ADDR_ATTR_FAMILY] = { .type = NLA_U16, },

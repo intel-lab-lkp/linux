@@ -8,8 +8,6 @@
 
 #include "dpll_nl.h"
 
-#include <uapi/linux/dpll.h>
-
 /* Common nested types */
 const struct nla_policy dpll_pin_parent_device_nl_policy[DPLL_A_PIN_PHASE_OFFSET + 1] = {
 	[DPLL_A_PIN_PARENT_ID] = { .type = NLA_U32, },
