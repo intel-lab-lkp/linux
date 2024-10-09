@@ -28,6 +28,7 @@ properties:
       - items:
           - enum:
               - xlnx,versal-gem       # Xilinx Versal
+              - amd,versal2-10gbe     # AMD Versal2 10gbe
               - xlnx,zynq-gem         # Xilinx Zynq-7xxx SoC
               - xlnx,zynqmp-gem       # Xilinx Zynq Ultrascale+ MPSoC
           - const: cdns,gem           # Generic
