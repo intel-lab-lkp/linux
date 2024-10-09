@@ -891,8 +891,10 @@ static int write_index(struct ubifs_info *c)
 		mutex_lock(&c->tnc_mutex);
 
 		if (znode->cparent)
-			ubifs_copy_hash(c, hash,
-					znode->cparent->zbranch[znode->ciip].hash);
+			if (!ubifs_zn_obsolete(znode))
+				ubifs_copy_hash(c, hash,
+					znode->cparent->zbranch[znode->ciip]
+					.hash);
 
 		if (znode->parent) {
 			if (!ubifs_zn_obsolete(znode))
