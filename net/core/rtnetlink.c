@@ -456,15 +456,29 @@ EXPORT_SYMBOL_GPL(rtnl_unregister_all);
 
 static LIST_HEAD(link_ops);
 
-static const struct rtnl_link_ops *rtnl_link_ops_get(const char *kind)
+static struct rtnl_link_ops *rtnl_link_ops_get(const char *kind, int *srcu_index)
 {
-	const struct rtnl_link_ops *ops;
+	struct rtnl_link_ops *ops;
 
-	list_for_each_entry(ops, &link_ops, list) {
-		if (!strcmp(ops->kind, kind))
-			return ops;
+	rcu_read_lock();
+
+	list_for_each_entry_rcu(ops, &link_ops, list) {
+		if (!strcmp(ops->kind, kind)) {
+			*srcu_index = srcu_read_lock(&ops->srcu);
+			goto unlock;
+		}
 	}
-	return NULL;
+
+	ops = NULL;
+unlock:
+	rcu_read_unlock();
+
+	return ops;
+}
+
+static void rtnl_link_ops_put(struct rtnl_link_ops *ops, int srcu_index)
+{
+	srcu_read_unlock(&ops->srcu, srcu_index);
 }
 
 /**
@@ -479,8 +493,15 @@ static const struct rtnl_link_ops *rtnl_link_ops_get(const char *kind)
  */
 int __rtnl_link_register(struct rtnl_link_ops *ops)
 {
-	if (rtnl_link_ops_get(ops->kind))
-		return -EEXIST;
+	struct rtnl_link_ops *tmp;
+
+	/* When RTNL is removed, add lock for link_ops. */
+	ASSERT_RTNL();
+
+	list_for_each_entry(tmp, &link_ops, list) {
+		if (!strcmp(ops->kind, tmp->kind))
+			return -EEXIST;
+	}
 
 	/* The check for alloc/setup is here because if ops
 	 * does not have that filled up, it is not possible
@@ -490,7 +511,9 @@ int __rtnl_link_register(struct rtnl_link_ops *ops)
 	if ((ops->alloc || ops->setup) && !ops->dellink)
 		ops->dellink = unregister_netdevice_queue;
 
-	list_add_tail(&ops->list, &link_ops);
+	init_srcu_struct(&ops->srcu);
+	list_add_tail_rcu(&ops->list, &link_ops);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(__rtnl_link_register);
@@ -541,10 +564,11 @@ void __rtnl_link_unregister(struct rtnl_link_ops *ops)
 {
 	struct net *net;
 
-	for_each_net(net) {
+	list_del_rcu(&ops->list);
+	synchronize_srcu(&ops->srcu);
+
+	for_each_net(net)
 		__rtnl_kill_links(net, ops);
-	}
-	list_del(&ops->list);
 }
 EXPORT_SYMBOL_GPL(__rtnl_link_unregister);
 
@@ -2157,10 +2181,11 @@ static const struct nla_policy ifla_xdp_policy[IFLA_XDP_MAX + 1] = {
 	[IFLA_XDP_PROG_ID]	= { .type = NLA_U32 },
 };
 
-static const struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla)
+static struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla,
+						  int *ops_srcu_index)
 {
-	const struct rtnl_link_ops *ops = NULL;
 	struct nlattr *linfo[IFLA_INFO_MAX + 1];
+	struct rtnl_link_ops *ops = NULL;
 
 	if (nla_parse_nested_deprecated(linfo, IFLA_INFO_MAX, nla, ifla_info_policy, NULL) < 0)
 		return NULL;
@@ -2169,7 +2194,7 @@ static const struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla
 		char kind[MODULE_NAME_LEN];
 
 		nla_strscpy(kind, linfo[IFLA_INFO_KIND], sizeof(kind));
-		ops = rtnl_link_ops_get(kind);
+		ops = rtnl_link_ops_get(kind, ops_srcu_index);
 	}
 
 	return ops;
@@ -2289,8 +2314,8 @@ static int rtnl_valid_dump_ifinfo_req(const struct nlmsghdr *nlh,
 
 static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 {
-	const struct rtnl_link_ops *kind_ops = NULL;
 	struct netlink_ext_ack *extack = cb->extack;
+	struct rtnl_link_ops *kind_ops = NULL;
 	const struct nlmsghdr *nlh = cb->nlh;
 	struct net *net = sock_net(skb->sk);
 	unsigned int flags = NLM_F_MULTI;
@@ -2301,6 +2326,7 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 	struct net *tgt_net = net;
 	u32 ext_filter_mask = 0;
 	struct net_device *dev;
+	int ops_srcu_index;
 	int master_idx = 0;
 	int netnsid = -1;
 	int err, i;
@@ -2334,7 +2360,7 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 			master_idx = nla_get_u32(tb[i]);
 			break;
 		case IFLA_LINKINFO:
-			kind_ops = linkinfo_to_kind_ops(tb[i]);
+			kind_ops = linkinfo_to_kind_ops(tb[i], &ops_srcu_index);
 			break;
 		default:
 			if (cb->strict_check) {
@@ -2360,6 +2386,10 @@ walk_entries:
 		if (err < 0)
 			break;
 	}
+
+	if (kind_ops)
+		rtnl_link_ops_put(kind_ops, ops_srcu_index);
+
 	cb->seq = tgt_net->dev_base_seq;
 	nl_dump_check_consistent(cb, nlmsg_hdr(skb));
 	if (netnsid >= 0)
@@ -3746,8 +3776,9 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
 	struct nlattr **tb, **linkinfo, **data = NULL;
-	const struct rtnl_link_ops *ops = NULL;
+	struct rtnl_link_ops *ops = NULL;
 	struct rtnl_newlink_tbs *tbs;
+	int ops_srcu_index;
 	int ret;
 
 	tbs = kmalloc(sizeof(*tbs), GFP_KERNEL);
@@ -3779,13 +3810,13 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 		char kind[MODULE_NAME_LEN];
 
 		nla_strscpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
-		ops = rtnl_link_ops_get(kind);
+		ops = rtnl_link_ops_get(kind, &ops_srcu_index);
 #ifdef CONFIG_MODULES
 		if (!ops) {
 			__rtnl_unlock();
 			request_module("rtnl-link-%s", kind);
 			rtnl_lock();
-			ops = rtnl_link_ops_get(kind);
+			ops = rtnl_link_ops_get(kind, &ops_srcu_index);
 		}
 #endif
 	}
@@ -3799,7 +3830,7 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 							  linkinfo[IFLA_INFO_DATA],
 							  ops->policy, extack);
 			if (ret < 0)
-				goto free;
+				goto put_ops;
 
 			data = tbs->attr;
 		}
@@ -3807,12 +3838,15 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 		if (ops->validate) {
 			ret = ops->validate(tb, data, extack);
 			if (ret < 0)
-				goto free;
+				goto put_ops;
 		}
 	}
 
 	ret = __rtnl_newlink(skb, nlh, ops, tbs, data, extack);
 
+put_ops:
+	if (ops)
+		rtnl_link_ops_put(ops, ops_srcu_index);
 free:
 	kfree(tbs);
 	return ret;
