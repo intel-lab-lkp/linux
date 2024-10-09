@@ -30,12 +30,17 @@ properties:
     enum: [ 1, 2 ]
 
 patternProperties:
-  "^partition@[0-9a-f]+$":
-    $ref: partition.yaml#
-    properties:
-      compatible:
-        const: brcm,bcm4908-firmware
-    unevaluatedProperties: false
+  "^partition(-.+|@[0-9a-f]+)$":
+    type: object
+    if:
+      properties:
+        compatible:
+          const: brcm,bcm4908-firmware
+    then:
+      $ref: partition.yaml#
+      properties:
+        compatible: true
+      unevaluatedProperties: false
 
 required:
   - "#address-cells"
