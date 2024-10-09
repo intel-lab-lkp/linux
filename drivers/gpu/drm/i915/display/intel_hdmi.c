@@ -1211,6 +1211,25 @@ static void vlv_set_infoframes(struct intel_encoder *encoder,
 			      &crtc_state->infoframes.hdmi);
 }
 
+void intel_hdmi_fastset_infoframes(struct intel_encoder *encoder,
+				   const struct intel_crtc_state *crtc_state,
+				   const struct drm_connector_state *conn_state)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	i915_reg_t reg = HSW_TVIDEO_DIP_CTL(display,
+					    crtc_state->cpu_transcoder);
+	u32 val = intel_de_read(display, reg);
+
+	val &= ~(VIDEO_DIP_ENABLE_DRM_GLK);
+
+	intel_de_write(display, reg, val);
+	intel_de_posting_read(display, reg);
+
+	intel_write_infoframe(encoder, crtc_state,
+			      HDMI_INFOFRAME_TYPE_DRM,
+			      &crtc_state->infoframes.drm);
+}
+
 static void hsw_set_infoframes(struct intel_encoder *encoder,
 			       bool enable,
 			       const struct intel_crtc_state *crtc_state,
