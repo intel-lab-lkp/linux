@@ -1263,8 +1263,9 @@ static int intel_dmc_debugfs_status_show(struct seq_file *m, void *unused)
 	if (!intel_dmc_has_payload(display))
 		goto out;
 
-	seq_printf(m, "version: %d.%d\n", DMC_VERSION_MAJOR(dmc->version),
-		   DMC_VERSION_MINOR(dmc->version));
+	if (dmc)
+		seq_printf(m, "version: %d.%d\n", DMC_VERSION_MAJOR(dmc->version),
+			   DMC_VERSION_MINOR(dmc->version));
 
 	if (DISPLAY_VER(display) >= 12) {
 		i915_reg_t dc3co_reg;
