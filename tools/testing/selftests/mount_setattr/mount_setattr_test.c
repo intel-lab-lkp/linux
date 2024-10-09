@@ -11,6 +11,7 @@
 #include <sys/wait.h>
 #include <sys/vfs.h>
 #include <sys/statvfs.h>
+#include <asm/posix_types.h> /* get __kernel_* typedefs */
 #include <sys/sysinfo.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -137,7 +138,8 @@
 static inline int sys_mount_setattr(int dfd, const char *path, unsigned int flags,
 				    struct mount_attr *attr, size_t size)
 {
-	return syscall(__NR_mount_setattr, dfd, path, flags, attr, size);
+	int ret = syscall(__NR_mount_setattr, dfd, path, flags, attr, size);
+	return ret >= 0 ? ret : -errno;
 }
 
 #ifndef OPEN_TREE_CLONE
@@ -152,9 +154,24 @@ static inline int sys_mount_setattr(int dfd, const char *path, unsigned int flag
 #define AT_RECURSIVE 0x8000 /* Apply to the entire subtree */
 #endif
 
+#define FSMOUNT_VALID_FLAGS                                                    \
+	(MOUNT_ATTR_RDONLY | MOUNT_ATTR_NOSUID | MOUNT_ATTR_NODEV |            \
+	 MOUNT_ATTR_NOEXEC | MOUNT_ATTR__ATIME | MOUNT_ATTR_NODIRATIME |       \
+	 MOUNT_ATTR_NOSYMFOLLOW)
+
+#define MOUNT_SETATTR_VALID_FLAGS (FSMOUNT_VALID_FLAGS | MOUNT_ATTR_IDMAP)
+
+#define MOUNT_SETATTR_PROPAGATION_FLAGS \
+	(MS_UNBINDABLE | MS_PRIVATE | MS_SLAVE | MS_SHARED)
+
+#ifndef CHECK_FIELDS
+#define CHECK_FIELDS (1ULL << 63)
+#endif
+
 static inline int sys_open_tree(int dfd, const char *filename, unsigned int flags)
 {
-	return syscall(__NR_open_tree, dfd, filename, flags);
+	int ret = syscall(__NR_open_tree, dfd, filename, flags);
+	return ret >= 0 ? ret : -errno;
 }
 
 static ssize_t write_nointr(int fd, const void *buf, size_t count)
@@ -1495,6 +1512,38 @@ TEST_F(mount_setattr, mount_attr_nosymfollow)
 	fd = open(NOSYMFOLLOW_SYMLINK, O_RDWR | O_CLOEXEC);
 	ASSERT_GT(fd, 0);
 	ASSERT_EQ(close(fd), 0);
+}
+
+TEST_F(mount_setattr, check_fields)
+{
+	struct mount_attr_ext {
+		struct mount_attr inner;
+		uint64_t extra1;
+		uint64_t extra2;
+		uint64_t extra3;
+	} attr;
+
+	/* Set the structure to dummy values. */
+	memset(&attr, 0xAB, sizeof(attr));
+
+	if (!mount_setattr_supported())
+		SKIP(return, "mount_setattr syscall not supported");
+
+	/* Make sure that invalid sizes are detected even with CHECK_FIELDS. */
+	EXPECT_EQ(sys_mount_setattr(-1, "", 0, (struct mount_attr *) &attr, CHECK_FIELDS), -EINVAL);
+	EXPECT_EQ(sys_mount_setattr(-1, "", 0, (struct mount_attr *) &attr, CHECK_FIELDS | 0xF000), -E2BIG);
+
+	/* Actually get the CHECK_FIELDS results. */
+	ASSERT_EQ(sys_mount_setattr(-1, "", 0, (struct mount_attr *) &attr, CHECK_FIELDS | sizeof(attr)), -EEXTSYS_NOOP);
+
+	EXPECT_EQ(attr.inner.attr_set, MOUNT_SETATTR_VALID_FLAGS);
+	EXPECT_EQ(attr.inner.attr_clr, MOUNT_SETATTR_VALID_FLAGS);
+	EXPECT_EQ(attr.inner.propagation, MOUNT_SETATTR_PROPAGATION_FLAGS);
+	EXPECT_EQ(attr.inner.userns_fd, 0xFFFFFFFFFFFFFFFF);
+	/* Trailing fields outside ksize must be zeroed. */
+	EXPECT_EQ(attr.extra1, 0);
+	EXPECT_EQ(attr.extra2, 0);
+	EXPECT_EQ(attr.extra3, 0);
 }
 
 TEST_HARNESS_MAIN
