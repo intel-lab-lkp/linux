@@ -39,6 +39,8 @@ pub mod init;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
+#[cfg(CONFIG_NEW_LEDS)]
+pub mod leds;
 pub mod list;
 #[cfg(CONFIG_NET)]
 pub mod net;
