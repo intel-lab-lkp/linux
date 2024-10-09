@@ -80,6 +80,7 @@ struct ublk_rq_data {
 
 struct ublk_uring_cmd_pdu {
 	struct ublk_queue *ubq;
+	struct request *req;
 	u16 tag;
 };
 
@@ -140,8 +141,6 @@ struct ublk_queue {
 	unsigned long flags;
 	struct task_struct	*ubq_daemon;
 	char *io_cmd_buf;
-
-	struct llist_head	io_cmds;
 
 	unsigned long io_addr;	/* mapped vm address */
 	unsigned int max_io_sz;
@@ -1132,9 +1131,10 @@ static inline void __ublk_abort_rq(struct ublk_queue *ubq,
 		blk_mq_end_request(rq, BLK_STS_IOERR);
 }
 
-static inline void __ublk_rq_task_work(struct request *req,
+static inline void __ublk_rq_task_work(struct io_uring_cmd *cmd,
 				       unsigned issue_flags)
 {
+	struct request *req = ublk_get_uring_cmd_pdu(cmd)->req;
 	struct ublk_queue *ubq = req->mq_hctx->driver_data;
 	int tag = req->tag;
 	struct ublk_io *io = &ubq->ios[tag];
@@ -1211,34 +1211,12 @@ static inline void __ublk_rq_task_work(struct request *req,
 	ubq_complete_io_cmd(io, UBLK_IO_RES_OK, issue_flags);
 }
 
-static inline void ublk_forward_io_cmds(struct ublk_queue *ubq,
-					unsigned issue_flags)
-{
-	struct llist_node *io_cmds = llist_del_all(&ubq->io_cmds);
-	struct ublk_rq_data *data, *tmp;
-
-	io_cmds = llist_reverse_order(io_cmds);
-	llist_for_each_entry_safe(data, tmp, io_cmds, node)
-		__ublk_rq_task_work(blk_mq_rq_from_pdu(data), issue_flags);
-}
-
-static void ublk_rq_task_work_cb(struct io_uring_cmd *cmd, unsigned issue_flags)
-{
-	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
-	struct ublk_queue *ubq = pdu->ubq;
-
-	ublk_forward_io_cmds(ubq, issue_flags);
-}
-
 static void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq)
 {
-	struct ublk_rq_data *data = blk_mq_rq_to_pdu(rq);
+	struct ublk_io *io = &ubq->ios[rq->tag];
 
-	if (llist_add(&data->node, &ubq->io_cmds)) {
-		struct ublk_io *io = &ubq->ios[rq->tag];
-
-		io_uring_cmd_complete_in_task(io->cmd, ublk_rq_task_work_cb);
-	}
+	ublk_get_uring_cmd_pdu(io->cmd)->req = rq;
+	io_uring_cmd_complete_in_task(io->cmd, __ublk_rq_task_work);
 }
 
 static enum blk_eh_timer_return ublk_timeout(struct request *rq)
