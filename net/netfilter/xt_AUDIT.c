@@ -9,16 +9,19 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/audit.h>
+#include <linux/cred.h>
+#include <linux/file.h>
+#include <linux/if_arp.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
-#include <linux/if_arp.h>
 #include <linux/netfilter/x_tables.h>
 #include <linux/netfilter/xt_AUDIT.h>
 #include <linux/netfilter_bridge/ebtables.h>
-#include <net/ipv6.h>
 #include <net/ip.h>
+#include <net/ipv6.h>
+#include <net/sock.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Thomas Graf <tgraf@redhat.com>");
@@ -66,7 +69,9 @@ static bool audit_ip6(struct audit_buffer *ab, struct sk_buff *skb)
 static unsigned int
 audit_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
+	struct sock *sk = skb->sk;
 	struct audit_buffer *ab;
+	bool got_uidgid = false;
 	int fam = -1;
 
 	if (audit_enabled == AUDIT_OFF)
@@ -98,6 +103,24 @@ audit_tg(struct sk_buff *skb, const struct xt_action_param *par)
 
 	if (fam == -1)
 		audit_log_format(ab, " saddr=? daddr=? proto=-1");
+
+	if (sk && sk_fullsock(sk)) {
+		read_lock_bh(&sk->sk_callback_lock);
+		if (sk->sk_socket && sk->sk_socket->file) {
+			const struct file *file = sk->sk_socket->file;
+			const struct cred *cred = file->f_cred;
+
+			audit_log_format(ab, " uid=%u gid=%u",
+					 from_kuid(&init_user_ns, cred->fsuid),
+					 from_kgid(&init_user_ns, cred->fsgid));
+
+			got_uidgid = true;
+		}
+		read_unlock_bh(&sk->sk_callback_lock);
+	}
+
+	if (!got_uidgid)
+		audit_log_format(ab, " uid=? gid=?");
 
 	audit_log_end(ab);
 
