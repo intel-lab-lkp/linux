@@ -21,6 +21,7 @@
 #include <asm/hypervisor.h>
 #include <asm/x86_init.h>
 #include <asm/kvmclock.h>
+#include <asm/timer.h>
 
 static int kvmclock __initdata = 1;
 static int kvmclock_vsyscall __initdata = 1;
@@ -148,10 +149,37 @@ bool kvm_check_and_clear_guest_paused(void)
 	return ret;
 }
 
+static u64 (*old_pv_sched_clock)(void);
+
+static void enable_kvm_sc_work(struct work_struct *work)
+{
+	u8 flags;
+
+	old_pv_sched_clock = static_call_query(pv_sched_clock);
+	flags = pvclock_read_flags(&hv_clock_boot[0].pvti);
+	kvm_sched_clock_init(flags & PVCLOCK_TSC_STABLE_BIT);
+}
+
+static DECLARE_DELAYED_WORK(enable_kvm_sc, enable_kvm_sc_work);
+
+static void disable_kvm_sc_work(struct work_struct *work)
+{
+	if (old_pv_sched_clock)
+		paravirt_set_sched_clock(old_pv_sched_clock);
+}
+static DECLARE_DELAYED_WORK(disable_kvm_sc, disable_kvm_sc_work);
+
 static int kvm_cs_enable(struct clocksource *cs)
 {
 	vclocks_set_used(VDSO_CLOCKMODE_PVCLOCK);
+	schedule_delayed_work(&enable_kvm_sc, 0);
+
 	return 0;
+}
+
+static void kvm_cs_disable(struct clocksource *cs)
+{
+	schedule_delayed_work(&disable_kvm_sc, 0);
 }
 
 static struct clocksource kvm_clock = {
@@ -162,6 +190,7 @@ static struct clocksource kvm_clock = {
 	.flags	= CLOCK_SOURCE_IS_CONTINUOUS,
 	.id     = CSID_X86_KVM_CLK,
 	.enable	= kvm_cs_enable,
+	.disable = kvm_cs_disable,
 };
 
 static void kvm_register_clock(char *txt)
@@ -287,8 +316,6 @@ static int kvmclock_setup_percpu(unsigned int cpu)
 
 void __init kvmclock_init(void)
 {
-	u8 flags;
-
 	if (!kvm_para_available() || !kvmclock)
 		return;
 
@@ -316,9 +343,6 @@ void __init kvmclock_init(void)
 
 	if (kvm_para_has_feature(KVM_FEATURE_CLOCKSOURCE_STABLE_BIT))
 		pvclock_set_flags(PVCLOCK_TSC_STABLE_BIT);
-
-	flags = pvclock_read_flags(&hv_clock_boot[0].pvti);
-	kvm_sched_clock_init(flags & PVCLOCK_TSC_STABLE_BIT);
 
 	x86_platform.calibrate_tsc = kvm_get_tsc_khz;
 	x86_platform.calibrate_cpu = kvm_get_tsc_khz;
