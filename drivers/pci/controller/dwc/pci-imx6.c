@@ -1238,8 +1238,23 @@ static int imx_pcie_suspend_noirq(struct device *dev)
 
 	imx_pcie_msi_save_restore(imx_pcie, true);
 	imx_pcie_pm_turnoff(imx_pcie);
-	imx_pcie_stop_link(imx_pcie->pci);
-	imx_pcie_host_exit(pp);
+	/*
+	 * Do not turn off the PCIe controller because of ERR003756, ERR004490, ERR005188,
+	 * they all document issues with LLTSSM and the PCIe controller which
+	 * does not come out of reset properly. Therefore, try to keep the controller enabled
+	 * and only reset the link. However, the reference clock still needs to be turned off,
+	 * else the controller will freeze on resume.
+	 */
+	if (imx_pcie->drvdata->variant == IMX6Q) {
+		/* Reset the PCIe device */
+		gpiod_set_value_cansleep(imx_pcie->reset_gpiod, 1);
+
+		if (imx_pcie->drvdata->enable_ref_clk)
+			imx_pcie->drvdata->enable_ref_clk(imx_pcie, false);
+	} else {
+		imx_pcie_stop_link(imx_pcie->pci);
+		imx_pcie_host_exit(pp);
+	}
 
 	return 0;
 }
@@ -1252,6 +1267,28 @@ static int imx_pcie_resume_noirq(struct device *dev)
 
 	if (!(imx_pcie->drvdata->flags & IMX_PCIE_FLAG_SUPPORTS_SUSPEND))
 		return 0;
+
+	/*
+	 * Even though the i.MX6Q does not support proper suspend/resume, we
+	 * need to reset the link after resume or the memory mapped PCIe I/O
+	 * space will be inaccessible. This will cause the system to freeze.
+	 */
+	if (imx_pcie->drvdata->variant == IMX6Q) {
+		if (imx_pcie->drvdata->enable_ref_clk)
+			imx_pcie->drvdata->enable_ref_clk(imx_pcie, true);
+
+		imx_pcie_deassert_core_reset(imx_pcie);
+
+		/*
+		 * Setup the root complex again and enable msi. Without this PCIe will
+		 * not work in msi mode and drivers will crash if they try to access
+		 * the device memory area
+		 */
+		dw_pcie_setup_rc(&imx_pcie->pci->pp);
+		imx_pcie_msi_save_restore(imx_pcie, false);
+
+		return 0;
+	}
 
 	ret = imx_pcie_host_init(pp);
 	if (ret)
@@ -1485,7 +1522,8 @@ static const struct imx_pcie_drvdata drvdata[] = {
 	[IMX6Q] = {
 		.variant = IMX6Q,
 		.flags = IMX_PCIE_FLAG_IMX_PHY |
-			 IMX_PCIE_FLAG_IMX_SPEED_CHANGE,
+			 IMX_PCIE_FLAG_IMX_SPEED_CHANGE |
+			 IMX_PCIE_FLAG_SUPPORTS_SUSPEND,
 		.dbi_length = 0x200,
 		.gpr = "fsl,imx6q-iomuxc-gpr",
 		.clk_names = imx6q_clks,
