@@ -257,6 +257,40 @@ with the following files:
 	    # cat /sys/fs/resctrl/info/L3_MON/mbm_local_bytes_config
 	    0=0x30;1=0x30;3=0x15;4=0x15
 
+"mbm_assign_mode":
+	Reports the list of monitoring modes supported. The enclosed brackets
+	indicate which mode is enabled.
+	::
+
+	  cat /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
+	  [mbm_cntr_assign]
+	  default
+
+	"mbm_cntr_assign":
+
+	In mbm_cntr_assign mode user-space is able to specify which control
+	or monitor groups in resctrl should have a counter assigned using the
+	'mbm_assign_control' file. The number of counters available is described
+	in the 'num_mbm_cntrs' file. Changing the mode may cause all counters on
+	a resource to reset.
+
+	The mode is useful on platforms which support more control and monitor
+	groups than hardware counters, meaning 'unassigned' control or monitor
+	groups will report 'Unavailable' or count the traffic in an unpredictable
+	way.
+
+	AMD Platforms with ABMC (Assignable Bandwidth Monitoring Counters) feature
+	enable this mode by default so that counters remain assigned even when the
+	corresponding RMID is not in use by any processor.
+
+	"default":
+
+	By default resctrl assumes each control and monitor group has a hardware
+	counter. Hardware that does not support 'mbm_cntr_assign' mode will still
+	allow more control or monitor groups than 'num_rmids' to be created. In
+	that case reading the mbm_total_bytes and mbm_local_bytes may report
+	'Unavailable' if there is no counter associated with that group.
+
 "max_threshold_occupancy":
 		Read/write file provides the largest value (in
 		bytes) at which a previously used LLC_occupancy
