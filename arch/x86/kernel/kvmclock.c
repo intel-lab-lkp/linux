@@ -22,6 +22,7 @@
 #include <asm/x86_init.h>
 #include <asm/kvmclock.h>
 #include <asm/timer.h>
+#include <asm/sev.h>
 
 static int kvmclock __initdata = 1;
 static int kvmclock_vsyscall __initdata = 1;
@@ -154,6 +155,13 @@ static u64 (*old_pv_sched_clock)(void);
 static void enable_kvm_sc_work(struct work_struct *work)
 {
 	u8 flags;
+
+	/*
+	 * For guest with SecureTSC enabled, TSC should be the only clock source.
+	 * Abort the guest when kvmclock is selected as the clock source.
+	 */
+	if (cc_platform_has(CC_ATTR_GUEST_SNP_SECURE_TSC))
+		snp_abort();
 
 	old_pv_sched_clock = static_call_query(pv_sched_clock);
 	flags = pvclock_read_flags(&hv_clock_boot[0].pvti);
