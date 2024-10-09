@@ -12965,7 +12965,6 @@ F:	drivers/ata/sata_gemini.h
 
 LIBATA SATA AHCI PLATFORM devices support
 M:	Hans de Goede <hdegoede@redhat.com>
-M:	Jens Axboe <axboe@kernel.dk>
 L:	linux-ide@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/axboe/linux-block.git
