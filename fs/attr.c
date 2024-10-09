@@ -298,6 +298,7 @@ static void setattr_copy_mgtime(struct inode *inode, const struct iattr *attr)
 	} else {
 		/* If ATTR_CTIME isn't set, then ATTR_MTIME shouldn't be either. */
 		WARN_ON_ONCE(ia_valid & ATTR_MTIME);
+		now = current_time(inode);
 	}
 
 	if (ia_valid & ATTR_ATIME_SET)
