@@ -7794,7 +7794,8 @@ DRM DRIVERS FOR VC4
 M:	Maxime Ripard <mripard@kernel.org>
 M:	Dave Stevenson <dave.stevenson@raspberrypi.com>
 R:	Maíra Canal <mcanal@igalia.com>
-R:	Raspberry Pi Kernel Maintenance <kernel-list@raspberrypi.com>
+L:	Raspberry Pi Kernel Maintenance <kernel-list@raspberrypi.com>
+L:	dri-devel@lists.freedesktop.org
 S:	Supported
 T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	Documentation/devicetree/bindings/display/brcm,bcm2835-*.yaml
