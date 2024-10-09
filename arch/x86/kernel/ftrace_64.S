@@ -216,8 +216,6 @@ SYM_INNER_LABEL(ftrace_regs_caller_op_ptr, SYM_L_GLOBAL)
 	movq %r14, R14(%rsp)
 	movq %r13, R13(%rsp)
 	movq %r12, R12(%rsp)
-	movq %r11, R11(%rsp)
-	movq %r10, R10(%rsp)
 	movq %rbx, RBX(%rsp)
 	/* Copy saved flags */
 	movq MCOUNT_REG_SIZE(%rsp), %rcx
@@ -256,7 +254,6 @@ SYM_INNER_LABEL(ftrace_regs_call, SYM_L_GLOBAL)
 	movq R14(%rsp), %r14
 	movq R13(%rsp), %r13
 	movq R12(%rsp), %r12
-	movq R10(%rsp), %r10
 	movq RBX(%rsp), %rbx
 
 	movq ORIG_RAX(%rsp), %rax
