@@ -170,6 +170,25 @@ dpll_msg_add_temp(struct sk_buff *msg, struct dpll_device *dpll,
 }
 
 static int
+dpll_msg_add_clock_quality_level(struct sk_buff *msg, struct dpll_device *dpll,
+				 struct netlink_ext_ack *extack)
+{
+	const struct dpll_device_ops *ops = dpll_device_ops(dpll);
+	enum dpll_clock_quality_level ql;
+	int ret;
+
+	if (!ops->clock_quality_level_get)
+		return 0;
+	ret = ops->clock_quality_level_get(dpll, dpll_priv(dpll), &ql, extack);
+	if (ret)
+		return ret;
+	if (nla_put_u32(msg, DPLL_A_CLOCK_QUALITY_LEVEL, ql))
+		return -EMSGSIZE;
+
+	return 0;
+}
+
+static int
 dpll_msg_add_pin_prio(struct sk_buff *msg, struct dpll_pin *pin,
 		      struct dpll_pin_ref *ref,
 		      struct netlink_ext_ack *extack)
@@ -557,6 +576,9 @@ dpll_device_get_one(struct dpll_device *dpll, struct sk_buff *msg,
 	if (ret)
 		return ret;
 	ret = dpll_msg_add_lock_status(msg, dpll, extack);
+	if (ret)
+		return ret;
+	ret = dpll_msg_add_clock_quality_level(msg, dpll, extack);
 	if (ret)
 		return ret;
 	ret = dpll_msg_add_mode(msg, dpll, extack);

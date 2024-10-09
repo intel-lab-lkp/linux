@@ -79,6 +79,26 @@ enum dpll_lock_status_error {
 	DPLL_LOCK_STATUS_ERROR_MAX = (__DPLL_LOCK_STATUS_ERROR_MAX - 1)
 };
 
+/**
+ * enum dpll_clock_quality_level - if previous status change was done due to a
+ *   failure, this provides information of dpll device lock status error. Valid
+ *   values for DPLL_A_LOCK_STATUS_ERROR attribute
+ */
+enum dpll_clock_quality_level {
+	DPLL_CLOCK_QUALITY_LEVEL_PRC = 1,
+	DPLL_CLOCK_QUALITY_LEVEL_SSU_A,
+	DPLL_CLOCK_QUALITY_LEVEL_SSU_B,
+	DPLL_CLOCK_QUALITY_LEVEL_EEC1,
+	DPLL_CLOCK_QUALITY_LEVEL_PRTC,
+	DPLL_CLOCK_QUALITY_LEVEL_EPRTC,
+	DPLL_CLOCK_QUALITY_LEVEL_EEEC,
+	DPLL_CLOCK_QUALITY_LEVEL_EPRC,
+
+	/* private: */
+	__DPLL_CLOCK_QUALITY_LEVEL_MAX,
+	DPLL_CLOCK_QUALITY_LEVEL_MAX = (__DPLL_CLOCK_QUALITY_LEVEL_MAX - 1)
+};
+
 #define DPLL_TEMP_DIVIDER	1000
 
 /**
@@ -180,6 +200,7 @@ enum dpll_a {
 	DPLL_A_TEMP,
 	DPLL_A_TYPE,
 	DPLL_A_LOCK_STATUS_ERROR,
+	DPLL_A_CLOCK_QUALITY_LEVEL,
 
 	__DPLL_A_MAX,
 	DPLL_A_MAX = (__DPLL_A_MAX - 1)
