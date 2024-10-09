@@ -291,6 +291,21 @@ with the following files:
 	that case reading the mbm_total_bytes and mbm_local_bytes may report
 	'Unavailable' if there is no counter associated with that group.
 
+	* To enable "mbm_cntr_assign" mode:
+	  ::
+
+	    # echo  "mbm_cntr_assign" > /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
+
+	* To enable default monitoring mode:
+	  ::
+
+	    # echo  "default" > /sys/fs/resctrl/info/L3_MON/mbm_assign_mode
+
+	The MBM events (mbm_total_bytes and/or mbm_local_bytes) associated counters
+	may reset when the mode is changed. Moving to mbm_cntr_assign mode will
+	require users to assign the counters to the events. Otherwise, the MBM
+	event counters will return "Unassigned" when read.
+
 "num_mbm_cntrs":
 	The number of monitoring counters available for assignment when the
 	architecture supports mbm_cntr_assign mode.
