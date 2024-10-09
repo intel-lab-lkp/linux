@@ -19,6 +19,7 @@
 
 #define MWIFIEX_BSS_COEX_COUNT	     2
 #define MWIFIEX_MAX_BSS_NUM         (3)
+#define MWIFIEX_MAX_CSA_COUNTERS     5
 
 #define MWIFIEX_DMA_ALIGN_SZ	    64
 #define MWIFIEX_RX_HEADROOM	    64

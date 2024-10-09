@@ -7,7 +7,7 @@
 
 #include "main.h"
 #include "fw.h"
-
+#include "cfg80211.h"
 
 void mwifiex_init_11h_params(struct mwifiex_private *priv)
 {
@@ -221,8 +221,11 @@ int mwifiex_11h_handle_chanrpt_ready(struct mwifiex_private *priv,
 				cancel_delayed_work_sync(&priv->dfs_cac_work);
 				cfg80211_cac_event(priv->netdev,
 						   &priv->dfs_chandef,
-						   NL80211_RADAR_DETECTED,
+						   NL80211_RADAR_CAC_ABORTED,
 						   GFP_KERNEL, 0);
+				cfg80211_radar_event(priv->adapter->wiphy,
+						     &priv->dfs_chandef,
+						     GFP_KERNEL);
 			}
 			break;
 		default:
@@ -245,9 +248,16 @@ int mwifiex_11h_handle_radar_detected(struct mwifiex_private *priv,
 
 	mwifiex_dbg(priv->adapter, MSG,
 		    "radar detected; indicating kernel\n");
-	if (mwifiex_stop_radar_detection(priv, &priv->dfs_chandef))
-		mwifiex_dbg(priv->adapter, ERROR,
-			    "Failed to stop CAC in FW\n");
+
+	if (priv->wdev.links[0].cac_started) {
+		if (mwifiex_stop_radar_detection(priv, &priv->dfs_chandef))
+			mwifiex_dbg(priv->adapter, ERROR,
+				    "Failed to stop CAC in FW\n");
+		cancel_delayed_work_sync(&priv->dfs_cac_work);
+		cfg80211_cac_event(priv->netdev, &priv->dfs_chandef,
+				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL, 0);
+	}
+
 	cfg80211_radar_event(priv->adapter->wiphy, &priv->dfs_chandef,
 			     GFP_KERNEL);
 	mwifiex_dbg(priv->adapter, MSG, "regdomain: %d\n",
@@ -268,13 +278,32 @@ void mwifiex_dfs_chan_sw_work_queue(struct work_struct *work)
 	struct mwifiex_uap_bss_param *bss_cfg;
 	struct delayed_work *delayed_work = to_delayed_work(work);
 	struct mwifiex_private *priv =
-			container_of(delayed_work, struct mwifiex_private,
-				     dfs_chan_sw_work);
+		container_of(delayed_work, struct mwifiex_private,
+			     dfs_chan_sw_work);
+
+	if (mwifiex_del_mgmt_ies(priv))
+		mwifiex_dbg(priv->adapter, ERROR,
+			    "Failed to delete mgmt IEs!\n");
 
 	bss_cfg = &priv->bss_cfg;
 	if (!bss_cfg->beacon_period) {
 		mwifiex_dbg(priv->adapter, ERROR,
 			    "channel switch: AP already stopped\n");
+		return;
+	}
+
+	if (mwifiex_send_cmd(priv, HostCmd_CMD_UAP_BSS_STOP,
+			     HostCmd_ACT_GEN_SET, 0, NULL, true)) {
+		mwifiex_dbg(priv->adapter, ERROR,
+			    "channel switch: Failed to stop the BSS\n");
+		return;
+	}
+
+	if (mwifiex_cfg80211_change_beacon_data(priv->adapter->wiphy,
+						priv->netdev,
+						&priv->beacon_after)) {
+		mwifiex_dbg(priv->adapter, ERROR,
+			    "channel switch: Failed to set beacon\n");
 		return;
 	}
 
@@ -291,4 +320,10 @@ void mwifiex_dfs_chan_sw_work_queue(struct work_struct *work)
 	wiphy_lock(priv->wdev.wiphy);
 	cfg80211_ch_switch_notify(priv->netdev, &priv->dfs_chandef, 0);
 	wiphy_unlock(priv->wdev.wiphy);
+
+	if (priv->uap_stop_tx) {
+		netif_carrier_on(priv->netdev);
+		mwifiex_wake_up_net_dev_queue(priv->netdev, priv->adapter);
+		priv->uap_stop_tx = false;
+	}
 }
