@@ -105,11 +105,16 @@ static int intel_dp_mst_bw_overhead(const struct intel_crtc_state *crtc_state,
 	if (dsc) {
 		int num_joined_pipes = intel_crtc_num_joined_pipes(crtc_state);
 
-		flags |= DRM_DP_BW_OVERHEAD_DSC;
 		dsc_slice_count = intel_dp_dsc_get_slice_count(connector,
 							       adjusted_mode->clock,
 							       adjusted_mode->hdisplay,
 							       num_joined_pipes);
+		/*
+		 * Try with dsc only if dsc_slice_count has a sane value i.e value is no
+		 * 0
+		 */
+		if (dsc_slice_count)
+			flags |= DRM_DP_BW_OVERHEAD_DSC;
 	}
 
 	overhead = drm_dp_bw_overhead(crtc_state->lane_count,
