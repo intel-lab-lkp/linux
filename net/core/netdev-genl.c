@@ -163,10 +163,11 @@ netdev_nl_napi_fill_one(struct sk_buff *rsp, struct napi_struct *napi,
 {
 	void *hdr;
 	pid_t pid;
+	int irq;
 
 	if (WARN_ON_ONCE(!napi->dev))
 		return -EINVAL;
-	if (!(napi->dev->flags & IFF_UP))
+	if (!(READ_ONCE(napi->dev->flags) & IFF_UP))
 		return 0;
 
 	hdr = genlmsg_iput(rsp, info);
@@ -177,17 +178,17 @@ netdev_nl_napi_fill_one(struct sk_buff *rsp, struct napi_struct *napi,
 	    nla_put_u32(rsp, NETDEV_A_NAPI_ID, napi->napi_id))
 		goto nla_put_failure;
 
-	if (nla_put_u32(rsp, NETDEV_A_NAPI_IFINDEX, napi->dev->ifindex))
+	if (nla_put_u32(rsp, NETDEV_A_NAPI_IFINDEX,
+			READ_ONCE(napi->dev->ifindex)))
 		goto nla_put_failure;
 
-	if (napi->irq >= 0 && nla_put_u32(rsp, NETDEV_A_NAPI_IRQ, napi->irq))
+	irq = READ_ONCE(napi->irq);
+	if (irq >= 0 && nla_put_u32(rsp, NETDEV_A_NAPI_IRQ, irq))
 		goto nla_put_failure;
 
-	if (napi->thread) {
-		pid = task_pid_nr(napi->thread);
-		if (nla_put_u32(rsp, NETDEV_A_NAPI_PID, pid))
-			goto nla_put_failure;
-	}
+	pid = READ_ONCE(napi->thread_pid_nr);
+	if (pid && nla_put_u32(rsp, NETDEV_A_NAPI_PID, pid))
+		goto nla_put_failure;
 
 	genlmsg_end(rsp, hdr);
 
@@ -214,7 +215,7 @@ int netdev_nl_napi_get_doit(struct sk_buff *skb, struct genl_info *info)
 	if (!rsp)
 		return -ENOMEM;
 
-	rtnl_lock();
+	rcu_read_lock();
 
 	napi = napi_by_id(napi_id);
 	if (napi) {
@@ -224,7 +225,7 @@ int netdev_nl_napi_get_doit(struct sk_buff *skb, struct genl_info *info)
 		err = -ENOENT;
 	}
 
-	rtnl_unlock();
+	rcu_read_unlock();
 
 	if (err)
 		goto err_free_msg;

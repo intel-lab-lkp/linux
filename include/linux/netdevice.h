@@ -377,6 +377,7 @@ struct napi_struct {
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
 	int			irq;
+	pid_t			thread_pid_nr;
 };
 
 enum {
@@ -2618,7 +2619,7 @@ void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 
 static inline void netif_napi_set_irq(struct napi_struct *napi, int irq)
 {
-	napi->irq = irq;
+	WRITE_ONCE(napi->irq, irq);
 }
 
 /* Default NAPI poll() weight

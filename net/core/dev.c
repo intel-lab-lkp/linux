@@ -1423,21 +1423,23 @@ static int napi_threaded_poll(void *data);
 
 static int napi_kthread_create(struct napi_struct *n)
 {
-	int err = 0;
+	struct task_struct *thread;
 
 	/* Create and wake up the kthread once to put it in
 	 * TASK_INTERRUPTIBLE mode to avoid the blocked task
 	 * warning and work with loadavg.
 	 */
-	n->thread = kthread_run(napi_threaded_poll, n, "napi/%s-%d",
+	thread = kthread_run(napi_threaded_poll, n, "napi/%s-%d",
 				n->dev->name, n->napi_id);
-	if (IS_ERR(n->thread)) {
-		err = PTR_ERR(n->thread);
-		pr_err("kthread_run failed with err %d\n", err);
-		n->thread = NULL;
-	}
+	if (IS_ERR(thread)) {
+		int err = PTR_ERR(thread);
 
-	return err;
+		pr_err("kthread_run failed with err %d\n", err);
+		return err;
+	}
+	WRITE_ONCE(n->thread, thread);
+	WRITE_ONCE(n->thread_pid_nr, task_pid_nr(thread));
+	return 0;
 }
 
 static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
@@ -6668,6 +6670,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	set_bit(NAPI_STATE_NPSVC, &napi->state);
 	list_add_rcu(&napi->dev_list, &dev->napi_list);
+	netif_napi_set_irq(napi, -1);
 	napi_hash_add(napi);
 	napi_get_frags_check(napi);
 	/* Create kthread for this napi if dev->threaded is set.
@@ -6676,7 +6679,6 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 	 */
 	if (dev->threaded && napi_kthread_create(napi))
 		dev->threaded = false;
-	netif_napi_set_irq(napi, -1);
 }
 EXPORT_SYMBOL(netif_napi_add_weight);
 
@@ -6753,7 +6755,8 @@ void __netif_napi_del(struct napi_struct *napi)
 
 	if (napi->thread) {
 		kthread_stop(napi->thread);
-		napi->thread = NULL;
+		WRITE_ONCE(napi->thread, NULL);
+		WRITE_ONCE(napi->thread_pid_nr, 0);
 	}
 }
 EXPORT_SYMBOL(__netif_napi_del);
