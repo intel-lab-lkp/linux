@@ -2117,6 +2117,9 @@ static long ocfs2_fallocate(struct file *file, int mode, loff_t offset,
 			return ret;
 	}
 
+	if (offset > UINT_MAX || offset + len > UINT_MAX)
+		return -EFBIG;
+
 	if (mode & FALLOC_FL_PUNCH_HOLE)
 		cmd = OCFS2_IOC_UNRESVSP64;
 
