@@ -1665,7 +1665,7 @@ int afs_fs_give_up_all_callbacks(struct afs_net *net, struct afs_server *server,
  */
 static int afs_deliver_fs_get_capabilities(struct afs_call *call)
 {
-	u32 count;
+	u32 count = 0;
 	int ret;
 
 	_enter("{%u,%zu}", call->unmarshall, iov_iter_count(call->iter));
