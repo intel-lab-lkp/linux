@@ -245,10 +245,10 @@ netdev_nl_napi_dump_one(struct net_device *netdev, struct sk_buff *rsp,
 	struct napi_struct *napi;
 	int err = 0;
 
-	if (!(netdev->flags & IFF_UP))
+	if (!(READ_ONCE(netdev->flags) & IFF_UP))
 		return err;
 
-	list_for_each_entry(napi, &netdev->napi_list, dev_list) {
+	list_for_each_entry_rcu(napi, &netdev->napi_list, dev_list) {
 		if (ctx->napi_id && napi->napi_id >= ctx->napi_id)
 			continue;
 
@@ -272,9 +272,9 @@ int netdev_nl_napi_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 	if (info->attrs[NETDEV_A_NAPI_IFINDEX])
 		ifindex = nla_get_u32(info->attrs[NETDEV_A_NAPI_IFINDEX]);
 
-	rtnl_lock();
+	rcu_read_lock();
 	if (ifindex) {
-		netdev = __dev_get_by_index(net, ifindex);
+		netdev = dev_get_by_index_rcu(net, ifindex);
 		if (netdev)
 			err = netdev_nl_napi_dump_one(netdev, skb, info, ctx);
 		else
@@ -287,7 +287,7 @@ int netdev_nl_napi_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 			ctx->napi_id = 0;
 		}
 	}
-	rtnl_unlock();
+	rcu_read_unlock();
 
 	return err;
 }
