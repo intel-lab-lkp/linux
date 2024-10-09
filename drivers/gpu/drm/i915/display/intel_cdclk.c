@@ -1921,7 +1921,7 @@ static u32 xe2lpd_mdclk_source_sel(struct intel_display *display)
 int intel_mdclk_cdclk_ratio(struct intel_display *display,
 			    const struct intel_cdclk_config *cdclk_config)
 {
-	if (mdclk_source_is_cdclk_pll(display))
+	if (mdclk_source_is_cdclk_pll(display) && cdclk_config->cdclk)
 		return DIV_ROUND_UP(cdclk_config->vco, cdclk_config->cdclk);
 
 	/* Otherwise, source for MDCLK is CD2XCLK. */
