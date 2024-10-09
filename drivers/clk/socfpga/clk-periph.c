@@ -60,7 +60,8 @@ static void __init __socfpga_periph_init(struct device_node *node,
 	u32 fixed_div;
 	u32 div_reg[3];
 
-	of_property_read_u32(node, "reg", &reg);
+	if (of_property_read_u32(node, "reg", &reg))
+		return;
 
 	periph_clk = kzalloc(sizeof(*periph_clk), GFP_KERNEL);
 	if (WARN_ON(!periph_clk))
