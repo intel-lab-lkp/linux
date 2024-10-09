@@ -114,6 +114,12 @@ int bch2_stripe_validate(struct bch_fs *c, struct bkey_s_c k,
 	const struct bch_stripe *s = bkey_s_c_to_stripe(k).v;
 	int ret = 0;
 
+	if (s->csum_granularity_bits >= ilog2(le16_to_cpu(s->sectors))) {
+		bch_err_ratelimited(c, "stripe csum gran bits %u too big",
+				    s->csum_granularity_bits);
+		return -BCH_ERR_stripe_csum_granularity_bits_too_big;
+	}
+
 	bkey_fsck_err_on(bkey_eq(k.k->p, POS_MIN) ||
 			 bpos_gt(k.k->p, POS(0, U32_MAX)),
 			 c, stripe_pos_bad,
