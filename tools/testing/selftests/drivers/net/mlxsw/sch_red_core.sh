@@ -89,23 +89,18 @@ host_create()
 	local host=$1; shift
 
 	simple_if_init $dev
+	defer simple_if_fini $dev
+
 	mtu_set $dev 10000
+	defer mtu_restore $dev
 
 	vlan_create $dev 10 v$dev $(ipaddr $host 10)/28
+	defer vlan_destroy $dev 10
 	ip link set dev $dev.10 type vlan egress 0:0
 
 	vlan_create $dev 11 v$dev $(ipaddr $host 11)/28
+	defer vlan_destroy $dev 11
 	ip link set dev $dev.11 type vlan egress 0:1
-}
-
-host_destroy()
-{
-	local dev=$1; shift
-
-	vlan_destroy $dev 11
-	vlan_destroy $dev 10
-	mtu_restore $dev
-	simple_if_fini $dev
 }
 
 h1_create()
@@ -113,15 +108,12 @@ h1_create()
 	host_create $h1 1
 }
 
-h1_destroy()
-{
-	host_destroy $h1
-}
-
 h2_create()
 {
 	host_create $h2 2
+
 	tc qdisc add dev $h2 clsact
+	defer tc qdisc del dev $h2 clsact
 
 	# Some of the tests in this suite use multicast traffic. As this traffic
 	# enters BR2_10 resp. BR2_11, it is flooded to all other ports. Thus
@@ -139,23 +131,12 @@ h2_create()
 
 	tc qdisc replace dev $h2 root handle 10: tbf rate 200mbit \
 		burst 128K limit 1G
-}
-
-h2_destroy()
-{
-	tc qdisc del dev $h2 root handle 10:
-	tc qdisc del dev $h2 clsact
-	host_destroy $h2
+	defer tc qdisc del dev $h2 root handle 10:
 }
 
 h3_create()
 {
 	host_create $h3 3
-}
-
-h3_destroy()
-{
-	host_destroy $h3
 }
 
 switch_create()
@@ -164,29 +145,48 @@ switch_create()
 	local vlan
 
 	ip link add dev br1_10 type bridge
+	defer ip link del dev br1_10
+
 	ip link add dev br1_11 type bridge
+	defer ip link del dev br1_11
 
 	ip link add dev br2_10 type bridge
+	defer ip link del dev br2_10
+
 	ip link add dev br2_11 type bridge
+	defer ip link del dev br2_11
 
 	for intf in $swp1 $swp2 $swp3 $swp4 $swp5; do
 		ip link set dev $intf up
+		defer ip link set dev $intf down
+
 		mtu_set $intf 10000
+		defer mtu_restore $intf
 	done
 
 	for intf in $swp1 $swp4; do
 		for vlan in 10 11; do
 			vlan_create $intf $vlan
+			defer vlan_destroy $intf $vlan
+
 			ip link set dev $intf.$vlan master br1_$vlan
+			defer ip link set dev $intf.$vlan nomaster
+
 			ip link set dev $intf.$vlan up
+			defer ip link set dev $intf.$vlan up
 		done
 	done
 
 	for intf in $swp2 $swp3 $swp5; do
 		for vlan in 10 11; do
 			vlan_create $intf $vlan
+			defer vlan_destroy $intf $vlan
+
 			ip link set dev $intf.$vlan master br2_$vlan
+			defer ip link set dev $intf.$vlan nomaster
+
 			ip link set dev $intf.$vlan up
+			defer ip link set dev $intf.$vlan up
 		done
 	done
 
@@ -201,49 +201,25 @@ switch_create()
 	for intf in $swp3 $swp4; do
 		tc qdisc replace dev $intf root handle 1: tbf rate 200mbit \
 			burst 128K limit 1G
+		defer tc qdisc del dev $intf root handle 1:
 	done
 
 	ip link set dev br1_10 up
+	defer ip link set dev br1_10 down
+
 	ip link set dev br1_11 up
+	defer ip link set dev br1_11 down
+
 	ip link set dev br2_10 up
+	defer ip link set dev br2_10 down
+
 	ip link set dev br2_11 up
+	defer ip link set dev br2_11 down
 
 	local size=$(devlink_pool_size_thtype 0 | cut -d' ' -f 1)
 	devlink_port_pool_th_save $swp3 8
 	devlink_port_pool_th_set $swp3 8 $size
-}
-
-switch_destroy()
-{
-	local intf
-	local vlan
-
-	devlink_port_pool_th_restore $swp3 8
-
-	ip link set dev br2_11 down
-	ip link set dev br2_10 down
-	ip link set dev br1_11 down
-	ip link set dev br1_10 down
-
-	for intf in $swp4 $swp3; do
-		tc qdisc del dev $intf root handle 1:
-	done
-
-	for intf in $swp5 $swp3 $swp2 $swp4 $swp1; do
-		for vlan in 11 10; do
-			ip link set dev $intf.$vlan down
-			ip link set dev $intf.$vlan nomaster
-			vlan_destroy $intf $vlan
-		done
-
-		mtu_restore $intf
-		ip link set dev $intf down
-	done
-
-	ip link del dev br2_11
-	ip link del dev br2_10
-	ip link del dev br1_11
-	ip link del dev br1_10
+	defer devlink_port_pool_th_restore $swp3 8
 }
 
 setup_prepare()
@@ -263,23 +239,12 @@ setup_prepare()
 	h3_mac=$(mac_get $h3)
 
 	vrf_prepare
+	defer vrf_cleanup
 
 	h1_create
 	h2_create
 	h3_create
 	switch_create
-}
-
-cleanup()
-{
-	pre_cleanup
-
-	switch_destroy
-	h3_destroy
-	h2_destroy
-	h1_destroy
-
-	vrf_cleanup
 }
 
 ping_ipv4()
@@ -450,6 +415,7 @@ __do_ecn_test()
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic $!
 	sleep 1
 
 	ecn_test_common "$name" "$get_nmarked" $vlan $limit
@@ -462,7 +428,6 @@ __do_ecn_test()
 	check_fail $? "UDP traffic went into backlog instead of being early-dropped"
 	log_test "TC $((vlan - 10)): $name backlog > limit: UDP early-dropped"
 
-	stop_traffic
 	sleep 1
 }
 
@@ -471,7 +436,8 @@ do_ecn_test()
 	local vlan=$1; shift
 	local limit=$1; shift
 
-	__do_ecn_test get_nmarked "$vlan" "$limit"
+	in_defer_scope \
+		__do_ecn_test get_nmarked "$vlan" "$limit"
 }
 
 do_ecn_test_perband()
@@ -480,10 +446,11 @@ do_ecn_test_perband()
 	local limit=$1; shift
 
 	mlxsw_only_on_spectrum 3+ || return
-	__do_ecn_test get_qdisc_nmarked "$vlan" "$limit" "per-band ECN"
+	in_defer_scope \
+		__do_ecn_test get_qdisc_nmarked "$vlan" "$limit" "per-band ECN"
 }
 
-do_ecn_nodrop_test()
+__do_ecn_nodrop_test()
 {
 	local vlan=$1; shift
 	local limit=$1; shift
@@ -491,6 +458,7 @@ do_ecn_nodrop_test()
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic $!
 	sleep 1
 
 	ecn_test_common "$name" get_nmarked $vlan $limit
@@ -503,11 +471,16 @@ do_ecn_nodrop_test()
 	check_err $? "UDP traffic was early-dropped instead of getting into backlog"
 	log_test "TC $((vlan - 10)): $name backlog > limit: UDP not dropped"
 
-	stop_traffic
 	sleep 1
 }
 
-do_red_test()
+do_ecn_nodrop_test()
+{
+	in_defer_scope \
+		__do_ecn_nodrop_test "$@"
+}
+
+__do_red_test()
 {
 	local vlan=$1; shift
 	local limit=$1; shift
@@ -518,6 +491,7 @@ do_red_test()
 	# is above limit.
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic $!
 
 	# Pushing below the queue limit should work.
 	RET=0
@@ -540,11 +514,16 @@ do_red_test()
 	check_err $? "backlog $backlog / $limit expected <= 15% distance"
 	log_test "TC $((vlan - 10)): RED backlog > limit"
 
-	stop_traffic
 	sleep 1
 }
 
-do_mc_backlog_test()
+do_red_test()
+{
+	in_defer_scope \
+		__do_red_test "$@"
+}
+
+__do_mc_backlog_test()
 {
 	local vlan=$1; shift
 	local limit=$1; shift
@@ -554,7 +533,10 @@ do_mc_backlog_test()
 	RET=0
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) bc
+	defer stop_traffic $!
+
 	start_tcp_traffic $h2.$vlan $(ipaddr 2 $vlan) $(ipaddr 3 $vlan) bc
+	defer stop_traffic $!
 
 	qbl=$(busywait 5000 until_counter_is ">= 500000" \
 		       get_qdisc_backlog $vlan)
@@ -567,13 +549,16 @@ do_mc_backlog_test()
 		       get_mc_transmit_queue $vlan)
 	check_err $? "MC backlog reported by qdisc not visible in ethtool"
 
-	stop_traffic
-	stop_traffic
-
 	log_test "TC $((vlan - 10)): Qdisc reports MC backlog"
 }
 
-do_mark_test()
+do_mc_backlog_test()
+{
+	in_defer_scope \
+		__do_mc_backlog_test "$@"
+}
+
+__do_mark_test()
 {
 	local vlan=$1; shift
 	local limit=$1; shift
@@ -588,6 +573,7 @@ do_mark_test()
 
 	start_tcp_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) \
 			  $h3_mac tos=0x01
+	defer stop_traffic $!
 
 	# Create a bit of a backlog and observe no mirroring due to marks.
 	qevent_rule_install_$subtest
@@ -618,11 +604,16 @@ do_mark_test()
 		log_test "TC $((vlan - 10)): marked packets $subtest'd"
 	fi
 
-	stop_traffic
 	sleep 1
 }
 
-do_drop_test()
+do_mark_test()
+{
+	in_defer_scope \
+		__do_mark_test "$@"
+}
+
+__do_drop_test()
 {
 	local vlan=$1; shift
 	local limit=$1; shift
@@ -637,6 +628,7 @@ do_drop_test()
 	RET=0
 
 	start_traffic $h1.$vlan $(ipaddr 1 $vlan) $(ipaddr 3 $vlan) $h3_mac
+	defer stop_traffic $!
 
 	# Create a bit of a backlog and observe no mirroring due to drops.
 	qevent_rule_install_$subtest
@@ -672,8 +664,13 @@ do_drop_test()
 
 	log_test "TC $((vlan - 10)): ${trigger}ped packets $subtest'd"
 
-	stop_traffic
 	sleep 1
+}
+
+do_drop_test()
+{
+	in_defer_scope \
+		__do_drop_test "$@"
 }
 
 qevent_rule_install_mirror()
