@@ -5190,15 +5190,7 @@ static int qlt_24xx_handle_els(struct scsi_qla_host *vha,
 		ql_dbg(ql_dbg_disc, vha, 0x20fc,
 		    "%s: logo %llx res %d sess %p ",
 		    __func__, wwn, res, sess);
-		if (res == 0) {
-			/*
-			 * cmd went upper layer, look for qlt_xmit_tm_rsp()
-			 * for LOGO_ACK & sess delete
-			 */
-			BUG_ON(!sess);
-			res = 0;
-		} else {
-			/* cmd did not go to upper layer. */
+		if (res) {
 			if (sess) {
 				qlt_schedule_sess_for_deletion(sess);
 				res = 0;
