@@ -230,7 +230,7 @@ static inline const char *section_begin(Elf64_Shdr *shdr)
 /* Find a section by its offset from the beginning of the file. */
 static inline Elf64_Shdr *section_by_off(Elf64_Off off)
 {
-	assert_ne(off, 0UL, "%lu");
+	assert_ne(off, 0ULL, "%llu");
 	return elf_ptr(Elf64_Shdr, off);
 }
 
@@ -276,7 +276,7 @@ static void init_elf(const char *path)
 	close(fd);
 
 	/* Get pointer to the ELF header. */
-	assert_ge(stat.st_size, sizeof(*elf.ehdr), "%lu");
+	assert_ge(stat.st_size, (off_t)sizeof(*elf.ehdr), "%llu");
 	elf.ehdr = elf_ptr(Elf64_Ehdr, 0);
 
 	/* Check the ELF magic. */
@@ -340,7 +340,7 @@ static void emit_rela_abs64(Elf64_Rela *rela, const char *sh_orig_name)
 	 * a symbol at the beginning of the relocated section, and <offset>
 	 * is `rela->r_offset`.
 	 */
-	printf(".reloc %lu, R_AARCH64_PREL32, %s%s + 0x%lx\n",
+	printf(".reloc %lu, R_AARCH64_PREL32, %s%s + 0x%llx\n",
 	       reloc_offset, HYP_SECTION_SYMBOL_PREFIX, sh_orig_name,
 	       elf64toh(rela->r_offset));
 
@@ -376,7 +376,7 @@ static void emit_rela_section(Elf64_Shdr *sh_rela)
 		uint32_t type = (uint32_t)elf64toh(rela->r_info);
 
 		/* Check that rela points inside the relocated section. */
-		assert_lt(elf64toh(rela->r_offset), elf64toh(sh_orig->sh_size), "0x%lx");
+		assert_lt(elf64toh(rela->r_offset), elf64toh(sh_orig->sh_size), "0x%llx");
 
 		switch (type) {
 		/*
