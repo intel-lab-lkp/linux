@@ -284,7 +284,7 @@ EXPORT_SYMBOL(inode_newsize_ok);
 static void setattr_copy_mgtime(struct inode *inode, const struct iattr *attr)
 {
 	unsigned int ia_valid = attr->ia_valid;
-	struct timespec64 now;
+	struct timespec64 now = inode_set_ctime_current(inode);
 
 	if (ia_valid & ATTR_CTIME) {
 		/*
@@ -293,8 +293,6 @@ static void setattr_copy_mgtime(struct inode *inode, const struct iattr *attr)
 		 */
 		if (ia_valid & ATTR_DELEG)
 			now = inode_set_ctime_deleg(inode, attr->ia_ctime);
-		else
-			now = inode_set_ctime_current(inode);
 	} else {
 		/* If ATTR_CTIME isn't set, then ATTR_MTIME shouldn't be either. */
 		WARN_ON_ONCE(ia_valid & ATTR_MTIME);
