@@ -368,18 +368,11 @@ int vfs_fstatat(int dfd, const char __user *filename,
 {
 	int ret;
 	int statx_flags = flags | AT_NO_AUTOMOUNT;
-	struct filename *name;
+	struct filename *name = getname_maybe_null(filename, flags);
 
-	/*
-	 * Work around glibc turning fstat() into fstatat(AT_EMPTY_PATH)
-	 *
-	 * If AT_EMPTY_PATH is set, we expect the common case to be that
-	 * empty path, and avoid doing all the extra pathname work.
-	 */
-	if (flags == AT_EMPTY_PATH && vfs_empty_path(dfd, filename))
+	if (!name)
 		return vfs_fstat(dfd, stat);
 
-	name = getname_flags(filename, getname_statx_lookup_flags(statx_flags));
 	ret = vfs_statx(dfd, name, statx_flags, stat, STATX_BASIC_STATS);
 	putname(name);
 
@@ -817,7 +810,7 @@ SYSCALL_DEFINE5(statx,
 {
 	int ret;
 	unsigned lflags;
-	struct filename *name;
+	struct filename *name = getname_maybe_null(filename, flags);
 
 	/*
 	 * Short-circuit handling of NULL and "" paths.
@@ -830,10 +823,9 @@ SYSCALL_DEFINE5(statx,
 	 * Supporting this results in the uglification below.
 	 */
 	lflags = flags & ~(AT_NO_AUTOMOUNT | AT_STATX_SYNC_TYPE);
-	if (lflags == AT_EMPTY_PATH && vfs_empty_path(dfd, filename))
+	if (!name)
 		return do_statx_fd(dfd, flags & ~AT_NO_AUTOMOUNT, mask, buffer);
 
-	name = getname_flags(filename, getname_statx_lookup_flags(flags));
 	ret = do_statx(dfd, name, flags, mask, buffer);
 	putname(name);
 
