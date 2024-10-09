@@ -115,4 +115,7 @@
 
 #define EHWPOISON	135	/* Memory page has hardware error */
 
+/* For extensible syscalls. */
+#define EEXTSYS_NOOP	136	/* Extensible syscall performed no operation */
+
 #endif
