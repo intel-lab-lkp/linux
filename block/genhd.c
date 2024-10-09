@@ -609,8 +609,16 @@ static void __blk_mark_disk_dead(struct gendisk *disk)
 	if (test_and_set_bit(GD_DEAD, &disk->state))
 		return;
 
-	if (test_bit(GD_OWNS_QUEUE, &disk->state))
-		blk_queue_flag_set(QUEUE_FLAG_DYING, disk->queue);
+	/*
+	 * Also mark the disk dead if it is not owned by the gendisk.  This
+	 * means we can't allow /dev/sg passthrough or SCSI internal commands
+	 * while unbinding a ULP.  That is more than just a bit ugly, but until
+	 * we untangle q_usage_counter into one owned by the disk and one owned
+	 * by the queue this is as good as it gets.  The flag will be cleared
+	 * at the end of del_gendisk if it wasn't set before.
+	 */
+	if (!test_and_set_bit(QUEUE_FLAG_DYING, &disk->queue->queue_flags))
+		set_bit(QUEUE_FLAG_RESURRECT, &disk->queue->queue_flags);
 
 	/*
 	 * Stop buffered writers from dirtying pages that can't be written out.
@@ -739,6 +747,10 @@ void del_gendisk(struct gendisk *disk)
 	 * again.  Else leave the queue frozen to fail all I/O.
 	 */
 	if (!test_bit(GD_OWNS_QUEUE, &disk->state)) {
+		if (test_bit(QUEUE_FLAG_RESURRECT, &q->queue_flags)) {
+			clear_bit(QUEUE_FLAG_DYING, &q->queue_flags);
+			clear_bit(QUEUE_FLAG_RESURRECT, &q->queue_flags);
+		}
 		blk_queue_flag_clear(QUEUE_FLAG_INIT_DONE, q);
 		__blk_mq_unfreeze_queue(q, true);
 	} else {
