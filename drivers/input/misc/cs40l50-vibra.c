@@ -508,7 +508,7 @@ static int cs40l50_vibra_probe(struct platform_device *pdev)
 	input_set_capability(vib->input, EV_FF, FF_PERIODIC);
 	input_set_capability(vib->input, EV_FF, FF_CUSTOM);
 
-	error = input_ff_create(vib->input, CS40L50_EFFECTS_MAX);
+	error = input_ff_create(vib->input, FF_MAX_EFFECTS);
 	if (error) {
 		dev_err(vib->dev, "Failed to create input device\n");
 		return error;
@@ -517,6 +517,7 @@ static int cs40l50_vibra_probe(struct platform_device *pdev)
 	vib->input->ff->upload = cs40l50_add;
 	vib->input->ff->playback = cs40l50_playback;
 	vib->input->ff->erase = cs40l50_erase;
+	vib->input->ff->max_concurrent_playbacks = CS40L50_EFFECTS_MAX;
 
 	INIT_LIST_HEAD(&vib->effect_head);
 
