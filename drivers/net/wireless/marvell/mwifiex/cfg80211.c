@@ -1858,28 +1858,18 @@ static int mwifiex_cfg80211_set_cqm_rssi_config(struct wiphy *wiphy,
 	return 0;
 }
 
-/* cfg80211 operation handler for change_beacon.
- * Function retrieves and sets modified management IEs to FW.
- */
-static int mwifiex_cfg80211_change_beacon(struct wiphy *wiphy,
-					  struct net_device *dev,
-					  struct cfg80211_ap_update *params)
+int mwifiex_cfg80211_change_beacon_data(struct wiphy *wiphy,
+					struct net_device *dev,
+					struct cfg80211_beacon_data *data)
 {
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
 	struct mwifiex_adapter *adapter = priv->adapter;
-	struct cfg80211_beacon_data *data = &params->beacon;
 
 	mwifiex_cancel_scan(adapter);
 
 	if (GET_BSS_ROLE(priv) != MWIFIEX_BSS_ROLE_UAP) {
 		mwifiex_dbg(priv->adapter, ERROR,
 			    "%s: bss_type mismatched\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!priv->bss_started) {
-		mwifiex_dbg(priv->adapter, ERROR,
-			    "%s: bss not started\n", __func__);
 		return -EINVAL;
 	}
 
@@ -1890,6 +1880,16 @@ static int mwifiex_cfg80211_change_beacon(struct wiphy *wiphy,
 	}
 
 	return 0;
+}
+
+/* cfg80211 operation handler for change_beacon.
+ * Function retrieves and sets modified management IEs to FW.
+ */
+static int mwifiex_cfg80211_change_beacon(struct wiphy *wiphy,
+					  struct net_device *dev,
+					  struct cfg80211_ap_update *params)
+{
+	return mwifiex_cfg80211_change_beacon_data(wiphy, dev, &params->beacon);
 }
 
 /* cfg80211 operation handler for del_station.
@@ -4027,10 +4027,8 @@ static int
 mwifiex_cfg80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 				struct cfg80211_csa_settings *params)
 {
-	struct ieee_types_header *chsw_ie;
-	struct ieee80211_channel_sw_ie *channel_sw;
-	int chsw_msec;
 	struct mwifiex_private *priv = mwifiex_netdev_get_priv(dev);
+	int chsw_msec;
 
 	if (priv->adapter->scan_processing) {
 		mwifiex_dbg(priv->adapter, ERROR,
@@ -4045,20 +4043,10 @@ mwifiex_cfg80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 				       &priv->dfs_chandef))
 		return -EINVAL;
 
-	chsw_ie = (void *)cfg80211_find_ie(WLAN_EID_CHANNEL_SWITCH,
-					   params->beacon_csa.tail,
-					   params->beacon_csa.tail_len);
-	if (!chsw_ie) {
-		mwifiex_dbg(priv->adapter, ERROR,
-			    "Could not parse channel switch announcement IE\n");
-		return -EINVAL;
-	}
-
-	channel_sw = (void *)(chsw_ie + 1);
-	if (channel_sw->mode) {
-		if (netif_carrier_ok(priv->netdev))
-			netif_carrier_off(priv->netdev);
+	if (params->block_tx) {
+		netif_carrier_off(priv->netdev);
 		mwifiex_stop_net_dev_queue(priv->netdev, priv->adapter);
+		priv->uap_stop_tx = true;
 	}
 
 	if (mwifiex_del_mgmt_ies(priv))
@@ -4075,7 +4063,7 @@ mwifiex_cfg80211_channel_switch(struct wiphy *wiphy, struct net_device *dev,
 	memcpy(&priv->beacon_after, &params->beacon_after,
 	       sizeof(priv->beacon_after));
 
-	chsw_msec = max(channel_sw->count * priv->bss_cfg.beacon_period, 100);
+	chsw_msec = max(params->count * priv->bss_cfg.beacon_period, 100);
 	queue_delayed_work(priv->dfs_chan_sw_workqueue, &priv->dfs_chan_sw_work,
 			   msecs_to_jiffies(chsw_msec));
 	return 0;
@@ -4814,6 +4802,7 @@ int mwifiex_register_cfg80211(struct mwifiex_adapter *adapter)
 			WIPHY_FLAG_HAS_CHANNEL_SWITCH |
 			WIPHY_FLAG_NETNS_OK |
 			WIPHY_FLAG_PS_ON_BY_DEFAULT;
+	wiphy->max_num_csa_counters = MWIFIEX_MAX_CSA_COUNTERS;
 
 	if (adapter->host_mlme_enabled)
 		wiphy->flags |= WIPHY_FLAG_REPORTS_OBSS;
