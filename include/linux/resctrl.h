@@ -187,12 +187,14 @@ enum resctrl_scope {
  * @num_rmid:		Number of RMIDs available
  * @num_mbm_cntrs:	Number of assignable monitoring counters
  * @mbm_cntr_assignable:Is system capable of supporting monitor assignment?
+ * @mbm_cntr_free_map:	bitmap of free MBM counters
  * @evt_list:		List of monitoring events
  */
 struct resctrl_mon {
 	int			num_rmid;
 	int			num_mbm_cntrs;
 	bool			mbm_cntr_assignable;
+	unsigned long		*mbm_cntr_free_map;
 	struct list_head	evt_list;
 };
 
