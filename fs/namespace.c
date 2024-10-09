@@ -4771,6 +4771,7 @@ SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path,
 		size_t, usize)
 {
 	int err;
+	bool check_fields;
 	struct path target;
 	struct mount_attr attr;
 	struct mount_kattr kattr;
@@ -4783,10 +4784,26 @@ SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path,
 		      AT_NO_AUTOMOUNT))
 		return -EINVAL;
 
+	check_fields = usize & CHECK_FIELDS;
+	usize &= ~CHECK_FIELDS;
+
 	if (unlikely(usize > PAGE_SIZE))
 		return -E2BIG;
 	if (unlikely(usize < MOUNT_ATTR_SIZE_VER0))
 		return -EINVAL;
+
+	if (unlikely(check_fields)) {
+		memset(&attr, 0, sizeof(attr));
+		attr = (struct mount_attr) {
+			.attr_set = MOUNT_SETATTR_VALID_FLAGS,
+			.attr_clr = MOUNT_SETATTR_VALID_FLAGS,
+			.propagation = MOUNT_SETATTR_PROPAGATION_FLAGS,
+			.userns_fd = 0xFFFFFFFFFFFFFFFF,
+		};
+
+		err = copy_struct_to_user(uattr, usize, &attr, sizeof(attr), NULL);
+		return err ?: -EEXTSYS_NOOP;
+	}
 
 	if (!may_mount())
 		return -EPERM;
