@@ -1076,7 +1076,7 @@ static long evdev_do_ioctl(struct file *file, unsigned int cmd,
 
 	case EVIOCGEFFECTS:
 		i = test_bit(EV_FF, dev->evbit) ?
-				dev->ff->max_effects : 0;
+				dev->ff->max_concurrent_playbacks : 0;
 		if (put_user(i, ip))
 			return -EFAULT;
 		return 0;

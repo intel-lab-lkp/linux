@@ -531,6 +531,7 @@ extern const struct class input_class;
  *	device (not emulated like ones in input_dev->ffbit)
  * @mutex: mutex for serializing access to the device
  * @max_effects: maximum number of effects supported by device
+ * @max_concurrent_playbacks: maximum number of concurrent playbacks
  * @effects: pointer to an array of effects currently loaded into device
  * @effect_owners: array of effect owners; when file handle owning
  *	an effect gets closed the effect is automatically erased
@@ -562,6 +563,7 @@ struct ff_device {
 	struct mutex mutex;
 
 	int max_effects;
+	int max_concurrent_playbacks;
 	struct ff_effect *effects;
 	struct file *effect_owners[] __counted_by(max_effects);
 };
