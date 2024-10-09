@@ -318,15 +318,19 @@ static int ima_eventdigest_init_common(const u8 *digest, u32 digestsize,
 				      hash_algo_name[hash_algo]);
 	}
 
-	if (digest)
+	if (digest) {
 		memcpy(buffer + offset, digest, digestsize);
-	else
+	} else {
 		/*
 		 * If digest is NULL, the event being recorded is a violation.
 		 * Make room for the digest by increasing the offset by the
 		 * hash algorithm digest size.
 		 */
+		if (hash_algo == HASH_ALGO__LAST) /* To handle ima template case */
+			hash_algo = ima_template_hash_algo_allowed(ima_hash_algo) ?
+				ima_hash_algo : HASH_ALGO_SHA1;
 		offset += hash_digest_size[hash_algo];
+	}
 
 	return ima_write_template_field_data(buffer, offset + digestsize,
 					     fmt, field_data);
