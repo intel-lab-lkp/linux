@@ -283,6 +283,7 @@
 #include <net/busy_poll.h>
 #include <net/hotdata.h>
 #include <trace/events/tcp.h>
+#include <trace/events/skb.h>
 #include <net/rps.h>
 
 #include "../core/devmem.h"
@@ -688,6 +689,7 @@ void tcp_skb_entail(struct sock *sk, struct sk_buff *skb)
 		tp->nonagle &= ~TCP_NAGLE_PUSH;
 
 	tcp_slow_start_after_idle_check(sk);
+	skb_set_delivery_time(skb, tp->tcp_clock_cache, SKB_CLOCK_MONOTONIC);
 }
 
 static inline void tcp_mark_urg(struct tcp_sock *tp, int flags)
@@ -1137,6 +1139,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 
 	/* Ok commence sending. */
 	copied = 0;
+	tcp_mstamp_refresh(tp);
 
 restart:
 	mss_now = tcp_send_mss(sk, &size_goal, flags);
@@ -1318,6 +1321,7 @@ wait_for_space:
 			goto do_error;
 
 		mss_now = tcp_send_mss(sk, &size_goal, flags);
+		tcp_mstamp_refresh(tp);
 	}
 
 out:
@@ -1519,6 +1523,7 @@ void tcp_cleanup_rbuf(struct sock *sk, int copied)
 
 static void tcp_eat_recv_skb(struct sock *sk, struct sk_buff *skb)
 {
+	skb_latency_notify(skb, sk, SKB_LATENCY_PICK);
 	__skb_unlink(skb, &sk->sk_receive_queue);
 	if (likely(skb->destructor == sock_rfree)) {
 		sock_rfree(skb);

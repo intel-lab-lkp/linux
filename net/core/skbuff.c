@@ -5521,6 +5521,7 @@ void skb_complete_tx_timestamp(struct sk_buff *skb,
 {
 	struct sock *sk = skb->sk;
 
+	skb_latency_notify(skb, sk, SKB_LATENCY_NIC);
 	if (!skb_may_tx_timestamp(sk, false))
 		goto err;
 
@@ -5538,6 +5539,24 @@ err:
 	kfree_skb(skb);
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
+
+void skb_latency_notify(struct sk_buff *skb, struct sock *sk,
+			enum skb_latency_type type)
+{
+	trace_skb_latency(skb, sk, type);
+}
+EXPORT_SYMBOL_GPL(skb_latency_notify);
+
+int skb_latency_regfunc(void)
+{
+	net_enable_timestamp();
+	return 0;
+}
+
+void skb_latency_unregfunc(void)
+{
+	net_disable_timestamp();
+}
 
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		     const struct sk_buff *ack_skb,
@@ -5599,6 +5618,7 @@ EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
 void skb_tstamp_tx(struct sk_buff *orig_skb,
 		   struct skb_shared_hwtstamps *hwtstamps)
 {
+	skb_latency_notify(orig_skb, NULL, SKB_LATENCY_NIC);
 	return __skb_tstamp_tx(orig_skb, NULL, hwtstamps, orig_skb->sk,
 			       SCM_TSTAMP_SND);
 }

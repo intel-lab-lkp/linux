@@ -85,6 +85,7 @@
 #include <linux/scatterlist.h>
 
 #include <trace/events/tcp.h>
+#include <trace/events/skb.h>
 
 #ifdef CONFIG_TCP_MD5SIG
 static int tcp_v4_md5_hash_hdr(char *md5_hash, const struct tcp_md5sig_key *key,
@@ -2222,6 +2223,7 @@ lookup:
 	if (!sk)
 		goto no_tcp_socket;
 
+	skb_latency_notify(skb, sk, SKB_LATENCY_RECV);
 	if (sk->sk_state == TCP_TIME_WAIT)
 		goto do_time_wait;
 

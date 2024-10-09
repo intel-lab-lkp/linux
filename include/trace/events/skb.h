@@ -92,6 +92,36 @@ TRACE_EVENT(skb_copy_datagram_iovec,
 	TP_printk("skbaddr=%p len=%d", __entry->skbaddr, __entry->len)
 );
 
+TRACE_EVENT_FN(skb_latency,
+
+	TP_PROTO(struct sk_buff *skb, struct sock *sk, enum skb_latency_type type),
+
+	TP_ARGS(skb, sk, type),
+
+	TP_STRUCT__entry(
+		__field(void *,		skbaddr)
+		__field(void *,		skaddr)
+		__field(u64,		latency)
+		__field(enum skb_latency_type,	type)
+	),
+
+	TP_fast_assign(
+		__entry->skbaddr = skb;
+		__entry->skaddr = sk;
+		__entry->type = type;
+		__entry->latency = skb->tstamp ?
+			(skb->tstamp_type == SKB_CLOCK_REALTIME ?
+				net_timedelta(skb->tstamp) :
+				ktime_get_ns() - skb->tstamp) : 0;
+	),
+
+	TP_printk("skbaddr=%p skaddr=%p type=%d latency=%lluns",
+		  __entry->skbaddr, __entry->skaddr, __entry->type,
+		  __entry->latency),
+
+	skb_latency_regfunc, skb_latency_unregfunc
+);
+
 #endif /* _TRACE_SKB_H */
 
 /* This part must be outside protection */

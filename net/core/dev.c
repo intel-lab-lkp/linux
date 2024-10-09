@@ -4347,6 +4347,8 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_SCHED_TSTAMP))
 		__skb_tstamp_tx(skb, NULL, NULL, skb->sk, SCM_TSTAMP_SCHED);
 
+	skb_latency_notify(skb, NULL, SKB_LATENCY_SCHED);
+
 	/* Disable soft irqs for various locks below. Also
 	 * stops preemption for RCU.
 	 */

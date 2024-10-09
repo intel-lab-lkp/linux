@@ -48,6 +48,7 @@
 #include <linux/skbuff_ref.h>
 
 #include <trace/events/tcp.h>
+#include <trace/events/skb.h>
 
 /* Refresh clocks of a TCP socket,
  * ensuring monotically increasing values.
@@ -2512,6 +2513,7 @@ static int tcp_mtu_probe(struct sock *sk)
 	skb = tcp_send_head(sk);
 	skb_copy_decrypted(nskb, skb);
 	mptcp_skb_ext_copy(nskb, skb);
+	nskb->tstamp = skb->tstamp;
 
 	TCP_SKB_CB(nskb)->seq = TCP_SKB_CB(skb)->seq;
 	TCP_SKB_CB(nskb)->end_seq = TCP_SKB_CB(skb)->seq + probe_size;
@@ -2540,6 +2542,7 @@ static int tcp_mtu_probe(struct sock *sk)
 			break;
 	}
 	tcp_init_tso_segs(nskb, nskb->len);
+	skb_latency_notify(nskb, sk, SKB_LATENCY_SEND);
 
 	/* We're ready to send.  If this fails, the probe will
 	 * be resegmented into mss-sized pieces by tcp_write_xmit().
@@ -2827,6 +2830,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		if (TCP_SKB_CB(skb)->end_seq == TCP_SKB_CB(skb)->seq)
 			break;
 
+		skb_latency_notify(skb, sk, SKB_LATENCY_SEND);
 		if (unlikely(tcp_transmit_skb(sk, skb, 1, gfp)))
 			break;
 
@@ -3616,6 +3620,7 @@ void tcp_send_fin(struct sock *sk)
 		/* FIN eats a sequence byte, write_seq advanced by tcp_queue_skb(). */
 		tcp_init_nondata_skb(skb, tp->write_seq,
 				     TCPHDR_ACK | TCPHDR_FIN);
+		skb_set_delivery_time(skb, tcp_clock_ns(), SKB_CLOCK_MONOTONIC);
 		tcp_queue_skb(sk, skb);
 	}
 	__tcp_push_pending_frames(sk, tcp_current_mss(sk), TCP_NAGLE_OFF);
@@ -4048,6 +4053,7 @@ static int tcp_send_syn_data(struct sock *sk, struct sk_buff *syn)
 		goto done;
 	}
 
+	skb_set_delivery_time(syn_data, tp->tcp_clock_cache, SKB_CLOCK_MONOTONIC);
 	/* data was not sent, put it in write_queue */
 	__skb_queue_tail(&sk->sk_write_queue, syn_data);
 	tp->packets_out -= tcp_skb_pcount(syn_data);
@@ -4353,6 +4359,7 @@ int tcp_write_wakeup(struct sock *sk, int mib)
 		} else if (!tcp_skb_pcount(skb))
 			tcp_set_skb_tso_segs(skb, mss);
 
+		skb_latency_notify(skb, sk, SKB_LATENCY_SEND);
 		TCP_SKB_CB(skb)->tcp_flags |= TCPHDR_PSH;
 		err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
 		if (!err)

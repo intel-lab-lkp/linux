@@ -1104,6 +1104,35 @@ struct sk_buff {
 #endif
 #define SKB_BF_MONO_TC_OFFSET		offsetof(struct sk_buff, __mono_tc_offset)
 
+enum skb_latency_type {
+	/* the latency from the skb being queued in the send buffer to the
+	 * skb is passed to L3 from L4. The latency in this case can be
+	 * caused by the nagle.
+	 */
+	SKB_LATENCY_SEND,
+	/* the latency from L3 to the skb entering the paccket scheduler
+	 * in output path.
+	 */
+	SKB_LATENCY_SCHED,
+	/* the latency from L3 to the skb entering the driver in output path */
+	SKB_LATENCY_NIC,
+	/* the latency from L3 to the skb being acknowledged by peer. This
+	 * including the latency caused by delay ack. If the skb is
+	 * retransmitted, this imply the last retransmitted skb.
+	 */
+	SKB_LATENCY_ACK,
+	/* the latency from the driver to the skb entering the L4 in input path */
+	SKB_LATENCY_RECV,
+	/* the latency from the driver to the skb being peeked from the
+	 * recv queue by the user in input path.
+	 */
+	SKB_LATENCY_PICK,
+	SKB_LATENCY_MAX,
+};
+
+extern int skb_latency_regfunc(void);
+extern void skb_latency_unregfunc(void);
+
 #ifdef __KERNEL__
 /*
  *	Handling routines are only of interest to the kernel
@@ -4499,6 +4528,9 @@ static inline void skb_tx_timestamp(struct sk_buff *skb)
 	if (skb_shinfo(skb)->tx_flags & SKBTX_SW_TSTAMP)
 		skb_tstamp_tx(skb, NULL);
 }
+
+void skb_latency_notify(struct sk_buff *skb, struct sock *sk,
+			enum skb_latency_type type);
 
 /**
  * skb_complete_wifi_ack - deliver skb with wifi status
