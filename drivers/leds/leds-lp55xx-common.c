@@ -512,12 +512,6 @@ static int lp55xx_init_led(struct lp55xx_led *led,
 	led->max_current = pdata->led_config[chan].max_current;
 	led->chan_nr = pdata->led_config[chan].chan_nr;
 
-	if (led->chan_nr >= max_channel) {
-		dev_err(dev, "Use channel numbers between 0 and %d\n",
-			max_channel - 1);
-		return -EINVAL;
-	}
-
 	if (pdata->led_config[chan].num_colors > 1)
 		ret = devm_led_classdev_multicolor_register(dev, &led->mc_cdev);
 	else
@@ -1132,8 +1126,11 @@ static int lp55xx_parse_common_child(struct device_node *np,
 	if (ret)
 		return ret;
 
-	if (*chan_nr < 0 || *chan_nr > cfg->max_channel)
+	if (*chan_nr < 0 || *chan_nr >= cfg->max_channel) {
+		dev_err(dev, "Use channel numbers between 0 and %d\n",
+			cfg->max_channel - 1);
 		return -EINVAL;
+	}
 
 	return 0;
 }
