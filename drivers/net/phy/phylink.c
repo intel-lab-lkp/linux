@@ -2111,6 +2111,13 @@ int phylink_fwnode_phy_connect(struct phylink *pl,
 		pl->link_config.interface = pl->link_interface;
 	}
 
+	/* Assume SerDes interface modes share the same lanes and allow
+	 * the PHY to switch between the
+	 */
+	if (test_bit(pl->link_interface, phylink_sfp_interfaces))
+		phy_interface_and(phy_dev->host_interfaces, phylink_sfp_interfaces,
+				  pl->config->supported_interfaces);
+
 	if (pl->config->mac_requires_rxc)
 		flags |= PHY_F_RXC_ALWAYS_ON;
 
