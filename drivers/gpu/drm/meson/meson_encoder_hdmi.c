@@ -402,7 +402,7 @@ int meson_encoder_hdmi_probe(struct meson_drm *priv)
 	meson_encoder_hdmi->priv = priv;
 
 	/* Encoder */
-	ret = drm_simple_encoder_init(priv->drm, &meson_encoder_hdmi->encoder,
+	ret = drm_simple_encoder_init(&priv->drm, &meson_encoder_hdmi->encoder,
 				      DRM_MODE_ENCODER_TMDS);
 	if (ret) {
 		dev_err_probe(priv->dev, ret, "Failed to init HDMI encoder\n");
@@ -420,7 +420,7 @@ int meson_encoder_hdmi_probe(struct meson_drm *priv)
 	}
 
 	/* Initialize & attach Bridge Connector */
-	meson_encoder_hdmi->connector = drm_bridge_connector_init(priv->drm,
+	meson_encoder_hdmi->connector = drm_bridge_connector_init(&priv->drm,
 							&meson_encoder_hdmi->encoder);
 	if (IS_ERR(meson_encoder_hdmi->connector)) {
 		ret = dev_err_probe(priv->dev,

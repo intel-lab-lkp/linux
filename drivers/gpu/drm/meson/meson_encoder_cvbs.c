@@ -104,7 +104,7 @@ static int meson_encoder_cvbs_get_modes(struct drm_bridge *bridge,
 	for (i = 0; i < MESON_CVBS_MODES_COUNT; ++i) {
 		struct meson_cvbs_mode *meson_mode = &meson_cvbs_modes[i];
 
-		mode = drm_mode_duplicate(priv->drm, &meson_mode->mode);
+		mode = drm_mode_duplicate(&priv->drm, &meson_mode->mode);
 		if (!mode) {
 			dev_err(priv->dev, "Failed to create a new display mode\n");
 			return 0;
@@ -221,7 +221,7 @@ static const struct drm_bridge_funcs meson_encoder_cvbs_bridge_funcs = {
 
 int meson_encoder_cvbs_probe(struct meson_drm *priv)
 {
-	struct drm_device *drm = priv->drm;
+	struct drm_device *drm = &priv->drm;
 	struct meson_encoder_cvbs *meson_encoder_cvbs;
 	struct drm_connector *connector;
 	struct device_node *remote;
@@ -256,7 +256,7 @@ int meson_encoder_cvbs_probe(struct meson_drm *priv)
 	meson_encoder_cvbs->priv = priv;
 
 	/* Encoder */
-	ret = drm_simple_encoder_init(priv->drm, &meson_encoder_cvbs->encoder,
+	ret = drm_simple_encoder_init(&priv->drm, &meson_encoder_cvbs->encoder,
 				      DRM_MODE_ENCODER_TVDAC);
 	if (ret)
 		return dev_err_probe(priv->dev, ret,
@@ -273,7 +273,7 @@ int meson_encoder_cvbs_probe(struct meson_drm *priv)
 	}
 
 	/* Initialize & attach Bridge Connector */
-	connector = drm_bridge_connector_init(priv->drm, &meson_encoder_cvbs->encoder);
+	connector = drm_bridge_connector_init(&priv->drm, &meson_encoder_cvbs->encoder);
 	if (IS_ERR(connector))
 		return dev_err_probe(priv->dev, PTR_ERR(connector),
 				     "Unable to create CVBS bridge connector\n");
