@@ -291,6 +291,10 @@ with the following files:
 	that case reading the mbm_total_bytes and mbm_local_bytes may report
 	'Unavailable' if there is no counter associated with that group.
 
+"num_mbm_cntrs":
+	The number of monitoring counters available for assignment when the
+	architecture supports mbm_cntr_assign mode.
+
 "max_threshold_occupancy":
 		Read/write file provides the largest value (in
 		bytes) at which a previously used LLC_occupancy
