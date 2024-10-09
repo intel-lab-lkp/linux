@@ -1309,6 +1309,7 @@ int hid_pidff_init(struct hid_device *hid)
 	ff->set_gain = pidff_set_gain;
 	ff->set_autocenter = pidff_set_autocenter;
 	ff->playback = pidff_playback;
+	ff->max_concurrent_playbacks = max_effects;
 
 	hid_info(dev, "Force feedback for USB HID PID devices by Anssi Hannula <anssi.hannula@gmail.com>\n");
 
