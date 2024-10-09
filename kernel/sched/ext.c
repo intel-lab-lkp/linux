@@ -2953,7 +2953,7 @@ static struct task_struct *pick_task_scx(struct rq *rq)
 
 		if (unlikely(!p->scx.slice)) {
 			if (!scx_rq_bypassing(rq) && !scx_warned_zero_slice) {
-				printk_deferred(KERN_WARNING "sched_ext: %s[%d] has zero slice in pick_next_task_scx()\n",
+				printk_deferred(KERN_WARNING "sched_ext: %s[%d] has zero slice in pick_task_scx()\n",
 						p->comm, p->pid);
 				scx_warned_zero_slice = true;
 			}
