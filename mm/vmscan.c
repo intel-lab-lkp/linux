@@ -4394,11 +4394,23 @@ static int scan_folios(struct lruvec *lruvec, struct scan_control *sc,
 	int remaining = MAX_LRU_BATCH;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
+	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 
 	VM_WARN_ON_ONCE(!list_empty(list));
 
-	if (get_nr_gens(lruvec, type) == MIN_NR_GENS)
-		return 0;
+	if (get_nr_gens(lruvec, type) == MIN_NR_GENS) {
+		/*
+		 * throttle for a while and then increase the min_seq since
+		 * both page types reach the limit.
+		 */
+		if (get_nr_gens(lruvec, !type) == MIN_NR_GENS) {
+			spin_unlock_irq(&lruvec->lru_lock);
+			reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);
+			spin_lock_irq(&lruvec->lru_lock);
+			try_to_inc_min_seq(lruvec, get_swappiness(lruvec, sc));
+		} else
+			return 0;
+	}
 
 	gen = lru_gen_from_seq(lrugen->min_seq[type]);
 
