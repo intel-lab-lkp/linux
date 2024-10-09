@@ -818,7 +818,7 @@ int main(int argc, char *argv[])
 
 		rc = ne_alloc_user_mem_region(&ne_user_mem_regions[i]);
 		if (rc < 0) {
-			printf("Error in alloc userspace memory region, iter %d\n", i);
+			printf("Error in alloc userspace memory region, iter %u\n", i);
 
 			goto release_enclave_fd;
 		}
@@ -831,7 +831,7 @@ int main(int argc, char *argv[])
 	for (i = 0; i < NE_DEFAULT_NR_MEM_REGIONS; i++) {
 		rc = ne_set_user_mem_region(enclave_fd, ne_user_mem_regions[i]);
 		if (rc < 0) {
-			printf("Error in set memory region, iter %d\n", i);
+			printf("Error in set memory region, iter %u\n", i);
 
 			goto release_enclave_fd;
 		}
@@ -847,12 +847,12 @@ int main(int argc, char *argv[])
 		ne_vcpus[i] = 0;
 		rc = ne_add_vcpu(enclave_fd, &ne_vcpus[i]);
 		if (rc < 0) {
-			printf("Error in add vcpu, iter %d\n", i);
+			printf("Error in add vcpu, iter %u\n", i);
 
 			goto release_enclave_fd;
 		}
 
-		printf("Added vCPU %d to the enclave\n", ne_vcpus[i]);
+		printf("Added vCPU %u to the enclave\n", ne_vcpus[i]);
 	}
 
 	printf("Enclave vCPUs were added\n");
