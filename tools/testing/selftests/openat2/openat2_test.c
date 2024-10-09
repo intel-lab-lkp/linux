@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Author: Aleksa Sarai <cyphar@cyphar.com>
- * Copyright (C) 2018-2019 SUSE LLC.
+ * Copyright (C) 2018-2024 SUSE LLC.
  */
 
 #define _GNU_SOURCE
 #define __SANE_USERSPACE_TYPES__ // Use ll64
+#include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
 #include <sys/stat.h>
@@ -29,6 +30,10 @@
 #define	O_LARGEFILE 0x8000
 #endif
 
+#ifndef CHECK_FIELDS
+#define CHECK_FIELDS (1ULL << 63)
+#endif
+
 struct open_how_ext {
 	struct open_how inner;
 	uint32_t extra1;
@@ -44,6 +49,152 @@ struct struct_test {
 	size_t size;
 	int err;
 };
+
+static bool check(bool *failed, bool pred)
+{
+	*failed |= pred;
+	return pred;
+}
+
+#define NUM_OPENAT2_CHECK_FIELDS_BAD_TESTS 2
+
+static void test_openat2_check_fields_bad(const char *name, size_t struct_size)
+{
+	int fd, expected_err;
+	bool failed = false;
+	struct open_how how = {};
+	void (*resultfn)(const char *msg, ...) = ksft_test_result_pass;
+
+	if (struct_size < sizeof(struct open_how))
+		expected_err = -EINVAL;
+	if (struct_size > 4096)
+		expected_err = -E2BIG;
+
+	if (!openat2_supported) {
+		ksft_print_msg("openat2(2) unsupported\n");
+		resultfn = ksft_test_result_skip;
+		goto skip;
+	}
+
+	fd = raw_openat2(AT_FDCWD, "", &how, CHECK_FIELDS | struct_size);
+	if (check(&failed, fd != expected_err))
+		ksft_print_msg("openat2(CHECK_FIELDS) returned wrong error code: %d (%s) != %d (%s)\n",
+			       fd, strerror(-fd),
+			       expected_err, strerror(-expected_err));
+
+	if (fd >= 0)
+		close(fd);
+
+	if (failed)
+		resultfn = ksft_test_result_fail;
+
+skip:
+	resultfn("openat2(CHECK_FIELDS) with %s returns %d (%s)\n", name,
+		 expected_err, strerror(-expected_err));
+	fflush(stdout);
+}
+
+#define NUM_OPENAT2_CHECK_FIELDS_TESTS 1
+#define NUM_OPENAT2_CHECK_FIELDS_VARIATIONS 13
+
+static void test_openat2_check_fields(void)
+{
+	int misalignments[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 17, 87 };
+
+	for (int i = 0; i < ARRAY_LEN(misalignments); i++) {
+		int fd, misalign = misalignments[i];
+		bool failed = false;
+		char *fdpath = NULL;
+		void (*resultfn)(const char *msg, ...) = ksft_test_result_pass;
+
+		struct open_how_ext how_ext = {}, *how_copy = &how_ext;
+		void *copy = NULL;
+
+		if (!openat2_supported) {
+			ksft_print_msg("openat2(2) unsupported\n");
+			resultfn = ksft_test_result_skip;
+			goto skip;
+		}
+
+		if (misalign) {
+			/*
+			 * Explicitly misalign the structure copying it with
+			 * the given (mis)alignment offset. The other data is
+			 * set to zero and we verify this afterwards to make
+			 * sure CHECK_FIELDS doesn't write outside the buffer.
+			 */
+			copy = malloc(misalign*2 + sizeof(how_ext));
+			how_copy = copy + misalign;
+			memset(copy, 0x00, misalign*2 + sizeof(how_ext));
+			memcpy(how_copy, &how_ext, sizeof(how_ext));
+		}
+
+		fd = raw_openat2(AT_FDCWD, ".", how_copy, CHECK_FIELDS | sizeof(*how_copy));
+		if (check(&failed, (fd != -EEXTSYS_NOOP)))
+			ksft_print_msg("openat2(CHECK_FIELDS) returned wrong error code: %d (%s) != %d\n",
+				       fd, strerror(-fd), -EEXTSYS_NOOP);
+		if (fd >= 0) {
+			fdpath = fdreadlink(fd);
+			close(fd);
+		}
+
+		if (failed) {
+			ksft_print_msg("openat2(CHECK_FIELDS) unexpectedly returned ");
+			if (fdpath)
+				ksft_print_msg("%d['%s']\n", fd, fdpath);
+			else
+				ksft_print_msg("%d (%s)\n", fd, strerror(-fd));
+		}
+
+		if (check(&failed, !(how_copy->inner.flags & O_PATH)))
+			ksft_print_msg("openat2(CHECK_FIELDS) returned flags is missing O_PATH (0x%.16x): 0x%.16llx\n",
+				       O_PATH, how_copy->inner.flags);
+
+		if (check(&failed, (how_copy->inner.mode != 07777)))
+			ksft_print_msg("openat2(CHECK_FIELDS) returned mode is invalid (0o%o): 0o%.4llo\n",
+				       07777, how_copy->inner.mode);
+
+		if (check(&failed, !(how_copy->inner.resolve & RESOLVE_IN_ROOT)))
+			ksft_print_msg("openat2(CHECK_FIELDS) returned resolve flags is missing RESOLVE_IN_ROOT (0x%.16x): 0x%.16llx\n",
+				       RESOLVE_IN_ROOT, how_copy->inner.resolve);
+
+		/* Verify that the buffer space outside the struct wasn't written to. */
+		if (check(&failed, how_copy->extra1 != 0))
+			ksft_print_msg("openat2(CHECK_FIELDS) touched a byte outside open_how (extra1): 0x%x\n",
+				       how_copy->extra1);
+		if (check(&failed, how_copy->extra2 != 0))
+			ksft_print_msg("openat2(CHECK_FIELDS) touched a byte outside open_how (extra2): 0x%x\n",
+				       how_copy->extra2);
+		if (check(&failed, how_copy->extra3 != 0))
+			ksft_print_msg("openat2(CHECK_FIELDS) touched a byte outside open_how (extra3): 0x%x\n",
+				       how_copy->extra3);
+
+		if (misalign) {
+			for (size_t i = 0; i < misalign; i++) {
+				char *p = copy + i;
+				if (check(&failed, *p != '\x00'))
+					ksft_print_msg("openat2(CHECK_FIELDS) touched a byte outside the size: buffer[%ld] = 0x%.2x\n",
+						       p - (char *) copy, *p);
+			}
+			for (size_t i = 0; i < misalign; i++) {
+				char *p = copy + misalign + sizeof(how_ext) + i;
+				if (check(&failed, *p != '\x00'))
+					ksft_print_msg("openat2(CHECK_FIELDS) touched a byte outside the size: buffer[%ld] = 0x%.2x\n",
+						       p - (char *) copy, *p);
+			}
+		}
+
+		if (failed)
+			resultfn = ksft_test_result_fail;
+
+skip:
+		resultfn("openat2(CHECK_FIELDS) [misalign=%d]\n", misalign);
+
+		free(copy);
+		free(fdpath);
+		fflush(stdout);
+	}
+}
 
 #define NUM_OPENAT2_STRUCT_TESTS 7
 #define NUM_OPENAT2_STRUCT_VARIATIONS 13
@@ -320,13 +471,19 @@ next:
 	}
 }
 
-#define NUM_TESTS (NUM_OPENAT2_STRUCT_VARIATIONS * NUM_OPENAT2_STRUCT_TESTS + \
+#define NUM_TESTS (NUM_OPENAT2_CHECK_FIELDS_TESTS * NUM_OPENAT2_CHECK_FIELDS_VARIATIONS + \
+		   NUM_OPENAT2_CHECK_FIELDS_BAD_TESTS + \
+		   NUM_OPENAT2_STRUCT_VARIATIONS * NUM_OPENAT2_STRUCT_TESTS + \
 		   NUM_OPENAT2_FLAG_TESTS)
 
 int main(int argc, char **argv)
 {
 	ksft_print_header();
 	ksft_set_plan(NUM_TESTS);
+
+	test_openat2_check_fields();
+	test_openat2_check_fields_bad("small struct (< v0)", 0);
+	test_openat2_check_fields_bad("large struct (> PAGE_SIZE)", 0xF000);
 
 	test_openat2_struct();
 	test_openat2_flags();
