@@ -2404,7 +2404,7 @@ static int _intel_hdcp_enable(struct intel_atomic_state *state,
 	struct drm_i915_private *i915 = to_i915(display->drm);
 	struct intel_connector *connector =
 		to_intel_connector(conn_state->connector);
-	struct intel_digital_port *dig_port = intel_attached_dig_port(connector);
+	struct intel_digital_port *dig_port;
 	struct intel_hdcp *hdcp = &connector->hdcp;
 	unsigned long check_link_interval = DRM_HDCP_CHECK_PERIOD_MS;
 	int ret = -EINVAL;
@@ -2417,6 +2417,8 @@ static int _intel_hdcp_enable(struct intel_atomic_state *state,
 			connector->base.base.id, connector->base.name);
 		return -ENODEV;
 	}
+
+	dig_port = intel_attached_dig_port(connector);
 
 	mutex_lock(&hdcp->mutex);
 	mutex_lock(&dig_port->hdcp_mutex);
