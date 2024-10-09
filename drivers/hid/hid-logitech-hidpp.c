@@ -2895,6 +2895,7 @@ static int hidpp_ff_init(struct hidpp_device *hidpp,
 	ff->set_gain = hidpp_ff_set_gain;
 	ff->set_autocenter = hidpp_ff_set_autocenter;
 	ff->destroy = hidpp_ff_destroy;
+	ff->max_concurrent_playbacks = num_slots;
 
 	/* Create sysfs interface */
 	error = device_create_file(&(hidpp->hid_dev->dev), &dev_attr_range);
