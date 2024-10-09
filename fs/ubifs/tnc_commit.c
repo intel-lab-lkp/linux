@@ -657,6 +657,7 @@ static int get_znodes_to_commit(struct ubifs_info *c)
 		znode->alt = 0;
 		cnext = find_next_dirty(znode);
 		if (!cnext) {
+			znode->cparent = NULL;
 			znode->cnext = c->cnext;
 			break;
 		}
