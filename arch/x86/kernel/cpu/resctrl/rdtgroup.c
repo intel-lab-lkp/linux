@@ -1669,6 +1669,7 @@ out:
 }
 
 struct mon_config_info {
+	struct rdt_resource *r;
 	struct rdt_mon_domain *d;
 	u32 evtid;
 	u32 mon_config;
@@ -1694,11 +1695,46 @@ u32 resctrl_arch_mon_event_config_get(struct rdt_mon_domain *d,
 	return INVALID_CONFIG_VALUE;
 }
 
+static void mbm_cntr_event_update(int cntr_id, unsigned int index, u32 val)
+{
+	union l3_qos_abmc_cfg abmc_cfg = { 0 };
+	struct rdtgroup *prgrp, *crgrp;
+	int update = 0;
+
+	/* Check if the cntr_id is associated to the event type updated */
+	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
+		if (prgrp->mon.cntr_id[index] == cntr_id) {
+			abmc_cfg.split.bw_src = prgrp->mon.rmid;
+			update = 1;
+			goto out_update;
+		}
+		list_for_each_entry(crgrp, &prgrp->mon.crdtgrp_list, mon.crdtgrp_list) {
+			if (crgrp->mon.cntr_id[index] == cntr_id) {
+				abmc_cfg.split.bw_src = crgrp->mon.rmid;
+				update = 1;
+				goto out_update;
+			}
+		}
+	}
+
+out_update:
+	if (update) {
+		abmc_cfg.split.cfg_en = 1;
+		abmc_cfg.split.cntr_en = 1;
+		abmc_cfg.split.cntr_id = cntr_id;
+		abmc_cfg.split.bw_type = val;
+		wrmsrl(MSR_IA32_L3_QOS_ABMC_CFG, abmc_cfg.full);
+	}
+}
+
 void resctrl_arch_mon_event_config_set(void *info)
 {
 	struct mon_config_info *mon_info = info;
+	struct rdt_mon_domain *d = mon_info->d;
+	struct rdt_resource *r = mon_info->r;
 	struct rdt_hw_mon_domain *hw_dom;
 	unsigned int index;
+	int cntr_id;
 
 	index = mon_event_config_index_get(mon_info->evtid);
 	if (index == INVALID_CONFIG_INDEX)
@@ -1717,6 +1753,18 @@ void resctrl_arch_mon_event_config_set(void *info)
 	case QOS_L3_MBM_LOCAL_EVENT_ID:
 		hw_dom->mbm_local_cfg =  mon_info->mon_config;
 		break;
+	}
+
+	/*
+	 * Update the assignment if the domain has the cntr_id's assigned
+	 * to event type updated.
+	 */
+	if (resctrl_arch_mbm_cntr_assign_enabled(r)) {
+		for (cntr_id = 0; cntr_id < r->mon.num_mbm_cntrs; cntr_id++) {
+			if (test_bit(cntr_id, d->mbm_cntr_map))
+				mbm_cntr_event_update(cntr_id, index,
+						      mon_info->mon_config);
+		}
 	}
 }
 
@@ -1805,6 +1853,7 @@ static void mbm_config_write_domain(struct rdt_resource *r,
 	mon_info.d = d;
 	mon_info.evtid = evtid;
 	mon_info.mon_config = val;
+	mon_info.r = r;
 
 	/*
 	 * Update MSR_IA32_EVT_CFG_BASE MSR on one of the CPUs in the
