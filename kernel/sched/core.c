@@ -5525,7 +5525,7 @@ static u64 cpu_resched_latency(struct rq *rq)
 	if (sysctl_resched_latency_warn_once && warned_once)
 		return 0;
 
-	if (!need_resched() || !latency_warn_ms)
+	if ((!need_resched() && !tif_need_resched_lazy()) || !latency_warn_ms)
 		return 0;
 
 	if (system_state == SYSTEM_BOOTING)
