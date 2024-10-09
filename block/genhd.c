@@ -675,16 +675,6 @@ void del_gendisk(struct gendisk *disk)
 	if (WARN_ON_ONCE(!disk_live(disk) && !(disk->flags & GENHD_FL_HIDDEN)))
 		return;
 
-	disk_del_events(disk);
-
-	/*
-	 * Prevent new openers by unlinked the bdev inode.
-	 */
-	mutex_lock(&disk->open_mutex);
-	xa_for_each(&disk->part_tbl, idx, part)
-		bdev_unhash(part);
-	mutex_unlock(&disk->open_mutex);
-
 	/*
 	 * Tell the file system to write back all dirty data and shut down if
 	 * it hasn't been notified earlier.
@@ -693,10 +683,22 @@ void del_gendisk(struct gendisk *disk)
 		blk_report_disk_dead(disk, false);
 
 	/*
-	 * Drop all partitions now that the disk is marked dead.
+	 * Then mark the disk dead to stop new requests from being served ASAP.
+	 * This needs to happen before taking ->open_mutex to prevent deadlocks
+	 * with SCSI ULPs that send passthrough commands from their ->release
+	 * methods.
+	 */
+	__blk_mark_disk_dead(disk);
+
+	disk_del_events(disk);
+
+	/*
+	 * Prevent new openers by unlinking the bdev inode, and drop all
+	 * partitions.
 	 */
 	mutex_lock(&disk->open_mutex);
-	__blk_mark_disk_dead(disk);
+	xa_for_each(&disk->part_tbl, idx, part)
+		bdev_unhash(part);
 	xa_for_each_start(&disk->part_tbl, idx, part, 1)
 		drop_partition(part);
 	mutex_unlock(&disk->open_mutex);
