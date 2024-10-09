@@ -12,24 +12,298 @@
 /// # Safety
 ///
 /// All bit-patterns must be valid for this type. This type must not have interior mutability.
-pub unsafe trait FromBytes {}
-
-macro_rules! impl_frombytes {
-    ($($({$($generics:tt)*})? $t:ty, )*) => {
-        // SAFETY: Safety comments written in the macro invocation.
-        $(unsafe impl$($($generics)*)? FromBytes for $t {})*
-    };
+pub unsafe trait FromBytes {
+    ///Converts a slice of Bytes into a Reference to Self
+    ///
+    /// # Examples
+    /// ```
+    ///    pub unsafe trait FromBytes {
+    ///        unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self;
+    ///        unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    ///        where
+    ///            Self: ToBytes;
+    ///    }
+    ///
+    ///unsafe impl FromBytes for u32 {
+    ///    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+    ///        let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+    ///        &*slice_ptr
+    ///    }
+    ///
+    ///    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    ///    where
+    ///        Self: ToBytes,
+    ///    {
+    ///        let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+    ///        &mut *slice_ptr
+    ///    }
+    ///}
+    ///
+    ///let slice_of_bytes : &[u8] = &[1, 2, 3, 4];
+    ///let result = u32::from_bytes(slice_of_bytes);
+    ///assert_eq!(*result, 0x4030201);
+    ///```
+    ///# Safety
+    ///
+    ///Guarantee that all values are initiliazed
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self;
+    ///Converts a mutabble slice of Bytes into a mutable Reference to Self
+    /// # Safety
+    ///
+    /// ToBytes in order to allow only types that implements ToBytes
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes;
 }
 
-impl_frombytes! {
-    // SAFETY: All bit patterns are acceptable values of the types below.
-    u8, u16, u32, u64, usize,
-    i8, i16, i32, i64, isize,
+// SAFETY: All bit patterns are acceptable values of the types below.
+unsafe impl FromBytes for u8 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
 
-    // SAFETY: If all bit patterns are acceptable for individual values in an array, then all bit
-    // patterns are also acceptable for arrays of that type.
-    {<T: FromBytes>} [T],
-    {<T: FromBytes, const N: usize>} [T; N],
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for u16 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for u32 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for u64 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for usize {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for i8 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for i16 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for i32 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for i64 {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+
+unsafe impl FromBytes for isize {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const Self;
+            &*slice_ptr
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut Self;
+            &mut *slice_ptr
+        }
+    }
+}
+// SAFETY: If all bit patterns are acceptable for individual values in an array, then all bit
+// patterns are also acceptable for arrays of that type.
+unsafe impl<T: FromBytes> FromBytes for [T] {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const T;
+            let slice_len = slice_of_bytes.len() / core::mem::size_of::<T>();
+            core::slice::from_raw_parts(slice_ptr, slice_len)
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_mut_ptr() as *mut T;
+            let slice_len = slice_of_bytes.len() / core::mem::size_of::<T>();
+            core::slice::from_raw_parts_mut(slice_ptr, slice_len)
+        }
+    }
+}
+
+/// # Examples
+///```
+///let slice_of_bytes: &[u8] = &[
+///    1, 0, 0, 0,
+///    2, 0, 0, 0,
+///    3, 0, 0, 0,
+///    4, 0, 0, 0,
+///    5, 0, 0, 0,
+///    6, 0, 0, 0,
+///    7, 0, 0, 0,
+///    8, 0, 0, 0,
+///];
+///
+///let foo = <[u32; 8]>::from_bytes(slice_of_bytes);
+///let expected: [u32; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+///
+///assert_eq!(*foo, expected);
+///```
+unsafe impl<T: FromBytes, const N: usize> FromBytes for [T; N] {
+    unsafe fn from_bytes(slice_of_bytes: &[u8]) -> &Self {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *const T;
+            &*(slice_ptr as *const [T; N])
+        }
+    }
+
+    unsafe fn from_bytes_mut(slice_of_bytes: &mut [u8]) -> &mut Self
+    where
+        Self: ToBytes,
+    {
+        unsafe {
+            let slice_ptr = slice_of_bytes.as_ptr() as *mut T;
+            &mut *(slice_ptr as *mut [T; N])
+        }
+    }
 }
 
 /// Types that can be viewed as an immutable slice of initialized bytes.
