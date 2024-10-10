@@ -177,7 +177,8 @@ int __init acpi_gtdt_init(struct acpi_table_header *table,
 	}
 
 	platform_timer = (void *)gtdt + gtdt->platform_timer_offset;
-	if (platform_timer < (void *)table + sizeof(struct acpi_table_gtdt)) {
+	if (platform_timer < (void *)table + sizeof(struct acpi_table_gtdt) ||
+			platform_timer >= acpi_gtdt_desc.gtdt_end) {
 		pr_err(FW_BUG "invalid timer data.\n");
 		return -EINVAL;
 	}
