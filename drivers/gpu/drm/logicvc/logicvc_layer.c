@@ -581,7 +581,6 @@ int logicvc_layers_init(struct logicvc_drm *logicvc)
 	struct drm_device *drm_dev = &logicvc->drm_dev;
 	struct device *dev = drm_dev->dev;
 	struct device_node *of_node = dev->of_node;
-	struct device_node *layer_node = NULL;
 	struct device_node *layers_node;
 	struct logicvc_layer *layer;
 	struct logicvc_layer *next;
@@ -594,7 +593,7 @@ int logicvc_layers_init(struct logicvc_drm *logicvc)
 		goto error;
 	}
 
-	for_each_child_of_node(layers_node, layer_node) {
+	for_each_child_of_node_scoped(layers_node, layer_node) {
 		u32 index = 0;
 
 		if (!logicvc_of_node_is_layer(layer_node))
@@ -613,7 +612,6 @@ int logicvc_layers_init(struct logicvc_drm *logicvc)
 
 		ret = logicvc_layer_init(logicvc, layer_node, index);
 		if (ret) {
-			of_node_put(layer_node);
 			of_node_put(layers_node);
 			goto error;
 		}
