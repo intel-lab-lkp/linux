@@ -714,32 +714,57 @@ __kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
 	return folio;
 }
 
-int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
-		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order)
+static int
+kvm_gmem_get_pfn_folio_locked(struct kvm *kvm, struct kvm_memory_slot *slot,
+			      gfn_t gfn, kvm_pfn_t *pfn, int *max_order,
+			      struct folio **folio)
 {
 	struct file *file = kvm_gmem_get_file(slot);
-	struct folio *folio;
 	bool is_prepared = false;
 	int r = 0;
 
 	if (!file)
 		return -EFAULT;
 
-	folio = __kvm_gmem_get_pfn(file, slot, gfn, pfn, &is_prepared, max_order);
-	if (IS_ERR(folio)) {
-		r = PTR_ERR(folio);
+	*folio = __kvm_gmem_get_pfn(file, slot, gfn, pfn, &is_prepared, max_order);
+	if (IS_ERR(*folio)) {
+		r = PTR_ERR(*folio);
 		goto out;
 	}
 
 	if (!is_prepared)
-		r = kvm_gmem_prepare_folio(kvm, slot, gfn, folio);
+		r = kvm_gmem_prepare_folio(kvm, slot, gfn, *folio);
 
-	folio_unlock(folio);
-	if (r < 0)
-		folio_put(folio);
+	if (r) {
+		folio_unlock(*folio);
+		folio_put(*folio);
+	}
 
 out:
 	fput(file);
+	return r;
+}
+
+int kvm_gmem_get_pfn_locked(struct kvm *kvm, struct kvm_memory_slot *slot,
+			    gfn_t gfn, kvm_pfn_t *pfn, int *max_order)
+{
+	struct folio *folio;
+
+	return kvm_gmem_get_pfn_folio_locked(kvm, slot, gfn, pfn, max_order, &folio);
+
+}
+EXPORT_SYMBOL_GPL(kvm_gmem_get_pfn_locked);
+
+int kvm_gmem_get_pfn(struct kvm *kvm, struct kvm_memory_slot *slot,
+		     gfn_t gfn, kvm_pfn_t *pfn, int *max_order)
+{
+	struct folio *folio;
+	int r;
+
+	r = kvm_gmem_get_pfn_folio_locked(kvm, slot, gfn, pfn, max_order, &folio);
+	if (!r)
+		folio_unlock(folio);
+
 	return r;
 }
 EXPORT_SYMBOL_GPL(kvm_gmem_get_pfn);
