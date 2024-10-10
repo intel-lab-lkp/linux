@@ -181,6 +181,7 @@ int main(int argc, char *argv[])
 			ulog("%d messages have been sent to %08x.%08x.\n", i, data->id.idx, data->id.val);
 		}
 
+		close(s);
 		return 0;
 	}
 
