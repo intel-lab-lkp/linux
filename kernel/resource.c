@@ -50,15 +50,28 @@ EXPORT_SYMBOL(iomem_resource);
 
 static DEFINE_RWLOCK(resource_lock);
 
-static struct resource *next_resource(struct resource *p, bool skip_children)
+static struct resource *__next_resource(struct resource *root, struct resource *p,
+					bool skip_children)
 {
 	if (!skip_children && p->child)
 		return p->child;
-	while (!p->sibling && p->parent)
+	while (!p->sibling && p->parent) {
 		p = p->parent;
+		if (p == root)
+			return NULL;
+	}
 	return p->sibling;
 }
 
+static struct resource *next_resource(struct resource *p, bool skip_children)
+{
+	return __next_resource(NULL, p, skip_children);
+}
+
+/*
+ * Traverse the whole resource tree (NOTE: not descendant tree under
+ * _root) from _root->child on.
+ */
 #define for_each_resource(_root, _p, _skip_children) \
 	for ((_p) = (_root)->child; (_p); (_p) = next_resource(_p, _skip_children))
 
@@ -572,7 +585,7 @@ static int __region_intersects(struct resource *parent, resource_size_t start,
 		covered = false;
 		ostart = max(res.start, p->start);
 		oend = min(res.end, p->end);
-		for_each_resource(p, dp, false) {
+		for (dp = p->child; dp; dp = __next_resource(p, dp, false)) {
 			if (!resource_overlaps(dp, &res))
 				continue;
 			is_type = (dp->flags & flags) == flags &&
