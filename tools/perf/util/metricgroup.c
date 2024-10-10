@@ -1123,7 +1123,7 @@ static int metricgroup__add_metric_sys_event_iter(const struct pmu_metric *pm,
 
 	ret = add_metric(d->metric_list, pm, d->modifier, d->metric_no_group,
 			 d->metric_no_threshold, d->user_requested_cpu_list,
-			 d->system_wide, d->root_metric, d->visited, d->table);
+			 d->system_wide, d->root_metric, d->visited, d->table ?: table);
 	if (ret)
 		goto out;
 
@@ -1226,7 +1226,8 @@ static int metricgroup__add_metric_callback(const struct pmu_metric *pm,
  * @system_wide: Are events for all processes recorded.
  * @metric_list: The list that the metric or metric group are added to.
  * @table: The table that is searched for metrics, most commonly the table for the
- *       architecture perf is running upon.
+ *       architecture perf is running upon. This value could be NULL if no core
+ *       metrics matches the architecture and we'll try to use the table of system PMUs.
  */
 static int metricgroup__add_metric(const char *pmu, const char *metric_name, const char *modifier,
 				   bool metric_no_group, bool metric_no_threshold,
@@ -1239,7 +1240,8 @@ static int metricgroup__add_metric(const char *pmu, const char *metric_name, con
 	int ret;
 	bool has_match = false;
 
-	{
+	/* Add core metrics to the metric list */
+	if (table) {
 		struct metricgroup__add_metric_data data = {
 			.list = &list,
 			.pmu = pmu,
@@ -1263,6 +1265,7 @@ static int metricgroup__add_metric(const char *pmu, const char *metric_name, con
 		has_match = data.has_match;
 	}
 	{
+		/* Parse metrics table of system PMUs */
 		struct metricgroup_iter_data data = {
 			.fn = metricgroup__add_metric_sys_event_iter,
 			.data = (void *) &(struct metricgroup_add_iter_data) {
@@ -1697,7 +1700,8 @@ int metricgroup__parse_groups(struct evlist *perf_evlist,
 	const struct pmu_metrics_table *table = pmu_metrics_table__find();
 
 	if (!table)
-		return -EINVAL;
+		pr_debug("The core metric table not found, continue to parse system metric table\n");
+
 	if (hardware_aware_grouping)
 		pr_debug("Use hardware aware grouping instead of traditional metric grouping method\n");
 
