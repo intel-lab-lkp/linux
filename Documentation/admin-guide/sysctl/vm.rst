@@ -36,6 +36,7 @@ Currently, these files are in /proc/sys/vm:
 - dirtytime_expire_seconds
 - dirty_writeback_centisecs
 - drop_caches
+- drop_fs_caches
 - enable_soft_offline
 - extfrag_threshold
 - highmem_is_dirtyable
@@ -267,6 +268,32 @@ used::
 
 These are informational only.  They do not mean that anything is wrong
 with your system.  To disable them, echo 4 (bit 2) into drop_caches.
+
+drop_fs_caches
+==============
+
+Writing to this will cause the kernel to drop clean for a specific file system
+caches, as well as reclaimable slab objects like dentries and inodes. Once
+dropped, their memory becomes free. Except for specifying the device number for
+a specific file system, everything else is consistent with drop_caches. The
+device number can be viewed through "cat /proc/self/montinfo" or 'lsblk'.
+
+To free pagecache::
+
+	echo "MAJOR:MINOR:1" > /proc/sys/vm/drop_caches
+
+To free reclaimable slab objects (includes dentries and inodes)::
+
+	echo "MAJOR:MINOR:2" > /proc/sys/vm/drop_caches
+
+To free slab objects and pagecache::
+
+	echo "MAJOR:MINOR:3" > /proc/sys/vm/drop_caches
+
+You may see informational messages in your kernel log when this file is
+used::
+
+	echo (1234): drop_fs_caches: MAJOR:MINOR:3
 
 enable_soft_offline
 ===================
