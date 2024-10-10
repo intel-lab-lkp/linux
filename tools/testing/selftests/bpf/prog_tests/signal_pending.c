@@ -36,7 +36,7 @@ static void test_signal_pending_by_type(enum bpf_prog_type prog_type)
 	err = setitimer(ITIMER_REAL, &timeo, NULL);
 	ASSERT_OK(err, "test-run-signal-timer");
 
-	err = bpf_prog_test_run_opts(prog_fd, &topts);
+	bpf_prog_test_run_opts(prog_fd, &topts);
 	ASSERT_LE(topts.duration, 500000000 /* 500ms */,
 		  "test-run-signal-duration");
 
