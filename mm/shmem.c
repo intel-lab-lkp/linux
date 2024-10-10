@@ -523,12 +523,15 @@ static bool shmem_confirm_swap(struct address_space *mapping,
  *	also respect fadvise()/madvise() hints;
  * SHMEM_HUGE_ADVISE:
  *	only allocate huge pages if requested with fadvise()/madvise();
+ * SHMEM_HUGE_WRITE_SIZE:
+ *	only allocate huge pages based on the write size.
  */
 
 #define SHMEM_HUGE_NEVER	0
 #define SHMEM_HUGE_ALWAYS	1
 #define SHMEM_HUGE_WITHIN_SIZE	2
 #define SHMEM_HUGE_ADVISE	3
+#define SHMEM_HUGE_WRITE_SIZE	4
 
 /*
  * Special values.
@@ -548,12 +551,46 @@ static bool shmem_confirm_swap(struct address_space *mapping,
 
 static int shmem_huge __read_mostly = SHMEM_HUGE_NEVER;
 
+/**
+ * shmem_mapping_size_order - Get maximum folio order for the given file size.
+ * @mapping: Target address_space.
+ * @index: The page index.
+ * @size: The suggested size of the folio to create.
+ *
+ * This returns a high order for folios (when supported) based on the file size
+ * which the mapping currently allows at the given index. The index is relevant
+ * due to alignment considerations the mapping might have. The returned order
+ * may be less than the size passed.
+ *
+ * Return: The order.
+ */
+static inline unsigned int
+shmem_mapping_size_order(struct address_space *mapping, pgoff_t index, size_t size)
+{
+	unsigned int order;
+
+	if (!mapping_large_folio_support(mapping))
+		return 0;
+
+	order = filemap_get_order(size);
+	if (!order)
+		return 0;
+
+	/* If we're not aligned, allocate a smaller folio */
+	if (index & ((1UL << order) - 1))
+		order = __ffs(index);
+
+	return min_t(size_t, order, MAX_PAGECACHE_ORDER);
+}
+
 static unsigned int __shmem_huge_global_enabled(struct inode *inode, pgoff_t index,
 						loff_t write_end, bool shmem_huge_force,
 						struct vm_area_struct *vma,
 						unsigned long vm_flags)
 {
 	struct mm_struct *mm = vma ? vma->vm_mm : NULL;
+	unsigned int order;
+	size_t len;
 	loff_t i_size;
 
 	if (!S_ISREG(inode->i_mode))
@@ -568,6 +605,17 @@ static unsigned int __shmem_huge_global_enabled(struct inode *inode, pgoff_t ind
 	switch (SHMEM_SB(inode->i_sb)->huge) {
 	case SHMEM_HUGE_ALWAYS:
 		return BIT(HPAGE_PMD_ORDER);
+	/*
+	 * If the huge option is SHMEM_HUGE_WRITE_SIZE, it will allow
+	 * getting a highest order hint based on the size of write and
+	 * fallocate paths, then will try each allowable huge orders.
+	 */
+	case SHMEM_HUGE_WRITE_SIZE:
+		if (!write_end)
+			return 0;
+		len = write_end - (index << PAGE_SHIFT);
+		order = shmem_mapping_size_order(inode->i_mapping, index, len);
+		return order > 0 ? BIT(order + 1) - 1 : 0;
 	case SHMEM_HUGE_WITHIN_SIZE:
 		index = round_up(index + 1, HPAGE_PMD_NR);
 		i_size = max(write_end, i_size_read(inode));
@@ -624,6 +672,8 @@ static const char *shmem_format_huge(int huge)
 		return "always";
 	case SHMEM_HUGE_WITHIN_SIZE:
 		return "within_size";
+	case SHMEM_HUGE_WRITE_SIZE:
+		return "write_size";
 	case SHMEM_HUGE_ADVISE:
 		return "advise";
 	case SHMEM_HUGE_DENY:
@@ -1694,13 +1744,9 @@ unsigned long shmem_allowable_huge_orders(struct inode *inode,
 
 	global_order = shmem_huge_global_enabled(inode, index, write_end,
 					shmem_huge_force, vma, vm_flags);
-	if (!vma || !vma_is_anon_shmem(vma)) {
-		/*
-		 * For tmpfs, we now only support PMD sized THP if huge page
-		 * is enabled, otherwise fallback to order 0.
-		 */
+	/* Tmpfs huge pages allocation? */
+	if (!vma || !vma_is_anon_shmem(vma))
 		return global_order;
-	}
 
 	/*
 	 * Following the 'deny' semantics of the top level, force the huge
@@ -2851,7 +2897,8 @@ static struct inode *__shmem_get_inode(struct mnt_idmap *idmap,
 	cache_no_acl(inode);
 	if (sbinfo->noswap)
 		mapping_set_unevictable(inode->i_mapping);
-	mapping_set_large_folios(inode->i_mapping);
+	if (sbinfo->huge)
+		mapping_set_large_folios(inode->i_mapping);
 
 	switch (mode & S_IFMT) {
 	default:
@@ -4224,6 +4271,7 @@ static const struct constant_table shmem_param_enums_huge[] = {
 	{"always",	SHMEM_HUGE_ALWAYS },
 	{"within_size",	SHMEM_HUGE_WITHIN_SIZE },
 	{"advise",	SHMEM_HUGE_ADVISE },
+	{"write_size",	SHMEM_HUGE_WRITE_SIZE },
 	{}
 };
 
