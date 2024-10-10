@@ -198,9 +198,11 @@ pte_t * __init populate_kernel_pte(unsigned long addr)
 	if (!pmd_present(pmdp_get(pmd))) {
 		pte_t *pte;
 
-		pte = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+		pte = memblock_alloc_raw(PAGE_SIZE, PAGE_SIZE);
 		if (!pte)
 			panic("%s: Failed to allocate memory\n", __func__);
+
+		kernel_pte_init(pte);
 		pmd_populate_kernel(&init_mm, pmd, pte);
 	}
 

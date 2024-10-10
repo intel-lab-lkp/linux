@@ -38,6 +38,28 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 }
 EXPORT_SYMBOL_GPL(pgd_alloc);
 
+void kernel_pte_init(void *addr)
+{
+	unsigned long *p, *end;
+	unsigned long entry;
+
+	entry = (unsigned long)_PAGE_GLOBAL;
+	p = (unsigned long *)addr;
+	end = p + PTRS_PER_PTE;
+
+	do {
+		p[0] = entry;
+		p[1] = entry;
+		p[2] = entry;
+		p[3] = entry;
+		p[4] = entry;
+		p += 8;
+		p[-3] = entry;
+		p[-2] = entry;
+		p[-1] = entry;
+	} while (p != end);
+}
+
 void pgd_init(void *addr)
 {
 	unsigned long *p, *end;
