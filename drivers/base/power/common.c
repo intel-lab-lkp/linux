@@ -26,6 +26,14 @@ int dev_pm_get_subsys_data(struct device *dev)
 {
 	struct pm_subsys_data *psd;
 
+	spin_lock_irq(&dev->power.lock);
+	if (dev->power.subsys_data) {
+		dev->power.subsys_data->refcount++;
+		spin_unlock_irq(&dev->power.lock);
+		return 0;
+	}
+	spin_unlock_irq(&dev->power.lock);
+
 	psd = kzalloc(sizeof(*psd), GFP_KERNEL);
 	if (!psd)
 		return -ENOMEM;
