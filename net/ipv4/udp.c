@@ -3425,7 +3425,7 @@ void __init udp_table_init(struct udp_table *table, const char *name)
 {
 	unsigned int i, slot_size;
 
-	slot_size = sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main);
+	slot_size = 2 * sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main);
 	table->hash = alloc_large_system_hash(name,
 					      slot_size,
 					      uhash_entries,
@@ -3437,6 +3437,7 @@ void __init udp_table_init(struct udp_table *table, const char *name)
 					      UDP_HTABLE_SIZE_MAX);
 
 	table->hash2 = (void *)(table->hash + (table->mask + 1));
+	table->hash4 = (void *)(table->hash2 + (table->mask + 1));
 	for (i = 0; i <= table->mask; i++) {
 		INIT_HLIST_HEAD(&table->hash[i].head);
 		table->hash[i].count = 0;
@@ -3447,6 +3448,11 @@ void __init udp_table_init(struct udp_table *table, const char *name)
 		table->hash2[i].hslot.count = 0;
 		spin_lock_init(&table->hash2[i].hslot.lock);
 		table->hash2[i].hash4_cnt = 0;
+	}
+	for (i = 0; i <= table->mask; i++) {
+		INIT_HLIST_HEAD(&table->hash4[i].head);
+		table->hash4[i].count = 0;
+		spin_lock_init(&table->hash4[i].lock);
 	}
 }
 
@@ -3480,16 +3486,15 @@ static struct udp_table __net_init *udp_pernet_table_alloc(unsigned int hash_ent
 	if (!udptable)
 		goto out;
 
-	slot_size = sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main);
+	slot_size = 2 * sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main);
 	udptable->hash = vmalloc_huge(hash_entries * slot_size,
 				      GFP_KERNEL_ACCOUNT);
 	if (!udptable->hash)
 		goto free_table;
 
 	udptable->hash2 = UDP_HSLOT_MAIN(udptable->hash + hash_entries);
-	udptable->mask = hash_entries - 1;
+	udptable->hash4 = (struct udp_hslot *)(udptable->hash2 + hash_entries);
 	udptable->log = ilog2(hash_entries);
-
 	for (i = 0; i < hash_entries; i++) {
 		INIT_HLIST_HEAD(&udptable->hash[i].head);
 		udptable->hash[i].count = 0;
@@ -3499,6 +3504,10 @@ static struct udp_table __net_init *udp_pernet_table_alloc(unsigned int hash_ent
 		udptable->hash2[i].hslot.count = 0;
 		spin_lock_init(&udptable->hash2[i].hslot.lock);
 		udptable->hash2[i].hash4_cnt = 0;
+
+		INIT_HLIST_HEAD(&udptable->hash4[i].head);
+		udptable->hash4[i].count = 0;
+		spin_lock_init(&udptable->hash4[i].lock);
 	}
 
 	return udptable;
