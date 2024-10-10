@@ -86,7 +86,7 @@ void generic_fillattr(struct mnt_idmap *idmap, u32 request_mask,
 	vfsgid_t vfsgid = i_gid_into_vfsgid(idmap, inode);
 
 	stat->dev = inode->i_sb->s_dev;
-	stat->ino = inode->i_ino;
+	stat->ino = inode_get_ino(inode);
 	stat->mode = inode->i_mode;
 	stat->nlink = inode->i_nlink;
 	stat->uid = vfsuid_into_kuid(vfsuid);

@@ -232,11 +232,13 @@ nfs_namespace_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 const struct inode_operations nfs_mountpoint_inode_operations = {
 	.getattr	= nfs_getattr,
 	.setattr	= nfs_setattr,
+	.get_ino	= nfs_compat_user_ino64,
 };
 
 const struct inode_operations nfs_referral_inode_operations = {
 	.getattr	= nfs_namespace_getattr,
 	.setattr	= nfs_namespace_setattr,
+	.get_ino	= nfs_compat_user_ino64,
 };
 
 static void nfs_expire_automounts(struct work_struct *work)

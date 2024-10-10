@@ -83,18 +83,19 @@ EXPORT_SYMBOL_GPL(nfs_wait_bit_killable);
 
 /**
  * nfs_compat_user_ino64 - returns the user-visible inode number
- * @fileid: 64-bit fileid
+ * @inode: inode pointer
  *
  * This function returns a 32-bit inode number if the boot parameter
  * nfs.enable_ino64 is zero.
  */
-u64 nfs_compat_user_ino64(u64 fileid)
+u64 nfs_compat_user_ino64(const struct *inode)
 {
 #ifdef CONFIG_COMPAT
 	compat_ulong_t ino;
 #else	
 	unsigned long ino;
 #endif
+	u64 fileid = NFS_FILEID(inode);
 
 	if (enable_ino64)
 		return fileid;
@@ -103,6 +104,7 @@ u64 nfs_compat_user_ino64(u64 fileid)
 		ino ^= fileid >> (sizeof(fileid)-sizeof(ino)) * 8;
 	return ino;
 }
+EXPORT_SYMBOL_GPL(nfs_compat_user_ino64);
 
 int nfs_drop_inode(struct inode *inode)
 {

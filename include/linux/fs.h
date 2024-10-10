@@ -2175,11 +2175,20 @@ struct inode_operations {
 			    struct dentry *dentry, struct fileattr *fa);
 	int (*fileattr_get)(struct dentry *dentry, struct fileattr *fa);
 	struct offset_ctx *(*get_offset_ctx)(struct inode *inode);
+	u64 (*get_ino)(const struct inode *inode);
 } ____cacheline_aligned;
 
 static inline int call_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	return file->f_op->mmap(file, vma);
+}
+
+static inline u64 inode_get_ino(struct inode *inode)
+{
+	if (unlikely(inode->i_op->get_ino))
+		return inode->i_op->get_ino(inode);
+
+	return inode->i_ino;
 }
 
 extern ssize_t vfs_read(struct file *, char __user *, size_t, loff_t *);

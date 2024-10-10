@@ -451,6 +451,7 @@ extern void nfs_zap_acl_cache(struct inode *inode);
 extern void nfs_set_cache_invalid(struct inode *inode, unsigned long flags);
 extern bool nfs_check_cache_invalid(struct inode *, unsigned long);
 extern int nfs_wait_bit_killable(struct wait_bit_key *key, int mode);
+extern u64 nfs_compat_user_ino64(const struct *inode);
 
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 /* localio.c */
