@@ -6548,13 +6548,13 @@ nfs4_laundromat(struct nfsd_net *nn)
 		unhash_delegation_locked(dp, SC_STATUS_REVOKED);
 		list_add(&dp->dl_recall_lru, &reaplist);
 	}
-	spin_unlock(&state_lock);
 	while (!list_empty(&reaplist)) {
 		dp = list_first_entry(&reaplist, struct nfs4_delegation,
 					dl_recall_lru);
 		list_del_init(&dp->dl_recall_lru);
 		revoke_delegation(dp);
 	}
+	spin_unlock(&state_lock);
 
 	spin_lock(&nn->client_lock);
 	while (!list_empty(&nn->close_lru)) {
@@ -7156,7 +7156,9 @@ nfsd4_free_stateid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		if (s->sc_status & SC_STATUS_REVOKED) {
 			spin_unlock(&s->sc_lock);
 			dp = delegstateid(s);
+			spin_lock(&state_lock);
 			list_del_init(&dp->dl_recall_lru);
+			spin_unlock(&state_lock);
 			spin_unlock(&cl->cl_lock);
 			nfs4_put_stid(s);
 			ret = nfs_ok;
