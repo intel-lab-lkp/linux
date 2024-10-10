@@ -50,18 +50,19 @@
 	((unsigned short)(msgid) & 0xfff)
 
 #define MAKE_CONNECT			(VCHIQ_MSG_CONNECT << TYPE_SHIFT)
-#define MAKE_OPEN(srcport) \
-	((VCHIQ_MSG_OPEN << TYPE_SHIFT) | ((srcport) << 12))
-#define MAKE_OPENACK(srcport, dstport) \
-	((VCHIQ_MSG_OPENACK << TYPE_SHIFT) | ((srcport) << 12) | ((dstport) << 0))
-#define MAKE_CLOSE(srcport, dstport) \
-	((VCHIQ_MSG_CLOSE << TYPE_SHIFT) | ((srcport) << 12) | ((dstport) << 0))
-#define MAKE_DATA(srcport, dstport) \
-	((VCHIQ_MSG_DATA << TYPE_SHIFT) | ((srcport) << 12) | ((dstport) << 0))
+#define MAKE_OPEN(srcport)		((VCHIQ_MSG_OPEN << TYPE_SHIFT) | \
+					 ((srcport) << 12))
+#define MAKE_OPENACK(srcport, dstport)	((VCHIQ_MSG_OPENACK << TYPE_SHIFT) | \
+					 ((srcport) << 12) | ((dstport) << 0))
+#define MAKE_CLOSE(srcport, dstport)	((VCHIQ_MSG_CLOSE << TYPE_SHIFT) | \
+					 ((srcport) << 12) | ((dstport) << 0))
+#define MAKE_DATA(srcport, dstport)	((VCHIQ_MSG_DATA << TYPE_SHIFT) | \
+					 ((srcport) << 12) | ((dstport) << 0))
 #define MAKE_PAUSE			(VCHIQ_MSG_PAUSE << TYPE_SHIFT)
 #define MAKE_RESUME			(VCHIQ_MSG_RESUME << TYPE_SHIFT)
 #define MAKE_REMOTE_USE			(VCHIQ_MSG_REMOTE_USE << TYPE_SHIFT)
-#define MAKE_REMOTE_USE_ACTIVE		(VCHIQ_MSG_REMOTE_USE_ACTIVE << TYPE_SHIFT)
+#define MAKE_REMOTE_USE_ACTIVE		(VCHIQ_MSG_REMOTE_USE_ACTIVE \
+					 << TYPE_SHIFT)
 
 #define PAGELIST_WRITE			0
 #define PAGELIST_READ			1
