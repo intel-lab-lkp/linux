@@ -95,6 +95,11 @@ struct bme680_calib {
 	s8  range_sw_err;
 };
 
+enum bme680_op_mode {
+	BME680_SLEEP,
+	BME680_FORCED,
+};
+
 struct bme680_data {
 	struct regmap *regmap;
 	struct bme680_calib bme680;
@@ -501,24 +506,23 @@ static u8 bme680_calc_heater_dur(u16 dur)
 	return durval;
 }
 
-static int bme680_set_mode(struct bme680_data *data, bool mode)
+static int bme680_set_mode(struct bme680_data *data, enum bme680_op_mode mode)
 {
 	struct device *dev = regmap_get_device(data->regmap);
 	int ret;
 
-	if (mode) {
-		ret = regmap_write_bits(data->regmap, BME680_REG_CTRL_MEAS,
-					BME680_MODE_MASK, BME680_MODE_FORCED);
-		if (ret < 0)
-			dev_err(dev, "failed to set forced mode\n");
-
-	} else {
-		ret = regmap_write_bits(data->regmap, BME680_REG_CTRL_MEAS,
-					BME680_MODE_MASK, BME680_MODE_SLEEP);
-		if (ret < 0)
-			dev_err(dev, "failed to set sleep mode\n");
-
+	switch (mode) {
+	case BME680_SLEEP:
+	case BME680_FORCED:
+		break;
+	default:
+		return -EINVAL;
 	}
+
+	ret = regmap_write_bits(data->regmap, BME680_REG_CTRL_MEAS,
+				BME680_MODE_MASK, mode);
+	if (ret < 0)
+		dev_err(dev, "failed to set ctrl_meas register\n");
 
 	return ret;
 }
@@ -612,8 +616,7 @@ static int bme680_gas_config(struct bme680_data *data)
 	int ret;
 	u8 heatr_res, heatr_dur;
 
-	/* Go to sleep */
-	ret = bme680_set_mode(data, false);
+	ret = bme680_set_mode(data, BME680_SLEEP);
 	if (ret < 0)
 		return ret;
 
@@ -750,8 +753,7 @@ static int bme680_read_raw(struct iio_dev *indio_dev,
 
 	guard(mutex)(&data->lock);
 
-	/* set forced mode to trigger measurement */
-	ret = bme680_set_mode(data, true);
+	ret = bme680_set_mode(data, BME680_FORCED);
 	if (ret < 0)
 		return ret;
 
