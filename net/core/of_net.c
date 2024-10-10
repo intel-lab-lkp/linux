@@ -142,6 +142,11 @@ int of_get_mac_address(struct device_node *np, u8 *addr)
 	if (!ret)
 		return 0;
 
+	if (of_find_property(np, "random-address", NULL)) {
+		eth_random_addr(addr);
+		return 0;
+	}
+
 	return of_get_mac_address_nvmem(np, addr);
 }
 EXPORT_SYMBOL(of_get_mac_address);
