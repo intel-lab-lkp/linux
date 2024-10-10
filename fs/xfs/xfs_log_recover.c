@@ -3521,6 +3521,7 @@ xlog_recover_finish(
 		 * (inode reclaim does this) before we get around to
 		 * xfs_log_mount_cancel.
 		 */
+		xfs_log_force(log->l_mp, XFS_LOG_SYNC);
 		xlog_recover_cancel_intents(log);
 		xfs_alert(log->l_mp, "Failed to recover intents");
 		xlog_force_shutdown(log, SHUTDOWN_LOG_IO_ERROR);
