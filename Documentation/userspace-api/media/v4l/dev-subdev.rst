@@ -721,7 +721,8 @@ To configure this pipeline, the userspace must take the following steps:
    :ref:`VIDIOC_SUBDEV_S_FMT <VIDIOC_SUBDEV_G_FMT>` ioctls to configure each
    stream endpoint in each sub-device.
 
-   In case generic raw and metadata formats are used, :ref:`V4L2_CID_CFA_PATTERN
-   <image-source-control-cfa-pattern>` and :ref:`V4L2_CID_METADATA_LAYOUT
-   <image_source_control_metadata_layout>` controls are present on the source
-   sub-device to obtain the pixel array CFA pattern and metadata layout.
+   In case generic raw and metadata formats are used,
+   :ref:`V4L2_CID_CFA_PATTERN <image-source-control-cfa-pattern>` and
+   :ref:`V4L2_CID_METADATA_LAYOUT <image_source_control_metadata_layout>`
+   controls are present on the source sub-device to obtain the pixel array CFA
+   pattern and metadata layout.

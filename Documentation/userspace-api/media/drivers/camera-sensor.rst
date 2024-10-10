@@ -18,6 +18,8 @@ binning functionality. The sensor drivers belong to two distinct classes, freely
 configurable and register list-based drivers, depending on how the driver
 configures this functionality.
 
+Also see :ref:`media_subdev_config_model_common_raw_sensor`.
+
 Freely configurable camera sensor drivers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -117,6 +119,8 @@ register programming sequences shall initialize the :ref:`V4L2_CID_HFLIP
 values programmed by the register sequences. The default values of these
 controls shall be 0 (disabled). Especially these controls shall not be inverted,
 independently of the sensor's mounting rotation.
+
+.. _media_using_camera_sensor_drivers_embedded_data:
 
 Embedded data
 -------------
