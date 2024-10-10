@@ -265,6 +265,28 @@ static bool evaluate_fsv_sig_true(const struct ipe_eval_ctx *const ctx)
 }
 #endif /* CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG */
 
+#ifdef CONFIG_IPE_PROP_ANONYMOUS_MEMORY
+static bool evaluate_anonymous_memory_false(const struct ipe_eval_ctx *const ctx)
+{
+	return !ctx->file;
+}
+
+static bool evaluate_anonymous_memory_true(const struct ipe_eval_ctx *const ctx)
+{
+	return !evaluate_anonymous_memory_false(ctx);
+}
+#else
+static bool evaluate_anonymous_memory_false(const struct ipe_eval_ctx *const ctx)
+{
+	return false;
+}
+
+static bool evaluate_anonymous_memory_true(const struct ipe_eval_ctx *const ctx)
+{
+	return false;
+}
+#endif /* CONFIG_IPE_PROP_ANONYMOUS_MEMORY */
+
 /**
  * evaluate_property() - Analyze @ctx against a rule property.
  * @ctx: Supplies a pointer to the context to be evaluated.
@@ -297,6 +319,10 @@ static bool evaluate_property(const struct ipe_eval_ctx *const ctx,
 		return evaluate_fsv_sig_false(ctx);
 	case IPE_PROP_FSV_SIG_TRUE:
 		return evaluate_fsv_sig_true(ctx);
+	case IPE_PROP_ANON_MEM_FALSE:
+		return evaluate_anonymous_memory_false(ctx);
+	case IPE_PROP_ANON_MEM_TRUE:
+		return evaluate_anonymous_memory_true(ctx);
 	default:
 		return false;
 	}

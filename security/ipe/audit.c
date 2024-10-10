@@ -59,6 +59,8 @@ static const char *const audit_prop_names[__IPE_PROP_MAX] = {
 	"fsverity_digest=",
 	"fsverity_signature=FALSE",
 	"fsverity_signature=TRUE",
+	"anonymous_memory=FALSE",
+	"anonymous_memory=TRUE",
 };
 
 /**

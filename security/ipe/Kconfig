@@ -75,6 +75,16 @@ config IPE_PROP_FS_VERITY_BUILTIN_SIG
 
 	  if unsure, answer Y.
 
+config IPE_PROP_ANONYMOUS_MEMORY
+	bool "Enable support for anonymous memory"
+	default y
+	help
+	  This option enables the 'anonymous_memory' property within IPE
+	  policies. The property evaluates to TRUE when a memory region
+	  in the evaluation context is not backed by a file (i.e., it is
+	  anonymous memory).
+
+	  if unsure, answer Y.
 endmenu
 
 config SECURITY_IPE_KUNIT_TEST

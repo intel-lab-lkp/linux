@@ -281,6 +281,8 @@ static const match_table_t property_tokens = {
 	{IPE_PROP_FSV_DIGEST,		"fsverity_digest=%s"},
 	{IPE_PROP_FSV_SIG_FALSE,	"fsverity_signature=FALSE"},
 	{IPE_PROP_FSV_SIG_TRUE,		"fsverity_signature=TRUE"},
+	{IPE_PROP_ANON_MEM_FALSE,	"anonymous_memory=FALSE"},
+	{IPE_PROP_ANON_MEM_TRUE,	"anonymous_memory=TRUE"},
 	{IPE_PROP_INVALID,		NULL}
 };
 
@@ -331,6 +333,8 @@ static int parse_property(char *t, struct ipe_rule *r)
 	case IPE_PROP_DMV_SIG_TRUE:
 	case IPE_PROP_FSV_SIG_FALSE:
 	case IPE_PROP_FSV_SIG_TRUE:
+	case IPE_PROP_ANON_MEM_FALSE:
+	case IPE_PROP_ANON_MEM_TRUE:
 		p->type = token;
 		break;
 	default:

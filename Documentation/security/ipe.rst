@@ -385,15 +385,16 @@ Anonymous Memory
 Anonymous memory isn't treated any differently from any other access in IPE.
 When anonymous memory is mapped with ``+X``, it still comes into the ``file_mmap``
 or ``file_mprotect`` hook, but with a ``NULL`` file object. This is submitted to
-the evaluation, like any other file. However, all current trust properties will
-evaluate to false, as they are all file-based and the operation is not
-associated with a file.
+the evaluation, like any other file. However, except the ``anonymous_memory`` property,
+all current trust properties will evaluate to false, as they are all file-based and
+the operation is not associated with a file.
 
 .. WARNING::
 
   This also occurs with the ``kernel_load_data`` hook, when the kernel is
   loading data from a userspace buffer that is not backed by a file. In this
-  scenario all current trust properties will also evaluate to false.
+  scenario, all current trust properties except ``anonymous_memory`` will also evaluate
+  to false.
 
 Securityfs Interface
 ~~~~~~~~~~~~~~~~~~~~

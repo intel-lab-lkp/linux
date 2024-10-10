@@ -666,6 +666,17 @@ fsverity_signature
 
       fsverity_signature=(TRUE|FALSE)
 
+anonymous_memory
+~~~~~~~~~~~~~~~~
+
+   This property can be used to allow or deny operations triggered by
+   anonymous memory. It evaluates to TRUE when a memory region
+   in the evaluation context is not backed by a file. It is controlled by
+   the ``IPE_PROP_ANONYMOUS_MEMORY`` config option.
+   The format of this property is::
+
+      anonymous_memory=(TRUE|FALSE)
+
 Policy Examples
 ---------------
 
