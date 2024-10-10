@@ -52,6 +52,7 @@
 #include <net/net_trackers.h>
 #include <net/net_debug.h>
 #include <net/dropreason-core.h>
+#include <net/neighbour_tables.h>
 
 struct netpoll_info;
 struct device;
@@ -2011,6 +2012,9 @@ enum netdev_reg_state {
  *
  *	@max_pacing_offload_horizon: max EDT offload horizon in nsec.
  *
+ *	@neighbours:	List heads pointing to this device's neighbours'
+ *			dev_list, one per address-family.
+ *
  *	FIXME: cleanup struct net_device such that network protocol info
  *	moves out.
  */
@@ -2405,6 +2409,8 @@ struct net_device {
 	struct dim_irq_moder	*irq_moder;
 
 	u64			max_pacing_offload_horizon;
+
+	struct hlist_head neighbours[NEIGH_NR_TABLES];
 
 	u8			priv[] ____cacheline_aligned
 				       __counted_by(priv_len);
