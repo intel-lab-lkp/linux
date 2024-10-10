@@ -75,9 +75,6 @@ static void execmem_cache_clean(struct work_struct *work)
 	mas_for_each(&mas, area, ULONG_MAX) {
 		size_t size;
 
-		if (!area)
-			continue;
-
 		size = mas_range_len(&mas);
 
 		if (IS_ALIGNED(size, PMD_SIZE) &&
