@@ -157,7 +157,9 @@ struct hw_perf_event {
 	union {
 		struct { /* hardware */
 			u64		config;
+			u64		config1;
 			u64		last_tag;
+			u64		dyn_mask;
 			unsigned long	config_base;
 			unsigned long	event_base;
 			int		event_base_rdpmc;
