@@ -1843,26 +1843,29 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 		match->prot_hook.ignore_outgoing = type_flags & PACKET_FANOUT_FLAG_IGNORE_OUTGOING;
 		list_add(&match->list, &fanout_list);
 	}
-	err = -EINVAL;
 
 	spin_lock(&po->bind_lock);
-	if (packet_sock_flag(po, PACKET_SOCK_RUNNING) &&
-	    match->type == type &&
-	    match->prot_hook.type == po->prot_hook.type &&
-	    match->prot_hook.dev == po->prot_hook.dev) {
+	if (po->ifindex == -1 || po->num == 0) {
+		/* Socket can not receive packets */
+		err = -ENXIO;
+	} else if (match->type != type ||
+		   match->prot_hook.type != po->prot_hook.type ||
+		   match->prot_hook.dev != po->prot_hook.dev) {
+		/* Joining an existing group, properties must be identical */
+		err = -EINVAL;
+	} else if (refcount_read(&match->sk_ref) >= match->max_num_members) {
 		err = -ENOSPC;
-		if (refcount_read(&match->sk_ref) < match->max_num_members) {
+	} else {
+		/* Paired with packet_setsockopt(PACKET_FANOUT_DATA) */
+		WRITE_ONCE(po->fanout, match);
+		po->rollover = rollover;
+		rollover = NULL;
+		refcount_set(&match->sk_ref, refcount_read(&match->sk_ref) + 1);
+		if (packet_sock_flag(po, PACKET_SOCK_RUNNING)) {
 			__dev_remove_pack(&po->prot_hook);
-
-			/* Paired with packet_setsockopt(PACKET_FANOUT_DATA) */
-			WRITE_ONCE(po->fanout, match);
-
-			po->rollover = rollover;
-			rollover = NULL;
-			refcount_set(&match->sk_ref, refcount_read(&match->sk_ref) + 1);
 			__fanout_link(sk, po);
-			err = 0;
 		}
+		err = 0;
 	}
 	spin_unlock(&po->bind_lock);
 
@@ -3452,8 +3455,12 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 	po->prot_hook.af_packet_net = sock_net(sk);
 
 	if (proto) {
+		/* Implicitly bind socket to "any interface" */
+		po->ifindex = 0;
 		po->prot_hook.type = proto;
 		__register_prot_hook(sk);
+	} else {
+		po->ifindex = -1;
 	}
 
 	mutex_lock(&net->packet.sklist_lock);
