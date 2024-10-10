@@ -8586,7 +8586,8 @@ static int ufshcd_device_params_init(struct ufs_hba *hba)
 		hba->dev_info.f_power_on_wp_en = flag;
 
 	/* Probe maximum power mode co-supported by both UFS host and device */
-	if (ufshcd_get_max_pwr_mode(hba))
+	ret = ufshcd_get_max_pwr_mode(hba);
+	if (ret)
 		dev_err(hba->dev,
 			"%s: Failed getting max supported power mode\n",
 			__func__);
