@@ -1159,15 +1159,18 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		chip_data = (const struct edt_i2c_chip_data *)id->driver_data;
 	if (!chip_data || !chip_data->max_support_points) {
 		dev_err(&client->dev, "invalid or missing chip data\n");
-		return -EINVAL;
+		error = -EINVAL;
+		goto err_regmap_exit;
 	}
 
 	tsdata->max_support_points = chip_data->max_support_points;
 
 	tsdata->vcc = devm_regulator_get(&client->dev, "vcc");
-	if (IS_ERR(tsdata->vcc))
-		return dev_err_probe(&client->dev, PTR_ERR(tsdata->vcc),
-				     "failed to request regulator\n");
+	if (IS_ERR(tsdata->vcc)) {
+		error = dev_err_probe(&client->dev, PTR_ERR(tsdata->vcc),
+				      "failed to request regulator\n");
+		goto err_regmap_exit;
+	}
 
 	tsdata->iovcc = devm_regulator_get(&client->dev, "iovcc");
 	if (IS_ERR(tsdata->iovcc)) {
@@ -1175,13 +1178,13 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		if (error != -EPROBE_DEFER)
 			dev_err(&client->dev,
 				"failed to request iovcc regulator: %d\n", error);
-		return error;
+		goto err_regmap_exit;
 	}
 
 	error = regulator_enable(tsdata->iovcc);
 	if (error < 0) {
 		dev_err(&client->dev, "failed to enable iovcc: %d\n", error);
-		return error;
+		goto err_regmap_exit;
 	}
 
 	/* Delay enabling VCC for > 10us (T_ivd) after IOVCC */
@@ -1191,14 +1194,14 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 	if (error < 0) {
 		dev_err(&client->dev, "failed to enable vcc: %d\n", error);
 		regulator_disable(tsdata->iovcc);
-		return error;
+		goto err_regmap_exit;
 	}
 
 	error = devm_add_action_or_reset(&client->dev,
 					 edt_ft5x06_disable_regulators,
 					 tsdata);
 	if (error)
-		return error;
+		goto err_regmap_exit;
 
 	tsdata->reset_gpio = devm_gpiod_get_optional(&client->dev,
 						     "reset", GPIOD_OUT_HIGH);
@@ -1206,7 +1209,7 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		error = PTR_ERR(tsdata->reset_gpio);
 		dev_err(&client->dev,
 			"Failed to request GPIO reset pin, error %d\n", error);
-		return error;
+		goto err_regmap_exit;
 	}
 
 	tsdata->wake_gpio = devm_gpiod_get_optional(&client->dev,
@@ -1215,7 +1218,7 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		error = PTR_ERR(tsdata->wake_gpio);
 		dev_err(&client->dev,
 			"Failed to request GPIO wake pin, error %d\n", error);
-		return error;
+		goto err_regmap_exit;
 	}
 
 	/*
@@ -1246,7 +1249,8 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 	input = devm_input_allocate_device(&client->dev);
 	if (!input) {
 		dev_err(&client->dev, "failed to allocate input device.\n");
-		return -ENOMEM;
+		error = -ENOMEM;
+		goto err_regmap_exit;
 	}
 
 	mutex_init(&tsdata->mutex);
@@ -1258,7 +1262,9 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 	error = edt_ft5x06_ts_identify(client, tsdata);
 	if (error) {
 		dev_err(&client->dev, "touchscreen probe failed\n");
-		return error;
+		if (IS_ERR(tsdata->regmap))
+			return error;
+		goto err_regmap_exit;
 	}
 
 	/*
@@ -1311,7 +1317,7 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 				    INPUT_MT_DIRECT);
 	if (error) {
 		dev_err(&client->dev, "Unable to init MT slots.\n");
-		return error;
+		goto err_regmap_exit;
 	}
 
 	irq_flags = irq_get_trigger_type(client->irq);
@@ -1324,12 +1330,12 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 					  client->name, tsdata);
 	if (error) {
 		dev_err(&client->dev, "Unable to request touchscreen IRQ.\n");
-		return error;
+		goto err_regmap_exit;
 	}
 
 	error = input_register_device(input);
 	if (error)
-		return error;
+		goto err_regmap_exit;
 
 	edt_ft5x06_ts_prepare_debugfs(tsdata, dev_driver_string(&client->dev));
 
@@ -1340,6 +1346,10 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		tsdata->reset_gpio ? desc_to_gpio(tsdata->reset_gpio) : -1);
 
 	return 0;
+
+err_regmap_exit:
+	regmap_exit(tsdata->regmap);
+	return error;
 }
 
 static void edt_ft5x06_ts_remove(struct i2c_client *client)
