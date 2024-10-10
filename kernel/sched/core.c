@@ -3733,7 +3733,7 @@ static int ttwu_runnable(struct task_struct *p, int wake_flags)
 	if (task_on_rq_queued(p)) {
 		update_rq_clock(rq);
 		if (p->se.sched_delayed)
-			enqueue_task(rq, p, ENQUEUE_NOCLOCK | ENQUEUE_DELAYED);
+			enqueue_task(rq, p, ENQUEUE_NOCLOCK | ENQUEUE_WAKEUP | ENQUEUE_DELAYED);
 		if (!task_on_cpu(rq, p)) {
 			/*
 			 * When on_rq && !on_cpu the task is preempted, see if
