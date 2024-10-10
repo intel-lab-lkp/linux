@@ -115,10 +115,11 @@ The mount options for this are:
 
 ================ ==============================================================
 huge=never       Do not allocate huge pages.  This is the default.
-huge=always      Attempt to allocate huge page every time a new page is needed.
-huge=within_size Only allocate huge page if it will be fully within i_size.
+huge=always      Attempt to allocate PMD sized huge page every time a new page is needed.
+huge=within_size Only allocate PMD sized huge page if it will be fully within i_size.
                  Also respect madvise(2) hints.
-huge=advise      Only allocate huge page if requested with madvise(2).
+huge=advise      Only allocate PMD sized huge page if requested with madvise(2).
+huge=write_size  Can allocate various sized huge page based on the write size.
 ================ ==============================================================
 
 See also Documentation/admin-guide/mm/transhuge.rst, which describes the
