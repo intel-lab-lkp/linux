@@ -1381,6 +1381,8 @@ __weak bool arch_is_embedded_insn(struct symbol *sym)
 
 static struct reloc *insn_reloc(struct objtool_file *file, struct instruction *insn)
 {
+	unsigned long offset = insn->offset;
+	unsigned int len = insn->len;
 	struct reloc *reloc;
 
 	if (insn->no_reloc)
@@ -1389,8 +1391,12 @@ static struct reloc *insn_reloc(struct objtool_file *file, struct instruction *i
 	if (!file)
 		return NULL;
 
-	reloc = find_reloc_by_dest_range(file->elf, insn->sec,
-					 insn->offset, insn->len);
+	do {
+		/* Skip any R_*_NONE relocations */
+		reloc = find_reloc_by_dest_range(file->elf, insn->sec,
+						 offset++, len--);
+	} while (len && reloc && reloc_type(reloc) == 0);
+
 	if (!reloc) {
 		insn->no_reloc = 1;
 		return NULL;
