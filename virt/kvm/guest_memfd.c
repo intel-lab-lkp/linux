@@ -370,7 +370,184 @@ static void kvm_gmem_init_mount(void)
 	kvm_gmem_mnt->mnt_flags |= MNT_NOEXEC;
 }
 
+#ifdef CONFIG_KVM_GMEM_MAPPABLE
+static struct folio *
+__kvm_gmem_get_pfn(struct file *file, struct kvm_memory_slot *slot,
+		   gfn_t gfn, kvm_pfn_t *pfn, bool *is_prepared,
+		   int *max_order);
+
+static int gmem_set_mappable(struct inode *inode, pgoff_t start, pgoff_t end)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	void *xval = xa_mk_value(true);
+	pgoff_t i;
+	bool r;
+
+	filemap_invalidate_lock(inode->i_mapping);
+	for (i = start; i < end; i++) {
+		r = xa_err(xa_store(mappable_offsets, i, xval, GFP_KERNEL));
+		if (r)
+			break;
+	}
+	filemap_invalidate_unlock(inode->i_mapping);
+
+	return r;
+}
+
+static int gmem_clear_mappable(struct inode *inode, pgoff_t start, pgoff_t end)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	pgoff_t i;
+	int r = 0;
+
+	filemap_invalidate_lock(inode->i_mapping);
+	for (i = start; i < end; i++) {
+		struct folio *folio;
+
+		/*
+		 * Holds the folio lock until after checking its refcount,
+		 * to avoid races with paths that fault in the folio.
+		 */
+		folio = kvm_gmem_get_folio(inode, i);
+		if (WARN_ON_ONCE(IS_ERR(folio)))
+			continue;
+
+		/*
+		 * Check that the host doesn't have any mappings on clearing
+		 * the mappable flag, because clearing the flag implies that the
+		 * memory will be unshared from the host. Therefore, to maintain
+		 * the invariant that the host cannot access private memory, we
+		 * need to check that it doesn't have any mappings to that
+		 * memory before making it private.
+		 *
+		 * Two references are expected because of kvm_gmem_get_folio().
+		 */
+		if (folio_ref_count(folio) > 2)
+			r = -EPERM;
+		else
+			xa_erase(mappable_offsets, i);
+
+		folio_put(folio);
+		folio_unlock(folio);
+
+		if (r)
+			break;
+	}
+	filemap_invalidate_unlock(inode->i_mapping);
+
+	return r;
+}
+
+static bool gmem_is_mappable(struct inode *inode, pgoff_t pgoff)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	bool r;
+
+	filemap_invalidate_lock_shared(inode->i_mapping);
+	r = xa_find(mappable_offsets, &pgoff, pgoff, XA_PRESENT);
+	filemap_invalidate_unlock_shared(inode->i_mapping);
+
+	return r;
+}
+
+int kvm_slot_gmem_set_mappable(struct kvm_memory_slot *slot, gfn_t start, gfn_t end)
+{
+	struct inode *inode = file_inode(slot->gmem.file);
+	pgoff_t start_off = slot->gmem.pgoff + start - slot->base_gfn;
+	pgoff_t end_off = start_off + end - start;
+
+	return gmem_set_mappable(inode, start_off, end_off);
+}
+
+int kvm_slot_gmem_clear_mappable(struct kvm_memory_slot *slot, gfn_t start, gfn_t end)
+{
+	struct inode *inode = file_inode(slot->gmem.file);
+	pgoff_t start_off = slot->gmem.pgoff + start - slot->base_gfn;
+	pgoff_t end_off = start_off + end - start;
+
+	return gmem_clear_mappable(inode, start_off, end_off);
+}
+
+bool kvm_slot_gmem_is_mappable(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	struct inode *inode = file_inode(slot->gmem.file);
+	unsigned long pgoff = slot->gmem.pgoff + gfn - slot->base_gfn;
+
+	return gmem_is_mappable(inode, pgoff);
+}
+
+static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
+{
+	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct folio *folio;
+	vm_fault_t ret = VM_FAULT_LOCKED;
+
+	/*
+	 * Holds the folio lock until after checking whether it can be faulted
+	 * in, to avoid races with paths that change a folio's mappability.
+	 */
+	folio = kvm_gmem_get_folio(inode, vmf->pgoff);
+	if (!folio)
+		return VM_FAULT_SIGBUS;
+
+	if (folio_test_hwpoison(folio)) {
+		ret = VM_FAULT_HWPOISON;
+		goto out;
+	}
+
+	if (!gmem_is_mappable(inode, vmf->pgoff)) {
+		ret = VM_FAULT_SIGBUS;
+		goto out;
+	}
+
+	if (!folio_test_uptodate(folio)) {
+		unsigned long nr_pages = folio_nr_pages(folio);
+		unsigned long i;
+
+		for (i = 0; i < nr_pages; i++)
+			clear_highpage(folio_page(folio, i));
+
+		folio_mark_uptodate(folio);
+	}
+
+	vmf->page = folio_file_page(folio, vmf->pgoff);
+out:
+	if (ret != VM_FAULT_LOCKED) {
+		folio_put(folio);
+		folio_unlock(folio);
+	}
+
+	return ret;
+}
+
+static const struct vm_operations_struct kvm_gmem_vm_ops = {
+	.fault = kvm_gmem_fault,
+};
+
+static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	if ((vma->vm_flags & (VM_SHARED | VM_MAYSHARE)) !=
+	    (VM_SHARED | VM_MAYSHARE)) {
+		return -EINVAL;
+	}
+
+	file_accessed(file);
+	vm_flags_set(vma, VM_DONTDUMP);
+	vma->vm_ops = &kvm_gmem_vm_ops;
+
+	return 0;
+}
+#else
+static int gmem_set_mappable(struct inode *inode, pgoff_t start, pgoff_t end)
+{
+	WARN_ON_ONCE(1);
+	return -EINVAL;
+}
+#define kvm_gmem_mmap NULL
+#endif /* CONFIG_KVM_GMEM_MAPPABLE */
+
 static struct file_operations kvm_gmem_fops = {
+	.mmap		= kvm_gmem_mmap,
 	.open		= generic_file_open,
 	.release	= kvm_gmem_release,
 	.fallocate	= kvm_gmem_fallocate,
@@ -555,6 +732,14 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	if (IS_ERR(file)) {
 		err = PTR_ERR(file);
 		goto err_gmem;
+	}
+
+	if (IS_ENABLED(CONFIG_KVM_GMEM_MAPPABLE)) {
+		err = gmem_set_mappable(file_inode(file), 0, size >> PAGE_SHIFT);
+		if (err) {
+			fput(file);
+			goto err_gmem;
+		}
 	}
 
 	kvm_get_kvm(kvm);
