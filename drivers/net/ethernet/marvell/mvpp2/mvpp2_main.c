@@ -38,6 +38,7 @@
 #include <net/page_pool/helpers.h>
 #include <net/tso.h>
 #include <linux/bpf_trace.h>
+#include <net/dsa.h>
 
 #include "mvpp2.h"
 #include "mvpp2_prs.h"
@@ -4782,6 +4783,36 @@ static bool mvpp22_rss_is_supported(struct mvpp2_port *port)
 		!(port->flags & MVPP2_F_LOOPBACK);
 }
 
+static int mvpp2_get_tag(struct net_device *dev)
+{
+	int tag;
+	int dsa_proto = DSA_TAG_PROTO_NONE;
+
+#if IS_ENABLED(CONFIG_NET_DSA)
+	if (netdev_uses_dsa(dev))
+		dsa_proto = dev->dsa_ptr->tag_ops->proto;
+#endif
+
+	switch (dsa_proto) {
+	case DSA_TAG_PROTO_DSA:
+		tag = MVPP2_TAG_TYPE_DSA;
+		break;
+	case DSA_TAG_PROTO_EDSA:
+	/**
+	 * DSA_TAG_PROTO_EDSA and MVPP2_TAG_TYPE_EDSA are
+	 * referring to separate things. MVPP2_TAG_TYPE_EDSA
+	 * refers to extended DSA, while DSA_TAG_PROTO_EDSA
+	 * refers to Ethertype DSA. Ethertype DSA requires no
+	 * setting in the parser.
+	 */
+	default:
+		tag = MVPP2_TAG_TYPE_MH;
+		break;
+	}
+
+	return tag;
+}
+
 static int mvpp2_open(struct net_device *dev)
 {
 	struct mvpp2_port *port = netdev_priv(dev);
@@ -4801,7 +4832,11 @@ static int mvpp2_open(struct net_device *dev)
 		netdev_err(dev, "mvpp2_prs_mac_da_accept own addr failed\n");
 		return err;
 	}
-	err = mvpp2_prs_tag_mode_set(port->priv, port->id, MVPP2_TAG_TYPE_MH);
+
+	if (netdev_uses_dsa(dev))
+		err = mvpp2_prs_tag_mode_set(port->priv, port->id, mvpp2_get_tag(dev));
+	else
+		err = mvpp2_prs_tag_mode_set(port->priv, port->id, MVPP2_TAG_TYPE_MH);
 	if (err) {
 		netdev_err(dev, "mvpp2_prs_tag_mode_set failed\n");
 		return err;

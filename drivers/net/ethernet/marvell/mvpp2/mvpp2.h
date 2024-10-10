@@ -59,6 +59,8 @@
 
 /* Top Registers */
 #define MVPP2_MH_REG(port)			(0x5040 + 4 * (port))
+#define MVPP2_MH_EN				BIT(0)
+#define MVPP2_DSA_NON_EXTENDED			BIT(4)
 #define MVPP2_DSA_EXTENDED			BIT(5)
 #define MVPP2_VER_ID_REG			0x50b0
 #define MVPP2_VER_PP22				0x10
