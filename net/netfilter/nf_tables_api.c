@@ -8546,14 +8546,18 @@ static void nft_unregister_flowtable_hook(struct net *net,
 }
 
 static void __nft_unregister_flowtable_net_hooks(struct net *net,
-						 struct list_head *hook_list,
-					         bool release_netdev)
+						 struct nft_flowtable *flowtable,
+						 struct list_head *hook_list)
 {
 	struct nft_hook *hook, *next;
 
 	list_for_each_entry_safe(hook, next, hook_list, list) {
+		if (flowtable)
+			flowtable->data.type->setup(&flowtable->data,
+						    hook->ops.dev,
+						    FLOW_BLOCK_UNBIND);
 		nf_unregister_net_hook(net, &hook->ops);
-		if (release_netdev) {
+		if (flowtable) {
 			list_del(&hook->list);
 			kfree_rcu(hook, rcu);
 		}
@@ -8563,7 +8567,7 @@ static void __nft_unregister_flowtable_net_hooks(struct net *net,
 static void nft_unregister_flowtable_net_hooks(struct net *net,
 					       struct list_head *hook_list)
 {
-	__nft_unregister_flowtable_net_hooks(net, hook_list, false);
+	__nft_unregister_flowtable_net_hooks(net, NULL, hook_list);
 }
 
 static int nft_register_flowtable_net_hooks(struct net *net,
@@ -11459,8 +11463,8 @@ static void __nft_release_hook(struct net *net, struct nft_table *table)
 	list_for_each_entry(chain, &table->chains, list)
 		__nf_tables_unregister_hook(net, table, chain, true);
 	list_for_each_entry(flowtable, &table->flowtables, list)
-		__nft_unregister_flowtable_net_hooks(net, &flowtable->hook_list,
-						     true);
+		__nft_unregister_flowtable_net_hooks(net, flowtable,
+						     &flowtable->hook_list);
 }
 
 static void __nft_release_hooks(struct net *net)
