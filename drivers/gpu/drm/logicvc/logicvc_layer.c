@@ -581,12 +581,12 @@ int logicvc_layers_init(struct logicvc_drm *logicvc)
 	struct drm_device *drm_dev = &logicvc->drm_dev;
 	struct device *dev = drm_dev->dev;
 	struct device_node *of_node = dev->of_node;
-	struct device_node *layers_node;
+	struct device_node *layers_node __free(device_node) =
+		of_get_child_by_name(of_node, "layers");
 	struct logicvc_layer *layer;
 	struct logicvc_layer *next;
 	int ret = 0;
 
-	layers_node = of_get_child_by_name(of_node, "layers");
 	if (!layers_node) {
 		drm_err(drm_dev, "No layers node found in the description\n");
 		ret = -ENODEV;
@@ -611,13 +611,9 @@ int logicvc_layers_init(struct logicvc_drm *logicvc)
 		}
 
 		ret = logicvc_layer_init(logicvc, layer_node, index);
-		if (ret) {
-			of_node_put(layers_node);
+		if (ret)
 			goto error;
-		}
 	}
-
-	of_node_put(layers_node);
 
 	return 0;
 
