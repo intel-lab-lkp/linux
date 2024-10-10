@@ -650,6 +650,9 @@ static void mt7996_bss_info_changed(struct ieee80211_hw *hw,
 	if (changed & BSS_CHANGED_MU_GROUPS)
 		mt7996_update_mu_group(hw, vif, info);
 
+	if (changed & BSS_CHANGED_TXPOWER)
+		mt7996_mcu_set_txpower_sku(phy);
+
 	mutex_unlock(&dev->mt76.mutex);
 }
 
