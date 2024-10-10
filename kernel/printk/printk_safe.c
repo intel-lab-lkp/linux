@@ -44,7 +44,7 @@ bool is_printk_legacy_deferred(void)
 	 * The per-CPU variable @printk_context can be read safely in any
 	 * context. CPU migration is always disabled when set.
 	 */
-	return (force_legacy_kthread() ||
+	return ((!this_cpu_in_panic() && force_legacy_kthread()) ||
 		this_cpu_read(printk_context) ||
 		in_nmi());
 }
