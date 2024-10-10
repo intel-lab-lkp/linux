@@ -3105,8 +3105,7 @@ union bpf_attr {
  * 		**ALLOW_ERROR_INJECTION** in the kernel code.
  *
  * 		Also, the helper is only available for the architectures having
- * 		the CONFIG_FUNCTION_ERROR_INJECTION option. As of this writing,
- * 		x86 architecture is the only one to support this feature.
+ * 		the CONFIG_FUNCTION_ERROR_INJECTION option.
  * 	Return
  * 		0
  *
