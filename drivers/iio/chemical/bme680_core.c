@@ -120,6 +120,7 @@ struct bme680_data {
 	u16 heater_temp;
 
 	struct regulator_bulk_data supplies[BME680_NUM_SUPPLIES];
+	int ambient_temp;
 
 	union {
 		u8 buf[3];
@@ -483,7 +484,7 @@ static u8 bme680_calc_heater_res(struct bme680_data *data, u16 temp)
 	if (temp > 400) /* Cap temperature */
 		temp = 400;
 
-	var1 = (((s32)BME680_AMB_TEMP * calib->par_gh3) / 1000) * 256;
+	var1 = (((s32)data->ambient_temp * calib->par_gh3) / 1000) * 256;
 	var2 = (calib->par_gh1 + 784) * (((((calib->par_gh2 + 154009) *
 						temp * 5) / 100)
 						+ 3276800) / 10);
@@ -878,6 +879,37 @@ static int bme680_write_raw(struct iio_dev *indio_dev,
 	return ret;
 }
 
+static ssize_t ambient_temp_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bme680_data *data = iio_priv(indio_dev);
+	int vals[2];
+
+	vals[0] = data->ambient_temp;
+	vals[1] = 1;
+
+	return iio_format_value(buf, IIO_VAL_INT, 1, vals);
+}
+
+static ssize_t ambient_temp_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bme680_data *data = iio_priv(indio_dev);
+	int ret, val_int, val_fract;
+
+	ret = iio_str_to_fixpoint(buf, 1, &val_int, &val_fract);
+	if (ret)
+		return ret;
+
+	data->ambient_temp = val_int;
+	return len;
+}
+
+static IIO_DEVICE_ATTR_RW(ambient_temp, 0);
+
 static const char bme680_oversampling_ratio_show[] = "1 2 4 8 16";
 
 static IIO_CONST_ATTR(oversampling_ratio_available,
@@ -885,6 +917,7 @@ static IIO_CONST_ATTR(oversampling_ratio_available,
 
 static struct attribute *bme680_attributes[] = {
 	&iio_const_attr_oversampling_ratio_available.dev_attr.attr,
+	&iio_dev_attr_ambient_temp.dev_attr.attr,
 	NULL,
 };
 
