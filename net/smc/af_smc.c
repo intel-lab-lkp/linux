@@ -70,6 +70,15 @@ struct workqueue_struct	*smc_close_wq;	/* wq for close work */
 static void smc_tcp_listen_work(struct work_struct *);
 static void smc_connect_work(struct work_struct *);
 
+__bpf_hook_start();
+
+__weak noinline int select_syn_smc(const struct sock *sk, struct sockaddr *peer)
+{
+	return 1;
+}
+
+__bpf_hook_end();
+
 int smc_nl_dump_hs_limitation(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct smc_nl_dmp_ctx *cb_ctx = smc_nl_dmp_ctx(cb);
@@ -156,19 +165,43 @@ drop:
 	return NULL;
 }
 
-static bool smc_hs_congested(const struct sock *sk)
+static void smc_openreq_init(struct request_sock *req,
+			     const struct tcp_options_received *rx_opt,
+			     struct sk_buff *skb, const struct sock *sk)
 {
+	struct inet_request_sock *ireq = inet_rsk(req);
+	struct sockaddr_storage rmt_sockaddr = {};
 	const struct smc_sock *smc;
 
 	smc = smc_clcsock_user_data(sk);
 
 	if (!smc)
-		return true;
+		return;
 
-	if (workqueue_congested(WORK_CPU_UNBOUND, smc_hs_wq))
-		return true;
+	if (smc->limit_smc_hs && workqueue_congested(WORK_CPU_UNBOUND, smc_hs_wq))
+		goto out_no_smc;
 
-	return false;
+	rmt_sockaddr.ss_family = sk->sk_family;
+
+	if (rmt_sockaddr.ss_family == AF_INET) {
+		struct sockaddr_in *rmt4_sockaddr =  (struct sockaddr_in *)&rmt_sockaddr;
+
+		rmt4_sockaddr->sin_addr.s_addr = ireq->ir_rmt_addr;
+		rmt4_sockaddr->sin_port	= ireq->ir_rmt_port;
+#if IS_ENABLED(CONFIG_IPV6)
+	} else {
+		struct sockaddr_in6 *rmt6_sockaddr =  (struct sockaddr_in6 *)&rmt_sockaddr;
+
+		rmt6_sockaddr->sin6_addr = ireq->ir_v6_rmt_addr;
+		rmt6_sockaddr->sin6_port = ireq->ir_rmt_port;
+#endif /* CONFIG_IPV6 */
+	}
+
+	ireq->smc_ok = select_syn_smc(sk, (struct sockaddr *)&rmt_sockaddr);
+	return;
+out_no_smc:
+	ireq->smc_ok = 0;
+	return;
 }
 
 struct smc_hashinfo smc_v4_hashinfo = {
@@ -1671,7 +1704,7 @@ int smc_connect(struct socket *sock, struct sockaddr *addr,
 	}
 
 	smc_copy_sock_settings_to_clc(smc);
-	tcp_sk(smc->clcsock->sk)->syn_smc = 1;
+	tcp_sk(smc->clcsock->sk)->syn_smc = select_syn_smc(sk, addr);
 	if (smc->connect_nonblock) {
 		rc = -EALREADY;
 		goto out;
@@ -2650,8 +2683,7 @@ int smc_listen(struct socket *sock, int backlog)
 
 	inet_csk(smc->clcsock->sk)->icsk_af_ops = &smc->af_ops;
 
-	if (smc->limit_smc_hs)
-		tcp_sk(smc->clcsock->sk)->smc_hs_congested = smc_hs_congested;
+	tcp_sk(smc->clcsock->sk)->smc_openreq_init = smc_openreq_init;
 
 	rc = kernel_listen(smc->clcsock, backlog);
 	if (rc) {
@@ -3475,6 +3507,24 @@ static struct pernet_operations smc_net_stat_ops = {
 	.exit = smc_net_stat_exit,
 };
 
+#if IS_ENABLED(CONFIG_BPF_SYSCALL)
+BTF_SET8_START(bpf_smc_fmodret_ids)
+BTF_ID_FLAGS(func, select_syn_smc)
+BTF_SET8_END(bpf_smc_fmodret_ids)
+
+static const struct btf_kfunc_id_set bpf_smc_fmodret_set = {
+	.owner = THIS_MODULE,
+	.set   = &bpf_smc_fmodret_ids,
+};
+
+static int bpf_smc_kfunc_init(void)
+{
+	return register_btf_fmodret_id_set(&bpf_smc_fmodret_set);
+}
+#else
+static inline int bpf_smc_kfunc_init(void) { return 0; }
+#endif /* CONFIG_BPF_SYSCALL */
+
 static int __init smc_init(void)
 {
 	int rc;
@@ -3574,8 +3624,17 @@ static int __init smc_init(void)
 		pr_err("%s: smc_inet_init fails with %d\n", __func__, rc);
 		goto out_ulp;
 	}
+
+	rc = bpf_smc_kfunc_init();
+	if (rc) {
+		pr_err("%s: bpf_smc_kfunc_init fails with %d\n", __func__, rc);
+		goto out_inet;
+	}
+
 	static_branch_enable(&tcp_have_smc);
 	return 0;
+out_inet:
+	smc_inet_exit();
 out_ulp:
 	tcp_unregister_ulp(&smc_ulp_ops);
 out_lo:
