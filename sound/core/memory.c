@@ -64,26 +64,6 @@ int copy_to_iter_fromio(struct iov_iter *dst, const void __iomem *src,
 EXPORT_SYMBOL(copy_to_iter_fromio);
 
 /**
- * copy_from_user_toio - copy data from user-space to mmio-space
- * @dst: the destination pointer on mmio-space
- * @src: the source pointer on user-space
- * @count: the data size to copy in bytes
- *
- * Copies the data from user-space to mmio-space.
- *
- * Return: Zero if successful, or non-zero on failure.
- */
-int copy_from_user_toio(volatile void __iomem *dst, const void __user *src, size_t count)
-{
-	struct iov_iter iter;
-
-	if (import_ubuf(ITER_SOURCE, (void __user *)src, count, &iter))
-		return -EFAULT;
-	return copy_from_iter_toio((void __iomem *)dst, &iter, count);
-}
-EXPORT_SYMBOL(copy_from_user_toio);
-
-/**
  * copy_from_iter_toio - copy data from iov_iter to mmio-space
  * @dst: the destination pointer on mmio-space
  * @src: the source iov_iter
