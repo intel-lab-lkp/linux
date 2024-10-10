@@ -1220,16 +1220,10 @@ static void pt_guest_enter(struct vcpu_vmx *vmx)
 	if (vmx_pt_mode_is_system())
 		return;
 
-	/*
-	 * GUEST_IA32_RTIT_CTL is already set in the VMCS.
-	 * Save host state before VM entry.
-	 */
-	rdmsrl(MSR_IA32_RTIT_CTL, vmx->pt_desc.host.ctl);
-	if (vmx->pt_desc.guest.ctl & RTIT_CTL_TRACEEN) {
-		wrmsrl(MSR_IA32_RTIT_CTL, 0);
-		pt_save_msr(&vmx->pt_desc.host, vmx->pt_desc.num_address_ranges);
+	intel_pt_vm_entry(vmx->pt_desc.guest.ctl & RTIT_CTL_TRACEEN);
+
+	if (vmx->pt_desc.guest.ctl & RTIT_CTL_TRACEEN)
 		pt_load_msr(&vmx->pt_desc.guest, vmx->pt_desc.num_address_ranges);
-	}
 }
 
 static void pt_guest_exit(struct vcpu_vmx *vmx)
@@ -1237,17 +1231,10 @@ static void pt_guest_exit(struct vcpu_vmx *vmx)
 	if (vmx_pt_mode_is_system())
 		return;
 
-	if (vmx->pt_desc.guest.ctl & RTIT_CTL_TRACEEN) {
+	if (vmx->pt_desc.guest.ctl & RTIT_CTL_TRACEEN)
 		pt_save_msr(&vmx->pt_desc.guest, vmx->pt_desc.num_address_ranges);
-		pt_load_msr(&vmx->pt_desc.host, vmx->pt_desc.num_address_ranges);
-	}
 
-	/*
-	 * KVM requires VM_EXIT_CLEAR_IA32_RTIT_CTL to expose PT to the guest,
-	 * i.e. RTIT_CTL is always cleared on VM-Exit.  Restore it if necessary.
-	 */
-	if (vmx->pt_desc.host.ctl)
-		wrmsrl(MSR_IA32_RTIT_CTL, vmx->pt_desc.host.ctl);
+	intel_pt_vm_exit(vmx->pt_desc.guest.ctl & RTIT_CTL_TRACEEN);
 }
 
 void vmx_set_host_fs_gs(struct vmcs_host_state *host, u16 fs_sel, u16 gs_sel,
