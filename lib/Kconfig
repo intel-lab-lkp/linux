@@ -725,6 +725,14 @@ config REF_TRACKER
 	depends on STACKTRACE_SUPPORT
 	select STACKDEPOT
 
+config STACKLOG_DEBUG
+	bool "Debug tool for logging and later displaying stacktraces"
+	select STACKDEPOT
+	select STACKDEPOT_ALWAYS_INIT
+	help
+	  Enables debug infrastructure for logging unique stack traces at
+	  a specific point, which can be later displayed from userland.
+
 config SBITMAP
 	bool
 
