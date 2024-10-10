@@ -157,7 +157,7 @@ ENDPROC(__und_invalid)
 #define SPFIX(code...)
 #endif
 
-	.macro	svc_entry, stack_hole=0 uaccess=1, overflow_check=1
+	.macro	svc_entry, stack_hole=0 uaccess=1, overflow_check=1, nmi=0
  UNWIND(.fnstart		)
 	sub	sp, sp, #(SVC_REGS_SIZE + \stack_hole)
  THUMB(	add	sp, r1		)	@ get SP in a GPR without
@@ -205,7 +205,11 @@ ENDPROC(__und_invalid)
 	uaccess_entry tsk, r0, r1, r2, \uaccess
 
 	mov	r0, sp				@ 'regs'
+	.if \nmi
+	bl	irqentry_nmi_enter_from_kernel_mode
+	.else
 	bl	irqentry_enter_from_kernel_mode
+	.endif
 
 	.endm
 
@@ -297,7 +301,7 @@ ENDPROC(__pabt_svc)
 
 	.align	5
 __fiq_svc:
-	svc_entry
+	svc_entry nmi=1
 	mov	r0, sp				@ struct pt_regs *regs
 	bl	handle_fiq_as_nmi
 	svc_exit_via_fiq
@@ -315,7 +319,7 @@ ENDPROC(__fiq_svc)
 @
 	.align 5
 __fiq_abt:
-	svc_entry
+	svc_entry nmi=1
 
  ARM(	msr	cpsr_c, #ABT_MODE | PSR_I_BIT | PSR_F_BIT )
  THUMB( mov	r0, #ABT_MODE | PSR_I_BIT | PSR_F_BIT )
@@ -490,9 +494,13 @@ ENDPROC(ret_from_exception)
 	.align	5
 __fiq_usr:
 	usr_entry
+	mov	r0, sp
+	bl	irqentry_nmi_enter_from_user_mode
 	kuser_cmpxchg_check
 	mov	r0, sp				@ struct pt_regs *regs
 	bl	handle_fiq_as_nmi
+	mov	r0, sp
+	bl	irqentry_nmi_exit_to_user_mode
 	get_thread_info tsk
 	restore_user_regs
  UNWIND(.fnend		)

@@ -252,6 +252,8 @@
 	@
 	.macro  svc_exit_via_fiq
 	uaccess_exit tsk, r0, r1
+	mov	r0, sp
+	bl	irqentry_nmi_exit_to_kernel_mode
 #ifndef CONFIG_THUMB2_KERNEL
 	@ ARM mode restore
 	mov	r0, sp
