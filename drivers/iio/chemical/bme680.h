@@ -64,6 +64,8 @@
 
 #define BME680_STARTUP_TIME_US			2000
 
+#define BME680_NUM_CHANNELS			4
+
 /* Calibration Parameters */
 #define BME680_T2_LSB_REG	0x8A
 #define BME680_H2_MSB_REG	0xE1
