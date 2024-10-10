@@ -31,6 +31,7 @@
 #include <linux/writeback.h>
 #include <linux/pagevec.h>
 #include <linux/mpage.h>
+#include <linux/rmap.h>
 #include <linux/namei.h>
 #include <linux/uio.h>
 #include <linux/bio.h>
@@ -3868,6 +3869,46 @@ int ext4_update_disksize_before_punch(struct inode *inode, loff_t offset,
 	ext4_journal_stop(handle);
 
 	return ret;
+}
+
+static inline void ext4_truncate_folio(struct inode *inode,
+				       loff_t start, loff_t end)
+{
+	unsigned long blocksize = i_blocksize(inode);
+	struct folio *folio;
+
+	if (round_up(start, blocksize) >= round_down(end, blocksize))
+		return;
+
+	folio = filemap_lock_folio(inode->i_mapping, start >> PAGE_SHIFT);
+	if (IS_ERR(folio))
+		return;
+
+	if (folio_mkclean(folio))
+		folio_mark_dirty(folio);
+	folio_unlock(folio);
+	folio_put(folio);
+}
+
+/*
+ * When truncating a range of folios, if the block size is less than the
+ * page size, the file's mapped partial blocks within one page could be
+ * freed or converted to unwritten. We should call this function to remove
+ * writable userspace mappings so that ext4_page_mkwrite() can be called
+ * during subsequent write access to these folios.
+ */
+void ext4_truncate_folios_range(struct inode *inode, loff_t start, loff_t end)
+{
+	unsigned long blocksize = i_blocksize(inode);
+
+	if (end > inode->i_size)
+		end = inode->i_size;
+	if (start >= end || blocksize >= PAGE_SIZE)
+		return;
+
+	ext4_truncate_folio(inode, start, min(round_up(start, PAGE_SIZE), end));
+	if (end > round_up(start, PAGE_SIZE))
+		ext4_truncate_folio(inode, round_down(end, PAGE_SIZE), end);
 }
 
 static void ext4_wait_dax_page(struct inode *inode)
