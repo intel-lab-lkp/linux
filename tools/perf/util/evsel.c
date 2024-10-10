@@ -135,7 +135,7 @@ static int store_event(struct perf_event_attr *attr, pid_t pid, struct perf_cpu 
 	char path[PATH_MAX];
 	char *dir = getenv("PERF_TEST_ATTR");
 
-	snprintf(path, PATH_MAX, "%s/event-%d-%llu-%d", dir,
+	snprintf(path, PATH_MAX, "%s/event-%d-%"PRI_lu64"-%d", dir,
 		 attr->type, attr->config, fd);
 
 	file = fopen(path, "w+");
@@ -144,7 +144,7 @@ static int store_event(struct perf_event_attr *attr, pid_t pid, struct perf_cpu 
 		return -1;
 	}
 
-	if (fprintf(file, "[event-%d-%llu-%d]\n",
+	if (fprintf(file, "[event-%d-%"PRI_lu64"-%d]\n",
 		    attr->type, attr->config, fd) < 0) {
 		perror("test attr - failed to write event file");
 		fclose(file);
@@ -161,10 +161,10 @@ static int store_event(struct perf_event_attr *attr, pid_t pid, struct perf_cpu 
 	/* struct perf_event_attr */
 	WRITE_ASS(type,   PRIu32);
 	WRITE_ASS(size,   PRIu32);
-	WRITE_ASS(config,  "llu");
-	WRITE_ASS(sample_period, "llu");
-	WRITE_ASS(sample_type,   "llu");
-	WRITE_ASS(read_format,   "llu");
+	WRITE_ASS(config,  PRI_lu64);
+	WRITE_ASS(sample_period, PRI_lu64);
+	WRITE_ASS(sample_type,   PRI_lu64);
+	WRITE_ASS(read_format,   PRI_lu64);
 	WRITE_ASS(disabled,       "d");
 	WRITE_ASS(inherit,        "d");
 	WRITE_ASS(pinned,         "d");
@@ -195,10 +195,10 @@ static int store_event(struct perf_event_attr *attr, pid_t pid, struct perf_cpu 
 	WRITE_ASS(use_clockid,    "d");
 	WRITE_ASS(wakeup_events, PRIu32);
 	WRITE_ASS(bp_type, PRIu32);
-	WRITE_ASS(config1, "llu");
-	WRITE_ASS(config2, "llu");
-	WRITE_ASS(branch_sample_type, "llu");
-	WRITE_ASS(sample_regs_user,   "llu");
+	WRITE_ASS(config1, PRI_lu64);
+	WRITE_ASS(config2, PRI_lu64);
+	WRITE_ASS(branch_sample_type, PRI_lu64);
+	WRITE_ASS(sample_regs_user,   PRI_lu64);
 	WRITE_ASS(sample_stack_user,  PRIu32);
 
 	fclose(file);
