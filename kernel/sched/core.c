@@ -2009,12 +2009,19 @@ unsigned long get_wchan(struct task_struct *p)
 
 void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
+	bool wakee_not_migrated = (flags & ENQUEUE_WAKEUP) && !(flags & ENQUEUE_MIGRATED);
+
 	if (!(flags & ENQUEUE_NOCLOCK))
 		update_rq_clock(rq);
 
 	if (!(flags & ENQUEUE_RESTORE)) {
 		sched_info_enqueue(rq, p);
-		psi_enqueue(p, (flags & ENQUEUE_WAKEUP) && !(flags & ENQUEUE_MIGRATED));
+
+		/* Notify PSI that the task was migrated in a delayed state before wakeup. */
+		if ((p->migration_flags & DELAYED_MIGRATED) && !task_on_rq_migrating(p)) {
+			wakee_not_migrated = false;
+			p->migration_flags &= ~DELAYED_MIGRATED;
+		}
 	}
 
 	p->sched_class->enqueue_task(rq, p, flags);
@@ -2023,6 +2030,8 @@ void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	 * ->sched_delayed.
 	 */
 	uclamp_rq_inc(rq, p);
+	if (!(flags & ENQUEUE_RESTORE))
+		psi_enqueue(p, wakee_not_migrated);
 
 	if (sched_core_enabled(rq))
 		sched_core_enqueue(rq, p);
@@ -2042,6 +2051,14 @@ inline bool dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 	if (!(flags & DEQUEUE_SAVE)) {
 		sched_info_dequeue(rq, p);
 		psi_dequeue(p, flags & DEQUEUE_SLEEP);
+
+		/*
+		 * Indicate that a sched_delayed task was migrated.
+		 * enqueue_task() needs this for correct accounting
+		 * when the delayed task eventually wakes up.
+		 */
+		if (p->se.sched_delayed && task_on_rq_migrating(p))
+			p->migration_flags |= DELAYED_MIGRATED;
 	}
 
 	/*
