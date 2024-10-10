@@ -129,8 +129,6 @@ void comedi_8254_pacer_enable(struct comedi_8254 *i8254,
 void comedi_8254_update_divisors(struct comedi_8254 *i8254);
 void comedi_8254_cascade_ns_to_timer(struct comedi_8254 *i8254,
 				     unsigned int *nanosec, unsigned int flags);
-void comedi_8254_ns_to_timer(struct comedi_8254 *i8254,
-			     unsigned int *nanosec, unsigned int flags);
 
 void comedi_8254_set_busy(struct comedi_8254 *i8254,
 			  unsigned int counter, bool busy);

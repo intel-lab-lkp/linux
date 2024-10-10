@@ -77,10 +77,6 @@
  * to create a 32-bit rate generator (I8254_MODE2). These functions are
  * provided to handle the cascaded counters:
  *
- * comedi_8254_ns_to_timer()
- *	Calculates the divisor value needed for a single counter to generate
- *	ns timing.
- *
  * comedi_8254_cascade_ns_to_timer()
  *	Calculates the two divisor values needed to the generate the pacer
  *	clock (in ns).
@@ -471,39 +467,6 @@ void comedi_8254_cascade_ns_to_timer(struct comedi_8254 *i8254,
 	i8254->next_div2 = d2;
 }
 EXPORT_SYMBOL_GPL(comedi_8254_cascade_ns_to_timer);
-
-/**
- * comedi_8254_ns_to_timer - calculate the divisor value for nanosec timing
- * @i8254:	comedi_8254 struct for the timer
- * @nanosec:	the desired ns time
- * @flags:	comedi_cmd flags
- */
-void comedi_8254_ns_to_timer(struct comedi_8254 *i8254,
-			     unsigned int *nanosec, unsigned int flags)
-{
-	unsigned int divisor;
-
-	switch (flags & CMDF_ROUND_MASK) {
-	default:
-	case CMDF_ROUND_NEAREST:
-		divisor = DIV_ROUND_CLOSEST(*nanosec, i8254->osc_base);
-		break;
-	case CMDF_ROUND_UP:
-		divisor = DIV_ROUND_UP(*nanosec, i8254->osc_base);
-		break;
-	case CMDF_ROUND_DOWN:
-		divisor = *nanosec / i8254->osc_base;
-		break;
-	}
-	if (divisor < 2)
-		divisor = 2;
-	if (divisor > I8254_MAX_COUNT)
-		divisor = I8254_MAX_COUNT;
-
-	*nanosec = divisor * i8254->osc_base;
-	i8254->next_div = divisor;
-}
-EXPORT_SYMBOL_GPL(comedi_8254_ns_to_timer);
 
 /**
  * comedi_8254_set_busy - set/clear the "busy" flag for a given counter
