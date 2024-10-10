@@ -77,18 +77,19 @@ struct file;
 /**
  * __pidfd_get_pid() - Retrieve a pid associated with the specified pidfd.
  *
- * @pidfd:      The pidfd whose pid we want, or the fd of a /proc/<pid> file if
- *              @alloc_proc is also set.
+ * @pidfd:      The pidfd whose pid we want, the fd of a /proc/<pid> file if
+ *              @alloc_proc is also set, or PIDFD_SELF_* to refer to the current
+ *              thread or thread group leader.
  * @pin_pid:    If set, then the reference counter of the returned pid is
  *              incremented. If not set, then @fd should be provided to pin the
  *              pidfd.
  * @allow_proc: If set, then an fd of a /proc/<pid> file can be passed instead
  *              of a pidfd, and this will be used to determine the pid.
  * @flags:      Output variable, if non-NULL, then the file->f_flags of the
- *              pidfd will be set here.
+ *              pidfd will be set here. If PIDFD_SELF_* set, this is zero.
  * @fd:         Output variable, if non-NULL, then the pidfd reference will
  *              remain elevated and the caller will need to decrement it
- *              themselves.
+ *              themselves. If PIDFD_SELF_* set, this is empty.
  *
  * Returns: If successful, the pid associated with the pidfd, otherwise an
  *          error.
