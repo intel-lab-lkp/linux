@@ -99,6 +99,9 @@ properties:
         -bit 16: Prevent packing/unpacking mode
           0x0: pack/unpack enabled when source data width/burst != destination data width/burst
           0x1: memory data width/burst forced to peripheral data width/burst to prevent pack/unpack
+        -bit 17: Prevent linked-list refactoring
+          0x0: don't prevent driver to refactor the linked-list for optimal performance
+          0x1: prevent driver to refactor the linked-list, despite not optimal performance
 
 required:
   - compatible
