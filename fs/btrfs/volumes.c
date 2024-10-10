@@ -749,6 +749,9 @@ static bool is_good_dev_path(const char *dev_path)
 	bool is_good = false;
 	int ret;
 
+	if (!dev_path)
+		goto out;
+
 	path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
 	if (!path_buf)
 		goto out;
@@ -778,6 +781,11 @@ static int get_canonical_dev_path(const char *dev_path, char *canonical)
 	char *path_buf = NULL;
 	char *resolved_path;
 	int ret;
+
+	if (!dev_path) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
 	if (!path_buf) {
