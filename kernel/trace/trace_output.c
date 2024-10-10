@@ -1246,6 +1246,11 @@ static enum print_line_t trace_stack_print(struct trace_iterator *iter,
 			break;
 
 		trace_seq_puts(s, " => ");
+		if (is_ftrace_trampoline((*p) + delta)) {
+			trace_seq_printf(s, "0x%08lx", (*p) + delta);
+			trace_seq_putc(s, '\n');
+			continue;
+		}
 		seq_print_ip_sym(s, (*p) + delta, flags);
 		trace_seq_putc(s, '\n');
 	}
