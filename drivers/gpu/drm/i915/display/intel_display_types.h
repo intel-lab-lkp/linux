@@ -158,6 +158,7 @@ struct intel_encoder {
 	enum port port;
 	u16 cloneable;
 	u8 pipe_mask;
+	bool typec_supp;
 
 	/* Check and recover a bad link state. */
 	struct delayed_work link_check_work;
