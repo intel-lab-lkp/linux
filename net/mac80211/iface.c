@@ -67,7 +67,6 @@ bool __ieee80211_recalc_txpower(struct ieee80211_sub_if_data *sdata)
 
 	if (power != sdata->vif.bss_conf.txpower) {
 		sdata->vif.bss_conf.txpower = power;
-		ieee80211_hw_config(sdata->local, 0);
 		return true;
 	}
 
