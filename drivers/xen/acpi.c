@@ -125,3 +125,20 @@ int xen_acpi_get_gsi_info(struct pci_dev *dev,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(xen_acpi_get_gsi_info);
+
+get_gsi_from_sbdf_t get_gsi_from_sbdf = NULL;
+
+void xen_acpi_register_get_gsi_func(get_gsi_from_sbdf_t func)
+{
+	get_gsi_from_sbdf = func;
+}
+EXPORT_SYMBOL_GPL(xen_acpi_register_get_gsi_func);
+
+int xen_acpi_get_gsi_from_sbdf(u32 sbdf)
+{
+	if (get_gsi_from_sbdf)
+		return get_gsi_from_sbdf(sbdf);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(xen_acpi_get_gsi_from_sbdf);
