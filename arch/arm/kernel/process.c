@@ -248,8 +248,6 @@ __visible void ret_from_fork(struct task_struct *prev, struct pt_regs *regs,
 		 * execve() syscall.
 		 */
 	}
-
-	/* syscall_exit_to_user_mode(regs); here once we switch to generic entry */
 }
 
 int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)

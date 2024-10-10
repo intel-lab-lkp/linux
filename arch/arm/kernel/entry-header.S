@@ -205,7 +205,7 @@
 	disable_irq_notrace
 
 	mov	r0, sp				@ 'regs'
-	bl	irqentry_exit_to_kernel_mode
+	bl	arm_irqentry_exit_to_kernel_mode
 
 	uaccess_exit tsk, r0, r1
 
@@ -253,7 +253,7 @@
 	.macro  svc_exit_via_fiq
 	uaccess_exit tsk, r0, r1
 	mov	r0, sp
-	bl	irqentry_nmi_exit_to_kernel_mode
+	bl	arm_irqentry_nmi_exit_to_kernel_mode
 #ifndef CONFIG_THUMB2_KERNEL
 	@ ARM mode restore
 	mov	r0, sp
@@ -348,12 +348,12 @@ ALT_UP_B(.L1_\@)
 */
 	.macro asm_irqentry_enter_from_user_mode
 	mov	r0, sp				@ regs
-	bl	irqentry_enter_from_user_mode
+	bl	arm_irqentry_enter_from_user_mode
 	.endm
 
 	.macro asm_irqentry_exit_to_user_mode
 	mov	r0, sp				@ regs
-	bl	irqentry_exit_to_user_mode
+	bl	arm_irqentry_exit_to_user_mode
 	.endm
 
 /*

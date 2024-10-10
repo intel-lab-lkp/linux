@@ -1,87 +1,59 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <asm/entry.h>
-#include <asm/ptrace.h>
-#include <asm/signal.h>
 #include <linux/context_tracking.h>
+#include <linux/entry-common.h>
 #include <linux/irqflags.h>
 #include <linux/rseq.h>
 
-long syscall_enter_from_user_mode(struct pt_regs *regs, long syscall)
-{
-	trace_hardirqs_on();
-	local_irq_enable();
-	/* This context tracking call has inverse naming */
-	user_exit_callable();
+static irqentry_state_t user_irq_state;
+static irqentry_state_t kernel_irq_state;
+static irqentry_state_t user_nmi_state;
+static irqentry_state_t kernel_nmi_state;
 
-	/* This will optionally be modified later */
-	return syscall;
+noinstr void arm_irqentry_enter_from_user_mode(struct pt_regs *regs)
+{
+	user_irq_state = irqentry_enter(regs);
 }
 
-void syscall_exit_to_user_mode(struct pt_regs *regs)
+noinstr void arm_irqentry_exit_to_user_mode(struct pt_regs *regs)
 {
-	unsigned long flags = read_thread_flags();
+	irqentry_exit(regs, user_irq_state);
+}
 
-	rseq_syscall(regs);
+noinstr void arm_irqentry_enter_from_kernel_mode(struct pt_regs *regs)
+{
+	kernel_irq_state = irqentry_enter(regs);
+}
+
+noinstr void arm_irqentry_exit_to_kernel_mode(struct pt_regs *regs)
+{
+	irqentry_exit(regs, kernel_irq_state);
+}
+
+noinstr void arm_irqentry_nmi_enter_from_user_mode(struct pt_regs *regs)
+{
+	irqentry_enter_from_user_mode(regs);
+	user_nmi_state = irqentry_nmi_enter(regs);
+}
+
+noinstr void arm_irqentry_nmi_exit_to_user_mode(struct pt_regs *regs)
+{
+	irqentry_nmi_exit(regs, user_nmi_state);
+	irqentry_exit_to_user_mode(regs);
+}
+
+noinstr void arm_irqentry_nmi_enter_from_kernel_mode(struct pt_regs *regs)
+{
+	kernel_nmi_state = irqentry_nmi_enter(regs);
+}
+
+noinstr void arm_irqentry_nmi_exit_to_kernel_mode(struct pt_regs *regs)
+{
+	irqentry_nmi_exit(regs, kernel_nmi_state);
+}
+
+asmlinkage void arm_exit_to_user_mode(struct pt_regs *regs)
+{
 	local_irq_disable();
-	/*
-	 * It really matters that we check for flags != 0 and not
-	 * just for pending work here!
-	 */
-	if (flags)
-		do_work_pending(regs, flags);
-
-	trace_hardirqs_on();
-	/* This context tracking call has inverse naming */
-	user_enter_callable();
-}
-
-noinstr void irqentry_enter_from_user_mode(struct pt_regs *regs)
-{
-	trace_hardirqs_off();
-	/* This context tracking call has inverse naming */
-	user_exit_callable();
-}
-
-noinstr void irqentry_exit_to_user_mode(struct pt_regs *regs)
-{
-	unsigned long flags = read_thread_flags();
-
-	/*
-	 * It really matters that we check for flags != 0 and not
-	 * just for pending work here!
-	 */
-	if (flags)
-		do_work_pending(regs, flags);
-	trace_hardirqs_on();
-	/* This context tracking call has inverse naming */
-	user_enter_callable();
-}
-
-noinstr void irqentry_enter_from_kernel_mode(struct pt_regs *regs)
-{
-	trace_hardirqs_off();
-}
-
-noinstr void irqentry_exit_to_kernel_mode(struct pt_regs *regs)
-{
-	if (interrupts_enabled(regs))
-		trace_hardirqs_on();
-	else
-		trace_hardirqs_off();
-}
-
-noinstr void irqentry_nmi_enter_from_user_mode(struct pt_regs *regs)
-{
-}
-
-noinstr void irqentry_nmi_exit_to_user_mode(struct pt_regs *regs)
-{
-}
-
-noinstr void irqentry_nmi_enter_from_kernel_mode(struct pt_regs *regs)
-{
-}
-
-noinstr void irqentry_nmi_exit_to_kernel_mode(struct pt_regs *regs)
-{
+	irqentry_exit_to_user_mode(regs);
 }

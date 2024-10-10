@@ -206,9 +206,9 @@ ENDPROC(__und_invalid)
 
 	mov	r0, sp				@ 'regs'
 	.if \nmi
-	bl	irqentry_nmi_enter_from_kernel_mode
+	bl	arm_irqentry_nmi_enter_from_kernel_mode
 	.else
-	bl	irqentry_enter_from_kernel_mode
+	bl	arm_irqentry_enter_from_kernel_mode
 	.endif
 
 	.endm
@@ -495,12 +495,12 @@ ENDPROC(ret_from_exception)
 __fiq_usr:
 	usr_entry
 	mov	r0, sp
-	bl	irqentry_nmi_enter_from_user_mode
+	bl	arm_irqentry_nmi_enter_from_user_mode
 	kuser_cmpxchg_check
 	mov	r0, sp				@ struct pt_regs *regs
 	bl	handle_fiq_as_nmi
 	mov	r0, sp
-	bl	irqentry_nmi_exit_to_user_mode
+	bl	arm_irqentry_nmi_exit_to_user_mode
 	get_thread_info tsk
 	restore_user_regs
  UNWIND(.fnend		)
