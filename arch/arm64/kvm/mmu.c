@@ -987,6 +987,10 @@ static void stage2_unmap_memslot(struct kvm *kvm,
 	phys_addr_t size = PAGE_SIZE * memslot->npages;
 	hva_t reg_end = hva + size;
 
+	/* Host will not map this private memory without a userspace address. */
+	if (kvm_slot_can_be_private(memslot) && !hva)
+		return;
+
 	/*
 	 * A memory region could potentially cover multiple VMAs, and any holes
 	 * between them, so iterate over all of them to find out if we should
@@ -2125,6 +2129,10 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 
 	hva = new->userspace_addr;
 	reg_end = hva + (new->npages << PAGE_SHIFT);
+
+	/* Host will not map this private memory without a userspace address. */
+	if ((kvm_slot_can_be_private(new)) && !hva)
+		return 0;
 
 	mmap_read_lock(current->mm);
 	/*
