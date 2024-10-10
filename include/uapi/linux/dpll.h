@@ -79,6 +79,28 @@ enum dpll_lock_status_error {
 	DPLL_LOCK_STATUS_ERROR_MAX = (__DPLL_LOCK_STATUS_ERROR_MAX - 1)
 };
 
+/**
+ * enum dpll_clock_quality_level - level of quality of a clock device. The
+ *   current list is defined according to the table 11-7 contained in ITU-T
+ *   G.8264/Y.1364 document. One may extend this list freely by other ITU-T
+ *   defined clock qualities, or different ones defined by another
+ *   standardization body (for those, please use different prefix).
+ */
+enum dpll_clock_quality_level {
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_PRC = 1,
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_SSU_A,
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_SSU_B,
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_EEC1,
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_PRTC,
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_EPRTC,
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_EEEC,
+	DPLL_CLOCK_QUALITY_LEVEL_ITU_EPRC,
+
+	/* private: */
+	__DPLL_CLOCK_QUALITY_LEVEL_MAX,
+	DPLL_CLOCK_QUALITY_LEVEL_MAX = (__DPLL_CLOCK_QUALITY_LEVEL_MAX - 1)
+};
+
 #define DPLL_TEMP_DIVIDER	1000
 
 /**
@@ -180,6 +202,7 @@ enum dpll_a {
 	DPLL_A_TEMP,
 	DPLL_A_TYPE,
 	DPLL_A_LOCK_STATUS_ERROR,
+	DPLL_A_CLOCK_QUALITY_LEVEL,
 
 	__DPLL_A_MAX,
 	DPLL_A_MAX = (__DPLL_A_MAX - 1)
