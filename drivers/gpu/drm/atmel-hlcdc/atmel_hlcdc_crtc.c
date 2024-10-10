@@ -146,13 +146,19 @@ static void atmel_hlcdc_crtc_mode_set_nofb(struct drm_crtc *c)
 
 		if (div_low >= 2 &&
 		    (10 * (prate / div_low - mode_rate) <
-		     (mode_rate - prate / div)))
+		     (mode_rate - prate / div))) {
 			/*
 			 * At least 10 times better when using a higher
 			 * frequency than requested, instead of a lower.
 			 * So, go with that.
 			 */
 			div = div_low;
+		} else {
+			if (crtc->dc->desc->is_xlcdc) {
+				cfg |= ATMEL_XLCDC_CLKBYP;
+				mask |= ATMEL_XLCDC_CLKBYP;
+			}
+		}
 	}
 
 	cfg |= ATMEL_HLCDC_CLKDIV(div);
