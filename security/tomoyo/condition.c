@@ -741,7 +741,7 @@ void tomoyo_get_attributes(struct tomoyo_obj_info *obj)
 
 			stat->uid  = inode->i_uid;
 			stat->gid  = inode->i_gid;
-			stat->ino  = inode->i_ino;
+			stat->ino  = inode_get_ino(inode);
 			stat->mode = inode->i_mode;
 			stat->dev  = inode->i_sb->s_dev;
 			stat->rdev = inode->i_rdev;
@@ -766,8 +766,8 @@ bool tomoyo_condition(struct tomoyo_request_info *r,
 		      const struct tomoyo_condition *cond)
 {
 	u32 i;
-	unsigned long min_v[2] = { 0, 0 };
-	unsigned long max_v[2] = { 0, 0 };
+	u64 min_v[2] = { 0, 0 };
+	u64 max_v[2] = { 0, 0 };
 	const struct tomoyo_condition_element *condp;
 	const struct tomoyo_number_union *numbers_p;
 	const struct tomoyo_name_union *names_p;
@@ -834,7 +834,7 @@ bool tomoyo_condition(struct tomoyo_request_info *r,
 		/* Check numeric or bit-op expressions. */
 		for (j = 0; j < 2; j++) {
 			const u8 index = j ? right : left;
-			unsigned long value = 0;
+			u64 value = 0;
 
 			switch (index) {
 			case TOMOYO_TASK_UID:

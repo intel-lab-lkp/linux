@@ -524,7 +524,7 @@ struct tomoyo_name_union {
 
 /* Structure for holding a number. */
 struct tomoyo_number_union {
-	unsigned long values[2];
+	u64 values[2];
 	struct tomoyo_group *group; /* Maybe NULL. */
 	/* One of values in "enum tomoyo_value_type". */
 	u8 value_type[2];
@@ -567,7 +567,7 @@ struct tomoyo_address_group {
 struct tomoyo_mini_stat {
 	kuid_t uid;
 	kgid_t gid;
-	ino_t ino;
+	u64 ino;
 	umode_t mode;
 	dev_t dev;
 	dev_t rdev;
