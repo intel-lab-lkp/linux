@@ -1336,7 +1336,7 @@ vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 		return ret;
 	}
 	gfp = vma_thp_gfp_mask(vma);
-	folio = vma_alloc_folio(gfp, HPAGE_PMD_ORDER, vma, haddr, true);
+	folio = vma_alloc_folio(gfp, HPAGE_PMD_ORDER, vma, haddr);
 	if (unlikely(!folio)) {
 		count_vm_event(THP_FAULT_FALLBACK);
 		count_mthp_stat(HPAGE_PMD_ORDER, MTHP_STAT_ANON_FAULT_FALLBACK);
