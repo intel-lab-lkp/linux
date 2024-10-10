@@ -2102,6 +2102,15 @@ static struct ctl_table vm_table[] = {
 		.extra2		= SYSCTL_FOUR,
 	},
 	{
+		.procname	= "drop_fs_caches",
+		.data		= NULL,
+		.maxlen		= 256,
+		.mode		= 0200,
+		.proc_handler	= drop_fs_caches_sysctl_handler,
+		.extra1         = SYSCTL_ONE,
+		.extra2         = SYSCTL_FOUR,
+	},
+	{
 		.procname	= "page_lock_unfairness",
 		.data		= &sysctl_page_lock_unfairness,
 		.maxlen		= sizeof(sysctl_page_lock_unfairness),
