@@ -542,33 +542,40 @@ static int rzg2l_irqc_common_init(struct device_node *node, struct device_node *
 	parent_domain = irq_find_host(parent);
 	if (!parent_domain) {
 		dev_err(&pdev->dev, "cannot find parent domain\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto put_dev;
 	}
 
 	rzg2l_irqc_data = devm_kzalloc(&pdev->dev, sizeof(*rzg2l_irqc_data), GFP_KERNEL);
-	if (!rzg2l_irqc_data)
-		return -ENOMEM;
+	if (!rzg2l_irqc_data) {
+		ret = -ENOMEM;
+		goto put_dev;
+	}
 
 	rzg2l_irqc_data->irqchip = irq_chip;
 
 	rzg2l_irqc_data->base = devm_of_iomap(&pdev->dev, pdev->dev.of_node, 0, NULL);
-	if (IS_ERR(rzg2l_irqc_data->base))
-		return PTR_ERR(rzg2l_irqc_data->base);
+	if (IS_ERR(rzg2l_irqc_data->base)) {
+		ret = PTR_ERR(rzg2l_irqc_data->base);
+		goto put_dev;
+	}
 
 	ret = rzg2l_irqc_parse_interrupts(rzg2l_irqc_data, node);
 	if (ret) {
 		dev_err(&pdev->dev, "cannot parse interrupts: %d\n", ret);
-		return ret;
+		goto put_dev;
 	}
 
 	resetn = devm_reset_control_get_exclusive(&pdev->dev, NULL);
-	if (IS_ERR(resetn))
-		return PTR_ERR(resetn);
+	if (IS_ERR(resetn)) {
+		ret = PTR_ERR(resetn);
+		goto put_dev;
+	}
 
 	ret = reset_control_deassert(resetn);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to deassert resetn pin, %d\n", ret);
-		return ret;
+		goto put_dev;
 	}
 
 	pm_runtime_enable(&pdev->dev);
@@ -591,6 +598,10 @@ static int rzg2l_irqc_common_init(struct device_node *node, struct device_node *
 
 	register_syscore_ops(&rzg2l_irqc_syscore_ops);
 
+	/*
+	 * coccicheck complains about a missing put_device call before returning, but it's a false
+	 * positive. We still need &pdev->dev after successfully returning from this function.
+	 */
 	return 0;
 
 pm_put:
@@ -598,6 +609,9 @@ pm_put:
 pm_disable:
 	pm_runtime_disable(&pdev->dev);
 	reset_control_assert(resetn);
+put_dev:
+	put_device(&pdev->dev);
+
 	return ret;
 }
 
