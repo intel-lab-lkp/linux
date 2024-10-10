@@ -1047,7 +1047,7 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	LIST_HEAD(demote_folios);
 	unsigned int nr_reclaimed = 0;
 	unsigned int pgactivate = 0;
-	bool do_demote_pass;
+	bool do_demote_pass, splited = false;
 	struct swap_iocb *plug = NULL;
 
 	folio_batch_init(&free_folios);
@@ -1064,6 +1064,16 @@ retry:
 		unsigned int nr_pages;
 
 		cond_resched();
+
+		/*
+		 * If a large folio has been split, many folios are added
+		 * to folio_list. Looping through the entire list takes
+		 * too much time, which may prevent folios that have completed
+		 * writeback from rotateing to the tail of the lru. Just
+		 * stop looping if nr_pageout is greater than nr_to_reclaim.
+		 */
+		if (unlikely(splited && stat->nr_pageout > sc->nr_to_reclaim))
+			break;
 
 		folio = lru_to_folio(folio_list);
 		list_del(&folio->lru);
@@ -1273,6 +1283,7 @@ retry:
 		if ((nr_pages > 1) && !folio_test_large(folio)) {
 			sc->nr_scanned -= (nr_pages - 1);
 			nr_pages = 1;
+			splited = true;
 		}
 
 		/*
@@ -1375,12 +1386,14 @@ retry:
 				if (nr_pages > 1 && !folio_test_large(folio)) {
 					sc->nr_scanned -= (nr_pages - 1);
 					nr_pages = 1;
+					splited = true;
 				}
 				goto activate_locked;
 			case PAGE_SUCCESS:
 				if (nr_pages > 1 && !folio_test_large(folio)) {
 					sc->nr_scanned -= (nr_pages - 1);
 					nr_pages = 1;
+					splited = true;
 				}
 				stat->nr_pageout += nr_pages;
 
@@ -1491,6 +1504,7 @@ activate_locked_split:
 		if (nr_pages > 1) {
 			sc->nr_scanned -= (nr_pages - 1);
 			nr_pages = 1;
+			splited = true;
 		}
 activate_locked:
 		/* Not a candidate for swapping, so reclaim swap space. */
