@@ -4749,7 +4749,8 @@ static struct intel_excl_cntrs *allocate_excl_cntrs(int cpu)
 	return c;
 }
 
-
+#define PMU_FL_DYN_MASK		(PMU_FL_EXCL_CNTRS | PMU_FL_TFA |	\
+				 PMU_FL_BR_CNTR | PMU_FL_ACR)
 int intel_cpuc_prepare(struct cpu_hw_events *cpuc, int cpu)
 {
 	cpuc->pebs_record_size = x86_pmu.pebs_record_size;
@@ -4760,7 +4761,7 @@ int intel_cpuc_prepare(struct cpu_hw_events *cpuc, int cpu)
 			goto err;
 	}
 
-	if (x86_pmu.flags & (PMU_FL_EXCL_CNTRS | PMU_FL_TFA | PMU_FL_BR_CNTR)) {
+	if (x86_pmu.flags & PMU_FL_DYN_MASK) {
 		size_t sz = X86_PMC_IDX_MAX * sizeof(struct event_constraint);
 
 		cpuc->constraint_list = kzalloc_node(sz, GFP_KERNEL, cpu_to_node(cpu));
@@ -4865,6 +4866,18 @@ static void update_pmu_cap(struct x86_hybrid_pmu *pmu)
 			    &eax, &ebx, &ecx, &edx);
 		pmu->cntr_mask64 = eax;
 		pmu->fixed_cntr_mask64 = ebx;
+	}
+
+	if (sub_bitmaps & ARCH_PERFMON_ACR_LEAF) {
+		cpuid_count(ARCH_PERFMON_EXT_LEAF, ARCH_PERFMON_ACR_LEAF_BIT,
+			    &eax, &ebx, &ecx, &edx);
+		/* The mask of the counters which can be reloaded */
+		pmu->acr_cntr_mask64 = eax | ((u64)ebx << INTEL_PMC_IDX_FIXED);
+
+		/* The mask of the counters which can cause a reload of reloadable counters */
+		pmu->acr_cntr_cause_mask = ecx | ((u64)edx << INTEL_PMC_IDX_FIXED);
+
+		x86_pmu.flags |= PMU_FL_ACR;
 	}
 
 	if (!intel_pmu_broken_perf_cap()) {
