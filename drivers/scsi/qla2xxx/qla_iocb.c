@@ -2486,6 +2486,17 @@ qla24xx_logout_iocb(srb_t *sp, struct logio_entry_24xx *logio)
 	logio->port_id[1] = sp->fcport->d_id.b.area;
 	logio->port_id[2] = sp->fcport->d_id.b.domain;
 	logio->vp_index = sp->vha->vp_idx;
+	logio->io_parameter[0] = cpu_to_le32(sp->vha->d_id.b.al_pa |
+				 sp->vha->d_id.b.area << 8 |
+				 sp->vha->d_id.b.domain << 16);
+	logio->io_parameter[1] = cpu_to_le32(sp->vha->port_name[3] |
+				 sp->vha->port_name[2] << 8 |
+				 sp->vha->port_name[1] << 16 |
+				 sp->vha->port_name[0] << 24);
+	logio->io_parameter[2] = cpu_to_le32(sp->vha->port_name[7] |
+				 sp->vha->port_name[6] << 8 |
+				 sp->vha->port_name[5] << 16 |
+				 sp->vha->port_name[4] << 24);
 }
 
 static void
