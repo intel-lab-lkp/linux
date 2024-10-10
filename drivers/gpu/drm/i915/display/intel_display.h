@@ -603,5 +603,8 @@ bool assert_port_valid(struct drm_i915_private *i915, enum port port);
 
 bool intel_scanout_needs_vtd_wa(struct drm_i915_private *i915);
 int intel_crtc_num_joined_pipes(const struct intel_crtc_state *crtc_state);
+int bmg_can_bypass_m_n_limit(struct intel_display *display,
+			     int m_n_ratio,
+			     enum pipe pipe);
 
 #endif
