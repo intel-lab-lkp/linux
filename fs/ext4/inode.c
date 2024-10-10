@@ -1102,9 +1102,24 @@ int ext4_block_write_begin(handle_t *handle, struct folio *folio,
 			err = -EIO;
 	}
 	if (unlikely(err)) {
-		if (should_journal_data)
+		if (should_journal_data) {
+			if (bh != head || !block_start) {
+				do {
+					block_end = block_start + bh->b_size;
+
+					if (buffer_new(bh))
+						if (block_end > from && block_start < to)
+							do_journal_get_write_access(handle,
+										    inode, bh);
+
+					block_start = block_end;
+					bh = bh->b_this_page;
+				} while (bh != head);
+			}
+
 			ext4_journalled_zero_new_buffers(handle, inode, folio,
 							 from, to);
+		}
 		else
 			folio_zero_new_buffers(folio, from, to);
 	} else if (fscrypt_inode_uses_fs_layer_crypto(inode)) {
