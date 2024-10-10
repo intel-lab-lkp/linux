@@ -2050,6 +2050,7 @@ static inline int _cond_resched(void)
 
 #endif /* PREEMPT_DYNAMIC && CONFIG_HAVE_PREEMPT_DYNAMIC_CALL */
 
+#define __might_resched_possible	__might_resched
 #else /* CONFIG_PREEMPTION && !CONFIG_PREEMPT_DYNAMIC */
 
 static inline int _cond_resched(void)
@@ -2058,11 +2059,13 @@ static inline int _cond_resched(void)
 	return 0;
 }
 
+static inline void __might_resched_possible(const char *file, int line, unsigned int offsets) {}
+
 #endif /* !CONFIG_PREEMPTION || CONFIG_PREEMPT_DYNAMIC */
 
-#define cond_resched() ({			\
-	__might_resched(__FILE__, __LINE__, 0);	\
-	_cond_resched();			\
+#define cond_resched() ({					\
+	__might_resched_possible(__FILE__, __LINE__, 0);	\
+	_cond_resched();					\
 })
 
 extern int __cond_resched_lock(spinlock_t *lock);
@@ -2088,19 +2091,19 @@ extern int __cond_resched_rwlock_write(rwlock_t *lock);
 	(PREEMPT_LOCK_OFFSET + (1U << MIGHT_RESCHED_RCU_SHIFT))
 #endif
 
-#define cond_resched_lock(lock) ({						\
-	__might_resched(__FILE__, __LINE__, PREEMPT_LOCK_RESCHED_OFFSETS);	\
-	__cond_resched_lock(lock);						\
+#define cond_resched_lock(lock) ({							\
+	__might_resched_possible(__FILE__, __LINE__, PREEMPT_LOCK_RESCHED_OFFSETS);	\
+	__cond_resched_lock(lock);							\
 })
 
-#define cond_resched_rwlock_read(lock) ({					\
-	__might_resched(__FILE__, __LINE__, PREEMPT_LOCK_RESCHED_OFFSETS);	\
-	__cond_resched_rwlock_read(lock);					\
+#define cond_resched_rwlock_read(lock) ({						\
+	__might_resched_possible(__FILE__, __LINE__, PREEMPT_LOCK_RESCHED_OFFSETS);	\
+	__cond_resched_rwlock_read(lock);						\
 })
 
-#define cond_resched_rwlock_write(lock) ({					\
-	__might_resched(__FILE__, __LINE__, PREEMPT_LOCK_RESCHED_OFFSETS);	\
-	__cond_resched_rwlock_write(lock);					\
+#define cond_resched_rwlock_write(lock) ({						\
+	__might_resched_possible(__FILE__, __LINE__, PREEMPT_LOCK_RESCHED_OFFSETS);	\
+	__cond_resched_rwlock_write(lock);						\
 })
 
 static __always_inline bool need_resched(void)
