@@ -464,23 +464,18 @@ static int th1520_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
 			if (!muxtype) {
 				dev_err(thp->pctl->dev, "%pOFn.%pOFn: unknown function '%s'\n",
 					np, child, funcname);
-				ret = -EINVAL;
-				goto free_configs;
+				goto e_inval;
 			}
 
 			funcname = devm_kasprintf(thp->pctl->dev, GFP_KERNEL, "%pOFn.%pOFn",
 						  np, child);
-			if (!funcname) {
-				ret = -ENOMEM;
-				goto free_configs;
-			}
+			if (!funcname)
+				goto e_nomem;
 
 			npins = of_property_count_strings(child, "pins");
 			pgnames = devm_kcalloc(thp->pctl->dev, npins, sizeof(*pgnames), GFP_KERNEL);
-			if (!pgnames) {
-				ret = -ENOMEM;
-				goto free_configs;
-			}
+			if (!pgnames)
+				goto e_nomem;
 		} else {
 			funcname = NULL;
 		}
@@ -497,8 +492,7 @@ static int th1520_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
 				nmaps = rollback;
 				dev_err(thp->pctl->dev, "%pOFn.%pOFn: unknown pin '%s'\n",
 					np, child, pinname);
-				ret = -EINVAL;
-				goto free_configs;
+				goto e_inval;
 			}
 
 			if (nconfigs) {
@@ -531,6 +525,12 @@ static int th1520_pinctrl_dt_node_to_map(struct pinctrl_dev *pctldev,
 	*num_maps = nmaps;
 	return 0;
 
+e_nomem:
+	ret = -ENOMEM;
+	goto free_configs;
+
+e_inval:
+	ret = -EINVAL;
 free_configs:
 	kfree(configs);
 free_map:
