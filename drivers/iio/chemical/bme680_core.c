@@ -15,6 +15,7 @@
 #include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -100,6 +101,12 @@ enum bme680_op_mode {
 	BME680_FORCED,
 };
 
+static const char *const bme680_supply_names[] = {
+	"vdd", "vddio"
+};
+
+#define BME680_NUM_SUPPLIES ARRAY_SIZE(bme680_supply_names)
+
 struct bme680_data {
 	struct regmap *regmap;
 	struct bme680_calib bme680;
@@ -109,6 +116,8 @@ struct bme680_data {
 	u8 oversampling_humid;
 	u16 heater_dur;
 	u16 heater_temp;
+
+	struct regulator_bulk_data supplies[BME680_NUM_SUPPLIES];
 
 	union {
 		u8 buf[3];
@@ -857,6 +866,13 @@ static const struct iio_info bme680_info = {
 	.attrs = &bme680_attribute_group,
 };
 
+static void bme680_regulators_disable(void *data)
+{
+	struct regulator_bulk_data *supplies = data;
+
+	regulator_bulk_disable(BME680_NUM_SUPPLIES, supplies);
+}
+
 int bme680_core_probe(struct device *dev, struct regmap *regmap,
 		      const char *name)
 {
@@ -884,6 +900,20 @@ int bme680_core_probe(struct device *dev, struct regmap *regmap,
 	data->oversampling_temp = 8;  /* 8X oversampling rate */
 	data->heater_temp = 320; /* degree Celsius */
 	data->heater_dur = 150;  /* milliseconds */
+
+	regulator_bulk_set_supply_names(data->supplies, bme680_supply_names,
+					BME680_NUM_SUPPLIES);
+	ret = devm_regulator_bulk_get(dev, BME680_NUM_SUPPLIES, data->supplies);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to get regulators\n");
+
+	ret = regulator_bulk_enable(BME680_NUM_SUPPLIES, data->supplies);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to enable regulators\n");
+
+	devm_add_action_or_reset(dev, bme680_regulators_disable, data->supplies);
+
+	fsleep(BME680_STARTUP_TIME_US);
 
 	ret = regmap_write(regmap, BME680_REG_SOFT_RESET, BME680_CMD_SOFTRESET);
 	if (ret < 0)
