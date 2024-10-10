@@ -325,8 +325,9 @@ int ilk_fdi_compute_config(struct intel_crtc *crtc,
 {
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *i915 = to_i915(dev);
+	struct intel_display *display = to_intel_display(pipe_config);
 	const struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
-	int lane, link_bw, fdi_dotclock;
+	int lane, link_bw, fdi_dotclock, ret;
 
 	/* FDI is a binary signal running at ~2.7GHz, encoding
 	 * each output octet as 10 bits. The actual frequency
@@ -344,13 +345,13 @@ int ilk_fdi_compute_config(struct intel_crtc *crtc,
 
 	pipe_config->fdi_lanes = lane;
 
-	intel_link_compute_m_n(fxp_q4_from_int(pipe_config->pipe_bpp),
-			       lane, fdi_dotclock,
-			       link_bw,
-			       intel_dp_bw_fec_overhead(false),
-			       &pipe_config->fdi_m_n);
+	ret = intel_link_compute_m_n(display, fxp_q4_from_int(pipe_config->pipe_bpp),
+				     lane, fdi_dotclock,
+				     link_bw,
+				     intel_dp_bw_fec_overhead(false),
+				     &pipe_config->fdi_m_n);
 
-	return 0;
+	return ret;
 }
 
 static int intel_fdi_atomic_check_bw(struct intel_atomic_state *state,
