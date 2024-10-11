@@ -37,6 +37,15 @@ static inline int shstk_update_last_frame(unsigned long val) { return 0; }
 static inline bool shstk_is_enabled(void) { return false; }
 #endif /* CONFIG_X86_USER_SHADOW_STACK */
 
+int arch_create_rstor_token(unsigned long ssp, unsigned long *token_addr);
+bool arch_cpu_supports_shadow_stack(void);
+bool arch_is_shstk_enabled(struct task_struct *task);
+void arch_set_shstk_base_size(struct task_struct *task, unsigned long base,
+			unsigned long size);
+void arch_get_shstk_base_size(struct task_struct *task, unsigned long *base,
+			unsigned long *size);
+void arch_set_shstk_ptr_and_enable(unsigned long ssp);
+void arch_set_thread_shstk_status(bool enable);
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_X86_SHSTK_H */
