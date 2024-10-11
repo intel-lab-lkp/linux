@@ -141,10 +141,10 @@ static int ovl_verity_mode_def(void)
 
 const struct fs_parameter_spec ovl_parameter_spec[] = {
 	fsparam_string_empty("lowerdir",    Opt_lowerdir),
-	fsparam_string("lowerdir+",         Opt_lowerdir_add),
-	fsparam_string("datadir+",          Opt_datadir_add),
-	fsparam_string("upperdir",          Opt_upperdir),
-	fsparam_string("workdir",           Opt_workdir),
+	fsparam_fd_or_path("lowerdir+",     Opt_lowerdir_add),
+	fsparam_fd_or_path("datadir+",      Opt_datadir_add),
+	fsparam_fd_or_path("upperdir",      Opt_upperdir),
+	fsparam_fd_or_path("workdir",       Opt_workdir),
 	fsparam_flag("default_permissions", Opt_default_permissions),
 	fsparam_enum("redirect_dir",        Opt_redirect_dir, ovl_parameter_redirect_dir),
 	fsparam_enum("index",               Opt_index, ovl_parameter_bool),
@@ -367,41 +367,87 @@ static void ovl_add_layer(struct fs_context *fc, enum ovl_opt layer,
 	}
 }
 
-static int ovl_parse_layer(struct fs_context *fc, const char *layer_name, enum ovl_opt layer)
+static inline bool is_upper_layer(enum ovl_opt layer)
 {
-	char *name = kstrdup(layer_name, GFP_KERNEL);
-	bool upper = (layer == Opt_upperdir || layer == Opt_workdir);
-	struct path path;
-	int err;
+	return layer == Opt_upperdir || layer == Opt_workdir;
+}
+
+/* Handle non-file descriptor-based layer options that require path lookup. */
+static inline int ovl_kern_path(const char *layer_name, struct path *layer_path,
+				enum ovl_opt layer)
+{
+	switch (layer) {
+	case Opt_upperdir:
+		fallthrough;
+	case Opt_workdir:
+		fallthrough;
+	case Opt_lowerdir:
+		return ovl_mount_dir(layer_name, layer_path);
+	case Opt_lowerdir_add:
+		fallthrough;
+	case Opt_datadir_add:
+		return ovl_mount_dir_noesc(layer_name, layer_path);
+	default:
+		WARN_ON_ONCE(true);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int ovl_do_parse_layer(struct fs_context *fc, const char *layer_name,
+			      struct path *layer_path, enum ovl_opt layer)
+{
+	char *name __free(kfree) = kstrdup(layer_name, GFP_KERNEL);
+	bool upper;
+	int err = 0;
 
 	if (!name)
 		return -ENOMEM;
 
-	if (upper || layer == Opt_lowerdir)
-		err = ovl_mount_dir(name, &path);
-	else
-		err = ovl_mount_dir_noesc(name, &path);
+	upper = is_upper_layer(layer);
+	err = ovl_mount_dir_check(fc, layer_path, layer, name, upper);
 	if (err)
-		goto out_free;
-
-	err = ovl_mount_dir_check(fc, &path, layer, name, upper);
-	if (err)
-		goto out_put;
+		return err;
 
 	if (!upper) {
 		err = ovl_ctx_realloc_lower(fc);
 		if (err)
-			goto out_put;
+			return err;
 	}
 
 	/* Store the user provided path string in ctx to show in mountinfo */
-	ovl_add_layer(fc, layer, &path, &name);
-
-out_put:
-	path_put(&path);
-out_free:
-	kfree(name);
+	ovl_add_layer(fc, layer, layer_path, &name);
 	return err;
+}
+
+static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
+			   enum ovl_opt layer)
+{
+	struct path path __free(path_put) = {};
+	char *buf __free(kfree) = NULL;
+	char *layer_name;
+	int err = 0;
+
+	if (param->type == fs_value_is_file) {
+		buf = kmalloc(PATH_MAX, GFP_KERNEL_ACCOUNT);
+		if (!buf)
+			return -ENOMEM;
+
+		path = param->file->f_path;
+		path_get(&path);
+
+		layer_name = d_path(&path, buf, PATH_MAX);
+		if (IS_ERR(layer_name))
+			return PTR_ERR(layer_name);
+	} else {
+		layer_name = param->string;
+		err = ovl_kern_path(layer_name, &path, layer);
+	}
+	if (err)
+		return err;
+
+	return ovl_do_parse_layer(fc, layer_name, &path, layer);
 }
 
 static void ovl_reset_lowerdirs(struct ovl_fs_context *ctx)
@@ -474,7 +520,13 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 
 	iter = dup;
 	for (nr = 0; nr < nr_lower; nr++) {
-		err = ovl_parse_layer(fc, iter, Opt_lowerdir);
+		struct path path __free(path_put) = {};
+
+		err = ovl_kern_path(iter, &path, Opt_lowerdir);
+		if (err)
+			goto out_err;
+
+		err = ovl_do_parse_layer(fc, iter, &path, Opt_lowerdir);
 		if (err)
 			goto out_err;
 
@@ -555,7 +607,7 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_datadir_add:
 	case Opt_upperdir:
 	case Opt_workdir:
-		err = ovl_parse_layer(fc, param->string, opt);
+		err = ovl_parse_layer(fc, param, opt);
 		break;
 	case Opt_default_permissions:
 		config->default_permissions = true;
