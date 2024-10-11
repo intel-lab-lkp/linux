@@ -1714,11 +1714,17 @@ static void nvme_enable_aen(struct nvme_ctrl *ctrl)
 	queue_work(nvme_wq, &ctrl->async_event_work);
 }
 
+static inline bool nvme_hidden_ns(struct nvme_ctrl *ctrl)
+{
+	return ctrl->opts && ctrl->opts->hidden_ns;
+}
+
 static int nvme_ns_open(struct nvme_ns *ns)
 {
 
 	/* should never be called due to GENHD_FL_HIDDEN */
-	if (WARN_ON_ONCE(nvme_ns_head_multipath(ns->head)))
+	if (WARN_ON_ONCE(nvme_ns_head_multipath(ns->head) ||
+			 nvme_hidden_ns(ns->ctrl)))
 		goto fail;
 	if (!nvme_get_ns(ns))
 		goto fail;
@@ -3828,6 +3834,9 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	disk->fops = &nvme_bdev_ops;
 	disk->private_data = ns;
 
+	if (nvme_hidden_ns(ctrl))
+		disk->flags |= GENHD_FL_HIDDEN;
+
 	ns->disk = disk;
 	ns->queue = disk->queue;
 	ns->ctrl = ctrl;
@@ -3879,7 +3888,8 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	if (device_add_disk(ctrl->device, ns->disk, nvme_ns_attr_groups))
 		goto out_cleanup_ns_from_list;
 
-	if (!nvme_ns_head_multipath(ns->head))
+	if (!nvme_ns_head_multipath(ns->head) &&
+	    !nvme_hidden_ns(ctrl))
 		nvme_add_ns_cdev(ns);
 
 	nvme_mpath_add_disk(ns, info->anagrpid);
@@ -3945,7 +3955,8 @@ static void nvme_ns_remove(struct nvme_ns *ns)
 	/* guarantee not available in head->list */
 	synchronize_srcu(&ns->head->srcu);
 
-	if (!nvme_ns_head_multipath(ns->head))
+	if (!nvme_ns_head_multipath(ns->head) &&
+	    !nvme_hidden_ns(ns->ctrl))
 		nvme_cdev_del(&ns->cdev, &ns->cdev_device);
 	del_gendisk(ns->disk);
 
