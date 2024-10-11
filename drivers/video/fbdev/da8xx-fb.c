@@ -1610,8 +1610,10 @@ static int fb_suspend(struct device *dev)
 	console_lock();
 	if (par->lcd_supply) {
 		ret = regulator_disable(par->lcd_supply);
-		if (ret)
+		if (ret) {
+			console_unlock();
 			return ret;
+		}
 	}
 
 	fb_set_suspend(info, 1);
@@ -1636,8 +1638,10 @@ static int fb_resume(struct device *dev)
 
 		if (par->lcd_supply) {
 			ret = regulator_enable(par->lcd_supply);
-			if (ret)
+			if (ret) {
+				console_unlock();
 				return ret;
+			}
 		}
 	}
 
