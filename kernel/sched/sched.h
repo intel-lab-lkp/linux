@@ -650,8 +650,9 @@ struct cfs_rq {
 	unsigned int		idle_nr_running;   /* SCHED_IDLE */
 	unsigned int		idle_h_nr_running; /* SCHED_IDLE */
 
+	s64			tot_vruntime;
 	s64			avg_vruntime;
-	u64			avg_load;
+	u64			tot_load;
 
 	u64			min_vruntime;
 #ifdef CONFIG_SCHED_CORE
