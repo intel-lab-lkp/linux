@@ -1306,7 +1306,7 @@ static ssize_t btrfs_temp_fsid_show(struct kobject *kobj,
 BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
-static const char * const btrfs_read_policy_name[] = { "pid", "rotation", "latency" };
+static const char * const btrfs_read_policy_name[] = { "pid", "rotation", "latency", "devid" };
 #else
 static const char * const btrfs_read_policy_name[] = { "pid" };
 #endif
@@ -1332,8 +1332,11 @@ static ssize_t btrfs_read_policy_show(struct kobject *kobj,
 		if (i == BTRFS_READ_POLICY_ROTATION)
 			ret += sysfs_emit_at(buf, ret, ":%d",
 					     fs_devices->min_contiguous_read);
-#endif
 
+		if (i == BTRFS_READ_POLICY_DEVID)
+			ret += sysfs_emit_at(buf, ret, ":%llu",
+							fs_devices->read_devid);
+#endif
 		if (i == policy)
 			ret += sysfs_emit_at(buf, ret, "]");
 	}
@@ -1401,7 +1404,32 @@ static ssize_t btrfs_read_policy_store(struct kobject *kobj,
 
 		return len;
 	}
+
+	if (index == BTRFS_READ_POLICY_DEVID) {
+		u64 value_devid;
+		BTRFS_DEV_LOOKUP_ARGS(args);
+
+		if (value == NULL || kstrtou64(value, 10, &value_devid))
+			return -EINVAL;
+
+		args.devid = value_devid;
+		if (btrfs_find_device(fs_devices, &args) == NULL)
+			return -EINVAL;
+
+		if (index != READ_ONCE(fs_devices->read_policy) ||
+		    (value_devid != READ_ONCE(fs_devices->read_devid))) {
+			WRITE_ONCE(fs_devices->read_policy, index);
+			WRITE_ONCE(fs_devices->read_devid, value_devid);
+
+			btrfs_info(fs_devices->fs_info, "read policy set to '%s:%llu'",
+				   btrfs_read_policy_name[index], value_devid);
+
+		}
+
+		return len;
+	}
 #endif
+
 	if (index != READ_ONCE(fs_devices->read_policy)) {
 		WRITE_ONCE(fs_devices->read_policy, index);
 		btrfs_info(fs_devices->fs_info, "read policy set to '%s'",

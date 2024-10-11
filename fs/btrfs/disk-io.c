@@ -3322,6 +3322,7 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 	fs_info->sectorsize = sectorsize;
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	fs_info->fs_devices->min_contiguous_read = sectorsize;
+	fs_info->fs_devices->read_devid = fs_info->fs_devices->latest_dev->devid;
 #endif
 	fs_info->sectorsize_bits = ilog2(sectorsize);
 	fs_info->sectors_per_page = (PAGE_SIZE >> fs_info->sectorsize_bits);
