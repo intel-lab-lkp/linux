@@ -1154,9 +1154,13 @@ macro_rules! __init_internal {
                         unsafe { ::core::ptr::write_bytes(slot, 0, 1) };
                         $init_zeroed // This will be `()` if set.
                     })?
-                    // Create the `this` so it can be referenced by the user inside of the
-                    // expressions creating the individual fields.
-                    $(let $this = unsafe { ::core::ptr::NonNull::new_unchecked(slot) };)?
+                    $(
+                        // Create the `this` so it can be referenced by the user inside of the
+                        // expressions creating the individual fields.
+                        //
+                        // SAFETY: `slot` is valid, because we are inside of an initializer closure.
+                        let $this = unsafe { ::core::ptr::NonNull::new_unchecked(slot) };
+                    )?
                     // Initialize every field.
                     $crate::__init_internal!(init_slot($($use_data)?):
                         @data(data),

@@ -6,7 +6,8 @@
 
 #![expect(non_snake_case)]
 
-use crate::build_assert;
+use crate::{build_assert, error::VTABLE_DEFAULT_ERROR, prelude::*};
+use core::ffi;
 
 /// Build an ioctl number, analogous to the C macro of the same name.
 #[inline(always)]
@@ -69,4 +70,47 @@ pub const fn _IOC_NR(nr: u32) -> u32 {
 /// Get the ioctl size from an ioctl number.
 pub const fn _IOC_SIZE(nr: u32) -> usize {
     ((nr >> uapi::_IOC_SIZESHIFT) & uapi::_IOC_SIZEMASK) as usize
+}
+
+/// Types implementing this trait can be used to parse ioctl commands.
+#[vtable]
+pub trait IoctlCommand: Sized + Send + Sync + 'static {
+    /// The error type returned by the parse functions.
+    ///
+    /// This type must be convertible into the kernel [`Error`] type.
+    type Err: Into<Error>;
+
+    /// Parse an ioctl command.
+    ///
+    /// This function parses the `cmd` argument as an ioctl command number
+    /// and returns a command that interprets the `arg` argument as needed.
+    ///
+    /// # Errors
+    ///
+    /// This function may return an error if the command is invalid.
+    fn parse(cmd: ffi::c_uint, arg: ffi::c_ulong) -> Result<Self, Self::Err>;
+
+    /// Parse an ioctl command for compatibility mode.
+    ///
+    /// If the compatibility mode is enabled, this function parses the `cmd`
+    /// argument as an ioctl command number and returns a command that
+    /// interprets the `arg` argument as needed. The values come from a 32-bit
+    /// user-space application and may need to be parsed differently.
+    ///
+    /// # Errors
+    ///
+    /// This function may return an error if the command is invalid.
+    #[cfg(CONFIG_COMPAT)]
+    fn compat_parse(_cmd: ffi::c_uint, _arg: ffi::c_ulong) -> Result<Self, Self::Err> {
+        kernel::build_error(VTABLE_DEFAULT_ERROR)
+    }
+}
+
+#[vtable]
+impl IoctlCommand for () {
+    type Err = Error;
+
+    fn parse(_cmd: ffi::c_uint, _arg: ffi::c_ulong) -> Result<Self> {
+        Err(ENOTTY)
+    }
 }
