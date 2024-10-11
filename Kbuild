@@ -34,6 +34,17 @@ arch/$(SRCARCH)/kernel/asm-offsets.s: $(timeconst-file) $(bounds-file)
 $(offsets-file): arch/$(SRCARCH)/kernel/asm-offsets.s FORCE
 	$(call filechk,offsets,__ASM_OFFSETS_H__)
 
+# Generate packing-checks.h
+
+hostprogs += lib/gen_packing_checks
+
+packing-checks := include/generated/packing-checks.h
+
+filechk_gen_packing_checks = lib/gen_packing_checks
+
+$(packing-checks): lib/gen_packing_checks FORCE
+	$(call filechk,gen_packing_checks)
+
 # Check for missing system calls
 
 quiet_cmd_syscalls = CALL    $<
@@ -70,7 +81,7 @@ $(atomic-checks): $(obj)/.checked-%: include/linux/atomic/%  FORCE
 # A phony target that depends on all the preparation targets
 
 PHONY += prepare
-prepare: $(offsets-file) missing-syscalls $(atomic-checks)
+prepare: $(offsets-file) missing-syscalls $(atomic-checks) $(packing-checks)
 	@:
 
 # Ordinary directory descending
