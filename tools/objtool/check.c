@@ -61,8 +61,8 @@ struct instruction *next_insn_same_sec(struct objtool_file *file,
 	return insn;
 }
 
-static struct instruction *next_insn_same_func(struct objtool_file *file,
-					       struct instruction *insn)
+struct instruction *next_insn_same_func(struct objtool_file *file,
+				        struct instruction *insn)
 {
 	struct instruction *next = next_insn_same_sec(file, insn);
 	struct symbol *func = insn_func(insn);
@@ -93,8 +93,8 @@ static struct instruction *prev_insn_same_sec(struct objtool_file *file,
 	return insn - 1;
 }
 
-static struct instruction *prev_insn_same_sym(struct objtool_file *file,
-					      struct instruction *insn)
+struct instruction *prev_insn_same_sym(struct objtool_file *file,
+				       struct instruction *insn)
 {
 	struct instruction *prev = prev_insn_same_sec(file, insn);
 
@@ -109,11 +109,6 @@ static struct instruction *prev_insn_same_sym(struct objtool_file *file,
 	     __fake; __fake = NULL)					\
 		for_each_sec(file, __sec)				\
 			sec_for_each_insn(file, __sec, insn)
-
-#define func_for_each_insn(file, func, insn)				\
-	for (insn = find_insn(file, func->sec, func->offset);		\
-	     insn;							\
-	     insn = next_insn_same_func(file, insn))
 
 #define sym_for_each_insn(file, sym, insn)				\
 	for (insn = find_insn(file, sym->sec, sym->offset);		\
@@ -139,15 +134,6 @@ static inline struct symbol *insn_call_dest(struct instruction *insn)
 		return NULL;
 
 	return insn->_call_dest;
-}
-
-static inline struct reloc *insn_jump_table(struct instruction *insn)
-{
-	if (insn->type == INSN_JUMP_DYNAMIC ||
-	    insn->type == INSN_CALL_DYNAMIC)
-		return insn->_jump_table;
-
-	return NULL;
 }
 
 static inline unsigned long insn_jump_table_size(struct instruction *insn)
