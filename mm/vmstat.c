@@ -2025,7 +2025,12 @@ static bool need_update(int cpu)
 
 	for_each_populated_zone(zone) {
 		struct per_cpu_zonestat *pzstats = per_cpu_ptr(zone->per_cpu_zonestats, cpu);
+		struct per_cpu_pages *pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
 		struct per_cpu_nodestat *n;
+
+		/* in onhz or nohz full make pcp decay work */
+		if (pcp->high_max > pcp->high_min)
+			return true;
 
 		/*
 		 * The fast way of checking if there are any vmstat diffs.
