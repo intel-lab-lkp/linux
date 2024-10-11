@@ -1369,6 +1369,11 @@ static struct pernet_operations ip6mr_net_ops = {
 	.exit_batch = ip6mr_net_exit_batch,
 };
 
+static const struct rtnl_msg_handler ip6mr_rtnl_msg_handlers[] = {
+	{THIS_MODULE, RTNL_FAMILY_IP6MR, RTM_GETROUTE,
+	 ip6mr_rtm_getroute, ip6mr_rtm_dumproute, 0},
+};
+
 int __init ip6_mr_init(void)
 {
 	int err;
@@ -1391,9 +1396,8 @@ int __init ip6_mr_init(void)
 		goto add_proto_fail;
 	}
 #endif
-	err = rtnl_register_module(THIS_MODULE, RTNL_FAMILY_IP6MR, RTM_GETROUTE,
-				   ip6mr_rtm_getroute, ip6mr_rtm_dumproute, 0);
-	if (err == 0)
+	err = rtnl_register_many(ip6mr_rtnl_msg_handlers);
+	if (!err)
 		return 0;
 
 #ifdef CONFIG_IPV6_PIMSM_V2
@@ -1410,7 +1414,7 @@ reg_pernet_fail:
 
 void ip6_mr_cleanup(void)
 {
-	rtnl_unregister(RTNL_FAMILY_IP6MR, RTM_GETROUTE);
+	rtnl_unregister_many(ip6mr_rtnl_msg_handlers);
 #ifdef CONFIG_IPV6_PIMSM_V2
 	inet6_del_protocol(&pim6_protocol, IPPROTO_PIM);
 #endif

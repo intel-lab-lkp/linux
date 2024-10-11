@@ -3139,6 +3139,14 @@ static struct pernet_operations ipmr_net_ops = {
 	.exit_batch = ipmr_net_exit_batch,
 };
 
+static const struct rtnl_msg_handler ipmr_rtnl_msg_handlers[] = {
+	{NULL, RTNL_FAMILY_IPMR, RTM_GETLINK, NULL, ipmr_rtm_dumplink, 0},
+	{NULL, RTNL_FAMILY_IPMR, RTM_NEWROUTE, ipmr_rtm_route, NULL, 0},
+	{NULL, RTNL_FAMILY_IPMR, RTM_DELROUTE, ipmr_rtm_route, NULL, 0},
+	{NULL, RTNL_FAMILY_IPMR, RTM_GETROUTE,
+	 ipmr_rtm_getroute, ipmr_rtm_dumproute, 0},
+};
+
 int __init ip_mr_init(void)
 {
 	int err;
@@ -3159,15 +3167,8 @@ int __init ip_mr_init(void)
 		goto add_proto_fail;
 	}
 #endif
-	rtnl_register(RTNL_FAMILY_IPMR, RTM_GETROUTE,
-		      ipmr_rtm_getroute, ipmr_rtm_dumproute, 0);
-	rtnl_register(RTNL_FAMILY_IPMR, RTM_NEWROUTE,
-		      ipmr_rtm_route, NULL, 0);
-	rtnl_register(RTNL_FAMILY_IPMR, RTM_DELROUTE,
-		      ipmr_rtm_route, NULL, 0);
+	rtnl_register_many(ipmr_rtnl_msg_handlers);
 
-	rtnl_register(RTNL_FAMILY_IPMR, RTM_GETLINK,
-		      NULL, ipmr_rtm_dumplink, 0);
 	return 0;
 
 #ifdef CONFIG_IP_PIMSM_V2
