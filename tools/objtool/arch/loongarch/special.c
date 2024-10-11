@@ -7,10 +7,3 @@ bool arch_support_alt_relocation(struct special_alt *special_alt,
 {
 	return false;
 }
-
-struct reloc *arch_find_switch_table(struct objtool_file *file,
-				     struct instruction *insn,
-				     unsigned long *table_size)
-{
-	return NULL;
-}

@@ -37,7 +37,10 @@ void arch_handle_alternative(unsigned short feature, struct special_alt *alt);
 bool arch_support_alt_relocation(struct special_alt *special_alt,
 				 struct instruction *insn,
 				 struct reloc *reloc);
-struct reloc *arch_find_switch_table(struct objtool_file *file,
-				     struct instruction *insn,
-				     unsigned long *table_size);
+
+int add_func_jump_tables(struct objtool_file *file, struct symbol *func);
+
+int add_jump_table(struct objtool_file *file, struct instruction *insn,
+		   struct reloc *next_table);
+
 #endif /* _SPECIAL_H */
