@@ -78,6 +78,7 @@ struct reloc {
 	struct section *sec;
 	struct symbol *sym;
 	struct reloc *sym_next_reloc;
+	s64 sym_offset;
 };
 
 struct elf {
@@ -249,6 +250,11 @@ static inline void set_reloc_offset(struct elf *elf, struct reloc *reloc, u64 of
 static inline s64 reloc_addend(struct reloc *reloc)
 {
 	return __get_reloc_field(reloc, r_addend);
+}
+
+static inline s64 reloc_sym_offset(struct reloc *reloc)
+{
+	return reloc->sym_offset ?: reloc_addend(reloc);
 }
 
 static inline void set_reloc_addend(struct elf *elf, struct reloc *reloc, s64 addend)
