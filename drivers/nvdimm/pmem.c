@@ -455,8 +455,9 @@ static int pmem_attach_disk(struct device *dev,
 		.logical_block_size	= pmem_sector_size(ndns),
 		.physical_block_size	= PAGE_SIZE,
 		.max_hw_sectors		= UINT_MAX,
-		.features		= BLK_FEAT_WRITE_CACHE |
-					  BLK_FEAT_SYNCHRONOUS,
+		.features		= BLK_FEAT_WRITE_CACHE		|
+					  BLK_FEAT_READ_SYNCHRONOUS	|
+					  BLK_FEAT_WRITE_SYNCHRONOUS,
 	};
 	int nid = dev_to_node(dev), fua;
 	struct resource *res = &nsio->res;

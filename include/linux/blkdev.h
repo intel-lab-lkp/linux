@@ -304,20 +304,23 @@ typedef unsigned int __bitwise blk_features_t;
 /* don't modify data until writeback is done */
 #define BLK_FEAT_STABLE_WRITES		((__force blk_features_t)(1u << 5))
 
-/* always completes in submit context */
-#define BLK_FEAT_SYNCHRONOUS		((__force blk_features_t)(1u << 6))
+/* read operations always completes in submit context */
+#define BLK_FEAT_READ_SYNCHRONOUS	((__force blk_features_t)(1u << 6))
+
+/* write operations always completes in submit context */
+#define BLK_FEAT_WRITE_SYNCHRONOUS	((__force blk_features_t)(1u << 7))
 
 /* supports REQ_NOWAIT */
-#define BLK_FEAT_NOWAIT			((__force blk_features_t)(1u << 7))
+#define BLK_FEAT_NOWAIT			((__force blk_features_t)(1u << 8))
 
 /* supports DAX */
-#define BLK_FEAT_DAX			((__force blk_features_t)(1u << 8))
+#define BLK_FEAT_DAX			((__force blk_features_t)(1u << 9))
 
 /* supports I/O polling */
-#define BLK_FEAT_POLL			((__force blk_features_t)(1u << 9))
+#define BLK_FEAT_POLL			((__force blk_features_t)(1u << 10))
 
 /* is a zoned device */
-#define BLK_FEAT_ZONED			((__force blk_features_t)(1u << 10))
+#define BLK_FEAT_ZONED			((__force blk_features_t)(1u << 11))
 
 /* supports PCI(e) p2p requests */
 #define BLK_FEAT_PCI_P2PDMA		((__force blk_features_t)(1u << 12))
@@ -1303,9 +1306,14 @@ static inline bool bdev_nonrot(struct block_device *bdev)
 	return blk_queue_nonrot(bdev_get_queue(bdev));
 }
 
-static inline bool bdev_synchronous(struct block_device *bdev)
+static inline bool bdev_read_synchronous(struct block_device *bdev)
 {
-	return bdev->bd_disk->queue->limits.features & BLK_FEAT_SYNCHRONOUS;
+	return bdev->bd_disk->queue->limits.features & BLK_FEAT_READ_SYNCHRONOUS;
+}
+
+static inline bool bdev_write_synchronous(struct block_device *bdev)
+{
+	return bdev->bd_disk->queue->limits.features & BLK_FEAT_WRITE_SYNCHRONOUS;
 }
 
 static inline bool bdev_stable_writes(struct block_device *bdev)

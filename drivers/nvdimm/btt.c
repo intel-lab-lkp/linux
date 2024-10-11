@@ -1501,7 +1501,8 @@ static int btt_blk_init(struct btt *btt)
 		.logical_block_size	= btt->sector_size,
 		.max_hw_sectors		= UINT_MAX,
 		.max_integrity_segments	= 1,
-		.features		= BLK_FEAT_SYNCHRONOUS,
+		.features		= BLK_FEAT_READ_SYNCHRONOUS |
+					  BLK_FEAT_WRITE_SYNCHRONOUS,
 	};
 	int rc;
 

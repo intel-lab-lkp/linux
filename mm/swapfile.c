@@ -3461,8 +3461,11 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	if (si->bdev && bdev_stable_writes(si->bdev))
 		si->flags |= SWP_STABLE_WRITES;
 
-	if (si->bdev && bdev_synchronous(si->bdev))
-		si->flags |= SWP_SYNCHRONOUS_IO;
+	if (si->bdev && bdev_read_synchronous(si->bdev))
+		si->flags |= SWP_READ_SYNCHRONOUS_IO;
+
+	if (si->bdev && bdev_write_synchronous(si->bdev))
+		si->flags |= SWP_WRITE_SYNCHRONOUS_IO;
 
 	if (si->bdev && bdev_nonrot(si->bdev)) {
 		si->flags |= SWP_SOLIDSTATE;
