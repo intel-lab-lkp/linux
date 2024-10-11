@@ -6843,6 +6843,32 @@ static struct pernet_operations rtnetlink_net_ops = {
 	.exit = rtnetlink_net_exit,
 };
 
+static const struct rtnl_msg_handler rtnetlink_rtnl_msg_handlers[] = {
+	{NULL, PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0},
+	{NULL, PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0},
+	{NULL, PF_UNSPEC, RTM_GETLINK, rtnl_getlink, rtnl_dump_ifinfo,
+	 RTNL_FLAG_DUMP_SPLIT_NLM_DONE},
+	{NULL, PF_UNSPEC, RTM_SETLINK, rtnl_setlink, NULL, 0},
+	{NULL, PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0},
+	{NULL, PF_UNSPEC, RTM_GETROUTE, NULL, rtnl_dump_all, 0},
+	{NULL, PF_UNSPEC, RTM_GETNETCONF, NULL, rtnl_dump_all, 0},
+	{NULL, PF_UNSPEC, RTM_GETSTATS, rtnl_stats_get, rtnl_stats_dump, 0},
+	{NULL, PF_UNSPEC, RTM_SETSTATS, rtnl_stats_set, NULL, 0},
+	{NULL, PF_UNSPEC, RTM_NEWLINKPROP, rtnl_newlinkprop, NULL, 0},
+	{NULL, PF_UNSPEC, RTM_DELLINKPROP, rtnl_dellinkprop, NULL, 0},
+	{NULL, PF_BRIDGE, RTM_GETLINK, NULL, rtnl_bridge_getlink, 0},
+	{NULL, PF_BRIDGE, RTM_DELLINK, rtnl_bridge_dellink, NULL, 0},
+	{NULL, PF_BRIDGE, RTM_SETLINK, rtnl_bridge_setlink, NULL, 0},
+	{NULL, PF_BRIDGE, RTM_NEWNEIGH, rtnl_fdb_add, NULL, 0},
+	{NULL, PF_BRIDGE, RTM_DELNEIGH, rtnl_fdb_del, NULL,
+	 RTNL_FLAG_BULK_DEL_SUPPORTED},
+	{NULL, PF_BRIDGE, RTM_GETNEIGH, rtnl_fdb_get, rtnl_fdb_dump, 0},
+	{NULL, PF_BRIDGE, RTM_NEWMDB, rtnl_mdb_add, NULL, 0},
+	{NULL, PF_BRIDGE, RTM_DELMDB, rtnl_mdb_del, NULL,
+	 RTNL_FLAG_BULK_DEL_SUPPORTED},
+	{NULL, PF_BRIDGE, RTM_GETMDB, rtnl_mdb_get, rtnl_mdb_dump, 0},
+};
+
 void __init rtnetlink_init(void)
 {
 	if (register_pernet_subsys(&rtnetlink_net_ops))
@@ -6850,34 +6876,5 @@ void __init rtnetlink_init(void)
 
 	register_netdevice_notifier(&rtnetlink_dev_notifier);
 
-	rtnl_register(PF_UNSPEC, RTM_GETLINK, rtnl_getlink,
-		      rtnl_dump_ifinfo, RTNL_FLAG_DUMP_SPLIT_NLM_DONE);
-	rtnl_register(PF_UNSPEC, RTM_SETLINK, rtnl_setlink, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0);
-
-	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
-	rtnl_register(PF_UNSPEC, RTM_GETROUTE, NULL, rtnl_dump_all, 0);
-	rtnl_register(PF_UNSPEC, RTM_GETNETCONF, NULL, rtnl_dump_all, 0);
-
-	rtnl_register(PF_UNSPEC, RTM_NEWLINKPROP, rtnl_newlinkprop, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_DELLINKPROP, rtnl_dellinkprop, NULL, 0);
-
-	rtnl_register(PF_BRIDGE, RTM_NEWNEIGH, rtnl_fdb_add, NULL, 0);
-	rtnl_register(PF_BRIDGE, RTM_DELNEIGH, rtnl_fdb_del, NULL,
-		      RTNL_FLAG_BULK_DEL_SUPPORTED);
-	rtnl_register(PF_BRIDGE, RTM_GETNEIGH, rtnl_fdb_get, rtnl_fdb_dump, 0);
-
-	rtnl_register(PF_BRIDGE, RTM_GETLINK, NULL, rtnl_bridge_getlink, 0);
-	rtnl_register(PF_BRIDGE, RTM_DELLINK, rtnl_bridge_dellink, NULL, 0);
-	rtnl_register(PF_BRIDGE, RTM_SETLINK, rtnl_bridge_setlink, NULL, 0);
-
-	rtnl_register(PF_UNSPEC, RTM_GETSTATS, rtnl_stats_get, rtnl_stats_dump,
-		      0);
-	rtnl_register(PF_UNSPEC, RTM_SETSTATS, rtnl_stats_set, NULL, 0);
-
-	rtnl_register(PF_BRIDGE, RTM_GETMDB, rtnl_mdb_get, rtnl_mdb_dump, 0);
-	rtnl_register(PF_BRIDGE, RTM_NEWMDB, rtnl_mdb_add, NULL, 0);
-	rtnl_register(PF_BRIDGE, RTM_DELMDB, rtnl_mdb_del, NULL,
-		      RTNL_FLAG_BULK_DEL_SUPPORTED);
+	rtnl_register_many(rtnetlink_rtnl_msg_handlers);
 }
