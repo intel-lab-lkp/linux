@@ -50,6 +50,7 @@ struct drm_log {
 	struct drm_client_dev client;
 	struct console con;
 	bool probed;
+	bool suspended;
 	u32 n_scanout;
 	struct drm_log_scanout *scanout;
 };
@@ -310,16 +311,41 @@ static int drm_log_client_hotplug(struct drm_client_dev *client)
 	return 0;
 }
 
+static int drm_log_client_suspend(struct drm_client_dev *client, bool _console_lock)
+{
+	struct drm_log *dlog = client_to_drm_log(client);
+
+	mutex_lock(&dlog->lock);
+	dlog->suspended = true;
+	mutex_unlock(&dlog->lock);
+	return 0;
+}
+
+static int drm_log_client_resume(struct drm_client_dev *client, bool _console_lock)
+{
+	struct drm_log *dlog = client_to_drm_log(client);
+
+	mutex_lock(&dlog->lock);
+	dlog->suspended = false;
+	mutex_unlock(&dlog->lock);
+	return 0;
+}
+
 static const struct drm_client_funcs drm_log_client_funcs = {
 	.owner		= THIS_MODULE,
 	.unregister	= drm_log_client_unregister,
 	.hotplug	= drm_log_client_hotplug,
+	.suspend	= drm_log_client_suspend,
+	.resume		= drm_log_client_resume,
 };
 
 static void drm_log_write_thread(struct console *con, struct nbcon_write_context *wctxt)
 {
 	struct drm_log *dlog = console_to_drm_log(con);
 	int i;
+
+	if (dlog->suspended)
+		return;
 
 	if (!dlog->probed)
 		drm_log_init_client(dlog);
