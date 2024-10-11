@@ -2077,6 +2077,24 @@ static struct folio *only_alloc_fresh_hugetlb_folio(struct hstate *h,
 	return folio;
 }
 
+static struct folio *only_alloc_and_account_fresh_hugetlb_folio(
+		struct hstate *h, gfp_t gfp_mask,
+		int nid, nodemask_t *nmask)
+{
+	struct folio *folio;
+
+	folio = only_alloc_fresh_hugetlb_folio(h, gfp_mask, nid, nmask, NULL);
+	if (!folio)
+		return NULL;
+
+	spin_lock_irq(&hugetlb_lock);
+	h->nr_huge_pages++;
+	h->nr_huge_pages_node[nid]++;
+	spin_unlock_irq(&hugetlb_lock);
+
+	return folio;
+}
+
 /*
  * Common helper to allocate a fresh hugetlb page. All specific allocators
  * should use this function to get new hugetlb pages
@@ -3301,23 +3319,34 @@ static void __init hugetlb_hstate_alloc_pages_onenode(struct hstate *h, int nid)
 {
 	unsigned long i;
 	char buf[32];
+	LIST_HEAD(folio_list);
+	struct folio *folio, *tmp_f;
 
 	for (i = 0; i < h->max_huge_pages_node[nid]; ++i) {
 		if (hstate_is_gigantic(h)) {
 			if (!alloc_bootmem_huge_page(h, nid))
 				break;
 		} else {
-			struct folio *folio;
 			gfp_t gfp_mask = htlb_alloc_mask(h) | __GFP_THISNODE;
 
-			folio = alloc_fresh_hugetlb_folio(h, gfp_mask, nid,
-					&node_states[N_MEMORY]);
+			folio = only_alloc_and_account_fresh_hugetlb_folio(h,
+					gfp_mask, nid, &node_states[N_MEMORY]);
 			if (!folio)
 				break;
-			free_huge_folio(folio); /* free it into the hugepage allocator */
+			list_add(&folio->lru, &folio_list);
 		}
 		cond_resched();
 	}
+
+	if (!list_empty(&folio_list)) {
+		/* Send list for bulk vmemmap optimization processing */
+		hugetlb_vmemmap_optimize_folios(h, &folio_list);
+
+		list_for_each_entry_safe(folio, tmp_f, &folio_list, lru) {
+			free_huge_folio(folio); /* free it into the hugepage allocator */
+		}
+	}
+
 	if (i == h->max_huge_pages_node[nid])
 		return;
 
