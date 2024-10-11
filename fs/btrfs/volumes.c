@@ -5954,6 +5954,54 @@ unsigned long btrfs_full_stripe_len(struct btrfs_fs_info *fs_info,
 	return len;
 }
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+struct stripe_mirror {
+	u64 devid;
+	int num;
+};
+
+static int btrfs_cmp_devid(const void *a, const void *b)
+{
+	struct stripe_mirror *s1 = (struct stripe_mirror *)a;
+	struct stripe_mirror *s2 = (struct stripe_mirror *)b;
+
+	if (s1->devid < s2->devid)
+		return -1;
+	if (s1->devid > s2->devid)
+		return 1;
+	return 0;
+}
+
+static int btrfs_read_rotation(struct btrfs_chunk_map *map, int first,
+			       int num_stripe)
+{
+	struct stripe_mirror stripes[4] = {0}; //4: max possible mirrors
+	struct btrfs_fs_devices *fs_devices = map->stripes[first].dev->fs_devices;
+	int j;
+	int slot;
+	int index;
+	int ret_stripe;
+	int total_reads;
+	int reads_per_dev = fs_devices->min_contiguous_read/
+						fs_devices->fs_info->sectorsize;
+
+	index = 0;
+	for (j = first; j < first + num_stripe; j++) {
+		stripes[index].devid = map->stripes[j].dev->devid;
+		stripes[index].num = j;
+		index++;
+	}
+	sort(stripes, num_stripe, sizeof(struct stripe_mirror),
+	     btrfs_cmp_devid, NULL);
+
+	total_reads = atomic_inc_return(&fs_devices->total_reads);
+	slot = total_reads/reads_per_dev;
+	ret_stripe = stripes[slot % num_stripe].num;
+
+	return ret_stripe;
+}
+#endif
+
 static int find_live_mirror(struct btrfs_fs_info *fs_info,
 			    struct btrfs_chunk_map *map, int first,
 			    int dev_replace_is_ongoing)
@@ -5983,6 +6031,11 @@ static int find_live_mirror(struct btrfs_fs_info *fs_info,
 	case BTRFS_READ_POLICY_PID:
 		preferred_mirror = first + (current->pid % num_stripes);
 		break;
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	case BTRFS_READ_POLICY_ROTATION:
+		preferred_mirror = btrfs_read_rotation(map, first, num_stripes);
+		break;
+#endif
 	}
 
 	if (dev_replace_is_ongoing &&

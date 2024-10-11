@@ -1305,7 +1305,11 @@ static ssize_t btrfs_temp_fsid_show(struct kobject *kobj,
 }
 BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+static const char * const btrfs_read_policy_name[] = { "pid", "rotation" };
+#else
 static const char * const btrfs_read_policy_name[] = { "pid" };
+#endif
 
 static ssize_t btrfs_read_policy_show(struct kobject *kobj,
 				      struct kobj_attribute *a, char *buf)
@@ -1316,14 +1320,22 @@ static ssize_t btrfs_read_policy_show(struct kobject *kobj,
 	int i;
 
 	for (i = 0; i < BTRFS_NR_READ_POLICY; i++) {
-		if (policy == i)
-			ret += sysfs_emit_at(buf, ret, "%s[%s]",
-					 (ret == 0 ? "" : " "),
-					 btrfs_read_policy_name[i]);
-		else
-			ret += sysfs_emit_at(buf, ret, "%s%s",
-					 (ret == 0 ? "" : " "),
-					 btrfs_read_policy_name[i]);
+		if (ret != 0)
+			ret += sysfs_emit_at(buf, ret, " ");
+
+		if (i == policy)
+			ret += sysfs_emit_at(buf, ret, "[");
+
+		ret += sysfs_emit_at(buf, ret, "%s", btrfs_read_policy_name[i]);
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+		if (i == BTRFS_READ_POLICY_ROTATION)
+			ret += sysfs_emit_at(buf, ret, ":%d",
+					     fs_devices->min_contiguous_read);
+#endif
+
+		if (i == policy)
+			ret += sysfs_emit_at(buf, ret, "]");
 	}
 
 	ret += sysfs_emit_at(buf, ret, "\n");
@@ -1336,21 +1348,67 @@ static ssize_t btrfs_read_policy_store(struct kobject *kobj,
 				       const char *buf, size_t len)
 {
 	struct btrfs_fs_devices *fs_devices = to_fs_devs(kobj);
+	int index = -1;
 	int i;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	char *value = strchr(buf, ':');
+
+	/* Separate value from input in policy:value format. */
+	if (value) {
+		*value = '\0';
+		value++;
+	}
+#endif
 
 	for (i = 0; i < BTRFS_NR_READ_POLICY; i++) {
 		if (sysfs_streq(buf, btrfs_read_policy_name[i])) {
-			if (i != READ_ONCE(fs_devices->read_policy)) {
-				WRITE_ONCE(fs_devices->read_policy, i);
-				btrfs_info(fs_devices->fs_info,
-					   "read policy set to '%s'",
-					   btrfs_read_policy_name[i]);
-			}
-			return len;
+			index = i;
+			break;
 		}
 	}
 
-	return -EINVAL;
+	if (index == -1)
+		return -EINVAL;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	if (index == BTRFS_READ_POLICY_ROTATION) {
+		int value_rota = fs_devices->fs_info->sectorsize;
+
+		if (value) {
+			if (kstrtoint(value, 10, &value_rota))
+				return -EINVAL;
+
+			if (value_rota % fs_devices->fs_info->sectorsize != 0) {
+				btrfs_err(fs_devices->fs_info,
+"read_policy: min_contiguous_read %d should be multiples of the sectorsize %u",
+					  value_rota,
+					  fs_devices->fs_info->sectorsize);
+				return -EINVAL;
+			}
+		}
+
+		if (index != READ_ONCE(fs_devices->read_policy) ||
+		    value_rota != READ_ONCE(fs_devices->min_contiguous_read)) {
+			WRITE_ONCE(fs_devices->read_policy, index);
+			WRITE_ONCE(fs_devices->min_contiguous_read, value_rota);
+			atomic_set(&fs_devices->total_reads, 0);
+
+			btrfs_info(fs_devices->fs_info, "read policy set to '%s:%d'",
+				   btrfs_read_policy_name[index], value_rota);
+
+		}
+
+		return len;
+	}
+#endif
+	if (index != READ_ONCE(fs_devices->read_policy)) {
+		WRITE_ONCE(fs_devices->read_policy, index);
+		btrfs_info(fs_devices->fs_info, "read policy set to '%s'",
+			   btrfs_read_policy_name[index]);
+	}
+
+	return len;
 }
 BTRFS_ATTR_RW(, read_policy, btrfs_read_policy_show, btrfs_read_policy_store);
 
