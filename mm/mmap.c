@@ -359,6 +359,20 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			return -EEXIST;
 	}
 
+	/*
+	 * This does two things:
+	 *
+	 * 1. Disallow MAP_FIXED replacing a PROT_NONE VMA adjacent to a stack
+	 * with an accessible VMA.
+	 * 2. Disallow MAP_FIXED_NOREPLACE creating a new accessible VMA
+	 * adjacent to a stack.
+	 */
+	if ((flags & (MAP_FIXED_NOREPLACE | MAP_FIXED)) &&
+	    (prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
+	    !(vm_flags & (VM_GROWSUP|VM_GROWSDOWN)) &&
+	    overlaps_stack_gap(mm, addr, len))
+		return (flags & MAP_FIXED) ? -ENOMEM : -EEXIST;
+
 	if (flags & MAP_LOCKED)
 		if (!can_do_mlock())
 			return -EPERM;
@@ -1339,6 +1353,57 @@ struct vm_area_struct *expand_stack(struct mm_struct *mm, unsigned long addr)
 success:
 	mmap_write_downgrade(mm);
 	return vma;
+}
+
+/*
+ * Does the specified VA range overlap the stack gap of a preceding or following
+ * stack VMA?
+ * Overlapping stack VMAs are ignored - so if someone deliberately creates a
+ * MAP_FIXED mapping in the middle of a stack or such, we let that go through.
+ *
+ * This is needed partly because userspace's intent when making PROT_NONE
+ * mappings is unclear; there are two different reasons for creating PROT_NONE
+ * mappings:
+ *
+ * A) Userspace wants to create its own guard mapping, for example for stacks.
+ * According to
+ * <https://lore.kernel.org/all/1499126133.2707.20.camel@decadent.org.uk/T/>,
+ * some Rust/Java programs do this with the main stack.
+ * Enforcing the kernel's stack gap between these userspace guard mappings and
+ * the main stack breaks stuff.
+ *
+ * B) Userspace wants to reserve some virtual address space for later mappings.
+ * This is done by memory allocators.
+ * In this case, we want to enforce a stack gap between the mapping and the
+ * stack.
+ *
+ * Because we can't tell these cases apart when a PROT_NONE mapping is created,
+ * we instead enforce the stack gap when a PROT_NONE mapping is made accessible
+ * (using mprotect()) or replaced with an accessible one (using MAP_FIXED).
+ */
+bool overlaps_stack_gap(struct mm_struct *mm, unsigned long addr, unsigned long len)
+{
+
+	struct vm_area_struct *vma, *prev_vma;
+
+	/* step 1: search for a non-overlapping following stack VMA */
+	vma = find_vma(mm, addr+len);
+	if (vma && vma->vm_start >= addr+len) {
+		/* is it too close? */
+		if (vma->vm_start - (addr+len) < stack_guard_start_gap(vma))
+			return true;
+	}
+
+	/* step 2: search for a non-overlapping preceding stack VMA */
+	if (!IS_ENABLED(CONFIG_STACK_GROWSUP))
+		return false;
+	vma = find_vma_prev(mm, addr, &prev_vma);
+	/* don't handle cases where the VA start overlaps a VMA */
+	if (vma && vma->vm_start < addr)
+		return false;
+	if (!prev_vma || !(prev_vma->vm_flags & VM_GROWSUP))
+		return false;
+	return addr - prev_vma->vm_end < stack_guard_gap;
 }
 
 /* do_munmap() - Wrapper function for non-maple tree aware do_munmap() calls.

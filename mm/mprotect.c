@@ -772,6 +772,12 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 		}
 	}
 
+	error = -ENOMEM;
+	if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
+	    !(vma->vm_flags & (VM_GROWSUP|VM_GROWSDOWN)) &&
+	    overlaps_stack_gap(current->mm, start, end - start))
+		goto out;
+
 	prev = vma_prev(&vmi);
 	if (start > vma->vm_start)
 		prev = vma;
