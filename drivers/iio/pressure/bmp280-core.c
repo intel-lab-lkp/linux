@@ -2210,7 +2210,7 @@ static irqreturn_t bmp580_trigger_handler(int irq, void *p)
 	struct iio_poll_func *pf = p;
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct bmp280_data *data = iio_priv(indio_dev);
-	int ret, offset;
+	int ret, offset = 0;
 
 	guard(mutex)(&data->lock);
 
