@@ -1232,7 +1232,6 @@ void domain_detach_iommu(struct dmar_domain *domain, struct intel_iommu *iommu);
 void device_block_translation(struct device *dev);
 int prepare_domain_attach_device(struct iommu_domain *domain,
 				 struct device *dev);
-void domain_update_iommu_cap(struct dmar_domain *domain);
 
 int dmar_ir_support(void);
 
