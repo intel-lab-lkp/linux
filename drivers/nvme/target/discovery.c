@@ -163,8 +163,8 @@ static void nvmet_execute_disc_get_log_page(struct nvmet_req *req)
 	const int entry_size = sizeof(struct nvmf_disc_rsp_page_entry);
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	struct nvmf_disc_rsp_page_hdr *hdr;
-	u64 offset = nvmet_get_log_page_offset(req->cmd);
-	size_t data_len = nvmet_get_log_page_len(req->cmd);
+	u64 offset = nvme_get_log_page_offset(req->cmd);
+	size_t data_len = nvme_get_log_page_len(req->cmd);
 	size_t alloc_len;
 	struct nvmet_subsys_link *p;
 	struct nvmet_port *r;
