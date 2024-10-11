@@ -1286,7 +1286,7 @@ static int amdgpu_cs_submit(struct amdgpu_cs_parser *p,
 	int r;
 
 	for (i = 0; i < p->gang_size; ++i)
-		drm_sched_job_arm(&p->jobs[i]->base);
+		drm_sched_job_arm(&p->jobs[i]->base, -1);
 
 	for (i = 0; i < p->gang_size; ++i) {
 		struct dma_fence *fence;
