@@ -48,11 +48,26 @@ struct drm_prime_file_private;
 struct drm_printer;
 struct drm_vblank_crtc;
 
+/* drm_client_event.c */
+#if defined(CONFIG_DRM_CLIENT)
+void drm_client_debugfs_init(struct drm_device *dev);
+#else
+static inline void drm_client_debugfs_init(struct drm_device *dev)
+{ }
+#endif
+
 /* drm_file.c */
 extern struct mutex drm_global_mutex;
 bool drm_dev_needs_global_mutex(struct drm_device *dev);
 struct drm_file *drm_file_alloc(struct drm_minor *minor);
 void drm_file_free(struct drm_file *file);
+
+/* drm_kms_helper_common.c */
+#if defined(CONFIG_DRM_FBDEV_EMULATION)
+extern bool drm_fbdev_emulation;
+extern int drm_fbdev_overalloc;
+extern bool drm_leak_fbdev_smem;
+#endif
 
 #ifdef CONFIG_PCI
 
