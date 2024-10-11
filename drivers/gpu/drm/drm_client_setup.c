@@ -6,6 +6,14 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_print.h>
 
+#include "drm_log.h"
+
+static char drm_client_default[16] = CONFIG_DRM_CLIENT_DEFAULT;
+module_param_string(client, drm_client_default, sizeof(drm_client_default), 0444);
+MODULE_PARM_DESC(client,
+		 "Choose which drm client to start, default is"
+		 CONFIG_DRM_CLIENT_DEFAULT "]");
+
 /**
  * drm_client_setup() - Setup in-kernel DRM clients
  * @dev: DRM device
@@ -26,9 +34,13 @@ void drm_client_setup(struct drm_device *dev, const struct drm_format_info *form
 {
 	int ret;
 
-	ret = drm_fbdev_client_setup(dev, format);
-	if (ret)
-		drm_warn(dev, "Failed to set up DRM client; error %d\n", ret);
+	if (!strcmp(drm_client_default, "log")) {
+		drm_log_register(dev);
+	} else if (!strcmp(drm_client_default, "fbdev")) {
+		ret = drm_fbdev_client_setup(dev, format);
+		if (ret)
+			drm_warn(dev, "Failed to set up DRM client; error %d\n", ret);
+	}
 }
 EXPORT_SYMBOL(drm_client_setup);
 

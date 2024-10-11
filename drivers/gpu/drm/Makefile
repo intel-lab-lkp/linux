@@ -160,6 +160,8 @@ drm_client_lib-$(CONFIG_DRM_FBDEV_EMULATION) += \
 	drm_fb_helper.o
 obj-$(CONFIG_DRM_CLIENT_LIB) += drm_client_lib.o
 
+obj-$(CONFIG_DRM_LOG) += drm_log.o
+
 #
 # Drivers and the rest
 #
