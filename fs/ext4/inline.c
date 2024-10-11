@@ -516,21 +516,17 @@ int ext4_readpage_inline(struct inode *inode, struct folio *folio)
 	int ret = 0;
 
 	down_read(&EXT4_I(inode)->xattr_sem);
-	if (!ext4_has_inline_data(inode)) {
+
+	/*
+	 * Current inline data can only exist in the 1st page; for all the
+	 * other pages simply revert to regular readpages
+	 */
+	if (!ext4_has_inline_data(inode) || folio->index) {
 		up_read(&EXT4_I(inode)->xattr_sem);
 		return -EAGAIN;
 	}
 
-	/*
-	 * Current inline data can only exist in the 1st page,
-	 * So for all the other pages, just set them uptodate.
-	 */
-	if (!folio->index)
-		ret = ext4_read_inline_folio(inode, folio);
-	else if (!folio_test_uptodate(folio)) {
-		folio_zero_segment(folio, 0, folio_size(folio));
-		folio_mark_uptodate(folio);
-	}
+	ret = ext4_read_inline_folio(inode, folio);
 
 	up_read(&EXT4_I(inode)->xattr_sem);
 
