@@ -1649,6 +1649,13 @@ static struct pernet_operations fib_net_ops = {
 	.exit_batch = fib_net_exit_batch,
 };
 
+static const struct rtnl_msg_handler fib_rtnl_msg_handlers[] = {
+	{NULL, PF_INET, RTM_NEWROUTE, inet_rtm_newroute, NULL, 0},
+	{NULL, PF_INET, RTM_DELROUTE, inet_rtm_delroute, NULL, 0},
+	{NULL, PF_INET, RTM_GETROUTE, NULL, inet_dump_fib,
+	 RTNL_FLAG_DUMP_UNLOCKED | RTNL_FLAG_DUMP_SPLIT_NLM_DONE},
+};
+
 void __init ip_fib_init(void)
 {
 	fib_trie_init();
@@ -1658,8 +1665,5 @@ void __init ip_fib_init(void)
 	register_netdevice_notifier(&fib_netdev_notifier);
 	register_inetaddr_notifier(&fib_inetaddr_notifier);
 
-	rtnl_register(PF_INET, RTM_NEWROUTE, inet_rtm_newroute, NULL, 0);
-	rtnl_register(PF_INET, RTM_DELROUTE, inet_rtm_delroute, NULL, 0);
-	rtnl_register(PF_INET, RTM_GETROUTE, NULL, inet_dump_fib,
-		      RTNL_FLAG_DUMP_UNLOCKED | RTNL_FLAG_DUMP_SPLIT_NLM_DONE);
+	rtnl_register_many(fib_rtnl_msg_handlers);
 }
