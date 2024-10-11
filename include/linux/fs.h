@@ -395,7 +395,10 @@ static inline bool is_sync_kiocb(struct kiocb *kiocb)
 	return kiocb->ki_complete == NULL;
 }
 
+typedef unsigned int __bitwise asop_flags_t;
+
 struct address_space_operations {
+	asop_flags_t asop_flags;
 	int (*writepage)(struct page *page, struct writeback_control *wbc);
 	int (*read_folio)(struct file *, struct folio *);
 
@@ -438,6 +441,12 @@ struct address_space_operations {
 	void (*swap_deactivate)(struct file *file);
 	int (*swap_rw)(struct kiocb *iocb, struct iov_iter *iter);
 };
+
+/**
+ * This flag is only to be used by filesystems whose folios cannot be
+ * reclaimed when in writeback (eg fuse)
+ */
+#define ASOP_NO_RECLAIM_IN_WRITEBACK	((__force asop_flags_t)(1 << 0))
 
 extern const struct address_space_operations empty_aops;
 
@@ -585,6 +594,11 @@ static inline int mapping_deny_writable(struct address_space *mapping)
 static inline void mapping_allow_writable(struct address_space *mapping)
 {
 	atomic_inc(&mapping->i_mmap_writable);
+}
+
+static inline bool mapping_no_reclaim_in_writeback(struct address_space *mapping)
+{
+	return mapping->a_ops->asop_flags & ASOP_NO_RECLAIM_IN_WRITEBACK;
 }
 
 /*
