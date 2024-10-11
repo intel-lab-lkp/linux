@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/ima.h>
+#include <linux/reboot.h>
 #include <generated/utsrelease.h>
 
 #include "ima.h"
@@ -115,6 +116,19 @@ void __init ima_load_x509(void)
 }
 #endif
 
+static int ima_reboot_notify(struct notifier_block *nb,
+                      unsigned long action,
+                      void *data)
+{
+	ima_measurements_suspend();
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block ima_reboot_notifier = {
+	.notifier_call = ima_reboot_notify,
+};
+
 int __init ima_init(void)
 {
 	int rc;
@@ -151,6 +165,8 @@ int __init ima_init(void)
 		return rc;
 
 	ima_init_key_queue();
+
+	register_reboot_notifier(&ima_reboot_notifier);
 
 	ima_measure_critical_data("kernel_info", "kernel_version",
 				  UTS_RELEASE, strlen(UTS_RELEASE), false,

@@ -44,6 +44,12 @@ struct ima_h_table ima_htable = {
  */
 static DEFINE_MUTEX(ima_extend_list_mutex);
 
+/*
+ * Used internally by the kernel to suspend-resume ima measurements.
+ * Protected by ima_extend_list_mutex.
+ */
+static bool suspend_ima_measurements;
+
 /* lookup up the digest value in the hash table, and return the entry */
 static struct ima_queue_entry *ima_lookup_digest_entry(u8 *digest_value,
 						       int pcr)
@@ -148,6 +154,13 @@ static int ima_pcr_extend(struct tpm_digest *digests_arg, int pcr)
 	return result;
 }
 
+void ima_measurements_suspend(void)
+{
+	mutex_lock(&ima_extend_list_mutex);
+	suspend_ima_measurements = true;
+	mutex_unlock(&ima_extend_list_mutex);
+}
+
 /*
  * Add template entry to the measurement list and hash table, and
  * extend the pcr.
@@ -174,6 +187,20 @@ int ima_add_template_entry(struct ima_template_entry *entry, int violation,
 			result = -EEXIST;
 			goto out;
 		}
+	}
+
+	/*
+	 * suspend_ima_measurements will be set if the system is
+	 * undergoing kexec soft boot to a new kernel.
+	 * suspending measurements in this short window ensures the
+	 * consistency of the IMA measurement list during copying
+	 * of the kexec buffer.
+	 */
+	if (suspend_ima_measurements) {
+		audit_cause = "measurements_suspended";
+		audit_info = 0;
+		result = -ENODEV;
+		goto out;
 	}
 
 	result = ima_add_digest_entry(entry,
