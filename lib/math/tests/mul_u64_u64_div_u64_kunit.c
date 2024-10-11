@@ -49,7 +49,7 @@ static test_params test_values[] = {
  *
  * #!/bin/sh
  * sed -ne 's/^{ \+\(.*\), \+\(.*\), \+\(.*\), \+\(.*\) },$/\1 \2 \3 \4/p' \
- *     lib/math/test_mul_u64_u64_div_u64.c |
+ *     lib/math/tests/mul_u64_u64_div_u64_kunit.c |
  * while read a b c r; do
  *   expected=$( printf "obase=16; ibase=16; %X * %X / %X\n" $a $b $c | bc )
  *   given=$( printf "%X\n" $r )
