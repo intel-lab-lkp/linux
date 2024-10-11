@@ -21,6 +21,8 @@ static inline void intel_wa_list_free(struct i915_wa_list *wal)
 	memset(wal, 0, sizeof(*wal));
 }
 
+bool intel_match_wa_cpu(void);
+
 void intel_engine_init_ctx_wa(struct intel_engine_cs *engine);
 int intel_engine_emit_ctx_wa(struct i915_request *rq);
 

@@ -121,6 +121,7 @@ gt-y += \
 	gt/intel_timeline.o \
 	gt/intel_tlb.o \
 	gt/intel_wopcm.o \
+	gt/intel_wa_cpu.o \
 	gt/intel_workarounds.o \
 	gt/shmem_utils.o \
 	gt/sysfs_engines.o
