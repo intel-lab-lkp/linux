@@ -7,6 +7,8 @@
 #include <linux/regmap.h>
 
 #include <linux/iio/iio.h>
+#include <linux/iio/triggered_buffer.h>
+#include <linux/iio/trigger_consumer.h>
 
 #include "bmi270.h"
 
@@ -66,6 +68,7 @@ enum bmi270_scan {
 	BMI270_SCAN_GYRO_X,
 	BMI270_SCAN_GYRO_Y,
 	BMI270_SCAN_GYRO_Z,
+	BMI270_SCAN_TIMESTAMP,
 };
 
 const struct bmi270_chip_info bmi270_chip_info[] = {
@@ -81,6 +84,29 @@ const struct bmi270_chip_info bmi270_chip_info[] = {
 	}
 };
 EXPORT_SYMBOL_NS_GPL(bmi270_chip_info, IIO_BMI270);
+
+static irqreturn_t bmi270_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+	struct bmi270_data *bmi270_device = iio_priv(indio_dev);
+	int i, ret, j = 0, base = BMI270_ACCEL_X_REG;
+	__le16 sample;
+
+	for_each_set_bit(i, indio_dev->active_scan_mask, indio_dev->masklength) {
+		ret = regmap_bulk_read(bmi270_device->regmap,
+				       base + i * sizeof(sample),
+				       &sample, sizeof(sample));
+		if (ret)
+			goto done;
+		bmi270_device->buf[j++] = sample;
+	}
+
+	iio_push_to_buffers_with_timestamp(indio_dev, bmi270_device->buf, pf->timestamp);
+done:
+	iio_trigger_notify_done(indio_dev->trig);
+	return IRQ_HANDLED;
+}
 
 static int bmi270_get_data(struct bmi270_data *bmi270_device,
 			   int chan_type, int axis, int *val)
@@ -139,6 +165,13 @@ static const struct iio_info bmi270_info = {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
 		BIT(IIO_CHAN_INFO_FREQUENCY),			\
+	.scan_index = BMI270_SCAN_ACCEL_##_axis,		\
+	.scan_type = {						\
+		.sign = 's',					\
+		.realbits = 16,				\
+		.storagebits = 16,				\
+		.endianness = IIO_LE				\
+	},	                                                \
 }
 
 #define BMI270_ANG_VEL_CHANNEL(_axis) {				\
@@ -148,6 +181,13 @@ static const struct iio_info bmi270_info = {
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
 		BIT(IIO_CHAN_INFO_FREQUENCY),			\
+	.scan_index = BMI270_SCAN_GYRO_##_axis,		\
+	.scan_type = {						\
+		.sign = 's',					\
+		.realbits = 16,				\
+		.storagebits = 16,				\
+		.endianness = IIO_LE				\
+	},	                                                \
 }
 
 static const struct iio_chan_spec bmi270_channels[] = {
@@ -157,6 +197,7 @@ static const struct iio_chan_spec bmi270_channels[] = {
 	BMI270_ANG_VEL_CHANNEL(X),
 	BMI270_ANG_VEL_CHANNEL(Y),
 	BMI270_ANG_VEL_CHANNEL(Z),
+	IIO_CHAN_SOFT_TIMESTAMP(BMI270_SCAN_TIMESTAMP),
 };
 
 static int bmi270_validate_chip_id(struct bmi270_data *bmi270_device)
@@ -316,6 +357,12 @@ int bmi270_core_probe(struct device *dev, struct regmap *regmap,
 	indio_dev->name = chip_info->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->info = &bmi270_info;
+
+	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
+					      iio_pollfunc_store_time,
+					      bmi270_trigger_handler, NULL);
+	if (ret)
+		return ret;
 
 	return devm_iio_device_register(dev, indio_dev);
 }
