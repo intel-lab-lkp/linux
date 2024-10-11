@@ -54,9 +54,11 @@ static int mgag200_vga_bmc_connector_helper_get_modes(struct drm_connector *conn
 	const struct mgag200_device_info *minfo = mdev->info;
 	int count;
 
-	count = drm_connector_helper_get_modes(connector);
+	if (connector->physical_status == connector_status_connected) {
+		count = drm_connector_helper_get_modes(connector);
+	} else {
+		drm_edid_connector_update(connector, NULL);
 
-	if (!count) {
 		/*
 		 * There's no EDID data without a connected monitor. Set BMC-
 		 * compatible modes in this case. The XGA default resolution
@@ -70,32 +72,9 @@ static int mgag200_vga_bmc_connector_helper_get_modes(struct drm_connector *conn
 	return count;
 }
 
-/*
- * There's no monitor connected if the DDC did not return an EDID. Still
- * return 'connected' as there's always a BMC. Incrementing the connector's
- * epoch counter triggers an update of the related properties.
- */
-static int mgag200_vga_bmc_connector_helper_detect_ctx(struct drm_connector *connector,
-						       struct drm_modeset_acquire_ctx *ctx,
-						       bool force)
-{
-	enum drm_connector_status old_status, status;
-
-	if (connector->edid_blob_ptr)
-		old_status = connector_status_connected;
-	else
-		old_status = connector_status_disconnected;
-
-	status = drm_connector_helper_detect_from_ddc(connector, ctx, force);
-
-	if (status != old_status)
-		++connector->epoch_counter;
-	return connector_status_connected;
-}
-
 static const struct drm_connector_helper_funcs mgag200_vga_connector_helper_funcs = {
 	.get_modes = mgag200_vga_bmc_connector_helper_get_modes,
-	.detect_ctx = mgag200_vga_bmc_connector_helper_detect_ctx,
+	.detect_ctx = drm_connector_helper_detect_from_ddc,
 };
 
 static const struct drm_connector_funcs mgag200_vga_connector_funcs = {
@@ -143,6 +122,7 @@ int mgag200_vga_bmc_output_init(struct mga_device *mdev)
 	}
 	drm_connector_helper_add(connector, &mgag200_vga_connector_helper_funcs);
 
+	connector->bmc_attached = true;
 	connector->polled = DRM_CONNECTOR_POLL_CONNECT |
 			    DRM_CONNECTOR_POLL_DISCONNECT;
 
