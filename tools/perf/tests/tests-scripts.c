@@ -203,6 +203,11 @@ static void append_script(int dir_fd, const char *name, char *desc,
 	test_suite->desc = desc;
 	test_suite->test_cases = tests;
 	test_suite->priv = strdup_check(filename);
+	/*
+	 * Note, tests with lots of stdout can't be exclusive as if they block
+	 * then the file lock is held and no one makes progress.
+	 */
+	test_suite->exclusive = strstr(desc, "(exclusive)") != NULL;
 	/* Realloc is good enough, though we could realloc by chunks, not that
 	 * anyone will ever measure performance here */
 	result_tmp = realloc(*result, (*result_sz + 1) * sizeof(*result_tmp));

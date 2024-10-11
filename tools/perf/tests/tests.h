@@ -42,6 +42,7 @@ struct test_suite {
 	const char *desc;
 	struct test_case *test_cases;
 	void *priv;
+	bool exclusive;
 };
 
 #define DECLARE_SUITE(name) \
