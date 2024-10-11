@@ -3101,6 +3101,13 @@ queue_run_job(struct drm_sched_job *sched_job)
 		return dma_fence_get(job->done_fence);
 	}
 
+	if (ptdev->base.dev->power.runtime_error) {
+		ret = panthor_device_reset_sync(ptdev);
+		if (drm_WARN_ON(&ptdev->base, ret))
+			return ERR_PTR(ret);
+		drm_WARN_ON(&ptdev->base, pm_runtime_set_active(ptdev->base.dev));
+	}
+
 	ret = pm_runtime_resume_and_get(ptdev->base.dev);
 	if (drm_WARN_ON(&ptdev->base, ret))
 		return ERR_PTR(ret);

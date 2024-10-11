@@ -105,6 +105,16 @@ static void panthor_device_reset_cleanup(struct drm_device *ddev, void *data)
 	destroy_workqueue(ptdev->reset.wq);
 }
 
+int panthor_device_reset_sync(struct panthor_device *ptdev)
+{
+	panthor_fw_pre_reset(ptdev, false);
+	panthor_mmu_pre_reset(ptdev);
+	panthor_gpu_soft_reset(ptdev);
+	panthor_gpu_l2_power_on(ptdev);
+	panthor_mmu_post_reset(ptdev);
+	return panthor_fw_post_reset(ptdev);
+}
+
 static void panthor_device_reset_work(struct work_struct *work)
 {
 	struct panthor_device *ptdev = container_of(work, struct panthor_device, reset.work);

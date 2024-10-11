@@ -217,6 +217,8 @@ struct panthor_file {
 int panthor_device_init(struct panthor_device *ptdev);
 void panthor_device_unplug(struct panthor_device *ptdev);
 
+int panthor_device_reset_sync(struct panthor_device *ptdev);
+
 /**
  * panthor_device_schedule_reset() - Schedules a reset operation
  */
