@@ -14,6 +14,7 @@
 #include "intel_gt_mcr.h"
 #include "intel_gt_print.h"
 #include "intel_gt_regs.h"
+#include "intel_pcode.h"
 #include "intel_ring.h"
 #include "intel_workarounds.h"
 
@@ -1770,9 +1771,26 @@ static void wa_list_apply(const struct i915_wa_list *wal)
 	intel_gt_mcr_unlock(gt, flags);
 }
 
+/* Wa_14022698537:dg2 */
+static void intel_enable_g8(struct intel_uncore *uncore)
+{
+	struct drm_i915_private *i915 = uncore->i915;
+
+	if (IS_DG2(i915)) {
+		if (IS_DG2_WA(i915) && !intel_match_wa_cpu())
+			return;
+
+		snb_pcode_write_p(uncore, PCODE_POWER_SETUP,
+				  POWER_SETUP_SUBCOMMAND_G8_ENABLE, 0, 0);
+	}
+}
+
 void intel_gt_apply_workarounds(struct intel_gt *gt)
 {
 	wa_list_apply(&gt->wa_list);
+
+	/* Special case for pcode mailbox which can't be on wa_list */
+	intel_enable_g8(gt->uncore);
 }
 
 static bool wa_list_verify(struct intel_gt *gt,
