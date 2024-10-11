@@ -634,23 +634,16 @@ static int ip6addrlbl_get(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	return err;
 }
 
+static const struct rtnl_msg_handler ipv6_adddr_label_rtnl_msg_handlers[] = {
+	{THIS_MODULE, PF_INET6, RTM_NEWADDRLABEL, ip6addrlbl_newdel, NULL,
+	 RTNL_FLAG_DOIT_UNLOCKED},
+	{THIS_MODULE, PF_INET6, RTM_DELADDRLABEL, ip6addrlbl_newdel, NULL,
+	 RTNL_FLAG_DOIT_UNLOCKED},
+	{THIS_MODULE, PF_INET6, RTM_GETADDRLABEL, ip6addrlbl_get, ip6addrlbl_dump,
+	 RTNL_FLAG_DOIT_UNLOCKED | RTNL_FLAG_DUMP_UNLOCKED},
+};
+
 int __init ipv6_addr_label_rtnl_register(void)
 {
-	int ret;
-
-	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_NEWADDRLABEL,
-				   ip6addrlbl_newdel,
-				   NULL, RTNL_FLAG_DOIT_UNLOCKED);
-	if (ret < 0)
-		return ret;
-	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_DELADDRLABEL,
-				   ip6addrlbl_newdel,
-				   NULL, RTNL_FLAG_DOIT_UNLOCKED);
-	if (ret < 0)
-		return ret;
-	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETADDRLABEL,
-				   ip6addrlbl_get,
-				   ip6addrlbl_dump, RTNL_FLAG_DOIT_UNLOCKED |
-						    RTNL_FLAG_DUMP_UNLOCKED);
-	return ret;
+	return rtnl_register_many(ipv6_adddr_label_rtnl_msg_handlers);
 }

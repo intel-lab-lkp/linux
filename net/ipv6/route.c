@@ -6680,6 +6680,13 @@ static void bpf_iter_unregister(void)
 #endif
 #endif
 
+static const struct rtnl_msg_handler ip6_route_rtnl_msg_handlers[] = {
+	{THIS_MODULE, PF_INET6, RTM_NEWROUTE, inet6_rtm_newroute, NULL, 0},
+	{THIS_MODULE, PF_INET6, RTM_DELROUTE, inet6_rtm_delroute, NULL, 0},
+	{THIS_MODULE, PF_INET6, RTM_GETROUTE, inet6_rtm_getroute, NULL,
+	 RTNL_FLAG_DOIT_UNLOCKED},
+};
+
 int __init ip6_route_init(void)
 {
 	int ret;
@@ -6722,19 +6729,7 @@ int __init ip6_route_init(void)
 	if (ret)
 		goto fib6_rules_init;
 
-	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_NEWROUTE,
-				   inet6_rtm_newroute, NULL, 0);
-	if (ret < 0)
-		goto out_register_late_subsys;
-
-	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_DELROUTE,
-				   inet6_rtm_delroute, NULL, 0);
-	if (ret < 0)
-		goto out_register_late_subsys;
-
-	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETROUTE,
-				   inet6_rtm_getroute, NULL,
-				   RTNL_FLAG_DOIT_UNLOCKED);
+	ret = rtnl_register_many(ip6_route_rtnl_msg_handlers);
 	if (ret < 0)
 		goto out_register_late_subsys;
 

@@ -1289,17 +1289,24 @@ static struct pernet_operations fib_rules_net_ops = {
 	.exit = fib_rules_net_exit,
 };
 
+static const struct rtnl_msg_handler fib_rules_rtnl_msg_handlers[] = {
+	{NULL, PF_UNSPEC, RTM_NEWRULE, fib_nl_newrule, NULL, 0},
+	{NULL, PF_UNSPEC, RTM_DELRULE, fib_nl_delrule, NULL, 0},
+	{NULL, PF_UNSPEC, RTM_GETRULE, NULL, fib_nl_dumprule,
+	 RTNL_FLAG_DUMP_UNLOCKED},
+};
+
 static int __init fib_rules_init(void)
 {
 	int err;
-	rtnl_register(PF_UNSPEC, RTM_NEWRULE, fib_nl_newrule, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_DELRULE, fib_nl_delrule, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_GETRULE, NULL, fib_nl_dumprule,
-		      RTNL_FLAG_DUMP_UNLOCKED);
+
+	err = rtnl_register_many(fib_rules_rtnl_msg_handlers);
+	if (err)
+		goto fail_rtnl;
 
 	err = register_pernet_subsys(&fib_rules_net_ops);
 	if (err < 0)
-		goto fail;
+		goto fail_pernet;
 
 	err = register_netdevice_notifier(&fib_rules_notifier);
 	if (err < 0)
@@ -1309,10 +1316,9 @@ static int __init fib_rules_init(void)
 
 fail_unregister:
 	unregister_pernet_subsys(&fib_rules_net_ops);
-fail:
-	rtnl_unregister(PF_UNSPEC, RTM_NEWRULE);
-	rtnl_unregister(PF_UNSPEC, RTM_DELRULE);
-	rtnl_unregister(PF_UNSPEC, RTM_GETRULE);
+fail_pernet:
+	rtnl_unregister_many(fib_rules_rtnl_msg_handlers);
+fail_rtnl:
 	return err;
 }
 
