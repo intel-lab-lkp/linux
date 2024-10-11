@@ -3253,21 +3253,17 @@ static void __init emac_make_bootlist(void)
 	int cell_indices[EMAC_BOOT_LIST_SIZE];
 
 	/* Collect EMACs */
-	while((np = of_find_all_nodes(np)) != NULL) {
+	while((np = of_find_matching_node(np, emac_match))) {
 		u32 idx;
 
-		if (of_match_node(emac_match, np) == NULL)
-			continue;
 		if (of_property_read_bool(np, "unused"))
 			continue;
 		if (of_property_read_u32(np, "cell-index", &idx))
 			continue;
 		cell_indices[i] = idx;
-		emac_boot_list[i++] = of_node_get(np);
-		if (i >= EMAC_BOOT_LIST_SIZE) {
-			of_node_put(np);
+		if (i >= EMAC_BOOT_LIST_SIZE)
 			break;
-		}
+		emac_boot_list[i++] = of_node_get(np);
 	}
 	max = i;
 
