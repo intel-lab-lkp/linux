@@ -8,6 +8,8 @@
  *
  */
 
+#include <linux/smp.h>
+#include <linux/suspend.h>
 #include "core.h"
 
 /* Cannon Lake: PGD PFET Enable Ack Status Register(s) bitmap */
@@ -206,8 +208,52 @@ const struct pmc_reg_map cnp_reg_map = {
 	.etr3_offset = ETR3_OFFSET,
 };
 
+
+/*
+ * Disable C1 auto-demotion
+ *
+ * Aggressive C1 auto-demotion may lead to failure to enter the deepest C-state
+ * during suspend-to-idle, causing high power consumption. To prevent this, we
+ * disable C1 auto-demotion during suspend and re-enable on resume.
+ *
+ * Note that, although MSR_PKG_CST_CONFIG_CONTROL has 'package' in its name, it
+ * is actually a per-core MSR on client platforms, affecting only a single CPU.
+ * Therefore, it must be configured on all online CPUs. The online cpu mask is
+ * unchanged during the phase of suspend/resume as user space is frozen.
+ */
+
+static DEFINE_PER_CPU(u64, pkg_cst_config);
+
+static void disable_c1_auto_demote(void *unused)
+{
+	int cpunum = smp_processor_id();
+	u64 val;
+
+	rdmsrl(MSR_PKG_CST_CONFIG_CONTROL, val);
+	per_cpu(pkg_cst_config, cpunum) = val;
+	val &= ~NHM_C1_AUTO_DEMOTE;
+	wrmsrl(MSR_PKG_CST_CONFIG_CONTROL, val);
+	pr_debug("%s: cpu:%d cst %llx\n", __func__, cpunum, val);
+}
+
+static void restore_c1_auto_demote(void *unused)
+{
+	int cpunum = smp_processor_id();
+
+	pr_debug("%s: cpu:%d cst %llx\n", __func__, cpunum,
+		 per_cpu(pkg_cst_config, cpunum));
+	wrmsrl(MSR_PKG_CST_CONFIG_CONTROL, per_cpu(pkg_cst_config, cpunum));
+}
+
 void cnl_suspend(struct pmc_dev *pmcdev)
 {
+	if (!pm_suspend_via_firmware()) {
+		preempt_disable();
+		disable_c1_auto_demote(NULL);
+		smp_call_function(disable_c1_auto_demote, NULL, 0);
+		preempt_enable();
+	}
+
 	/*
 	 * Due to a hardware limitation, the GBE LTR blocks PC10
 	 * when a cable is attached. To unblock PC10 during suspend,
@@ -218,6 +264,13 @@ void cnl_suspend(struct pmc_dev *pmcdev)
 
 int cnl_resume(struct pmc_dev *pmcdev)
 {
+	if (!pm_suspend_via_firmware()) {
+		preempt_disable();
+		restore_c1_auto_demote(NULL);
+		smp_call_function(restore_c1_auto_demote, NULL, 0);
+		preempt_enable();
+	}
+
 	pmc_core_send_ltr_ignore(pmcdev, 3, 0);
 
 	return pmc_core_resume_common(pmcdev);
