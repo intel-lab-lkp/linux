@@ -7,6 +7,7 @@
 #include <linux/regmap.h>
 
 #include <linux/iio/iio.h>
+#include <linux/iio/sysfs.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/trigger_consumer.h>
 
@@ -34,6 +35,9 @@
 #define BMI270_ACC_CONF_BWP_NORMAL_MODE			0x02
 #define BMI270_ACC_CONF_FILTER_PERF_MSK			BIT(7)
 
+#define BMI270_ACC_CONF_RANGE_REG			0x41
+#define BMI270_ACC_CONF_RANGE_MSK			GENMASK(1, 0)
+
 #define BMI270_GYR_CONF_REG				0x42
 #define BMI270_GYR_CONF_ODR_MSK				GENMASK(3, 0)
 #define BMI270_GYR_CONF_ODR_200HZ			0x09
@@ -41,6 +45,9 @@
 #define BMI270_GYR_CONF_BWP_NORMAL_MODE			0x02
 #define BMI270_GYR_CONF_NOISE_PERF_MSK			BIT(6)
 #define BMI270_GYR_CONF_FILTER_PERF_MSK			BIT(7)
+
+#define BMI270_GYR_CONF_RANGE_REG			0x43
+#define BMI270_GYR_CONF_RANGE_MSK			GENMASK(2, 0)
 
 #define BMI270_INIT_CTRL_REG				0x59
 #define BMI270_INIT_CTRL_LOAD_DONE_MSK			BIT(0)
@@ -84,6 +91,236 @@ const struct bmi270_chip_info bmi270_chip_info[] = {
 	}
 };
 EXPORT_SYMBOL_NS_GPL(bmi270_chip_info, IIO_BMI270);
+
+enum bmi270_sensor_type {
+	BMI270_ACCEL	= 0,
+	BMI270_GYRO,
+};
+
+struct bmi270_scale {
+	u8 bits;
+	int uscale;
+};
+
+struct bmi270_odr {
+	u8 bits;
+	int odr;
+	int uodr;
+};
+
+static const struct bmi270_scale bmi270_accel_scale[] = {
+	{ 0x00, 598},
+	{ 0x01, 1197},
+	{ 0x02, 2394},
+	{ 0x03, 4788},
+};
+
+static const struct bmi270_scale bmi270_gyro_scale[] = {
+	{ 0x00, 1065},
+	{ 0x01, 532},
+	{ 0x02, 266},
+	{ 0x03, 133},
+	{ 0x04, 66},
+};
+
+struct bmi270_scale_item {
+	const struct bmi270_scale *tbl;
+	int num;
+};
+
+static const struct bmi270_scale_item bmi270_scale_table[] = {
+	[BMI270_ACCEL] = {
+		.tbl	= bmi270_accel_scale,
+		.num	= ARRAY_SIZE(bmi270_accel_scale),
+	},
+	[BMI270_GYRO] = {
+		.tbl	= bmi270_gyro_scale,
+		.num	= ARRAY_SIZE(bmi270_gyro_scale),
+	},
+};
+
+static const struct bmi270_odr bmi270_accel_odr[] = {
+	{0x01, 0, 781250},
+	{0x02, 1, 562500},
+	{0x03, 3, 125000},
+	{0x04, 6, 250000},
+	{0x05, 12, 500000},
+	{0x06, 25, 0},
+	{0x07, 50, 0},
+	{0x08, 100, 0},
+	{0x09, 200, 0},
+	{0x0A, 400, 0},
+	{0x0B, 800, 0},
+	{0x0C, 1600, 0},
+};
+
+static const struct bmi270_odr bmi270_gyro_odr[] = {
+	{0x06, 25, 0},
+	{0x07, 50, 0},
+	{0x08, 100, 0},
+	{0x09, 200, 0},
+	{0x0A, 400, 0},
+	{0x0B, 800, 0},
+	{0x0C, 1600, 0},
+	{0x0D, 3200, 0},
+};
+
+struct bmi270_odr_item {
+	const struct bmi270_odr *tbl;
+	int num;
+};
+
+static const struct  bmi270_odr_item bmi270_odr_table[] = {
+	[BMI270_ACCEL] = {
+		.tbl	= bmi270_accel_odr,
+		.num	= ARRAY_SIZE(bmi270_accel_odr),
+	},
+	[BMI270_GYRO] = {
+		.tbl	= bmi270_gyro_odr,
+		.num	= ARRAY_SIZE(bmi270_gyro_odr),
+	},
+};
+
+static int bmi270_set_scale(struct bmi270_data *data,
+			    int chan_type, int uscale)
+{
+	int i;
+	int reg;
+	struct bmi270_scale_item bmi270_scale_item;
+
+	switch (chan_type) {
+	case IIO_ACCEL:
+		reg = BMI270_ACC_CONF_RANGE_REG;
+		bmi270_scale_item = bmi270_scale_table[BMI270_ACCEL];
+		break;
+	case IIO_ANGL_VEL:
+		reg = BMI270_GYR_CONF_RANGE_REG;
+		bmi270_scale_item = bmi270_scale_table[BMI270_GYRO];
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	for (i = 0; i < bmi270_scale_item.num; i++)
+		if (bmi270_scale_item.tbl[i].uscale == uscale)
+			break;
+
+	if (i == bmi270_scale_item.num)
+		return -EINVAL;
+
+	return regmap_write(data->regmap, reg,
+			    bmi270_scale_item.tbl[i].bits);
+}
+
+static int bmi270_get_scale(struct bmi270_data *bmi270_device,
+			    int chan_type, int *uscale)
+{
+	int i, ret, val;
+	int reg;
+	struct bmi270_scale_item bmi270_scale_item;
+
+	switch (chan_type) {
+	case IIO_ACCEL:
+		reg = BMI270_ACC_CONF_RANGE_REG;
+		bmi270_scale_item = bmi270_scale_table[BMI270_ACCEL];
+		break;
+	case IIO_ANGL_VEL:
+		reg = BMI270_GYR_CONF_RANGE_REG;
+		bmi270_scale_item = bmi270_scale_table[BMI270_GYRO];
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = regmap_read(bmi270_device->regmap, reg, &val);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < bmi270_scale_item.num; i++)
+		if (bmi270_scale_item.tbl[i].bits == val) {
+			*uscale = bmi270_scale_item.tbl[i].uscale;
+			return 0;
+		}
+
+	return -EINVAL;
+}
+
+static int bmi270_set_odr(struct bmi270_data *data, int chan_type,
+			  int odr, int uodr)
+{
+	int i;
+	int reg, mask;
+	struct bmi270_odr_item bmi270_odr_item;
+
+	switch (chan_type) {
+	case IIO_ACCEL:
+		reg = BMI270_ACC_CONF_REG;
+		mask = BMI270_ACC_CONF_ODR_MSK;
+		bmi270_odr_item = bmi270_odr_table[BMI270_ACCEL];
+		break;
+	case IIO_ANGL_VEL:
+		reg = BMI270_GYR_CONF_REG;
+		mask = BMI270_GYR_CONF_ODR_MSK;
+		bmi270_odr_item = bmi270_odr_table[BMI270_GYRO];
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	for (i = 0; i < bmi270_odr_item.num; i++)
+		if (bmi270_odr_item.tbl[i].odr == odr &&
+		    bmi270_odr_item.tbl[i].uodr == uodr)
+			break;
+
+	if (i >= bmi270_odr_item.num)
+		return -EINVAL;
+
+	return regmap_update_bits(data->regmap,
+				  reg,
+				  mask,
+				  bmi270_odr_item.tbl[i].bits);
+}
+
+static int bmi270_get_odr(struct bmi270_data *data, int chan_type,
+			  int *odr, int *uodr)
+{
+	int i, val, ret;
+	int reg, mask;
+	struct bmi270_odr_item bmi270_odr_item;
+
+	switch (chan_type) {
+	case IIO_ACCEL:
+		reg = BMI270_ACC_CONF_REG;
+		mask = BMI270_ACC_CONF_ODR_MSK;
+		bmi270_odr_item = bmi270_odr_table[BMI270_ACCEL];
+		break;
+	case IIO_ANGL_VEL:
+		reg = BMI270_GYR_CONF_REG;
+		mask = BMI270_GYR_CONF_ODR_MSK;
+		bmi270_odr_item = bmi270_odr_table[BMI270_GYRO];
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = regmap_read(data->regmap, reg, &val);
+	if (ret)
+		return ret;
+
+	val &= mask;
+
+	for (i = 0; i < bmi270_odr_item.num; i++)
+		if (val == bmi270_odr_item.tbl[i].bits)
+			break;
+
+	if (i >= bmi270_odr_item.num)
+		return -EINVAL;
+
+	*odr = bmi270_odr_item.tbl[i].odr;
+	*uodr = bmi270_odr_item.tbl[i].uodr;
+
+	return 0;
+}
 
 static irqreturn_t bmi270_trigger_handler(int irq, void *p)
 {
@@ -149,13 +386,65 @@ static int bmi270_read_raw(struct iio_dev *indio_dev,
 			return ret;
 
 		return IIO_VAL_INT;
+	case IIO_CHAN_INFO_SCALE:
+		*val = 0;
+		ret = bmi270_get_scale(bmi270_device, chan->type, val2);
+		return ret ? ret : IIO_VAL_INT_PLUS_MICRO;
+	case IIO_CHAN_INFO_SAMP_FREQ:
+		ret = bmi270_get_odr(bmi270_device, chan->type, val, val2);
+		return ret ? ret : IIO_VAL_INT_PLUS_MICRO;
 	default:
 		return -EINVAL;
 	}
 }
 
+static int bmi270_write_raw(struct iio_dev *indio_dev,
+			    struct iio_chan_spec const *chan,
+			    int val, int val2, long mask)
+{
+	struct bmi270_data *data = iio_priv(indio_dev);
+
+	switch (mask) {
+	case IIO_CHAN_INFO_SCALE:
+		return bmi270_set_scale(data, chan->type, val2);
+	case IIO_CHAN_INFO_SAMP_FREQ:
+		return bmi270_set_odr(data, chan->type, val, val2);
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static
+IIO_CONST_ATTR(in_accel_sampling_frequency_available,
+	       "0.78125 1.5625 3.125 6.25 12.5 25 50 100 200 400 800 1600");
+static
+IIO_CONST_ATTR(in_anglvel_sampling_frequency_available,
+	       "25 50 100 200 400 800 1600 3200");
+static
+IIO_CONST_ATTR(in_accel_scale_available,
+	       "0.000598 0.001197 0.002394 0.004788");
+static
+IIO_CONST_ATTR(in_anglvel_scale_available,
+	       "0.001065 0.000532 0.000266 0.000133 0.000066");
+
+static struct attribute *bmi270_attrs[] = {
+	&iio_const_attr_in_accel_sampling_frequency_available.dev_attr.attr,
+	&iio_const_attr_in_anglvel_sampling_frequency_available.dev_attr.attr,
+	&iio_const_attr_in_accel_scale_available.dev_attr.attr,
+	&iio_const_attr_in_anglvel_scale_available.dev_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group bmi270_attrs_group = {
+	.attrs = bmi270_attrs,
+};
+
 static const struct iio_info bmi270_info = {
 	.read_raw = bmi270_read_raw,
+	.write_raw = bmi270_write_raw,
+	.attrs = &bmi270_attrs_group,
 };
 
 #define BMI270_ACCEL_CHANNEL(_axis) {				\
@@ -164,7 +453,7 @@ static const struct iio_info bmi270_info = {
 	.channel2 = IIO_MOD_##_axis,				\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
-		BIT(IIO_CHAN_INFO_FREQUENCY),			\
+		BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 	.scan_index = BMI270_SCAN_ACCEL_##_axis,		\
 	.scan_type = {						\
 		.sign = 's',					\
@@ -180,7 +469,7 @@ static const struct iio_info bmi270_info = {
 	.channel2 = IIO_MOD_##_axis,				\
 	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
-		BIT(IIO_CHAN_INFO_FREQUENCY),			\
+		BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
 	.scan_index = BMI270_SCAN_GYRO_##_axis,		\
 	.scan_type = {						\
 		.sign = 's',					\
