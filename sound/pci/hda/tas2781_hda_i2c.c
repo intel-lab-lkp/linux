@@ -615,7 +615,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	struct tasdevice_priv *tas_priv = context;
 	struct tas2781_hda *tas_hda = dev_get_drvdata(tas_priv->dev);
 	struct hda_codec *codec = tas_priv->codec;
-	int i, ret;
+	int i, ret, spk_id;
 
 	pm_runtime_get_sync(tas_priv->dev);
 	mutex_lock(&tas_priv->codec_lock);
@@ -648,8 +648,23 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	tasdevice_dsp_remove(tas_priv);
 
 	tas_priv->fw_state = TASDEVICE_DSP_FW_PENDING;
-	scnprintf(tas_priv->coef_binaryname, 64, "TAS2XXX%04X.bin",
-		codec->core.subsystem_id & 0xffff);
+	if ((codec->core.subsystem_id & 0xffff0000) == TAS2781_ASUS_ID) {
+		// Speaker id need to be checked.
+		if (tas_priv->speaker_id)
+			spk_id = gpiod_get_value(tas_priv->speaker_id);
+		else
+			spk_id = 0;
+		if (spk_id < 0 || spk_id > 1) {
+			// Speaker id is not valid, use default.
+			dev_dbg(tas_priv->dev, "Wrong spk_id = %d\n", spk_id);
+			spk_id = 0;
+		}
+		scnprintf(tas_priv->coef_binaryname, 64, "TAS2XXX%04X%01d.bin",
+			codec->core.subsystem_id & 0xffff, spk_id);
+	} else {
+		scnprintf(tas_priv->coef_binaryname, 64, "TAS2XXX%04X.bin",
+			codec->core.subsystem_id & 0xffff);
+	}
 	ret = tasdevice_dsp_parser(tas_priv);
 	if (ret) {
 		dev_err(tas_priv->dev, "dspfw load %s error\n",
@@ -787,6 +802,15 @@ static void tas2781_hda_remove(struct device *dev)
 	tasdevice_remove(tas_hda->priv);
 }
 
+static const struct acpi_gpio_params speakerid_gpios = { 0, 0, false };
+static const struct acpi_gpio_params interrupt_gpios = { 1, 0, false };
+
+static const struct acpi_gpio_mapping tas2781_speaker_id_gpios[] = {
+	{ "speakerid-gpios", &speakerid_gpios, 1 },
+	{ "interrupt-gpios", &interrupt_gpios, 1 },
+	{ }
+};
+
 static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 {
 	struct tas2781_hda *tas_hda;
@@ -823,6 +847,15 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 	if (ret)
 		return dev_err_probe(tas_hda->dev, ret,
 			"Platform not supported\n");
+	ret = devm_acpi_dev_add_driver_gpios(tas_hda->dev,
+					     tas2781_speaker_id_gpios);
+	if (ret)
+		dev_info(tas_hda->dev, "Unable to add GPIO mapping table\n");
+
+	tas_hda->priv->speaker_id = devm_gpiod_get(tas_hda->dev, "speakerid",
+						   GPIOD_IN);
+	if (IS_ERR(tas_hda->priv->speaker_id))
+		dev_info(tas_hda->dev, "Failed to get Speaker id gpio.\n");
 
 	ret = tasdevice_init(tas_hda->priv);
 	if (ret)
