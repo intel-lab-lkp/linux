@@ -528,8 +528,13 @@ int panthor_device_suspend(struct device *dev)
 		    drm_dev_enter(&ptdev->base, &cookie)) {
 			panthor_gpu_resume(ptdev);
 			panthor_mmu_resume(ptdev);
-			drm_WARN_ON(&ptdev->base, panthor_fw_resume(ptdev));
-			panthor_sched_resume(ptdev);
+			ret = panthor_fw_resume(ptdev);
+			if (!ret) {
+				panthor_sched_resume(ptdev);
+				ret = -EAGAIN;
+			} else {
+				drm_err(&ptdev->base, "FW resume failed at runtime suspend: %d\n", ret);
+			}
 			drm_dev_exit(cookie);
 		}
 
