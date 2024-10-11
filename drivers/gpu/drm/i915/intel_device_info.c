@@ -200,6 +200,15 @@ static const u16 subplatform_g12_ids[] = {
 	INTEL_DG2_G12_IDS(ID),
 };
 
+static const u16 subplatform_dg2_wa_ids[] = {
+	INTEL_DG2_WA_IDS(ID),
+};
+
+static const u16 subplatform_dg2_ids[] = {
+	INTEL_DG2_IDS(ID),
+	INTEL_ATS_M_IDS(ID),
+};
+
 static const u16 subplatform_arl_ids[] = {
 	INTEL_ARL_IDS(ID),
 };
@@ -252,15 +261,22 @@ static void intel_device_info_subplatform_init(struct drm_i915_private *i915)
 		if (find_devid(devid, subplatform_rplu_ids,
 			       ARRAY_SIZE(subplatform_rplu_ids)))
 			mask |= BIT(INTEL_SUBPLATFORM_RPLU);
-	} else if (find_devid(devid, subplatform_g10_ids,
-			      ARRAY_SIZE(subplatform_g10_ids))) {
-		mask = BIT(INTEL_SUBPLATFORM_G10);
-	} else if (find_devid(devid, subplatform_g11_ids,
-			      ARRAY_SIZE(subplatform_g11_ids))) {
-		mask = BIT(INTEL_SUBPLATFORM_G11);
-	} else if (find_devid(devid, subplatform_g12_ids,
-			      ARRAY_SIZE(subplatform_g12_ids))) {
-		mask = BIT(INTEL_SUBPLATFORM_G12);
+	} else if (find_devid(devid, subplatform_dg2_ids,
+			      ARRAY_SIZE(subplatform_dg2_ids))) {
+		if (find_devid(devid, subplatform_g10_ids,
+			       ARRAY_SIZE(subplatform_g10_ids)))
+			mask = BIT(INTEL_SUBPLATFORM_G10);
+		else if (find_devid(devid, subplatform_g11_ids,
+				    ARRAY_SIZE(subplatform_g11_ids)))
+			mask = BIT(INTEL_SUBPLATFORM_G11);
+		else if (find_devid(devid, subplatform_g12_ids,
+				    ARRAY_SIZE(subplatform_g12_ids)))
+			mask = BIT(INTEL_SUBPLATFORM_G12);
+
+		/* DG2 WA ids span across multiple subplatforms */
+		if (find_devid(devid, subplatform_dg2_wa_ids,
+			       ARRAY_SIZE(subplatform_dg2_wa_ids)))
+			mask |= BIT(INTEL_SUBPLATFORM_WA);
 	} else if (find_devid(devid, subplatform_arl_ids,
 			      ARRAY_SIZE(subplatform_arl_ids))) {
 		mask = BIT(INTEL_SUBPLATFORM_ARL);
