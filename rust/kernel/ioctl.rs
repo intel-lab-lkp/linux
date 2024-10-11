@@ -73,6 +73,22 @@ pub const fn _IOC_SIZE(nr: u32) -> usize {
 }
 
 /// Types implementing this trait can be used to parse ioctl commands.
+///
+/// Normally, this trait is derived for a command enum.
+///
+/// # Example
+///
+/// ```
+/// #[derive(IoctlCommand)]
+/// #[ioctl(code = 0x18, start_num = 0)]
+/// enum Command {
+///     NoReadWrite,                 // No read or write access.
+///     NoReadWriteButTakesArg(u64), // No read or write access, but takes an argument.
+///     ReadOnly(UserSliceWriter),   // We write data for the user to read.
+///     WriteOnly(UserSliceReader),  // We read data that the user wrote.
+///     WriteAndRead(UserSlice),     // We read data from the user and then write data to the user.
+/// }
+/// ```
 #[vtable]
 pub trait IoctlCommand: Sized + Send + Sync + 'static {
     /// The error type returned by the parse functions.
@@ -113,4 +129,178 @@ impl IoctlCommand for () {
     fn parse(_cmd: ffi::c_uint, _arg: ffi::c_ulong) -> Result<Self> {
         Err(ENOTTY)
     }
+}
+
+/// Support macro for deriving the `IoctlCommand` trait.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __derive_ioctl_cmd {
+    (parse_input:
+        @enum_name($enum_name:ident),
+        @code($code:literal),
+        @variants(
+            $(
+                @variant($i:literal, $variant:ident, $arg_type:tt),
+            )*
+        )
+    ) => {
+        #[automatically_derived]
+        impl $crate::ioctl::IoctlCommand for $enum_name {
+            type Err = $crate::error::Error;
+
+            const USE_VTABLE_ATTR: () = ();
+
+            const HAS_PARSE: bool = true;
+
+            fn parse(
+                cmd: ::core::ffi::c_uint,
+                arg: ::core::ffi::c_ulong,
+            ) -> ::core::result::Result<Self, Self::Err> {
+                let ty = $crate::ioctl::_IOC_TYPE(cmd) as u8;
+
+                if ty != $code {
+                    return Err($crate::error::code::ENOTTY);
+                }
+
+                let nr = $crate::ioctl::_IOC_NR(cmd) as u8;
+                let dir = $crate::ioctl::_IOC_DIR(cmd);
+                let size = $crate::ioctl::_IOC_SIZE(cmd);
+
+                // Make sure we don't get unused parameter warnings
+                let _ = arg;
+
+                match (nr, dir, size) {
+                    $(
+                        ::kernel::__derive_ioctl_cmd!(
+                            match_pattern:
+                                @variant($i, $arg_type)
+                        ) => ::kernel::__derive_ioctl_cmd!(
+                            match_body:
+                                @dir(dir),
+                                @size(size),
+                                @arg(arg),
+                                @variant($variant, $arg_type)
+                        ),
+                    )*
+                    _ => Err($crate::error::code::ENOTTY),
+                }
+            }
+        }
+    };
+    (match_pattern:
+        @variant($i:literal, None)
+    ) => {
+        ($i, $crate::uapi::_IOC_NONE, 0)
+    };
+    (match_body:
+        @dir($dir:ident),
+        @size($size:ident),
+        @arg($arg:ident),
+        @variant($variant:ident, None)
+    ) => {
+        Ok(Self::$variant)
+    };
+    (match_pattern:
+        @variant($i:literal, u64)
+    ) => {
+        ($i, $crate::uapi::_IOC_NONE, 0)
+    };
+    (match_body:
+        @dir($dir:ident),
+        @size($size:ident),
+        @arg($arg:ident),
+        @variant($variant:ident, u64)
+    ) => {
+        Ok(Self::$variant($arg))
+    };
+    (match_pattern:
+        @variant($i:literal, UserSliceWriter)
+    ) => {
+        ($i, $crate::uapi::_IOC_READ, _)
+    };
+    (match_body:
+        @dir($dir:ident),
+        @size($size:ident),
+        @arg($arg:ident),
+        @variant($variant:ident, UserSliceWriter)
+    ) => {
+        {
+            let user_writer = $crate::uaccess::UserSlice::new(
+                $arg as $crate::uaccess::UserPtr,
+                $size
+            )
+            .writer();
+
+            Ok(Self::$variant(user_writer))
+        }
+    };
+    (match_pattern:
+        @variant($i:literal, UserSliceReader)
+    ) => {
+        ($i, $crate::uapi::_IOC_WRITE, _)
+    };
+    (match_body:
+        @dir($dir:ident),
+        @size($size:ident),
+        @arg($arg:ident),
+        @variant($variant:ident, UserSliceReader)
+    ) => {
+        {
+            let user_reader = $crate::uaccess::UserSlice::new(
+                $arg as $crate::uaccess::UserPtr,
+                $size
+            )
+            .reader();
+
+            Ok(Self::$variant(user_reader))
+        }
+    };
+    (match_pattern:
+        @variant($i:literal, UserSlice)
+    ) => {
+        ($i, _, _)
+    };
+    (match_body:
+        @dir($dir:ident),
+        @size($size:ident),
+        @arg($arg:ident),
+        @variant($variant:ident, UserSlice)
+    ) => {
+        // Unfortunately, we cannot just do a match guard
+        if $dir != $crate::uapi::_IOC_READ | $crate::uapi::_IOC_WRITE {
+            Err($crate::error::code::ENOTTY)
+        } else {
+            let user_slice = $crate::uaccess::UserSlice::new(
+                $arg as $crate::uaccess::UserPtr,
+                $size
+            );
+
+            Ok(Self::$variant(user_slice))
+        }
+    };
+    (match_pattern:
+        @variant($i:literal, $arg_type:tt)
+    ) => {
+        ($i, _, _)
+    };
+    (match_body:
+        @dir($dir:ident),
+        @size($size:ident),
+        @arg($arg:ident),
+        @variant($variant:ident, $arg_type:tt)
+    ) => {
+        {
+            // We have an unsupported argument type
+            const _: () = ::core::assert!(
+                false,
+                ::core::concat!(
+                    "Invalid argument type for ioctl command ",
+                    stringify!($variant),
+                    ": ",
+                    stringify!($arg_type),
+                )
+            );
+            ::core::unreachable!()
+        }
+    };
 }

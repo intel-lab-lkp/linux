@@ -10,6 +10,7 @@
 mod quote;
 mod concat_idents;
 mod helpers;
+mod ioctl_cmd;
 mod module;
 mod paste;
 mod pin_data;
@@ -410,6 +411,26 @@ pub fn paste(input: TokenStream) -> TokenStream {
     let mut tokens = input.into_iter().collect();
     paste::expand(&mut tokens);
     tokens.into_iter().collect()
+}
+
+/// Derives the [`IoctlCommand`] trait for the given enum.
+///
+/// # Example
+///
+/// ```
+/// #[derive(IoctlCommand)]
+/// #[ioctl(code = 0x18, start_num = 0)]
+/// enum Command {
+///     NoReadWrite,                 // No read or write access.
+///     NoReadWriteButTakesArg(u64), // No read or write access, but takes an argument.
+///     ReadOnly(UserSliceWriter),   // We write data for the user to read.
+///     WriteOnly(UserSliceReader),  // We read data that the user wrote.
+///     WriteAndRead(UserSlice),     // We read data from the user and then write data to the user.
+/// }
+/// ```
+#[proc_macro_derive(IoctlCommand, attributes(ioctl))]
+pub fn derive_ioctl_cmd(input: TokenStream) -> TokenStream {
+    ioctl_cmd::derive(input)
 }
 
 /// Derives the [`Zeroable`] trait for the given struct.

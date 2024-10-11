@@ -20,7 +20,7 @@ pub use crate::alloc::{box_ext::BoxExt, flags::*, vec_ext::VecExt};
 pub use alloc::{boxed::Box, vec::Vec};
 
 #[doc(no_inline)]
-pub use macros::{module, pin_data, pinned_drop, vtable, Zeroable};
+pub use macros::{module, pin_data, pinned_drop, vtable, IoctlCommand, Zeroable};
 
 pub use super::build_assert;
 
