@@ -4977,11 +4977,8 @@ static int cea_db_tag(const struct cea_db *db)
 	return db->tag_length >> 5;
 }
 
-static int cea_db_payload_len(const void *_db)
+static int cea_db_payload_len(const struct cea_db *db)
 {
-	/* FIXME: Transition to passing struct cea_db * everywhere. */
-	const struct cea_db *db = _db;
-
 	return db->tag_length & 0x1f;
 }
 
@@ -5432,22 +5429,18 @@ static uint8_t hdr_metadata_type(const u8 *edid_ext)
 }
 
 static void
-drm_parse_hdr_metadata_block(struct drm_connector *connector, const u8 *db)
+drm_parse_hdr_metadata_block(struct drm_connector *connector, const u8 *db, const u16 payload_len)
 {
-	u16 len;
-
-	len = cea_db_payload_len(db);
-
 	connector->hdr_sink_metadata.hdmi_type1.eotf =
 						eotf_supported(db);
 	connector->hdr_sink_metadata.hdmi_type1.metadata_type =
 						hdr_metadata_type(db);
 
-	if (len >= 4)
+	if (payload_len >= 4)
 		connector->hdr_sink_metadata.hdmi_type1.max_cll = db[4];
-	if (len >= 5)
+	if (payload_len >= 5)
 		connector->hdr_sink_metadata.hdmi_type1.max_fall = db[5];
-	if (len >= 6) {
+	if (payload_len >= 6) {
 		connector->hdr_sink_metadata.hdmi_type1.min_cll = db[6];
 
 		/* Calculate only when all values are available */
@@ -5457,20 +5450,18 @@ drm_parse_hdr_metadata_block(struct drm_connector *connector, const u8 *db)
 
 /* HDMI Vendor-Specific Data Block (HDMI VSDB, H14b-VSDB) */
 static void
-drm_parse_hdmi_vsdb_audio(struct drm_connector *connector, const u8 *db)
+drm_parse_hdmi_vsdb_audio(struct drm_connector *connector, const u8 *db, u8 payload_len)
 {
-	u8 len = cea_db_payload_len(db);
-
-	if (len >= 6 && (db[6] & (1 << 7)))
+	if (payload_len >= 6 && (db[6] & (1 << 7)))
 		connector->eld[DRM_ELD_SAD_COUNT_CONN_TYPE] |= DRM_ELD_SUPPORTS_AI;
 
-	if (len >= 10 && hdmi_vsdb_latency_present(db)) {
+	if (payload_len >= 10 && hdmi_vsdb_latency_present(db)) {
 		connector->latency_present[0] = true;
 		connector->video_latency[0] = db[9];
 		connector->audio_latency[0] = db[10];
 	}
 
-	if (len >= 12 && hdmi_vsdb_i_latency_present(db)) {
+	if (payload_len >= 12 && hdmi_vsdb_i_latency_present(db)) {
 		connector->latency_present[1] = true;
 		connector->video_latency[1] = db[11];
 		connector->audio_latency[1] = db[12];
@@ -5695,7 +5686,7 @@ static void drm_edid_to_eld(struct drm_connector *connector,
 		case CTA_DB_VENDOR:
 			/* HDMI Vendor-Specific Data Block */
 			if (cea_db_is_hdmi_vsdb(db))
-				drm_parse_hdmi_vsdb_audio(connector, (const u8 *)db);
+				drm_parse_hdmi_vsdb_audio(connector, (const u8 *)db, len);
 			break;
 		default:
 			break;
@@ -6122,7 +6113,7 @@ static void drm_parse_ycbcr420_deep_color_info(struct drm_connector *connector,
 }
 
 static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
-			       const u8 *hf_scds)
+			       const u8 *hf_scds, int payload_len)
 {
 	hdmi_dsc->v_1p2 = hf_scds[11] & DRM_EDID_DSC_1P2;
 
@@ -6142,7 +6133,7 @@ static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
 		/* Supports min 8 BPC if DSC 1.2 is supported*/
 		hdmi_dsc->bpc_supported = 8;
 
-	if (cea_db_payload_len(hf_scds) >= 12 && hf_scds[12]) {
+	if (payload_len >= 12 && hf_scds[12]) {
 		u8 dsc_max_slices;
 		u8 dsc_max_frl_rate;
 
@@ -6188,13 +6179,13 @@ static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
 		}
 	}
 
-	if (cea_db_payload_len(hf_scds) >= 13 && hf_scds[13])
+	if (payload_len >= 13 && hf_scds[13])
 		hdmi_dsc->total_chunk_kbytes = hf_scds[13] & DRM_EDID_DSC_TOTAL_CHUNK_KBYTES;
 }
 
 /* Sink Capability Data Structure */
 static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
-				      const u8 *hf_scds)
+				      const u8 *hf_scds, int payload_len)
 {
 	struct drm_display_info *info = &connector->display_info;
 	struct drm_hdmi_info *hdmi = &info->hdmi;
@@ -6247,8 +6238,8 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 
 	drm_parse_ycbcr420_deep_color_info(connector, hf_scds);
 
-	if (cea_db_payload_len(hf_scds) >= 11 && hf_scds[11]) {
-		drm_parse_dsc_info(hdmi_dsc, hf_scds);
+	if (payload_len >= 11 && hf_scds[11]) {
+		drm_parse_dsc_info(hdmi_dsc, hf_scds, payload_len);
 		dsc_support = true;
 	}
 
@@ -6259,7 +6250,7 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 }
 
 static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
-					   const u8 *hdmi)
+					   const u8 *hdmi, const u8 payload_len)
 {
 	struct drm_display_info *info = &connector->display_info;
 	unsigned int dc_bpc = 0;
@@ -6267,7 +6258,7 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 	/* HDMI supports at least 8 bpc */
 	info->bpc = 8;
 
-	if (cea_db_payload_len(hdmi) < 6)
+	if (payload_len < 6)
 		return;
 
 	if (hdmi[6] & DRM_EDID_HDMI_DC_30) {
@@ -6320,18 +6311,17 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 
 /* HDMI Vendor-Specific Data Block (HDMI VSDB, H14b-VSDB) */
 static void
-drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const u8 *db)
+drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const u8 *db, const u8 payload_len)
 {
 	struct drm_display_info *info = &connector->display_info;
-	u8 len = cea_db_payload_len(db);
 
 	info->is_hdmi = true;
 
 	info->source_physical_address = (db[4] << 8) | db[5];
 
-	if (len >= 6)
+	if (payload_len >= 6)
 		info->dvi_dual = db[6] & 1;
-	if (len >= 7)
+	if (payload_len >= 7)
 		info->max_tmds_clock = db[7] * 5000;
 
 	/*
@@ -6340,14 +6330,14 @@ drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const u8 *db)
 	 * HDMI infoframe support was first added in HDMI 1.4. Assume the sink
 	 * supports infoframes if HDMI_Video_present is set.
 	 */
-	if (len >= 8 && db[8] & BIT(5))
+	if (payload_len >= 8 && db[8] & BIT(5))
 		info->has_hdmi_infoframe = true;
 
 	drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] HDMI: DVI dual %d, max TMDS clock %d kHz\n",
 		    connector->base.id, connector->name,
 		    info->dvi_dual, info->max_tmds_clock);
 
-	drm_parse_hdmi_deep_color_info(connector, db);
+	drm_parse_hdmi_deep_color_info(connector, db, payload_len);
 }
 
 /*
@@ -6410,12 +6400,13 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 	cea_db_iter_for_each(db, &iter) {
 		/* FIXME: convert parsers to use struct cea_db */
 		const u8 *data = (const u8 *)db;
+		int len = cea_db_payload_len(db);
 
 		if (cea_db_is_hdmi_vsdb(db))
-			drm_parse_hdmi_vsdb_video(connector, data);
+			drm_parse_hdmi_vsdb_video(connector, data, len);
 		else if (cea_db_is_hdmi_forum_vsdb(db) ||
 			 cea_db_is_hdmi_forum_scdb(db))
-			drm_parse_hdmi_forum_scds(connector, data);
+			drm_parse_hdmi_forum_scds(connector, data, len);
 		else if (cea_db_is_microsoft_vsdb(db))
 			drm_parse_microsoft_vsdb(connector, data);
 		else if (cea_db_is_y420cmdb(db))
@@ -6425,7 +6416,7 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 		else if (cea_db_is_vcdb(db))
 			drm_parse_vcdb(connector, data);
 		else if (cea_db_is_hdmi_hdr_metadata_block(db))
-			drm_parse_hdr_metadata_block(connector, data);
+			drm_parse_hdr_metadata_block(connector, data, len);
 		else if (cea_db_tag(db) == CTA_DB_VIDEO)
 			parse_cta_vdb(connector, db);
 		else if (cea_db_tag(db) == CTA_DB_AUDIO)
