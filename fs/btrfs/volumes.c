@@ -12,6 +12,9 @@
 #include <linux/uuid.h>
 #include <linux/list_sort.h>
 #include <linux/namei.h>
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+#include <linux/part_stat.h>
+#endif
 #include "misc.h"
 #include "ctree.h"
 #include "disk-io.h"
@@ -5955,6 +5958,35 @@ unsigned long btrfs_full_stripe_len(struct btrfs_fs_info *fs_info,
 }
 
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
+static int btrfs_best_stripe(struct btrfs_fs_info *fs_info,
+			     struct btrfs_chunk_map *map, int first,
+			     int num_stripe)
+{
+	u64 best_wait = U64_MAX;
+	int best_stripe = 0;
+	int index;
+
+	for (index = first; index < first + num_stripe; index++) {
+		u64 read_wait;
+		u64 avg_wait = 0;
+		unsigned long read_ios;
+		struct btrfs_device *device = map->stripes[index].dev;
+
+		read_wait = part_stat_read(device->bdev, nsecs[READ]);
+		read_ios = part_stat_read(device->bdev, ios[READ]);
+
+		if (read_wait && read_ios && read_wait >= read_ios)
+			avg_wait = div_u64(read_wait, read_ios);
+
+		if (best_wait > avg_wait) {
+			best_wait = avg_wait;
+			best_stripe = index;
+		}
+	}
+
+	return best_stripe;
+}
+
 struct stripe_mirror {
 	u64 devid;
 	int num;
@@ -6034,6 +6066,10 @@ static int find_live_mirror(struct btrfs_fs_info *fs_info,
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	case BTRFS_READ_POLICY_ROTATION:
 		preferred_mirror = btrfs_read_rotation(map, first, num_stripes);
+		break;
+	case BTRFS_READ_POLICY_LATENCY:
+		preferred_mirror = btrfs_best_stripe(fs_info, map, first,
+								num_stripes);
 		break;
 #endif
 	}
