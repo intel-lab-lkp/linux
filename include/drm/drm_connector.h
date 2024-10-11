@@ -1803,6 +1803,14 @@ struct drm_connector {
 	bool ycbcr_420_allowed;
 
 	/**
+	 * @ bmc_attached:
+	 * The connector has a BMC transparently attached to it. It has to
+	 * report a connected status, even without a physically connected
+	 * display.
+	 */
+	bool bmc_attached;
+
+	/**
 	 * @registration_state: Is this connector initializing, exposed
 	 * (registered) with userspace, or unregistered?
 	 *

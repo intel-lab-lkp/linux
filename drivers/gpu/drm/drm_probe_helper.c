@@ -605,7 +605,11 @@ retry:
 			ret = connector_status_unknown;
 
 		connector->physical_status = ret;
-		connector->status = connector->physical_status;
+
+		if (connector->bmc_attached)
+			connector->status = connector_status_connected;
+		else
+			connector->status = connector->physical_status;
 	}
 
 	/*
