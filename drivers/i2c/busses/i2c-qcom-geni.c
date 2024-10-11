@@ -134,6 +134,8 @@ struct geni_i2c_clk_fld {
 	u8	t_cycle_cnt;
 };
 
+static int geni_i2c_runtime_resume(struct device *dev);
+
 /*
  * Hardware uses the underlying formula to calculate time periods of
  * SCL clock cycle. Firmware uses some additional cycles excluded from the
@@ -675,22 +677,49 @@ static int geni_i2c_fifo_xfer(struct geni_i2c_dev *gi2c,
 	return num;
 }
 
+static int geni_i2c_force_resume(struct geni_i2c_dev *gi2c)
+{
+	struct device *dev = gi2c->se.dev;
+	int ret;
+
+	ret = geni_i2c_runtime_resume(dev);
+	if (ret) {
+		dev_err(gi2c->se.dev, "Failed to enable SE resources: %d\n", ret);
+		pm_runtime_put_noidle(dev);
+		pm_runtime_set_suspended(dev);
+		return ret;
+	}
+	pm_runtime_get_noresume(dev);
+	pm_runtime_set_active(dev);
+	return 0;
+}
+
 static int geni_i2c_xfer(struct i2c_adapter *adap,
 			 struct i2c_msg msgs[],
 			 int num)
 {
 	struct geni_i2c_dev *gi2c = i2c_get_adapdata(adap);
+	struct device *dev = gi2c->se.dev;
 	int ret;
 
 	gi2c->err = 0;
 	reinit_completion(&gi2c->done);
-	ret = pm_runtime_get_sync(gi2c->se.dev);
-	if (ret < 0) {
-		dev_err(gi2c->se.dev, "error turning SE resources:%d\n", ret);
-		pm_runtime_put_noidle(gi2c->se.dev);
-		/* Set device in suspended since resume failed */
-		pm_runtime_set_suspended(gi2c->se.dev);
-		return ret;
+
+	/* Serve I2C transfer by forced resume whether Runtime PM is enbled or not */
+	if (!pm_runtime_enabled(dev) && gi2c->suspended) {
+		dev_dbg(dev, "Runtime PM is disabled hence force resume, pm_usage_count: %d\n",
+			atomic_read(&dev->power.usage_count));
+		ret = geni_i2c_force_resume(gi2c);
+		if (ret)
+			return ret;
+	} else {
+		ret = pm_runtime_get_sync(dev);
+		if (ret == -EACCES && gi2c->suspended) {
+			dev_dbg(dev, "pm_runtime_get_sync() failed-%d, force resume\n", ret);
+			ret = geni_i2c_force_resume(gi2c);
+			if (ret)
+				return ret;
+		}
 	}
 
 	qcom_geni_i2c_conf(gi2c);
@@ -700,8 +729,19 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 	else
 		ret = geni_i2c_fifo_xfer(gi2c, msgs, num);
 
-	pm_runtime_mark_last_busy(gi2c->se.dev);
-	pm_runtime_put_autosuspend(gi2c->se.dev);
+	/* Does Opposite to Forced Resume when runtime PM was not enabled and served
+	 * Transfer via forced resume.
+	 */
+	if (!pm_runtime_enabled(dev) && !gi2c->suspended) {
+		pm_runtime_put_noidle(dev);
+		pm_runtime_set_suspended(dev);
+		/* Reset flag same as runtime suspend, next xfer PM can be enabled */
+		gi2c->suspended = 0;
+	} else {
+		pm_runtime_mark_last_busy(gi2c->se.dev);
+		pm_runtime_put_autosuspend(gi2c->se.dev);
+	}
+
 	gi2c->cur = NULL;
 	gi2c->err = 0;
 	return ret;
@@ -818,7 +858,8 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	init_completion(&gi2c->done);
 	spin_lock_init(&gi2c->lock);
 	platform_set_drvdata(pdev, gi2c);
-	ret = devm_request_irq(dev, gi2c->irq, geni_i2c_irq, IRQF_NO_AUTOEN,
+	ret = devm_request_irq(dev, gi2c->irq, geni_i2c_irq,
+			       IRQF_NO_AUTOEN | IRQF_EARLY_RESUME | IRQF_NO_SUSPEND,
 			       dev_name(dev), gi2c);
 	if (ret) {
 		dev_err(dev, "Request_irq failed:%d: err:%d\n",
