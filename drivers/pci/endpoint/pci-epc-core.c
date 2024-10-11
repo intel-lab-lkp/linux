@@ -466,6 +466,132 @@ int pci_epc_map_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 }
 EXPORT_SYMBOL_GPL(pci_epc_map_addr);
 
+/*
+ * Determine the actual PCI address range that should be mapped to access
+ * @pci_size from @pci_addr. This is done using the controller get_mem_map
+ * operation if that operation is defined. Otherwise, simply assume that the
+ * controller has no mapping alignment constraint and return the requested range
+ * as-is.
+ */
+static int pci_epc_get_mem_map(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			       u64 pci_addr, size_t pci_size,
+			       struct pci_epc_map *map)
+{
+	int ret;
+
+	/*
+	 * Initialize and remember the PCI address region to be mapped. The
+	 * controller ->get_mem_map() operation may change the map->pci_size to a
+	 * smaller value.
+	 */
+	memset(map, 0, sizeof(*map));
+	map->pci_addr = pci_addr;
+	map->pci_size = pci_size;
+
+	if (!epc->ops->get_mem_map) {
+		/*
+		 * Assume that the EP controller has no alignment constraint,
+		 * that is, that the PCI address to map and the size of the
+		 * controller memory needed for the mapping are the same as
+		 * specified by the caller.
+		 */
+		map->map_pci_addr = pci_addr;
+		map->map_size = pci_size;
+		map->map_ofst = 0;
+		return 0;
+	}
+
+	mutex_lock(&epc->lock);
+	ret = epc->ops->get_mem_map(epc, func_no, vfunc_no, map);
+	mutex_unlock(&epc->lock);
+
+	return ret;
+}
+
+/**
+ * pci_epc_mem_map() - allocate and map a PCI address to a CPU address
+ * @epc: the EPC device on which the CPU address is to be allocated and mapped
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @pci_addr: PCI address to which the CPU address should be mapped
+ * @pci_size: the number of bytes to map starting from @pci_addr
+ * @map: where to return the mapping information
+ *
+ * Allocate a controller memory address region and map it to a RC PCI address
+ * region, taking into account the controller physical address mapping
+ * constraints using pci_epc_get_mem_map().
+ * The effective size of the PCI address range mapped from @pci_addr is
+ * indicated by @map->pci_size. This size may be less than the requested
+ * @pci_size. The local virtual CPU address for the mapping is indicated by
+ * @map->virt_addr (@map->phys_addr indicates the physical address).
+ * The size and CPU address of the controller memory allocated and mapped are
+ * respectively indicated by @map->map_size and @map->virt_base (and
+ * @map->phys_base).
+ *
+ * Returns 0 on success and a negative error code in case of error.
+ */
+int pci_epc_mem_map(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+		    u64 pci_addr, size_t pci_size, struct pci_epc_map *map)
+{
+	int ret;
+
+	if (!pci_epc_function_is_valid(epc, func_no, vfunc_no))
+		return -EINVAL;
+
+	if (!pci_size || !map)
+		return -EINVAL;
+
+	ret = pci_epc_get_mem_map(epc, func_no, vfunc_no,
+				  pci_addr, pci_size, map);
+	if (ret)
+		return ret;
+
+	map->virt_base = pci_epc_mem_alloc_addr(epc, &map->phys_base,
+						map->map_size);
+	if (!map->virt_base)
+		return -ENOMEM;
+
+	map->phys_addr = map->phys_base + map->map_ofst;
+	map->virt_addr = map->virt_base + map->map_ofst;
+
+	ret = pci_epc_map_addr(epc, func_no, vfunc_no, map->phys_base,
+			       map->map_pci_addr, map->map_size);
+	if (ret) {
+		pci_epc_mem_free_addr(epc, map->phys_base, map->virt_base,
+				      map->map_size);
+		map->virt_base = 0;
+		return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pci_epc_mem_map);
+
+/**
+ * pci_epc_mem_unmap() - unmap and free a CPU address region
+ * @epc: the EPC device on which the CPU address is allocated and mapped
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @map: the mapping information
+ *
+ * Unmap and free a CPU address region that was allocated and mapped with
+ * pci_epc_mem_map().
+ */
+void pci_epc_mem_unmap(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+		       struct pci_epc_map *map)
+{
+	if (!pci_epc_function_is_valid(epc, func_no, vfunc_no))
+		return;
+
+	if (!map || !map->virt_base)
+		return;
+
+	pci_epc_unmap_addr(epc, func_no, vfunc_no, map->phys_base);
+	pci_epc_mem_free_addr(epc, map->phys_base, map->virt_base,
+			      map->map_size);
+}
+EXPORT_SYMBOL_GPL(pci_epc_mem_unmap);
+
 /**
  * pci_epc_clear_bar() - reset the BAR
  * @epc: the EPC device for which the BAR has to be cleared
