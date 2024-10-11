@@ -26,6 +26,14 @@ struct rpmsg_ns_msg {
 	__rpmsg32 flags;
 } __packed;
 
+/* Non-standard extended ns message by Texas Instruments */
+struct __rpmsg_ns_msg_ti {
+	char name[RPMSG_NAME_SIZE];
+	char desc[RPMSG_NAME_SIZE]; /* ignored */
+	u32 addr;
+	u32 flags;
+} __packed;
+
 /**
  * enum rpmsg_ns_flags - dynamic name service announcement flags
  *

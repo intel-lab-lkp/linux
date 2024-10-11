@@ -31,10 +31,11 @@ EXPORT_SYMBOL(rpmsg_ns_register_device);
 static int rpmsg_ns_cb(struct rpmsg_device *rpdev, void *data, int len,
 		       void *priv, u32 src)
 {
-	struct rpmsg_ns_msg *msg = data;
 	struct rpmsg_device *newch;
 	struct rpmsg_channel_info chinfo;
 	struct device *dev = rpdev->dev.parent;
+	__rpmsg32 ns_addr, ns_flags;
+	char *ns_name;
 	int ret;
 
 #if defined(CONFIG_DYNAMIC_DEBUG)
@@ -42,23 +43,36 @@ static int rpmsg_ns_cb(struct rpmsg_device *rpdev, void *data, int len,
 			 data, len, true);
 #endif
 
-	if (len != sizeof(*msg)) {
+	if (len == sizeof(struct rpmsg_ns_msg)) {
+		struct rpmsg_ns_msg *msg = data;
+
+		ns_addr = msg->addr;
+		ns_flags = msg->flags;
+		ns_name = msg->name;
+	} else if (len == sizeof(struct __rpmsg_ns_msg_ti)) {
+		struct __rpmsg_ns_msg_ti *msg = data;
+
+		ns_addr = msg->addr;
+		ns_flags = msg->flags;
+		ns_name = msg->name;
+		dev_warn(dev, "non-standard ns msg found\n");
+	} else {
 		dev_err(dev, "malformed ns msg (%d)\n", len);
 		return -EINVAL;
 	}
 
 	/* don't trust the remote processor for null terminating the name */
-	msg->name[RPMSG_NAME_SIZE - 1] = '\0';
+	ns_name[RPMSG_NAME_SIZE - 1] = '\0';
 
-	strscpy_pad(chinfo.name, msg->name, sizeof(chinfo.name));
+	strscpy_pad(chinfo.name, ns_name, sizeof(chinfo.name));
 	chinfo.src = RPMSG_ADDR_ANY;
-	chinfo.dst = rpmsg32_to_cpu(rpdev, msg->addr);
+	chinfo.dst = rpmsg32_to_cpu(rpdev, ns_addr);
 
 	dev_info(dev, "%sing channel %s addr 0x%x\n",
-		 rpmsg32_to_cpu(rpdev, msg->flags) & RPMSG_NS_DESTROY ?
-		 "destroy" : "creat", msg->name, chinfo.dst);
+		 rpmsg32_to_cpu(rpdev, ns_flags) & RPMSG_NS_DESTROY ?
+		 "destroy" : "creat", ns_name, chinfo.dst);
 
-	if (rpmsg32_to_cpu(rpdev, msg->flags) & RPMSG_NS_DESTROY) {
+	if (rpmsg32_to_cpu(rpdev, ns_flags) & RPMSG_NS_DESTROY) {
 		ret = rpmsg_release_channel(rpdev, &chinfo);
 		if (ret)
 			dev_err(dev, "rpmsg_destroy_channel failed: %d\n", ret);
