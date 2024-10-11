@@ -1326,44 +1326,45 @@ notify_bulks(struct vchiq_service *service, struct vchiq_bulk_queue *queue,
 		struct vchiq_bulk *bulk =
 			&queue->bulks[BULK_INDEX(queue->remove)];
 
+		if (!bulk->data || !service->instance)
+			goto complete;
+
 		/*
 		 * Only generate callbacks for non-dummy bulk
 		 * requests, and non-terminated services
 		 */
-		if (bulk->data && service->instance) {
-			if (bulk->actual != VCHIQ_BULK_ACTUAL_ABORTED) {
-				if (bulk->dir == VCHIQ_BULK_TRANSMIT) {
-					VCHIQ_SERVICE_STATS_INC(service, bulk_tx_count);
-					VCHIQ_SERVICE_STATS_ADD(service, bulk_tx_bytes,
-								bulk->actual);
-				} else {
-					VCHIQ_SERVICE_STATS_INC(service, bulk_rx_count);
-					VCHIQ_SERVICE_STATS_ADD(service, bulk_rx_bytes,
-								bulk->actual);
-				}
+		if (bulk->actual != VCHIQ_BULK_ACTUAL_ABORTED) {
+			if (bulk->dir == VCHIQ_BULK_TRANSMIT) {
+				VCHIQ_SERVICE_STATS_INC(service, bulk_tx_count);
+				VCHIQ_SERVICE_STATS_ADD(service, bulk_tx_bytes,
+							bulk->actual);
 			} else {
-				VCHIQ_SERVICE_STATS_INC(service, bulk_aborted_count);
+				VCHIQ_SERVICE_STATS_INC(service, bulk_rx_count);
+				VCHIQ_SERVICE_STATS_ADD(service, bulk_rx_bytes,
+							bulk->actual);
 			}
-			if (bulk->mode == VCHIQ_BULK_MODE_BLOCKING) {
-				struct bulk_waiter *waiter;
-
-				spin_lock(&service->state->bulk_waiter_spinlock);
-				waiter = bulk->userdata;
-				if (waiter) {
-					waiter->actual = bulk->actual;
-					complete(&waiter->event);
-				}
-				spin_unlock(&service->state->bulk_waiter_spinlock);
-			} else if (bulk->mode == VCHIQ_BULK_MODE_CALLBACK) {
-				enum vchiq_reason reason =
-						get_bulk_reason(bulk);
-				status = make_service_callback(service, reason,	NULL,
-							       bulk->userdata);
-				if (status == -EAGAIN)
-					break;
-			}
+		} else {
+			VCHIQ_SERVICE_STATS_INC(service, bulk_aborted_count);
 		}
+		if (bulk->mode == VCHIQ_BULK_MODE_BLOCKING) {
+			struct bulk_waiter *waiter;
 
+			spin_lock(&service->state->bulk_waiter_spinlock);
+			waiter = bulk->userdata;
+			if (waiter) {
+				waiter->actual = bulk->actual;
+				complete(&waiter->event);
+			}
+			spin_unlock(&service->state->bulk_waiter_spinlock);
+		} else if (bulk->mode == VCHIQ_BULK_MODE_CALLBACK) {
+			enum vchiq_reason reason =
+					get_bulk_reason(bulk);
+			status = make_service_callback(service, reason,	NULL,
+						       bulk->userdata);
+			if (status == -EAGAIN)
+				break;
+		}
+complete:
 		queue->remove++;
 		complete(&service->bulk_remove_event);
 	}
