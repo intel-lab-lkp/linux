@@ -23,10 +23,9 @@ static const struct drm_encoder_funcs ast_sil164_encoder_funcs = {
 
 static int ast_sil164_connector_helper_get_modes(struct drm_connector *connector)
 {
-	struct ast_connector *ast_connector = to_ast_connector(connector);
 	int count;
 
-	if (ast_connector->physical_status == connector_status_connected) {
+	if (connector->physical_status == connector_status_connected) {
 		count = drm_connector_helper_get_modes(connector);
 	} else {
 		drm_edid_connector_update(connector, NULL);
@@ -48,16 +47,11 @@ static int ast_sil164_connector_helper_detect_ctx(struct drm_connector *connecto
 						  struct drm_modeset_acquire_ctx *ctx,
 						  bool force)
 {
-	struct ast_connector *ast_connector = to_ast_connector(connector);
 	enum drm_connector_status status;
 
 	status = drm_connector_helper_detect_from_ddc(connector, ctx, force);
 
-	if (status != ast_connector->physical_status)
-		++connector->epoch_counter;
-	ast_connector->physical_status = status;
-
-	return connector_status_connected;
+	return status;
 }
 
 static const struct drm_connector_helper_funcs ast_sil164_connector_helper_funcs = {
@@ -83,7 +77,6 @@ int ast_sil164_output_init(struct ast_device *ast)
 	struct drm_crtc *crtc = &ast->crtc;
 	struct i2c_adapter *ddc;
 	struct drm_encoder *encoder;
-	struct ast_connector *ast_connector;
 	struct drm_connector *connector;
 	int ret;
 
@@ -104,8 +97,7 @@ int ast_sil164_output_init(struct ast_device *ast)
 
 	/* connector */
 
-	ast_connector = &ast->output.sil164.connector;
-	connector = &ast_connector->base;
+	connector = &ast->output.sil164.connector;
 	ret = drm_connector_init_with_ddc(dev, connector, &ast_sil164_connector_funcs,
 					  DRM_MODE_CONNECTOR_DVII, ddc);
 	if (ret)
@@ -114,9 +106,8 @@ int ast_sil164_output_init(struct ast_device *ast)
 
 	connector->interlace_allowed = 0;
 	connector->doublescan_allowed = 0;
+	connector->bmc_attached = true;
 	connector->polled = DRM_CONNECTOR_POLL_CONNECT | DRM_CONNECTOR_POLL_DISCONNECT;
-
-	ast_connector->physical_status = connector->status;
 
 	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret)

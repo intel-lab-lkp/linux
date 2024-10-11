@@ -503,10 +503,9 @@ static const struct drm_encoder_helper_funcs ast_dp501_encoder_helper_funcs = {
 
 static int ast_dp501_connector_helper_get_modes(struct drm_connector *connector)
 {
-	struct ast_connector *ast_connector = to_ast_connector(connector);
 	int count;
 
-	if (ast_connector->physical_status == connector_status_connected) {
+	if (connector->physical_status == connector_status_connected) {
 		struct ast_device *ast = to_ast_device(connector->dev);
 		const struct drm_edid *drm_edid;
 
@@ -534,18 +533,13 @@ static int ast_dp501_connector_helper_detect_ctx(struct drm_connector *connector
 						 struct drm_modeset_acquire_ctx *ctx,
 						 bool force)
 {
-	struct ast_connector *ast_connector = to_ast_connector(connector);
 	struct ast_device *ast = to_ast_device(connector->dev);
 	enum drm_connector_status status = connector_status_disconnected;
 
 	if (ast_dp501_is_connected(ast))
 		status = connector_status_connected;
 
-	if (status != ast_connector->physical_status)
-		++connector->epoch_counter;
-	ast_connector->physical_status = status;
-
-	return connector_status_connected;
+	return status;
 }
 
 static const struct drm_connector_helper_funcs ast_dp501_connector_helper_funcs = {
@@ -570,7 +564,6 @@ int ast_dp501_output_init(struct ast_device *ast)
 	struct drm_device *dev = &ast->base;
 	struct drm_crtc *crtc = &ast->crtc;
 	struct drm_encoder *encoder;
-	struct ast_connector *ast_connector;
 	struct drm_connector *connector;
 	int ret;
 
@@ -587,8 +580,7 @@ int ast_dp501_output_init(struct ast_device *ast)
 
 	/* connector */
 
-	ast_connector = &ast->output.dp501.connector;
-	connector = &ast_connector->base;
+	connector = &ast->output.dp501.connector;
 	ret = drm_connector_init(dev, connector, &ast_dp501_connector_funcs,
 				 DRM_MODE_CONNECTOR_DisplayPort);
 	if (ret)
@@ -597,9 +589,8 @@ int ast_dp501_output_init(struct ast_device *ast)
 
 	connector->interlace_allowed = 0;
 	connector->doublescan_allowed = 0;
+	connector->bmc_attached = true;
 	connector->polled = DRM_CONNECTOR_POLL_CONNECT | DRM_CONNECTOR_POLL_DISCONNECT;
-
-	ast_connector->physical_status = connector->status;
 
 	ret = drm_connector_attach_encoder(connector, encoder);
 	if (ret)
