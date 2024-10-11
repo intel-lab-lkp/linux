@@ -490,6 +490,7 @@ err_set_suspended:
 int panthor_device_suspend(struct device *dev)
 {
 	struct panthor_device *ptdev = dev_get_drvdata(dev);
+	unsigned int susp_retries;
 	int ret, cookie;
 
 	if (atomic_read(&ptdev->pm.state) != PANTHOR_DEVICE_PM_STATE_ACTIVE)
@@ -522,7 +523,12 @@ int panthor_device_suspend(struct device *dev)
 		drm_dev_exit(cookie);
 	}
 
-	ret = panthor_devfreq_suspend(ptdev);
+	for (susp_retries = 0; susp_retries < 5; susp_retries++) {
+		ret = panthor_devfreq_suspend(ptdev);
+		if (!ret)
+			break;
+	}
+
 	if (ret) {
 		if (panthor_device_is_initialized(ptdev) &&
 		    drm_dev_enter(&ptdev->base, &cookie)) {
