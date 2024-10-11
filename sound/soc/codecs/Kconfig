@@ -112,6 +112,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_DA9055
 	imply SND_SOC_DMIC
 	imply SND_SOC_ES8316
+	imply SND_SOC_ES8323
 	imply SND_SOC_ES8326
 	imply SND_SOC_ES8328_SPI
 	imply SND_SOC_ES8328_I2C
@@ -222,6 +223,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_RT712_SDCA_DMIC_SDW
 	imply SND_SOC_RT715_SDW
 	imply SND_SOC_RT715_SDCA_SDW
+	imply SND_SOC_RT721_SDCA_SDW
 	imply SND_SOC_RT722_SDCA_SDW
 	imply SND_SOC_RT1308_SDW
 	imply SND_SOC_RT1316_SDW
@@ -281,6 +283,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_TWL4030
 	imply SND_SOC_TWL6040
 	imply SND_SOC_UDA1334
+	imply SND_SOC_UDA1342
 	imply SND_SOC_UDA1380
 	imply SND_SOC_WCD9335
 	imply SND_SOC_WCD934X
@@ -1143,6 +1146,10 @@ config SND_SOC_ES8316
 	tristate "Everest Semi ES8316 CODEC"
 	depends on I2C
 
+config SND_SOC_ES8323
+	tristate "Everest Semi ES8323 CODEC"
+	depends on I2C
+
 config SND_SOC_ES8326
 	tristate "Everest Semi ES8326 CODEC"
 	depends on I2C
@@ -1545,6 +1552,11 @@ config SND_SOC_RL6231
 	default m if SND_SOC_RT1305=m
 	default m if SND_SOC_RT1308=m
 
+config SND_SOC_RT_SDW_COMMON
+	tristate
+	default y if SND_SOC_RT721_SDCA_SDW=y
+	default m if SND_SOC_RT721_SDCA_SDW=m
+
 config SND_SOC_RL6347A
 	tristate
 	default y if SND_SOC_RT274=y
@@ -1739,6 +1751,12 @@ config SND_SOC_RT712_SDCA_SDW
 
 config SND_SOC_RT712_SDCA_DMIC_SDW
 	tristate "Realtek RT712 SDCA DMIC Codec - SDW"
+	depends on SOUNDWIRE
+	select REGMAP_SOUNDWIRE
+	select REGMAP_SOUNDWIRE_MBQ
+
+config SND_SOC_RT721_SDCA_SDW
+	tristate "Realtek RT721 SDCA Codec - SDW"
 	depends on SOUNDWIRE
 	select REGMAP_SOUNDWIRE
 	select REGMAP_SOUNDWIRE_MBQ
@@ -2113,6 +2131,13 @@ config SND_SOC_UDA1334
 	  The UDA1334 is an NXP audio codec, supports the I2S-bus data format
 	  and has basic features such as de-emphasis (at 44.1 kHz sampling
 	  rate) and mute.
+
+config SND_SOC_UDA1342
+	tristate "NXP UDA1342 CODEC"
+	depends on I2C
+	help
+	  The UDA1342 is an NXP audio codec, support 2x Stereo audio ADC (4x PGA
+	  mic inputs), stereo audio DAC, with basic audio processing.
 
 config SND_SOC_UDA1380
 	tristate
@@ -2563,6 +2588,19 @@ config SND_SOC_NAU8824
 
 config SND_SOC_NAU8825
 	tristate
+	depends on I2C
+
+config SND_SOC_NTPFW
+	tristate
+
+config SND_SOC_NTP8918
+	select SND_SOC_NTPFW
+	tristate "NeoFidelity NTP8918 amplifier"
+	depends on I2C
+
+config SND_SOC_NTP8835
+	select SND_SOC_NTPFW
+	tristate "NeoFidelity NTP8835 and NTP8835C amplifiers"
 	depends on I2C
 
 config SND_SOC_TPA6130A2
