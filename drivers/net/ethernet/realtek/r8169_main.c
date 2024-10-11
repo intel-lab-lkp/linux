@@ -1777,11 +1777,26 @@ static const char rtl8169_gstrings[][ETH_GSTRING_LEN] = {
 	"tx_underrun",
 };
 
+static const char rtl8125_gstrings[][ETH_GSTRING_LEN] = {
+	"tx_bytes",
+	"rx_bytes",
+	"tx_pause_on",
+	"tx_pause_off",
+	"rx_pause_on",
+	"rx_pause_off",
+};
+
 static int rtl8169_get_sset_count(struct net_device *dev, int sset)
 {
+	struct rtl8169_private *tp = netdev_priv(dev);
+
 	switch (sset) {
 	case ETH_SS_STATS:
-		return ARRAY_SIZE(rtl8169_gstrings);
+		if (rtl_is_8125(tp))
+			return ARRAY_SIZE(rtl8169_gstrings) +
+			       ARRAY_SIZE(rtl8125_gstrings);
+		else
+			return ARRAY_SIZE(rtl8169_gstrings);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -1873,13 +1888,33 @@ static void rtl8169_get_ethtool_stats(struct net_device *dev,
 	data[10] = le32_to_cpu(counters->rx_multicast);
 	data[11] = le16_to_cpu(counters->tx_aborted);
 	data[12] = le16_to_cpu(counters->tx_underrun);
+
+	if (rtl_is_8125(tp)) {
+		data[5] = le32_to_cpu(counters->align_errors32);
+		data[10] = le64_to_cpu(counters->rx_multicast64);
+		data[11] = le32_to_cpu(counters->tx_aborted32);
+		data[12] = le32_to_cpu(counters->tx_underrun32);
+
+		data[13] = le64_to_cpu(counters->tx_octets);
+		data[14] = le64_to_cpu(counters->rx_octets);
+		data[15] = le32_to_cpu(counters->tx_pause_on);
+		data[16] = le32_to_cpu(counters->tx_pause_off);
+		data[17] = le32_to_cpu(counters->rx_pause_on);
+		data[18] = le32_to_cpu(counters->rx_pause_off);
+	}
 }
 
 static void rtl8169_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
+	struct rtl8169_private *tp = netdev_priv(dev);
+
 	switch(stringset) {
 	case ETH_SS_STATS:
 		memcpy(data, rtl8169_gstrings, sizeof(rtl8169_gstrings));
+		if (rtl_is_8125(tp)) {
+			data += sizeof(rtl8169_gstrings);
+			memcpy(data, rtl8125_gstrings, sizeof(rtl8125_gstrings));
+		}
 		break;
 	}
 }
@@ -3893,6 +3928,9 @@ static void rtl_hw_start_8125(struct rtl8169_private *tp)
 	default:
 		break;
 	}
+
+	/* enable extended tally counter */
+	r8168_mac_ocp_modify(tp, 0xea84, 0, BIT(1) | BIT(0));
 
 	rtl_hw_config(tp);
 }
