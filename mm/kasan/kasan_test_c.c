@@ -41,13 +41,6 @@ static struct {
 	bool async_fault;
 } test_status;
 
-/*
- * Some tests use these global variables to store return values from function
- * calls that could otherwise be eliminated by the compiler as dead code.
- */
-void *kasan_ptr_result;
-int kasan_int_result;
-
 /* Probe for console output: obtains test_status lines of interest. */
 static void probe_console(void *ignore, const char *buf, size_t len)
 {
@@ -1488,6 +1481,7 @@ static void kasan_memchr(struct kunit *test)
 {
 	char *ptr;
 	size_t size = 24;
+	void *kasan_ptr_result;
 
 	/*
 	 * str* functions are not instrumented with CONFIG_AMD_MEM_ENCRYPT.
@@ -1514,6 +1508,7 @@ static void kasan_memcmp(struct kunit *test)
 	char *ptr;
 	size_t size = 24;
 	int arr[9];
+	int kasan_int_result;
 
 	/*
 	 * str* functions are not instrumented with CONFIG_AMD_MEM_ENCRYPT.
@@ -1539,6 +1534,8 @@ static void kasan_strings(struct kunit *test)
 {
 	char *ptr;
 	size_t size = 24;
+	void *kasan_ptr_result;
+	int kasan_int_result;
 
 	/*
 	 * str* functions are not instrumented with CONFIG_AMD_MEM_ENCRYPT.
@@ -1585,6 +1582,8 @@ static void kasan_bitops_modify(struct kunit *test, int nr, void *addr)
 
 static void kasan_bitops_test_and_modify(struct kunit *test, int nr, void *addr)
 {
+	int kasan_int_result;
+
 	KUNIT_EXPECT_KASAN_FAIL(test, test_and_set_bit(nr, addr));
 	KUNIT_EXPECT_KASAN_FAIL(test, __test_and_set_bit(nr, addr));
 	KUNIT_EXPECT_KASAN_FAIL(test, test_and_set_bit_lock(nr, addr));
