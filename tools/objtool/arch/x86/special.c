@@ -112,46 +112,34 @@ static struct reloc *find_switch_table(struct objtool_file *file,
 				       struct instruction *insn,
 				       unsigned long *table_size)
 {
-	struct reloc  *text_reloc, *rodata_reloc;
-	struct section *table_sec;
-	unsigned long table_offset;
-
-	/* look for a relocation which references .rodata */
-	text_reloc = find_reloc_by_dest_range(file->elf, insn->sec,
-					      insn->offset, insn->len);
-	if (!text_reloc || text_reloc->sym->type != STT_SECTION ||
-	    !text_reloc->sym->sec->rodata)
-		return NULL;
-
-	table_offset = reloc_addend(text_reloc);
-	table_sec = text_reloc->sym->sec;
-
-	if (reloc_type(text_reloc) == R_X86_64_PC32)
-		table_offset += 4;
-
-	/*
-	 * Make sure the .rodata address isn't associated with a
-	 * symbol.  GCC jump tables are anonymous data.
-	 *
-	 * Also support C jump tables which are in the same format as
-	 * switch jump tables.  For objtool to recognize them, they
-	 * need to be placed in the C_JUMP_TABLE_SECTION section.  They
-	 * have symbols associated with them.
-	 */
-	if (find_symbol_containing(table_sec, table_offset) &&
-	    strcmp(table_sec->name, C_JUMP_TABLE_SECTION))
-		return NULL;
+	struct reloc *rodata_reloc;
+	struct symbol *sym = NULL;
 
 	/*
 	 * Each table entry has a rela associated with it.  The rela
 	 * should reference text in the same function as the original
 	 * instruction.
 	 */
-	rodata_reloc = find_reloc_by_dest(file->elf, table_sec, table_offset);
-	if (!rodata_reloc)
+	rodata_reloc = find_rodata_sym_reference(file, insn, &sym);
+
+	/*
+	 * Annotations, if present, are attached to the indirect jump
+	 * instruction directly. In this case, a symbol annotation is
+	 * expected.
+	 *
+	 * Otherwise, make sure the .rodata address isn't associated with
+	 * a symbol. Unannotated GCC jump tables are anonymous data.
+	 *
+	 * Also support C jump tables which are in the same format as
+	 * switch jump tables.  For objtool to recognize them, they
+	 * need to be placed in the C_JUMP_TABLE_SECTION section.  They
+	 * have symbols associated with them.
+	 */
+	if (insn->type != INSN_JUMP_DYNAMIC && sym &&
+	    strcmp(sym->sec->name, C_JUMP_TABLE_SECTION))
 		return NULL;
 
-	*table_size = 0;
+	*table_size = sym ? sym->len : 0;
 	return rodata_reloc;
 }
 

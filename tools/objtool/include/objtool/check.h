@@ -140,4 +140,8 @@ struct instruction *next_insn_same_func(struct objtool_file *file, struct instru
 	     insn;							\
 	     insn = next_insn_same_func(file, insn))
 
+struct reloc *find_rodata_sym_reference(struct objtool_file *file,
+					struct instruction *insn,
+					struct symbol **sym);
+
 #endif /* _CHECK_H */

@@ -1367,6 +1367,8 @@ __weak bool arch_is_embedded_insn(struct symbol *sym)
 
 static struct reloc *insn_reloc(struct objtool_file *file, struct instruction *insn)
 {
+	unsigned long offset = insn->offset;
+	unsigned int len = insn->len;
 	struct reloc *reloc;
 
 	if (insn->no_reloc)
@@ -1375,8 +1377,12 @@ static struct reloc *insn_reloc(struct objtool_file *file, struct instruction *i
 	if (!file)
 		return NULL;
 
-	reloc = find_reloc_by_dest_range(file->elf, insn->sec,
-					 insn->offset, insn->len);
+	do {
+		/* Skip any R_*_NONE relocations */
+		reloc = find_reloc_by_dest_range(file->elf, insn->sec,
+						 offset++, len--);
+	} while (len && reloc && reloc_type(reloc) == R_NONE);
+
 	if (!reloc) {
 		insn->no_reloc = 1;
 		return NULL;
@@ -2143,10 +2149,86 @@ int add_jump_table(struct objtool_file *file, struct instruction *insn,
 	return 0;
 }
 
+struct reloc *find_rodata_sym_reference(struct objtool_file *file,
+					struct instruction *insn,
+					struct symbol **table_sym)
+{
+	struct reloc *text_reloc, *rodata_reloc;
+	unsigned long addend;
+	struct symbol *sym;
+
+	/*
+	 * Look for a relocation which references .rodata. We must use
+	 * find_reloc_by_dest_range() directly here, as insn_reloc() filters
+	 * out R_*_NONE relocations which are used for jump table annotations.
+	 */
+	text_reloc = find_reloc_by_dest_range(file->elf, insn->sec,
+					      insn->offset, insn->len);
+	if (!text_reloc) {
+		insn->no_reloc = 1;
+		return NULL;
+	}
+
+	sym = text_reloc->sym;
+	if (!sym->sec->rodata)
+		return NULL;
+
+	if (reloc_type(text_reloc) == elf_data_rela_type(file->elf))
+		addend = arch_dest_reloc_offset(reloc_addend(text_reloc));
+	else
+		addend = reloc_addend(text_reloc);
+
+	rodata_reloc = find_reloc_by_dest(file->elf, sym->sec,
+					  sym->offset + addend);
+	if (!rodata_reloc)
+		return NULL;
+
+	/*
+	 * Find the ELF symbol covering the destination of the relocation. This
+	 * is trivial if the reloc refers to a STT_OBJECT directly, but it may
+	 * have been emitted as section relative as well.
+	 */
+	if (sym->type == STT_SECTION)
+		sym = find_symbol_containing(sym->sec, addend);
+
+	*table_sym = sym;
+	return rodata_reloc;
+}
+
+/*
+ * Generic version of jump table handling, relying strictly on annotations
+ * provided by the compiler. Overridden for x86 using heuristics that attempt
+ * to correlate indirect jump instructions with preceding .rodata references.
+ */
 int __weak add_func_jump_tables(struct objtool_file *file,
 				struct symbol *func)
 {
-	return 0;
+	struct instruction *insn;
+	int ret = 0;
+
+	func_for_each_insn(file, func, insn) {
+		struct reloc *reloc;
+		struct symbol *sym;
+
+		if (insn->type != INSN_JUMP_DYNAMIC)
+			continue;
+
+		/*
+		 * Look for a relocation attached to this indirect jump that
+		 * references an ELF object in .rodata. This should be the jump
+		 * table annotation emitted by the compiler.
+		 */
+		reloc = find_rodata_sym_reference(file, insn, &sym);
+		if (reloc && sym && sym->len) {
+			insn->_jump_table = reloc;
+			insn->_jump_table_size = sym->len;
+
+			ret = add_jump_table(file, insn, NULL);
+			if (ret)
+				break;
+		}
+	}
+	return ret;
 }
 
 /*
