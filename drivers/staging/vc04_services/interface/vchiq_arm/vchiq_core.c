@@ -1188,13 +1188,10 @@ queue_message_sync(struct vchiq_state *state, struct vchiq_service *service,
 	header = (struct vchiq_header *)SLOT_DATA_FROM_INDEX(state,
 		local->slot_sync);
 
-	{
-		int oldmsgid = header->msgid;
-
-		if (oldmsgid != VCHIQ_MSGID_PADDING)
-			dev_err(state->dev, "core: %d: qms - msgid %x, not PADDING\n",
-				state->id, oldmsgid);
-	}
+	if (header->msgid != VCHIQ_MSGID_PADDING)
+		dev_err(state->dev,
+			"core: %d: qms - msgid %x, is not a PADDING message\n",
+			state->id, header->msgid);
 
 	dev_dbg(state->dev, "sync: %d: qms %s@%pK,%x (%d->%d)\n",
 		state->id, msg_type_str(VCHIQ_MSG_TYPE(msgid)), header, size,
