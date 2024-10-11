@@ -2145,6 +2145,16 @@ int cdns3_ep_config(struct cdns3_endpoint *priv_ep, bool enable)
 		return -EINVAL;
 	}
 
+	/*
+	 * The Endpoint is configured to handle a maximum packet size of
+	 * max_packet_size. Hence, set priv_ep->endpoint.maxpacket to
+	 * max_packet_size. This is necessary to ensure that TD_SIZE and
+	 * TOTAL_TDL are calculated correctly in cdns3_ep_run_transfer(),
+	 * and also to ensure that TDL is calculated correctly in
+	 * cdns3_ep_run_stream_transfer().
+	 */
+	priv_ep->endpoint.maxpacket = max_packet_size;
+
 	if (max_packet_size == 1024)
 		priv_ep->trb_burst_size = 128;
 	else if (max_packet_size >= 512)
