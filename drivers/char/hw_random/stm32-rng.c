@@ -49,6 +49,7 @@
 
 struct stm32_rng_data {
 	uint	max_clock_rate;
+	uint	nb_clock;
 	u32	cr;
 	u32	nscr;
 	u32	htcr;
@@ -72,7 +73,7 @@ struct stm32_rng_private {
 	struct hwrng rng;
 	struct device *dev;
 	void __iomem *base;
-	struct clk *clk;
+	struct clk_bulk_data *clk_bulk;
 	struct reset_control *rst;
 	struct stm32_rng_config pm_conf;
 	const struct stm32_rng_data *data;
@@ -266,7 +267,7 @@ static uint stm32_rng_clock_freq_restrain(struct hwrng *rng)
 	unsigned long clock_rate = 0;
 	uint clock_div = 0;
 
-	clock_rate = clk_get_rate(priv->clk);
+	clock_rate = clk_get_rate(priv->clk_bulk[0].clk);
 
 	/*
 	 * Get the exponent to apply on the CLKDIV field in RNG_CR register
@@ -276,7 +277,7 @@ static uint stm32_rng_clock_freq_restrain(struct hwrng *rng)
 	while ((clock_rate >> clock_div) > priv->data->max_clock_rate)
 		clock_div++;
 
-	pr_debug("RNG clk rate : %lu\n", clk_get_rate(priv->clk) >> clock_div);
+	pr_debug("RNG clk rate : %lu\n", clk_get_rate(priv->clk_bulk[0].clk) >> clock_div);
 
 	return clock_div;
 }
@@ -288,7 +289,7 @@ static int stm32_rng_init(struct hwrng *rng)
 	int err;
 	u32 reg;
 
-	err = clk_prepare_enable(priv->clk);
+	err = clk_bulk_prepare_enable(priv->data->nb_clock, priv->clk_bulk);
 	if (err)
 		return err;
 
@@ -328,7 +329,7 @@ static int stm32_rng_init(struct hwrng *rng)
 							(!(reg & RNG_CR_CONDRST)),
 							10, 50000);
 		if (err) {
-			clk_disable_unprepare(priv->clk);
+			clk_bulk_disable_unprepare(priv->data->nb_clock, priv->clk_bulk);
 			dev_err(priv->dev, "%s: timeout %x!\n", __func__, reg);
 			return -EINVAL;
 		}
@@ -356,12 +357,13 @@ static int stm32_rng_init(struct hwrng *rng)
 						reg & RNG_SR_DRDY,
 						10, 100000);
 	if (err || (reg & ~RNG_SR_DRDY)) {
-		clk_disable_unprepare(priv->clk);
+		clk_bulk_disable_unprepare(priv->data->nb_clock, priv->clk_bulk);
 		dev_err(priv->dev, "%s: timeout:%x SR: %x!\n", __func__, err, reg);
+
 		return -EINVAL;
 	}
 
-	clk_disable_unprepare(priv->clk);
+	clk_bulk_disable_unprepare(priv->data->nb_clock, priv->clk_bulk);
 
 	return 0;
 }
@@ -379,7 +381,8 @@ static int __maybe_unused stm32_rng_runtime_suspend(struct device *dev)
 	reg = readl_relaxed(priv->base + RNG_CR);
 	reg &= ~RNG_CR_RNGEN;
 	writel_relaxed(reg, priv->base + RNG_CR);
-	clk_disable_unprepare(priv->clk);
+
+	clk_bulk_disable_unprepare(priv->data->nb_clock, priv->clk_bulk);
 
 	return 0;
 }
@@ -389,7 +392,7 @@ static int __maybe_unused stm32_rng_suspend(struct device *dev)
 	struct stm32_rng_private *priv = dev_get_drvdata(dev);
 	int err;
 
-	err = clk_prepare_enable(priv->clk);
+	err = clk_bulk_prepare_enable(priv->data->nb_clock, priv->clk_bulk);
 	if (err)
 		return err;
 
@@ -403,7 +406,7 @@ static int __maybe_unused stm32_rng_suspend(struct device *dev)
 
 	writel_relaxed(priv->pm_conf.cr, priv->base + RNG_CR);
 
-	clk_disable_unprepare(priv->clk);
+	clk_bulk_disable_unprepare(priv->data->nb_clock, priv->clk_bulk);
 
 	return 0;
 }
@@ -414,7 +417,7 @@ static int __maybe_unused stm32_rng_runtime_resume(struct device *dev)
 	int err;
 	u32 reg;
 
-	err = clk_prepare_enable(priv->clk);
+	err = clk_bulk_prepare_enable(priv->data->nb_clock, priv->clk_bulk);
 	if (err)
 		return err;
 
@@ -434,7 +437,7 @@ static int __maybe_unused stm32_rng_resume(struct device *dev)
 	int err;
 	u32 reg;
 
-	err = clk_prepare_enable(priv->clk);
+	err = clk_bulk_prepare_enable(priv->data->nb_clock, priv->clk_bulk);
 	if (err)
 		return err;
 
@@ -462,7 +465,7 @@ static int __maybe_unused stm32_rng_resume(struct device *dev)
 							reg & ~RNG_CR_CONDRST, 10, 100000);
 
 		if (err) {
-			clk_disable_unprepare(priv->clk);
+			clk_bulk_disable_unprepare(priv->data->nb_clock, priv->clk_bulk);
 			dev_err(priv->dev, "%s: timeout:%x CR: %x!\n", __func__, err, reg);
 			return -EINVAL;
 		}
@@ -472,7 +475,7 @@ static int __maybe_unused stm32_rng_resume(struct device *dev)
 		writel_relaxed(reg, priv->base + RNG_CR);
 	}
 
-	clk_disable_unprepare(priv->clk);
+	clk_bulk_disable_unprepare(priv->data->nb_clock, priv->clk_bulk);
 
 	return 0;
 }
@@ -484,9 +487,19 @@ static const struct dev_pm_ops __maybe_unused stm32_rng_pm_ops = {
 				stm32_rng_resume)
 };
 
+static const struct stm32_rng_data stm32mp25_rng_data = {
+	.has_cond_reset = true,
+	.max_clock_rate = 48000000,
+	.nb_clock = 2,
+	.cr = 0x00F00D00,
+	.nscr = 0x2B5BB,
+	.htcr = 0x969D,
+};
+
 static const struct stm32_rng_data stm32mp13_rng_data = {
 	.has_cond_reset = true,
 	.max_clock_rate = 48000000,
+	.nb_clock = 1,
 	.cr = 0x00F00D00,
 	.nscr = 0x2B5BB,
 	.htcr = 0x969D,
@@ -495,9 +508,14 @@ static const struct stm32_rng_data stm32mp13_rng_data = {
 static const struct stm32_rng_data stm32_rng_data = {
 	.has_cond_reset = false,
 	.max_clock_rate = 3000000,
+	.nb_clock = 1,
 };
 
 static const struct of_device_id stm32_rng_match[] = {
+	{
+		.compatible = "st,stm32mp25-rng",
+		.data = &stm32mp25_rng_data,
+	},
 	{
 		.compatible = "st,stm32mp13-rng",
 		.data = &stm32mp13_rng_data,
@@ -525,10 +543,6 @@ static int stm32_rng_probe(struct platform_device *ofdev)
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
 
-	priv->clk = devm_clk_get(&ofdev->dev, NULL);
-	if (IS_ERR(priv->clk))
-		return PTR_ERR(priv->clk);
-
 	priv->rst = devm_reset_control_get(&ofdev->dev, NULL);
 	if (!IS_ERR(priv->rst)) {
 		reset_control_assert(priv->rst);
@@ -550,6 +564,41 @@ static int stm32_rng_probe(struct platform_device *ofdev)
 	priv->rng.init = stm32_rng_init;
 	priv->rng.read = stm32_rng_read;
 	priv->rng.quality = 900;
+
+	if (!priv->data->nb_clock || priv->data->nb_clock > 2)
+		return -EINVAL;
+
+	priv->clk_bulk = devm_kzalloc(dev, priv->data->nb_clock * sizeof(*priv->clk_bulk),
+				      GFP_KERNEL);
+	if (!priv->clk_bulk)
+		return -ENOMEM;
+
+	if (priv->data->nb_clock == 2) {
+		struct clk *clk;
+		struct clk *bus_clk;
+
+		clk = devm_clk_get(&ofdev->dev, "core");
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
+
+		bus_clk = devm_clk_get(&ofdev->dev, "bus");
+		if (IS_ERR(clk))
+			return PTR_ERR(bus_clk);
+
+		priv->clk_bulk[0].clk = clk;
+		priv->clk_bulk[0].id = "core";
+		priv->clk_bulk[1].clk = bus_clk;
+		priv->clk_bulk[1].id = "bus";
+	} else {
+		struct clk *clk;
+
+		clk = devm_clk_get(&ofdev->dev, NULL);
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
+
+		priv->clk_bulk[0].clk = clk;
+		priv->clk_bulk[0].id = "core";
+	}
 
 	pm_runtime_set_autosuspend_delay(dev, 100);
 	pm_runtime_use_autosuspend(dev);
