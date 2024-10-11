@@ -117,7 +117,6 @@ enum {
 	CRUSH_BUCKET_STRAW = 4,
 	CRUSH_BUCKET_STRAW2 = 5,
 };
-extern const char *crush_bucket_alg_name(int alg);
 
 /*
  * although tree was a legacy algorithm, it has been buggy, so
@@ -314,7 +313,6 @@ struct crush_map {
 
 
 /* crush.c */
-extern int crush_get_bucket_item_weight(const struct crush_bucket *b, int pos);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);
