@@ -48,3 +48,9 @@ OPTIONS
 
 --dso::
 	Specify a DSO for the "Symbols" test.
+
+-w::
+--workload=::
+	Run a built-in workload, to list them use '-w --list', current ones include:
+	noploop, thloop, leafloop, sqrtloop, brstack, datasym and landlock.
+	Used with the shell script regression tests.
