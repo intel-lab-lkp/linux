@@ -629,9 +629,10 @@ static void __fail_scsi_task(struct iscsi_task *task, int err)
 		conn->session->queued_cmdsn--;
 		/* it was never sent so just complete like normal */
 		state = ISCSI_TASK_COMPLETED;
-	} else if (err == DID_TRANSPORT_DISRUPTED)
+	} else if (err == DID_TRANSPORT_DISRUPTED) {
 		state = ISCSI_TASK_ABRT_SESS_RECOV;
-	else
+		sc->device->expecting_cc_ua = 1;
+	} else
 		state = ISCSI_TASK_ABRT_TMF;
 
 	sc = task->sc;
