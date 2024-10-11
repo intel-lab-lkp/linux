@@ -15,6 +15,9 @@ PCI Endpoint Framework
    pci-ntb-howto
    pci-vntb-function
    pci-vntb-howto
+   pci-nvme-function
+   pci-nvme-howto
 
    function/binding/pci-test
    function/binding/pci-ntb
+   function/binding/pci-nvme
