@@ -505,9 +505,25 @@ static int perf_test__list(int argc, const char **argv)
 	return 0;
 }
 
+static int workloads__fprintf_list(FILE *fp)
+{
+	struct test_workload *twl;
+	int printed = 0;
+
+	workloads__for_each(twl)
+		printed += fprintf(fp, "%s\n", twl->name);
+
+	return printed;
+}
+
 static int run_workload(const char *work, int argc, const char **argv)
 {
 	struct test_workload *twl;
+
+	if (!strcmp(work, "--list")) {
+		workloads__fprintf_list(stdout);
+		return 0;
+	}
 
 	workloads__for_each(twl) {
 		if (!strcmp(twl->name, work))
@@ -544,7 +560,7 @@ int cmd_test(int argc, const char **argv)
 	OPT_BOOLEAN('p', "parallel", &parallel, "Run the tests in parallel"),
 	OPT_BOOLEAN('S', "sequential", &sequential,
 		    "Run the tests one after another rather than in parallel"),
-	OPT_STRING('w', "workload", &workload, "work", "workload to run for testing"),
+	OPT_STRING('w', "workload", &workload, "work", "workload to run for testing, use '-w --list' to list the available ones."),
 	OPT_STRING(0, "dso", &dso_to_test, "dso", "dso to test"),
 	OPT_STRING(0, "objdump", &test_objdump_path, "path",
 		   "objdump binary to use for disassembly and annotations"),
