@@ -139,10 +139,6 @@ static int __ref zero_pmd_populate(pud_t *pud, unsigned long addr,
 	return 0;
 }
 
-void __weak __meminit pmd_init(void *addr)
-{
-}
-
 static int __ref zero_pud_populate(p4d_t *p4d, unsigned long addr,
 				unsigned long end)
 {
@@ -179,10 +175,6 @@ static int __ref zero_pud_populate(p4d_t *p4d, unsigned long addr,
 	} while (pud++, addr = next, addr != end);
 
 	return 0;
-}
-
-void __weak __meminit pud_init(void *addr)
-{
 }
 
 static int __ref zero_p4d_populate(pgd_t *pgd, unsigned long addr,
