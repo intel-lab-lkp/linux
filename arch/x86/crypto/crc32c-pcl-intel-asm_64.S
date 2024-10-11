@@ -171,6 +171,7 @@ SYM_FUNC_START(crc_pcl)
 	leaq	jump_table(%rip), %bufp
 	movslq	(%bufp,%rax,4), len
 	addq	len, %bufp
+	.reloc	., R_X86_64_NONE, jump_table
 	JMP_NOSPEC bufp
 
 	################################################################
@@ -327,6 +328,8 @@ JMPTBL_ENTRY %i
 	i=i+1
 .endr
 
+.size	jump_table, . - jump_table
+.type	jump_table, @object
 
 	################################################################
 	## PCLMULQDQ tables
