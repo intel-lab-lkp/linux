@@ -282,6 +282,7 @@ static int __drm_connector_init(struct drm_device *dev,
 	connector->edid_blob_ptr = NULL;
 	connector->epoch_counter = 0;
 	connector->tile_blob_ptr = NULL;
+	connector->physical_status = connector_status_unknown;
 	connector->status = connector_status_unknown;
 	connector->display_info.panel_orientation =
 		DRM_MODE_PANEL_ORIENTATION_UNKNOWN;

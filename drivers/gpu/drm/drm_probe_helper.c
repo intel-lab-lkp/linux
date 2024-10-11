@@ -373,7 +373,7 @@ retry:
 	if (WARN_ON(ret < 0))
 		ret = connector_status_unknown;
 
-	if (ret != connector->status)
+	if (ret != connector->physical_status)
 		connector->epoch_counter += 1;
 
 	drm_modeset_drop_locks(&ctx);
@@ -409,7 +409,7 @@ drm_helper_probe_detect(struct drm_connector *connector,
 
 	ret = detect_connector_status(connector, ctx, force);
 
-	if (ret != connector->status)
+	if (ret != connector->physical_status)
 		connector->epoch_counter += 1;
 
 	return ret;
@@ -588,9 +588,11 @@ retry:
 	if (connector->force) {
 		if (connector->force == DRM_FORCE_ON ||
 		    connector->force == DRM_FORCE_ON_DIGITAL)
-			connector->status = connector_status_connected;
+			connector->physical_status = connector_status_connected;
 		else
-			connector->status = connector_status_disconnected;
+			connector->physical_status = connector_status_disconnected;
+		connector->status = connector->physical_status;
+
 		if (connector->funcs->force)
 			connector->funcs->force(connector);
 	} else {
@@ -602,7 +604,8 @@ retry:
 		} else if (WARN(ret < 0, "Invalid return value %i for connector detection\n", ret))
 			ret = connector_status_unknown;
 
-		connector->status = ret;
+		connector->physical_status = ret;
+		connector->status = connector->physical_status;
 	}
 
 	/*

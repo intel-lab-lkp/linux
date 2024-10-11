@@ -1818,6 +1818,13 @@ struct drm_connector {
 	struct list_head modes;
 
 	/**
+	 * @physical_status:
+	 * One of the drm_connector_status enums (connected, not, or unknown).
+	 * Protected by &drm_mode_config.mutex.
+	 */
+	enum drm_connector_status physical_status;
+
+	/**
 	 * @status:
 	 * One of the drm_connector_status enums (connected, not, or unknown).
 	 * Protected by &drm_mode_config.mutex.
