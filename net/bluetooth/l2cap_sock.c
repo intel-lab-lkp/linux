@@ -132,10 +132,15 @@ static int l2cap_sock_bind(struct socket *sock, struct sockaddr *addr, int alen)
 	bacpy(&chan->src, &la.l2_bdaddr);
 	chan->src_type = la.l2_bdaddr_type;
 
-	if (la.l2_cid)
-		err = l2cap_add_scid(chan, __le16_to_cpu(la.l2_cid));
-	else
+	if (la.l2_cid) {
+		/* Restrict fixed CIDs to CAP_NET_BIND_SERVICE */
+		if (!capable(CAP_NET_BIND_SERVICE))
+			err = -EACCES;
+		else
+			err = l2cap_add_scid(chan, __le16_to_cpu(la.l2_cid));
+	} else {
 		err = l2cap_add_psm(chan, &la.l2_bdaddr, la.l2_psm);
+	}
 
 	if (err < 0)
 		goto done;
