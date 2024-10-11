@@ -564,26 +564,26 @@ vchiq_blocking_bulk_transfer(struct vchiq_instance *instance, unsigned int handl
 	}
 	mutex_unlock(&instance->bulk_waiter_list_mutex);
 
-	if (waiter) {
-		struct vchiq_bulk *bulk = waiter->bulk_waiter.bulk;
-
-		if (bulk) {
-			/* This thread has an outstanding bulk transfer. */
-			/* FIXME: why compare a dma address to a pointer? */
-			if ((bulk->data != (dma_addr_t)(uintptr_t)data) || (bulk->size != size)) {
-				/*
-				 * This is not a retry of the previous one.
-				 * Cancel the signal when the transfer completes.
-				 */
-				spin_lock(&service->state->bulk_waiter_spinlock);
-				bulk->userdata = NULL;
-				spin_unlock(&service->state->bulk_waiter_spinlock);
-			}
-		}
-	} else {
+	if (!waiter) {
 		waiter = kzalloc(sizeof(*waiter), GFP_KERNEL);
 		if (!waiter)
 			return -ENOMEM;
+	}
+
+	struct vchiq_bulk *bulk = waiter->bulk_waiter.bulk;
+
+	if (bulk) {
+		/* This thread has an outstanding bulk transfer. */
+		/* FIXME: why compare a dma address to a pointer? */
+		if ((bulk->data != (dma_addr_t)(uintptr_t)data) || (bulk->size != size)) {
+			/*
+			 * This is not a retry of the previous one.
+			 * Cancel the signal when the transfer completes.
+			 */
+			spin_lock(&service->state->bulk_waiter_spinlock);
+			bulk->userdata = NULL;
+			spin_unlock(&service->state->bulk_waiter_spinlock);
+		}
 	}
 
 	ret = vchiq_bulk_xfer_blocking(instance, handle, data, NULL, size,
