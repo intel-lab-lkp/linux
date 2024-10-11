@@ -9835,15 +9835,12 @@ static unsigned long task_h_load(struct task_struct *p)
 }
 #endif
 
-static void sched_balance_update_blocked_averages(int cpu)
+static void update_blocked_averages(struct rq *rq)
 {
 	bool decayed = false, done = true;
-	struct rq *rq = cpu_rq(cpu);
-	struct rq_flags rf;
 
-	rq_lock_irqsave(rq, &rf);
-	update_blocked_load_tick(rq);
 	update_rq_clock(rq);
+	update_blocked_load_tick(rq);
 
 	decayed |= __update_blocked_others(rq, &done);
 	decayed |= __update_blocked_fair(rq, &done);
@@ -9851,6 +9848,18 @@ static void sched_balance_update_blocked_averages(int cpu)
 	update_blocked_load_status(rq, !done);
 	if (decayed)
 		cpufreq_update_util(rq, 0);
+}
+
+static void sched_balance_update_blocked_averages(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+	struct cfs_rq *cfs_rq;
+	struct rq_flags rf;
+
+	cfs_rq = &rq->cfs;
+
+	rq_lock_irqsave(rq, &rf);
+	update_blocked_averages(rq);
 	rq_unlock_irqrestore(rq, &rf);
 }
 
@@ -12871,6 +12880,8 @@ void sched_balance_trigger(struct rq *rq)
 
 	if (time_after_eq(jiffies, rq->next_balance))
 		raise_softirq(SCHED_SOFTIRQ);
+	else if (idle_cpu(rq->cpu))
+		update_blocked_averages(rq);
 
 	nohz_balancer_kick(rq);
 }
