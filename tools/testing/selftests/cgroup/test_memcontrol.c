@@ -1392,7 +1392,6 @@ static int test_memcg_oom_group_leaf_events(const char *root)
 	if (cg_write(child, "memory.oom.group", "1"))
 		goto cleanup;
 
-	cg_run_nowait(parent, alloc_anon_noexit, (void *) MB(60));
 	cg_run_nowait(child, alloc_anon_noexit, (void *) MB(1));
 	cg_run_nowait(child, alloc_anon_noexit, (void *) MB(1));
 	if (!cg_run(child, alloc_anon, (void *)MB(100)))
