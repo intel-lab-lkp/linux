@@ -157,6 +157,8 @@ int __init acpi_gtdt_init(struct acpi_table_header *table,
 {
 	void *platform_timer;
 	struct acpi_table_gtdt *gtdt;
+	struct acpi_gtdt_header *gh;
+	void *struct_end;
 
 	gtdt = container_of(table, struct acpi_table_gtdt, header);
 	acpi_gtdt_desc.gtdt = gtdt;
@@ -177,11 +179,20 @@ int __init acpi_gtdt_init(struct acpi_table_header *table,
 	}
 
 	platform_timer = (void *)gtdt + gtdt->platform_timer_offset;
-	if (platform_timer < (void *)table + sizeof(struct acpi_table_gtdt)) {
-		pr_err(FW_BUG "invalid timer data.\n");
-		return -EINVAL;
+	struct_end = (void *)table + sizeof(struct acpi_table_gtdt);
+	for (int i = 0; i < gtdt->platform_timer_count; i++) {
+		gh = platform_timer;
+		if (((i == 0 && platform_timer >= struct_end) || i != 0) &&
+			platform_timer < acpi_gtdt_desc.gtdt_end &&
+			platform_timer + gh->length <= acpi_gtdt_desc.gtdt_end) {
+			platform_timer += gh->length;
+		} else {
+			pr_err(FW_BUG "invalid timer data.\n");
+			return -EINVAL;
+		}
 	}
-	acpi_gtdt_desc.platform_timer = platform_timer;
+
+	acpi_gtdt_desc.platform_timer = (void *)gtdt + gtdt->platform_timer_offset;
 	if (platform_timer_count)
 		*platform_timer_count = gtdt->platform_timer_count;
 
