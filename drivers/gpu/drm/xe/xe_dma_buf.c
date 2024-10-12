@@ -17,6 +17,7 @@
 #include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_pm.h"
+#include "xe_sriov.h"
 #include "xe_ttm_vram_mgr.h"
 #include "xe_vm.h"
 
@@ -26,8 +27,11 @@ static int xe_dma_buf_attach(struct dma_buf *dmabuf,
 			     struct dma_buf_attachment *attach)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
+	struct xe_bo *bo = gem_to_xe_bo(obj);
+	struct xe_device *xe = xe_bo_device(bo);
 
 	if (attach->peer2peer &&
+	    !IS_SRIOV_VF(xe) &&
 	    pci_p2pdma_distance(to_pci_dev(obj->dev->dev), attach->dev, false) < 0)
 		attach->peer2peer = false;
 
@@ -51,7 +55,7 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 	struct xe_device *xe = xe_bo_device(bo);
-	int ret;
+	int ret = 0;
 
 	/*
 	 * For now only support pinning in TT memory, for two reasons:
@@ -63,7 +67,8 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
 		return -EINVAL;
 	}
 
-	ret = xe_bo_migrate(bo, XE_PL_TT);
+	if (!IS_SRIOV_VF(xe) || !attach->peer2peer)
+		ret = xe_bo_migrate(bo, XE_PL_TT);
 	if (ret) {
 		if (ret != -EINTR && ret != -ERESTARTSYS)
 			drm_dbg(&xe->drm,
