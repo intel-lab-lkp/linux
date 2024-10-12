@@ -15,9 +15,14 @@ struct evsel;
 struct target;
 struct bpf_counter;
 
+struct bpf_stat_opts {
+	bool inherit;
+};
+
 typedef int (*bpf_counter_evsel_op)(struct evsel *evsel);
 typedef int (*bpf_counter_evsel_target_op)(struct evsel *evsel,
-					   struct target *target);
+					   struct target *target,
+					   struct bpf_stat_opts *opts);
 typedef int (*bpf_counter_evsel_install_pe_op)(struct evsel *evsel,
 					       int cpu_map_idx,
 					       int fd);
@@ -38,7 +43,8 @@ struct bpf_counter {
 
 #ifdef HAVE_BPF_SKEL
 
-int bpf_counter__load(struct evsel *evsel, struct target *target);
+int bpf_counter__load(struct evsel *evsel, struct target *target,
+		      struct bpf_stat_opts *opts);
 int bpf_counter__enable(struct evsel *evsel);
 int bpf_counter__disable(struct evsel *evsel);
 int bpf_counter__read(struct evsel *evsel);
@@ -50,7 +56,8 @@ int bpf_counter__install_pe(struct evsel *evsel, int cpu_map_idx, int fd);
 #include <linux/err.h>
 
 static inline int bpf_counter__load(struct evsel *evsel __maybe_unused,
-				    struct target *target __maybe_unused)
+				    struct target *target __maybe_unused,
+				    struct bpf_stat_opts *opts __maybe_unused)
 {
 	return 0;
 }

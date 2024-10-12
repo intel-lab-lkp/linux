@@ -698,6 +698,7 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 	char msg[BUFSIZ];
 	unsigned long long t0, t1;
 	struct evsel *counter;
+	struct bpf_stat_opts opts;
 	size_t l;
 	int status = 0;
 	const bool forks = (argc > 0);
@@ -725,7 +726,8 @@ static int __run_perf_stat(int argc, const char **argv, int run_idx)
 
 	evlist__for_each_entry(evsel_list, counter) {
 		counter->reset_group = false;
-		if (bpf_counter__load(counter, &target)) {
+		opts.inherit = !stat_config.no_inherit;
+		if (bpf_counter__load(counter, &target, &opts)) {
 			err = -1;
 			goto err_out;
 		}

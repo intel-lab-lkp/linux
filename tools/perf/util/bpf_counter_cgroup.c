@@ -167,7 +167,8 @@ out:
 }
 
 static int bperf_cgrp__load(struct evsel *evsel,
-			    struct target *target __maybe_unused)
+			    struct target *target __maybe_unused,
+			    struct bpf_stat_opts *opts __maybe_unused)
 {
 	static bool bperf_loaded = false;
 
