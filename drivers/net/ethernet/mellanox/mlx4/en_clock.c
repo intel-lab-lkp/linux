@@ -47,9 +47,10 @@ static u64 mlx4_en_read_clock_cache(const struct cyclecounter *tc)
 	return READ_ONCE(mdev->clock_cache) & tc->mask;
 }
 
-static void mlx4_en_read_clock(struct mlx4_en_dev *mdev)
+static void mlx4_en_read_clock(struct mlx4_en_dev *mdev,
+			       struct ptp_system_timestamp *sts)
 {
-	u64 cycles = mlx4_read_clock(mdev->dev);
+	u64 cycles = mlx4_read_clock(mdev->dev, sts);
 
 	WRITE_ONCE(mdev->clock_cache, cycles);
 }
@@ -117,7 +118,7 @@ void mlx4_en_ptp_overflow_check(struct mlx4_en_dev *mdev)
 	if (timeout) {
 		write_seqlock_irqsave(&mdev->clock_lock, flags);
 		/* refresh the clock_cache */
-		mlx4_en_read_clock(mdev);
+		mlx4_en_read_clock(mdev, NULL);
 
 		timecounter_read(&mdev->clock);
 		write_sequnlock_irqrestore(&mdev->clock_lock, flags);
@@ -146,7 +147,7 @@ static int mlx4_en_phc_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
 	/* refresh the clock_cache */
-	mlx4_en_read_clock(mdev);
+	mlx4_en_read_clock(mdev, NULL);
 	timecounter_read(&mdev->clock);
 	mdev->cycles.mult = mult;
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
@@ -192,7 +193,7 @@ static int mlx4_en_phc_gettime(struct ptp_clock_info *ptp,
 
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
 	/* refresh the clock_cache */
-	mlx4_en_read_clock(mdev);
+	mlx4_en_read_clock(mdev, NULL);
 	ns = timecounter_read(&mdev->clock);
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
 
@@ -220,7 +221,7 @@ static int mlx4_en_phc_settime(struct ptp_clock_info *ptp,
 	/* reset the timecounter */
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
 	/* refresh the clock_cache */
-	mlx4_en_read_clock(mdev);
+	mlx4_en_read_clock(mdev, NULL);
 	timecounter_init(&mdev->clock, &mdev->cycles, ns);
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
 
@@ -298,7 +299,7 @@ void mlx4_en_init_timestamp(struct mlx4_en_dev *mdev)
 
 	write_seqlock_irqsave(&mdev->clock_lock, flags);
 	/* initialize the clock_cache */
-	mlx4_en_read_clock(mdev);
+	mlx4_en_read_clock(mdev, NULL);
 	timecounter_init(&mdev->clock, &mdev->cycles,
 			 ktime_to_ns(ktime_get_real()));
 	write_sequnlock_irqrestore(&mdev->clock_lock, flags);
