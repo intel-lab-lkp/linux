@@ -37,6 +37,21 @@
 		backlight = <&backlight_lvds>;
 		power-supply = <&reg_vcc_3v3_sw>;
 
+		panel-timing {
+			clock-frequency = <74250000>;
+			hactive = <1280>;
+			vactive = <800>;
+			hfront-porch = <72>;
+			hback-porch = <86>;
+			hsync-len = <2>;
+			vfront-porch = <15>;
+			vback-porch = <21>;
+			vsync-len = <2>;
+			hsync-active = <0>;
+			vsync-active = <0>;
+			de-active = <1>;
+		};
+
 		port {
 			panel1_in: endpoint {
 				remote-endpoint = <&ldb_lvds_ch1>;
