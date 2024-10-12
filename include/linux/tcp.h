@@ -446,7 +446,7 @@ struct tcp_sock {
 
 /* Sock_ops bpf program related variables */
 #ifdef CONFIG_BPF
-	u8	bpf_sock_ops_cb_flags;  /* Control calling BPF programs
+	u32	bpf_sock_ops_cb_flags;  /* Control calling BPF programs
 					 * values defined in uapi/linux/tcp.h
 					 */
 	u8	bpf_chg_cc_inprogress:1; /* In the middle of

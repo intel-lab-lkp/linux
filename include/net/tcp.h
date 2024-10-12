@@ -423,7 +423,7 @@ int tcp_set_rcvlowat(struct sock *sk, int val);
 int tcp_set_window_clamp(struct sock *sk, int val);
 void tcp_update_recv_tstamps(struct sk_buff *skb,
 			     struct scm_timestamping_internal *tss);
-void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
+void tcp_recv_timestamp(struct msghdr *msg, struct sock *sk,
 			struct scm_timestamping_internal *tss);
 void tcp_data_ready(struct sock *sk);
 #ifdef CONFIG_MMU

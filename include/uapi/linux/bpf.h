@@ -6903,8 +6903,11 @@ enum {
 	/* Call bpf when the kernel is generating tx timestamps.
 	 */
 	BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG = (1<<7),
+	/* Call bpf when the kernel is generating rx timestamps.
+	 */
+	BPF_SOCK_OPS_RX_TIMESTAMPING_OPT_CB_FLAG = (1<<8),
 /* Mask of all currently supported cb flags */
-	BPF_SOCK_OPS_ALL_CB_FLAGS       = 0xFF,
+	BPF_SOCK_OPS_ALL_CB_FLAGS       = 0x1FF,
 };
 
 /* List of known BPF sock_ops operators.

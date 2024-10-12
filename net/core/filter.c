@@ -5216,14 +5216,18 @@ static int bpf_sock_set_timestamping(struct sock *sk,
 		return -EINVAL;
 
 	if (!(flags & (SOF_TIMESTAMPING_TX_SCHED | SOF_TIMESTAMPING_TX_SOFTWARE |
-	      SOF_TIMESTAMPING_TX_ACK)))
+	      SOF_TIMESTAMPING_TX_ACK | SOF_TIMESTAMPING_RX_SOFTWARE)))
 		return -EINVAL;
 
 	ret = sock_set_tskey(sk, flags, BPFPROG_TS_REQUESTOR);
 	if (ret)
 		return ret;
 
+	if (flags & SOF_TIMESTAMPING_RX_SOFTWARE)
+		sock_enable_timestamp(sk, SOCK_TIMESTAMPING_RX_SOFTWARE);
+
 	WRITE_ONCE(sk->sk_tsflags[BPFPROG_TS_REQUESTOR], flags);
+
 	static_branch_enable(&bpf_tstamp_control);
 
 	return 0;
