@@ -521,7 +521,7 @@ static int sdsi_state_cert_show(struct sdsi_dev *s)
 				lbc->num_bundles, STATE_MAX_NUM_IN_BUNDLE);
 
 		offset += blob_size;
-	};
+	}
 
 	return 0;
 }
