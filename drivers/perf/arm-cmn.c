@@ -79,7 +79,6 @@
 
 /* Some types are designed to coexist with another device in the same node */
 #define CMN_CCLA_PMU_EVENT_SEL		0x008
-#define CMN_HNP_PMU_EVENT_SEL		0x008
 
 /* DTMs live in the PMU space of XP registers */
 #define CMN_DTM_WPn(n)			(0x1A0 + (n) * 0x18)
