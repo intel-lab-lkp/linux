@@ -894,6 +894,27 @@ static int sock_timestamping_bind_phc(struct sock *sk, int phc_index)
 	return 0;
 }
 
+int sock_get_timestamping(struct so_timestamping *timestamping,
+			  sockptr_t optval, unsigned int optlen)
+{
+	int val;
+
+	if (copy_from_sockptr(&val, optval, sizeof(val)))
+		return -EFAULT;
+
+	if (optlen == sizeof(*timestamping)) {
+		if (copy_from_sockptr(timestamping, optval,
+				      sizeof(*timestamping))) {
+			return -EFAULT;
+		}
+	} else {
+		memset(timestamping, 0, sizeof(*timestamping));
+		timestamping->flags = val;
+	}
+
+	return 0;
+}
+
 int sock_set_timestamping(struct sock *sk, int optname,
 			  struct so_timestamping timestamping)
 {
@@ -1402,17 +1423,9 @@ set_sndbuf:
 
 	case SO_TIMESTAMPING_NEW:
 	case SO_TIMESTAMPING_OLD:
-		if (optlen == sizeof(timestamping)) {
-			if (copy_from_sockptr(&timestamping, optval,
-					      sizeof(timestamping))) {
-				ret = -EFAULT;
-				break;
-			}
-		} else {
-			memset(&timestamping, 0, sizeof(timestamping));
-			timestamping.flags = val;
-		}
-		ret = sock_set_timestamping(sk, optname, timestamping);
+		ret = sock_get_timestamping(&timestamping, optval, optlen);
+		if (!ret)
+			ret = sock_set_timestamping(sk, optname, timestamping);
 		break;
 
 	case SO_RCVLOWAT:

@@ -5204,10 +5204,30 @@ static const struct bpf_func_proto bpf_get_socket_uid_proto = {
 	.arg1_type      = ARG_PTR_TO_CTX,
 };
 
+static int bpf_sock_set_timestamping(struct sock *sk,
+				     struct so_timestamping *timestamping)
+{
+	u32 flags = timestamping->flags;
+
+	if (flags & ~SOF_TIMESTAMPING_MASK)
+		return -EINVAL;
+
+	if (!(flags & (SOF_TIMESTAMPING_TX_SCHED | SOF_TIMESTAMPING_TX_SOFTWARE |
+	      SOF_TIMESTAMPING_TX_ACK)))
+		return -EINVAL;
+
+	WRITE_ONCE(sk->sk_tsflags[BPFPROG_TS_REQUESTOR], flags);
+
+	return 0;
+}
+
 static int sol_socket_sockopt(struct sock *sk, int optname,
 			      char *optval, int *optlen,
 			      bool getopt)
 {
+	struct so_timestamping ts;
+	int ret = 0;
+
 	switch (optname) {
 	case SO_REUSEADDR:
 	case SO_SNDBUF:
@@ -5225,6 +5245,13 @@ static int sol_socket_sockopt(struct sock *sk, int optname,
 		break;
 	case SO_BINDTODEVICE:
 		break;
+	case SO_TIMESTAMPING_NEW:
+	case SO_TIMESTAMPING_OLD:
+		ret = sock_get_timestamping(&ts, KERNEL_SOCKPTR(optval),
+					    *optlen);
+		if (!ret)
+			ret = bpf_sock_set_timestamping(sk, &ts);
+		return ret;
 	default:
 		return -EINVAL;
 	}
