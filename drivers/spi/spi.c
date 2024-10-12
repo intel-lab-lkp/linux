@@ -624,11 +624,6 @@ static void spi_dev_set_name(struct spi_device *spi)
  */
 #define SPI_INVALID_CS		((s8)-1)
 
-static inline bool is_valid_cs(s8 chip_select)
-{
-	return chip_select != SPI_INVALID_CS;
-}
-
 static inline int spi_dev_check_cs(struct device *dev,
 				   struct spi_device *spi, u8 idx,
 				   struct spi_device *new_spi, u8 new_idx)
@@ -639,7 +634,7 @@ static inline int spi_dev_check_cs(struct device *dev,
 	cs = spi_get_chipselect(spi, idx);
 	for (idx_new = new_idx; idx_new < new_spi->num_chipselect; idx_new++) {
 		cs_new = spi_get_chipselect(new_spi, idx_new);
-		if (is_valid_cs(cs) && is_valid_cs(cs_new) && cs == cs_new) {
+		if (cs == cs_new) {
 			dev_err(dev, "chipselect %u already in use\n", cs_new);
 			return -EBUSY;
 		}
@@ -685,7 +680,7 @@ static int __spi_add_device(struct spi_device *spi)
 	for (idx = 0; idx < spi->num_chipselect; idx++) {
 		/* Chipselects are numbered 0..max; validate. */
 		cs = spi_get_chipselect(spi, idx);
-		if (is_valid_cs(cs) && cs >= ctlr->num_chipselect) {
+		if (cs >= ctlr->num_chipselect) {
 			dev_err(dev, "cs%d >= max %d\n", spi_get_chipselect(spi, idx),
 				ctlr->num_chipselect);
 			return -EINVAL;
@@ -727,8 +722,7 @@ static int __spi_add_device(struct spi_device *spi)
 
 		for (idx = 0; idx < spi->num_chipselect; idx++) {
 			cs = spi_get_chipselect(spi, idx);
-			if (is_valid_cs(cs))
-				spi_set_csgpiod(spi, idx, ctlr->cs_gpiods[cs]);
+			spi_set_csgpiod(spi, idx, ctlr->cs_gpiods[cs]);
 		}
 	}
 
@@ -781,14 +775,6 @@ int spi_add_device(struct spi_device *spi)
 }
 EXPORT_SYMBOL_GPL(spi_add_device);
 
-static void spi_set_all_cs_unused(struct spi_device *spi)
-{
-	u8 idx;
-
-	for (idx = 0; idx < SPI_CS_CNT_MAX; idx++)
-		spi_set_chipselect(spi, idx, SPI_INVALID_CS);
-}
-
 /**
  * spi_new_device - instantiate one new SPI device
  * @ctlr: Controller to which device is connected
@@ -824,7 +810,6 @@ struct spi_device *spi_new_device(struct spi_controller *ctlr,
 	WARN_ON(strlen(chip->modalias) >= sizeof(proxy->modalias));
 
 	/* Use provided chip-select for proxy device */
-	spi_set_all_cs_unused(proxy);
 	spi_set_chipselect(proxy, 0, chip->chip_select);
 
 	proxy->max_speed_hz = chip->max_speed_hz;
@@ -2450,8 +2435,6 @@ static int of_spi_parse_dt(struct spi_controller *ctlr, struct spi_device *spi,
 		return -EINVAL;
 	}
 
-	spi_set_all_cs_unused(spi);
-
 	/* Device address */
 	rc = of_property_read_variable_u32_array(nc, "reg", &cs[0], 1,
 						 SPI_CS_CNT_MAX);
@@ -2596,7 +2579,6 @@ struct spi_device *spi_new_ancillary_device(struct spi_device *spi,
 	strscpy(ancillary->modalias, "dummy", sizeof(ancillary->modalias));
 
 	/* Use provided chip-select for ancillary device */
-	spi_set_all_cs_unused(ancillary);
 	spi_set_chipselect(ancillary, 0, chip_select);
 
 	/* Take over SPI mode/speed from SPI main device */
@@ -2844,7 +2826,6 @@ struct spi_device *acpi_spi_device_alloc(struct spi_controller *ctlr,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	spi_set_all_cs_unused(spi);
 	spi_set_chipselect(spi, 0, lookup.chip_select);
 
 	ACPI_COMPANION_SET(&spi->dev, adev);
