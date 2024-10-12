@@ -5619,7 +5619,8 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 	__skb_complete_tx_timestamp(skb, sk, tstype, opt_stats);
 }
 
-static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype)
+static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype,
+				     struct skb_shared_hwtstamps *hwtstamps)
 {
 	struct tcp_sock *tp;
 	u32 tsflags;
@@ -5640,11 +5641,17 @@ static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype)
 		case SCM_TSTAMP_SCHED:
 			cb_flag = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
 			break;
+		case SCM_TSTAMP_SND:
+			cb_flag = BPF_SOCK_OPS_TS_SW_OPT_CB;
+			break;
 		default:
 			return;
 		}
 
-		tstamp = ktime_to_timespec64(ktime_get_real());
+		if (hwtstamps)
+			tstamp = ktime_to_timespec64(hwtstamps->hwtstamp);
+		else
+			tstamp = ktime_to_timespec64(ktime_get_real());
 		tcp_call_bpf_2arg(sk, cb_flag, tstamp.tv_sec, tstamp.tv_nsec);
 	}
 }
@@ -5658,7 +5665,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		return;
 
 	if (static_branch_unlikely(&bpf_tstamp_control))
-		bpf_skb_tstamp_tx_output(sk, tstype);
+		bpf_skb_tstamp_tx_output(sk, tstype, hwtstamps);
 
 	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }
