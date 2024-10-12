@@ -1351,23 +1351,20 @@ static int bch2_dev_alloc(struct bch_fs *c, unsigned dev_idx)
 {
 	struct bch_member member = bch2_sb_member_get(c->disk_sb.sb, dev_idx);
 	struct bch_dev *ca = NULL;
-	int ret = 0;
 
-	if (bch2_fs_init_fault("dev_alloc"))
-		goto err;
+	if (bch2_fs_init_fault("dev_alloc")) {
+		bch_err(c, "dev_alloc fault injected");
+		return -EFAULT;
+	}
 
 	ca = __bch2_dev_alloc(c, &member);
 	if (!ca)
-		goto err;
+		return -BCH_ERR_ENOMEM_dev_alloc;
 
 	ca->fs = c;
 
 	bch2_dev_attach(c, ca, dev_idx);
-	return ret;
-err:
-	if (ca)
-		bch2_dev_free(ca);
-	return -BCH_ERR_ENOMEM_dev_alloc;
+	return 0;
 }
 
 static int __bch2_dev_attach_bdev(struct bch_dev *ca, struct bch_sb_handle *sb)
