@@ -21,7 +21,7 @@
 #include <uapi/linux/spi/spi.h>
 
 /* Max no. of CS supported per spi device */
-#define SPI_CS_CNT_MAX 4
+#define SPI_DEVICE_CS_CNT_MAX 4
 
 struct dma_chan;
 struct software_node;
@@ -186,7 +186,7 @@ struct spi_device {
 	struct device		dev;
 	struct spi_controller	*controller;
 	u32			max_speed_hz;
-	u8			chip_select[SPI_CS_CNT_MAX];
+	u8			chip_select[SPI_DEVICE_CS_CNT_MAX];
 	u8			num_chipselect;
 	u8			bits_per_word;
 	bool			rt;
@@ -218,7 +218,8 @@ struct spi_device {
 	void			*controller_data;
 	char			modalias[SPI_NAME_SIZE];
 	const char		*driver_override;
-	struct gpio_desc	*cs_gpiod[SPI_CS_CNT_MAX];	/* Chip select gpio desc */
+	/* Chip select gpio desc */
+	struct gpio_desc	*cs_gpiod[SPI_DEVICE_CS_CNT_MAX];
 	struct spi_delay	word_delay; /* Inter-word delay */
 	/* CS delays */
 	struct spi_delay	cs_setup;
@@ -233,7 +234,7 @@ struct spi_device {
 	 * multiple chip selects & memories are connected in parallel
 	 * then more than one bit need to be set in cs_index_mask.
 	 */
-	u32			cs_index_mask : SPI_CS_CNT_MAX;
+	u32			cs_index_mask : SPI_DEVICE_CS_CNT_MAX;
 
 	/*
 	 * Likely need more hooks for more protocol options affecting how
@@ -711,8 +712,8 @@ struct spi_controller {
 	bool				auto_runtime_pm;
 	bool                            fallback;
 	bool				last_cs_mode_high;
-	s8				last_cs[SPI_CS_CNT_MAX];
-	u32				last_cs_index_mask : SPI_CS_CNT_MAX;
+	s8				last_cs[SPI_DEVICE_CS_CNT_MAX];
+	u32				last_cs_index_mask : SPI_DEVICE_CS_CNT_MAX;
 	struct completion               xfer_completion;
 	size_t				max_dma_len;
 
