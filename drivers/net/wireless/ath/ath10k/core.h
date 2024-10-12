@@ -558,6 +558,10 @@ struct ath10k_sta {
 	u8 rate_ctrl[ATH10K_TID_MAX];
 	u32 rate_code[ATH10K_TID_MAX];
 	int rtscts[ATH10K_TID_MAX];
+	/* protects num_fw_queued */
+	spinlock_t sta_tx_lock;
+	wait_queue_head_t empty_tx_wq;
+	unsigned int num_fw_queued;
 };
 
 #define ATH10K_VDEV_SETUP_TIMEOUT_HZ	(5 * HZ)

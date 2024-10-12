@@ -91,6 +91,9 @@ int ath10k_txrx_tx_unref(struct ath10k_htt *htt,
 					       skb_cb->airtime_est, 0);
 	rcu_read_unlock();
 
+	if (txq)
+		ath10k_htt_tx_sta_dec_pending(htt, txq->sta);
+
 	if (ar->bus_param.dev_type != ATH10K_DEV_TYPE_HL)
 		dma_unmap_single(dev, skb_cb->paddr, msdu->len, DMA_TO_DEVICE);
 
