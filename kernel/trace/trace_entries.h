@@ -190,6 +190,8 @@ FTRACE_ENTRY(kernel_stack, stack_entry,
 
 	F_STRUCT(
 		__field(	int,		size	)
+		__field(	unsigned long,	trampoline	)
+		__field(	unsigned long,	trampoline_size	)
 		__stack_array(	unsigned long,	caller,	FTRACE_STACK_ENTRIES, size)
 	),
 
