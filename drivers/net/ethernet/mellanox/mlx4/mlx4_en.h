@@ -435,6 +435,7 @@ struct mlx4_en_dev {
 	unsigned long		last_overflow_check;
 	struct ptp_clock	*ptp_clock;
 	struct ptp_clock_info	ptp_clock_info;
+	u64			clock_cache;
 	struct notifier_block	netdev_nb;
 	struct notifier_block	mlx_nb;
 };

@@ -1946,7 +1946,6 @@ u64 mlx4_read_clock(struct mlx4_dev *dev)
 }
 EXPORT_SYMBOL_GPL(mlx4_read_clock);
 
-
 static int map_internal_clock(struct mlx4_dev *dev)
 {
 	struct mlx4_priv *priv = mlx4_priv(dev);
