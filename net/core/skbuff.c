@@ -5632,8 +5632,21 @@ static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype)
 		return;
 
 	tp = tcp_sk(sk);
-	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG))
-		return;
+	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG)) {
+		struct timespec64 tstamp;
+		u32 cb_flag;
+
+		switch (tstype) {
+		case SCM_TSTAMP_SCHED:
+			cb_flag = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
+			break;
+		default:
+			return;
+		}
+
+		tstamp = ktime_to_timespec64(ktime_get_real());
+		tcp_call_bpf_2arg(sk, cb_flag, tstamp.tv_sec, tstamp.tv_nsec);
+	}
 }
 
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
