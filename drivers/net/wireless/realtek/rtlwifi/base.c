@@ -449,6 +449,7 @@ static int _rtl_init_deferred_work(struct ieee80211_hw *hw)
 	if (!wq)
 		return -ENOMEM;
 
+	set_bit(RTL_STATUS_WORK_SETUP, &rtlpriv->status);
 	/* <1> timer */
 	timer_setup(&rtlpriv->works.watchdog_timer,
 		    rtl_watch_dog_timer_callback, 0);
@@ -473,6 +474,9 @@ void rtl_deinit_deferred_work(struct ieee80211_hw *hw, bool ips_wq)
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 
+	if (!test_bit(RTL_STATUS_WORK_SETUP, &rtlpriv->status))
+		return;
+
 	del_timer_sync(&rtlpriv->works.watchdog_timer);
 
 	cancel_delayed_work_sync(&rtlpriv->works.watchdog_wq);
@@ -484,6 +488,7 @@ void rtl_deinit_deferred_work(struct ieee80211_hw *hw, bool ips_wq)
 	cancel_delayed_work_sync(&rtlpriv->works.ps_rfon_wq);
 	cancel_delayed_work_sync(&rtlpriv->works.fwevt_wq);
 	cancel_delayed_work_sync(&rtlpriv->works.c2hcmd_wq);
+	clear_bit(RTL_STATUS_WORK_SETUP, &rtlpriv->status);
 }
 EXPORT_SYMBOL_GPL(rtl_deinit_deferred_work);
 

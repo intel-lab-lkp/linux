@@ -322,6 +322,7 @@ enum rt_eeprom_type {
 
 enum ttl_status {
 	RTL_STATUS_INTERFACE_START = 0,
+	RTL_STATUS_WORK_SETUP = 1,
 };
 
 enum hardware_type {
