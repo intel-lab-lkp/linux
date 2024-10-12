@@ -71,11 +71,11 @@ static int digsig_verify_rsa(struct key *key,
 	int err = -EINVAL;
 	unsigned long len;
 	unsigned long mlen, mblen;
-	unsigned nret, l;
+	unsigned int l;
 	int head, i;
 	unsigned char *out1 = NULL;
 	const char *m;
-	MPI in = NULL, res = NULL, pkey[2];
+	MPI pkey[2];
 	uint8_t *p, *datap;
 	const uint8_t *endp;
 	const struct user_key_payload *ukp;
@@ -112,7 +112,7 @@ static int digsig_verify_rsa(struct key *key,
 		pkey[i] = mpi_read_from_buffer(datap, &remaining);
 		if (IS_ERR(pkey[i])) {
 			err = PTR_ERR(pkey[i]);
-			goto err;
+			goto free_keys;
 		}
 		datap += remaining;
 	}
@@ -122,57 +122,63 @@ static int digsig_verify_rsa(struct key *key,
 
 	if (mlen == 0) {
 		err = -EINVAL;
-		goto err;
+		goto free_keys;
 	}
 
 	err = -ENOMEM;
 
 	out1 = kzalloc(mlen, GFP_KERNEL);
 	if (!out1)
-		goto err;
+		goto free_keys;
 
-	nret = siglen;
-	in = mpi_read_from_buffer(sig, &nret);
-	if (IS_ERR(in)) {
-		err = PTR_ERR(in);
-		goto err;
+	{
+		unsigned int nret = siglen;
+		MPI in __free(mpi_free) = mpi_read_from_buffer(sig, &nret);
+
+		if (IS_ERR(in)) {
+			err = PTR_ERR(in);
+			goto in_exit;
+		}
+
+		{
+			MPI res __free(mpi_free) = mpi_alloc(mpi_get_nlimbs(in) * 2);
+
+			if (!res)
+				goto res_exit;
+
+			err = mpi_powm(res, in, pkey[1], pkey[0]);
+			if (err)
+				goto res_exit;
+
+			if (mpi_get_nlimbs(res) * BYTES_PER_MPI_LIMB > mlen) {
+				err = -EINVAL;
+				goto res_exit;
+			}
+
+			p = mpi_get_buffer(res, &l, NULL);
+			if (!p) {
+				err = -EINVAL;
+				goto res_exit;
+			}
+
+			len = mlen;
+			head = len - l;
+			memset(out1, 0, head);
+			memcpy(out1 + head, p, l);
+
+			kfree(p);
+
+			m = pkcs_1_v1_5_decode_emsa(out1, len, mblen, &len);
+
+			if (!m || len != hlen || memcmp(m, h, hlen))
+				err = -EINVAL;
+res_exit:
+		}
+in_exit:
 	}
 
-	res = mpi_alloc(mpi_get_nlimbs(in) * 2);
-	if (!res)
-		goto err;
-
-	err = mpi_powm(res, in, pkey[1], pkey[0]);
-	if (err)
-		goto err;
-
-	if (mpi_get_nlimbs(res) * BYTES_PER_MPI_LIMB > mlen) {
-		err = -EINVAL;
-		goto err;
-	}
-
-	p = mpi_get_buffer(res, &l, NULL);
-	if (!p) {
-		err = -EINVAL;
-		goto err;
-	}
-
-	len = mlen;
-	head = len - l;
-	memset(out1, 0, head);
-	memcpy(out1 + head, p, l);
-
-	kfree(p);
-
-	m = pkcs_1_v1_5_decode_emsa(out1, len, mblen, &len);
-
-	if (!m || len != hlen || memcmp(m, h, hlen))
-		err = -EINVAL;
-
-err:
-	mpi_free(in);
-	mpi_free(res);
 	kfree(out1);
+free_keys:
 	while (--i >= 0)
 		mpi_free(pkey[i]);
 err1:
