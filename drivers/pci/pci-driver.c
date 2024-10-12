@@ -1378,7 +1378,7 @@ static int pci_pm_runtime_idle(struct device *dev)
 	 * always remain in D0 regardless of the runtime PM status
 	 */
 	if (!pci_dev->driver)
-		return 0;
+		return -EBUSY;
 
 	if (pm && pm->runtime_idle)
 		return pm->runtime_idle(dev);
