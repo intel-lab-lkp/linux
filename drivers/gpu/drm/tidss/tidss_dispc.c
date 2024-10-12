@@ -700,8 +700,8 @@ void dispc_k2g_set_irqenable(struct dispc_device *dispc, dispc_irq_t mask)
 {
 	dispc_irq_t old_mask = dispc_k2g_read_irqenable(dispc);
 
-	/* clear the irqstatus for newly enabled irqs */
-	dispc_k2g_clear_irqstatus(dispc, (mask ^ old_mask) & mask);
+	/* clear the irqstatus for irqs that are being disabled now */
+	dispc_k2g_clear_irqstatus(dispc, (mask ^ old_mask) & old_mask);
 
 	dispc_k2g_vp_set_irqenable(dispc, 0, mask);
 	dispc_k2g_vid_set_irqenable(dispc, 0, mask);
@@ -843,8 +843,8 @@ static void dispc_k3_set_irqenable(struct dispc_device *dispc,
 
 	old_mask = dispc_k3_read_irqenable(dispc);
 
-	/* clear the irqstatus for newly enabled irqs */
-	dispc_k3_clear_irqstatus(dispc, (old_mask ^ mask) & mask);
+	/* clear the irqstatus for irqs that are being disabled now */
+	dispc_k3_clear_irqstatus(dispc, (old_mask ^ mask) & old_mask);
 
 	for (i = 0; i < dispc->feat->num_vps; ++i) {
 		dispc_k3_vp_set_irqenable(dispc, i, mask);
