@@ -27,3 +27,14 @@ driver takes over.
 devlink dev info provides version information for all three components. In
 addition to the version the hg commit hash of the build is included as a
 separate entry.
+
+Upgrading Firmware
+------------------
+
+fbnic supports upgrading firmware using devlink dev flash. Firmware images
+are signed and distributed by Meta. All firmware is bundled into a single
+PLDM image which is written into stored flash. Flashing firmware does not
+interrupt operation.
+
+On host reboot the newly flashed UEFI driver will be used. To run new control
+or cmrt firmware the NIC must be power cycled.
