@@ -2895,6 +2895,7 @@ DECLARE_STATIC_KEY_FALSE(bpf_tstamp_control);
 void sock_set_timestamp(struct sock *sk, int optname, bool valbool);
 int sock_get_timestamping(struct so_timestamping *timestamping,
 			  sockptr_t optval, unsigned int optlen);
+int sock_set_tskey(struct sock *sk, int val, int type);
 int sock_set_timestamping(struct sock *sk, int optname,
 			  struct so_timestamping timestamping);
 

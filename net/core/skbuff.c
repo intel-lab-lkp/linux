@@ -5619,7 +5619,7 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 	__skb_complete_tx_timestamp(skb, sk, tstype, opt_stats);
 }
 
-static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype,
+static void bpf_skb_tstamp_tx_output(struct sock *sk, struct sk_buff *skb, int tstype,
 				     struct skb_shared_hwtstamps *hwtstamps)
 {
 	struct tcp_sock *tp;
@@ -5635,7 +5635,7 @@ static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype,
 	tp = tcp_sk(sk);
 	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG)) {
 		struct timespec64 tstamp;
-		u32 cb_flag;
+		u32 cb_flag, key = 0;
 
 		switch (tstype) {
 		case SCM_TSTAMP_SCHED:
@@ -5651,11 +5651,17 @@ static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype,
 			return;
 		}
 
+		if (sk_is_tcp(sk)) {
+			key = skb_shinfo(skb)->tskey;
+			key -= atomic_read(&sk->sk_tskey);
+		}
+
 		if (hwtstamps)
 			tstamp = ktime_to_timespec64(hwtstamps->hwtstamp);
 		else
 			tstamp = ktime_to_timespec64(ktime_get_real());
-		tcp_call_bpf_2arg(sk, cb_flag, tstamp.tv_sec, tstamp.tv_nsec);
+
+		tcp_call_bpf_3arg(sk, cb_flag, key, tstamp.tv_sec, tstamp.tv_nsec);
 	}
 }
 
@@ -5668,7 +5674,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		return;
 
 	if (static_branch_unlikely(&bpf_tstamp_control))
-		bpf_skb_tstamp_tx_output(sk, tstype, hwtstamps);
+		bpf_skb_tstamp_tx_output(sk, orig_skb, tstype, hwtstamps);
 
 	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }

@@ -915,21 +915,18 @@ int sock_get_timestamping(struct so_timestamping *timestamping,
 	return 0;
 }
 
-int sock_set_timestamping(struct sock *sk, int optname,
-			  struct so_timestamping timestamping)
+int sock_set_tskey(struct sock *sk, int val, int type)
 {
-	int val = timestamping.flags;
-	int ret;
-
-	if (val & ~SOF_TIMESTAMPING_MASK)
-		return -EINVAL;
+	u32 tsflags;
 
 	if (val & SOF_TIMESTAMPING_OPT_ID_TCP &&
 	    !(val & SOF_TIMESTAMPING_OPT_ID))
 		return -EINVAL;
 
+	tsflags |= (sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR] |
+		    sk->sk_tsflags[BPFPROG_TS_REQUESTOR]);
 	if (val & SOF_TIMESTAMPING_OPT_ID &&
-	    !(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR] & SOF_TIMESTAMPING_OPT_ID)) {
+	    !(tsflags & SOF_TIMESTAMPING_OPT_ID)) {
 		if (sk_is_tcp(sk)) {
 			if ((1 << sk->sk_state) &
 			    (TCPF_CLOSE | TCPF_LISTEN))
@@ -942,6 +939,22 @@ int sock_set_timestamping(struct sock *sk, int optname,
 			atomic_set(&sk->sk_tskey, 0);
 		}
 	}
+
+	return 0;
+}
+
+int sock_set_timestamping(struct sock *sk, int optname,
+			  struct so_timestamping timestamping)
+{
+	int val = timestamping.flags;
+	int ret;
+
+	if (val & ~SOF_TIMESTAMPING_MASK)
+		return -EINVAL;
+
+	ret = sock_set_tskey(sk, val, SOCKETOPT_TS_REQUESTOR);
+	if (ret)
+		return ret;
 
 	if (val & SOF_TIMESTAMPING_OPT_STATS &&
 	    !(val & SOF_TIMESTAMPING_OPT_TSONLY))

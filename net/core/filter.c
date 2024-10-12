@@ -5210,6 +5210,7 @@ static int bpf_sock_set_timestamping(struct sock *sk,
 				     struct so_timestamping *timestamping)
 {
 	u32 flags = timestamping->flags;
+	int ret;
 
 	if (flags & ~SOF_TIMESTAMPING_MASK)
 		return -EINVAL;
@@ -5217,6 +5218,10 @@ static int bpf_sock_set_timestamping(struct sock *sk,
 	if (!(flags & (SOF_TIMESTAMPING_TX_SCHED | SOF_TIMESTAMPING_TX_SOFTWARE |
 	      SOF_TIMESTAMPING_TX_ACK)))
 		return -EINVAL;
+
+	ret = sock_set_tskey(sk, flags, BPFPROG_TS_REQUESTOR);
+	if (ret)
+		return ret;
 
 	WRITE_ONCE(sk->sk_tsflags[BPFPROG_TS_REQUESTOR], flags);
 	static_branch_enable(&bpf_tstamp_control);
