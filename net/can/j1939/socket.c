@@ -996,7 +996,7 @@ static void __j1939_sk_errqueue(struct j1939_session *session, struct sock *sk,
 	if (!(jsk->state & J1939_SOCK_ERRQUEUE))
 		return;
 
-	tsflags = READ_ONCE(sk->sk_tsflags);
+	tsflags = READ_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR]);
 	switch (type) {
 	case J1939_ERRQUEUE_TX_ACK:
 		if (!(tsflags & SOF_TIMESTAMPING_TX_ACK))

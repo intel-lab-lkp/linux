@@ -1547,7 +1547,7 @@ emsgsize:
 	}
 
 	if (cork->tx_flags & SKBTX_ANY_TSTAMP &&
-	    READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_OPT_ID) {
+	    READ_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR]) & SOF_TIMESTAMPING_OPT_ID) {
 		if (cork->flags & IPCORK_TS_OPT_ID) {
 			tskey = cork->ts_opt_id;
 		} else {

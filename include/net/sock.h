@@ -234,6 +234,13 @@ struct sock_common {
 struct bpf_local_storage;
 struct sk_filter;
 
+enum {
+	SOCKETOPT_TS_REQUESTOR = 0,
+	BPFPROG_TS_REQUESTOR,
+
+	__MAX_TS_REQUESTOR,
+};
+
 /**
   *	struct sock - network layer representation of sockets
   *	@__sk_common: shared layout with inet_timewait_sock
@@ -444,7 +451,7 @@ struct sock {
 	socket_lock_t		sk_lock;
 	u32			sk_reserved_mem;
 	int			sk_forward_alloc;
-	u32			sk_tsflags;
+	u32			sk_tsflags[__MAX_TS_REQUESTOR];
 	__cacheline_group_end(sock_write_rxtx);
 
 	__cacheline_group_begin(sock_write_tx);
@@ -1811,7 +1818,7 @@ static inline void sockcm_init(struct sockcm_cookie *sockc,
 			       const struct sock *sk)
 {
 	*sockc = (struct sockcm_cookie) {
-		.tsflags = READ_ONCE(sk->sk_tsflags)
+		.tsflags = READ_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR])
 	};
 }
 
@@ -2619,7 +2626,7 @@ static inline void
 sock_recv_timestamp(struct msghdr *msg, struct sock *sk, struct sk_buff *skb)
 {
 	struct skb_shared_hwtstamps *hwtstamps = skb_hwtstamps(skb);
-	u32 tsflags = READ_ONCE(sk->sk_tsflags);
+	u32 tsflags = READ_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR]);
 	ktime_t kt = skb->tstamp;
 	/*
 	 * generate control messages if
@@ -2654,7 +2661,7 @@ static inline void sock_recv_cmsgs(struct msghdr *msg, struct sock *sk,
 			   SOF_TIMESTAMPING_RAW_HARDWARE)
 
 	if (sk->sk_flags & FLAGS_RECV_CMSGS ||
-	    READ_ONCE(sk->sk_tsflags) & TSFLAGS_ANY)
+	    READ_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR]) & TSFLAGS_ANY)
 		__sock_recv_cmsgs(msg, sk, skb);
 	else if (unlikely(sock_flag(sk, SOCK_TIMESTAMP)))
 		sock_write_timestamp(sk, skb->tstamp);

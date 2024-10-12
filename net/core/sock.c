@@ -908,7 +908,7 @@ int sock_set_timestamping(struct sock *sk, int optname,
 		return -EINVAL;
 
 	if (val & SOF_TIMESTAMPING_OPT_ID &&
-	    !(sk->sk_tsflags & SOF_TIMESTAMPING_OPT_ID)) {
+	    !(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR] & SOF_TIMESTAMPING_OPT_ID)) {
 		if (sk_is_tcp(sk)) {
 			if ((1 << sk->sk_state) &
 			    (TCPF_CLOSE | TCPF_LISTEN))
@@ -932,7 +932,7 @@ int sock_set_timestamping(struct sock *sk, int optname,
 			return ret;
 	}
 
-	WRITE_ONCE(sk->sk_tsflags, val);
+	WRITE_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR], val);
 	sock_valbool_flag(sk, SOCK_TSTAMP_NEW, optname == SO_TIMESTAMPING_NEW);
 
 	if (val & SOF_TIMESTAMPING_RX_SOFTWARE)
@@ -1797,7 +1797,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		 * Don't change the beviour for the old case SO_TIMESTAMPING_OLD.
 		 */
 		if (optname == SO_TIMESTAMPING_OLD || sock_flag(sk, SOCK_TSTAMP_NEW)) {
-			v.timestamping.flags = READ_ONCE(sk->sk_tsflags);
+			v.timestamping.flags = READ_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR]);
 			v.timestamping.bind_phc = READ_ONCE(sk->sk_bind_phc);
 		}
 		break;
@@ -2930,7 +2930,7 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 	case SCM_TS_OPT_ID:
 		if (sk_is_tcp(sk))
 			return -EINVAL;
-		tsflags = READ_ONCE(sk->sk_tsflags);
+		tsflags = READ_ONCE(sk->sk_tsflags[SOCKETOPT_TS_REQUESTOR]);
 		if (!(tsflags & SOF_TIMESTAMPING_OPT_ID))
 			return -EINVAL;
 		if (cmsg->cmsg_len != CMSG_LEN(sizeof(u32)))
