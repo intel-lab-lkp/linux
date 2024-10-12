@@ -130,7 +130,7 @@ static const unsigned int bmi323_reg_savestate[] = {
 	BMI323_FIFO_CONF_REG
 };
 
-static const unsigned int bmi323_ext_reg_savestate[] = {
+static const unsigned int bmi323_ext_reg_savestate[] __maybe_unused = {
 	BMI323_GEN_SET1_REG,
 	BMI323_TAP1_REG,
 	BMI323_TAP2_REG,
