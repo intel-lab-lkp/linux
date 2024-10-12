@@ -18,6 +18,8 @@
 #![feature(lint_reasons)]
 #![feature(new_uninit)]
 #![feature(unsize)]
+#![feature(portable_simd)]
+#![feature(trivial_bounds)]
 
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
