@@ -5204,6 +5204,8 @@ static const struct bpf_func_proto bpf_get_socket_uid_proto = {
 	.arg1_type      = ARG_PTR_TO_CTX,
 };
 
+DEFINE_STATIC_KEY_FALSE(bpf_tstamp_control);
+
 static int bpf_sock_set_timestamping(struct sock *sk,
 				     struct so_timestamping *timestamping)
 {
@@ -5217,6 +5219,7 @@ static int bpf_sock_set_timestamping(struct sock *sk,
 		return -EINVAL;
 
 	WRITE_ONCE(sk->sk_tsflags[BPFPROG_TS_REQUESTOR], flags);
+	static_branch_enable(&bpf_tstamp_control);
 
 	return 0;
 }

@@ -2891,6 +2891,7 @@ static inline bool sk_dev_equal_l3scope(struct sock *sk, int dif)
 void sock_def_readable(struct sock *sk);
 
 int sock_bindtoindex(struct sock *sk, int ifindex, bool lock_sk);
+DECLARE_STATIC_KEY_FALSE(bpf_tstamp_control);
 void sock_set_timestamp(struct sock *sk, int optname, bool valbool);
 int sock_get_timestamping(struct so_timestamping *timestamping,
 			  sockptr_t optval, unsigned int optlen);

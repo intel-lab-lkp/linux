@@ -5540,6 +5540,29 @@ err:
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
+static bool sk_tstamp_tx_flags(struct sock *sk, u32 tsflags, int tstype)
+{
+	u32 testflag;
+
+	switch (tstype) {
+	case SCM_TSTAMP_SCHED:
+		testflag = SOF_TIMESTAMPING_TX_SCHED;
+		break;
+	case SCM_TSTAMP_SND:
+		testflag = SOF_TIMESTAMPING_TX_SOFTWARE;
+		break;
+	case SCM_TSTAMP_ACK:
+		testflag = SOF_TIMESTAMPING_TX_ACK;
+		break;
+	default:
+		return false;
+	}
+	if (tsflags & testflag)
+		return true;
+
+	return false;
+}
+
 static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 				 const struct sk_buff *ack_skb,
 				 struct skb_shared_hwtstamps *hwtstamps,
@@ -5556,6 +5579,9 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 
 	tsonly = tsflags & SOF_TIMESTAMPING_OPT_TSONLY;
 	if (!skb_may_tx_timestamp(sk, tsonly))
+		return;
+
+	if (!sk_tstamp_tx_flags(sk, tsflags, tstype))
 		return;
 
 	if (tsonly) {
@@ -5593,6 +5619,15 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 	__skb_complete_tx_timestamp(skb, sk, tstype, opt_stats);
 }
 
+static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype)
+{
+	u32 tsflags;
+
+	tsflags = READ_ONCE(sk->sk_tsflags[BPFPROG_TS_REQUESTOR]);
+	if (!sk_tstamp_tx_flags(sk, tsflags, tstype))
+		return;
+}
+
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		     const struct sk_buff *ack_skb,
 		     struct skb_shared_hwtstamps *hwtstamps,
@@ -5600,6 +5635,9 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 {
 	if (!sk)
 		return;
+
+	if (static_branch_unlikely(&bpf_tstamp_control))
+		bpf_skb_tstamp_tx_output(sk, tstype);
 
 	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }
