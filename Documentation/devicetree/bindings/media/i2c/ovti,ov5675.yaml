@@ -60,7 +60,7 @@ properties:
     properties:
       endpoint:
         $ref: /schemas/media/video-interfaces.yaml#
-        unevaluatedProperties: false
+        additionalProperties: false
 
         properties:
           data-lanes:
@@ -69,6 +69,7 @@ properties:
 
           # Supports max data transfer of 900 Mbps per lane
           link-frequencies: true
+          remote-endpoint: true
 
 required:
   - compatible

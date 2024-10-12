@@ -48,7 +48,7 @@ properties:
     properties:
       endpoint:
         $ref: /schemas/media/video-interfaces.yaml#
-        unevaluatedProperties: false
+        additionalProperties: false
 
         properties:
           data-lanes:
@@ -60,10 +60,12 @@ properties:
                   - const: 4
 
           link-frequencies: true
+          remote-endpoint: true
 
         required:
           - data-lanes
           - link-frequencies
+          - remote-endpoint
 
     required:
       - endpoint

@@ -77,7 +77,7 @@ properties:
     properties:
       endpoint:
         $ref: /schemas/media/video-interfaces.yaml#
-        unevaluatedProperties: false
+        additionalProperties: false
 
         properties:
           link-frequencies: true
@@ -88,9 +88,11 @@ properties:
               the link speed defined by the 'link-frequencies' property.
               If present, the value shall be in the range of 0-4.
             default: 4
+          remote-endpoint: true
 
         required:
           - link-frequencies
+          - remote-endpoint
 
     required:
       - endpoint

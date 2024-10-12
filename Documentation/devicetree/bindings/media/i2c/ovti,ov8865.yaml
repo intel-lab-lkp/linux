@@ -45,7 +45,7 @@ properties:
     properties:
       endpoint:
         $ref: /schemas/media/video-interfaces.yaml#
-        unevaluatedProperties: false
+        additionalProperties: false
 
         properties:
           link-frequencies: true
@@ -54,9 +54,12 @@ properties:
             minItems: 1
             maxItems: 4
 
+          remote-endpoint: true
+
         required:
           - data-lanes
           - link-frequencies
+          - remote-endpoint
 
 required:
   - compatible

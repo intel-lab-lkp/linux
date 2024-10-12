@@ -77,7 +77,7 @@ properties:
     properties:
       endpoint:
         $ref: /schemas/media/video-interfaces.yaml#
-        unevaluatedProperties: false
+        additionalProperties: false
 
         properties:
           link-frequencies: true
@@ -87,11 +87,13 @@ properties:
               - 1 # CSI-2 C-PHY
               - 3 # CCP2
               - 4 # CSI-2 D-PHY
+          remote-endpoint: true
 
         required:
           - link-frequencies
           - data-lanes
           - bus-type
+          - remote-endpoint
 
 required:
   - compatible
