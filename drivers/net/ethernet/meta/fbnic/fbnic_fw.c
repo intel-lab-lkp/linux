@@ -207,6 +207,38 @@ static int fbnic_mbx_map_tlv_msg(struct fbnic_dev *fbd,
 	return err;
 }
 
+static int fbnic_mbx_map_req_w_cmpl(struct fbnic_dev *fbd,
+				    struct fbnic_tlv_msg *msg,
+				    struct fbnic_fw_completion *cmpl_data)
+{
+	unsigned long flags;
+	int err;
+
+	spin_lock_irqsave(&fbd->fw_tx_lock, flags);
+
+	/* If we are already waiting on a completion then abort */
+	if (cmpl_data && fbd->cmpl_data) {
+		err = -EBUSY;
+		goto unlock_mbx;
+	}
+
+	/* Record completion location and submit request */
+	if (cmpl_data)
+		fbd->cmpl_data = cmpl_data;
+
+	err = fbnic_mbx_map_msg(fbd, FBNIC_IPC_MBX_TX_IDX, msg,
+				le16_to_cpu(msg->hdr.len) * sizeof(u32), 1);
+
+	/* If msg failed then clear completion data for next caller */
+	if (err && cmpl_data)
+		fbd->cmpl_data = NULL;
+
+unlock_mbx:
+	spin_unlock_irqrestore(&fbd->fw_tx_lock, flags);
+
+	return err;
+}
+
 static void fbnic_mbx_process_tx_msgs(struct fbnic_dev *fbd)
 {
 	struct fbnic_fw_mbx *tx_mbx = &fbd->mbx[FBNIC_IPC_MBX_TX_IDX];
@@ -651,6 +683,225 @@ void fbnic_fw_check_heartbeat(struct fbnic_dev *fbd)
 		dev_warn(fbd->dev, "Failed to send heartbeat message\n");
 }
 
+/**
+ * fbnic_fw_xmit_fw_start_upgrade - Create and transmit a start update message
+ * @fbd: FBNIC device structure
+ * @cmpl_data: Completion data for upgrade process
+ * @id: Component ID
+ * @len: Length of FW update package data
+ *
+ * Return: zero on success, negative value on failure
+ *
+ * Asks the FW to prepare for starting a firmware upgrade
+ */
+int fbnic_fw_xmit_fw_start_upgrade(struct fbnic_dev *fbd,
+				   struct fbnic_fw_completion *cmpl_data,
+				   unsigned int id, unsigned int len)
+{
+	struct fbnic_tlv_msg *msg;
+	int err;
+
+	if (!len)
+		return -EINVAL;
+
+	msg = fbnic_tlv_msg_alloc(FBNIC_TLV_MSG_ID_FW_START_UPGRADE_REQ);
+	if (!msg)
+		return -ENOMEM;
+
+	err = fbnic_tlv_attr_put_int(msg, FBNIC_FW_START_UPGRADE_SECTION, id);
+	if (err)
+		goto free_message;
+
+	err = fbnic_tlv_attr_put_int(msg, FBNIC_FW_START_UPGRADE_IMAGE_LENGTH,
+				     len);
+	if (err)
+		goto free_message;
+
+	err = fbnic_mbx_map_req_w_cmpl(fbd, msg, cmpl_data);
+	if (err)
+		goto free_message;
+
+	return 0;
+
+free_message:
+	free_page((unsigned long)msg);
+	return err;
+}
+
+static const struct fbnic_tlv_index fbnic_fw_start_upgrade_resp_index[] = {
+	FBNIC_TLV_ATTR_S32(FBNIC_FW_START_UPGRADE_ERROR),
+	FBNIC_TLV_ATTR_LAST
+};
+
+static int fbnic_fw_parse_fw_start_upgrade_resp(void *opaque,
+						struct fbnic_tlv_msg **results)
+{
+	struct fbnic_dev *fbd = opaque;
+	struct fbnic_fw_completion *cmpl_data;
+	int err = 0;
+
+	/* Verify we have a completion pointer */
+	cmpl_data = READ_ONCE(fbd->cmpl_data);
+	if (!cmpl_data ||
+	    cmpl_data->msg_type != FBNIC_TLV_MSG_ID_FW_WRITE_CHUNK_REQ)
+		return -ENOSPC;
+
+	/* Check for errors */
+	get_signed_result(FBNIC_FW_START_UPGRADE_ERROR, err);
+
+	cmpl_data->result = err;
+	complete(&cmpl_data->done);
+
+	return 0;
+}
+
+static const struct fbnic_tlv_index fbnic_fw_write_chunk_req_index[] = {
+	FBNIC_TLV_ATTR_U32(FBNIC_FW_WRITE_CHUNK_OFFSET),
+	FBNIC_TLV_ATTR_U32(FBNIC_FW_WRITE_CHUNK_LENGTH),
+	FBNIC_TLV_ATTR_LAST
+};
+
+static int fbnic_fw_parse_fw_write_chunk_req(void *opaque,
+					     struct fbnic_tlv_msg **results)
+{
+	struct fbnic_dev *fbd = opaque;
+	struct fbnic_fw_completion *cmpl_data;
+	u32 length = 0, offset = 0;
+	struct fbnic_tlv_msg *msg;
+	int err;
+
+	/* Start by attempting to allocate a response to the message */
+	msg = fbnic_tlv_msg_alloc(FBNIC_TLV_MSG_ID_FW_WRITE_CHUNK_RESP);
+	if (!msg)
+		return -ENOMEM;
+
+	/* Verify we have a completion pointer */
+	cmpl_data = READ_ONCE(fbd->cmpl_data);
+	if (!cmpl_data ||
+	    cmpl_data->msg_type != FBNIC_TLV_MSG_ID_FW_WRITE_CHUNK_REQ) {
+		err = -ENOSPC;
+		goto msg_err;
+	}
+
+	/* Notify FW if the data link has been severed */
+	if (!cmpl_data->fw_update.data) {
+		err = -ECANCELED;
+		goto msg_err;
+	}
+
+	/* Pull length/offset pair and mark it as complete */
+	get_unsigned_result(FBNIC_FW_WRITE_CHUNK_OFFSET, offset);
+	get_unsigned_result(FBNIC_FW_WRITE_CHUNK_LENGTH, length);
+
+	/* Record offset and length for the response */
+	if (offset) {
+		err = fbnic_tlv_attr_put_int(msg, FBNIC_FW_WRITE_CHUNK_OFFSET,
+					     offset);
+		if (err)
+			goto msg_err;
+	}
+
+	err = fbnic_tlv_attr_put_int(msg, FBNIC_FW_WRITE_CHUNK_LENGTH,
+				     length);
+	if (err)
+		goto msg_err;
+
+	/* Verify length */
+	if (!length || length > TLV_MAX_DATA) {
+		err = -EINVAL;
+		goto msg_err;
+	}
+
+	/* Verify offset and length are within bounds */
+	if (offset >= cmpl_data->fw_update.size ||
+	    offset + length > cmpl_data->fw_update.size) {
+		err = -EFAULT;
+		goto msg_err;
+	}
+
+	/* Add outbound data to message */
+	err = fbnic_tlv_attr_put_value(msg, FBNIC_FW_WRITE_CHUNK_DATA,
+				       cmpl_data->fw_update.data + offset,
+				       length);
+
+	/* Notify the waiting thread that we processed a message */
+	if (!err)
+		cmpl_data->fw_update.last_offset = offset;
+
+	cmpl_data->result = err;
+	complete(&cmpl_data->done);
+
+msg_err:
+	/* Report error to FW if one occurred */
+	if (err)
+		fbnic_tlv_attr_put_int(msg, FBNIC_FW_WRITE_CHUNK_ERROR, err);
+
+	/* Map and send the response */
+	err = fbnic_mbx_map_tlv_msg(fbd, msg);
+	if (err)
+		free_page((unsigned long)msg);
+
+	return err;
+}
+
+static const struct fbnic_tlv_index fbnic_fw_verify_image_resp_index[] = {
+	FBNIC_TLV_ATTR_S32(FBNIC_FW_VERIFY_IMAGE_ERROR),
+	FBNIC_TLV_ATTR_LAST
+};
+
+static int fbnic_fw_parse_fw_verify_image_resp(void *opaque,
+					       struct fbnic_tlv_msg **results)
+{
+	struct fbnic_dev *fbd = opaque;
+	struct fbnic_fw_completion *cmpl_data;
+	int err = 0;
+
+	/* Verify we have a completion pointer */
+	cmpl_data = READ_ONCE(fbd->cmpl_data);
+	if (!cmpl_data ||
+	    cmpl_data->msg_type != FBNIC_TLV_MSG_ID_FW_VERIFY_IMAGE_RESP)
+		return -ENOSPC;
+
+	/* Check for errors */
+	get_signed_result(FBNIC_FW_VERIFY_IMAGE_ERROR, err);
+
+	cmpl_data->result = err;
+	complete(&cmpl_data->done);
+
+	return err;
+}
+
+static const struct fbnic_tlv_index fbnic_fw_finish_upgrade_req_index[] = {
+	FBNIC_TLV_ATTR_S32(FBNIC_FW_FINISH_UPGRADE_ERROR),
+	FBNIC_TLV_ATTR_LAST
+};
+
+static int fbnic_fw_parse_fw_finish_upgrade_req(void *opaque,
+						struct fbnic_tlv_msg **results)
+{
+	struct fbnic_dev *fbd = opaque;
+	struct fbnic_fw_completion *cmpl_data;
+	int err = 0;
+
+	/* Verify we have a completion pointer */
+	cmpl_data = READ_ONCE(fbd->cmpl_data);
+	if (!cmpl_data ||
+	    cmpl_data->msg_type != FBNIC_TLV_MSG_ID_FW_WRITE_CHUNK_REQ)
+		return -ENOSPC;
+
+	/* Check for errors */
+	get_signed_result(FBNIC_FW_FINISH_UPGRADE_ERROR, err);
+
+	/* Close out update by clearing data pointer */
+	cmpl_data->fw_update.last_offset = cmpl_data->fw_update.size;
+	cmpl_data->fw_update.data = NULL;
+
+	cmpl_data->result = err;
+	complete(&cmpl_data->done);
+
+	return 0;
+}
+
 static const struct fbnic_tlv_parser fbnic_fw_tlv_parser[] = {
 	FBNIC_TLV_PARSER(FW_CAP_RESP, fbnic_fw_cap_resp_index,
 			 fbnic_fw_parse_cap_resp),
@@ -658,6 +909,18 @@ static const struct fbnic_tlv_parser fbnic_fw_tlv_parser[] = {
 			 fbnic_fw_parse_ownership_resp),
 	FBNIC_TLV_PARSER(HEARTBEAT_RESP, fbnic_heartbeat_resp_index,
 			 fbnic_fw_parse_heartbeat_resp),
+	FBNIC_TLV_PARSER(FW_START_UPGRADE_RESP,
+			 fbnic_fw_start_upgrade_resp_index,
+			 fbnic_fw_parse_fw_start_upgrade_resp),
+	FBNIC_TLV_PARSER(FW_WRITE_CHUNK_REQ,
+			 fbnic_fw_write_chunk_req_index,
+			 fbnic_fw_parse_fw_write_chunk_req),
+	FBNIC_TLV_PARSER(FW_VERIFY_IMAGE_RESP,
+			 fbnic_fw_verify_image_resp_index,
+			 fbnic_fw_parse_fw_verify_image_resp),
+	FBNIC_TLV_PARSER(FW_FINISH_UPGRADE_REQ,
+			 fbnic_fw_finish_upgrade_req_index,
+			 fbnic_fw_parse_fw_finish_upgrade_req),
 	FBNIC_TLV_MSG_ERROR
 };
 
