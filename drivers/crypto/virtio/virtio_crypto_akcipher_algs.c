@@ -355,7 +355,6 @@ static int virtio_crypto_rsa_set_key(struct crypto_akcipher *tfm,
 
 	/* mpi_free will test n, just free it. */
 	mpi_free(rsa_ctx->n);
-	rsa_ctx->n = NULL;
 
 	if (private) {
 		keytype = VIRTIO_CRYPTO_AKCIPHER_KEY_TYPE_PRIVATE;
@@ -365,8 +364,10 @@ static int virtio_crypto_rsa_set_key(struct crypto_akcipher *tfm,
 		ret = rsa_parse_pub_key(&rsa_key, key, keylen);
 	}
 
-	if (ret)
+	if (ret) {
+		rsa_ctx->n = NULL;
 		return ret;
+	}
 
 	rsa_ctx->n = mpi_read_raw_data(rsa_key.n, rsa_key.n_sz);
 	if (!rsa_ctx->n)
