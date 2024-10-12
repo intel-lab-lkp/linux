@@ -6,6 +6,7 @@
 #include "xe_bo.h"
 
 #include <linux/dma-buf.h>
+#include <linux/iommu.h>
 
 #include <drm/drm_drv.h>
 #include <drm/drm_gem_ttm_helper.h>
@@ -15,16 +16,19 @@
 #include <drm/ttm/ttm_tt.h>
 #include <uapi/drm/xe_drm.h>
 
+#include "regs/xe_bars.h"
 #include "xe_device.h"
 #include "xe_dma_buf.h"
 #include "xe_drm_client.h"
 #include "xe_ggtt.h"
 #include "xe_gt.h"
+#include "xe_gt_sriov_pf_config.h"
 #include "xe_map.h"
 #include "xe_migrate.h"
 #include "xe_pm.h"
 #include "xe_preempt_fence.h"
 #include "xe_res_cursor.h"
+#include "xe_sriov_pf_helpers.h"
 #include "xe_trace_bo.h"
 #include "xe_ttm_stolen_mgr.h"
 #include "xe_vm.h"
@@ -543,6 +547,102 @@ static int xe_bo_trigger_rebind(struct xe_device *xe, struct xe_bo *bo,
 	return ret;
 }
 
+static struct pci_dev *xe_find_vf_dev(struct xe_device *xe,
+				      phys_addr_t phys)
+{
+	struct pci_dev *pdev, *pf_pdev = to_pci_dev(xe->drm.dev);
+	resource_size_t io_start, io_size;
+
+	list_for_each_entry(pdev, &pf_pdev->bus->devices, bus_list) {
+		if (pdev->is_physfn)
+			continue;
+
+		io_start = pci_resource_start(pdev, LMEM_BAR);
+		io_size = pci_resource_len(pdev, LMEM_BAR);
+
+		if (phys >= io_start &&
+		    phys < (io_start + io_size - PAGE_SIZE))
+			return pdev;
+	}
+	return NULL;
+}
+
+
+static void xe_bo_translate_iova_to_dpa(struct xe_device *xe,
+					struct sg_table *sg,
+					struct sg_table *new_sg,
+					struct pci_dev *pdev)
+{
+	resource_size_t io_start = pci_resource_start(pdev, LMEM_BAR);
+	struct xe_gt *gt = xe_root_mmio_gt(xe);
+	struct scatterlist *sgl, *new_sgl;
+	int i, vfid = pci_iov_vf_id(pdev);
+	dma_addr_t new_addr, bo_addr;
+	struct iommu_domain *domain;
+	phys_addr_t phys;
+	u64 offset;
+
+	bo_addr = xe_gt_sriov_pf_config_get_lmem_addr(gt, ++vfid);
+	domain = iommu_get_domain_for_dev(xe->drm.dev);
+
+	new_sgl = new_sg->sgl;
+	for_each_sgtable_dma_sg(sg, sgl, i) {
+		phys = domain ? iommu_iova_to_phys(domain, sg_dma_address(sgl)) :
+			sg_dma_address(sgl);
+		offset = phys - io_start;
+		new_addr = bo_addr + offset;
+
+		sg_set_page(new_sgl, NULL, sg_dma_len(sgl), 0);
+		sg_dma_address(new_sgl) = new_addr;
+		sg_dma_len(new_sgl) = sg_dma_len(sgl);
+
+		new_sgl = sg_next(new_sgl);
+	}
+}
+
+static struct sg_table *xe_bo_create_new_sg(struct sg_table *sg,
+					    struct xe_bo *bo)
+{
+	struct xe_device *xe = xe_bo_device(bo);
+	struct iommu_domain *domain;
+	struct sg_table *new_sg;
+	struct pci_dev *pdev;
+	phys_addr_t phys;
+	int vfid;
+
+	if (!IS_SRIOV_PF(xe))
+		return sg;
+
+	domain = iommu_get_domain_for_dev(xe->drm.dev);
+	phys = domain ? iommu_iova_to_phys(domain, sg_dma_address(sg->sgl)) :
+		sg_dma_address(sg->sgl);
+
+	if (page_is_ram(PFN_DOWN(phys)))
+		return sg;
+
+	pdev = xe_find_vf_dev(xe, phys);
+	if (!pdev)
+		return sg;
+
+	vfid = pci_iov_vf_id(pdev);
+	if (vfid < 0)
+		return sg;
+
+	new_sg = kzalloc(sizeof(*new_sg), GFP_KERNEL);
+	if (!new_sg)
+		return sg;
+
+	if (sg_alloc_table(new_sg, sg->nents, GFP_KERNEL)) {
+		kfree(new_sg);
+		return sg;
+	}
+
+	bo->is_devmem_external = true;
+	xe_bo_translate_iova_to_dpa(xe, sg, new_sg, pdev);
+
+	return new_sg;
+}
+
 /*
  * The dma-buf map_attachment() / unmap_attachment() is hooked up here.
  * Note that unmapping the attachment is deferred to the next
@@ -577,7 +677,7 @@ static int xe_bo_move_dmabuf(struct ttm_buffer_object *ttm_bo,
 		return PTR_ERR(sg);
 
 	ttm_bo->sg = sg;
-	xe_tt->sg = sg;
+	xe_tt->sg = xe_bo_create_new_sg(sg, ttm_to_xe_bo(ttm_bo));
 
 out:
 	ttm_bo_move_null(ttm_bo, new_res);
@@ -1066,6 +1166,8 @@ static void xe_ttm_bo_release_notify(struct ttm_buffer_object *ttm_bo)
 
 static void xe_ttm_bo_delete_mem_notify(struct ttm_buffer_object *ttm_bo)
 {
+	struct xe_bo *bo = ttm_to_xe_bo(ttm_bo);
+
 	if (!xe_bo_is_xe_bo(ttm_bo))
 		return;
 
@@ -1079,6 +1181,10 @@ static void xe_ttm_bo_delete_mem_notify(struct ttm_buffer_object *ttm_bo)
 
 		dma_buf_unmap_attachment(ttm_bo->base.import_attach, ttm_bo->sg,
 					 DMA_BIDIRECTIONAL);
+		if (bo->is_devmem_external && xe_tt->sg != ttm_bo->sg) {
+			sg_free_table(xe_tt->sg);
+			kfree(xe_tt->sg);
+		}
 		ttm_bo->sg = NULL;
 		xe_tt->sg = NULL;
 	}

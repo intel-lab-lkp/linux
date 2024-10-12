@@ -68,6 +68,12 @@ struct xe_bo {
 	bool ccs_cleared;
 
 	/**
+	 * @is_devmem_external: Whether this BO is an imported dma-buf that
+	 * has a backing store in VRAM.
+	 */
+	bool is_devmem_external;
+
+	/**
 	 * @cpu_caching: CPU caching mode. Currently only used for userspace
 	 * objects. Exceptions are system memory on DGFX, which is always
 	 * WB.
