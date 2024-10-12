@@ -5621,10 +5621,18 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 
 static void bpf_skb_tstamp_tx_output(struct sock *sk, int tstype)
 {
+	struct tcp_sock *tp;
 	u32 tsflags;
+
+	if (!sk_is_tcp(sk))
+		return;
 
 	tsflags = READ_ONCE(sk->sk_tsflags[BPFPROG_TS_REQUESTOR]);
 	if (!sk_tstamp_tx_flags(sk, tsflags, tstype))
+		return;
+
+	tp = tcp_sk(sk);
+	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_TX_TIMESTAMPING_OPT_CB_FLAG))
 		return;
 }
 
