@@ -136,6 +136,7 @@ extern void spi_transfer_cs_change_delay_exec(struct spi_message *msg,
  *	The spi_transfer.speed_hz can override this for each transfer.
  * @chip_select: Array of physical chipselect, spi->chipselect[i] gives
  *	the corresponding physical CS for logical CS i.
+ * @num_chipselect: Number of physical chipselects used.
  * @mode: The spi mode defines how data is clocked out and in.
  *	This may be changed by the device's driver.
  *	The "active low" default for chipselect mode can be overridden
@@ -186,6 +187,7 @@ struct spi_device {
 	struct spi_controller	*controller;
 	u32			max_speed_hz;
 	u8			chip_select[SPI_CS_CNT_MAX];
+	u8			num_chipselect;
 	u8			bits_per_word;
 	bool			rt;
 #define SPI_NO_TX		BIT(31)		/* No transmit wire */
@@ -311,7 +313,7 @@ static inline bool spi_is_csgpiod(struct spi_device *spi)
 {
 	u8 idx;
 
-	for (idx = 0; idx < SPI_CS_CNT_MAX; idx++) {
+	for (idx = 0; idx < spi->num_chipselect; idx++) {
 		if (spi_get_csgpiod(spi, idx))
 			return true;
 	}
