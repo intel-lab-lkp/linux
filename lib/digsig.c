@@ -73,10 +73,9 @@ static int digsig_verify_rsa(struct key *key,
 	unsigned long mlen, mblen;
 	unsigned int l;
 	int head, i;
-	unsigned char *out1 = NULL;
 	const char *m;
 	MPI pkey[2];
-	uint8_t *p, *datap;
+	uint8_t *datap;
 	const uint8_t *endp;
 	const struct user_key_payload *ukp;
 	struct pubkey_hdr *pkh;
@@ -126,58 +125,56 @@ static int digsig_verify_rsa(struct key *key,
 	}
 
 	err = -ENOMEM;
-
-	out1 = kzalloc(mlen, GFP_KERNEL);
-	if (!out1)
-		goto free_keys;
-
 	{
-		unsigned int nret = siglen;
-		MPI in __free(mpi_free) = mpi_read_from_buffer(sig, &nret);
+		unsigned char *out1 __free(kfree) = kzalloc(mlen, GFP_KERNEL);
 
-		if (IS_ERR(in)) {
-			err = PTR_ERR(in);
-			goto in_exit;
-		}
-
+		if (out1)
 		{
-			MPI res __free(mpi_free) = mpi_alloc(mpi_get_nlimbs(in) * 2);
+			unsigned int nret = siglen;
+			MPI in __free(mpi_free) = mpi_read_from_buffer(sig, &nret);
 
-			if (!res)
-				goto res_exit;
-
-			err = mpi_powm(res, in, pkey[1], pkey[0]);
-			if (err)
-				goto res_exit;
-
-			if (mpi_get_nlimbs(res) * BYTES_PER_MPI_LIMB > mlen) {
-				err = -EINVAL;
-				goto res_exit;
+			if (IS_ERR(in)) {
+				err = PTR_ERR(in);
+				goto in_exit;
 			}
 
-			p = mpi_get_buffer(res, &l, NULL);
-			if (!p) {
-				err = -EINVAL;
-				goto res_exit;
-			}
+			{
+				MPI res __free(mpi_free) = mpi_alloc(mpi_get_nlimbs(in) * 2);
 
-			len = mlen;
-			head = len - l;
-			memset(out1, 0, head);
-			memcpy(out1 + head, p, l);
+				if (!res)
+					goto res_exit;
 
-			kfree(p);
+				err = mpi_powm(res, in, pkey[1], pkey[0]);
+				if (err)
+					goto res_exit;
 
-			m = pkcs_1_v1_5_decode_emsa(out1, len, mblen, &len);
+				if (mpi_get_nlimbs(res) * BYTES_PER_MPI_LIMB > mlen) {
+					err = -EINVAL;
+					goto res_exit;
+				}
 
-			if (!m || len != hlen || memcmp(m, h, hlen))
-				err = -EINVAL;
+				{
+					uint8_t *p __free(kfree) = mpi_get_buffer(res, &l, NULL);
+
+					if (!p) {
+						err = -EINVAL;
+						goto p_exit;
+					}
+
+					len = mlen;
+					head = len - l;
+					memset(out1, 0, head);
+					memcpy(out1 + head, p, l);
+					m = pkcs_1_v1_5_decode_emsa(out1, len, mblen, &len);
+					if (!m || len != hlen || memcmp(m, h, hlen))
+						err = -EINVAL;
+p_exit:
+				}
 res_exit:
-		}
+			}
 in_exit:
+		}
 	}
-
-	kfree(out1);
 free_keys:
 	while (--i >= 0)
 		mpi_free(pkey[i]);
