@@ -69,6 +69,8 @@
 //! fn print_later(val: Arc<MyStruct>) {
 //!     let _ = workqueue::system().enqueue(val);
 //! }
+//!
+//! # let _ = print_later(MyStruct::new(42).unwrap());
 //! ```
 //!
 //! The following example shows how multiple `work_struct` fields can be used:
@@ -126,6 +128,9 @@
 //! fn print_2_later(val: Arc<MyStruct>) {
 //!     let _ = workqueue::system().enqueue::<Arc<MyStruct>, 2>(val);
 //! }
+//!
+//! # let _ = print_1_later(MyStruct::new(24, 25).unwrap());
+//! # let _ = print_2_later(MyStruct::new(41, 42).unwrap());
 //! ```
 //!
 //! C header: [`include/linux/workqueue.h`](srctree/include/linux/workqueue.h)
