@@ -980,7 +980,7 @@ static int cyapa_gen3_set_proximity(struct cyapa *cyapa, bool enable)
 
 static int cyapa_gen3_get_query_data(struct cyapa *cyapa)
 {
-	u8 query_data[QUERY_DATA_SIZE];
+	u8 query_data[I2C_SMBUS_BLOCK_MAX];
 	int ret;
 
 	if (cyapa->state != CYAPA_STATE_OP)
