@@ -1456,6 +1456,29 @@ u64 xe_gt_sriov_pf_config_get_lmem(struct xe_gt *gt, unsigned int vfid)
 }
 
 /**
+ * xe_gt_sriov_pf_config_get_lmem_addr - Get VF's LMEM starting addr.
+ * @gt: the &xe_gt
+ * @vfid: the VF identifier
+ *
+ * This function can only be called on PF.
+ *
+ * Return: VF's starting address in LMEM.
+ */
+dma_addr_t xe_gt_sriov_pf_config_get_lmem_addr(struct xe_gt *gt,
+					       unsigned int vfid)
+{
+	struct xe_gt_sriov_config *config;
+	dma_addr_t addr;
+
+	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+	config = pf_pick_vf_config(gt, vfid);
+	addr = xe_bo_addr(config->lmem_obj, 0, PAGE_SIZE);
+	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+
+	return addr;
+}
+
+/**
  * xe_gt_sriov_pf_config_set_lmem - Provision VF with LMEM.
  * @gt: the &xe_gt (can't be media)
  * @vfid: the VF identifier
