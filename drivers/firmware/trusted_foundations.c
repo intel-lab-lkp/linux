@@ -175,6 +175,7 @@ void of_register_trusted_foundations(void)
 				   &pdata.version_minor);
 	if (err != 0)
 		panic("Trusted Foundation: missing version-minor property\n");
+	of_node_put(node);
 	register_trusted_foundations(&pdata);
 }
 
