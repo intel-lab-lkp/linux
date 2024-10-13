@@ -32,6 +32,11 @@ struct tblock {
 
 	/* lock management */
 	struct super_block *sb;	/* super block */
+	/*
+	 * commit_state is used for synchronization of the jfs_commit
+	 * threads.  It is protected by LAZY_LOCK().
+	 */
+	int commit_state;	/* commit state */
 	lid_t next;		/* index of first tlock of tid */
 	lid_t last;		/* index of last tlock of tid */
 	wait_queue_head_t waitor;	/* tids waiting on this tid */
@@ -55,6 +60,9 @@ struct tblock {
 	} u;
 	u32 ino;		/* inode number being created */
 };
+
+/* tblock commit_state */
+#define IN_LAZYCOMMIT 1
 
 extern struct tblock *TxBlock;	/* transaction block table */
 

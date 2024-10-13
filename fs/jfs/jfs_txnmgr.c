@@ -2700,7 +2700,6 @@ int jfs_lazycommit(void *arg)
 	int WorkDone;
 	struct tblock *tblk;
 	unsigned long flags;
-	struct jfs_sb_info *sbi;
 
 	set_freezable();
 	do {
@@ -2711,17 +2710,16 @@ int jfs_lazycommit(void *arg)
 			list_for_each_entry(tblk, &TxAnchor.unlock_queue,
 					    cqueue) {
 
-				sbi = JFS_SBI(tblk->sb);
 				/*
 				 * For each volume, the transactions must be
 				 * handled in order.  If another commit thread
 				 * is handling a tblk for this superblock,
 				 * skip it
 				 */
-				if (sbi->commit_state & IN_LAZYCOMMIT)
+				if (tblk->commit_state & IN_LAZYCOMMIT)
 					continue;
 
-				sbi->commit_state |= IN_LAZYCOMMIT;
+				tblk->commit_state |= IN_LAZYCOMMIT;
 				WorkDone = 1;
 
 				/*
@@ -2733,7 +2731,7 @@ int jfs_lazycommit(void *arg)
 				txLazyCommit(tblk);
 				LAZY_LOCK(flags);
 
-				sbi->commit_state &= ~IN_LAZYCOMMIT;
+				tblk->commit_state &= ~IN_LAZYCOMMIT;
 				/*
 				 * Don't continue in the for loop.  (We can't
 				 * anyway, it's unsafe!)  We want to go back to
@@ -2781,7 +2779,7 @@ void txLazyUnlock(struct tblock * tblk)
 	 * Don't wake up a commit thread if there is already one servicing
 	 * this superblock, or if the last one we woke up hasn't started yet.
 	 */
-	if (!(JFS_SBI(tblk->sb)->commit_state & IN_LAZYCOMMIT) &&
+	if (!(tblk->commit_state & IN_LAZYCOMMIT) &&
 	    !jfs_commit_thread_waking) {
 		jfs_commit_thread_waking = 1;
 		wake_up(&jfs_commit_thread_wait);
