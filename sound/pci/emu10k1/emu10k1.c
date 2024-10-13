@@ -133,7 +133,9 @@ static int snd_card_emu10k1_probe(struct pci_dev *pci,
 		if (err < 0)
 			return err;
 	}
-	if (emu->audigy) {
+	if (emu->card_capabilities->no_midi) {
+		dev_info(emu->card->dev, "Card has no ext. MIDI ports.\n");
+	} else if (emu->audigy) {
 		err = snd_emu10k1_audigy_midi(emu);
 		if (err < 0)
 			return err;

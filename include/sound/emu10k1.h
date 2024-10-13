@@ -1673,6 +1673,7 @@ struct snd_emu_chip_details {
 	unsigned int i2c_adc:1;		/* I2C interface for ADC; requires ca0108_chip */
 	unsigned int adc_1361t:1;	/* Use Philips 1361T ADC */
 	unsigned int invert_shared_spdif:1;  /* analog/digital switch inverted */
+	unsigned int no_midi:1;		/* Has no MIDI */
 	const char *driver;
 	const char *name;
 	const char *id;		/* for backward compatibility - can be NULL if not needed */
