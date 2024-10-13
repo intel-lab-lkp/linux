@@ -165,7 +165,7 @@ __u32 cn_hash_del_get_exval(struct cn_hash_dev *hdev, pid_t pid);
 int cn_add_elem(__u32 uexit_code, pid_t pid);
 int cn_del_elem(pid_t pid);
 __u32 cn_del_get_exval(pid_t pid);
-__u32 cn_get_exval(pid_t pid);
+int cn_get_exval(pid_t pid);
 
 struct cn_hash_dev *cn_hash_alloc_dev(const char *name);
 void cn_hash_free_dev(struct cn_hash_dev *hdev);
@@ -175,9 +175,13 @@ void cn_hash_free_elem(struct uexit_pid_hnode *elem);
 int cn_hash_add_elem(struct cn_hash_dev *hdev, __u32 uexit_code, pid_t pid);
 int cn_hash_del_elem(struct cn_hash_dev *hdev, pid_t pid);
 __u32 cn_hash_del_get_exval(struct cn_hash_dev *hdev, pid_t pid);
-__u32 cn_hash_get_exval(struct cn_hash_dev *hdev, pid_t pid);
+int cn_hash_get_exval(struct cn_hash_dev *hdev, pid_t pid);
 
 bool cn_table_empty(void);
 bool cn_hash_table_empty(struct cn_hash_dev *hdev);
+
+int cn_display_hlist(pid_t pid, int max_len, int *hkey, int *key_display);
+int cn_hash_display_hlist(struct cn_hash_dev *hdev, pid_t pid, int max_len,
+				int *hkey, int *key_display);
 
 #endif				/* __CONNECTOR_H */
