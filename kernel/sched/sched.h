@@ -2467,21 +2467,6 @@ __put_prev_set_next_dl_server(struct rq *rq,
 	rq->dl_server = NULL;
 }
 
-static inline void put_prev_set_next_task(struct rq *rq,
-					  struct task_struct *prev,
-					  struct task_struct *next)
-{
-	WARN_ON_ONCE(rq->curr != prev);
-
-	__put_prev_set_next_dl_server(rq, prev, next);
-
-	if (next == prev)
-		return;
-
-	prev->sched_class->put_prev_task(rq, prev, next);
-	next->sched_class->set_next_task(rq, next, true);
-}
-
 /*
  * Helper to define a sched_class instance; each one is placed in a separate
  * section which is ordered by the linker script:
@@ -2519,6 +2504,21 @@ DECLARE_STATIC_KEY_FALSE(__scx_switched_all);	/* all fair class tasks on SCX */
 #define scx_enabled()		false
 #define scx_switched_all()	false
 #endif /* !CONFIG_SCHED_CLASS_EXT */
+
+static inline void put_prev_set_next_task(struct rq *rq,
+					  struct task_struct *prev,
+					  struct task_struct *next)
+{
+	WARN_ON_ONCE(rq->curr != prev);
+
+	__put_prev_set_next_dl_server(rq, prev, next);
+
+	if (next == prev && !scx_enabled())
+		return;
+
+	prev->sched_class->put_prev_task(rq, prev, next);
+	next->sched_class->set_next_task(rq, next, true);
+}
 
 /*
  * Iterate only active classes. SCX can take over all fair tasks or be
