@@ -1053,6 +1053,11 @@ properties:
         items:
           - const: xunlong,orangepi-5
           - const: rockchip,rk3588s
+      
+      - description: Xunlong Orange Pi 5B
+        items:
+          - const: xunlong,orangepi-5b
+          - const: rockchip,rk3588s
 
       - description: Zkmagic A95X Z2
         items:
