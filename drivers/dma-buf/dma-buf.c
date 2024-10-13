@@ -902,7 +902,7 @@ static struct sg_table * __map_dma_buf(struct dma_buf_attachment *attach,
 struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		       const struct dma_buf_attach_ops *importer_ops,
-		       void *importer_priv)
+		       void *importer_priv, int flags)
 {
 	struct dma_buf_attachment *attach;
 	int ret;
@@ -925,6 +925,13 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 	attach->importer_priv = importer_priv;
 
 	if (dmabuf->ops->attach) {
+		if (DMA_BUF_ATTACH_NO_MOVE &&
+		    (!dmabuf->ops->attach_needs_move ||
+		      dmabuf->ops->attach_needs_move(dmabuf, attach))) {
+			ret = -EINVAL;
+			goto err_attach;
+		}
+
 		ret = dmabuf->ops->attach(dmabuf, attach);
 		if (ret)
 			goto err_attach;
@@ -989,7 +996,7 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_dynamic_attach, DMA_BUF);
 struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
 					  struct device *dev)
 {
-	return dma_buf_dynamic_attach(dmabuf, dev, NULL, NULL);
+	return dma_buf_dynamic_attach(dmabuf, dev, NULL, NULL, 0);
 }
 EXPORT_SYMBOL_NS_GPL(dma_buf_attach, DMA_BUF);
 

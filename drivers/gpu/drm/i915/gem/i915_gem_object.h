@@ -312,6 +312,13 @@ i915_gem_object_is_framebuffer(const struct drm_i915_gem_object *obj)
 	return READ_ONCE(obj->frontbuffer) || obj->is_dpt;
 }
 
+static inline enum intel_region_id
+i915_gem_object_get_region_id(const struct drm_i915_gem_object *obj)
+{
+	struct intel_memory_region *mr = READ_ONCE(obj->mm.region);
+	return mr->id;
+}
+
 static inline unsigned int
 i915_gem_object_get_tiling(const struct drm_i915_gem_object *obj)
 {

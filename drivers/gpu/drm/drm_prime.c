@@ -294,7 +294,7 @@ EXPORT_SYMBOL(drm_gem_dmabuf_release);
  */
 int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 			       struct drm_file *file_priv, int prime_fd,
-			       uint32_t *handle)
+			       uint32_t *handle, uint32_t flags)
 {
 	struct dma_buf *dma_buf;
 	struct drm_gem_object *obj;
@@ -314,9 +314,10 @@ int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 	/* never seen this one, need to import */
 	mutex_lock(&dev->object_name_lock);
 	if (dev->driver->gem_prime_import)
+		/* TODO: pass flags around */
 		obj = dev->driver->gem_prime_import(dev, dma_buf);
 	else
-		obj = drm_gem_prime_import(dev, dma_buf);
+		obj = drm_gem_prime_import(dev, dma_buf, flags);
 	if (IS_ERR(obj)) {
 		ret = PTR_ERR(obj);
 		goto out_unlock;
@@ -368,11 +369,13 @@ int drm_prime_fd_to_handle_ioctl(struct drm_device *dev, void *data,
 	struct drm_prime_handle *args = data;
 
 	if (dev->driver->prime_fd_to_handle) {
+		/* TODO: pass around flags */
 		return dev->driver->prime_fd_to_handle(dev, file_priv, args->fd,
 						       &args->handle);
 	}
 
-	return drm_gem_prime_fd_to_handle(dev, file_priv, args->fd, &args->handle);
+	return drm_gem_prime_fd_to_handle(dev, file_priv, args->fd,
+					  &args->handle, args->flags);
 }
 
 static struct dma_buf *export_and_register_object(struct drm_device *dev,
@@ -636,6 +639,13 @@ void drm_gem_map_detach(struct dma_buf *dma_buf,
 }
 EXPORT_SYMBOL(drm_gem_map_detach);
 
+static int drm_gem_attach_needs_move(struct dma_buf *dma_buf,
+				     struct dma_buf_attachment *attach)
+{
+	/* TODO: is this correct for all drm_gem_prime_dmabuf_ops users? */
+	return 0;
+}
+
 /**
  * drm_gem_map_dma_buf - map_dma_buf implementation for GEM
  * @attach: attachment whose scatterlist is to be returned
@@ -813,6 +823,7 @@ static const struct dma_buf_ops drm_gem_prime_dmabuf_ops =  {
 	.cache_sgt_mapping = true,
 	.attach = drm_gem_map_attach,
 	.detach = drm_gem_map_detach,
+	.attach_needs_move = drm_gem_attach_needs_move,
 	.map_dma_buf = drm_gem_map_dma_buf,
 	.unmap_dma_buf = drm_gem_unmap_dma_buf,
 	.release = drm_gem_dmabuf_release,
@@ -933,7 +944,8 @@ EXPORT_SYMBOL(drm_gem_prime_export);
  */
 struct drm_gem_object *drm_gem_prime_import_dev(struct drm_device *dev,
 					    struct dma_buf *dma_buf,
-					    struct device *attach_dev)
+					    struct device *attach_dev,
+					    uint32_t flags)
 {
 	struct dma_buf_attachment *attach;
 	struct sg_table *sgt;
@@ -1002,9 +1014,10 @@ EXPORT_SYMBOL(drm_gem_prime_import_dev);
  * &drm_gem_object_funcs.free hook when using this function.
  */
 struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
-					    struct dma_buf *dma_buf)
+					    struct dma_buf *dma_buf,
+					    uint32_t flags)
 {
-	return drm_gem_prime_import_dev(dev, dma_buf, dev->dev);
+	return drm_gem_prime_import_dev(dev, dma_buf, dev->dev, flags);
 }
 EXPORT_SYMBOL(drm_gem_prime_import);
 

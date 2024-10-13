@@ -201,9 +201,18 @@ static void i915_gem_dmabuf_detach(struct dma_buf *dmabuf,
 	i915_gem_object_unpin_pages(obj);
 }
 
+static int i915_gem_dmabuf_attach_needs_move(struct dma_buf *dmabuf,
+					     struct dma_buf_attachment *attach)
+{
+	struct drm_i915_gem_object *obj = dma_buf_to_obj(dmabuf);
+
+	return i915_gem_object_get_region_id(obj) != INTEL_REGION_SMEM;
+}
+
 static const struct dma_buf_ops i915_dmabuf_ops =  {
 	.attach = i915_gem_dmabuf_attach,
 	.detach = i915_gem_dmabuf_detach,
+	.attach_needs_move = i915_gem_dmabuf_attach_needs_move,
 	.map_dma_buf = i915_gem_map_dma_buf,
 	.unmap_dma_buf = drm_gem_unmap_dma_buf,
 	.release = drm_gem_dmabuf_release,

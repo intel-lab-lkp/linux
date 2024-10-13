@@ -883,10 +883,11 @@ struct drm_set_client_cap {
 
 #define DRM_RDWR O_RDWR
 #define DRM_CLOEXEC O_CLOEXEC
+#define DRM_PRIME_FD_TO_HANDLE_NO_MOVE (1 << 0)
 struct drm_prime_handle {
 	__u32 handle;
 
-	/** Flags.. only applicable for handle->fd */
+	/** Flags */
 	__u32 flags;
 
 	/** Returned dmabuf file descriptor */

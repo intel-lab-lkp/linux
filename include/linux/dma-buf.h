@@ -82,6 +82,8 @@ struct dma_buf_ops {
 	 */
 	void (*detach)(struct dma_buf *, struct dma_buf_attachment *);
 
+	int (*attach_needs_move)(struct dma_buf *, struct dma_buf_attachment *);
+
 	/**
 	 * @pin:
 	 *
@@ -597,12 +599,14 @@ dma_buf_attachment_is_dynamic(struct dma_buf_attachment *attach)
 	return !!attach->importer_ops;
 }
 
+#define DMA_BUF_ATTACH_NO_MOVE (1 << 0)
+
 struct dma_buf_attachment *dma_buf_attach(struct dma_buf *dmabuf,
 					  struct device *dev);
 struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, struct device *dev,
 		       const struct dma_buf_attach_ops *importer_ops,
-		       void *importer_priv);
+		       void *importer_priv, int flags);
 void dma_buf_detach(struct dma_buf *dmabuf,
 		    struct dma_buf_attachment *attach);
 int dma_buf_pin(struct dma_buf_attachment *attach);

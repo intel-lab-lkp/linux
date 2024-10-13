@@ -68,7 +68,8 @@ struct dma_buf *drm_gem_dmabuf_export(struct drm_device *dev,
 void drm_gem_dmabuf_release(struct dma_buf *dma_buf);
 
 int drm_gem_prime_fd_to_handle(struct drm_device *dev,
-			       struct drm_file *file_priv, int prime_fd, uint32_t *handle);
+			       struct drm_file *file_priv, int prime_fd,
+			       uint32_t *handle, uint32_t flags);
 struct dma_buf *drm_gem_prime_handle_to_dmabuf(struct drm_device *dev,
 			       struct drm_file *file_priv, uint32_t handle,
 			       uint32_t flags);
@@ -102,9 +103,11 @@ unsigned long drm_prime_get_contiguous_size(struct sg_table *sgt);
 /* helper functions for importing */
 struct drm_gem_object *drm_gem_prime_import_dev(struct drm_device *dev,
 						struct dma_buf *dma_buf,
-						struct device *attach_dev);
+						struct device *attach_dev,
+						uint32_t flags);
 struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
-					    struct dma_buf *dma_buf);
+					    struct dma_buf *dma_buf,
+					    uint32_t flags);
 
 void drm_prime_gem_destroy(struct drm_gem_object *obj, struct sg_table *sg);
 

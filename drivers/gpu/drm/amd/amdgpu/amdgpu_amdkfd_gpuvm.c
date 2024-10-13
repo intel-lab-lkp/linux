@@ -2452,7 +2452,7 @@ int amdgpu_amdkfd_gpuvm_import_dmabuf_fd(struct amdgpu_device *adev, int fd,
 	int ret;
 
 	ret = drm_gem_prime_fd_to_handle(&adev->ddev, adev->kfd.client.file, fd,
-					 &handle);
+					 &handle, 0);
 	if (ret)
 		return ret;
 	obj = drm_gem_object_lookup(adev->kfd.client.file, handle);
