@@ -184,4 +184,10 @@ void fdt_init_reserved_mem(void);
 
 bool of_fdt_device_is_available(const void *blob, unsigned long node);
 
+#if defined(CONFIG_OF_DEBUG)
+void of_debug_mark_queried(struct property *pp);
+#else
+static inline void of_debug_mark_queried(struct property *pp) { }
+#endif
+
 #endif /* _LINUX_OF_PRIVATE_H */

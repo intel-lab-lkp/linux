@@ -39,6 +39,9 @@ struct property {
 #if defined(CONFIG_OF_KOBJ)
 	struct bin_attribute attr;
 #endif
+#if defined(CONFIG_OF_DEBUG)
+	bool	queried;
+#endif
 };
 
 #if defined(CONFIG_SPARC)

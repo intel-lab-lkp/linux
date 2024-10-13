@@ -90,6 +90,15 @@ config OF_IRQ
 	def_bool y
 	depends on !SPARC && IRQ_DOMAIN
 
+config OF_DEBUG
+	bool "Device Tree debug features"
+	select DEBUG_FS
+	help
+	 This option enables device tree debug features.
+	 Currently only <debugfs>/of_mark_queried, writing 'y' to this file
+	 causes setting S_IWUSR on each device tree property in sysfs that
+	 was queried by a device driver.  This is useful to find dead properties.
+
 config OF_RESERVED_MEM
 	def_bool OF_EARLY_FLATTREE
 

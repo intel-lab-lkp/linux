@@ -202,6 +202,8 @@ static struct property *__of_find_property(const struct device_node *np,
 		if (of_prop_cmp(pp->name, name) == 0) {
 			if (lenp)
 				*lenp = pp->length;
+			of_debug_mark_queried(pp);
+
 			break;
 		}
 	}

@@ -25,3 +25,4 @@ obj-$(CONFIG_OF_OVERLAY_KUNIT_TEST) += overlay-test.o
 overlay-test-y := overlay_test.o kunit_overlay_test.dtbo.o
 
 obj-$(CONFIG_OF_UNITTEST) += unittest-data/
+obj-$(CONFIG_OF_DEBUG) += debug.o
