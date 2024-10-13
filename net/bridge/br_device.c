@@ -384,15 +384,25 @@ static int br_fill_forward_path(struct net_device_path_ctx *ctx,
 				struct net_device_path *path)
 {
 	struct net_bridge_fdb_entry *f;
-	struct net_bridge_port *dst;
+	struct net_bridge_port *src, *dst;
+	struct net_device *br_dev;
 	struct net_bridge *br;
 
-	if (netif_is_bridge_port(ctx->dev))
-		return -1;
+	if (netif_is_bridge_port(ctx->dev)) {
+		br_dev = netdev_master_upper_dev_get_rcu((struct net_device *)ctx->dev);
+		if (!br_dev)
+			return -1;
 
-	br = netdev_priv(ctx->dev);
+		br = netdev_priv(br_dev);
 
-	br_vlan_fill_forward_path_pvid(br, ctx, path);
+		src = br_port_get_rcu(ctx->dev);
+
+		br_vlan_fill_forward_path_pvid(br, src, ctx, path);
+	} else {
+		br = netdev_priv(ctx->dev);
+
+		br_vlan_fill_forward_path_pvid(br, NULL, ctx, path);
+	}
 
 	f = br_fdb_find_rcu(br, ctx->daddr, path->bridge.vlan_id);
 	if (!f)
