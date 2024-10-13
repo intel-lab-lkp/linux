@@ -947,6 +947,7 @@ static const struct snd_emu_chip_details emu_chip_details[] = {
 	 .id = "Audigy2",
 	 .emu10k2_chip = 1,
 	 .ca0108_chip = 1,
+	 .no_midi = 1,
 	 .spk71 = 1,
 	 .adc_1361t = 1,  /* 24 bit capture instead of 16bit */
 	 .ac97_chip = 1},
