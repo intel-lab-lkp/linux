@@ -195,6 +195,16 @@ ENDPROC(__v7m_setup)
 .endm
 
 	/*
+	 * Match ARM Cortex-M85 processor.
+	 */
+	.type	__v7m_cm85_proc_info, #object
+__v7m_cm85_proc_info:
+	.long	0x410fd230		/* ARM Cortex-M85 0xD23 */
+	.long	0xff0ffff0		/* Mask off revision, patch release */
+	__v7m_proc __v7m_cm85_proc_info, __v7m_cm7_setup, hwcaps = HWCAP_EDSP, cache_fns = v7m_cache_fns, proc_fns = cm7_processor_functions
+	.size	__v7m_cm85_proc_info, . - __v7m_cm85_proc_info
+
+	/*
 	 * Match ARM Cortex-M55 processor.
 	 */
 	.type	__v7m_cm55_proc_info, #object
