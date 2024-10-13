@@ -99,12 +99,12 @@ static u32 __init imx8mq_soc_revision(void)
 static void __init imx8mm_soc_uid(void)
 {
 	void __iomem *ocotp_base;
-	struct device_node *np;
+	struct device_node *np __free(device_node) =
+		of_find_compatible_node(NULL, NULL, "fsl,imx8mm-ocotp");
 	struct clk *clk;
 	u32 offset = of_machine_is_compatible("fsl,imx8mp") ?
 		     IMX8MP_OCOTP_UID_OFFSET : 0;
 
-	np = of_find_compatible_node(NULL, NULL, "fsl,imx8mm-ocotp");
 	if (!np)
 		return;
 
@@ -125,7 +125,6 @@ static void __init imx8mm_soc_uid(void)
 	clk_disable_unprepare(clk);
 	clk_put(clk);
 	iounmap(ocotp_base);
-	of_node_put(np);
 }
 
 static u32 __init imx8mm_soc_revision(void)
