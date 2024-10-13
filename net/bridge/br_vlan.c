@@ -3,6 +3,7 @@
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
+#include <net/dsa.h>
 #include <net/switchdev.h>
 
 #include "br_private.h"
@@ -100,6 +101,19 @@ static void __vlan_flags_commit(struct net_bridge_vlan *v, u16 flags)
 	__vlan_flags_update(v, flags, true);
 }
 
+static inline bool br_vlan_tagging_by_switchdev(struct net_bridge *br)
+{
+#if IS_ENABLED(CONFIG_NET_DSA)
+	struct net_bridge_port *p;
+
+	list_for_each_entry(p, &br->port_list, list) {
+		if (dsa_user_dev_check(p->dev))
+			return false;
+	}
+#endif
+	return true;
+}
+
 static int __vlan_vid_add(struct net_device *dev, struct net_bridge *br,
 			  struct net_bridge_vlan *v, u16 flags,
 			  struct netlink_ext_ack *extack)
@@ -113,6 +127,8 @@ static int __vlan_vid_add(struct net_device *dev, struct net_bridge *br,
 	if (err == -EOPNOTSUPP)
 		return vlan_vid_add(dev, br->vlan_proto, v->vid);
 	v->priv_flags |= BR_VLFLAG_ADDED_BY_SWITCHDEV;
+	if (br_vlan_tagging_by_switchdev(br))
+		v->priv_flags |= BR_VLFLAG_TAGGING_BY_SWITCHDEV;
 	return err;
 }
 
@@ -1491,7 +1507,7 @@ int br_vlan_fill_forward_path_mode(struct net_bridge *br,
 
 	if (path->bridge.vlan_mode == DEV_PATH_BR_VLAN_TAG)
 		path->bridge.vlan_mode = DEV_PATH_BR_VLAN_KEEP;
-	else if (v->priv_flags & BR_VLFLAG_ADDED_BY_SWITCHDEV)
+	else if (v->priv_flags & BR_VLFLAG_TAGGING_BY_SWITCHDEV)
 		path->bridge.vlan_mode = DEV_PATH_BR_VLAN_UNTAG_HW;
 	else
 		path->bridge.vlan_mode = DEV_PATH_BR_VLAN_UNTAG;
