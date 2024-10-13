@@ -51,6 +51,7 @@
  */
 #define EXC_RET_STACK_MASK			0x00000004
 #define EXC_RET_THREADMODE_PROCESSSTACK		(3 << 2)
+#define EXC_RET_FTYPE				(1 << 4)
 
 /* Cache related definitions */
 

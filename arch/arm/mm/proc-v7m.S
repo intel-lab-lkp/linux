@@ -138,6 +138,7 @@ __v7m_setup_cont:
 1:	cpsid	i
 	/* Calculate exc_ret */
 	orr	r10, lr, #EXC_RET_THREADMODE_PROCESSSTACK
+	orr	r10, #EXC_RET_FTYPE
 	ldmia	sp, {r0-r3, r12}
 	str	r5, [r12, #11 * 4]	@ restore the original SVC vector entry
 	mov	lr, r6			@ restore LR
