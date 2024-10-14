@@ -909,6 +909,11 @@ struct intel_csc_matrix {
 	u16 postoff[3];
 };
 
+enum intel_dsc_split_state {
+	INTEL_DSC_SPLIT_DISABLED,
+	INTEL_DSC_SPLIT_2_STREAMS,
+};
+
 void intel_io_mmio_fw_write(void *ctx, i915_reg_t reg, u32 val);
 
 typedef void (*intel_io_reg_write)(void *ctx, i915_reg_t reg, u32 val);
@@ -1235,7 +1240,7 @@ struct intel_crtc_state {
 	/* Display Stream compression state */
 	struct {
 		bool compression_enable;
-		bool dsc_split;
+		enum intel_dsc_split_state dsc_split;
 		/* Compressed Bpp in U6.4 format (first 4 bits for fractional part) */
 		u16 compressed_bpp_x16;
 		u8 slice_count;
