@@ -1629,7 +1629,7 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 		return NOTIFY_DONE;
 	}
 
-	wireless_nlevent_flush();
+	wireless_nlevent_flush(dev_net(dev));
 
 	return NOTIFY_OK;
 }
