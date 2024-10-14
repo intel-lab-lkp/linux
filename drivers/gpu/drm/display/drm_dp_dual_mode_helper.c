@@ -491,11 +491,10 @@ EXPORT_SYMBOL(drm_lspcon_get_mode);
  * 0 on success, -error on failure/timeout
  */
 int drm_lspcon_set_mode(const struct drm_device *dev, struct i2c_adapter *adapter,
-			enum drm_lspcon_mode mode)
+			enum drm_lspcon_mode mode, int time_out)
 {
 	u8 data = 0;
 	int ret;
-	int time_out = 200;
 	enum drm_lspcon_mode current_mode;
 
 	if (mode == DRM_LSPCON_MODE_PCON)
