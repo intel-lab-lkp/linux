@@ -3,6 +3,7 @@
 #include <linux/execmem.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
+#include <linux/kallsyms.h>
 #include <linux/module.h>
 #include <linux/page_ext.h>
 #include <linux/pgalloc_tag.h>
@@ -152,6 +153,42 @@ static void __init procfs_init(void)
 	proc_create_seq("allocinfo", 0400, NULL, &allocinfo_seq_op);
 }
 
+#ifdef CONFIG_PGALLOC_TAG_USE_PAGEFLAGS
+
+DEFINE_STATIC_KEY_TRUE(mem_profiling_use_pageflags);
+unsigned long alloc_tag_ref_mask;
+int alloc_tag_ref_offs;
+
+#define SECTION_START(NAME)	(CODETAG_SECTION_START_PREFIX NAME)
+#define SECTION_STOP(NAME)	(CODETAG_SECTION_STOP_PREFIX NAME)
+
+struct alloc_tag_kernel_section kernel_tags = { NULL, 0 };
+
+void __init alloc_tag_sec_init(void)
+{
+	struct alloc_tag *last_codetag;
+
+	kernel_tags.first_tag = (struct alloc_tag *)kallsyms_lookup_name(
+					SECTION_START(ALLOC_TAG_SECTION_NAME));
+	last_codetag = (struct alloc_tag *)kallsyms_lookup_name(
+					SECTION_STOP(ALLOC_TAG_SECTION_NAME));
+	kernel_tags.count = last_codetag - kernel_tags.first_tag;
+
+	/* Check if kernel tags fit into page flags */
+	if (kernel_tags.count > (1UL << NR_UNUSED_PAGEFLAG_BITS)) {
+		static_branch_disable(&mem_profiling_use_pageflags);
+		pr_warn("%lu kernel tags do not fit into %d available page flag bits, page extensions will be used instead!\n",
+			kernel_tags.count, NR_UNUSED_PAGEFLAG_BITS);
+	} else {
+		alloc_tag_ref_offs = (LRU_REFS_PGOFF - NR_UNUSED_PAGEFLAG_BITS);
+		alloc_tag_ref_mask = ((1UL << NR_UNUSED_PAGEFLAG_BITS) - 1);
+		pr_info("All unused page flags (%d bits) are used to store page tag references!\n",
+			NR_UNUSED_PAGEFLAG_BITS);
+	}
+}
+
+#endif /* CONFIG_PGALLOC_TAG_USE_PAGEFLAGS */
+
 #ifdef CONFIG_MODULES
 
 static struct maple_tree mod_area_mt = MTREE_INIT(mod_area_mt, MT_FLAGS_ALLOC_RANGE);
@@ -161,7 +198,29 @@ static struct module unloaded_mod;
 /* A dummy object used to indicate a module prepended area */
 static struct module prepend_mod;
 
-static struct alloc_tag_module_section module_tags;
+struct alloc_tag_module_section module_tags;
+
+#ifdef CONFIG_PGALLOC_TAG_USE_PAGEFLAGS
+static inline unsigned long alloc_tag_align(unsigned long val)
+{
+	if (val % sizeof(struct alloc_tag) == 0)
+		return val;
+	return ((val / sizeof(struct alloc_tag)) + 1) * sizeof(struct alloc_tag);
+}
+
+static inline bool tags_addressable(void)
+{
+	unsigned long tag_idx_count = CODETAG_ID_FIRST + kernel_tags.count +
+					module_tags.size / sizeof(struct alloc_tag);
+
+	return tag_idx_count < (1UL << NR_UNUSED_PAGEFLAG_BITS);
+}
+
+#else /* CONFIG_PGALLOC_TAG_USE_PAGEFLAGS */
+
+static inline bool tags_addressable(void) { return true; }
+
+#endif /* CONFIG_PGALLOC_TAG_USE_PAGEFLAGS */
 
 static bool needs_section_mem(struct module *mod, unsigned long size)
 {
@@ -237,6 +296,21 @@ static void *reserve_module_tags(struct module *mod, unsigned long size,
 	if (!align)
 		align = 1;
 
+#ifdef CONFIG_PGALLOC_TAG_USE_PAGEFLAGS
+	/*
+	 * If alloc_tag size is not a multiple of required alignment tag
+	 * indexing does not work.
+	 */
+	if (!IS_ALIGNED(sizeof(struct alloc_tag), align)) {
+		pr_err("%s: alignment %lu is incompatible with allocation tag indexing, disable CONFIG_PGALLOC_TAG_USE_PAGEFLAGS",
+			mod->name, align);
+		return ERR_PTR(-EINVAL);
+	}
+
+	/* Ensure prepend consumes multiple of alloc_tag-sized blocks */
+	if (prepend)
+		prepend = alloc_tag_align(prepend);
+#endif /* CONFIG_PGALLOC_TAG_USE_PAGEFLAGS */
 	mas_lock(&mas);
 repeat:
 	/* Try finding exact size and hope the start is aligned */
@@ -305,6 +379,12 @@ unlock:
 		unsigned long phys_size = vm_module_tags->nr_pages << PAGE_SHIFT;
 
 		module_tags.size = offset + size;
+		if (!tags_addressable() && mem_alloc_profiling_enabled()) {
+			static_branch_disable(&mem_alloc_profiling_key);
+			pr_warn("With module %s there are too many tags to fit in %d page flag bits. Memory profiling is disabled!\n",
+				mod->name, NR_UNUSED_PAGEFLAG_BITS);
+		}
+
 		if (phys_size < module_tags.size) {
 			int grow_res;
 
@@ -406,6 +486,10 @@ static int __init alloc_mod_tags_mem(void)
 
 	module_tags.start_addr = (unsigned long)vm_module_tags->addr;
 	module_tags.end_addr = module_tags.start_addr + MODULE_ALLOC_TAG_VMAP_SIZE;
+#ifdef CONFIG_PGALLOC_TAG_USE_PAGEFLAGS
+	/* Ensure the base is alloc_tag aligned */
+	module_tags.start_addr = alloc_tag_align(module_tags.start_addr);
+#endif
 
 	return 0;
 }
@@ -467,6 +551,10 @@ early_param("sysctl.vm.mem_profiling", setup_early_mem_profiling);
 
 static __init bool need_page_alloc_tagging(void)
 {
+#ifdef CONFIG_PGALLOC_TAG_USE_PAGEFLAGS
+	if (static_key_enabled(&mem_profiling_use_pageflags))
+		return false;
+#endif
 	return mem_profiling_support;
 }
 

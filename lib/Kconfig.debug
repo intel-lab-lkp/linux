@@ -1017,6 +1017,25 @@ config MEM_ALLOC_PROFILING_DEBUG
 	  Adds warnings with helpful error messages for memory allocation
 	  profiling.
 
+config PGALLOC_TAG_USE_PAGEFLAGS
+	bool "Use pageflags to encode page allocation tag reference"
+	default n
+	depends on MEM_ALLOC_PROFILING
+	help
+	  When set, page allocation tag references are encoded inside page
+	  flags if they fit, otherwise they are encoded in page extensions.
+
+	  Setting this flag reduces memory and performance overhead of memory
+	  allocation profiling but it requires enough unused page flag bits to
+	  address all kernel allocations. If enabled but there are not enough
+	  unused page flag bits, profiling will fall back to using page
+	  extensions and a warning will be issued to disable this config.
+	  If dynamically loaded modules add enough tags that they can't be
+	  addressed anymore with available page flag bits, profiling for such
+	  modules will be disabled and a warning will be issued.
+
+	  Say N if unsure.
+
 source "lib/Kconfig.kasan"
 source "lib/Kconfig.kfence"
 source "lib/Kconfig.kmsan"
