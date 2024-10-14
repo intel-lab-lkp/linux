@@ -291,13 +291,34 @@ static void panfrost_mmu_flush_range(struct panfrost_device *pfdev,
 	pm_runtime_put_autosuspend(pfdev->base.dev);
 }
 
+static void mmu_unmap_range(size_t len, u64 iova, bool is_heap,
+			    struct io_pgtable_ops *ops)
+{
+	size_t unmapped_len = 0;
+
+	while (unmapped_len < len) {
+		size_t unmapped_page, pgcount;
+		size_t pgsize = get_pgsize(iova, len - unmapped_len, &pgcount);
+
+		if (is_heap)
+			pgcount = 1;
+		if (!is_heap || ops->iova_to_phys(ops, iova)) {
+			unmapped_page = ops->unmap_pages(ops, iova, pgsize, pgcount, NULL);
+			WARN_ON(unmapped_page != pgsize * pgcount);
+		}
+		iova += pgsize * pgcount;
+		unmapped_len += pgsize * pgcount;
+	}
+}
+
 static int mmu_map_sg(struct panfrost_device *pfdev, struct panfrost_mmu *mmu,
-		      u64 iova, int prot, struct sg_table *sgt)
+		      u64 iova, int prot, struct sg_table *sgt, bool is_heap)
 {
 	unsigned int count;
 	struct scatterlist *sgl;
 	struct io_pgtable_ops *ops = mmu->pgtbl_ops;
 	u64 start_iova = iova;
+	int ret;
 
 	for_each_sgtable_dma_sg(sgt, sgl, count) {
 		unsigned long paddr = sg_dma_address(sgl);
@@ -311,8 +332,13 @@ static int mmu_map_sg(struct panfrost_device *pfdev, struct panfrost_mmu *mmu,
 			size_t pgcount, mapped = 0;
 			size_t pgsize = get_pgsize(iova | paddr, len, &pgcount);
 
-			ops->map_pages(ops, iova, paddr, pgsize, pgcount, prot,
+			ret = ops->map_pages(ops, iova, paddr, pgsize, pgcount, prot,
 				       GFP_KERNEL, &mapped);
+			if (ret) {
+				/* Unmap everything we mapped and bail out */
+				mmu_unmap_range(mapped, start_iova, is_heap, ops);
+				return ret;
+			}
 			/* Don't get stuck if things have gone wrong */
 			mapped = max(mapped, pgsize);
 			iova += mapped;
@@ -334,6 +360,7 @@ int panfrost_mmu_map(struct panfrost_gem_mapping *mapping)
 	struct panfrost_device *pfdev = to_panfrost_device(obj->dev);
 	struct sg_table *sgt;
 	int prot = IOMMU_READ | IOMMU_WRITE;
+	int ret;
 
 	if (WARN_ON(mapping->active))
 		return 0;
@@ -345,8 +372,13 @@ int panfrost_mmu_map(struct panfrost_gem_mapping *mapping)
 	if (WARN_ON(IS_ERR(sgt)))
 		return PTR_ERR(sgt);
 
-	mmu_map_sg(pfdev, mapping->mmu, mapping->mmnode.start << PAGE_SHIFT,
-		   prot, sgt);
+	ret = mmu_map_sg(pfdev, mapping->mmu, mapping->mmnode.start << PAGE_SHIFT,
+			 prot, sgt, false);
+	if (ret) {
+		drm_gem_shmem_put_pages(shmem);
+		return ret;
+	}
+
 	mapping->active = true;
 
 	return 0;
@@ -360,7 +392,7 @@ void panfrost_mmu_unmap(struct panfrost_gem_mapping *mapping)
 	struct io_pgtable_ops *ops = mapping->mmu->pgtbl_ops;
 	u64 iova = mapping->mmnode.start << PAGE_SHIFT;
 	size_t len = mapping->mmnode.size << PAGE_SHIFT;
-	size_t unmapped_len = 0;
+
 
 	if (WARN_ON(!mapping->active))
 		return;
@@ -368,19 +400,7 @@ void panfrost_mmu_unmap(struct panfrost_gem_mapping *mapping)
 	dev_dbg(pfdev->base.dev, "unmap: as=%d, iova=%llx, len=%zx",
 		mapping->mmu->as, iova, len);
 
-	while (unmapped_len < len) {
-		size_t unmapped_page, pgcount;
-		size_t pgsize = get_pgsize(iova, len - unmapped_len, &pgcount);
-
-		if (bo->is_heap)
-			pgcount = 1;
-		if (!bo->is_heap || ops->iova_to_phys(ops, iova)) {
-			unmapped_page = ops->unmap_pages(ops, iova, pgsize, pgcount, NULL);
-			WARN_ON(unmapped_page != pgsize * pgcount);
-		}
-		iova += pgsize * pgcount;
-		unmapped_len += pgsize * pgcount;
-	}
+	mmu_unmap_range(len, iova, bo->is_heap, ops);
 
 	panfrost_mmu_flush_range(pfdev, mapping->mmu,
 				 mapping->mmnode.start << PAGE_SHIFT, len);
@@ -533,8 +553,11 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 	if (ret)
 		goto err_map;
 
-	mmu_map_sg(pfdev, bomapping->mmu, addr,
-		   IOMMU_WRITE | IOMMU_READ | IOMMU_NOEXEC, sgt);
+	ret = mmu_map_sg(pfdev, bomapping->mmu, addr,
+			 IOMMU_WRITE | IOMMU_READ | IOMMU_NOEXEC,
+			 sgt, true);
+	if (ret)
+		goto err_mmu_map_sg;
 
 	bomapping->active = true;
 	bo->heap_rss_size += SZ_2M;
@@ -548,6 +571,9 @@ out:
 
 	return 0;
 
+err_mmu_map_sg:
+	dma_unmap_sgtable(pfdev->base.dev, sgt,
+			  DMA_BIDIRECTIONAL, 0);
 err_map:
 	sg_free_table(sgt);
 err_unlock:
