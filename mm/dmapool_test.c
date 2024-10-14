@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
 #include <linux/device.h>
 #include <linux/dma-map-ops.h>
 #include <linux/dma-mapping.h>
@@ -87,7 +89,7 @@ static int dmapool_test_block(const struct dmapool_parms *parms)
 	}
 	end_time = ktime_get();
 
-	printk("dmapool test: size:%-4zu align:%-4zu blocks:%-4d time:%llu\n",
+	pr_info("dmapool test: size:%-4zu align:%-4zu blocks:%-4d time:%llu\n",
 		parms->size, parms->align, blocks,
 		ktime_us_delta(end_time, start_time));
 
@@ -112,7 +114,7 @@ static int dmapool_checks(void)
 
 	ret = device_register(&test_dev);
 	if (ret) {
-		printk("%s: register failed:%d\n", __func__, ret);
+		pr_err("%s: register failed:%d\n", __func__, ret);
 		goto put_device;
 	}
 
@@ -121,7 +123,7 @@ static int dmapool_checks(void)
 	test_dev.dma_mask = &dma_mask;
 	ret = dma_set_mask_and_coherent(&test_dev, DMA_BIT_MASK(64));
 	if (ret) {
-		printk("%s: mask failed:%d\n", __func__, ret);
+		pr_err("%s: mask failed:%d\n", __func__, ret);
 		goto del_device;
 	}
 
