@@ -71,6 +71,25 @@ struct btrfs_bio *btrfs_bio_alloc(unsigned int nr_vecs, blk_opf_t opf,
 	return bbio;
 }
 
+void btrfs_bio_set_private_flag(struct btrfs_bio *bbio, unsigned short flag) {
+	ASSERT(flag & BTRFS_BIO_PRIVATE_FLAG_MASK);
+	bbio->bio.bi_flags |= flag;
+}
+
+void btrfs_bio_clear_private_flag(struct btrfs_bio *bbio, unsigned short flag) {
+	ASSERT(flag & BTRFS_BIO_PRIVATE_FLAG_MASK);
+	bbio->bio.bi_flags &= ~flag;
+}
+
+void btrfs_bio_clear_private_flags(struct btrfs_bio *bbio) {
+	bbio->bio.bi_flags &= ~BTRFS_BIO_PRIVATE_FLAG_MASK;
+}
+
+bool btrfs_bio_private_flagged(struct btrfs_bio *bbio, unsigned short flag) {
+	ASSERT(flag & BTRFS_BIO_PRIVATE_FLAG_MASK);
+	return bbio->bio.bi_flags & flag;
+}
+
 static struct btrfs_bio *btrfs_split_bio(struct btrfs_fs_info *fs_info,
 					 struct btrfs_bio *orig_bbio,
 					 u64 map_length)
@@ -493,6 +512,7 @@ static void btrfs_submit_mirrored_bio(struct btrfs_io_context *bioc, int dev_nr)
 static void btrfs_submit_bio(struct bio *bio, struct btrfs_io_context *bioc,
 			     struct btrfs_io_stripe *smap, int mirror_num)
 {
+	btrfs_bio_clear_private_flags(btrfs_bio(bio));
 	if (!bioc) {
 		/* Single mirror read/write fast path. */
 		btrfs_bio(bio)->mirror_num = mirror_num;

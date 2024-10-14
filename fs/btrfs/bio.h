@@ -101,6 +101,13 @@ struct btrfs_bio *btrfs_bio_alloc(unsigned int nr_vecs, blk_opf_t opf,
 				  btrfs_bio_end_io_t end_io, void *private);
 void btrfs_bio_end_io(struct btrfs_bio *bbio, blk_status_t status);
 
+#define BTRFS_BIO_FLAG_CSUM_SEARCH_COMMIT_ROOT	1U << (BIO_FLAG_LAST + 1)
+#define BTRFS_BIO_PRIVATE_FLAG_MASK	(BTRFS_BIO_FLAG_CSUM_SEARCH_COMMIT_ROOT)
+void btrfs_bio_set_private_flag(struct btrfs_bio *bbio, unsigned short flag);
+void btrfs_bio_clear_private_flag(struct btrfs_bio *bbio, unsigned short flag);
+void btrfs_bio_clear_private_flags(struct btrfs_bio *bbio);
+bool btrfs_bio_private_flagged(struct btrfs_bio *bbio, unsigned short flag);
+
 /* Submit using blkcg_punt_bio_submit. */
 #define REQ_BTRFS_CGROUP_PUNT			REQ_FS_PRIVATE
 
