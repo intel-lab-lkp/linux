@@ -3703,10 +3703,10 @@ static int igb_disable_sriov(struct pci_dev *pdev, bool reinit)
 			dev_warn(&pdev->dev,
 				 "Cannot deallocate SR-IOV virtual functions while they are assigned - VFs will not be deallocated\n");
 			return -EPERM;
-		} else {
-			pci_disable_sriov(pdev);
-			msleep(500);
 		}
+
+		pci_disable_sriov(pdev);
+		msleep(500);
 		spin_lock_irqsave(&adapter->vfs_lock, flags);
 		kfree(adapter->vf_mac_list);
 		adapter->vf_mac_list = NULL;
@@ -3739,6 +3739,7 @@ static int igb_enable_sriov(struct pci_dev *pdev, int num_vfs, bool reinit)
 		err = -EPERM;
 		goto out;
 	}
+
 	if (!num_vfs)
 		goto out;
 
@@ -3746,11 +3747,13 @@ static int igb_enable_sriov(struct pci_dev *pdev, int num_vfs, bool reinit)
 		dev_info(&pdev->dev, "%d pre-allocated VFs found - override max_vfs setting of %d\n",
 			 old_vfs, max_vfs);
 		adapter->vfs_allocated_count = old_vfs;
-	} else
+	} else {
 		adapter->vfs_allocated_count = num_vfs;
+	}
 
 	adapter->vf_data = kcalloc(adapter->vfs_allocated_count,
-				sizeof(struct vf_data_storage), GFP_KERNEL);
+				   sizeof(struct vf_data_storage),
+				   GFP_KERNEL);
 
 	/* if allocation failed then we do not support SR-IOV */
 	if (!adapter->vf_data) {
