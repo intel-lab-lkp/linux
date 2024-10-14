@@ -151,9 +151,6 @@ struct net {
 	struct netns_ft ft;
 #endif
 #endif
-#ifdef CONFIG_WEXT_CORE
-	struct sk_buff_head	wext_nlevents;
-#endif
 	struct net_generic __rcu	*gen;
 
 	/* Used to store attached BPF programs */

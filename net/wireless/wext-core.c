@@ -20,6 +20,7 @@
 #include <net/netlink.h>
 #include <net/wext.h>
 #include <net/net_namespace.h>
+#include <net/netns/generic.h>
 
 typedef int (*wext_ioctl_func)(struct net_device *, struct iwreq *,
 			       unsigned int, struct iw_request_info *,
@@ -343,6 +344,17 @@ static const int compat_event_type_size[] = {
 
 /* IW event code */
 
+struct wext_net {
+	struct sk_buff_head nlevents;
+};
+
+static int wext_net_id;
+
+static struct wext_net *wext_net(struct net *net)
+{
+	return net_generic(net, wext_net_id);
+}
+
 void wireless_nlevent_flush(void)
 {
 	struct sk_buff *skb;
@@ -350,7 +362,9 @@ void wireless_nlevent_flush(void)
 
 	down_read(&net_rwsem);
 	for_each_net(net) {
-		while ((skb = skb_dequeue(&net->wext_nlevents)))
+		struct wext_net *wnet = wext_net(net);
+
+		while ((skb = skb_dequeue(&wnet->nlevents)))
 			rtnl_notify(skb, net, 0, RTNLGRP_LINK, NULL,
 				    GFP_KERNEL);
 	}
@@ -379,18 +393,25 @@ static struct notifier_block wext_netdev_notifier = {
 
 static int __net_init wext_pernet_init(struct net *net)
 {
-	skb_queue_head_init(&net->wext_nlevents);
+	struct wext_net *wnet = wext_net(net);
+
+	skb_queue_head_init(&wnet->nlevents);
+
 	return 0;
 }
 
 static void __net_exit wext_pernet_exit(struct net *net)
 {
-	skb_queue_purge(&net->wext_nlevents);
+	struct wext_net *wnet = wext_net(net);
+
+	skb_queue_purge(&wnet->nlevents);
 }
 
 static struct pernet_operations wext_pernet_ops = {
 	.init = wext_pernet_init,
 	.exit = wext_pernet_exit,
+	.id = &wext_net_id,
+	.size = sizeof(struct wext_net),
 };
 
 static int __init wireless_nlevent_init(void)
@@ -462,6 +483,7 @@ void wireless_send_event(struct net_device *	dev,
 	int wrqu_off = 0;			/* Offset in wrqu */
 	/* Don't "optimise" the following variable, it will crash */
 	unsigned int	cmd_index;		/* *MUST* be unsigned */
+	struct wext_net *wnet;
 	struct sk_buff *skb;
 	struct nlmsghdr *nlh;
 	struct nlattr *nla;
@@ -632,7 +654,8 @@ void wireless_send_event(struct net_device *	dev,
 
 	skb_shinfo(skb)->frag_list = compskb;
 #endif
-	skb_queue_tail(&dev_net(dev)->wext_nlevents, skb);
+	wnet = wext_net(dev_net(dev));
+	skb_queue_tail(&wnet->nlevents, skb);
 	schedule_work(&wireless_nlevent_work);
 }
 EXPORT_SYMBOL(wireless_send_event);
