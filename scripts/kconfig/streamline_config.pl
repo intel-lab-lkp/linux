@@ -473,6 +473,11 @@ foreach my $line (@config_file) {
 
     if (/(CONFIG_[$valid]*)=(m|y)/) {
 	$orig_configs{$1} = $2;
+	# all configs options set to 'y' need to be processed
+	if ($2 eq "y") {
+            $configs{$1}= $2;
+        }
+
     }
 }
 
@@ -499,8 +504,8 @@ sub parse_config_depends
 
 	    $p =~ s/^[^$valid]*[$valid]+//;
 
-	    # We only need to process if the depend config is a module
-	    if (!defined($orig_configs{$conf}) || $orig_configs{$conf} eq "y") {
+	    # Make sure that this config exists in the current .config file
+	    if (!defined($orig_configs{$conf})) {
 		next;
 	    }
 
@@ -600,12 +605,6 @@ sub loop_depend {
 
       forloop:
 	foreach my $config (keys %configs) {
-
-	    # If this config is not a module, we do not need to process it
-	    if (defined($orig_configs{$config}) && $orig_configs{$config} ne "m") {
-		next forloop;
-	    }
-
 	    $config =~ s/^CONFIG_//;
 	    $depconfig = $config;
 
