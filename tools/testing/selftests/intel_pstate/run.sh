@@ -87,9 +87,11 @@ mkt_freq=${_mkt_freq}0
 
 # Get the ranges from cpupower
 _min_freq=$(cpupower frequency-info -l | tail -1 | awk ' { print $1 } ')
-min_freq=$(($_min_freq / 1000))
+min_freq=$((_min_freq / 1000))
+echo "min_freq:"
+echo $min_freq
 _max_freq=$(cpupower frequency-info -l | tail -1 | awk ' { print $2 } ')
-max_freq=$(($_max_freq / 1000))
+max_freq=$((_max_freq / 1000))
 
 
 [ $EVALUATE_ONLY -eq 0 ] && for freq in `seq $max_freq -100 $min_freq`
