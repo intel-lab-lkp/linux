@@ -18,11 +18,11 @@ static void fuse_file_accessed(struct file *file)
 	fuse_invalidate_atime(inode);
 }
 
-static void fuse_passthrough_end_write(struct file *file, loff_t, ssize_t)
+static void fuse_passthrough_end_write(struct file *file, loff_t pos, ssize_t ret)
 {
 	struct inode *inode = file_inode(file);
 
-	fuse_invalidate_attr_mask(inode, FUSE_STATX_MODSIZE);
+	fuse_write_update_attr(inode, pos, ret);
 }
 
 ssize_t fuse_passthrough_read_iter(struct kiocb *iocb, struct iov_iter *iter)
