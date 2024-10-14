@@ -41,11 +41,18 @@ static_assert(BITS_PER_TYPE(access_mask_t) >= LANDLOCK_NUM_SCOPE);
 static_assert(sizeof(unsigned long) >= sizeof(access_mask_t));
 
 /* Ruleset access masks. */
-struct access_masks {
-	access_mask_t fs : LANDLOCK_NUM_ACCESS_FS;
-	access_mask_t net : LANDLOCK_NUM_ACCESS_NET;
-	access_mask_t scope : LANDLOCK_NUM_SCOPE;
+union access_masks {
+	struct {
+		access_mask_t fs : LANDLOCK_NUM_ACCESS_FS;
+		access_mask_t net : LANDLOCK_NUM_ACCESS_NET;
+		access_mask_t scope : LANDLOCK_NUM_SCOPE;
+	};
+	u32 all;
 };
+
+/* Makes sure all fields are covered. */
+static_assert(sizeof(((union access_masks *)NULL)->all) ==
+	      sizeof(union access_masks));
 
 typedef u16 layer_mask_t;
 /* Makes sure all layers can be checked. */
@@ -229,7 +236,7 @@ struct landlock_ruleset {
 			 * layers are set once and never changed for the
 			 * lifetime of the ruleset.
 			 */
-			struct access_masks access_masks[];
+			union access_masks access_masks[];
 		};
 	};
 };
@@ -258,6 +265,46 @@ static inline void landlock_get_ruleset(struct landlock_ruleset *const ruleset)
 {
 	if (ruleset)
 		refcount_inc(&ruleset->usage);
+}
+
+/**
+ * landlock_merge_access_masks - Return the merge of a ruleset's access_masks
+ *
+ * @ruleset: Landlock ruleset (used as a domain)
+ *
+ * Returns: an access_masks result of the OR of all the ruleset's access masks.
+ */
+static inline union access_masks
+landlock_merge_access_masks(const struct landlock_ruleset *const ruleset)
+{
+	size_t layer_level;
+	union access_masks matches = {};
+
+	for (layer_level = 0; layer_level < ruleset->num_layers; layer_level++)
+		matches.all |= ruleset->access_masks[layer_level].all;
+
+	return matches;
+}
+
+/**
+ * landlock_match_ruleset - Return @ruleset if any @masks right matches
+ *
+ * @ruleset: Landlock ruleset (used as a domain)
+ * @masks: access masks
+ *
+ * Returns: @ruleset if @masks matches, or NULL otherwise.
+ */
+static inline const struct landlock_ruleset *
+landlock_match_ruleset(const struct landlock_ruleset *const ruleset,
+		       const union access_masks masks)
+{
+	if (!ruleset)
+		return NULL;
+
+	if (landlock_merge_access_masks(ruleset).all & masks.all)
+		return ruleset;
+
+	return NULL;
 }
 
 static inline void
@@ -296,18 +343,11 @@ landlock_add_scope_mask(struct landlock_ruleset *const ruleset,
 }
 
 static inline access_mask_t
-landlock_get_raw_fs_access_mask(const struct landlock_ruleset *const ruleset,
-				const u16 layer_level)
-{
-	return ruleset->access_masks[layer_level].fs;
-}
-
-static inline access_mask_t
 landlock_get_fs_access_mask(const struct landlock_ruleset *const ruleset,
 			    const u16 layer_level)
 {
 	/* Handles all initially denied by default access rights. */
-	return landlock_get_raw_fs_access_mask(ruleset, layer_level) |
+	return ruleset->access_masks[layer_level].fs |
 	       LANDLOCK_ACCESS_FS_INITIALLY_DENIED;
 }
 
