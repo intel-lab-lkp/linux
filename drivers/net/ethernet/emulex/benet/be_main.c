@@ -1392,10 +1392,12 @@ static netdev_tx_t be_xmit(struct sk_buff *skb, struct net_device *netdev)
 	if (be_send_pkt_to_bmc(adapter, &skb)) {
 		BE_WRB_F_SET(wrb_params.features, OS2BMC, 1);
 		wrb_cnt = be_xmit_enqueue(adapter, txo, skb, &wrb_params);
-		if (unlikely(!wrb_cnt))
+		if (unlikely(!wrb_cnt)) {
+			dev_kfree_skb_any(skb);
 			goto drop;
-		else
+		} else {
 			skb_get(skb);
+		}
 	}
 
 	if (be_is_txq_full(txo)) {
