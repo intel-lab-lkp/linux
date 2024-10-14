@@ -138,7 +138,7 @@ static DEFINE_PER_CPU(struct softirq_ctrl, softirq_ctrl) = {
  */
 bool local_bh_blocked(void)
 {
-	return __this_cpu_read(softirq_ctrl.cnt) != 0;
+	return (__this_cpu_read(softirq_ctrl.cnt) & SOFTIRQ_MASK) != 0;
 }
 
 void __local_bh_disable_ip(unsigned long ip, unsigned int cnt)
@@ -155,7 +155,8 @@ void __local_bh_disable_ip(unsigned long ip, unsigned int cnt)
 			/* Required to meet the RCU bottomhalf requirements. */
 			rcu_read_lock();
 		} else {
-			DEBUG_LOCKS_WARN_ON(this_cpu_read(softirq_ctrl.cnt));
+			DEBUG_LOCKS_WARN_ON(this_cpu_read(softirq_ctrl.cnt) &
+					    SOFTIRQ_MASK);
 		}
 	}
 
@@ -163,7 +164,7 @@ void __local_bh_disable_ip(unsigned long ip, unsigned int cnt)
 	 * Track the per CPU softirq disabled state. On RT this is per CPU
 	 * state to allow preemption of bottom half disabled sections.
 	 */
-	newcnt = __this_cpu_add_return(softirq_ctrl.cnt, cnt);
+	newcnt = __this_cpu_add_return(softirq_ctrl.cnt, cnt) & SOFTIRQ_MASK;
 	/*
 	 * Reflect the result in the task state to prevent recursion on the
 	 * local lock and to make softirq_count() & al work.
@@ -184,7 +185,7 @@ static void __local_bh_enable(unsigned int cnt, bool unlock)
 	int newcnt;
 
 	DEBUG_LOCKS_WARN_ON(current->softirq_disable_cnt !=
-			    this_cpu_read(softirq_ctrl.cnt));
+			    (this_cpu_read(softirq_ctrl.cnt) & SOFTIRQ_MASK));
 
 	if (IS_ENABLED(CONFIG_TRACE_IRQFLAGS) && softirq_count() == cnt) {
 		raw_local_irq_save(flags);
@@ -192,7 +193,7 @@ static void __local_bh_enable(unsigned int cnt, bool unlock)
 		raw_local_irq_restore(flags);
 	}
 
-	newcnt = __this_cpu_sub_return(softirq_ctrl.cnt, cnt);
+	newcnt = __this_cpu_sub_return(softirq_ctrl.cnt, cnt) & SOFTIRQ_MASK;
 	current->softirq_disable_cnt = newcnt;
 
 	if (!newcnt && unlock) {
@@ -212,7 +213,7 @@ void __local_bh_enable_ip(unsigned long ip, unsigned int cnt)
 	lockdep_assert_irqs_enabled();
 
 	local_irq_save(flags);
-	curcnt = __this_cpu_read(softirq_ctrl.cnt);
+	curcnt = __this_cpu_read(softirq_ctrl.cnt) & SOFTIRQ_MASK;
 
 	/*
 	 * If this is not reenabling soft interrupts, no point in trying to
