@@ -51,5 +51,5 @@ done
 
 
 # print overall results
-print_overall_results "$TEST_RESULT"
+print_overall_results "$TEST_RESULT" "Some of the tests need DWARF to run"
 exit $?
