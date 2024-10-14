@@ -496,6 +496,7 @@ bool mce_usable_address(struct mce *m)
 
 	case X86_VENDOR_INTEL:
 	case X86_VENDOR_ZHAOXIN:
+	case X86_VENDOR_CENTAUR:
 		return intel_mce_usable_address(m);
 
 	default:
@@ -513,6 +514,7 @@ bool mce_is_memory_error(struct mce *m)
 
 	case X86_VENDOR_INTEL:
 	case X86_VENDOR_ZHAOXIN:
+	case X86_VENDOR_CENTAUR:
 		/*
 		 * Intel SDM Volume 3B - 15.9.2 Compound Error Codes
 		 *
@@ -1242,7 +1244,8 @@ static noinstr bool mce_check_crashing_cpu(void)
 
 		mcgstatus = __rdmsr(MSR_IA32_MCG_STATUS);
 
-		if (boot_cpu_data.x86_vendor == X86_VENDOR_ZHAOXIN) {
+		if (boot_cpu_data.x86_vendor == X86_VENDOR_ZHAOXIN ||
+		    boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR) {
 			if (mcgstatus & MCG_STATUS_LMCES)
 				return false;
 		}
@@ -1516,7 +1519,8 @@ noinstr void do_machine_check(struct pt_regs *regs)
 	 * on Intel, Zhaoxin only.
 	 */
 	if (m.cpuvendor == X86_VENDOR_INTEL ||
-	    m.cpuvendor == X86_VENDOR_ZHAOXIN)
+	    m.cpuvendor == X86_VENDOR_ZHAOXIN ||
+	    m.cpuvendor == X86_VENDOR_CENTAUR)
 		lmce = m.mcgstatus & MCG_STATUS_LMCES;
 
 	/*
@@ -2087,6 +2091,7 @@ static void __mcheck_cpu_clear_vendor(struct cpuinfo_x86 *c)
 		break;
 
 	case X86_VENDOR_ZHAOXIN:
+	case X86_VENDOR_CENTAUR:
 		mce_zhaoxin_feature_clear(c);
 		break;
 
