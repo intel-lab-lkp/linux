@@ -1004,6 +1004,8 @@ static void drm_test_drm_hdmi_compute_mode_clock_rgb(struct kunit *test)
 	rate = drm_hdmi_compute_mode_clock(mode, 8, HDMI_COLORSPACE_RGB);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, mode->clock * 1000ULL, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1025,6 +1027,8 @@ static void drm_test_drm_hdmi_compute_mode_clock_rgb_10bpc(struct kunit *test)
 	rate = drm_hdmi_compute_mode_clock(mode, 10, HDMI_COLORSPACE_RGB);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, mode->clock * 1250, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1043,6 +1047,8 @@ static void drm_test_drm_hdmi_compute_mode_clock_rgb_10bpc_vic_1(struct kunit *t
 
 	rate = drm_hdmi_compute_mode_clock(mode, 10, HDMI_COLORSPACE_RGB);
 	KUNIT_EXPECT_EQ(test, rate, 0);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1064,6 +1070,8 @@ static void drm_test_drm_hdmi_compute_mode_clock_rgb_12bpc(struct kunit *test)
 	rate = drm_hdmi_compute_mode_clock(mode, 12, HDMI_COLORSPACE_RGB);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, mode->clock * 1500, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1082,6 +1090,8 @@ static void drm_test_drm_hdmi_compute_mode_clock_rgb_12bpc_vic_1(struct kunit *t
 
 	rate = drm_hdmi_compute_mode_clock(mode, 12, HDMI_COLORSPACE_RGB);
 	KUNIT_EXPECT_EQ(test, rate, 0);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1103,6 +1113,8 @@ static void drm_test_drm_hdmi_compute_mode_clock_rgb_double(struct kunit *test)
 	rate = drm_hdmi_compute_mode_clock(mode, 8, HDMI_COLORSPACE_RGB);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, (mode->clock * 1000ULL) * 2, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1126,6 +1138,8 @@ static void drm_test_connector_hdmi_compute_mode_clock_yuv420_valid(struct kunit
 	rate = drm_hdmi_compute_mode_clock(mode, 8, HDMI_COLORSPACE_YUV420);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, (mode->clock * 1000ULL) / 2, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 static const unsigned int drm_hdmi_compute_mode_clock_yuv420_vic_valid_tests[] = {
@@ -1164,6 +1178,8 @@ static void drm_test_connector_hdmi_compute_mode_clock_yuv420_10_bpc(struct kuni
 	KUNIT_ASSERT_GT(test, rate, 0);
 
 	KUNIT_EXPECT_EQ(test, mode->clock * 625, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1189,6 +1205,8 @@ static void drm_test_connector_hdmi_compute_mode_clock_yuv420_12_bpc(struct kuni
 	KUNIT_ASSERT_GT(test, rate, 0);
 
 	KUNIT_EXPECT_EQ(test, mode->clock * 750, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1211,6 +1229,8 @@ static void drm_test_connector_hdmi_compute_mode_clock_yuv422_8_bpc(struct kunit
 	rate = drm_hdmi_compute_mode_clock(mode, 8, HDMI_COLORSPACE_YUV422);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, mode->clock * 1000, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1233,6 +1253,8 @@ static void drm_test_connector_hdmi_compute_mode_clock_yuv422_10_bpc(struct kuni
 	rate = drm_hdmi_compute_mode_clock(mode, 10, HDMI_COLORSPACE_YUV422);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, mode->clock * 1000, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1255,6 +1277,8 @@ static void drm_test_connector_hdmi_compute_mode_clock_yuv422_12_bpc(struct kuni
 	rate = drm_hdmi_compute_mode_clock(mode, 12, HDMI_COLORSPACE_YUV422);
 	KUNIT_ASSERT_GT(test, rate, 0);
 	KUNIT_EXPECT_EQ(test, mode->clock * 1000, rate);
+
+	drm_mode_destroy(drm, mode);
 }
 
 static struct kunit_case drm_hdmi_compute_mode_clock_tests[] = {
