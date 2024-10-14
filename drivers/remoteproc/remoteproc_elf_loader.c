@@ -278,7 +278,7 @@ find_table(struct device *dev, const struct firmware *fw)
 		table = (struct resource_table *)(elf_data + offset);
 
 		/* make sure we have the entire table */
-		if (offset + size > fw_size || offset + size < size) {
+		if (offset + size > fw_size) {
 			dev_err(dev, "resource table truncated\n");
 			return NULL;
 		}
