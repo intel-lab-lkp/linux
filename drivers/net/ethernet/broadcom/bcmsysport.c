@@ -29,13 +29,15 @@
 
 /* I/O accessors register helpers */
 #define BCM_SYSPORT_IO_MACRO(name, offset) \
-static inline u32 name##_readl(struct bcm_sysport_priv *priv, u32 off)	\
+static u32 __maybe_unused						\
+name##_readl(struct bcm_sysport_priv *priv, u32 off)			\
 {									\
 	u32 reg = readl_relaxed(priv->base + offset + off);		\
 	return reg;							\
 }									\
-static inline void name##_writel(struct bcm_sysport_priv *priv,		\
-				  u32 val, u32 off)			\
+									\
+static void __maybe_unused						\
+name##_writel(struct bcm_sysport_priv *priv, u32 val, u32 off)		\
 {									\
 	writel_relaxed(val, priv->base + offset + off);			\
 }									\
