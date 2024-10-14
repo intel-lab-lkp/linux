@@ -72,7 +72,7 @@ static DEFINE_MUTEX(pools_reg_lock);
 static ssize_t pools_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct dma_pool *pool;
-	unsigned size;
+	unsigned int size;
 
 	size = sysfs_emit(buf, "poolinfo - 0.1\n");
 
