@@ -4948,6 +4948,47 @@ static int igc_sw_init(struct igc_adapter *adapter)
 	return 0;
 }
 
+void igc_set_queue_napi(struct igc_adapter *adapter, int q_idx,
+			struct napi_struct *napi)
+{
+	if (adapter->flags & IGC_FLAG_QUEUE_PAIRS) {
+		netif_queue_set_napi(adapter->netdev, q_idx,
+				     NETDEV_QUEUE_TYPE_RX, napi);
+		netif_queue_set_napi(adapter->netdev, q_idx,
+				     NETDEV_QUEUE_TYPE_TX, napi);
+	} else {
+		if (q_idx < adapter->num_rx_queues) {
+			netif_queue_set_napi(adapter->netdev, q_idx,
+					     NETDEV_QUEUE_TYPE_RX, napi);
+		} else {
+			q_idx -= adapter->num_rx_queues;
+			netif_queue_set_napi(adapter->netdev, q_idx,
+					     NETDEV_QUEUE_TYPE_TX, napi);
+		}
+	}
+}
+
+void igc_unset_queue_napi(struct igc_adapter *adapter, int q_idx)
+{
+	struct net_device *netdev = adapter->netdev;
+
+	if (adapter->flags & IGC_FLAG_QUEUE_PAIRS) {
+		netif_queue_set_napi(netdev, q_idx, NETDEV_QUEUE_TYPE_RX,
+				     NULL);
+		netif_queue_set_napi(netdev, q_idx, NETDEV_QUEUE_TYPE_TX,
+				     NULL);
+	} else {
+		if (q_idx < adapter->num_rx_queues) {
+			netif_queue_set_napi(adapter->netdev, q_idx,
+					     NETDEV_QUEUE_TYPE_RX, NULL);
+		} else {
+			q_idx -= adapter->num_rx_queues;
+			netif_queue_set_napi(adapter->netdev, q_idx,
+					     NETDEV_QUEUE_TYPE_TX, NULL);
+		}
+	}
+}
+
 /**
  * igc_up - Open the interface and prepare it to handle traffic
  * @adapter: board private structure
@@ -4955,6 +4996,7 @@ static int igc_sw_init(struct igc_adapter *adapter)
 void igc_up(struct igc_adapter *adapter)
 {
 	struct igc_hw *hw = &adapter->hw;
+	struct napi_struct *napi;
 	int i = 0;
 
 	/* hardware has been reset, we need to reload some things */
@@ -4962,8 +5004,11 @@ void igc_up(struct igc_adapter *adapter)
 
 	clear_bit(__IGC_DOWN, &adapter->state);
 
-	for (i = 0; i < adapter->num_q_vectors; i++)
-		napi_enable(&adapter->q_vector[i]->napi);
+	for (i = 0; i < adapter->num_q_vectors; i++) {
+		napi = &adapter->q_vector[i]->napi;
+		napi_enable(napi);
+		igc_set_queue_napi(adapter, i, napi);
+	}
 
 	if (adapter->msix_entries)
 		igc_configure_msix(adapter);
@@ -5192,6 +5237,7 @@ void igc_down(struct igc_adapter *adapter)
 	for (i = 0; i < adapter->num_q_vectors; i++) {
 		if (adapter->q_vector[i]) {
 			napi_synchronize(&adapter->q_vector[i]->napi);
+			igc_unset_queue_napi(adapter, i);
 			napi_disable(&adapter->q_vector[i]->napi);
 		}
 	}
@@ -6021,6 +6067,7 @@ static int __igc_open(struct net_device *netdev, bool resuming)
 	struct igc_adapter *adapter = netdev_priv(netdev);
 	struct pci_dev *pdev = adapter->pdev;
 	struct igc_hw *hw = &adapter->hw;
+	struct napi_struct *napi;
 	int err = 0;
 	int i = 0;
 
@@ -6056,8 +6103,11 @@ static int __igc_open(struct net_device *netdev, bool resuming)
 
 	clear_bit(__IGC_DOWN, &adapter->state);
 
-	for (i = 0; i < adapter->num_q_vectors; i++)
-		napi_enable(&adapter->q_vector[i]->napi);
+	for (i = 0; i < adapter->num_q_vectors; i++) {
+		napi = &adapter->q_vector[i]->napi;
+		napi_enable(napi);
+		igc_set_queue_napi(adapter, i, napi);
+	}
 
 	/* Clear any pending interrupts. */
 	rd32(IGC_ICR);
