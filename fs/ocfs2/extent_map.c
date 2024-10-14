@@ -961,13 +961,17 @@ int ocfs2_read_virt_blocks(struct inode *inode, u64 v_block, int nr,
 	int rc = 0;
 	u64 p_block, p_count;
 	int i, count, done = 0;
+	loff_t i_size = i_size_read(inode);
 
 	trace_ocfs2_read_virt_blocks(
 	     inode, (unsigned long long)v_block, nr, bhs, flags,
 	     validate);
 
+	if (!i_size)
+		return -EINVAL;
+
 	if (((v_block + nr - 1) << inode->i_sb->s_blocksize_bits) >=
-	    i_size_read(inode)) {
+	    i_size) {
 		BUG_ON(!(flags & OCFS2_BH_READAHEAD));
 		goto out;
 	}
