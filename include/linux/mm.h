@@ -3818,6 +3818,7 @@ void *sparse_buffer_alloc(unsigned long size);
 struct page * __populate_section_memmap(unsigned long pfn,
 		unsigned long nr_pages, int nid, struct vmem_altmap *altmap,
 		struct dev_pagemap *pgmap);
+void kernel_pte_init(void *addr);
 void pmd_init(void *addr);
 void pud_init(void *addr);
 pgd_t *vmemmap_pgd_populate(unsigned long addr, int node);

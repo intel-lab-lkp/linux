@@ -269,6 +269,7 @@ extern void set_pmd_at(struct mm_struct *mm, unsigned long addr, pmd_t *pmdp, pm
 extern void pgd_init(void *addr);
 extern void pud_init(void *addr);
 extern void pmd_init(void *addr);
+extern void kernel_pte_init(void *addr);
 
 /*
  * Encode/decode swap entries and swap PTEs. Swap PTEs are all PTEs that
