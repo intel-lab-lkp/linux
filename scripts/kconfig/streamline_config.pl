@@ -149,6 +149,34 @@ my $var;
 my $iflevel = 0;
 my @ifdeps;
 
+# distributes choice entries to different config options
+sub set_hash_value {
+    my %htable = %{$_[0]};
+    my $tmp_config = $_[1];
+    my $current_config = $_[2];
+    if (defined($htable{$tmp_config})) {
+	${$_[0]}{$current_config} = $htable{$tmp_config};
+    }
+}
+
+# distribute choice config entries
+sub copy_configs {
+    my $tmp_config = "TMP_CONFIG";
+    my $choice_config = $_[0];
+    set_hash_value (\%depends, $tmp_config, $choice_config);
+    set_hash_value (\%selects, $tmp_config, $choice_config);
+    set_hash_value (\%prompts, $tmp_config, $choice_config);
+    set_hash_value (\%defaults, $tmp_config, $choice_config);
+}
+
+sub delete_temp_config {
+    my $tmp_config = "TMP_CONFIG";
+    $depends{$tmp_config} = undef;
+    $selects{$tmp_config} = undef;
+    $prompts{$tmp_config} = undef;
+    $defaults{$tmp_config} = undef;
+}
+
 # prevent recursion
 my %read_kconfigs;
 
@@ -163,6 +191,7 @@ sub read_kconfig {
 
     my $source = "$ksource/$kconfig";
     my $last_source = "";
+    my $choice_activated = 0;
 
     # Check for any environment variables used
     while ($source =~ /\$\((\w+)\)/ && $last_source ne $source) {
@@ -205,9 +234,13 @@ sub read_kconfig {
 	    $config = $2;
 	    $config2kfile{"CONFIG_$config"} = $kconfig;
 
+	    if ($choice_activated) {
+		copy_configs $config;
+	    }
+
 	    # Add depends for 'if' nesting
 	    for (my $i = 0; $i < $iflevel; $i++) {
-		if ($i) {
+		if (defined($depends{$config})) {
 		    $depends{$config} .= " " . $ifdeps[$i];
 		} else {
 		    $depends{$config} = $ifdeps[$i];
@@ -260,8 +293,18 @@ sub read_kconfig {
 	    $iflevel-- if ($iflevel);
 
 	# stop on "help" and keywords that end a menu entry
-	} elsif (/^\s*(---)?help(---)?\s*$/ || /^(comment|choice|menu)\b/) {
+	} elsif (/^\s*(---)?help(---)?\s*$/ || /^(comment|menu)\b/) {
 	    $state = "NONE";
+
+	# for choice, distribute the lines before each config entry to
+	# each config entry
+	} elsif (/^\s*choice\b/) {
+	    $choice_activated = 1;
+	    $config = "TMP_CONFIG";
+	    $state = "NEW";
+	} elsif (/^\s*endchoice/) {
+	    delete_temp_config;
+	    $choice_activated = 0;
 	}
     }
     close($kinfile);
