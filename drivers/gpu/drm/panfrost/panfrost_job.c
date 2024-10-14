@@ -414,7 +414,7 @@ static struct dma_fence *panfrost_job_run(struct drm_sched_job *sched_job)
 	return fence;
 }
 
-void panfrost_job_enable_interrupts(struct panfrost_device *pfdev)
+void panfrost_job_enable_interrupts(struct panfrost_device *pfdev, bool enable_job_int)
 {
 	int j;
 	u32 irq_mask = 0;
@@ -426,7 +426,8 @@ void panfrost_job_enable_interrupts(struct panfrost_device *pfdev)
 	}
 
 	job_write(pfdev, JOB_INT_CLEAR, irq_mask);
-	job_write(pfdev, JOB_INT_MASK, irq_mask);
+	if (enable_job_int)
+		job_write(pfdev, JOB_INT_MASK, irq_mask);
 }
 
 void panfrost_job_suspend_irq(struct panfrost_device *pfdev)
@@ -718,12 +719,7 @@ panfrost_reset(struct panfrost_device *pfdev,
 	spin_unlock(&pfdev->js->job_lock);
 
 	/* Proceed with reset now. */
-	panfrost_device_reset(pfdev);
-
-	/* panfrost_device_reset() unmasks job interrupts, but we want to
-	 * keep them masked a bit longer.
-	 */
-	job_write(pfdev, JOB_INT_MASK, 0);
+	panfrost_device_reset(pfdev, false);
 
 	/* GPU has been reset, we can clear the reset pending bit. */
 	atomic_set(&pfdev->reset.pending, 0);
@@ -898,7 +894,7 @@ int panfrost_job_init(struct panfrost_device *pfdev)
 		}
 	}
 
-	panfrost_job_enable_interrupts(pfdev);
+	panfrost_job_enable_interrupts(pfdev, true);
 
 	return 0;
 
