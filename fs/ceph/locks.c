@@ -221,8 +221,7 @@ static int ceph_lock_wait_for_completion(struct ceph_mds_client *mdsc,
 	if (err && err != -ERESTARTSYS)
 		return err;
 
-	wait_for_completion_killable(&req->r_safe_completion);
-	return 0;
+	return wait_for_completion_killable(&req->r_safe_completion);
 }
 
 static int try_unlock_file(struct file *file, struct file_lock *fl)
