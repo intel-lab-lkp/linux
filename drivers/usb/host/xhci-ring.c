@@ -1186,8 +1186,11 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 			 * So keep retrying until the command clearly succeeds.
 			 * Not clear what to do if other HCs have similar bugs.
 			 */
-			if (!(xhci->quirks & XHCI_NEC_HOST))
+			if (!(xhci->quirks & XHCI_NEC_HOST)) {
+				xhci_warn(xhci, "Unhandled Stop Endpoint failure on slot %d ep_index %d\n",
+						slot_id, ep_index);
 				break;
+			}
 			fallthrough;
 
 		case EP_STATE_RUNNING:
