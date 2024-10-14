@@ -485,7 +485,7 @@ static int ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
 		.a0 = FFA_MSG_SEND_DIRECT_REQ2, .a1 = src_dst_ids,
 	};
 
-	export_uuid((u8 *)&args.a2, uuid);
+	memcpy((void *)&args + offsetof(ffa_value_t, a2), uuid, sizeof(*uuid));
 	memcpy((void *)&args + offsetof(ffa_value_t, a4), data, sizeof(*data));
 
 	invoke_ffa_fn(args, &ret);
@@ -496,7 +496,7 @@ static int ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
 		return ffa_to_linux_errno((int)ret.a2);
 
 	if (ret.a0 == FFA_MSG_SEND_DIRECT_RESP2) {
-		memcpy(data, &ret.a4, sizeof(*data));
+		memcpy(data, (void *)&ret + offsetof(ffa_value_t, a4), sizeof(*data));
 		return 0;
 	}
 
