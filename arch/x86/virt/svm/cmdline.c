@@ -10,6 +10,7 @@
 #include <linux/string.h>
 #include <linux/printk.h>
 #include <linux/cache.h>
+#include <linux/cpufeature.h>
 
 #include <asm/sev-common.h>
 
@@ -22,6 +23,12 @@ static int __init init_sev_config(char *str)
 	while ((s = strsep(&str, ","))) {
 		if (!strcmp(s, "debug")) {
 			sev_cfg.debug = true;
+			continue;
+		}
+
+		if (!strcmp(s, "nosnp")) {
+			setup_clear_cpu_cap(X86_FEATURE_SEV_SNP);
+			cc_platform_clear(CC_ATTR_HOST_SEV_SNP);
 			continue;
 		}
 
