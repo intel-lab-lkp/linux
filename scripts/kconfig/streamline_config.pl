@@ -713,4 +713,53 @@ foreach my $module (keys(%modules)) {
     }
 }
 
+# the following tool can be used to check a particular config option.
+# You can read the output if the variable "debugprint" is set to "1."
+# Here is a sample way to use the tool:
+# dprintvar("INET_ESP");
+#
+sub dprintvar {
+    if ($debugprint) {
+	my $dconfig = $_[0];
+	my $fconfig = "CONFIG_$dconfig";
+	my $con_found = "";
+	my $dep_found = "";
+	my $def_found = "";
+	my $sel_found = "";
+	my $prom_found = "";
+	my $ori_found = "";
+	my $proc_found = "";
+
+        if (defined($configs{$fconfig})) {
+            $con_found = $configs{$fconfig};
+        }
+        if (defined($depends{$dconfig})) {
+            $dep_found = $depends{$dconfig};
+        }
+        if (defined($defaults{$dconfig})) {
+            $def_found = $defaults{$dconfig};
+        }
+        if (defined($selects{$dconfig})) {
+            $sel_found = $selects{$dconfig};
+        }
+        if (defined($prompts{$dconfig})) {
+            $prom_found = $prompts{$dconfig};
+        }
+        if (defined($orig_configs{$fconfig})) {
+            $ori_found = $orig_configs{$fconfig};
+        }
+        if (defined($process_selects{$dconfig})) {
+            $proc_found = $process_selects{$dconfig};
+        }
+
+        dprint "config: $dconfig\n";
+        dprint "config found: $con_found\n";
+        dprint "depends: $dep_found\n";
+        dprint "defaults: $def_found\n";
+        dprint "selects: $sel_found\n";
+        dprint "prompts: $prom_found\n";
+        dprint "in original config: $ori_found\n";
+	dprint "process selected: $proc_found\n";
+    }
+}
 # vim: softtabstop=4
