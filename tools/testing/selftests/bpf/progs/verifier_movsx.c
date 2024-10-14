@@ -290,6 +290,26 @@ l0_%=:							\
 #else
 
 SEC("socket")
+__description("MOV64SX, S8, unsigned range_check")
+__success __retval(0)
+__naked void mov64sx_s8_range_check(void)
+{
+	asm volatile ("					\
+	call %[bpf_get_prandom_u32];			\
+	r0 &= 0x1;					\
+	r0 += 0xfe;					\
+	r0 = (s8)r0;					\
+	if r0 < 0xfffffffffffffffe goto label_%=;	\
+	r0 = 0;						\
+	exit;						\
+label_%=:						\
+	exit;						\
+"	:
+	: __imm(bpf_get_prandom_u32)
+	: __clobber_all);
+}
+
+SEC("socket")
 __description("cpuv4 is not supported by compiler or jit, use a dummy test")
 __success
 int dummy_test(void)
