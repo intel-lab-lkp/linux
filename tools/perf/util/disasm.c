@@ -1580,20 +1580,6 @@ static int symbol__disassemble_capstone_powerpc(char *filename, struct symbol *s
 		offset += 4;
 	}
 
-	/* It failed in the middle */
-	if (offset != len) {
-		struct list_head *list = &notes->src->source;
-
-		/* Discard all lines and fallback to objdump */
-		while (!list_empty(list)) {
-			dl = list_first_entry(list, struct disasm_line, al.node);
-
-			list_del_init(&dl->al.node);
-			disasm_line__free(dl);
-		}
-		count = -1;
-	}
-
 out:
 	if (needs_cs_close)
 		cs_close(&handle);
@@ -1612,7 +1598,7 @@ err:
 		 */
 		list_for_each_entry_safe(dl, tmp, &notes->src->source, al.node) {
 			list_del(&dl->al.node);
-			free(dl);
+			disasm_line__free(dl);
 		}
 	}
 	count = -1;
