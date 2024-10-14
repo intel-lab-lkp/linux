@@ -23,6 +23,33 @@
 #include <linux/ethtool.h>
 #include <linux/netdevice.h>
 
+#define CAN_FRAME_ERROR_INIT(cf) \
+	((cf)->can_id |= CAN_ERR_PROT | CAN_ERR_BUSERROR)
+
+#define CAN_FRAME_SET_ERR_BIT0(cf) \
+	((cf)->data[2] |= CAN_ERR_PROT_BIT0)
+
+#define CAN_FRAME_SET_ERR_BIT1(cf) \
+	((cf)->data[2] |= CAN_ERR_PROT_BIT1)
+
+#define CAN_FRAME_SET_ERR_ACK(cf) \
+	do { \
+		((cf)->can_id |= CAN_ERR_ACK); \
+		((cf)->data[3] = CAN_ERR_PROT_LOC_ACK); \
+	} while (0)
+
+#define CAN_FRAME_SET_ERR_CRC(cf) \
+	do { \
+		((cf)->data[2] |= CAN_ERR_PROT_BIT); \
+		((cf)->data[3] = CAN_ERR_PROT_LOC_CRC_SEQ); \
+	} while (0)
+
+#define CAN_FRAME_SET_ERR_FORM(cf) \
+	((cf)->data[2] |= CAN_ERR_PROT_FORM)
+
+#define CAN_FRAME_SET_ERR_STUFF(cf) \
+	((cf)->data[2] |= CAN_ERR_PROT_STUFF)
+
 /*
  * CAN mode
  */
