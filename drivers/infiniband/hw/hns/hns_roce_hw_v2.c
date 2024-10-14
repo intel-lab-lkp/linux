@@ -37,6 +37,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h>
 #include <net/addrconf.h>
 #include <rdma/ib_addr.h>
 #include <rdma/ib_cache.h>
@@ -2865,6 +2866,36 @@ err_modify_qp:
 	return ret;
 }
 
+static int hns_roce_v2_get_reset_page(struct hns_roce_dev *hr_dev)
+{
+	struct hns_roce_reset_state *state;
+
+	hr_dev->reset_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!hr_dev->reset_page)
+		return -ENOMEM;
+
+	hr_dev->reset_kaddr = vmap(&hr_dev->reset_page, 1, VM_MAP, PAGE_KERNEL);
+	if (!hr_dev->reset_kaddr)
+		goto err_with_vmap;
+
+	state = hr_dev->reset_kaddr;
+	state->hw_ready = 1;
+
+	return 0;
+
+err_with_vmap:
+	put_page(hr_dev->reset_page);
+	return -ENOMEM;
+}
+
+static void hns_roce_v2_put_reset_page(struct hns_roce_dev *hr_dev)
+{
+	vunmap(hr_dev->reset_kaddr);
+	hr_dev->reset_kaddr = NULL;
+	put_page(hr_dev->reset_page);
+	hr_dev->reset_page = NULL;
+}
+
 static int get_hem_table(struct hns_roce_dev *hr_dev)
 {
 	unsigned int qpc_count;
@@ -2944,14 +2975,21 @@ static int hns_roce_v2_init(struct hns_roce_dev *hr_dev)
 {
 	int ret;
 
+	ret = hns_roce_v2_get_reset_page(hr_dev);
+	if (ret) {
+		dev_err(hr_dev->dev,
+			"reset state init failed, ret = %d.\n", ret);
+		return ret;
+	}
+
 	/* The hns ROCEE requires the extdb info to be cleared before using */
 	ret = hns_roce_clear_extdb_list_info(hr_dev);
 	if (ret)
-		return ret;
+		goto err_clear_extdb_failed;
 
 	ret = get_hem_table(hr_dev);
 	if (ret)
-		return ret;
+		goto err_clear_extdb_failed;
 
 	if (hr_dev->is_vf)
 		return 0;
@@ -2967,6 +3005,9 @@ static int hns_roce_v2_init(struct hns_roce_dev *hr_dev)
 err_llm_init_failed:
 	put_hem_table(hr_dev);
 
+err_clear_extdb_failed:
+	hns_roce_v2_put_reset_page(hr_dev);
+
 	return ret;
 }
 
@@ -2979,6 +3020,8 @@ static void hns_roce_v2_exit(struct hns_roce_dev *hr_dev)
 
 	if (!hr_dev->is_vf)
 		hns_roce_free_link_table(hr_dev);
+
+	hns_roce_v2_put_reset_page(hr_dev);
 
 	if (hr_dev->pci_dev->revision == PCI_REVISION_ID_HIP09)
 		free_dip_list(hr_dev);

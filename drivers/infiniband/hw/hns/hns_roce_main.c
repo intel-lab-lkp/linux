@@ -324,6 +324,7 @@ hns_roce_user_mmap_entry_insert(struct ib_ucontext *ucontext, u64 address,
 				ucontext, &entry->rdma_entry, length, 0);
 		break;
 	case HNS_ROCE_MMAP_TYPE_DWQE:
+	case HNS_ROCE_MMAP_TYPE_RESET:
 		ret = rdma_user_mmap_entry_insert_range(
 				ucontext, &entry->rdma_entry, length, 1,
 				U32_MAX);
@@ -339,6 +340,20 @@ hns_roce_user_mmap_entry_insert(struct ib_ucontext *ucontext, u64 address,
 	}
 
 	return entry;
+}
+
+static int hns_roce_alloc_reset_entry(struct ib_ucontext *uctx)
+{
+	struct hns_roce_ucontext *context = to_hr_ucontext(uctx);
+	struct hns_roce_dev *hr_dev = to_hr_dev(uctx->device);
+
+	context->reset_mmap_entry = hns_roce_user_mmap_entry_insert(
+		uctx, (u64)page_to_phys(hr_dev->reset_page), PAGE_SIZE,
+		HNS_ROCE_MMAP_TYPE_RESET);
+	if (!context->reset_mmap_entry)
+		return -ENOMEM;
+
+	return 0;
 }
 
 static void hns_roce_dealloc_uar_entry(struct hns_roce_ucontext *context)
@@ -369,6 +384,7 @@ static int hns_roce_alloc_ucontext(struct ib_ucontext *uctx,
 	struct hns_roce_dev *hr_dev = to_hr_dev(uctx->device);
 	struct hns_roce_ib_alloc_ucontext_resp resp = {};
 	struct hns_roce_ib_alloc_ucontext ucmd = {};
+	struct rdma_user_mmap_entry *rdma_entry;
 	int ret = -EAGAIN;
 
 	if (!hr_dev->active)
@@ -421,6 +437,13 @@ static int hns_roce_alloc_ucontext(struct ib_ucontext *uctx,
 
 	resp.cqe_size = hr_dev->caps.cqe_sz;
 
+	ret = hns_roce_alloc_reset_entry(uctx);
+	if (ret)
+		goto error_fail_reset_entry;
+
+	rdma_entry = &context->reset_mmap_entry->rdma_entry;
+	resp.reset_mmap_key = rdma_user_mmap_get_offset(rdma_entry);
+
 	ret = ib_copy_to_udata(udata, &resp,
 			       min(udata->outlen, sizeof(resp)));
 	if (ret)
@@ -429,6 +452,9 @@ static int hns_roce_alloc_ucontext(struct ib_ucontext *uctx,
 	return 0;
 
 error_fail_copy_to_udata:
+	rdma_user_mmap_entry_remove(&context->reset_mmap_entry->rdma_entry);
+
+error_fail_reset_entry:
 	if (hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_CQ_RECORD_DB ||
 	    hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_QP_RECORD_DB)
 		mutex_destroy(&context->page_mutex);
@@ -447,6 +473,8 @@ static void hns_roce_dealloc_ucontext(struct ib_ucontext *ibcontext)
 {
 	struct hns_roce_ucontext *context = to_hr_ucontext(ibcontext);
 	struct hns_roce_dev *hr_dev = to_hr_dev(ibcontext->device);
+
+	rdma_user_mmap_entry_remove(&context->reset_mmap_entry->rdma_entry);
 
 	if (hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_CQ_RECORD_DB ||
 	    hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_QP_RECORD_DB)
@@ -484,6 +512,14 @@ static int hns_roce_mmap(struct ib_ucontext *uctx, struct vm_area_struct *vma)
 	case HNS_ROCE_MMAP_TYPE_DB:
 	case HNS_ROCE_MMAP_TYPE_DWQE:
 		prot = pgprot_device(vma->vm_page_prot);
+		break;
+	case HNS_ROCE_MMAP_TYPE_RESET:
+		if (vma->vm_flags & (VM_WRITE | VM_EXEC)) {
+			ret = -EINVAL;
+			goto out;
+		}
+		vm_flags_set(vma, VM_DONTEXPAND);
+		prot = vma->vm_page_prot;
 		break;
 	default:
 		ret = -EINVAL;
