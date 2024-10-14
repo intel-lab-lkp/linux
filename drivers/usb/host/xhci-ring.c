@@ -911,6 +911,21 @@ done:
 	return ret;
 }
 
+/*
+ * A Stop Endpoint command is redundant if the EP is not in the Running state.
+ * It will fail with Context State Error. We sometimes queue redundant Stop EP
+ * commands when the EP is held Stopped for Set TR Deq execution, or Halted.
+ * A pending Stop Endpoint command *becomes* redundant if the EP halts before
+ * its completion, and this flag needs to be updated in those cases too.
+ */
+static void xhci_update_stop_cmd_redundant(struct xhci_virt_ep *ep)
+{
+	if (ep->ep_state & (SET_DEQ_PENDING | EP_HALTED | EP_CLEARING_TT))
+		ep->ep_state |= EP_STOP_CMD_REDUNDANT;
+	else
+		ep->ep_state &= ~EP_STOP_CMD_REDUNDANT;
+}
+
 static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 				struct xhci_virt_ep *ep,
 				struct xhci_td *td,
@@ -946,6 +961,7 @@ static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 		return err;
 
 	ep->ep_state |= EP_HALTED;
+	xhci_update_stop_cmd_redundant(ep);
 
 	xhci_ring_cmd_db(xhci);
 
@@ -1149,15 +1165,31 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 				break;
 			ep->ep_state &= ~EP_STOP_CMD_PENDING;
 			return;
+
 		case EP_STATE_STOPPED:
 			/*
-			 * NEC uPD720200 sometimes sets this state and fails with
-			 * Context Error while continuing to process TRBs.
-			 * Be conservative and trust EP_CTX_STATE on other chips.
+			 * Per xHCI 4.6.9, Stop Endpoint command on a Stopped
+			 * EP is a Context State Error, and EP stays Stopped.
+			 * The EP could be stopped by some concurrent job, so
+			 * ignore this error when that's the case.
+			 */
+			if (ep->ep_state & EP_STOP_CMD_REDUNDANT)
+				break;
+			/*
+			 * NEC uPD720200 controllers have this bug: it takes one
+			 * service interval to restart a stopped EP, and in this
+			 * time its state remains Stopped. Any new Stop Endpoint
+			 * command fails and this handler may run quickly enough
+			 * to still observe the Stopped state, but it's bound to
+			 * soon change to Running, and all hell breaks loose.
+			 *
+			 * So keep retrying until the command clearly succeeds.
+			 * Not clear what to do if other HCs have similar bugs.
 			 */
 			if (!(xhci->quirks & XHCI_NEC_HOST))
 				break;
 			fallthrough;
+
 		case EP_STATE_RUNNING:
 			/* Race, HW handled stop ep cmd before ep was running */
 			xhci_dbg(xhci, "Stop ep completion ctx error, ep is running\n");
@@ -4383,10 +4415,16 @@ int xhci_queue_evaluate_context(struct xhci_hcd *xhci, struct xhci_command *cmd,
 int xhci_queue_stop_endpoint(struct xhci_hcd *xhci, struct xhci_command *cmd,
 			     int slot_id, unsigned int ep_index, int suspend)
 {
+	struct xhci_virt_ep *ep;
 	u32 trb_slot_id = SLOT_ID_FOR_TRB(slot_id);
 	u32 trb_ep_index = EP_INDEX_FOR_TRB(ep_index);
 	u32 type = TRB_TYPE(TRB_STOP_RING);
 	u32 trb_suspend = SUSPEND_PORT_FOR_TRB(suspend);
+
+	ep = xhci_get_virt_ep(xhci, slot_id, ep_index);
+	if (ep)
+		xhci_update_stop_cmd_redundant(ep);
+	/* else: don't care, the handler will do nothing anyway */
 
 	return queue_command(xhci, cmd, 0, 0, 0,
 			trb_slot_id | trb_ep_index | type | trb_suspend, false);
