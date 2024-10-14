@@ -29,11 +29,11 @@
 		ethdr0 = &ethdr0;
 		gce0 = &gce0;
 		gce1 = &gce1;
-		merge0 = &merge0;
 		merge1 = &merge1;
 		merge2 = &merge2;
 		merge3 = &merge3;
 		merge4 = &merge4;
+		merge5 = &merge5;
 		mutex0 = &mutex0;
 		mutex1 = &mutex1;
 		padding0 = &padding0;
@@ -2698,7 +2698,7 @@
 			mediatek,gce-client-reg = <&gce0 SUBSYS_1c10XXXX 0xb000 0x1000>;
 		};
 
-		merge0: merge@1c10c000 {
+		merge1: merge@1c10c000 {
 			compatible = "mediatek,mt8188-disp-merge", "mediatek,mt8195-disp-merge";
 			reg = <0 0x1c10c000 0 0x1000>;
 			clocks = <&vdosys1 CLK_VDO1_VPP_MERGE0>,
@@ -2711,7 +2711,7 @@
 			mediatek,merge-mute;
 		};
 
-		merge1: merge@1c10d000 {
+		merge2: merge@1c10d000 {
 			compatible = "mediatek,mt8188-disp-merge", "mediatek,mt8195-disp-merge";
 			reg = <0 0x1c10d000 0 0x1000>;
 			clocks = <&vdosys1 CLK_VDO1_VPP_MERGE1>,
@@ -2724,7 +2724,7 @@
 			mediatek,merge-mute;
 		};
 
-		merge2: merge@1c10e000 {
+		merge3: merge@1c10e000 {
 			compatible = "mediatek,mt8188-disp-merge", "mediatek,mt8195-disp-merge";
 			reg = <0 0x1c10e000 0 0x1000>;
 			clocks = <&vdosys1 CLK_VDO1_VPP_MERGE2>,
@@ -2737,7 +2737,7 @@
 			mediatek,merge-mute;
 		};
 
-		merge3: merge@1c10f000 {
+		merge4: merge@1c10f000 {
 			compatible = "mediatek,mt8188-disp-merge", "mediatek,mt8195-disp-merge";
 			reg = <0 0x1c10f000 0 0x1000>;
 			clocks = <&vdosys1 CLK_VDO1_VPP_MERGE3>,
@@ -2750,7 +2750,7 @@
 			mediatek,merge-mute;
 		};
 
-		merge4: merge@1c110000 {
+		merge5: merge@1c110000 {
 			compatible = "mediatek,mt8188-disp-merge", "mediatek,mt8195-disp-merge";
 			reg = <0 0x1c110000 0 0x1000>;
 			clocks = <&vdosys1 CLK_VDO1_VPP_MERGE4>,
