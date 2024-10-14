@@ -385,6 +385,12 @@ struct control_buf {
 	virtio_net_ctrl_ack status;
 };
 
+enum virtnet_mode {
+	VIRTNET_MODE_SMALL,
+	VIRTNET_MODE_MERGE,
+	VIRTNET_MODE_BIG
+};
+
 struct virtnet_info {
 	struct virtio_device *vdev;
 	struct virtqueue *cvq;
@@ -413,6 +419,8 @@ struct virtnet_info {
 
 	/* Host will merge rx buffers for big packets (shake it! shake it!) */
 	bool mergeable_rx_bufs;
+
+	enum virtnet_mode mode;
 
 	/* Host supports rss and/or hash report */
 	bool has_rss;
@@ -643,12 +651,15 @@ static struct page *get_a_page(struct receive_queue *rq, gfp_t gfp_mask)
 static void virtnet_rq_free_buf(struct virtnet_info *vi,
 				struct receive_queue *rq, void *buf)
 {
-	if (vi->mergeable_rx_bufs)
+	switch (vi->mode) {
+	case VIRTNET_MODE_SMALL:
+	case VIRTNET_MODE_MERGE:
 		put_page(virt_to_head_page(buf));
-	else if (vi->big_packets)
+		break;
+	case VIRTNET_MODE_BIG:
 		give_pages(rq, buf);
-	else
-		put_page(virt_to_head_page(buf));
+		break;
+	}
 }
 
 static void enable_delayed_refill(struct virtnet_info *vi)
@@ -1315,7 +1326,8 @@ static void virtnet_receive_xsk_buf(struct virtnet_info *vi, struct receive_queu
 
 	flags = ((struct virtio_net_common_hdr *)(xdp->data - vi->hdr_len))->hdr.flags;
 
-	if (!vi->mergeable_rx_bufs)
+	/* We only support small and merge mode. */
+	if (vi->mode == VIRTNET_MODE_SMALL)
 		skb = virtnet_receive_xsk_small(dev, vi, rq, xdp, xdp_xmit, stats);
 	else
 		skb = virtnet_receive_xsk_merge(dev, vi, rq, xdp, xdp_xmit, stats);
@@ -2389,13 +2401,20 @@ static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 	 */
 	flags = ((struct virtio_net_common_hdr *)buf)->hdr.flags;
 
-	if (vi->mergeable_rx_bufs)
+	switch (vi->mode) {
+	case VIRTNET_MODE_MERGE:
 		skb = receive_mergeable(dev, vi, rq, buf, ctx, len, xdp_xmit,
 					stats);
-	else if (vi->big_packets)
+		break;
+
+	case VIRTNET_MODE_BIG:
 		skb = receive_big(dev, vi, rq, buf, len, stats);
-	else
+		break;
+
+	case VIRTNET_MODE_SMALL:
 		skb = receive_small(dev, vi, rq, buf, ctx, len, xdp_xmit, stats);
+		break;
+	}
 
 	if (unlikely(!skb))
 		return;
@@ -2580,12 +2599,19 @@ static bool try_fill_recv(struct virtnet_info *vi, struct receive_queue *rq,
 	}
 
 	do {
-		if (vi->mergeable_rx_bufs)
+		switch (vi->mode) {
+		case VIRTNET_MODE_MERGE:
 			err = add_recvbuf_mergeable(vi, rq, gfp);
-		else if (vi->big_packets)
+			break;
+
+		case VIRTNET_MODE_BIG:
 			err = add_recvbuf_big(vi, rq, gfp);
-		else
+			break;
+
+		case VIRTNET_MODE_SMALL:
 			err = add_recvbuf_small(vi, rq, gfp);
+			break;
+		}
 
 		if (err)
 			break;
@@ -2703,7 +2729,7 @@ static int virtnet_receive_packets(struct virtnet_info *vi,
 	int packets = 0;
 	void *buf;
 
-	if (!vi->big_packets || vi->mergeable_rx_bufs) {
+	if (vi->mode != VIRTNET_MODE_BIG) {
 		void *ctx;
 		while (packets < budget &&
 		       (buf = virtnet_rq_get_buf(rq, &len, &ctx))) {
@@ -5510,7 +5536,7 @@ static int virtnet_xsk_pool_enable(struct net_device *dev,
 	/* In big_packets mode, xdp cannot work, so there is no need to
 	 * initialize xsk of rq.
 	 */
-	if (vi->big_packets && !vi->mergeable_rx_bufs)
+	if (vi->mode == VIRTNET_MODE_BIG)
 		return -ENOENT;
 
 	if (qid >= vi->curr_queue_pairs)
@@ -6007,7 +6033,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	vqs_info = kcalloc(total_vqs, sizeof(*vqs_info), GFP_KERNEL);
 	if (!vqs_info)
 		goto err_vqs_info;
-	if (!vi->big_packets || vi->mergeable_rx_bufs) {
+	if (vi->mode != VIRTNET_MODE_BIG) {
 		ctx = kcalloc(total_vqs, sizeof(*ctx), GFP_KERNEL);
 		if (!ctx)
 			goto err_ctx;
@@ -6479,6 +6505,13 @@ static int virtnet_probe(struct virtio_device *vdev)
 	}
 
 	virtnet_set_big_packets(vi, mtu);
+
+	if (vi->mergeable_rx_bufs)
+		vi->mode = VIRTNET_MODE_MERGE;
+	else if (vi->big_packets)
+		vi->mode = VIRTNET_MODE_BIG;
+	else
+		vi->mode = VIRTNET_MODE_SMALL;
 
 	if (vi->any_header_sg)
 		dev->needed_headroom = vi->hdr_len;
