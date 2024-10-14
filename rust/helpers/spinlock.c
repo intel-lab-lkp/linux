@@ -6,7 +6,7 @@
 void rust_helper___spin_lock_init(spinlock_t *lock, const char *name,
 				  struct lock_class_key *key)
 {
-#ifdef CONFIG_DEBUG_SPINLOCK
+#if defined(CONFIG_DEBUG_SPINLOCK) && !defined(CONFIG_PREEMPT_RT)
 	__raw_spin_lock_init(spinlock_check(lock), name, key, LD_WAIT_CONFIG);
 #else
 	spin_lock_init(lock);
