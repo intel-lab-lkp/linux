@@ -1865,11 +1865,13 @@ static int sdhci_esdhc_suspend(struct device *dev)
 	struct pltfm_imx_data *imx_data = sdhci_pltfm_priv(pltfm_host);
 	int ret;
 
-	if (host->mmc->caps2 & MMC_CAP2_CQE) {
-		ret = cqhci_suspend(host->mmc);
-		if (ret)
-			return ret;
-	}
+	/*
+	 * Switch to runtime resume for two reasons:
+	 * 1, there is register access, so need to make sure gate on ipg clock.
+	 * 2, make sure the pm_runtime_force_suspend() in NOIRQ stage really
+	 *    invoke its ->runtime_suspend callback.
+	 */
+	pm_runtime_get_sync(dev);
 
 	if ((imx_data->socdata->flags & ESDHC_FLAG_STATE_LOST_IN_LPMODE) &&
 		(host->tuning_mode != SDHCI_TUNING_MODE_1)) {
@@ -1877,12 +1879,11 @@ static int sdhci_esdhc_suspend(struct device *dev)
 		mmc_retune_needed(host->mmc);
 	}
 
-	if (host->tuning_mode != SDHCI_TUNING_MODE_3)
-		mmc_retune_needed(host->mmc);
-
-	ret = sdhci_suspend_host(host);
-	if (ret)
-		return ret;
+	if (device_may_wakeup(dev)) {
+		ret = sdhci_enable_irq_wakeups(host);
+		if (!ret)
+			dev_warn(dev, "Failed to enable irq wakeup\n");
+	}
 
 	ret = pinctrl_pm_select_sleep_state(dev);
 	if (ret)
@@ -1898,22 +1899,18 @@ static int sdhci_esdhc_resume(struct device *dev)
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	int ret;
 
-	ret = pinctrl_pm_select_default_state(dev);
+	ret = mmc_gpio_set_cd_wake(host->mmc, false);
 	if (ret)
 		return ret;
 
 	/* re-initialize hw state in case it's lost in low power mode */
 	sdhci_esdhc_imx_hwinit(host);
 
-	ret = sdhci_resume_host(host);
-	if (ret)
-		return ret;
+	if (host->irq_wake_enabled)
+		sdhci_disable_irq_wakeups(host);
 
-	if (host->mmc->caps2 & MMC_CAP2_CQE)
-		ret = cqhci_resume(host->mmc);
-
-	if (!ret)
-		ret = mmc_gpio_set_cd_wake(host->mmc, false);
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_put_autosuspend(dev);
 
 	return ret;
 }
@@ -2005,6 +2002,8 @@ static const struct dev_pm_ops sdhci_esdhc_pmops = {
 	SET_SYSTEM_SLEEP_PM_OPS(sdhci_esdhc_suspend, sdhci_esdhc_resume)
 	SET_RUNTIME_PM_OPS(sdhci_esdhc_runtime_suspend,
 				sdhci_esdhc_runtime_resume, NULL)
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+					pm_runtime_force_resume)
 };
 
 static struct platform_driver sdhci_esdhc_imx_driver = {
