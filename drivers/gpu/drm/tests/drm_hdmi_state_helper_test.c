@@ -466,6 +466,8 @@ static void drm_test_check_broadcast_rgb_auto_cea_mode_vic_1(struct kunit *test)
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, conn_state);
 
 	KUNIT_EXPECT_FALSE(test, conn_state->hdmi.is_limited_range);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -582,6 +584,8 @@ static void drm_test_check_broadcast_rgb_full_cea_mode_vic_1(struct kunit *test)
 			DRM_HDMI_BROADCAST_RGB_FULL);
 
 	KUNIT_EXPECT_FALSE(test, conn_state->hdmi.is_limited_range);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -698,6 +702,8 @@ static void drm_test_check_broadcast_rgb_limited_cea_mode_vic_1(struct kunit *te
 			DRM_HDMI_BROADCAST_RGB_LIMITED);
 
 	KUNIT_EXPECT_TRUE(test, conn_state->hdmi.is_limited_range);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
@@ -1286,6 +1292,8 @@ static void drm_test_check_output_bpc_format_vic_1(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, conn_state->hdmi.output_bpc, 8);
 	KUNIT_EXPECT_EQ(test, conn_state->hdmi.output_format, HDMI_COLORSPACE_RGB);
+
+	drm_mode_destroy(drm, mode);
 }
 
 /*
