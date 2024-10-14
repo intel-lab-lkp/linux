@@ -203,6 +203,9 @@ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
 
 	might_sleep();
 
+	if (!config->policy)
+		return ERR_PTR(-EINVAL);
+
 	switch (config->policy) {
 	case QCOM_TZMEM_POLICY_STATIC:
 		if (!config->initial_size)
@@ -411,6 +414,9 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_alloc);
 void qcom_tzmem_free(void *vaddr)
 {
 	struct qcom_tzmem_chunk *chunk;
+
+	if (!vaddr)
+		return;
 
 	scoped_guard(spinlock_irqsave, &qcom_tzmem_chunks_lock)
 		chunk = radix_tree_delete_item(&qcom_tzmem_chunks,
