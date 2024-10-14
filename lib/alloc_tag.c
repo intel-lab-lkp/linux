@@ -8,6 +8,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_buf.h>
 #include <linux/seq_file.h>
+#include <linux/vmalloc.h>
 
 static struct codetag_type *alloc_tag_cttype;
 
@@ -153,6 +154,7 @@ static void __init procfs_init(void)
 #ifdef CONFIG_MODULES
 
 static struct maple_tree mod_area_mt = MTREE_INIT(mod_area_mt, MT_FLAGS_ALLOC_RANGE);
+static struct vm_struct *vm_module_tags;
 /* A dummy object used to indicate an unloaded module */
 static struct module unloaded_mod;
 /* A dummy object used to indicate a module prepended area */
@@ -195,6 +197,25 @@ static void clean_unused_module_areas_locked(void)
 	}
 }
 
+static int vm_module_tags_grow(unsigned long addr, unsigned long bytes)
+{
+	struct page **next_page = vm_module_tags->pages + vm_module_tags->nr_pages;
+	unsigned long more_pages = ALIGN(bytes, PAGE_SIZE) >> PAGE_SHIFT;
+	unsigned long nr;
+
+	nr = alloc_pages_bulk_array_node(GFP_KERNEL | __GFP_NOWARN,
+					 NUMA_NO_NODE, more_pages, next_page);
+	if (nr != more_pages)
+		return -ENOMEM;
+
+	vm_module_tags->nr_pages += nr;
+	if (vmap_pages_range(addr, addr + (nr << PAGE_SHIFT),
+			     PAGE_KERNEL, next_page, PAGE_SHIFT) < 0)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static void *reserve_module_tags(struct module *mod, unsigned long size,
 				 unsigned int prepend, unsigned long align)
 {
@@ -202,7 +223,7 @@ static void *reserve_module_tags(struct module *mod, unsigned long size,
 	MA_STATE(mas, &mod_area_mt, 0, section_size - 1);
 	bool cleanup_done = false;
 	unsigned long offset;
-	void *ret;
+	void *ret = NULL;
 
 	/* If no tags return NULL */
 	if (size < sizeof(struct alloc_tag))
@@ -239,7 +260,7 @@ cleanup:
 		goto repeat;
 	} else {
 		ret = ERR_PTR(-ENOMEM);
-		goto out;
+		goto unlock;
 	}
 
 found:
@@ -254,7 +275,7 @@ found:
 		mas_store(&mas, &prepend_mod);
 		if (mas_is_err(&mas)) {
 			ret = ERR_PTR(xa_err(mas.node));
-			goto out;
+			goto unlock;
 		}
 		mas.index = offset;
 		mas.last = offset + size - 1;
@@ -263,7 +284,7 @@ found:
 			ret = ERR_PTR(xa_err(mas.node));
 			mas.index = pad_start;
 			mas_erase(&mas);
-			goto out;
+			goto unlock;
 		}
 
 	} else {
@@ -271,18 +292,33 @@ found:
 		mas_store(&mas, mod);
 		if (mas_is_err(&mas)) {
 			ret = ERR_PTR(xa_err(mas.node));
-			goto out;
+			goto unlock;
+		}
+	}
+unlock:
+	mas_unlock(&mas);
+	if (IS_ERR(ret))
+		return ret;
+
+	if (module_tags.size < offset + size) {
+		unsigned long phys_size = vm_module_tags->nr_pages << PAGE_SHIFT;
+
+		module_tags.size = offset + size;
+		if (phys_size < module_tags.size) {
+			int grow_res;
+
+			grow_res = vm_module_tags_grow(module_tags.start_addr + phys_size,
+						       module_tags.size - phys_size);
+			if (grow_res) {
+				static_branch_disable(&mem_alloc_profiling_key);
+				pr_warn("Failed to allocate tags memory for module %s. Memory profiling is disabled!\n",
+					mod->name);
+				return ERR_PTR(grow_res);
+			}
 		}
 	}
 
-	if (module_tags.size < offset + size)
-		module_tags.size = offset + size;
-
-	ret = (struct alloc_tag *)(module_tags.start_addr + offset);
-out:
-	mas_unlock(&mas);
-
-	return ret;
+	return (struct alloc_tag *)(module_tags.start_addr + offset);
 }
 
 static void release_module_tags(struct module *mod, bool unused)
@@ -351,12 +387,23 @@ static void replace_module(struct module *mod, struct module *new_mod)
 
 static int __init alloc_mod_tags_mem(void)
 {
-	/* Allocate space to copy allocation tags */
-	module_tags.start_addr = (unsigned long)execmem_alloc(EXECMEM_MODULE_DATA,
-							      MODULE_ALLOC_TAG_VMAP_SIZE);
-	if (!module_tags.start_addr)
+	/* Map space to copy allocation tags */
+	vm_module_tags = execmem_vmap(EXECMEM_MODULE_DATA, MODULE_ALLOC_TAG_VMAP_SIZE);
+	if (!vm_module_tags) {
+		pr_err("Failed to map %lu bytes for module allocation tags\n",
+			MODULE_ALLOC_TAG_VMAP_SIZE);
+		module_tags.start_addr = 0;
 		return -ENOMEM;
+	}
 
+	vm_module_tags->pages = kmalloc_array(get_vm_area_size(vm_module_tags) >> PAGE_SHIFT,
+					sizeof(struct page *), GFP_KERNEL | __GFP_ZERO);
+	if (!vm_module_tags->pages) {
+		free_vm_area(vm_module_tags);
+		return -ENOMEM;
+	}
+
+	module_tags.start_addr = (unsigned long)vm_module_tags->addr;
 	module_tags.end_addr = module_tags.start_addr + MODULE_ALLOC_TAG_VMAP_SIZE;
 
 	return 0;
@@ -364,8 +411,13 @@ static int __init alloc_mod_tags_mem(void)
 
 static void __init free_mod_tags_mem(void)
 {
-	execmem_free((void *)module_tags.start_addr);
+	int i;
+
 	module_tags.start_addr = 0;
+	for (i = 0; i < vm_module_tags->nr_pages; i++)
+		__free_page(vm_module_tags->pages[i]);
+	kfree(vm_module_tags->pages);
+	free_vm_area(vm_module_tags);
 }
 
 #else /* CONFIG_MODULES */
