@@ -4,6 +4,7 @@ obj-y				=  core.o severity.o genpool.o
 obj-$(CONFIG_X86_ANCIENT_MCE)	+= winchip.o p5.o
 obj-$(CONFIG_X86_MCE_INTEL)	+= intel.o
 obj-$(CONFIG_X86_MCE_AMD)	+= amd.o
+obj-$(CONFIG_X86_MCE_ZHAOXIN)   += zhaoxin.o
 obj-$(CONFIG_X86_MCE_THRESHOLD) += threshold.o
 
 mce-inject-y			:= inject.o
