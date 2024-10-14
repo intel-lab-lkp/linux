@@ -1110,6 +1110,8 @@ retry:
 		if (writeback && folio_test_reclaim(folio))
 			stat->nr_congested += nr_pages;
 
+		mapping = folio_mapping(folio);
+
 		/*
 		 * If a folio at the tail of the LRU is under writeback, there
 		 * are three cases to consider.
@@ -1165,7 +1167,8 @@ retry:
 			/* Case 2 above */
 			} else if (writeback_throttling_sane(sc) ||
 			    !folio_test_reclaim(folio) ||
-			    !may_enter_fs(folio, sc->gfp_mask)) {
+			    !may_enter_fs(folio, sc->gfp_mask) ||
+			    (mapping && mapping_no_writeback_reclaim(mapping))) {
 				/*
 				 * This is slightly racy -
 				 * folio_end_writeback() might have
@@ -1320,7 +1323,6 @@ retry:
 		if (folio_maybe_dma_pinned(folio))
 			goto activate_locked;
 
-		mapping = folio_mapping(folio);
 		if (folio_test_dirty(folio)) {
 			/*
 			 * Only kswapd can writeback filesystem folios
