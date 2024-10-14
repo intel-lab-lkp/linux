@@ -97,6 +97,7 @@ int alloc_shrinker_info(struct mem_cgroup *memcg)
 
 err:
 	mutex_unlock(&shrinker_mutex);
+	kvfree(info);
 	free_shrinker_info(memcg);
 	return -ENOMEM;
 }
