@@ -981,13 +981,37 @@ u16 intel_dp_dsc_get_max_compressed_bpp(struct drm_i915_private *i915,
 	return bits_per_pixel;
 }
 
+static
+bool can_use_pixel_replication(int mode_hdisplay, u8 slice_count,
+			       enum intel_output_format output_format,
+			       bool ultrajoiner)
+{
+	int slice_width;
+
+	if (!(mode_hdisplay % slice_count))
+		return false;
+
+	if (!ultrajoiner)
+		return false;
+
+	slice_width = DIV_ROUND_UP(mode_hdisplay, slice_count);
+
+	/* Odd slice width is not supported by YCbCr420/422 formats */
+	if (slice_width % 2 && output_format == INTEL_OUTPUT_FORMAT_YCBCR420)
+		return false;
+
+	return true;
+}
+
 u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 				int mode_clock, int mode_hdisplay,
+				enum intel_output_format output_format,
 				int num_joined_pipes)
 {
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	u8 min_slice_count, i;
 	int max_slice_width;
+	bool ultrajoiner = num_joined_pipes == 4 ? true : false;
 
 	if (mode_clock <= DP_DSC_PEAK_PIXEL_RATE)
 		min_slice_count = DIV_ROUND_UP(mode_clock,
@@ -1031,7 +1055,10 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 		if (num_joined_pipes > 1 && valid_dsc_slicecount[i] < 2)
 			continue;
 
-		if (mode_hdisplay % test_slice_count)
+		if (mode_hdisplay % test_slice_count &&
+		    !can_use_pixel_replication(mode_hdisplay,
+					       test_slice_count,
+					       output_format, ultrajoiner))
 			continue;
 
 		if (min_slice_count <= test_slice_count)
@@ -1458,6 +1485,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 				intel_dp_dsc_get_slice_count(connector,
 							     target_clock,
 							     mode->hdisplay,
+							     output_format,
 							     num_joined_pipes);
 		}
 
@@ -2322,6 +2350,33 @@ static int intel_edp_dsc_compute_pipe_bpp(struct intel_dp *intel_dp,
 	return 0;
 }
 
+static
+int intel_dp_dsc_get_pixel_replication(struct intel_dp *intel_dp,
+				       struct intel_crtc_state *pipe_config)
+{
+	int mode_hdisplay = pipe_config->hw.adjusted_mode.hdisplay;
+	int slice_count = pipe_config->dsc.slice_count;
+	int pixel_replication_count;
+	int slice_width;
+	bool ultrajoiner = false;
+
+	if (intel_crtc_num_joined_pipes(pipe_config) == 4)
+		ultrajoiner = true;
+
+	if (!can_use_pixel_replication(mode_hdisplay, slice_count,
+				       pipe_config->output_format, ultrajoiner))
+		return 0;
+
+	slice_width = DIV_ROUND_UP(mode_hdisplay, slice_count);
+
+	pixel_replication_count = (slice_width * slice_count) - mode_hdisplay;
+
+	if (pixel_replication_count >= 0)
+		return pixel_replication_count;
+
+	return 0;
+}
+
 int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 				struct intel_crtc_state *pipe_config,
 				struct drm_connector_state *conn_state,
@@ -2391,6 +2446,7 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 			intel_dp_dsc_get_slice_count(connector,
 						     adjusted_mode->crtc_clock,
 						     adjusted_mode->crtc_hdisplay,
+						     pipe_config->output_format,
 						     num_joined_pipes);
 		if (!dsc_dp_slice_count) {
 			drm_dbg_kms(&dev_priv->drm,
@@ -2400,6 +2456,9 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 
 		pipe_config->dsc.slice_count = dsc_dp_slice_count;
 	}
+
+	pipe_config->dsc.pixel_replication_count =
+		intel_dp_dsc_get_pixel_replication(intel_dp, pipe_config);
 	/*
 	 * VDSC engine operates at 1 Pixel per clock, so if peak pixel rate
 	 * is greater than the maximum Cdclock and if slice count is even
