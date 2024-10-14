@@ -512,6 +512,7 @@ void __init smp_prepare_boot_cpu(void)
 			set_cpu_numa_node(cpu, node);
 		else {
 			set_cpu_numa_node(cpu, rr_node);
+			set_early_cpu_to_node(cpu, rr_node);
 			rr_node = next_node_in(rr_node, node_online_map);
 		}
 	}

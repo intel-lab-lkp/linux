@@ -34,6 +34,9 @@ static struct numa_meminfo numa_meminfo;
 cpumask_t cpus_on_node[MAX_NUMNODES];
 cpumask_t phys_cpus_on_node[MAX_NUMNODES];
 EXPORT_SYMBOL(cpus_on_node);
+static s16 __cpu_to_node[NR_CPUS] = {
+	[0 ... CONFIG_NR_CPUS - 1] = NUMA_NO_NODE
+};
 
 /*
  * apicid, cpu, node mappings
@@ -117,9 +120,14 @@ int early_cpu_to_node(int cpu)
 	int physid = cpu_logical_map(cpu);
 
 	if (physid < 0)
-		return NUMA_NO_NODE;
+		return __cpu_to_node[cpu];
 
 	return __cpuid_to_node[physid];
+}
+
+void set_early_cpu_to_node(int cpu, s16 node)
+{
+	__cpu_to_node[cpu] = node;
 }
 
 void __init early_numa_add_cpu(int cpuid, s16 node)
