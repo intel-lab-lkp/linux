@@ -1494,6 +1494,18 @@ config VIDEO_I2C
 	  To compile this driver as a module, choose M here: the
 	  module will be called video-i2c
 
+config VIDEO_LT6911UXE
+        tristate "Lontium LT6911UXE decoder"
+        depends on ACPI && VIDEO_DEV
+        select V4L2_FWNODE
+        select V4L2_CCI_I2C
+        help
+          This is a Video4Linux2 sensor-level driver for the Lontium
+          LT6911UXE HDMI to MIPI CSI-2 bridge.
+
+          To compile this driver as a module, choose M here: the
+          module will be called lt6911uxe.
+
 config VIDEO_M52790
 	tristate "Mitsubishi M52790 A/V switch"
 	depends on VIDEO_DEV && I2C
