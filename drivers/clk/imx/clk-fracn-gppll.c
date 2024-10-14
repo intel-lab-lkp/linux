@@ -63,6 +63,12 @@
 		.odiv	=	(_odiv),			\
 	}
 
+#define fence_write(val, reg)			\
+	do {					\
+		writel_relaxed(val, reg);	\
+		readl(reg);			\
+	} while (0)
+
 struct clk_fracn_gppll {
 	struct clk_hw			hw;
 	void __iomem			*base;
@@ -253,10 +259,10 @@ static int clk_fracn_gppll_set_rate(struct clk_hw *hw, unsigned long drate,
 
 	pll_div = FIELD_PREP(PLL_RDIV_MASK, rate->rdiv) | rate->odiv |
 		FIELD_PREP(PLL_MFI_MASK, rate->mfi);
-	writel_relaxed(pll_div, pll->base + PLL_DIV);
+	fence_write(pll_div, pll->base + PLL_DIV);
 	if (pll->flags & CLK_FRACN_GPPLL_FRACN) {
 		writel_relaxed(rate->mfd, pll->base + PLL_DENOMINATOR);
-		writel_relaxed(FIELD_PREP(PLL_MFN_MASK, rate->mfn), pll->base + PLL_NUMERATOR);
+		fence_write(FIELD_PREP(PLL_MFN_MASK, rate->mfn), pll->base + PLL_NUMERATOR);
 	}
 
 	/* Wait for 5us according to fracn mode pll doc */
@@ -264,7 +270,7 @@ static int clk_fracn_gppll_set_rate(struct clk_hw *hw, unsigned long drate,
 
 	/* Enable Powerup */
 	tmp |= POWERUP_MASK;
-	writel_relaxed(tmp, pll->base + PLL_CTRL);
+	fence_write(tmp, pll->base + PLL_CTRL);
 
 	/* Wait Lock */
 	ret = clk_fracn_gppll_wait_lock(pll);
@@ -301,7 +307,7 @@ static int clk_fracn_gppll_prepare(struct clk_hw *hw)
 	writel_relaxed(val, pll->base + PLL_CTRL);
 
 	val |= POWERUP_MASK;
-	writel_relaxed(val, pll->base + PLL_CTRL);
+	fence_write(val, pll->base + PLL_CTRL);
 
 	ret = clk_fracn_gppll_wait_lock(pll);
 	if (ret)
