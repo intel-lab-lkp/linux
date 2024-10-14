@@ -480,15 +480,19 @@ static u64 pt_config_filters(struct perf_event *event)
 		 */
 
 		/* avoid redundant msr writes */
-		if (pt->filters.filter[range].msr_a != filter->msr_a) {
+		if (pt->filters.filter[range].msr_a != filter->msr_a ||
+		    pt->write_filter_msrs[range]) {
 			wrmsrl(pt_address_ranges[range].msr_a, filter->msr_a);
 			pt->filters.filter[range].msr_a = filter->msr_a;
 		}
 
-		if (pt->filters.filter[range].msr_b != filter->msr_b) {
+		if (pt->filters.filter[range].msr_b != filter->msr_b ||
+		    pt->write_filter_msrs[range]) {
 			wrmsrl(pt_address_ranges[range].msr_b, filter->msr_b);
 			pt->filters.filter[range].msr_b = filter->msr_b;
 		}
+
+		pt->write_filter_msrs[range] = false;
 
 		rtit_ctl |= (u64)filter->config << pt_address_ranges[range].reg_off;
 	}
@@ -534,6 +538,11 @@ static void pt_config(struct perf_event *event)
 	reg |= (event->attr.config & PT_CONFIG_MASK);
 
 	event->hw.aux_config = reg;
+
+	/* Configuration is complete, it is now OK to handle an NMI */
+	barrier();
+	WRITE_ONCE(pt->handle_nmi, 1);
+
 	pt_config_start(event);
 }
 
@@ -950,6 +959,7 @@ static void pt_handle_status(struct pt *pt)
 		pt_buffer_advance(buf);
 
 	wrmsrl(MSR_IA32_RTIT_STATUS, status);
+	pt->status = status;
 }
 
 /**
@@ -1588,7 +1598,6 @@ static void pt_event_start(struct perf_event *event, int mode)
 			goto fail_end_stop;
 	}
 
-	WRITE_ONCE(pt->handle_nmi, 1);
 	hwc->state = 0;
 
 	pt_config_buffer(buf);
@@ -1643,6 +1652,104 @@ static void pt_event_stop(struct perf_event *event, int mode)
 	}
 }
 
+#define PT_VM_NO_TRANSITION	0
+#define PT_VM_ENTRY		1
+#define PT_VM_EXIT		2
+
+void intel_pt_vm_entry(bool guest_trace_enable)
+{
+	struct pt *pt = this_cpu_ptr(&pt_ctx);
+	struct perf_event *event;
+
+	pt->restart_event = NULL;
+	pt->stashed_buf_sz = 0;
+
+	WRITE_ONCE(pt->vm_transition, PT_VM_ENTRY);
+	barrier();
+
+	if (READ_ONCE(pt->handle_nmi)) {
+		/* Must stop handler before reading pt->handle.event */
+		WRITE_ONCE(pt->handle_nmi, 0);
+		barrier();
+		event = pt->handle.event;
+		if (event && !event->hw.state) {
+			struct pt_buffer *buf = perf_get_aux(&pt->handle);
+
+			if (buf && buf->snapshot)
+				pt->stashed_buf_sz = buf->nr_pages << PAGE_SHIFT;
+			pt->restart_event = event;
+			pt_event_stop(event, PERF_EF_UPDATE);
+		}
+	}
+
+	/*
+	 * If guest_trace_enable, MSRs need to be saved, but the values are
+	 * either already cached or not needed:
+	 *	MSR_IA32_RTIT_CTL		event->hw.aux_config
+	 *	MSR_IA32_RTIT_STATUS		pt->status
+	 *	MSR_IA32_RTIT_CR3_MATCH		not used
+	 *	MSR_IA32_RTIT_OUTPUT_BASE	pt->output_base
+	 *	MSR_IA32_RTIT_OUTPUT_MASK	pt->output_mask
+	 *	MSR_IA32_RTIT_ADDR...		pt->filters
+	 */
+}
+EXPORT_SYMBOL_GPL(intel_pt_vm_entry);
+
+void intel_pt_vm_exit(bool guest_trace_enable)
+{
+	struct pt *pt = this_cpu_ptr(&pt_ctx);
+	u64 base = pt->output_base;
+	u64 mask = pt->output_mask;
+
+	WRITE_ONCE(pt->vm_transition, PT_VM_EXIT);
+	barrier();
+
+	/*
+	 * If guest_trace_enable, MSRs need to be restored, but that is handled
+	 * in different ways:
+	 *	MSR_IA32_RTIT_CTL		written next start
+	 *	MSR_IA32_RTIT_STATUS		restored below
+	 *	MSR_IA32_RTIT_CR3_MATCH		not used
+	 *	MSR_IA32_RTIT_OUTPUT_BASE	written next start or restored
+	 *					further below
+	 *	MSR_IA32_RTIT_OUTPUT_MASK	written next start or restored
+	 *					further below
+	 *	MSR_IA32_RTIT_ADDR...		flagged to be written when
+	 *					needed
+	 */
+	if (guest_trace_enable) {
+		wrmsrl(MSR_IA32_RTIT_STATUS, pt->status);
+		/*
+		 * Force address filter MSR writes during reconfiguration,
+		 * refer pt_config_filters().
+		 */
+		for (int range = 0; range < PT_FILTERS_NUM; range++)
+			pt->write_filter_msrs[range] = true;
+	}
+
+	if (pt->restart_event) {
+		if (guest_trace_enable) {
+			/* Invalidate to force buffer reconfiguration */
+			pt->output_base = ~0ULL;
+			pt->output_mask = 0;
+		}
+		pt_event_start(pt->restart_event, 0);
+		pt->restart_event = NULL;
+	}
+
+	/* If tracing wasn't started, restore buffer configuration */
+	if (guest_trace_enable && !READ_ONCE(pt->handle_nmi)) {
+		wrmsrl(MSR_IA32_RTIT_OUTPUT_BASE, base);
+		wrmsrl(MSR_IA32_RTIT_OUTPUT_MASK, mask);
+		pt->output_base = base;
+		pt->output_mask = mask;
+	}
+
+	barrier();
+	WRITE_ONCE(pt->vm_transition, PT_VM_NO_TRANSITION);
+}
+EXPORT_SYMBOL_GPL(intel_pt_vm_exit);
+
 static long pt_event_snapshot_aux(struct perf_event *event,
 				  struct perf_output_handle *handle,
 				  unsigned long size)
@@ -1651,6 +1758,24 @@ static long pt_event_snapshot_aux(struct perf_event *event,
 	struct pt_buffer *buf = perf_get_aux(&pt->handle);
 	unsigned long from = 0, to;
 	long ret;
+	int tr;
+
+	/*
+	 * Special handling during VM transition. At VM-Entry stage, once
+	 * tracing is stopped, as indicated by buf == NULL, snapshot using the
+	 * saved head position. At VM-Exit do that also until tracing is
+	 * reconfigured as indicated by handle_nmi.
+	 */
+	tr = READ_ONCE(pt->vm_transition);
+	if ((tr == PT_VM_ENTRY && !buf) || (tr == PT_VM_EXIT && !READ_ONCE(pt->handle_nmi))) {
+		if (WARN_ON_ONCE(!pt->stashed_buf_sz))
+			return 0;
+		to = pt->handle.head;
+		if (to < size)
+			from = pt->stashed_buf_sz;
+		from += to - size;
+		return perf_output_copy_aux(&pt->handle, handle, from, to);
+	}
 
 	if (WARN_ON_ONCE(!buf))
 		return 0;

@@ -121,6 +121,11 @@ struct pt_filters {
  * @vmx_on:		1 if VMX is ON on this cpu
  * @output_base:	cached RTIT_OUTPUT_BASE MSR value
  * @output_mask:	cached RTIT_OUTPUT_MASK MSR value
+ * @status:		cached RTIT_STATUS MSR value
+ * @vm_transition:	VM transition (snapshot_aux needs special handling)
+ * @write_filter_msrs:	write address filter MSRs during configuration
+ * @stashed_buf_sz:	buffer size during VM transition
+ * @restart_event:	event to restart after VM-Exit
  */
 struct pt {
 	struct perf_output_handle handle;
@@ -129,6 +134,11 @@ struct pt {
 	int			vmx_on;
 	u64			output_base;
 	u64			output_mask;
+	u64			status;
+	int			vm_transition;
+	bool			write_filter_msrs[PT_FILTERS_NUM];
+	unsigned long		stashed_buf_sz;
+	struct perf_event	*restart_event;
 };
 
 #endif /* __INTEL_PT_H__ */
