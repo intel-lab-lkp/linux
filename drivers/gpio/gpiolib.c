@@ -4873,6 +4873,12 @@ static struct device_driver gpio_stub_drv = {
 	.probe = gpio_stub_drv_probe,
 };
 
+#if IS_ENABLED(CONFIG_GPIO_SYSFS_CLASS_DIR_STUB)
+static const struct class gpio_class_stub = {
+	.name = "gpio",
+};
+#endif /* CONFIG_GPIO_SYSFS_CLASS_DIR_STUB */
+
 static int __init gpiolib_dev_init(void)
 {
 	int ret;
@@ -4898,6 +4904,12 @@ static int __init gpiolib_dev_init(void)
 		bus_unregister(&gpio_bus_type);
 		return ret;
 	}
+
+#if IS_ENABLED(CONFIG_GPIO_SYSFS_CLASS_DIR_STUB)
+	ret = class_register(&gpio_class_stub);
+	if (ret)
+		pr_err("gpiolib: failed to create the empty gpio class directory\n");
+#endif /* CONFIG_GPIO_SYSFS_CLASS_DIR_STUB */
 
 	gpiolib_initialized = true;
 	gpiochip_setup_devs();
