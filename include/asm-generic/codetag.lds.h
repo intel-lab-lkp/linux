@@ -5,7 +5,7 @@
 #define SECTION_WITH_BOUNDARIES(_name)	\
 	. = ALIGN(8);			\
 	__start_##_name = .;		\
-	KEEP(*(_name))			\
+	KEEP(*(. ## _name))		\
 	__stop_##_name = .;
 
 #define CODETAG_SECTIONS()		\
