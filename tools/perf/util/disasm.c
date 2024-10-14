@@ -1774,25 +1774,23 @@ static int symbol__disassemble_raw(char *filename, struct symbol *sym,
 		offset += 4;
 	}
 
-	/* It failed in the middle */
-	if (offset != len) {
-		struct list_head *list = &notes->src->source;
-
-		/* Discard all lines and fallback to objdump */
-		while (!list_empty(list)) {
-			dl = list_first_entry(list, struct disasm_line, al.node);
-
-			list_del_init(&dl->al.node);
-			disasm_line__free(dl);
-		}
-		count = -1;
-	}
-
 out:
 	free(buf);
 	return count < 0 ? count : 0;
 
 err:
+	if (!list_empty(&notes->src->source)) {
+		struct disasm_line *tmp;
+
+		/*
+		 * It probably failed in the middle of the above loop.
+		 * Release any resources it might add.
+		 */
+		list_for_each_entry_safe(dl, tmp, &notes->src->source, al.node) {
+			list_del(&dl->al.node);
+			disasm_line__free(dl);
+		}
+	}
 	count = -1;
 	goto out;
 }
