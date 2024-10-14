@@ -1302,6 +1302,7 @@ replay_again:
 
  sea_exit:
 	kfree(ea);
+	ea = NULL;
 	SMB2_open_free(&rqst[0]);
 	SMB2_set_info_free(&rqst[1]);
 	SMB2_close_free(&rqst[2]);
