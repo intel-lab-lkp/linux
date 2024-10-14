@@ -51,6 +51,32 @@ config PROC_MEM_NO_FORCE
 
 endchoice
 
+choice
+	prompt "Seal system mappings"
+	default SEAL_SYSTEM_MAPPINGS_NEVER
+	help
+	  Seal system mappings such as vdso, vvar, sigpage, uprobes and
+	  vsyscall.
+	  Note: kernel command line exec.seal_system_mappings overwrites this.
+
+config SEAL_SYSTEM_MAPPINGS_NEVER
+	bool "Traditional behavior - not sealed"
+	help
+	  Do not seal system mappings.
+	  This is default.
+
+config SEAL_SYSTEM_MAPPINGS_ALWAYS
+	bool "Always seal system mappings"
+	depends on 64BIT
+	depends on !CHECKPOINT_RESTORE
+	help
+	  Seal system mappings such as vdso, vvar, sigpage, uprobes and
+	  vsyscall.
+	  Note: CHECKPOINT_RESTORE might relocate vdso mapping during restore,
+	  and remap will fail if the mapping is sealed, therefore
+	  !CHECKPOINT_RESTORE is added as dependency.
+endchoice
+
 config SECURITY
 	bool "Enable different security models"
 	depends on SYSFS

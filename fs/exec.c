@@ -68,6 +68,7 @@
 #include <linux/user_events.h>
 #include <linux/rseq.h>
 #include <linux/ksm.h>
+#include <linux/fs_parser.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -2159,3 +2160,55 @@ fs_initcall(init_fs_exec_sysctls);
 #ifdef CONFIG_EXEC_KUNIT_TEST
 #include "tests/exec_kunit.c"
 #endif
+
+#ifdef CONFIG_64BIT
+/*
+ * Kernel cmdline overwrite for CONFIG_SEAL_SYSTEM_MAPPINGS_X
+ */
+enum seal_system_mappings_type {
+	SEAL_SYSTEM_MAPPINGS_NEVER,
+	SEAL_SYSTEM_MAPPINGS_ALWAYS
+};
+
+static enum seal_system_mappings_type seal_system_mappings __ro_after_init =
+	IS_ENABLED(CONFIG_SEAL_SYSTEM_MAPPINGS_ALWAYS) ? SEAL_SYSTEM_MAPPINGS_ALWAYS :
+	SEAL_SYSTEM_MAPPINGS_NEVER;
+
+static const struct constant_table value_table_sys_mapping[] __initconst = {
+	{ "never", SEAL_SYSTEM_MAPPINGS_NEVER},
+	{ "always", SEAL_SYSTEM_MAPPINGS_ALWAYS},
+	{ }
+};
+
+static int __init early_seal_system_mappings_override(char *buf)
+{
+	if (!buf)
+		return -EINVAL;
+
+	seal_system_mappings = lookup_constant(value_table_sys_mapping,
+			buf, seal_system_mappings);
+
+	return 0;
+}
+
+early_param("exec.seal_system_mappings", early_seal_system_mappings_override);
+
+static bool seal_system_mappings_enabled(void)
+{
+	if (seal_system_mappings == SEAL_SYSTEM_MAPPINGS_ALWAYS)
+		return true;
+
+	return false;
+}
+
+void update_seal_exec_system_mappings(unsigned long *vm_flags)
+{
+	if (!(*vm_flags & VM_SEALED) && seal_system_mappings_enabled())
+		*vm_flags |= VM_SEALED;
+
+}
+#else
+void update_seal_exec_system_mappings(unsigned long *vm_flags)
+{
+}
+#endif /* CONFIG_64BIT */
