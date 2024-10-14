@@ -11332,6 +11332,7 @@ out:
 
 static int tg3_request_irq(struct tg3 *tp, int irq_num)
 {
+	char irq_lbl[IFNAMSIZ + 6 + 10]; /* name + "-txrx-" + %d */
 	irq_handler_t fn;
 	unsigned long flags;
 	char *name;
@@ -11340,20 +11341,19 @@ static int tg3_request_irq(struct tg3 *tp, int irq_num)
 	if (tp->irq_cnt == 1)
 		name = tp->dev->name;
 	else {
-		name = &tnapi->irq_lbl[0];
+		name = &irq_lbl[0];
 		if (tnapi->tx_buffers && tnapi->rx_rcb)
-			snprintf(name, IFNAMSIZ,
+			snprintf(name, sizeof(irq_lbl),
 				 "%s-txrx-%d", tp->dev->name, irq_num);
 		else if (tnapi->tx_buffers)
-			snprintf(name, IFNAMSIZ,
+			snprintf(name, sizeof(irq_lbl),
 				 "%s-tx-%d", tp->dev->name, irq_num);
 		else if (tnapi->rx_rcb)
-			snprintf(name, IFNAMSIZ,
+			snprintf(name, sizeof(irq_lbl),
 				 "%s-rx-%d", tp->dev->name, irq_num);
 		else
-			snprintf(name, IFNAMSIZ,
+			snprintf(name, sizeof(irq_lbl),
 				 "%s-%d", tp->dev->name, irq_num);
-		name[IFNAMSIZ-1] = 0;
 	}
 
 	if (tg3_flag(tp, USING_MSI) || tg3_flag(tp, USING_MSIX)) {

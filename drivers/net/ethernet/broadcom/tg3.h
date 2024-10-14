@@ -3033,7 +3033,6 @@ struct tg3_napi {
 	dma_addr_t			rx_rcb_mapping;
 	dma_addr_t			tx_desc_mapping;
 
-	char				irq_lbl[IFNAMSIZ];
 	unsigned int			irq_vec;
 };
 
