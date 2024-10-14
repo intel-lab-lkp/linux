@@ -621,6 +621,7 @@ static void __fail_scsi_task(struct iscsi_task *task, int err)
 	if (cleanup_queued_task(task))
 		return;
 
+	sc = task->sc;
 	if (task->state == ISCSI_TASK_PENDING) {
 		/*
 		 * cmd never made it to the xmit thread, so we should not count
@@ -629,12 +630,12 @@ static void __fail_scsi_task(struct iscsi_task *task, int err)
 		conn->session->queued_cmdsn--;
 		/* it was never sent so just complete like normal */
 		state = ISCSI_TASK_COMPLETED;
-	} else if (err == DID_TRANSPORT_DISRUPTED)
+	} else if (err == DID_TRANSPORT_DISRUPTED) {
 		state = ISCSI_TASK_ABRT_SESS_RECOV;
-	else
+		sc->device->expecting_cc_ua = 1;
+	} else
 		state = ISCSI_TASK_ABRT_TMF;
 
-	sc = task->sc;
 	sc->result = err << 16;
 	scsi_set_resid(sc, scsi_bufflen(sc));
 	iscsi_complete_task(task, state);
