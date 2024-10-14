@@ -1074,7 +1074,7 @@ static int add_delayed_ref(struct btrfs_trans_handle *trans,
 		kmem_cache_free(btrfs_delayed_ref_node_cachep, node);
 
 	if (qrecord_inserted)
-		return btrfs_qgroup_trace_extent_post(trans, record, head_ref->bytenr);
+		return btrfs_qgroup_trace_extent_post(trans, record, generic_ref->bytenr);
 	return 0;
 
 free_record:
