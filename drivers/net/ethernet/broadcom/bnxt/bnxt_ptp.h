@@ -102,7 +102,7 @@ struct bnxt_ptp_cfg {
 	struct timecounter	tc;
 	struct bnxt_pps		pps_info;
 	/* serialize timecounter access */
-	spinlock_t		ptp_lock;
+	seqlock_t		ptp_lock;
 	/* serialize ts tx request queuing */
 	spinlock_t		ptp_tx_lock;
 	u64			current_time;
@@ -146,11 +146,13 @@ struct bnxt_ptp_cfg {
 };
 
 #if BITS_PER_LONG == 32
-#define BNXT_READ_TIME64(ptp, dst, src)		\
-do {						\
-	spin_lock_bh(&(ptp)->ptp_lock);		\
-	(dst) = (src);				\
-	spin_unlock_bh(&(ptp)->ptp_lock);	\
+#define BNXT_READ_TIME64(ptp, dst, src)			\
+do {							\
+	unsigned int seq;				\
+	do {						\
+		seq = read_seqbegin(&(ptp)->ptp_lock);	\
+		(dst) = (src);				\
+	while (read_seqretry(&(ptp)->ptp_lock, seq);	\
 } while (0)
 #else
 #define BNXT_READ_TIME64(ptp, dst, src)		\
@@ -180,4 +182,16 @@ void bnxt_ptp_rtc_timecounter_init(struct bnxt_ptp_cfg *ptp, u64 ns);
 int bnxt_ptp_init_rtc(struct bnxt *bp, bool phc_cfg);
 int bnxt_ptp_init(struct bnxt *bp, bool phc_cfg);
 void bnxt_ptp_clear(struct bnxt *bp);
+static inline u64 bnxt_timecounter_cyc2time(struct bnxt_ptp_cfg *ptp, u64 ts)
+{
+	unsigned int seq;
+	u64 ns;
+
+	do {
+		seq = read_seqbegin(&ptp->ptp_lock);
+		ns = timecounter_cyc2time(&ptp->tc, ts);
+	} while (read_seqretry(&ptp->ptp_lock, seq));
+
+	return ns;
+}
 #endif
