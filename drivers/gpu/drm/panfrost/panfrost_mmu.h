@@ -4,6 +4,9 @@
 #ifndef __PANFROST_MMU_H__
 #define __PANFROST_MMU_H__
 
+#include <linux/types.h>
+
+struct panfrost_device;
 struct panfrost_gem_mapping;
 struct panfrost_file_priv;
 struct panfrost_mmu;
