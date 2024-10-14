@@ -85,9 +85,15 @@ static const char *panfrost_fence_get_timeline_name(struct dma_fence *fence)
 	}
 }
 
+static void panfrost_fence_release(struct dma_fence *fence)
+{
+	kfree(to_panfrost_fence(fence));
+}
+
 static const struct dma_fence_ops panfrost_fence_ops = {
 	.get_driver_name = panfrost_fence_get_driver_name,
 	.get_timeline_name = panfrost_fence_get_timeline_name,
+	.release = panfrost_fence_release,
 };
 
 static struct dma_fence *panfrost_fence_create(struct panfrost_device *pfdev, int js_num)
