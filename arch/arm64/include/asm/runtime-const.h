@@ -14,7 +14,7 @@
 		"movk %0, #0x89ab, lsl #16\n\t"			\
 		"movk %0, #0x4567, lsl #32\n\t"			\
 		"movk %0, #0x0123, lsl #48\n\t"			\
-		".pushsection runtime_ptr_" #sym ",\"a\"\n\t"	\
+		".pushsection .runtime_ptr_" #sym ",\"a\"\n\t"	\
 		".long 1b - .\n\t"				\
 		".popsection"					\
 		:"=r" (__ret));					\
@@ -24,7 +24,7 @@
 	unsigned long __ret;					\
 	asm_inline("1:\t"					\
 		"lsr %w0,%w1,#12\n\t"				\
-		".pushsection runtime_shift_" #sym ",\"a\"\n\t"	\
+		".pushsection .runtime_shift_" #sym ",\"a\"\n\t"\
 		".long 1b - .\n\t"				\
 		".popsection"					\
 		:"=r" (__ret)					\

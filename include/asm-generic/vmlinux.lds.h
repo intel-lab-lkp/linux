@@ -914,8 +914,8 @@
 
 #define NAMED_SECTION(name) \
 	. = ALIGN(8); \
-	name : AT(ADDR(name) - LOAD_OFFSET) \
-	{ BOUNDED_SECTION_PRE_LABEL(name, name, __start_, __stop_) }
+	. ## name : AT(ADDR(. ## name) - LOAD_OFFSET) \
+	{ BOUNDED_SECTION_PRE_LABEL(. ## name, name, __start_, __stop_) }
 
 #define RUNTIME_CONST(t,x) NAMED_SECTION(runtime_##t##_##x)
 

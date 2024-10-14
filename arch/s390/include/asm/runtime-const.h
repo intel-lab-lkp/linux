@@ -11,7 +11,7 @@
 	asm_inline(						\
 		"0:	iihf	%[__ret],%[c1]\n"		\
 		"	iilf	%[__ret],%[c2]\n"		\
-		".pushsection runtime_ptr_" #sym ",\"a\"\n"	\
+		".pushsection .runtime_ptr_" #sym ",\"a\"\n"	\
 		".long 0b - .\n"				\
 		".popsection"					\
 		: [__ret] "=d" (__ret)				\
@@ -26,7 +26,7 @@
 								\
 	asm_inline(						\
 		"0:	srl	%[__ret],12\n"			\
-		".pushsection runtime_shift_" #sym ",\"a\"\n"	\
+		".pushsection .runtime_shift_" #sym ",\"a\"\n"	\
 		".long 0b - .\n"				\
 		".popsection"					\
 		: [__ret] "+d" (__ret));			\
