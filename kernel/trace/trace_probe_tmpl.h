@@ -269,7 +269,7 @@ store_trace_args(void *data, struct trace_probe *tp, void *rec, void *edata,
 		ret = process_fetch_insn(arg->code, rec, edata, dl, base);
 		if (arg->dynamic && likely(ret > 0)) {
 			dyndata += ret;
-			maxlen -= ret;
+			maxlen = max(maxlen - ret, 0);
 		}
 	}
 }
