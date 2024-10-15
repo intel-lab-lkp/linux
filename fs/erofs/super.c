@@ -631,6 +631,10 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 			errorfc(fc, "unsupported blksize for fscache mode");
 			return -EINVAL;
 		}
+		if (erofs_is_fileio_mode(sbi)) {
+			errorfc(fc, "unsupported blksize for fileio mode");
+			return -EINVAL;
+		}
 		if (!sb_set_blocksize(sb, 1 << sbi->blkszbits)) {
 			errorfc(fc, "failed to set erofs blksize");
 			return -EINVAL;
