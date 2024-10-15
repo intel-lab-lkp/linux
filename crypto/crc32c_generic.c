@@ -80,6 +80,17 @@ static int chksum_setkey(struct crypto_shash *tfm, const u8 *key,
 	return 0;
 }
 
+#ifdef CONFIG_CRYPTO_MANAGER_EXTRA_TESTS
+static int chksum_update_base(struct shash_desc *desc, const u8 *data,
+			      unsigned int length)
+{
+	struct chksum_desc_ctx *ctx = shash_desc_ctx(desc);
+
+	ctx->crc = __crc32c_le_base(ctx->crc, data, length);
+	return 0;
+}
+#endif
+
 static int chksum_update(struct shash_desc *desc, const u8 *data,
 			 unsigned int length)
 {
@@ -127,35 +138,52 @@ static int crc32c_cra_init(struct crypto_tfm *tfm)
 	return 0;
 }
 
-static struct shash_alg alg = {
-	.digestsize		=	CHKSUM_DIGEST_SIZE,
-	.setkey			=	chksum_setkey,
-	.init		=	chksum_init,
-	.update		=	chksum_update,
-	.final		=	chksum_final,
-	.finup		=	chksum_finup,
-	.digest		=	chksum_digest,
-	.descsize		=	sizeof(struct chksum_desc_ctx),
-	.base			=	{
-		.cra_name		=	"crc32c",
-		.cra_driver_name	=	"crc32c-generic",
-		.cra_priority		=	100,
-		.cra_flags		=	CRYPTO_ALG_OPTIONAL_KEY,
-		.cra_blocksize		=	CHKSUM_BLOCK_SIZE,
-		.cra_ctxsize		=	sizeof(struct chksum_ctx),
-		.cra_module		=	THIS_MODULE,
-		.cra_init		=	crc32c_cra_init,
-	}
-};
+static struct shash_alg algs[] = {{
+	.digestsize		= CHKSUM_DIGEST_SIZE,
+	.setkey			= chksum_setkey,
+	.init			= chksum_init,
+	.update			= chksum_update,
+	.final			= chksum_final,
+	.finup			= chksum_finup,
+	.digest			= chksum_digest,
+	.descsize		= sizeof(struct chksum_desc_ctx),
+
+	.base.cra_name		= "crc32c",
+	.base.cra_driver_name	= "crc32c-generic",
+	.base.cra_priority	= 100,
+	.base.cra_flags		= CRYPTO_ALG_OPTIONAL_KEY,
+	.base.cra_blocksize	= CHKSUM_BLOCK_SIZE,
+	.base.cra_ctxsize	= sizeof(struct chksum_ctx),
+	.base.cra_module	= THIS_MODULE,
+	.base.cra_init		= crc32c_cra_init,
+#ifdef CONFIG_CRYPTO_MANAGER_EXTRA_TESTS
+}, {
+	.digestsize		= CHKSUM_DIGEST_SIZE,
+	.setkey			= chksum_setkey,
+	.init			= chksum_init,
+	.update			= chksum_update_base,
+	.final			= chksum_final,
+	.digest			= chksum_digest,
+	.descsize		= sizeof(struct chksum_desc_ctx),
+
+	.base.cra_name		= "crc32c",
+	.base.cra_driver_name	= "crc32c-base",
+	.base.cra_flags		= CRYPTO_ALG_OPTIONAL_KEY,
+	.base.cra_blocksize	= CHKSUM_BLOCK_SIZE,
+	.base.cra_ctxsize	= sizeof(struct chksum_ctx),
+	.base.cra_module	= THIS_MODULE,
+	.base.cra_init		= crc32c_cra_init,
+#endif
+}};
 
 static int __init crc32c_mod_init(void)
 {
-	return crypto_register_shash(&alg);
+	return crypto_register_shashes(algs, ARRAY_SIZE(algs));
 }
 
 static void __exit crc32c_mod_fini(void)
 {
-	crypto_unregister_shash(&alg);
+	crypto_unregister_shashes(algs, ARRAY_SIZE(algs));
 }
 
 subsys_initcall(crc32c_mod_init);
