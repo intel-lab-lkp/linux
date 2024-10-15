@@ -378,6 +378,7 @@ struct mddev {
 						       * takeover/stop are not safe
 						       */
 	struct gendisk			*gendisk;
+	struct file			*meta_file;
 
 	struct kobject			kobj;
 	int				hold_active;
@@ -753,7 +754,6 @@ struct md_sysfs_entry {
 	ssize_t (*show)(struct mddev *, char *);
 	ssize_t (*store)(struct mddev *, const char *, size_t);
 };
-extern const struct attribute_group md_bitmap_group;
 
 static inline struct kernfs_node *sysfs_get_dirent_safe(struct kernfs_node *sd, char *name)
 {

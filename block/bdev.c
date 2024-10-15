@@ -990,12 +990,25 @@ static unsigned blk_to_file_flags(blk_mode_t mode)
 	return flags;
 }
 
+struct file *bdev_file_alloc(struct block_device *bdev, blk_mode_t mode)
+{
+	unsigned int flags = blk_to_file_flags(mode);
+
+	struct file *bdev_file = alloc_file_pseudo_noaccount(BD_INODE(bdev),
+			blockdev_mnt, "", flags | O_LARGEFILE, &def_blk_fops);
+
+	if (!IS_ERR(bdev_file))
+		ihold(BD_INODE(bdev));
+
+	return bdev_file;
+}
+EXPORT_SYMBOL_GPL(bdev_file_alloc);
+
 struct file *bdev_file_open_by_dev(dev_t dev, blk_mode_t mode, void *holder,
 				   const struct blk_holder_ops *hops)
 {
 	struct file *bdev_file;
 	struct block_device *bdev;
-	unsigned int flags;
 	int ret;
 
 	ret = bdev_permission(dev, mode, holder);
@@ -1006,14 +1019,11 @@ struct file *bdev_file_open_by_dev(dev_t dev, blk_mode_t mode, void *holder,
 	if (!bdev)
 		return ERR_PTR(-ENXIO);
 
-	flags = blk_to_file_flags(mode);
-	bdev_file = alloc_file_pseudo_noaccount(BD_INODE(bdev),
-			blockdev_mnt, "", flags | O_LARGEFILE, &def_blk_fops);
+	bdev_file = bdev_file_alloc(bdev, mode);
 	if (IS_ERR(bdev_file)) {
 		blkdev_put_no_open(bdev);
 		return bdev_file;
 	}
-	ihold(BD_INODE(bdev));
 
 	ret = bdev_open(bdev, mode, holder, hops, bdev_file);
 	if (ret) {

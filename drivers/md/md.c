@@ -66,6 +66,7 @@
 #include <linux/part_stat.h>
 
 #include "md.h"
+#include "md-meta.h"
 #include "md-bitmap.h"
 #include "md-cluster.h"
 
@@ -101,6 +102,10 @@ static struct workqueue_struct *md_wq;
  */
 static struct workqueue_struct *md_misc_wq;
 struct workqueue_struct *md_bitmap_wq;
+
+static bool llbitmap;
+module_param_named(llbitmap, llbitmap, bool, 0644);
+MODULE_PARM_DESC(llbitmap, "Use experimental lockless bitmap");
 
 static int remove_and_add_spares(struct mddev *mddev,
 				 struct md_rdev *this);
@@ -664,7 +669,10 @@ int mddev_init(struct mddev *mddev)
 	mddev->resync_min = 0;
 	mddev->resync_max = MaxSector;
 	mddev->level = LEVEL_NONE;
-	mddev_set_bitmap_ops(mddev);
+	if (llbitmap)
+		mddev_set_llbitmap_ops(mddev);
+	else
+		mddev_set_bitmap_ops(mddev);
 
 	INIT_WORK(&mddev->sync_work, md_start_sync);
 	INIT_WORK(&mddev->del_work, mddev_delayed_delete);
@@ -2154,24 +2162,6 @@ retry:
 	}
 
 	sb->sb_csum = calc_sb_1_csum(sb);
-}
-
-static sector_t super_1_choose_bm_space(sector_t dev_size)
-{
-	sector_t bm_space;
-
-	/* if the device is bigger than 8Gig, save 64k for bitmap
-	 * usage, if bigger than 200Gig, save 128k
-	 */
-	if (dev_size < 64*2)
-		bm_space = 0;
-	else if (dev_size - 64*2 >= 200*1024*1024*2)
-		bm_space = 128*2;
-	else if (dev_size - 4*2 > 8*1024*1024*2)
-		bm_space = 64*2;
-	else
-		bm_space = 4*2;
-	return bm_space;
 }
 
 static unsigned long long
@@ -5660,7 +5650,6 @@ static const struct attribute_group md_redundancy_group = {
 
 static const struct attribute_group *md_attr_groups[] = {
 	&md_default_group,
-	&md_bitmap_group,
 	NULL,
 };
 
@@ -5717,6 +5706,7 @@ static void md_kobj_release(struct kobject *ko)
 	if (mddev->sysfs_level)
 		sysfs_put(mddev->sysfs_level);
 
+	md_free_meta_file(mddev);
 	del_gendisk(mddev->gendisk);
 	put_disk(mddev->gendisk);
 }
@@ -5902,10 +5892,25 @@ struct mddev *md_alloc(dev_t dev, char *name)
 		return ERR_PTR(error);
 	}
 
+	if (mddev->bitmap_ops->group)
+		if (sysfs_create_group(&mddev->kobj, mddev->bitmap_ops->group))
+			pr_warn("md: cannot register extra bitmap attributes for %s\n",
+				mdname(mddev));
+
 	kobject_uevent(&mddev->kobj, KOBJ_ADD);
 	mddev->sysfs_state = sysfs_get_dirent_safe(mddev->kobj.sd, "array_state");
 	mddev->sysfs_level = sysfs_get_dirent_safe(mddev->kobj.sd, "level");
 	mutex_unlock(&disks_mutex);
+
+	if (!mddev_is_dm(mddev) && llbitmap) {
+		error = md_alloc_meta_file(mddev);
+		if (error) {
+			mddev->hold_active = 0;
+			mddev_put(mddev);
+			return ERR_PTR(error);
+		}
+	}
+
 	return mddev;
 
 out_put_disk:

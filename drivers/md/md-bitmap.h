@@ -8,6 +8,7 @@
 #define BITMAP_H 1
 
 #define BITMAP_MAGIC 0x6d746962
+#define LLBITMAP_MAGIC 0x6d746963
 
 typedef __u16 bitmap_counter_t;
 #define COUNTER_BITS 16
@@ -71,6 +72,8 @@ struct md_bitmap_stats {
 };
 
 struct bitmap_operations {
+	int version;
+
 	bool (*enabled)(struct mddev *mddev);
 	int (*create)(struct mddev *mddev, int slot);
 	int (*resize)(struct mddev *mddev, sector_t blocks, int chunksize,
@@ -107,9 +110,48 @@ struct bitmap_operations {
 			      sector_t *hi, bool clear_bits);
 	void (*set_pages)(void *data, unsigned long pages);
 	void (*free)(void *data);
+
+	struct attribute_group *group;
 };
 
 /* the bitmap API */
 void mddev_set_bitmap_ops(struct mddev *mddev);
+void mddev_set_llbitmap_ops(struct mddev *mddev);
+
+static inline void mddev_set_timeout(struct mddev *mddev, unsigned long timeout,
+				     bool force)
+{
+	struct md_thread *thread;
+
+	rcu_read_lock();
+	thread = rcu_dereference(mddev->thread);
+
+	if (!thread)
+		goto out;
+
+	if (force || thread->timeout < MAX_SCHEDULE_TIMEOUT)
+		thread->timeout = timeout;
+
+out:
+	rcu_read_unlock();
+}
+
+static inline sector_t super_1_choose_bm_space(sector_t dev_size)
+{
+	sector_t bm_space;
+
+	/* if the device is bigger than 8Gig, save 64k for bitmap
+	 * usage, if bigger than 200Gig, save 128k
+	 */
+	if (dev_size < 64*2)
+		bm_space = 0;
+	else if (dev_size - 64*2 >= 200*1024*1024*2)
+		bm_space = 128*2;
+	else if (dev_size - 4*2 > 8*1024*1024*2)
+		bm_space = 64*2;
+	else
+		bm_space = 4*2;
+	return bm_space;
+}
 
 #endif

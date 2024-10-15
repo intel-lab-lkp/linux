@@ -1476,24 +1476,6 @@ static bitmap_counter_t *md_bitmap_get_counter(struct bitmap_counts *bitmap,
 					       sector_t offset, sector_t *blocks,
 					       int create);
 
-static void mddev_set_timeout(struct mddev *mddev, unsigned long timeout,
-			      bool force)
-{
-	struct md_thread *thread;
-
-	rcu_read_lock();
-	thread = rcu_dereference(mddev->thread);
-
-	if (!thread)
-		goto out;
-
-	if (force || thread->timeout < MAX_SCHEDULE_TIMEOUT)
-		thread->timeout = timeout;
-
-out:
-	rcu_read_unlock();
-}
-
 /*
  * bitmap daemon -- periodically wakes up to clean bits and flush pages
  *			out to disk
@@ -2964,12 +2946,15 @@ static struct attribute *md_bitmap_attrs[] = {
 	&max_backlog_used.attr,
 	NULL
 };
-const struct attribute_group md_bitmap_group = {
+
+static struct attribute_group md_bitmap_group = {
 	.name = "bitmap",
 	.attrs = md_bitmap_attrs,
 };
 
 static struct bitmap_operations bitmap_ops = {
+	.version		= 1,
+
 	.enabled		= bitmap_enabled,
 	.create			= bitmap_create,
 	.resize			= bitmap_resize,
@@ -2997,6 +2982,8 @@ static struct bitmap_operations bitmap_ops = {
 	.copy_from_slot		= bitmap_copy_from_slot,
 	.set_pages		= bitmap_set_pages,
 	.free			= md_bitmap_free,
+
+	.group			= &md_bitmap_group,
 };
 
 void mddev_set_bitmap_ops(struct mddev *mddev)
