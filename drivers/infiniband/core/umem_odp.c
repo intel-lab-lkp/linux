@@ -381,7 +381,7 @@ int ib_umem_odp_map_dma_and_lock(struct ib_umem_odp *umem_odp, u64 user_virt,
 	pfn_start_idx = (range.start - ib_umem_start(umem_odp)) >> PAGE_SHIFT;
 	num_pfns = (range.end - range.start) >> PAGE_SHIFT;
 	if (fault) {
-		range.default_flags = HMM_PFN_REQ_FAULT;
+		range.default_flags = HMM_PFN_REQ_FAULT | HMM_PFN_REQ_ALLOW_P2P;
 
 		if (access_mask & ODP_WRITE_ALLOWED_BIT)
 			range.default_flags |= HMM_PFN_REQ_WRITE;
