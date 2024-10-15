@@ -459,13 +459,26 @@ static void put_prev_task_idle(struct rq *rq, struct task_struct *prev, struct t
 static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool first)
 {
 	update_idle_core(rq);
-	scx_update_idle(rq, true);
 	schedstat_inc(rq->sched_goidle);
 	next->se.exec_start = rq_clock_task(rq);
 }
 
 struct task_struct *pick_task_idle(struct rq *rq)
 {
+	/*
+	 * When switching from a non-idle to the idle class, .set_next_task()
+	 * is called only once during the transition.
+	 *
+	 * However, the CPU may remain active for multiple rounds (e.g., by
+	 * calling scx_bpf_kick_cpu() from the ops.update_idle() callback).
+	 *
+	 * In such cases, we need to keep updating the scx idle state to
+	 * properly re-trigger the ops.update_idle() callback.
+	 *
+	 * Updating the state in .pick_task(), instead of .set_next_task(),
+	 * ensures correct handling of scx idle state transitions.
+	 */
+	scx_update_idle(rq, true);
 	return rq->idle;
 }
 
