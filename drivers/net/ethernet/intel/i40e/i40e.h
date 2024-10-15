@@ -755,6 +755,8 @@ enum i40e_filter_state {
 	I40E_FILTER_ACTIVE,		/* Added to switch by FW */
 	I40E_FILTER_FAILED,		/* Rejected by FW */
 	I40E_FILTER_REMOVE,		/* To be removed */
+	/* RESERVED */
+	I40E_FILTER_NEW_SYNC = 6,	/* New, not sent, in sync task */
 /* There is no 'removed' state; the filter struct is freed */
 };
 struct i40e_mac_filter {

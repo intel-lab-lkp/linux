@@ -89,6 +89,8 @@ static char *i40e_filter_state_string[] = {
 	"ACTIVE",
 	"FAILED",
 	"REMOVE",
+	"<RESERVED>",
+	"NEW_SYNC",
 };
 
 /**
