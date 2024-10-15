@@ -1251,7 +1251,7 @@ static int rvu_af_npc_exact_feature_get(struct devlink *devlink, u32 id,
 	enabled = rvu_npc_exact_has_match_table(rvu);
 
 	snprintf(ctx->val.vstr, sizeof(ctx->val.vstr), "%s",
-		 enabled ? "enabled" : "disabled");
+		 str_enabled_disabled(enabled));
 
 	return 0;
 }
