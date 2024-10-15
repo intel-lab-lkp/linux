@@ -36,19 +36,25 @@ struct acpi_gtdt_descriptor {
 
 static struct acpi_gtdt_descriptor acpi_gtdt_desc __initdata;
 
-static inline __init void *next_platform_timer(void *platform_timer)
+static __init bool platform_timer_valid(void *platform_timer)
 {
 	struct acpi_gtdt_header *gh = platform_timer;
 
-	platform_timer += gh->length;
-	if (platform_timer < acpi_gtdt_desc.gtdt_end)
-		return platform_timer;
-
-	return NULL;
+	return (platform_timer >= (void *)(acpi_gtdt_desc.gtdt + 1) &&
+		platform_timer < acpi_gtdt_desc.gtdt_end &&
+		gh->length != 0 &&
+		platform_timer + gh->length <= acpi_gtdt_desc.gtdt_end);
 }
 
-#define for_each_platform_timer(_g)				\
-	for (_g = acpi_gtdt_desc.platform_timer; _g;	\
+static __init void *next_platform_timer(void *platform_timer)
+{
+	struct acpi_gtdt_header *gh = platform_timer;
+
+	return platform_timer + gh->length;
+}
+
+#define for_each_platform_timer(_g, first_entry)	\
+	for (_g = first_entry; platform_timer_valid(_g);	\
 	     _g = next_platform_timer(_g))
 
 static inline bool is_timer_block(void *platform_timer)
@@ -155,8 +161,9 @@ bool __init acpi_gtdt_c3stop(int type)
 int __init acpi_gtdt_init(struct acpi_table_header *table,
 			  int *platform_timer_count)
 {
-	void *platform_timer;
+	void *platform_timer, *tmp;
 	struct acpi_table_gtdt *gtdt;
+	int cnt = 0;
 
 	gtdt = container_of(table, struct acpi_table_gtdt, header);
 	acpi_gtdt_desc.gtdt = gtdt;
@@ -177,7 +184,10 @@ int __init acpi_gtdt_init(struct acpi_table_header *table,
 	}
 
 	platform_timer = (void *)gtdt + gtdt->platform_timer_offset;
-	if (platform_timer < (void *)table + sizeof(struct acpi_table_gtdt)) {
+	for_each_platform_timer(tmp, platform_timer)
+		cnt++;
+
+	if (cnt != gtdt->platform_timer_count) {
 		pr_err(FW_BUG "invalid timer data.\n");
 		return -EINVAL;
 	}
@@ -305,7 +315,7 @@ int __init acpi_arch_timer_mem_init(struct arch_timer_mem *timer_mem,
 	void *platform_timer;
 
 	*timer_count = 0;
-	for_each_platform_timer(platform_timer) {
+	for_each_platform_timer(platform_timer, acpi_gtdt_desc.platform_timer) {
 		if (is_timer_block(platform_timer)) {
 			ret = gtdt_parse_timer_block(platform_timer, timer_mem);
 			if (ret)
@@ -398,7 +408,7 @@ static int __init gtdt_sbsa_gwdt_init(void)
 	if (ret || !timer_count)
 		goto out_put_gtdt;
 
-	for_each_platform_timer(platform_timer) {
+	for_each_platform_timer(platform_timer, acpi_gtdt_desc.platform_timer) {
 		if (is_non_secure_watchdog(platform_timer)) {
 			ret = gtdt_import_sbsa_gwdt(platform_timer, gwdt_count);
 			if (ret)
