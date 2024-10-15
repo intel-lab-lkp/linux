@@ -308,7 +308,7 @@ int cn_add_elem(__u32 uexit_code, pid_t pid)
 }
 EXPORT_SYMBOL_GPL(cn_add_elem);
 
-__u32 cn_get_exval(pid_t pid)
+int cn_get_exval(pid_t pid)
 {
 	struct cn_dev *dev = &cdev;
 	__u32 exval;
@@ -320,6 +320,19 @@ __u32 cn_get_exval(pid_t pid)
 	return exval;
 }
 EXPORT_SYMBOL_GPL(cn_get_exval);
+
+int cn_display_hlist(pid_t pid, int max_len, int *hkey,
+			int *key_display)
+{
+	struct cn_dev *dev = &cdev;
+
+	if (!cn_already_initialized)
+		return 0;
+
+	return cn_hash_display_hlist(dev->hdev, pid, max_len,
+					hkey, key_display);
+}
+EXPORT_SYMBOL_GPL(cn_display_hlist);
 
 bool cn_table_empty(void)
 {
