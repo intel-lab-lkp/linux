@@ -43,6 +43,7 @@ properties:
               - samsung,exynos7885-wakeup-eint
               - samsung,exynos850-wakeup-eint
               - samsung,exynos8895-wakeup-eint
+              - samsung,exynos990-wakeup-eint
           - const: samsung,exynos7-wakeup-eint
       - items:
           - enum:
