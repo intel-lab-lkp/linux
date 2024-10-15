@@ -18,13 +18,14 @@
 #include <net/addrconf.h>
 #include <net/dst.h>
 #include <net/xfrm.h>
+#include <net/inet_dscp.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/ip6_route.h>
 #include <net/l3mdev.h>
 
-static struct dst_entry *xfrm6_dst_lookup(struct net *net, int tos, int oif,
-					  const xfrm_address_t *saddr,
+static struct dst_entry *xfrm6_dst_lookup(struct net *net, dscp_t dscp,
+					  int oif, const xfrm_address_t *saddr,
 					  const xfrm_address_t *daddr,
 					  u32 mark)
 {

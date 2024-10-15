@@ -355,8 +355,8 @@ struct xfrm_type;
 struct xfrm_dst;
 struct xfrm_policy_afinfo {
 	struct dst_ops		*dst_ops;
-	struct dst_entry	*(*dst_lookup)(struct net *net,
-					       int tos, int oif,
+	struct dst_entry	*(*dst_lookup)(struct net *net, dscp_t dscp,
+					       int oif,
 					       const xfrm_address_t *saddr,
 					       const xfrm_address_t *daddr,
 					       u32 mark);

@@ -11,6 +11,7 @@
 
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <net/inet_dscp.h>
 #include <linux/inetdevice.h>
 #include <net/dst.h>
 #include <net/xfrm.h>
@@ -40,14 +41,15 @@ static struct dst_entry *__xfrm4_dst_lookup(struct net *net, struct flowi4 *fl4,
 	return ERR_CAST(rt);
 }
 
-static struct dst_entry *xfrm4_dst_lookup(struct net *net, int tos, int oif,
-					  const xfrm_address_t *saddr,
+static struct dst_entry *xfrm4_dst_lookup(struct net *net, dscp_t dscp,
+					  int oif, const xfrm_address_t *saddr,
 					  const xfrm_address_t *daddr,
 					  u32 mark)
 {
 	struct flowi4 fl4;
 
-	return __xfrm4_dst_lookup(net, &fl4, tos, oif, saddr, daddr, mark);
+	return __xfrm4_dst_lookup(net, &fl4, inet_dscp_to_dsfield(dscp), oif,
+				  saddr, daddr, mark);
 }
 
 static int xfrm4_get_saddr(struct net *net, int oif,

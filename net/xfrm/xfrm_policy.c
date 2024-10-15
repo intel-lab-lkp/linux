@@ -282,8 +282,7 @@ struct dst_entry *__xfrm_dst_lookup(struct net *net, dscp_t dscp, int oif,
 	if (unlikely(afinfo == NULL))
 		return ERR_PTR(-EAFNOSUPPORT);
 
-	dst = afinfo->dst_lookup(net, inet_dscp_to_dsfield(dscp), oif, saddr,
-				 daddr, mark);
+	dst = afinfo->dst_lookup(net, dscp, oif, saddr, daddr, mark);
 
 	rcu_read_unlock();
 
