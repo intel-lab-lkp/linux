@@ -3,7 +3,7 @@
  * IPQ9574 RDP board common device tree source
  *
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /dts-v1/;
@@ -162,6 +162,10 @@
 
 &usb3 {
 	status = "okay";
+};
+
+&cmn_pll_ref_clk {
+	clock-frequency = <48000000>;
 };
 
 &xo_board_clk {
