@@ -268,12 +268,12 @@ static int dw_pcie_find_index(struct dw_pcie_ep *ep, phys_addr_t addr,
 	return -EINVAL;
 }
 
-static phys_addr_t dw_pcie_ep_align_addr(struct pci_epc *epc,
-			phys_addr_t pci_addr, size_t *pci_size, size_t *offset)
+static u64 dw_pcie_ep_align_addr(struct pci_epc *epc, u64 pci_addr,
+				 size_t *pci_size, size_t *offset)
 {
 	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
-	phys_addr_t mask = pci->region_align - 1;
+	u64 mask = pci->region_align - 1;
 	size_t ofst = pci_addr & mask;
 
 	*pci_size = ALIGN(ofst + *pci_size, ep->page_size);
