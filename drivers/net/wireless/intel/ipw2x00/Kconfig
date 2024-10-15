@@ -6,6 +6,7 @@
 config IPW2100
 	tristate "Intel PRO/Wireless 2100 Network Connection"
 	depends on PCI && CFG80211
+	select CRYPTO_LIB_ARC4
 	select WIRELESS_EXT
 	select WEXT_PRIV
 	select FW_LOADER
