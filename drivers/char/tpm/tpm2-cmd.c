@@ -14,6 +14,14 @@
 #include "tpm.h"
 #include <crypto/hash_info.h>
 
+static int __ro_after_init tpm2_pcr_extend_hmac = 1;
+static int __init tpm2_pcr_extend_hmac_setup(char *str)
+{
+	tpm2_pcr_extend_hmac = 0;
+	return 0;
+}
+__setup("tpm2_pcr_extend_hmac_disable", tpm2_pcr_extend_hmac_setup);
+
 static struct tpm2_hash tpm2_hash_map[] = {
 	{HASH_ALGO_SHA1, TPM_ALG_SHA1},
 	{HASH_ALGO_SHA256, TPM_ALG_SHA256},
@@ -232,18 +240,26 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 	int rc;
 	int i;
 
-	rc = tpm2_start_auth_session(chip);
-	if (rc)
-		return rc;
+	if (tpm2_pcr_extend_hmac) {
+		rc = tpm2_start_auth_session(chip);
+		if (rc)
+			return rc;
+	}
 
 	rc = tpm_buf_init(&buf, TPM2_ST_SESSIONS, TPM2_CC_PCR_EXTEND);
 	if (rc) {
-		tpm2_end_auth_session(chip);
+		if (tpm2_pcr_extend_hmac)
+			tpm2_end_auth_session(chip);
 		return rc;
 	}
 
-	tpm_buf_append_name(chip, &buf, pcr_idx, NULL);
-	tpm_buf_append_hmac_session(chip, &buf, 0, NULL, 0);
+	if (tpm2_pcr_extend_hmac) {
+		tpm_buf_append_name(chip, &buf, pcr_idx, NULL);
+		tpm_buf_append_hmac_session(chip, &buf, 0, NULL, 0);
+	} else {
+		tpm_buf_append_handle(chip, &buf, pcr_idx, NULL);
+		tpm_buf_append_auth(chip, &buf, 0, NULL, 0);
+	}
 
 	tpm_buf_append_u32(&buf, chip->nr_allocated_banks);
 
@@ -253,9 +269,16 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 			       chip->allocated_banks[i].digest_size);
 	}
 
-	tpm_buf_fill_hmac_session(chip, &buf);
-	rc = tpm_transmit_cmd(chip, &buf, 0, "attempting extend a PCR value");
-	rc = tpm_buf_check_hmac_response(chip, &buf, rc);
+	if (tpm2_pcr_extend_hmac) {
+		tpm_buf_fill_hmac_session(chip, &buf);
+		rc = tpm_transmit_cmd(chip, &buf, 0,
+				      "attempting extend a PCR value");
+		rc = tpm_buf_check_hmac_response(chip, &buf, rc);
+	} else {
+		rc = tpm_transmit_cmd(chip, &buf, 0,
+				      "attempting extend a PCR value");
+	}
+
 
 	tpm_buf_destroy(&buf);
 

@@ -205,6 +205,14 @@ static int tpm2_read_public(struct tpm_chip *chip, u32 handle, char *name)
 }
 #endif /* CONFIG_TCG_TPM2_HMAC */
 
+void tpm_buf_append_handle(struct tpm_chip *chip, struct tpm_buf *buf,
+			   u32 handle, u8 *name)
+{
+	tpm_buf_append_u32(buf, handle);
+	/* count the number of handles in the upper bits of flags */
+	buf->handles++;
+}
+
 /**
  * tpm_buf_append_name() - add a handle area to the buffer
  * @chip: the TPM chip structure
@@ -237,9 +245,7 @@ void tpm_buf_append_name(struct tpm_chip *chip, struct tpm_buf *buf,
 #endif
 
 	if (!tpm2_chip_auth(chip)) {
-		tpm_buf_append_u32(buf, handle);
-		/* count the number of handles in the upper bits of flags */
-		buf->handles++;
+		tpm_buf_append_handle(chip, buf, handle, name);
 		return;
 	}
 
@@ -271,6 +277,31 @@ void tpm_buf_append_name(struct tpm_chip *chip, struct tpm_buf *buf,
 #endif
 }
 EXPORT_SYMBOL_GPL(tpm_buf_append_name);
+
+void tpm_buf_append_auth(struct tpm_chip *chip, struct tpm_buf *buf,
+			 u8 attributes, u8 *passphrase, int passphrase_len)
+{
+	/* offset tells us where the sessions area begins */
+	int offset = buf->handles * 4 + TPM_HEADER_SIZE;
+	u32 len = 9 + passphrase_len;
+
+	if (tpm_buf_length(buf) != offset) {
+		/* not the first session so update the existing length */
+		len += get_unaligned_be32(&buf->data[offset]);
+		put_unaligned_be32(len, &buf->data[offset]);
+	} else {
+		tpm_buf_append_u32(buf, len);
+	}
+	/* auth handle */
+	tpm_buf_append_u32(buf, TPM2_RS_PW);
+	/* nonce */
+	tpm_buf_append_u16(buf, 0);
+	/* attributes */
+	tpm_buf_append_u8(buf, 0);
+	/* passphrase */
+	tpm_buf_append_u16(buf, passphrase_len);
+	tpm_buf_append(buf, passphrase, passphrase_len);
+}
 
 /**
  * tpm_buf_append_hmac_session() - Append a TPM session element
@@ -309,26 +340,8 @@ void tpm_buf_append_hmac_session(struct tpm_chip *chip, struct tpm_buf *buf,
 #endif
 
 	if (!tpm2_chip_auth(chip)) {
-		/* offset tells us where the sessions area begins */
-		int offset = buf->handles * 4 + TPM_HEADER_SIZE;
-		u32 len = 9 + passphrase_len;
-
-		if (tpm_buf_length(buf) != offset) {
-			/* not the first session so update the existing length */
-			len += get_unaligned_be32(&buf->data[offset]);
-			put_unaligned_be32(len, &buf->data[offset]);
-		} else {
-			tpm_buf_append_u32(buf, len);
-		}
-		/* auth handle */
-		tpm_buf_append_u32(buf, TPM2_RS_PW);
-		/* nonce */
-		tpm_buf_append_u16(buf, 0);
-		/* attributes */
-		tpm_buf_append_u8(buf, 0);
-		/* passphrase */
-		tpm_buf_append_u16(buf, passphrase_len);
-		tpm_buf_append(buf, passphrase, passphrase_len);
+		tpm_buf_append_auth(chip, buf, attributes, passphrase,
+				    passphrase_len);
 		return;
 	}
 

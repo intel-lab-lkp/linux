@@ -6727,6 +6727,11 @@
 	torture.verbose_sleep_duration= [KNL]
 			Duration of each verbose-printk() sleep in jiffies.
 
+	tpm_pcr_extend_hmac_disable [HW,TPM]
+			Disable TPM2 pcr_extend HMAC for better IMA
+			performance. By default is set to true (1).
+			Mainly needed when using a HW TPM2.
+
 	tpm_suspend_pcr=[HW,TPM]
 			Format: integer pcr id
 			Specify that at suspend time, the tpm driver
