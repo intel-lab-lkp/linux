@@ -64,7 +64,8 @@ static int led_pwm_set(struct led_classdev *led_cdev,
 
 __attribute__((nonnull))
 static int led_pwm_add(struct device *dev, struct led_pwm_priv *priv,
-		       struct led_pwm *led, struct fwnode_handle *fwnode)
+		       struct led_pwm *led, struct fwnode_handle *fwnode,
+		       unsigned int default_brightness)
 {
 	struct led_pwm_data *led_data = &priv->leds[priv->num_leds];
 	struct led_init_data init_data = { .fwnode = fwnode };
@@ -103,7 +104,7 @@ static int led_pwm_add(struct device *dev, struct led_pwm_priv *priv,
 	/* set brightness */
 	switch (led->default_state) {
 	case LEDS_DEFSTATE_ON:
-		led_data->cdev.brightness = led->max_brightness;
+		led_data->cdev.brightness = default_brightness;
 		break;
 	case LEDS_DEFSTATE_KEEP:
 		{
@@ -140,6 +141,7 @@ static int led_pwm_add(struct device *dev, struct led_pwm_priv *priv,
 static int led_pwm_create_fwnode(struct device *dev, struct led_pwm_priv *priv)
 {
 	struct led_pwm led;
+	unsigned int default_brightness;
 	int ret;
 
 	device_for_each_child_node_scoped(dev, fwnode) {
@@ -159,7 +161,12 @@ static int led_pwm_create_fwnode(struct device *dev, struct led_pwm_priv *priv)
 
 		led.default_state = led_init_default_state_get(fwnode);
 
-		ret = led_pwm_add(dev, priv, &led, fwnode);
+		ret = fwnode_property_read_u32(fwnode, "default-brightness",
+					       &default_brightness);
+		if (ret < 0 || default_brightness > led.max_brightness)
+			default_brightness = led.max_brightness;
+
+		ret = led_pwm_add(dev, priv, &led, fwnode, default_brightness);
 		if (ret)
 			return ret;
 	}
