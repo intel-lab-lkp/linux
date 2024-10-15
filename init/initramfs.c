@@ -249,11 +249,11 @@ static void __init read_into(char *buf, unsigned size, enum state next)
 	}
 }
 
-static __initdata char *header_buf, *name_buf;
+static __initdata char *cpio_buf;
 
 static int __init do_start(void)
 {
-	read_into(header_buf, 110, GotHeader);
+	read_into(cpio_buf, 110, GotHeader);
 	return 0;
 }
 
@@ -293,14 +293,14 @@ static int __init do_header(void)
 	if (S_ISLNK(mode)) {
 		if (body_len > PATH_MAX)
 			return 0;
-		collect = collected = name_buf;
+		collect = collected = cpio_buf;
 		remains = N_ALIGN(name_len) + body_len;
 		next_state = GotSymlink;
 		state = Collect;
 		return 0;
 	}
 	if (S_ISREG(mode) || !body_len)
-		read_into(name_buf, N_ALIGN(name_len), GotName);
+		read_into(cpio_buf, N_ALIGN(name_len), GotName);
 	return 0;
 }
 
@@ -486,10 +486,14 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	const char *compress_name;
 	static __initdata char msg_buf[64];
 
-	header_buf = kmalloc(110, GFP_KERNEL);
-	/* 2x PATH_MAX as @name_buf is also used for staging symlink targets */
-	name_buf = kmalloc(N_ALIGN(PATH_MAX) + PATH_MAX + 1, GFP_KERNEL);
-	if (!header_buf || !name_buf)
+	/*
+	 * @cpio_buf is first used for staging the 110 byte newc/crc cpio
+	 * header, after which parse_header() converts and stashes fields into
+	 * corresponding types. The same buffer is then reused for file path
+	 * staging. 2 x PATH_MAX covers any possible symlink target.
+	 */
+	cpio_buf = kmalloc(N_ALIGN(PATH_MAX) + PATH_MAX + 1, GFP_KERNEL);
+	if (!cpio_buf)
 		panic_show_mem("can't allocate buffers");
 
 	state = Start;
@@ -534,8 +538,7 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 		len -= my_inptr;
 	}
 	dir_utime();
-	kfree(name_buf);
-	kfree(header_buf);
+	kfree(cpio_buf);
 	return message;
 }
 
