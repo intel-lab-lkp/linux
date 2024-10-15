@@ -135,9 +135,9 @@ static ssize_t target_type_show(struct device *dev,
 	struct cxl_decoder *cxld = to_cxl_decoder(dev);
 
 	switch (cxld->target_type) {
-	case CXL_DECODER_DEVMEM:
+	case CXL_DECODER_ACCEL:
 		return sysfs_emit(buf, "accelerator\n");
-	case CXL_DECODER_HOSTONLYMEM:
+	case CXL_DECODER_EXPANDER:
 		return sysfs_emit(buf, "expander\n");
 	}
 	return -ENXIO;
@@ -1768,7 +1768,7 @@ static int cxl_decoder_init(struct cxl_port *port, struct cxl_decoder *cxld)
 	/* Pre initialize an "empty" decoder */
 	cxld->interleave_ways = 1;
 	cxld->interleave_granularity = PAGE_SIZE;
-	cxld->target_type = CXL_DECODER_HOSTONLYMEM;
+	cxld->target_type = CXL_DECODER_EXPANDER;
 	cxld->hpa_range = (struct range) {
 		.start = 0,
 		.end = -1,
