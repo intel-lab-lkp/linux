@@ -54,14 +54,16 @@ properties:
     maxItems: 13
 
   "#dma-cells":
-    const: 3
+    minItems: 3
+    maxItems: 4
     description: >
       DMA clients must use the format described in dma.txt, giving a phandle
-      to the DMA controller plus the following 3 integer cells:
+      to the DMA controller plus the following 4 integer cells:
       - channel: if set to 0xffffffff, any available channel will be allocated
         for the client. Otherwise, the exact channel specified will be used.
       - seid: serial id of the client as defined in the SoC documentation.
       - client: type of the client as defined in dt-bindings/dma/qcom-gpi.h
+      - channel-tre-size: size of the channel TRE (transfer ring element)
 
   iommus:
     maxItems: 1
