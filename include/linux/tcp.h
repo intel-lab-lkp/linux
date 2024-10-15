@@ -156,6 +156,10 @@ struct tcp_request_sock {
 #if IS_ENABLED(CONFIG_MPTCP)
 	bool				drop_req;
 #endif
+	u8				accecn_ok  : 1,
+					syn_ect_snt: 2,
+					syn_ect_rcv: 2;
+	u8				accecn_fail_mode:4;
 	u32				txhash;
 	u32				rcv_isn;
 	u32				snt_isn;
@@ -372,7 +376,10 @@ struct tcp_sock {
 	u8	compressed_ack;
 	u8	dup_ack_counter:2,
 		tlp_retrans:1,	/* TLP is a retransmission */
-		unused:5;
+		syn_ect_snt:2,	/* AccECN ECT memory, only */
+		syn_ect_rcv:2,	/* ... needed durign 3WHS + first seqno */
+		wait_third_ack:1; /* Need 3rd ACK in simultaneous open for AccECN */
+	u8	accecn_fail_mode:4;     /* AccECN failure handling */
 	u8	thin_lto    : 1,/* Use linear timeouts for thin streams */
 		fastopen_connect:1, /* FASTOPEN_CONNECT sockopt */
 		fastopen_no_cookie:1, /* Allow send/recv SYN+data without a cookie */
