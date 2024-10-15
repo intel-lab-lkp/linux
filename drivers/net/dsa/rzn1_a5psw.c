@@ -803,8 +803,7 @@ static void a5psw_get_strings(struct dsa_switch *ds, int port, u32 stringset,
 		return;
 
 	for (u = 0; u < ARRAY_SIZE(a5psw_stats); u++) {
-		memcpy(data + u * ETH_GSTRING_LEN, a5psw_stats[u].name,
-		       ETH_GSTRING_LEN);
+		ethtool_puts(&data, a5psw_stats[u].name);
 	}
 }
 

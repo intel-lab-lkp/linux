@@ -1222,12 +1222,9 @@ static void mv88e6xxx_get_strings(struct dsa_switch *ds, int port,
 	if (chip->info->ops->stats_get_strings)
 		count = chip->info->ops->stats_get_strings(chip, data);
 
-	if (chip->info->ops->serdes_get_strings) {
-		data += count * ETH_GSTRING_LEN;
+	if (chip->info->ops->serdes_get_strings)
 		count = chip->info->ops->serdes_get_strings(chip, port, data);
-	}
 
-	data += count * ETH_GSTRING_LEN;
 	mv88e6xxx_atu_vtu_get_strings(data);
 
 	mv88e6xxx_reg_unlock(chip);
