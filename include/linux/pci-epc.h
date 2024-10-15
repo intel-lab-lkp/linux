@@ -49,10 +49,10 @@ pci_epc_interface_string(enum pci_epc_interface_type type)
  * @virt_addr: virtual address at which @pci_addr is mapped
  */
 struct pci_epc_map {
-	phys_addr_t	pci_addr;
+	u64		pci_addr;
 	size_t		pci_size;
 
-	phys_addr_t	map_pci_addr;
+	u64		map_pci_addr;
 	size_t		map_size;
 
 	phys_addr_t	phys_base;
@@ -93,8 +93,8 @@ struct pci_epc_ops {
 			   struct pci_epf_bar *epf_bar);
 	void	(*clear_bar)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 			     struct pci_epf_bar *epf_bar);
-	phys_addr_t (*align_addr)(struct pci_epc *epc, phys_addr_t pci_addr,
-				  size_t *size, size_t *offset);
+	u64	(*align_addr)(struct pci_epc *epc, u64 pci_addr, size_t *size,
+			      size_t *offset);
 	int	(*map_addr)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 			    phys_addr_t addr, u64 pci_addr, size_t size);
 	void	(*unmap_addr)(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
