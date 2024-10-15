@@ -11,15 +11,6 @@
 
 #include <linux/rio_drv.h>
 
-/*
- *  Wrappers for all RIO configuration access functions.  They just check
- *  alignment and call the low-level functions pointed to by rio_mport->ops.
- */
-
-#define RIO_8_BAD 0
-#define RIO_16_BAD (offset & 1)
-#define RIO_32_BAD (offset & 3)
-
 /**
  * RIO_LOP_READ - Generate rio_local_read_config_* functions
  * @size: Size of configuration space read (8, 16, 32 bits)
