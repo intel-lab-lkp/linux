@@ -19,6 +19,7 @@
 
 #include <net/sock.h>
 #include <net/dst.h>
+#include <net/inet_dscp.h>
 #include <net/ip.h>
 #include <net/route.h>
 #include <net/ipv6.h>
@@ -1764,7 +1765,7 @@ static inline int xfrm_user_policy(struct sock *sk, int optname,
 }
 #endif
 
-struct dst_entry *__xfrm_dst_lookup(struct net *net, int tos, int oif,
+struct dst_entry *__xfrm_dst_lookup(struct net *net, dscp_t dscp, int oif,
 				    const xfrm_address_t *saddr,
 				    const xfrm_address_t *daddr,
 				    int family, u32 mark);

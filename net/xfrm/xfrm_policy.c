@@ -270,7 +270,7 @@ static const struct xfrm_if_cb *xfrm_if_get_cb(void)
 	return rcu_dereference(xfrm_if_cb);
 }
 
-struct dst_entry *__xfrm_dst_lookup(struct net *net, int tos, int oif,
+struct dst_entry *__xfrm_dst_lookup(struct net *net, dscp_t dscp, int oif,
 				    const xfrm_address_t *saddr,
 				    const xfrm_address_t *daddr,
 				    int family, u32 mark)
@@ -282,7 +282,8 @@ struct dst_entry *__xfrm_dst_lookup(struct net *net, int tos, int oif,
 	if (unlikely(afinfo == NULL))
 		return ERR_PTR(-EAFNOSUPPORT);
 
-	dst = afinfo->dst_lookup(net, tos, oif, saddr, daddr, mark);
+	dst = afinfo->dst_lookup(net, inet_dscp_to_dsfield(dscp), oif, saddr,
+				 daddr, mark);
 
 	rcu_read_unlock();
 
@@ -310,8 +311,7 @@ static inline struct dst_entry *xfrm_dst_lookup(struct xfrm_state *x,
 		daddr = x->coaddr;
 	}
 
-	dst = __xfrm_dst_lookup(net, inet_dscp_to_dsfield(dscp), oif, saddr,
-				daddr, family, mark);
+	dst = __xfrm_dst_lookup(net, dscp, oif, saddr, daddr, family, mark);
 
 	if (!IS_ERR(dst)) {
 		if (prev_saddr != saddr)
