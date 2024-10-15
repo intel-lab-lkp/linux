@@ -2024,3 +2024,4 @@ module_i2c_driver(ds1307_driver);
 
 MODULE_DESCRIPTION("RTC driver for DS1307 and similar chips");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("i2c:rtc-ds1307");

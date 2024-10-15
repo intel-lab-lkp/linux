@@ -158,3 +158,4 @@ module_i2c_driver(ds1672_driver);
 MODULE_AUTHOR("Alessandro Zummo <a.zummo@towertech.it>");
 MODULE_DESCRIPTION("Dallas/Maxim DS1672 timekeeper driver");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("i2c:rtc-ds1672");

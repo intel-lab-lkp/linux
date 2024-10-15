@@ -211,3 +211,4 @@ module_spi_driver(ds1302_driver);
 MODULE_DESCRIPTION("Dallas DS1302 RTC driver");
 MODULE_AUTHOR("Paul Mundt, David McCullough");
 MODULE_LICENSE("GPL v2");
+MODULE_ALIAS("spi:rtc-ds1302");
