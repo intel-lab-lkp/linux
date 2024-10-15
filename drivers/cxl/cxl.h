@@ -315,13 +315,13 @@ resource_size_t cxl_rcd_component_reg_phys(struct device *dev,
  * Additionally indicate whether decoder settings were autodetected,
  * user customized.
  */
-#define CXL_DECODER_F_RAM   BIT(0)
-#define CXL_DECODER_F_PMEM  BIT(1)
-#define CXL_DECODER_F_TYPE2 BIT(2)
-#define CXL_DECODER_F_TYPE3 BIT(3)
-#define CXL_DECODER_F_LOCK  BIT(4)
-#define CXL_DECODER_F_ENABLE    BIT(5)
-#define CXL_DECODER_F_MASK  GENMASK(5, 0)
+#define CXL_DECODER_F_RAM         BIT(0)
+#define CXL_DECODER_F_PMEM        BIT(1)
+#define CXL_DECODER_F_DEVCOH      BIT(2)
+#define CXL_DECODER_F_HOSTONLYCOH BIT(3)
+#define CXL_DECODER_F_LOCK        BIT(4)
+#define CXL_DECODER_F_ENABLE      BIT(5)
+#define CXL_DECODER_F_MASK        GENMASK(5, 0)
 
 enum cxl_decoder_type {
 	CXL_DECODER_DEVMEM = 2,
