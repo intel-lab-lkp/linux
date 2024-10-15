@@ -841,18 +841,25 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 		.end = base + size - 1,
 	};
 
+	if (cxled) {
+		struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+		struct cxl_dev_state *cxlds = cxlmd->cxlds;
+
+		if (cxlds->type == CXL_DEVTYPE_CLASSMEM)
+			cxld->target_type = CXL_DECODER_EXPANDER;
+		else
+			cxld->target_type = CXL_DECODER_ACCEL;
+	}
+
 	/* decoders are enabled if committed */
 	if (committed) {
 		cxld->flags |= CXL_DECODER_F_ENABLE;
 		if (ctrl & CXL_HDM_DECODER0_CTRL_LOCK)
 			cxld->flags |= CXL_DECODER_F_LOCK;
-		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_HOSTONLY, ctrl)) {
-			cxld->target_type = CXL_DECODER_EXPANDER;
+		if (FIELD_GET(CXL_HDM_DECODER0_CTRL_HOSTONLY, ctrl))
 			cxld->coherence = CXL_DECODER_HOSTONLYCOH;
-		} else {
-			cxld->target_type = CXL_DECODER_ACCEL;
+		else
 			cxld->coherence = CXL_DECODER_DEVCOH;
-		}
 
 		guard(rwsem_write)(&cxl_region_rwsem);
 		if (cxld->id != cxl_num_decoders_committed(port)) {
@@ -874,21 +881,12 @@ static int init_hdm_decoder(struct cxl_port *port, struct cxl_decoder *cxld,
 			struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 			struct cxl_dev_state *cxlds = cxlmd->cxlds;
 
-			/*
-			 * Default by devtype until a device arrives that needs
-			 * more precision.
-			 */
-			if (cxlds->type == CXL_DEVTYPE_CLASSMEM)
-				cxld->target_type = CXL_DECODER_EXPANDER;
-			else
-				cxld->target_type = CXL_DECODER_ACCEL;
 			if (cxlds->coherence == CXL_DEVCOH_HOSTONLY)
 				cxld->coherence = CXL_DECODER_HOSTONLYCOH;
 			else
 				cxld->coherence = CXL_DECODER_DEVCOH;
 		} else {
-			/* To be overridden by region type/coherence at commit time */
-			cxld->target_type = CXL_DECODER_EXPANDER;
+			/* To be overridden by region coherence at commit time */
 			cxld->coherence = CXL_DECODER_HOSTONLYCOH;
 		}
 

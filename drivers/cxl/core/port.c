@@ -139,6 +139,8 @@ static ssize_t target_type_show(struct device *dev,
 		return sysfs_emit(buf, "accelerator\n");
 	case CXL_DECODER_EXPANDER:
 		return sysfs_emit(buf, "expander\n");
+	default:
+		break;
 	}
 	return -ENXIO;
 }
