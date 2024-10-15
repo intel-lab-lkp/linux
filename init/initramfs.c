@@ -484,7 +484,6 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	long written;
 	decompress_fn decompress;
 	const char *compress_name;
-	static __initdata char msg_buf[64];
 
 	state = Start;
 	this_header = 0;
@@ -514,10 +513,12 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 				error("decompressor failed");
 		} else if (compress_name) {
 			if (!message) {
-				snprintf(msg_buf, sizeof msg_buf,
+				/* FSM exit: cpio_buf reuse is safe */
+				snprintf(cpio_buf,
+					 N_ALIGN(PATH_MAX) + PATH_MAX + 1,
 					 "compression method %s not configured",
 					 compress_name);
-				message = msg_buf;
+				message = cpio_buf;
 			}
 		} else
 			error("invalid magic at start of compressed archive");
@@ -684,6 +685,7 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	 * header, after which parse_header() converts and stashes fields into
 	 * corresponding types. The same buffer is then reused for file path
 	 * staging. 2 x PATH_MAX covers any possible symlink target.
+	 * On error, @err may point to a @cpio_buf backed error message.
 	 */
 	cpio_buf = kmalloc(N_ALIGN(PATH_MAX) + PATH_MAX + 1, GFP_KERNEL);
 	if (!cpio_buf)
