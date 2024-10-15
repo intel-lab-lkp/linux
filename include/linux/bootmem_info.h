@@ -62,6 +62,16 @@ static inline void put_page_bootmem(struct page *page)
 {
 }
 
+static inline enum bootmem_type bootmem_type(const struct page *page)
+{
+	return SECTION_INFO;
+}
+
+static inline unsigned long bootmem_info(const struct page *page)
+{
+	return 0;
+}
+
 static inline void get_page_bootmem(unsigned long info, struct page *page,
 				    enum bootmem_type type)
 {
