@@ -2372,7 +2372,8 @@ static inline bool consume_remote_task(struct rq *this_rq, struct task_struct *p
 static bool consume_dispatch_q(struct rq *rq, struct scx_dispatch_q *dsq)
 {
 	struct task_struct *p;
-retry:
+	bool ret = false;
+
 	/*
 	 * The caller can't expect to successfully consume a task if the task's
 	 * addition to @dsq isn't guaranteed to be visible somehow. Test
@@ -2389,19 +2390,20 @@ retry:
 		if (rq == task_rq) {
 			task_unlink_from_dsq(p, dsq);
 			move_local_task_to_local_dsq(p, 0, dsq, rq);
-			raw_spin_unlock(&dsq->lock);
-			return true;
+			ret = true;
+			break;
 		}
 
 		if (task_can_run_on_remote_rq(p, rq, false)) {
-			if (likely(consume_remote_task(rq, p, dsq, task_rq)))
-				return true;
-			goto retry;
+			if (likely(consume_remote_task(rq, p, dsq, task_rq))) {
+				ret = true;
+				break;
+			}
 		}
 	}
 
 	raw_spin_unlock(&dsq->lock);
-	return false;
+	return ret;
 }
 
 static bool consume_global_dsq(struct rq *rq)
