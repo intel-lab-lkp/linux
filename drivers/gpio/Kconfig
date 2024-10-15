@@ -69,6 +69,24 @@ config GPIO_SYSFS
 	  use the character device /dev/gpiochipN with the appropriate
 	  ioctl() operations instead.
 
+config GPIO_SYSFS_CLASS_MOUNT_POINT
+	bool "Create empty /sys/class/gpio directory" if EXPERT
+	depends on !GPIO_SYSFS
+	default y
+	help
+	  Say Y here to create an empty /sys/class/gpio directory.
+
+	  User-space may want to use some kind of a compatibility layer for the
+	  deprecated GPIO sysfs ABI. This would typically involve mounting
+	  a fuse-based filesystem using the GPIO character device to emulate
+	  the sysfs behavior and layout.
+
+	  This option makes GPIOLIB create an empty directory at /sys/class/gpio
+	  where user-space can mount the sysfs replacement and avoid having to
+	  change existing programs to adjust to different filesystem paths.
+
+	  If unsure, say Y.
+
 config GPIO_CDEV
 	bool
 	prompt "Character device (/dev/gpiochipN) support" if EXPERT

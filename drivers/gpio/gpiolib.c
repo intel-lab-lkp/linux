@@ -4899,6 +4899,12 @@ static int __init gpiolib_dev_init(void)
 		return ret;
 	}
 
+#if IS_ENABLED(CONFIG_GPIO_SYSFS_CLASS_MOUNT_POINT)
+	ret = sysfs_create_mount_point(class_kobj, "gpio");
+	if (ret)
+		pr_err("gpiolib: failed to create the GPIO class mountpoint\n");
+#endif /* CONFIG_GPIO_SYSFS_CLASS_MOUNT_POINT */
+
 	gpiolib_initialized = true;
 	gpiochip_setup_devs();
 
