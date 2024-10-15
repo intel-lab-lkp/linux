@@ -80,6 +80,7 @@ DEFINE_MUTEX(arm_smmu_asid_lock);
 static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ ARM_SMMU_OPT_SKIP_PREFETCH, "hisilicon,broken-prefetch-cmd" },
 	{ ARM_SMMU_OPT_PAGE0_REGS_ONLY, "cavium,cn9900-broken-page1-regspace"},
+	{ ARM_SMMU_OPT_IMX95_BYPASS_SID0, "nxp,imx95-bypass-sid-zero"},
 	{ 0, NULL},
 };
 
@@ -4465,7 +4466,7 @@ static void __iomem *arm_smmu_ioremap(struct device *dev, resource_size_t start,
 	return devm_ioremap_resource(dev, &res);
 }
 
-static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
+static void arm_smmu_install_bypass_ste(struct arm_smmu_device *smmu)
 {
 	struct list_head rmr_list;
 	struct iommu_resv_region *e;
@@ -4496,6 +4497,18 @@ static void arm_smmu_rmr_install_bypass_ste(struct arm_smmu_device *smmu)
 	}
 
 	iort_put_rmr_sids(dev_fwnode(smmu->dev), &rmr_list);
+
+	if (smmu->options & ARM_SMMU_OPT_IMX95_BYPASS_SID0) {
+		int ret = arm_smmu_init_sid_strtab(smmu, 0);
+
+		if (ret) {
+			dev_err(smmu->dev, "i.MX95 SID0 bypass failed\n");
+			return;
+		}
+
+		arm_smmu_make_bypass_ste(smmu,
+					 arm_smmu_get_step_for_sid(smmu, 0));
+	}
 }
 
 static void arm_smmu_impl_remove(void *data)
@@ -4614,8 +4627,8 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	/* Record our private device structure */
 	platform_set_drvdata(pdev, smmu);
 
-	/* Check for RMRs and install bypass STEs if any */
-	arm_smmu_rmr_install_bypass_ste(smmu);
+	/* Install bypass STEs if any */
+	arm_smmu_install_bypass_ste(smmu);
 
 	/* Reset the device */
 	ret = arm_smmu_device_reset(smmu);
