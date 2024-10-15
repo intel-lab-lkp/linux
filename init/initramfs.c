@@ -249,7 +249,7 @@ static void __init read_into(char *buf, unsigned size, enum state next)
 	}
 }
 
-static __initdata char *header_buf, *symlink_buf, *name_buf;
+static __initdata char *header_buf, *name_buf;
 
 static int __init do_start(void)
 {
@@ -293,7 +293,7 @@ static int __init do_header(void)
 	if (S_ISLNK(mode)) {
 		if (body_len > PATH_MAX)
 			return 0;
-		collect = collected = symlink_buf;
+		collect = collected = name_buf;
 		remains = N_ALIGN(name_len) + body_len;
 		next_state = GotSymlink;
 		state = Collect;
@@ -487,10 +487,9 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	static __initdata char msg_buf[64];
 
 	header_buf = kmalloc(110, GFP_KERNEL);
-	symlink_buf = kmalloc(PATH_MAX + N_ALIGN(PATH_MAX) + 1, GFP_KERNEL);
-	name_buf = kmalloc(N_ALIGN(PATH_MAX), GFP_KERNEL);
-
-	if (!header_buf || !symlink_buf || !name_buf)
+	/* 2x PATH_MAX as @name_buf is also used for staging symlink targets */
+	name_buf = kmalloc(N_ALIGN(PATH_MAX) + PATH_MAX + 1, GFP_KERNEL);
+	if (!header_buf || !name_buf)
 		panic_show_mem("can't allocate buffers");
 
 	state = Start;
@@ -536,7 +535,6 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	}
 	dir_utime();
 	kfree(name_buf);
-	kfree(symlink_buf);
 	kfree(header_buf);
 	return message;
 }
