@@ -1,3 +1,5 @@
 mixer-test
 pcm-test
 test-pcmtest-driver
+global-timer
+utimer-test
