@@ -231,9 +231,9 @@ static void ovl_file_modified(struct file *file)
 	ovl_copyattr(file_inode(file));
 }
 
-static void ovl_file_end_write(struct file *file, loff_t, ssize_t)
+static void ovl_file_end_write(struct kiocb *iocb, ssize_t)
 {
-	ovl_file_modified(file);
+	ovl_file_modified(iocb->ki_filp);
 }
 
 static void ovl_file_accessed(struct file *file)
@@ -271,7 +271,6 @@ static ssize_t ovl_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
 		.cred = ovl_creds(file_inode(file)->i_sb),
-		.user_file = file,
 		.accessed = ovl_file_accessed,
 	};
 
@@ -298,7 +297,6 @@ static ssize_t ovl_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 	int ifl = iocb->ki_flags;
 	struct backing_file_ctx ctx = {
 		.cred = ovl_creds(inode->i_sb),
-		.user_file = file,
 		.end_write = ovl_file_end_write,
 	};
 
@@ -338,7 +336,6 @@ static ssize_t ovl_splice_read(struct file *in, loff_t *ppos,
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
 		.cred = ovl_creds(file_inode(in)->i_sb),
-		.user_file = in,
 		.accessed = ovl_file_accessed,
 	};
 
@@ -346,7 +343,7 @@ static ssize_t ovl_splice_read(struct file *in, loff_t *ppos,
 	if (ret)
 		return ret;
 
-	ret = backing_file_splice_read(fd_file(real), ppos, pipe, len, flags, &ctx);
+	ret = backing_file_splice_read(fd_file(real), in, ppos, pipe, len, flags, &ctx);
 	fdput(real);
 
 	return ret;
@@ -368,7 +365,6 @@ static ssize_t ovl_splice_write(struct pipe_inode_info *pipe, struct file *out,
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
 		.cred = ovl_creds(inode->i_sb),
-		.user_file = out,
 		.end_write = ovl_file_end_write,
 	};
 
@@ -380,8 +376,9 @@ static ssize_t ovl_splice_write(struct pipe_inode_info *pipe, struct file *out,
 	if (ret)
 		goto out_unlock;
 
-	ret = backing_file_splice_write(pipe, fd_file(real), ppos, len, flags, &ctx);
+	ret = backing_file_splice_write(pipe, fd_file(real), out, ppos, len, flags, &ctx);
 	fdput(real);
+
 
 out_unlock:
 	inode_unlock(inode);
@@ -420,7 +417,6 @@ static int ovl_mmap(struct file *file, struct vm_area_struct *vma)
 	struct file *realfile = file->private_data;
 	struct backing_file_ctx ctx = {
 		.cred = ovl_creds(file_inode(file)->i_sb),
-		.user_file = file,
 		.accessed = ovl_file_accessed,
 	};
 

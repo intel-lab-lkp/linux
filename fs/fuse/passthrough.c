@@ -18,11 +18,11 @@ static void fuse_file_accessed(struct file *file)
 	fuse_invalidate_atime(inode);
 }
 
-static void fuse_passthrough_end_write(struct file *file, loff_t pos, ssize_t ret)
+static void fuse_passthrough_end_write(struct kiocb *iocb, ssize_t ret)
 {
-	struct inode *inode = file_inode(file);
+	struct inode *inode = file_inode(iocb->ki_filp);
 
-	fuse_write_update_attr(inode, pos, ret);
+	fuse_write_update_attr(inode, iocb->ki_pos, ret);
 }
 
 ssize_t fuse_passthrough_read_iter(struct kiocb *iocb, struct iov_iter *iter)
@@ -34,7 +34,6 @@ ssize_t fuse_passthrough_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
 		.cred = ff->cred,
-		.user_file = file,
 		.accessed = fuse_file_accessed,
 	};
 
@@ -62,7 +61,6 @@ ssize_t fuse_passthrough_write_iter(struct kiocb *iocb,
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
 		.cred = ff->cred,
-		.user_file = file,
 		.end_write = fuse_passthrough_end_write,
 	};
 
@@ -88,15 +86,13 @@ ssize_t fuse_passthrough_splice_read(struct file *in, loff_t *ppos,
 	struct file *backing_file = fuse_file_passthrough(ff);
 	struct backing_file_ctx ctx = {
 		.cred = ff->cred,
-		.user_file = in,
 		.accessed = fuse_file_accessed,
 	};
 
 	pr_debug("%s: backing_file=0x%p, pos=%lld, len=%zu, flags=0x%x\n", __func__,
-		 backing_file, ppos ? *ppos : 0, len, flags);
+		 backing_file, *ppos, len, flags);
 
-	return backing_file_splice_read(backing_file, ppos, pipe, len, flags,
-					&ctx);
+	return backing_file_splice_read(backing_file, in, ppos, pipe, len, flags, &ctx);
 }
 
 ssize_t fuse_passthrough_splice_write(struct pipe_inode_info *pipe,
@@ -109,16 +105,14 @@ ssize_t fuse_passthrough_splice_write(struct pipe_inode_info *pipe,
 	ssize_t ret;
 	struct backing_file_ctx ctx = {
 		.cred = ff->cred,
-		.user_file = out,
 		.end_write = fuse_passthrough_end_write,
 	};
 
 	pr_debug("%s: backing_file=0x%p, pos=%lld, len=%zu, flags=0x%x\n", __func__,
-		 backing_file, ppos ? *ppos : 0, len, flags);
+		 backing_file, *ppos, len, flags);
 
 	inode_lock(inode);
-	ret = backing_file_splice_write(pipe, backing_file, ppos, len, flags,
-					&ctx);
+	ret = backing_file_splice_write(pipe, backing_file, out, ppos, len, flags, &ctx);
 	inode_unlock(inode);
 
 	return ret;
@@ -130,7 +124,6 @@ ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma)
 	struct file *backing_file = fuse_file_passthrough(ff);
 	struct backing_file_ctx ctx = {
 		.cred = ff->cred,
-		.user_file = file,
 		.accessed = fuse_file_accessed,
 	};
 
