@@ -279,6 +279,8 @@ static inline void *neighbour_priv(const struct neighbour *n)
 extern const struct nla_policy nda_policy[];
 
 #define neigh_for_each(pos, head) hlist_for_each_entry(pos, head, hash)
+#define neigh_for_each_safe(pos, tmp, head) hlist_for_each_entry_safe(pos, tmp, head, hash)
+
 #define neigh_hlist_entry(n) hlist_entry_safe(n, struct neighbour, hash)
 #define neigh_first_rcu(bucket) \
 	neigh_hlist_entry(rcu_dereference(hlist_first_rcu(bucket)))
@@ -312,12 +314,9 @@ static inline struct neighbour *___neigh_lookup_noref(
 	u32 hash_val;
 
 	hash_val = hash(pkey, dev, nht->hash_rnd) >> (32 - nht->hash_shift);
-	for (n = rcu_dereference(nht->hash_buckets[hash_val]);
-	     n != NULL;
-	     n = rcu_dereference(n->next)) {
+	neigh_for_each(n, &nht->hash_heads[hash_val])
 		if (n->dev == dev && key_eq(n, pkey))
 			return n;
-	}
 
 	return NULL;
 }
