@@ -69,6 +69,10 @@ properties:
       register access with page 0 offsets. Set for Cavium ThunderX2 silicon that
       doesn't support SMMU page1 register space.
 
+  nxp,imx95-bypass-sid-zero:
+    type: boolean
+    description: StreamID 0 that needs transaction set as bypass mode.
+
 required:
   - compatible
   - reg
