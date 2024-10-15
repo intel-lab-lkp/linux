@@ -98,6 +98,13 @@
 /* Used to indicate that a guest passthrough interrupt needs to be handled */
 #define RESUME_PASSTHROUGH	(RESUME_GUEST | RESUME_FLAG_ARCH2)
 
+/* Clear LPCR_MER bit - If we run a L2 vCPU with LPCR_MER bit set but no pending external
+ * interrupts, we end up getting a flood of spurious interrupts in L2 KVM guests. To avoid
+ * that, reset LPCR_MER and let the check for pending interrupts in kvmhv_run_single_vcpu()
+ * set LPCR_MER if there are pending interrupts.
+ */
+#define kvmppc_reset_lpcr_mer(vcpu) (vcpu->arch.vcore->lpcr &= ~LPCR_MER)
+
 /* Used as a "null" value for timebase values */
 #define TB_NIL	(~(u64)0)
 
@@ -5097,7 +5104,7 @@ static int kvmppc_vcpu_run_hv(struct kvm_vcpu *vcpu)
 		accumulate_time(vcpu, &vcpu->arch.guest_entry);
 		if (cpu_has_feature(CPU_FTR_ARCH_300))
 			r = kvmhv_run_single_vcpu(vcpu, ~(u64)0,
-						  vcpu->arch.vcore->lpcr);
+						  kvmppc_reset_lpcr_mer(vcpu));
 		else
 			r = kvmppc_run_vcpu(vcpu);
 
