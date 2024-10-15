@@ -32,6 +32,15 @@ config INITRAMFS_FORCE
 	  and is useful if you cannot or don't want to change the image
 	  your bootloader passes to the kernel.
 
+config INITRAMFS_SIG
+	bool "Validate signed initramfs images"
+	depends on SYSTEM_DATA_VERIFICATION
+	help
+	  This option validates that image provided by the
+	  bootloader is signed. The decision to accept or
+	  reject the image is then left to the kernel lockdown
+	  logic.
+
 config INITRAMFS_ROOT_UID
 	int "User ID to map to 0 (user root)"
 	depends on INITRAMFS_SOURCE!=""
