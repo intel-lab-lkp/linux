@@ -42,7 +42,7 @@ int jfs_umount(struct super_block *sb)
 	struct inode *ipaimap = sbi->ipaimap;
 	struct inode *ipaimap2 = sbi->ipaimap2;
 	struct jfs_log *log;
-	int rc = 0;
+	int rc = 0, sb_update = 0;
 
 	jfs_info("UnMount JFS: sb:0x%p", sb);
 
@@ -51,11 +51,19 @@ int jfs_umount(struct super_block *sb)
 	 *
 	 * if mounted read-write and log based recovery was enabled
 	 */
-	if ((log = sbi->log))
+	if ((log = sbi->log)) {
 		/*
 		 * Wait for outstanding transactions to be written to log:
 		 */
 		jfs_flush_journal(log, 2);
+		/*
+		 * close log:
+		 *
+		 * remove file system from log active file system list.
+		 */
+		rc = lmLogClose(sb);
+		sb_update = 1;
+	}
 
 	/*
 	 * close fileset inode allocation map (aka fileset inode)
@@ -103,15 +111,8 @@ int jfs_umount(struct super_block *sb)
 	 * consistent state) and log superblock active file system
 	 * list (to signify skip logredo()).
 	 */
-	if (log) {		/* log = NULL if read-only mount */
+	if (sb_update) {		/* log = NULL if read-only mount */
 		updateSuper(sb, FM_CLEAN);
-
-		/*
-		 * close log:
-		 *
-		 * remove file system from log active file system list.
-		 */
-		rc = lmLogClose(sb);
 	}
 	jfs_info("UnMount JFS Complete: rc = %d", rc);
 	return rc;
