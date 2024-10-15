@@ -25,9 +25,11 @@
 #define PTP_PPS_EVENT PPS_CAPTUREASSERT
 #define PTP_PPS_MODE (PTP_PPS_DEFAULTS | PPS_CANWAIT | PPS_TSFMT_TSPEC)
 
+static int ptp_udev_uevent(const struct device *dev, struct kobj_uevent_env *env);
 const struct class ptp_class = {
 	.name = "ptp",
-	.dev_groups = ptp_groups
+	.dev_groups = ptp_groups,
+	.dev_uevent = ptp_udev_uevent
 };
 
 /* private globals */
@@ -513,6 +515,13 @@ void ptp_cancel_worker_sync(struct ptp_clock *ptp)
 EXPORT_SYMBOL(ptp_cancel_worker_sync);
 
 /* module operations */
+
+static int ptp_udev_uevent(const struct device *dev, struct kobj_uevent_env *env)
+{
+	struct ptp_clock *ptp = container_of(dev, struct ptp_clock, dev);
+
+	return add_uevent_var(env, "PTP_CLOCK_NAME=%s", ptp->info->name);
+}
 
 static void __exit ptp_exit(void)
 {
