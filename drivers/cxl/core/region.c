@@ -3475,6 +3475,14 @@ out:
 					p->res->start, p->res->end, cxlr,
 					is_system_ram) > 0)
 			return 0;
+		/*
+		 * Accelerator regions have specific usage, skip
+		 * device-dax registration.
+		 */
+		if (cxlr->type == CXL_DECODER_ACCEL)
+			return 0;
+
+		/* Expander routes to device-dax */
 		return devm_cxl_add_dax_region(cxlr);
 	default:
 		dev_dbg(&cxlr->dev, "unsupported region mode: %d\n",
