@@ -1428,11 +1428,7 @@ static int dapm_widget_power_check(struct snd_soc_dapm_widget *w)
 	if (w->power_checked)
 		return w->new_power;
 
-	if (w->force)
-		w->new_power = 1;
-	else
-		w->new_power = w->power_check(w);
-
+	w->new_power = w->force ? 1 : w->power_check(w);
 	w->power_checked = true;
 
 	return w->new_power;
