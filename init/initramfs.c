@@ -573,6 +573,20 @@ static int __init initramfs_async_setup(char *str)
 }
 __setup("initramfs_async=", initramfs_async_setup);
 
+static bool  __initdata enforce_initrd_sig = IS_ENABLED(CONFIG_INITRAMFS_SIG);
+#ifdef CONFIG_INITRAMFS_SIG
+static int __init initrd_sig_setup(char *str)
+{
+	if (!strcmp(str, "enforcing"))
+		enforce_initrd_sig = true;
+	else if (!strcmp(str, "checking"))
+		enforce_initrd_sig = false;
+	return 1;
+}
+__setup("initrdsig=", initrd_sig_setup);
+#endif
+
+
 extern char __initramfs_start[];
 extern unsigned long __initramfs_size;
 #include <linux/initrd.h>
@@ -766,7 +780,10 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	else
 		printk(KERN_INFO "Unpacking initramfs...\n");
 
-	initrd_signature_check(&initrd_len);
+	if (initrd_signature_check(&initrd_len) && enforce_initrd_sig) {
+		printk(KERN_EMERG "Initramfs signature required\n");
+		goto done;
+	}
 
 	err = unpack_to_rootfs((char *)initrd_start, initrd_len);
 	if (err) {
