@@ -160,6 +160,13 @@ static const struct iio_chan_spec_ext_info inv_icm42600_accel_ext_infos[] = {
 	{},
 };
 
+static const struct iio_event_spec icm42600_step_event = {
+	.type = IIO_EV_TYPE_CHANGE,
+	.dir = IIO_EV_DIR_NONE,
+	.mask_shared_by_type = BIT(IIO_EV_INFO_ENABLE) |
+	                       BIT(IIO_EV_INFO_VALUE),
+};
+
 static const struct iio_chan_spec inv_icm42600_accel_channels[] = {
 	INV_ICM42600_ACCEL_CHAN(IIO_MOD_X, INV_ICM42600_ACCEL_SCAN_X,
 				inv_icm42600_accel_ext_infos),
@@ -169,6 +176,14 @@ static const struct iio_chan_spec inv_icm42600_accel_channels[] = {
 				inv_icm42600_accel_ext_infos),
 	INV_ICM42600_TEMP_CHAN(INV_ICM42600_ACCEL_SCAN_TEMP),
 	IIO_CHAN_SOFT_TIMESTAMP(INV_ICM42600_ACCEL_SCAN_TIMESTAMP),
+	{
+	        .type = IIO_STEPS,
+	        .info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
+	        .scan_index = -1,
+	        .event_spec = &icm42600_step_event,
+	        .num_event_specs = 1,
+	},
+
 };
 
 /*
@@ -668,6 +683,31 @@ out_unlock:
 	return ret;
 }
 
+static int inv_icm42600_steps_read_raw(struct iio_dev *indio_dev,
+                               struct iio_chan_spec const *chan,
+                               int *val, int *val2, long mask)
+{
+       struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+       __le16 steps;
+       int ret;
+
+       if (mask == IIO_CHAN_INFO_PROCESSED) {
+               ret = iio_device_claim_direct_mode(indio_dev);
+               if (ret)
+                       return ret;
+               ret = regmap_bulk_read(st->map, INV_ICM42600_REG_APEX_DATA, &steps, sizeof(steps));
+               if (ret)
+                       return ret;
+               iio_device_release_direct_mode(indio_dev);
+               if (ret)
+                       return ret;
+               *val = steps;
+               return IIO_VAL_INT;
+       }
+
+       return -EINVAL;
+}
+
 static int inv_icm42600_accel_read_raw(struct iio_dev *indio_dev,
 				       struct iio_chan_spec const *chan,
 				       int *val, int *val2, long mask)
@@ -681,6 +721,8 @@ static int inv_icm42600_accel_read_raw(struct iio_dev *indio_dev,
 		break;
 	case IIO_TEMP:
 		return inv_icm42600_temp_read_raw(indio_dev, chan, val, val2, mask);
+	case IIO_STEPS:
+		return inv_icm42600_steps_read_raw(indio_dev, chan, val, val2, mask);
 	default:
 		return -EINVAL;
 	}
@@ -824,6 +866,126 @@ static int inv_icm42600_accel_hwfifo_flush(struct iio_dev *indio_dev,
 	return ret;
 }
 
+/*****************Pedometer Functionality**************/
+static int inv_icm42600_step_en(struct inv_icm42600_state *st, int state)
+{
+	struct inv_icm42600_sensor_conf conf = INV_ICM42600_SENSOR_CONF_APEX;
+	int ret, value;
+
+	if (state) {
+
+		ret = inv_icm42600_set_accel_conf(st, &conf, NULL);
+		if (ret)
+			return ret;
+
+		ret = regmap_write(st->map, INV_ICM42600_REG_APEX_CONFIG0,
+		                        INV_ICM42600_DMP_ODR_50Hz);
+		if (ret)
+			return ret;
+
+		ret = regmap_write(st->map, INV_ICM42600_REG_SIGNAL_PATH_RESET,
+		                        INV_ICM42600_SIGNAL_PATH_RESET_DMP_MEM_RESET);
+		if (ret)
+			return ret;
+		msleep(1);
+
+		ret = regmap_write(st->map, INV_ICM42600_REG_SIGNAL_PATH_RESET,
+		                        INV_ICM42600_SIGNAL_PATH_RESET_DMP_INIT_EN);
+		if (ret)
+			return ret;
+
+		ret = regmap_write(st->map, INV_ICM42600_REG_INT_SOURCE6,
+		                        INV_ICM42600_STEP_DET_INT1_EN);
+		if (ret)
+			return ret;
+
+		value = INV_ICM42600_DMP_ODR_50Hz | INV_ICM42600_PED_ENABLE;
+		ret = regmap_write(st->map, INV_ICM42600_REG_APEX_CONFIG0, value);
+		if (ret)
+			return ret;
+
+		st->pedometer_enable = true;
+
+	} else {
+
+		ret = regmap_write(st->map, INV_ICM42600_REG_APEX_CONFIG0, 0);
+		if (ret)
+			return ret;
+
+		ret = regmap_write(st->map, INV_ICM42600_REG_INT_SOURCE6, 0);
+		if (ret)
+			return ret;
+
+		st->pedometer_enable = false;
+	 }
+
+	return 0;
+}
+
+static int inv_icm42600_write_event_config(struct iio_dev *indio_dev,
+                                     const struct iio_chan_spec *chan,
+                                     enum iio_event_type type,
+                                     enum iio_event_direction dir, int state)
+{
+	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+	int ret;
+
+	if(chan->type != IIO_STEPS)
+	        return -EINVAL;
+
+	mutex_lock(&st->lock);
+
+	ret = inv_icm42600_step_en(st, state);
+
+	mutex_unlock(&st->lock);
+	return ret;
+}
+
+static int inv_icm42600_read_event_config(struct iio_dev *indio_dev,
+                                    const struct iio_chan_spec *chan,
+                                    enum iio_event_type type,
+                                    enum iio_event_direction dir)
+{
+	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+	int value;
+
+	if (chan->type != IIO_STEPS)
+	        return -EINVAL;
+
+	regmap_read(st->map, INV_ICM42600_REG_APEX_CONFIG0, &value);
+
+	if (value & INV_ICM42600_PED_ENABLE)
+	        return 1;
+	else
+	        return 0;
+}
+
+static int inv_icm42600_read_event_value(struct iio_dev *indio_dev,
+                                   const struct iio_chan_spec *chan,
+                                   enum iio_event_type type,
+                                   enum iio_event_direction dir,
+                                   enum iio_event_info info,
+                                   int *val, int *val2)
+{
+	struct inv_icm42600_state *st = iio_device_get_drvdata(indio_dev);
+
+	mutex_lock(&st->lock);
+
+	if (type == IIO_EV_TYPE_CHANGE) {
+		if (st->pedometer_value == true) {
+			*val = 1;
+		        st->pedometer_value = false;
+		} else {
+		        *val = 0;
+		}
+		mutex_unlock(&st->lock);
+		return IIO_VAL_INT;
+	}
+
+	mutex_unlock(&st->lock);
+	return -EINVAL;
+}
+
 static const struct iio_info inv_icm42600_accel_info = {
 	.read_raw = inv_icm42600_accel_read_raw,
 	.read_avail = inv_icm42600_accel_read_avail,
@@ -833,6 +995,9 @@ static const struct iio_info inv_icm42600_accel_info = {
 	.update_scan_mode = inv_icm42600_accel_update_scan_mode,
 	.hwfifo_set_watermark = inv_icm42600_accel_hwfifo_set_watermark,
 	.hwfifo_flush_to_buffer = inv_icm42600_accel_hwfifo_flush,
+	.write_event_config = inv_icm42600_write_event_config,
+	.read_event_config  = inv_icm42600_read_event_config,
+	.read_event_value   = inv_icm42600_read_event_value,
 };
 
 struct iio_dev *inv_icm42600_accel_init(struct inv_icm42600_state *st)

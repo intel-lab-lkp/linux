@@ -122,6 +122,7 @@ struct inv_icm42600_sensor_conf {
 	int filter;
 };
 #define INV_ICM42600_SENSOR_CONF_INIT		{-1, -1, -1, -1}
+#define INV_ICM42600_SENSOR_CONF_APEX		{ 2, 0, 9, 6}
 
 struct inv_icm42600_conf {
 	struct inv_icm42600_sensor_conf gyro;
@@ -141,6 +142,8 @@ struct inv_icm42600_suspended {
  *  @chip:		chip identifier.
  *  @name:		chip name.
  *  @map:		regmap pointer.
+ *  @pedometer_enable	status of pedometer function
+ *  @pedometer_value	status of steps event occurnce
  *  @vdd_supply:	VDD voltage regulator for the chip.
  *  @vddio_supply:	I/O voltage regulator for the chip.
  *  @orientation:	sensor chip orientation relative to main hardware.
@@ -157,6 +160,8 @@ struct inv_icm42600_state {
 	enum inv_icm42600_chip chip;
 	const char *name;
 	struct regmap *map;
+	bool pedometer_enable;
+	bool pedometer_value;
 	struct regulator *vdd_supply;
 	struct regulator *vddio_supply;
 	struct iio_mount_matrix orientation;
@@ -301,6 +306,15 @@ struct inv_icm42600_sensor_state {
 #define INV_ICM42600_GYRO_ACCEL_CONFIG0_GYRO_FILT(_f)	\
 		FIELD_PREP(GENMASK(3, 0), (_f))
 
+/* Pedometer functionality */
+#define INV_ICM42600_REG_APEX_CONFIG0                  0x0056
+#define INV_ICM42600_DMP_ODR_50Hz                      BIT(1)
+#define INV_ICM42600_PED_ENABLE                        BIT(5)
+#define INV_ICM42600_REG_INT_STATUS3                   0x0038
+#define INV_ICM42600_STEP_DET_INT                      BIT(5)
+#define INV_ICM42600_REG_APEX_DATA                     0x0031 // 2 Byte little-endian
+
+
 #define INV_ICM42600_REG_TMST_CONFIG			0x0054
 #define INV_ICM42600_TMST_CONFIG_MASK			GENMASK(4, 0)
 #define INV_ICM42600_TMST_CONFIG_TMST_TO_REGS_EN	BIT(4)
@@ -373,6 +387,8 @@ struct inv_icm42600_sensor_state {
 #define INV_ICM42600_INTF_CONFIG6_I3C_SDR_EN		BIT(0)
 
 /* User bank 4 (MSB 0x40) */
+#define INV_ICM42600_REG_INT_SOURCE6                    0x404D
+#define INV_ICM42600_STEP_DET_INT1_EN              	BIT(5)
 #define INV_ICM42600_REG_INT_SOURCE8			0x404F
 #define INV_ICM42600_INT_SOURCE8_FSYNC_IBI_EN		BIT(5)
 #define INV_ICM42600_INT_SOURCE8_PLL_RDY_IBI_EN		BIT(4)

@@ -15,7 +15,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
-
+#include <linux/iio/events.h>
+#include <linux/of_irq.h>
 #include <linux/iio/iio.h>
 
 #include "inv_icm42600.h"
@@ -533,6 +534,19 @@ static irqreturn_t inv_icm42600_irq_handler(int irq, void *_data)
 
 	mutex_lock(&st->lock);
 
+	ret = regmap_read(st->map, INV_ICM42600_REG_INT_STATUS3, &status);
+	if (ret)
+	        goto out_unlock;
+
+	if (status & INV_ICM42600_STEP_DET_INT) {
+	        iio_push_event(st->indio_accel, IIO_MOD_EVENT_CODE(IIO_STEPS, 0,
+	                                                     IIO_NO_MOD,
+	                                                     IIO_EV_TYPE_CHANGE,
+	                                                     IIO_EV_DIR_NONE),
+	                                                        st->timestamp.accel);
+	        st->pedometer_value = true;
+	}
+
 	ret = regmap_read(st->map, INV_ICM42600_REG_INT_STATUS, &status);
 	if (ret)
 		goto out_unlock;
@@ -852,12 +866,20 @@ static int inv_icm42600_runtime_suspend(struct device *dev)
 	mutex_lock(&st->lock);
 
 	/* disable all sensors */
-	ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
-					 INV_ICM42600_SENSOR_MODE_OFF, false,
-					 NULL);
-	if (ret)
-		goto error_unlock;
+	if (st->pedometer_enable) {
+		ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
+						 INV_ICM42600_SENSOR_MODE_LOW_POWER,
+						false, NULL);
+		if (ret)
+			goto error_unlock;
+	} else {
 
+		ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
+						 INV_ICM42600_SENSOR_MODE_OFF,
+						 false, NULL);
+		if (ret)
+			goto error_unlock;
+	}
 	regulator_disable(st->vddio_supply);
 
 error_unlock:
