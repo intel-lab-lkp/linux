@@ -108,14 +108,39 @@ static struct inet_protosw smc_inet6_protosw = {
 };
 #endif /* CONFIG_IPV6 */
 
+static struct lock_class_key smc_slock_keys[2];
+static struct lock_class_key smc_keys[2];
+
 static int smc_inet_init_sock(struct sock *sk)
 {
 	struct net *net = sock_net(sk);
+	int rc;
 
 	/* init common smc sock */
 	smc_sk_init(net, sk, IPPROTO_SMC);
 	/* create clcsock */
-	return smc_create_clcsk(net, sk, sk->sk_family);
+	rc = smc_create_clcsk(net, sk, sk->sk_family);
+	if (rc)
+		return rc;
+
+	switch (sk->sk_family) {
+		case AF_INET:
+			sock_lock_init_class_and_name(sk, "slock-AF_INET-SMC",
+					&smc_slock_keys[0],
+					"sk_lock-AF_INET-SMC",
+					&smc_keys[0]);
+			break;
+		case AF_INET6:
+			sock_lock_init_class_and_name(sk, "slock-AF_INET6-SMC",
+					&smc_slock_keys[1],
+					"sk_lock-AF_INET6-SMC",
+					&smc_keys[1]);
+			break;
+		default:
+			WARN_ON_ONCE(1);
+	}
+
+	return 0;
 }
 
 int __init smc_inet_init(void)
