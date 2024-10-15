@@ -40,6 +40,9 @@
 #include <linux/hmm.h>
 #include <linux/memremap.h>
 #include <linux/migrate.h>
+#include <linux/pci-p2pdma.h>
+#include <nvkm/core/pci.h>
+
 
 /*
  * FIXME: this is ugly right now we are using TTM to allocate vram and we pin
@@ -77,9 +80,15 @@ struct nouveau_dmem_migrate {
 	struct nouveau_channel *chan;
 };
 
+struct nouveau_dmem_hmm_p2p {
+	size_t p2p_size;
+	void *p2p_start_addr;
+};
+
 struct nouveau_dmem {
 	struct nouveau_drm *drm;
 	struct nouveau_dmem_migrate migrate;
+	struct nouveau_dmem_hmm_p2p hmm_p2p;
 	struct list_head chunks;
 	struct mutex mutex;
 	struct page *free_pages;
@@ -158,6 +167,61 @@ static int nouveau_dmem_copy_one(struct nouveau_drm *drm, struct page *spage,
 	return 0;
 }
 
+static int nouveau_dmem_bar1_mapping(struct nouveau_bo *nvbo,
+				     unsigned long long *bus_addr)
+{
+	int ret;
+	struct ttm_resource *mem = nvbo->bo.resource;
+
+	if (mem->bus.offset) {
+		*bus_addr = mem->bus.offset;
+		return 0;
+	}
+
+	if (PFN_UP(nvbo->bo.base.size) > PFN_UP(nvbo->bo.resource->size))
+		return -EINVAL;
+
+	ret = ttm_bo_reserve(&nvbo->bo, false, false, NULL);
+	if (ret)
+		return ret;
+
+	ret = nvbo->bo.bdev->funcs->io_mem_reserve(nvbo->bo.bdev, mem);
+	*bus_addr = mem->bus.offset;
+
+	ttm_bo_unreserve(&nvbo->bo);
+	return ret;
+}
+
+static struct page *nouveau_dmem_get_dma_page(struct page *private_page)
+{
+	int ret;
+	unsigned long long offset_in_chunk, offset_in_bar1;
+	unsigned long long chunk_bus_addr, page_bus_addr;
+	unsigned long long bar1_base_addr;
+	struct nouveau_drm *drm = page_to_drm(private_page);
+	struct nouveau_bo *nvbo = nouveau_page_to_chunk(private_page)->bo;
+	struct nvkm_device *nv_device = nvxx_device(drm);
+	void *p2p_start_addr = drm->dmem->hmm_p2p.p2p_start_addr;
+	size_t p2p_size = drm->dmem->hmm_p2p.p2p_size;
+
+	bar1_base_addr = nv_device->func->resource_addr(nv_device, 1);
+	offset_in_chunk =
+		(page_to_pfn(private_page) << PAGE_SHIFT) -
+		nouveau_page_to_chunk(private_page)->pagemap.range.start;
+
+	ret = nouveau_dmem_bar1_mapping(nvbo, &chunk_bus_addr);
+	if (ret)
+		return ERR_PTR(ret);
+
+	page_bus_addr = chunk_bus_addr + offset_in_chunk;
+	if (!p2p_size || page_bus_addr > bar1_base_addr + p2p_size ||
+	    page_bus_addr < bar1_base_addr)
+		return ERR_PTR(-ENOMEM);
+
+	offset_in_bar1 = page_bus_addr - bar1_base_addr;
+	return virt_to_page(p2p_start_addr + offset_in_bar1);
+}
+
 static vm_fault_t nouveau_dmem_migrate_to_ram(struct vm_fault *vmf)
 {
 	struct nouveau_drm *drm = page_to_drm(vmf->page);
@@ -219,8 +283,9 @@ done:
 }
 
 static const struct dev_pagemap_ops nouveau_dmem_pagemap_ops = {
-	.page_free		= nouveau_dmem_page_free,
-	.migrate_to_ram		= nouveau_dmem_migrate_to_ram,
+	.page_free		 = nouveau_dmem_page_free,
+	.migrate_to_ram		 = nouveau_dmem_migrate_to_ram,
+	.get_dma_page_for_device = nouveau_dmem_get_dma_page,
 };
 
 static int
@@ -413,13 +478,30 @@ nouveau_dmem_evict_chunk(struct nouveau_dmem_chunk *chunk)
 	kvfree(dma_addrs);
 }
 
+static void nouveau_destroy_bar1_pci_p2p_mem(struct nouveau_drm *drm,
+					     struct pci_dev *pdev,
+					     void *p2p_start_addr,
+					     size_t p2p_size)
+{
+	if (p2p_size)
+		pci_free_p2pmem(pdev, p2p_start_addr, p2p_size);
+
+	NV_INFO(drm, "PCI P2P memory freed(%p)\n", p2p_start_addr);
+}
+
 void
 nouveau_dmem_fini(struct nouveau_drm *drm)
 {
 	struct nouveau_dmem_chunk *chunk, *tmp;
+	struct nvkm_device *nv_device = nvxx_device(drm);
 
 	if (drm->dmem == NULL)
 		return;
+
+	nouveau_destroy_bar1_pci_p2p_mem(drm,
+					 nv_device->func->pci(nv_device)->pdev,
+					 drm->dmem->hmm_p2p.p2p_start_addr,
+					 drm->dmem->hmm_p2p.p2p_size);
 
 	mutex_lock(&drm->dmem->mutex);
 
@@ -586,10 +668,30 @@ nouveau_dmem_migrate_init(struct nouveau_drm *drm)
 	return -ENODEV;
 }
 
+static int nouveau_alloc_bar1_pci_p2p_mem(struct nouveau_drm *drm,
+					  struct pci_dev *pdev, size_t size,
+					  void **pp2p_start_addr,
+					  size_t *pp2p_size)
+{
+	int ret;
+
+	ret = pci_p2pdma_add_resource(pdev, 1, size, 0);
+	if (ret)
+		return ret;
+
+	*pp2p_start_addr = pci_alloc_p2pmem(pdev, size);
+	*pp2p_size = (*pp2p_start_addr) ? size : 0;
+
+	NV_INFO(drm, "PCI P2P memory allocated(%p)\n", *pp2p_start_addr);
+	return 0;
+}
+
 void
 nouveau_dmem_init(struct nouveau_drm *drm)
 {
 	int ret;
+	struct nvkm_device *nv_device = nvxx_device(drm);
+	size_t bar1_size;
 
 	/* This only make sense on PASCAL or newer */
 	if (drm->client.device.info.family < NV_DEVICE_INFO_V0_PASCAL)
@@ -610,6 +712,17 @@ nouveau_dmem_init(struct nouveau_drm *drm)
 		kfree(drm->dmem);
 		drm->dmem = NULL;
 	}
+
+	/* Expose BAR1 for HMM P2P Memory */
+	bar1_size = nv_device->func->resource_size(nv_device, 1);
+	ret = nouveau_alloc_bar1_pci_p2p_mem(drm,
+					     nv_device->func->pci(nv_device)->pdev,
+					     bar1_size,
+					     &drm->dmem->hmm_p2p.p2p_start_addr,
+					     &drm->dmem->hmm_p2p.p2p_size);
+	if (ret)
+		NV_WARN(drm,
+			"PCI P2P memory allocation failed, HMM P2P won't be supported\n");
 }
 
 static unsigned long nouveau_dmem_migrate_copy_one(struct nouveau_drm *drm,
