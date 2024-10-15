@@ -314,7 +314,7 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	struct intel_display *display = to_intel_display(intel_dp);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	enum port port = dp_to_dig_port(intel_dp)->base.port;
-	u32 alpm_ctl;
+	u32 alpm_ctl, alpm_swing_setup;
 
 	if (DISPLAY_VER(display) < 20 ||
 	    (!intel_dp->psr.sel_update_enabled && !intel_dp_is_edp(intel_dp)))
@@ -331,10 +331,15 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 			ALPM_CTL_AUX_LESS_SLEEP_HOLD_TIME_50_SYMBOLS |
 			ALPM_CTL_AUX_LESS_WAKE_TIME(intel_dp->alpm_parameters.aux_less_wake_lines);
 
+
+		if (DISPLAY_VER(display) >= 30)
+			alpm_swing_setup = XE3_PORT_ALPM_CTL_MAX_PHY_SWING_SETUP(15);
+		else
+			alpm_swing_setup = PORT_ALPM_CTL_MAX_PHY_SWING_SETUP(15);
 		intel_de_write(display,
 			       PORT_ALPM_CTL(port),
 			       PORT_ALPM_CTL_ALPM_AUX_LESS_ENABLE |
-			       PORT_ALPM_CTL_MAX_PHY_SWING_SETUP(15) |
+			       alpm_swing_setup |
 			       PORT_ALPM_CTL_MAX_PHY_SWING_HOLD(0) |
 			       PORT_ALPM_CTL_SILENCE_PERIOD(
 				       intel_dp->alpm_parameters.silence_period_sym_clocks));
