@@ -626,6 +626,7 @@ config DRM_PANEL_SAMSUNG_AMS639RQ08
 config DRM_PANEL_SAMSUNG_S6E88A0_AMS452EF01
 	tristate "Samsung AMS452EF01 panel with S6E88A0 DSI video mode controller"
 	depends on OF
+	select DRM_DISPLAY_DSC_HELPER
 	select DRM_MIPI_DSI
 	select VIDEOMODE_HELPERS
 
