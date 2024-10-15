@@ -198,7 +198,7 @@ static int dw_pcie_irq_domain_alloc(struct irq_domain *domain,
 	for (i = 0; i < nr_irqs; i++)
 		irq_domain_set_info(domain, virq + i, bit + i,
 				    pp->msi_irq_chip,
-				    pp, handle_edge_irq,
+				    pp, handle_level_irq,
 				    NULL, NULL);
 
 	return 0;
