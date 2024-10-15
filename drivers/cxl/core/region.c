@@ -1005,9 +1005,10 @@ static int cxl_rr_alloc_decoder(struct cxl_port *port, struct cxl_region *cxlr,
 	}
 
 	/*
-	 * Endpoints should already match the region type, but backstop that
-	 * assumption with an assertion. Switch-decoders change mapping-type
-	 * based on what is mapped when they are assigned to a region.
+	 * Endpoints should already match the region type/coherence, but
+	 * backstop that assumption with an assertion. Switch-decoders change
+	 * mapping-type/coherence based on what is mapped when they are assigned
+	 * to a region.
 	 */
 	dev_WARN_ONCE(&cxlr->dev,
 		      port == cxled_to_port(cxled) &&
@@ -1016,6 +1017,13 @@ static int cxl_rr_alloc_decoder(struct cxl_port *port, struct cxl_region *cxlr,
 		      dev_name(&cxled_to_memdev(cxled)->dev),
 		      dev_name(&cxld->dev), cxld->target_type, cxlr->type);
 	cxld->target_type = cxlr->type;
+	dev_WARN_ONCE(&cxlr->dev,
+		      port == cxled_to_port(cxled) &&
+			      cxld->coherence != cxlr->coherence,
+		      "%s:%s mismatch decoder coherence %d -> %d\n",
+		      dev_name(&cxled_to_memdev(cxled)->dev),
+		      dev_name(&cxld->dev), cxld->coherence, cxlr->coherence);
+	cxld->coherence = cxlr->coherence;
 	cxl_rr->decoder = cxld;
 	return 0;
 }
@@ -1922,6 +1930,29 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		dev_dbg(&cxlr->dev, "%s:%s type mismatch: %d vs %d\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
 			cxled->cxld.target_type, cxlr->type);
+		return -ENXIO;
+	}
+
+	/* Set the coherence of region to that of the first endpoint */
+	if (cxlr->coherence == CXL_DECODER_INVALIDCOH) {
+		unsigned long flags = cxlrd->cxlsd.cxld.flags;
+		enum cxl_decoder_coherence coherence = cxled->cxld.coherence;
+
+		cxlr->coherence = coherence;
+		if ((coherence == CXL_DECODER_HOSTONLYCOH &&
+		     !(flags & CXL_DECODER_F_HOSTONLYCOH)) ||
+		    (coherence == CXL_DECODER_DEVCOH &&
+		     !(flags & CXL_DECODER_F_DEVCOH))) {
+			dev_dbg(&cxlr->dev,
+"%s:%s endpoint coherence: %d isn't supported by root decoder: %#lx\n",
+				dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+				coherence, flags);
+			return -ENXIO;
+		}
+	} else if (cxled->cxld.coherence != cxlr->coherence) {
+		dev_dbg(&cxlr->dev, "%s:%s coherence mismatch: %d vs %d\n",
+			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+			cxled->cxld.coherence, cxlr->coherence);
 		return -ENXIO;
 	}
 

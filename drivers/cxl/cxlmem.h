@@ -394,6 +394,16 @@ enum cxl_devtype {
 	CXL_DEVTYPE_CLASSMEM,
 };
 
+/*
+ * enum cxl_devcoherence - the coherence of the cxl device
+ * @CXL_DEVCOH_DEV      - HDM-D (type 2) or HDM-DB (type 2/3)
+ * @CXL_DEVCOH_HOSTONLY - HDM-H (type 3)
+ */
+enum cxl_devcoherence {
+	CXL_DEVCOH_DEV,
+	CXL_DEVCOH_HOSTONLY,
+};
+
 /**
  * struct cxl_dpa_perf - DPA performance property entry
  * @dpa_range: range for DPA address
@@ -427,6 +437,7 @@ struct cxl_dpa_perf {
  * @ram_res: Active Volatile memory capacity configuration
  * @serial: PCIe Device Serial Number
  * @type: Generic Memory Class device or Vendor Specific Memory device
+ * @coherence: Device or Host only coherence
  * @cxl_mbox: CXL mailbox context
  */
 struct cxl_dev_state {
@@ -442,6 +453,7 @@ struct cxl_dev_state {
 	struct resource ram_res;
 	u64 serial;
 	enum cxl_devtype type;
+	enum cxl_devcoherence coherence;
 	struct cxl_mailbox cxl_mbox;
 };
 
