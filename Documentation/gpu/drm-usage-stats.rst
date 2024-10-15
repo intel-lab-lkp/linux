@@ -56,7 +56,7 @@ Optional fully standardised keys
 Identification
 ^^^^^^^^^^^^^^
 
-- drm-pdev: <aaaa:bb.cc.d>
+- drm-pdev: <aaaa:bb:cc.d>
 
 For PCI devices this should contain the PCI slot address of the device in
 question.
