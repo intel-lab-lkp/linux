@@ -739,7 +739,7 @@ static ssize_t show_vgapass(struct device *device, struct device_attribute *attr
 }
 static struct device_attribute device_attrs[] = {
 	__ATTR(vgapass, S_IRUGO|S_IWUSR, show_vgapass, store_vgapass)
-	};
+};
 #endif
 
 static int sstfb_ioctl(struct fb_info *info, unsigned int cmd,
@@ -1436,7 +1436,8 @@ static int sstfb_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	sstfb_clear_screen(info);
-#fdef CONFIG_FB_DEVICE
+
+#ifdef CONFIG_FB_DEVICE
 	if (device_create_file(info->dev, &device_attrs[0]))
 		printk(KERN_WARNING "sstfb: can't create sysfs entry.\n");
 #endif
@@ -1468,6 +1469,7 @@ static void sstfb_remove(struct pci_dev *pdev)
 
 	info = pci_get_drvdata(pdev);
 	par = info->par;
+
 #ifdef CONFIG_FB_DEVICE
 	device_remove_file(info->dev, &device_attrs[0]);
 #endif
