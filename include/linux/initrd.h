@@ -5,6 +5,9 @@
 
 #define INITRD_MINOR 250 /* shouldn't collide with /dev/ram* too soon ... */
 
+/* the len here equals the modsig string len */
+#define INITRD_SIG_STRING "~initrd signature appended~\n"
+
 /* starting block # of image */
 extern int rd_image_start;
 

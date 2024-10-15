@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/init.h>
+#include <linux/initrd.h>
 #include <linux/async.h>
 #include <linux/fs.h>
 #include <linux/slab.h>
@@ -14,6 +15,7 @@
 #include <linux/kstrtox.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
+#include <linux/module_signature.h>
 #include <linux/namei.h>
 #include <linux/init_syscalls.h>
 #include <linux/umh.h>
@@ -688,8 +690,69 @@ static void __init populate_initrd_image(char *err)
 }
 #endif /* CONFIG_BLK_DEV_RAM */
 
+static int __init initrd_signature_check(size_t *initrd_len)
+{
+	struct module_signature *ms;
+	size_t sig_len;
+	int ret = -ENODATA;
+	const size_t m_len = sizeof(INITRD_SIG_STRING) - 1;
+
+	*initrd_len = (initrd_end - initrd_start);
+
+	if (*initrd_len < (m_len + sizeof(*ms)))
+		goto fail;
+
+	if (memcmp((char *)(initrd_end - m_len), INITRD_SIG_STRING, m_len)) {
+		pr_info("unsigned initramfs\n");
+		goto fail;
+	}
+
+	/* remove module sig string from len computations going forward */
+	*initrd_len -= m_len;
+
+	ms = (struct module_signature *)(initrd_end - sizeof(*ms) - m_len);
+
+	ret = mod_check_sig(ms, *initrd_len, "initramfs");
+	if (ret)
+		goto fail;
+
+	sig_len = be32_to_cpu(ms->sig_len);
+	*initrd_len -= sizeof(*ms) + sig_len;
+
+#ifdef CONFIG_INITRAMFS_SIG
+	ret = verify_pkcs7_signature((char *)initrd_start, *initrd_len,
+				     (char *)(initrd_start + *initrd_len),
+				     sig_len,
+				     VERIFY_USE_SECONDARY_KEYRING,
+				     VERIFYING_UNSPECIFIED_SIGNATURE,
+				     NULL, NULL);
+
+	switch (ret) {
+	case 0:
+		pr_info("initramfs: valid signature\n");
+		break;
+	case -ENODATA:
+		pr_err("initramfs: invalid signature\n");
+		break;
+	case -ENOPKG:
+		pr_err("initramfs: unsupported crypto\n");
+		break;
+	case -ENOKEY:
+		pr_err("initramfs: unknown key\n");
+		break;
+	default:
+		pr_err("initramfs: unknown error %d\n", ret);
+	}
+#endif
+
+fail:
+	return ret;
+}
+
 static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 {
+	size_t initrd_len;
+
 	/* Load the built in initramfs */
 	char *err = unpack_to_rootfs(__initramfs_start, __initramfs_size);
 	if (err)
@@ -703,7 +766,9 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	else
 		printk(KERN_INFO "Unpacking initramfs...\n");
 
-	err = unpack_to_rootfs((char *)initrd_start, initrd_end - initrd_start);
+	initrd_signature_check(&initrd_len);
+
+	err = unpack_to_rootfs((char *)initrd_start, initrd_len);
 	if (err) {
 #ifdef CONFIG_BLK_DEV_RAM
 		populate_initrd_image(err);
