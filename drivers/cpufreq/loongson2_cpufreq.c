@@ -153,6 +153,9 @@ static int __init cpufreq_init(void)
 		cpu_wait = loongson2_cpu_wait;
 	}
 
+	if (ret)
+		platform_driver_unregister(&platform_driver);
+
 	return ret;
 }
 
