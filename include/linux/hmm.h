@@ -41,6 +41,8 @@ enum hmm_pfn_flags {
 	/* Input flags */
 	HMM_PFN_REQ_FAULT = HMM_PFN_VALID,
 	HMM_PFN_REQ_WRITE = HMM_PFN_WRITE,
+	/* allow returning PCI P2PDMA pages */
+	HMM_PFN_REQ_ALLOW_P2P = 1,
 
 	HMM_PFN_FLAGS = 0xFFUL << HMM_PFN_ORDER_SHIFT,
 };

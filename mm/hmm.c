@@ -230,6 +230,8 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 	unsigned long cpu_flags;
 	pte_t pte = ptep_get(ptep);
 	uint64_t pfn_req_flags = *hmm_pfn;
+	struct page *(*get_dma_page_handler)(struct page *private_page);
+	struct page *dma_page;
 
 	if (pte_none_mostly(pte)) {
 		required_fault =
@@ -255,6 +257,32 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 				cpu_flags |= HMM_PFN_WRITE;
 			*hmm_pfn = swp_offset_pfn(entry) | cpu_flags;
 			return 0;
+		}
+
+		/*
+		 * P2P for supported pages, and according to caller request
+		 * translate the private page to the match P2P page if it fails
+		 * continue with the regular flow
+		 */
+		if (is_device_private_entry(entry)) {
+			get_dma_page_handler =
+				pfn_swap_entry_to_page(entry)
+					->pgmap->ops->get_dma_page_for_device;
+			if ((hmm_vma_walk->range->default_flags &
+			    HMM_PFN_REQ_ALLOW_P2P) &&
+			    get_dma_page_handler) {
+				dma_page = get_dma_page_handler(
+					pfn_swap_entry_to_page(entry));
+				if (!IS_ERR(dma_page)) {
+					cpu_flags = HMM_PFN_VALID;
+					if (is_writable_device_private_entry(
+						    entry))
+						cpu_flags |= HMM_PFN_WRITE;
+					*hmm_pfn = page_to_pfn(dma_page) |
+						   cpu_flags;
+					return 0;
+				}
+			}
 		}
 
 		required_fault =
