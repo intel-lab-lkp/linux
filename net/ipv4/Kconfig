@@ -679,6 +679,39 @@ config TCP_CONG_BBR
 	  AQM schemes that do not provide a delay signal. It requires the fq
 	  ("Fair Queue") pacing packet scheduler.
 
+config TCP_CONG_PRAGUE
+	tristate "TCP Prague"
+	default n
+	help
+	  TCP Prague is an enhancement for DCTCP to make DCTCP congestion
+	  control deployable into general Internet.
+	  TCP-Prague evolved from DCTCP, adapted for the use over the public
+	  internet and removing all reasons why the NW would need to build a
+	  queue in a bottleneck link to control the rate of this congestion-
+	  control. As such, it needs to implement the performance and safety
+	  requirements listed in Appendix A of IETF RFC9331:
+	  https://datatracker.ietf.org/doc/html/rfc9331
+
+	  This version enhances DCTCP by:
+	  * RTT independence
+	  * Fractional window and increased alpha resolution
+	  * Updated integer arithmetics and fixed-point scaling
+	  * Only Additive Increase for ACK of non-marked packets
+	  * Pacing/tso sizing
+	  * Pacing below minimum congestion window of 2
+	  * +/- 3% pacing variations per RTT
+	  * Enforce the use of ECT_1, Accurate ECN and ECN++
+
+	  All above improvements make Prague behave under 25ms very rate fair
+	  and RTT independent, assures full or close to full link utilization
+	  on a stable network link and allows the NW to control the rate down
+	  to 100kbps without the need to drop packets or built a queue.
+	  For RTTs from 0us till 25ms and link rates higher than 100kbps, the
+	  resulting rate equation is very close to:
+	  r [Mbps] = 1/p - 1
+	  Above 25ms, a correction factor of 25ms/RTT needs to be applied
+	  (reducing the rate proportional to the higher RTT).
+
 choice
 	prompt "Default TCP congestion control"
 	default DEFAULT_CUBIC
@@ -716,6 +749,9 @@ choice
 	config DEFAULT_BBR
 		bool "BBR" if TCP_CONG_BBR=y
 
+	config DEFAULT_PRAGUE
+		bool "Prague" if TCP_CONG_PRAGUE=y
+
 	config DEFAULT_RENO
 		bool "Reno"
 endchoice
@@ -740,6 +776,7 @@ config DEFAULT_TCP_CONG
 	default "dctcp" if DEFAULT_DCTCP
 	default "cdg" if DEFAULT_CDG
 	default "bbr" if DEFAULT_BBR
+	default "prague" if DEFAULT_PRAGUE
 	default "cubic"
 
 config TCP_SIGPOOL
