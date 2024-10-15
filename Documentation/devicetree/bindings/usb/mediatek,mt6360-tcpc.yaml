@@ -32,6 +32,27 @@ properties:
     description:
       Properties for usb c connector.
 
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+    description:
+      Any connector to the data bus of this controller should be specified.
+    properties:
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+    patternProperties:
+      "port@[0-2]$":
+        $ref: /schemas/graph.yaml#/properties/port
+        description:
+          It could be one of the following interface types. High-Speed
+          (HS) data bus endpoint to the Type-C connector, SuperSpeed (SS)
+          data bus endpoint to the Type-C connector, or Sideband Use (SBU)
+          AUX lines endpoint to the Type-C connector for the purpose of
+          handling altmode muxing and orientation switching.
+
 additionalProperties: false
 
 required:
