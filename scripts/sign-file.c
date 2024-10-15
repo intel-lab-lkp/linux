@@ -75,6 +75,7 @@ struct module_signature {
 #define PKEY_ID_PKCS7 2
 
 static char magic_number[] = "~Module signature appended~\n";
+static char magic_initrd[] = "~initrd signature appended~\n";
 
 static __attribute__((noreturn))
 void format(void)
@@ -226,6 +227,7 @@ int main(int argc, char **argv)
 	bool save_sig = false, replace_orig;
 	bool sign_only = false;
 	bool raw_sig = false;
+	bool initrd_sig = false;
 	unsigned char buf[4096];
 	unsigned long module_size, sig_size;
 	unsigned int use_signed_attrs;
@@ -253,7 +255,7 @@ int main(int argc, char **argv)
 #endif
 
 	do {
-		opt = getopt(argc, argv, "sdpk");
+		opt = getopt(argc, argv, "sdpki");
 		switch (opt) {
 		case 's': raw_sig = true; break;
 		case 'p': save_sig = true; break;
@@ -261,6 +263,7 @@ int main(int argc, char **argv)
 #ifndef USE_PKCS7
 		case 'k': use_keyid = CMS_USE_KEYID; break;
 #endif
+		case 'i': initrd_sig = true; break;
 		case -1: break;
 		default: format();
 		}
@@ -398,7 +401,11 @@ int main(int argc, char **argv)
 	sig_size = BIO_number_written(bd) - module_size;
 	sig_info.sig_len = htonl(sig_size);
 	ERR(BIO_write(bd, &sig_info, sizeof(sig_info)) < 0, "%s", dest_name);
-	ERR(BIO_write(bd, magic_number, sizeof(magic_number) - 1) < 0, "%s", dest_name);
+	if (initrd_sig)
+		ERR(BIO_write(bd, magic_initrd, sizeof(magic_initrd) - 1) < 0, "%s", dest_name);
+	else
+		ERR(BIO_write(bd, magic_number, sizeof(magic_number) - 1) < 0, "%s", dest_name);
+
 
 	ERR(BIO_free(bd) != 1, "%s", dest_name);
 
