@@ -234,7 +234,7 @@ enum msm_gpi_tce_code {
 #define GPI_RX_CHAN		(1)
 #define STATE_IGNORE		(U32_MAX)
 #define EV_FACTOR		(2)
-#define REQ_OF_DMA_ARGS		(5) /* # of arguments required from client */
+#define REQ_OF_DMA_ARGS		(3) /* # of arguments required from client */
 #define CHAN_TRES		64
 
 struct __packed xfer_compl_event {
@@ -481,6 +481,7 @@ struct gchan {
 	u32 chid;
 	u32 seid;
 	u32 protocol;
+	u32 num_chan_tres;
 	struct gpii *gpii;
 	enum gpi_ch_state ch_state;
 	enum gpi_pm_state pm_state;
@@ -1903,8 +1904,8 @@ static int gpi_ch_init(struct gchan *gchan)
 	}
 
 	/* allocate memory for event ring */
-	elements = CHAN_TRES << ev_factor;
-	ret = gpi_alloc_ring(&gpii->ev_ring, elements,
+	elements = max(gpii->gchan[0].num_chan_tres, gpii->gchan[1].num_chan_tres);
+	ret = gpi_alloc_ring(&gpii->ev_ring, elements << ev_factor,
 			     sizeof(union gpi_event), gpii);
 	if (ret)
 		goto exit_gpi_init;
@@ -2042,7 +2043,7 @@ static int gpi_alloc_chan_resources(struct dma_chan *chan)
 	mutex_lock(&gpii->ctrl_lock);
 
 	/* allocate memory for transfer ring */
-	ret = gpi_alloc_ring(&gchan->ch_ring, CHAN_TRES,
+	ret = gpi_alloc_ring(&gchan->ch_ring, gchan->num_chan_tres,
 			     sizeof(struct gpi_tre), gpii);
 	if (ret)
 		goto xfer_alloc_err;
@@ -2107,9 +2108,9 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 	int gpii;
 	struct gchan *gchan;
 
-	if (args->args_count < 3) {
-		dev_err(gpi_dev->dev, "gpii require minimum 2 args, client passed:%d args\n",
-			args->args_count);
+	if (args->args_count < REQ_OF_DMA_ARGS) {
+		dev_err(gpi_dev->dev, "gpii require minimum %d args, client passed:%d args\n",
+			REQ_OF_DMA_ARGS, args->args_count);
 		return NULL;
 	}
 
@@ -2137,6 +2138,16 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 
 	gchan->seid = seid;
 	gchan->protocol = args->args[2];
+
+	/*
+	 * If the channel tre size entry is present in device tree and
+	 * channel tre size is greater than 64 then parse the value from
+	 * the device tree, otherwise use the default value, which is 64.
+	 */
+	if (args->args_count > REQ_OF_DMA_ARGS && args->args[3] > CHAN_TRES)
+		gchan->num_chan_tres = args->args[3];
+	else
+		gchan->num_chan_tres = CHAN_TRES;
 
 	return dma_get_slave_channel(&gchan->vc.chan);
 }
