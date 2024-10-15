@@ -435,7 +435,10 @@ static int xe3_plane_max_width(const struct drm_framebuffer *fb,
 			       int color_plane,
 			       unsigned int rotation)
 {
-	return 6144;
+	if (intel_format_info_is_yuv_semiplanar(fb->format, fb->modifier))
+		return 4096;
+	else
+		return 6144;
 }
 
 static int icl_hdr_plane_max_width(const struct drm_framebuffer *fb,
