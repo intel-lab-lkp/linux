@@ -3662,14 +3662,6 @@ static inline void mas_new_root(struct ma_state *mas, void *entry)
 	void __rcu **slots;
 	unsigned long *pivots;
 
-	if (!entry) {
-		mas->depth = 0;
-		mas_set_height(mas);
-		rcu_assign_pointer(mas->tree->ma_root, entry);
-		mas->status = ma_start;
-		goto done;
-	}
-
 	node = mas_pop_node(mas);
 	pivots = ma_pivots(node, type);
 	slots = ma_slots(node, type);
@@ -3682,7 +3674,6 @@ static inline void mas_new_root(struct ma_state *mas, void *entry)
 	mas_set_height(mas);
 	rcu_assign_pointer(mas->tree->ma_root, mte_mk_root(mas->node));
 
-done:
 	if (xa_is_node(root))
 		mte_destroy_walk(root, mas->tree);
 
