@@ -220,12 +220,20 @@ endif
 
 $(OUTPUT)po/$(PACKAGE).pot: $(UTIL_SRC)
 	$(ECHO) "  GETTEXT " $@
-	$(QUIET) xgettext --default-domain=$(PACKAGE) --add-comments \
-		--keyword=_ --keyword=N_ $(UTIL_SRC) -p $(@D) -o $(@F)
+	$(QUIET) if ! command -v xgettext > /dev/null; then \
+		echo "Error: gettext not found. Please install gettext."; \
+	else \
+		xgettext --default-domain=$(PACKAGE) --add-comments \
+		--keyword=_ --keyword=N_ $(UTIL_SRC) -p $(@D) -o $(@F); \
+	fi
 
 $(OUTPUT)po/%.gmo: po/%.po
 	$(ECHO) "  MSGFMT  " $@
-	$(QUIET) msgfmt -o $@ po/$*.po
+	$(QUIET) if ! command -v msgfmt > /dev/null; then \
+		echo "Error: msgfmt not found. Make sure gettext is set up correctly."; \
+	else \
+		msgfmt -o $@ po/$*.po; \
+	fi
 
 create-gmo: ${GMO_FILES}
 
