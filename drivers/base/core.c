@@ -668,6 +668,19 @@ postcore_initcall(devlink_class_init);
 #define DL_ADD_VALID_FLAGS (DL_MANAGED_LINK_FLAGS | DL_FLAG_STATELESS | \
 			    DL_FLAG_PM_RUNTIME | DL_FLAG_RPM_ACTIVE)
 
+static bool device_link_is_useless(u32 flags, struct device *consumer)
+{
+	/*
+	 * SYNC_STATE_ONLY links are useless once a consumer device has probed.
+	 */
+	if (flags & DL_FLAG_SYNC_STATE_ONLY &&
+	    consumer->links.status != DL_DEV_NO_DRIVER &&
+	    consumer->links.status != DL_DEV_PROBING)
+		return true;
+
+	return false;
+}
+
 /**
  * device_link_add - Create a link between two devices.
  * @consumer: Consumer end of the link.
@@ -771,13 +784,7 @@ struct device_link *device_link_add(struct device *consumer,
 		goto out;
 	}
 
-	/*
-	 * SYNC_STATE_ONLY links are useless once a consumer device has probed.
-	 * So, only create it if the consumer hasn't probed yet.
-	 */
-	if (flags & DL_FLAG_SYNC_STATE_ONLY &&
-	    consumer->links.status != DL_DEV_NO_DRIVER &&
-	    consumer->links.status != DL_DEV_PROBING) {
+	if (device_link_is_useless(flags, consumer)) {
 		link = NULL;
 		goto out;
 	}
