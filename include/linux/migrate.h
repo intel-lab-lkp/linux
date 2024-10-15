@@ -183,10 +183,37 @@ static inline unsigned long migrate_pfn(unsigned long pfn)
 	return (pfn << MIGRATE_PFN_SHIFT) | MIGRATE_PFN_VALID;
 }
 
+struct p2p_allow;
+
+/**
+ * struct p2p_allow_ops - Functions for detailed cross-device access.
+ */
+struct p2p_allow_ops {
+	/**
+	 * @p2p_allow: Whether to allow cross-device access to device_private pages.
+	 * @allow: Pointer to a struct p2p_allow. Typically subclassed by the caller
+	 * to provide needed information.
+	 * @page: The page being queried.
+	 */
+	bool (*p2p_allow)(struct p2p_allow *allow, struct page *page);
+};
+
+/**
+ * struct p2p_allow - Information needed to allow cross-device access.
+ * @ops: Pointer to a struct p2p_allow_ops.
+ *
+ * This struct is intended to be embedded / subclassed to provide additional
+ * information needed by the @ops p2p_allow() callback.
+ */
+struct p2p_allow {
+	const struct p2p_allow_ops *ops;
+};
+
 enum migrate_vma_direction {
 	MIGRATE_VMA_SELECT_SYSTEM = 1 << 0,
 	MIGRATE_VMA_SELECT_DEVICE_PRIVATE = 1 << 1,
 	MIGRATE_VMA_SELECT_DEVICE_COHERENT = 1 << 2,
+	MIGRATE_VMA_SELECT_DEVICE_P2P = 1 << 3,
 };
 
 struct migrate_vma {
@@ -222,6 +249,8 @@ struct migrate_vma {
 	 * a migrate_to_ram() callback.
 	 */
 	struct page		*fault_page;
+	/* Optional identification of devices for p2p migration */
+	struct p2p_allow        *p2p;
 };
 
 int migrate_vma_setup(struct migrate_vma *args);

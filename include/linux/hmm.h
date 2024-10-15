@@ -12,6 +12,7 @@
 #include <linux/mm.h>
 
 struct mmu_interval_notifier;
+struct p2p_allow;
 
 /*
  * On output:
@@ -97,6 +98,7 @@ struct hmm_range {
 	unsigned long		default_flags;
 	unsigned long		pfn_flags_mask;
 	void			*dev_private_owner;
+	struct p2p_allow        *p2p;
 };
 
 /*

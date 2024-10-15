@@ -54,6 +54,13 @@ static int migrate_vma_collect_hole(unsigned long start,
 	return 0;
 }
 
+static bool migrate_vma_allow_p2p(struct migrate_vma *migrate, struct page *page)
+{
+	if (likely(!migrate->p2p))
+		return false;
+	return migrate->p2p->ops->p2p_allow(migrate->p2p, page);
+}
+
 static int migrate_vma_collect_pmd(pmd_t *pmdp,
 				   unsigned long start,
 				   unsigned long end,
@@ -136,6 +143,11 @@ again:
 			if (!(migrate->flags &
 				MIGRATE_VMA_SELECT_DEVICE_PRIVATE) ||
 			    page->pgmap->owner != migrate->pgmap_owner)
+				goto next;
+
+			if (!(migrate->flags &
+			      MIGRATE_VMA_SELECT_DEVICE_P2P) ||
+			    !migrate_vma_allow_p2p(migrate, page))
 				goto next;
 
 			mpfn = migrate_pfn(page_to_pfn(page)) |
