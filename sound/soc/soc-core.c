@@ -2663,10 +2663,7 @@ struct snd_soc_dai *snd_soc_register_dai(struct snd_soc_component *component,
 		dai->name = fmt_single_name(dev, &dai->id);
 	} else {
 		dai->name = fmt_multiple_name(dev, dai_drv);
-		if (dai_drv->id)
-			dai->id = dai_drv->id;
-		else
-			dai->id = component->num_dai;
+		dai->id = dai_drv->id ? dai_drv->id : component->num_dai;
 	}
 	if (!dai->name)
 		return NULL;
