@@ -848,6 +848,7 @@ our %deprecated_apis = (
 	"kunmap"				=> "kunmap_local",
 	"kmap_atomic"				=> "kmap_local_page",
 	"kunmap_atomic"				=> "kunmap_local",
+	"devm_rtc_device_register"	=> "devm_rtc_allocate_device' and 'devm_rtc_register_device",
 );
 
 #Create a search pattern for all these strings to speed up a loop below
