@@ -96,7 +96,7 @@ static void __net_exit rtnl_net_debug_net_exit(struct net *net)
 	unregister_netdevice_notifier_net(net, nb);
 }
 
-static struct pernet_operations rtnl_net_debug_net_ops __net_initdata = {
+static struct pernet_operations rtnl_net_debug_net_ops = {
 	.init = rtnl_net_debug_net_init,
 	.exit = rtnl_net_debug_net_exit,
 	.id = &rtnl_net_debug_net_id,
@@ -121,11 +121,11 @@ static int __init rtnl_net_debug_init(void)
 
 	return ret;
 }
+subsys_initcall(rtnl_net_debug_init);
 
 static void __exit rtnl_net_debug_exit(void)
 {
 	unregister_netdevice_notifier(&rtnl_net_debug_block);
 	unregister_pernet_device(&rtnl_net_debug_net_ops);
 }
-
-subsys_initcall(rtnl_net_debug_init);
+module_exit(rtnl_net_debug_exit);
