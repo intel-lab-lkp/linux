@@ -23,6 +23,9 @@
 /* /sys/class */
 static struct kset *class_kset;
 
+struct kobject *class_kobj;
+EXPORT_SYMBOL_GPL(class_kobj);
+
 #define to_class_attr(_attr) container_of(_attr, struct class_attribute, attr)
 
 /**
@@ -668,5 +671,8 @@ int __init classes_init(void)
 	class_kset = kset_create_and_add("class", NULL, NULL);
 	if (!class_kset)
 		return -ENOMEM;
+
+	class_kobj = &class_kset->kobj;
+
 	return 0;
 }

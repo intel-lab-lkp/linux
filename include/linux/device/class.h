@@ -69,6 +69,12 @@ struct class {
 	const struct dev_pm_ops *pm;
 };
 
+/*
+ * Global /sys/class kobject for creating sub-groups by means other than
+ * class_register().
+ */
+extern struct kobject *class_kobj;
+
 struct class_dev_iter {
 	struct klist_iter		ki;
 	const struct device_type	*type;
