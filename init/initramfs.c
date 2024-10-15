@@ -486,16 +486,6 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 	const char *compress_name;
 	static __initdata char msg_buf[64];
 
-	/*
-	 * @cpio_buf is first used for staging the 110 byte newc/crc cpio
-	 * header, after which parse_header() converts and stashes fields into
-	 * corresponding types. The same buffer is then reused for file path
-	 * staging. 2 x PATH_MAX covers any possible symlink target.
-	 */
-	cpio_buf = kmalloc(N_ALIGN(PATH_MAX) + PATH_MAX + 1, GFP_KERNEL);
-	if (!cpio_buf)
-		panic_show_mem("can't allocate buffers");
-
 	state = Start;
 	this_header = 0;
 	message = NULL;
@@ -538,7 +528,6 @@ static char * __init unpack_to_rootfs(char *buf, unsigned long len)
 		len -= my_inptr;
 	}
 	dir_utime();
-	kfree(cpio_buf);
 	return message;
 }
 
@@ -688,8 +677,20 @@ static void __init populate_initrd_image(char *err)
 
 static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 {
+	char *err;
+
+	/*
+	 * @cpio_buf is first used for staging the 110 byte newc/crc cpio
+	 * header, after which parse_header() converts and stashes fields into
+	 * corresponding types. The same buffer is then reused for file path
+	 * staging. 2 x PATH_MAX covers any possible symlink target.
+	 */
+	cpio_buf = kmalloc(N_ALIGN(PATH_MAX) + PATH_MAX + 1, GFP_KERNEL);
+	if (!cpio_buf)
+		panic_show_mem("can't allocate buffers");
+
 	/* Load the built in initramfs */
-	char *err = unpack_to_rootfs(__initramfs_start, __initramfs_size);
+	err = unpack_to_rootfs(__initramfs_start, __initramfs_size);
 	if (err)
 		panic_show_mem("%s", err); /* Failed to decompress INTERNAL initramfs */
 
@@ -711,6 +712,7 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	}
 
 done:
+	kfree(cpio_buf);
 	security_initramfs_populated();
 
 	/*
