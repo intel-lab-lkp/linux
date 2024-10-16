@@ -18,39 +18,26 @@
 
 static struct kmem_cache *erofs_inode_cachep __read_mostly;
 
-void _erofs_err(struct super_block *sb, const char *func, const char *fmt, ...)
-{
-	struct va_format vaf;
-	va_list args;
+#define _erofs_log_def(name) \
+	void _erofs_##name(struct super_block *sb, const char *func, const char *fmt, ...) \
+	{ \
+		struct va_format vaf; \
+		va_list args; \
+		\
+		va_start(args, (fmt)); \
+		\
+		vaf.fmt = (fmt); \
+		vaf.va = &args; \
+		\
+		if ((sb)) \
+			pr_##name("(device %s): %s: %pV", (sb)->s_id, (func), &vaf); \
+		else \
+			pr_##name("%s: %pV", (func), &vaf); \
+		va_end(args); \
+	}
 
-	va_start(args, fmt);
-
-	vaf.fmt = fmt;
-	vaf.va = &args;
-
-	if (sb)
-		pr_err("(device %s): %s: %pV", sb->s_id, func, &vaf);
-	else
-		pr_err("%s: %pV", func, &vaf);
-	va_end(args);
-}
-
-void _erofs_info(struct super_block *sb, const char *func, const char *fmt, ...)
-{
-	struct va_format vaf;
-	va_list args;
-
-	va_start(args, fmt);
-
-	vaf.fmt = fmt;
-	vaf.va = &args;
-
-	if (sb)
-		pr_info("(device %s): %pV", sb->s_id, &vaf);
-	else
-		pr_info("%pV", &vaf);
-	va_end(args);
-}
+_erofs_log_def(err);
+_erofs_log_def(info);
 
 static int erofs_superblock_csum_verify(struct super_block *sb, void *sbdata)
 {
