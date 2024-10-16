@@ -110,6 +110,15 @@ struct ttm_backup_ops {
 	 * After a call to @fini, it's illegal to use the @backup pointer.
 	 */
 	void (*fini)(struct ttm_backup *backup);
+
+	/**
+	 * bytes_avail: Report the approximate number of bytes of backup space
+	 * left for backup.
+	 * @backup: Pointer to the struct backup queried.
+	 *
+	 * Return: An approximate size of backup space available.
+	 */
+	u64 (*bytes_avail)(struct ttm_backup *backup);
 };
 
 /**
@@ -123,15 +132,8 @@ struct ttm_backup {
 	const struct ttm_backup_ops *ops;
 };
 
-/**
- * ttm_backup_shmem_create() - Create a shmem-based struct backup.
- * @size: The maximum size (in bytes) to back up.
- *
- * Create a backup utilizing shmem objects.
- *
- * Return: A pointer to a struct ttm_backup on success,
- * an error pointer on error.
- */
 struct ttm_backup *ttm_backup_shmem_create(loff_t size);
+
+u64 ttm_backup_shmem_bytes_avail(void);
 
 #endif
