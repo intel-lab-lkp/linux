@@ -13,6 +13,11 @@
 #include <linux/in6.h>
 #include <net/ipv6.h>
 
+#define RPC_MIN_RESVPORT	(1U)
+#define RPC_MAX_RESVPORT	(65535U)
+#define RPC_DEF_MIN_RESVPORT	(665U)
+#define RPC_DEF_MAX_RESVPORT	(1023U)
+
 size_t		rpc_ntop(const struct sockaddr *, char *, const size_t);
 size_t		rpc_pton(struct net *, const char *, const size_t,
 			 struct sockaddr *, const size_t);
