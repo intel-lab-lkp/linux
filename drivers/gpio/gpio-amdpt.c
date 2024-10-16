@@ -143,7 +143,7 @@ static struct platform_driver pt_gpio_driver = {
 		.acpi_match_table = ACPI_PTR(pt_gpio_acpi_match),
 	},
 	.probe = pt_gpio_probe,
-	.remove_new = pt_gpio_remove,
+	.remove = pt_gpio_remove,
 };
 
 module_platform_driver(pt_gpio_driver);
