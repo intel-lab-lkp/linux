@@ -2530,7 +2530,7 @@ static struct sk_buff *igc_xdp_run_prog(struct igc_adapter *adapter,
 	res = __igc_xdp_run_prog(adapter, prog, xdp);
 
 out:
-	return ERR_PTR(-res);
+	return res ? ERR_PTR(-res) : NULL;
 }
 
 /* This function assumes __netif_tx_lock is held by the caller. */
