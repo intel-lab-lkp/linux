@@ -1186,4 +1186,74 @@ struct fuse_supp_groups {
 	uint32_t	groups[];
 };
 
+/**
+ * Size of the ring buffer header
+ */
+#define FUSE_RING_HEADER_BUF_SIZE 4096
+#define FUSE_RING_MIN_IN_OUT_ARG_SIZE 4096
+
+/*
+ * Request is background type. Daemon side is free to use this information
+ * to handle foreground/background CQEs with different priorities.
+ */
+#define FUSE_RING_REQ_FLAG_ASYNC (1ull << 0)
+
+/**
+ * This structure mapped onto the
+ */
+struct fuse_ring_req {
+	union {
+		/* The first 4K are command data */
+		char ring_header[FUSE_RING_HEADER_BUF_SIZE];
+
+		struct {
+			uint64_t flags;
+
+			uint32_t in_out_arg_len;
+			uint32_t padding;
+
+			/* kernel fills in, reads out */
+			union {
+				struct fuse_in_header in;
+				struct fuse_out_header out;
+			};
+		};
+	};
+
+	char in_out_arg[];
+};
+
+/**
+ * sqe commands to the kernel
+ */
+enum fuse_uring_cmd {
+	FUSE_URING_REQ_INVALID = 0,
+
+	/* submit sqe to kernel to get a request */
+	FUSE_URING_REQ_FETCH = 1,
+
+	/* commit result and fetch next request */
+	FUSE_URING_REQ_COMMIT_AND_FETCH = 2,
+};
+
+/**
+ * In the 80B command area of the SQE.
+ */
+struct fuse_uring_cmd_req {
+	/* User buffer */
+	uint64_t buf_ptr;
+
+	/* entry identifier */
+	uint64_t commit_id;
+
+	/* queue the command is for (queue index) */
+	uint16_t qid;
+	uint8_t padding[6];
+
+	/* length of the user buffer */
+	uint32_t buf_len;
+
+	uint32_t flags;
+};
+
 #endif /* _LINUX_FUSE_H */

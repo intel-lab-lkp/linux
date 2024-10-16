@@ -7,6 +7,7 @@
 */
 
 #include "fuse_i.h"
+#include "dev_uring_i.h"
 
 #include <linux/pagemap.h>
 #include <linux/slab.h>
@@ -946,6 +947,8 @@ EXPORT_SYMBOL_GPL(fuse_conn_init);
 static void delayed_release(struct rcu_head *p)
 {
 	struct fuse_conn *fc = container_of(p, struct fuse_conn, rcu);
+
+	fuse_uring_destruct(fc);
 
 	put_user_ns(fc->user_ns);
 	fc->release(fc);
