@@ -50,6 +50,14 @@
 #define PIDFD_NONBLOCK O_NONBLOCK
 #endif
 
+/* System header file may not have this available. */
+#ifndef PIDFD_SELF_THREAD
+#define PIDFD_SELF_THREAD -100
+#endif
+#ifndef PIDFD_SELF_THREAD_GROUP
+#define PIDFD_SELF_THREAD_GROUP -200
+#endif
+
 /*
  * The kernel reserves 300 pids via RESERVED_PIDS in kernel/pid.c
  * That means, when it wraps around any pid < 300 will be skipped.
