@@ -529,8 +529,20 @@ cpufreq_policy_put:
 
 static int amd_pstate_verify(struct cpufreq_policy_data *policy_data)
 {
+	struct cpufreq_policy *policy = cpufreq_cpu_get(policy_data->cpu);
+	struct amd_cpudata *cpudata = policy->driver_data;
+
+	if (!policy)
+		return -EINVAL;
+
+	if (policy_data->min == FREQ_QOS_MIN_DEFAULT_VALUE)
+		policy_data->min = cpudata->lowest_nonlinear_freq;
+
 	cpufreq_verify_within_cpu_limits(policy_data);
 	pr_debug("policy_max =%d, policy_min=%d\n", policy_data->max, policy_data->min);
+
+	cpufreq_cpu_put(policy);
+
 	return 0;
 }
 
@@ -996,7 +1008,7 @@ static int amd_pstate_cpu_init(struct cpufreq_policy *policy)
 		policy->fast_switch_possible = true;
 
 	ret = freq_qos_add_request(&policy->constraints, &cpudata->req[0],
-				   FREQ_QOS_MIN, policy->cpuinfo.min_freq);
+				   FREQ_QOS_MIN, FREQ_QOS_MIN_DEFAULT_VALUE);
 	if (ret < 0) {
 		dev_err(dev, "Failed to add min-freq constraint (%d)\n", ret);
 		goto free_cpudata1;
