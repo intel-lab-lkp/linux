@@ -74,16 +74,16 @@ impl Ktime {
 /// Returns the number of milliseconds between two ktimes.
 #[inline]
 pub fn ktime_ms_delta(later: Ktime, earlier: Ktime) -> i64 {
-    (later - earlier).to_ms()
+    (later - earlier).as_millis()
 }
 
 impl core::ops::Sub for Ktime {
-    type Output = Ktime;
+    type Output = Delta;
 
     #[inline]
-    fn sub(self, other: Ktime) -> Ktime {
-        Self {
-            inner: self.inner - other.inner,
+    fn sub(self, other: Ktime) -> Delta {
+        Delta {
+            nanos: self.inner - other.inner,
         }
     }
 }
