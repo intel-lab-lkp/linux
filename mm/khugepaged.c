@@ -1142,23 +1142,25 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 			goto out_nolock;
 	}
 
-	mmap_read_unlock(mm);
-	/*
-	 * Prevent all access to pagetables with the exception of
-	 * gup_fast later handled by the ptep_clear_flush and the VM
-	 * handled by the anon_vma lock + PG_lock.
-	 *
-	 * UFFDIO_MOVE is prevented to race as well thanks to the
-	 * mmap_lock.
-	 */
-	mmap_write_lock(mm);
-	result = hugepage_vma_revalidate(mm, address, true, &vma, cc);
-	if (result != SCAN_SUCCEED)
-		goto out_up_write;
-	/* check if the pmd is still valid */
-	result = check_pmd_still_valid(mm, address, pmd);
-	if (result != SCAN_SUCCEED)
-		goto out_up_write;
+	if (upgrade_read(&mm->mmap_lock)) {
+		mmap_read_unlock(mm);
+		/*
+		 * Prevent all access to pagetables with the exception of
+		 * gup_fast later handled by the ptep_clear_flush and the VM
+		 * handled by the anon_vma lock + PG_lock.
+		 *
+		 * UFFDIO_MOVE is prevented to race as well thanks to the
+		 * mmap_lock.
+		 */
+		mmap_write_lock(mm);
+		result = hugepage_vma_revalidate(mm, address, true, &vma, cc);
+		if (result != SCAN_SUCCEED)
+			goto out_up_write;
+		/* check if the pmd is still valid */
+		result = check_pmd_still_valid(mm, address, pmd);
+		if (result != SCAN_SUCCEED)
+			goto out_up_write;
+	}
 
 	vma_start_write(vma);
 	anon_vma_lock_write(vma->anon_vma);
