@@ -113,7 +113,7 @@ unx_marshal(struct rpc_task *task, struct xdr_stream *xdr)
 	struct rpc_clnt	*clnt = task->tk_client;
 	struct rpc_cred	*cred = task->tk_rqstp->rq_cred;
 	__be32		*p, *cred_len, *gidarr_len;
-	int		i;
+	int		i, ngroups;
 	struct group_info *gi = cred->cr_cred->group_info;
 	struct user_namespace *userns = clnt->cl_cred ?
 		clnt->cl_cred->user_ns : &init_user_ns;
@@ -136,14 +136,17 @@ unx_marshal(struct rpc_task *task, struct xdr_stream *xdr)
 	*p++ = cpu_to_be32(from_kgid_munged(userns, cred->cr_cred->fsgid));
 
 	gidarr_len = p++;
-	if (gi)
-		for (i = 0; i < UNX_NGROUPS && i < gi->ngroups; i++)
+	if (gi && gi->ngroups) {
+		ngroups = min(UNX_NGROUPS, gi->ngroups);
+		p = xdr_reserve_space(xdr, ngroups * sizeof(*p));
+		if (!p)
+			goto marshal_failed;
+		for (i = 0; i < ngroups; i++)
 			*p++ = cpu_to_be32(from_kgid_munged(userns, gi->gid[i]));
+	}
+
 	*gidarr_len = cpu_to_be32(p - gidarr_len - 1);
 	*cred_len = cpu_to_be32((p - cred_len - 1) << 2);
-	p = xdr_reserve_space(xdr, (p - gidarr_len - 1) << 2);
-	if (!p)
-		goto marshal_failed;
 
 	/* Verifier */
 
