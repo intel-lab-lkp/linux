@@ -33,7 +33,7 @@
  * (e.g. a virtual address) and a strong prevailing wind.
  */
 #define compiletime_assert_rwonce_type(t)					\
-	compiletime_assert(__native_word(t) || sizeof(t) == sizeof(long long),	\
+	compiletime_assert(__native_word(t) || sizeof(t) == sizeof(__dword_type), \
 		"Unsupported access size for {READ,WRITE}_ONCE().")
 
 /*
