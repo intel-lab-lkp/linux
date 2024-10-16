@@ -1321,6 +1321,7 @@ static void boot_delay_msec(int level)
 	unsigned long timeout;
 
 	if ((boot_delay == 0 || system_state >= SYSTEM_RUNNING)
+		|| is_printk_console_loud()
 		|| suppress_message_printing(level)) {
 		return;
 	}
@@ -2273,6 +2274,9 @@ int vprintk_store(int facility, int level,
 	if (dev_info)
 		flags |= LOG_NEWLINE;
 
+	if (is_printk_console_loud())
+		flags |= LOG_LOUD_CON;
+
 	if (flags & LOG_CONT) {
 		prb_rec_init_wr(&r, reserve_size);
 		if (prb_reserve_in_last(&e, prb, &r, caller_id, PRINTKRB_RECORD_MAX)) {
@@ -2947,6 +2951,7 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 	struct printk_info info;
 	struct printk_record r;
 	size_t len = 0;
+	bool loud_con;
 
 	/*
 	 * Formatting extended messages requires a separate buffer, so use the
@@ -2965,9 +2970,10 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 
 	pmsg->seq = r.info->seq;
 	pmsg->dropped = r.info->seq - seq;
+	loud_con = r.info->flags & LOG_LOUD_CON;
 
 	/* Skip record that has level above the console loglevel. */
-	if (may_suppress && suppress_message_printing(r.info->level))
+	if (!loud_con && may_suppress && suppress_message_printing(r.info->level))
 		goto out;
 
 	if (is_extended) {

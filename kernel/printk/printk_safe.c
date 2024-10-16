@@ -12,7 +12,30 @@
 
 #include "internal.h"
 
-static DEFINE_PER_CPU(int, printk_context);
+static DEFINE_PER_CPU(unsigned int, printk_context);
+
+#define PRINTK_SAFE_CONTEXT_MASK		0x0000ffffU
+#define PRINTK_LOUD_CONSOLE_CONTEXT_MASK	0xffff0000U
+#define PRINTK_LOUD_CONSOLE_CONTEXT_OFFSET	0x00010000U
+
+void noinstr printk_loud_console_enter(void)
+{
+	cant_migrate();
+	this_cpu_add(printk_context, PRINTK_LOUD_CONSOLE_CONTEXT_OFFSET);
+}
+
+void noinstr printk_loud_console_exit(void)
+{
+	cant_migrate();
+	this_cpu_sub(printk_context, PRINTK_LOUD_CONSOLE_CONTEXT_OFFSET);
+}
+
+/* Safe in any context. CPU migration is always disabled when set. */
+bool is_printk_console_loud(void)
+{
+	return !!(this_cpu_read(printk_context) &
+			PRINTK_LOUD_CONSOLE_CONTEXT_MASK);
+}
 
 /* Can be preempted by NMI. */
 void __printk_safe_enter(void)
@@ -45,7 +68,7 @@ bool is_printk_legacy_deferred(void)
 	 * context. CPU migration is always disabled when set.
 	 */
 	return (force_legacy_kthread() ||
-		this_cpu_read(printk_context) ||
+		!!(this_cpu_read(printk_context) & PRINTK_SAFE_CONTEXT_MASK) ||
 		in_nmi());
 }
 
