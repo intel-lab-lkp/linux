@@ -1892,7 +1892,8 @@ static int __mcheck_cpu_apply_quirks(struct cpuinfo_x86 *c)
 	}
 
 	/* This should be disabled by the BIOS, but isn't always */
-	if (c->x86_vendor == X86_VENDOR_AMD) {
+	switch (c->x86_vendor) {
+	case X86_VENDOR_AMD:
 		if (c->x86 == 15 && this_cpu_read(mce_num_banks) > 4) {
 			/*
 			 * disable GART TBL walk error reporting, which
@@ -1925,9 +1926,9 @@ static int __mcheck_cpu_apply_quirks(struct cpuinfo_x86 *c)
 		if (c->x86 >= 0x17 && c->x86 <= 0x1A)
 			mce_flags.zen_ifu_quirk = 1;
 
-	}
+		break;
 
-	if (c->x86_vendor == X86_VENDOR_INTEL) {
+	case X86_VENDOR_INTEL:
 		/*
 		 * SDM documents that on family 6 bank 0 should not be written
 		 * because it aliases to another special BIOS controlled
@@ -1964,9 +1965,10 @@ static int __mcheck_cpu_apply_quirks(struct cpuinfo_x86 *c)
 		 */
 		if (c->x86_vfm == INTEL_SKYLAKE_X)
 			mce_flags.skx_repmov_quirk = 1;
-	}
 
-	if (c->x86_vendor == X86_VENDOR_ZHAOXIN) {
+		break;
+
+	case X86_VENDOR_ZHAOXIN:
 		/*
 		 * All newer Zhaoxin CPUs support MCE broadcasting. Enable
 		 * synchronization with a one second timeout.
@@ -1975,6 +1977,8 @@ static int __mcheck_cpu_apply_quirks(struct cpuinfo_x86 *c)
 			if (cfg->monarch_timeout < 0)
 				cfg->monarch_timeout = USEC_PER_SEC;
 		}
+
+		break;
 	}
 
 	if (cfg->monarch_timeout < 0)
