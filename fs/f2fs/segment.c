@@ -2570,6 +2570,31 @@ void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr)
 	up_write(&sit_i->sentry_lock);
 }
 
+void f2fs_invalidate_consecutive_blocks(struct f2fs_sb_info *sbi, block_t addr, int cnt)
+{
+	unsigned int segno = GET_SEGNO(sbi, addr);
+	unsigned int segno2 = GET_SEGNO(sbi, addr + cnt - 1);
+	struct sit_info *sit_i = SIT_I(sbi);
+
+	f2fs_bug_on(sbi, addr == NULL_ADDR || segno != segno2);
+	if (addr == NEW_ADDR || addr == COMPRESS_ADDR)
+		return;
+
+	f2fs_truncate_meta_inode_pages(sbi, addr, cnt);
+	f2fs_invalidate_compress_pages_range(sbi, addr, cnt);
+
+	/* add it into sit main buffer */
+	down_write(&sit_i->sentry_lock);
+
+	update_segment_mtime(sbi, addr, 0);
+	update_sit_entry(sbi, addr, -cnt);
+
+	/* add it into dirty seglist */
+	locate_dirty_segment(sbi, segno);
+
+	up_write(&sit_i->sentry_lock);
+}
+
 bool f2fs_is_checkpointed_data(struct f2fs_sb_info *sbi, block_t blkaddr)
 {
 	struct sit_info *sit_i = SIT_I(sbi);

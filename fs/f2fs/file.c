@@ -612,6 +612,18 @@ static int f2fs_file_open(struct inode *inode, struct file *filp)
 	return finish_preallocate_blocks(inode);
 }
 
+static bool check_f2fs_invalidate_consecutive_blocks(struct f2fs_sb_info *sbi,
+					block_t blkaddr1, block_t blkaddr2)
+{
+	if (blkaddr2 - blkaddr1 != 1)
+		return false;
+
+	if (GET_SEGNO(sbi, blkaddr1) != GET_SEGNO(sbi, blkaddr2))
+		return false;
+
+	return true;
+}
+
 void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dn->inode);
@@ -621,6 +633,9 @@ void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 	int cluster_index = 0, valid_blocks = 0;
 	int cluster_size = F2FS_I(dn->inode)->i_cluster_size;
 	bool released = !atomic_read(&F2FS_I(dn->inode)->i_compr_blocks);
+	block_t con_start;
+	bool run_invalid = true;
+	int con_cnt = 1;
 
 	addr = get_dnode_addr(dn->inode, dn->node_page) + ofs;
 
@@ -652,7 +667,24 @@ void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 				valid_blocks++;
 		}
 
-		f2fs_invalidate_blocks(sbi, blkaddr);
+		if (run_invalid)
+			con_start = blkaddr;
+
+		if (count > 1 &&
+			check_f2fs_invalidate_consecutive_blocks(sbi, blkaddr,
+				le32_to_cpu(*(addr + 1)))) {
+			run_invalid = false;
+
+			if (con_cnt++ == 1)
+				con_start = blkaddr;
+		} else {
+			run_invalid = true;
+		}
+
+		if (run_invalid) {
+			f2fs_invalidate_consecutive_blocks(sbi, con_start, con_cnt);
+			con_cnt = 1;
+		}
 
 		if (!released || blkaddr != COMPRESS_ADDR)
 			nr_free++;
