@@ -37,7 +37,7 @@ static inline void file_ref_init(file_ref_t *ref, unsigned long cnt)
 }
 
 bool __file_ref_get(file_ref_t *ref);
-bool __file_ref_put(file_ref_t *ref);
+bool __file_ref_put(file_ref_t *ref, unsigned long cnt);
 
 /**
  * file_ref_get - Acquire one reference on a file
@@ -82,7 +82,7 @@ static __always_inline __must_check bool file_ref_get(file_ref_t *ref)
  */
 static __always_inline __must_check bool file_ref_put(file_ref_t *ref)
 {
-	bool released;
+	unsigned long released;
 
 	preempt_disable();
 	/*
@@ -91,10 +91,11 @@ static __always_inline __must_check bool file_ref_put(file_ref_t *ref)
 	 * fails then we need to handle the last reference drop and
 	 * cases inside the saturation and dead zones.
 	 */
-	if (likely(!atomic_long_add_negative_release(-1, &ref->refcnt)))
+	released = atomic_long_dec_return(&ref->refcnt);
+	if (likely(released != FILE_REF_NOREF && released < FILE_REF_MAXREF))
 		released = false;
 	else
-		released = __file_ref_put(ref);
+		released = __file_ref_put(ref, released);
 	preempt_enable();
 	return released;
 }

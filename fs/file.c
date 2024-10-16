@@ -82,12 +82,9 @@ EXPORT_SYMBOL_GPL(__file_ref_get);
  *	with a concurrent get()/put() pair. Caller is not allowed to
  *	deconstruct the protected object.
  */
-bool __file_ref_put(file_ref_t *ref)
+bool __file_ref_put(file_ref_t *ref, unsigned long cnt)
 {
-	unsigned long cnt;
-
 	/* Did this drop the last reference? */
-	cnt = atomic_long_read(&ref->refcnt);
 	if (likely(cnt == FILE_REF_NOREF)) {
 		/*
 		 * Carefully try to set the reference count to FILE_REF_DEAD.
