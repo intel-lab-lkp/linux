@@ -538,7 +538,7 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 	struct ufshcd_lrb *lrbp = &hba->lrb[task_tag];
 	struct scsi_cmnd *cmd = lrbp->cmd;
 	struct ufs_hw_queue *hwq;
-	void __iomem *reg, *opr_sqd_base;
+	void __iomem *opr_sqd_base;
 	u32 nexus, id, val;
 	int err;
 
@@ -572,14 +572,12 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 	/* SQRTCy.ICU = 1 */
 	writel(SQ_ICU, opr_sqd_base + REG_SQRTC);
 
-	/* Poll SQRTSy.CUS = 1. Return result from SQRTSy.RTC */
-	reg = opr_sqd_base + REG_SQRTS;
-	err = read_poll_timeout(readl, val, val & SQ_CUS, 20,
-				MCQ_POLL_US, false, reg);
+	/* Wait until SQRTSy.CUS = 1. */
+	err = read_poll_timeout(readl, val, val & SQ_CUS, 20, MCQ_POLL_US,
+				false, opr_sqd_base + REG_SQRTS);
 	if (err)
-		dev_err(hba->dev, "%s: failed. hwq=%d, tag=%d err=%ld\n",
-			__func__, id, task_tag,
-			FIELD_GET(SQ_ICU_ERR_CODE_MASK, readl(reg)));
+		dev_err(hba->dev, "%s: failed. hwq=%d, tag=%d err=%d\n",
+			__func__, id, task_tag, err);
 
 	if (ufshcd_mcq_sq_start(hba, hwq))
 		err = -ETIMEDOUT;
