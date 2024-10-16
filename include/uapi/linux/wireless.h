@@ -748,7 +748,7 @@ struct iw_missed {
  *	Quality range (for spy threshold)
  */
 struct iw_thrspy {
-	struct sockaddr		addr;		/* Source address (hw/mac) */
+	struct sockaddr_legacy	addr;		/* Source address (hw/mac) */
 	struct iw_quality	qual;		/* Quality of the link */
 	struct iw_quality	low;		/* Low threshold */
 	struct iw_quality	high;		/* High threshold */
@@ -766,15 +766,15 @@ struct iw_thrspy {
  *	current BSS if the driver is in Managed mode and associated with an AP.
  */
 struct iw_scan_req {
-	__u8		scan_type; /* IW_SCAN_TYPE_{ACTIVE,PASSIVE} */
-	__u8		essid_len;
-	__u8		num_channels; /* num entries in channel_list;
-				       * 0 = scan all allowed channels */
-	__u8		flags; /* reserved as padding; use zero, this may
-				* be used in the future for adding flags
-				* to request different scan behavior */
-	struct sockaddr	bssid; /* ff:ff:ff:ff:ff:ff for broadcast BSSID or
-				* individual address of a specific BSS */
+	__u8			scan_type; /* IW_SCAN_TYPE_{ACTIVE,PASSIVE} */
+	__u8			essid_len;
+	__u8			num_channels; /* num entries in channel_list;
+					       * 0 = scan all allowed channels */
+	__u8			flags; /* reserved as padding; use zero, this may
+					* be used in the future for adding flags
+					* to request different scan behavior */
+	struct sockaddr_legacy	bssid; /* ff:ff:ff:ff:ff:ff for broadcast BSSID or
+					* individual address of a specific BSS */
 
 	/*
 	 * Use this ESSID if IW_SCAN_THIS_ESSID flag is used instead of using
@@ -827,15 +827,15 @@ struct iw_scan_req {
  *	debugging/testing.
  */
 struct iw_encode_ext {
-	__u32		ext_flags; /* IW_ENCODE_EXT_* */
-	__u8		tx_seq[IW_ENCODE_SEQ_MAX_SIZE]; /* LSB first */
-	__u8		rx_seq[IW_ENCODE_SEQ_MAX_SIZE]; /* LSB first */
-	struct sockaddr	addr; /* ff:ff:ff:ff:ff:ff for broadcast/multicast
-			       * (group) keys or unicast address for
-			       * individual keys */
-	__u16		alg; /* IW_ENCODE_ALG_* */
-	__u16		key_len;
-	__u8		key[];
+	__u32			ext_flags; /* IW_ENCODE_EXT_* */
+	__u8			tx_seq[IW_ENCODE_SEQ_MAX_SIZE]; /* LSB first */
+	__u8			rx_seq[IW_ENCODE_SEQ_MAX_SIZE]; /* LSB first */
+	struct sockaddr_legacy	addr; /* ff:ff:ff:ff:ff:ff for broadcast/multicast
+				       * (group) keys or unicast address for
+				       * individual keys */
+	__u16			alg; /* IW_ENCODE_ALG_* */
+	__u16			key_len;
+	__u8			key[];
 };
 
 /* SIOCSIWMLME data */
@@ -853,16 +853,16 @@ struct iw_mlme {
 #define IW_PMKID_LEN	16
 
 struct iw_pmksa {
-	__u32		cmd; /* IW_PMKSA_* */
-	struct sockaddr	bssid;
-	__u8		pmkid[IW_PMKID_LEN];
+	__u32			cmd; /* IW_PMKSA_* */
+	struct sockaddr_legacy	bssid;
+	__u8			pmkid[IW_PMKID_LEN];
 };
 
 /* IWEVMICHAELMICFAILURE data */
 struct iw_michaelmicfailure {
-	__u32		flags;
-	struct sockaddr	src_addr;
-	__u8		tsc[IW_ENCODE_SEQ_MAX_SIZE]; /* LSB first */
+	__u32			flags;
+	struct sockaddr_legacy	src_addr;
+	__u8			tsc[IW_ENCODE_SEQ_MAX_SIZE]; /* LSB first */
 };
 
 /* IWEVPMKIDCAND data */
