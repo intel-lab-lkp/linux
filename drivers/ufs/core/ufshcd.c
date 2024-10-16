@@ -6195,7 +6195,7 @@ static void ufshcd_exception_event_handler(struct work_struct *work)
 	u32 status = 0;
 	hba = container_of(work, struct ufs_hba, eeh_work);
 
-	ufshcd_scsi_block_requests(hba);
+	blk_mq_quiesce_tagset(&hba->host->tag_set);
 	err = ufshcd_get_ee_status(hba, &status);
 	if (err) {
 		dev_err(hba->dev, "%s: failed to get exception status %d\n",
@@ -6213,7 +6213,7 @@ static void ufshcd_exception_event_handler(struct work_struct *work)
 
 	ufs_debugfs_exception_event(hba, status);
 out:
-	ufshcd_scsi_unblock_requests(hba);
+	blk_mq_unquiesce_tagset(&hba->host->tag_set);
 }
 
 /* Complete requests that have door-bell cleared */
