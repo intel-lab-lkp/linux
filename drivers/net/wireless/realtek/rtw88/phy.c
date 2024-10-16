@@ -1465,15 +1465,14 @@ static void rtw_phy_store_tx_power_by_rate(struct rtw_dev *rtwdev,
 		    rate_num > RTW_RF_PATH_MAX))
 		return;
 
+	s8 (*tx_pwr_by_rate_offset) = (band == PHY_BANK_2G)
+						? hal->tx_pwr_by_rate_offset_2g[rfpath]
+						: hal->tx_pwr_by_rate_offset_5g[rfpath];
+
 	for (i = 0; i < rate_num; i++) {
 		offset = pwr_by_rate[i];
 		rate = rates[i];
-		if (band == PHY_BAND_2G)
-			hal->tx_pwr_by_rate_offset_2g[rfpath][rate] = offset;
-		else if (band == PHY_BAND_5G)
-			hal->tx_pwr_by_rate_offset_5g[rfpath][rate] = offset;
-		else
-			continue;
+		tx_pwr_by_rate_offset[rate] = offset;
 	}
 }
 
