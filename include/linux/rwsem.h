@@ -249,6 +249,7 @@ DEFINE_GUARD_COND(rwsem_write, _try, down_write_trylock(_T))
  * downgrade write lock to read lock
  */
 extern void downgrade_write(struct rw_semaphore *sem);
+extern int upgrade_read(struct rw_semaphore *sem);
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 /*

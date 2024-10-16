@@ -37,6 +37,7 @@
  * meanings when set.
  *  - Bit 0: RWSEM_READER_OWNED - rwsem may be owned by readers (just a hint)
  *  - Bit 1: RWSEM_NONSPINNABLE - Cannot spin on a reader-owned lock
+ *  - Bit 2: RWSEM_UPGRADING    - doing upgrade read process
  *
  * When the rwsem is reader-owned and a spinning writer has timed out,
  * the nonspinnable bit will be set to disable optimistic spinning.
@@ -62,7 +63,8 @@
  */
 #define RWSEM_READER_OWNED	(1UL << 0)
 #define RWSEM_NONSPINNABLE	(1UL << 1)
-#define RWSEM_OWNER_FLAGS_MASK	(RWSEM_READER_OWNED | RWSEM_NONSPINNABLE)
+#define RWSEM_UPGRADING		(1UL << 2)
+#define RWSEM_OWNER_FLAGS_MASK	(RWSEM_READER_OWNED | RWSEM_NONSPINNABLE | RWSEM_UPGRADING)
 
 #ifdef CONFIG_DEBUG_RWSEMS
 # define DEBUG_RWSEMS_WARN_ON(c, sem)	do {			\
@@ -93,7 +95,8 @@
  * Bit  0    - writer locked bit
  * Bit  1    - waiters present bit
  * Bit  2    - lock handoff bit
- * Bits 3-7  - reserved
+ * Bit  3    - upgrade read bit
+ * Bits 4-7  - reserved
  * Bits 8-30 - 23-bit reader count
  * Bit  31   - read fail bit
  *
@@ -117,6 +120,7 @@
 #define RWSEM_WRITER_LOCKED	(1UL << 0)
 #define RWSEM_FLAG_WAITERS	(1UL << 1)
 #define RWSEM_FLAG_HANDOFF	(1UL << 2)
+#define RWSEM_FLAG_UPGRADE_READ	(1UL << 3)
 #define RWSEM_FLAG_READFAIL	(1UL << (BITS_PER_LONG - 1))
 
 #define RWSEM_READER_SHIFT	8
@@ -141,6 +145,13 @@ static inline void rwsem_set_owner(struct rw_semaphore *sem)
 {
 	lockdep_assert_preemption_disabled();
 	atomic_long_set(&sem->owner, (long)current);
+}
+
+static inline void rwsem_set_owner_upgrade(struct rw_semaphore *sem)
+{
+	lockdep_assert_preemption_disabled();
+	atomic_long_set(&sem->owner, (long)current | RWSEM_UPGRADING |
+			RWSEM_READER_OWNED | RWSEM_NONSPINNABLE);
 }
 
 static inline void rwsem_clear_owner(struct rw_semaphore *sem)
@@ -201,7 +212,7 @@ static inline bool is_rwsem_reader_owned(struct rw_semaphore *sem)
 	 */
 	long count = atomic_long_read(&sem->count);
 
-	if (count & RWSEM_WRITER_MASK)
+	if ((count & RWSEM_WRITER_MASK) && !(count & RWSEM_FLAG_UPGRADE_READ))
 		return false;
 	return rwsem_test_oflags(sem, RWSEM_READER_OWNED);
 }
@@ -1336,6 +1347,8 @@ static inline int __down_write_trylock(struct rw_semaphore *sem)
 static inline void __up_read(struct rw_semaphore *sem)
 {
 	long tmp;
+	unsigned long flags;
+	struct task_struct *owner;
 
 	DEBUG_RWSEMS_WARN_ON(sem->magic != sem, sem);
 	DEBUG_RWSEMS_WARN_ON(!is_rwsem_reader_owned(sem), sem);
@@ -1349,6 +1362,9 @@ static inline void __up_read(struct rw_semaphore *sem)
 		clear_nonspinnable(sem);
 		rwsem_wake(sem);
 	}
+	owner = rwsem_owner_flags(sem, &flags);
+	if (unlikely(!(tmp & RWSEM_READER_MASK) && (flags & RWSEM_UPGRADING)))
+		wake_up_process(owner);
 	preempt_enable();
 }
 
@@ -1640,6 +1656,71 @@ void downgrade_write(struct rw_semaphore *sem)
 	__downgrade_write(sem);
 }
 EXPORT_SYMBOL(downgrade_write);
+
+static inline void rwsem_clear_upgrade_flag(struct rw_semaphore *sem)
+{
+	atomic_long_andnot(RWSEM_FLAG_UPGRADE_READ, &sem->count);
+}
+
+/*
+ * upgrade read lock to write lock
+ */
+static inline int __upgrade_read(struct rw_semaphore *sem)
+{
+	long tmp;
+
+	preempt_disable();
+
+	tmp = atomic_long_read(&sem->count);
+	do {
+		if (tmp & (RWSEM_WRITER_MASK | RWSEM_FLAG_UPGRADE_READ)) {
+			preempt_enable();
+			return -EBUSY;
+		}
+	} while (!atomic_long_try_cmpxchg(&sem->count, &tmp,
+		tmp + RWSEM_FLAG_UPGRADE_READ + RWSEM_WRITER_LOCKED - RWSEM_READER_BIAS));
+
+	if ((tmp & RWSEM_READER_MASK) == RWSEM_READER_BIAS) {
+		/* fast path */
+		DEBUG_RWSEMS_WARN_ON(sem->magic != sem, sem);
+		rwsem_clear_upgrade_flag(sem);
+		rwsem_set_owner(sem);
+		preempt_enable();
+		return 0;
+	}
+	/* slow path */
+	raw_spin_lock_irq(&sem->wait_lock);
+	rwsem_set_owner_upgrade(sem);
+
+	set_current_state(TASK_UNINTERRUPTIBLE);
+
+	for (;;) {
+		if (!(atomic_long_read(&sem->count) & RWSEM_READER_MASK))
+			break;
+		raw_spin_unlock_irq(&sem->wait_lock);
+		schedule_preempt_disabled();
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		raw_spin_lock_irq(&sem->wait_lock);
+	}
+
+	rwsem_clear_upgrade_flag(sem);
+	rwsem_set_owner(sem);
+	__set_current_state(TASK_RUNNING);
+	raw_spin_unlock_irq(&sem->wait_lock);
+	preempt_enable();
+	return 0;
+}
+
+/*
+ * upgrade read lock to write lock
+ *
+ * Return: 0 on success, error code on failure
+ */
+int upgrade_read(struct rw_semaphore *sem)
+{
+	return __upgrade_read(sem);
+}
+EXPORT_SYMBOL(upgrade_read);
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 
