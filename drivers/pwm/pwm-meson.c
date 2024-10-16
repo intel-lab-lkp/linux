@@ -310,6 +310,7 @@ static int meson_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 	struct meson_pwm *meson = to_meson_pwm(chip);
 	struct meson_pwm_channel_data *channel_data;
 	struct meson_pwm_channel *channel;
+	unsigned int hi, lo;
 	u32 value;
 
 	channel = &meson->channels[pwm->hwpwm];
@@ -319,11 +320,11 @@ static int meson_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
 	state->enabled = value & channel_data->pwm_en_mask;
 
 	value = readl(meson->base + channel_data->reg_offset);
-	channel->lo = FIELD_GET(PWM_LOW_MASK, value);
-	channel->hi = FIELD_GET(PWM_HIGH_MASK, value);
+	lo = FIELD_GET(PWM_LOW_MASK, value);
+	hi = FIELD_GET(PWM_HIGH_MASK, value);
 
-	state->period = meson_pwm_cnt_to_ns(chip, pwm, channel->lo + channel->hi);
-	state->duty_cycle = meson_pwm_cnt_to_ns(chip, pwm, channel->hi);
+	state->period = meson_pwm_cnt_to_ns(chip, pwm, lo + hi);
+	state->duty_cycle = meson_pwm_cnt_to_ns(chip, pwm, hi);
 
 	state->polarity = PWM_POLARITY_NORMAL;
 
