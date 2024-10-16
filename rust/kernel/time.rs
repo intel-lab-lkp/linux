@@ -155,3 +155,14 @@ impl Delta {
         self.nanos / NSEC_PER_SEC
     }
 }
+
+impl core::ops::Add<Delta> for Ktime {
+    type Output = Ktime;
+
+    #[inline]
+    fn add(self, delta: Delta) -> Ktime {
+        Ktime {
+            inner: self.inner + delta.as_nanos(),
+        }
+    }
+}
