@@ -104,6 +104,11 @@ struct btrfs_bio *btrfs_bio_alloc(unsigned int nr_vecs, blk_opf_t opf,
 				  btrfs_bio_end_io_t end_io, void *private);
 void btrfs_bio_end_io(struct btrfs_bio *bbio, blk_status_t status);
 
+#define BTRFS_BIO_FLAG_CSUM_SEARCH_COMMIT_ROOT	(1U << (BIO_FLAG_LAST + 1))
+void btrfs_bio_set_csum_search_commit_root(struct btrfs_bio *bbio);
+void btrfs_bio_clear_csum_search_commit_root(struct btrfs_bio *bbio);
+bool btrfs_bio_csum_search_commit_root(struct btrfs_bio *bbio);
+
 /* Submit using blkcg_punt_bio_submit. */
 #define REQ_BTRFS_CGROUP_PUNT			REQ_FS_PRIVATE
 

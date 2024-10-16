@@ -99,6 +99,21 @@ struct btrfs_bio_ctrl {
 	enum btrfs_compression_type compress_type;
 	u32 len_to_oe_boundary;
 	blk_opf_t opf;
+	/*
+	 * If this is a data read bio, we set this to true if it is safe to
+	 * search for csums in the commit root. Otherwise, it is set to false.
+	 *
+	 * This is an optimization to reduce the contention on the csum tree
+	 * root rwsem. Due to how rwsem is implemented, there is a possible
+	 * priority inversion where the readers holding the lock don't get
+	 * scheduled (say they're in a cgroup stuck in heavy reclaim) which
+	 * then blocks btrfs transactions. The only real help is to try to
+	 * reduce the contention on the lock as much as we can.
+	 *
+	 * Do this by detecting when a data read is reading data from an old
+	 * transaction so it's safe to look in the commit root.
+	 */
+	bool csum_search_commit_root;
 	btrfs_bio_end_io_t end_io_func;
 	struct writeback_control *wbc;
 
@@ -769,6 +784,9 @@ static void submit_extent_folio(struct btrfs_bio_ctrl *bio_ctrl,
 			alloc_new_bio(inode, bio_ctrl, disk_bytenr,
 				      folio_pos(folio) + pg_offset);
 		}
+		if (btrfs_op(&bio_ctrl->bbio->bio) == BTRFS_MAP_READ &&
+		    is_data_inode(inode) && bio_ctrl->csum_search_commit_root)
+			btrfs_bio_set_csum_search_commit_root(bio_ctrl->bbio);
 
 		/* Cap to the current ordered extent boundary if there is one. */
 		if (len > bio_ctrl->len_to_oe_boundary) {
@@ -1046,6 +1064,9 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 
 		if (prev_em_start)
 			*prev_em_start = em->start;
+
+		if (em->generation < btrfs_get_fs_generation(fs_info))
+			bio_ctrl->csum_search_commit_root = true;
 
 		free_extent_map(em);
 		em = NULL;
