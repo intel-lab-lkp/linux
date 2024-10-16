@@ -328,6 +328,9 @@ static void fsl_mc_check(struct mem_ctl_info *mci)
 	 * TODO: Add support for 32-bit wide buses
 	 */
 	if ((err_detect & DDR_EDE_SBE) && (bus_width == 64)) {
+		u64 cap = (u64)cap_high << 32 | (u64)cap_low;
+		u32 s = syndrome;
+
 		sbe_ecc_decode(cap_high, cap_low, syndrome,
 				&bad_data_bit, &bad_ecc_bit);
 
@@ -338,11 +341,15 @@ static void fsl_mc_check(struct mem_ctl_info *mci)
 			fsl_mc_printk(mci, KERN_ERR,
 				"Faulty ECC bit: %d\n", bad_ecc_bit);
 
+		if (bad_data_bit >= 0)
+			cap ^= 1ULL << bad_data_bit;
+
+		if (bad_ecc_bit >= 0)
+			s ^= 1 << bad_ecc_bit;
+
 		fsl_mc_printk(mci, KERN_ERR,
 			"Expected Data / ECC:\t%#8.8x_%08x / %#2.2x\n",
-			cap_high ^ (1 << (bad_data_bit - 32)),
-			cap_low ^ (1 << bad_data_bit),
-			syndrome ^ (1 << bad_ecc_bit));
+			upper_32_bits(cap), lower_32_bits(cap), s);
 	}
 
 	fsl_mc_printk(mci, KERN_ERR,
