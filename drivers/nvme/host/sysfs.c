@@ -546,6 +546,17 @@ static ssize_t dctype_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(dctype);
 
+static ssize_t max_hw_sectors_kb_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	struct nvme_ctrl *ctrl = dev_get_drvdata(dev);
+	u32 max_hw_sectors_kb = ctrl->max_hw_sectors >> 1;
+
+	return sysfs_emit(buf, "%u\n", max_hw_sectors_kb);
+}
+static DEVICE_ATTR_RO(max_hw_sectors_kb);
+
 #ifdef CONFIG_NVME_HOST_AUTH
 static ssize_t nvme_ctrl_dhchap_secret_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -687,6 +698,7 @@ static struct attribute *nvme_dev_attrs[] = {
 	&dev_attr_kato.attr,
 	&dev_attr_cntrltype.attr,
 	&dev_attr_dctype.attr,
+	&dev_attr_max_hw_sectors_kb.attr,
 #ifdef CONFIG_NVME_HOST_AUTH
 	&dev_attr_dhchap_secret.attr,
 	&dev_attr_dhchap_ctrl_secret.attr,
