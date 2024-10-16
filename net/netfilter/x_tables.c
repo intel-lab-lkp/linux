@@ -1399,7 +1399,7 @@ xt_replace_table(struct xt_table *table,
 
 	/* Do the substitution. */
 	local_bh_disable();
-	private = table->private;
+	private = READ_ONCE(table->private);
 
 	/* Check inside lock: is the old number correct? */
 	if (num_counters != private->number) {
