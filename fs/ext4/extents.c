@@ -4782,6 +4782,10 @@ long ext4_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 		ret = ext4_zero_range(file, offset, len, mode);
 		goto exit;
 	}
+
+	if (mode & FALLOC_FL_KEEP_SIZE)
+		ext4_clear_inode_state(inode, EXT4_STATE_TRUNCATED);
+
 	trace_ext4_fallocate_enter(inode, offset, len, mode);
 	lblk = offset >> blkbits;
 
