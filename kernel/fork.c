@@ -2292,6 +2292,7 @@ __latent_entropy struct task_struct *copy_process(
 	acct_clear_integrals(p);
 
 	posix_cputimers_init(&p->posix_cputimers);
+	tick_dep_clear_task(p, TICK_DEP_BIT_POSIX_TIMER);
 
 	p->io_context = NULL;
 	audit_set_context(p, NULL);
