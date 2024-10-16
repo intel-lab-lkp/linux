@@ -24,14 +24,11 @@
 #undef pr_fmt
 #define pr_fmt(fmt) "erofs: " fmt
 
-__printf(3, 4) void _erofs_err(struct super_block *sb,
-			       const char *function, const char *fmt, ...);
-#define erofs_err(sb, fmt, ...)	\
-	_erofs_err(sb, __func__, fmt "\n", ##__VA_ARGS__)
-__printf(3, 4) void _erofs_info(struct super_block *sb,
-			       const char *function, const char *fmt, ...);
-#define erofs_info(sb, fmt, ...) \
-	_erofs_info(sb, __func__, fmt "\n", ##__VA_ARGS__)
+#define erofs_log_declare(name) \
+	__printf(2, 3) void erofs_##name(struct super_block *sb, const char *fmt, ...)
+erofs_log_declare(err);
+erofs_log_declare(info);
+
 #ifdef CONFIG_EROFS_FS_DEBUG
 #define DBG_BUGON               BUG_ON
 #else

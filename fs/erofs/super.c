@@ -18,8 +18,8 @@
 
 static struct kmem_cache *erofs_inode_cachep __read_mostly;
 
-#define _erofs_log_def(name) \
-	void _erofs_##name(struct super_block *sb, const char *func, const char *fmt, ...) \
+#define erofs_log_def(name) \
+	__printf(2, 3) void erofs_##name(struct super_block *sb, const char *fmt, ...) \
 	{ \
 		struct va_format vaf; \
 		va_list args; \
@@ -30,14 +30,14 @@ static struct kmem_cache *erofs_inode_cachep __read_mostly;
 		vaf.va = &args; \
 		\
 		if ((sb)) \
-			pr_##name("(device %s): %s: %pV", (sb)->s_id, (func), &vaf); \
+			pr_##name("(device %s): %s: %pV\n", (sb)->s_id, __func__, &vaf); \
 		else \
-			pr_##name("%s: %pV", (func), &vaf); \
+			pr_##name("%s: %pV\n", __func__, &vaf); \
 		va_end(args); \
 	}
 
-_erofs_log_def(err);
-_erofs_log_def(info);
+erofs_log_def(err);
+erofs_log_def(info);
 
 static int erofs_superblock_csum_verify(struct super_block *sb, void *sbdata)
 {
