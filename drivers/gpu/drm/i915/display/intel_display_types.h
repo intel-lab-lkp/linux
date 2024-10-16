@@ -683,6 +683,8 @@ struct intel_plane_state {
 	u64 ccval;
 
 	const char *no_fbc_reason;
+
+	struct drm_property_blob *async_sup_modifiers;
 };
 
 struct intel_initial_plane_config {
@@ -1434,6 +1436,8 @@ struct intel_plane {
 	} cursor;
 
 	struct intel_fbc *fbc;
+
+	struct drm_property *async_modifiers_property;
 
 	/*
 	 * NOTE: Do not place new plane state fields here (e.g., when adding

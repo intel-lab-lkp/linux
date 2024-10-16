@@ -2383,6 +2383,29 @@ static bool icl_plane_format_mod_supported(struct drm_plane *_plane,
 	}
 }
 
+static int intel_plane_get_property(struct drm_plane *plane,
+				    const struct drm_plane_state *state,
+				    struct drm_property *property,
+				    uint64_t *val)
+{
+	struct drm_i915_private *i915 = to_i915(plane->dev);
+	const struct intel_plane_state *intel_plane_state =
+		to_intel_plane_state(state);
+	struct intel_plane *intel_plane = to_intel_plane(plane);
+
+	if (property == intel_plane->async_modifiers_property) {
+		*val = intel_plane_state->async_sup_modifiers ?
+			intel_plane_state->async_sup_modifiers->base.id : 0;
+	} else {
+		drm_err(&i915->drm,
+			"Unknown property [PROP:%d:%s]\n",
+			property->base.id, property->name);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static bool tgl_plane_format_mod_supported(struct drm_plane *_plane,
 					   u32 format, u64 modifier)
 {
@@ -2442,6 +2465,7 @@ static const struct drm_plane_funcs skl_plane_funcs = {
 	.atomic_duplicate_state = intel_plane_duplicate_state,
 	.atomic_destroy_state = intel_plane_destroy_state,
 	.format_mod_supported = skl_plane_format_mod_supported,
+	.atomic_get_property = intel_plane_get_property,
 };
 
 static const struct drm_plane_funcs icl_plane_funcs = {
@@ -2451,6 +2475,7 @@ static const struct drm_plane_funcs icl_plane_funcs = {
 	.atomic_duplicate_state = intel_plane_duplicate_state,
 	.atomic_destroy_state = intel_plane_destroy_state,
 	.format_mod_supported = icl_plane_format_mod_supported,
+	.atomic_get_property = intel_plane_get_property,
 };
 
 static const struct drm_plane_funcs tgl_plane_funcs = {
@@ -2460,6 +2485,7 @@ static const struct drm_plane_funcs tgl_plane_funcs = {
 	.atomic_duplicate_state = intel_plane_duplicate_state,
 	.atomic_destroy_state = intel_plane_destroy_state,
 	.format_mod_supported = tgl_plane_format_mod_supported,
+	.atomic_get_property = intel_plane_get_property,
 };
 
 static void
@@ -2547,6 +2573,25 @@ static u8 skl_get_plane_caps(struct drm_i915_private *i915,
 		caps |= INTEL_PLANE_CAP_NEED64K_PHYS;
 
 	return caps;
+}
+
+static void intel_plane_attach_async_modifiers_property(struct intel_plane *intel_plane)
+{
+	struct drm_plane *plane = &intel_plane->base;
+	struct drm_device *dev = plane->dev;
+	struct drm_property *prop;
+
+	prop = intel_plane->async_modifiers_property;
+	if (!prop) {
+		prop = drm_property_create(dev, DRM_MODE_PROP_BLOB | DRM_MODE_PROP_ATOMIC,
+					   "Async Supported Modifiers", 0);
+		if (!prop)
+			return;
+
+		intel_plane->async_modifiers_property = prop;
+	}
+
+	drm_object_attach_property(&plane->base, prop, 0);
 }
 
 struct intel_plane *
@@ -2694,10 +2739,12 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 	if (DISPLAY_VER(dev_priv) >= 12)
 		drm_plane_enable_fb_damage_clips(&plane->base);
 
-	if (DISPLAY_VER(dev_priv) >= 11)
+	if (DISPLAY_VER(dev_priv) >= 11) {
 		drm_plane_create_scaling_filter_property(&plane->base,
 						BIT(DRM_SCALING_FILTER_DEFAULT) |
 						BIT(DRM_SCALING_FILTER_NEAREST_NEIGHBOR));
+		intel_plane_attach_async_modifiers_property(plane);
+	}
 
 	intel_plane_helper_add(plane);
 

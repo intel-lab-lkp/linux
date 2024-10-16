@@ -117,6 +117,9 @@ intel_plane_duplicate_state(struct drm_plane *plane)
 	intel_state->dpt_vma = NULL;
 	intel_state->flags = 0;
 
+	if (intel_state->async_sup_modifiers)
+		drm_property_blob_get(intel_state->async_sup_modifiers);
+
 	/* add reference to fb */
 	if (intel_state->hw.fb)
 		drm_framebuffer_get(intel_state->hw.fb);
@@ -140,6 +143,9 @@ intel_plane_destroy_state(struct drm_plane *plane,
 
 	drm_WARN_ON(plane->dev, plane_state->ggtt_vma);
 	drm_WARN_ON(plane->dev, plane_state->dpt_vma);
+
+	if (plane_state->async_sup_modifiers)
+		drm_property_blob_put(plane_state->async_sup_modifiers);
 
 	__drm_atomic_helper_plane_destroy_state(&plane_state->uapi);
 	if (plane_state->hw.fb)
