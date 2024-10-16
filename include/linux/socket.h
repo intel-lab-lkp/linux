@@ -40,6 +40,25 @@ struct sockaddr {
 	};
 };
 
+/*
+ * This is the legacy form of `struct sockaddr`. The original `struct sockaddr`
+ * was modified in commit b5f0de6df6dce ("net: dev: Convert sa_data to flexible
+ * array in struct sockaddR") due to the fact that "One of the worst offenders
+ * of "fake flexible arrays" is struct sockaddr". This means that the original
+ * `char sa_data[14]` behaved as a flexible array at runtime, so a proper
+ * flexible-array member was introduced.
+ *
+ * This caused several flexible-array-in-the-middle issues:
+ * https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#index-Wflex-array-member-not-at-end
+ *
+ * `struct sockaddr_legacy` replaces `struct sockaddr` in all instances where
+ * objects of this type do not appear at the end of composite structures.
+ */
+struct sockaddr_legacy {
+	sa_family_t	sa_family;	/* address family, AF_xxx	*/
+	char 		sa_data[14];	/* 14 bytes of protocol address	*/
+};
+
 struct linger {
 	int		l_onoff;	/* Linger active		*/
 	int		l_linger;	/* How long to linger for	*/
