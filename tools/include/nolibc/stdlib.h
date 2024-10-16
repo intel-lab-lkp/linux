@@ -90,7 +90,7 @@ char *getenv(const char *name)
 {
 	int idx, i;
 
-	if (environ) {
+	if (*environ) {
 		for (idx = 0; environ[idx]; idx++) {
 			for (i = 0; name[i] && name[i] == environ[idx][i];)
 				i++;
