@@ -5,6 +5,7 @@
 #include <linux/elf.h>
 #include <linux/kernel.h>
 #include <linux/pagemap.h>
+#include <linux/set_memory.h>
 
 #define BUILD_ID 3
 
@@ -74,7 +75,9 @@ static int freader_get_folio(struct freader *r, loff_t file_off)
 		filemap_invalidate_unlock_shared(r->file->f_mapping);
 	}
 
-	if (IS_ERR(r->folio) || !folio_test_uptodate(r->folio)) {
+	if (IS_ERR(r->folio) ||
+	    !kernel_page_present(&r->folio->page) ||
+	    !folio_test_uptodate(r->folio)) {
 		if (!IS_ERR(r->folio))
 			folio_put(r->folio);
 		r->folio = NULL;
