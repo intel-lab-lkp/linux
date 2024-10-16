@@ -452,7 +452,7 @@ full_check:
 				     itag);
 }
 
-static inline __be32 sk_extract_addr(struct sockaddr *addr)
+static inline __be32 sk_extract_addr(struct sockaddr_legacy *addr)
 {
 	return ((struct sockaddr_in *) addr)->sin_addr.s_addr;
 }

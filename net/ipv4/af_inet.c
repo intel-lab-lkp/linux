@@ -1021,7 +1021,7 @@ static int inet_compat_routing_ioctl(struct sock *sk, unsigned int cmd,
 	struct rtentry rt;
 
 	if (copy_from_user(&rt.rt_dst, &ur->rt_dst,
-			3 * sizeof(struct sockaddr)) ||
+			3 * sizeof(struct sockaddr_legacy)) ||
 	    get_user(rt.rt_flags, &ur->rt_flags) ||
 	    get_user(rt.rt_metric, &ur->rt_metric) ||
 	    get_user(rt.rt_mtu, &ur->rt_mtu) ||
