@@ -831,6 +831,16 @@ struct devid_map {
 #define AMD_IOMMU_DEVICE_FLAG_PRIV_SUP   0x10
 
 /*
+ * Structure defining one entry in the device table
+ */
+struct dev_table_entry {
+	union {
+		u64 data[4];
+		u128 data128[2];
+	};
+};
+
+/*
  * This struct contains device specific data for the IOMMU
  */
 struct iommu_dev_data {
@@ -858,6 +868,7 @@ struct iommu_dev_data {
 	bool defer_attach;
 
 	struct ratelimit_state rs;        /* Ratelimit IOPF messages */
+	struct dev_table_entry dte_cache;
 };
 
 /* Map HPET and IOAPIC ids to the devid used by the IOMMU */
@@ -882,16 +893,6 @@ extern struct list_head amd_iommu_list;
  * The indices are referenced in the protection domains
  */
 extern struct amd_iommu *amd_iommus[MAX_IOMMUS];
-
-/*
- * Structure defining one entry in the device table
- */
-struct dev_table_entry {
-	union {
-		u64 data[4];
-		u128 data128[2];
-	};
-};
 
 /*
  * One entry for unity mappings parsed out of the ACPI table.
