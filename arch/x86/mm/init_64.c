@@ -1449,6 +1449,7 @@ static unsigned long probe_memory_block_size(void)
 {
 	unsigned long boot_mem_end = max_pfn << PAGE_SHIFT;
 	unsigned long bz;
+	int order;
 
 	/* If memory block size has been set, then use it */
 	bz = set_memory_block_size;
@@ -1458,6 +1459,21 @@ static unsigned long probe_memory_block_size(void)
 	/* Use regular block if RAM is smaller than MEM_SIZE_FOR_LARGE_BLOCK */
 	if (boot_mem_end < MEM_SIZE_FOR_LARGE_BLOCK) {
 		bz = MIN_MEMORY_BLOCK_SIZE;
+		goto done;
+	}
+
+	/* Consider hotplug advisement value (if set) */
+	order = memblock_probe_size_order();
+	bz = order > 0 ? (1UL << order) : 0;
+	if (bz) {
+		/* Align down to max and up to min supported */
+		bz = max(min(bz, MAX_BLOCK_SIZE), MIN_MEMORY_BLOCK_SIZE);
+		/* Use lesser of advisement and end of memory alignment */
+		for (; bz > MIN_MEMORY_BLOCK_SIZE; bz >>= 1) {
+			if (IS_ALIGNED(boot_mem_end, bz))
+				goto done;
+		}
+		/* Barring clean alignment, default to min block size */
 		goto done;
 	}
 
