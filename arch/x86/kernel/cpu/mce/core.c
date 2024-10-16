@@ -1118,7 +1118,7 @@ static noinstr int mce_start(int *no_way_out)
 	} else {
 		/*
 		 * Subject: Now start the scanning loop one by one in
-		 * the original callin order.
+		 * the original calling order.
 		 * This way when there are any shared banks it will be
 		 * only seen by one CPU before cleared, avoiding duplicates.
 		 */
@@ -1892,7 +1892,7 @@ static int __mcheck_cpu_apply_quirks(struct cpuinfo_x86 *c)
 	case X86_VENDOR_AMD:
 		if (c->x86 == 15 && this_cpu_read(mce_num_banks) > 4) {
 			/*
-			 * disable GART TBL walk error reporting, which
+			 * disable GART TLB walk error reporting, which
 			 * trips off incorrectly with the IOMMU & 3ware
 			 * & Cerberus:
 			 */
