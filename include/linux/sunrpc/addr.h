@@ -186,4 +186,30 @@ static inline u32 rpc_get_scope_id(const struct sockaddr *sa)
 	return ((struct sockaddr_in6 *) sa)->sin6_scope_id;
 }
 
+static inline int rpc_init_anyaddr(const int family, struct sockaddr *sap)
+{
+	static const struct sockaddr_in sin = {
+		.sin_family		= AF_INET,
+		.sin_addr.s_addr	= htonl(INADDR_ANY),
+	};
+	static const struct sockaddr_in6 sin6 = {
+		.sin6_family		= AF_INET6,
+		.sin6_addr		= IN6ADDR_ANY_INIT,
+	};
+
+	switch (family) {
+	case AF_LOCAL:
+		break;
+	case AF_INET:
+		memcpy(sap, &sin, sizeof(sin));
+		break;
+	case AF_INET6:
+		memcpy(sap, &sin6, sizeof(sin6));
+		break;
+	default:
+		return -EAFNOSUPPORT;
+	}
+	return 0;
+}
+
 #endif /* _LINUX_SUNRPC_ADDR_H */
