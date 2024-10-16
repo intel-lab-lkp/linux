@@ -343,6 +343,9 @@ static unsigned long clk_double_div_recalc_rate(struct clk_hw *hw,
 	div = get_div(double_div->reg1, double_div->shift1);
 	div *= get_div(double_div->reg2, double_div->shift2);
 
+	if (WARN_ON_ONCE(!div))
+		return 0;
+
 	return DIV_ROUND_UP_ULL((u64)parent_rate, div);
 }
 
