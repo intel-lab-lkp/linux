@@ -14,6 +14,7 @@
 #include <linux/errno.h>
 #include <linux/acpi.h>
 #include <linux/memblock.h>
+#include <linux/memory.h>
 #include <linux/numa.h>
 #include <linux/nodemask.h>
 #include <linux/topology.h>
@@ -334,6 +335,35 @@ out_err_bad_srat:
 	return 0;
 }
 
+/*
+ * CXL allows CFMW to be aligned along 256MB boundaries, but large memory
+ * systems default to larger alignments (2GB on x86). Misalignments can
+ * cause some capacity to become unreachable. Calculate the largest supported
+ * alignment for all CFMW to maximize the amount of mappable capacity.
+ */
+static int __init acpi_align_cfmws(union acpi_subtable_headers *header,
+				   void *arg, const unsigned long table_end)
+{
+	struct acpi_cedt_cfmws *cfmws = (struct acpi_cedt_cfmws *)header;
+	u64 start = cfmws->base_hpa;
+	u64 size = cfmws->window_size;
+	unsigned long *fin_bz = arg;
+	unsigned long bz;
+
+	for (bz = SZ_64T; bz >= SZ_256M; bz >>= 1) {
+		if (IS_ALIGNED(start, bz) && IS_ALIGNED(size, bz))
+			break;
+	}
+
+	/* Only adjust downward, we never want to increase block size */
+	if (bz < *fin_bz && bz >= SZ_256M)
+		*fin_bz = bz;
+	else if (bz < SZ_256M)
+		pr_err("CFMWS: [BIOS BUG] base/size alignment violates spec\n");
+
+	return 0;
+}
+
 static int __init acpi_parse_cfmws(union acpi_subtable_headers *header,
 				   void *arg, const unsigned long table_end)
 {
@@ -502,6 +532,7 @@ acpi_table_parse_srat(enum acpi_srat_type id,
 int __init acpi_numa_init(void)
 {
 	int i, fake_pxm, cnt = 0;
+	unsigned long bz = SZ_64T;
 
 	if (acpi_disabled)
 		return -EINVAL;
@@ -553,6 +584,17 @@ int __init acpi_numa_init(void)
 	}
 	last_real_pxm = fake_pxm;
 	fake_pxm++;
+
+	/* Calculate and set largest supported memory block size alignment */
+	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, acpi_align_cfmws, &bz);
+	if (bz >= SZ_256M) {
+		if (memblock_advise_size_order(ffs(bz)-1) < 0)
+			pr_warn("CFMWS: memblock size advise failed\n");
+		else
+			pr_info("CFMWS: memblock advised size(%ld)\n", bz);
+	}
+
+	/* Then parse and fill the numa nodes with the described memory */
 	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, acpi_parse_cfmws,
 			      &fake_pxm);
 
