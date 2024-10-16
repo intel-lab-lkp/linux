@@ -2136,12 +2136,13 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	if (ret)
 		goto destroy_root;
 
-	ret = rebind_subsystems(root, ss_mask);
+	ret = cgroup_bpf_inherit(root_cgrp);
 	if (ret)
 		goto exit_stats;
 
-	ret = cgroup_bpf_inherit(root_cgrp);
-	WARN_ON_ONCE(ret);
+	ret = rebind_subsystems(root, ss_mask);
+	if (ret)
+		goto exit_stats;
 
 	trace_cgroup_setup_root(root);
 
