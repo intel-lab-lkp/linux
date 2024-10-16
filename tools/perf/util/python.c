@@ -1201,12 +1201,42 @@ static PyObject *pyrf__tracepoint(struct pyrf_evsel *pevsel,
 #endif // HAVE_LIBTRACEEVENT
 }
 
+static PyObject *pyrf__parse_events(PyObject *self, PyObject *args)
+{
+	const char *input;
+	struct pyrf_evlist *pevlist;
+	struct parse_events_error err;
+
+	if (!PyArg_ParseTuple(args, "s", &input))
+		return NULL;
+
+	pevlist = PyObject_New(struct pyrf_evlist, &pyrf_evlist__type);
+	if (!pevlist)
+		return NULL;
+
+	parse_events_error__init(&err);
+	memset(&pevlist->evlist, 0, sizeof(pevlist->evlist));
+	evlist__init(&pevlist->evlist, NULL, NULL);
+	if (parse_events(&pevlist->evlist, input, &err)) {
+		parse_events_error__print(&err, input);
+		PyErr_SetFromErrno(PyExc_OSError);
+		return NULL;
+	}
+	return (PyObject *)pevlist;
+}
+
 static PyMethodDef perf__methods[] = {
 	{
 		.ml_name  = "tracepoint",
 		.ml_meth  = (PyCFunction) pyrf__tracepoint,
 		.ml_flags = METH_VARARGS | METH_KEYWORDS,
 		.ml_doc	  = PyDoc_STR("Get tracepoint config.")
+	},
+	{
+		.ml_name  = "parse_events",
+		.ml_meth  = (PyCFunction) pyrf__parse_events,
+		.ml_flags = METH_VARARGS,
+		.ml_doc	  = PyDoc_STR("Parse a string of events and return an evlist.")
 	},
 	{ .ml_name = NULL, }
 };
