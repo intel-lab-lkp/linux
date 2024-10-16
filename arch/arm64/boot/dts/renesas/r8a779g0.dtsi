@@ -1364,6 +1364,18 @@
 						reg = <0>;
 						remote-endpoint = <&isp0vin00>;
 					};
+
+					vin00isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin00isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin00isp3: endpoint@3 {
+						reg = <3>;
+					};
 				};
 			};
 		};
@@ -1392,6 +1404,18 @@
 					vin01isp0: endpoint@0 {
 						reg = <0>;
 						remote-endpoint = <&isp0vin01>;
+					};
+
+					vin01isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin01isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin01isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1422,6 +1446,18 @@
 						reg = <0>;
 						remote-endpoint = <&isp0vin02>;
 					};
+
+					vin02isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin02isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin02isp3: endpoint@3 {
+						reg = <3>;
+					};
 				};
 			};
 		};
@@ -1450,6 +1486,18 @@
 					vin03isp0: endpoint@0 {
 						reg = <0>;
 						remote-endpoint = <&isp0vin03>;
+					};
+
+					vin03isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin03isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin03isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1480,6 +1528,18 @@
 						reg = <0>;
 						remote-endpoint = <&isp0vin04>;
 					};
+
+					vin04isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin04isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin04isp3: endpoint@3 {
+						reg = <3>;
+					};
 				};
 			};
 		};
@@ -1508,6 +1568,18 @@
 					vin05isp0: endpoint@0 {
 						reg = <0>;
 						remote-endpoint = <&isp0vin05>;
+					};
+
+					vin05isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin05isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin05isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1538,6 +1610,18 @@
 						reg = <0>;
 						remote-endpoint = <&isp0vin06>;
 					};
+
+					vin06isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin06isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin06isp3: endpoint@3 {
+						reg = <3>;
+					};
 				};
 			};
 		};
@@ -1567,6 +1651,18 @@
 						reg = <0>;
 						remote-endpoint = <&isp0vin07>;
 					};
+
+					vin07isp1: endpoint@1 {
+						reg = <1>;
+					};
+
+					vin07isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin07isp3: endpoint@3 {
+						reg = <3>;
+					};
 				};
 			};
 		};
@@ -1592,9 +1688,21 @@
 
 					reg = <2>;
 
+					vin08isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin08isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin08>;
+					};
+
+					vin08isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin08isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1621,9 +1729,21 @@
 
 					reg = <2>;
 
+					vin09isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin09isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin09>;
+					};
+
+					vin09isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin09isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1650,9 +1770,21 @@
 
 					reg = <2>;
 
+					vin10isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin10isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin10>;
+					};
+
+					vin10isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin10isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1679,9 +1811,21 @@
 
 					reg = <2>;
 
+					vin11isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin11isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin11>;
+					};
+
+					vin11isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin11isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1708,9 +1852,21 @@
 
 					reg = <2>;
 
+					vin12isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin12isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin12>;
+					};
+
+					vin12isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin12isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1737,9 +1893,21 @@
 
 					reg = <2>;
 
+					vin13isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin13isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin13>;
+					};
+
+					vin13isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin13isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1766,9 +1934,21 @@
 
 					reg = <2>;
 
+					vin14isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin14isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin14>;
+					};
+
+					vin14isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin14isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -1795,9 +1975,21 @@
 
 					reg = <2>;
 
+					vin15isp0: endpoint@0 {
+						reg = <0>;
+					};
+
 					vin15isp1: endpoint@1 {
 						reg = <1>;
 						remote-endpoint = <&isp1vin15>;
+					};
+
+					vin15isp2: endpoint@2 {
+						reg = <2>;
+					};
+
+					vin15isp3: endpoint@3 {
+						reg = <3>;
 					};
 				};
 			};
@@ -2251,6 +2443,10 @@
 						reg = <0>;
 						remote-endpoint = <&csi40isp0>;
 					};
+
+					isp0csi41: endpoint@1 {
+						reg = <1>;
+					};
 				};
 
 				port@1 {
@@ -2330,6 +2526,10 @@
 					#size-cells = <0>;
 
 					reg = <0>;
+
+					isp1csi40: endpoint@0 {
+						reg = <0>;
+					};
 
 					isp1csi41: endpoint@1 {
 						reg = <1>;
