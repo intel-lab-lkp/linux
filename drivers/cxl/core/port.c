@@ -1399,14 +1399,14 @@ static void delete_endpoint(void *data)
 	struct cxl_port *endpoint = cxlmd->endpoint;
 	struct device *host = endpoint_host(endpoint);
 
-	scoped_guard(device, host) {
-		if (host->driver && !endpoint->dead) {
-			devm_release_action(host, cxl_unlink_parent_dport, endpoint);
-			devm_release_action(host, cxl_unlink_uport, endpoint);
-			devm_release_action(host, unregister_port, endpoint);
-		}
-		cxlmd->endpoint = NULL;
+	device_lock(host);
+	if (host->driver && !endpoint->dead) {
+		devm_release_action(host, cxl_unlink_parent_dport, endpoint);
+		devm_release_action(host, cxl_unlink_uport, endpoint);
+		devm_release_action(host, unregister_port, endpoint);
 	}
+	cxlmd->endpoint = NULL;
+	device_unlock(host);
 	put_device(&endpoint->dev);
 	put_device(host);
 }
@@ -1571,38 +1571,40 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 	 * dereferencing the device of the port before the parent_port releasing.
 	 */
 	struct cxl_port *port __free(put_cxl_port) = NULL;
-	scoped_guard(device, &parent_port->dev) {
-		if (!parent_port->dev.driver) {
-			dev_warn(&cxlmd->dev,
-				 "port %s:%s disabled, failed to enumerate CXL.mem\n",
-				 dev_name(&parent_port->dev), dev_name(uport_dev));
-			return -ENXIO;
-		}
-
-		port = find_cxl_port_at(parent_port, dport_dev, &dport);
-		if (!port) {
-			component_reg_phys = find_component_registers(uport_dev);
-			port = devm_cxl_add_port(&parent_port->dev, uport_dev,
-						 component_reg_phys, parent_dport);
-			if (IS_ERR(port))
-				return PTR_ERR(port);
-
-			/* retry find to pick up the new dport information */
-			port = find_cxl_port_at(parent_port, dport_dev, &dport);
-			if (!port)
-				return -ENXIO;
-		}
+	device_lock(&parent_port->dev);
+	if (!parent_port->dev.driver) {
+		dev_warn(&cxlmd->dev,
+			 "port %s:%s disabled, failed to enumerate CXL.mem\n",
+			 dev_name(&parent_port->dev), dev_name(uport_dev));
+		port = ERR_PTR(-ENXIO);
+		goto out;
 	}
 
-	dev_dbg(&cxlmd->dev, "add to new port %s:%s\n",
-		dev_name(&port->dev), dev_name(port->uport_dev));
-	rc = cxl_add_ep(dport, &cxlmd->dev);
-	if (rc == -EBUSY) {
-		/*
-		 * "can't" happen, but this error code means
-		 * something to the caller, so translate it.
-		 */
-		rc = -ENXIO;
+	port = find_cxl_port_at(parent_port, dport_dev, &dport);
+	if (!port) {
+		component_reg_phys = find_component_registers(uport_dev);
+		port = devm_cxl_add_port(&parent_port->dev, uport_dev,
+					 component_reg_phys, parent_dport);
+		/* retry find to pick up the new dport information */
+		if (!IS_ERR(port))
+			port = find_cxl_port_at(parent_port, dport_dev, &dport);
+	}
+out:
+	device_unlock(&parent_port->dev);
+
+	if (IS_ERR(port))
+		rc = PTR_ERR(port);
+	else {
+		dev_dbg(&cxlmd->dev, "add to new port %s:%s\n",
+			dev_name(&port->dev), dev_name(port->uport_dev));
+		rc = cxl_add_ep(dport, &cxlmd->dev);
+		if (rc == -EBUSY) {
+			/*
+			 * "can't" happen, but this error code means
+			 * something to the caller, so translate it.
+			 */
+			rc = -ENXIO;
+		}
 	}
 
 	return rc;
