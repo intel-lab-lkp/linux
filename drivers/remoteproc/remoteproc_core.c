@@ -1727,6 +1727,7 @@ static int rproc_stop(struct rproc *rproc, bool crashed)
 	/* power off the remote processor */
 	ret = rproc->ops->stop(rproc);
 	if (ret) {
+		rproc->state = RPROC_DEFUNCT;
 		dev_err(dev, "can't stop rproc: %d\n", ret);
 		return ret;
 	}
@@ -1839,7 +1840,7 @@ int rproc_trigger_recovery(struct rproc *rproc)
 		return ret;
 
 	/* State could have changed before we got the mutex */
-	if (rproc->state != RPROC_CRASHED)
+	if (rproc->state == RPROC_DEFUNCT || rproc->state != RPROC_CRASHED)
 		goto unlock_mutex;
 
 	dev_err(dev, "recovering %s\n", rproc->name);
