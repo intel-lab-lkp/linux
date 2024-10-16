@@ -435,6 +435,10 @@ struct fuse_req {
 
 	/** fuse_mount this request belongs to */
 	struct fuse_mount *fm;
+
+#ifdef CONFIG_FUSE_IO_URING
+	void *ring_entry;
+#endif
 };
 
 struct fuse_iqueue;
@@ -1199,6 +1203,11 @@ void fuse_change_entry_timeout(struct dentry *entry, struct fuse_entry_out *o);
  * Acquire reference to fuse_conn
  */
 struct fuse_conn *fuse_conn_get(struct fuse_conn *fc);
+
+/**
+ * Initialize the fuse processing queue
+ */
+void fuse_pqueue_init(struct fuse_pqueue *fpq);
 
 /**
  * Initialize fuse_conn
