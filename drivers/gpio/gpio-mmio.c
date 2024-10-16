@@ -694,6 +694,7 @@ MODULE_DEVICE_TABLE(of, bgpio_of_match);
 static struct bgpio_pdata *bgpio_parse_fw(struct device *dev, unsigned long *flags)
 {
 	struct bgpio_pdata *pdata;
+	u32 ngpios;
 
 	if (!dev_fwnode(dev))
 		return NULL;
@@ -703,6 +704,9 @@ static struct bgpio_pdata *bgpio_parse_fw(struct device *dev, unsigned long *fla
 		return ERR_PTR(-ENOMEM);
 
 	pdata->base = -1;
+
+	if (!device_property_read_u32(dev, "ngpios", &ngpios))
+		pdata->ngpios = ngpios;
 
 	if (device_is_big_endian(dev))
 		*flags |= BGPIOF_BIG_ENDIAN_BYTE_ORDER;
