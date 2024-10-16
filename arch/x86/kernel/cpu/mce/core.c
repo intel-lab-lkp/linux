@@ -706,8 +706,6 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 		if (!mce_banks[i].ctl || !test_bit(i, *b))
 			continue;
 
-		m.misc = 0;
-		m.addr = 0;
 		m.bank = i;
 
 		barrier();
@@ -1284,8 +1282,6 @@ __mc_scan_banks(struct mce *m, struct pt_regs *regs, struct mce *final,
 		if (!mce_banks[i].ctl)
 			continue;
 
-		m->misc = 0;
-		m->addr = 0;
 		m->bank = i;
 
 		m->status = mce_rdmsrl(mca_msr_reg(i, MCA_STATUS));
