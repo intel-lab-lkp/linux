@@ -21,6 +21,7 @@ MODULE_PARM_DESC(enable_uring,
 
 struct fuse_uring_cmd_pdu {
 	struct fuse_ring_ent *ring_ent;
+	struct fuse_ring_queue *queue;
 };
 
 /*
@@ -372,6 +373,61 @@ void fuse_uring_stop_queues(struct fuse_ring *ring)
 	} else {
 		wake_up_all(&ring->stop_waitq);
 	}
+}
+
+/*
+ * Handle IO_URING_F_CANCEL, typically should come on on daemon termination
+ */
+static void fuse_uring_cancel(struct io_uring_cmd *cmd,
+			      unsigned int issue_flags, struct fuse_conn *fc)
+{
+	struct fuse_uring_cmd_pdu *pdu = (struct fuse_uring_cmd_pdu *)cmd->pdu;
+	struct fuse_ring_queue *queue = pdu->queue;
+	struct fuse_ring_ent *ent;
+	bool found = false;
+	bool need_cmd_done = false;
+
+	spin_lock(&queue->lock);
+
+	/* XXX: This is cumbersome for large queues. */
+	list_for_each_entry(ent, &queue->ent_avail_queue, list) {
+		if (pdu->ring_ent == ent) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		pr_info("qid=%d Did not find ent=%p", queue->qid, ent);
+		spin_unlock(&queue->lock);
+		return;
+	}
+
+	if (ent->state == FRRS_WAIT) {
+		ent->state = FRRS_USERSPACE;
+		list_move(&ent->list, &queue->ent_in_userspace);
+		need_cmd_done = true;
+	}
+	spin_unlock(&queue->lock);
+
+	if (need_cmd_done)
+		io_uring_cmd_done(cmd, -ENOTCONN, 0, issue_flags);
+
+	/*
+	 * releasing the last entry should trigger fuse_dev_release() if
+	 * the daemon was terminated
+	 */
+}
+
+static void fuse_uring_prepare_cancel(struct io_uring_cmd *cmd, int issue_flags,
+				      struct fuse_ring_ent *ring_ent)
+{
+	struct fuse_uring_cmd_pdu *pdu = (struct fuse_uring_cmd_pdu *)cmd->pdu;
+
+	pdu->ring_ent = ring_ent;
+	pdu->queue = ring_ent->queue;
+
+	io_uring_cmd_mark_cancelable(cmd, issue_flags);
 }
 
 /*
@@ -902,6 +958,7 @@ static int fuse_uring_fetch(struct io_uring_cmd *cmd, unsigned int issue_flags,
 		goto err;
 
 	atomic_inc(&ring->queue_refs);
+	fuse_uring_prepare_cancel(cmd, issue_flags, ring_ent);
 	_fuse_uring_fetch(ring_ent, cmd, issue_flags);
 
 	return 0;
@@ -946,6 +1003,11 @@ int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 
 	if (fc->aborted)
 		goto out;
+
+	if ((unlikely(issue_flags & IO_URING_F_CANCEL))) {
+		fuse_uring_cancel(cmd, issue_flags, fc);
+		return 0;
+	}
 
 	switch (cmd_op) {
 	case FUSE_URING_REQ_FETCH:
