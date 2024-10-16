@@ -2492,6 +2492,17 @@ static long __gup_longterm_locked(struct mm_struct *mm,
 
 		/* FOLL_LONGTERM implies FOLL_PIN */
 		rc = check_and_migrate_movable_pages(nr_pinned_pages, pages);
+
+		/*
+		 * The __get_user_pages_locked() call happens before we know
+		 * that whether it's possible to successfully complete the whole
+		 * operation. To compensate for this, if we get an unexpected
+		 * error (such as -ENOMEM) then we must unpin everything, before
+		 * erroring out.
+		 */
+		if (rc != -EAGAIN && rc != 0)
+			unpin_user_pages(pages, nr_pinned_pages);
+
 	} while (rc == -EAGAIN);
 	memalloc_pin_restore(flags);
 	return rc ? rc : nr_pinned_pages;
