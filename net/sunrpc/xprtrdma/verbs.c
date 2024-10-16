@@ -285,6 +285,98 @@ static void rpcrdma_ep_removal_done(struct rpcrdma_notification *rn)
 	xprt_force_disconnect(ep->re_xprt);
 }
 
+static int rpcrdma_get_random_port(void)
+{
+	unsigned short min = xprt_rdma_min_resvport, max = xprt_rdma_max_resvport;
+	unsigned short range;
+	unsigned short rand;
+
+	if (max < min)
+		return -EADDRINUSE;
+	range = max - min + 1;
+	rand = get_random_u32_below(range);
+	return rand + min;
+}
+
+static void rpcrdma_set_srcport(struct rpcrdma_xprt *r_xprt, struct rdma_cm_id *id)
+{
+        struct sockaddr *sap = (struct sockaddr *)&id->route.addr.src_addr;
+
+	if (r_xprt->rx_srcport == 0 && r_xprt->rx_xprt.reuseport) {
+		switch (sap->sa_family) {
+		case AF_INET6:
+			r_xprt->rx_srcport = ntohs(((struct sockaddr_in6 *)sap)->sin6_port);
+			break;
+		case AF_INET:
+			r_xprt->rx_srcport = ntohs(((struct sockaddr_in *)sap)->sin_port);
+			break;
+		}
+	}
+}
+
+static int rpcrdma_get_srcport(struct rpcrdma_xprt *r_xprt)
+{
+	int port = r_xprt->rx_srcport;
+
+	if (port == 0 && r_xprt->rx_xprt.resvport)
+		port = rpcrdma_get_random_port();
+	return port;
+}
+
+static unsigned short rpcrdma_next_srcport(struct rpcrdma_xprt *r_xprt, unsigned short port)
+{
+	if (r_xprt->rx_srcport != 0)
+		r_xprt->rx_srcport = 0;
+	if (!r_xprt->rx_xprt.resvport)
+		return 0;
+	if (port <= xprt_rdma_min_resvport || port > xprt_rdma_max_resvport)
+		return xprt_rdma_max_resvport;
+	return --port;
+}
+
+static int rpcrdma_bind(struct rpcrdma_xprt *r_xprt, struct rdma_cm_id *id)
+{
+	struct sockaddr_storage myaddr;
+	int err, nloop = 0;
+	int port = rpcrdma_get_srcport(r_xprt);
+	unsigned short last;
+
+	/*
+	 * If we are asking for any ephemeral port (i.e. port == 0 &&
+	 * r_xprt->rx_xprt.resvport == 0), don't bind.  Let the local
+	 * port selection happen implicitly when the socket is used
+	 * (for example at connect time).
+	 *
+	 * This ensures that we can continue to establish TCP
+	 * connections even when all local ephemeral ports are already
+	 * a part of some TCP connection.  This makes no difference
+	 * for UDP sockets, but also doesn't harm them.
+	 *
+	 * If we're asking for any reserved port (i.e. port == 0 &&
+	 * r_xprt->rx_xprt.resvport == 1) rpcrdma_get_srcport above will
+	 * ensure that port is non-zero and we will bind as needed.
+	 */
+	if (port <= 0)
+		return port;
+
+	memcpy(&myaddr, &r_xprt->rx_srcaddr, r_xprt->rx_xprt.addrlen);
+	do {
+		rpc_set_port((struct sockaddr *)&myaddr, port);
+		err = rdma_bind_addr(id, (struct sockaddr *)&myaddr);
+		if (err == 0) {
+			if (r_xprt->rx_xprt.reuseport)
+				r_xprt->rx_srcport = port;
+			break;
+		}
+		last = port;
+		port = rpcrdma_next_srcport(r_xprt, port);
+		if (port > last)
+			nloop++;
+	} while (err == -EADDRINUSE && nloop != 2);
+
+	return err;
+}
+
 static struct rdma_cm_id *rpcrdma_create_id(struct rpcrdma_xprt *r_xprt,
 					    struct rpcrdma_ep *ep)
 {
@@ -299,6 +391,12 @@ static struct rdma_cm_id *rpcrdma_create_id(struct rpcrdma_xprt *r_xprt,
 			    RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(id))
 		return id;
+
+	rc = rpcrdma_bind(r_xprt, id);
+	if (rc) {
+		rc = -ENOTCONN;
+		goto out;
+	}
 
 	ep->re_async_rc = -ETIMEDOUT;
 	rc = rdma_resolve_addr(id, NULL, (struct sockaddr *)&xprt->addr,
@@ -327,6 +425,8 @@ static struct rdma_cm_id *rpcrdma_create_id(struct rpcrdma_xprt *r_xprt,
 	rc = rpcrdma_rn_register(id->device, &ep->re_rn, rpcrdma_ep_removal_done);
 	if (rc)
 		goto out;
+
+	rpcrdma_set_srcport(r_xprt, id);
 
 	return id;
 

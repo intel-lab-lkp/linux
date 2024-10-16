@@ -70,6 +70,10 @@ unsigned int xprt_rdma_max_inline_write = RPCRDMA_DEF_INLINE;
 unsigned int xprt_rdma_memreg_strategy		= RPCRDMA_FRWR;
 int xprt_rdma_pad_optimize;
 static struct xprt_class xprt_rdma;
+static unsigned int xprt_rdma_min_resvport_limit = RPC_MIN_RESVPORT;
+static unsigned int xprt_rdma_max_resvport_limit = RPC_MAX_RESVPORT;
+unsigned int xprt_rdma_min_resvport = RPC_DEF_MIN_RESVPORT;
+unsigned int xprt_rdma_max_resvport = RPC_DEF_MAX_RESVPORT;
 
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
 
@@ -136,6 +140,24 @@ static struct ctl_table xr_tunables_table[] = {
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "rdma_min_resvport",
+		.data		= &xprt_rdma_min_resvport,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &xprt_rdma_min_resvport_limit,
+		.extra2		= &xprt_rdma_max_resvport_limit
+	},
+	{
+		.procname	= "rdma_max_resvport",
+		.data		= &xprt_rdma_max_resvport,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &xprt_rdma_min_resvport_limit,
+		.extra2		= &xprt_rdma_max_resvport_limit
 	},
 };
 
@@ -346,6 +368,20 @@ xprt_setup_rdma(struct xprt_create *args)
 	xprt_rdma_format_addresses(xprt, sap);
 
 	new_xprt = rpcx_to_rdmax(xprt);
+
+	if (args->srcaddr)
+		memcpy(&new_xprt->rx_srcaddr, args->srcaddr, args->addrlen);
+	else {
+		rc = rpc_init_anyaddr(args->dstaddr->sa_family,
+					(struct sockaddr *)&new_xprt->rx_srcaddr);
+		if (rc != 0) {
+			xprt_rdma_free_addresses(xprt);
+			xprt_free(xprt);
+			module_put(THIS_MODULE);
+			return ERR_PTR(rc);
+		}
+	}
+
 	rc = rpcrdma_buffer_create(new_xprt);
 	if (rc) {
 		xprt_rdma_free_addresses(xprt);
