@@ -349,7 +349,7 @@ static void __init numa_clear_kernel_node_hotplug(void)
 	for_each_reserved_mem_region(mb_region) {
 		int nid = memblock_get_region_node(mb_region);
 
-		if (nid != MAX_NUMNODES)
+		if (nid != NUMA_NO_NODE && nid != MAX_NUMNODES)
 			node_set(nid, reserved_nodemask);
 	}
 
