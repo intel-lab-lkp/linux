@@ -105,6 +105,10 @@ static void write_dte_lower128(struct dev_table_entry *ptr, struct dev_table_ent
 
 	old.data128[0] = READ_ONCE(ptr->data128[0]);
 	do {
+		/* Apply erratum 63 */
+		if (FIELD_GET(DTE_DATA1_SYSMGT_MASK, new->data[1]) == 0x1)
+			new->data[0] |= DTE_FLAG_IW;
+
 	/* Note: try_cmpxchg inherently update &old.data128[0] on failure */
 	} while (!try_cmpxchg128(&ptr->data128[0], &old.data128[0], new->data128[0]));
 }
@@ -2117,8 +2121,6 @@ static void clear_dte_entry(struct amd_iommu *iommu, u16 devid)
 		dev_table[devid].data[0] |= DTE_FLAG_TV;
 
 	dev_table[devid].data[1] &= DTE_FLAG_MASK;
-
-	amd_iommu_apply_erratum_63(iommu, devid);
 }
 
 /* Update and flush DTE for the given device */
