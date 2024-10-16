@@ -796,8 +796,9 @@ out:
 
 static int match_free_decoder(struct device *dev, void *data)
 {
+	struct cxl_port *port = to_cxl_port(dev->parent);
 	struct cxl_decoder *cxld;
-	int *id = data;
+	struct device **target_dev = data;
 
 	if (!is_switch_decoder(dev))
 		return 0;
@@ -805,15 +806,24 @@ static int match_free_decoder(struct device *dev, void *data)
 	cxld = to_cxl_decoder(dev);
 
 	/* enforce ordered allocation */
-	if (cxld->id != *id)
+	if (cxld->id == port->commit_end + 1) {
+		if (!cxld->region) {
+			*target_dev = dev;
+			return 1;
+		}
+
+		dev_dbg(dev->parent,
+			"%s: cxld '%s' was reserved by '%s'\n", __func__,
+			dev_name(dev), dev_name(&cxld->region->dev));
+		return -EBUSY;
+	}
+
+	if (cxld->flags & CXL_DECODER_F_ENABLE)
 		return 0;
 
-	if (!cxld->region)
-		return 1;
-
-	(*id)++;
-
-	return 0;
+	dev_dbg(dev->parent, "%s: cxld '%s' was out of order shut down\n",
+		__func__, dev_name(dev));
+	return -EINVAL;
 }
 
 static int match_auto_decoder(struct device *dev, void *data)
@@ -839,17 +849,18 @@ cxl_region_find_decoder(struct cxl_port *port,
 			struct cxl_endpoint_decoder *cxled,
 			struct cxl_region *cxlr)
 {
-	struct device *dev;
-	int id = 0;
+	struct device *dev = NULL;
 
 	if (port == cxled_to_port(cxled))
 		return &cxled->cxld;
 
-	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags))
+	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		dev = device_find_child(&port->dev, &cxlr->params,
 					match_auto_decoder);
-	else
-		dev = device_find_child(&port->dev, &id, match_free_decoder);
+	} else {
+		device_for_each_child(&port->dev, &dev, match_free_decoder);
+		get_device(dev);
+	}
 	if (!dev)
 		return NULL;
 	/*
