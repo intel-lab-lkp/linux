@@ -19,10 +19,16 @@
 TEST_RESULT=0
 
 # skip if not supported
-BLACKFUNC=`head -n 1 /sys/kernel/debug/kprobes/blacklist 2> /dev/null | cut -f2`
-if [ -z "$BLACKFUNC" ]; then
+BLACKFUNC_LIST=`head -n 5 /sys/kernel/debug/kprobes/blacklist 2> /dev/null | cut -f2`
+if [ -z "$BLACKFUNC_LIST" ]; then
 	print_overall_skipped
 	exit 0
+fi
+
+# chceck if locate is present to find vmlinux with DWARF debug info
+locate --help 2&> /dev/null
+if [ $? -eq 0 ]; then
+	VMLINUX_FILE=$(locate -r '/vmlinux$' | xargs -I{} sh -c 'test -f "{}" && echo "{}"' | grep "$(uname -r)")
 fi
 
 # remove all previously added probes
@@ -30,24 +36,62 @@ clear_all_probes
 
 
 ### adding blacklisted function
-
-# functions from blacklist should be skipped by perf probe
-! $CMD_PERF probe $BLACKFUNC > $LOGS_DIR/adding_blacklisted.log 2> $LOGS_DIR/adding_blacklisted.err
-PERF_EXIT_CODE=$?
-
 REGEX_SCOPE_FAIL="Failed to find scope of probe point"
 REGEX_SKIP_MESSAGE=" is blacklisted function, skip it\."
-REGEX_NOT_FOUND_MESSAGE="Probe point \'$BLACKFUNC\' not found."
+REGEX_NOT_FOUND_MESSAGE="Probe point \'$RE_EVENT\' not found."
 REGEX_ERROR_MESSAGE="Error: Failed to add events."
 REGEX_INVALID_ARGUMENT="Failed to write event: Invalid argument"
 REGEX_SYMBOL_FAIL="Failed to find symbol at $RE_ADDRESS"
-REGEX_OUT_SECTION="$BLACKFUNC is out of \.\w+, skip it"
-../common/check_all_lines_matched.pl "$REGEX_SKIP_MESSAGE" "$REGEX_NOT_FOUND_MESSAGE" "$REGEX_ERROR_MESSAGE" "$REGEX_SCOPE_FAIL" "$REGEX_INVALID_ARGUMENT" "$REGEX_SYMBOL_FAIL" "$REGEX_OUT_SECTION" < $LOGS_DIR/adding_blacklisted.err
-CHECK_EXIT_CODE=$?
+REGEX_OUT_SECTION="$RE_EVENT is out of \.\w+, skip it"
+REGEX_MISSING_DECL_LINE="A function DIE doesn't have decl_line. Maybe broken DWARF?"
 
-print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "adding blacklisted function $BLACKFUNC"
-(( TEST_RESULT += $? ))
+BLACKFUNC=""
+SKIP_DWARF=0
 
+for BLACKFUNC in $BLACKFUNC_LIST; do
+	echo "Probing $BLACKFUNC"
+
+	# functions from blacklist should be skipped by perf probe
+	! $CMD_PERF probe $BLACKFUNC > $LOGS_DIR/adding_blacklisted.log 2> $LOGS_DIR/adding_blacklisted.err
+	PERF_EXIT_CODE=$?
+
+	# check for bad DWARF polluting the result
+	../common/check_all_patterns_found.pl "$REGEX_MISSING_DECL_LINE" >/dev/null < $LOGS_DIR/adding_blacklisted.err
+
+	if [ $? -eq 0 ]; then
+		SKIP_DWARF=1
+
+		# confirm that the broken DWARF comes from assembler
+		if [ -n "$VMLINUX_FILE" ]; then
+			readelf -wi "$VMLINUX_FILE" |
+			awk -v probe="$BLACKFUNC" '/DW_AT_language/ { comp_lang = $0 }
+										$0 ~ probe { if (comp_lang) { print comp_lang }; exit }' |
+			grep -q "MIPS assembler"
+
+			CHECK_EXIT_CODE=$?
+			if [ $CHECK_EXIT_CODE -ne 0 ]; then
+				SKIP_DWARF=0 # broken DWARF while available
+				break
+			fi
+		else
+			echo "Result polluted by broken DWARF, trying another probe"
+		fi
+
+	else
+		../common/check_all_lines_matched.pl "$REGEX_SKIP_MESSAGE" "$REGEX_NOT_FOUND_MESSAGE" "$REGEX_ERROR_MESSAGE" "$REGEX_SCOPE_FAIL" "$REGEX_INVALID_ARGUMENT" "$REGEX_SYMBOL_FAIL" "$REGEX_OUT_SECTION" < $LOGS_DIR/adding_blacklisted.err
+		CHECK_EXIT_CODE=$?
+
+		SKIP_DWARF=0
+		break
+	fi
+done
+
+if [ $SKIP_DWARF -eq 1 ]; then
+	print_testcase_skipped "adding blacklisted function $BLACKFUNC"
+else
+	print_results $PERF_EXIT_CODE $CHECK_EXIT_CODE "adding blacklisted function $BLACKFUNC"
+	(( TEST_RESULT += $? ))
+fi
 
 ### listing not-added probe
 
