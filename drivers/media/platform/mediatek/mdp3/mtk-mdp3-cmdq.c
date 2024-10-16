@@ -624,14 +624,11 @@ static struct mdp_cmdq_cmd *mdp_cmdq_prepare(struct mdp_dev *mdp,
 	if (ret)
 		goto err_free_cmd;
 
-	if (CFG_CHECK(MT8183, p_id)) {
+	if (CFG_CHECK(MT8183, p_id))
 		num_comp = CFG_GET(MT8183, param->config, num_components);
-	} else if (CFG_CHECK(MT8195, p_id)) {
+	else if (CFG_CHECK(MT8195, p_id))
 		num_comp = CFG_GET(MT8195, param->config, num_components);
-	} else {
-		ret = -EINVAL;
-		goto err_destroy_pkt;
-	}
+
 	comps = kcalloc(num_comp, sizeof(*comps), GFP_KERNEL);
 	if (!comps) {
 		ret = -ENOMEM;
