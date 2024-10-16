@@ -443,6 +443,55 @@ xprt_rdma_set_port(struct rpc_xprt *xprt, u16 port)
 }
 
 /**
+ * xprt_rdma_get_srcaddr - get the rdma local address, without port
+ * @xprt: controlling RPC transport
+ * @buf: address buffer
+ * @buflen: the buffer length
+ */
+static int
+xprt_rdma_get_srcaddr(struct rpc_xprt *xprt, char *buf, size_t buflen)
+{
+	struct rpcrdma_xprt *r_xprt = rpcx_to_rdmax(xprt);
+	struct rpcrdma_ep *ep = r_xprt->rx_ep;
+	struct sockaddr *sap;
+	int ret = -1;
+
+	if (ep && ep->re_id && (ep->re_connect_status == 1)) {
+		sap = (struct sockaddr *)&ep->re_id->route.addr.src_addr;
+		ret = snprintf(buf, buflen, "%pISc", sap);
+	}
+
+	return ret;
+}
+
+/**
+ * xprt_rdma_get_srcaddr - get the rdma local address, without port
+ * @xprt: controlling RPC transport
+ */
+static unsigned short
+xprt_rdma_get_srcport(struct rpc_xprt *xprt)
+{
+	struct rpcrdma_xprt *r_xprt = rpcx_to_rdmax(xprt);
+	struct rpcrdma_ep *ep = r_xprt->rx_ep;
+	struct sockaddr *sap;
+	unsigned short ret = 0;
+
+	if (ep && ep->re_id && (ep->re_connect_status == 1)) {
+		sap = (struct sockaddr *)&ep->re_id->route.addr.src_addr;
+		switch (sap->sa_family) {
+		case AF_INET6:
+			ret = ntohs(((struct sockaddr_in6 *)sap)->sin6_port);
+			break;
+		case AF_INET:
+			ret = ntohs(((struct sockaddr_in *)sap)->sin_port);
+			break;
+		}
+	}
+
+	return ret;
+}
+
+/**
  * xprt_rdma_timer - invoked when an RPC times out
  * @xprt: controlling RPC transport
  * @task: RPC task that timed out
@@ -768,6 +817,8 @@ static const struct rpc_xprt_ops xprt_rdma_procs = {
 	.rpcbind		= rpcb_getport_async,	/* sunrpc/rpcb_clnt.c */
 	.set_port		= xprt_rdma_set_port,
 	.connect		= xprt_rdma_connect,
+	.get_srcaddr		= xprt_rdma_get_srcaddr,
+	.get_srcport		= xprt_rdma_get_srcport,
 	.buf_alloc		= xprt_rdma_allocate,
 	.buf_free		= xprt_rdma_free,
 	.send_request		= xprt_rdma_send_request,
