@@ -2026,6 +2026,55 @@ void __init memblock_allow_resize(void)
 	memblock_can_resize = 1;
 }
 
+/*
+ * @order: bit-order describing the preferred minimum block size
+ *
+ * Intended for use by early-boot software prior to smp and allocator init to
+ * advise the architecture what the minimum block size should be. Should only
+ * be called during arch init before allocator and smp init.
+ *
+ * This value can only decrease after it has been initially set, the intention
+ * is to identify the smallest supported alignment across all opinions.
+ *
+ * Use of this advisement value is arch-specific.
+ *
+ * Returns: 0 on success, -EINVAL if order is <=0, and -EBUSY if already probed
+ */
+static int memblock_sz_order;
+#define MEMBLOCK_SZO_PROBED (-1)
+int memblock_advise_size_order(int order)
+{
+	if (order <= 0)
+		return -EINVAL;
+
+	if (memblock_sz_order == MEMBLOCK_SZO_PROBED)
+		return -EBUSY;
+
+	if (memblock_sz_order)
+		memblock_sz_order = min(order, memblock_sz_order);
+	else
+		memblock_sz_order = order;
+
+	return 0;
+}
+
+/*
+ * memblock_probe_size_order is intended for arch init code to probe one time,
+ * for a suggested memory block size.  After the first call, the result will
+ * always be -EBUSY. A late user should call memory_block_size_bytes instead to
+ * determine the actual block size in use.
+ *
+ * Should only be called during arch init prior to allocator and smp init.
+ *
+ * Returns: block size order, 0 if never set, or -EBUSY if previously probed.
+ */
+int memblock_probe_size_order(void)
+{
+	int rv = xchg(&memblock_sz_order, -1);
+
+	return (rv == -1) ? -EBUSY : rv;
+}
+
 static int __init early_memblock(char *p)
 {
 	if (p && strstr(p, "debug"))
