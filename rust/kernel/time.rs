@@ -8,8 +8,14 @@
 //! C header: [`include/linux/jiffies.h`](srctree/include/linux/jiffies.h).
 //! C header: [`include/linux/ktime.h`](srctree/include/linux/ktime.h).
 
+/// The number of nanoseconds per microsecond.
+pub const NSEC_PER_USEC: i64 = bindings::NSEC_PER_USEC as i64;
+
 /// The number of nanoseconds per millisecond.
 pub const NSEC_PER_MSEC: i64 = bindings::NSEC_PER_MSEC as i64;
+
+/// The number of nanoseconds per second.
+pub const NSEC_PER_SEC: i64 = bindings::NSEC_PER_SEC as i64;
 
 /// The time unit of Linux kernel. One jiffy equals (1/HZ) second.
 pub type Jiffies = core::ffi::c_ulong;
@@ -79,5 +85,73 @@ impl core::ops::Sub for Ktime {
         Self {
             inner: self.inner - other.inner,
         }
+    }
+}
+
+/// A span of time.
+#[derive(Copy, Clone)]
+pub struct Delta {
+    nanos: i64,
+}
+
+impl Delta {
+    /// Create a new `Delta` from a number of nanoseconds.
+    #[inline]
+    pub fn from_nanos(nanos: i64) -> Self {
+        Self { nanos }
+    }
+
+    /// Create a new `Delta` from a number of microseconds.
+    #[inline]
+    pub fn from_micros(micros: i64) -> Self {
+        Self {
+            nanos: micros.saturating_mul(NSEC_PER_USEC),
+        }
+    }
+
+    /// Create a new `Delta` from a number of milliseconds.
+    #[inline]
+    pub fn from_millis(millis: i64) -> Self {
+        Self {
+            nanos: millis.saturating_mul(NSEC_PER_MSEC),
+        }
+    }
+
+    /// Create a new `Delta` from a number of seconds.
+    #[inline]
+    pub fn from_secs(secs: i64) -> Self {
+        Self {
+            nanos: secs.saturating_mul(NSEC_PER_SEC),
+        }
+    }
+
+    /// Return `true` if the `Detla` spans no time.
+    #[inline]
+    pub fn is_zero(self) -> bool {
+        self.nanos == 0
+    }
+
+    /// Return the number of nanoseconds in the `Delta`.
+    #[inline]
+    pub fn as_nanos(self) -> i64 {
+        self.nanos
+    }
+
+    /// Return the number of microseconds in the `Delta`.
+    #[inline]
+    pub fn as_micros(self) -> i64 {
+        self.nanos / NSEC_PER_USEC
+    }
+
+    /// Return the number of milliseconds in the `Delta`.
+    #[inline]
+    pub fn as_millis(self) -> i64 {
+        self.nanos / NSEC_PER_MSEC
+    }
+
+    /// Return the number of seconds in the `Delta`.
+    #[inline]
+    pub fn as_secs(self) -> i64 {
+        self.nanos / NSEC_PER_SEC
     }
 }
