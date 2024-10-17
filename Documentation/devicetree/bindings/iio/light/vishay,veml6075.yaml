@@ -29,6 +29,22 @@ required:
   - reg
   - vdd-supply
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          enum:
+            - vishay,veml6070
+    then:
+      properties:
+        rset-kohms:
+          $ref: /schemas/types.yaml#/definitions/uint32
+          description: |
+            Value in kilo Ohms of the Rset resistor used to select
+            the integration time.
+          minimum: 75
+          maximum: 1200
+
 additionalProperties: false
 
 examples:
