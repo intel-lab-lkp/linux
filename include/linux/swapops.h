@@ -426,9 +426,15 @@ typedef unsigned long pte_marker;
  * "Poisoned" here is meant in the very general sense of "future accesses are
  * invalid", instead of referring very specifically to hardware memory errors.
  * This marker is meant to represent any of various different causes of this.
+ *
+ * Note that, when encountered by the faulting logic, PTEs with this marker will
+ * result in VM_FAULT_HWPOISON and thus regardless trigger hardware memory error
+ * logic.
  */
 #define  PTE_MARKER_POISONED			BIT(1)
-#define  PTE_MARKER_MASK			(BIT(2) - 1)
+/* Indicates that, on fault, this PTE will case a SIGSEGV signal to be sent. */
+#define  PTE_MARKER_GUARD			BIT(2)
+#define  PTE_MARKER_MASK			(BIT(3) - 1)
 
 static inline swp_entry_t make_pte_marker_entry(pte_marker marker)
 {
@@ -462,8 +468,24 @@ static inline swp_entry_t make_poisoned_swp_entry(void)
 
 static inline int is_poisoned_swp_entry(swp_entry_t entry)
 {
+	/*
+	 * We treat guard pages as poisoned too as these have the same semantics
+	 * as poisoned ranges, only with different fault handling.
+	 */
 	return is_pte_marker_entry(entry) &&
-	    (pte_marker_get(entry) & PTE_MARKER_POISONED);
+		(pte_marker_get(entry) &
+		 (PTE_MARKER_POISONED | PTE_MARKER_GUARD));
+}
+
+static inline swp_entry_t make_guard_swp_entry(void)
+{
+	return make_pte_marker_entry(PTE_MARKER_GUARD);
+}
+
+static inline int is_guard_swp_entry(swp_entry_t entry)
+{
+	return is_pte_marker_entry(entry) &&
+		(pte_marker_get(entry) & PTE_MARKER_GUARD);
 }
 
 /*
