@@ -650,8 +650,8 @@ static int get_znodes_to_commit(struct ubifs_info *c)
 		dbg_cmt("no znodes to commit");
 		return 0;
 	}
-	cnt += 1;
 	while (1) {
+		cnt += 1;
 		ubifs_assert(c, !ubifs_zn_cow(znode));
 		__set_bit(COW_ZNODE, &znode->flags);
 		znode->alt = 0;
@@ -664,7 +664,6 @@ static int get_znodes_to_commit(struct ubifs_info *c)
 		znode->ciip = znode->iip;
 		znode->cnext = cnext;
 		znode = cnext;
-		cnt += 1;
 	}
 	dbg_cmt("committing %d znodes", cnt);
 	ubifs_assert(c, cnt == atomic_long_read(&c->dirty_zn_cnt));
