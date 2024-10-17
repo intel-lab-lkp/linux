@@ -133,6 +133,14 @@ static int gdsc_update_collapse_bit(struct gdsc *sc, bool val)
 	if (ret)
 		return ret;
 
+	if (sc->collapse_sleep_ctrl) {
+		ret = regmap_update_bits(sc->regmap, sc->collapse_sleep_ctrl, mask, val ? mask : 0);
+		if (ret) {
+			regmap_update_bits(sc->regmap, reg, mask, val ? 0 : mask);
+			return ret;
+		}
+	}
+
 	return 0;
 }
 

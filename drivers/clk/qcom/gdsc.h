@@ -19,6 +19,7 @@ struct reset_controller_dev;
  * @regmap: regmap for MMIO accesses
  * @gdscr: gsdc control register
  * @collapse_ctrl: APCS collapse-vote register
+ * @collapse_sleep_ctrl: APCS collapse-vote register for the sleep state
  * @collapse_mask: APCS collapse-vote mask
  * @gds_hw_ctrl: gds_hw_ctrl register
  * @cxcs: offsets of branch registers to toggle mem/periph bits in
@@ -37,6 +38,7 @@ struct gdsc {
 	struct regmap			*regmap;
 	unsigned int			gdscr;
 	unsigned int			collapse_ctrl;
+	unsigned int			collapse_sleep_ctrl;
 	unsigned int			collapse_mask;
 	unsigned int			gds_hw_ctrl;
 	unsigned int			clamp_io_ctrl;
