@@ -60,6 +60,7 @@ int drm_aux_bridge_register(struct device *parent)
 	adev->dev.parent = parent;
 	adev->dev.of_node = of_node_get(parent->of_node);
 	adev->dev.release = drm_aux_bridge_release;
+	adev->dev.of_node_reused = true;
 
 	ret = auxiliary_device_init(adev);
 	if (ret) {
