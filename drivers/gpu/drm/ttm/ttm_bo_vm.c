@@ -405,13 +405,9 @@ static int ttm_bo_vm_access_kmap(struct ttm_buffer_object *bo,
 	return len;
 }
 
-int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
-		     void *buf, int len, int write)
+int ttm_bo_access(struct ttm_buffer_object *bo, unsigned long offset,
+		  void *buf, int len, int write)
 {
-	struct ttm_buffer_object *bo = vma->vm_private_data;
-	unsigned long offset = (addr) - vma->vm_start +
-		((vma->vm_pgoff - drm_vma_node_start(&bo->base.vma_node))
-		 << PAGE_SHIFT);
 	int ret;
 
 	if (len < 1 || (offset + len) > bo->base.size)
@@ -438,6 +434,18 @@ int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
 	ttm_bo_unreserve(bo);
 
 	return ret;
+}
+EXPORT_SYMBOL(ttm_bo_access);
+
+int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
+		     void *buf, int len, int write)
+{
+	struct ttm_buffer_object *bo = vma->vm_private_data;
+	unsigned long offset = (addr) - vma->vm_start +
+		((vma->vm_pgoff - drm_vma_node_start(&bo->base.vma_node))
+		 << PAGE_SHIFT);
+
+	return ttm_bo_access(bo, offset, buf, len, write);
 }
 EXPORT_SYMBOL(ttm_bo_vm_access);
 

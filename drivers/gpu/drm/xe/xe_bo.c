@@ -1111,6 +1111,53 @@ static void xe_ttm_bo_swap_notify(struct ttm_buffer_object *ttm_bo)
 	}
 }
 
+static int xe_ttm_access_memory(struct ttm_buffer_object *ttm_bo,
+				unsigned long offset, void *buf, int len,
+				int write)
+{
+	struct xe_bo *bo = ttm_to_xe_bo(ttm_bo);
+	struct xe_device *xe = ttm_to_xe_device(ttm_bo->bdev);
+	struct iosys_map vmap;
+	struct xe_res_cursor cursor;
+	struct xe_mem_region *vram;
+	void __iomem *virtual;
+	int bytes_left = len;
+
+	xe_bo_assert_held(bo);
+
+	if (!mem_type_is_vram(ttm_bo->resource->mem_type))
+		return -EIO;
+
+	/* FIXME: Use GPU for non-visible VRAM */
+	if (!(bo->flags & XE_BO_FLAG_NEEDS_CPU_ACCESS))
+		return -EINVAL;
+
+	vram = res_to_mem_region(ttm_bo->resource);
+	xe_res_first(ttm_bo->resource, offset & ~PAGE_MASK, 0, &cursor);
+
+	do {
+		int wcount = PAGE_SIZE - (offset & PAGE_MASK) > bytes_left ?
+			bytes_left : PAGE_SIZE - (offset & PAGE_MASK);
+
+		virtual = (u8 __force *)vram->mapping + cursor.start;
+
+		iosys_map_set_vaddr_iomem(&vmap, (void __iomem *)virtual);
+		if (write)
+			xe_map_memcpy_to(xe, &vmap, offset & PAGE_MASK, buf,
+					 wcount);
+		else
+			xe_map_memcpy_from(xe, buf, &vmap, offset & PAGE_MASK,
+					   wcount);
+
+		offset += wcount;
+		buf += wcount;
+		bytes_left -= wcount;
+		xe_res_next(&cursor, PAGE_SIZE);
+	} while (bytes_left);
+
+	return len;
+}
+
 const struct ttm_device_funcs xe_ttm_funcs = {
 	.ttm_tt_create = xe_ttm_tt_create,
 	.ttm_tt_populate = xe_ttm_tt_populate,
@@ -1120,6 +1167,7 @@ const struct ttm_device_funcs xe_ttm_funcs = {
 	.move = xe_bo_move,
 	.io_mem_reserve = xe_ttm_io_mem_reserve,
 	.io_mem_pfn = xe_ttm_io_mem_pfn,
+	.access_memory = xe_ttm_access_memory,
 	.release_notify = xe_ttm_bo_release_notify,
 	.eviction_valuable = ttm_bo_eviction_valuable,
 	.delete_mem_notify = xe_ttm_bo_delete_mem_notify,
