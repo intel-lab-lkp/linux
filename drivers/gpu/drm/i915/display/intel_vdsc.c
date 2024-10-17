@@ -768,6 +768,26 @@ void intel_uncompressed_joiner_enable(const struct intel_crtc_state *crtc_state)
 	}
 }
 
+/*
+ * With 12 slices, there can be a case where the src width is odd.
+ * As per Bspec the src width should be even, so an extra Odd Pixel is
+ * programmed in Pipe in such cases. This extra pixel needs to be
+ * dropped in Splitter HW.
+ */
+static
+bool intel_dsc_need_odd_pixel_removal(const struct intel_crtc_state *crtc_state)
+{
+	int pipe_src_w = drm_rect_width(&crtc_state->pipe_src);
+
+	if (intel_crtc_num_joined_pipes(crtc_state) != 4)
+		return false;
+
+	if ((pipe_src_w + crtc_state->dsc.pixel_replication_count) % 4)
+		return true;
+
+	return false;
+}
+
 void intel_dsc_enable(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
@@ -804,6 +824,12 @@ void intel_dsc_enable(const struct intel_crtc_state *crtc_state)
 
 		if (intel_crtc_is_bigjoiner_primary(crtc_state))
 			dss_ctl1_val |= PRIMARY_BIG_JOINER_ENABLE;
+	}
+
+	if (intel_dsc_need_odd_pixel_removal(crtc_state)) {
+		dss_ctl2_val |= ODD_PIXEL_REMOVAL;
+		if (crtc->pipe == PIPE_A || crtc->pipe == PIPE_C)
+			dss_ctl2_val |= ODD_PIXEL_REMOVAL_CONFIG_EOL;
 	}
 
 	if (crtc_state->dsc.pixel_replication_count)
