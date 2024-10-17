@@ -23,6 +23,14 @@ enum integrity_status {
 #ifdef CONFIG_INTEGRITY
 extern void __init integrity_load_keys(void);
 
+#ifdef CONFIG_SECURITY_CLAVIS
+void __init late_init_clavis_setup(void);
+#else
+static inline void late_init_clavis_setup(void)
+{
+}
+#endif
+
 #else
 static inline void integrity_load_keys(void)
 {

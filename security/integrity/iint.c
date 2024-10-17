@@ -36,6 +36,8 @@ int integrity_kernel_read(struct file *file, loff_t offset,
  */
 void __init integrity_load_keys(void)
 {
+	late_init_clavis_setup();
+
 	ima_load_x509();
 
 	if (!IS_ENABLED(CONFIG_IMA_LOAD_X509))

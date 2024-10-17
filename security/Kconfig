@@ -225,6 +225,7 @@ source "security/safesetid/Kconfig"
 source "security/lockdown/Kconfig"
 source "security/landlock/Kconfig"
 source "security/ipe/Kconfig"
+source "security/clavis/Kconfig"
 
 source "security/integrity/Kconfig"
 

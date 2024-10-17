@@ -1,0 +1,11 @@
+config SECURITY_CLAVIS
+	bool "Clavis keyring"
+	depends on SECURITY
+	select SYSTEM_DATA_VERIFICATION
+	select CRYPTO_SHA256
+	help
+	  Enable the clavis keyring. This keyring shall contain a single asymmetric key.
+	  This key shall be linked to a key already contained in one of the system
+	  keyrings (builtin, secondary, or platform).  One way to add this key
+	  is during boot by passing in the asymmetric key id within the "clavis=" boot
+	  param.  This keyring is required by the Clavis LSM.

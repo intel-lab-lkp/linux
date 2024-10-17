@@ -645,6 +645,12 @@
 	cio_ignore=	[S390]
 			See Documentation/arch/s390/common_io.rst for details.
 
+	clavis=		[SECURITY,EARLY]
+			Identifies a specific key contained in one of the system
+			keyrings (builtin, secondary, or platform) to be used as
+			the Clavis root of trust.
+			Format: { <keyid> }
+
 	clearcpuid=X[,X...] [X86]
 			Disable CPUID feature X for the kernel. See
 			arch/x86/include/asm/cpufeatures.h for the valid bit
