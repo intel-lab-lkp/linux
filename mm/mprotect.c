@@ -821,6 +821,9 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 			break;
 		}
 
+		if ((vma->vm_flags & VM_WRITE) && !(newflags & VM_WRITE))
+			newflags |= VM_WASWRITE;
+
 		error = security_file_mprotect(vma, reqprot, prot);
 		if (error)
 			break;

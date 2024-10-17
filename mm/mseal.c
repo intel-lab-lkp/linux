@@ -36,18 +36,30 @@ static bool is_madv_discard(int behavior)
 	return false;
 }
 
-static bool is_ro_anon(struct vm_area_struct *vma)
+static bool anon_is_ro(struct vm_area_struct *vma)
 {
-	/* check anonymous mapping. */
-	if (vma->vm_file || vma->vm_flags & VM_SHARED)
-		return false;
-
 	/*
 	 * check for non-writable:
 	 * PROT=RO or PKRU is not writeable.
 	 */
 	if (!(vma->vm_flags & VM_WRITE) ||
 		!arch_vma_access_permitted(vma, true, false, false))
+		return true;
+
+	return false;
+}
+
+static bool vma_is_prot_none(struct vm_area_struct *vma)
+{
+	if ((vma->vm_flags & VM_ACCESS_FLAGS) == VM_NONE)
+		return true;
+
+	return false;
+}
+
+static bool vma_was_writable_turn_readonly(struct vm_area_struct *vma)
+{
+	if (!(vma->vm_flags & VM_WRITE) && vma->vm_flags & VM_WASWRITE)
 		return true;
 
 	return false;
@@ -61,7 +73,25 @@ bool can_modify_vma_madv(struct vm_area_struct *vma, int behavior)
 	if (!is_madv_discard(behavior))
 		return true;
 
-	if (unlikely(!can_modify_vma(vma) && is_ro_anon(vma)))
+	/* not sealed */
+	if (likely(can_modify_vma(vma)))
+		return true;
+
+	/* PROT_NONE mapping */
+	if (vma_is_prot_none(vma))
+		return true;
+
+	/* file-backed private mapping */
+	if (vma->vm_file) {
+		/* read-only but was writeable */
+		if (vma_was_writable_turn_readonly(vma))
+			return false;
+
+		return true;
+	}
+
+	/* anonymous mapping is read-only */
+	if (anon_is_ro(vma))
 		return false;
 
 	/* Allow by default. */
