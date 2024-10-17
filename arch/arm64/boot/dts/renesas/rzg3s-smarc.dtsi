@@ -74,27 +74,6 @@
 };
 
 &pinctrl {
-	key-1-gpio-hog {
-		gpio-hog;
-		gpios = <RZG2L_GPIO(18, 0) GPIO_ACTIVE_LOW>;
-		input;
-		line-name = "key-1-gpio-irq";
-	};
-
-	key-2-gpio-hog {
-		gpio-hog;
-		gpios = <RZG2L_GPIO(0, 1) GPIO_ACTIVE_LOW>;
-		input;
-		line-name = "key-2-gpio-irq";
-	};
-
-	key-3-gpio-hog {
-		gpio-hog;
-		gpios = <RZG2L_GPIO(0, 3) GPIO_ACTIVE_LOW>;
-		input;
-		line-name = "key-3-gpio-irq";
-	};
-
 	scif0_pins: scif0 {
 		pinmux = <RZG2L_PORT_PINMUX(6, 3, 1)>, /* RXD */
 			 <RZG2L_PORT_PINMUX(6, 4, 1)>; /* TXD */
