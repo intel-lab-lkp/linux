@@ -35867,6 +35867,75 @@ static noinline void __init check_locky(struct maple_tree *mt)
 	mt_clear_in_rcu(mt);
 }
 
+static noinline void __init check_store_null(struct maple_tree *mt)
+{
+	MA_STATE(ms, mt, 0, ULONG_MAX);
+
+	mt_set_non_kernel(10);
+
+	/*
+	 * Store NULL at range [0, ULONG_MAX] to an empty tree should result
+	 * in an empty tree
+	 */
+	mas_store(&ms, NULL);
+	MT_BUG_ON(mt, !mtree_empty(mt));
+	mtree_destroy(mt);
+
+	/*
+	 * Store NULL at any range to an empty tree should result in an empty
+	 * tree
+	 */
+	mas_set_range(&ms, 3, 10);
+	mas_store(&ms, NULL);
+	MT_BUG_ON(mt, !mtree_empty(mt));
+	mtree_destroy(mt);
+
+	/*
+	 * Store NULL at range [0, ULONG_MAX] to a single entry tree should
+	 * result in an empty tree
+	 */
+	mas_set(&ms, 0);
+	mas_store(&ms, &ms);
+	mas_set_range(&ms, 0, ULONG_MAX);
+	mas_store(&ms, NULL);
+	MT_BUG_ON(mt, !mtree_empty(mt));
+	mtree_destroy(mt);
+
+	/*
+	 * Store NULL at range [0, n] to a single entry tree should
+	 * result in an empty tree
+	 */
+	mas_set(&ms, 0);
+	mas_store(&ms, &ms);
+	mas_set_range(&ms, 0, 5);
+	mas_store(&ms, NULL);
+	MT_BUG_ON(mt, !mtree_empty(mt));
+	mtree_destroy(mt);
+
+	/*
+	 * Store NULL at range [m, n] where m > 0 to a single entry tree
+	 * should still be a single entry tree
+	 */
+	mas_set(&ms, 0);
+	mas_store(&ms, &ms);
+	mas_set_range(&ms, 2, 5);
+	mas_store(&ms, NULL);
+	MT_BUG_ON(mt, mtree_empty(mt));
+	MT_BUG_ON(mt, xa_is_node(mt->ma_root));
+	mtree_destroy(mt);
+
+	/*
+	 * Store NULL at range [0, ULONG_MAX] to a tree with node should
+	 * result in an empty tree
+	 */
+	mas_set_range(&ms, 1, 3);
+	mas_store(&ms, &ms);
+	mas_set_range(&ms, 0, ULONG_MAX);
+	mas_store(&ms, NULL);
+	MT_BUG_ON(mt, !mtree_empty(mt));
+	mtree_destroy(mt);
+}
+
 /*
  * Compares two nodes except for the addresses stored in the nodes.
  * Returns zero if they are the same, otherwise returns non-zero.
@@ -36369,6 +36438,10 @@ void farmer_tests(void)
 
 	node->parent = ma_parent_ptr(node);
 	ma_free_rcu(node);
+
+	mt_init_flags(&tree, MT_FLAGS_ALLOC_RANGE);
+	check_store_null(&tree);
+	mtree_destroy(&tree);
 
 	/* Check things that will make lockdep angry */
 	mt_init_flags(&tree, MT_FLAGS_ALLOC_RANGE);
