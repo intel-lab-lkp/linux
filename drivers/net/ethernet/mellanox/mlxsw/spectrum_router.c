@@ -3006,6 +3006,26 @@ static void mlxsw_sp_neigh_rif_made_sync_each(struct neighbour *n, void *data)
 		rms->err = -ENOMEM;
 }
 
+static void mlxsw_sp_neigh_for_each(struct neigh_table *tbl,
+				    void *cookie)
+{
+	struct neigh_hash_table *nht;
+	int chain;
+
+	rcu_read_lock();
+	nht = rcu_dereference(tbl->nht);
+
+	read_lock_bh(&tbl->lock); /* avoid resizes */
+	for (chain = 0; chain < (1 << nht->hash_shift); chain++) {
+		struct neighbour *n;
+
+		neigh_for_each(n, &nht->hash_heads[chain])
+			mlxsw_sp_neigh_rif_made_sync_each(n, cookie);
+	}
+	read_unlock_bh(&tbl->lock);
+	rcu_read_unlock();
+}
+
 static int mlxsw_sp_neigh_rif_made_sync(struct mlxsw_sp *mlxsw_sp,
 					struct mlxsw_sp_rif *rif)
 {
@@ -3014,12 +3034,12 @@ static int mlxsw_sp_neigh_rif_made_sync(struct mlxsw_sp *mlxsw_sp,
 		.rif = rif,
 	};
 
-	neigh_for_each(&arp_tbl, mlxsw_sp_neigh_rif_made_sync_each, &rms);
+	mlxsw_sp_neigh_for_each(&arp_tbl, &rms);
 	if (rms.err)
 		goto err_arp;
 
 #if IS_ENABLED(CONFIG_IPV6)
-	neigh_for_each(&nd_tbl, mlxsw_sp_neigh_rif_made_sync_each, &rms);
+	mlxsw_sp_neigh_for_each(&nd_tbl, &rms);
 #endif
 	if (rms.err)
 		goto err_nd;

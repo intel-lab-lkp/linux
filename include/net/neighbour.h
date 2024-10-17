@@ -277,6 +277,8 @@ static inline void *neighbour_priv(const struct neighbour *n)
 
 extern const struct nla_policy nda_policy[];
 
+#define neigh_for_each(pos, head) hlist_for_each_entry(pos, head, hash)
+
 static inline bool neigh_key_eq32(const struct neighbour *n, const void *pkey)
 {
 	return *(const u32 *)n->primary_key == *(const u32 *)pkey;
@@ -390,8 +392,6 @@ static inline struct net *pneigh_net(const struct pneigh_entry *pneigh)
 }
 
 void neigh_app_ns(struct neighbour *n);
-void neigh_for_each(struct neigh_table *tbl,
-		    void (*cb)(struct neighbour *, void *), void *cookie);
 void __neigh_for_each_release(struct neigh_table *tbl,
 			      int (*cb)(struct neighbour *));
 int neigh_xmit(int fam, struct net_device *, const void *, struct sk_buff *);

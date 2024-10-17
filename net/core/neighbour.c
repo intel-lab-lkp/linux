@@ -3120,28 +3120,6 @@ static int neigh_get(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	return err;
 }
 
-void neigh_for_each(struct neigh_table *tbl, void (*cb)(struct neighbour *, void *), void *cookie)
-{
-	int chain;
-	struct neigh_hash_table *nht;
-
-	rcu_read_lock();
-	nht = rcu_dereference(tbl->nht);
-
-	read_lock_bh(&tbl->lock); /* avoid resizes */
-	for (chain = 0; chain < (1 << nht->hash_shift); chain++) {
-		struct neighbour *n;
-
-		for (n = rcu_dereference(nht->hash_buckets[chain]);
-		     n != NULL;
-		     n = rcu_dereference(n->next))
-			cb(n, cookie);
-	}
-	read_unlock_bh(&tbl->lock);
-	rcu_read_unlock();
-}
-EXPORT_SYMBOL(neigh_for_each);
-
 /* The tbl->lock must be held as a writer and BH disabled. */
 void __neigh_for_each_release(struct neigh_table *tbl,
 			      int (*cb)(struct neighbour *))
