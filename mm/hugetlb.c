@@ -1887,6 +1887,7 @@ void free_huge_folio(struct folio *folio)
 	struct hstate *h = folio_hstate(folio);
 	int nid = folio_nid(folio);
 	struct hugepage_subpool *spool = hugetlb_folio_subpool(folio);
+	struct mem_cgroup *memcg = get_mem_cgroup_from_current();
 	bool restore_reserve;
 	unsigned long flags;
 
@@ -1926,6 +1927,8 @@ void free_huge_folio(struct folio *folio)
 	hugetlb_cgroup_uncharge_folio_rsvd(hstate_index(h),
 					  pages_per_huge_page(h), folio);
 	mem_cgroup_uncharge(folio);
+	mod_memcg_state(memcg, MEMCG_HUGETLB, -pages_per_huge_page(h));
+	mem_cgroup_put(memcg);
 	if (restore_reserve)
 		h->resv_huge_pages++;
 
@@ -3093,6 +3096,8 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 
 	if (!memcg_charge_ret)
 		mem_cgroup_commit_charge(folio, memcg);
+
+	mod_memcg_state(memcg, MEMCG_HUGETLB, nr_pages);
 	mem_cgroup_put(memcg);
 
 	return folio;

@@ -39,6 +39,9 @@ enum memcg_stat_item {
 	MEMCG_KMEM,
 	MEMCG_ZSWAP_B,
 	MEMCG_ZSWAPPED,
+#ifdef CONFIG_HUGETLB_PAGE
+	MEMCG_HUGETLB,
+#endif
 	MEMCG_NR_STAT,
 };
 
