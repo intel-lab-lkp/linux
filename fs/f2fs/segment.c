@@ -3230,6 +3230,10 @@ allocate:
 		return err;
 	stat_inc_seg_type(sbi, curseg);
 	locate_dirty_segment(sbi, old_segno);
+
+	if (new_sec)
+		f2fs_blkzoned_submit_merged_write(sbi, type);
+
 	return 0;
 }
 
@@ -4299,6 +4303,30 @@ static int restore_curseg_summaries(struct f2fs_sb_info *sbi)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_BLK_DEV_ZONED
+	if (f2fs_sb_has_blkzoned(sbi)) {
+		for (type = 0; type < NR_PERSISTENT_LOG; type++) {
+			struct curseg_info *curseg = CURSEG_I(sbi, type);
+			enum page_type ptype;
+			enum temp_type temp;
+
+			/* current segment locates in non-seqzone */
+			if (!f2fs_blkaddr_in_seqzone(sbi,
+					START_BLOCK(sbi, curseg->segno)))
+				continue;
+
+			/* write pointer of zone is zero */
+			if (is_blkaddr_zone_boundary(sbi,
+				NEXT_FREE_BLKADDR(sbi, curseg), true))
+				continue;
+
+			ptype = PAGE_TYPE(type);
+			temp = f2fs_get_segment_temp(type);
+			down(&sbi->available_open_zones);
+			sbi->write_io[ptype][temp].zone_opened = true;
+		}
+	}
+#endif
 	return 0;
 }
 
@@ -5632,6 +5660,19 @@ static void destroy_curseg(struct f2fs_sb_info *sbi)
 	for (i = 0; i < NR_CURSEG_TYPE; i++) {
 		kfree(array[i].sum_blk);
 		kfree(array[i].journal);
+		kfree(array[i].target_map);
+
+#ifdef CONFIG_BLK_DEV_ZONED
+		if (f2fs_sb_has_blkzoned(sbi)) {
+			enum page_type ptype = PAGE_TYPE(i);
+			enum temp_type temp = f2fs_get_segment_temp(i);
+
+			if (sbi->write_io[ptype][temp].zone_opened) {
+				up(&sbi->available_open_zones);
+				sbi->write_io[ptype][temp].zone_opened = false;
+			}
+		}
+#endif
 	}
 	kfree(array);
 }
