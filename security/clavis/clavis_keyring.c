@@ -8,6 +8,7 @@
 #include <keys/system_keyring.h>
 #include <keys/user-type.h>
 #include <crypto/pkcs7.h>
+#include <kunit/static_stub.h>
 #include "clavis.h"
 
 static struct key *clavis_keyring;
@@ -46,6 +47,9 @@ static int pkcs7_preparse_content(void *ctx, const void *data, size_t len, size_
 	return ret;
 }
 
+int (* const pkcs7_preparse_content_fn_ptr)(void *ctx, const void *data, size_t len,
+					    size_t asn1hdrlen) = pkcs7_preparse_content;
+
 static void key_acl_free_preparse(struct key_preparsed_payload *prep)
 {
 	kfree(prep->description);
@@ -54,16 +58,24 @@ static void key_acl_free_preparse(struct key_preparsed_payload *prep)
 
 static struct key *clavis_keyring_get(void)
 {
+	KUNIT_STATIC_STUB_REDIRECT(clavis_keyring_get);
 	return clavis_keyring;
 }
 
+struct key * (* const clavis_keyring_get_fn_ptr)(void) = clavis_keyring_get;
+
 static bool clavis_acl_enforced(void)
 {
+	KUNIT_STATIC_STUB_REDIRECT(clavis_acl_enforced);
 	return clavis_enforced;
 }
 
+bool (* const clavis_acl_enforced_fn_ptr)(void) = clavis_acl_enforced;
+
 static int key_acl_preparse(struct key_preparsed_payload *prep)
 {
+	KUNIT_STATIC_STUB_REDIRECT(key_acl_preparse, prep);
+
 	/*
 	 * Only allow the description to be set via the pkcs7 data contents.
 	 * The exception to this rule is if the entry was builtin, it will have
@@ -78,6 +90,8 @@ static int key_acl_preparse(struct key_preparsed_payload *prep)
 				      VERIFYING_CLAVIS_SIGNATURE, pkcs7_preparse_content,
 				      prep);
 }
+
+int (* const key_acl_preparse_fn_ptr)(struct key_preparsed_payload *prep) = key_acl_preparse;
 
 static int key_acl_instantiate(struct key *key, struct key_preparsed_payload *prep)
 {
@@ -225,6 +239,10 @@ static struct asymmetric_key_id *clavis_parse_boot_param(char *kid, struct asymm
 	return akid;
 }
 
+struct asymmetric_key_id *
+	(* const parse_boot_param_fn_ptr)(char *kid, struct asymmetric_key_id *akid,
+					  int akid_max_len) = clavis_parse_boot_param;
+
 static int __init clavis_param(char *kid)
 {
 	clavis_boot_akid = clavis_parse_boot_param(kid, &clavis_setup_akid.id,
@@ -247,6 +265,10 @@ static struct key *clavis_keyring_alloc(const char *desc, struct key_restriction
 	return keyring;
 }
 
+struct key *
+	(* const keyring_alloc_fn_ptr)(const char *desc, struct key_restriction *restriction) =
+				       clavis_keyring_alloc;
+
 static struct key_restriction *clavis_restriction_alloc(key_restrict_link_func_t check_func)
 {
 	struct key_restriction *restriction;
@@ -258,6 +280,10 @@ static struct key_restriction *clavis_restriction_alloc(key_restrict_link_func_t
 
 	return restriction;
 }
+
+struct key_restriction *
+	(* const restriction_alloc_fn_ptr)(key_restrict_link_func_t
+					   check_func) = clavis_restriction_alloc;
 
 static void clavis_add_acl(const char *const *skid_list, struct key *keyring)
 {
@@ -283,6 +309,9 @@ static void clavis_add_acl(const char *const *skid_list, struct key *keyring)
 		}
 	}
 }
+
+void (* const clavis_add_acl_fn_ptr)(const char *const *skid_list,
+				     struct key *keyring) = clavis_add_acl;
 
 int __init clavis_keyring_init(void)
 {
