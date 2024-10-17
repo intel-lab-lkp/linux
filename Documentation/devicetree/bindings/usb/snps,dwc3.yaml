@@ -180,6 +180,12 @@ properties:
     description: When set core will set Tx de-emphasis value
     type: boolean
 
+  snps,filter-se0-fsls-eop-quirk:
+    description:
+      When set controller will ignore single SE0 glitch on the linestate during transmit
+      Only two or more SE0 is considered as a valid EOP on FS/LS port.
+    type: boolean
+
   snps,tx_de_emphasis:
     description:
       The value driven to the PHY is controlled by the LTSSM during USB3
