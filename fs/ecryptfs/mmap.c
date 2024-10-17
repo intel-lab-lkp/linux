@@ -195,7 +195,7 @@ static int ecryptfs_read_folio(struct file *file, struct folio *folio)
 			}
 		}
 	} else {
-		rc = ecryptfs_decrypt_page(&folio->page);
+		rc = ecryptfs_decrypt_page(folio);
 		if (rc) {
 			ecryptfs_printk(KERN_ERR, "Error decrypting page; "
 					"rc = [%d]\n", rc);
@@ -308,7 +308,7 @@ static int ecryptfs_write_begin(struct file *file,
 				folio_zero_range(folio, 0, PAGE_SIZE);
 				folio_mark_uptodate(folio);
 			} else if (len < PAGE_SIZE) {
-				rc = ecryptfs_decrypt_page(&folio->page);
+				rc = ecryptfs_decrypt_page(folio);
 				if (rc) {
 					printk(KERN_ERR "%s: Error decrypting "
 					       "page at index [%ld]; "
