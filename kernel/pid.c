@@ -535,33 +535,48 @@ struct pid *find_ge_pid(int nr, struct pid_namespace *ns)
 }
 EXPORT_SYMBOL_GPL(find_ge_pid);
 
+static struct pid *pidfd_get_pid_self(unsigned int pidfd, unsigned int *flags)
+{
+	bool is_thread = pidfd == PIDFD_SELF_THREAD;
+	enum pid_type type = is_thread ? PIDTYPE_PID : PIDTYPE_TGID;
+	struct pid *pid = *task_pid_ptr(current, type);
+
+	/* The caller expects an elevated reference count. */
+	get_pid(pid);
+	return pid;
+}
+
 struct pid *__pidfd_get_pid(unsigned int pidfd, bool allow_proc,
 			    unsigned int *flags)
 {
-	struct pid *pid;
-	struct fd f = fdget(pidfd);
-	struct file *file = fd_file(f);
+	if (pidfd_is_self_sentinel(pidfd)) {
+		return pidfd_get_pid_self(pidfd, flags);
+	} else {
+		struct pid *pid;
+		struct fd f = fdget(pidfd);
+		struct file *file = fd_file(f);
 
-	if (!file)
-		return ERR_PTR(-EBADF);
+		if (!file)
+			return ERR_PTR(-EBADF);
 
-	pid = pidfd_pid(file);
-	/* If we allow opening a pidfd via /proc/<pid>, do so. */
-	if (IS_ERR(pid) && allow_proc)
-		pid = tgid_pidfd_to_pid(file);
+		pid = pidfd_pid(file);
+		/* If we allow opening a pidfd via /proc/<pid>, do so. */
+		if (IS_ERR(pid) && allow_proc)
+			pid = tgid_pidfd_to_pid(file);
 
-	if (IS_ERR(pid)) {
+		if (IS_ERR(pid)) {
+			fdput(f);
+			return pid;
+		}
+
+		/* Pin pid before we release fd. */
+		get_pid(pid);
+		if (flags)
+			*flags = file->f_flags;
 		fdput(f);
+
 		return pid;
 	}
-
-	/* Pin pid before we release fd. */
-	get_pid(pid);
-	if (flags)
-		*flags = file->f_flags;
-	fdput(f);
-
-	return pid;
 }
 
 /**
