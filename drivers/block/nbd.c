@@ -701,8 +701,9 @@ static blk_status_t nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd,
 			if (sent) {
 				nsock->pending = req;
 				nsock->sent = sent;
+			} else {
+				set_bit(NBD_CMD_REQUEUED, &cmd->flags);
 			}
-			set_bit(NBD_CMD_REQUEUED, &cmd->flags);
 			return BLK_STS_RESOURCE;
 		}
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
@@ -743,7 +744,6 @@ send_pages:
 					 */
 					nsock->pending = req;
 					nsock->sent = sent;
-					set_bit(NBD_CMD_REQUEUED, &cmd->flags);
 					return BLK_STS_RESOURCE;
 				}
 				dev_err(disk_to_dev(nbd->disk),
@@ -776,6 +776,35 @@ requeue:
 	nbd_mark_nsock_dead(nbd, nsock, 1);
 	nbd_requeue_cmd(cmd);
 	return BLK_STS_OK;
+}
+
+/*
+ * Send pending nbd request and payload, part of them have been sent
+ * already, so we have to send them all with current request, and can't
+ * return BLK_STS_RESOURCE, otherwise request tag may be changed in next
+ * retry
+ */
+static blk_status_t nbd_send_pending_cmd(struct nbd_device *nbd,
+		struct nbd_cmd *cmd)
+{
+	struct request *req = blk_mq_rq_from_pdu(cmd);
+	unsigned long deadline = READ_ONCE(req->deadline);
+	unsigned int wait_ms = 2;
+	blk_status_t res;
+
+	WARN_ON_ONCE(test_bit(NBD_CMD_REQUEUED, &cmd->flags));
+
+	while (true) {
+		res = nbd_send_cmd(nbd, cmd, cmd->index);
+		if (res != BLK_STS_RESOURCE)
+			return res;
+		if (READ_ONCE(jiffies) + msecs_to_jiffies(wait_ms) >= deadline)
+			break;
+		msleep(wait_ms);
+		wait_ms *= 2;
+	}
+
+	return BLK_STS_IOERR;
 }
 
 static int nbd_read_reply(struct nbd_device *nbd, struct socket *sock,
@@ -1111,6 +1140,8 @@ again:
 		goto out;
 	}
 	ret = nbd_send_cmd(nbd, cmd, index);
+	if (ret == BLK_STS_RESOURCE && nsock->pending == req)
+		ret = nbd_send_pending_cmd(nbd, cmd);
 out:
 	mutex_unlock(&nsock->tx_lock);
 	nbd_config_put(nbd);
