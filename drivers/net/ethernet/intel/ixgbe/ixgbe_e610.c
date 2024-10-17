@@ -6,6 +6,7 @@
 #include "ixgbe_x550.h"
 #include "ixgbe_type.h"
 #include "ixgbe_x540.h"
+#include "ixgbe_mbx.h"
 #include "ixgbe_phy.h"
 
 /**
