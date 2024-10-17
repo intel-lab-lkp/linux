@@ -48,103 +48,14 @@ static const struct landlock_ruleset *get_current_net_domain(void)
 	return landlock_match_ruleset(landlock_get_current_domain(), any_net);
 }
 
-static int current_check_access_socket(struct socket *const sock,
-				       struct sockaddr *const address,
-				       const int addrlen,
-				       access_mask_t access_request)
+static int check_access_port(const struct landlock_ruleset *const dom,
+			     __be16 port, access_mask_t access_request)
 {
-	__be16 port;
 	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_NET] = {};
 	const struct landlock_rule *rule;
 	struct landlock_id id = {
 		.type = LANDLOCK_KEY_NET_PORT,
 	};
-	const struct landlock_ruleset *const dom = get_current_net_domain();
-
-	if (!dom)
-		return 0;
-	if (WARN_ON_ONCE(dom->num_layers < 1))
-		return -EACCES;
-
-	/* Do not restrict non-TCP sockets. */
-	if (!sk_is_tcp(sock->sk))
-		return 0;
-
-	/* Checks for minimal header length to safely read sa_family. */
-	if (addrlen < offsetofend(typeof(*address), sa_family))
-		return -EINVAL;
-
-	switch (address->sa_family) {
-	case AF_UNSPEC:
-	case AF_INET:
-		if (addrlen < sizeof(struct sockaddr_in))
-			return -EINVAL;
-		port = ((struct sockaddr_in *)address)->sin_port;
-		break;
-
-#if IS_ENABLED(CONFIG_IPV6)
-	case AF_INET6:
-		if (addrlen < SIN6_LEN_RFC2133)
-			return -EINVAL;
-		port = ((struct sockaddr_in6 *)address)->sin6_port;
-		break;
-#endif /* IS_ENABLED(CONFIG_IPV6) */
-
-	default:
-		return 0;
-	}
-
-	/* Specific AF_UNSPEC handling. */
-	if (address->sa_family == AF_UNSPEC) {
-		/*
-		 * Connecting to an address with AF_UNSPEC dissolves the TCP
-		 * association, which have the same effect as closing the
-		 * connection while retaining the socket object (i.e., the file
-		 * descriptor).  As for dropping privileges, closing
-		 * connections is always allowed.
-		 *
-		 * For a TCP access control system, this request is legitimate.
-		 * Let the network stack handle potential inconsistencies and
-		 * return -EINVAL if needed.
-		 */
-		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP)
-			return 0;
-
-		/*
-		 * For compatibility reason, accept AF_UNSPEC for bind
-		 * accesses (mapped to AF_INET) only if the address is
-		 * INADDR_ANY (cf. __inet_bind).  Checking the address is
-		 * required to not wrongfully return -EACCES instead of
-		 * -EAFNOSUPPORT.
-		 *
-		 * We could return 0 and let the network stack handle these
-		 * checks, but it is safer to return a proper error and test
-		 * consistency thanks to kselftest.
-		 */
-		if (access_request == LANDLOCK_ACCESS_NET_BIND_TCP) {
-			/* addrlen has already been checked for AF_UNSPEC. */
-			const struct sockaddr_in *const sockaddr =
-				(struct sockaddr_in *)address;
-
-			if (sock->sk->__sk_common.skc_family != AF_INET)
-				return -EINVAL;
-
-			if (sockaddr->sin_addr.s_addr != htonl(INADDR_ANY))
-				return -EAFNOSUPPORT;
-		}
-	} else {
-		/*
-		 * Checks sa_family consistency to not wrongfully return
-		 * -EACCES instead of -EINVAL.  Valid sa_family changes are
-		 * only (from AF_INET or AF_INET6) to AF_UNSPEC.
-		 *
-		 * We could return 0 and let the network stack handle this
-		 * check, but it is safer to return a proper error and test
-		 * consistency thanks to kselftest.
-		 */
-		if (address->sa_family != sock->sk->__sk_common.skc_family)
-			return -EINVAL;
-	}
 
 	id.key.data = (__force uintptr_t)port;
 	BUILD_BUG_ON(sizeof(port) > sizeof(id.key.data));
@@ -162,16 +73,147 @@ static int current_check_access_socket(struct socket *const sock,
 static int hook_socket_bind(struct socket *const sock,
 			    struct sockaddr *const address, const int addrlen)
 {
-	return current_check_access_socket(sock, address, addrlen,
-					   LANDLOCK_ACCESS_NET_BIND_TCP);
+	__be16 port;
+	struct sock *const sk = sock->sk;
+	const struct landlock_ruleset *const dom = get_current_net_domain();
+
+	if (!dom)
+		return 0;
+	if (WARN_ON_ONCE(dom->num_layers < 1))
+		return -EACCES;
+
+	if (sk_is_tcp(sk)) {
+		/* Checks for minimal header length to safely read sa_family. */
+		if (addrlen < offsetofend(typeof(*address), sa_family))
+			return -EINVAL;
+
+		switch (address->sa_family) {
+		case AF_UNSPEC:
+		case AF_INET:
+			if (addrlen < sizeof(struct sockaddr_in))
+				return -EINVAL;
+			port = ((struct sockaddr_in *)address)->sin_port;
+			break;
+
+#if IS_ENABLED(CONFIG_IPV6)
+		case AF_INET6:
+			if (addrlen < SIN6_LEN_RFC2133)
+				return -EINVAL;
+			port = ((struct sockaddr_in6 *)address)->sin6_port;
+			break;
+#endif /* IS_ENABLED(CONFIG_IPV6) */
+
+		default:
+			return 0;
+		}
+
+		/*
+		 * For compatibility reason, accept AF_UNSPEC for bind
+		 * accesses (mapped to AF_INET) only if the address is
+		 * INADDR_ANY (cf. __inet_bind).  Checking the address is
+		 * required to not wrongfully return -EACCES instead of
+		 * -EAFNOSUPPORT.
+		 *
+		 * We could return 0 and let the network stack handle these
+		 * checks, but it is safer to return a proper error and test
+		 * consistency thanks to kselftest.
+		 */
+		if (address->sa_family == AF_UNSPEC) {
+			/* addrlen has already been checked for AF_UNSPEC. */
+			const struct sockaddr_in *const sockaddr =
+				(struct sockaddr_in *)address;
+
+			if (sk->sk_family != AF_INET)
+				return -EINVAL;
+
+			if (sockaddr->sin_addr.s_addr != htonl(INADDR_ANY))
+				return -EAFNOSUPPORT;
+		} else {
+			/*
+			 * Checks sa_family consistency to not wrongfully return
+			 * -EACCES instead of -EINVAL.  Valid sa_family changes are
+			 * only (from AF_INET or AF_INET6) to AF_UNSPEC.
+			 *
+			 * We could return 0 and let the network stack handle this
+			 * check, but it is safer to return a proper error and test
+			 * consistency thanks to kselftest.
+			 */
+			if (address->sa_family != sk->sk_family)
+				return -EINVAL;
+		}
+		return check_access_port(dom, port,
+					 LANDLOCK_ACCESS_NET_BIND_TCP);
+	}
+	return 0;
 }
 
 static int hook_socket_connect(struct socket *const sock,
 			       struct sockaddr *const address,
 			       const int addrlen)
 {
-	return current_check_access_socket(sock, address, addrlen,
-					   LANDLOCK_ACCESS_NET_CONNECT_TCP);
+	__be16 port;
+	struct sock *const sk = sock->sk;
+	const struct landlock_ruleset *const dom = get_current_net_domain();
+
+	if (!dom)
+		return 0;
+	if (WARN_ON_ONCE(dom->num_layers < 1))
+		return -EACCES;
+
+	if (sk_is_tcp(sk)) {
+		/* Checks for minimal header length to safely read sa_family. */
+		if (addrlen < offsetofend(typeof(*address), sa_family))
+			return -EINVAL;
+
+		switch (address->sa_family) {
+		case AF_UNSPEC:
+		case AF_INET:
+			if (addrlen < sizeof(struct sockaddr_in))
+				return -EINVAL;
+			port = ((struct sockaddr_in *)address)->sin_port;
+			break;
+
+#if IS_ENABLED(CONFIG_IPV6)
+		case AF_INET6:
+			if (addrlen < SIN6_LEN_RFC2133)
+				return -EINVAL;
+			port = ((struct sockaddr_in6 *)address)->sin6_port;
+			break;
+#endif /* IS_ENABLED(CONFIG_IPV6) */
+
+		default:
+			return 0;
+		}
+
+		/*
+		 * Connecting to an address with AF_UNSPEC dissolves the TCP
+		 * association, which have the same effect as closing the
+		 * connection while retaining the socket object (i.e., the file
+		 * descriptor).  As for dropping privileges, closing
+		 * connections is always allowed.
+		 *
+		 * For a TCP access control system, this request is legitimate.
+		 * Let the network stack handle potential inconsistencies and
+		 * return -EINVAL if needed.
+		 */
+		if (address->sa_family == AF_UNSPEC)
+			return 0;
+		/*
+		 * Checks sa_family consistency to not wrongfully return
+		 * -EACCES instead of -EINVAL.  Valid sa_family changes are
+		 * only (from AF_INET or AF_INET6) to AF_UNSPEC.
+		 *
+		 * We could return 0 and let the network stack handle this
+		 * check, but it is safer to return a proper error and test
+		 * consistency thanks to kselftest.
+		 */
+		if (address->sa_family != sk->sk_family)
+			return -EINVAL;
+
+		return check_access_port(dom, port,
+					 LANDLOCK_ACCESS_NET_CONNECT_TCP);
+	}
+	return 0;
 }
 
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
