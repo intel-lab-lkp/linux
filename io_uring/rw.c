@@ -279,7 +279,11 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 		rw->kiocb.ki_ioprio = get_current_ioprio();
 	}
 	rw->kiocb.dio_complete = NULL;
-
+	if (ddir == ITER_SOURCE &&
+	    req->file->f_op->fop_flags & FOP_PER_IO_HINTS)
+		rw->kiocb.ki_write_hint = READ_ONCE(sqe->write_hint);
+	else
+		rw->kiocb.ki_write_hint = WRITE_LIFE_NOT_SET;
 	rw->addr = READ_ONCE(sqe->addr);
 	rw->len = READ_ONCE(sqe->len);
 	rw->flags = READ_ONCE(sqe->rw_flags);
@@ -1027,7 +1031,10 @@ int io_write(struct io_kiocb *req, unsigned int issue_flags)
 	if (unlikely(ret))
 		return ret;
 	req->cqe.res = iov_iter_count(&io->iter);
-	rw->kiocb.ki_write_hint = file_write_hint(rw->kiocb.ki_filp);
+
+	/* Use per-file hint only if per-io hint is not set. */
+	if (rw->kiocb.ki_write_hint == WRITE_LIFE_NOT_SET)
+		rw->kiocb.ki_write_hint = file_write_hint(rw->kiocb.ki_filp);
 
 	if (force_nonblock) {
 		/* If the file doesn't support async, just async punt */
