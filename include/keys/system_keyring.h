@@ -9,6 +9,7 @@
 #define _KEYS_SYSTEM_KEYRING_H
 
 #include <linux/key.h>
+struct asymmetric_key_id;
 
 enum blacklist_hash_type {
 	/* TBSCertificate hash */
@@ -28,7 +29,7 @@ int restrict_link_by_digsig_builtin(struct key *dest_keyring,
 				    const union key_payload *payload,
 				    struct key *restriction_key);
 extern __init int load_module_cert(struct key *keyring);
-
+extern int system_key_link(struct key *keyring, struct asymmetric_key_id *id);
 #else
 #define restrict_link_by_builtin_trusted restrict_link_reject
 #define restrict_link_by_digsig_builtin restrict_link_reject
@@ -38,6 +39,10 @@ static inline __init int load_module_cert(struct key *keyring)
 	return 0;
 }
 
+static inline int system_key_link(struct key *keyring, struct asymmetric_key_id *id)
+{
+	return 0;
+}
 #endif
 
 #ifdef CONFIG_SECONDARY_TRUSTED_KEYRING

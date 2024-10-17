@@ -20,6 +20,9 @@
 static struct key *builtin_trusted_keys;
 #ifdef CONFIG_SECONDARY_TRUSTED_KEYRING
 static struct key *secondary_trusted_keys;
+#define system_trusted_keys secondary_trusted_keys
+#else
+#define system_trusted_keys builtin_trusted_keys
 #endif
 #ifdef CONFIG_INTEGRITY_MACHINE_KEYRING
 static struct key *machine_trusted_keys;
@@ -420,3 +423,30 @@ void __init set_platform_trusted_keys(struct key *keyring)
 	platform_trusted_keys = keyring;
 }
 #endif
+
+/**
+ * system_key_link - Link to a system key
+ * @keyring: The keyring to link into
+ * @id: The asymmetric key id to look for in the system keyring
+ *
+ * Search the system keyrings to see if one of them contains a matching "id".
+ * If there is a match, link the key into "keyring".  System keyrings always
+ * includes the builtin. If any of the following keyrings are enabled:
+ * secondary, machine, and platform they are searched as well.
+ */
+int system_key_link(struct key *keyring, struct asymmetric_key_id *id)
+{
+	struct key *key;
+
+	key = find_asymmetric_key(system_trusted_keys, id, NULL, NULL, false);
+	if (!IS_ERR(key))
+		return key_link(keyring, key);
+
+	if (platform_trusted_keys) {
+		key = find_asymmetric_key(platform_trusted_keys, id, NULL, NULL, false);
+		if (!IS_ERR(key))
+			return key_link(keyring, key);
+	}
+
+	return -ENOKEY;
+}
