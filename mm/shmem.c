@@ -2393,11 +2393,7 @@ clear:
 	 * it now, lest undo on failure cancel our earlier guarantee.
 	 */
 	if (sgp != SGP_WRITE && !folio_test_uptodate(folio)) {
-		long i, n = folio_nr_pages(folio);
-
-		for (i = 0; i < n; i++)
-			clear_highpage(folio_page(folio, i));
-		flush_dcache_folio(folio);
+		folio_zero_range(folio, 0, folio_size(folio));
 		folio_mark_uptodate(folio);
 	}
 
