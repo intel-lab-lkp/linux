@@ -222,6 +222,17 @@ static void __dwc3_set_mode(struct work_struct *work)
 
 	switch (desired_dr_role) {
 	case DWC3_GCTL_PRTCAP_HOST:
+	       /*
+		* Setting GUCTL1 bit 29 so that controller
+		* will ignore single SE0 glitch on the linestate
+		* during transmit.
+		*/
+		if (dwc->filter_se0_fsls_eop_quirk) {
+			reg = dwc3_readl(dwc->regs, DWC3_GUCTL1);
+			reg |= DWC3_GUCTL1_FILTER_SE0_FSLS_EOP;
+			dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
+		}
+
 		ret = dwc3_host_init(dwc);
 		if (ret) {
 			dev_err(dwc->dev, "failed to initialize host\n");
@@ -1788,6 +1799,8 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 
 	dwc->tx_de_emphasis_quirk = device_property_read_bool(dev,
 				"snps,tx_de_emphasis_quirk");
+	dwc->filter_se0_fsls_eop_quirk = device_property_read_bool(dev,
+				"snps,filter-se0-fsls-eop-quirk");
 	device_property_read_u8(dev, "snps,tx_de_emphasis",
 				&tx_de_emphasis);
 	device_property_read_string(dev, "snps,hsphy_interface",

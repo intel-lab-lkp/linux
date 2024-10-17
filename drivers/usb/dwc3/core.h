@@ -276,6 +276,7 @@
 
 /* Global User Control 1 Register */
 #define DWC3_GUCTL1_DEV_DECOUPLE_L1L2_EVT	BIT(31)
+#define DWC3_GUCTL1_FILTER_SE0_FSLS_EOP		BIT(29)
 #define DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS	BIT(28)
 #define DWC3_GUCTL1_DEV_FORCE_20_CLK_FOR_30_CLK	BIT(26)
 #define DWC3_GUCTL1_DEV_L1_EXIT_BY_HW		BIT(24)
@@ -1140,6 +1141,8 @@ struct dwc3_scratchpad_array {
  * @gfladj_refclk_lpm_sel: set if we need to enable SOF/ITP counter
  *                          running based on ref_clk
  * @tx_de_emphasis_quirk: set if we enable Tx de-emphasis quirk
+ * @filter_se0_fsls_eop_quirk: set to ignores single
+ *				SE0 glitch on the linestate during transmit.
  * @tx_de_emphasis: Tx de-emphasis value
  *	0	- -6dB de-emphasis
  *	1	- -3.5dB de-emphasis
@@ -1373,6 +1376,7 @@ struct dwc3 {
 	unsigned		gfladj_refclk_lpm_sel:1;
 
 	unsigned		tx_de_emphasis_quirk:1;
+	unsigned		filter_se0_fsls_eop_quirk:1;
 	unsigned		tx_de_emphasis:2;
 
 	unsigned		dis_metastability_quirk:1;
