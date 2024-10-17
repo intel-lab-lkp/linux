@@ -1370,10 +1370,16 @@ static void revoke_delegation(struct nfs4_delegation *dp)
 	if (dp->dl_stid.sc_status &
 	    (SC_STATUS_REVOKED | SC_STATUS_ADMIN_REVOKED)) {
 		spin_lock(&clp->cl_lock);
-		refcount_inc(&dp->dl_stid.sc_count);
+		if (dp->dl_stid.sc_status & SC_STATUS_FREED) {
+			list_del_init(&dp->dl_recall_lru);
+			spin_unlock(&clp->cl_lock);
+			goto out;
+		}
 		list_add(&dp->dl_recall_lru, &clp->cl_revoked);
+		dp->dl_stid.sc_status |= SC_STATUS_FREEABLE;
 		spin_unlock(&clp->cl_lock);
 	}
+out:
 	destroy_unhashed_deleg(dp);
 }
 
@@ -6545,6 +6551,7 @@ nfs4_laundromat(struct nfsd_net *nn)
 		dp = list_entry (pos, struct nfs4_delegation, dl_recall_lru);
 		if (!state_expired(&lt, dp->dl_time))
 			break;
+		refcount_inc(&dp->dl_stid.sc_count);
 		unhash_delegation_locked(dp, SC_STATUS_REVOKED);
 		list_add(&dp->dl_recall_lru, &reaplist);
 	}
@@ -7156,7 +7163,9 @@ nfsd4_free_stateid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		if (s->sc_status & SC_STATUS_REVOKED) {
 			spin_unlock(&s->sc_lock);
 			dp = delegstateid(s);
-			list_del_init(&dp->dl_recall_lru);
+			if (s->sc_status & SC_STATUS_FREEABLE)
+				list_del_init(&dp->dl_recall_lru);
+			s->sc_status |= SC_STATUS_FREED;
 			spin_unlock(&cl->cl_lock);
 			nfs4_put_stid(s);
 			ret = nfs_ok;
@@ -7486,7 +7495,7 @@ nfsd4_delegreturn(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if ((status = fh_verify(rqstp, &cstate->current_fh, S_IFREG, 0)))
 		return status;
 
-	status = nfsd4_lookup_stateid(cstate, stateid, SC_TYPE_DELEG, 0, &s, nn);
+	status = nfsd4_lookup_stateid(cstate, stateid, SC_TYPE_DELEG, SC_STATUS_REVOKED|SC_STATUS_FREEABLE, &s, nn);
 	if (status)
 		goto out;
 	dp = delegstateid(s);
