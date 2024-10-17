@@ -1605,7 +1605,7 @@ err:
 					     gmc.xgmi.head)
 		adev->gmc.gmc_funcs->request_mem_partition_mode(tmp_adev,
 								cur_nps_mode);
-	mutex_lock(&hive->hive_lock);
+	mutex_unlock(&hive->hive_lock);
 
 	return r;
 }
