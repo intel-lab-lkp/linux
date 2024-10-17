@@ -1,11 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
 /*
- * Using the avg_vruntime, do the right thing and preserve lag across
- * sleep+wake cycles. EEVDF placement strategy #1, #2 if disabled.
- */
-SCHED_FEAT(PLACE_LAG, false)
-/*
  * Give new tasks half a slice to ease into the competition.
  */
 SCHED_FEAT(PLACE_DEADLINE_INITIAL, true)
@@ -13,11 +8,6 @@ SCHED_FEAT(PLACE_DEADLINE_INITIAL, true)
  * Preserve relative virtual deadline on 'migration'.
  */
 SCHED_FEAT(PLACE_REL_DEADLINE, true)
-/*
- * Inhibit (wakeup) preemption until the current task has either matched the
- * 0-lag point or until is has exhausted it's slice.
- */
-SCHED_FEAT(RUN_TO_PARITY, false)
 /*
  * Allow wakeup of tasks with a shorter slice to cancel RUN_TO_PARITY for
  * current.

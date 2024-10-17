@@ -29,4 +29,12 @@ extern int sysctl_numa_balancing_mode;
 #define sysctl_numa_balancing_mode	0
 #endif
 
+#if defined(CONFIG_SCHED_DEBUG) && defined(CONFIG_SYSCTL)
+extern unsigned int sysctl_sched_place_lag_enabled;
+extern unsigned int sysctl_sched_run_to_parity_enabled;
+#else
+#define sysctl_sched_place_lag_enabled 0
+#define sysctl_sched_run_to_parity_enabled 0
+#endif
+
 #endif /* _LINUX_SCHED_SYSCTL_H */
