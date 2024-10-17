@@ -199,7 +199,7 @@ static __always_inline __must_check unsigned long __clear_user(void __user *addr
 static __always_inline unsigned long clear_user(void __user *to, unsigned long n)
 {
 	if (__access_ok(to, n))
-		return __clear_user(to, n);
+		return __clear_user(mask_user_address(to), n);
 	return n;
 }
 #endif /* _ASM_X86_UACCESS_64_H */
