@@ -1956,6 +1956,7 @@ static void uvc_unregister_video(struct uvc_device *dev)
 
 int uvc_register_video_device(struct uvc_device *dev,
 			      struct uvc_streaming *stream,
+			      unsigned int inst,
 			      struct video_device *vdev,
 			      struct uvc_video_queue *queue,
 			      enum v4l2_buf_type type,
@@ -1990,16 +1991,17 @@ int uvc_register_video_device(struct uvc_device *dev,
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
 	default:
 		vdev->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+		snprintf(vdev->name, sizeof(vdev->name), "Cap%u %s", inst, dev->name);
 		break;
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
 		vdev->device_caps = V4L2_CAP_VIDEO_OUTPUT | V4L2_CAP_STREAMING;
+		snprintf(vdev->name, sizeof(vdev->name), "Out%u %s", inst, dev->name);
 		break;
 	case V4L2_BUF_TYPE_META_CAPTURE:
 		vdev->device_caps = V4L2_CAP_META_CAPTURE | V4L2_CAP_STREAMING;
+		snprintf(vdev->name, sizeof(vdev->name), "Meta%u %s", inst, dev->name);
 		break;
 	}
-
-	strscpy(vdev->name, dev->name, sizeof(vdev->name));
 
 	/*
 	 * Set the driver data before calling video_register_device, otherwise
@@ -2020,7 +2022,7 @@ int uvc_register_video_device(struct uvc_device *dev,
 }
 
 static int uvc_register_video(struct uvc_device *dev,
-		struct uvc_streaming *stream)
+		struct uvc_streaming *stream, unsigned int inst)
 {
 	int ret;
 
@@ -2041,7 +2043,7 @@ static int uvc_register_video(struct uvc_device *dev,
 	uvc_debugfs_init_stream(stream);
 
 	/* Register the device with V4L. */
-	return uvc_register_video_device(dev, stream, &stream->vdev,
+	return uvc_register_video_device(dev, stream, inst, &stream->vdev,
 					 &stream->queue, stream->type,
 					 &uvc_fops, &uvc_ioctl_ops);
 }
@@ -2054,9 +2056,13 @@ static int uvc_register_terms(struct uvc_device *dev,
 {
 	struct uvc_streaming *stream;
 	struct uvc_entity *term;
+	unsigned int inst_cap = 0;
+	unsigned int inst_out = 0;
 	int ret;
 
 	list_for_each_entry(term, &chain->entities, chain) {
+		bool is_capture;
+
 		if (UVC_ENTITY_TYPE(term) != UVC_TT_STREAMING)
 			continue;
 
@@ -2069,16 +2075,22 @@ static int uvc_register_terms(struct uvc_device *dev,
 		}
 
 		stream->chain = chain;
-		ret = uvc_register_video(dev, stream);
+		is_capture = stream->type == V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		ret = uvc_register_video(dev, stream,
+					 is_capture ? inst_cap : inst_out);
 		if (ret < 0)
 			return ret;
 
-		/*
-		 * Register a metadata node, but ignore a possible failure,
-		 * complete registration of video nodes anyway.
-		 */
-		uvc_meta_register(stream);
-
+		if (is_capture) {
+			/*
+			 * Register a metadata node, but ignore a possible failure,
+			 * complete registration of video nodes anyway.
+			 */
+			uvc_meta_register(stream, inst_cap);
+			inst_cap++;
+		} else {
+			inst_out++;
+		}
 		term->vdev = &stream->vdev;
 	}
 

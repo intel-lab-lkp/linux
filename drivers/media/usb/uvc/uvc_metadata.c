@@ -156,7 +156,7 @@ static const struct v4l2_file_operations uvc_meta_fops = {
 	.mmap = vb2_fop_mmap,
 };
 
-int uvc_meta_register(struct uvc_streaming *stream)
+int uvc_meta_register(struct uvc_streaming *stream, unsigned int inst)
 {
 	struct uvc_device *dev = stream->dev;
 	struct video_device *vdev = &stream->meta.vdev;
@@ -170,7 +170,7 @@ int uvc_meta_register(struct uvc_streaming *stream)
 	 */
 	vdev->queue = &queue->queue;
 
-	return uvc_register_video_device(dev, stream, vdev, queue,
+	return uvc_register_video_device(dev, stream, inst, vdev, queue,
 					 V4L2_BUF_TYPE_META_CAPTURE,
 					 &uvc_meta_fops, &uvc_meta_ioctl_ops);
 }
