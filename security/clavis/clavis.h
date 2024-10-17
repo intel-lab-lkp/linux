@@ -5,6 +5,7 @@
 
 /* Max length for the asymmetric key id contained on the boot param */
 #define CLAVIS_BIN_KID_MAX   32
+#define CLAVIS_ASCII_KID_MAX 64
 
 struct asymmetric_setup_kid {
 	struct asymmetric_key_id id;
