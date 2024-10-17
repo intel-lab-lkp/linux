@@ -1450,4 +1450,33 @@ static inline void accept_page(struct page *page)
 }
 #endif /* CONFIG_UNACCEPTED_MEMORY */
 
+#ifdef CONFIG_PT_RECLAIM
+static inline void set_pt_unreclaimable(bool *can_reclaim_pt)
+{
+	*can_reclaim_pt = false;
+}
+bool try_get_and_clear_pmd(struct mm_struct *mm, pmd_t *pmd, pmd_t *pmdval);
+void free_pte(struct mm_struct *mm, unsigned long addr, struct mmu_gather *tlb,
+	      pmd_t pmdval);
+void try_to_free_pte(struct mm_struct *mm, pmd_t *pmd, unsigned long addr,
+		     struct mmu_gather *tlb);
+#else
+static inline void set_pt_unreclaimable(bool *can_reclaim_pt)
+{
+}
+static inline bool try_get_and_clear_pmd(struct mm_struct *mm, pmd_t *pmd,
+					 pmd_t *pmdval)
+{
+	return false;
+}
+static inline void free_pte(struct mm_struct *mm, unsigned long addr,
+			    struct mmu_gather *tlb, pmd_t pmdval)
+{
+}
+static inline void try_to_free_pte(struct mm_struct *mm, pmd_t *pmd,
+				   unsigned long addr, struct mmu_gather *tlb)
+{
+}
+#endif /* CONFIG_PT_RECLAIM */
+
 #endif	/* __MM_INTERNAL_H */
