@@ -30,8 +30,11 @@
 #define WMAX_METHOD_DEEP_SLEEP_STATUS	0x0C
 #define WMAX_METHOD_THERMAL_INFORMATION	0x14
 #define WMAX_METHOD_THERMAL_CONTROL	0x15
+#define WMAX_METHOD_GMODE_STATUS	0x25
 
+#define WMAX_ARG_GET_DEFAULT_PROF	0x0A
 #define WMAX_ARG_GET_CURRENT_PROF	0x0B
+#define WMAX_ARG_GET_GMODE_STATUS	0x02
 
 #define WMAX_FAILURE_CODE		0xFFFFFFFF
 
@@ -968,6 +971,42 @@ static int thermal_profile_set_ustt(struct platform_profile_handler *pprof,
 	return 0;
 }
 
+static int autodetect_thermal_profile(void)
+{
+	acpi_status status;
+	u32 in_args;
+	u32 default_profile;
+	u32 gmode;
+
+	in_args = WMAX_ARG_GET_DEFAULT_PROF;
+	status = alienware_wmax_command(&in_args, sizeof(in_args),
+					WMAX_METHOD_THERMAL_INFORMATION, &default_profile);
+
+	if (ACPI_FAILURE(status))
+		return 0;
+
+	in_args = WMAX_ARG_GET_GMODE_STATUS;
+	status = alienware_wmax_command(&in_args, sizeof(in_args),
+					WMAX_METHOD_GMODE_STATUS, &gmode);
+
+	if (ACPI_FAILURE(status))
+		return 0;
+
+	if (default_profile == WMAX_THERMAL_BALANCED && gmode == 1) {
+		quirks->thermal = WMAX_THERMAL_TABLE_SIMPLE;
+		quirks->gmode = 1;
+		return 0;
+	}
+
+	if (default_profile == WMAX_THERMAL_USTT_BALANCED)
+		quirks->thermal = WMAX_THERMAL_TABLE_USTT;
+
+	if (gmode == 0 || gmode == 1)
+		quirks->gmode = 1;
+
+	return 0;
+}
+
 static int create_thermal_profile(void)
 {
 	pp_handler.profile_get = thermal_profile_get;
@@ -1049,6 +1088,9 @@ static int __init alienware_wmi_init(void)
 		if (ret)
 			goto fail_prep_deepsleep;
 	}
+
+	if (interface == WMAX && quirks == &quirk_unknown)
+		autodetect_thermal_profile();
 
 	if (quirks->thermal > 0) {
 		ret = create_thermal_profile();
