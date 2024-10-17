@@ -97,11 +97,26 @@ static void setup_loopback(struct __test_metadata *const _metadata)
 	clear_ambient_cap(_metadata, CAP_NET_ADMIN);
 }
 
-static bool prot_is_tcp(const struct protocol_variant *const prot)
+static bool prot_is_inet_stream(const struct protocol_variant *const prot)
 {
 	return (prot->domain == AF_INET || prot->domain == AF_INET6) &&
-	       prot->type == SOCK_STREAM &&
+	       prot->type == SOCK_STREAM;
+}
+
+static bool prot_is_tcp(const struct protocol_variant *const prot)
+{
+	return prot_is_inet_stream(prot) &&
 	       (prot->protocol == IPPROTO_TCP || prot->protocol == IPPROTO_IP);
+}
+
+static bool prot_is_sctp(const struct protocol_variant *const prot)
+{
+	return prot_is_inet_stream(prot) && prot->protocol == IPPROTO_SCTP;
+}
+
+static bool prot_is_unix_stream(const struct protocol_variant *const prot)
+{
+	return prot->domain == AF_UNIX && prot->type == SOCK_STREAM;
 }
 
 static bool is_restricted(const struct protocol_variant *const prot,
@@ -358,6 +373,17 @@ FIXTURE_VARIANT_ADD(protocol, no_sandbox_with_ipv4_mptcp) {
 };
 
 /* clang-format off */
+FIXTURE_VARIANT_ADD(protocol, no_sandbox_with_ipv4_sctp) {
+	/* clang-format on */
+	.sandbox = NO_SANDBOX,
+	.prot = {
+		.domain = AF_INET,
+		.type = SOCK_STREAM,
+		.protocol = IPPROTO_SCTP,
+	},
+};
+
+/* clang-format off */
 FIXTURE_VARIANT_ADD(protocol, no_sandbox_with_ipv6_tcp1) {
 	/* clang-format on */
 	.sandbox = NO_SANDBOX,
@@ -388,6 +414,17 @@ FIXTURE_VARIANT_ADD(protocol, no_sandbox_with_ipv6_mptcp) {
 		.domain = AF_INET6,
 		.type = SOCK_STREAM,
 		.protocol = IPPROTO_MPTCP,
+	},
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(protocol, no_sandbox_with_ipv6_sctp) {
+	/* clang-format on */
+	.sandbox = NO_SANDBOX,
+	.prot = {
+		.domain = AF_INET6,
+		.type = SOCK_STREAM,
+		.protocol = IPPROTO_SCTP,
 	},
 };
 
@@ -466,6 +503,17 @@ FIXTURE_VARIANT_ADD(protocol, tcp_sandbox_with_ipv4_mptcp) {
 };
 
 /* clang-format off */
+FIXTURE_VARIANT_ADD(protocol, tcp_sandbox_with_ipv4_sctp) {
+	/* clang-format on */
+	.sandbox = TCP_SANDBOX,
+	.prot = {
+		.domain = AF_INET,
+		.type = SOCK_STREAM,
+		.protocol = IPPROTO_SCTP,
+	},
+};
+
+/* clang-format off */
 FIXTURE_VARIANT_ADD(protocol, tcp_sandbox_with_ipv6_tcp1) {
 	/* clang-format on */
 	.sandbox = TCP_SANDBOX,
@@ -496,6 +544,17 @@ FIXTURE_VARIANT_ADD(protocol, tcp_sandbox_with_ipv6_mptcp) {
 		.domain = AF_INET6,
 		.type = SOCK_STREAM,
 		.protocol = IPPROTO_MPTCP,
+	},
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(protocol, tcp_sandbox_with_ipv6_sctp) {
+	/* clang-format on */
+	.sandbox = TCP_SANDBOX,
+	.prot = {
+		.domain = AF_INET6,
+		.type = SOCK_STREAM,
+		.protocol = IPPROTO_SCTP,
 	},
 };
 
@@ -793,7 +852,7 @@ TEST_F(protocol, bind_unspec)
 
 	/* Allowed bind on AF_UNSPEC/INADDR_ANY. */
 	ret = bind_variant(bind_fd, &self->unspec_any0);
-	if (variant->prot.domain == AF_INET) {
+	if (variant->prot.domain == AF_INET && !prot_is_sctp(&variant->prot)) {
 		EXPECT_EQ(0, ret)
 		{
 			TH_LOG("Failed to bind to unspec/any socket: %s",
@@ -819,7 +878,7 @@ TEST_F(protocol, bind_unspec)
 
 	/* Denied bind on AF_UNSPEC/INADDR_ANY. */
 	ret = bind_variant(bind_fd, &self->unspec_any0);
-	if (variant->prot.domain == AF_INET) {
+	if (variant->prot.domain == AF_INET && !prot_is_sctp(&variant->prot)) {
 		if (is_restricted(&variant->prot, variant->sandbox)) {
 			EXPECT_EQ(-EACCES, ret);
 		} else {
@@ -834,7 +893,7 @@ TEST_F(protocol, bind_unspec)
 	bind_fd = socket_variant(&self->srv0);
 	ASSERT_LE(0, bind_fd);
 	ret = bind_variant(bind_fd, &self->unspec_srv0);
-	if (variant->prot.domain == AF_INET) {
+	if (variant->prot.domain == AF_INET && !prot_is_sctp(&variant->prot)) {
 		EXPECT_EQ(-EAFNOSUPPORT, ret);
 	} else {
 		EXPECT_EQ(-EINVAL, ret)
@@ -899,17 +958,18 @@ TEST_F(protocol, connect_unspec)
 
 		/* Disconnects already connected socket, or set peer. */
 		ret = connect_variant(connect_fd, &self->unspec_any0);
-		if (self->srv0.protocol.domain == AF_UNIX &&
-		    self->srv0.protocol.type == SOCK_STREAM) {
+		if (prot_is_unix_stream(&variant->prot)) {
 			EXPECT_EQ(-EINVAL, ret);
+		} else if (prot_is_sctp(&variant->prot)) {
+			EXPECT_EQ(-EOPNOTSUPP, ret);
 		} else {
 			EXPECT_EQ(0, ret);
 		}
 
 		/* Tries to reconnect, or set peer. */
 		ret = connect_variant(connect_fd, &self->srv0);
-		if (self->srv0.protocol.domain == AF_UNIX &&
-		    self->srv0.protocol.type == SOCK_STREAM) {
+		if (prot_is_unix_stream(&variant->prot) ||
+		    prot_is_sctp(&variant->prot)) {
 			EXPECT_EQ(-EISCONN, ret);
 		} else {
 			EXPECT_EQ(0, ret);
@@ -926,9 +986,10 @@ TEST_F(protocol, connect_unspec)
 		}
 
 		ret = connect_variant(connect_fd, &self->unspec_any0);
-		if (self->srv0.protocol.domain == AF_UNIX &&
-		    self->srv0.protocol.type == SOCK_STREAM) {
+		if (prot_is_unix_stream(&variant->prot)) {
 			EXPECT_EQ(-EINVAL, ret);
+		} else if (prot_is_sctp(&variant->prot)) {
+			EXPECT_EQ(-EOPNOTSUPP, ret);
 		} else {
 			/* Always allowed to disconnect. */
 			EXPECT_EQ(0, ret);
