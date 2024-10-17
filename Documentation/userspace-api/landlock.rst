@@ -610,7 +610,8 @@ time as the other security modules.  The list of security modules enabled by
 default is set with ``CONFIG_LSM``.  The kernel configuration should then
 contains ``CONFIG_LSM=landlock,[...]`` with ``[...]``  as the list of other
 potentially useful security modules for the running system (see the
-``CONFIG_LSM`` help).
+``CONFIG_LSM`` help). It is recommended to specify Landlock first of all other
+modules in CONFIG_LSM list since it provides better errors consistency.
 
 Boot time configuration
 -----------------------
