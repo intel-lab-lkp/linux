@@ -105,6 +105,26 @@ SYM_FUNC_START(__get_user_8)
 SYM_FUNC_END(__get_user_8)
 EXPORT_SYMBOL(__get_user_8)
 
+#ifdef CONFIG_X86_64
+
+/*
+ * On x86-64, get_user() does address masking rather than a conditional
+ * bounds check so there's no functional difference with __get_user().
+ */
+SYM_FUNC_ALIAS(__get_user_nocheck_1, __get_user_1);
+EXPORT_SYMBOL(__get_user_nocheck_1);
+
+SYM_FUNC_ALIAS(__get_user_nocheck_2, __get_user_2);
+EXPORT_SYMBOL(__get_user_nocheck_2);
+
+SYM_FUNC_ALIAS(__get_user_nocheck_4, __get_user_4);
+EXPORT_SYMBOL(__get_user_nocheck_4);
+
+SYM_FUNC_ALIAS(__get_user_nocheck_8, __get_user_8);
+EXPORT_SYMBOL(__get_user_nocheck_8);
+
+#else /* CONFIG_X86_32 */
+
 /* .. and the same for __get_user, just without the range checks */
 SYM_FUNC_START(__get_user_nocheck_1)
 	ASM_STAC
@@ -139,19 +159,16 @@ EXPORT_SYMBOL(__get_user_nocheck_4)
 SYM_FUNC_START(__get_user_nocheck_8)
 	ASM_STAC
 	ASM_BARRIER_NOSPEC
-#ifdef CONFIG_X86_64
-	UACCESS movq (%_ASM_AX),%rdx
-#else
 	xor %ecx,%ecx
 	UACCESS movl (%_ASM_AX),%edx
 	UACCESS movl 4(%_ASM_AX),%ecx
-#endif
 	xor %eax,%eax
 	ASM_CLAC
 	RET
 SYM_FUNC_END(__get_user_nocheck_8)
 EXPORT_SYMBOL(__get_user_nocheck_8)
 
+#endif /* CONFIG_X86_32 */
 
 SYM_CODE_START_LOCAL(__get_user_handle_exception)
 	ASM_CLAC
