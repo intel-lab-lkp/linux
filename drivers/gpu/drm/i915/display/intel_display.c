@@ -2514,15 +2514,41 @@ void intel_encoder_get_config(struct intel_encoder *encoder,
 	intel_crtc_readout_derived_state(crtc_state);
 }
 
+static int intel_splitter_adjust_pipe_width(int width, int pixel_replication_count, int num_pipes)
+{
+	int pipe_src_width;
+
+	/*
+	 * With ultrajoiner and 12 DSC slices case, addition of extra pixels (padding)
+	 * is required.
+	 * Pixel replication is required due to the rounding of slice_width (Hactive / slice_count)
+	 * One extra pixel is added if the pipe src width becomes odd, to make it even.
+	 *
+	 * Splitter HW takes care of these by removing odd pixel from each pipe.
+	 * It removes replicated pixels from the last pipe.
+	 */
+	width += pixel_replication_count;
+
+	pipe_src_width = width / num_pipes;
+
+	if (pipe_src_width % 2 == 0)
+		return width;
+
+	return width + num_pipes;
+}
+
 static void intel_joiner_compute_pipe_src(struct intel_crtc_state *crtc_state)
 {
 	int num_pipes = intel_crtc_num_joined_pipes(crtc_state);
 	int width, height;
+	int pixel_replication_count = crtc_state->dsc.pixel_replication_count;
 
-	if (num_pipes == 1)
+	if (num_pipes == 1 && !pixel_replication_count)
 		return;
 
-	width = drm_rect_width(&crtc_state->pipe_src);
+	width = intel_splitter_adjust_pipe_width(drm_rect_width(&crtc_state->pipe_src),
+						 pixel_replication_count, num_pipes);
+
 	height = drm_rect_height(&crtc_state->pipe_src);
 
 	drm_rect_init(&crtc_state->pipe_src, 0, 0,
