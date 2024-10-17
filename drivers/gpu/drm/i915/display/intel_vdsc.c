@@ -379,7 +379,14 @@ intel_dsc_power_domain(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 
 static int intel_dsc_get_vdsc_per_pipe(const struct intel_crtc_state *crtc_state)
 {
-	return crtc_state->dsc.dsc_split ? 2 : 1;
+	switch (crtc_state->dsc.dsc_split) {
+	case INTEL_DSC_SPLIT_2_STREAMS:
+		return 2;
+	case INTEL_DSC_SPLIT_DISABLED:
+	default:
+		break;
+	}
+	return 1;
 }
 
 int intel_dsc_get_num_vdsc_instances(const struct intel_crtc_state *crtc_state)
@@ -976,12 +983,27 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 	if (!crtc_state->dsc.compression_enable)
 		goto out;
 
-	crtc_state->dsc.dsc_split = (dss_ctl2 & RIGHT_BRANCH_VDSC_ENABLE) &&
-		(dss_ctl1 & JOINER_ENABLE);
+	if ((dss_ctl1 & JOINER_ENABLE) &&
+	    (dss_ctl2 & RIGHT_BRANCH_VDSC_ENABLE))
+		crtc_state->dsc.dsc_split = INTEL_DSC_SPLIT_2_STREAMS;
+	else
+		crtc_state->dsc.dsc_split = INTEL_DSC_SPLIT_DISABLED;
 
 	intel_dsc_get_pps_config(crtc_state);
 out:
 	intel_display_power_put(dev_priv, power_domain, wakeref);
+}
+
+static const char * const dsc_split_str[] = {
+	[INTEL_DSC_SPLIT_DISABLED] = "DISABLED",
+	[INTEL_DSC_SPLIT_2_STREAMS] = "2 STREAMS",
+};
+
+static const char *dsc_split_name(enum intel_dsc_split_state dsc_split)
+{
+	if (dsc_split >= ARRAY_SIZE(dsc_split_str))
+		return "invalid";
+	return dsc_split_str[dsc_split];
 }
 
 static void intel_vdsc_dump_state(struct drm_printer *p, int indent,
@@ -991,7 +1013,7 @@ static void intel_vdsc_dump_state(struct drm_printer *p, int indent,
 			  "dsc-dss: compressed-bpp:" FXP_Q4_FMT ", slice-count: %d, split: %s\n",
 			  FXP_Q4_ARGS(crtc_state->dsc.compressed_bpp_x16),
 			  crtc_state->dsc.slice_count,
-			  str_yes_no(crtc_state->dsc.dsc_split));
+			  dsc_split_name(crtc_state->dsc.dsc_split));
 }
 
 void intel_vdsc_state_dump(struct drm_printer *p, int indent,
