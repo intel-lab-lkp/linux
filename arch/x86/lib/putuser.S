@@ -87,7 +87,26 @@ SYM_FUNC_START(__put_user_8)
 SYM_FUNC_END(__put_user_8)
 EXPORT_SYMBOL(__put_user_8)
 
-/* .. and the same for __put_user, just without the range checks */
+#ifdef CONFIG_X86_64
+
+/*
+ * On x86-64, put_user() does address masking rather than a conditional
+ * bounds check so there's no functional difference with __put_user().
+ */
+SYM_FUNC_ALIAS(__put_user_nocheck_1, __put_user_1);
+EXPORT_SYMBOL(__put_user_nocheck_1);
+
+SYM_FUNC_ALIAS(__put_user_nocheck_2, __put_user_2);
+EXPORT_SYMBOL(__put_user_nocheck_2);
+
+SYM_FUNC_ALIAS(__put_user_nocheck_4, __put_user_4);
+EXPORT_SYMBOL(__put_user_nocheck_4);
+
+SYM_FUNC_ALIAS(__put_user_nocheck_8, __put_user_8);
+EXPORT_SYMBOL(__put_user_nocheck_8);
+
+#else /* CONFIG_X86_32 */
+
 SYM_FUNC_START(__put_user_nocheck_1)
 	ASM_STAC
 6:	movb %al,(%_ASM_CX)
@@ -118,14 +137,14 @@ EXPORT_SYMBOL(__put_user_nocheck_4)
 SYM_FUNC_START(__put_user_nocheck_8)
 	ASM_STAC
 9:	mov %_ASM_AX,(%_ASM_CX)
-#ifdef CONFIG_X86_32
 10:	movl %edx,4(%_ASM_CX)
-#endif
 	xor %ecx,%ecx
 	ASM_CLAC
 	RET
 SYM_FUNC_END(__put_user_nocheck_8)
 EXPORT_SYMBOL(__put_user_nocheck_8)
+
+#endif /* CONFIG_X86_32 */
 
 SYM_CODE_START_LOCAL(__put_user_handle_exception)
 	ASM_CLAC
@@ -140,11 +159,9 @@ SYM_CODE_END(__put_user_handle_exception)
 	_ASM_EXTABLE_UA(4b, __put_user_handle_exception)
 #ifdef CONFIG_X86_32
 	_ASM_EXTABLE_UA(5b, __put_user_handle_exception)
-#endif
 	_ASM_EXTABLE_UA(6b, __put_user_handle_exception)
 	_ASM_EXTABLE_UA(7b, __put_user_handle_exception)
 	_ASM_EXTABLE_UA(8b, __put_user_handle_exception)
 	_ASM_EXTABLE_UA(9b, __put_user_handle_exception)
-#ifdef CONFIG_X86_32
 	_ASM_EXTABLE_UA(10b, __put_user_handle_exception)
 #endif
