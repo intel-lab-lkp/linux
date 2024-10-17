@@ -158,6 +158,11 @@ static enum hrtimer_restart txdone_hrtimer(struct hrtimer *hrtimer)
  */
 void mbox_chan_received_data(struct mbox_chan *chan, void *mssg)
 {
+	if (chan->mbox->ops->send_request) {
+		dev_dbg(chan->mbox->dev, "Operation not supported for mailbox requests\n");
+		return;
+	}
+
 	/* No buffering the received data */
 	if (chan->cl->rx_callback)
 		chan->cl->rx_callback(chan->cl, mssg);
@@ -176,6 +181,11 @@ EXPORT_SYMBOL_GPL(mbox_chan_received_data);
  */
 void mbox_chan_txdone(struct mbox_chan *chan, int r)
 {
+	if (chan->mbox->ops->send_request) {
+		dev_dbg(chan->mbox->dev, "Operation not supported for mailbox requests\n");
+		return;
+	}
+
 	if (unlikely(!(chan->txdone_method & TXDONE_BY_IRQ))) {
 		dev_err(chan->mbox->dev,
 		       "Controller can't run the TX ticker\n");
@@ -197,6 +207,11 @@ EXPORT_SYMBOL_GPL(mbox_chan_txdone);
  */
 void mbox_client_txdone(struct mbox_chan *chan, int r)
 {
+	if (chan->mbox->ops->send_request) {
+		dev_dbg(chan->mbox->dev, "Operation not supported for mailbox requests\n");
+		return;
+	}
+
 	if (unlikely(!(chan->txdone_method & TXDONE_BY_ACK))) {
 		dev_err(chan->mbox->dev, "Client can't run the TX ticker\n");
 		return;
@@ -261,6 +276,11 @@ int mbox_send_message(struct mbox_chan *chan, void *mssg)
 	if (!chan || !chan->cl)
 		return -EINVAL;
 
+	if (chan->mbox->ops->send_request) {
+		dev_dbg(chan->mbox->dev, "Operation not supported for mailbox requests\n");
+		return -EOPNOTSUPP;
+	}
+
 	t = add_to_rbuf(chan, mssg);
 	if (t < 0) {
 		dev_err(chan->mbox->dev, "Try increasing MBOX_TX_QUEUE_LEN\n");
@@ -289,6 +309,39 @@ int mbox_send_message(struct mbox_chan *chan, void *mssg)
 }
 EXPORT_SYMBOL_GPL(mbox_send_message);
 
+int mbox_send_request(struct mbox_chan *chan, struct mbox_request *req)
+{
+	return chan->mbox->ops->send_request(chan, req);
+}
+EXPORT_SYMBOL_GPL(mbox_send_request);
+
+int mbox_wait_request(int err, struct mbox_wait *wait)
+{
+	switch (err) {
+	case -EINPROGRESS:
+		wait_for_completion(&wait->completion);
+		reinit_completion(&wait->completion);
+		err = wait->err;
+		break;
+	}
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(mbox_wait_request);
+
+void mbox_request_complete(struct mbox_request *req, int err)
+{
+	struct mbox_wait *wait;
+
+	if (err == -EINPROGRESS)
+		return;
+
+	wait = req->wait;
+	wait->err = err;
+	complete(&wait->completion);
+}
+EXPORT_SYMBOL_GPL(mbox_request_complete);
+
 /**
  * mbox_flush - flush a mailbox channel
  * @chan: mailbox channel to flush
@@ -311,23 +364,43 @@ int mbox_flush(struct mbox_chan *chan, unsigned long timeout)
 		return -ENOTSUPP;
 
 	ret = chan->mbox->ops->flush(chan, timeout);
-	if (ret < 0)
+	if (ret < 0 && !chan->mbox->ops->send_request)
 		tx_tick(chan, ret);
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(mbox_flush);
 
+static int mbox_chan_startup(struct mbox_chan *chan, struct mbox_client *cl)
+{
+	struct mbox_controller *mbox = chan->mbox;
+	struct device *dev = cl->dev;
+	int ret;
+
+	if (!mbox->ops->startup)
+		return 0;
+
+	ret = mbox->ops->startup(chan);
+	if (ret) {
+		dev_err(dev, "Unable to startup the chan (%d)\n", ret);
+		mbox_free_channel(chan);
+	}
+
+	return ret;
+}
+
 static int __mbox_bind_client(struct mbox_chan *chan, struct mbox_client *cl)
 {
 	struct device *dev = cl->dev;
 	unsigned long flags;
-	int ret;
 
 	if (chan->cl || !try_module_get(chan->mbox->dev->driver->owner)) {
 		dev_dbg(dev, "%s: mailbox not free\n", __func__);
 		return -EBUSY;
 	}
+
+	if (chan->mbox->ops->send_request)
+		return mbox_chan_startup(chan, cl);
 
 	spin_lock_irqsave(&chan->lock, flags);
 	chan->msg_free = 0;
@@ -341,17 +414,7 @@ static int __mbox_bind_client(struct mbox_chan *chan, struct mbox_client *cl)
 
 	spin_unlock_irqrestore(&chan->lock, flags);
 
-	if (chan->mbox->ops->startup) {
-		ret = chan->mbox->ops->startup(chan);
-
-		if (ret) {
-			dev_err(dev, "Unable to startup the chan (%d)\n", ret);
-			mbox_free_channel(chan);
-			return ret;
-		}
-	}
-
-	return 0;
+	return mbox_chan_startup(chan, cl);
 }
 
 /**
@@ -474,13 +537,18 @@ EXPORT_SYMBOL_GPL(mbox_request_channel_byname);
  */
 void mbox_free_channel(struct mbox_chan *chan)
 {
+	struct mbox_controller *mbox;
 	unsigned long flags;
 
 	if (!chan || !chan->cl)
 		return;
 
-	if (chan->mbox->ops->shutdown)
-		chan->mbox->ops->shutdown(chan);
+	mbox = chan->mbox;
+	if (mbox->ops->shutdown)
+		mbox->ops->shutdown(chan);
+
+	if (mbox->ops->send_request)
+		return module_put(mbox->dev->driver->owner);
 
 	/* The queued TX requests are simply aborted, no callbacks are made */
 	spin_lock_irqsave(&chan->lock, flags);
@@ -489,7 +557,7 @@ void mbox_free_channel(struct mbox_chan *chan)
 	if (chan->txdone_method == TXDONE_BY_ACK)
 		chan->txdone_method = TXDONE_BY_POLL;
 
-	module_put(chan->mbox->dev->driver->owner);
+	module_put(mbox->dev->driver->owner);
 	spin_unlock_irqrestore(&chan->lock, flags);
 }
 EXPORT_SYMBOL_GPL(mbox_free_channel);
@@ -506,6 +574,13 @@ of_mbox_index_xlate(struct mbox_controller *mbox,
 	return &mbox->chans[ind];
 }
 
+static void mbox_controller_add_tail(struct mbox_controller *mbox)
+{
+	mutex_lock(&con_mutex);
+	list_add_tail(&mbox->node, &mbox_cons);
+	mutex_unlock(&con_mutex);
+}
+
 /**
  * mbox_controller_register - Register the mailbox controller
  * @mbox:	Pointer to the mailbox controller.
@@ -519,6 +594,17 @@ int mbox_controller_register(struct mbox_controller *mbox)
 	/* Sanity check */
 	if (!mbox || !mbox->dev || !mbox->ops || !mbox->num_chans)
 		return -EINVAL;
+
+	if (mbox->ops->send_request && mbox->ops->send_data)
+		return -EINVAL;
+
+	if (!mbox->of_xlate)
+		mbox->of_xlate = of_mbox_index_xlate;
+
+	if (mbox->ops->send_request) {
+		mbox_controller_add_tail(mbox);
+		return 0;
+	}
 
 	if (mbox->txdone_irq)
 		txdone = TXDONE_BY_IRQ;
@@ -549,12 +635,7 @@ int mbox_controller_register(struct mbox_controller *mbox)
 		spin_lock_init(&chan->lock);
 	}
 
-	if (!mbox->of_xlate)
-		mbox->of_xlate = of_mbox_index_xlate;
-
-	mutex_lock(&con_mutex);
-	list_add_tail(&mbox->node, &mbox_cons);
-	mutex_unlock(&con_mutex);
+	mbox_controller_add_tail(mbox);
 
 	return 0;
 }
@@ -578,7 +659,7 @@ void mbox_controller_unregister(struct mbox_controller *mbox)
 	for (i = 0; i < mbox->num_chans; i++)
 		mbox_free_channel(&mbox->chans[i]);
 
-	if (mbox->txdone_poll)
+	if (!mbox->ops->send_request && mbox->txdone_poll)
 		hrtimer_cancel(&mbox->poll_hrt);
 
 	mutex_unlock(&con_mutex);

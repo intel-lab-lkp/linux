@@ -8,6 +8,7 @@
 #include <linux/hrtimer.h>
 #include <linux/device.h>
 #include <linux/completion.h>
+#include <linux/mailbox_request.h>
 
 struct mbox_chan;
 
@@ -20,6 +21,10 @@ struct mbox_chan;
  *		transmission of data is reported by the controller via
  *		mbox_chan_txdone (if it has some TX ACK irq). It must not
  *		sleep.
+ * @send_request: The API asks the MBOX controller driver to transmit a message
+ *                on the bus. The call may be in atomic context. Returns
+ *                -EINPROGRESS if data is fed into hardware, -ENOSPC when the
+ *                hardware queue is full, or zero when the request completes.
  * @flush:	Called when a client requests transmissions to be blocking but
  *		the context doesn't allow sleeping. Typically the controller
  *		will implement a busy loop waiting for the data to flush out.
@@ -45,6 +50,7 @@ struct mbox_chan;
  */
 struct mbox_chan_ops {
 	int (*send_data)(struct mbox_chan *chan, void *data);
+	int (*send_request)(struct mbox_chan *chan, struct mbox_request *req);
 	int (*flush)(struct mbox_chan *chan, unsigned long timeout);
 	int (*startup)(struct mbox_chan *chan);
 	void (*shutdown)(struct mbox_chan *chan);
@@ -131,6 +137,7 @@ int mbox_controller_register(struct mbox_controller *mbox); /* can sleep */
 void mbox_controller_unregister(struct mbox_controller *mbox); /* can sleep */
 void mbox_chan_received_data(struct mbox_chan *chan, void *data); /* atomic */
 void mbox_chan_txdone(struct mbox_chan *chan, int r); /* atomic */
+void mbox_request_complete(struct mbox_request *req, int err); /*can sleep */
 
 int devm_mbox_controller_register(struct device *dev,
 				  struct mbox_controller *mbox);

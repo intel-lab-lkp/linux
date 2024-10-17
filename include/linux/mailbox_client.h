@@ -9,6 +9,7 @@
 
 #include <linux/of.h>
 #include <linux/device.h>
+#include <linux/mailbox_request.h>
 
 struct mbox_chan;
 
@@ -46,5 +47,8 @@ int mbox_flush(struct mbox_chan *chan, unsigned long timeout);
 void mbox_client_txdone(struct mbox_chan *chan, int r); /* atomic */
 bool mbox_client_peek_data(struct mbox_chan *chan); /* atomic */
 void mbox_free_channel(struct mbox_chan *chan); /* may sleep */
+
+int mbox_send_request(struct mbox_chan *chan, struct mbox_request *req);
+int mbox_wait_request(int err, struct mbox_wait *wait);
 
 #endif /* __MAILBOX_CLIENT_H */
