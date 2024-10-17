@@ -91,6 +91,11 @@ HOSTRUSTFLAGS
 -------------
 Additional flags to be passed to $(HOSTRUSTC) when building host programs.
 
+PROCMACROLDFLAGS
+-------------
+Additional flags to be passed when linking proc macros for the Rust toolchain.
+If unset, it defaults to $(HOSTLDFLAGS).
+
 HOSTLDFLAGS
 -----------
 Additional flags to be passed when linking host programs.
