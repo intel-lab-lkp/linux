@@ -380,6 +380,8 @@ intel_dsc_power_domain(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 static int intel_dsc_get_vdsc_per_pipe(const struct intel_crtc_state *crtc_state)
 {
 	switch (crtc_state->dsc.dsc_split) {
+	case INTEL_DSC_SPLIT_3_STREAMS:
+		return 3;
 	case INTEL_DSC_SPLIT_2_STREAMS:
 		return 2;
 	case INTEL_DSC_SPLIT_DISABLED:
@@ -782,6 +784,12 @@ void intel_dsc_enable(const struct intel_crtc_state *crtc_state)
 		dss_ctl2_val |= VDSC1_ENABLE;
 		dss_ctl1_val |= JOINER_ENABLE;
 	}
+
+	if (vdsc_instances_per_pipe > 2) {
+		dss_ctl2_val |= VDSC2_ENABLE;
+		dss_ctl2_val |= SMALL_JOINER_CONFIG_3_ENGINES;
+	}
+
 	if (crtc_state->joiner_pipes) {
 		if (intel_crtc_ultrajoiner_enable_needed(crtc_state))
 			dss_ctl1_val |= ULTRA_JOINER_ENABLE;
@@ -983,11 +991,15 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 	if (!crtc_state->dsc.compression_enable)
 		goto out;
 
-	if ((dss_ctl1 & JOINER_ENABLE) &&
-	    (dss_ctl2 & VDSC1_ENABLE))
-		crtc_state->dsc.dsc_split = INTEL_DSC_SPLIT_2_STREAMS;
-	else
+	if (dss_ctl1 & JOINER_ENABLE) {
+		if (dss_ctl2 & (VDSC2_ENABLE | SMALL_JOINER_CONFIG_3_ENGINES))
+			crtc_state->dsc.dsc_split = INTEL_DSC_SPLIT_3_STREAMS;
+
+		else if (dss_ctl2 & VDSC1_ENABLE)
+			crtc_state->dsc.dsc_split = INTEL_DSC_SPLIT_2_STREAMS;
+	} else {
 		crtc_state->dsc.dsc_split = INTEL_DSC_SPLIT_DISABLED;
+	}
 
 	intel_dsc_get_pps_config(crtc_state);
 out:
@@ -997,6 +1009,7 @@ out:
 static const char * const dsc_split_str[] = {
 	[INTEL_DSC_SPLIT_DISABLED] = "DISABLED",
 	[INTEL_DSC_SPLIT_2_STREAMS] = "2 STREAMS",
+	[INTEL_DSC_SPLIT_3_STREAMS] = "3 STREAMS",
 };
 
 static const char *dsc_split_name(enum intel_dsc_split_state dsc_split)
