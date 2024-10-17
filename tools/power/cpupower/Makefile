@@ -218,29 +218,41 @@ else
 endif
 	$(QUIET) $(STRIPCMD) $@
 
+ifeq (, $(shell which xgettext))
+$(warning "Install xgettext to extract translatable strings.")
+else
 $(OUTPUT)po/$(PACKAGE).pot: $(UTIL_SRC)
 	$(ECHO) "  GETTEXT " $@
 	$(QUIET) xgettext --default-domain=$(PACKAGE) --add-comments \
 		--keyword=_ --keyword=N_ $(UTIL_SRC) -p $(@D) -o $(@F)
+endif
 
+ifeq (, $(shell which msgfmt))
+$(warning "Install msgfmt to generate binary message catalogs.")
+else
 $(OUTPUT)po/%.gmo: po/%.po
 	$(ECHO) "  MSGFMT  " $@
 	$(QUIET) msgfmt -o $@ po/$*.po
+endif
 
 create-gmo: ${GMO_FILES}
 
+ifeq (, $(shell which msgmerge))
+$(warning "Install msgmerge to merge translations.")
+else
 update-po: $(OUTPUT)po/$(PACKAGE).pot
 	$(ECHO) "  MSGMRG  " $@
 	$(QUIET) @for HLANG in $(LANGUAGES); do \
 		echo -n "Updating $$HLANG "; \
 		if msgmerge po/$$HLANG.po $< -o \
-		   $(OUTPUT)po/$$HLANG.new.po; then \
+		  $(OUTPUT)po/$$HLANG.new.po; then \
 			mv -f $(OUTPUT)po/$$HLANG.new.po $(OUTPUT)po/$$HLANG.po; \
 		else \
 			echo "msgmerge for $$HLANG failed!"; \
 			rm -f $(OUTPUT)po/$$HLANG.new.po; \
 		fi; \
 	done;
+endif
 
 compile-bench: $(OUTPUT)libcpupower.so.$(LIB_MAJ)
 	@V=$(V) confdir=$(confdir) $(MAKE) -C bench O=$(OUTPUT)
