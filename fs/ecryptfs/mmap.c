@@ -178,18 +178,18 @@ out:
  */
 static int ecryptfs_read_folio(struct file *file, struct folio *folio)
 {
-	struct page *page = &folio->page;
+	struct inode *inode = folio->mapping->host;
 	struct ecryptfs_crypt_stat *crypt_stat =
-		&ecryptfs_inode_to_private(page->mapping->host)->crypt_stat;
+		&ecryptfs_inode_to_private(inode)->crypt_stat;
 	int rc = 0;
 
 	if (!crypt_stat || !(crypt_stat->flags & ECRYPTFS_ENCRYPTED)) {
-		rc = ecryptfs_read_lower_page_segment(page, page->index, 0,
-						      PAGE_SIZE,
-						      page->mapping->host);
+		rc = ecryptfs_read_lower_page_segment(&folio->page, folio->index, 0,
+						      folio_size(folio),
+						      inode);
 	} else if (crypt_stat->flags & ECRYPTFS_VIEW_AS_ENCRYPTED) {
 		if (crypt_stat->flags & ECRYPTFS_METADATA_IN_XATTR) {
-			rc = ecryptfs_copy_up_encrypted_with_header(page,
+			rc = ecryptfs_copy_up_encrypted_with_header(&folio->page,
 								    crypt_stat);
 			if (rc) {
 				printk(KERN_ERR "%s: Error attempting to copy "
@@ -201,9 +201,9 @@ static int ecryptfs_read_folio(struct file *file, struct folio *folio)
 			}
 
 		} else {
-			rc = ecryptfs_read_lower_page_segment(
-				page, page->index, 0, PAGE_SIZE,
-				page->mapping->host);
+			rc = ecryptfs_read_lower_page_segment(&folio->page,
+					folio->index, 0, folio_size(folio),
+					inode);
 			if (rc) {
 				printk(KERN_ERR "Error reading page; rc = "
 				       "[%d]\n", rc);
@@ -211,7 +211,7 @@ static int ecryptfs_read_folio(struct file *file, struct folio *folio)
 			}
 		}
 	} else {
-		rc = ecryptfs_decrypt_page(page);
+		rc = ecryptfs_decrypt_page(&folio->page);
 		if (rc) {
 			ecryptfs_printk(KERN_ERR, "Error decrypting page; "
 					"rc = [%d]\n", rc);
@@ -219,13 +219,11 @@ static int ecryptfs_read_folio(struct file *file, struct folio *folio)
 		}
 	}
 out:
-	if (rc)
-		ClearPageUptodate(page);
-	else
-		SetPageUptodate(page);
+	if (!rc)
+		folio_mark_uptodate(folio);
 	ecryptfs_printk(KERN_DEBUG, "Unlocking page with index = [0x%.16lx]\n",
-			page->index);
-	unlock_page(page);
+			folio->index);
+	folio_unlock(folio);
 	return rc;
 }
 
