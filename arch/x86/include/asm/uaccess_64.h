@@ -54,11 +54,11 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 #define valid_user_address(x) ((__force long)(x) >= 0)
 
 /*
- * Masking the user address is an alternative to a conditional
- * user_access_begin that can avoid the fencing. This only works
- * for dense accesses starting at the address.
+ * If it's a kernel address, force it to all 1's.  This prevents a mispredicted
+ * access_ok() from speculatively accessing kernel space.
  */
 #define mask_user_address(x) ((typeof(x))((long)(x)|((long)(x)>>63)))
+
 #define masked_user_access_begin(x) ({				\
 	__auto_type __masked_ptr = (x);				\
 	__masked_ptr = mask_user_address(__masked_ptr);		\
@@ -133,6 +133,7 @@ copy_user_generic(void *to, const void *from, unsigned long len)
 static __always_inline __must_check unsigned long
 raw_copy_from_user(void *dst, const void __user *src, unsigned long size)
 {
+	src = mask_user_address(src);
 	return copy_user_generic(dst, (__force void *)src, size);
 }
 

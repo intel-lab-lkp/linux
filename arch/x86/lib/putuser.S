@@ -34,7 +34,7 @@
 
 .macro check_range size:req
 .if IS_ENABLED(CONFIG_X86_64)
-	mov %rcx, %rbx
+	mov %rcx, %rbx		/* mask_user_address() */
 	sar $63, %rbx
 	or %rbx, %rcx
 .else
