@@ -937,11 +937,17 @@ static inline long se_weight(struct sched_entity *se)
 	return scale_load_down(se->load.weight);
 }
 
-
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 static inline bool sched_asym_prefer(int a, int b)
 {
 	return arch_asym_cpu_priority(a) > arch_asym_cpu_priority(b);
 }
+#else
+static inline bool sched_asym_prefer(int a, int b)
+{
+	return false;
+}
+#endif
 
 struct perf_domain {
 	struct em_perf_domain *em_pd;

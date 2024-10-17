@@ -86,13 +86,6 @@ static int __init setup_sched_thermal_decay_shift(char *str)
 __setup("sched_thermal_decay_shift=", setup_sched_thermal_decay_shift);
 
 #ifdef CONFIG_SMP
-/*
- * For asym packing, by default the lower numbered CPU has higher priority.
- */
-int __weak arch_asym_cpu_priority(int cpu)
-{
-	return -cpu;
-}
 
 /*
  * The margin used when comparing utilization with CPU capacity.
@@ -9180,12 +9173,14 @@ enum group_type {
 	 * a task on SMT with busy sibling to another CPU on idle core.
 	 */
 	group_smt_balance,
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 	/*
 	 * SD_ASYM_PACKING only: One local CPU with higher capacity is available,
 	 * and the task should be migrated to it instead of running on the
 	 * current CPU.
 	 */
 	group_asym_packing,
+#endif
 	/*
 	 * The tasks' affinity constraints previously prevented the scheduler
 	 * from balancing the load across the system.
@@ -9870,7 +9865,9 @@ struct sg_lb_stats {
 	unsigned int idle_cpus;                 /* Nr of idle CPUs         in the group */
 	unsigned int group_weight;
 	enum group_type group_type;
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 	unsigned int group_asym_packing;	/* Tasks should be moved to preferred CPU */
+#endif
 	unsigned int group_smt_balance;		/* Task on busy SMT be moved */
 	unsigned long group_misfit_task_load;	/* A CPU has a task too big for its capacity */
 #ifdef CONFIG_NUMA_BALANCING
@@ -10130,8 +10127,10 @@ group_type group_classify(unsigned int imbalance_pct,
 	if (sg_imbalanced(group))
 		return group_imbalanced;
 
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 	if (sgs->group_asym_packing)
 		return group_asym_packing;
+#endif
 
 	if (sgs->group_smt_balance)
 		return group_smt_balance;
@@ -10143,6 +10142,15 @@ group_type group_classify(unsigned int imbalance_pct,
 		return group_fully_busy;
 
 	return group_has_spare;
+}
+
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
+/*
+ * For asym packing, by default the lower numbered CPU has higher priority.
+ */
+int __weak arch_asym_cpu_priority(int cpu)
+{
+	return -cpu;
 }
 
 /**
@@ -10202,6 +10210,40 @@ sched_group_asym(struct lb_env *env, struct sg_lb_stats *sgs, struct sched_group
 
 	return sched_asym(env->sd, env->dst_cpu, group->asym_prefer_cpu);
 }
+
+static inline bool asym_active_balance(struct lb_env *env)
+{
+	/*
+	 * ASYM_PACKING needs to force migrate tasks from busy but lower
+	 * priority CPUs in order to pack all tasks in the highest priority
+	 * CPUs. When done between cores, do it only if the whole core if the
+	 * whole core is idle.
+	 *
+	 * If @env::src_cpu is an SMT core with busy siblings, let
+	 * the lower priority @env::dst_cpu help it. Do not follow
+	 * CPU priority.
+	 */
+	return env->idle && sched_use_asym_prio(env->sd, env->dst_cpu) &&
+	       (sched_asym_prefer(env->dst_cpu, env->src_cpu) ||
+		!sched_use_asym_prio(env->sd, env->src_cpu));
+}
+
+static inline bool check_asym_packing(struct sg_lb_stats *group)
+{
+	return group->group_type == group_asym_packing;
+}
+
+#else
+
+static inline bool sched_asym(struct sched_domain *sd, int dst_cpu, int src_cpu)
+{
+	return false;
+}
+
+static inline bool asym_active_balance(struct lb_env *env) { return false; }
+static inline bool check_asym_packing(struct sg_lb_stats *group) { return false; }
+
+#endif /* CONFIG_ARCH_HAS_SCHED_ASYM_PACKING */
 
 /* One group has more than one SMT CPU while the other group does not */
 static inline bool smt_vs_nonsmt_groups(struct sched_group *sg1,
@@ -10354,10 +10396,12 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 
 	sgs->group_weight = group->group_weight;
 
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 	/* Check if dst CPU is idle and preferred to this group */
 	if (!local_group && env->idle && sgs->sum_h_nr_running &&
 	    sched_group_asym(env, sgs, group))
 		sgs->group_asym_packing = 1;
+#endif
 
 	/* Check for loaded SMT group to be balanced to dst CPU */
 	if (!local_group && smt_balance(env, sgs, group))
@@ -10430,9 +10474,11 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 		 */
 		return false;
 
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 	case group_asym_packing:
 		/* Prefer to move from lowest priority CPU's work */
 		return sched_asym_prefer(sds->busiest->asym_prefer_cpu, sg->asym_prefer_cpu);
+#endif
 
 	case group_misfit_task:
 		/*
@@ -10685,7 +10731,9 @@ static bool update_pick_idlest(struct sched_group *idlest,
 		break;
 
 	case group_imbalanced:
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 	case group_asym_packing:
+#endif
 	case group_smt_balance:
 		/* Those types are not used in the slow wakeup path */
 		return false;
@@ -10817,7 +10865,9 @@ sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int
 		break;
 
 	case group_imbalanced:
+#ifdef CONFIG_ARCH_HAS_SCHED_ASYM_PACKING
 	case group_asym_packing:
+#endif
 	case group_smt_balance:
 		/* Those type are not used in the slow wakeup path */
 		return NULL;
@@ -11052,7 +11102,7 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 		return;
 	}
 
-	if (busiest->group_type == group_asym_packing) {
+	if (check_asym_packing(busiest)) {
 		/*
 		 * In case of asym capacity, we will try to migrate all load to
 		 * the preferred CPU.
@@ -11259,7 +11309,7 @@ static struct sched_group *sched_balance_find_src_group(struct lb_env *env)
 		goto out_balanced;
 
 	/* ASYM feature bypasses nice load balance check */
-	if (busiest->group_type == group_asym_packing)
+	if (check_asym_packing(busiest))
 		goto force_balance;
 
 	/*
@@ -11513,24 +11563,6 @@ static struct rq *sched_balance_find_src_rq(struct lb_env *env,
  * so long as it is large enough.
  */
 #define MAX_PINNED_INTERVAL	512
-
-static inline bool
-asym_active_balance(struct lb_env *env)
-{
-	/*
-	 * ASYM_PACKING needs to force migrate tasks from busy but lower
-	 * priority CPUs in order to pack all tasks in the highest priority
-	 * CPUs. When done between cores, do it only if the whole core if the
-	 * whole core is idle.
-	 *
-	 * If @env::src_cpu is an SMT core with busy siblings, let
-	 * the lower priority @env::dst_cpu help it. Do not follow
-	 * CPU priority.
-	 */
-	return env->idle && sched_use_asym_prio(env->sd, env->dst_cpu) &&
-	       (sched_asym_prefer(env->dst_cpu, env->src_cpu) ||
-		!sched_use_asym_prio(env->sd, env->src_cpu));
-}
 
 static inline bool
 imbalanced_active_balance(struct lb_env *env)
