@@ -24,6 +24,15 @@ const char __initconst *const clavis_module_acl[] = {
 extern const char __initconst *const clavis_module_acl[];
 #endif
 
+#ifdef CONFIG_EFI
+int clavis_efi_param(struct asymmetric_key_id *kid, int len);
+#else
+static inline int __init clavis_efi_param(struct asymmetric_key_id *kid, int len)
+{
+	return -EINVAL;
+}
+#endif
+
 int __init clavis_keyring_init(void);
 int clavis_sig_verify(const struct key *key, const struct public_key_signature *sig);
 #endif /* _SECURITY_CLAVIS_H_ */

@@ -307,8 +307,17 @@ int __init clavis_keyring_init(void)
 
 void __init late_init_clavis_setup(void)
 {
-	if (!clavis_boot_akid)
+	struct asymmetric_setup_kid efi_keyid;
+	struct asymmetric_key_id *keyid = &efi_keyid.id;
+	int error;
+
+	error = clavis_efi_param(keyid, ARRAY_SIZE(efi_keyid.data));
+
+	if (error && !clavis_boot_akid)
 		return;
+
+	if (error)
+		keyid = clavis_boot_akid;
 
 	system_key_link(clavis_keyring, clavis_boot_akid);
 }
