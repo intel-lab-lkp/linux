@@ -6,6 +6,7 @@
 obj-$(CONFIG_SYSTEM_TRUSTED_KEYRING) += system_keyring.o system_certificates.o
 obj-$(CONFIG_SYSTEM_BLACKLIST_KEYRING) += blacklist.o blacklist_hashes.o
 obj-$(CONFIG_SYSTEM_REVOCATION_LIST) += revocation_certificates.o
+obj-$(CONFIG_SECURITY_CLAVIS) += clavis_module_acl.o
 
 $(obj)/blacklist_hashes.o: $(obj)/blacklist_hash_list
 CFLAGS_blacklist_hashes.o := -I $(obj)
@@ -74,6 +75,25 @@ $(obj)/signing_key.x509: $(filter-out $(PKCS11_URI),$(CONFIG_MODULE_SIG_KEY)) $(
 	$(call if_changed,extract_certs)
 
 targets += signing_key.x509
+
+ifeq ($(CONFIG_MODULE_SIG_KEY),)
+quiet_cmd_make_module_acl = GEN   $@
+      cmd_make_module_acl = \
+	echo > $@
+else
+quiet_cmd_make_module_acl = GEN   $@
+      cmd_make_module_acl = \
+	openssl x509 -in $< -inform der -ext subjectKeyIdentifier  -nocert | \
+	tail -n +2 | cut -f2 -d '='| tr -d ':' | tr '[:upper:]' '[:lower:]' | \
+	sed 's/^[ \t]*//; s/.*/"00:&",/' > $@
+endif
+
+$(obj)/module_acl: $(obj)/signing_key.x509 FORCE
+		$(call if_changed,make_module_acl)
+
+$(obj)/clavis_module_acl.o: $(obj)/module_acl
+
+targets += module_acl
 
 $(obj)/revocation_certificates.o: $(obj)/x509_revocation_list
 

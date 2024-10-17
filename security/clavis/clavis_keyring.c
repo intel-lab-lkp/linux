@@ -259,6 +259,31 @@ static struct key_restriction *clavis_restriction_alloc(key_restrict_link_func_t
 	return restriction;
 }
 
+static void clavis_add_acl(const char *const *skid_list, struct key *keyring)
+{
+	const char *const *acl;
+	key_ref_t key;
+
+	for (acl = skid_list; *acl; acl++) {
+		key = key_create(make_key_ref(keyring, true),
+				 "clavis_key_acl",
+				  *acl,
+				  NULL,
+				  0,
+				  KEY_POS_SEARCH | KEY_POS_VIEW | KEY_USR_SEARCH | KEY_USR_VIEW,
+				  KEY_ALLOC_NOT_IN_QUOTA | KEY_ALLOC_BUILT_IN |
+				  KEY_ALLOC_BYPASS_RESTRICTION);
+		if (IS_ERR(key)) {
+			if (PTR_ERR(key) == -EEXIST)
+				pr_info("Duplicate clavis_key_acl %s\n", *acl);
+			else
+				pr_info("Problem with clavis_key_acl %s: %pe\n", *acl, key);
+		} else {
+			pr_info("Added clavis_key_acl %s\n", *acl);
+		}
+	}
+}
+
 static int __init clavis_keyring_init(void)
 {
 	struct key_restriction *restriction;
@@ -273,6 +298,8 @@ static int __init clavis_keyring_init(void)
 	clavis_keyring = clavis_keyring_alloc(".clavis", restriction);
 	if (IS_ERR(clavis_keyring))
 		panic("Can't allocate clavis keyring\n");
+
+	clavis_add_acl(clavis_module_acl, clavis_keyring);
 
 	return 0;
 }
