@@ -31,7 +31,7 @@
 
 /* Macro for register map group offset. */
 #define PRODUCT_ID_SIZE  16
-#define QUERY_DATA_SIZE  27
+#define QUERY_DATA_SIZE  32
 #define REG_PROTOCOL_GEN_QUERY_OFFSET  20
 
 #define REG_OFFSET_DATA_BASE     0x0000
@@ -114,6 +114,8 @@ struct cyapa_reg_data {
 	u8 finger_btn;
 	/* CYAPA reports up to 5 touches per packet. */
 	struct cyapa_touch touches[5];
+	/* padding up to size I2C_SMBUS_BLOCK_MAX. */
+	u8 padding[5];
 } __packed;
 
 struct gen3_write_block_cmd {
