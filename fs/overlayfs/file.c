@@ -289,7 +289,7 @@ static void ovl_file_modified(struct file *file)
 	ovl_copyattr(file_inode(file));
 }
 
-static void ovl_file_end_write(struct file *file, loff_t, ssize_t)
+static void ovl_file_end_write(struct file *file, loff_t pos, ssize_t ret)
 {
 	ovl_file_modified(file);
 }
