@@ -278,6 +278,8 @@ static inline void *neighbour_priv(const struct neighbour *n)
 extern const struct nla_policy nda_policy[];
 
 #define neigh_for_each(pos, head) hlist_for_each_entry(pos, head, hash)
+#define neigh_first_entry(bucket) \
+	hlist_entry_safe((bucket)->first, struct neighbour, hash)
 
 static inline bool neigh_key_eq32(const struct neighbour *n, const void *pkey)
 {
