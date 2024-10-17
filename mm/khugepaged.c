@@ -1721,6 +1721,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		spinlock_t *pml;
 		spinlock_t *ptl;
 		bool skipped_uffd = false;
+		pte_t *pte;
 
 		/*
 		 * Check vma->anon_vma to exclude MAP_PRIVATE mappings that
@@ -1757,9 +1758,15 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		mmu_notifier_invalidate_range_start(&range);
 
 		pml = pmd_lock(mm, pmd);
-		ptl = pte_lockptr(mm, pmd);
+		pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
+		if (!pte) {
+			spin_unlock(pml);
+			mmu_notifier_invalidate_range_end(&range);
+			continue;
+		}
 		if (ptl != pml)
 			spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
+		pte_unmap(pte);
 
 		/*
 		 * Huge page lock is still held, so normally the page table
