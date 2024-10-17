@@ -119,9 +119,6 @@ static vm_fault_t ocfs2_page_mkwrite(struct vm_fault *vmf)
 	int err;
 	vm_fault_t ret;
 
-	sb_start_pagefault(inode->i_sb);
-	ocfs2_block_signals(&oldset);
-
 	/*
 	 * The cluster locks taken will block a truncate from another
 	 * node. Taking the data lock will also ensure that we don't
@@ -131,7 +128,7 @@ static vm_fault_t ocfs2_page_mkwrite(struct vm_fault *vmf)
 	if (err < 0) {
 		mlog_errno(err);
 		ret = vmf_error(err);
-		goto out;
+		return ret;
 	}
 
 	/*
@@ -141,16 +138,19 @@ static vm_fault_t ocfs2_page_mkwrite(struct vm_fault *vmf)
 	 */
 	down_write(&OCFS2_I(inode)->ip_alloc_sem);
 
+	sb_start_pagefault(inode->i_sb);
+	ocfs2_block_signals(&oldset);
+
 	ret = __ocfs2_page_mkwrite(vmf->vma->vm_file, di_bh, page);
+
+	ocfs2_unblock_signals(&oldset);
+	sb_end_pagefault(inode->i_sb);
 
 	up_write(&OCFS2_I(inode)->ip_alloc_sem);
 
 	brelse(di_bh);
 	ocfs2_inode_unlock(inode, 1);
 
-out:
-	ocfs2_unblock_signals(&oldset);
-	sb_end_pagefault(inode->i_sb);
 	return ret;
 }
 
