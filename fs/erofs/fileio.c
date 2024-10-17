@@ -88,6 +88,7 @@ static int erofs_fileio_scan_folio(struct erofs_fileio *io, struct folio *folio)
 	struct erofs_map_blocks *map = &io->map;
 	unsigned int cur = 0, end = folio_size(folio), len, attached = 0;
 	loff_t pos = folio_pos(folio), ofs;
+	bool fully_mapped = true;
 	struct iov_iter iter;
 	struct bio_vec bv;
 	int err = 0;
@@ -124,6 +125,7 @@ static int erofs_fileio_scan_folio(struct erofs_fileio *io, struct folio *folio)
 			erofs_put_metabuf(&buf);
 		} else if (!(map->m_flags & EROFS_MAP_MAPPED)) {
 			folio_zero_segment(folio, cur, cur + len);
+			fully_mapped = false;
 			attached = 0;
 		} else {
 			if (io->rq && (map->m_pa + ofs != io->dev.m_pa ||

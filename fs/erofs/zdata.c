@@ -915,7 +915,7 @@ static int z_erofs_scan_folio(struct z_erofs_decompress_frontend *f,
 	const loff_t offset = folio_pos(folio);
 	const unsigned int bs = i_blocksize(inode);
 	unsigned int end = folio_size(folio), split = 0, cur, pgs;
-	bool tight, excl;
+	bool tight, excl, fully_mapped = true;
 	int err = 0;
 
 	tight = (bs == PAGE_SIZE);
@@ -938,6 +938,7 @@ static int z_erofs_scan_folio(struct z_erofs_decompress_frontend *f,
 
 		if (!(map->m_flags & EROFS_MAP_MAPPED)) {
 			folio_zero_segment(folio, cur, end);
+			fully_mapped = false;
 			tight = false;
 		} else if (map->m_flags & EROFS_MAP_FRAGMENT) {
 			erofs_off_t fpos = offset + cur - map->m_la;
@@ -998,6 +999,9 @@ static int z_erofs_scan_folio(struct z_erofs_decompress_frontend *f,
 			tight = (bs == PAGE_SIZE);
 		}
 	} while ((end = cur) > 0);
+
+	if (fully_mapped)
+		folio_set_mappedtodisk(folio);
 	erofs_onlinefolio_end(folio, err);
 	return err;
 }
