@@ -1601,6 +1601,7 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 	swp_entry_t entry;
 	int nr;
 
+retry:
 	tlb_change_page_size(tlb, PAGE_SIZE);
 	init_rss_vec(rss);
 	start_pte = pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
@@ -1705,6 +1706,11 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 	if (force_flush)
 		tlb_flush_mmu(tlb);
 
+	if (addr != end) {
+		cond_resched();
+		goto retry;
+	}
+
 	return addr;
 }
 
@@ -1743,8 +1749,6 @@ static inline unsigned long zap_pmd_range(struct mmu_gather *tlb,
 			continue;
 		}
 		addr = zap_pte_range(tlb, vma, pmd, addr, next, details);
-		if (addr != next)
-			pmd--;
 	} while (pmd++, cond_resched(), addr != end);
 
 	return addr;
