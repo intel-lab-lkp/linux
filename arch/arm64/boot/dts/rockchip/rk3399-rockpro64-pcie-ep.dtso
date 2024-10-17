@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * DT-overlay to run the PCIe Dual Mode controller in Endpoint mode
+ * with the #PERST signal handled with gpio2.
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+
+/dts-v1/;
+/plugin/;
+
+&pcie0 {
+	status = "disabled";
+};
+
+&pcie0_ep {
+	reset-gpios = <&gpio2 RK_PD4 GPIO_ACTIVE_LOW>;
+	status = "okay";
+};
