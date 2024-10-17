@@ -170,6 +170,31 @@ static void clk_branch2_mem_disable(struct clk_hw *hw)
 	return clk_branch2_disable(hw);
 }
 
+static int clk_branch2_sreg_enable(struct clk_hw *hw)
+{
+	struct clk_branch *br = to_clk_branch(hw);
+	u32 val;
+	int ret;
+
+	ret = clk_enable_regmap(hw);
+	if (ret)
+		return -EINVAL;
+
+	return regmap_read_poll_timeout(br->clkr.regmap, br->sreg_enable_reg,
+					val, !(val & br->sreg_core_ack_bit), 1, 200);
+}
+
+static void clk_branch2_sreg_disable(struct clk_hw *hw)
+{
+	struct clk_branch *br = to_clk_branch(hw);
+	u32 val;
+
+	clk_disable_regmap(hw);
+
+	regmap_read_poll_timeout(br->clkr.regmap, br->sreg_enable_reg,
+				 val, val & br->sreg_periph_ack_bit, 1, 200);
+}
+
 const struct clk_ops clk_branch2_mem_ops = {
 	.enable = clk_branch2_mem_enable,
 	.disable = clk_branch2_mem_disable,
@@ -203,3 +228,10 @@ const struct clk_ops clk_branch2_prepare_ops = {
 	.is_prepared = clk_is_enabled_regmap,
 };
 EXPORT_SYMBOL_GPL(clk_branch2_prepare_ops);
+
+const struct clk_ops clk_branch2_sreg_ops = {
+	.enable = clk_branch2_sreg_enable,
+	.disable = clk_branch2_sreg_disable,
+	.is_enabled = clk_is_enabled_regmap,
+};
+EXPORT_SYMBOL(clk_branch2_sreg_ops);
