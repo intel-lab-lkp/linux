@@ -131,6 +131,26 @@ verified:
 	return 0;
 }
 
+void pkcs7_clear_usage_flag(struct pkcs7_message *pkcs7, unsigned long usage)
+{
+	struct pkcs7_signed_info *sinfo;
+
+	for (sinfo = pkcs7->signed_infos; sinfo; sinfo = sinfo->next) {
+		if (sinfo->sig)
+			clear_bit(usage, &sinfo->sig->usage_flags);
+	}
+}
+
+void pkcs7_set_usage_flag(struct pkcs7_message *pkcs7, unsigned long usage)
+{
+	struct pkcs7_signed_info *sinfo;
+
+	for (sinfo = pkcs7->signed_infos; sinfo; sinfo = sinfo->next) {
+		if (sinfo->sig)
+			set_bit(usage, &sinfo->sig->usage_flags);
+	}
+}
+
 /**
  * pkcs7_validate_trust - Validate PKCS#7 trust chain
  * @pkcs7: The PKCS#7 certificate to validate

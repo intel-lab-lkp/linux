@@ -17,6 +17,7 @@
 #include <linux/uidgid.h>
 #include <keys/asymmetric-type.h>
 #include <keys/system_keyring.h>
+#include <crypto/public_key.h>
 #include "blacklist.h"
 
 /*
@@ -289,7 +290,9 @@ int is_key_on_revocation_list(struct pkcs7_message *pkcs7)
 {
 	int ret;
 
+	pkcs7_set_usage_flag(pkcs7, PKS_REVOCATION_PASS);
 	ret = pkcs7_validate_trust(pkcs7, blacklist_keyring);
+	pkcs7_clear_usage_flag(pkcs7, PKS_REVOCATION_PASS);
 
 	if (ret == 0)
 		return -EKEYREJECTED;
