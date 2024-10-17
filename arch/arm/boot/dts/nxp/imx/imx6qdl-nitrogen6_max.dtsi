@@ -411,7 +411,7 @@
 };
 
 &iomuxc {
-	imx6q-nitrogen6-max {
+	imx6q-nitrogen6-maxgrp {
 		pinctrl_audmux: audmuxgrp {
 			fsl,pins = <
 				MX6QDL_PAD_CSI0_DAT7__AUD3_RXD		0x130b0

@@ -42,8 +42,8 @@
  */
 
 &iomuxc {
-	hummingboard2 {
-		pinctrl_hummingboard2_usdhc3: hummingboard2-usdhc3 {
+	hummingboard2grp {
+		pinctrl_hummingboard2_usdhc3: hummingboard2-usdhc3grp {
 			fsl,pins = <
 				MX6QDL_PAD_SD3_CMD__SD3_CMD    0x17059
 				MX6QDL_PAD_SD3_CLK__SD3_CLK    0x10059

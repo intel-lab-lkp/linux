@@ -9,7 +9,7 @@
 &iomuxc {
 	pinctrl-0 = <&pinctrl_hog>;
 
-	imx6qdl-wandboard {
+	imx6qdl-wandboardgrp {
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
 				MX6QDL_PAD_GPIO_2__GPIO1_IO02		0x80000000	/* uSDHC1 CD */

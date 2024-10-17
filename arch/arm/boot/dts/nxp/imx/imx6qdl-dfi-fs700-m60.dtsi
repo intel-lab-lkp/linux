@@ -47,7 +47,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog>;
 
-	imx6qdl-dfi-fs700-m60 {
+	imx6qdl-dfi-fs700-m60grp {
 		pinctrl_hog: hoggrp {
 			fsl,pins = <
 				MX6QDL_PAD_ENET_CRS_DV__GPIO1_IO25 0x80000000

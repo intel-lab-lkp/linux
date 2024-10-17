@@ -227,7 +227,7 @@
 };
 
 &iomuxc {
-	imx6q-phytec-pfla02 {
+	imx6q-phytec-pfla02grp {
 		pinctrl_ecspi3: ecspi3grp {
 			fsl,pins = <
 				MX6QDL_PAD_DISP0_DAT2__ECSPI3_MISO	0x100b1

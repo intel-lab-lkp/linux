@@ -179,12 +179,12 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog &pinctrl_gpio>;
 
-	imx6qdl-aristainetos {
-		pinctrl_aristainetos_usbh1_vbus: aristainetos-usbh1-vbus {
+	imx6qdl-aristainetosgrp {
+		pinctrl_aristainetos_usbh1_vbus: aristainetos-usbh1-vbusgrp {
 			fsl,pins = <MX6QDL_PAD_EIM_D31__GPIO3_IO31 0x130b0>;
 		};
 
-		pinctrl_aristainetos_usbotg_vbus: aristainetos-usbotg-vbus {
+		pinctrl_aristainetos_usbotg_vbus: aristainetos-usbotg-vbusgrp {
 			fsl,pins = <MX6QDL_PAD_KEY_ROW4__GPIO4_IO15 0x130b0>;
 		};
 
