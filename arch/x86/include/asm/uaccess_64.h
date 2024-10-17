@@ -140,6 +140,7 @@ raw_copy_from_user(void *dst, const void __user *src, unsigned long size)
 static __always_inline __must_check unsigned long
 raw_copy_to_user(void __user *dst, const void *src, unsigned long size)
 {
+	dst = mask_user_address(dst);
 	return copy_user_generic((__force void *)dst, src, size);
 }
 
