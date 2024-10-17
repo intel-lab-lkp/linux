@@ -9,3 +9,13 @@ config SECURITY_CLAVIS
 	  keyrings (builtin, secondary, or platform).  One way to add this key
 	  is during boot by passing in the asymmetric key id within the "clavis=" boot
 	  param.  This keyring is required by the Clavis LSM.
+
+config SECURITY_CLAVIS_ACL_LIST
+	string "Clavis ACL list to preload into the clavis keyring"
+	depends on SECURITY_CLAVIS
+	help
+	  If set, this option should be the file name of a list of clavis ACL
+	  entries. This will be included into a C wrapper to incorporate the
+	  acl list into the kernel. The file contents must be in the following
+	  format: <two digit key usage number>:<subject key id>.  If more than
+	  one entry is added, add a carriage return after each entry.

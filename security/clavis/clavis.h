@@ -14,6 +14,8 @@ struct asymmetric_setup_kid {
 	unsigned char data[CLAVIS_BIN_KID_MAX];
 };
 
+extern const char __initconst *const clavis_builtin_acl_list[];
+
 #ifndef CONFIG_SYSTEM_TRUSTED_KEYRING
 const char __initconst *const clavis_module_acl[] = {
 	 NULL

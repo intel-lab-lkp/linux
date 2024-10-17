@@ -300,6 +300,7 @@ int __init clavis_keyring_init(void)
 		panic("Can't allocate clavis keyring\n");
 
 	clavis_add_acl(clavis_module_acl, clavis_keyring);
+	clavis_add_acl(clavis_builtin_acl_list, clavis_keyring);
 
 	return 0;
 }
