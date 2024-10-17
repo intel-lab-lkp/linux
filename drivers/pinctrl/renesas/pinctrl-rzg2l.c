@@ -1774,8 +1774,6 @@ static void rzg2l_gpio_free(struct gpio_chip *chip, unsigned int offset)
 {
 	unsigned int virq;
 
-	pinctrl_gpio_free(chip, offset);
-
 	virq = irq_find_mapping(chip->irq.domain, offset);
 	if (virq)
 		irq_dispose_mapping(virq);
@@ -1785,6 +1783,8 @@ static void rzg2l_gpio_free(struct gpio_chip *chip, unsigned int offset)
 	 * drive the GPIO pin as an output.
 	 */
 	rzg2l_gpio_direction_input(chip, offset);
+
+	pinctrl_gpio_free(chip, offset);
 }
 
 static const char * const rzg2l_gpio_names[] = {
