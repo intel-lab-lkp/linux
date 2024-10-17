@@ -451,6 +451,18 @@ See also the examples in :ref:`control`.
 	``V4L2_CTRL_WHICH_MAX_VAL`` is optional and depends on the
 	``V4L2_CTRL_FLAG_HAS_WHICH_MIN_MAX`` flag. See the documentation of
 	the specific control on how to interpret the minimum and maximum values.
+    * - ``V4L2_CTRL_TYPE_REGION``
+      - n/a
+      - n/a
+      - n/a
+      - A struct :c:type:`v4l2_ctrl_video_region_param`, containing a rectangle
+	described by the position of its top-left corner, the width and the height.
+	And a parameter for detailed purpose, for example, it's QP offset for video
+	encoder ROI. Units depend on the use case. Support for
+	``V4L2_CTRL_WHICH_MIN_VAL`` and ``V4L2_CTRL_WHICH_MAX_VAL`` is optional and
+	depends on the ``V4L2_CTRL_FLAG_HAS_WHICH_MIN_MAX`` flag. See the
+	documentation of the specific control on how to interpret the minimum and
+	maximum values.
     * - ``V4L2_CTRL_TYPE_H264_SPS``
       - n/a
       - n/a
