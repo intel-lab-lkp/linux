@@ -147,6 +147,7 @@ static struct snd_soc_dai_driver acp63_dai[] = {
 	.name = "acp-pdm-dmic",
 	.id = DMIC_INSTANCE,
 	.capture = {
+		.stream_name = "DMIC capture",
 		.rates = SNDRV_PCM_RATE_8000_48000,
 		.formats = SNDRV_PCM_FMTBIT_S32_LE,
 		.channels_min = 2,
