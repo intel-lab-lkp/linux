@@ -1533,7 +1533,6 @@ try_split:
 				goto redirty;
 		}
 		folio_zero_range(folio, 0, folio_size(folio));
-		flush_dcache_folio(folio);
 		folio_mark_uptodate(folio);
 	}
 
