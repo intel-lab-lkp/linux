@@ -24,9 +24,7 @@ static struct key *secondary_trusted_keys;
 #ifdef CONFIG_INTEGRITY_MACHINE_KEYRING
 static struct key *machine_trusted_keys;
 #endif
-#ifdef CONFIG_INTEGRITY_PLATFORM_KEYRING
 static struct key *platform_trusted_keys;
-#endif
 
 extern __initconst const u8 system_certificate_list[];
 extern __initconst const unsigned long system_certificate_list_size;
@@ -345,11 +343,7 @@ int verify_pkcs7_message_sig(const void *data, size_t len,
 		trusted_keys = builtin_trusted_keys;
 #endif
 	} else if (trusted_keys == VERIFY_USE_PLATFORM_KEYRING) {
-#ifdef CONFIG_INTEGRITY_PLATFORM_KEYRING
 		trusted_keys = platform_trusted_keys;
-#else
-		trusted_keys = NULL;
-#endif
 		if (!trusted_keys) {
 			ret = -ENOKEY;
 			pr_devel("PKCS#7 platform keyring is not available\n");
