@@ -63,6 +63,7 @@ enum fs_value_type;
 struct watch;
 struct watch_notification;
 struct lsm_ctx;
+struct public_key_signature;
 
 /* Default (no) options for the capable function */
 #define CAP_OPT_NONE 0x0
@@ -2053,6 +2054,7 @@ void security_key_post_create_or_update(struct key *keyring, struct key *key,
 					const void *payload, size_t payload_len,
 					unsigned long flags, bool create);
 
+int security_key_verify_signature(const struct key *key, const struct public_key_signature *sig);
 #else
 
 static inline int security_key_alloc(struct key *key,
@@ -2087,6 +2089,11 @@ static inline void security_key_post_create_or_update(struct key *keyring,
 						      bool create)
 { }
 
+static inline int security_key_verify_signature(const struct key *key,
+						const struct public_key_signature *sig)
+{
+	return 0;
+}
 #endif
 #endif /* CONFIG_KEYS */
 

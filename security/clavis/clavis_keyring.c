@@ -284,7 +284,7 @@ static void clavis_add_acl(const char *const *skid_list, struct key *keyring)
 	}
 }
 
-static int __init clavis_keyring_init(void)
+int __init clavis_keyring_init(void)
 {
 	struct key_restriction *restriction;
 
@@ -306,10 +306,82 @@ static int __init clavis_keyring_init(void)
 
 void __init late_init_clavis_setup(void)
 {
-	clavis_keyring_init();
-
 	if (!clavis_boot_akid)
 		return;
 
 	system_key_link(clavis_keyring, clavis_boot_akid);
+}
+
+int clavis_sig_verify(const struct key *key, const struct public_key_signature *sig)
+{
+	const struct asymmetric_key_ids *kids = asymmetric_key_ids(key);
+	const struct asymmetric_key_subtype *subtype;
+	const struct asymmetric_key_id *newkid;
+	char *buf_ptr, *ptr;
+	key_ref_t ref;
+	int i, buf_len;
+
+	if (!clavis_acl_enforced())
+		return 0;
+	if (key->type != &key_type_asymmetric)
+		return -EKEYREJECTED;
+	subtype = asymmetric_key_subtype(key);
+	if (!subtype || !key->payload.data[0])
+		return -EKEYREJECTED;
+	if (!subtype->verify_signature)
+		return -EKEYREJECTED;
+
+	/* Allow sig validation when not using a system keyring */
+	if (!test_bit(PKS_USAGE_SET, &sig->usage_flags))
+		return 0;
+
+	/* The previous sig validation is enough to get on the clavis keyring */
+	if (sig->usage == VERIFYING_CLAVIS_SIGNATURE)
+		return 0;
+
+	if (test_bit(PKS_REVOCATION_PASS, &sig->usage_flags))
+		return 0;
+
+	for (i = 0, buf_len = 0; i < 3; i++) {
+		if (kids->id[i]) {
+			newkid = (struct asymmetric_key_id *)kids->id[i];
+			if (newkid->len > buf_len)
+				buf_len = newkid->len;
+		}
+	}
+
+	if (!buf_len)
+		return -EKEYREJECTED;
+
+	/* Allocate enough space for the conversion to ascii plus the header. */
+	buf_ptr = kmalloc(buf_len * 2 + 4, GFP_KERNEL | __GFP_ZERO);
+
+	if (!buf_ptr)
+		return -ENOMEM;
+
+	for (i = 0; i < 3; i++) {
+		if (kids->id[i]) {
+			newkid = (struct asymmetric_key_id *)kids->id[i];
+			if (!newkid->len)
+				continue;
+
+			ptr = buf_ptr;
+			ptr = bin2hex(ptr, &sig->usage, 1);
+			*ptr++ = ':';
+			ptr = bin2hex(ptr, newkid->data, newkid->len);
+			*ptr = 0;
+			ref = keyring_search(make_key_ref(clavis_keyring_get(), true),
+					     &clavis_key_acl, buf_ptr, false);
+
+			if (!IS_ERR(ref))
+				break;
+		}
+	}
+
+	kfree(buf_ptr);
+
+	if (IS_ERR(ref))
+		return -EKEYREJECTED;
+
+	return 0;
 }

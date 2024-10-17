@@ -3,6 +3,8 @@
 #define _SECURITY_CLAVIS_H_
 #include <keys/asymmetric-type.h>
 
+struct public_key_signature;
+
 /* Max length for the asymmetric key id contained on the boot param */
 #define CLAVIS_BIN_KID_MAX   32
 #define CLAVIS_ASCII_KID_MAX 64
@@ -20,4 +22,6 @@ const char __initconst *const clavis_module_acl[] = {
 extern const char __initconst *const clavis_module_acl[];
 #endif
 
+int __init clavis_keyring_init(void);
+int clavis_sig_verify(const struct key *key, const struct public_key_signature *sig);
 #endif /* _SECURITY_CLAVIS_H_ */

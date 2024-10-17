@@ -410,6 +410,8 @@ LSM_HOOK(int, 0, key_getsecurity, struct key *key, char **buffer)
 LSM_HOOK(void, LSM_RET_VOID, key_post_create_or_update, struct key *keyring,
 	 struct key *key, const void *payload, size_t payload_len,
 	 unsigned long flags, bool create)
+LSM_HOOK(int, 0, key_verify_signature, const struct key *key,
+	 const struct public_key_signature *sig)
 #endif /* CONFIG_KEYS */
 
 #ifdef CONFIG_AUDIT
