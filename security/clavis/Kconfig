@@ -19,3 +19,19 @@ config SECURITY_CLAVIS_ACL_LIST
 	  acl list into the kernel. The file contents must be in the following
 	  format: <two digit key usage number>:<subject key id>.  If more than
 	  one entry is added, add a carriage return after each entry.
+
+config SECURITY_CLAVIS_KUNIT_TEST
+	bool "KUnit tests for Clavis" if !KUNIT_ALL_TESTS
+	depends on SECURITY_CLAVIS && KUNIT
+	default KUNIT_ALL_TESTS
+	select SYSTEM_BLACKLIST_KEYRING
+	select SYSTEM_REVOCATION_LIST
+	help
+	  Build KUnit tests for Clavis.
+
+	  See the KUnit documentation in Documentation/dev-tools/kunit
+
+	  Run all KUnit tests for Clavis with:
+	  ./tools/testing/kunit/kunit.py run --kunitconfig security/clavis
+
+	  If you are unsure how to answer this question, answer N.
