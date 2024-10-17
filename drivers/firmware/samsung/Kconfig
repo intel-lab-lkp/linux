@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config EXYNOS_ACPM
+	tristate "Exynos ACPM (Alive Clock and Power Manager) driver support"
+	select MAILBOX
+	help
+	  ACPM is a firmware that operates on the APM (Active Power Management)
+	  module that handles overall power management activities. ACPM and
+	  masters regard each other as independent hardware component and
+	  communicate with each other using mailbox messages and shared memory.
+	  This module provides the means to communicate with the ACPM firmware.
