@@ -39,6 +39,7 @@ static unsigned long kasan_flags;
 
 #define KASAN_BIT_REPORTED	0
 #define KASAN_BIT_MULTI_SHOT	1
+#define NUM_STACK_ENTRIES 64
 
 enum kasan_arg_fault {
 	KASAN_ARG_FAULT_DEFAULT,
@@ -369,12 +370,99 @@ static inline bool init_task_stack_addr(const void *addr)
 			sizeof(init_thread_union.stack));
 }
 
+/* Helper to skip KASAN-related functions in stack-trace. */
+static int get_stack_skipnr(const unsigned long stack_entries[], int num_entries)
+{
+	char buf[64];
+	int len, skip;
+
+	for (skip = 0; skip < num_entries; ++skip) {
+		len = scnprintf(buf, sizeof(buf), "%ps", (void *)stack_entries[skip]);
+
+		/* Never show  kasan_* functions. */
+		if (strnstr(buf, "kasan_", len) == buf)
+			continue;
+		/*
+		 * No match for runtime functions -- @skip entries to skip to
+		 * get to first frame of interest.
+		 */
+		break;
+	}
+
+	return skip;
+}
+
+static int
+replace_stack_entry(unsigned long stack_entries[], int num_entries, unsigned long ip,
+		    unsigned long *replaced)
+{
+	unsigned long symbolsize, offset;
+	unsigned long target_func;
+	int skip;
+
+	if (kallsyms_lookup_size_offset(ip, &symbolsize, &offset))
+		target_func = ip - offset;
+	else
+		goto fallback;
+
+	for (skip = 0; skip < num_entries; ++skip) {
+		unsigned long func = stack_entries[skip];
+
+		if (!kallsyms_lookup_size_offset(func, &symbolsize, &offset))
+			goto fallback;
+		func -= offset;
+
+		if (func == target_func) {
+			*replaced = stack_entries[skip];
+			stack_entries[skip] = ip;
+			return skip;
+		}
+	}
+
+fallback:
+	/* Should not happen; the resulting stack trace is likely misleading. */
+	WARN_ONCE(1, "Cannot find frame for %pS in stack trace", (void *)ip);
+	return get_stack_skipnr(stack_entries, num_entries);
+}
+
+static void
+print_stack_trace(unsigned long stack_entries[], int num_entries, unsigned long reordered_to)
+{
+	stack_trace_print(stack_entries, num_entries, 0);
+	if (reordered_to)
+		pr_err("  |\n  +-> reordered to: %pS\n", (void *)reordered_to);
+}
+
+static int
+sanitize_stack_entries(unsigned long stack_entries[], int num_entries, unsigned long ip,
+		       unsigned long *replaced)
+{
+	return ip ? replace_stack_entry(stack_entries, num_entries, ip, replaced) :
+			  get_stack_skipnr(stack_entries, num_entries);
+}
+
+static void save_stack_lvl_kasan(const char *log_lvl, struct kasan_report_info *info)
+{
+	unsigned long reordered_to = 0;
+	unsigned long stack_entries[NUM_STACK_ENTRIES] = {0};
+	int num_stack_entries = stack_trace_save(stack_entries, NUM_STACK_ENTRIES, 1);
+	int skipnr = sanitize_stack_entries(stack_entries,
+				 num_stack_entries, info->ip, &reordered_to);
+
+	dump_stack_print_info(log_lvl);
+	pr_err("\n");
+
+	print_stack_trace(stack_entries + skipnr, num_stack_entries - skipnr,
+					 reordered_to);
+	pr_err("\n");
+}
+
 static void print_address_description(void *addr, u8 tag,
 				      struct kasan_report_info *info)
 {
 	struct page *page = addr_to_page(addr);
 
-	dump_stack_lvl(KERN_ERR);
+	save_stack_lvl_kasan(KERN_ERR, info);
 	pr_err("\n");
 
 	if (info->cache && info->object) {
@@ -488,7 +576,7 @@ static void print_report(struct kasan_report_info *info)
 		print_address_description(addr, tag, info);
 		print_memory_metadata(info->first_bad_addr);
 	} else {
-		dump_stack_lvl(KERN_ERR);
+		save_stack_lvl_kasan(KERN_ERR, info);
 	}
 }
 
