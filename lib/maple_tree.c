@@ -3409,6 +3409,24 @@ static inline void mas_root_expand(struct ma_state *mas, void *entry)
 	unsigned long *pivots;
 	int slot = 0;
 
+	if (!entry) {
+		/*
+		 * We come here in two cases:
+		 * 1. This is an empty tree
+		 * 2. This is a single entry tree with range [0, 0]
+		 *
+		 * If this is an empty tree, the result should still be an
+		 * empty tree no matter what the range is.
+		 *
+		 * If this is a single entry tree, we should set it to an
+		 * empty tree if the range cover [0, 0]. Otherwise, we don't
+		 * need to change it.
+		 */
+		if (!mas->index && contents)
+			rcu_assign_pointer(mas->tree->ma_root, NULL);
+		return;
+	}
+
 	node = mas_pop_node(mas);
 	pivots = ma_pivots(node, type);
 	slots = ma_slots(node, type);
