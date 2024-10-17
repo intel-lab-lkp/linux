@@ -154,11 +154,22 @@ static int intel_dp_mst_dsc_get_slice_count(const struct intel_connector *connec
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 	int num_joined_pipes = intel_crtc_num_joined_pipes(crtc_state);
+	int slice_count;
 
-	return intel_dp_dsc_get_slice_count(connector,
-					    adjusted_mode->clock,
-					    adjusted_mode->hdisplay,
-					    num_joined_pipes);
+	slice_count = intel_dp_dsc_get_slice_count(connector,
+						   adjusted_mode->clock,
+						   adjusted_mode->hdisplay,
+						   crtc_state->output_format,
+						   num_joined_pipes);
+	/*
+	 * FIXME: With 12 slice count, extra pixels are added.
+	 * Take pixel replication into account for MST BW calculation?
+	 * Avoid slice count of 12 for now.
+	 */
+	if (slice_count == 12)
+		return 0;
+
+	return slice_count;
 }
 
 static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
@@ -1524,6 +1535,7 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 				intel_dp_dsc_get_slice_count(intel_connector,
 							     target_clock,
 							     mode->hdisplay,
+							     INTEL_OUTPUT_FORMAT_RGB,
 							     num_joined_pipes);
 		}
 
