@@ -868,35 +868,35 @@ void libipw_rx_any(struct libipw_device *ieee,
 	case IW_MODE_ADHOC:
 		/* our BSS and not from/to DS */
 		if (ether_addr_equal(hdr->addr3, ieee->bssid))
-		if ((fc & (IEEE80211_FCTL_TODS+IEEE80211_FCTL_FROMDS)) == 0) {
-			/* promisc: get all */
-			if (ieee->dev->flags & IFF_PROMISC)
-				is_packet_for_us = 1;
-			/* to us */
-			else if (ether_addr_equal(hdr->addr1, ieee->dev->dev_addr))
-				is_packet_for_us = 1;
-			/* mcast */
-			else if (is_multicast_ether_addr(hdr->addr1))
-				is_packet_for_us = 1;
-		}
+			if ((fc & (IEEE80211_FCTL_TODS + IEEE80211_FCTL_FROMDS)) == 0) {
+				/* promisc: get all */
+				if (ieee->dev->flags & IFF_PROMISC)
+					is_packet_for_us = 1;
+				/* to us */
+				else if (ether_addr_equal(hdr->addr1, ieee->dev->dev_addr))
+					is_packet_for_us = 1;
+				/* mcast */
+				else if (is_multicast_ether_addr(hdr->addr1))
+					is_packet_for_us = 1;
+			}
 		break;
 	case IW_MODE_INFRA:
 		/* our BSS (== from our AP) and from DS */
 		if (ether_addr_equal(hdr->addr2, ieee->bssid))
-		if ((fc & (IEEE80211_FCTL_TODS+IEEE80211_FCTL_FROMDS)) == IEEE80211_FCTL_FROMDS) {
-			/* promisc: get all */
-			if (ieee->dev->flags & IFF_PROMISC)
-				is_packet_for_us = 1;
-			/* to us */
-			else if (ether_addr_equal(hdr->addr1, ieee->dev->dev_addr))
-				is_packet_for_us = 1;
-			/* mcast */
-			else if (is_multicast_ether_addr(hdr->addr1)) {
-				/* not our own packet bcasted from AP */
-				if (!ether_addr_equal(hdr->addr3, ieee->dev->dev_addr))
+			if ((fc & (IEEE80211_FCTL_TODS + IEEE80211_FCTL_FROMDS)) == IEEE80211_FCTL_FROMDS) {
+				/* promisc: get all */
+				if (ieee->dev->flags & IFF_PROMISC)
 					is_packet_for_us = 1;
+				/* to us */
+				else if (ether_addr_equal(hdr->addr1, ieee->dev->dev_addr))
+					is_packet_for_us = 1;
+				/* mcast */
+				else if (is_multicast_ether_addr(hdr->addr1)) {
+					/* not our own packet bcasted from AP */
+					if (!ether_addr_equal(hdr->addr3, ieee->dev->dev_addr))
+						is_packet_for_us = 1;
+				}
 			}
-		}
 		break;
 	default:
 		/* ? */
