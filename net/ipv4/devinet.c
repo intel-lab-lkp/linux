@@ -2380,7 +2380,7 @@ static void inet_forward_change(struct net *net)
 		if (on)
 			dev_disable_lro(dev);
 
-		in_dev = __in_dev_get_rtnl(dev);
+		in_dev = __in_dev_get_rtnl_net(dev);
 		if (in_dev) {
 			IN_DEV_CONF_SET(in_dev, FORWARDING, on);
 			inet_netconf_notify_devconf(net, RTM_NEWNETCONF,
@@ -2471,7 +2471,7 @@ static int devinet_sysctl_forward(const struct ctl_table *ctl, int write,
 
 	if (write && *valp != val) {
 		if (valp != &IPV4_DEVCONF_DFLT(net, FORWARDING)) {
-			if (!rtnl_trylock()) {
+			if (!rtnl_net_trylock(net)) {
 				/* Restore the original values before restarting */
 				*valp = val;
 				*ppos = pos;
@@ -2490,7 +2490,7 @@ static int devinet_sysctl_forward(const struct ctl_table *ctl, int write,
 							    idev->dev->ifindex,
 							    cnf);
 			}
-			rtnl_unlock();
+			rtnl_net_unlock(net);
 			rt_cache_flush(net);
 		} else
 			inet_netconf_notify_devconf(net, RTM_NEWNETCONF,
