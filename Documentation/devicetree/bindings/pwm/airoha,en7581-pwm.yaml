@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pwm/airoha,en7581-pwm.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Airoha EN7581 PWM Controller
+
+maintainers:
+  - Lorenzo Bianconi <lorenzo@kernel.org>
+
+allOf:
+  - $ref: pwm.yaml#
+
+properties:
+  compatible:
+    const: airoha,en7581-pwm
+
+  "#pwm-cells":
+    const: 3
+
+  airoha,74hc595-mode:
+    description: Set the PWM to handle attached shift register chip 74HC595.
+
+      With this disabled, PWM assume a 74HC164 chip attached.
+
+      The main difference between the 2 chip is the presence of a latch pin
+      that needs to triggered to apply the configuration and PWM needs to
+      account for that.
+    type: boolean
+
+  airoha,sipo-clock-divisor:
+    description: Declare Shift Register chip clock divisor (clock source is
+      from SoC APB Clock)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 32
+    enum: [4, 8, 16, 32]
+
+  airoha,sipo-clock-delay:
+    description: Declare Serial GPIO Clock delay.
+      This can be needed to permit the attached shift register to correctly
+      setup and apply settings. Value must NOT be greater than
+      "airoha,sipo-clock-divisor" / 2
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1
+    minimum: 1
+    maximum: 16
+
+required:
+  - compatible
+  - "#pwm-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    pwm {
+      compatible = "airoha,en7581-pwm";
+
+      #pwm-cells = <3>;
+    };
