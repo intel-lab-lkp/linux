@@ -68,7 +68,7 @@ struct dma_fence *__dma_fence_unwrap_merge(unsigned int num_fences,
 	struct dma_fence *tmp, **array;
 	ktime_t timestamp;
 	unsigned int i;
-	size_t count;
+	size_t count, j;
 
 	count = 0;
 	timestamp = ns_to_ktime(0);
@@ -127,6 +127,10 @@ restart:
 			 * function is used multiple times. So attempt to order
 			 * the fences by context as we pass over them and merge
 			 * fences with the same context.
+			 *
+			 * We will remove any remaining duplicate fences down
+			 * below, but doing this here saves us from having to
+			 * iterate over the array to detect the duplicate.
 			 */
 			if (!tmp || tmp->context > next->context) {
 				tmp = next;
@@ -145,7 +149,12 @@ restart:
 		}
 
 		if (tmp) {
-			array[count++] = dma_fence_get(tmp);
+			for (j = 0; j < count; ++j) {
+				if (array[count] == tmp)
+					break;
+			}
+			if (j == count)
+				array[count++] = dma_fence_get(tmp);
 			fences[sel] = dma_fence_unwrap_next(&iter[sel]);
 		}
 	} while (tmp);
