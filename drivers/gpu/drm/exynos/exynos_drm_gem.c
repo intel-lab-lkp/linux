@@ -337,7 +337,7 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 	 */
 
 	args->pitch = args->width * ((args->bpp + 7) / 8);
-	args->size = args->pitch * args->height;
+	args->size = (__u64)args->pitch * args->height;
 
 	if (is_drm_iommu_supported(dev))
 		flags = EXYNOS_BO_NONCONTIG | EXYNOS_BO_WC;
