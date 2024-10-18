@@ -2320,13 +2320,13 @@ static int switch_log_sprint(struct spu_context *ctx, char *tbuf, int n)
 
 	p = ctx->switch_log->log + ctx->switch_log->tail % SWITCH_LOG_BUFSIZE;
 
-	return snprintf(tbuf, n, "%llu.%09u %d %u %u %llu\n",
-			(unsigned long long) p->tstamp.tv_sec,
-			(unsigned int) p->tstamp.tv_nsec,
-			p->spu_id,
-			(unsigned int) p->type,
-			(unsigned int) p->val,
-			(unsigned long long) p->timebase);
+	return scnprintf(tbuf, n, "%llu.%09u %d %u %u %llu\n",
+			 (unsigned long long)p->tstamp.tv_sec,
+			 (unsigned int)p->tstamp.tv_nsec,
+			 p->spu_id,
+			 (unsigned int)p->type,
+			 (unsigned int)p->val,
+			 (unsigned long long)p->timebase);
 }
 
 static ssize_t spufs_switch_log_read(struct file *file, char __user *buf,
