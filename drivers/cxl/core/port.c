@@ -1539,14 +1539,63 @@ static resource_size_t find_component_registers(struct device *dev)
 	return map.resource;
 }
 
+/*
+ * Check if @parent_port has a child cxl_port that hosts @dport_dev.
+ * and if not create a new port attached via the @parent_dport
+ * downstream of @parent_port
+ *
+ * Caller is responsible for dropping the port reference after using
+ * @dport
+ */
+static struct cxl_dport *find_add_dport(struct cxl_port *parent_port,
+					struct device *dport_dev,
+					struct cxl_dport *parent_dport)
+{
+	struct device *uport_dev = dport_dev->parent;
+	resource_size_t component_reg_phys;
+	struct cxl_dport *dport;
+	struct cxl_port *port;
+
+	/*
+	 * lock serves 2 purposes:
+	 * - Resolve races to find/create a new port
+	 * - Prevent found / created ports from being freed before a
+	 *   reference can be taken
+	 */
+	guard(device)(&parent_port->dev);
+	if (!parent_port->dev.driver) {
+		dev_warn(&parent_port->dev,
+			 "disabled, failed to enumerate CXL.mem\n");
+		return ERR_PTR(-ENXIO);
+	}
+
+	port = find_cxl_port_at(parent_port, dport_dev, &dport);
+	if (port)
+		return dport;
+
+	/*
+	 * Note that this port is only unregistered when @parent_port
+	 * is unbound / removed, not if this routine returns an error.
+	 * It is a shared object across multiple downstream endpoints.
+	 */
+	component_reg_phys = find_component_registers(uport_dev);
+	port = devm_cxl_add_port(&parent_port->dev, uport_dev,
+				 component_reg_phys, parent_dport);
+	if (IS_ERR(port))
+		return ERR_CAST(port);
+
+	dport = cxl_find_dport_by_dev(port, dport_dev);
+	if (!dport)
+		return ERR_PTR(-ENXIO);
+	get_device(&port->dev);
+	return dport;
+}
+
 static int add_port_attach_ep(struct cxl_memdev *cxlmd,
-			      struct device *uport_dev,
 			      struct device *dport_dev)
 {
 	struct device *dparent = grandparent(dport_dev);
-	struct cxl_port *port, *parent_port = NULL;
-	struct cxl_dport *dport, *parent_dport;
-	resource_size_t component_reg_phys;
+	struct cxl_dport *parent_dport;
 	int rc;
 
 	if (!dparent) {
@@ -1560,50 +1609,23 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 		return -ENXIO;
 	}
 
-	parent_port = find_cxl_port(dparent, &parent_dport);
-	if (!parent_port) {
-		/* iterate to create this parent_port */
+	struct cxl_port *parent_port __free(put_cxl_port) =
+		find_cxl_port(dparent, &parent_dport);
+
+	/* iterate to create this parent_port? */
+	if (!parent_port)
 		return -EAGAIN;
-	}
 
-	device_lock(&parent_port->dev);
-	if (!parent_port->dev.driver) {
-		dev_warn(&cxlmd->dev,
-			 "port %s:%s disabled, failed to enumerate CXL.mem\n",
-			 dev_name(&parent_port->dev), dev_name(uport_dev));
-		port = ERR_PTR(-ENXIO);
-		goto out;
-	}
+	struct cxl_dport *dport __free(put_cxl_dport) =
+		find_add_dport(parent_port, dport_dev, parent_dport);
+	if (IS_ERR(dport))
+		return PTR_ERR(dport);
 
-	port = find_cxl_port_at(parent_port, dport_dev, &dport);
-	if (!port) {
-		component_reg_phys = find_component_registers(uport_dev);
-		port = devm_cxl_add_port(&parent_port->dev, uport_dev,
-					 component_reg_phys, parent_dport);
-		/* retry find to pick up the new dport information */
-		if (!IS_ERR(port))
-			port = find_cxl_port_at(parent_port, dport_dev, &dport);
-	}
-out:
-	device_unlock(&parent_port->dev);
+	rc = cxl_add_ep(dport, &cxlmd->dev);
 
-	if (IS_ERR(port))
-		rc = PTR_ERR(port);
-	else {
-		dev_dbg(&cxlmd->dev, "add to new port %s:%s\n",
-			dev_name(&port->dev), dev_name(port->uport_dev));
-		rc = cxl_add_ep(dport, &cxlmd->dev);
-		if (rc == -EBUSY) {
-			/*
-			 * "can't" happen, but this error code means
-			 * something to the caller, so translate it.
-			 */
-			rc = -ENXIO;
-		}
-		put_device(&port->dev);
-	}
-
-	put_device(&parent_port->dev);
+	/* translate EBUSY as fatal */
+	if (rc == -EBUSY)
+		rc = -ENXIO;
 	return rc;
 }
 
@@ -1678,7 +1700,7 @@ retry:
 			return 0;
 		}
 
-		rc = add_port_attach_ep(cxlmd, uport_dev, dport_dev);
+		rc = add_port_attach_ep(cxlmd, dport_dev);
 		/* port missing, try to add parent */
 		if (rc == -EAGAIN)
 			continue;
