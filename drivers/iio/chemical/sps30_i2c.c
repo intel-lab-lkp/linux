@@ -105,16 +105,18 @@ static int sps30_i2c_command(struct sps30_state *state, u16 cmd, void *arg, size
 		return ret;
 
 	/* validate received data and strip off crc bytes */
-	tmp = rsp;
-	for (i = 0; i < rsp_size; i += 3) {
-		crc = crc8(sps30_i2c_crc8_table, buf + i, 2, CRC8_INIT_VALUE);
-		if (crc != buf[i + 2]) {
-			dev_err(state->dev, "data integrity check failed\n");
-			return -EIO;
-		}
+	if (rsp) {
+		tmp = rsp;
+		for (i = 0; i < rsp_size; i += 3) {
+			crc = crc8(sps30_i2c_crc8_table, buf + i, 2, CRC8_INIT_VALUE);
+			if (crc != buf[i + 2]) {
+				dev_err(state->dev, "data integrity check failed\n");
+				return -EIO;
+			}
 
-		*tmp++ = buf[i];
-		*tmp++ = buf[i + 1];
+			*tmp++ = buf[i];
+			*tmp++ = buf[i + 1];
+		}
 	}
 
 	return 0;
