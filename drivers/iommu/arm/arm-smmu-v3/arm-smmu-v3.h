@@ -437,6 +437,7 @@ static inline unsigned int arm_smmu_cdtab_l2_idx(unsigned int ssid)
 
 #define EVTQ_0_ID			GENMASK_ULL(7, 0)
 
+/* Events */
 #define EVT_ID_TRANSLATION_FAULT	0x10
 #define EVT_ID_ADDR_SIZE_FAULT		0x11
 #define EVT_ID_ACCESS_FAULT		0x12
@@ -452,6 +453,7 @@ static inline unsigned int arm_smmu_cdtab_l2_idx(unsigned int ssid)
 #define EVTQ_1_RnW			(1UL << 35)
 #define EVTQ_1_S2			(1UL << 39)
 #define EVTQ_1_CLASS			GENMASK_ULL(41, 40)
+#define EVTQ_1_CLASS_TT			0x1
 #define EVTQ_1_TT_READ			(1UL << 44)
 #define EVTQ_2_ADDR			GENMASK_ULL(63, 0)
 #define EVTQ_3_IPA			GENMASK_ULL(51, 12)
@@ -769,6 +771,24 @@ struct arm_smmu_stream {
 	u32				id;
 	struct arm_smmu_master		*master;
 	struct rb_node			node;
+};
+
+struct arm_smmu_event {
+	struct arm_smmu_device		*smmu;
+	u8				id;
+	u8				class;
+	u16				stag;
+	u32				sid;
+	u32				ssid;
+	u64				iova;
+	u64				ipa;
+	u64				raw[EVTQ_ENT_DWORDS];
+	bool				stall;
+	bool				ssid_valid;
+	bool				privileged;
+	bool				instruction;
+	bool				s2;
+	bool				read;
 };
 
 /* SMMU private data for each master */

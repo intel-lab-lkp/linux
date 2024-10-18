@@ -1757,17 +1757,16 @@ arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 }
 
 /* IRQ and event handlers */
-static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
+static int arm_smmu_handle_evt(struct arm_smmu_event *event)
 {
 	int ret = 0;
 	u32 perm = 0;
 	struct arm_smmu_master *master;
-	bool ssid_valid = evt[0] & EVTQ_0_SSV;
-	u32 sid = FIELD_GET(EVTQ_0_SID, evt[0]);
 	struct iopf_fault fault_evt = { };
+	struct arm_smmu_device *smmu = event->smmu;
 	struct iommu_fault *flt = &fault_evt.fault;
 
-	switch (FIELD_GET(EVTQ_0_ID, evt[0])) {
+	switch (event->id) {
 	case EVT_ID_TRANSLATION_FAULT:
 	case EVT_ID_ADDR_SIZE_FAULT:
 	case EVT_ID_ACCESS_FAULT:
@@ -1777,35 +1776,35 @@ static int arm_smmu_handle_evt(struct arm_smmu_device *smmu, u64 *evt)
 		return -EOPNOTSUPP;
 	}
 
-	if (!(evt[1] & EVTQ_1_STALL))
+	if (!event->stall)
 		return -EOPNOTSUPP;
 
-	if (evt[1] & EVTQ_1_RnW)
+	if (event->read)
 		perm |= IOMMU_FAULT_PERM_READ;
 	else
 		perm |= IOMMU_FAULT_PERM_WRITE;
 
-	if (evt[1] & EVTQ_1_InD)
+	if (event->instruction)
 		perm |= IOMMU_FAULT_PERM_EXEC;
 
-	if (evt[1] & EVTQ_1_PnU)
+	if (event->privileged)
 		perm |= IOMMU_FAULT_PERM_PRIV;
 
 	flt->type = IOMMU_FAULT_PAGE_REQ;
 	flt->prm = (struct iommu_fault_page_request) {
 		.flags = IOMMU_FAULT_PAGE_REQUEST_LAST_PAGE,
-		.grpid = FIELD_GET(EVTQ_1_STAG, evt[1]),
+		.grpid = event->stag,
 		.perm = perm,
-		.addr = FIELD_GET(EVTQ_2_ADDR, evt[2]),
+		.addr = event->iova,
 	};
 
-	if (ssid_valid) {
+	if (event->ssid_valid) {
 		flt->prm.flags |= IOMMU_FAULT_PAGE_REQUEST_PASID_VALID;
-		flt->prm.pasid = FIELD_GET(EVTQ_0_SSID, evt[0]);
+		flt->prm.pasid = event->ssid;
 	}
 
 	mutex_lock(&smmu->streams_mutex);
-	master = arm_smmu_find_master(smmu, sid);
+	master = arm_smmu_find_master(smmu, event->sid);
 	if (!master) {
 		ret = -EINVAL;
 		goto out_unlock;
@@ -1817,28 +1816,48 @@ out_unlock:
 	return ret;
 }
 
+static void arm_smmu_get_event_from_raw(struct arm_smmu_device *smmu,
+					struct arm_smmu_event *event)
+{
+	/* Pick out the good stuff */
+	event->id = FIELD_GET(EVTQ_0_ID, event->raw[0]);
+	event->sid = FIELD_GET(EVTQ_0_SID, event->raw[0]);
+	event->ssid_valid = event->raw[0] & EVTQ_0_SSV;
+	event->ssid = event->ssid_valid ? FIELD_GET(EVTQ_0_SSID, event->raw[0]) : IOMMU_NO_PASID;
+	event->privileged = FIELD_GET(EVTQ_1_PnU, event->raw[1]);
+	event->instruction = FIELD_GET(EVTQ_1_InD, event->raw[1]);
+	event->s2 = FIELD_GET(EVTQ_1_S2, event->raw[1]);
+	event->read = FIELD_GET(EVTQ_1_RnW, event->raw[1]);
+	event->stag = FIELD_GET(EVTQ_1_STAG, event->raw[1]);
+	event->stall = event->raw[1] & EVTQ_1_STALL;
+	event->class = FIELD_GET(EVTQ_1_CLASS, event->raw[1]);
+	event->iova = FIELD_GET(EVTQ_2_ADDR, event->raw[2]);
+	event->ipa = FIELD_GET(EVTQ_3_IPA, event->raw[3]);
+	event->smmu = smmu;
+}
+
 static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 {
 	int i, ret;
+	struct arm_smmu_event evt;
 	struct arm_smmu_device *smmu = dev;
 	struct arm_smmu_queue *q = &smmu->evtq.q;
 	struct arm_smmu_ll_queue *llq = &q->llq;
 	static DEFINE_RATELIMIT_STATE(rs, DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
-	u64 evt[EVTQ_ENT_DWORDS];
 
 	do {
-		while (!queue_remove_raw(q, evt)) {
-			u8 id = FIELD_GET(EVTQ_0_ID, evt[0]);
+		while (!queue_remove_raw(q, evt.raw)) {
 
-			ret = arm_smmu_handle_evt(smmu, evt);
+			arm_smmu_get_event_from_raw(smmu, &evt);
+			ret = arm_smmu_handle_evt(&evt);
 			if (!ret || !__ratelimit(&rs))
 				continue;
 
-			dev_info(smmu->dev, "event 0x%02x received:\n", id);
-			for (i = 0; i < ARRAY_SIZE(evt); ++i)
+			dev_info(smmu->dev, "event 0x%02x received:\n", evt.id);
+			for (i = 0; i < EVTQ_ENT_DWORDS; ++i)
 				dev_info(smmu->dev, "\t0x%016llx\n",
-					 (unsigned long long)evt[i]);
+					(unsigned long long)evt.raw[i]);
 
 			cond_resched();
 		}
