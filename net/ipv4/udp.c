@@ -3425,7 +3425,8 @@ void __init udp_table_init(struct udp_table *table, const char *name)
 {
 	unsigned int i, slot_size;
 
-	slot_size = sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main);
+	slot_size = sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main) +
+		    udp_hash4_slot_size();
 	table->hash = alloc_large_system_hash(name,
 					      slot_size,
 					      uhash_entries,
@@ -3446,8 +3447,8 @@ void __init udp_table_init(struct udp_table *table, const char *name)
 		INIT_HLIST_HEAD(&table->hash2[i].hslot.head);
 		table->hash2[i].hslot.count = 0;
 		spin_lock_init(&table->hash2[i].hslot.lock);
-		table->hash2[i].hash4_cnt = 0;
 	}
+	udp_table_hash4_init(table);
 }
 
 u32 udp_flow_hashrnd(void)
@@ -3480,7 +3481,8 @@ static struct udp_table __net_init *udp_pernet_table_alloc(unsigned int hash_ent
 	if (!udptable)
 		goto out;
 
-	slot_size = sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main);
+	slot_size = sizeof(struct udp_hslot) + sizeof(struct udp_hslot_main) +
+		    udp_hash4_slot_size();
 	udptable->hash = vmalloc_huge(hash_entries * slot_size,
 				      GFP_KERNEL_ACCOUNT);
 	if (!udptable->hash)
@@ -3498,8 +3500,8 @@ static struct udp_table __net_init *udp_pernet_table_alloc(unsigned int hash_ent
 		INIT_HLIST_HEAD(&udptable->hash2[i].hslot.head);
 		udptable->hash2[i].hslot.count = 0;
 		spin_lock_init(&udptable->hash2[i].hslot.lock);
-		udptable->hash2[i].hash4_cnt = 0;
 	}
+	udp_table_hash4_init(udptable);
 
 	return udptable;
 
