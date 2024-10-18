@@ -110,10 +110,19 @@ static int tas2781_get_i2c_res(struct acpi_resource *ares, void *data)
 	return 1;
 }
 
+static const struct acpi_gpio_params speakerid_gpios = { 0, 0, false };
+
+static const struct acpi_gpio_mapping tas2781_speaker_id_gpios[] = {
+	{ "speakerid-gpios", &speakerid_gpios, 1 },
+	{ }
+};
+
 static int tas2781_read_acpi(struct tasdevice_priv *p, const char *hid)
 {
 	struct acpi_device *adev;
+	struct device *physdev;
 	LIST_HEAD(resources);
+	const char *sub;
 	int ret;
 
 	adev = acpi_dev_get_first_match_dev(hid, NULL, -1);
@@ -122,19 +131,44 @@ static int tas2781_read_acpi(struct tasdevice_priv *p, const char *hid)
 			"Failed to find an ACPI device for %s\n", hid);
 		return -ENODEV;
 	}
-
+	physdev = get_device(acpi_get_first_physical_node(adev));
 	ret = acpi_dev_get_resources(adev, &resources, tas2781_get_i2c_res, p);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(p->dev, "Failed to get ACPI resource.\n");
 		goto err;
+	}
+	sub = acpi_get_subsystem_id(ACPI_HANDLE(physdev));
+	if (IS_ERR(sub)) {
+		dev_err(p->dev, "Failed to get SUBSYS ID.\n");
+		goto err;
+	}
+	// Speaker id was needed for ASUS projects.
+	if (strstr(sub, TAS2781_ASUS_ID)) {
+		ret = devm_acpi_dev_add_driver_gpios(p->dev,
+			tas2781_speaker_id_gpios);
+		if (ret) {
+			dev_err(p->dev, "Unable to add GPIO.\n");
+			goto err;
+		}
+		p->speaker_id = devm_gpiod_get(p->dev, "speakerid", GPIOD_IN);
+		if (IS_ERR(p->speaker_id)) {
+			dev_err(p->dev, "Failed to get Speaker id.\n");
+			goto err;
+		}
+	} else {
+		p->speaker_id = NULL;
+	}
 
 	acpi_dev_free_resource_list(&resources);
 	strscpy(p->dev_name, hid, sizeof(p->dev_name));
+	put_device(physdev);
 	acpi_dev_put(adev);
 
 	return 0;
 
 err:
 	dev_err(p->dev, "read acpi error, ret: %d\n", ret);
+	put_device(physdev);
 	acpi_dev_put(adev);
 
 	return ret;
@@ -615,7 +649,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	struct tasdevice_priv *tas_priv = context;
 	struct tas2781_hda *tas_hda = dev_get_drvdata(tas_priv->dev);
 	struct hda_codec *codec = tas_priv->codec;
-	int i, ret;
+	int i, ret, spk_id;
 
 	pm_runtime_get_sync(tas_priv->dev);
 	mutex_lock(&tas_priv->codec_lock);
@@ -648,8 +682,25 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	tasdevice_dsp_remove(tas_priv);
 
 	tas_priv->fw_state = TASDEVICE_DSP_FW_PENDING;
-	scnprintf(tas_priv->coef_binaryname, 64, "TAS2XXX%04X.bin",
-		codec->core.subsystem_id & 0xffff);
+	if (tas_priv->speaker_id != NULL) {
+		// Speaker id need to be checked for ASUS only.
+		spk_id = gpiod_get_value(tas_priv->speaker_id);
+		if (spk_id < 0 || spk_id > 1) {
+			// Speaker id is not valid, use default.
+			dev_dbg(tas_priv->dev, "Wrong spk_id = %d\n", spk_id);
+			spk_id = 0;
+		}
+		scnprintf(tas_priv->coef_binaryname,
+			  sizeof(tas_priv->coef_binaryname),
+			  "TAS2XXX%04X%01d.bin",
+			  lower_16_bits(codec->core.subsystem_id),
+			  spk_id);
+	} else {
+		scnprintf(tas_priv->coef_binaryname,
+			  sizeof(tas_priv->coef_binaryname),
+			  "TAS2XXX%04X.bin",
+			  lower_16_bits(codec->core.subsystem_id));
+	}
 	ret = tasdevice_dsp_parser(tas_priv);
 	if (ret) {
 		dev_err(tas_priv->dev, "dspfw load %s error\n",
@@ -792,7 +843,6 @@ static int tas2781_hda_i2c_probe(struct i2c_client *clt)
 	struct tas2781_hda *tas_hda;
 	const char *device_name;
 	int ret;
-
 
 	tas_hda = devm_kzalloc(&clt->dev, sizeof(*tas_hda), GFP_KERNEL);
 	if (!tas_hda)
