@@ -15,6 +15,7 @@
 #include "intel_display_params.h"
 #include "intel_display_power.h"
 #include "intel_display_reg_defs.h"
+#include "intel_dp.h"
 #include "intel_fbc.h"
 #include "intel_step.h"
 
@@ -1684,6 +1685,9 @@ static void __intel_display_device_info_runtime_init(struct drm_i915_private *i9
 					display_runtime->num_scalers[pipe] = 1;
 		}
 	}
+
+	if (DISPLAY_VER(i915) >= 30)
+		intel_dp_check_edp_typec_support(display, display_runtime);
 
 	display_runtime->rawclk_freq = intel_read_rawclk(display);
 	drm_dbg_kms(&i915->drm, "rawclk rate: %d kHz\n", display_runtime->rawclk_freq);

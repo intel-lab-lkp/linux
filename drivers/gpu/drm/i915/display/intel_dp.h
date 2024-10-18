@@ -20,6 +20,8 @@ struct intel_atomic_state;
 struct intel_connector;
 struct intel_crtc_state;
 struct intel_digital_port;
+struct intel_display;
+struct intel_display_runtime_info;
 struct intel_dp;
 struct intel_encoder;
 
@@ -204,5 +206,8 @@ bool intel_dp_link_params_valid(struct intel_dp *intel_dp, int link_rate,
 				u8 lane_count);
 bool intel_dp_has_connector(struct intel_dp *intel_dp,
 			    const struct drm_connector_state *conn_state);
+void
+intel_dp_check_edp_typec_support(struct intel_display *display,
+				 struct intel_display_runtime_info *display_runtime);
 
 #endif /* __INTEL_DP_H__ */
