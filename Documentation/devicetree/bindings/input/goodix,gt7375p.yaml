@@ -8,27 +8,27 @@ title: Goodix GT7375P touchscreen
 
 maintainers:
   - Douglas Anderson <dianders@chromium.org>
+  - Charles Wang <charles.goodix@gmail.com>
 
 description:
-  Supports the Goodix GT7375P touchscreen.
-  This touchscreen uses the i2c-hid protocol but has some non-standard
-  power sequencing required.
-
-allOf:
-  - $ref: /schemas/input/touchscreen/touchscreen.yaml#
+  The Goodix GT7375P and GT7986U touchscreens support both SPI and I2C interfaces.
+  With the I2C interface, they use the i2c-hid protocol but require non-standard
+  power sequencing. With the SPI interface, they use a custom HID protocol that
+  is incompatible with Microsoft's HID-over-SPI protocol.
 
 properties:
   compatible:
     oneOf:
-      - const: goodix,gt7375p
+      - items:
+          - const: goodix,gt7375p
       - items:
           - const: goodix,gt7986u
           - const: goodix,gt7375p
+      - items:
+          - const: goodix,gt7986u
 
   reg:
-    enum:
-      - 0x5d
-      - 0x14
+    maxItems: 1
 
   interrupts:
     maxItems: 1
@@ -57,12 +57,40 @@ properties:
       This property is used to avoid the back-powering issue.
     type: boolean
 
+  goodix,hid-report-addr:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The register address for retrieving HID report data.
+      This address is related to the device firmware and may
+      change after a firmware update.
+
+  spi-max-frequency: true
+
 required:
   - compatible
   - reg
   - interrupts
   - reset-gpios
   - vdd-supply
+
+allOf:
+  - $ref: /schemas/input/touchscreen/touchscreen.yaml#
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+  - if:
+      properties:
+        compatible:
+          items:
+            - const: goodix,gt7986u
+    then:
+      required:
+        - goodix,hid-report-addr
+    else:
+      properties:
+        goodix,hid-report-addr: false
+        spi-max-frequency: false
+        reg:
+          enum: [0x5d, 0x14]
 
 additionalProperties: false
 
@@ -84,6 +112,26 @@ examples:
         interrupts = <9 IRQ_TYPE_LEVEL_LOW>;
 
         reset-gpios = <&tlmm 8 GPIO_ACTIVE_LOW>;
+        vdd-supply = <&pp3300_ts>;
+      };
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+
+    spi {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      touchscreen@0 {
+        compatible = "goodix,gt7986u";
+        reg = <0>;
+        interrupt-parent = <&gpio>;
+        interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
+        reset-gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;
+        spi-max-frequency = <10000000>;
+        goodix,hid-report-addr = <0x22c8c>;
         vdd-supply = <&pp3300_ts>;
       };
     };
