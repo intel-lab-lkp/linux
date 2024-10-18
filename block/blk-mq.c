@@ -29,6 +29,7 @@
 #include <linux/blk-crypto.h>
 #include <linux/part_stat.h>
 #include <linux/sched/isolation.h>
+#include <linux/pm_qos.h>
 
 #include <trace/events/block.h>
 
@@ -2757,9 +2758,60 @@ out:
 static void __blk_mq_flush_plug_list(struct request_queue *q,
 				     struct blk_plug *plug)
 {
+	struct request *req, *next;
+	struct blk_mq_hw_ctx *hctx;
+	int cpu;
+
 	if (blk_queue_quiesced(q))
 		return;
+
+	rq_list_for_each_safe(&plug->mq_list, req, next) {
+		hctx = req->mq_hctx;
+
+		if (next && next->mq_hctx == hctx)
+			continue;
+
+		if (q->disk->cpu_lat_limit < 0)
+			continue;
+
+		hctx->last_active = jiffies + msecs_to_jiffies(q->disk->cpu_lat_timeout);
+
+		if (!hctx->cpu_lat_limit_active) {
+			hctx->cpu_lat_limit_active = true;
+			for_each_cpu(cpu, hctx->cpumask) {
+				struct dev_pm_qos_request *qos;
+
+				qos = per_cpu_ptr(hctx->cpu_lat_qos, cpu);
+				dev_pm_qos_add_request(get_cpu_device(cpu), qos,
+						       DEV_PM_QOS_RESUME_LATENCY,
+						       q->disk->cpu_lat_limit);
+			}
+			schedule_delayed_work(&hctx->cpu_latency_work,
+					      msecs_to_jiffies(q->disk->cpu_lat_timeout));
+		}
+	}
+
 	q->mq_ops->queue_rqs(&plug->mq_list);
+}
+
+static void blk_mq_cpu_latency_work(struct work_struct *work)
+{
+	struct blk_mq_hw_ctx *hctx = container_of(work, struct blk_mq_hw_ctx,
+						  cpu_latency_work.work);
+	int cpu;
+
+	if (time_after(jiffies, hctx->last_active)) {
+		for_each_cpu(cpu, hctx->cpumask) {
+			struct dev_pm_qos_request *qos;
+
+			qos = per_cpu_ptr(hctx->cpu_lat_qos, cpu);
+			dev_pm_qos_remove_request(qos);
+		}
+		hctx->cpu_lat_limit_active = false;
+	} else {
+		schedule_delayed_work(&hctx->cpu_latency_work,
+				      msecs_to_jiffies(hctx->queue->disk->cpu_lat_timeout));
+	}
 }
 
 static void blk_mq_dispatch_plug_list(struct blk_plug *plug, bool from_sched)
@@ -3785,6 +3837,11 @@ static int blk_mq_init_hctx(struct request_queue *q,
 
 	if (xa_insert(&q->hctx_table, hctx_idx, hctx, GFP_KERNEL))
 		goto exit_flush_rq;
+
+	hctx->cpu_lat_qos = alloc_percpu(struct dev_pm_qos_request);
+	if (!hctx->cpu_lat_qos)
+		goto exit_flush_rq;
+	INIT_DELAYED_WORK(&hctx->cpu_latency_work, blk_mq_cpu_latency_work);
 
 	return 0;
 
