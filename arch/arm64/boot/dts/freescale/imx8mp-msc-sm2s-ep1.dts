@@ -15,6 +15,17 @@
 		     "avnet,sm2s-imx8mp-14N0600E", "avnet,sm2s-imx8mp",
 		     "fsl,imx8mp";
 
+	hdmi-connector {
+		compatible = "hdmi-connector";
+		type = "a";
+
+		port {
+			hdmi_in: endpoint {
+				remote-endpoint = <&hdmi_tx_out>;
+			};
+		};
+	};
+
 	reg_vcc_3v3_audio: 3v3-audio-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "VCC_3V3_AUD";
@@ -54,6 +65,14 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hdmi>;
 	status = "okay";
+
+	ports {
+		port@1 {
+			hdmi_tx_out: endpoint {
+				remote-endpoint = <&hdmi_in>;
+			};
+		};
+	};
 };
 
 &hdmi_tx_phy {
