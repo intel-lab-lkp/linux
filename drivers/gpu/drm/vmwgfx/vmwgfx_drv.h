@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0 OR MIT */
 /**************************************************************************
  *
- * Copyright (c) 2009-2024 Broadcom. All Rights Reserved. The term
- * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+ * Copyright (c) 2009-2024 Broadcom. All Rights Reserved.
+ * The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -196,7 +196,8 @@ enum vmw_res_type {
 enum vmw_cmdbuf_res_type {
 	vmw_cmdbuf_res_shader,
 	vmw_cmdbuf_res_view,
-	vmw_cmdbuf_res_streamoutput
+	vmw_cmdbuf_res_streamoutput,
+	vmw_cmdbuf_res_surface
 };
 
 struct vmw_cmdbuf_res_manager;
@@ -261,6 +262,11 @@ struct vmw_surface {
 	struct vmw_cursor_snooper snooper;
 	struct vmw_surface_offset *offsets;
 	struct list_head view_list;
+};
+
+struct vmw_cmdbuf_surface {
+	struct vmw_surface surface;
+	struct ttm_base_object base;
 };
 
 struct vmw_fifo_state {
@@ -1198,6 +1204,17 @@ u32 vmw_lookup_surface_handle_for_buffer(struct vmw_private *vmw,
 int vmw_dumb_create(struct drm_file *file_priv,
 		    struct drm_device *dev,
 		    struct drm_mode_create_dumb *args);
+
+struct vmw_cmdbuf_surface *vmw_res_to_cmdbuf_srf(struct vmw_resource *res);
+
+int vmw_cmdbuf_surface_define(struct vmw_private *dev_priv,
+			      struct vmw_sw_context *sw_context,
+			      struct vmw_surface_metadata *metadata,
+			      uint32 user_key);
+
+int vmw_cmdbuf_surface_destroy(struct vmw_private *dev_priv,
+			       struct vmw_sw_context *sw_context,
+			       uint32 user_key);
 
 /*
  * Shader management - vmwgfx_shader.c

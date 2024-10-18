@@ -112,6 +112,9 @@ int vmw_getparam_ioctl(struct drm_device *dev, void *data,
 	case DRM_VMW_PARAM_DEVICE_ID:
 		param->value = to_pci_dev(dev_priv->drm.dev)->device;
 		break;
+	case DRM_VMW_PARAM_USER_SRF:
+		param->value = 1;
+		break;
 	default:
 		return -EINVAL;
 	}

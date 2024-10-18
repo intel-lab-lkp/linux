@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0 OR MIT
 /**************************************************************************
  *
- * Copyright (c) 2009-2024 Broadcom. All Rights Reserved. The term
- * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+ * Copyright (c) 2009-2024 Broadcom. All Rights Reserved.
+ * The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -80,6 +80,8 @@ struct vmw_surface_dirty {
 static void vmw_user_surface_free(struct vmw_resource *res);
 static struct vmw_resource *
 vmw_user_surface_base_to_res(struct ttm_base_object *base);
+static void vmw_cmdbuf_surface_free(struct vmw_resource *res);
+static struct vmw_resource *vmw_cmdbuf_surface_base_to_res(struct ttm_base_object *base);
 static int vmw_legacy_srf_bind(struct vmw_resource *res,
 			       struct ttm_validate_buffer *val_buf);
 static int vmw_legacy_srf_unbind(struct vmw_resource *res,
@@ -154,6 +156,15 @@ static const struct vmw_res_func vmw_gb_surface_func = {
 	.dirty_sync = vmw_surface_dirty_sync,
 	.dirty_range_add = vmw_surface_dirty_range_add,
 	.clean = vmw_surface_clean,
+};
+
+static const struct vmw_res_func vmw_gb_cmdbuf_surface_func = {
+	.res_type = vmw_res_surface,
+	.needs_guest_memory = false,
+	.may_evict = false,
+	.type_name = "guest backed command buffer managed surface",
+	.domain = VMW_BO_DOMAIN_MOB,
+	.busy_domain = VMW_BO_DOMAIN_MOB,
 };
 
 /*
@@ -2363,4 +2374,146 @@ err:
 		ttm_ref_object_base_unref(tfile, arg.rep.handle);
 
 	return ret;
+}
+
+struct vmw_cmdbuf_surface *vmw_res_to_cmdbuf_srf(struct vmw_resource *res)
+{
+	struct vmw_surface *surface = vmw_res_to_srf(res);
+
+	return container_of(surface, struct vmw_cmdbuf_surface, surface);
+}
+
+static struct vmw_resource *vmw_cmdbuf_surface_base_to_res(struct ttm_base_object *base)
+{
+	return &(container_of(base, struct vmw_cmdbuf_surface, base)->surface.res);
+}
+
+static void vmw_cmdbuf_surface_free(struct vmw_resource *res)
+{
+	struct vmw_cmdbuf_surface *surface = vmw_res_to_cmdbuf_srf(res);
+
+	ttm_base_object_kfree(surface, base);
+}
+
+static void vmw_cmdbuf_surface_base_release(struct ttm_base_object **p_base)
+{
+	struct ttm_base_object *base = *p_base;
+	struct vmw_resource *res = vmw_cmdbuf_surface_base_to_res(base);
+
+	*p_base = NULL;
+	vmw_resource_unreference(&res);
+}
+
+
+int vmw_cmdbuf_surface_define(struct vmw_private *dev_priv,
+			      struct vmw_sw_context *sw_context,
+			      struct vmw_surface_metadata *metadata,
+			      uint32 user_key)
+{
+	struct vmw_cmdbuf_surface *surface;
+	struct vmw_resource *res;
+	int ret = 0;
+
+	if (!has_sm4_1_context(dev_priv)) {
+		if (SVGA3D_FLAGS_UPPER_32(metadata->flags) != 0)
+			ret = -EINVAL;
+
+		if (metadata->multisample_count != 0)
+			ret = -EINVAL;
+
+		if (metadata->multisample_pattern != SVGA3D_MS_PATTERN_NONE)
+			ret = -EINVAL;
+
+		if (metadata->quality_level != SVGA3D_MS_QUALITY_NONE)
+			ret = -EINVAL;
+
+		if (ret) {
+			VMW_DEBUG_USER("SM4.1 surface not supported.\n");
+			return ret;
+		}
+	}
+
+	if (metadata->buffer_byte_stride > 0 && !has_sm5_context(dev_priv)) {
+		VMW_DEBUG_USER("SM5 surface not supported.\n");
+		return -EINVAL;
+	}
+
+	if ((metadata->flags & SVGA3D_SURFACE_MULTISAMPLE) &&
+	    metadata->multisample_count == 0) {
+		VMW_DEBUG_USER("Invalid sample count.\n");
+		return -EINVAL;
+	}
+
+	if (metadata->mip_levels[0] > DRM_VMW_MAX_MIP_LEVELS) {
+		VMW_DEBUG_USER("Invalid mip level.\n");
+		return -EINVAL;
+	}
+
+	if (metadata->autogen_filter != SVGA3D_TEX_FILTER_NONE)
+		return -EINVAL;
+
+	if (metadata->num_sizes != 1)
+		return -EINVAL;
+
+
+	surface = kzalloc(sizeof(*surface), GFP_KERNEL);
+	if (unlikely(!surface))
+		return -ENOMEM;
+
+	res = &surface->surface.res;
+
+	ret = vmw_resource_init(dev_priv, res, false, vmw_cmdbuf_surface_free,
+				&vmw_gb_cmdbuf_surface_func);
+	if (unlikely(ret != 0)) {
+		vmw_cmdbuf_surface_free(res);
+		return ret;
+	}
+
+	INIT_LIST_HEAD(&surface->surface.view_list);
+
+	ret = vmw_cmdbuf_res_add(sw_context->man, vmw_cmdbuf_res_surface,
+				 user_key, res, &sw_context->staged_cmd_res);
+	if (unlikely(ret != 0)) {
+		vmw_resource_unreference(&res);
+		return ret;
+	}
+
+	ret = ttm_base_object_init(sw_context->fp->tfile, &surface->base, true,
+				   VMW_RES_SURFACE,
+				   &vmw_cmdbuf_surface_base_release);
+	if (unlikely(ret != 0)) {
+		vmw_resource_unreference(&res);
+		return ret;
+	}
+
+	return 0;
+}
+
+int vmw_cmdbuf_surface_destroy(struct vmw_private *dev_priv,
+			       struct vmw_sw_context *sw_context,
+			       uint32 user_key)
+{
+	struct vmw_resource *res;
+	struct vmw_cmdbuf_surface *surface;
+	struct ttm_base_object *base;
+	struct ttm_object_file *tfile = sw_context->fp->tfile;
+	int ret;
+
+	ret = vmw_cmdbuf_res_remove(sw_context->man, vmw_cmdbuf_res_surface,
+				    user_key, &sw_context->staged_cmd_res,
+				    &res);
+	if (unlikely(ret != 0))
+		return ret;
+
+	surface = vmw_res_to_cmdbuf_srf(res);
+	base = &surface->base;
+
+	mutex_lock(&dev_priv->binding_mutex);
+	vmw_view_surface_list_destroy(dev_priv, &surface->surface.view_list);
+	vmw_binding_res_list_scrub(&res->binding_head);
+	mutex_unlock(&dev_priv->binding_mutex);
+
+	ttm_ref_object_base_unref(tfile, base->handle);
+
+	return 0;
 }
