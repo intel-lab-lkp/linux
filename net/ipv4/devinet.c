@@ -574,9 +574,7 @@ static int inet_insert_ifa(struct in_ifaddr *ifa)
 
 static int inet_set_ifa(struct net_device *dev, struct in_ifaddr *ifa)
 {
-	struct in_device *in_dev = __in_dev_get_rtnl(dev);
-
-	ASSERT_RTNL();
+	struct in_device *in_dev = __in_dev_get_rtnl_net(dev);
 
 	ipv4_devconf_setall(in_dev);
 	neigh_parms_data_state_setall(in_dev->arp_parms);
@@ -1114,7 +1112,7 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 		goto out;
 	}
 
-	rtnl_lock();
+	rtnl_net_lock(net);
 
 	ret = -ENODEV;
 	dev = __dev_get_by_name(net, ifr->ifr_name);
@@ -1124,7 +1122,7 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 	if (colon)
 		*colon = ':';
 
-	in_dev = __in_dev_get_rtnl(dev);
+	in_dev = __in_dev_get_rtnl_net(dev);
 	if (in_dev) {
 		if (tryaddrmatch) {
 			/* Matthias Andree */
@@ -1134,7 +1132,7 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 			   This is checked above. */
 
 			for (ifap = &in_dev->ifa_list;
-			     (ifa = rtnl_dereference(*ifap)) != NULL;
+			     (ifa = rtnl_net_dereference(net, *ifap)) != NULL;
 			     ifap = &ifa->ifa_next) {
 				if (!strcmp(ifr->ifr_name, ifa->ifa_label) &&
 				    sin_orig.sin_addr.s_addr ==
@@ -1148,7 +1146,7 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 		   comparing just the label */
 		if (!ifa) {
 			for (ifap = &in_dev->ifa_list;
-			     (ifa = rtnl_dereference(*ifap)) != NULL;
+			     (ifa = rtnl_net_dereference(net, *ifap)) != NULL;
 			     ifap = &ifa->ifa_next)
 				if (!strcmp(ifr->ifr_name, ifa->ifa_label))
 					break;
@@ -1190,6 +1188,9 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 				inet_del_ifa(in_dev, ifap, 1);
 			break;
 		}
+
+		/* NETDEV_UP/DOWN/CHANGE could touch a peer dev */
+		ASSERT_RTNL();
 		ret = dev_change_flags(dev, ifr->ifr_flags, NULL);
 		break;
 
@@ -1291,7 +1292,7 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 		break;
 	}
 done:
-	rtnl_unlock();
+	rtnl_net_unlock(net);
 out:
 	return ret;
 }
