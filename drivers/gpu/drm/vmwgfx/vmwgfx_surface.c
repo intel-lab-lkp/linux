@@ -2405,6 +2405,44 @@ static void vmw_cmdbuf_surface_base_release(struct ttm_base_object **p_base)
 }
 
 
+static void vmw_cmdbuf_surface_hw_destroy(struct vmw_resource *res)
+{
+	struct vmw_private *dev_priv = res->dev_priv;
+	struct vmw_cmdbuf_surface *surface;
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdDestroyGBSurface body;
+	} *cmd;
+
+	if (res->id == -1)
+		return;
+
+	surface = vmw_res_to_cmdbuf_srf(res);
+	/**
+	 * If userspace is submitting a destroy command there is no need for
+	 * kernel to do so.
+	 */
+	if (surface->cmdbuf_destroy)
+		return;
+
+	mutex_lock(&dev_priv->binding_mutex);
+	vmw_view_surface_list_destroy(dev_priv, &surface->surface.view_list);
+	vmw_binding_res_list_scrub(&res->binding_head);
+
+	cmd = VMW_CMD_RESERVE(dev_priv, sizeof(*cmd));
+	if (unlikely(!cmd)) {
+		mutex_unlock(&dev_priv->binding_mutex);
+		return;
+	}
+
+	cmd->header.id = SVGA_3D_CMD_DESTROY_GB_SURFACE;
+	cmd->header.size = sizeof(cmd->body);
+	cmd->body.sid = res->id;
+	vmw_cmd_commit(dev_priv, sizeof(*cmd));
+	mutex_unlock(&dev_priv->binding_mutex);
+}
+
+
 int vmw_cmdbuf_surface_define(struct vmw_private *dev_priv,
 			      struct vmw_sw_context *sw_context,
 			      struct vmw_surface_metadata *metadata,
@@ -2485,6 +2523,9 @@ int vmw_cmdbuf_surface_define(struct vmw_private *dev_priv,
 		vmw_resource_unreference(&res);
 		return ret;
 	}
+
+	res->hw_destroy = vmw_cmdbuf_surface_hw_destroy;
+	surface->cmdbuf_destroy = false;
 
 	return 0;
 }
