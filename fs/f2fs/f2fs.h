@@ -4762,6 +4762,11 @@ static inline void f2fs_invalidate_internal_cache(struct f2fs_sb_info *sbi,
 	f2fs_invalidate_compress_page(sbi, blkaddr);
 }
 
+static inline bool f2fs_blkzoned_has_regular_section(struct f2fs_sb_info *sbi)
+{
+	return f2fs_sb_has_blkzoned(sbi) && sbi->first_zoned_segno;
+}
+
 #define EFSBADCRC	EBADMSG		/* Bad CRC detected */
 #define EFSCORRUPTED	EUCLEAN		/* Filesystem is corrupted */
 

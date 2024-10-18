@@ -2613,8 +2613,16 @@ bool f2fs_should_update_outplace(struct inode *inode, struct f2fs_io_info *fio)
 		return false;
 	if (fio && is_sbi_flag_set(sbi, SBI_NEED_FSCK))
 		return true;
-	if (f2fs_lfs_mode(sbi))
-		return true;
+	if (f2fs_lfs_mode(sbi)) {
+		/* no regular block device in mainarea */
+		if (!f2fs_blkzoned_has_regular_section(sbi))
+			return true;
+		/* blkaddr locates in sequential zone */
+		if (fio && __is_valid_data_blkaddr(fio->old_blkaddr) &&
+			GET_SEGNO(sbi, fio->old_blkaddr) >=
+					sbi->first_zoned_segno)
+			return true;
+	}
 	if (S_ISDIR(inode->i_mode))
 		return true;
 	if (IS_NOQUOTA(inode))
