@@ -122,7 +122,10 @@ void blk_mq_in_flight_rw(struct request_queue *q, struct block_device *part,
 
 void blk_freeze_queue_start(struct request_queue *q)
 {
+	int sub_class;
+
 	mutex_lock(&q->mq_freeze_lock);
+	sub_class = q->mq_freeze_depth;
 	if (++q->mq_freeze_depth == 1) {
 		percpu_ref_kill(&q->q_usage_counter);
 		mutex_unlock(&q->mq_freeze_lock);
@@ -131,6 +134,12 @@ void blk_freeze_queue_start(struct request_queue *q)
 	} else {
 		mutex_unlock(&q->mq_freeze_lock);
 	}
+	/*
+	 * model as down_write_trylock() so that two concurrent freeze queue
+	 * can be allowed
+	 */
+	if (blk_queue_freeze_lockdep(q))
+		rwsem_acquire(&q->q_usage_counter_map, sub_class, 1, _RET_IP_);
 }
 EXPORT_SYMBOL_GPL(blk_freeze_queue_start);
 
@@ -188,6 +197,9 @@ void __blk_mq_unfreeze_queue(struct request_queue *q, bool force_atomic)
 		wake_up_all(&q->mq_freeze_wq);
 	}
 	mutex_unlock(&q->mq_freeze_lock);
+
+	if (blk_queue_freeze_lockdep(q))
+		rwsem_release(&q->q_usage_counter_map, _RET_IP_);
 }
 
 void blk_mq_unfreeze_queue(struct request_queue *q)
@@ -4241,6 +4253,9 @@ void blk_mq_destroy_queue(struct request_queue *q)
 	blk_queue_start_drain(q);
 	blk_mq_freeze_queue_wait(q);
 
+	/* counter pair of acquire in blk_queue_start_drain */
+	if (blk_queue_freeze_lockdep(q))
+		rwsem_release(&q->q_usage_counter_map, _RET_IP_);
 	blk_sync_queue(q);
 	blk_mq_cancel_work_sync(q);
 	blk_mq_exit_queue(q);

@@ -4,6 +4,7 @@
 
 #include <linux/bio-integrity.h>
 #include <linux/blk-crypto.h>
+#include <linux/lockdep.h>
 #include <linux/memblock.h>	/* for max_pfn/max_low_pfn */
 #include <linux/sched/sysctl.h>
 #include <linux/timekeeping.h>
@@ -43,6 +44,8 @@ void bio_await_chain(struct bio *bio);
 
 static inline bool blk_try_enter_queue(struct request_queue *q, bool pm)
 {
+	/* model as down_read() for lockdep */
+	rwsem_acquire_read(&q->q_usage_counter_map, 0, 0, _RET_IP_);
 	rcu_read_lock();
 	if (!percpu_ref_tryget_live_rcu(&q->q_usage_counter))
 		goto fail;
@@ -56,12 +59,18 @@ static inline bool blk_try_enter_queue(struct request_queue *q, bool pm)
 		goto fail_put;
 
 	rcu_read_unlock();
+	/*
+	 * queue exit often happen in other context, so we simply annotate
+	 * release here, still lots of cases can be covered
+	 */
+	rwsem_release(&q->q_usage_counter_map, _RET_IP_);
 	return true;
 
 fail_put:
 	blk_queue_exit(q);
 fail:
 	rcu_read_unlock();
+	rwsem_release(&q->q_usage_counter_map, _RET_IP_);
 	return false;
 }
 

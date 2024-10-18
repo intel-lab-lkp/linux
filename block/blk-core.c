@@ -384,6 +384,7 @@ static void blk_timeout_work(struct work_struct *work)
 
 struct request_queue *blk_alloc_queue(struct queue_limits *lim, int node_id)
 {
+	static struct lock_class_key __q_usage_counter_key;
 	struct request_queue *q;
 	int error;
 
@@ -441,6 +442,8 @@ struct request_queue *blk_alloc_queue(struct queue_limits *lim, int node_id)
 				PERCPU_REF_INIT_ATOMIC, GFP_KERNEL);
 	if (error)
 		goto fail_stats;
+	lockdep_init_map(&q->q_usage_counter_map, "q->q_usage_counter",
+			 &__q_usage_counter_key, 0);
 
 	q->nr_requests = BLKDEV_DEFAULT_RQ;
 

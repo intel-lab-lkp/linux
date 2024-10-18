@@ -742,6 +742,9 @@ void del_gendisk(struct gendisk *disk)
 		blk_queue_flag_clear(QUEUE_FLAG_INIT_DONE, q);
 		__blk_mq_unfreeze_queue(q, true);
 	} else {
+		/* counter pair of acquire in blk_queue_start_drain */
+		if (blk_queue_freeze_lockdep(q))
+			rwsem_release(&q->q_usage_counter_map, _RET_IP_);
 		if (queue_is_mq(q))
 			blk_mq_exit_queue(q);
 	}

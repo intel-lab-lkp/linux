@@ -687,7 +687,10 @@ enum {
 	 * or shared hwqs instead of 'mq-deadline'.
 	 */
 	BLK_MQ_F_NO_SCHED_BY_DEFAULT	= 1 << 6,
-	BLK_MQ_F_ALLOC_POLICY_START_BIT = 7,
+
+	BLK_MQ_F_SKIP_FREEZE_LOCKDEP	= 1 << 7,
+
+	BLK_MQ_F_ALLOC_POLICY_START_BIT = 8,
 	BLK_MQ_F_ALLOC_POLICY_BITS = 1,
 };
 #define BLK_MQ_FLAG_TO_ALLOC_POLICY(flags) \
