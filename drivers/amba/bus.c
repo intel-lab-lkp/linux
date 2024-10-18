@@ -209,6 +209,7 @@ static int amba_match(struct device *dev, const struct device_driver *drv)
 {
 	struct amba_device *pcdev = to_amba_device(dev);
 	const struct amba_driver *pcdrv = to_amba_driver(drv);
+	int retval;
 
 	mutex_lock(&pcdev->periphid_lock);
 	if (!pcdev->periphid) {
@@ -230,8 +231,14 @@ static int amba_match(struct device *dev, const struct device_driver *drv)
 	mutex_unlock(&pcdev->periphid_lock);
 
 	/* When driver_override is set, only bind to the matching driver */
-	if (pcdev->driver_override)
-		return !strcmp(pcdev->driver_override, drv->name);
+
+	device_lock(dev);
+	if (pcdev->driver_override) {
+		retval = !strcmp(pcdev->driver_override, drv->name);
+		device_unlock(dev);
+		return retval;
+	}
+	device_unlock(dev);
 
 	return amba_lookup(pcdrv->id_table, pcdev) != NULL;
 }
