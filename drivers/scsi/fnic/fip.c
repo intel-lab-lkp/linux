@@ -452,6 +452,7 @@ void fnic_fcoe_process_flogi_resp(struct fnic *fnic, struct fip_header_s *fiph)
 			FNIC_FIP_DBG(KERN_INFO, fnic->lport->host,
 				     fnic->fnic_num, "iport->state:%d\n",
 				     iport->state);
+			fnic_fdls_disc_start(iport);
 			if (!((iport->selected_fcf.ka_disabled)
 			      || (iport->selected_fcf.fka_adv_period == 0))) {
 				u64 tov;
@@ -535,6 +536,7 @@ void fnic_fcoe_process_cvl(struct fnic *fnic, struct fip_header_s *fiph)
 	struct fip_cvl_s *cvl_msg = (struct fip_cvl_s *)fiph;
 	int i;
 	int found = false;
+	int max_count = 0;
 
 	FNIC_FIP_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 		     "fnic 0x%p clear virtual link handler\n", fnic);
@@ -575,6 +577,26 @@ void fnic_fcoe_process_cvl(struct fnic *fnic, struct fip_header_s *fiph)
 			return;
 		fnic_common_fip_cleanup(fnic);
 
+		while (fnic->reset_in_progress == IN_PROGRESS) {
+			spin_unlock_irqrestore(&fnic->fnic_lock, fnic->lock_flags);
+			wait_for_completion_timeout(&fnic->reset_completion_wait,
+							msecs_to_jiffies(5000));
+			spin_lock_irqsave(&fnic->fnic_lock, fnic->lock_flags);
+			max_count++;
+			if (max_count >= FIP_FNIC_RESET_WAIT_COUNT) {
+				FNIC_FIP_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
+					 "Rthr waited too long. Skipping handle link event %p\n",
+					 fnic);
+				return;
+			}
+			FNIC_FIP_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
+				 "fnic reset in progress. Link event needs to wait %p",
+				 fnic);
+		}
+		fnic->reset_in_progress = IN_PROGRESS;
+		fnic_fdls_link_down(iport);
+		fnic->reset_in_progress = NOT_IN_PROGRESS;
+		complete(&fnic->reset_completion_wait);
 		fnic_fcoe_send_vlan_req(fnic);
 	}
 }
@@ -628,8 +650,10 @@ void fnic_work_on_fip_timer(struct work_struct *work)
 			     "FCF Discovery timeout\n");
 		if (memcmp(iport->selected_fcf.fcf_mac, zmac, ETH_ALEN) != 0) {
 
-			if (iport->flags & FNIC_FIRST_LINK_UP)
+			if (iport->flags & FNIC_FIRST_LINK_UP) {
+				fnic_scsi_fcpio_reset(iport->fnic);
 				iport->flags &= ~FNIC_FIRST_LINK_UP;
+			}
 
 			fnic_fcoe_start_flogi(fnic);
 			if (!((iport->selected_fcf.ka_disabled)
@@ -832,6 +856,7 @@ void fnic_work_on_fcs_ka_timer(struct work_struct *work)
 
 	fnic_common_fip_cleanup(fnic);
 	spin_lock_irqsave(&fnic->fnic_lock, fnic->lock_flags);
+	fnic_fdls_link_down(iport);
 	iport->state = FNIC_IPORT_STATE_FIP;
 	spin_unlock_irqrestore(&fnic->fnic_lock, fnic->lock_flags);
 

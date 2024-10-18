@@ -1848,7 +1848,6 @@ void fdls_fabric_timer_callback(struct timer_list *t)
 		}
 		break;
 	default:
-		fnic_fdls_start_flogi(iport);	/* Placeholder call */
 		break;
 	}
 	spin_unlock_irqrestore(&fnic->fnic_lock, flags);
@@ -3020,6 +3019,12 @@ fdls_process_flogi_rsp(struct fnic_iport_s *iport,
 
 		fnic_fdls_learn_fcoe_macs(iport, rx_frame, fcid);
 
+		if (fnic_fdls_register_portid(iport, iport->fcid, rx_frame) != 0) {
+			FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
+						 "0x%x: FLOGI registration failed", iport->fcid);
+			break;
+		}
+
 		memcpy(&fcmac[3], fcid, 3);
 		FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
 			 "Adding vNIC device MAC addr: %02x:%02x:%02x:%02x:%02x:%02x",
@@ -3952,6 +3957,29 @@ fdls_process_rscn(struct fnic_iport_s *iport, struct fc_frame_header *fchdr)
 	fdls_send_rscn_resp(iport, fchdr);
 }
 
+void fnic_fdls_disc_start(struct fnic_iport_s *iport)
+{
+	struct fnic *fnic = iport->fnic;
+
+	if (IS_FNIC_FCP_INITIATOR(fnic)) {
+		fc_host_fabric_name(iport->fnic->lport->host) = 0;
+		fc_host_post_event(iport->fnic->lport->host, fc_get_event_number(),
+						   FCH_EVT_LIPRESET, 0);
+	}
+
+	if (!iport->usefip) {
+		if (iport->flags & FNIC_FIRST_LINK_UP) {
+			spin_unlock_irqrestore(&fnic->fnic_lock, fnic->lock_flags);
+			fnic_scsi_fcpio_reset(iport->fnic);
+			spin_lock_irqsave(&fnic->fnic_lock, fnic->lock_flags);
+
+			iport->flags &= ~FNIC_FIRST_LINK_UP;
+		}
+		fnic_fdls_start_flogi(iport);
+	} else
+		fnic_fdls_start_plogi(iport);
+}
+
 static void
 fdls_process_adisc_req(struct fnic_iport_s *iport,
 		       struct fc_frame_header *fchdr)
@@ -4365,4 +4393,43 @@ void fnic_fdls_recv_frame(struct fnic_iport_s *iport, void *rx_frame,
 			 "Received unknown FCoE frame of len: %d. Dropping frame", len);
 		break;
 	}
+}
+
+void fnic_fdls_disc_init(struct fnic_iport_s *iport)
+{
+	fdls_init_oxid_pool(iport);
+	fdls_set_state((&iport->fabric), FDLS_STATE_INIT);
+}
+
+void fnic_fdls_link_down(struct fnic_iport_s *iport)
+{
+	struct fnic_tport_s *tport, *next;
+	struct fnic *fnic = iport->fnic;
+
+	FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
+				 "0x%x: FDLS processing link down", iport->fcid);
+
+	fdls_set_state((&iport->fabric), FDLS_STATE_LINKDOWN);
+	iport->fabric.flags = 0;
+
+	if (IS_FNIC_FCP_INITIATOR(fnic)) {
+		spin_unlock_irqrestore(&fnic->fnic_lock, fnic->lock_flags);
+		fnic_scsi_fcpio_reset(iport->fnic);
+		spin_lock_irqsave(&fnic->fnic_lock, fnic->lock_flags);
+		fdls_init_oxid_pool(iport);
+
+		list_for_each_entry_safe(tport, next, &iport->tport_list, links) {
+			FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
+						 "removing rport: 0x%x", tport->fcid);
+			fdls_delete_tport(iport, tport);
+		}
+	}
+
+	if ((fnic_fdmi_support == 1) && (iport->fabric.fdmi_pending > 0)) {
+		del_timer_sync(&iport->fabric.fdmi_timer);
+		iport->fabric.fdmi_pending = 0;
+	}
+
+	FNIC_FCS_DBG(KERN_INFO, fnic->lport->host, fnic->fnic_num,
+				 "0x%x: FDLS finish processing link down", iport->fcid);
 }
