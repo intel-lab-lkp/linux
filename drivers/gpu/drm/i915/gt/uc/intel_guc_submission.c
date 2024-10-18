@@ -1684,6 +1684,8 @@ void intel_guc_submission_reset_prepare(struct intel_guc *guc)
 	guc->interrupts.disable(guc);
 	__reset_guc_busyness_stats(guc);
 
+	intel_guc_ct_disable(&guc->ct);
+
 	/* Flush IRQ handler */
 	spin_lock_irq(guc_to_gt(guc)->irq_lock);
 	spin_unlock_irq(guc_to_gt(guc)->irq_lock);

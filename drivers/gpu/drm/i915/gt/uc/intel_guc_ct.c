@@ -1176,6 +1176,9 @@ static bool ct_process_incoming_requests(struct intel_guc_ct *ct)
 	bool done;
 	int err;
 
+	if (!ct->enabled)
+		return true;
+
 	spin_lock_irqsave(&ct->requests.lock, flags);
 	request = list_first_entry_or_null(&ct->requests.incoming,
 					   struct ct_incoming_msg, link);
