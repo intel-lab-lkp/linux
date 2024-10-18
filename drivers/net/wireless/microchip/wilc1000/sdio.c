@@ -769,8 +769,10 @@ static int wilc_sdio_init(struct wilc *wilc, bool resume)
 
 static int wilc_sdio_read_size(struct wilc *wilc, u32 *size)
 {
-	u32 tmp;
+	struct sdio_func *func = dev_to_sdio_func(wilc->dev);
 	struct sdio_cmd52 cmd;
+	u32 tmp;
+	int ret;
 
 	/**
 	 *      Read DMA count in words
@@ -780,12 +782,20 @@ static int wilc_sdio_read_size(struct wilc *wilc, u32 *size)
 	cmd.raw = 0;
 	cmd.address = WILC_SDIO_INTERRUPT_DATA_SZ_REG;
 	cmd.data = 0;
-	wilc_sdio_cmd52(wilc, &cmd);
+	ret = wilc_sdio_cmd52(wilc, &cmd);
+	if (ret) {
+		dev_err(&func->dev, "Fail cmd 52, set DATA_SZ[0] register...\n");
+		return ret;
+	}
 	tmp = cmd.data;
 
 	cmd.address = WILC_SDIO_INTERRUPT_DATA_SZ_REG + 1;
 	cmd.data = 0;
-	wilc_sdio_cmd52(wilc, &cmd);
+	ret = wilc_sdio_cmd52(wilc, &cmd);
+	if (ret) {
+		dev_err(&func->dev, "Fail cmd 52, set DATA_SZ[1] register...\n");
+		return ret;
+	}
 	tmp |= (cmd.data << 8);
 
 	*size = tmp;
@@ -796,9 +806,10 @@ static int wilc_sdio_read_int(struct wilc *wilc, u32 *int_status)
 {
 	struct sdio_func *func = dev_to_sdio_func(wilc->dev);
 	struct wilc_sdio *sdio_priv = wilc->bus_data;
-	u32 tmp;
-	u8 irq_flags;
 	struct sdio_cmd52 cmd;
+	u8 irq_flags;
+	u32 tmp;
+	int ret;
 
 	wilc_sdio_read_size(wilc, &tmp);
 
@@ -817,7 +828,11 @@ static int wilc_sdio_read_int(struct wilc *wilc, u32 *int_status)
 	cmd.raw = 0;
 	cmd.read_write = 0;
 	cmd.data = 0;
-	wilc_sdio_cmd52(wilc, &cmd);
+	ret = wilc_sdio_cmd52(wilc, &cmd);
+	if (ret) {
+		dev_err(&func->dev, "Fail cmd 52, set IRQ_FLAG register...\n");
+		return ret;
+	}
 	irq_flags = cmd.data;
 
 	if (sdio_priv->irq_gpio)
