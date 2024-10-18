@@ -1041,6 +1041,66 @@ gpio_keys_disable_wakeup(struct gpio_keys_drvdata *ddata)
 	}
 }
 
+static int gpio_keys_freeze(struct device *dev)
+{
+	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
+	struct gpio_button_data *bdata;
+	int i;
+
+	for (i = 0; i < ddata->pdata->nbuttons; i++) {
+		bdata = &ddata->data[i];
+
+		if (!bdata->irq)
+			continue;
+
+		mutex_lock(&ddata->disable_lock);
+		gpio_keys_disable_button(bdata);
+		mutex_unlock(&ddata->disable_lock);
+
+		devm_free_irq(dev, bdata->irq, bdata);
+	}
+
+	return 0;
+}
+
+static int gpio_keys_restore(struct device *dev)
+{
+	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
+	struct gpio_button_data *bdata;
+	int error = 0, i;
+	irq_handler_t isr;
+	unsigned long irqflags;
+	const char *desc;
+
+	for (i = 0; i < ddata->pdata->nbuttons; i++) {
+		bdata = &ddata->data[i];
+		desc = bdata->button->desc ? bdata->button->desc : "gpio_keys";
+		if (!bdata->irq)
+			continue;
+
+		if (bdata->gpiod) {
+			isr = gpio_keys_gpio_isr;
+			irqflags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+		} else {
+			isr = gpio_keys_irq_isr;
+			irqflags = 0;
+		}
+
+		if (!bdata->button->can_disable)
+			irqflags = IRQF_SHARED;
+
+		error = devm_request_any_context_irq(dev, bdata->irq,
+						     isr, irqflags, desc, bdata);
+		if (error < 0) {
+			dev_err(dev, "Unable to claim irq %d; error %d\n",
+				bdata->irq, error);
+			return error;
+		}
+	}
+
+	return 0;
+}
+
 static int gpio_keys_suspend(struct device *dev)
 {
 	struct gpio_keys_drvdata *ddata = dev_get_drvdata(dev);
@@ -1083,7 +1143,12 @@ static int gpio_keys_resume(struct device *dev)
 	return 0;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(gpio_keys_pm_ops, gpio_keys_suspend, gpio_keys_resume);
+static const struct dev_pm_ops gpio_keys_pm_ops = {
+	.freeze = gpio_keys_freeze,
+	.restore = gpio_keys_restore,
+	.suspend = gpio_keys_suspend,
+	.resume = gpio_keys_resume,
+};
 
 static void gpio_keys_shutdown(struct platform_device *pdev)
 {
