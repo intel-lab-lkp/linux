@@ -435,6 +435,18 @@ struct blk_mq_hw_ctx {
 	/** @kobj: Kernel object for sysfs. */
 	struct kobject		kobj;
 
+	/** @cpu_latency_work: Work to handle CPU latency PM limits. */
+	struct delayed_work	cpu_latency_work;
+
+	/** @cpu_lat_limit_active: If CPU latency limits are active or not. */
+	bool			cpu_lat_limit_active;
+
+	/** @last_active: Jiffies value when the queue was last active. */
+	unsigned long		last_active;
+
+	/** @cpu_lat_qos: PM QoS latency limits for individual CPUs. */
+	struct dev_pm_qos_request __percpu *cpu_lat_qos;
+
 #ifdef CONFIG_BLK_DEBUG_FS
 	/**
 	 * @debugfs_dir: debugfs directory for this hardware queue. Named
