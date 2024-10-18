@@ -360,25 +360,17 @@ static void dwxgmac3_fpe_configure(void __iomem *ioaddr,
 				   u32 num_txq, u32 num_rxq,
 				   bool tx_enable, bool pmac_enable)
 {
-	u32 value;
+	static const struct stmmac_fpe_configure_info dwxgmac3_fpe_info = {
+		.rxq_ctrl1_reg = XGMAC_RXQ_CTRL1,
+		.fprq_mask = XGMAC_FPRQ,
+		.fprq_shift = XGMAC_FPRQ_SHIFT,
+		.mac_fpe_reg = XGMAC_MAC_FPE_CTRL_STS,
+		.int_en_reg = XGMAC_INT_EN,
+		.int_en_bit = XGMAC_FPEIE,
+	};
 
-	if (!tx_enable) {
-		value = readl(ioaddr + XGMAC_MAC_FPE_CTRL_STS);
-
-		value &= ~STMMAC_MAC_FPE_CTRL_STS_EFPE;
-
-		writel(value, ioaddr + XGMAC_MAC_FPE_CTRL_STS);
-		return;
-	}
-
-	value = readl(ioaddr + XGMAC_RXQ_CTRL1);
-	value &= ~XGMAC_FPRQ;
-	value |= (num_rxq - 1) << XGMAC_FPRQ_SHIFT;
-	writel(value, ioaddr + XGMAC_RXQ_CTRL1);
-
-	value = readl(ioaddr + XGMAC_MAC_FPE_CTRL_STS);
-	value |= STMMAC_MAC_FPE_CTRL_STS_EFPE;
-	writel(value, ioaddr + XGMAC_MAC_FPE_CTRL_STS);
+	common_fpe_configure(ioaddr, cfg, num_rxq, tx_enable, pmac_enable,
+			     &dwxgmac3_fpe_info);
 }
 
 const struct stmmac_fpe_ops dwmac5_fpe_ops = {
