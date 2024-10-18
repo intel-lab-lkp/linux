@@ -67,9 +67,13 @@ static int damon_va_evenly_split_region(struct damon_target *t,
 	unsigned long sz_orig, sz_piece, orig_end;
 	struct damon_region *n = NULL, *next;
 	unsigned long start;
+	int i;
 
 	if (!r || !nr_pieces)
 		return -EINVAL;
+
+	if (nr_pieces == 1)
+		return 0;
 
 	orig_end = r->ar.end;
 	sz_orig = damon_sz_region(r);
@@ -79,9 +83,11 @@ static int damon_va_evenly_split_region(struct damon_target *t,
 		return -EINVAL;
 
 	r->ar.end = r->ar.start + sz_piece;
+	/* origin region will be updated as the first one after splitting */
+	i = 1;
+	n = r;
 	next = damon_next_region(r);
-	for (start = r->ar.end; start + sz_piece <= orig_end;
-			start += sz_piece) {
+	for (start = r->ar.end; i < nr_pieces; start += sz_piece, i++) {
 		n = damon_new_region(start, start + sz_piece);
 		if (!n)
 			return -ENOMEM;
@@ -89,8 +95,7 @@ static int damon_va_evenly_split_region(struct damon_target *t,
 		r = n;
 	}
 	/* complement last region for possible rounding error */
-	if (n)
-		n->ar.end = orig_end;
+	n->ar.end = orig_end;
 
 	return 0;
 }
