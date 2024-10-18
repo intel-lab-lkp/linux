@@ -100,13 +100,12 @@
 
 &i2c0 {
 	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&touchscreen_pins>;
 
 	touchscreen: touchscreen@10 {
 		compatible = "elan,ekth3500";
 		reg = <0x10>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&touchscreen_pins>;
 
 		interrupts-extended = <&pio 155 IRQ_TYPE_LEVEL_LOW>;
 
@@ -116,16 +115,13 @@
 
 &i2c2 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&i2c2_pins>;
+	pinctrl-0 = <&i2c2_pins>, <&trackpad_pins>;
 	status = "okay";
 	clock-frequency = <400000>;
 
 	trackpad@15 {
 		compatible = "elan,ekth3000";
 		reg = <0x15>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&trackpad_pins>;
 
 		interrupts-extended = <&pio 7 IRQ_TYPE_LEVEL_LOW>;
 
