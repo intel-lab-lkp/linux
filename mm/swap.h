@@ -8,6 +8,17 @@ struct mempolicy;
 #include <linux/swapops.h> /* for swp_offset */
 #include <linux/blk_types.h> /* for bio_end_io_t */
 
+/*
+ * For IAA compression batching:
+ * Maximum number of IAA acomp compress requests that will be processed
+ * in a sub-batch.
+ */
+#if defined(CONFIG_ZSWAP_STORE_BATCHING_ENABLED)
+#define SWAP_CRYPTO_SUB_BATCH_SIZE 8UL
+#else
+#define SWAP_CRYPTO_SUB_BATCH_SIZE 1UL
+#endif
+
 /* linux/mm/page_io.c */
 int sio_pool_init(void);
 struct swap_iocb;
