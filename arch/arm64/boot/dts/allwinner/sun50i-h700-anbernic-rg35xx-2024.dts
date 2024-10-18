@@ -18,6 +18,9 @@
 	compatible = "anbernic,rg35xx-2024", "allwinner,sun50i-h700";
 
 	aliases {
+		mmc0 = &mmc0;
+		mmc1 = &mmc2;
+		mmc2 = &mmc1;
 		serial0 = &uart0;
 	};
 
@@ -175,6 +178,15 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 	};
+
+	reg_vcc3v3_mmc2: regulator-vcc3v3-mmc2 {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&pio 4 4 GPIO_ACTIVE_HIGH>; /* PE4 */
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-name = "vcc3v3-mmc2";
+	};
 };
 
 &cpu0 {
@@ -186,10 +198,21 @@
 };
 
 &mmc0 {
-	vmmc-supply = <&reg_cldo3>;
-	disable-wp;
-	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>;  /* PF6 */
 	bus-width = <4>;
+	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>;  /* PF6 */
+	disable-wp;
+	no-1-8-v;
+	vmmc-supply = <&reg_cldo3>;
+	status = "okay";
+};
+
+&mmc2 {
+	bus-width = <4>;
+	cd-gpios = <&pio 4 22 GPIO_ACTIVE_LOW>; /* PE22 */
+	disable-wp;
+	no-1-8-v;
+	vmmc-supply = <&reg_vcc3v3_mmc2>;
+	vqmmc-supply = <&reg_cldo3>;
 	status = "okay";
 };
 
