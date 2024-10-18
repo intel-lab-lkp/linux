@@ -347,6 +347,8 @@ class LinuxSourceTree:
 		if filter_action:
 			args.append('kunit.filter_action=' + filter_action)
 		args.append('kunit.enable=1')
+		args.append('panic_on_warn=1')
+		args.append('panic=-1')
 
 		process = self._ops.start(args, build_dir)
 		assert process.stdout is not None  # tell mypy it's set
