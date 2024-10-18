@@ -51,6 +51,7 @@ struct acomp_req {
 struct crypto_acomp {
 	int (*compress)(struct acomp_req *req);
 	int (*decompress)(struct acomp_req *req);
+	int (*poll)(struct acomp_req *req);
 	void (*dst_free)(struct scatterlist *dst);
 	unsigned int reqsize;
 	struct crypto_tfm base;
@@ -263,6 +264,23 @@ static inline int crypto_acomp_compress(struct acomp_req *req)
 static inline int crypto_acomp_decompress(struct acomp_req *req)
 {
 	return crypto_acomp_reqtfm(req)->decompress(req);
+}
+
+/**
+ * crypto_acomp_poll() -- Invoke asynchronous poll operation
+ *
+ * Function invokes the asynchronous poll operation
+ *
+ * @req:	asynchronous request
+ *
+ * Return: zero on poll completion, -EAGAIN if not complete, or
+ *         error code in case of error
+ */
+static inline int crypto_acomp_poll(struct acomp_req *req)
+{
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
+
+	return tfm->poll(req);
 }
 
 #endif
