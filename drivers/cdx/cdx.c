@@ -268,6 +268,7 @@ static int cdx_bus_match(struct device *dev, const struct device_driver *drv)
 	const struct cdx_driver *cdx_drv = to_cdx_driver(drv);
 	const struct cdx_device_id *found_id = NULL;
 	const struct cdx_device_id *ids;
+	int ret = false;
 
 	if (cdx_dev->is_bus)
 		return false;
@@ -275,28 +276,40 @@ static int cdx_bus_match(struct device *dev, const struct device_driver *drv)
 	ids = cdx_drv->match_id_table;
 
 	/* When driver_override is set, only bind to the matching driver */
-	if (cdx_dev->driver_override && strcmp(cdx_dev->driver_override, drv->name))
-		return false;
+	device_lock(dev);
+	if (cdx_dev->driver_override && strcmp(cdx_dev->driver_override, drv->name)) {
+		ret = false;
+		goto out;
+	}
 
 	found_id = cdx_match_id(ids, cdx_dev);
-	if (!found_id)
-		return false;
+	if (!found_id) {
+		ret = false;
+		goto out;
+	}
 
 	do {
 		/*
 		 * In case override_only was set, enforce driver_override
 		 * matching.
 		 */
-		if (!found_id->override_only)
-			return true;
-		if (cdx_dev->driver_override)
-			return true;
+		if (!found_id->override_only) {
+			ret = true;
+			goto out;
+		}
+		if (cdx_dev->driver_override) {
+			ret = true;
+			goto out;
+		}
 
 		ids = found_id + 1;
 		found_id = cdx_match_id(ids, cdx_dev);
 	} while (found_id);
 
-	return false;
+	ret = false;
+out:
+	device_unlock(dev);
+	return ret;
 }
 
 static int cdx_probe(struct device *dev)
@@ -470,8 +483,12 @@ static ssize_t driver_override_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	struct cdx_device *cdx_dev = to_cdx_device(dev);
+	ssize_t len;
 
-	return sysfs_emit(buf, "%s\n", cdx_dev->driver_override);
+	device_lock(dev);
+	len = sysfs_emit(buf, "%s\n", cdx_dev->driver_override);
+	device_unlock(dev);
+	return len;
 }
 static DEVICE_ATTR_RW(driver_override);
 
