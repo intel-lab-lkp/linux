@@ -130,6 +130,20 @@ static const struct dmi_system_id dmi_lid_quirks[] = {
 		},
 		.driver_data = (void *)(long)ACPI_BUTTON_LID_INIT_OPEN,
 	},
+	
+		/*
+		 * Samsung Galaxybook 2, initial LID device
+		 * is detected as closed , thus causing suspend loop after boot.
+		 */
+	
+	{
+        	.matches = {
+            		DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+            		DMI_MATCH(DMI_PRODUCT_NAME, "750XED"),
+        	},
+        	.driver_data = (void *)(long)ACPI_BUTTON_LID_INIT_OPEN,
+    	},
+	
 	{}
 };
 
