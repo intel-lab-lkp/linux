@@ -9828,8 +9828,6 @@ void kvm_x86_vendor_exit(void)
 	if (hypervisor_is_type(X86_HYPER_MS_HYPERV))
 		clear_hv_tscchange_cb();
 #endif
-	kvm_lapic_exit();
-
 	if (!boot_cpu_has(X86_FEATURE_CONSTANT_TSC)) {
 		cpufreq_unregister_notifier(&kvmclock_cpufreq_notifier_block,
 					    CPUFREQ_TRANSITION_NOTIFIER);
@@ -14015,9 +14013,3 @@ static int __init kvm_x86_init(void)
 	return 0;
 }
 module_init(kvm_x86_init);
-
-static void __exit kvm_x86_exit(void)
-{
-	WARN_ON_ONCE(static_branch_unlikely(&kvm_has_noapic_vcpu));
-}
-module_exit(kvm_x86_exit);
