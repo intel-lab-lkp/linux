@@ -227,6 +227,131 @@ static void swap_zeromap_folio_clear(struct folio *folio)
 }
 
 /*
+ * For batching of folios in reclaim path for zswap batch compressions
+ * with Intel IAA.
+ */
+static void simc_write_in_memory_cache_complete(
+	struct swap_in_memory_cache_cb *simc,
+	struct writeback_control *wbc)
+{
+	int i;
+
+	/* All elements of a plug write batch have the same swap type. */
+	struct swap_info_struct *sis = swp_swap_info(simc->folios[0]->swap);
+
+	VM_BUG_ON(!sis);
+
+	for (i = 0; i < simc->nr_folios; ++i) {
+		struct folio *folio = simc->folios[i];
+
+		if (!simc->errors[i]) {
+			count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
+			folio_unlock(folio);
+		} else {
+			__swap_writepage(simc->folios[i], wbc);
+		}
+	}
+}
+
+void swap_write_in_memory_cache_unplug(struct swap_in_memory_cache_cb *simc,
+				       struct writeback_control *wbc)
+{
+	unsigned long pflags;
+
+	psi_memstall_enter(&pflags);
+
+	zswap_store_batch(simc);
+
+	simc_write_in_memory_cache_complete(simc, wbc);
+
+	psi_memstall_leave(&pflags);
+
+	simc->processed = true;
+}
+
+/*
+ * Only called by swap_writepage() if (wbc && wbc->swap_in_memory_cache_plug)
+ * is true i.e., from shrink_folio_list()->pageout() path.
+ */
+static bool swap_writepage_in_memory_cache(struct folio *folio,
+					   struct writeback_control *wbc)
+{
+	struct swap_in_memory_cache_cb *simc;
+	unsigned type = swp_type(folio->swap);
+	int node_id = folio_nid(folio);
+	int comp_batch_size = READ_ONCE(compress_batchsize);
+	bool ret = false;
+
+	simc = wbc->swap_in_memory_cache_plug;
+
+	if ((simc->nr_folios > 0) &&
+			((simc->type != type) || (simc->node_id != node_id) ||
+			folio_test_pmd_mappable(folio) ||
+			(simc->nr_folios == comp_batch_size))) {
+		swap_write_in_memory_cache_unplug(simc, wbc);
+		ret = true;
+		simc->next_batch_folio = folio;
+	} else {
+		simc->type = type;
+		simc->node_id = node_id;
+		simc->folios[simc->nr_folios] = folio;
+
+		/*
+		 * If zswap successfully stores a page, it should set
+		 * simc->errors[] to 0.
+		 */
+		simc->errors[simc->nr_folios] = -1;
+		simc->nr_folios++;
+	}
+
+	return ret;
+}
+
+void swap_writepage_in_memory_cache_transition(void *arg)
+{
+	struct swap_in_memory_cache_cb *simc =
+		(struct swap_in_memory_cache_cb *) arg;
+	simc->nr_folios = 0;
+	simc->processed = false;
+
+	if (simc->next_batch_folio) {
+		struct folio *folio = simc->next_batch_folio;
+		simc->folios[simc->nr_folios] = folio;
+		simc->type = swp_type(folio->swap);
+		simc->node_id = folio_nid(folio);
+		simc->next_batch_folio = NULL;
+
+		/*
+		 * If zswap successfully stores a page, it should set
+		 * simc->errors[] to 0.
+		 */
+		simc->errors[simc->nr_folios] = -1;
+		simc->nr_folios++;
+	}
+}
+
+void swap_writepage_in_memory_cache_init(void *arg)
+{
+	struct swap_in_memory_cache_cb *simc =
+		(struct swap_in_memory_cache_cb *) arg;
+
+	simc->nr_folios = 0;
+	simc->processed = false;
+	simc->next_batch_folio = NULL;
+	simc->transition = &swap_writepage_in_memory_cache_transition;
+}
+
+/*
+ * zswap batching of folios with IAA:
+ *
+ * Reclaim batching note for pmd-mappable folios:
+ * Any pmd-mappable folio in the reclaim path will be processed in a batch
+ * comprising only that folio. There will be no mixed batches containing
+ * pmd-mappable folios for batch compression with IAA.
+ * There are no restrictions with other large folios: a reclaim batch
+ * can comprise of any-order mix of non-pmd-mappable folios.
+ */
+/*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
  */
@@ -268,7 +393,32 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		 */
 		swap_zeromap_folio_clear(folio);
 	}
-	if (zswap_store(folio)) {
+
+	/*
+	 * Batching of compressions with IAA: If reclaim path pageout has
+	 * invoked swap_writepage with a wbc->swap_in_memory_cache_plug,
+	 * add the page to the plug, or invoke zswap_store_batch() if
+	 * "vm.compress-batchsize" elements have been stored in
+	 * the plug.
+	 *
+	 * If swap_writepage has been called from other kernel code without
+	 * a wbc->swap_in_memory_cache_plug, call zswap_store() with the folio
+	 * (i.e. without adding the folio to a plug for batch processing).
+	 */
+	if (wbc && wbc->swap_in_memory_cache_plug) {
+		if (!mem_cgroup_zswap_writeback_enabled(folio_memcg(folio)) &&
+			!zswap_is_enabled() &&
+			folio_memcg(folio) &&
+			!READ_ONCE(folio_memcg(folio)->zswap_writeback)) {
+			folio_mark_dirty(folio);
+			return AOP_WRITEPAGE_ACTIVATE;
+		}
+
+		if (swap_writepage_in_memory_cache(folio, wbc))
+			return AOP_PAGE_BATCH_SUCCESS;
+		else
+			return AOP_PAGE_BATCHED;
+	} else if (zswap_store(folio)) {
 		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
 		folio_unlock(folio);
 		return 0;

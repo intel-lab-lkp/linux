@@ -11,6 +11,8 @@ extern atomic_long_t zswap_stored_pages;
 
 #ifdef CONFIG_ZSWAP
 
+struct swap_in_memory_cache_cb;
+
 struct zswap_lruvec_state {
 	/*
 	 * Number of swapped in pages from disk, i.e not found in the zswap pool.
@@ -107,6 +109,15 @@ struct zswap_store_pipeline_state {
 };
 
 bool zswap_store_batching_enabled(void);
+void __zswap_store_batch(struct swap_in_memory_cache_cb *simc);
+void __zswap_store_batch_single(struct swap_in_memory_cache_cb *simc);
+static inline void zswap_store_batch(struct swap_in_memory_cache_cb *simc)
+{
+	if (zswap_store_batching_enabled())
+		__zswap_store_batch(simc);
+	else
+		__zswap_store_batch_single(simc);
+}
 unsigned long zswap_total_pages(void);
 bool zswap_store(struct folio *folio);
 bool zswap_load(struct folio *folio);
@@ -123,10 +134,15 @@ bool zswap_never_enabled(void);
 struct zswap_lruvec_state {};
 struct zswap_store_sub_batch_page {};
 struct zswap_store_pipeline_state {};
+struct swap_in_memory_cache_cb;
 
 static inline bool zswap_store_batching_enabled(void)
 {
 	return false;
+}
+
+static inline void zswap_store_batch(struct swap_in_memory_cache_cb *simc)
+{
 }
 
 static inline bool zswap_store(struct folio *folio)

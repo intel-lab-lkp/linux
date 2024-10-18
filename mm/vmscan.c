@@ -619,6 +619,13 @@ typedef enum {
 	PAGE_ACTIVATE,
 	/* folio has been sent to the disk successfully, folio is unlocked */
 	PAGE_SUCCESS,
+	/*
+	 * reclaim folio batch has been sent to swap successfully,
+	 * folios are unlocked
+	 */
+	PAGE_BATCH_SUCCESS,
+	/* folio has been added to the reclaim batch. */
+	PAGE_BATCHED,
 	/* folio is clean and locked */
 	PAGE_CLEAN,
 } pageout_t;
@@ -628,7 +635,8 @@ typedef enum {
  * Calls ->writepage().
  */
 static pageout_t pageout(struct folio *folio, struct address_space *mapping,
-			 struct swap_iocb **plug, struct list_head *folio_list)
+			 struct swap_iocb **plug, struct list_head *folio_list,
+			 struct swap_in_memory_cache_cb *imc_plug)
 {
 	/*
 	 * If the folio is dirty, only perform writeback if that write
@@ -674,6 +682,7 @@ static pageout_t pageout(struct folio *folio, struct address_space *mapping,
 			.range_end = LLONG_MAX,
 			.for_reclaim = 1,
 			.swap_plug = plug,
+			.swap_in_memory_cache_plug = imc_plug,
 		};
 
 		/*
@@ -691,6 +700,23 @@ static pageout_t pageout(struct folio *folio, struct address_space *mapping,
 		if (res == AOP_WRITEPAGE_ACTIVATE) {
 			folio_clear_reclaim(folio);
 			return PAGE_ACTIVATE;
+		}
+
+		if (res == AOP_PAGE_BATCHED)
+			return PAGE_BATCHED;
+
+		if (res == AOP_PAGE_BATCH_SUCCESS) {
+			int r;
+			for (r = 0; r < imc_plug->nr_folios; ++r) {
+				struct folio *rfolio = imc_plug->folios[r];
+				if (!folio_test_writeback(rfolio)) {
+					/* synchronous write or broken a_ops? */
+					folio_clear_reclaim(rfolio);
+				}
+				trace_mm_vmscan_write_folio(rfolio);
+				node_stat_add_folio(rfolio, NR_VMSCAN_WRITE);
+			}
+			return PAGE_BATCH_SUCCESS;
 		}
 
 		if (!folio_test_writeback(folio)) {
@@ -1035,6 +1061,12 @@ static bool may_enter_fs(struct folio *folio, gfp_t gfp_mask)
 	return !data_race(folio_swap_flags(folio) & SWP_FS_OPS);
 }
 
+static __always_inline bool reclaim_batch_being_processed(
+	struct swap_in_memory_cache_cb *imc_plug)
+{
+	return imc_plug->nr_folios && imc_plug->processed;
+}
+
 /*
  * shrink_folio_list() returns the number of reclaimed pages
  */
@@ -1049,21 +1081,53 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	unsigned int pgactivate = 0;
 	bool do_demote_pass;
 	struct swap_iocb *plug = NULL;
+	struct swap_in_memory_cache_cb imc_plug;
+	bool imc_plug_path = false;
+	struct folio *folio;
+	int r;
 
+	imc_plug.init = &swap_writepage_in_memory_cache_init;
+	imc_plug.init(&imc_plug);
 	folio_batch_init(&free_folios);
 	memset(stat, 0, sizeof(*stat));
 	cond_resched();
 	do_demote_pass = can_demote(pgdat->node_id, sc);
 
 retry:
-	while (!list_empty(folio_list)) {
+	while (!list_empty(folio_list) || (imc_plug.nr_folios && !imc_plug.processed)) {
 		struct address_space *mapping;
-		struct folio *folio;
 		enum folio_references references = FOLIOREF_RECLAIM;
 		bool dirty, writeback;
 		unsigned int nr_pages;
+		imc_plug_path = false;
 
 		cond_resched();
+
+		/* Reclaim path zswap/zram batching using IAA. */
+		if (list_empty(folio_list)) {
+			struct writeback_control wbc = {
+				.sync_mode = WB_SYNC_NONE,
+				.nr_to_write = SWAP_CLUSTER_MAX,
+				.range_start = 0,
+				.range_end = LLONG_MAX,
+				.for_reclaim = 1,
+				.swap_plug = &plug,
+				.swap_in_memory_cache_plug = &imc_plug,
+			};
+
+			swap_write_in_memory_cache_unplug(&imc_plug, &wbc);
+
+			for (r = 0; r < imc_plug.nr_folios; ++r) {
+				struct folio *rfolio = imc_plug.folios[r];
+				if (!folio_test_writeback(rfolio)) {
+					/* synchronous write or broken a_ops? */
+					folio_clear_reclaim(rfolio);
+				}
+				trace_mm_vmscan_write_folio(rfolio);
+				node_stat_add_folio(rfolio, NR_VMSCAN_WRITE);
+			}
+			goto serialize_post_batch_pageout;
+		}
 
 		folio = lru_to_folio(folio_list);
 		list_del(&folio->lru);
@@ -1363,7 +1427,7 @@ retry:
 			 * starts and then write it out here.
 			 */
 			try_to_unmap_flush_dirty();
-			switch (pageout(folio, mapping, &plug, folio_list)) {
+			switch (pageout(folio, mapping, &plug, folio_list, &imc_plug)) {
 			case PAGE_KEEP:
 				goto keep_locked;
 			case PAGE_ACTIVATE:
@@ -1377,34 +1441,66 @@ retry:
 					nr_pages = 1;
 				}
 				goto activate_locked;
+			case PAGE_BATCHED:
+				continue;
 			case PAGE_SUCCESS:
-				if (nr_pages > 1 && !folio_test_large(folio)) {
-					sc->nr_scanned -= (nr_pages - 1);
-					nr_pages = 1;
-				}
-				stat->nr_pageout += nr_pages;
-
-				if (folio_test_writeback(folio))
-					goto keep;
-				if (folio_test_dirty(folio))
-					goto keep;
-
-				/*
-				 * A synchronous write - probably a ramdisk.  Go
-				 * ahead and try to reclaim the folio.
-				 */
-				if (!folio_trylock(folio))
-					goto keep;
-				if (folio_test_dirty(folio) ||
-				    folio_test_writeback(folio))
-					goto keep_locked;
-				mapping = folio_mapping(folio);
-				fallthrough;
+				goto post_single_pageout;
+			case PAGE_BATCH_SUCCESS:
+				goto serialize_post_batch_pageout;
 			case PAGE_CLEAN:
+				goto folio_is_clean;
 				; /* try to free the folio below */
 			}
+		} else {
+			goto folio_is_clean;
 		}
 
+serialize_post_batch_pageout:
+		imc_plug_path = reclaim_batch_being_processed(&imc_plug);
+		if (!imc_plug_path) {
+			pr_err("imc_plug: type %u node_id %d \
+				nr_folios %u processed %d next_batch_folio %px",
+				imc_plug.type, imc_plug.node_id,
+				imc_plug.nr_folios, imc_plug.processed,
+				imc_plug.next_batch_folio);
+		}
+		BUG_ON(!imc_plug_path);
+		r = -1;
+
+next_folio_in_batch:
+		while (++r < imc_plug.nr_folios) {
+			folio = imc_plug.folios[r];
+			goto post_single_pageout;
+		} /* while imc_plug folios. */
+
+		imc_plug.transition(&imc_plug);
+		continue;
+
+post_single_pageout:
+		mapping = folio_mapping(folio);
+		nr_pages = folio_nr_pages(folio);
+		if (nr_pages > 1 && !folio_test_large(folio)) {
+			sc->nr_scanned -= (nr_pages - 1);
+			nr_pages = 1;
+		}
+		stat->nr_pageout += nr_pages;
+
+		if (folio_test_writeback(folio))
+			goto keep;
+		if (folio_test_dirty(folio))
+			goto keep;
+
+		/*
+		 * A synchronous write - probably a ramdisk.  Go
+		 * ahead and try to reclaim the folio.
+		 */
+		if (!folio_trylock(folio))
+			goto keep;
+		if (folio_test_dirty(folio) ||
+		    folio_test_writeback(folio))
+			goto keep_locked;
+
+folio_is_clean:
 		/*
 		 * If the folio has buffers, try to free the buffer
 		 * mappings associated with this folio. If we succeed
@@ -1444,6 +1540,8 @@ retry:
 					 * leave it off the LRU).
 					 */
 					nr_reclaimed += nr_pages;
+					if (imc_plug_path)
+						goto next_folio_in_batch;
 					continue;
 				}
 			}
@@ -1481,6 +1579,8 @@ free_it:
 			try_to_unmap_flush();
 			free_unref_folios(&free_folios);
 		}
+		if (imc_plug_path)
+			goto next_folio_in_batch;
 		continue;
 
 activate_locked_split:
@@ -1510,6 +1610,8 @@ keep:
 		list_add(&folio->lru, &ret_folios);
 		VM_BUG_ON_FOLIO(folio_test_lru(folio) ||
 				folio_test_unevictable(folio), folio);
+		if (imc_plug_path)
+			goto next_folio_in_batch;
 	}
 	/* 'folio_list' is always empty here */
 

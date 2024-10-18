@@ -1667,6 +1667,26 @@ check_old:
 }
 
 /*
+ * The batch contains <= vm.compress-batchsize nr of folios.
+ * All folios in the batch have the same swap type and folio_nid.
+ */
+void __zswap_store_batch(struct swap_in_memory_cache_cb *simc)
+{
+	__zswap_store_batch_core(simc->node_id, simc->folios,
+				 simc->errors, simc->nr_folios);
+}
+
+void __zswap_store_batch_single(struct swap_in_memory_cache_cb *simc)
+{
+	u8 i;
+
+	for (i = 0; i < simc->nr_folios; ++i) {
+		if (zswap_store(simc->folios[i]))
+			simc->errors[i] = 0;
+	}
+}
+
+/*
  * Note: If SWAP_CRYPTO_SUB_BATCH_SIZE exceeds 256, change the
  * u8 stack variables in the next several functions, to u16.
  */

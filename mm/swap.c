@@ -38,6 +38,7 @@
 #include <linux/local_lock.h>
 #include <linux/buffer_head.h>
 
+#include "swap.h"
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -46,6 +47,14 @@
 /* How many pages do we try to swap or page in/out together? As a power of 2 */
 int page_cluster;
 const int page_cluster_max = 31;
+
+/*
+ * Number of pages in a reclaim batch for pageout.
+ * If zswap is enabled, this is the batch-size for zswap
+ * compress batching of multiple any-order folios.
+ */
+int compress_batchsize;
+const int compress_batchsize_max = SWAP_CRYPTO_MAX_COMP_BATCH_SIZE;
 
 struct cpu_fbatches {
 	/*
@@ -1105,4 +1114,10 @@ void __init swap_setup(void)
 	 * Right now other parts of the system means that we
 	 * _really_ don't want to cluster much more
 	 */
+
+	/*
+	 * Initialize the number of pages in a reclaim batch
+	 * for pageout.
+	 */
+	compress_batchsize = 1;
 }

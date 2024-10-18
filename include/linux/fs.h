@@ -303,6 +303,8 @@ struct iattr {
 enum positive_aop_returns {
 	AOP_WRITEPAGE_ACTIVATE	= 0x80000,
 	AOP_TRUNCATED_PAGE	= 0x80001,
+	AOP_PAGE_BATCHED	= 0x80002,
+	AOP_PAGE_BATCH_SUCCESS	= 0x80003,
 };
 
 /*

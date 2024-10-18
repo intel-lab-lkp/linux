@@ -80,6 +80,14 @@ extern void * high_memory;
 extern int page_cluster;
 extern const int page_cluster_max;
 
+/*
+ * Compress batching of any-order folios in the reclaim path with IAA.
+ * The number of folios to batch reclaim can be set through
+ * "sysctl vm.compress-batchsize" which can be a value in [1, 32].
+ */
+extern int compress_batchsize;
+extern const int compress_batchsize_max;
+
 #ifdef CONFIG_SYSCTL
 extern int sysctl_legacy_va_layout;
 #else

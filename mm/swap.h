@@ -20,6 +20,13 @@ struct mempolicy;
 #define SWAP_CRYPTO_SUB_BATCH_SIZE 1UL
 #endif
 
+/* Set the vm.compress-batchsize limits. */
+#if defined(CONFIG_ZSWAP_STORE_BATCHING_ENABLED)
+#define SWAP_CRYPTO_MAX_COMP_BATCH_SIZE SWAP_CLUSTER_MAX
+#else
+#define SWAP_CRYPTO_MAX_COMP_BATCH_SIZE 1UL
+#endif
+
 /* linux/mm/swap_state.c, zswap.c */
 struct crypto_acomp_ctx {
 	struct crypto_acomp *acomp;
@@ -53,6 +60,20 @@ void swap_crypto_acomp_compress_batch(
 	int nr_pages,
 	struct crypto_acomp_ctx *acomp_ctx);
 
+/* linux/mm/vmscan.c, linux/mm/page_io.c, linux/mm/zswap.c */
+/* For batching of compressions in reclaim path. */
+struct swap_in_memory_cache_cb {
+	unsigned int type;
+	int node_id;
+	struct folio *folios[SWAP_CLUSTER_MAX];
+	int errors[SWAP_CLUSTER_MAX];
+	unsigned int nr_folios;
+	bool processed;
+	struct folio *next_batch_folio;
+	void (*transition)(void *);
+	void (*init)(void *);
+};
+
 /* linux/mm/page_io.c */
 int sio_pool_init(void);
 struct swap_iocb;
@@ -63,6 +84,10 @@ static inline void swap_read_unplug(struct swap_iocb *plug)
 	if (unlikely(plug))
 		__swap_read_unplug(plug);
 }
+void swap_writepage_in_memory_cache_init(void *arg);
+void swap_writepage_in_memory_cache_transition(void *arg);
+void swap_write_in_memory_cache_unplug(struct swap_in_memory_cache_cb *simc,
+				       struct writeback_control *wbc);
 void swap_write_unplug(struct swap_iocb *sio);
 int swap_writepage(struct page *page, struct writeback_control *wbc);
 void __swap_writepage(struct folio *folio, struct writeback_control *wbc);
@@ -161,6 +186,21 @@ static inline void swap_crypto_acomp_compress_batch(
 	int errors[],
 	int nr_pages,
 	struct crypto_acomp_ctx *acomp_ctx)
+{
+}
+
+struct swap_in_memory_cache_cb {};
+static void swap_writepage_in_memory_cache_init(void *arg)
+{
+}
+
+static void swap_writepage_in_memory_cache_transition(void *arg)
+{
+}
+
+static inline void swap_write_in_memory_cache_unplug(
+	struct swap_in_memory_cache_cb *simc,
+	struct writeback_control *wbc)
 {
 }
 

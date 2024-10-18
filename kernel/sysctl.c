@@ -2065,6 +2065,15 @@ static struct ctl_table vm_table[] = {
 		.extra2		= (void *)&page_cluster_max,
 	},
 	{
+		.procname	= "compress-batchsize",
+		.data		= &compress_batchsize,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ONE,
+		.extra2		= (void *)&compress_batchsize_max,
+	},
+	{
 		.procname	= "dirtytime_expire_seconds",
 		.data		= &dirtytime_expire_interval,
 		.maxlen		= sizeof(dirtytime_expire_interval),

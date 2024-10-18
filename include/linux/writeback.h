@@ -82,6 +82,11 @@ struct writeback_control {
 	/* Target list for splitting a large folio */
 	struct list_head *list;
 
+	/*
+	 * Plug for storing reclaim folios for compress batching.
+	 */
+	struct swap_in_memory_cache_cb *swap_in_memory_cache_plug;
+
 	/* internal fields used by the ->writepages implementation: */
 	struct folio_batch fbatch;
 	pgoff_t index;
