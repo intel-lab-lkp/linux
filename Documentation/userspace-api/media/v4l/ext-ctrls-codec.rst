@@ -1667,6 +1667,79 @@ enum v4l2_mpeg_video_h264_hierarchical_coding_type -
     Codecs need to always use the specified range, rather then a HW custom range.
     Applicable to encoders
 
+``V4L2_CID_MPEG_VIDEO_ROI_MODE``
+    (enum)
+
+enum v4l2_mpeg_video_roi_mode -
+    Video roi mode. Possible values are:
+
+
+
+.. flat-table::
+    :header-rows:  0
+    :stub-columns: 0
+
+    * - ``V4L2_MPEG_VIDEO_ROI_MODE_NONE``
+      - No ROI in the MPEG stream
+    * - ``V4L2_MPEG_VIDEO_ROI_MODE_RECT``
+      - Rectangle ROI mode
+    * - ``V4L2_MPEG_VIDEO_ROI_MODE_MAP``
+      - Map ROI mode
+
+``V4L2_CID_MPEG_VIDEO_ROI_RECT (struct)``
+    Select rectangular regions and specify the QP offset. The
+    struct :c:type:`v4l2_ctrl_video_region_param` provides the
+    rectangular region and the parameter to describe QP offset.
+    The maximum number of rectangular regions depends on the
+    hardware.  This control is a dynamically sized array. This
+    control is applicable when ``V4L2_CID_MPEG_VIDEO_ROI_MODE``
+    value is ``V4L2_MPEG_VIDEO_ROI_MODE_RECT``. Applicable to
+    encoders.
+
+.. c:type:: v4l2_ctrl_video_region_param
+
+.. raw:: latex
+
+    \small
+
+.. tabularcolumns:: |p{4.0cm}|p{4.0cm}|p{4.0cm}|
+
+.. flat-table:: struct v4l2_ctrl_video_region_param
+    :header-rows:  0
+    :stub-columns: 0
+    :widths:       1 1 1
+
+    * - struct :c:type:`v4l2_rect`
+      - ``rect``
+      - The rectangular region
+    * - __s32
+      - ``parameter``
+      -
+    * - __u32
+      - ``reserved[2]``
+      -
+
+.. raw:: latex
+
+    \normalsize
+
+``V4L2_CID_MPEG_VIDEO_ROI_MAP (integer)``
+    Specifies the QP offset for each block. This control is a
+    dynamically sized array. The array size can be calculated
+    from video resolution and the roi map block size which can
+    be got from ``V4L2_CID_MPEG_VIDEO_ROI_MAP_BLOCK_SIZE``. This
+    control is applicable when ``V4L2_CID_MPEG_VIDEO_ROI_MODE``
+    value is ``V4L2_MPEG_VIDEO_ROI_MODE_MAP``. Applicable to
+    encoders.
+
+``V4L2_CID_MPEG_VIDEO_ROI_MAP_BLOCK_SIZE (struct)``
+    This control returns the roi block size in pixels. The struct
+    :c:type:`v4l2_area` provides the width and height in separate
+    fields. This control is applicable when
+    ``V4L2_CID_MPEG_VIDEO_ROI_MODE`` value is
+    ``V4L2_MPEG_VIDEO_ROI_MODE_MAP``. This control depends on the
+    encoding format. Applicable to encoders.
+
 .. raw:: latex
 
     \normalsize
