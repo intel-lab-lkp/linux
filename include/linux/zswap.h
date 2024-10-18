@@ -24,6 +24,7 @@ struct zswap_lruvec_state {
 	atomic_long_t nr_disk_swapins;
 };
 
+bool zswap_store_batching_enabled(void);
 unsigned long zswap_total_pages(void);
 bool zswap_store(struct folio *folio);
 bool zswap_load(struct folio *folio);
@@ -38,6 +39,11 @@ bool zswap_never_enabled(void);
 #else
 
 struct zswap_lruvec_state {};
+
+static inline bool zswap_store_batching_enabled(void)
+{
+	return false;
+}
 
 static inline bool zswap_store(struct folio *folio)
 {

@@ -127,6 +127,15 @@ static bool zswap_shrinker_enabled = IS_ENABLED(
 		CONFIG_ZSWAP_SHRINKER_DEFAULT_ON);
 module_param_named(shrinker_enabled, zswap_shrinker_enabled, bool, 0644);
 
+/*
+ * Enable/disable batching of compressions if zswap_store is called with a
+ * large folio. If enabled, and if IAA is the zswap compressor, pages are
+ * compressed in parallel in batches of say, 8 pages.
+ * If not, every page is compressed sequentially.
+ */
+static bool __zswap_store_batching_enabled = IS_ENABLED(
+	CONFIG_ZSWAP_STORE_BATCHING_ENABLED);
+
 bool zswap_is_enabled(void)
 {
 	return zswap_enabled;
@@ -240,6 +249,11 @@ static inline struct xarray *swap_zswap_tree(swp_entry_t swp)
 #define zswap_pool_debug(msg, p)				\
 	pr_debug("%s pool %s/%s\n", msg, (p)->tfm_name,		\
 		 zpool_get_type((p)->zpool))
+
+__always_inline bool zswap_store_batching_enabled(void)
+{
+	return __zswap_store_batching_enabled;
+}
 
 /*********************************
 * pool functions

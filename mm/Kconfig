@@ -125,6 +125,18 @@ config ZSWAP_COMPRESSOR_DEFAULT
        default "zstd" if ZSWAP_COMPRESSOR_DEFAULT_ZSTD
        default ""
 
+config ZSWAP_STORE_BATCHING_ENABLED
+	bool "Batching of zswap stores with Intel IAA"
+	depends on ZSWAP && CRYPTO_DEV_IAA_CRYPTO
+	default n
+	help
+	Enables zswap_store to swapout large folios in batches of 8 pages,
+	rather than a page at a time, if the system has Intel IAA for hardware
+	acceleration of compressions. If IAA is configured as the zswap
+	compressor, this will parallelize batch compression of upto 8 pages
+	in the folio in	hardware, thereby improving large folio compression
+	throughput and reducing swapout latency.
+
 choice
 	prompt "Default allocator"
 	depends on ZSWAP
