@@ -213,6 +213,9 @@ struct gendisk {
 	u64 diskseq;
 	blk_mode_t open_mode;
 
+	int cpu_lat_limit;
+	int cpu_lat_timeout;
+
 	/*
 	 * Independent sector access ranges. This is always NULL for
 	 * devices that do not have multiple independent access ranges.
