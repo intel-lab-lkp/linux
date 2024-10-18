@@ -4074,12 +4074,13 @@ static bool can_swapin_thp(struct vm_fault *vmf, pte_t *ptep, int nr_pages)
 
 	/*
 	 * swap_read_folio() can't handle the case a large folio is hybridly
-	 * from different backends. And they are likely corner cases. Similar
-	 * things might be added once zswap support large folios.
+	 * from different backends. And they are likely corner cases.
 	 */
 	if (unlikely(swap_zeromap_batch(entry, nr_pages, NULL) != nr_pages))
 		return false;
 	if (unlikely(non_swapcache_batch(entry, nr_pages) != nr_pages))
+		return false;
+	if (unlikely(!zswap_present_test(entry, nr_pages)))
 		return false;
 
 	return true;
@@ -4125,14 +4126,6 @@ static struct folio *alloc_swap_folio(struct vm_fault *vmf)
 	 * maintain the uffd semantics.
 	 */
 	if (unlikely(userfaultfd_armed(vma)))
-		goto fallback;
-
-	/*
-	 * A large swapped out folio could be partially or fully in zswap. We
-	 * lack handling for such cases, so fallback to swapping in order-0
-	 * folio.
-	 */
-	if (!zswap_never_enabled())
 		goto fallback;
 
 	entry = pte_to_swp_entry(vmf->orig_pte);

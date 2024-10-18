@@ -1624,58 +1624,52 @@ bool zswap_present_test(swp_entry_t swp, int nr_pages)
 
 bool zswap_load(struct folio *folio)
 {
+	int nr_pages = folio_nr_pages(folio);
 	swp_entry_t swp = folio->swap;
+	unsigned int type = swp_type(swp);
 	pgoff_t offset = swp_offset(swp);
 	bool swapcache = folio_test_swapcache(folio);
-	struct xarray *tree = swap_zswap_tree(swp);
+	struct xarray *tree;
 	struct zswap_entry *entry;
+	int i;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 
 	if (zswap_never_enabled())
 		return false;
 
-	/*
-	 * Large folios should not be swapped in while zswap is being used, as
-	 * they are not properly handled. Zswap does not properly load large
-	 * folios, and a large folio may only be partially in zswap.
-	 *
-	 * Return true without marking the folio uptodate so that an IO error is
-	 * emitted (e.g. do_swap_page() will sigbus).
-	 */
-	if (WARN_ON_ONCE(folio_test_large(folio)))
-		return true;
-
-	/*
-	 * When reading into the swapcache, invalidate our entry. The
-	 * swapcache can be the authoritative owner of the page and
-	 * its mappings, and the pressure that results from having two
-	 * in-memory copies outweighs any benefits of caching the
-	 * compression work.
-	 *
-	 * (Most swapins go through the swapcache. The notable
-	 * exception is the singleton fault on SWP_SYNCHRONOUS_IO
-	 * files, which reads into a private page and may free it if
-	 * the fault fails. We remain the primary owner of the entry.)
-	 */
-	if (swapcache)
-		entry = xa_erase(tree, offset);
-	else
-		entry = xa_load(tree, offset);
-
-	if (!entry)
+	if (!zswap_present_test(folio->swap, nr_pages))
 		return false;
 
-	zswap_decompress(entry, &folio->page);
+	for (i = 0; i < nr_pages; ++i) {
+		tree = swap_zswap_tree(swp_entry(type, offset + i));
+		/*
+		 * When reading into the swapcache, invalidate our entry. The
+		 * swapcache can be the authoritative owner of the page and
+		 * its mappings, and the pressure that results from having two
+		 * in-memory copies outweighs any benefits of caching the
+		 * compression work.
+		 *
+		 * (Swapins with swap count > 1 go through the swapcache.
+		 * For swap count == 1, the swapcache is skipped and we
+		 * remain the primary owner of the entry.)
+		 */
+		if (swapcache)
+			entry = xa_erase(tree, offset + i);
+		else
+			entry = xa_load(tree, offset + i);
 
-	count_vm_event(ZSWPIN);
-	if (entry->objcg)
-		count_objcg_events(entry->objcg, ZSWPIN, 1);
+		zswap_decompress(entry, folio_page(folio, i));
 
-	if (swapcache) {
-		zswap_entry_free(entry);
-		folio_mark_dirty(folio);
+		if (entry->objcg)
+			count_objcg_events(entry->objcg, ZSWPIN, 1);
+		if (swapcache)
+			zswap_entry_free(entry);
 	}
+
+	count_vm_events(ZSWPIN, nr_pages);
+	if (swapcache)
+		folio_mark_dirty(folio);
 
 	folio_mark_uptodate(folio);
 	return true;
