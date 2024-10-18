@@ -161,9 +161,10 @@ for details) through the following functions::
   __s32 i2c_smbus_process_call(int file, __u8 command, __u16 value);
   __s32 i2c_smbus_block_process_call(int file, __u8 command, __u8 length,
                                      __u8 *values);
-  __s32 i2c_smbus_read_block_data(int file, __u8 command, __u8 *values);
+  __s32 i2c_smbus_read_block_data(int file, __u8 command, __u8 length,
+                                  __u8 *values);
   __s32 i2c_smbus_write_block_data(int file, __u8 command, __u8 length,
-                                   __u8 *values);
+                                   const __u8 *values);
 
 All these transactions return -1 on failure; you can read errno to see
 what happened. The 'write' transactions return 0 on success; the
