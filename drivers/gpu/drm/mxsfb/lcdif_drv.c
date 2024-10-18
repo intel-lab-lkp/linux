@@ -16,7 +16,9 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_client_setup.h>
+#include <drm/drm_connector.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_fbdev_dma.h>
@@ -56,6 +58,7 @@ static int lcdif_attach_bridge(struct lcdif_drm_private *lcdif)
 		struct device_node *remote;
 		struct of_endpoint of_ep;
 		struct drm_encoder *encoder;
+		struct drm_connector *connector;
 
 		remote = of_graph_get_remote_port_parent(ep);
 		if (!of_device_is_available(remote)) {
@@ -97,13 +100,25 @@ static int lcdif_attach_bridge(struct lcdif_drm_private *lcdif)
 			return ret;
 		}
 
-		ret = drm_bridge_attach(encoder, bridge, NULL, 0);
+		ret = drm_bridge_attach(encoder, bridge, NULL,
+					DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 		if (ret) {
 			of_node_put(ep);
 			return dev_err_probe(dev, ret,
 					     "Failed to attach bridge for endpoint%u\n",
 					     of_ep.id);
 		}
+
+		connector = drm_bridge_connector_init(lcdif->drm, encoder);
+		if (IS_ERR(connector)) {
+			ret = PTR_ERR(connector);
+			dev_err(dev, "Failed to initialize bridge connector: %d\n",
+				ret);
+			of_node_put(ep);
+			return ret;
+		}
+
+		drm_connector_attach_encoder(connector, encoder);
 	}
 
 	return 0;
