@@ -225,7 +225,6 @@ extern void warn_bogus_irq_restore(void);
 		raw_safe_halt();		\
 	} while (0)
 
-
 #else /* !CONFIG_TRACE_IRQFLAGS */
 
 #define local_irq_enable()	do { raw_local_irq_enable(); } while (0)
@@ -253,6 +252,37 @@ extern void warn_bogus_irq_restore(void);
 #else /* !CONFIG_TRACE_IRQFLAGS_SUPPORT */
 #define irqs_disabled()	raw_irqs_disabled()
 #endif /* CONFIG_TRACE_IRQFLAGS_SUPPORT */
+
+DECLARE_PER_CPU(struct interrupt_disable_state, local_interrupt_disable_state);
+
+static inline void local_interrupt_disable(void)
+{
+	unsigned long flags;
+	long new_count;
+
+	local_irq_save(flags);
+
+	new_count = raw_cpu_inc_return(local_interrupt_disable_state.count);
+
+	if (new_count == 1)
+		raw_cpu_write(local_interrupt_disable_state.flags, flags);
+}
+
+static inline void local_interrupt_enable(void)
+{
+	long new_count;
+
+	new_count = raw_cpu_dec_return(local_interrupt_disable_state.count);
+
+	if (new_count == 0) {
+		unsigned long flags;
+
+		flags = raw_cpu_read(local_interrupt_disable_state.flags);
+		local_irq_restore(flags);
+	} else if (unlikely(new_count < 0)) {
+		/* XXX: BUG() here? */
+	}
+}
 
 #define irqs_disabled_flags(flags) raw_irqs_disabled_flags(flags)
 
