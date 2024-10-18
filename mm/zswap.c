@@ -1641,12 +1641,21 @@ void zswap_invalidate(swp_entry_t swp)
 	struct xarray *tree = swap_zswap_tree(swp);
 	struct zswap_entry *entry;
 
+	XA_STATE(xas, tree, offset);
+
 	if (xa_empty(tree))
 		return;
 
-	entry = xa_erase(tree, offset);
-	if (entry)
+	rcu_read_lock();
+	entry = xas_load(&xas);
+	if (entry) {
+		xas_lock(&xas);
+		WARN_ON_ONCE(xas_reload(&xas) != entry);
+		xas_store(&xas, NULL);
+		xas_unlock(&xas);
 		zswap_entry_free(entry);
+	}
+	rcu_read_unlock();
 }
 
 int zswap_swapon(int type, unsigned long nr_pages)
