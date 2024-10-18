@@ -237,13 +237,15 @@ static int detach_nvdimm(struct device *dev, void *data)
 	if (!is_cxl_nvdimm(dev))
 		return 0;
 
-	scoped_guard(device, dev) {
-		if (dev->driver) {
-			cxl_nvd = to_cxl_nvdimm(dev);
-			if (cxl_nvd->cxlmd && cxl_nvd->cxlmd->cxl_nvb == data)
-				release = true;
-		}
-	}
+	device_lock(dev);
+	if (!dev->driver)
+		goto out;
+
+	cxl_nvd = to_cxl_nvdimm(dev);
+	if (cxl_nvd->cxlmd && cxl_nvd->cxlmd->cxl_nvb == data)
+		release = true;
+out:
+	device_unlock(dev);
 	if (release)
 		device_release_driver(dev);
 	return 0;

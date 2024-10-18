@@ -168,17 +168,19 @@ static int cxl_mem_probe(struct device *dev)
 
 	cxl_dport_init_ras_reporting(dport, dev);
 
-	scoped_guard(device, endpoint_parent) {
-		if (!endpoint_parent->driver) {
-			dev_err(dev, "CXL port topology %s not enabled\n",
-				dev_name(endpoint_parent));
-			return -ENXIO;
-		}
-
-		rc = devm_cxl_add_endpoint(endpoint_parent, cxlmd, dport);
-		if (rc)
-			return rc;
+	device_lock(endpoint_parent);
+	if (!endpoint_parent->driver) {
+		dev_err(dev, "CXL port topology %s not enabled\n",
+			dev_name(endpoint_parent));
+		rc = -ENXIO;
+		goto unlock;
 	}
+
+	rc = devm_cxl_add_endpoint(endpoint_parent, cxlmd, dport);
+unlock:
+	device_unlock(endpoint_parent);
+	if (rc)
+		return rc;
 
 	/*
 	 * The kernel may be operating out of CXL memory on this device,
