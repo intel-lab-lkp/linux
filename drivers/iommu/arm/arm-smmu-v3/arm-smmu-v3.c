@@ -1841,11 +1841,8 @@ static void arm_smmu_dump_event(struct arm_smmu_event *evt, struct ratelimit_sta
 /* IRQ and event handlers */
 static int arm_smmu_handle_evt(struct arm_smmu_event *event)
 {
-	int ret = 0;
 	u32 perm = 0;
-	struct arm_smmu_master *master;
 	struct iopf_fault fault_evt = { };
-	struct arm_smmu_device *smmu = event->smmu;
 	struct iommu_fault *flt = &fault_evt.fault;
 
 	switch (event->id) {
@@ -1885,17 +1882,14 @@ static int arm_smmu_handle_evt(struct arm_smmu_event *event)
 		flt->prm.pasid = event->ssid;
 	}
 
-	mutex_lock(&smmu->streams_mutex);
-	master = arm_smmu_find_master(smmu, event->sid);
-	if (!master) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
+	/*
+	 * If the master wasn't found while reading the event or
+	 * get_device() returned NULL, we shouldn't report a fault.
+	 */
+	if (!event->dev)
+		return -EINVAL;
 
-	ret = iommu_report_device_fault(master->dev, &fault_evt);
-out_unlock:
-	mutex_unlock(&smmu->streams_mutex);
-	return ret;
+	return iommu_report_device_fault(event->dev, &fault_evt);
 }
 
 static void arm_smmu_get_event_from_raw(struct arm_smmu_device *smmu,
