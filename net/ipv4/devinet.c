@@ -756,7 +756,8 @@ static void check_lifetime(struct work_struct *work)
 		rcu_read_unlock();
 		if (!change_needed)
 			continue;
-		rtnl_lock();
+
+		rtnl_net_lock(net);
 		hlist_for_each_entry_safe(ifa, n, head, addr_lst) {
 			unsigned long age;
 
@@ -773,7 +774,7 @@ static void check_lifetime(struct work_struct *work)
 				struct in_ifaddr *tmp;
 
 				ifap = &ifa->ifa_dev->ifa_list;
-				tmp = rtnl_dereference(*ifap);
+				tmp = rtnl_net_dereference(net, *ifap);
 				while (tmp) {
 					if (tmp == ifa) {
 						inet_del_ifa(ifa->ifa_dev,
@@ -781,7 +782,7 @@ static void check_lifetime(struct work_struct *work)
 						break;
 					}
 					ifap = &tmp->ifa_next;
-					tmp = rtnl_dereference(*ifap);
+					tmp = rtnl_net_dereference(net, *ifap);
 				}
 			} else if (ifa->ifa_preferred_lft !=
 				   INFINITY_LIFE_TIME &&
@@ -791,7 +792,7 @@ static void check_lifetime(struct work_struct *work)
 				rtmsg_ifa(RTM_NEWADDR, ifa, NULL, 0);
 			}
 		}
-		rtnl_unlock();
+		rtnl_net_unlock(net);
 	}
 
 	next_sec = round_jiffies_up(next);
