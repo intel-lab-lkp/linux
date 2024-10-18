@@ -3482,7 +3482,19 @@ static int test_acomp(struct crypto_acomp *tfm,
 		acomp_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
 					   crypto_req_done, &wait);
 
-		ret = crypto_wait_req(crypto_acomp_compress(req), &wait);
+		if (tfm->poll) {
+			ret = crypto_acomp_compress(req);
+			if (ret == -EINPROGRESS) {
+				do {
+					ret = crypto_acomp_poll(req);
+					if (ret && ret != -EAGAIN)
+						break;
+				} while (ret);
+			}
+		} else {
+			ret = crypto_wait_req(crypto_acomp_compress(req), &wait);
+		}
+
 		if (ret) {
 			pr_err("alg: acomp: compression failed on test %d for %s: ret=%d\n",
 			       i + 1, algo, -ret);
@@ -3498,7 +3510,19 @@ static int test_acomp(struct crypto_acomp *tfm,
 		crypto_init_wait(&wait);
 		acomp_request_set_params(req, &src, &dst, ilen, dlen);
 
-		ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+		if (tfm->poll) {
+			ret = crypto_acomp_decompress(req);
+			if (ret == -EINPROGRESS) {
+				do {
+					ret = crypto_acomp_poll(req);
+					if (ret && ret != -EAGAIN)
+						break;
+				} while (ret);
+			}
+		} else {
+			ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+		}
+
 		if (ret) {
 			pr_err("alg: acomp: compression failed on test %d for %s: ret=%d\n",
 			       i + 1, algo, -ret);
@@ -3531,7 +3555,19 @@ static int test_acomp(struct crypto_acomp *tfm,
 		sg_init_one(&src, input_vec, ilen);
 		acomp_request_set_params(req, &src, NULL, ilen, 0);
 
-		ret = crypto_wait_req(crypto_acomp_compress(req), &wait);
+		if (tfm->poll) {
+			ret = crypto_acomp_compress(req);
+			if (ret == -EINPROGRESS) {
+				do {
+					ret = crypto_acomp_poll(req);
+					if (ret && ret != -EAGAIN)
+						break;
+				} while (ret);
+			}
+		} else {
+			ret = crypto_wait_req(crypto_acomp_compress(req), &wait);
+		}
+
 		if (ret) {
 			pr_err("alg: acomp: compression failed on NULL dst buffer test %d for %s: ret=%d\n",
 			       i + 1, algo, -ret);
@@ -3574,7 +3610,19 @@ static int test_acomp(struct crypto_acomp *tfm,
 		acomp_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
 					   crypto_req_done, &wait);
 
-		ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+		if (tfm->poll) {
+			ret = crypto_acomp_decompress(req);
+			if (ret == -EINPROGRESS) {
+				do {
+					ret = crypto_acomp_poll(req);
+					if (ret && ret != -EAGAIN)
+						break;
+				} while (ret);
+			}
+		} else {
+			ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+		}
+
 		if (ret) {
 			pr_err("alg: acomp: decompression failed on test %d for %s: ret=%d\n",
 			       i + 1, algo, -ret);
@@ -3606,7 +3654,19 @@ static int test_acomp(struct crypto_acomp *tfm,
 		crypto_init_wait(&wait);
 		acomp_request_set_params(req, &src, NULL, ilen, 0);
 
-		ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+		if (tfm->poll) {
+			ret = crypto_acomp_decompress(req);
+			if (ret == -EINPROGRESS) {
+				do {
+					ret = crypto_acomp_poll(req);
+					if (ret && ret != -EAGAIN)
+						break;
+				} while (ret);
+			}
+		} else {
+			ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+		}
+
 		if (ret) {
 			pr_err("alg: acomp: decompression failed on NULL dst buffer test %d for %s: ret=%d\n",
 			       i + 1, algo, -ret);
