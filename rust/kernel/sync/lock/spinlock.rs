@@ -94,6 +94,7 @@ unsafe impl super::Backend for SpinLockBackend {
     type State = bindings::spinlock_t;
     type GuardState = ();
     type Context<'a> = ();
+    type BackendInContext = ();
 
     unsafe fn init(
         ptr: *mut Self::State,
@@ -146,6 +147,7 @@ pub use new_spinlock_irq;
 ///
 /// ```
 /// use kernel::sync::{new_spinlock_irq, SpinLockIrq};
+/// use kernel::interrupt::InterruptDisabled;
 ///
 /// struct Inner {
 ///     a: u32,
@@ -168,6 +170,12 @@ pub use new_spinlock_irq;
 ///     }
 /// }
 ///
+/// // Accessing an `Example` from a function that can only be called in no-irq contexts
+/// fn noirq_work(e: &Example, irq: &InterruptDisabled) {
+///     assert_eq!(e.c, 10);
+///     assert_eq!(e.d.lock_with(irq).a, 20);
+/// }
+///
 /// // Allocate a boxed `Example`
 /// let e = Box::pin_init(Example::new(), GFP_KERNEL)?;
 ///
@@ -186,6 +194,7 @@ unsafe impl super::Backend for SpinLockIrqBackend {
     type State = bindings::spinlock_t;
     type GuardState = ();
     type Context<'a> = &'a InterruptDisabled;
+    type BackendInContext = SpinLockBackend;
 
     unsafe fn init(
         ptr: *mut Self::State,

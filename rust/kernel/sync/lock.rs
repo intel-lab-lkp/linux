@@ -24,10 +24,14 @@ pub mod spinlock;
 ///   is owned, that is, between calls to [`lock`] and [`unlock`].
 /// - Implementers must also ensure that [`relock`] uses the same locking method as the original
 ///   lock operation.
+/// - Implementers must ensure if [`BackendInContext`] is a [`Backend`], it's safe to acquire lock
+///   under the [`Context`], the [`State`] of two backends must be the same.
 ///
 /// [`lock`]: Backend::lock
 /// [`unlock`]: Backend::unlock
 /// [`relock`]: Backend::relock
+/// [`BackendInContext`]: Backend::BackendInContext
+/// [`Context`]: Backend::Context
 pub unsafe trait Backend {
     /// The state required by the lock.
     type State;
@@ -40,6 +44,9 @@ pub unsafe trait Backend {
 
     /// The context which can be provided to acquire the lock with a different backend.
     type Context<'a>;
+
+    /// The alternative backend we can use if a [`Context`] is provided.
+    type BackendInContext: Sized;
 
     /// Initialises the lock.
     ///
@@ -125,8 +132,22 @@ impl<T, B: Backend> Lock<T, B> {
 impl<T: ?Sized, B: Backend> Lock<T, B> {
     /// Acquires the lock with the given context and gives the caller access to the data protected
     /// by it.
-    pub fn lock_with<'a>(&'a self, _context: B::Context<'a>) -> Guard<'a, T, B> {
-        todo!()
+    pub fn lock_with<'a>(&'a self, _context: B::Context<'a>) -> Guard<'a, T, B::BackendInContext>
+    where
+        B::BackendInContext: Backend,
+    {
+        // SAFETY: Per the safety guarantee of `Backend`, if `B::BackendIncontext` and `B` should
+        // have the same state, therefore the layout of the lock is the same so it's safe the
+        // convert one to another.
+        let lock = unsafe { &*(self as *const _ as *const Lock<T, B::BackendInContext>) };
+        // SAFETY: The constructor of the type calls `init`, so the existence of the object proves
+        // that `init` was called. Plus the safety guarantee of `Backend` guarantees that `B::state`
+        // is the same as `B::BackendInContext::state`, also it's safe to call another backend
+        // because there is `B::Context<'a>`.
+        let state = unsafe { B::BackendInContext::lock(lock.state.get()) };
+
+        // SAFETY: The lock was just acquired.
+        unsafe { Guard::new(lock, state) }
     }
 
     /// Acquires the lock and gives the caller access to the data protected by it.
