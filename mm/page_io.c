@@ -620,6 +620,7 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 		folio_unlock(folio);
 		goto finish;
 	} else if (zswap_load(folio)) {
+		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPIN);
 		folio_unlock(folio);
 		goto finish;
 	}
