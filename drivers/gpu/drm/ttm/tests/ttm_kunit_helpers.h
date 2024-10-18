@@ -52,4 +52,9 @@ int ttm_test_devices_init(struct kunit *test);
 int ttm_test_devices_all_init(struct kunit *test);
 void ttm_test_devices_fini(struct kunit *test);
 
+int ttm_tt_init_kunit(struct kunit *test,
+		      struct ttm_tt *ttm, struct ttm_buffer_object *bo,
+		      uint32_t page_flags, enum ttm_caching caching,
+		      unsigned long extra_pages);
+
 #endif // TTM_KUNIT_HELPERS_H

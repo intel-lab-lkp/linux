@@ -301,5 +301,27 @@ void ttm_test_devices_fini(struct kunit *test)
 }
 EXPORT_SYMBOL_GPL(ttm_test_devices_fini);
 
+static void kunit_action_ttm_tt_fini(void *ptr)
+{
+	struct ttm_tt *ttm = ptr;
+
+	ttm_tt_fini(ttm);
+}
+
+int ttm_tt_init_kunit(struct kunit *test,
+		      struct ttm_tt *ttm, struct ttm_buffer_object *bo,
+		      uint32_t page_flags, enum ttm_caching caching,
+		      unsigned long extra_pages)
+{
+	int ret;
+
+	ret = ttm_tt_init(ttm, bo, page_flags, caching, extra_pages);
+	if (ret)
+		return ret;
+
+	return kunit_add_action_or_reset(test, kunit_action_ttm_tt_fini, ttm);
+}
+EXPORT_SYMBOL(ttm_tt_init_kunit);
+
 MODULE_DESCRIPTION("TTM KUnit test helper functions");
 MODULE_LICENSE("GPL and additional rights");

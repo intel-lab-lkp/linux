@@ -52,7 +52,7 @@ static void ttm_tt_init_basic(struct kunit *test)
 
 	bo = ttm_bo_kunit_init(test, test->priv, params->size, NULL);
 
-	err = ttm_tt_init(tt, bo, page_flags, caching, extra_pages);
+	err = ttm_tt_init_kunit(test, tt, bo, page_flags, caching, extra_pages);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	KUNIT_ASSERT_EQ(test, tt->num_pages, num_pages + extra_pages);
@@ -81,7 +81,7 @@ static void ttm_tt_init_misaligned(struct kunit *test)
 	/* Make the object size misaligned */
 	bo->base.size += 1;
 
-	err = ttm_tt_init(tt, bo, 0, caching, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, caching, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	KUNIT_ASSERT_EQ(test, tt->num_pages, num_pages);
@@ -99,7 +99,7 @@ static void ttm_tt_fini_basic(struct kunit *test)
 
 	bo = ttm_bo_kunit_init(test, test->priv, BO_SIZE, NULL);
 
-	err = ttm_tt_init(tt, bo, 0, caching, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, caching, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 	KUNIT_ASSERT_NOT_NULL(test, tt->pages);
 
@@ -140,7 +140,7 @@ static void ttm_tt_fini_shmem(struct kunit *test)
 
 	bo = ttm_bo_kunit_init(test, test->priv, BO_SIZE, NULL);
 
-	err = ttm_tt_init(tt, bo, 0, caching, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, caching, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	shmem = shmem_file_setup("ttm swap", BO_SIZE, 0);
@@ -197,7 +197,7 @@ static void ttm_tt_create_ttm_exists(struct kunit *test)
 
 	bo = ttm_bo_kunit_init(test, test->priv, BO_SIZE, NULL);
 
-	err = ttm_tt_init(tt, bo, 0, caching, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, caching, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 	bo->ttm = tt;
 
@@ -280,7 +280,7 @@ static void ttm_tt_populate_populated_ttm(struct kunit *test)
 	tt = kunit_kzalloc(test, sizeof(*tt), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, tt);
 
-	err = ttm_tt_init(tt, bo, 0, ttm_cached, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, ttm_cached, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_tt_populate(devs->ttm_dev, tt, &ctx);
@@ -304,7 +304,7 @@ static void ttm_tt_unpopulate_basic(struct kunit *test)
 	tt = kunit_kzalloc(test, sizeof(*tt), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, tt);
 
-	err = ttm_tt_init(tt, bo, 0, ttm_cached, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, ttm_cached, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_tt_populate(devs->ttm_dev, tt, &ctx);
@@ -327,7 +327,7 @@ static void ttm_tt_unpopulate_empty_ttm(struct kunit *test)
 	tt = kunit_kzalloc(test, sizeof(*tt), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, tt);
 
-	err = ttm_tt_init(tt, bo, 0, ttm_cached, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, ttm_cached, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	ttm_tt_unpopulate(devs->ttm_dev, tt);
@@ -348,7 +348,7 @@ static void ttm_tt_swapin_basic(struct kunit *test)
 	tt = kunit_kzalloc(test, sizeof(*tt), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, tt);
 
-	err = ttm_tt_init(tt, bo, 0, ttm_cached, 0);
+	err = ttm_tt_init_kunit(test, tt, bo, 0, ttm_cached, 0);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	err = ttm_tt_populate(devs->ttm_dev, tt, &ctx);
