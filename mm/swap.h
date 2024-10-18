@@ -7,6 +7,7 @@ struct mempolicy;
 #ifdef CONFIG_SWAP
 #include <linux/swapops.h> /* for swp_offset */
 #include <linux/blk_types.h> /* for bio_end_io_t */
+#include <linux/crypto.h>
 
 /*
  * For IAA compression batching:
@@ -18,6 +19,39 @@ struct mempolicy;
 #else
 #define SWAP_CRYPTO_SUB_BATCH_SIZE 1UL
 #endif
+
+/* linux/mm/swap_state.c, zswap.c */
+struct crypto_acomp_ctx {
+	struct crypto_acomp *acomp;
+	struct acomp_req *req[SWAP_CRYPTO_SUB_BATCH_SIZE];
+	u8 *buffer[SWAP_CRYPTO_SUB_BATCH_SIZE];
+	struct crypto_wait wait;
+	struct mutex mutex;
+	bool is_sleepable;
+};
+
+/**
+ * This API provides IAA compress batching functionality for use by swap
+ * modules.
+ * The acomp_ctx mutex should be locked/unlocked before/after calling this
+ * procedure.
+ *
+ * @pages: Pages to be compressed.
+ * @dsts: Pre-allocated destination buffers to store results of IAA compression.
+ * @dlens: Will contain the compressed lengths.
+ * @errors: Will contain a 0 if the page was successfully compressed, or a
+ *          non-0 error value to be processed by the calling function.
+ * @nr_pages: The number of pages, up to SWAP_CRYPTO_SUB_BATCH_SIZE,
+ *            to be compressed.
+ * @acomp_ctx: The acomp context for iaa_crypto/other compressor.
+ */
+void swap_crypto_acomp_compress_batch(
+	struct page *pages[],
+	u8 *dsts[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_pages,
+	struct crypto_acomp_ctx *acomp_ctx);
 
 /* linux/mm/page_io.c */
 int sio_pool_init(void);
@@ -119,6 +153,17 @@ static inline int swap_zeromap_batch(swp_entry_t entry, int max_nr,
 
 #else /* CONFIG_SWAP */
 struct swap_iocb;
+struct crypto_acomp_ctx {};
+static inline void swap_crypto_acomp_compress_batch(
+	struct page *pages[],
+	u8 *dsts[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_pages,
+	struct crypto_acomp_ctx *acomp_ctx)
+{
+}
+
 static inline void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 {
 }

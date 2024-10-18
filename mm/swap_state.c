@@ -23,6 +23,8 @@
 #include <linux/swap_slots.h>
 #include <linux/huge_mm.h>
 #include <linux/shmem_fs.h>
+#include <linux/scatterlist.h>
+#include <crypto/acompress.h>
 #include "internal.h"
 #include "swap.h"
 
@@ -741,6 +743,119 @@ void exit_swap_address_space(unsigned int type)
 	nr_swapper_spaces[type] = 0;
 	swapper_spaces[type] = NULL;
 }
+
+#ifdef CONFIG_SWAP
+
+/**
+ * This API provides IAA compress batching functionality for use by swap
+ * modules.
+ * The acomp_ctx mutex should be locked/unlocked before/after calling this
+ * procedure.
+ *
+ * @pages: Pages to be compressed.
+ * @dsts: Pre-allocated destination buffers to store results of IAA compression.
+ * @dlens: Will contain the compressed lengths.
+ * @errors: Will contain a 0 if the page was successfully compressed, or a
+ *          non-0 error value to be processed by the calling function.
+ * @nr_pages: The number of pages, up to SWAP_CRYPTO_SUB_BATCH_SIZE,
+ *            to be compressed.
+ * @acomp_ctx: The acomp context for iaa_crypto/other compressor.
+ */
+void swap_crypto_acomp_compress_batch(
+	struct page *pages[],
+	u8 *dsts[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_pages,
+	struct crypto_acomp_ctx *acomp_ctx)
+{
+	struct scatterlist inputs[SWAP_CRYPTO_SUB_BATCH_SIZE];
+	struct scatterlist outputs[SWAP_CRYPTO_SUB_BATCH_SIZE];
+	bool compressions_done = false;
+	int i, j;
+
+	BUG_ON(nr_pages > SWAP_CRYPTO_SUB_BATCH_SIZE);
+
+	/*
+	 * Prepare and submit acomp_reqs to IAA.
+	 * IAA will process these compress jobs in parallel in async mode.
+	 * If the compressor does not support a poll() method, or if IAA is
+	 * used in sync mode, the jobs will be processed sequentially using
+	 * acomp_ctx->req[0] and acomp_ctx->wait.
+	 */
+	for (i = 0; i < nr_pages; ++i) {
+		j = acomp_ctx->acomp->poll ? i : 0;
+		sg_init_table(&inputs[i], 1);
+		sg_set_page(&inputs[i], pages[i], PAGE_SIZE, 0);
+
+		/*
+		 * Each acomp_ctx->buffer[] is of size (PAGE_SIZE * 2).
+		 * Reflect same in sg_list.
+		 */
+		sg_init_one(&outputs[i], dsts[i], PAGE_SIZE * 2);
+		acomp_request_set_params(acomp_ctx->req[j], &inputs[i],
+					 &outputs[i], PAGE_SIZE, dlens[i]);
+
+		/*
+		 * If the crypto_acomp provides an asynchronous poll()
+		 * interface, submit the request to the driver now, and poll for
+		 * a completion status later, after all descriptors have been
+		 * submitted. If the crypto_acomp does not provide a poll()
+		 * interface, submit the request and wait for it to complete,
+		 * i.e., synchronously, before moving on to the next request.
+		 */
+		if (acomp_ctx->acomp->poll) {
+			errors[i] = crypto_acomp_compress(acomp_ctx->req[j]);
+
+			if (errors[i] != -EINPROGRESS)
+				errors[i] = -EINVAL;
+			else
+				errors[i] = -EAGAIN;
+		} else {
+			errors[i] = crypto_wait_req(
+					      crypto_acomp_compress(acomp_ctx->req[j]),
+					      &acomp_ctx->wait);
+			if (!errors[i])
+				dlens[i] = acomp_ctx->req[j]->dlen;
+		}
+	}
+
+	/*
+	 * If not doing async compressions, the batch has been processed at
+	 * this point and we can return.
+	 */
+	if (!acomp_ctx->acomp->poll)
+		return;
+
+	/*
+	 * Poll for and process IAA compress job completions
+	 * in out-of-order manner.
+	 */
+	while (!compressions_done) {
+		compressions_done = true;
+
+		for (i = 0; i < nr_pages; ++i) {
+			/*
+			 * Skip, if the compression has already completed
+			 * successfully or with an error.
+			 */
+			if (errors[i] != -EAGAIN)
+				continue;
+
+			errors[i] = crypto_acomp_poll(acomp_ctx->req[i]);
+
+			if (errors[i]) {
+				if (errors[i] == -EAGAIN)
+					compressions_done = false;
+			} else {
+				dlens[i] = acomp_ctx->req[i]->dlen;
+			}
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(swap_crypto_acomp_compress_batch);
+
+#endif /* CONFIG_SWAP */
 
 static int swap_vma_ra_win(struct vm_fault *vmf, unsigned long *start,
 			   unsigned long *end)

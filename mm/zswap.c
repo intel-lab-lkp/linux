@@ -150,15 +150,6 @@ bool zswap_never_enabled(void)
 * data structures
 **********************************/
 
-struct crypto_acomp_ctx {
-	struct crypto_acomp *acomp;
-	struct acomp_req *req[SWAP_CRYPTO_SUB_BATCH_SIZE];
-	u8 *buffer[SWAP_CRYPTO_SUB_BATCH_SIZE];
-	struct crypto_wait wait;
-	struct mutex mutex;
-	bool is_sleepable;
-};
-
 /*
  * The lock ordering is zswap_tree.lock -> zswap_pool.lru_lock.
  * The only case where lru_lock is not acquired while holding tree.lock is
