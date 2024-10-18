@@ -910,18 +910,34 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 	acomp_request_set_params(acomp_ctx->req, &input, &output, PAGE_SIZE, dlen);
 
 	/*
-	 * it maybe looks a little bit silly that we send an asynchronous request,
-	 * then wait for its completion synchronously. This makes the process look
-	 * synchronous in fact.
-	 * Theoretically, acomp supports users send multiple acomp requests in one
-	 * acomp instance, then get those requests done simultaneously. but in this
-	 * case, zswap actually does store and load page by page, there is no
-	 * existing method to send the second page before the first page is done
-	 * in one thread doing zwap.
-	 * but in different threads running on different cpu, we have different
-	 * acomp instance, so multiple threads can do (de)compression in parallel.
+	 * If the crypto_acomp provides an asynchronous poll() interface,
+	 * submit the descriptor and poll for a completion status.
+	 *
+	 * It maybe looks a little bit silly that we send an asynchronous
+	 * request, then wait for its completion in a busy-wait poll loop, or,
+	 * synchronously. This makes the process look synchronous in fact.
+	 * Theoretically, acomp supports users send multiple acomp requests in
+	 * one acomp instance, then get those requests done simultaneously.
+	 * But in this case, zswap actually does store and load page by page,
+	 * there is no existing method to send the second page before the
+	 * first page is done in one thread doing zswap.
+	 * But in different threads running on different cpu, we have different
+	 * acomp instance, so multiple threads can do (de)compression in
+	 * parallel.
 	 */
-	comp_ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req), &acomp_ctx->wait);
+	if (acomp_ctx->acomp->poll) {
+		comp_ret = crypto_acomp_compress(acomp_ctx->req);
+		if (comp_ret == -EINPROGRESS) {
+			do {
+				comp_ret = crypto_acomp_poll(acomp_ctx->req);
+				if (comp_ret && comp_ret != -EAGAIN)
+					break;
+			} while (comp_ret);
+		}
+	} else {
+		comp_ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req), &acomp_ctx->wait);
+	}
+
 	dlen = acomp_ctx->req->dlen;
 	if (comp_ret)
 		goto unlock;
@@ -959,6 +975,7 @@ static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 	struct scatterlist input, output;
 	struct crypto_acomp_ctx *acomp_ctx;
 	u8 *src;
+	int ret;
 
 	acomp_ctx = raw_cpu_ptr(entry->pool->acomp_ctx);
 	mutex_lock(&acomp_ctx->mutex);
@@ -984,7 +1001,17 @@ static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 	sg_init_table(&output, 1);
 	sg_set_folio(&output, folio, PAGE_SIZE, 0);
 	acomp_request_set_params(acomp_ctx->req, &input, &output, entry->length, PAGE_SIZE);
-	BUG_ON(crypto_wait_req(crypto_acomp_decompress(acomp_ctx->req), &acomp_ctx->wait));
+	if (acomp_ctx->acomp->poll) {
+		ret = crypto_acomp_decompress(acomp_ctx->req);
+		if (ret == -EINPROGRESS) {
+			do {
+				ret = crypto_acomp_poll(acomp_ctx->req);
+				BUG_ON(ret && ret != -EAGAIN);
+			} while (ret);
+		}
+	} else {
+		BUG_ON(crypto_wait_req(crypto_acomp_decompress(acomp_ctx->req), &acomp_ctx->wait));
+	}
 	BUG_ON(acomp_ctx->req->dlen != PAGE_SIZE);
 	mutex_unlock(&acomp_ctx->mutex);
 
