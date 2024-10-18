@@ -202,6 +202,12 @@ int avic_vm_init(struct kvm *kvm)
 	if (!enable_apicv)
 		return 0;
 
+	if (cc_platform_has(CC_ATTR_HOST_SEV_SNP) &&
+	    !boot_cpu_has(X86_FEATURE_HV_INUSE_WR_ALLOWED)) {
+		pr_debug("APICv Inhibit due to Missing HvInUseWrAllowed.\n");
+		kvm_set_apicv_inhibit(kvm, APICV_INHIBIT_REASON_HVINUSEWR_NOT_ALLOWED);
+	}
+
 	/* Allocating physical APIC ID table (4KB) */
 	p_page = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
 	if (!p_page)

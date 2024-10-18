@@ -1274,6 +1274,12 @@ enum kvm_apicv_inhibit {
 	 */
 	APICV_INHIBIT_REASON_LOGICAL_ID_ALIASED,
 
+	/*
+	 * Non-SNP guest cannot activate AVIC on SNP-enabled system w/o
+	 * CPUID HvInUseWrAllowed feature.
+	 */
+	APICV_INHIBIT_REASON_HVINUSEWR_NOT_ALLOWED,
+
 	NR_APICV_INHIBIT_REASONS,
 };
 
@@ -1292,7 +1298,8 @@ enum kvm_apicv_inhibit {
 	__APICV_INHIBIT_REASON(IRQWIN),			\
 	__APICV_INHIBIT_REASON(PIT_REINJ),		\
 	__APICV_INHIBIT_REASON(SEV),			\
-	__APICV_INHIBIT_REASON(LOGICAL_ID_ALIASED)
+	__APICV_INHIBIT_REASON(LOGICAL_ID_ALIASED),	\
+	__APICV_INHIBIT_REASON(HVINUSEWR_NOT_ALLOWED)
 
 struct kvm_arch {
 	unsigned long n_used_mmu_pages;
