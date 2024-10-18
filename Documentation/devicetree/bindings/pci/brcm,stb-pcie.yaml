@@ -104,6 +104,18 @@ properties:
     minItems: 1
     maxItems: 3
 
+  brcm,gen3-eq-presets:
+    description: |
+      A u16 array giving the GEN3 equilization presets, one for each lane.
+      These values are destined for the 16bit registers known as the
+      Lane Equalization Control Register(s) of the Secondary PCI Express
+      Extended Capability.  In the array, lane 0 is first term, lane 1 next,
+      etc. The contents of the entries reflect what is necessary for
+      the current board and SoC, and the details of each preset are
+      described in Section 7.27.4 of the PCI base spec, Revision 3.0.
+
+    $ref: /schemas/types.yaml#/definitions/uint16-array
+
 required:
   - compatible
   - reg
