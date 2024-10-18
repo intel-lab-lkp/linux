@@ -20,6 +20,7 @@ properties:
       - awinic,aw88395
       - awinic,aw88261
       - awinic,aw88399
+      - awinic,aw88081
 
   reg:
     maxItems: 1
@@ -57,6 +58,7 @@ allOf:
           contains:
             enum:
               - awinic,aw88261
+              - awinic,aw88081
     then:
       properties:
         reset-gpios: false
