@@ -962,4 +962,7 @@ void pcim_release_region(struct pci_dev *pdev, int bar);
 	(PCI_CONF1_ADDRESS(bus, dev, func, reg) | \
 	 PCI_CONF1_EXT_REG(reg))
 
+void pci_seq_tree_add_dev(struct pci_dev *dev);
+void pci_seq_tree_remove_dev(struct pci_dev *dev);
+
 #endif /* DRIVERS_PCI_H */

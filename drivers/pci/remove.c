@@ -53,6 +53,7 @@ static void pci_destroy_dev(struct pci_dev *dev)
 	pci_npem_remove(dev);
 
 	device_del(&dev->dev);
+	pci_seq_tree_remove_dev(dev);
 
 	down_write(&pci_bus_sem);
 	list_del(&dev->bus_list);
