@@ -13,6 +13,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
 #include <linux/i2c.h>
+#include <linux/idr.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of_graph.h>
@@ -168,6 +169,7 @@
  * @pwm_enabled:  Used to track if the PWM signal is currently enabled.
  * @pwm_pin_busy: Track if GPIO4 is currently requested for GPIO or PWM.
  * @pwm_refclk_freq: Cache for the reference clock input to the PWM.
+ * @id:           Unique instance ID
  */
 struct ti_sn65dsi86 {
 	struct auxiliary_device		*bridge_aux;
@@ -202,7 +204,10 @@ struct ti_sn65dsi86 {
 	atomic_t			pwm_pin_busy;
 #endif
 	unsigned int			pwm_refclk_freq;
+	int				id;
 };
+
+static DEFINE_IDA(ti_sn65dsi86_ida);
 
 static const struct regmap_range ti_sn65dsi86_volatile_ranges[] = {
 	{ .range_min = 0, .range_max = 0xFF },
@@ -488,6 +493,7 @@ static int ti_sn65dsi86_add_aux_device(struct ti_sn65dsi86 *pdata,
 		return -ENOMEM;
 
 	aux->name = name;
+	aux->id = pdata->id;
 	aux->dev.parent = dev;
 	aux->dev.release = ti_sn65dsi86_aux_device_release;
 	device_set_of_node_from_dev(&aux->dev, dev);
@@ -1889,6 +1895,13 @@ static int ti_sn65dsi86_parse_regulators(struct ti_sn65dsi86 *pdata)
 				       pdata->supplies);
 }
 
+static void ti_sn65dsi86_devm_ida_free(void *data)
+{
+	struct ti_sn65dsi86 *pdata = data;
+
+	ida_free(&ti_sn65dsi86_ida, pdata->id);
+}
+
 static int ti_sn65dsi86_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
@@ -1903,6 +1916,17 @@ static int ti_sn65dsi86_probe(struct i2c_client *client)
 	pdata = devm_kzalloc(dev, sizeof(struct ti_sn65dsi86), GFP_KERNEL);
 	if (!pdata)
 		return -ENOMEM;
+
+	ret = ida_alloc(&ti_sn65dsi86_ida, GFP_KERNEL);
+	if (ret < 0)
+		return ret;
+
+	pdata->id = ret;
+
+	ret = devm_add_action_or_reset(dev, ti_sn65dsi86_devm_ida_free, pdata);
+	if (ret)
+		return ret;
+
 	dev_set_drvdata(dev, pdata);
 	pdata->dev = dev;
 
