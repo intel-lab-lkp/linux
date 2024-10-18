@@ -14,6 +14,7 @@ struct bmi270_data {
 };
 
 enum bmi270_device_type {
+	BMI260,
 	BMI270,
 };
 

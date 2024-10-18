@@ -33,11 +33,23 @@ static int bmi270_i2c_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id bmi270_i2c_id[] = {
+	{ "bmi260", (kernel_ulong_t)&bmi270_chip_info[BMI260] },
 	{ "bmi270", (kernel_ulong_t)&bmi270_chip_info[BMI270] },
 	{ }
 };
 
+static const struct acpi_device_id bmi270_acpi_match[] = {
+	/* OrangePi NEO */
+	{ "BMI0260",  (kernel_ulong_t)&bmi270_chip_info[BMI260] },
+	/* GPD Win Mini, Aya Neo AIR Pro, OXP Mini Pro, etc. */
+	{ "BMI0160",  (kernel_ulong_t)&bmi270_chip_info[BMI260] },
+	/* GPD Win Max 2 */
+	{ "10EC5280", (kernel_ulong_t)&bmi270_chip_info[BMI260] },
+	{ }
+};
+
 static const struct of_device_id bmi270_of_match[] = {
+	{ .compatible = "bosch,bmi260", .data = &bmi270_chip_info[BMI260] },
 	{ .compatible = "bosch,bmi270", .data = &bmi270_chip_info[BMI270] },
 	{ }
 };
@@ -45,6 +57,7 @@ static const struct of_device_id bmi270_of_match[] = {
 static struct i2c_driver bmi270_i2c_driver = {
 	.driver = {
 		.name = "bmi270_i2c",
+		.acpi_match_table = bmi270_acpi_match,
 		.of_match_table = bmi270_of_match,
 	},
 	.probe = bmi270_i2c_probe,
