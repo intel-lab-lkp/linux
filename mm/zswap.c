@@ -1576,6 +1576,52 @@ check_old:
 	return ret;
 }
 
+static bool swp_offset_in_zswap(unsigned int type, pgoff_t offset)
+{
+	return (offset >> SWAP_ADDRESS_SPACE_SHIFT) <  nr_zswap_trees[type];
+}
+
+/* Returns true if the entire folio is in zswap */
+bool zswap_present_test(swp_entry_t swp, int nr_pages)
+{
+	pgoff_t offset = swp_offset(swp), tree_max_idx;
+	int max_idx = 0, i = 0, tree_offset = 0;
+	unsigned int type = swp_type(swp);
+	struct zswap_entry *entry = NULL;
+	struct xarray *tree;
+
+	while (i < nr_pages) {
+		tree_offset = offset + i;
+		/* Check if the tree exists. */
+		if (!swp_offset_in_zswap(type, tree_offset))
+			return false;
+
+		tree = swap_zswap_tree(swp_entry(type, tree_offset));
+		XA_STATE(xas, tree, tree_offset);
+
+		tree_max_idx = tree_offset % SWAP_ADDRESS_SPACE_PAGES ?
+			ALIGN(tree_offset, SWAP_ADDRESS_SPACE_PAGES) :
+			ALIGN(tree_offset + 1, SWAP_ADDRESS_SPACE_PAGES);
+		max_idx = min(offset + nr_pages, tree_max_idx) - 1;
+		rcu_read_lock();
+		xas_for_each(&xas, entry, max_idx) {
+			if (xas_retry(&xas, entry))
+				continue;
+			i++;
+		}
+		rcu_read_unlock();
+		/*
+		 * If xas_for_each exits because entry is NULL and
+		 * the number of entries checked are less then max idx,
+		 * then zswap does not contain the entire folio.
+		 */
+		if (!entry && offset + i <= max_idx)
+			return false;
+	}
+
+	return true;
+}
+
 bool zswap_load(struct folio *folio)
 {
 	swp_entry_t swp = folio->swap;

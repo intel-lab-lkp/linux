@@ -4281,7 +4281,8 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	swapcache = folio;
 
 	if (!folio) {
-		if (data_race(si->flags & SWP_SYNCHRONOUS_IO) &&
+		if ((data_race(si->flags & SWP_SYNCHRONOUS_IO) ||
+		    zswap_present_test(entry, 1)) &&
 		    __swap_count(entry) == 1) {
 			/* skip swapcache */
 			folio = alloc_swap_folio(vmf);
