@@ -1601,7 +1601,7 @@ next_block:
 	/* use out-place-update for direct IO under LFS mode */
 	if (map->m_may_create && (is_hole ||
 		(flag == F2FS_GET_BLOCK_DIO && f2fs_lfs_mode(sbi) &&
-		!f2fs_is_pinned_file(inode)))) {
+		!f2fs_is_pinned_file(inode) && !f2fs_is_nocow_file(inode)))) {
 		if (unlikely(f2fs_cp_error(sbi))) {
 			err = -EIO;
 			goto sync_out;
@@ -2601,6 +2601,11 @@ bool f2fs_should_update_inplace(struct inode *inode, struct f2fs_io_info *fio)
 	if (file_is_cold(inode) && !is_inode_flag_set(inode, FI_OPU_WRITE))
 		return true;
 
+	/* allows NOCoW file to be migrated during defragmentation and swapon */
+	if (f2fs_is_nocow_file(inode) &&
+		!is_inode_flag_set(inode, FI_OPU_WRITE))
+		return true;
+
 	return check_inplace_update_policy(inode, fio);
 }
 
@@ -2623,6 +2628,9 @@ bool f2fs_should_update_outplace(struct inode *inode, struct f2fs_io_info *fio)
 					sbi->first_zoned_segno)
 			return true;
 	}
+	/* should check NOCoW flag after lfs_mode check condition */
+	if (f2fs_is_nocow_file(inode))
+		return false;
 	if (S_ISDIR(inode->i_mode))
 		return true;
 	if (IS_NOQUOTA(inode))
@@ -2687,11 +2695,22 @@ int f2fs_do_write_data_page(struct f2fs_io_info *fio)
 						DATA_GENERIC_ENHANCE))
 			return -EFSCORRUPTED;
 
+		/*
+		 * if data block of NOCoW inode locates in sequential-zone,
+		 * let's trigger OPU.
+		 */
+		if (f2fs_is_nocow_file(inode) &&
+			f2fs_blkzoned_has_regular_section(fio->sbi) &&
+			GET_SEGNO(fio->sbi, fio->old_blkaddr) >=
+					fio->sbi->first_zoned_segno)
+			goto get_dnode;
+
 		ipu_force = true;
 		fio->need_lock = LOCK_DONE;
 		goto got_it;
 	}
 
+get_dnode:
 	/* Deadlock due to between page->lock and f2fs_lock_op */
 	if (fio->need_lock == LOCK_REQ && !f2fs_trylock_op(fio->sbi))
 		return -EAGAIN;

@@ -3046,6 +3046,7 @@ static inline void f2fs_change_bit(unsigned int nr, char *addr)
 #define F2FS_NOCOMP_FL			0x00000400 /* Don't compress */
 #define F2FS_INDEX_FL			0x00001000 /* hash-indexed directory */
 #define F2FS_DIRSYNC_FL			0x00010000 /* dirsync behaviour (directories only) */
+#define F2FS_NOCOW_FL			0x00800000 /* Do not cow file */
 #define F2FS_PROJINHERIT_FL		0x20000000 /* Create with parents projid */
 #define F2FS_CASEFOLD_FL		0x40000000 /* Casefolded file */
 #define F2FS_DEVICE_ALIAS_FL		0x80000000 /* File for aliasing a device */
@@ -3329,6 +3330,11 @@ static inline bool f2fs_is_atomic_file(struct inode *inode)
 static inline bool f2fs_is_cow_file(struct inode *inode)
 {
 	return is_inode_flag_set(inode, FI_COW_FILE);
+}
+
+static inline bool f2fs_is_nocow_file(struct inode *inode)
+{
+	return F2FS_I(inode)->i_flags & F2FS_NOCOW_FL;
 }
 
 static inline void *inline_data_addr(struct inode *inode, struct page *page)
@@ -4630,8 +4636,8 @@ static inline bool f2fs_low_mem_mode(struct f2fs_sb_info *sbi)
 static inline bool f2fs_may_compress(struct inode *inode)
 {
 	if (IS_SWAPFILE(inode) || f2fs_is_pinned_file(inode) ||
-		f2fs_is_atomic_file(inode) || f2fs_has_inline_data(inode) ||
-		f2fs_is_mmap_file(inode))
+		f2fs_is_nocow_file(inode) || f2fs_is_atomic_file(inode) ||
+		f2fs_has_inline_data(inode) || f2fs_is_mmap_file(inode))
 		return false;
 	return S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode);
 }
