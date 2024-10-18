@@ -375,6 +375,7 @@ struct iomap_writeback_ops {
 struct iomap_writepage_ctx {
 	struct iomap		iomap;
 	struct iomap_ioend	*ioend;
+	struct writeback_control *wbc;
 	const struct iomap_writeback_ops *ops;
 	u32			nr_folios;	/* folios added to the ioend */
 };
@@ -384,7 +385,7 @@ void iomap_ioend_try_merge(struct iomap_ioend *ioend,
 		struct list_head *more_ioends);
 void iomap_sort_ioends(struct list_head *ioend_list);
 int iomap_writepages(struct address_space *mapping,
-		struct writeback_control *wbc, struct iomap_writepage_ctx *wpc,
+		struct iomap_writepage_ctx *wpc,
 		const struct iomap_writeback_ops *ops);
 
 /*

@@ -152,9 +152,11 @@ static const struct iomap_writeback_ops zonefs_writeback_ops = {
 static int zonefs_writepages(struct address_space *mapping,
 			     struct writeback_control *wbc)
 {
-	struct iomap_writepage_ctx wpc = { };
+	struct iomap_writepage_ctx wpc = {
+		.wbc	= wbc,
+	};
 
-	return iomap_writepages(mapping, wbc, &wpc, &zonefs_writeback_ops);
+	return iomap_writepages(mapping, &wpc, &zonefs_writeback_ops);
 }
 
 static int zonefs_swap_activate(struct swap_info_struct *sis,
