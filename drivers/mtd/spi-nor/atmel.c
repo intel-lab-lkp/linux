@@ -214,6 +214,7 @@ static const struct flash_info atmel_nor_parts[] = {
 	}, {
 		.id = SNOR_ID(0x1f, 0x47, 0x08),
 		.name = "at25ff321a",
+		.size = SZ_4M,
 		.flags = SPI_NOR_HAS_LOCK | SPI_NOR_SWP_IS_VOLATILE,
 		.fixups = &atmel_nor_global_protection_fixups
 	}, {
