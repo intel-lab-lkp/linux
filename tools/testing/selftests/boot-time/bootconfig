@@ -1,0 +1,15 @@
+ftrace.event {
+    synthetic.initcall_latency {
+        # Synthetic event to record initcall latency, start, and end times
+        fields = "unsigned long func", "u64 lat", "u64 start", "u64 end"
+        actions = "hist:keys=func.sym,start,end:vals=lat:sort=lat"
+    }
+    initcall.initcall_start {
+        # Capture the start time (ts0) when initcall starts
+        actions = "hist:keys=func:ts0=common_timestamp.usecs"
+    }
+    initcall.initcall_finish {
+        # Capture the end time, calculate latency, and trigger synthetic event
+        actions = "hist:keys=func:lat=common_timestamp.usecs-$ts0:start=$ts0:end=common_timestamp.usecs:onmatch(initcall.initcall_start).initcall_latency(func,$lat,$start,$end)"
+    }
+}

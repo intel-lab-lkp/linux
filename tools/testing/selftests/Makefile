@@ -3,6 +3,7 @@ TARGETS += acct
 TARGETS += alsa
 TARGETS += amd-pstate
 TARGETS += arm64
+TARGETS += boot-time
 TARGETS += bpf
 TARGETS += breakpoints
 TARGETS += cachestat
