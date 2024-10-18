@@ -857,6 +857,37 @@ definitions:
         type: u32
         doc: Total memory across all queues
   -
+    name: tc-dualpi2-xstats
+    type: struct
+    members:
+      -
+        name: prob
+        type: u32
+      -
+        name: delay_c
+        type: u32
+      -
+        name: delay_l
+        type: u32
+      -
+        name: pkts_in_c
+        type: u32
+      -
+        name: pkts_in_l
+        type: u32
+      -
+        name: maxq
+        type: u32
+      -
+        name: ecn_mark
+        type: u32
+      -
+        name: step_mark
+        type: u32
+      -
+        name: credit
+        type: s32
+  -
     name: tc-fq-qd-stats
     type: struct
     members:
@@ -3224,6 +3255,77 @@ attribute-sets:
         name: dq-rate-estimator
         type: u32
   -
+    name: tc-dualpi2-attrs
+    attributes:
+      -
+        name: limit
+        type: u32
+        doc:  Limit the number of packets can be enqueued
+      -
+        name: target
+        type: u64
+        doc: Expected queue delay
+      -
+        name: tupdate
+        type: u32
+        doc: Frequency at which drop probability is calculated
+      -
+        name: alpha
+        type: u32
+        doc: Integral gain factors in Hz for PI controller
+      -
+        name: beta
+        type: u32
+        doc: Proportional gain factors in Hz for PI controller
+      -
+        name: coupling_factor
+        type: u8
+        doc: Probability coupling factor between Classic and L4S
+      -
+        name: step_thresh
+        type: u32
+        doc: Step marking thresohld (time/packet) for L4S
+      -
+        name: drop_overload
+        type: flags
+        doc: Control the overload strategy
+        entries:
+        - drop_on_overload
+        - overflow
+      -
+        name: ecn_mask
+        type: flags
+        doc: Configure the ECT classifier
+        entries:
+        - l4s_ect
+        - any_ect
+      -
+        name: drop_early
+        type: flags
+        doc: Decide when packets are PI-based dropped or marked
+        entries:
+        - drop_enqueue
+        - drop_dequeue
+      -
+        name: gso_split
+        type: flags
+        doc: Split aggregated skb or not
+        entries:
+        - split_gso
+        - no_split_gso
+      -
+        name: classic_protection
+        type: u8
+        doc:  Classic protection in percentage (from 0 to 100)
+      -
+        name: max_rtt
+        type: u32
+        doc: The maximum RTT of the traffic that controlled by DualPI2
+      -
+        name: typical_rtt
+        type: u32
+        doc: The typical RTT of the traffic that controlled by DualPI2
+  -
     name: tc-netem-attrs
     attributes:
       -
@@ -3701,6 +3803,9 @@ sub-messages:
         value: fq_pie
         attribute-set: tc-fq-pie-attrs
       -
+        value: fq_dualpi2
+        attribute-set: tc-dualpi2-attrs
+      -
         value: fw
         attribute-set: tc-fw-attrs
       -
@@ -3855,6 +3960,9 @@ sub-messages:
       -
         value: fq_pie
         fixed-header: tc-fq-pie-xstats
+      -
+        value: fq_dualpi2
+        fixed-header: tc-fq-dualpi2-xstats
       -
         value: hhf
         fixed-header: tc-hhf-xstats
