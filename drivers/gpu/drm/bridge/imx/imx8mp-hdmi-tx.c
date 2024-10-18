@@ -96,6 +96,7 @@ static int imx8mp_dw_hdmi_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(hdmi->pixclk),
 				     "Unable to get pixel clock\n");
 
+	plat_data->output_port = 1;
 	plat_data->mode_valid = imx8mp_hdmi_mode_valid;
 	plat_data->phy_ops = &imx8mp_hdmi_phy_ops;
 	plat_data->phy_name = "SAMSUNG HDMI TX PHY";
