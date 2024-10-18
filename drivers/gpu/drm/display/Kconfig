@@ -11,13 +11,14 @@ config DRM_DISPLAY_HELPER
 	help
 	  DRM helpers for display adapters.
 
-if DRM_DISPLAY_HELPER
-
 config DRM_BRIDGE_CONNECTOR
 	bool
 	select DRM_DISPLAY_HDMI_STATE_HELPER
+	select DRM_DISPLAY_HELPER
 	help
 	  DRM connector implementation terminating DRM bridge chains.
+
+if DRM_DISPLAY_HELPER
 
 config DRM_DISPLAY_DP_AUX_CEC
 	bool "Enable DisplayPort CEC-Tunneling-over-AUX HDMI support"
