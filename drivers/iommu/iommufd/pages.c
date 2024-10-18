@@ -346,25 +346,40 @@ static void batch_destroy(struct pfn_batch *batch, void *backup)
 		kfree(batch->pfns);
 }
 
+/* returns the number of pfn's added */
+static long batch_add_pfn_num(struct pfn_batch *batch, unsigned long pfn,
+			      unsigned long nr)
+{
+	const unsigned long MAX_NPFNS = type_max(typeof(*batch->npfns));
+	unsigned long n = 0;
+
+	if (batch->end) {
+		unsigned long npfn_end = batch->npfns[batch->end - 1];
+		unsigned long pfn_end = batch->pfns[batch->end - 1];
+
+		if (pfn == pfn_end + npfn_end && npfn_end < MAX_NPFNS) {
+			n = min_t(unsigned long, MAX_NPFNS - npfn_end, nr);
+			batch->npfns[batch->end - 1] += n;
+			batch->total_pfns += n;
+			if (nr == n)
+				return n;
+			nr -= n;
+		}
+	}
+	if (batch->end == batch->array_size)
+		return n;
+	nr = min_t(unsigned long, MAX_NPFNS, nr);
+	batch->total_pfns += nr;
+	batch->pfns[batch->end] = pfn;
+	batch->npfns[batch->end] = nr;
+	batch->end++;
+	return n + nr;
+}
+
 /* true if the pfn was added, false otherwise */
 static bool batch_add_pfn(struct pfn_batch *batch, unsigned long pfn)
 {
-	const unsigned int MAX_NPFNS = type_max(typeof(*batch->npfns));
-
-	if (batch->end &&
-	    pfn == batch->pfns[batch->end - 1] + batch->npfns[batch->end - 1] &&
-	    batch->npfns[batch->end - 1] != MAX_NPFNS) {
-		batch->npfns[batch->end - 1]++;
-		batch->total_pfns++;
-		return true;
-	}
-	if (batch->end == batch->array_size)
-		return false;
-	batch->total_pfns++;
-	batch->pfns[batch->end] = pfn;
-	batch->npfns[batch->end] = 1;
-	batch->end++;
-	return true;
+	return batch_add_pfn_num(batch, pfn, 1) == 1;
 }
 
 /*
@@ -620,6 +635,58 @@ static void batch_from_pages(struct pfn_batch *batch, struct page **pages,
 	for (; pages != end; pages++)
 		if (!batch_add_pfn(batch, page_to_pfn(*pages)))
 			break;
+}
+
+static void batch_from_folios(struct pfn_batch *batch, struct folio ***folios_p,
+			      unsigned long *offset_p, unsigned long npages)
+{
+	unsigned long offset = *offset_p;
+	struct folio **folios = *folios_p;
+
+	while (npages) {
+		unsigned long n;
+		struct folio *folio = *folios;
+		unsigned long nr = folio_nr_pages(folio) - offset;
+		unsigned long pfn = page_to_pfn(folio_page(folio, offset));
+
+		nr = min(nr, npages);
+		n = batch_add_pfn_num(batch, pfn, nr);
+		npages -= n;
+
+		if (n == nr) {
+			folios++;
+			offset = 0;
+		} else if (n) {
+			offset += n;
+		} else {
+			break;
+		}
+	}
+
+	*folios_p = folios;
+	*offset_p = offset;
+}
+
+static void folios_unpin_partial(struct folio **folios, unsigned long offset,
+				 unsigned long npages)
+{
+	unsigned long i = 0;
+
+	while (npages) {
+		struct folio *folio = folios[i++];
+		unsigned long nr = folio_nr_pages(folio);
+
+		if (offset == 0 && nr < npages) {
+			unpin_folio(folio);
+		} else {
+			struct page *page = folio_page(folio, offset);
+
+			nr = min(npages, nr - offset);
+			unpin_user_page_range_dirty_lock(page, nr, false);
+			offset = 0;
+		}
+		npages -= nr;
+	}
 }
 
 static void batch_unpin(struct pfn_batch *batch, struct iopt_pages *pages,
