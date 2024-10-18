@@ -6,12 +6,14 @@
  * based on drivers/power/supply/jz4740-battery.c
  */
 
+#include <linux/cleanup.h>
 #include <linux/iio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/property.h>
+#include <linux/slab.h>
 
 struct ingenic_battery {
 	struct device *dev;
@@ -62,7 +64,7 @@ static int ingenic_battery_get_property(struct power_supply *psy,
  */
 static int ingenic_battery_set_scale(struct ingenic_battery *bat)
 {
-	const int *scale_raw;
+	const int *scale_raw __free(kfree) = NULL;
 	int scale_len, scale_type, best_idx = -1, best_mV, max_raw, i, ret;
 	u64 max_mV;
 
