@@ -332,6 +332,7 @@ int rproc_alloc_vring(struct rproc_vdev *rvdev, int i)
 	int ret, notifyid;
 	struct rproc_mem_entry *mem;
 	size_t size;
+	int start, end;
 
 	/* actual size of vring (in bytes) */
 	size = PAGE_ALIGN(vring_size(rvring->num, rvring->align));
@@ -363,9 +364,18 @@ int rproc_alloc_vring(struct rproc_vdev *rvdev, int i)
 	/*
 	 * Assign an rproc-wide unique index for this vring
 	 * TODO: assign a notifyid for rvdev updates as well
-	 * TODO: support predefined notifyids (via resource table)
 	 */
-	ret = idr_alloc(&rproc->notifyids, rvring, 0, 0, GFP_KERNEL);
+
+	start = 0;
+	end = 0;
+
+	/* use id if specified in rsc table */
+	if (rsc->vring[i].notifyid != RSC_INVALID_NOTIFYID) {
+		start = rsc->vring[i].notifyid;
+		end = start + 1;
+	}
+
+	ret = idr_alloc(&rproc->notifyids, rvring, start, end, GFP_KERNEL);
 	if (ret < 0) {
 		dev_err(dev, "idr_alloc failed: %d\n", ret);
 		return ret;

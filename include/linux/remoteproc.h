@@ -238,6 +238,7 @@ struct fw_rsc_trace {
 	u8 name[32];
 } __packed;
 
+#define RSC_INVALID_NOTIFYID 0xFFFFFFFFU
 /**
  * struct fw_rsc_vdev_vring - vring descriptor entry
  * @da: device address
