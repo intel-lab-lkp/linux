@@ -38,6 +38,7 @@
 #define VIVID_CID_S32_ARRAY		(VIVID_CID_CUSTOM_BASE + 15)
 #define VIVID_CID_S64_ARRAY		(VIVID_CID_CUSTOM_BASE + 16)
 #define VIVID_CID_RECT			(VIVID_CID_CUSTOM_BASE + 17)
+#define VIVID_CID_REGION		(VIVID_CID_CUSTOM_BASE + 18)
 
 #define VIVID_CID_VIVID_BASE		(0x00f00000 | 0xf000)
 #define VIVID_CID_VIVID_CLASS		(0x00f00000 | 1)
@@ -391,6 +392,32 @@ static const struct v4l2_ctrl_config vivid_ctrl_rect = {
 	.p_def.p_const = &rect_def,
 	.p_min.p_const = &rect_min,
 	.p_max.p_const = &rect_max,
+};
+
+static const struct v4l2_ctrl_video_region_param region_def = {
+	.rect = { 0, 0, 0, 0 },
+	.parameter = 0,
+};
+
+static const struct v4l2_ctrl_video_region_param region_min = {
+	.rect = { 0, 0, 0, 0 },
+	.parameter = -51,
+};
+
+static const struct v4l2_ctrl_video_region_param region_max = {
+	.rect = { 0, 0, 1920, 1080 },
+	.parameter = 51,
+};
+
+static const struct v4l2_ctrl_config vivid_ctrl_region = {
+	.ops = &vivid_user_gen_ctrl_ops,
+	.id = VIVID_CID_REGION,
+	.name = "Region",
+	.type = V4L2_CTRL_TYPE_REGION,
+	.flags = V4L2_CTRL_FLAG_HAS_WHICH_MIN_MAX,
+	.p_def.p_const = &region_def,
+	.p_min.p_const = &region_min,
+	.p_max.p_const = &region_max,
 };
 
 /* Framebuffer Controls */
@@ -1719,6 +1746,7 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 	dev->ro_int32 = v4l2_ctrl_new_custom(hdl_user_gen, &vivid_ctrl_ro_int32, NULL);
 	v4l2_ctrl_new_custom(hdl_user_gen, &vivid_ctrl_area, NULL);
 	v4l2_ctrl_new_custom(hdl_user_gen, &vivid_ctrl_rect, NULL);
+	v4l2_ctrl_new_custom(hdl_user_gen, &vivid_ctrl_region, NULL);
 	v4l2_ctrl_new_custom(hdl_user_gen, &vivid_ctrl_u32_array, NULL);
 	v4l2_ctrl_new_custom(hdl_user_gen, &vivid_ctrl_u32_dyn_array, NULL);
 	v4l2_ctrl_new_custom(hdl_user_gen, &vivid_ctrl_u16_matrix, NULL);
