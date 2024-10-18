@@ -2,6 +2,8 @@
 /*
  * Copyright © 2023 Intel Corporation
  */
+#include <linux/file.h>
+
 #include <drm/ttm/ttm_tt.h>
 
 #include "ttm_kunit_helpers.h"
@@ -167,6 +169,14 @@ int ttm_device_kunit_init_bad_evict(struct ttm_test_devices *priv,
 }
 EXPORT_SYMBOL_GPL(ttm_device_kunit_init_bad_evict);
 
+static void kunit_action_obj_fput(void *ptr)
+{
+	struct drm_gem_object *obj = ptr;
+
+	if (obj->filp)
+		fput(obj->filp);
+}
+
 struct ttm_buffer_object *ttm_bo_kunit_init(struct kunit *test,
 					    struct ttm_test_devices *devs,
 					    size_t size,
@@ -185,6 +195,9 @@ struct ttm_buffer_object *ttm_bo_kunit_init(struct kunit *test,
 		bo->base.resv = obj;
 
 	err = drm_gem_object_init(devs->drm, &bo->base, size);
+	KUNIT_ASSERT_EQ(test, err, 0);
+
+	err = kunit_add_action_or_reset(test, kunit_action_obj_fput, &bo->base);
 	KUNIT_ASSERT_EQ(test, err, 0);
 
 	bo->bdev = devs->ttm_dev;
