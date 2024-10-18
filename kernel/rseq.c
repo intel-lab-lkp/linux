@@ -25,6 +25,56 @@
 				  RSEQ_CS_FLAG_NO_RESTART_ON_SIGNAL | \
 				  RSEQ_CS_FLAG_NO_RESTART_ON_MIGRATE)
 
+#ifdef CONFIG_DEBUG_RSEQ
+static int rseq_validate_ro_fields(struct task_struct *t)
+{
+	u32 cpu_id_start, cpu_id, node_id, mm_cid;
+	struct rseq __user *rseq = t->rseq;
+
+	/*
+	 * Validate fields which are required to be read-only by
+	 * user-space.
+	 */
+	if (!user_read_access_begin(rseq, t->rseq_len))
+		goto efault;
+	unsafe_get_user(cpu_id_start, &rseq->cpu_id_start, efault_end);
+	unsafe_get_user(cpu_id, &rseq->cpu_id, efault_end);
+	unsafe_get_user(node_id, &rseq->node_id, efault_end);
+	unsafe_get_user(mm_cid, &rseq->mm_cid, efault_end);
+	user_read_access_end();
+
+	if (cpu_id_start != t->rseq_fields.cpu_id_start)
+		printk_ratelimited(KERN_WARNING
+			"Detected rseq cpu_id_start field corruption. Value: %u, expecting: %u (pid=%d).\n",
+			cpu_id_start, t->rseq_fields.cpu_id_start, t->pid);
+	if (cpu_id != t->rseq_fields.cpu_id)
+		printk_ratelimited(KERN_WARNING
+			"Detected rseq cpu_id field corruption. Value: %u, expecting: %u (pid=%d).\n",
+			cpu_id, t->rseq_fields.cpu_id, t->pid);
+	if (node_id != t->rseq_fields.node_id)
+		printk_ratelimited(KERN_WARNING
+			"Detected rseq node_id field corruption. Value: %u, expecting: %u (pid=%d).\n",
+			node_id, t->rseq_fields.node_id, t->pid);
+	if (mm_cid != t->rseq_fields.mm_cid)
+		printk_ratelimited(KERN_WARNING
+			"Detected rseq mm_cid field corruption. Value: %u, expecting: %u (pid=%d).\n",
+			mm_cid, t->rseq_fields.mm_cid, t->pid);
+
+	/* For now, only print a console warning on mismatch. */
+	return 0;
+
+efault_end:
+	user_read_access_end();
+efault:
+	return -EFAULT;
+}
+#else
+static int rseq_validate_ro_fields(struct task_struct *t)
+{
+	return 0;
+}
+#endif
+
 /*
  *
  * Restartable sequences are a lightweight interface that allows
@@ -92,6 +142,11 @@ static int rseq_update_cpu_node_id(struct task_struct *t)
 	u32 node_id = cpu_to_node(cpu_id);
 	u32 mm_cid = task_mm_cid(t);
 
+	/*
+	 * Validate read-only rseq fields.
+	 */
+	if (rseq_validate_ro_fields(t))
+		goto efault;
 	WARN_ON_ONCE((int) mm_cid < 0);
 	if (!user_write_access_begin(rseq, t->rseq_len))
 		goto efault;
@@ -105,6 +160,13 @@ static int rseq_update_cpu_node_id(struct task_struct *t)
 	 * t->rseq_len != ORIG_RSEQ_SIZE.
 	 */
 	user_write_access_end();
+#ifdef CONFIG_DEBUG_RSEQ
+	/* Save a copy of the values which are read-only into kernel-space. */
+	t->rseq_fields.cpu_id_start = cpu_id;
+	t->rseq_fields.cpu_id = cpu_id;
+	t->rseq_fields.node_id = node_id;
+	t->rseq_fields.mm_cid = mm_cid;
+#endif
 	trace_rseq_update(t);
 	return 0;
 
@@ -119,6 +181,11 @@ static int rseq_reset_rseq_cpu_node_id(struct task_struct *t)
 	u32 cpu_id_start = 0, cpu_id = RSEQ_CPU_ID_UNINITIALIZED, node_id = 0,
 	    mm_cid = 0;
 
+	/*
+	 * Validate read-only rseq fields.
+	 */
+	if (!rseq_validate_ro_fields(t))
+		return -EFAULT;
 	/*
 	 * Reset cpu_id_start to its initial state (0).
 	 */
@@ -141,6 +208,15 @@ static int rseq_reset_rseq_cpu_node_id(struct task_struct *t)
 	 */
 	if (put_user(mm_cid, &t->rseq->mm_cid))
 		return -EFAULT;
+#ifdef CONFIG_DEBUG_RSEQ
+	/*
+	 * Reset the in-kernel rseq fields copy.
+	 */
+	t->rseq_fields.cpu_id_start = cpu_id_start;
+	t->rseq_fields.cpu_id = cpu_id;
+	t->rseq_fields.node_id = node_id;
+	t->rseq_fields.mm_cid = mm_cid;
+#endif
 	/*
 	 * Additional feature fields added after ORIG_RSEQ_SIZE
 	 * need to be conditionally reset only if
@@ -423,6 +499,17 @@ SYSCALL_DEFINE4(rseq, struct rseq __user *, rseq, u32, rseq_len,
 	current->rseq = rseq;
 	current->rseq_len = rseq_len;
 	current->rseq_sig = sig;
+#ifdef CONFIG_DEBUG_RSEQ
+	/*
+	 * Initialize the in-kernel rseq fields copy for validation of
+	 * read-only fields.
+	 */
+	if (get_user(current->rseq_fields.cpu_id_start, &rseq->cpu_id_start) ||
+	    get_user(current->rseq_fields.cpu_id, &rseq->cpu_id) ||
+	    get_user(current->rseq_fields.node_id, &rseq->node_id) ||
+	    get_user(current->rseq_fields.mm_cid, &rseq->mm_cid))
+		return -EFAULT;
+#endif
 	/*
 	 * If rseq was previously inactive, and has just been
 	 * registered, ensure the cpu_id_start and cpu_id fields
