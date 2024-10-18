@@ -9,6 +9,15 @@
 #include "dwmac5.h"
 #include "dwxgmac2.h"
 
+struct stmmac_fpe_configure_info {
+	const u32 rxq_ctrl1_reg;	/* offset of MAC_RxQ_Ctrl1 */
+	const u32 fprq_mask;		/* Frame Preemption Residue Queue */
+	const u32 fprq_shift;
+	const u32 mac_fpe_reg;		/* offset of MAC_FPE_CTRL_STS */
+	const u32 int_en_reg;		/* offset of MAC_Interrupt_Enable */
+	const u32 int_en_bit;		/* Frame Preemption Interrupt Enable */
+};
+
 void stmmac_fpe_link_state_handle(struct stmmac_priv *priv, bool is_up)
 {
 	struct stmmac_fpe_cfg *fpe_cfg = &priv->fpe_cfg;
@@ -160,41 +169,42 @@ void stmmac_fpe_apply(struct stmmac_priv *priv)
 	}
 }
 
-static void dwmac5_fpe_configure(void __iomem *ioaddr,
-				 struct stmmac_fpe_cfg *cfg,
-				 u32 num_txq, u32 num_rxq,
-				 bool tx_enable, bool pmac_enable)
+static void common_fpe_configure(void __iomem *ioaddr,
+				 struct stmmac_fpe_cfg *cfg, u32 num_rxq,
+				 bool tx_enable, bool pmac_enable,
+				 const struct stmmac_fpe_configure_info *info)
 {
 	u32 value;
 
 	if (tx_enable) {
 		cfg->fpe_csr = STMMAC_MAC_FPE_CTRL_STS_EFPE;
-		value = readl(ioaddr + GMAC_RXQ_CTRL1);
-		value &= ~GMAC_RXQCTRL_FPRQ;
-		value |= (num_rxq - 1) << GMAC_RXQCTRL_FPRQ_SHIFT;
-		writel(value, ioaddr + GMAC_RXQ_CTRL1);
+		value = readl(ioaddr + info->rxq_ctrl1_reg);
+		value &= ~info->fprq_mask;
+		/* Keep this SHIFT, FIELD_PREP() expects a constant mask :-/ */
+		value |= (num_rxq - 1) << info->fprq_shift;
+		writel(value, ioaddr + info->rxq_ctrl1_reg);
 	} else {
 		cfg->fpe_csr = 0;
 	}
-	writel(cfg->fpe_csr, ioaddr + GMAC5_MAC_FPE_CTRL_STS);
+	writel(cfg->fpe_csr, ioaddr + info->mac_fpe_reg);
 
-	value = readl(ioaddr + GMAC_INT_EN);
+	value = readl(ioaddr + info->int_en_reg);
 
 	if (pmac_enable) {
-		if (!(value & GMAC_INT_FPE_EN)) {
+		if (!(value & info->int_en_bit)) {
 			/* Dummy read to clear any pending masked interrupts */
-			readl(ioaddr + GMAC5_MAC_FPE_CTRL_STS);
+			readl(ioaddr + info->mac_fpe_reg);
 
-			value |= GMAC_INT_FPE_EN;
+			value |= info->int_en_bit;
 		}
 	} else {
-		value &= ~GMAC_INT_FPE_EN;
+		value &= ~info->int_en_bit;
 	}
 
-	writel(value, ioaddr + GMAC_INT_EN);
+	writel(value, ioaddr + info->int_en_reg);
 }
 
-static int dwmac5_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
+static int common_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
 {
 	u32 value;
 	int status;
@@ -204,7 +214,7 @@ static int dwmac5_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
 	/* Reads from the MAC_FPE_CTRL_STS register should only be performed
 	 * here, since the status flags of MAC_FPE_CTRL_STS are "clear on read"
 	 */
-	value = readl(ioaddr + GMAC5_MAC_FPE_CTRL_STS);
+	value = readl(ioaddr);
 
 	if (value & STMMAC_MAC_FPE_CTRL_STS_TRSP) {
 		status |= FPE_EVENT_TRSP;
@@ -229,7 +239,7 @@ static int dwmac5_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
 	return status;
 }
 
-static void dwmac5_fpe_send_mpacket(void __iomem *ioaddr,
+static void common_fpe_send_mpacket(void __iomem *ioaddr,
 				    struct stmmac_fpe_cfg *cfg,
 				    enum stmmac_mpacket_type type)
 {
@@ -240,7 +250,37 @@ static void dwmac5_fpe_send_mpacket(void __iomem *ioaddr,
 	else if (type == MPACKET_RESPONSE)
 		value |= STMMAC_MAC_FPE_CTRL_STS_SRSP;
 
-	writel(value, ioaddr + GMAC5_MAC_FPE_CTRL_STS);
+	writel(value, ioaddr);
+}
+
+static void dwmac5_fpe_configure(void __iomem *ioaddr,
+				 struct stmmac_fpe_cfg *cfg,
+				 u32 num_txq, u32 num_rxq,
+				 bool tx_enable, bool pmac_enable)
+{
+	static const struct stmmac_fpe_configure_info dwmac5_fpe_info = {
+		.rxq_ctrl1_reg = GMAC_RXQ_CTRL1,
+		.fprq_mask = GMAC_RXQCTRL_FPRQ,
+		.fprq_shift = GMAC_RXQCTRL_FPRQ_SHIFT,
+		.mac_fpe_reg = GMAC5_MAC_FPE_CTRL_STS,
+		.int_en_reg = GMAC_INT_EN,
+		.int_en_bit = GMAC_INT_FPE_EN,
+	};
+
+	common_fpe_configure(ioaddr, cfg, num_rxq, tx_enable, pmac_enable,
+			     &dwmac5_fpe_info);
+}
+
+static int dwmac5_fpe_irq_status(void __iomem *ioaddr, struct net_device *dev)
+{
+	return common_fpe_irq_status(ioaddr + GMAC5_MAC_FPE_CTRL_STS, dev);
+}
+
+static void dwmac5_fpe_send_mpacket(void __iomem *ioaddr,
+				    struct stmmac_fpe_cfg *cfg,
+				    enum stmmac_mpacket_type type)
+{
+	common_fpe_send_mpacket(ioaddr + GMAC5_MAC_FPE_CTRL_STS, cfg, type);
 }
 
 static int dwmac5_fpe_get_add_frag_size(const void __iomem *ioaddr)
