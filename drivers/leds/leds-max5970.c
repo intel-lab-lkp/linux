@@ -72,6 +72,7 @@ static int max5970_led_probe(struct platform_device *pdev)
 
 		ddata = devm_kzalloc(dev, sizeof(*ddata), GFP_KERNEL);
 		if (!ddata) {
+			fwnode_handle_put(led_node);
 			fwnode_handle_put(child);
 			return -ENOMEM;
 		}
@@ -89,10 +90,13 @@ static int max5970_led_probe(struct platform_device *pdev)
 
 		ret = devm_led_classdev_register(dev, &ddata->cdev);
 		if (ret < 0) {
+			fwnode_handle_put(led_node);
 			fwnode_handle_put(child);
 			return dev_err_probe(dev, ret, "Failed to initialize LED %u\n", reg);
 		}
 	}
+
+	fwnode_handle_put(led_node);
 
 	return ret;
 }
