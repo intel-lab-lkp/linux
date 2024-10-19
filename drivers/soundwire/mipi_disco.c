@@ -50,7 +50,6 @@ static bool mipi_device_property_read_bool(const struct device *dev,
 int sdw_master_read_prop(struct sdw_bus *bus)
 {
 	struct sdw_master_prop *prop = &bus->prop;
-	struct fwnode_handle *link;
 	const char *scales_prop;
 	char name[32];
 	int nval;
@@ -65,7 +64,8 @@ int sdw_master_read_prop(struct sdw_bus *bus)
 	snprintf(name, sizeof(name),
 		 "mipi-sdw-link-%d-subproperties", bus->link_id);
 
-	link = device_get_named_child_node(bus->dev, name);
+	struct fwnode_handle *link __free(fwnode_handle) =
+		device_get_named_child_node(bus->dev, name);
 	if (!link) {
 		dev_err(bus->dev, "Master node %s not found\n", name);
 		return -EIO;
@@ -89,10 +89,8 @@ int sdw_master_read_prop(struct sdw_bus *bus)
 		prop->clk_freq = devm_kcalloc(bus->dev, prop->num_clk_freq,
 					      sizeof(*prop->clk_freq),
 					      GFP_KERNEL);
-		if (!prop->clk_freq) {
-			fwnode_handle_put(link);
+		if (!prop->clk_freq)
 			return -ENOMEM;
-		}
 
 		ret = fwnode_property_read_u32_array(link,
 				"mipi-sdw-clock-frequencies-supported",
@@ -124,10 +122,8 @@ int sdw_master_read_prop(struct sdw_bus *bus)
 		prop->clk_gears = devm_kcalloc(bus->dev, prop->num_clk_gears,
 					       sizeof(*prop->clk_gears),
 					       GFP_KERNEL);
-		if (!prop->clk_gears) {
-			fwnode_handle_put(link);
+		if (!prop->clk_gears)
 			return -ENOMEM;
-		}
 
 		ret = fwnode_property_read_u32_array(link,
 					       scales_prop,
@@ -151,8 +147,6 @@ int sdw_master_read_prop(struct sdw_bus *bus)
 
 	fwnode_property_read_u32(link, "mipi-sdw-command-error-threshold",
 				 &prop->err_threshold);
-
-	fwnode_handle_put(link);
 
 	return 0;
 }
@@ -220,7 +214,6 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 			      struct sdw_dpn_prop *dpn, int count, int ports,
 			      char *type)
 {
-	struct fwnode_handle *node;
 	u32 bit, i = 0;
 	unsigned long addr;
 	char name[40];
@@ -237,7 +230,8 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 
 		dpn[i].num = bit;
 
-		node = device_get_named_child_node(&slave->dev, name);
+		struct fwnode_handle *node __free(fwnode_handle) =
+			device_get_named_child_node(&slave->dev, name);
 		if (!node) {
 			dev_err(&slave->dev, "%s dpN not found\n", name);
 			return -EIO;
@@ -255,10 +249,8 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 						    dpn[i].num_words,
 						    sizeof(*dpn[i].words),
 						    GFP_KERNEL);
-			if (!dpn[i].words) {
-				fwnode_handle_put(node);
+			if (!dpn[i].words)
 				return -ENOMEM;
-			}
 
 			ret = fwnode_property_read_u32_array(node,
 					"mipi-sdw-port-wordlength-configs",
@@ -298,10 +290,8 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 						       dpn[i].num_channels,
 						       sizeof(*dpn[i].channels),
 						 GFP_KERNEL);
-			if (!dpn[i].channels) {
-				fwnode_handle_put(node);
+			if (!dpn[i].channels)
 				return -ENOMEM;
-			}
 
 			ret = fwnode_property_read_u32_array(node,
 					"mipi-sdw-channel-number-list",
@@ -317,10 +307,8 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 					dpn[i].num_ch_combinations,
 					sizeof(*dpn[i].ch_combinations),
 					GFP_KERNEL);
-			if (!dpn[i].ch_combinations) {
-				fwnode_handle_put(node);
+			if (!dpn[i].ch_combinations)
 				return -ENOMEM;
-			}
 
 			ret = fwnode_property_read_u32_array(node,
 					"mipi-sdw-channel-combination-list",
@@ -357,8 +345,6 @@ static int sdw_slave_read_dpn(struct sdw_slave *slave,
 			if (ret < 0)
 				return ret;
 		}
-
-		fwnode_handle_put(node);
 
 		i++;
 	}
