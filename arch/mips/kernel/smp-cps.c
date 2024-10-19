@@ -39,6 +39,7 @@ UASM_L_LA(_not_nmi)
 static uint32_t core_entry_reg;
 static phys_addr_t cps_vec_pa;
 
+static bool l2_hci_broken;
 struct cluster_boot_config *mips_cps_cluster_bootcfg;
 
 static void power_up_other_cluster(unsigned int cluster)
@@ -254,6 +255,22 @@ static void __init cps_smp_setup(void)
 #endif /* CONFIG_MIPS_MT_FPAFF */
 }
 
+static void __init check_hci_quirk(void)
+{
+	struct device_node *np;
+
+	np = of_cpu_device_node_get(0);
+	if (!np) {
+		pr_debug("%s: No cpu node in the device tree\n", __func__);
+		return;
+	}
+
+	if (of_property_read_bool(np, "cm3-l2-config-hci-broken")) {
+		pr_info("HCI (Hardware Cache Init for the L2 cache) in GCR_L2_RAM_CONFIG from the CM3 is broken");
+		l2_hci_broken = true;
+	}
+}
+
 static void __init cps_prepare_cpus(unsigned int max_cpus)
 {
 	unsigned int nclusters, ncores, core_vpes, c, cl, cca;
@@ -306,6 +323,9 @@ static void __init cps_prepare_cpus(unsigned int max_cpus)
 	mips_cps_cluster_bootcfg = kcalloc(nclusters,
 					   sizeof(*mips_cps_cluster_bootcfg),
 					   GFP_KERNEL);
+
+	if (nclusters > 1)
+		check_hci_quirk();
 
 	for (cl = 0; cl < nclusters; cl++) {
 		/* Allocate core boot configuration structs */
@@ -368,7 +388,7 @@ static void init_cluster_l2(void)
 {
 	u32 l2_cfg, l2sm_cop, result;
 
-	while (1) {
+	while (!l2_hci_broken) {
 		l2_cfg = read_gcr_redir_l2_ram_config();
 
 		/* If HCI is not supported, use the state machine below */
