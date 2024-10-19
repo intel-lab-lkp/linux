@@ -45,7 +45,7 @@ static int max5970_led_set_brightness(struct led_classdev *cdev,
 
 static int max5970_led_probe(struct platform_device *pdev)
 {
-	struct fwnode_handle *led_node, *child;
+	struct fwnode_handle *child;
 	struct device *dev = &pdev->dev;
 	struct regmap *regmap;
 	struct max5970_led *ddata;
@@ -55,7 +55,8 @@ static int max5970_led_probe(struct platform_device *pdev)
 	if (!regmap)
 		return -ENODEV;
 
-	led_node = device_get_named_child_node(dev->parent, "leds");
+	struct fwnode_handle *led_node __free(fwnode_handle) =
+		device_get_named_child_node(dev->parent, "leds");
 	if (!led_node)
 		return -ENODEV;
 
@@ -72,7 +73,6 @@ static int max5970_led_probe(struct platform_device *pdev)
 
 		ddata = devm_kzalloc(dev, sizeof(*ddata), GFP_KERNEL);
 		if (!ddata) {
-			fwnode_handle_put(led_node);
 			fwnode_handle_put(child);
 			return -ENOMEM;
 		}
@@ -90,13 +90,10 @@ static int max5970_led_probe(struct platform_device *pdev)
 
 		ret = devm_led_classdev_register(dev, &ddata->cdev);
 		if (ret < 0) {
-			fwnode_handle_put(led_node);
 			fwnode_handle_put(child);
 			return dev_err_probe(dev, ret, "Failed to initialize LED %u\n", reg);
 		}
 	}
-
-	fwnode_handle_put(led_node);
 
 	return ret;
 }
