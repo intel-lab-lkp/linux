@@ -402,18 +402,18 @@ static void kdb_printenv(void)
  */
 int kdbgetularg(const char *arg, unsigned long *value)
 {
-	char *endp;
 	unsigned long val;
 
-	val = simple_strtoul(arg, &endp, 0);
+	if ((strpbrk(arg, hex_asc) == NULL)
+	 && (strpbrk(arg, hex_asc_upper) == NULL))
+		return KDB_BADINT;
 
-	if (endp == arg) {
+	if (kstrtoul(arg, 0, &val) != 0) {
 		/*
 		 * Also try base 16, for us folks too lazy to type the
 		 * leading 0x...
 		 */
-		val = simple_strtoul(arg, &endp, 16);
-		if (endp == arg)
+		if (kstrtoul(arg, 16, &val) != 0)
 			return KDB_BADINT;
 	}
 
