@@ -1133,12 +1133,21 @@ static int xe_ttm_access_memory(struct ttm_buffer_object *ttm_bo,
 	if (!mem_type_is_vram(ttm_bo->resource->mem_type))
 		return -EIO;
 
-	/* FIXME: Use GPU for non-visible VRAM */
-	if (!xe_ttm_resource_visible(ttm_bo->resource))
-		return -EIO;
-
 	if (!xe_pm_runtime_get_if_in_use(xe))
 		return -EIO;
+
+	if (!xe_ttm_resource_visible(ttm_bo->resource) || len >= SZ_16K) {
+		struct xe_migrate *migrate =
+			mem_type_to_migrate(xe, ttm_bo->resource->mem_type);
+		int err;
+
+		err = xe_migrate_access_memory(migrate, bo, offset, buf, len,
+					       write);
+		if (err)
+			return err;
+
+		goto out;
+	}
 
 	vram = res_to_mem_region(ttm_bo->resource);
 	xe_res_first(ttm_bo->resource, offset & PAGE_MASK, bo->size, &cursor);
@@ -1161,6 +1170,7 @@ static int xe_ttm_access_memory(struct ttm_buffer_object *ttm_bo,
 			xe_res_next(&cursor, PAGE_SIZE);
 	} while (bytes_left);
 
+out:
 	xe_pm_runtime_put(xe);
 
 	return len;
