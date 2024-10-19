@@ -1848,6 +1848,18 @@ static int elf_validity_cache_copy(struct load_info *info, int flags)
 	info->strtab = (char *)info->hdr + info->sechdrs[info->index.str].sh_offset;
 
 	/*
+	 * The string table must be NUL-terminated, as required
+	 * by the spec. This makes strcmp and pr_* calls that access
+	 * strings in the section safe.
+	 */
+	strhdr = &info->sechdrs[info->index.str];
+	if (strhdr->sh_size > 0 && info->strtab[strhdr->sh_size - 1] != '\0') {
+		pr_err("module %s: string table isn't null terminated\n",
+		       info->name ?: "(missing .modinfo section or name field)");
+		goto no_exec;
+	}
+
+	/*
 	 * The ".gnu.linkonce.this_module" ELF section is special. It is
 	 * what modpost uses to refer to __this_module and let's use rely
 	 * on THIS_MODULE to point to &__this_module properly. The kernel's
