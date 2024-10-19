@@ -81,14 +81,13 @@ required:
 
 allOf:
   - if:
-      not:
-        properties:
-          compatible:
-            contains:
-              enum:
-                - mediatek,mt6795-dpi
-                - mediatek,mt8173-dpi
-                - mediatek,mt8186-dpi
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt2701-dpi
+              - mediatek,mt7623-dpi
+              - mediatek,mt8192-dpi
     then:
       properties:
         power-domains: false
