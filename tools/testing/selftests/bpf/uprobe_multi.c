@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/mman.h>
+#include <mman-common.h>
 #include <unistd.h>
 #include <sdt.h>
 
