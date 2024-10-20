@@ -47,6 +47,8 @@ struct vsc73xx_portinfo {
  *	every vlan configured in port vlan operation. It doesn't cover tag_8021q
  *	vlans.
  * @fdb_lock: Mutex protects fdb access
+ * @rcv_worker: Kthread worker struct for packet reciver poller
+ * @dwork: Work struct for scheduling work to the packet reciver poller
  */
 struct vsc73xx {
 	struct device			*dev;
@@ -60,6 +62,8 @@ struct vsc73xx {
 	struct vsc73xx_portinfo		portinfo[VSC73XX_MAX_NUM_PORTS];
 	struct list_head		vlans;
 	struct mutex			fdb_lock;
+	struct kthread_worker		*rcv_worker;
+	struct kthread_delayed_work	dwork;
 };
 
 /**

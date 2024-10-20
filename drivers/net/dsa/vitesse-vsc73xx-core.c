@@ -45,6 +45,15 @@
 #define VSC73XX_BLOCK_MII_INTERNAL	0x0 /* Internal MDIO subblock */
 #define VSC73XX_BLOCK_MII_EXTERNAL	0x1 /* External MDIO subblock */
 
+/* CAPTURE Block subblock */
+#define VSC73XX_BLOCK_CAPT_FRAME0	0x0 /* Frame 0 subblock */
+#define VSC73XX_BLOCK_CAPT_FRAME1	0x1 /* Frame 1 subblock */
+#define VSC73XX_BLOCK_CAPT_FRAME2	0x2 /* Frame 2 subblock */
+#define VSC73XX_BLOCK_CAPT_FRAME3	0x3 /* Frame 3 subblock */
+#define VSC73XX_BLOCK_CAPT_Q0		0x4 /* Queue 0 subblock */
+#define VSC73XX_BLOCK_CAPT_Q1		0x6 /* Queue 0 subblock */
+#define VSC73XX_BLOCK_CAPT_RST		0x7 /* Capture reset subblock */
+
 #define CPU_PORT	6 /* CPU port */
 #define VSC73XX_NUM_FDB_ROWS	2048
 #define VSC73XX_NUM_BUCKETS	4
@@ -244,6 +253,13 @@
 #define VSC73XX_MACTINDX_BUCKET_MSK		GENMASK(12, 11)
 #define VSC73XX_MACTINDX_INDEX_MSK		GENMASK(10, 0)
 
+#define VSC73XX_CAPENAB_IPMC			BIT(20)
+#define VSC73XX_CAPENAB_ARPBC			BIT(19)
+#define VSC73XX_CAPENAB_IGMP			BIT(18)
+#define VSC73XX_CAPENAB_ALLBRIDGE		BIT(17)
+#define VSC73XX_CAPENAB_BPDU			BIT(16)
+#define VSC73XX_CAPENAB_GARP			GENMASK(15, 0)
+
 #define VSC73XX_MACACCESS_CPU_COPY		BIT(14)
 #define VSC73XX_MACACCESS_FWD_KILL		BIT(13)
 #define VSC73XX_MACACCESS_IGNORE_VLAN		BIT(12)
@@ -297,6 +313,13 @@
 
 #define VSC73XX_MII_STAT_BUSY	BIT(3)
 
+/* Capture block 4 registers */
+#define VSC73XX_CAPT_FRAME_DATA		0x0
+#define VSC73XX_CAPT_FRAME_DATA_MAX	0xff
+#define VSC73XX_CAPT_CAPREADP		0x0
+#define VSC73XX_CAPT_CAPWRP		0x3
+#define VSC73XX_CAPT_CAPRST		0xff
+
 /* Arbiter block 5 registers */
 #define VSC73XX_ARBEMPTY		0x0c
 #define VSC73XX_ARBDISC			0x0e
@@ -316,6 +339,7 @@
 #define VSC73XX_ICPU_MBOX_SET		0x16
 #define VSC73XX_ICPU_MBOX_CLR		0x17
 #define VSC73XX_CHIPID			0x18
+#define VSC73XX_CAPCTRL			0x31
 #define VSC73XX_GPIO			0x34
 
 #define VSC73XX_GMIIDELAY_GMII0_GTXDELAY_NONE	0
@@ -364,6 +388,24 @@
 				 VSC73XX_ICPU_CTRL_CLK_EN | \
 				 VSC73XX_ICPU_CTRL_SRST)
 
+#define VSC73XX_CAPCTRL_QUEUE1_READY		BIT(31)
+#define VSC73XX_CAPCTRL_QUEUE0_READY		BIT(30)
+#define VSC73XX_CAPCTRL_ARPBC_Q			BIT(18)
+#define VSC73XX_CAPCTRL_IPMC_Q			BIT(17)
+#define VSC73XX_CAPCTRL_IGMP_Q			BIT(16)
+#define VSC73XX_CAPCTRL_ALLBRIDGE_Q		BIT(15)
+#define VSC73XX_CAPCTRL_GARP_Q			BIT(14)
+#define VSC73XX_CAPCTRL_BPDU_Q			BIT(13)
+#define VSC73XX_CAPCTRL_FIFO_MODE		BIT(12)
+#define VSC73XX_CAPCTRL_QUEUE1_ENA		BIT(11)
+#define VSC73XX_CAPCTRL_Q1_IRQ_EN		BIT(6)
+#define VSC73XX_CAPCTRL_Q0_IRQ_EN		BIT(5)
+#define VSC73XX_CAPCTRL_Q1_IRQ_PIN		BIT(4)
+#define VSC73XX_CAPCTRL_Q0_IRQ_PIN		BIT(3)
+#define VSC73XX_CAPCTRL_LEARN_TRUNCATE		BIT(2)
+#define VSC73XX_CAPCTRL_LEARN_Q			BIT(1)
+#define VSC73XX_CAPCTRL_MACB_Q			BIT(0)
+
 #define IS_7385(a) ((a)->chipid == VSC73XX_CHIPID_ID_7385)
 #define IS_7388(a) ((a)->chipid == VSC73XX_CHIPID_ID_7388)
 #define IS_7395(a) ((a)->chipid == VSC73XX_CHIPID_ID_7395)
@@ -373,6 +415,7 @@
 #define VSC73XX_POLL_SLEEP_US		1000
 #define VSC73XX_MDIO_POLL_SLEEP_US	5
 #define VSC73XX_POLL_TIMEOUT_US		10000
+#define VSC73XX_RCV_POLL_INTERVAL	100
 
 #define VSC73XX_IFH_MAGIC		0x52
 #define VSC73XX_IFH_SIZE		8
@@ -834,6 +877,115 @@ static void vsc73xx_deferred_xmit(struct kthread_work *work)
 	kfree(xmit_work);
 }
 
+static void vsc73xx_polled_rcv(struct kthread_work *work)
+{
+	struct vsc73xx *vsc = container_of(work, struct vsc73xx, dwork.work);
+	u16 ptr = VSC73XX_CAPT_FRAME_DATA;
+	struct dsa_switch *ds = vsc->ds;
+	int ret, buf_len, len, part;
+	struct vsc73xx_ifh ifh;
+	struct net_device *dev;
+	struct dsa_port *dp;
+	struct sk_buff *skb;
+	u32 val, *buf;
+	u16 count;
+
+	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_SYSTEM, 0, VSC73XX_CAPCTRL, &val);
+	if (ret)
+		goto queue;
+
+	if (!(val & VSC73XX_CAPCTRL_QUEUE0_READY))
+		/* No frame to read */
+		goto queue;
+
+	/* Initialise reading */
+	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_CAPTURE, VSC73XX_BLOCK_CAPT_Q0,
+			   VSC73XX_CAPT_CAPREADP, &val);
+	if (ret)
+		goto queue;
+
+	/* Get internal frame header */
+	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_CAPTURE,
+			   VSC73XX_BLOCK_CAPT_FRAME0, ptr++, &ifh.datah);
+	if (ret)
+		goto queue;
+
+	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_CAPTURE,
+			   VSC73XX_BLOCK_CAPT_FRAME0, ptr++, &ifh.datal);
+	if (ret)
+		goto queue;
+
+	if (ifh.magic != VSC73XX_IFH_MAGIC) {
+		/* Something goes wrong with buffer. Reset capture block */
+		vsc73xx_write(vsc, VSC73XX_BLOCK_CAPTURE,
+			      VSC73XX_BLOCK_CAPT_RST, VSC73XX_CAPT_CAPRST, 1);
+		goto queue;
+	}
+
+	if (!dsa_is_user_port(ds, ifh.port))
+		goto release_frame;
+
+	dp = dsa_to_port(ds, ifh.port);
+	dev = dp->user;
+	if (!dev)
+		goto release_frame;
+
+	count = (ifh.frame_length + 7 + VSC73XX_IFH_SIZE - ETH_FCS_LEN) >> 2;
+
+	skb = netdev_alloc_skb(dev, len);
+	if (unlikely(!skb)) {
+		netdev_err(dev, "Unable to allocate sk_buff\n");
+		goto release_frame;
+	}
+
+	buf_len = ifh.frame_length - ETH_FCS_LEN;
+	buf = (u32 *)skb_put(skb, buf_len);
+	len = 0;
+	part = 0;
+
+	while (ptr < count) {
+		ret = vsc73xx_read(vsc, VSC73XX_BLOCK_CAPTURE,
+				   VSC73XX_BLOCK_CAPT_FRAME0 + part, ptr++,
+				   buf + len);
+		if (ret)
+			goto free_skb;
+		len++;
+		if (ptr > VSC73XX_CAPT_FRAME_DATA_MAX &&
+		    count != VSC73XX_CAPT_FRAME_DATA_MAX) {
+			ptr = VSC73XX_CAPT_FRAME_DATA;
+			part++;
+			count -= VSC73XX_CAPT_FRAME_DATA_MAX;
+		}
+	}
+
+	/* Get FCS */
+	ret = vsc73xx_read(vsc, VSC73XX_BLOCK_CAPTURE,
+			   VSC73XX_BLOCK_CAPT_FRAME0, ptr++, &val);
+	if (ret)
+		goto free_skb;
+
+	/* Everything we see on an interface that is in the HW bridge
+	 * has already been forwarded.
+	 */
+	if (dp->bridge)
+		skb->offload_fwd_mark = 1;
+
+	skb->protocol = eth_type_trans(skb, dev);
+
+	netif_rx(skb);
+	goto release_frame;
+
+free_skb:
+	kfree_skb(skb);
+release_frame:
+	/* Release the frame from internal buffer */
+	vsc73xx_write(vsc, VSC73XX_BLOCK_CAPTURE, VSC73XX_BLOCK_CAPT_Q0,
+		      VSC73XX_CAPT_CAPREADP, 0);
+queue:
+	kthread_queue_delayed_work(vsc->rcv_worker, &vsc->dwork,
+				   msecs_to_jiffies(VSC73XX_RCV_POLL_INTERVAL));
+}
+
 static int
 vsc73xx_connect_tag_protocol(struct dsa_switch *ds, enum dsa_tag_protocol proto)
 {
@@ -1112,14 +1264,36 @@ static int vsc73xx_setup(struct dsa_switch *ds)
 	ret = dsa_tag_8021q_register(ds, htons(ETH_P_8021Q));
 	rtnl_unlock();
 
+	/* Reset capture block */
+	vsc73xx_write(vsc, VSC73XX_BLOCK_CAPTURE, VSC73XX_BLOCK_CAPT_RST,
+		      VSC73XX_CAPT_CAPRST, 1);
+
+	/* Capture BPDU frames */
+	vsc73xx_write(vsc, VSC73XX_BLOCK_ANALYZER, 0, VSC73XX_CAPENAB,
+		      VSC73XX_CAPENAB_BPDU);
+
+	vsc->rcv_worker = kthread_create_worker(0, "vsc73xx_rcv");
+	if (IS_ERR(vsc->rcv_worker))
+		return PTR_ERR(vsc->rcv_worker);
+
+	kthread_init_delayed_work(&vsc->dwork, vsc73xx_polled_rcv);
+
+	kthread_queue_delayed_work(vsc->rcv_worker, &vsc->dwork,
+				   msecs_to_jiffies(VSC73XX_RCV_POLL_INTERVAL));
+
 	return ret;
 }
 
 static void vsc73xx_teardown(struct dsa_switch *ds)
 {
+	struct vsc73xx *vsc = ds->priv;
+
 	rtnl_lock();
 	dsa_tag_8021q_unregister(ds);
 	rtnl_unlock();
+
+	kthread_cancel_delayed_work_sync(&vsc->dwork);
+	kthread_destroy_worker(vsc->rcv_worker);
 }
 
 static void vsc73xx_init_port(struct vsc73xx *vsc, int port)
