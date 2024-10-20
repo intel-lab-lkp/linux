@@ -3110,6 +3110,25 @@ out:
 	return page;
 }
 
+static unsigned long get_max_free_highatomic(struct zone *zone)
+{
+	int order;
+	unsigned long free = 0;
+	unsigned long reserved = zone->nr_reserved_highatomic;
+
+	if (reserved <= pageblock_nr_pages)
+		return reserved;
+
+	for (order = 0; order <= MAX_PAGE_ORDER; order++) {
+		struct free_area *area = &zone->free_area[order];
+
+		if (!list_empty(&area->free_list[MIGRATE_HIGHATOMIC]))
+			free += READ_ONCE(area->nr_free) << order;
+	}
+
+	return min(reserved, free);
+}
+
 static inline long __zone_watermark_unusable_free(struct zone *z,
 				unsigned int order, unsigned int alloc_flags)
 {
@@ -3117,11 +3136,11 @@ static inline long __zone_watermark_unusable_free(struct zone *z,
 
 	/*
 	 * If the caller does not have rights to reserves below the min
-	 * watermark then subtract the high-atomic reserves. This will
-	 * over-estimate the size of the atomic reserve but it avoids a search.
+	 * watermark then subtract the high-atomic reserves. This can
+	 * overestimate the size of free high-atomic reserves.
 	 */
 	if (likely(!(alloc_flags & ALLOC_RESERVES)))
-		unusable_free += z->nr_reserved_highatomic;
+		unusable_free += get_max_free_highatomic(z);
 
 #ifdef CONFIG_CMA
 	/* If allocation can't use CMA areas don't use free CMA pages */
