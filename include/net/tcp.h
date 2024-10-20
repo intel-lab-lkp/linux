@@ -2434,14 +2434,17 @@ static inline void tcp_warn_once(const struct sock *sk, bool cond, const char *s
 {
 	WARN_ONCE(cond,
 		  "%s"
+		  "cwnd:%u "
 		  "out:%u sacked:%u lost:%u retrans:%u "
 		  "tlp_high_seq:%u sk_state:%u ca_state:%u "
-		  "advmss:%u mss_cache:%u pmtu:%u\n",
+		  "mss:%u advmss:%u mss_cache:%u pmtu:%u\n",
 		  str,
+		  tcp_snd_cwnd(tcp_sk(sk)),
 		  tcp_sk(sk)->packets_out, tcp_sk(sk)->sacked_out,
 		  tcp_sk(sk)->lost_out, tcp_sk(sk)->retrans_out,
 		  tcp_sk(sk)->tlp_high_seq, sk->sk_state,
 		  inet_csk(sk)->icsk_ca_state,
+		  tcp_current_mss((struct sock *)sk),
 		  tcp_sk(sk)->advmss, tcp_sk(sk)->mss_cache,
 		  inet_csk(sk)->icsk_pmtu_cookie);
 }
