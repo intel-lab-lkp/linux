@@ -42,6 +42,8 @@
 #include <linux/percpu-refcount.h>
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
+#include <linux/jhash.h>
+#include <linux/rhashtable.h>
 
 #include <linux/uaccess.h>
 #include <linux/nospec.h>
@@ -146,7 +148,7 @@ struct kioctx {
 
 	struct {
 		spinlock_t	ctx_lock;
-		struct list_head active_reqs;	/* used for cancellation */
+		struct rhashtable active_reqs;	/* used for cancellation */
 	} ____cacheline_aligned_in_smp;
 
 	struct {
@@ -207,8 +209,8 @@ struct aio_kiocb {
 
 	struct io_event		ki_res;
 
-	struct list_head	ki_list;	/* the aio core uses this
-						 * for cancellation */
+	struct rhash_head node; /* the aio core uses this for cancellation */
+
 	refcount_t		ki_refcnt;
 
 	/*
@@ -216,6 +218,28 @@ struct aio_kiocb {
 	 * this is the underlying eventfd context to deliver events to.
 	 */
 	struct eventfd_ctx	*ki_eventfd;
+};
+
+struct active_req_rhash_cmp_arg {
+	__u64 obj;
+};
+
+static int active_req_rhash_cmp(struct rhashtable_compare_arg *args, const void *obj)
+{
+	const struct active_req_rhash_cmp_arg *x = args->key;
+	const struct aio_kiocb *entry = obj;
+
+	return (entry->ki_res.obj == x->obj) ? 0 : 1;
+};
+
+static struct rhashtable_params active_req_rhash_params = {
+	.head_offset = offsetof(struct aio_kiocb, node),
+	.key_offset  = offsetof(struct aio_kiocb, ki_res) +
+				   offsetof(struct io_event, obj),
+	.key_len	 = sizeof(__u64),
+	.hashfn      = jhash,
+	.obj_cmpfn	 = active_req_rhash_cmp,
+	.automatic_shrinking   = true,
 };
 
 /*------ sysctl variables----*/
@@ -596,13 +620,13 @@ void kiocb_set_cancel_fn(struct kiocb *iocb, kiocb_cancel_fn *cancel)
 
 	req = container_of(iocb, struct aio_kiocb, rw);
 
-	if (WARN_ON_ONCE(!list_empty(&req->ki_list)))
+	if (WARN_ON_ONCE(req->node.next))
 		return;
 
 	ctx = req->ki_ctx;
 
 	spin_lock_irqsave(&ctx->ctx_lock, flags);
-	list_add_tail(&req->ki_list, &ctx->active_reqs);
+	rhashtable_insert_fast(&ctx->active_reqs, &req->node, active_req_rhash_params);
 	req->ki_cancel = cancel;
 	spin_unlock_irqrestore(&ctx->ctx_lock, flags);
 }
@@ -647,15 +671,23 @@ static void free_ioctx_reqs(struct percpu_ref *ref)
 static void free_ioctx_users(struct percpu_ref *ref)
 {
 	struct kioctx *ctx = container_of(ref, struct kioctx, users);
-	struct aio_kiocb *req;
+	struct rhashtable_iter it;
+	struct aio_kiocb *entry;
+
+	it.ht = &ctx->active_reqs;
+	it.p = NULL;
+	it.slot = 0;
+	it.skip = 0;
+	it.end_of_table = 0;
 
 	spin_lock_irq(&ctx->ctx_lock);
 
-	while (!list_empty(&ctx->active_reqs)) {
-		req = list_first_entry(&ctx->active_reqs,
-				       struct aio_kiocb, ki_list);
-		req->ki_cancel(&req->rw);
-		list_del_init(&req->ki_list);
+	it.walker.tbl = rcu_dereference_protected(ctx->active_reqs.tbl, 1);
+	list_add(&it.walker.list, &it.walker.tbl->walkers);
+
+	while ((entry = rhashtable_walk_next(&it)) != NULL) {
+		entry->ki_cancel(&entry->rw);
+		rhashtable_remove_fast(&ctx->active_reqs, &entry->node, active_req_rhash_params);
 	}
 
 	spin_unlock_irq(&ctx->ctx_lock);
@@ -777,7 +809,7 @@ static struct kioctx *ioctx_alloc(unsigned nr_events)
 	mutex_lock(&ctx->ring_lock);
 	init_waitqueue_head(&ctx->wait);
 
-	INIT_LIST_HEAD(&ctx->active_reqs);
+	rhashtable_init(&ctx->active_reqs, &active_req_rhash_params);
 
 	if (percpu_ref_init(&ctx->users, free_ioctx_users, 0, GFP_KERNEL))
 		goto err;
@@ -1066,7 +1098,7 @@ static inline struct aio_kiocb *aio_get_req(struct kioctx *ctx)
 
 	percpu_ref_get(&ctx->reqs);
 	req->ki_ctx = ctx;
-	INIT_LIST_HEAD(&req->ki_list);
+	req->node.next = NULL;
 	refcount_set(&req->ki_refcnt, 2);
 	req->ki_eventfd = NULL;
 	return req;
@@ -1484,7 +1516,7 @@ static void aio_remove_iocb(struct aio_kiocb *iocb)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ctx->ctx_lock, flags);
-	list_del(&iocb->ki_list);
+	rhashtable_remove_fast(&ctx->active_reqs, &iocb->node, active_req_rhash_params);
 	spin_unlock_irqrestore(&ctx->ctx_lock, flags);
 }
 
@@ -1492,7 +1524,9 @@ static void aio_complete_rw(struct kiocb *kiocb, long res)
 {
 	struct aio_kiocb *iocb = container_of(kiocb, struct aio_kiocb, rw);
 
-	if (!list_empty_careful(&iocb->ki_list))
+	if (rhashtable_lookup_fast(&iocb->ki_ctx->active_reqs,
+							   &iocb->node,
+							   active_req_rhash_params) == 0)
 		aio_remove_iocb(iocb);
 
 	if (kiocb->ki_flags & IOCB_WRITE) {
@@ -1758,7 +1792,7 @@ static void aio_poll_complete_work(struct work_struct *work)
 		list_del_init(&req->wait.entry);
 		poll_iocb_unlock_wq(req);
 	} /* else, POLLFREE has freed the waitqueue, so we must complete */
-	list_del_init(&iocb->ki_list);
+	rhashtable_remove_fast(&ctx->active_reqs, &iocb->node, active_req_rhash_params);
 	iocb->ki_res.res = mangle_poll(mask);
 	spin_unlock_irq(&ctx->ctx_lock);
 
@@ -1813,7 +1847,7 @@ static int aio_poll_wake(struct wait_queue_entry *wait, unsigned mode, int sync,
 		struct kioctx *ctx = iocb->ki_ctx;
 
 		list_del_init(&req->wait.entry);
-		list_del(&iocb->ki_list);
+		rhashtable_remove_fast(&ctx->active_reqs, &iocb->node, active_req_rhash_params);
 		iocb->ki_res.res = mangle_poll(mask);
 		if (iocb->ki_eventfd && !eventfd_signal_allowed()) {
 			iocb = NULL;
@@ -1949,7 +1983,9 @@ static int aio_poll(struct aio_kiocb *aiocb, const struct iocb *iocb)
 			 * Actually waiting for an event, so add the request to
 			 * active_reqs so that it can be cancelled if needed.
 			 */
-			list_add_tail(&aiocb->ki_list, &ctx->active_reqs);
+			rhashtable_insert_fast(&ctx->active_reqs,
+								   &aiocb->node,
+								   active_req_rhash_params);
 			aiocb->ki_cancel = aio_poll_cancel;
 		}
 		if (on_queue)
@@ -2191,13 +2227,10 @@ SYSCALL_DEFINE3(io_cancel, aio_context_t, ctx_id, struct iocb __user *, iocb,
 		return -EINVAL;
 
 	spin_lock_irq(&ctx->ctx_lock);
-	/* TODO: use a hash or array, this sucks. */
-	list_for_each_entry(kiocb, &ctx->active_reqs, ki_list) {
-		if (kiocb->ki_res.obj == obj) {
-			ret = kiocb->ki_cancel(&kiocb->rw);
-			list_del_init(&kiocb->ki_list);
-			break;
-		}
+	kiocb = rhashtable_lookup_fast(&ctx->active_reqs, &obj, active_req_rhash_params);
+	if (kiocb) {
+		ret = kiocb->ki_cancel(&kiocb->rw);
+		rhashtable_remove_fast(&ctx->active_reqs, &kiocb->node, active_req_rhash_params);
 	}
 	spin_unlock_irq(&ctx->ctx_lock);
 
