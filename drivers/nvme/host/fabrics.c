@@ -539,7 +539,8 @@ int nvmf_connect_io_queue(struct nvme_ctrl *ctrl, u16 qid)
 			data, sizeof(*data), qid,
 			NVME_SUBMIT_AT_HEAD |
 			NVME_SUBMIT_RESERVED |
-			NVME_SUBMIT_NOWAIT);
+			NVME_SUBMIT_NOWAIT |
+			NVME_SUBMIT_ARB_MQ);
 	if (ret) {
 		nvmf_log_connect_error(ctrl, ret, le32_to_cpu(res.u32),
 				       &cmd, data);

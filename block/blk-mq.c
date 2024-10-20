@@ -647,8 +647,16 @@ struct request *blk_mq_alloc_request_hctx(struct request_queue *q,
 	if (!blk_mq_hw_queue_mapped(data.hctx))
 		goto out_queue_exit;
 	cpu = cpumask_first_and(data.hctx->cpumask, cpu_online_mask);
-	if (cpu >= nr_cpu_ids)
-		goto out_queue_exit;
+	if (cpu >= nr_cpu_ids) {
+		if (!(flags & BLK_MQ_REQ_ARB_MQ))
+			goto out_queue_exit;
+		/* fallback to the first cpu not isolated */
+		for_each_online_cpu(cpu) {
+			if (!cpu_is_isolated(cpu))
+				break;
+		}
+	}
+
 	data.ctx = __blk_mq_get_ctx(q, cpu);
 
 	if (q->elevator)

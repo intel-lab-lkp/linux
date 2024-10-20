@@ -1130,9 +1130,12 @@ int __nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
 		blk_flags |= BLK_MQ_REQ_RESERVED;
 	if (qid == NVME_QID_ANY)
 		req = blk_mq_alloc_request(q, nvme_req_op(cmd), blk_flags);
-	else
+	else {
+		if (flags & NVME_SUBMIT_ARB_MQ)
+			blk_flags |= BLK_MQ_REQ_ARB_MQ;
 		req = blk_mq_alloc_request_hctx(q, nvme_req_op(cmd), blk_flags,
 						qid - 1);
+	}
 
 	if (IS_ERR(req))
 		return PTR_ERR(req);

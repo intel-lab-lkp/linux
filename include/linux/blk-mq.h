@@ -746,6 +746,8 @@ enum {
 	BLK_MQ_REQ_RESERVED	= (__force blk_mq_req_flags_t)(1 << 1),
 	/* set RQF_PM */
 	BLK_MQ_REQ_PM		= (__force blk_mq_req_flags_t)(1 << 2),
+	/* use arbitrary mq ctx */
+	BLK_MQ_REQ_ARB_MQ	= (__force blk_mq_req_flags_t)(1 << 3),
 };
 
 struct request *blk_mq_alloc_request(struct request_queue *q, blk_opf_t opf,
@@ -824,7 +826,7 @@ static inline int blk_mq_request_completed(struct request *rq)
 }
 
 /*
- * 
+ *
  * Set the state to complete when completing a request from inside ->queue_rq.
  * This is used by drivers that want to ensure special complete actions that
  * need access to the request are called on failure, e.g. by nvme for

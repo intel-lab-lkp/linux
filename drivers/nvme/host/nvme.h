@@ -879,6 +879,8 @@ enum {
 	NVME_SUBMIT_RESERVED = (__force nvme_submit_flags_t)(1 << 2),
 	/* Retry command when NVME_STATUS_DNR is not set in the result */
 	NVME_SUBMIT_RETRY = (__force nvme_submit_flags_t)(1 << 3),
+	/* Submit command with arbitrary mq ctx */
+	NVME_SUBMIT_ARB_MQ = (__force nvme_submit_flags_t)(1 << 4),
 };
 
 int nvme_submit_sync_cmd(struct request_queue *q, struct nvme_command *cmd,
