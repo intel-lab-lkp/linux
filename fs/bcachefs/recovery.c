@@ -1002,6 +1002,7 @@ int bch2_fs_initialize(struct bch_fs *c)
 	struct bkey_inode_buf packed_inode;
 	struct qstr lostfound = QSTR("lost+found");
 	int ret;
+	struct bch_member *m;
 
 	bch_notice(c, "initializing new filesystem");
 	set_bit(BCH_FS_new_fs, &c->flags);
@@ -1057,8 +1058,17 @@ int bch2_fs_initialize(struct bch_fs *c)
 	bch_verbose(c, "marking superblocks");
 	ret = bch2_trans_mark_dev_sbs(c);
 	bch_err_msg(c, ret, "marking superblocks");
-	if (ret)
+	if (ret) {
+		mutex_lock(&c->sb_lock);
+		for_each_member_device(c, ca) {
+			m = bch2_members_v2_get_mut(c->disk_sb.sb, ca->dev_idx);
+			SET_BCH_MEMBER_FREESPACE_INITIALIZED(m, false);
+			ca->mi = bch2_mi_to_cpu(m);
+		}
+		mutex_unlock(&c->sb_lock);
+
 		goto err;
+	}
 
 	for_each_online_member(c, ca)
 		ca->new_fs_bucket_idx = 0;
