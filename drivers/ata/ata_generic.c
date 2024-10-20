@@ -225,7 +225,7 @@ static struct pci_device_id ata_generic[] = {
 	 * these chips were handled by the generic driver; keep the
 	 * old behavior if the dedicated driver is not enabled...
 	 */
-#if !defined(CONFIG_PATA_TOSHIBA) && !defined(CONFIG_PATA_TOSHIBA_MODULE)
+#if !IS_ENABLED(CONFIG_PATA_TOSHIBA)
 	{ PCI_DEVICE(PCI_VENDOR_ID_TOSHIBA,PCI_DEVICE_ID_TOSHIBA_PICCOLO_1), },
 	{ PCI_DEVICE(PCI_VENDOR_ID_TOSHIBA,PCI_DEVICE_ID_TOSHIBA_PICCOLO_2),  },
 	{ PCI_DEVICE(PCI_VENDOR_ID_TOSHIBA,PCI_DEVICE_ID_TOSHIBA_PICCOLO_3),  },
