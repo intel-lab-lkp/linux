@@ -100,6 +100,11 @@ module_param(fnlock_default, bool, 0444);
 #define ASUS_THROTTLE_THERMAL_POLICY_SILENT_VIVO	1
 #define ASUS_THROTTLE_THERMAL_POLICY_OVERBOOST_VIVO	2
 
+#define AIPT_STANDARD				0
+#define AIPT_WHISPER				1
+#define AIPT_PERFORMANCE			2
+#define AIPT_FULL_SPEED				3
+
 #define PLATFORM_PROFILE_MAX 2
 
 #define USB_INTEL_XUSB2PR		0xD0
@@ -333,6 +338,9 @@ struct asus_wmi {
 	struct asus_wmi_debug debug;
 
 	struct asus_wmi_driver *driver;
+	acpi_handle acpi_mgmt_handle;
+	int asus_aipt_mode;
+	bool asus_aipt_present;
 };
 
 /* WMI ************************************************************************/
@@ -3804,6 +3812,19 @@ static ssize_t throttle_thermal_policy_store(struct device *dev,
 static DEVICE_ATTR_RW(throttle_thermal_policy);
 
 /* Platform profile ***********************************************************/
+static int asus_wmi_write_aipt_mode(struct asus_wmi *asus, int aipt_mode)
+{
+	int status;
+
+	status = acpi_execute_simple_method(asus->acpi_mgmt_handle, "FANL", aipt_mode);
+	if (ACPI_FAILURE(status)) {
+		acpi_handle_info(asus->acpi_mgmt_handle, "FANL execute failed\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
 static int asus_wmi_platform_profile_to_vivo(struct asus_wmi *asus, int mode)
 {
 	bool vivo;
@@ -3844,6 +3865,26 @@ static int asus_wmi_platform_profile_mode_from_vivo(struct asus_wmi *asus, int m
 	return mode;
 }
 
+static int asus_wmi_aipt_platform_profile_get(struct asus_wmi *asus,
+					      enum platform_profile_option *profile)
+{
+	switch (asus->asus_aipt_mode) {
+	case AIPT_STANDARD:
+		*profile = PLATFORM_PROFILE_BALANCED;
+		break;
+	case AIPT_PERFORMANCE:
+		*profile = PLATFORM_PROFILE_PERFORMANCE;
+		break;
+	case AIPT_WHISPER:
+		*profile = PLATFORM_PROFILE_QUIET;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int asus_wmi_platform_profile_get(struct platform_profile_handler *pprof,
 					enum platform_profile_option *profile)
 {
@@ -3851,6 +3892,10 @@ static int asus_wmi_platform_profile_get(struct platform_profile_handler *pprof,
 	int tp;
 
 	asus = container_of(pprof, struct asus_wmi, platform_profile_handler);
+
+	if (asus->asus_aipt_present)
+		return asus_wmi_aipt_platform_profile_get(asus, profile);
+
 	tp = asus->throttle_thermal_policy_mode;
 
 	switch (asus_wmi_platform_profile_mode_from_vivo(asus, tp)) {
@@ -3874,26 +3919,42 @@ static int asus_wmi_platform_profile_set(struct platform_profile_handler *pprof,
 					enum platform_profile_option profile)
 {
 	struct asus_wmi *asus;
-	int tp;
+	int ret = 0, tp, aipt_mode;
 
 	asus = container_of(pprof, struct asus_wmi, platform_profile_handler);
 
 	switch (profile) {
 	case PLATFORM_PROFILE_PERFORMANCE:
 		tp = ASUS_THROTTLE_THERMAL_POLICY_OVERBOOST;
+		aipt_mode = AIPT_PERFORMANCE;
 		break;
 	case PLATFORM_PROFILE_BALANCED:
 		tp = ASUS_THROTTLE_THERMAL_POLICY_DEFAULT;
+		aipt_mode = AIPT_STANDARD;
 		break;
 	case PLATFORM_PROFILE_QUIET:
 		tp = ASUS_THROTTLE_THERMAL_POLICY_SILENT;
+		aipt_mode = AIPT_WHISPER;
 		break;
 	default:
 		return -EOPNOTSUPP;
 	}
 
-	asus->throttle_thermal_policy_mode = asus_wmi_platform_profile_to_vivo(asus, tp);
-	return throttle_thermal_policy_write(asus);
+	if (asus->asus_aipt_present) {
+		ret = asus_wmi_write_aipt_mode(asus, aipt_mode);
+		if (!ret) {
+			asus->asus_aipt_mode = aipt_mode;
+			goto skip_vivo;
+		}
+	}
+
+	if (asus->throttle_thermal_policy_dev) {
+		asus->throttle_thermal_policy_mode = asus_wmi_platform_profile_to_vivo(asus, tp);
+		ret = throttle_thermal_policy_write(asus);
+	}
+
+skip_vivo:
+	return ret;
 }
 
 static int platform_profile_setup(struct asus_wmi *asus)
@@ -3905,7 +3966,7 @@ static int platform_profile_setup(struct asus_wmi *asus)
 	 * Not an error if a component platform_profile relies on is unavailable
 	 * so early return, skipping the setup of platform_profile.
 	 */
-	if (!asus->throttle_thermal_policy_dev)
+	if (!asus->throttle_thermal_policy_dev && !asus->asus_aipt_present)
 		return 0;
 
 	dev_info(dev, "Using throttle_thermal_policy for platform_profile support\n");
@@ -4538,6 +4599,7 @@ static int asus_wmi_sysfs_init(struct platform_device *device)
 static int asus_wmi_platform_init(struct asus_wmi *asus)
 {
 	struct device *dev = &asus->platform_device->dev;
+	struct acpi_device *adev;
 	char *wmi_uid;
 	int rv;
 
@@ -4592,6 +4654,29 @@ static int asus_wmi_platform_init(struct asus_wmi *asus)
 	if (asus->driver->quirks->wapf >= 0)
 		asus_wmi_set_devstate(ASUS_WMI_DEVID_CWAP,
 				      asus->driver->quirks->wapf, NULL);
+
+	/*
+	 * Check presence of Intelligent Performance Technology (AIPT).
+	 * If present store acpi handle and set asus_aipt_present to true.
+	 */
+	adev = acpi_dev_get_first_match_dev("PNP0C14", "ATK", -1);
+	if (adev) {
+		acpi_handle handle = acpi_device_handle(adev);
+
+		acpi_dev_put(adev);
+
+		if (!acpi_has_method(handle, "FANL"))
+			return 0;
+
+		asus->acpi_mgmt_handle = handle;
+		asus->asus_aipt_present = true;
+		dev_info(dev, "ASUS Intelligent Performance Technology (AIPT) is present\n");
+		/*
+		 * Set the mode corresponding to default Linux platform power
+		 * profile Balanced
+		 */
+		asus_wmi_write_aipt_mode(asus, AIPT_STANDARD);
+	}
 
 	return 0;
 }
