@@ -1831,7 +1831,7 @@ static inline int mab_no_null_split(struct maple_big_node *b_node,
 		 * still be sufficient, then increment the split on NULL.
 		 */
 		if ((split < slot_count - 1) &&
-		    (b_node->b_end - split) > (mt_min_slots[b_node->type]))
+		    (b_node->b_end - split - 1) > (mt_min_slots[b_node->type]))
 			split++;
 		else
 			split--;
@@ -1896,7 +1896,7 @@ static inline int mab_calc_split(struct ma_state *mas,
 		 */
 		while ((split < slot_count - 1) &&
 		       ((bn->pivot[split] - min) < slot_count - 1) &&
-		       (b_end - split > slot_min))
+		       (b_end - split - 1 > slot_min))
 			split++;
 	}
 
