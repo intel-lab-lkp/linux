@@ -269,9 +269,6 @@ static inline void crash_kexec_wait_realmode(int cpu) {}
 
 void crash_kexec_prepare(void)
 {
-	/* Avoid hardlocking with irresponsive CPU holding logbuf_lock */
-	printk_deferred_enter();
-
 	/*
 	 * This function is only called after the system
 	 * has panicked or is otherwise in a critical state.
