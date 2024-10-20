@@ -1,0 +1,107 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/altr,socfpga-a10.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Device Tree Clock bindings for Altera's SoCFPGA platform
+
+maintainers:
+  - TODO
+
+description:
+  This binding uses the common clock binding[1].
+
+  [1] Documentation/devicetree/bindings/clock/clock-bindings.txt
+
+properties:
+  compatible:
+    description: |
+      shall be one of the following
+        - "altr,socfpga-a10-pll-clock" - for a PLL clock
+        - "altr,socfpga-a10-perip-clk" - The peripheral clock divided from the
+            PLL clock.
+        - "altr,socfpga-a10-gate-clk" - Clocks that directly feed peripherals
+            and can get gated.
+    enum:
+      - altr,socfpga-a10-pll-clock
+      - altr,socfpga-a10-perip-clk
+      - altr,socfpga-a10-gate-clk
+
+  reg:
+    description: |
+      shall be the control register offset from CLOCK_MANAGER's base for the
+      clock.
+    maxItems: 1
+
+  clocks:
+    description: |
+      shall be the input parent clock phandle for the clock. This is either an
+      oscillator or a pll output.
+    minItems: 1
+    maxItems: 5
+
+  '#clock-cells':
+    description: from common clock binding, shall be set to 0.
+    maxItems: 1
+
+  fixed-divider:
+    description: if clocks have a fixed divider value, use this property.
+    minimum: 1
+    maximum: 16
+
+  clk-gate:
+    description: |
+      for "socfpga-a10-gate-clk", clk-gate contains the gating register and the
+      bit index.
+    minItems: 2
+
+  div-reg:
+    description: |
+      for "socfpga-a10-gate-clk" and "socfpga-a10-periph-clk", div-reg contains
+      the divider register, bit shift, and width.
+    minItems: 3
+    maxItems: 3
+
+  clk-phase:
+    description: |
+      for the sdmmc_clk, contains the value of the clock phase that controls
+      the SDMMC CIU clock. The first value is the clk_sample(smpsel), and the
+      second value is the cclk_in_drv(drvsel). The clk-phase is used to enable
+      the correct hold/delay times that is needed for the SD/MMC CIU clock. The
+      values of both can be 0-315 degrees, in 45 degree increments.
+    minItems: 1
+
+required:
+  - compatible
+  - clocks
+  - '#clock-cells'
+
+oneOf:
+  - items:
+      - required:
+          - reg
+      - required:
+          - div-reg
+
+additionalProperties: false
+
+examples:
+  - |
+    main_pll: main_pll@40 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      #clock-cells = <0>;
+      compatible = "altr,socfpga-a10-pll-clock";
+      clocks = <&osc1>, <&cb_intosc_ls_clk>,
+           <&f2s_free_clk>;
+      reg = <0x40>;
+
+      main_noc_base_clk: main_noc_base_clk {
+        compatible = "altr,socfpga-a10-perip-clk";
+        div-reg = <0x140 16 11>;
+        clocks = <&periph_pll>;
+        #clock-cells = <0>;
+      };
+    };
+...
