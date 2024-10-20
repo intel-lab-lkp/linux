@@ -73,6 +73,9 @@
 #define VSC73XX_CAT_PR_USR_PRIO	0x75
 #define VSC73XX_CAT_VLAN_MISC	0x79
 #define VSC73XX_CAT_PORT_VLAN	0x7a
+#define VSC73XX_CPUTXDAT	0xc0
+#define VSC73XX_MISCFIFO	0xc4
+#define VSC73XX_MISCSTAT	0xc8
 #define VSC73XX_Q_MISC_CONF	0xdf
 
 /* MAC_CFG register bits */
@@ -165,6 +168,14 @@
 #define VSC73XX_CAT_PORT_VLAN_VLAN_CFI BIT(15)
 #define VSC73XX_CAT_PORT_VLAN_VLAN_USR_PRIO GENMASK(14, 12)
 #define VSC73XX_CAT_PORT_VLAN_VLAN_VID GENMASK(11, 0)
+
+/* MISCFIFO Miscellaneous Control Register */
+#define VSC73XX_MISCFIFO_REWIND_CPU_TX	BIT(1)
+#define VSC73XX_MISCFIFO_CPU_TX		BIT(0)
+
+/* MISCSTAT Miscellaneous Status */
+#define VSC73XX_MISCSTAT_CPU_TX_DATA_PENDING	BIT(8)
+#define VSC73XX_MISCSTAT_CPU_TX_DATA_OVERFLOW	BIT(7)
 
 /* Frame analyzer block 2 registers */
 #define VSC73XX_STORMLIMIT	0x02
@@ -363,6 +374,9 @@
 #define VSC73XX_MDIO_POLL_SLEEP_US	5
 #define VSC73XX_POLL_TIMEOUT_US		10000
 
+#define VSC73XX_IFH_MAGIC		0x52
+#define VSC73XX_IFH_SIZE		8
+
 struct vsc73xx_counter {
 	u8 counter;
 	const char *name;
@@ -373,6 +387,31 @@ struct vsc73xx_fdb {
 	u8 port;
 	u8 mac[ETH_ALEN];
 	bool valid;
+};
+
+/* Internal frame header structure */
+struct vsc73xx_ifh {
+	union {
+		u32 datah;
+		struct {
+		u32 wt:1, /* Frame was tagged but tag has removed from frame */
+		    : 1,
+		    frame_length:14, /* Frame Length including CRC */
+		    : 11,
+		    port:5; /* SRC port of switch */
+		};
+	};
+	union {
+		u32 datal;
+		struct {
+		u32 vid:16, /* VLAN ID */
+		    : 3,
+		    magic:9, /* IFH magic field */
+		    lpa:1, /* SMAC is subject of learning */
+		    : 1,
+		    priority:2; /* Switch categorizer assigned priority */
+		};
+	};
 };
 
 /* Counters are named according to the MIB standards where applicable.
@@ -681,6 +720,133 @@ static int vsc73xx_phy_write(struct dsa_switch *ds, int phy, int regnum,
 	dev_dbg(vsc->dev, "write %04x to reg %02x in phy%d\n",
 		val, regnum, phy);
 	return 0;
+}
+
+static int vsc73xx_tx_fifo_busy_check(struct vsc73xx *vsc, int port)
+{
+	int ret, err;
+	u32 val;
+
+	ret = read_poll_timeout(vsc73xx_read, err,
+				err < 0 ||
+				!(val & VSC73XX_MISCSTAT_CPU_TX_DATA_PENDING),
+				VSC73XX_POLL_SLEEP_US,
+				VSC73XX_POLL_TIMEOUT_US, false, vsc,
+				VSC73XX_BLOCK_MAC, port, VSC73XX_MISCSTAT,
+				&val);
+	if (ret)
+		return ret;
+	return err;
+}
+
+static int
+vsc73xx_write_tx_fifo(struct vsc73xx *vsc, int port, u32 data0, u32 data1)
+{
+	vsc73xx_write(vsc, VSC73XX_BLOCK_MAC, port, VSC73XX_CPUTXDAT, data0);
+	vsc73xx_write(vsc, VSC73XX_BLOCK_MAC, port, VSC73XX_CPUTXDAT, data1);
+
+	return vsc73xx_tx_fifo_busy_check(vsc, port);
+}
+
+static int
+vsc73xx_inject_frame(struct vsc73xx *vsc, int port, struct sk_buff *skb)
+{
+	struct vsc73xx_ifh *ifh;
+	u32 length, i, count;
+	u32 *buf;
+	int ret;
+
+	if (skb->len + VSC73XX_IFH_SIZE < 64)
+		length = 64;
+	else
+		length = skb->len + VSC73XX_IFH_SIZE;
+
+	count = DIV_ROUND_UP(length, 8);
+	buf = kzalloc(count * 8, GFP_KERNEL);
+	memset(buf, 0, sizeof(buf));
+
+	ifh = (struct vsc73xx_ifh *)buf;
+	ifh->frame_length = skb->len;
+	ifh->magic = VSC73XX_IFH_MAGIC;
+
+	skb_copy_and_csum_dev(skb, (u8 *)(buf + 2));
+
+	for (i = 0; i < count; i++) {
+		ret = vsc73xx_write_tx_fifo(vsc, port, buf[2 * i],
+					    buf[2 * i + 1]);
+		if (ret) {
+			/* Clear buffer after error */
+			vsc73xx_update_bits(vsc, VSC73XX_BLOCK_MAC, port,
+					    VSC73XX_MISCFIFO,
+					    VSC73XX_MISCFIFO_REWIND_CPU_TX,
+					    VSC73XX_MISCFIFO_REWIND_CPU_TX);
+			goto err;
+		}
+	}
+
+	vsc73xx_write(vsc, VSC73XX_BLOCK_MAC, port, VSC73XX_MISCFIFO,
+		      VSC73XX_MISCFIFO_CPU_TX);
+
+	skb_tx_timestamp(skb);
+
+	skb->dev->stats.tx_packets++;
+	skb->dev->stats.tx_bytes += skb->len;
+err:
+	kfree(buf);
+	return ret;
+}
+
+#define work_to_xmit_work(w) \
+		container_of((w), struct vsc73xx_deferred_xmit_work, work)
+
+static void vsc73xx_deferred_xmit(struct kthread_work *work)
+{
+	struct vsc73xx_deferred_xmit_work *xmit_work = work_to_xmit_work(work);
+	struct dsa_switch *ds = xmit_work->dp->ds;
+	struct sk_buff *skb = xmit_work->skb;
+	int port = xmit_work->dp->index;
+	struct vsc73xx *vsc = ds->priv;
+	int ret;
+
+	if (vsc73xx_tx_fifo_busy_check(vsc, port)) {
+		dev_err(vsc->dev, "port %d failed to inject skb\n",
+			port);
+
+		/* Clear buffer after error */
+		vsc73xx_update_bits(vsc, VSC73XX_BLOCK_MAC, port,
+				    VSC73XX_MISCFIFO,
+				    VSC73XX_MISCFIFO_REWIND_CPU_TX,
+				    VSC73XX_MISCFIFO_REWIND_CPU_TX);
+
+		kfree_skb(skb);
+		return;
+	}
+
+	ret = vsc73xx_inject_frame(vsc, port, skb);
+
+	if (ret) {
+		dev_err(vsc->dev, "port %d failed to inject skb\n",
+			port);
+		return;
+	}
+
+	consume_skb(skb);
+	kfree(xmit_work);
+}
+
+static int
+vsc73xx_connect_tag_protocol(struct dsa_switch *ds, enum dsa_tag_protocol proto)
+{
+	struct vsc73xx_8021q_tagger_data *tagger_data;
+
+	switch (proto) {
+	case DSA_TAG_PROTO_VSC73XX_8021Q:
+		tagger_data = ds->tagger_data;
+		tagger_data->xmit_work_fn = vsc73xx_deferred_xmit;
+		return 0;
+	default:
+		return -EPROTONOSUPPORT;
+	}
 }
 
 static enum dsa_tag_protocol vsc73xx_get_tag_protocol(struct dsa_switch *ds,
@@ -1026,6 +1192,11 @@ static void vsc73xx_init_port(struct vsc73xx *vsc, int port)
 		      port,
 		      VSC73XX_CAT_DROP,
 		      VSC73XX_CAT_DROP_FWD_PAUSE_ENA);
+
+	/* Allow switch to recalculate CRC of CPU packets */
+	vsc73xx_update_bits(vsc, VSC73XX_BLOCK_MAC, port, VSC73XX_TXUPDCFG,
+			    VSC73XX_TXUPDCFG_TX_UPDATE_CRC_CPU_ENA,
+			    VSC73XX_TXUPDCFG_TX_UPDATE_CRC_CPU_ENA);
 
 	/* Clear all counters */
 	vsc73xx_write(vsc, VSC73XX_BLOCK_MAC,
@@ -2218,6 +2389,7 @@ static const struct phylink_mac_ops vsc73xx_phylink_mac_ops = {
 
 static const struct dsa_switch_ops vsc73xx_ds_ops = {
 	.get_tag_protocol = vsc73xx_get_tag_protocol,
+	.connect_tag_protocol = vsc73xx_connect_tag_protocol,
 	.setup = vsc73xx_setup,
 	.teardown = vsc73xx_teardown,
 	.phy_read = vsc73xx_phy_read,

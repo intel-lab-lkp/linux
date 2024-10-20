@@ -2,6 +2,7 @@
 #include <linux/device.h>
 #include <linux/etherdevice.h>
 #include <linux/gpio/driver.h>
+#include <linux/dsa/vsc73xx.h>
 
 /* The VSC7395 switch chips have 5+1 ports which means 5 ordinary ports and
  * a sixth CPU port facing the processor with an RGMII interface. These ports
