@@ -2219,11 +2219,6 @@ static void vsc73xx_refresh_fwd_map(struct dsa_switch *ds, int port, u8 state)
 			    VSC73XX_SRCMASKS_PORTS_MASK, mask);
 }
 
-/* FIXME: STP frames aren't forwarded at this moment. BPDU frames are
- * forwarded only from and to PI/SI interface. For more info see chapter
- * 2.7.1 (CPU Forwarding) in datasheet.
- * This function is required for tag_8021q operations.
- */
 static void vsc73xx_port_stp_state_set(struct dsa_switch *ds, int port,
 				       u8 state)
 {
