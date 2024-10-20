@@ -65,11 +65,18 @@ static int bmi270_spi_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id bmi270_spi_id[] = {
+	{ "bmi260", (kernel_ulong_t)&bmi260_chip_info},
 	{ "bmi270", (kernel_ulong_t)&bmi270_chip_info },
 	{ }
 };
 
+static const struct acpi_device_id bmi270_acpi_match[] = {
+	{ "BOSC0260",  (kernel_ulong_t)&bmi260_chip_info },
+	{ }
+};
+
 static const struct of_device_id bmi270_of_match[] = {
+	{ .compatible = "bosch,bmi260", .data = &bmi260_chip_info },
 	{ .compatible = "bosch,bmi270", .data = &bmi270_chip_info },
 	{ }
 };
@@ -77,6 +84,7 @@ static const struct of_device_id bmi270_of_match[] = {
 static struct spi_driver bmi270_spi_driver = {
 	.driver = {
 		.name = "bmi270",
+		.acpi_match_table = bmi270_acpi_match,
 		.of_match_table = bmi270_of_match,
 	},
 	.probe = bmi270_spi_probe,
