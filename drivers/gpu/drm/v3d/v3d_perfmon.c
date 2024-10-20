@@ -221,6 +221,7 @@ void v3d_perfmon_get(struct v3d_perfmon *perfmon)
 void v3d_perfmon_put(struct v3d_perfmon *perfmon)
 {
 	if (perfmon && refcount_dec_and_test(&perfmon->refcnt)) {
+		atomic_dec(&perfmon->v3d->num_perfmon);
 		mutex_destroy(&perfmon->lock);
 		kfree(perfmon);
 	}
@@ -312,6 +313,9 @@ static int v3d_perfmon_idr_del(int id, void *elem, void *data)
 	if (perfmon == v3d->active_perfmon)
 		v3d_perfmon_stop(v3d, perfmon, false);
 
+	/* If this perfmon is global one, set global_perfmon to NULL */
+	cmpxchg(&v3d->perfmon_info.global_perfmon, perfmon, NULL);
+
 	v3d_perfmon_put(perfmon);
 
 	return 0;
@@ -349,6 +353,12 @@ int v3d_perfmon_create_ioctl(struct drm_device *dev, void *data,
 			return -EINVAL;
 	}
 
+	/* If there is a global perfmon. block the creation of perfmons. */
+	if (v3d->perfmon_info.global_perfmon) {
+		dev_info_ratelimited(dev->dev, "global perfmon is active\n");
+		return -EAGAIN;
+	}
+
 	perfmon = kzalloc(struct_size(perfmon, values, req->ncounters),
 			  GFP_KERNEL);
 	if (!perfmon)
@@ -358,6 +368,7 @@ int v3d_perfmon_create_ioctl(struct drm_device *dev, void *data,
 		perfmon->counters[i] = req->counters[i];
 
 	perfmon->ncounters = req->ncounters;
+	perfmon->v3d = v3d;
 
 	refcount_set(&perfmon->refcnt, 1);
 	mutex_init(&perfmon->lock);
@@ -373,6 +384,7 @@ int v3d_perfmon_create_ioctl(struct drm_device *dev, void *data,
 		return ret;
 	}
 
+	atomic_inc(&perfmon->v3d->num_perfmon);
 	req->id = ret;
 
 	return 0;
@@ -452,6 +464,43 @@ int v3d_perfmon_get_counter_ioctl(struct drm_device *dev, void *data,
 	strscpy(req->name, counter->name, sizeof(req->name));
 	strscpy(req->category, counter->category, sizeof(req->category));
 	strscpy(req->description, counter->description, sizeof(req->description));
+
+	return 0;
+}
+
+int v3d_perfmon_set_global_ioctl(struct drm_device *dev, void *data,
+				 struct drm_file *file_priv)
+{
+	struct v3d_file_priv *v3d_priv = file_priv->driver_priv;
+	struct drm_v3d_perfmon_set_global *req = data;
+	struct v3d_dev *v3d = to_v3d_dev(dev);
+	struct v3d_perfmon *perfmon;
+
+	if (req->flags & ~DRM_V3D_PERFMON_CLEAR_GLOBAL)
+		return -EINVAL;
+
+	/* If the request is to clear the global performance monitor. */
+	if (req->flags & DRM_V3D_PERFMON_CLEAR_GLOBAL) {
+		if (cmpxchg(&v3d->perfmon_info.global_perfmon, v3d->perfmon_info.global_perfmon, NULL))
+			return 0;
+		else
+			return -EINVAL;
+	}
+
+	guard(mutex)(&v3d_priv->perfmon.lock);
+
+	perfmon = idr_find(&v3d_priv->perfmon.idr, req->id);
+	if (!perfmon)
+		return -EINVAL;
+
+	/* Only permit this ioctl(..) if there is exactly one perfmon - the one
+	 * we want to make global.
+	 */
+	if (atomic_read(&v3d->num_perfmon) != 1)
+		return -EPERM;
+
+	if (cmpxchg(&v3d->perfmon_info.global_perfmon, NULL, perfmon))
+		return -EBUSY;
 
 	return 0;
 }

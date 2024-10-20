@@ -61,6 +61,8 @@ struct v3d_queue_state {
 	struct v3d_stats stats;
 };
 
+struct v3d_dev;
+
 /* Performance monitor object. The perform lifetime is controlled by userspace
  * using perfmon related ioctls. A perfmon can be attached to a submit_cl
  * request, and when this is the case, HW perf counters will be activated just
@@ -68,6 +70,9 @@ struct v3d_queue_state {
  * done. This way, only events related to a specific job will be counted.
  */
 struct v3d_perfmon {
+	/* Pointer back to v3d instance this perfmon belongs. */
+	struct v3d_dev *v3d;
+
 	/* Tracks the number of users of the perfmon, when this counter reaches
 	 * zero the perfmon is destroyed.
 	 */
@@ -179,6 +184,9 @@ struct v3d_dev {
 		u32 num_allocated;
 		u32 pages_allocated;
 	} bo_stats;
+
+	/* Keep track of current number of allocated perfmons. */
+	atomic_t num_perfmon;
 };
 
 static inline struct v3d_dev *
@@ -584,6 +592,8 @@ int v3d_perfmon_get_values_ioctl(struct drm_device *dev, void *data,
 				 struct drm_file *file_priv);
 int v3d_perfmon_get_counter_ioctl(struct drm_device *dev, void *data,
 				  struct drm_file *file_priv);
+int v3d_perfmon_set_global_ioctl(struct drm_device *dev, void *data,
+				 struct drm_file *file_priv);
 
 /* v3d_sysfs.c */
 int v3d_sysfs_init(struct device *dev);

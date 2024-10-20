@@ -30,6 +30,12 @@ struct v3d_perfmon_info {
 	 * Array of counters valid for the platform.
 	 */
 	const struct v3d_perf_counter_desc *counters;
+
+	/*
+	 * For some performance analysis tool in user space, we need
+	 * to use one global configured perfmon for all jobs.
+	 */
+	struct v3d_perfmon *global_perfmon;
 };
 
 #endif
