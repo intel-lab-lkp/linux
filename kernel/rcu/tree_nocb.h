@@ -893,6 +893,12 @@ static inline bool nocb_cb_wait_cond(struct rcu_data *rdp)
 	return !READ_ONCE(rdp->nocb_cb_sleep) || kthread_should_park();
 }
 
+static inline bool nocb_cblist_empty(struct rcu_data *rdp)
+{
+	return !(rcu_rdp_is_offloaded(rdp) &&
+		WARN_ON_ONCE(rcu_segcblist_n_cbs(&rdp->cblist)));
+}
+
 /*
  * Invoke any ready callbacks from the corresponding no-CBs CPU,
  * then, if there are no more, wait for more to appear.
@@ -907,7 +913,7 @@ static void nocb_cb_wait(struct rcu_data *rdp)
 
 	swait_event_interruptible_exclusive(rdp->nocb_cb_wq,
 					    nocb_cb_wait_cond(rdp));
-	if (kthread_should_park()) {
+	if (kthread_should_park() && nocb_cblist_empty(rdp)) {
 		kthread_parkme();
 	} else if (READ_ONCE(rdp->nocb_cb_sleep)) {
 		WARN_ON(signal_pending(current));
