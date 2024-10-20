@@ -165,6 +165,10 @@ restart:
 
 	trace_xfs_filestream_pick(pag, pino, free);
 	args->pag = pag;
+
+	if (!args->pag)
+		return -ENOSPC;
+
 	return 0;
 
 }
