@@ -122,6 +122,17 @@ ____intel_de_wait_for_register_nowl(struct intel_display *display,
 #define __intel_de_wait_for_register_nowl(p,...) ____intel_de_wait_for_register_nowl(__to_intel_display(p), __VA_ARGS__)
 
 static inline int
+____intel_de_wait_for_register_atomic_nowl(struct intel_display *display,
+					   i915_reg_t reg,
+					   u32 mask, u32 value,
+					   unsigned int fast_timeout_us)
+{
+	return __intel_wait_for_register(__to_uncore(display), reg, mask,
+					 value, fast_timeout_us, 0, NULL);
+}
+#define __intel_de_wait_for_register_atomic_nowl(p,...) ____intel_de_wait_for_register_atomic_nowl(__to_intel_display(p), __VA_ARGS__)
+
+static inline int
 __intel_de_wait(struct intel_display *display, i915_reg_t reg,
 		u32 mask, u32 value, unsigned int timeout)
 {
