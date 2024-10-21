@@ -271,6 +271,7 @@ void intel_dmc_wl_init(struct intel_display *display)
 	refcount_set(&wl->refcount, 0);
 }
 
+/* Must only be called as part of enabling dynamic DC states. */
 void intel_dmc_wl_enable(struct intel_display *display)
 {
 	struct intel_dmc_wl *wl = &display->wl;
@@ -281,7 +282,7 @@ void intel_dmc_wl_enable(struct intel_display *display)
 
 	spin_lock_irqsave(&wl->lock, flags);
 
-	if (wl->enabled)
+	if (drm_WARN_ON(display->drm, wl->enabled))
 		goto out_unlock;
 
 	/*
@@ -314,6 +315,7 @@ out_unlock:
 	spin_unlock_irqrestore(&wl->lock, flags);
 }
 
+/* Must only be called as part of disabling dynamic DC states. */
 void intel_dmc_wl_disable(struct intel_display *display)
 {
 	struct intel_dmc_wl *wl = &display->wl;
@@ -326,7 +328,7 @@ void intel_dmc_wl_disable(struct intel_display *display)
 
 	spin_lock_irqsave(&wl->lock, flags);
 
-	if (!wl->enabled)
+	if (drm_WARN_ON(display->drm, !wl->enabled))
 		goto out_unlock;
 
 	/* Disable wakelock in DMC */
