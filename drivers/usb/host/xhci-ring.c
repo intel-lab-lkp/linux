@@ -126,6 +126,29 @@ static void inc_td_cnt(struct urb *urb)
 	urb_priv->num_tds_done++;
 }
 
+/*
+ * Return true if the DMA is pointing to a Link TRB in the ring;
+ * otherwise, return false.
+ */
+static bool is_dma_link_trb(struct xhci_ring *ring, dma_addr_t dma)
+{
+	struct xhci_segment *seg;
+	union xhci_trb *trb;
+
+	seg = ring->first_seg;
+	do {
+		if (in_range(dma, seg->dma, TRB_SEGMENT_SIZE)) {
+			/* found the TRB, check if it's link */
+			trb = &seg->trbs[(dma - seg->dma) / sizeof(*trb)];
+			return trb_is_link(trb);
+		}
+
+		seg = seg->next;
+	} while (seg != ring->first_seg);
+
+	return false;
+}
+
 static void trb_to_noop(union xhci_trb *trb, u32 noop_type)
 {
 	if (trb_is_link(trb)) {
@@ -1718,6 +1741,7 @@ static void handle_cmd_completion(struct xhci_hcd *xhci,
 
 	trace_xhci_handle_command(xhci->cmd_ring, &cmd_trb->generic);
 
+	cmd_comp_code = GET_COMP_CODE(le32_to_cpu(event->status));
 	cmd_dequeue_dma = xhci_trb_virt_to_dma(xhci->cmd_ring->deq_seg,
 			cmd_trb);
 	/*
@@ -1725,16 +1749,25 @@ static void handle_cmd_completion(struct xhci_hcd *xhci,
 	 * command.
 	 */
 	if (!cmd_dequeue_dma || cmd_dma != (u64)cmd_dequeue_dma) {
-		xhci_warn(xhci,
-			  "ERROR mismatched command completion event\n");
-		return;
+		/*
+		 * For the 'command ring stopped' completion event, there
+		 * is a risk of a mismatch in dequeue pointers if we abort
+		 * the command just before the link TRB in the command ring.
+		 * In this scenario, the cmd_dma in the event would point
+		 * to a link TRB, while the software dequeue pointer circles
+		 * back to the start.
+		 */
+		if (!(cmd_comp_code == COMP_COMMAND_RING_STOPPED &&
+		      is_dma_link_trb(xhci->cmd_ring, cmd_dma))) {
+			xhci_warn(xhci,
+				  "ERROR mismatched command completion event\n");
+			return;
+		}
 	}
 
 	cmd = list_first_entry(&xhci->cmd_list, struct xhci_command, cmd_list);
 
 	cancel_delayed_work(&xhci->cmd_timer);
-
-	cmd_comp_code = GET_COMP_CODE(le32_to_cpu(event->status));
 
 	/* If CMD ring stopped we own the trbs between enqueue and dequeue */
 	if (cmd_comp_code == COMP_COMMAND_RING_STOPPED) {
