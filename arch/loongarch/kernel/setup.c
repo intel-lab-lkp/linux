@@ -65,6 +65,8 @@ EXPORT_SYMBOL(cpu_data);
 
 struct loongson_board_info b_info;
 static const char dmi_empty_string[] = "        ";
+static int possible_cpus;
+static bool bsp_added;
 
 /*
  * Setup information
@@ -346,10 +348,55 @@ out:
 	*cmdline_p = boot_command_line;
 }
 
+int topo_get_cpu(int physid)
+{
+	int i;
+
+	for (i = 0; i < possible_cpus; i++)
+		if (cpu_logical_map(i) == physid)
+			break;
+
+	if (i == possible_cpus)
+		return -ENOENT;
+
+	return i;
+}
+
+int topo_add_cpu(int physid)
+{
+	int cpu;
+
+	if (!bsp_added && (physid == loongson_sysconf.boot_cpu_id)) {
+		bsp_added = true;
+		return 0;
+	}
+
+	cpu = topo_get_cpu(physid);
+	if (cpu >= 0) {
+		pr_warn("Adding duplicated physical cpuid 0x%x\n", physid);
+		return -EEXIST;
+	}
+
+	if (possible_cpus >= nr_cpu_ids)
+		return -ERANGE;
+
+	__cpu_logical_map[possible_cpus] = physid;
+	cpu = possible_cpus++;
+	return cpu;
+}
+
+static void __init topo_init(void)
+{
+	loongson_sysconf.boot_cpu_id = read_csr_cpuid();
+	__cpu_logical_map[0] = loongson_sysconf.boot_cpu_id;
+	possible_cpus++;
+}
+
 void __init platform_init(void)
 {
 	arch_reserve_vmcore();
 	arch_reserve_crashkernel();
+	topo_init();
 
 #ifdef CONFIG_ACPI
 	acpi_table_upgrade();

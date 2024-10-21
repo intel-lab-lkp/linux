@@ -119,4 +119,7 @@ static inline void __cpu_die(unsigned int cpu)
 #define cpu_logical_map(cpu)	0
 #endif /* CONFIG_SMP */
 
+int topo_add_cpu(int physid);
+int topo_get_cpu(int physid);
+
 #endif /* __ASM_SMP_H */
