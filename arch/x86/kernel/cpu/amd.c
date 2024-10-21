@@ -1224,7 +1224,7 @@ enum amd_core_type amd_get_core_type(void)
 		     core_type                  :4;
 	} props;
 
-	if (!cpu_feature_enabled(X86_FEATURE_HETERO_CORE_TOPOLOGY))
+	if (!cpu_feature_enabled(X86_FEATURE_AMD_HETEROGENEOUS_CORES))
 		return CPU_CORE_TYPE_NO_HETERO_SUP;
 
 	cpuid_leaf_reg(0x80000026, CPUID_EBX, &props);
