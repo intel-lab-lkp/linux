@@ -2366,6 +2366,14 @@ static int intel_edp_dsc_compute_pipe_bpp(struct intel_dp *intel_dp,
 	return 0;
 }
 
+static bool intel_dp_dsc_needs_odd_pixel(int hdisplay, int replicated_pixels, int num_pipes)
+{
+	if (!replicated_pixels || num_pipes == 1)
+		return false;
+
+	return ((hdisplay + replicated_pixels) / num_pipes) % 2;
+}
+
 int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 				struct intel_crtc_state *pipe_config,
 				struct drm_connector_state *conn_state,
@@ -2452,6 +2460,10 @@ int intel_dp_dsc_compute_config(struct intel_dp *intel_dp,
 						adjusted_mode->crtc_hdisplay,
 						pipe_config->dsc.slice_count,
 						pipe_config->output_format);
+	pipe_config->dsc.has_odd_pixel =
+		intel_dp_dsc_needs_odd_pixel(adjusted_mode->crtc_hdisplay,
+					     pipe_config->dsc.replicated_pixels,
+					     num_joined_pipes);
 
 	/*
 	 * VDSC engine operates at 1 Pixel per clock, so if peak pixel rate
