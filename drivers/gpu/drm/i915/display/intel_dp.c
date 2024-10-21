@@ -1940,6 +1940,23 @@ static bool is_bw_sufficient_for_dsc_config(u16 compressed_bppx16, u32 link_cloc
 	return available_bw > required_bw;
 }
 
+static
+u32 adjust_clock_for_extra_pixels(const struct drm_display_mode *adjusted_mode,
+				  int extra_pixels)
+{
+	u32 clock = adjusted_mode->clock;
+	u16 htotal = adjusted_mode->htotal;
+
+	if (!extra_pixels)
+		return clock;
+	/*
+	 * clock = (htotal) * (vtotal) * refresh_rate
+	 * adjusted_clock = (htotal + extra_pixels) * (vtotal) * refresh_rate
+	 * = clock + (clock * extra_pixels / htotal)
+	 */
+	return clock + extra_pixels * (clock / htotal);
+}
+
 static int dsc_compute_link_config(struct intel_dp *intel_dp,
 				   struct intel_crtc_state *pipe_config,
 				   struct link_config_limits *limits,
@@ -1948,7 +1965,11 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 {
 	const struct drm_display_mode *adjusted_mode = &pipe_config->hw.adjusted_mode;
 	int link_rate, lane_count;
+	u32 adjusted_clock;
 	int i;
+
+	adjusted_clock = adjust_clock_for_extra_pixels(adjusted_mode,
+						       pipe_config->dsc.replicated_pixels);
 
 	for (i = 0; i < intel_dp->num_common_rates; i++) {
 		link_rate = intel_dp_common_rate(intel_dp, i);
@@ -1959,7 +1980,7 @@ static int dsc_compute_link_config(struct intel_dp *intel_dp,
 		     lane_count <= limits->max_lane_count;
 		     lane_count <<= 1) {
 			if (!is_bw_sufficient_for_dsc_config(compressed_bppx16, link_rate,
-							     lane_count, adjusted_mode->clock,
+							     lane_count, adjusted_clock,
 							     pipe_config->output_format,
 							     timeslots))
 				continue;
