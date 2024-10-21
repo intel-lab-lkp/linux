@@ -50,6 +50,14 @@
 							   _ICL_PIPE_DSS_CTL2_PB, \
 							   _ICL_PIPE_DSS_CTL2_PC)
 
+#define _BMG_PIPE_DSS_CTL3_PB			0x782f0
+#define _BMG_PIPE_DSS_CTL3_PC			0x784f0
+#define BMG_PIPE_DSS_CTL3(pipe)			_MMIO_PIPE((pipe) - PIPE_B, \
+							   _BMG_PIPE_DSS_CTL3_PB, \
+							   _BMG_PIPE_DSS_CTL3_PC)
+#define  DSC_PIXEL_REPLICATION_MASK		REG_GENMASK(15, 0)
+#define  DSC_PIXEL_REPLICATION(count)		(REG_FIELD_PREP(DSC_PIXEL_REPLICATION_MASK, (count)))
+
 /* Icelake Display Stream Compression Registers */
 #define DSCA_PICTURE_PARAMETER_SET_0		_MMIO(0x6B200)
 #define DSCC_PICTURE_PARAMETER_SET_0		_MMIO(0x6BA00)
