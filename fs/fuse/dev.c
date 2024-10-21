@@ -1668,7 +1668,7 @@ static int fuse_notify_store(struct fuse_conn *fc, unsigned int size,
 		err = fuse_copy_page(cs, &page, offset, this_num, 0);
 		if (!folio_test_uptodate(folio) && !err && offset == 0 &&
 		    (this_num == folio_size(folio) || file_size == end)) {
-			folio_zero_range(folio, this_num, folio_size(folio));
+			folio_zero_segment(folio, this_num, folio_size(folio));
 			folio_mark_uptodate(folio);
 		}
 		folio_unlock(folio);
