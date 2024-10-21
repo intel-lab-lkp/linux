@@ -210,7 +210,7 @@ static int vm_get_cmma_bits(struct kvm_vm *vm, u64 flags, int *errno_out)
 	struct kvm_s390_cmma_log args;
 	int rc;
 
-	errno = 0;
+	*errno_out = 0;
 
 	args = (struct kvm_s390_cmma_log){
 		.start_gfn = 0,
@@ -219,8 +219,10 @@ static int vm_get_cmma_bits(struct kvm_vm *vm, u64 flags, int *errno_out)
 		.values = (__u64)&cmma_value_buf[0]
 	};
 	rc = __vm_ioctl(vm, KVM_S390_GET_CMMA_BITS, &args);
+	if (rc < 0) {
+		*errno_out = errno;
+	}
 
-	*errno_out = errno;
 	return rc;
 }
 
