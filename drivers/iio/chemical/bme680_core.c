@@ -15,6 +15,7 @@
 #include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
@@ -110,6 +111,10 @@ enum bme680_scan {
 	BME680_GAS,
 };
 
+static const char *const bme680_supply_names[] = { "vdd", "vddio" };
+
+#define BME680_NUM_SUPPLIES ARRAY_SIZE(bme680_supply_names)
+
 struct bme680_data {
 	struct regmap *regmap;
 	struct bme680_calib bme680;
@@ -120,6 +125,8 @@ struct bme680_data {
 	u8 preheat_curr_mA;
 	u16 heater_dur;
 	u16 heater_temp;
+
+	struct regulator_bulk_data supplies[BME680_NUM_SUPPLIES];
 
 	struct {
 		s32 chan[4];
@@ -1113,6 +1120,14 @@ int bme680_core_probe(struct device *dev, struct regmap *regmap,
 	data->heater_temp = 320; /* degree Celsius */
 	data->heater_dur = 150;  /* milliseconds */
 	data->preheat_curr_mA = 0;
+
+	ret = devm_regulator_bulk_get_enable(dev, BME680_NUM_SUPPLIES,
+					     bme680_supply_names);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to get and enable supplies.\n");
+
+	fsleep(BME680_STARTUP_TIME_US);
 
 	ret = regmap_write(regmap, BME680_REG_SOFT_RESET, BME680_CMD_SOFTRESET);
 	if (ret < 0)
