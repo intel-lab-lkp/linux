@@ -1262,7 +1262,6 @@ int register_ftrace_graph(struct fgraph_ops *gops)
 			return ret;
 		}
 		fgraph_initialized = true;
-		ret = 0;
 	}
 
 	if (!fgraph_array[0]) {
