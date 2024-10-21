@@ -2514,6 +2514,22 @@ void intel_encoder_get_config(struct intel_encoder *encoder,
 	intel_crtc_readout_derived_state(crtc_state);
 }
 
+static int intel_splitter_adjust_pipe_width(int width, int replicated_pixels)
+{
+	/* Account for Pixel replication:
+	 * Pixel replication is required due to the rounding of slice_width (Hactive / slice_count).
+	 *
+	 * Splitter HW takes care of these by removing replicated pixels from the last pipe.
+	 */
+
+	if (!replicated_pixels)
+		return width;
+
+	width += replicated_pixels;
+
+	return width;
+}
+
 static void intel_joiner_compute_pipe_src(struct intel_crtc_state *crtc_state)
 {
 	int num_pipes = intel_crtc_num_joined_pipes(crtc_state);
@@ -2522,7 +2538,9 @@ static void intel_joiner_compute_pipe_src(struct intel_crtc_state *crtc_state)
 	if (num_pipes == 1)
 		return;
 
-	width = drm_rect_width(&crtc_state->pipe_src);
+	width = intel_splitter_adjust_pipe_width(drm_rect_width(&crtc_state->pipe_src),
+						 crtc_state->dsc.replicated_pixels);
+
 	height = drm_rect_height(&crtc_state->pipe_src);
 
 	drm_rect_init(&crtc_state->pipe_src, 0, 0,
