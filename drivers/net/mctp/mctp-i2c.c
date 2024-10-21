@@ -579,7 +579,7 @@ static void mctp_i2c_flow_release(struct mctp_i2c_dev *midev)
 
 static int mctp_i2c_header_create(struct sk_buff *skb, struct net_device *dev,
 				  unsigned short type, const void *daddr,
-	   const void *saddr, unsigned int len)
+				  const void *saddr, unsigned int len)
 {
 	struct mctp_i2c_hdr *hdr;
 	struct mctp_hdr *mhdr;
@@ -588,8 +588,15 @@ static int mctp_i2c_header_create(struct sk_buff *skb, struct net_device *dev,
 	if (len > MCTP_I2C_MAXMTU)
 		return -EMSGSIZE;
 
-	lldst = *((u8 *)daddr);
-	llsrc = *((u8 *)saddr);
+	if (daddr)
+		lldst = *((u8 *)daddr);
+	else
+		return -EINVAL;
+
+	if (saddr)
+		llsrc = *((u8 *)saddr);
+	else
+		llsrc = dev->dev_addr;
 
 	skb_push(skb, sizeof(struct mctp_i2c_hdr));
 	skb_reset_mac_header(skb);
