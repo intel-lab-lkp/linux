@@ -537,6 +537,7 @@ static inline int handle_guest_request(struct snp_msg_desc *mdesc, u64 exit_code
 
 void __init snp_secure_tsc_prepare(void);
 void __init securetsc_init(void);
+void __noreturn sev_es_terminate(unsigned int set, unsigned int reason);
 
 #else	/* !CONFIG_AMD_MEM_ENCRYPT */
 
@@ -586,6 +587,7 @@ static inline int handle_guest_request(struct snp_msg_desc *mdesc, u64 exit_code
 
 static inline void __init snp_secure_tsc_prepare(void) { }
 static inline void __init securetsc_init(void) { }
+static inline void sev_es_terminate(unsigned int set, unsigned int reason) { }
 
 #endif	/* CONFIG_AMD_MEM_ENCRYPT */
 
