@@ -185,7 +185,7 @@ auto-test-targets :=			\
 
 testcase-targets := $(addsuffix .o,$(addprefix $(SCXOBJ_DIR)/,$(auto-test-targets)))
 
-$(SCXOBJ_DIR)/runner.o: runner.c | $(SCXOBJ_DIR)
+$(SCXOBJ_DIR)/runner.o: runner.c | $(SCXOBJ_DIR) $(BPFOBJ)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Create all of the test targets object files, whose testcase objects will be
