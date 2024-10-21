@@ -33,6 +33,9 @@ void intel_dsc_dp_pps_write(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state);
 void intel_vdsc_state_dump(struct drm_printer *p, int indent,
 			   const struct intel_crtc_state *crtc_state);
+bool intel_dsc_can_use_pixel_replication(struct intel_display *display,
+					 int mode_hdisplay, u8 slice_count,
+					 enum intel_output_format output_format);
 int intel_dsc_get_replicated_pixels(struct intel_display *display,
 				    int mode_hdisplay,
 				    int slice_count,
