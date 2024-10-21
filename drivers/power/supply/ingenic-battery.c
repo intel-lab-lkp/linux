@@ -6,12 +6,14 @@
  * based on drivers/power/supply/jz4740-battery.c
  */
 
+#include <linux/cleanup.h>
 #include <linux/iio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/property.h>
+#include <linux/slab.h>
 
 struct ingenic_battery {
 	struct device *dev;
@@ -62,8 +64,8 @@ static int ingenic_battery_get_property(struct power_supply *psy,
  */
 static int ingenic_battery_set_scale(struct ingenic_battery *bat)
 {
-	const int *scale_raw;
-	int scale_len, scale_type, best_idx = -1, best_mV, max_raw, i, ret;
+	int scale_len, scale_type, scale_avail_type;
+	int best_idx = -1, best_mV, max_raw, i, ret;
 	u64 max_mV;
 
 	ret = iio_read_max_channel_raw(bat->channel, &max_raw);
@@ -72,14 +74,18 @@ static int ingenic_battery_set_scale(struct ingenic_battery *bat)
 		return ret;
 	}
 
-	ret = iio_read_avail_channel_attribute(bat->channel, &scale_raw,
-					       &scale_type, &scale_len,
-					       IIO_CHAN_INFO_SCALE);
-	if (ret < 0) {
+	const int *scale_raw __free(kfree) =
+		iio_read_avail_channel_attr_retvals(bat->channel,
+						    &scale_type,
+						    &scale_len,
+						    &scale_avail_type,
+						    IIO_CHAN_INFO_SCALE);
+	if (IS_ERR(scale_raw)) {
 		dev_err(bat->dev, "Unable to read channel avail scale\n");
-		return ret;
+		return PTR_ERR(scale_raw);
 	}
-	if (ret != IIO_AVAIL_LIST || scale_type != IIO_VAL_FRACTIONAL_LOG2)
+	if (scale_avail_type != IIO_AVAIL_LIST ||
+	    scale_type != IIO_VAL_FRACTIONAL_LOG2)
 		return -EINVAL;
 
 	max_mV = bat->info->voltage_max_design_uv / 1000;

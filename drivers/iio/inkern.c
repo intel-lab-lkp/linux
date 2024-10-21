@@ -760,10 +760,54 @@ static int iio_channel_read_avail(struct iio_channel *chan,
 	if (!iio_channel_has_available(chan->channel, info))
 		return -EINVAL;
 
-	if (iio_info->read_avail)
-		return iio_info->read_avail(chan->indio_dev, chan->channel,
-					    vals, type, length, info);
+	if (iio_info->read_avail) {
+		const int *vals_tmp;
+		int ret;
+
+		ret = iio_info->read_avail(chan->indio_dev, chan->channel,
+					   &vals_tmp, type, length, info);
+		if (ret < 0)
+			return ret;
+
+		/*
+		 * Copy the producer's avail buffer with lock_exists locked to
+		 * avoid possible race with producer unregistration.
+		 */
+		*vals = kmemdup_array(vals_tmp, *length, sizeof(int), GFP_KERNEL);
+		if (!*vals)
+			return -ENOMEM;
+
+		if (iio_info->read_avail_release_resource)
+			iio_info->read_avail_release_resource(
+				chan->indio_dev, chan->channel, vals_tmp, info);
+
+		return ret;
+	}
 	return -EINVAL;
+}
+
+/*
+ * iio_channel_read_avail_retvals() is equivalent to iio_channel_read_avail()
+ * but stores the pointer to the buffer of available values in the returned
+ * variable. Since such buffer must be freed after use, this function lets the
+ * user declare a cleanup local variable, e.g.:
+ * const int *vals = __free(kfree) = iio_channel_read_avail_retvals(...);
+ */
+static const int *iio_channel_read_avail_retvals(struct iio_channel *chan,
+						 int *type, int *length,
+						 int *avail_type,
+						 enum iio_chan_info_enum info)
+{
+	const int *vals;
+	int ret;
+
+	ret = iio_channel_read_avail(chan, &vals, type, length, info);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	*avail_type = ret;
+
+	return vals;
 }
 
 int iio_read_avail_channel_attribute(struct iio_channel *chan,
@@ -780,6 +824,25 @@ int iio_read_avail_channel_attribute(struct iio_channel *chan,
 }
 EXPORT_SYMBOL_GPL(iio_read_avail_channel_attribute);
 
+const int *
+iio_read_avail_channel_attr_retvals(struct iio_channel *chan, int *type,
+				    int *length, int *avail_type,
+				    enum iio_chan_info_enum attribute)
+{
+	const int *vals;
+	int ret;
+
+	ret = iio_read_avail_channel_attribute(chan, &vals, type, length,
+					       attribute);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	*avail_type = ret;
+
+	return vals;
+}
+EXPORT_SYMBOL_GPL(iio_read_avail_channel_attr_retvals);
+
 int iio_read_avail_channel_raw(struct iio_channel *chan,
 			       const int **vals, int *length)
 {
@@ -789,9 +852,11 @@ int iio_read_avail_channel_raw(struct iio_channel *chan,
 	ret = iio_read_avail_channel_attribute(chan, vals, &type, length,
 					       IIO_CHAN_INFO_RAW);
 
-	if (ret >= 0 && type != IIO_VAL_INT)
+	if (ret >= 0 && type != IIO_VAL_INT) {
 		/* raw values are assumed to be IIO_VAL_INT */
+		kfree(*vals);
 		ret = -EINVAL;
+	}
 
 	return ret;
 }
@@ -801,15 +866,16 @@ static int iio_channel_read_max(struct iio_channel *chan,
 				int *val, int *val2, int *type,
 				enum iio_chan_info_enum info)
 {
-	const int *vals;
 	int length;
-	int ret;
+	int avail_type;
 
-	ret = iio_channel_read_avail(chan, &vals, type, &length, info);
-	if (ret < 0)
-		return ret;
+	const int *vals __free(kfree) =
+		iio_channel_read_avail_retvals(chan, type, &length,
+					       &avail_type, info);
+	if (IS_ERR(vals))
+		return PTR_ERR(vals);
 
-	switch (ret) {
+	switch (avail_type) {
 	case IIO_AVAIL_RANGE:
 		switch (*type) {
 		case IIO_VAL_INT:
@@ -857,15 +923,16 @@ static int iio_channel_read_min(struct iio_channel *chan,
 				int *val, int *val2, int *type,
 				enum iio_chan_info_enum info)
 {
-	const int *vals;
 	int length;
-	int ret;
+	int avail_type;
 
-	ret = iio_channel_read_avail(chan, &vals, type, &length, info);
-	if (ret < 0)
-		return ret;
+	const int *vals __free(kfree) =
+		iio_channel_read_avail_retvals(chan, type, &length,
+					       &avail_type, info);
+	if (IS_ERR(vals))
+		return PTR_ERR(vals);
 
-	switch (ret) {
+	switch (avail_type) {
 	case IIO_AVAIL_RANGE:
 		switch (*type) {
 		case IIO_VAL_INT:

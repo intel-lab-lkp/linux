@@ -316,7 +316,7 @@ int iio_read_min_channel_raw(struct iio_channel *chan, int *val);
 /**
  * iio_read_avail_channel_raw() - read available raw values from a given channel
  * @chan:		The channel being queried.
- * @vals:		Available values read back.
+ * @vals:		Available values read back. Must be freed after use.
  * @length:		Number of entries in vals.
  *
  * Returns an error code, IIO_AVAIL_RANGE or IIO_AVAIL_LIST.
@@ -334,7 +334,7 @@ int iio_read_avail_channel_raw(struct iio_channel *chan,
 /**
  * iio_read_avail_channel_attribute() - read available channel attribute values
  * @chan:		The channel being queried.
- * @vals:		Available values read back.
+ * @vals:		Available values read back. Must be freed after use.
  * @type:		Type of values read back.
  * @length:		Number of entries in vals.
  * @attribute:		info attribute to be read back.
@@ -344,6 +344,30 @@ int iio_read_avail_channel_raw(struct iio_channel *chan,
 int iio_read_avail_channel_attribute(struct iio_channel *chan,
 				     const int **vals, int *type, int *length,
 				     enum iio_chan_info_enum attribute);
+
+
+/**
+ * iio_read_avail_channel_attr_retvals() - read available channel attr values
+ * @chan:		The channel being queried.
+ * @type:		Type of values read back.
+ * @length:		Number of entries in vals.
+ * @avail_type:		Available type of values read back
+ *			(IIO_AVAIL_RANGE or IIO_AVAIL_LIST).
+ * @attribute:		info attribute to be read back.
+ *
+ * This function is equivalent to iio_read_avail_channel_attribute() but stores
+ * the pointer to the buffer of available values in the returned variable.
+ * Since such buffer must be freed after use, this function lets the user
+ * declare a cleanup local variable, e.g.:
+ * const int *vals = __free(kfree) = iio_read_avail_channel_attr_retvals(...);
+ *
+ * Returns a pointer to negative errno on error otherwise returns the available
+ * values read back that must be freed after use.
+ */
+const int *
+iio_read_avail_channel_attr_retvals(struct iio_channel *chan, int *type,
+				    int *length, int *avail_type,
+				    enum iio_chan_info_enum attribute);
 
 /**
  * iio_get_channel_type() - get the type of a channel
