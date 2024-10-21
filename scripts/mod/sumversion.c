@@ -392,7 +392,7 @@ out_file:
 /* Calc and record src checksum. */
 void get_src_version(const char *modname, char sum[], unsigned sumlen)
 {
-	char *buf;
+	char *buf, *pos;
 	struct md4_ctx md;
 	char *fname;
 	char filelist[PATH_MAX + 1];
@@ -400,7 +400,7 @@ void get_src_version(const char *modname, char sum[], unsigned sumlen)
 	/* objects for a module are listed in the first line of *.mod file. */
 	snprintf(filelist, sizeof(filelist), "%s.mod", modname);
 
-	buf = read_text_file(filelist);
+	pos = buf = read_text_file(filelist);
 
 	md4_init(&md);
 	while ((fname = strsep(&buf, "\n"))) {
@@ -413,5 +413,5 @@ void get_src_version(const char *modname, char sum[], unsigned sumlen)
 
 	md4_final_ascii(&md, sum, sumlen);
 free:
-	free(buf);
+	free(pos);
 }
