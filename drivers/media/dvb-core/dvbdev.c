@@ -551,7 +551,7 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 		kfree(dvbdev);
 		*pdvbdev = NULL;
 		mutex_unlock(&dvbdev_register_lock);
-		return ret;
+		return -EINVAL;
 	}
 #endif
 	dvbdev->minor = minor;
