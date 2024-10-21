@@ -804,6 +804,7 @@ void *__kmalloc_cache_noprof(struct kmem_cache *s, gfp_t flags, size_t size)
 void *__kmalloc_cache_node_noprof(struct kmem_cache *s, gfp_t gfpflags,
 				  int node, size_t size)
 				__assume_kmalloc_alignment __alloc_size(4);
+#define kmalloc_cache(...)	alloc_hooks(__kmalloc_cache_noprof(__VA_ARGS__))
 
 void *__kmalloc_large_noprof(size_t size, gfp_t flags)
 				__assume_page_alignment __alloc_size(1);
