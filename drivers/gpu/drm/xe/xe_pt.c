@@ -660,10 +660,11 @@ xe_pt_stage_bind(struct xe_tile *tile, struct xe_vma *vma,
 			xe_walk.default_pte &= ~XE_USM_PPGTT_PTE_AE;
 	}
 
-	if (is_devmem) {
+	if (is_devmem || bo->is_devmem_external)
 		xe_walk.default_pte |= XE_PPGTT_PTE_DM;
+
+	if (is_devmem)
 		xe_walk.dma_offset = vram_region_gpu_offset(bo->ttm.resource);
-	}
 
 	if (!xe_vma_has_no_bo(vma) && xe_bo_is_stolen(bo))
 		xe_walk.dma_offset = xe_ttm_stolen_gpu_offset(xe_bo_device(bo));
@@ -677,6 +678,9 @@ xe_pt_stage_bind(struct xe_tile *tile, struct xe_vma *vma,
 		else if (xe_bo_is_vram(bo) || xe_bo_is_stolen(bo))
 			xe_res_first(bo->ttm.resource, xe_vma_bo_offset(vma),
 				     xe_vma_size(vma), &curs);
+		else if (bo->is_devmem_external)
+			xe_res_first_dma(bo->dma_addr, xe_vma_bo_offset(vma),
+					xe_vma_size(vma), &curs);
 		else
 			xe_res_first_sg(xe_bo_sg(bo), xe_vma_bo_offset(vma),
 					xe_vma_size(vma), &curs);
