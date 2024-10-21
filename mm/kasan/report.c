@@ -261,6 +261,59 @@ static void print_error_description(struct kasan_report_info *info)
 			info->access_addr, current->comm, task_pid_nr(current));
 }
 
+/* Helper to skip KASAN-related functions in stack-trace. */
+static int get_stack_skipnr(const unsigned long stack_entries[], int num_entries)
+{
+	char buf[128];
+	int len, skip;
+
+	for (skip = 0; skip < num_entries; ++skip) {
+		len = scnprintf(buf, sizeof(buf), "%ps", (void *)stack_entries[skip]);
+
+		/* Never show  kasan_* functions. */
+		if (strnstr(buf, "kasan_", len) == buf)
+			continue;
+		/*
+		 * No match for runtime functions -- @skip entries to skip to
+		 * get to first frame of interest.
+		 */
+		break;
+	}
+
+	return skip;
+}
+
+/*
+ * Use in place of stack_dump_lvl to filter KASAN related functions in
+ * stack_trace.
+ */
+static void kasan_dump_stack_lvl(void)
+{
+	unsigned long stack_entries[KASAN_STACK_DEPTH] = { 0 };
+	int num_stack_entries = stack_trace_save(stack_entries, KASAN_STACK_DEPTH, 1);
+	int skipnr = get_stack_skipnr(stack_entries, num_stack_entries);
+
+	dump_stack_print_info(KERN_ERR);
+	stack_trace_print(stack_entries + skipnr, num_stack_entries - skipnr, 0);
+	pr_err("\n");
+}
+
+/*
+ * Use in place of stack_depot_print to filter KASAN related functions in
+ * stack_trace.
+ */
+static void kasan_stack_depot_print(depot_stack_handle_t stack)
+{
+	unsigned long *entries;
+	unsigned int nr_entries;
+
+	nr_entries = stack_depot_fetch(stack, &entries);
+	int skipnr = get_stack_skipnr(entries, nr_entries);
+
+	if (nr_entries > 0)
+		stack_trace_print(entries + skipnr, nr_entries - skipnr, 0);
+}
+
 static void print_track(struct kasan_track *track, const char *prefix)
 {
 #ifdef CONFIG_KASAN_EXTRA_INFO
@@ -277,7 +330,7 @@ static void print_track(struct kasan_track *track, const char *prefix)
 	pr_err("%s by task %u:\n", prefix, track->pid);
 #endif /* CONFIG_KASAN_EXTRA_INFO */
 	if (track->stack)
-		stack_depot_print(track->stack);
+		kasan_stack_depot_print(track->stack);
 	else
 		pr_err("(stack is not available)\n");
 }
@@ -373,9 +426,6 @@ static void print_address_description(void *addr, u8 tag,
 				      struct kasan_report_info *info)
 {
 	struct page *page = addr_to_page(addr);
-
-	dump_stack_lvl(KERN_ERR);
-	pr_err("\n");
 
 	if (info->cache && info->object) {
 		describe_object(addr, info);
@@ -484,11 +534,11 @@ static void print_report(struct kasan_report_info *info)
 		kasan_print_tags(tag, info->first_bad_addr);
 	pr_err("\n");
 
+	kasan_dump_stack_lvl();
+
 	if (addr_has_metadata(addr)) {
 		print_address_description(addr, tag, info);
 		print_memory_metadata(info->first_bad_addr);
-	} else {
-		dump_stack_lvl(KERN_ERR);
 	}
 }
 
