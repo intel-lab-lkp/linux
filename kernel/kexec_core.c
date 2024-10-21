@@ -210,6 +210,16 @@ int sanity_check_segment_list(struct kimage *image)
 	}
 #endif
 
+	/*
+	 * The destination addresses are searched from free memory ranges rather
+	 * than being allocated from the current kernel, so they are not
+	 * guaranteed to be accepted by the current kernel.
+	 * Accept those initial pages for the new kernel since it may not be
+	 * able to accept them by itself.
+	 */
+	for (i = 0; i < nr_segments; i++)
+		accept_memory(image->segment[i].mem, image->segment[i].memsz);
+
 	return 0;
 }
 
