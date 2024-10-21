@@ -7025,9 +7025,9 @@ static int ufshcd_clear_tm_cmd(struct ufs_hba *hba, int tag)
 	if (!test_bit(tag, &hba->outstanding_tasks))
 		goto out;
 
-	spin_lock_irqsave(hba->host->host_lock, flags);
+	spin_lock_irqsave(&hba->reg_lock, flags);
 	ufshcd_utmrl_clear(hba, tag);
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	spin_unlock_irqrestore(&hba->reg_lock, flags);
 
 	/* poll for max. 1 sec to clear door bell register by h/w */
 	err = ufshcd_wait_for_register(hba,
