@@ -797,7 +797,8 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 				 BIT_ULL(VHOST_BACKEND_F_IOTLB_PERSIST) |
 				 BIT_ULL(VHOST_BACKEND_F_SUSPEND) |
 				 BIT_ULL(VHOST_BACKEND_F_RESUME) |
-				 BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK)))
+				 BIT_ULL(VHOST_BACKEND_F_ENABLE_AFTER_DRIVER_OK) |
+				 BIT_ULL(VHOST_BACKEND_F_NOIOMMU)))
 			return -EOPNOTSUPP;
 		if ((features & BIT_ULL(VHOST_BACKEND_F_SUSPEND)) &&
 		     !vhost_vdpa_can_suspend(v))
@@ -813,6 +814,12 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 			return -EOPNOTSUPP;
 		if ((features & BIT_ULL(VHOST_BACKEND_F_IOTLB_PERSIST)) &&
 		     !vhost_vdpa_has_persistent_map(v))
+			return -EOPNOTSUPP;
+		if ((features & BIT_ULL(VHOST_BACKEND_F_NOIOMMU)) &&
+		    !v->noiommu_en)
+			return -EOPNOTSUPP;
+		if (!(features & BIT_ULL(VHOST_BACKEND_F_NOIOMMU)) &&
+		    v->noiommu_en)
 			return -EOPNOTSUPP;
 		vhost_set_backend_features(&v->vdev, features);
 		return 0;
@@ -871,6 +878,8 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 			features |= BIT_ULL(VHOST_BACKEND_F_DESC_ASID);
 		if (vhost_vdpa_has_persistent_map(v))
 			features |= BIT_ULL(VHOST_BACKEND_F_IOTLB_PERSIST);
+		if (v->noiommu_en)
+			features |= BIT_ULL(VHOST_BACKEND_F_NOIOMMU);
 		features |= vhost_vdpa_get_backend_features(v);
 		if (copy_to_user(featurep, &features, sizeof(features)))
 			r = -EFAULT;
