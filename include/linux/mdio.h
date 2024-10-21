@@ -8,6 +8,7 @@
 
 #include <uapi/linux/mdio.h>
 #include <linux/bitfield.h>
+#include <linux/mutex.h>
 #include <linux/mod_devicetable.h>
 
 struct gpio_desc;
@@ -24,6 +25,9 @@ enum mdio_mutex_lock_class {
 	MDIO_MUTEX_MUX,
 	MDIO_MUTEX_NESTED,
 };
+
+DEFINE_GUARD(mdio_mutex_nested, struct mutex *,
+	     mutex_lock_nested(_T, MDIO_MUTEX_NESTED), mutex_unlock(_T))
 
 struct mdio_device {
 	struct device dev;
