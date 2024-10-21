@@ -2743,7 +2743,9 @@ static void nvme_pci_free_ctrl(struct nvme_ctrl *ctrl)
 	nvme_free_tagset(dev);
 	put_device(dev->dev);
 	kfree(dev->queues);
+	dev->queues = NULL;
 	kfree(dev);
+	dev = NULL;
 }
 
 static void nvme_reset_work(struct work_struct *work)
@@ -3068,8 +3070,10 @@ static struct nvme_dev *nvme_pci_alloc_dev(struct pci_dev *pdev,
 out_put_device:
 	put_device(dev->dev);
 	kfree(dev->queues);
+	dev->queues = NULL;
 out_free_dev:
 	kfree(dev);
+	dev = NULL;
 	return ERR_PTR(ret);
 }
 
