@@ -40,6 +40,7 @@ config M68K
 	select UACCESS_MEMCPY if !MMU
 	select ZONE_DMA
 	select TRACE_IRQFLAGS_SUPPORT
+	select ARCH_STACKWALK
 
 config CPU_BIG_ENDIAN
 	def_bool y
@@ -106,6 +107,10 @@ config BOOTINFO_PROC
 	help
 	  Say Y to export the bootinfo used to boot the kernel in a
 	  "bootinfo" file in procfs.  This is useful with kexec.
+
+config STACKTRACE_SUPPORT
+	bool
+	default y
 
 menu "Platform setup"
 
