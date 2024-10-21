@@ -84,7 +84,7 @@ static const char * const iommu_group_resv_type_string[] = {
 	[IOMMU_RESV_DIRECT_RELAXABLE]		= "direct-relaxable",
 	[IOMMU_RESV_RESERVED]			= "reserved",
 	[IOMMU_RESV_MSI]			= "msi",
-	[IOMMU_RESV_SW_MSI]			= "msi",
+	[IOMMU_RESV_SW_MSI]			= "sw-msi",
 };
 
 #define IOMMU_CMD_LINE_DMA_API		BIT(0)
