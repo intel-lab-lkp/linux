@@ -1394,9 +1394,20 @@ static void gic_send_sgi(u64 cluster_id, u16 tlist, unsigned int irq)
 	gic_write_sgi1r(val);
 }
 
+static void gic_broadcast_sgi(unsigned int irq)
+{
+	u64 val;
+
+	val = BIT(ICC_SGI1R_IRQ_ROUTING_MODE_BIT) | (irq << ICC_SGI1R_SGI_ID_SHIFT);
+
+	pr_devel("CPU %d: broadcasting SGI %u\n", smp_processor_id(), irq);
+	gic_write_sgi1r(val);
+}
+
 static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 {
 	int cpu;
+	cpumask_t broadcast;
 
 	if (WARN_ON(d->hwirq >= 16))
 		return;
@@ -1407,6 +1418,13 @@ static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 	 */
 	dsb(ishst);
 
+	cpumask_copy(&broadcast, cpu_present_mask);
+	cpumask_clear_cpu(smp_processor_id(), &broadcast);
+	if (cpumask_equal(&broadcast, mask)) {
+		gic_broadcast_sgi(d->hwirq);
+		goto done;
+	}
+
 	for_each_cpu(cpu, mask) {
 		u64 cluster_id = MPIDR_TO_SGI_CLUSTER_ID(gic_cpu_to_affinity(cpu));
 		u16 tlist;
@@ -1414,7 +1432,7 @@ static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 		tlist = gic_compute_target_list(&cpu, mask, cluster_id);
 		gic_send_sgi(cluster_id, tlist, d->hwirq);
 	}
-
+done:
 	/* Force the above writes to ICC_SGI1R_EL1 to be executed */
 	isb();
 }
