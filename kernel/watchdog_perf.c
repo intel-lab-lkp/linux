@@ -144,6 +144,7 @@ static int hardlockup_detector_event_create(void)
 			 PTR_ERR(evt));
 		return PTR_ERR(evt);
 	}
+	WARN_ON(this_cpu_read(watchdog_ev));
 	this_cpu_write(watchdog_ev, evt);
 	return 0;
 }
