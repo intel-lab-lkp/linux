@@ -303,7 +303,9 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 		   pipe_config->vrr.flipline,
 		   intel_vrr_vmin_vblank_start(pipe_config),
 		   intel_vrr_vmax_vblank_start(pipe_config));
-
+	drm_printf(&p, "vrr_vsync_start: %d, vrr_vsync_end: %d\n",
+		   pipe_config->vrr.vsync_start,
+		   pipe_config->vrr.vsync_end);
 	drm_printf(&p, "requested mode: " DRM_MODE_FMT "\n",
 		   DRM_MODE_ARG(&pipe_config->hw.mode));
 	drm_printf(&p, "adjusted mode: " DRM_MODE_FMT "\n",
