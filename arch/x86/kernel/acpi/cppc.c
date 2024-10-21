@@ -273,7 +273,7 @@ int amd_get_boost_ratio_numerator(unsigned int cpu, u64 *numerator)
 	/* detect if running on heterogeneous design */
 	smp_call_function_single(cpu, amd_do_get_core_type, &core_type, 1);
 	switch (core_type) {
-	case CPU_CORE_TYPE_NO_HETERO_SUP:
+	case -EINVAL:
 		break;
 	case CPU_CORE_TYPE_PERFORMANCE:
 		/* use the max scale for performance cores */

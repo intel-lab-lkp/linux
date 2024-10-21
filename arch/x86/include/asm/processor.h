@@ -691,15 +691,14 @@ static inline u32 per_cpu_l2c_id(unsigned int cpu)
 	return per_cpu(cpu_info.topo.l2c_id, cpu);
 }
 
+#ifdef CONFIG_CPU_SUP_AMD
 /* defined by CPUID_Fn80000026_EBX BIT [31:28] */
 enum amd_core_type {
-	CPU_CORE_TYPE_NO_HETERO_SUP = -1,
-	CPU_CORE_TYPE_PERFORMANCE = 0,
-	CPU_CORE_TYPE_EFFICIENCY = 1,
-	CPU_CORE_TYPE_UNDEFINED = 2,
+	CPU_CORE_TYPE_PERFORMANCE,
+	CPU_CORE_TYPE_EFFICIENCY,
+	CPU_CORE_TYPE_UNDEFINED,
 };
 
-#ifdef CONFIG_CPU_SUP_AMD
 /*
  * Issue a DIV 0/1 insn to clear any division data from previous DIV
  * operations.
@@ -711,13 +710,13 @@ static __always_inline void amd_clear_divider(void)
 }
 
 extern void amd_check_microcode(void);
-extern enum amd_core_type amd_get_core_type(void);
+extern int amd_get_core_type(void);
 #else
 static inline void amd_clear_divider(void)		{ }
 static inline void amd_check_microcode(void)		{ }
-static inline enum amd_core_type amd_get_core_type(void)
+static inline int amd_get_core_type(void)
 {
-	return CPU_CORE_TYPE_NO_HETERO_SUP;
+	return -EINVAL;
 }
 #endif
 

@@ -1212,10 +1212,9 @@ void amd_check_microcode(void)
  * Returns the CPU type [31:28] (i.e., performance or efficient) of
  * a CPU in the processor.
  *
- * If the processor has no core type support, returns
- * CPU_CORE_TYPE_NO_HETERO_SUP.
+ * If the processor has no core type support, returns -EINVAL.
  */
-enum amd_core_type amd_get_core_type(void)
+int amd_get_core_type(void)
 {
 	struct {
 		u32  num_processors             :16,
@@ -1225,7 +1224,7 @@ enum amd_core_type amd_get_core_type(void)
 	} props;
 
 	if (!cpu_feature_enabled(X86_FEATURE_AMD_HETEROGENEOUS_CORES))
-		return CPU_CORE_TYPE_NO_HETERO_SUP;
+		return -EINVAL;
 
 	cpuid_leaf_reg(0x80000026, CPUID_EBX, &props);
 	if (props.core_type >= CPU_CORE_TYPE_UNDEFINED)
