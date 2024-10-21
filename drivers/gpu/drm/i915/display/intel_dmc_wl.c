@@ -95,20 +95,20 @@ out_unlock:
 	spin_unlock_irqrestore(&wl->lock, flags);
 }
 
-static bool intel_dmc_wl_check_range(u32 address)
+static bool intel_dmc_wl_addr_in_range(u32 address,
+				       const struct intel_dmc_wl_range ranges[])
 {
-	int i;
-	bool wl_needed = false;
-
-	for (i = 0; lnl_wl_range[i].start; i++) {
-		if (address >= lnl_wl_range[i].start &&
-		    address <= lnl_wl_range[i].end) {
-			wl_needed = true;
-			break;
-		}
+	for (int i = 0; ranges[i].start; i++) {
+		if (ranges[i].start <= address && address <= ranges[i].end)
+			return true;
 	}
 
-	return wl_needed;
+	return false;
+}
+
+static bool intel_dmc_wl_check_range(u32 address)
+{
+	return intel_dmc_wl_addr_in_range(address, lnl_wl_range);
 }
 
 static bool __intel_dmc_wl_supported(struct intel_display *display)
