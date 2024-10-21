@@ -117,10 +117,21 @@ __intel_wait_for_register(struct intel_uncore *uncore, i915_reg_t i915_reg,
 			  unsigned int slow_timeout_ms, u32 *out_value)
 {
 	struct xe_reg reg = XE_REG(i915_mmio_reg_offset(i915_reg));
+	bool atomic;
+
+	/*
+	 * FIXME: We are trying to replicate the behavior from i915 here, in
+	 * which sleep is not performed if slow_timeout_ms == 0. This hack is
+	 * necessary because of paths in display code that are executed in
+	 * atomic context. Setting the atomic flag based on timeout values
+	 * doesn't feel very robust. Ideally, we should have a proper interface
+	 * for explicitly choosing non-sleeping behavior.
+	 */
+	atomic = !slow_timeout_ms && fast_timeout_us > 0;
 
 	return xe_mmio_wait32(__compat_uncore_to_mmio(uncore), reg, mask, value,
 			      fast_timeout_us + 1000 * slow_timeout_ms,
-			      out_value, false);
+			      out_value, atomic);
 }
 
 static inline u32 intel_uncore_read_fw(struct intel_uncore *uncore,
