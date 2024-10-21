@@ -295,7 +295,7 @@ int htc_connect_service(struct htc_target *target,
 	}
 
 	*conn_rsp_epid = target->conn_rsp_epid;
-	return 0;
+	return target->conn_rsp_epid == ENDPOINT_UNUSED ? -ENODEV : 0;
 err:
 	kfree_skb(skb);
 	return ret;
