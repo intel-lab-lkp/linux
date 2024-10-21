@@ -332,10 +332,11 @@ struct track {
 enum track_item { TRACK_ALLOC, TRACK_FREE };
 
 #ifdef SLAB_SUPPORTS_SYSFS
-static int sysfs_slab_add(struct kmem_cache *);
+static int sysfs_slab_add(struct kmem_cache *, bool);
 static int sysfs_slab_alias(struct kmem_cache *, const char *);
 #else
-static inline int sysfs_slab_add(struct kmem_cache *s) { return 0; }
+static inline int sysfs_slab_add(struct kmem_cache *s, bool sysfs_lazy)
+							{ return 0; }
 static inline int sysfs_slab_alias(struct kmem_cache *s, const char *p)
 							{ return 0; }
 #endif
@@ -5981,7 +5982,12 @@ int do_kmem_cache_create(struct kmem_cache *s, const char *name,
 {
 	int err = -EINVAL;
 
-	s->name = name;
+	s->name = kstrdup_const(name, GFP_KERNEL);
+	if (!s->name) {
+		err = -ENOMEM;
+		goto out;
+	}
+
 	s->size = s->object_size = size;
 
 	s->flags = kmem_cache_flags(flags, s->name);
@@ -6048,16 +6054,20 @@ int do_kmem_cache_create(struct kmem_cache *s, const char *name,
 		goto out;
 	}
 
-	err = sysfs_slab_add(s);
+	err = sysfs_slab_add(s, false);
 	if (err)
-		goto out;
+		/* Resources are already freed on sysfs_slab_add() failure */
+		return err;
 
 	if (s->flags & SLAB_STORE_USER)
 		debugfs_slab_add(s);
 
 out:
-	if (err)
+	if (err) {
 		__kmem_cache_release(s);
+		kfree_const(s->name);
+		kmem_cache_free(kmem_cache, s);
+	}
 	return err;
 }
 
@@ -7006,9 +7016,20 @@ static void kmem_cache_release(struct kobject *k)
 	slab_kmem_cache_release(to_slab(k));
 }
 
+static void kmem_cache_sysfs_lazy_release(struct kobject *k) { }
+
 static const struct sysfs_ops slab_sysfs_ops = {
 	.show = slab_attr_show,
 	.store = slab_attr_store,
+};
+
+/*
+ * Early slab caches shouldn't be destroyed just because SLUB failed to create
+ * sysfs files. use a no-op function as .release function.
+ */
+static const struct kobj_type slab_sysfs_lazy_ktype = {
+	.sysfs_ops = &slab_sysfs_ops,
+	.release = kmem_cache_sysfs_lazy_release,
 };
 
 static const struct kobj_type slab_ktype = {
@@ -7067,12 +7088,13 @@ static char *create_unique_id(struct kmem_cache *s)
 	return name;
 }
 
-static int sysfs_slab_add(struct kmem_cache *s)
+static int sysfs_slab_add(struct kmem_cache *s, bool sysfs_lazy)
 {
 	int err;
 	const char *name;
 	struct kset *kset = cache_kset(s);
 	int unmergeable = slab_unmergeable(s);
+	const struct kobj_type *ktype;
 
 	if (!unmergeable && disable_higher_order_debug &&
 			(slub_debug & DEBUG_METADATA_FLAGS))
@@ -7097,9 +7119,14 @@ static int sysfs_slab_add(struct kmem_cache *s)
 	}
 
 	s->kobj.kset = kset;
-	err = kobject_init_and_add(&s->kobj, &slab_ktype, NULL, "%s", name);
+	if (sysfs_lazy)
+		ktype = &slab_sysfs_lazy_ktype;
+	else
+		ktype = &slab_ktype;
+	err = kobject_init_and_add(&s->kobj, ktype, NULL, "%s", name);
+
 	if (err)
-		goto out;
+		goto out_put_kobj;
 
 	err = sysfs_create_group(&s->kobj, &slab_attr_group);
 	if (err)
@@ -7113,8 +7140,11 @@ out:
 	if (!unmergeable)
 		kfree(name);
 	return err;
+
 out_del_kobj:
 	kobject_del(&s->kobj);
+out_put_kobj:
+	kobject_put(&s->kobj);
 	goto out;
 }
 
@@ -7181,7 +7211,7 @@ static int __init slab_sysfs_init(void)
 	slab_state = FULL;
 
 	list_for_each_entry(s, &slab_caches, list) {
-		err = sysfs_slab_add(s);
+		err = sysfs_slab_add(s, true);
 		if (err)
 			pr_err("SLUB: Unable to add boot slab %s to sysfs\n",
 			       s->name);
