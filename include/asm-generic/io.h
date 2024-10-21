@@ -7,10 +7,12 @@
 #ifndef __ASM_GENERIC_IO_H
 #define __ASM_GENERIC_IO_H
 
+#include <linux/align.h>
 #include <asm/page.h> /* I/O is all done through memory accesses */
 #include <linux/string.h> /* for memset() and memcpy() */
 #include <linux/sizes.h>
 #include <linux/types.h>
+#include <linux/unaligned.h>
 #include <linux/instruction_pointer.h>
 
 #ifdef CONFIG_GENERIC_IOMAP
@@ -1154,16 +1156,40 @@ static inline void unxlate_dev_mem_ptr(phys_addr_t phys, void *addr)
 #define memset_io memset_io
 /**
  * memset_io	Set a range of I/O memory to a constant value
- * @addr:	The beginning of the I/O-memory range to set
- * @val:	The value to set the memory to
+ * @dst:	The beginning of the I/O-memory range to set
+ * @c:		The value to set the memory to
  * @count:	The number of bytes to set
  *
  * Set a range of I/O memory to a given value.
  */
-static inline void memset_io(volatile void __iomem *addr, int value,
-			     size_t size)
+static inline void memset_io(volatile void __iomem *dst, int c, size_t count)
 {
-	memset(__io_virt(addr), value, size);
+	long qc = (u8)c;
+
+	qc *= ~0UL / 0xff;
+
+	while (count && !IS_ALIGNED((long)dst, sizeof(long))) {
+		__raw_writeb(c, dst);
+		dst++;
+		count--;
+	}
+
+	while (count >= sizeof(long)) {
+#ifdef CONFIG_64BIT
+		__raw_writeq(qc, dst);
+#else
+		__raw_writel(qc, dst);
+#endif
+
+		dst += sizeof(long);
+		count -= sizeof(long);
+	}
+
+	while (count) {
+		__raw_writeb(c, dst);
+		dst++;
+		count--;
+	}
 }
 #endif
 
@@ -1171,34 +1197,84 @@ static inline void memset_io(volatile void __iomem *addr, int value,
 #define memcpy_fromio memcpy_fromio
 /**
  * memcpy_fromio	Copy a block of data from I/O memory
- * @dst:		The (RAM) destination for the copy
- * @src:		The (I/O memory) source for the data
+ * @to:			The (RAM) destination for the copy
+ * @from:		The (I/O memory) source for the data
  * @count:		The number of bytes to copy
  *
  * Copy a block of data from I/O memory.
  */
-static inline void memcpy_fromio(void *buffer,
-				 const volatile void __iomem *addr,
-				 size_t size)
+static inline void memcpy_fromio(void *to, const volatile void __iomem *from,
+				 size_t count)
 {
-	memcpy(buffer, __io_virt(addr), size);
+	while (count && !IS_ALIGNED((long)from, sizeof(long))) {
+		*(u8 *)to = __raw_readb(from);
+		from++;
+		to++;
+		count--;
+	}
+
+	while (count >= sizeof(long)) {
+#ifdef CONFIG_64BIT
+		long val = __raw_readq(from);
+#else
+		long val = __raw_readl(from);
+#endif
+		put_unaligned(val, (long *)to);
+
+
+		from += sizeof(long);
+		to += sizeof(long);
+		count -= sizeof(long);
+	}
+
+	while (count) {
+		*(u8 *)to = __raw_readb(from);
+		from++;
+		to++;
+		count--;
+	}
 }
 #endif
 
 #ifndef memcpy_toio
 #define memcpy_toio memcpy_toio
 /**
- * memcpy_toio		Copy a block of data into I/O memory
- * @dst:		The (I/O memory) destination for the copy
- * @src:		The (RAM) source for the data
- * @count:		The number of bytes to copy
+ * memcpy_toio	Copy a block of data into I/O memory
+ * @to:		The (I/O memory) destination for the copy
+ * @from:	The (RAM) source for the data
+ * @count:	The number of bytes to copy
  *
  * Copy a block of data to I/O memory.
  */
-static inline void memcpy_toio(volatile void __iomem *addr, const void *buffer,
-			       size_t size)
+static inline void memcpy_toio(volatile void __iomem *to, const void *from,
+			       size_t count)
 {
-	memcpy(__io_virt(addr), buffer, size);
+	while (count && !IS_ALIGNED((long)to, sizeof(long))) {
+		__raw_writeb(*(u8 *)from, to);
+		from++;
+		to++;
+		count--;
+	}
+
+	while (count >= sizeof(long)) {
+		long val = get_unaligned((long *)from);
+#ifdef CONFIG_64BIT
+		__raw_writeq(val, to);
+#else
+		__raw_writel(val, to);
+#endif
+
+		from += sizeof(long);
+		to += sizeof(long);
+		count -= sizeof(long);
+	}
+
+	while (count) {
+		__raw_writeb(*(u8 *)from, to);
+		from++;
+		to++;
+		count--;
+	}
 }
 #endif
 
