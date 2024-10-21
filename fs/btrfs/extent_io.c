@@ -99,6 +99,15 @@ struct btrfs_bio_ctrl {
 	enum btrfs_compression_type compress_type;
 	u32 len_to_oe_boundary;
 	blk_opf_t opf;
+	/*
+	 * If this is a data read bio, we set this to true if the extent is
+	 * from a past transaction and thus it is safe to search for csums
+	 * in the commit root. Otherwise, we set it to false.
+	 *
+	 * See the comment in btrfs_lookup_bio_sums for more detail on the
+	 * need for this optimization.
+	 */
+	bool csum_search_commit_root;
 	btrfs_bio_end_io_t end_io_func;
 	struct writeback_control *wbc;
 
@@ -770,6 +779,9 @@ static void submit_extent_folio(struct btrfs_bio_ctrl *bio_ctrl,
 			alloc_new_bio(inode, bio_ctrl, disk_bytenr,
 				      folio_pos(folio) + pg_offset);
 		}
+		if (btrfs_op(&bio_ctrl->bbio->bio) == BTRFS_MAP_READ &&
+		    is_data_inode(inode) && bio_ctrl->csum_search_commit_root)
+			btrfs_bio_set_csum_search_commit_root(bio_ctrl->bbio);
 
 		/* Cap to the current ordered extent boundary if there is one. */
 		if (len > bio_ctrl->len_to_oe_boundary) {
@@ -1047,6 +1059,14 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 
 		if (prev_em_start)
 			*prev_em_start = em->start;
+
+		/*
+		 * At this point, we know it is safe to search for
+		 * csums in the commit root, but we have not yet
+		 * allocated a bio, so stash it in bio_ctrl.
+		 */
+		if (em->generation < btrfs_get_fs_generation(fs_info))
+			bio_ctrl->csum_search_commit_root = true;
 
 		free_extent_map(em);
 		em = NULL;
