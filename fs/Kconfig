@@ -430,4 +430,17 @@ source "fs/unicode/Kconfig"
 config IO_WQ
 	bool
 
+config PIPE_SKIP_SLEEPER
+	bool "Skip sleeping processes during pipe read/write"
+	default n
+	help
+	  This option introduces a check whether the sleep queue will
+	  be awakened during pipe read/write.
+
+	  It often leads to a performance improvement. However, in
+	  low-load or single-task scenarios, it may introduce minor
+	  performance overhead.
+
+	  If unsure, say N.
+
 endmenu
