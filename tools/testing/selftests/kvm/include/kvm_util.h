@@ -531,6 +531,14 @@ void read_stat_data(int stats_fd, struct kvm_stats_header *header,
 		    struct kvm_stats_desc *desc, uint64_t *data,
 		    size_t max_elements);
 
+#define DEFINE_CHECK_STAT(type, stat)			\
+static inline int check_##type##_##stat##_exists(void)	\
+{							\
+	return 1;					\
+}							\
+
+#define STAT_EXISTS(type, stat) (check_##type##_##stat##_exists())
+
 void __vm_get_stat(struct kvm_vm *vm, const char *stat_name, uint64_t *data,
 		   size_t max_elements);
 
@@ -541,6 +549,50 @@ static inline uint64_t vm_get_stat(struct kvm_vm *vm, const char *stat_name)
 	__vm_get_stat(vm, stat_name, &data, 1);
 	return data;
 }
+
+#define DEFINE_GENERIC_VCPU_STAT				\
+	DEFINE_CHECK_STAT(vcpu, halt_successfull_poll)		\
+	DEFINE_CHECK_STAT(vcpu, halt_attempted_poll)		\
+	DEFINE_CHECK_STAT(vcpu, halt_poll_invalid)		\
+	DEFINE_CHECK_STAT(vcpu, halt_wakeup)			\
+	DEFINE_CHECK_STAT(vcpu, halt_poll_success_ns)		\
+	DEFINE_CHECK_STAT(vcpu, halt_poll_fail_ns)		\
+	DEFINE_CHECK_STAT(vcpu, halt_wait_ns)			\
+	DEFINE_CHECK_STAT(vcpu, halt_poll_success_hist)		\
+	DEFINE_CHECK_STAT(vcpu, halt_poll_fail_hist)		\
+	DEFINE_CHECK_STAT(vcpu, halt_wait_hist)			\
+	DEFINE_CHECK_STAT(vcpu, blocking)			\
+
+/*
+ * Define a default empty macro for architectures which do not specify
+ * arch specific vcpu stats
+ */
+
+#ifndef DEFINE_ARCH_VCPU_STAT
+#define DEFINE_ARCH_VCPU_STAT
+#endif
+
+DEFINE_GENERIC_VCPU_STAT
+DEFINE_ARCH_VCPU_STAT
+
+#undef DEFINE_CHECK_STAT
+#undef DEFINE_GENERIC_VCPU_STAT
+#undef DEFINE_ARCH_VCPU_STAT
+
+void __vcpu_get_stat(struct kvm_vcpu *vcpu, const char *stat_name, uint64_t *data,
+		   size_t max_elements);
+
+#define vcpu_get_stat(vcpu, stat_name)				\
+({								\
+	uint64_t data;						\
+								\
+	STAT_EXISTS(vcpu, stat_name);				\
+	__vcpu_get_stat(vcpu, #stat_name, &data, 1);		\
+	data;							\
+})								\
+
+#undef DEFINE_CHECK_STAT
+#undef DEFINE_GENERIC_VCPU_STAT
 
 void vm_create_irqchip(struct kvm_vm *vm);
 

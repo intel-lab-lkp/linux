@@ -2196,6 +2196,46 @@ void read_stat_data(int stats_fd, struct kvm_stats_header *header,
 }
 
 /*
+ * Read the data of the named vcpu stat
+ *
+ * Input Args:
+ *   vcpu - the vcpu for which the stat should be read
+ *   stat_name - the name of the stat to read
+ *   max_elements - the maximum number of 8-byte values to read into data
+ *
+ * Output Args:
+ *   data - the buffer into which stat data should be read
+ *
+ * Read the data values of a specified stat from the binary stats interface.
+ */
+void __vcpu_get_stat(struct kvm_vcpu *vcpu, const char *stat_name, uint64_t *data,
+		   size_t max_elements)
+{
+	int vcpu_stats_fd;
+	struct kvm_stats_header header;
+	struct kvm_stats_desc *desc, *t_desc;
+	size_t size_desc;
+	int i;
+
+	vcpu_stats_fd = vcpu_get_stats_fd(vcpu);
+	read_stats_header(vcpu_stats_fd, &header);
+
+	desc = read_stats_descriptors(vcpu_stats_fd, &header);
+	size_desc = get_stats_descriptor_size(&header);
+
+	for (i = 0; i < header.num_desc; ++i) {
+		t_desc = (void *)desc + (i * size_desc);
+
+		if (strcmp(t_desc->name, stat_name))
+			continue;
+
+		read_stat_data(vcpu_stats_fd, &header, t_desc,
+			       data, max_elements);
+		break;
+	}
+}
+
+/*
  * Read the data of the named stat
  *
  * Input Args:

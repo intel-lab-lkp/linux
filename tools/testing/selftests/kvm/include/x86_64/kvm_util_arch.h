@@ -48,4 +48,40 @@ do {											\
 	}										\
 } while (0)
 
+#define DEFINE_ARCH_VCPU_STAT					\
+	DEFINE_CHECK_STAT(vcpu, pf_taken)			\
+	DEFINE_CHECK_STAT(vcpu, pf_fixed)			\
+	DEFINE_CHECK_STAT(vcpu, pf_emulate)			\
+	DEFINE_CHECK_STAT(vcpu, pf_spurious)			\
+	DEFINE_CHECK_STAT(vcpu, pf_fast)			\
+	DEFINE_CHECK_STAT(vcpu, pf_mmio_spte_created)		\
+	DEFINE_CHECK_STAT(vcpu, pf_guest)			\
+	DEFINE_CHECK_STAT(vcpu, tlb_flush)			\
+	DEFINE_CHECK_STAT(vcpu, invlpg)				\
+	DEFINE_CHECK_STAT(vcpu, exits)				\
+	DEFINE_CHECK_STAT(vcpu, io_exits)			\
+	DEFINE_CHECK_STAT(vcpu, mmio_exits)			\
+	DEFINE_CHECK_STAT(vcpu, signal_exits)			\
+	DEFINE_CHECK_STAT(vcpu, irq_window_exits)		\
+	DEFINE_CHECK_STAT(vcpu, nmi_window_exits)		\
+	DEFINE_CHECK_STAT(vcpu, l1d_flush)			\
+	DEFINE_CHECK_STAT(vcpu, halt_exits)			\
+	DEFINE_CHECK_STAT(vcpu, request_irq_exits)		\
+	DEFINE_CHECK_STAT(vcpu, irq_exits)			\
+	DEFINE_CHECK_STAT(vcpu, host_state_reload)		\
+	DEFINE_CHECK_STAT(vcpu, fpu_reload)			\
+	DEFINE_CHECK_STAT(vcpu, insn_emulation)			\
+	DEFINE_CHECK_STAT(vcpu, insn_emulation_fail)		\
+	DEFINE_CHECK_STAT(vcpu, hypercalls)			\
+	DEFINE_CHECK_STAT(vcpu, irq_injections)			\
+	DEFINE_CHECK_STAT(vcpu, nmi_injections)			\
+	DEFINE_CHECK_STAT(vcpu, req_event)			\
+	DEFINE_CHECK_STAT(vcpu, nested_run)			\
+	DEFINE_CHECK_STAT(vcpu, directed_yield_attempted)	\
+	DEFINE_CHECK_STAT(vcpu, directed_yield_successful)	\
+	DEFINE_CHECK_STAT(vcpu, preemption_reported)		\
+	DEFINE_CHECK_STAT(vcpu, preemption_other)		\
+	DEFINE_CHECK_STAT(vcpu, guest_mode)			\
+	DEFINE_CHECK_STAT(vcpu, notify_window_exits)		\
+
 #endif  // SELFTEST_KVM_UTIL_ARCH_H
