@@ -49,6 +49,7 @@ struct intel_dmc_wl_range {
 
 static struct intel_dmc_wl_range lnl_wl_range[] = {
 	{ .start = 0x60000, .end = 0x7ffff },
+	{},
 };
 
 static void __intel_dmc_wl_release(struct intel_display *display)
@@ -99,7 +100,7 @@ static bool intel_dmc_wl_check_range(u32 address)
 	int i;
 	bool wl_needed = false;
 
-	for (i = 0; i < ARRAY_SIZE(lnl_wl_range); i++) {
+	for (i = 0; lnl_wl_range[i].start; i++) {
 		if (address >= lnl_wl_range[i].start &&
 		    address <= lnl_wl_range[i].end) {
 			wl_needed = true;
