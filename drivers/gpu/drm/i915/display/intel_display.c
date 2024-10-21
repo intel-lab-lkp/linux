@@ -2514,12 +2514,18 @@ void intel_encoder_get_config(struct intel_encoder *encoder,
 	intel_crtc_readout_derived_state(crtc_state);
 }
 
-static int intel_splitter_adjust_pipe_width(int width, int replicated_pixels)
+static int intel_splitter_adjust_pipe_width(int width, int replicated_pixels,
+					    bool has_odd_pixel, int num_pipes)
 {
-	/* Account for Pixel replication:
+	/* Account for Pixel replication + Odd pixel:
 	 * Pixel replication is required due to the rounding of slice_width (Hactive / slice_count).
 	 *
-	 * Splitter HW takes care of these by removing replicated pixels from the last pipe.
+	 * These extra pixels when added to the pipe source width, can make the pipe source width
+	 * odd. Since HW expects the pipe source width to be even, therefore one extra pixel needs
+	 * to be added to the pipe source width to make it even.
+	 *
+	 * Splitter HW takes care of these by removing odd pixel from each pipe and
+	 * replicated pixels from the last pipe.
 	 */
 
 	if (!replicated_pixels)
@@ -2527,7 +2533,11 @@ static int intel_splitter_adjust_pipe_width(int width, int replicated_pixels)
 
 	width += replicated_pixels;
 
-	return width;
+	if (!has_odd_pixel)
+		return width;
+
+	/* Account for one extra pixel for each pipe */
+	return width + num_pipes;
 }
 
 static void intel_joiner_compute_pipe_src(struct intel_crtc_state *crtc_state)
@@ -2539,7 +2549,9 @@ static void intel_joiner_compute_pipe_src(struct intel_crtc_state *crtc_state)
 		return;
 
 	width = intel_splitter_adjust_pipe_width(drm_rect_width(&crtc_state->pipe_src),
-						 crtc_state->dsc.replicated_pixels);
+						 crtc_state->dsc.replicated_pixels,
+						 crtc_state->dsc.has_odd_pixel,
+						 num_pipes);
 
 	height = drm_rect_height(&crtc_state->pipe_src);
 
