@@ -109,7 +109,7 @@ efct_efclib_config(struct efct *efct, struct libefc_function_template *tt)
 	efc->log_level = EFC_LOG_LIB;
 
 	sli = &efct->hw.sli;
-	efc->max_xfer_size = sli->sge_supported_length *
+	efc->max_xfer_size = (u64)sli->sge_supported_length *
 			     sli_get_max_sgl(&efct->hw.sli);
 	efc->sli = sli;
 	efc->fcfi = efct->hw.fcf_indicator;
