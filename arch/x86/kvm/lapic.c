@@ -135,8 +135,6 @@ static inline int __apic_test_and_clear_vector(int vec, void *bitmap)
 	return __test_and_clear_bit(VEC_POS(vec), (bitmap) + REG_POS(vec));
 }
 
-__read_mostly DEFINE_STATIC_KEY_FALSE(kvm_has_noapic_vcpu);
-EXPORT_SYMBOL_GPL(kvm_has_noapic_vcpu);
 
 __read_mostly DEFINE_STATIC_KEY_DEFERRED_FALSE(apic_hw_disabled, HZ);
 __read_mostly DEFINE_STATIC_KEY_DEFERRED_FALSE(apic_sw_disabled, HZ);
@@ -2517,10 +2515,8 @@ void kvm_free_lapic(struct kvm_vcpu *vcpu)
 {
 	struct kvm_lapic *apic = vcpu->arch.apic;
 
-	if (!vcpu->arch.apic) {
-		static_branch_dec(&kvm_has_noapic_vcpu);
+	if (!vcpu->arch.apic)
 		return;
-	}
 
 	hrtimer_cancel(&apic->lapic_timer.timer);
 
@@ -2863,10 +2859,8 @@ int kvm_create_lapic(struct kvm_vcpu *vcpu)
 
 	ASSERT(vcpu != NULL);
 
-	if (!irqchip_in_kernel(vcpu->kvm)) {
-		static_branch_inc(&kvm_has_noapic_vcpu);
+	if (!irqchip_in_kernel(vcpu->kvm))
 		return 0;
-	}
 
 	apic = kzalloc(sizeof(*apic), GFP_KERNEL_ACCOUNT);
 	if (!apic)
