@@ -2156,6 +2156,16 @@ static int npcm_i2c_master_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
 	} while (time_is_after_jiffies(time_left) && bus_busy);
 
 	/*
+	 * Previously, the 7-bit address was stored and being converted to
+	 * the address of event in the following call to npcm_i2c_master_start_xmit().
+	 *
+	 * Since there are cases that the i2c_recover_bus() gets called at the
+	 * early stage of npcm_i2c_master_xfer(), the address of event is stored
+	 * and then used in the i2c_recover_bus().
+	 */
+	bus->dest_addr = i2c_8bit_addr_from_msg(msg0);
+
+	/*
 	 * Check the BER (bus error) state, when ber_state is true, it means that the module
 	 * detects the bus error which is caused by some factor like that the electricity
 	 * noise occurs on the bus. Under this condition, the module is reset and the bus
@@ -2165,6 +2175,15 @@ static int npcm_i2c_master_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
 	 * bus is busy.
 	 */
 	if (bus_busy || bus->ber_state) {
+		/*
+		 * Since the transfer might be a read operation, remove the I2C_M_RD flag
+		 * from the bus->dest_addr for the i2c_recover_bus() call later.
+		 *
+		 * The i2c_recover_bus() uses the address in a write direction to recover
+		 * the i2c bus if some error condition occurs.
+		 */
+		bus->dest_addr &= ~I2C_M_RD;
+
 		iowrite8(NPCM_I2CCST_BB, bus->reg + NPCM_I2CCST);
 		npcm_i2c_reset(bus);
 		i2c_recover_bus(adap);
@@ -2172,7 +2191,6 @@ static int npcm_i2c_master_xfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
 	}
 
 	npcm_i2c_init_params(bus);
-	bus->dest_addr = slave_addr;
 	bus->msgs = msgs;
 	bus->msgs_num = num;
 	bus->cmd_err = 0;
