@@ -250,7 +250,7 @@ static bool intel_dmc_wl_check_range(struct intel_display *display, u32 address)
 
 static bool __intel_dmc_wl_supported(struct intel_display *display)
 {
-	if (DISPLAY_VER(display) < 20 ||
+	if (!HAS_DMC_WAKELOCK(display) ||
 	    !intel_dmc_has_payload(display) ||
 	    !display->params.enable_dmc_wl)
 		return false;
@@ -263,7 +263,7 @@ void intel_dmc_wl_init(struct intel_display *display)
 	struct intel_dmc_wl *wl = &display->wl;
 
 	/* don't call __intel_dmc_wl_supported(), DMC is not loaded yet */
-	if (DISPLAY_VER(display) < 20 || !display->params.enable_dmc_wl)
+	if (!HAS_DMC_WAKELOCK(display) || !display->params.enable_dmc_wl)
 		return;
 
 	INIT_DELAYED_WORK(&wl->work, intel_dmc_wl_work);
