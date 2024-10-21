@@ -38,15 +38,55 @@ struct vmemmap_remap_walk {
 	struct page		*reuse_page;
 	unsigned long		reuse_addr;
 	struct list_head	*vmemmap_pages;
-
-/* Skip the TLB flush when we split the PMD */
-#define VMEMMAP_SPLIT_NO_TLB_FLUSH	BIT(0)
-/* Skip the TLB flush when we remap the PTE */
-#define VMEMMAP_REMAP_NO_TLB_FLUSH	BIT(1)
-/* synchronize_rcu() to avoid writes from page_ref_add_unless() */
-#define VMEMMAP_SYNCHRONIZE_RCU		BIT(2)
 	unsigned long		flags;
 };
+
+#ifndef VMEMMAP_ARCH_TLB_FLUSH_FLAGS
+#define VMEMMAP_ARCH_TLB_FLUSH_FLAGS 0
+#endif
+
+#ifndef vmemmap_update_supported
+static bool vmemmap_update_supported(void)
+{
+	return true;
+}
+#endif
+
+#ifndef vmemmap_update_lock
+static void vmemmap_update_lock(void)
+{
+}
+#endif
+
+#ifndef vmemmap_update_unlock
+static void vmemmap_update_unlock(void)
+{
+}
+#endif
+
+#ifndef vmemmap_update_pte_range_start
+static void vmemmap_update_pte_range_start(pte_t *pte, unsigned long start, unsigned long end)
+{
+}
+#endif
+
+#ifndef vmemmap_update_pte_range_end
+static void vmemmap_update_pte_range_end(void)
+{
+}
+#endif
+
+#ifndef vmemmap_update_pmd_range_start
+static void vmemmap_update_pmd_range_start(pmd_t *pmd, unsigned long start, unsigned long end)
+{
+}
+#endif
+
+#ifndef vmemmap_update_pmd_range_end
+static void vmemmap_update_pmd_range_end(void)
+{
+}
+#endif
 
 static int vmemmap_split_pmd(pmd_t *pmd, struct page *head, unsigned long start,
 			     struct vmemmap_remap_walk *walk)
@@ -83,7 +123,9 @@ static int vmemmap_split_pmd(pmd_t *pmd, struct page *head, unsigned long start,
 
 		/* Make pte visible before pmd. See comment in pmd_install(). */
 		smp_wmb();
+		vmemmap_update_pmd_range_start(pmd, start, start + PMD_SIZE);
 		pmd_populate_kernel(&init_mm, pmd, pgtable);
+		vmemmap_update_pmd_range_end();
 		if (!(walk->flags & VMEMMAP_SPLIT_NO_TLB_FLUSH))
 			flush_tlb_kernel_range(start, start + PMD_SIZE);
 	} else {
@@ -164,10 +206,12 @@ static int vmemmap_remap_range(unsigned long start, unsigned long end,
 
 	VM_BUG_ON(!PAGE_ALIGNED(start | end));
 
+	vmemmap_update_lock();
 	mmap_read_lock(&init_mm);
 	ret = walk_page_range_novma(&init_mm, start, end, &vmemmap_remap_ops,
 				    NULL, walk);
 	mmap_read_unlock(&init_mm);
+	vmemmap_update_unlock();
 	if (ret)
 		return ret;
 
@@ -228,6 +272,8 @@ static void vmemmap_remap_pte_range(pte_t *pte, unsigned long start, unsigned lo
 		smp_wmb();
 	}
 
+	vmemmap_update_pte_range_start(pte, start, end);
+
 	for (i = 0; i < nr_pages; i++) {
 		pte_t val;
 
@@ -242,6 +288,8 @@ static void vmemmap_remap_pte_range(pte_t *pte, unsigned long start, unsigned lo
 
 		set_pte_at(&init_mm, start + PAGE_SIZE * i, pte + i, val);
 	}
+
+	vmemmap_update_pte_range_end();
 }
 
 /*
@@ -287,6 +335,8 @@ static void vmemmap_restore_pte_range(pte_t *pte, unsigned long start, unsigned 
 	 */
 	smp_wmb();
 
+	vmemmap_update_pte_range_start(pte, start, end);
+
 	for (i = 0; i < nr_pages; i++) {
 		pte_t val;
 
@@ -296,6 +346,8 @@ static void vmemmap_restore_pte_range(pte_t *pte, unsigned long start, unsigned 
 		val = mk_pte(page, PAGE_KERNEL);
 		set_pte_at(&init_mm, start + PAGE_SIZE * i, pte + i, val);
 	}
+
+	vmemmap_update_pte_range_end();
 }
 
 /**
@@ -513,7 +565,8 @@ static int __hugetlb_vmemmap_restore_folio(const struct hstate *h,
  */
 int hugetlb_vmemmap_restore_folio(const struct hstate *h, struct folio *folio)
 {
-	return __hugetlb_vmemmap_restore_folio(h, folio, VMEMMAP_SYNCHRONIZE_RCU);
+	return __hugetlb_vmemmap_restore_folio(h, folio,
+			VMEMMAP_SYNCHRONIZE_RCU | VMEMMAP_ARCH_TLB_FLUSH_FLAGS);
 }
 
 /**
@@ -553,7 +606,7 @@ long hugetlb_vmemmap_restore_folios(const struct hstate *h,
 		list_move(&folio->lru, non_hvo_folios);
 	}
 
-	if (restored)
+	if (restored && !(VMEMMAP_ARCH_TLB_FLUSH_FLAGS & VMEMMAP_REMAP_NO_TLB_FLUSH))
 		flush_tlb_all();
 	if (!ret)
 		ret = restored;
@@ -641,7 +694,8 @@ void hugetlb_vmemmap_optimize_folio(const struct hstate *h, struct folio *folio)
 {
 	LIST_HEAD(vmemmap_pages);
 
-	__hugetlb_vmemmap_optimize_folio(h, folio, &vmemmap_pages, VMEMMAP_SYNCHRONIZE_RCU);
+	__hugetlb_vmemmap_optimize_folio(h, folio, &vmemmap_pages,
+			VMEMMAP_SYNCHRONIZE_RCU | VMEMMAP_ARCH_TLB_FLUSH_FLAGS);
 	free_vmemmap_page_list(&vmemmap_pages);
 }
 
@@ -683,7 +737,8 @@ void hugetlb_vmemmap_optimize_folios(struct hstate *h, struct list_head *folio_l
 			break;
 	}
 
-	flush_tlb_all();
+	if (!(VMEMMAP_ARCH_TLB_FLUSH_FLAGS & VMEMMAP_SPLIT_NO_TLB_FLUSH))
+		flush_tlb_all();
 
 	list_for_each_entry(folio, folio_list, lru) {
 		int ret;
@@ -701,15 +756,26 @@ void hugetlb_vmemmap_optimize_folios(struct hstate *h, struct list_head *folio_l
 		 * allowing more vmemmap remaps to occur.
 		 */
 		if (ret == -ENOMEM && !list_empty(&vmemmap_pages)) {
-			flush_tlb_all();
+			if (!(VMEMMAP_ARCH_TLB_FLUSH_FLAGS & VMEMMAP_REMAP_NO_TLB_FLUSH))
+				flush_tlb_all();
 			free_vmemmap_page_list(&vmemmap_pages);
 			INIT_LIST_HEAD(&vmemmap_pages);
 			__hugetlb_vmemmap_optimize_folio(h, folio, &vmemmap_pages, flags);
 		}
 	}
 
-	flush_tlb_all();
+	if (!(VMEMMAP_ARCH_TLB_FLUSH_FLAGS & VMEMMAP_REMAP_NO_TLB_FLUSH))
+		flush_tlb_all();
 	free_vmemmap_page_list(&vmemmap_pages);
+}
+
+static int hugetlb_vmemmap_sysctl(const struct ctl_table *ctl, int write,
+				  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	if (!vmemmap_update_supported())
+		return -ENODEV;
+
+	return proc_dobool(ctl, write, buffer, lenp, ppos);
 }
 
 static struct ctl_table hugetlb_vmemmap_sysctls[] = {
@@ -718,7 +784,7 @@ static struct ctl_table hugetlb_vmemmap_sysctls[] = {
 		.data		= &vmemmap_optimize_enabled,
 		.maxlen		= sizeof(vmemmap_optimize_enabled),
 		.mode		= 0644,
-		.proc_handler	= proc_dobool,
+		.proc_handler	= hugetlb_vmemmap_sysctl,
 	},
 };
 
@@ -728,6 +794,11 @@ static int __init hugetlb_vmemmap_init(void)
 
 	/* HUGETLB_VMEMMAP_RESERVE_SIZE should cover all used struct pages */
 	BUILD_BUG_ON(__NR_USED_SUBPAGE > HUGETLB_VMEMMAP_RESERVE_PAGES);
+
+	if (READ_ONCE(vmemmap_optimize_enabled) && !vmemmap_update_supported()) {
+		pr_warn("HugeTLB: disabling HVO due to missing support.\n");
+		WRITE_ONCE(vmemmap_optimize_enabled, false);
+	}
 
 	for_each_hstate(h) {
 		if (hugetlb_vmemmap_optimizable(h)) {
