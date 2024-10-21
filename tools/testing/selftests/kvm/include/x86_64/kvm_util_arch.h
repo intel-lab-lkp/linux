@@ -48,6 +48,22 @@ do {											\
 	}										\
 } while (0)
 
+#define DEFINE_ARCH_VM_STAT					\
+	DEFINE_CHECK_STAT(vm, mmu_shadow_zapped)		\
+	DEFINE_CHECK_STAT(vm, mmu_pte_write)			\
+	DEFINE_CHECK_STAT(vm, mmu_pde_zapped)			\
+	DEFINE_CHECK_STAT(vm, mmu_flooded)			\
+	DEFINE_CHECK_STAT(vm, mmu_recycled)			\
+	DEFINE_CHECK_STAT(vm, mmu_cache_miss)			\
+	DEFINE_CHECK_STAT(vm, mmu_unsync)			\
+	DEFINE_CHECK_STAT(vm, pages_4k)				\
+	DEFINE_CHECK_STAT(vm, pages_2m)				\
+	DEFINE_CHECK_STAT(vm, pages_1g)				\
+	DEFINE_CHECK_STAT(vm, pages)				\
+	DEFINE_CHECK_STAT(vm, nx_lpage_splits)			\
+	DEFINE_CHECK_STAT(vm, max_mmu_page_hash_collisions)	\
+	DEFINE_CHECK_STAT(vm, max_mmu_rmap_size)		\
+
 #define DEFINE_ARCH_VCPU_STAT					\
 	DEFINE_CHECK_STAT(vcpu, pf_taken)			\
 	DEFINE_CHECK_STAT(vcpu, pf_fixed)			\

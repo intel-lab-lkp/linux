@@ -539,16 +539,35 @@ static inline int check_##type##_##stat##_exists(void)	\
 
 #define STAT_EXISTS(type, stat) (check_##type##_##stat##_exists())
 
+#define DEFINE_GENERIC_VM_STAT					\
+	DEFINE_CHECK_STAT(vm, remote_tlb_flush)			\
+	DEFINE_CHECK_STAT(vm, remote_tlb_flush_requests)	\
+
+/*
+ * Define a default empty macro for architectures which do not specify
+ * arch specific vm stats.
+ */
+#ifndef DEFINE_ARCH_VM_STAT
+#define DEFINE_ARCH_VM_STAT
+#endif
+
+DEFINE_GENERIC_VM_STAT
+DEFINE_ARCH_VM_STAT
+
+#undef DEFINE_GENERIC_VM_STAT
+#undef DEFINE_ARCH_VM_STAT
+
 void __vm_get_stat(struct kvm_vm *vm, const char *stat_name, uint64_t *data,
 		   size_t max_elements);
 
-static inline uint64_t vm_get_stat(struct kvm_vm *vm, const char *stat_name)
-{
-	uint64_t data;
-
-	__vm_get_stat(vm, stat_name, &data, 1);
-	return data;
-}
+#define vm_get_stat(vm, stat_name)				\
+({								\
+	uint64_t data;						\
+								\
+	STAT_EXISTS(vm, stat_name);				\
+	__vm_get_stat(vm, #stat_name, &data, 1);		\
+	data;							\
+})
 
 #define DEFINE_GENERIC_VCPU_STAT				\
 	DEFINE_CHECK_STAT(vcpu, halt_successfull_poll)		\
