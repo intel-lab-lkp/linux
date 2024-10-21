@@ -1689,10 +1689,11 @@ void intel_guc_submission_reset_prepare(struct intel_guc *guc)
 	spin_unlock_irq(guc_to_gt(guc)->irq_lock);
 
 	guc_flush_submissions(guc);
-	guc_flush_destroyed_contexts(guc);
 	flush_work(&guc->ct.requests.worker);
 
 	scrub_guc_desc_for_outstanding_g2h(guc);
+	guc_flush_destroyed_contexts(guc);
+
 }
 
 static struct intel_engine_cs *
