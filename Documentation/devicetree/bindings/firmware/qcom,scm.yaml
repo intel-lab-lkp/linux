@@ -64,6 +64,7 @@ properties:
           - qcom,scm-sm8450
           - qcom,scm-sm8550
           - qcom,scm-sm8650
+          - qcom,scm-sm8750
           - qcom,scm-qcs404
           - qcom,scm-x1e80100
       - const: qcom,scm
@@ -195,6 +196,7 @@ allOf:
                 - qcom,scm-sm8450
                 - qcom,scm-sm8550
                 - qcom,scm-sm8650
+                - qcom,scm-sm8750
     then:
       properties:
         interrupts: false
