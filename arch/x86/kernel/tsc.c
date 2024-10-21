@@ -1264,6 +1264,21 @@ static void __init check_system_tsc_reliable(void)
 		tsc_disable_clocksource_watchdog();
 }
 
+static void __init upgrade_clock_rating(struct clocksource *tsc_early,
+					struct clocksource *tsc)
+{
+	/*
+	 * Upgrade the clock rating for TSC early and regular clocksource when
+	 * the underlying platform provides non-stop, invaraint and stable TSC.
+	 */
+	if (boot_cpu_has(X86_FEATURE_CONSTANT_TSC) &&
+	    boot_cpu_has(X86_FEATURE_NONSTOP_TSC) &&
+	    !tsc_unstable) {
+		tsc_early->rating = 449;
+		tsc->rating = 450;
+	}
+}
+
 /*
  * Make an educated guess if the TSC is trustworthy and synchronized
  * over all CPUs.
@@ -1564,6 +1579,8 @@ void __init tsc_init(void)
 
 	if (tsc_clocksource_reliable || no_tsc_watchdog)
 		tsc_disable_clocksource_watchdog();
+
+	upgrade_clock_rating(&clocksource_tsc_early, &clocksource_tsc);
 
 	clocksource_register_khz(&clocksource_tsc_early, tsc_khz);
 	detect_art();
