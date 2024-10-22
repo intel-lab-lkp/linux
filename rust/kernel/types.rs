@@ -429,3 +429,65 @@ pub enum Either<L, R> {
     /// Constructs an instance of [`Either`] containing a value of type `R`.
     Right(R),
 }
+
+/// A smart pointer that owns the underlying data `T`.
+///
+/// This is a simple smart pointer that owns the underlying data. Typically, this would be
+/// returned as a wrapper for `T` in `T`'s constructor.
+/// When an object adds an option of being constructed this way, in addition to implementing
+/// `Drop`, it implements `Ownable` as well, thus having finer-grained control in where
+/// resource allocation and deallocation happens.
+///
+/// # Invariants
+///
+/// The pointer is always valid and owns the underlying data.
+pub struct Owned<T: Ownable> {
+    ptr: NonNull<T>,
+}
+
+impl<T: Ownable> Owned<T> {
+    /// Creates a new smart pointer that owns `T`.
+    ///
+    /// # Safety
+    /// `ptr` needs to be a valid pointer, and it should be the unique owner to the object,
+    /// in other words, no other entity should free the underlying data.
+    pub unsafe fn to_owned(ptr: *mut T) -> Self {
+	// SAFETY: Per function safety requirement.
+	Self { ptr: unsafe { NonNull::new_unchecked(ptr) } }
+    }
+}
+
+impl<T: Ownable> Deref for Owned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: By the type invariant, there is necessarily a reference to the object, so it is
+        // safe to dereference it.
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T: Ownable> DerefMut for Owned<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: By the type invariant, there is necessarily a reference to the object, so it is
+        // safe to dereference it.
+        unsafe { self.ptr.as_mut() }
+    }
+}
+
+/// An Ownable type is a type that can be put into `Owned<T>`, and when `Owned<T>` drops,
+/// `ptr_drop` will be called.
+pub unsafe trait Ownable {
+    /// # Safety
+    /// This could only be called in the `Owned::drop` function.
+    unsafe fn ptr_drop(ptr: *mut Self);
+}
+
+impl<T: Ownable> Drop for Owned<T> {
+    fn drop(&mut self) {
+	// SAFETY: In Owned<T>::drop.
+	unsafe {
+	    <T as Ownable>::ptr_drop(self.ptr.as_mut());
+	}
+    }
+}
