@@ -265,6 +265,13 @@ int xhci_plat_probe(struct platform_device *pdev, struct device *sysdev, const s
 		if (device_property_read_bool(tmpdev, "xhci-skip-phy-init-quirk"))
 			xhci->quirks |= XHCI_SKIP_PHY_INIT;
 
+#ifdef CONFIG_USB_SKIP_SUSPEND
+		if (device_property_read_bool(tmpdev, "usb-skip-suspend")) {
+			hcd_to_bus(hcd)->skip_suspend = true;
+			hcd_to_bus(xhci->shared_hcd)->skip_suspend = true;
+		}
+#endif
+
 		device_property_read_u32(tmpdev, "imod-interval-ns",
 					 &xhci->imod_interval);
 	}
