@@ -3146,9 +3146,56 @@ found:
 		goto retry;
 }
 
+#ifdef CONFIG_SCHED_MC
+/*
+ * Per-CPU cpumasks used by the built-in idle CPU selection policy to determine
+ * task's LLC domain.
+ */
+static DEFINE_PER_CPU(cpumask_var_t, __select_llc_mask);
+
+static void init_select_llc_mask(void)
+{
+	int i;
+
+	for_each_possible_cpu(i)
+		zalloc_cpumask_var_node(&per_cpu(__select_llc_mask, i),
+					GFP_KERNEL, cpu_to_node(i));
+}
+
+static struct cpumask *this_llc_mask(void)
+{
+	return this_cpu_cpumask_var_ptr(__select_llc_mask);
+}
+
+static inline const struct cpumask *llc_domain(s32 cpu)
+{
+	struct sched_domain *sd = rcu_dereference(per_cpu(sd_llc, cpu));
+
+	return sd ? sched_domain_span(sd) : NULL;
+}
+#else /* CONFIG_SCHED_MC */
+static inline void init_select_llc_mask(void) {}
+
+static inline struct cpumask *this_llc_mask(void)
+{
+	return NULL;
+}
+
+static inline const struct cpumask *llc_domain(s32 cpu)
+{
+	return NULL;
+}
+#endif /* CONFIG_SCHED_MC */
+
+/*
+ * Built-in cpu idle selection policy.
+ */
 static s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu,
 			      u64 wake_flags, bool *found)
 {
+	struct cpumask *llc_cpus = this_llc_mask();
+	const struct cpumask *llc_mask;
+	bool llc_empty;
 	s32 cpu;
 
 	*found = false;
@@ -3191,26 +3238,65 @@ static s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu,
 	}
 
 	/*
+	 * Determine the task's LLC domain.
+	 */
+	llc_mask = llc_domain(prev_cpu);
+	if (llc_cpus && llc_mask)
+		llc_empty = !cpumask_and(llc_cpus, llc_mask, p->cpus_ptr);
+	else
+		llc_empty = true;
+
+	/*
 	 * If CPU has SMT, any wholly idle CPU is likely a better pick than
 	 * partially idle @prev_cpu.
 	 */
 	if (sched_smt_active()) {
+		/*
+		 * Keep using @prev_cpu if it's part of a fully idle core.
+		 */
 		if (cpumask_test_cpu(prev_cpu, idle_masks.smt) &&
 		    test_and_clear_cpu_idle(prev_cpu)) {
 			cpu = prev_cpu;
 			goto cpu_found;
 		}
 
+		/*
+		 * Search for any fully idle core in the same LLC domain.
+		 */
+		if (!llc_empty) {
+			cpu = scx_pick_idle_cpu(llc_cpus, SCX_PICK_IDLE_CORE);
+			if (cpu >= 0)
+				goto cpu_found;
+		}
+
+		/*
+		 * Search for any full idle core usable by the task.
+		 */
 		cpu = scx_pick_idle_cpu(p->cpus_ptr, SCX_PICK_IDLE_CORE);
 		if (cpu >= 0)
 			goto cpu_found;
 	}
 
+	/*
+	 * Use @prev_cpu if it's idle.
+	 */
 	if (test_and_clear_cpu_idle(prev_cpu)) {
 		cpu = prev_cpu;
 		goto cpu_found;
 	}
 
+	/*
+	 * Search for any idle CPU in the same LLC domain.
+	 */
+	if (!llc_empty) {
+		cpu = scx_pick_idle_cpu(llc_cpus, 0);
+		if (cpu >= 0)
+			goto cpu_found;
+	}
+
+	/*
+	 * Search for any idle CPU usable by the task.
+	 */
 	cpu = scx_pick_idle_cpu(p->cpus_ptr, 0);
 	if (cpu >= 0)
 		goto cpu_found;
@@ -7273,6 +7359,8 @@ static int __init scx_init(void)
 		pr_err("sched_ext: Failed to add global attributes\n");
 		return ret;
 	}
+
+	init_select_llc_mask();
 
 	return 0;
 }
