@@ -48,6 +48,7 @@
 #define PCF2127_BIT_CTRL3_BLF			BIT(2)
 #define PCF2127_BIT_CTRL3_BF			BIT(3)
 #define PCF2127_BIT_CTRL3_BTSE			BIT(4)
+#define PCF2127_BIT_CTRL3_PWRMNG_MASK		(BIT(5) | BIT(6) | BIT(7))
 /* Time and date registers */
 #define PCF2127_REG_TIME_BASE		0x03
 #define PCF2127_BIT_SC_OSF			BIT(7)
@@ -527,6 +528,49 @@ static int pcf2127_watchdog_init(struct device *dev, struct pcf2127 *pcf2127)
 	}
 
 	return devm_watchdog_register_device(dev, &pcf2127->wdd);
+}
+
+static int pcf2127_battery_init(struct device *dev, struct pcf2127 *pcf2127)
+{
+	u8 val = 0xff;
+	int ret;
+
+	/*
+	 * Disable battery low/switch-over timestamp and interrupts.
+	 * Clear battery interrupt flags which can block new trigger events.
+	 * Note: This is the default chip behaviour but added to ensure
+	 * correct tamper timestamp and interrupt function.
+	 */
+	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				 PCF2127_BIT_CTRL3_BTSE |
+				 PCF2127_BIT_CTRL3_BIE |
+				 PCF2127_BIT_CTRL3_BLIE, 0);
+	if (ret) {
+		dev_err(dev, "%s: interrupt config (ctrl3) failed\n",
+			__func__);
+		return ret;
+	}
+
+	ret = device_property_read_u8(dev, "nxp,battery-switch-over", &val);
+	if (ret < 0)
+		return 0;
+
+	if (val > 7) {
+		dev_warn(dev,
+			 "%s: ignoring invalid value for nxp,battery-switch-over: %u\n",
+			 __func__, val);
+		return 0;
+	};
+	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				 PCF2127_BIT_CTRL3_PWRMNG_MASK, val << 5);
+	if (ret) {
+		dev_err(dev,
+			"%s: battery switch-over config (ctrl3) failed\n",
+			__func__);
+		return ret;
+	}
+
+	return 0;
 }
 
 /* Alarm */
@@ -1224,22 +1268,9 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	}
 
 	pcf2127_watchdog_init(dev, pcf2127);
-
-	/*
-	 * Disable battery low/switch-over timestamp and interrupts.
-	 * Clear battery interrupt flags which can block new trigger events.
-	 * Note: This is the default chip behaviour but added to ensure
-	 * correct tamper timestamp and interrupt function.
-	 */
-	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
-				 PCF2127_BIT_CTRL3_BTSE |
-				 PCF2127_BIT_CTRL3_BIE |
-				 PCF2127_BIT_CTRL3_BLIE, 0);
-	if (ret) {
-		dev_err(dev, "%s: interrupt config (ctrl3) failed\n",
-			__func__);
+	ret = pcf2127_battery_init(dev, pcf2127);
+	if (ret < 0)
 		return ret;
-	}
 
 	/*
 	 * Enable timestamp functions 1 to 4.
