@@ -85,7 +85,9 @@ static inline u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 
 static inline struct page_pool *page_pool_to_pp(struct page *page)
 {
-	return page->pp;
+	struct page_pool_item *item = page->pp_item;
+
+	return container_of(item, struct page_pool, items[item->pp_idx]);
 }
 
 /**
