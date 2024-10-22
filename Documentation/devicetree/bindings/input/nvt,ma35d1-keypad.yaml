@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/nvt,ma35d1-keypad.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NVT MA35D1 Keypad
+
+maintainers:
+  - Ming-jen Chen <mjchen0829@gmail.com>
+
+allOf:
+  - $ref: /schemas/input/matrix-keymap.yaml#
+
+properties:
+  compatible:
+    const: nuvoton,ma35d1-kpi
+
+  debounce-period:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      key debounce period select
+      0  = 0 clock
+      1  = 0 clock
+      2  = 0 clock
+      3  = 8 clocks
+      4  = 16 clocks
+      5  = 32 clocks
+      6  = 64 clocks
+      7  = 128 clocks
+      8  = 256 clocks
+      9  = 512 clocks
+      10 = 1024 clocks
+      11 = 2048 clocks
+      12 = 4096 clocks
+      13 = 8192 clocks
+
+  per-scale:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Row Scan Cycle Pre-scale Value (1 to 256).
+
+  per-scalediv:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Per-scale divider (1 to 256).
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - linux,keymap
+  - debounce-period
+  - per-scale
+  - per-scalediv
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/input/input.h>
+    keypad: keypad@404A0000 {
+      compatible = "nuvoton,ma35d1-kpi";
+      reg = <0x404A0000 0x10000>;
+      interrupts = <79>;
+      clocks = <&clk>;
+      keypad,num-rows = <2>;
+      keypad,num-columns = <2>;
+
+      linux,keymap = <
+         MATRIX_KEY(0,  0, KEY_ENTER)
+         MATRIX_KEY(0,  1, KEY_ENTER)
+         MATRIX_KEY(1,  0, KEY_SPACE)
+         MATRIX_KEY(1,  1, KEY_Z)
+     >;
+
+     debounce-period = <1>;
+     per-scale = <1>;
+     per-scalediv = <24>;
+    };
