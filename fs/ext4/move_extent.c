@@ -610,6 +610,13 @@ ext4_move_extents(struct file *o_filp, struct file *d_filp, __u64 orig_blk,
 		return -EOPNOTSUPP;
 	}
 
+	if (ext4_test_inode_state(orig_inode, EXT4_STATE_BUFFERED_IOMAP) ||
+	    ext4_test_inode_state(donor_inode, EXT4_STATE_BUFFERED_IOMAP)) {
+		ext4_msg(orig_inode->i_sb, KERN_ERR,
+			 "Online defrag not supported for inode with iomap buffered IO path");
+		return -EOPNOTSUPP;
+	}
+
 	/* Protect orig and donor inodes against a truncate */
 	lock_two_nondirectories(orig_inode, donor_inode);
 
