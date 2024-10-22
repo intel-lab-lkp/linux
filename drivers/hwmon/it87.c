@@ -15,6 +15,7 @@
  *            IT8620E  Super I/O chip w/LPC interface
  *            IT8622E  Super I/O chip w/LPC interface
  *            IT8623E  Super I/O chip w/LPC interface
+ *            IT8625E  Super I/O chip w/LPC interface
  *            IT8628E  Super I/O chip w/LPC interface
  *            IT8705F  Super I/O chip w/LPC interface
  *            IT8712F  Super I/O chip w/LPC interface
@@ -161,6 +162,7 @@ static inline void superio_exit(int ioreg, bool noexit)
 #define IT8620E_DEVID 0x8620
 #define IT8622E_DEVID 0x8622
 #define IT8623E_DEVID 0x8623
+#define IT8625E_DEVID 0x8625
 #define IT8628E_DEVID 0x8628
 #define IT87952E_DEVID 0x8695
 
@@ -2782,6 +2784,7 @@ static int __init it87_find(int sioaddr, unsigned short *address,
 	case IT8622E_DEVID:
 		sio_data->type = it8622;
 		break;
+	case IT8625E_DEVID:
 	case IT8628E_DEVID:
 		sio_data->type = it8628;
 		break;
