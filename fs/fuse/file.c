@@ -750,7 +750,6 @@ static struct fuse_io_args *fuse_io_folios_alloc(struct fuse_io_priv *io,
 	ia = kzalloc(sizeof(*ia), GFP_KERNEL);
 	if (ia) {
 		ia->io = io;
-		ia->ap.uses_folios = true;
 		ia->ap.folios = fuse_folios_alloc(nfolios, GFP_KERNEL,
 						  &ia->ap.folio_descs);
 		if (!ia->ap.folios) {
@@ -880,7 +879,6 @@ static int fuse_do_readfolio(struct file *file, struct folio *folio)
 	struct fuse_io_args ia = {
 		.ap.args.page_zeroing = true,
 		.ap.args.out_pages = true,
-		.ap.uses_folios = true,
 		.ap.num_folios = 1,
 		.ap.folios = &folio,
 		.ap.folio_descs = &desc,
@@ -1318,7 +1316,6 @@ static ssize_t fuse_perform_write(struct kiocb *iocb, struct iov_iter *ii)
 		unsigned int nr_pages = fuse_wr_pages(pos, iov_iter_count(ii),
 						      fc->max_pages);
 
-		ap->uses_folios = true;
 		ap->folios = fuse_folios_alloc(nr_pages, GFP_KERNEL, &ap->folio_descs);
 		if (!ap->folios) {
 			err = -ENOMEM;
@@ -2093,7 +2090,6 @@ static struct fuse_writepage_args *fuse_writepage_args_alloc(void)
 	if (wpa) {
 		ap = &wpa->ia.ap;
 		ap->num_folios = 0;
-		ap->uses_folios = true;
 		ap->folios = fuse_folios_alloc(1, GFP_NOFS, &ap->folio_descs);
 		if (!ap->folios) {
 			kfree(wpa);
