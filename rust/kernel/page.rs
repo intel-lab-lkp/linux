@@ -3,7 +3,7 @@
 //! Kernel page allocation and management.
 
 use crate::{
-    alloc::{AllocError, Flags},
+    alloc::{AllocError, Flags, VVec, flags::*},
     bindings,
     error::code::*,
     error::Result,
@@ -114,6 +114,26 @@ impl Page {
         // SAFETY: We just successfully allocated a page, therefore dereferencing
         // the page pointer is valid.
         Ok(unsafe { &*page.cast() })
+    }
+
+    /// A convenience wrapper to vmalloc_to_page which ensures it takes a page-sized buffer
+    /// represented by `PageSlice`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::page::*;
+    ///
+    /// # fn dox() -> Result<(), kernel::alloc::AllocError> {
+    /// let somedata: [u8; PAGE_SIZE * 2] = [0; PAGE_SIZE * 2];
+    /// let buf: &[u8] = &somedata;
+    /// let pages: VVec<PageSlice> = buf.try_into()?;
+    /// let page = Page::page_slice_to_page(&pages[0])?;
+    /// # Ok(()) }
+    /// ```
+    pub fn page_slice_to_page<'a>(page: &PageSlice) -> Result<&'a Self, AllocError>
+    {
+        Self::vmalloc_to_page(page.0.as_ptr() as _)
     }
 
     /// Returns a raw pointer to the page.
@@ -284,6 +304,43 @@ impl Page {
             // exclusive access to the slice since the caller guarantees that there are no races.
             reader.read_raw(unsafe { core::slice::from_raw_parts_mut(dst.cast(), len) })
         })
+    }
+}
+
+/// A page-aligned, page-sized object. This is used for convenience to convert a large
+/// buffer into an array of page-sized vmalloc'd chunks which can then be used in
+/// `Page::page_slice_to_page` wrapper.
+///
+// FIXME: This should be `PAGE_SIZE`, but the compiler rejects everything except a literal
+// integer argument for the `repr(align)` attribute.
+#[repr(align(4096))]
+pub struct PageSlice([u8; PAGE_SIZE]);
+
+impl TryFrom<&[u8]> for VVec<PageSlice> {
+    type Error = AllocError;
+
+    fn try_from(val: &[u8]) -> Result<Self, AllocError> {
+        let mut k = VVec::new();
+        let aligned_len: usize;
+
+        // Ensure the size is page-aligned.
+        match core::alloc::Layout::from_size_align(val.len(), PAGE_SIZE) {
+            Ok(align) => { aligned_len = align.pad_to_align().size() },
+            Err(_) => return Err(AllocError),
+        };
+        let pages = aligned_len >> PAGE_SHIFT;
+        match k.reserve(pages, GFP_KERNEL) {
+            Ok(()) => {
+                // SAFETY: from above, the length should be equal to the vector's capacity
+                unsafe { k.set_len(pages); }
+                // SAFETY: src buffer sized val.len() does not overlap with dst buffer since
+                // the dst buffer's size is val.len() padded up to a multiple of PAGE_SIZE.
+                unsafe { ptr::copy_nonoverlapping(val.as_ptr(), k.as_mut_ptr() as *mut u8,
+                                                  val.len()) };
+                Ok(k)
+            },
+            Err(_) => Err(AllocError),
+        }
     }
 }
 
