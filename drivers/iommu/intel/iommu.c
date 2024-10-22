@@ -733,12 +733,17 @@ void dmar_fault_dump_ptes(struct intel_iommu *iommu, u16 source_id,
 	u8 devfn = source_id & 0xff;
 	u8 bus = source_id >> 8;
 	struct dma_pte *pgtable;
+	u64 entry;
 
 	pr_info("Dump %s table entries for IOVA 0x%llx\n", iommu->name, addr);
 
 	/* root entry dump */
 	rt_entry = &iommu->root_entry[bus];
-	if (!rt_entry) {
+	entry = rt_entry->lo;
+	if (sm_supported(iommu) && devfn >= 0x80)
+		entry = rt_entry->hi;
+
+	if (!(entry & 1)) {
 		pr_info("root table entry is not present\n");
 		return;
 	}
@@ -766,28 +771,32 @@ void dmar_fault_dump_ptes(struct intel_iommu *iommu, u16 source_id,
 		goto pgtable_walk;
 	}
 
+	/* For request-without-pasid, get the pasid from context entry */
+	if (pasid == IOMMU_PASID_INVALID)
+		pasid = IOMMU_NO_PASID;
+
 	/* get the pointer to pasid directory entry */
 	dir = phys_to_virt(ctx_entry->lo & VTD_PAGE_MASK);
-	if (!dir) {
+	dir_index = pasid >> PASID_PDE_SHIFT;
+	pde = &dir[dir_index];
+
+	if (!pasid_pde_is_present(pde)) {
 		pr_info("pasid directory entry is not present\n");
 		return;
 	}
-	/* For request-without-pasid, get the pasid from context entry */
-	if (intel_iommu_sm && pasid == IOMMU_PASID_INVALID)
-		pasid = IOMMU_NO_PASID;
 
-	dir_index = pasid >> PASID_PDE_SHIFT;
-	pde = &dir[dir_index];
 	pr_info("pasid dir entry: 0x%016llx\n", pde->val);
 
 	/* get the pointer to the pasid table entry */
-	entries = get_pasid_table_from_pde(pde);
-	if (!entries) {
+	entries = phys_to_virt(READ_ONCE(pde->val) & PDE_PFN_MASK);
+	index = pasid & PASID_PTE_MASK;
+	pte = &entries[index];
+
+	if (!pasid_pte_is_present(pte)) {
 		pr_info("pasid table entry is not present\n");
 		return;
 	}
-	index = pasid & PASID_PTE_MASK;
-	pte = &entries[index];
+
 	for (i = 0; i < ARRAY_SIZE(pte->val); i++)
 		pr_info("pasid table entry[%d]: 0x%016llx\n", i, pte->val[i]);
 
