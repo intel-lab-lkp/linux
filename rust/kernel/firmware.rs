@@ -4,8 +4,8 @@
 //!
 //! C header: [`include/linux/firmware.h`](srctree/include/linux/firmware.h)
 
-use crate::{bindings, device::Device, error::Error, error::Result, str::CStr};
-use core::ptr::NonNull;
+use crate::{bindings, device::Device, error::Error, error::Result, str::CStr,
+            types::{Opaque, Owned, Ownable}};
 
 /// # Invariants
 ///
@@ -52,10 +52,11 @@ impl FwFunc {
 /// # Ok(())
 /// # }
 /// ```
-pub struct Firmware(NonNull<bindings::firmware>);
+ #[repr(transparent)]
+pub struct Firmware(Opaque<bindings::firmware>);
 
 impl Firmware {
-    fn request_internal(name: &CStr, dev: &Device, func: FwFunc) -> Result<Self> {
+    fn request_internal(name: &CStr, dev: &Device, func: FwFunc) -> Result<Owned<Self>> {
         let mut fw: *mut bindings::firmware = core::ptr::null_mut();
         let pfw: *mut *mut bindings::firmware = &mut fw;
 
@@ -65,25 +66,26 @@ impl Firmware {
         if ret != 0 {
             return Err(Error::from_errno(ret));
         }
-
+        // CAST: Self` is a `repr(transparent)` wrapper around `bindings::firmware`.
+        let ptr = fw.cast::<Self>();
         // SAFETY: `func` not bailing out with a non-zero error code, guarantees that `fw` is a
         // valid pointer to `bindings::firmware`.
-        Ok(Firmware(unsafe { NonNull::new_unchecked(fw) }))
+        Ok(unsafe { Owned::to_owned(ptr) })
     }
 
     /// Send a firmware request and wait for it. See also `bindings::request_firmware`.
-    pub fn request(name: &CStr, dev: &Device) -> Result<Self> {
+    pub fn request(name: &CStr, dev: &Device) -> Result<Owned<Self>> {
         Self::request_internal(name, dev, FwFunc::request())
     }
 
     /// Send a request for an optional firmware module. See also
     /// `bindings::firmware_request_nowarn`.
-    pub fn request_nowarn(name: &CStr, dev: &Device) -> Result<Self> {
+    pub fn request_nowarn(name: &CStr, dev: &Device) -> Result<Owned<Self>> {
         Self::request_internal(name, dev, FwFunc::request_nowarn())
     }
 
     fn as_raw(&self) -> *mut bindings::firmware {
-        self.0.as_ptr()
+        self.0.get()
     }
 
     /// Returns the size of the requested firmware in bytes.
@@ -101,10 +103,13 @@ impl Firmware {
     }
 }
 
-impl Drop for Firmware {
-    fn drop(&mut self) {
-        // SAFETY: `self.as_raw()` is valid by the type invariant.
-        unsafe { bindings::release_firmware(self.as_raw()) };
+unsafe impl Ownable for Firmware {
+    unsafe fn ptr_drop(ptr: *mut Self) {
+        // SAFETY:
+        // - By the type invariants, we have ownership of the ptr and can free it.
+        // - Per function safety, this is called in Owned::drop(), so `ptr` is a
+        //   unique pointer to object, it's safe to release the firmware.
+        unsafe { bindings::release_firmware(ptr.cast()) };
     }
 }
 
