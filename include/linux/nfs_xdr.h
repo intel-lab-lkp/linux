@@ -1374,6 +1374,7 @@ struct nfs41_impl_id {
 	char				domain[NFS4_OPAQUE_LIMIT + 1];
 	char				name[NFS4_OPAQUE_LIMIT + 1];
 	struct nfstime4			date;
+	struct rcu_head			__rcu_head;
 };
 
 #define MAX_BIND_CONN_TO_SESSION_RETRIES 3
@@ -1397,7 +1398,7 @@ struct nfs41_exchange_id_res {
 	u32				flags;
 	struct nfs41_server_owner	*server_owner;
 	struct nfs41_server_scope	*server_scope;
-	struct nfs41_impl_id		*impl_id;
+	struct nfs41_impl_id __rcu	*impl_id;
 	struct nfs41_state_protection	state_protect;
 };
 

@@ -612,13 +612,19 @@ static void show_pnfs(struct seq_file *m, struct nfs_server *server)
 
 static void show_implementation_id(struct seq_file *m, struct nfs_server *nfss)
 {
-	if (nfss->nfs_client && nfss->nfs_client->cl_implid) {
-		struct nfs41_impl_id *impl_id = nfss->nfs_client->cl_implid;
+	struct nfs_client *clp = nfss->nfs_client;
+	struct nfs41_impl_id *impl_id;
+
+	if (!clp)
+		return;
+	rcu_read_lock();
+	impl_id = rcu_dereference(clp->cl_implid);
+	if (impl_id)
 		seq_printf(m, "\n\timpl_id:\tname='%s',domain='%s',"
 			   "date='%llu,%u'",
 			   impl_id->name, impl_id->domain,
 			   impl_id->date.seconds, impl_id->date.nseconds);
-	}
+	rcu_read_unlock();
 }
 #else
 #if IS_ENABLED(CONFIG_NFS_V4)

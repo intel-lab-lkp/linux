@@ -293,7 +293,10 @@ static void nfs4_shutdown_client(struct nfs_client *clp)
 	rpc_destroy_wait_queue(&clp->cl_rpcwaitq);
 	kfree(clp->cl_serverowner);
 	kfree(clp->cl_serverscope);
-	kfree(clp->cl_implid);
+#ifdef CONFIG_NFS_V4_1
+	if (clp->cl_implid)
+		kfree_rcu(clp->cl_implid, __rcu_head);
+#endif
 	kfree(clp->cl_owner_id);
 }
 
