@@ -4147,6 +4147,13 @@ out:
 	return err;
 }
 
+static int ext4_iomap_zero_range(struct inode *inode, loff_t from,
+				 loff_t length, bool *did_zero)
+{
+	return iomap_zero_range(inode, from, length, did_zero,
+				&ext4_iomap_buffered_write_ops);
+}
+
 /*
  * ext4_block_zero_page_range() zeros out a mapping of length 'length'
  * starting from file offset 'from'.  The range to be zero'd must
@@ -4173,6 +4180,8 @@ static int ext4_block_zero_page_range(struct address_space *mapping,
 	if (IS_DAX(inode)) {
 		return dax_zero_range(inode, from, length, NULL,
 				      &ext4_iomap_ops);
+	} else if (ext4_test_inode_state(inode, EXT4_STATE_BUFFERED_IOMAP)) {
+		return ext4_iomap_zero_range(inode, from, length, did_zero);
 	}
 	return __ext4_block_zero_page_range(mapping, from, length, did_zero);
 }
@@ -4572,6 +4581,22 @@ int ext4_truncate(struct inode *inode)
 			goto out_trace;
 
 		ext4_block_truncate_page(mapping, inode->i_size, &zero_len);
+		/*
+		 * inode with an iomap buffered I/O path does not order data,
+		 * so it is necessary to write out zeroed data before the
+		 * updating i_disksize transaction is committed. Otherwise,
+		 * stale data may remain in the last block, which could be
+		 * exposed during the next expand truncate operation.
+		 */
+		if (zero_len && ext4_test_inode_state(inode,
+					EXT4_STATE_BUFFERED_IOMAP)) {
+			loff_t zero_end = inode->i_size + zero_len;
+
+			err = filemap_write_and_wait_range(mapping,
+					inode->i_size, zero_end - 1);
+			if (err)
+				goto out_trace;
+		}
 	}
 
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
