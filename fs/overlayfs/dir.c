@@ -28,6 +28,10 @@ int ovl_cleanup(struct ovl_fs *ofs, struct inode *wdir, struct dentry *wdentry)
 {
 	int err;
 
+	/*
+	 * Cached negative upper dentries are generally not useful, so grab a
+	 * ref to the victim to keep it from turning negative.
+	 */
 	dget(wdentry);
 	if (d_is_dir(wdentry))
 		err = ovl_do_rmdir(ofs, wdir, wdentry);
