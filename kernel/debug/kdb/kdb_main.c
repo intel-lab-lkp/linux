@@ -2827,7 +2827,7 @@ static kdbtab_t maintab[] = {
 #if defined(CONFIG_PRINTK)
 	{	.name = "dmesg",
 		.func = kdb_dmesg,
-		.usage = "[lines]",
+		.usage = "[lines] [adjust]",
 		.help = "Display syslog buffer",
 		.flags = KDB_ENABLE_ALWAYS_SAFE,
 	},
