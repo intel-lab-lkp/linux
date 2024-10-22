@@ -173,6 +173,17 @@ static int usb_acpi_add_usb4_devlink(struct usb_device *udev)
 	if (IS_ERR(nhi_fwnode))
 		return 0;
 
+	/*
+	 * If USB4 Host interface driver isn't set up yet we can't be in a USB3
+	 * tunnel created by it.
+	 */
+	if (!nhi_fwnode->dev || !device_is_bound(nhi_fwnode->dev)) {
+		dev_info(&port_dev->dev, "%s probed before USB4 host interface\n",
+			 dev_name(&port_dev->child->dev));
+		udev->tunnel_mode = USB_LINK_NATIVE;
+		return 0;
+	}
+
 	link = device_link_add(&port_dev->child->dev, nhi_fwnode->dev,
 			       DL_FLAG_AUTOREMOVE_CONSUMER |
 			       DL_FLAG_RPM_ACTIVE |
