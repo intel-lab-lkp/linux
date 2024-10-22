@@ -76,6 +76,7 @@ static void assert_pch_hdmi_disabled(struct drm_i915_private *dev_priv,
 static void assert_pch_ports_disabled(struct drm_i915_private *dev_priv,
 				      enum pipe pipe)
 {
+	struct intel_display *display = &dev_priv->display;
 	enum pipe port_pipe;
 
 	assert_pch_dp_disabled(dev_priv, pipe, PORT_B, PCH_DP_B);
@@ -83,7 +84,7 @@ static void assert_pch_ports_disabled(struct drm_i915_private *dev_priv,
 	assert_pch_dp_disabled(dev_priv, pipe, PORT_D, PCH_DP_D);
 
 	I915_STATE_WARN(dev_priv,
-			intel_crt_port_enabled(dev_priv, PCH_ADPA, &port_pipe) && port_pipe == pipe,
+			intel_crt_port_enabled(display, PCH_ADPA, &port_pipe) && port_pipe == pipe,
 			"PCH VGA enabled on transcoder %c, should be disabled\n",
 			pipe_name(pipe));
 
