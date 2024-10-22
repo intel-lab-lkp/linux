@@ -292,6 +292,8 @@ struct sdhci_msm_host {
 	bool vqmmc_enabled;
 };
 
+static struct sdhci_msm_host *sdhci_slot[3];
+
 static const struct sdhci_msm_offset *sdhci_priv_msm_offset(struct sdhci_host *host)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -2425,6 +2427,14 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
 		goto pltfm_free;
+
+	if (node) {
+		ret = of_alias_get_id(pdev->dev.of_node, "mmc");
+		if (ret < 0)
+			dev_err(&pdev->dev, "get slot index failed %d\n", ret);
+		else
+			sdhci_slot[ret] = msm_host;
+	}
 
 	/*
 	 * Based on the compatible string, load the required msm host info from
