@@ -2260,8 +2260,7 @@ static int __mmap_prepare(struct mmap_state *map)
 	return 0;
 }
 
-static int __mmap_new_file_vma(struct mmap_state *map, struct vm_area_struct *vma,
-			       struct vm_area_struct **mergep)
+static int __mmap_new_file_vma(struct mmap_state *map, struct vm_area_struct *vma)
 {
 	struct vma_iterator *vmi = map->vmi;
 	struct vma_merge_struct *vmg = map->vmg;
@@ -2291,34 +2290,6 @@ static int __mmap_new_file_vma(struct mmap_state *map, struct vm_area_struct *vm
 			(vma->vm_flags & VM_MAYWRITE));
 
 	vma_iter_config(vmi, vmg->start, vmg->end);
-	/*
-	 * If flags changed after mmap_file(), we should try merge
-	 * vma again as we may succeed this time.
-	 */
-	if (unlikely(map->flags != vma->vm_flags && vmg->prev)) {
-		struct vm_area_struct *merge;
-
-		vmg->flags = vma->vm_flags;
-		/* If this fails, state is reset ready for a reattempt. */
-		merge = vma_merge_new_range(vmg);
-
-		if (merge) {
-			/*
-			 * ->mmap() can change vma->vm_file and fput
-			 * the original file. So fput the vma->vm_file
-			 * here or we would add an extra fput for file
-			 * and cause general protection fault
-			 * ultimately.
-			 */
-			fput(vma->vm_file);
-			vm_area_free(vma);
-			vma_iter_free(vmi);
-			*mergep = merge;
-		} else {
-			vma_iter_config(vmi, vmg->start, vmg->end);
-		}
-	}
-
 	map->flags = vma->vm_flags;
 	return 0;
 }
@@ -2341,7 +2312,6 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 {
 	struct vma_iterator *vmi = map->vmi;
 	struct vma_merge_struct *vmg = map->vmg;
-	struct vm_area_struct *merge = NULL;
 	int error = 0;
 	struct vm_area_struct *vma;
 
@@ -2365,7 +2335,7 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 	}
 
 	if (vmg->file)
-		error = __mmap_new_file_vma(map, vma, &merge);
+		error = __mmap_new_file_vma(map, vma);
 	else if (map->flags & VM_SHARED)
 		error = shmem_zero_setup(vma);
 	else
@@ -2373,9 +2343,6 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 
 	if (error)
 		goto free_iter_vma;
-
-	if (merge)
-		goto file_expanded;
 
 #ifdef CONFIG_SPARC64
 	/* TODO: Fix SPARC ADI! */
@@ -2393,8 +2360,6 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 	 * call covers the non-merge case.
 	 */
 	khugepaged_enter_vma(vma, map->flags);
-
-file_expanded:
 	ksm_add_vma(vma);
 
 	*vmap = vma;
