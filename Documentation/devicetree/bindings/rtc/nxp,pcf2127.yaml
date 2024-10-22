@@ -30,6 +30,16 @@ properties:
 
   reset-source: true
 
+  nxp,battery-switch-over:
+    description:
+      Battery and power related configuration. This property is used to set the
+      PWRMNG bits of the Control_3 register to control the battery switch-over,
+      battery low detection and extra power fail detection functions.
+      The actual supported functions depend on the device capabilities.
+    $ref: /schemas/types.yaml#/definitions/uint8
+    minimum: 0
+    maximum: 7
+
 required:
   - compatible
   - reg
