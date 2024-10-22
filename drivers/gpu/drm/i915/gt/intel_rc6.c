@@ -140,6 +140,7 @@ static void gen11_rc6_enable(struct intel_rc6 *rc6)
 					      VDN_MFX_POWERGATE_ENABLE(i));
 	}
 
+	rc6->pg_enable = pg_enable;
 	intel_uncore_write_fw(uncore, GEN9_PG_ENABLE, pg_enable);
 }
 
@@ -572,8 +573,11 @@ static void __intel_rc6_disable(struct intel_rc6 *rc6)
 	intel_guc_rc_disable(gt_to_guc(gt));
 
 	intel_uncore_forcewake_get(uncore, FORCEWAKE_ALL);
-	if (GRAPHICS_VER(i915) >= 9)
+	if (GRAPHICS_VER(i915) >= 9) {
+		rc6->pg_enable = 0;
 		intel_uncore_write_fw(uncore, GEN9_PG_ENABLE, 0);
+	}
+
 	intel_uncore_write_fw(uncore, GEN6_RC_CONTROL, 0);
 	intel_uncore_write_fw(uncore, GEN6_RC_STATE, 0);
 	intel_uncore_forcewake_put(uncore, FORCEWAKE_ALL);
@@ -687,6 +691,15 @@ void intel_rc6_unpark(struct intel_rc6 *rc6)
 
 	/* Restore HW timers for automatic RC6 entry while busy */
 	intel_uncore_write_fw(uncore, GEN6_RC_CONTROL, rc6->ctl_enable);
+
+	/*
+	 * Seeing render forcewake timeouts during active submissions so disable render PG
+	 * while workloads are under execution.
+	 * FIXME Remove this change once real cause of render force wake timeout is fixed
+	 */
+	if (rc6->pg_enable == GEN9_RENDER_PG_ENABLE)
+		intel_uncore_write_fw(uncore, GEN9_PG_ENABLE,
+				      rc6->pg_enable & ~GEN9_RENDER_PG_ENABLE);
 }
 
 void intel_rc6_park(struct intel_rc6 *rc6)
@@ -715,6 +728,9 @@ void intel_rc6_park(struct intel_rc6 *rc6)
 	else
 		target = 0x4; /* normal rc6 */
 	intel_uncore_write_fw(uncore, GEN6_RC_STATE, target << RC_SW_TARGET_STATE_SHIFT);
+
+	if (rc6->pg_enable == GEN9_RENDER_PG_ENABLE)
+		intel_uncore_write_fw(uncore, GEN9_PG_ENABLE, rc6->pg_enable);
 }
 
 void intel_rc6_disable(struct intel_rc6 *rc6)

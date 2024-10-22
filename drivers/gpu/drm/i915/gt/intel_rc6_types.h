@@ -30,6 +30,7 @@ struct intel_rc6 {
 
 	u32 ctl_enable;
 	u32 bios_rc_state;
+	u32 pg_enable;
 
 	struct drm_i915_gem_object *pctx;
 
