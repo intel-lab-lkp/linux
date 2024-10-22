@@ -2002,28 +2002,47 @@ static struct vfsmount *btrfs_reconfigure_for_mount(struct fs_context *fc)
 {
 	struct vfsmount *mnt;
 	int ret;
-	const bool ro2rw = !(fc->sb_flags & SB_RDONLY);
+	const unsigned int old_sb_flags = fc->sb_flags_mask;
 
+retry:
 	/*
 	 * We got an EBUSY because our SB_RDONLY flag didn't match the existing
 	 * super block, so invert our setting here and retry the mount so we
 	 * can get our vfsmount.
 	 */
-	if (ro2rw)
-		fc->sb_flags |= SB_RDONLY;
-	else
+	if (fc->sb_flags & SB_RDONLY)
 		fc->sb_flags &= ~SB_RDONLY;
-
+	else
+		fc->sb_flags |= SB_RDONLY;
 	mnt = fc_mount(fc);
-	if (IS_ERR(mnt))
+	/*
+	 * There is no super block lock to hold, thus we can have
+	 * another remount changing the RO/RW status.
+	 * So here we need to check if we got -EBUSY.
+	 * If we got one, retry with inverted RO flags again.
+	 */
+	if (IS_ERR(mnt) && PTR_ERR(mnt) == -EBUSY)
+		goto retry;
+	if (IS_ERR(mnt)) {
+		ret = PTR_ERR(mnt);
+		btrfs_err(NULL, "failed to mount during reconfigure: %d\n", ret);
+		return mnt;
+	}
+	if (!fc->oldapi)
 		return mnt;
 
-	if (!fc->oldapi || !ro2rw)
+	down_write(&mnt->mnt_sb->s_umount);
+	/*
+	 * The new mount is already matching our RO flags, or no need to
+	 * reconfigure to RW.
+	 */
+	if ((old_sb_flags & SB_RDONLY) == (mnt->mnt_sb->s_flags & SB_RDONLY) ||
+	    !(old_sb_flags & SB_RDONLY)) {
+		up_write(&mnt->mnt_sb->s_umount);
 		return mnt;
-
+	}
 	/* We need to convert to rw, call reconfigure. */
 	fc->sb_flags &= ~SB_RDONLY;
-	down_write(&mnt->mnt_sb->s_umount);
 	ret = btrfs_reconfigure(fc);
 	up_write(&mnt->mnt_sb->s_umount);
 	if (ret) {
