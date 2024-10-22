@@ -654,11 +654,30 @@ static inline bool has_enough_free_secs(struct f2fs_sb_info *sbi,
 	return !has_not_enough_free_secs(sbi, freed, needed);
 }
 
+static inline bool has_enough_free_blks(struct f2fs_sb_info *sbi)
+{
+	long long total_free_blocks = 0;
+	block_t avail_user_block_count;
+	block_t valid_block_count;
+
+	spin_lock(&sbi->stat_lock);
+
+	avail_user_block_count = get_available_block_count(sbi, NULL, true);
+	valid_block_count = valid_user_blocks(sbi);
+	total_free_blocks = avail_user_block_count - valid_block_count;
+
+	spin_unlock(&sbi->stat_lock);
+
+	return (total_free_blocks > 0) ? true : false;
+}
+
 static inline bool f2fs_is_checkpoint_ready(struct f2fs_sb_info *sbi)
 {
 	if (likely(!is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
 		return true;
 	if (likely(has_enough_free_secs(sbi, 0, 0)))
+		return true;
+	if (likely(has_enough_free_blks(sbi)))
 		return true;
 	return false;
 }
