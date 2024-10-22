@@ -140,7 +140,7 @@ void intel_uc_fw_change_status(struct intel_uc_fw *uc_fw,
  * backward-compatible one, so we use only the former in the file name.
  */
 #define INTEL_GSC_FIRMWARE_DEFS(fw_def, gsc_def) \
-	fw_def(METEORLAKE,   0, gsc_def(mtl, 1, 0))
+	fw_def(METEORLAKE,   0, gsc_def(mtl, 1, 0 , "i915/mtl_gsc_102.1.15.1926.bin"))
 
 /*
  * Set of macros for producing a list of filenames from the above table.
@@ -177,8 +177,8 @@ void intel_uc_fw_change_status(struct intel_uc_fw *uc_fw,
 #define MAKE_HUC_FW_PATH_MMP(prefix_, major_, minor_, patch_) \
 	__MAKE_UC_FW_PATH_MMP(prefix_, "huc", major_, minor_, patch_)
 
-#define MAKE_GSC_FW_PATH(prefix_, major_, minor_) \
-	__MAKE_UC_FW_PATH_MAJOR(prefix_, "gsc", major_)
+#define MAKE_GSC_FW_PATH(prefix_, major_, minor_, path_) \
+	path_
 
 /*
  * All blobs need to be declared via MODULE_FIRMWARE().
@@ -240,9 +240,8 @@ struct __packed uc_fw_blob {
 #define HUC_FW_BLOB_GSC(prefix_) \
 	UC_FW_BLOB_NEW(0, 0, 0, true, MAKE_HUC_FW_PATH_GSC(prefix_))
 
-#define GSC_FW_BLOB(prefix_, major_, minor_) \
-	UC_FW_BLOB_NEW(major_, minor_, 0, true, \
-		       MAKE_GSC_FW_PATH(prefix_, major_, minor_))
+#define GSC_FW_BLOB(prefix_, major_, minor_, path_) \
+	UC_FW_BLOB_NEW(major_, minor_, 0, true, path_)
 
 struct __packed uc_fw_platform_requirement {
 	enum intel_platform p;
