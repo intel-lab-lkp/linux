@@ -290,6 +290,7 @@ struct sdhci_msm_host {
 	u32 dll_config;
 	u32 ddr_config;
 	bool vqmmc_enabled;
+	bool err_occurred;
 };
 
 static const struct sdhci_msm_offset *sdhci_priv_msm_offset(struct sdhci_host *host)
@@ -2255,6 +2256,8 @@ static void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	const struct sdhci_msm_offset *msm_offset = msm_host->offset;
 
+	msm_host->err_occurred = true;
+
 	SDHCI_MSM_DUMP("----------- VENDOR REGISTER DUMP -----------\n");
 
 	SDHCI_MSM_DUMP(
@@ -2398,6 +2401,41 @@ static int sdhci_msm_gcc_reset(struct device *dev, struct sdhci_host *host)
 	return ret;
 }
 
+static ssize_t err_state_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+
+	if (!host || !host->mmc)
+		return -EINVAL;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", !!msm_host->err_occurred);
+}
+
+static DEVICE_ATTR_RO(err_state);
+
+static struct attribute *sdhci_msm_sysfs_attrs[] = {
+	&dev_attr_err_state.attr,
+	NULL
+};
+
+static const struct attribute_group sdhci_msm_sysfs_group = {
+	.name = "qcom",
+	.attrs = sdhci_msm_sysfs_attrs,
+};
+
+static void sdhci_msm_init_sysfs(struct device *dev)
+{
+	int ret;
+
+	ret = sysfs_create_group(&dev->kobj, &sdhci_msm_sysfs_group);
+	if (ret)
+		dev_err(dev, "%s: Failed to create qcom sysfs group (err = %d)\n",
+				__func__, ret);
+}
+
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
 	struct sdhci_host *host;
@@ -2441,6 +2479,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 
 	sdhci_get_of_property(pdev);
 	sdhci_msm_get_of_property(pdev, host);
+
+	sdhci_msm_init_sysfs(&pdev->dev);
 
 	msm_host->saved_tuning_phase = INVALID_TUNING_PHASE;
 
