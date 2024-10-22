@@ -14,6 +14,7 @@
 #include <linux/errno.h>
 #include <linux/acpi.h>
 #include <linux/memblock.h>
+#include <linux/memory.h>
 #include <linux/numa.h>
 #include <linux/nodemask.h>
 #include <linux/topology.h>
@@ -334,6 +335,29 @@ out_err_bad_srat:
 	return 0;
 }
 
+/* Advise memblock on maximum block size to avoid stranded capacity. */
+static int __init acpi_align_cfmws(union acpi_subtable_headers *header,
+				   void *arg, const unsigned long table_end)
+{
+	struct acpi_cedt_cfmws *cfmws = (struct acpi_cedt_cfmws *)header;
+	u64 start = cfmws->base_hpa;
+	u64 size = cfmws->window_size;
+	unsigned long bz;
+
+	for (bz = SZ_64T; bz >= SZ_256M; bz >>= 1) {
+		if (IS_ALIGNED(start, bz) && IS_ALIGNED(size, bz))
+			break;
+	}
+
+	if (bz >= SZ_256M) {
+		if (memory_block_advise_max_size(bz) < 0)
+			pr_warn("CFMWS: memblock size advise failed\n");
+	} else
+		pr_err("CFMWS: [BIOS BUG] base/size alignment violates spec\n");
+
+	return 0;
+}
+
 static int __init acpi_parse_cfmws(union acpi_subtable_headers *header,
 				   void *arg, const unsigned long table_end)
 {
@@ -545,6 +569,15 @@ int __init acpi_numa_init(void)
 	 * are defined in the CFMWS and not already defined in the SRAT.
 	 * Initialize a fake_pxm as the first available PXM to emulate.
 	 */
+
+	/* Align memblock size to CFMW regions if possible */
+	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, acpi_align_cfmws, NULL);
+
+	/*
+	 * Nodes start populating with blocks after this, so probe the max
+	 * block size to prevent it from changing in the future.
+	 */
+	memory_block_probe_max_size();
 
 	/* fake_pxm is the next unused PXM value after SRAT parsing */
 	for (i = 0, fake_pxm = -1; i < MAX_NUMNODES; i++) {
