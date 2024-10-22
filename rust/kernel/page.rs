@@ -31,11 +31,12 @@ pub const fn page_align(addr: usize) -> usize {
     (addr + (PAGE_SIZE - 1)) & PAGE_MASK
 }
 
-/// A pointer to a page that owns the page allocation.
+/// A pointer to a page that may own the page allocation.
 ///
 /// # Invariants
 ///
-/// The pointer is valid, and has ownership over the page.
+/// The pointer is valid, and has ownership over the page if the page is allocated by this
+/// abstraction.
 #[repr(transparent)]
 pub struct Page {
     page: Opaque<bindings::page>,
@@ -86,6 +87,33 @@ impl Page {
         // allocated page. We transfer that ownership to the new `Page` object.
         // SAFETY: According to invariant above ptr is valid.
         Ok(unsafe { Owned::to_owned(ptr) })
+    }
+
+    /// This is just a wrapper to vmalloc_to_page which returns an existing page mapping, hence
+    /// we don't take ownership of the page. Returns an error if the pointer is null or if it
+    /// is not returned by vmalloc().
+    pub fn vmalloc_to_page<'a>(
+        cpu_addr: *const core::ffi::c_void
+    ) -> Result<&'a Self, AllocError>
+    {
+        if cpu_addr.is_null() {
+            return Err(AllocError);
+        }
+        // SAFETY: We've checked that the pointer is not null, so it is safe to call this method.
+        if unsafe { !bindings::is_vmalloc_addr(cpu_addr) } {
+            return Err(AllocError);
+        }
+        // SAFETY: We've initially ensured the pointer argument to this function is not null and
+        // checked for the requirement the the buffer passed to it should be allocated by vmalloc,
+        // so it is safe to call this method.
+        let page = unsafe { bindings::vmalloc_to_page(cpu_addr) };
+        if page.is_null() {
+            return Err(AllocError);
+        }
+        // CAST: `Self` is a `repr(transparent)` wrapper around `bindings::page`.
+        // SAFETY: We just successfully allocated a page, therefore dereferencing
+        // the page pointer is valid.
+        Ok(unsafe { &*page.cast() })
     }
 
     /// Returns a raw pointer to the page.
