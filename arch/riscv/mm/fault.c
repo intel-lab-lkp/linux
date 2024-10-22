@@ -8,6 +8,7 @@
 
 
 #include <linux/mm.h>
+#include <linux/kasan.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/perf_event.h>
@@ -29,6 +30,8 @@ static void die_kernel_fault(const char *msg, unsigned long addr,
 
 	pr_alert("Unable to handle kernel %s at virtual address " REG_FMT "\n", msg,
 		addr);
+
+	kasan_non_canonical_hook(addr);
 
 	bust_spinlocks(0);
 	die(regs, "Oops");
