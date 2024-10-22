@@ -21,7 +21,8 @@ struct intel_hdcp_gsc_message {
 
 bool intel_hdcp_gsc_cs_required(struct intel_display *display)
 {
-	return DISPLAY_VER(display) >= 14;
+	return DISPLAY_VER(display) >= 14 &&
+		DISPLAY_VER_FULL(display) != IP_VER(14, 1);
 }
 
 bool intel_hdcp_gsc_check_status(struct intel_display *display)
