@@ -4677,6 +4677,7 @@ static long ext4_zero_range(struct file *file, loff_t offset,
 		}
 
 		/* Now release the pages and zero block aligned part of pages */
+		ext4_truncate_folios_range(inode, start, end);
 		truncate_pagecache_range(inode, start, end - 1);
 		inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
 
