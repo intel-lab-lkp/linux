@@ -908,10 +908,10 @@ drm_get_last_vbltimestamp(struct drm_device *dev, unsigned int pipe,
  * drm_crtc_accurate_vblank_count() for such use-cases.
  *
  * Note that for a given vblank counter value drm_crtc_handle_vblank()
- * and drm_crtc_vblank_count() or drm_crtc_vblank_count_and_time()
- * provide a barrier: Any writes done before calling
- * drm_crtc_handle_vblank() will be visible to callers of the later
- * functions, if the vblank count is the same or a later one.
+ * and drm_crtc_vblank_count() provide a barrier:
+ * Any writes done before calling drm_crtc_handle_vblank() will be
+ * visible to callers of the later functions, if the vblank count is
+ * the same or a later one.
  *
  * See also &drm_vblank_crtc.count.
  *
@@ -936,7 +936,6 @@ EXPORT_SYMBOL(drm_crtc_vblank_count);
  * modesetting activity. Returns corresponding system timestamp of the time
  * of the vblank interval that corresponds to the current vblank counter value.
  *
- * This is the legacy version of drm_crtc_vblank_count_and_time().
  */
 static u64 drm_vblank_count_and_time(struct drm_device *dev, unsigned int pipe,
 				     ktime_t *vblanktime)
@@ -958,33 +957,6 @@ static u64 drm_vblank_count_and_time(struct drm_device *dev, unsigned int pipe,
 
 	return vblank_count;
 }
-
-/**
- * drm_crtc_vblank_count_and_time - retrieve "cooked" vblank counter value
- *     and the system timestamp corresponding to that vblank counter value
- * @crtc: which counter to retrieve
- * @vblanktime: Pointer to time to receive the vblank timestamp.
- *
- * Fetches the "cooked" vblank count value that represents the number of
- * vblank events since the system was booted, including lost events due to
- * modesetting activity. Returns corresponding system timestamp of the time
- * of the vblank interval that corresponds to the current vblank counter value.
- *
- * Note that for a given vblank counter value drm_crtc_handle_vblank()
- * and drm_crtc_vblank_count() or drm_crtc_vblank_count_and_time()
- * provide a barrier: Any writes done before calling
- * drm_crtc_handle_vblank() will be visible to callers of the later
- * functions, if the vblank count is the same or a later one.
- *
- * See also &drm_vblank_crtc.count.
- */
-u64 drm_crtc_vblank_count_and_time(struct drm_crtc *crtc,
-				   ktime_t *vblanktime)
-{
-	return drm_vblank_count_and_time(crtc->dev, drm_crtc_index(crtc),
-					 vblanktime);
-}
-EXPORT_SYMBOL(drm_crtc_vblank_count_and_time);
 
 /**
  * drm_crtc_next_vblank_start - calculate the time of the next vblank
@@ -1978,10 +1950,10 @@ EXPORT_SYMBOL(drm_handle_vblank);
  * This is the native KMS version of drm_handle_vblank().
  *
  * Note that for a given vblank counter value drm_crtc_handle_vblank()
- * and drm_crtc_vblank_count() or drm_crtc_vblank_count_and_time()
- * provide a barrier: Any writes done before calling
- * drm_crtc_handle_vblank() will be visible to callers of the later
- * functions, if the vblank count is the same or a later one.
+ * and drm_crtc_vblank_count() * provide a barrier:
+ * Any writes done before calling * drm_crtc_handle_vblank() will be
+ * visible to callers of the later functions, if the vblank count is
+ * the same or a later one.
  *
  * See also &drm_vblank_crtc.count.
  *
