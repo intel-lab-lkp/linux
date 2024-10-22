@@ -4038,7 +4038,9 @@ void ext4_set_aops(struct inode *inode)
  * racing writeback can come later and flush the stale pagecache to disk.
  */
 static int __ext4_block_zero_page_range(handle_t *handle,
-		struct address_space *mapping, loff_t from, loff_t length)
+					struct address_space *mapping,
+					loff_t from, loff_t length,
+					bool *did_zero)
 {
 	ext4_fsblk_t index = from >> PAGE_SHIFT;
 	unsigned offset = from & (PAGE_SIZE-1);
@@ -4116,13 +4118,15 @@ static int __ext4_block_zero_page_range(handle_t *handle,
 
 	if (ext4_should_journal_data(inode)) {
 		err = ext4_dirty_journalled_data(handle, bh);
+		if (err)
+			goto unlock;
 	} else {
 		err = 0;
 		mark_buffer_dirty(bh);
-		if (ext4_should_order_data(inode))
-			err = ext4_jbd2_inode_add_write(handle, inode, from,
-					length);
 	}
+
+	if (did_zero)
+		*did_zero = true;
 
 unlock:
 	folio_unlock(folio);
@@ -4138,7 +4142,9 @@ unlock:
  * that corresponds to 'from'
  */
 static int ext4_block_zero_page_range(handle_t *handle,
-		struct address_space *mapping, loff_t from, loff_t length)
+				      struct address_space *mapping,
+				      loff_t from, loff_t length,
+				      bool *did_zero)
 {
 	struct inode *inode = mapping->host;
 	unsigned offset = from & (PAGE_SIZE-1);
@@ -4156,7 +4162,8 @@ static int ext4_block_zero_page_range(handle_t *handle,
 		return dax_zero_range(inode, from, length, NULL,
 				      &ext4_iomap_ops);
 	}
-	return __ext4_block_zero_page_range(handle, mapping, from, length);
+	return __ext4_block_zero_page_range(handle, mapping, from, length,
+					    did_zero);
 }
 
 /*
@@ -4166,12 +4173,15 @@ static int ext4_block_zero_page_range(handle_t *handle,
  * of that block so it doesn't yield old data if the file is later grown.
  */
 static int ext4_block_truncate_page(handle_t *handle,
-		struct address_space *mapping, loff_t from)
+				    struct address_space *mapping, loff_t from,
+				    loff_t *zero_len)
 {
 	unsigned offset = from & (PAGE_SIZE-1);
 	unsigned length;
 	unsigned blocksize;
 	struct inode *inode = mapping->host;
+	bool did_zero = false;
+	int ret;
 
 	/* If we are processing an encrypted inode during orphan list handling */
 	if (IS_ENCRYPTED(inode) && !fscrypt_has_encryption_key(inode))
@@ -4180,7 +4190,13 @@ static int ext4_block_truncate_page(handle_t *handle,
 	blocksize = inode->i_sb->s_blocksize;
 	length = blocksize - (offset & (blocksize - 1));
 
-	return ext4_block_zero_page_range(handle, mapping, from, length);
+	ret = ext4_block_zero_page_range(handle, mapping, from, length,
+					 &did_zero);
+	if (ret)
+		return ret;
+
+	*zero_len = length;
+	return 0;
 }
 
 int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
@@ -4203,13 +4219,14 @@ int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
 	if (start == end &&
 	    (partial_start || (partial_end != sb->s_blocksize - 1))) {
 		err = ext4_block_zero_page_range(handle, mapping,
-						 lstart, length);
+						 lstart, length, NULL);
 		return err;
 	}
 	/* Handle partial zero out on the start of the range */
 	if (partial_start) {
 		err = ext4_block_zero_page_range(handle, mapping,
-						 lstart, sb->s_blocksize);
+						 lstart, sb->s_blocksize,
+						 NULL);
 		if (err)
 			return err;
 	}
@@ -4217,7 +4234,7 @@ int ext4_zero_partial_blocks(handle_t *handle, struct inode *inode,
 	if (partial_end != sb->s_blocksize - 1)
 		err = ext4_block_zero_page_range(handle, mapping,
 						 byte_end - partial_end,
-						 partial_end + 1);
+						 partial_end + 1, NULL);
 	return err;
 }
 
@@ -4517,6 +4534,7 @@ int ext4_truncate(struct inode *inode)
 	int err = 0, err2;
 	handle_t *handle;
 	struct address_space *mapping = inode->i_mapping;
+	loff_t zero_len = 0;
 
 	/*
 	 * There is a possibility that we're either freeing the inode
@@ -4560,7 +4578,15 @@ int ext4_truncate(struct inode *inode)
 	}
 
 	if (inode->i_size & (inode->i_sb->s_blocksize - 1))
-		ext4_block_truncate_page(handle, mapping, inode->i_size);
+		ext4_block_truncate_page(handle, mapping, inode->i_size,
+					 &zero_len);
+
+	if (zero_len && ext4_should_order_data(inode)) {
+		err = ext4_jbd2_inode_add_write(handle, inode, inode->i_size,
+						zero_len);
+		if (err)
+			goto out_stop;
+	}
 
 	/*
 	 * We add the inode to the orphan list, so that if this
