@@ -8,8 +8,9 @@ use crate::{
     error::code::*,
     error::Result,
     uaccess::UserSliceReader,
+    types::{Opaque, Owned, Ownable},
 };
-use core::ptr::{self, NonNull};
+use core::ptr::{self};
 
 /// A bitwise shift for the page size.
 pub const PAGE_SHIFT: usize = bindings::PAGE_SHIFT as usize;
@@ -35,8 +36,9 @@ pub const fn page_align(addr: usize) -> usize {
 /// # Invariants
 ///
 /// The pointer is valid, and has ownership over the page.
+#[repr(transparent)]
 pub struct Page {
-    page: NonNull<bindings::page>,
+    page: Opaque<bindings::page>,
 }
 
 // SAFETY: Pages have no logic that relies on them staying on a given thread, so moving them across
@@ -71,19 +73,24 @@ impl Page {
     /// let page = Page::alloc_page(GFP_KERNEL | __GFP_ZERO)?;
     /// # Ok(()) }
     /// ```
-    pub fn alloc_page(flags: Flags) -> Result<Self, AllocError> {
+    pub fn alloc_page(flags: Flags) -> Result<Owned<Self>, AllocError> {
         // SAFETY: Depending on the value of `gfp_flags`, this call may sleep. Other than that, it
         // is always safe to call this method.
         let page = unsafe { bindings::alloc_pages(flags.as_raw(), 0) };
-        let page = NonNull::new(page).ok_or(AllocError)?;
+        if page.is_null() {
+            return Err(AllocError);
+        }
+        // CAST: Self` is a `repr(transparent)` wrapper around `bindings::page`.
+        let ptr = page.cast::<Self>();
         // INVARIANT: We just successfully allocated a page, so we now have ownership of the newly
         // allocated page. We transfer that ownership to the new `Page` object.
-        Ok(Self { page })
+        // SAFETY: According to invariant above ptr is valid.
+        Ok(unsafe { Owned::to_owned(ptr) })
     }
 
     /// Returns a raw pointer to the page.
     pub fn as_ptr(&self) -> *mut bindings::page {
-        self.page.as_ptr()
+        self.page.get()
     }
 
     /// Runs a piece of code with this page mapped to an address.
@@ -252,9 +259,9 @@ impl Page {
     }
 }
 
-impl Drop for Page {
-    fn drop(&mut self) {
+unsafe impl Ownable for Page {
+    unsafe fn ptr_drop(ptr: *mut Self) {
         // SAFETY: By the type invariants, we have ownership of the page and can free it.
-        unsafe { bindings::__free_pages(self.page.as_ptr(), 0) };
+        unsafe { bindings::__free_pages(ptr.cast(), 0) };
     }
 }
