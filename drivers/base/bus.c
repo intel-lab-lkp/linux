@@ -40,6 +40,24 @@ static struct kset *bus_kset;
 	struct driver_attribute driver_attr_##_name =		\
 		__ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store)
 
+/*
+ *  Bus rescans drivers for a single device, and derives from
+ *  bus_rescan_devices_helper(), but returns scanning result
+ *  as precise as possible.
+ */
+static int __must_check bus_rescan_single_device(struct device *dev)
+{
+	int ret;
+
+	if (dev->parent && dev->bus->need_parent_lock)
+		device_lock(dev->parent);
+	ret = device_attach(dev);
+	if (dev->parent && dev->bus->need_parent_lock)
+		device_unlock(dev->parent);
+
+	return ret;
+}
+
 static int __must_check bus_rescan_devices_helper(struct device *dev,
 						void *data);
 
@@ -310,13 +328,33 @@ static ssize_t drivers_probe_store(const struct bus_type *bus,
 				   const char *buf, size_t count)
 {
 	struct device *dev;
-	int err = -EINVAL;
+	int err;
+	int res;
 
 	dev = bus_find_device_by_name(bus, NULL, buf);
 	if (!dev)
 		return -ENODEV;
-	if (bus_rescan_devices_helper(dev, NULL) == 0)
+
+	res = bus_rescan_single_device(dev);
+	if (res < 0) {
+		/*
+		 * Give user known -EAGAIN in case of internal
+		 * -EPROBE_DEFER, and propagate error code upwards
+		 * as precise as possible.
+		 */
+		err = res == -EPROBE_DEFER ? -EAGAIN : res;
+	} else if (res > 0) {
 		err = count;
+	} else {
+		/*
+		 * Which error code to return for such synchronous
+		 * probing result ?
+		 */
+		dev_err(dev, "device '%s' fails to attach a driver\n",
+			dev_name(dev));
+		err = count;
+	}
+
 	put_device(dev);
 	return err;
 }
