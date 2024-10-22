@@ -29,6 +29,8 @@ properties:
       - st,stm32mp157-z-pinctrl
       - st,stm32mp215-pinctrl
       - st,stm32mp215-z-pinctrl
+      - st,stm32mp235-pinctrl
+      - st,stm32mp235-z-pinctrl
       - st,stm32mp257-pinctrl
       - st,stm32mp257-z-pinctrl
 
