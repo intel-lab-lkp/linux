@@ -6738,7 +6738,7 @@ __bpf_kfunc void scx_bpf_exit_bstr(s64 exit_code, char *fmt,
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&scx_exit_bstr_buf_lock, flags);
-	if (bstr_format(&scx_exit_bstr_buf, fmt, data, data__sz) >= 0)
+	if (bstr_format(&scx_exit_bstr_buf, fmt__str, data, data__sz) >= 0)
 		scx_ops_exit_kind(SCX_EXIT_UNREG_BPF, exit_code, "%s",
 				  scx_exit_bstr_buf.line);
 	raw_spin_unlock_irqrestore(&scx_exit_bstr_buf_lock, flags);
@@ -6759,7 +6759,7 @@ __bpf_kfunc void scx_bpf_error_bstr(char *fmt, unsigned long long *data,
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&scx_exit_bstr_buf_lock, flags);
-	if (bstr_format(&scx_exit_bstr_buf, fmt, data, data__sz) >= 0)
+	if (bstr_format(&scx_exit_bstr_buf, fmt__str, data, data__sz) >= 0)
 		scx_ops_exit_kind(SCX_EXIT_ERROR_BPF, 0, "%s",
 				  scx_exit_bstr_buf.line);
 	raw_spin_unlock_irqrestore(&scx_exit_bstr_buf_lock, flags);
@@ -6791,10 +6791,10 @@ __bpf_kfunc void scx_bpf_dump_bstr(char *fmt, unsigned long long *data,
 
 	/* append the formatted string to the line buf */
 	ret = __bstr_format(buf->data, buf->line + dd->cursor,
-			    sizeof(buf->line) - dd->cursor, fmt, data, data__sz);
+			    sizeof(buf->line) - dd->cursor, fmt__str, data, data__sz);
 	if (ret < 0) {
 		dump_line(dd->s, "%s[!] (\"%s\", %p, %u) failed to format (%d)",
-			  dd->prefix, fmt, data, data__sz, ret);
+			  dd->prefix, fmt__str, data, data__sz, ret);
 		return;
 	}
 
