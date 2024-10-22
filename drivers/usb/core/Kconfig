@@ -143,3 +143,14 @@ config USB_DEFAULT_AUTHORIZATION_MODE
 	  ACPI selecting value 2 is analogous to selecting value 0.
 
 	  If unsure, keep the default value.
+
+config USB_SKIP_SUSPEND
+	bool "Vendor USB support skip suspend"
+	depends on USB
+	help
+	  Select this the associate USB devices will skip suspend when pm control.
+
+	  This option adds support skip suspend for PM control of USB devices
+	  in specific manufacturers platforms.
+
+	  If unsure, keep the default value.
