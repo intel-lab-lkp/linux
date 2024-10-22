@@ -115,8 +115,8 @@ static bool cxl_mbox_background_complete(struct cxl_dev_state *cxlds)
 {
 	u64 reg;
 
-	reg = readq(cxlds->regs.mbox + CXLDEV_MBOX_BG_CMD_STATUS_OFFSET);
-	return FIELD_GET(CXLDEV_MBOX_BG_CMD_COMMAND_PCT_MASK, reg) == 100;
+	reg = readq(cxlds->regs.mbox + CXLDEV_MBOX_STATUS_OFFSET);
+	return FIELD_GET(CXLDEV_MBOX_STATUS_BG_CMD, reg) == 0;
 }
 
 static irqreturn_t cxl_pci_mbox_irq(int irq, void *id)
@@ -241,7 +241,8 @@ static int __cxl_pci_mbox_send_cmd(struct cxl_mailbox *cxl_mbox,
 	 * hardware semantics and only allow device health status.
 	 */
 	if (mds->security.poll_tmo_secs > 0) {
-		if (mbox_cmd->opcode != CXL_MBOX_OP_GET_HEALTH_INFO)
+		if (mbox_cmd->opcode != CXL_MBOX_OP_GET_HEALTH_INFO &&
+		    mbox_cmd->opcode != CXL_MBOX_OP_REQUEST_ABORT_BG_OP)
 			return -EBUSY;
 	}
 
@@ -335,11 +336,64 @@ static int __cxl_pci_mbox_send_cmd(struct cxl_mailbox *cxl_mbox,
 	return 0;
 }
 
+/*
+ * Return true implies that the request was successful and the on-going
+ * background operation was in fact aborted. This also guarantees that
+ * the respective thread is done.
+ */
+static bool cxl_try_to_cancel_background(struct cxl_mailbox *cxl_mbox)
+{
+	int rc;
+	struct cxl_dev_state *cxlds = mbox_to_cxlds(cxl_mbox);
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
+	struct device *dev = cxlds->dev;
+	struct cxl_mbox_cmd cmd = {
+		.opcode = CXL_MBOX_OP_REQUEST_ABORT_BG_OP
+	};
+
+	lockdep_assert_held(&cxl_mbox->mbox_mutex);
+
+	rc = __cxl_pci_mbox_send_cmd(cxl_mbox, &cmd);
+	if (rc) {
+		dev_dbg(dev, "Failed to send abort request : %d\n", rc);
+		return false;
+	}
+
+	if (!cxl_mbox_background_complete(cxlds))
+		return false;
+
+	if (mds->security.sanitize_active) {
+		/*
+		 * Cancel the work and cleanup on its behalf - we hold
+		 * the mbox_mutex, cannot race with cxl_mbox_sanitize_work().
+		 */
+		cancel_delayed_work_sync(&mds->security.poll_dwork);
+		mds->security.poll_tmo_secs = 0;
+		if (mds->security.sanitize_node)
+			sysfs_notify_dirent(mds->security.sanitize_node);
+		mds->security.sanitize_active = false;
+
+		dev_dbg(cxlds->dev, "Sanitization operation aborted\n");
+	} else {
+		/*
+		 * Kick the poller and wait for it to be done - no one else
+		 * can touch mbox regs. rcuwait_wake_up() provides full
+		 * barriers such that wake up occurs before waiting on the
+		 * bgpoll atomic to be cleared.
+		 */
+		rcuwait_wake_up(&cxl_mbox->mbox_wait);
+		atomic_cond_read_acquire(&cxl_mbox->poll_bgop, !VAL);
+	}
+
+	return true;
+}
+
 static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 			     struct cxl_mbox_cmd *cmd)
 {
 	int rc;
 	struct cxl_dev_state *cxlds = mbox_to_cxlds(cxl_mbox);
+	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
 	struct device *dev = cxlds->dev;
 
 	mutex_lock_io(&cxl_mbox->mbox_mutex);
@@ -348,10 +402,18 @@ static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 	 * each other: no new bg operation can occur in between while polling.
 	 */
 	if (cxl_is_background_cmd(cmd->opcode)) {
-		if (atomic_read_acquire(&cxl_mbox->poll_bgop)) {
-			mutex_unlock(&cxl_mbox->mbox_mutex);
-			return -EBUSY;
+		if (mds->security.sanitize_active ||
+		    atomic_read_acquire(&cxl_mbox->poll_bgop)) {
+			if (!cxl_try_to_cancel_background(cxl_mbox)) {
+				mutex_unlock(&cxl_mbox->mbox_mutex);
+				return -EBUSY;
+			}
 		}
+		/*
+		 * ... at this point we know that the canceled
+		 * bgop context is gone, and we are the _only_
+		 * background command in town. Proceed to send it.
+		 */
 	}
 
 	rc = __cxl_pci_mbox_send_cmd(cxl_mbox, cmd);
@@ -394,10 +456,11 @@ static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 				      CXLDEV_MBOX_BG_CMD_STATUS_OFFSET);
 		cmd->return_code = FIELD_GET(CXLDEV_MBOX_BG_CMD_COMMAND_RC_MASK,
 					     bg_status_reg);
-		dev_dbg(dev,
-			"Mailbox background operation (0x%04x) completed\n",
-			cmd->opcode);
+
+		dev_dbg(dev, "Mailbox background operation (0x%04x) %s\n",
+			cmd->opcode, !cmd->return_code ? "completed":"aborted");
 done:
+		/* ensure clearing poll_bop is the last operation */
 		atomic_set_release(&cxl_mbox->poll_bgop, 0);
 	}
 
