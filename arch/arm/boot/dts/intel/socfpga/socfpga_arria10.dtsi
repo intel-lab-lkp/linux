@@ -497,7 +497,7 @@
 				compatible = "snps,dw-apb-gpio-port";
 				gpio-controller;
 				#gpio-cells = <2>;
-				snps,nr-gpios = <29>;
+				ngpios = <29>;
 				reg = <0>;
 				interrupt-controller;
 				#interrupt-cells = <2>;
@@ -517,7 +517,7 @@
 				compatible = "snps,dw-apb-gpio-port";
 				gpio-controller;
 				#gpio-cells = <2>;
-				snps,nr-gpios = <29>;
+				ngpios = <29>;
 				reg = <0>;
 				interrupt-controller;
 				#interrupt-cells = <2>;
@@ -537,7 +537,7 @@
 				compatible = "snps,dw-apb-gpio-port";
 				gpio-controller;
 				#gpio-cells = <2>;
-				snps,nr-gpios = <27>;
+				ngpios = <27>;
 				reg = <0>;
 				interrupt-controller;
 				#interrupt-cells = <2>;
