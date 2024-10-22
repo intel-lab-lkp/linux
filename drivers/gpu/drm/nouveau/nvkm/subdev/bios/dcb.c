@@ -193,20 +193,6 @@ dcb_outp_parse(struct nvkm_bios *bios, u8 idx, u8 *ver, u8 *len,
 	return dcb;
 }
 
-u16
-dcb_outp_match(struct nvkm_bios *bios, u16 type, u16 mask,
-	       u8 *ver, u8 *len, struct dcb_output *outp)
-{
-	u16 dcb, idx = 0;
-	while ((dcb = dcb_outp_parse(bios, idx++, ver, len, outp))) {
-		if ((dcb_outp_hasht(outp) & 0x00ff) == (type & 0x00ff)) {
-			if ((dcb_outp_hashm(outp) & mask) == mask)
-				break;
-		}
-	}
-	return dcb;
-}
-
 int
 dcb_outp_foreach(struct nvkm_bios *bios, void *data,
 		 int (*exec)(struct nvkm_bios *, void *, int, u16))

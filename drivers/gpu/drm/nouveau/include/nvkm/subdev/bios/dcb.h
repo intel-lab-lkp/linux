@@ -61,8 +61,6 @@ u16 dcb_table(struct nvkm_bios *, u8 *ver, u8 *hdr, u8 *ent, u8 *len);
 u16 dcb_outp(struct nvkm_bios *, u8 idx, u8 *ver, u8 *len);
 u16 dcb_outp_parse(struct nvkm_bios *, u8 idx, u8 *, u8 *,
 		   struct dcb_output *);
-u16 dcb_outp_match(struct nvkm_bios *, u16 type, u16 mask, u8 *, u8 *,
-		   struct dcb_output *);
 int dcb_outp_foreach(struct nvkm_bios *, void *data, int (*exec)
 		     (struct nvkm_bios *, void *, int index, u16 entry));
 #endif

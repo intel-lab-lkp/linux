@@ -59,16 +59,3 @@ dcb_xpio_table(struct nvkm_bios *bios, u8 idx,
 	}
 	return 0x0000;
 }
-
-u16
-dcb_xpio_parse(struct nvkm_bios *bios, u8 idx,
-	       u8 *ver, u8 *hdr, u8 *cnt, u8 *len, struct nvbios_xpio *info)
-{
-	u16 data = dcb_xpio_table(bios, idx, ver, hdr, cnt, len);
-	if (data && *len >= 6) {
-		info->type = nvbios_rd08(bios, data + 0x04);
-		info->addr = nvbios_rd08(bios, data + 0x05);
-		info->flags = nvbios_rd08(bios, data + 0x06);
-	}
-	return 0x0000;
-}
