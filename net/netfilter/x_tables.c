@@ -1239,6 +1239,7 @@ struct xt_table *xt_find_table_lock(struct net *net, u_int8_t af,
 	struct module *owner = NULL;
 	struct xt_template *tmpl;
 	struct xt_table *t;
+	int err = -ENOENT;
 
 	mutex_lock(&xt[af].mutex);
 	list_for_each_entry(t, &xt_net->tables[af], list)
@@ -1247,8 +1248,6 @@ struct xt_table *xt_find_table_lock(struct net *net, u_int8_t af,
 
 	/* Table doesn't exist in this netns, check larval list */
 	list_for_each_entry(tmpl, &xt_templates[af], list) {
-		int err;
-
 		if (strcmp(tmpl->name, name))
 			continue;
 		if (!try_module_get(tmpl->me))
@@ -1267,6 +1266,9 @@ struct xt_table *xt_find_table_lock(struct net *net, u_int8_t af,
 		break;
 	}
 
+	if (err < 0)
+		goto out;
+
 	/* and once again: */
 	list_for_each_entry(t, &xt_net->tables[af], list)
 		if (strcmp(t->name, name) == 0)
@@ -1275,7 +1277,7 @@ struct xt_table *xt_find_table_lock(struct net *net, u_int8_t af,
 	module_put(owner);
  out:
 	mutex_unlock(&xt[af].mutex);
-	return ERR_PTR(-ENOENT);
+	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(xt_find_table_lock);
 
