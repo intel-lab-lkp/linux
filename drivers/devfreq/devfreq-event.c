@@ -184,32 +184,6 @@ int devfreq_event_get_event(struct devfreq_event_dev *edev,
 EXPORT_SYMBOL_GPL(devfreq_event_get_event);
 
 /**
- * devfreq_event_reset_event() - Reset all opeations of devfreq-event dev.
- * @edev	: the devfreq-event device
- *
- * Note that this function stop all operations of devfreq-event dev and reset
- * the current event data to make the devfreq-event device into initial state.
- */
-int devfreq_event_reset_event(struct devfreq_event_dev *edev)
-{
-	int ret = 0;
-
-	if (!edev || !edev->desc)
-		return -EINVAL;
-
-	if (!devfreq_event_is_enabled(edev))
-		return -EPERM;
-
-	mutex_lock(&edev->lock);
-	if (edev->desc->ops && edev->desc->ops->reset)
-		ret = edev->desc->ops->reset(edev);
-	mutex_unlock(&edev->lock);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(devfreq_event_reset_event);
-
-/**
  * devfreq_event_get_edev_by_phandle() - Get the devfreq-event dev from
  *					 devicetree.
  * @dev		: the pointer to the given device
