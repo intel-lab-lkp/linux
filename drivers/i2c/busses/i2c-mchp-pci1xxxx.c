@@ -994,7 +994,7 @@ static int pci1xxxx_i2c_xfer(struct i2c_adapter *adap,
 {
 	struct pci1xxxx_i2c *i2c = i2c_get_adapdata(adap);
 	u8 slaveaddr;
-	int retval;
+	int retval = 0;
 	u32 i;
 
 	i2c->i2c_xfer_in_progress = true;
