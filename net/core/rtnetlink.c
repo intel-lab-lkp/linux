@@ -2466,6 +2466,12 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
 		return -EINVAL;
 	}
 
+	if (tb[IFLA_GSO_MAX_SIZE] &&
+	    (nla_get_u32(tb[IFLA_GSO_MAX_SIZE]) < MAX_TCP_HEADER + 1)) {
+		NL_SET_ERR_MSG(extack, "too small gso_max_size");
+		return -EINVAL;
+	}
+
 	if (tb[IFLA_GSO_MAX_SEGS] &&
 	    (nla_get_u32(tb[IFLA_GSO_MAX_SEGS]) > GSO_MAX_SEGS ||
 	     nla_get_u32(tb[IFLA_GSO_MAX_SEGS]) > dev->tso_max_segs)) {
@@ -2482,6 +2488,12 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
 	if (tb[IFLA_GSO_IPV4_MAX_SIZE] &&
 	    nla_get_u32(tb[IFLA_GSO_IPV4_MAX_SIZE]) > dev->tso_max_size) {
 		NL_SET_ERR_MSG(extack, "too big gso_ipv4_max_size");
+		return -EINVAL;
+	}
+
+	if (tb[IFLA_GSO_IPV4_MAX_SIZE] &&
+	    (nla_get_u32(tb[IFLA_GSO_IPV4_MAX_SIZE]) < MAX_TCP_HEADER + 1)) {
+		NL_SET_ERR_MSG(extack, "too small gso_ipv4_max_size");
 		return -EINVAL;
 	}
 
