@@ -109,6 +109,18 @@ With that the process is complete. Now report the regression as described by
 Documentation/admin-guide/reporting-issues.rst.
 
 
+Bisecting linux-next
+--------------------
+
+Since linux-next is a series of merges rebuilt every day starting from
+Linus' tree there is no commmon history between multiple versions of
+-next. This means that the history of a given -next release won't
+include prior -next releases which confuses bisect if you try to
+bisect between them. Bisects will run much better if performed between
+-next and the commit in Linus' tree which that version of -next is
+based on instead.
+
+
 Additional reading material
 ---------------------------
 
