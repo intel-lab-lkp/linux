@@ -227,10 +227,14 @@ int __init numa_cleanup_meminfo(struct numa_meminfo *mi)
 			continue;
 		}
 
-		/* make sure all non-reserved blocks are inside the limits */
-		bi->start = max(bi->start, low);
+		/* preserve info for reserved areas before DRAM */
+		if (bi->start < low) {
+			numa_add_memblk_to(bi->nid, bi->start, low,
+					   &numa_reserved_meminfo);
+			bi->start = low;
+		}
 
-		/* preserve info for non-RAM areas above 'max_pfn': */
+		/* preserve info for reserved areas after DRAM */
 		if (bi->end > high) {
 			numa_add_memblk_to(bi->nid, high, bi->end,
 					   &numa_reserved_meminfo);
