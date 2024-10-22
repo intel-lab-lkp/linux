@@ -1390,6 +1390,10 @@ static int __init cpqhpc_init(void)
 	cpqhp_initialize_debugfs();
 	result = pci_register_driver(&cpqhpc_driver);
 	dbg("pci_register_driver = %d\n", result);
+
+	if (result)
+		cpqhp_shutdown_debugfs();
+
 	return result;
 }
 
