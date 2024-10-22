@@ -160,6 +160,8 @@ static inline int __hfs_ext_read_extent(struct hfs_find_data *fd, struct hfs_ext
 	if (fd->key->ext.FNum != fd->search_key->ext.FNum ||
 	    fd->key->ext.FkType != fd->search_key->ext.FkType)
 		return -ENOENT;
+	if (!fd->tree->root && res == -ENOENT)
+		return -ENOENT;
 	if (fd->entrylength != sizeof(hfs_extent_rec))
 		return -EIO;
 	hfs_bnode_read(fd->bnode, extent, fd->entryoffset, sizeof(hfs_extent_rec));
