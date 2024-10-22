@@ -111,7 +111,7 @@ static int cxl_request_irq(struct cxl_dev_state *cxlds, int irq,
 					 dev_id);
 }
 
-static bool cxl_mbox_background_complete(struct cxl_dev_state *cxlds)
+static bool cxl_mbox_background_done(struct cxl_dev_state *cxlds)
 {
 	u64 reg;
 
@@ -128,7 +128,7 @@ static irqreturn_t cxl_pci_mbox_irq(int irq, void *id)
 	struct cxl_mailbox *cxl_mbox = &cxlds->cxl_mbox;
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
 
-	if (!cxl_mbox_background_complete(cxlds))
+	if (!cxl_mbox_background_done(cxlds))
 		return IRQ_NONE;
 
 	reg = readq(cxlds->regs.mbox + CXLDEV_MBOX_BG_CMD_STATUS_OFFSET);
@@ -157,7 +157,7 @@ static void cxl_mbox_sanitize_work(struct work_struct *work)
 	struct cxl_mailbox *cxl_mbox = &cxlds->cxl_mbox;
 
 	mutex_lock(&cxl_mbox->mbox_mutex);
-	if (cxl_mbox_background_complete(cxlds)) {
+	if (cxl_mbox_background_done(cxlds)) {
 		mds->security.poll_tmo_secs = 0;
 		if (mds->security.sanitize_node)
 			sysfs_notify_dirent(mds->security.sanitize_node);
@@ -359,7 +359,7 @@ static bool cxl_try_to_cancel_background(struct cxl_mailbox *cxl_mbox)
 		return false;
 	}
 
-	if (!cxl_mbox_background_complete(cxlds))
+	if (!cxl_mbox_background_done(cxlds))
 		return false;
 
 	if (mds->security.sanitize_active) {
@@ -398,7 +398,7 @@ static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 
 	mutex_lock_io(&cxl_mbox->mbox_mutex);
 	/*
-	 * Ensure cxl_mbox_background_complete() checks are safe amongst
+	 * Ensure cxl_mbox_background_done() checks are safe amongst
 	 * each other: no new bg operation can occur in between while polling.
 	 */
 	if (cxl_is_background_cmd(cmd->opcode)) {
@@ -434,7 +434,7 @@ static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 		timeout = cmd->poll_interval_ms;
 		for (i = 0; i < cmd->poll_count; i++) {
 			if (rcuwait_wait_event_timeout(&cxl_mbox->mbox_wait,
-				       cxl_mbox_background_complete(cxlds),
+				       cxl_mbox_background_done(cxlds),
 				       TASK_UNINTERRUPTIBLE,
 				       msecs_to_jiffies(timeout)) > 0)
 				break;
@@ -445,7 +445,7 @@ static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 		 * until the next successful command submission and the driver
 		 * can get back in sync with the hardware state.
 		 */
-		if (!cxl_mbox_background_complete(cxlds)) {
+		if (!cxl_mbox_background_done(cxlds)) {
 			dev_err(dev, "timeout waiting for background (%d ms)\n",
 				timeout * cmd->poll_count);
 			rc = -ETIMEDOUT;
