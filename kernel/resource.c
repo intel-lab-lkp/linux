@@ -50,15 +50,34 @@ EXPORT_SYMBOL(iomem_resource);
 
 static DEFINE_RWLOCK(resource_lock);
 
-static struct resource *next_resource(struct resource *p, bool skip_children)
+/*
+ * Return the next node of @p in pre-order tree traversal.  If
+ * @skip_children is true, skip the descendant nodes of @p in
+ * traversal.  If @p is a descendant of @subtree_root, only traverse
+ * the subtree under @subtree_root.
+ */
+static struct resource *__next_resource(struct resource *p, bool skip_children,
+					struct resource *subtree_root)
 {
 	if (!skip_children && p->child)
 		return p->child;
-	while (!p->sibling && p->parent)
+	while (!p->sibling && p->parent) {
 		p = p->parent;
+		if (p == subtree_root)
+			return NULL;
+	}
 	return p->sibling;
 }
 
+static struct resource *next_resource(struct resource *p, bool skip_children)
+{
+	return __next_resource(p, skip_children, NULL);
+}
+
+/*
+ * Traverse the whole resource tree with @_root as root in pre-order.
+ * NOTE: @_root should be the topmost node, that is, @_root->parent == NULL.
+ */
 #define for_each_resource(_root, _p, _skip_children) \
 	for ((_p) = (_root)->child; (_p); (_p) = next_resource(_p, _skip_children))
 
@@ -572,7 +591,8 @@ static int __region_intersects(struct resource *parent, resource_size_t start,
 		covered = false;
 		ostart = max(res.start, p->start);
 		oend = min(res.end, p->end);
-		for_each_resource(p, dp, false) {
+		/* Traverse the subtree under 'p'. */
+		for (dp = p->child; dp; dp = __next_resource(dp, false, p)) {
 			if (!resource_overlaps(dp, &res))
 				continue;
 			is_type = (dp->flags & flags) == flags &&
