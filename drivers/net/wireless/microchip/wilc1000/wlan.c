@@ -767,25 +767,37 @@ static int chip_wakeup(struct wilc *wilc)
 
 static inline int acquire_bus(struct wilc *wilc, enum bus_acquire acquire)
 {
-	int ret = 0;
+	const struct wilc_hif_func *hif_func = wilc->hif_func;
+	int ret;
 
-	mutex_lock(&wilc->hif_cs);
-	if (acquire == WILC_BUS_ACQUIRE_AND_WAKEUP && wilc->power_save_mode) {
-		ret = chip_wakeup(wilc);
-		if (ret)
-			mutex_unlock(&wilc->hif_cs);
-	}
+	hif_func->hif_claim(wilc);
 
+	if (!wilc->power_save_mode)
+		return 0;
+
+	if (acquire != WILC_BUS_ACQUIRE_AND_WAKEUP)
+		return 0;
+
+	ret = chip_wakeup(wilc);
+	if (ret)
+		goto err;
+
+	return 0;
+
+err:
+	hif_func->hif_release(wilc);
 	return ret;
 }
 
 static inline int release_bus(struct wilc *wilc, enum bus_release release)
 {
+	const struct wilc_hif_func *hif_func = wilc->hif_func;
 	int ret = 0;
 
 	if (release == WILC_BUS_RELEASE_ALLOW_SLEEP && wilc->power_save_mode)
 		ret = chip_allow_sleep(wilc);
-	mutex_unlock(&wilc->hif_cs);
+
+	hif_func->hif_release(wilc);
 
 	return ret;
 }
@@ -1447,7 +1459,9 @@ void wilc_wlan_cleanup(struct net_device *dev)
 	wilc->rx_buffer = NULL;
 	kfree(wilc->tx_buffer);
 	wilc->tx_buffer = NULL;
+	acquire_bus(wilc, WILC_BUS_ACQUIRE_AND_WAKEUP);
 	wilc->hif_func->hif_deinit(wilc);
+	release_bus(wilc, WILC_BUS_RELEASE_ALLOW_SLEEP);
 }
 
 static int wilc_wlan_cfg_commit(struct wilc_vif *vif, int type,

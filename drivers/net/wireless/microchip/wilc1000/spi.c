@@ -50,6 +50,9 @@ struct wilc_spi {
 		struct gpio_desc *enable;	/* ENABLE GPIO or NULL */
 		struct gpio_desc *reset;	/* RESET GPIO or NULL */
 	} gpios;
+
+	/* lock to protect hif access */
+	struct mutex hif_cs;
 };
 
 static const struct wilc_hif_func wilc_hif_spi;
@@ -1105,6 +1108,15 @@ static int wilc_spi_write(struct wilc *wilc, u32 addr, u8 *buf, u32 size)
  *      Bus interfaces
  *
  ********************************************/
+static void wilc_spi_claim(struct wilc *wilc)
+{
+	mutex_lock(&wilc->hif_cs);
+}
+
+static void wilc_spi_release(struct wilc *wilc)
+{
+	mutex_unlock(&wilc->hif_cs);
+}
 
 static int wilc_spi_reset(struct wilc *wilc)
 {
@@ -1132,6 +1144,7 @@ static int wilc_spi_deinit(struct wilc *wilc)
 
 	spi_priv->isinit = false;
 	wilc_wlan_power(wilc, false);
+	mutex_destroy(&wilc->hif_cs);
 	return 0;
 }
 
@@ -1139,6 +1152,8 @@ static int wilc_spi_init(struct wilc *wilc, bool resume)
 {
 	struct wilc_spi *spi_priv = wilc->bus_data;
 	int ret;
+
+	mutex_init(&spi->hif_cs);
 
 	if (spi_priv->isinit) {
 		/* Confirm we can read chipid register without error: */
