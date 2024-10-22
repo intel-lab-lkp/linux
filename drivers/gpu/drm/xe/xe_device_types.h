@@ -35,6 +35,8 @@
 struct xe_ggtt;
 struct xe_pat_ops;
 
+struct intel_dg_nvm_dev;
+
 #define XE_BO_INVALID_OFFSET	LONG_MAX
 
 #define GRAPHICS_VER(xe) ((xe)->info.graphics_verx100 / 100)
@@ -44,6 +46,7 @@ struct xe_pat_ops;
 #define IS_DGFX(xe) ((xe)->info.is_dgfx)
 #define HAS_HECI_GSCFI(xe) ((xe)->info.has_heci_gscfi)
 #define HAS_HECI_CSCFI(xe) ((xe)->info.has_heci_cscfi)
+#define HAS_GSC_NVM(xe) ((xe)->info.has_gsc_nvm)
 
 #define XE_VRAM_FLAGS_NEED64K		BIT(0)
 
@@ -331,6 +334,8 @@ struct xe_device {
 		u8 has_heci_gscfi:1;
 		/** @info.has_heci_cscfi: device has heci cscfi */
 		u8 has_heci_cscfi:1;
+		/** @info.has_gsc_nvm: device has gsc non-volatile memory */
+		u8 has_gsc_nvm:1;
 		/** @info.skip_guc_pc: Skip GuC based PM feature init */
 		u8 skip_guc_pc:1;
 		/** @info.has_atomic_enable_pte_bit: Device has atomic enable PTE bit */
@@ -501,6 +506,9 @@ struct xe_device {
 
 	/** @heci_gsc: graphics security controller */
 	struct xe_heci_gsc heci_gsc;
+
+	/** @nvm: discrete graphics non-volatile memory */
+	struct intel_dg_nvm_dev *nvm;
 
 	/** @oa: oa observation subsystem */
 	struct xe_oa oa;
