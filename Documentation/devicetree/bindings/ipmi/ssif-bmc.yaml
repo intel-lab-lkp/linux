@@ -19,6 +19,12 @@ properties:
   reg:
     maxItems: 1
 
+  alert-gpios:
+    description:
+      GPIO pin designated for SSIF alert, used by the BMC to notify the
+      host when a response is available.
+    maxItems: 1
+
 required:
   - compatible
   - reg
@@ -27,6 +33,7 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/gpio/gpio.h>
     i2c {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -34,5 +41,6 @@ examples:
         ssif-bmc@10 {
             compatible = "ssif-bmc";
             reg = <0x10>;
+            alert-gpios = <&gpio 0 GPIO_ACTIVE_LOW>;
         };
     };
