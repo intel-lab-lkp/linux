@@ -6,7 +6,7 @@
 
 void _start(void);
 
-noinline static void real_init(void)
+noinline __attribute__((force_align_arg_pointer)) static void real_init(void)
 {
 	struct stub_init_data init_data;
 	unsigned long res;
