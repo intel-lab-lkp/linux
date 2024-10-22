@@ -278,29 +278,15 @@ static int __cxl_pci_mbox_send_cmd(struct cxl_mailbox *cxl_mbox,
 	mbox_cmd->return_code =
 		FIELD_GET(CXLDEV_MBOX_STATUS_RET_CODE_MASK, status_reg);
 
-	/*
-	 * Handle the background command in a synchronous manner.
-	 *
-	 * All other mailbox commands will serialize/queue on the mbox_mutex,
-	 * which we currently hold. Furthermore this also guarantees that
-	 * cxl_mbox_background_complete() checks are safe amongst each other,
-	 * in that no new bg operation can occur in between.
-	 *
-	 * Background operations are timesliced in accordance with the nature
-	 * of the command. In the event of timeout, the mailbox state is
-	 * indeterminate until the next successful command submission and the
-	 * driver can get back in sync with the hardware state.
-	 */
 	if (mbox_cmd->return_code == CXL_MBOX_CMD_RC_BACKGROUND) {
-		u64 bg_status_reg;
-		int i, timeout;
-
 		/*
 		 * Sanitization is a special case which monopolizes the device
 		 * and cannot be timesliced. Handle asynchronously instead,
 		 * and allow userspace to poll(2) for completion.
 		 */
 		if (mbox_cmd->opcode == CXL_MBOX_OP_SANITIZE) {
+			int timeout;
+
 			if (mds->security.sanitize_active)
 				return -EBUSY;
 
@@ -311,44 +297,19 @@ static int __cxl_pci_mbox_send_cmd(struct cxl_mailbox *cxl_mbox,
 			schedule_delayed_work(&mds->security.poll_dwork,
 					      timeout * HZ);
 			dev_dbg(dev, "Sanitization operation started\n");
-			goto success;
+		} else {
+			/* pairs with release/acquire semantics */
+			WARN_ON_ONCE(atomic_xchg(&cxl_mbox->poll_bgop,
+						 mbox_cmd->opcode));
+			dev_dbg(dev, "Mailbox background operation (0x%04x) started\n",
+				mbox_cmd->opcode);
 		}
-
-		dev_dbg(dev, "Mailbox background operation (0x%04x) started\n",
-			mbox_cmd->opcode);
-
-		timeout = mbox_cmd->poll_interval_ms;
-		for (i = 0; i < mbox_cmd->poll_count; i++) {
-			if (rcuwait_wait_event_timeout(&cxl_mbox->mbox_wait,
-						       cxl_mbox_background_complete(cxlds),
-						       TASK_UNINTERRUPTIBLE,
-						       msecs_to_jiffies(timeout)) > 0)
-				break;
-		}
-
-		if (!cxl_mbox_background_complete(cxlds)) {
-			dev_err(dev, "timeout waiting for background (%d ms)\n",
-				timeout * mbox_cmd->poll_count);
-			return -ETIMEDOUT;
-		}
-
-		bg_status_reg = readq(cxlds->regs.mbox +
-				      CXLDEV_MBOX_BG_CMD_STATUS_OFFSET);
-		mbox_cmd->return_code =
-			FIELD_GET(CXLDEV_MBOX_BG_CMD_COMMAND_RC_MASK,
-				  bg_status_reg);
-		dev_dbg(dev,
-			"Mailbox background operation (0x%04x) completed\n",
-			mbox_cmd->opcode);
-	}
-
-	if (mbox_cmd->return_code != CXL_MBOX_CMD_RC_SUCCESS) {
+	} else if (mbox_cmd->return_code != CXL_MBOX_CMD_RC_SUCCESS) {
 		dev_dbg(dev, "Mailbox operation had an error: %s\n",
 			cxl_mbox_cmd_rc2str(mbox_cmd));
 		return 0; /* completed but caller must check return_code */
 	}
 
-success:
 	/* #7 */
 	cmd_reg = readq(cxlds->regs.mbox + CXLDEV_MBOX_CMD_OFFSET);
 	out_len = FIELD_GET(CXLDEV_MBOX_CMD_PAYLOAD_LENGTH_MASK, cmd_reg);
@@ -378,10 +339,67 @@ static int cxl_pci_mbox_send(struct cxl_mailbox *cxl_mbox,
 			     struct cxl_mbox_cmd *cmd)
 {
 	int rc;
+	struct cxl_dev_state *cxlds = mbox_to_cxlds(cxl_mbox);
+	struct device *dev = cxlds->dev;
 
 	mutex_lock_io(&cxl_mbox->mbox_mutex);
+	/*
+	 * Ensure cxl_mbox_background_complete() checks are safe amongst
+	 * each other: no new bg operation can occur in between while polling.
+	 */
+	if (cxl_is_background_cmd(cmd->opcode)) {
+		if (atomic_read_acquire(&cxl_mbox->poll_bgop)) {
+			mutex_unlock(&cxl_mbox->mbox_mutex);
+			return -EBUSY;
+		}
+	}
+
 	rc = __cxl_pci_mbox_send_cmd(cxl_mbox, cmd);
 	mutex_unlock(&cxl_mbox->mbox_mutex);
+
+	if (cmd->return_code != CXL_MBOX_CMD_RC_BACKGROUND)
+		return rc;
+
+	/*
+	 * Handle the background command in a synchronous manner. Background
+	 * operations are timesliced in accordance with the nature of the
+	 * command.
+	 */
+	if (cmd->opcode != CXL_MBOX_OP_SANITIZE) {
+		int i, timeout;
+		u64 bg_status_reg;
+
+		timeout = cmd->poll_interval_ms;
+		for (i = 0; i < cmd->poll_count; i++) {
+			if (rcuwait_wait_event_timeout(&cxl_mbox->mbox_wait,
+				       cxl_mbox_background_complete(cxlds),
+				       TASK_UNINTERRUPTIBLE,
+				       msecs_to_jiffies(timeout)) > 0)
+				break;
+		}
+
+		/*
+		 * In the event of timeout, the mailbox state is indeterminate
+		 * until the next successful command submission and the driver
+		 * can get back in sync with the hardware state.
+		 */
+		if (!cxl_mbox_background_complete(cxlds)) {
+			dev_err(dev, "timeout waiting for background (%d ms)\n",
+				timeout * cmd->poll_count);
+			rc = -ETIMEDOUT;
+			goto done;
+		}
+
+		bg_status_reg = readq(cxlds->regs.mbox +
+				      CXLDEV_MBOX_BG_CMD_STATUS_OFFSET);
+		cmd->return_code = FIELD_GET(CXLDEV_MBOX_BG_CMD_COMMAND_RC_MASK,
+					     bg_status_reg);
+		dev_dbg(dev,
+			"Mailbox background operation (0x%04x) completed\n",
+			cmd->opcode);
+done:
+		atomic_set_release(&cxl_mbox->poll_bgop, 0);
+	}
 
 	return rc;
 }

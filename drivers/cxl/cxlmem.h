@@ -557,6 +557,19 @@ enum cxl_opcode {
 	CXL_MBOX_OP_MAX			= 0x10000
 };
 
+static inline bool cxl_is_background_cmd(u16 opcode)
+{
+	switch (opcode) {
+	case CXL_MBOX_OP_TRANSFER_FW:
+	case CXL_MBOX_OP_ACTIVATE_FW:
+	case CXL_MBOX_OP_SCAN_MEDIA:
+	case CXL_MBOX_OP_SANITIZE:
+		return true;
+	default:
+		return false;
+	}
+}
+
 #define DEFINE_CXL_CEL_UUID                                                    \
 	UUID_INIT(0xda9c0b5, 0xbf41, 0x4b78, 0x8f, 0x79, 0x96, 0xb1, 0x62,     \
 		  0x3b, 0x3f, 0x17)

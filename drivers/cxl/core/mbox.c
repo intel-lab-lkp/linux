@@ -1429,6 +1429,7 @@ int cxl_mailbox_init(struct cxl_mailbox *cxl_mbox, struct device *host)
 
 	cxl_mbox->host = host;
 	mutex_init(&cxl_mbox->mbox_mutex);
+	atomic_set(&cxl_mbox->poll_bgop, 0);
 	rcuwait_init(&cxl_mbox->mbox_wait);
 
 	return 0;
