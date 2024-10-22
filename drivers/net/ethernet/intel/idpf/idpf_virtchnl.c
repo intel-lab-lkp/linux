@@ -3010,11 +3010,6 @@ restart:
 		goto err_netdev_alloc;
 	}
 
-	/* Start the mailbox task before requesting vectors. This will ensure
-	 * vector information response from mailbox is handled
-	 */
-	queue_delayed_work(adapter->mbx_wq, &adapter->mbx_task, 0);
-
 	queue_delayed_work(adapter->serv_wq, &adapter->serv_task,
 			   msecs_to_jiffies(5 * (adapter->pdev->devfn & 0x07)));
 
@@ -3039,7 +3034,6 @@ restart:
 
 err_intr_req:
 	cancel_delayed_work_sync(&adapter->serv_task);
-	cancel_delayed_work_sync(&adapter->mbx_task);
 	idpf_vport_params_buf_rel(adapter);
 err_netdev_alloc:
 	kfree(adapter->vports);
@@ -3063,7 +3057,6 @@ init_failed:
 	adapter->state = __IDPF_VER_CHECK;
 	if (adapter->vcxn_mngr)
 		idpf_vc_xn_shutdown(adapter->vcxn_mngr);
-	idpf_deinit_dflt_mbx(adapter);
 	set_bit(IDPF_HR_DRV_LOAD, adapter->flags);
 	queue_delayed_work(adapter->vc_event_wq, &adapter->vc_event_task,
 			   msecs_to_jiffies(task_delay));
