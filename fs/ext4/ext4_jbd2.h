@@ -467,6 +467,14 @@ static inline int ext4_should_journal_data(struct inode *inode)
 
 static inline int ext4_should_order_data(struct inode *inode)
 {
+	/*
+	 * There is no need to order data for inodes with iomap buffered I/O
+	 * path since it always allocate unwritten extents for new allocated
+	 * blocks and have no risk of stale data.
+	 */
+	if (ext4_test_inode_state(inode, EXT4_STATE_BUFFERED_IOMAP))
+		return 0;
+
 	return ext4_inode_journal_mode(inode) & EXT4_INODE_ORDERED_DATA_MODE;
 }
 
