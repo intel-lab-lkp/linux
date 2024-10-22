@@ -235,7 +235,7 @@
 				reg = <0>;
 				gpio-controller;
 				#gpio-cells = <2>;
-				snps,nr-gpios = <24>;
+				ngpios = <24>;
 				interrupt-controller;
 				#interrupt-cells = <2>;
 				interrupts = <GIC_SPI 111 IRQ_TYPE_LEVEL_HIGH>;
