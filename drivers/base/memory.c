@@ -110,6 +110,49 @@ static void memory_block_release(struct device *dev)
 	kfree(mem);
 }
 
+/*
+ * @size: suggestion for maximum block size. must be aligned on power of 2.
+ *
+ * Early boot software (pre-allocator init) may advise archs on the max block
+ * size.This value can only decrease after initialization, as the intent is to
+ * identify the largest supported alignment for all sources.
+ *
+ * Use of this value is arch dependent, as is min/max block size.
+ *
+ * Returns: 0 on success
+ *	    -EINVAL if size is 0 or not pow2 aligned
+ *	    -EBUSY if value has already been probed
+ */
+static size_t memory_block_advised_sz;
+static bool memory_block_size_probed;
+int memory_block_advise_max_size(size_t bz)
+{
+	if (!bz || (bz & (bz - 1)) != 0)
+		return -EINVAL;
+
+	if (memory_block_size_probed)
+		return -EBUSY;
+
+	if (memory_block_advised_sz)
+		memory_block_advised_sz = min(bz, memory_block_advised_sz);
+	else
+		memory_block_advised_sz = bz;
+
+	return 0;
+}
+
+/*
+ * memory_block_probe_max_size provides a suggested maximum memory block
+ * size value. After the first call, the value can never change.
+ *
+ * Returns: advised size in bytes, or 0 if never set.
+ */
+size_t memory_block_probe_max_size(void)
+{
+	memory_block_size_probed = true;
+	return memory_block_advised_sz;
+}
+
 unsigned long __weak memory_block_size_bytes(void)
 {
 	return MIN_MEMORY_BLOCK_SIZE;
