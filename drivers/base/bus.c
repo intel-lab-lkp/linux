@@ -58,9 +58,6 @@ static int __must_check bus_rescan_single_device(struct device *dev)
 	return ret;
 }
 
-static int __must_check bus_rescan_devices_helper(struct device *dev,
-						void *data);
-
 /**
  * bus_to_subsys - Turn a struct bus_type into a struct subsys_private
  *
@@ -797,15 +794,23 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
 						  void *data)
 {
 	int ret = 0;
+	int *first_error = data;
 
-	if (!dev->driver) {
-		if (dev->parent && dev->bus->need_parent_lock)
-			device_lock(dev->parent);
-		ret = device_attach(dev);
-		if (dev->parent && dev->bus->need_parent_lock)
-			device_unlock(dev->parent);
-	}
-	return ret < 0 ? ret : 0;
+	ret = bus_rescan_single_device(dev);
+
+	if (ret >= 0)
+		return 0;
+
+	if (!*first_error)
+		*first_error = ret;
+	/*
+	 * Ignore these inconsequential errors and continue to
+	 * scan drivers for next device.
+	 */
+	if (ret == -EPROBE_DEFER || ret == -ENODEV || ret == -EBUSY)
+		return 0;
+
+	return ret;
 }
 
 /**
@@ -818,7 +823,10 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
  */
 int bus_rescan_devices(const struct bus_type *bus)
 {
-	return bus_for_each_dev(bus, NULL, NULL, bus_rescan_devices_helper);
+	int err = 0;
+
+	bus_for_each_dev(bus, NULL, &err, bus_rescan_devices_helper);
+	return err;
 }
 EXPORT_SYMBOL_GPL(bus_rescan_devices);
 
@@ -833,9 +841,13 @@ EXPORT_SYMBOL_GPL(bus_rescan_devices);
  */
 int device_reprobe(struct device *dev)
 {
+	int ret;
+
 	if (dev->driver)
 		device_driver_detach(dev);
-	return bus_rescan_devices_helper(dev, NULL);
+
+	ret = bus_rescan_single_device(dev);
+	return ret < 0 ? ret : 0;
 }
 EXPORT_SYMBOL_GPL(device_reprobe);
 
