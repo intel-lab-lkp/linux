@@ -53,6 +53,8 @@ static inline void bus_lock_init(void) {}
 #ifdef CONFIG_CPU_SUP_INTEL
 u8 get_this_hybrid_cpu_type(void);
 u32 get_this_hybrid_cpu_native_id(void);
+u32 intel_native_model_id(struct cpuinfo_x86 *c);
+enum x86_topology_cpu_type intel_cpu_type(struct cpuinfo_x86 *c);
 #else
 static inline u8 get_this_hybrid_cpu_type(void)
 {
@@ -62,6 +64,23 @@ static inline u8 get_this_hybrid_cpu_type(void)
 static inline u32 get_this_hybrid_cpu_native_id(void)
 {
 	return 0;
+}
+
+static u32 intel_native_model_id(struct cpuinfo_x86 *c)
+{
+	return 0;
+}
+static enum x86_topology_cpu_type intel_cpu_type(struct cpuinfo_x86 *c)
+{
+	return TOPO_CPU_TYPE_UNKNOWN;
+}
+#endif
+#ifdef CONFIG_CPU_SUP_AMD
+enum x86_topology_cpu_type amd_cpu_type(struct cpuinfo_x86 *c);
+#else
+static inline enum x86_topology_cpu_type amd_cpu_type(struct cpuinfo_x86 *c)
+{
+	return TOPO_CPU_TYPE_UNKNOWN;
 }
 #endif
 #ifdef CONFIG_IA32_FEAT_CTL
