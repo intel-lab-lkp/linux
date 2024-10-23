@@ -2894,19 +2894,21 @@ static inline void zone_statistics(struct zone *preferred_zone, struct zone *z,
 {
 #ifdef CONFIG_NUMA
 	enum numa_stat_item local_stat = NUMA_LOCAL;
+	bool z_is_cpuless = !node_state(zone_to_nid(z), N_CPU);
+	bool pref_is_cpuless = !node_state(zone_to_nid(preferred_zone), N_CPU);
 
-	/* skip numa counters update if numa stats is disabled */
 	if (!static_branch_likely(&vm_numa_stat_key))
 		return;
 
-	if (zone_to_nid(z) != numa_node_id())
+	if (zone_to_nid(z) != numa_node_id() || z_is_cpuless)
 		local_stat = NUMA_OTHER;
 
-	if (zone_to_nid(z) == zone_to_nid(preferred_zone))
+	if (zone_to_nid(z) == zone_to_nid(preferred_zone) && !z_is_cpuless)
 		__count_numa_events(z, NUMA_HIT, nr_account);
 	else {
 		__count_numa_events(z, NUMA_MISS, nr_account);
-		__count_numa_events(preferred_zone, NUMA_FOREIGN, nr_account);
+		if (!pref_is_cpuless)
+			__count_numa_events(preferred_zone, NUMA_FOREIGN, nr_account);
 	}
 	__count_numa_events(z, local_stat, nr_account);
 #endif
