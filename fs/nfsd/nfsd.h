@@ -90,7 +90,11 @@ extern const struct svc_version	nfsd_version2, nfsd_version3, nfsd_version4;
 extern struct mutex		nfsd_mutex;
 extern spinlock_t		nfsd_drc_lock;
 extern unsigned long		nfsd_drc_max_mem;
-extern unsigned long		nfsd_drc_mem_used;
+/* Storing the sum of the slot sizes for all active clients (across
+ * all net-namespaces) allows a share of total available memory to
+ * be allocaed to each client based on its slot size.
+ */
+extern unsigned long		nfsd_drc_slotsize_sum;
 extern atomic_t			nfsd_th_cnt;		/* number of available threads */
 
 extern const struct seq_operations nfs_exports_op;

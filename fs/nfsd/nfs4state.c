@@ -1928,44 +1928,26 @@ static inline u32 slot_bytes(struct nfsd4_channel_attrs *ca)
 }
 
 /*
- * XXX: If we run out of reserved DRC memory we could (up to a point)
- * re-negotiate active sessions and reduce their slot usage to make
- * room for new connections. For now we just fail the create session.
+ * When a client connects it gets a max_requests number that would allow
+ * it to use 1/8 of the memory we think can reasonably be used for the DRC.
+ * Later in response to SEQUENCE operations we further limit that when there
+ * are more than 8 concurrent clients.
  */
-static u32 nfsd4_get_drc_mem(struct nfsd4_channel_attrs *ca, struct nfsd_net *nn)
+static u32 nfsd4_get_drc_mem(struct nfsd4_channel_attrs *ca)
 {
 	u32 slotsize = slot_bytes(ca);
 	u32 num = ca->maxreqs;
-	unsigned long avail, total_avail;
-	unsigned int scale_factor;
+	unsigned long avail;
 
 	spin_lock(&nfsd_drc_lock);
-	if (nfsd_drc_max_mem > nfsd_drc_mem_used)
-		total_avail = nfsd_drc_max_mem - nfsd_drc_mem_used;
-	else
-		/* We have handed out more space than we chose in
-		 * set_max_drc() to allow.  That isn't really a
-		 * problem as long as that doesn't make us think we
-		 * have lots more due to integer overflow.
-		 */
-		total_avail = 0;
-	avail = min((unsigned long)NFSD_MAX_MEM_PER_SESSION, total_avail);
-	/*
-	 * Never use more than a fraction of the remaining memory,
-	 * unless it's the only way to give this client a slot.
-	 * The chosen fraction is either 1/8 or 1/number of threads,
-	 * whichever is smaller.  This ensures there are adequate
-	 * slots to support multiple clients per thread.
-	 * Give the client one slot even if that would require
-	 * over-allocation--it is better than failure.
-	 */
-	scale_factor = max_t(unsigned int, 8, nn->nfsd_serv->sv_nrthreads);
 
-	avail = clamp_t(unsigned long, avail, slotsize,
-			total_avail/scale_factor);
-	num = min_t(int, num, avail / slotsize);
-	num = max_t(int, num, 1);
-	nfsd_drc_mem_used += num * slotsize;
+	avail = min(NFSD_MAX_MEM_PER_SESSION,
+		    nfsd_drc_max_mem / 8);
+
+	num = clamp_t(int, num, 1, avail / slotsize);
+
+	nfsd_drc_slotsize_sum += slotsize;
+
 	spin_unlock(&nfsd_drc_lock);
 
 	return num;
@@ -1976,8 +1958,32 @@ static void nfsd4_put_drc_mem(struct nfsd4_channel_attrs *ca)
 	int slotsize = slot_bytes(ca);
 
 	spin_lock(&nfsd_drc_lock);
-	nfsd_drc_mem_used -= slotsize * ca->maxreqs;
+	nfsd_drc_slotsize_sum -= slotsize;
 	spin_unlock(&nfsd_drc_lock);
+}
+
+/*
+ * Report the number of slots that we would like the client to limit
+ * itself to.
+ */
+static unsigned int nfsd4_get_drc_slots(struct nfsd4_session *session)
+{
+	u32 slotsize = slot_bytes(&session->se_fchannel);
+	unsigned long avail;
+	unsigned long slotsize_sum = READ_ONCE(nfsd_drc_slotsize_sum);
+
+	if (slotsize_sum < slotsize)
+		slotsize_sum = slotsize;
+
+	/*
+	 * We share memory so all clients get the same number of slots.
+	 * Find our share of avail mem across all active clients,
+	 * then limit to 1/8 of total, and configured max
+	 */
+	avail = min3(nfsd_drc_max_mem * slotsize / slotsize_sum,
+		     nfsd_drc_max_mem / 8,
+		     NFSD_MAX_MEM_PER_SESSION);
+	return max3(1UL, avail / slotsize, session->se_fchannel.maxreqs);
 }
 
 static struct nfsd4_session *alloc_session(struct nfsd4_channel_attrs *fattrs,
@@ -3795,7 +3801,7 @@ static __be32 check_forechannel_attrs(struct nfsd4_channel_attrs *ca, struct nfs
 	 * Note that we always allow at least one slot, because our
 	 * accounting is soft and provides no guarantees either way.
 	 */
-	ca->maxreqs = nfsd4_get_drc_mem(ca, nn);
+	ca->maxreqs = nfsd4_get_drc_mem(ca);
 
 	return nfs_ok;
 }
@@ -4286,10 +4292,12 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	slot = session->se_slots[seq->slotid];
 	dprintk("%s: slotid %d\n", __func__, seq->slotid);
 
-	/* We do not negotiate the number of slots yet, so set the
-	 * maxslots to the session maxreqs which is used to encode
-	 * sr_highest_slotid and the sr_target_slot id to maxslots */
-	seq->maxslots = session->se_fchannel.maxreqs;
+	/* Negotiate number of slots: set the target, and use the
+	 * same for max as long as it doesn't decrease the max
+	 * (that isn't allowed).
+	 */
+	seq->target_maxslots = nfsd4_get_drc_slots(session);
+	seq->maxslots = max(seq->maxslots, seq->target_maxslots);
 
 	trace_nfsd_slot_seqid_sequence(clp, seq, slot);
 	status = check_slot_seqid(seq->seqid, slot->sl_seqid,
