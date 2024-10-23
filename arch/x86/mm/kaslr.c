@@ -60,6 +60,21 @@ static inline unsigned long get_padding(struct kaslr_memory_region *region)
 	return (region->size_tb << TB_SHIFT);
 }
 
+/*
+ * nokaslr param handling is done by the loader which treats the
+ * boot parameters as read only so this is a hack to ingest this
+ * to keep it from passing to user mode
+ */
+static int __init parse_nokaslr(char *p)
+{
+	if (!!(boot_params.hdr.loadflags & KASLR_FLAG)) {
+		pr_warn("the loader has not parsed the nokaslr flag");
+	}
+
+	return 0;
+}
+early_param("nokaslr", parse_nokaslr);
+
 /* Initialize base and padding for each memory region randomized with KASLR */
 void __init kernel_randomize_memory(void)
 {
