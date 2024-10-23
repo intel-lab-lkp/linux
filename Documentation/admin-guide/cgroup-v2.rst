@@ -2612,6 +2612,57 @@ RDMA Interface Files
 	  mlx4_0 hca_handle=1 hca_object=20
 	  ocrdma1 hca_handle=1 hca_object=23
 
+DEV
+----
+
+The "dev" controller regulates the distribution and accounting of
+device resources, currently only memory regions. Because each memory
+region may have its own page size, which does not have to be equal
+to the system page size. the units are in bytes.
+
+DEV Interface Files
+~~~~~~~~~~~~~~~~~~~~
+
+  dev.region.max, dev.region.min, dev.region.low
+	A readwrite nested-keyed file that exists for all the cgroups
+	except root that describes current configured resource limit
+	for a device.
+
+	Lines are keyed by device name and are not ordered.
+	Each line contains space separated resource name and its configured
+	limit that can be distributed.
+
+	The following nested keys are defined.
+
+	  ==========	=======================================================
+	  *	 	Maximum amount of bytes that allocatable in this region
+	  ==========	=======================================================
+
+	An example for xe follows::
+
+	  drm/0000:03:00.0 vram0=1073741824 stolen=max
+
+	The semantics are the same as for the memory cgroup controller, and are
+	calculated in the same way.
+
+  dev.region.capacity
+	A read-only file that describes maximum region capacity.
+	It only exists on the root cgroup. Not all memory can be
+	allocated by cgroups, as the kernel reserves some for
+	internal use.
+
+	An example for xe follows::
+
+	  drm/0000:03:00.0 vram0=8514437120 stolen=67108864
+
+  dev.region.current
+	A read-only file that describes current resource usage.
+	It exists for all the cgroup except root.
+
+	An example for xe follows::
+
+	  drm/0000:03:00.0 vram0=12550144 stolen=8650752
+
 HugeTLB
 -------
 
