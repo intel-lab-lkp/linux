@@ -1041,6 +1041,22 @@ void intel_vdsc_state_dump(struct drm_printer *p, int indent,
 	drm_dsc_dump_config(p, indent, &crtc_state->dsc.config);
 }
 
+bool intel_dsc_can_use_pixel_replication(struct intel_display *display,
+					 int mode_hdisplay, u8 slice_count,
+					 enum intel_output_format output_format)
+{
+	int slice_width = DIV_ROUND_UP(mode_hdisplay, slice_count);
+
+	if (!HAS_PIXEL_REPLICATION(display))
+		return false;
+
+	/* Odd slice width is not supported by YCbCr420 format */
+	if (slice_width % 2 && output_format == INTEL_OUTPUT_FORMAT_YCBCR420)
+		return false;
+
+	return true;
+}
+
 int intel_dsc_get_replicated_pixels(struct intel_display *display,
 				    int mode_hdisplay,
 				    int slice_count,
@@ -1049,11 +1065,10 @@ int intel_dsc_get_replicated_pixels(struct intel_display *display,
 	int replicated_pixels;
 	int slice_width = DIV_ROUND_UP(mode_hdisplay, slice_count);
 
-	if (!HAS_PIXEL_REPLICATION(display))
-		return 0;
-
-	/* Odd slice width is not supported by YCbCr420 format */
-	if (slice_width % 2 && output_format == INTEL_OUTPUT_FORMAT_YCBCR420)
+	if (!intel_dsc_can_use_pixel_replication(display,
+						 mode_hdisplay,
+						 slice_count,
+						 output_format))
 		return 0;
 
 	replicated_pixels = (slice_width * slice_count) - mode_hdisplay;

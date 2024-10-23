@@ -172,6 +172,7 @@ static int intel_dp_mst_dsc_get_slice_count(const struct intel_connector *connec
 	return intel_dp_dsc_get_slice_count(connector,
 					    adjusted_mode->clock,
 					    adjusted_mode->hdisplay,
+					    crtc_state->output_format,
 					    num_joined_pipes);
 }
 
@@ -1538,6 +1539,7 @@ intel_dp_mst_mode_valid_ctx(struct drm_connector *connector,
 				intel_dp_dsc_get_slice_count(intel_connector,
 							     target_clock,
 							     mode->hdisplay,
+							     INTEL_OUTPUT_FORMAT_RGB,
 							     num_joined_pipes);
 		}
 
