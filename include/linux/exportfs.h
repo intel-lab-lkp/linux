@@ -247,6 +247,7 @@ struct export_operations {
 						*/
 #define EXPORT_OP_FLUSH_ON_CLOSE	(0x20) /* fs flushes file data on close */
 #define EXPORT_OP_ASYNC_LOCK		(0x40) /* fs can do async lock request */
+#define EXPORT_OP_NOLOCKSUPPORT		(0x80) /* no file locking support */
 	unsigned long	flags;
 };
 
@@ -261,6 +262,19 @@ static inline bool
 exportfs_lock_op_is_async(const struct export_operations *export_ops)
 {
 	return export_ops->flags & EXPORT_OP_ASYNC_LOCK;
+}
+
+/**
+ * exportfs_lock_op_is_unsupported() - export does not support file locking
+ * @export_ops:	the nfs export operations to check
+ *
+ * Returns true if the nfs export_operations structure has
+ * EXPORT_OP_NOLOCKSUPPORT in their flags set
+ */
+static inline bool
+exportfs_lock_op_is_unsupported(const struct export_operations *export_ops)
+{
+	return export_ops->flags & EXPORT_OP_NOLOCKSUPPORT;
 }
 
 extern int exportfs_encode_inode_fh(struct inode *inode, struct fid *fid,
