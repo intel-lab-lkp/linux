@@ -2212,21 +2212,20 @@ STALE_CLIENTID(clientid_t *clid, struct nfsd_net *nn)
 	return 1;
 }
 
-/* 
- * XXX Should we use a slab cache ?
- * This type of memory management is somewhat inefficient, but we use it
- * anyway since SETCLIENTID is not a common operation.
- */
 static struct nfs4_client *alloc_client(struct xdr_netobj name,
 				struct nfsd_net *nn)
 {
 	struct nfs4_client *clp;
 	int i;
 
-	if (atomic_read(&nn->nfs4_client_count) >= nn->nfs4_max_clients) {
+	if (atomic_read(&nn->nfs4_client_count) -
+	    atomic_read(&nn->nfsd_courtesy_clients) >= nn->nfs4_max_clients)
+		return ERR_PTR(-EUSERS);
+
+	if (atomic_read(&nn->nfs4_client_count) >= nn->nfs4_max_clients &&
+	    atomic_read(&nn->nfsd_courtesy_clients) > 0)
 		mod_delayed_work(laundry_wq, &nn->laundromat_work, 0);
-		return NULL;
-	}
+
 	clp = kmem_cache_zalloc(client_slab, GFP_KERNEL);
 	if (clp == NULL)
 		return NULL;
@@ -3121,8 +3120,8 @@ static struct nfs4_client *create_client(struct xdr_netobj name,
 	struct dentry *dentries[ARRAY_SIZE(client_files)];
 
 	clp = alloc_client(name, nn);
-	if (clp == NULL)
-		return NULL;
+	if (IS_ERR_OR_NULL(clp))
+		return clp;
 
 	ret = copy_cred(&clp->cl_cred, &rqstp->rq_cred);
 	if (ret) {
@@ -3504,6 +3503,11 @@ nfsd4_exchange_id(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	new = create_client(exid->clname, rqstp, &verf);
 	if (new == NULL)
 		return nfserr_jukebox;
+	if (IS_ERR(new))
+		/* Protocol has no specific error for "client limit reached".
+		 * NFS4ERR_RESOURCE is not permitted for EXCHANGE_ID
+		 */
+		return nfserr_serverfault;
 	status = copy_impl_id(new, exid);
 	if (status)
 		goto out_nolock;
@@ -4422,6 +4426,12 @@ nfsd4_setclientid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	new = create_client(clname, rqstp, &clverifier);
 	if (new == NULL)
 		return nfserr_jukebox;
+	if (IS_ERR(new))
+		/* Protocol has no specific error for "client limit reached".
+		 * NFS4ERR_RESOURCE, while allowed for SETCLIENTID, implies
+		 * that a smaller COMPOUND might be successful.
+		 */
+		return nfserr_serverfault;
 	spin_lock(&nn->client_lock);
 	conf = find_confirmed_client_by_name(&clname, nn);
 	if (conf && client_has_state(conf)) {
