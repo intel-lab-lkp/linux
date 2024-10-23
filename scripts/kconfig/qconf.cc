@@ -1165,25 +1165,17 @@ void ConfigInfoView::expr_print_help(void *data, struct symbol *sym, const char 
 void ConfigInfoView::clicked(const QUrl &url)
 {
 	QByteArray str = url.toEncoded();
-	const std::size_t count = str.size();
-	char *data = new char[count + 2];  // '$' + '\0'
 	struct symbol **result;
 	struct menu *m = NULL;
 
-	if (count < 1) {
-		delete[] data;
+	if (str.isEmpty())
 		return;
-	}
-
-	memcpy(data, str.constData(), count);
-	data[count] = '\0';
 
 	/* Seek for exact match */
-	data[0] = '^';
-	strcat(data, "$");
-	result = sym_re_search(data);
+	str[0] = '^';
+	str.append('$');
+	result = sym_re_search(str.constData());
 	if (!result) {
-		delete[] data;
 		return;
 	}
 
@@ -1206,7 +1198,6 @@ void ConfigInfoView::clicked(const QUrl &url)
 	}
 
 	free(result);
-	delete[] data;
 }
 
 void ConfigInfoView::contextMenuEvent(QContextMenuEvent *event)
