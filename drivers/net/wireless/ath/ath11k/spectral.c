@@ -942,7 +942,7 @@ static inline int ath11k_spectral_debug_register(struct ath11k *ar)
 						    0600,
 						    ar->debug.debugfs_pdev, ar,
 						    &fops_scan_ctl);
-	if (!ar->spectral.scan_ctl) {
+	if (IS_ERR(ar->spectral.scan_ctl)) {
 		ath11k_warn(ar->ab, "failed to open debugfs in pdev %d\n",
 			    ar->pdev_idx);
 		ret = -EINVAL;
@@ -953,7 +953,7 @@ static inline int ath11k_spectral_debug_register(struct ath11k *ar)
 						      0600,
 						      ar->debug.debugfs_pdev, ar,
 						      &fops_scan_count);
-	if (!ar->spectral.scan_count) {
+	if (IS_ERR(ar->spectral.scan_count)) {
 		ath11k_warn(ar->ab, "failed to open debugfs in pdev %d\n",
 			    ar->pdev_idx);
 		ret = -EINVAL;
@@ -964,7 +964,7 @@ static inline int ath11k_spectral_debug_register(struct ath11k *ar)
 						     0600,
 						     ar->debug.debugfs_pdev, ar,
 						     &fops_scan_bins);
-	if (!ar->spectral.scan_bins) {
+	if (IS_ERR(ar->spectral.scan_bins)) {
 		ath11k_warn(ar->ab, "failed to open debugfs in pdev %d\n",
 			    ar->pdev_idx);
 		ret = -EINVAL;
