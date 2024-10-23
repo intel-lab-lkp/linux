@@ -130,6 +130,27 @@ struct tdp_iter {
 #define for_each_tdp_pte(iter, root, start, end) \
 	for_each_tdp_pte_min_level(iter, root, PG_LEVEL_4K, start, end)
 
+
+/*
+ * Skip up to count not present entries of the iterator. Returns true
+ * if the final entry is not present.
+ */
+static inline bool tdp_iter_skip_not_present(struct tdp_iter *iter, int count)
+{
+	int i;
+	int pos;
+
+	pos = SPTE_INDEX(iter->gfn << PAGE_SHIFT, iter->level);
+	count = min(count, SPTE_ENT_PER_PAGE - 1 - pos);
+	for (i = 0; i < count && !is_shadow_present_pte(iter->old_spte); i++)
+		iter->old_spte = kvm_tdp_mmu_read_spte(iter->sptep + i + 1);
+
+	iter->gfn += i * KVM_PAGES_PER_HPAGE(iter->level);
+	iter->next_last_level_gfn = iter->gfn;
+	iter->sptep += i;
+	return !is_shadow_present_pte(iter->old_spte);
+}
+
 tdp_ptep_t spte_to_child_pt(u64 pte, int level);
 
 void tdp_iter_start(struct tdp_iter *iter, struct kvm_mmu_page *root,

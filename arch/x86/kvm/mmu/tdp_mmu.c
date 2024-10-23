@@ -757,7 +757,7 @@ retry:
 		if (tdp_mmu_iter_cond_resched(kvm, &iter, false, shared))
 			continue;
 
-		if (!is_shadow_present_pte(iter.old_spte))
+		if (tdp_iter_skip_not_present(&iter, 32))
 			continue;
 
 		if (iter.level > zap_level)
