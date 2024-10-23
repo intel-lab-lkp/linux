@@ -930,6 +930,12 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 	if (drm_dev_needs_global_mutex(dev))
 		mutex_lock(&drm_global_mutex);
 
+	ret = drmm_cgroup_register_device(dev, &dev->cg);
+	if (ret) {
+		DRM_ERROR("Cannot create cgroup device.\n");
+		goto out_unlock;
+	}
+
 	if (drm_core_check_feature(dev, DRIVER_COMPUTE_ACCEL))
 		accel_debugfs_register(dev);
 	else
@@ -937,7 +943,7 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 
 	ret = drm_minor_register(dev, DRM_MINOR_RENDER);
 	if (ret)
-		goto err_minors;
+		goto out_unregister_cgroup;
 
 	ret = drm_minor_register(dev, DRM_MINOR_PRIMARY);
 	if (ret)
@@ -982,6 +988,8 @@ err_minors:
 	drm_minor_unregister(dev, DRM_MINOR_ACCEL);
 	drm_minor_unregister(dev, DRM_MINOR_PRIMARY);
 	drm_minor_unregister(dev, DRM_MINOR_RENDER);
+out_unregister_cgroup:
+	dev_cgroup_unregister_device(&dev->cg);
 out_unlock:
 	if (drm_dev_needs_global_mutex(dev))
 		mutex_unlock(&drm_global_mutex);
@@ -1024,6 +1032,7 @@ void drm_dev_unregister(struct drm_device *dev)
 	drm_minor_unregister(dev, DRM_MINOR_PRIMARY);
 	drm_minor_unregister(dev, DRM_MINOR_RENDER);
 	drm_debugfs_dev_fini(dev);
+	dev_cgroup_unregister_device(&dev->cg);
 }
 EXPORT_SYMBOL(drm_dev_unregister);
 
