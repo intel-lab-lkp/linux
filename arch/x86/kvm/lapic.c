@@ -3099,6 +3099,10 @@ int kvm_apic_set_state(struct kvm_vcpu *vcpu, struct kvm_lapic_state *s)
 						apic_find_highest_irr(apic));
 		kvm_x86_call(hwapic_isr_update)(apic_find_highest_isr(apic));
 	}
+
+	/* Search the IRR and enable irr_pending state with disabled APICv*/
+	if (!enable_apicv && apic_search_irr(apic) != -1)
+		apic->irr_pending = true;
 	kvm_make_request(KVM_REQ_EVENT, vcpu);
 	if (ioapic_in_kernel(vcpu->kvm))
 		kvm_rtc_eoi_tracking_restore_one(vcpu);
