@@ -7,6 +7,7 @@
 #define pr_fmt(fmt) "amd_smn: " fmt
 
 #include <linux/pci.h>
+#include <linux/debugfs.h>
 
 #include <asm/amd_smn.h>
 
@@ -113,6 +114,82 @@ int __must_check amd_smn_hsmp_rdwr(u16 node, u32 address, u32 *value, bool write
 }
 EXPORT_SYMBOL_GPL(amd_smn_hsmp_rdwr);
 
+static struct dentry *debugfs_dir;
+static u16 debug_node;
+static u32 debug_address;
+
+static ssize_t smn_node_write(struct file *file, const char __user *userbuf,
+			      size_t count, loff_t *ppos)
+{
+	int ret;
+
+	ret = kstrtou16_from_user(userbuf, count, 0, &debug_node);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static int smn_node_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "0x%08x\n", debug_node);
+	return 0;
+}
+
+static ssize_t smn_address_write(struct file *file, const char __user *userbuf,
+				 size_t count, loff_t *ppos)
+{
+	int ret;
+
+	ret = kstrtouint_from_user(userbuf, count, 0, &debug_address);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static int smn_address_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "0x%08x\n", debug_address);
+	return 0;
+}
+
+static int smn_value_show(struct seq_file *m, void *v)
+{
+	u32 val;
+	int ret;
+
+	ret = amd_smn_read(debug_node, debug_address, &val);
+	if (ret)
+		return ret;
+
+	seq_printf(m, "0x%08x\n", val);
+	return 0;
+}
+
+static ssize_t smn_value_write(struct file *file, const char __user *userbuf,
+			       size_t count, loff_t *ppos)
+{
+	u32 val;
+	int ret;
+
+	ret = kstrtouint_from_user(userbuf, count, 0, &val);
+	if (ret)
+		return ret;
+
+	add_taint(TAINT_USER, LOCKDEP_STILL_OK);
+
+	ret = amd_smn_write(debug_node, debug_address, val);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+DEFINE_SHOW_STORE_ATTRIBUTE(smn_node);
+DEFINE_SHOW_STORE_ATTRIBUTE(smn_address);
+DEFINE_SHOW_STORE_ATTRIBUTE(smn_value);
+
 static int amd_cache_roots(void)
 {
 	u16 node, num_nodes = amd_num_nodes();
@@ -179,6 +256,12 @@ static int __init amd_smn_init(void)
 	err = reserve_root_config_spaces();
 	if (err)
 		return err;
+
+	debugfs_dir = debugfs_create_dir("amd_smn", arch_debugfs_dir);
+
+	debugfs_create_file("node",	0600, debugfs_dir, NULL, &smn_node_fops);
+	debugfs_create_file("address",	0600, debugfs_dir, NULL, &smn_address_fops);
+	debugfs_create_file("value",	0600, debugfs_dir, NULL, &smn_value_fops);
 
 	return 0;
 }
