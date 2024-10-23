@@ -141,7 +141,7 @@ static void test_kmalloc_redzone_access(struct kunit *test)
 {
 	struct kmem_cache *s = test_kmem_cache_create("TestSlub_RZ_kmalloc", 32,
 				SLAB_KMALLOC|SLAB_STORE_USER|SLAB_RED_ZONE);
-	u8 *p = __kmalloc_cache_noprof(s, GFP_KERNEL, 18);
+	u8 *p = alloc_hooks(__kmalloc_cache_noprof(s, GFP_KERNEL, 18));
 
 	kasan_disable_current();
 
@@ -199,7 +199,7 @@ static void test_krealloc_redzone_zeroing(struct kunit *test)
 	struct kmem_cache *s = test_kmem_cache_create("TestSlub_krealloc", 64,
 				SLAB_KMALLOC|SLAB_STORE_USER|SLAB_RED_ZONE);
 
-	p = __kmalloc_cache_noprof(s, GFP_KERNEL, 48);
+	p = alloc_hooks(__kmalloc_cache_noprof(s, GFP_KERNEL, 48));
 	memset(p, 0xff, 48);
 
 	kasan_disable_current();
