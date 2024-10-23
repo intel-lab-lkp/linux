@@ -874,7 +874,7 @@ skip:
 
 void ConfigList::focusInEvent(QFocusEvent *e)
 {
-	struct menu *menu = NULL;
+	struct menu *menu = nullptr;
 
 	Parent::focusInEvent(e);
 
@@ -933,7 +933,7 @@ void ConfigList::setAllOpen(bool open)
 }
 
 ConfigInfoView::ConfigInfoView(QWidget* parent, const char *name)
-	: Parent(parent), sym(0), _menu(0)
+	: Parent(parent), sym(nullptr), _menu(nullptr)
 {
 	setObjectName(name);
 	setOpenLinks(false);
@@ -985,7 +985,7 @@ void ConfigInfoView::setInfo(struct menu *m)
 	if (_menu == m)
 		return;
 	_menu = m;
-	sym = NULL;
+	sym = nullptr;
 	if (!_menu)
 		clear();
 	else
@@ -1167,7 +1167,7 @@ void ConfigInfoView::clicked(const QUrl &url)
 {
 	QByteArray str = url.toEncoded();
 	struct symbol **result;
-	struct menu *m = NULL;
+	struct menu *m = nullptr;
 
 	if (str.isEmpty())
 		return;
@@ -1208,7 +1208,7 @@ void ConfigInfoView::contextMenuEvent(QContextMenuEvent *event)
 }
 
 ConfigSearchWindow::ConfigSearchWindow(ConfigMainWindow *parent)
-	: Parent(parent), result(NULL)
+	: Parent(parent), result(nullptr)
 {
 	setObjectName("search");
 	setWindowTitle("Search Config");
@@ -1280,7 +1280,7 @@ void ConfigSearchWindow::search(void)
 {
 	struct symbol **p;
 	struct property *prop;
-	ConfigItem *lastItem = NULL;
+	ConfigItem *lastItem = nullptr;
 
 	free(result);
 	list->clear();
@@ -1572,7 +1572,7 @@ void ConfigMainWindow::changeMenu(struct menu *menu)
 void ConfigMainWindow::setMenuLink(struct menu *menu)
 {
 	struct menu *parent;
-	ConfigList* list = NULL;
+	ConfigList* list = nullptr;
 	ConfigItem* item;
 
 	if (configList->menuSkip(menu))
@@ -1851,7 +1851,7 @@ int main(int ac, char** av)
 	cmdline.process(*configApp);
 
 	if (cmdline.isSet(silent))
-		conf_set_message_callback(NULL);
+		conf_set_message_callback(nullptr);
 
 	QStringList args = cmdline.positionalArguments();
 	if (args.isEmpty())
