@@ -882,6 +882,8 @@ static noinline int btree_node_iter_and_journal_peek(struct btree_trans *trans,
 	__bch2_btree_and_journal_iter_init_node_iter(trans, &jiter, l->b, l->iter, path->pos);
 
 	k = bch2_btree_and_journal_iter_peek(&jiter);
+	if (!k.k)
+		goto err;
 
 	bch2_bkey_buf_reassemble(out, c, k);
 
@@ -889,6 +891,7 @@ static noinline int btree_node_iter_and_journal_peek(struct btree_trans *trans,
 	    c->opts.btree_node_prefetch)
 		ret = btree_path_prefetch_j(trans, path, &jiter);
 
+err:
 	bch2_btree_and_journal_iter_exit(&jiter);
 	return ret;
 }
