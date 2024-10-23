@@ -574,7 +574,7 @@ static void swap_read_folio_bdev_sync(struct folio *folio,
 	 */
 	get_task_struct(current);
 	count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
-	count_vm_event(PSWPIN);
+	count_vm_events(PSWPIN, folio_nr_pages(folio));
 	submit_bio_wait(&bio);
 	__end_swap_bio_read(&bio);
 	put_task_struct(current);
@@ -590,7 +590,7 @@ static void swap_read_folio_bdev_async(struct folio *folio,
 	bio->bi_end_io = end_swap_bio_read;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
 	count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
-	count_vm_event(PSWPIN);
+	count_vm_events(PSWPIN, folio_nr_pages(folio));
 	submit_bio(bio);
 }
 
