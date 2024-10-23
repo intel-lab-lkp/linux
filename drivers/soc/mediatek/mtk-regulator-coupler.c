@@ -74,7 +74,7 @@ static int mediatek_regulator_balance_voltage(struct regulator_coupler *coupler,
 		return ret;
 
 	/*
-	 * If we're asked to set a voltage less than VSRAM min_uV, set
+	 * If we're asked to set a voltage less than VGPU min_uV, set
 	 * the minimum allowed voltage on VSRAM, as in this case it is
 	 * safe to ignore the max_spread parameter.
 	 */
@@ -108,7 +108,7 @@ static int mediatek_regulator_attach(struct regulator_coupler *coupler,
 	 * this means that this is surely not a GPU<->SRAM couple: in that
 	 * case, we may want to use another coupler implementation, if any,
 	 * or the generic one: the regulator core will keep walking through
-	 * the list of couplers when any .attach_regulator() cb returns 1.
+	 * the list of couplers when any .attach_regulator() cb returns 0.
 	 */
 	if (rdev->coupling_desc.n_coupled > 2)
 		return 1;
