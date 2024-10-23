@@ -286,6 +286,13 @@ architecture dependent.  kvm_vcpu_block() calls kvm_arch_vcpu_runnable()
 to check if it should awaken.  One reason to do so is to provide
 architectures a function where requests may be checked if necessary.
 
+VM planes
+---------
+
+Each plane has its own set of requests.  Processing requests from
+another plane needs to go through a plane switch, for example via a
+`KVM_EXIT_PLANE_EVENT` userspace exit.
+
 References
 ==========
 
