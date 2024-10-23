@@ -1880,6 +1880,9 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 			intel_crtc_wait_for_next_vblank(wa_crtc);
 		}
 	}
+
+	if (new_crtc_state->hw.casf_params.strength_changed)
+		intel_filter_lut_load(crtc, new_crtc_state);
 }
 
 void ilk_pfit_disable(const struct intel_crtc_state *old_crtc_state)
@@ -7178,6 +7181,9 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 		    cmrr_params_changed(old_crtc_state, new_crtc_state))
 			intel_vrr_set_transcoder_timings(new_crtc_state);
 	}
+
+	if (intel_casf_strength_changed(state))
+		intel_casf_enable(new_crtc_state);
 
 	intel_fbc_update(state, crtc);
 
