@@ -7,6 +7,7 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/slab.h>
 #include <linux/io.h>
@@ -505,6 +506,16 @@ static const struct clk_ops axi_clkgen_ops = {
 	.get_parent = axi_clkgen_get_parent,
 };
 
+static void axi_clk_put(void *clk)
+{
+	clk_put(clk);
+}
+
+static void axi_clk_disable(void *clk)
+{
+	clk_disable_unprepare(clk);
+}
+
 static int axi_clkgen_probe(struct platform_device *pdev)
 {
 	const struct axi_clkgen_limits *dflt_limits;
@@ -512,6 +523,7 @@ static int axi_clkgen_probe(struct platform_device *pdev)
 	struct clk_init_data init;
 	const char *parent_names[2];
 	const char *clk_name;
+	struct clk *axi_clk;
 	unsigned int i;
 	int ret;
 
@@ -528,9 +540,30 @@ static int axi_clkgen_probe(struct platform_device *pdev)
 		return PTR_ERR(axi_clkgen->base);
 
 	init.num_parents = of_clk_get_parent_count(pdev->dev.of_node);
-	if (init.num_parents < 1 || init.num_parents > 2)
+	if (init.num_parents < 2 || init.num_parents > 3)
 		return -EINVAL;
 
+	/*
+	 * The last clock is the axi bus clock that needs to be enabled so we
+	 * can access the IP core registers.
+	 */
+	axi_clk = of_clk_get(pdev->dev.of_node, init.num_parents - 1);
+	if (IS_ERR(axi_clk))
+		return PTR_ERR(axi_clk);
+
+	ret = devm_add_action_or_reset(&pdev->dev, axi_clk_put, axi_clk);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(axi_clk);
+	if (ret)
+		return ret;
+
+	ret = devm_add_action_or_reset(&pdev->dev, axi_clk_disable, axi_clk);
+	if (ret)
+		return ret;
+
+	init.num_parents -= 1;
 	for (i = 0; i < init.num_parents; i++) {
 		parent_names[i] = of_clk_get_parent_name(pdev->dev.of_node, i);
 		if (!parent_names[i])
