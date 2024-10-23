@@ -244,6 +244,11 @@
 		#interrupt-cells = <1>;
 		pinctrl-0 = <&mt6360_pins>;
 
+		adc {
+			compatible = "mediatek,mt6360-adc";
+			#io-channel-cells = <1>;
+		};
+
 		charger {
 			compatible = "mediatek,mt6360-chg";
 			richtek,vinovp-microvolt = <14500000>;
@@ -253,6 +258,12 @@
 				regulator-min-microvolt = <4425000>;
 				regulator-max-microvolt = <5825000>;
 			};
+		};
+
+		led {
+			compatible = "mediatek,mt6360-led";
+			#address-cells = <1>;
+			#size-cells = <0>;
 		};
 
 		regulator {
