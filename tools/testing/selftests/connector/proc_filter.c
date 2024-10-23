@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Author: Anjali Kulkarni <anjali.k.kulkarni@oracle.com>
+ *
+ * Copyright (c) 2024 Oracle and/or its affiliates.
+ */
 
 #include <sys/types.h>
 #include <sys/epoll.h>
@@ -28,6 +33,7 @@
 volatile static int interrupted;
 static int nl_sock, ret_errno, tcount;
 static struct epoll_event evn;
+FILE *file;
 
 static int filter;
 
@@ -36,6 +42,8 @@ static int filter;
 #else
 #define Printf ksft_print_msg
 #endif
+
+#define EXIT_LOG
 
 int send_message(void *pinp)
 {
@@ -146,58 +154,65 @@ int handle_packet(char *buff, int fd, struct proc_event *event)
 		tcount++;
 		switch (event->what) {
 		case PROC_EVENT_EXIT:
-			Printf("Exit process %d (tgid %d) with code %d, signal %d\n",
+#ifdef EXIT_LOG
+			fprintf(file, "pid %d tgid %d code %d\n",
+				event->event_data.exit.process_pid,
+				event->event_data.exit.process_tgid,
+				event->event_data.exit.exit_code);
+#else
+			Printf("Exit pid %d (tgid %d) exitcode %d, signal %d\n",
 			       event->event_data.exit.process_pid,
 			       event->event_data.exit.process_tgid,
 			       event->event_data.exit.exit_code,
 			       event->event_data.exit.exit_signal);
+#endif
 			break;
 		case PROC_EVENT_FORK:
-			Printf("Fork process %d (tgid %d), parent %d (tgid %d)\n",
+			Printf("Fork pid %d (tgid %d), parent %d (tgid %d)\n",
 			       event->event_data.fork.child_pid,
 			       event->event_data.fork.child_tgid,
 			       event->event_data.fork.parent_pid,
 			       event->event_data.fork.parent_tgid);
 			break;
 		case PROC_EVENT_EXEC:
-			Printf("Exec process %d (tgid %d)\n",
+			Printf("Exec pid %d (tgid %d)\n",
 			       event->event_data.exec.process_pid,
 			       event->event_data.exec.process_tgid);
 			break;
 		case PROC_EVENT_UID:
-			Printf("UID process %d (tgid %d) uid %d euid %d\n",
+			Printf("UID pid %d (tgid %d) uid %d euid %d\n",
 			       event->event_data.id.process_pid,
 			       event->event_data.id.process_tgid,
 			       event->event_data.id.r.ruid,
 			       event->event_data.id.e.euid);
 			break;
 		case PROC_EVENT_GID:
-			Printf("GID process %d (tgid %d) gid %d egid %d\n",
+			Printf("GID pid %d (tgid %d) gid %d egid %d\n",
 			       event->event_data.id.process_pid,
 			       event->event_data.id.process_tgid,
 			       event->event_data.id.r.rgid,
 			       event->event_data.id.e.egid);
 			break;
 		case PROC_EVENT_SID:
-			Printf("SID process %d (tgid %d)\n",
+			Printf("SID pid %d (tgid %d)\n",
 			       event->event_data.sid.process_pid,
 			       event->event_data.sid.process_tgid);
 			break;
 		case PROC_EVENT_PTRACE:
-			Printf("Ptrace process %d (tgid %d), Tracer %d (tgid %d)\n",
+			Printf("Ptrace pid %d (tgid %d), Tracer %d (tgid %d)\n",
 			       event->event_data.ptrace.process_pid,
 			       event->event_data.ptrace.process_tgid,
 			       event->event_data.ptrace.tracer_pid,
 			       event->event_data.ptrace.tracer_tgid);
 			break;
 		case PROC_EVENT_COMM:
-			Printf("Comm process %d (tgid %d) comm %s\n",
+			Printf("Comm pid %d (tgid %d) comm %s\n",
 			       event->event_data.comm.process_pid,
 			       event->event_data.comm.process_tgid,
 			       event->event_data.comm.comm);
 			break;
 		case PROC_EVENT_COREDUMP:
-			Printf("Coredump process %d (tgid %d) parent %d, (tgid %d)\n",
+			Printf("Coredump pid %d (tgid %d) parent %d, (tgid %d)\n",
 			       event->event_data.coredump.process_pid,
 			       event->event_data.coredump.process_tgid,
 			       event->event_data.coredump.parent_pid,
@@ -263,10 +278,11 @@ int main(int argc, char *argv[])
 	if (filter) {
 		input.event_type = PROC_EVENT_NONZERO_EXIT;
 		input.mcast_op = PROC_CN_MCAST_LISTEN;
-		err = register_proc_netlink(&epoll_fd, (void*)&input);
+		err = register_proc_netlink(&epoll_fd, (void *)&input);
 	} else {
 		enum proc_cn_mcast_op op = PROC_CN_MCAST_LISTEN;
-		err = register_proc_netlink(&epoll_fd, (void*)&op);
+
+		err = register_proc_netlink(&epoll_fd, (void *)&op);
 	}
 
 	if (err < 0) {
@@ -279,31 +295,40 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+#ifdef EXIT_LOG
+	file = fopen("exit.log", "w");
+	if (!file) {
+		perror("Error opening file exit.log");
+		close(nl_sock);
+		close(epoll_fd);
+		exit(1);
+	}
+#endif
+
 	while (!interrupted) {
 		err = handle_events(epoll_fd, &proc_ev);
 		if (err < 0) {
 			if (ret_errno == EINTR)
 				continue;
-			if (err == -2)
-				close(nl_sock);
-			if (err == -3) {
-				close(nl_sock);
-				close(epoll_fd);
-			}
+			close(nl_sock);
+			close(epoll_fd);
+			fclose(file);
 			exit(1);
 		}
 	}
 
 	if (filter) {
 		input.mcast_op = PROC_CN_MCAST_IGNORE;
-		send_message((void*)&input);
+		send_message((void *)&input);
 	} else {
 		enum proc_cn_mcast_op op = PROC_CN_MCAST_IGNORE;
-		send_message((void*)&op);
+
+		send_message((void *)&op);
 	}
 
 	close(epoll_fd);
 	close(nl_sock);
+	fclose(file);
 
 	printf("Done total count: %d\n", tcount);
 	exit(0);
