@@ -2607,6 +2607,8 @@ static void btusb_mtk_claim_iso_intf(struct btusb_data *data)
 	struct btmtk_data *btmtk_data = hci_get_priv(data->hdev);
 	int err;
 
+	init_usb_anchor(&btmtk_data->isopkt_anchor);
+
 	err = usb_driver_claim_interface(&btusb_driver,
 					 btmtk_data->isopkt_intf, data);
 	if (err < 0) {
