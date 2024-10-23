@@ -8,6 +8,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCommandLineParser>
 #include <QDebug>
 #include <QFileDialog>
 #include <QLabel>
@@ -1836,40 +1837,29 @@ void fixup_rootmenu(struct menu *menu)
 	}
 }
 
-static const char *progname;
-
-static void usage(void)
-{
-	printf("%s [-s] <config>\n", progname);
-	exit(0);
-}
-
 int main(int ac, char** av)
 {
 	ConfigMainWindow* v;
-	const char *name;
+	configApp = new QApplication(ac, av);
+	QCommandLineParser cmdline;
+	QCommandLineOption silent("s", "silent");
 
-	progname = av[0];
-	if (ac > 1 && av[1][0] == '-') {
-		switch (av[1][1]) {
-		case 's':
-			conf_set_message_callback(NULL);
-			break;
-		case 'h':
-		case '?':
-			usage();
-		}
-		name = av[2];
-	} else
-		name = av[1];
-	if (!name)
-		usage();
+	cmdline.addOption(silent);
+	cmdline.addHelpOption();
+	cmdline.addPositionalArgument("file", "config file to open", "Kconfig");
 
-	conf_parse(name);
+	cmdline.process(*configApp);
+
+	if (cmdline.isSet(silent))
+		conf_set_message_callback(NULL);
+
+	QStringList args = cmdline.positionalArguments();
+	if (args.isEmpty())
+		cmdline.showHelp(1);
+
+	conf_parse(args.first().toLocal8Bit().constData());
 	fixup_rootmenu(&rootmenu);
 	//zconfdump(stdout);
-
-	configApp = new QApplication(ac, av);
 
 	configSettings = new ConfigSettings();
 	configSettings->beginGroup("/kconfig/qconf");
