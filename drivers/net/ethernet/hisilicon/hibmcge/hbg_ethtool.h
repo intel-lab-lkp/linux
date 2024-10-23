@@ -7,5 +7,6 @@
 #include <linux/netdevice.h>
 
 void hbg_ethtool_set_ops(struct net_device *netdev);
+void hbg_update_stats(struct hbg_priv *priv);
 
 #endif

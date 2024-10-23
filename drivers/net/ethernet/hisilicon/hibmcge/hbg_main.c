@@ -134,6 +134,24 @@ static void hbg_net_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 	netdev_info(netdev, "%s", buf);
 }
 
+static void hbg_net_get_stats(struct net_device *netdev,
+			      struct rtnl_link_stats64 *stats)
+{
+	struct hbg_priv *priv = netdev_priv(netdev);
+	struct hbg_stats *h_stats = &priv->stats;
+
+	hbg_update_stats(priv);
+	dev_get_tstats64(netdev, stats);
+	stats->tx_dropped += h_stats->tx_drop_cnt;
+	stats->tx_dropped += h_stats->tx_excessive_length_drop_cnt;
+
+	stats->tx_errors += h_stats->tx_add_cs_fail_cnt;
+	stats->tx_errors += h_stats->tx_bufrl_err_cnt;
+	stats->tx_errors += h_stats->tx_underrun_err_cnt;
+	stats->tx_errors += h_stats->tx_we_err_cnt;
+	stats->tx_errors += h_stats->tx_crc_err_cnt;
+}
+
 static const struct net_device_ops hbg_netdev_ops = {
 	.ndo_open		= hbg_net_open,
 	.ndo_stop		= hbg_net_stop,
@@ -142,7 +160,34 @@ static const struct net_device_ops hbg_netdev_ops = {
 	.ndo_set_mac_address	= hbg_net_set_mac_address,
 	.ndo_change_mtu		= hbg_net_change_mtu,
 	.ndo_tx_timeout		= hbg_net_tx_timeout,
+	.ndo_get_stats64	= hbg_net_get_stats,
 };
+
+static void hbg_service_task(struct work_struct *work)
+{
+	struct hbg_priv *priv = container_of(work, struct hbg_priv,
+					     service_task.work);
+
+	/* The type of statistics register is u32,
+	 * and the type of driver statistics is u64.
+	 * To prevent the statistics register from overflowing,
+	 * the driver dumps the statistics every 5 minutes.
+	 */
+	hbg_update_stats(priv);
+	schedule_delayed_work(&priv->service_task,
+			      msecs_to_jiffies(5 * 60 * MSEC_PER_SEC));
+}
+
+static void hbg_delaywork_init(struct hbg_priv *priv)
+{
+	INIT_DELAYED_WORK(&priv->service_task, hbg_service_task);
+	schedule_delayed_work(&priv->service_task, 0);
+}
+
+static void hbg_delaywork_uninit(void *data)
+{
+	cancel_delayed_work_sync(data);
+}
 
 static int hbg_init(struct hbg_priv *priv)
 {
@@ -160,7 +205,13 @@ static int hbg_init(struct hbg_priv *priv)
 	if (ret)
 		return ret;
 
-	return hbg_mdio_init(priv);
+	ret = hbg_mdio_init(priv);
+	if (ret)
+		return ret;
+
+	hbg_delaywork_init(priv);
+	return devm_add_action_or_reset(&priv->pdev->dev, hbg_delaywork_uninit,
+					&priv->service_task);
 }
 
 static int hbg_pci_init(struct pci_dev *pdev)
