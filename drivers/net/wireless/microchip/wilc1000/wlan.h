@@ -403,6 +403,8 @@ struct wilc_hif_func {
 	void (*disable_interrupt)(struct wilc *nic);
 	int (*hif_reset)(struct wilc *wilc);
 	bool (*hif_is_init)(struct wilc *wilc);
+	void (*hif_claim)(struct wilc *wilc);
+	void (*hif_release)(struct wilc *wilc);
 };
 
 #define WILC_MAX_CFG_FRAME_SIZE		1468

@@ -468,9 +468,7 @@ static void wilc_wlan_deinitialize(struct net_device *dev)
 
 		if (!wl->dev_irq_num &&
 		    wl->hif_func->disable_interrupt) {
-			mutex_lock(&wl->hif_cs);
 			wl->hif_func->disable_interrupt(wl);
-			mutex_unlock(&wl->hif_cs);
 		}
 		complete(&wl->txq_event);
 

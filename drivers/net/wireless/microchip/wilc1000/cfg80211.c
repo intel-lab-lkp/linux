@@ -1730,7 +1730,6 @@ static const struct cfg80211_ops wilc_cfg80211_ops = {
 
 static void wlan_init_locks(struct wilc *wl)
 {
-	mutex_init(&wl->hif_cs);
 	mutex_init(&wl->rxq_cs);
 	mutex_init(&wl->cfg_cmd_lock);
 	mutex_init(&wl->vif_mutex);
@@ -1748,7 +1747,6 @@ static void wlan_init_locks(struct wilc *wl)
 
 void wlan_deinit_locks(struct wilc *wilc)
 {
-	mutex_destroy(&wilc->hif_cs);
 	mutex_destroy(&wilc->rxq_cs);
 	mutex_destroy(&wilc->cfg_cmd_lock);
 	mutex_destroy(&wilc->txq_add_to_head_cs);

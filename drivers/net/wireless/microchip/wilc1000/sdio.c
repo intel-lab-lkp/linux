@@ -56,11 +56,23 @@ struct sdio_cmd53 {
 
 static const struct wilc_hif_func wilc_hif_sdio;
 
+static void wilc_sdio_claim(struct wilc *wilc)
+{
+	struct sdio_func *func = container_of(wilc->dev, struct sdio_func, dev);
+
+	sdio_claim_host(func);
+}
+
+static void wilc_sdio_release(struct wilc *wilc)
+{
+	struct sdio_func *func = container_of(wilc->dev, struct sdio_func, dev);
+
+	sdio_release_host(func);
+}
+
 static void wilc_sdio_interrupt(struct sdio_func *func)
 {
-	sdio_release_host(func);
 	wilc_handle_isr(sdio_get_drvdata(func));
-	sdio_claim_host(func);
 }
 
 static int wilc_sdio_cmd52(struct wilc *wilc, struct sdio_cmd52 *cmd)
@@ -68,8 +80,6 @@ static int wilc_sdio_cmd52(struct wilc *wilc, struct sdio_cmd52 *cmd)
 	struct sdio_func *func = container_of(wilc->dev, struct sdio_func, dev);
 	int ret;
 	u8 data;
-
-	sdio_claim_host(func);
 
 	func->num = cmd->function;
 	if (cmd->read_write) {  /* write */
@@ -85,8 +95,6 @@ static int wilc_sdio_cmd52(struct wilc *wilc, struct sdio_cmd52 *cmd)
 		cmd->data = data;
 	}
 
-	sdio_release_host(func);
-
 	if (ret)
 		dev_err(&func->dev, "%s..failed, err(%d)\n", __func__, ret);
 	return ret;
@@ -98,8 +106,6 @@ static int wilc_sdio_cmd53(struct wilc *wilc, struct sdio_cmd53 *cmd)
 	int size, ret;
 	struct wilc_sdio *sdio_priv = wilc->bus_data;
 	u8 *buf = cmd->buffer;
-
-	sdio_claim_host(func);
 
 	func->num = cmd->function;
 	func->cur_blksize = cmd->block_size;
@@ -128,8 +134,6 @@ static int wilc_sdio_cmd53(struct wilc *wilc, struct sdio_cmd53 *cmd)
 			memcpy(cmd->buffer, buf, size);
 	}
 out:
-	sdio_release_host(func);
-
 	if (ret)
 		dev_err(&func->dev, "%s..failed, err(%d)\n", __func__,  ret);
 
@@ -180,9 +184,11 @@ static int wilc_sdio_probe(struct sdio_func *func,
 		goto dispose_irq;
 	}
 
+	wilc_sdio_claim(wilc);
 	wilc_sdio_init(wilc, false);
 
 	ret = wilc_get_chipid(wilc);
+	wilc_sdio_release(wilc);
 	if (ret)
 		goto dispose_irq;
 
@@ -196,7 +202,9 @@ static int wilc_sdio_probe(struct sdio_func *func,
 		goto dispose_irq;
 	}
 
+	wilc_sdio_claim(wilc);
 	wilc_sdio_deinit(wilc);
+	wilc_sdio_release(wilc);
 
 	vif = wilc_netdev_ifc_init(wilc, "wlan%d", WILC_STATION_MODE,
 				   NL80211_IFTYPE_STATION, false);
@@ -258,9 +266,9 @@ static int wilc_sdio_enable_interrupt(struct wilc *dev)
 	struct sdio_func *func = container_of(dev->dev, struct sdio_func, dev);
 	int ret = 0;
 
-	sdio_claim_host(func);
+	wilc_sdio_claim(dev);
 	ret = sdio_claim_irq(func, wilc_sdio_interrupt);
-	sdio_release_host(func);
+	wilc_sdio_release(dev);
 
 	if (ret < 0) {
 		dev_err(&func->dev, "can't claim sdio_irq, err(%d)\n", ret);
@@ -274,11 +282,11 @@ static void wilc_sdio_disable_interrupt(struct wilc *dev)
 	struct sdio_func *func = container_of(dev->dev, struct sdio_func, dev);
 	int ret;
 
-	sdio_claim_host(func);
+	wilc_sdio_claim(dev);
 	ret = sdio_release_irq(func);
 	if (ret < 0)
 		dev_err(&func->dev, "can't release sdio_irq, err(%d)\n", ret);
-	sdio_release_host(func);
+	wilc_sdio_release(dev);
 }
 
 /********************************************
@@ -998,6 +1006,8 @@ static const struct wilc_hif_func wilc_hif_sdio = {
 	.disable_interrupt = wilc_sdio_disable_interrupt,
 	.hif_reset = wilc_sdio_reset,
 	.hif_is_init = wilc_sdio_is_init,
+	.hif_claim = wilc_sdio_claim,
+	.hif_release = wilc_sdio_release,
 };
 
 static int wilc_sdio_suspend(struct device *dev)
@@ -1038,7 +1048,9 @@ static int wilc_sdio_resume(struct device *dev)
 	if (!IS_ERR(wilc->rtc_clk))
 		clk_prepare_enable(wilc->rtc_clk);
 
+	wilc_sdio_claim(wilc);
 	wilc_sdio_init(wilc, true);
+	wilc_sdio_release(wilc);
 	wilc_sdio_enable_interrupt(wilc);
 
 	return host_wakeup_notify(wilc);

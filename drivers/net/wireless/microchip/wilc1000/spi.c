@@ -1105,6 +1105,19 @@ static int wilc_spi_write(struct wilc *wilc, u32 addr, u8 *buf, u32 size)
  *      Bus interfaces
  *
  ********************************************/
+static void wilc_spi_claim(struct wilc *wilc)
+{
+	struct spi_device *spi = to_spi_device(wilc->dev);
+
+	spi_bus_lock(spi->controller);
+}
+
+static void wilc_spi_release(struct wilc *wilc)
+{
+	struct spi_device *spi = to_spi_device(wilc->dev);
+
+	spi_bus_unlock(spi->controller);
+}
 
 static int wilc_spi_reset(struct wilc *wilc)
 {
