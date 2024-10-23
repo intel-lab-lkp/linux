@@ -389,6 +389,9 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 {
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
+	struct intel_atomic_state *state = to_intel_atomic_state(conn_state->state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_crtc_state *old_crtc_state = intel_atomic_get_old_crtc_state(state, crtc);
 	int pipe_src_w = drm_rect_width(&crtc_state->pipe_src);
 	int pipe_src_h = drm_rect_height(&crtc_state->pipe_src);
 	int x, y, width, height;
@@ -398,6 +401,9 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 	    adjusted_mode->crtc_vdisplay == pipe_src_h &&
 	    crtc_state->output_format != INTEL_OUTPUT_FORMAT_YCBCR420)
 		return 0;
+
+	if (old_crtc_state->hw.casf_params.need_scaler)
+		return -EINVAL;
 
 	switch (conn_state->scaling_mode) {
 	case DRM_MODE_SCALE_CENTER:
@@ -451,6 +457,7 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 
 	drm_rect_init(&crtc_state->pch_pfit.dst,
 		      x, y, width, height);
+
 	crtc_state->pch_pfit.enabled = true;
 
 	return 0;

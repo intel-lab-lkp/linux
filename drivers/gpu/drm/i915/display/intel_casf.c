@@ -83,6 +83,16 @@ void intel_casf_enable(struct intel_crtc_state *crtc_state)
 		intel_de_write_fw(display, GLK_PS_COEF_DATA_SET(crtc->pipe, id, 1),
 				  tmp);
 	}
+
+	skl_scaler_setup_casf(crtc_state);
+}
+
+int intel_casf_compute_config(struct intel_crtc_state *crtc_state)
+{
+	if (!crtc_state->pch_pfit.enabled)
+		crtc_state->hw.casf_params.need_scaler = true;
+
+	return 0;
 }
 
 static void convert_sharpness_coef_binary(struct scaler_filter_coeff *coeff,
