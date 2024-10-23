@@ -1372,7 +1372,7 @@ ConfigMainWindow::ConfigMainWindow(void)
 
 	conf_set_changed_callback(conf_changed);
 
-	configname = xstrdup(conf_get_configname());
+	configname = conf_get_configname();
 
 	QAction *saveAsAction = new QAction("Save &As...", this);
 	connect(saveAsAction, &QAction::triggered,
@@ -1511,28 +1511,22 @@ ConfigMainWindow::ConfigMainWindow(void)
 void ConfigMainWindow::loadConfig(void)
 {
 	QString str;
-	QByteArray ba;
-	const char *name;
 
 	str = QFileDialog::getOpenFileName(this, "", configname);
 	if (str.isNull())
 		return;
 
-	ba = str.toLocal8Bit();
-	name = ba.data();
-
-	if (conf_read(name))
+	if (conf_read(str.toLocal8Bit().constData()))
 		QMessageBox::information(this, "qconf", "Unable to load configuration!");
 
-	free(configname);
-	configname = xstrdup(name);
+	configname = str;
 
 	ConfigList::updateListAllForAll();
 }
 
 bool ConfigMainWindow::saveConfig(void)
 {
-	if (conf_write(configname)) {
+	if (conf_write(configname.toLocal8Bit().constData())) {
 		QMessageBox::information(this, "qconf", "Unable to save configuration!");
 		return false;
 	}
@@ -1544,23 +1538,17 @@ bool ConfigMainWindow::saveConfig(void)
 void ConfigMainWindow::saveConfigAs(void)
 {
 	QString str;
-	QByteArray ba;
-	const char *name;
 
 	str = QFileDialog::getSaveFileName(this, "", configname);
 	if (str.isNull())
 		return;
 
-	ba = str.toLocal8Bit();
-	name = ba.data();
-
-	if (conf_write(name)) {
+	if (conf_write(str.toLocal8Bit().constData())) {
 		QMessageBox::information(this, "qconf", "Unable to save configuration!");
 	}
 	conf_write_autoconf(0);
 
-	free(configname);
-	configname = xstrdup(name);
+	configname = str;
 }
 
 void ConfigMainWindow::searchConfig(void)
