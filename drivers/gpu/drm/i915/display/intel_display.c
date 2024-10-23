@@ -111,6 +111,7 @@
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
 #include "intel_sdvo.h"
+#include "intel_casf.h"
 #include "intel_snps_phy.h"
 #include "intel_tc.h"
 #include "intel_tdf.h"
@@ -6168,6 +6169,8 @@ static int intel_atomic_check_planes(struct intel_atomic_state *state)
 		ret = icl_check_nv12_planes(state, crtc);
 		if (ret)
 			return ret;
+
+		intel_casf_scaler_compute_config(new_crtc_state);
 
 		/*
 		 * On some platforms the number of active planes affects
