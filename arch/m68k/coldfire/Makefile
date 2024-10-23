@@ -29,7 +29,7 @@ obj-$(CONFIG_M5307)	+= m5307.o intc.o reset.o
 obj-$(CONFIG_M53xx)	+= m53xx.o intc-simr.o reset.o
 obj-$(CONFIG_M5407)	+= m5407.o intc.o reset.o
 obj-$(CONFIG_M54xx)	+= m54xx.o intc-2.o
-obj-$(CONFIG_M5441x)	+= m5441x.o intc-simr.o reset.o
+obj-$(CONFIG_M5441x)	+= m5441x.o intc-simr.o reset.o dma_timer.o
 
 obj-$(CONFIG_COLDFIRE_PIT_TIMER) += pit.o
 obj-$(CONFIG_COLDFIRE_TIMERS)	 += timers.o
