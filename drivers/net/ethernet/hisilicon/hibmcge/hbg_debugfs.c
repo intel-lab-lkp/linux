@@ -97,6 +97,8 @@ static int hbg_dbg_irq_info(struct seq_file *s, void *unused)
 	return 0;
 }
 
+static const char * const reset_type_str[] = {"None", "FLR", "Function"};
+
 static int hbg_dbg_nic_state(struct seq_file *s, void *unused)
 {
 	struct net_device *netdev = dev_get_drvdata(s->private);
@@ -105,7 +107,19 @@ static int hbg_dbg_nic_state(struct seq_file *s, void *unused)
 	seq_printf(s, "event handling state: %s\n",
 		   hbg_get_bool_str(test_bit(HBG_NIC_STATE_EVENT_HANDLING,
 					     &priv->state)));
+	seq_printf(s, "need reset state: %s\n",
+		   hbg_get_bool_str(test_bit(HBG_NIC_STATE_NEED_RESET,
+					     &priv->state)));
+	seq_printf(s, "resetting state: %s\n",
+		   hbg_get_bool_str(test_bit(HBG_NIC_STATE_RESETTING,
+					     &priv->state)));
+	seq_printf(s, "reset fail state: %s\n",
+		   hbg_get_bool_str(test_bit(HBG_NIC_STATE_RESET_FAIL,
+					     &priv->state)));
+	seq_printf(s, "last reset type: %s\n",
+		   reset_type_str[priv->reset_type]);
 
+	seq_printf(s, "reset fail cnt: %llu\n", priv->stats.reset_fail_cnt);
 	seq_printf(s, "tx timeout cnt: %llu\n", priv->stats.tx_timeout_cnt);
 	return 0;
 }

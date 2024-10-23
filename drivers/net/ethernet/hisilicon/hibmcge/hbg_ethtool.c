@@ -4,6 +4,7 @@
 #include <linux/ethtool.h>
 #include <linux/phy.h>
 #include "hbg_common.h"
+#include "hbg_err.h"
 #include "hbg_ethtool.h"
 #include "hbg_hw.h"
 
@@ -360,6 +361,19 @@ static int hbg_ethtool_set_pauseparam(struct net_device *net_dev,
 	}
 
 	hbg_hw_set_pause_enable(priv, !!param->tx_pause, !!param->rx_pause);
+	priv->user_def.pause_param = *param;
+	return 0;
+}
+
+static int hbg_ethtool_reset(struct net_device *netdev, u32 *flags)
+{
+	struct hbg_priv *priv = netdev_priv(netdev);
+
+	if (*flags != ETH_RESET_DEDICATED)
+		return -EOPNOTSUPP;
+
+	hbg_reset_task_schedule(priv);
+	*flags = 0;
 	return 0;
 }
 
@@ -375,6 +389,7 @@ static const struct ethtool_ops hbg_ethtool_ops = {
 	.get_regs		= hbg_ethtool_get_regs,
 	.get_pauseparam         = hbg_ethtool_get_pauseparam,
 	.set_pauseparam         = hbg_ethtool_set_pauseparam,
+	.reset			= hbg_ethtool_reset,
 };
 
 void hbg_ethtool_set_ops(struct net_device *netdev)
