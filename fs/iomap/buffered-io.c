@@ -1357,6 +1357,7 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 	loff_t pos = iter->pos;
 	loff_t length = iomap_length(iter);
 	loff_t written = 0;
+	bool eof_zero = false;
 
 	/*
 	 * We must zero subranges of unwritten mappings that might be dirty in
@@ -1376,12 +1377,23 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 	 * triggers writeback time post-eof zeroing.
 	 */
 	if (srcmap->type == IOMAP_HOLE || srcmap->type == IOMAP_UNWRITTEN) {
-		if (*range_dirty) {
+		/* range is clean and already zeroed, nothing to do */
+		if (!*range_dirty)
+			return length;
+
+		/* flush for anything other than partial eof zeroing */
+		if (pos != i_size_read(iter->inode) ||
+		   (pos % i_blocksize(iter->inode)) == 0) {
 			*range_dirty = false;
 			return iomap_zero_iter_flush_and_stale(iter);
 		}
-		/* range is clean and already zeroed, nothing to do */
-		return length;
+		/*
+		 * Special case partial EOF zeroing. Since we know the EOF
+		 * folio is dirty, prefer in-memory zeroing for it. This avoids
+		 * excessive flush latency on frequent file size extending
+		 * operations.
+		 */
+		eof_zero = true;
 	}
 
 	do {
@@ -1400,6 +1412,8 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 		offset = offset_in_folio(folio, pos);
 		if (bytes > folio_size(folio) - offset)
 			bytes = folio_size(folio) - offset;
+		if (eof_zero && length > bytes)
+			length = bytes;
 
 		folio_zero_range(folio, offset, bytes);
 		folio_mark_accessed(folio);
