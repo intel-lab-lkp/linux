@@ -11260,6 +11260,7 @@ enum special_kfunc_type {
 	KF_bpf_iter_css_task_new,
 	KF_bpf_session_cookie,
 	KF_bpf_get_kmem_cache,
+	KF_bpf_get_hw_counter,
 };
 
 BTF_SET_START(special_kfunc_set)
@@ -11326,6 +11327,7 @@ BTF_ID(func, bpf_session_cookie)
 BTF_ID_UNUSED
 #endif
 BTF_ID(func, bpf_get_kmem_cache)
+BTF_ID(func, bpf_get_hw_counter)
 
 static bool is_kfunc_ret_null(struct bpf_kfunc_call_arg_meta *meta)
 {
@@ -20395,6 +20397,15 @@ static int fixup_kfunc_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 	} else if (desc->func_id == special_kfunc_list[KF_bpf_cast_to_kern_ctx] ||
 		   desc->func_id == special_kfunc_list[KF_bpf_rdonly_cast]) {
 		insn_buf[0] = BPF_MOV64_REG(BPF_REG_0, BPF_REG_1);
+		*cnt = 1;
+	} else if (IS_ENABLED(CONFIG_X86) &&
+		   desc->func_id == special_kfunc_list[KF_bpf_get_hw_counter]) {
+		insn->imm = 0;
+		insn->code = BPF_JMP | BPF_CALL;
+		insn->src_reg = BPF_PSEUDO_KFUNC_CALL;
+		insn->dst_reg = 1; /* Implement enum for inlined fast calls */
+
+		insn_buf[0] = *insn;
 		*cnt = 1;
 	} else if (is_bpf_wq_set_callback_impl_kfunc(desc->func_id)) {
 		struct bpf_insn ld_addrs[2] = { BPF_LD_IMM64(BPF_REG_4, (long)env->prog->aux) };

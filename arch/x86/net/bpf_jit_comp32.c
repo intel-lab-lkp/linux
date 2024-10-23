@@ -2091,6 +2091,17 @@ static int do_jit(struct bpf_prog *bpf_prog, int *addrs, u8 *image,
 			if (insn->src_reg == BPF_PSEUDO_CALL)
 				goto notyet;
 
+			if (insn->src_reg == BPF_PSEUDO_KFUNC_CALL && !imm32) {
+				if (insn->dst_reg == 1) {
+					struct cpuinfo_x86 *c = &cpu_data(get_boot_cpu_id());
+
+					if (cpu_has(c, X86_FEATURE_LFENCE_RDTSC))
+						EMIT3(0x0F, 0xAE, 0xE8);
+					EMIT2(0x0F, 0x31);
+					break;
+				}
+			}
+
 			if (insn->src_reg == BPF_PSEUDO_KFUNC_CALL) {
 				int err;
 

@@ -2126,6 +2126,29 @@ populate_extable:
 		case BPF_JMP | BPF_CALL: {
 			u8 *ip = image + addrs[i - 1];
 
+			if (insn->src_reg == BPF_PSEUDO_KFUNC_CALL && !imm32) {
+				if (insn->dst_reg == 1) {
+					struct cpuinfo_x86 *c = &cpu_data(get_boot_cpu_id());
+
+					/* Save RDX because RDTSC will use EDX:EAX to return u64 */
+					emit_mov_reg(&prog, true, AUX_REG, BPF_REG_3);
+					if (cpu_has(c, X86_FEATURE_LFENCE_RDTSC))
+						EMIT_LFENCE();
+					EMIT2(0x0F, 0x31);
+
+					/* shl RDX, 32 */
+					maybe_emit_1mod(&prog, BPF_REG_3, true);
+					EMIT3(0xC1, add_1reg(0xE0, BPF_REG_3), 32);
+					/* or RAX, RDX */
+					maybe_emit_mod(&prog, BPF_REG_0, BPF_REG_3, true);
+					EMIT2(0x09, add_2reg(0xC0, BPF_REG_0, BPF_REG_3));
+					/* restore RDX from R11 */
+					emit_mov_reg(&prog, true, BPF_REG_3, AUX_REG);
+
+					break;
+				}
+			}
+
 			func = (u8 *) __bpf_call_base + imm32;
 			if (tail_call_reachable) {
 				LOAD_TAIL_CALL_CNT_PTR(bpf_prog->aux->stack_depth);
