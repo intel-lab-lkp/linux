@@ -797,6 +797,12 @@ void intel_dsc_enable(const struct intel_crtc_state *crtc_state)
 			dss_ctl1_val |= PRIMARY_BIG_JOINER_ENABLE;
 	}
 
+	if (crtc_state->dsc.has_odd_pixel) {
+		dss_ctl2_val |= ODD_PIXEL_REMOVAL;
+		if (crtc->pipe == PIPE_A || crtc->pipe == PIPE_C)
+			dss_ctl2_val |= ODD_PIXEL_REMOVAL_CONFIG_EOL;
+	}
+
 	if (crtc_state->dsc.replicated_pixels)
 		dss_ctl3_val = DSC_PIXEL_REPLICATION(crtc_state->dsc.replicated_pixels);
 
@@ -1010,6 +1016,9 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 	} else {
 		crtc_state->dsc.num_streams = 0;
 	}
+
+	if (dss_ctl2 & ODD_PIXEL_REMOVAL)
+		crtc_state->dsc.has_odd_pixel = true;
 
 	if (dss_ctl3 & DSC_PIXEL_REPLICATION_MASK)
 		crtc_state->dsc.replicated_pixels =
