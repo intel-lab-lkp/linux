@@ -1747,6 +1747,13 @@ static int vdec_close(struct file *file)
 {
 	struct venus_inst *inst = to_inst(file);
 
+	/*
+	 * Make sure we don't have pending IRQs and no threaded IRQ handler is
+	 * running nor pending (synchronize_irq)), which can race with inst
+	 * destruction.
+	 */
+	disable_irq(inst->core->irq);
+
 	vdec_pm_get(inst);
 
 	cancel_work_sync(&inst->delayed_process_work);
@@ -1762,6 +1769,12 @@ static int vdec_close(struct file *file)
 	mutex_destroy(&inst->ctx_q_lock);
 
 	vdec_pm_put(inst, false);
+
+	/*
+	 * inst is gone from the core->instances list, re-enable IRQ and
+	 * threaded IRQ
+	 */
+	enable_irq(inst->core->irq);
 
 	kfree(inst);
 	return 0;
