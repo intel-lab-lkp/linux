@@ -284,11 +284,16 @@ do_second:
 		second = true;
 		goto do_second;
 	}
+	if (i < 14) {
+		r = be64_to_cpu(pteg[i+1]);
+		pp = (r & HPTE_R_PP) | key;
+		if (r & HPTE_R_PP0)
+			pp |= 8;
+	} else {
+		dprintk("KVM: Index out of bounds!\n");
+		goto no_page_found;
+	}
 
-	r = be64_to_cpu(pteg[i+1]);
-	pp = (r & HPTE_R_PP) | key;
-	if (r & HPTE_R_PP0)
-		pp |= 8;
 
 	gpte->eaddr = eaddr;
 	gpte->vpage = kvmppc_mmu_book3s_64_ea_to_vp(vcpu, eaddr, data);
