@@ -424,6 +424,12 @@ extern unsigned long highest_memmap_pfn;
 #define MAX_RECLAIM_RETRIES 16
 
 /*
+ * Maximum number of attempts we make to install guard pages before we give up
+ * and return -ERESTARTNOINTR to have userspace try again.
+ */
+#define MAX_MADVISE_GUARD_RETRIES 3
+
+/*
  * in mm/vmscan.c:
  */
 bool folio_isolate_lru(struct folio *folio);
