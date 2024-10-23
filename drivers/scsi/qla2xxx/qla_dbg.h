@@ -31,7 +31,7 @@ struct qla2300_fw_dump {
 	__be16 fpm_b1_reg[64];
 	__be16 risc_ram[0xf800];
 	__be16 stack_ram[0x1000];
-	__be16 data_ram[1];
+	__be16 data_ram[];
 };
 
 struct qla2100_fw_dump {
@@ -84,7 +84,7 @@ struct qla24xx_fw_dump {
 	__be32	fpm_hdw_reg[192];
 	__be32	fb_hdw_reg[176];
 	__be32	code_ram[0x2000];
-	__be32	ext_mem[1];
+	__be32	ext_mem[];
 };
 
 struct qla25xx_fw_dump {
@@ -123,7 +123,7 @@ struct qla25xx_fw_dump {
 	__be32	fpm_hdw_reg[192];
 	__be32	fb_hdw_reg[192];
 	__be32	code_ram[0x2000];
-	__be32	ext_mem[1];
+	__be32	ext_mem[];
 };
 
 struct qla81xx_fw_dump {
@@ -162,7 +162,7 @@ struct qla81xx_fw_dump {
 	__be32	fpm_hdw_reg[224];
 	__be32	fb_hdw_reg[208];
 	__be32	code_ram[0x2000];
-	__be32	ext_mem[1];
+	__be32	ext_mem[];
 };
 
 struct qla83xx_fw_dump {
@@ -210,7 +210,7 @@ struct qla83xx_fw_dump {
 	__be32	fb_hdw_reg[432];
 	__be32	at0_array_reg[128];
 	__be32	code_ram[0x2400];
-	__be32	ext_mem[1];
+	__be32	ext_mem[];
 };
 
 #define EFT_NUM_BUFFERS		4
