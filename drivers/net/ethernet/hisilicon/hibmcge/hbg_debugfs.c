@@ -35,6 +35,7 @@ static int hbg_dbg_dev_spec(struct seq_file *s, void *unused)
 	seq_printf(s, "min mtu: %u, max mtu: %u\n",
 		   specs->min_mtu, specs->max_mtu);
 	seq_printf(s, "mdio frequency: %u\n", specs->mdio_frequency);
+	seq_printf(s, "uc mac max num: %u\n", specs->uc_mac_num);
 
 	return 0;
 }
@@ -109,12 +110,37 @@ static int hbg_dbg_nic_state(struct seq_file *s, void *unused)
 	return 0;
 }
 
+static int hbg_dbg_mac_table(struct seq_file *s, void *unused)
+{
+	struct net_device *netdev = dev_get_drvdata(s->private);
+	struct hbg_priv *priv = netdev_priv(netdev);
+	struct hbg_mac_filter *filter;
+	u32 i;
+
+	filter = &priv->filter;
+	seq_printf(s, "mac addr max count: %u\n", filter->table_max_len);
+	seq_printf(s, "filter enabled: %s\n",
+		   hbg_get_bool_str(filter->enabled));
+	seq_printf(s, "table overflow: %s\n",
+		   hbg_get_bool_str(filter->table_overflow));
+
+	for (i = 0; i < filter->table_max_len; i++) {
+		if (is_zero_ether_addr(filter->mac_table[i].addr))
+			continue;
+
+		seq_printf(s, "[%u] %pM\n", i, filter->mac_table[i].addr);
+	}
+
+	return 0;
+}
+
 static const struct hbg_dbg_info hbg_dbg_infos[] = {
 	{ "dev_spec", hbg_dbg_dev_spec },
 	{ "tx_ring", hbg_dbg_tx_ring },
 	{ "rx_ring", hbg_dbg_rx_ring },
 	{ "irq_info", hbg_dbg_irq_info },
 	{ "nic_state", hbg_dbg_nic_state },
+	{ "mac_talbe", hbg_dbg_mac_table },
 };
 
 static void hbg_debugfs_uninit(void *data)
