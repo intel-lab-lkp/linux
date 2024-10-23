@@ -1259,7 +1259,7 @@ int register_ftrace_graph(struct fgraph_ops *gops)
 					fgraph_cpu_init, NULL);
 		if (ret < 0) {
 			pr_warn("fgraph: Error to init cpu hotplug support\n");
-			return ret;
+			goto out;
 		}
 		fgraph_initialized = true;
 		ret = 0;
