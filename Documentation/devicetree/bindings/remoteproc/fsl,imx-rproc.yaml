@@ -28,6 +28,15 @@ properties:
       - fsl,imx8qxp-cm4
       - fsl,imx8ulp-cm33
       - fsl,imx93-cm33
+      - fsl,imx95-cm7-sof
+
+  reg:
+    maxItems: 2
+
+  reg-names:
+    items:
+      - const: dram
+      - const: mailbox
 
   clocks:
     maxItems: 1
@@ -38,10 +47,8 @@ properties:
       Phandle to syscon block which provide access to System Reset Controller
 
   mbox-names:
-    items:
-      - const: tx
-      - const: rx
-      - const: rxdb
+    minItems: 1
+    maxItems: 4
 
   mboxes:
     description:
@@ -49,7 +56,7 @@ properties:
       List of <&phandle type channel> - 1 channel for TX, 1 channel for RX, 1 channel for RXDB.
       (see mailbox/fsl,mu.yaml)
     minItems: 1
-    maxItems: 3
+    maxItems: 4
 
   memory-region:
     description:
@@ -84,6 +91,10 @@ properties:
       This property is to specify the resource id of the remote processor in SoC
       which supports SCFW
 
+  port:
+    $ref: /schemas/sound/audio-graph-port.yaml#
+    unevaluatedProperties: false
+
 required:
   - compatible
 
@@ -113,6 +124,43 @@ allOf:
     else:
       properties:
         power-domains: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: fsl,imx95-cm7-sof
+    then:
+      properties:
+        mboxes:
+          minItems: 4
+        mbox-names:
+          items:
+            - const: txdb0
+            - const: txdb1
+            - const: rxdb0
+            - const: rxdb1
+        memory-region:
+          maxItems: 1
+      required:
+        - reg
+        - reg-names
+        - mboxes
+        - mbox-names
+        - memory-region
+        - port
+    else:
+      properties:
+        reg: false
+        reg-names: false
+        mboxes:
+          maxItems: 3
+        mbox-names:
+          items:
+            - const: tx
+            - const: rx
+            - const: rxdb
+        port: false
 
 additionalProperties: false
 
