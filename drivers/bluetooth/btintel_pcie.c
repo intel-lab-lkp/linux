@@ -273,6 +273,12 @@ static int btintel_pcie_reset_bt(struct btintel_pcie_data *data)
 	return reg == 0 ? 0 : -ENODEV;
 }
 
+static void btintel_pcie_set_persistence_mode(struct btintel_pcie_data *data)
+{
+	btintel_pcie_set_reg_bits(data, BTINTEL_PCIE_CSR_HW_BOOT_CONFIG,
+				  BTINTEL_PCIE_CSR_HW_BOOT_CONFIG_KEEP_ON);
+}
+
 /* This function enables BT function by setting BTINTEL_PCIE_CSR_FUNC_CTRL_MAC_INIT bit in
  * BTINTEL_PCIE_CSR_FUNC_CTRL_REG register and wait for MSI-X with
  * BTINTEL_PCIE_MSIX_HW_INT_CAUSES_GP0.
@@ -296,6 +302,8 @@ static int btintel_pcie_enable_bt(struct btintel_pcie_data *data)
 	 * gp0 interrupt handler.
 	 */
 	data->boot_stage_cache = 0x0;
+
+	btintel_pcie_set_persistence_mode(data);
 
 	/* Set MAC_INIT bit to start primary bootloader */
 	reg = btintel_pcie_rd_reg32(data, BTINTEL_PCIE_CSR_FUNC_CTRL_REG);
@@ -1651,11 +1659,55 @@ static void btintel_pcie_remove(struct pci_dev *pdev)
 	pci_set_drvdata(pdev, NULL);
 }
 
+static int btintel_pcie_suspend(struct device *dev)
+{
+	struct btintel_pcie_data *data;
+	int err;
+	struct  pci_dev *pdev = to_pci_dev(dev);
+
+	data = pci_get_drvdata(pdev);
+	btintel_pcie_wr_sleep_cntrl(data, BTINTEL_PCIE_STATE_D3_HOT);
+	data->gp0_received = false;
+	err = wait_event_timeout(data->gp0_wait_q, data->gp0_received,
+				 msecs_to_jiffies(BTINTEL_DEFAULT_INTR_TIMEOUT_MS));
+	if (!err) {
+		bt_dev_err(data->hdev, "failed to receive gp0 interrupt for suspend");
+		goto fail;
+	}
+	return 0;
+fail:
+	return -EBUSY;
+}
+
+static int btintel_pcie_resume(struct device *dev)
+{
+	struct btintel_pcie_data *data;
+	struct  pci_dev *pdev = to_pci_dev(dev);
+	int err;
+
+	data = pci_get_drvdata(pdev);
+	btintel_pcie_wr_sleep_cntrl(data, BTINTEL_PCIE_STATE_D0);
+	data->gp0_received = false;
+	err = wait_event_timeout(data->gp0_wait_q, data->gp0_received,
+				 msecs_to_jiffies(BTINTEL_DEFAULT_INTR_TIMEOUT_MS));
+	if (!err) {
+		bt_dev_err(data->hdev, "failed to receive gp0 interrupt for resume");
+		goto fail;
+	}
+	return 0;
+fail:
+	return -EBUSY;
+}
+
+static SIMPLE_DEV_PM_OPS(btintel_pcie_pm_ops, btintel_pcie_suspend,
+		btintel_pcie_resume);
+
 static struct pci_driver btintel_pcie_driver = {
 	.name = KBUILD_MODNAME,
 	.id_table = btintel_pcie_table,
 	.probe = btintel_pcie_probe,
 	.remove = btintel_pcie_remove,
+	.driver.pm = &btintel_pcie_pm_ops,
 };
 module_pci_driver(btintel_pcie_driver);
 
