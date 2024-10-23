@@ -5944,8 +5944,7 @@ static void stmmac_common_interrupt(struct stmmac_priv *priv)
 				      &priv->xstats, tx_cnt);
 
 	if (priv->dma_cap.fpesel) {
-		int status = stmmac_fpe_irq_status(priv, priv->ioaddr,
-						   priv->dev);
+		int status = stmmac_fpe_irq_status(priv);
 
 		stmmac_fpe_event_status(priv, status);
 	}
