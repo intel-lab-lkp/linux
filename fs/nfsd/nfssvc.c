@@ -78,7 +78,7 @@ DEFINE_MUTEX(nfsd_mutex);
  */
 DEFINE_SPINLOCK(nfsd_drc_lock);
 unsigned long	nfsd_drc_max_mem;
-unsigned long	nfsd_drc_mem_used;
+unsigned long	nfsd_drc_slotsize_sum;
 
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 static const struct svc_version *localio_versions[] = {
@@ -589,10 +589,13 @@ void nfsd_reset_versions(struct nfsd_net *nn)
  */
 static void set_max_drc(void)
 {
+	if (nfsd_drc_max_mem)
+		return;
+
 	#define NFSD_DRC_SIZE_SHIFT	7
 	nfsd_drc_max_mem = (nr_free_buffer_pages()
 					>> NFSD_DRC_SIZE_SHIFT) * PAGE_SIZE;
-	nfsd_drc_mem_used = 0;
+	nfsd_drc_slotsize_sum = 0;
 	dprintk("%s nfsd_drc_max_mem %lu \n", __func__, nfsd_drc_max_mem);
 }
 
