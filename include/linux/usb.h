@@ -487,6 +487,13 @@ struct usb_bus {
 	struct mon_bus *mon_bus;	/* non-null when associated */
 	int monitored;			/* non-zero when monitored */
 #endif
+
+	bool skip_suspend;		/* All USB devices are brought into suspend
+					 * power state after system suspend. It is
+					 * desirable for some specific manufacturers
+					 * buses to keep their devices in normal
+					 * state even after system suspend.
+					 */
 };
 
 struct usb_dev_state;
