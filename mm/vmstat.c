@@ -1270,6 +1270,9 @@ const char * const vmstat_text[] = {
 	"pgpromote_success",
 	"pgpromote_candidate",
 #endif
+#ifdef CONFIG_HUGETLB_PAGE
+	"hugeTLB",
+#endif
 	"pgdemote_kswapd",
 	"pgdemote_direct",
 	"pgdemote_khugepaged",
