@@ -683,7 +683,7 @@ static void debugfs_init(struct mgb4_vout_dev *voutdev)
 
 	voutdev->debugfs = debugfs_create_dir(voutdev->vdev.name,
 					      voutdev->mgbdev->debugfs);
-	if (!voutdev->debugfs)
+	if (IS_ERR(voutdev->debugfs))
 		return;
 
 	voutdev->regs[0].name = "CONFIG";

@@ -860,7 +860,7 @@ static void debugfs_init(struct mgb4_vin_dev *vindev)
 
 	vindev->debugfs = debugfs_create_dir(vindev->vdev.name,
 					     vindev->mgbdev->debugfs);
-	if (!vindev->debugfs)
+	if (IS_ERR(vindev->debugfs))
 		return;
 
 	vindev->regs[0].name = "CONFIG";
