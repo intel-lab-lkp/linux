@@ -19791,6 +19791,7 @@ F:	arch/riscv/boot/dts/
 X:	arch/riscv/boot/dts/allwinner/
 X:	arch/riscv/boot/dts/renesas/
 X:	arch/riscv/boot/dts/sophgo/
+X:	arch/riscv/boot/dts/spacemit/
 X:	arch/riscv/boot/dts/thead/
 
 RISC-V PMU DRIVERS
@@ -21577,6 +21578,14 @@ S:	Maintained
 W:	https://linuxtv.org
 Q:	http://patchwork.linuxtv.org/project/linux-media/list/
 F:	drivers/media/dvb-frontends/sp2*
+
+SPACEMIT SoC Support
+M:	Yixun Lan <dlan@gentoo.org>
+S:	Maintained
+T:	git https://github.com/spacemit-com/linux
+F:	arch/riscv/boot/dts/spacemit/
+N:	spacemit
+K:	spacemit
 
 SPANISH DOCUMENTATION
 M:	Carlos Bilbao <carlos.bilbao.osdev@gmail.com>
