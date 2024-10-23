@@ -47,6 +47,8 @@ struct ath12k_peer {
 
 	/* protected by ab->data_lock */
 	bool dp_setup_done;
+
+	u16 ml_peer_id;
 };
 
 struct ath12k_ml_peer {
