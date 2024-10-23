@@ -30,4 +30,10 @@ static inline u16 amd_num_nodes(void)
 	return topology_amd_nodes_per_pkg() * topology_max_packages();
 }
 
+/* Caller must ensure the input is an AMD node device. */
+static inline u16 amd_pci_dev_to_node_id(struct pci_dev *pdev)
+{
+	return PCI_SLOT(pdev->devfn) - AMD_NODE0_PCI_SLOT;
+}
+
 #endif /*_ASM_X86_AMD_NODE_H_*/
