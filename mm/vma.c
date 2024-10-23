@@ -19,6 +19,7 @@ struct mmap_state {
 	struct file *file;
 
 	unsigned long charged;
+	bool retry_merge;
 
 	struct vm_area_struct *prev;
 	struct vm_area_struct *next;
@@ -2280,9 +2281,9 @@ static int __mmap_prepare(struct mmap_state *map, struct vma_merge_struct *vmg,
 	return 0;
 }
 
+
 static int __mmap_new_file_vma(struct mmap_state *map,
-			       struct vma_merge_struct *vmg,
-			       struct vm_area_struct **vmap, bool *mergedp)
+			       struct vm_area_struct **vmap)
 {
 	struct vma_iterator *vmi = map->vmi;
 	struct vm_area_struct *vma = *vmap;
@@ -2311,37 +2312,11 @@ static int __mmap_new_file_vma(struct mmap_state *map,
 			!(map->flags & VM_MAYWRITE) &&
 			(vma->vm_flags & VM_MAYWRITE));
 
+	/* If the flags change (and are mergeable), let's retry later. */
+	map->retry_merge = vma->vm_flags != map->flags && !(vma->vm_flags & VM_SPECIAL);
+
 	vma_iter_config(vmi, map->addr, map->end);
-	/*
-	 * If flags changed after mmap_file(), we should try merge
-	 * vma again as we may succeed this time.
-	 */
-	if (unlikely(map->flags != vma->vm_flags && map->prev)) {
-		struct vm_area_struct *merge;
-
-		vmg->flags = vma->vm_flags;
-		/* If this fails, state is reset ready for a reattempt. */
-		merge = vma_merge_new_range(vmg);
-
-		if (merge) {
-			/*
-			 * ->mmap() can change vma->vm_file and fput
-			 * the original file. So fput the vma->vm_file
-			 * here or we would add an extra fput for file
-			 * and cause general protection fault
-			 * ultimately.
-			 */
-			fput(vma->vm_file);
-			vm_area_free(vma);
-			vma = merge;
-			*mergedp = true;
-		} else {
-			vma_iter_config(vmi, map->addr, map->end);
-		}
-	}
-
 	map->flags = vma->vm_flags;
-	*vmap = vma;
 	return 0;
 }
 
@@ -2349,22 +2324,15 @@ static int __mmap_new_file_vma(struct mmap_state *map,
  * __mmap_new_vma() - Allocate a new VMA for the region, as merging was not
  * possible.
  *
- * An exception to this is if the mapping is file-backed, and the underlying
- * driver changes the VMA flags, permitting a subsequent merge of the VMA, in
- * which case the returned VMA is one that was merged on a second attempt.
- *
  * @map:  Mapping state.
- * @vmg:  VMA merge state.
  * @vmap: Output pointer for the new VMA.
  *
  * Returns: Zero on success, or an error.
  */
-static int __mmap_new_vma(struct mmap_state *map, struct vma_merge_struct *vmg,
-			  struct vm_area_struct **vmap)
+static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 {
 	struct vma_iterator *vmi = map->vmi;
 	int error = 0;
-	bool merged = false;
 	struct vm_area_struct *vma;
 
 	/*
@@ -2387,7 +2355,7 @@ static int __mmap_new_vma(struct mmap_state *map, struct vma_merge_struct *vmg,
 	}
 
 	if (map->file)
-		error = __mmap_new_file_vma(map, vmg, &vma, &merged);
+		error = __mmap_new_file_vma(map, &vma);
 	else if (map->flags & VM_SHARED)
 		error = shmem_zero_setup(vma);
 	else
@@ -2395,9 +2363,6 @@ static int __mmap_new_vma(struct mmap_state *map, struct vma_merge_struct *vmg,
 
 	if (error)
 		goto free_iter_vma;
-
-	if (merged)
-		goto file_expanded;
 
 #ifdef CONFIG_SPARC64
 	/* TODO: Fix SPARC ADI! */
@@ -2415,8 +2380,6 @@ static int __mmap_new_vma(struct mmap_state *map, struct vma_merge_struct *vmg,
 	 * call covers the non-merge case.
 	 */
 	khugepaged_enter_vma(vma, map->flags);
-
-file_expanded:
 	ksm_add_vma(vma);
 	*vmap = vma;
 	return 0;
@@ -2430,13 +2393,17 @@ free_vma:
 
 /*
  * __mmap_complete() - Unmap any VMAs we overlap, account memory mapping
- *                     statistics, handle locking and finalise the VMA.
+ *                     statistics, handle locking and finalise the VMA,
+ *                     attempt a final merge if required.
  *
  * @map: Mapping state.
  * @vma: Merged or newly allocated VMA for the mmap()'d region.
+ * @vmg: VMA merge state.
  */
-static void __mmap_complete(struct mmap_state *map, struct vm_area_struct *vma)
+static void __mmap_complete(struct mmap_state *map, struct vm_area_struct *vma,
+			    struct vma_merge_struct *vmg)
 {
+
 	struct mm_struct *mm = map->mm;
 	unsigned long vm_flags = vma->vm_flags;
 
@@ -2468,6 +2435,16 @@ static void __mmap_complete(struct mmap_state *map, struct vm_area_struct *vma)
 	vm_flags_set(vma, VM_SOFTDIRTY);
 
 	vma_set_page_prot(vma);
+
+	/* OK VMA flags changed in __mmap_new_vma(), try a merge again. */
+	if (map->retry_merge) {
+		vma_iter_config(map->vmi, map->addr, map->end);
+		vmg->vma = vma;
+		vmg->flags = map->flags;
+		vmg->next = NULL; /* Must be set by merge logic. */
+
+		vma_merge_existing_range(vmg);
+	}
 }
 
 unsigned long __mmap_region(struct file *file, unsigned long addr,
@@ -2490,12 +2467,12 @@ unsigned long __mmap_region(struct file *file, unsigned long addr,
 	vma = vma_merge_new_range(&vmg);
 	if (!vma) {
 		/* ...but if we can't, allocate a new VMA. */
-		error = __mmap_new_vma(&map, &vmg, &vma);
+		error = __mmap_new_vma(&map, &vma);
 		if (error)
 			goto unacct_error;
 	}
 
-	__mmap_complete(&map, vma);
+	__mmap_complete(&map, vma, &vmg);
 
 	return addr;
 
