@@ -16679,9 +16679,8 @@ F:	Documentation/hwmon/nzxt-kraken3.rst
 F:	drivers/hwmon/nzxt-kraken3.c
 
 NZXT-SMART2 HARDWARE MONITORING DRIVER
-M:	Aleksandr Mezin <mezin.alexander@gmail.com>
 L:	linux-hwmon@vger.kernel.org
-S:	Maintained
+S:	Orphan
 F:	Documentation/hwmon/nzxt-smart2.rst
 F:	drivers/hwmon/nzxt-smart2.c
 
