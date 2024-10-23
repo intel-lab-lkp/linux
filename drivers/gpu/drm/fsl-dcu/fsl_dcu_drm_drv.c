@@ -109,7 +109,9 @@ static int fsl_dcu_load(struct drm_device *dev, unsigned long flags)
 		return dev_err_probe(dev->dev, ret, "failed to initialize mode setting\n");
 
 	scfg = syscon_regmap_lookup_by_compatible("fsl,ls1021a-scfg");
-	if (PTR_ERR(scfg) != -ENODEV) {
+	if (IS_ERR(scfg) && PTR_ERR(scfg) != -ENODEV)
+		return dev_err_probe(dev->dev, PTR_ERR(scfg), "failed to find regmap\n");
+	if (!IS_ERR(scfg)) {
 		/*
 		 * For simplicity, enable the PIXCLK unconditionally,
 		 * resulting in increased power consumption. Disabling
