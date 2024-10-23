@@ -94,6 +94,9 @@ unsigned int halt_poll_ns_shrink = 2;
 module_param(halt_poll_ns_shrink, uint, 0644);
 EXPORT_SYMBOL_GPL(halt_poll_ns_shrink);
 
+bool debugfs_per_vm = true;
+module_param(debugfs_per_vm, bool, 0644);
+
 /*
  * Ordering of locks:
  *
@@ -1050,7 +1053,7 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 	int kvm_debugfs_num_entries = kvm_vm_stats_header.num_desc +
 				      kvm_vcpu_stats_header.num_desc;
 
-	if (!debugfs_initialized())
+	if (!debugfs_initialized() || !debugfs_per_vm)
 		return 0;
 
 	snprintf(dir_name, sizeof(dir_name), "%d-%s", task_pid_nr(current), fdname);
