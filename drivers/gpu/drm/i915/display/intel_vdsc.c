@@ -765,6 +765,7 @@ void intel_dsc_enable(const struct intel_crtc_state *crtc_state)
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	u32 dss_ctl1_val = 0;
 	u32 dss_ctl2_val = 0;
+	u32 dss_ctl3_val = 0;
 	int vdsc_instances_per_pipe = intel_dsc_get_vdsc_per_pipe(crtc_state);
 
 	if (!crtc_state->dsc.compression_enable)
@@ -795,8 +796,16 @@ void intel_dsc_enable(const struct intel_crtc_state *crtc_state)
 		if (intel_crtc_is_bigjoiner_primary(crtc_state))
 			dss_ctl1_val |= PRIMARY_BIG_JOINER_ENABLE;
 	}
+
+	if (crtc_state->dsc.replicated_pixels)
+		dss_ctl3_val = DSC_PIXEL_REPLICATION(crtc_state->dsc.replicated_pixels);
+
 	intel_de_write(dev_priv, dss_ctl1_reg(crtc, crtc_state->cpu_transcoder), dss_ctl1_val);
 	intel_de_write(dev_priv, dss_ctl2_reg(crtc, crtc_state->cpu_transcoder), dss_ctl2_val);
+
+	if (HAS_PIXEL_REPLICATION(dev_priv) && dss_ctl3_val)
+		intel_de_write(dev_priv,
+			       BMG_PIPE_DSS_CTL3(crtc_state->cpu_transcoder), dss_ctl3_val);
 }
 
 void intel_dsc_disable(const struct intel_crtc_state *old_crtc_state)
@@ -809,6 +818,10 @@ void intel_dsc_disable(const struct intel_crtc_state *old_crtc_state)
 	    old_crtc_state->joiner_pipes) {
 		intel_de_write(dev_priv, dss_ctl1_reg(crtc, old_crtc_state->cpu_transcoder), 0);
 		intel_de_write(dev_priv, dss_ctl2_reg(crtc, old_crtc_state->cpu_transcoder), 0);
+
+		if (HAS_PIXEL_REPLICATION(dev_priv))
+			intel_de_write(dev_priv,
+				       BMG_PIPE_DSS_CTL3(old_crtc_state->cpu_transcoder), 0);
 	}
 }
 
@@ -966,7 +979,7 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	enum intel_display_power_domain power_domain;
 	intel_wakeref_t wakeref;
-	u32 dss_ctl1, dss_ctl2;
+	u32 dss_ctl1, dss_ctl2, dss_ctl3 = 0;
 
 	if (!intel_dsc_source_support(crtc_state))
 		return;
@@ -979,6 +992,9 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 
 	dss_ctl1 = intel_de_read(dev_priv, dss_ctl1_reg(crtc, cpu_transcoder));
 	dss_ctl2 = intel_de_read(dev_priv, dss_ctl2_reg(crtc, cpu_transcoder));
+
+	if (HAS_PIXEL_REPLICATION(dev_priv))
+		dss_ctl3 = intel_de_read(dev_priv, BMG_PIPE_DSS_CTL3(crtc_state->cpu_transcoder));
 
 	crtc_state->dsc.compression_enable = dss_ctl2 & VDSC0_ENABLE;
 	if (!crtc_state->dsc.compression_enable)
@@ -995,6 +1011,10 @@ void intel_dsc_get_config(struct intel_crtc_state *crtc_state)
 		crtc_state->dsc.num_streams = 0;
 	}
 
+	if (dss_ctl3 & DSC_PIXEL_REPLICATION_MASK)
+		crtc_state->dsc.replicated_pixels =
+			dss_ctl3 & DSC_PIXEL_REPLICATION_MASK;
+
 	intel_dsc_get_pps_config(crtc_state);
 out:
 	intel_display_power_put(dev_priv, power_domain, wakeref);
@@ -1004,10 +1024,11 @@ static void intel_vdsc_dump_state(struct drm_printer *p, int indent,
 				  const struct intel_crtc_state *crtc_state)
 {
 	drm_printf_indent(p, indent,
-			  "dsc-dss: compressed-bpp:" FXP_Q4_FMT ", slice-count: %d, num_streams: %d\n",
+			  "dsc-dss: compressed-bpp:" FXP_Q4_FMT ", slice-count: %d, num_streams: %d, replicated pixels: %d\n",
 			  FXP_Q4_ARGS(crtc_state->dsc.compressed_bpp_x16),
 			  crtc_state->dsc.slice_count,
-			  crtc_state->dsc.num_streams);
+			  crtc_state->dsc.num_streams,
+			  crtc_state->dsc.replicated_pixels);
 }
 
 void intel_vdsc_state_dump(struct drm_printer *p, int indent,
