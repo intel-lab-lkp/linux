@@ -10,6 +10,8 @@
 
 #include <linux/i3c/master.h>
 
+#define AMD_I3C_GET_SLAVE_ADDR		0x30
+
 void i3c_bus_normaluse_lock(struct i3c_bus *bus);
 void i3c_bus_normaluse_unlock(struct i3c_bus *bus);
 
