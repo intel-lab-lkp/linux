@@ -176,7 +176,7 @@ static void bluefield_gather_report_ecc(struct mem_ctl_info *mci,
 {
 	struct bluefield_edac_priv *priv = mci->pvt_info;
 	u32 dram_additional_info, err_prank, edea0, edea1;
-	u32 ecc_latch_select, dram_syndrom, serr, derr, syndrom;
+	u32 ecc_latch_select, dram_syndrome, serr, derr, syndrome;
 	enum hw_event_mc_err_type ecc_type;
 	u64 ecc_dimm_addr;
 	int ecc_dimm, err;
@@ -198,13 +198,13 @@ static void bluefield_gather_report_ecc(struct mem_ctl_info *mci,
 	 * same type as the one asked to report. If not, just report the
 	 * error without the detailed information.
 	 */
-	err = bluefield_edac_readl(priv, MLXBF_SYNDROM, &dram_syndrom);
+	err = bluefield_edac_readl(priv, MLXBF_SYNDROM, &dram_syndrome);
 	if (err)
-		dev_err(priv->dev, "DRAM syndrom read failed.\n");
+		dev_err(priv->dev, "DRAM syndrome read failed.\n");
 
-	serr = FIELD_GET(MLXBF_SYNDROM__SERR, dram_syndrom);
-	derr = FIELD_GET(MLXBF_SYNDROM__DERR, dram_syndrom);
-	syndrom = FIELD_GET(MLXBF_SYNDROM__SYN, dram_syndrom);
+	serr = FIELD_GET(MLXBF_SYNDROM__SERR, dram_syndrome);
+	derr = FIELD_GET(MLXBF_SYNDROM__DERR, dram_syndrome);
+	syndrome = FIELD_GET(MLXBF_SYNDROM__SYN, dram_syndrome);
 
 	if ((is_single_ecc && !serr) || (!is_single_ecc && !derr)) {
 		edac_mc_handle_error(ecc_type, mci, error_cnt, 0, 0, 0,
@@ -233,7 +233,7 @@ static void bluefield_gather_report_ecc(struct mem_ctl_info *mci,
 	edac_mc_handle_error(ecc_type, mci, error_cnt,
 			     PFN_DOWN(ecc_dimm_addr),
 			     offset_in_page(ecc_dimm_addr),
-			     syndrom, ecc_dimm, 0, 0, mci->ctl_name, "");
+			     syndrome, ecc_dimm, 0, 0, mci->ctl_name, "");
 }
 
 static void bluefield_edac_check(struct mem_ctl_info *mci)
