@@ -3128,6 +3128,9 @@ config AMD_NODE
 	def_bool y
 	depends on CPU_SUP_AMD && PCI
 
+config AMD_SMN
+	def_bool y
+	depends on AMD_NODE
 endmenu
 
 menu "Binary Emulations"
