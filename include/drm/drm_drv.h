@@ -34,6 +34,7 @@
 
 #include <drm/drm_device.h>
 
+struct dev_cgroup_device;
 struct drm_fb_helper;
 struct drm_fb_helper_surface_size;
 struct drm_file;
@@ -437,6 +438,9 @@ struct drm_driver {
 void *__devm_drm_dev_alloc(struct device *parent,
 			   const struct drm_driver *driver,
 			   size_t size, size_t offset);
+
+int drmm_cgroup_register_device(struct drm_device *dev,
+				struct dev_cgroup_device *cgdev);
 
 /**
  * devm_drm_dev_alloc - Resource managed allocation of a &drm_device instance

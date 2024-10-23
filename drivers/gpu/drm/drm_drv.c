@@ -26,6 +26,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <linux/cgroup_dev.h>
 #include <linux/debugfs.h>
 #include <linux/fs.h>
 #include <linux/module.h>
@@ -819,6 +820,26 @@ void drm_dev_put(struct drm_device *dev)
 		kref_put(&dev->ref, drm_dev_release);
 }
 EXPORT_SYMBOL(drm_dev_put);
+
+static inline void drmm_cg_unregister_device(struct drm_device *dev, void *arg)
+{
+	dev_cgroup_unregister_device(arg);
+}
+
+int drmm_cgroup_register_device(struct drm_device *dev,
+				struct dev_cgroup_device *cgdev)
+{
+	int ret;
+	char dev_name[32];
+
+	snprintf(dev_name, sizeof(dev_name), "drm/%s", dev->unique);
+	ret = dev_cgroup_register_device(cgdev, dev_name);
+	if (ret)
+		return ret;
+
+	return drmm_add_action_or_reset(dev, drmm_cg_unregister_device, cgdev);
+}
+EXPORT_SYMBOL_GPL(drmm_cgroup_register_device);
 
 static int create_compat_control_link(struct drm_device *dev)
 {
