@@ -51,6 +51,9 @@ int devm_cxl_pmu_add(struct device *parent, struct cxl_pmu_regs *regs,
 	case CXL_PMU_MEMDEV:
 		rc = dev_set_name(dev, "pmu_mem%d.%d", assoc_id, index);
 		break;
+	default:
+		rc = -EINVAL;
+		break;
 	}
 	if (rc)
 		goto err;
