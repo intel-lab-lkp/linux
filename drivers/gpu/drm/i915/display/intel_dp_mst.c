@@ -92,20 +92,34 @@ static int intel_dp_mst_bw_overhead(const struct intel_crtc_state *crtc_state,
 				    const struct intel_connector *connector,
 				    bool ssc, int dsc_slice_count, int bpp_x16)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 	unsigned long flags = DRM_DP_BW_OVERHEAD_MST;
 	int overhead;
+	int replicated_pixels = 0;
 
 	flags |= intel_dp_is_uhbr(crtc_state) ? DRM_DP_BW_OVERHEAD_UHBR : 0;
 	flags |= ssc ? DRM_DP_BW_OVERHEAD_SSC_REF_CLK : 0;
 	flags |= crtc_state->fec_enable ? DRM_DP_BW_OVERHEAD_FEC : 0;
 
-	if (dsc_slice_count)
+	if (dsc_slice_count) {
 		flags |= DRM_DP_BW_OVERHEAD_DSC;
+		/*
+		 * When hdisplay is not divisible by dsc_slice_count, extra pixels
+		 * are added to last slice. Need to account for the extra overhead due
+		 * to these extra pixels.
+		 */
+		if (adjusted_mode->hdisplay % dsc_slice_count)
+			replicated_pixels =
+				intel_dsc_get_replicated_pixels(display,
+								adjusted_mode->hdisplay,
+								dsc_slice_count,
+								crtc_state->output_format);
+	}
 
 	overhead = drm_dp_bw_overhead(crtc_state->lane_count,
-				      adjusted_mode->hdisplay,
+				      adjusted_mode->hdisplay + replicated_pixels,
 				      dsc_slice_count,
 				      bpp_x16,
 				      flags);

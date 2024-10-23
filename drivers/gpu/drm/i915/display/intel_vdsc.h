@@ -10,9 +10,11 @@
 
 struct drm_printer;
 
+enum intel_output_format;
 enum transcoder;
 struct intel_crtc;
 struct intel_crtc_state;
+struct intel_display;
 struct intel_encoder;
 
 bool intel_dsc_source_support(const struct intel_crtc_state *crtc_state);
@@ -31,5 +33,9 @@ void intel_dsc_dp_pps_write(struct intel_encoder *encoder,
 			    const struct intel_crtc_state *crtc_state);
 void intel_vdsc_state_dump(struct drm_printer *p, int indent,
 			   const struct intel_crtc_state *crtc_state);
+int intel_dsc_get_replicated_pixels(struct intel_display *display,
+				    int mode_hdisplay,
+				    int slice_count,
+				    enum intel_output_format output_format);
 
 #endif /* __INTEL_VDSC_H__ */
