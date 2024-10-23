@@ -1578,7 +1578,7 @@ int dw_i3c_common_probe(struct dw_i3c_master *master,
 	writel(INTR_ALL, master->regs + INTR_STATUS);
 	irq = platform_get_irq(pdev, 0);
 	ret = devm_request_irq(&pdev->dev, irq,
-			       dw_i3c_master_irq_handler, 0,
+			       dw_i3c_master_irq_handler, IRQF_SHARED,
 			       dev_name(&pdev->dev), master);
 	if (ret)
 		goto err_assert_rst;
