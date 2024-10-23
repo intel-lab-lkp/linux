@@ -66,7 +66,6 @@ struct rt_sigframe_user_layout {
 	unsigned long end_offset;
 };
 
-#define BASE_SIGFRAME_SIZE round_up(sizeof(struct rt_sigframe), 16)
 #define TERMINATOR_SIZE round_up(sizeof(struct _aarch64_ctx), 16)
 #define EXTRA_CONTEXT_SIZE round_up(sizeof(struct extra_context), 16)
 
