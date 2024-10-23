@@ -37,6 +37,15 @@ properties:
   codec2codec:
     type: object
     description: Codec to Codec node
+  hp-det-gpios:
+    maxItems: 1
+  widgets:
+    description:
+      User specified audio sound widgets.
+      Each entry is a pair of strings, the first being the type of
+      widget ("Microphone", "Line", "Headphone", "Speaker"), the
+      second being the machine specific name for the widget.
+    $ref: /schemas/types.yaml#/definitions/non-unique-string-array
 
 required:
   - compatible
