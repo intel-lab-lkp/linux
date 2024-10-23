@@ -48,8 +48,8 @@ static int cn_already_initialized;
  * one we are expecting then it is a new message.
  *
  * If we receive a message and its sequence number is the same as one
- * we are expecting but it's acknowledgement number is not equal to
- * the acknowledgement number in the original message + 1, then it is
+ * we are expecting but it's acknowledgment number is not equal to
+ * the acknowledgment number in the original message + 1, then it is
  * a new message.
  *
  * If msg->len != len, then additional cn_msg messages are expected following
@@ -121,7 +121,7 @@ EXPORT_SYMBOL_GPL(cn_netlink_send_mult);
 
 /* same as cn_netlink_send_mult except msg->len is used for len */
 int cn_netlink_send(struct cn_msg *msg, u32 portid, u32 __group,
-	gfp_t gfp_mask)
+		    gfp_t gfp_mask)
 {
 	return cn_netlink_send_mult(msg, msg->len, portid, __group, gfp_mask,
 				    NULL, NULL);
@@ -155,7 +155,7 @@ static int cn_call_callback(struct sk_buff *skb)
 	}
 	spin_unlock_bh(&dev->cbdev->queue_lock);
 
-	if (cbq != NULL) {
+	if (cbq) {
 		cbq->callback(msg, nsp);
 		kfree_skb(skb);
 		cn_queue_release_callback(cbq);
@@ -171,7 +171,7 @@ static int cn_call_callback(struct sk_buff *skb)
  */
 static int cn_bind(struct net *net, int group)
 {
-	unsigned long groups = (unsigned long) group;
+	unsigned long groups = (unsigned long)group;
 
 	if (ns_capable(net->user_ns, CAP_NET_ADMIN))
 		return 0;
@@ -271,6 +271,50 @@ static int __maybe_unused cn_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+int cn_del_get_exval(pid_t pid)
+{
+	struct cn_dev *dev = &cdev;
+
+	if (!cn_already_initialized)
+		return 0;
+
+	return cn_hash_del_get_exval(dev->hdev, pid);
+}
+EXPORT_SYMBOL_GPL(cn_del_get_exval);
+
+int cn_add_elem(__u32 uexit_code, pid_t pid)
+{
+	struct cn_dev *dev = &cdev;
+
+	if (!cn_already_initialized)
+		return 0;
+
+	return cn_hash_add_elem(dev->hdev, uexit_code, pid);
+}
+EXPORT_SYMBOL_GPL(cn_add_elem);
+
+int cn_get_exval(pid_t pid)
+{
+	struct cn_dev *dev = &cdev;
+
+	if (!cn_already_initialized)
+		return 0;
+
+	return cn_hash_get_exval(dev->hdev, pid);
+}
+EXPORT_SYMBOL_GPL(cn_get_exval);
+
+bool cn_table_empty(void)
+{
+	struct cn_dev *dev = &cdev;
+
+	if (!cn_already_initialized)
+		return 0;
+
+	return cn_hash_table_empty(dev->hdev);
+}
+EXPORT_SYMBOL_GPL(cn_table_empty);
+
 static int cn_init(void)
 {
 	struct cn_dev *dev = &cdev;
@@ -283,18 +327,35 @@ static int cn_init(void)
 	};
 
 	dev->nls = netlink_kernel_create(&init_net, NETLINK_CONNECTOR, &cfg);
-	if (!dev->nls)
+	if (!dev->nls) {
+		pr_err("%s: netlink_kernel_create failed, connector not initialized\n",
+		       __func__);
 		return -EIO;
+	}
 
 	dev->cbdev = cn_queue_alloc_dev("cqueue", dev->nls);
 	if (!dev->cbdev) {
+		pr_err("%s: Allocation of dev->cbdev failed, connector not initialized\n",
+		       __func__);
 		netlink_kernel_release(dev->nls);
 		return -EINVAL;
 	}
 
+	dev->hdev = cn_hash_alloc_dev("pid hash table");
+	if (!dev->hdev) {
+		pr_err("%s: Allocation of dev->hdev failed, connector not initialized\n",
+		       __func__);
+		netlink_kernel_release(dev->nls);
+		cn_queue_free_dev(dev->cbdev);
+		return -ENOMEM;
+	}
+
+	pr_debug("Connector initialized, allocated hdev %p\n", dev->hdev);
+
 	cn_already_initialized = 1;
 
-	proc_create_single("connector", S_IRUGO, init_net.proc_net, cn_proc_show);
+	proc_create_single("connector", S_IRUGO, init_net.proc_net,
+			   cn_proc_show);
 
 	return 0;
 }
@@ -308,6 +369,7 @@ static void cn_fini(void)
 	remove_proc_entry("connector", init_net.proc_net);
 
 	cn_queue_free_dev(dev->cbdev);
+	cn_hash_free_dev(dev->hdev);
 	netlink_kernel_release(dev->nls);
 }
 

@@ -44,6 +44,7 @@ struct local_event {
 	local_lock_t lock;
 	__u32 count;
 };
+
 static DEFINE_PER_CPU(struct local_event, local_event) = {
 	.lock = INIT_LOCAL_LOCK(lock),
 };
@@ -69,12 +70,14 @@ static int cn_filter(struct sock *dsk, struct sk_buff *skb, void *data)
 	if ((__u32)val == PROC_EVENT_ALL)
 		return 0;
 
+	pr_debug("%s: val %lx, what %x\n", __func__, val, what);
+
 	/*
 	 * Drop packet if we have to report only non-zero exit status
 	 * (PROC_EVENT_NONZERO_EXIT) and exit status is 0
 	 */
 	if (((__u32)val & PROC_EVENT_NONZERO_EXIT) &&
-	    (what == PROC_EVENT_EXIT)) {
+	    what == PROC_EVENT_EXIT) {
 		if (exit_code)
 			return 0;
 	}
@@ -187,11 +190,15 @@ void proc_id_connector(struct task_struct *task, int which_id)
 	rcu_read_lock();
 	cred = __task_cred(task);
 	if (which_id == PROC_EVENT_UID) {
-		ev->event_data.id.r.ruid = from_kuid_munged(&init_user_ns, cred->uid);
-		ev->event_data.id.e.euid = from_kuid_munged(&init_user_ns, cred->euid);
+		ev->event_data.id.r.ruid =
+			from_kuid_munged(&init_user_ns, cred->uid);
+		ev->event_data.id.e.euid =
+			from_kuid_munged(&init_user_ns, cred->euid);
 	} else if (which_id == PROC_EVENT_GID) {
-		ev->event_data.id.r.rgid = from_kgid_munged(&init_user_ns, cred->gid);
-		ev->event_data.id.e.egid = from_kgid_munged(&init_user_ns, cred->egid);
+		ev->event_data.id.r.rgid =
+			from_kgid_munged(&init_user_ns, cred->gid);
+		ev->event_data.id.e.egid =
+			from_kgid_munged(&init_user_ns, cred->egid);
 	} else {
 		rcu_read_unlock();
 		return;
@@ -252,8 +259,9 @@ void proc_ptrace_connector(struct task_struct *task, int ptrace_id)
 	} else if (ptrace_id == PTRACE_DETACH) {
 		ev->event_data.ptrace.tracer_pid  = 0;
 		ev->event_data.ptrace.tracer_tgid = 0;
-	} else
+	} else {
 		return;
+	}
 
 	memcpy(&msg->id, &cn_proc_event_id, sizeof(msg->id));
 	msg->ack = 0; /* not used */
@@ -326,9 +334,15 @@ void proc_exit_connector(struct task_struct *task)
 	struct proc_event *ev;
 	struct task_struct *parent;
 	__u8 buffer[CN_PROC_MSG_SIZE] __aligned(8);
+	int uexit_code;
 
-	if (atomic_read(&proc_event_num_listeners) < 1)
+	if (atomic_read(&proc_event_num_listeners) < 1) {
+		if (likely(!(task->flags & PF_EXIT_NOTIFY)))
+			return;
+
+		cn_del_get_exval(task->pid);
 		return;
+	}
 
 	msg = buffer_to_cn_msg(buffer);
 	ev = (struct proc_event *)msg->data;
@@ -337,7 +351,26 @@ void proc_exit_connector(struct task_struct *task)
 	ev->what = PROC_EVENT_EXIT;
 	ev->event_data.exit.process_pid = task->pid;
 	ev->event_data.exit.process_tgid = task->tgid;
-	ev->event_data.exit.exit_code = task->exit_code;
+	if (unlikely(task->flags & PF_EXIT_NOTIFY)) {
+		task->flags &= ~PF_EXIT_NOTIFY;
+
+		uexit_code = cn_del_get_exval(task->pid);
+		if (uexit_code <= 0) {
+			pr_debug("%s: err %d returning task's exit code %u\n",
+				 __func__, uexit_code,
+				 task->exit_code);
+			ev->event_data.exit.exit_code = task->exit_code;
+		} else {
+			ev->event_data.exit.exit_code = uexit_code;
+			pr_debug("%s: Reset PF_EXIT_NOTIFY & retrieved exit code %u from hash table, pid %d\n",
+				 __func__,
+				 ev->event_data.exit.exit_code,
+				 task->pid);
+		}
+	} else {
+		ev->event_data.exit.exit_code = task->exit_code;
+	}
+
 	ev->event_data.exit.exit_signal = task->exit_signal;
 
 	rcu_read_lock();
@@ -356,7 +389,7 @@ void proc_exit_connector(struct task_struct *task)
 }
 
 /*
- * Send an acknowledgement message to userspace
+ * Send an acknowledgment message to userspace
  *
  * Use 0 for success, EFOO otherwise.
  * Note: this is the negative of conventional kernel error
@@ -401,7 +434,7 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 	int err = 0, initial = 0;
 	struct sock *sk = NULL;
 
-	/* 
+	/*
 	 * Events are reported with respect to the initial pid
 	 * and user namespaces so ignore requestors from
 	 * other namespaces.
@@ -413,6 +446,13 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 	if (msg->len == sizeof(*pinput)) {
 		pinput = (struct proc_input *)msg->data;
 		mc_op = pinput->mcast_op;
+		if (mc_op == PROC_CN_MCAST_NOTIFY) {
+			pr_debug("%s: Received PROC_CN_MCAST_NOTIFY, pid %d\n",
+				 __func__, current->pid);
+			current->flags |= PF_EXIT_NOTIFY;
+			err = cn_add_elem(pinput->uexit_code, current->pid);
+			return;
+		}
 		ev_type = pinput->event_type;
 	} else if (msg->len == sizeof(mc_op)) {
 		mc_op = *((enum proc_cn_mcast_op *)msg->data);
@@ -428,10 +468,12 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 
 	if (nsp->sk) {
 		sk = nsp->sk;
-		if (sk->sk_user_data == NULL) {
+		if (!sk->sk_user_data) {
 			sk->sk_user_data = kzalloc(sizeof(struct proc_input),
 						   GFP_KERNEL);
-			if (sk->sk_user_data == NULL) {
+			if (!sk->sk_user_data) {
+				pr_err("%s: Alloc fail sk_user_data, pid %d\n",
+				       __func__, current->pid);
 				err = ENOMEM;
 				goto out;
 			}
@@ -442,21 +484,32 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 		}
 		((struct proc_input *)(sk->sk_user_data))->event_type =
 			ev_type;
+		pr_debug("%s: sk: %p pid: %d event_type: %x\n",
+			 __func__, sk, current->pid, ev_type);
 		((struct proc_input *)(sk->sk_user_data))->mcast_op = mc_op;
 	}
 
 	switch (mc_op) {
 	case PROC_CN_MCAST_LISTEN:
-		if (initial || (prev_mc_op != PROC_CN_MCAST_LISTEN))
+		if (initial || prev_mc_op != PROC_CN_MCAST_LISTEN) {
 			atomic_inc(&proc_event_num_listeners);
+			pr_debug("%s: PROC_CN_MCAST_LISTEN pid %d: Incremented listeners to %d\n",
+				 __func__, current->pid,
+				 atomic_read(&proc_event_num_listeners));
+		}
 		break;
 	case PROC_CN_MCAST_IGNORE:
-		if (!initial && (prev_mc_op != PROC_CN_MCAST_IGNORE))
+		if (!initial && prev_mc_op != PROC_CN_MCAST_IGNORE) {
 			atomic_dec(&proc_event_num_listeners);
+			pr_debug("%s: PROC_CN_MCAST_IGNORE pid %d: Decremented listeners to %d\n",
+				 __func__, current->pid,
+				 atomic_read(&proc_event_num_listeners));
+		}
 		((struct proc_input *)(sk->sk_user_data))->event_type =
 			PROC_EVENT_NONE;
 		break;
 	default:
+		pr_warn("%s: Invalid value for mc_op %d\n", __func__, mc_op);
 		err = EINVAL;
 		break;
 	}

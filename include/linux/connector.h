@@ -1,13 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * 	connector.h
- * 
+ * connector.h
+ *
  * 2004-2005 Copyright (c) Evgeniy Polyakov <zbr@ioremap.net>
  * All rights reserved.
  */
 #ifndef __CONNECTOR_H
 #define __CONNECTOR_H
-
 
 #include <linux/refcount.h>
 
@@ -18,6 +17,8 @@
 #include <uapi/linux/connector.h>
 
 #define CN_CBQ_NAMELEN		32
+#define HASHT_NAMELEN		32
+#define PID_HASH_TABLE_BITS	10
 
 struct cn_queue_dev {
 	atomic_t refcnt;
@@ -40,9 +41,27 @@ struct cn_callback_entry {
 	struct cn_queue_dev *pdev;
 
 	struct cn_callback_id id;
-	void (*callback) (struct cn_msg *, struct netlink_skb_parms *);
+	void (*callback)(struct cn_msg *, struct netlink_skb_parms *);
 
 	u32 seq, group;
+};
+
+struct uexit_pid_hnode {
+	__u32 uexit_code;
+	pid_t pid;
+	struct hlist_node uexit_pid_hlist;
+};
+
+struct cn_hash_dev {
+	atomic_t hrefcnt;
+	unsigned char name[HASHT_NAMELEN];
+	/*
+	 * This mutex is used to lock the hash table to allow
+	 * multiple threads to add their pid & exit code to it.
+	 * Shared between all threads.
+	 */
+	struct mutex uexit_hash_lock;
+	DECLARE_HASHTABLE(uexit_pid_htable, PID_HASH_TABLE_BITS);
 };
 
 struct cn_dev {
@@ -52,6 +71,7 @@ struct cn_dev {
 	struct sock *nls;
 
 	struct cn_queue_dev *cbdev;
+	struct cn_hash_dev *hdev;
 };
 
 /**
@@ -62,10 +82,11 @@ struct cn_dev {
  *		in-kernel users.
  * @name:	connector's callback symbolic name.
  * @callback:	connector's callback.
- * 		parameters are %cn_msg and the sender's credentials
+ *		parameters are %cn_msg and the sender's credentials
  */
 int cn_add_callback(const struct cb_id *id, const char *name,
-		    void (*callback)(struct cn_msg *, struct netlink_skb_parms *));
+		    void (*callback)(struct cn_msg *,
+				     struct netlink_skb_parms *));
 /**
  * cn_del_callback() - Unregisters new callback with connector core.
  *
@@ -73,17 +94,16 @@ int cn_add_callback(const struct cb_id *id, const char *name,
  */
 void cn_del_callback(const struct cb_id *id);
 
-
 /**
  * cn_netlink_send_mult - Sends message to the specified groups.
  *
- * @msg: 	message header(with attached data).
+ * @msg:	message header(with attached data).
  * @len:	Number of @msg to be sent.
  * @portid:	destination port.
  *		If non-zero the message will be sent to the given port,
  *		which should be set to the original sender.
  * @group:	destination group.
- * 		If @portid and @group is zero, then appropriate group will
+ *		If @portid and @group is zero, then appropriate group will
  *		be searched through all registered connector users, and
  *		message will be delivered to the group which was created
  *		for user with the same ID as in @msg.
@@ -111,7 +131,7 @@ int cn_netlink_send_mult(struct cn_msg *msg, u16 len, u32 portid,
  *		If non-zero the message will be sent to the given port,
  *		which should be set to the original sender.
  * @group:	destination group.
- * 		If @portid and @group is zero, then appropriate group will
+ *		If @portid and @group is zero, then appropriate group will
  *		be searched through all registered connector users, and
  *		message will be delivered to the group which was created
  *		for user with the same ID as in @msg.
@@ -128,7 +148,8 @@ int cn_netlink_send(struct cn_msg *msg, u32 portid, u32 group, gfp_t gfp_mask);
 
 int cn_queue_add_callback(struct cn_queue_dev *dev, const char *name,
 			  const struct cb_id *id,
-			  void (*callback)(struct cn_msg *, struct netlink_skb_parms *));
+			  void (*callback)(struct cn_msg *,
+					   struct netlink_skb_parms *));
 void cn_queue_del_callback(struct cn_queue_dev *dev, const struct cb_id *id);
 void cn_queue_release_callback(struct cn_callback_entry *);
 
@@ -136,5 +157,20 @@ struct cn_queue_dev *cn_queue_alloc_dev(const char *name, struct sock *);
 void cn_queue_free_dev(struct cn_queue_dev *dev);
 
 int cn_cb_equal(const struct cb_id *, const struct cb_id *);
+
+struct cn_hash_dev *cn_hash_alloc_dev(const char *name);
+void cn_hash_free_dev(struct cn_hash_dev *hdev);
+struct uexit_pid_hnode *cn_hash_find_pid_node(struct cn_hash_dev *hdev,
+					      pid_t pid);
+int cn_hash_add_elem(struct cn_hash_dev *hdev, __u32 uexit_code, pid_t pid);
+int cn_hash_del_get_exval(struct cn_hash_dev *hdev, pid_t pid);
+int cn_hash_get_exval(struct cn_hash_dev *hdev, pid_t pid);
+
+int cn_add_elem(__u32 uexit_code, pid_t pid);
+int cn_del_get_exval(pid_t pid);
+int cn_get_exval(pid_t pid);
+
+bool cn_table_empty(void);
+bool cn_hash_table_empty(struct cn_hash_dev *hdev);
 
 #endif				/* __CONNECTOR_H */
