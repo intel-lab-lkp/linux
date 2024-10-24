@@ -119,8 +119,8 @@ static void dma_fence_array_release(struct dma_fence *fence)
 	for (i = 0; i < array->num_fences; ++i)
 		dma_fence_put(array->fences[i]);
 
-	kfree(array->fences);
-	dma_fence_free(fence);
+	kvfree(array->fences);
+	kvfree_rcu(fence, rcu);
 }
 
 static void dma_fence_array_set_deadline(struct dma_fence *fence,
@@ -153,7 +153,7 @@ struct dma_fence_array *dma_fence_array_alloc(int num_fences)
 {
 	struct dma_fence_array *array;
 
-	return kzalloc(struct_size(array, callbacks, num_fences), GFP_KERNEL);
+	return kvzalloc(struct_size(array, callbacks, num_fences), GFP_KERNEL);
 }
 EXPORT_SYMBOL(dma_fence_array_alloc);
 
