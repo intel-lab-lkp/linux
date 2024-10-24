@@ -620,6 +620,27 @@ out:
 EXPORT_SYMBOL_GPL(kvm_gmem_get_pfn);
 
 #ifdef CONFIG_KVM_GENERIC_PRIVATE_MEM
+static int kvm_gmem_post_populate_generic(struct kvm *kvm, gfn_t gfn_start, kvm_pfn_t pfn,
+				  void __user *src, int order, void *opaque)
+{
+	int ret = 0, i;
+	int npages = (1 << order);
+	gfn_t gfn;
+
+	if (src) {
+		void *vaddr = kmap_local_pfn(pfn);
+
+		ret = copy_from_user(vaddr, src, npages * PAGE_SIZE);
+		if (ret)
+			ret = -EINVAL;
+		kunmap_local(vaddr);
+	} else
+		for (gfn = gfn_start, i = 0; gfn < gfn_start + npages; gfn++, i++)
+			clear_highpage(pfn_to_page(pfn + i));
+
+	return ret;
+}
+
 long kvm_gmem_populate(struct kvm *kvm, gfn_t start_gfn, void __user *src, long npages,
 		       kvm_gmem_populate_cb post_populate, void *opaque)
 {
