@@ -252,6 +252,7 @@ void mddev_create_serial_pool(struct mddev *mddev, struct md_rdev *rdev)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(mddev_create_serial_pool);
 
 /*
  * Free resource from rdev(s), and destroy serial_info_pool under conditions:
@@ -291,6 +292,7 @@ void mddev_destroy_serial_pool(struct mddev *mddev, struct md_rdev *rdev)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(mddev_destroy_serial_pool);
 
 static struct ctl_table_header *raid_table_header;
 
@@ -972,15 +974,7 @@ void md_super_write(struct mddev *mddev, struct md_rdev *rdev,
 	atomic_inc(&mddev->pending_writes);
 	submit_bio(bio);
 }
-
-int md_super_wait(struct mddev *mddev)
-{
-	/* wait for all superblock writes that were scheduled to complete */
-	wait_event(mddev->sb_wait, atomic_read(&mddev->pending_writes)==0);
-	if (test_and_clear_bit(MD_SB_NEED_REWRITE, &mddev->sb_flags))
-		return -EAGAIN;
-	return 0;
-}
+EXPORT_SYMBOL_GPL(md_super_write);
 
 int sync_page_io(struct md_rdev *rdev, sector_t sector, int size,
 		 struct page *page, blk_opf_t opf, bool metadata_op)
@@ -3793,6 +3787,7 @@ int strict_strtoul_scaled(const char *cp, unsigned long *res, int scale)
 	*res = result * int_pow(10, scale - decimals);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(strict_strtoul_scaled);
 
 static ssize_t
 safe_delay_show(struct mddev *mddev, char *page)
@@ -8556,6 +8551,7 @@ int md_setup_cluster(struct mddev *mddev, int nodes)
 		mddev->safemode_delay = 0;
 	return ret;
 }
+EXPORT_SYMBOL_GPL(md_setup_cluster);
 
 void md_cluster_stop(struct mddev *mddev)
 {
@@ -8564,6 +8560,7 @@ void md_cluster_stop(struct mddev *mddev)
 	md_cluster_ops->leave(mddev);
 	module_put(md_cluster_mod);
 }
+EXPORT_SYMBOL_GPL(md_cluster_stop);
 
 static int is_mddev_idle(struct mddev *mddev, int init)
 {

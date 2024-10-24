@@ -869,7 +869,6 @@ void md_free_cloned_bio(struct bio *bio);
 extern bool __must_check md_flush_request(struct mddev *mddev, struct bio *bio);
 extern void md_super_write(struct mddev *mddev, struct md_rdev *rdev,
 			   sector_t sector, int size, struct page *page);
-extern int md_super_wait(struct mddev *mddev);
 extern int sync_page_io(struct md_rdev *rdev, sector_t sector, int size,
 		struct page *page, blk_opf_t opf, bool metadata_op);
 extern void md_do_sync(struct md_thread *thread);
@@ -992,6 +991,15 @@ extern const struct block_device_operations md_fops;
 static inline bool mddev_is_dm(struct mddev *mddev)
 {
 	return !mddev->gendisk;
+}
+
+static inline int md_super_wait(struct mddev *mddev)
+{
+	/* wait for all superblock writes that were scheduled to complete */
+	wait_event(mddev->sb_wait, atomic_read(&mddev->pending_writes) == 0);
+	if (test_and_clear_bit(MD_SB_NEED_REWRITE, &mddev->sb_flags))
+		return -EAGAIN;
+	return 0;
 }
 
 static inline void mddev_trace_remap(struct mddev *mddev, struct bio *bio,
