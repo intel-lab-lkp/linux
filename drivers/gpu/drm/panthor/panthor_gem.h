@@ -46,6 +46,16 @@ struct panthor_gem_object {
 
 	/** @flags: Combination of drm_panthor_bo_flags flags. */
 	u32 flags;
+
+	/**
+	 * @cleaned: The buffer object pages have been cleaned.
+	 *
+	 * There could be dirty CPU cachelines for the pages of buffer object
+	 * after allocation, as shmem will zero out the pages. The cachelines
+	 * need to be cleaned if the pages are going to be accessed with an
+	 * uncached CPU mapping.
+	 */
+	bool cleaned;
 };
 
 /**

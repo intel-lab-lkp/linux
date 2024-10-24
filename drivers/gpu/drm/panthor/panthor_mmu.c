@@ -1242,6 +1242,11 @@ static int panthor_vm_prepare_map_op_ctx(struct panthor_vm_op_ctx *op_ctx,
 
 	op_ctx->map.sgt = sgt;
 
+	if (bo->base.map_wc && !bo->cleaned) {
+		dma_sync_sgtable_for_device(vm->ptdev->base.dev, sgt, DMA_TO_DEVICE);
+		bo->cleaned = true;
+	}
+
 	preallocated_vm_bo = drm_gpuvm_bo_create(&vm->base, &bo->base.base);
 	if (!preallocated_vm_bo) {
 		if (!bo->base.base.import_attach)
