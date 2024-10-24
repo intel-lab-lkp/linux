@@ -2404,6 +2404,9 @@ struct inode *nfs_alloc_inode(struct super_block *sb)
 #ifdef CONFIG_NFS_V4_2
 	nfsi->xattr_cache = NULL;
 #endif
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	nfsi->fh.inode_key = NULL;
+#endif
 	nfs_netfs_inode_init(nfsi);
 
 	return &nfsi->vfs_inode;

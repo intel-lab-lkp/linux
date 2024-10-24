@@ -117,7 +117,7 @@ EXPORT_SYMBOL_GPL(nfs_uuid_invalidate_one_client);
 
 struct nfsd_file *nfs_open_local_fh(nfs_uuid_t *uuid,
 		   struct rpc_clnt *rpc_clnt, const struct cred *cred,
-		   const struct nfs_fh *nfs_fh, const fmode_t fmode)
+		   struct nfs_fh *nfs_fh, const fmode_t fmode)
 {
 	struct net *net;
 	struct nfsd_file *localio;

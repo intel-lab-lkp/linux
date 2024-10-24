@@ -221,6 +221,9 @@ nfsd_file_alloc(struct net *net, struct inode *inode, unsigned char need,
 	INIT_LIST_HEAD(&nf->nf_gc);
 	nf->nf_birthtime = ktime_get();
 	nf->nf_file = NULL;
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	nf->nf_inodep = NULL;
+#endif
 	nf->nf_cred = get_current_cred();
 	nf->nf_net = net;
 	nf->nf_flags = want_gc ?
@@ -285,6 +288,12 @@ nfsd_file_free(struct nfsd_file *nf)
 		nfsd_file_check_write_error(nf);
 		nfsd_filp_close(nf->nf_file);
 	}
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	if (nf->nf_inodep) {
+		*(nf->nf_inodep) = NULL;
+		nf->nf_inodep = NULL;
+	}
+#endif
 
 	/*
 	 * If this item is still linked via nf_lru, that's a bug.
@@ -1254,6 +1263,75 @@ nfsd_file_acquire_local(struct net *net, struct svc_cred *cred,
 				     fhp, may_flags, NULL, pnf, true);
 	revert_creds(save_cred);
 	return beres;
+}
+
+/**
+ * nfsd_file_acquire_cached - Get cached GC'd open file using inode
+ * @net: The network namespace in which to perform a lookup
+ * @cred: the user credential with which to validate access
+ * @inode_key: inode to use as opaque lookup key
+ * @may_flags: NFSD_MAY_ settings for the file
+ * @pnf: OUT: found cached GC'd "struct nfsd_file" object
+ *
+ * Rather than make nfsd_file_do_acquire more complex (by training
+ * it to conditionally skip fh_verify(), nfsd_file allocation and
+ * contruction) duplicate the minimalist subset of it that is
+ * needed to achieve nfsd_file lookup using the opaque @inode_key.
+ *
+ * The nfsd_file object returned by this API is reference-counted
+ * and garbage-collected. The object is retained for a few
+ * seconds after the final nfsd_file_put() in case the caller
+ * wants to re-use it.
+ *
+ * Return values:
+ *   %nfs_ok - @pnf points to an nfsd_file with its reference
+ *   count boosted.
+ *
+ * On error, an nfsstat value in network byte order is returned.
+ */
+__be32
+nfsd_file_acquire_cached(struct net *net, const struct cred *cred,
+			 void *inode_key, unsigned int may_flags,
+			 struct nfsd_file **pnf)
+{
+	unsigned char need = may_flags & NFSD_FILE_MAY_MASK;
+	struct nfsd_file *nf;
+	__be32 status;
+
+	rcu_read_lock();
+	nf = nfsd_file_lookup_locked(net, cred, inode_key, need, true);
+	rcu_read_unlock();
+
+	if (unlikely(!nf))
+		return nfserr_noent;
+
+	/*
+	 * If the nf is on the LRU then it holds an extra reference
+	 * that must be put if it's removed. It had better not be
+	 * the last one however, since we should hold another.
+	 */
+	if (nfsd_file_lru_remove(nf))
+		WARN_ON_ONCE(refcount_dec_and_test(&nf->nf_ref));
+
+	if (WARN_ON_ONCE(test_bit(NFSD_FILE_PENDING, &nf->nf_flags) ||
+			 !test_bit(NFSD_FILE_HASHED, &nf->nf_flags))) {
+		status = nfserr_inval;
+		goto error;
+	}
+	this_cpu_inc(nfsd_file_cache_hits);
+
+	status = nfserrno(nfsd_open_break_lease(file_inode(nf->nf_file), may_flags));
+	if (status != nfs_ok) {
+error:
+		nfsd_file_put(nf);
+		nf = NULL;
+	} else {
+		this_cpu_inc(nfsd_file_acquisitions);
+		nfsd_file_check_write_error(nf);
+		*pnf = nf;
+	}
+	trace_nfsd_file_acquire(NULL, inode_key, may_flags, nf, status);
+	return status;
 }
 
 /**

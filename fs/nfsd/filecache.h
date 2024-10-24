@@ -47,6 +47,10 @@ struct nfsd_file {
 	struct list_head	nf_gc;
 	struct rcu_head		nf_rcu;
 	ktime_t			nf_birthtime;
+
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	void **			nf_inodep;
+#endif
 };
 
 int nfsd_file_cache_init(void);
@@ -71,5 +75,8 @@ __be32 nfsd_file_acquire_opened(struct svc_rqst *rqstp, struct svc_fh *fhp,
 __be32 nfsd_file_acquire_local(struct net *net, struct svc_cred *cred,
 			       struct auth_domain *client, struct svc_fh *fhp,
 			       unsigned int may_flags, struct nfsd_file **pnf);
+__be32 nfsd_file_acquire_cached(struct net *net, const struct cred *cred,
+			       void *inode_key, unsigned int may_flags,
+			       struct nfsd_file **pnf);
 int nfsd_file_cache_stats_show(struct seq_file *m, void *v);
 #endif /* _FS_NFSD_FILECACHE_H */

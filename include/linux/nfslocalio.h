@@ -42,7 +42,7 @@ void nfs_uuid_invalidate_one_client(nfs_uuid_t *nfs_uuid);
 /* localio needs to map filehandle -> struct nfsd_file */
 extern struct nfsd_file *
 nfsd_open_local_fh(struct net *, struct auth_domain *, struct rpc_clnt *,
-		   const struct cred *, const struct nfs_fh *,
+		   const struct cred *, struct nfs_fh *,
 		   const fmode_t) __must_hold(rcu);
 
 struct nfsd_localio_operations {
@@ -52,7 +52,7 @@ struct nfsd_localio_operations {
 						struct auth_domain *,
 						struct rpc_clnt *,
 						const struct cred *,
-						const struct nfs_fh *,
+						struct nfs_fh *,
 						const fmode_t);
 	void (*nfsd_file_put_local)(struct nfsd_file *);
 	struct file *(*nfsd_file_file)(struct nfsd_file *);
@@ -63,7 +63,7 @@ extern const struct nfsd_localio_operations *nfs_to;
 
 struct nfsd_file *nfs_open_local_fh(nfs_uuid_t *,
 		   struct rpc_clnt *, const struct cred *,
-		   const struct nfs_fh *, const fmode_t);
+		   struct nfs_fh *, const fmode_t);
 
 static inline void nfs_to_nfsd_file_put_local(struct nfsd_file *localio)
 {

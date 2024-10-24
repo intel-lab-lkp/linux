@@ -29,6 +29,10 @@
 struct nfs_fh {
 	unsigned short		size;
 	unsigned char		data[NFS_MAXFHSIZE];
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	/* 'inode_key' is an opaque key used for nfsd_file hash lookups */
+	void *			inode_key;
+#endif
 };
 
 /*

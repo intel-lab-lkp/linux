@@ -58,26 +58,50 @@ void nfsd_localio_ops_init(void)
 struct nfsd_file *
 nfsd_open_local_fh(struct net *net, struct auth_domain *dom,
 		   struct rpc_clnt *rpc_clnt, const struct cred *cred,
-		   const struct nfs_fh *nfs_fh, const fmode_t fmode)
+		   struct nfs_fh *nfs_fh, const fmode_t fmode)
 {
 	int mayflags = NFSD_MAY_LOCALIO;
 	struct svc_cred rq_cred;
 	struct svc_fh fh;
 	struct nfsd_file *localio;
+	void *nf_inode_key;
 	__be32 beres;
 
 	if (nfs_fh->size > NFS4_FHSIZE)
 		return ERR_PTR(-EINVAL);
 
-	/* nfs_fh -> svc_fh */
-	fh_init(&fh, NFS4_FHSIZE);
-	fh.fh_handle.fh_size = nfs_fh->size;
-	memcpy(fh.fh_handle.fh_raw, nfs_fh->data, nfs_fh->size);
-
 	if (fmode & FMODE_READ)
 		mayflags |= NFSD_MAY_READ;
 	if (fmode & FMODE_WRITE)
 		mayflags |= NFSD_MAY_WRITE;
+
+	/*
+	 * Check if 'inode_key' stored in @nfs_fh maps to an
+	 * open nfsd_file in the filecache (from a previous
+	 * nfsd_open_local_fh).
+	 *
+	 * The 'inode_key' may have become stale (due to nfsd_file
+	 * being free'd by filecache GC) so the lookup will fail
+	 * gracefully by falling back to using nfsd_file_acquire_local().
+	 */
+	nf_inode_key = READ_ONCE(nfs_fh->inode_key);
+	if (nf_inode_key) {
+		beres = nfsd_file_acquire_cached(net, cred,
+						 nf_inode_key,
+						 mayflags, &localio);
+		if (beres == nfs_ok)
+			return localio;
+		/*
+		 * reset stale nfs_fh->inode_key and fallthru
+		 * to use normal nfsd_file_acquire_local().
+		 */
+		nfs_fh->inode_key = NULL;
+	}
+
+	/* nfs_fh -> svc_fh */
+	fh_init(&fh, NFS4_FHSIZE);
+	fh.fh_handle.fh_size = nfs_fh->size;
+	memcpy(fh.fh_handle.fh_raw, nfs_fh->data, nfs_fh->size);
 
 	svcauth_map_clnt_to_svc_cred_local(rpc_clnt, cred, &rq_cred);
 
@@ -85,6 +109,16 @@ nfsd_open_local_fh(struct net *net, struct auth_domain *dom,
 					&fh, mayflags, &localio);
 	if (beres)
 		localio = ERR_PTR(nfs_stat_to_errno(be32_to_cpu(beres)));
+	else {
+		/*
+		 * opaque 'inode_key' has a 1:1 mapping to both an
+		 * nfsd_file and nfs_fh struct (And the nfs_fh is shared
+		 * by all NFS client threads. So there is no risk of
+		 * storing competing addresses in nfsd_file->nf_inodep
+		 */
+		localio->nf_inodep = (void **) &nfs_fh->inode_key;
+		nfs_fh->inode_key = localio->nf_inode;
+	}
 
 	fh_put(&fh);
 	if (rq_cred.cr_group_info)
