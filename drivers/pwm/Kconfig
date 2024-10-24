@@ -471,6 +471,16 @@ config PWM_NTXEC
 	  controller found in certain e-book readers designed by the original
 	  design manufacturer Netronix.
 
+config PWM_NCT6694
+	tristate "Nuvoton NCT6694 PWM support"
+	depends on MFD_NCT6694
+	help
+	If you say yes to this option, support will be included for Nuvoton
+	NCT6694, a USB device to PWM controller.
+
+	This driver can also be built as a module. If so, the module
+	will be called pwm-nct6694.
+
 config PWM_OMAP_DMTIMER
 	tristate "OMAP Dual-Mode Timer PWM support"
 	depends on OF
