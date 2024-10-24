@@ -194,7 +194,7 @@ static bool imx_scu_clk_is_valid(u32 rsrc_id)
 int imx_clk_scu_init(struct device_node *np,
 		     const struct imx_clk_scu_rsrc_table *data)
 {
-	u32 clk_cells;
+	u32 clk_cells = 0;
 	int ret, i;
 
 	ret = imx_scu_get_handle(&ccm_ipc_handle);
