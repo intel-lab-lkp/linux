@@ -106,7 +106,7 @@ struct dma_fence *__dma_fence_unwrap_merge(unsigned int num_fences,
 		fences[i] = dma_fence_unwrap_first(fences[i], &iter[i]);
 
 	count = 0;
-	do {
+	while (true) {
 		unsigned int sel;
 
 restart:
@@ -144,11 +144,40 @@ restart:
 			}
 		}
 
-		if (tmp) {
-			array[count++] = dma_fence_get(tmp);
-			fences[sel] = dma_fence_unwrap_next(&iter[sel]);
+		if (!tmp)
+			break;
+
+		/*
+		 * We could use a binary search here, but since the assumption
+		 * is that the main input are already sorted dma_fence_arrays
+		 * just looking from end has a higher chance of finding the
+		 * right location on the first try
+		 */
+
+		for (i = count; i--;) {
+			if (likely(array[i]->context < tmp->context))
+				break;
+
+			if (array[i]->context == tmp->context) {
+				if (dma_fence_is_later(tmp, array[i])) {
+					dma_fence_put(array[i]);
+					array[i] = dma_fence_get(tmp);
+				}
+				fences[sel] = dma_fence_unwrap_next(&iter[sel]);
+				goto restart;
+			}
 		}
-	} while (tmp);
+
+		++i;
+		/*
+		 * Make room for the fence, this should be a nop most of the
+		 * time.
+		 */
+		memcpy(&array[i + 1], &array[i], (count - i) * sizeof(*array));
+		array[i] = dma_fence_get(tmp);
+		fences[sel] = dma_fence_unwrap_next(&iter[sel]);
+		count++;
+	};
 
 	if (count == 0) {
 		tmp = dma_fence_allocate_private_stub(ktime_get());
