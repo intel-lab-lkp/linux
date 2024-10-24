@@ -255,8 +255,8 @@ static int of_coresight_parse_endpoint(struct device *dev,
 		else {
 			conn.filter_src_dev =
 			 coresight_find_csdev_by_fwnode(conn.filter_src_fwnode);
-			if (conn.filter_src_dev && (conn.filter_src_dev->type
-			    != CORESIGHT_DEV_TYPE_SOURCE))
+			if (conn.filter_src_dev &&
+				  !coresight_is_device_source(conn.filter_src_dev))
 				dev_warn(&conn.filter_src_dev->dev,
 				  "Filter source is not a source device\n");
 		}

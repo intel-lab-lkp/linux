@@ -83,7 +83,7 @@ static struct coresight_device *coresight_get_source(struct list_head *path)
 		return NULL;
 
 	csdev = list_first_entry(path, struct coresight_node, link)->csdev;
-	if (csdev->type != CORESIGHT_DEV_TYPE_SOURCE)
+	if (!coresight_is_device_source(csdev))
 		return NULL;
 
 	return csdev;
@@ -976,9 +976,8 @@ static int coresight_orphan_match(struct device *dev, void *data)
 		/* Fix filter source device before skip the port */
 		if (conn->filter_src_fwnode && !conn->filter_src_dev) {
 			if (dst_csdev && (conn->filter_src_fwnode
-			    == dst_csdev->dev.fwnode)
-			    && !WARN_ON_ONCE(dst_csdev->type
-			    != CORESIGHT_DEV_TYPE_SOURCE))
+			    == dst_csdev->dev.fwnode) && !WARN_ON_ONCE(
+			    !coresight_is_device_source(dst_csdev)))
 				conn->filter_src_dev = dst_csdev;
 			else
 				still_orphan = true;
@@ -1053,7 +1052,7 @@ static void coresight_remove_conns(struct coresight_device *csdev)
 	int i, j;
 	struct coresight_connection *conn;
 
-	if (csdev->type == CORESIGHT_DEV_TYPE_SOURCE)
+	if (coresight_is_device_source(csdev))
 		bus_for_each_dev(&coresight_bustype, NULL, csdev,
 				 coresight_clear_filter_source);
 
