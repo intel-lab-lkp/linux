@@ -55,6 +55,7 @@ MODULE_PARM_DESC(default_quality,
 static void drop_current_rng(void);
 static int hwrng_init(struct hwrng *rng);
 static int hwrng_fillfn(void *unused);
+static DECLARE_COMPLETION(setup_done);
 
 static inline int rng_get_data(struct hwrng *rng, u8 *buffer, size_t size,
 			       int wait);
@@ -465,6 +466,7 @@ static int hwrng_fillfn(void *unused)
 	size_t entropy, entropy_credit = 0; /* in 1/1024 of a bit */
 	long rc;
 
+	complete(&setup_done);
 	while (!kthread_should_stop()) {
 		unsigned short quality;
 		struct hwrng *rng;
@@ -662,12 +664,14 @@ static int __init hwrng_modinit(void)
 	if (ret)
 		goto err_miscdev;
 
-	hwrng_fill = kthread_create(hwrng_fillfn, NULL, "hwrng");
+	hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
 	if (IS_ERR(hwrng_fill)) {
 		ret = PTR_ERR(hwrng_fill);
 		pr_err("hwrng_fill thread creation failed (%d)\n", ret);
 		goto err_kthread;
 	}
+
+	wait_for_completion(&setup_done);
 
 	ret = kthread_park(hwrng_fill);
 	if (ret)
