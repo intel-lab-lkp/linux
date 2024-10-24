@@ -6442,6 +6442,30 @@ the capability to be present.
 
 `flags` must currently be zero.
 
+4.144 KVM_GUEST_MEMFD_POPULATE
+----------------------------
+
+:Capability: KVM_CAP_GUEST_MEMFD
+:Architectures: none
+:Type: vm ioctl
+:Parameters: struct kvm_guest_memfd_populate(in)
+:Returns: 0 if all requested pages populated, < 0 on error
+
+KVM_GUEST_MEMFD_POPULATE populates guest_memfd with data provided by userspace.
+
+::
+
+  struct kvm_guest_memfd_populate {
+  __u64 gpa;
+  __u64 size;
+  void __user *from;
+  __u64 flags;
+  };
+
+A gfn can only be populated once.  If a gfn is attempted to get populated
+multiple times without prior calls to fallocate(PUNCH_HOLE), subsequent calls
+will return EEXIST.
+If the `from` pointer is NULL, the pages are cleared.
 
 5. The kvm_run structure
 ========================
