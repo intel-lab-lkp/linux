@@ -37,6 +37,9 @@ properties:
     description: IRQ line for the ADC
     maxItems: 1
 
+  interrupt-gpios:
+    description: GPIO reading the interrupt line
+
   '#address-cells':
     const: 1
 
@@ -57,7 +60,12 @@ required:
   - reg
   - clocks
   - clock-names
-  - interrupts
+
+oneOf:
+  - required:
+      - interrupts
+  - required:
+      - interrupt-gpios
 
 patternProperties:
   "^channel@([0-9]|1[0-5])$":
@@ -119,8 +127,7 @@ examples:
         compatible = "adi,ad7124-4";
         reg = <0>;
         spi-max-frequency = <5000000>;
-        interrupts = <25 2>;
-        interrupt-parent = <&gpio>;
+        interrupt-gpios = <&gpio 25 2>;
         refin1-supply = <&adc_vref>;
         clocks = <&ad7124_mclk>;
         clock-names = "mclk";
