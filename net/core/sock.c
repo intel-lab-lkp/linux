@@ -1932,6 +1932,10 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		v.val = READ_ONCE(sk->sk_mark);
 		break;
 
+	case SO_RX_IFINDEX:
+		v.val = READ_ONCE(sk->sk_rx_dst_ifindex);
+		break;
+
 	case SO_RCVMARK:
 		v.val = sock_flag(sk, SOCK_RCVMARK);
 		break;

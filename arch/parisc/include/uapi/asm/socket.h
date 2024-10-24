@@ -140,6 +140,8 @@
 
 #define SCM_TS_OPT_ID		0x404C
 
+#define SO_RX_IFINDEX		82
+
 #if !defined(__KERNEL__)
 
 #if __BITS_PER_LONG == 64
