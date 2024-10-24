@@ -5159,8 +5159,25 @@ static long kvm_vm_ioctl(struct file *filp,
 	void __user *argp = (void __user *)arg;
 	int r;
 
-	if (kvm->mm != current->mm || kvm->vm_dead)
+	if (kvm->vm_dead)
 		return -EIO;
+
+#ifdef CONFIG_KVM_PRIVATE_MEM
+	if (ioctl == KVM_GUEST_MEMFD_POPULATE) {
+		struct kvm_guest_memfd_populate populate;
+
+		r = -EFAULT;
+		if (copy_from_user(&populate, argp, sizeof(populate)))
+			goto out;
+
+		r = kvm_gmem_guest_memfd_populate(kvm, &populate);
+		goto out;
+	}
+#endif
+
+	if (kvm->mm != current->mm)
+		return -EIO;
+
 	switch (ioctl) {
 	case KVM_CREATE_VCPU:
 		r = kvm_vm_ioctl_create_vcpu(kvm, arg);
@@ -5381,16 +5398,6 @@ static long kvm_vm_ioctl(struct file *filp,
 			goto out;
 
 		r = kvm_gmem_create(kvm, &guest_memfd);
-		break;
-	}
-	case KVM_GUEST_MEMFD_POPULATE: {
-		struct kvm_guest_memfd_populate populate;
-
-		r = -EFAULT;
-		if (copy_from_user(&populate, argp, sizeof(populate)))
-			goto out;
-
-		r = kvm_gmem_guest_memfd_populate(kvm, &populate);
 		break;
 	}
 #endif
