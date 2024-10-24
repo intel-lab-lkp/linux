@@ -942,10 +942,8 @@ static int nfc_genl_dep_link_up(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	idx = nla_get_u32(info->attrs[NFC_ATTR_DEVICE_INDEX]);
-	if (!info->attrs[NFC_ATTR_TARGET_INDEX])
-		tgt_idx = NFC_TARGET_IDX_ANY;
-	else
-		tgt_idx = nla_get_u32(info->attrs[NFC_ATTR_TARGET_INDEX]);
+	tgt_idx = nla_get_u32_default(info->attrs[NFC_ATTR_TARGET_INDEX],
+				      NFC_TARGET_IDX_ANY);
 
 	comm = nla_get_u8(info->attrs[NFC_ATTR_COMM_MODE]);
 

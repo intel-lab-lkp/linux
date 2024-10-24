@@ -601,15 +601,11 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	nlrule->action = frh->action;
 	nlrule->flags = frh->flags;
 	nlrule->table = frh_get_table(frh, tb);
-	if (tb[FRA_SUPPRESS_PREFIXLEN])
-		nlrule->suppress_prefixlen = nla_get_u32(tb[FRA_SUPPRESS_PREFIXLEN]);
-	else
-		nlrule->suppress_prefixlen = -1;
+	nlrule->suppress_prefixlen = nla_get_u32_default(tb[FRA_SUPPRESS_PREFIXLEN],
+							 -1);
 
-	if (tb[FRA_SUPPRESS_IFGROUP])
-		nlrule->suppress_ifgroup = nla_get_u32(tb[FRA_SUPPRESS_IFGROUP]);
-	else
-		nlrule->suppress_ifgroup = -1;
+	nlrule->suppress_ifgroup = nla_get_u32_default(tb[FRA_SUPPRESS_IFGROUP],
+						       -1);
 
 	if (tb[FRA_GOTO]) {
 		if (nlrule->action != FR_ACT_GOTO) {

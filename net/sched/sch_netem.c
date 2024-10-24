@@ -1059,10 +1059,8 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt,
 	/* capping jitter to the range acceptable by tabledist() */
 	q->jitter = min_t(s64, abs(q->jitter), INT_MAX);
 
-	if (tb[TCA_NETEM_PRNG_SEED])
-		q->prng.seed = nla_get_u64(tb[TCA_NETEM_PRNG_SEED]);
-	else
-		q->prng.seed = get_random_u64();
+	q->prng.seed = nla_get_u64_default(tb[TCA_NETEM_PRNG_SEED],
+					   get_random_u64());
 	prandom_seed_state(&q->prng.prng_state, q->prng.seed);
 
 unlock:

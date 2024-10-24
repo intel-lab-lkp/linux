@@ -2871,10 +2871,7 @@ static int do_setlink(const struct sk_buff *skb,
 			goto errout;
 		}
 
-		if (tb[IFLA_NEW_IFINDEX])
-			new_ifindex = nla_get_s32(tb[IFLA_NEW_IFINDEX]);
-		else
-			new_ifindex = 0;
+		new_ifindex = nla_get_s32_default(tb[IFLA_NEW_IFINDEX], 0);
 
 		err = __dev_change_net_namespace(dev, net, pat, new_ifindex);
 		put_net(net);

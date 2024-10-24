@@ -750,11 +750,8 @@ static int gred_init(struct Qdisc *sch, struct nlattr *opt,
 		return -EINVAL;
 	}
 
-	if (tb[TCA_GRED_LIMIT])
-		sch->limit = nla_get_u32(tb[TCA_GRED_LIMIT]);
-	else
-		sch->limit = qdisc_dev(sch)->tx_queue_len
-		             * psched_mtu(qdisc_dev(sch));
+	sch->limit = nla_get_u32_default(tb[TCA_GRED_LIMIT],
+					 qdisc_dev(sch)->tx_queue_len * psched_mtu(qdisc_dev(sch)));
 
 	if (qdisc_dev(sch)->netdev_ops->ndo_setup_tc) {
 		table->opt = kzalloc(sizeof(*table->opt), GFP_KERNEL);
