@@ -388,10 +388,11 @@ int minix_empty_dir(struct inode * inode)
 				if (!name[1]) {
 					if (inumber != inode->i_ino)
 						goto not_empty;
-				} else if (name[1] != '.')
+				} else if (name[1] != '.') {
 					goto not_empty;
-				else if (name[2])
+				} else if (name[2]) {
 					goto not_empty;
+				}
 			}
 		}
 		folio_release_kmap(folio, kaddr);
