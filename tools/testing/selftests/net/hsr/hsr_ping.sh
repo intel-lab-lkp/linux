@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: GPL-2.0
 
 ipv6=true
+vlan=false
 
 source ./hsr_common.sh
 
-optstring="h4"
+optstring="h4v"
 usage() {
 	echo "Usage: $0 [OPTION]"
 	echo -e "\t-4: IPv4 only: disable IPv6 tests (default: test both IPv4 and IPv6)"
+	echo -e "\t-v: Enable VLAN tests"
 }
 
 while getopts "$optstring" option;do
@@ -19,6 +21,9 @@ while getopts "$optstring" option;do
 		;;
 	"4")
 		ipv6=false
+		;;
+	"v")
+		vlan=true
 		;;
 	"?")
 		usage $0
@@ -175,6 +180,50 @@ setup_hsr_interfaces()
 	ip -net "$ns3" link set hsr3 up
 }
 
+setup_vlan_interfaces() {
+	ip link add link hsr1 name hsr1.2 type vlan id 2
+	ip link add link hsr1 name hsr1.3 type vlan id 3
+	ip link add link hsr1 name hsr1.4 type vlan id 4
+	ip link add link hsr1 name hsr1.5 type vlan id 5
+
+	ip link add link hsr2 name hsr2.2 type vlan id 2
+	ip link add link hsr2 name hsr2.3 type vlan id 3
+	ip link add link hsr2 name hsr2.4 type vlan id 4
+	ip link add link hsr2 name hsr2.5 type vlan id 5
+
+	ip link add link hsr3 name hsr3.2 type vlan id 2
+	ip link add link hsr3 name hsr3.3 type vlan id 3
+	ip link add link hsr3 name hsr3.4 type vlan id 4
+	ip link add link hsr3 name hsr3.5 type vlan id 5
+
+	ip -net "$ns1" addr add 100.64.2.1/24 dev hsr1.2
+	ip -net "$ns1" addr add 100.64.3.1/24 dev hsr1.3
+	ip -net "$ns1" addr add 100.64.4.1/24 dev hsr1.4
+	ip -net "$ns1" addr add 100.64.5.1/24 dev hsr1.5
+
+	ip -net "$ns2" addr add 100.64.2.2/24 dev hsr2.2
+	ip -net "$ns2" addr add 100.64.3.2/24 dev hsr2.3
+	ip -net "$ns2" addr add 100.64.4.2/24 dev hsr2.4
+	ip -net "$ns2" addr add 100.64.5.2/24 dev hsr2.5
+
+	ip -net "$ns3" addr add 100.64.2.3/24 dev hsr3.2
+	ip -net "$ns3" addr add 100.64.3.3/24 dev hsr3.3
+	ip -net "$ns3" addr add 100.64.4.3/24 dev hsr3.4
+	ip -net "$ns3" addr add 100.64.5.3/24 dev hsr3.5
+}
+
+hsr_vlan_ping() {
+	do_ping "$ns2" 100.64.2.1
+	do_ping "$ns2" 100.64.3.1
+	do_ping "$ns2" 100.64.4.1
+	do_ping "$ns2" 100.64.5.1
+
+	do_ping "$ns2" 100.64.2.3
+	do_ping "$ns2" 100.64.3.3
+	do_ping "$ns2" 100.64.4.3
+	do_ping "$ns2" 100.64.5.3
+}
+
 check_prerequisites
 setup_ns ns1 ns2 ns3
 
@@ -183,9 +232,21 @@ trap cleanup_all_ns EXIT
 setup_hsr_interfaces 0
 do_complete_ping_test
 
+# Run VLAN Test
+if $vlan; then
+	setup_vlan_interfaces
+	hsr_vlan_ping
+fi
+
 setup_ns ns1 ns2 ns3
 
 setup_hsr_interfaces 1
 do_complete_ping_test
+
+# Run VLAN Test
+if $vlan; then
+	setup_vlan_interfaces
+	hsr_vlan_ping
+fi
 
 exit $ret
