@@ -18,6 +18,7 @@ properties:
     enum:
       - allwinner,sun20i-d1-usb-phy
       - allwinner,sun50i-a64-usb-phy
+      - allwinner,sun50i-a100-usb-phy
 
   reg:
     items:
