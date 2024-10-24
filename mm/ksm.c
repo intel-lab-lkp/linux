@@ -1787,7 +1787,7 @@ static __always_inline struct folio *chain(struct ksm_stable_node **s_n_d,
  * with identical content to the page that we are scanning right now.
  *
  * This function returns the stable tree node of identical content if found,
- * NULL otherwise.
+ * -EBUSY if the stable node's page is being migrated, NULL otherwise.
  */
 static struct folio *stable_tree_search(struct page *page)
 {
@@ -2261,7 +2261,8 @@ static void cmp_and_merge_page(struct page *page, struct ksm_rmap_item *rmap_ite
 
 	/* Start by searching for the folio in the stable tree */
 	kfolio = stable_tree_search(page);
-	if (&kfolio->page == page && rmap_item->head == stable_node) {
+	if (!IS_ERR_OR_NULL(kfolio) && &kfolio->page == page &&
+	    rmap_item->head == stable_node) {
 		folio_put(kfolio);
 		return;
 	}
