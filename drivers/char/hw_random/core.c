@@ -87,15 +87,6 @@ static int set_current_rng(struct hwrng *rng)
 	drop_current_rng();
 	current_rng = rng;
 
-	/* if necessary, start hwrng thread */
-	if (!hwrng_fill) {
-		hwrng_fill = kthread_run(hwrng_fillfn, NULL, "hwrng");
-		if (IS_ERR(hwrng_fill)) {
-			pr_err("hwrng_fill thread creation failed\n");
-			hwrng_fill = NULL;
-		}
-	}
-
 	return 0;
 }
 
@@ -477,10 +468,17 @@ static int hwrng_fillfn(void *unused)
 	while (!kthread_should_stop()) {
 		unsigned short quality;
 		struct hwrng *rng;
+		if (kthread_should_park()) {
+			kthread_parkme();
+			continue;
+		}
 
 		rng = get_current_rng();
-		if (IS_ERR(rng) || !rng)
-			break;
+		if (IS_ERR(rng) || !rng) {
+			schedule();
+			continue;
+		}
+
 		mutex_lock(&reading_mutex);
 		rc = rng_get_data(rng, rng_fillbuf,
 				  rng_buffer_size(), 1);
@@ -508,12 +506,12 @@ static int hwrng_fillfn(void *unused)
 		add_hwgenerator_randomness((void *)rng_fillbuf, rc,
 					   entropy >> 10, true);
 	}
-	hwrng_fill = NULL;
 	return 0;
 }
 
 int hwrng_register(struct hwrng *rng)
 {
+	struct hwrng *old_rng;
 	int err = -EINVAL;
 	struct hwrng *tmp;
 
@@ -537,6 +535,7 @@ int hwrng_register(struct hwrng *rng)
 	/* Adjust quality field to always have a proper value */
 	rng->quality = min_t(u16, min_t(u16, default_quality, 1024), rng->quality ?: 1024);
 
+	old_rng = current_rng;
 	if (!current_rng ||
 	    (!cur_rng_set_by_user && rng->quality > current_rng->quality)) {
 		/*
@@ -549,6 +548,10 @@ int hwrng_register(struct hwrng *rng)
 			goto out_unlock;
 	}
 	mutex_unlock(&rng_mutex);
+
+	if (!old_rng && current_rng)
+		kthread_unpark(hwrng_fill);
+
 	return 0;
 out_unlock:
 	mutex_unlock(&rng_mutex);
@@ -575,15 +578,12 @@ void hwrng_unregister(struct hwrng *rng)
 	}
 
 	new_rng = get_current_rng_nolock();
-	if (list_empty(&rng_list)) {
-		mutex_unlock(&rng_mutex);
-		if (hwrng_fill)
-			kthread_stop(hwrng_fill);
-	} else
-		mutex_unlock(&rng_mutex);
+	mutex_unlock(&rng_mutex);
 
 	if (new_rng)
 		put_rng(new_rng);
+	else
+		kthread_park(hwrng_fill);
 
 	wait_for_completion(&rng->cleanup_done);
 }
@@ -647,7 +647,7 @@ EXPORT_SYMBOL_GPL(hwrng_yield);
 
 static int __init hwrng_modinit(void)
 {
-	int ret;
+	int ret = -ENOMEM;
 
 	/* kmalloc makes this safe for virt_to_page() in virtio_rng.c */
 	rng_buffer = kmalloc(rng_buffer_size(), GFP_KERNEL);
@@ -655,22 +655,41 @@ static int __init hwrng_modinit(void)
 		return -ENOMEM;
 
 	rng_fillbuf = kmalloc(rng_buffer_size(), GFP_KERNEL);
-	if (!rng_fillbuf) {
-		kfree(rng_buffer);
-		return -ENOMEM;
-	}
+	if (!rng_fillbuf)
+		goto err_fillbuf;
 
 	ret = misc_register(&rng_miscdev);
-	if (ret) {
-		kfree(rng_fillbuf);
-		kfree(rng_buffer);
+	if (ret)
+		goto err_miscdev;
+
+	hwrng_fill = kthread_create(hwrng_fillfn, NULL, "hwrng");
+	if (IS_ERR(hwrng_fill)) {
+		ret = PTR_ERR(hwrng_fill);
+		pr_err("hwrng_fill thread creation failed (%d)\n", ret);
+		goto err_kthread;
 	}
 
+	ret = kthread_park(hwrng_fill);
+	if (ret)
+		goto err_park;
+
+	return ret;
+
+err_park:
+	kthread_stop(hwrng_fill);
+err_kthread:
+	misc_deregister(&rng_miscdev);
+err_miscdev:
+	kfree(rng_buffer);
+err_fillbuf:
+	kfree(rng_buffer);
 	return ret;
 }
 
 static void __exit hwrng_modexit(void)
 {
+	kthread_stop(hwrng_fill);
+
 	mutex_lock(&rng_mutex);
 	BUG_ON(current_rng);
 	kfree(rng_buffer);
