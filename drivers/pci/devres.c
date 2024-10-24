@@ -438,8 +438,17 @@ static void pcim_intx_restore(struct device *dev, void *data)
 	__pcim_intx(pdev, res->orig_intx);
 }
 
-static struct pcim_intx_devres *get_or_create_intx_devres(struct device *dev)
+static void save_orig_intx(struct pci_dev *pdev, struct pcim_intx_devres *res)
 {
+	u16 pci_command;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
+	res->orig_intx = !(pci_command & PCI_COMMAND_INTX_DISABLE);
+}
+
+static struct pcim_intx_devres *get_or_create_intx_devres(struct pci_dev *pdev)
+{
+	struct device *dev = &pdev->dev;
 	struct pcim_intx_devres *res;
 
 	res = devres_find(dev, pcim_intx_restore, NULL, NULL);
@@ -447,8 +456,10 @@ static struct pcim_intx_devres *get_or_create_intx_devres(struct device *dev)
 		return res;
 
 	res = devres_alloc(pcim_intx_restore, sizeof(*res), GFP_KERNEL);
-	if (res)
+	if (res) {
+		save_orig_intx(pdev, res);
 		devres_add(dev, res);
+	}
 
 	return res;
 }
@@ -467,11 +478,10 @@ int pcim_intx(struct pci_dev *pdev, int enable)
 {
 	struct pcim_intx_devres *res;
 
-	res = get_or_create_intx_devres(&pdev->dev);
+	res = get_or_create_intx_devres(pdev);
 	if (!res)
 		return -ENOMEM;
 
-	res->orig_intx = !enable;
 	__pcim_intx(pdev, enable);
 
 	return 0;
