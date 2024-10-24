@@ -2221,7 +2221,7 @@ int pm_genpd_init(struct generic_pm_domain *genpd,
 	genpd_lock_init(genpd);
 	genpd->gov = gov;
 	INIT_WORK(&genpd->power_off_work, genpd_power_off_work_fn);
-	atomic_set(&genpd->sd_count, 0);
+	atomic_set(&genpd->sd_count, is_off ? 0 : 1);
 	genpd->status = is_off ? GENPD_STATE_OFF : GENPD_STATE_ON;
 	genpd->device_count = 0;
 	genpd->provider = NULL;
