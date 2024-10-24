@@ -185,6 +185,7 @@ static int __init efifb_set_system(const struct dmi_system_id *id)
 		&efifb_dmi_list[enumid]				\
 	}
 
+#ifdef CONFIG_EFI
 static const struct dmi_system_id efifb_dmi_system_table[] __initconst = {
 	EFIFB_DMI_SYSTEM_ID("Apple Computer, Inc.", "iMac4,1", M_I17),
 	/* At least one of these two will be right; maybe both? */
@@ -282,6 +283,7 @@ static const struct dmi_system_id efifb_dmi_swap_width_height[] __initconst = {
 	},
 	{},
 };
+#endif
 
 static bool efifb_overlaps_pci_range(const struct of_pci_range *range)
 {
@@ -342,10 +344,6 @@ static int efifb_add_links(struct fwnode_handle *fwnode)
 	return 0;
 }
 
-static const struct fwnode_operations efifb_fwnode_ops = {
-	.add_links = efifb_add_links,
-};
-
 #ifdef CONFIG_EFI
 static struct fwnode_handle efifb_fwnode;
 
@@ -364,6 +362,10 @@ __init void sysfb_apply_efi_quirks(void)
 		screen_info.lfb_linelength = 4 * screen_info.lfb_width;
 	}
 }
+
+static const struct fwnode_operations efifb_fwnode_ops = {
+	.add_links = efifb_add_links,
+};
 
 __init void sysfb_set_efifb_fwnode(struct platform_device *pd)
 {
