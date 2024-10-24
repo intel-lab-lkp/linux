@@ -1414,7 +1414,7 @@ TEST_F(mount_setattr_idmapped, idmap_mount_tree_invalid)
 	ASSERT_EQ(expected_uid_gid(-EBADF, "/tmp/B/b", 0, 0, 0), 0);
 	ASSERT_EQ(expected_uid_gid(-EBADF, "/tmp/B/BB/b", 0, 0, 0), 0);
 
-	open_tree_fd = sys_open_tree(-EBADF, "/mnt/A",
+	open_tree_fd = sys_open_tree(-EBADF, "/mnt/B",
 				     AT_RECURSIVE |
 				     AT_EMPTY_PATH |
 				     AT_NO_AUTOMOUNT |
