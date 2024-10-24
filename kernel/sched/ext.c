@@ -3151,31 +3151,85 @@ found:
 		goto retry;
 }
 
+/*
+ * Scheduling domain types used for idle CPU selection.
+ */
+enum scx_domain_type {
+	SCX_DOM_LLC,		/* Use the same last-level cache (LLC) */
+	SCX_DOM_NUMA,		/* Use the same NUMA node */
+};
+
 #ifdef CONFIG_SCHED_MC
 /*
- * Return the cpumask of CPUs usable by task @p in the same LLC domain of @cpu,
- * or NULL if the LLC domain cannot be determined.
+ * Return the cpumask of CPUs usable by task @p in the same domain of @cpu, or
+ * NULL if the domain cannot be determined.
  */
-static const struct cpumask *llc_domain(const struct task_struct *p, s32 cpu)
+static const struct cpumask *
+scx_domain(const struct task_struct *p, s32 cpu, enum scx_domain_type type)
 {
-	struct sched_domain *sd = rcu_dereference(per_cpu(sd_llc, cpu));
-	const struct cpumask *llc_cpus = sd ? sched_domain_span(sd) : NULL;
+	struct sched_domain *sd;
 
 	/*
-	 * Return the LLC domain only if the task is allowed to run on all
-	 * CPUs.
+	 * Determine the scheduling domain only if the task is allowed to run
+	 * on all CPUs.
+	 *
+	 * This is done primarily for efficiency, as it avoids the overhead of
+	 * updating a cpumask every time we need to select an idle CPU (which
+	 * can be costly in large SMP systems), but it also aligns logically:
+	 * if a task's scheduling domain is restricted by user-space (through
+	 * CPU affinity), the task will simply use the flat scheduling domain
+	 * defined by user-space.
 	 */
-	return p->nr_cpus_allowed == nr_cpu_ids ? llc_cpus : NULL;
+	if (p->nr_cpus_allowed < nr_cpu_ids)
+		return NULL;
+
+	switch (type) {
+	case SCX_DOM_LLC:
+		sd = rcu_dereference(per_cpu(sd_llc, cpu));
+		break;
+	case SCX_DOM_NUMA:
+		sd = rcu_dereference(per_cpu(sd_numa, cpu));
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		sd = NULL;
+	}
+	if (!sd)
+		return NULL;
+
+	return sched_domain_span(sd);
 }
 #else /* CONFIG_SCHED_MC */
-static inline const struct cpumask *llc_domain(struct task_struct *p, s32 cpu)
+static const struct cpumask *
+scx_domain(const struct task_struct *p, s32 cpu, enum scx_domain_type type)
 {
 	return NULL;
 }
 #endif /* CONFIG_SCHED_MC */
 
 /*
- * Built-in cpu idle selection policy.
+ * Built-in CPU idle selection policy:
+ *
+ * 1. Prioritize full-idle cores:
+ *   - always prioritize CPUs from fully idle cores (both logical CPUs are
+ *     idle) to avoid interference caused by SMT.
+ *
+ * 2. Reuse the same CPU:
+ *   - prefer the last used CPU to take advantage of cached data (L1, L2) and
+ *     branch prediction optimizations.
+ *
+ * 3. Pick a CPU within the same LLC (Last-Level Cache):
+ *   - if the above conditions aren't met, pick a CPU that shares the same LLC
+ *     to maintain cache locality.
+ *
+ * 4. Pick a CPU within the same NUMA Node:
+ *   - choose a CPU from the same NUMA node to reduce memory access latency.
+ *
+ * In most architectures the NUMA domain and LLC domain overlap. In this case,
+ * making an additional attempt to find an idle CPU within the same domain
+ * might seem redundant, but the overhead is minimal and it can be beneficial,
+ * as it increases the chance of selecting a close CPU that may have just
+ * become idle.
  *
  * NOTE: tasks that can only run on 1 CPU are excluded by this logic, because
  * we never call ops.select_cpu() for them, see select_task_rq().
@@ -3183,7 +3237,8 @@ static inline const struct cpumask *llc_domain(struct task_struct *p, s32 cpu)
 static s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu,
 			      u64 wake_flags, bool *found)
 {
-	const struct cpumask *llc_cpus = llc_domain(p, prev_cpu);
+	const struct cpumask *llc_cpus = scx_domain(p, prev_cpu, SCX_DOM_LLC);
+	const struct cpumask *numa_cpus = scx_domain(p, prev_cpu, SCX_DOM_NUMA);
 	s32 cpu;
 
 	*found = false;
@@ -3249,6 +3304,15 @@ static s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu,
 		}
 
 		/*
+		 * Search for any fully idle core in the same NUMA node.
+		 */
+		if (numa_cpus) {
+			cpu = scx_pick_idle_cpu(numa_cpus, SCX_PICK_IDLE_CORE);
+			if (cpu >= 0)
+				goto cpu_found;
+		}
+
+		/*
 		 * Search for any full idle core usable by the task.
 		 */
 		cpu = scx_pick_idle_cpu(p->cpus_ptr, SCX_PICK_IDLE_CORE);
@@ -3269,6 +3333,15 @@ static s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu,
 	 */
 	if (llc_cpus) {
 		cpu = scx_pick_idle_cpu(llc_cpus, 0);
+		if (cpu >= 0)
+			goto cpu_found;
+	}
+
+	/*
+	 * Search for any idle CPU in the same NUMA node.
+	 */
+	if (numa_cpus) {
+		cpu = scx_pick_idle_cpu(numa_cpus, 0);
 		if (cpu >= 0)
 			goto cpu_found;
 	}
