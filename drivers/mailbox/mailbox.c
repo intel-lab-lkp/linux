@@ -165,6 +165,22 @@ void mbox_chan_received_data(struct mbox_chan *chan, void *mssg)
 EXPORT_SYMBOL_GPL(mbox_chan_received_data);
 
 /**
+ * mbox_chan_received_data_bh - A way for controller driver to push data
+ *				received from remote to the upper layer.
+ * @chan: Pointer to the mailbox channel on which RX happened.
+ * @mssg: Client specific message typecasted as void *
+ *
+ * For the operations which is not atomic can be called from
+ * mbox_chan_received_data_bh().
+ */
+void mbox_chan_received_data_bh(struct mbox_chan *chan, void *mssg)
+{
+	if (chan->cl->rx_callback_bh)
+		chan->cl->rx_callback_bh(chan->cl, mssg);
+}
+EXPORT_SYMBOL_GPL(mbox_chan_received_data_bh);
+
+/**
  * mbox_chan_txdone - A way for controller driver to notify the
  *			framework that the last TX has completed.
  * @chan: Pointer to the mailbox chan on which TX happened.
