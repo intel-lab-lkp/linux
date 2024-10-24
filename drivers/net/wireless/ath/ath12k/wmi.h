@@ -3746,7 +3746,7 @@ struct wmi_stop_scan_cmd {
 struct ath12k_wmi_scan_chan_list_arg {
 	u32 pdev_id;
 	u16 nallchans;
-	struct ath12k_wmi_channel_arg channel[];
+	struct ath12k_wmi_channel_arg channel[] __counted_by(nallchans);
 };
 
 struct wmi_scan_chan_list_cmd {
