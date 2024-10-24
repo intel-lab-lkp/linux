@@ -942,6 +942,9 @@ struct fuse_mount {
 	/* Entry on fc->mounts */
 	struct list_head fc_entry;
 	struct rcu_head rcu;
+
+	/* Whether this is a submount */
+	bool submount;
 };
 
 static inline struct fuse_mount *get_fuse_mount_super(struct super_block *sb)
@@ -1225,14 +1228,42 @@ struct fuse_dev *fuse_dev_alloc_install(struct fuse_conn *fc);
 struct fuse_dev *fuse_dev_alloc(void);
 void fuse_dev_install(struct fuse_dev *fud, struct fuse_conn *fc);
 void fuse_dev_free(struct fuse_dev *fud);
-void fuse_send_init(struct fuse_mount *fm);
 
 /**
- * Fill in superblock and initialize fuse connection
+ * Send INIT request
+ * @fm: FUSE mount
+ * @await_reply: If true, send a synchronous request, awaiting the server's
+ *		 reply.  Otherwise, just submit the request, not awaiting a
+ *		 reply; it will then be processed in the background once it
+ *		 arrives.
+ */
+void fuse_send_init(struct fuse_mount *fm, bool await_reply);
+
+/**
+ * Query the root inode's mode via GETATTR from the server; for use with
+ * fuse_make_root_inode()
+ * @fm: FUSE mount
+ * @rootmode: on success, receives the root inode's mode
+ */
+int fuse_get_rootmode(struct fuse_mount *fm, unsigned int *rootmode);
+
+/**
+ * Fill in superblock, without creating the root inode
  * @sb: partially-initialized superblock to fill in
  * @ctx: mount context
  */
 int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx);
+
+/**
+ * Create the root inode and initialize fuse connection, completing
+ * initialization of the superblock
+ * @sb: almost-initialized superblock (from fuse_fill_super_common()) to
+ *	complete
+ * @ctx: mount context
+ * @mode: inode mode of the root inode
+ */
+int fuse_make_root_inode(struct super_block *sb, struct fuse_fs_context *ctx,
+			 unsigned int mode);
 
 /*
  * Remove the mount from the connection

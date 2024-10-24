@@ -1547,6 +1547,7 @@ static int virtio_fs_fill_super(struct super_block *sb, struct fs_context *fsc)
 	struct virtio_fs *fs = fc->iq.priv;
 	struct fuse_fs_context *ctx = fsc->fs_private;
 	unsigned int i;
+	unsigned int rootmode;
 	int err;
 
 	virtio_fs_ctx_set_defaults(ctx);
@@ -1583,6 +1584,12 @@ static int virtio_fs_fill_super(struct super_block *sb, struct fs_context *fsc)
 		}
 		ctx->dax_dev = fs->dax_dev;
 	}
+
+	/*
+	 * Begin sb initialization, fuse_send_init() and process_init_reply()
+	 * need it.  Cannot create the root inode yet, we need to wait for the
+	 * INIT reply to know its inode mode.
+	 */
 	err = fuse_fill_super_common(sb, ctx);
 	if (err < 0)
 		goto err_free_fuse_devs;
@@ -1595,12 +1602,27 @@ static int virtio_fs_fill_super(struct super_block *sb, struct fs_context *fsc)
 
 	/* Previous unmount will stop all queues. Start these again */
 	virtio_fs_start_all_queues(fs);
-	fuse_send_init(fm);
+	fuse_send_init(fm, true);
+
+	err = fuse_get_rootmode(fm, &rootmode);
+	/* On error, fall back to the default (probably S_IFDIR) */
+	if (err < 0)
+		rootmode = ctx->rootmode;
+
+	err = fuse_make_root_inode(sb, ctx, rootmode);
+	if (err < 0)
+		goto err_free_fuse_devs;
+
 	mutex_unlock(&virtio_fs_mutex);
 	return 0;
 
 err_free_fuse_devs:
-	virtio_fs_free_devs(fs);
+	/*
+	 * After INIT, virtio_fs_conn_destroy() will be called by
+	 * virtio_kill_sb(), so there is no need to clean up here
+	 */
+	if (!fc->initialized)
+		virtio_fs_free_devs(fs);
 err:
 	mutex_unlock(&virtio_fs_mutex);
 	return err;
@@ -1641,8 +1663,16 @@ static void virtio_kill_sb(struct super_block *sb)
 	struct fuse_mount *fm = get_fuse_mount_super(sb);
 	bool last;
 
-	/* If mount failed, we can still be called without any fc */
-	if (sb->s_root) {
+	/*
+	 * Only destroy the connection after full initialization, i.e.
+	 * once s_root is set (see commit d534d31d6a45d).
+	 * One exception: For virtio-fs, we call INIT before s_root is
+	 * set so we can determine the root node's mode.  We must call
+	 * DESTROY after INIT.  So if an error occurs during that time
+	 * window (specifically in fuse_make_root_inode()), we still
+	 * need to call virtio_fs_conn_destroy() here.
+	 */
+	if (sb->s_root || (fm->fc && fm->fc->initialized && !fm->submount)) {
 		last = fuse_mount_remove(fm);
 		if (last)
 			virtio_fs_conn_destroy(fm);

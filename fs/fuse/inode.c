@@ -1380,10 +1380,11 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 	wake_up_all(&fc->blocked_waitq);
 }
 
-void fuse_send_init(struct fuse_mount *fm)
+void fuse_send_init(struct fuse_mount *fm, bool await_reply)
 {
 	struct fuse_init_args *ia;
 	u64 flags;
+	ssize_t ret;
 
 	ia = kzalloc(sizeof(*ia), GFP_KERNEL | __GFP_NOFAIL);
 
@@ -1433,7 +1434,18 @@ void fuse_send_init(struct fuse_mount *fm)
 	ia->args.nocreds = true;
 	ia->args.end = process_init_reply;
 
-	if (fuse_simple_background(fm, &ia->args, GFP_KERNEL) != 0)
+	if (await_reply)
+		ret = fuse_simple_request(fm, &ia->args);
+	else
+		ret = fuse_simple_background(fm, &ia->args, GFP_KERNEL);
+
+	/*
+	 * Errors from fuse_simple_request() may mean that we failed to submit
+	 * the request, or may be error codes from the server, which would have
+	 * been processed already.  Either way, ensure that we always call
+	 * process_init_reply() at least once.
+	 */
+	if (ret < 0)
 		process_init_reply(fm, &ia->args, -ENOTCONN);
 }
 EXPORT_SYMBOL_GPL(fuse_send_init);
@@ -1655,6 +1667,7 @@ static int fuse_get_tree_submount(struct fs_context *fsc)
 	if (!fm)
 		return -ENOMEM;
 
+	fm->submount = true;
 	fm->fc = fuse_conn_get(fc);
 	fsc->s_fs_info = fm;
 	sb = sget_fc(fsc, NULL, set_anon_super_fc);
@@ -1696,8 +1709,6 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	struct fuse_dev *fud = NULL;
 	struct fuse_mount *fm = get_fuse_mount_super(sb);
 	struct fuse_conn *fc = fm->fc;
-	struct inode *root;
-	struct dentry *root_dentry;
 	int err;
 
 	err = -EINVAL;
@@ -1754,34 +1765,14 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	fc->no_control = ctx->no_control;
 	fc->no_force_umount = ctx->no_force_umount;
 
-	err = -ENOMEM;
-	root = fuse_get_root_inode(sb, ctx->rootmode);
-	sb->s_d_op = &fuse_root_dentry_operations;
-	root_dentry = d_make_root(root);
-	if (!root_dentry)
-		goto err_dev_free;
-	/* Root dentry doesn't have .d_revalidate */
-	sb->s_d_op = &fuse_dentry_operations;
-
-	mutex_lock(&fuse_mutex);
 	err = -EINVAL;
-	if (ctx->fudptr && *ctx->fudptr)
-		goto err_unlock;
-
-	err = fuse_ctl_add_conn(fc);
-	if (err)
-		goto err_unlock;
-
-	list_add_tail(&fc->entry, &fuse_conn_list);
-	sb->s_root = root_dentry;
-	if (ctx->fudptr)
+	if (ctx->fudptr) {
+		if (*ctx->fudptr)
+			goto err_dev_free;
 		*ctx->fudptr = fud;
-	mutex_unlock(&fuse_mutex);
+	}
 	return 0;
 
- err_unlock:
-	mutex_unlock(&fuse_mutex);
-	dput(root_dentry);
  err_dev_free:
 	if (fud)
 		fuse_dev_free(fud);
@@ -1792,6 +1783,48 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	return err;
 }
 EXPORT_SYMBOL_GPL(fuse_fill_super_common);
+
+int fuse_make_root_inode(struct super_block *sb, struct fuse_fs_context *ctx,
+			 unsigned int mode)
+{
+	struct fuse_mount *fm = get_fuse_mount_super(sb);
+	struct fuse_conn *fc = fm->fc;
+	struct inode *root;
+	struct dentry *root_dentry;
+	int err;
+
+	err = -ENOMEM;
+	root = fuse_get_root_inode(sb, mode);
+	sb->s_d_op = &fuse_root_dentry_operations;
+	root_dentry = d_make_root(root);
+	if (!root_dentry)
+		goto err_dev_free;
+	/* Root dentry doesn't have .d_revalidate */
+	sb->s_d_op = &fuse_dentry_operations;
+
+	mutex_lock(&fuse_mutex);
+	err = fuse_ctl_add_conn(fc);
+	if (err)
+		goto err_unlock;
+
+	list_add_tail(&fc->entry, &fuse_conn_list);
+	sb->s_root = root_dentry;
+	mutex_unlock(&fuse_mutex);
+	return 0;
+
+ err_unlock:
+	mutex_unlock(&fuse_mutex);
+	dput(root_dentry);
+ err_dev_free:
+	if (ctx->fudptr && *ctx->fudptr) {
+		fuse_dev_free(*ctx->fudptr);
+		*ctx->fudptr = NULL;
+	}
+	if (IS_ENABLED(CONFIG_FUSE_DAX))
+		fuse_dax_conn_free(fc);
+	return err;
+}
+EXPORT_SYMBOL_GPL(fuse_make_root_inode);
 
 static int fuse_fill_super(struct super_block *sb, struct fs_context *fsc)
 {
@@ -1814,9 +1847,12 @@ static int fuse_fill_super(struct super_block *sb, struct fs_context *fsc)
 	err = fuse_fill_super_common(sb, ctx);
 	if (err)
 		return err;
+	err = fuse_make_root_inode(sb, ctx, ctx->rootmode);
+	if (err)
+		return err;
 	/* file->private_data shall be visible on all CPUs after this */
 	smp_mb();
-	fuse_send_init(get_fuse_mount_super(sb));
+	fuse_send_init(get_fuse_mount_super(sb), false);
 	return 0;
 }
 
