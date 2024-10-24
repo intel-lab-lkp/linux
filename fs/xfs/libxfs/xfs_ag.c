@@ -238,15 +238,36 @@ xfs_ag_block_count(
 			mp->m_sb.sb_dblocks);
 }
 
-/* Calculate the first and last possible inode number in an AG. */
+/*
+ * Calculate the first and last possible inode number in an AG.
+ *
+ * Due to a bug in sparse inode allocation for the runt AG at the end of the
+ * filesystem, we can have a valid sparse inode chunk on disk that spans beyond
+ * the end of the AG. Sparse inode chunks have special alignment - the full
+ * chunk must always be naturally aligned, and the regions that are allocated
+ * sparsely are cluster sized and aligned.
+ *
+ * The result of this is that for sparse inode setups, sb->sb_inoalignmt is
+ * always the size of the chunk, and that means M_IGEO(mp)->cluster_align isn't
+ * actually cluster alignment, it is chunk alignment. That means a sparse inode
+ * cluster that overlaps the end of the AG can never be valid based on "cluster
+ * alignment" even though all the inodes allocated within the sparse chunk at
+ * within the valid bounds of the AG and so can be used.
+ *
+ * Hence for the runt AG, the valid maximum inode number is based on sparse
+ * inode cluster alignment (sb->sb_spino_align) and not the "cluster alignment"
+ * value.
+ */
 static void
 __xfs_agino_range(
 	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
 	xfs_agblock_t		eoag,
 	xfs_agino_t		*first,
 	xfs_agino_t		*last)
 {
 	xfs_agblock_t		bno;
+	xfs_agblock_t		end_align;
 
 	/*
 	 * Calculate the first inode, which will be in the first
@@ -259,7 +280,12 @@ __xfs_agino_range(
 	 * Calculate the last inode, which will be at the end of the
 	 * last (aligned) cluster that can be allocated in the AG.
 	 */
-	bno = round_down(eoag, M_IGEO(mp)->cluster_align);
+	if (xfs_has_sparseinodes(mp) && agno == mp->m_sb.sb_agcount - 1)
+		end_align = mp->m_sb.sb_spino_align;
+	else
+		end_align = M_IGEO(mp)->cluster_align;
+
+	bno = round_down(eoag, end_align);
 	*last = XFS_AGB_TO_AGINO(mp, bno) - 1;
 }
 
@@ -270,7 +296,8 @@ xfs_agino_range(
 	xfs_agino_t		*first,
 	xfs_agino_t		*last)
 {
-	return __xfs_agino_range(mp, xfs_ag_block_count(mp, agno), first, last);
+	return __xfs_agino_range(mp, agno, xfs_ag_block_count(mp, agno),
+			first, last);
 }
 
 int
@@ -284,7 +311,7 @@ xfs_update_last_ag_size(
 		return -EFSCORRUPTED;
 	pag->block_count = __xfs_ag_block_count(mp, prev_agcount - 1,
 			mp->m_sb.sb_agcount, mp->m_sb.sb_dblocks);
-	__xfs_agino_range(mp, pag->block_count, &pag->agino_min,
+	__xfs_agino_range(mp, pag->pag_agno, pag->block_count, &pag->agino_min,
 			&pag->agino_max);
 	xfs_perag_rele(pag);
 	return 0;
@@ -345,8 +372,8 @@ xfs_initialize_perag(
 		pag->block_count = __xfs_ag_block_count(mp, index, new_agcount,
 				dblocks);
 		pag->min_block = XFS_AGFL_BLOCK(mp);
-		__xfs_agino_range(mp, pag->block_count, &pag->agino_min,
-				&pag->agino_max);
+		__xfs_agino_range(mp, pag->pag_agno, pag->block_count,
+				&pag->agino_min, &pag->agino_max);
 	}
 
 	index = xfs_set_inode_alloc(mp, new_agcount);
@@ -932,8 +959,8 @@ xfs_ag_shrink_space(
 
 	/* Update perag geometry */
 	pag->block_count -= delta;
-	__xfs_agino_range(pag->pag_mount, pag->block_count, &pag->agino_min,
-				&pag->agino_max);
+	__xfs_agino_range(mp, pag->pag_agno, pag->block_count,
+				&pag->agino_min, &pag->agino_max);
 
 	xfs_ialloc_log_agi(*tpp, agibp, XFS_AGI_LENGTH);
 	xfs_alloc_log_agf(*tpp, agfbp, XFS_AGF_LENGTH);
@@ -1003,8 +1030,8 @@ xfs_ag_extend_space(
 
 	/* Update perag geometry */
 	pag->block_count = be32_to_cpu(agf->agf_length);
-	__xfs_agino_range(pag->pag_mount, pag->block_count, &pag->agino_min,
-				&pag->agino_max);
+	__xfs_agino_range(pag->pag_mount, pag->pag_agno, pag->block_count,
+				&pag->agino_min, &pag->agino_max);
 	return 0;
 }
 

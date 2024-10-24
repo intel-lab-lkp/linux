@@ -108,22 +108,36 @@ xfs_inobt_rec_freecount(
 	return hweight64(realfree);
 }
 
+/* Compute the highest allocated inode in an incore inode record. */
+static xfs_agino_t
+xfs_inobt_rec_highino(
+	const struct xfs_inobt_rec_incore	*irec)
+{
+	if (xfs_inobt_issparse(irec->ir_holemask))
+		return xfs_highbit64(xfs_inobt_irec_to_allocmask(irec));
+	return XFS_INODES_PER_CHUNK;
+}
+
 /* Simple checks for inode records. */
 xfs_failaddr_t
 xfs_inobt_check_irec(
 	struct xfs_perag			*pag,
 	const struct xfs_inobt_rec_incore	*irec)
 {
+	xfs_agino_t	high_ino = xfs_inobt_rec_highino(irec);
+
 	/* Record has to be properly aligned within the AG. */
 	if (!xfs_verify_agino(pag, irec->ir_startino))
 		return __this_address;
-	if (!xfs_verify_agino(pag,
-				irec->ir_startino + XFS_INODES_PER_CHUNK - 1))
+
+	if (!xfs_verify_agino(pag, irec->ir_startino + high_ino - 1))
 		return __this_address;
+
 	if (irec->ir_count < XFS_INODES_PER_HOLEMASK_BIT ||
 	    irec->ir_count > XFS_INODES_PER_CHUNK)
 		return __this_address;
-	if (irec->ir_freecount > XFS_INODES_PER_CHUNK)
+
+	if (irec->ir_freecount > irec->ir_count)
 		return __this_address;
 
 	if (xfs_inobt_rec_freecount(irec) != irec->ir_freecount)
