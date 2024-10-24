@@ -569,15 +569,15 @@ static const struct regmap_config ad7380_regmap_config = {
 static int ad7380_debugfs_reg_access(struct iio_dev *indio_dev, u32 reg,
 				     u32 writeval, u32 *readval)
 {
-	iio_device_claim_direct_scoped(return  -EBUSY, indio_dev) {
-		struct ad7380_state *st = iio_priv(indio_dev);
+	struct ad7380_state *st = iio_priv(indio_dev);
 
-		if (readval)
-			return regmap_read(st->regmap, reg, readval);
-		else
-			return regmap_write(st->regmap, reg, writeval);
-	}
-	unreachable();
+	if_not_cond_guard(iio_claim_direct_try, indio_dev)
+		return -EBUSY;
+
+	if (readval)
+		return regmap_read(st->regmap, reg, readval);
+
+	return regmap_write(st->regmap, reg, writeval);
 }
 
 /*
@@ -819,12 +819,12 @@ static int ad7380_read_raw(struct iio_dev *indio_dev,
 		return PTR_ERR(scan_type);
 
 	switch (info) {
-	case IIO_CHAN_INFO_RAW:
-		iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
-			return ad7380_read_direct(st, chan->scan_index,
-						  scan_type, val);
-		}
-		unreachable();
+	case IIO_CHAN_INFO_RAW: {
+		if_not_cond_guard(iio_claim_direct_try, indio_dev)
+			return -EBUSY;
+
+		return ad7380_read_direct(st, chan->scan_index, scan_type, val);
+	}
 	case IIO_CHAN_INFO_SCALE:
 		/*
 		 * According to the datasheet, the LSB size is:
@@ -901,7 +901,7 @@ static int ad7380_write_raw(struct iio_dev *indio_dev,
 	int ret, osr, boost;
 
 	switch (mask) {
-	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+	case IIO_CHAN_INFO_OVERSAMPLING_RATIO: {
 		osr = ad7380_osr_to_regval(val);
 		if (osr < 0)
 			return osr;
@@ -909,31 +909,31 @@ static int ad7380_write_raw(struct iio_dev *indio_dev,
 		/* always enable resolution boost when oversampling is enabled */
 		boost = osr > 0 ? 1 : 0;
 
-		iio_device_claim_direct_scoped(return -EBUSY, indio_dev) {
-			ret = regmap_update_bits(st->regmap,
-					AD7380_REG_ADDR_CONFIG1,
-					AD7380_CONFIG1_OSR | AD7380_CONFIG1_RES,
-					FIELD_PREP(AD7380_CONFIG1_OSR, osr) |
-					FIELD_PREP(AD7380_CONFIG1_RES, boost));
+		if_not_cond_guard(iio_claim_direct_try, indio_dev)
+			return -EBUSY;
 
-			if (ret)
-				return ret;
+		ret = regmap_update_bits(st->regmap,
+					 AD7380_REG_ADDR_CONFIG1,
+					 AD7380_CONFIG1_OSR | AD7380_CONFIG1_RES,
+					 FIELD_PREP(AD7380_CONFIG1_OSR, osr) |
+					 FIELD_PREP(AD7380_CONFIG1_RES, boost));
 
-			st->oversampling_ratio = val;
-			st->resolution_boost_enabled = boost;
+		if (ret)
+			return ret;
 
-			/*
-			 * Perform a soft reset. This will flush the oversampling
-			 * block and FIFO but will maintain the content of the
-			 * configurable registers.
-			 */
-			return regmap_update_bits(st->regmap,
-					AD7380_REG_ADDR_CONFIG2,
-					AD7380_CONFIG2_RESET,
-					FIELD_PREP(AD7380_CONFIG2_RESET,
-						   AD7380_CONFIG2_RESET_SOFT));
-		}
-		unreachable();
+		st->oversampling_ratio = val;
+		st->resolution_boost_enabled = boost;
+
+		/*
+		 * Perform a soft reset. This will flush the oversampling block
+		 * and FIFO but will maintain the content of the configurable
+		 * registers.
+		 */
+		return regmap_update_bits(st->regmap, AD7380_REG_ADDR_CONFIG2,
+					  AD7380_CONFIG2_RESET,
+					  FIELD_PREP(AD7380_CONFIG2_RESET,
+						     AD7380_CONFIG2_RESET_SOFT));
+	}
 	default:
 		return -EINVAL;
 	}
