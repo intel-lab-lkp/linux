@@ -1169,6 +1169,37 @@ static int mos7840_calc_baud_rate_divisor(struct usb_serial_port *port,
 		*divisor = 0x01;		// DLM=0, DLL=0x01
 		*clk_sel_val = 0x60;	// clock source=24M
 
+	/* below are using 96M or 30M clock source
+	 * will determine the clock source later
+	 * in function mos7840_send_cmd_write_baud_rate
+	 */
+	} else if (baudRate == 6000000) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 96M
+	} else if (baudRate == 2000000) {
+		*divisor = 0x03;		// DLM=0, DLL=0x03
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 96M
+	} else if (baudRate == 403200) {
+		*divisor = 0x0f;		// DLM=0, DLL=0x0f
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 96M
+	} else if (baudRate == 225000) {
+		*divisor = 0x1b;		// DLM=0, DLL=0x1b
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 96M
+	} else if (baudRate == 153600) {
+		*divisor = 0x27;		// DLM=0, DLL=0x27
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 96M
+
+	} else if (baudRate == 10000) {
+		*divisor = 0xbb;		// DLM=0, DLL=0xbb
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 30M
+	} else if (baudRate == 125000) {
+		*divisor = 0x0f;		// DLM=0, DLL=0x0f
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 30M
+	} else if (baudRate == 625000) {
+		*divisor = 0x03;		// DLM=0, DLL=0x03
+		*clk_sel_val = 0x80;	// DUMMY val, clock source = 30M
+
+
 	} else if (baudRate <= 115200) {
 		*divisor = 115200 / baudRate;
 		*clk_sel_val = 0x0;
@@ -1246,11 +1277,134 @@ static int mos7840_send_cmd_write_baud_rate(struct moschip_port *mos7840_port,
 
 	}
 
-	if (1) {		/* baudRate <= 115200) */
+	if (1) {
 		clk_sel_val = 0x0;
 		Data = 0x0;
 		status = mos7840_calc_baud_rate_divisor(port, baudRate, &divisor,
 						   &clk_sel_val);
+		if (status < 0) {
+			dev_dbg(&port->dev, "%s failed in set_serial_baud\n", __func__);
+			return -1;
+		}
+
+		/* Write clk_sel_val to SP_Reg or Clk_Select_Reg*/
+		// check clk_sel_val before setting the clk_sel_val
+		if (clk_sel_val == 0x80) {
+		// clk_sel_val is DUMMY value -> Write the corresponding value to Clk_Select_Reg
+			// 0x01:30M, 0x02:96M, 0x05:External Clock
+			if (baudRate == 125000 || baudRate == 625000 || baudRate == 10000) {
+				clk_sel_val = 0x01;
+			} else if (baudRate == 153600 || baudRate == 225000 || baudRate == 403200 ||
+					baudRate == 2000000 || baudRate == 6000000) {
+				clk_sel_val = 0x02;
+			} else {
+				clk_sel_val = 0x05; // externel clk for custom case.
+			}
+
+			// needs to set clock source through
+			// Clk_Select_Reg1(offset 0x13) & Clk_Select_Reg2(offset 0x14)
+			// Clk_Select_Reg1 for port1,2		Clk_Select_Reg2 for port3,4
+			if (mos7840_port->port_num <= 2) {
+				status = mos7840_get_reg_sync(port, CLOCK_SELECT_REG1, &Data);
+				if (status < 0) {
+					dev_dbg(&port->dev, "reading Clk_Select_Reg failed in set_serial_baud\n");
+					return -1;
+				}
+				if (mos7840_port->port_num == 1) {
+					Data = (Data & 0xf8) | clk_sel_val;
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG1, Data);
+				} else if (mos7840_port->port_num == 2) {
+					Data = (Data & 0xc7) | (clk_sel_val<<3);
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG1, Data);
+				}
+				if (status < 0) {
+					dev_dbg(&port->dev, "setting Clk_Select_Reg failed\n");
+					return -1;
+				}
+			} else if (mos7840_port->port_num <= 4) {
+				status = mos7840_get_reg_sync(port, CLOCK_SELECT_REG2, &Data);
+				if (status < 0) {
+					dev_dbg(&port->dev, "reading Clk_Select_Reg failed in set_serial_baud\n");
+					return -1;
+				}
+				if (mos7840_port->port_num == 3) {
+					Data = (Data & 0xf8) | clk_sel_val;
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG2, Data);
+				} else if (mos7840_port->port_num == 4) {
+					Data = (Data & 0xc7) | (clk_sel_val<<3);
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG2, Data);
+				}
+				if (status < 0) {
+					dev_dbg(&port->dev, "setting Clk_Select_Reg failed\n");
+					return -1;
+				}
+			}
+		} else {
+		// clk_sel_val is not DUMMY value -> Write the corresponding value to SP_Reg
+
+			/* First, needs to write default value to
+			 * Clk_Select_Reg1(offset 0x13) & Clk_Select_Reg2(offset 0x14)
+			 * Clk_Select_Reg1 for port1,2		Clk_Select_Reg2 for port3,4
+			 */
+			if (mos7840_port->port_num <= 2) {
+				status = mos7840_get_reg_sync(port, CLOCK_SELECT_REG1, &Data);
+				if (status < 0) {
+					dev_dbg(&port->dev, "reading Clk_Select_Reg failed in set_serial_baud\n");
+					return -1;
+				}
+				if (mos7840_port->port_num == 1) {
+					Data = (Data & 0xf8) | 0x00;
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG1, Data);
+				} else if (mos7840_port->port_num == 2) {
+					Data = (Data & 0xc7) | (0x00<<3);
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG1, Data);
+				}
+				if (status < 0) {
+					dev_dbg(&port->dev, "setting Clk_Select_Reg failed\n");
+					return -1;
+				}
+			} else if (mos7840_port->port_num <= 4) {
+				status = mos7840_get_reg_sync(port, CLOCK_SELECT_REG2, &Data);
+				if (status < 0) {
+					dev_dbg(&port->dev, "reading Clk_Select_Reg failed in set_serial_baud\n");
+					return -1;
+				}
+				if (mos7840_port->port_num == 3) {
+					Data = (Data & 0xf8) | 0x00;
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG2, Data);
+				} else if (mos7840_port->port_num == 4) {
+					Data = (Data & 0xc7) | (0x00<<3);
+					status =
+						mos7840_set_reg_sync(port, CLOCK_SELECT_REG2, Data);
+				}
+				if (status < 0) {
+					dev_dbg(&port->dev, "setting Clk_Select_Reg failed\n");
+					return -1;
+				}
+			}
+			// select clock source by writing clk_sel_val to SPx_Reg
+			status = mos7840_get_reg_sync(port, mos7840_port->SpRegOffset,
+									 &Data);
+			if (status < 0) {
+				dev_dbg(&port->dev, "reading spreg failed in set_serial_baud\n");
+				return -1;
+			}
+			Data = (Data & 0x8f) | clk_sel_val;
+			status = mos7840_set_reg_sync(port, mos7840_port->SpRegOffset,
+									Data);
+			if (status < 0) {
+				dev_dbg(&port->dev, "Writing spreg failed in set_serial_baud\n");
+				return -1;
+			}
+		}
+
 		status = mos7840_get_reg_sync(port, mos7840_port->SpRegOffset,
 								 &Data);
 		if (status < 0) {
