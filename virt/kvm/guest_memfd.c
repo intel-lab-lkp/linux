@@ -720,4 +720,11 @@ put_folio_and_exit:
 	return ret && !i ? ret : i;
 }
 EXPORT_SYMBOL_GPL(kvm_gmem_populate);
+
+int kvm_gmem_guest_memfd_populate(struct kvm *kvm,
+				struct kvm_guest_memfd_populate *populate)
+{
+	return kvm_gmem_populate(kvm, populate->gpa >> PAGE_SHIFT, populate->from,
+		populate->size >> PAGE_SHIFT, kvm_gmem_post_populate_generic, NULL);
+}
 #endif

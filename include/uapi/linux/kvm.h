@@ -1573,4 +1573,13 @@ struct kvm_pre_fault_memory {
 	__u64 padding[5];
 };
 
+struct kvm_guest_memfd_populate {
+	__u64 gpa;
+	__u64 size;
+	void __user *from;
+	__u64 flags;
+};
+
+#define KVM_GUEST_MEMFD_POPULATE _IOW(KVMIO,  0xd6, struct kvm_guest_memfd_populate)
+
 #endif /* __LINUX_KVM_H */

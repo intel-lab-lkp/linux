@@ -5383,6 +5383,16 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = kvm_gmem_create(kvm, &guest_memfd);
 		break;
 	}
+	case KVM_GUEST_MEMFD_POPULATE: {
+		struct kvm_guest_memfd_populate populate;
+
+		r = -EFAULT;
+		if (copy_from_user(&populate, argp, sizeof(populate)))
+			goto out;
+
+		r = kvm_gmem_guest_memfd_populate(kvm, &populate);
+		break;
+	}
 #endif
 	default:
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);
