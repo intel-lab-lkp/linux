@@ -1063,11 +1063,116 @@ static int mos7840_calc_baud_rate_divisor(struct usb_serial_port *port,
 {
 	dev_dbg(&port->dev, "%s - %d\n", __func__, baudRate);
 
-	if (baudRate <= 115200) {
+	// divisor = (256*DLM)+DLL
+	// baudrate = InputCLK/(16*Divisor)
+	if (baudRate == 50) {
+		*divisor = (256*0x09)+0x04; // DLM=0x09, DLL=0x04
+		*clk_sel_val = 0x0;	    // clock source = 1.846153846M
+	} else if (baudRate == 75) {
+		*divisor = (256*0x06)+0x02; // DLM=0x06, DLL=0x02
+		*clk_sel_val = 0x0;	    // clock source = 1.846153846M
+	} else if (baudRate == 110) {
+		*divisor = (256*0x04)+0x19; // DLM=0x04, DLL=0x19
+		*clk_sel_val = 0x0;	    // clock source = 1.846153846M
+	} else if (baudRate == 134) {
+		*divisor = (256*0x03)+0x5d; // DLM=0x03, DLL=0x5d
+		*clk_sel_val = 0x0;	    // clock source = 1.846153846M
+	} else if (baudRate == 150) {
+		*divisor = (256*0x03)+0x01; // DLM=0x03, DLL=0x01
+		*clk_sel_val = 0x0;	    // clock source = 1.846153846M
+	} else if (baudRate == 300) {
+		*divisor = (256*0x01)+0x81; // DLM=0x01, DLL=0x81
+		*clk_sel_val = 0x0;	    // clock source = 1.846153846M
+	} else if (baudRate == 600) {
+		*divisor = 0xc0;		// DLM=0, DLL=0xc0
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 1200) {
+		*divisor = 0x60;		// DLM=0, DLL=0x60
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 1800) {
+		*divisor = 0x40;		// DLM=0, DLL=0x40
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 2400) {
+		*divisor = 0x30;		// DLM=0, DLL=0x30
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 4800) {
+		*divisor = 0x18;		// DLM=0, DLL=0x18
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 7200) {
+		*divisor = 0x10;		// DLM=0, DLL=0x10
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 9600) {
+		*divisor = 0x0c;		// DLM=0, DLL=0x0c
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 14400) {
+		*divisor = 0x08;		// DLM=0, DLL=0x08
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 19200) {
+		*divisor = 0x06;		// DLM=0, DLL=0x06
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 28800) {
+		*divisor = 0x04;		// DLM=0, DLL=0x04
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 38400) {
+		*divisor = 0x03;		// DLM=0, DLL=0x03
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 57600) {
+		*divisor = 0x02;		// DLM=0, DLL=0x02
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 115200) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x0;		// clock source = 1.846153846M
+	} else if (baudRate == 230400) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x10;	// clock source = 3.692307692M
+	} else if (baudRate == 460800) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x30;	// clock source = 7.384615384M
+	} else if (baudRate == 806400) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x40;	// clock source = 12.923076922M
+	} else if (baudRate == 921600) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x50;	// clock source = 14.769230768M
+	} else if (baudRate == 25000) {
+		*divisor = 0x78;		// DLM=0, DLL=0x78
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 50000) {
+		*divisor = 0x3c;		// DLM=0, DLL=0x3c
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 75000) {
+		*divisor = 0x28;		// DLM=0, DLL=0x28
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 100000) {
+		*divisor = 0x1e;		// DLM=0, DLL=0x1e
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 250000) {
+		*divisor = 0x0c;		// DLM=0, DLL=0x0c
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 300000) {
+		*divisor = 0x0a;		// DLM=0, DLL=0x0a
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 500000) {
+		*divisor = 0x06;		// DLM=0, DLL=0x06
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 600000) {
+		*divisor = 0x05;		// DLM=0, DLL=0x05
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 1000000) {
+		*divisor = 0x03;		// DLM=0, DLL=0x03
+		*clk_sel_val = 0x70;	// clock source=48M
+	} else if (baudRate == 3000000) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x70;	// clock source=48M
+
+	} else if (baudRate == 1500000) {
+		*divisor = 0x01;		// DLM=0, DLL=0x01
+		*clk_sel_val = 0x60;	// clock source=24M
+
+	} else if (baudRate <= 115200) {
 		*divisor = 115200 / baudRate;
 		*clk_sel_val = 0x0;
-	}
-	if ((baudRate > 115200) && (baudRate <= 230400)) {
+	} else if ((baudRate > 115200) && (baudRate <= 230400)) {
 		*divisor = 230400 / baudRate;
 		*clk_sel_val = 0x10;
 	} else if ((baudRate > 230400) && (baudRate <= 403200)) {
@@ -1088,6 +1193,9 @@ static int mos7840_calc_baud_rate_divisor(struct usb_serial_port *port,
 	} else if ((baudRate > 1572864) && (baudRate <= 3145728)) {
 		*divisor = 3145728 / baudRate;
 		*clk_sel_val = 0x70;
+	} else {
+		dev_dbg(&port->dev, "func: %s -baudrate %d not supported.\n", __func__, baudRate);
+		return -1;
 	}
 	return 0;
 }
