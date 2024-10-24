@@ -16,16 +16,21 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - fsl,imx35-spdif
-      - fsl,vf610-spdif
-      - fsl,imx6sx-spdif
-      - fsl,imx8qm-spdif
-      - fsl,imx8qxp-spdif
-      - fsl,imx8mq-spdif
-      - fsl,imx8mm-spdif
-      - fsl,imx8mn-spdif
-      - fsl,imx8ulp-spdif
+    oneOf:
+      - const: fsl,imx35-spdif
+      - const: fsl,imx6sx-spdif
+      - const: fsl,imx8mm-spdif
+      - const: fsl,imx8mn-spdif
+      - const: fsl,imx8mq-spdif
+      - const: fsl,imx8qm-spdif
+      - const: fsl,imx8qxp-spdif
+      - const: fsl,imx8ulp-spdif
+      - const: fsl,vf610-spdif
+      - items:
+          - enum:
+              - fsl,imx6sl-spdif
+              - fsl,imx6sx-spdif
+          - const: fsl,imx35-spdif
 
   reg:
     maxItems: 1
