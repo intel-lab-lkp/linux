@@ -1375,6 +1375,7 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 {
 	struct intel_connector *connector = to_intel_connector(_connector);
 	struct intel_dp *intel_dp = intel_attached_dp(connector);
+	enum intel_output_format sink_format;
 	struct drm_i915_private *dev_priv = to_i915(connector->base.dev);
 	const struct drm_display_mode *fixed_mode;
 	int target_clock = mode->clock;
@@ -1408,6 +1409,11 @@ intel_dp_mode_valid(struct drm_connector *_connector,
 	num_joined_pipes = intel_dp_num_joined_pipes(intel_dp, connector,
 						     mode->hdisplay, target_clock);
 	max_dotclk *= num_joined_pipes;
+
+	sink_format = intel_dp_sink_format(connector, mode);
+	if (sink_format == INTEL_OUTPUT_FORMAT_YCBCR420 &&
+	    mode->hdisplay > 4096)
+		return MODE_NO_420;
 
 	if (target_clock > max_dotclk)
 		return MODE_CLOCK_HIGH;
