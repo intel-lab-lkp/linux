@@ -144,6 +144,9 @@
 
 #define SERIAL_LCR_DLAB            ((__u16)(0x0080))
 
+#define CLOCK_SELECT_REG1          ((__u16)(0x13))
+#define CLOCK_SELECT_REG2          ((__u16)(0x14))
+
 /*
  * URB POOL related defines
  */
