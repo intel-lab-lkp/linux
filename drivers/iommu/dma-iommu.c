@@ -707,7 +707,7 @@ static int iommu_dma_init_domain(struct iommu_domain *domain, struct device *dev
 			goto done_unlock;
 		}
 
-		ret = 0;
+		ret = iova_reserve_iommu_regions(dev, domain);
 		goto done_unlock;
 	}
 
