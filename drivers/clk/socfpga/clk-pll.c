@@ -82,7 +82,8 @@ static void __init __socfpga_pll_init(struct device_node *node,
 	struct device_node *clkmgr_np;
 	int rc;
 
-	of_property_read_u32(node, "reg", &reg);
+	if (of_property_read_u32(node, "reg", &reg))
+		return;
 
 	pll_clk = kzalloc(sizeof(*pll_clk), GFP_KERNEL);
 	if (WARN_ON(!pll_clk))
