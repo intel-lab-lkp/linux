@@ -74,9 +74,9 @@ The same is defined in the amd_hsmp.h header.
 ACPI device object format
 =========================
 The ACPI object format expected from the amd_hsmp driver
-for socket with ID00 is given below.
+for socket with ID00 is given below::
 
-Device(HSMP)
+  Device(HSMP)
 		{
 			Name(_HID, "AMDI0097")
 			Name(_UID, "ID00")
