@@ -5095,9 +5095,19 @@ static int kvmppc_vcpu_run_hv(struct kvm_vcpu *vcpu)
 
 	do {
 		accumulate_time(vcpu, &vcpu->arch.guest_entry);
+		/*
+		 * L1's copy of L2's lpcr (vcpu->arch.vcore->lpcr) can get its MER bit
+		 * unexpectedly set - for e.g. during NMI handling when all register
+		 * states are synchronized from L0 to L1. L1 needs to inform L0 about
+		 * MER=1 only when there are pending external interrupts.
+		 * kvmhv_run_single_vcpu() anyway sets MER bit if there are pending
+		 * external interrupts. Hence, mask off MER bit when passing vcore->lpcr
+		 * here as otherwise it may generate spurious interrupts in L2 KVM
+		 * causing an endless loop, which results in L2 guest getting hung.
+		 */
 		if (cpu_has_feature(CPU_FTR_ARCH_300))
 			r = kvmhv_run_single_vcpu(vcpu, ~(u64)0,
-						  vcpu->arch.vcore->lpcr);
+						  vcpu->arch.vcore->lpcr & ~LPCR_MER);
 		else
 			r = kvmppc_run_vcpu(vcpu);
 
