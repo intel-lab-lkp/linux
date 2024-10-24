@@ -71,6 +71,10 @@ struct md_bitmap_stats {
 };
 
 struct bitmap_operations {
+	int version;
+	struct module *owner;
+	struct list_head list;
+
 	bool (*enabled)(struct mddev *mddev);
 	int (*create)(struct mddev *mddev, int slot);
 	int (*resize)(struct mddev *mddev, sector_t blocks, int chunksize);
@@ -110,7 +114,7 @@ struct bitmap_operations {
 	struct attribute_group *group;
 };
 
-/* the bitmap API */
-void mddev_set_bitmap_ops(struct mddev *mddev);
+void register_md_bitmap(struct bitmap_operations *op);
+void unregister_md_bitmap(struct bitmap_operations *op);
 
 #endif

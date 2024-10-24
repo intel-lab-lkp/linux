@@ -83,6 +83,9 @@ static const char *action_name[NR_SYNC_ACTIONS] = {
 static LIST_HEAD(pers_list);
 static DEFINE_SPINLOCK(pers_lock);
 
+static LIST_HEAD(bitmap_list);
+static DEFINE_SPINLOCK(bitmap_lock);
+
 static const struct kobj_type md_ktype;
 
 const struct md_cluster_operations *md_cluster_ops;
@@ -100,7 +103,6 @@ static struct workqueue_struct *md_wq;
  * workqueue whith reconfig_mutex grabbed.
  */
 static struct workqueue_struct *md_misc_wq;
-struct workqueue_struct *md_bitmap_wq;
 
 static int remove_and_add_spares(struct mddev *mddev,
 				 struct md_rdev *this);
@@ -630,15 +632,96 @@ static void active_io_release(struct percpu_ref *ref)
 
 static void no_op(struct percpu_ref *r) {}
 
+void register_md_bitmap(struct bitmap_operations *op)
+{
+	pr_info("md: bitmap version %d registered\n", op->version);
+
+	spin_lock(&bitmap_lock);
+	list_add_tail(&op->list, &bitmap_list);
+	spin_unlock(&bitmap_lock);
+}
+EXPORT_SYMBOL_GPL(register_md_bitmap);
+
+void unregister_md_bitmap(struct bitmap_operations *op)
+{
+	pr_info("md: bitmap version %d unregistered\n", op->version);
+
+	spin_lock(&bitmap_lock);
+	list_del_init(&op->list);
+	spin_unlock(&bitmap_lock);
+}
+EXPORT_SYMBOL_GPL(unregister_md_bitmap);
+
+static struct bitmap_operations *__find_bitmap(int version)
+{
+	struct bitmap_operations *op;
+
+	list_for_each_entry(op, &bitmap_list, list)
+		if (op->version == version) {
+			if (try_module_get(op->owner))
+				return op;
+			else
+				return NULL;
+		}
+
+	return NULL;
+}
+
+static struct bitmap_operations *find_bitmap(int version)
+{
+	struct bitmap_operations *op = NULL;
+
+	spin_lock(&bitmap_lock);
+	op = __find_bitmap(version);
+	spin_unlock(&bitmap_lock);
+
+	if (op)
+		return op;
+
+	if (request_module("md-bitmap") != 0)
+		return NULL;
+
+	spin_lock(&bitmap_lock);
+	op = __find_bitmap(version);
+	spin_unlock(&bitmap_lock);
+
+	return op;
+}
+
+/* TODO: support more versions */
+static int mddev_set_bitmap_ops(struct mddev *mddev)
+{
+	struct bitmap_operations *op = find_bitmap(1);
+
+	if (!op)
+		return -ENODEV;
+
+	mddev->bitmap_ops = op;
+	return 0;
+}
+
+static void mddev_clear_bitmap_ops(struct mddev *mddev)
+{
+	module_put(mddev->bitmap_ops->owner);
+	mddev->bitmap_ops = NULL;
+}
+
 int mddev_init(struct mddev *mddev)
 {
+	int ret = mddev_set_bitmap_ops(mddev);
+
+	if (ret)
+		return ret;
 
 	if (percpu_ref_init(&mddev->active_io, active_io_release,
-			    PERCPU_REF_ALLOW_REINIT, GFP_KERNEL))
+			    PERCPU_REF_ALLOW_REINIT, GFP_KERNEL)) {
+		mddev_clear_bitmap_ops(mddev);
 		return -ENOMEM;
+	}
 
 	if (percpu_ref_init(&mddev->writes_pending, no_op,
 			    PERCPU_REF_ALLOW_REINIT, GFP_KERNEL)) {
+		mddev_clear_bitmap_ops(mddev);
 		percpu_ref_exit(&mddev->active_io);
 		return -ENOMEM;
 	}
@@ -666,7 +749,6 @@ int mddev_init(struct mddev *mddev)
 	mddev->resync_min = 0;
 	mddev->resync_max = MaxSector;
 	mddev->level = LEVEL_NONE;
-	mddev_set_bitmap_ops(mddev);
 
 	INIT_WORK(&mddev->sync_work, md_start_sync);
 	INIT_WORK(&mddev->del_work, mddev_delayed_delete);
@@ -677,6 +759,7 @@ EXPORT_SYMBOL_GPL(mddev_init);
 
 void mddev_destroy(struct mddev *mddev)
 {
+	mddev_clear_bitmap_ops(mddev);
 	percpu_ref_exit(&mddev->active_io);
 	percpu_ref_exit(&mddev->writes_pending);
 }
@@ -9889,11 +9972,6 @@ static int __init md_init(void)
 	if (!md_misc_wq)
 		goto err_misc_wq;
 
-	md_bitmap_wq = alloc_workqueue("md_bitmap", WQ_MEM_RECLAIM | WQ_UNBOUND,
-				       0);
-	if (!md_bitmap_wq)
-		goto err_bitmap_wq;
-
 	ret = __register_blkdev(MD_MAJOR, "md", md_probe);
 	if (ret < 0)
 		goto err_md;
@@ -9912,8 +9990,6 @@ static int __init md_init(void)
 err_mdp:
 	unregister_blkdev(MD_MAJOR, "md");
 err_md:
-	destroy_workqueue(md_bitmap_wq);
-err_bitmap_wq:
 	destroy_workqueue(md_misc_wq);
 err_misc_wq:
 	destroy_workqueue(md_wq);
@@ -10220,7 +10296,6 @@ static __exit void md_exit(void)
 	spin_unlock(&all_mddevs_lock);
 
 	destroy_workqueue(md_misc_wq);
-	destroy_workqueue(md_bitmap_wq);
 	destroy_workqueue(md_wq);
 }
 

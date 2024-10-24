@@ -37,6 +37,21 @@ config BLK_DEV_MD
 
 	  If unsure, say N.
 
+config MD_BITMAP
+	tristate "RAID bitmap support"
+	default y
+	depends on BLK_DEV_MD
+	help
+	  If you say Y here, support for the write intent bitmap will be
+	  enabled. The bitmap will be used to record the data regions that need
+	  to be resynced after a power failure, preventing a full disk resync.
+	  The bitmap size ranges from 4K to 132K, depending on the array size.
+	  Each bit corresponds to 2 bytes of data and is managed in
+	  self-maintained memory. All bits are protected by a disk-level
+	  spinlock.
+
+	  If unsure, say Y.
+
 config MD_AUTODETECT
 	bool "Autodetect RAID arrays during kernel boot"
 	depends on BLK_DEV_MD=y
