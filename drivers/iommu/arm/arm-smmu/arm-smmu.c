@@ -282,6 +282,13 @@ static void arm_smmu_tlb_inv_range_s1(unsigned long iova, size_t size,
 	struct arm_smmu_cfg *cfg = &smmu_domain->cfg;
 	int idx = cfg->cbndx;
 
+	if (size == 0 || granule == 0 || (size % granule) != 0) {
+		dev_err(smmu->dev,
+				 "The size or granule passed in is err. size=%lu, granule=%lu\n",
+				 size, granule);
+		return;
+	}
+
 	if (smmu->features & ARM_SMMU_FEAT_COHERENT_WALK)
 		wmb();
 
@@ -308,6 +315,13 @@ static void arm_smmu_tlb_inv_range_s2(unsigned long iova, size_t size,
 	struct arm_smmu_domain *smmu_domain = cookie;
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	int idx = smmu_domain->cfg.cbndx;
+
+	if (size == 0 || granule == 0 || (size % granule) != 0) {
+		dev_err(smmu->dev,
+				 "The size or granule passed in is err. size=%lu, granule=%lu\n",
+				 size, granule);
+		return;
+	}
 
 	if (smmu->features & ARM_SMMU_FEAT_COHERENT_WALK)
 		wmb();
