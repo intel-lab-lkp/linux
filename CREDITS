@@ -1092,6 +1092,10 @@ E: cider@speakeasy.org
 W: http://www.speakeasy.org/~cider/
 D: implemented kmod
 
+N: Evgeniy Dushistov
+E: dushistov@mail.ru
+D: UFS filesystem
+
 N: Torsten Duwe
 E: Torsten.Duwe@informatik.uni-erlangen.de
 D: Part-time kernel hacker
@@ -1351,6 +1355,10 @@ S: Whitfield Software Services
 S: 600 North Bell Avenue, Suite 160
 S: Carnegie, Pennsylvania 15106-4304
 S: USA
+
+N: Vladimir Georgiev
+E: v.georgiev@metrotek.ru
+D: Microchip Polarfire FPGA driver reviews
 
 N: Kai Germaschewski
 E: kai@germaschewski.name
@@ -2141,6 +2149,10 @@ D: DECstation port, Sharp Mobilon port
 S: D-50931 Koeln
 S: Germany
 
+N: Ivan Kokshaysky
+E: ink@jurassic.park.msu.ru
+D: Alpha port maintenance
+
 N: Willy Konynenberg
 E: willy@xos.nl
 W: http://www.xos.nl/
@@ -2172,6 +2184,16 @@ S: 7170 Warden Avenue, Unit 2
 S: Markham, Ontario
 S: L3R 8B2
 S: Canada
+
+N: Dmitry Kozlov
+E: xeb@mail.ru
+D: GRE demultiplexer driver
+D: PPTP driver
+
+N: Sergey Kozlov
+E: serjk@netup.ru
+D: Media drivers for ascot2e, cxd2841er, horus3a, lnbh25
+D: Media drivers for netup PCI universal DVB devices
 
 N: Maxim Krasnyansky
 E: maxk@qualcomm.com
@@ -3000,6 +3022,11 @@ N: Peter Oruba
 D: AMD Microcode loader driver
 S: Germany
 
+N: Abylay Ospan
+E: aospan@netup.ru
+D: Media drivers for ascot2e, cxd2841er, helene, horus3a, lnbh25
+D: Media drivers for netup PCI universal DVB devices
+
 N: Jens Osterkamp
 E: jens@de.ibm.com
 D: Maintainer of Spidernet network driver for Cell
@@ -3397,6 +3424,10 @@ S: Neue Heimat Str. 8
 S: D-68789 St.Leon-Rot
 S: Germany
 
+N: Dmitry Rokosov
+E: ddrokosov@sberdevices.ru
+D: Memsensing Microsystems msa311 driver
+
 N: Thiago Berlitz Rondon
 E: maluco@mileniumnet.com.br
 W: http://vivaldi.linuxms.com.br/~maluco
@@ -3594,6 +3625,15 @@ N: Marcel Selhorst
 E: tpmdd@selhorst.net
 D: TPM driver
 
+N: Serge Semin
+E: fancer.lancer@gmail.com
+D: MIPS Baikal-T1 platform; MIPS core drivers
+D: Baikal-T1 PVT hardware monitor driver
+D: Designware EDMA core IP driver reviews
+D: libata SATA AHCI Synopsys DWC controller driver
+D: Synopsys Designware APB SSI driver
+D: NTB IDT driver
+
 N: Darren Senn
 E: sinster@darkwater.com
 D: Whatever I notice needs doing (so far: itimers, /proc)
@@ -3635,6 +3675,15 @@ S: USA
 N: Joonyoung Shim
 E: y0922.shim@samsung.com
 D: Samsung Exynos DRM drivers
+
+N: Alexander Shiyan
+E: shc_work@mail.ru
+D: Arm/Cirrus Logic clps711x architecture
+
+N: Sergey Shtylyov
+E: s.shtylyov@omp.ru
+D: libata PATA driver reviews
+D: Renesas ethernet AVB, R-CAR SATA and SuperH ethernet driver reviews
 
 N: Robert Siemer
 E: Robert.Siemer@gmx.de
@@ -3867,6 +3916,10 @@ D: (bogomips, scope, eject, statserial)
 S: 1 Laurie Court
 S: Kanata, Ontario
 S: Canada K2L 1S2
+
+N: Nikita Travkin
+E: nikita@trvn.ru
+D: Acer Aspire 1 Embedded Controller driver
 
 N: Andrew Tridgell
 E: tridge@samba.org
