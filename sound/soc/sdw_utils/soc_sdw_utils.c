@@ -138,14 +138,21 @@ struct asoc_sdw_codec_info codec_info_list[] = {
 				.dailink = {SOC_SDW_AMP_OUT_DAI_ID, SOC_SDW_UNUSED_DAI_ID},
 				.init = asoc_sdw_rt_amp_init,
 				.exit = asoc_sdw_rt_amp_exit,
-				.rtd_init = asoc_sdw_rt712_spk_rtd_init,
+				.rtd_init = asoc_sdw_rt_mf_sdca_spk_rtd_init,
 				.controls = generic_spk_controls,
 				.num_controls = ARRAY_SIZE(generic_spk_controls),
 				.widgets = generic_spk_widgets,
 				.num_widgets = ARRAY_SIZE(generic_spk_widgets),
 			},
+			{
+				.direction = {false, true},
+				.dai_name = "rt712-sdca-aif3",
+				.dai_type = SOC_SDW_DAI_TYPE_MIC,
+				.dailink = {SOC_SDW_UNUSED_DAI_ID, SOC_SDW_DMIC_DAI_ID},
+				.rtd_init = asoc_sdw_rt_dmic_rtd_init,
+			},
 		},
-		.dai_num = 2,
+		.dai_num = 3,
 	},
 	{
 		.part_id = 0x1712,
@@ -178,8 +185,15 @@ struct asoc_sdw_codec_info codec_info_list[] = {
 				.widgets = generic_jack_widgets,
 				.num_widgets = ARRAY_SIZE(generic_jack_widgets),
 			},
+			{
+				.direction = {false, true},
+				.dai_name = "rt712-sdca-aif3",
+				.dai_type = SOC_SDW_DAI_TYPE_MIC,
+				.dailink = {SOC_SDW_UNUSED_DAI_ID, SOC_SDW_DMIC_DAI_ID},
+				.rtd_init = asoc_sdw_rt_dmic_rtd_init,
+			},
 		},
-		.dai_num = 1,
+		.dai_num = 2,
 	},
 	{
 		.part_id = 0x1713,
@@ -334,6 +348,47 @@ struct asoc_sdw_codec_info codec_info_list[] = {
 		.dai_num = 1,
 	},
 	{
+		.part_id = 0x721,
+		.version_id = 3,
+		.dais = {
+			{
+				.direction = {true, true},
+				.dai_name = "rt721-sdca-aif1",
+				.dai_type = SOC_SDW_DAI_TYPE_JACK,
+				.dailink = {SOC_SDW_JACK_OUT_DAI_ID, SOC_SDW_JACK_IN_DAI_ID},
+				.init = asoc_sdw_rt_sdca_jack_init,
+				.exit = asoc_sdw_rt_sdca_jack_exit,
+				.rtd_init = asoc_sdw_rt_sdca_jack_rtd_init,
+				.controls = generic_jack_controls,
+				.num_controls = ARRAY_SIZE(generic_jack_controls),
+				.widgets = generic_jack_widgets,
+				.num_widgets = ARRAY_SIZE(generic_jack_widgets),
+			},
+			{
+				.direction = {true, false},
+				.dai_name = "rt721-sdca-aif2",
+				.dai_type = SOC_SDW_DAI_TYPE_AMP,
+				/* No feedback capability is provided by rt721-sdca codec driver*/
+				.dailink = {SOC_SDW_AMP_OUT_DAI_ID, SOC_SDW_UNUSED_DAI_ID},
+				.init = asoc_sdw_rt_amp_init,
+				.exit = asoc_sdw_rt_amp_exit,
+				.rtd_init = asoc_sdw_rt_mf_sdca_spk_rtd_init,
+				.controls = generic_spk_controls,
+				.num_controls = ARRAY_SIZE(generic_spk_controls),
+				.widgets = generic_spk_widgets,
+				.num_widgets = ARRAY_SIZE(generic_spk_widgets),
+			},
+			{
+				.direction = {false, true},
+				.dai_name = "rt721-sdca-aif3",
+				.dai_type = SOC_SDW_DAI_TYPE_MIC,
+				.dailink = {SOC_SDW_UNUSED_DAI_ID, SOC_SDW_DMIC_DAI_ID},
+				.rtd_init = asoc_sdw_rt_dmic_rtd_init,
+			},
+		},
+		.dai_num = 3,
+	},
+	{
 		.part_id = 0x722,
 		.version_id = 3,
 		.dais = {
@@ -358,7 +413,7 @@ struct asoc_sdw_codec_info codec_info_list[] = {
 				.dailink = {SOC_SDW_AMP_OUT_DAI_ID, SOC_SDW_UNUSED_DAI_ID},
 				.init = asoc_sdw_rt_amp_init,
 				.exit = asoc_sdw_rt_amp_exit,
-				.rtd_init = asoc_sdw_rt722_spk_rtd_init,
+				.rtd_init = asoc_sdw_rt_mf_sdca_spk_rtd_init,
 				.controls = generic_spk_controls,
 				.num_controls = ARRAY_SIZE(generic_spk_controls),
 				.widgets = generic_spk_widgets,
@@ -487,6 +542,8 @@ struct asoc_sdw_codec_info codec_info_list[] = {
 				.rtd_init = asoc_sdw_cs42l43_dmic_rtd_init,
 				.widgets = generic_dmic_widgets,
 				.num_widgets = ARRAY_SIZE(generic_dmic_widgets),
+				.quirk = SOC_SDW_CODEC_MIC,
+				.quirk_exclude = true,
 			},
 			{
 				.direction = {false, true},
@@ -1112,7 +1169,8 @@ int asoc_sdw_parse_sdw_endpoints(struct snd_soc_card *card,
 				dai_info = &codec_info->dais[adr_end->num];
 				soc_dai = asoc_sdw_find_dailink(soc_dais, adr_end);
 
-				if (dai_info->quirk && !(dai_info->quirk & ctx->mc_quirk))
+				if (dai_info->quirk &&
+				    !(dai_info->quirk_exclude ^ !!(dai_info->quirk & ctx->mc_quirk)))
 					continue;
 
 				dev_dbg(dev,
