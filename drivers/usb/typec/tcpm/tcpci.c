@@ -686,7 +686,8 @@ static int tcpci_init(struct tcpc_dev *tcpc)
 
 	reg = TCPC_ALERT_TX_SUCCESS | TCPC_ALERT_TX_FAILED |
 		TCPC_ALERT_TX_DISCARDED | TCPC_ALERT_RX_STATUS |
-		TCPC_ALERT_RX_HARD_RST | TCPC_ALERT_CC_STATUS;
+		TCPC_ALERT_RX_HARD_RST | TCPC_ALERT_CC_STATUS |
+		TCPC_ALERT_FAULT;
 	if (tcpci->controls_vbus)
 		reg |= TCPC_ALERT_POWER_STATUS;
 	/* Enable VSAFE0V status interrupt when detecting VSAFE0V is supported */
@@ -714,6 +715,14 @@ irqreturn_t tcpci_irq(struct tcpci *tcpci)
 	irq_ret = status & tcpci->alert_mask;
 
 process_status:
+	/*
+	 * some chips asert fault alert, even if it is masked.
+	 * The FAULT_STATUS is read and written after to acknolige
+	 */
+	if (status & TCPC_ALERT_FAULT) {
+		regmap_read(tcpci->regmap, TCPC_FAULT_STATUS, &raw);
+		regmap_write(tcpci->regmap, TCPC_FAULT_STATUS, raw);
+	}
 	/*
 	 * Clear alert status for everything except RX_STATUS, which shouldn't
 	 * be cleared until we have successfully retrieved message.
