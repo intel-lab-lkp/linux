@@ -92,8 +92,7 @@ enum port_type {
 #define	PM8001_MAX_MSIX_VEC	 64	/* max msi-x int for spcv/ve */
 #define	PM8001_RESERVE_SLOT	 8
 
-#define	CONFIG_SCSI_PM8001_MAX_DMA_SG	528
-#define PM8001_MAX_DMA_SG	CONFIG_SCSI_PM8001_MAX_DMA_SG
+#define PM8001_MAX_DMA_SG	1024
 
 enum memory_region_num {
 	AAP1 = 0x0, /* application acceleration processor */
