@@ -1443,7 +1443,7 @@ unwind:
 }
 
 static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
-			    size_t map_size)
+			    size_t map_size, unsigned int map_flags)
 {
 	dma_addr_t iova = dma->iova;
 	unsigned long vaddr = dma->vaddr;
@@ -1452,27 +1452,61 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 	long npage;
 	unsigned long pfn, limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 	int ret = 0;
+	struct mm_struct *mm = current->mm;
+	bool mmio_dont_pin = map_flags & VFIO_DMA_MAP_FLAG_MMIO_DONT_PIN;
+
+	/* This code path is only user initiated */
+	if (!mm) {
+		ret = -ENODEV;
+		goto out;
+	}
 
 	vfio_batch_init(&batch);
 
 	while (size) {
-		/* Pin a contiguous chunk of memory */
-		npage = vfio_pin_pages_remote(dma, vaddr + dma->size,
-					      size >> PAGE_SHIFT, &pfn, limit,
-					      &batch);
-		if (npage <= 0) {
-			WARN_ON(!npage);
-			ret = (int)npage;
-			break;
+		struct vm_area_struct *vma;
+		unsigned long start = vaddr + dma->size;
+		bool do_pin_pages = true;
+
+		if (mmio_dont_pin) {
+			mmap_read_lock(mm);
+
+			vma = find_vma_intersection(mm, start, start+1);
+
+			/*
+			 * If this dma address rang belongs to the IO address space with VMA flags
+			 * VM_IO | VM_PFNMAP | VM_PGOFF_IS_PFN, it doesn't need to be pinned.
+			 * Simply skip the pin operation to avoid unnecessary overhead.
+			 */
+			if (vma && (vma->vm_flags & VM_PFNMAP) && (vma->vm_flags & VM_IO)
+							&& (vma->vm_flags & VM_PGOFF_IS_PFN)) {
+				pfn = vma->vm_pgoff + ((start - vma->vm_start) >> PAGE_SHIFT);
+				npage = min_t(long, (vma->vm_end - start), size) >> PAGE_SHIFT;
+				do_pin_pages = false;
+			}
+			mmap_read_unlock(mm);
+		}
+
+		if (do_pin_pages) {
+			/* Pin a contiguous chunk of memory */
+			npage = vfio_pin_pages_remote(dma, start, size >> PAGE_SHIFT, &pfn,
+							limit, &batch);
+			if (npage <= 0) {
+				WARN_ON(!npage);
+				ret = (int)npage;
+				break;
+			}
 		}
 
 		/* Map it! */
 		ret = vfio_iommu_map(iommu, iova + dma->size, pfn, npage,
 				     dma->prot);
 		if (ret) {
-			vfio_unpin_pages_remote(dma, iova + dma->size, pfn,
-						npage, true);
-			vfio_batch_unpin(&batch, dma);
+			if (do_pin_pages) {
+				vfio_unpin_pages_remote(dma, iova + dma->size, pfn,
+							npage, true);
+				vfio_batch_unpin(&batch, dma);
+			}
 			break;
 		}
 
@@ -1483,6 +1517,7 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 	vfio_batch_fini(&batch);
 	dma->iommu_mapped = true;
 
+out:
 	if (ret)
 		vfio_remove_dma(iommu, dma);
 
@@ -1649,7 +1684,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	if (list_empty(&iommu->domain_list))
 		dma->size = size;
 	else
-		ret = vfio_pin_map_dma(iommu, dma, size);
+		ret = vfio_pin_map_dma(iommu, dma, size, map->flags);
 
 	if (!ret && iommu->dirty_page_tracking) {
 		ret = vfio_dma_bitmap_alloc(dma, pgsize);
@@ -2643,6 +2678,7 @@ static int vfio_iommu_type1_check_extension(struct vfio_iommu *iommu,
 	case VFIO_TYPE1_IOMMU:
 	case VFIO_TYPE1v2_IOMMU:
 	case VFIO_TYPE1_NESTING_IOMMU:
+	case VFIO_DMA_MAP_MMIO_DONT_PIN:
 	case VFIO_UNMAP_ALL:
 		return 1;
 	case VFIO_UPDATE_VADDR:
@@ -2815,7 +2851,7 @@ static int vfio_iommu_type1_map_dma(struct vfio_iommu *iommu,
 	struct vfio_iommu_type1_dma_map map;
 	unsigned long minsz;
 	uint32_t mask = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE |
-			VFIO_DMA_MAP_FLAG_VADDR;
+			VFIO_DMA_MAP_FLAG_VADDR | VFIO_DMA_MAP_FLAG_MMIO_DONT_PIN;
 
 	minsz = offsetofend(struct vfio_iommu_type1_dma_map, size);
 

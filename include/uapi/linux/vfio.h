@@ -57,6 +57,16 @@
 #define VFIO_UPDATE_VADDR		10
 
 /*
+ * Support VFIO_DMA_MAP_FLAG_MMIO_DONT_PIN for DMA mapping. For MMIO addresses,
+ * we do not need to pin the pages or establish address mapping in the MMU
+ * at this stage. We only need to establish the address mapping in the IOMMU for
+ * the ioctl(VFIO_IOMMU_MAP_DMA). The page table mapping in the MMU will be
+ * dynamically established through the page fault mechanism when the page
+ * is accessed in the future.
+ */
+#define VFIO_DMA_MAP_MMIO_DONT_PIN	11
+
+/*
  * The IOCTL interface is designed for extensibility by embedding the
  * structure length (argsz) and flags into structures passed between
  * kernel and userspace.  We therefore use the _IO() macro for these
@@ -1560,6 +1570,7 @@ struct vfio_iommu_type1_dma_map {
 #define VFIO_DMA_MAP_FLAG_READ (1 << 0)		/* readable from device */
 #define VFIO_DMA_MAP_FLAG_WRITE (1 << 1)	/* writable from device */
 #define VFIO_DMA_MAP_FLAG_VADDR (1 << 2)
+#define VFIO_DMA_MAP_FLAG_MMIO_DONT_PIN (1 << 3)	/* MMIO doesn't need pin page */
 	__u64	vaddr;				/* Process virtual address */
 	__u64	iova;				/* IO virtual address */
 	__u64	size;				/* Size of mapping (bytes) */

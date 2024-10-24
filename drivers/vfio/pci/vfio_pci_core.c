@@ -1776,7 +1776,7 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 	 * the VMA flags.
 	 */
 	vm_flags_set(vma, VM_ALLOW_ANY_UNCACHED | VM_IO | VM_PFNMAP |
-			VM_DONTEXPAND | VM_DONTDUMP);
+			VM_DONTEXPAND | VM_DONTDUMP | VM_PGOFF_IS_PFN);
 	vma->vm_ops = &vfio_pci_mmap_ops;
 
 	return 0;
