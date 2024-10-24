@@ -142,6 +142,8 @@
  *   nla_get_flag(nla)			return 1 if flag is true
  *   nla_get_msecs(nla)			get payload for a msecs attribute
  *
+ *   The same functions also exist with _default().
+ *
  * Attribute Misc:
  *   nla_memcpy(dest, nla, count)	copy attribute into memory
  *   nla_memcmp(nla, data, size)	compare attribute with memory area
@@ -1866,6 +1868,31 @@ static inline unsigned long nla_get_msecs(const struct nlattr *nla)
 
 	return msecs_to_jiffies((unsigned long) msecs);
 }
+
+#define MAKE_NLA_GET_DEFAULT(tp, fn)			\
+static inline tp fn##_default(const struct nlattr *nla,	\
+			      tp defvalue)		\
+{							\
+	if (!nla)					\
+		return defvalue;			\
+	return n(nla);					\
+}
+
+MAKE_NLA_GET_DEFAULT(u8, nla_get_u8);
+MAKE_NLA_GET_DEFAULT(u16, nla_get_u16);
+MAKE_NLA_GET_DEFAULT(u32, nla_get_u32);
+MAKE_NLA_GET_DEFAULT(u64, nla_get_u64);
+MAKE_NLA_GET_DEFAULT(unsigned long, nla_get_msecs);
+MAKE_NLA_GET_DEFAULT(s8, nla_get_s8);
+MAKE_NLA_GET_DEFAULT(s16, nla_get_s16);
+MAKE_NLA_GET_DEFAULT(s32, nla_get_s32);
+MAKE_NLA_GET_DEFAULT(s64, nla_get_s64);
+MAKE_NLA_GET_DEFAULT(s16, nla_get_le16);
+MAKE_NLA_GET_DEFAULT(s32, nla_get_le32);
+MAKE_NLA_GET_DEFAULT(s64, nla_get_le64);
+MAKE_NLA_GET_DEFAULT(s16, nla_get_be16);
+MAKE_NLA_GET_DEFAULT(s32, nla_get_be32);
+MAKE_NLA_GET_DEFAULT(s64, nla_get_be64);
 
 /**
  * nla_get_in_addr - return payload of IPv4 address attribute
