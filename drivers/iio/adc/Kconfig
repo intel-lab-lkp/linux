@@ -1014,6 +1014,16 @@ config NPCM_ADC
 	  This driver can also be built as a module. If so, the module
 	  will be called npcm_adc.
 
+config NCT6694_ADC
+	tristate "Nuvoton NCT6694 ADC driver"
+	depends on MFD_NCT6694
+	help
+	If you say yes to this option, support will be included for Nuvoton
+	NCT6694, a USB device to ADC.
+
+	This driver can also be built as a module. If so, the module
+	will be called nct6694_adc.
+
 config PAC1921
 	tristate "Microchip Technology PAC1921 driver"
 	depends on I2C
