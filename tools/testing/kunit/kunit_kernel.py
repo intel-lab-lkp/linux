@@ -116,7 +116,8 @@ class LinuxSourceTreeOperationsQemu(LinuxSourceTreeOperations):
 
 	def start(self, params: List[str], build_dir: str) -> subprocess.Popen:
 		kernel_path = os.path.join(build_dir, self._kernel_path)
-		qemu_command = ['qemu-system-' + self._qemu_arch,
+		qemu_binary = 'qemu-system-' + self._qemu_arch
+		qemu_command = [qemu_binary,
 				'-nodefaults',
 				'-m', '1024',
 				'-kernel', kernel_path,
@@ -124,6 +125,29 @@ class LinuxSourceTreeOperationsQemu(LinuxSourceTreeOperations):
 				'-no-reboot',
 				'-nographic',
 				'-serial', self._serial] + self._extra_qemu_params
+		accelerators = {
+			line.strip()
+			for line in subprocess.check_output([qemu_binary, "-accel", "help"], text=True).splitlines()
+			if line and line.islower()
+		}
+		if 'kvm' in accelerators:
+			try:
+				with open('/dev/kvm', 'rb+'):
+					qemu_command.extend(['-accel', 'kvm'])
+			except OSError as e:
+				print(e)
+		elif 'hvf' in accelerators:
+			try:
+				for line in subprocess.check_output(['sysctl', 'kern.hv_support'], text=True).splitlines():
+					if not line:
+						continue
+					key, value = line.split(':')
+					if key == 'kern.hv_support' and bool(value):
+						qemu_command.extend(['-accel', 'hvf'])
+						break
+			except subprocess.CalledProcessError as e:
+				print(e)
+
 		# Note: shlex.join() does what we want, but requires python 3.8+.
 		print('Running tests with:\n$', ' '.join(shlex.quote(arg) for arg in qemu_command))
 		return subprocess.Popen(qemu_command,
