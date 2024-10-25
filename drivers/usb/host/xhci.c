@@ -346,21 +346,22 @@ static int xhci_disable_interrupter(struct xhci_interrupter *ir)
 	return 0;
 }
 
-/* interrupt moderation interval imod_interval in nanoseconds */
-int xhci_set_interrupter_moderation(struct xhci_interrupter *ir,
-				    u32 imod_interval)
+/* Interrupt moderation interval in 250 nanoseconds increments, 0 means no interrupt throttling. */
+void xhci_set_interrupter_moderation(struct xhci_hcd *xhci, struct xhci_interrupter *ir,
+				     u32 imod_interval)
 {
-	u32 imod;
+	u32 irq_control;
 
-	if (!ir || !ir->ir_set || imod_interval > U16_MAX * 250)
-		return -EINVAL;
+	imod_interval /= 250;
+	imod_interval = min(imod_interval, U16_MAX);
 
-	imod = readl(&ir->ir_set->irq_control);
-	imod &= ~ER_IRQ_INTERVAL_MASK;
-	imod |= (imod_interval / 250) & ER_IRQ_INTERVAL_MASK;
-	writel(imod, &ir->ir_set->irq_control);
+	irq_control = readl(&ir->ir_set->irq_control);
+	irq_control &= ~ER_IRQ_INTERVAL_MASK;
+	irq_control |= imod_interval & ER_IRQ_INTERVAL_MASK;
+	writel(irq_control, &ir->ir_set->irq_control);
 
-	return 0;
+	xhci_dbg(xhci, "Interrupt moderation interval set to %uns for interrupt %u\n",
+		 imod_interval * 250, ir->intr_num);
 }
 
 static void compliance_mode_recovery(struct timer_list *t)
@@ -567,7 +568,7 @@ int xhci_run(struct usb_hcd *hcd)
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 			"ERST deq = 64'h%0lx", (long unsigned int) temp_64);
 
-	xhci_set_interrupter_moderation(ir, xhci->imod_interval);
+	xhci_set_interrupter_moderation(xhci, ir, xhci->imod_interval);
 
 	if (xhci->quirks & XHCI_NEC_HOST) {
 		struct xhci_command *command;
