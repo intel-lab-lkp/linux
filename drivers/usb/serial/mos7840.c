@@ -228,6 +228,7 @@ static int mos7840_set_reg_sync(struct usb_serial_port *port, __u16 reg,
 				__u16 val)
 {
 	struct usb_device *dev = port->serial->dev;
+
 	val = val & 0x00ff;
 	dev_dbg(&port->dev, "mos7840_set_reg_sync offset is %x, value %x\n", reg, val);
 
@@ -280,6 +281,7 @@ static int mos7840_set_uart_reg(struct usb_serial_port *port, __u16 reg,
 {
 
 	struct usb_device *dev = port->serial->dev;
+
 	val = val & 0x00ff;
 	/* For the UART control registers, the application number need
 	 * to be Or'ed
@@ -449,6 +451,7 @@ static void mos7840_bulk_in_callback(struct urb *urb)
 
 	if (urb->actual_length) {
 		struct tty_port *tport = &mos7840_port->port->port;
+
 		tty_insert_flip_string(tport, data, urb->actual_length);
 		tty_flip_buffer_push(tport);
 		port->icount.rx += urb->actual_length;
@@ -743,6 +746,7 @@ static unsigned int mos7840_chars_in_buffer(struct tty_struct *tty)
 	for (i = 0; i < NUM_URBS; ++i) {
 		if (mos7840_port->busy[i]) {
 			struct urb *urb = mos7840_port->write_urb_pool[i];
+
 			chars += urb->transfer_buffer_length;
 		}
 	}
@@ -944,6 +948,7 @@ static void mos7840_throttle(struct tty_struct *tty)
 	/* if we are implementing XON/XOFF, send the stop character */
 	if (I_IXOFF(tty)) {
 		unsigned char stop_char = STOP_CHAR(tty);
+
 		status = mos7840_write(tty, port, &stop_char, 1);
 		if (status <= 0)
 			return;
@@ -973,6 +978,7 @@ static void mos7840_unthrottle(struct tty_struct *tty)
 	/* if we are implementing XON/XOFF, send the start character */
 	if (I_IXOFF(tty)) {
 		unsigned char start_char = START_CHAR(tty);
+
 		status = mos7840_write(tty, port, &start_char, 1);
 		if (status <= 0)
 			return;
