@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/hwmon/adi,ltc4296-1.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: LTC4296-1 5-Port SPoE PSE Controller
+
+maintainers:
+  - Antoniu Miclaus <antoniu.miclaus@analog.com>
+
+description: |
+  The LTC4296-1 is an IEEE 802.3cg-compliant, five port, single-pair
+  power over Ethernet (SPoE), power sourcing equipment (PSE)
+  controller. SPoE simplifies system design and installation with
+  standardized power and Ethernet data over a single-pair cable.
+
+  Datasheet:
+    https://www.analog.com/en/products/ltc4296-1.html
+
+$ref: /schemas/spi/spi-peripheral-props.yaml#
+
+properties:
+  compatible:
+    const: adi,ltc4296-1
+
+  reg:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  vin-supply: true
+
+patternProperties:
+  "^channel@[0-3]$":
+    type: object
+    description:
+      Represents the current monitoring channels.
+
+    properties:
+      reg:
+        description:
+          The channel number. ltc4296-1 can monitor 5 currents.
+        items:
+          minimum: 0
+          maximum: 4
+
+      shunt-resistor-micro-ohms:
+        description:
+          The value of curent sense resistor in micro ohms.
+
+    required:
+      - reg
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - vin-supply
+
+additionalProperties: false
+
+examples:
+  - |
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        hwmon@0 {
+            compatible = "adi,ltc4296-1";
+            reg = <0x0>;
+            vin-supply = <&vcc>;
+        };
+    };
+  - |
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        hwmon@0 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            compatible = "adi,ltc4296-1";
+            reg = <0x0>;
+            vin-supply = <&vin>;
+
+            channel@0 {
+                    reg = <0x0>;
+                    shunt-resistor-micro-ohms = <100000>;
+            };
+
+            channel@1 {
+                    reg = <0x1>;
+                    shunt-resistor-micro-ohms = <100000>;
+            };
+        };
+    };
+...
