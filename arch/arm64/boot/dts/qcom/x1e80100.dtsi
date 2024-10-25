@@ -70,6 +70,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x0>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_0>;
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
@@ -87,6 +88,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x100>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_0>;
 			power-domains = <&CPU_PD1>;
 			power-domain-names = "psci";
@@ -98,6 +100,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x200>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_0>;
 			power-domains = <&CPU_PD2>;
 			power-domain-names = "psci";
@@ -109,6 +112,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x300>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_0>;
 			power-domains = <&CPU_PD3>;
 			power-domain-names = "psci";
@@ -120,6 +124,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x10000>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1200>;
 			next-level-cache = <&L2_1>;
 			power-domains = <&CPU_PD4>;
 			power-domain-names = "psci";
@@ -137,6 +142,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x10100>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_1>;
 			power-domains = <&CPU_PD5>;
 			power-domain-names = "psci";
@@ -148,6 +154,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x10200>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_1>;
 			power-domains = <&CPU_PD6>;
 			power-domain-names = "psci";
@@ -159,6 +166,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x10300>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_1>;
 			power-domains = <&CPU_PD7>;
 			power-domain-names = "psci";
@@ -170,6 +178,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x20000>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1200>;
 			next-level-cache = <&L2_2>;
 			power-domains = <&CPU_PD8>;
 			power-domain-names = "psci";
@@ -187,6 +196,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x20100>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_2>;
 			power-domains = <&CPU_PD9>;
 			power-domain-names = "psci";
@@ -198,6 +208,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x20200>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_2>;
 			power-domains = <&CPU_PD10>;
 			power-domain-names = "psci";
@@ -209,6 +220,7 @@
 			compatible = "qcom,oryon";
 			reg = <0x0 0x20300>;
 			enable-method = "psci";
+			capacity-dmips-mhz = <1024>;
 			next-level-cache = <&L2_2>;
 			power-domains = <&CPU_PD11>;
 			power-domain-names = "psci";
