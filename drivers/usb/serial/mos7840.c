@@ -282,7 +282,8 @@ static int mos7840_set_uart_reg(struct usb_serial_port *port, __u16 reg,
 	struct usb_device *dev = port->serial->dev;
 	val = val & 0x00ff;
 	/* For the UART control registers, the application number need
-	   to be Or'ed */
+	 * to be Or'ed
+	 */
 	if (port->serial->num_ports == 2 && port->port_number != 0)
 		val |= ((__u16)port->port_number + 2) << 8;
 	else
@@ -1539,8 +1540,9 @@ static int mos7840_port_probe(struct usb_serial_port *port)
 	int pnum;
 	__u16 Data;
 
-	/* we set up the pointers to the endpoints in the mos7840_open *
-	 * function, as the structures aren't created yet.             */
+	/* we set up the pointers to the endpoints in the mos7840_open
+	 * function, as the structures aren't created yet.
+	 */
 
 	pnum = port->port_number;
 
@@ -1551,14 +1553,16 @@ static int mos7840_port_probe(struct usb_serial_port *port)
 
 	/* Initialize all port interrupt end point to port 0 int
 	 * endpoint. Our device has only one interrupt end point
-	 * common to all port */
+	 * common to all port
+	 */
 
 	mos7840_port->port = port;
 	spin_lock_init(&mos7840_port->pool_lock);
 
 	/* minor is not initialised until later by
 	 * usb-serial.c:get_free_serial() and cannot therefore be used
-	 * to index device instances */
+	 * to index device instances
+	 */
 	mos7840_port->port_num = pnum + 1;
 	dev_dbg(&port->dev, "port->minor = %d\n", port->minor);
 	dev_dbg(&port->dev, "mos7840_port->port_num = %d\n", mos7840_port->port_num);
@@ -1591,7 +1595,8 @@ static int mos7840_port_probe(struct usb_serial_port *port)
 		dev_dbg(&port->dev, "ControlReg Reading success val is %x, status%d\n", Data, status);
 	Data |= 0x08;	/* setting driver done bit */
 	Data |= 0x04;	/* sp1_bit to have cts change reflect in
-			   modem status reg */
+			 * modem status reg
+			 */
 
 	/* Data |= 0x20; //rx_disable bit */
 	status = mos7840_set_reg_sync(port,
@@ -1603,7 +1608,8 @@ static int mos7840_port_probe(struct usb_serial_port *port)
 		dev_dbg(&port->dev, "ControlReg Writing success(rx_disable) status%d\n", status);
 
 	/* Write default values in DCR (i.e 0x01 in DCR0, 0x05 in DCR2
-	   and 0x24 in DCR3 */
+	 * and 0x24 in DCR3
+	 */
 	Data = 0x01;
 	status = mos7840_set_reg_sync(port,
 			(__u16) (mos7840_port->DcrRegOffset + 0), Data);
