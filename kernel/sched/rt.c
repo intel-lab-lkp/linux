@@ -5,8 +5,10 @@
  */
 
 int sched_rr_timeslice = RR_TIMESLICE;
+#if defined(CONFIG_SYSCTL) || defined(CONFIG_RT_GROUP_SCHED)
 /* More than 4 hours if BW_SHIFT equals 20. */
 static const u64 max_rt_runtime = MAX_BW;
+#endif
 
 /*
  * period over which we measure -rt task CPU usage in us.
