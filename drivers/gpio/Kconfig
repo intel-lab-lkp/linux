@@ -29,7 +29,6 @@ config GPIOLIB_FASTPATH_LIMIT
 config OF_GPIO
 	def_bool y
 	depends on OF
-	depends on HAS_IOMEM
 
 config GPIO_ACPI
 	def_bool y
