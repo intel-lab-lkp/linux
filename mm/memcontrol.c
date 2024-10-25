@@ -616,8 +616,11 @@ void mem_cgroup_flush_stats(struct mem_cgroup *memcg)
 	if (!memcg)
 		memcg = root_mem_cgroup;
 
-	if (memcg_vmstats_needs_flush(memcg->vmstats))
+	if (memcg_vmstats_needs_flush(memcg->vmstats)) {
+		trace_memcg_flush_stats(memcg, TRACE_MEMCG_FLUSH_READER);
 		do_flush_stats(memcg);
+	} else
+		trace_memcg_flush_stats(memcg, TRACE_MEMCG_FLUSH_READER_SKIP);
 }
 
 void mem_cgroup_flush_stats_ratelimited(struct mem_cgroup *memcg)
@@ -633,6 +636,7 @@ static void flush_memcg_stats_dwork(struct work_struct *w)
 	 * Deliberately ignore memcg_vmstats_needs_flush() here so that flushing
 	 * in latency-sensitive paths is as cheap as possible.
 	 */
+	trace_memcg_flush_stats(root_mem_cgroup, TRACE_MEMCG_FLUSH_PERIODIC);
 	do_flush_stats(root_mem_cgroup);
 	queue_delayed_work(system_unbound_wq, &stats_flush_dwork, FLUSH_TIME);
 }
@@ -5286,6 +5290,7 @@ bool obj_cgroup_may_zswap(struct obj_cgroup *objcg)
 		 * mem_cgroup_flush_stats() ignores small changes. Use
 		 * do_flush_stats() directly to get accurate stats for charging.
 		 */
+		trace_memcg_flush_stats(memcg, TRACE_MEMCG_FLUSH_ZSWAP);
 		do_flush_stats(memcg);
 		pages = memcg_page_state(memcg, MEMCG_ZSWAP_B) / PAGE_SIZE;
 		if (pages < max)
