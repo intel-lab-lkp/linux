@@ -61,10 +61,6 @@ static noinstr irqentry_state_t enter_from_kernel_mode(struct pt_regs *regs)
 	return ret;
 }
 
-#ifdef CONFIG_PREEMPT_DYNAMIC
-DEFINE_STATIC_KEY_TRUE(sk_dynamic_irqentry_exit_cond_resched);
-#endif
-
 static inline bool arm64_irqentry_exit_need_resched(void)
 {
 	/*
@@ -92,16 +88,21 @@ static inline bool arm64_irqentry_exit_need_resched(void)
 
 void raw_irqentry_exit_cond_resched(void)
 {
-#ifdef CONFIG_PREEMPT_DYNAMIC
-	if (!static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched))
-		return;
-#endif
-
 	if (!preempt_count()) {
 		if (need_resched() && arm64_irqentry_exit_need_resched())
 			preempt_schedule_irq();
 	}
 }
+
+#ifdef CONFIG_PREEMPT_DYNAMIC
+DEFINE_STATIC_KEY_TRUE(sk_dynamic_irqentry_exit_cond_resched);
+void dynamic_irqentry_exit_cond_resched(void)
+{
+	if (!static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched))
+		return;
+	raw_irqentry_exit_cond_resched();
+}
+#endif
 
 /*
  * Handle IRQ/context state management when exiting to kernel mode.
@@ -128,7 +129,7 @@ static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
 		}
 
 		if (IS_ENABLED(CONFIG_PREEMPTION))
-			raw_irqentry_exit_cond_resched();
+			irqentry_exit_cond_resched();
 
 		trace_hardirqs_on();
 	} else {
