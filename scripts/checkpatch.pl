@@ -622,6 +622,7 @@ our $signature_tags = qr{(?xi:
 	Reviewed-by:|
 	Reported-by:|
 	Suggested-by:|
+	Helped-by:|
 	To:|
 	Cc:
 )};
