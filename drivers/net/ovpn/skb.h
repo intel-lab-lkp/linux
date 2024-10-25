@@ -22,6 +22,7 @@ struct ovpn_cb {
 	struct ovpn_crypto_key_slot *ks;
 	struct aead_request *req;
 	struct scatterlist *sg;
+	unsigned int orig_len;
 	unsigned int payload_offset;
 };
 
