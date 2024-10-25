@@ -113,6 +113,16 @@
 #define MT9P031_TEST_PATTERN_RED			0xa2
 #define MT9P031_TEST_PATTERN_BLUE			0xa3
 
+struct mt9p031_model_info {
+       u32 code;
+};
+
+static const struct mt9p031_model_info mt9p031_models[] = {
+	{.code = MEDIA_BUS_FMT_SGRBG12_1X12}, /* mt9p006  */
+	{.code = MEDIA_BUS_FMT_SGRBG12_1X12}, /* mt9p031  */
+	{.code = MEDIA_BUS_FMT_Y12_1X12},     /* mt9p031m */
+};
+
 struct mt9p031 {
 	struct v4l2_subdev subdev;
 	struct media_pad pad;
@@ -125,7 +135,7 @@ struct mt9p031 {
 	struct clk *clk;
 	struct regulator_bulk_data regulators[3];
 
-	u32 code;
+	const struct mt9p031_model_info *model;
 	struct aptina_pll pll;
 	unsigned int clk_div;
 	bool use_pll;
@@ -708,7 +718,7 @@ static int mt9p031_init_state(struct v4l2_subdev *subdev,
 	crop->height = MT9P031_WINDOW_HEIGHT_DEF;
 
 	format = __mt9p031_get_pad_format(mt9p031, sd_state, 0, which);
-	format->code = mt9p031->code;
+	format->code = mt9p031->model->code;
 	format->width = MT9P031_WINDOW_WIDTH_DEF;
 	format->height = MT9P031_WINDOW_HEIGHT_DEF;
 	format->field = V4L2_FIELD_NONE;
@@ -1117,7 +1127,7 @@ static int mt9p031_probe(struct i2c_client *client)
 	mt9p031->pdata = pdata;
 	mt9p031->output_control	= MT9P031_OUTPUT_CONTROL_DEF;
 	mt9p031->mode2 = MT9P031_READ_MODE_2_ROW_BLC;
-	mt9p031->code = (uintptr_t)i2c_get_match_data(client);
+	mt9p031->model = &mt9p031_models[(uintptr_t)i2c_get_match_data(client)];
 
 	mt9p031->regulators[0].supply = "vdd";
 	mt9p031->regulators[1].supply = "vdd_io";
@@ -1214,17 +1224,17 @@ static void mt9p031_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id mt9p031_id[] = {
-	{ "mt9p006", MEDIA_BUS_FMT_SGRBG12_1X12 },
-	{ "mt9p031", MEDIA_BUS_FMT_SGRBG12_1X12 },
-	{ "mt9p031m", MEDIA_BUS_FMT_Y12_1X12 },
+	{ "mt9p006", 0 },
+	{ "mt9p031", 1 },
+	{ "mt9p031m", 2 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, mt9p031_id);
 
 static const struct of_device_id mt9p031_of_match[] = {
-	{ .compatible = "aptina,mt9p006", .data = (void *)MEDIA_BUS_FMT_SGRBG12_1X12 },
-	{ .compatible = "aptina,mt9p031", .data = (void *)MEDIA_BUS_FMT_SGRBG12_1X12 },
-	{ .compatible = "aptina,mt9p031m", .data = (void *)MEDIA_BUS_FMT_Y12_1X12 },
+	{ .compatible = "aptina,mt9p006", .data = (void *)0 },
+	{ .compatible = "aptina,mt9p031", .data = (void *)1 },
+	{ .compatible = "aptina,mt9p031m", .data = (void *)2 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mt9p031_of_match);
