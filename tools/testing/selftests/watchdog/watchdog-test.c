@@ -51,7 +51,7 @@ static const struct option lopts[] = {
  * the PC Watchdog card to reset its internal timer so it doesn't trigger
  * a computer reset.
  */
-static void keep_alive(void)
+static int keep_alive(void)
 {
 	int dummy;
 	int ret;
@@ -59,6 +59,8 @@ static void keep_alive(void)
 	ret = ioctl(fd, WDIOC_KEEPALIVE, &dummy);
 	if (!ret)
 		printf(".");
+
+	return ret;
 }
 
 /*
@@ -175,7 +177,7 @@ int main(int argc, char *argv[])
 	int flags;
 	unsigned int ping_rate = DEFAULT_PING_RATE;
 	int ret;
-	int c;
+	int c, n;
 	int oneshot = 0, stop = 1, count = 0;
 	char *file = "/dev/watchdog";
 	struct watchdog_info info;
@@ -342,7 +344,9 @@ int main(int argc, char *argv[])
 	signal(SIGINT, term);
 
 	while (stop || count--) {
-		exit_code = keep_alive();
+		ret = keep_alive();
+		if (ret)
+			goto end;
 		sleep(ping_rate);
 	}
 end:
@@ -350,9 +354,10 @@ end:
 	 * Send specific magic character 'V' just in case Magic Close is
 	 * enabled to ensure watchdog gets disabled on close.
 	 */
-	ret = write(fd, &v, 1);
-	if (ret < 0)
+	n = write(fd, &v, 1);
+	if (n < 0)
 		printf("Stopping watchdog ticks failed (%d)...\n", errno);
 	close(fd);
-	return 0;
+
+	return ret || n < 0;
 }
