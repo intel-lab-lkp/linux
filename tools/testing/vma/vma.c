@@ -219,7 +219,7 @@ static bool vma_write_started(struct vm_area_struct *vma)
 }
 
 /* Helper function providing a dummy vm_ops->close() method.*/
-static void dummy_close(struct vm_area_struct *)
+static void dummy_close(struct vm_area_struct *vma)
 {
 }
 
