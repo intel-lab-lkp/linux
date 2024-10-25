@@ -375,33 +375,37 @@ int mtk_build_eint(struct mtk_pinctrl *hw, struct platform_device *pdev)
 	if (!of_property_read_bool(np, "interrupt-controller"))
 		return -ENODEV;
 
-	hw->eint = devm_kzalloc(hw->dev, sizeof(*hw->eint), GFP_KERNEL);
-	if (!hw->eint)
-		return -ENOMEM;
+	if (hw->soc->eint_hw) {
+		hw->eint = devm_kzalloc(hw->dev, sizeof(*hw->eint), GFP_KERNEL);
+		if (!hw->eint)
+			return -ENOMEM;
 
-	hw->eint->base = devm_platform_ioremap_resource_byname(pdev, "eint");
-	if (IS_ERR(hw->eint->base)) {
-		ret = PTR_ERR(hw->eint->base);
-		goto err_free_eint;
+		hw->eint->base = devm_platform_ioremap_resource_byname(pdev, "eint");
+		if (IS_ERR(hw->eint->base)) {
+			ret = PTR_ERR(hw->eint->base);
+			goto err_free_eint;
+		}
+
+		hw->eint->irq = irq_of_parse_and_map(np, 0);
+		if (!hw->eint->irq) {
+			ret = -EINVAL;
+			goto err_free_eint;
+		}
+
+		hw->eint->dev = &pdev->dev;
+		hw->eint->hw = hw->soc->eint_hw;
+		hw->eint->pctl = hw;
+		hw->eint->gpio_xlate = &mtk_eint_xt;
+
+                return mtk_eint_do_init(hw->eint);
+
+        } else {
+                hw->eint->dev = &pdev->dev;
+                hw->eint->pctl = hw;
+                hw->eint->gpio_xlate = &mtk_eint_xt;
+
+                return mtk_eint_do_init_v2(hw->eint);
 	}
-
-	hw->eint->irq = irq_of_parse_and_map(np, 0);
-	if (!hw->eint->irq) {
-		ret = -EINVAL;
-		goto err_free_eint;
-	}
-
-	if (!hw->soc->eint_hw) {
-		ret = -ENODEV;
-		goto err_free_eint;
-	}
-
-	hw->eint->dev = &pdev->dev;
-	hw->eint->hw = hw->soc->eint_hw;
-	hw->eint->pctl = hw;
-	hw->eint->gpio_xlate = &mtk_eint_xt;
-
-	return mtk_eint_do_init(hw->eint);
 
 err_free_eint:
 	devm_kfree(hw->dev, hw->eint);
