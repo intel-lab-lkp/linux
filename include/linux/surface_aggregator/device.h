@@ -164,6 +164,7 @@ enum ssam_device_flags {
  * @dev:   Driver model representation of the device.
  * @ctrl:  SSAM controller managing this device.
  * @uid:   UID identifying the device.
+ * @tpd:   Platform profile device data.
  * @flags: Device state flags, see &enum ssam_device_flags.
  */
 struct ssam_device {
@@ -171,6 +172,7 @@ struct ssam_device {
 	struct ssam_controller *ctrl;
 
 	struct ssam_device_uid uid;
+	struct ssam_platform_profile_device *tpd;
 
 	unsigned long flags;
 };
