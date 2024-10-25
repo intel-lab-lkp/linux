@@ -947,7 +947,7 @@ static int hw_breakpoint_pending(unsigned long addr, unsigned int fsr,
 
 	preempt_disable();
 
-	if (interrupts_enabled(regs))
+	if (!regs_irqs_disabled(regs))
 		local_irq_enable();
 
 	/* We only handle watchpoints and hardware breakpoints. */

@@ -167,7 +167,7 @@ void __show_regs(struct pt_regs *regs)
 			segment = "user";
 
 		printk("Flags: %s  IRQs o%s  FIQs o%s  Mode %s  ISA %s  Segment %s\n",
-			buf, interrupts_enabled(regs) ? "n" : "ff",
+			buf, !regs_irqs_disabled(regs) ? "n" : "ff",
 			fast_interrupts_enabled(regs) ? "n" : "ff",
 			processor_modes[processor_mode(regs)],
 			isa_modes[isa_mode(regs)], segment);
