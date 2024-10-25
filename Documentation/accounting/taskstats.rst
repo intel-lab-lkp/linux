@@ -53,7 +53,7 @@ receive buffer sizes.
 Interface
 ---------
 
-The user-kernel interface is encapsulated in include/linux/taskstats.h
+The user-kernel interface is encapsulated in ``include/uapi/linux/taskstats.h``.
 
 To avoid this documentation becoming obsolete as the interface evolves, only
 an outline of the current version is given. taskstats.h always overrides the
