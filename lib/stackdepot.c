@@ -611,6 +611,9 @@ depot_stack_handle_t stack_depot_save_flags(unsigned long *entries,
 	if (unlikely(nr_entries == 0) || stack_depot_disabled)
 		return 0;
 
+	if (!stack_table)
+		return 0;
+
 	hash = hash_stack(entries, nr_entries);
 	bucket = &stack_table[hash & stack_hash_mask];
 
