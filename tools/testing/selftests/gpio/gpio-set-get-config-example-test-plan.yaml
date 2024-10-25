@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+# Top-level contains a list of the GPIO chips that will be tested. Each one is
+# chosen based on the GPIO chip's info label.
+- label: "gpiochip_device_label"
+  # For each GPIO chip, multiple pin configurations can be tested, which are
+  # listed under 'tests'
+  tests:
+  # pin indicates the pin number to test
+  - pin: 34
+    # bias can be 'pull-up', 'pull-down', 'disabled'
+    bias: "pull-up"
+  - pin: 34
+    bias: "pull-down"
+  - pin: 34
+    bias: "disabled"
