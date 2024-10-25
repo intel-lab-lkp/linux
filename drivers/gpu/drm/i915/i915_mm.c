@@ -146,7 +146,7 @@ int remap_io_sg(struct vm_area_struct *vma,
 	while (offset >= sg_dma_len(r.sgt.sgp) >> PAGE_SHIFT) {
 		offset -= sg_dma_len(r.sgt.sgp) >> PAGE_SHIFT;
 		r.sgt = __sgt_iter(__sg_next(r.sgt.sgp), use_dma(iobase));
-		if (!r.sgt.sgp)
+		if (GEM_WARN_ON(!r.sgt.sgp))
 			return -EINVAL;
 	}
 	r.sgt.curr = offset << PAGE_SHIFT;
