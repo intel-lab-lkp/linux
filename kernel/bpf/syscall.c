@@ -3106,14 +3106,21 @@ static void bpf_link_free(struct bpf_link *link)
 		bpf_prog_put(link->prog);
 	}
 	if (ops->dealloc_deferred) {
-		/* schedule BPF link deallocation; if underlying BPF program
-		 * is sleepable, we need to first wait for RCU tasks trace
-		 * sync, then go through "classic" RCU grace period
-		 */
-		if (sleepable)
-			call_rcu_tasks_trace(&link->rcu, bpf_link_defer_dealloc_mult_rcu_gp);
-		else
-			call_rcu(&link->rcu, bpf_link_defer_dealloc_rcu_gp);
+		if (link->type == BPF_LINK_TYPE_RAW_TRACEPOINT) {
+		        struct bpf_raw_tp_link *raw_tp =
+				container_of(link, struct bpf_raw_tp_link, link);
+
+			tracepoint_call_rcu(raw_tp->btp->tp, &link->rcu, bpf_link_defer_dealloc_rcu_gp);
+		} else {
+			/* schedule BPF link deallocation; if underlying BPF program
+			 * is sleepable, we need to first wait for RCU tasks trace
+			 * sync, then go through "classic" RCU grace period
+			 */
+			if (sleepable)
+				call_rcu_tasks_trace(&link->rcu, bpf_link_defer_dealloc_mult_rcu_gp);
+			else
+				call_rcu(&link->rcu, bpf_link_defer_dealloc_rcu_gp);
+		}
 	} else if (ops->dealloc)
 		ops->dealloc(link);
 }

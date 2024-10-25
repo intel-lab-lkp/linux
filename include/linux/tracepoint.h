@@ -104,6 +104,8 @@ void for_each_tracepoint_in_module(struct module *mod,
  * tracepoint_synchronize_unregister must be called between the last tracepoint
  * probe unregistration and the end of module exit to make sure there is no
  * caller executing a probe when it is freed.
+ * An alternative to tracepoint_synchronize_unregister() is to use
+ * tracepoint_call_rcu() for batched reclaim.
  */
 #ifdef CONFIG_TRACEPOINTS
 static inline void tracepoint_synchronize_unregister(void)
@@ -111,8 +113,15 @@ static inline void tracepoint_synchronize_unregister(void)
 	synchronize_rcu_tasks_trace();
 	synchronize_rcu();
 }
+
+void tracepoint_call_rcu(struct tracepoint *tp, struct rcu_head *head,
+			 void (*callback)(struct rcu_head *head));
+
 #else
 static inline void tracepoint_synchronize_unregister(void)
+{ }
+static inline void tracepoint_call_rcu(struct tracepoint *tp, struct rcu_head *head,
+				       void (*callback)(struct rcu_head *head))
 { }
 #endif
 
