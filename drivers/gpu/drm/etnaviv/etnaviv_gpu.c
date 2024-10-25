@@ -848,8 +848,7 @@ int etnaviv_gpu_init(struct etnaviv_gpu *gpu)
 		priv->shm_gfp_mask |= GFP_DMA32;
 
 	/* Create buffer: */
-	ret = etnaviv_cmdbuf_init(priv->cmdbuf_suballoc, &gpu->buffer,
-				  PAGE_SIZE);
+	ret = etnaviv_cmdbuf_init(priv->cmdbuf_suballoc, &gpu->buffer, SZ_4K);
 	if (ret) {
 		dev_err(gpu->dev, "could not create command buffer\n");
 		goto fail;
