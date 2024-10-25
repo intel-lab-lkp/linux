@@ -294,6 +294,9 @@ int htc_connect_service(struct htc_target *target,
 		return -ETIMEDOUT;
 	}
 
+	if (unlikely(target->conn_rsp_epid == ENDPOINT_UNUSED))
+		return -ENODEV;
+
 	*conn_rsp_epid = target->conn_rsp_epid;
 	return 0;
 err:
