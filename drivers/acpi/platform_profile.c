@@ -23,6 +23,15 @@ static const char * const profile_names[] = {
 };
 static_assert(ARRAY_SIZE(profile_names) == PLATFORM_PROFILE_LAST);
 
+static bool platform_profile_is_registered(void)
+{
+	struct list_head *pos;
+	int count = 0;
+	list_for_each(pos, &platform_profile_handler_list)
+		count++;
+	return count > 0;
+}
+
 static ssize_t platform_profile_choices_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -206,8 +215,10 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 
 	list_del(&pprof->list);
 
-	sysfs_remove_group(acpi_kobj, &platform_profile_group);
 	cur_profile = NULL;
+	if (!platform_profile_is_registered())
+		sysfs_remove_group(acpi_kobj, &platform_profile_group);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(platform_profile_remove);
