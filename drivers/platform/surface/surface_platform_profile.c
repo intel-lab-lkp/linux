@@ -228,7 +228,7 @@ static int surface_platform_profile_probe(struct ssam_device *sdev)
 
 static void surface_platform_profile_remove(struct ssam_device *sdev)
 {
-	platform_profile_remove();
+	platform_profile_remove(&sdev->tpd->handler);
 }
 
 static const struct ssam_device_id ssam_platform_profile_match[] = {

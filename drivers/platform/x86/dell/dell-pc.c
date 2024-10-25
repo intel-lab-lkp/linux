@@ -273,7 +273,7 @@ static int thermal_init(void)
 static void thermal_cleanup(void)
 {
 	if (thermal_handler) {
-		platform_profile_remove();
+		platform_profile_remove(thermal_handler);
 		kfree(thermal_handler);
 	}
 }
