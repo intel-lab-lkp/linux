@@ -645,10 +645,14 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 
 	nres = 0;
 	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
+		int vf_bar_sz = pci_iov_resource_size(dev,
+						      pci_resource_to_iov(i));
 		bars |= (1 << pci_resource_to_iov(i));
 		res = &dev->resource[pci_resource_to_iov(i)];
-		if (res->parent)
-			nres++;
+		if (!res->parent || vf_bar_sz * nr_virtfn > resource_size(res))
+			continue;
+
+		nres++;
 	}
 	if (nres != iov->nres) {
 		pci_err(dev, "not enough MMIO resources for SR-IOV\n");
