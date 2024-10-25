@@ -523,7 +523,6 @@ static const struct dev_pm_ops qcom_cci_pm = {
 static int cci_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	unsigned long cci_clk_rate = 0;
 	struct device_node *child;
 	struct resource *r;
 	struct cci *cci;
@@ -597,7 +596,7 @@ static int cci_probe(struct platform_device *pdev)
 	/* Retrieve CCI clock rate */
 	for (i = 0; i < cci->nclocks; i++) {
 		if (!strcmp(cci->clocks[i].id, "cci")) {
-			cci_clk_rate = clk_get_rate(cci->clocks[i].clk);
+			clk_get_rate(cci->clocks[i].clk);
 			break;
 		}
 	}
