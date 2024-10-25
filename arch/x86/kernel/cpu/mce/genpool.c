@@ -118,22 +118,21 @@ int mce_gen_pool_add(struct mce *mce)
 
 static int mce_gen_pool_create(void)
 {
-	int mce_numrecords, mce_poolsz, order;
+	int mce_numrecords, mce_poolsz, order, ret;
 	struct gen_pool *gpool;
-	int ret = -ENOMEM;
 	void *mce_pool;
 
 	order = order_base_2(sizeof(struct mce_evt_llist));
 	gpool = gen_pool_create(order, -1);
 	if (!gpool)
-		return ret;
+		return -ENOMEM;
 
 	mce_numrecords = max(MCE_MIN_ENTRIES, num_possible_cpus() * MCE_PER_CPU);
 	mce_poolsz = mce_numrecords * (1 << order);
 	mce_pool = kmalloc(mce_poolsz, GFP_KERNEL);
 	if (!mce_pool) {
 		gen_pool_destroy(gpool);
-		return ret;
+		return -ENOMEM;
 	}
 	ret = gen_pool_add(gpool, (unsigned long)mce_pool, mce_poolsz, -1);
 	if (ret) {
@@ -144,7 +143,7 @@ static int mce_gen_pool_create(void)
 
 	mce_evt_pool = gpool;
 
-	return ret;
+	return 0;
 }
 
 int mce_gen_pool_init(void)
