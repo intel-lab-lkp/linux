@@ -6860,6 +6860,7 @@ static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
 	struct page *dst_page;
 	struct page *src_page;
 
+	addr = ALIGN_DOWN(addr, folio_size(dst));
 	for (i = 0; i < nr_pages; i++) {
 		dst_page = folio_page(dst, i);
 		src_page = folio_page(src, i);
