@@ -862,6 +862,14 @@ xfs_file_write_iter(
 		ret = xfs_file_dio_write(iocb, from);
 		if (ret != -ENOTBLK)
 			return ret;
+		/*
+		 * iomap can return -ENOTBLK if pagecache invalidation fails.
+		 * Let's make sure if -ENOTBLK is ever returned for atomic
+		 * writes than we fail the write request instead of fallback
+		 * to buffered-io.
+		 */
+		if (iocb->ki_flags & IOCB_ATOMIC)
+			return -EIO;
 	}
 
 	return xfs_file_buffered_write(iocb, from);
