@@ -163,6 +163,21 @@ static struct sk_buff *dsa_xmit_ll(struct sk_buff *skb, struct net_device *dev,
 	 */
 	if (skb->protocol == htons(ETH_P_8021Q) &&
 	    (!br_dev || br_vlan_enabled(br_dev))) {
+		struct bridge_vlan_info br_info;
+		u16 vid = 0;
+		u16 src_tagged = 1;
+		u8 *vid_ptr;
+		int err = 0;
+
+		/* Read VID from VLAN 802.1Q tag */
+		vid_ptr = dsa_etype_header_pos_tx(skb);
+		vid = ((vid_ptr[2] & 0x0F) << 8 | vid_ptr[3]);
+		/* Get VLAN info for vid on net_device *dev (dsa slave) */
+		err = br_vlan_get_info_rcu(dev, vid, &br_info);
+		if (err == 0 && (br_info.flags & BRIDGE_VLAN_INFO_UNTAGGED)) {
+			src_tagged = 0;
+		}
+
 		if (extra) {
 			skb_push(skb, extra);
 			dsa_alloc_etype_header(skb, extra);
@@ -170,11 +185,11 @@ static struct sk_buff *dsa_xmit_ll(struct sk_buff *skb, struct net_device *dev,
 
 		/* Construct tagged DSA tag from 802.1Q tag. */
 		dsa_header = dsa_etype_header_pos_tx(skb) + extra;
-		dsa_header[0] = (cmd << 6) | 0x20 | tag_dev;
+		dsa_header[0] = (cmd << 6) | (src_tagged << 5) | tag_dev;
 		dsa_header[1] = tag_port << 3;
 
 		/* Move CFI field from byte 2 to byte 1. */
-		if (dsa_header[2] & 0x10) {
+		if (src_tagged == 1 && dsa_header[2] & 0x10) {
 			dsa_header[1] |= 0x01;
 			dsa_header[2] &= ~0x10;
 		}
