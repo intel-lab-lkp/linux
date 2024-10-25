@@ -95,6 +95,14 @@ static inline bool arm64_irqentry_exit_need_resched(void)
 	return true;
 }
 
+void raw_irqentry_exit_cond_resched(void)
+{
+	if (!preempt_count()) {
+		if (need_resched() && arm64_irqentry_exit_need_resched())
+			preempt_schedule_irq();
+	}
+}
+
 /*
  * Handle IRQ/context state management when exiting to kernel mode.
  * After this function returns it is not safe to call regular kernel code,
@@ -119,13 +127,8 @@ static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
 			return;
 		}
 
-		if (IS_ENABLED(CONFIG_PREEMPTION)) {
-			if (!preempt_count()) {
-				if (need_resched() &&
-				    arm64_irqentry_exit_need_resched())
-					preempt_schedule_irq();
-			}
-		}
+		if (IS_ENABLED(CONFIG_PREEMPTION))
+			raw_irqentry_exit_cond_resched();
 
 		trace_hardirqs_on();
 	} else {
