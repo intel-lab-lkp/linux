@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/gpio.h>
+#include <stdbool.h>
 
 #define CONSUMER	"gpio-mockup-cdev"
 
@@ -95,6 +96,7 @@ static void usage(char *prog)
 	printf("               (default is to leave bias unchanged):\n");
 	printf("        -l: set line active low (default is active high)\n");
 	printf("        -s: set line value (default is to get line value)\n");
+	printf("        -w: wait even in get mode\n");
 	printf("        -u: uAPI version to use (default is 2)\n");
 	exit(-1);
 }
@@ -120,13 +122,14 @@ int main(int argc, char *argv[])
 	unsigned int offset, val = 0, abiv;
 	uint32_t flags_v1;
 	uint64_t flags_v2;
+	bool wait = false;
 
 	abiv = 2;
 	ret = 0;
 	flags_v1 = GPIOHANDLE_REQUEST_INPUT;
 	flags_v2 = GPIO_V2_LINE_FLAG_INPUT;
 
-	while ((opt = getopt(argc, argv, "lb:s:u:")) != -1) {
+	while ((opt = getopt(argc, argv, "lb:s:u:w")) != -1) {
 		switch (opt) {
 		case 'l':
 			flags_v1 |= GPIOHANDLE_REQUEST_ACTIVE_LOW;
@@ -150,9 +153,13 @@ int main(int argc, char *argv[])
 			flags_v1 |= GPIOHANDLE_REQUEST_OUTPUT;
 			flags_v2 &= ~GPIO_V2_LINE_FLAG_INPUT;
 			flags_v2 |= GPIO_V2_LINE_FLAG_OUTPUT;
+			wait = true;
 			break;
 		case 'u':
 			abiv = atoi(optarg);
+			break;
+		case 'w':
+			wait = true;
 			break;
 		default:
 			usage(argv[0]);
@@ -183,9 +190,10 @@ int main(int argc, char *argv[])
 		return lfd;
 	}
 
-	if (flags_v2 & GPIO_V2_LINE_FLAG_OUTPUT) {
+	if (wait)
 		wait_signal();
-	} else {
+
+	if (flags_v2 & GPIO_V2_LINE_FLAG_INPUT) {
 		if (abiv == 1)
 			ret = get_value_v1(lfd);
 		else
