@@ -21,6 +21,7 @@ static int parport_pc_find_nonpci_ports (int autoirq, int autodma)
 	int propsize;
 	int count = 0;
 	int virq;
+	struct parport_data tmp_pdata;
 
 	for_each_compatible_node(np, "parallel", "pnpPNP,400") {
 		prop = of_get_property(np, "reg", &propsize);
@@ -32,8 +33,8 @@ static int parport_pc_find_nonpci_ports (int autoirq, int autodma)
 		if (!virq)
 			continue;
 
-		if (parport_pc_probe_port(io1, io2, virq, autodma, NULL, 0)
-				!= NULL)
+		parport_data_ioport_init(&tmp_pdata, io1, io2, virq, autodma);
+		if (parport_pc_probe_port(tmp_pdata, NULL, 0) != NULL)
 			count++;
 	}
 	return count;

@@ -115,13 +115,14 @@ static int ecpp_probe(struct platform_device *op)
 	unsigned long d_len;
 	struct device_node *parent;
 	struct parport *p;
+	struct parport_data tmp_pdata;
 	int slot, err;
 
 	parent = op->dev.of_node->parent;
 	if (of_node_name_eq(parent, "dma")) {
-		p = parport_pc_probe_port(base, base + 0x400,
-					  op->archdata.irqs[0], PARPORT_DMA_NOFIFO,
-					  op->dev.parent->parent, 0);
+		parport_data_ioport_init(&tmp_pdata, base, base + 0x400,
+					op->archdata.irqs[0], PARPORT_DMA_NOFIFO);
+		p = parport_pc_probe_port(tmp_pdata, op->dev.parent->parent, 0);
 		if (!p)
 			return -ENOMEM;
 		dev_set_drvdata(&op->dev, p);
@@ -169,9 +170,9 @@ static int ecpp_probe(struct platform_device *op)
 	ns87303_modify(config, PTR,
 		       0, PTR_LPT_REG_DIR);
 
-	p = parport_pc_probe_port(base, base + 0x400,
-				  op->archdata.irqs[0],
-				  slot,
+	parport_data_ioport_init(&tmp_pdata, base, base + 0x400,
+				op->archdata.irqs[0], slot);
+	p = parport_pc_probe_port(tmp_pdata,
 				  op->dev.parent,
 				  0);
 	err = -ENOMEM;

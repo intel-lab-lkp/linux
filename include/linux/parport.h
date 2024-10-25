@@ -180,6 +180,14 @@ struct ieee1284_info {
 	struct semaphore irq;
 };
 
+struct parport_data {
+	/* for ioport */
+	unsigned long iobase;   /* base address for ioport */
+	unsigned long iobase_hi;        /* base address (hi - ECR) */
+	int irq;
+	int dma;
+};
+
 /* A parallel port */
 struct parport {
 	unsigned long iobase;	/* base address for ioport */

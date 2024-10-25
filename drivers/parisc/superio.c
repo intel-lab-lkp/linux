@@ -418,10 +418,11 @@ static void __init superio_serial_init(void)
 static void __init superio_parport_init(void)
 {
 #ifdef CONFIG_PARPORT_PC
-	if (!parport_pc_probe_port(sio_dev.pp_base,
-			0 /*base_hi*/,
-			PAR_IRQ, 
-			PARPORT_DMA_NONE /* dma */,
+	struct parport_data tmp_pdata;
+
+	parport_data_ioport_init(&tmp_pdata, sio_dev.pp_base, 0,
+				PAR_IRQ, PARPORT_DMA_NONE);
+	if (!parport_pc_probe_port(tmp_pdata,
 			NULL /*struct pci_dev* */,
 			0 /* shared irq flags */))
 
