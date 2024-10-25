@@ -1480,6 +1480,75 @@ int ufs_qcom_testbus_config(struct ufs_qcom_host *host)
 	return 0;
 }
 
+static void ufs_qcom_dump_testbus(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	u32 *testbus = NULL;
+	int i, j, nminor = 0, testbus_len = 0;
+	char *prefix;
+
+	testbus = kmalloc(256 * sizeof(u32), GFP_KERNEL);
+	if (!testbus)
+		return;
+
+	for (j = 0; j < TSTBUS_MAX; j++) {
+		nminor = 32;
+
+		switch (j) {
+		case TSTBUS_UAWM:
+			prefix = "TSTBUS_UAWM ";
+			break;
+		case TSTBUS_UARM:
+			prefix = "TSTBUS_UARM ";
+			break;
+		case TSTBUS_TXUC:
+			prefix = "TSTBUS_TXUC ";
+			break;
+		case TSTBUS_RXUC:
+			prefix = "TSTBUS_RXUC ";
+			break;
+		case TSTBUS_DFC:
+			prefix = "TSTBUS_DFC ";
+			break;
+		case TSTBUS_TRLUT:
+			prefix = "TSTBUS_TRLUT ";
+			break;
+		case TSTBUS_TMRLUT:
+			prefix = "TSTBUS_TMRLUT ";
+			break;
+		case TSTBUS_OCSC:
+			prefix = "TSTBUS_OCSC ";
+			break;
+		case TSTBUS_UTP_HCI:
+			prefix = "TSTBUS_UTP_HCI ";
+			break;
+		case TSTBUS_COMBINED:
+			prefix = "TSTBUS_COMBINED ";
+			break;
+		case TSTBUS_WRAPPER:
+			prefix = "TSTBUS_WRAPPER ";
+			break;
+		case TSTBUS_UNIPRO:
+			nminor = 256;
+			prefix = "TSTBUS_UNIPRO ";
+			break;
+		default:
+			break;
+		}
+
+		host->testbus.select_major = j;
+		testbus_len = nminor * sizeof(u32);
+		for (i = 0; i < nminor; i++) {
+			host->testbus.select_minor = i;
+			ufs_qcom_testbus_config(host);
+			testbus[i] = ufshcd_readl(hba, UFS_TEST_BUS);
+		}
+		print_hex_dump(KERN_ERR, prefix, DUMP_PREFIX_OFFSET,
+			       16, 4, testbus, testbus_len, false);
+	}
+	kfree(testbus);
+}
+
 static void ufs_qcom_dump_mcq_hci_regs(struct ufs_hba *hba)
 {
 	/* RES_MCQ_1 */
@@ -1596,6 +1665,10 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba)
 			ufs_qcom_dump_mcq_hci_regs(hba);
 			usleep_range(1000, 1100);
 		}
+		ufshcd_dump_regs(hba, UFS_TEST_BUS, 4, "UFS_TEST_BUS ");
+		usleep_range(1000, 1100);
+		ufs_qcom_dump_testbus(hba);
+		usleep_range(1000, 1100);
 	}
 }
 
