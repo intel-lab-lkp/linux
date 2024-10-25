@@ -17,6 +17,49 @@ static inline void syscall_enter_audit(struct pt_regs *regs, long syscall)
 	}
 }
 
+/**
+ * arch_pre_report_syscall_entry - Architecture specific work before
+ *				   report_syscall_entry().
+ *
+ * Invoked from syscall_trace_enter() to prepare for ptrace_report_syscall_entry().
+ * Defaults to NOP.
+ *
+ * The main purpose is for saving a general purpose register clobbered
+ * in the tracee.
+ */
+static inline unsigned long arch_pre_report_syscall_entry(struct pt_regs *regs);
+
+#ifndef arch_pre_report_syscall_entry
+static inline unsigned long arch_pre_report_syscall_entry(struct pt_regs *regs)
+{
+	return 0;
+}
+#endif
+
+/**
+ * arch_post_report_syscall_entry - Architecture specific work after
+ *			            report_syscall_entry().
+ *
+ * Invoked from syscall_trace_enter() after calling ptrace_report_syscall_entry().
+ * Defaults to NOP.
+ *
+ * The main purpose is for restoring a general purpose register clobbered
+ * in the trace saved in arch_pre_report_syscall_entry(), also it can
+ * do something arch-specific according to the return value of
+ * ptrace_report_syscall_entry().
+ */
+static inline void arch_post_report_syscall_entry(struct pt_regs *regs,
+						  unsigned long saved_reg,
+						  long ret);
+
+#ifndef arch_post_report_syscall_entry
+static inline void arch_post_report_syscall_entry(struct pt_regs *regs,
+						  unsigned long saved_reg,
+						  long ret)
+{
+}
+#endif
+
 long syscall_trace_enter(struct pt_regs *regs, long syscall,
 				unsigned long work)
 {
@@ -34,7 +77,9 @@ long syscall_trace_enter(struct pt_regs *regs, long syscall,
 
 	/* Handle ptrace */
 	if (work & (SYSCALL_WORK_SYSCALL_TRACE | SYSCALL_WORK_SYSCALL_EMU)) {
+		unsigned long saved_reg = arch_pre_report_syscall_entry(regs);
 		ret = ptrace_report_syscall_entry(regs);
+		arch_post_report_syscall_entry(regs, saved_reg, ret);
 		if (ret || (work & SYSCALL_WORK_SYSCALL_EMU))
 			return -1L;
 	}
@@ -71,20 +116,50 @@ noinstr void syscall_enter_from_user_mode_prepare(struct pt_regs *regs)
 	instrumentation_end();
 }
 
-/*
- * If SYSCALL_EMU is set, then the only reason to report is when
- * SINGLESTEP is set (i.e. PTRACE_SYSEMU_SINGLESTEP).  This syscall
- * instruction has been already reported in syscall_enter_from_user_mode().
+/**
+ * arch_pre_report_syscall_exit - Architecture specific work before
+ *				  report_syscall_exit().
+ *
+ * Invoked from syscall_exit_work() to prepare for ptrace_report_syscall_exit().
+ * Defaults to NOP.
+ *
+ * The main purpose is for saving a general purpose register clobbered
+ * in the trace.
  */
-static inline bool report_single_step(unsigned long work)
+static inline unsigned long arch_pre_report_syscall_exit(struct pt_regs *regs,
+							     unsigned long work);
+
+#ifndef arch_pre_report_syscall_exit
+static inline unsigned long arch_pre_report_syscall_exit(struct pt_regs *regs,
+							     unsigned long work)
 {
-	if (work & SYSCALL_WORK_SYSCALL_EMU)
-		return false;
-
-	return work & SYSCALL_WORK_SYSCALL_EXIT_TRAP;
+	return 0;
 }
+#endif
 
-static void syscall_exit_work(struct pt_regs *regs, unsigned long work)
+/**
+ * arch_post_report_syscall_exit - Architecture specific work after
+ *			           report_syscall_exit().
+ *
+ * Invoked from syscall_exit_work() after calling ptrace_report_syscall_exit().
+ * Defaults to NOP.
+ *
+ * The main purpose is for restoring a general purpose register clobbered
+ * in the trace saved in arch_pre_report_syscall_exit().
+ */
+static inline void arch_post_report_syscall_exit(struct pt_regs *regs,
+						 unsigned long saved_reg,
+						 unsigned long work);
+
+#ifndef arch_post_report_syscall_exit
+static inline void arch_post_report_syscall_exit(struct pt_regs *regs,
+						 unsigned long saved_reg,
+						 unsigned long work)
+{
+}
+#endif
+
+void syscall_exit_work(struct pt_regs *regs, unsigned long work)
 {
 	bool step;
 
@@ -107,8 +182,11 @@ static void syscall_exit_work(struct pt_regs *regs, unsigned long work)
 		trace_sys_exit(regs, syscall_get_return_value(current, regs));
 
 	step = report_single_step(work);
-	if (step || work & SYSCALL_WORK_SYSCALL_TRACE)
+	if (step || work & SYSCALL_WORK_SYSCALL_TRACE) {
+		unsigned long saved_reg = arch_pre_report_syscall_exit(regs, work);
 		ptrace_report_syscall_exit(regs, step);
+		arch_post_report_syscall_exit(regs, saved_reg, work);
+	}
 }
 
 /*

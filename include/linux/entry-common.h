@@ -178,4 +178,5 @@ void syscall_exit_to_user_mode_work(struct pt_regs *regs);
  */
 void syscall_exit_to_user_mode(struct pt_regs *regs);
 
+void syscall_exit_work(struct pt_regs *regs, unsigned long work);
 #endif
