@@ -62,13 +62,12 @@ static unsigned int mtk_get_port(struct mtk_pinctrl *pctl, unsigned long pin)
 			<< pctl->devdata->port_shf;
 }
 
-static int mtk_pmx_gpio_set_direction(struct pinctrl_dev *pctldev,
-			struct pinctrl_gpio_range *range, unsigned offset,
-			bool input)
+static int mtk_common_pin_set_direction(struct mtk_pinctrl *pctl,
+					unsigned int offset,
+					bool input)
 {
 	unsigned int reg_addr;
 	unsigned int bit;
-	struct mtk_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
 
 	reg_addr = mtk_get_port(pctl, offset) + pctl->devdata->dir_offset;
 	bit = BIT(offset & pctl->devdata->mode_mask);
@@ -84,6 +83,15 @@ static int mtk_pmx_gpio_set_direction(struct pinctrl_dev *pctldev,
 
 	regmap_write(mtk_get_regmap(pctl, offset), reg_addr, bit);
 	return 0;
+}
+
+static int mtk_pmx_gpio_set_direction(struct pinctrl_dev *pctldev,
+			struct pinctrl_gpio_range *range, unsigned int offset,
+			bool input)
+{
+	struct mtk_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
+
+	return mtk_common_pin_set_direction(pctl, offset, input);
 }
 
 static void mtk_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
@@ -363,12 +371,11 @@ static int mtk_pconf_set_pull_select(struct mtk_pinctrl *pctl,
 	return 0;
 }
 
-static int mtk_pconf_parse_conf(struct pinctrl_dev *pctldev,
+static int mtk_pconf_parse_conf(struct mtk_pinctrl *pctl,
 		unsigned int pin, enum pin_config_param param,
-		enum pin_config_param arg)
+		u32 arg)
 {
 	int ret = 0;
-	struct mtk_pinctrl *pctl = pinctrl_dev_get_drvdata(pctldev);
 
 	switch (param) {
 	case PIN_CONFIG_BIAS_DISABLE:
@@ -381,15 +388,15 @@ static int mtk_pconf_parse_conf(struct pinctrl_dev *pctldev,
 		ret = mtk_pconf_set_pull_select(pctl, pin, true, false, arg);
 		break;
 	case PIN_CONFIG_INPUT_ENABLE:
-		mtk_pmx_gpio_set_direction(pctldev, NULL, pin, true);
+		mtk_common_pin_set_direction(pctl, pin, true);
 		ret = mtk_pconf_set_ies_smt(pctl, pin, arg, param);
 		break;
 	case PIN_CONFIG_OUTPUT:
 		mtk_gpio_set(pctl->chip, pin, arg);
-		ret = mtk_pmx_gpio_set_direction(pctldev, NULL, pin, false);
+		ret = mtk_common_pin_set_direction(pctl, pin, false);
 		break;
 	case PIN_CONFIG_INPUT_SCHMITT_ENABLE:
-		mtk_pmx_gpio_set_direction(pctldev, NULL, pin, true);
+		mtk_common_pin_set_direction(pctl, pin, true);
 		ret = mtk_pconf_set_ies_smt(pctl, pin, arg, param);
 		break;
 	case PIN_CONFIG_DRIVE_STRENGTH:
@@ -421,7 +428,7 @@ static int mtk_pconf_group_set(struct pinctrl_dev *pctldev, unsigned group,
 	int i, ret;
 
 	for (i = 0; i < num_configs; i++) {
-		ret = mtk_pconf_parse_conf(pctldev, g->pin,
+		ret = mtk_pconf_parse_conf(pctl, g->pin,
 			pinconf_to_config_param(configs[i]),
 			pinconf_to_config_argument(configs[i]));
 		if (ret < 0)
@@ -870,19 +877,20 @@ static int mtk_gpio_set_config(struct gpio_chip *chip, unsigned offset,
 	struct mtk_pinctrl *pctl = gpiochip_get_data(chip);
 	const struct mtk_desc_pin *pin;
 	unsigned long eint_n;
-	u32 debounce;
+	enum pin_config_param param = pinconf_to_config_param(config);
+	u32 arg = pinconf_to_config_argument(config);
 
-	if (pinconf_to_config_param(config) != PIN_CONFIG_INPUT_DEBOUNCE)
-		return -ENOTSUPP;
+	if (param == PIN_CONFIG_INPUT_DEBOUNCE) {
+		pin = pctl->devdata->pins + offset;
+		if (pin->eint.eintnum == NO_EINT_SUPPORT)
+			return -EINVAL;
 
-	pin = pctl->devdata->pins + offset;
-	if (pin->eint.eintnum == NO_EINT_SUPPORT)
-		return -EINVAL;
+		eint_n = pin->eint.eintnum;
 
-	debounce = pinconf_to_config_argument(config);
-	eint_n = pin->eint.eintnum;
+		return mtk_eint_set_debounce(pctl->eint, eint_n, arg);
+	}
 
-	return mtk_eint_set_debounce(pctl->eint, eint_n, debounce);
+	return mtk_pconf_parse_conf(pctl, offset, param, arg);
 }
 
 static const struct gpio_chip mtk_gpio_chip = {
