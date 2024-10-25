@@ -220,7 +220,7 @@ struct moschip_port {
 
 /*
  * mos7840_set_reg_sync
- * 	To set the Control register by calling usb_fill_control_urb function
+ *	To set the Control register by calling usb_fill_control_urb function
  *	by passing usb_sndctrlpipe function as parameter.
  */
 
@@ -238,7 +238,7 @@ static int mos7840_set_reg_sync(struct usb_serial_port *port, __u16 reg,
 
 /*
  * mos7840_get_reg_sync
- * 	To set the Uart register by calling usb_fill_control_urb function by
+ *	To set the Uart register by calling usb_fill_control_urb function by
  *	passing usb_rcvctrlpipe function as parameter.
  */
 
@@ -1356,11 +1356,11 @@ static void mos7840_set_termios(struct tty_struct *tty,
  * mos7840_get_lsr_info - get line status register info
  *
  * Purpose: Let user call ioctl() to get info when the UART physically
- * 	    is emptied.  On bus types like RS485, the transmitter must
- * 	    release the bus after transmitting. This must be done when
- * 	    the transmit shift register is empty, not be done when the
- * 	    transmit holding register is empty.  This functionality
- * 	    allows an RS485 driver to be written in user space.
+ *	is emptied.  On bus types like RS485, the transmitter must
+ *	release the bus after transmitting. This must be done when
+ *	the transmit shift register is empty, not be done when the
+ *	transmit holding register is empty.  This functionality
+ *	allows an RS485 driver to be written in user space.
  *****************************************************************************/
 
 static int mos7840_get_lsr_info(struct tty_struct *tty,
