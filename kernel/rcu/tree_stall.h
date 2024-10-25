@@ -357,8 +357,8 @@ static void rcu_dump_cpu_stacks(unsigned long gp_seq)
 					pr_err("Offline CPU %d blocking current GP.\n", cpu);
 				else
 					dump_cpu_task(cpu);
-			raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 			}
+			raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
 		}
 		printk_deferred_exit();
 	}
