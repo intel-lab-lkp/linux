@@ -1052,9 +1052,13 @@ static void check_unmap(struct dma_debug_entry *ref)
 	}
 
 	hash_bucket_del(entry);
-	dma_entry_free(entry);
-
 	put_hash_bucket(bucket, flags);
+
+	/*
+	 * Now that bucket has been released, the removed entry can be
+	 * freed without risk of deadlock:
+	 */
+	dma_entry_free(entry);
 }
 
 static void check_for_stack(struct device *dev,
