@@ -956,23 +956,27 @@ struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
 		vma_prev(vmg->vmi); /* Equivalent to going to the previous range */
 	}
 
+	/* No mergeable adjacent VMA, return */
+	if (!vmg->vma)
+		return NULL;
+
 	/*
 	 * Now try to expand adjacent VMA(s). This takes care of removing the
 	 * following VMA if we have VMAs on both sides.
 	 */
-	if (vmg->vma && !vma_expand(vmg)) {
+	if (!vma_expand(vmg)) {
 		khugepaged_enter_vma(vmg->vma, vmg->flags);
 		vmg->state = VMA_MERGE_SUCCESS;
 		return vmg->vma;
 	}
 
 	/* If expansion failed, reset state. Allows us to retry merge later. */
+	if (vmg->vma == prev)
+		vma_iter_set(vmg->vmi, start);
 	vmg->vma = NULL;
 	vmg->start = start;
 	vmg->end = end;
 	vmg->pgoff = pgoff;
-	if (vmg->vma == prev)
-		vma_iter_set(vmg->vmi, start);
 
 	return NULL;
 }
