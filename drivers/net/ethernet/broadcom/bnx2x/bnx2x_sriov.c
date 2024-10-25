@@ -2619,10 +2619,6 @@ int bnx2x_get_vf_config(struct net_device *dev, int vfidx,
 
 	mac_obj = &bnx2x_leading_vfq(vf, mac_obj);
 	vlan_obj = &bnx2x_leading_vfq(vf, vlan_obj);
-	if (!mac_obj || !vlan_obj) {
-		BNX2X_ERR("VF partially initialized\n");
-		return -EINVAL;
-	}
 
 	ivi->vf = vfidx;
 	ivi->qos = 0;
