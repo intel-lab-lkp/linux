@@ -2477,25 +2477,30 @@ static void rzg2l_gpio_irq_restore(struct rzg2l_pinctrl *pctrl)
 static void rzg2l_gpio_irq_domain_free(struct irq_domain *domain, unsigned int virq,
 				       unsigned int nr_irqs)
 {
+	struct rzg2l_pinctrl *pctrl;
+	irq_hw_number_t hwirq;
+	struct gpio_chip *gc;
+	unsigned long flags;
 	struct irq_data *d;
+	unsigned int i, j;
 
-	d = irq_domain_get_irq_data(domain, virq);
-	if (d) {
-		struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
-		struct rzg2l_pinctrl *pctrl = container_of(gc, struct rzg2l_pinctrl, gpio_chip);
-		irq_hw_number_t hwirq = irqd_to_hwirq(d);
-		unsigned long flags;
-		unsigned int i;
+	for (j = 0; j < nr_irqs; j++) {
+		d = irq_domain_get_irq_data(domain, virq + j);
+		if (d) {
+			gc = irq_data_get_irq_chip_data(d);
+			pctrl = container_of(gc, struct rzg2l_pinctrl, gpio_chip);
+			hwirq = irqd_to_hwirq(d);
 
-		for (i = 0; i < RZG2L_TINT_MAX_INTERRUPT; i++) {
-			if (pctrl->hwirq[i] == hwirq) {
-				rzg2l_gpio_irq_endisable(pctrl, hwirq, false);
-				rzg2l_gpio_free(gc, hwirq);
-				spin_lock_irqsave(&pctrl->bitmap_lock, flags);
-				bitmap_release_region(pctrl->tint_slot, i, get_order(1));
-				spin_unlock_irqrestore(&pctrl->bitmap_lock, flags);
-				pctrl->hwirq[i] = 0;
-				break;
+			for (i = 0; i < RZG2L_TINT_MAX_INTERRUPT; i++) {
+				if (pctrl->hwirq[i] == hwirq) {
+					rzg2l_gpio_irq_endisable(pctrl, hwirq, false);
+					rzg2l_gpio_free(gc, hwirq);
+					spin_lock_irqsave(&pctrl->bitmap_lock, flags);
+					bitmap_release_region(pctrl->tint_slot, i, get_order(1));
+					spin_unlock_irqrestore(&pctrl->bitmap_lock, flags);
+					pctrl->hwirq[i] = 0;
+					break;
+				}
 			}
 		}
 	}
