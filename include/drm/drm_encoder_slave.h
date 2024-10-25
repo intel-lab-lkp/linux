@@ -58,8 +58,7 @@ struct drm_encoder_slave_funcs {
 	void (*destroy)(struct drm_encoder *encoder);
 
 	/**
-	 * @dpms: Analogous to &drm_encoder_helper_funcs @dpms callback. Wrapped
-	 * by drm_i2c_encoder_dpms().
+	 * @dpms: Analogous to &drm_encoder_helper_funcs @dpms callback.
 	 */
 	void (*dpms)(struct drm_encoder *encoder, int mode);
 
@@ -88,7 +87,7 @@ struct drm_encoder_slave_funcs {
 			  struct drm_display_mode *mode);
 	/**
 	 * @mode_set: Analogous to &drm_encoder_helper_funcs @mode_set
-	 * callback. Wrapped by drm_i2c_encoder_mode_set().
+	 * callback.
 	 */
 	void (*mode_set)(struct drm_encoder *encoder,
 			 struct drm_display_mode *mode,
@@ -223,14 +222,8 @@ void drm_i2c_encoder_destroy(struct drm_encoder *encoder);
  * Wrapper fxns which can be plugged in to drm_encoder_helper_funcs:
  */
 
-void drm_i2c_encoder_dpms(struct drm_encoder *encoder, int mode);
 bool drm_i2c_encoder_mode_fixup(struct drm_encoder *encoder,
 		const struct drm_display_mode *mode,
-		struct drm_display_mode *adjusted_mode);
-void drm_i2c_encoder_prepare(struct drm_encoder *encoder);
-void drm_i2c_encoder_commit(struct drm_encoder *encoder);
-void drm_i2c_encoder_mode_set(struct drm_encoder *encoder,
-		struct drm_display_mode *mode,
 		struct drm_display_mode *adjusted_mode);
 enum drm_connector_status drm_i2c_encoder_detect(struct drm_encoder *encoder,
 	    struct drm_connector *connector);

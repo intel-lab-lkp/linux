@@ -125,12 +125,6 @@ get_slave_funcs(struct drm_encoder *enc)
 	return to_encoder_slave(enc)->slave_funcs;
 }
 
-void drm_i2c_encoder_dpms(struct drm_encoder *encoder, int mode)
-{
-	get_slave_funcs(encoder)->dpms(encoder, mode);
-}
-EXPORT_SYMBOL(drm_i2c_encoder_dpms);
-
 bool drm_i2c_encoder_mode_fixup(struct drm_encoder *encoder,
 		const struct drm_display_mode *mode,
 		struct drm_display_mode *adjusted_mode)
@@ -141,26 +135,6 @@ bool drm_i2c_encoder_mode_fixup(struct drm_encoder *encoder,
 	return get_slave_funcs(encoder)->mode_fixup(encoder, mode, adjusted_mode);
 }
 EXPORT_SYMBOL(drm_i2c_encoder_mode_fixup);
-
-void drm_i2c_encoder_prepare(struct drm_encoder *encoder)
-{
-	drm_i2c_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
-}
-EXPORT_SYMBOL(drm_i2c_encoder_prepare);
-
-void drm_i2c_encoder_commit(struct drm_encoder *encoder)
-{
-	drm_i2c_encoder_dpms(encoder, DRM_MODE_DPMS_ON);
-}
-EXPORT_SYMBOL(drm_i2c_encoder_commit);
-
-void drm_i2c_encoder_mode_set(struct drm_encoder *encoder,
-		struct drm_display_mode *mode,
-		struct drm_display_mode *adjusted_mode)
-{
-	get_slave_funcs(encoder)->mode_set(encoder, mode, adjusted_mode);
-}
-EXPORT_SYMBOL(drm_i2c_encoder_mode_set);
 
 enum drm_connector_status drm_i2c_encoder_detect(struct drm_encoder *encoder,
 	    struct drm_connector *connector)
