@@ -12,7 +12,7 @@
 #include <sys/wait.h>
 
 #include "../kselftest_harness.h"
-#include "../pidfd/pidfd.h"
+#include "../pidfd/pidfd_helpers.h"
 
 /*
  * Regression test for:
