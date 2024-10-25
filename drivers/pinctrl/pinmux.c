@@ -99,6 +99,20 @@ bool pinmux_can_be_used_for_gpio(struct pinctrl_dev *pctldev, unsigned int pin)
 	return !(ops->strict && !!desc->gpio_owner);
 }
 
+bool pin_requested(struct pinctrl_dev *pctldev, int pin)
+{
+	struct pin_desc *desc;
+
+	desc = pin_desc_get(pctldev, pin);
+	if (!desc)
+		return false;
+
+	if (!desc->gpio_owner && !desc->mux_owner)
+		return false;
+
+	return true;
+}
+
 /**
  * pin_request() - request a single pin to be muxed in, typically for GPIO
  * @pctldev: the associated pin controller device

@@ -42,6 +42,7 @@ int pinmux_map_to_setting(const struct pinctrl_map *map,
 void pinmux_free_setting(const struct pinctrl_setting *setting);
 int pinmux_enable_setting(const struct pinctrl_setting *setting);
 void pinmux_disable_setting(const struct pinctrl_setting *setting);
+bool pin_requested(struct pinctrl_dev *pctldev, int pin);
 
 #else
 
@@ -98,6 +99,11 @@ static inline int pinmux_enable_setting(const struct pinctrl_setting *setting)
 
 static inline void pinmux_disable_setting(const struct pinctrl_setting *setting)
 {
+}
+
+static inline bool __maybe_unused pin_requested(struct pinctrl_dev *pctldev, int pin)
+{
+	return false;
 }
 
 #endif
