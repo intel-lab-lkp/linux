@@ -3012,6 +3012,11 @@ static int dbFindBits(u32 word, int l2nb)
 	int bitno, nb;
 	u32 mask;
 
+	/* return immediately if the number of free bits is a word
+	 */
+	if (l2nb == BUDMIN)
+		return (!!word) << BUDMIN;
+
 	/* get the number of bits.
 	 */
 	nb = 1 << l2nb;
