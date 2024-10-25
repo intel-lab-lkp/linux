@@ -114,8 +114,6 @@ static void __sched arm64_preempt_schedule_irq(void)
 static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
 					irqentry_state_t state)
 {
-	arm64_preempt_schedule_irq();
-
 	mte_check_tfsr_exit();
 
 	lockdep_assert_irqs_disabled();
@@ -128,6 +126,8 @@ static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
 			lockdep_hardirqs_on(CALLER_ADDR0);
 			return;
 		}
+
+		arm64_preempt_schedule_irq();
 
 		trace_hardirqs_on();
 	} else {
