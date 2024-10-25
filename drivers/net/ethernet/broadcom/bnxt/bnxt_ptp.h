@@ -106,10 +106,10 @@ struct bnxt_ptp_cfg {
 	/* serialize ts tx request queuing */
 	spinlock_t		ptp_tx_lock;
 	u64			current_time;
-	u64			old_time;
 	unsigned long		next_period;
 	unsigned long		next_overflow_check;
 	u32			cmult;
+	u32			old_time;
 	/* a 23b shift cyclecounter will overflow in ~36 mins.  Check overflow every 18 mins. */
 	#define BNXT_PHC_OVERFLOW_PERIOD	(18 * 60 * HZ)
 
@@ -144,20 +144,6 @@ struct bnxt_ptp_cfg {
 
 	struct bnxt_ptp_stats	stats;
 };
-
-#if BITS_PER_LONG == 32
-#define BNXT_READ_TIME64(ptp, dst, src)				\
-do {								\
-	unsigned long flags;					\
-								\
-	spin_lock_irqsave(&(ptp)->ptp_lock, flags);		\
-	(dst) = (src);						\
-	spin_unlock_irqrestore(&(ptp)->ptp_lock, flags);	\
-} while (0)
-#else
-#define BNXT_READ_TIME64(ptp, dst, src)		\
-	((dst) = READ_ONCE(src))
-#endif
 
 #define BNXT_PTP_INC_TX_AVAIL(ptp)		\
 do {						\
