@@ -393,6 +393,8 @@ struct queue_limits {
 	unsigned short		max_integrity_segments;
 	unsigned short		max_discard_segments;
 
+	unsigned short		max_write_hints;
+
 	unsigned int		max_open_zones;
 	unsigned int		max_active_zones;
 
@@ -1183,6 +1185,11 @@ static inline unsigned short queue_max_segments(const struct request_queue *q)
 	return q->limits.max_segments;
 }
 
+static inline unsigned short queue_max_write_hints(struct request_queue *q)
+{
+	return q->limits.max_write_hints;
+}
+
 static inline unsigned short queue_max_discard_segments(const struct request_queue *q)
 {
 	return q->limits.max_discard_segments;
@@ -1228,6 +1235,11 @@ bdev_max_zone_append_sectors(struct block_device *bdev)
 static inline unsigned int bdev_max_segments(struct block_device *bdev)
 {
 	return queue_max_segments(bdev_get_queue(bdev));
+}
+
+static inline unsigned short bdev_max_write_hints(struct block_device *bdev)
+{
+	return queue_max_write_hints(bdev_get_queue(bdev));
 }
 
 static inline unsigned queue_logical_block_size(const struct request_queue *q)
