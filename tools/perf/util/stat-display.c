@@ -506,7 +506,7 @@ static void print_metric_json(struct perf_stat_config *config __maybe_unused,
 	struct outstate *os = ctx;
 	FILE *out = os->fh;
 
-	if (unit) {
+	if (unit && strlen(unit)) {
 		json_out(os, "\"metric-value\" : \"%f\", \"metric-unit\" : \"%s\"", val, unit);
 		if (thresh != METRIC_THRESHOLD_UNKNOWN) {
 			json_out(os, "\"metric-threshold\" : \"%s\"",
