@@ -3720,8 +3720,16 @@ static int pci_rebar_find_pos(struct pci_dev *pdev, int bar)
 {
 	unsigned int pos, nbars, i;
 	u32 ctrl;
+	int cap;
 
-	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_REBAR);
+	if (pci_resource_is_iov(bar)) {
+		cap = PCI_EXT_CAP_ID_VF_REBAR;
+		bar = pci_resource_from_iov(bar);
+	} else {
+		cap = PCI_EXT_CAP_ID_REBAR;
+	}
+
+	pos = pci_find_ext_capability(pdev, cap);
 	if (!pos)
 		return -ENOTSUPP;
 
