@@ -36,7 +36,7 @@
  * This is intended to match the logic in irqentry_enter(), handling the kernel
  * mode transitions only.
  */
-static __always_inline irqentry_state_t __enter_from_kernel_mode(struct pt_regs *regs)
+static noinstr irqentry_state_t enter_from_kernel_mode(struct pt_regs *regs)
 {
 	irqentry_state_t ret = {
 		.exit_rcu = false,
@@ -54,13 +54,6 @@ static __always_inline irqentry_state_t __enter_from_kernel_mode(struct pt_regs 
 	lockdep_hardirqs_off(CALLER_ADDR0);
 	rcu_irq_enter_check_tick();
 	trace_hardirqs_off_finish();
-
-	return ret;
-}
-
-static noinstr irqentry_state_t enter_from_kernel_mode(struct pt_regs *regs)
-{
-	irqentry_state_t ret = __enter_from_kernel_mode(regs);
 
 	mte_check_tfsr_entry();
 	mte_disable_tco_entry(current);
