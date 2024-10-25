@@ -1389,6 +1389,7 @@ void set_load_weight(struct task_struct *p, bool update_load)
 }
 
 #ifdef CONFIG_UCLAMP_TASK
+#ifdef CONFIG_UCLAMP_TASK_GROUP
 /*
  * Serializes updates of utilization clamp values
  *
@@ -1400,6 +1401,7 @@ void set_load_weight(struct task_struct *p, bool update_load)
  * updates or API abuses.
  */
 static DEFINE_MUTEX(uclamp_mutex);
+#endif /* CONFIG_UCLAMP_TASK_GROUP */
 
 /* Max allowed minimum utilization */
 static unsigned int __maybe_unused sysctl_sched_uclamp_util_min = SCHED_CAPACITY_SCALE;
