@@ -27,7 +27,7 @@
 
 int fd;
 const char v = 'V';
-static const char sopts[] = "bdehp:st:Tn:NLf:i";
+static const char sopts[] = "bdehp:st:Tn:NLf:c:i";
 static const struct option lopts[] = {
 	{"bootstatus",          no_argument, NULL, 'b'},
 	{"disable",             no_argument, NULL, 'd'},
@@ -42,6 +42,7 @@ static const struct option lopts[] = {
 	{"gettimeleft",		no_argument, NULL, 'L'},
 	{"file",          required_argument, NULL, 'f'},
 	{"info",		no_argument, NULL, 'i'},
+	{"count",         required_argument, NULL, 'c'},
 	{NULL,                  no_argument, NULL, 0x0}
 };
 
@@ -95,6 +96,7 @@ static void usage(char *progname)
 	printf(" -n, --pretimeout=T\tSet the pretimeout to T seconds\n");
 	printf(" -N, --getpretimeout\tGet the pretimeout\n");
 	printf(" -L, --gettimeleft\tGet the time left until timer expires\n");
+	printf(" -c, --count\tStop after feeding the watchdog count times\n");
 	printf("\n");
 	printf("Parameters are parsed left-to-right in real-time.\n");
 	printf("Example: %s -d -t 10 -p 5 -e\n", progname);
@@ -174,7 +176,7 @@ int main(int argc, char *argv[])
 	unsigned int ping_rate = DEFAULT_PING_RATE;
 	int ret;
 	int c;
-	int oneshot = 0;
+	int oneshot = 0, stop = 1, count = 0;
 	char *file = "/dev/watchdog";
 	struct watchdog_info info;
 	int temperature;
@@ -307,6 +309,9 @@ int main(int argc, char *argv[])
 			else
 				printf("WDIOC_GETTIMELEFT error '%s'\n", strerror(errno));
 			break;
+		case 'c':
+			stop = 0;
+			count = strtoul(optarg, NULL, 0);
 		case 'f':
 			/* Handled above */
 			break;
@@ -336,8 +341,8 @@ int main(int argc, char *argv[])
 
 	signal(SIGINT, term);
 
-	while (1) {
-		keep_alive();
+	while (stop || count--) {
+		exit_code = keep_alive();
 		sleep(ping_rate);
 	}
 end:
