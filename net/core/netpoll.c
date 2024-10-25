@@ -772,13 +772,13 @@ put_noaddr:
 		}
 	}
 
-	/* fill up the skb queue */
-	refill_skbs();
-
 	err = __netpoll_setup(np, ndev);
 	if (err)
 		goto put;
 	rtnl_unlock();
+
+	/* fill up the skb queue */
+	refill_skbs();
 	return 0;
 
 put:
