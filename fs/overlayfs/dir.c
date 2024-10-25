@@ -28,12 +28,14 @@ int ovl_cleanup(struct ovl_fs *ofs, struct inode *wdir, struct dentry *wdentry)
 {
 	int err;
 
-	dget(wdentry);
 	if (d_is_dir(wdentry))
 		err = ovl_do_rmdir(ofs, wdir, wdentry);
 	else
 		err = ovl_do_unlink(ofs, wdir, wdentry);
-	dput(wdentry);
+
+	/* A cached negative upper dentry is generally not useful, so drop it. */
+	if (d_is_negative(wdentry))
+		d_drop(wdentry);
 
 	if (err) {
 		pr_err("cleanup of '%pd2' failed (%i)\n",
