@@ -234,18 +234,19 @@ do {									\
  */
 #define percpu_add_op(size, qual, var, val)				\
 do {									\
-	const int pao_ID__ = (__builtin_constant_p(val) &&		\
-			      ((val) == 1 || (val) == -1)) ?		\
-				(int)(val) : 0;				\
+	const int pao_const__ = __builtin_constant_p(val);		\
+	const int pao_inc__   = (val) == 1;				\
+	const int pao_dec__   = (typeof(var))(val) ==			\
+				(typeof(var))-1;			\
 									\
 	if (0) {							\
 		typeof(var) pao_tmp__;					\
 		pao_tmp__ = (val);					\
 		(void)pao_tmp__;					\
 	}								\
-	if (pao_ID__ == 1)						\
+	if (pao_const__ && pao_inc__)					\
 		percpu_unary_op(size, qual, "inc", var);		\
-	else if (pao_ID__ == -1)					\
+	else if (pao_const__ && pao_dec__)				\
 		percpu_unary_op(size, qual, "dec", var);		\
 	else								\
 		percpu_binary_op(size, qual, "add", var, val);		\
