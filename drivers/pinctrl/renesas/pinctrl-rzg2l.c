@@ -1772,7 +1772,11 @@ static int rzg2l_gpio_get(struct gpio_chip *chip, unsigned int offset)
 
 static void rzg2l_gpio_free(struct gpio_chip *chip, unsigned int offset)
 {
+	struct rzg2l_pinctrl *pctrl = gpiochip_get_data(chip);
 	unsigned int virq;
+
+	if (!pin_requested(pctrl->pctl, offset))
+		return;
 
 	virq = irq_find_mapping(chip->irq.domain, offset);
 	if (virq)
@@ -2357,6 +2361,35 @@ static int rzg2l_gpio_irq_set_wake(struct irq_data *data, unsigned int on)
 	return 0;
 }
 
+static int rzg2l_gpio_irq_request_resources(struct irq_data *d)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct rzg2l_pinctrl *pctrl = container_of(gc, struct rzg2l_pinctrl, gpio_chip);
+	unsigned int child = irqd_to_hwirq(d);
+	int ret;
+
+	if (!pin_requested(pctrl->pctl, child)) {
+		ret = rzg2l_gpio_request(gc, child);
+		if (ret)
+			return ret;
+	}
+
+	ret = rzg2l_gpio_direction_input(gc, child);
+	if (ret)
+		return ret;
+
+	return gpiochip_irq_reqres(d);
+}
+
+static void rzg2l_gpio_irq_release_resources(struct irq_data *d)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	unsigned int child = irqd_to_hwirq(d);
+
+	gpiochip_irq_relres(d);
+	rzg2l_gpio_free(gc, child);
+}
+
 static const struct irq_chip rzg2l_gpio_irqchip = {
 	.name = "rzg2l-gpio",
 	.irq_disable = rzg2l_gpio_irq_disable,
@@ -2368,8 +2401,9 @@ static const struct irq_chip rzg2l_gpio_irqchip = {
 	.irq_print_chip = rzg2l_gpio_irq_print_chip,
 	.irq_set_affinity = irq_chip_set_affinity_parent,
 	.irq_set_wake = rzg2l_gpio_irq_set_wake,
+	.irq_request_resources = rzg2l_gpio_irq_request_resources,
+	.irq_release_resources = rzg2l_gpio_irq_release_resources,
 	.flags = IRQCHIP_IMMUTABLE,
-	GPIOCHIP_IRQ_RESOURCE_HELPERS,
 };
 
 static int rzg2l_gpio_child_to_parent_hwirq(struct gpio_chip *gc,
@@ -2381,15 +2415,10 @@ static int rzg2l_gpio_child_to_parent_hwirq(struct gpio_chip *gc,
 	struct rzg2l_pinctrl *pctrl = gpiochip_get_data(gc);
 	unsigned long flags;
 	int gpioint, irq;
-	int ret;
 
 	gpioint = rzg2l_gpio_get_gpioint(child, pctrl);
 	if (gpioint < 0)
 		return gpioint;
-
-	ret = rzg2l_gpio_direction_input(gc, child);
-	if (ret)
-		return ret;
 
 	spin_lock_irqsave(&pctrl->bitmap_lock, flags);
 	irq = bitmap_find_free_region(pctrl->tint_slot, RZG2L_TINT_MAX_INTERRUPT, get_order(1));
