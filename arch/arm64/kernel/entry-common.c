@@ -65,8 +65,6 @@ static noinstr irqentry_state_t enter_from_kernel_mode(struct pt_regs *regs)
 DEFINE_STATIC_KEY_TRUE(sk_dynamic_irqentry_exit_cond_resched);
 #define need_irq_preemption() \
 	(static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched))
-#else
-#define need_irq_preemption()	(IS_ENABLED(CONFIG_PREEMPTION))
 #endif
 
 static inline bool arm64_irqentry_exit_need_resched(void)
@@ -121,9 +119,12 @@ static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
 			return;
 		}
 
-		if (!preempt_count()) {
-			if (need_resched() && arm64_irqentry_exit_need_resched())
-				preempt_schedule_irq();
+		if (IS_ENABLED(CONFIG_PREEMPTION)) {
+			if (!preempt_count()) {
+				if (need_resched() &&
+				    arm64_irqentry_exit_need_resched())
+					preempt_schedule_irq();
+			}
 		}
 
 		trace_hardirqs_on();
