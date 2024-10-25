@@ -147,8 +147,9 @@ static int ieee80211_set_ap_mbssid_options(struct ieee80211_sub_if_data *sdata,
 					   struct ieee80211_bss_conf *link_conf)
 {
 	struct ieee80211_sub_if_data *tx_sdata;
+	struct ieee80211_link_data *tx_link;
 
-	sdata->vif.mbssid_tx_vif = NULL;
+	link_conf->mbssid_tx_bss = NULL;
 	link_conf->bssid_index = 0;
 	link_conf->nontransmitted = false;
 	link_conf->ema_ap = false;
@@ -162,9 +163,22 @@ static int ieee80211_set_ap_mbssid_options(struct ieee80211_sub_if_data *sdata,
 		return -EINVAL;
 
 	if (tx_sdata == sdata) {
-		sdata->vif.mbssid_tx_vif = &sdata->vif;
+		link_conf->mbssid_tx_bss = link_conf;
 	} else {
-		sdata->vif.mbssid_tx_vif = &tx_sdata->vif;
+		tx_link = sdata_dereference(tx_sdata->link[params.tx_link_id],
+					    tx_sdata);
+		if (!tx_link || !tx_link->conf)
+			return -ENOLINK;
+
+		/* Make sure input tx vif from user is really configured as a
+		 * transmitting vif as per our internal data before referring it.
+		 */
+		if (tx_link->conf->mbssid_tx_bss !=
+		    tx_sdata->vif.link_conf[params.tx_link_id])
+			return -EINVAL;
+
+		link_conf->mbssid_tx_bss =
+				     tx_sdata->vif.link_conf[params.tx_link_id];
 		link_conf->nontransmitted = true;
 		link_conf->bssid_index = params.index;
 	}
@@ -1665,7 +1679,6 @@ static int ieee80211_stop_ap(struct wiphy *wiphy, struct net_device *dev,
 	kfree(link_conf->ftmr_params);
 	link_conf->ftmr_params = NULL;
 
-	sdata->vif.mbssid_tx_vif = NULL;
 	link_conf->bssid_index = 0;
 	link_conf->nontransmitted = false;
 	link_conf->ema_ap = false;
@@ -1679,6 +1692,8 @@ static int ieee80211_stop_ap(struct wiphy *wiphy, struct net_device *dev,
 		ieee80211_free_key_list(local, &keys);
 	}
 
+	ieee80211_stop_mbssid(sdata);
+	link_conf->mbssid_tx_bss = NULL;
 	link_conf->enable_beacon = false;
 	sdata->beacon_rate_set = false;
 	sdata->vif.cfg.ssid_len = 0;
@@ -3695,23 +3710,43 @@ void ieee80211_csa_finish(struct ieee80211_vif *vif, unsigned int link_id)
 		return;
 	}
 
-	/* TODO: MBSSID with MLO changes */
-	if (vif->mbssid_tx_vif == vif) {
+	if (link_data->conf->mbssid_tx_bss == vif->link_conf[link_id]) {
 		/* Trigger ieee80211_csa_finish() on the non-transmitting
 		 * interfaces when channel switch is received on
 		 * transmitting interface
 		 */
 		struct ieee80211_sub_if_data *iter;
+		struct ieee80211_link_data *link_iter;
+		unsigned int link_id_iter;
+		unsigned long valid_links;
 
 		list_for_each_entry_rcu(iter, &local->interfaces, list) {
 			if (!ieee80211_sdata_running(iter))
 				continue;
 
-			if (iter == sdata || iter->vif.mbssid_tx_vif != vif)
+			if (iter == sdata)
 				continue;
 
-			wiphy_work_queue(iter->local->hw.wiphy,
-					 &iter->deflink.csa.finalize_work);
+			/* check link 0 by default for Non-ML non-tx vif's
+			 * deflinks
+			 */
+			valid_links = iter->vif.valid_links | BIT(0);
+			for_each_set_bit(link_id_iter, &valid_links,
+					 IEEE80211_MLD_MAX_NUM_LINKS) {
+				link_iter =
+				      rcu_dereference(iter->link[link_id_iter]);
+				if (!link_iter)
+					continue;
+				/* Check if any of link of iterator sdata
+				 * belongs to same mbssid group as the tx link
+				 */
+				if (link_iter->conf->mbssid_tx_bss !=
+				    vif->link_conf[link_id])
+					continue;
+
+				wiphy_work_queue(iter->local->hw.wiphy,
+						 &link_iter->csa.finalize_work);
+			}
 		}
 	}
 	wiphy_work_queue(local->hw.wiphy, &link_data->csa.finalize_work);
@@ -4817,15 +4852,35 @@ ieee80211_color_change_bss_config_notify(struct ieee80211_link_data *link,
 
 	ieee80211_link_info_change_notify(sdata, link, changed);
 
-	if (!sdata->vif.bss_conf.nontransmitted && sdata->vif.mbssid_tx_vif) {
+	if (!link->conf->nontransmitted && link->conf->mbssid_tx_bss) {
 		struct ieee80211_sub_if_data *child;
+		unsigned int link_id_iter;
+		unsigned long valid_links;
+		struct ieee80211_link_data *link_iter;
 
 		list_for_each_entry(child, &sdata->local->interfaces, list) {
-			if (child != sdata && child->vif.mbssid_tx_vif == &sdata->vif) {
-				child->vif.bss_conf.he_bss_color.color = color;
-				child->vif.bss_conf.he_bss_color.enabled = enable;
+			if (child == sdata)
+				continue;
+
+			/* check deflink by default */
+			valid_links = child->vif.valid_links | BIT(0);
+			for_each_set_bit(link_id_iter, &valid_links,
+					 IEEE80211_MLD_MAX_NUM_LINKS) {
+				link_iter = sdata_dereference(child->link[link_id_iter],
+							      child);
+				if (!link_iter)
+					continue;
+				/* Check if any of link of iterator sdata
+				 * belongs to same mbssid group as the tx link
+				 */
+				if (link_iter->conf->mbssid_tx_bss !=
+				    link->conf)
+					continue;
+
+				link_iter->conf->he_bss_color.color = color;
+				link_iter->conf->he_bss_color.enabled = enable;
 				ieee80211_link_info_change_notify(child,
-								  &child->deflink,
+								  link_iter,
 								  BSS_CHANGED_HE_BSS_COLOR);
 			}
 		}

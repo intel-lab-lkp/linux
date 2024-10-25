@@ -2290,7 +2290,7 @@ static void mac80211_hwsim_beacon_tx(void *arg, u8 *mac,
 	    vif->type != NL80211_IFTYPE_OCB)
 		return;
 
-	if (vif->mbssid_tx_vif && vif->mbssid_tx_vif != vif)
+	if (link_conf->mbssid_tx_bss && link_conf->mbssid_tx_bss != link_conf)
 		return;
 
 	if (vif->bss_conf.ema_ap) {

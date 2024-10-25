@@ -738,30 +738,84 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 		ieee80211_add_virtual_monitor(local);
 }
 
-static void ieee80211_stop_mbssid(struct ieee80211_sub_if_data *sdata)
+void ieee80211_stop_mbssid(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_sub_if_data *tx_sdata, *non_tx_sdata, *tmp_sdata;
-	struct ieee80211_vif *tx_vif = sdata->vif.mbssid_tx_vif;
+	struct ieee80211_bss_conf *tx_bss;
+	unsigned int link_id, iter_link_id;
+	unsigned long iter_valid_links, valid_links;
+	struct ieee80211_link_data *link_iter, *link;
 
-	if (!tx_vif)
-		return;
+	lockdep_assert_wiphy(sdata->local->hw.wiphy);
+	/* Check link 0 by default for non MLO. */
+	iter_valid_links = sdata->vif.valid_links | BIT(0);
+	/* Check if any of the links of current sdata is an MBSSID. */
+	for_each_set_bit(iter_link_id, &iter_valid_links,
+			 IEEE80211_MLD_MAX_NUM_LINKS) {
+		link_iter = sdata_dereference(sdata->link[iter_link_id], sdata);
+		if (!link_iter)
+			continue;
 
-	tx_sdata = vif_to_sdata(tx_vif);
-	sdata->vif.mbssid_tx_vif = NULL;
+		tx_bss = link_iter->conf->mbssid_tx_bss;
+		if (!tx_bss)
+			continue;
 
-	list_for_each_entry_safe(non_tx_sdata, tmp_sdata,
-				 &tx_sdata->local->interfaces, list) {
-		if (non_tx_sdata != sdata && non_tx_sdata != tx_sdata &&
-		    non_tx_sdata->vif.mbssid_tx_vif == tx_vif &&
-		    ieee80211_sdata_running(non_tx_sdata)) {
-			non_tx_sdata->vif.mbssid_tx_vif = NULL;
-			dev_close(non_tx_sdata->wdev.netdev);
+		tx_sdata = vif_to_sdata(tx_bss->vif);
+		link_iter->conf->mbssid_tx_bss = NULL;
+
+		/* If we are not tx sdata reset tx sdata's tx_bss to avoid
+		 * recusrion while closing tx sdata at the end of outer loop
+		 * below.
+		 */
+		if (sdata != tx_sdata) {
+			link = sdata_dereference(tx_sdata->link[tx_bss->link_id],
+						 tx_sdata);
+			if (!link)
+				continue;
+			link->conf->mbssid_tx_bss = NULL;
 		}
-	}
 
-	if (sdata != tx_sdata && ieee80211_sdata_running(tx_sdata)) {
-		tx_sdata->vif.mbssid_tx_vif = NULL;
-		dev_close(tx_sdata->wdev.netdev);
+		/* loop through sdatas to find if any of their links
+		 * belong to same mbssid group as the one getting deleted.
+		 */
+		list_for_each_entry_safe(non_tx_sdata, tmp_sdata,
+					 &tx_sdata->local->interfaces, list) {
+			if (non_tx_sdata != sdata && non_tx_sdata != tx_sdata &&
+			    ieee80211_sdata_running(non_tx_sdata)) {
+				valid_links = non_tx_sdata->vif.valid_links |
+					      BIT(0);
+				for_each_set_bit(link_id, &valid_links,
+						 IEEE80211_MLD_MAX_NUM_LINKS) {
+					link = sdata_dereference(non_tx_sdata->link[link_id],
+								 non_tx_sdata);
+					if (!link)
+						continue;
+
+					/* If both tx vif and tx linkid is
+					 * matching then it belongs to same
+					 * MBSSID group.
+					 */
+					if (link->conf->mbssid_tx_bss != tx_bss)
+						continue;
+
+					link->conf->mbssid_tx_bss = NULL;
+
+					/* Remove all links of matching MLD
+					 * until dynamic link removal can be
+					 * supported.
+					 */
+					cfg80211_stop_iface(non_tx_sdata->wdev.wiphy,
+							    &non_tx_sdata->wdev,
+							    GFP_KERNEL);
+				}
+			}
+		}
+
+		/* If we are not tx sdata, remove links of tx sdata and proceed.
+		 */
+		if (sdata != tx_sdata && ieee80211_sdata_running(tx_sdata))
+			cfg80211_stop_iface(tx_sdata->wdev.wiphy,
+					    &tx_sdata->wdev, GFP_KERNEL);
 	}
 }
 
@@ -769,19 +823,23 @@ static int ieee80211_stop(struct net_device *dev)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 
-	/* close dependent VLAN and MBSSID interfaces before locking wiphy */
+	/* close dependent VLAN interfaces before locking wiphy */
 	if (sdata->vif.type == NL80211_IFTYPE_AP) {
 		struct ieee80211_sub_if_data *vlan, *tmpsdata;
 
 		list_for_each_entry_safe(vlan, tmpsdata, &sdata->u.ap.vlans,
 					 u.vlan.list)
 			dev_close(vlan->dev);
-
-		ieee80211_stop_mbssid(sdata);
 	}
 
 	wiphy_lock(sdata->local->hw.wiphy);
 	wiphy_work_cancel(sdata->local->hw.wiphy, &sdata->activate_links_work);
+
+	/* Close the dependent MBSSID interfaces with wiphy lock as we may be
+	 * terminating its partner links too in case of MLD.
+	 */
+	if (sdata->vif.type == NL80211_IFTYPE_AP)
+		ieee80211_stop_mbssid(sdata);
 
 	ieee80211_do_stop(sdata, true);
 	wiphy_unlock(sdata->local->hw.wiphy);

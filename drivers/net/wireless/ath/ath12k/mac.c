@@ -1480,7 +1480,7 @@ static int ath12k_mac_setup_bcn_tmpl_ema(struct ath12k_vif *arvif)
 	int ret = 0;
 	u8 i;
 
-	tx_arvif = ath12k_vif_to_arvif(arvif->vif->mbssid_tx_vif);
+	tx_arvif = ath12k_vif_to_arvif(bss_conf->mbssid_tx_bss->vif);
 	beacons = ieee80211_beacon_get_template_ema_list(ath12k_ar_to_hw(tx_arvif->ar),
 							 tx_arvif->vif, 0);
 	if (!beacons || !beacons->cnt) {
@@ -1534,8 +1534,8 @@ static int ath12k_mac_setup_bcn_tmpl(struct ath12k_vif *arvif)
 	if (arvif->vdev_type != WMI_VDEV_TYPE_AP)
 		return 0;
 
-	if (vif->mbssid_tx_vif) {
-		tx_arvif = ath12k_vif_to_arvif(vif->mbssid_tx_vif);
+	if (vif->bss_conf.mbssid_tx_bss) {
+		tx_arvif = ath12k_vif_to_arvif(vif->bss_conf.mbssid_tx_bss->vif);
 		if (tx_arvif != arvif && arvif->is_up)
 			return 0;
 
@@ -1629,8 +1629,9 @@ static void ath12k_control_beaconing(struct ath12k_vif *arvif,
 	params.vdev_id = arvif->vdev_id;
 	params.aid = arvif->aid;
 	params.bssid = arvif->bssid;
-	if (arvif->vif->mbssid_tx_vif) {
-		params.tx_bssid = ath12k_vif_to_arvif(arvif->vif->mbssid_tx_vif)->bssid;
+	if (arvif->vif->bss_conf.mbssid_tx_bss) {
+		params.tx_bssid =
+			   ath12k_vif_to_arvif(arvif->vif->bss_conf.mbssid_tx_bss->vif)->bssid;
 		params.nontx_profile_idx = info->bssid_index;
 		params.nontx_profile_cnt = 1 << info->bssid_indicator;
 	}
@@ -6231,17 +6232,17 @@ ath12k_mac_get_vdev_stats_id(struct ath12k_vif *arvif)
 static int ath12k_mac_setup_vdev_params_mbssid(struct ath12k_vif *arvif,
 					       u32 *flags, u32 *tx_vdev_id)
 {
-	struct ieee80211_vif *tx_vif = arvif->vif->mbssid_tx_vif;
+	struct ieee80211_bss_conf *tx_bss = arvif->vif->bss_conf.mbssid_tx_bss;
 	struct ath12k *ar = arvif->ar;
 	struct ath12k_vif *tx_arvif;
 
-	if (!tx_vif)
+	if (!tx_bss)
 		return 0;
 
-	tx_arvif = ath12k_vif_to_arvif(tx_vif);
+	tx_arvif = ath12k_vif_to_arvif(tx_bss->vif);
 
 	if (arvif->vif->bss_conf.nontransmitted) {
-		if (ar->ah->hw->wiphy != ieee80211_vif_to_wdev(tx_vif)->wiphy)
+		if (ar->ah->hw->wiphy != ieee80211_vif_to_wdev(tx_bss->vif)->wiphy)
 			return -EINVAL;
 
 		*flags = WMI_VDEV_MBSSID_FLAGS_NON_TRANSMIT_AP;
@@ -7492,8 +7493,9 @@ ath12k_mac_update_vif_chan(struct ath12k *ar,
 		params.vdev_id = arvif->vdev_id;
 		params.aid = arvif->aid;
 		params.bssid = arvif->bssid;
-		if (vif->mbssid_tx_vif) {
-			params.tx_bssid = ath12k_vif_to_arvif(vif->mbssid_tx_vif)->bssid;
+		if (vif->bss_conf.mbssid_tx_bss) {
+			params.tx_bssid =
+				  ath12k_vif_to_arvif(vif->bss_conf.mbssid_tx_bss->vif)->bssid;
 			params.nontx_profile_idx = vif->bss_conf.bssid_index;
 			params.nontx_profile_cnt = 1 << vif->bss_conf.bssid_indicator;
 		}
