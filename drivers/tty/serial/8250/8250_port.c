@@ -1360,18 +1360,37 @@ static void autoconfig_irq(struct uart_8250_port *up)
 	port->irq = (irq > 0) ? irq : 0;
 }
 
+static void __serial8250_stop_rx_mask_dr(struct uart_port *port)
+{
+	port->read_status_mask &= ~UART_LSR_DR;
+}
+
+static void __serial8250_stop_rx_int(struct uart_8250_port *p)
+{
+	/* Port locked to synchronize UART_IER access against the console. */
+	lockdep_assert_held_once(&p->port.lock);
+
+	p->ier &= ~(UART_IER_RLSI | UART_IER_RDI);
+	serial_port_out(&p->port, UART_IER, p->ier);
+}
+
+static void __serial8250_start_rx_int(struct uart_8250_port *p)
+{
+	/* Port locked to synchronize UART_IER access against the console. */
+	lockdep_assert_held_once(&p->port.lock);
+
+	p->ier |= UART_IER_RLSI | UART_IER_RDI;
+	serial_port_out(&p->port, UART_IER, p->ier);
+}
+
 static void serial8250_stop_rx(struct uart_port *port)
 {
 	struct uart_8250_port *up = up_to_u8250p(port);
 
-	/* Port locked to synchronize UART_IER access against the console. */
-	lockdep_assert_held_once(&port->lock);
-
 	serial8250_rpm_get(up);
 
-	up->ier &= ~(UART_IER_RLSI | UART_IER_RDI);
-	up->port.read_status_mask &= ~UART_LSR_DR;
-	serial_port_out(port, UART_IER, up->ier);
+	__serial8250_stop_rx_mask_dr(port);
+	__serial8250_stop_rx_int(up);
 
 	serial8250_rpm_put(up);
 }
@@ -1385,9 +1404,6 @@ static void serial8250_stop_rx(struct uart_port *port)
 void serial8250_em485_stop_tx(struct uart_8250_port *p)
 {
 	unsigned char mcr = serial8250_in_MCR(p);
-
-	/* Port locked to synchronize UART_IER access against the console. */
-	lockdep_assert_held_once(&p->port.lock);
 
 	if (p->port.rs485.flags & SER_RS485_RTS_AFTER_SEND)
 		mcr |= UART_MCR_RTS;
@@ -1403,8 +1419,7 @@ void serial8250_em485_stop_tx(struct uart_8250_port *p)
 	if (!(p->port.rs485.flags & SER_RS485_RX_DURING_TX)) {
 		serial8250_clear_and_reinit_fifos(p);
 
-		p->ier |= UART_IER_RLSI | UART_IER_RDI;
-		serial_port_out(&p->port, UART_IER, p->ier);
+		__serial8250_start_rx_int(p);
 	}
 }
 EXPORT_SYMBOL_GPL(serial8250_em485_stop_tx);
