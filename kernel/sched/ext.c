@@ -863,6 +863,8 @@ DEFINE_STATIC_KEY_FALSE(__scx_ops_enabled);
 DEFINE_STATIC_PERCPU_RWSEM(scx_fork_rwsem);
 static atomic_t scx_ops_enable_state_var = ATOMIC_INIT(SCX_OPS_DISABLED);
 static atomic_t scx_ops_bypass_depth = ATOMIC_INIT(0);
+static atomic_t scx_ops_bypass_en_cnt = ATOMIC_INIT(0);
+static atomic_t scx_ops_bypass_dis_cnt = ATOMIC_INIT(0);
 static bool scx_ops_init_task_enabled;
 static bool scx_switching_all;
 DEFINE_STATIC_KEY_FALSE(__scx_switched_all);
@@ -2658,7 +2660,7 @@ static int balance_one(struct rq *rq, struct task_struct *prev)
 		 * scheduler wants to handle this explicitly, it should
 		 * implement ->cpu_release().
 		 *
-		 * See scx_ops_disable_workfn() for the explanation on the
+		 * See scx_ops_helper_workfn() for the explanation on the
 		 * bypassing test.
 		 */
 		if ((prev->scx.flags & SCX_TASK_QUEUED) &&
@@ -4419,7 +4421,7 @@ static const char *scx_exit_reason(enum scx_exit_kind kind)
 	}
 }
 
-static void scx_ops_disable_workfn(struct kthread_work *work)
+static void scx_ops_helper_workfn(struct kthread_work *work)
 {
 	struct scx_exit_info *ei = scx_exit_info;
 	struct scx_task_iter sti;
@@ -4428,12 +4430,23 @@ static void scx_ops_disable_workfn(struct kthread_work *work)
 	struct scx_dispatch_q *dsq;
 	int i, kind;
 
+	while (atomic_read(&scx_ops_bypass_en_cnt)) {
+		scx_ops_bypass(true);
+		atomic_dec(&scx_ops_bypass_en_cnt);
+	}
+
+	while (atomic_read(&scx_ops_bypass_dis_cnt)) {
+		scx_ops_bypass(false);
+		atomic_dec(&scx_ops_bypass_dis_cnt);
+	}
+
 	kind = atomic_read(&scx_exit_kind);
 	while (true) {
 		/*
-		 * NONE indicates that a new scx_ops has been registered since
-		 * disable was scheduled - don't kill the new ops. DONE
-		 * indicates that the ops has already been disabled.
+		 * NONE indicates either that a new scx_ops has been registered
+		 * since disable was scheduled, or that the helper was scheduled
+		 * on the enable path to disable bypass - don't kill the new
+		 * ops. DONE indicates that the ops has already been disabled.
 		 */
 		if (kind == SCX_EXIT_NONE || kind == SCX_EXIT_DONE)
 			return;
@@ -4571,9 +4584,9 @@ done:
 	scx_ops_bypass(false);
 }
 
-static DEFINE_KTHREAD_WORK(scx_ops_disable_work, scx_ops_disable_workfn);
+static DEFINE_KTHREAD_WORK(scx_ops_helper_work, scx_ops_helper_workfn);
 
-static void schedule_scx_ops_disable_work(void)
+static void schedule_scx_ops_helper_work(void)
 {
 	struct kthread_worker *helper = READ_ONCE(scx_ops_helper);
 
@@ -4582,7 +4595,42 @@ static void schedule_scx_ops_disable_work(void)
 	 * scx_ops_helper isn't set up yet, there's nothing to do.
 	 */
 	if (helper)
-		kthread_queue_work(helper, &scx_ops_disable_work);
+		kthread_queue_work(helper, &scx_ops_helper_work);
+}
+
+/*
+ * schedule_scx_bypass_delta - Schedule bypass to be enabled or disabled.
+ *
+ * Record the need to either increment or decrement bypass depth, and schedule
+ * the scx_ops_helper kthread to perform the operation.
+ *
+ * In any context that an SCX scheduler may be loaded (i.e. any context other
+ * than the enable path), bypass depth must always be adjusted in the same
+ * execution context as the ops-disable path to avoid a call to
+ * scx_ops_bypass(false) racing with a call to scx_ops_bypass(true).
+ * Concurrent calls to the operations are never safe, due to the possibility of
+ * the following race:
+ *
+ * 1. scx_bypass_ops(false|true) is invoked, setting the depth to whatever
+ *    value causes the execution context to enter the actual bypass enable /
+ *    disable loop.
+ *
+ * 2. scx_bypass_ops(false|true) (whichever is the inverse of the call above)
+ *    is invoked in a different execution context, and also enters the enable /
+ *    disable loop before the context above has had a chance to iterate over
+ *    all CPUs.
+ *
+ * This is unsafe because it could cause us to e.g. set SCX_RQ_BYPASSING on an
+ * rq when it was already previously set, or _unset_ SCX_RQ_BYPASSING when we
+ * in fact need bypass to be enabled.
+ */
+static void schedule_scx_bypass_delta(bool bypass)
+{
+	if (bypass)
+		atomic_inc(&scx_ops_bypass_en_cnt);
+	else
+		atomic_inc(&scx_ops_bypass_dis_cnt);
+	schedule_scx_ops_helper_work();
 }
 
 static void scx_ops_disable(enum scx_exit_kind kind)
@@ -4594,7 +4642,7 @@ static void scx_ops_disable(enum scx_exit_kind kind)
 
 	atomic_try_cmpxchg(&scx_exit_kind, &none, kind);
 
-	schedule_scx_ops_disable_work();
+	schedule_scx_ops_helper_work();
 }
 
 static void dump_newline(struct seq_buf *s)
@@ -4882,7 +4930,7 @@ static void scx_ops_error_irq_workfn(struct irq_work *irq_work)
 	if (ei->kind >= SCX_EXIT_ERROR)
 		scx_dump_state(ei, scx_ops.exit_dump_len);
 
-	schedule_scx_ops_disable_work();
+	schedule_scx_ops_helper_work();
 }
 
 static DEFINE_IRQ_WORK(scx_ops_error_irq_work, scx_ops_error_irq_workfn);
@@ -4909,7 +4957,7 @@ static __printf(3, 4) void scx_ops_exit_kind(enum scx_exit_kind kind,
 
 	/*
 	 * Set ei->kind and ->reason for scx_dump_state(). They'll be set again
-	 * in scx_ops_disable_workfn().
+	 * in scx_ops_helper_workfn().
 	 */
 	ei->kind = kind;
 	ei->reason = scx_exit_reason(ei->kind);
@@ -5214,7 +5262,7 @@ static int scx_ops_enable(struct sched_ext_ops *ops, struct bpf_link *link)
 	scx_task_iter_stop(&sti);
 	percpu_up_write(&scx_fork_rwsem);
 
-	scx_ops_bypass(false);
+	schedule_scx_bypass_delta(false);
 
 	if (!scx_ops_tryset_enable_state(SCX_OPS_ENABLED, SCX_OPS_ENABLING)) {
 		WARN_ON_ONCE(atomic_read(&scx_exit_kind) == SCX_EXIT_NONE);
@@ -5249,7 +5297,7 @@ err_unlock:
 err_disable_unlock_all:
 	scx_cgroup_unlock();
 	percpu_up_write(&scx_fork_rwsem);
-	scx_ops_bypass(false);
+	schedule_scx_bypass_delta(false);
 err_disable:
 	mutex_unlock(&scx_ops_enable_mutex);
 	/*
@@ -5258,11 +5306,11 @@ err_disable:
 	 * scx_ops_error() wasn't already invoked and exit indicating success so
 	 * that the error is notified through ops.exit() with all the details.
 	 *
-	 * Flush scx_ops_disable_work to ensure that error is reported before
+	 * Flush scx_ops_helper_work to ensure that error is reported before
 	 * init completion.
 	 */
 	scx_ops_error("scx_ops_enable() failed (%d)", ret);
-	kthread_flush_work(&scx_ops_disable_work);
+	kthread_flush_work(&scx_ops_helper_work);
 	return 0;
 }
 
@@ -5475,7 +5523,7 @@ static int bpf_scx_reg(void *kdata, struct bpf_link *link)
 static void bpf_scx_unreg(void *kdata, struct bpf_link *link)
 {
 	scx_ops_disable(SCX_EXIT_UNREG);
-	kthread_flush_work(&scx_ops_disable_work);
+	kthread_flush_work(&scx_ops_helper_work);
 }
 
 static int bpf_scx_init(struct btf *btf)
@@ -5797,12 +5845,12 @@ static int scx_pm_handler(struct notifier_block *nb, unsigned long event, void *
 	case PM_HIBERNATION_PREPARE:
 	case PM_SUSPEND_PREPARE:
 	case PM_RESTORE_PREPARE:
-		scx_ops_bypass(true);
+		schedule_scx_bypass_delta(true);
 		break;
 	case PM_POST_HIBERNATION:
 	case PM_POST_SUSPEND:
 	case PM_POST_RESTORE:
-		scx_ops_bypass(false);
+		schedule_scx_bypass_delta(false);
 		break;
 	}
 
