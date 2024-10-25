@@ -341,10 +341,10 @@ static int dlfb_ops_mmap(struct fb_info *info, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	pos = (unsigned long)info->fix.smem_start + offset;
-
+#ifdef CONFIG_FB_DEVICE
 	dev_dbg(info->dev, "mmap() framebuffer addr:%lu size:%lu\n",
 		pos, size);
-
+#endif
 	while (size > 0) {
 		page = vmalloc_to_pfn((void *)pos);
 		if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED))
@@ -929,10 +929,10 @@ static int dlfb_ops_open(struct fb_info *info, int user)
 		info->fbdefio = fbdefio;
 		fb_deferred_io_init(info);
 	}
-
+#ifdef CONFIG_FB_DEVICE
 	dev_dbg(info->dev, "open, user=%d fb_info=%p count=%d\n",
 		user, info, dlfb->fb_count);
-
+#endif
 	return 0;
 }
 
@@ -982,9 +982,9 @@ static int dlfb_ops_release(struct fb_info *info, int user)
 		kfree(info->fbdefio);
 		info->fbdefio = NULL;
 	}
-
+#ifdef CONFIG_FB_DEVICE
 	dev_dbg(info->dev, "release, user=%d count=%d\n", user, dlfb->fb_count);
-
+#endif
 	return 0;
 }
 
@@ -1095,10 +1095,10 @@ static int dlfb_ops_blank(int blank_mode, struct fb_info *info)
 	struct dlfb_data *dlfb = info->par;
 	char *bufptr;
 	struct urb *urb;
-
+#ifdef CONFIG_FB_DEVICE
 	dev_dbg(info->dev, "blank, mode %d --> %d\n",
 		dlfb->blank_mode, blank_mode);
-
+#endif
 	if ((dlfb->blank_mode == FB_BLANK_POWERDOWN) &&
 	    (blank_mode != FB_BLANK_POWERDOWN)) {
 
@@ -1190,7 +1190,9 @@ static int dlfb_realloc_framebuffer(struct dlfb_data *dlfb, struct fb_info *info
 		 */
 		new_fb = vmalloc(new_len);
 		if (!new_fb) {
+#ifdef CONFIG_FB_DEVICE
 			dev_err(info->dev, "Virtual framebuffer alloc failed\n");
+#endif
 			return -ENOMEM;
 		}
 		memset(new_fb, 0xff, new_len);
@@ -1213,9 +1215,11 @@ static int dlfb_realloc_framebuffer(struct dlfb_data *dlfb, struct fb_info *info
 		 */
 		if (shadow)
 			new_back = vzalloc(new_len);
+#ifdef CONFIG_FB_DEVICE
 		if (!new_back)
 			dev_info(info->dev,
 				 "No shadow/backing buffer allocated\n");
+#endif
 		else {
 			dlfb_deferred_vfree(dlfb, dlfb->backing_buffer);
 			dlfb->backing_buffer = new_back;
@@ -1247,14 +1251,14 @@ static int dlfb_setup_modes(struct dlfb_data *dlfb,
 	struct device *dev = info->device;
 	struct fb_videomode *mode;
 	const struct fb_videomode *default_vmode = NULL;
-
+#ifdef CONFIG_FB_DEVICE
 	if (info->dev) {
 		/* only use mutex if info has been registered */
 		mutex_lock(&info->lock);
 		/* parent device is used otherwise */
 		dev = info->dev;
 	}
-
+#endif
 	edid = kmalloc(EDID_LENGTH, GFP_KERNEL);
 	if (!edid) {
 		result = -ENOMEM;
@@ -1375,10 +1379,10 @@ static int dlfb_setup_modes(struct dlfb_data *dlfb,
 error:
 	if (edid && (dlfb->edid != edid))
 		kfree(edid);
-
+#ifdef CONFIG_FB_DEVICE
 	if (info->dev)
 		mutex_unlock(&info->lock);
-
+#endif
 	return result;
 }
 
@@ -1597,8 +1601,10 @@ success:
 static int dlfb_usb_probe(struct usb_interface *intf,
 			  const struct usb_device_id *id)
 {
+#ifdef CONFIG_FB_DEVICE
 	int i;
 	const struct device_attribute *attr;
+#endif
 	struct dlfb_data *dlfb;
 	struct fb_info *info;
 	int retval;
@@ -1701,7 +1707,7 @@ static int dlfb_usb_probe(struct usb_interface *intf,
 			retval);
 		goto error;
 	}
-
+#ifdef CONFIG_FB_DEVICE
 	for (i = 0; i < ARRAY_SIZE(fb_device_attrs); i++) {
 		attr = &fb_device_attrs[i];
 		retval = device_create_file(info->dev, attr);
@@ -1710,17 +1716,16 @@ static int dlfb_usb_probe(struct usb_interface *intf,
 				 "failed to create '%s' attribute: %d\n",
 				 attr->attr.name, retval);
 	}
-
 	retval = device_create_bin_file(info->dev, &edid_attr);
 	if (retval)
 		dev_warn(info->device, "failed to create '%s' attribute: %d\n",
 			 edid_attr.attr.name, retval);
-
 	dev_info(info->device,
 		 "%s is DisplayLink USB device (%dx%d, %dK framebuffer memory)\n",
 		 dev_name(info->dev), info->var.xres, info->var.yres,
 		 ((dlfb->backing_buffer) ?
 		 info->fix.smem_len * 2 : info->fix.smem_len) >> 10);
+#endif
 	return 0;
 
 error:
@@ -1737,8 +1742,9 @@ static void dlfb_usb_disconnect(struct usb_interface *intf)
 {
 	struct dlfb_data *dlfb;
 	struct fb_info *info;
+#ifdef CONFIG_FB_DEVICE
 	int i;
-
+#endif
 	dlfb = usb_get_intfdata(intf);
 	info = dlfb->info;
 
@@ -1754,10 +1760,11 @@ static void dlfb_usb_disconnect(struct usb_interface *intf)
 	dlfb_free_urb_list(dlfb);
 
 	/* remove udlfb's sysfs interfaces */
+#ifdef CONFIG_FB_DEVICE
 	for (i = 0; i < ARRAY_SIZE(fb_device_attrs); i++)
 		device_remove_file(info->dev, &fb_device_attrs[i]);
 	device_remove_bin_file(info->dev, &edid_attr);
-
+#endif
 	unregister_framebuffer(info);
 }
 
