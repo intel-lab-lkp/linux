@@ -932,7 +932,7 @@ static int snd_mts64_probe(struct platform_device *pdev)
 	strcpy(card->driver, DRIVER_NAME);
 	strcpy(card->shortname, "ESI " CARD_NAME);
 	sprintf(card->longname,  "%s at 0x%lx, irq %i", 
-		card->shortname, p->base, p->irq);
+		card->shortname, p->iobase, p->irq);
 
 	mts64_cb.private = card;			 /* private */
 	pardev = parport_register_dev_model(p,		 /* port */
@@ -947,7 +947,7 @@ static int snd_mts64_probe(struct platform_device *pdev)
 
 	/* claim parport */
 	if (parport_claim(pardev)) {
-		dev_dbg(card->dev, "Cannot claim parport 0x%lx\n", pardev->port->base);
+		dev_dbg(card->dev, "Cannot claim parport 0x%lx\n", pardev->port->iobase);
 		err = -EIO;
 		goto free_pardev;
 	}
@@ -986,7 +986,7 @@ static int snd_mts64_probe(struct platform_device *pdev)
 		goto __err;
 	}
 
-	dev_info(card->dev, "ESI Miditerminal 4140 on 0x%lx\n", p->base);
+	dev_info(card->dev, "ESI Miditerminal 4140 on 0x%lx\n", p->iobase);
 	return 0;
 
 release_pardev:

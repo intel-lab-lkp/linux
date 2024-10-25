@@ -249,8 +249,8 @@ static struct parport *parport_gsc_probe_port(unsigned long base,
 	}
 	priv->ctr = 0xc;
 	priv->ctr_writable = 0xff;
-	p->base = base;
-	p->base_hi = base_hi;
+	p->iobase = base;
+	p->iobase_hi = base_hi;
 	p->irq = irq;
 	p->modes = PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT;
 	p->ops = ops;
@@ -272,12 +272,12 @@ static struct parport *parport_gsc_probe_port(unsigned long base,
 	}
 
 	p->dev = &padev->dev;
-	p->base_hi = base_hi;
+	p->iobase_hi = base_hi;
 	p->modes = tmp.modes;
 	p->size = (p->modes & PARPORT_MODE_EPP)?8:3;
 	p->private_data = priv;
 
-	pr_info("%s: PC-style at 0x%lx", p->name, p->base);
+	pr_info("%s: PC-style at 0x%lx", p->name, p->iobase);
 	p->irq = irq;
 	if (p->irq == PARPORT_IRQ_AUTO) {
 		p->irq = PARPORT_IRQ_NONE;

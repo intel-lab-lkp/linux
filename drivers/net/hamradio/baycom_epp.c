@@ -306,7 +306,7 @@ static int eppconfig(struct baycom_state *bc)
 		bc->cfg.extmodem ? "ext" : "int", bc->cfg.fclk, bc->cfg.bps,
 		(bc->cfg.fclk + 8 * bc->cfg.bps) / (16 * bc->cfg.bps),
 		bc->cfg.loopback ? ",loopback" : "");
-	sprintf(portarg, "%ld", bc->pdev->port->base);
+	sprintf(portarg, "%ld", bc->pdev->port->iobase);
 	printk(KERN_DEBUG "%s: %s -s -p %s -m %s\n", bc_drvname, eppconfig_path, portarg, modearg);
 
 	return call_usermodehelper(eppconfig_path, argv, envp, UMH_WAIT_PROC);
@@ -828,14 +828,14 @@ static int epp_open(struct net_device *dev)
         }
 #if 0
         if (pp->irq < 0) {
-		pr_err("%s: parport at 0x%lx has no irq\n", bc_drvname, pp->base);
+		pr_err("%s: parport at 0x%lx has no irq\n", bc_drvname, pp->iobase);
 		parport_put_port(pp);
                 return -ENXIO;
         }
 #endif
 	if ((~pp->modes) & (PARPORT_MODE_TRISTATE | PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT)) {
 		pr_err("%s: parport at 0x%lx cannot be used\n",
-		       bc_drvname, pp->base);
+		       bc_drvname, pp->iobase);
 		parport_put_port(pp);
                 return -EIO;
 	}
@@ -857,11 +857,11 @@ static int epp_open(struct net_device *dev)
 	bc->pdev = parport_register_dev_model(pp, dev->name, &par_cb, i);
 	parport_put_port(pp);
         if (!bc->pdev) {
-		pr_err("%s: cannot register parport at 0x%lx\n", bc_drvname, pp->base);
+		pr_err("%s: cannot register parport at 0x%lx\n", bc_drvname, pp->iobase);
                 return -ENXIO;
         }
         if (parport_claim(bc->pdev)) {
-		pr_err("%s: parport at 0x%lx busy\n", bc_drvname, pp->base);
+		pr_err("%s: parport at 0x%lx busy\n", bc_drvname, pp->iobase);
                 parport_unregister_device(bc->pdev);
                 return -EBUSY;
         }

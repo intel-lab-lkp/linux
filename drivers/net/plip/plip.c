@@ -1286,7 +1286,7 @@ static void plip_attach (struct parport *port)
 		strcpy(dev->name, name);
 
 		dev->irq = port->irq;
-		dev->base_addr = port->base;
+		dev->base_addr = port->iobase;
 		if (port->irq == -1) {
 			printk(KERN_INFO "plip: %s has no IRQ. Using IRQ-less mode,"
 		                 "which is fairly inefficient!\n", port->name);

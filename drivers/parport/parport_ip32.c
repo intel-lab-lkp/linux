@@ -301,7 +301,7 @@ struct parport_ip32_private {
 #define __pr_probe(...)							\
 	do { if (verbose_probing) printk(__VA_ARGS__); } while (0)
 #define pr_probe(p, fmt, ...)						\
-	__pr_probe(KERN_INFO PPIP32 "0x%lx: " fmt, (p)->base , ##__VA_ARGS__)
+	__pr_probe(KERN_INFO PPIP32 "0x%lx: " fmt, (p)->iobase, ##__VA_ARGS__)
 
 /*
  * parport_ip32_dump_state - print register status of parport
@@ -2038,8 +2038,8 @@ static __init struct parport *parport_ip32_probe_port(void)
 		err = -ENOMEM;
 		goto fail;
 	}
-	p->base = MACE_BASE + offsetof(struct sgi_mace, isa.parallel);
-	p->base_hi = MACE_BASE + offsetof(struct sgi_mace, isa.ecp1284);
+	p->iobase = MACE_BASE + offsetof(struct sgi_mace, isa.parallel);
+	p->iobase_hi = MACE_BASE + offsetof(struct sgi_mace, isa.ecp1284);
 	p->private_data = priv;
 
 	*ops = parport_ip32_ops;
@@ -2131,7 +2131,7 @@ static __init struct parport *parport_ip32_probe_port(void)
 	parport_ip32_dump_state(p, "end init", 0);
 
 	/* Print out what we found */
-	pr_info("%s: SGI IP32 at 0x%lx (0x%lx)", p->name, p->base, p->base_hi);
+	pr_info("%s: SGI IP32 at 0x%lx (0x%lx)", p->name, p->iobase, p->iobase_hi);
 	if (p->irq != PARPORT_IRQ_NONE)
 		pr_cont(", irq %d", p->irq);
 	pr_cont(" [");

@@ -112,7 +112,7 @@ static void ks0108_parport_attach(struct parport *port)
 {
 	struct pardev_cb ks0108_cb;
 
-	if (port->base != ks0108_port)
+	if (port->iobase != ks0108_port)
 		return;
 
 	memset(&ks0108_cb, 0, sizeof(ks0108_cb));
@@ -140,7 +140,7 @@ err_unreg_device:
 
 static void ks0108_parport_detach(struct parport *port)
 {
-	if (port->base != ks0108_port)
+	if (port->iobase != ks0108_port)
 		return;
 
 	if (!ks0108_pardevice) {

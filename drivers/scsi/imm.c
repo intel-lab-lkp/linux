@@ -69,7 +69,7 @@ static DEFINE_SPINLOCK(arbitration_lock);
 
 static void got_it(imm_struct *dev)
 {
-	dev->base = dev->dev->port->base;
+	dev->base = dev->dev->port->iobase;
 	if (dev->cur_cmd)
 		imm_scsi_pointer(dev->cur_cmd)->phase = 1;
 	else
@@ -1199,8 +1199,8 @@ static int __imm_attach(struct parport *pb)
 	}
 	dev->waiting = NULL;
 	finish_wait(&waiting, &wait);
-	dev->base = dev->dev->port->base;
-	dev->base_hi = dev->dev->port->base_hi;
+	dev->base = dev->dev->port->iobase;
+	dev->base_hi = dev->dev->port->iobase_hi;
 	w_ctr(dev->base, 0x0c);
 
 	/* Done configuration */
@@ -1225,7 +1225,7 @@ static int __imm_attach(struct parport *pb)
 	if (!host)
 		goto out1;
 	host->no_highmem = true;
-	host->io_port = pb->base;
+	host->io_port = pb->iobase;
 	host->n_io_port = ports;
 	host->dma_channel = -1;
 	host->unique_id = pb->number;

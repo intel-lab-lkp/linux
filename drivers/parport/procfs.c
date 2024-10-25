@@ -128,7 +128,7 @@ static int do_hardware_base_addr(const struct ctl_table *table, int write,
 	if (write) /* permissions prevent this anyway */
 		return -EACCES;
 
-	len += scnprintf(buffer, sizeof(buffer), "%lu\t%lu\n", port->base, port->base_hi);
+	len += scnprintf(buffer, sizeof(buffer), "%lu\t%lu\n", port->iobase, port->iobase_hi);
 
 	if (len > *lenp)
 		len = *lenp;
