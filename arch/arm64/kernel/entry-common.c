@@ -69,9 +69,11 @@ static noinstr irqentry_state_t enter_from_kernel_mode(struct pt_regs *regs)
  * This is intended to match the logic in irqentry_exit(), handling the kernel
  * mode transitions only, and with preemption handled elsewhere.
  */
-static __always_inline void __exit_to_kernel_mode(struct pt_regs *regs,
-						  irqentry_state_t state)
+static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
+					irqentry_state_t state)
 {
+	mte_check_tfsr_exit();
+
 	lockdep_assert_irqs_disabled();
 
 	if (!regs_irqs_disabled(regs)) {
@@ -88,13 +90,6 @@ static __always_inline void __exit_to_kernel_mode(struct pt_regs *regs,
 		if (state.exit_rcu)
 			ct_irq_exit();
 	}
-}
-
-static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
-					irqentry_state_t state)
-{
-	mte_check_tfsr_exit();
-	__exit_to_kernel_mode(regs, state);
 }
 
 /*
