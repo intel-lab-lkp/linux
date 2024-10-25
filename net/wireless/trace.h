@@ -218,8 +218,6 @@
 		__entry->plink_state = sinfo->plink_state;	       \
 	} while (0)
 
-#define BOOL_TO_STR(bo) (bo) ? "true" : "false"
-
 #define QOS_MAP_ENTRY __field(u8, num_des)			\
 		      __array(u8, dscp_exception,		\
 			      2 * IEEE80211_QOS_MAP_MAX_EX)	\
@@ -536,7 +534,7 @@ DECLARE_EVENT_CLASS(key_handle,
 	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", link_id: %d, "
 		  "key_index: %u, pairwise: %s, mac addr: %pM",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->link_id,
-		  __entry->key_index, BOOL_TO_STR(__entry->pairwise),
+		  __entry->key_index, str_true_false(__entry->pairwise),
 		  __entry->mac_addr)
 );
 
@@ -579,7 +577,7 @@ TRACE_EVENT(rdev_add_key,
 		  "mac addr: %pM",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->link_id,
 		  __entry->key_index, __entry->mode,
-		  BOOL_TO_STR(__entry->pairwise), __entry->mac_addr)
+		  str_true_false(__entry->pairwise), __entry->mac_addr)
 );
 
 TRACE_EVENT(rdev_set_default_key,
@@ -605,8 +603,8 @@ TRACE_EVENT(rdev_set_default_key,
 	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", link_id: %d, "
 		  "key index: %u, unicast: %s, multicast: %s",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->link_id,
-		  __entry->key_index, BOOL_TO_STR(__entry->unicast),
-		  BOOL_TO_STR(__entry->multicast))
+		  __entry->key_index, str_true_false(__entry->unicast),
+		  str_true_false(__entry->multicast))
 );
 
 TRACE_EVENT(rdev_set_default_mgmt_key,
@@ -691,7 +689,7 @@ TRACE_EVENT(rdev_start_ap,
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->ssid, CHAN_DEF_PR_ARG,
 		  __entry->beacon_interval, __entry->dtim_period,
 		  __entry->hidden_ssid, __entry->wpa_ver,
-		  BOOL_TO_STR(__entry->privacy), __entry->auth_type,
+		  str_true_false(__entry->privacy), __entry->auth_type,
 		  __entry->inactivity_timeout, __entry->link_id)
 );
 
@@ -1406,7 +1404,7 @@ TRACE_EVENT(rdev_assoc,
 	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", bssid: %pM"
 		  ", previous bssid: %pM, use mfp: %s, flags: 0x%x",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->bssid,
-		  __entry->prev_bssid, BOOL_TO_STR(__entry->use_mfp),
+		  __entry->prev_bssid, str_true_false(__entry->use_mfp),
 		  __entry->flags)
 );
 
@@ -1455,7 +1453,7 @@ TRACE_EVENT(rdev_disassoc,
 		  ", reason: %u, local state change: %s",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->bssid,
 		  __entry->reason_code,
-		  BOOL_TO_STR(__entry->local_state_change))
+		  str_true_false(__entry->local_state_change))
 );
 
 TRACE_EVENT(rdev_mgmt_tx_cancel_wait,
@@ -1528,7 +1526,7 @@ TRACE_EVENT(rdev_connect,
 		  ", ssid: %s, auth type: %d, privacy: %s, wpa versions: %u, "
 		  "flags: 0x%x, previous bssid: %pM",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->bssid, __entry->ssid,
-		  __entry->auth_type, BOOL_TO_STR(__entry->privacy),
+		  __entry->auth_type, str_true_false(__entry->privacy),
 		  __entry->wpa_versions, __entry->flags, __entry->prev_bssid)
 );
 
@@ -1930,7 +1928,7 @@ TRACE_EVENT(rdev_tdls_mgmt,
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->peer,
 		  __entry->link_id, __entry->action_code, __entry->dialog_token,
 		  __entry->status_code, __entry->peer_capability,
-		  BOOL_TO_STR(__entry->initiator),
+		  str_true_false(__entry->initiator),
 		  ((u8 *)__get_dynamic_array(buf))[0])
 );
 
@@ -2139,9 +2137,9 @@ TRACE_EVENT(rdev_mgmt_tx,
 	TP_printk(WIPHY_PR_FMT ", " WDEV_PR_FMT ", " CHAN_PR_FMT ", offchan: %s,"
 		  " wait: %u, no cck: %s, dont wait for ack: %s",
 		  WIPHY_PR_ARG, WDEV_PR_ARG, CHAN_PR_ARG,
-		  BOOL_TO_STR(__entry->offchan), __entry->wait,
-		  BOOL_TO_STR(__entry->no_cck),
-		  BOOL_TO_STR(__entry->dont_wait_for_ack))
+		  str_true_false(__entry->offchan), __entry->wait,
+		  str_true_false(__entry->no_cck),
+		  str_true_false(__entry->dont_wait_for_ack))
 );
 
 TRACE_EVENT(rdev_tx_control_port,
@@ -2169,7 +2167,7 @@ TRACE_EVENT(rdev_tx_control_port,
 		  " proto: 0x%x, unencrypted: %s, link: %d",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->dest,
 		  be16_to_cpu(__entry->proto),
-		  BOOL_TO_STR(__entry->unencrypted),
+		  str_true_false(__entry->unencrypted),
 		  __entry->link_id)
 );
 
@@ -2747,7 +2745,7 @@ TRACE_EVENT(rdev_set_multicast_to_unicast,
 	),
 	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT ", unicast: %s",
 		  WIPHY_PR_ARG, NETDEV_PR_ARG,
-		  BOOL_TO_STR(__entry->enabled))
+		  str_true_false(__entry->enabled))
 );
 
 DEFINE_EVENT(wiphy_wdev_evt, rdev_get_txq_stats,
@@ -3060,7 +3058,7 @@ TRACE_EVENT(cfg80211_return_bool,
 	TP_fast_assign(
 		__entry->ret = ret;
 	),
-	TP_printk("returned %s", BOOL_TO_STR(__entry->ret))
+	TP_printk("returned %s", str_true_false(__entry->ret))
 );
 
 DECLARE_EVENT_CLASS(cfg80211_netdev_mac_evt,
@@ -3337,7 +3335,7 @@ TRACE_EVENT(cfg80211_mgmt_tx_status,
 		__entry->ack = ack;
 	),
 	TP_printk(WDEV_PR_FMT", cookie: %llu, ack: %s",
-		  WDEV_PR_ARG, __entry->cookie, BOOL_TO_STR(__entry->ack))
+		  WDEV_PR_ARG, __entry->cookie, str_true_false(__entry->ack))
 );
 
 TRACE_EVENT(cfg80211_control_port_tx_status,
@@ -3354,7 +3352,7 @@ TRACE_EVENT(cfg80211_control_port_tx_status,
 		__entry->ack = ack;
 	),
 	TP_printk(WDEV_PR_FMT", cookie: %llu, ack: %s",
-		  WDEV_PR_ARG, __entry->cookie, BOOL_TO_STR(__entry->ack))
+		  WDEV_PR_ARG, __entry->cookie, str_true_false(__entry->ack))
 );
 
 TRACE_EVENT(cfg80211_rx_control_port,
@@ -3379,7 +3377,7 @@ TRACE_EVENT(cfg80211_rx_control_port,
 	),
 	TP_printk(NETDEV_PR_FMT ", len=%d, %pM, proto: 0x%x, unencrypted: %s, link: %d",
 		  NETDEV_PR_ARG, __entry->len, __entry->from,
-		  __entry->proto, BOOL_TO_STR(__entry->unencrypted),
+		  __entry->proto, str_true_false(__entry->unencrypted),
 		  __entry->link_id)
 );
 
@@ -3575,7 +3573,7 @@ TRACE_EVENT(cfg80211_probe_status,
 	),
 	TP_printk(NETDEV_PR_FMT " addr:%pM, cookie: %llu, acked: %s",
 		  NETDEV_PR_ARG, __entry->addr, __entry->cookie,
-		  BOOL_TO_STR(__entry->acked))
+		  str_true_false(__entry->acked))
 );
 
 TRACE_EVENT(cfg80211_cqm_pktloss_notify,
@@ -3618,7 +3616,7 @@ TRACE_EVENT(cfg80211_pmksa_candidate_notify,
 	),
 	TP_printk(NETDEV_PR_FMT ", index:%d, bssid: %pM, pre auth: %s",
 		  NETDEV_PR_ARG, __entry->index, __entry->bssid,
-		  BOOL_TO_STR(__entry->preauth))
+		  str_true_false(__entry->preauth))
 );
 
 TRACE_EVENT(cfg80211_report_obss_beacon,
@@ -3697,7 +3695,7 @@ TRACE_EVENT(cfg80211_scan_done,
 		}
 	),
 	TP_printk("aborted: %s, scan start (TSF): %llu, tsf_bssid: %pM",
-		  BOOL_TO_STR(__entry->aborted),
+		  str_true_false(__entry->aborted),
 		  (unsigned long long)__entry->scan_start_tsf,
 		  __entry->tsf_bssid)
 );
