@@ -26,6 +26,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <linux/array_size.h>
+#include <linux/build_bug.h>
 #include <linux/debugfs.h>
 #include <linux/fs.h>
 #include <linux/module.h>
@@ -33,6 +35,7 @@
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
 #include <linux/slab.h>
+#include <linux/sprintf.h>
 #include <linux/srcu.h>
 #include <linux/xarray.h>
 
@@ -69,6 +72,16 @@ static bool drm_core_init_complete;
 static struct dentry *drm_debugfs_root;
 
 DEFINE_STATIC_SRCU(drm_unplug_srcu);
+
+/*
+ * Available recovery methods for wedged device. To be sent along with device
+ * wedged uevent.
+ */
+static const char *const drm_wedge_recovery_opts[] = {
+	[ffs(DRM_WEDGE_RECOVERY_REBIND) - 1]	= "rebind",
+	[ffs(DRM_WEDGE_RECOVERY_BUS_RESET) - 1]	= "bus-reset",
+};
+static_assert(ARRAY_SIZE(drm_wedge_recovery_opts) == ffs(DRM_WEDGE_RECOVERY_BUS_RESET));
 
 /*
  * DRM Minors
@@ -496,6 +509,44 @@ void drm_dev_unplug(struct drm_device *dev)
 	unmap_mapping_range(dev->anon_inode->i_mapping, 0, 0, 1);
 }
 EXPORT_SYMBOL(drm_dev_unplug);
+
+/**
+ * drm_dev_wedged_event - generate a device wedged uevent
+ * @dev: DRM device
+ * @method: method(s) to be used for recovery
+ *
+ * This generates a device wedged uevent for the DRM device specified by @dev.
+ * Recovery @method from drm_wedge_recovery_opts[] is sent in the uevent
+ * environment as ``WEDGED=<method1>[,<method2>]`` in order of less to more
+ * side-effects. If caller is unsure about recovery or @method is unknown (0),
+ * ``WEDGED=none`` will be sent instead.
+ *
+ * Returns: 0 on success, negative error code otherwise.
+ */
+int drm_dev_wedged_event(struct drm_device *dev, unsigned long method)
+{
+	unsigned int len, opt, size = ARRAY_SIZE(drm_wedge_recovery_opts);
+	const char *recovery = NULL;
+	/* Event string length up to 24+ characters with available methods */
+	char event_string[32];
+	char *envp[] = { event_string, NULL };
+
+	len = scnprintf(event_string, sizeof(event_string), "%s", "WEDGED=");
+
+	for_each_set_bit(opt, &method, size) {
+		recovery = drm_wedge_recovery_opts[opt];
+		len += scnprintf(event_string + len, sizeof(event_string),
+				 opt == size - 1 ? "%s" : "%s,", recovery);
+	}
+
+	if (!recovery)
+		/* Caller is unsure about recovery, do the best we can at this point. */
+		scnprintf(event_string + len, sizeof(event_string), "%s", "none");
+
+	drm_info(dev, "device wedged, needs recovery\n");
+	return kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE, envp);
+}
+EXPORT_SYMBOL(drm_dev_wedged_event);
 
 /*
  * DRM internal mount
