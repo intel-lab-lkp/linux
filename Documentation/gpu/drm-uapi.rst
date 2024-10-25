@@ -362,6 +362,81 @@ the first place. DRM devices should make use of devcoredump to store relevant
 information about the reset, so this information can be added to user bug
 reports.
 
+Device wedging
+==============
+
+Drivers can optionally make use of device wedged event (implemented as
+drm_dev_wedged_event() in DRM subsystem) which notifies userspace of wedged
+(hanged/unusable) state of the DRM device through a uevent. This is useful
+especially in cases where the device is no longer operating as expected even
+after a reset and has become unrecoverable from driver context. Purpose of
+this implementation is to provide drivers a generic way to recover with the
+help of userspace intervention without taking any drastic measures in the
+driver.
+
+A 'wedged' device is basically a dead device that needs attention. The
+uevent is the notification that is sent to userspace along with a hint about
+what could possibly be attempted to recover the device and bring it back to
+usable state. Different drivers may have different ideas of a 'wedged' device
+depending on their hardware implementation, and hence the vendor agnostic
+nature of the event. It is up to the drivers to decide when they see the need
+for recovery and how they want to recover from the available methods.
+
+Recovery
+--------
+
+Current implementation defines two recovery methods, out of which, drivers
+can use any one, both or none. Method(s) of choice will be sent in the uevent
+environment as ``WEDGED=<method1>[,<method2>]`` in order of less to more side
+effects. If driver is unsure about recovery or method is unknown (like reboot,
+firmware flashing, hardware replacement or any other procedure which can't be
+attempted on the fly), ``WEDGED=none`` will be sent instead.
+
+It is the responsibility of the driver to perform required cleanups (like
+disabling system memory access or signalling dma_fences) and prepare itself
+for the recovery before sending the event. Once the event is sent, driver
+should block all IOCTLs with an error code. This will signify the reason for
+wegeding which can be reported to the application if needed.
+
+Userspace consumers can parse this event and attempt recovery as per below
+expectations.
+
+    =============== ==================================
+    Recovery method Consumer expectations
+    =============== ==================================
+    rebind          unbind + rebind driver
+    bus-reset       unbind + reset bus device + rebind
+    none            admin/user policy
+    =============== ==================================
+
+Example for rebind
+~~~~~~~~~~~~~~~~~~
+
+Udev rule::
+
+    SUBSYSTEM=="drm", ENV{WEDGED}=="rebind", DEVPATH=="*/drm/card[0-9]",
+    RUN+="/path/to/rebind.sh $env{DEVPATH}"
+
+Recovery script::
+
+    #!/bin/sh
+
+    DEVPATH=$(readlink -f /sys/$1/device)
+    DEVICE=$(basename $DEVPATH)
+    DRIVER=$(readlink -f $DEVPATH/driver)
+
+    echo -n $DEVICE > $DRIVER/unbind
+    sleep 1
+    echo -n $DEVICE > $DRIVER/bind
+
+Although scripts are simple enough for basic recovery, admin/users can define
+customized policies around recovery action. For example if the driver supports
+multiple recovery methods, consumers can opt for the suitable one based on
+policy definition. Consumers can also take additional steps like gathering
+telemetry information (devcoredump, syslog), or have the device available for
+further debugging and data collection before performing the recovery. This is
+useful especially when the driver is unsure about recovery or method is unknown.
+
 .. _drm_driver_ioctl:
 
 IOCTL Support on Device Nodes
