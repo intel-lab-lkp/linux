@@ -75,14 +75,6 @@ static inline bool arm64_irqentry_exit_need_resched(void)
 		return false;
 
 	/*
-	 * Note: thread_info::preempt_count includes both thread_info::count
-	 * and thread_info::need_resched, and is not equivalent to
-	 * preempt_count().
-	 */
-	if (READ_ONCE(current_thread_info()->preempt_count) != 0)
-		return false;
-
-	/*
 	 * DAIF.DA are cleared at the start of IRQ/FIQ handling, and when GIC
 	 * priority masking is used the GIC irqchip driver will clear DAIF.IF
 	 * using gic_arch_enable_irqs() for normal IRQs. If anything is set in
@@ -129,8 +121,10 @@ static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
 			return;
 		}
 
-		if (arm64_irqentry_exit_need_resched())
-			preempt_schedule_irq();
+		if (!preempt_count()) {
+			if (need_resched() && arm64_irqentry_exit_need_resched())
+				preempt_schedule_irq();
+		}
 
 		trace_hardirqs_on();
 	} else {
