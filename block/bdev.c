@@ -414,6 +414,7 @@ void __init bdev_cache_init(void)
 
 struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 {
+	unsigned short max_write_hints;
 	struct block_device *bdev;
 	struct inode *inode;
 
@@ -440,6 +441,20 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 		return NULL;
 	}
 	bdev->bd_disk = disk;
+
+	max_write_hints = bdev_max_write_hints(bdev);
+	if (max_write_hints) {
+		int size = BITS_TO_LONGS(max_write_hints) * sizeof(long);
+
+		bdev->write_hint_mask = kmalloc(size, GFP_KERNEL);
+		if (!bdev->write_hint_mask) {
+			free_percpu(bdev->bd_stats);
+			iput(inode);
+			return NULL;
+		}
+		memset(bdev->write_hint_mask, 0xff, size);
+	}
+
 	return bdev;
 }
 
