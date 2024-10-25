@@ -2997,6 +2997,8 @@ static int qed_iov_pre_update_vport(struct qed_hwfn *hwfn,
 		return 0;
 
 	vf_info = qed_iov_get_public_vf_info(hwfn, vfid, true);
+	if (!vf_info)
+		return 0;
 
 	if (flags->update_rx_mode_config) {
 		vf_info->rx_accept_mode = flags->rx_accept_filter;
@@ -5145,6 +5147,9 @@ static void qed_iov_handle_trust_change(struct qed_hwfn *hwfn)
 		 * needed.
 		 */
 		vf_info = qed_iov_get_public_vf_info(hwfn, i, true);
+		if (!vf_info)
+			continue;
+
 		if (vf_info->is_trusted_configured ==
 		    vf_info->is_trusted_request)
 			continue;
