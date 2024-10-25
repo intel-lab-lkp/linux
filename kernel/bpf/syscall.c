@@ -3092,28 +3092,46 @@ static void bpf_link_defer_dealloc_mult_rcu_gp(struct rcu_head *rcu)
 		call_rcu(rcu, bpf_link_defer_dealloc_rcu_gp);
 }
 
+static void bpf_link_defer_bpf_prog_put(struct rcu_head *rcu)
+{
+	struct bpf_prog_aux *aux = container_of(rcu, struct bpf_prog_aux, rcu);
+
+	bpf_prog_put(aux->prog);
+}
+
 /* bpf_link_free is guaranteed to be called from process context */
 static void bpf_link_free(struct bpf_link *link)
 {
 	const struct bpf_link_ops *ops = link->ops;
+	struct bpf_raw_tp_link *raw_tp = NULL;
 	bool sleepable = false;
 
+	if (link->type == BPF_LINK_TYPE_RAW_TRACEPOINT)
+		raw_tp = container_of(link, struct bpf_raw_tp_link, link);
 	bpf_link_free_id(link->id);
 	if (link->prog) {
 		sleepable = link->prog->sleepable;
 		/* detach BPF program, clean up used resources */
 		ops->release(link);
-		bpf_prog_put(link->prog);
+		if (raw_tp)
+			tracepoint_call_rcu(raw_tp->btp->tp, &link->prog->aux->rcu,
+					    bpf_link_defer_bpf_prog_put);
+		else
+			bpf_prog_put(link->prog);
 	}
 	if (ops->dealloc_deferred) {
-		/* schedule BPF link deallocation; if underlying BPF program
-		 * is sleepable, we need to first wait for RCU tasks trace
-		 * sync, then go through "classic" RCU grace period
-		 */
-		if (sleepable)
-			call_rcu_tasks_trace(&link->rcu, bpf_link_defer_dealloc_mult_rcu_gp);
-		else
-			call_rcu(&link->rcu, bpf_link_defer_dealloc_rcu_gp);
+		if (raw_tp) {
+			tracepoint_call_rcu(raw_tp->btp->tp, &link->rcu, bpf_link_defer_dealloc_rcu_gp);
+		} else {
+			/* schedule BPF link deallocation; if underlying BPF program
+			 * is sleepable, we need to first wait for RCU tasks trace
+			 * sync, then go through "classic" RCU grace period
+			 */
+			if (sleepable)
+				call_rcu_tasks_trace(&link->rcu, bpf_link_defer_dealloc_mult_rcu_gp);
+			else
+				call_rcu(&link->rcu, bpf_link_defer_dealloc_rcu_gp);
+		}
 	} else if (ops->dealloc)
 		ops->dealloc(link);
 }
