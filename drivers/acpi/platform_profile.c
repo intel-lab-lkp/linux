@@ -180,41 +180,34 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 {
 	int err;
 
-	mutex_lock(&profile_lock);
+	guard(mutex)(&profile_lock);
 	/* We can only have one active profile */
-	if (cur_profile) {
-		mutex_unlock(&profile_lock);
+	if (cur_profile)
 		return -EEXIST;
-	}
 
 	/* Sanity check the profile handler field are set */
 	if (!pprof || bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST) ||
-		!pprof->profile_set || !pprof->profile_get) {
-		mutex_unlock(&profile_lock);
+		!pprof->profile_set || !pprof->profile_get)
 		return -EINVAL;
-	}
 
 	err = sysfs_create_group(acpi_kobj, &platform_profile_group);
-	if (err) {
-		mutex_unlock(&profile_lock);
+	if (err)
 		return err;
-	}
 	list_add_tail(&pprof->list, &platform_profile_handler_list);
 
 	cur_profile = pprof;
-	mutex_unlock(&profile_lock);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(platform_profile_register);
 
 int platform_profile_remove(struct platform_profile_handler *pprof)
 {
+	guard(mutex)(&profile_lock);
+
 	list_del(&pprof->list);
 
 	sysfs_remove_group(acpi_kobj, &platform_profile_group);
-	mutex_lock(&profile_lock);
 	cur_profile = NULL;
-	mutex_unlock(&profile_lock);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(platform_profile_remove);
