@@ -954,9 +954,7 @@ static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
 
 /*
  * Fix up the ep ring first, so HW stops executing cancelled TDs.
- * We have the xHCI lock, so nothing can modify this list until we drop it.
- * We're also in the event handler, so we can't get re-interrupted if another
- * Stop Endpoint command completes.
+ * Call this under xhci->lock, so nothing can modify TD lists or interrupt us.
  *
  * only call this when ring is not in a running state
  */
@@ -971,6 +969,7 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 	u64			hw_deq;
 	unsigned int		slot_id = ep->vdev->slot_id;
 	int			err;
+	bool			pending_td = false;	/* cached_td is already pending */
 
 	xhci = ep->xhci;
 
@@ -1000,7 +999,18 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 		if (td->cancel_status == TD_HALTED || trb_in_td(xhci, td, hw_deq, false)) {
 			switch (td->cancel_status) {
 			case TD_CLEARED: /* TD is already no-op */
+				break;
 			case TD_CLEARING_CACHE: /* set TR deq command already queued */
+				xhci_dbg(xhci, "Found cached TD in URB %p pending\n", td->urb);
+				if (cached_td && !pending_td)
+					/* not supposed to happen... */
+					xhci_warn(xhci, "Cached TDs cleared out of order: URB %p pending but URB %p not done yet\n",
+							td->urb, cached_td->urb);
+					// WTF, no easy way to handle this. We may have already
+					// picked up to two TDs for clearing and can't undo it
+					// without adding more complexity to this function.
+				cached_td = td;
+				pending_td = true;
 				break;
 			case TD_DIRTY: /* TD is cached, clear it */
 			case TD_HALTED:
@@ -1020,12 +1030,14 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 						  "Found multiple active URBs %p and %p in stream %u?\n",
 						  td->urb, cached_td->urb,
 						  td->urb->stream_id);
-					td_to_noop(xhci, ring, cached_td, false);
-					cached_td->cancel_status = TD_CLEARED;
+					td_to_noop(xhci, ring, td, false);
+					td->cancel_status = TD_CLEARED;
+					break;
 				}
 				td_to_noop(xhci, ring, td, false);
 				td->cancel_status = TD_CLEARING_CACHE;
 				cached_td = td;
+				xhci_dbg(xhci, "Pick cached TD in URB %p for clearing\n", td->urb);
 				break;
 			}
 		} else {
@@ -1034,8 +1046,11 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 		}
 	}
 
-	/* If there's no need to move the dequeue pointer then we're done */
-	if (!cached_td)
+	/*
+	 * We are done if there's no need to move the dequeue pointer or if the
+	 * command is already pending. Completion handler will call us again.
+	 */
+	if (!cached_td || ep->ep_state & SET_DEQ_PENDING)
 		return 0;
 
 	err = xhci_move_dequeue_past_td(xhci, slot_id, ep->ep_index,
@@ -1059,6 +1074,19 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 		}
 	}
 	return 0;
+}
+
+/*
+ * Erase queued TDs from transfer ring(s) and give back those the xHC didn't
+ * stop on. If necessary, queue commands to move the xHC off cancelled TDs it
+ * stopped on. Those will be given back later when the commands complete.
+ *
+ * Call under xhci->lock on a stopped/halted endpoint.
+ */
+void xhci_process_cancelled_tds(struct xhci_virt_ep *ep)
+{
+	xhci_invalidate_cancelled_tds(ep);
+	xhci_giveback_invalidated_tds(ep);
 }
 
 /*
@@ -1154,12 +1182,9 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 			/*
 			 * Per xHCI 4.6.9, Stop Endpoint command on a Stopped
 			 * EP is a Context State Error, and EP stays Stopped.
-			 * This outcome is valid if the command was redundant.
-			 */
-			if (ep->ep_state & EP_STOP_CMD_REDUNDANT)
-				break;
-			/*
-			 * Or it really failed on Halted, but somebody ran Reset
+			 * This is avoided by never queuing redundant commands.
+			 *
+			 * But maybe it failed on Halted, and somebody ran Reset
 			 * Endpoint later. EP state is now Stopped and EP_HALTED
 			 * still set because Reset EP handler will run after us.
 			 */
@@ -1199,11 +1224,10 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 	}
 
 	/* will queue a set TR deq if stopped on a cancelled, uncleared TD */
-	xhci_invalidate_cancelled_tds(ep);
-	ep->ep_state &= ~EP_STOP_CMD_PENDING;
+	xhci_process_cancelled_tds(ep);
 
 	/* Otherwise ring the doorbell(s) to restart queued transfers */
-	xhci_giveback_invalidated_tds(ep);
+	ep->ep_state &= ~EP_STOP_CMD_PENDING;
 	ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
 }
 
@@ -4397,27 +4421,10 @@ int xhci_queue_evaluate_context(struct xhci_hcd *xhci, struct xhci_command *cmd,
 int xhci_queue_stop_endpoint(struct xhci_hcd *xhci, struct xhci_command *cmd,
 			     int slot_id, unsigned int ep_index, int suspend)
 {
-	struct xhci_virt_ep *ep;
 	u32 trb_slot_id = SLOT_ID_FOR_TRB(slot_id);
 	u32 trb_ep_index = EP_INDEX_FOR_TRB(ep_index);
 	u32 type = TRB_TYPE(TRB_STOP_RING);
 	u32 trb_suspend = SUSPEND_PORT_FOR_TRB(suspend);
-
-	/*
-	 * Any of that means the EP is or will be Stopped by the time this
-	 * command runs. Queue it anyway for its side effects like calling
-	 * our default handler or complete(). But our handler must know if
-	 * the command is redundant, so check it now. The handler can't do
-	 * it later because those operations may finish before it runs.
-	 */
-	ep = xhci_get_virt_ep(xhci, slot_id, ep_index);
-	if (ep) {
-		if (ep->ep_state & (SET_DEQ_PENDING | EP_HALTED | EP_CLEARING_TT))
-			ep->ep_state |= EP_STOP_CMD_REDUNDANT;
-		else
-			ep->ep_state &= ~EP_STOP_CMD_REDUNDANT;
-	}
-	/* else: don't care, the handler will do nothing anyway */
 
 	return queue_command(xhci, cmd, 0, 0, 0,
 			trb_slot_id | trb_ep_index | type | trb_suspend, false);

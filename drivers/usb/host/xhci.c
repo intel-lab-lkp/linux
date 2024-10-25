@@ -1768,10 +1768,28 @@ static int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 		}
 	}
 
-	/* Queue a stop endpoint command, but only if this is
-	 * the first cancellation to be handled.
+	/*
+	 * The endpoint needs to be stopped to remove cancelled TDs from xHC
+	 * queues. But don't stop it unnecessarily: firstly - for efficiency,
+	 * secondly - for correctness, because our completion handler assumes
+	 * that any apparent attempt to stop a stopped EP is a hardware bug.
 	 */
-	if (!(ep->ep_state & EP_STOP_CMD_PENDING)) {
+
+	/* These completion handlers will sort out cancelled TDs for us */
+	if (ep->ep_state & (EP_STOP_CMD_PENDING | EP_HALTED)) {
+		xhci_dbg(xhci, "Not queuing Stop Endpoint on slot %d ep %d state 0x%x\n",
+				urb->dev->slot_id, ep_index, ep->ep_state);
+		goto done;
+	}
+
+	/* In these cases the endpoint is stopped already */
+	if (ep->ep_state & (SET_DEQ_PENDING | EP_CLEARING_TT)) {
+		/* and cancelled TDs can be given back right away */
+		xhci_dbg(xhci, "Invalidating TDs instantly on slot %d ep %d state 0x%x\n",
+				urb->dev->slot_id, ep_index, ep->ep_state);
+		xhci_process_cancelled_tds(ep);
+	} else {
+		/* Otherwise, queue a new Stop Endpoint command */
 		command = xhci_alloc_command(xhci, false, GFP_ATOMIC);
 		if (!command) {
 			ret = -ENOMEM;
