@@ -818,20 +818,6 @@ static bool amdgpu_job_fence_enable_signaling(struct dma_fence *f)
 	return true;
 }
 
-/**
- * amdgpu_fence_free - free up the fence memory
- *
- * @rcu: RCU callback head
- *
- * Free up the fence memory after the RCU grace period.
- */
-static void amdgpu_fence_free(struct rcu_head *rcu)
-{
-	struct dma_fence *f = container_of(rcu, struct dma_fence, rcu);
-
-	/* free fence_slab if it's separated fence*/
-	kmem_cache_free(amdgpu_fence_slab, to_amdgpu_fence(f));
-}
 
 /**
  * amdgpu_job_fence_free - free up the job with embedded fence
@@ -858,7 +844,7 @@ static void amdgpu_job_fence_free(struct rcu_head *rcu)
  */
 static void amdgpu_fence_release(struct dma_fence *f)
 {
-	call_rcu(&f->rcu, amdgpu_fence_free);
+	kfree_rcu(f, rcu);
 }
 
 /**
