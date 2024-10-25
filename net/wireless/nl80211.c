@@ -454,6 +454,8 @@ nl80211_mbssid_config_policy[NL80211_MBSSID_CONFIG_ATTR_MAX + 1] = {
 	[NL80211_MBSSID_CONFIG_ATTR_INDEX] = { .type = NLA_U8 },
 	[NL80211_MBSSID_CONFIG_ATTR_TX_IFINDEX] = { .type = NLA_U32 },
 	[NL80211_MBSSID_CONFIG_ATTR_EMA] = { .type = NLA_FLAG },
+	[NL80211_MBSSID_CONFIG_ATTR_TX_LINK_ID] =
+		NLA_POLICY_MAX(NLA_U8, IEEE80211_MLD_MAX_NUM_LINKS),
 };
 
 static const struct nla_policy
@@ -5522,6 +5524,7 @@ static int nl80211_parse_mbssid_config(struct wiphy *wiphy,
 				       u8 num_elems)
 {
 	struct nlattr *tb[NL80211_MBSSID_CONFIG_ATTR_MAX + 1];
+	int err;
 
 	if (!wiphy->mbssid_max_interfaces)
 		return -EOPNOTSUPP;
@@ -5554,18 +5557,14 @@ static int nl80211_parse_mbssid_config(struct wiphy *wiphy,
 			return -EINVAL;
 
 		if (tx_ifindex != dev->ifindex) {
-			struct net_device *tx_netdev =
-				dev_get_by_index(wiphy_net(wiphy), tx_ifindex);
-
-			if (!tx_netdev || !tx_netdev->ieee80211_ptr ||
-			    tx_netdev->ieee80211_ptr->wiphy != wiphy ||
-			    tx_netdev->ieee80211_ptr->iftype !=
-							NL80211_IFTYPE_AP) {
-				dev_put(tx_netdev);
-				return -EINVAL;
+			config->tx_wdev =
+			 dev_get_by_index(wiphy_net(wiphy), tx_ifindex)->ieee80211_ptr;
+			if (!config->tx_wdev ||
+			    config->tx_wdev->wiphy != wiphy ||
+			    config->tx_wdev->iftype != NL80211_IFTYPE_AP) {
+				err = -EINVAL;
+				goto out;
 			}
-
-			config->tx_wdev = tx_netdev->ieee80211_ptr;
 		} else {
 			config->tx_wdev = dev->ieee80211_ptr;
 		}
@@ -5575,7 +5574,29 @@ static int nl80211_parse_mbssid_config(struct wiphy *wiphy,
 		return -EINVAL;
 	}
 
+	config->tx_link_id = 0;
+	if (config->tx_wdev->valid_links) {
+		if (!tb[NL80211_MBSSID_CONFIG_ATTR_TX_LINK_ID])
+			goto out;
+
+		config->tx_link_id =
+			  nla_get_u8(tb[NL80211_MBSSID_CONFIG_ATTR_TX_LINK_ID]);
+		if (!(config->tx_wdev->valid_links & BIT(config->tx_link_id))) {
+			err = -ENOLINK;
+			goto out;
+		}
+	} else if (tb[NL80211_MBSSID_CONFIG_ATTR_TX_LINK_ID]) {
+		goto out;
+	}
+
 	return 0;
+
+out:
+	if (config->tx_wdev && config->tx_wdev->netdev &&
+	    config->tx_wdev->netdev != dev)
+		dev_put(config->tx_wdev->netdev);
+
+	return err;
 }
 
 static struct cfg80211_mbssid_elems *
