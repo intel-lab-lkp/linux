@@ -245,14 +245,6 @@ void blk_clear_pm_only(struct request_queue *q)
 }
 EXPORT_SYMBOL_GPL(blk_clear_pm_only);
 
-static void blk_free_queue_rcu(struct rcu_head *rcu_head)
-{
-	struct request_queue *q = container_of(rcu_head,
-			struct request_queue, rcu_head);
-
-	percpu_ref_exit(&q->q_usage_counter);
-	kmem_cache_free(blk_requestq_cachep, q);
-}
 
 static void blk_free_queue(struct request_queue *q)
 {
@@ -261,7 +253,7 @@ static void blk_free_queue(struct request_queue *q)
 		blk_mq_release(q);
 
 	ida_free(&blk_queue_ida, q->id);
-	call_rcu(&q->rcu_head, blk_free_queue_rcu);
+	kfree_rcu(q, rcu_head);
 }
 
 /**
