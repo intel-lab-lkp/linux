@@ -230,7 +230,7 @@ static int mos7840_set_reg_sync(struct usb_serial_port *port, __u16 reg,
 	struct usb_device *dev = port->serial->dev;
 
 	val = val & 0x00ff;
-	dev_dbg(&port->dev, "mos7840_set_reg_sync offset is %x, value %x\n", reg, val);
+	dev_dbg(&port->dev, "%s offset is %x, value %x\n", __func__, reg, val);
 
 	return usb_control_msg(dev, usb_sndctrlpipe(dev, 0), MCS_WRREQ,
 			       MCS_WR_RTYPE, val, reg, NULL, 0,
