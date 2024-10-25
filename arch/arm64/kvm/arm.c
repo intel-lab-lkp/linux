@@ -821,12 +821,12 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 		 */
 		ret = kvm_vgic_map_resources(kvm);
 		if (ret)
-			return ret;
+			goto out_err;
 	}
 
 	ret = kvm_finalize_sys_regs(vcpu);
 	if (ret)
-		return ret;
+		goto out_err;
 
 	/*
 	 * This needs to happen after any restriction has been applied
@@ -836,16 +836,16 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 
 	ret = kvm_timer_enable(vcpu);
 	if (ret)
-		return ret;
+		goto out_err;
 
 	ret = kvm_arm_pmu_v3_enable(vcpu);
 	if (ret)
-		return ret;
+		goto out_err;
 
 	if (is_protected_kvm_enabled()) {
 		ret = pkvm_create_hyp_vm(kvm);
 		if (ret)
-			return ret;
+			goto out_err;
 	}
 
 	if (!irqchip_in_kernel(kvm)) {
@@ -868,6 +868,10 @@ int kvm_arch_vcpu_run_pid_change(struct kvm_vcpu *vcpu)
 	set_bit(KVM_ARCH_FLAG_HAS_RAN_ONCE, &kvm->arch.flags);
 	mutex_unlock(&kvm->arch.config_lock);
 
+	return ret;
+
+out_err:
+	kvm_vm_dead(kvm);
 	return ret;
 }
 
