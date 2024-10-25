@@ -98,7 +98,7 @@ static void netfs_writeback_unlock_folios(struct netfs_io_request *wreq,
 		slot = 0;
 	}
 
-	for (;;) {
+	while (folioq) {
 		struct folio *folio;
 		struct netfs_folio *finfo;
 		unsigned long long fpos, fend;
