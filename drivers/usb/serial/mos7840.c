@@ -920,8 +920,9 @@ static int mos7840_write(struct tty_struct *tty, struct usb_serial_port *port,
 
 	if (status) {
 		mos7840_port->busy[i] = 0;
-		dev_err_console(port, "%s - usb_submit_urb(write bulk) failed "
-			"with status = %d\n", __func__, status);
+		dev_err_console(port,
+			"%s - usb_submit_urb(write bulk) failed with status = %d\n",
+			__func__, status);
 		bytes_sent = status;
 		goto exit;
 	}
