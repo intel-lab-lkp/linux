@@ -3015,7 +3015,7 @@ static int dbFindBits(u32 word, int l2nb)
 	/* get the number of bits.
 	 */
 	nb = 1 << l2nb;
-	assert(nb <= DBWORD);
+	assert(nb < DBWORD || (nb == DBWORD && !word));
 
 	/* complement the word so we can use a mask (i.e. 0s represent
 	 * free bits) and compute the mask.
