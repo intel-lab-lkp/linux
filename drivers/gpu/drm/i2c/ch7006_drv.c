@@ -232,12 +232,16 @@ static int ch7006_encoder_get_modes(struct drm_encoder *encoder,
 	int n = 0;
 
 	for (mode = ch7006_modes; mode->mode.clock; mode++) {
+		struct drm_display_mode *new_mode;
+
 		if (~mode->valid_scales & 1<<priv->scale ||
 		    ~mode->valid_norms & 1<<priv->norm)
 			continue;
 
-		drm_mode_probed_add(connector,
-				drm_mode_duplicate(encoder->dev, &mode->mode));
+		new_mode = drm_mode_duplicate(encoder->dev, &mode->mode);
+		if (!new_mode)
+			continue;
+		drm_mode_probed_add(connector, new_mode);
 
 		n++;
 	}
