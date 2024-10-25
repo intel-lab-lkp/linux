@@ -1201,7 +1201,7 @@ static void mos7840_change_port_settings(struct tty_struct *tty,
 {
 	struct usb_serial_port *port = mos7840_port->port;
 	int baud;
-	unsigned cflag;
+	unsigned int cflag;
 	__u8 lData;
 	__u8 lParity;
 	__u8 lStop;
