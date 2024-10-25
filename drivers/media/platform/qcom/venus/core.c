@@ -26,6 +26,7 @@
 #include "firmware.h"
 #include "pm_helpers.h"
 #include "hfi_venus_io.h"
+#include "vdec.h"
 
 static void venus_coredump(struct venus_core *core)
 {
@@ -501,6 +502,30 @@ err_cpucfg_path:
 
 	return ret;
 }
+
+void venus_close_common(struct venus_inst *inst)
+{
+	/*
+	 * First, remove the inst from the ->instances list, so that
+	 * to_instance() will return NULL.
+	 */
+	hfi_session_destroy(inst);
+	/*
+	 * Second, make sure we don't have IRQ/IRQ-thread currently running
+	 * or pending execution, which would race with the inst destruction.
+	 */
+	synchronize_irq(inst->core->irq);
+
+	v4l2_m2m_ctx_release(inst->m2m_ctx);
+	v4l2_m2m_release(inst->m2m_dev);
+	v4l2_fh_del(&inst->fh);
+	v4l2_fh_exit(&inst->fh);
+	vdec_ctrl_deinit(inst);
+
+	mutex_destroy(&inst->lock);
+	mutex_destroy(&inst->ctx_q_lock);
+}
+EXPORT_SYMBOL_GPL(venus_close_common);
 
 static __maybe_unused int venus_runtime_resume(struct device *dev)
 {
