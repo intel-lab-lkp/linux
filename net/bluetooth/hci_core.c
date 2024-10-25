@@ -2716,7 +2716,6 @@ void hci_unregister_dev(struct hci_dev *hdev)
 		rfkill_destroy(hdev->rfkill);
 	}
 
-	device_del(&hdev->dev);
 	/* Actual cleanup is deferred until hci_release_dev(). */
 	hci_dev_put(hdev);
 }
@@ -2756,6 +2755,8 @@ void hci_release_dev(struct hci_dev *hdev)
 	kfree_skb(hdev->sent_cmd);
 	kfree_skb(hdev->req_skb);
 	kfree_skb(hdev->recv_event);
+
+	device_del(&hdev->dev);
 	kfree(hdev);
 }
 EXPORT_SYMBOL(hci_release_dev);
