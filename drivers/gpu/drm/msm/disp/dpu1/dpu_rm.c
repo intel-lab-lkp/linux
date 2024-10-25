@@ -694,6 +694,74 @@ int dpu_rm_reserve(
 	return ret;
 }
 
+static struct dpu_hw_sspp *dpu_rm_try_sspp(struct dpu_rm *rm,
+					   struct dpu_global_state *global_state,
+					   struct drm_crtc *crtc,
+					   struct dpu_rm_sspp_requirements *reqs,
+					   unsigned int type)
+{
+	uint32_t crtc_id = crtc->base.id;
+	struct dpu_hw_sspp *hw_sspp;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(rm->hw_sspp); i++) {
+		if (!rm->hw_sspp[i])
+			continue;
+
+		if (global_state->sspp_to_crtc_id[i])
+			continue;
+
+		hw_sspp = rm->hw_sspp[i];
+
+		if (hw_sspp->cap->type != type)
+			continue;
+
+		if (reqs->scale && !hw_sspp->cap->sblk->scaler_blk.len)
+			continue;
+
+		// TODO: QSEED2 and RGB scalers are not yet supported
+		if (reqs->scale && !hw_sspp->ops.setup_scaler)
+			continue;
+
+		if (reqs->yuv && !hw_sspp->cap->sblk->csc_blk.len)
+			continue;
+
+		if (reqs->rot90 && !(hw_sspp->cap->features & DPU_SSPP_INLINE_ROTATION))
+			continue;
+
+		global_state->sspp_to_crtc_id[i] = crtc_id;
+
+		return rm->hw_sspp[i];
+	}
+
+	return NULL;
+}
+struct dpu_hw_sspp *dpu_rm_reserve_sspp(struct dpu_rm *rm,
+					struct dpu_global_state *global_state,
+					struct drm_crtc *crtc,
+					struct dpu_rm_sspp_requirements *reqs)
+{
+	struct dpu_hw_sspp *hw_sspp = NULL;
+
+	if (!reqs->scale && !reqs->yuv)
+		hw_sspp = dpu_rm_try_sspp(rm, global_state, crtc, reqs, SSPP_TYPE_DMA);
+	if (!hw_sspp && reqs->scale)
+		hw_sspp = dpu_rm_try_sspp(rm, global_state, crtc, reqs, SSPP_TYPE_RGB);
+	if (!hw_sspp)
+		hw_sspp = dpu_rm_try_sspp(rm, global_state, crtc, reqs, SSPP_TYPE_VIG);
+
+	return hw_sspp;
+}
+
+void dpu_rm_release_all_sspp(struct dpu_global_state *global_state,
+			     struct drm_crtc *crtc)
+{
+	uint32_t crtc_id = crtc->base.id;
+
+	_dpu_rm_clear_mapping(global_state->sspp_to_crtc_id,
+		ARRAY_SIZE(global_state->sspp_to_crtc_id), crtc_id);
+}
+
 int dpu_rm_get_assigned_resources(struct dpu_rm *rm,
 	struct dpu_global_state *global_state, uint32_t enc_id,
 	enum dpu_hw_blk_type type, struct dpu_hw_blk **blks, int blks_size)
