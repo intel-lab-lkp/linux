@@ -17292,7 +17292,9 @@ L:	openvpn-devel@lists.sourceforge.net (moderated for non-subscribers)
 L:	netdev@vger.kernel.org
 S:	Supported
 T:	git https://github.com/OpenVPN/linux-kernel-ovpn.git
+F:	Documentation/netlink/specs/ovpn.yaml
 F:	drivers/net/ovpn/
+F:	include/uapi/linux/ovpn.h
 
 OPENVSWITCH
 M:	Pravin B Shelar <pshelar@ovn.org>
