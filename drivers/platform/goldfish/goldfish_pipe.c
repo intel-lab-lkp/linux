@@ -922,11 +922,13 @@ static void goldfish_pipe_remove(struct platform_device *pdev)
 	goldfish_pipe_device_deinit(pdev, dev);
 }
 
+#ifdef CONFIG_ACPI
 static const struct acpi_device_id goldfish_pipe_acpi_match[] = {
 	{ "GFSH0003", 0 },
 	{ },
 };
 MODULE_DEVICE_TABLE(acpi, goldfish_pipe_acpi_match);
+#endif
 
 static const struct of_device_id goldfish_pipe_of_match[] = {
 	{ .compatible = "google,android-pipe", },
