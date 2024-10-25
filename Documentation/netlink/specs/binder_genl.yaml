@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+
+name: binder_genl
+protocol: genetlink
+
+doc: Netlink protocol to report binder transaction errors and warnings.
+
+definitions:
+  -
+    type: flags
+    name: flag
+    doc: |
+      Used with "set" and "reply" command below, defining what kind of binder
+      transactions reported to the user space administration process.
+    value-start: 0
+    entries: [ failed, delayed, spam, override ]
+
+attribute-sets:
+  -
+    name: attr
+    doc: The supported attributes of binder genl.
+    attributes:
+      -
+        name: pid
+        type: u32
+        doc: |
+          Used by "set" and "reply" command below, indicating the binder proc
+          or context to set the flags.
+      -
+        name: flags
+        type: u32
+        doc: |
+          Used by "set" and "reply" command below, indicating the flags to set.
+      -
+        name: report
+        type: binary
+        doc: Used by "report" command below, containing struct binder_report.
+
+operations:
+  list:
+    -
+      name: set
+      doc: |
+        Set flags from user space, requesting what kinds of binder
+        transactions to report.
+      attribute-set: attr
+
+      do:
+        request: &params
+          attributes:
+            - pid
+            - flags
+        reply: *params
+    -
+      name: reply
+      doc: Acknowledge the above "set" request, echoing the same params.
+    -
+      name: report
+      doc: Send the requested binder transaction reports to user space.
