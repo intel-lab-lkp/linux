@@ -1149,15 +1149,37 @@ static void xhci_handle_cmd_stop_ep(struct xhci_hcd *xhci, int slot_id,
 				break;
 			ep->ep_state &= ~EP_STOP_CMD_PENDING;
 			return;
+
 		case EP_STATE_STOPPED:
 			/*
-			 * NEC uPD720200 sometimes sets this state and fails with
-			 * Context Error while continuing to process TRBs.
-			 * Be conservative and trust EP_CTX_STATE on other chips.
+			 * Per xHCI 4.6.9, Stop Endpoint command on a Stopped
+			 * EP is a Context State Error, and EP stays Stopped.
+			 * This outcome is valid if the command was redundant.
+			 */
+			if (ep->ep_state & EP_STOP_CMD_REDUNDANT)
+				break;
+			/*
+			 * Or it really failed on Halted, but somebody ran Reset
+			 * Endpoint later. EP state is now Stopped and EP_HALTED
+			 * still set because Reset EP handler will run after us.
+			 */
+			if (ep->ep_state & EP_HALTED)
+				break;
+			/*
+			 * On some HCs EP state remains Stopped for some tens of
+			 * us to a few ms or more after a doorbell ring, and any
+			 * new Stop Endpoint fails without aborting the restart.
+			 * This handler may run quickly enough to still see this
+			 * Stopped state, but it will soon change to Running.
+			 *
+			 * Assume this bug on unexpected Stop Endpoint failures.
+			 * Keep retrying until the EP starts and stops again, on
+			 * chips known to have the bug and to react positively.
 			 */
 			if (!(xhci->quirks & XHCI_NEC_HOST))
 				break;
 			fallthrough;
+
 		case EP_STATE_RUNNING:
 			/* Race, HW handled stop ep cmd before ep was running */
 			xhci_dbg(xhci, "Stop ep completion ctx error, ep is running\n");
@@ -4375,10 +4397,27 @@ int xhci_queue_evaluate_context(struct xhci_hcd *xhci, struct xhci_command *cmd,
 int xhci_queue_stop_endpoint(struct xhci_hcd *xhci, struct xhci_command *cmd,
 			     int slot_id, unsigned int ep_index, int suspend)
 {
+	struct xhci_virt_ep *ep;
 	u32 trb_slot_id = SLOT_ID_FOR_TRB(slot_id);
 	u32 trb_ep_index = EP_INDEX_FOR_TRB(ep_index);
 	u32 type = TRB_TYPE(TRB_STOP_RING);
 	u32 trb_suspend = SUSPEND_PORT_FOR_TRB(suspend);
+
+	/*
+	 * Any of that means the EP is or will be Stopped by the time this
+	 * command runs. Queue it anyway for its side effects like calling
+	 * our default handler or complete(). But our handler must know if
+	 * the command is redundant, so check it now. The handler can't do
+	 * it later because those operations may finish before it runs.
+	 */
+	ep = xhci_get_virt_ep(xhci, slot_id, ep_index);
+	if (ep) {
+		if (ep->ep_state & (SET_DEQ_PENDING | EP_HALTED | EP_CLEARING_TT))
+			ep->ep_state |= EP_STOP_CMD_REDUNDANT;
+		else
+			ep->ep_state &= ~EP_STOP_CMD_REDUNDANT;
+	}
+	/* else: don't care, the handler will do nothing anyway */
 
 	return queue_command(xhci, cmd, 0, 0, 0,
 			trb_slot_id | trb_ep_index | type | trb_suspend, false);
