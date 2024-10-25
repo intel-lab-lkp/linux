@@ -584,6 +584,15 @@ static inline bool pci_resource_is_iov(int resno)
 {
 	return resno >= PCI_IOV_RESOURCES && resno <= PCI_IOV_RESOURCE_END;
 }
+static inline int pci_resource_to_iov(int resno)
+{
+	return resno + PCI_IOV_RESOURCES;
+}
+
+static inline int pci_resource_from_iov(int resno)
+{
+	return resno - PCI_IOV_RESOURCES;
+}
 extern const struct attribute_group sriov_pf_dev_attr_group;
 extern const struct attribute_group sriov_vf_dev_attr_group;
 #else
@@ -607,6 +616,15 @@ static inline int pci_iov_bus_range(struct pci_bus *bus)
 static inline bool pci_resource_is_iov(int resno)
 {
 	return false;
+}
+static inline int pci_resource_to_iov(int resno)
+{
+	return -ENODEV;
+}
+
+static inline int pci_resource_from_iov(int resno)
+{
+	return -ENODEV;
 }
 #endif /* CONFIG_PCI_IOV */
 

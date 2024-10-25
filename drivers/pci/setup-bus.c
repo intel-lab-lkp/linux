@@ -1778,7 +1778,7 @@ static int iov_resources_unassigned(struct pci_dev *dev, void *data)
 	bool *unassigned = data;
 
 	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
-		struct resource *r = &dev->resource[i + PCI_IOV_RESOURCES];
+		struct resource *r = &dev->resource[pci_resource_to_iov(i)];
 		struct pci_bus_region region;
 
 		/* Not assigned or rejected by kernel? */
