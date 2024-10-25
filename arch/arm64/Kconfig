@@ -370,6 +370,9 @@ config GENERIC_CSUM
 config GENERIC_CALIBRATE_DELAY
 	def_bool y
 
+config GENERIC_ISA_DMA
+	def_bool y
+
 config SMP
 	def_bool y
 
