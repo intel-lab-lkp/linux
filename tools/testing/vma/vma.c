@@ -243,6 +243,12 @@ static bool test_simple_merge(void)
 	ASSERT_FALSE(vma_link(&mm, vma_left));
 	ASSERT_FALSE(vma_link(&mm, vma_right));
 
+	fail_prealloc = true;
+	vma = merge_new(&vmg);
+	ASSERT_EQ(vma, NULL);
+	ASSERT_EQ(vmi.mas.index, 0x1000);
+
+	fail_prealloc = false;
 	vma = merge_new(&vmg);
 	ASSERT_NE(vma, NULL);
 
