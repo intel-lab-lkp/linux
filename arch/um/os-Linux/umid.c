@@ -212,7 +212,7 @@ static void __init create_pid_file(void)
 	char pid[sizeof("nnnnnnnnn")], *file;
 	int fd, n;
 
-	n = strlen(uml_dir) + UMID_LEN + sizeof("/pid");
+	n = strlen(uml_dir) + strlen(umid) + sizeof("/pid");
 	file = malloc(n);
 	if (!file)
 		return;
@@ -394,7 +394,7 @@ static void remove_umid_dir(void)
 {
 	char *dir, err;
 
-	dir = malloc(strlen(uml_dir) + UMID_LEN + 1);
+	dir = malloc(strlen(uml_dir) + strlen(umid) + 1);
 	if (!dir)
 		return;
 
