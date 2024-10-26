@@ -21,7 +21,8 @@
 
 enum chips {
 	/* Managers */
-	ltc2972, ltc2974, ltc2975, ltc2977, ltc2978, ltc2979, ltc2980,
+	ltc2971, ltc2972, ltc2974, ltc2975, ltc2977, ltc2978,
+	ltc2979, ltc2980,
 	/* Controllers */
 	ltc3880, ltc3882, ltc3883, ltc3884, ltc3886, ltc3887, ltc3889, ltc7132, ltc7880,
 	/* Modules */
@@ -61,6 +62,7 @@ enum chips {
 
 #define LTC2978_ID_MASK			0xfff0
 
+#define LTC2971_ID			0x0320
 #define LTC2972_ID			0x0310
 #define LTC2974_ID			0x0210
 #define LTC2975_ID			0x0220
@@ -533,6 +535,7 @@ static int ltc2978_write_word_data(struct i2c_client *client, int page,
 }
 
 static const struct i2c_device_id ltc2978_id[] = {
+	{"ltc2971", ltc2971},
 	{"ltc2972", ltc2972},
 	{"ltc2974", ltc2974},
 	{"ltc2975", ltc2975},
@@ -564,11 +567,19 @@ MODULE_DEVICE_TABLE(i2c, ltc2978_id);
 
 #if IS_ENABLED(CONFIG_SENSORS_LTC2978_REGULATOR)
 #define LTC2978_ADC_RES	0xFFFF
+#define LTC2978_UV_STEP	1000
+
+/* Common for most chips */
 #define LTC2978_N_ADC	122
 #define LTC2978_MAX_UV	(LTC2978_ADC_RES * LTC2978_N_ADC)
-#define LTC2978_UV_STEP	1000
 #define LTC2978_N_VOLTAGES	((LTC2978_MAX_UV / LTC2978_UV_STEP) + 1)
 
+/* LTC2971 */
+#define LTC2971_N_ADC	4500
+#define LTC2971_MAX_UV	(LTC2978_ADC_RES * LTC2971_N_ADC)
+#define LTC2971_N_VOLTAGES	((LTC2971_MAX_UV / LTC2978_UV_STEP) + 1)
+
+/* Common for most chips */
 static const struct regulator_desc ltc2978_reg_desc[] = {
 	PMBUS_REGULATOR_STEP("vout", 0, LTC2978_N_VOLTAGES, LTC2978_UV_STEP, 0),
 	PMBUS_REGULATOR_STEP("vout", 1, LTC2978_N_VOLTAGES, LTC2978_UV_STEP, 0),
@@ -578,6 +589,12 @@ static const struct regulator_desc ltc2978_reg_desc[] = {
 	PMBUS_REGULATOR_STEP("vout", 5, LTC2978_N_VOLTAGES, LTC2978_UV_STEP, 0),
 	PMBUS_REGULATOR_STEP("vout", 6, LTC2978_N_VOLTAGES, LTC2978_UV_STEP, 0),
 	PMBUS_REGULATOR_STEP("vout", 7, LTC2978_N_VOLTAGES, LTC2978_UV_STEP, 0),
+};
+
+/* LTC2971 */
+static const struct regulator_desc ltc2971_reg_desc[] = {
+	PMBUS_REGULATOR_STEP("vout", 0, LTC2971_N_VOLTAGES, LTC2978_UV_STEP, 0),
+	PMBUS_REGULATOR_STEP("vout", 1, LTC2971_N_VOLTAGES, LTC2978_UV_STEP, 0),
 };
 
 static const struct regulator_desc ltc2978_reg_desc_default[] = {
@@ -624,7 +641,9 @@ static int ltc2978_get_id(struct i2c_client *client)
 
 	chip_id &= LTC2978_ID_MASK;
 
-	if (chip_id == LTC2972_ID)
+	if (chip_id == LTC2971_ID)
+		return ltc2971;
+	else if (chip_id == LTC2972_ID)
 		return ltc2972;
 	else if (chip_id == LTC2974_ID)
 		return ltc2974;
@@ -731,6 +750,7 @@ static int ltc2978_probe(struct i2c_client *client)
 	data->temp2_max = 0x7c00;
 
 	switch (data->id) {
+	case ltc2971:
 	case ltc2972:
 		info->read_word_data = ltc2975_read_word_data;
 		info->pages = LTC2972_NUM_PAGES;
@@ -861,6 +881,13 @@ static int ltc2978_probe(struct i2c_client *client)
 #if IS_ENABLED(CONFIG_SENSORS_LTC2978_REGULATOR)
 	info->num_regulators = info->pages;
 	switch (data->id) {
+	case ltc2971:
+		info->reg_desc = ltc2971_reg_desc;
+		if (info->num_regulators > ARRAY_SIZE(ltc2971_reg_desc)) {
+			dev_warn(&client->dev, "num_regulators too large!");
+			info->num_regulators = ARRAY_SIZE(ltc2971_reg_desc);
+		}
+		break;
 	case ltc2972:
 	case ltc2974:
 	case ltc2975:
@@ -892,6 +919,7 @@ static int ltc2978_probe(struct i2c_client *client)
 
 #ifdef CONFIG_OF
 static const struct of_device_id ltc2978_of_match[] = {
+	{ .compatible = "lltc,ltc2971" },
 	{ .compatible = "lltc,ltc2972" },
 	{ .compatible = "lltc,ltc2974" },
 	{ .compatible = "lltc,ltc2975" },
