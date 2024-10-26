@@ -171,8 +171,7 @@ static int __dtpm_devfreq_setup(struct devfreq *devfreq, struct dtpm *parent)
 	ret = dtpm_register(dev_name(dev), &dtpm_devfreq->dtpm, parent);
 	if (ret) {
 		pr_err("Failed to register '%s': %d\n", dev_name(dev), ret);
-		kfree(dtpm_devfreq);
-		return ret;
+		goto out_dtpm_free;
 	}
 
 	ret = dev_pm_qos_add_request(dev, &dtpm_devfreq->qos_req,
@@ -190,6 +189,8 @@ static int __dtpm_devfreq_setup(struct devfreq *devfreq, struct dtpm *parent)
 out_dtpm_unregister:
 	dtpm_unregister(&dtpm_devfreq->dtpm);
 
+out_dtpm_free:
+	kfree(dtpm_devfreq);
 	return ret;
 }
 
