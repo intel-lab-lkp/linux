@@ -34,6 +34,172 @@ arch/$(SRCARCH)/kernel/asm-offsets.s: $(timeconst-file) $(bounds-file)
 $(offsets-file): arch/$(SRCARCH)/kernel/asm-offsets.s FORCE
 	$(call filechk,offsets,__ASM_OFFSETS_H__)
 
+ifdef CONFIG_PACKING_CHECK_FIELDS
+
+# Generate packing-checks.h
+
+ifdef CONFIG_PACKING_CHECK_FIELDS_1
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_1
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_2
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_2
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_3
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_3
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_4
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_4
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_5
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_5
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_6
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_6
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_7
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_7
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_8
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_8
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_9
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_9
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_10
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_10
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_11
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_11
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_12
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_12
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_13
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_13
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_14
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_14
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_15
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_15
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_16
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_16
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_17
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_17
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_18
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_18
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_19
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_19
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_20
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_20
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_21
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_21
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_22
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_22
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_23
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_23
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_24
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_24
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_25
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_25
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_26
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_26
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_27
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_27
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_28
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_28
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_29
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_29
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_30
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_30
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_31
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_31
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_32
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_32
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_33
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_33
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_34
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_34
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_35
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_35
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_36
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_36
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_37
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_37
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_38
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_38
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_39
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_39
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_40
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_40
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_41
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_41
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_42
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_42
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_43
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_43
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_44
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_44
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_45
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_45
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_46
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_46
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_47
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_47
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_48
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_48
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_49
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_49
+endif
+ifdef CONFIG_PACKING_CHECK_FIELDS_50
+HOSTCFLAGS_lib/gen_packing_checks.o += -DPACKING_CHECK_FIELDS_50
+endif
+
+hostprogs += lib/gen_packing_checks
+
+packing-checks := include/generated/packing-checks.h
+
+filechk_gen_packing_checks = lib/gen_packing_checks
+
+$(packing-checks): lib/gen_packing_checks FORCE
+	$(call filechk,gen_packing_checks)
+
+endif
+
 # Check for missing system calls
 
 quiet_cmd_syscalls = CALL    $<
@@ -70,7 +236,7 @@ $(atomic-checks): $(obj)/.checked-%: include/linux/atomic/%  FORCE
 # A phony target that depends on all the preparation targets
 
 PHONY += prepare
-prepare: $(offsets-file) missing-syscalls $(atomic-checks)
+prepare: $(offsets-file) missing-syscalls $(atomic-checks) $(packing-checks)
 	@:
 
 # Ordinary directory descending

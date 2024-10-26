@@ -40,9 +40,11 @@ config PACKING
 
 	  When in doubt, say N.
 
+if PACKING
+
 config PACKING_KUNIT_TEST
 	tristate "KUnit tests for packing library" if !KUNIT_ALL_TESTS
-	depends on PACKING && KUNIT
+	depends on KUNIT
 	default KUNIT_ALL_TESTS
 	help
 	  This builds KUnit tests for the packing library.
@@ -51,6 +53,363 @@ config PACKING_KUNIT_TEST
 	  please refer to the KUnit documentation in Documentation/dev-tools/kunit/.
 
 	  When in doubt, say N.
+
+config PACKING_CHECK_FIELDS
+	bool
+	help
+	  This option generates the <include/generated/packing-checks.h> file.
+
+config PACKING_CHECK_FIELDS_1
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 1 element.
+
+config PACKING_CHECK_FIELDS_2
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 2 elements.
+
+config PACKING_CHECK_FIELDS_3
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 3 elements.
+
+config PACKING_CHECK_FIELDS_4
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 4 elements.
+
+config PACKING_CHECK_FIELDS_5
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 5 elements.
+
+config PACKING_CHECK_FIELDS_6
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 6 elements.
+
+config PACKING_CHECK_FIELDS_7
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 7 elements.
+
+config PACKING_CHECK_FIELDS_8
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 8 elements.
+
+config PACKING_CHECK_FIELDS_9
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 9 elements.
+
+config PACKING_CHECK_FIELDS_10
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 10 elements.
+
+config PACKING_CHECK_FIELDS_11
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 11 elements.
+
+config PACKING_CHECK_FIELDS_12
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 12 elements.
+
+config PACKING_CHECK_FIELDS_13
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 13 elements.
+
+config PACKING_CHECK_FIELDS_14
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 14 elements.
+
+config PACKING_CHECK_FIELDS_15
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 15 elements.
+
+config PACKING_CHECK_FIELDS_16
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 16 elements.
+
+config PACKING_CHECK_FIELDS_17
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 17 elements.
+
+config PACKING_CHECK_FIELDS_18
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 18 elements.
+
+config PACKING_CHECK_FIELDS_19
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 19 elements.
+
+config PACKING_CHECK_FIELDS_20
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 20 elements.
+
+config PACKING_CHECK_FIELDS_21
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 21 elements.
+
+config PACKING_CHECK_FIELDS_22
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 22 elements.
+
+config PACKING_CHECK_FIELDS_23
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 23 elements.
+
+config PACKING_CHECK_FIELDS_24
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 24 elements.
+
+config PACKING_CHECK_FIELDS_25
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 25 elements.
+
+config PACKING_CHECK_FIELDS_26
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 26 elements.
+
+config PACKING_CHECK_FIELDS_27
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 27 elements.
+
+config PACKING_CHECK_FIELDS_28
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 28 elements.
+
+config PACKING_CHECK_FIELDS_29
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 29 elements.
+
+config PACKING_CHECK_FIELDS_30
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 30 elements.
+
+config PACKING_CHECK_FIELDS_31
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 31 elements.
+
+config PACKING_CHECK_FIELDS_32
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 32 elements.
+
+config PACKING_CHECK_FIELDS_33
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 33 elements.
+
+config PACKING_CHECK_FIELDS_34
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 34 elements.
+
+config PACKING_CHECK_FIELDS_35
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 35 elements.
+
+config PACKING_CHECK_FIELDS_36
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 36 elements.
+
+config PACKING_CHECK_FIELDS_37
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 37 elements.
+
+config PACKING_CHECK_FIELDS_38
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 38 elements.
+
+config PACKING_CHECK_FIELDS_39
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 39 elements.
+
+config PACKING_CHECK_FIELDS_40
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 40 elements.
+
+config PACKING_CHECK_FIELDS_41
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 41 elements.
+
+config PACKING_CHECK_FIELDS_42
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 42 elements.
+
+config PACKING_CHECK_FIELDS_43
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 43 elements.
+
+config PACKING_CHECK_FIELDS_44
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 44 elements.
+
+config PACKING_CHECK_FIELDS_45
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 45 elements.
+
+config PACKING_CHECK_FIELDS_46
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 46 elements.
+
+config PACKING_CHECK_FIELDS_47
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 47 elements.
+
+config PACKING_CHECK_FIELDS_48
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 48 elements.
+
+config PACKING_CHECK_FIELDS_49
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 49 elements.
+
+config PACKING_CHECK_FIELDS_50
+	bool
+	select PACKING_CHECK_FIELDS
+	help
+	  This option generates compile-time checks for struct packed_field
+	  arrays of 50 elements.
+
+endif # PACKING
 
 config BITREVERSE
 	tristate
