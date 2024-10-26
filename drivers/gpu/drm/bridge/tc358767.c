@@ -1625,14 +1625,38 @@ static int tc_dpi_atomic_check(struct drm_bridge *bridge,
 			       struct drm_connector_state *conn_state)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
-	int adjusted_clock = 0;
+	int adjusted_clock_0p = 0;
+	int adjusted_clock_1p = 0;
+	int adjusted_clock;
 	int ret;
 
+	/*
+	 * Calculate adjusted clock pixel and find out what the PLL can
+	 * produce. The PLL is limited, so the clock might be inaccurate.
+	 */
 	ret = tc_pxl_pll_calc(tc, clk_get_rate(tc->refclk),
 			      crtc_state->mode.clock * 1000,
-			      &adjusted_clock, NULL);
+			      &adjusted_clock_0p, NULL);
 	if (ret)
 		return ret;
+
+	/*
+	 * Calculate adjusted pixel clock with 1% faster requested pixel
+	 * clock and find out what the PLL can produce. This may in fact
+	 * be closer to the expected pixel clock of the output.
+	 */
+	ret = tc_pxl_pll_calc(tc, clk_get_rate(tc->refclk),
+			      crtc_state->mode.clock * 1010,
+			      &adjusted_clock_1p, NULL);
+	if (ret)
+		return ret;
+
+	/* Pick the more accurate of the two calculated results. */
+	if (crtc_state->mode.clock * 1010 - adjusted_clock_1p <
+	    crtc_state->mode.clock * 1000 - adjusted_clock_0p)
+		adjusted_clock = adjusted_clock_1p;
+	else
+		adjusted_clock = adjusted_clock_0p;
 
 	crtc_state->adjusted_mode.clock = adjusted_clock / 1000;
 
