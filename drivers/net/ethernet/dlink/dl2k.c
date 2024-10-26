@@ -99,6 +99,88 @@ static const struct net_device_ops netdev_ops = {
 	.ndo_tx_timeout		= rio_tx_timeout,
 };
 
+#define DEFINE_STATS(FIELD, REGS, SIZE) {				\
+	.string = #FIELD,						\
+	.offset = offsetof(struct netdev_private, FIELD),		\
+	.regs = (REGS),							\
+	.size = sizeof(SIZE)						\
+}
+
+#define STATS_SIZE		ARRAY_SIZE(stats)
+
+struct dlink_stats stats[] = {
+	DEFINE_STATS(tx_jumbo_frames, TxJumboFrames, u16),
+	DEFINE_STATS(rx_jumbo_frames, RxJumboFrames, u16),
+
+	DEFINE_STATS(tcp_checksum_errors, TCPCheckSumErrors, u16),
+	DEFINE_STATS(udp_checksum_errors, UDPCheckSumErrors, u16),
+	DEFINE_STATS(ip_checksum_errors, IPCheckSumErrors, u16),
+
+	DEFINE_STATS(tx_packets, FramesXmtOk, u32),
+	DEFINE_STATS(rx_packets, FramesRcvOk, u32),
+	DEFINE_STATS(tx_bytes, OctetXmtOk, u32),
+	DEFINE_STATS(rx_bytes, OctetRcvOk, u32),
+
+	DEFINE_STATS(single_collisions, SingleColFrames, u32),
+	DEFINE_STATS(multi_collisions, MultiColFrames, u32),
+	DEFINE_STATS(late_collisions, LateCollisions, u32),
+
+	DEFINE_STATS(rx_frames_too_long_errors, FrameTooLongErrors, u16),
+	DEFINE_STATS(rx_in_range_length_errors, InRangeLengthErrors, u16),
+	DEFINE_STATS(rx_frames_check_seq_errors, FramesCheckSeqErrors, u16),
+	DEFINE_STATS(rx_frames_lost_errors, FramesLostRxErrors, u16),
+
+	DEFINE_STATS(tx_frames_abort, FramesAbortXSColls, u16),
+	DEFINE_STATS(tx_carrier_sense_errors, CarrierSenseErrors, u16),
+
+	DEFINE_STATS(tx_multicast_bytes, McstOctetXmtOk, u32),
+	DEFINE_STATS(rx_multicast_bytes, McstOctetRcvOk, u32),
+
+	DEFINE_STATS(tx_multicast_frames, McstFramesXmtdOk, u32),
+	DEFINE_STATS(rx_multicast_frames, McstFramesRcvdOk, u32),
+
+	DEFINE_STATS(tx_broadcast_frames, BcstFramesXmtdOk, u16),
+	DEFINE_STATS(rx_broadcast_frames, BcstFramesRcvdOk, u16),
+
+	DEFINE_STATS(tx_mac_control_frames, MacControlFramesXmtd, u16),
+	DEFINE_STATS(rx_mac_control_frames, MacControlFramesRcvd, u16),
+
+	DEFINE_STATS(tx_frames_deferred, FramesWDeferredXmt, u32),
+	DEFINE_STATS(tx_frames_excessive_deferral, FramesWEXDeferal, u16),
+
+#ifdef MEM_MAPPING
+	DEFINE_STATS(rmon_collisions, EtherStatsCollisions, u32),
+	DEFINE_STATS(rmon_crc_align_errors, EtherStatsCRCAlignErrors, u32),
+	DEFINE_STATS(rmon_under_size_packets, EtherStatsUndersizePkts, u32),
+	DEFINE_STATS(rmon_fragments, EtherStatsFragments, u32),
+	DEFINE_STATS(rmon_jabbers, EtherStatsJabbers, u32),
+
+	DEFINE_STATS(rmon_tx_bytes, EtherStatsOctetsTransmit, u32),
+	DEFINE_STATS(rmon_rx_bytes, EtherStatsOctets, u32),
+
+	DEFINE_STATS(rmon_tx_packets, EtherStatsPktsTransmit, u32),
+	DEFINE_STATS(rmon_rx_packets, EtherStatsPkts, u32),
+
+	DEFINE_STATS(rmon_tx_byte_64, EtherStatsPkts64OctetTransmit, u32),
+	DEFINE_STATS(rmon_rx_byte_64, EtherStats64Octets, u32),
+
+	DEFINE_STATS(rmon_tx_byte_65to127, EtherStatsPkts64OctetTransmit, u32),
+	DEFINE_STATS(rmon_rx_byte_64to127, EtherStats64Octets, u32),
+
+	DEFINE_STATS(rmon_tx_byte_128to255, EtherStatsPkts128to255OctetsTransmit, u32),
+	DEFINE_STATS(rmon_rx_byte_128to255, EtherStatsPkts128to255Octets, u32),
+
+	DEFINE_STATS(rmon_tx_byte_256to511, EtherStatsPkts256to511OctetsTransmit, u32),
+	DEFINE_STATS(rmon_rx_byte_256to511, EtherStatsPkts256to511Octets, u32),
+
+	DEFINE_STATS(rmon_tx_byte_512to1023, EtherStatsPkts512to1023OctetsTransmit, u32),
+	DEFINE_STATS(rmon_rx_byte_512to1203, EtherStatsPkts512to1023Octets, u32),
+
+	DEFINE_STATS(rmon_tx_byte_1204to1518, EtherStatsPkts1024to1518OctetsTransmit, u32),
+	DEFINE_STATS(rmon_rx_byte_1204to1518, EtherStatsPkts1024to1518Octets, u32)
+#endif
+};
+
 static int
 rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 {
@@ -148,6 +230,7 @@ rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 	np->pdev = pdev;
 	spin_lock_init (&np->tx_lock);
 	spin_lock_init (&np->rx_lock);
+	spin_lock_init(&np->stats_lock);
 
 	/* Parse manual configuration */
 	np->an_enable = 1;
@@ -1069,60 +1152,30 @@ get_stats (struct net_device *dev)
 {
 	struct netdev_private *np = netdev_priv(dev);
 	void __iomem *ioaddr = np->ioaddr;
-#ifdef MEM_MAPPING
+	unsigned long flags;
 	int i;
-#endif
-	unsigned int stat_reg;
+
+	spin_lock_irqsave(&np->stats_lock, flags);
 
 	/* All statistics registers need to be acknowledged,
 	   else statistic overflow could cause problems */
 
-	dev->stats.rx_packets += dr32(FramesRcvOk);
-	dev->stats.tx_packets += dr32(FramesXmtOk);
-	dev->stats.rx_bytes += dr32(OctetRcvOk);
-	dev->stats.tx_bytes += dr32(OctetXmtOk);
+	for (i = 0; i < STATS_SIZE; i++) {
+		u64 *data = ((void *) np) + stats[i].offset;
 
-	dev->stats.multicast = dr32(McstFramesRcvdOk);
-	dev->stats.collisions += dr32(SingleColFrames)
-			     +  dr32(MultiColFrames);
-
-	/* detailed tx errors */
-	stat_reg = dr16(FramesAbortXSColls);
-	dev->stats.tx_aborted_errors += stat_reg;
-	dev->stats.tx_errors += stat_reg;
-
-	stat_reg = dr16(CarrierSenseErrors);
-	dev->stats.tx_carrier_errors += stat_reg;
-	dev->stats.tx_errors += stat_reg;
-
-	/* Clear all other statistic register. */
-	dr32(McstOctetXmtOk);
-	dr16(BcstFramesXmtdOk);
-	dr32(McstFramesXmtdOk);
-	dr16(BcstFramesRcvdOk);
-	dr16(MacControlFramesRcvd);
-	dr16(FrameTooLongErrors);
-	dr16(InRangeLengthErrors);
-	dr16(FramesCheckSeqErrors);
-	dr16(FramesLostRxErrors);
-	dr32(McstOctetXmtOk);
-	dr32(BcstOctetXmtOk);
-	dr32(McstFramesXmtdOk);
-	dr32(FramesWDeferredXmt);
-	dr32(LateCollisions);
-	dr16(BcstFramesXmtdOk);
-	dr16(MacControlFramesXmtd);
-	dr16(FramesWEXDeferal);
+		if (stats[i].size == sizeof(u32))
+			*data += dr32(stats[i].regs);
+		else
+			*data += dr16(stats[i].regs);
+	}
 
 #ifdef MEM_MAPPING
 	for (i = 0x100; i <= 0x150; i += 4)
 		dr32(i);
 #endif
-	dr16(TxJumboFrames);
-	dr16(RxJumboFrames);
-	dr16(TCPCheckSumErrors);
-	dr16(UDPCheckSumErrors);
-	dr16(IPCheckSumErrors);
+
+	spin_unlock_irqrestore(&np->stats_lock, flags);
+
 	return &dev->stats;
 }
 
@@ -1131,53 +1184,18 @@ clear_stats (struct net_device *dev)
 {
 	struct netdev_private *np = netdev_priv(dev);
 	void __iomem *ioaddr = np->ioaddr;
-#ifdef MEM_MAPPING
 	int i;
-#endif
 
 	/* All statistics registers need to be acknowledged,
 	   else statistic overflow could cause problems */
-	dr32(FramesRcvOk);
-	dr32(FramesXmtOk);
-	dr32(OctetRcvOk);
-	dr32(OctetXmtOk);
 
-	dr32(McstFramesRcvdOk);
-	dr32(SingleColFrames);
-	dr32(MultiColFrames);
-	dr32(LateCollisions);
-	/* detailed rx errors */
-	dr16(FrameTooLongErrors);
-	dr16(InRangeLengthErrors);
-	dr16(FramesCheckSeqErrors);
-	dr16(FramesLostRxErrors);
+	for (i = 0; i < STATS_SIZE; i++) {
+		if (stats[i].size == sizeof(u32))
+			dr32(stats[i].regs);
+		else
+			dr16(stats[i].regs);
+	}
 
-	/* detailed tx errors */
-	dr16(FramesAbortXSColls);
-	dr16(CarrierSenseErrors);
-
-	/* Clear all other statistic register. */
-	dr32(McstOctetXmtOk);
-	dr16(BcstFramesXmtdOk);
-	dr32(McstFramesXmtdOk);
-	dr16(BcstFramesRcvdOk);
-	dr16(MacControlFramesRcvd);
-	dr32(McstOctetXmtOk);
-	dr32(BcstOctetXmtOk);
-	dr32(McstFramesXmtdOk);
-	dr32(FramesWDeferredXmt);
-	dr16(BcstFramesXmtdOk);
-	dr16(MacControlFramesXmtd);
-	dr16(FramesWEXDeferal);
-#ifdef MEM_MAPPING
-	for (i = 0x100; i <= 0x150; i += 4)
-		dr32(i);
-#endif
-	dr16(TxJumboFrames);
-	dr16(RxJumboFrames);
-	dr16(TCPCheckSumErrors);
-	dr16(UDPCheckSumErrors);
-	dr16(IPCheckSumErrors);
 	return 0;
 }
 
@@ -1328,11 +1346,48 @@ static u32 rio_get_link(struct net_device *dev)
 	return np->link_status;
 }
 
+static void get_ethtool_stats(struct net_device *dev,
+			      struct ethtool_stats __always_unused *__,
+			      u64 *data)
+{
+	struct netdev_private *np = netdev_priv(dev);
+
+	get_stats(dev);
+
+	for (int i = 0; i < STATS_SIZE; i++)
+		data[i] = *(u64 *) (((void *) np) + stats[i].offset);
+}
+
+static void get_strings(struct net_device *dev, u32 stringset, u8 *data)
+{
+	switch (stringset) {
+	case ETH_SS_STATS:
+		for (int i = 0; i < STATS_SIZE; i++) {
+			memcpy(data, stats[i].string, STATS_STRING_LEN);
+			data += STATS_STRING_LEN;
+		}
+		break;
+	}
+}
+
+static int get_sset_count(struct net_device *dev, int sset)
+{
+	switch (sset) {
+	case ETH_SS_STATS:
+		return STATS_SIZE;
+	}
+
+	return 0;
+}
+
 static const struct ethtool_ops ethtool_ops = {
 	.get_drvinfo = rio_get_drvinfo,
 	.get_link = rio_get_link,
 	.get_link_ksettings = rio_get_link_ksettings,
 	.set_link_ksettings = rio_set_link_ksettings,
+	.get_ethtool_stats = get_ethtool_stats,
+	.get_strings = get_strings,
+	.get_sset_count = get_sset_count
 };
 
 static int
