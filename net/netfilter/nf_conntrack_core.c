@@ -976,18 +976,6 @@ static void nf_ct_acct_merge(struct nf_conn *ct, enum ip_conntrack_info ctinfo,
 	}
 }
 
-static void __nf_conntrack_insert_prepare(struct nf_conn *ct)
-{
-	struct nf_conn_tstamp *tstamp;
-
-	refcount_inc(&ct->ct_general.use);
-
-	/* set conntrack timestamp, if enabled. */
-	tstamp = nf_conn_tstamp_find(ct);
-	if (tstamp)
-		tstamp->start = ktime_get_real_ns();
-}
-
 /**
  * nf_ct_match_reverse - check if ct1 and ct2 refer to identical flow
  * @ct1: conntrack in hash table to check against
@@ -1111,7 +1099,7 @@ static int nf_ct_resolve_clash_harder(struct sk_buff *skb, u32 repl_idx)
 	 */
 	loser_ct->status |= IPS_FIXED_TIMEOUT | IPS_NAT_CLASH;
 
-	__nf_conntrack_insert_prepare(loser_ct);
+	refcount_inc(&loser_ct->ct_general.use);
 
 	/* fake add for ORIGINAL dir: we want lookups to only find the entry
 	 * already in the table.  This also hides the clashing entry from
@@ -1295,7 +1283,7 @@ chaintoolong:
 	   weird delay cases. */
 	ct->timeout += nfct_time_stamp;
 
-	__nf_conntrack_insert_prepare(ct);
+	refcount_inc(&ct->ct_general.use);
 
 	/* Since the lookup is lockless, hash insertion must be done after
 	 * starting the timer and setting the CONFIRMED bit. The RCU barriers

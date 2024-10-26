@@ -23,18 +23,18 @@ struct nf_conn_tstamp *nf_conn_tstamp_find(const struct nf_conn *ct)
 #endif
 }
 
-static inline
-struct nf_conn_tstamp *nf_ct_tstamp_ext_add(struct nf_conn *ct, gfp_t gfp)
+static inline void nf_ct_tstamp_ext_add(struct nf_conn *ct, gfp_t gfp)
 {
 #ifdef CONFIG_NF_CONNTRACK_TIMESTAMP
 	struct net *net = nf_ct_net(ct);
+	struct nf_conn_tstamp *tstamp;
 
 	if (!net->ct.sysctl_tstamp)
-		return NULL;
+		return;
 
-	return nf_ct_ext_add(ct, NF_CT_EXT_TSTAMP, gfp);
-#else
-	return NULL;
+	tstamp = nf_ct_ext_add(ct, NF_CT_EXT_TSTAMP, gfp);
+	if (tstamp)
+		tstamp->start = ktime_get_real_ns();
 #endif
 };
 
