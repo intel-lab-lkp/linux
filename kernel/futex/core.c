@@ -119,13 +119,18 @@ late_initcall(fail_futex_debugfs);
  * @key:	Pointer to the futex key for which the hash is calculated
  *
  * We hash on the keys returned from get_futex_key (see below) and return the
- * corresponding hash bucket in the global hash.
+ * corresponding hash bucket in the global hash. If the FUTEX is private and
+ * a local hash table is privated then this one is used.
  */
 struct futex_hash_bucket *futex_hash(union futex_key *key)
 {
+	struct futex_hash_table *fht;
 	u32 hash = jhash2((u32 *)key, offsetof(typeof(*key), both.offset) / 4,
 			  key->both.offset);
 
+	fht = current->futex_hash_table;
+	if (fht && (key->both.offset & (FUT_OFF_INODE | FUT_OFF_MMSHARED)) == 0)
+		return &fht->queues[hash & (fht->slots - 1)];
 	return &futex_queues[hash & (futex_hashsize - 1)];
 }
 
