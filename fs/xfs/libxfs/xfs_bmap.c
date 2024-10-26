@@ -3536,7 +3536,7 @@ xfs_bmap_btalloc_at_eof(
 	 * or it's the first allocation in a file, just try for a stripe aligned
 	 * allocation.
 	 */
-	if (ap->offset) {
+	if (ap->prev.br_startoff != NULLFILEOFF) {
 		xfs_extlen_t	nextminlen = 0;
 
 		/*
