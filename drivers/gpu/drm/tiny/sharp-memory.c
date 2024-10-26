@@ -48,12 +48,6 @@ enum sharp_memory_model {
 	LS044Q7DH01,
 };
 
-enum sharp_memory_vcom_mode {
-	SHARP_MEMORY_SOFTWARE_VCOM,
-	SHARP_MEMORY_EXTERNAL_VCOM,
-	SHARP_MEMORY_PWM_VCOM
-};
-
 struct sharp_memory_device {
 	struct drm_device drm;
 	struct spi_device *spi;
@@ -67,10 +61,6 @@ struct sharp_memory_device {
 
 	struct gpio_desc *enable_gpio;
 
-	struct task_struct *sw_vcom_signal;
-	struct pwm_device *pwm_vcom_signal;
-
-	enum sharp_memory_vcom_mode vcom_mode;
 	u8 vcom;
 
 	u32 pitch;
@@ -500,25 +490,41 @@ static int sharp_memory_pipe_init(struct drm_device *dev,
 	return drm_connector_attach_encoder(connector, encoder);
 }
 
+static void sharp_memory_stop_kthread(void *data)
+{
+	struct task_struct *task = data;
+
+	kthread_stop(task);
+}
+
+static void sharp_memory_disable_pwm(void *data)
+{
+	struct pwm_device *pwm = data;
+
+	pwm_disable(pwm);
+}
+
 static int sharp_memory_init_pwm_vcom_signal(struct sharp_memory_device *smd)
 {
 	int ret;
 	struct device *dev = &smd->spi->dev;
+	struct pwm_device *pwm_vcom_signal;
 	struct pwm_state pwm_state;
 
-	smd->pwm_vcom_signal = devm_pwm_get(dev, NULL);
-	if (IS_ERR(smd->pwm_vcom_signal))
-		return dev_err_probe(dev, PTR_ERR(smd->pwm_vcom_signal),
+	pwm_vcom_signal = devm_pwm_get(dev, NULL);
+	if (IS_ERR(pwm_vcom_signal))
+		return dev_err_probe(dev, PTR_ERR(pwm_vcom_signal),
 				     "Could not get pwm device\n");
 
-	pwm_init_state(smd->pwm_vcom_signal, &pwm_state);
+	pwm_init_state(pwm_vcom_signal, &pwm_state);
 	pwm_set_relative_duty_cycle(&pwm_state, 1, 10);
 	pwm_state.enabled = true;
-	ret = pwm_apply_might_sleep(smd->pwm_vcom_signal, &pwm_state);
+	ret = pwm_apply_might_sleep(pwm_vcom_signal, &pwm_state);
 	if (ret)
 		return dev_err_probe(dev, -EINVAL, "Could not apply pwm state\n");
 
-	return 0;
+	return devm_add_action_or_reset(dev, sharp_memory_disable_pwm,
+					pwm_vcom_signal);
 }
 
 static int sharp_memory_probe(struct spi_device *spi)
@@ -595,15 +601,20 @@ static int sharp_memory_probe(struct spi_device *spi)
 				     "Unable to find sharp,vcom-mode node in device tree\n");
 
 	if (!strcmp("software", vcom_mode_str)) {
-		smd->vcom_mode = SHARP_MEMORY_SOFTWARE_VCOM;
-		smd->sw_vcom_signal = kthread_run(sharp_memory_sw_vcom_signal_thread,
-						  smd, "sw_vcom_signal");
+		struct task_struct *sw_vcom_signal;
+
+		sw_vcom_signal = kthread_run(sharp_memory_sw_vcom_signal_thread,
+					     smd, "sw_vcom_signal");
+
+		ret = devm_add_action_or_reset(dev, sharp_memory_stop_kthread,
+					       sw_vcom_signal);
+		if (ret)
+			return ret;
 
 	} else if (!strcmp("external", vcom_mode_str)) {
-		smd->vcom_mode = SHARP_MEMORY_EXTERNAL_VCOM;
+		/* empty */
 
 	} else if (!strcmp("pwm", vcom_mode_str)) {
-		smd->vcom_mode = SHARP_MEMORY_PWM_VCOM;
 		ret = sharp_memory_init_pwm_vcom_signal(smd);
 		if (ret)
 			return ret;
@@ -640,19 +651,6 @@ static void sharp_memory_remove(struct spi_device *spi)
 
 	drm_dev_unplug(&smd->drm);
 	drm_atomic_helper_shutdown(&smd->drm);
-
-	switch (smd->vcom_mode) {
-	case SHARP_MEMORY_SOFTWARE_VCOM:
-		kthread_stop(smd->sw_vcom_signal);
-		break;
-
-	case SHARP_MEMORY_EXTERNAL_VCOM:
-		break;
-
-	case SHARP_MEMORY_PWM_VCOM:
-		pwm_disable(smd->pwm_vcom_signal);
-		break;
-	}
 }
 
 static struct spi_driver sharp_memory_spi_driver = {
