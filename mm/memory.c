@@ -6821,6 +6821,7 @@ static void clear_gigantic_page(struct folio *folio, unsigned long addr,
 	int i;
 
 	might_sleep();
+	addr = ALIGN_DOWN(addr, folio_size(folio));
 	for (i = 0; i < nr_pages; i++) {
 		cond_resched();
 		clear_user_highpage(folio_page(folio, i), addr + i * PAGE_SIZE);
