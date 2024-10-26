@@ -979,7 +979,7 @@ lock_and_cleanup_extent_if_need(struct btrfs_inode *inode, struct folio *folio,
 				      cached_state);
 			folio_unlock(folio);
 			folio_put(folio);
-			btrfs_start_ordered_extent(ordered);
+			btrfs_start_ordered_extent(ordered, NULL);
 			btrfs_put_ordered_extent(ordered);
 			return -EAGAIN;
 		}
@@ -1047,8 +1047,8 @@ int btrfs_check_nocow_lock(struct btrfs_inode *inode, loff_t pos,
 			return -EAGAIN;
 		}
 	} else {
-		btrfs_lock_and_flush_ordered_range(inode, lockstart, lockend,
-						   &cached_state);
+		btrfs_lock_and_flush_ordered_range(inode, NULL, lockstart,
+						   lockend, &cached_state);
 	}
 	ret = can_nocow_extent(&inode->vfs_inode, lockstart, &num_bytes,
 			       NULL, nowait, false);
@@ -1884,7 +1884,7 @@ again:
 		unlock_extent(io_tree, page_start, page_end, &cached_state);
 		folio_unlock(folio);
 		up_read(&BTRFS_I(inode)->i_mmap_lock);
-		btrfs_start_ordered_extent(ordered);
+		btrfs_start_ordered_extent(ordered, NULL);
 		btrfs_put_ordered_extent(ordered);
 		goto again;
 	}
@@ -3710,6 +3710,7 @@ const struct file_operations btrfs_file_operations = {
 	.compat_ioctl	= btrfs_compat_ioctl,
 #endif
 	.remap_file_range = btrfs_remap_file_range,
+	.uring_cmd	= btrfs_uring_cmd,
 	.fop_flags	= FOP_BUFFER_RASYNC | FOP_BUFFER_WASYNC,
 };
 
