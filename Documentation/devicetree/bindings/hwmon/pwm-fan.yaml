@@ -40,6 +40,10 @@ properties:
     maximum: 4
     default: 2
 
+  retain-state-shutdown:
+    description: Retain the state of the PWM on shutdown.
+    $ref: /schemas/types.yaml#/definitions/flag
+
   pwms:
     description: The PWM that is used to control the fan.
     maxItems: 1
