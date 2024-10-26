@@ -16,6 +16,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <linux/pidfd.h>
+
 #include "../kselftest.h"
 #include "pidfd_helpers.h"
 
