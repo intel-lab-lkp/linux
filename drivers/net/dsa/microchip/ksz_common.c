@@ -2238,16 +2238,51 @@ static int ksz_sw_mdio_write(struct mii_bus *bus, int addr, int regnum,
 	return dev->dev_ops->w_phy(dev, addr, regnum, val);
 }
 
+static int ksz_parent_mdio_read(struct mii_bus *bus, int addr, int regnum)
+{
+	struct ksz_device *dev = bus->priv;
+
+	return mdiobus_read_nested(dev->parent_mdio_bus, addr, regnum);
+}
+
+static int ksz_parent_mdio_write(struct mii_bus *bus, int addr, int regnum,
+				 u16 val)
+{
+	struct ksz_device *dev = bus->priv;
+
+	return mdiobus_write_nested(dev->parent_mdio_bus, addr, regnum, val);
+}
+
+static int ksz_phy_addr_to_port(struct ksz_device *dev, int addr)
+{
+	struct dsa_switch *ds = dev->ds;
+	struct dsa_port *dp;
+
+	dsa_switch_for_each_user_port(dp, ds) {
+		if (dev->info->internal_phy[dp->index] &&
+		    dev->phy_addr_map[dp->index] == addr)
+			return dp->index;
+	}
+
+	return -EINVAL;
+}
+
 static int ksz_irq_phy_setup(struct ksz_device *dev)
 {
 	struct dsa_switch *ds = dev->ds;
-	int phy;
+	int phy, port;
 	int irq;
 	int ret;
 
-	for (phy = 0; phy < KSZ_MAX_NUM_PORTS; phy++) {
+	for (phy = 0; phy < PHY_MAX_ADDR; phy++) {
 		if (BIT(phy) & ds->phys_mii_mask) {
-			irq = irq_find_mapping(dev->ports[phy].pirq.domain,
+			port = ksz_phy_addr_to_port(dev, phy);
+			if (port < 0) {
+				ret = port;
+				goto out;
+			}
+
+			irq = irq_find_mapping(dev->ports[port].pirq.domain,
 					       PORT_SRC_PHY_INT);
 			if (irq < 0) {
 				ret = irq;
@@ -2270,21 +2305,37 @@ static void ksz_irq_phy_free(struct ksz_device *dev)
 	struct dsa_switch *ds = dev->ds;
 	int phy;
 
-	for (phy = 0; phy < KSZ_MAX_NUM_PORTS; phy++)
+	for (phy = 0; phy < PHY_MAX_ADDR; phy++)
 		if (BIT(phy) & ds->phys_mii_mask)
 			irq_dispose_mapping(ds->user_mii_bus->irq[phy]);
 }
 
 static int ksz_mdio_register(struct ksz_device *dev)
 {
+	struct device_node *parent_bus_node;
+	struct mii_bus *parent_bus = NULL;
 	struct dsa_switch *ds = dev->ds;
 	struct device_node *mdio_np;
 	struct mii_bus *bus;
-	int ret;
+	struct dsa_port *dp;
+	int ret, i;
 
 	mdio_np = of_get_child_by_name(dev->dev->of_node, "mdio");
 	if (!mdio_np)
 		return 0;
+
+	parent_bus_node = of_parse_phandle(mdio_np, "mdio-parent-bus", 0);
+	if (parent_bus_node && !dev->info->phy_side_mdio_supported) {
+		dev_warn(dev->dev, "Side MDIO bus is not supported for this HW, ignoring 'mdio-parent-bus' property.\n");
+	} else if (parent_bus_node) {
+		parent_bus = of_mdio_find_bus(parent_bus_node);
+		if (!parent_bus) {
+			of_node_put(parent_bus_node);
+			return -EPROBE_DEFER;
+		}
+
+		dev->parent_mdio_bus = parent_bus;
+	}
 
 	bus = devm_mdiobus_alloc(ds->dev);
 	if (!bus) {
@@ -2292,13 +2343,43 @@ static int ksz_mdio_register(struct ksz_device *dev)
 		return -ENOMEM;
 	}
 
+	if (dev->dev_ops->mdio_bus_preinit) {
+		ret = dev->dev_ops->mdio_bus_preinit(dev, !!parent_bus);
+		if (ret)
+			goto put_mdio_node;
+	}
+
+	if (dev->dev_ops->create_phy_addr_map) {
+		ret = dev->dev_ops->create_phy_addr_map(dev, !!parent_bus);
+		if (ret)
+			goto put_mdio_node;
+	} else {
+		for (i = 0; i < dev->info->port_cnt; i++)
+			dev->phy_addr_map[i] = i;
+	}
+
 	bus->priv = dev;
-	bus->read = ksz_sw_mdio_read;
-	bus->write = ksz_sw_mdio_write;
-	bus->name = "ksz user smi";
-	snprintf(bus->id, MII_BUS_ID_SIZE, "SMI-%d", ds->index);
+	if (parent_bus) {
+		bus->read = ksz_parent_mdio_read;
+		bus->write = ksz_parent_mdio_write;
+		bus->name = "KSZ side MDIO";
+		snprintf(bus->id, MII_BUS_ID_SIZE, "ksz-side-mdio-%d",
+			 ds->index);
+	} else {
+		bus->read = ksz_sw_mdio_read;
+		bus->write = ksz_sw_mdio_write;
+		bus->name = "ksz user smi";
+		snprintf(bus->id, MII_BUS_ID_SIZE, "SMI-%d", ds->index);
+	}
+
+	dsa_switch_for_each_user_port(dp, dev->ds) {
+		if (dev->info->internal_phy[dp->index] &&
+		    dev->phy_addr_map[dp->index] < PHY_MAX_ADDR)
+			bus->phy_mask |= BIT(dev->phy_addr_map[dp->index]);
+	}
+
+	ds->phys_mii_mask = bus->phy_mask;
 	bus->parent = ds->dev;
-	bus->phy_mask = ~ds->phys_mii_mask;
 
 	ds->user_mii_bus = bus;
 
@@ -2318,6 +2399,7 @@ static int ksz_mdio_register(struct ksz_device *dev)
 			ksz_irq_phy_free(dev);
 	}
 
+put_mdio_node:
 	of_node_put(mdio_np);
 
 	return ret;

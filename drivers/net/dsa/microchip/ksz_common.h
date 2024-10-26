@@ -65,6 +65,8 @@ struct ksz_chip_data {
 	u8 num_tx_queues;
 	u8 num_ipms; /* number of Internal Priority Maps */
 	bool tc_cbs_supported;
+	/* PHYs can be accessed via side MDIO channel */
+	bool phy_side_mdio_supported;
 	const struct ksz_dev_ops *ops;
 	const struct phylink_mac_ops *phylink_mac_ops;
 	bool phy_errata_9477;
@@ -191,6 +193,9 @@ struct ksz_device {
 	struct ksz_switch_macaddr *switch_macaddr;
 	struct net_device *hsr_dev;     /* HSR */
 	u8 hsr_ports;
+
+	u8 phy_addr_map[KSZ_MAX_NUM_PORTS];
+	struct mii_bus *parent_mdio_bus;
 };
 
 /* List of supported models */
@@ -326,6 +331,8 @@ struct ksz_dev_ops {
 	void (*port_cleanup)(struct ksz_device *dev, int port);
 	void (*port_setup)(struct ksz_device *dev, int port, bool cpu_port);
 	int (*set_ageing_time)(struct ksz_device *dev, unsigned int msecs);
+	int (*mdio_bus_preinit)(struct ksz_device *dev, bool side_mdio);
+	int (*create_phy_addr_map)(struct ksz_device *dev, bool side_mdio);
 	int (*r_phy)(struct ksz_device *dev, u16 phy, u16 reg, u16 *val);
 	int (*w_phy)(struct ksz_device *dev, u16 phy, u16 reg, u16 val);
 	void (*r_mib_cnt)(struct ksz_device *dev, int port, u16 addr,
