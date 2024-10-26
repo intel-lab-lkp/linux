@@ -84,6 +84,7 @@ struct hbg_dev_specs {
 	u32 vlan_layers;
 	u32 max_mtu;
 	u32 min_mtu;
+	u32 uc_mac_num;
 
 	u32 max_frame_len;
 	u32 rx_buf_size;
@@ -214,6 +215,17 @@ struct hbg_stats {
 	u64 tx_dma_err_cnt;
 };
 
+struct hbg_mac_table_entry {
+	u8 addr[ETH_ALEN];
+};
+
+struct hbg_mac_filter {
+	struct hbg_mac_table_entry *mac_table;
+	u32 table_max_len;
+	bool table_overflow;
+	bool enabled;
+};
+
 struct hbg_priv {
 	struct net_device *netdev;
 	struct pci_dev *pdev;
@@ -226,6 +238,7 @@ struct hbg_priv {
 	struct hbg_ring rx_ring;
 	struct hbg_stats stats;
 	struct delayed_work service_task;
+	struct hbg_mac_filter filter;
 };
 
 #endif
