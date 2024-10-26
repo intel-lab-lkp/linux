@@ -51,6 +51,9 @@ static int meson_clk_phase_set_phase(struct clk_hw *hw, int degrees)
 	struct meson_clk_phase_data *phase = meson_clk_phase_data(clk);
 	unsigned int val;
 
+	if (phase->ph.width > 8)
+		return -EINVAL;
+
 	val = meson_clk_degrees_to_val(degrees, phase->ph.width);
 	meson_parm_write(clk->map, &phase->ph, val);
 
@@ -110,6 +113,9 @@ static int meson_clk_triphase_set_phase(struct clk_hw *hw, int degrees)
 	struct meson_clk_triphase_data *tph = meson_clk_triphase_data(clk);
 	unsigned int val;
 
+	if (tph->ph0.width > 8)
+		return -EINVAL;
+
 	val = meson_clk_degrees_to_val(degrees, tph->ph0.width);
 	meson_parm_write(clk->map, &tph->ph0, val);
 	meson_parm_write(clk->map, &tph->ph1, val);
@@ -166,6 +172,9 @@ static int meson_sclk_ws_inv_set_phase(struct clk_hw *hw, int degrees)
 	struct clk_regmap *clk = to_clk_regmap(hw);
 	struct meson_sclk_ws_inv_data *tph = meson_sclk_ws_inv_data(clk);
 	unsigned int val;
+
+	if (tph->ph.width > 8)
+		return -EINVAL;
 
 	val = meson_clk_degrees_to_val(degrees, tph->ph.width);
 	meson_parm_write(clk->map, &tph->ph, val);
