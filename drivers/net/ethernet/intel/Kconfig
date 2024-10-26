@@ -292,6 +292,9 @@ config ICE
 	select DIMLIB
 	select LIBIE
 	select NET_DEVLINK
+	select PACKING
+	select PACKING_CHECK_FIELDS_20
+	select PACKING_CHECK_FIELDS_27
 	select PLDMFW
 	select DPLL
 	help
