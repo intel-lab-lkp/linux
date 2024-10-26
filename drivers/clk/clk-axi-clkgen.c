@@ -344,7 +344,7 @@ static int axi_clkgen_set_rate(struct clk_hw *clk_hw,
 	uint32_t filter;
 	uint32_t lock;
 
-	if (parent_rate == 0 || rate == 0)
+	if (parent_rate < 1000 || rate < 1000)
 		return -EINVAL;
 
 	axi_clkgen_calc_params(limits, parent_rate, rate, &d, &m, &dout);
@@ -391,6 +391,9 @@ static int axi_clkgen_determine_rate(struct clk_hw *hw,
 	const struct axi_clkgen_limits *limits = &axi_clkgen->limits;
 	unsigned int d, m, dout;
 	unsigned long long tmp;
+
+	if (req->best_parent_rate < 1000 || req->rate < 1000)
+		return -EINVAL;
 
 	axi_clkgen_calc_params(limits, req->best_parent_rate, req->rate,
 			       &d, &m, &dout);
