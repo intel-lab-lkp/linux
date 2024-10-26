@@ -293,6 +293,7 @@ static int mlx4_init_user_cqes(void *buf, int entries, int cqe_size)
 	void *init_ents;
 	int err = 0;
 	int i;
+	size_t size = array_size(entries, cqe_size);
 
 	init_ents = kmalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!init_ents)
@@ -314,9 +315,7 @@ static int mlx4_init_user_cqes(void *buf, int entries, int cqe_size)
 			buf += PAGE_SIZE;
 		}
 	} else {
-		err = copy_to_user((void __user *)buf, init_ents,
-				   array_size(entries, cqe_size)) ?
-			-EFAULT : 0;
+		err = copy_to_user((void __user *)buf, init_ents, size) ? -EFAULT : 0;
 	}
 
 out:
