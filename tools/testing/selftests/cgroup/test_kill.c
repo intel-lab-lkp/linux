@@ -10,7 +10,7 @@
 #include <unistd.h>
 
 #include "../kselftest.h"
-#include "../pidfd/pidfd.h"
+#include "../pidfd/pidfd_helpers.h"
 #include "cgroup_util.h"
 
 /*
