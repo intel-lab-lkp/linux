@@ -829,6 +829,14 @@ int xe_exec_queue_destroy_ioctl(struct drm_device *dev, void *data,
 
 	xe_exec_queue_kill(q);
 
+	/*
+	 * After killing and destroying the exec queue, make sure userspace has
+	 * an updated view of the run ticks, regardless if this was the last
+	 * ref: since the exec queue is removed from xef->exec_queue.xa, a
+	 * query to fdinfo after this returns could not account for this load.
+	 */
+	xe_exec_queue_update_run_ticks(q);
+
 	trace_xe_exec_queue_close(q);
 	xe_exec_queue_put(q);
 
