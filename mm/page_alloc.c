@@ -644,6 +644,18 @@ static inline void account_freepages(struct zone *zone, int nr_pages,
 		__mod_zone_page_state(zone, NR_FREE_CMA_PAGES, nr_pages);
 }
 
+static void account_highatomic_freepages(struct zone *zone, unsigned int order,
+					 int old_mt, int new_mt)
+{
+	int delta = 1 << order;
+
+	if (is_migrate_highatomic(old_mt))
+		WRITE_ONCE(zone->nr_free_highatomic, zone->nr_free_highatomic - delta);
+
+	if (is_migrate_highatomic(new_mt))
+		WRITE_ONCE(zone->nr_free_highatomic, zone->nr_free_highatomic + delta);
+}
+
 /* Used for pages not on another list */
 static inline void __add_to_free_list(struct page *page, struct zone *zone,
 				      unsigned int order, int migratetype,
@@ -660,6 +672,8 @@ static inline void __add_to_free_list(struct page *page, struct zone *zone,
 	else
 		list_add(&page->buddy_list, &area->free_list[migratetype]);
 	area->nr_free++;
+
+	account_highatomic_freepages(zone, order, -1, migratetype);
 }
 
 /*
@@ -681,6 +695,8 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 
 	account_freepages(zone, -(1 << order), old_mt);
 	account_freepages(zone, 1 << order, new_mt);
+
+	account_highatomic_freepages(zone, order, old_mt, new_mt);
 }
 
 static inline void __del_page_from_free_list(struct page *page, struct zone *zone,
@@ -698,6 +714,8 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 	__ClearPageBuddy(page);
 	set_page_private(page, 0);
 	zone->free_area[order].nr_free--;
+
+	account_highatomic_freepages(zone, order, migratetype, -1);
 }
 
 static inline void del_page_from_free_list(struct page *page, struct zone *zone,
@@ -3117,11 +3135,10 @@ static inline long __zone_watermark_unusable_free(struct zone *z,
 
 	/*
 	 * If the caller does not have rights to reserves below the min
-	 * watermark then subtract the high-atomic reserves. This will
-	 * over-estimate the size of the atomic reserve but it avoids a search.
+	 * watermark then subtract the free pages reserved for highatomic.
 	 */
 	if (likely(!(alloc_flags & ALLOC_RESERVES)))
-		unusable_free += z->nr_reserved_highatomic;
+		unusable_free += READ_ONCE(z->nr_free_highatomic);
 
 #ifdef CONFIG_CMA
 	/* If allocation can't use CMA areas don't use free CMA pages */
