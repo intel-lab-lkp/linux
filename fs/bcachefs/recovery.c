@@ -59,6 +59,7 @@ static void bch2_reconstruct_alloc(struct bch_fs *c)
 
 	mutex_lock(&c->sb_lock);
 	struct bch_sb_field_ext *ext = bch2_sb_field_get(c->disk_sb.sb, ext);
+	void *sb;
 
 	__set_bit_le64(BCH_RECOVERY_PASS_STABLE_check_allocations, ext->recovery_passes_required);
 	__set_bit_le64(BCH_RECOVERY_PASS_STABLE_check_alloc_info, ext->recovery_passes_required);
@@ -94,7 +95,10 @@ static void bch2_reconstruct_alloc(struct bch_fs *c)
 	__set_bit_le64(BCH_FSCK_ERR_accounting_mismatch, ext->errors_silent);
 	c->sb.compat &= ~(1ULL << BCH_COMPAT_alloc_info);
 
+	sb = c->disk_sb.sb;
 	bch2_write_super(c);
+	if (sb != c->disk_sb.sb)
+		ext = bch2_sb_field_get(c->disk_sb.sb, ext);
 	mutex_unlock(&c->sb_lock);
 
 	c->opts.recovery_passes |= bch2_recovery_passes_from_stable(le64_to_cpu(ext->recovery_passes_required[0]));
