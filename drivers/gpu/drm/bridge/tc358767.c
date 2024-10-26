@@ -901,6 +901,63 @@ static int tc_set_common_video_mode(struct tc_data *tc,
 	int vsync_len = mode->vsync_end - mode->vsync_start;
 	int ret;
 
+	/*
+	 * Horizontal Timing Control0 Register 1/2 (HTIM01/HTIM02) Register
+	 * bitfields description state "These bits must be multiple of even
+	 * pixel". It is not possible to simply align every bitfield to the
+	 * nearest even pixel, because that would unalign the line width.
+	 * Instead, attempt to re-align the timings.
+	 */
+
+	/* Panels with odd active pixel count are not supported by the bridge */
+	if (mode->hdisplay & 1)
+		dev_warn(tc->dev, "Panels with odd pixel count per active line are not supported.\n");
+
+	/* HPW is odd */
+	if (hsync_len & 1) {
+		/* Make sure there is some margin left */
+		if (left_margin >= 2) {
+			/* Align HPW up */
+			hsync_len++;
+			left_margin--;
+		} else if (right_margin >= 2) {
+			/* Align HPW up */
+			hsync_len++;
+			right_margin--;
+		} else if (hsync_len > 2) {
+			/* Align HPW down as last-resort option */
+			hsync_len--;
+			left_margin++;
+		} else {
+			dev_warn(tc->dev, "HPW is odd, not enough margins to compensate.\n");
+		}
+	}
+
+	/* HBP is odd (HPW is surely even now) */
+	if (left_margin & 1) {
+		/* Make sure there is some margin left */
+		if (right_margin >= 2) {
+			/* Align HBP up */
+			left_margin++;
+			right_margin--;
+		} else if (hsync_len > 2) {
+			/* HPW is surely even and > 2, which means at least 4 */
+			hsync_len -= 2;
+			/*
+			 * Subtract 2 from sync pulse and distribute it between
+			 * margins. This aligns HBP and keeps HPW aligned.
+			 */
+			left_margin++;
+			right_margin++;
+		} else {
+			dev_warn(tc->dev, "HBP is odd, not enough pixels to compensate.\n");
+		}
+	}
+
+	/* HFP is odd (HBP and HPW is surely even now) */
+	if (right_margin & 1)
+		dev_warn(tc->dev, "HFP is odd, panels with odd pixel count per full line are not supported.\n");
+
 	dev_dbg(tc->dev, "set mode %dx%d\n",
 		mode->hdisplay, mode->vdisplay);
 	dev_dbg(tc->dev, "H margin %d,%d sync %d\n",
@@ -922,14 +979,14 @@ static int tc_set_common_video_mode(struct tc_data *tc,
 		return ret;
 
 	ret = regmap_write(tc->regmap, HTIM01,
-			   FIELD_PREP(HBPR, ALIGN(left_margin, 2)) |
-			   FIELD_PREP(HPW, ALIGN(hsync_len, 2)));
+			   FIELD_PREP(HBPR, left_margin) |
+			   FIELD_PREP(HPW, hsync_len));
 	if (ret)
 		return ret;
 
 	ret = regmap_write(tc->regmap, HTIM02,
 			   FIELD_PREP(HDISPR, ALIGN(mode->hdisplay, 2)) |
-			   FIELD_PREP(HFPR, ALIGN(right_margin, 2)));
+			   FIELD_PREP(HFPR, right_margin));
 	if (ret)
 		return ret;
 
