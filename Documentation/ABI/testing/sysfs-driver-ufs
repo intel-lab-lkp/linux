@@ -1559,3 +1559,55 @@ Description:
 		Symbol - HCMID. This file shows the UFSHCD manufacturer id.
 		The Manufacturer ID is defined by JEDEC in JEDEC-JEP106.
 		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/wb_toggle_buf_resize
+What:		/sys/bus/platform/devices/*.ufs/wb_toggle_buf_resize
+Date:		Qct 2024
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		The host can decrease or increase the WriteBooster Buffer size by setting
+		this file.
+
+		======  ======================================
+		00h  Idle (There is no resize operation)
+		01h  Decrease WriteBooster Buffer Size
+		02h  Increase WriteBooster Buffer Size
+		Others  Reserved
+		======  ======================================
+
+		The file is write only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/attributes/wb_buf_resize_hint
+What:		/sys/bus/platform/devices/*.ufs/attributes/wb_buf_resize_hint
+Date:		Qct 2024
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		wb_buf_resize_hint indicates hint information about which type of resize for
+		WriteBooster Buffer is recommended by the device.
+
+		======  ======================================
+		00h  Recommend keep the buffer size
+		01h  Recommend to decrease the buffer size
+		02h  Recommend to increase the buffer size
+		Others: Reserved
+		======  ======================================
+
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/attributes/wb_buf_resize_status
+What:		/sys/bus/platform/devices/*.ufs/attributes/wb_buf_resize_status
+Date:		Qct 2024
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		The host can check the Resize operation status of the WriteBooster Buffer
+		by reading this file.
+
+		======  ========================================
+		00h  Idle (resize operation is not issued)
+		01h  Resize operation in progress
+		02h  Resize operation completed successfully
+		03h  Resize operation general failure
+		Others  Reserved
+		======  ========================================
+
+		The file is read only.
