@@ -82,6 +82,7 @@ void efifb_setup_from_dmi(struct screen_info *si, const char *opt)
 	}
 }
 
+#ifdef CONFIG_EFI
 #define choose_value(dmivalue, fwvalue, field, flags) ({	\
 		typeof(fwvalue) _ret_ = fwvalue;		\
 		if ((flags) & (field))				\
@@ -346,7 +347,6 @@ static const struct fwnode_operations efifb_fwnode_ops = {
 	.add_links = efifb_add_links,
 };
 
-#ifdef CONFIG_EFI
 static struct fwnode_handle efifb_fwnode;
 
 __init void sysfb_apply_efi_quirks(void)
