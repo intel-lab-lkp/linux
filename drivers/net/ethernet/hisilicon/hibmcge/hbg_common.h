@@ -4,6 +4,7 @@
 #ifndef __HBG_COMMON_H
 #define __HBG_COMMON_H
 
+#include <linux/ethtool.h>
 #include <linux/netdevice.h>
 #include <linux/pci.h>
 #include "hbg_reg.h"
@@ -33,6 +34,15 @@ enum hbg_tx_state {
 
 enum hbg_nic_state {
 	HBG_NIC_STATE_EVENT_HANDLING = 0,
+	HBG_NIC_STATE_NEED_RESET,
+	HBG_NIC_STATE_RESETTING,
+	HBG_NIC_STATE_RESET_FAIL,
+};
+
+enum hbg_reset_type {
+	HBG_RESET_TYPE_NONE = 0,
+	HBG_RESET_TYPE_FLR,
+	HBG_RESET_TYPE_FUNCTION,
 };
 
 struct hbg_buffer {
@@ -213,6 +223,13 @@ struct hbg_stats {
 
 	u64 tx_timeout_cnt;
 	u64 tx_dma_err_cnt;
+
+	u64 reset_fail_cnt;
+};
+
+/* saved for restore after rest */
+struct hbg_user_def {
+	struct ethtool_pauseparam pause_param;
 };
 
 struct hbg_mac_table_entry {
@@ -239,6 +256,11 @@ struct hbg_priv {
 	struct hbg_stats stats;
 	struct delayed_work service_task;
 	struct hbg_mac_filter filter;
+
+	struct hbg_user_def user_def;
+	enum hbg_reset_type reset_type;
 };
+
+void hbg_reset_task_schedule(struct hbg_priv *priv);
 
 #endif

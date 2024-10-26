@@ -19,6 +19,7 @@ struct hbg_dbg_info {
 };
 
 #define hbg_get_bool_str(state) ((state) ? "true" : "false")
+#define hbg_get_state_str(p, s) hbg_get_bool_str(test_bit(s, &(p)->state))
 
 static void hbg_dbg_ring(struct hbg_priv *priv, struct hbg_ring *ring,
 			 struct seq_file *s)
@@ -101,11 +102,35 @@ static int hbg_dbg_mac_table(struct seq_file *s, void *unused)
 	return 0;
 }
 
+static const char * const reset_type_str[] = {"None", "FLR", "Function"};
+
+static int hbg_dbg_nic_state(struct seq_file *s, void *unused)
+{
+	struct net_device *netdev = dev_get_drvdata(s->private);
+	struct hbg_priv *priv = netdev_priv(netdev);
+
+	seq_printf(s, "event handling state: %s\n",
+		   hbg_get_state_str(priv, HBG_NIC_STATE_EVENT_HANDLING));
+	seq_printf(s, "need reset state: %s\n",
+		   hbg_get_state_str(priv, HBG_NIC_STATE_NEED_RESET));
+	seq_printf(s, "resetting state: %s\n",
+		   hbg_get_state_str(priv, HBG_NIC_STATE_RESETTING));
+	seq_printf(s, "reset fail state: %s\n",
+		   hbg_get_state_str(priv, HBG_NIC_STATE_RESET_FAIL));
+	seq_printf(s, "last reset type: %s\n",
+		   reset_type_str[priv->reset_type]);
+	/* reset_fail_cnt is related to the HBG_NIC_STATE_RESET_FAIL */
+	seq_printf(s, "reset fail cnt: %llu\n", priv->stats.reset_fail_cnt);
+
+	return 0;
+}
+
 static const struct hbg_dbg_info hbg_dbg_infos[] = {
 	{ "tx_ring", hbg_dbg_tx_ring },
 	{ "rx_ring", hbg_dbg_rx_ring },
 	{ "irq_info", hbg_dbg_irq_info },
 	{ "mac_talbe", hbg_dbg_mac_table },
+	{ "nic_state", hbg_dbg_nic_state },
 };
 
 static void hbg_debugfs_uninit(void *data)
