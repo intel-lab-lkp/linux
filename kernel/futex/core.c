@@ -39,6 +39,7 @@
 #include <linux/memblock.h>
 #include <linux/fault-inject.h>
 #include <linux/slab.h>
+#include <linux/prctl.h>
 
 #include "futex.h"
 #include "../locking/rtmutex_common.h"
@@ -55,6 +56,12 @@ static struct {
 #define futex_queues   (__futex_data.queues)
 #define futex_hashsize (__futex_data.hashsize)
 
+struct futex_hash_table {
+	unsigned int			slots;
+	int				users;
+	spinlock_t			lock;
+	struct  futex_hash_bucket	queues[];
+};
 
 /*
  * Fault injections for futexes.
@@ -1040,6 +1047,9 @@ static inline void exit_pi_state_list(struct task_struct *curr) { }
 
 static void futex_cleanup(struct task_struct *tsk)
 {
+	struct futex_hash_table *fht;
+	bool need_free = false;
+
 	if (unlikely(tsk->robust_list)) {
 		exit_robust_list(tsk);
 		tsk->robust_list = NULL;
@@ -1054,6 +1064,23 @@ static void futex_cleanup(struct task_struct *tsk)
 
 	if (unlikely(!list_empty(&tsk->pi_state_list)))
 		exit_pi_state_list(tsk);
+
+	rcu_read_lock();
+	fht = rcu_dereference(current->futex_hash_table);
+	if (fht) {
+
+		spin_lock(&fht->lock);
+		fht->users--;
+		WARN_ON_ONCE(fht->users < 0);
+		if (fht->users == 0)
+			need_free = true;
+		spin_unlock(&fht->lock);
+		rcu_assign_pointer(current->futex_hash_table, NULL);
+	}
+	rcu_read_unlock();
+
+	if (need_free)
+		kfree_rcu_mightsleep(fht);
 }
 
 /**
@@ -1151,6 +1178,104 @@ static void futex_hash_bucket_init(struct futex_hash_bucket *fhb)
 	atomic_set(&fhb->waiters, 0);
 	plist_head_init(&fhb->chain);
 	spin_lock_init(&fhb->lock);
+}
+
+static int futex_hash_allocate(unsigned long arg3, unsigned long arg4,
+			       unsigned long arg5)
+{
+	unsigned int hash_slots = arg3;
+	struct futex_hash_table *fht;
+	size_t struct_size;
+	int i;
+
+	if (hash_slots == 0)
+		hash_slots = 4;
+	if (hash_slots < 2)
+		hash_slots = 2;
+	if (hash_slots > 16)
+		hash_slots = 16;
+	if (!is_power_of_2(hash_slots))
+		hash_slots = rounddown_pow_of_two(hash_slots);
+
+	if (current->futex_hash_table)
+		return -EALREADY;
+
+	struct_size = hash_slots * sizeof(struct futex_hash_bucket);
+	struct_size += sizeof(struct futex_hash_table);
+	fht = kmalloc(struct_size, GFP_KERNEL);
+	if (!fht)
+		return -ENOMEM;
+
+	fht->slots = hash_slots;
+	fht->users = 1;
+	spin_lock_init(&fht->lock);
+
+	for (i = 0; i < hash_slots; i++)
+		futex_hash_bucket_init(&fht->queues[i]);
+
+	rcu_assign_pointer(current->futex_hash_table, fht);
+	return 0;
+}
+
+static int futex_hash_share(unsigned long arg3, unsigned long arg4,
+			    unsigned long arg5)
+{
+	struct futex_hash_table *fht;
+	struct task_struct *task;
+	pid_t task_pid;
+	int ret;
+
+	rcu_read_lock();
+	/* XXX maybe auto attach on fork() */
+	task_pid = task_tgid_vnr(current);
+	task = find_task_by_vpid(task_pid);
+	if (!task) {
+		ret = -ESRCH;
+		goto out;
+	}
+
+	fht = rcu_dereference(task->futex_hash_table);
+	if (!fht) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	spin_lock(&fht->lock);
+	if (fht->users <= 0) {
+		ret  = -EINVAL;
+		goto unlock_out;
+	}
+	fht->users++;
+
+	rcu_assign_pointer(current->futex_hash_table, fht);
+	ret = 0;
+
+unlock_out:
+	spin_unlock(&fht->lock);
+out:
+	rcu_read_unlock();
+	return ret;
+}
+
+int futex_hash_prctl(unsigned long arg2, unsigned long arg3,
+		     unsigned long arg4, unsigned long arg5)
+{
+	int ret;
+
+	switch (arg2) {
+	case PR_FUTEX_HASH_ALLOCATE:
+		ret = futex_hash_allocate(arg3, arg4, arg5);
+		break;
+
+	case PR_FUTEX_HASH_SHARE:
+		ret = futex_hash_share(arg3, arg4, arg5);
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
 }
 
 static int __init futex_init(void)

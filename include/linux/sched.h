@@ -58,6 +58,7 @@ struct bpf_net_context;
 struct capture_control;
 struct cfs_rq;
 struct fs_struct;
+struct futex_hash_table;
 struct futex_pi_state;
 struct io_context;
 struct io_uring_task;
@@ -1281,6 +1282,7 @@ struct task_struct {
 #endif
 #ifdef CONFIG_FUTEX
 	struct robust_list_head __user	*robust_list;
+	struct futex_hash_table		*futex_hash_table;
 #ifdef CONFIG_COMPAT
 	struct compat_robust_list_head __user *compat_robust_list;
 #endif
