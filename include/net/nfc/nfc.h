@@ -105,6 +105,8 @@ struct nfc_target {
 	u8 is_iso15693;
 	u8 iso15693_dsfid;
 	u8 iso15693_uid[NFC_ISO15693_UID_MAXSIZE];
+	u8 ats_len;
+	u8 ats[NFC_ATS_MAXSIZE];
 };
 
 /**
