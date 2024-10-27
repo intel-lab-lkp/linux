@@ -849,7 +849,13 @@ static int gb_operation_response_send(struct gb_operation *operation,
 		goto err_put;
 
 	/* Fill in the response header and send it */
-	operation->response->header->result = gb_operation_errno_map(errno);
+	if (operation->response) {
+		operation->response->header->result = gb_operation_errno_map(errno);
+	} else {
+		dev_err(&connection->hd->dev, "failed to allocate response\n");
+		ret = -ENOMEM;
+		goto err_put_active;
+	}
 
 	ret = gb_message_send(operation->response, GFP_KERNEL);
 	if (ret)
