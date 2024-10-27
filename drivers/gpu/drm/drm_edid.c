@@ -6065,14 +6065,15 @@ static void parse_cta_y420vdb(struct drm_connector *connector,
 	}
 }
 
-static void drm_parse_vcdb(struct drm_connector *connector, const u8 *db)
+static void drm_parse_vcdb(struct drm_connector *connector, const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
+	const u8 *data = cea_db_data(db);
 
 	drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] CEA VCDB 0x%02x\n",
-		    connector->base.id, connector->name, db[2]);
+		    connector->base.id, connector->name, data[1]);
 
-	if (db[2] & EDID_CEA_VCDB_QS)
+	if (data[1] & EDID_CEA_VCDB_QS)
 		info->rgb_quant_range_selectable = true;
 }
 
@@ -6430,7 +6431,7 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 		else if (cea_db_is_y420vdb(db))
 			parse_cta_y420vdb(connector, db);
 		else if (cea_db_is_vcdb(db))
-			drm_parse_vcdb(connector, data);
+			drm_parse_vcdb(connector, db);
 		else if (cea_db_is_hdmi_hdr_metadata_block(db))
 			drm_parse_hdr_metadata_block(connector, data);
 		else if (cea_db_tag(db) == CTA_DB_VIDEO)
