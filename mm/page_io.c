@@ -226,6 +226,19 @@ static void swap_zeromap_folio_clear(struct folio *folio)
 	}
 }
 
+static inline void count_swpout_vm_event(struct folio *folio)
+{
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	if (unlikely(folio_test_pmd_mappable(folio))) {
+		count_memcg_folio_events(folio, THP_SWPOUT, 1);
+		count_vm_event(THP_SWPOUT);
+	}
+#endif
+	count_mthp_stat(folio_order(folio), MTHP_STAT_SWPOUT);
+	count_memcg_folio_events(folio, PSWPOUT, folio_nr_pages(folio));
+	count_vm_events(PSWPOUT, folio_nr_pages(folio));
+}
+
 /*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
@@ -258,6 +271,7 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 	 */
 	if (is_folio_zero_filled(folio)) {
 		swap_zeromap_folio_set(folio);
+		count_swpout_vm_event(folio);
 		folio_unlock(folio);
 		return 0;
 	} else {
@@ -280,19 +294,6 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 
 	__swap_writepage(folio, wbc);
 	return 0;
-}
-
-static inline void count_swpout_vm_event(struct folio *folio)
-{
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	if (unlikely(folio_test_pmd_mappable(folio))) {
-		count_memcg_folio_events(folio, THP_SWPOUT, 1);
-		count_vm_event(THP_SWPOUT);
-	}
-#endif
-	count_mthp_stat(folio_order(folio), MTHP_STAT_SWPOUT);
-	count_memcg_folio_events(folio, PSWPOUT, folio_nr_pages(folio));
-	count_vm_events(PSWPOUT, folio_nr_pages(folio));
 }
 
 #if defined(CONFIG_MEMCG) && defined(CONFIG_BLK_CGROUP)
@@ -618,6 +619,9 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 	delayacct_swapin_start();
 
 	if (swap_read_folio_zeromap(folio)) {
+		count_mthp_stat(folio_order(folio), MTHP_STAT_SWPIN);
+		count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
+		count_vm_events(PSWPIN, folio_nr_pages(folio));
 		folio_unlock(folio);
 		goto finish;
 	} else if (zswap_load(folio)) {
