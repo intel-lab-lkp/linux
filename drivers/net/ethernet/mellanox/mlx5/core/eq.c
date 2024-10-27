@@ -114,13 +114,13 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 	struct mlx5_eq *eq = &eq_comp->core;
 	struct mlx5_eqe *eqe;
 	int num_eqes = 0;
-	u32 cqn = -1;
 
 	eqe = next_eqe_sw(eq);
 	if (!eqe)
 		goto out;
 
 	do {
+		u32 cqn;
 		struct mlx5_core_cq *cq;
 
 		/* Make sure we read EQ entry contents after we've
@@ -146,9 +146,6 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 
 out:
 	eq_update_ci(eq, 1);
-
-	if (cqn != -1)
-		tasklet_schedule(&eq_comp->tasklet_ctx.task);
 
 	return 0;
 }
