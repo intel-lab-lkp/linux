@@ -6361,11 +6361,12 @@ drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const struct cea_db *
  * https://docs.microsoft.com/en-us/windows-hardware/drivers/display/specialized-monitors-edid-extension
  */
 static void drm_parse_microsoft_vsdb(struct drm_connector *connector,
-				     const u8 *db)
+				     const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
-	u8 version = db[4];
-	bool desktop_usage = db[5] & BIT(6);
+	const u8 *data = cea_db_data(db);
+	u8 version = data[3];
+	bool desktop_usage = data[4] & BIT(6);
 
 	/* Version 1 and 2 for HMDs, version 3 flags desktop usage explicitly */
 	if (version == 1 || version == 2 || (version == 3 && !desktop_usage))
@@ -6373,7 +6374,7 @@ static void drm_parse_microsoft_vsdb(struct drm_connector *connector,
 
 	drm_dbg_kms(connector->dev,
 		    "[CONNECTOR:%d:%s] HMD or specialized display VSDB version %u: 0x%02x\n",
-		    connector->base.id, connector->name, version, db[5]);
+		    connector->base.id, connector->name, version, data[4]);
 }
 
 static void drm_parse_cea_ext(struct drm_connector *connector,
@@ -6423,7 +6424,7 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 			 cea_db_is_hdmi_forum_scdb(db))
 			drm_parse_hdmi_forum_scds(connector, db);
 		else if (cea_db_is_microsoft_vsdb(db))
-			drm_parse_microsoft_vsdb(connector, data);
+			drm_parse_microsoft_vsdb(connector, db);
 		else if (cea_db_is_y420cmdb(db))
 			parse_cta_y420cmdb(connector, db, &y420cmdb_map);
 		else if (cea_db_is_y420vdb(db))
