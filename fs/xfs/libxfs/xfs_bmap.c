@@ -4169,6 +4169,10 @@ xfs_bmapi_allocate(
 		 * is not on the busy list.
 		 */
 		bma->datatype = XFS_ALLOC_NOBUSY;
+		// Ensure whichfork is valid (0 or 1) before further checks
+		if (whichfork < 0 || whichfork > 1) {
+			return -EINVAL; // Invalid fork
+		}
 		if (whichfork == XFS_DATA_FORK || whichfork == XFS_COW_FORK) {
 			bma->datatype |= XFS_ALLOC_USERDATA;
 			if (bma->offset == 0)
