@@ -5418,7 +5418,7 @@ static void drm_calculate_luminance_range(struct drm_connector *connector)
 
 static uint8_t eotf_supported(const u8 *edid_ext)
 {
-	return edid_ext[2] &
+	return edid_ext[1] &
 		(BIT(HDMI_EOTF_TRADITIONAL_GAMMA_SDR) |
 		 BIT(HDMI_EOTF_TRADITIONAL_GAMMA_HDR) |
 		 BIT(HDMI_EOTF_SMPTE_ST2084) |
@@ -5427,28 +5427,29 @@ static uint8_t eotf_supported(const u8 *edid_ext)
 
 static uint8_t hdr_metadata_type(const u8 *edid_ext)
 {
-	return edid_ext[3] &
+	return edid_ext[2] &
 		BIT(HDMI_STATIC_METADATA_TYPE1);
 }
 
 static void
-drm_parse_hdr_metadata_block(struct drm_connector *connector, const u8 *db)
+drm_parse_hdr_metadata_block(struct drm_connector *connector, const struct cea_db *db)
 {
 	u16 len;
 
 	len = cea_db_payload_len(db);
+	const u8 *data = cea_db_data(db);
 
 	connector->hdr_sink_metadata.hdmi_type1.eotf =
-						eotf_supported(db);
+						eotf_supported(data);
 	connector->hdr_sink_metadata.hdmi_type1.metadata_type =
-						hdr_metadata_type(db);
+						hdr_metadata_type(data);
 
 	if (len >= 4)
-		connector->hdr_sink_metadata.hdmi_type1.max_cll = db[4];
+		connector->hdr_sink_metadata.hdmi_type1.max_cll = data[3];
 	if (len >= 5)
-		connector->hdr_sink_metadata.hdmi_type1.max_fall = db[5];
+		connector->hdr_sink_metadata.hdmi_type1.max_fall = data[4];
 	if (len >= 6) {
-		connector->hdr_sink_metadata.hdmi_type1.min_cll = db[6];
+		connector->hdr_sink_metadata.hdmi_type1.min_cll = data[5];
 
 		/* Calculate only when all values are available */
 		drm_calculate_luminance_range(connector);
@@ -6416,9 +6417,6 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 
 	cea_db_iter_edid_begin(drm_edid, &iter);
 	cea_db_iter_for_each(db, &iter) {
-		/* FIXME: convert parsers to use struct cea_db */
-		const u8 *data = (const u8 *)db;
-
 		if (cea_db_is_hdmi_vsdb(db))
 			drm_parse_hdmi_vsdb_video(connector, db);
 		else if (cea_db_is_hdmi_forum_vsdb(db) ||
@@ -6433,7 +6431,7 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 		else if (cea_db_is_vcdb(db))
 			drm_parse_vcdb(connector, db);
 		else if (cea_db_is_hdmi_hdr_metadata_block(db))
-			drm_parse_hdr_metadata_block(connector, data);
+			drm_parse_hdr_metadata_block(connector, db);
 		else if (cea_db_tag(db) == CTA_DB_VIDEO)
 			parse_cta_vdb(connector, db);
 		else if (cea_db_tag(db) == CTA_DB_AUDIO)
