@@ -10,6 +10,8 @@
 
 enum virtiovf_migf_state {
 	VIRTIOVF_MIGF_STATE_ERROR = 1,
+	VIRTIOVF_MIGF_STATE_PRECOPY = 2,
+	VIRTIOVF_MIGF_STATE_COMPLETE = 3,
 };
 
 enum virtiovf_load_state {
@@ -57,6 +59,7 @@ struct virtiovf_migration_file {
 	/* synchronize access to the file state */
 	struct mutex lock;
 	loff_t max_pos;
+	u64 pre_copy_initial_bytes;
 	u64 record_size;
 	u32 record_tag;
 	u8 has_obj_id:1;
@@ -90,6 +93,7 @@ struct virtiovf_pci_core_device {
 	/* protect migration state */
 	struct mutex state_mutex;
 	enum vfio_device_mig_state mig_state;
+	u16 num_pre_copy_calls;
 	/* protect the reset_done flow */
 	spinlock_t reset_lock;
 	struct virtiovf_migration_file *resuming_migf;
