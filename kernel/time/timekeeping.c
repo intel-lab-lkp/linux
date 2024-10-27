@@ -1536,6 +1536,7 @@ int do_settimeofday64(const struct timespec64 *ts)
 
 	/* Signal hrtimers about time change */
 	clock_was_set(CLOCK_SET_WALL);
+	ntp_notify_cmos_timer(true);
 
 	audit_tk_injoffset(ts_delta);
 	add_device_randomness(ts, sizeof(*ts));
@@ -1575,6 +1576,7 @@ static int timekeeping_inject_offset(const struct timespec64 *ts)
 
 	/* Signal hrtimers about time change */
 	clock_was_set(CLOCK_SET_WALL);
+	ntp_notify_cmos_timer(true);
 	return 0;
 }
 
@@ -1936,6 +1938,7 @@ void timekeeping_inject_sleeptime64(const struct timespec64 *delta)
 
 	/* Signal hrtimers about time change */
 	clock_was_set(CLOCK_SET_WALL | CLOCK_SET_BOOT);
+	ntp_notify_cmos_timer(true);
 }
 #endif
 
@@ -2658,7 +2661,6 @@ EXPORT_SYMBOL_GPL(random_get_entropy_fallback);
 int do_adjtimex(struct __kernel_timex *txc)
 {
 	struct audit_ntp_data ad;
-	bool offset_set = false;
 	bool clock_set = false;
 	struct timespec64 ts;
 	int ret;
@@ -2680,7 +2682,6 @@ int do_adjtimex(struct __kernel_timex *txc)
 		if (ret)
 			return ret;
 
-		offset_set = delta.tv_sec != 0;
 		audit_tk_injoffset(delta);
 	}
 
@@ -2714,7 +2715,11 @@ int do_adjtimex(struct __kernel_timex *txc)
 	if (clock_set)
 		clock_was_set(CLOCK_SET_WALL);
 
-	ntp_notify_cmos_timer(offset_set);
+	/* Time jump (ADJ_SETOFFSET) is handled by timekeeping_inject_offset(),
+	 * which calls ntp_notify_cmos_timer() to cancel NTP sync hrtimer.
+	 * For the rest of do_adjtimex(), NTP sync flag is not cleared, so no
+	 * need to cancel NTP sync hrtimer here. */
+	ntp_notify_cmos_timer(false);
 
 	return ret;
 }
