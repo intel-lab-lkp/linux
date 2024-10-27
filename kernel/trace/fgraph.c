@@ -1249,7 +1249,7 @@ int register_ftrace_graph(struct fgraph_ops *gops)
 {
 	static bool fgraph_initialized;
 	int command = 0;
-	int ret = 0;
+	int ret;
 	int i = -1;
 
 	guard(mutex)(&ftrace_lock);
