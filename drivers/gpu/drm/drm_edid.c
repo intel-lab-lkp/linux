@@ -6112,45 +6112,48 @@ void drm_get_max_frl_rate(int max_frl_rate, u8 *max_lanes, u8 *max_rate_per_lane
 }
 
 static void drm_parse_ycbcr420_deep_color_info(struct drm_connector *connector,
-					       const u8 *db)
+					       const struct cea_db *db)
 {
 	u8 dc_mask;
 	struct drm_hdmi_info *hdmi = &connector->display_info.hdmi;
+	const u8 *data = cea_db_data(db);
 
-	dc_mask = db[7] & DRM_EDID_YCBCR420_DC_MASK;
+	dc_mask = data[6] & DRM_EDID_YCBCR420_DC_MASK;
 	hdmi->y420_dc_modes = dc_mask;
 }
 
 static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
-			       const u8 *hf_scds)
+			       const struct cea_db *db)
 {
-	hdmi_dsc->v_1p2 = hf_scds[11] & DRM_EDID_DSC_1P2;
+	const u8 *hf_scds = cea_db_data(db);
+
+	hdmi_dsc->v_1p2 = hf_scds[10] & DRM_EDID_DSC_1P2;
 
 	if (!hdmi_dsc->v_1p2)
 		return;
 
-	hdmi_dsc->native_420 = hf_scds[11] & DRM_EDID_DSC_NATIVE_420;
-	hdmi_dsc->all_bpp = hf_scds[11] & DRM_EDID_DSC_ALL_BPP;
+	hdmi_dsc->native_420 = hf_scds[10] & DRM_EDID_DSC_NATIVE_420;
+	hdmi_dsc->all_bpp = hf_scds[10] & DRM_EDID_DSC_ALL_BPP;
 
-	if (hf_scds[11] & DRM_EDID_DSC_16BPC)
+	if (hf_scds[10] & DRM_EDID_DSC_16BPC)
 		hdmi_dsc->bpc_supported = 16;
-	else if (hf_scds[11] & DRM_EDID_DSC_12BPC)
+	else if (hf_scds[10] & DRM_EDID_DSC_12BPC)
 		hdmi_dsc->bpc_supported = 12;
-	else if (hf_scds[11] & DRM_EDID_DSC_10BPC)
+	else if (hf_scds[10] & DRM_EDID_DSC_10BPC)
 		hdmi_dsc->bpc_supported = 10;
 	else
 		/* Supports min 8 BPC if DSC 1.2 is supported*/
 		hdmi_dsc->bpc_supported = 8;
 
-	if (cea_db_payload_len(hf_scds) >= 12 && hf_scds[12]) {
+	if (cea_db_payload_len(db) >= 12 && hf_scds[11]) {
 		u8 dsc_max_slices;
 		u8 dsc_max_frl_rate;
 
-		dsc_max_frl_rate = (hf_scds[12] & DRM_EDID_DSC_MAX_FRL_RATE_MASK) >> 4;
+		dsc_max_frl_rate = (hf_scds[11] & DRM_EDID_DSC_MAX_FRL_RATE_MASK) >> 4;
 		drm_get_max_frl_rate(dsc_max_frl_rate, &hdmi_dsc->max_lanes,
 				     &hdmi_dsc->max_frl_rate_per_lane);
 
-		dsc_max_slices = hf_scds[12] & DRM_EDID_DSC_MAX_SLICES;
+		dsc_max_slices = hf_scds[11] & DRM_EDID_DSC_MAX_SLICES;
 
 		switch (dsc_max_slices) {
 		case 1:
@@ -6188,26 +6191,27 @@ static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
 		}
 	}
 
-	if (cea_db_payload_len(hf_scds) >= 13 && hf_scds[13])
-		hdmi_dsc->total_chunk_kbytes = hf_scds[13] & DRM_EDID_DSC_TOTAL_CHUNK_KBYTES;
+	if (cea_db_payload_len(db) >= 13 && hf_scds[12])
+		hdmi_dsc->total_chunk_kbytes = hf_scds[12] & DRM_EDID_DSC_TOTAL_CHUNK_KBYTES;
 }
 
 /* Sink Capability Data Structure */
 static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
-				      const u8 *hf_scds)
+				      const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	struct drm_hdmi_info *hdmi = &info->hdmi;
 	struct drm_hdmi_dsc_cap *hdmi_dsc = &hdmi->dsc_cap;
+	const u8 *hf_scds = cea_db_data(db);
 	int max_tmds_clock = 0;
 	u8 max_frl_rate = 0;
 	bool dsc_support = false;
 
 	info->has_hdmi_infoframe = true;
 
-	if (hf_scds[6] & 0x80) {
+	if (hf_scds[5] & 0x80) {
 		hdmi->scdc.supported = true;
-		if (hf_scds[6] & 0x40)
+		if (hf_scds[5] & 0x40)
 			hdmi->scdc.read_request = true;
 	}
 
@@ -6220,11 +6224,11 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 	 * Lets check it out.
 	 */
 
-	if (hf_scds[5]) {
+	if (hf_scds[4]) {
 		struct drm_scdc *scdc = &hdmi->scdc;
 
 		/* max clock is 5000 KHz times block value */
-		max_tmds_clock = hf_scds[5] * 5000;
+		max_tmds_clock = hf_scds[4] * 5000;
 
 		if (max_tmds_clock > 340000) {
 			info->max_tmds_clock = max_tmds_clock;
@@ -6234,21 +6238,21 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 			scdc->scrambling.supported = true;
 
 			/* Few sinks support scrambling for clocks < 340M */
-			if ((hf_scds[6] & 0x8))
+			if ((hf_scds[5] & 0x8))
 				scdc->scrambling.low_rates = true;
 		}
 	}
 
-	if (hf_scds[7]) {
-		max_frl_rate = (hf_scds[7] & DRM_EDID_MAX_FRL_RATE_MASK) >> 4;
+	if (hf_scds[6]) {
+		max_frl_rate = (hf_scds[6] & DRM_EDID_MAX_FRL_RATE_MASK) >> 4;
 		drm_get_max_frl_rate(max_frl_rate, &hdmi->max_lanes,
 				     &hdmi->max_frl_rate_per_lane);
 	}
 
-	drm_parse_ycbcr420_deep_color_info(connector, hf_scds);
+	drm_parse_ycbcr420_deep_color_info(connector, db);
 
-	if (cea_db_payload_len(hf_scds) >= 11 && hf_scds[11]) {
-		drm_parse_dsc_info(hdmi_dsc, hf_scds);
+	if (cea_db_payload_len(db) >= 11 && hf_scds[10]) {
+		drm_parse_dsc_info(hdmi_dsc, db);
 		dsc_support = true;
 	}
 
@@ -6417,7 +6421,7 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 			drm_parse_hdmi_vsdb_video(connector, db);
 		else if (cea_db_is_hdmi_forum_vsdb(db) ||
 			 cea_db_is_hdmi_forum_scdb(db))
-			drm_parse_hdmi_forum_scds(connector, data);
+			drm_parse_hdmi_forum_scds(connector, db);
 		else if (cea_db_is_microsoft_vsdb(db))
 			drm_parse_microsoft_vsdb(connector, data);
 		else if (cea_db_is_y420cmdb(db))
