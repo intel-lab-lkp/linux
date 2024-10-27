@@ -413,6 +413,7 @@ enum clk_gating_state {
  * @active_reqs: number of requests that are pending and should be waited for
  * completion before gating clocks.
  * @clk_gating_workq: workqueue for clock gating work.
+ * @lock: serielize access to the clk_gating members
  */
 struct ufs_clk_gating {
 	struct delayed_work gate_work;
@@ -426,6 +427,7 @@ struct ufs_clk_gating {
 	bool is_initialized;
 	int active_reqs;
 	struct workqueue_struct *clk_gating_workq;
+	spinlock_t lock;
 };
 
 /**
