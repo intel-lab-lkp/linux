@@ -453,6 +453,7 @@ struct ufs_clk_gating {
  * @is_initialized: Indicates whether clock scaling is initialized or not
  * @is_busy_started: tracks if busy period has started or not
  * @is_suspended: tracks if devfreq is suspended or not
+ * @lock: seriliaze access to the clock_scaling members
  */
 struct ufs_clk_scaling {
 	int active_reqs;
@@ -472,6 +473,7 @@ struct ufs_clk_scaling {
 	bool is_busy_started;
 	bool is_suspended;
 	bool suspend_on_no_request;
+	spinlock_t lock;
 };
 
 #define UFS_EVENT_HIST_LENGTH 8
