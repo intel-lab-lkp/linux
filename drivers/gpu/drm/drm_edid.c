@@ -6259,32 +6259,33 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 }
 
 static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
-					   const u8 *hdmi)
+					   const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	unsigned int dc_bpc = 0;
+	const u8 *hdmi = cea_db_data(db);
 
 	/* HDMI supports at least 8 bpc */
 	info->bpc = 8;
 
-	if (cea_db_payload_len(hdmi) < 6)
+	if (cea_db_payload_len(db) < 6)
 		return;
 
-	if (hdmi[6] & DRM_EDID_HDMI_DC_30) {
+	if (hdmi[5] & DRM_EDID_HDMI_DC_30) {
 		dc_bpc = 10;
 		info->edid_hdmi_rgb444_dc_modes |= DRM_EDID_HDMI_DC_30;
 		drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] HDMI sink does deep color 30.\n",
 			    connector->base.id, connector->name);
 	}
 
-	if (hdmi[6] & DRM_EDID_HDMI_DC_36) {
+	if (hdmi[5] & DRM_EDID_HDMI_DC_36) {
 		dc_bpc = 12;
 		info->edid_hdmi_rgb444_dc_modes |= DRM_EDID_HDMI_DC_36;
 		drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] HDMI sink does deep color 36.\n",
 			    connector->base.id, connector->name);
 	}
 
-	if (hdmi[6] & DRM_EDID_HDMI_DC_48) {
+	if (hdmi[5] & DRM_EDID_HDMI_DC_48) {
 		dc_bpc = 16;
 		info->edid_hdmi_rgb444_dc_modes |= DRM_EDID_HDMI_DC_48;
 		drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] HDMI sink does deep color 48.\n",
@@ -6302,7 +6303,7 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 	info->bpc = dc_bpc;
 
 	/* YCRCB444 is optional according to spec. */
-	if (hdmi[6] & DRM_EDID_HDMI_DC_Y444) {
+	if (hdmi[5] & DRM_EDID_HDMI_DC_Y444) {
 		info->edid_hdmi_ycbcr444_dc_modes = info->edid_hdmi_rgb444_dc_modes;
 		drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] HDMI sink does YCRCB444 in deep color.\n",
 			    connector->base.id, connector->name);
@@ -6312,7 +6313,7 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 	 * Spec says that if any deep color mode is supported at all,
 	 * then deep color 36 bit must be supported.
 	 */
-	if (!(hdmi[6] & DRM_EDID_HDMI_DC_36)) {
+	if (!(hdmi[5] & DRM_EDID_HDMI_DC_36)) {
 		drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] HDMI sink should do DC_36, but does not!\n",
 			    connector->base.id, connector->name);
 	}
@@ -6320,19 +6321,20 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 
 /* HDMI Vendor-Specific Data Block (HDMI VSDB, H14b-VSDB) */
 static void
-drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const u8 *db)
+drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const struct cea_db *db)
 {
 	struct drm_display_info *info = &connector->display_info;
 	u8 len = cea_db_payload_len(db);
+	const u8 *data = cea_db_data(db);
 
 	info->is_hdmi = true;
 
-	info->source_physical_address = (db[4] << 8) | db[5];
+	info->source_physical_address = (data[3] << 8) | data[4];
 
 	if (len >= 6)
-		info->dvi_dual = db[6] & 1;
+		info->dvi_dual = data[5] & 1;
 	if (len >= 7)
-		info->max_tmds_clock = db[7] * 5000;
+		info->max_tmds_clock = data[6] * 5000;
 
 	/*
 	 * Try to infer whether the sink supports HDMI infoframes.
@@ -6340,7 +6342,7 @@ drm_parse_hdmi_vsdb_video(struct drm_connector *connector, const u8 *db)
 	 * HDMI infoframe support was first added in HDMI 1.4. Assume the sink
 	 * supports infoframes if HDMI_Video_present is set.
 	 */
-	if (len >= 8 && db[8] & BIT(5))
+	if (len >= 8 && data[7] & BIT(5))
 		info->has_hdmi_infoframe = true;
 
 	drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] HDMI: DVI dual %d, max TMDS clock %d kHz\n",
@@ -6412,7 +6414,7 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 		const u8 *data = (const u8 *)db;
 
 		if (cea_db_is_hdmi_vsdb(db))
-			drm_parse_hdmi_vsdb_video(connector, data);
+			drm_parse_hdmi_vsdb_video(connector, db);
 		else if (cea_db_is_hdmi_forum_vsdb(db) ||
 			 cea_db_is_hdmi_forum_scdb(db))
 			drm_parse_hdmi_forum_scds(connector, data);
