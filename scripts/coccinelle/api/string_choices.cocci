@@ -282,6 +282,25 @@ e << str_on_off_r.E;
 
 coccilib.report.print_report(p[0], "opportunity for str_on_off(%s)" % e)
 
+@str_off_on depends on patch@
+expression E;
+@@
+-      ((E) ? "off" : "on")
++      str_off_on(E)
+
+@str_off_on_r depends on !patch@
+expression E;
+position P;
+@@
+*      E@P ? "off" : "on"
+
+@script:python depends on report@
+p << str_off_on_r.P;
+e << str_off_on_r.E;
+@@
+
+coccilib.report.print_report(p[0], "opportunity for str_off_on(%s)" % e)
+
 @str_yes_no depends on patch@
 expression E;
 @@
@@ -300,3 +319,22 @@ e << str_yes_no_r.E;
 @@
 
 coccilib.report.print_report(p[0], "opportunity for str_yes_no(%s)" % e)
+
+@str_no_yes depends on patch@
+expression E;
+@@
+-      ((E) ? "no" : "yes")
++      str_no_yes(E)
+
+@str_no_yes_r depends on !patch@
+expression E;
+position P;
+@@
+*      E@P ? "no" : "yes"
+
+@script:python depends on report@
+p << str_no_yes_r.P;
+e << str_no_yes_r.E;
+@@
+
+coccilib.report.print_report(p[0], "opportunity for str_no_yes(%s)" % e)
