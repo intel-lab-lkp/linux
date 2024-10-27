@@ -528,6 +528,7 @@ out:
 
 incomplete:
 	if (test_bit(NETFS_SREQ_CLEAR_TAIL, &subreq->flags)) {
+		netfs_reset_subreq_iter(rreq, subreq);
 		netfs_clear_unread(subreq);
 		subreq->transferred = subreq->len;
 		goto complete;
