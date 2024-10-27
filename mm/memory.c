@@ -4180,6 +4180,16 @@ static struct folio *alloc_swap_folio(struct vm_fault *vmf)
 
 	pte_unmap_unlock(pte, ptl);
 
+	if (!orders)
+		goto fallback;
+
+	/*
+	 * Avoid swapping in large folios when memcg is nearly full, as it
+	 * may quickly trigger additional swap-out and swap-in cycles.
+	 */
+	if (mem_cgroup_precharge_large_folio(vma->vm_mm, &entry))
+		goto fallback;
+
 	/* Try allocating the highest of the remaining orders. */
 	gfp = vma_thp_gfp_mask(vma);
 	while (orders) {
@@ -4717,6 +4727,13 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 	pte_unmap(pte);
 
 	if (!orders)
+		goto fallback;
+
+	/*
+	 * When memcg is nearly full, large folios can rapidly fill
+	 * the margin and trigger new reclamation
+	 */
+	if (mem_cgroup_precharge_large_folio(vma->vm_mm, NULL))
 		goto fallback;
 
 	/* Try allocating the highest of the remaining orders. */

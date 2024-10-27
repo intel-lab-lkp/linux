@@ -678,6 +678,9 @@ static inline int mem_cgroup_charge(struct folio *folio, struct mm_struct *mm,
 int mem_cgroup_hugetlb_try_charge(struct mem_cgroup *memcg, gfp_t gfp,
 		long nr_pages);
 
+int mem_cgroup_precharge_large_folio(struct mm_struct *mm,
+				swp_entry_t *entry);
+
 int mem_cgroup_swapin_charge_folio(struct folio *folio, struct mm_struct *mm,
 				  gfp_t gfp, swp_entry_t entry);
 
@@ -1178,6 +1181,12 @@ static inline int mem_cgroup_charge(struct folio *folio,
 
 static inline int mem_cgroup_hugetlb_try_charge(struct mem_cgroup *memcg,
 		gfp_t gfp, long nr_pages)
+{
+	return 0;
+}
+
+static inline int mem_cgroup_precharge_large_folio(struct mm_struct *mm,
+		swp_entry_t *entry)
 {
 	return 0;
 }

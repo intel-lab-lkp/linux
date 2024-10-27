@@ -4517,6 +4517,51 @@ int mem_cgroup_hugetlb_try_charge(struct mem_cgroup *memcg, gfp_t gfp,
 	return 0;
 }
 
+static inline bool mem_cgroup_has_margin(struct mem_cgroup *memcg)
+{
+	for (; !mem_cgroup_is_root(memcg); memcg = parent_mem_cgroup(memcg)) {
+		if (mem_cgroup_margin(memcg) < HPAGE_PMD_NR)
+			return false;
+	}
+
+	return true;
+}
+
+/**
+ * mem_cgroup_swapin_precharge_large_folio: Precharge large folios.
+ *
+ * @mm: mm context of the victim
+ * @entry: swap entry for which the folio will be allocated
+ *
+ * If we are arriving the edge of an almost full memcg, return error so that
+ * swap-in and anon faults can quickly fall back to small folios to avoid swap
+ * thrashing.
+ *
+ * Returns 0 on success, an error code on failure.
+ */
+int mem_cgroup_precharge_large_folio(struct mm_struct *mm, swp_entry_t *entry)
+{
+	struct mem_cgroup *memcg = NULL;
+	unsigned short id;
+	bool has_margin;
+
+	if (mem_cgroup_disabled())
+		return 0;
+
+	rcu_read_lock();
+	if (entry) {
+		id = lookup_swap_cgroup_id(*entry);
+		memcg = mem_cgroup_from_id(id);
+	}
+	if (!memcg || !css_tryget_online(&memcg->css))
+		memcg = get_mem_cgroup_from_mm(mm);
+	has_margin = mem_cgroup_has_margin(memcg);
+	rcu_read_unlock();
+
+	css_put(&memcg->css);
+	return has_margin ? 0 : -ENOMEM;
+}
+
 /**
  * mem_cgroup_swapin_charge_folio - Charge a newly allocated folio for swapin.
  * @folio: folio to charge.
