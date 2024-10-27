@@ -621,6 +621,7 @@ static inline void ahash_request_set_callback(struct ahash_request *req,
 {
 	req->base.complete = compl;
 	req->base.data = data;
+	flags &= ~CRYPTO_TFM_REQ_CHAIN;
 	req->base.flags = flags;
 }
 
@@ -644,6 +645,20 @@ static inline void ahash_request_set_crypt(struct ahash_request *req,
 	req->src = src;
 	req->nbytes = nbytes;
 	req->result = result;
+}
+
+static inline void ahash_reqchain_init(struct ahash_request *req,
+				       u32 flags, crypto_completion_t compl,
+				       void *data)
+{
+	ahash_request_set_callback(req, flags, compl, data);
+	crypto_reqchain_init(&req->base);
+}
+
+static inline void ahash_request_chain(struct ahash_request *req,
+				       struct ahash_request *head)
+{
+	crypto_request_chain(&req->base, &head->base);
 }
 
 /**
@@ -945,6 +960,16 @@ static inline void shash_desc_zero(struct shash_desc *desc)
 {
 	memzero_explicit(desc,
 			 sizeof(*desc) + crypto_shash_descsize(desc->tfm));
+}
+
+static inline int ahash_request_err(struct ahash_request *req)
+{
+	return req->base.err;
+}
+
+static inline bool ahash_is_async(struct crypto_ahash *tfm)
+{
+	return crypto_tfm_is_async(&tfm->base);
 }
 
 #endif	/* _CRYPTO_HASH_H */
