@@ -2670,6 +2670,7 @@ static int __init console_setup(char *str)
 	char *devname = NULL;
 	char *options;
 	char *s;
+	char *first_delim;
 	int idx;
 
 	/*
@@ -2685,8 +2686,13 @@ static int __init console_setup(char *str)
 	if (_braille_console_setup(&str, &brl_options))
 		return 1;
 
-	/* For a DEVNAME:0.0 style console the character device is unknown early */
-	if (strchr(str, ':'))
+	/*
+	 * For a DEVNAME:0.0 style console the character device is unknown
+	 * early. We must restrict this to before any comma to avoid interfering
+	 * with named options, like "loglevel".
+	 */
+	first_delim = strpbrk(str, ":,");
+	if (first_delim && *first_delim == ':')
 		devname = buf;
 	else
 		ttyname = buf;
