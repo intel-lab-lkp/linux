@@ -6303,3 +6303,62 @@ int ice_cgu_get_output_pin_state_caps(struct ice_hw *hw, u8 pin_id,
 
 	return 0;
 }
+
+/**
+ * ice_ptp_hw_ts_point_get - check if tx timestamping is latched on/post SFD
+ * @hw: pointer to the HW struct
+ * @point: return the configured tx timestamp latch point
+ *
+ * Verify if HW timestamping point is configured to measure at the beginning or
+ * post of SFD (Start of Frame Delimiter)
+ *
+ * Return: 0 on success, negative on error
+ */
+int ice_ptp_hw_ts_point_get(struct ice_hw *hw, enum ptp_ts_point *point)
+{
+	u8 port = hw->port_info->lport;
+	u32 val;
+	int err;
+
+	err = ice_read_mac_reg_eth56g(hw, port, PHY_MAC_XIF_MODE, &val);
+	if (err)
+		return err;
+	if (val & PHY_MAC_XIF_TS_SFD_ENA_M)
+		*point = PTP_TS_POINT_SFD;
+	else
+		*point = PTP_TS_POINT_POST_SFD;
+
+	return err;
+}
+
+/**
+ * ice_ptp_hw_ts_point_set - configure timestamping on/post SFD
+ * @hw: pointer to the HW struct
+ * @point: requested tx timestamp latch point
+ *
+ * Configure timestamping to measure at the beginning/post SFD (Start of Frame
+ * Delimiter)
+ *
+ * Return: 0 on success, negative on error
+ */
+int ice_ptp_hw_ts_point_set(struct ice_hw *hw, enum ptp_ts_point point)
+{
+	u8 port = hw->port_info->lport;
+	int err, val;
+
+	err = ice_read_mac_reg_eth56g(hw, port, PHY_MAC_XIF_MODE, &val);
+	if (err)
+		return err;
+	if ((val & PHY_MAC_XIF_TS_SFD_ENA_M && point == PTP_TS_POINT_SFD) ||
+	    (!(val & PHY_MAC_XIF_TS_SFD_ENA_M) &&
+	     point == PTP_TS_POINT_POST_SFD))
+		return -EINVAL;
+	if (point == PTP_TS_POINT_SFD)
+		val |= PHY_MAC_XIF_TS_SFD_ENA_M;
+	else if (point == PTP_TS_POINT_POST_SFD)
+		val &= ~PHY_MAC_XIF_TS_SFD_ENA_M;
+	else
+		return -EINVAL;
+
+	return ice_write_mac_reg_eth56g(hw, port, PHY_MAC_XIF_MODE, val);
+}
