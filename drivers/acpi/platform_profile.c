@@ -10,6 +10,7 @@
 #include <linux/sysfs.h>
 
 static struct platform_profile_handler *cur_profile;
+static LIST_HEAD(platform_profile_handler_list);
 static DEFINE_MUTEX(profile_lock);
 
 static const char * const profile_names[] = {
@@ -198,6 +199,7 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 		mutex_unlock(&profile_lock);
 		return err;
 	}
+	list_add_tail(&pprof->list, &platform_profile_handler_list);
 
 	cur_profile = pprof;
 	mutex_unlock(&profile_lock);
@@ -207,8 +209,9 @@ EXPORT_SYMBOL_GPL(platform_profile_register);
 
 int platform_profile_remove(struct platform_profile_handler *pprof)
 {
-	sysfs_remove_group(acpi_kobj, &platform_profile_group);
+	list_del(&pprof->list);
 
+	sysfs_remove_group(acpi_kobj, &platform_profile_group);
 	mutex_lock(&profile_lock);
 	cur_profile = NULL;
 	mutex_unlock(&profile_lock);
