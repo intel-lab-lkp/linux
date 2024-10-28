@@ -1676,6 +1676,7 @@ int handler_new_ref(struct v4l2_ctrl_handler *hdl,
 	u32 class_ctrl = V4L2_CTRL_ID2WHICH(id) | 1;
 	int bucket = id % hdl->nr_of_buckets;	/* which bucket to use */
 	unsigned int size_extra_req = 0;
+	int ret = 0;
 
 	if (ctrl_ref)
 		*ctrl_ref = NULL;
@@ -1722,6 +1723,13 @@ int handler_new_ref(struct v4l2_ctrl_handler *hdl,
 		/* Don't add duplicates */
 		if (ref->ctrl->id == id) {
 			kfree(new_ref);
+			/*
+			 * Either the driver creates the same control twice,
+			 * or the same control is present in an added control
+			 * handler.
+			 */
+			if (WARN_ON(hdl == ctrl->handler))
+				ret = -EEXIST;
 			goto unlock;
 		}
 		list_add(&new_ref->node, ref->node.prev);
@@ -1746,6 +1754,8 @@ insert_in_hash:
 
 unlock:
 	mutex_unlock(hdl->lock);
+	if (ret)
+		return handler_set_err(hdl, ret);
 	return 0;
 }
 
