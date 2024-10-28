@@ -39,6 +39,7 @@ struct perf_mem {
 	bool			all_kernel;
 	bool			all_user;
 	bool			data_type;
+	bool			report_hierarchy;
 	int			operation;
 	const char		*cpu_list;
 	DECLARE_BITMAP(cpu_bitmap, MAX_NR_CPUS);
@@ -329,6 +330,8 @@ static char *get_sort_order(struct perf_mem *mem)
 
 	if (mem->sort_key)
 		scnprintf(sort, sizeof(sort), "--sort=%s", mem->sort_key);
+	else if (mem->report_hierarchy && mem->data_type)
+		strcpy(sort, "--sort=type,mem,snoop,tlb");
 	else if (mem->data_type)
 		strcpy(sort, "--sort=mem,snoop,tlb,type");
 	/*
@@ -374,7 +377,7 @@ static int __cmd_report(int argc, const char **argv, struct perf_mem *mem,
 	if (mem->dump_raw)
 		return report_raw_events(mem);
 
-	rep_argc = argc + 3;
+	rep_argc = argc + 5;
 	rep_argv = calloc(rep_argc + 1, sizeof(char *));
 	if (!rep_argv)
 		return -1;
@@ -386,6 +389,9 @@ static int __cmd_report(int argc, const char **argv, struct perf_mem *mem,
 	new_sort_order = get_sort_order(mem);
 	if (new_sort_order)
 		rep_argv[i++] = new_sort_order;
+
+	if (mem->report_hierarchy)
+		rep_argv[i++] = "-H";
 
 	for (j = 0; j < argc; j++, i++)
 		rep_argv[i] = argv[j];
@@ -513,6 +519,8 @@ int cmd_mem(int argc, const char **argv)
 		   sort_order_help),
 	OPT_BOOLEAN('T', "type-profile", &mem.data_type,
 		    "Show data-type profile result"),
+	OPT_BOOLEAN('H', "hierarchy", &mem.report_hierarchy,
+		    "Show entries in a hierarchy"),
 	OPT_PARENT(mem_options)
 	};
 	const char *const mem_subcommands[] = { "record", "report", NULL };

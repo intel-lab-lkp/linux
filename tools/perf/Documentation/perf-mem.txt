@@ -125,6 +125,12 @@ REPORT OPTIONS
 	Specify the field separator used when dump raw samples (-D option). By default,
 	The separator is the space character.
 
+-H::
+--hierarchy::
+	Enable hierarchical output.  In the hierarchy mode, each sort key groups
+	samples based on the criteria and then sub-divide it using the lower
+	level sort key.  See linkperf:perf-report[1] for details.
+
 In addition, for report all perf report options are valid, and for record
 all perf record options.
 
