@@ -25,6 +25,11 @@ properties:
   avdd-supply: true
   dvdd-supply: true
 
+  syna,boot-on:
+    description: |
+      The display has been initialized and left on by the bootloader/firmware.
+    type: boolean
+
 required:
   - compatible
   - reg
