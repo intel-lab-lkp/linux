@@ -2437,6 +2437,10 @@ static int process_isoc_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 		sum_trbs_for_length = true;
 		if (ep_trb != td->last_trb)
 			td->error_mid_td = true;
+		if ((xhci->quirks & XHCI_ETRON_HOST) &&
+		    td->urb->dev->speed >= USB_SPEED_SUPER &&
+		    td->first_trb == td->last_trb)
+			ep_ring->spurious_event = true;
 		break;
 	case COMP_STOPPED:
 		sum_trbs_for_length = true;
@@ -2655,8 +2659,8 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	case COMP_SUCCESS:
 		if (EVENT_TRB_LEN(le32_to_cpu(event->transfer_len)) != 0) {
 			trb_comp_code = COMP_SHORT_PACKET;
-			xhci_dbg(xhci, "Successful completion on short TX for slot %u ep %u with last td short %d\n",
-				 slot_id, ep_index, ep_ring->last_td_was_short);
+			xhci_dbg(xhci, "Successful completion on short TX for slot %u ep %u with spurious event %d\n",
+				 slot_id, ep_index, ep_ring->spurious_event);
 		}
 		break;
 	case COMP_SHORT_PACKET:
@@ -2801,13 +2805,13 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	if (list_empty(&ep_ring->td_list)) {
 		/*
 		 * Don't print wanings if ring is empty due to a stopped endpoint generating an
-		 * extra completion event if the device was suspended. Or, a event for the last TRB
-		 * of a short TD we already got a short event for. The short TD is already removed
-		 * from the TD list.
+		 * extra completion event if the device was suspended. Or, the spurious event flag
+		 * is set at the last TD of the TD list due to a short transfer or an one-TRB isoc
+		 * TD error, and such TD is already removed from the TD list.
 		 */
 		if (trb_comp_code != COMP_STOPPED &&
 		    trb_comp_code != COMP_STOPPED_LENGTH_INVALID &&
-		    !ep_ring->last_td_was_short) {
+		    !ep_ring->spurious_event) {
 			xhci_warn(xhci, "Event TRB for slot %u ep %u with no TDs queued\n",
 				  slot_id, ep_index);
 		}
@@ -2851,11 +2855,11 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 
 			/*
 			 * Some hosts give a spurious success event after a short
-			 * transfer. Ignore it.
+			 * transfer or an one-TRB isoc TD error. Ignore it.
 			 */
 			if ((xhci->quirks & XHCI_SPURIOUS_SUCCESS) &&
-			    ep_ring->last_td_was_short) {
-				ep_ring->last_td_was_short = false;
+			    ep_ring->spurious_event) {
+				ep_ring->spurious_event = false;
 				return 0;
 			}
 
@@ -2884,9 +2888,9 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	} while (ep->skip);
 
 	if (trb_comp_code == COMP_SHORT_PACKET)
-		ep_ring->last_td_was_short = true;
+		ep_ring->spurious_event = true;
 	else
-		ep_ring->last_td_was_short = false;
+		ep_ring->spurious_event = false;
 
 	ep_trb = &ep_seg->trbs[(ep_trb_dma - ep_seg->dma) / sizeof(*ep_trb)];
 	trace_xhci_handle_transfer(ep_ring, (struct xhci_generic_trb *) ep_trb);
