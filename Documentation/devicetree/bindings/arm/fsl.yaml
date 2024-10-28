@@ -1079,6 +1079,8 @@ properties:
       - description: i.MX8MP based Boards
         items:
           - enum:
+              - abb,imx8mp-aristianetos3 # i.MX8MP ABB Board
+              - abb,imx8mp-aristianetos3-som # i.MX8MP ABB Board SoM
               - beacon,imx8mp-beacon-kit  # i.MX8MP Beacon Development Kit
               - dmo,imx8mp-data-modul-edm-sbc # i.MX8MP eDM SBC
               - emcraft,imx8mp-navqp      # i.MX8MP Emcraft Systems NavQ+ Kit
