@@ -258,6 +258,8 @@ static int r63353_panel_probe(struct mipi_dsi_device *dsi)
 	int ret = 0;
 	struct device *dev = &dsi->dev;
 	struct r63353_panel *panel;
+	bool initialized;
+	enum gpiod_flags rflags;
 
 	panel = devm_kzalloc(&dsi->dev, sizeof(*panel), GFP_KERNEL);
 	if (!panel)
@@ -282,7 +284,9 @@ static int r63353_panel_probe(struct mipi_dsi_device *dsi)
 	if (IS_ERR(panel->avdd))
 		return PTR_ERR(panel->avdd);
 
-	panel->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+	initialized = of_property_read_bool(dev->of_node, "syna,boot-on");
+	rflags = initialized ? GPIOD_ASIS : GPIOD_OUT_LOW;
+	panel->reset_gpio = devm_gpiod_get(dev, "reset", rflags);
 	if (IS_ERR(panel->reset_gpio)) {
 		dev_err(dev, "failed to get RESET GPIO\n");
 		return PTR_ERR(panel->reset_gpio);
@@ -297,6 +301,10 @@ static int r63353_panel_probe(struct mipi_dsi_device *dsi)
 		return ret;
 
 	drm_panel_add(&panel->base);
+	if (initialized) {
+		r63353_panel_power_on(panel);
+		panel->base.prepared = true;
+	}
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {
