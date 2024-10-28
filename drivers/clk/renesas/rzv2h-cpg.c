@@ -98,6 +98,7 @@ struct pll_clk {
  *
  * @priv: CPG private data
  * @hw: handle between common and hardware-specific interfaces
+ * @no_pm: flag to indicate PM is not supported
  * @on_index: register offset
  * @on_bit: ON/MON bit
  * @mon_index: monitor register offset
@@ -106,6 +107,7 @@ struct pll_clk {
 struct mod_clock {
 	struct rzv2h_cpg_priv *priv;
 	struct clk_hw hw;
+	bool no_pm;
 	u8 on_index;
 	u8 on_bit;
 	s8 mon_index;
@@ -541,6 +543,7 @@ rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
 	clock->on_bit = mod->on_bit;
 	clock->mon_index = mod->mon_index;
 	clock->mon_bit = mod->mon_bit;
+	clock->no_pm = mod->no_pm;
 	clock->priv = priv;
 	clock->hw.init = &init;
 
@@ -658,6 +661,32 @@ static int rzv2h_cpg_reset_controller_register(struct rzv2h_cpg_priv *priv)
 	return devm_reset_controller_register(priv->dev, &priv->rcdev);
 }
 
+static bool rzv2h_cpg_is_pm_clk(struct rzv2h_cpg_priv *priv,
+				const struct of_phandle_args *clkspec)
+{
+	struct mod_clock *clock;
+	struct clk_hw *hw;
+	unsigned int id;
+
+	if (clkspec->args_count != 2)
+		return true;
+
+	id = clkspec->args[1];
+	if (clkspec->args[0] != CPG_MOD ||
+	    id >= priv->num_core_clks + priv->num_mod_clks)
+		return true;
+
+	if (priv->clks[priv->num_core_clks + id] == ERR_PTR(-ENOENT))
+		return true;
+
+	hw = __clk_get_hw(priv->clks[priv->num_core_clks + id]);
+	clock = to_mod_clock(hw);
+	if (clock->no_pm)
+		return false;
+
+	return true;
+}
+
 /**
  * struct rzv2h_cpg_pd - RZ/V2H power domain data structure
  * @priv: pointer to CPG private data structure
@@ -670,6 +699,8 @@ struct rzv2h_cpg_pd {
 
 static int rzv2h_cpg_attach_dev(struct generic_pm_domain *domain, struct device *dev)
 {
+	struct rzv2h_cpg_pd *pd = container_of(domain, struct rzv2h_cpg_pd, genpd);
+	struct rzv2h_cpg_priv *priv = pd->priv;
 	struct device_node *np = dev->of_node;
 	struct of_phandle_args clkspec;
 	bool once = true;
@@ -679,6 +710,12 @@ static int rzv2h_cpg_attach_dev(struct generic_pm_domain *domain, struct device 
 
 	while (!of_parse_phandle_with_args(np, "clocks", "#clock-cells", i,
 					   &clkspec)) {
+		if (!rzv2h_cpg_is_pm_clk(priv, &clkspec)) {
+			of_node_put(clkspec.np);
+			i++;
+			continue;
+		}
+
 		if (once) {
 			once = false;
 			error = pm_clk_create(dev);
