@@ -1789,8 +1789,8 @@ struct ncsi_dev *ncsi_register_dev(struct net_device *dev,
 	ndp->ptype.dev = dev;
 	dev_add_pack(&ndp->ptype);
 
-	pdev = to_platform_device(dev->dev.parent);
-	if (pdev) {
+	if (dev->dev.parent && dev_is_platform(dev->dev.parent)) {
+		pdev = to_platform_device(dev->dev.parent);
 		np = pdev->dev.of_node;
 		if (np && (of_property_read_bool(np, "mellanox,multi-host") ||
 			   of_property_read_bool(np, "mlx,multi-host")))
