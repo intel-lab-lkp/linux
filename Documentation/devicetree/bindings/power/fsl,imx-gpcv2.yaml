@@ -94,6 +94,12 @@ properties:
             minItems: 1
             maxItems: 4
 
+          fsl,boot-on:
+            description: |
+              The power-domain has been initialized and left on  by the
+              bootloader/firmware.
+            type: boolean
+
         required:
           - '#power-domain-cells'
           - reg
