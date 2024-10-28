@@ -7,6 +7,7 @@
  *  regular file handling primitives for fat-based filesystems
  */
 
+#include "linux/spinlock.h"
 #include <linux/capability.h>
 #include <linux/module.h>
 #include <linux/compat.h>
@@ -306,6 +307,9 @@ error:
 	return err;
 }
 
+/* Prevent data race in fat_free. */
+static DEFINE_SPINLOCK(cluster_lock);
+
 /* Free all clusters after the skip'th cluster. */
 static int fat_free(struct inode *inode, int skip)
 {
@@ -343,7 +347,10 @@ static int fat_free(struct inode *inode, int skip)
 		struct fat_entry fatent;
 		int ret, fclus, dclus;
 
+		/* Ensure fat_get_cluster isn't called while freeing. */
+		spin_lock(&cluster_lock);
 		ret = fat_get_cluster(inode, skip - 1, &fclus, &dclus);
+		spin_unlock(&cluster_lock);
 		if (ret < 0)
 			return ret;
 		else if (ret == FAT_ENT_EOF)
@@ -373,7 +380,12 @@ static int fat_free(struct inode *inode, int skip)
 	inode->i_blocks = skip << (MSDOS_SB(sb)->cluster_bits - 9);
 
 	/* Freeing the remained cluster chain */
-	return fat_free_clusters(inode, free_start);
+	int ret;
+
+	spin_lock(&cluster_lock);
+	ret = fat_free_clusters(inode, free_start);
+	spin_unlock(&cluster_lock);
+	return ret;
 }
 
 void fat_truncate_blocks(struct inode *inode, loff_t offset)
