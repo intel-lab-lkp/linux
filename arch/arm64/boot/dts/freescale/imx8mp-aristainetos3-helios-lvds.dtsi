@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2024 Heiko Schocher <hs@denx.de>
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/pwm/pwm.h>
+
+&{/} {
+	panel: panel {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_lcd0_vdd_en>;
+		compatible = "lg,lb070wv8";
+		backlight = <&lvds_backlight>;
+		enable-gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&ldb_lvds_ch0>;
+			};
+		};
+	};
+};
+
+&gpio3 {
+	mipi_lvds_select {
+		gpio-hog;
+		gpios = <23 GPIO_ACTIVE_HIGH>;
+		output-low;
+		line-name = "mipi_lvds_select";
+	};
+};
+
+&hdmi_blk_ctrl {
+	status = "disabled";
+};
+
+&hdmi_pvi {
+	status = "disabled";
+};
+
+&hdmi_tx {
+	status = "disabled";
+};
+
+&hdmi_tx_phy {
+	status = "disabled";
+};
+
+&irqsteer_hdmi {
+	status = "disabled";
+};
+
+&ldb_lvds_ch0 {
+	fsl,data-mapping = "jeida";
+	fsl,data-width = <24>;
+	remote-endpoint = <&panel_in>;
+};
+
+&lcdif1 {
+	status = "disabled";
+};
+
+&lcdif2 {
+	status = "okay";
+};
+
+&lcdif3 {
+	status = "disabled";
+};
+
+&lvds_backlight {
+	status = "okay";
+};
+
+&lvds_bridge {
+	status = "okay";
+};
+
+&media_blk_ctrl {
+	/*
+	 * The internal divider will always divide the output LVDS clock by 7
+	 * so our display needs 33246000 Hz, so set VIDEO_PLL1 to
+	 * 33246000 * 7 = 232722000 Hz
+	 */
+	assigned-clock-rates = <500000000>, <200000000>, <0>, <0>, <232722000>;
+};

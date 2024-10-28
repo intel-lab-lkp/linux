@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2024 Heiko Schocher <hs@denx.de>
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+
+&{/} {
+	helios_gpio_leds {
+		compatible = "gpio-leds";
+
+		helios_blue {
+			label = "helios:blue";
+			gpios = <&helios_pca6416 15 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		helios_green {
+			label = "helios:green";
+			gpios = <&helios_pca6416 14 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		helios_red {
+			label = "helios:red";
+			gpios = <&helios_pca6416 12 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+
+		helios_yellow {
+			label = "helios:yellow";
+			gpios = <&helios_pca6416 13 GPIO_ACTIVE_LOW>;
+			default-state = "off";
+		};
+	};
+};
+
+&dp83867_0 {
+	status = "disabled";
+};
+
+&ecspi1 {
+	spidev1_0: spi@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <54000000>;
+	};
+
+	spidev1_1: spi@1 {
+		compatible = "rohm,dh2228fv";
+		reg = <1>;
+		spi-max-frequency = <54000000>;
+	};
+};
+
+&ecspi2 {
+	spidev2_0: spi@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <54000000>;
+	};
+};
+
+&fec {
+	status = "disabled";
+};
+
+&i2c1 {
+	eeprom@57 {
+		compatible = "atmel,24c64";
+		reg = <0x57>;
+	};
+};
+
+&i2c3 {
+	helios_pca6416: gpio@20 {
+		compatible = "ti,tca6416";
+		reg = <0x20>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		gpio-line-names = "DIN0_CON",
+			"DIN1_CON",
+			"DIN2_CON",
+			"DIN3_CON",
+			"DIN4_CON",
+			"DIN5_CON",
+			"DIN6_CON",
+			"DIN7_CON",
+			"PM102_RES",
+			"COMx_RES",
+			"BPL_RES",
+			"PC_RES",
+			"LED_RED",
+			"LED_YELLOW",
+			"LED_GREEN",
+			"LED_BLUE";
+	};
+
+	rtc@68 {
+		compatible = "st,m41t00";
+		reg = <0x68>;
+	};
+};

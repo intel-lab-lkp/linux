@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2024 Heiko Schocher <hs@denx.de>
+ */
+/dts-v1/;
+/plugin/;
+
+#include "imx8mp-aristainetos3-adpismarc.dtsi"
+
+&{/} {
+	model = "Aristainetos3 ADLink PI SMARC carrier";
+	compatible = "abb,aristainetos3-adpismarc", "imx8mp-aristianetos3",
+		     "abb,aristianetos3-som", "fsl,imx8mp";
+};

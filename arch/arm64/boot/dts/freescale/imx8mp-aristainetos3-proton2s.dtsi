@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2024 Heiko Schocher <hs@denx.de>
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+
+&{/} {
+	gpio-leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_gpio_led>;
+
+		leda0 {
+			label = "leda0";
+			gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+		leda1 {
+			label = "leda1";
+			gpios = <&gpio2 7 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+	};
+
+	watchdog {
+		/* MAX6371KA */
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_watchdog_gpio>;
+		compatible = "linux,wdt-gpio";
+		always-running;
+		gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+		hw_algo = "level";
+		/* Reset triggers in 3..9 seconds */
+		hw_margin_ms = <1500>;
+		status = "okay";
+	};
+};
+
+&dp83867_0 {
+	status = "disabled";
+};
+
+&eqos {
+	max-speed = <100>;
+};
+
+&fec {
+	status = "disabled";
+};
+
+&ecspi1{
+	fsl,spi-num-chipselects = <1>;
+	pinctrl-0 = <&pinctrl_ecspi1>;
+	cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
+
+	spidev1_0: spi@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <54000000>;
+	};
+
+};
+
+&ecspi2 {
+	spidev2_0: spi@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <54000000>;
+	};
+};
+
+&gpio1 {
+	gpio-line-names =
+		"", "", "", "", "", "", "", "power",
+		"", "", "", "", "", "", "", "",
+		"", "", "", "", "", "", "", "",
+		"", "", "", "", "", "", "", "";
+};
+
+&gpio6 {
+	gpio-line-names =
+		"relay0", "relay1", "relay2",
+		"heater", "fan", "spare",
+		"clear", "fault";
+};
+
+&i2c2 {
+	tlc59108@40 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		compatible = "ti,tlc59108";
+		reg = <0x40>;
+
+		system_red@0 {
+			label = "system:red";
+			reg = <0x0>;
+		};
+
+		system_green@1 {
+			label = "system:green";
+			reg = <0x1>;
+		};
+
+		hydrogen_green@2 {
+			label = "hydrogen:green";
+			reg = <0x2>;
+		};
+
+		hydrogen_red@3 {
+			label = "hydrogen:red";
+			reg = <0x3>;
+		};
+
+		hydrogen_blue@4 {
+			label = "hydrogen:blue";
+			reg = <0x4>;
+		};
+
+		moisture_red@5 {
+			label = "moisture:red";
+			reg = <0x5>;
+		};
+
+		moisture_green@6 {
+			label = "moisture:green";
+			reg = <0x6>;
+		};
+
+		moisture_blue@7 {
+			label = "moisture:blue";
+			reg = <0x7>;
+		};
+	};
+
+	rtc1: rtc@68 {
+		compatible = "dallas,ds1339";
+		reg = <0x68>;
+	};
+};
+
+// SER3
+&uart1 {
+	pinctrl-0 = <&pinctrl_uart1>;
+};
+
+// SER0
+&uart2 {
+	pinctrl-0 = <&pinctrl_uart2>;
+};
+
+// SER1
+&uart3 {
+	pinctrl-0 = <&pinctrl_uart3>;
+};
+
+// SER2
+&uart4 {
+	linux,rs485-enabled-at-boot-time;
+	uart-has-rtscts;
+	rs485-rts-active-low;
+	rs485-rts-delay = <0 0>;
+	rts-gpios = <&gpio3 9 GPIO_ACTIVE_HIGH>;
+};
+
+&usdhc1 {
+	status = "disabled";
+};
+
+&wdog1 {
+	status = "okay";
+};
+
+&iomuxc {
+	pinctrl-0 = <&pinctrl_gpio_proton2s>;
+};

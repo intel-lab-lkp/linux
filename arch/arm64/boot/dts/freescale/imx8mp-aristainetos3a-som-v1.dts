@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2024 Heiko Schocher <hs@denx.de>
+ *
+ * IMX8MP ADLINK raw SoM carrier variant
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/phy/phy-imx8-pcie.h>
+#include "imx8mp-aristainetos3a-som-v1.dtsi"
+
+/ {
+	model = "Aristainetos3 raw SoM carrier";
+	compatible = "abb,imx8mp-aristianetos3", "abb,imx8mp-aristianetos3-som",
+		     "fsl,imx8mp";
+};
