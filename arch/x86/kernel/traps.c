@@ -537,7 +537,8 @@ DEFINE_IDTENTRY(exc_bounds)
 enum kernel_gp_hint {
 	GP_NO_HINT,
 	GP_NON_CANONICAL,
-	GP_CANONICAL
+	GP_CANONICAL,
+	GP_LASS_VIOLATION
 };
 
 /*
@@ -573,6 +574,8 @@ static enum kernel_gp_hint get_kernel_gp_address(struct pt_regs *regs,
 	if (*addr < ~__VIRTUAL_MASK &&
 	    *addr + insn.opnd_bytes - 1 > __VIRTUAL_MASK)
 		return GP_NON_CANONICAL;
+	else if (*addr < ~__VIRTUAL_MASK && cpu_feature_enabled(X86_FEATURE_LASS))
+		return GP_LASS_VIOLATION;
 #endif
 
 	return GP_CANONICAL;
@@ -696,6 +699,11 @@ DEFINE_IDTENTRY_ERRORCODE(exc_general_protection)
 	char desc[sizeof(GPFSTR) + 50 + 2*sizeof(unsigned long) + 1] = GPFSTR;
 	enum kernel_gp_hint hint = GP_NO_HINT;
 	unsigned long gp_addr;
+	static char *help[] = {
+		[GP_NON_CANONICAL]	= "probably for non-canonical address",
+		[GP_CANONICAL]		= "maybe for address",
+		[GP_LASS_VIOLATION]	= "LASS prevented access to address"
+	};
 
 	if (user_mode(regs) && try_fixup_enqcmd_gp())
 		return;
@@ -735,9 +743,7 @@ DEFINE_IDTENTRY_ERRORCODE(exc_general_protection)
 		hint = get_kernel_gp_address(regs, &gp_addr);
 
 	if (hint != GP_NO_HINT)
-		snprintf(desc, sizeof(desc), GPFSTR ", %s 0x%lx",
-			 (hint == GP_NON_CANONICAL) ? "probably for non-canonical address"
-						    : "maybe for address",
+		snprintf(desc, sizeof(desc), GPFSTR ", %s 0x%lx", help[hint],
 			 gp_addr);
 
 	/*
