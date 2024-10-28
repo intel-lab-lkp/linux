@@ -6793,12 +6793,10 @@ ftrace_graph_set_hash(struct ftrace_hash *hash, char *buffer)
 
 	func_g.len = strlen(func_g.search);
 
-	mutex_lock(&ftrace_lock);
+	guard(mutex)(&ftrace_lock);
 
-	if (unlikely(ftrace_disabled)) {
-		mutex_unlock(&ftrace_lock);
+	if (unlikely(ftrace_disabled))
 		return -ENODEV;
-	}
 
 	do_for_each_ftrace_rec(pg, rec) {
 
@@ -6814,7 +6812,7 @@ ftrace_graph_set_hash(struct ftrace_hash *hash, char *buffer)
 				if (entry)
 					continue;
 				if (add_hash_entry(hash, rec->ip) == NULL)
-					goto out;
+					return 0;
 			} else {
 				if (entry) {
 					free_hash_entry(hash, entry);
@@ -6823,13 +6821,8 @@ ftrace_graph_set_hash(struct ftrace_hash *hash, char *buffer)
 			}
 		}
 	} while_for_each_ftrace_rec();
-out:
-	mutex_unlock(&ftrace_lock);
 
-	if (fail)
-		return -EINVAL;
-
-	return 0;
+	return fail ? -EINVAL : 0;
 }
 
 static ssize_t
