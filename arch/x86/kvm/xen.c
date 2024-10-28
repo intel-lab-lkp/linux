@@ -265,9 +265,8 @@ static void kvm_xen_stop_timer(struct kvm_vcpu *vcpu)
 
 static void kvm_xen_init_timer(struct kvm_vcpu *vcpu)
 {
-	hrtimer_init(&vcpu->arch.xen.timer, CLOCK_MONOTONIC,
-		     HRTIMER_MODE_ABS_HARD);
-	vcpu->arch.xen.timer.function = xen_timer_callback;
+	hrtimer_setup(&vcpu->arch.xen.timer, xen_timer_callback, CLOCK_MONOTONIC,
+		      HRTIMER_MODE_ABS_HARD);
 }
 
 static void kvm_xen_update_runstate_guest(struct kvm_vcpu *v, bool atomic)
