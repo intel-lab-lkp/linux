@@ -1547,11 +1547,17 @@ emsgsize:
 			flags &= ~MSG_SPLICE_PAGES;
 	}
 
-	if (cork->tx_flags & SKBTX_ANY_TSTAMP &&
-	    READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_OPT_ID) {
-		if (cork->flags & IPCORK_TS_OPT_ID) {
-			tskey = cork->ts_opt_id;
-		} else {
+	if (cork->tx_flags & SKBTX_ANY_TSTAMP) {
+		if (READ_ONCE(sk->sk_tsflags) & SOF_TIMESTAMPING_OPT_ID) {
+			if (cork->flags & IPCORK_TS_OPT_ID) {
+				tskey = cork->ts_opt_id;
+			} else {
+				tskey = atomic_inc_return(&sk->sk_tskey) - 1;
+				hold_tskey = true;
+			}
+		}
+		if (!hold_tskey &&
+		    READ_ONCE(sk->sk_tsflags_bpf) & SOF_TIMESTAMPING_OPT_ID) {
 			tskey = atomic_inc_return(&sk->sk_tskey) - 1;
 			hold_tskey = true;
 		}
