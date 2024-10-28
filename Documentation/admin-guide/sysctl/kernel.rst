@@ -1065,8 +1065,8 @@ This sysctl is deprecated and will be removed in future. Please consider using
 ``kernel.console_loglevel`` or ``kernel.default_message_loglevel`` instead.
 
 The four values in printk denote: ``console_loglevel``,
-``default_message_loglevel``, ``minimum_console_loglevel`` and
-``default_console_loglevel`` respectively.
+``default_message_loglevel``, ``minimum_console_loglevel`` and an unused legacy
+value respectively.
 
 These values influence printk() behavior when printing or
 logging error messages.
@@ -1078,7 +1078,6 @@ default_message_loglevel messages without an explicit priority
                          will be printed with this priority
 minimum_console_loglevel minimum (highest) value to which
                          console_loglevel can be set
-default_console_loglevel default value for console_loglevel
 ======================== =====================================
 
 
