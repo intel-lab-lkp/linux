@@ -2679,7 +2679,7 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 	int is_udplite = IS_UDPLITE(sk);
 
 	if (level == SOL_SOCKET) {
-		err = sk_setsockopt(sk, level, optname, optval, optlen);
+		err = sk_setsockopt(sk, level, optname, optval, optlen, false);
 
 		if (optname == SO_RCVBUF || optname == SO_RCVBUFFORCE) {
 			sockopt_lock_sock(sk);

@@ -1775,7 +1775,7 @@ static inline void skb_set_owner_edemux(struct sk_buff *skb, struct sock *sk)
 #endif
 
 int sk_setsockopt(struct sock *sk, int level, int optname,
-		  sockptr_t optval, unsigned int optlen);
+		  sockptr_t optval, unsigned int optlen, bool bpf_timetamping);
 int sock_setsockopt(struct socket *sock, int level, int op,
 		    sockptr_t optval, unsigned int optlen);
 int do_sock_setsockopt(struct socket *sock, bool compat, int level,
@@ -1784,7 +1784,7 @@ int do_sock_getsockopt(struct socket *sock, bool compat, int level,
 		       int optname, sockptr_t optval, sockptr_t optlen);
 
 int sk_getsockopt(struct sock *sk, int level, int optname,
-		  sockptr_t optval, sockptr_t optlen);
+		  sockptr_t optval, sockptr_t optlen, bool bpf_timetamping);
 int sock_gettstamp(struct socket *sock, void __user *userstamp,
 		   bool timeval, bool time32);
 struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,

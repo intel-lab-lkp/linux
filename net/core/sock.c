@@ -941,6 +941,19 @@ int sock_set_timestamping(struct sock *sk, int optname,
 	return 0;
 }
 
+static int sock_set_timestamping_bpf(struct sock *sk,
+				     struct so_timestamping timestamping)
+{
+	u32 flags = timestamping.flags;
+
+	if (flags & ~SOF_TIMESTAMPING_BPF_SUPPPORTED_MASK)
+		return -EINVAL;
+
+	WRITE_ONCE(sk->sk_tsflags_bpf, flags);
+
+	return 0;
+}
+
 void sock_set_keepalive(struct sock *sk)
 {
 	lock_sock(sk);
@@ -1159,7 +1172,7 @@ static int sockopt_validate_clockid(__kernel_clockid_t value)
  */
 
 int sk_setsockopt(struct sock *sk, int level, int optname,
-		  sockptr_t optval, unsigned int optlen)
+		  sockptr_t optval, unsigned int optlen, bool bpf_timetamping)
 {
 	struct so_timestamping timestamping;
 	struct socket *sock = sk->sk_socket;
@@ -1409,7 +1422,10 @@ set_sndbuf:
 			memset(&timestamping, 0, sizeof(timestamping));
 			timestamping.flags = val;
 		}
-		ret = sock_set_timestamping(sk, optname, timestamping);
+		if (!bpf_timetamping)
+			ret = sock_set_timestamping(sk, optname, timestamping);
+		else
+			ret = sock_set_timestamping_bpf(sk, timestamping);
 		break;
 
 	case SO_RCVLOWAT:
@@ -1626,7 +1642,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 		    sockptr_t optval, unsigned int optlen)
 {
 	return sk_setsockopt(sock->sk, level, optname,
-			     optval, optlen);
+			     optval, optlen, false);
 }
 EXPORT_SYMBOL(sock_setsockopt);
 
@@ -1670,7 +1686,7 @@ static int groups_to_user(sockptr_t dst, const struct group_info *src)
 }
 
 int sk_getsockopt(struct sock *sk, int level, int optname,
-		  sockptr_t optval, sockptr_t optlen)
+		  sockptr_t optval, sockptr_t optlen, bool bpf_timetamping)
 {
 	struct socket *sock = sk->sk_socket;
 
@@ -1793,9 +1809,13 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 		 * returning the flags when they were set through the same option.
 		 * Don't change the beviour for the old case SO_TIMESTAMPING_OLD.
 		 */
-		if (optname == SO_TIMESTAMPING_OLD || sock_flag(sk, SOCK_TSTAMP_NEW)) {
-			v.timestamping.flags = READ_ONCE(sk->sk_tsflags);
-			v.timestamping.bind_phc = READ_ONCE(sk->sk_bind_phc);
+		if (!bpf_timetamping) {
+			if (optname == SO_TIMESTAMPING_OLD || sock_flag(sk, SOCK_TSTAMP_NEW)) {
+				v.timestamping.flags = READ_ONCE(sk->sk_tsflags);
+				v.timestamping.bind_phc = READ_ONCE(sk->sk_bind_phc);
+			}
+		} else {
+			v.timestamping.flags = READ_ONCE(sk->sk_tsflags_bpf);
 		}
 		break;
 

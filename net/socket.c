@@ -2385,7 +2385,7 @@ int do_sock_getsockopt(struct socket *sock, bool compat, int level,
 
 	ops = READ_ONCE(sock->ops);
 	if (level == SOL_SOCKET) {
-		err = sk_getsockopt(sock->sk, level, optname, optval, optlen);
+		err = sk_getsockopt(sock->sk, level, optname, optval, optlen, false);
 	} else if (unlikely(!ops->getsockopt)) {
 		err = -EOPNOTSUPP;
 	} else {

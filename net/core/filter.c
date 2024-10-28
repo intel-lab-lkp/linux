@@ -5238,6 +5238,9 @@ static int sol_socket_sockopt(struct sock *sk, int optname,
 		break;
 	case SO_BINDTODEVICE:
 		break;
+	case SO_TIMESTAMPING_NEW:
+	case SO_TIMESTAMPING_OLD:
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -5247,11 +5250,11 @@ static int sol_socket_sockopt(struct sock *sk, int optname,
 			return -EINVAL;
 		return sk_getsockopt(sk, SOL_SOCKET, optname,
 				     KERNEL_SOCKPTR(optval),
-				     KERNEL_SOCKPTR(optlen));
+				     KERNEL_SOCKPTR(optlen), true);
 	}
 
 	return sk_setsockopt(sk, SOL_SOCKET, optname,
-			     KERNEL_SOCKPTR(optval), *optlen);
+			     KERNEL_SOCKPTR(optval), *optlen, true);
 }
 
 static int bpf_sol_tcp_setsockopt(struct sock *sk, int optname,

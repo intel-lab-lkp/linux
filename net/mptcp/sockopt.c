@@ -306,7 +306,7 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
 			return PTR_ERR(ssk);
 		}
 
-		ret = sk_setsockopt(ssk, SOL_SOCKET, optname, optval, optlen);
+		ret = sk_setsockopt(ssk, SOL_SOCKET, optname, optval, optlen, false);
 		if (ret == 0) {
 			if (optname == SO_REUSEPORT)
 				sk->sk_reuseport = ssk->sk_reuseport;
