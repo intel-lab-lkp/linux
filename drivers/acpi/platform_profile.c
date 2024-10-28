@@ -190,9 +190,14 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 {
 	int err;
 
-	/* Sanity check the profile handler field are set */
+	/* Sanity check the profile handler field are set and balanced is supported */
 	if (!pprof || bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST) ||
 		!pprof->profile_set || !pprof->profile_get) {
+		pr_err("platform_profile: handler is invalid\n");
+		return -EINVAL;
+	}
+	if (!test_bit(PLATFORM_PROFILE_BALANCED, pprof->choices)) {
+		pr_err("platform_profile: handler does not support balanced profile\n");
 		return -EINVAL;
 	}
 
