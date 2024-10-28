@@ -359,6 +359,32 @@
 			J722S_IOPAD(0x00a0, PIN_OUTPUT, 1) /* (N24) GPMC0_WPn.AUDIO_EXT_REFCLK1 */
 		>;
 	};
+
+	rpi_header_gpio0_pins_default: rpi-header-gpio0-default-pins {
+		pinctrl-single,pins = <
+			J722S_IOPAD(0x094, PIN_INPUT, 7) /* (P26) GPIO0_36 */
+			J722S_IOPAD(0x088, PIN_INPUT, 7) /* (N22) GPIO0_33 */
+			J722S_IOPAD(0x0ac, PIN_INPUT, 7) /* (P21) GPIO0_42 */
+			J722S_IOPAD(0x0a8, PIN_INPUT, 7) /* (R27) GPIO0_41 */
+		>;
+	};
+
+	rpi_header_gpio1_pins_default: rpi-header-gpio1-default-pins {
+		pinctrl-single,pins = <
+			J722S_IOPAD(0x1b0, PIN_INPUT, 7) /* (F24) GPIO1_14 */
+			J722S_IOPAD(0x1ac, PIN_INPUT, 7) /* (C27) GPIO1_13 */
+			J722S_IOPAD(0x198, PIN_INPUT, 7) /* (A26) GPIO1_8 */
+			J722S_IOPAD(0x1a4, PIN_INPUT, 7) /* (D25) GPIO1_11 */
+			J722S_IOPAD(0x194, PIN_INPUT, 7) /* (A25) GPIO1_7 */
+			J722S_IOPAD(0x1b8, PIN_INPUT, 7) /* (C20) GPIO1_16 */
+			J722S_IOPAD(0x1a8, PIN_INPUT, 7) /* (C26) GPIO1_12 */
+			J722S_IOPAD(0x1a0, PIN_INPUT, 7) /* (F23) GPIO1_10 */
+			J722S_IOPAD(0x19c, PIN_INPUT, 7) /* (B25) GPIO1_9 */
+			J722S_IOPAD(0x1b4, PIN_INPUT, 7) /* (B20) GPIO1_15 */
+			J722S_IOPAD(0x1bc, PIN_INPUT, 7) /* (D20) GPIO1_17 */
+			J722S_IOPAD(0x1c0, PIN_INPUT, 7) /* (E19) GPIO1_18 */
+		>;
+	};
 };
 
 &cpsw3g {
@@ -387,6 +413,8 @@
 };
 
 &main_gpio1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rpi_header_gpio1_pins_default>;
 	status = "okay";
 };
 
@@ -442,6 +470,25 @@
 			J722S_MCU_IOPAD(0x050, PIN_INPUT_PULLUP, 0)	/* (C6) WKUP_I2C1_SDA */
 		>;
 		bootph-all;
+	};
+
+	mcu_rpi_header_gpio0_pins_default: mcu-rpi-header-gpio0-default-pins {
+		pinctrl-single,pins = <
+			J722S_MCU_IOPAD(0x01c, PIN_INPUT, 7) /* (B5) MCU_GPIO0_7 */
+			J722S_MCU_IOPAD(0x020, PIN_INPUT, 7) /* (C5) MCU_GPIO0_8 */
+			J722S_MCU_IOPAD(0x00c, PIN_INPUT, 7) /* (B12) MCU_GPIO0_3 */
+			J722S_MCU_IOPAD(0x010, PIN_INPUT, 7) /* (C11) MCU_GPIO0_4 */
+			J722S_MCU_IOPAD(0x008, PIN_INPUT, 7) /* (A9) MCU_GPIO0_2 */
+			J722S_MCU_IOPAD(0x000, PIN_INPUT, 7) /* (C12) MCU_GPIO0_0 */
+			J722S_MCU_IOPAD(0x004, PIN_INPUT, 7) /* (A10) MCU_GPIO0_1 */
+		>;
+	};
+
+	mcu_i2c0_pins_default: mcu-i2c0-default-pins {
+		pinctrl-single,pins = <
+			J722S_MCU_IOPAD(0x048, PIN_INPUT, 0) /* (E11) MCU_I2C0_SDA */
+			J722S_MCU_IOPAD(0x044, PIN_INPUT, 0) /* (B13) MCU_I2C0_SCL */
+		>;
 	};
 };
 
@@ -810,5 +857,20 @@
 };
 
 &mcu_gpio0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mcu_rpi_header_gpio0_pins_default>;
+	status = "okay";
+};
+
+&main_gpio0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rpi_header_gpio0_pins_default>;
+	status = "okay";
+};
+
+&mcu_i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mcu_i2c0_pins_default>;
+	clock-frequency = <400000>;
 	status = "okay";
 };
