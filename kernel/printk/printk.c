@@ -833,7 +833,7 @@ static ssize_t devkmsg_read(struct file *file, char __user *buf,
 	if (ret)
 		return ret;
 
-	if (!printk_get_next_message(&pmsg, atomic64_read(&user->seq), true, false)) {
+	if (!printk_get_next_message(&pmsg, NULL, atomic64_read(&user->seq))) {
 		if (file->f_flags & O_NONBLOCK) {
 			ret = -EAGAIN;
 			goto out;
@@ -850,8 +850,8 @@ static ssize_t devkmsg_read(struct file *file, char __user *buf,
 		 * This pairs with __wake_up_klogd:A.
 		 */
 		ret = wait_event_interruptible(log_wait,
-				printk_get_next_message(&pmsg, atomic64_read(&user->seq), true,
-							false)); /* LMM(devkmsg_read:A) */
+				printk_get_next_message(&pmsg, NULL,
+					atomic64_read(&user->seq))); /* LMM(devkmsg_read:A) */
 		if (ret)
 			goto out;
 	}
@@ -2925,20 +2925,19 @@ void console_prepend_replay(struct printk_message *pmsg)
  * @pmsg will contain the formatted result. @pmsg->pbufs must point to a
  * struct printk_buffers.
  *
+ * @con is the console in question. Only @con->flags and @con->level are
+ * guaranteed to be valid at this point. Note especially well that con->seq is
+ * not yet guaranteed to be consistent with @seq.
+ *
  * @seq is the record to read and format. If it is not available, the next
  * valid record is read.
- *
- * @is_extended specifies if the message should be formatted for extended
- * console output.
- *
- * @may_supress specifies if records may be skipped based on loglevel.
  *
  * Returns false if no record is available. Otherwise true and all fields
  * of @pmsg are valid. (See the documentation of struct printk_message
  * for information about the @pmsg fields.)
  */
-bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
-			     bool is_extended, bool may_suppress)
+bool printk_get_next_message(struct printk_message *pmsg, struct console *con,
+			     u64 seq)
 {
 	struct printk_buffers *pbufs = pmsg->pbufs;
 	const size_t scratchbuf_sz = sizeof(pbufs->scratchbuf);
@@ -2948,6 +2947,14 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 	struct printk_info info;
 	struct printk_record r;
 	size_t len = 0;
+	bool is_extended;
+
+	if (con) {
+		is_extended = console_srcu_read_flags(con) & CON_EXTENDED;
+	} else {
+		/* Used only by devkmsg_read(). */
+		is_extended = true;
+	}
 
 	/*
 	 * Formatting extended messages requires a separate buffer, so use the
@@ -2967,8 +2974,8 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 	pmsg->seq = r.info->seq;
 	pmsg->dropped = r.info->seq - seq;
 
-	/* Skip record that has level above the console loglevel. */
-	if (may_suppress && suppress_message_printing(r.info->level))
+	/* Never suppress when used in devkmsg_read() */
+	if (con && suppress_message_printing(r.info->level))
 		goto out;
 
 	if (is_extended) {
@@ -3044,7 +3051,7 @@ static bool console_emit_next_record(struct console *con, bool *handover, int co
 
 	*handover = false;
 
-	if (!printk_get_next_message(&pmsg, con->seq, is_extended, true))
+	if (!printk_get_next_message(&pmsg, con, con->seq))
 		return false;
 
 	con->dropped += pmsg.dropped;
