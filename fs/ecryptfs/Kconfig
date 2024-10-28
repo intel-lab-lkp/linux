@@ -2,6 +2,7 @@
 config ECRYPT_FS
 	tristate "eCrypt filesystem layer support"
 	depends on KEYS && CRYPTO && (ENCRYPTED_KEYS || ENCRYPTED_KEYS=n)
+	select BUFFER_HEAD if BLOCK
 	select CRYPTO_ECB
 	select CRYPTO_CBC
 	select CRYPTO_MD5
