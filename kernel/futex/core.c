@@ -39,6 +39,7 @@
 #include <linux/memblock.h>
 #include <linux/fault-inject.h>
 #include <linux/slab.h>
+#include <linux/prctl.h>
 
 #include "futex.h"
 #include "../locking/rtmutex_common.h"
@@ -1151,6 +1152,70 @@ static void futex_hash_bucket_init(struct futex_hash_bucket *fhb)
 	atomic_set(&fhb->waiters, 0);
 	plist_head_init(&fhb->chain);
 	spin_lock_init(&fhb->lock);
+}
+
+static int futex_hash_allocate(unsigned long arg3, unsigned long arg4,
+			       unsigned long arg5)
+{
+	unsigned int hash_slots = arg3;
+	struct futex_hash_bucket *fhb;
+	int i;
+
+	if (!thread_group_leader(current))
+		return -EINVAL;
+
+	if (current->signal->futex_hash_bucket)
+		return -EALREADY;
+
+	if (hash_slots == 0)
+		hash_slots = 4;
+	if (hash_slots < 2)
+		hash_slots = 2;
+	if (hash_slots > 16)
+		hash_slots = 16;
+	if (!is_power_of_2(hash_slots))
+		hash_slots = rounddown_pow_of_two(hash_slots);
+
+	fhb = kmalloc_array(hash_slots, sizeof(struct futex_hash_bucket), GFP_KERNEL);
+	if (!fhb)
+		return -ENOMEM;
+
+	current->signal->futex_hash_mask = hash_slots - 1;
+
+	for (i = 0; i < hash_slots; i++)
+		futex_hash_bucket_init(&fhb[i]);
+
+	current->signal->futex_hash_bucket = fhb;
+	return 0;
+}
+
+static int futex_hash_is_shared(unsigned long arg3, unsigned long arg4,
+				unsigned long arg5)
+{
+	if (current->signal->futex_hash_bucket)
+		return current->signal->futex_hash_mask + 1;
+	return 0;
+}
+
+int futex_hash_prctl(unsigned long arg2, unsigned long arg3,
+		     unsigned long arg4, unsigned long arg5)
+{
+	int ret;
+
+	switch (arg2) {
+	case PR_FUTEX_HASH_ALLOCATE:
+		ret = futex_hash_allocate(arg3, arg4, arg5);
+		break;
+
+	case PR_FUTEX_HASH_IS_SHARED:
+		ret = futex_hash_is_shared(arg3, arg4, arg5);
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
 }
 
 static int __init futex_init(void)

@@ -14,6 +14,8 @@
 #include <linux/mm_types.h>
 #include <asm/ptrace.h>
 
+struct futex_hash_bucket;
+
 /*
  * Types defining task->signal and task->sighand and APIs using them:
  */
@@ -246,6 +248,8 @@ struct signal_struct {
 						 * and may have inconsistent
 						 * permissions.
 						 */
+	unsigned int			futex_hash_mask;
+	struct futex_hash_bucket	*futex_hash_bucket;
 } __randomize_layout;
 
 /*

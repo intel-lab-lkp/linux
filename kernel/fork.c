@@ -949,6 +949,7 @@ static inline void free_signal_struct(struct signal_struct *sig)
 {
 	taskstats_tgid_free(sig);
 	sched_autogroup_exit(sig);
+	kfree(sig->futex_hash_bucket);
 	/*
 	 * __mmdrop is not safe to call from softirq context on x86 due to
 	 * pgd_dtor so postpone it to the async context
