@@ -47,6 +47,12 @@ properties:
   clocks:
     maxItems: 1
 
+  cm3-l2-config-hci-broken:
+    type: boolean
+    description:
+      If present, indicates that the HCI (Hardware Cache Initialization)
+      information for the L2 cache in multi-cluster configuration is broken.
+
   device_type: true
 
 allOf:
