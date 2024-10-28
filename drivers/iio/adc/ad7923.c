@@ -170,6 +170,8 @@ static int ad7923_update_scan_mode(struct iio_dev *indio_dev,
 	 * skip that one.
 	 */
 	for_each_set_bit(i, active_scan_mask, indio_dev->num_channels - 1) {
+		if (len >= 4)
+			return -EINVAL;
 		cmd = AD7923_WRITE_CR | AD7923_CHANNEL_WRITE(i) |
 			AD7923_SEQUENCE_WRITE(AD7923_SEQUENCE_OFF) |
 			st->settings;
