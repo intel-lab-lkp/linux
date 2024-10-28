@@ -1599,7 +1599,7 @@ static int ftgmac100_stop(struct net_device *netdev)
 	netif_napi_del(&priv->napi);
 	if (netdev->phydev)
 		phy_stop(netdev->phydev);
-	if (priv->use_ncsi)
+	if (priv->ndev)
 		ncsi_stop_dev(priv->ndev);
 
 	ftgmac100_stop_hw(priv);
@@ -2059,8 +2059,10 @@ static void ftgmac100_remove(struct platform_device *pdev)
 	netdev = platform_get_drvdata(pdev);
 	priv = netdev_priv(netdev);
 
-	if (priv->ndev)
+	if (priv->ndev) {
 		ncsi_unregister_dev(priv->ndev);
+		priv->ndev = NULL;
+	}
 	unregister_netdev(netdev);
 
 	clk_disable_unprepare(priv->rclk);
