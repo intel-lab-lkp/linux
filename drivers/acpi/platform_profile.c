@@ -9,7 +9,6 @@
 #include <linux/platform_profile.h>
 #include <linux/sysfs.h>
 
-static struct platform_profile_handler *cur_profile;
 static LIST_HEAD(platform_profile_handler_list);
 static DEFINE_MUTEX(profile_lock);
 
@@ -188,7 +187,8 @@ static const struct attribute_group platform_profile_group = {
 
 void platform_profile_notify(void)
 {
-	if (!cur_profile)
+	guard(mutex)(&profile_lock);
+	if (!platform_profile_is_registered())
 		return;
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 }
@@ -251,17 +251,15 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	}
 
 	guard(mutex)(&profile_lock);
-	/* We can only have one active profile */
-	if (cur_profile)
-		return -EEXIST;
 
-	err = sysfs_create_group(acpi_kobj, &platform_profile_group);
-	if (err)
-		return err;
+	if (!platform_profile_is_registered()) {
+		err = sysfs_create_group(acpi_kobj, &platform_profile_group);
+		if (err)
+			return err;
+	}
 	list_add_tail(&pprof->list, &platform_profile_handler_list);
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
-	cur_profile = pprof;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(platform_profile_register);
@@ -272,9 +270,8 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 
 	list_del(&pprof->list);
 
-	cur_profile = NULL;
-
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
+
 	if (!platform_profile_is_registered())
 		sysfs_remove_group(acpi_kobj, &platform_profile_group);
 
