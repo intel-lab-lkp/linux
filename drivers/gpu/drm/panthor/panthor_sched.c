@@ -611,6 +611,16 @@ struct panthor_group {
 	bool timedout;
 
 	/**
+	 * @innocent: True when the group becomes unusable because the group suspension
+	 * failed during a reset.
+	 *
+	 * Sometimes the FW was put in a bad state by other groups, causing the group
+	 * suspension happening in the reset path to fail. In that case, we consider the
+	 * group innocent.
+	 */
+	bool innocent;
+
+	/**
 	 * @syncobjs: Pool of per-queue synchronization objects.
 	 *
 	 * One sync object per queue. The position of the sync object is
@@ -2689,6 +2699,12 @@ void panthor_sched_suspend(struct panthor_device *ptdev)
 		while (slot_mask) {
 			u32 csg_id = ffs(slot_mask) - 1;
 			struct panthor_csg_slot *csg_slot = &sched->csg_slots[csg_id];
+
+			/* If the group was still usable before that point, we consider
+			 * it innocent.
+			 */
+			if (group_can_run(csg_slot->group))
+				csg_slot->group->innocent = true;
 
 			/* We consider group suspension failures as fatal and flag the
 			 * group as unusable by setting timedout=true.
