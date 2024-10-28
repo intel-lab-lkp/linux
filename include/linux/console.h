@@ -321,6 +321,7 @@ struct nbcon_write_context {
  * @dropped:		Number of unreported dropped ringbuffer records
  * @data:		Driver private data
  * @node:		hlist node for the console list
+ * @level:		Console-specific loglevel
  *
  * @nbcon_state:	State for nbcon consoles
  * @nbcon_seq:		Sequence number of the next record for nbcon to print
@@ -349,6 +350,7 @@ struct console {
 	unsigned long		dropped;
 	void			*data;
 	struct hlist_node	node;
+	int			level;
 
 	/* nbcon console specific members */
 

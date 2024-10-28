@@ -1287,9 +1287,62 @@ module_param(ignore_loglevel, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(ignore_loglevel,
 		 "ignore loglevel setting (prints all kernel messages to the console)");
 
-static bool suppress_message_printing(int level)
+bool per_console_loglevel_is_set(const struct console *con)
 {
-	return (level >= console_loglevel && !ignore_loglevel);
+	return con && (READ_ONCE(con->level) > 0);
+}
+
+/*
+ * Hierarchy of loglevel authority:
+ *
+ * 1. con->level. The locally set, console-specific loglevel. Optional, only
+ *    valid if >0.
+ * 2. console_loglevel. The default global console loglevel, always present.
+ */
+enum loglevel_source
+console_effective_loglevel_source(const struct console *con)
+{
+	if (WARN_ON_ONCE(!con))
+		return LLS_GLOBAL;
+
+	if (ignore_loglevel)
+		return LLS_IGNORE_LOGLEVEL;
+
+	if (per_console_loglevel_is_set(con))
+		return LLS_LOCAL;
+
+	return LLS_GLOBAL;
+}
+
+int console_effective_loglevel(const struct console *con)
+{
+	enum loglevel_source source;
+	int level;
+
+	source = console_effective_loglevel_source(con);
+
+	switch (source) {
+	case LLS_IGNORE_LOGLEVEL:
+		level = CONSOLE_LOGLEVEL_MOTORMOUTH;
+		break;
+	case LLS_LOCAL:
+		level = READ_ONCE(con->level);
+		break;
+	case LLS_GLOBAL:
+		level = console_loglevel;
+		break;
+	default:
+		pr_warn("Unhandled console loglevel source: %d", source);
+		level = console_loglevel;
+		break;
+	}
+
+	return level;
+}
+
+static bool suppress_message_printing(int level, struct console *con)
+{
+	return level >= console_effective_loglevel(con);
 }
 
 #ifdef CONFIG_BOOT_PRINTK_DELAY
@@ -2122,7 +2175,21 @@ int printk_delay_msec __read_mostly;
 
 static inline void printk_delay(int level)
 {
-	if (suppress_message_printing(level))
+	bool will_emit = false;
+	int cookie;
+	struct console *con;
+
+	cookie = console_srcu_read_lock();
+
+	for_each_console_srcu(con) {
+		if (!suppress_message_printing(level, con)) {
+			will_emit = true;
+			break;
+		}
+	}
+	console_srcu_read_unlock(cookie);
+
+	if (!will_emit)
 		return;
 
 	boot_delay_msec();
@@ -2975,7 +3042,7 @@ bool printk_get_next_message(struct printk_message *pmsg, struct console *con,
 	pmsg->dropped = r.info->seq - seq;
 
 	/* Never suppress when used in devkmsg_read() */
-	if (con && suppress_message_printing(r.info->level))
+	if (con && suppress_message_printing(r.info->level, con))
 		goto out;
 
 	if (is_extended) {
@@ -3788,6 +3855,9 @@ static int try_enable_preferred_console(struct console *newcon,
 				continue;
 			if (newcon->index < 0)
 				newcon->index = c->index;
+
+			// TODO: Will be configurable in a later patch
+			newcon->level = -1;
 
 			if (_braille_register_console(newcon, c))
 				return 0;
