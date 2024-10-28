@@ -1324,6 +1324,7 @@ static const struct imx_pgc_domain_data imx8mn_pgc_domain_data = {
 static int imx_pgc_domain_probe(struct platform_device *pdev)
 {
 	struct imx_pgc_domain *domain = pdev->dev.platform_data;
+	bool init_off;
 	int ret;
 
 	domain->dev = &pdev->dev;
@@ -1354,10 +1355,31 @@ static int imx_pgc_domain_probe(struct platform_device *pdev)
 		regmap_update_bits(domain->regmap, domain->regs->map,
 				   domain->bits.map, domain->bits.map);
 
-	ret = pm_genpd_init(&domain->genpd, NULL, true);
+	init_off = !of_property_read_bool(domain->dev->of_node,
+					  "fsl,boot-on");
+	ret = pm_genpd_init(&domain->genpd, NULL, init_off);
 	if (ret) {
 		dev_err(domain->dev, "Failed to init power domain\n");
 		goto out_domain_unmap;
+	}
+
+	if (!init_off) {
+		ret = pm_runtime_get_sync(domain->dev);
+		if (ret < 0) {
+			pm_runtime_put_noidle(domain->dev);
+			dev_err_probe(domain->dev, ret, "failed to power up bus domain\n");
+			goto out_genpd_remove;
+		}
+
+		if (domain->keep_clocks) {
+			ret = clk_bulk_prepare_enable(domain->num_clks, domain->clks);
+			if (ret) {
+				dev_err_probe(domain->dev, ret,
+					      "failed to enable clocks for domain: %s\n",
+					      domain->genpd.name);
+				goto out_pm_put;
+			}
+		}
 	}
 
 	if (IS_ENABLED(CONFIG_LOCKDEP) &&
@@ -1368,11 +1390,17 @@ static int imx_pgc_domain_probe(struct platform_device *pdev)
 					   &domain->genpd);
 	if (ret) {
 		dev_err(domain->dev, "Failed to add genpd provider\n");
-		goto out_genpd_remove;
+		goto out_clk_unprepare;
 	}
 
 	return 0;
 
+out_clk_unprepare:
+	if (!init_off && domain->keep_clocks)
+		clk_bulk_disable_unprepare(domain->num_clks, domain->clks);
+out_pm_put:
+	if (!init_off)
+		pm_runtime_put(domain->dev);
 out_genpd_remove:
 	pm_genpd_remove(&domain->genpd);
 out_domain_unmap:
