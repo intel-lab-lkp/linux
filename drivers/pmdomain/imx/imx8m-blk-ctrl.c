@@ -166,6 +166,24 @@ static int imx8m_blk_ctrl_power_off(struct generic_pm_domain *genpd)
 
 static struct lock_class_key blk_ctrl_genpd_lock_class;
 
+static bool imx8m_blk_ctrl_is_off(struct device *dev, struct generic_pm_domain *genpd)
+{
+	struct device_node *node = dev->of_node;
+	struct imx8m_blk_ctrl_domain *domain = to_imx8m_blk_ctrl_domain(genpd);
+	const struct imx8m_blk_ctrl_domain_data *data = domain->data;
+	u32 boot_on;
+	int index;
+
+	index = of_property_match_string(node, "power-domain-names",
+					 data->gpc_name);
+	if (index < 0 || of_property_read_u32_index(node,
+						    "fsl,power-domains-boot-on",
+						    index, &boot_on))
+		return true;
+
+	return !boot_on;
+}
+
 static int imx8m_blk_ctrl_probe(struct platform_device *pdev)
 {
 	const struct imx8m_blk_ctrl_data *bc_data;
@@ -173,6 +191,8 @@ static int imx8m_blk_ctrl_probe(struct platform_device *pdev)
 	struct imx8m_blk_ctrl *bc;
 	void __iomem *base;
 	int i, ret;
+	bool init_off;
+	bool *pm_runtime_cleanup;
 
 	struct regmap_config regmap_config = {
 		.reg_bits	= 32,
@@ -220,6 +240,11 @@ static int imx8m_blk_ctrl_probe(struct platform_device *pdev)
 			return dev_err_probe(dev, PTR_ERR(bc->bus_power_dev),
 					     "failed to attach power domain \"bus\"\n");
 	}
+
+	pm_runtime_cleanup = devm_kcalloc(dev, bc_data->num_domains,
+					  sizeof(*pm_runtime_cleanup), GFP_KERNEL);
+	if (!pm_runtime_cleanup)
+		return -ENOMEM;
 
 	for (i = 0; i < bc_data->num_domains; i++) {
 		const struct imx8m_blk_ctrl_domain_data *data = &bc_data->domains[i];
@@ -274,13 +299,32 @@ static int imx8m_blk_ctrl_probe(struct platform_device *pdev)
 		domain->genpd.power_off = imx8m_blk_ctrl_power_off;
 		domain->bc = bc;
 
-		ret = pm_genpd_init(&domain->genpd, NULL, true);
+		init_off = imx8m_blk_ctrl_is_off(dev, &domain->genpd);
+		ret = pm_genpd_init(&domain->genpd, NULL, init_off);
 		if (ret) {
 			dev_err_probe(dev, ret,
 				      "failed to init power domain \"%s\"\n",
 				      data->gpc_name);
 			dev_pm_domain_detach(domain->power_dev, true);
 			goto cleanup_pds;
+		}
+
+		if (!init_off) {
+			ret = pm_runtime_get_sync(bc->bus_power_dev);
+			if (ret < 0) {
+				pm_runtime_put_noidle(bc->bus_power_dev);
+				dev_err_probe(dev, ret, "failed to power up bus domain\n");
+				goto cleanup_pds;
+			}
+
+			ret = pm_runtime_get_sync(domain->power_dev);
+			if (ret < 0) {
+				pm_runtime_put(bc->bus_power_dev);
+				dev_err_probe(dev, ret, "failed to power up peripheral domain\n");
+				goto cleanup_pds;
+			}
+
+			pm_runtime_cleanup[i] = true;
 		}
 
 		/*
@@ -324,6 +368,11 @@ cleanup_provider:
 	of_genpd_del_provider(dev->of_node);
 cleanup_pds:
 	for (i--; i >= 0; i--) {
+		if (pm_runtime_cleanup[i]) {
+			pm_runtime_put(bc->domains[i].power_dev);
+			pm_runtime_put(bc->bus_power_dev);
+		}
+
 		pm_genpd_remove(&bc->domains[i].genpd);
 		dev_pm_domain_detach(bc->domains[i].power_dev, true);
 	}
