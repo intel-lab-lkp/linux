@@ -81,18 +81,22 @@ static void *ti_am335x_xbar_route_allocate(struct of_phandle_args *dma_spec,
 	struct ti_am335x_xbar_data *xbar = platform_get_drvdata(pdev);
 	struct ti_am335x_xbar_map *map;
 
-	if (dma_spec->args_count != 3)
+	if (dma_spec->args_count != 3) {
+		put_device(&pdev->dev);
 		return ERR_PTR(-EINVAL);
+	}
 
 	if (dma_spec->args[2] >= xbar->xbar_events) {
 		dev_err(&pdev->dev, "Invalid XBAR event number: %d\n",
 			dma_spec->args[2]);
+		put_device(&pdev->dev);
 		return ERR_PTR(-EINVAL);
 	}
 
 	if (dma_spec->args[0] >= xbar->dma_requests) {
 		dev_err(&pdev->dev, "Invalid DMA request line number: %d\n",
 			dma_spec->args[0]);
+		put_device(&pdev->dev);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -100,12 +104,14 @@ static void *ti_am335x_xbar_route_allocate(struct of_phandle_args *dma_spec,
 	dma_spec->np = of_parse_phandle(ofdma->of_node, "dma-masters", 0);
 	if (!dma_spec->np) {
 		dev_err(&pdev->dev, "Can't get DMA master\n");
+		put_device(&pdev->dev);
 		return ERR_PTR(-EINVAL);
 	}
 
 	map = kzalloc(sizeof(*map), GFP_KERNEL);
 	if (!map) {
 		of_node_put(dma_spec->np);
+		put_device(&pdev->dev);
 		return ERR_PTR(-ENOMEM);
 	}
 
