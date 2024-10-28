@@ -368,6 +368,7 @@ void execmem_free(void *ptr)
 		vfree(ptr);
 }
 
+#ifdef CONFIG_MMU
 struct vm_struct *execmem_vmap(size_t size)
 {
 	struct execmem_range *range = &execmem_info->ranges[EXECMEM_MODULE_DATA];
@@ -383,6 +384,7 @@ struct vm_struct *execmem_vmap(size_t size)
 
 	return area;
 }
+#endif
 
 void *execmem_update_copy(void *dst, const void *src, size_t size)
 {
