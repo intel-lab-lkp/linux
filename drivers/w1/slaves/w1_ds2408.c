@@ -199,7 +199,7 @@ static ssize_t output_write(struct file *filp, struct kobject *kobj,
 out:
 	mutex_unlock(&sl->master->bus_mutex);
 
-	dev_dbg(&sl->dev, "%s, mutex unlocked retries:%d\n",
+	dev_dbg(&sl->dev, "%s, mutex unlocked retries:%u\n",
 		(bytes_written > 0) ? "succeeded" : "error", retries);
 
 	return bytes_written;
