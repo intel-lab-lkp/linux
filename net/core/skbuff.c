@@ -5539,17 +5539,14 @@ err:
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
-void __skb_tstamp_tx(struct sk_buff *orig_skb,
-		     const struct sk_buff *ack_skb,
-		     struct skb_shared_hwtstamps *hwtstamps,
-		     struct sock *sk, int tstype)
+static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
+				 const struct sk_buff *ack_skb,
+				 struct skb_shared_hwtstamps *hwtstamps,
+				 struct sock *sk, int tstype)
 {
 	struct sk_buff *skb;
 	bool tsonly, opt_stats = false;
 	u32 tsflags;
-
-	if (!sk)
-		return;
 
 	tsflags = READ_ONCE(sk->sk_tsflags);
 	if (!hwtstamps && !(tsflags & SOF_TIMESTAMPING_OPT_TX_SWHW) &&
@@ -5593,6 +5590,17 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		__net_timestamp(skb);
 
 	__skb_complete_tx_timestamp(skb, sk, tstype, opt_stats);
+}
+
+void __skb_tstamp_tx(struct sk_buff *orig_skb,
+		     const struct sk_buff *ack_skb,
+		     struct skb_shared_hwtstamps *hwtstamps,
+		     struct sock *sk, int tstype)
+{
+	if (!sk)
+		return;
+
+	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
 
