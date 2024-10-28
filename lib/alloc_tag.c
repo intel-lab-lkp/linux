@@ -268,7 +268,6 @@ void __init alloc_tag_sec_init(void)
 #ifdef CONFIG_MODULES
 
 static struct maple_tree mod_area_mt = MTREE_INIT(mod_area_mt, MT_FLAGS_ALLOC_RANGE);
-static struct vm_struct *vm_module_tags;
 /* A dummy object used to indicate an unloaded module */
 static struct module unloaded_mod;
 /* A dummy object used to indicate a module prepended area */
@@ -391,6 +390,9 @@ repeat:
 	return false;
 }
 
+#ifdef CONFIG_MMU
+static struct vm_struct *vm_module_tags;
+
 static int vm_module_tags_populate(void)
 {
 	unsigned long phys_size = vm_module_tags->nr_pages << PAGE_SHIFT;
@@ -417,6 +419,13 @@ static int vm_module_tags_populate(void)
 
 	return 0;
 }
+#else
+static int vm_module_tags_populate(void)
+{
+	/* Memory was already allocated */
+	return 0;
+}
+#endif
 
 static void *reserve_module_tags(struct module *mod, unsigned long size,
 				 unsigned int prepend, unsigned long align)
@@ -561,6 +570,7 @@ static void replace_module(struct module *mod, struct module *new_mod)
 
 static int __init alloc_mod_tags_mem(void)
 {
+#ifdef CONFIG_MMU
 	/* Map space to copy allocation tags */
 	vm_module_tags = execmem_vmap(MODULE_ALLOC_TAG_VMAP_SIZE);
 	if (!vm_module_tags) {
@@ -578,6 +588,13 @@ static int __init alloc_mod_tags_mem(void)
 	}
 
 	module_tags.start_addr = (unsigned long)vm_module_tags->addr;
+#else
+	/* Allocate space to copy allocation tags */
+	module_tags.start_addr = (unsigned long)execmem_alloc(EXECMEM_MODULE_DATA,
+							      MODULE_ALLOC_TAG_VMAP_SIZE);
+	if (!module_tags.start_addr)
+		return -ENOMEM;
+#endif
 	module_tags.end_addr = module_tags.start_addr + MODULE_ALLOC_TAG_VMAP_SIZE;
 	/* Ensure the base is alloc_tag aligned when required for indexing */
 	module_tags.start_addr = alloc_tag_align(module_tags.start_addr);
@@ -587,6 +604,7 @@ static int __init alloc_mod_tags_mem(void)
 
 static void __init free_mod_tags_mem(void)
 {
+#ifdef CONFIG_MMU
 	int i;
 
 	module_tags.start_addr = 0;
@@ -594,6 +612,9 @@ static void __init free_mod_tags_mem(void)
 		__free_page(vm_module_tags->pages[i]);
 	kfree(vm_module_tags->pages);
 	free_vm_area(vm_module_tags);
+#else
+	execmem_free((void *)module_tags.start_addr);
+#endif
 }
 
 #else /* CONFIG_MODULES */
