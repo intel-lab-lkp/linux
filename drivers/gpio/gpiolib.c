@@ -2675,10 +2675,11 @@ int gpio_set_debounce_timeout(struct gpio_desc *desc, unsigned int debounce)
 	ret = gpio_set_config_with_argument_optional(desc,
 						     PIN_CONFIG_INPUT_DEBOUNCE,
 						     debounce);
-	if (!ret)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	if (ret)
+		return ret;
 
-	return ret;
+	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	return 0;
 }
 
 /**
@@ -2698,16 +2699,17 @@ int gpiod_direction_input(struct gpio_desc *desc)
 	VALIDATE_DESC(desc);
 
 	ret = gpiod_direction_input_nonotify(desc);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	if (ret)
+		return ret;
 
-	return ret;
+	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(gpiod_direction_input);
 
 int gpiod_direction_input_nonotify(struct gpio_desc *desc)
 {
-	int ret = 0;
+	int ret;
 
 	CLASS(gpio_chip_guard, guard)(desc);
 	if (!guard.gc)
@@ -2734,6 +2736,8 @@ int gpiod_direction_input_nonotify(struct gpio_desc *desc)
 	if (guard.gc->direction_input) {
 		ret = guard.gc->direction_input(guard.gc,
 						gpio_chip_hwgpio(desc));
+		if (ret)
+			goto out_trace_direction;
 	} else if (guard.gc->get_direction &&
 		  (guard.gc->get_direction(guard.gc,
 					   gpio_chip_hwgpio(desc)) != 1)) {
@@ -2742,11 +2746,11 @@ int gpiod_direction_input_nonotify(struct gpio_desc *desc)
 			   __func__);
 		return -EIO;
 	}
-	if (ret == 0) {
-		clear_bit(FLAG_IS_OUT, &desc->flags);
-		ret = gpio_set_bias(desc);
-	}
 
+	clear_bit(FLAG_IS_OUT, &desc->flags);
+	ret = gpio_set_bias(desc);
+
+out_trace_direction:
 	trace_gpio_direction(desc_to_gpio(desc), 1, ret);
 
 	return ret;
@@ -2775,6 +2779,8 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 	if (guard.gc->direction_output) {
 		ret = guard.gc->direction_output(guard.gc,
 						 gpio_chip_hwgpio(desc), val);
+		if (ret)
+			goto out_trace_value_and_direction;
 	} else {
 		/* Check that we are in output mode if we can */
 		if (guard.gc->get_direction &&
@@ -2791,8 +2797,9 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 		guard.gc->set(guard.gc, gpio_chip_hwgpio(desc), val);
 	}
 
-	if (!ret)
-		set_bit(FLAG_IS_OUT, &desc->flags);
+	set_bit(FLAG_IS_OUT, &desc->flags);
+
+out_trace_value_and_direction:
 	trace_gpio_value(desc_to_gpio(desc), 0, val);
 	trace_gpio_direction(desc_to_gpio(desc), 0, ret);
 	return ret;
@@ -2817,10 +2824,11 @@ int gpiod_direction_output_raw(struct gpio_desc *desc, int value)
 	VALIDATE_DESC(desc);
 
 	ret = gpiod_direction_output_raw_commit(desc, value);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	if (ret)
+		return ret;
 
-	return ret;
+	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(gpiod_direction_output_raw);
 
@@ -2844,10 +2852,11 @@ int gpiod_direction_output(struct gpio_desc *desc, int value)
 	VALIDATE_DESC(desc);
 
 	ret = gpiod_direction_output_nonotify(desc, value);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	if (ret)
+		return ret;
 
-	return ret;
+	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(gpiod_direction_output);
 
@@ -2878,19 +2887,15 @@ int gpiod_direction_output_nonotify(struct gpio_desc *desc, int value)
 		if (!ret)
 			goto set_output_value;
 		/* Emulate open drain by not actively driving the line high */
-		if (value) {
-			ret = gpiod_direction_input_nonotify(desc);
+		if (value)
 			goto set_output_flag;
-		}
 	} else if (test_bit(FLAG_OPEN_SOURCE, &flags)) {
 		ret = gpio_set_config(desc, PIN_CONFIG_DRIVE_OPEN_SOURCE);
 		if (!ret)
 			goto set_output_value;
 		/* Emulate open source by not actively driving the line low */
-		if (!value) {
-			ret = gpiod_direction_input_nonotify(desc);
+		if (!value)
 			goto set_output_flag;
-		}
 	} else {
 		gpio_set_config(desc, PIN_CONFIG_DRIVE_PUSH_PULL);
 	}
@@ -2902,15 +2907,17 @@ set_output_value:
 	return gpiod_direction_output_raw_commit(desc, value);
 
 set_output_flag:
+	ret = gpiod_direction_input_nonotify(desc);
+	if (ret)
+		return ret;
 	/*
 	 * When emulating open-source or open-drain functionalities by not
 	 * actively driving the line (setting mode to input) we still need to
 	 * set the IS_OUT flag or otherwise we won't be able to set the line
 	 * value anymore.
 	 */
-	if (ret == 0)
-		set_bit(FLAG_IS_OUT, &desc->flags);
-	return ret;
+	set_bit(FLAG_IS_OUT, &desc->flags);
+	return 0;
 }
 
 /**
@@ -2995,25 +3002,25 @@ int gpiod_set_config(struct gpio_desc *desc, unsigned long config)
 	VALIDATE_DESC(desc);
 
 	ret = gpio_do_set_config(desc, config);
-	if (!ret) {
-		/* These are the only options we notify the userspace about. */
-		switch (pinconf_to_config_param(config)) {
-		case PIN_CONFIG_BIAS_DISABLE:
-		case PIN_CONFIG_BIAS_PULL_DOWN:
-		case PIN_CONFIG_BIAS_PULL_UP:
-		case PIN_CONFIG_DRIVE_OPEN_DRAIN:
-		case PIN_CONFIG_DRIVE_OPEN_SOURCE:
-		case PIN_CONFIG_DRIVE_PUSH_PULL:
-		case PIN_CONFIG_INPUT_DEBOUNCE:
-			gpiod_line_state_notify(desc,
-						GPIO_V2_LINE_CHANGED_CONFIG);
-			break;
-		default:
-			break;
-		}
+	if (ret)
+		return ret;
+
+	/* These are the only options we notify the userspace about */
+	switch (pinconf_to_config_param(config)) {
+	case PIN_CONFIG_BIAS_DISABLE:
+	case PIN_CONFIG_BIAS_PULL_DOWN:
+	case PIN_CONFIG_BIAS_PULL_UP:
+	case PIN_CONFIG_DRIVE_OPEN_DRAIN:
+	case PIN_CONFIG_DRIVE_OPEN_SOURCE:
+	case PIN_CONFIG_DRIVE_PUSH_PULL:
+	case PIN_CONFIG_INPUT_DEBOUNCE:
+		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+		break;
+	default:
+		break;
 	}
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(gpiod_set_config);
 
@@ -3730,10 +3737,11 @@ int gpiod_set_consumer_name(struct gpio_desc *desc, const char *name)
 	VALIDATE_DESC(desc);
 
 	ret = desc_set_label(desc, name);
-	if (ret == 0)
-		gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	if (ret)
+		return ret;
 
-	return ret;
+	gpiod_line_state_notify(desc, GPIO_V2_LINE_CHANGED_CONFIG);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(gpiod_set_consumer_name);
 
