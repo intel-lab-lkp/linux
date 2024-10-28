@@ -23,45 +23,90 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
+#include "../kselftest.h"
+
+
 int main(void)
 {
 	int fd;
 
+	/* Setting up kselftest framework */
+	ksft_print_header();
+	ksft_set_plan(1);
+
+	/* Check if test is run as root */
+	if (geteuid()) {
+		ksft_test_result_skip("This test needs root to run!\n");
+		return 1;
+	}
+
+
 	if (unshare(CLONE_NEWNS) == -1) {
 		if (errno == ENOSYS || errno == EPERM) {
-			fprintf(stderr, "error: unshare, errno %d\n", errno);
-			return 4;
+			ksft_test_result_fail("unshare() error: unshare, errno %d\n", errno);
+			return 1;
 		}
-		fprintf(stderr, "error: unshare, errno %d\n", errno);
-		return 1;
+		else{
+			fprintf(stderr, "unshare() error: unshare, errno %d\n", errno);
+			ksft_test_result_fail("unshare() error: unshare, errno %d\n", errno);
+			return 1;
+
+		}
+	} 
+	
+	else {
+		ksft_print_msg("unshare(): Creat new mount namespace: Success.\n");
+
 	}
-	if (mount(NULL, "/", NULL, MS_PRIVATE|MS_REC, NULL) == -1) {
-		fprintf(stderr, "error: mount '/', errno %d\n", errno);
+
+
+
+	if (mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL) == -1) {
+		ksft_test_result_fail("mount() error: Root filesystem private mount: Fail %d\n", errno);
 		return 1;
+	} else {
+		ksft_print_msg("mount(): Root filesystem private mount: Success\n");
 	}
+
 
 	/* Our heroes: 1 root inode, 1 O_TMPFILE inode, 1 permanent inode. */
 	if (mount(NULL, "/tmp", "tmpfs", 0, "nr_inodes=3") == -1) {
-		fprintf(stderr, "error: mount tmpfs, errno %d\n", errno);
+		ksft_test_result_fail("mount() error: Mounting tmpfs on /tmp: Fail %d\n", errno);
 		return 1;
+	} else {
+		ksft_print_msg("mount(): Mounting tmpfs on /tmp: Success\n");
 	}
 
-	fd = openat(AT_FDCWD, "/tmp", O_WRONLY|O_TMPFILE, 0600);
+
+	fd = openat(AT_FDCWD, "/tmp", O_WRONLY | O_TMPFILE, 0600);
 	if (fd == -1) {
-		fprintf(stderr, "error: open 1, errno %d\n", errno);
+		ksft_test_result_fail("openat() error: Open first temporary file: Fail %d\n", errno);
 		return 1;
+	} else {
+		ksft_print_msg("openat(): Open first temporary file: Success\n");
 	}
+
+
 	if (linkat(fd, "", AT_FDCWD, "/tmp/1", AT_EMPTY_PATH) == -1) {
-		fprintf(stderr, "error: linkat, errno %d\n", errno);
+		ksft_test_result_fail("linkat() error: Linking the temporary file: Fail %d\n", errno);
+		/* Ensure fd is closed on failure */
+		close(fd); 
 		return 1;
+	} else {
+		ksft_print_msg("linkat(): Linking the temporary file: Success\n");
 	}
 	close(fd);
 
-	fd = openat(AT_FDCWD, "/tmp", O_WRONLY|O_TMPFILE, 0600);
+
+	fd = openat(AT_FDCWD, "/tmp", O_WRONLY | O_TMPFILE, 0600);
 	if (fd == -1) {
-		fprintf(stderr, "error: open 2, errno %d\n", errno);
+		ksft_test_result_fail("openat() error: Opening the second temporary file: Fail %d\n", errno);
 		return 1;
+	} else {
+		ksft_print_msg("openat(): Opening the second temporary file: Success\n");
 	}
 
+    ksft_test_result_pass("Test : Success\n");
+	ksft_exit_pass();
 	return 0;
 }
