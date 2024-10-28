@@ -51,6 +51,45 @@ static unsigned long platform_profile_get_choices(void)
 	return seen;
 }
 
+/* expected to be called under mutex */
+static int platform_profile_get_active(enum platform_profile_option *profile)
+{
+	struct platform_profile_handler *handler;
+	enum platform_profile_option active = PLATFORM_PROFILE_LAST;
+	enum platform_profile_option active2 = PLATFORM_PROFILE_LAST;
+	int err;
+
+	list_for_each_entry(handler, &platform_profile_handler_list, list) {
+		if (active == PLATFORM_PROFILE_LAST)
+			err = handler->profile_get(handler, &active);
+		else
+			err = handler->profile_get(handler, &active2);
+		if (err) {
+			pr_err("Failed to get profile for handler %s\n", handler->name);
+			return err;
+		}
+
+		if (WARN_ON(active == PLATFORM_PROFILE_LAST))
+			return -EINVAL;
+		if (active2 == PLATFORM_PROFILE_LAST)
+			continue;
+
+		if (active != active2) {
+			pr_warn("Profile handlers don't agree on current profile\n");
+			return -EINVAL;
+		}
+		active = active2;
+	}
+
+	/* Check that profile is valid index */
+	if (WARN_ON((active < 0) || (active >= ARRAY_SIZE(profile_names))))
+		return -EIO;
+
+	*profile = active;
+
+	return 0;
+}
+
 static ssize_t platform_profile_choices_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
@@ -80,23 +119,13 @@ static ssize_t platform_profile_show(struct device *dev,
 	enum platform_profile_option profile = PLATFORM_PROFILE_BALANCED;
 	int err;
 
-	err = mutex_lock_interruptible(&profile_lock);
-	if (err)
-		return err;
-
-	if (!cur_profile) {
-		mutex_unlock(&profile_lock);
-		return -ENODEV;
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
+		if (!platform_profile_is_registered())
+			return -ENODEV;
+		err = platform_profile_get_active(&profile);
+		if (err)
+			return err;
 	}
-
-	err = cur_profile->profile_get(cur_profile, &profile);
-	mutex_unlock(&profile_lock);
-	if (err)
-		return err;
-
-	/* Check that profile is valid index */
-	if (WARN_ON((profile < 0) || (profile >= ARRAY_SIZE(profile_names))))
-		return -EIO;
 
 	return sysfs_emit(buf, "%s\n", profile_names[profile]);
 }
