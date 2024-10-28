@@ -222,8 +222,18 @@ static void tsnep_phy_link_status_change(struct net_device *netdev)
 static int tsnep_phy_loopback(struct tsnep_adapter *adapter, bool enable)
 {
 	int retval;
+	int speed;
 
-	retval = phy_loopback(adapter->phydev, enable, 0);
+	if (enable) {
+		if (adapter->phydev->speed == SPEED_100)
+			speed = SPEED_100;
+		else
+			speed = SPEED_1000;
+	} else {
+		speed = 0;
+	}
+
+	retval = phy_loopback(adapter->phydev, enable, speed);
 
 	/* PHY link state change is not signaled if loopback is enabled, it
 	 * would delay a working loopback anyway, let's ensure that loopback
