@@ -317,7 +317,7 @@ static ssize_t vpd_write(struct file *filp, struct kobject *kobj,
 
 	return ret;
 }
-static BIN_ATTR(vpd, 0600, vpd_read, vpd_write, 0);
+static BIN_ATTR_RW(vpd, 0);
 
 static struct bin_attribute *vpd_attrs[] = {
 	&bin_attr_vpd,
