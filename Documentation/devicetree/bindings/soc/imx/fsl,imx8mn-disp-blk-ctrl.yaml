@@ -56,6 +56,15 @@ properties:
       - const: csi-aclk
       - const: csi-pclk
 
+  fsl,power-domains-boot-on:
+    description: |
+      Provide the on/off (1/0) status of the power domains. It allows
+      specifying whether one or more power domains have already been
+      initialized and left powered on by the bootloader.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 5
+    maxItems: 5
+
 required:
   - compatible
   - reg
