@@ -891,6 +891,49 @@ static int sock_timestamping_bind_phc(struct sock *sk, int phc_index)
 	return 0;
 }
 
+/* Used to track the tskey for bpf extension
+ *
+ * @sk_tskey: bpf extension can use it only when no application uses.
+ *            Application can use it directly regardless of bpf extension.
+ *
+ * There are three strategies:
+ * 1) If we've already set through setsockopt() and here we're going to set
+ *    OPT_ID for bpf use, we will not re-initialize the @sk_tskey and will
+ *    keep the record of delta between the current "key" and previous key.
+ * 2) If we've already set through bpf_setsockopt() and here we're going to
+ *    set for application use, we will record the delta first and then
+ *    override/initialize the @sk_tskey.
+ * 3) other cases, which means only either of them takes effect, so initialize
+ *    everything simplely.
+ */
+static long int sock_calculate_tskey_offset(struct sock *sk, int val, int bpf_type)
+{
+	u32 tskey;
+
+	if (sk_is_tcp(sk)) {
+		if ((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN))
+			return -EINVAL;
+
+		if (val & SOF_TIMESTAMPING_OPT_ID_TCP)
+			tskey = tcp_sk(sk)->write_seq;
+		else
+			tskey = tcp_sk(sk)->snd_una;
+	} else {
+		tskey = 0;
+	}
+
+	if (bpf_type && (sk->sk_tsflags & SOF_TIMESTAMPING_OPT_ID)) {
+		sk->sk_tskey_bpf_offset = tskey - atomic_read(&sk->sk_tskey);
+		return 0;
+	} else if (!bpf_type && (sk->sk_tsflags_bpf & SOF_TIMESTAMPING_OPT_ID)) {
+		sk->sk_tskey_bpf_offset = atomic_read(&sk->sk_tskey) - tskey;
+	} else {
+		sk->sk_tskey_bpf_offset = 0;
+	}
+
+	return tskey;
+}
+
 int sock_set_tskey(struct sock *sk, int val, int bpf_type)
 {
 	u32 tsflags = bpf_type ? sk->sk_tsflags_bpf : sk->sk_tsflags;
@@ -901,17 +944,13 @@ int sock_set_tskey(struct sock *sk, int val, int bpf_type)
 
 	if (val & SOF_TIMESTAMPING_OPT_ID &&
 	    !(tsflags & SOF_TIMESTAMPING_OPT_ID)) {
-		if (sk_is_tcp(sk)) {
-			if ((1 << sk->sk_state) &
-			    (TCPF_CLOSE | TCPF_LISTEN))
-				return -EINVAL;
-			if (val & SOF_TIMESTAMPING_OPT_ID_TCP)
-				atomic_set(&sk->sk_tskey, tcp_sk(sk)->write_seq);
-			else
-				atomic_set(&sk->sk_tskey, tcp_sk(sk)->snd_una);
-		} else {
-			atomic_set(&sk->sk_tskey, 0);
-		}
+		long int ret;
+
+		ret = sock_calculate_tskey_offset(sk, val, bpf_type);
+		if (ret <= 0)
+			return ret;
+
+		atomic_set(&sk->sk_tskey, ret);
 	}
 
 	return 0;
@@ -956,9 +995,14 @@ static int sock_set_timestamping_bpf(struct sock *sk,
 				     struct so_timestamping timestamping)
 {
 	u32 flags = timestamping.flags;
+	int ret;
 
 	if (flags & ~SOF_TIMESTAMPING_BPF_SUPPPORTED_MASK)
 		return -EINVAL;
+
+	ret = sock_set_tskey(sk, flags, 1);
+	if (ret)
+		return ret;
 
 	WRITE_ONCE(sk->sk_tsflags_bpf, flags);
 

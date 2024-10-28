@@ -5641,9 +5641,10 @@ void timestamp_call_bpf(struct sock *sk, int op, u32 nargs, u32 *args)
 }
 
 static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype,
+				     struct sk_buff *skb,
 				     struct skb_shared_hwtstamps *hwtstamps)
 {
-	u32 args[2] = {0, 0};
+	u32 args[3] = {0, 0, 0};
 	u32 tsflags, cb_flag;
 
 	tsflags = READ_ONCE(sk->sk_tsflags_bpf);
@@ -5672,7 +5673,15 @@ static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype,
 		args[1] = ts.tv_nsec;
 	}
 
-	timestamp_call_bpf(sk, cb_flag, 2, args);
+	if (tsflags & SOF_TIMESTAMPING_OPT_ID) {
+		args[2] = skb_shinfo(skb)->tskey;
+		if (sk_is_tcp(sk))
+			args[2] -= atomic_read(&sk->sk_tskey);
+		if (sk->sk_tskey_bpf_offset)
+			args[2] += sk->sk_tskey_bpf_offset;
+	}
+
+	timestamp_call_bpf(sk, cb_flag, 3, args);
 }
 
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
@@ -5683,7 +5692,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	if (!sk)
 		return;
 
-	skb_tstamp_tx_output_bpf(sk, tstype, hwtstamps);
+	skb_tstamp_tx_output_bpf(sk, tstype, orig_skb, hwtstamps);
 	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
