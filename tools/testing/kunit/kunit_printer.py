@@ -17,10 +17,12 @@ class Printer:
 
 	def __init__(self, output: typing.IO[str]):
 		self._output = output
-		self._use_color = output.isatty()
+		if output is not None:
+			self._use_color = output.isatty()
 
 	def print(self, message: str) -> None:
-		print(message, file=self._output)
+		if self._output is not None:
+			print(message, file=self._output)
 
 	def print_with_timestamp(self, message: str) -> None:
 		ts = datetime.datetime.now().strftime('%H:%M:%S')
@@ -46,3 +48,4 @@ class Printer:
 
 # Provides a default instance that prints to stdout
 stdout = Printer(sys.stdout)
+null_printer = Printer(None)
