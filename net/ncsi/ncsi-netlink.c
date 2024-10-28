@@ -58,6 +58,8 @@ static int ncsi_write_channel_info(struct sk_buff *skb,
 				   struct ncsi_dev_priv *ndp,
 				   struct ncsi_channel *nc)
 {
+	const unsigned int fw_name_len = sizeof(nc->version.fw_name);
+	char fw_name[sizeof(nc->version.fw_name) + 1];
 	struct ncsi_channel_vlan_filter *ncf;
 	struct ncsi_channel_mode *m;
 	struct nlattr *vid_nest;
@@ -73,7 +75,14 @@ static int ncsi_write_channel_info(struct sk_buff *skb,
 
 	nla_put_u32(skb, NCSI_CHANNEL_ATTR_VERSION_MAJOR, nc->version.major);
 	nla_put_u32(skb, NCSI_CHANNEL_ATTR_VERSION_MINOR, nc->version.minor);
-	nla_put_string(skb, NCSI_CHANNEL_ATTR_VERSION_STR, nc->version.fw_name);
+
+	/* the fw_name string will only be nul-terminated if it is shorter
+	 * than the 12-bytes available in the packet definition; ensure we have
+	 * the correct terminator here.
+	 */
+	memcpy(fw_name, nc->version.fw_name, fw_name_len);
+	fw_name[fw_name_len] = '\0';
+	nla_put_string(skb, NCSI_CHANNEL_ATTR_VERSION_STR, fw_name);
 
 	vid_nest = nla_nest_start_noflag(skb, NCSI_CHANNEL_ATTR_VLAN_LIST);
 	if (!vid_nest)
