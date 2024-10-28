@@ -105,37 +105,42 @@ static ssize_t platform_profile_store(struct device *dev,
 			    struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
+	struct platform_profile_handler *handler;
+	unsigned long choices;
 	int err, i;
-
-	err = mutex_lock_interruptible(&profile_lock);
-	if (err)
-		return err;
-
-	if (!cur_profile) {
-		mutex_unlock(&profile_lock);
-		return -ENODEV;
-	}
 
 	/* Scan for a matching profile */
 	i = sysfs_match_string(profile_names, buf);
 	if (i < 0) {
-		mutex_unlock(&profile_lock);
 		return -EINVAL;
 	}
 
-	/* Check that platform supports this profile choice */
-	if (!test_bit(i, cur_profile->choices)) {
-		mutex_unlock(&profile_lock);
-		return -EOPNOTSUPP;
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
+		if (!platform_profile_is_registered())
+			return -ENODEV;
+
+		/* Check that all handlers support this profile choice */
+		choices = platform_profile_get_choices();
+		if (!test_bit(i, &choices))
+			return -EOPNOTSUPP;
+
+		list_for_each_entry(handler, &platform_profile_handler_list, list) {
+			err = handler->profile_set(handler, i);
+			if (err) {
+				pr_err("Failed to set profile for handler %s\n", handler->name);
+				break;
+			}
+		}
+		if (err) {
+			list_for_each_entry_continue_reverse(handler, &platform_profile_handler_list, list) {
+				if (handler->profile_set(handler, PLATFORM_PROFILE_BALANCED))
+					pr_err("Failed to revert profile for handler %s\n", handler->name);
+			}
+			return err;
+		}
 	}
 
-	err = cur_profile->profile_set(cur_profile, i);
-	if (!err)
-		sysfs_notify(acpi_kobj, NULL, "platform_profile");
-
-	mutex_unlock(&profile_lock);
-	if (err)
-		return err;
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 	return count;
 }
 
