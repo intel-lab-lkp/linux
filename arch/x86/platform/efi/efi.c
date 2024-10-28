@@ -846,11 +846,24 @@ static void __init __efi_enter_virtual_mode(void)
 
 	efi_sync_low_kernel_mappings();
 
+	/*
+	 * set_virtual_address_map is the only service located at lower
+	 * addresses, so we have to temporarily disable LASS around it.
+	 * Note that clearing EFLAGS.AC is not enough for this, the whole
+	 * LASS needs to be disabled.
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_LASS))
+		cr4_clear_bits(X86_CR4_LASS);
+
 	status = efi_set_virtual_address_map(efi.memmap.desc_size * count,
 					     efi.memmap.desc_size,
 					     efi.memmap.desc_version,
 					     (efi_memory_desc_t *)pa,
 					     efi_systab_phys);
+
+	if (cpu_feature_enabled(X86_FEATURE_LASS))
+		cr4_set_bits(X86_CR4_LASS);
+
 	if (status != EFI_SUCCESS) {
 		pr_err("Unable to switch EFI into virtual mode (status=%lx)!\n",
 		       status);
