@@ -3803,7 +3803,7 @@ int split_folio_to_list(struct folio *folio, struct list_head *list)
  *
  * After split, folio is left locked for caller.
  */
-static int folio_split(struct folio *folio, unsigned int new_order,
+int folio_split(struct folio *folio, unsigned int new_order,
 		struct page *page, struct list_head *list)
 {
 	return __folio_split(folio, new_order, page, list, false);
