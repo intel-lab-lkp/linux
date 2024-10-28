@@ -1953,7 +1953,6 @@ static __init void identify_boot_cpu(void)
 	enable_sep_cpu();
 #endif
 	cpu_detect_tlb(&boot_cpu_data);
-	setup_cr_pinning();
 
 	tsx_init();
 	tdx_init();
@@ -2385,9 +2384,15 @@ void __init arch_cpu_finalize_init(void)
 
 	/*
 	 * This needs to follow the FPU initializtion, since EFI depends on it.
+	 * It also needs to precede the CR pinning setup, because we need to be
+	 * able to temporarily clear the CR4.LASS bit in order to execute the
+	 * set_virtual_address_map call, which resides in lower addresses and
+	 * would trip LASS if enabled.
 	 */
 	if (efi_enabled(EFI_RUNTIME_SERVICES))
 		efi_enter_virtual_mode();
+
+	setup_cr_pinning();
 
 	/*
 	 * Ensure that access to the per CPU representation has the initial
