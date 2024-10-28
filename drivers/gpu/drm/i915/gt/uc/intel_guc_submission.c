@@ -1684,15 +1684,20 @@ void intel_guc_submission_reset_prepare(struct intel_guc *guc)
 	guc->interrupts.disable(guc);
 	__reset_guc_busyness_stats(guc);
 
-	/* Flush IRQ handler */
-	spin_lock_irq(guc_to_gt(guc)->irq_lock);
-	spin_unlock_irq(guc_to_gt(guc)->irq_lock);
+	/*
+	 * Disable tasklet until end of prepare, if tasklet is active,
+	 * tasklet_disable will wait until it finished
+	 */
+	tasklet_disable(&guc->ct.receive_tasklet);
 
 	guc_flush_submissions(guc);
 	guc_flush_destroyed_contexts(guc);
 	flush_work(&guc->ct.requests.worker);
 
 	scrub_guc_desc_for_outstanding_g2h(guc);
+
+	/* Enable tasklet at the end, before HW reset */
+	tasklet_enable(&guc->ct.receive_tasklet);
 }
 
 static struct intel_engine_cs *
