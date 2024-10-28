@@ -33,30 +33,43 @@ static bool platform_profile_is_registered(void)
 	return count > 0;
 }
 
+/* expected to be called under mutex */
+static unsigned long platform_profile_get_choices(void)
+{
+	struct platform_profile_handler *handler;
+	unsigned long seen = 0;
+	int i;
+
+	list_for_each_entry(handler, &platform_profile_handler_list, list) {
+		for_each_set_bit(i, handler->choices, PLATFORM_PROFILE_LAST) {
+			if (seen & BIT(i))
+				continue;
+			seen |= BIT(i);
+		}
+	}
+
+	return seen;
+}
+
 static ssize_t platform_profile_choices_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
+	unsigned long choices;
 	int len = 0;
-	int err, i;
+	int i;
 
-	err = mutex_lock_interruptible(&profile_lock);
-	if (err)
-		return err;
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock)
+		choices = platform_profile_get_choices();
 
-	if (!cur_profile) {
-		mutex_unlock(&profile_lock);
-		return -ENODEV;
-	}
-
-	for_each_set_bit(i, cur_profile->choices, PLATFORM_PROFILE_LAST) {
+	for_each_set_bit(i, &choices, PLATFORM_PROFILE_LAST) {
 		if (len == 0)
 			len += sysfs_emit_at(buf, len, "%s", profile_names[i]);
 		else
 			len += sysfs_emit_at(buf, len, " %s", profile_names[i]);
 	}
+
 	len += sysfs_emit_at(buf, len, "\n");
-	mutex_unlock(&profile_lock);
 	return len;
 }
 
