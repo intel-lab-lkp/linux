@@ -5640,8 +5640,10 @@ static void timestamp_call_bpf(struct sock *sk, int op, u32 nargs, u32 *args)
 	BPF_CGROUP_RUN_PROG_SOCK_OPS_SK(&sock_ops, sk);
 }
 
-static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype)
+static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype,
+				     struct skb_shared_hwtstamps *hwtstamps)
 {
+	u32 args[2] = {0, 0};
 	u32 tsflags, cb_flag;
 
 	tsflags = READ_ONCE(sk->sk_tsflags_bpf);
@@ -5652,11 +5654,22 @@ static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype)
 	case SCM_TSTAMP_SCHED:
 		cb_flag = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
 		break;
+	case SCM_TSTAMP_SND:
+		cb_flag = BPF_SOCK_OPS_TS_SW_OPT_CB;
+		break;
 	default:
 		return;
 	}
 
-	timestamp_call_bpf(sk, cb_flag, 0, NULL);
+	if (hwtstamps) {
+		struct timespec64 ts;
+
+		ts = ktime_to_timespec64(hwtstamps->hwtstamp);
+		args[0] = ts.tv_sec;
+		args[1] = ts.tv_nsec;
+	}
+
+	timestamp_call_bpf(sk, cb_flag, 2, args);
 }
 
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
@@ -5667,7 +5680,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	if (!sk)
 		return;
 
-	skb_tstamp_tx_output_bpf(sk, tstype);
+	skb_tstamp_tx_output_bpf(sk, tstype, hwtstamps);
 	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
