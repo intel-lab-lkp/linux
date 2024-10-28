@@ -1061,6 +1061,9 @@ Messages without an explicit priority will be printed with this priority.
 printk
 ======
 
+This sysctl is deprecated and will be removed in future. Please consider using
+``kernel.console_loglevel`` or ``kernel.default_message_loglevel`` instead.
+
 The four values in printk denote: ``console_loglevel``,
 ``default_message_loglevel``, ``minimum_console_loglevel`` and
 ``default_console_loglevel`` respectively.
