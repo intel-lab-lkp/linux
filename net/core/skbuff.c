@@ -5657,6 +5657,9 @@ static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype,
 	case SCM_TSTAMP_SND:
 		cb_flag = BPF_SOCK_OPS_TS_SW_OPT_CB;
 		break;
+	case SCM_TSTAMP_ACK:
+		cb_flag = BPF_SOCK_OPS_TS_ACK_OPT_CB;
+		break;
 	default:
 		return;
 	}
