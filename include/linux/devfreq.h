@@ -262,14 +262,6 @@ int devfreq_register_notifier(struct devfreq *devfreq,
 int devfreq_unregister_notifier(struct devfreq *devfreq,
 				struct notifier_block *nb,
 				unsigned int list);
-int devm_devfreq_register_notifier(struct device *dev,
-				struct devfreq *devfreq,
-				struct notifier_block *nb,
-				unsigned int list);
-void devm_devfreq_unregister_notifier(struct device *dev,
-				struct devfreq *devfreq,
-				struct notifier_block *nb,
-				unsigned int list);
 struct devfreq *devfreq_get_devfreq_by_node(struct device_node *node);
 struct devfreq *devfreq_get_devfreq_by_phandle(struct device *dev,
 				const char *phandle_name, int index);
@@ -417,21 +409,6 @@ static inline int devfreq_unregister_notifier(struct devfreq *devfreq,
 					unsigned int list)
 {
 	return 0;
-}
-
-static inline int devm_devfreq_register_notifier(struct device *dev,
-					struct devfreq *devfreq,
-					struct notifier_block *nb,
-					unsigned int list)
-{
-	return 0;
-}
-
-static inline void devm_devfreq_unregister_notifier(struct device *dev,
-					struct devfreq *devfreq,
-					struct notifier_block *nb,
-					unsigned int list)
-{
 }
 
 static inline struct devfreq *devfreq_get_devfreq_by_node(struct device_node *node)
