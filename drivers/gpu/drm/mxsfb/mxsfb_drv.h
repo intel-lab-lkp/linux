@@ -47,6 +47,7 @@ struct mxsfb_drm_private {
 	struct drm_bridge		*bridge;
 
 	bool				crc_active;
+	bool                            enabled;
 };
 
 static inline struct mxsfb_drm_private *

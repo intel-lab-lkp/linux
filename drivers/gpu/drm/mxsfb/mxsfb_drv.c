@@ -10,6 +10,7 @@
 
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
+#include <linux/of.h>
 #include <linux/io.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -221,6 +222,8 @@ static int mxsfb_load(struct drm_device *drm,
 	if (!mxsfb)
 		return -ENOMEM;
 
+	mxsfb->enabled =
+		of_property_read_bool(drm->dev->of_node, "fsl,boot-on");
 	mxsfb->drm = drm;
 	drm->dev_private = mxsfb;
 	mxsfb->devdata = devdata;

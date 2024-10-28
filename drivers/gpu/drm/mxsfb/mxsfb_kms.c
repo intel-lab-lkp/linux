@@ -202,9 +202,11 @@ static void mxsfb_enable_controller(struct mxsfb_drm_private *mxsfb)
 	writel(reg, mxsfb->base + LCDC_CTRL1);
 
 	writel(CTRL_RUN, mxsfb->base + LCDC_CTRL + REG_SET);
+
+	mxsfb->enabled = true;
 }
 
-static void mxsfb_disable_controller(struct mxsfb_drm_private *mxsfb)
+static void _mxsfb_disable_controller(struct mxsfb_drm_private *mxsfb)
 {
 	u32 reg;
 
@@ -220,6 +222,13 @@ static void mxsfb_disable_controller(struct mxsfb_drm_private *mxsfb)
 	reg = readl(mxsfb->base + LCDC_VDCTRL4);
 	reg &= ~VDCTRL4_SYNC_SIGNALS_ON;
 	writel(reg, mxsfb->base + LCDC_VDCTRL4);
+
+	mxsfb->enabled = false;
+}
+
+static void mxsfb_disable_controller(struct mxsfb_drm_private *mxsfb)
+{
+	_mxsfb_disable_controller(mxsfb);
 
 	clk_disable_unprepare(mxsfb->clk);
 	if (mxsfb->clk_disp_axi)
@@ -353,6 +362,9 @@ static void mxsfb_crtc_atomic_enable(struct drm_crtc *crtc,
 	struct drm_device *drm = mxsfb->drm;
 	u32 bus_format = 0;
 	dma_addr_t dma_addr;
+
+	if (mxsfb->enabled)
+		_mxsfb_disable_controller(mxsfb);
 
 	pm_runtime_get_sync(drm->dev);
 	mxsfb_enable_axi_clk(mxsfb);
