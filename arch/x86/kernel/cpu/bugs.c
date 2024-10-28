@@ -41,7 +41,6 @@ static void __init spectre_v2_user_select_mitigation(void);
 static void __init ssb_select_mitigation(void);
 static void __init l1tf_select_mitigation(void);
 static void __init mds_select_mitigation(void);
-static void __init md_clear_update_mitigation(void);
 static void __init md_clear_select_mitigation(void);
 static void __init taa_select_mitigation(void);
 static void __init mmio_select_mitigation(void);
@@ -234,32 +233,23 @@ static void x86_amd_ssb_disable(void)
 
 /* Default mitigation for MDS-affected CPUs */
 static enum mds_mitigations mds_mitigation __ro_after_init =
-	IS_ENABLED(CONFIG_MITIGATION_MDS) ? MDS_MITIGATION_FULL : MDS_MITIGATION_OFF;
+	IS_ENABLED(CONFIG_MITIGATION_MDS) ? MDS_MITIGATION_VERW : MDS_MITIGATION_OFF;
 static bool mds_nosmt __ro_after_init = false;
 
 static const char * const mds_strings[] = {
 	[MDS_MITIGATION_OFF]	= "Vulnerable",
-	[MDS_MITIGATION_FULL]	= "Mitigation: Clear CPU buffers",
+	[MDS_MITIGATION_VERW]	= "Mitigation: Clear CPU buffers",
 	[MDS_MITIGATION_VMWERV]	= "Vulnerable: Clear CPU buffers attempted, no microcode",
 };
 
 static void __init mds_select_mitigation(void)
 {
-	if (!boot_cpu_has_bug(X86_BUG_MDS) || cpu_mitigations_off()) {
+	if (!boot_cpu_has_bug(X86_BUG_MDS))
 		mds_mitigation = MDS_MITIGATION_OFF;
-		return;
-	}
-
-	if (mds_mitigation == MDS_MITIGATION_FULL) {
-		if (!boot_cpu_has(X86_FEATURE_MD_CLEAR))
-			mds_mitigation = MDS_MITIGATION_VMWERV;
-
-		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
-
-		if (!boot_cpu_has(X86_BUG_MSBDS_ONLY) &&
-		    (mds_nosmt || cpu_mitigations_auto_nosmt()))
-			cpu_smt_disable(false);
-	}
+	else if (boot_cpu_has(X86_FEATURE_MD_CLEAR))
+		mds_mitigation = MDS_MITIGATION_VERW;
+	else
+		mds_mitigation = MDS_MITIGATION_VMWERV;
 }
 
 static int __init mds_cmdline(char *str)
@@ -273,9 +263,9 @@ static int __init mds_cmdline(char *str)
 	if (!strcmp(str, "off"))
 		mds_mitigation = MDS_MITIGATION_OFF;
 	else if (!strcmp(str, "full"))
-		mds_mitigation = MDS_MITIGATION_FULL;
+		mds_mitigation = MDS_MITIGATION_VERW;
 	else if (!strcmp(str, "full,nosmt")) {
-		mds_mitigation = MDS_MITIGATION_FULL;
+		mds_mitigation = MDS_MITIGATION_VERW;
 		mds_nosmt = true;
 	}
 
@@ -316,25 +306,12 @@ static void __init taa_select_mitigation(void)
 	if (!boot_cpu_has(X86_FEATURE_RTM)) {
 		taa_mitigation = TAA_MITIGATION_TSX_DISABLED;
 		return;
-	}
-
-	if (cpu_mitigations_off()) {
-		taa_mitigation = TAA_MITIGATION_OFF;
-		return;
-	}
-
-	/*
-	 * TAA mitigation via VERW is turned off if both
-	 * tsx_async_abort=off and mds=off are specified.
-	 */
-	if (taa_mitigation == TAA_MITIGATION_OFF &&
-	    mds_mitigation == MDS_MITIGATION_OFF)
-		return;
-
-	if (boot_cpu_has(X86_FEATURE_MD_CLEAR))
-		taa_mitigation = TAA_MITIGATION_VERW;
-	else
+	} else if (!boot_cpu_has(X86_FEATURE_MD_CLEAR)) {
 		taa_mitigation = TAA_MITIGATION_UCODE_NEEDED;
+		return;
+	} else {
+		taa_mitigation = TAA_MITIGATION_VERW;
+	}
 
 	/*
 	 * VERW doesn't clear the CPU buffers when MD_CLEAR=1 and MDS_NO=1.
@@ -348,18 +325,6 @@ static void __init taa_select_mitigation(void)
 	if ( (x86_arch_cap_msr & ARCH_CAP_MDS_NO) &&
 	    !(x86_arch_cap_msr & ARCH_CAP_TSX_CTRL_MSR))
 		taa_mitigation = TAA_MITIGATION_UCODE_NEEDED;
-
-	/*
-	 * TSX is enabled, select alternate mitigation for TAA which is
-	 * the same as MDS. Enable MDS static branch to clear CPU buffers.
-	 *
-	 * For guests that can't determine whether the correct microcode is
-	 * present on host, enable the mitigation for UCODE_NEEDED as well.
-	 */
-	setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
-
-	if (taa_nosmt || cpu_mitigations_auto_nosmt())
-		cpu_smt_disable(false);
 }
 
 static int __init tsx_async_abort_parse_cmdline(char *str)
@@ -405,23 +370,10 @@ static const char * const mmio_strings[] = {
 
 static void __init mmio_select_mitigation(void)
 {
-	if (!boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA) ||
-	     boot_cpu_has_bug(X86_BUG_MMIO_UNKNOWN) ||
-	     cpu_mitigations_off()) {
+	if (!boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA)) {
 		mmio_mitigation = MMIO_MITIGATION_OFF;
 		return;
 	}
-
-	if (mmio_mitigation == MMIO_MITIGATION_OFF)
-		return;
-
-	/*
-	 * Enable CPU buffer clear mitigation for host and VMM, if also affected
-	 * by MDS or TAA. Otherwise, enable mitigation for VMM only.
-	 */
-	if (boot_cpu_has_bug(X86_BUG_MDS) || (boot_cpu_has_bug(X86_BUG_TAA) &&
-					      boot_cpu_has(X86_FEATURE_RTM)))
-		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
 
 	/*
 	 * X86_FEATURE_CLEAR_CPU_BUF could be enabled by other VERW based
@@ -454,9 +406,6 @@ static void __init mmio_select_mitigation(void)
 		mmio_mitigation = MMIO_MITIGATION_VERW;
 	else
 		mmio_mitigation = MMIO_MITIGATION_UCODE_NEEDED;
-
-	if (mmio_nosmt || cpu_mitigations_auto_nosmt())
-		cpu_smt_disable(false);
 }
 
 static int __init mmio_stale_data_parse_cmdline(char *str)
@@ -501,17 +450,12 @@ static const char * const rfds_strings[] = {
 
 static void __init rfds_select_mitigation(void)
 {
-	if (!boot_cpu_has_bug(X86_BUG_RFDS) || cpu_mitigations_off()) {
+	if (!boot_cpu_has_bug(X86_BUG_RFDS))
 		rfds_mitigation = RFDS_MITIGATION_OFF;
-		return;
-	}
-	if (rfds_mitigation == RFDS_MITIGATION_OFF)
-		return;
-
-	if (x86_arch_cap_msr & ARCH_CAP_RFDS_CLEAR)
-		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
-	else
+	else if (!(x86_arch_cap_msr & ARCH_CAP_RFDS_CLEAR))
 		rfds_mitigation = RFDS_MITIGATION_UCODE_NEEDED;
+	else
+		rfds_mitigation = RFDS_MITIGATION_VERW;
 }
 
 static __init int rfds_parse_cmdline(char *str)
@@ -534,52 +478,12 @@ early_param("reg_file_data_sampling", rfds_parse_cmdline);
 #undef pr_fmt
 #define pr_fmt(fmt)     "" fmt
 
-static void __init md_clear_update_mitigation(void)
+static bool __init cpu_bug_needs_verw(void)
 {
-	if (cpu_mitigations_off())
-		return;
-
-	if (!boot_cpu_has(X86_FEATURE_CLEAR_CPU_BUF))
-		goto out;
-
-	/*
-	 * X86_FEATURE_CLEAR_CPU_BUF is now enabled. Update MDS, TAA and MMIO
-	 * Stale Data mitigation, if necessary.
-	 */
-	if (mds_mitigation == MDS_MITIGATION_OFF &&
-	    boot_cpu_has_bug(X86_BUG_MDS)) {
-		mds_mitigation = MDS_MITIGATION_FULL;
-		mds_select_mitigation();
-	}
-	if (taa_mitigation == TAA_MITIGATION_OFF &&
-	    boot_cpu_has_bug(X86_BUG_TAA)) {
-		taa_mitigation = TAA_MITIGATION_VERW;
-		taa_select_mitigation();
-	}
-	/*
-	 * MMIO_MITIGATION_OFF is not checked here so that mmio_stale_data_clear
-	 * gets updated correctly as per X86_FEATURE_CLEAR_CPU_BUF state.
-	 */
-	if (boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA)) {
-		mmio_mitigation = MMIO_MITIGATION_VERW;
-		mmio_select_mitigation();
-	}
-	if (rfds_mitigation == RFDS_MITIGATION_OFF &&
-	    boot_cpu_has_bug(X86_BUG_RFDS)) {
-		rfds_mitigation = RFDS_MITIGATION_VERW;
-		rfds_select_mitigation();
-	}
-out:
-	if (boot_cpu_has_bug(X86_BUG_MDS))
-		pr_info("MDS: %s\n", mds_strings[mds_mitigation]);
-	if (boot_cpu_has_bug(X86_BUG_TAA))
-		pr_info("TAA: %s\n", taa_strings[taa_mitigation]);
-	if (boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA))
-		pr_info("MMIO Stale Data: %s\n", mmio_strings[mmio_mitigation]);
-	else if (boot_cpu_has_bug(X86_BUG_MMIO_UNKNOWN))
-		pr_info("MMIO Stale Data: Unknown: No mitigations\n");
-	if (boot_cpu_has_bug(X86_BUG_RFDS))
-		pr_info("Register File Data Sampling: %s\n", rfds_strings[rfds_mitigation]);
+	return boot_cpu_has_bug(X86_BUG_MDS) ||
+	       boot_cpu_has_bug(X86_BUG_TAA) ||
+	       boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA) ||
+	       boot_cpu_has_bug(X86_BUG_RFDS);
 }
 
 static void __init verw_mitigations_check(void)
@@ -599,20 +503,70 @@ static void __init verw_mitigations_check(void)
 	}
 }
 
-static void __init md_clear_select_mitigation(void)
+static bool __init verw_mitigations_disabled(void)
 {
 	verw_mitigations_check();
+	/*
+	 * TODO: Create a single mitigation variable that will allow for setting
+	 * the location of the mitigation, i.e.:
+	 *
+	 * kernel->user
+	 * kvm->guest
+	 * kvm->guest if device passthrough
+	 * kernel->idle
+	 */
+	return (mds_mitigation == MDS_MITIGATION_OFF &&
+		taa_mitigation == TAA_MITIGATION_OFF &&
+		mmio_mitigation == MMIO_MITIGATION_OFF &&
+		rfds_mitigation == RFDS_MITIGATION_OFF);
+}
+
+static void __init md_clear_select_mitigation(void)
+{
+	if (verw_mitigations_disabled())
+		goto out;
+
+	if (!cpu_bug_needs_verw() || cpu_mitigations_off()) {
+		mds_mitigation = MDS_MITIGATION_OFF;
+		taa_mitigation = TAA_MITIGATION_OFF;
+		mmio_mitigation = MMIO_MITIGATION_OFF;
+		rfds_mitigation = RFDS_MITIGATION_OFF;
+		goto out;
+	}
+
 	mds_select_mitigation();
 	taa_select_mitigation();
-	mmio_select_mitigation();
 	rfds_select_mitigation();
 
+	if (mds_mitigation == MDS_MITIGATION_VERW ||
+	    taa_mitigation == TAA_MITIGATION_VERW ||
+	    rfds_mitigation == RFDS_MITIGATION_VERW)
+		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
+
 	/*
-	 * As these mitigations are inter-related and rely on VERW instruction
-	 * to clear the microarchitural buffers, update and print their status
-	 * after mitigation selection is done for each of these vulnerabilities.
+	 * The MMIO mitigation has a dependency on X86_FEATURE_CLEAR_CPU_BUF so
+	 * this must be called after it gets set
 	 */
-	md_clear_update_mitigation();
+	mmio_select_mitigation();
+
+	if (!boot_cpu_has(X86_BUG_MSBDS_ONLY) &&
+	    (mds_nosmt || cpu_mitigations_auto_nosmt()))
+		cpu_smt_disable(false);
+
+	if (taa_nosmt || mmio_nosmt || cpu_mitigations_auto_nosmt())
+		cpu_smt_disable(false);
+
+out:
+	if (boot_cpu_has_bug(X86_BUG_MDS))
+		pr_info("MDS: %s\n", mds_strings[mds_mitigation]);
+	if (boot_cpu_has_bug(X86_BUG_TAA))
+		pr_info("TAA: %s\n", taa_strings[taa_mitigation]);
+	if (boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA))
+		pr_info("MMIO Stale Data: %s\n", mmio_strings[mmio_mitigation]);
+	else if (boot_cpu_has_bug(X86_BUG_MMIO_UNKNOWN))
+		pr_info("MMIO Stale Data: Unknown: No mitigations\n");
+	if (boot_cpu_has_bug(X86_BUG_RFDS))
+		pr_info("Register File Data Sampling: %s\n", rfds_strings[rfds_mitigation]);
 }
 
 #undef pr_fmt
@@ -1991,7 +1945,7 @@ void cpu_bugs_smt_update(void)
 	}
 
 	switch (mds_mitigation) {
-	case MDS_MITIGATION_FULL:
+	case MDS_MITIGATION_VERW:
 	case MDS_MITIGATION_VMWERV:
 		if (sched_smt_active() && !boot_cpu_has(X86_BUG_MSBDS_ONLY))
 			pr_warn_once(MDS_MSG_SMT);
