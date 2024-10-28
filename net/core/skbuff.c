@@ -5692,7 +5692,8 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	if (!sk)
 		return;
 
-	skb_tstamp_tx_output_bpf(sk, tstype, orig_skb, hwtstamps);
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS))
+		skb_tstamp_tx_output_bpf(sk, tstype, orig_skb, hwtstamps);
 	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);

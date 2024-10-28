@@ -1479,7 +1479,7 @@ set_sndbuf:
 		}
 		if (!bpf_timetamping)
 			ret = sock_set_timestamping(sk, optname, timestamping);
-		else
+		else if (cgroup_bpf_enabled(CGROUP_SOCK_OPS))
 			ret = sock_set_timestamping_bpf(sk, timestamping);
 		break;
 
@@ -1869,7 +1869,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 				v.timestamping.flags = READ_ONCE(sk->sk_tsflags);
 				v.timestamping.bind_phc = READ_ONCE(sk->sk_bind_phc);
 			}
-		} else {
+		} else if (cgroup_bpf_enabled(CGROUP_SOCK_OPS)) {
 			v.timestamping.flags = READ_ONCE(sk->sk_tsflags_bpf);
 		}
 		break;

@@ -1264,7 +1264,8 @@ back_from_confirm:
 	if (!corkreq) {
 		struct inet_cork cork;
 
-		timestamp_call_bpf(sk, BPF_SOCK_OPS_TS_UDP_SND_CB, 0, NULL);
+		if (cgroup_bpf_enabled(CGROUP_SOCK_OPS))
+			timestamp_call_bpf(sk, BPF_SOCK_OPS_TS_UDP_SND_CB, 0, NULL);
 		skb = ip_make_skb(sk, fl4, getfrag, msg, ulen,
 				  sizeof(struct udphdr), &ipc, &rt,
 				  &cork, msg->msg_flags);

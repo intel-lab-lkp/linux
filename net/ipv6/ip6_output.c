@@ -1402,7 +1402,8 @@ static int ip6_setup_cork(struct sock *sk, struct inet_cork_full *cork,
 	cork->base.tx_flags = 0;
 	cork->base.mark = ipc6->sockc.mark;
 	sock_tx_timestamp(sk, &ipc6->sockc, &cork->base.tx_flags);
-	sock_tx_timestamp_bpf(READ_ONCE(sk->sk_tsflags_bpf), &cork->base.tx_flags);
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS))
+		sock_tx_timestamp_bpf(READ_ONCE(sk->sk_tsflags_bpf), &cork->base.tx_flags);
 	if (ipc6->sockc.tsflags & SOCKCM_FLAG_TS_OPT_ID) {
 		cork->base.flags |= IPCORK_TS_OPT_ID;
 		cork->base.ts_opt_id = ipc6->sockc.ts_opt_id;
@@ -1556,7 +1557,7 @@ emsgsize:
 				hold_tskey = true;
 			}
 		}
-		if (!hold_tskey &&
+		if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) && !hold_tskey &&
 		    READ_ONCE(sk->sk_tsflags_bpf) & SOF_TIMESTAMPING_OPT_ID) {
 			tskey = atomic_inc_return(&sk->sk_tskey) - 1;
 			hold_tskey = true;

@@ -1058,7 +1058,7 @@ static int __ip_append_data(struct sock *sk,
 				hold_tskey = true;
 			}
 		}
-		if (!hold_tskey &&
+		if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) && !hold_tskey &&
 		    READ_ONCE(sk->sk_tsflags_bpf) & SOF_TIMESTAMPING_OPT_ID) {
 			tskey = atomic_inc_return(&sk->sk_tskey) - 1;
 			hold_tskey = true;
@@ -1338,7 +1338,8 @@ static int ip_setup_cork(struct sock *sk, struct inet_cork *cork,
 	cork->transmit_time = ipc->sockc.transmit_time;
 	cork->tx_flags = 0;
 	sock_tx_timestamp(sk, &ipc->sockc, &cork->tx_flags);
-	sock_tx_timestamp_bpf(READ_ONCE(sk->sk_tsflags_bpf), &cork->tx_flags);
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS))
+		sock_tx_timestamp_bpf(READ_ONCE(sk->sk_tsflags_bpf), &cork->tx_flags);
 	if (ipc->sockc.tsflags & SOCKCM_FLAG_TS_OPT_ID) {
 		cork->flags |= IPCORK_TS_OPT_ID;
 		cork->ts_opt_id = ipc->sockc.ts_opt_id;

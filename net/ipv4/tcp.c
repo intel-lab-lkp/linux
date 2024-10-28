@@ -509,7 +509,8 @@ static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 			shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
 	}
 
-	tcp_tx_timestamp_bpf(sk, skb);
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS))
+		tcp_tx_timestamp_bpf(sk, skb);
 }
 
 static bool tcp_stream_is_readable(struct sock *sk, int target)
