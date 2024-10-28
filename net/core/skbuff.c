@@ -5539,6 +5539,32 @@ err:
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
+/* This function is used to test if application SO_TIMESTAMPING feature
+ * or bpf SO_TIMESTAMPING feature is loaded by checking its own socket flags.
+ */
+static bool sk_tstamp_tx_flags(struct sock *sk, u32 tsflags, int tstype)
+{
+	u32 testflag;
+
+	switch (tstype) {
+	case SCM_TSTAMP_SCHED:
+		testflag = SOF_TIMESTAMPING_TX_SCHED;
+		break;
+	case SCM_TSTAMP_SND:
+		testflag = SOF_TIMESTAMPING_TX_SOFTWARE;
+		break;
+	case SCM_TSTAMP_ACK:
+		testflag = SOF_TIMESTAMPING_TX_ACK;
+		break;
+	default:
+		return false;
+	}
+	if (tsflags & testflag)
+		return true;
+
+	return false;
+}
+
 static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 				 const struct sk_buff *ack_skb,
 				 struct skb_shared_hwtstamps *hwtstamps,
@@ -5549,6 +5575,9 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 	u32 tsflags;
 
 	tsflags = READ_ONCE(sk->sk_tsflags);
+	if (!sk_tstamp_tx_flags(sk, tsflags, tstype))
+		return;
+
 	if (!hwtstamps && !(tsflags & SOF_TIMESTAMPING_OPT_TX_SWHW) &&
 	    skb_shinfo(orig_skb)->tx_flags & SKBTX_IN_PROGRESS)
 		return;
@@ -5592,6 +5621,15 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 	__skb_complete_tx_timestamp(skb, sk, tstype, opt_stats);
 }
 
+static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype)
+{
+	u32 tsflags;
+
+	tsflags = READ_ONCE(sk->sk_tsflags_bpf);
+	if (!sk_tstamp_tx_flags(sk, tsflags, tstype))
+		return;
+}
+
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		     const struct sk_buff *ack_skb,
 		     struct skb_shared_hwtstamps *hwtstamps,
@@ -5600,6 +5638,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	if (!sk)
 		return;
 
+	skb_tstamp_tx_output_bpf(sk, tstype);
 	skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
