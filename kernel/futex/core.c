@@ -1204,6 +1204,11 @@ static int futex_hash_allocate(unsigned long arg3, unsigned long arg4,
 	return 0;
 }
 
+int futex_hash_allocate_default(void)
+{
+	return futex_hash_allocate(0, 0, 0);
+}
+
 static int futex_hash_is_shared(unsigned long arg3, unsigned long arg4,
 				unsigned long arg5)
 {
