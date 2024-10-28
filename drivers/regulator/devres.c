@@ -491,15 +491,6 @@ struct regulator_supply_alias_match {
 	const char *id;
 };
 
-static int devm_regulator_match_supply_alias(struct device *dev, void *res,
-					     void *data)
-{
-	struct regulator_supply_alias_match *match = res;
-	struct regulator_supply_alias_match *target = data;
-
-	return match->dev == target->dev && strcmp(match->id, target->id) == 0;
-}
-
 static void devm_regulator_destroy_supply_alias(struct device *dev, void *res)
 {
 	struct regulator_supply_alias_match *match = res;
@@ -547,71 +538,6 @@ int devm_regulator_register_supply_alias(struct device *dev, const char *id,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(devm_regulator_register_supply_alias);
-
-static void devm_regulator_unregister_supply_alias(struct device *dev,
-						   const char *id)
-{
-	struct regulator_supply_alias_match match;
-	int rc;
-
-	match.dev = dev;
-	match.id = id;
-
-	rc = devres_release(dev, devm_regulator_destroy_supply_alias,
-			    devm_regulator_match_supply_alias, &match);
-	if (rc != 0)
-		WARN_ON(rc);
-}
-
-/**
- * devm_regulator_bulk_register_supply_alias - Managed register
- * multiple aliases
- *
- * @dev:       device to supply
- * @id:        list of supply names or regulator IDs
- * @alias_dev: device that should be used to lookup the supply
- * @alias_id:  list of supply names or regulator IDs that should be used to
- *             lookup the supply
- * @num_id:    number of aliases to register
- *
- * @return 0 on success, a negative error number on failure.
- *
- * This helper function allows drivers to register several supply
- * aliases in one operation, the aliases will be automatically
- * unregisters when the source device is unbound.  If any of the
- * aliases cannot be registered any aliases that were registered
- * will be removed before returning to the caller.
- */
-int devm_regulator_bulk_register_supply_alias(struct device *dev,
-					      const char *const *id,
-					      struct device *alias_dev,
-					      const char *const *alias_id,
-					      int num_id)
-{
-	int i;
-	int ret;
-
-	for (i = 0; i < num_id; ++i) {
-		ret = devm_regulator_register_supply_alias(dev, id[i],
-							   alias_dev,
-							   alias_id[i]);
-		if (ret < 0)
-			goto err;
-	}
-
-	return 0;
-
-err:
-	dev_err(dev,
-		"Failed to create supply alias %s,%s -> %s,%s\n",
-		id[i], dev_name(dev), alias_id[i], dev_name(alias_dev));
-
-	while (--i >= 0)
-		devm_regulator_unregister_supply_alias(dev, id[i]);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(devm_regulator_bulk_register_supply_alias);
 
 struct regulator_notifier_match {
 	struct regulator *regulator;
