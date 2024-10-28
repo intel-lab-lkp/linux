@@ -2092,7 +2092,7 @@ int phy_resume(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(phy_resume);
 
-int phy_loopback(struct phy_device *phydev, bool enable)
+int phy_loopback(struct phy_device *phydev, bool enable, int speed)
 {
 	int ret = 0;
 
@@ -2112,9 +2112,9 @@ int phy_loopback(struct phy_device *phydev, bool enable)
 	}
 
 	if (phydev->drv->set_loopback)
-		ret = phydev->drv->set_loopback(phydev, enable, 0);
+		ret = phydev->drv->set_loopback(phydev, enable, speed);
 	else
-		ret = genphy_loopback(phydev, enable, 0);
+		ret = genphy_loopback(phydev, enable, speed);
 
 	if (ret)
 		goto out;
