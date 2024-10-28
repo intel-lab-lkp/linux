@@ -103,6 +103,9 @@ DEFINE_STATIC_SRCU(console_srcu);
  */
 int __read_mostly suppress_printk;
 
+/* The sysrq infrastructure needs this even on !CONFIG_PRINTK. */
+bool __read_mostly ignore_per_console_loglevel;
+
 #ifdef CONFIG_LOCKDEP
 static struct lockdep_map console_lock_dep_map = {
 	.name = "console_lock"
@@ -1287,9 +1290,21 @@ module_param(ignore_loglevel, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(ignore_loglevel,
 		 "ignore loglevel setting (prints all kernel messages to the console)");
 
+static int __init ignore_per_console_loglevel_setup(char *str)
+{
+	ignore_per_console_loglevel = true;
+	return 0;
+}
+
+early_param("ignore_per_console_loglevel", ignore_per_console_loglevel_setup);
+module_param(ignore_per_console_loglevel, bool, 0644);
+MODULE_PARM_DESC(
+	ignore_per_console_loglevel,
+	"ignore per-console loglevel setting (only respect global console loglevel)");
+
 bool per_console_loglevel_is_set(const struct console *con)
 {
-	return con && (READ_ONCE(con->level) > 0);
+	return !ignore_per_console_loglevel && con && (READ_ONCE(con->level) > 0);
 }
 
 /*
@@ -1298,6 +1313,16 @@ bool per_console_loglevel_is_set(const struct console *con)
  * 1. con->level. The locally set, console-specific loglevel. Optional, only
  *    valid if >0.
  * 2. console_loglevel. The default global console loglevel, always present.
+ *
+ * The behaviour can be further changed by the following printk module
+ * parameters:
+ *
+ * 1. ignore_loglevel. Can be set at boot or at runtime with
+ *    /sys/module/printk/parameters/ignore_loglevel. Overrides absolutely
+ *    everything since it's used to debug.
+ * 2. ignore_per_console_loglevel. Existing per-console loglevel values are left
+ *    intact, but are ignored in favour of console_loglevel as long as this is
+ *    true. Also manipulated through syslog(SYSLOG_ACTION_CONSOLE_{ON,OFF}).
  */
 enum loglevel_source
 console_effective_loglevel_source(const struct console *con)
@@ -1796,6 +1821,7 @@ int do_syslog(int type, char __user *buf, int len, int source)
 	struct printk_info info;
 	bool clear = false;
 	static int saved_console_loglevel = LOGLEVEL_DEFAULT;
+	static int saved_ignore_per_console_loglevel;
 	int error;
 
 	error = check_syslog_permissions(type, source);
@@ -1836,19 +1862,28 @@ int do_syslog(int type, char __user *buf, int len, int source)
 		break;
 	/* Disable logging to console */
 	case SYSLOG_ACTION_CONSOLE_OFF:
-		if (saved_console_loglevel == LOGLEVEL_DEFAULT)
+		if (saved_console_loglevel == LOGLEVEL_DEFAULT) {
 			saved_console_loglevel = console_loglevel;
+			saved_ignore_per_console_loglevel =
+				ignore_per_console_loglevel;
+		}
 		console_loglevel = minimum_console_loglevel;
+		ignore_per_console_loglevel = true;
 		break;
 	/* Enable logging to console */
 	case SYSLOG_ACTION_CONSOLE_ON:
 		if (saved_console_loglevel != LOGLEVEL_DEFAULT) {
 			console_loglevel = saved_console_loglevel;
+			ignore_per_console_loglevel =
+				saved_ignore_per_console_loglevel;
 			saved_console_loglevel = LOGLEVEL_DEFAULT;
 		}
 		break;
 	/* Set level of messages printed to console */
 	case SYSLOG_ACTION_CONSOLE_LEVEL:
+		if (!ignore_per_console_loglevel)
+			pr_warn_once(
+				"SYSLOG_ACTION_CONSOLE_LEVEL is ignored by consoles with an explicitly set per-console loglevel, see Documentation/admin-guide/per-console-loglevel.rst\n");
 		if (len < 1 || len > 8)
 			return -EINVAL;
 		if (len < minimum_console_loglevel)

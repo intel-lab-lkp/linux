@@ -119,6 +119,7 @@ configure specific aspects of kernel behavior to your liking.
    namespaces/index
    numastat
    parport
+   per-console-loglevel
    perf-security
    pm/index
    pnp
