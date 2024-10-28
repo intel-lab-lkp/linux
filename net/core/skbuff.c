@@ -64,6 +64,7 @@
 #include <linux/mpls.h>
 #include <linux/kcov.h>
 #include <linux/iov_iter.h>
+#include <linux/bpf-cgroup.h>
 
 #include <net/protocol.h>
 #include <net/dst.h>
@@ -5621,13 +5622,41 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 	__skb_complete_tx_timestamp(skb, sk, tstype, opt_stats);
 }
 
+static void timestamp_call_bpf(struct sock *sk, int op, u32 nargs, u32 *args)
+{
+	struct bpf_sock_ops_kern sock_ops;
+
+	memset(&sock_ops, 0, offsetof(struct bpf_sock_ops_kern, temp));
+	if (sk_fullsock(sk)) {
+		sock_ops.is_fullsock = 1;
+		sock_owned_by_me(sk);
+	}
+
+	sock_ops.sk = sk;
+	sock_ops.op = op;
+	if (nargs > 0)
+		memcpy(sock_ops.args, args, nargs * sizeof(*args));
+
+	BPF_CGROUP_RUN_PROG_SOCK_OPS_SK(&sock_ops, sk);
+}
+
 static void skb_tstamp_tx_output_bpf(struct sock *sk, int tstype)
 {
-	u32 tsflags;
+	u32 tsflags, cb_flag;
 
 	tsflags = READ_ONCE(sk->sk_tsflags_bpf);
 	if (!sk_tstamp_tx_flags(sk, tsflags, tstype))
 		return;
+
+	switch (tstype) {
+	case SCM_TSTAMP_SCHED:
+		cb_flag = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
+		break;
+	default:
+		return;
+	}
+
+	timestamp_call_bpf(sk, cb_flag, 0, NULL);
 }
 
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
