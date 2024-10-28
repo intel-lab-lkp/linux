@@ -780,10 +780,11 @@ static void bcm_free_op_rcu(struct rcu_head *rcu_head)
 	kfree(op);
 }
 
-static void bcm_remove_op(struct bcm_op *op)
+static void bcm_remove_op(struct bcm_op *op, bool is_tx)
 {
 	hrtimer_cancel(&op->timer);
-	hrtimer_cancel(&op->thrtimer);
+	if (!is_tx)
+		hrtimer_cancel(&op->thrtimer);
 
 	call_rcu(&op->rcu, bcm_free_op_rcu);
 }
@@ -844,7 +845,7 @@ static int bcm_delete_rx_op(struct list_head *ops, struct bcm_msg_head *mh,
 						  bcm_rx_handler, op);
 
 			list_del(&op->list);
-			bcm_remove_op(op);
+			bcm_remove_op(op, false);
 			return 1; /* done */
 		}
 	}
@@ -864,7 +865,7 @@ static int bcm_delete_tx_op(struct list_head *ops, struct bcm_msg_head *mh,
 		if ((op->can_id == mh->can_id) && (op->ifindex == ifindex) &&
 		    (op->flags & CAN_FD_FRAME) == (mh->flags & CAN_FD_FRAME)) {
 			list_del(&op->list);
-			bcm_remove_op(op);
+			bcm_remove_op(op, true);
 			return 1; /* done */
 		}
 	}
@@ -1014,10 +1015,6 @@ static int bcm_tx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 		hrtimer_init(&op->timer, CLOCK_MONOTONIC,
 			     HRTIMER_MODE_REL_SOFT);
 		op->timer.function = bcm_tx_timeout_handler;
-
-		/* currently unused in tx_ops */
-		hrtimer_init(&op->thrtimer, CLOCK_MONOTONIC,
-			     HRTIMER_MODE_REL_SOFT);
 
 		/* add this bcm_op to the list of the tx_ops */
 		list_add(&op->list, &bo->tx_ops);
@@ -1277,7 +1274,7 @@ static int bcm_rx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 		if (err) {
 			/* this bcm rx op is broken -> remove it */
 			list_del(&op->list);
-			bcm_remove_op(op);
+			bcm_remove_op(op, false);
 			return err;
 		}
 	}
@@ -1581,7 +1578,7 @@ static int bcm_release(struct socket *sock)
 #endif /* CONFIG_PROC_FS */
 
 	list_for_each_entry_safe(op, next, &bo->tx_ops, list)
-		bcm_remove_op(op);
+		bcm_remove_op(op, true);
 
 	list_for_each_entry_safe(op, next, &bo->rx_ops, list) {
 		/*
@@ -1613,7 +1610,7 @@ static int bcm_release(struct socket *sock)
 	synchronize_rcu();
 
 	list_for_each_entry_safe(op, next, &bo->rx_ops, list)
-		bcm_remove_op(op);
+		bcm_remove_op(op, false);
 
 	/* remove device reference */
 	if (bo->bound) {
