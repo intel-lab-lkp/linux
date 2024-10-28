@@ -18,6 +18,7 @@
 			compatible = "img,i6500";
 			reg = <0>;
 			clocks = <&occ_cpu>;
+			cm3-l2-config-hci-broken;
 		};
 	};
 
