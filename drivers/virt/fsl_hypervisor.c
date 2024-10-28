@@ -848,7 +848,13 @@ static int __init fsl_hypervisor_init(void)
 		dbisr = kzalloc(sizeof(*dbisr), GFP_KERNEL);
 		if (!dbisr) {
 			of_node_put(np);
-			goto out_of_memory;
+			list_for_each_entry_safe(dbisr, n, &isr_list, list) {
+				free_irq(dbisr->irq, dbisr);
+				list_del(&dbisr->list);
+				kfree(dbisr);
+			}
+			misc_deregister(&fsl_hv_misc_dev);
+			return -ENOMEM;
 		}
 
 		dbisr->irq = irq;
@@ -895,17 +901,6 @@ static int __init fsl_hypervisor_init(void)
 	}
 
 	return 0;
-
-out_of_memory:
-	list_for_each_entry_safe(dbisr, n, &isr_list, list) {
-		free_irq(dbisr->irq, dbisr);
-		list_del(&dbisr->list);
-		kfree(dbisr);
-	}
-
-	misc_deregister(&fsl_hv_misc_dev);
-
-	return -ENOMEM;
 }
 
 /*
