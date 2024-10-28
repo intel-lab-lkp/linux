@@ -1933,6 +1933,7 @@ int samsung_dsim_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct samsung_dsim *dsi;
+	bool initialized;
 	int ret, i;
 
 	dsi = devm_kzalloc(dev, sizeof(*dsi), GFP_KERNEL);
@@ -2010,6 +2011,13 @@ int samsung_dsim_probe(struct platform_device *pdev)
 	dsi->bridge.funcs = &samsung_dsim_bridge_funcs;
 	dsi->bridge.of_node = dev->of_node;
 	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
+	initialized = of_property_read_bool(dev->of_node, "samsung,boot-on");
+	if (initialized) {
+		dsi->state = DSIM_STATE_INITIALIZED | DSIM_STATE_ENABLED;
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret)
+			goto err_disable_runtime;
+	}
 
 	/* DE_LOW: i.MX8M Mini/Nano LCDIF-DSIM glue logic inverts HS/VS/DE */
 	if (dsi->plat_data->hw_type == DSIM_TYPE_IMX8MM)
@@ -2020,11 +2028,14 @@ int samsung_dsim_probe(struct platform_device *pdev)
 	if (dsi->plat_data->host_ops && dsi->plat_data->host_ops->register_host) {
 		ret = dsi->plat_data->host_ops->register_host(dsi);
 		if (ret)
-			goto err_disable_runtime;
+			goto err_put_runtime;
 	}
 
 	return 0;
 
+err_put_runtime:
+	if (initialized)
+		pm_runtime_put_sync(dev);
 err_disable_runtime:
 	pm_runtime_disable(dev);
 
