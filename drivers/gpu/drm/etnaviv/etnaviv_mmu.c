@@ -83,7 +83,7 @@ static int etnaviv_iommu_map(struct etnaviv_iommu_context *context, u32 iova,
 		dma_addr_t pa = sg_dma_address(sg) + sg->offset;
 		unsigned int bytes = sg_dma_len(sg) - sg->offset;
 
-		VERB("map[%d]: %08x %pap(%x)", i, iova, &pa, bytes);
+		VERB("map[%d]: %08x %pap(%x)", i, da, &pa, bytes);
 
 		ret = etnaviv_context_map(context, da, pa, bytes, prot);
 		if (ret)
@@ -113,7 +113,7 @@ static void etnaviv_iommu_unmap(struct etnaviv_iommu_context *context, u32 iova,
 
 		etnaviv_context_unmap(context, da, bytes);
 
-		VERB("unmap[%d]: %08x(%x)", i, iova, bytes);
+		VERB("unmap[%d]: %08x(%x)", i, da, bytes);
 
 		BUG_ON(!PAGE_ALIGNED(bytes));
 
