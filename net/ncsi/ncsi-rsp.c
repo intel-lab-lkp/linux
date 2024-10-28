@@ -1205,12 +1205,6 @@ int ncsi_rcv_rsp(struct sk_buff *skb, struct net_device *dev,
 		}
 	}
 
-	if (!nrh) {
-		netdev_err(nd->dev, "Received unrecognized packet (0x%x)\n",
-			   hdr->type);
-		return -ENOENT;
-	}
-
 	/* Associate with the request */
 	spin_lock_irqsave(&ndp->lock, flags);
 	nr = &ndp->requests[hdr->id];
@@ -1228,43 +1222,42 @@ int ncsi_rcv_rsp(struct sk_buff *skb, struct net_device *dev,
 
 	/* Validate the packet */
 	spin_unlock_irqrestore(&ndp->lock, flags);
-	payload = nrh->payload;
+	payload = nrh ? nrh->payload : -1;
 	if (payload < 0)
 		payload = ntohs(hdr->length);
+
 	ret = ncsi_validate_rsp_pkt(nr, payload);
-	if (ret) {
+	if (ret)
 		netdev_warn(ndp->ndev.dev,
 			    "NCSI: 'bad' packet ignored for type 0x%x\n",
 			    hdr->type);
 
-		if (nr->flags == NCSI_REQ_FLAG_NETLINK_DRIVEN) {
-			if (ret == -EPERM)
-				goto out_netlink;
-			else
-				ncsi_send_netlink_err(ndp->ndev.dev,
-						      nr->snd_seq,
-						      nr->snd_portid,
-						      &nr->nlhdr,
-						      ret);
-		}
-		goto out;
-	}
-
-	/* Process the packet */
-	ret = nrh->handler(nr);
-	if (ret)
-		netdev_err(ndp->ndev.dev,
-			   "NCSI: Handler for packet type 0x%x returned %d\n",
-			   hdr->type, ret);
-
-out_netlink:
 	if (nr->flags == NCSI_REQ_FLAG_NETLINK_DRIVEN) {
-		ret = ncsi_rsp_handler_netlink(nr);
-		if (ret) {
-			netdev_err(ndp->ndev.dev,
-				   "NCSI: Netlink handler for packet type 0x%x returned %d\n",
-				   hdr->type, ret);
+		/* netlink driven: forward response to netlink socket */
+		if (!ret || ret == -EPERM)
+			ncsi_rsp_handler_netlink(nr);
+		else
+			ncsi_send_netlink_err(ndp->ndev.dev,
+					      nr->snd_seq,
+					      nr->snd_portid,
+					      &nr->nlhdr,
+					      ret);
+	} else if (nrh) {
+		/* not netlink driven: process the packet in the kernel. We
+		 * need to have a handler for this
+		 */
+		if (!ret) {
+			ret = nrh->handler(nr);
+			if (ret)
+				netdev_err(ndp->ndev.dev,
+					   "NCSI: Handler for packet type 0x%x returned %d\n",
+					   hdr->type, ret);
 		}
+
+	} else {
+		netdev_err(nd->dev, "Received unrecognized packet (0x%x)\n",
+			   hdr->type);
+		ret = -ENOENT;
 	}
 
 out:
