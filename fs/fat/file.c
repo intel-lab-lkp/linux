@@ -188,7 +188,9 @@ int fat_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 	struct inode *inode = filp->f_mapping->host;
 	int err;
 
+	down_read(&MSDOS_I(inode)->truncate_lock);
 	err = __generic_file_fsync(filp, start, end, datasync);
+	up_read(&MSDOS_I(inode)->truncate_lock);
 	if (err)
 		return err;
 
