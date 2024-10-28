@@ -1952,7 +1952,7 @@ void hrtimer_sleeper_start_expires(struct hrtimer_sleeper *sl,
 	 * Make the enqueue delivery mode check work on RT. If the sleeper
 	 * was initialized for hard interrupt delivery, force the mode bit.
 	 * This is a special case for hrtimer_sleepers because
-	 * hrtimer_init_sleeper() determines the delivery mode on RT so the
+	 * __hrtimer_init_sleeper() determines the delivery mode on RT so the
 	 * fiddling with this decision is avoided at the call sites.
 	 */
 	if (IS_ENABLED(CONFIG_PREEMPT_RT) && sl->timer.is_hard)
@@ -1993,21 +1993,6 @@ static void __hrtimer_init_sleeper(struct hrtimer_sleeper *sl,
 	sl->timer.function = hrtimer_wakeup;
 	sl->task = current;
 }
-
-/**
- * hrtimer_init_sleeper - initialize sleeper to the given clock
- * @sl:		sleeper to be initialized
- * @clock_id:	the clock to be used
- * @mode:	timer mode abs/rel
- */
-void hrtimer_init_sleeper(struct hrtimer_sleeper *sl, clockid_t clock_id,
-			  enum hrtimer_mode mode)
-{
-	debug_init(&sl->timer, clock_id, mode);
-	__hrtimer_init_sleeper(sl, clock_id, mode);
-
-}
-EXPORT_SYMBOL_GPL(hrtimer_init_sleeper);
 
 /**
  * hrtimer_init_sleeper_on_stack - initialize a sleeper in stack memory
