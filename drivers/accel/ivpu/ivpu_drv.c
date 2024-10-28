@@ -456,7 +456,6 @@ static const struct drm_driver driver = {
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
 
-	.date = UTS_RELEASE,
 	.major = 1,
 };
 
