@@ -34,6 +34,8 @@
 #include "bpf_iter_ksym.skel.h"
 #include "bpf_iter_sockmap.skel.h"
 
+#define gettid() syscall(SYS_gettid)
+
 static void test_btf_id_or_null(void)
 {
 	struct bpf_iter_test_kern3 *skel;
