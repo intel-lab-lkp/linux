@@ -226,10 +226,12 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		if (!(cond))						\
 			return;						\
 									\
-		if (syscall)						\
+		if (syscall) {						\
 			rcu_read_lock_trace();				\
-		else							\
+			might_fault();					\
+		} else {						\
 			preempt_disable_notrace();			\
+		}							\
 									\
 		__DO_TRACE_CALL(name, TP_ARGS(args));			\
 									\
