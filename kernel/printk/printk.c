@@ -1315,15 +1315,13 @@ static int __init boot_delay_setup(char *str)
 }
 early_param("boot_delay", boot_delay_setup);
 
-static void boot_delay_msec(int level)
+static void boot_delay_msec(void)
 {
 	unsigned long long k;
 	unsigned long timeout;
 
-	if ((boot_delay == 0 || system_state >= SYSTEM_RUNNING)
-		|| suppress_message_printing(level)) {
+	if (boot_delay == 0 || system_state >= SYSTEM_RUNNING)
 		return;
-	}
 
 	k = (unsigned long long)loops_per_msec * boot_delay;
 
@@ -1342,7 +1340,7 @@ static void boot_delay_msec(int level)
 	}
 }
 #else
-static inline void boot_delay_msec(int level)
+static inline void boot_delay_msec(void)
 {
 }
 #endif
@@ -2124,7 +2122,10 @@ int printk_delay_msec __read_mostly;
 
 static inline void printk_delay(int level)
 {
-	boot_delay_msec(level);
+	if (suppress_message_printing(level))
+		return;
+
+	boot_delay_msec();
 
 	if (unlikely(printk_delay_msec)) {
 		int m = printk_delay_msec;
