@@ -27,6 +27,12 @@
 
 #else /* __ASSEMBLY__ */
 
+/*
+ * The CLAC/STAC instructions toggle enforcement of X86_FEATURE_SMAP.
+ * Add dedicated lass_*() variants for cases that are necessitated by
+ * LASS (X86_FEATURE_LASS) enforcement, which helps readability and
+ * avoids AC flag flipping on CPUs that don't support LASS.
+ */
 static __always_inline void clac(void)
 {
 	/* Note: a barrier is implicit in alternative() */
@@ -37,6 +43,18 @@ static __always_inline void stac(void)
 {
 	/* Note: a barrier is implicit in alternative() */
 	alternative("", __ASM_STAC, X86_FEATURE_SMAP);
+}
+
+static __always_inline void lass_clac(void)
+{
+	/* Note: a barrier is implicit in alternative() */
+	alternative("", __ASM_CLAC, X86_FEATURE_LASS);
+}
+
+static __always_inline void lass_stac(void)
+{
+	/* Note: a barrier is implicit in alternative() */
+	alternative("", __ASM_STAC, X86_FEATURE_LASS);
 }
 
 static __always_inline unsigned long smap_save(void)
