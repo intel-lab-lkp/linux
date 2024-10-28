@@ -132,6 +132,11 @@ properties:
             dependencies:
               lane-polarities: [data-lanes]
 
+  samsung,boot-on:
+    description:
+      The bridge has been initialized and left on by the bootloader/firmware.
+    type: boolean
+
 required:
   - clock-names
   - clocks
