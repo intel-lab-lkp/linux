@@ -477,6 +477,20 @@ void tcp_init_sock(struct sock *sk)
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
+static void tcp_tx_timestamp_bpf(struct sock *sk, struct sk_buff *skb)
+{
+	u32 tsflags = READ_ONCE(sk->sk_tsflags_bpf);
+
+	if (tsflags && skb) {
+		struct skb_shared_info *shinfo = skb_shinfo(skb);
+		struct tcp_skb_cb *tcb = TCP_SKB_CB(skb);
+
+		sock_tx_timestamp_bpf(tsflags, &shinfo->tx_flags);
+		if (tsflags & SOF_TIMESTAMPING_TX_ACK)
+			tcb->txstamp_ack = 1;
+	}
+}
+
 static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 {
 	struct sk_buff *skb = tcp_write_queue_tail(sk);
@@ -492,6 +506,8 @@ static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 		if (tsflags & SOF_TIMESTAMPING_TX_RECORD_MASK)
 			shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
 	}
+
+	tcp_tx_timestamp_bpf(sk, skb);
 }
 
 static bool tcp_stream_is_readable(struct sock *sk, int target)

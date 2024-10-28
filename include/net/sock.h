@@ -2710,6 +2710,12 @@ static inline void sock_tx_timestamp(struct sock *sk,
 	_sock_tx_timestamp(sk, sockc, tx_flags, NULL);
 }
 
+static inline void sock_tx_timestamp_bpf(u32 tsflags, __u8 *tx_flags)
+{
+	if (tsflags)
+		__sock_tx_timestamp(tsflags, tx_flags);
+}
+
 static inline void skb_setup_tx_timestamp(struct sk_buff *skb,
 					  const struct sockcm_cookie *sockc)
 {
