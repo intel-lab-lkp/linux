@@ -32,6 +32,33 @@ The format of this option is::
 			and F is flow control ('r' for RTS). Default is
 			9600n8. The maximum baudrate is 115200.
 
+			One can also specify the per-console loglevel for this
+			console by providing a loglevel parameter, for example
+			"loglevel:4" to set this console's loglevel to 4. The
+			value provided can be from 0 (LOGLEVEL_EMERG) to 8
+			(LOGLEVEL_DEBUG + 1), and messages below that will be
+			emitted onto the console as they become available.
+
+The available loglevels are defined thus:
+
++---+--------------+-----------------------------------+
+| 0 | KERN_EMERG   | system is unusable                |
++---+--------------+-----------------------------------+
+| 1 | KERN_ALERT   | action must be taken immediately  |
++---+--------------+-----------------------------------+
+| 2 | KERN_CRIT    | critical conditions               |
++---+--------------+-----------------------------------+
+| 3 | KERN_ERR     | error conditions                  |
++---+--------------+-----------------------------------+
+| 4 | KERN_WARNING | warning conditions                |
++---+--------------+-----------------------------------+
+| 5 | KERN_NOTICE  | normal but significant condition  |
++---+--------------+-----------------------------------+
+| 6 | KERN_INFO    | informational                     |
++---+--------------+-----------------------------------+
+| 7 | KERN_DEBUG   | debug-level messages              |
++---+--------------+-----------------------------------+
+
 You can specify multiple console= options on the kernel command line.
 
 The behavior is well defined when each device type is mentioned only once.
@@ -39,11 +66,14 @@ In this case, the output will appear on all requested consoles. And
 the last device will be used when you open ``/dev/console``.
 So, for example::
 
-	console=ttyS1,9600 console=tty0
+	console=ttyS1,9600,loglevel:5 console=tty0
 
 defines that opening ``/dev/console`` will get you the current foreground
-virtual console, and kernel messages will appear on both the VGA
-console and the 2nd serial port (ttyS1 or COM2) at 9600 baud.
+virtual console, and kernel messages will appear on both the VGA console and
+the 2nd serial port (ttyS1 or COM2) at 9600 baud. The optional loglevel "5"
+indicates that this console will emit messages more serious than
+LOGLEVEL_NOTICE (that is, LOGLEVEL_WARNING and below, since more serious
+messages have lower ordering).
 
 The behavior is more complicated when the same device type is defined more
 times. In this case, there are the following two rules:
@@ -143,3 +173,4 @@ Replace the sample values as needed.
    the integration of these patches into m68k, ppc and alpha.
 
 Miquel van Smoorenburg <miquels@cistron.nl>, 11-Jun-2000
+Chris Down <chris@chrisdown.name>, 23-October-2024

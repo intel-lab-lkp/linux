@@ -799,13 +799,18 @@
 		ttyS<n>[,options]
 		ttyUSB0[,options]
 			Use the specified serial port.  The options are of
-			the form "bbbbpnf", where "bbbb" is the baud rate,
-			"p" is parity ("n", "o", or "e"), "n" is number of
-			bits, and "f" is flow control ("r" for RTS or
-			omit it).  Default is "9600n8".
+			the form "bbbbpnf,extra", where "bbbb" is the baud
+			rate, "p" is parity ("n", "o", or "e"), "n" is
+			number of bits, and "f" is flow control ("r" for RTS
+			or omit it). Default is "9600n8".
 
-			See Documentation/admin-guide/serial-console.rst for more
-			information.  See
+			At present the only extra option is "loglevel" to
+			set the per-console loglevel. For example:
+
+				console=ttyS0,9600n8,loglevel:3
+
+			See Documentation/admin-guide/serial-console.rst for
+			more information.  See
 			Documentation/networking/netconsole.rst for an
 			alternative.
 
@@ -3167,8 +3172,11 @@
 	loglevel=	[KNL,EARLY]
 			All Kernel Messages with a loglevel smaller than the
 			console loglevel will be printed to the console. It can
-			also be changed with klogd or other programs. The
-			loglevels are defined as follows:
+			also be changed with klogd or other programs. Note that
+			this can be overridden per-console, see
+			Documentation/admin-guide/per-console-loglevel.rst.
+
+			The loglevels are defined as follows:
 
 			0 (KERN_EMERG)		system is unusable
 			1 (KERN_ALERT)		action must be taken immediately

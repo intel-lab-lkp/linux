@@ -2597,12 +2597,84 @@ static void set_user_specified(struct console_cmdline *c, bool user_specified)
 	console_set_on_cmdline = 1;
 }
 
+static bool find_and_remove_console_option(char *options, const char *key,
+					   char *val_buf, size_t val_buf_size)
+{
+	bool found = false, first = true;
+	char *option, *next = options;
+
+	while ((option = strsep(&next, ","))) {
+		char *value;
+
+		value = strchr(option, ':');
+		if (value)
+			*(value++) = '\0';
+
+		if (strcmp(option, key) == 0) {
+			found = true;
+			if (value) {
+				if (strlen(value) >= val_buf_size) {
+					pr_warn("Can't copy console option value for %s:%s: not enough space (%zu)\n",
+						option, value, val_buf_size);
+					found = false;
+				} else {
+					strscpy(val_buf, value, val_buf_size);
+				}
+			} else
+				*val_buf = '\0';
+		}
+
+		if (found)
+			break;
+
+		if (next)
+			*(next - 1) = ',';
+		if (value)
+			*(value - 1) = ':';
+
+		first = false;
+	}
+
+	if (found) {
+		if (next)
+			memmove(option, next, strlen(next) + 1);
+		else if (first)
+			*option = '\0';
+		else
+			*--option = '\0';
+	}
+
+	return found;
+}
+
+static int find_and_remove_loglevel_option(char *options)
+{
+	char val[16];
+	int loglevel;
+
+	if (!find_and_remove_console_option(options, "loglevel", val,
+					    sizeof(val)))
+		return -ENOENT;
+
+	if (kstrtoint(val, 10, &loglevel)) {
+		pr_warn("Invalid console loglevel, ignoring: %s\n", val);
+		return -EINVAL;
+	}
+
+	if (clamp_loglevel(loglevel) != loglevel) {
+		pr_warn("Per-console loglevel out of range, ignoring: %d\n", loglevel);
+		return -ERANGE;
+	}
+
+	return loglevel;
+}
+
 static int __add_preferred_console(const char *name, const short idx,
 				   const char *devname, char *options,
 				   char *brl_options, bool user_specified)
 {
 	struct console_cmdline *c;
-	int i;
+	int i, ret;
 
 	if (!name && !devname)
 		return -EINVAL;
@@ -2639,6 +2711,13 @@ static int __add_preferred_console(const char *name, const short idx,
 		strscpy(c->name, name);
 	if (devname)
 		strscpy(c->devname, devname);
+
+	ret = find_and_remove_loglevel_option(options);
+	if (ret >= 0)
+		c->level = ret;
+	else
+		c->level = -1;
+
 	c->options = options;
 	set_user_specified(c, user_specified);
 	braille_set_options(c, brl_options);
@@ -3903,8 +3982,10 @@ static int try_enable_preferred_console(struct console *newcon,
 			if (newcon->index < 0)
 				newcon->index = c->index;
 
-			// TODO: Will be configurable in a later patch
-			newcon->level = -1;
+			if (c->level > 0)
+				newcon->level = c->level;
+			else
+				newcon->level = -1;
 
 			newcon->classdev = NULL;
 

@@ -72,7 +72,11 @@ Built-in netconsole starts immediately after the TCP stack is
 initialized and attempts to bring up the supplied dev at the supplied
 address.
 
-You can also set a loglevel at runtime::
+You can also set a loglevel at boot time on the kernel command line::
+
+  console=netcon0,loglevel:2
+
+This can also be changed at runtime::
 
   $ ls -l /sys/class/console/netcon0/
   total 0
