@@ -805,6 +805,11 @@ static inline bool system_supports_mte(void)
 	return alternative_has_cap_unlikely(ARM64_MTE);
 }
 
+static inline bool system_supports_notagaccess(void)
+{
+	return alternative_has_cap_unlikely(ARM64_MTE_PERM);
+}
+
 static inline bool system_has_prio_mask_debugging(void)
 {
 	return IS_ENABLED(CONFIG_ARM64_DEBUG_PRIORITY_MASKING) &&
