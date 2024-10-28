@@ -316,6 +316,7 @@ __setup("ramdisk_size=", ramdisk_size);
  * (should share code eventually).
  */
 static LIST_HEAD(brd_devices);
+static DEFINE_MUTEX(brd_devices_mutex);
 static struct dentry *brd_debugfs_dir;
 
 static int brd_alloc(int i)
@@ -340,18 +341,27 @@ static int brd_alloc(int i)
 					  BLK_FEAT_NOWAIT,
 	};
 
-	list_for_each_entry(brd, &brd_devices, brd_list)
-		if (brd->brd_number == i)
-			return -EEXIST;
+	snprintf(buf, DISK_NAME_LEN, "ram%d", i);
+	mutex_lock(&brd_devices_mutex);
+	list_for_each_entry(brd, &brd_devices, brd_list) {
+		if (brd->brd_number == i) {
+			mutex_unlock(&brd_devices_mutex);
+			err = -EEXIST;
+			goto out;
+		}
+	}
 	brd = kzalloc(sizeof(*brd), GFP_KERNEL);
-	if (!brd)
-		return -ENOMEM;
+	if (!brd) {
+		mutex_unlock(&brd_devices_mutex);
+		err = -ENOMEM;
+		goto out;
+	}
 	brd->brd_number		= i;
 	list_add_tail(&brd->brd_list, &brd_devices);
+	mutex_unlock(&brd_devices_mutex);
 
 	xa_init(&brd->brd_pages);
 
-	snprintf(buf, DISK_NAME_LEN, "ram%d", i);
 	if (!IS_ERR_OR_NULL(brd_debugfs_dir))
 		debugfs_create_u64(buf, 0444, brd_debugfs_dir,
 				&brd->brd_nr_pages);
@@ -378,8 +388,13 @@ static int brd_alloc(int i)
 out_cleanup_disk:
 	put_disk(disk);
 out_free_dev:
+	mutex_lock(&brd_devices_mutex);
 	list_del(&brd->brd_list);
+	mutex_unlock(&brd_devices_mutex);
 	kfree(brd);
+out:
+	pr_info("brd: %s for %s failed with %d.\n",
+		__func__, buf, err);
 	return err;
 }
 
@@ -398,7 +413,9 @@ static void brd_cleanup(void)
 		del_gendisk(brd->brd_disk);
 		put_disk(brd->brd_disk);
 		brd_free_pages(brd);
+		mutex_lock(&brd_devices_mutex);
 		list_del(&brd->brd_list);
+		mutex_unlock(&brd_devices_mutex);
 		kfree(brd);
 	}
 }
@@ -424,17 +441,7 @@ static inline void brd_check_and_reset_par(void)
 
 static int __init brd_init(void)
 {
-	int err, i;
-
-	brd_check_and_reset_par();
-
-	brd_debugfs_dir = debugfs_create_dir("ramdisk_pages", NULL);
-
-	for (i = 0; i < rd_nr; i++) {
-		err = brd_alloc(i);
-		if (err)
-			goto out_free;
-	}
+	int i;
 
 	/*
 	 * brd module now has a feature to instantiate underlying device
@@ -450,20 +457,20 @@ static int __init brd_init(void)
 	 *	If (X / max_part) was not already created it will be created
 	 *	dynamically.
 	 */
+	brd_check_and_reset_par();
+	brd_debugfs_dir = debugfs_create_dir("ramdisk_pages", NULL);
 
 	if (__register_blkdev(RAMDISK_MAJOR, "ramdisk", brd_probe)) {
-		err = -EIO;
-		goto out_free;
+		pr_info("brd: module NOT loaded !!!\n");
+		debugfs_remove_recursive(brd_debugfs_dir);
+		return -EIO;
 	}
+
+	for (i = 0; i < rd_nr; i++)
+		brd_alloc(i);
 
 	pr_info("brd: module loaded\n");
 	return 0;
-
-out_free:
-	brd_cleanup();
-
-	pr_info("brd: module NOT loaded !!!\n");
-	return err;
 }
 
 static void __exit brd_exit(void)
