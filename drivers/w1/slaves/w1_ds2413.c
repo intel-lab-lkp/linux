@@ -61,19 +61,19 @@ next:
 		} else if (state == W1_F3A_INVALID_PIO_STATE) {
 			/* slave didn't respond, try to select it again */
 			dev_warn(&sl->dev, "slave device did not respond to PIO_ACCESS_READ, " \
-					    "reselecting, retries left: %d\n", retries);
+					    "reselecting, retries left: %u\n", retries);
 			goto next;
 		}
 
 		if (w1_reset_resume_command(sl->master))
 			goto out; /* unrecoverable error */
 
-		dev_warn(&sl->dev, "PIO_ACCESS_READ error, retries left: %d\n", retries);
+		dev_warn(&sl->dev, "PIO_ACCESS_READ error, retries left: %u\n", retries);
 	}
 
 out:
 	mutex_unlock(&sl->master->bus_mutex);
-	dev_dbg(&sl->dev, "%s, mutex unlocked, retries: %d\n",
+	dev_dbg(&sl->dev, "%s, mutex unlocked, retries: %u\n",
 		(bytes_read > 0) ? "succeeded" : "error", retries);
 	return bytes_read;
 }
@@ -118,12 +118,12 @@ static ssize_t output_write(struct file *filp, struct kobject *kobj,
 		if (w1_reset_resume_command(sl->master))
 			goto out; /* unrecoverable error */
 
-		dev_warn(&sl->dev, "PIO_ACCESS_WRITE error, retries left: %d\n", retries);
+		dev_warn(&sl->dev, "PIO_ACCESS_WRITE error, retries left: %u\n", retries);
 	}
 
 out:
 	mutex_unlock(&sl->master->bus_mutex);
-	dev_dbg(&sl->dev, "%s, mutex unlocked, retries: %d\n",
+	dev_dbg(&sl->dev, "%s, mutex unlocked, retries: %u\n",
 		(bytes_written > 0) ? "succeeded" : "error", retries);
 	return bytes_written;
 }
