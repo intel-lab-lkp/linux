@@ -488,6 +488,8 @@ static void tcp_tx_timestamp_bpf(struct sock *sk, struct sk_buff *skb)
 		sock_tx_timestamp_bpf(tsflags, &shinfo->tx_flags);
 		if (tsflags & SOF_TIMESTAMPING_TX_ACK)
 			tcb->txstamp_ack = 1;
+		if (tsflags & SOF_TIMESTAMPING_TX_RECORD_MASK)
+			shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
 	}
 }
 
