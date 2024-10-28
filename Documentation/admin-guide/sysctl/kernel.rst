@@ -1044,6 +1044,20 @@ otherwise the 'doze' mode will be used.
 
 ==============================================================
 
+Some of these settings may be overridden per-console, see
+Documentation/admin-guide/per-console-loglevel.rst. See ``man 2 syslog`` for
+more information on the different loglevels.
+
+console_loglevel
+================
+
+Messages with a higher priority than this will be printed to consoles.
+
+default_message_loglevel
+========================
+
+Messages without an explicit priority will be printed with this priority.
+
 printk
 ======
 
@@ -1052,8 +1066,7 @@ The four values in printk denote: ``console_loglevel``,
 ``default_console_loglevel`` respectively.
 
 These values influence printk() behavior when printing or
-logging error messages. See '``man 2 syslog``' for more info on
-the different loglevels.
+logging error messages.
 
 ======================== =====================================
 console_loglevel         messages with a higher priority than
