@@ -2707,6 +2707,16 @@ enum drm_mode_status vmw_connector_mode_valid(struct drm_connector *connector,
 	return MODE_OK;
 }
 
+/*
+ * Common modes not present in the VESA DMT standard or assigned a VIC.
+ */
+static struct {
+	int width;
+	int height;
+} common_modes[] = {	{2560, 1440}, // QHD
+			{3440, 1440}, // UWQHD
+			{3840, 2400}}; // WQUXGA
+
 /**
  * vmw_connector_get_modes - implements drm_connector_helper_funcs.get_modes callback
  *
@@ -2751,7 +2761,26 @@ int vmw_connector_get_modes(struct drm_connector *connector)
 		max_height = min(dev_priv->stdu_max_height, max_height);
 	}
 
-	num_modes = 1 + drm_add_modes_noedid(connector, max_width, max_height);
+	num_modes = 1;
+
+	mode = drm_display_mode_from_cea_vic(dev, 97); // 4K UHD 16:9
+	if (mode) {
+		drm_mode_probed_add(connector, mode);
+		num_modes++;
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(common_modes); i++) {
+		mode = drm_cvt_mode(dev, common_modes[i].width,
+				    common_modes[i].height,
+				    60, true, false, false);
+		if (mode) {
+			mode->type |= DRM_MODE_TYPE_DRIVER;
+			drm_mode_probed_add(connector, mode);
+			num_modes++;
+		}
+	}
+
+	num_modes += drm_add_modes_noedid(connector, max_width, max_height);
 
 	return num_modes;
 }
