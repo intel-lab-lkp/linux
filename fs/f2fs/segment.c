@@ -2711,7 +2711,7 @@ static int get_new_segment(struct f2fs_sb_info *sbi,
 		if (sbi->blkzone_alloc_policy == BLKZONE_ALLOC_PRIOR_CONV || pinning)
 			segno = 0;
 		else
-			segno = max(first_zoned_segno(sbi), *newseg);
+			segno = first_zoned_segno(sbi);
 		hint = GET_SEC_FROM_SEG(sbi, segno);
 	}
 #endif
