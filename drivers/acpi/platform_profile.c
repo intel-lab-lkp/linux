@@ -210,6 +210,7 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	if (err)
 		return err;
 	list_add_tail(&pprof->list, &platform_profile_handler_list);
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
 	cur_profile = pprof;
 	return 0;
@@ -223,6 +224,8 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 	list_del(&pprof->list);
 
 	cur_profile = NULL;
+
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 	if (!platform_profile_is_registered())
 		sysfs_remove_group(acpi_kobj, &platform_profile_group);
 
