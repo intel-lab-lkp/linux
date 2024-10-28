@@ -582,8 +582,26 @@ out:
 		pr_info("Register File Data Sampling: %s\n", rfds_strings[rfds_mitigation]);
 }
 
+static void __init verw_mitigations_check(void)
+{
+	if (mds_mitigation == MDS_MITIGATION_OFF ||
+	    taa_mitigation == TAA_MITIGATION_OFF ||
+	    mmio_mitigation == MMIO_MITIGATION_OFF ||
+	    rfds_mitigation == RFDS_MITIGATION_OFF) {
+		if (mds_mitigation == MDS_MITIGATION_OFF &&
+		    taa_mitigation == TAA_MITIGATION_OFF &&
+		    mmio_mitigation == MMIO_MITIGATION_OFF &&
+		    rfds_mitigation == RFDS_MITIGATION_OFF)
+			return;
+
+		pr_info("MDS, TAA, MMIO Stale Data, and Register File Data Sampling all depend on VERW\n");
+		pr_info("In order to disable any one of them please ensure all 4 are disabled.\n");
+	}
+}
+
 static void __init md_clear_select_mitigation(void)
 {
+	verw_mitigations_check();
 	mds_select_mitigation();
 	taa_select_mitigation();
 	mmio_select_mitigation();
