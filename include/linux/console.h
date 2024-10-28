@@ -16,6 +16,7 @@
 
 #include <linux/atomic.h>
 #include <linux/bits.h>
+#include <linux/device.h>
 #include <linux/irq_work.h>
 #include <linux/rculist.h>
 #include <linux/rcuwait.h>
@@ -322,6 +323,7 @@ struct nbcon_write_context {
  * @data:		Driver private data
  * @node:		hlist node for the console list
  * @level:		Console-specific loglevel
+ * @classdev:		Console class device for /sys/class/console
  *
  * @nbcon_state:	State for nbcon consoles
  * @nbcon_seq:		Sequence number of the next record for nbcon to print
@@ -351,6 +353,7 @@ struct console {
 	void			*data;
 	struct hlist_node	node;
 	int			level;
+	struct device		*classdev;
 
 	/* nbcon console specific members */
 

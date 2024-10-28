@@ -199,6 +199,12 @@ static int __init control_devkmsg(char *str)
 }
 __setup("printk.devkmsg=", control_devkmsg);
 
+int clamp_loglevel(int level)
+{
+	return clamp(level, minimum_console_loglevel,
+		     CONSOLE_LOGLEVEL_MOTORMOUTH);
+}
+
 char devkmsg_log_str[DEVKMSG_STR_MAX_SIZE] = "ratelimit";
 #if defined(CONFIG_PRINTK) && defined(CONFIG_SYSCTL)
 int devkmsg_sysctl_set_loglvl(const struct ctl_table *table, int write,
@@ -3894,6 +3900,8 @@ static int try_enable_preferred_console(struct console *newcon,
 			// TODO: Will be configurable in a later patch
 			newcon->level = -1;
 
+			newcon->classdev = NULL;
+
 			if (_braille_register_console(newcon, c))
 				return 0;
 
@@ -4170,6 +4178,7 @@ void register_console(struct console *newcon)
 	if (use_device_lock)
 		newcon->device_unlock(newcon, flags);
 
+	console_register_device(newcon);
 	console_sysfs_notify();
 
 	/*
@@ -4263,6 +4272,9 @@ static int unregister_console_locked(struct console *console)
 
 	if (console->flags & CON_NBCON)
 		nbcon_free(console);
+
+	if (console->classdev)
+		device_unregister(console->classdev);
 
 	console_sysfs_notify();
 
@@ -4428,6 +4440,9 @@ static int __init printk_late_init(void)
 					console_cpu_notify, NULL);
 	WARN_ON(ret < 0);
 	printk_sysctl_init();
+
+	console_setup_class();
+
 	return 0;
 }
 late_initcall(printk_late_init);

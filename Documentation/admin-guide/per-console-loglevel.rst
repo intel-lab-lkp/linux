@@ -68,3 +68,44 @@ further:
 The default value for ``kernel.console_loglevel`` comes from
 ``CONFIG_CONSOLE_LOGLEVEL_DEFAULT``, or ``CONFIG_CONSOLE_LOGLEVEL_QUIET`` if
 ``quiet`` is passed on the kernel command line.
+
+Console attributes
+~~~~~~~~~~~~~~~~~~
+
+Registered consoles are exposed at ``/sys/class/console``. For example, if you
+are using ``ttyS0``, the console backing it can be viewed at
+``/sys/class/console/ttyS0/``. The following files are available:
+
+* ``effective_loglevel`` (r): The effective loglevel after considering all
+  loglevel authorities. For example, it shows the value of the console-specific
+  loglevel when a console-specific loglevel is defined, and shows the global
+  console loglevel value when the console-specific one is not defined.
+
+* ``effective_loglevel_source`` (r): The loglevel authority which resulted in
+  the effective loglevel being set. The following values can be present:
+
+    * ``local``: The console-specific loglevel is in effect.
+
+    * ``global``: The global loglevel (``kernel.console_loglevel``) is in
+      effect. Set a console-specific loglevel to override it.
+
+    * ``ignore_loglevel``: ``ignore_loglevel`` was specified on the kernel
+      command line or at ``/sys/module/printk/parameters/ignore_loglevel``.
+      Disable it to use level controls.
+
+* ``enabled`` (r): Whether the console is enabled.
+
+* ``loglevel`` (rw): The local, console-specific loglevel for this console.
+  This will be in effect if no other global control overrides it. Look at
+  ``effective_loglevel`` and ``effective_loglevel_source`` to verify that.
+
+Deprecated
+~~~~~~~~~~
+
+* ``kernel.printk`` sysctl: this takes four values, setting
+  ``kernel.console_loglevel``, ``kernel.default_message_loglevel``, the minimum
+  console loglevel, and a fourth unused value. The interface is generally
+  considered to quite confusing, doesn't perform checks on the values given,
+  and is unaware of per-console loglevel semantics.
+
+Chris Down <chris@chrisdown.name>, 13-October-2024

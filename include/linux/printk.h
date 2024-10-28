@@ -77,6 +77,8 @@ extern bool ignore_per_console_loglevel;
 
 extern void console_verbose(void);
 
+int clamp_loglevel(int level);
+
 /* strlen("ratelimit") + 1 */
 #define DEVKMSG_STR_MAX_SIZE 10
 extern char devkmsg_log_str[DEVKMSG_STR_MAX_SIZE];

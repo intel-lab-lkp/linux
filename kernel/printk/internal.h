@@ -21,6 +21,11 @@ enum loglevel_source {
 	LLS_IGNORE_LOGLEVEL,
 };
 
+void console_register_device(struct console *new);
+void console_setup_class(void);
+
+int clamp_loglevel(int level);
+
 enum loglevel_source
 console_effective_loglevel_source(const struct console *con);
 int console_effective_loglevel(const struct console *con);

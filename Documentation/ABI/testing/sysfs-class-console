@@ -1,0 +1,47 @@
+What:		/sys/class/console/
+Date:		October 2024
+Contact:	Chris Down <chris@chrisdown.name>
+Description:	Interface for viewing and setting per-console attributes, like
+		the per-console loglevel. For a high-level document describing
+		the motivations for this interface and related non-sysfs
+		controls, see
+		Documentation/admin-guide/per-console-loglevel.rst.
+
+What:		/sys/class/console/<C>/effective_loglevel
+Date:		October 2024
+Contact:	Chris Down <chris@chrisdown.name>
+Description:	Read only. The currently effective loglevel for this console.
+		All messages emitted with a loglevel below the effective value
+		will be emitted to the console.
+
+What:		/sys/class/console/<C>/effective_loglevel_source
+Date:		October 2024
+Contact:	Chris Down <chris@chrisdown.name>
+Description:	Read only. The currently effective loglevel source for this
+		console -- for example, whether it was set globally, or whether
+		it was set locally for this console.
+
+		Possible values are:
+			=============== ============================================
+			local           The loglevel comes from the per-console
+			                loglevel.
+			global          The loglevel comes from the global loglevel.
+			ignore_loglevel Both the per-console loglevel and global
+			                loglevels are ignored as ignore_loglevel is
+			                present on the kernel command line.
+			=============== ============================================
+
+What:		/sys/class/console/<C>/enabled
+Date:		October 2024
+Contact:	Chris Down <chris@chrisdown.name>
+Description:	Read only. "1" if the console is enabled, "0" otherwise.
+
+What:		/sys/class/console/<C>/loglevel
+Date:		October 2024
+Contact:	Chris Down <chris@chrisdown.name>
+Description:	Read write. The current per-console loglevel, which will take
+		effect if not overridden by other non-sysfs controls (see
+		Documentation/admin-guide/per-console-loglevel.rst). Bounds are
+		0 (LOGLEVEL_EMERG) to 8 (LOGLEVEL_DEBUG + 1) inclusive. Also
+		takes the special value "-1" to indicate that no per-console
+		loglevel is set, and we should defer to the global controls.
