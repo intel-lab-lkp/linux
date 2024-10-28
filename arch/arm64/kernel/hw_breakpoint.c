@@ -103,7 +103,7 @@ int hw_breakpoint_slots(int type)
 	WRITE_WB_REG_CASE(OFF, 14, REG, VAL);	\
 	WRITE_WB_REG_CASE(OFF, 15, REG, VAL)
 
-static u64 read_wb_reg(int reg, int n)
+static u64 __read_wb_reg(int reg, int n)
 {
 	u64 val = 0;
 
@@ -118,9 +118,27 @@ static u64 read_wb_reg(int reg, int n)
 
 	return val;
 }
+
+static u64 read_wb_reg(int reg, int n)
+{
+	int mdsel_bank, index;
+	u64 val;
+
+	if (!is_debug_v8p9_enabled())
+		return __read_wb_reg(reg, n);
+
+	mdsel_bank = n / 16;
+	index = n % 16;
+	preempt_disable();
+	write_sysreg_s(mdsel_bank << MDSELR_EL1_BANK_SHIFT, SYS_MDSELR_EL1);
+	isb();
+	val = __read_wb_reg(reg, index);
+	preempt_enable();
+	return val;
+}
 NOKPROBE_SYMBOL(read_wb_reg);
 
-static void write_wb_reg(int reg, int n, u64 val)
+static void __write_wb_reg(int reg, int n, u64 val)
 {
 	switch (reg + n) {
 	GEN_WRITE_WB_REG_CASES(AARCH64_DBG_REG_BVR, AARCH64_DBG_REG_NAME_BVR, val);
@@ -131,6 +149,22 @@ static void write_wb_reg(int reg, int n, u64 val)
 		pr_warn("attempt to write to unknown breakpoint register %d\n", n);
 	}
 	isb();
+}
+
+static void write_wb_reg(int reg, int n, u64 val)
+{
+	int mdsel_bank, index;
+
+	if (!is_debug_v8p9_enabled())
+		return __write_wb_reg(reg, n, val);
+
+	mdsel_bank = n / 16;
+	index = n % 16;
+	preempt_disable();
+	write_sysreg_s(mdsel_bank << MDSELR_EL1_BANK_SHIFT, SYS_MDSELR_EL1);
+	isb();
+	__write_wb_reg(reg, index, val);
+	preempt_enable();
 }
 NOKPROBE_SYMBOL(write_wb_reg);
 
