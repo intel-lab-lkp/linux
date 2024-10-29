@@ -108,6 +108,11 @@ properties:
     description:
       GPIO connected to the RESET pin of the UFS memory device.
 
+  ice-config:
+    type: object
+    description:
+      ICE configuration table for Qualcom SOC
+
 required:
   - compatible
   - reg
@@ -350,5 +355,24 @@ examples:
                             <0 0>,
                             <0 0>;
             qcom,ice = <&ice>;
+
+            ice_cfg: ice-config {
+                static-alloc {
+                     ice-allocator-name = "static-alloc";
+                     rx-alloc-percent = <60>;
+                     status = "okay";
+                };
+
+                floor-based {
+                     ice-allocator-name = "floor-based";
+                     status = "okay";
+                };
+
+                instantaneous {
+                     ice-allocator-name = "instantaneous";
+                     num-core = <28 28 15 13>;
+                     status = "okay";
+                };
+            };
         };
     };
