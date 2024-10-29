@@ -33,10 +33,22 @@ properties:
               - fsl,imx8mq-lcdif
           - const: fsl,imx6sx-lcdif
       - items:
+          - const: fsl,imx6sl-lcdif
+          - const: fsl,imx6sx-lcdif
+          - const: fsl,imx28-lcdif
+      - items:
+          - const: fsl,imx6sll-lcdif
+          - const: fsl,imx6sx-lcdif
+          - const: fsl,imx28-lcdif
+      - items:
+          - enum:
+              - fsl,imx6sl-lcdif
+              - fsl,imx6sll-lcdif
+          - const: fsl,imx28-lcdif
+      - items:
           - enum:
               - fsl,imx6sx-lcdif
           - const: fsl,imx28-lcdif
-
   reg:
     maxItems: 1
 
