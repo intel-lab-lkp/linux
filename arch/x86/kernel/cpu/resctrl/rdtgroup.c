@@ -2011,6 +2011,47 @@ out_done_assign:
 	return ret;
 }
 
+/*
+ * Unassign a hardware counter associated with @evtid from the domain and
+ * the group. Unassign the counters from all the domains if rdt_mon_domain
+ * is NULL else unassign from the specific domain.
+ * Free the global counter once unassigned from all the domains.
+ */
+int rdtgroup_unassign_cntr_event(struct rdt_resource *r, struct rdtgroup *rdtgrp,
+				 struct rdt_mon_domain *d, enum resctrl_event_id evtid)
+{
+	int index = MBM_EVENT_ARRAY_INDEX(evtid);
+	int cntr_id = rdtgrp->mon.cntr_id[index];
+	int ret;
+
+	/* Return early if the counter is unassigned already */
+	if (cntr_id == MON_CNTR_UNSET)
+		return 0;
+
+	if (!d) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			ret = resctrl_config_cntr(r, d, evtid, rdtgrp->mon.rmid,
+						  rdtgrp->closid, cntr_id, false);
+			if (ret)
+				goto out_done_unassign;
+		}
+	} else {
+		ret = resctrl_config_cntr(r, d, evtid, rdtgrp->mon.rmid,
+					  rdtgrp->closid, cntr_id, false);
+		if (ret)
+			goto out_done_unassign;
+	}
+
+	/* Free the counter id once it is unassigned from all the domains */
+	if (!mbm_cntr_assigned_to_domain(r, cntr_id)) {
+		mbm_cntr_free(r, cntr_id);
+		rdtgroup_cntr_id_init(rdtgrp, evtid);
+	}
+
+out_done_unassign:
+	return ret;
+}
+
 /* rdtgroup information files for one cache resource. */
 static struct rftype res_common_files[] = {
 	{
