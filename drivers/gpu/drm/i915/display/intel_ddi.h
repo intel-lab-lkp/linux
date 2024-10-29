@@ -65,6 +65,9 @@ void intel_ddi_disable_transcoder_func(const struct intel_crtc_state *crtc_state
 void intel_ddi_enable_transcoder_clock(struct intel_encoder *encoder,
 				       const struct intel_crtc_state *crtc_state);
 void intel_ddi_disable_transcoder_clock(const  struct intel_crtc_state *crtc_state);
+void intel_ddi_config_transcoder_dp2(struct intel_encoder *encoder,
+				     const struct intel_crtc_state *crtc_state,
+				     bool enable);
 void intel_ddi_wait_for_fec_status(struct intel_encoder *encoder,
 				   const struct intel_crtc_state *crtc_state,
 				   bool enabled);
