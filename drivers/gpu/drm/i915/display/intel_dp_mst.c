@@ -1057,6 +1057,9 @@ static void intel_mst_post_disable_dp(struct intel_atomic_state *state,
 
 	intel_ddi_disable_transcoder_func(old_crtc_state);
 
+	if (DISPLAY_VER(dev_priv) >= 30 && !last_mst_stream)
+		intel_ddi_config_transcoder_dp2(encoder, old_crtc_state, false);
+
 	for_each_pipe_crtc_modeset_disable(display, pipe_crtc, old_crtc_state, i) {
 		const struct intel_crtc_state *old_pipe_crtc_state =
 			intel_atomic_get_old_crtc_state(state, pipe_crtc);
@@ -1224,8 +1227,10 @@ static void intel_mst_pre_enable_dp(struct intel_atomic_state *state,
 	if (DISPLAY_VER(dev_priv) < 12 || !first_mst_stream)
 		intel_ddi_enable_transcoder_clock(encoder, pipe_config);
 
-	if (DISPLAY_VER(dev_priv) >= 30 && !first_mst_stream)
+	if (DISPLAY_VER(dev_priv) >= 30 && !first_mst_stream) {
+		intel_ddi_config_transcoder_dp2(encoder, pipe_config, true);
 		intel_ddi_config_transcoder_func(encoder, pipe_config);
+	}
 
 	intel_dsc_dp_pps_write(&dig_port->base, pipe_config);
 	intel_ddi_set_dp_msa(pipe_config, conn_state);
