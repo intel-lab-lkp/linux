@@ -29,12 +29,7 @@ static int __init bpf_lsm_init(void)
 	return 0;
 }
 
-struct lsm_blob_sizes bpf_lsm_blob_sizes __ro_after_init = {
-	.lbs_inode = sizeof(struct bpf_storage_blob),
-};
-
 DEFINE_LSM(bpf) = {
 	.name = "bpf",
 	.init = bpf_lsm_init,
-	.blobs = &bpf_lsm_blob_sizes
 };
