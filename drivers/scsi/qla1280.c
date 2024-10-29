@@ -8,9 +8,15 @@
 * Copyright (C) 2003-2004 Christoph Hellwig
 *
 ******************************************************************************/
-#define QLA1280_VERSION      "3.27.1"
+#define QLA1280_VERSION      "3.27.2"
 /*****************************************************************************
     Revision History:
+    Rev  3.27.2, October 28, 2024, Magnus Lindholm
+	- Explicitly set enable_64bit_addressing flag if QLA_64BIT_PTR is
+	  defined and card is in a 64-bit slot.
+	- Add information about chip hardware revision and pci-slot width to
+	  driver information string
+	- For QLA1040, limit DMA_BIT_MASK to 32 bits for 32-bit cards
     Rev  3.27.1, February 8, 2010, Michael Reed
 	- Retain firmware image for error recovery.
     Rev  3.27, February 10, 2009, Michael Reed
@@ -368,6 +374,7 @@
 
 #define	MEMORY_MAPPED_IO	1
 
+
 #include "qla1280.h"
 
 #ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
@@ -655,18 +662,51 @@ qla1280_info(struct Scsi_Host *host)
 {
 	static char qla1280_scsi_name_buffer[125];
 	char *bp;
+	char hwrev = ' ';
+	int bits;
 	struct scsi_qla_host *ha;
 	struct qla_boards *bdp;
+	struct device_reg __iomem *reg;
 
 	bp = &qla1280_scsi_name_buffer[0];
 	ha = (struct scsi_qla_host *)host->hostdata;
+	reg = ha->iobase;
 	bdp = &ql1280_board_tbl[ha->devnum];
 	memset(bp, 0, sizeof(qla1280_scsi_name_buffer));
 
+
+	if (IS_ISP1040(ha))
+		switch (ha->revision) {
+		case 1:
+			hwrev = ' ';
+			break;
+		case 2:
+			hwrev = 'A';
+			break;
+		case 3:
+			hwrev = ' ';
+			break;
+		case 4:
+			hwrev = 'A';
+			break;
+		case 5:
+			hwrev = 'B';
+			break;
+		case 6:
+			hwrev = 'C';
+			break;
+		default:
+			hwrev = '?';
+			break;
+	}
+	if (RD_REG_WORD(&reg->istatus) & PCI_64BIT_SLOT)
+		bits = 64;
+	else
+		bits = 32;
 	sprintf (bp,
-		 "QLogic %s PCI to SCSI Host Adapter\n"
+		 "QLogic %s%c %d-bit PCI to SCSI Host Adapter\n"
 		 "       Firmware version: %2d.%02d.%02d, Driver version %s",
-		 &bdp->name[0], ha->fwver1, ha->fwver2, ha->fwver3,
+		 &bdp->name[0], hwrev, bits, ha->fwver1, ha->fwver2, ha->fwver3,
 		 QLA1280_VERSION);
 	return bp;
 }
@@ -2168,6 +2208,13 @@ qla1280_nvram_config(struct scsi_qla_host *ha)
 	} else {
 		qla1280_set_defaults(ha);
 	}
+#ifdef QLA_64BIT_PTR
+	/* set flag in nvram if we're using 64 bit addressing */
+	if (RD_REG_WORD(&reg->istatus) & PCI_64BIT_SLOT)
+		nv->cntr_flags_1.enable_64bit_addressing = 1;
+	else
+		nv->cntr_flags_1.enable_64bit_addressing = 0;
+#endif
 
 	qla1280_print_settings(nv);
 
@@ -2177,9 +2224,9 @@ qla1280_nvram_config(struct scsi_qla_host *ha)
 
 	if (IS_ISP1040(ha)) {
 		uint16_t hwrev, cfg1, cdma_conf;
-
 		hwrev = RD_REG_WORD(&reg->cfg_0) & ISP_CFG0_HWMSK;
 
+		ha->revision = hwrev;
 		cfg1 = RD_REG_WORD(&reg->cfg_1) & ~(BIT_4 | BIT_5 | BIT_6);
 		cdma_conf = RD_REG_WORD(&reg->cdma_cfg);
 
@@ -4139,9 +4186,11 @@ static int
 qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int devnum = id->driver_data;
+	u64 mask;
 	struct qla_boards *bdp = &ql1280_board_tbl[devnum];
 	struct Scsi_Host *host;
 	struct scsi_qla_host *ha;
+	struct device_reg __iomem *reg;
 	int error = -ENODEV;
 
 	/* Bypass all AMI SUBSYS VENDOR IDs */
@@ -4176,9 +4225,38 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	ha->pdev = pdev;
 	ha->devnum = devnum;	/* specifies microcode load address */
 
+
+
+#if MEMORY_MAPPED_IO
+	ha->mmpbase = pci_ioremap_bar(ha->pdev, 1);
+	if (!ha->mmpbase) {
+		printk(KERN_INFO "qla1280: Unable to map I/O memory\n");
+	goto error_free_response_ring;
+	}
+
+	host->base = (unsigned long)ha->mmpbase;
+	ha->iobase = (struct device_reg __iomem *)ha->mmpbase;
+#else
+	host->io_port = pci_resource_start(ha->pdev, 0);
+	if (!request_region(host->io_port, 0xff, "qla1280")) {
+		printk(KERN_INFO "qla1280: Failed to reserve i/o region "
+				 "0x%04lx-0x%04lx - already in use\n",
+		host->io_port, host->io_port + 0xff);
+	goto error_free_response_ring;
+	}
+
+	ha->iobase = (struct device_reg *)host->io_port;
+#endif
+
+
 #ifdef QLA_64BIT_PTR
-	if (dma_set_mask_and_coherent(&ha->pdev->dev, DMA_BIT_MASK(64))) {
-		if (dma_set_mask(&ha->pdev->dev, DMA_BIT_MASK(32))) {
+	reg = ha->iobase;
+	if (RD_REG_WORD(&reg->istatus) & PCI_64BIT_SLOT)
+		mask = DMA_BIT_MASK(64);
+	else
+		mask = DMA_BIT_MASK(32);
+	if (dma_set_mask_and_coherent(&ha->pdev->dev, mask)) {
+		if (dma_set_mask(&ha->pdev->dev, mask)) {
 			printk(KERN_WARNING "scsi(%li): Unable to set a "
 			       "suitable DMA mask - aborting\n", ha->host_no);
 			error = -ENODEV;
@@ -4225,28 +4303,6 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	host->unique_id = host->host_no;
 
 	error = -ENODEV;
-
-#if MEMORY_MAPPED_IO
-	ha->mmpbase = pci_ioremap_bar(ha->pdev, 1);
-	if (!ha->mmpbase) {
-		printk(KERN_INFO "qla1280: Unable to map I/O memory\n");
-		goto error_free_response_ring;
-	}
-
-	host->base = (unsigned long)ha->mmpbase;
-	ha->iobase = (struct device_reg __iomem *)ha->mmpbase;
-#else
-	host->io_port = pci_resource_start(ha->pdev, 0);
-	if (!request_region(host->io_port, 0xff, "qla1280")) {
-		printk(KERN_INFO "qla1280: Failed to reserve i/o region "
-				 "0x%04lx-0x%04lx - already in use\n",
-		       host->io_port, host->io_port + 0xff);
-		goto error_free_response_ring;
-	}
-
-	ha->iobase = (struct device_reg *)host->io_port;
-#endif
-
 	INIT_LIST_HEAD(&ha->done_q);
 
 	/* Disable ISP interrupts. */
