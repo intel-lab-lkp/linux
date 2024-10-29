@@ -471,6 +471,35 @@ void split_huge_pmd_locked(struct vm_area_struct *vma, unsigned long address,
 bool unmap_huge_pmd_locked(struct vm_area_struct *vma, unsigned long addr,
 			   pmd_t *pmdp, struct folio *folio);
 
+static inline int get_order_from_str(const char *size_str,
+				     const unsigned long thp_orders)
+{
+	unsigned long size;
+	char *endptr;
+	int order;
+
+	size = memparse(size_str, &endptr);
+
+	if (!is_power_of_2(size))
+		goto err;
+
+	order = get_order(size);
+	if (BIT(order) & ~thp_orders)
+		goto err;
+
+	return order;
+err:
+	pr_err("invalid size %s in boot parameter\n", size_str);
+	return -EINVAL;
+}
+
+struct thp_policy_bitmap {
+	const char *policy;
+	unsigned long bitmap;
+};
+
+int parse_huge_orders(char *p, struct thp_policy_bitmap *policies,
+		      const int num_policies, const unsigned long thp_orders);
 #else /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 static inline bool folio_test_pmd_mappable(struct folio *folio)

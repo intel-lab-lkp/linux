@@ -958,91 +958,80 @@ out:
 }
 __setup("transparent_hugepage=", setup_transparent_hugepage);
 
-static inline int get_order_from_str(const char *size_str)
-{
-	unsigned long size;
-	char *endptr;
-	int order;
-
-	size = memparse(size_str, &endptr);
-
-	if (!is_power_of_2(size))
-		goto err;
-	order = get_order(size);
-	if (BIT(order) & ~THP_ORDERS_ALL_ANON)
-		goto err;
-
-	return order;
-err:
-	pr_err("invalid size %s in thp_anon boot parameter\n", size_str);
-	return -EINVAL;
-}
-
-static char str_dup[PAGE_SIZE] __initdata;
-static int __init setup_thp_anon(char *str)
+int parse_huge_orders(char *p, struct thp_policy_bitmap *policies,
+		      const int num_policies, const unsigned long thp_orders)
 {
 	char *token, *range, *policy, *subtoken;
-	unsigned long always, inherit, madvise;
 	char *start_size, *end_size;
-	int start, end, nr;
-	char *p;
+	int start, end, nr, i;
+	bool policy_set;
 
-	if (!str || strlen(str) + 1 > PAGE_SIZE)
-		goto err;
-	strcpy(str_dup, str);
-
-	always = huge_anon_orders_always;
-	madvise = huge_anon_orders_madvise;
-	inherit = huge_anon_orders_inherit;
-	p = str_dup;
 	while ((token = strsep(&p, ";")) != NULL) {
 		range = strsep(&token, ":");
 		policy = token;
 
 		if (!policy)
-			goto err;
+			return 0;
 
 		while ((subtoken = strsep(&range, ",")) != NULL) {
+			policy_set = false;
+
 			if (strchr(subtoken, '-')) {
 				start_size = strsep(&subtoken, "-");
 				end_size = subtoken;
 
-				start = get_order_from_str(start_size);
-				end = get_order_from_str(end_size);
+				start = get_order_from_str(start_size, thp_orders);
+				end = get_order_from_str(end_size, thp_orders);
 			} else {
-				start = end = get_order_from_str(subtoken);
+				start = end = get_order_from_str(subtoken, thp_orders);
 			}
 
 			if (start < 0 || end < 0 || start > end)
-				goto err;
+				return 0;
 
 			nr = end - start + 1;
-			if (!strcmp(policy, "always")) {
-				bitmap_set(&always, start, nr);
-				bitmap_clear(&inherit, start, nr);
-				bitmap_clear(&madvise, start, nr);
-			} else if (!strcmp(policy, "madvise")) {
-				bitmap_set(&madvise, start, nr);
-				bitmap_clear(&inherit, start, nr);
-				bitmap_clear(&always, start, nr);
-			} else if (!strcmp(policy, "inherit")) {
-				bitmap_set(&inherit, start, nr);
-				bitmap_clear(&madvise, start, nr);
-				bitmap_clear(&always, start, nr);
-			} else if (!strcmp(policy, "never")) {
-				bitmap_clear(&inherit, start, nr);
-				bitmap_clear(&madvise, start, nr);
-				bitmap_clear(&always, start, nr);
-			} else {
-				pr_err("invalid policy %s in thp_anon boot parameter\n", policy);
-				goto err;
+
+			for (i = 0; i < num_policies; i++) {
+				if (!strcmp(policy, policies[i].policy)) {
+					bitmap_set(&policies[i].bitmap, start, nr);
+					policy_set = true;
+				} else
+					bitmap_clear(&policies[i].bitmap, start, nr);
+			}
+
+			if (!policy_set && strcmp(policy, "never")) {
+				pr_err("invalid policy %s in boot parameter\n", policy);
+				return 0;
 			}
 		}
 	}
 
-	huge_anon_orders_always = always;
-	huge_anon_orders_madvise = madvise;
-	huge_anon_orders_inherit = inherit;
+	return 1;
+}
+
+static char str_dup[PAGE_SIZE] __initdata;
+static int __init setup_thp_anon(char *str)
+{
+	struct thp_policy_bitmap policies[] = {
+		{ "always",  huge_anon_orders_always },
+		{ "madvise",  huge_anon_orders_madvise },
+		{ "inherit",  huge_anon_orders_inherit },
+	};
+	char *p;
+
+	if (!str || strlen(str) + 1 > PAGE_SIZE)
+		goto err;
+
+	strscpy(str_dup, str);
+	p = str_dup;
+
+	if (!parse_huge_orders(p, policies, ARRAY_SIZE(policies),
+			      THP_ORDERS_ALL_ANON))
+		goto err;
+
+	huge_anon_orders_always = policies[0].bitmap;
+	huge_anon_orders_madvise = policies[1].bitmap;
+	huge_anon_orders_inherit = policies[2].bitmap;
 	anon_orders_configured = true;
 	return 1;
 
