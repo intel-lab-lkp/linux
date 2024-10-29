@@ -601,6 +601,9 @@ static void drm_sched_job_timedout(struct work_struct *work)
  * callers responsibility to release it manually if it's not part of the
  * pending list any more.
  *
+ * This function is typically used for reset recovery (see the docu of
+ * drm_sched_backend_ops.timedout_job() for details). Do not call it for
+ * scheduler teardown, i.e., before calling drm_sched_fini().
  */
 void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 {
@@ -673,7 +676,6 @@ void drm_sched_stop(struct drm_gpu_scheduler *sched, struct drm_sched_job *bad)
 	 */
 	cancel_delayed_work(&sched->work_tdr);
 }
-
 EXPORT_SYMBOL(drm_sched_stop);
 
 /**
@@ -681,6 +683,10 @@ EXPORT_SYMBOL(drm_sched_stop);
  *
  * @sched: scheduler instance
  *
+ * This function is typically used for reset recovery (see the docu of
+ * drm_sched_backend_ops.timedout_job() for details). Do not call it for
+ * scheduler startup. The scheduler itself is fully operational after
+ * drm_sched_init() succeeded.
  */
 void drm_sched_start(struct drm_gpu_scheduler *sched)
 {
