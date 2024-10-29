@@ -8,6 +8,7 @@
 #include <linux/fpga/fpga-bridge.h>
 #include <linux/fpga/fpga-mgr.h>
 #include <linux/fpga/fpga-region.h>
+#include <linux/fpga-region.h>
 #include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -180,6 +181,67 @@ static struct attribute *fpga_region_attrs[] = {
 };
 ATTRIBUTE_GROUPS(fpga_region);
 
+static int fpga_region_device_open(struct inode *inode, struct file *file)
+{
+	struct miscdevice *miscdev = file->private_data;
+	struct fpga_region *region = container_of(miscdev, struct fpga_region, miscdev);
+
+	file->private_data = region;
+
+	return 0;
+}
+
+static int fpga_region_device_release(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static long fpga_region_device_ioctl(struct file *file, unsigned int cmd,
+				     unsigned long arg)
+{
+	int err;
+	void __user *argp = (void __user *)arg;
+	struct fpga_region_config_info config_info;
+	struct fpga_region *region =  (struct fpga_region *)(file->private_data);
+
+	switch (cmd) {
+	case FPGA_REGION_IOCTL_LOAD:
+		if (copy_from_user(&config_info, argp, sizeof(struct fpga_region_config_info)))
+			return -EFAULT;
+
+		err = region->region_ops->region_config_enumeration(region, &config_info);
+
+		break;
+	case FPGA_REGION_IOCTL_REMOVE:
+		if (copy_from_user(&config_info, argp, sizeof(struct fpga_region_config_info)))
+			return -EFAULT;
+
+		err = region->region_ops->region_remove(region, &config_info);
+
+		break;
+	case FPGA_REGION_IOCTL_STATUS:
+		unsigned int status;
+
+		status = region->region_ops->region_status(region);
+
+		if (copy_to_user((void __user *)arg, &status, sizeof(status)))
+			err = -EFAULT;
+		break;
+	default:
+		err = -ENOTTY;
+	}
+
+	return err;
+}
+
+static const struct file_operations fpga_region_fops = {
+	.owner		= THIS_MODULE,
+	.open		= fpga_region_device_open,
+	.release	= fpga_region_device_release,
+	.unlocked_ioctl	= fpga_region_device_ioctl,
+	.compat_ioctl	= fpga_region_device_ioctl,
+};
+
 /**
  * __fpga_region_register_full - create and register an FPGA Region device
  * @parent: device parent
@@ -229,8 +291,21 @@ __fpga_region_register_full(struct device *parent, const struct fpga_region_info
 	if (ret)
 		goto err_remove;
 
+	if (info->region_ops) {
+		region->region_ops = info->region_ops;
+		region->miscdev.minor = MISC_DYNAMIC_MINOR;
+		region->miscdev.name = kobject_name(&region->dev.kobj);
+		region->miscdev.fops = &fpga_region_fops;
+		ret = misc_register(&region->miscdev);
+		if (ret) {
+			pr_err("fpga-region: failed to register misc device.\n");
+			goto err_remove;
+		}
+	}
+
 	ret = device_register(&region->dev);
 	if (ret) {
+		misc_deregister(&region->miscdev);
 		put_device(&region->dev);
 		return ERR_PTR(ret);
 	}
@@ -273,6 +348,40 @@ __fpga_region_register(struct device *parent, struct fpga_manager *mgr,
 EXPORT_SYMBOL_GPL(__fpga_region_register);
 
 /**
+ * __fpga_region_register_with_ops - create and register an FPGA Region device
+ * with user interface call-backs.
+ * @parent: device parent
+ * @mgr: manager that programs this region
+ * @region_ops: ops for low level FPGA region for device enumeration/removal
+ * @priv: of-fpga-region private data
+ * @get_bridges: optional function to get bridges to a list
+ * @owner: module containing the get_bridges function
+ *
+ * This simple version of the register function should be sufficient for most users.
+ * The fpga_region_register_full() function is available for users that need to
+ * pass additional, optional parameters.
+ *
+ * Return: struct fpga_region or ERR_PTR()
+ */
+struct fpga_region *
+__fpga_region_register_with_ops(struct device *parent, struct fpga_manager *mgr,
+				const struct fpga_region_ops *region_ops,
+				void *priv,
+				int (*get_bridges)(struct fpga_region *),
+				struct module *owner)
+{
+	struct fpga_region_info info = { 0 };
+
+	info.mgr = mgr;
+	info.priv = priv;
+	info.get_bridges = get_bridges;
+	info.region_ops = region_ops;
+
+	return __fpga_region_register_full(parent, &info, owner);
+}
+EXPORT_SYMBOL_GPL(__fpga_region_register_with_ops);
+
+/**
  * fpga_region_unregister - unregister an FPGA region
  * @region: FPGA region
  *
@@ -280,6 +389,7 @@ EXPORT_SYMBOL_GPL(__fpga_region_register);
  */
 void fpga_region_unregister(struct fpga_region *region)
 {
+	misc_deregister(&region->miscdev);
 	device_unregister(&region->dev);
 }
 EXPORT_SYMBOL_GPL(fpga_region_unregister);

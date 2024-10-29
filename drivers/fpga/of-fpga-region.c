@@ -8,6 +8,8 @@
 #include <linux/fpga/fpga-bridge.h>
 #include <linux/fpga/fpga-mgr.h>
 #include <linux/fpga/fpga-region.h>
+#include <linux/firmware.h>
+#include <linux/fpga-region.h>
 #include <linux/idr.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -17,6 +19,20 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+
+/**
+ * struct of_fpga_region_priv - Private data structure
+ * image.
+ * @dev:	Device data structure
+ * @fw:		firmware of coeff table.
+ * @path:	path of FPGA overlay image firmware file.
+ * @ovcs_id:	overlay changeset id.
+ */
+struct of_fpga_region_priv {
+	struct device *dev;
+	const struct firmware *fw;
+	int ovcs_id;
+};
 
 static const struct of_device_id fpga_region_of_match[] = {
 	{ .compatible = "fpga-region", },
@@ -394,20 +410,93 @@ static struct notifier_block fpga_region_of_nb = {
 	.notifier_call = of_fpga_region_notify,
 };
 
+static int of_fpga_region_status(struct fpga_region *region)
+{
+	struct of_fpga_region_priv *ovcs = region->priv;
+
+	if (ovcs->ovcs_id)
+		return FPGA_REGION_HAS_PL;
+
+	return FPGA_REGION_EMPTY;
+}
+
+static int of_fpga_region_config_enumeration(struct fpga_region *region,
+					     struct fpga_region_config_info *config_info)
+{
+	struct of_fpga_region_priv *ovcs = region->priv;
+	int err;
+
+	/* if it's set do not allow changes */
+	if (ovcs->ovcs_id)
+		return -EPERM;
+
+	err = request_firmware(&ovcs->fw, config_info->firmware_name, NULL);
+	if (err != 0)
+		goto out_err;
+
+	err = of_overlay_fdt_apply((void *)ovcs->fw->data, ovcs->fw->size,
+				   &ovcs->ovcs_id, NULL);
+	if (err < 0) {
+		pr_err("%s: Failed to create overlay (err=%d)\n",
+		       __func__, err);
+		release_firmware(ovcs->fw);
+		goto out_err;
+	}
+
+	return 0;
+
+out_err:
+	ovcs->ovcs_id = 0;
+	ovcs->fw = NULL;
+
+	return err;
+}
+
+static int of_fpga_region_config_remove(struct fpga_region *region,
+					struct fpga_region_config_info *config_info)
+{
+	struct of_fpga_region_priv *ovcs = region->priv;
+
+	if (!ovcs->ovcs_id)
+		return -EPERM;
+
+	of_overlay_remove(&ovcs->ovcs_id);
+	release_firmware(ovcs->fw);
+
+	ovcs->ovcs_id = 0;
+	ovcs->fw = NULL;
+
+	return 0;
+}
+
+static const struct fpga_region_ops region_ops = {
+	.region_status = of_fpga_region_status,
+	.region_config_enumeration = of_fpga_region_config_enumeration,
+	.region_remove = of_fpga_region_config_remove,
+};
+
 static int of_fpga_region_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
+	struct of_fpga_region_priv *priv;
 	struct fpga_region *region;
 	struct fpga_manager *mgr;
 	int ret;
+
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	priv->dev = dev;
 
 	/* Find the FPGA mgr specified by region or parent region. */
 	mgr = of_fpga_region_get_mgr(np);
 	if (IS_ERR(mgr))
 		return -EPROBE_DEFER;
 
-	region = fpga_region_register(dev, mgr, of_fpga_region_get_bridges);
+	region = fpga_region_register_with_ops(dev, mgr, &region_ops, priv,
+					       of_fpga_region_get_bridges);
 	if (IS_ERR(region)) {
 		ret = PTR_ERR(region);
 		goto eprobe_mgr_put;

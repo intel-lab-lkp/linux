@@ -6,8 +6,26 @@
 #include <linux/device.h>
 #include <linux/fpga/fpga-mgr.h>
 #include <linux/fpga/fpga-bridge.h>
+#include <linux/fpga-region.h>
+#include <linux/miscdevice.h>
 
 struct fpga_region;
+
+/**
+ * struct fpga_region_ops - ops for low level FPGA region ops for device
+ * enumeration/removal
+ * @region_status: returns the FPGA region status
+ * @region_config_enumeration: Configure and enumerate the FPGA region.
+ * @region_remove: Remove all devices within the FPGA region
+ * (which are added as part of the enumeration).
+ */
+struct fpga_region_ops {
+	int (*region_status)(struct fpga_region *region);
+	int (*region_config_enumeration)(struct fpga_region *region,
+					 struct fpga_region_config_info *config_info);
+	int (*region_remove)(struct fpga_region *region,
+			     struct fpga_region_config_info *config_info);
+};
 
 /**
  * struct fpga_region_info - collection of parameters an FPGA Region
@@ -15,6 +33,8 @@ struct fpga_region;
  * @compat_id: FPGA region id for compatibility check.
  * @priv: fpga region private data
  * @get_bridges: optional function to get bridges to a list
+ * @fpga_region_ops: ops for low level FPGA region ops for device
+ * enumeration/removal
  *
  * fpga_region_info contains parameters for the register_full function.
  * These are separated into an info structure because they some are optional
@@ -26,6 +46,7 @@ struct fpga_region_info {
 	struct fpga_compat_id *compat_id;
 	void *priv;
 	int (*get_bridges)(struct fpga_region *region);
+	const struct fpga_region_ops *region_ops;
 };
 
 /**
@@ -39,6 +60,8 @@ struct fpga_region_info {
  * @ops_owner: module containing the get_bridges function
  * @priv: private data
  * @get_bridges: optional function to get bridges to a list
+ * @fpga_region_ops: ops for low level FPGA region ops for device
+ * enumeration/removal
  */
 struct fpga_region {
 	struct device dev;
@@ -50,6 +73,8 @@ struct fpga_region {
 	struct module *ops_owner;
 	void *priv;
 	int (*get_bridges)(struct fpga_region *region);
+	const struct fpga_region_ops *region_ops;
+	struct miscdevice miscdev;
 };
 
 #define to_fpga_region(d) container_of(d, struct fpga_region, dev)
@@ -71,6 +96,13 @@ __fpga_region_register_full(struct device *parent, const struct fpga_region_info
 struct fpga_region *
 __fpga_region_register(struct device *parent, struct fpga_manager *mgr,
 		       int (*get_bridges)(struct fpga_region *), struct module *owner);
+#define fpga_region_register_with_ops(parent, mgr, region_ops, priv, get_bridges) \
+	__fpga_region_register_with_ops(parent, mgr, region_ops, priv, get_bridges, THIS_MODULE)
+struct fpga_region *
+__fpga_region_register_with_ops(struct device *parent, struct fpga_manager *mgr,
+				const struct fpga_region_ops *region_ops, void *priv,
+				int (*get_bridges)(struct fpga_region *),
+				struct module *owner);
 void fpga_region_unregister(struct fpga_region *region);
 
 #endif /* _FPGA_REGION_H */
