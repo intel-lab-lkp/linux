@@ -925,6 +925,14 @@ static int rdtgroup_available_mbm_cntrs_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static void rdtgroup_cntr_id_init(struct rdtgroup *rdtgrp,
+				  enum resctrl_event_id evtid)
+{
+	int index = MBM_EVENT_ARRAY_INDEX(evtid);
+
+	rdtgrp->mon.cntr_id[index] = MON_CNTR_UNSET;
+}
+
 #ifdef CONFIG_PROC_CPU_RESCTRL
 
 /*
@@ -3561,6 +3569,9 @@ static int mkdir_rdt_prepare_rmid_alloc(struct rdtgroup *rdtgrp)
 	}
 	rdtgrp->mon.rmid = ret;
 
+	rdtgroup_cntr_id_init(rdtgrp, QOS_L3_MBM_TOTAL_EVENT_ID);
+	rdtgroup_cntr_id_init(rdtgrp, QOS_L3_MBM_LOCAL_EVENT_ID);
+
 	ret = mkdir_mondata_all(rdtgrp->kn, rdtgrp, &rdtgrp->mon.mon_data_kn);
 	if (ret) {
 		rdt_last_cmd_puts("kernfs subdir error\n");
@@ -4115,6 +4126,10 @@ static void __init rdtgroup_setup_default(void)
 	rdtgroup_default.closid = RESCTRL_RESERVED_CLOSID;
 	rdtgroup_default.mon.rmid = RESCTRL_RESERVED_RMID;
 	rdtgroup_default.type = RDTCTRL_GROUP;
+
+	rdtgroup_cntr_id_init(&rdtgroup_default, QOS_L3_MBM_TOTAL_EVENT_ID);
+	rdtgroup_cntr_id_init(&rdtgroup_default, QOS_L3_MBM_LOCAL_EVENT_ID);
+
 	INIT_LIST_HEAD(&rdtgroup_default.mon.crdtgrp_list);
 
 	list_add(&rdtgroup_default.rdtgroup_list, &rdt_all_groups);

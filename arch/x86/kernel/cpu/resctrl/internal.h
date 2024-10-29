@@ -62,6 +62,18 @@
 /* Setting bit 0 in L3_QOS_EXT_CFG enables the ABMC feature. */
 #define ABMC_ENABLE_BIT			0
 
+/* Maximum assignable counters per resctrl group */
+#define MAX_CNTRS			2
+
+#define MON_CNTR_UNSET			U32_MAX
+
+/*
+ * Get the counter index for the assignable counter
+ * 0 for evtid == QOS_L3_MBM_TOTAL_EVENT_ID
+ * 1 for evtid == QOS_L3_MBM_LOCAL_EVENT_ID
+ */
+#define MBM_EVENT_ARRAY_INDEX(_event) ((_event) - 2)
+
 /**
  * cpumask_any_housekeeping() - Choose any CPU in @mask, preferring those that
  *			        aren't marked nohz_full
@@ -231,12 +243,14 @@ enum rdtgrp_mode {
  * @parent:			parent rdtgrp
  * @crdtgrp_list:		child rdtgroup node list
  * @rmid:			rmid for this rdtgroup
+ * @cntr_id:			IDs of hardware counters assigned to monitor group
  */
 struct mongroup {
 	struct kernfs_node	*mon_data_kn;
 	struct rdtgroup		*parent;
 	struct list_head	crdtgrp_list;
 	u32			rmid;
+	u32			cntr_id[MAX_CNTRS];
 };
 
 /**
