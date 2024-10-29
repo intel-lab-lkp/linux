@@ -360,6 +360,14 @@ static int __init do_name(void)
 {
 	state = SkipIt;
 	next_state = Reset;
+
+	/* name_len > 0 && name_len <= PATH_MAX checked in do_header */
+	if (collected[name_len - 1] != '\0') {
+		pr_err("Skipping name without nulterm: %.*s\n",
+		       (int)name_len, collected);
+		return 0;
+	}
+
 	if (strcmp(collected, "TRAILER!!!") == 0) {
 		free_hash();
 		return 0;
@@ -424,13 +432,19 @@ static int __init do_copy(void)
 
 static int __init do_symlink(void)
 {
+	state = SkipIt;
+	next_state = Reset;
+
+	if (collected[name_len - 1] != '\0') {
+		pr_err("Skipping symlink without nulterm: %.*s\n",
+		       (int)name_len, collected);
+		return 0;
+	}
 	collected[N_ALIGN(name_len) + body_len] = '\0';
 	clean_path(collected, 0);
 	init_symlink(collected + N_ALIGN(name_len), collected);
 	init_chown(collected, uid, gid, AT_SYMLINK_NOFOLLOW);
 	do_utime(collected, mtime);
-	state = SkipIt;
-	next_state = Reset;
 	return 0;
 }
 
