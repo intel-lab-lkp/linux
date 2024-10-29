@@ -762,11 +762,9 @@ static int ad7606_read_raw(struct iio_dev *indio_dev,
 		*val = st->oversampling;
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		/*
-		 * TODO: return the real frequency intead of the requested one once
-		 * pwm_get_state_hw comes upstream.
-		 */
-		pwm_get_state(st->cnvst_pwm, &cnvst_pwm_state);
+		ret = pwm_get_state_hw(st->cnvst_pwm, &cnvst_pwm_state);
+		if (ret < 0)
+			return ret;
 		*val = DIV_ROUND_CLOSEST_ULL(NSEC_PER_SEC, cnvst_pwm_state.period);
 		return IIO_VAL_INT;
 	}
