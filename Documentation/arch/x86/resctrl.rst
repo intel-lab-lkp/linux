@@ -302,6 +302,10 @@ with the following files:
 	memory bandwidth tracking to a single memory bandwidth event per
 	monitoring group.
 
+"available_mbm_cntrs":
+	The number of free monitoring counters available assignment in each domain
+	when the architecture supports mbm_cntr_assign mode.
+
 "max_threshold_occupancy":
 		Read/write file provides the largest value (in
 		bytes) at which a previously used LLC_occupancy
