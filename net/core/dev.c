@@ -5857,7 +5857,7 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 		struct rps_dev_flow voidflow, *rflow = &voidflow;
 		int cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
-		if (cpu >= 0) {
+		if (cpu >= 0 && cpu != smp_processor_id()) {
 			ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
 			rcu_read_unlock();
 			return ret;
@@ -5886,11 +5886,13 @@ void netif_receive_skb_list_internal(struct list_head *head)
 	rcu_read_lock();
 #ifdef CONFIG_RPS
 	if (static_branch_unlikely(&rps_needed)) {
+		int curr_cpu = smp_processor_id();
+
 		list_for_each_entry_safe(skb, next, head, list) {
 			struct rps_dev_flow voidflow, *rflow = &voidflow;
 			int cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
-			if (cpu >= 0) {
+			if (cpu >= 0 && cpu != curr_cpu) {
 				/* Will be handled, remove from list */
 				skb_list_del_init(skb);
 				enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
