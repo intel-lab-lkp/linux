@@ -168,6 +168,43 @@ static inline bool can_dev_dropped_skb(struct net_device *dev, struct sk_buff *s
 	return can_dropped_invalid_skb(dev, skb);
 }
 
+static inline void can_frame_error_init(struct can_frame *cf)
+{
+	cf->can_id |= CAN_ERR_PROT | CAN_ERR_BUSERROR;
+}
+
+static inline void can_frame_set_err_bit0(struct can_frame *cf)
+{
+	cf->data[2] |= CAN_ERR_PROT_BIT0;
+}
+
+static inline void can_frame_set_err_bit1(struct can_frame *cf)
+{
+	cf->data[2] |= CAN_ERR_PROT_BIT1;
+}
+
+static inline void can_frame_set_err_ack(struct can_frame *cf)
+{
+	cf->can_id |= CAN_ERR_ACK;
+	cf->data[3] = CAN_ERR_PROT_LOC_ACK;
+}
+
+static inline void can_frame_set_err_crc(struct can_frame *cf)
+{
+	cf->data[2] |= CAN_ERR_PROT_BIT;
+	cf->data[3] = CAN_ERR_PROT_LOC_CRC_SEQ;
+}
+
+static inline void can_frame_set_err_form(struct can_frame *cf)
+{
+	cf->data[2] |= CAN_ERR_PROT_FORM;
+}
+
+static inline void can_frame_set_err_stuff(struct can_frame *cf)
+{
+	cf->data[2] |= CAN_ERR_PROT_STUFF;
+}
+
 void can_setup(struct net_device *dev);
 
 struct net_device *alloc_candev_mqs(int sizeof_priv, unsigned int echo_skb_max,
