@@ -157,7 +157,7 @@ static inline bool drm_debug_enabled_raw(enum drm_debug_category category)
  * a descriptor, and only enabled callsites are reachable.  They use
  * the private macro to avoid re-testing the enable-bit.
  */
-#define __drm_debug_enabled(category)	true
+#define __drm_debug_enabled(category)	({ (void)(category); true; })
 #define drm_debug_enabled(category)	drm_debug_enabled_instrumented(category)
 #else
 #define __drm_debug_enabled(category)	drm_debug_enabled_raw(category)
