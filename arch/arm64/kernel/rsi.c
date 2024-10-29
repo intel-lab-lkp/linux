@@ -8,6 +8,7 @@
 #include <linux/psci.h>
 #include <linux/swiotlb.h>
 #include <linux/cc_platform.h>
+#include <linux/platform_device.h>
 
 #include <asm/io.h>
 #include <asm/mem_encrypt.h>
@@ -140,3 +141,17 @@ void __init arm64_rsi_init(void)
 	static_branch_enable(&rsi_present);
 }
 
+static struct platform_device rsi_dev = {
+	.name = ARMV9_RSI_PDEV_NAME,
+	.id = -1
+};
+
+static int __init rsi_init(void)
+{
+	if (is_realm_world())
+		if (platform_device_register(&rsi_dev))
+			pr_err("failed to register rsi platform device");
+	return 0;
+}
+
+arch_initcall(rsi_init)
