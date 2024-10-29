@@ -195,8 +195,11 @@ struct ufs_qcom_host {
 
 #ifdef CONFIG_SCSI_UFS_CRYPTO
 	struct qcom_ice *ice;
+	struct device_node *ice_conf;
+	int chosen_ice_allocator;
 #endif
-
+	#define UFS_QCOM_CAP_ICE_CONFIG BIT(4)
+	u32 caps;
 	void __iomem *dev_ref_clk_ctrl_mmio;
 	bool is_dev_ref_clk_enabled;
 	struct ufs_hw_version hw_ver;
@@ -225,6 +228,39 @@ ufs_qcom_get_debug_reg_offset(struct ufs_qcom_host *host, u32 reg)
 
 	return UFS_CNTLR_3_x_x_VEN_REGS_OFFSET(reg);
 };
+
+#ifdef CONFIG_SCSI_UFS_CRYPTO
+static inline bool is_ice_config_supported(struct ufs_qcom_host *host)
+{
+	return (host->caps & UFS_QCOM_CAP_ICE_CONFIG);
+}
+
+/* Ice  Allocator Selection */
+#define STATIC_ALLOC 0x0
+#define FLOOR_BASED BIT(0)
+#define INSTANTANEOUS BIT(1)
+
+enum {
+	REG_UFS_MEM_ICE_NUM_AES_CORES = 0x2608,
+	REG_UFS_MEM_ICE_CONFIG = 0x260C,
+	REG_UFS_MEM_ICE_STATIC_ALLOC_NUM_CORE = 0x2610,
+	REG_UFS_MEM_ICE_FLOOR_BASED_NUM_CORE_0 = 0x2614,
+	REG_UFS_MEM_ICE_INSTANTANEOUS_NUM_CORE = 0x2664,
+};
+
+#define ICE_FLOOR_BASED_NAME_LEN 3
+#define ICE_FLOOR_BASED_NUM_PARAMS 6
+
+struct ufs_qcom_floor_based_config {
+	/* group names */
+	char name[ICE_FLOOR_BASED_NAME_LEN];
+	/*
+	 * num_core_tx_stream, num_core_rx_stream, num_wr_task_max,
+	 * num_wr_task_min, num_rd_task_max, num_rd_task_min
+	 */
+	unsigned int val[ICE_FLOOR_BASED_NUM_PARAMS];
+};
+#endif
 
 #define ufs_qcom_is_link_off(hba) ufshcd_is_link_off(hba)
 #define ufs_qcom_is_link_active(hba) ufshcd_is_link_active(hba)

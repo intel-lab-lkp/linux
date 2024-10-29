@@ -105,6 +105,213 @@ static struct ufs_qcom_host *rcdev_to_ufs_host(struct reset_controller_dev *rcd)
 }
 
 #ifdef CONFIG_SCSI_UFS_CRYPTO
+/*
+ * There're 10 sets of settings for floor-based allocations.
+ */
+static struct ufs_qcom_floor_based_config floor_based_config[] = {
+	{"G0", {5, 12, 0, 0, 32, 0}},
+	{"G1", {12, 5, 32, 0, 0, 0}},
+	{"G2", {6, 11, 4, 1, 32, 1}},
+	{"G3", {6, 11, 7, 1, 32, 1}},
+	{"G4", {7, 10, 11, 1, 32, 1}},
+	{"G5", {7, 10, 14, 1, 32, 1}},
+	{"G6", {8, 9, 18, 1, 32, 1}},
+	{"G7", {9, 8, 21, 1, 32, 1}},
+	{"G8", {10, 7, 24, 1, 32, 1}},
+	{"G9", {10, 7, 32, 1, 32, 1}},
+};
+
+static inline void __get_floor_based_grp_params(unsigned int *val, int *c, int *t)
+{
+	*c = ((val[0] << 8) | val[1] | (1 << 31));
+	*t = ((val[2] << 24) | (val[3] << 16) | (val[4] << 8) | val[5]);
+}
+
+static inline void get_floor_based_grp_params(unsigned int group, int *core, int *task)
+{
+	struct ufs_qcom_floor_based_config *p = &floor_based_config[group];
+
+	 __get_floor_based_grp_params(p->val, core, task);
+}
+
+/**
+ * ufs_qcom_ice_config_static_alloc - Static ICE allocator
+ *
+ * @hba: host controller instance
+ * Return: zero for success and non-zero in case of a failure.
+ */
+static int ufs_qcom_ice_config_static_alloc(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	unsigned int val, rx_aes;
+	unsigned int num_aes_cores;
+	int ret;
+
+	ret = of_property_read_u32(host->ice_conf, "rx-alloc-percent", &val);
+	if (ret)
+		return ret;
+
+	num_aes_cores = ufshcd_readl(hba, REG_UFS_MEM_ICE_NUM_AES_CORES);
+	ufshcd_writel(hba, STATIC_ALLOC, REG_UFS_MEM_ICE_CONFIG);
+
+	/*
+	 * DTS specifies the percent allocation to rx stream
+	 * Calculation -
+	 *  Num Tx stream = N_TOT - (N_TOT * percent of rx stream allocation)
+	 */
+	rx_aes = DIV_ROUND_CLOSEST(num_aes_cores * val, 100);
+	val = rx_aes | ((num_aes_cores - rx_aes) << 8);
+	ufshcd_writel(hba, val, REG_UFS_MEM_ICE_STATIC_ALLOC_NUM_CORE);
+
+	return 0;
+}
+
+/**
+ * ufs_qcom_ice_config_floor_based - Floor based ICE allocator
+ *
+ * @hba: host controller instance
+ * Return: zero for success and non-zero in case of a failure.
+ */
+static int ufs_qcom_ice_config_floor_based(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	unsigned int reg = REG_UFS_MEM_ICE_FLOOR_BASED_NUM_CORE_0;
+	/* 6 values for each group, refer struct ufs_qcom_floor_based_config */
+	unsigned int override_val[ICE_FLOOR_BASED_NUM_PARAMS];
+	char name[8] = {0};
+	int i, ret;
+
+	ufshcd_writel(hba, FLOOR_BASED, REG_UFS_MEM_ICE_CONFIG);
+	for (i = 0; i < ARRAY_SIZE(floor_based_config); i++) {
+		int core = 0, task = 0;
+
+		if (host->ice_conf) {
+			snprintf(name, sizeof(name), "g%d", i);
+			ret = of_property_read_variable_u32_array(host->ice_conf,
+								  name,
+								  override_val,
+								  ICE_FLOOR_BASED_NUM_PARAMS,
+								  ICE_FLOOR_BASED_NUM_PARAMS);
+			/* Some/All parameters may be overwritten */
+			if (ret > 0)
+				__get_floor_based_grp_params(override_val, &core,
+						      &task);
+			else
+				get_floor_based_grp_params(i, &core, &task);
+		} else {
+			get_floor_based_grp_params(i, &core, &task);
+		}
+
+		/* Num Core and Num task are contiguous & configured for a group together */
+		ufshcd_writel(hba, core, reg);
+		reg += 4;
+		ufshcd_writel(hba, task, reg);
+		reg += 4;
+	}
+
+	return 0;
+}
+
+/**
+ * ufs_qcom_ice_config_instantaneous - Instantaneous ICE allocator
+ *
+ * @hba: host controller instance
+ * Return: zero for success and non-zero in case of a failure.
+ */
+static int ufs_qcom_ice_config_instantaneous(struct ufs_hba *hba)
+{
+	unsigned int val[4];
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	unsigned int config;
+	int ret;
+
+	ret = of_property_read_variable_u32_array(host->ice_conf, "num-core", val,
+						  4, 4);
+	if (ret < 0)
+		return ret;
+
+	config = val[0] | (val[1] << 8) | (val[2] << 16) | (val[3] << 24);
+
+	ufshcd_writel(hba, INSTANTANEOUS, REG_UFS_MEM_ICE_CONFIG);
+	ufshcd_writel(hba, config, REG_UFS_MEM_ICE_INSTANTANEOUS_NUM_CORE);
+
+	return 0;
+}
+
+static int ufs_qcom_parse_ice_allocator(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct device_node *np;
+	struct device_node *ice_np;
+	const char *allocator_name;
+	int ret;
+
+	np = hba->dev->of_node;
+	if (!np)
+		return -ENOENT;
+
+	ice_np = of_get_next_available_child(np, NULL);
+	if (!ice_np)
+		return -ENOENT;
+
+	/* Only 1 config can be enabled, pick the first */
+	host->ice_conf = of_get_next_available_child(ice_np, NULL);
+	if (!host->ice_conf) {
+		/* No overrides, use floor based as default */
+		host->chosen_ice_allocator = FLOOR_BASED;
+		dev_info(hba->dev, "Resort to default ice floor based ice config\n");
+		return 0;
+	}
+
+	ret = of_property_read_string(host->ice_conf, "ice-allocator-name", &allocator_name);
+	if (ret < 0)
+		return ret;
+
+	if (!strcmp(allocator_name, "static-alloc"))
+		host->chosen_ice_allocator = STATIC_ALLOC;
+	else if (!strcmp(allocator_name, "floor-based"))
+		host->chosen_ice_allocator = FLOOR_BASED;
+	else if (!strcmp(allocator_name, "instantaneous"))
+		host->chosen_ice_allocator = INSTANTANEOUS;
+	else {
+		dev_err(hba->dev, "Failed to find a valid ice allocator\n");
+		ret = -ENODATA;
+	}
+
+	return ret;
+}
+
+static int ufs_qcom_config_ice_allocator(struct ufs_qcom_host *host)
+{
+	if (!is_ice_config_supported(host))
+		return 0;
+
+	switch (host->chosen_ice_allocator) {
+	case STATIC_ALLOC:
+		return ufs_qcom_ice_config_static_alloc(host->hba);
+	case FLOOR_BASED:
+		return ufs_qcom_ice_config_floor_based(host->hba);
+	case INSTANTANEOUS:
+		return ufs_qcom_ice_config_instantaneous(host->hba);
+	}
+
+	return -EINVAL;
+}
+
+static int ufs_qcom_ice_config_init(struct ufs_qcom_host *host)
+{
+	struct ufs_hba *hba = host->hba;
+	int ret;
+
+	if (!is_ice_config_supported(host))
+		return 0;
+
+	ret = ufs_qcom_parse_ice_allocator(hba);
+	if (!ret)
+		dev_dbg(hba->dev, "ICE allocator initialization success!!");
+
+	return ret;
+}
 
 static inline void ufs_qcom_ice_enable(struct ufs_qcom_host *host)
 {
@@ -117,6 +324,7 @@ static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
 	struct ufs_hba *hba = host->hba;
 	struct device *dev = hba->dev;
 	struct qcom_ice *ice;
+	int ret;
 
 	ice = of_qcom_ice_get(dev);
 	if (ice == ERR_PTR(-EOPNOTSUPP)) {
@@ -129,6 +337,10 @@ static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
 
 	host->ice = ice;
 	hba->caps |= UFSHCD_CAP_CRYPTO;
+
+	ret = ufs_qcom_ice_config_init(host);
+	if (ret)
+		dev_info(dev, "Continue with default ice configuration\n");
 
 	return 0;
 }
@@ -196,6 +408,12 @@ static inline int ufs_qcom_ice_suspend(struct ufs_qcom_host *host)
 {
 	return 0;
 }
+
+static int ufs_qcom_config_ice(struct ufs_qcom_host *host)
+{
+	return 0;
+}
+
 #endif
 
 static void ufs_qcom_disable_lane_clks(struct ufs_qcom_host *host)
@@ -435,6 +653,11 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 		err = ufs_qcom_enable_lane_clks(host);
 		break;
 	case POST_CHANGE:
+		err = ufs_qcom_config_ice_allocator(host);
+		if (err) {
+			dev_err(hba->dev, "failed to configure ice, ret=%d\n", err);
+			break;
+		}
 		/* check if UFS PHY moved from DISABLED to HIBERN8 */
 		err = ufs_qcom_check_hibern8(hba);
 		ufs_qcom_enable_hw_clk_gating(hba);
@@ -917,12 +1140,17 @@ static void ufs_qcom_set_host_params(struct ufs_hba *hba)
 
 static void ufs_qcom_set_caps(struct ufs_hba *hba)
 {
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
 	hba->caps |= UFSHCD_CAP_CLK_GATING | UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
 	hba->caps |= UFSHCD_CAP_CLK_SCALING | UFSHCD_CAP_WB_WITH_CLK_SCALING;
 	hba->caps |= UFSHCD_CAP_AUTO_BKOPS_SUSPEND;
 	hba->caps |= UFSHCD_CAP_WB_EN;
 	hba->caps |= UFSHCD_CAP_AGGR_POWER_COLLAPSE;
 	hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
+
+	if (host->hw_ver.major >= 0x5)
+		host->caps |= UFS_QCOM_CAP_ICE_CONFIG;
 }
 
 /**
