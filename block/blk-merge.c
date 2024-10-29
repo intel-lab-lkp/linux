@@ -411,10 +411,9 @@ struct bio *bio_split_zone_append(struct bio *bio,
  */
 struct bio *bio_split_to_limits(struct bio *bio)
 {
-	const struct queue_limits *lim = &bdev_get_queue(bio->bi_bdev)->limits;
 	unsigned int nr_segs;
 
-	return __bio_split_to_limits(bio, lim, &nr_segs);
+	return __bio_split_to_limits(bio, bdev_limits(bio->bi_bdev), &nr_segs);
 }
 EXPORT_SYMBOL(bio_split_to_limits);
 
@@ -797,7 +796,7 @@ static inline void blk_update_mixed_merge(struct request *req,
 
 static void blk_account_io_merge_request(struct request *req)
 {
-	if (blk_do_io_stat(req)) {
+	if (req->rq_flags & RQF_IO_STAT) {
 		part_stat_lock();
 		part_stat_inc(req->part, merges[op_stat_group(req_op(req))]);
 		part_stat_local_dec(req->part,
@@ -1005,12 +1004,11 @@ enum elv_merge blk_try_merge(struct request *rq, struct bio *bio)
 
 static void blk_account_io_merge_bio(struct request *req)
 {
-	if (!blk_do_io_stat(req))
-		return;
-
-	part_stat_lock();
-	part_stat_inc(req->part, merges[op_stat_group(req_op(req))]);
-	part_stat_unlock();
+	if (req->rq_flags & RQF_IO_STAT) {
+		part_stat_lock();
+		part_stat_inc(req->part, merges[op_stat_group(req_op(req))]);
+		part_stat_unlock();
+	}
 }
 
 enum bio_merge_status bio_attempt_back_merge(struct request *req,
