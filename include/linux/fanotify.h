@@ -135,4 +135,49 @@
 #undef FAN_ALL_PERM_EVENTS
 #undef FAN_ALL_OUTGOING_EVENTS
 
+struct fsnotify_group;
+struct qstr;
+struct inode;
+struct fanotify_fastpath_hook;
+
+struct fanotify_fastpath_event {
+	u32 mask;
+	const void *data;
+	int data_type;
+	struct inode *dir;
+	const struct qstr *file_name;
+	__kernel_fsid_t *fsid;
+	u32 match_mask;
+};
+
+struct fanotify_fastpath_ops {
+	int (*fp_handler)(struct fsnotify_group *group,
+			  struct fanotify_fastpath_hook *fp_hook,
+			  struct fanotify_fastpath_event *fp_event);
+	int (*fp_init)(struct fanotify_fastpath_hook *hook, const char *args);
+	void (*fp_free)(struct fanotify_fastpath_hook *hook);
+
+	char name[FAN_FP_NAME_MAX];
+	struct module *owner;
+	struct list_head list;
+	int flags;
+};
+
+enum fanotify_fastpath_return {
+	FAN_FP_RET_SEND_TO_USERSPACE = 0,
+	FAN_FP_RET_SKIP_EVENT = 1,
+};
+
+struct fanotify_fastpath_hook {
+	struct fanotify_fastpath_ops *ops;
+	void *data;
+};
+
+int fanotify_fastpath_register(struct fanotify_fastpath_ops *ops);
+void fanotify_fastpath_unregister(struct fanotify_fastpath_ops *ops);
+int fanotify_fastpath_add(struct fsnotify_group *group,
+			  struct fanotify_fastpath_args __user *args);
+void fanotify_fastpath_del(struct fsnotify_group *group);
+void fanotify_fastpath_hook_free(struct fanotify_fastpath_hook *fp_hook);
+
 #endif /* _LINUX_FANOTIFY_H */
