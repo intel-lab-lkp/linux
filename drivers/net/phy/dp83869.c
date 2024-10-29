@@ -41,6 +41,8 @@
 #define DP83869_IO_MUX_CFG	0x0170
 #define DP83869_OP_MODE		0x01df
 #define DP83869_FX_CTRL		0x0c00
+#define DP83869_FX_ANADV        0x0c04
+#define DP83869_FX_LPABL        0x0c05
 
 #define DP83869_SW_RESET	BIT(15)
 #define DP83869_SW_RESTART	BIT(14)
@@ -135,6 +137,17 @@
 #define DP83869_DOWNSHIFT_4_COUNT	4
 #define DP83869_DOWNSHIFT_8_COUNT	8
 
+/* FX_ANADV bits */
+#define DP83869_BP_FULL_DUPLEX       BIT(5)
+#define DP83869_BP_PAUSE             BIT(7)
+#define DP83869_BP_ASYMMETRIC_PAUSE  BIT(8)
+
+/* FX_LPABL bits */
+#define DP83869_LPA_1000FULL   BIT(5)
+#define DP83869_LPA_PAUSE_CAP  BIT(7)
+#define DP83869_LPA_PAUSE_ASYM BIT(8)
+#define DP83869_LPA_LPACK      BIT(14)
+
 enum {
 	DP83869_PORT_MIRRORING_KEEP,
 	DP83869_PORT_MIRRORING_EN,
@@ -153,19 +166,129 @@ struct dp83869_private {
 	int mode;
 };
 
+static int dp83869_config_aneg(struct phy_device *phydev)
+{
+	struct dp83869_private *dp83869 = phydev->priv;
+	unsigned long *advertising;
+	int err, changed = false;
+	u32 adv;
+
+	if (dp83869->mode != DP83869_RGMII_1000_BASE)
+		return genphy_config_aneg(phydev);
+
+	/* Forcing speed or duplex isn't supported in 1000base-x mode */
+	if (phydev->autoneg != AUTONEG_ENABLE)
+		return 0;
+
+	/* In fiber modes, register locations 0xc0... get mapped to offset 0.
+	 * Unfortunately, the fiber-specific autonegotiation advertisement
+	 * register at address 0xc04 does not have the same bit layout as the
+	 * corresponding standard MII_ADVERTISE register. Thus, functions such
+	 * as genphy_config_advert() will write the advertisement register
+	 * incorrectly.
+	 */
+	advertising = phydev->advertising;
+
+	/* Only allow advertising what this PHY supports */
+	linkmode_and(advertising, advertising,
+		     phydev->supported);
+
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT, advertising))
+		adv |= DP83869_BP_FULL_DUPLEX;
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_Pause_BIT, advertising))
+		adv |= DP83869_BP_PAUSE;
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, advertising))
+		adv |= DP83869_BP_ASYMMETRIC_PAUSE;
+
+	err = phy_modify_changed(phydev, DP83869_FX_ANADV,
+				 DP83869_BP_FULL_DUPLEX | DP83869_BP_PAUSE |
+				 DP83869_BP_ASYMMETRIC_PAUSE,
+				 adv);
+
+	if (err < 0)
+		return err;
+	else if (err)
+		changed = true;
+
+	return genphy_check_and_restart_aneg(phydev, changed);
+}
+
+static int dp83869_read_status_fiber(struct phy_device *phydev)
+{
+	int err, lpa, old_link = phydev->link;
+	unsigned long *lp_advertising;
+
+	err = genphy_update_link(phydev);
+	if (err)
+		return err;
+
+	if (phydev->autoneg == AUTONEG_ENABLE && old_link && phydev->link)
+		return 0;
+
+	phydev->speed = SPEED_UNKNOWN;
+	phydev->duplex = DUPLEX_UNKNOWN;
+	phydev->pause = 0;
+	phydev->asym_pause = 0;
+
+	lp_advertising = phydev->lp_advertising;
+
+	if (phydev->autoneg != AUTONEG_ENABLE) {
+		linkmode_zero(lp_advertising);
+
+		phydev->duplex = DUPLEX_FULL;
+		phydev->speed = SPEED_1000;
+
+		return 0;
+	}
+
+	if (!phydev->autoneg_complete) {
+		linkmode_zero(lp_advertising);
+		return 0;
+	}
+
+	/* In fiber modes, register locations 0xc0... get mapped to offset 0.
+	 * Unfortunately, the fiber-specific link partner capabilities register
+	 * at address 0xc05 does not have the same bit layout as the
+	 * corresponding standard MII_LPA register. Thus, functions such as
+	 * genphy_read_lpa() will read autonegotiation results incorrectly.
+	 */
+
+	lpa = phy_read(phydev, DP83869_FX_LPABL);
+	if (lpa < 0)
+		return lpa;
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_1000baseX_Full_BIT,
+			 lp_advertising, lpa & DP83869_LPA_1000FULL);
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Pause_BIT, lp_advertising,
+			 lpa & DP83869_LPA_PAUSE_CAP);
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, lp_advertising,
+			 lpa & DP83869_LPA_PAUSE_ASYM);
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
+			 lp_advertising, lpa & DP83869_LPA_LPACK);
+
+	phy_resolve_aneg_linkmode(phydev);
+
+	return 0;
+}
+
 static int dp83869_read_status(struct phy_device *phydev)
 {
 	struct dp83869_private *dp83869 = phydev->priv;
 	int ret;
 
+	if (dp83869->mode == DP83869_RGMII_1000_BASE)
+		return dp83869_read_status_fiber(phydev);
+
 	ret = genphy_read_status(phydev);
 	if (ret)
 		return ret;
 
-	if (linkmode_test_bit(ETHTOOL_LINK_MODE_FIBRE_BIT, phydev->supported)) {
+	if (dp83869->mode == DP83869_RGMII_100_BASE) {
 		if (phydev->link) {
-			if (dp83869->mode == DP83869_RGMII_100_BASE)
-				phydev->speed = SPEED_100;
+			phydev->speed = SPEED_100;
 		} else {
 			phydev->speed = SPEED_UNKNOWN;
 			phydev->duplex = DUPLEX_UNKNOWN;
@@ -898,6 +1021,7 @@ static int dp83869_phy_reset(struct phy_device *phydev)
 	.soft_reset	= dp83869_phy_reset,			\
 	.config_intr	= dp83869_config_intr,			\
 	.handle_interrupt = dp83869_handle_interrupt,		\
+	.config_aneg    = dp83869_config_aneg,                  \
 	.read_status	= dp83869_read_status,			\
 	.get_tunable	= dp83869_get_tunable,			\
 	.set_tunable	= dp83869_set_tunable,			\
