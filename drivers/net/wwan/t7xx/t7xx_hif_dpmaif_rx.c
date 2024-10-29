@@ -166,8 +166,8 @@ int t7xx_dpmaif_rx_buf_alloc(struct dpmaif_ctrl *dpmaif_ctrl,
 			     const unsigned int q_num, const unsigned int buf_cnt,
 			     const bool initial)
 {
-	unsigned int i, bat_cnt, bat_max_cnt, bat_start_idx;
-	int ret;
+	unsigned int bat_cnt, bat_max_cnt, bat_start_idx;
+	int ret, i;
 
 	if (!buf_cnt || buf_cnt > bat_req->bat_size_cnt)
 		return -EINVAL;
@@ -226,7 +226,7 @@ int t7xx_dpmaif_rx_buf_alloc(struct dpmaif_ctrl *dpmaif_ctrl,
 	return 0;
 
 err_unmap_skbs:
-	while (--i > 0)
+	while (--i >= 0)
 		t7xx_unmap_bat_skb(dpmaif_ctrl->dev, bat_req->bat_skb, i);
 
 	return ret;
