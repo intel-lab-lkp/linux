@@ -21,7 +21,7 @@
 #include <regex.h>
 #include <errno.h>
 
-#define MAX_SLABS 500
+#define MAX_SLABS 1000
 #define MAX_ALIASES 500
 #define MAX_NODES 1024
 
@@ -1240,6 +1240,8 @@ static void read_slab_dir(void)
 				p--;
 			alias->ref = strdup(p);
 			alias++;
+			if (aliases > MAX_ALIASES)
+				fatal("Too many aliases\n");
 			break;
 		   case DT_DIR:
 			if (chdir(de->d_name))
@@ -1303,6 +1305,8 @@ static void read_slab_dir(void)
 			if (slab->name[0] == ':')
 				alias_targets++;
 			slab++;
+			if (slab - slabinfo > MAX_SLABS)
+				fatal("Too many slabs\n");
 			break;
 		   default :
 			fatal("Unknown file type %lx\n", de->d_type);
@@ -1312,10 +1316,6 @@ static void read_slab_dir(void)
 	slabs = slab - slabinfo;
 	actual_slabs = slabs;
 	aliases = alias - aliasinfo;
-	if (slabs > MAX_SLABS)
-		fatal("Too many slabs\n");
-	if (aliases > MAX_ALIASES)
-		fatal("Too many aliases\n");
 }
 
 static void output_slabs(void)
