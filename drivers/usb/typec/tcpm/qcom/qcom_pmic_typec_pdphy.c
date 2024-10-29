@@ -221,7 +221,7 @@ qcom_pmic_typec_pdphy_pd_transmit_payload(struct pmic_typec_pdphy *pmic_typec_pd
 					  unsigned int negotiated_rev)
 {
 	struct device *dev = pmic_typec_pdphy->dev;
-	unsigned int val, hdr_len, txbuf_len, txsize_len;
+	unsigned int val, hdr_len = 0, txbuf_len = 0, txsize_len;
 	unsigned long flags;
 	int ret;
 
