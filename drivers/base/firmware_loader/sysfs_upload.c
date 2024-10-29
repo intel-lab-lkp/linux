@@ -103,6 +103,10 @@ static ssize_t cancel_store(struct device *dev, struct device_attribute *attr,
 	if (fwlp->progress == FW_UPLOAD_PROG_IDLE)
 		ret = -ENODEV;
 
+	/*
+	 * Not idle, so fw_upload_start already called try_module_get.
+	 * No need to get/put around cancel.
+	 */
 	fwlp->ops->cancel(fwlp->fw_upload);
 	mutex_unlock(&fwlp->lock);
 
@@ -164,11 +168,13 @@ static void fw_upload_main(struct work_struct *work)
 	enum fw_upload_err ret;
 	struct device *fw_dev;
 	struct fw_upload *fwl;
+	struct module *module;
 
 	fwlp = container_of(work, struct fw_upload_priv, work);
 	fwl = fwlp->fw_upload;
 	fw_sysfs = (struct fw_sysfs *)fwl->priv;
 	fw_dev = &fw_sysfs->dev;
+	module = fwlp->module;
 
 	fw_upload_update_progress(fwlp, FW_UPLOAD_PROG_PREPARING);
 	ret = fwlp->ops->prepare(fwl, fwlp->data, fwlp->remaining_size);
@@ -204,6 +210,7 @@ done:
 		fwlp->ops->cleanup(fwl);
 
 putdev_exit:
+	module_put(module);
 	put_device(fw_dev->parent);
 
 	/*
@@ -238,7 +245,11 @@ int fw_upload_start(struct fw_sysfs *fw_sysfs)
 		return 0;
 	}
 
+
 	fwlp = fw_sysfs->fw_upload_priv;
+	if (!try_module_get(fwlp->module)) /* released in fw_upload_main */
+		return -EFAULT;
+
 	mutex_lock(&fwlp->lock);
 
 	/* Do not interfere with an on-going fw_upload */
@@ -310,13 +321,10 @@ firmware_upload_register(struct module *module, struct device *parent,
 		return ERR_PTR(-EINVAL);
 	}
 
-	if (!try_module_get(module))
-		return ERR_PTR(-EFAULT);
-
 	fw_upload = kzalloc(sizeof(*fw_upload), GFP_KERNEL);
 	if (!fw_upload) {
 		ret = -ENOMEM;
-		goto exit_module_put;
+		goto exit_err;
 	}
 
 	fw_upload_priv = kzalloc(sizeof(*fw_upload_priv), GFP_KERNEL);
@@ -358,7 +366,7 @@ firmware_upload_register(struct module *module, struct device *parent,
 	if (ret) {
 		dev_err(fw_dev, "%s: device_register failed\n", __func__);
 		put_device(fw_dev);
-		goto exit_module_put;
+		goto exit_err;
 	}
 
 	return fw_upload;
@@ -372,8 +380,7 @@ free_fw_upload_priv:
 free_fw_upload:
 	kfree(fw_upload);
 
-exit_module_put:
-	module_put(module);
+exit_err:
 
 	return ERR_PTR(ret);
 }
@@ -387,7 +394,6 @@ void firmware_upload_unregister(struct fw_upload *fw_upload)
 {
 	struct fw_sysfs *fw_sysfs = fw_upload->priv;
 	struct fw_upload_priv *fw_upload_priv = fw_sysfs->fw_upload_priv;
-	struct module *module = fw_upload_priv->module;
 
 	mutex_lock(&fw_upload_priv->lock);
 	if (fw_upload_priv->progress == FW_UPLOAD_PROG_IDLE) {
@@ -395,6 +401,11 @@ void firmware_upload_unregister(struct fw_upload *fw_upload)
 		goto unregister;
 	}
 
+	/*
+	 * No need to try_module_get/module_put around the op since only the
+	 * module itself will call unregister, usually when the refcount has
+	 * dropped to zero and it's cleaning up dependencies to destroy itself.
+	 */
 	fw_upload_priv->ops->cancel(fw_upload);
 	mutex_unlock(&fw_upload_priv->lock);
 
@@ -403,6 +414,5 @@ void firmware_upload_unregister(struct fw_upload *fw_upload)
 
 unregister:
 	device_unregister(&fw_sysfs->dev);
-	module_put(module);
 }
 EXPORT_SYMBOL_GPL(firmware_upload_unregister);
