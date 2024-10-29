@@ -838,7 +838,7 @@ static void scrub_stripe_submit_repair_read(struct scrub_stripe *stripe,
 			     bbio->bio.bi_iter.bi_size >= blocksize)) {
 			ASSERT(bbio->bio.bi_iter.bi_size);
 			atomic_inc(&stripe->pending_io);
-			btrfs_submit_bio(bbio, mirror);
+			btrfs_submit_bbio(bbio, mirror);
 			if (wait)
 				wait_scrub_stripe_io(stripe);
 			bbio = NULL;
@@ -857,7 +857,7 @@ static void scrub_stripe_submit_repair_read(struct scrub_stripe *stripe,
 	if (bbio) {
 		ASSERT(bbio->bio.bi_iter.bi_size);
 		atomic_inc(&stripe->pending_io);
-		btrfs_submit_bio(bbio, mirror);
+		btrfs_submit_bbio(bbio, mirror);
 		if (wait)
 			wait_scrub_stripe_io(stripe);
 	}
@@ -1601,8 +1601,9 @@ static int scrub_find_fill_first_stripe(struct btrfs_block_group *bg,
 		cur_logical = extent_start + extent_len;
 	}
 
-	/* Now fill the data csum. */
-	if (bg->flags & BTRFS_BLOCK_GROUP_DATA) {
+	/* Now fill the data checksums (if the checksum tree is set up). */
+	if (!test_bit(BTRFS_FS_STATE_NO_DATA_CSUMS, &fs_info->fs_state) &&
+	    bg->flags & BTRFS_BLOCK_GROUP_DATA) {
 		int sector_nr;
 		unsigned long csum_bitmap = 0;
 
@@ -1683,7 +1684,7 @@ static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
 		     bbio->bio.bi_iter.bi_size >= stripe_len)) {
 			ASSERT(bbio->bio.bi_iter.bi_size);
 			atomic_inc(&stripe->pending_io);
-			btrfs_submit_bio(bbio, mirror);
+			btrfs_submit_bbio(bbio, mirror);
 			bbio = NULL;
 		}
 
@@ -1694,7 +1695,7 @@ static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
 					    (i << fs_info->sectorsize_bits);
 			int err;
 
-			io_stripe.is_scrub = true;
+			io_stripe.rst_search_commit_root = true;
 			stripe_len = (nr_sectors - i) << fs_info->sectorsize_bits;
 			/*
 			 * For RST cases, we need to manually split the bbio to
@@ -1720,7 +1721,7 @@ static void scrub_submit_extent_sector_read(struct scrub_ctx *sctx,
 	if (bbio) {
 		ASSERT(bbio->bio.bi_iter.bi_size);
 		atomic_inc(&stripe->pending_io);
-		btrfs_submit_bio(bbio, mirror);
+		btrfs_submit_bbio(bbio, mirror);
 	}
 
 	if (atomic_dec_and_test(&stripe->pending_io)) {
@@ -1776,7 +1777,7 @@ static void scrub_submit_initial_read(struct scrub_ctx *sctx,
 
 		mirror = calc_next_mirror(mirror, num_copies);
 	}
-	btrfs_submit_bio(bbio, mirror);
+	btrfs_submit_bbio(bbio, mirror);
 }
 
 static bool stripe_has_metadata_error(struct scrub_stripe *stripe)
