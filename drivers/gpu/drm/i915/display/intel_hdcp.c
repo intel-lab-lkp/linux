@@ -1503,6 +1503,8 @@ static int hdcp2_deauthenticate_port(struct intel_connector *connector)
 static int hdcp2_authentication_key_exchange(struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
+	struct intel_digital_port *dig_port =
+		intel_attached_dig_port(connector);
 	struct intel_hdcp *hdcp = &connector->hdcp;
 	union {
 		struct hdcp2_ake_init ake_init;
@@ -1513,11 +1515,17 @@ static int hdcp2_authentication_key_exchange(struct intel_connector *connector)
 	} msgs;
 	const struct intel_hdcp_shim *shim = hdcp->shim;
 	size_t size;
-	int ret, i;
+	int ret, i, max_retries;
 
 	/* Init for seq_num */
 	hdcp->seq_num_v = 0;
 	hdcp->seq_num_m = 0;
+
+	if (intel_encoder_is_dp(&dig_port->base) ||
+	    intel_encoder_is_mst(&dig_port->base))
+		max_retries = 10;
+	else
+		max_retries = 1;
 
 	ret = hdcp2_prepare_ake_init(connector, &msgs.ake_init);
 	if (ret < 0)
@@ -1536,7 +1544,7 @@ static int hdcp2_authentication_key_exchange(struct intel_connector *connector)
 	 * authentication. The values of 10 and delay of 50ms was decided based
 	 * on multiple trial and errors.
 	 */
-	for (i = 0; i < 10; i++) {
+	for (i = 0; i < max_retries; i++) {
 		if (!intel_hdcp2_get_capability(connector)) {
 			msleep(50);
 			continue;
