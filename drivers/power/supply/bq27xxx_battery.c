@@ -1871,11 +1871,19 @@ static int bq27xxx_battery_current_and_status(
 
 static void bq27xxx_battery_update_unlocked(struct bq27xxx_device_info *di)
 {
+#define MAX_RETRY 3
+	int retry = 0, sleep = 10;
 	union power_supply_propval status = di->last_status;
 	struct bq27xxx_reg_cache cache = {0, };
 	bool has_singe_flag = di->opts & BQ27XXX_O_ZERO;
 
-	cache.flags = bq27xxx_read(di, BQ27XXX_REG_FLAGS, has_singe_flag);
+	do {
+		cache.flags = bq27xxx_read(di, BQ27XXX_REG_FLAGS, has_singe_flag);
+		if (cache.flags == -EBUSY && retry < MAX_RETRY) {
+			retry++;
+			BQ27XXX_MSLEEP(sleep);		/* sleep 10 miliseconds when busy */
+		}
+	} while (cache.flags == -EBUSY && retry < MAX_RETRY);
 	if ((cache.flags & 0xff) == 0xff)
 		cache.flags = -1; /* read error */
 	if (cache.flags >= 0) {
@@ -2030,7 +2038,7 @@ static int bq27xxx_battery_get_property(struct power_supply *psy,
 	mutex_unlock(&di->lock);
 
 	if (psp != POWER_SUPPLY_PROP_PRESENT && di->cache.flags < 0)
-		return -ENODEV;
+		return di->cache.flags;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
