@@ -219,6 +219,7 @@ config LEDS_TURRIS_OMNIA
 	depends on OF
 	depends on TURRIS_OMNIA_MCU
 	select LEDS_TRIGGERS
+	select TURRIS_OMNIA_MCU_GPIO
 	help
 	  This option enables basic support for the LEDs found on the front
 	  side of CZ.NIC's Turris Omnia router. There are 12 RGB LEDs on the

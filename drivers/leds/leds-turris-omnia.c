@@ -43,12 +43,15 @@ struct omnia_led {
  * @client:			I2C client device
  * @lock:			mutex to protect
  * @has_gamma_correction:	whether the MCU firmware supports gamma correction
+ * @brightness_knode:		kernel node of the "brightness" device sysfs attribute (this is the
+ *				driver specific global brightness, not the LED classdev brightness)
  * @leds:			flexible array of per-LED data
  */
 struct omnia_leds {
 	struct i2c_client *client;
 	struct mutex lock;
 	bool has_gamma_correction;
+	struct kernfs_node *brightness_knode;
 	struct omnia_led leds[];
 };
 
@@ -373,6 +376,30 @@ static struct attribute *omnia_led_controller_attrs[] = {
 };
 ATTRIBUTE_GROUPS(omnia_led_controller);
 
+static irqreturn_t omnia_brightness_changed_threaded_fn(int irq, void *data)
+{
+	struct omnia_leds *leds = data;
+
+	if (unlikely(!leds->brightness_knode)) {
+		/*
+		 * It would be nicer to get this dirent in the driver probe method, before the IRQ
+		 * is requested. But the really_probe() function in drivers/base/dd.c registers
+		 * driver's .dev_groups only after probe is finished, so during driver probe the
+		 * "brightness" sysfs node is not yet present.
+		 *
+		 * Note that sysfs_get_dirent() may sleep. This is okay, because we are in threaded
+		 * context.
+		 */
+		leds->brightness_knode = sysfs_get_dirent(leds->client->dev.kobj.sd, "brightness");
+		if (!leds->brightness_knode)
+			return IRQ_NONE;
+	}
+
+	sysfs_notify_dirent(leds->brightness_knode);
+
+	return IRQ_HANDLED;
+}
+
 static int omnia_mcu_get_features(const struct i2c_client *client)
 {
 	struct i2c_client mcu_client = *client;
@@ -436,6 +463,14 @@ static int omnia_leds_probe(struct i2c_client *client)
 			 "Consider upgrading MCU firmware with the omnia-mcutool utility.\n");
 	}
 
+	if (ret & OMNIA_FEAT_BRIGHTNESS_INT) {
+		ret = devm_request_threaded_irq(dev, client->irq, NULL,
+						omnia_brightness_changed_threaded_fn, IRQF_ONESHOT,
+						"leds-turris-omnia", leds);
+		if (ret <= 0)
+			return dev_err_probe(dev, ret ?: -ENXIO, "Cannot request brightness IRQ\n");
+	}
+
 	mutex_init(&leds->lock);
 
 	ret = devm_led_trigger_register(dev, &omnia_hw_trigger);
@@ -458,6 +493,19 @@ static int omnia_leds_probe(struct i2c_client *client)
 
 static void omnia_leds_remove(struct i2c_client *client)
 {
+	struct omnia_leds *leds = i2c_get_clientdata(client);
+
+	/*
+	 * We need to free the brightness IRQ here, before putting away the brightness sysfs node.
+	 * Otherwise devres would free the interrupt only after the sysfs node is removed, and if
+	 * an interrupt occurred between those two events, it would use a removed sysfs node.
+	 */
+	devm_free_irq(&client->dev, client->irq, leds);
+
+	/* Now put away the sysfs node we got the first time the interrupt handler was called */
+	if (leds->brightness_knode)
+		sysfs_put(leds->brightness_knode);
+
 	/* put all LEDs into default (HW triggered) mode */
 	omnia_cmd_write_u8(client, OMNIA_CMD_LED_MODE, OMNIA_CMD_LED_MODE_LED(OMNIA_BOARD_LEDS));
 
