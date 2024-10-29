@@ -40,6 +40,21 @@ The ``octeontx2 AF`` driver implements the following driver-specific parameters.
      - runtime
      - Use to set the quantum which hardware uses for scheduling among transmit queues.
        Hardware uses weighted DWRR algorithm to schedule among all transmit queues.
+   * - ``npc_mcam_high_zone_percent``
+     - u8
+     - runtime
+     - Use to set the number of high priority zone entries in NPC MCAM that can be allocated
+       by a user, out of the three priority zone categories high, mid and low.
+   * - ``npc_def_rule_cntr``
+     - bool
+     - runtime
+     - Use to enable or disable hit counters for the default rules in NPC MCAM.
+   * - ``nix_maxlf``
+     - u16
+     - runtime
+     - Use to set the maximum number of LFs in NIX hardware block. This would be useful
+       to increase the availability of default resources allocated to enabled LFs like
+       MCAM entries for example.
 
 The ``octeontx2 PF`` driver implements the following driver-specific parameters.
 
