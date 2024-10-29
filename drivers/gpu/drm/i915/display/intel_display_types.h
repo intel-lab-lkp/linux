@@ -724,9 +724,6 @@ struct intel_crtc_scaler_state {
 	 */
 #define SKL_CRTC_INDEX 31
 	unsigned scaler_users;
-
-	/* scaler used by crtc for panel fitting purpose */
-	int scaler_id;
 };
 
 /* {crtc,crtc_state}->mode_flags */
@@ -1126,6 +1123,10 @@ struct intel_crtc_state {
 	/* Panel fitter placement and size for Ironlake+ */
 	struct {
 		struct drm_rect dst;
+
+		/* pipe scaler (skl+) */
+		int scaler_id;
+
 		bool enabled;
 		bool force_thru;
 	} pch_pfit;

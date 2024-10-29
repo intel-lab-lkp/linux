@@ -5628,8 +5628,8 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 
 		PIPE_CONF_CHECK_BOOL(pch_pfit.enabled);
 		PIPE_CONF_CHECK_RECT(pch_pfit.dst);
+		PIPE_CONF_CHECK_I(pch_pfit.scaler_id);
 
-		PIPE_CONF_CHECK_I(scaler_state.scaler_id);
 		PIPE_CONF_CHECK_I(pixel_rate);
 
 		PIPE_CONF_CHECK_X(gamma_mode);

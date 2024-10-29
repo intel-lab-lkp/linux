@@ -249,7 +249,7 @@ int skl_update_scaler_crtc(struct intel_crtc_state *crtc_state)
 	}
 	return skl_update_scaler(crtc_state, !crtc_state->hw.active,
 				 SKL_CRTC_INDEX,
-				 &crtc_state->scaler_state.scaler_id,
+				 &crtc_state->pch_pfit.scaler_id,
 				 drm_rect_width(&crtc_state->pipe_src),
 				 drm_rect_height(&crtc_state->pipe_src),
 				 width, height, NULL, 0,
@@ -436,7 +436,7 @@ static int setup_crtc_scaler(struct intel_atomic_state *state,
 	return intel_atomic_setup_scaler(scaler_state,
 					 hweight32(scaler_state->scaler_users),
 					 crtc, "CRTC", crtc->base.base.id,
-					 NULL, &scaler_state->scaler_id);
+					 NULL, &crtc_state->pch_pfit.scaler_id);
 }
 
 static int setup_plane_scaler(struct intel_atomic_state *state,
@@ -669,7 +669,7 @@ void skl_pfit_enable(const struct intel_crtc_state *crtc_state)
 		return;
 
 	if (drm_WARN_ON(display->drm,
-			crtc_state->scaler_state.scaler_id < 0))
+			crtc_state->pch_pfit.scaler_id < 0))
 		return;
 
 	drm_rect_init(&src, 0, 0,
@@ -682,7 +682,7 @@ void skl_pfit_enable(const struct intel_crtc_state *crtc_state)
 	uv_rgb_hphase = skl_scaler_calc_phase(1, hscale, false);
 	uv_rgb_vphase = skl_scaler_calc_phase(1, vscale, false);
 
-	id = scaler_state->scaler_id;
+	id = crtc_state->pch_pfit.scaler_id;
 
 	ps_ctrl = PS_SCALER_EN | PS_BINDING_PIPE | scaler_state->scalers[id].mode |
 		skl_scaler_get_filter_select(crtc_state->hw.scaling_filter, 0);
@@ -832,7 +832,7 @@ void skl_scaler_get_config(struct intel_crtc_state *crtc_state)
 		break;
 	}
 
-	scaler_state->scaler_id = id;
+	crtc_state->pch_pfit.scaler_id = id;
 	if (id >= 0)
 		scaler_state->scaler_users |= (1 << SKL_CRTC_INDEX);
 	else
