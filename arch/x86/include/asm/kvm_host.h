@@ -428,11 +428,12 @@ struct kvm_mmu_root_info {
 #define KVM_MMU_ROOT_INFO_INVALID \
 	((struct kvm_mmu_root_info) { .pgd = INVALID_PAGE, .hpa = INVALID_PAGE })
 
-#define KVM_MMU_NUM_PREV_ROOTS 3
+#define KVM_MMU_NUM_PREV_ROOTS		3
+#define KVM_MMU_NUM_PREV_ROOTS_MAX	11
 
 #define KVM_MMU_ROOT_CURRENT		BIT(0)
 #define KVM_MMU_ROOT_PREVIOUS(i)	BIT(1+i)
-#define KVM_MMU_ROOTS_ALL		(BIT(1 + KVM_MMU_NUM_PREV_ROOTS) - 1)
+#define KVM_MMU_ROOTS_ALL		(BIT(1 + KVM_MMU_NUM_PREV_ROOTS_MAX) - 1)
 
 #define KVM_HAVE_MMU_RWLOCK
 
@@ -467,7 +468,7 @@ struct kvm_mmu {
 	*/
 	u32 pkru_mask;
 
-	struct kvm_mmu_root_info prev_roots[KVM_MMU_NUM_PREV_ROOTS];
+	struct kvm_mmu_root_info prev_roots[KVM_MMU_NUM_PREV_ROOTS_MAX];
 
 	/*
 	 * Bitmap; bit set = permission fault
