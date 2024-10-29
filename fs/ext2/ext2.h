@@ -18,6 +18,7 @@
 #include <linux/rbtree.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
+#include <linux/rhashtable.h>
 
 /* XXX Here for now... not interested in restructing headers JUST now */
 
@@ -116,6 +117,8 @@ struct ext2_sb_info {
 	struct mb_cache *s_ea_block_cache;
 	struct dax_device *s_daxdev;
 	u64 s_dax_part_off;
+	struct rhashtable buffer_cache;
+	spinlock_t buffer_cache_lock;
 };
 
 static inline spinlock_t *
@@ -683,6 +686,24 @@ struct ext2_inode_info {
  */
 #define EXT2_STATE_NEW			0x00000001 /* inode is newly created */
 
+/*
+ * ext2 buffer
+ */
+struct ext2_buffer {
+	sector_t b_block;
+	struct rhash_head b_rhash;
+	struct page *b_page;
+	size_t b_size;
+	char *b_data;
+	unsigned long b_flags;
+	refcount_t b_refcount;
+	struct mutex b_lock;
+};
+
+/*
+ * Buffer flags
+ */
+ #define EXT2_BUF_DIRTY_BIT 0
 
 /*
  * Function prototypes
@@ -716,6 +737,14 @@ extern int ext2_should_retry_alloc(struct super_block *sb, int *retries);
 extern void ext2_init_block_alloc_info(struct inode *);
 extern void ext2_rsv_window_add(struct super_block *sb, struct ext2_reserve_window_node *rsv);
 
+/* cache.c */
+extern int init_buffer_cache(struct rhashtable *);
+extern void destroy_buffer_cache(struct rhashtable *buffer_cache);
+extern int sync_buffers(struct super_block *);
+extern struct ext2_buffer *get_buffer(struct super_block *, sector_t, bool);
+extern void put_buffer(struct ext2_buffer *);
+extern void buffer_set_dirty(struct ext2_buffer *);
+
 /* dir.c */
 int ext2_add_link(struct dentry *, struct inode *);
 int ext2_inode_by_name(struct inode *dir,
@@ -741,6 +770,7 @@ extern int ext2_write_inode (struct inode *, struct writeback_control *);
 extern void ext2_evict_inode(struct inode *);
 void ext2_write_failed(struct address_space *mapping, loff_t to);
 extern int ext2_get_block(struct inode *, sector_t, struct buffer_head *, int);
+extern int ext2_get_block_bno(struct inode *, sector_t, int, u32 *, bool *);
 extern int ext2_setattr (struct mnt_idmap *, struct dentry *, struct iattr *);
 extern int ext2_getattr (struct mnt_idmap *, const struct path *,
 			 struct kstat *, u32, unsigned int);

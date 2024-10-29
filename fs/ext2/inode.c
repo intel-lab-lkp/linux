@@ -803,6 +803,26 @@ int ext2_get_block(struct inode *inode, sector_t iblock,
 
 }
 
+int ext2_get_block_bno(struct inode *inode, sector_t iblock,
+		int create, u32 *bno, bool *mapped)
+{
+	struct super_block *sb = inode->i_sb;
+	struct buffer_head tmp_bh;
+	int err;
+
+	tmp_bh.b_state = 0;
+	tmp_bh.b_size = sb->s_blocksize;
+
+	err = ext2_get_block(inode, iblock, &tmp_bh, 0);
+	if (err)
+		return err;
+
+	*mapped = buffer_mapped(&tmp_bh);
+	*bno = tmp_bh.b_blocknr;
+
+	return 0;
+}
+
 static int ext2_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		unsigned flags, struct iomap *iomap, struct iomap *srcmap)
 {

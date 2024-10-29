@@ -152,6 +152,8 @@ static void ext2_put_super (struct super_block * sb)
 	ext2_xattr_destroy_cache(sbi->s_ea_block_cache);
 	sbi->s_ea_block_cache = NULL;
 
+	destroy_buffer_cache(&sbi->buffer_cache);
+
 	if (!sb_rdonly(sb)) {
 		struct ext2_super_block *es = sbi->s_es;
 
@@ -835,6 +837,13 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 	sbi->s_daxdev = fs_dax_get_by_bdev(sb->s_bdev, &sbi->s_dax_part_off,
 					   NULL, NULL);
 
+	spin_lock_init(&sbi->buffer_cache_lock);
+	ret = init_buffer_cache(&sbi->buffer_cache);
+	if (ret) {
+		ext2_msg(sb, KERN_ERR, "error: unable to create buffer cache");
+		goto failed_sbi;
+	}
+
 	spin_lock_init(&sbi->s_lock);
 	ret = -EINVAL;
 
@@ -1278,6 +1287,8 @@ static int ext2_sync_fs(struct super_block *sb, int wait)
 	 */
 	dquot_writeback_dquots(sb, -1);
 
+	sync_buffers(sb);
+
 	spin_lock(&sbi->s_lock);
 	if (es->s_state & cpu_to_le16(EXT2_VALID_FS)) {
 		ext2_debug("setting valid to 0\n");
@@ -1491,9 +1502,10 @@ static ssize_t ext2_quota_read(struct super_block *sb, int type, char *data,
 	int offset = off & (sb->s_blocksize - 1);
 	int tocopy;
 	size_t toread;
-	struct buffer_head tmp_bh;
-	struct buffer_head *bh;
 	loff_t i_size = i_size_read(inode);
+	struct ext2_buffer *buf;
+	u32 bno;
+	bool mapped;
 
 	if (off > i_size)
 		return 0;
@@ -1503,20 +1515,19 @@ static ssize_t ext2_quota_read(struct super_block *sb, int type, char *data,
 	while (toread > 0) {
 		tocopy = min_t(size_t, sb->s_blocksize - offset, toread);
 
-		tmp_bh.b_state = 0;
-		tmp_bh.b_size = sb->s_blocksize;
-		err = ext2_get_block(inode, blk, &tmp_bh, 0);
+		err = ext2_get_block_bno(inode, blk, 0, &bno, &mapped);
 		if (err < 0)
 			return err;
-		if (!buffer_mapped(&tmp_bh))	/* A hole? */
+		if (!mapped)	/* A hole? */
 			memset(data, 0, tocopy);
 		else {
-			bh = sb_bread(sb, tmp_bh.b_blocknr);
-			if (!bh)
-				return -EIO;
-			memcpy(data, bh->b_data+offset, tocopy);
-			brelse(bh);
+			buf = get_buffer(sb, bno, 1);
+			if (IS_ERR(buf))
+				return PTR_ERR(buf);
+			memcpy(data, buf->b_data+offset, tocopy);
+			put_buffer(buf);
 		}
+
 		offset = 0;
 		toread -= tocopy;
 		data += tocopy;
@@ -1535,32 +1546,29 @@ static ssize_t ext2_quota_write(struct super_block *sb, int type,
 	int offset = off & (sb->s_blocksize - 1);
 	int tocopy;
 	size_t towrite = len;
-	struct buffer_head tmp_bh;
-	struct buffer_head *bh;
+	struct ext2_buffer *buf;
+	u32 bno;
+	bool mapped;
 
 	while (towrite > 0) {
 		tocopy = min_t(size_t, sb->s_blocksize - offset, towrite);
 
-		tmp_bh.b_state = 0;
-		tmp_bh.b_size = sb->s_blocksize;
-		err = ext2_get_block(inode, blk, &tmp_bh, 1);
+		err = ext2_get_block_bno(inode, blk, 1, &bno, &mapped);
 		if (err < 0)
 			goto out;
+
 		if (offset || tocopy != EXT2_BLOCK_SIZE(sb))
-			bh = sb_bread(sb, tmp_bh.b_blocknr);
+			buf = get_buffer(sb, bno, 1);
 		else
-			bh = sb_getblk(sb, tmp_bh.b_blocknr);
-		if (unlikely(!bh)) {
-			err = -EIO;
+			buf = get_buffer(sb, bno, 0);
+		if (IS_ERR(buf)) {
+			err = PTR_ERR(buf);
 			goto out;
 		}
-		lock_buffer(bh);
-		memcpy(bh->b_data+offset, data, tocopy);
-		flush_dcache_page(bh->b_page);
-		set_buffer_uptodate(bh);
-		mark_buffer_dirty(bh);
-		unlock_buffer(bh);
-		brelse(bh);
+		memcpy(buf->b_data+offset, data, tocopy);
+		buffer_set_dirty(buf);
+		put_buffer(buf);
+
 		offset = 0;
 		towrite -= tocopy;
 		data += tocopy;
