@@ -2863,6 +2863,18 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 	case SCM_RIGHTS:
 	case SCM_CREDENTIALS:
 		break;
+	case SO_PRIORITY:
+		if (cmsg->cmsg_len != CMSG_LEN(sizeof(u32)))
+			return -EINVAL;
+
+		if ((*(u32 *)CMSG_DATA(cmsg) >= 0 && *(u32 *)CMSG_DATA(cmsg) <= 6) ||
+		    sockopt_ns_capable(sock_net(sk)->user_ns, CAP_NET_RAW) ||
+		    sockopt_ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN)) {
+			sockc->priority_cmsg_value = *(u32 *)CMSG_DATA(cmsg);
+			sockc->priority_cmsg_set = 1;
+			break;
+		}
+		return -EPERM;
 	default:
 		return -EINVAL;
 	}

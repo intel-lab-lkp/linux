@@ -1401,6 +1401,8 @@ static int ip6_setup_cork(struct sock *sk, struct inet_cork_full *cork,
 	cork->base.gso_size = ipc6->gso_size;
 	cork->base.tx_flags = 0;
 	cork->base.mark = ipc6->sockc.mark;
+	cork->base.priority_cmsg_set = ipc6->sockc.priority_cmsg_set;
+	cork->base.priority_cmsg_value = ipc6->sockc.priority_cmsg_value;
 	sock_tx_timestamp(sk, ipc6->sockc.tsflags, &cork->base.tx_flags);
 
 	cork->base.length = 0;
@@ -1931,7 +1933,11 @@ struct sk_buff *__ip6_make_skb(struct sock *sk,
 	hdr->saddr = fl6->saddr;
 	hdr->daddr = *final_dst;
 
-	skb->priority = READ_ONCE(sk->sk_priority);
+	if (cork->base.priority_cmsg_set)
+		skb->priority = cork->base.priority_cmsg_value;
+	else
+		skb->priority = READ_ONCE(sk->sk_priority);
+
 	skb->mark = cork->base.mark;
 	if (sk_is_tcp(sk))
 		skb_set_delivery_time(skb, cork->base.transmit_time, SKB_CLOCK_MONOTONIC);

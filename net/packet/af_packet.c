@@ -3125,7 +3125,11 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 
 	skb->protocol = proto;
 	skb->dev = dev;
-	skb->priority = READ_ONCE(sk->sk_priority);
+	if (sockc.priority_cmsg_set)
+		skb->priority = sockc.priority_cmsg_value;
+	else
+		skb->priority = READ_ONCE(sk->sk_priority);
+
 	skb->mark = sockc.mark;
 	skb_set_delivery_type_by_clockid(skb, sockc.transmit_time, sk->sk_clockid);
 

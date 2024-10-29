@@ -176,6 +176,8 @@ struct inet_cork {
 	__u16			gso_size;
 	u64			transmit_time;
 	u32			mark;
+	__u8		priority_cmsg_set;
+	u32			priority_cmsg_value;
 };
 
 struct inet_cork_full {
