@@ -48,6 +48,7 @@
 #include <trace/events/power.h>
 #include <linux/sched.h>
 #include <linux/sched/smt.h>
+#include <linux/smp.h>
 #include <linux/notifier.h>
 #include <linux/cpu.h>
 #include <linux/moduleparam.h>
@@ -1645,6 +1646,7 @@ static bool __init intel_idle_acpi_cst_extract(void)
 static void __init intel_idle_init_cstates_acpi(struct cpuidle_driver *drv)
 {
 	int cstate, limit = min_t(int, CPUIDLE_STATE_MAX, acpi_state_table.count);
+	unsigned int mwait_hint_deepest = 0;
 
 	/*
 	 * If limit > 0, intel_idle_cst_usable() has returned 'true', so all of
@@ -1678,6 +1680,7 @@ static void __init intel_idle_init_cstates_acpi(struct cpuidle_driver *drv)
 			state->target_residency *= 3;
 
 		state->flags = MWAIT2flg(cx->address);
+		mwait_hint_deepest = cx->address;
 		if (cx->type > ACPI_STATE_C2)
 			state->flags |= CPUIDLE_FLAG_TLB_FLUSHED;
 
@@ -1690,6 +1693,9 @@ static void __init intel_idle_init_cstates_acpi(struct cpuidle_driver *drv)
 		state->enter = intel_idle;
 		state->enter_s2idle = intel_idle_s2idle;
 	}
+
+	if (mwait_hint_deepest)
+		smp_set_mwait_play_dead_hint(mwait_hint_deepest);
 }
 
 static bool __init intel_idle_off_by_default(u32 mwait_hint)
@@ -1988,6 +1994,7 @@ static void state_update_enter_method(struct cpuidle_state *state, int cstate)
 
 static void __init intel_idle_init_cstates_icpu(struct cpuidle_driver *drv)
 {
+	unsigned int mwait_hint_deepest = 0;
 	int cstate;
 
 	switch (boot_cpu_data.x86_vfm) {
@@ -2037,6 +2044,8 @@ static void __init intel_idle_init_cstates_icpu(struct cpuidle_driver *drv)
 		if (!intel_idle_verify_cstate(mwait_hint))
 			continue;
 
+		mwait_hint_deepest = mwait_hint;
+
 		/* Structure copy. */
 		drv->states[drv->state_count] = cpuidle_state_table[cstate];
 		state = &drv->states[drv->state_count];
@@ -2060,6 +2069,9 @@ static void __init intel_idle_init_cstates_icpu(struct cpuidle_driver *drv)
 		wrmsrl(MSR_CC6_DEMOTION_POLICY_CONFIG, 0);
 		wrmsrl(MSR_MC6_DEMOTION_POLICY_CONFIG, 0);
 	}
+
+	if (mwait_hint_deepest)
+		smp_set_mwait_play_dead_hint(mwait_hint_deepest);
 }
 
 /**
