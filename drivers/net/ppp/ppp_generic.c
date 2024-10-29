@@ -236,8 +236,8 @@ struct ppp_net {
 /* Get the PPP protocol number from a skb */
 #define PPP_PROTO(skb)	get_unaligned_be16((skb)->data)
 
-/* We limit the length of ppp->file.rq to this (arbitrary) value */
-#define PPP_MAX_RQLEN	32
+/* We limit the length of ppp->file.rq/xq to this (arbitrary) value */
+#define PPP_MAX_QLEN	32
 
 /*
  * Maximum number of multilink fragments queued up.
@@ -920,8 +920,6 @@ static long ppp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				break;
 		} else {
 			ppp->npmode[i] = npi.mode;
-			/* we may be able to transmit more packets now (??) */
-			netif_wake_queue(ppp->dev);
 		}
 		err = 0;
 		break;
@@ -1639,6 +1637,7 @@ static void ppp_setup(struct net_device *dev)
 	dev->tx_queue_len = 3;
 	dev->type = ARPHRD_PPP;
 	dev->flags = IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
+	dev->priv_flags |= IFF_NO_QUEUE;
 	dev->priv_destructor = ppp_dev_priv_destructor;
 	netif_keep_dst(dev);
 }
@@ -1654,17 +1653,15 @@ static void __ppp_xmit_process(struct ppp *ppp, struct sk_buff *skb)
 	if (!ppp->closing) {
 		ppp_push(ppp);
 
-		if (skb)
-			skb_queue_tail(&ppp->file.xq, skb);
+		if (skb) {
+			if (ppp->file.xq.qlen > PPP_MAX_QLEN)
+				kfree_skb(skb);
+			else
+				skb_queue_tail(&ppp->file.xq, skb);
+		}
 		while (!ppp->xmit_pending &&
 		       (skb = skb_dequeue(&ppp->file.xq)))
 			ppp_send_frame(ppp, skb);
-		/* If there's no work left to do, tell the core net
-		   code that we can accept some more. */
-		if (!ppp->xmit_pending && !skb_peek(&ppp->file.xq))
-			netif_wake_queue(ppp->dev);
-		else
-			netif_stop_queue(ppp->dev);
 	} else {
 		kfree_skb(skb);
 	}
@@ -1850,7 +1847,7 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 	 * queue it up for pppd to receive.
 	 */
 	if (ppp->flags & SC_LOOP_TRAFFIC) {
-		if (ppp->file.rq.qlen > PPP_MAX_RQLEN)
+		if (ppp->file.rq.qlen > PPP_MAX_QLEN)
 			goto drop;
 		skb_queue_tail(&ppp->file.rq, skb);
 		wake_up_interruptible(&ppp->file.rwait);
@@ -2319,7 +2316,7 @@ ppp_input(struct ppp_channel *chan, struct sk_buff *skb)
 		/* put it on the channel queue */
 		skb_queue_tail(&pch->file.rq, skb);
 		/* drop old frames if queue too long */
-		while (pch->file.rq.qlen > PPP_MAX_RQLEN &&
+		while (pch->file.rq.qlen > PPP_MAX_QLEN &&
 		       (skb = skb_dequeue(&pch->file.rq)))
 			kfree_skb(skb);
 		wake_up_interruptible(&pch->file.rwait);
@@ -2472,7 +2469,7 @@ ppp_receive_nonmp_frame(struct ppp *ppp, struct sk_buff *skb)
 		/* control or unknown frame - pass it to pppd */
 		skb_queue_tail(&ppp->file.rq, skb);
 		/* limit queue length by dropping old frames */
-		while (ppp->file.rq.qlen > PPP_MAX_RQLEN &&
+		while (ppp->file.rq.qlen > PPP_MAX_QLEN &&
 		       (skb = skb_dequeue(&ppp->file.rq)))
 			kfree_skb(skb);
 		/* wake up any process polling or blocking on read */
