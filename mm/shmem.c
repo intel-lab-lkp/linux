@@ -136,6 +136,7 @@ static unsigned long huge_shmem_orders_always __read_mostly;
 static unsigned long huge_shmem_orders_madvise __read_mostly;
 static unsigned long huge_shmem_orders_inherit __read_mostly;
 static unsigned long huge_shmem_orders_within_size __read_mostly;
+static bool shmem_orders_configured __initdata;
 #endif
 
 #ifdef CONFIG_TMPFS
@@ -5027,7 +5028,8 @@ void __init shmem_init(void)
 	 * Default to setting PMD-sized THP to inherit the global setting and
 	 * disable all other multi-size THPs.
 	 */
-	huge_shmem_orders_inherit = BIT(HPAGE_PMD_ORDER);
+	if (!shmem_orders_configured)
+		huge_shmem_orders_inherit = BIT(HPAGE_PMD_ORDER);
 #endif
 	return;
 
@@ -5184,6 +5186,7 @@ struct kobj_attribute thpsize_shmem_enabled_attr =
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE)
 
+
 static int __init setup_transparent_hugepage_shmem(char *str)
 {
 	int huge, ret = 0;
@@ -5206,6 +5209,39 @@ out:
 	return ret;
 }
 __setup("transparent_hugepage_shmem=", setup_transparent_hugepage_shmem);
+
+static char str_dup[PAGE_SIZE] __initdata;
+static int __init setup_thp_shmem(char *str)
+{
+	struct thp_policy_bitmap policies[] = {
+		{ "always",  huge_shmem_orders_always },
+		{ "inherit",  huge_shmem_orders_inherit },
+		{ "advise",  huge_shmem_orders_madvise },
+		{ "within_size",  huge_shmem_orders_within_size }
+	};
+	char *p;
+
+	if (!str || strlen(str) + 1 > PAGE_SIZE)
+		goto err;
+
+	strscpy(str_dup, str);
+	p = str_dup;
+
+	if (!parse_huge_orders(p, policies, ARRAY_SIZE(policies),
+			      THP_ORDERS_ALL_FILE_DEFAULT))
+		goto err;
+
+	huge_shmem_orders_always = policies[0].bitmap;
+	huge_shmem_orders_inherit = policies[1].bitmap;
+	huge_shmem_orders_madvise = policies[2].bitmap;
+	huge_shmem_orders_within_size = policies[3].bitmap;
+	shmem_orders_configured = true;
+	return 1;
+err:
+	pr_warn("thp_shmem=%s: error parsing string, ignoring setting\n", str);
+	return 0;
+}
+__setup("thp_shmem=", setup_thp_shmem);
 
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
