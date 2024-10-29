@@ -695,6 +695,7 @@ struct sched_dl_entity {
 	struct rq			*rq;
 	dl_server_has_tasks_f		server_has_tasks;
 	dl_server_pick_f		server_pick_task;
+	struct root_domain		*last_rd;
 
 #ifdef CONFIG_RT_MUTEXES
 	/*

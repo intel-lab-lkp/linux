@@ -1627,21 +1627,26 @@ void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec)
 void dl_server_start(struct sched_dl_entity *dl_se)
 {
 	struct rq *rq = dl_se->rq;
+	int cpu = cpu_of(rq);
+	struct root_domain *rd = cpu_rq(cpu)->rd;
 
 	/*
 	 * XXX: the apply do not work fine at the init phase for the
 	 * fair server because things are not yet set. We need to improve
 	 * this before getting generic.
 	 */
-	if (!dl_server(dl_se)) {
+	if (!dl_server(dl_se) || dl_se->last_rd != rd) {
 		u64 runtime =  50 * NSEC_PER_MSEC;
 		u64 period = 1000 * NSEC_PER_MSEC;
 
+		dl_se->last_rd = rd;
 		dl_server_apply_params(dl_se, runtime, period, 1);
 
-		dl_se->dl_server = 1;
-		dl_se->dl_defer = 1;
-		setup_new_dl_entity(dl_se);
+		if (!dl_server(dl_se)) {
+			dl_se->dl_server = 1;
+			dl_se->dl_defer = 1;
+			setup_new_dl_entity(dl_se);
+		}
 	}
 
 	if (!dl_se->dl_runtime)
