@@ -18,6 +18,13 @@ struct pcc_mbox_chan {
 	u16 min_turnaround_time;
 };
 
+struct pcc_extended_type_hdr {
+	__le32 signature;
+	__le32 flags;
+	__le32 length;
+	char command[4];
+};
+
 /* Generic Communications Channel Shared Memory Region */
 #define PCC_SIGNATURE			0x50434300
 /* Generic Communications Channel Command Field */
@@ -31,6 +38,7 @@ struct pcc_mbox_chan {
 #define PCC_CMD_COMPLETION_NOTIFY	BIT(0)
 
 #define MAX_PCC_SUBSPACES	256
+#define PCC_ACK_FLAG_MASK	0x1
 
 #ifdef CONFIG_PCC
 extern struct pcc_mbox_chan *
