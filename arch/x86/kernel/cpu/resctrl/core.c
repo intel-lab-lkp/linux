@@ -1140,7 +1140,7 @@ static void __exit resctrl_exit(void)
 	rdtgroup_exit();
 
 	if (r->mon_capable)
-		rdt_put_mon_l3_config();
+		rdt_put_mon_l3_config(r);
 }
 
 __exitcall(resctrl_exit);

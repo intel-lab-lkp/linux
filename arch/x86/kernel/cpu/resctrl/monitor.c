@@ -983,6 +983,27 @@ void mbm_setup_overflow_handler(struct rdt_mon_domain *dom, unsigned long delay_
 		schedule_delayed_work_on(cpu, &dom->mbm_over, delay);
 }
 
+/*
+ * Bitmap to track the available hardware counters when operating in
+ * "mbm_cntr_assign" mode. A hardware counter can be assigned to a RMID,
+ * event pair.
+ */
+static __init unsigned long *mbm_cntrs_init(struct rdt_resource *r)
+{
+	r->mon.mbm_cntr_free_map = bitmap_zalloc(r->mon.num_mbm_cntrs,
+						 GFP_KERNEL);
+	if (r->mon.mbm_cntr_free_map)
+		bitmap_fill(r->mon.mbm_cntr_free_map, r->mon.num_mbm_cntrs);
+
+	return r->mon.mbm_cntr_free_map;
+}
+
+static  __exit void mbm_cntrs_exit(struct rdt_resource *r)
+{
+	bitmap_free(r->mon.mbm_cntr_free_map);
+	r->mon.mbm_cntr_free_map = NULL;
+}
+
 static __init int dom_data_init(struct rdt_resource *r)
 {
 	u32 idx_limit = resctrl_arch_system_num_rmid_idx();
@@ -1020,6 +1041,17 @@ static __init int dom_data_init(struct rdt_resource *r)
 		goto out_unlock;
 	}
 
+	if (r->mon.mbm_cntr_assignable && !mbm_cntrs_init(r)) {
+		if (IS_ENABLED(CONFIG_RESCTRL_RMID_DEPENDS_ON_CLOSID)) {
+			kfree(closid_num_dirty_rmid);
+			closid_num_dirty_rmid = NULL;
+		}
+		kfree(rmid_ptrs);
+		rmid_ptrs = NULL;
+		err = -ENOMEM;
+		goto out_unlock;
+	}
+
 	for (i = 0; i < idx_limit; i++) {
 		entry = &rmid_ptrs[i];
 		INIT_LIST_HEAD(&entry->list);
@@ -1044,7 +1076,7 @@ out_unlock:
 	return err;
 }
 
-static void __exit dom_data_exit(void)
+static void __exit dom_data_exit(struct rdt_resource *r)
 {
 	mutex_lock(&rdtgroup_mutex);
 
@@ -1055,6 +1087,9 @@ static void __exit dom_data_exit(void)
 
 	kfree(rmid_ptrs);
 	rmid_ptrs = NULL;
+
+	if (r->mon.mbm_cntr_assignable)
+		mbm_cntrs_exit(r);
 
 	mutex_unlock(&rdtgroup_mutex);
 }
@@ -1210,10 +1245,6 @@ int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 	 */
 	resctrl_rmid_realloc_threshold = resctrl_arch_round_mon_val(threshold);
 
-	ret = dom_data_init(r);
-	if (ret)
-		return ret;
-
 	if (rdt_cpu_has(X86_FEATURE_BMEC)) {
 		u32 eax, ebx, ecx, edx;
 
@@ -1240,6 +1271,10 @@ int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 		}
 	}
 
+	ret = dom_data_init(r);
+	if (ret)
+		return ret;
+
 	l3_mon_evt_init(r);
 
 	r->mon_capable = true;
@@ -1247,9 +1282,9 @@ int __init rdt_get_mon_l3_config(struct rdt_resource *r)
 	return 0;
 }
 
-void __exit rdt_put_mon_l3_config(void)
+void __exit rdt_put_mon_l3_config(struct rdt_resource *r)
 {
-	dom_data_exit();
+	dom_data_exit(r);
 }
 
 void __init intel_rdt_mbm_apply_quirk(void)
