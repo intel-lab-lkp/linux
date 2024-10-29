@@ -434,6 +434,10 @@ struct iio_trigger; /* forward declaration */
  *			type and the number of vals is returned in length. For
  *			ranges, there are always three vals returned; min, step
  *			and max. For lists, all possible values are enumerated.
+ * @read_avail_release_resource: function to release the available values
+ *			potentially allocated during a read_avail() call. Input
+ *			arguments should match those provided in the
+ *			corresponding read_avail() call.
  * @write_raw:		function to write a value to the device.
  *			Parameters are the same as for read_raw.
  * @read_label:		function to request label name for a specified label,
