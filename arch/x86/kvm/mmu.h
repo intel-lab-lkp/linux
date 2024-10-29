@@ -7,6 +7,7 @@
 #include "cpuid.h"
 
 extern bool __read_mostly enable_mmio_caching;
+extern uint __read_mostly prev_roots_num;
 
 #define PT_WRITABLE_SHIFT 1
 #define PT_USER_SHIFT 2

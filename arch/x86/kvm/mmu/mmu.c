@@ -96,6 +96,22 @@ __MODULE_PARM_TYPE(nx_huge_pages_recovery_period_ms, "uint");
 static bool __read_mostly force_flush_and_sync_on_reuse;
 module_param_named(flush_on_reuse, force_flush_and_sync_on_reuse, bool, 0644);
 
+static int prev_roots_num_param(const char *val, const struct kernel_param *kp)
+{
+	return param_set_uint_minmax(val, kp, KVM_MMU_NUM_PREV_ROOTS, KVM_MMU_NUM_PREV_ROOTS_MAX);
+}
+
+static const struct kernel_param_ops prev_roots_num_ops = {
+	.set = prev_roots_num_param,
+	.get = param_get_uint,
+};
+
+uint __read_mostly prev_roots_num = KVM_MMU_NUM_PREV_ROOTS;
+EXPORT_SYMBOL_GPL(prev_roots_num);
+module_param_cb(prev_roots_num, &prev_roots_num_ops,
+		&prev_roots_num, 0644);
+__MODULE_PARM_TYPE(prev_roots_num, "uint");
+
 /*
  * When setting this variable to true it enables Two-Dimensional-Paging
  * where the hardware walks 2 page tables:
@@ -3613,12 +3629,12 @@ void kvm_mmu_free_roots(struct kvm *kvm, struct kvm_mmu *mmu,
 		&& VALID_PAGE(mmu->root.hpa);
 
 	if (!free_active_root) {
-		for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++)
+		for (i = 0; i < prev_roots_num; i++)
 			if ((roots_to_free & KVM_MMU_ROOT_PREVIOUS(i)) &&
 			    VALID_PAGE(mmu->prev_roots[i].hpa))
 				break;
 
-		if (i == KVM_MMU_NUM_PREV_ROOTS)
+		if (i == prev_roots_num)
 			return;
 	}
 
@@ -3627,7 +3643,7 @@ void kvm_mmu_free_roots(struct kvm *kvm, struct kvm_mmu *mmu,
 	else
 		write_lock(&kvm->mmu_lock);
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++)
+	for (i = 0; i < prev_roots_num; i++)
 		if (roots_to_free & KVM_MMU_ROOT_PREVIOUS(i))
 			mmu_free_root_page(kvm, &mmu->prev_roots[i].hpa,
 					   &invalid_list);
@@ -3674,7 +3690,7 @@ void kvm_mmu_free_guest_mode_roots(struct kvm *kvm, struct kvm_mmu *mmu)
 	 */
 	WARN_ON_ONCE(mmu->root_role.guest_mode);
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++) {
+	for (i = 0; i < prev_roots_num; i++) {
 		root_hpa = mmu->prev_roots[i].hpa;
 		if (!VALID_PAGE(root_hpa))
 			continue;
@@ -4085,7 +4101,7 @@ void kvm_mmu_sync_prev_roots(struct kvm_vcpu *vcpu)
 	unsigned long roots_to_free = 0;
 	int i;
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++)
+	for (i = 0; i < prev_roots_num; i++)
 		if (is_unsync_root(vcpu->arch.mmu->prev_roots[i].hpa))
 			roots_to_free |= KVM_MMU_ROOT_PREVIOUS(i);
 
@@ -4848,7 +4864,7 @@ static bool cached_root_find_and_keep_current(struct kvm *kvm, struct kvm_mmu *m
 	if (is_root_usable(&mmu->root, new_pgd, new_role))
 		return true;
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++) {
+	for (i = 0; i < prev_roots_num; i++) {
 		/*
 		 * The swaps end up rotating the cache like this:
 		 *   C   0 1 2 3   (on entry to the function)
@@ -4879,7 +4895,7 @@ static bool cached_root_find_without_current(struct kvm *kvm, struct kvm_mmu *mm
 {
 	uint i;
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++)
+	for (i = 0; i < prev_roots_num; i++)
 		if (is_root_usable(&mmu->prev_roots[i], new_pgd, new_role))
 			goto hit;
 
@@ -4888,7 +4904,7 @@ static bool cached_root_find_without_current(struct kvm *kvm, struct kvm_mmu *mm
 hit:
 	swap(mmu->root, mmu->prev_roots[i]);
 	/* Bubble up the remaining roots.  */
-	for (; i < KVM_MMU_NUM_PREV_ROOTS - 1; i++)
+	for (; i < prev_roots_num - 1; i++)
 		mmu->prev_roots[i] = mmu->prev_roots[i + 1];
 	mmu->prev_roots[i].hpa = INVALID_PAGE;
 	return true;
@@ -5829,7 +5845,7 @@ static void __kvm_mmu_free_obsolete_roots(struct kvm *kvm, struct kvm_mmu *mmu)
 	if (is_obsolete_root(kvm, mmu->root.hpa))
 		roots_to_free |= KVM_MMU_ROOT_CURRENT;
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++) {
+	for (i = 0; i < prev_roots_num; i++) {
 		if (is_obsolete_root(kvm, mmu->prev_roots[i].hpa))
 			roots_to_free |= KVM_MMU_ROOT_PREVIOUS(i);
 	}
@@ -6237,7 +6253,7 @@ void kvm_mmu_invalidate_addr(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu,
 	if (roots & KVM_MMU_ROOT_CURRENT)
 		__kvm_mmu_invalidate_addr(vcpu, mmu, addr, mmu->root.hpa);
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++) {
+	for (i = 0; i < prev_roots_num; i++) {
 		if (roots & KVM_MMU_ROOT_PREVIOUS(i))
 			__kvm_mmu_invalidate_addr(vcpu, mmu, addr, mmu->prev_roots[i].hpa);
 	}
@@ -6271,7 +6287,7 @@ void kvm_mmu_invpcid_gva(struct kvm_vcpu *vcpu, gva_t gva, unsigned long pcid)
 	if (pcid == kvm_get_active_pcid(vcpu))
 		roots |= KVM_MMU_ROOT_CURRENT;
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++) {
+	for (i = 0; i < prev_roots_num; i++) {
 		if (VALID_PAGE(mmu->prev_roots[i].hpa) &&
 		    pcid == kvm_get_pcid(vcpu, mmu->prev_roots[i].pgd))
 			roots |= KVM_MMU_ROOT_PREVIOUS(i);
@@ -6330,7 +6346,7 @@ static int __kvm_mmu_create(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu)
 
 	mmu->root.hpa = INVALID_PAGE;
 	mmu->root.pgd = 0;
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++)
+	for (i = 0; i < prev_roots_num; i++)
 		mmu->prev_roots[i] = KVM_MMU_ROOT_INFO_INVALID;
 
 	/* vcpu->arch.guest_mmu isn't used when !tdp_enabled. */

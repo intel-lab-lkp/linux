@@ -394,7 +394,7 @@ static void nested_ept_invalidate_addr(struct kvm_vcpu *vcpu, gpa_t eptp,
 
 	WARN_ON_ONCE(!mmu_is_nested(vcpu));
 
-	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++) {
+	for (i = 0; i < prev_roots_num; i++) {
 		cached_root = &vcpu->arch.mmu->prev_roots[i];
 
 		if (nested_ept_root_matches(cached_root->hpa, cached_root->pgd,
@@ -5876,7 +5876,7 @@ static int handle_invept(struct kvm_vcpu *vcpu)
 					    operand.eptp))
 			roots_to_free |= KVM_MMU_ROOT_CURRENT;
 
-		for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++) {
+		for (i = 0; i < prev_roots_num; i++) {
 			if (nested_ept_root_matches(mmu->prev_roots[i].hpa,
 						    mmu->prev_roots[i].pgd,
 						    operand.eptp))
