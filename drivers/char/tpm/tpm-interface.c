@@ -370,6 +370,8 @@ int tpm_pm_suspend(struct device *dev)
 	if (!chip)
 		return -ENODEV;
 
+	chip->flags |= TPM_CHIP_FLAG_SUSPENDED;
+
 	if (chip->flags & TPM_CHIP_FLAG_ALWAYS_POWERED)
 		goto suspended;
 
@@ -388,8 +390,6 @@ int tpm_pm_suspend(struct device *dev)
 	}
 
 suspended:
-	chip->flags |= TPM_CHIP_FLAG_SUSPENDED;
-
 	if (rc)
 		dev_err(dev, "Ignoring error %d while suspending\n", rc);
 	return 0;
