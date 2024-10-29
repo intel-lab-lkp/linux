@@ -1710,6 +1710,7 @@ out:
 }
 
 struct mon_config_info {
+	struct rdt_resource *r;
 	struct rdt_mon_domain *d;
 	u32 evtid;
 	u32 mon_config;
@@ -1735,26 +1736,28 @@ u32 resctrl_arch_mon_event_config_get(struct rdt_mon_domain *d,
 	return INVALID_CONFIG_VALUE;
 }
 
-void resctrl_arch_mon_event_config_set(void *info)
+void resctrl_arch_mon_event_config_set(struct rdt_mon_domain *d,
+				       enum resctrl_event_id eventid, u32 val)
 {
-	struct mon_config_info *mon_info = info;
 	struct rdt_hw_mon_domain *hw_dom;
 	unsigned int index;
 
-	index = mon_event_config_index_get(mon_info->evtid);
+	index = mon_event_config_index_get(eventid);
 	if (index == INVALID_CONFIG_INDEX)
 		return;
 
-	wrmsr(MSR_IA32_EVT_CFG_BASE + index, mon_info->mon_config, 0);
+	wrmsr(MSR_IA32_EVT_CFG_BASE + index, val, 0);
 
-	hw_dom = resctrl_to_arch_mon_dom(mon_info->d);
+	hw_dom = resctrl_to_arch_mon_dom(d);
 
-	switch (mon_info->evtid) {
+	switch (eventid) {
 	case QOS_L3_MBM_TOTAL_EVENT_ID:
-		hw_dom->mbm_total_cfg = mon_info->mon_config;
+		hw_dom->mbm_total_cfg = val;
 		break;
 	case QOS_L3_MBM_LOCAL_EVENT_ID:
-		hw_dom->mbm_local_cfg = mon_info->mon_config;
+		hw_dom->mbm_local_cfg = val;
+		break;
+	default:
 		break;
 	}
 }
@@ -1826,6 +1829,70 @@ static int mbm_local_bytes_config_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+static struct rdtgroup *rdtgroup_find_grp_by_cntr_id_index(int cntr_id, unsigned int index)
+{
+	struct rdtgroup *prgrp, *crgrp;
+
+	/* Check if the cntr_id is associated to the event type updated */
+	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
+		if (prgrp->mon.cntr_id[index] == cntr_id)
+			return prgrp;
+
+		list_for_each_entry(crgrp, &prgrp->mon.crdtgrp_list, mon.crdtgrp_list) {
+			if (crgrp->mon.cntr_id[index] == cntr_id)
+				return crgrp;
+		}
+	}
+
+	return NULL;
+}
+
+static void resctrl_arch_update_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
+				     enum resctrl_event_id evtid, u32 rmid,
+				     u32 closid, u32 cntr_id, u32 val)
+{
+	union l3_qos_abmc_cfg abmc_cfg = { 0 };
+
+	abmc_cfg.split.cfg_en = 1;
+	abmc_cfg.split.cntr_en = 1;
+	abmc_cfg.split.cntr_id = cntr_id;
+	abmc_cfg.split.bw_src = rmid;
+	abmc_cfg.split.bw_type = val;
+
+	wrmsrl(MSR_IA32_L3_QOS_ABMC_CFG, abmc_cfg.full);
+}
+
+static void resctrl_mon_event_config_set(void *info)
+{
+	struct mon_config_info *mon_info = info;
+	struct rdt_mon_domain *d = mon_info->d;
+	struct rdt_resource *r = mon_info->r;
+	struct rdtgroup *rdtgrp;
+	unsigned int index;
+	u32 cntr_id;
+
+	resctrl_arch_mon_event_config_set(d, mon_info->evtid, mon_info->mon_config);
+
+	if (!resctrl_arch_mbm_cntr_assign_enabled(r))
+		return;
+
+	index = mon_event_config_index_get(mon_info->evtid);
+	if (index == INVALID_CONFIG_INDEX)
+		return;
+
+	for (cntr_id = 0; cntr_id < r->mon.num_mbm_cntrs; cntr_id++) {
+		if (test_bit(cntr_id, d->mbm_cntr_map)) {
+			rdtgrp = rdtgroup_find_grp_by_cntr_id_index(cntr_id, index);
+			if (rdtgrp)
+				resctrl_arch_update_cntr(mon_info->r, d,
+							 mon_info->evtid,
+							 rdtgrp->mon.rmid,
+							 rdtgrp->closid,
+							 cntr_id,
+							 mon_info->mon_config);
+		}
+	}
+}
 
 static void mbm_config_write_domain(struct rdt_resource *r,
 				    struct rdt_mon_domain *d, u32 evtid, u32 val)
@@ -1841,6 +1908,7 @@ static void mbm_config_write_domain(struct rdt_resource *r,
 	if (config_val == INVALID_CONFIG_VALUE || config_val == val)
 		return;
 
+	mon_info.r = r;
 	mon_info.d = d;
 	mon_info.evtid = evtid;
 	mon_info.mon_config = val;
@@ -1852,7 +1920,7 @@ static void mbm_config_write_domain(struct rdt_resource *r,
 	 * on one CPU is observed by all the CPUs in the domain.
 	 */
 	smp_call_function_any(&d->hdr.cpu_mask,
-			      resctrl_arch_mon_event_config_set,
+			      resctrl_mon_event_config_set,
 			      &mon_info, 1);
 
 	/*
