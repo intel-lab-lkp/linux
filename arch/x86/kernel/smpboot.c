@@ -127,6 +127,9 @@ int __read_mostly __max_smt_threads = 1;
 /* Flag to indicate if a complete sched domain rebuild is required */
 bool x86_topology_update;
 
+#define PLAY_DEAD_MWAIT_HINT_UNSET 0U
+static unsigned int __read_mostly play_dead_mwait_hint;
+
 int arch_update_cpu_topology(void)
 {
 	int retval = x86_topology_update;
@@ -1270,6 +1273,11 @@ void play_dead_common(void)
 	local_irq_disable();
 }
 
+void smp_set_mwait_play_dead_hint(unsigned int hint)
+{
+	WRITE_ONCE(play_dead_mwait_hint, hint);
+}
+
 /* Computes mwait hint for the deepest mwait hint based on cpuid leaf 0x5 */
 static inline unsigned int get_deepest_mwait_hint(void)
 {
@@ -1322,7 +1330,9 @@ static inline void mwait_play_dead(void)
 	if (__this_cpu_read(cpu_info.cpuid_level) < CPUID_MWAIT_LEAF)
 		return;
 
-	hint = get_deepest_mwait_hint();
+	hint = READ_ONCE(play_dead_mwait_hint);
+	if (hint == PLAY_DEAD_MWAIT_HINT_UNSET)
+		hint = get_deepest_mwait_hint();
 
 	/* Set up state for the kexec() hack below */
 	md->status = CPUDEAD_MWAIT_WAIT;
