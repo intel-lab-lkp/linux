@@ -223,6 +223,7 @@ static int sev_cmd_buffer_len(int cmd)
 	case SEV_CMD_SNP_GUEST_REQUEST:		return sizeof(struct sev_data_snp_guest_request);
 	case SEV_CMD_SNP_CONFIG:		return sizeof(struct sev_user_data_snp_config);
 	case SEV_CMD_SNP_COMMIT:		return sizeof(struct sev_data_snp_commit);
+	case SEV_CMD_SNP_DOWNLOAD_FIRMWARE_EX:	return sizeof(struct sev_data_download_firmware_ex);
 	default:				return 0;
 	}
 
@@ -829,6 +830,7 @@ static int snp_reclaim_cmd_buf(int cmd, void *cmd_buf)
 	return 0;
 }
 
+static void snp_cmd_bookkeeping_locked(int cmd, struct sev_device *sev, void *data);
 static int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 {
 	struct cmd_buf_desc desc_list[CMD_BUF_DESC_MAX] = {0};
@@ -851,6 +853,15 @@ static int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 	buf_len = sev_cmd_buffer_len(cmd);
 	if (WARN_ON_ONCE(!data != !buf_len))
 		return -EINVAL;
+
+	/* The firmware does not coordinate all GCTX page updates. Force an
+	 * error to ensure that no new VM can be started and no active VM makes
+	 * progress on guest requests until the firmware is rolled back.
+	 */
+	if (sev->synthetic_restore_required) {
+		*psp_ret = SEV_RET_RESTORE_REQUIRED;
+		return -EBUSY;
+	}
 
 	/*
 	 * Copy the incoming data to driver's scratch buffer as __pa() will not
@@ -993,6 +1004,9 @@ static int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 	print_hex_dump_debug("(out): ", DUMP_PREFIX_OFFSET, 16, 2, data,
 			     buf_len, false);
 
+	if (!ret)
+		snp_cmd_bookkeeping_locked(cmd, sev, data);
+
 	return ret;
 }
 
@@ -1093,6 +1107,7 @@ static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 	return 0;
 }
 
+static int sev_snp_platform_init_firmware_upload(struct sev_device *sev);
 static int __sev_snp_init_locked(int *error)
 {
 	struct psp_device *psp = psp_master;
@@ -1189,6 +1204,8 @@ static int __sev_snp_init_locked(int *error)
 	dev_dbg(sev->dev, "SEV-SNP firmware initialized\n");
 
 	sev_es_tmr_size = SNP_TMR_SIZE;
+
+	rc = sev_snp_platform_init_firmware_upload(sev);
 
 	return rc;
 }
@@ -1335,6 +1352,13 @@ static int _sev_platform_init_locked(struct sev_platform_init_args *args)
 
 	/* Defer legacy SEV/SEV-ES support if allowed by caller/module. */
 	if (args->probe && !psp_init_on_probe)
+		return 0;
+
+	/*
+	 * Defer legacy SEV/SEV-ES support if legacy VMs are not being launched
+	 * and module psp_init_on_probe parameter is false.
+	 */
+	if (args->supports_download_firmware_ex && !psp_init_on_probe)
 		return 0;
 
 	return __sev_platform_init_locked(&args->error);
@@ -1603,14 +1627,8 @@ static int sev_update_firmware(struct device *dev)
 		return -1;
 	}
 
-	/*
-	 * SEV FW expects the physical address given to it to be 32
-	 * byte aligned. Memory allocated has structure placed at the
-	 * beginning followed by the firmware being passed to the SEV
-	 * FW. Allocate enough memory for data structure + alignment
-	 * padding + SEV FW.
-	 */
-	data_size = ALIGN(sizeof(struct sev_data_download_firmware), 32);
+	data_size = ALIGN(sizeof(struct sev_data_download_firmware),
+			  SEV_FW_ALIGNMENT);
 
 	order = get_order(firmware->size + data_size);
 	p = alloc_pages(GFP_KERNEL, order);
@@ -2233,6 +2251,366 @@ static int sev_misc_init(struct sev_device *sev)
 	return 0;
 }
 
+#ifdef CONFIG_FW_UPLOAD
+
+static enum fw_upload_err snp_dlfw_ex_prepare(struct fw_upload *fw_upload,
+                                             const u8 *data, u32 size)
+{
+        return FW_UPLOAD_ERR_NONE;
+}
+
+static enum fw_upload_err snp_dlfw_ex_poll_complete(struct fw_upload *fw_upload)
+{
+        return FW_UPLOAD_ERR_NONE;
+}
+
+/*
+ * This may be called asynchronously with an on-going update.  All other
+ * functions are called sequentially in a single thread. To avoid contention on
+ * register accesses, only update the cancel_request flag. Other functions will
+ * check this flag and handle the cancel request synchronously.
+ */
+static void snp_dlfw_ex_cancel(struct fw_upload *fw_upload)
+{
+	struct sev_device *sev = psp_master->sev_data;
+
+        mutex_lock(&sev->fw_lock);
+        sev->fw_cancel = true;
+        mutex_unlock(&sev->fw_lock);
+}
+
+static enum fw_upload_err snp_dlfw_ex_err_translate(struct sev_device *sev, int psp_ret)
+{
+	dev_dbg(sev->dev, "Failed to update SEV firmware: %#x\n", psp_ret);
+	/*
+	 * Operation error:
+	 *   HW_ERROR: Critical error. Machine needs repairs now.
+	 *   RW_ERROR: Severe error. Roll back to the prior version to recover.
+	 * User error:
+	 *   FW_INVALID: Bad input for this interface.
+	 *   BUSY: Wrong machine state to run download_firmware_ex.
+	 */
+	switch (psp_ret) {
+	case SEV_RET_RESTORE_REQUIRED:
+		dev_warn(sev->dev, "Firmware updated but unusable\n");
+		dev_warn(sev->dev, "Need to do manual firmware rollback!!!\n");
+		return FW_UPLOAD_ERR_RW_ERROR;
+	case SEV_RET_SHUTDOWN_REQUIRED:
+		/* No state changes made. Not a hardware error. */
+		dev_warn(sev->dev, "Firmware image cannot be live updated\n");
+		return FW_UPLOAD_ERR_FW_INVALID;
+	case SEV_RET_BAD_VERSION:
+		/* No state changes made. Not a hardware error. */
+		dev_warn(sev->dev, "Firmware image is not well formed\n");
+		return FW_UPLOAD_ERR_FW_INVALID;
+		/* SEV-specific errors that can still happen. */
+	case SEV_RET_BAD_SIGNATURE:
+		/* No state changes made. Not a hardware error. */
+		dev_warn(sev->dev, "Firmware image signature is bad\n");
+		return FW_UPLOAD_ERR_FW_INVALID;
+	case SEV_RET_INVALID_PLATFORM_STATE:
+		/* Calling at the wrong time. Not a hardware error. */
+		dev_warn(sev->dev, "Firmware not updated as SEV in INIT state\n");
+		return FW_UPLOAD_ERR_BUSY;
+	case SEV_RET_HWSEV_RET_UNSAFE:
+		dev_err(sev->dev, "Firmware is unstable. Reset your machine!!!\n");
+		return FW_UPLOAD_ERR_HW_ERROR;
+		/* Kernel bug cases. */
+	case SEV_RET_INVALID_PARAM:
+		dev_err(sev->dev, "Download-firmware-EX invalid parameter\n");
+		return FW_UPLOAD_ERR_RW_ERROR;
+	case SEV_RET_INVALID_ADDRESS:
+		dev_err(sev->dev, "Download-firmware-EX invalid address\n");
+		return FW_UPLOAD_ERR_RW_ERROR;
+	default:
+		dev_err(sev->dev, "Unhandled download_firmware_ex err %d\n", psp_ret);
+		return FW_UPLOAD_ERR_HW_ERROR;
+	}
+}
+
+static enum fw_upload_err snp_dlfw_ex_write(struct fw_upload *fwl, const u8 *data,
+                                       u32 offset, u32 size, u32 *written)
+{
+	struct sev_data_download_firmware_ex *data_ex;
+	struct sev_data_snp_guest_status status_data;
+	struct sev_device *sev = fwl->dd_handle;
+	void *snp_guest_status, *fw_dest;
+	u8 api_major, api_minor, build;
+	int ret, error, order;
+	struct page *p;
+	u64 data_size;
+	bool cancel;
+
+	if (!sev)
+		return FW_UPLOAD_ERR_HW_ERROR;
+
+	mutex_lock(&sev->fw_lock);
+	cancel = sev->fw_cancel;
+	mutex_unlock(&sev->fw_lock);
+
+	if (cancel)
+		return FW_UPLOAD_ERR_CANCELED;
+
+	/*
+	 * SEV firmware update is a one-shot update operation, the write()
+	 * callback to be invoked multiple times for the same update is
+	 * unexpected.
+	 */
+	if (offset)
+		return FW_UPLOAD_ERR_INVALID_SIZE;
+
+	if (sev_get_api_version())
+		return FW_UPLOAD_ERR_HW_ERROR;
+
+	api_major = sev->api_major;
+	api_minor = sev->api_minor;
+	build     = sev->build;
+
+	data_size = ALIGN(sizeof(struct sev_data_download_firmware_ex),
+			  SEV_FW_ALIGNMENT);
+
+	order = get_order(size + data_size);
+	p = alloc_pages(GFP_KERNEL, order);
+	if (!p) {
+		ret = FW_UPLOAD_ERR_INVALID_SIZE;
+		goto fw_err;
+	}
+
+	/*
+	 * Copy firmware data to a kernel allocated contiguous
+	 * memory region.
+	 */
+	data_ex = page_address(p);
+	fw_dest = page_address(p) + data_size;
+	memcpy(fw_dest, data, size);
+
+	data_ex->address = __psp_pa(fw_dest);
+	data_ex->len = size;
+	data_ex->cmdlen = sizeof(struct sev_data_download_firmware_ex);
+
+	/*
+	 * SNP_COMMIT should be issued explicitly to commit the updated
+	 * firmware after guest context pages have been updated.
+	 */
+
+	ret = sev_do_cmd(SEV_CMD_SNP_DOWNLOAD_FIRMWARE_EX, data_ex, &error);
+
+	if (ret) {
+		ret = snp_dlfw_ex_err_translate(sev, error);
+		goto free_err;
+	}
+
+	__free_pages(p, order);
+
+	/* Need to do a DF_FLUSH after live firmware update */
+	wbinvd_on_all_cpus();
+	ret = __sev_do_cmd_locked(SEV_CMD_SNP_DF_FLUSH, NULL, &error);
+	if (ret) {
+		dev_dbg(sev->dev, "DF_FLUSH error %d\n", error);
+		ret = FW_UPLOAD_ERR_HW_ERROR;
+		goto free_err;
+	}
+
+	sev_get_api_version();
+
+	/*
+	 * Force an update of guest context pages after SEV firmware
+	 * live update by issuing SNP_GUEST_STATUS on all guest
+	 * context pages.
+	 */
+	snp_guest_status = sev_fw_alloc(PAGE_SIZE);
+	if (!snp_guest_status) {
+		ret = FW_UPLOAD_ERR_INVALID_SIZE;
+		goto free_err;
+	}
+
+	/*
+	 * After the last bound asid-to-gctx page is snp_unbound_gctx_end-many
+	 * unbound gctx pages that also need updating.
+	 */
+	for (int i = 1; i <= sev->last_snp_asid + sev->snp_unbound_gctx_end; i++) {
+		if (sev->snp_asid_to_gctx_pages_map[i]) {
+			status_data.gctx_paddr = sev->snp_asid_to_gctx_pages_map[i];
+			status_data.address = __psp_pa(snp_guest_status);
+			ret = sev_do_cmd(SEV_CMD_SNP_GUEST_STATUS, &status_data, &error);
+			if (ret) {
+				/*
+				 * Handle race with SNP VM being destroyed/decommissoned,
+				 * if guest context page invalid error is returned,
+				 * assume guest has been destroyed.
+				 */
+				if (error == SEV_RET_INVALID_GUEST)
+					continue;
+				sev->synthetic_restore_required = true;
+				dev_err(sev->dev, "Failed to update SNP GCTX after firmware update, %#x\n", error);
+				dev_err(sev->dev, "Need to do manual SNP firmware rollback!!!\n");
+				snp_free_firmware_page(snp_guest_status);
+				ret = FW_UPLOAD_ERR_RW_ERROR;
+				goto free_err;
+			}
+		}
+	}
+	snp_free_firmware_page(snp_guest_status);
+
+	if (api_major != sev->api_major || api_minor != sev->api_minor ||
+	    build != sev->build) {
+		dev_info(sev->dev, "SEV firmware updated from %d.%d.%d to %d.%d.%d\n",
+			 api_major, api_minor, build,
+			 sev->api_major, sev->api_minor, sev->build);
+	} else {
+		dev_info(sev->dev, "SEV firmware same as old %d.%d.%d\n",
+			 api_major, api_minor, build);
+	}
+
+	*written = size;
+	return FW_UPLOAD_ERR_NONE;
+
+free_err:
+	__free_pages(p, order);
+fw_err:
+	return ret;
+}
+
+static const struct fw_upload_ops snp_dlfw_ex_ops = {
+        .prepare = snp_dlfw_ex_prepare,
+        .write = snp_dlfw_ex_write,
+        .poll_complete = snp_dlfw_ex_poll_complete,
+        .cancel = snp_dlfw_ex_cancel,
+};
+
+static void sev_snp_dev_init_firmware_upload(struct sev_device *sev)
+{
+	struct fw_upload *fwl;
+
+	fwl = firmware_upload_register(THIS_MODULE, sev->dev, "snp_dlfw_ex", &snp_dlfw_ex_ops, sev);
+
+	if (IS_ERR(fwl))
+		dev_err(sev->dev, "SEV firmware upload failed to initialize, err %ld\n", PTR_ERR(fwl));
+
+	sev->fwl = fwl;
+	mutex_init(&sev->fw_lock);
+}
+
+static void sev_snp_destroy_firmware_upload(struct sev_device *sev)
+{
+	firmware_upload_unregister(sev->fwl);
+}
+
+/*
+ * After a gctx is created, it is used by snp_launch_start before getting
+ * bound to an asid. The launch protocol allocates an asid before creating a
+ * matching gctx page, so there should never be more unbound gctx pages than
+ * there are possible SNP asids.
+ *
+ * The unbound gctx pages must be updated after executing DOWNLOAD_FIRMWARE_EX
+ * and before committing the firmware.
+ */
+static void snp_gctx_create_track_locked(struct sev_device *sev, void *data)
+{
+	struct sev_data_snp_addr *gctx_create = data;
+
+	/* This condition should never happen, but is needed for memory safety. */
+	if (sev->snp_unbound_gctx_end >= sev->last_snp_asid) {
+		dev_warn(sev->dev, "Too many unbound SNP GCTX pages to track\n");
+		return;
+	}
+
+	sev->snp_unbound_gctx_pages[sev->snp_unbound_gctx_end] = gctx_create->address;
+	sev->snp_unbound_gctx_end++;
+}
+
+/*
+ * PREREQUISITE: The snp_activate command was successful, meaning the asid
+ * is in the acceptable range 1..sev->last_snp_asid.
+ *
+ * The gctx_paddr must be in the unbound gctx buffer.
+ */
+static void snp_activate_track_locked(struct sev_device *sev, void *data)
+{
+	struct sev_data_snp_activate *data_activate = data;
+
+	sev->snp_asid_to_gctx_pages_map[data_activate->asid] = data_activate->gctx_paddr;
+
+	for (int i = 0; i < sev->snp_unbound_gctx_end; i++) {
+		if (sev->snp_unbound_gctx_pages[i] == data_activate->gctx_paddr) {
+			/*
+			 * Swap the last unbound gctx page with the now-bound
+			 * gctx page to shrink the buffer.
+			 */
+			sev->snp_unbound_gctx_end--;
+			sev->snp_unbound_gctx_pages[i] = sev->snp_unbound_gctx_pages[sev->snp_unbound_gctx_end];
+			sev->snp_unbound_gctx_pages[sev->snp_unbound_gctx_end] = 0;
+			break;
+		}
+	}
+}
+
+static void snp_decommission_track_locked(struct sev_device *sev, void *data)
+{
+	struct sev_data_snp_addr *data_decommission = data;
+
+	for (int i = 1; i <= sev->last_snp_asid; i++) {
+		if (sev->snp_asid_to_gctx_pages_map[i] == data_decommission->address) {
+			sev->snp_asid_to_gctx_pages_map[i] = 0;
+			break;
+		}
+	}
+}
+
+static void snp_cmd_bookkeeping_locked(int cmd, struct sev_device *sev, void *data)
+{
+	if (!sev->snp_asid_to_gctx_pages_map)
+		return;
+
+	switch (cmd)
+	{
+	case SEV_CMD_SNP_GCTX_CREATE:
+		snp_gctx_create_track_locked(sev, data);
+		break;
+	case SEV_CMD_SNP_ACTIVATE:
+		snp_activate_track_locked(sev, data);
+		break;
+	case SEV_CMD_SNP_DECOMMISSION:
+		snp_decommission_track_locked(sev, data);
+		break;
+	default:
+		;
+	}
+}
+
+static int sev_snp_platform_init_firmware_upload(struct sev_device *sev)
+{
+	u32 max_snp_asid;
+
+	/*
+	 * cpuid_edx(0x8000001f) is the minimum SEV ASID, hence the exclusive
+	 * maximum SEV-SNP ASID. Save the inclusive maximum to avoid confusing
+	 * logic elsewhere.
+	 */
+	max_snp_asid = cpuid_edx(0x8000001f);
+	sev->last_snp_asid = max_snp_asid - 1;
+	if (sev->last_snp_asid) {
+		sev->snp_asid_to_gctx_pages_map = devm_kmalloc_array(
+			sev->dev, max_snp_asid * 2, sizeof(u64), GFP_KERNEL | __GFP_ZERO);
+		sev->snp_unbound_gctx_pages = &sev->snp_asid_to_gctx_pages_map[max_snp_asid];
+		if (!sev->snp_asid_to_gctx_pages_map) {
+			kfree(snp_range_list);
+			dev_err(sev->dev,
+				"SEV-SNP: snp_asid_to_gctx_pages_map memory allocation failed\n");
+			return -ENOMEM;
+		}
+	}
+	return 0;
+}
+
+#else
+
+static int sev_snp_platform_init_firmware_upload(struct sev_device *sev) { return 0; }
+static void sev_snp_dev_init_firmware_upload(struct sev_device *sev) { }
+static void sev_snp_destroy_firmware_upload(struct sev_device *sev) { }
+static void snp_cmd_bookkeeping_locked(int cmd, struct sev_device *sev, void *data) { }
+#endif
+
 int sev_dev_init(struct psp_device *psp)
 {
 	struct device *dev = psp->dev;
@@ -2273,6 +2651,8 @@ int sev_dev_init(struct psp_device *psp)
 	ret = sev_misc_init(sev);
 	if (ret)
 		goto e_irq;
+
+	sev_snp_dev_init_firmware_upload(sev);
 
 	dev_notice(dev, "sev enabled\n");
 
@@ -2352,6 +2732,8 @@ void sev_dev_destroy(struct psp_device *psp)
 		kref_put(&misc_dev->refcount, sev_exit);
 
 	psp_clear_sev_irq_handler(psp);
+
+	sev_snp_destroy_firmware_upload(sev);
 }
 
 static int snp_shutdown_on_panic(struct notifier_block *nb,
