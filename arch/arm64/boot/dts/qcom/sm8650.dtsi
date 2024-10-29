@@ -2590,6 +2590,25 @@
 			#reset-cells = <1>;
 
 			status = "disabled";
+
+			ice_cfg: ice-config {
+				static-alloc {
+					ice-allocator-name = "static-alloc";
+					rx-alloc-percent = <60>;
+					status = "disabled";
+				};
+
+				floor-based {
+					ice-allocator-name = "floor-based";
+					status = "disabled";
+				};
+
+				instantaneous {
+					ice-allocator-name = "instantaneous";
+					num-core = <28 28 15 13>;
+					status = "okay";
+				};
+			};
 		};
 
 		ice: crypto@1d88000 {
