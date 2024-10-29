@@ -6032,7 +6032,8 @@ static int round_up_stack_depth(struct bpf_verifier_env *env, int stack_depth)
  * Since recursion is prevented by check_cfg() this algorithm
  * only needs a local stack of MAX_CALL_FRAMES to remember callsites
  */
-static int check_max_stack_depth_subprog(struct bpf_verifier_env *env, int idx)
+static int check_max_stack_depth_subprog(struct bpf_verifier_env *env, int idx,
+					 int *subtree_depth, int *depth_frame)
 {
 	struct bpf_subprog_info *subprog = env->subprog_info;
 	struct bpf_insn *insn = env->prog->insnsi;
@@ -6070,10 +6071,9 @@ process_func:
 		return -EACCES;
 	}
 	depth += round_up_stack_depth(env, subprog[idx].stack_depth);
-	if (depth > MAX_BPF_STACK) {
-		verbose(env, "combined stack size of %d calls is %d. Too large\n",
-			frame + 1, depth);
-		return -EACCES;
+	if (depth > MAX_BPF_STACK && !*subtree_depth) {
+		*subtree_depth = depth;
+		*depth_frame = frame + 1;
 	}
 continue_func:
 	subprog_end = subprog[idx + 1].start;
@@ -6173,15 +6173,19 @@ continue_func:
 static int check_max_stack_depth(struct bpf_verifier_env *env)
 {
 	struct bpf_subprog_info *si = env->subprog_info;
-	int ret;
+	int ret, subtree_depth = 0, depth_frame;
 
 	for (int i = 0; i < env->subprog_cnt; i++) {
 		if (!i || si[i].is_async_cb) {
-			ret = check_max_stack_depth_subprog(env, i);
+			ret = check_max_stack_depth_subprog(env, i, &subtree_depth, &depth_frame);
 			if (ret < 0)
 				return ret;
 		}
-		continue;
+	}
+	if (subtree_depth > MAX_BPF_STACK) {
+		verbose(env, "combined stack size of %d calls is %d. Too large\n",
+			depth_frame, subtree_depth);
+		return -EACCES;
 	}
 	return 0;
 }
