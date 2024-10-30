@@ -1210,14 +1210,26 @@ static unsigned long __init ram_alignment(resource_size_t pos)
 
 void __init e820__reserve_resources_late(void)
 {
-	int i;
 	struct resource *res;
+	int i;
 
+	/*
+	 * Prior to inserting SOFT_RESERVED resources we want to check for an
+	 * intersection with potential CXL resources. Any SOFT_RESERVED resources
+	 * that do intersect a potential CXL resource are set aside so they
+	 * can be trimmed to accommodate CXL resource intersections and added to
+	 * the iomem resource tree after the CXL drivers have completed their
+	 * device probe.
+	 */
 	res = e820_res;
-	for (i = 0; i < e820_table->nr_entries; i++) {
-		if (!res->parent && res->end)
+	for (i = 0; i < e820_table->nr_entries; i++, res++) {
+		if (res->desc == IORES_DESC_SOFT_RESERVED) {
+			pr_err("CXL DEBUG Inserting Soft Reserve %llx - %llx\n",
+			       res->start, res->end);
+			insert_soft_reserve_resource(res);
+		} else if (!res->parent && res->end) {
 			insert_resource_expand_to_fit(&iomem_resource, res);
-		res++;
+		}
 	}
 
 	/*

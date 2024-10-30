@@ -31,6 +31,7 @@
 #include <linux/vmalloc.h>
 #include <asm/io.h>
 
+#include <linux/acpi.h>
 
 struct resource ioport_resource = {
 	.name	= "PCI IO",
@@ -47,6 +48,13 @@ struct resource iomem_resource = {
 	.flags	= IORESOURCE_MEM,
 };
 EXPORT_SYMBOL(iomem_resource);
+
+struct resource srmem_resource = {
+	.name	= "Soft Reserved mem",
+	.start	= 0,
+	.end	= -1,
+	.flags	= IORESOURCE_MEM,
+};
 
 static DEFINE_RWLOCK(resource_lock);
 
@@ -1074,6 +1082,136 @@ int adjust_resource(struct resource *res, resource_size_t start,
 	return result;
 }
 EXPORT_SYMBOL(adjust_resource);
+
+static void trim_soft_reserve(struct resource *sr_res,
+			      const struct resource *res)
+{
+	struct resource *new_res;
+
+	pr_err("CXL DEBUG Trimming Soft Reserve %pr\n", res);
+
+	if (sr_res->start == res->start && sr_res->end == res->end) {
+		pr_err("CXL DEBUG Releasing resource %pr\n", res);
+		__release_resource(sr_res, false);
+		free_resource(sr_res);
+	} else if (sr_res->start == res->start) {
+		pr_err("CXL DEBUG Adjusting resource %pr (%llx - %llx)\n",
+		       sr_res, res->end + 1, sr_res->end - res->end);
+		WARN_ON(__adjust_resource(sr_res, res->end + 1,
+					  sr_res->end - res->end));
+	} else if (sr_res->end == res->end) {
+		pr_err("CXL DEBUG Adjusting resource %pr (%llx - %llx)\n",
+		       sr_res, sr_res->start, res->start - sr_res->start);
+		WARN_ON(__adjust_resource(sr_res, sr_res->start,
+					  res->start - sr_res->start));
+	} else {
+		/* Adjust existing to beginning resource */
+		pr_err("CXL DEBUG Adjusting resource %pr (%llx - %llx)\n",
+		       sr_res, sr_res->start, res->start);
+		__adjust_resource(sr_res, sr_res->start,
+				  res->start - sr_res->start);
+
+		/* Add new resource for end piece */
+		new_res = alloc_resource(GFP_KERNEL);
+		if (!new_res)
+			return;
+
+		*new_res = DEFINE_RES_NAMED(res->end + 1, sr_res->end - res->end,
+					    "Soft Reserved", sr_res->flags);
+		new_res->desc = IORES_DESC_SOFT_RESERVED;
+		pr_err("CXL DEBUG Adding resource %pr\n", new_res);
+		__insert_resource(&srmem_resource, new_res);
+	}
+}
+
+void trim_soft_reserve_resources(const struct resource *res)
+{
+	struct resource *sr_res;
+
+	write_lock(&resource_lock);
+	for (sr_res = srmem_resource.child; sr_res; sr_res = sr_res->sibling) {
+		if (resource_contains(sr_res, res)) {
+			trim_soft_reserve(sr_res, res);
+			break;
+		}
+	}
+	write_unlock(&resource_lock);
+}
+EXPORT_SYMBOL(trim_soft_reserve_resources);
+
+void merge_soft_reserve_resources(void)
+{
+	struct resource *sr_res, *next;
+
+	write_lock(&resource_lock);
+	for (sr_res = srmem_resource.child; sr_res; sr_res = next) {
+		next = sr_res->sibling;
+
+		pr_err("CXL DEBUG Merging Soft Reserve %pr\n", sr_res);
+		__release_resource(sr_res, false);
+		WARN_ON(__insert_resource(&iomem_resource, sr_res));
+	}
+	write_unlock(&resource_lock);
+}
+EXPORT_SYMBOL(merge_soft_reserve_resources);
+
+struct srmem_arg {
+	struct resource *res;
+	int overlaps;
+};
+
+static int srmem_parse_cfmws(union acpi_subtable_headers *hdr,
+			     void *arg, const unsigned long unused)
+{
+	struct acpi_cedt_cfmws *cfmws;
+	struct srmem_arg *args = arg;
+	struct resource cfmws_res;
+	struct resource *res;
+
+	res = args->res;
+
+	pr_err("CXL DEBUG Checking Soft Reserve for CFMWS overlap %pr\n", res);
+
+	cfmws = (struct acpi_cedt_cfmws *)hdr;
+	cfmws_res = DEFINE_RES_MEM(cfmws->base_hpa,
+				   cfmws->base_hpa + cfmws->window_size);
+	pr_err("CXL DEBUG Found CFMWS: %pr\n", &cfmws_res);
+
+	if (resource_overlaps(&cfmws_res, res)) {
+		pr_err("CXL DEBUG Found SOFT RESERVE intersection %llx - %llx : %llx - %llx\n",
+		       res->start, res->end, cfmws_res.start, cfmws_res.end);
+		args->overlaps += 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+static bool resource_overlaps_cfmws(struct resource *res)
+{
+	struct srmem_arg arg = {
+		.res = res,
+		.overlaps = 0
+	};
+
+	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, srmem_parse_cfmws, &arg);
+
+	if (arg.overlaps)
+		return true;
+
+	return false;
+}
+
+int insert_soft_reserve_resource(struct resource *res)
+{
+	if (resource_overlaps_cfmws(res)) {
+		pr_err("CXL DEBUG Reserving Soft Reserve %pr\n", res);
+		return insert_resource(&srmem_resource, res);
+	}
+
+	return insert_resource(&iomem_resource, res);
+}
+EXPORT_SYMBOL(insert_soft_reserve_resource);
 
 static void __init
 __reserve_region_with_split(struct resource *root, resource_size_t start,
