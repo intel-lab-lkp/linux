@@ -26201,7 +26201,6 @@ cal_try:
 
 static void wlc_phy_rxcal_radio_setup_nphy(struct brcms_phy *pi, u8 rx_core)
 {
-	u16 offtune_val;
 	u16 bias_g = 0;
 	u16 bias_a = 0;
 
@@ -26322,17 +26321,9 @@ static void wlc_phy_rxcal_radio_setup_nphy(struct brcms_phy *pi, u8 rx_core)
 						read_radio_reg(pi,
 							RADIO_2056_RX_LNAA_TUNE
 							| RADIO_2056_RX0);
-
-					offtune_val =
-						(pi->tx_rx_cal_radio_saveregs
-						 [2] & 0xF0) >> 8;
-					offtune_val =
-						(offtune_val <= 0x7) ? 0xF : 0;
-
 					mod_radio_reg(pi,
 						      RADIO_2056_RX_LNAA_TUNE |
-						      RADIO_2056_RX0, 0xF0,
-						      (offtune_val << 8));
+						      RADIO_2056_RX0, 0xF0, 0xF00);
 				}
 
 				write_radio_reg(pi,
@@ -26372,18 +26363,9 @@ static void wlc_phy_rxcal_radio_setup_nphy(struct brcms_phy *pi, u8 rx_core)
 							pi,
 							RADIO_2056_RX_LNAG_TUNE
 							| RADIO_2056_RX0);
-
-					offtune_val =
-						(pi->
-						 tx_rx_cal_radio_saveregs[2] &
-						 0xF0) >> 8;
-					offtune_val =
-						(offtune_val <= 0x7) ? 0xF : 0;
-
 					mod_radio_reg(pi,
 						      RADIO_2056_RX_LNAG_TUNE |
-						      RADIO_2056_RX0, 0xF0,
-						      (offtune_val << 8));
+						      RADIO_2056_RX0, 0xF0, 0xF00);
 				}
 
 				write_radio_reg(pi,
@@ -26446,18 +26428,9 @@ static void wlc_phy_rxcal_radio_setup_nphy(struct brcms_phy *pi, u8 rx_core)
 							pi,
 							RADIO_2056_RX_LNAA_TUNE
 							| RADIO_2056_RX1);
-
-					offtune_val =
-						(pi->
-						 tx_rx_cal_radio_saveregs[2] &
-						 0xF0) >> 8;
-					offtune_val =
-						(offtune_val <= 0x7) ? 0xF : 0;
-
 					mod_radio_reg(pi,
 						      RADIO_2056_RX_LNAA_TUNE |
-						      RADIO_2056_RX1, 0xF0,
-						      (offtune_val << 8));
+						      RADIO_2056_RX1, 0xF0, 0xF00);
 				}
 
 				write_radio_reg(pi,
@@ -26496,18 +26469,9 @@ static void wlc_phy_rxcal_radio_setup_nphy(struct brcms_phy *pi, u8 rx_core)
 							pi,
 							RADIO_2056_RX_LNAG_TUNE
 							| RADIO_2056_RX1);
-
-					offtune_val =
-						(pi->
-						 tx_rx_cal_radio_saveregs[2] &
-						 0xF0) >> 8;
-					offtune_val =
-						(offtune_val <= 0x7) ? 0xF : 0;
-
 					mod_radio_reg(pi,
 						      RADIO_2056_RX_LNAG_TUNE |
-						      RADIO_2056_RX1, 0xF0,
-						      (offtune_val << 8));
+						      RADIO_2056_RX1, 0xF0, 0xF00);
 				}
 
 				write_radio_reg(pi,
