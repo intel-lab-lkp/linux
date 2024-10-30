@@ -18,6 +18,7 @@ properties:
     enum:
       - qcom,qca2066-bt
       - qcom,qca6174-bt
+      - qcom,qca6698-bt
       - qcom,qca9377-bt
       - qcom,wcn3988-bt
       - qcom,wcn3990-bt
@@ -169,6 +170,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - qcom,qca6698-bt
               - qcom,wcn6855-bt
     then:
       required:
