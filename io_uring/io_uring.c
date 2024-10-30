@@ -3879,6 +3879,7 @@ static int __init io_uring_init(void)
 	BUILD_BUG_SQE_ELEM(48, __u64,  addr3);
 	BUILD_BUG_SQE_ELEM_SIZE(48, 0, cmd);
 	BUILD_BUG_SQE_ELEM(56, __u64,  __pad2);
+	BUILD_BUG_SQE_ELEM_SIZE(64, 0, big_sqe);
 
 	BUILD_BUG_ON(sizeof(struct io_uring_files_update) !=
 		     sizeof(struct io_uring_rsrc_update));
@@ -3901,6 +3902,9 @@ static int __init io_uring_init(void)
 
 	/* top 8bits are for internal use */
 	BUILD_BUG_ON((IORING_URING_CMD_MASK & 0xff000000) != 0);
+
+	BUILD_BUG_ON(sizeof(struct io_uring_meta_pi) >
+		     sizeof(struct io_uring_sqe));
 
 	io_uring_optable_init();
 

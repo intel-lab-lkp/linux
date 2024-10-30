@@ -105,6 +105,22 @@ struct io_uring_sqe {
 		 */
 		__u8	cmd[0];
 	};
+	/*
+	 * If the ring is initialized with IORING_SETUP_SQE128, then
+	 * this field is starting offset for 64 bytes of data. For meta io
+	 * this contains 'struct io_uring_meta_pi'
+	 */
+	__u8	big_sqe[0];
+};
+
+/* this is placed in SQE128 */
+struct io_uring_meta_pi {
+	__u16		pi_flags;
+	__u16		app_tag;
+	__u32		len;
+	__u64		addr;
+	__u64		seed;
+	__u64		rsvd[2];
 };
 
 /*
