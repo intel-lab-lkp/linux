@@ -577,7 +577,8 @@ free_tid:
 	cxgb4_remove_tid(&tx_info->adap->tids, tx_info->tx_chan,
 			 tx_info->tid, tx_info->ip_family);
 
-	xa_erase(&u_ctx->tid_list, tx_info->tid);
+	if (u_ctx)
+		xa_erase(&u_ctx->tid_list, tx_info->tid);
 
 put_module:
 	/* release module refcount */
