@@ -111,6 +111,7 @@ static struct pid_namespace *create_pid_namespace(struct user_namespace *user_ns
 	ns->user_ns = get_user_ns(user_ns);
 	ns->ucounts = ucounts;
 	ns->pid_allocated = PIDNS_ADDING;
+	ns->pid_max = parent_pid_ns->pid_max;
 #if defined(CONFIG_SYSCTL) && defined(CONFIG_MEMFD_CREATE)
 	ns->memfd_noexec_scope = pidns_memfd_noexec_scope(parent_pid_ns);
 #endif
@@ -280,19 +281,45 @@ static int pid_ns_ctl_handler(const struct ctl_table *table, int write,
 
 	return ret;
 }
+#endif	/* CONFIG_CHECKPOINT_RESTORE */
 
-extern int pid_max;
+static int pid_max_ns_ctl_handler(const struct ctl_table *table, int write,
+		void *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct pid_namespace *pid_ns = task_active_pid_ns(current);
+	struct ctl_table tmp = *table;
+
+	if (write && !checkpoint_restore_ns_capable(pid_ns->user_ns))
+		return -EPERM;
+
+	tmp.data = &pid_ns->pid_max;
+	if (pid_ns->parent)
+		tmp.extra2 = &pid_ns->parent->pid_max;
+
+	return proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+}
+
 static struct ctl_table pid_ns_ctl_table[] = {
+#ifdef CONFIG_CHECKPOINT_RESTORE
 	{
 		.procname = "ns_last_pid",
 		.maxlen = sizeof(int),
 		.mode = 0666, /* permissions are checked in the handler */
 		.proc_handler = pid_ns_ctl_handler,
 		.extra1 = SYSCTL_ZERO,
-		.extra2 = &pid_max,
+		.extra2 = &init_pid_ns.pid_max,
 	},
-};
 #endif	/* CONFIG_CHECKPOINT_RESTORE */
+	{
+		.procname = "pid_max",
+		.maxlen = sizeof(int),
+		.mode = 0644,
+		.proc_handler = pid_max_ns_ctl_handler,
+		.extra1 = &pid_max_min,
+		.extra2 = &pid_max_max,
+	},
+	{ }
+};
 
 int reboot_pid_ns(struct pid_namespace *pid_ns, int cmd)
 {
@@ -449,9 +476,7 @@ static __init int pid_namespaces_init(void)
 {
 	pid_ns_cachep = KMEM_CACHE(pid_namespace, SLAB_PANIC | SLAB_ACCOUNT);
 
-#ifdef CONFIG_CHECKPOINT_RESTORE
 	register_sysctl_init("kernel", pid_ns_ctl_table);
-#endif
 
 	register_pid_ns_sysctl_table_vm();
 	return 0;
