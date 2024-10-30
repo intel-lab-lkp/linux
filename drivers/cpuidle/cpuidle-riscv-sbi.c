@@ -513,11 +513,14 @@ static int sbi_cpuidle_probe(struct platform_device *pdev)
 		if (np &&
 		    of_property_present(np, "power-domains") &&
 		    of_property_present(np, "power-domain-names")) {
+			of_node_put(np);
 			continue;
 		} else {
 			sbi_cpuidle_use_osi = false;
+			of_node_put(np);
 			break;
 		}
+		of_node_put(np);
 	}
 
 	/* Populate generic power domains from DT nodes */
