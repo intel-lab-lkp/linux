@@ -1,0 +1,881 @@
+// SPDX-License-Identifier: GPL-2.0
+// Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
+
+#include <linux/kernel.h>
+#include <linux/skbuff.h>
+#include <linux/u64_stats_sync.h>
+
+#include "hinic3_nic_dev.h"
+#include "hinic3_nic_cfg.h"
+#include "hinic3_tx.h"
+
+#define MAX_PAYLOAD_OFFSET         221
+#define MIN_SKB_LEN                32
+
+#define TXQ_STATS_INC(txq, field) \
+do { \
+	u64_stats_update_begin(&(txq)->txq_stats.syncp); \
+	(txq)->txq_stats.field++; \
+	u64_stats_update_end(&(txq)->txq_stats.syncp); \
+} while (0)
+
+static void hinic3_txq_clean_stats(struct hinic3_txq_stats *txq_stats)
+{
+	u64_stats_update_begin(&txq_stats->syncp);
+	txq_stats->bytes = 0;
+	txq_stats->packets = 0;
+	txq_stats->busy = 0;
+	txq_stats->wake = 0;
+	txq_stats->dropped = 0;
+
+	txq_stats->skb_pad_err = 0;
+	txq_stats->frag_len_overflow = 0;
+	txq_stats->offload_cow_skb_err = 0;
+	txq_stats->map_frag_err = 0;
+	txq_stats->unknown_tunnel_pkt = 0;
+	txq_stats->frag_size_err = 0;
+	u64_stats_update_end(&txq_stats->syncp);
+}
+
+static void txq_stats_init(struct hinic3_txq *txq)
+{
+	struct hinic3_txq_stats *txq_stats = &txq->txq_stats;
+
+	u64_stats_init(&txq_stats->syncp);
+	hinic3_txq_clean_stats(txq_stats);
+}
+
+int hinic3_alloc_txqs(struct net_device *netdev)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	u16 q_id, num_txqs = nic_dev->max_qps;
+	struct pci_dev *pdev = nic_dev->pdev;
+	struct hinic3_txq *txq;
+	u64 txq_size;
+
+	txq_size = num_txqs * sizeof(*nic_dev->txqs);
+	if (!txq_size) {
+		dev_err(hwdev->dev, "Cannot allocate zero size txqs\n");
+		return -EINVAL;
+	}
+
+	nic_dev->txqs = kzalloc(txq_size, GFP_KERNEL);
+	if (!nic_dev->txqs)
+		return -ENOMEM;
+
+	for (q_id = 0; q_id < num_txqs; q_id++) {
+		txq = &nic_dev->txqs[q_id];
+		txq->netdev = netdev;
+		txq->q_id = q_id;
+		txq->q_depth = nic_dev->q_params.sq_depth;
+		txq->q_mask = nic_dev->q_params.sq_depth - 1;
+		txq->dev = &pdev->dev;
+
+		txq_stats_init(txq);
+	}
+
+	return 0;
+}
+
+void hinic3_free_txqs(struct net_device *netdev)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+
+	kfree(nic_dev->txqs);
+}
+
+static void hinic3_set_buf_desc(struct hinic3_sq_bufdesc *buf_descs,
+				dma_addr_t addr, u32 len)
+{
+	buf_descs->hi_addr = upper_32_bits(addr);
+	buf_descs->lo_addr = lower_32_bits(addr);
+	buf_descs->len  = len;
+}
+
+static int tx_map_skb(struct net_device *netdev, struct sk_buff *skb,
+		      struct hinic3_txq *txq,
+		      struct hinic3_tx_info *tx_info,
+		      struct hinic3_sq_wqe_combo *wqe_combo)
+{
+	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->ctrl_bd0;
+	struct hinic3_sq_bufdesc *buf_desc = wqe_combo->bds_head;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_dma_info *dma_info = tx_info->dma_info;
+	struct pci_dev *pdev = nic_dev->pdev;
+	skb_frag_t *frag;
+	u32 j, i;
+	int err;
+
+	dma_info[0].dma = dma_map_single(&pdev->dev, skb->data, skb_headlen(skb), DMA_TO_DEVICE);
+	if (dma_mapping_error(&pdev->dev, dma_info[0].dma)) {
+		TXQ_STATS_INC(txq, map_frag_err);
+		return -EFAULT;
+	}
+
+	dma_info[0].len = skb_headlen(skb);
+
+	wqe_desc->hi_addr = upper_32_bits(dma_info[0].dma);
+	wqe_desc->lo_addr = lower_32_bits(dma_info[0].dma);
+
+	wqe_desc->ctrl_len = dma_info[0].len;
+
+	for (i = 0; i < skb_shinfo(skb)->nr_frags;) {
+		frag = &(skb_shinfo(skb)->frags[i]);
+		if (unlikely(i == wqe_combo->first_bds_num))
+			buf_desc = wqe_combo->bds_sec2;
+
+		i++;
+		dma_info[i].dma = skb_frag_dma_map(&pdev->dev, frag, 0,
+						   skb_frag_size(frag),
+						   DMA_TO_DEVICE);
+		if (dma_mapping_error(&pdev->dev, dma_info[i].dma)) {
+			TXQ_STATS_INC(txq, map_frag_err);
+			i--;
+			err = -EFAULT;
+			goto err_frag_map;
+		}
+		dma_info[i].len = skb_frag_size(frag);
+
+		hinic3_set_buf_desc(buf_desc, dma_info[i].dma,
+				    dma_info[i].len);
+		buf_desc++;
+	}
+
+	return 0;
+
+err_frag_map:
+	for (j = 0; j < i;) {
+		j++;
+		dma_unmap_page(&pdev->dev, dma_info[j].dma,
+			       dma_info[j].len, DMA_TO_DEVICE);
+	}
+	dma_unmap_single(&pdev->dev, dma_info[0].dma, dma_info[0].len,
+			 DMA_TO_DEVICE);
+	return err;
+}
+
+static void tx_unmap_skb(struct net_device *netdev,
+			 struct sk_buff *skb,
+			 struct hinic3_dma_info *dma_info)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct pci_dev *pdev = nic_dev->pdev;
+	int i;
+
+	for (i = 0; i < skb_shinfo(skb)->nr_frags;) {
+		i++;
+		dma_unmap_page(&pdev->dev,
+			       dma_info[i].dma,
+			       dma_info[i].len, DMA_TO_DEVICE);
+	}
+
+	dma_unmap_single(&pdev->dev, dma_info[0].dma,
+			 dma_info[0].len, DMA_TO_DEVICE);
+}
+
+static void tx_free_skb(struct net_device *netdev,
+			struct hinic3_tx_info *tx_info)
+{
+	tx_unmap_skb(netdev, tx_info->skb, tx_info->dma_info);
+	dev_kfree_skb_any(tx_info->skb);
+	tx_info->skb = NULL;
+}
+
+static void free_all_tx_skbs(struct net_device *netdev, u32 sq_depth,
+			     struct hinic3_tx_info *tx_info_arr)
+{
+	struct hinic3_tx_info *tx_info;
+	u32 idx;
+
+	for (idx = 0; idx < sq_depth; idx++) {
+		tx_info = &tx_info_arr[idx];
+		if (tx_info->skb)
+			tx_free_skb(netdev, tx_info);
+	}
+}
+
+union hinic3_l4 {
+	struct tcphdr *tcp;
+	struct udphdr *udp;
+	unsigned char *hdr;
+};
+
+enum sq_l3_type {
+	UNKNOWN_L3TYPE               = 0,
+	IPV6_PKT                     = 1,
+	IPV4_PKT_NO_CHKSUM_OFFLOAD   = 2,
+	IPV4_PKT_WITH_CHKSUM_OFFLOAD = 3,
+};
+
+enum sq_l4offload_type {
+	OFFLOAD_DISABLE     = 0,
+	TCP_OFFLOAD_ENABLE  = 1,
+	SCTP_OFFLOAD_ENABLE = 2,
+	UDP_OFFLOAD_ENABLE  = 3,
+};
+
+/* initialize l4 offset and offload */
+static void get_inner_l4_info(struct sk_buff *skb, union hinic3_l4 *l4,
+			      u8 l4_proto, u32 *offset,
+			      enum sq_l4offload_type *l4_offload)
+{
+	switch (l4_proto) {
+	case IPPROTO_TCP:
+		*l4_offload = TCP_OFFLOAD_ENABLE;
+		/* To be same with TSO, payload offset begins from payload */
+		*offset = (l4->tcp->doff << TCP_HDR_DATA_OFF_UNIT_SHIFT) +
+			   TRANSPORT_OFFSET(l4->hdr, skb);
+		break;
+
+	case IPPROTO_UDP:
+		*l4_offload = UDP_OFFLOAD_ENABLE;
+		*offset = TRANSPORT_OFFSET(l4->hdr, skb);
+		break;
+	default:
+		*l4_offload = OFFLOAD_DISABLE;
+		*offset = 0;
+	}
+}
+
+static int hinic3_tx_csum(struct hinic3_txq *txq, struct hinic3_sq_task *task,
+			  struct sk_buff *skb)
+{
+	if (skb->ip_summed != CHECKSUM_PARTIAL)
+		return 0;
+
+	if (skb->encapsulation) {
+		union hinic3_ip ip;
+		u8 l4_proto;
+
+		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, TUNNEL_FLAG);
+
+		ip.hdr = skb_network_header(skb);
+		if (ip.v4->version == 4) {
+			l4_proto = ip.v4->protocol;
+		} else if (ip.v4->version == 6) {
+			union hinic3_l4 l4;
+			unsigned char *exthdr;
+			__be16 frag_off;
+
+			exthdr = ip.hdr + sizeof(*ip.v6);
+			l4_proto = ip.v6->nexthdr;
+			l4.hdr = skb_transport_header(skb);
+			if (l4.hdr != exthdr)
+				ipv6_skip_exthdr(skb, exthdr - skb->data,
+						 &l4_proto, &frag_off);
+		} else {
+			l4_proto = IPPROTO_RAW;
+		}
+
+		if (l4_proto != IPPROTO_UDP ||
+		    ((struct udphdr *)skb_transport_header(skb))->dest != VXLAN_OFFLOAD_PORT_LE) {
+			TXQ_STATS_INC(txq, unknown_tunnel_pkt);
+			/* Unsupported tunnel packet, disable csum offload */
+			skb_checksum_help(skb);
+			return 0;
+		}
+	}
+
+	task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, INNER_L4_EN);
+
+	return 1;
+}
+
+static void get_inner_l3_l4_type(struct sk_buff *skb, union hinic3_ip *ip,
+				 union hinic3_l4 *l4,
+				 enum sq_l3_type *l3_type, u8 *l4_proto)
+{
+	unsigned char *exthdr;
+	__be16 frag_off;
+
+	if (ip->v4->version == 4) {
+		*l3_type = IPV4_PKT_WITH_CHKSUM_OFFLOAD;
+		*l4_proto = ip->v4->protocol;
+	} else if (ip->v4->version == 6) {
+		*l3_type = IPV6_PKT;
+		exthdr = ip->hdr + sizeof(*ip->v6);
+		*l4_proto = ip->v6->nexthdr;
+		if (exthdr != l4->hdr) {
+			ipv6_skip_exthdr(skb, exthdr - skb->data,
+					 l4_proto, &frag_off);
+		}
+	} else {
+		*l3_type = UNKNOWN_L3TYPE;
+		*l4_proto = 0;
+	}
+}
+
+static void hinic3_set_tso_info(struct hinic3_sq_task *task, u32 *queue_info,
+				enum sq_l4offload_type l4_offload,
+				u32 offset, u32 mss)
+{
+	if (l4_offload == TCP_OFFLOAD_ENABLE) {
+		*queue_info |= SQ_CTRL_QUEUE_INFO_SET(1U, TSO);
+		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, INNER_L4_EN);
+	} else if (l4_offload == UDP_OFFLOAD_ENABLE) {
+		*queue_info |= SQ_CTRL_QUEUE_INFO_SET(1U, UFO);
+		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, INNER_L4_EN);
+	}
+
+	/* enable L3 calculation */
+	task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, INNER_L3_EN);
+
+	*queue_info |= SQ_CTRL_QUEUE_INFO_SET(offset >> 1, PLDOFF);
+
+	/* set MSS value */
+	*queue_info &= ~SQ_CTRL_QUEUE_INFO_MSS_MASK;
+	*queue_info |= SQ_CTRL_QUEUE_INFO_SET(mss, MSS);
+}
+
+static int hinic3_tso(struct hinic3_sq_task *task, u32 *queue_info,
+		      struct sk_buff *skb)
+{
+	enum sq_l4offload_type l4_offload;
+	enum sq_l3_type l3_type;
+	union hinic3_ip ip;
+	union hinic3_l4 l4;
+	u8 l4_proto;
+	u32 offset;
+	int err;
+
+	if (!skb_is_gso(skb))
+		return 0;
+
+	err = skb_cow_head(skb, 0);
+	if (err < 0)
+		return err;
+
+	if (skb->encapsulation) {
+		u32 gso_type = skb_shinfo(skb)->gso_type;
+		/* L3 checksum is always enabled */
+		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, OUT_L3_EN);
+		task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, TUNNEL_FLAG);
+
+		l4.hdr = skb_transport_header(skb);
+		ip.hdr = skb_network_header(skb);
+
+		if (gso_type & SKB_GSO_UDP_TUNNEL_CSUM) {
+			l4.udp->check = ~csum_magic(&ip, IPPROTO_UDP);
+			task->pkt_info0 |= SQ_TASK_INFO0_SET(1U, OUT_L4_EN);
+		}
+
+		ip.hdr = skb_inner_network_header(skb);
+		l4.hdr = skb_inner_transport_header(skb);
+	} else {
+		ip.hdr = skb_network_header(skb);
+		l4.hdr = skb_transport_header(skb);
+	}
+
+	get_inner_l3_l4_type(skb, &ip, &l4, &l3_type, &l4_proto);
+
+	if (l4_proto == IPPROTO_TCP)
+		l4.tcp->check = ~csum_magic(&ip, IPPROTO_TCP);
+
+	get_inner_l4_info(skb, &l4, l4_proto, &offset, &l4_offload);
+
+	hinic3_set_tso_info(task, queue_info, l4_offload, offset,
+			    skb_shinfo(skb)->gso_size);
+
+	return 1;
+}
+
+static void hinic3_set_vlan_tx_offload(struct hinic3_sq_task *task,
+				       u16 vlan_tag, u8 vlan_tpid)
+{
+	/* vlan_tpid: 0=select TPID0 in IPSU, 1=select TPID1 in IPSU
+	 * 2=select TPID2 in IPSU, 3=select TPID3 in IPSU,
+	 * 4=select TPID4 in IPSU
+	 */
+	task->vlan_offload = SQ_TASK_INFO3_SET(vlan_tag, VLAN_TAG) |
+			     SQ_TASK_INFO3_SET(vlan_tpid, VLAN_TPID) |
+			     SQ_TASK_INFO3_SET(1U, VLAN_TAG_VALID);
+}
+
+static u32 hinic3_tx_offload(struct sk_buff *skb, struct hinic3_sq_task *task,
+			     u32 *queue_info, struct hinic3_txq *txq)
+{
+	u32 offload = 0;
+	int tso_cs_en;
+
+	task->pkt_info0 = 0;
+	task->ip_identify = 0;
+	task->rsvd = 0;
+	task->vlan_offload = 0;
+
+	tso_cs_en = hinic3_tso(task, queue_info, skb);
+	if (tso_cs_en < 0) {
+		offload = TX_OFFLOAD_INVALID;
+		return offload;
+	} else if (tso_cs_en) {
+		offload |= TX_OFFLOAD_TSO;
+	} else {
+		tso_cs_en = hinic3_tx_csum(txq, task, skb);
+		if (tso_cs_en)
+			offload |= TX_OFFLOAD_CSUM;
+	}
+
+#define VLAN_INSERT_MODE_MAX 5
+	if (unlikely(skb_vlan_tag_present(skb))) {
+		/* select vlan insert mode by qid, default 802.1Q Tag type */
+		hinic3_set_vlan_tx_offload(task, skb_vlan_tag_get(skb),
+					   txq->q_id % VLAN_INSERT_MODE_MAX);
+		offload |= TX_OFFLOAD_VLAN;
+	}
+
+	if (unlikely(SQ_CTRL_QUEUE_INFO_GET(*queue_info, PLDOFF) >
+		     MAX_PAYLOAD_OFFSET)) {
+		offload = TX_OFFLOAD_INVALID;
+		return offload;
+	}
+
+	return offload;
+}
+
+static void get_pkt_stats(struct hinic3_txq *txq, struct sk_buff *skb)
+{
+	u32 hdr_len, tx_bytes;
+	unsigned short pkts;
+
+	if (skb_is_gso(skb)) {
+		hdr_len = (skb_shinfo(skb)->gso_segs - 1) * skb_tcp_all_headers(skb);
+		tx_bytes = skb->len + hdr_len;
+		pkts = skb_shinfo(skb)->gso_segs;
+	} else {
+		tx_bytes = skb->len > ETH_ZLEN ? skb->len : ETH_ZLEN;
+		pkts = 1;
+	}
+
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.bytes += tx_bytes;
+	txq->txq_stats.packets += pkts;
+	u64_stats_update_end(&txq->txq_stats.syncp);
+}
+
+static int hinic3_maybe_stop_tx(struct hinic3_txq *txq, u16 wqebb_cnt)
+{
+	if (likely(hinic3_wq_free_wqebbs(&txq->sq->wq) >= wqebb_cnt))
+		return 0;
+
+	/* We need to check again in a case another CPU has just
+	 * made room available.
+	 */
+	netif_stop_subqueue(txq->netdev, txq->q_id);
+
+	if (likely(hinic3_wq_free_wqebbs(&txq->sq->wq) < wqebb_cnt))
+		return -EBUSY;
+
+	netif_start_subqueue(txq->netdev, txq->q_id);
+
+	return 0;
+}
+
+static u16 hinic3_get_and_update_sq_owner(struct hinic3_io_queue *sq,
+					  u16 curr_pi, u16 wqebb_cnt)
+{
+	u16 owner = sq->owner;
+
+	if (unlikely(curr_pi + wqebb_cnt >= sq->wq.q_depth))
+		sq->owner = !sq->owner;
+
+	return owner;
+}
+
+static u16 hinic3_set_wqe_combo(struct hinic3_txq *txq,
+				struct hinic3_sq_wqe_combo *wqe_combo,
+				u32 offload, u16 num_sge, u16 *curr_pi)
+{
+	struct hinic3_sq_bufdesc *second_part_wqebbs_addr;
+	u16 first_part_wqebbs_num, tmp_pi;
+	struct hinic3_sq_bufdesc *wqe;
+
+	wqe_combo->ctrl_bd0 = hinic3_wq_get_one_wqebb(&txq->sq->wq, curr_pi);
+	if (!offload && num_sge == 1) {
+		wqe_combo->wqe_type = SQ_WQE_COMPACT_TYPE;
+		return hinic3_get_and_update_sq_owner(txq->sq, *curr_pi, 1);
+	}
+
+	wqe_combo->wqe_type = SQ_WQE_EXTENDED_TYPE;
+
+	if (offload) {
+		wqe_combo->task = hinic3_wq_get_one_wqebb(&txq->sq->wq, &tmp_pi);
+		wqe_combo->task_type = SQ_WQE_TASKSECT_16BYTES;
+	} else {
+		wqe_combo->task_type = SQ_WQE_TASKSECT_46BITS;
+	}
+
+	if (num_sge > 1) {
+		/* first wqebb contain bd0, and bd size is equal to sq wqebb
+		 * size, so we use (num_sge - 1) as wanted weqbb_cnt
+		 */
+		hinic3_wq_get_multi_wqebbs(&txq->sq->wq, num_sge - 1, &tmp_pi,
+					   &wqe,
+					   &second_part_wqebbs_addr,
+					   &first_part_wqebbs_num);
+		wqe_combo->bds_head = wqe;
+		wqe_combo->bds_sec2 = second_part_wqebbs_addr;
+		wqe_combo->first_bds_num = first_part_wqebbs_num;
+	}
+
+	return hinic3_get_and_update_sq_owner(txq->sq, *curr_pi,
+					      num_sge + (u16)!!offload);
+}
+
+static void hinic3_prepare_sq_ctrl(struct hinic3_sq_wqe_combo *wqe_combo,
+				   u32 queue_info, int nr_descs, u16 owner)
+{
+	struct hinic3_sq_wqe_desc *wqe_desc = wqe_combo->ctrl_bd0;
+
+	if (wqe_combo->wqe_type == SQ_WQE_COMPACT_TYPE) {
+		wqe_desc->ctrl_len |=
+		    SQ_CTRL_SET(SQ_NORMAL_WQE, DATA_FORMAT) |
+		    SQ_CTRL_SET(wqe_combo->wqe_type, EXTENDED) |
+		    SQ_CTRL_SET(owner, OWNER);
+
+		/* compact wqe queue_info will transfer to chip */
+		wqe_desc->queue_info = 0;
+		return;
+	}
+
+	wqe_desc->ctrl_len |= SQ_CTRL_SET(nr_descs, BUFDESC_NUM) |
+			      SQ_CTRL_SET(wqe_combo->task_type, TASKSECT_LEN) |
+			      SQ_CTRL_SET(SQ_NORMAL_WQE, DATA_FORMAT) |
+			      SQ_CTRL_SET(wqe_combo->wqe_type, EXTENDED) |
+			      SQ_CTRL_SET(owner, OWNER);
+
+	wqe_desc->queue_info = queue_info;
+	wqe_desc->queue_info |= SQ_CTRL_QUEUE_INFO_SET(1U, UC);
+
+	if (!SQ_CTRL_QUEUE_INFO_GET(wqe_desc->queue_info, MSS)) {
+		wqe_desc->queue_info |=
+		    SQ_CTRL_QUEUE_INFO_SET(TX_MSS_DEFAULT, MSS);
+	} else if (SQ_CTRL_QUEUE_INFO_GET(wqe_desc->queue_info, MSS) <
+		   TX_MSS_MIN) {
+		/* mss should not be less than 80 */
+		wqe_desc->queue_info &= ~SQ_CTRL_QUEUE_INFO_MSS_MASK;
+		wqe_desc->queue_info |= SQ_CTRL_QUEUE_INFO_SET(TX_MSS_MIN, MSS);
+	}
+}
+
+static netdev_tx_t hinic3_send_one_skb(struct sk_buff *skb,
+				       struct net_device *netdev,
+				       struct hinic3_txq *txq)
+{
+	struct hinic3_sq_wqe_combo wqe_combo = {};
+	struct hinic3_tx_info *tx_info;
+	u32 offload, queue_info = 0;
+	struct hinic3_sq_task task;
+	u16 wqebb_cnt, num_sge;
+	u16 saved_wq_prod_idx;
+	u16 owner, pi = 0;
+	u8 saved_sq_owner;
+	int err;
+
+	if (unlikely(skb->len < MIN_SKB_LEN)) {
+		if (skb_pad(skb, MIN_SKB_LEN - skb->len)) {
+			TXQ_STATS_INC(txq, skb_pad_err);
+			goto err_tx_skb_pad;
+		}
+
+		skb->len = MIN_SKB_LEN;
+	}
+
+	num_sge = skb_shinfo(skb)->nr_frags + 1;
+	/* assume normal wqe format + 1 wqebb for task info */
+	wqebb_cnt = num_sge + 1;
+	if (unlikely(hinic3_maybe_stop_tx(txq, wqebb_cnt))) {
+		TXQ_STATS_INC(txq, busy);
+		return NETDEV_TX_BUSY;
+	}
+
+	offload = hinic3_tx_offload(skb, &task, &queue_info, txq);
+	if (unlikely(offload == TX_OFFLOAD_INVALID)) {
+		TXQ_STATS_INC(txq, offload_cow_skb_err);
+		goto tx_drop_pkts;
+	} else if (!offload) {
+		wqebb_cnt -= 1;
+		if (unlikely(num_sge == 1 && skb->len > COMPACET_WQ_SKB_MAX_LEN))
+			goto tx_drop_pkts;
+	}
+
+	saved_wq_prod_idx = txq->sq->wq.prod_idx;
+	saved_sq_owner = txq->sq->owner;
+
+	owner = hinic3_set_wqe_combo(txq, &wqe_combo, offload, num_sge, &pi);
+	if (offload)
+		*wqe_combo.task = task;
+
+	tx_info = &txq->tx_info[pi];
+	tx_info->skb = skb;
+	tx_info->wqebb_cnt = wqebb_cnt;
+
+	err = tx_map_skb(netdev, skb, txq, tx_info, &wqe_combo);
+	if (err) {
+		/* Rollback work queue to reclaim the wqebb we did not use */
+		txq->sq->wq.prod_idx = saved_wq_prod_idx;
+		txq->sq->owner = saved_sq_owner;
+		goto tx_drop_pkts;
+	}
+
+	get_pkt_stats(txq, skb);
+	hinic3_prepare_sq_ctrl(&wqe_combo, queue_info, num_sge, owner);
+	hinic3_write_db(txq->sq, 0, SQ_CFLAG_DP,
+			hinic3_get_sq_local_pi(txq->sq));
+
+	return NETDEV_TX_OK;
+
+tx_drop_pkts:
+	dev_kfree_skb_any(skb);
+
+err_tx_skb_pad:
+	TXQ_STATS_INC(txq, dropped);
+
+	return NETDEV_TX_OK;
+}
+
+netdev_tx_t hinic3_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	u16 q_id = skb_get_queue_mapping(skb);
+	struct hinic3_txq *txq;
+
+	if (unlikely(!netif_carrier_ok(netdev))) {
+		dev_kfree_skb_any(skb);
+		HINIC3_NIC_STATS_INC(nic_dev, tx_carrier_off_drop);
+		return NETDEV_TX_OK;
+	}
+
+	if (unlikely(q_id >= nic_dev->q_params.num_qps)) {
+		txq = &nic_dev->txqs[0];
+		HINIC3_NIC_STATS_INC(nic_dev, tx_invalid_qid);
+		goto tx_drop_pkts;
+	}
+	txq = &nic_dev->txqs[q_id];
+
+	return hinic3_send_one_skb(skb, netdev, txq);
+
+tx_drop_pkts:
+	dev_kfree_skb_any(skb);
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.dropped++;
+	u64_stats_update_end(&txq->txq_stats.syncp);
+
+	return NETDEV_TX_OK;
+}
+
+static bool is_hw_complete_sq_process(struct hinic3_io_queue *sq)
+{
+	u16 sw_pi, hw_ci;
+
+	sw_pi = hinic3_get_sq_local_pi(sq);
+	hw_ci = hinic3_get_sq_hw_ci(sq);
+
+	return sw_pi == hw_ci;
+}
+
+#define HINIC3_FLUSH_QUEUE_TIMEOUT	1000
+static int hinic3_stop_sq(struct hinic3_txq *txq)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(txq->netdev);
+	unsigned long timeout;
+	int err;
+
+	timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
+	do {
+		if (is_hw_complete_sq_process(txq->sq))
+			return 0;
+
+		usleep_range(900, 1000);
+	} while (time_before(jiffies, timeout));
+
+	/* force hardware to drop packets */
+	timeout = msecs_to_jiffies(HINIC3_FLUSH_QUEUE_TIMEOUT) + jiffies;
+	do {
+		if (is_hw_complete_sq_process(txq->sq))
+			return 0;
+
+		err = hinic3_force_drop_tx_pkt(nic_dev->hwdev);
+		if (err)
+			break;
+
+		usleep_range(9900, 10000);
+	} while (time_before(jiffies, timeout));
+
+	if (is_hw_complete_sq_process(txq->sq))
+		return 0;
+
+	return -EFAULT;
+}
+
+/* packet transmission should be stopped before calling this function */
+int hinic3_flush_txqs(struct net_device *netdev)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	u16 qid;
+	int err;
+
+	for (qid = 0; qid < nic_dev->q_params.num_qps; qid++) {
+		err = hinic3_stop_sq(&nic_dev->txqs[qid]);
+		if (err)
+			netdev_err(netdev, "Failed to stop sq%u\n", qid);
+	}
+
+	return 0;
+}
+
+#define HINIC3_BDS_PER_SQ_WQEBB \
+	(HINIC3_SQ_WQEBB_SIZE / sizeof(struct hinic3_sq_bufdesc))
+
+int hinic3_alloc_txqs_res(struct net_device *netdev, u16 num_sq,
+			  u32 sq_depth, struct hinic3_dyna_txq_res *txqs_res)
+{
+	struct hinic3_dyna_txq_res *tqres;
+	int idx, i;
+	u64 size;
+
+	for (idx = 0; idx < num_sq; idx++) {
+		tqres = &txqs_res[idx];
+
+		size = sizeof(*tqres->tx_info) * sq_depth;
+		tqres->tx_info = kzalloc(size, GFP_KERNEL);
+		if (!tqres->tx_info)
+			goto err_out;
+
+		size = sizeof(*tqres->bds) *
+			(sq_depth * HINIC3_BDS_PER_SQ_WQEBB +
+			 HINIC3_MAX_SQ_SGE);
+		tqres->bds = kzalloc(size, GFP_KERNEL);
+		if (!tqres->bds) {
+			kfree(tqres->tx_info);
+			goto err_out;
+		}
+	}
+
+	return 0;
+
+err_out:
+	for (i = 0; i < idx; i++) {
+		tqres = &txqs_res[i];
+
+		kfree(tqres->bds);
+		kfree(tqres->tx_info);
+	}
+
+	return -ENOMEM;
+}
+
+void hinic3_free_txqs_res(struct net_device *netdev, u16 num_sq,
+			  u32 sq_depth, struct hinic3_dyna_txq_res *txqs_res)
+{
+	struct hinic3_dyna_txq_res *tqres;
+	int idx;
+
+	for (idx = 0; idx < num_sq; idx++) {
+		tqres = &txqs_res[idx];
+
+		free_all_tx_skbs(netdev, sq_depth, tqres->tx_info);
+		kfree(tqres->bds);
+		kfree(tqres->tx_info);
+	}
+}
+
+int hinic3_configure_txqs(struct net_device *netdev, u16 num_sq,
+			  u32 sq_depth, struct hinic3_dyna_txq_res *txqs_res)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_dyna_txq_res *tqres;
+	struct hinic3_txq *txq;
+	u16 q_id;
+	u32 idx;
+
+	for (q_id = 0; q_id < num_sq; q_id++) {
+		txq = &nic_dev->txqs[q_id];
+		tqres = &txqs_res[q_id];
+
+		txq->q_depth = sq_depth;
+		txq->q_mask = sq_depth - 1;
+
+		txq->tx_info = tqres->tx_info;
+		for (idx = 0; idx < sq_depth; idx++)
+			txq->tx_info[idx].dma_info =
+				&tqres->bds[idx * HINIC3_BDS_PER_SQ_WQEBB];
+
+		txq->sq = &nic_dev->nic_io->sq[q_id];
+	}
+
+	return 0;
+}
+
+void hinic3_txq_get_stats(struct hinic3_txq *txq,
+			  struct hinic3_txq_stats *stats)
+{
+	struct hinic3_txq_stats *txq_stats = &txq->txq_stats;
+	unsigned int start;
+
+	u64_stats_update_begin(&stats->syncp);
+	do {
+		start = u64_stats_fetch_begin(&txq_stats->syncp);
+		stats->bytes = txq_stats->bytes;
+		stats->packets = txq_stats->packets;
+		stats->busy = txq_stats->busy;
+		stats->wake = txq_stats->wake;
+		stats->dropped = txq_stats->dropped;
+	} while (u64_stats_fetch_retry(&txq_stats->syncp, start));
+	u64_stats_update_end(&stats->syncp);
+}
+
+int hinic3_tx_poll(struct hinic3_txq *txq, int budget)
+{
+	struct net_device *netdev = txq->netdev;
+	u16 hw_ci, sw_ci, q_id = txq->sq->q_id;
+	struct hinic3_nic_dev *nic_dev;
+	struct hinic3_tx_info *tx_info;
+	u16 wqebb_cnt = 0;
+	int pkts = 0;
+	u64 wake = 0;
+
+	nic_dev = netdev_priv(netdev);
+	hw_ci = hinic3_get_sq_hw_ci(txq->sq);
+	dma_rmb();
+	sw_ci = hinic3_get_sq_local_ci(txq->sq);
+
+	do {
+		tx_info = &txq->tx_info[sw_ci];
+
+		/* Did all wqebb of this wqe complete? */
+		if (hw_ci == sw_ci ||
+		    ((hw_ci - sw_ci) & txq->q_mask) < tx_info->wqebb_cnt)
+			break;
+
+		sw_ci = (sw_ci + tx_info->wqebb_cnt) & (u16)txq->q_mask;
+		prefetch(&txq->tx_info[sw_ci]);
+
+		wqebb_cnt += tx_info->wqebb_cnt;
+		pkts++;
+
+		tx_free_skb(netdev, tx_info);
+	} while (likely(pkts < budget));
+
+	hinic3_wq_put_wqebbs(&txq->sq->wq, wqebb_cnt);
+
+	if (unlikely(__netif_subqueue_stopped(netdev, q_id) &&
+		     hinic3_wq_free_wqebbs(&txq->sq->wq) >= 1 &&
+		     test_bit(HINIC3_INTF_UP, &nic_dev->flags))) {
+		struct netdev_queue *netdev_txq =
+				netdev_get_tx_queue(netdev, q_id);
+
+		__netif_tx_lock(netdev_txq, smp_processor_id());
+		/* avoid re-waking subqueue with xmit_frame */
+		if (__netif_subqueue_stopped(netdev, q_id)) {
+			netif_wake_subqueue(netdev, q_id);
+			wake++;
+		}
+		__netif_tx_unlock(netdev_txq);
+	}
+
+	u64_stats_update_begin(&txq->txq_stats.syncp);
+	txq->txq_stats.wake += wake;
+	u64_stats_update_end(&txq->txq_stats.syncp);
+
+	return pkts;
+}
