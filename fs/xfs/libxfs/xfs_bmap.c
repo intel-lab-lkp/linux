@@ -3531,12 +3531,14 @@ xfs_bmap_btalloc_at_eof(
 	int			error;
 
 	/*
-	 * If there are already extents in the file, try an exact EOF block
-	 * allocation to extend the file as a contiguous extent. If that fails,
-	 * or it's the first allocation in a file, just try for a stripe aligned
-	 * allocation.
+	 * If there are already extents in the file, and xfs_bmap_adjacent() has
+	 * given a better blkno, try an exact EOF block allocation to extend the
+	 * file as a contiguous extent. If that fails, or it's the first
+	 * allocation in a file, just try for a stripe aligned allocation.
 	 */
-	if (ap->offset) {
+	if (ap->prev.br_startoff != NULLFILEOFF &&
+	     !isnullstartblock(ap->prev.br_startblock) &&
+	     xfs_bmap_adjacent_valid(ap, ap->blkno, ap->prev.br_startblock)) {
 		xfs_extlen_t	nextminlen = 0;
 
 		/*
