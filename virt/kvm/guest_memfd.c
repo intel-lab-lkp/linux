@@ -96,6 +96,131 @@ out:
 	return r;
 }
 
+/*
+ * Updates the range [@start, @end] in @gmem_priv's direct map state xarray to be @state,
+ * e.g. erasing entries in this range if @state is the default state, and creating
+ * entries otherwise.
+ *
+ * Assumes the xa_lock is held.
+ */
+static int __kvm_gmem_update_xarray(struct kvm_gmem_inode_private *gmem_priv, pgoff_t start,
+				    pgoff_t end, bool state)
+{
+	struct xarray *xa = &gmem_priv->direct_map_state;
+	int r = 0;
+
+	/*
+	 * Cannot use xa_store_range, as multi-indexes cannot easily
+	 * be partially updated.
+	 */
+	for (pgoff_t index = start; index < end; ++index) {
+		if (state == gmem_priv->default_direct_map_state)
+			__xa_erase(xa, index);
+		else
+			/* don't care _what_ we store in the xarray, only care about presence */
+			__xa_store(xa, index, gmem_priv, GFP_KERNEL);
+
+		r = xa_err(xa);
+		if (r)
+			goto out;
+	}
+
+out:
+	return r;
+}
+
+static int __kvm_gmem_folio_set_direct_map(struct folio *folio, pgoff_t start, pgoff_t end,
+					   bool state)
+{
+	unsigned long npages = end - start + 1;
+	struct page *first_page = folio_file_page(folio, start);
+
+	int r = set_direct_map_valid_noflush(first_page, npages, state);
+
+	flush_tlb_kernel_range((unsigned long)page_address(first_page),
+			       (unsigned long)page_address(first_page) +
+				       npages * PAGE_SIZE);
+	return r;
+}
+
+/*
+ * Updates the direct map status for the given range from @start to @end (inclusive), returning
+ * -EINVAL if this range is not completely contained within @folio. Also updates the
+ * xarray stored in the private data of the inode @folio is attached to.
+ *
+ * Takes and drops the folio lock.
+ */
+static __always_unused int kvm_gmem_folio_set_direct_map(struct folio *folio, pgoff_t start,
+								 pgoff_t end, bool state)
+{
+	struct inode *inode = folio_inode(folio);
+	struct kvm_gmem_inode_private *gmem_priv = inode->i_private;
+	int r = -EINVAL;
+
+	if (!folio_contains(folio, start) || !folio_contains(folio, end))
+		goto out;
+
+	xa_lock(&gmem_priv->direct_map_state);
+	r = __kvm_gmem_update_xarray(gmem_priv, start, end, state);
+	if (r)
+		goto unlock_xa;
+
+	folio_lock(folio);
+	r = __kvm_gmem_folio_set_direct_map(folio, start, end, state);
+	folio_unlock(folio);
+
+unlock_xa:
+	xa_unlock(&gmem_priv->direct_map_state);
+out:
+	return r;
+}
+
+/*
+ * Updates the direct map status for the given range from @start to @end (inclusive)
+ * of @inode. Folios in this range have their direct map entries reconfigured,
+ * and the xarray in the @inode's private data is updated.
+ */
+static __always_unused int kvm_gmem_set_direct_map(struct inode *inode, pgoff_t start,
+							   pgoff_t end, bool state)
+{
+	struct kvm_gmem_inode_private *gmem_priv = inode->i_private;
+	struct folio_batch fbatch;
+	pgoff_t index = start;
+	unsigned int count, i;
+	int r = 0;
+
+	xa_lock(&gmem_priv->direct_map_state);
+
+	r = __kvm_gmem_update_xarray(gmem_priv, start, end, state);
+	if (r)
+		goto out;
+
+	folio_batch_init(&fbatch);
+	while (!filemap_get_folios(inode->i_mapping, &index, end, &fbatch) && !r) {
+		count = folio_batch_count(&fbatch);
+		for (i = 0; i < count; i++) {
+			struct folio *folio = fbatch.folios[i];
+			pgoff_t folio_start = max(folio_index(folio), start);
+			pgoff_t folio_end =
+				min(folio_index(folio) + folio_nr_pages(folio),
+				    end);
+
+			folio_lock(folio);
+			r = __kvm_gmem_folio_set_direct_map(folio, folio_start,
+							    folio_end, state);
+			folio_unlock(folio);
+
+			if (r)
+				break;
+		}
+		folio_batch_release(&fbatch);
+	}
+
+	xa_unlock(&gmem_priv->direct_map_state);
+out:
+	return r;
+}
+
 /**
  * folio_file_pfn - like folio_file_page, but return a pfn.
  * @folio: The folio which contains this index.
