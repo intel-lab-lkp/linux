@@ -10,6 +10,7 @@
  *   Dirk Behme <Dirk.Behme@gmail.com>
  */
 
+#include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
@@ -117,6 +118,8 @@ struct davinci_nand_info {
 	uint32_t		mask_cle;
 
 	uint32_t		core_chipsel;
+
+	struct clk		*clk;
 };
 
 static DEFINE_SPINLOCK(davinci_nand_lock);
@@ -820,6 +823,12 @@ static int nand_davinci_probe(struct platform_device *pdev)
 	if (!base) {
 		dev_err(&pdev->dev, "ioremap failed for resource %pR\n", res2);
 		return -EADDRNOTAVAIL;
+	}
+
+	info->clk = devm_clk_get(&pdev->dev, "aemif");
+	if (IS_ERR(info->clk)) {
+		dev_err(&pdev->dev, "failed to get clock %ld", PTR_ERR(info->clk));
+		return PTR_ERR(info->clk);
 	}
 
 	info->pdev		= pdev;
