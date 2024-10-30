@@ -144,7 +144,6 @@ struct exynos_ufs_uic_attr {
 	/* RX Attributes */
 	unsigned int rx_filler_enable;
 	unsigned int rx_dif_p_nsec;
-	unsigned int rx_hibern8_wait_nsec;
 	unsigned int rx_base_unit_nsec;
 	unsigned int rx_gran_unit_nsec;
 	unsigned int rx_sleep_cnt;
@@ -199,7 +198,6 @@ struct ufs_phy_time_cfg {
 	u32 tx_gran_n_val;
 	u32 tx_sleep_cnt;
 	u32 rx_linereset;
-	u32 rx_hibern8_wait;
 	u32 rx_base_n_val;
 	u32 rx_gran_n_val;
 	u32 rx_sleep_cnt;

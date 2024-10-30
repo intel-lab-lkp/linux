@@ -559,8 +559,6 @@ static void exynos_ufs_specify_phy_time_attr(struct exynos_ufs *ufs)
 
 	t_cfg->rx_linereset =
 		exynos_ufs_calc_time_cntr(ufs, attr->rx_dif_p_nsec);
-	t_cfg->rx_hibern8_wait =
-		exynos_ufs_calc_time_cntr(ufs, attr->rx_hibern8_wait_nsec);
 	t_cfg->rx_base_n_val =
 		exynos_ufs_calc_time_cntr(ufs, attr->rx_base_unit_nsec);
 	t_cfg->rx_gran_n_val =
@@ -1975,7 +1973,6 @@ static struct exynos_ufs_uic_attr exynos7_uic_attr = {
 	.tx_min_activatetime		= 0xa,
 	.rx_filler_enable		= 0x2,
 	.rx_dif_p_nsec			= 1000000,	/* unit: ns */
-	.rx_hibern8_wait_nsec		= 4000000,	/* unit: ns */
 	.rx_base_unit_nsec		= 100000,	/* unit: ns */
 	.rx_gran_unit_nsec		= 4000,		/* unit: ns */
 	.rx_sleep_cnt			= 1280,		/* unit: ns */
@@ -2050,7 +2047,6 @@ static struct exynos_ufs_uic_attr gs101_uic_attr = {
 	.tx_min_activatetime		= 0xa,
 	.rx_filler_enable		= 0x2,
 	.rx_dif_p_nsec			= 1000000,	/* unit: ns */
-	.rx_hibern8_wait_nsec		= 4000000,	/* unit: ns */
 	.rx_base_unit_nsec		= 100000,	/* unit: ns */
 	.rx_gran_unit_nsec		= 4000,		/* unit: ns */
 	.rx_sleep_cnt			= 1280,		/* unit: ns */
@@ -2077,7 +2073,6 @@ static struct exynos_ufs_uic_attr fsd_uic_attr = {
 	.tx_min_activatetime		= 0xa,
 	.rx_filler_enable		= 0x2,
 	.rx_dif_p_nsec			= 1000000,	/* unit: ns */
-	.rx_hibern8_wait_nsec		= 4000000,	/* unit: ns */
 	.rx_base_unit_nsec		= 100000,	/* unit: ns */
 	.rx_gran_unit_nsec		= 4000,		/* unit: ns */
 	.rx_sleep_cnt			= 1280,		/* unit: ns */
