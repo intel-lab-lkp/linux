@@ -105,6 +105,7 @@ struct rtl_vendor_cmd {
 
 enum {
 	REALTEK_ALT6_CONTINUOUS_TX_CHIP,
+	REALTEK_ALT6_FORCE,
 
 	__REALTEK_NUM_FLAGS,
 };
