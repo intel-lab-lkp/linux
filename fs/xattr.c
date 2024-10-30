@@ -1015,7 +1015,7 @@ generic_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 			return err;
 	}
 
-	return err ? err : buffer_size - remaining_size;
+	return buffer_size - remaining_size;
 }
 EXPORT_SYMBOL(generic_listxattr);
 
