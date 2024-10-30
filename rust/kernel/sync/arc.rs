@@ -148,9 +148,10 @@ impl<T: ?Sized> ArcInner<T> {
         let refcount_layout = Layout::new::<bindings::refcount_t>();
         // SAFETY: The caller guarantees that the pointer is valid.
         let val_layout = Layout::for_value(unsafe { &*ptr });
+        let val_offset = refcount_layout.extend(val_layout);
         // SAFETY: We're computing the layout of a real struct that existed when compiling this
         // binary, so its layout is not so large that it can trigger arithmetic overflow.
-        let val_offset = unsafe { refcount_layout.extend(val_layout).unwrap_unchecked().1 };
+        let (_, val_offset) = unsafe { val_offset.unwrap_unchecked() };
 
         // Pointer casts leave the metadata unchanged. This is okay because the metadata of `T` and
         // `ArcInner<T>` is the same since `ArcInner` is a struct with `T` as its last field.
@@ -164,9 +165,10 @@ impl<T: ?Sized> ArcInner<T> {
         // still valid.
         let ptr = unsafe { ptr.byte_sub(val_offset) };
 
+        let ptr = ptr.cast_mut();
         // SAFETY: The pointer can't be null since you can't have an `ArcInner<T>` value at the null
         // address.
-        unsafe { NonNull::new_unchecked(ptr.cast_mut()) }
+        unsafe { NonNull::new_unchecked(ptr) }
     }
 }
 
@@ -201,10 +203,11 @@ impl<T> Arc<T> {
         };
 
         let inner = KBox::new(value, flags)?;
+        let inner = KBox::leak(inner).into();
 
         // SAFETY: We just created `inner` with a reference count of 1, which is owned by the new
         // `Arc` object.
-        Ok(unsafe { Self::from_inner(KBox::leak(inner).into()) })
+        Ok(unsafe { Self::from_inner(inner) })
     }
 }
 
@@ -333,13 +336,15 @@ impl<T: 'static> ForeignOwnable for Arc<T> {
     type Borrowed<'a> = ArcBorrow<'a, T>;
 
     fn into_foreign(self) -> *const core::ffi::c_void {
-        ManuallyDrop::new(self).ptr.as_ptr() as _
+        ManuallyDrop::new(self).ptr.as_ptr().cast_const().cast()
     }
 
     unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> ArcBorrow<'a, T> {
+        let ptr = ptr.cast_mut().cast();
+
         // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
         // call to `Self::into_foreign`.
-        let inner = unsafe { NonNull::new_unchecked(ptr as _) };
+        let inner = unsafe { NonNull::new_unchecked(ptr) };
 
         // SAFETY: The safety requirements of `from_foreign` ensure that the object remains alive
         // for the lifetime of the returned value.
@@ -347,9 +352,11 @@ impl<T: 'static> ForeignOwnable for Arc<T> {
     }
 
     unsafe fn from_foreign(ptr: *const core::ffi::c_void) -> Self {
+        let ptr = ptr.cast_mut().cast();
+
         // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
         // call to `Self::into_foreign`.
-        let inner = unsafe { NonNull::new_unchecked(ptr as _) };
+        let inner = unsafe { NonNull::new_unchecked(ptr) };
 
         // SAFETY: By the safety requirement of this function, we know that `ptr` came from
         // a previous call to `Arc::into_foreign`, which guarantees that `ptr` is valid and
@@ -376,10 +383,14 @@ impl<T: ?Sized> AsRef<T> for Arc<T> {
 
 impl<T: ?Sized> Clone for Arc<T> {
     fn clone(&self) -> Self {
+        // SAFETY: By the type invariant, there is necessarily a reference to the object, so it is
+        // safe to dereference it.
+        let refcount = unsafe { self.ptr.as_ref() }.refcount.get();
+
         // INVARIANT: C `refcount_inc` saturates the refcount, so it cannot overflow to zero.
         // SAFETY: By the type invariant, there is necessarily a reference to the object, so it is
         // safe to increment the refcount.
-        unsafe { bindings::refcount_inc(self.ptr.as_ref().refcount.get()) };
+        unsafe { bindings::refcount_inc(refcount) };
 
         // SAFETY: We just incremented the refcount. This increment is now owned by the new `Arc`.
         unsafe { Self::from_inner(self.ptr) }
@@ -399,10 +410,11 @@ impl<T: ?Sized> Drop for Arc<T> {
         // SAFETY: Also by the type invariant, we are allowed to decrement the refcount.
         let is_zero = unsafe { bindings::refcount_dec_and_test(refcount) };
         if is_zero {
+            let ptr = self.ptr.as_ptr();
             // The count reached zero, we must free the memory.
             //
             // SAFETY: The pointer was initialised from the result of `KBox::leak`.
-            unsafe { drop(KBox::from_raw(self.ptr.as_ptr())) };
+            unsafe { drop(KBox::from_raw(ptr)) };
         }
     }
 }
@@ -550,7 +562,7 @@ impl<T: ?Sized> Deref for ArcBorrow<'_, T> {
     fn deref(&self) -> &Self::Target {
         // SAFETY: By the type invariant, the underlying object is still alive with no mutable
         // references to it, so it is safe to create a shared reference.
-        unsafe { &self.inner.as_ref().data }
+        &unsafe { self.inner.as_ref() }.data
     }
 }
 
@@ -652,11 +664,11 @@ impl<T> UniqueArc<T> {
             }? AllocError),
             flags,
         )?;
-        Ok(UniqueArc {
-            // INVARIANT: The newly-created object has a refcount of 1.
-            // SAFETY: The pointer from the `KBox` is valid.
-            inner: unsafe { Arc::from_inner(KBox::leak(inner).into()) },
-        })
+        let inner = KBox::leak(inner).into();
+        // INVARIANT: The newly-created object has a refcount of 1.
+        // SAFETY: The pointer from the `KBox` is valid.
+        let inner = unsafe { Arc::from_inner(inner) };
+        Ok(UniqueArc { inner })
     }
 }
 
@@ -675,18 +687,18 @@ impl<T> UniqueArc<MaybeUninit<T>> {
     /// The caller guarantees that the value behind this pointer has been initialized. It is
     /// *immediate* UB to call this when the value is not initialized.
     pub unsafe fn assume_init(self) -> UniqueArc<T> {
-        let inner = ManuallyDrop::new(self).inner.ptr;
-        UniqueArc {
-            // SAFETY: The new `Arc` is taking over `ptr` from `self.inner` (which won't be
-            // dropped). The types are compatible because `MaybeUninit<T>` is compatible with `T`.
-            inner: unsafe { Arc::from_inner(inner.cast()) },
-        }
+        let inner = ManuallyDrop::new(self).inner.ptr.cast();
+        // SAFETY: The new `Arc` is taking over `ptr` from `self.inner` (which won't be
+        // dropped). The types are compatible because `MaybeUninit<T>` is compatible with `T`.
+        let inner = unsafe { Arc::from_inner(inner) };
+        UniqueArc { inner }
     }
 
     /// Initialize `self` using the given initializer.
     pub fn init_with<E>(mut self, init: impl Init<T, E>) -> core::result::Result<UniqueArc<T>, E> {
+        let ptr = self.as_mut_ptr();
         // SAFETY: The supplied pointer is valid for initialization.
-        match unsafe { init.__init(self.as_mut_ptr()) } {
+        match unsafe { init.__init(ptr) } {
             // SAFETY: Initialization completed successfully.
             Ok(()) => Ok(unsafe { self.assume_init() }),
             Err(err) => Err(err),
@@ -698,9 +710,10 @@ impl<T> UniqueArc<MaybeUninit<T>> {
         mut self,
         init: impl PinInit<T, E>,
     ) -> core::result::Result<Pin<UniqueArc<T>>, E> {
+        let ptr = self.as_mut_ptr();
         // SAFETY: The supplied pointer is valid for initialization and we will later pin the value
         // to ensure it does not move.
-        match unsafe { init.__pinned_init(self.as_mut_ptr()) } {
+        match unsafe { init.__pinned_init(ptr) } {
             // SAFETY: Initialization completed successfully.
             Ok(()) => Ok(unsafe { self.assume_init() }.into()),
             Err(err) => Err(err),
@@ -729,7 +742,7 @@ impl<T: ?Sized> DerefMut for UniqueArc<T> {
         // SAFETY: By the `Arc` type invariant, there is necessarily a reference to the object, so
         // it is safe to dereference it. Additionally, we know there is only one reference when
         // it's inside a `UniqueArc`, so it is safe to get a mutable reference.
-        unsafe { &mut self.inner.ptr.as_mut().data }
+        &mut unsafe { self.inner.ptr.as_mut() }.data
     }
 }
 

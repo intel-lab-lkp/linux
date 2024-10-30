@@ -182,12 +182,12 @@ where
     ///
     /// Callers must ensure that the value inside of `b` is in an initialized state.
     pub unsafe fn assume_init(self) -> Box<T, A> {
-        let raw = Self::into_raw(self);
+        let raw = Self::into_raw(self).cast();
 
         // SAFETY: `raw` comes from a previous call to `Box::into_raw`. By the safety requirements
         // of this function, the value inside the `Box` is in an initialized state. Hence, it is
         // safe to reconstruct the `Box` as `Box<T, A>`.
-        unsafe { Box::from_raw(raw.cast()) }
+        unsafe { Box::from_raw(raw) }
     }
 
     /// Writes the value and converts to `Box<T, A>`.
@@ -247,10 +247,10 @@ where
 
     /// Forgets the contents (does not run the destructor), but keeps the allocation.
     fn forget_contents(this: Self) -> Box<MaybeUninit<T>, A> {
-        let ptr = Self::into_raw(this);
+        let ptr = Self::into_raw(this).cast();
 
         // SAFETY: `ptr` is valid, because it came from `Box::into_raw`.
-        unsafe { Box::from_raw(ptr.cast()) }
+        unsafe { Box::from_raw(ptr) }
     }
 
     /// Drops the contents, but keeps the allocation.
@@ -356,19 +356,21 @@ where
     type Borrowed<'a> = &'a T;
 
     fn into_foreign(self) -> *const core::ffi::c_void {
-        Box::into_raw(self) as _
+        Box::into_raw(self).cast_const().cast()
     }
 
     unsafe fn from_foreign(ptr: *const core::ffi::c_void) -> Self {
+        let ptr = ptr.cast_mut().cast();
         // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
         // call to `Self::into_foreign`.
-        unsafe { Box::from_raw(ptr as _) }
+        unsafe { Box::from_raw(ptr) }
     }
 
     unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> &'a T {
+        let ptr = ptr.cast();
         // SAFETY: The safety requirements of this method ensure that the object remains alive and
         // immutable for the duration of 'a.
-        unsafe { &*ptr.cast() }
+        unsafe { &*ptr }
     }
 }
 
@@ -380,21 +382,25 @@ where
 
     fn into_foreign(self) -> *const core::ffi::c_void {
         // SAFETY: We are still treating the box as pinned.
-        Box::into_raw(unsafe { Pin::into_inner_unchecked(self) }) as _
+        Box::into_raw(unsafe { Pin::into_inner_unchecked(self) })
+            .cast_const()
+            .cast()
     }
 
     unsafe fn from_foreign(ptr: *const core::ffi::c_void) -> Self {
+        let ptr = ptr.cast_mut().cast();
         // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
         // call to `Self::into_foreign`.
-        unsafe { Pin::new_unchecked(Box::from_raw(ptr as _)) }
+        unsafe { Pin::new_unchecked(Box::from_raw(ptr)) }
     }
 
     unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> Pin<&'a T> {
+        let ptr = ptr.cast();
         // SAFETY: The safety requirements for this function ensure that the object is still alive,
         // so it is safe to dereference the raw pointer.
         // The safety requirements of `from_foreign` also ensure that the object remains alive for
         // the lifetime of the returned value.
-        let r = unsafe { &*ptr.cast() };
+        let r = unsafe { &*ptr };
 
         // SAFETY: This pointer originates from a `Pin<Box<T>>`.
         unsafe { Pin::new_unchecked(r) }
@@ -445,12 +451,14 @@ where
     fn drop(&mut self) {
         let layout = Layout::for_value::<T>(self);
 
+        let ptr = self.0.as_ptr();
         // SAFETY: The pointer in `self.0` is guaranteed to be valid by the type invariant.
-        unsafe { core::ptr::drop_in_place::<T>(self.deref_mut()) };
+        unsafe { core::ptr::drop_in_place(ptr) };
 
+        let addr = self.0.cast();
         // SAFETY:
         // - `self.0` was previously allocated with `A`.
         // - `layout` is equal to the `Layout´ `self.0` was allocated with.
-        unsafe { A::free(self.0.cast(), layout) };
+        unsafe { A::free(addr, layout) };
     }
 }
