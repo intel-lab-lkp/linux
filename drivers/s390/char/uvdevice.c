@@ -297,6 +297,45 @@ out:
 	return ret;
 }
 
+/*
+ * Do the actual secret list creation. Calls the list-UVC until there is no more
+ * space in the user buffer, or the list ends.
+ */
+static int uvio_get_list(void *zpage, struct uvio_ioctl_cb *uv_ioctl)
+{
+	u8 __user *user_secrets = (u8 __user *)uv_ioctl->argument_addr;
+	struct uv_secret_list *list = zpage;
+	size_t len = UVIO_LIST_SECRETS_LEN;
+	u16 num_secrets_stored = 0;
+	size_t user_off = 0;
+	size_t list_off = 0;
+
+	do {
+		if (user_off + len > uv_ioctl->argument_len)
+			break;
+		uv_list_secrets(list, list->next_secret_idx, &uv_ioctl->uv_rc,
+				&uv_ioctl->uv_rrc);
+		if (uv_ioctl->uv_rc != UVC_RC_EXECUTED &&
+		    uv_ioctl->uv_rc != UVC_RC_MORE_DATA)
+			break;
+		if (copy_to_user(user_secrets + user_off, (u8 *)list + list_off,
+				 len))
+			return -EFAULT;
+
+		user_off += len;
+		num_secrets_stored += list->num_secr_stored;
+		/* The 2nd,3rd,.. secret list pages will not contain the list header again */
+		list_off = offsetof(struct uv_secret_list, secrets);
+		len = UVIO_LIST_SECRETS_LEN - list_off;
+	} while (uv_ioctl->uv_rc == UVC_RC_MORE_DATA);
+
+	/* Merge headers */
+	list->num_secr_stored = num_secrets_stored;
+	if (copy_to_user(user_secrets, list, list_off))
+		return -EFAULT;
+	return 0;
+}
+
 /** uvio_list_secrets() - perform a List Secret UVC
  * @uv_ioctl: ioctl control block
  *
@@ -308,6 +347,12 @@ out:
  *
  * The argument specifies the location for the result of the UV-Call.
  *
+ * Argument len must be a multiple of a page; 1-8 pages allowed.
+ * The list secrets IOCTL will call the list UVC multiple times and fill
+ * the provided user-buffer with list elements until either the list ends or
+ * the buffer is full. The list header is merged over all list header from the
+ * individual UVCs.
+ *
  * If the List Secrets UV facility is not present, UV will return invalid
  * command rc. This won't be fenced in the driver and does not result in a
  * negative return value.
@@ -318,31 +363,22 @@ out:
  */
 static int uvio_list_secrets(struct uvio_ioctl_cb *uv_ioctl)
 {
-	void __user *user_buf_arg = (void __user *)uv_ioctl->argument_addr;
-	struct uv_cb_guest_addr uvcb = {
-		.header.len = sizeof(uvcb),
-		.header.cmd = UVC_CMD_LIST_SECRETS,
-	};
-	void *secrets = NULL;
-	int ret = 0;
+	void *zpage = NULL;
+	int rc;
 
-	if (uv_ioctl->argument_len != UVIO_LIST_SECRETS_LEN)
+	if (uv_ioctl->argument_len == 0 ||
+	    uv_ioctl->argument_len % UVIO_LIST_SECRETS_LEN != 0 ||
+	    uv_ioctl->argument_len > UVIO_LIST_SECRETS_MAX_LEN)
 		return -EINVAL;
 
-	secrets = kvzalloc(UVIO_LIST_SECRETS_LEN, GFP_KERNEL);
-	if (!secrets)
+	zpage = (void *)get_zeroed_page(GFP_KERNEL);
+	if (!zpage)
 		return -ENOMEM;
 
-	uvcb.addr = (u64)secrets;
-	uv_call_sched(0, (u64)&uvcb);
-	uv_ioctl->uv_rc = uvcb.header.rc;
-	uv_ioctl->uv_rrc = uvcb.header.rrc;
+	rc = uvio_get_list(zpage, uv_ioctl);
 
-	if (copy_to_user(user_buf_arg, secrets, UVIO_LIST_SECRETS_LEN))
-		ret = -EFAULT;
-
-	kvfree(secrets);
-	return ret;
+	free_page((unsigned long)zpage);
+	return rc;
 }
 
 /** uvio_lock_secrets() - perform a Lock Secret Store UVC
