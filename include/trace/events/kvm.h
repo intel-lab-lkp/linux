@@ -489,6 +489,28 @@ TRACE_EVENT(kvm_test_age_hva,
 	TP_printk("mmu notifier test age hva: %#016lx", __entry->hva)
 );
 
+#ifdef CONFIG_KVM_PRIVATE_MEM
+TRACE_EVENT(kvm_gmem_direct_map_state_change,
+	TP_PROTO(pgoff_t start, pgoff_t end, bool state),
+	TP_ARGS(start, end, state),
+
+	TP_STRUCT__entry(
+		__field(pgoff_t, start)
+		__field(pgoff_t, end)
+		__field(bool, state)
+	),
+
+	TP_fast_assign(
+		__entry->start = start;
+		__entry->end = end;
+		__entry->state = state;
+	),
+
+	TP_printk("changed direct map state of guest_memfd range %lu to %lu to %s",
+		  __entry->start, __entry->end, __entry->state ? "present" : "not present")
+);
+#endif
+
 #endif /* _TRACE_KVM_MAIN_H */
 
 /* This part must be outside protection */

@@ -7,6 +7,7 @@
 #include <linux/set_memory.h>
 
 #include "kvm_mm.h"
+#include "trace/events/kvm.h"
 
 struct kvm_gmem {
 	struct kvm *kvm;
@@ -169,6 +170,8 @@ static __always_unused int kvm_gmem_folio_set_direct_map(struct folio *folio, pg
 	r = __kvm_gmem_folio_set_direct_map(folio, start, end, state);
 	folio_unlock(folio);
 
+	trace_kvm_gmem_direct_map_state_change(start, end, state);
+
 unlock_xa:
 	xa_unlock(&gmem_priv->direct_map_state);
 out:
@@ -215,6 +218,8 @@ static __always_unused int kvm_gmem_set_direct_map(struct inode *inode, pgoff_t 
 		}
 		folio_batch_release(&fbatch);
 	}
+
+	trace_kvm_gmem_direct_map_state_change(start, end, state);
 
 	xa_unlock(&gmem_priv->direct_map_state);
 out:
