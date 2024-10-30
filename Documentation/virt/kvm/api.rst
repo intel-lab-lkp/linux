@@ -6616,10 +6616,11 @@ to the byte array.
 .. note::
 
       For KVM_EXIT_IO, KVM_EXIT_MMIO, KVM_EXIT_OSI, KVM_EXIT_PAPR, KVM_EXIT_XEN,
-      KVM_EXIT_EPR, KVM_EXIT_X86_RDMSR and KVM_EXIT_X86_WRMSR the corresponding
-      operations are complete (and guest state is consistent) only after userspace
-      has re-entered the kernel with KVM_RUN.  The kernel side will first finish
-      incomplete operations and then check for pending signals.
+      KVM_EXIT_EPR, KVM_EXIT_HYPERCALL, KVM_EXIT_X86_RDMSR and KVM_EXIT_X86_WRMSR
+      the corresponding operations are complete (and guest state is consistent)
+      only after userspace has re-entered the kernel with KVM_RUN. The kernel
+      side will first finish incomplete operations and then check for pending
+      signals.
 
       The pending state of the operation is not preserved in state which is
       visible to userspace, thus userspace should ensure that the operation is
@@ -8225,6 +8226,38 @@ When enabled KVM will support VMware backdoor PV interface. The
 default value for it is set via the kvm.enable_vmware_backdoor
 kernel parameter (false when not set). Must be set before any
 VCPUs have been created.
+
+7.38 KVM_CAP_X86_VMWARE_HYPERCALL
+---------------------------------
+
+:Architectures: x86
+:Parameters: args[0] whether the feature should be enabled or not
+:Returns: 0 on success.
+
+Capability allows userspace to handle hypercalls. When enabled
+whenever the vcpu has executed a VMCALL(Intel) or a VMMCALL(AMD)
+instruction kvm will exit to userspace with KVM_EXIT_HYPERCALL.
+
+On exit the hypercall structure of the kvm_run structure will
+look as follows:
+
+::
+   /* KVM_EXIT_HYPERCALL */
+   struct {
+      __u64 nr;      // rax
+      __u64 args[6]; // rbx, rcx, rdx, rsi, rdi, rbp
+      __u64 ret;     // cpl, whatever userspace
+                     // sets this to on return will be
+                     // written to the rax
+      __u64 flags;   // KVM_EXIT_HYPERCALL_LONG_MODE if
+                     // the hypercall was executed in
+                     // 64bit mode, 0 otherwise
+   } hypercall;
+
+Except when running in compatibility mode with VMware hypervisors
+userspace handling of hypercalls is discouraged. To implement
+such functionality, use KVM_EXIT_IO (x86) or KVM_EXIT_MMIO
+(all except s390).
 
 8. Other capabilities.
 ======================

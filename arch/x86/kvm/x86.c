@@ -4682,6 +4682,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_MEMORY_FAULT_INFO:
 	case KVM_CAP_X86_GUEST_MODE:
 	case KVM_CAP_X86_VMWARE_BACKDOOR:
+	case KVM_CAP_X86_VMWARE_HYPERCALL:
 		r = 1;
 		break;
 	case KVM_CAP_PRE_FAULT_MEMORY:
@@ -6776,6 +6777,13 @@ split_irqchip_unlock:
 			r = 0;
 		}
 		mutex_unlock(&kvm->lock);
+		break;
+	case KVM_CAP_X86_VMWARE_HYPERCALL:
+		r = -EINVAL;
+		if (cap->args[0] & ~1)
+			break;
+		kvm->arch.vmware_hypercall_enabled = cap->args[0];
+		r = 0;
 		break;
 	default:
 		r = -EINVAL;
@@ -10010,6 +10018,28 @@ static int complete_hypercall_exit(struct kvm_vcpu *vcpu)
 	return kvm_skip_emulated_instruction(vcpu);
 }
 
+static int kvm_vmware_hypercall(struct kvm_vcpu *vcpu)
+{
+	struct kvm_run *run = vcpu->run;
+	bool is_64_bit = is_64_bit_hypercall(vcpu);
+	u64 mask = is_64_bit ? U64_MAX : U32_MAX;
+
+	vcpu->run->hypercall.flags = is_64_bit ? KVM_EXIT_HYPERCALL_LONG_MODE : 0;
+	run->hypercall.nr = kvm_rax_read(vcpu) & mask;
+	run->hypercall.args[0] = kvm_rbx_read(vcpu) & mask;
+	run->hypercall.args[1] = kvm_rcx_read(vcpu) & mask;
+	run->hypercall.args[2] = kvm_rdx_read(vcpu) & mask;
+	run->hypercall.args[3] = kvm_rsi_read(vcpu) & mask;
+	run->hypercall.args[4] = kvm_rdi_read(vcpu) & mask;
+	run->hypercall.args[5] = kvm_rbp_read(vcpu) & mask;
+	run->hypercall.ret = kvm_x86_call(get_cpl)(vcpu);
+
+	run->exit_reason = KVM_EXIT_HYPERCALL;
+	vcpu->arch.complete_userspace_io = complete_hypercall_exit;
+
+	return 0;
+}
+
 unsigned long __kvm_emulate_hypercall(struct kvm_vcpu *vcpu, unsigned long nr,
 				      unsigned long a0, unsigned long a1,
 				      unsigned long a2, unsigned long a3,
@@ -10107,6 +10137,9 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
 	unsigned long nr, a0, a1, a2, a3, ret;
 	int op_64_bit;
 	int cpl;
+
+	if (vcpu->kvm->arch.vmware_hypercall_enabled)
+		return kvm_vmware_hypercall(vcpu);
 
 	if (kvm_xen_hypercall_enabled(vcpu->kvm))
 		return kvm_xen_hypercall(vcpu);
