@@ -2239,7 +2239,6 @@ ctnetlink_create_conntrack(struct net *net,
 	struct nf_conn *ct;
 	int err = -EINVAL;
 	struct nf_conntrack_helper *helper;
-	struct nf_conn_tstamp *tstamp;
 	u64 timeout;
 
 	ct = nf_conntrack_alloc(net, zone, otuple, rtuple, GFP_ATOMIC);
@@ -2303,7 +2302,7 @@ ctnetlink_create_conntrack(struct net *net,
 		goto err2;
 
 	nf_ct_acct_ext_add(ct, GFP_ATOMIC);
-	nf_ct_tstamp_ext_add(ct, GFP_ATOMIC);
+	nf_ct_tstamp_ext_add(ct, 0, GFP_ATOMIC);
 	nf_ct_ecache_ext_add(ct, 0, 0, GFP_ATOMIC);
 	nf_ct_labels_ext_add(ct);
 	nfct_seqadj_ext_add(ct);
@@ -2365,9 +2364,6 @@ ctnetlink_create_conntrack(struct net *net,
 		__set_bit(IPS_EXPECTED_BIT, &ct->status);
 		ct->master = master_ct;
 	}
-	tstamp = nf_conn_tstamp_find(ct);
-	if (tstamp)
-		tstamp->start = ktime_get_real_ns();
 
 	err = nf_conntrack_hash_check_insert(ct);
 	if (err < 0)
