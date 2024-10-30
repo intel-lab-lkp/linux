@@ -422,15 +422,22 @@ struct ovl_fh *ovl_encode_real_fh(struct ovl_fs *ofs, struct dentry *real,
 	int fh_type, dwords;
 	int buflen = MAX_HANDLE_SZ;
 	uuid_t *uuid = &real->d_sb->s_uuid;
-	int err;
+	int err, rtt = 0;
 
 	/* Make sure the real fid stays 32bit aligned */
 	BUILD_BUG_ON(OVL_FH_FID_OFFSET % 4);
 	BUILD_BUG_ON(MAX_HANDLE_SZ + OVL_FH_FID_OFFSET > 255);
 
+retry:
 	fh = kzalloc(buflen + OVL_FH_FID_OFFSET, GFP_KERNEL);
-	if (!fh)
+	if (!fh) {
+		if (!rtt) {
+			cond_resched();
+			rtt++;
+			goto retry;
+		}
 		return ERR_PTR(-ENOMEM);
+	}
 
 	/*
 	 * We encode a non-connectable file handle for non-dir, because we
