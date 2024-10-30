@@ -150,7 +150,8 @@ static void hpfs_write_inode_ea(struct inode *i, struct fnode *fnode)
 		   Some unknown structures like ACL may be in fnode,
 		   we'd better not overwrite them
 		hpfs_error(i->i_sb, "fnode %08x has some unknown HPFS386 structures", i->i_ino);
-	} else*/ if (hpfs_sb(i->i_sb)->sb_eas >= 2) {
+	} else*/
+	if (hpfs_sb(i->i_sb)->sb_eas >= 2) {
 		__le32 ea;
 		if (!uid_eq(i->i_uid, hpfs_sb(i->i_sb)->sb_uid) || hpfs_inode->i_ea_uid) {
 			ea = cpu_to_le32(i_uid_read(i));
