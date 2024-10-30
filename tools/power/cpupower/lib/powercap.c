@@ -70,6 +70,17 @@ out:
 	return ret;
 }
 
+static int sysfs_set_enabled(char *path, int mode)
+{
+	char command[SYSFS_PATH_MAX + 10];
+
+	char yes_no = (char)(mode + '0');
+
+	sprintf(command, "echo -n %c > %s", yes_no, path);
+
+	return system(command);
+}
+
 int powercap_get_enabled(int *mode)
 {
 	char path[SYSFS_PATH_MAX] = PATH_TO_POWERCAP "/intel-rapl/enabled";
@@ -77,12 +88,11 @@ int powercap_get_enabled(int *mode)
 	return sysfs_get_enabled(path, mode);
 }
 
-/*
- * TODO: implement function. Returns dummy 0 for now.
- */
 int powercap_set_enabled(int mode)
 {
-	return 0;
+	char path[SYSFS_PATH_MAX] = PATH_TO_POWERCAP "/intel-rapl/enabled";
+
+	return sysfs_set_enabled(path, mode);
 }
 
 /*
@@ -180,8 +190,17 @@ int powercap_zone_get_enabled(struct powercap_zone *zone, int *mode)
 
 int powercap_zone_set_enabled(struct powercap_zone *zone, int mode)
 {
-	/* To be done if needed */
-	return 0;
+	char path[SYSFS_PATH_MAX] = PATH_TO_POWERCAP;
+
+	if ((strlen(PATH_TO_POWERCAP) + strlen(zone->sys_name)) +
+	    strlen("/enabled") + 1 >= SYSFS_PATH_MAX)
+		return -1;
+
+	strcat(path, "/");
+	strcat(path, zone->sys_name);
+	strcat(path, "/enabled");
+
+	return sysfs_set_enabled(path, mode);
 }
 
 
