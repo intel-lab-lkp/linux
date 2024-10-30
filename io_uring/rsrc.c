@@ -977,8 +977,10 @@ static int io_clone_buffers(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx
 			dst_node = rsrc_empty_node;
 		} else {
 			dst_node = io_rsrc_node_alloc(ctx, &data, index, IORING_RSRC_BUFFER);
-			if (!dst_node)
+			if (!dst_node) {
+				ret = -ENOMEM;
 				goto out_put_free;
+			}
 
 			refcount_inc(&src_node->buf->refs);
 			dst_node->buf = src_node->buf;
