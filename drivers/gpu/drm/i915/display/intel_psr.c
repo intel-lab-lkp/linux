@@ -233,7 +233,9 @@ static bool psr_global_enabled(struct intel_dp *intel_dp)
 	switch (intel_dp->psr.debug & I915_PSR_DEBUG_MODE_MASK) {
 	case I915_PSR_DEBUG_DEFAULT:
 		if (display->params.enable_psr == -1)
-			return connector->panel.vbt.psr.enable;
+			return intel_dp_is_edp(intel_dp) ?
+				connector->panel.vbt.psr.enable :
+				true;
 		return display->params.enable_psr;
 	case I915_PSR_DEBUG_DISABLE:
 		return false;
@@ -1451,11 +1453,15 @@ static bool intel_psr2_config_valid(struct intel_dp *intel_dp,
 		return false;
 	}
 
-	if (DISPLAY_VER(display) >= 12) {
+	if (DISPLAY_VER(display) >= 20) {
+		psr_max_h = crtc_hdisplay;
+		psr_max_v = crtc_vdisplay;
+		max_bpp = crtc_state->pipe_bpp;
+	} else if (IS_DISPLAY_VER(display, 12, 14)) {
 		psr_max_h = 5120;
 		psr_max_v = 3200;
 		max_bpp = 30;
-	} else if (DISPLAY_VER(display) >= 10) {
+	} else if (IS_DISPLAY_VER(display, 10, 11)) {
 		psr_max_h = 4096;
 		psr_max_v = 2304;
 		max_bpp = 24;
@@ -1912,14 +1918,14 @@ static void intel_psr_enable_source(struct intel_dp *intel_dp,
 		 * cause issues if non-supported panels are used.
 		 */
 		if (!intel_dp->psr.panel_replay_enabled &&
-		    (IS_DISPLAY_VER_STEP(display, IP_VER(14, 0), STEP_A0, STEP_B0) ||
+		    (IS_DISPLAY_VERx100_STEP(display, 1400, STEP_A0, STEP_B0) ||
 		     IS_ALDERLAKE_P(dev_priv)))
 			intel_de_rmw(display, hsw_chicken_trans_reg(dev_priv, cpu_transcoder),
 				     0, ADLP_1_BASED_X_GRANULARITY);
 
 		/* Wa_16012604467:adlp,mtl[a0,b0] */
 		if (!intel_dp->psr.panel_replay_enabled &&
-		    IS_DISPLAY_VER_STEP(display, IP_VER(14, 0), STEP_A0, STEP_B0))
+		    IS_DISPLAY_VERx100_STEP(display, 1400, STEP_A0, STEP_B0))
 			intel_de_rmw(display,
 				     MTL_CLKGATE_DIS_TRANS(display, cpu_transcoder),
 				     0,
@@ -2104,7 +2110,7 @@ static void intel_psr_disable_locked(struct intel_dp *intel_dp)
 	if (intel_dp->psr.sel_update_enabled) {
 		/* Wa_16012604467:adlp,mtl[a0,b0] */
 		if (!intel_dp->psr.panel_replay_enabled &&
-		    IS_DISPLAY_VER_STEP(display, IP_VER(14, 0), STEP_A0, STEP_B0))
+		    IS_DISPLAY_VERx100_STEP(display, 1400, STEP_A0, STEP_B0))
 			intel_de_rmw(display,
 				     MTL_CLKGATE_DIS_TRANS(display, cpu_transcoder),
 				     MTL_CLKGATE_DIS_TRANS_DMASC_GATING_DIS, 0);
@@ -2559,7 +2565,7 @@ intel_psr_apply_su_area_workarounds(struct intel_crtc_state *crtc_state)
 
 	/* Wa_14014971492 */
 	if (!crtc_state->has_panel_replay &&
-	    ((IS_DISPLAY_VER_STEP(display, IP_VER(14, 0), STEP_A0, STEP_B0) ||
+	    ((IS_DISPLAY_VERx100_STEP(display, 1400, STEP_A0, STEP_B0) ||
 	      IS_ALDERLAKE_P(i915) || IS_TIGERLAKE(i915))) &&
 	    crtc_state->splitter.enable)
 		crtc_state->psr2_su_area.y1 = 0;

@@ -2236,7 +2236,7 @@ static void intel_dp_sink_set_fec_ready(struct intel_dp *intel_dp,
 	if (drm_dp_dpcd_writeb(&intel_dp->aux, DP_FEC_CONFIGURATION,
 			       enable ? DP_FEC_READY : 0) <= 0)
 		drm_dbg_kms(display->drm, "Failed to set FEC_READY to %s in the sink\n",
-			    enable ? "enabled" : "disabled");
+			    str_enabled_disabled(enable));
 
 	if (enable &&
 	    drm_dp_dpcd_writeb(&intel_dp->aux, DP_FEC_STATUS,
@@ -4885,7 +4885,7 @@ void intel_ddi_init(struct intel_display *display,
 		if (!assert_has_icl_dsi(dev_priv))
 			return;
 
-		icl_dsi_init(dev_priv, devdata);
+		icl_dsi_init(display, devdata);
 		return;
 	}
 
