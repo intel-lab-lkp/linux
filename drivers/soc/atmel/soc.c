@@ -401,10 +401,13 @@ static int __init atmel_soc_device_init(void)
 {
 	struct device_node *np = of_find_node_by_path("/");
 
-	if (!of_match_node(at91_soc_allowed_list, np))
+	if (!of_match_node(at91_soc_allowed_list, np)) {
+		of_node_put(np);
 		return 0;
+	}
 
 	at91_soc_init(socs);
+	of_node_put(np);
 
 	return 0;
 }
