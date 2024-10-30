@@ -1244,7 +1244,18 @@ static void nohz_csd_func(void *info)
 	rq->idle_balance = idle_cpu(cpu);
 	if (rq->idle_balance) {
 		rq->nohz_idle_balance = flags;
-		raise_softirq_irqoff(SCHED_SOFTIRQ);
+
+		/*
+		 * Don't wakeup ksoftirqd when raising SCHED_SOFTIRQ
+		 * since the idle load balancer may mistake wakeup of
+		 * ksoftirqd as a genuine task wakeup and bail out from
+		 * load balancing early. Since it is guaranteed that
+		 * pending softirqs will be handled soon, either on
+		 * irq_exit() or via do_softirq_post_smp_call_flush(),
+		 * raise SCHED_SOFTIRQ without checking the need to
+		 * wakeup ksoftirqd.
+		 */
+		__raise_softirq_irqoff(SCHED_SOFTIRQ);
 	}
 }
 
