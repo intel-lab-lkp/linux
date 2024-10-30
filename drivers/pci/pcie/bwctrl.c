@@ -299,7 +299,10 @@ static int pcie_bwnotif_probe(struct pcie_device *srv)
 	if (!data)
 		return -ENOMEM;
 
-	devm_mutex_init(&srv->device, &data->set_speed_mutex);
+	ret = devm_mutex_init(&srv->device, &data->set_speed_mutex);
+	if (ret)
+		return ret;
+
 	ret = devm_request_threaded_irq(&srv->device, srv->irq, NULL,
 					pcie_bwnotif_irq_thread,
 					IRQF_SHARED | IRQF_ONESHOT,
