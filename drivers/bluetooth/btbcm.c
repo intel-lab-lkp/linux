@@ -549,8 +549,10 @@ static const char *btbcm_get_board_name(struct device *dev)
 	if (!root)
 		return NULL;
 
-	if (of_property_read_string_index(root, "compatible", 0, &tmp))
+	if (of_property_read_string_index(root, "compatible", 0, &tmp)) {
+		of_node_put(root);
 		return NULL;
+	}
 
 	/* get rid of any '/' in the compatible string */
 	board_type = devm_kstrdup(dev, tmp, GFP_KERNEL);
