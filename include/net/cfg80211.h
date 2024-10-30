@@ -2956,6 +2956,8 @@ struct cfg80211_bss_ies {
  * @cannot_use_reasons: the reasons (bitmap) for not being able to connect,
  *	if @restrict_use is set and @use_for is zero (empty); may be 0 for
  *	unspecified reasons; see &enum nl80211_bss_cannot_use_reasons
+ * @med_sync_delay: Medium Synchronization delay as described in
+ *	IEEE 802.11be-2024 Figure 9-1074q.
  * @priv: private area for driver use, has at least wiphy->bss_priv_size bytes
  */
 struct cfg80211_bss {
@@ -2985,6 +2987,8 @@ struct cfg80211_bss {
 
 	u8 use_for;
 	u8 cannot_use_reasons;
+
+	u16 med_sync_delay;
 
 	u8 priv[] __aligned(sizeof(void *));
 };

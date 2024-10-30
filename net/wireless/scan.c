@@ -1899,6 +1899,13 @@ cfg80211_update_known_bss(struct cfg80211_registered_device *rdev,
 	 */
 	if (signal_valid)
 		known->pub.signal = new->pub.signal;
+
+	/* update medium synchronization delay when its value is not
+	 * the default.
+	 */
+	if (new->pub.med_sync_delay != IEEE80211_MED_SYNC_DELAY_DEFAULT)
+		known->pub.med_sync_delay = new->pub.med_sync_delay;
+
 	known->pub.capability = new->pub.capability;
 	known->ts = new->ts;
 	known->ts_boottime = new->ts_boottime;
@@ -2224,6 +2231,7 @@ cfg80211_inform_single_bss_data(struct wiphy *wiphy,
 	int bss_type;
 	bool signal_valid;
 	unsigned long ts;
+	const struct element *ml;
 
 	if (WARN_ON(!wiphy))
 		return NULL;
@@ -2267,6 +2275,7 @@ cfg80211_inform_single_bss_data(struct wiphy *wiphy,
 	tmp.pub.use_for = data->use_for;
 	tmp.pub.cannot_use_reasons = data->cannot_use_reasons;
 	tmp.bss_source = data->bss_source;
+	tmp.pub.med_sync_delay = IEEE80211_MED_SYNC_DELAY_DEFAULT;
 
 	switch (data->bss_source) {
 	case BSS_SOURCE_MBSSID:
@@ -2321,6 +2330,12 @@ cfg80211_inform_single_bss_data(struct wiphy *wiphy,
 		break;
 	case CFG80211_BSS_FTYPE_PRESP:
 		rcu_assign_pointer(tmp.pub.proberesp_ies, ies);
+		ml = cfg80211_find_ext_elem(WLAN_EID_EXT_EHT_MULTI_LINK,
+					    ies->data, ies->len);
+		if (ml)
+			tmp.pub.med_sync_delay =
+				ieee80211_mle_get_eml_med_sync_delay(ml->data + 1);
+
 		break;
 	}
 	rcu_assign_pointer(tmp.pub.ies, ies);

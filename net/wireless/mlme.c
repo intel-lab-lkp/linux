@@ -326,7 +326,9 @@ void cfg80211_oper_and_vht_capa(struct ieee80211_vht_cap *vht_capa,
 }
 
 static int
-cfg80211_mlme_check_mlo_compat(const struct ieee80211_multi_link_elem *mle_a,
+cfg80211_mlme_check_mlo_compat(const struct cfg80211_bss *bss_a,
+			       const struct cfg80211_bss *bss_b,
+			       const struct ieee80211_multi_link_elem *mle_a,
 			       const struct ieee80211_multi_link_elem *mle_b,
 			       struct netlink_ext_ack *extack)
 {
@@ -340,8 +342,7 @@ cfg80211_mlme_check_mlo_compat(const struct ieee80211_multi_link_elem *mle_a,
 		return -EINVAL;
 	}
 
-	if (ieee80211_mle_get_eml_med_sync_delay((const u8 *)mle_a) !=
-	    ieee80211_mle_get_eml_med_sync_delay((const u8 *)mle_b)) {
+	if (bss_a->med_sync_delay != bss_b->med_sync_delay) {
 		NL_SET_ERR_MSG(extack, "link EML medium sync delay mismatch");
 		return -EINVAL;
 	}
@@ -426,7 +427,9 @@ static int cfg80211_mlme_check_mlo(struct net_device *dev,
 		if (WARN_ON(!mles[i]))
 			goto error;
 
-		if (cfg80211_mlme_check_mlo_compat(mles[req->link_id], mles[i],
+		if (cfg80211_mlme_check_mlo_compat(req->links[req->link_id].bss,
+						   req->links[i].bss,
+						   mles[req->link_id], mles[i],
 						   extack)) {
 			req->links[i].error = -EINVAL;
 			goto error;
