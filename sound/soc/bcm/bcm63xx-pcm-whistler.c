@@ -232,7 +232,7 @@ static int bcm63xx_pcm_close(struct snd_soc_component *component,
 
 static irqreturn_t i2s_dma_isr(int irq, void *bcm_i2s_priv)
 {
-	unsigned int availdepth, ifflevel, offlevel, int_status, val_1, val_2;
+	unsigned int availdepth, ifflevel, offlevel, int_status, val_1 = 0, val_2 = 0;
 	struct bcm63xx_runtime_data *prtd;
 	struct snd_pcm_substream *substream;
 	struct snd_pcm_runtime *runtime;
