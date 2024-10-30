@@ -1513,6 +1513,13 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 				blocked_rdev = rdev;
 				break;
 			}
+
+			if (is_bad && bio->bi_opf & REQ_ATOMIC) {
+				/* We just cannot atomically write this ... */
+				error = -EFAULT;
+				goto err_handle;
+			}
+
 			if (is_bad && first_bad <= r1_bio->sector) {
 				/* Cannot write here at all */
 				bad_sectors -= (r1_bio->sector - first_bad);
@@ -3192,6 +3199,7 @@ static int raid1_set_limits(struct mddev *mddev)
 
 	md_init_stacking_limits(&lim);
 	lim.max_write_zeroes_sectors = 0;
+	lim.features |= BLK_FEAT_ATOMIC_WRITES_STACKED;
 	err = mddev_stack_rdev_limits(mddev, &lim, MDDEV_STACK_INTEGRITY);
 	if (err) {
 		queue_limits_cancel_update(mddev->gendisk->queue);
