@@ -1,0 +1,28 @@
+drm drm-fixes 4d95a12beba146b0ca2de59c7ce905bc0aadfd0c
+	Merge tag 'drm-xe-fixes-2024-10-24-1' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-fixes
+drm-misc drm-misc-fixes 4700fd3e050da8302e60ebd4850d008250fa7204
+	drm/panthor: Report group as timedout when we fail to properly suspend
+drm-intel drm-intel-fixes 81983758430957d9a5cb3333fe324fd70cf63e7e
+	Linux 6.12-rc5
+drm-xe drm-xe-fixes cdc21021f0351226a4845715564afd5dc50ed44b
+	drm/xe: Don't restart parallel queues multiple times on GT reset
+drm drm-next e7103f8785504dd5c6aad118fbc64fc49eda33af
+	Merge tag 'amd-drm-next-6.13-2024-10-25' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes ba2b9de0c1ac2abfbe663414a292c5881e64c361
+	drm/tegra: fix potential uninitialized variable use
+drm-intel drm-intel-next-fixes e860513f56d8428fcb2bd0282ac8ab691a53fc6c
+	drm/i915/dp: Fix colorimetry detection
+drm-xe drm-xe-next-fixes d7126c0cfc137a580eba92bd82b6d288bd43961d
+	Merge tag 'drm-xe-next-fixes-2024-09-19' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next 904bc5479896d8da7dcd3e162ce224c32c3dc6c3
+	Documentation/gpu: Fix Panthor documentation build warnings
+drm-intel drm-intel-next 5eb2e7855910561a07d4cedf9c898624899b057b
+	drm/i915/display: use x100 version for full version and release
+drm-intel drm-intel-gt-next 6ef0e3ef2662db71d363af77ce31fa940bb7d525
+	drm/i915/gt: Retry RING_HEAD reset until it get sticks
+drm-xe drm-xe-next db38fdb7bf5fe72fbebc3357c8844a5101a16f21
+	drm/xe/guc: Separate full CTB content from guc_info debugfs
+drm-intel topic/core-for-CI 8db9a55ae3149e377b72f80da5078e347f0fde3c
+	x86/apic: Stop the TSC Deadline timer during lapic timer shutdown
+drm-xe topic/xe-for-CI fefe873265210efca14d239382df9243cb6387b9
+	drm/xe/ptl: Define HuC FW version for PTL
