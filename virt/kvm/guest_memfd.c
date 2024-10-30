@@ -4,6 +4,7 @@
 #include <linux/kvm_host.h>
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
+#include <linux/set_memory.h>
 
 #include "kvm_mm.h"
 
@@ -12,6 +13,88 @@ struct kvm_gmem {
 	struct xarray bindings;
 	struct list_head entry;
 };
+
+struct kvm_gmem_inode_private {
+	unsigned long long flags;
+
+	/*
+	 * direct map configuration of the gmem instance this private data
+	 * is associated with. present indices indicate a desired direct map
+	 * configuration deviating from default_direct_map_state (e.g. if
+	 * default_direct_map_state is false/not present, then the xarray
+	 * contains all indices for which direct map entries are restored).
+	 */
+	struct xarray direct_map_state;
+	bool default_direct_map_state;
+};
+
+static bool kvm_gmem_test_no_direct_map(struct kvm_gmem_inode_private *gmem_priv)
+{
+	return ((unsigned long)gmem_priv->flags & KVM_GMEM_NO_DIRECT_MAP) != 0;
+}
+
+/*
+ * Configure the direct map present/not present state of @folio based on
+ * the xarray stored in the associated inode's private data.
+ *
+ * Assumes the folio lock is held.
+ */
+static int kvm_gmem_folio_configure_direct_map(struct folio *folio)
+{
+	struct inode *inode = folio_inode(folio);
+	struct kvm_gmem_inode_private *gmem_priv = inode->i_private;
+	bool default_state = gmem_priv->default_direct_map_state;
+
+	pgoff_t start = folio_index(folio);
+	pgoff_t last = start + folio_nr_pages(folio) - 1;
+
+	struct xarray *xa = &gmem_priv->direct_map_state;
+	unsigned long index;
+	void *entry;
+
+	pgoff_t range_start = start;
+	unsigned long npages = 1;
+	int r = 0;
+
+	if (!kvm_gmem_test_no_direct_map(gmem_priv))
+		goto out;
+
+	r = set_direct_map_valid_noflush(folio_page(folio, 0), folio_nr_pages(folio),
+					 default_state);
+	if (r)
+		goto out;
+
+	if (!xa_find_after(xa, &range_start, last, XA_PRESENT))
+		goto out_flush;
+
+	xa_for_each_range(xa, index, entry, range_start, last) {
+		++npages;
+
+		if (index == range_start + npages)
+			continue;
+
+		r = set_direct_map_valid_noflush(folio_file_page(folio, range_start), npages - 1,
+						 !default_state);
+		if (r)
+			goto out_flush;
+
+		range_start = index;
+		npages = 1;
+	}
+
+	r = set_direct_map_valid_noflush(folio_file_page(folio, range_start), npages,
+					 !default_state);
+
+out_flush:
+	/*
+	 * Use PG_private to track that this folio has had potentially some of
+	 * its direct map entries modified, so that we can restore them in free_folio.
+	 */
+	folio_set_private(folio);
+	flush_tlb_kernel_range(start, start + folio_size(folio));
+out:
+	return r;
+}
 
 /**
  * folio_file_pfn - like folio_file_page, but return a pfn.
@@ -42,9 +125,19 @@ static int __kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slo
 	return 0;
 }
 
-static inline void kvm_gmem_mark_prepared(struct folio *folio)
+
+static inline int kvm_gmem_finalize_folio(struct folio *folio)
 {
+	int r = kvm_gmem_folio_configure_direct_map(folio);
+
+	/*
+	 * Parts of the direct map might have been punched out, mark this folio
+	 * as prepared even in the error case to avoid touching parts without
+	 * direct map entries in a potential re-preparation.
+	 */
 	folio_mark_uptodate(folio);
+
+	return r;
 }
 
 /*
@@ -82,11 +175,10 @@ static int kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slot,
 	index = ALIGN_DOWN(index, 1 << folio_order(folio));
 	r = __kvm_gmem_prepare_folio(kvm, slot, index, folio);
 	if (!r)
-		kvm_gmem_mark_prepared(folio);
+		r = kvm_gmem_finalize_folio(folio);
 
 	return r;
 }
-
 /*
  * Returns a locked folio on success.  The caller is responsible for
  * setting the up-to-date flag before the memory is mapped into the guest.
@@ -249,6 +341,7 @@ static long kvm_gmem_fallocate(struct file *file, int mode, loff_t offset,
 static int kvm_gmem_release(struct inode *inode, struct file *file)
 {
 	struct kvm_gmem *gmem = file->private_data;
+	struct kvm_gmem_inode_private *gmem_priv;
 	struct kvm_memory_slot *slot;
 	struct kvm *kvm = gmem->kvm;
 	unsigned long index;
@@ -279,12 +372,16 @@ static int kvm_gmem_release(struct inode *inode, struct file *file)
 
 	list_del(&gmem->entry);
 
+	gmem_priv = inode->i_private;
+
 	filemap_invalidate_unlock(inode->i_mapping);
 
 	mutex_unlock(&kvm->slots_lock);
-
 	xa_destroy(&gmem->bindings);
 	kfree(gmem);
+
+	xa_destroy(&gmem_priv->direct_map_state);
+	kfree(gmem_priv);
 
 	kvm_put_kvm(kvm);
 
@@ -357,24 +454,37 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 	return MF_DELAYED;
 }
 
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 static void kvm_gmem_free_folio(struct folio *folio)
 {
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 	struct page *page = folio_page(folio, 0);
 	kvm_pfn_t pfn = page_to_pfn(page);
 	int order = folio_order(folio);
 
 	kvm_arch_gmem_invalidate(pfn, pfn + (1ul << order));
-}
 #endif
+
+	if (folio_test_private(folio)) {
+		unsigned long start = (unsigned long)folio_address(folio);
+
+		int r = set_direct_map_valid_noflush(folio_page(folio, 0), folio_nr_pages(folio),
+						     true);
+		/*
+		 * There might be holes left in the folio, better make sure
+		 * nothing tries to touch it again.
+		 */
+		if (r)
+			folio_set_hwpoison(folio);
+
+		flush_tlb_kernel_range(start, start + folio_size(folio));
+	}
+}
 
 static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
 	.migrate_folio	= kvm_gmem_migrate_folio,
 	.error_remove_folio = kvm_gmem_error_folio,
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 	.free_folio = kvm_gmem_free_folio,
-#endif
 };
 
 static int kvm_gmem_getattr(struct mnt_idmap *idmap, const struct path *path,
@@ -401,6 +511,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 {
 	const char *anon_name = "[kvm-gmem]";
 	struct kvm_gmem *gmem;
+	struct kvm_gmem_inode_private *gmem_priv;
 	struct inode *inode;
 	struct file *file;
 	int fd, err;
@@ -409,11 +520,14 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	if (fd < 0)
 		return fd;
 
+	err = -ENOMEM;
 	gmem = kzalloc(sizeof(*gmem), GFP_KERNEL);
-	if (!gmem) {
-		err = -ENOMEM;
+	if (!gmem)
 		goto err_fd;
-	}
+
+	gmem_priv = kzalloc(sizeof(*gmem_priv), GFP_KERNEL);
+	if (!gmem_priv)
+		goto err_fd;
 
 	file = anon_inode_create_getfile(anon_name, &kvm_gmem_fops, gmem,
 					 O_RDWR, NULL);
@@ -427,7 +541,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	inode = file->f_inode;
 	WARN_ON(file->f_mapping != inode->i_mapping);
 
-	inode->i_private = (void *)(unsigned long)flags;
+	inode->i_private = gmem_priv;
 	inode->i_op = &kvm_gmem_iops;
 	inode->i_mapping->a_ops = &kvm_gmem_aops;
 	inode->i_mode |= S_IFREG;
@@ -441,6 +555,9 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	gmem->kvm = kvm;
 	xa_init(&gmem->bindings);
 	list_add(&gmem->entry, &inode->i_mapping->i_private_list);
+
+	xa_init(&gmem_priv->direct_map_state);
+	gmem_priv->flags = flags;
 
 	fd_install(fd, file);
 	return fd;
@@ -456,10 +573,13 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 {
 	loff_t size = args->size;
 	u64 flags = args->flags;
-	u64 valid_flags = 0;
+	u64 valid_flags = KVM_GMEM_NO_DIRECT_MAP;
 
 	if (flags & ~valid_flags)
 		return -EINVAL;
+
+	if ((flags & KVM_GMEM_NO_DIRECT_MAP) && !can_set_direct_map())
+		return -EOPNOTSUPP;
 
 	if (size <= 0 || !PAGE_ALIGNED(size))
 		return -EINVAL;
@@ -679,7 +799,6 @@ long kvm_gmem_populate(struct kvm *kvm, gfn_t start_gfn, void __user *src, long 
 			break;
 		}
 
-		folio_unlock(folio);
 		WARN_ON(!IS_ALIGNED(gfn, 1 << max_order) ||
 			(npages - i) < (1 << max_order));
 
@@ -695,7 +814,8 @@ long kvm_gmem_populate(struct kvm *kvm, gfn_t start_gfn, void __user *src, long 
 		p = src ? src + i * PAGE_SIZE : NULL;
 		ret = post_populate(kvm, gfn, pfn, p, max_order, opaque);
 		if (!ret)
-			kvm_gmem_mark_prepared(folio);
+			ret = kvm_gmem_finalize_folio(folio);
+		folio_unlock(folio);
 
 put_folio_and_exit:
 		folio_put(folio);
