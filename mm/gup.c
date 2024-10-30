@@ -21,6 +21,7 @@
 #include <linux/pagevec.h>
 #include <linux/sched/mm.h>
 #include <linux/shmem_fs.h>
+#include <linux/vmalloc.h>
 
 #include <asm/mmu_context.h>
 #include <asm/tlbflush.h>
@@ -2439,7 +2440,7 @@ static long check_and_migrate_movable_pages(unsigned long nr_pages,
 	struct folio **folios;
 	long i, ret;
 
-	folios = kmalloc_array(nr_pages, sizeof(*folios), GFP_KERNEL);
+	folios = kvmalloc_array(nr_pages, sizeof(*folios), GFP_KERNEL);
 	if (!folios) {
 		unpin_user_pages(pages, nr_pages);
 		return -ENOMEM;
@@ -2450,7 +2451,7 @@ static long check_and_migrate_movable_pages(unsigned long nr_pages,
 
 	ret = check_and_migrate_movable_folios(nr_pages, folios);
 
-	kfree(folios);
+	kvfree(folios);
 	return ret;
 }
 #else
