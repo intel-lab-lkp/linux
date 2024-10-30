@@ -1326,11 +1326,8 @@ void mlxsw_sp1_get_stats_strings(u8 **p)
 {
 	int i;
 
-	for (i = 0; i < MLXSW_SP_PTP_PORT_STATS_LEN; i++) {
-		memcpy(*p, mlxsw_sp_ptp_port_stats[i].str,
-		       ETH_GSTRING_LEN);
-		*p += ETH_GSTRING_LEN;
-	}
+	for (i = 0; i < MLXSW_SP_PTP_PORT_STATS_LEN; i++)
+		ethtool_puts(p, mlxsw_sp_ptp_port_stats[i].str);
 }
 
 void mlxsw_sp1_get_stats(struct mlxsw_sp_port *mlxsw_sp_port,
