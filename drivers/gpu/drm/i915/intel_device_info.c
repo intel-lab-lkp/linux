@@ -200,6 +200,10 @@ static const u16 subplatform_g12_ids[] = {
 	INTEL_DG2_G12_IDS(ID),
 };
 
+static const u16 subplatform_dg2_d_ids[] = {
+	INTEL_DG2_D_IDS(ID),
+};
+
 static const u16 subplatform_arl_ids[] = {
 	INTEL_ARL_IDS(ID),
 };
@@ -265,6 +269,11 @@ static void intel_device_info_subplatform_init(struct drm_i915_private *i915)
 			      ARRAY_SIZE(subplatform_arl_ids))) {
 		mask = BIT(INTEL_SUBPLATFORM_ARL);
 	}
+
+	/* DG2_D ids span across multiple DG2 subplatforms */
+	if (find_devid(devid, subplatform_dg2_d_ids,
+		       ARRAY_SIZE(subplatform_dg2_d_ids)))
+		mask |= BIT(INTEL_SUBPLATFORM_D);
 
 	GEM_BUG_ON(mask & ~INTEL_SUBPLATFORM_MASK);
 
