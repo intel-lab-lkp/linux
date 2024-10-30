@@ -335,12 +335,12 @@ impl<T: ?Sized> Arc<T> {
 impl<T: 'static> ForeignOwnable for Arc<T> {
     type Borrowed<'a> = ArcBorrow<'a, T>;
 
-    fn into_foreign(self) -> *const core::ffi::c_void {
-        ManuallyDrop::new(self).ptr.as_ptr().cast_const().cast()
+    fn into_foreign(self) -> *mut core::ffi::c_void {
+        ManuallyDrop::new(self).ptr.as_ptr().cast()
     }
 
-    unsafe fn borrow<'a>(ptr: *const core::ffi::c_void) -> ArcBorrow<'a, T> {
-        let ptr = ptr.cast_mut().cast();
+    unsafe fn borrow<'a>(ptr: *mut core::ffi::c_void) -> ArcBorrow<'a, T> {
+        let ptr = ptr.cast();
 
         // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
         // call to `Self::into_foreign`.
@@ -351,8 +351,8 @@ impl<T: 'static> ForeignOwnable for Arc<T> {
         unsafe { ArcBorrow::new(inner) }
     }
 
-    unsafe fn from_foreign(ptr: *const core::ffi::c_void) -> Self {
-        let ptr = ptr.cast_mut().cast();
+    unsafe fn from_foreign(ptr: *mut core::ffi::c_void) -> Self {
+        let ptr = ptr.cast();
 
         // SAFETY: The safety requirements of this function ensure that `ptr` comes from a previous
         // call to `Self::into_foreign`.
