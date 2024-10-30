@@ -723,6 +723,8 @@ static int isl29018_probe(struct i2c_client *client)
 		name = iio_get_acpi_device_name_and_data(&client->dev, &ddata);
 		dev_id = (intptr_t)ddata;
 	}
+	if (!name)
+		return -ENODEV;
 
 	mutex_init(&chip->lock);
 
