@@ -8,6 +8,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_gem_shmem_helper.h>
+#include <drm/gpu_scheduler.h>
 #include <linux/iosys-map.h>
 #include <linux/vmalloc.h>
 
@@ -72,6 +73,7 @@ static void amdxdna_gem_obj_free(struct drm_gem_object *gobj)
 		vunmap(abo->mem.kva);
 		drm_gem_object_put(to_gobj(abo->dev_heap));
 		drm_gem_object_release(gobj);
+		mutex_destroy(&abo->mem.notify_lock);
 		mutex_destroy(&abo->lock);
 		kfree(abo);
 		return;
@@ -81,6 +83,7 @@ static void amdxdna_gem_obj_free(struct drm_gem_object *gobj)
 		drm_mm_takedown(&abo->mm);
 
 	drm_gem_vunmap_unlocked(gobj, &map);
+	mutex_destroy(&abo->mem.notify_lock);
 	mutex_destroy(&abo->lock);
 	drm_gem_shmem_free(&abo->base);
 }
@@ -234,6 +237,13 @@ amdxdna_gem_create_obj(struct drm_device *dev, size_t size)
 	abo->pinned = false;
 	abo->assigned_hwctx = AMDXDNA_INVALID_CTX_HANDLE;
 	mutex_init(&abo->lock);
+	mutex_init(&abo->mem.notify_lock);
+
+	if (IS_ENABLED(CONFIG_LOCKDEP)) {
+		fs_reclaim_acquire(GFP_KERNEL);
+		might_lock(&abo->mem.notify_lock);
+		fs_reclaim_release(GFP_KERNEL);
+	}
 
 	abo->mem.userptr = AMDXDNA_INVALID_ADDR;
 	abo->mem.dev_addr = AMDXDNA_INVALID_ADDR;
