@@ -158,11 +158,18 @@ struct shash_desc {
 
 #define HASH_MAX_DIGESTSIZE	 64
 
+#ifdef CONFIG_S390
+/*
+ * The descsize for phmac on s390 exceeds the generic "worst case".
+ */
+#define HASH_MAX_DESCSIZE	384
+#else
 /*
  * Worst case is hmac(sha3-224-generic).  Its context is a nested 'shash_desc'
  * containing a 'struct sha3_state'.
  */
 #define HASH_MAX_DESCSIZE	(sizeof(struct shash_desc) + 360)
+#endif
 
 #define SHASH_DESC_ON_STACK(shash, ctx)					     \
 	char __##shash##_desc[sizeof(struct shash_desc) + HASH_MAX_DESCSIZE] \
