@@ -1651,6 +1651,34 @@ int sock_create_kern(struct net *net, int family, int type, int protocol, struct
 }
 EXPORT_SYMBOL(sock_create_kern);
 
+int sock_create_kern_getnet(struct net *net, int family, int type, int proto, struct socket **res)
+{
+	struct sock *sk;
+	int ret;
+
+	if (!maybe_get_net(net))
+		return -EINVAL;
+
+	ret = sock_create_kern(net, family, type, proto, res);
+	if (ret < 0) {
+		put_net(net);
+		return ret;
+	}
+
+	sk = (*res)->sk;
+	lock_sock(sk);
+	/* Update ns_tracker to current stack trace and refcounted tracker */
+	__netns_tracker_free(net, &sk->ns_tracker, false);
+
+	sk->sk_net_refcnt = 1;
+	netns_tracker_alloc(net, &sk->ns_tracker, GFP_KERNEL);
+	sock_inuse_add(net, 1);
+	release_sock(sk);
+
+	return ret;
+}
+EXPORT_SYMBOL(sock_create_kern_getnet);
+
 static struct socket *__sys_socket_create(int family, int type, int protocol)
 {
 	struct socket *sock;
