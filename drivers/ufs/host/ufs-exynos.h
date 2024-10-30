@@ -136,7 +136,6 @@ struct exynos_ufs_uic_attr {
 	/* TX Attributes */
 	unsigned int tx_trailingclks;
 	unsigned int tx_dif_p_nsec;
-	unsigned int tx_dif_n_nsec;
 	unsigned int tx_high_z_cnt_nsec;
 	unsigned int tx_base_unit_nsec;
 	unsigned int tx_gran_unit_nsec;
@@ -195,7 +194,6 @@ struct exynos_ufs_drv_data {
 
 struct ufs_phy_time_cfg {
 	u32 tx_linereset_p;
-	u32 tx_linereset_n;
 	u32 tx_high_z_cnt;
 	u32 tx_base_n_val;
 	u32 tx_gran_n_val;

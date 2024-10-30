@@ -548,8 +548,6 @@ static void exynos_ufs_specify_phy_time_attr(struct exynos_ufs *ufs)
 
 	t_cfg->tx_linereset_p =
 		exynos_ufs_calc_time_cntr(ufs, attr->tx_dif_p_nsec);
-	t_cfg->tx_linereset_n =
-		exynos_ufs_calc_time_cntr(ufs, attr->tx_dif_n_nsec);
 	t_cfg->tx_high_z_cnt =
 		exynos_ufs_calc_time_cntr(ufs, attr->tx_high_z_cnt_nsec);
 	t_cfg->tx_base_n_val =
@@ -1970,7 +1968,6 @@ static void exynos_ufs_remove(struct platform_device *pdev)
 static struct exynos_ufs_uic_attr exynos7_uic_attr = {
 	.tx_trailingclks		= 0x10,
 	.tx_dif_p_nsec			= 3000000,	/* unit: ns */
-	.tx_dif_n_nsec			= 1000000,	/* unit: ns */
 	.tx_high_z_cnt_nsec		= 20000,	/* unit: ns */
 	.tx_base_unit_nsec		= 100000,	/* unit: ns */
 	.tx_gran_unit_nsec		= 4000,		/* unit: ns */
@@ -2046,7 +2043,6 @@ static const struct exynos_ufs_drv_data exynos_ufs_drvs = {
 static struct exynos_ufs_uic_attr gs101_uic_attr = {
 	.tx_trailingclks		= 0xff,
 	.tx_dif_p_nsec			= 3000000,	/* unit: ns */
-	.tx_dif_n_nsec			= 1000000,	/* unit: ns */
 	.tx_high_z_cnt_nsec		= 20000,	/* unit: ns */
 	.tx_base_unit_nsec		= 100000,	/* unit: ns */
 	.tx_gran_unit_nsec		= 4000,		/* unit: ns */
@@ -2074,7 +2070,6 @@ static struct exynos_ufs_uic_attr gs101_uic_attr = {
 static struct exynos_ufs_uic_attr fsd_uic_attr = {
 	.tx_trailingclks		= 0x10,
 	.tx_dif_p_nsec			= 3000000,	/* unit: ns */
-	.tx_dif_n_nsec			= 1000000,	/* unit: ns */
 	.tx_high_z_cnt_nsec		= 20000,	/* unit: ns */
 	.tx_base_unit_nsec		= 100000,	/* unit: ns */
 	.tx_gran_unit_nsec		= 4000,		/* unit: ns */
