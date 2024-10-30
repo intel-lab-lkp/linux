@@ -1347,7 +1347,16 @@ int begin_new_exec(struct linux_binprm * bprm)
 		set_dumpable(current->mm, SUID_DUMP_USER);
 
 	perf_event_exec();
-	__set_task_comm(me, kbasename(bprm->filename), true);
+
+	/*
+	 * If argv0 was set, alloc_bprm() made up a path that will
+	 * probably not be useful to admins running ps or similar.
+	 * Let's fix it up to be something reasonable.
+	 */
+	if (bprm->argv0)
+		__set_task_comm(me, kbasename(bprm->argv0), true);
+	else
+		__set_task_comm(me, kbasename(bprm->filename), true);
 
 	/* An exec changes our domain. We are no longer part of the thread
 	   group */
@@ -1497,7 +1506,26 @@ static void free_bprm(struct linux_binprm *bprm)
 	if (bprm->interp != bprm->filename)
 		kfree(bprm->interp);
 	kfree(bprm->fdpath);
+	kfree(bprm->argv0);
 	kfree(bprm);
+}
+
+static int bprm_add_fixup_comm(struct linux_binprm *bprm,
+			       struct user_arg_ptr argv)
+{
+	const char __user *p = get_user_arg_ptr(argv, 0);
+
+	/*
+	 * If p == NULL, let's just fall back to fdpath.
+	 */
+	if (!p)
+		return 0;
+
+	bprm->argv0 = strndup_user(p, MAX_ARG_STRLEN);
+	if (bprm->argv0)
+		return 0;
+
+	return -EFAULT;
 }
 
 static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int flags)
@@ -1904,6 +1932,12 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if (IS_ERR(bprm)) {
 		retval = PTR_ERR(bprm);
 		goto out_ret;
+	}
+
+	if (unlikely(bprm->fdpath)) {
+		retval = bprm_add_fixup_comm(bprm, argv);
+		if (retval != 0)
+			goto out_free;
 	}
 
 	retval = count(argv, MAX_ARG_STRINGS);
