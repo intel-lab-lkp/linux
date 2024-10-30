@@ -17,6 +17,8 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/spinlock.h>
+#include <memory/ti-aemif.h>
 
 #define TA_SHIFT	2
 #define RHOLD_SHIFT	4
@@ -108,27 +110,6 @@ struct aemif_cs_data {
 };
 
 /**
- * struct aemif_cs_timing: structure to hold cs timing configuration
- * values are expressed in number of clock cycles - 1
- * @ta: minimum turn around time
- * @rhold read hold width
- * @rstrobe read strobe width
- * @rsetup read setup width
- * @whold write hold width
- * @wstrobe write strobe width
- * @wsetup write setup width
- */
-struct aemif_cs_timings {
-	u32	ta;
-	u32	rhold;
-	u32	rstrobe;
-	u32	rsetup;
-	u32	whold;
-	u32	wstrobe;
-	u32	wsetup;
-};
-
-/**
  * struct aemif_device: structure to hold device data
  * @base: base address of AEMIF registers
  * @clk: source clock
@@ -136,6 +117,7 @@ struct aemif_cs_timings {
  * @num_cs: number of assigned chip-selects
  * @cs_offset: start number of cs nodes
  * @cs_data: array of chip-select settings
+ * @cs_config_lock: lock used to access CS configuration
  */
 struct aemif_device {
 	void __iomem *base;
@@ -144,6 +126,7 @@ struct aemif_device {
 	u8 num_cs;
 	int cs_offset;
 	struct aemif_cs_data cs_data[NUM_CS];
+	spinlock_t config_cs_lock;
 };
 
 /**
@@ -154,8 +137,9 @@ struct aemif_device {
  *
  * Returns 0 on success, else negative errno.
  */
-static int aemif_set_cs_timings(struct aemif_device *aemif, u8 cs, struct aemif_cs_timings *timings)
+int aemif_set_cs_timings(struct aemif_device *aemif, u8 cs, struct aemif_cs_timings *timings)
 {
+	unsigned long flags;
 	unsigned int offset;
 	u32 val, set;
 
@@ -176,13 +160,16 @@ static int aemif_set_cs_timings(struct aemif_device *aemif, u8 cs, struct aemif_
 
 	offset = A1CR_OFFSET + cs * 4;
 
+	spin_lock_irqsave(&aemif->config_cs_lock, flags);
 	val = readl(aemif->base + offset);
 	val &= ~TIMINGS_MASK;
 	val |= set;
 	writel(val, aemif->base + offset);
+	spin_unlock_irqrestore(&aemif->config_cs_lock, flags);
 
 	return 0;
 }
+EXPORT_SYMBOL(aemif_set_cs_timings);
 
 /**
  * aemif_calc_rate - calculate timing data.
@@ -231,6 +218,7 @@ static int aemif_config_abus(struct platform_device *pdev, int csnum)
 	struct aemif_cs_data *data = &aemif->cs_data[csnum];
 	unsigned long clk_rate = aemif->clk_rate;
 	struct aemif_cs_timings timings;
+	unsigned long flags;
 	unsigned offset;
 	u32 set, val;
 
@@ -250,10 +238,12 @@ static int aemif_config_abus(struct platform_device *pdev, int csnum)
 	if (data->enable_ss)
 		set |= ACR_SSTROBE_MASK;
 
+	spin_lock_irqsave(&aemif->config_cs_lock, flags);
 	val = readl(aemif->base + offset);
 	val &= ~CONFIG_MASK;
 	val |= set;
 	writel(val, aemif->base + offset);
+	spin_unlock_irqrestore(&aemif->config_cs_lock, flags);
 
 	return aemif_set_cs_timings(aemif, data->cs - aemif->cs_offset, &timings);
 }
@@ -396,6 +386,7 @@ static int aemif_probe(struct platform_device *pdev)
 	if (IS_ERR(aemif->base))
 		return PTR_ERR(aemif->base);
 
+	spin_lock_init(&aemif->config_cs_lock);
 	if (np) {
 		/*
 		 * For every controller device node, there is a cs device node
