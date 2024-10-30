@@ -152,6 +152,7 @@ config DRM_PANIC_SCREEN
 config DRM_PANIC_SCREEN_QR_CODE
 	bool "Add a panic screen with a QR code"
 	depends on DRM_PANIC && RUST
+	select ZLIB_DEFLATE
 	help
 	  This option adds a QR code generator, and a panic screen with a QR
 	  code. The QR code will contain the last lines of kmsg and other debug
@@ -209,6 +210,18 @@ config DRM_DEBUG_MODESET_LOCK
 	  printed when attempting to lock a contended lock.
 
 	  If in doubt, say "N".
+
+config DRM_CLIENT_SELECTION
+	bool
+	depends on DRM
+	select DRM_CLIENT_SETUP if DRM_FBDEV_EMULATION
+	help
+	  Drivers that support in-kernel DRM clients have to select this
+	  option.
+
+config DRM_CLIENT_SETUP
+	bool
+	depends on DRM_CLIENT_SELECTION
 
 config DRM_FBDEV_EMULATION
 	bool "Enable legacy fbdev support for your modesetting driver"
@@ -472,6 +485,7 @@ source "drivers/gpu/drm/imagination/Kconfig"
 config DRM_HYPERV
 	tristate "DRM Support for Hyper-V synthetic video device"
 	depends on DRM && PCI && MMU && HYPERV
+	select DRM_CLIENT_SELECTION
 	select DRM_KMS_HELPER
 	select DRM_GEM_SHMEM_HELPER
 	help
