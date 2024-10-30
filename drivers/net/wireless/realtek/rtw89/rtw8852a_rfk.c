@@ -2248,8 +2248,6 @@ static s8 _dpk_dgain_mapping(struct rtw89_dev *rtwdev, u16 dgain)
 		offset = -9;
 	else if (dgain <= 0x155)
 		offset = -12;
-	else
-		offset = 0x0;
 
 	return offset;
 }
