@@ -1507,8 +1507,7 @@ static int kxcjk1013_probe(struct i2c_client *client)
 		data->info = (const struct kx_chipset_info *)(id->driver_data);
 	} else {
 		name = iio_get_acpi_device_name_and_data(&client->dev, &ddata);
-		if (name)
-			data->info = ddata;
+		data->info = ddata;
 		if (data->info == &kxcj91008_kiox010a_info)
 			indio_dev->label = "accel-display";
 		else if (data->info == &kxcj91008_kiox020a_info)
