@@ -926,8 +926,14 @@ axienet_start_xmit_dmaengine(struct sk_buff *skb, struct net_device *ndev)
 	dma_tx_desc->callback_result = axienet_dma_tx_cb;
 	txq = skb_get_tx_queue(lp->ndev, skb);
 	netdev_tx_sent_queue(txq, skb->len);
-	netif_txq_maybe_stop(txq, CIRC_SPACE(lp->tx_ring_head, lp->tx_ring_tail, TX_BD_NUM_MAX),
-			     MAX_SKB_FRAGS + 1, 2 * MAX_SKB_FRAGS);
+
+	/* Check if queue stopped */
+	if (!netif_txq_maybe_stop(txq, CIRC_SPACE(lp->tx_ring_head, lp->tx_ring_tail,
+						  TX_BD_NUM_MAX),
+						  MAX_SKB_FRAGS + 1, 2 * MAX_SKB_FRAGS)) {
+		dma_unmap_sg(lp->dev, skbuf_dma->sgl, sg_len, DMA_TO_DEVICE);
+		return NETDEV_TX_BUSY;
+	}
 
 	dmaengine_submit(dma_tx_desc);
 	dma_async_issue_pending(lp->tx_chan);
