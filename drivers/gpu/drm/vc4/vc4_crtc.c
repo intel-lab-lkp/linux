@@ -576,10 +576,12 @@ void vc4_crtc_send_vblank(struct drm_crtc *crtc)
 	struct drm_device *dev = crtc->dev;
 	unsigned long flags;
 
-	if (!crtc->state || !crtc->state->event)
-		return;
-
 	spin_lock_irqsave(&dev->event_lock, flags);
+	if (!crtc->state || !crtc->state->event) {
+		spin_unlock_irqrestore(&dev->event_lock, flags);
+		return;
+	}
+
 	drm_crtc_send_vblank_event(crtc, crtc->state->event);
 	crtc->state->event = NULL;
 	spin_unlock_irqrestore(&dev->event_lock, flags);
