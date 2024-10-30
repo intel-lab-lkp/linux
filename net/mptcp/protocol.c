@@ -2854,6 +2854,7 @@ static void mptcp_ca_reset(struct sock *sk)
 static int mptcp_init_sock(struct sock *sk)
 {
 	struct net *net = sock_net(sk);
+	struct mptcp_sched_ops *sched;
 	int ret;
 
 	__mptcp_init_sock(sk);
@@ -2864,8 +2865,10 @@ static int mptcp_init_sock(struct sock *sk)
 	if (unlikely(!net->mib.mptcp_statistics) && !mptcp_mib_alloc(net))
 		return -ENOMEM;
 
-	ret = mptcp_init_sched(mptcp_sk(sk),
-			       mptcp_sched_find(mptcp_get_scheduler(net)));
+	rcu_read_lock();
+	sched = mptcp_sched_find(mptcp_get_scheduler(net));
+	rcu_read_unlock();
+	ret = mptcp_init_sched(mptcp_sk(sk), sched);
 	if (ret)
 		return ret;
 
