@@ -122,9 +122,12 @@ static ssize_t video_source_store(struct device *dev,
 	if (loopin_old && loopin_cnt(loopin_old) == 1)
 		mgb4_mask_reg(&mgbdev->video, loopin_old->config->regs.config,
 			      0x2, 0x0);
-	if (loopin_new)
+	if (loopin_new) {
 		mgb4_mask_reg(&mgbdev->video, loopin_new->config->regs.config,
 			      0x2, 0x2);
+		mgb4_write_reg(&mgbdev->video, voutdev->config->regs.padding,
+			       loopin_new->padding);
+	}
 
 	if (val == voutdev->config->id + MGB4_VIN_DEVICES)
 		mgb4_write_reg(&mgbdev->video, voutdev->config->regs.config,

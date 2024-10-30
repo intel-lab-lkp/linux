@@ -331,27 +331,10 @@ out:
 	return rv;
 }
 
-static int fh_release(struct file *file)
-{
-	struct mgb4_vin_dev *vindev = video_drvdata(file);
-	int rv;
-
-	mutex_lock(&vindev->lock);
-
-	if (v4l2_fh_is_singular_file(file))
-		set_loopback_padding(vindev, 0);
-
-	rv = _vb2_fop_release(file, NULL);
-
-	mutex_unlock(&vindev->lock);
-
-	return rv;
-}
-
 static const struct v4l2_file_operations video_fops = {
 	.owner = THIS_MODULE,
 	.open = fh_open,
-	.release = fh_release,
+	.release = vb2_fop_release,
 	.unlocked_ioctl = video_ioctl2,
 	.read = vb2_fop_read,
 	.mmap = vb2_fop_mmap,
