@@ -979,7 +979,7 @@ static void __init cpg_mssr_reserved_exit(struct cpg_mssr_priv *priv)
 static int __init cpg_mssr_reserved_init(struct cpg_mssr_priv *priv,
 					 const struct cpg_mssr_info *info)
 {
-	struct device_node *soc = of_find_node_by_path("/soc");
+	struct device_node *soc __free(device_node) = of_find_node_by_path("/soc");
 	struct device_node *node;
 	uint32_t args[MAX_PHANDLE_ARGS];
 	unsigned int *ids = NULL;
@@ -1022,7 +1022,6 @@ static int __init cpg_mssr_reserved_init(struct cpg_mssr_priv *priv,
 
 			ids = krealloc_array(ids, (num + 1), sizeof(*ids), GFP_KERNEL);
 			if (!ids) {
-				of_node_put(soc);
 				of_node_put(it.node);
 				return -ENOMEM;
 			}
@@ -1037,7 +1036,6 @@ static int __init cpg_mssr_reserved_init(struct cpg_mssr_priv *priv,
 			num++;
 		}
 	}
-	of_node_put(soc);
 
 	priv->num_reserved_ids	= num;
 	priv->reserved_ids	= ids;
