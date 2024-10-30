@@ -102,12 +102,16 @@ EXPORT_SYMBOL_GPL(iio_read_acpi_mount_matrix);
  * NOTE: This helper function exists only for backward compatibility,
  * do not use in a new code!
  *
- * Returns: ACPI device instance name or %NULL.
+ * Returns: ACPI device instance name or %NULL When returning %NULL, the @data,
+ * if provided, will be also initialised to %NULL.
  */
 const char *iio_get_acpi_device_name_and_data(struct device *dev, const void **data)
 {
 	const struct acpi_device_id *id;
 	acpi_handle handle;
+
+	if (data)
+		*data = NULL;
 
 	handle = ACPI_HANDLE(dev);
 	if (!handle)
