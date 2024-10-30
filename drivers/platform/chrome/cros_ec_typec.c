@@ -500,7 +500,7 @@ static int cros_typec_enable_tbt(struct cros_typec_data *typec,
 	}
 
 	port->state.data = &data;
-	port->state.mode = TYPEC_TBT_MODE;
+	port->state.mode = USB_TYPEC_TBT_MODE;
 
 	return typec_mux_set(port->mux, &port->state);
 }

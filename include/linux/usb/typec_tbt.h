@@ -10,7 +10,7 @@
 #define USB_TYPEC_TBT_SID		USB_TYPEC_VENDOR_INTEL
 
 /* Connector state for Thunderbolt3 */
-#define TYPEC_TBT_MODE			TYPEC_STATE_MODAL
+#define USB_TYPEC_TBT_MODE		TYPEC_STATE_MODAL
 
 /**
  * struct typec_thunderbolt_data - Thundebolt3 Alt Mode specific data
@@ -44,6 +44,7 @@ struct typec_thunderbolt_data {
 
 #define   TBT_GEN3_NON_ROUNDED                 0
 #define   TBT_GEN3_GEN4_ROUNDED_NON_ROUNDED    1
+#define TBT_CABLE_ROUNDED		BIT(19)
 #define TBT_CABLE_OPTICAL		BIT(21)
 #define TBT_CABLE_RETIMER		BIT(22)
 #define TBT_CABLE_LINK_TRAINING		BIT(23)
