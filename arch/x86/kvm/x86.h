@@ -384,13 +384,16 @@ static inline bool kvm_mpx_supported(void)
 
 extern unsigned int min_timer_period_us;
 
-extern bool enable_vmware_backdoor;
-
 extern int pi_inject_timer;
 
 extern bool report_ignored_msrs;
 
 extern bool eager_page_split;
+
+static inline bool kvm_vmware_backdoor_enabled(struct kvm_vcpu *vcpu)
+{
+	return vcpu->kvm->arch.vmware_backdoor_enabled;
+}
 
 static inline void kvm_pr_unimpl_wrmsr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 {

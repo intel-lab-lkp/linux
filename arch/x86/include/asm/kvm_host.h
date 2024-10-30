@@ -1401,6 +1401,7 @@ struct kvm_arch {
 #ifdef CONFIG_KVM_XEN
 	struct kvm_xen xen;
 #endif
+	bool vmware_backdoor_enabled;
 
 	bool backwards_tsc_observed;
 	bool boot_vcpu_runs_old_kvmclock;

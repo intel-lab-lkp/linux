@@ -314,7 +314,7 @@ int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 			svm_leave_nested(vcpu);
 			svm_set_gif(svm, true);
 			/* #GP intercept is still needed for vmware backdoor */
-			if (!enable_vmware_backdoor)
+			if (!kvm_vmware_backdoor_enabled(vcpu))
 				clr_exception_intercept(svm, GP_VECTOR);
 
 			/*
@@ -1262,7 +1262,7 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	 * We intercept those #GP and allow access to them anyway
 	 * as VMware does.
 	 */
-	if (enable_vmware_backdoor)
+	if (kvm_vmware_backdoor_enabled(vcpu))
 		set_exception_intercept(svm, GP_VECTOR);
 
 	svm_set_intercept(svm, INTERCEPT_INTR);
@@ -2401,7 +2401,7 @@ static int gp_interception(struct kvm_vcpu *vcpu)
 	opcode = svm_instr_opcode(vcpu);
 
 	if (opcode == NONE_SVM_INSTR) {
-		if (!enable_vmware_backdoor)
+		if (!kvm_vmware_backdoor_enabled(vcpu))
 			goto reinject;
 
 		/*

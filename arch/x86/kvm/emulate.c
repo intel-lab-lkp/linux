@@ -2563,7 +2563,7 @@ static bool emulator_io_port_access_allowed(struct x86_emulate_ctxt *ctxt,
 	 * VMware allows access to these ports even if denied
 	 * by TSS I/O permission bitmap. Mimic behavior.
 	 */
-	if (enable_vmware_backdoor &&
+	if (kvm_vmware_backdoor_enabled(ctxt->vcpu) &&
 	    ((port == VMWARE_PORT_VMPORT) || (port == VMWARE_PORT_VMRPC)))
 		return true;
 
@@ -3917,7 +3917,8 @@ static int check_rdpmc(struct x86_emulate_ctxt *ctxt)
 	 * VMware allows access to these Pseduo-PMCs even when read via RDPMC
 	 * in Ring3 when CR4.PCE=0.
 	 */
-	if (enable_vmware_backdoor && is_vmware_backdoor_pmc(rcx))
+	if (kvm_vmware_backdoor_enabled(ctxt->vcpu) &&
+	    is_vmware_backdoor_pmc(rcx))
 		return X86EMUL_CONTINUE;
 
 	/*

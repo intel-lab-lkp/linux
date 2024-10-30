@@ -8211,6 +8211,21 @@ KVM exits with the register state of either the L1 or L2 guest
 depending on which executed at the time of an exit. Userspace must
 take care to differentiate between these cases.
 
+7.37 KVM_CAP_X86_VMWARE_BACKDOOR
+--------------------------------
+
+:Architectures: x86
+:Parameters: args[0] whether the feature should be enabled or not
+:Returns: 0 on success.
+
+The presence of this capability indicates that KVM supports
+enabling of the VMware backdoor via the enable cap interface.
+
+When enabled KVM will support VMware backdoor PV interface. The
+default value for it is set via the kvm.enable_vmware_backdoor
+kernel parameter (false when not set). Must be set before any
+VCPUs have been created.
+
 8. Other capabilities.
 ======================
 
