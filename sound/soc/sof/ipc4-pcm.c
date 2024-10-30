@@ -600,7 +600,7 @@ static int sof_ipc4_pcm_dai_link_fixup_rate(struct snd_sof_dev *sdev,
 	unsigned int fe_rate = params_rate(params);
 	bool fe_be_rate_match = false;
 	bool single_be_rate = true;
-	unsigned int be_rate;
+	unsigned int be_rate = 0;
 	int i;
 
 	/*
