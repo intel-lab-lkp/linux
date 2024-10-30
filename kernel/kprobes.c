@@ -145,16 +145,18 @@ kprobe_opcode_t *__get_insn_slot(struct kprobe_insn_cache *c)
 {
 	struct kprobe_insn_page *kip;
 	kprobe_opcode_t *slot = NULL;
+	int num_slots;
 
 	/* Since the slot array is not protected by rcu, we need a mutex */
 	mutex_lock(&c->mutex);
+	num_slots = slots_per_page(c);
  retry:
 	rcu_read_lock();
 	list_for_each_entry_rcu(kip, &c->pages, list) {
-		if (kip->nused < slots_per_page(c)) {
+		if (kip->nused < num_slots) {
 			int i;
 
-			for (i = 0; i < slots_per_page(c); i++) {
+			for (i = 0; i < num_slots; i++) {
 				if (kip->slot_used[i] == SLOT_CLEAN) {
 					kip->slot_used[i] = SLOT_USED;
 					kip->nused++;
@@ -164,7 +166,7 @@ kprobe_opcode_t *__get_insn_slot(struct kprobe_insn_cache *c)
 				}
 			}
 			/* kip->nused is broken. Fix it. */
-			kip->nused = slots_per_page(c);
+			kip->nused = num_slots;
 			WARN_ON(1);
 		}
 	}
@@ -175,7 +177,7 @@ kprobe_opcode_t *__get_insn_slot(struct kprobe_insn_cache *c)
 		goto retry;
 
 	/* All out of space.  Need to allocate a new page. */
-	kip = kmalloc(KPROBE_INSN_PAGE_SIZE(slots_per_page(c)), GFP_KERNEL);
+	kip = kmalloc(KPROBE_INSN_PAGE_SIZE(num_slots), GFP_KERNEL);
 	if (!kip)
 		goto out;
 
@@ -185,9 +187,11 @@ kprobe_opcode_t *__get_insn_slot(struct kprobe_insn_cache *c)
 		goto out;
 	}
 	INIT_LIST_HEAD(&kip->list);
-	memset(kip->slot_used, SLOT_CLEAN, slots_per_page(c));
-	kip->slot_used[0] = SLOT_USED;
+	/* nused must be set before accessing slot_used */
+	kip->nused = num_slots;
+	memset(kip->slot_used, SLOT_CLEAN, num_slots);
 	kip->nused = 1;
+	kip->slot_used[0] = SLOT_USED;
 	kip->ngarbage = 0;
 	kip->cache = c;
 	list_add_rcu(&kip->list, &c->pages);
