@@ -86,6 +86,8 @@ void of_i2c_register_devices(struct i2c_adapter *adap)
 {
 	struct device_node *bus, *node;
 	struct i2c_client *client;
+	u32 addr;
+	char temp[16];
 
 	/* Only register child devices if the adapter has a node pointer set */
 	if (!adap->dev.of_node)
@@ -99,6 +101,10 @@ void of_i2c_register_devices(struct i2c_adapter *adap)
 
 	for_each_available_child_of_node(bus, node) {
 		if (of_node_test_and_set_flag(node, OF_POPULATED))
+			continue;
+
+		if (of_property_read_u32(node, "reg", &addr) ||
+		    of_alias_from_compatible(node, temp, sizeof(temp)))
 			continue;
 
 		client = of_i2c_register_device(adap, node);
