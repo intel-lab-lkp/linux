@@ -128,6 +128,7 @@ int typec_cable_set_identity(struct typec_cable *cable);
  * @svid: Standard or Vendor ID
  * @mode: Index of the Mode
  * @vdo: VDO returned by Discover Modes USB PD command
+ * @no_auto_enter: Only for ports. Disables auto enter which is default behavior.
  * @roles: Only for ports. DRP if the mode is available in both roles
  *
  * Description of an Alternate Mode which a connector, cable plug or partner
@@ -137,6 +138,7 @@ struct typec_altmode_desc {
 	u16			svid;
 	u8			mode;
 	u32			vdo;
+	bool			no_auto_enter;
 	/* Only used with ports */
 	enum typec_port_data	roles;
 };

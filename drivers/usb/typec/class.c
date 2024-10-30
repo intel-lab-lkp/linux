@@ -397,6 +397,31 @@ static ssize_t active_store(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_RW(active);
 
 static ssize_t
+auto_enter_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct typec_altmode *alt = to_typec_altmode(dev);
+
+	return sprintf(buf, "%s\n", alt->auto_enter ? "yes" : "no");
+}
+
+static ssize_t auto_enter_store(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t size)
+{
+	struct typec_altmode *adev = to_typec_altmode(dev);
+	bool auto_enter;
+	int ret;
+
+	ret = kstrtobool(buf, &auto_enter);
+	if (ret)
+		return ret;
+
+	adev->auto_enter = auto_enter;
+
+	return size;
+}
+static DEVICE_ATTR_RW(auto_enter);
+
+static ssize_t
 supported_roles_show(struct device *dev, struct device_attribute *attr,
 		     char *buf)
 {
@@ -439,6 +464,7 @@ static DEVICE_ATTR_RO(svid);
 
 static struct attribute *typec_altmode_attrs[] = {
 	&dev_attr_active.attr,
+	&dev_attr_auto_enter.attr,
 	&dev_attr_mode.attr,
 	&dev_attr_svid.attr,
 	&dev_attr_vdo.attr,
@@ -453,6 +479,10 @@ static umode_t typec_altmode_attr_is_visible(struct kobject *kobj,
 	if (attr == &dev_attr_active.attr)
 		if (!adev->ops || !adev->ops->activate)
 			return 0444;
+
+	if (attr == &dev_attr_auto_enter.attr)
+		if (!is_typec_port(adev->dev.parent))
+			return 0;
 
 	return attr->mode;
 }
@@ -556,6 +586,7 @@ typec_register_altmode(struct device *parent,
 	if (is_port) {
 		alt->attrs[3] = &dev_attr_supported_roles.attr;
 		alt->adev.active = true; /* Enabled by default */
+		alt->adev.auto_enter = !desc->no_auto_enter;
 	}
 
 	sprintf(alt->group_name, "mode%d", desc->mode);
