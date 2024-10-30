@@ -195,12 +195,20 @@ void blk_mq_unfreeze_queue(struct request_queue *q)
 EXPORT_SYMBOL_GPL(blk_mq_unfreeze_queue);
 
 /*
- * non_owner variant of blk_freeze_queue_start
+ * non_owner variant of blk_mq_freeze_queue
  *
- * Unlike blk_freeze_queue_start, the queue doesn't need to be unfrozen
- * by the same task.  This is fragile and should not be used if at all
+ * Unlike blk_mq_freeze_queue, the queue doesn't need to be unfrozen by
+ * the same task. This is fragile and should not be used if at all
  * possible.
  */
+void blk_mq_freeze_queue_non_owner(struct request_queue *q)
+{
+	__blk_freeze_queue_start(q);
+	blk_mq_freeze_queue_wait(q);
+}
+EXPORT_SYMBOL_GPL(blk_mq_freeze_queue_non_owner);
+
+/* non_owner variant of blk_freeze_queue_start */
 void blk_freeze_queue_start_non_owner(struct request_queue *q)
 {
 	__blk_freeze_queue_start(q);
