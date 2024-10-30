@@ -660,6 +660,10 @@ static ssize_t fill_readbuf(struct port *port, u8 __user *out_buf,
 		return 0;
 
 	buf = port->inbuf;
+
+	if (!buf)
+		return 0;
+
 	out_count = min(out_count, buf->len - buf->offset);
 
 	if (to_user) {
