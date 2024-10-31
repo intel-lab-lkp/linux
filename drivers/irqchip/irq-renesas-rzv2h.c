@@ -102,7 +102,7 @@ static inline struct rzv2h_icu_priv *irq_data_to_priv(struct irq_data *data)
 static void rzv2h_icu_eoi(struct irq_data *d)
 {
 	struct rzv2h_icu_priv *priv = irq_data_to_priv(d);
-	unsigned int hw_irq = irqd_to_hwirq(d);
+	unsigned long hw_irq = irqd_to_hwirq(d);
 	unsigned int tintirq_nr;
 	u32 bit;
 
@@ -128,7 +128,7 @@ static void rzv2h_icu_eoi(struct irq_data *d)
 static void rzv2h_tint_irq_endisable(struct irq_data *d, bool enable)
 {
 	struct rzv2h_icu_priv *priv = irq_data_to_priv(d);
-	unsigned int hw_irq = irqd_to_hwirq(d);
+	unsigned long hw_irq = irqd_to_hwirq(d);
 	u32 tint_nr, tssel_n, k, tssr;
 
 	if (hw_irq < ICU_TINT_START)
@@ -184,7 +184,7 @@ static int rzv2h_nmi_set_type(struct irq_data *d, unsigned int type)
 
 static void rzv2h_clear_irq_int(struct rzv2h_icu_priv *priv, unsigned int hwirq)
 {
-	unsigned int irq_nr = hwirq - ICU_IRQ_START;
+	unsigned long irq_nr = hwirq - ICU_IRQ_START;
 	u32 isctr, iitsr, iitsel;
 	u32 bit = BIT(irq_nr);
 
@@ -204,8 +204,8 @@ static void rzv2h_clear_irq_int(struct rzv2h_icu_priv *priv, unsigned int hwirq)
 static int rzv2h_irq_set_type(struct irq_data *d, unsigned int type)
 {
 	struct rzv2h_icu_priv *priv = irq_data_to_priv(d);
-	unsigned int hwirq = irqd_to_hwirq(d);
-	u32 irq_nr = hwirq - ICU_IRQ_START;
+	unsigned long hwirq = irqd_to_hwirq(d);
+	unsigned long irq_nr = hwirq - ICU_IRQ_START;
 	u32 iitsr, sense;
 
 	switch (type & IRQ_TYPE_SENSE_MASK) {
@@ -241,7 +241,7 @@ static int rzv2h_irq_set_type(struct irq_data *d, unsigned int type)
 
 static void rzv2h_clear_tint_int(struct rzv2h_icu_priv *priv, unsigned int hwirq)
 {
-	unsigned int tint_nr = hwirq - ICU_TINT_START;
+	unsigned long tint_nr = hwirq - ICU_TINT_START;
 	int titsel_n = ICU_TITSR_TITSEL_N(tint_nr);
 	u32 tsctr, titsr, titsel;
 	u32 bit = BIT(tint_nr);
@@ -265,9 +265,9 @@ static int rzv2h_tint_set_type(struct irq_data *d, unsigned int type)
 	u32 titsr, titsr_k, titsel_n, tien;
 	struct rzv2h_icu_priv *priv;
 	u32 tssr, tssr_k, tssel_n;
-	unsigned int hwirq;
+	unsigned long hwirq;
 	u32 tint, sense;
-	int tint_nr;
+	unsigned long tint_nr;
 
 	switch (type & IRQ_TYPE_SENSE_MASK) {
 	case IRQ_TYPE_LEVEL_LOW:
@@ -329,7 +329,7 @@ static int rzv2h_tint_set_type(struct irq_data *d, unsigned int type)
 
 static int rzv2h_icu_set_type(struct irq_data *d, unsigned int type)
 {
-	unsigned int hw_irq = irqd_to_hwirq(d);
+	unsigned long hw_irq = irqd_to_hwirq(d);
 	int ret;
 
 	if (hw_irq >= ICU_TINT_START)
