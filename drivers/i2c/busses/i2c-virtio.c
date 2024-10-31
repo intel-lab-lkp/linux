@@ -251,6 +251,12 @@ static int virtio_i2c_freeze(struct virtio_device *vdev)
 
 static int virtio_i2c_restore(struct virtio_device *vdev)
 {
+	int ret;
+
+	ret = virtio_device_reset_and_restore_status(vdev);
+	if (ret)
+		return ret;
+
 	return virtio_i2c_setup_vqs(vdev->priv);
 }
 

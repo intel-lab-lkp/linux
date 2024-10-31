@@ -6693,6 +6693,10 @@ static __maybe_unused int virtnet_restore(struct virtio_device *vdev)
 	struct virtnet_info *vi = vdev->priv;
 	int err;
 
+	err = virtio_device_reset_and_restore_status(vdev);
+	if (err)
+		return err;
+
 	err = virtnet_restore_up(vdev);
 	if (err)
 		return err;

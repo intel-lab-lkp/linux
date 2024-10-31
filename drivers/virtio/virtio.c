@@ -549,7 +549,7 @@ int virtio_device_freeze(struct virtio_device *dev)
 }
 EXPORT_SYMBOL_GPL(virtio_device_freeze);
 
-int virtio_device_restore(struct virtio_device *dev)
+int virtio_device_reset_and_restore_status(struct virtio_device *dev)
 {
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 	int ret;
@@ -574,23 +574,34 @@ int virtio_device_restore(struct virtio_device *dev)
 
 	ret = dev->config->finalize_features(dev);
 	if (ret)
-		goto err;
+		return ret;
 
 	ret = virtio_features_ok(dev);
 	if (ret)
-		goto err;
+		return ret;
 
-	if (drv->restore) {
-		ret = drv->restore(dev);
-		if (ret)
-			goto err;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(virtio_device_reset_and_restore_status);
+
+int virtio_device_restore(struct virtio_device *dev)
+{
+	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
+	int ret;
+
+	if (drv) {
+		if (drv->restore) {
+			ret = drv->restore(dev);
+			if (ret)
+				goto err;
+		}
+
+		/* If restore didn't do it, mark device DRIVER_OK ourselves. */
+		if (!(dev->config->get_status(dev) & VIRTIO_CONFIG_S_DRIVER_OK))
+			virtio_device_ready(dev);
+
+		virtio_config_core_enable(dev);
 	}
-
-	/* If restore didn't do it, mark device DRIVER_OK ourselves. */
-	if (!(dev->config->get_status(dev) & VIRTIO_CONFIG_S_DRIVER_OK))
-		virtio_device_ready(dev);
-
-	virtio_config_core_enable(dev);
 
 	return 0;
 

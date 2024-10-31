@@ -374,6 +374,10 @@ static int virtinput_restore(struct virtio_device *vdev)
 	struct virtio_input *vi = vdev->priv;
 	int err;
 
+	err = virtio_device_reset_and_restore_status(vdev);
+	if (err)
+		return err;
+
 	err = virtinput_init_vqs(vi);
 	if (err)
 		return err;
