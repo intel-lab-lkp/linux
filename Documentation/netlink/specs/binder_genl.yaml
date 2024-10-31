@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+
+name: binder_genl
+protocol: genetlink
+uapi-header: linux/android/binder_genl.h
+doc: Netlink protocol to report binder transaction errors and warnings.
+
+definitions:
+  -
+    type: flags
+    name: flag
+    doc: |
+      Used with "set" and "reply" command below, defining what kind of binder
+      transactions reported to the user space administration process.
+    value-start: 0
+    entries: [ failed, delayed, spam, override ]
+
+attribute-sets:
+  -
+    name: cmd
+    doc: The supported attributes of "set" and "reply" commands
+    attributes:
+      -
+        name: pid
+        type: u32
+        doc: |
+          What binder proc or context to enable binder genl report,
+          used by "set" and "reply" command below.
+      -
+        name: flags
+        type: u32
+        doc: |
+          What kind of binder transactions reported via binder genl,
+          used by "set" and "reply" command below.
+  -
+    name: report
+    doc: The supported attributes of "report" command
+    attributes:
+      -
+        name: err
+        type: u32
+        doc: |
+          Copy of binder_driver_return_protocol returned to the sender,
+          used by "report" command below.
+      -
+        name: from_pid
+        type: u32
+        doc: |
+          Sender pid of the corresponding binder transaction
+          used by "report" command below.
+      -
+        name: from_tid
+        type: u32
+        doc: |
+          Sender tid of the corresponding binder transaction
+          used by "report" command below.
+      -
+        name: to_pid
+        type: u32
+        doc: |
+          Target pid of the corresponding binder transaction
+          used by "report" command below.
+      -
+        name: to_tid
+        type: u32
+        doc: |
+          Target tid of the corresponding binder transaction
+          used by "report" command below.
+      -
+        name: reply
+        type: u32
+        doc: |
+          1 means the transaction is a reply, 0 otherwise
+          used by "report" command below.
+      -
+        name: flags
+        type: u32
+        doc: |
+          Copy of binder_transaction_data->flags
+          used by "report" command below.
+      -
+        name: code
+        type: u32
+        doc: |
+          Copy of binder_transaction_data->code
+          used by "report" command below.
+      -
+        name: data_size
+        type: u32
+        doc: |
+          Copy of binder_transaction_data->data_size
+          used by "report" command below.
+
+operations:
+  list:
+    -
+      name: set
+      doc: |
+        Set flags from user space, requesting what kinds of binder
+        transactions to report.
+      attribute-set: cmd
+
+      do:
+        request: &params
+          attributes:
+            - pid
+            - flags
+        reply: *params
+    -
+      name: reply
+      doc: Acknowledge the above "set" request, echoing the same params.
+    -
+      name: report
+      doc: Send the requested binder transaction reports to user space.
