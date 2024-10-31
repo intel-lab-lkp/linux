@@ -227,6 +227,18 @@ static void ifs_free(struct folio *folio)
 	kfree(ifs);
 }
 
+/* helper to reset an iter for reuse */
+static inline void
+iomap_iter_init(struct iomap_iter *iter, struct inode *inode, loff_t pos,
+		loff_t len, unsigned flags)
+{
+	memset(iter, 0, sizeof(*iter));
+	iter->inode = inode;
+	iter->pos = pos;
+	iter->len = len;
+	iter->flags = flags;
+}
+
 /*
  * Calculate the range inside the folio that we actually need to read.
  */
@@ -1401,6 +1413,10 @@ iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
 		.len		= len,
 		.flags		= IOMAP_ZERO,
 	};
+	struct address_space *mapping = inode->i_mapping;
+	unsigned int blocksize = i_blocksize(inode);
+	unsigned int off = pos & (blocksize - 1);
+	loff_t plen = min_t(loff_t, len, blocksize - off);
 	int ret;
 	bool range_dirty;
 
@@ -1410,12 +1426,30 @@ iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
 	 * mapping converts on writeback completion and must be zeroed.
 	 *
 	 * The simplest way to deal with this is to flush pagecache and process
-	 * the updated mappings. To avoid an unconditional flush, check dirty
-	 * state and defer the flush until a combination of dirty pagecache and
-	 * at least one mapping that might convert on writeback is seen.
+	 * the updated mappings. First, special case the partial eof zeroing
+	 * use case since it is more performance sensitive. Zero the start of
+	 * the range if unaligned and already dirty in pagecache.
+	 */
+	if (off &&
+	    filemap_range_needs_writeback(mapping, pos, pos + plen - 1)) {
+		iter.len = plen;
+		while ((ret = iomap_iter(&iter, ops)) > 0)
+			iter.processed = iomap_zero_iter(&iter, did_zero);
+
+		/* reset iterator for the rest of the range */
+		iomap_iter_init(&iter, inode, iter.pos,
+			len - (iter.pos - pos), IOMAP_ZERO);
+		if (ret || !iter.len)
+			return ret;
+	}
+
+	/*
+	 * To avoid an unconditional flush, check dirty state and defer the
+	 * flush until a combination of dirty pagecache and at least one
+	 * mapping that might convert on writeback is seen.
 	 */
 	range_dirty = filemap_range_needs_writeback(inode->i_mapping,
-					pos, pos + len - 1);
+					iter.pos, iter.pos + iter.len - 1);
 	while ((ret = iomap_iter(&iter, ops)) > 0) {
 		const struct iomap *s = iomap_iter_srcmap(&iter);
 		if (s->type == IOMAP_HOLE || s->type == IOMAP_UNWRITTEN) {
