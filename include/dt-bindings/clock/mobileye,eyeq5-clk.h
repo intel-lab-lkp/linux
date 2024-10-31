@@ -25,6 +25,10 @@
 #define EQ5C_CPU_CORE2	13
 #define EQ5C_CPU_CORE3	14
 
+/* EQ5C_PLL_PER children */
+#define EQ5C_PER_OCC	15
+#define EQ5C_PER_UART	16
+
 #define EQ6LC_PLL_DDR		0
 #define EQ6LC_PLL_CPU		1
 #define EQ6LC_PLL_PER		2
