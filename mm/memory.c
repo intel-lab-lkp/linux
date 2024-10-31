@@ -1436,7 +1436,7 @@ copy_page_range(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma)
 static inline bool should_zap_cows(struct zap_details *details)
 {
 	/* By default, zap all pages */
-	if (!details)
+	if (!details || details->reclaim_pt)
 		return true;
 
 	/* Or, we zap COWed pages only if the caller wants to */
@@ -1678,6 +1678,30 @@ static inline int do_zap_pte_range(struct mmu_gather *tlb,
 					 details, rss);
 }
 
+static inline int count_pte_none(pte_t *pte, int nr)
+{
+	int none_nr = 0;
+
+	/*
+	 * If PTE_MARKER_UFFD_WP is enabled, the uffd-wp PTEs may be
+	 * re-installed, so we need to check pte_none() one by one.
+	 * Otherwise, checking a single PTE in a batch is sufficient.
+	 */
+#ifdef CONFIG_PTE_MARKER_UFFD_WP
+	for (;;) {
+		if (pte_none(ptep_get(pte)))
+			none_nr++;
+		if (--nr == 0)
+			break;
+		pte++;
+	}
+#else
+	if (pte_none(ptep_get(pte)))
+		none_nr = nr;
+#endif
+	return none_nr;
+}
+
 static unsigned long zap_pte_range(struct mmu_gather *tlb,
 				struct vm_area_struct *vma, pmd_t *pmd,
 				unsigned long addr, unsigned long end,
@@ -1689,7 +1713,15 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 	spinlock_t *ptl;
 	pte_t *start_pte;
 	pte_t *pte;
+	pmd_t pmdval;
+	bool can_reclaim_pt = false;
+	bool direct_reclaim = false;
+	unsigned long start = addr;
+	int none_nr = 0;
 	int nr;
+
+	if (details && details->reclaim_pt && (end - start >= PMD_SIZE))
+		can_reclaim_pt = true;
 
 retry:
 	tlb_change_page_size(tlb, PAGE_SIZE);
@@ -1706,11 +1738,15 @@ retry:
 
 		nr = do_zap_pte_range(tlb, vma, pte, addr, end, details, rss,
 				      &force_flush, &force_break);
+		none_nr += count_pte_none(pte, nr);
 		if (unlikely(force_break)) {
 			addr += nr * PAGE_SIZE;
 			break;
 		}
 	} while (pte += nr, addr += PAGE_SIZE * nr, addr != end);
+
+	if (addr == end && can_reclaim_pt && (none_nr == PTRS_PER_PTE))
+		direct_reclaim = try_get_and_clear_pmd(mm, pmd, &pmdval);
 
 	add_mm_rss_vec(mm, rss);
 	arch_leave_lazy_mmu_mode();
@@ -1736,6 +1772,13 @@ retry:
 		force_flush = false;
 		force_break = false;
 		goto retry;
+	}
+
+	if (can_reclaim_pt) {
+		if (direct_reclaim)
+			free_pte(mm, start, tlb, pmdval);
+		else
+			try_to_free_pte(mm, pmd, start, tlb);
 	}
 
 	return addr;

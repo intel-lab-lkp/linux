@@ -1508,4 +1508,27 @@ int walk_page_range_mm(struct mm_struct *mm, unsigned long start,
 		unsigned long end, const struct mm_walk_ops *ops,
 		void *private);
 
+#ifdef CONFIG_PT_RECLAIM
+bool try_get_and_clear_pmd(struct mm_struct *mm, pmd_t *pmd, pmd_t *pmdval);
+void free_pte(struct mm_struct *mm, unsigned long addr, struct mmu_gather *tlb,
+	      pmd_t pmdval);
+void try_to_free_pte(struct mm_struct *mm, pmd_t *pmd, unsigned long addr,
+		     struct mmu_gather *tlb);
+#else
+static inline bool try_get_and_clear_pmd(struct mm_struct *mm, pmd_t *pmd,
+					 pmd_t *pmdval)
+{
+	return false;
+}
+static inline void free_pte(struct mm_struct *mm, unsigned long addr,
+			    struct mmu_gather *tlb, pmd_t pmdval)
+{
+}
+static inline void try_to_free_pte(struct mm_struct *mm, pmd_t *pmd,
+				   unsigned long addr, struct mmu_gather *tlb)
+{
+}
+#endif /* CONFIG_PT_RECLAIM */
+
+
 #endif	/* __MM_INTERNAL_H */
