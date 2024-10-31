@@ -8,6 +8,7 @@
  *  Copyright  ©  2009 Paul Mackerras, IBM Corp. <paulus@au1.ibm.com>
  */
 
+#include "linux/seq_file.h"
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/cpu.h>
@@ -6820,6 +6821,17 @@ static int perf_fasync(int fd, struct file *filp, int on)
 	return 0;
 }
 
+static void perf_show_fdinfo(struct seq_file *m, struct file *f)
+{
+	struct perf_event *event = f->private_data;
+
+	seq_printf(m, "perf_event-attr.type:\t%u\n", event->orig_type);
+	seq_printf(m, "perf_event-attr.config:\t%llu\n", event->attr.config);
+	seq_printf(m, "perf_event-attr.config1:\t%llu\n", event->attr.config1);
+	seq_printf(m, "perf_event-attr.config2:\t%llu\n", event->attr.config2);
+	seq_printf(m, "perf_event-attr.config3:\t%llu\n", event->attr.config3);
+}
+
 static const struct file_operations perf_fops = {
 	.release		= perf_release,
 	.read			= perf_read,
@@ -6828,6 +6840,7 @@ static const struct file_operations perf_fops = {
 	.compat_ioctl		= perf_compat_ioctl,
 	.mmap			= perf_mmap,
 	.fasync			= perf_fasync,
+	.show_fdinfo		= perf_show_fdinfo,
 };
 
 /*
