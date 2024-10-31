@@ -19,6 +19,12 @@
 
 #define EQ5C_DIV_OSPI	10
 
+/* EQ5C_PLL_CPU children */
+#define EQ5C_CPU_CORE0	11
+#define EQ5C_CPU_CORE1	12
+#define EQ5C_CPU_CORE2	13
+#define EQ5C_CPU_CORE3	14
+
 #define EQ6LC_PLL_DDR		0
 #define EQ6LC_PLL_CPU		1
 #define EQ6LC_PLL_PER		2
