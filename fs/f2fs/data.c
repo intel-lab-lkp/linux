@@ -1676,7 +1676,12 @@ next_block:
 		/* reserved delalloc block should be mapped for fiemap. */
 		if (blkaddr == NEW_ADDR)
 			map->m_flags |= F2FS_MAP_DELALLOC;
-		if (flag != F2FS_GET_BLOCK_DIO || !is_hole)
+		/*
+		 * f2fs_map_blocks() supports to map continuous holes or
+		 * preallocated address, don't set F2FS_MAP_MAPPED for these
+		 * cases only.
+		 */
+		if (flag != F2FS_GET_BLOCK_DIO || map->m_may_create || !is_hole)
 			map->m_flags |= F2FS_MAP_MAPPED;
 
 		map->m_pblk = blkaddr;
