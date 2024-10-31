@@ -288,6 +288,8 @@ static int bch2_mount_opt_lookup(const char *name)
 
 int bch2_opt_validate(const struct bch_option *opt, u64 v, struct printbuf *err)
 {
+	const u64 opt_max = opt->type == BCH_OPT_STR ? opt->max - 1 : opt->max;
+
 	if (v < opt->min) {
 		if (err)
 			prt_printf(err, "%s: too small (min %llu)",
@@ -295,10 +297,10 @@ int bch2_opt_validate(const struct bch_option *opt, u64 v, struct printbuf *err)
 		return -BCH_ERR_ERANGE_option_too_small;
 	}
 
-	if (opt->max && v >= opt->max) {
+	if (opt->max && v >= opt_max) {
 		if (err)
 			prt_printf(err, "%s: too big (max %llu)",
-			       opt->attr.name, opt->max);
+			       opt->attr.name, opt_max);
 		return -BCH_ERR_ERANGE_option_too_big;
 	}
 
