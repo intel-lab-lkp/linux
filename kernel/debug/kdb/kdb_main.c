@@ -1123,22 +1123,22 @@ int kdb_parse(const char *cmdstr)
 }
 
 
-static int handle_ctrl_cmd(char *cmd)
+static int handle_arrow_cmd(char *cmd)
 {
-#define CTRL_P	16
-#define CTRL_N	14
+#define ARROW_UP	16
+#define ARROW_DOWN	14
 
 	/* initial situation */
 	if (cmd_head == cmd_tail)
 		return 0;
 	switch (*cmd) {
-	case CTRL_P:
+	case ARROW_UP:
 		if (cmdptr != cmd_tail)
 			cmdptr = (cmdptr + KDB_CMD_HISTORY_COUNT - 1) %
 				 KDB_CMD_HISTORY_COUNT;
 		strscpy(cmd_cur, cmd_hist[cmdptr], CMD_BUFLEN);
 		return 1;
-	case CTRL_N:
+	case ARROW_DOWN:
 		if (cmdptr != cmd_head)
 			cmdptr = (cmdptr+1) % KDB_CMD_HISTORY_COUNT;
 		strscpy(cmd_cur, cmd_hist[cmdptr], CMD_BUFLEN);
@@ -1351,7 +1351,7 @@ do_full_getstr:
 					*(cmd_hist[cmd_head] +
 					  strlen(cmd_hist[cmd_head])-1) = '\0';
 				}
-				if (!handle_ctrl_cmd(cmdbuf))
+				if (!handle_arrow_cmd(cmdbuf))
 					*(cmd_cur+strlen(cmd_cur)-1) = '\0';
 				cmdbuf = cmd_cur;
 				goto do_full_getstr;
