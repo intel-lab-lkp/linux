@@ -103,6 +103,30 @@ struct arm_spe_queue {
 	u32				flags;
 };
 
+struct arm_spe_source_mapping {
+	u16 source;
+	enum arm_spe_common_data_source common_src;
+};
+
+#define MAP_SOURCE(src, common)				\
+	{						\
+		.source = ARM_SPE_##src,		\
+		.common_src = ARM_SPE_COMMON_##common,  \
+	}
+
+static int arm_spe__map_to_common_source(u16 source,
+					 struct arm_spe_source_mapping *tbl,
+					 int nr_sources)
+{
+	while (nr_sources--) {
+		if (tbl->source == source)
+			return tbl->common_src;
+		tbl++;
+	}
+
+	return -1;
+}
+
 static void arm_spe_dump(struct arm_spe *spe __maybe_unused,
 			 unsigned char *buf, size_t len)
 {
@@ -443,6 +467,11 @@ static const struct midr_range common_ds_encoding_cpus[] = {
 	{},
 };
 
+static const struct midr_range ampereone_ds_encoding_cpus[] = {
+	MIDR_ALL_VERSIONS(MIDR_AMPERE1A),
+	{},
+};
+
 static void arm_spe__sample_flags(struct arm_spe_queue *speq)
 {
 	const struct arm_spe_record *record = &speq->decoder->record;
@@ -532,6 +561,38 @@ static void arm_spe__synth_data_source_common(const struct arm_spe_record *recor
 	}
 }
 
+static struct arm_spe_source_mapping ampereone_sources[] = {
+	MAP_SOURCE(AMPEREONE_LOCAL_CHIP_CACHE_OR_DEVICE, DS_PEER_CORE),
+	MAP_SOURCE(AMPEREONE_SLC, DS_SYS_CACHE),
+	MAP_SOURCE(AMPEREONE_REMOTE_CHIP_CACHE, DS_REMOTE),
+	MAP_SOURCE(AMPEREONE_DDR, DS_DRAM),
+	MAP_SOURCE(AMPEREONE_L1D, DS_L1D),
+	MAP_SOURCE(AMPEREONE_L2D, DS_L2),
+};
+
+/*
+ * Source is IMPDEF. Here we convert the source code used on AmpereOne cores
+ * to the common (Neoverse, Cortex) to avoid duplicating the decoding code.
+ */
+static void arm_spe__synth_data_source_ampereone(const struct arm_spe_record *record,
+						 union perf_mem_data_src *data_src)
+{
+	int common_src;
+	struct arm_spe_record common_record;
+
+	common_src = arm_spe__map_to_common_source(record->source,
+						   ampereone_sources,
+						   ARRAY_SIZE(ampereone_sources));
+	if (common_src < 0)
+		 /* Assign a bogus value that's not used for common coding */
+		common_record.source = 0xfff;
+	else
+		common_record.source = common_src;
+
+	common_record.op = record->op;
+	arm_spe__synth_data_source_common(&common_record, data_src);
+}
+
 static void arm_spe__synth_memory_level(const struct arm_spe_record *record,
 					union perf_mem_data_src *data_src)
 {
@@ -606,6 +667,8 @@ static u64 arm_spe__synth_data_source(struct arm_spe_queue *speq,
 	union perf_mem_data_src	data_src = { .mem_op = PERF_MEM_OP_NA };
 	bool is_common = arm_spe__is_ds_encoding_supported(speq,
 						common_ds_encoding_cpus);
+	bool is_ampereone = arm_spe__is_ds_encoding_supported(speq,
+						ampereone_ds_encoding_cpus);
 
 	if (record->op & ARM_SPE_OP_LD)
 		data_src.mem_op = PERF_MEM_OP_LOAD;
@@ -616,6 +679,8 @@ static u64 arm_spe__synth_data_source(struct arm_spe_queue *speq,
 
 	if (is_common)
 		arm_spe__synth_data_source_common(record, &data_src);
+	else if (is_ampereone)
+		arm_spe__synth_data_source_ampereone(record, &data_src);
 	else
 		arm_spe__synth_memory_level(record, &data_src);
 
