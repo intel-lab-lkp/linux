@@ -92,6 +92,8 @@
 #define TCAN4X5X_MODE_STANDBY BIT(6)
 #define TCAN4X5X_MODE_NORMAL BIT(7)
 
+#define TCAN4X5X_NWKRQ_VOLTAGE_MASK BIT(19)
+
 #define TCAN4X5X_DISABLE_WAKE_MSK	(BIT(31) | BIT(30))
 #define TCAN4X5X_DISABLE_INH_MSK	BIT(9)
 
@@ -267,6 +269,11 @@ static int tcan4x5x_init(struct m_can_classdev *cdev)
 	if (ret)
 		return ret;
 
+	ret = regmap_update_bits(tcan4x5x->regmap, TCAN4X5X_CONFIG,
+				 TCAN4X5X_NWKRQ_VOLTAGE_MASK, tcan4x5x->nwkrq_voltage);
+	if (ret)
+		return ret;
+
 	return ret;
 }
 
@@ -316,6 +323,28 @@ static const struct tcan4x5x_version_info
 	}
 
 	return &tcan4x5x_versions[TCAN4X5X];
+}
+
+static int tcan4x5x_get_dt_data(struct m_can_classdev *cdev)
+{
+	struct tcan4x5x_priv *tcan4x5x = cdev_to_priv(cdev);
+	struct device_node *np = cdev->dev->of_node;
+	u8 prop;
+	int ret;
+
+	ret = of_property_read_u8(np, "ti,nwkrq-voltage-sel", &prop);
+	if (!ret) {
+		if (prop <= 1)
+			tcan4x5x->nwkrq_voltage = prop;
+		else
+			dev_warn(cdev->dev,
+				 "nwkrq-voltage-sel have invalid option: %u\n",
+				 prop);
+	} else {
+		tcan4x5x->nwkrq_voltage = 0;
+	}
+
+	return 0;
 }
 
 static int tcan4x5x_get_gpios(struct m_can_classdev *cdev,
@@ -450,6 +479,12 @@ static int tcan4x5x_can_probe(struct spi_device *spi)
 	ret = tcan4x5x_get_gpios(mcan_class, version_info);
 	if (ret) {
 		dev_err(&spi->dev, "Getting gpios failed %pe\n", ERR_PTR(ret));
+		goto out_power;
+	}
+
+	ret = tcan4x5x_get_dt_data(mcan_class);
+	if (ret) {
+		dev_err(&spi->dev, "Getting dt data failed %pe\n", ERR_PTR(ret));
 		goto out_power;
 	}
 
