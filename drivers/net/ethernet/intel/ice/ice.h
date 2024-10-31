@@ -109,6 +109,7 @@
 #define ICE_Q_WAIT_MAX_RETRY	(5 * ICE_Q_WAIT_RETRY_LIMIT)
 #define ICE_MAX_LG_RSS_QS	256
 #define ICE_INVAL_Q_INDEX	0xffff
+#define ICE_SF_DEFAULT_EQS	8
 
 #define ICE_MAX_RXQS_PER_TC		256	/* Used when setting VSI context per TC Rx queues */
 
@@ -441,6 +442,7 @@ struct ice_vsi {
 	u8 old_numtc;
 	u16 old_ena_tc;
 
+	u32 max_io_eqs;
 	/* setup back reference, to which aggregator node this VSI
 	 * corresponds to
 	 */

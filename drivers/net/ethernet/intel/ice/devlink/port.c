@@ -530,6 +530,33 @@ void ice_devlink_destroy_sf_dev_port(struct ice_sf_dev *sf_dev)
 	devl_port_unregister(&sf_dev->priv->devlink_port);
 }
 
+static int
+ice_devlink_port_fn_max_io_eqs_set(struct devlink_port *port, u32 max_io_eqs,
+				   struct netlink_ext_ack *extack)
+{
+	struct ice_dynamic_port *dyn_port = ice_devlink_port_to_dyn(port);
+
+	if (max_io_eqs > num_online_cpus()) {
+		NL_SET_ERR_MSG_MOD(extack, "Supplied value out of range");
+		return -EINVAL;
+	}
+
+	dyn_port->vsi->max_io_eqs = max_io_eqs;
+
+	return 0;
+}
+
+static int
+ice_devlink_port_fn_max_io_eqs_get(struct devlink_port *port, u32 *max_io_eqs,
+				   struct netlink_ext_ack *extack)
+{
+	struct ice_dynamic_port *dyn_port = ice_devlink_port_to_dyn(port);
+
+	*max_io_eqs = dyn_port->vsi->max_io_eqs;
+
+	return 0;
+}
+
 /**
  * ice_activate_dynamic_port - Activate a dynamic port
  * @dyn_port: dynamic port instance to activate
@@ -547,6 +574,14 @@ ice_activate_dynamic_port(struct ice_dynamic_port *dyn_port,
 
 	if (dyn_port->active)
 		return 0;
+
+	if (!dyn_port->vsi->max_io_eqs) {
+		err = ice_devlink_port_fn_max_io_eqs_set(&dyn_port->devlink_port,
+							 ICE_SF_DEFAULT_EQS,
+							 extack);
+		if (err)
+			return err;
+	}
 
 	err = ice_sf_eth_activate(dyn_port, extack);
 	if (err)
@@ -807,6 +842,8 @@ static const struct devlink_port_ops ice_devlink_port_sf_ops = {
 	.port_fn_hw_addr_set = ice_devlink_port_fn_hw_addr_set,
 	.port_fn_state_get = ice_devlink_port_fn_state_get,
 	.port_fn_state_set = ice_devlink_port_fn_state_set,
+	.port_fn_max_io_eqs_set = ice_devlink_port_fn_max_io_eqs_set,
+	.port_fn_max_io_eqs_get = ice_devlink_port_fn_max_io_eqs_get,
 };
 
 /**
