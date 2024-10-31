@@ -1079,6 +1079,7 @@ struct v4l2_requestbuffers {
 #define V4L2_BUF_CAP_SUPPORTS_MMAP_CACHE_HINTS		(1 << 6)
 #define V4L2_BUF_CAP_SUPPORTS_MAX_NUM_BUFFERS		(1 << 7)
 #define V4L2_BUF_CAP_SUPPORTS_REMOVE_BUFS		(1 << 8)
+#define V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS	(1 << 9)
 
 /**
  * struct v4l2_plane - plane info for multi-planar buffers
@@ -2660,9 +2661,18 @@ struct v4l2_dbg_chip_info {
  * @flags:	additional buffer management attributes (ignored unless the
  *		queue has V4L2_BUF_CAP_SUPPORTS_MMAP_CACHE_HINTS capability
  *		and configured for MMAP streaming I/O).
- * @max_num_buffers: if V4L2_BUF_CAP_SUPPORTS_MAX_NUM_BUFFERS capability flag is set
- *		this field indicate the maximum possible number of buffers
- *		for this queue.
+ * @max_num_buffers: if the V4L2_BUF_CAP_SUPPORTS_MAX_NUM_BUFFERS capability
+ *		flag is set, then this field indicate the maximum possible
+ *		number of buffers for this queue.
+ * @min_num_buffers: if the V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS capability
+ *		flag is set, then this field indicate the minimum possible
+ *		number of buffers for this queue. Using this value might cause
+ *		dropped frames, but it will be able to stream video. Useful for
+ *		capturing only a single frame.
+ * @rec_num_buffers: if the V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS capability
+ *		flag is set, then this field indicates the recommended number
+ *		of buffers for this queue. This is also used when calling
+ *		VIDIOC_REQBUFS with count = 1.
  * @reserved:	future extensions
  */
 struct v4l2_create_buffers {
@@ -2673,7 +2683,9 @@ struct v4l2_create_buffers {
 	__u32			capabilities;
 	__u32			flags;
 	__u32			max_num_buffers;
-	__u32			reserved[5];
+	__u16			min_num_buffers;
+	__u16			rec_num_buffers;
+	__u32			reserved[4];
 };
 
 /**

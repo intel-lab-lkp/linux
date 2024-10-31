@@ -672,7 +672,8 @@ int vb2_querybuf(struct vb2_queue *q, struct v4l2_buffer *b)
 EXPORT_SYMBOL(vb2_querybuf);
 
 static void vb2_set_flags_and_caps(struct vb2_queue *q, u32 memory,
-				   u32 *flags, u32 *caps, u32 *max_num_bufs)
+				   u32 *flags, u32 *caps, u32 *max_num_bufs,
+				   u16 *min_num_bufs, u16 *rec_num_bufs)
 {
 	if (!q->allow_cache_hints || memory != V4L2_MEMORY_MMAP) {
 		/*
@@ -702,6 +703,11 @@ static void vb2_set_flags_and_caps(struct vb2_queue *q, u32 memory,
 		*max_num_bufs = q->max_num_buffers;
 		*caps |= V4L2_BUF_CAP_SUPPORTS_MAX_NUM_BUFFERS;
 	}
+	if (min_num_bufs && rec_num_bufs) {
+		*min_num_bufs = q->min_queued_buffers + 1;
+		*rec_num_bufs = q->min_reqbufs_allocation;
+		*caps |= V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS;
+	}
 }
 
 int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
@@ -710,7 +716,7 @@ int vb2_reqbufs(struct vb2_queue *q, struct v4l2_requestbuffers *req)
 	u32 flags = req->flags;
 
 	vb2_set_flags_and_caps(q, req->memory, &flags,
-			       &req->capabilities, NULL);
+			       &req->capabilities, NULL, NULL, NULL);
 	req->flags = flags;
 	return ret ? ret : vb2_core_reqbufs(q, req->memory,
 					    req->flags, &req->count);
@@ -753,7 +759,9 @@ int vb2_create_bufs(struct vb2_queue *q, struct v4l2_create_buffers *create)
 
 	create->index = vb2_get_num_buffers(q);
 	vb2_set_flags_and_caps(q, create->memory, &create->flags,
-			       &create->capabilities, &create->max_num_buffers);
+			       &create->capabilities, &create->max_num_buffers,
+			       &create->min_num_buffers,
+			       &create->rec_num_buffers);
 	if (create->count == 0)
 		return ret != -EBUSY ? ret : 0;
 
@@ -1027,7 +1035,7 @@ int vb2_ioctl_reqbufs(struct file *file, void *priv,
 	u32 flags = p->flags;
 
 	vb2_set_flags_and_caps(vdev->queue, p->memory, &flags,
-			       &p->capabilities, NULL);
+			       &p->capabilities, NULL, NULL, NULL);
 	p->flags = flags;
 	if (res)
 		return res;
@@ -1050,7 +1058,8 @@ int vb2_ioctl_create_bufs(struct file *file, void *priv,
 
 	p->index = vb2_get_num_buffers(vdev->queue);
 	vb2_set_flags_and_caps(vdev->queue, p->memory, &p->flags,
-			       &p->capabilities, &p->max_num_buffers);
+			       &p->capabilities, &p->max_num_buffers,
+			       &p->min_num_buffers, &p->rec_num_buffers);
 	/*
 	 * If count == 0, then just check if memory and type are valid.
 	 * Any -EBUSY result from vb2_verify_memory_type can be mapped to 0.
