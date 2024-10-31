@@ -187,30 +187,41 @@ EXPORT_SYMBOL_GPL(platform_profile_notify);
 
 int platform_profile_cycle(void)
 {
+	enum platform_profile_option next = PLATFORM_PROFILE_LAST;
+	struct platform_profile_handler *handler;
 	enum platform_profile_option profile;
-	enum platform_profile_option next;
+	unsigned long choices;
 	int err;
 
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
-		if (!cur_profile)
-			return -ENODEV;
-
-		err = cur_profile->profile_get(cur_profile, &profile);
+		err = platform_profile_get_active(&profile);
 		if (err)
 			return err;
 
-		next = find_next_bit_wrap(cur_profile->choices, PLATFORM_PROFILE_LAST,
+		choices = platform_profile_get_choices();
+
+		next = find_next_bit_wrap(&choices,
+					  PLATFORM_PROFILE_LAST,
 					  profile + 1);
 
-		if (WARN_ON(next == PLATFORM_PROFILE_LAST))
-			return -EINVAL;
-
-		err = cur_profile->profile_set(cur_profile, next);
-		if (err)
-			return err;
+		list_for_each_entry(handler, &platform_profile_handler_list, list) {
+			err = handler->profile_set(handler, next);
+			if (err) {
+				pr_err("Failed to set profile for handler %s\n", handler->name);
+				break;
+			}
+		}
+		if (err) {
+			list_for_each_entry_continue_reverse(handler, &platform_profile_handler_list, list) {
+				err = handler->profile_set(handler, PLATFORM_PROFILE_BALANCED);
+				if (err)
+					pr_err("Failed to revert profile for handler %s\n", handler->name);
+			}
+		}
 	}
 
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(platform_profile_cycle);
