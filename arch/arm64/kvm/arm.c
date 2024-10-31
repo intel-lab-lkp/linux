@@ -150,6 +150,10 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 		}
 		mutex_unlock(&kvm->slots_lock);
 		break;
+	case KVM_CAP_ARM_SIGBUS_ON_SEA:
+		r = 0;
+		set_bit(KVM_ARCH_FLAG_SIGBUS_ON_SEA, &kvm->arch.flags);
+		break;
 	default:
 		break;
 	}
@@ -338,6 +342,7 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_ARM_SYSTEM_SUSPEND:
 	case KVM_CAP_IRQFD_RESAMPLE:
 	case KVM_CAP_COUNTER_OFFSET:
+	case KVM_CAP_ARM_SIGBUS_ON_SEA:
 		r = 1;
 		break;
 	case KVM_CAP_SET_GUEST_DEBUG2:

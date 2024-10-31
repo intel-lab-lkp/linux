@@ -11,15 +11,17 @@
 #include <asm/acpi.h>
 
 /*
- * Was this synchronous external abort a RAS notification?
- * Returns '0' for errors handled by some RAS subsystem, or -ENOENT.
+ * Handle synchronous external abort (SEA) in the following order:
+ * 1. Delegate to APEI/GHES to see if SEA can be claimed by them. If so, we
+ *    are all done.
+ * 2. If userspace opts in KVM_CAP_ARM_SIGBUS_ON_SEA, and if the SEA is NOT
+ *    about translation table, send SIGBUS
+ *    - si_code is BUS_OBJERR.
+ *    - si_addr will be 0 when accurate HVA is unavailable.
+ * 3. Otherwise, directly inject an async SError to guest.
+ *
+ * Note this applies to both ESR_ELx_EC_IABT_* and ESR_ELx_EC_DABT_*.
  */
-static inline int kvm_handle_guest_sea(phys_addr_t addr, u64 esr)
-{
-	/* apei_claim_sea(NULL) expects to mask interrupts itself */
-	lockdep_assert_irqs_enabled();
-
-	return apei_claim_sea(NULL);
-}
+void kvm_handle_guest_sea(struct kvm_vcpu *vcpu);
 
 #endif /* __ARM64_KVM_RAS_H__ */

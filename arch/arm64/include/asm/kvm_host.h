@@ -332,6 +332,8 @@ struct kvm_arch {
 	/* Fine-Grained UNDEF initialised */
 #define KVM_ARCH_FLAG_FGU_INITIALIZED			8
 	unsigned long flags;
+	/* Instead of injecting SError into guest, SIGBUS VMM */
+#define KVM_ARCH_FLAG_SIGBUS_ON_SEA			9
 
 	/* VM-wide vCPU feature set */
 	DECLARE_BITMAP(vcpu_features, KVM_VCPU_MAX_FEATURES);
