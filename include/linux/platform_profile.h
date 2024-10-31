@@ -30,6 +30,7 @@ struct platform_profile_handler {
 	const char *name;
 	struct device *dev;
 	unsigned long choices[BITS_TO_LONGS(PLATFORM_PROFILE_LAST)];
+	struct list_head list;
 	int (*profile_get)(struct platform_profile_handler *pprof,
 				enum platform_profile_option *profile);
 	int (*profile_set)(struct platform_profile_handler *pprof,
