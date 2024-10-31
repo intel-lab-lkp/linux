@@ -959,7 +959,7 @@ static int xhci_handle_halted_endpoint(struct xhci_hcd *xhci,
  * We're also in the event handler, so we can't get re-interrupted if another
  * Stop Endpoint command completes.
  *
- * only call this when ring is not in a running state
+ * only call this on a ring in Stopped state (we may need to queue Set TR Deq)
  */
 
 static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
@@ -972,6 +972,13 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 	u64			hw_deq;
 	unsigned int		slot_id = ep->vdev->slot_id;
 	int			err;
+
+	/*
+	 * This is not going to work if the hardware is changing its dequeue
+	 * pointers as we look at them. Completion handler will call us later.
+	 */
+	if (ep->ep_state & SET_DEQ_PENDING)
+		return 0;
 
 	xhci = ep->xhci;
 
@@ -1001,7 +1008,9 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 		if (td->cancel_status == TD_HALTED || trb_in_td(xhci, td, hw_deq, false)) {
 			switch (td->cancel_status) {
 			case TD_CLEARED: /* TD is already no-op */
-			case TD_CLEARING_CACHE: /* set TR deq command already queued */
+				break;
+			case TD_CLEARING_CACHE: /* set TR deq command completed */
+				td->cancel_status = TD_CLEARED;
 				break;
 			case TD_DIRTY: /* TD is cached, clear it */
 			case TD_HALTED:
@@ -1358,8 +1367,6 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 	struct xhci_virt_ep *ep;
 	struct xhci_ep_ctx *ep_ctx;
 	struct xhci_slot_ctx *slot_ctx;
-	struct xhci_td *td, *tmp_td;
-	bool deferred = false;
 
 	ep_index = TRB_TO_EP_INDEX(le32_to_cpu(trb->generic.field[3]));
 	stream_id = TRB_TO_STREAM_ID(le32_to_cpu(trb->generic.field[2]));
@@ -1451,37 +1458,15 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 				  ep->queued_deq_seg, ep->queued_deq_ptr);
 		}
 	}
-	/* HW cached TDs cleared from cache, give them back */
-	list_for_each_entry_safe(td, tmp_td, &ep->cancelled_td_list,
-				 cancelled_td_list) {
-		ep_ring = xhci_urb_to_transfer_ring(ep->xhci, td->urb);
-		if (td->cancel_status == TD_CLEARING_CACHE) {
-			td->cancel_status = TD_CLEARED;
-			xhci_dbg(ep->xhci, "%s: Giveback cancelled URB %p TD\n",
-				 __func__, td->urb);
-			xhci_td_cleanup(ep->xhci, td, ep_ring, td->status);
-		} else if (td->cancel_status == TD_CLEARING_CACHE_DEFERRED) {
-			deferred = true;
-		} else {
-			xhci_dbg(ep->xhci, "%s: Keep cancelled URB %p TD as cancel_status is %d\n",
-				 __func__, td->urb, td->cancel_status);
-		}
-	}
 cleanup:
 	ep->ep_state &= ~SET_DEQ_PENDING;
 	ep->queued_deq_seg = NULL;
 	ep->queued_deq_ptr = NULL;
 
-	if (deferred) {
-		/* We have more streams to clear */
-		xhci_dbg(ep->xhci, "%s: Pending TDs to clear, continuing with invalidation\n",
-			 __func__);
-		xhci_invalidate_cancelled_tds(ep);
-	} else {
-		/* Restart any rings with pending URBs */
-		xhci_dbg(ep->xhci, "%s: All TDs cleared, ring doorbell\n", __func__);
-		ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
-	}
+	/* Continue cancellations or restart the ring if done */
+	xhci_invalidate_cancelled_tds(ep);
+	ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
+	xhci_giveback_invalidated_tds(ep);
 }
 
 static void xhci_handle_cmd_reset_ep(struct xhci_hcd *xhci, int slot_id,
