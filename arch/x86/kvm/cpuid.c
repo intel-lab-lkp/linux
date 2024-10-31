@@ -797,6 +797,8 @@ void kvm_set_cpu_caps(void)
 		F(WRMSR_XX_BASE_NS)
 	);
 
+	if (tdp_enabled)
+		kvm_cpu_cap_check_and_set(X86_FEATURE_ERAPS);
 	kvm_cpu_cap_check_and_set(X86_FEATURE_SBPB);
 	kvm_cpu_cap_check_and_set(X86_FEATURE_IBPB_BRTYPE);
 	kvm_cpu_cap_check_and_set(X86_FEATURE_SRSO_NO);
@@ -1357,8 +1359,19 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 		entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
 		break;
 	case 0x80000021:
-		entry->ebx = entry->ecx = entry->edx = 0;
+		unsigned int ebx_mask = 0;
+
+		entry->ecx = entry->edx = 0;
 		cpuid_entry_override(entry, CPUID_8000_0021_EAX);
+
+		/*
+		 * Bits 23:16 in EBX indicate the size of the RSB.
+		 * Expose the value in the hardware to the guest.
+		 */
+		if (kvm_cpu_cap_has(X86_FEATURE_ERAPS))
+			ebx_mask |= GENMASK(23, 16);
+
+		entry->ebx &= ebx_mask;
 		break;
 	/* AMD Extended Performance Monitoring and Debug */
 	case 0x80000022: {

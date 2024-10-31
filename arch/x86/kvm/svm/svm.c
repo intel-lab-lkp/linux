@@ -1360,6 +1360,28 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 	if (boot_cpu_has(X86_FEATURE_V_SPEC_CTRL))
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SPEC_CTRL, 1, 1);
 
+	/*
+	 * If the hardware has a larger RSB, use it in the guest context as
+	 * well.
+	 *
+	 * When running nested guests: the hardware tags host and guest RSB
+	 * entries, but the entries are ASID agnostic.  Differentiating L1 and
+	 * L2 guests isn't possible in hardware.  To prevent L2->L1 RSB
+	 * poisoning attacks in this case, the L0 hypervisor must set
+	 * FLUSH_RAP_ON_VMRUN in the L1's VMCB on a nested #VMEXIT to ensure
+	 * the next VMRUN flushes the RSB.
+	 *
+	 * For shadow paging / NPT disabled case: the CPU's CR3 does not
+	 * contain the CR3 of the running guest process, and hence intra-guest
+	 * context switches will not cause a hardware TLB flush, which in turn
+	 * does not result in a guest RSB flush that the ERAPS feature
+	 * provides.  Do not expose ERAPS or the larger RSB to the guest in
+	 * this case, so the guest continues implementing software mitigations
+	 * as well as only sees 32 entries for the RSB.
+	 */
+	if (boot_cpu_has(X86_FEATURE_ERAPS) && npt_enabled)
+		vmcb_set_larger_rap(svm->vmcb);
+
 	if (kvm_vcpu_apicv_active(vcpu))
 		avic_init_vmcb(svm, vmcb);
 
@@ -3393,6 +3415,7 @@ static void dump_vmcb(struct kvm_vcpu *vcpu)
 	pr_err("%-20s%016llx\n", "tsc_offset:", control->tsc_offset);
 	pr_err("%-20s%d\n", "asid:", control->asid);
 	pr_err("%-20s%d\n", "tlb_ctl:", control->tlb_ctl);
+	pr_err("%-20s%d\n", "erap_ctl:", control->erap_ctl);
 	pr_err("%-20s%08x\n", "int_ctl:", control->int_ctl);
 	pr_err("%-20s%08x\n", "int_vector:", control->int_vector);
 	pr_err("%-20s%08x\n", "int_state:", control->int_state);
@@ -3558,6 +3581,27 @@ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		int vmexit;
 
 		trace_kvm_nested_vmexit(vcpu, KVM_ISA_SVM);
+
+		if (boot_cpu_has(X86_FEATURE_ERAPS)
+		    && vmcb_is_larger_rap(svm->vmcb01.ptr)) {
+			/*
+			 * XXX a few further optimizations can be made:
+			 *
+			 * 1. In pre_svm_run() we can reset this bit when a hw
+			 * TLB flush has happened - any context switch on a
+			 * CPU (which causes a TLB flush) auto-flushes the RSB
+			 * - eg when this vCPU is scheduled on a different
+			 * pCPU.
+			 *
+			 * 2. This is also not needed in the case where the
+			 * vCPU is being scheduled on the same pCPU, but there
+			 * was a context switch between the #VMEXIT and VMRUN.
+			 *
+			 * 3. If the guest returns to L2 again after this
+			 * #VMEXIT, there's no need to flush the RSB.
+			 */
+			vmcb_set_flush_rap(svm->vmcb01.ptr);
+		}
 
 		vmexit = nested_svm_exit_special(svm);
 
