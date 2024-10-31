@@ -26,6 +26,10 @@ properties:
   reg:
     maxItems: 1
 
+  gpio-line-names:
+    minItems: 1
+    maxItems: 17
+
   interrupts:
     maxItems: 1
 
