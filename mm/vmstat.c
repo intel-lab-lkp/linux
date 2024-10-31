@@ -161,9 +161,11 @@ void vm_events_fold_cpu(int cpu)
  */
 atomic_long_t vm_zone_stat[NR_VM_ZONE_STAT_ITEMS] __cacheline_aligned_in_smp;
 atomic_long_t vm_node_stat[NR_VM_NODE_STAT_ITEMS] __cacheline_aligned_in_smp;
+atomic_long_t vm_global_stat[NR_VM_STAT_ITEMS] __cacheline_aligned_in_smp;
 atomic_long_t vm_numa_event[NR_VM_NUMA_EVENT_ITEMS] __cacheline_aligned_in_smp;
 EXPORT_SYMBOL(vm_zone_stat);
 EXPORT_SYMBOL(vm_node_stat);
+EXPORT_SYMBOL(vm_global_stat);
 
 #ifdef CONFIG_NUMA
 static void fold_vm_zone_numa_events(struct zone *zone)
@@ -1033,22 +1035,34 @@ unsigned long node_page_state(struct pglist_data *pgdat,
 }
 #endif
 
+void mod_global_page_state(enum vm_stat_item item, long nr)
+{
+	atomic_long_add(nr, &vm_global_stat[item]);
+}
+
+unsigned long global_page_state(enum vm_stat_item item)
+{
+	long x = atomic_long_read(&vm_global_stat[item]);
+#ifdef CONFIG_SMP
+	if (x < 0)
+		x = 0;
+#endif
+	return x;
+}
+
 /*
  * Count number of pages "struct page" and "struct page_ext" consume.
- * nr_memmap_boot_pages: # of pages allocated by boot allocator
- * nr_memmap_pages: # of pages that were allocated by buddy allocator
+ * NR_MEMMAP_BOOT_PAGES: # of pages allocated by boot allocator
+ * NR_MEMMAP_PAGES: # of pages that were allocated by buddy allocator
  */
-static atomic_long_t nr_memmap_boot_pages = ATOMIC_LONG_INIT(0);
-static atomic_long_t nr_memmap_pages = ATOMIC_LONG_INIT(0);
-
 void memmap_boot_pages_add(long delta)
 {
-	atomic_long_add(delta, &nr_memmap_boot_pages);
+	mod_global_page_state(NR_MEMMAP_BOOT_PAGES, delta);
 }
 
 void memmap_pages_add(long delta)
 {
-	atomic_long_add(delta, &nr_memmap_pages);
+	mod_global_page_state(NR_MEMMAP_PAGES, delta);
 }
 
 #ifdef CONFIG_COMPACTION
@@ -1880,8 +1894,8 @@ static void *vmstat_start(struct seq_file *m, loff_t *pos)
 
 	global_dirty_limits(v + NR_DIRTY_BG_THRESHOLD,
 			    v + NR_DIRTY_THRESHOLD);
-	v[NR_MEMMAP_PAGES] = atomic_long_read(&nr_memmap_pages);
-	v[NR_MEMMAP_BOOT_PAGES] = atomic_long_read(&nr_memmap_boot_pages);
+	for (int i = NR_MEMMAP_PAGES; i < NR_VM_STAT_ITEMS; i++)
+		v[i] = global_page_state(i);
 	v += NR_VM_STAT_ITEMS;
 
 #ifdef CONFIG_VM_EVENT_COUNTERS

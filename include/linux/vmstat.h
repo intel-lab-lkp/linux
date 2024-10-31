@@ -145,6 +145,11 @@ extern atomic_long_t vm_zone_stat[NR_VM_ZONE_STAT_ITEMS];
 extern atomic_long_t vm_node_stat[NR_VM_NODE_STAT_ITEMS];
 extern atomic_long_t vm_numa_event[NR_VM_NUMA_EVENT_ITEMS];
 
+/*
+ * Global page accounting (no per cpu differentials).
+ */
+extern atomic_long_t vm_global_stat[NR_VM_STAT_ITEMS];
+
 #ifdef CONFIG_NUMA
 static inline void zone_numa_event_add(long x, struct zone *zone,
 				enum numa_stat_item item)
@@ -490,6 +495,9 @@ static inline void node_stat_sub_folio(struct folio *folio,
 {
 	mod_node_page_state(folio_pgdat(folio), item, -folio_nr_pages(folio));
 }
+
+void mod_global_page_state(enum vm_stat_item item, long nr);
+unsigned long global_page_state(enum vm_stat_item item);
 
 extern const char * const vmstat_text[];
 
