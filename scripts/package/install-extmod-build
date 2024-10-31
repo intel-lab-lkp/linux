@@ -12,7 +12,8 @@ is_enabled() {
 find_in_scripts() {
 	find scripts \
 		\( -name atomic -o -name dtc -o -name kconfig -o -name package \) -prune -o \
-		! -name unifdef -a ! -name mk_elfconfig -a \( -type f -o -type l \) -print
+		! -name unifdef -a ! -name mk_elfconfig -a \( -type f -o -type l \) \
+		! -name .gitignore -print
 }
 
 mkdir -p "${destdir}"
@@ -23,7 +24,8 @@ mkdir -p "${destdir}"
 	find "arch/${SRCARCH}" -maxdepth 1 -name 'Makefile*'
 	find "arch/${SRCARCH}" -name generated -prune -o -name include -type d -print
 	find "arch/${SRCARCH}" -name Kbuild.platforms -o -name Platform
-	find include \( -name config -o -name generated \) -prune -o \( -type f -o -type l \) -print
+	find include \( -name config -o -name generated \) -prune -o \( -type f -o -type l \) \
+		! -name .gitignore -print
 	find_in_scripts
 ) | tar -c -f - -C "${srctree}" -T - | tar -xf - -C "${destdir}"
 
