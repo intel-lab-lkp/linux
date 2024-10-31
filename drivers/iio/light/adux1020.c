@@ -505,7 +505,7 @@ static int adux1020_write_event_config(struct iio_dev *indio_dev,
 				       enum iio_event_direction dir, int state)
 {
 	struct adux1020_data *data = iio_priv(indio_dev);
-	int ret, mask;
+	int ret, mask, val;
 
 	mutex_lock(&data->lock);
 
@@ -526,12 +526,12 @@ static int adux1020_write_event_config(struct iio_dev *indio_dev,
 			mask = ADUX1020_PROX_OFF1_INT;
 
 		if (state)
-			state = 0;
+			val = 0;
 		else
-			state = mask;
+			val = mask;
 
 		ret = regmap_update_bits(data->regmap, ADUX1020_REG_INT_MASK,
-					 mask, state);
+					 mask, val);
 		if (ret < 0)
 			goto fail;
 
