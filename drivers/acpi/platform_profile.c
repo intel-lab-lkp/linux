@@ -24,13 +24,24 @@ static const char * const profile_names[] = {
 };
 static_assert(ARRAY_SIZE(profile_names) == PLATFORM_PROFILE_LAST);
 
+static DEFINE_IDR(platform_profile_minor_idr);
+
+static const struct class platform_profile_class = {
+	.name = "platform-profile",
+};
+
 static bool platform_profile_is_registered(void)
 {
 	lockdep_assert_held(&profile_lock);
 	return !list_empty(&platform_profile_handler_list);
 }
 
-static unsigned long platform_profile_get_choices(void)
+static bool platform_profile_is_class_device(struct device *dev)
+{
+	return dev && dev->class == &platform_profile_class;
+}
+
+static unsigned long platform_profile_get_choices(struct device *dev)
 {
 	struct platform_profile_handler *handler;
 	unsigned long aggregate = 0;
@@ -40,6 +51,9 @@ static unsigned long platform_profile_get_choices(void)
 	list_for_each_entry(handler, &platform_profile_handler_list, list) {
 		unsigned long individual = 0;
 
+		/* if called from a class attribute then only match that one */
+		if (platform_profile_is_class_device(dev) && handler->dev != dev->parent)
+			continue;
 		for_each_set_bit(i, handler->choices, PLATFORM_PROFILE_LAST)
 			individual |= BIT(i);
 		if (!aggregate)
@@ -51,7 +65,7 @@ static unsigned long platform_profile_get_choices(void)
 	return aggregate;
 }
 
-static int platform_profile_get_active(enum platform_profile_option *profile)
+static int platform_profile_get_active(struct device *dev, enum platform_profile_option *profile)
 {
 	struct platform_profile_handler *handler;
 	enum platform_profile_option active = PLATFORM_PROFILE_LAST;
@@ -60,6 +74,8 @@ static int platform_profile_get_active(enum platform_profile_option *profile)
 
 	lockdep_assert_held(&profile_lock);
 	list_for_each_entry(handler, &platform_profile_handler_list, list) {
+		if (platform_profile_is_class_device(dev) && handler->dev != dev->parent)
+			continue;
 		err = handler->profile_get(handler, &val);
 		if (err) {
 			pr_err("Failed to get profile for handler %s\n", handler->name);
@@ -69,6 +85,10 @@ static int platform_profile_get_active(enum platform_profile_option *profile)
 		if (WARN_ON(val >= PLATFORM_PROFILE_LAST))
 			return -EINVAL;
 
+		/*
+		 * If the profiles are different for class devices then this must
+		 * show "custom" to legacy sysfs interface
+		 */
 		if (active != val && active != PLATFORM_PROFILE_LAST) {
 			*profile = PLATFORM_PROFILE_CUSTOM;
 			return 0;
@@ -90,7 +110,7 @@ static ssize_t platform_profile_choices_show(struct device *dev,
 	int i;
 
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock)
-		choices = platform_profile_get_choices();
+		choices = platform_profile_get_choices(dev);
 
 	for_each_set_bit(i, &choices, PLATFORM_PROFILE_LAST) {
 		if (len == 0)
@@ -113,7 +133,7 @@ static ssize_t platform_profile_show(struct device *dev,
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
 		if (!platform_profile_is_registered())
 			return -ENODEV;
-		err = platform_profile_get_active(&profile);
+		err = platform_profile_get_active(dev, &profile);
 		if (err)
 			return err;
 	}
@@ -138,12 +158,22 @@ static ssize_t platform_profile_store(struct device *dev,
 		if (!platform_profile_is_registered())
 			return -ENODEV;
 
-		/* Check that all handlers support this profile choice */
-		choices = platform_profile_get_choices();
+		/* don't allow setting custom to legacy sysfs interface */
+		if (!platform_profile_is_class_device(dev) &&
+		     i == PLATFORM_PROFILE_CUSTOM) {
+			pr_warn("Custom profile not supported for legacy sysfs interface\n");
+			return -EINVAL;
+		}
+
+		/* Check that applicable handlers support this profile choice */
+		choices = platform_profile_get_choices(dev);
 		if (!test_bit(i, &choices))
 			return -EOPNOTSUPP;
 
 		list_for_each_entry(handler, &platform_profile_handler_list, list) {
+			if (platform_profile_is_class_device(dev) &&
+			    handler->dev != dev->parent)
+				continue;
 			err = handler->profile_set(handler, i);
 			if (err) {
 				pr_err("Failed to set profile for handler %s\n", handler->name);
@@ -152,6 +182,9 @@ static ssize_t platform_profile_store(struct device *dev,
 		}
 		if (err) {
 			list_for_each_entry_continue_reverse(handler, &platform_profile_handler_list, list) {
+				if (platform_profile_is_class_device(dev) &&
+				    handler->dev != dev->parent)
+					continue;
 				if (handler->profile_set(handler, PLATFORM_PROFILE_BALANCED))
 					pr_err("Failed to revert profile for handler %s\n",
 					       handler->name);
@@ -194,11 +227,11 @@ int platform_profile_cycle(void)
 	int err;
 
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
-		err = platform_profile_get_active(&profile);
+		err = platform_profile_get_active(NULL, &profile);
 		if (err)
 			return err;
 
-		choices = platform_profile_get_choices();
+		choices = platform_profile_get_choices(NULL);
 
 		next = find_next_bit_wrap(&choices,
 					  PLATFORM_PROFILE_LAST,
@@ -228,6 +261,7 @@ EXPORT_SYMBOL_GPL(platform_profile_cycle);
 
 int platform_profile_register(struct platform_profile_handler *pprof)
 {
+	bool registered;
 	int err;
 
 	/* Sanity check the profile handler */
@@ -250,14 +284,49 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	if (cur_profile)
 		return -EEXIST;
 
-	err = sysfs_create_group(acpi_kobj, &platform_profile_group);
+	registered = platform_profile_is_registered();
+	if (!registered) {
+		/* class for individual handlers */
+		err = class_register(&platform_profile_class);
+		if (err)
+			return err;
+		/* legacy sysfs files */
+		err = sysfs_create_group(acpi_kobj, &platform_profile_group);
+		if (err)
+			goto cleanup_class;
+
+	}
+
+	/* create class interface for individual handler */
+	pprof->minor = idr_alloc(&platform_profile_minor_idr, pprof, 0, 0, GFP_KERNEL);
+	pprof->class_dev = device_create(&platform_profile_class, pprof->dev,
+					 MKDEV(0, pprof->minor), NULL, "platform-profile-%s",
+					 pprof->name);
+	if (IS_ERR(pprof->class_dev)) {
+		err = PTR_ERR(pprof->class_dev);
+		goto cleanup_legacy;
+	}
+	err = sysfs_create_group(&pprof->class_dev->kobj, &platform_profile_group);
 	if (err)
-		return err;
+		goto cleanup_device;
+
 	list_add_tail(&pprof->list, &platform_profile_handler_list);
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
 	cur_profile = pprof;
 	return 0;
+
+cleanup_device:
+	device_destroy(&platform_profile_class, MKDEV(0, pprof->minor));
+
+cleanup_legacy:
+	if (!registered)
+		sysfs_remove_group(acpi_kobj, &platform_profile_group);
+cleanup_class:
+	if (!registered)
+		class_unregister(&platform_profile_class);
+
+	return err;
 }
 EXPORT_SYMBOL_GPL(platform_profile_register);
 
@@ -270,6 +339,10 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 	cur_profile = NULL;
 
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
+
+	sysfs_remove_group(&pprof->class_dev->kobj, &platform_profile_group);
+	device_destroy(&platform_profile_class, MKDEV(0, pprof->minor));
+
 	if (!platform_profile_is_registered())
 		sysfs_remove_group(acpi_kobj, &platform_profile_group);
 
