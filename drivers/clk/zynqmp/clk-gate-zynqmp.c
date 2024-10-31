@@ -7,6 +7,7 @@
  * Gated clock implementation
  */
 
+#include <dt-bindings/clock/xlnx-zynqmp-clk.h>
 #include <linux/clk-provider.h>
 #include <linux/slab.h>
 #include "clk-zynqmp.h"
@@ -38,7 +39,13 @@ static int zynqmp_clk_gate_enable(struct clk_hw *hw)
 	u32 clk_id = gate->clk_id;
 	int ret;
 
-	ret = zynqmp_pm_clock_enable(clk_id);
+	if (clk_id == GPU_PP0_REF || clk_id == GPU_PP1_REF) {
+		ret = zynqmp_pm_clock_enable(GPU_PP0_REF);
+		if (!ret)
+			ret = zynqmp_pm_clock_enable(GPU_PP1_REF);
+	} else {
+		ret = zynqmp_pm_clock_enable(clk_id);
+	}
 
 	if (ret)
 		pr_debug("%s() clock enable failed for %s (id %d), ret = %d\n",
@@ -58,7 +65,13 @@ static void zynqmp_clk_gate_disable(struct clk_hw *hw)
 	u32 clk_id = gate->clk_id;
 	int ret;
 
-	ret = zynqmp_pm_clock_disable(clk_id);
+	if (clk_id == GPU_PP0_REF || clk_id == GPU_PP1_REF) {
+		ret = zynqmp_pm_clock_disable(GPU_PP1_REF);
+		if (!ret)
+			ret = zynqmp_pm_clock_disable(GPU_PP0_REF);
+	} else {
+		ret = zynqmp_pm_clock_disable(clk_id);
+	}
 
 	if (ret)
 		pr_debug("%s() clock disable failed for %s (id %d), ret = %d\n",
