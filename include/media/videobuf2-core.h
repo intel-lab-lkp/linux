@@ -351,6 +351,13 @@ struct vb2_buffer {
  *			\*num_buffers are being allocated additionally to
  *			the buffers already allocated. If either \*num_planes
  *			or the requested sizes are invalid callback must return %-EINVAL.
+ * @queue_info:		called from VIDIOC_REQBUFS() and VIDIOC_CREATE_BUFS()
+ *			handlers before memory allocation.
+ *			The driver must return the required number of planes
+ *			per buffer in \*num_planes, and the size of each plane
+ *			must be set in the sizes\[\] array. Optionally set the
+ *			per-plane allocator specific device in the
+ *			alloc_devs\[\] array.
  * @wait_prepare:	release any locks taken while calling vb2 functions;
  *			it is called before an ioctl needs to wait for a new
  *			buffer to arrive; required to avoid a deadlock in
@@ -435,6 +442,8 @@ struct vb2_ops {
 	int (*queue_setup)(struct vb2_queue *q,
 			   unsigned int *num_buffers, unsigned int *num_planes,
 			   unsigned int sizes[], struct device *alloc_devs[]);
+	int (*queue_info)(struct vb2_queue *q, unsigned int *num_planes,
+			  unsigned int sizes[], struct device *alloc_devs[]);
 
 	void (*wait_prepare)(struct vb2_queue *q);
 	void (*wait_finish)(struct vb2_queue *q);
@@ -680,6 +689,7 @@ struct vb2_queue {
 	 * called. Used to check for unbalanced ops.
 	 */
 	u32				cnt_queue_setup;
+	u32				cnt_queue_info;
 	u32				cnt_wait_prepare;
 	u32				cnt_wait_finish;
 	u32				cnt_prepare_streaming;

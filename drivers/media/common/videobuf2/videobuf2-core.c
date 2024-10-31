@@ -611,9 +611,9 @@ static void __vb2_queue_free(struct vb2_queue *q, unsigned int start, unsigned i
 		if (unbalanced) {
 			pr_info("unbalanced counters for queue %p:\n", q);
 			if (q->cnt_start_streaming != q->cnt_stop_streaming)
-				pr_info("     setup: %u start_streaming: %u stop_streaming: %u\n",
-					q->cnt_queue_setup, q->cnt_start_streaming,
-					q->cnt_stop_streaming);
+				pr_info("     setup: %u info: %u start_streaming: %u stop_streaming: %u\n",
+					q->cnt_queue_setup, q->cnt_queue_info,
+					q->cnt_start_streaming, q->cnt_stop_streaming);
 			if (q->cnt_prepare_streaming != q->cnt_unprepare_streaming)
 				pr_info("     prepare_streaming: %u unprepare_streaming: %u\n",
 					q->cnt_prepare_streaming, q->cnt_unprepare_streaming);
@@ -622,6 +622,7 @@ static void __vb2_queue_free(struct vb2_queue *q, unsigned int start, unsigned i
 					q->cnt_wait_prepare, q->cnt_wait_finish);
 		}
 		q->cnt_queue_setup = 0;
+		q->cnt_queue_info = 0;
 		q->cnt_wait_prepare = 0;
 		q->cnt_wait_finish = 0;
 		q->cnt_prepare_streaming = 0;
@@ -914,7 +915,8 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 		q->is_busy = 0;
 		/*
 		 * In case of REQBUFS(0) return immediately without calling
-		 * driver's queue_setup() callback and allocating resources.
+		 * driver's queue_setup() or queue_info() callback and
+		 * allocating resources.
 		 */
 		if (*count == 0)
 			return 0;
@@ -928,7 +930,7 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	memset(q->alloc_devs, 0, sizeof(q->alloc_devs));
 	/*
 	 * Set this now to ensure that drivers see the correct q->memory value
-	 * in the queue_setup op.
+	 * in the queue_setup/info op.
 	 */
 	mutex_lock(&q->mmap_lock);
 	ret = vb2_core_allocated_buffers_storage(q);
@@ -938,12 +940,18 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 		return ret;
 	set_queue_coherency(q, non_coherent_mem);
 
-	/*
-	 * Ask the driver how many buffers and planes per buffer it requires.
-	 * Driver also sets the size and allocator context for each plane.
-	 */
-	ret = call_qop(q, queue_setup, q, &num_buffers, &num_planes,
-		       plane_sizes, q->alloc_devs);
+	if (q->ops->queue_info) {
+		ret = call_qop(q, queue_info, q, &num_planes,
+			       plane_sizes, q->alloc_devs);
+	} else {
+		/*
+		 * Ask the driver how many buffers and planes per buffer it
+		 * requires. The driver also sets the size and (optionally)
+		 * the allocator context for each plane.
+		 */
+		ret = call_qop(q, queue_setup, q, &num_buffers, &num_planes,
+			       plane_sizes, q->alloc_devs);
+	}
 	if (ret)
 		goto error;
 
@@ -980,7 +988,7 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	/*
 	 * Check if driver can handle the allocated number of buffers.
 	 */
-	if (!ret && allocated_buffers < num_buffers) {
+	if (!ret && allocated_buffers < num_buffers && q->ops->queue_setup) {
 		num_buffers = allocated_buffers;
 		/*
 		 * num_planes is set by the previous queue_setup(), but since it
@@ -1082,17 +1090,44 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 
 	num_buffers = min(*count, q->max_num_buffers - q_num_bufs);
 
-	if (requested_planes && requested_sizes) {
+	if (q->ops->queue_info) {
+		ret = call_qop(q, queue_info, q, &num_planes,
+			       plane_sizes, q->alloc_devs);
+
+		if (ret)
+			goto error;
+
+		/* Check that driver has set sane values */
+		if (WARN_ON(!num_planes)) {
+			ret = -EINVAL;
+			goto error;
+		}
+		if (num_planes != requested_planes) {
+			ret = -EINVAL;
+			goto error;
+		}
+
+		for (unsigned int i = 0; i < num_planes; i++) {
+			if (WARN_ON(!plane_sizes[i])) {
+				ret = -EINVAL;
+				goto error;
+			}
+			if (plane_sizes[i] > requested_sizes[i]) {
+				ret = -EINVAL;
+				goto error;
+			}
+			plane_sizes[i] = requested_sizes[i];
+		}
+	} else {
 		num_planes = requested_planes;
 		memcpy(plane_sizes, requested_sizes, sizeof(plane_sizes));
+		/*
+		 * Ask the driver, whether the requested number of buffers, planes per
+		 * buffer and their sizes are acceptable
+		 */
+		ret = call_qop(q, queue_setup, q, &num_buffers,
+			       &num_planes, plane_sizes, q->alloc_devs);
 	}
-
-	/*
-	 * Ask the driver, whether the requested number of buffers, planes per
-	 * buffer and their sizes are acceptable
-	 */
-	ret = call_qop(q, queue_setup, q, &num_buffers,
-		       &num_planes, plane_sizes, q->alloc_devs);
 	if (ret)
 		goto error;
 
@@ -1108,7 +1143,7 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 	/*
 	 * Check if driver can handle the so far allocated number of buffers.
 	 */
-	if (allocated_buffers < num_buffers) {
+	if (allocated_buffers < num_buffers && q->ops->queue_setup) {
 		num_buffers = allocated_buffers;
 
 		/*
@@ -2617,8 +2652,11 @@ int vb2_core_queue_init(struct vb2_queue *q)
 	    WARN_ON(!q->mem_ops)	  ||
 	    WARN_ON(!q->type)		  ||
 	    WARN_ON(!q->io_modes)	  ||
-	    WARN_ON(!q->ops->queue_setup) ||
 	    WARN_ON(!q->ops->buf_queue))
+		return -EINVAL;
+
+	if (WARN_ON(!q->ops->queue_setup && !q->ops->queue_info) ||
+	    WARN_ON(q->ops->queue_setup && q->ops->queue_info))
 		return -EINVAL;
 
 	if (WARN_ON(q->max_num_buffers < VB2_MAX_FRAME) ||
