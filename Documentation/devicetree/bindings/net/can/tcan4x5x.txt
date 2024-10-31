@@ -23,6 +23,12 @@ required property details.
 Optional properties:
 	- reset-gpios: Hardwired output GPIO. If not defined then software
 		       reset.
+	- ti,nwkrq-voltage-sel: nWKRQ Pin GPO buffer voltage rail configuration.
+			        The option of this properties will tell which
+				voltage rail is used for the nWKRQ Pin.
+				Valid values are 0 and 1.
+				0: Internal voltage rail
+				1: VIO voltage rail
 	- device-state-gpios: Input GPIO that indicates if the device is in
 			      a sleep state or if the device is active. Not
 			      available with tcan4552/4553.
@@ -44,5 +50,6 @@ tcan4x5x: tcan4x5x@0 {
 		device-state-gpios = <&gpio3 21 GPIO_ACTIVE_HIGH>;
 		device-wake-gpios = <&gpio1 15 GPIO_ACTIVE_HIGH>;
 		reset-gpios = <&gpio1 27 GPIO_ACTIVE_HIGH>;
+		ti,nwkrq-voltage-sel = /bits/ 8 <0>;
 		wakeup-source;
 };
