@@ -1295,6 +1295,9 @@ const char * const vmstat_text[] = {
 	"nr_dirty_background_threshold",
 	"nr_memmap_pages",
 	"nr_memmap_boot_pages",
+#if defined(CONFIG_MEMCG) && defined(CONFIG_SWAP)
+	"nr_swap_cgroup_pages",
+#endif
 
 #if defined(CONFIG_VM_EVENT_COUNTERS) || defined(CONFIG_MEMCG)
 	/* enum vm_event_item counters */

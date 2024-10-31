@@ -53,6 +53,8 @@ static int swap_cgroup_prepare(int type)
 		if (!(idx % SWAP_CLUSTER_MAX))
 			cond_resched();
 	}
+	mod_global_page_state(NR_SWAP_CGROUP_PAGES, ctrl->length);
+
 	return 0;
 not_enough_page:
 	max = idx;
@@ -228,6 +230,7 @@ void swap_cgroup_swapoff(int type)
 			if (!(i % SWAP_CLUSTER_MAX))
 				cond_resched();
 		}
+		mod_global_page_state(NR_SWAP_CGROUP_PAGES, -length);
 		vfree(map);
 	}
 }

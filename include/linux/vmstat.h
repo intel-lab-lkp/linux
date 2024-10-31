@@ -41,6 +41,9 @@ enum vm_stat_item {
 	NR_DIRTY_BG_THRESHOLD,
 	NR_MEMMAP_PAGES,	/* page metadata allocated through buddy allocator */
 	NR_MEMMAP_BOOT_PAGES,	/* page metadata allocated through boot allocator */
+#if defined(CONFIG_MEMCG) && defined(CONFIG_SWAP)
+	NR_SWAP_CGROUP_PAGES,	/* allocated to store struct swap_cgroup */
+#endif
 	NR_VM_STAT_ITEMS,
 };
 
