@@ -1811,15 +1811,21 @@ static void __init spectre_v2_select_mitigation(void)
 	 *    speculated return targets may come from the branch predictor,
 	 *    which could have a user-poisoned BTB or BHB entry.
 	 *
-	 *    AMD has it even worse: *all* returns are speculated from the BTB,
-	 *    regardless of the state of the RSB.
-	 *
 	 *    When IBRS or eIBRS is enabled, the "user -> kernel" attack
 	 *    scenario is mitigated by the IBRS branch prediction isolation
 	 *    properties, so the RSB buffer filling wouldn't be necessary to
 	 *    protect against this type of attack.
 	 *
 	 *    The "user -> user" attack scenario is mitigated by RSB filling.
+	 *
+	 *    AMD CPUs without the BTC_NO bit may speculate return targets
+	 *    from the BTB. CPUs with BTC_NO do not speculate return targets
+	 *    from the BTB, even on RSB underflow.
+	 *
+	 *    The ERAPS CPU feature (which implies the presence of BTC_NO)
+	 *    adds an RSB flush each time a TLB flush happens (i.e., on every
+	 *    context switch).  So, RSB filling is not necessary for this
+	 *    attack type with ERAPS present.
 	 *
 	 * 2) Poisoned RSB entry
 	 *
@@ -1831,17 +1837,24 @@ static void __init spectre_v2_select_mitigation(void)
 	 *    eIBRS.
 	 *
 	 *    The "user -> user" scenario, also known as SpectreBHB, requires
-	 *    RSB clearing.
+	 *    RSB clearing on processors without ERAPS.
 	 *
 	 * So to mitigate all cases, unconditionally fill RSB on context
-	 * switches.
-	 *
-	 * FIXME: Is this pointless for retbleed-affected AMD?
+	 * switches when ERAPS is not present.
 	 */
-	setup_force_cpu_cap(X86_FEATURE_RSB_CTXSW);
-	pr_info("Spectre v2 / SpectreRSB mitigation: Filling RSB on context switch\n");
+	if (!boot_cpu_has(X86_FEATURE_ERAPS)) {
+		setup_force_cpu_cap(X86_FEATURE_RSB_CTXSW);
+		pr_info("Spectre v2 / SpectreRSB mitigation: Filling RSB on context switch\n");
 
-	spectre_v2_determine_rsb_fill_type_at_vmexit(mode);
+		/*
+		 * For guest -> host (or vice versa) RSB poisoning scenarios,
+		 * determine the mitigation mode here.  With ERAPS, RSB
+		 * entries are tagged as host or guest - ensuring that neither
+		 * the host nor the guest have to clear or fill RSB entries to
+		 * avoid poisoning, skip RSB filling at VMEXIT in that case.
+		 */
+		spectre_v2_determine_rsb_fill_type_at_vmexit(mode);
+	}
 
 	/*
 	 * Retpoline protects the kernel, but doesn't protect firmware.  IBRS
@@ -2839,7 +2852,7 @@ static ssize_t spectre_v2_show_state(char *buf)
 	    spectre_v2_enabled == SPECTRE_V2_EIBRS_LFENCE)
 		return sysfs_emit(buf, "Vulnerable: eIBRS+LFENCE with unprivileged eBPF and SMT\n");
 
-	return sysfs_emit(buf, "%s%s%s%s%s%s%s%s\n",
+	return sysfs_emit(buf, "%s%s%s%s%s%s%s%s%s\n",
 			  spectre_v2_strings[spectre_v2_enabled],
 			  ibpb_state(),
 			  boot_cpu_has(X86_FEATURE_USE_IBRS_FW) ? "; IBRS_FW" : "",
@@ -2847,6 +2860,7 @@ static ssize_t spectre_v2_show_state(char *buf)
 			  boot_cpu_has(X86_FEATURE_RSB_CTXSW) ? "; RSB filling" : "",
 			  pbrsb_eibrs_state(),
 			  spectre_bhi_state(),
+			  boot_cpu_has(X86_FEATURE_ERAPS) ? "; ERAPS hardware RSB flush" : "",
 			  /* this should always be at the end */
 			  spectre_v2_module_string());
 }

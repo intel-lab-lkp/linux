@@ -117,6 +117,17 @@
  * We define a CPP macro such that it can be used from both .S files and
  * inline assembly. It's possible to do a .macro and then include that
  * from C via asm(".include <asm/nospec-branch.h>") but let's not go there.
+ *
+ * AMD CPUs with the ERAPS feature may have a larger default RSB.  These CPUs
+ * use the default number of entries on a host, and can optionally (based on
+ * hypervisor setup) use 32 (old) or the new default in a guest.  The number
+ * of default entries is reflected in CPUID 8000_0021:EBX[23:16].
+ *
+ * With the ERAPS feature, RSB filling is not necessary anymore: the RSB is
+ * auto-cleared on a TLB flush (i.e. a context switch).  Adapting the value of
+ * RSB_CLEAR_LOOPS below for ERAPS would change it to a runtime variable
+ * instead of the current compile-time constant, so leave it as-is, as this
+ * works for both older CPUs, as well as newer ones with ERAPS.
  */
 
 #define RETPOLINE_THUNK_SIZE	32
