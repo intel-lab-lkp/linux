@@ -57,6 +57,8 @@ scm_version()
 		return
 	fi
 
+	githack=" --match=v6.11 --candidates=1"
+
 	# mainline kernel:  6.2.0-rc5  ->  v6.2-rc5
 	# stable kernel:    6.1.7      ->  v6.1.7
 	version_tag=v$(echo "${KERNELVERSION}" | sed -E 's/^([0-9]+\.[0-9]+)\.0(.*)$/\1\2/')
@@ -67,7 +69,7 @@ scm_version()
 	tag=${file_localversion#-}
 	desc=
 	if [ -n "${tag}" ]; then
-		desc=$(git describe --match=$tag 2>/dev/null)
+		desc=$(git describe --match=$tag $githack 2>/dev/null)
 	fi
 
 	# Otherwise, if a localversion* file exists, and the tag
@@ -76,13 +78,13 @@ scm_version()
 	# it. This is e.g. the case in linux-rt.
 	if [ -z "${desc}" ] && [ -n "${file_localversion}" ]; then
 		tag="${version_tag}${file_localversion}"
-		desc=$(git describe --match=$tag 2>/dev/null)
+		desc=$(git describe --match=$tag $githack 2>/dev/null)
 	fi
 
 	# Otherwise, default to the annotated tag derived from KERNELVERSION.
 	if [ -z "${desc}" ]; then
 		tag="${version_tag}"
-		desc=$(git describe --match=$tag 2>/dev/null)
+		desc=$(git describe --match=$tag $githack 2>/dev/null)
 	fi
 
 	# If we are at the tagged commit, we ignore it because the version is
