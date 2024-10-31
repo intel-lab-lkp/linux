@@ -1852,6 +1852,11 @@ static int vicodec_open(struct file *file)
 			  1, 31, 1, 20);
 	v4l2_ctrl_new_std(hdl, &vicodec_ctrl_ops, V4L2_CID_FWHT_P_FRAME_QP,
 			  1, 31, 1, 20);
+	if (!ctx->is_stateless)
+		v4l2_ctrl_new_std(hdl, &vicodec_ctrl_ops, ctx->is_enc ?
+				  V4L2_CID_MIN_BUFFERS_FOR_OUTPUT :
+				  V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
+				  1, 32, 1, 2);
 	if (ctx->is_enc)
 		v4l2_ctrl_new_std(hdl, &vicodec_ctrl_ops,
 				  V4L2_CID_MIN_BUFFERS_FOR_OUTPUT, 1, 1, 1, 1);
