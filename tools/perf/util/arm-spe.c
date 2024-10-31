@@ -555,7 +555,8 @@ static void arm_spe__synth_memory_level(const struct arm_spe_record *record,
 		data_src->mem_lvl |= PERF_MEM_LVL_REM_CCE1;
 }
 
-static bool arm_spe__is_common_ds_encoding(struct arm_spe_queue *speq)
+static bool arm_spe__is_ds_encoding_supported(struct arm_spe_queue *speq,
+					      const struct midr_range *cpus)
 {
 	struct arm_spe *spe = speq->spe;
 	bool is_in_cpu_list;
@@ -592,7 +593,7 @@ static bool arm_spe__is_common_ds_encoding(struct arm_spe_queue *speq)
 		midr = metadata[ARM_SPE_CPU_MIDR];
 	}
 
-	is_in_cpu_list = is_midr_in_range_list(midr, common_ds_encoding_cpus);
+	is_in_cpu_list = is_midr_in_range_list(midr, cpus);
 	if (is_in_cpu_list)
 		return true;
 	else
@@ -603,7 +604,8 @@ static u64 arm_spe__synth_data_source(struct arm_spe_queue *speq,
 				      const struct arm_spe_record *record)
 {
 	union perf_mem_data_src	data_src = { .mem_op = PERF_MEM_OP_NA };
-	bool is_common = arm_spe__is_common_ds_encoding(speq);
+	bool is_common = arm_spe__is_ds_encoding_supported(speq,
+						common_ds_encoding_cpus);
 
 	if (record->op & ARM_SPE_OP_LD)
 		data_src.mem_op = PERF_MEM_OP_LOAD;
