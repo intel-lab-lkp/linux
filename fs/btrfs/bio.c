@@ -81,6 +81,9 @@ static struct btrfs_bio *btrfs_split_bio(struct btrfs_fs_info *fs_info,
 
 	bio = bio_split(&orig_bbio->bio, map_length >> SECTOR_SHIFT, GFP_NOFS,
 			&btrfs_clone_bioset);
+	if (IS_ERR(bio))
+		return ERR_CAST(bio);
+
 	bbio = btrfs_bio(bio);
 	btrfs_bio_init(bbio, fs_info, NULL, orig_bbio);
 	bbio->inode = orig_bbio->inode;
@@ -687,6 +690,10 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 
 	if (map_length < length) {
 		bbio = btrfs_split_bio(fs_info, bbio, map_length);
+		if (IS_ERR(bbio)) {
+			ret = errno_to_blk_status(PTR_ERR(bbio));
+			goto fail;
+		}
 		bio = &bbio->bio;
 	}
 
@@ -698,7 +705,7 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 		bbio->saved_iter = bio->bi_iter;
 		ret = btrfs_lookup_bio_sums(bbio);
 		if (ret)
-			goto fail;
+			goto fail_split;
 	}
 
 	if (btrfs_op(bio) == BTRFS_MAP_WRITE) {
@@ -732,13 +739,13 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 
 			ret = btrfs_bio_csum(bbio);
 			if (ret)
-				goto fail;
+				goto fail_split;
 		} else if (use_append ||
 			   (btrfs_is_zoned(fs_info) && inode &&
 			    inode->flags & BTRFS_INODE_NODATASUM)) {
 			ret = btrfs_alloc_dummy_sum(bbio);
 			if (ret)
-				goto fail;
+				goto fail_split;
 		}
 	}
 
@@ -746,7 +753,7 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 done:
 	return map_length == length;
 
-fail:
+fail_split:
 	btrfs_bio_counter_dec(fs_info);
 	/*
 	 * We have split the original bbio, now we have to end both the current
@@ -760,6 +767,7 @@ fail:
 
 		btrfs_bio_end_io(remaining, ret);
 	}
+fail:
 	btrfs_bio_end_io(bbio, ret);
 	/* Do not submit another chunk */
 	return true;
