@@ -328,13 +328,12 @@ long inc_rlimit_get_ucounts(struct ucounts *ucounts, enum rlimit_type type)
 		if (new != 1)
 			continue;
 		if (!get_ucounts(iter))
-			goto dec_unwind;
+			goto unwind;
 	}
 	return ret;
-dec_unwind:
+unwind:
 	dec = atomic_long_sub_return(1, &iter->rlimit[type]);
 	WARN_ON_ONCE(dec < 0);
-unwind:
 	do_dec_rlimit_put_ucounts(ucounts, iter, type);
 	return 0;
 }
