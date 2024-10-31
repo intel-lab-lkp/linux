@@ -1055,7 +1055,7 @@ int drm_prime_sg_to_dma_addr_array(struct sg_table *sgt, dma_addr_t *addrs,
 
 	for_each_sgtable_dma_page(sgt, &dma_iter, 0) {
 		if (WARN_ON(a - addrs >= max_entries))
-			return -1;
+			return -EINVAL;
 		*a++ = sg_page_iter_dma_address(&dma_iter);
 	}
 	return 0;
