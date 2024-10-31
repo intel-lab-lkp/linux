@@ -1718,7 +1718,8 @@ static void xilinx_dma_complete_descriptor(struct xilinx_dma_chan *chan)
 		return;
 
 	list_for_each_entry_safe(desc, next, &chan->active_list, node) {
-		if (chan->xdev->dma_config->dmatype == XDMA_TYPE_AXIDMA) {
+		if (chan->xdev->dma_config->dmatype == XDMA_TYPE_AXIDMA &&
+		    chan->irq_delay) {
 			struct xilinx_axidma_tx_segment *seg;
 
 			seg = list_last_entry(&desc->segments,
