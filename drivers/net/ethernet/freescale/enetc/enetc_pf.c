@@ -343,10 +343,17 @@ static int enetc_pf_set_vf_mac(struct net_device *ndev, int vf, u8 *mac)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
 	struct enetc_pf *pf = enetc_si_priv(priv->si);
+	struct device *dev = &pf->si->pdev->dev;
 	struct enetc_vf_state *vf_state;
 
 	if (vf >= pf->total_vfs)
 		return -EINVAL;
+
+	if (vf + 1 <= pf->num_vfs) {
+		dev_err(dev, "Cannot set MAC address for an enabled VF\n");
+
+		return -EPERM;
+	}
 
 	if (!is_valid_ether_addr(mac))
 		return -EADDRNOTAVAIL;
