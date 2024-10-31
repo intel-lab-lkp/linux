@@ -457,7 +457,7 @@ static vm_fault_t mmap_vmcore_fault(struct vm_fault *vmf)
 #endif
 }
 
-static const struct vm_operations_struct vmcore_mmap_ops = {
+static const struct vm_operations_struct __maybe_unused vmcore_mmap_ops = {
 	.fault = mmap_vmcore_fault,
 };
 
