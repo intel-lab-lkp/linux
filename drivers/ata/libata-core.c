@@ -4776,58 +4776,17 @@ static void ata_verify_xfer(struct ata_queued_cmd *qc)
 }
 
 /**
- *	ata_qc_complete - Complete an active ATA command
- *	@qc: Command to complete
+ *	ata_qc_complete_success - Post processing needed for a successful QC.
+ *	@qc: Command that was completed successfully
  *
- *	Indicate to the mid and upper layers that an ATA command has
- *	completed, with either an ok or not-ok status.
- *
- *	Refrain from calling this function multiple times when
- *	successfully completing multiple NCQ commands.
- *	ata_qc_complete_multiple() should be used instead, which will
- *	properly update IRQ expect state.
- *
- *	LOCKING:
- *	spin_lock_irqsave(host lock)
+ *	When a QC receives a successful completion, we need to perform some
+ *	additional post processing.
  */
-void ata_qc_complete(struct ata_queued_cmd *qc)
+void ata_qc_complete_success(struct ata_queued_cmd *qc)
 {
 	struct ata_port *ap = qc->ap;
 	struct ata_device *dev = qc->dev;
 	struct ata_eh_info *ehi = &dev->link->eh_info;
-
-	/* Trigger the LED (if available) */
-	ledtrig_disk_activity(!!(qc->tf.flags & ATA_TFLAG_WRITE));
-
-	/*
-	 * In order to synchronize EH with the regular execution path, a qc that
-	 * is owned by EH is marked with ATA_QCFLAG_EH.
-	 *
-	 * The normal execution path is responsible for not accessing a qc owned
-	 * by EH.  libata core enforces the rule by returning NULL from
-	 * ata_qc_from_tag() for qcs owned by EH.
-	 */
-	if (unlikely(qc->err_mask))
-		qc->flags |= ATA_QCFLAG_EH;
-
-	/*
-	 * Finish internal commands without any further processing and always
-	 * with the result TF filled.
-	 */
-	if (unlikely(ata_tag_internal(qc->tag))) {
-		fill_result_tf(qc);
-		trace_ata_qc_complete_internal(qc);
-		__ata_qc_complete(qc);
-		return;
-	}
-
-	/* Non-internal qc has failed.  Fill the result TF and summon EH. */
-	if (unlikely(qc->flags & ATA_QCFLAG_EH)) {
-		fill_result_tf(qc);
-		trace_ata_qc_complete_failed(qc);
-		ata_qc_schedule_eh(qc);
-		return;
-	}
 
 	WARN_ON_ONCE(ata_port_is_frozen(ap));
 
@@ -4887,6 +4846,60 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 		ata_verify_xfer(qc);
 
 	__ata_qc_complete(qc);
+}
+
+/**
+ *	ata_qc_complete - Complete an active ATA command
+ *	@qc: Command to complete
+ *
+ *	Indicate to the mid and upper layers that an ATA command has
+ *	completed, with either an ok or not-ok status.
+ *
+ *	Refrain from calling this function multiple times when
+ *	successfully completing multiple NCQ commands.
+ *	ata_qc_complete_multiple() should be used instead, which will
+ *	properly update IRQ expect state.
+ *
+ *	LOCKING:
+ *	spin_lock_irqsave(host lock)
+ */
+void ata_qc_complete(struct ata_queued_cmd *qc)
+{
+	/* Trigger the LED (if available) */
+	ledtrig_disk_activity(!!(qc->tf.flags & ATA_TFLAG_WRITE));
+
+	/*
+	 * In order to synchronize EH with the regular execution path, a qc that
+	 * is owned by EH is marked with ATA_QCFLAG_EH.
+	 *
+	 * The normal execution path is responsible for not accessing a qc owned
+	 * by EH.  libata core enforces the rule by returning NULL from
+	 * ata_qc_from_tag() for qcs owned by EH.
+	 */
+	if (unlikely(qc->err_mask))
+		qc->flags |= ATA_QCFLAG_EH;
+
+	/*
+	 * Finish internal commands without any further processing and always
+	 * with the result TF filled.
+	 */
+	if (unlikely(ata_tag_internal(qc->tag))) {
+		fill_result_tf(qc);
+		trace_ata_qc_complete_internal(qc);
+		__ata_qc_complete(qc);
+		return;
+	}
+
+	/* Non-internal qc has failed.  Fill the result TF and summon EH. */
+	if (unlikely(qc->flags & ATA_QCFLAG_EH)) {
+		fill_result_tf(qc);
+		trace_ata_qc_complete_failed(qc);
+		ata_qc_schedule_eh(qc);
+		return;
+	}
+
+	/* This point is only reached if QC was successful */
+	ata_qc_complete_success(qc);
 }
 EXPORT_SYMBOL_GPL(ata_qc_complete);
 

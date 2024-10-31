@@ -1194,6 +1194,7 @@ extern void ata_id_c_string(const u16 *id, unsigned char *s,
 			    unsigned int ofs, unsigned int len);
 extern unsigned int ata_do_dev_read_id(struct ata_device *dev,
 				       struct ata_taskfile *tf, __le16 *id);
+extern void ata_qc_complete_success(struct ata_queued_cmd *qc);
 extern void ata_qc_complete(struct ata_queued_cmd *qc);
 extern u64 ata_qc_get_active(struct ata_port *ap);
 extern void ata_scsi_simulate(struct ata_device *dev, struct scsi_cmnd *cmd);
