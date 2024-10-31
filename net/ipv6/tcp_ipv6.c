@@ -1588,6 +1588,7 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 	struct sk_buff *opt_skb = NULL;
 	enum skb_drop_reason reason;
 	struct tcp_sock *tp;
+	bool sk_lock_flag = false;
 
 	/* Imagine: socket is IPv6. IPv4 packet arrives,
 	   goes to IPv4 receive handler and backlogged.
@@ -1618,8 +1619,13 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 	   by tcp. Feel free to propose better solution.
 					       --ANK (980728)
 	 */
-	if (np->rxopt.all)
+	if (np->rxopt.all) {
+		if (TCP_SKB_CB(skb)->sk_lock_capability) {
+			sk_lock_flag = true;
+			bh_lock_sock_nested(sk);
+		}
 		opt_skb = skb_clone_and_charge_r(skb, sk);
+	}
 
 	if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
 		struct dst_entry *dst;
@@ -1641,7 +1647,7 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 		tcp_rcv_established(sk, skb);
 		if (opt_skb)
 			goto ipv6_pktoptions;
-		return 0;
+		goto unlock;
 	}
 
 	if (tcp_checksum_complete(skb))
@@ -1658,7 +1664,7 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 			}
 			if (opt_skb)
 				__kfree_skb(opt_skb);
-			return 0;
+			goto unlock;
 		}
 	} else
 		sock_rps_save_rxhash(sk, skb);
@@ -1668,7 +1674,7 @@ int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto reset;
 	if (opt_skb)
 		goto ipv6_pktoptions;
-	return 0;
+	goto unlock;
 
 reset:
 	tcp_v6_send_reset(sk, skb, sk_rst_convert_drop_reason(reason));
@@ -1676,7 +1682,7 @@ discard:
 	if (opt_skb)
 		__kfree_skb(opt_skb);
 	sk_skb_reason_drop(sk, skb, reason);
-	return 0;
+	goto unlock;
 csum_err:
 	reason = SKB_DROP_REASON_TCP_CSUM;
 	trace_tcp_bad_csum(skb);
@@ -1715,6 +1721,9 @@ ipv6_pktoptions:
 	}
 
 	consume_skb(opt_skb);
+unlock:
+	if (sk_lock_flag)
+		bh_unlock_sock(sk);
 	return 0;
 }
 
@@ -1900,7 +1909,9 @@ process:
 	skb->dev = NULL;
 
 	if (sk->sk_state == TCP_LISTEN) {
+		TCP_SKB_CB(skb)->sk_lock_capability = true;
 		ret = tcp_v6_do_rcv(sk, skb);
+		TCP_SKB_CB(skb)->sk_lock_capability = false;
 		goto put_and_return;
 	}
 
