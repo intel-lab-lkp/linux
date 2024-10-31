@@ -4420,6 +4420,7 @@ try_onemore:
 
 	/* initialize locks within allocated memory */
 	init_f2fs_rwsem(&sbi->gc_lock);
+	sema_init(&sbi->gc_clean_lock, 1);
 	mutex_init(&sbi->writepages);
 	init_f2fs_rwsem(&sbi->cp_global_sem);
 	init_f2fs_rwsem(&sbi->node_write);

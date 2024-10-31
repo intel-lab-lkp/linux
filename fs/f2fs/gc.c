@@ -232,14 +232,19 @@ int f2fs_start_gc_thread(struct f2fs_sb_info *sbi)
 
 void f2fs_stop_gc_thread(struct f2fs_sb_info *sbi)
 {
-	struct f2fs_gc_kthread *gc_th = sbi->gc_thread;
+	struct f2fs_gc_kthread *gc_th;
 
-	if (!gc_th)
+	down(&sbi->gc_clean_lock);
+	gc_th = sbi->gc_thread;
+	if (!gc_th) {
+		up(&sbi->gc_clean_lock);
 		return;
+	}
 	kthread_stop(gc_th->f2fs_gc_task);
 	wake_up_all(&gc_th->fggc_wq);
 	kfree(gc_th);
 	sbi->gc_thread = NULL;
+	up(&sbi->gc_clean_lock);
 }
 
 static int select_gc_type(struct f2fs_sb_info *sbi, int gc_type)
