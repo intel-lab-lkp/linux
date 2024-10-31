@@ -1093,11 +1093,9 @@ static bool __copy_device_table(struct amd_iommu *iommu)
 			__set_bit(dom_id, amd_iommu_pd_alloc_bitmap);
 			/* If gcr3 table existed, mask it out */
 			if (old_devtb[devid].data[0] & DTE_FLAG_GV) {
-				tmp = DTE_GCR3_VAL_B(~0ULL) << DTE_GCR3_SHIFT_B;
-				tmp |= DTE_GCR3_VAL_C(~0ULL) << DTE_GCR3_SHIFT_C;
+				tmp = (DTE_GCR3_30_15 | DTE_GCR3_51_31);
 				pci_seg->old_dev_tbl_cpy[devid].data[1] &= ~tmp;
-				tmp = DTE_GCR3_VAL_A(~0ULL) << DTE_GCR3_SHIFT_A;
-				tmp |= DTE_FLAG_GV;
+				tmp = (DTE_GCR3_14_12 | DTE_FLAG_GV);
 				pci_seg->old_dev_tbl_cpy[devid].data[0] &= ~tmp;
 			}
 		}
@@ -1146,6 +1144,28 @@ static bool copy_device_table(void)
 	}
 
 	return true;
+}
+
+struct dev_table_entry *amd_iommu_get_ivhd_dte_flags(u16 devid)
+{
+	u16 f = 0, l = 0xFFFF;
+	struct ivhd_dte_flags *e;
+	struct dev_table_entry *dte = NULL;
+
+	for_each_ivhd_dte_flags(e) {
+		/*
+		 * Need to go through the whole list to find the smallest range,
+		 * which contains the devid. Then store it in f and l variables.
+		 */
+		if ((e->devid_first >= devid) && (e->devid_last <= devid)) {
+			if (f < e->devid_first)
+				f = e->devid_first;
+			if (e->devid_last < l)
+				l = e->devid_last;
+			dte = &(e->dte);
+		}
+	}
+	return dte;
 }
 
 static bool search_ivhd_dte_flags(u16 first, u16 last)
