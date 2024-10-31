@@ -8,9 +8,12 @@
 * Copyright (C) 2003-2004 Christoph Hellwig
 *
 ******************************************************************************/
-#define QLA1280_VERSION      "3.27.1"
+#define QLA1280_VERSION      "3.27.2"
 /*****************************************************************************
     Revision History:
+    Rev  3.27.2, October 31, 2024, Magnus Lindholm
+	- Limit DMA_BIT_MASK to 32-bit for QLA1020 and QLA1040 cards in order to prevent
+	  file system corruption on some platforms
     Rev  3.27.1, February 8, 2010, Michael Reed
 	- Retain firmware image for error recovery.
     Rev  3.27, February 10, 2009, Michael Reed
@@ -4142,6 +4145,7 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct qla_boards *bdp = &ql1280_board_tbl[devnum];
 	struct Scsi_Host *host;
 	struct scsi_qla_host *ha;
+	u64 mask;
 	int error = -ENODEV;
 
 	/* Bypass all AMI SUBSYS VENDOR IDs */
@@ -4177,8 +4181,13 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	ha->devnum = devnum;	/* specifies microcode load address */
 
 #ifdef QLA_64BIT_PTR
-	if (dma_set_mask_and_coherent(&ha->pdev->dev, DMA_BIT_MASK(64))) {
-		if (dma_set_mask(&ha->pdev->dev, DMA_BIT_MASK(32))) {
+	/* for 1020 and 1040, force 32-bit DMA mask */
+	if (IS_ISP1040(ha))
+		mask = DMA_BIT_MASK(32);
+	else
+		mask = DMA_BIT_MASK(64);
+	if (dma_set_mask_and_coherent(&ha->pdev->dev, mask)) {
+		if (dma_set_mask(&ha->pdev->dev, mask)) {
 			printk(KERN_WARNING "scsi(%li): Unable to set a "
 			       "suitable DMA mask - aborting\n", ha->host_no);
 			error = -ENODEV;
