@@ -118,9 +118,6 @@ static void matrix_keypad_scan(struct work_struct *work)
 
 	memset(new_state, 0, sizeof(new_state));
 
-	for (row = 0; row < keypad->num_row_gpios; row++)
-		gpiod_direction_input(keypad->row_gpios[row]);
-
 	/* assert each column and read the row status out */
 	for (col = 0; col < keypad->num_col_gpios; col++) {
 
@@ -326,6 +323,8 @@ static int matrix_keypad_init_gpio(struct platform_device *pdev,
 
 		if (active_low ^ gpiod_is_active_low(keypad->row_gpios[i]))
 			gpiod_toggle_active_low(keypad->row_gpios[i]);
+
+		gpiod_direction_input(keypad->row_gpios[i]);
 	}
 
 	return 0;
