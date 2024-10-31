@@ -157,6 +157,32 @@ static void ice_vsi_set_num_desc(struct ice_vsi *vsi)
 	}
 }
 
+static void ice_vsi_set_num_txqs(struct ice_vsi *vsi, u16 def_qs)
+{
+	if (vsi->req_txq) {
+		vsi->alloc_txq = vsi->req_txq;
+		vsi->num_txq = vsi->req_txq;
+	} else {
+		vsi->alloc_txq = min_t(u16, def_qs, (u16)num_online_cpus());
+	}
+}
+
+static void ice_vsi_set_num_rxqs(struct ice_vsi *vsi, bool rss_ena, u16 def_qs)
+{
+	/* only 1 Rx queue unless RSS is enabled */
+	if (rss_ena) {
+		vsi->alloc_rxq = 1;
+		return;
+	}
+
+	if (vsi->req_rxq) {
+		vsi->alloc_rxq = vsi->req_rxq;
+		vsi->num_rxq = vsi->req_rxq;
+	} else {
+		vsi->alloc_rxq = min_t(u16, def_qs, (u16)num_online_cpus());
+	}
+}
+
 /**
  * ice_vsi_set_num_qs - Set number of queues, descriptors and vectors for a VSI
  * @vsi: the VSI being configured
@@ -174,31 +200,13 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi)
 
 	switch (vsi_type) {
 	case ICE_VSI_PF:
-		if (vsi->req_txq) {
-			vsi->alloc_txq = vsi->req_txq;
-			vsi->num_txq = vsi->req_txq;
-		} else {
-			vsi->alloc_txq = min3(pf->num_lan_msix,
-					      ice_get_avail_txq_count(pf),
-					      (u16)num_online_cpus());
-		}
-
+		ice_vsi_set_num_txqs(vsi, min(pf->num_lan_msix,
+					      ice_get_avail_txq_count(pf)));
 		pf->num_lan_tx = vsi->alloc_txq;
 
-		/* only 1 Rx queue unless RSS is enabled */
-		if (!test_bit(ICE_FLAG_RSS_ENA, pf->flags)) {
-			vsi->alloc_rxq = 1;
-		} else {
-			if (vsi->req_rxq) {
-				vsi->alloc_rxq = vsi->req_rxq;
-				vsi->num_rxq = vsi->req_rxq;
-			} else {
-				vsi->alloc_rxq = min3(pf->num_lan_msix,
-						      ice_get_avail_rxq_count(pf),
-						      (u16)num_online_cpus());
-			}
-		}
-
+		ice_vsi_set_num_rxqs(vsi, !test_bit(ICE_FLAG_RSS_ENA, pf->flags),
+				     min(pf->num_lan_msix,
+					 ice_get_avail_rxq_count(pf)));
 		pf->num_lan_rx = vsi->alloc_rxq;
 
 		vsi->num_q_vectors = min_t(int, pf->num_lan_msix,
@@ -206,9 +214,12 @@ static void ice_vsi_set_num_qs(struct ice_vsi *vsi)
 						 vsi->alloc_txq));
 		break;
 	case ICE_VSI_SF:
-		vsi->alloc_txq = 1;
-		vsi->alloc_rxq = 1;
-		vsi->num_q_vectors = 1;
+		ice_vsi_set_num_txqs(vsi, min(vsi->max_io_eqs,
+					      ice_get_avail_txq_count(pf)));
+		ice_vsi_set_num_rxqs(vsi, !test_bit(ICE_FLAG_RSS_ENA, pf->flags),
+				     min(vsi->max_io_eqs,
+					 ice_get_avail_rxq_count(pf)));
+		vsi->num_q_vectors = max_t(int, vsi->alloc_rxq, vsi->alloc_txq);
 		vsi->irq_dyn_alloc = true;
 		break;
 	case ICE_VSI_VF:

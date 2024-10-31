@@ -3786,22 +3786,31 @@ ice_get_ts_info(struct net_device *dev, struct kernel_ethtool_ts_info *info)
 
 /**
  * ice_get_max_txq - return the maximum number of Tx queues for in a PF
- * @pf: PF structure
+ * @vsi: VSI structure
  */
-static int ice_get_max_txq(struct ice_pf *pf)
+static int ice_get_max_txq(struct ice_vsi *vsi)
 {
-	return min3(pf->num_lan_msix, (u16)num_online_cpus(),
-		    (u16)pf->hw.func_caps.common_cap.num_txq);
+	u16 num_queues = vsi->back->num_lan_msix;
+
+	if (vsi->max_io_eqs)
+		num_queues = vsi->max_io_eqs;
+	return min3(num_queues, (u16)num_online_cpus(),
+		    (u16)vsi->back->hw.func_caps.common_cap.num_txq);
 }
 
 /**
  * ice_get_max_rxq - return the maximum number of Rx queues for in a PF
- * @pf: PF structure
+ * @vsi: VSI structure
  */
-static int ice_get_max_rxq(struct ice_pf *pf)
+static int ice_get_max_rxq(struct ice_vsi *vsi)
 {
-	return min3(pf->num_lan_msix, (u16)num_online_cpus(),
-		    (u16)pf->hw.func_caps.common_cap.num_rxq);
+	u16 num_queues = vsi->back->num_lan_msix;
+
+	if (vsi->max_io_eqs)
+		num_queues = vsi->max_io_eqs;
+
+	return min3(num_queues, (u16)num_online_cpus(),
+		    (u16)vsi->back->hw.func_caps.common_cap.num_rxq);
 }
 
 /**
@@ -3839,8 +3848,8 @@ ice_get_channels(struct net_device *dev, struct ethtool_channels *ch)
 	struct ice_pf *pf = vsi->back;
 
 	/* report maximum channels */
-	ch->max_rx = ice_get_max_rxq(pf);
-	ch->max_tx = ice_get_max_txq(pf);
+	ch->max_rx = ice_get_max_rxq(vsi);
+	ch->max_tx = ice_get_max_txq(vsi);
 	ch->max_combined = min_t(int, ch->max_rx, ch->max_tx);
 
 	/* report current channels */
@@ -3958,14 +3967,14 @@ static int ice_set_channels(struct net_device *dev, struct ethtool_channels *ch)
 			   vsi->tc_cfg.numtc);
 		return -EINVAL;
 	}
-	if (new_rx > ice_get_max_rxq(pf)) {
+	if (new_rx > ice_get_max_rxq(vsi)) {
 		netdev_err(dev, "Maximum allowed Rx channels is %d\n",
-			   ice_get_max_rxq(pf));
+			   ice_get_max_rxq(vsi));
 		return -EINVAL;
 	}
-	if (new_tx > ice_get_max_txq(pf)) {
+	if (new_tx > ice_get_max_txq(vsi)) {
 		netdev_err(dev, "Maximum allowed Tx channels is %d\n",
-			   ice_get_max_txq(pf));
+			   ice_get_max_txq(vsi));
 		return -EINVAL;
 	}
 
