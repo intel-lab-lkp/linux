@@ -615,7 +615,8 @@ void validate_mm(struct mm_struct *mm)
 			anon_vma_unlock_read(anon_vma);
 		}
 #endif
-		i++;
+		if (++i > mm->map_count)
+			break;
 	}
 	if (i != mm->map_count) {
 		pr_emerg("map_count %d vma iterator %d\n", mm->map_count, i);
