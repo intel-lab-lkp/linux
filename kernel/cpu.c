@@ -2218,7 +2218,7 @@ static struct cpuhp_step cpuhp_hp_states[] = {
 	[CPUHP_AP_IRQ_AFFINITY_ONLINE] = {
 		.name			= "irq/affinity:online",
 		.startup.single		= irq_affinity_online_cpu,
-		.teardown.single	= NULL,
+		.teardown.single	= irq_affinity_offline_cpu,
 	},
 	[CPUHP_AP_PERF_ONLINE] = {
 		.name			= "perf:online",

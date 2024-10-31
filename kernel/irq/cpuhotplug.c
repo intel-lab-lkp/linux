@@ -232,6 +232,31 @@ static void irq_restore_affinity_of_irq(struct irq_desc *desc, unsigned int cpu)
 		irq_set_affinity_locked(data, affinity, false);
 }
 
+static int irq_check_affinity_of_irq(struct irq_desc *desc, unsigned int cpu)
+{
+	struct irq_data *data = irq_desc_get_irq_data(desc);
+	const struct cpumask *affinity = irq_data_get_affinity_mask(data);
+	unsigned int cur;
+
+	if (!irqd_affinity_is_managed(data) || !desc->action ||
+	    !irq_data_get_irq_chip(data) || !cpumask_test_cpu(cpu, affinity))
+		return 0;
+
+	for_each_cpu(cur, affinity)
+		if (cur != cpu && cpumask_test_cpu(cur, cpu_online_mask))
+			return 0;
+
+	/*
+	 * If the onging offline CPU is the last one in the affinity,
+	 * the managed interrupts will be unavailable until one of
+	 * the assigned CPUs comes online. To prevent this unavailability,
+	 * return -EBUSY directly in this case.
+	 */
+	pr_warn("Affinity %*pbl of managed IRQ%u contains only one CPU%u that online\n",
+		cpumask_pr_args(affinity), data->irq, cpu);
+	return -EBUSY;
+}
+
 /**
  * irq_affinity_online_cpu - Restore affinity for managed interrupts
  * @cpu:	Upcoming CPU for which interrupts should be restored
@@ -251,4 +276,30 @@ int irq_affinity_online_cpu(unsigned int cpu)
 	irq_unlock_sparse();
 
 	return 0;
+}
+
+/**
+ * irq_affinity_offline_cpu - Check affinity for managed interrupts
+ * to prevent the unavailability caused by taking the last CPU in the
+ * affinity offline.
+ * @cpu:	Upcoming CPU for which interrupts should be checked
+ */
+int irq_affinity_offline_cpu(unsigned int cpu)
+{
+	struct irq_desc *desc;
+	unsigned int irq;
+	int ret = 0;
+
+	irq_lock_sparse();
+	for_each_active_irq(irq) {
+		desc = irq_to_desc(irq);
+		raw_spin_lock_irq(&desc->lock);
+		ret = irq_check_affinity_of_irq(desc, cpu);
+		raw_spin_unlock_irq(&desc->lock);
+		if (ret < 0)
+			break;
+	}
+	irq_unlock_sparse();
+
+	return ret;
 }
