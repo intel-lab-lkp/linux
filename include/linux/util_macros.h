@@ -7,12 +7,18 @@
 #define __find_closest(x, a, as, op)					\
 ({									\
 	typeof(as) __fc_i, __fc_as = (as) - 1;				\
-	typeof(x) __fc_x = (x);						\
+	typeof(x) __fc_mid_x, __fc_x = (x);				\
+	typeof(x) __fc_left, __fc_right;				\
 	typeof(*a) const *__fc_a = (a);					\
 	for (__fc_i = 0; __fc_i < __fc_as; __fc_i++) {			\
-		if (__fc_x op DIV_ROUND_CLOSEST(__fc_a[__fc_i] +	\
-						__fc_a[__fc_i + 1], 2))	\
+		__fc_mid_x = (__fc_a[__fc_i] + __fc_a[__fc_i + 1]) / 2;	\
+		if (__fc_x op __fc_mid_x) {				\
+			__fc_left = __fc_mid_x - __fc_a[__fc_i];	\
+			__fc_right = __fc_a[__fc_i + 1] - __fc_mid_x;	\
+			if (__fc_right < __fc_left)			\
+				__fc_i++;				\
 			break;						\
+		}							\
 	}								\
 	(__fc_i);							\
 })
@@ -38,7 +44,7 @@
  * Similar to find_closest() but 'a' is expected to be sorted in descending
  * order.
  */
-#define find_closest_descending(x, a, as) __find_closest(x, a, as, >=)
+#define find_closest_descending(x, a, as) __find_closest(x, a, as, >)
 
 /**
  * is_insidevar - check if the @ptr points inside the @var memory range.
