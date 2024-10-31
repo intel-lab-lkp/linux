@@ -418,6 +418,10 @@ static int st_chk_result(struct scsi_tape *STp, struct st_request * SRpnt)
 
 	STp->pos_unknown |= STp->device->was_reset;
 
+	DEBC_printk(STp, "%s: %d: pos_unknown %x was_reset %x ready %x, result %d\n",
+			__func__, __LINE__, STp->pos_unknown, STp->device->was_reset,
+			STp->ready, result);
+
 	if (cmdstatp->have_sense &&
 	    scode == RECOVERED_ERROR
 #if ST_RECOVERED_WRITE_FATAL
@@ -834,6 +838,10 @@ static int flush_buffer(struct scsi_tape *STp, int seek_next)
 	int backspace, result;
 	struct st_partstat *STps;
 
+	DEBC_printk(STp, "%s: %d: pos_unknown %x was_reset %x ready %x\n",
+		__func__, __LINE__, STp->pos_unknown, STp->device->was_reset,
+		STp->ready);
+
 	if (STp->ready != ST_READY)
 		return 0;
 
@@ -1050,6 +1058,10 @@ static int check_tape(struct scsi_tape *STp, struct file *filp)
 	struct inode *inode = file_inode(filp);
 	int mode = TAPE_MODE(inode);
 
+	DEBC_printk(STp, "%s: %d: pos_unknown %x was_reset %x ready %x\n",
+			__func__, __LINE__, STp->pos_unknown,
+			STp->device->was_reset, STp->ready);
+
 	STp->ready = ST_READY;
 
 	if (mode != STp->current_mode) {
@@ -1085,6 +1097,9 @@ static int check_tape(struct scsi_tape *STp, struct file *filp)
 			STps->drv_file = 0;
 		}
 		new_session = 1;
+		DEBC_printk(STp, "%s: %d: CHKRES_NEW_SESS pos_unknown %x was_reset %x ready %x\n",
+				__func__, __LINE__, STp->pos_unknown, STp->device->was_reset,
+				STp->ready);
 	}
 	else {
 		STp->cleaning_req |= saved_cleaning;
@@ -1101,6 +1116,12 @@ static int check_tape(struct scsi_tape *STp, struct file *filp)
 			STp->ps[0].drv_file = STp->ps[0].drv_block = (-1);
 			STp->partition = STp->new_partition = 0;
 			STp->door_locked = ST_UNLOCKED;
+
+			DEBC_printk(STp,
+				"%s: %d: CHKRES_NOT_READY pos_unknown %x was_reset %x ready %x\n",
+				__func__, __LINE__, STp->pos_unknown, STp->device->was_reset,
+				STp->ready);
+
 			return CHKRES_NOT_READY;
 		}
 	}
@@ -1237,9 +1258,16 @@ static int check_tape(struct scsi_tape *STp, struct file *filp)
 		}
 	}
 
+	DEBC_printk(STp, "%s: %d: CHKRES_READY pos_unknown %x was_reset %x ready %x\n",
+			__func__, __LINE__, STp->pos_unknown, STp->device->was_reset,
+			STp->ready);
+
 	return CHKRES_READY;
 
  err_out:
+	DEBC_printk(STp, "%s: %d: pos_unknown %x was_reset %x ready %x retval %d\n",
+			__func__, __LINE__, STp->pos_unknown, STp->device->was_reset,
+			STp->ready, retval);
 	return retval;
 }
 
@@ -1351,6 +1379,9 @@ static int st_flush(struct file *filp, fl_owner_t id)
 
 	if (file_count(filp) > 1)
 		return 0;
+
+	DEBC_printk(STp, "%s: %d: pos_unknown %x was_reset %x ready %x\n",
+			__func__, __LINE__, STp->pos_unknown, STp->device->was_reset, STp->ready);
 
 	if (STps->rw == ST_WRITING && !STp->pos_unknown) {
 		result = st_flush_write_buffer(STp);
