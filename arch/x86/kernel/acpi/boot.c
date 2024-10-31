@@ -105,7 +105,7 @@ static u32 isa_irq_to_gsi[NR_IRQS_LEGACY] __read_mostly = {
  * This is just a simple wrapper around early_memremap(),
  * with sanity checks for phys == 0 and size == 0.
  */
-void __init __iomem *__acpi_map_table(unsigned long phys, unsigned long size)
+void __init *__acpi_map_table(unsigned long phys, unsigned long size)
 {
 
 	if (!phys || !size)

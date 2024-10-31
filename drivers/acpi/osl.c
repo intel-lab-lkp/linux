@@ -334,7 +334,7 @@ void __iomem __ref
 	}
 
 	if (!acpi_permanent_mmap)
-		return __acpi_map_table((unsigned long)phys, size);
+		return (void __iomem __force *)__acpi_map_table((unsigned long)phys, size);
 
 	mutex_lock(&acpi_ioremap_lock);
 	/* Check if there's a suitable mapping already. */

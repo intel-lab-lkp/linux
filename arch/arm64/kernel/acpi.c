@@ -88,10 +88,10 @@ static bool __init dt_is_stub(void)
 }
 
 /*
- * __acpi_map_table() will be called before page_init(), so early_ioremap()
- * or early_memremap() should be called here to for ACPI table mapping.
+ * __acpi_map_table() will be called before page_init(), so early_memremap()
+ * should be called here to for ACPI table mapping.
  */
-void __init __iomem *__acpi_map_table(unsigned long phys, unsigned long size)
+void __init *__acpi_map_table(unsigned long phys, unsigned long size)
 {
 	if (!size)
 		return NULL;

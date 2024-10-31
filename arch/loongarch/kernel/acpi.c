@@ -34,7 +34,7 @@ u64 acpi_saved_sp;
 
 struct acpi_madt_core_pic acpi_core_pic[MAX_CORE_PIC];
 
-void __init __iomem * __acpi_map_table(unsigned long phys, unsigned long size)
+void __init *__acpi_map_table(unsigned long phys, unsigned long size)
 {
 
 	if (!phys || !size)
