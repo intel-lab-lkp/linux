@@ -848,7 +848,7 @@ add_delayed_ref_head(struct btrfs_trans_handle *trans,
 		if (xa_is_err(existing)) {
 			/* Memory was preallocated by the caller. */
 			ASSERT(xa_err(existing) != -ENOMEM);
-			return ERR_CAST(existing);
+			return ERR_PTR(xa_err(existing));
 		} else if (WARN_ON(existing)) {
 			/*
 			 * Shouldn't happen we just did a lookup before under
