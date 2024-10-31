@@ -170,13 +170,7 @@ static int sysfs_kf_bin_mmap(struct kernfs_open_file *of,
 static loff_t sysfs_kf_bin_llseek(struct kernfs_open_file *of, loff_t offset,
 				  int whence)
 {
-	struct bin_attribute *battr = of->kn->priv;
-	struct kobject *kobj = of->kn->parent->priv;
-
-	if (battr->llseek)
-		return battr->llseek(of->file, kobj, battr, offset, whence);
-	else
-		return generic_file_llseek(of->file, offset, whence);
+	return generic_file_llseek(of->file, offset, whence);
 }
 
 static int sysfs_kf_bin_open(struct kernfs_open_file *of)
