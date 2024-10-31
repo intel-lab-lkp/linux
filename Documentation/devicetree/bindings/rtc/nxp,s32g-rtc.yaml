@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/nxp,s32g-rtc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP S32G2/S32G3 Real Time Clock (RTC)
+
+maintainers:
+  - Bogdan Hamciuc <bogdan.hamciuc@nxp.com>
+  - Ciprian Marian Costea <ciprianmarian.costea@nxp.com>
+
+properties:
+  compatible:
+    oneOf:
+      - enum:
+          - nxp,s32g2-rtc
+      - items:
+          - const: nxp,s32g3-rtc
+          - const: nxp,s32g2-rtc
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 1
+
+  clocks:
+    items:
+      - description: ipg clock drives the access to the
+          RTC iomapped registers
+
+  clock-names:
+    items:
+      - const: ipg
+
+  assigned-clocks:
+    minItems: 1
+    items:
+      - description: Runtime clock source. It must be a clock
+            source for the RTC module. It will be disabled by hardware
+            during Standby/Suspend.
+      - description: Standby/Suspend clock source. It is optional
+            and can be used in case the RTC will continue ticking during
+            platform/system suspend. RTC hardware module contains a
+            hardware mux for clock source selection.
+
+  assigned-clock-parents:
+    description: List of phandles to each parent clock.
+
+  assigned-clock-rates:
+    description: List of frequencies for RTC clock sources.
+            RTC module contains 2 hardware divisors which can be
+            enabled or not. Hence, available frequencies are the following
+            parent_freq, parent_freq / 512, parent_freq / 32 or
+            parent_freq / (512 * 32)
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - "#clock-cells"
+  - clocks
+  - clock-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    rtc0: rtc@40060000 {
+        compatible = "nxp,s32g3-rtc",
+                   "nxp,s32g2-rtc";
+        reg = <0x40060000 0x1000>;
+        interrupts = <GIC_SPI 121 IRQ_TYPE_LEVEL_HIGH>;
+        #clock-cells = <1>;
+        clocks = <&clks 54>;
+        clock-names = "ipg";
+        /*
+         * Configuration of default parent clocks.
+         * 'assigned-clocks' 0-3 IDs are Runtime clock sources
+         * 4-7 IDs are Suspend/Standby clock sources.
+         */
+        assigned-clocks = <&rtc0 2>, <&rtc0 4>;
+        assigned-clock-parents = <&clks 56>, <&clks 55>;
+        /*
+         * Clock frequency can be divided by value
+         * 512 or 32 (or both) via hardware divisors.
+         * Below configuration:
+         * Runtime clock source: FIRC (51 MHz) / 512 (DIV512)
+         * Suspend/Standby clock source: SIRC (32 KHz)
+         */
+        assigned-clock-rates = <99609>, <32000>;
+    };
