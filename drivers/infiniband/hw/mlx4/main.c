@@ -123,40 +123,6 @@ static int num_ib_ports(struct mlx4_dev *dev)
 	return ib_ports;
 }
 
-static struct net_device *mlx4_ib_get_netdev(struct ib_device *device,
-					     u32 port_num)
-{
-	struct mlx4_ib_dev *ibdev = to_mdev(device);
-	struct net_device *dev, *ret = NULL;
-
-	rcu_read_lock();
-	for_each_netdev_rcu(&init_net, dev) {
-		if (dev->dev.parent != ibdev->ib_dev.dev.parent ||
-		    dev->dev_port + 1 != port_num)
-			continue;
-
-		if (mlx4_is_bonded(ibdev->dev)) {
-			struct net_device *upper;
-
-			upper = netdev_master_upper_dev_get_rcu(dev);
-			if (upper) {
-				struct net_device *active;
-
-				active = bond_option_active_slave_get_rcu(netdev_priv(upper));
-				if (active)
-					dev = active;
-			}
-		}
-
-		dev_hold(dev);
-		ret = dev;
-		break;
-	}
-
-	rcu_read_unlock();
-	return ret;
-}
-
 static int mlx4_ib_update_gids_v1(struct gid_entry *gids,
 				  struct mlx4_ib_dev *ibdev,
 				  u32 port_num)
@@ -2544,7 +2510,6 @@ static const struct ib_device_ops mlx4_ib_dev_ops = {
 	.get_dev_fw_str = get_fw_ver_str,
 	.get_dma_mr = mlx4_ib_get_dma_mr,
 	.get_link_layer = mlx4_ib_port_link_layer,
-	.get_netdev = mlx4_ib_get_netdev,
 	.get_port_immutable = mlx4_port_immutable,
 	.map_mr_sg = mlx4_ib_map_mr_sg,
 	.mmap = mlx4_ib_mmap,
