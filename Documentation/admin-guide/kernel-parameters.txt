@@ -3235,6 +3235,15 @@
 			different yeeloong laptops.
 			Example: machtype=lemote-yeeloong-2f-7inch
 
+	managed_irqs_per_node=
+			[KNL,SMP] Support for limiting the number of managed
+			interrupts on every node to prevent the case that
+			interrupts cannot be properly allocated where a large
+			number of devices are present. The default number is 0,
+			that means no limit to the number of managed irqs.
+			Format: integer between 0 and num_possible_cpus() / num_possible_nodes()
+			Default: 0
+
 	maxcpus=	[SMP,EARLY] Maximum number of processors that an SMP kernel
 			will bring up during bootup.  maxcpus=n : n >= 0 limits
 			the kernel to bring up 'n' processors. Surely after

@@ -876,7 +876,7 @@ static void virtio_fs_map_queues(struct virtio_device *vdev, struct virtio_fs *f
 	return;
 fallback:
 	/* Attempt to map evenly in groups over the CPUs */
-	masks = group_cpus_evenly(fs->num_request_queues);
+	masks = group_cpus_evenly(fs->num_request_queues, true);
 	/* If even this fails we default to all CPUs use queue zero */
 	if (!masks) {
 		for_each_possible_cpu(cpu)

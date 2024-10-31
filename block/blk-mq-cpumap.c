@@ -20,7 +20,7 @@ void blk_mq_map_queues(struct blk_mq_queue_map *qmap)
 	const struct cpumask *masks;
 	unsigned int queue, cpu;
 
-	masks = group_cpus_evenly(qmap->nr_queues);
+	masks = group_cpus_evenly(qmap->nr_queues, true);
 	if (!masks) {
 		for_each_possible_cpu(cpu)
 			qmap->mq_map[cpu] = qmap->queue_offset;

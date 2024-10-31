@@ -64,6 +64,10 @@ irq_create_affinity_masks(unsigned int nvecs, struct irq_affinity *affd)
 	for (curvec = 0; curvec < affd->pre_vectors; curvec++)
 		cpumask_copy(&masks[curvec].mask, irq_default_affinity);
 
+	/* Mark the managed interrupts */
+	for (i = curvec; i < nvecs - affd->post_vectors; i++)
+		masks[i].is_managed = 1;
+
 	/*
 	 * Spread on present CPUs starting from affd->pre_vectors. If we
 	 * have multiple sets, build each sets affinity mask separately.
@@ -71,7 +75,8 @@ irq_create_affinity_masks(unsigned int nvecs, struct irq_affinity *affd)
 	for (i = 0, usedvecs = 0; i < affd->nr_sets; i++) {
 		unsigned int this_vecs = affd->set_size[i];
 		int j;
-		struct cpumask *result = group_cpus_evenly(this_vecs);
+		struct cpumask *result = group_cpus_evenly(this_vecs,
+				masks[curvec].is_managed);
 
 		if (!result) {
 			kfree(masks);
@@ -93,10 +98,6 @@ irq_create_affinity_masks(unsigned int nvecs, struct irq_affinity *affd)
 		curvec = affd->pre_vectors + usedvecs;
 	for (; curvec < nvecs; curvec++)
 		cpumask_copy(&masks[curvec].mask, irq_default_affinity);
-
-	/* Mark the managed interrupts */
-	for (i = affd->pre_vectors; i < nvecs - affd->post_vectors; i++)
-		masks[i].is_managed = 1;
 
 	return masks;
 }

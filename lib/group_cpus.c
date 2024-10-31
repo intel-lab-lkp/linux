@@ -11,6 +11,30 @@
 
 #ifdef CONFIG_SMP
 
+static unsigned int __read_mostly managed_irqs_per_node;
+static struct cpumask managed_irqs_cpumsk[MAX_NUMNODES] __cacheline_aligned_in_smp = {
+	[0 ... MAX_NUMNODES-1] = {CPU_BITS_ALL}
+};
+
+static int __init irq_managed_setup(char *str)
+{
+	int ret;
+
+	ret = kstrtouint(str, 10, &managed_irqs_per_node);
+	if (ret < 0) {
+		pr_warn("managed_irqs_per_node= cannot parse, ignored\n");
+		return 0;
+	}
+
+	if (managed_irqs_per_node * num_possible_nodes() > num_possible_cpus()) {
+		managed_irqs_per_node = num_possible_cpus() / num_possible_nodes();
+		pr_warn("managed_irqs_per_node= cannot be larger than %u\n",
+			managed_irqs_per_node);
+	}
+	return 1;
+}
+__setup("managed_irqs_per_node=", irq_managed_setup);
+
 static void grp_spread_init_one(struct cpumask *irqmsk, struct cpumask *nmsk,
 				unsigned int cpus_per_grp)
 {
@@ -246,6 +270,30 @@ static void alloc_nodes_groups(unsigned int numgrps,
 	}
 }
 
+static void __group_prepare_affinity(struct cpumask *premask,
+				     cpumask_var_t *node_to_cpumask)
+{
+	nodemask_t nodemsk = NODE_MASK_NONE;
+	unsigned int ncpus, n;
+
+	get_nodes_in_cpumask(node_to_cpumask, premask, &nodemsk);
+
+	for_each_node_mask(n, nodemsk) {
+		cpumask_and(&managed_irqs_cpumsk[n], &managed_irqs_cpumsk[n], premask);
+		cpumask_and(&managed_irqs_cpumsk[n], &managed_irqs_cpumsk[n], node_to_cpumask[n]);
+
+		ncpus = cpumask_weight(&managed_irqs_cpumsk[n]);
+		if (ncpus < managed_irqs_per_node) {
+			/* Reset node n to current node cpumask */
+			cpumask_copy(&managed_irqs_cpumsk[n], node_to_cpumask[n]);
+			continue;
+		}
+
+		grp_spread_init_one(premask, &managed_irqs_cpumsk[n], managed_irqs_per_node);
+	}
+}
+
+
 static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
 			       cpumask_var_t *node_to_cpumask,
 			       const struct cpumask *cpu_mask,
@@ -332,6 +380,7 @@ static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
 /**
  * group_cpus_evenly - Group all CPUs evenly per NUMA/CPU locality
  * @numgrps: number of groups
+ * @is_managed: if these groups managed by kernel
  *
  * Return: cpumask array if successful, NULL otherwise. And each element
  * includes CPUs assigned to this group
@@ -344,7 +393,7 @@ static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
  * We guarantee in the resulted grouping that all CPUs are covered, and
  * no same CPU is assigned to multiple groups
  */
-struct cpumask *group_cpus_evenly(unsigned int numgrps)
+struct cpumask *group_cpus_evenly(unsigned int numgrps, bool is_managed)
 {
 	unsigned int curgrp = 0, nr_present = 0, nr_others = 0;
 	cpumask_var_t *node_to_cpumask;
@@ -381,6 +430,10 @@ struct cpumask *group_cpus_evenly(unsigned int numgrps)
 	 * optimization.
 	 */
 	cpumask_copy(npresmsk, data_race(cpu_present_mask));
+
+	/* Limit the count of managed interrupts on every node */
+	if (is_managed && managed_irqs_per_node)
+		__group_prepare_affinity(npresmsk, node_to_cpumask);
 
 	/* grouping present CPUs first */
 	ret = __group_cpus_evenly(curgrp, numgrps, node_to_cpumask,
