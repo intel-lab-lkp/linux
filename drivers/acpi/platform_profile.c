@@ -29,23 +29,43 @@ static bool platform_profile_is_registered(void)
 	return !list_empty(&platform_profile_handler_list);
 }
 
+static unsigned long platform_profile_get_choices(void)
+{
+	struct platform_profile_handler *handler;
+	unsigned long aggregate = 0;
+	int i;
+
+	lockdep_assert_held(&profile_lock);
+	list_for_each_entry(handler, &platform_profile_handler_list, list) {
+		unsigned long individual = 0;
+
+		for_each_set_bit(i, handler->choices, PLATFORM_PROFILE_LAST)
+			individual |= BIT(i);
+		if (!aggregate)
+			aggregate = individual;
+		else
+			aggregate &= individual;
+	}
+
+	return aggregate;
+}
+
 static ssize_t platform_profile_choices_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
+	unsigned long choices;
 	int len = 0;
 	int i;
 
-	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
-		if (!cur_profile)
-			return -ENODEV;
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock)
+		choices = platform_profile_get_choices();
 
-		for_each_set_bit(i, cur_profile->choices, PLATFORM_PROFILE_LAST) {
-			if (len == 0)
-				len += sysfs_emit_at(buf, len, "%s", profile_names[i]);
-			else
-				len += sysfs_emit_at(buf, len, " %s", profile_names[i]);
-		}
+	for_each_set_bit(i, &choices, PLATFORM_PROFILE_LAST) {
+		if (len == 0)
+			len += sysfs_emit_at(buf, len, "%s", profile_names[i]);
+		else
+			len += sysfs_emit_at(buf, len, " %s", profile_names[i]);
 	}
 	len += sysfs_emit_at(buf, len, "\n");
 
