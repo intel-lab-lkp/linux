@@ -330,6 +330,7 @@ static int stf_dphy_init(struct phy *phy)
 
 	ret = reset_control_deassert(dphy->sys_rst);
 	if (ret) {
+		clk_disable_unprepare(dphy->txesc_clk);
 		dev_err(dphy->dev, "Failed to deassert sys_rst\n");
 		return ret;
 	}
