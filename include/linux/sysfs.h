@@ -305,8 +305,12 @@ struct bin_attribute {
 	struct address_space *(*f_mapping)(void);
 	ssize_t (*read)(struct file *, struct kobject *, struct bin_attribute *,
 			char *, loff_t, size_t);
+	ssize_t (*read_new)(struct file *, struct kobject *, const struct bin_attribute *,
+			    char *, loff_t, size_t);
 	ssize_t (*write)(struct file *, struct kobject *, struct bin_attribute *,
 			 char *, loff_t, size_t);
+	ssize_t (*write_new)(struct file *, struct kobject *,
+			     const struct bin_attribute *, char *, loff_t, size_t);
 	int (*mmap)(struct file *, struct kobject *, const struct bin_attribute *attr,
 		    struct vm_area_struct *vma);
 };
@@ -323,11 +327,34 @@ struct bin_attribute {
  */
 #define sysfs_bin_attr_init(bin_attr) sysfs_attr_init(&(bin_attr)->attr)
 
+typedef ssize_t __sysfs_rw_handler(struct file *, struct kobject *,
+				   struct bin_attribute *, char *, loff_t, size_t);
+typedef ssize_t __sysfs_rw_handler_new(struct file *, struct kobject *,
+				       const struct bin_attribute *, char *, loff_t, size_t);
+
 /* macros to create static binary attributes easier */
 #define __BIN_ATTR(_name, _mode, _read, _write, _size) {		\
 	.attr = { .name = __stringify(_name), .mode = _mode },		\
-	.read	= _read,						\
-	.write	= _write,						\
+	.read = _Generic(_read,						\
+		__sysfs_rw_handler * : _read,				\
+		__sysfs_rw_handler_new * : NULL,			\
+		void * : NULL						\
+	),								\
+	.read_new = _Generic(_read,					\
+		__sysfs_rw_handler * : NULL,				\
+		__sysfs_rw_handler_new * : _read,			\
+		void * : NULL						\
+	),								\
+	.write = _Generic(_write,					\
+		__sysfs_rw_handler * : _write,				\
+		__sysfs_rw_handler_new * : NULL,			\
+		void * : NULL						\
+	),								\
+	.write_new = _Generic(_write,					\
+		__sysfs_rw_handler * : NULL,				\
+		__sysfs_rw_handler_new * : _write,			\
+		void * : NULL						\
+	),								\
 	.size	= _size,						\
 }
 
