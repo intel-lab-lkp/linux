@@ -214,18 +214,14 @@ static int vivid_thread_sdr_cap(void *data)
 	return 0;
 }
 
-static int sdr_cap_queue_setup(struct vb2_queue *vq,
-		       unsigned *nbuffers, unsigned *nplanes,
-		       unsigned sizes[], struct device *alloc_devs[])
+static int sdr_cap_queue_info(struct vb2_queue *vq,
+			      unsigned int *nplanes, unsigned int sizes[],
+			      struct device *alloc_devs[])
 {
-	/* 2 = max 16-bit sample returned */
-	u32 size = SDR_CAP_SAMPLES_PER_BUF * 2;
-
-	if (*nplanes)
-		return sizes[0] < size ? -EINVAL : 0;
 
 	*nplanes = 1;
-	sizes[0] = size;
+	/* 2 = max 16-bit sample returned */
+	sizes[0] = SDR_CAP_SAMPLES_PER_BUF * 2;
 	return 0;
 }
 
@@ -331,7 +327,7 @@ static void sdr_cap_buf_request_complete(struct vb2_buffer *vb)
 }
 
 const struct vb2_ops vivid_sdr_cap_qops = {
-	.queue_setup		= sdr_cap_queue_setup,
+	.queue_info		= sdr_cap_queue_info,
 	.buf_prepare		= sdr_cap_buf_prepare,
 	.buf_queue		= sdr_cap_buf_queue,
 	.start_streaming	= sdr_cap_start_streaming,

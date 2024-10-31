@@ -15,9 +15,9 @@
 #include "vivid-vbi-out.h"
 #include "vivid-vbi-cap.h"
 
-static int vbi_out_queue_setup(struct vb2_queue *vq,
-		       unsigned *nbuffers, unsigned *nplanes,
-		       unsigned sizes[], struct device *alloc_devs[])
+static int vbi_out_queue_info(struct vb2_queue *vq,
+			      unsigned int *nplanes, unsigned int sizes[],
+			      struct device *alloc_devs[])
 {
 	struct vivid_dev *dev = vb2_get_drv_priv(vq);
 	bool is_60hz = dev->std_out & V4L2_STD_525_60;
@@ -28,11 +28,8 @@ static int vbi_out_queue_setup(struct vb2_queue *vq,
 	if (!vivid_is_svid_out(dev))
 		return -EINVAL;
 
-	if (*nplanes)
-		return sizes[0] < size ? -EINVAL : 0;
-	sizes[0] = size;
-
 	*nplanes = 1;
+	sizes[0] = size;
 	return 0;
 }
 
@@ -122,7 +119,7 @@ static void vbi_out_buf_request_complete(struct vb2_buffer *vb)
 }
 
 const struct vb2_ops vivid_vbi_out_qops = {
-	.queue_setup		= vbi_out_queue_setup,
+	.queue_info		= vbi_out_queue_info,
 	.buf_prepare		= vbi_out_buf_prepare,
 	.buf_queue		= vbi_out_buf_queue,
 	.start_streaming	= vbi_out_start_streaming,

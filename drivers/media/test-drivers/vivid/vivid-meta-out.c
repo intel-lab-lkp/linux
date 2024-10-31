@@ -13,24 +13,17 @@
 #include "vivid-kthread-out.h"
 #include "vivid-meta-out.h"
 
-static int meta_out_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
-				unsigned int *nplanes, unsigned int sizes[],
-				struct device *alloc_devs[])
+static int meta_out_queue_info(struct vb2_queue *vq,
+			       unsigned int *nplanes, unsigned int sizes[],
+			       struct device *alloc_devs[])
 {
 	struct vivid_dev *dev = vb2_get_drv_priv(vq);
-	unsigned int size =  sizeof(struct vivid_meta_out_buf);
 
 	if (!vivid_is_webcam(dev))
 		return -EINVAL;
 
-	if (*nplanes) {
-		if (sizes[0] < size)
-			return -EINVAL;
-	} else {
-		sizes[0] = size;
-	}
-
 	*nplanes = 1;
+	sizes[0] = sizeof(struct vivid_meta_out_buf);
 	return 0;
 }
 
@@ -116,12 +109,12 @@ static void meta_out_buf_request_complete(struct vb2_buffer *vb)
 }
 
 const struct vb2_ops vivid_meta_out_qops = {
-	.queue_setup            = meta_out_queue_setup,
-	.buf_prepare            = meta_out_buf_prepare,
-	.buf_queue              = meta_out_buf_queue,
-	.start_streaming        = meta_out_start_streaming,
-	.stop_streaming         = meta_out_stop_streaming,
-	.buf_request_complete   = meta_out_buf_request_complete,
+	.queue_info		= meta_out_queue_info,
+	.buf_prepare		= meta_out_buf_prepare,
+	.buf_queue		= meta_out_buf_queue,
+	.start_streaming	= meta_out_start_streaming,
+	.stop_streaming		= meta_out_stop_streaming,
+	.buf_request_complete	= meta_out_buf_request_complete,
 };
 
 int vidioc_enum_fmt_meta_out(struct file *file, void  *priv,

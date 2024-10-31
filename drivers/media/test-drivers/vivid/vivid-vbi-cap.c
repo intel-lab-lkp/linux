@@ -120,9 +120,9 @@ void vivid_sliced_vbi_cap_process(struct vivid_dev *dev,
 	}
 }
 
-static int vbi_cap_queue_setup(struct vb2_queue *vq,
-		       unsigned *nbuffers, unsigned *nplanes,
-		       unsigned sizes[], struct device *alloc_devs[])
+static int vbi_cap_queue_info(struct vb2_queue *vq,
+			      unsigned int *nplanes, unsigned int sizes[],
+			      struct device *alloc_devs[])
 {
 	struct vivid_dev *dev = vb2_get_drv_priv(vq);
 	bool is_60hz = dev->std_cap[dev->input] & V4L2_STD_525_60;
@@ -133,11 +133,8 @@ static int vbi_cap_queue_setup(struct vb2_queue *vq,
 	if (!vivid_is_sdtv_cap(dev))
 		return -EINVAL;
 
-	if (*nplanes)
-		return sizes[0] < size ? -EINVAL : 0;
-	sizes[0] = size;
-
 	*nplanes = 1;
+	sizes[0] = size;
 	return 0;
 }
 
@@ -224,7 +221,7 @@ static void vbi_cap_buf_request_complete(struct vb2_buffer *vb)
 }
 
 const struct vb2_ops vivid_vbi_cap_qops = {
-	.queue_setup		= vbi_cap_queue_setup,
+	.queue_info		= vbi_cap_queue_info,
 	.buf_prepare		= vbi_cap_buf_prepare,
 	.buf_queue		= vbi_cap_buf_queue,
 	.start_streaming	= vbi_cap_start_streaming,

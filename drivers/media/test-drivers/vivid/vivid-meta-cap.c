@@ -13,24 +13,17 @@
 #include "vivid-kthread-cap.h"
 #include "vivid-meta-cap.h"
 
-static int meta_cap_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
-				unsigned int *nplanes, unsigned int sizes[],
-				struct device *alloc_devs[])
+static int meta_cap_queue_info(struct vb2_queue *vq,
+			       unsigned int *nplanes, unsigned int sizes[],
+			       struct device *alloc_devs[])
 {
 	struct vivid_dev *dev = vb2_get_drv_priv(vq);
-	unsigned int size =  sizeof(struct vivid_uvc_meta_buf);
 
 	if (!vivid_is_webcam(dev))
 		return -EINVAL;
 
-	if (*nplanes) {
-		if (sizes[0] < size)
-			return -EINVAL;
-	} else {
-		sizes[0] = size;
-	}
-
 	*nplanes = 1;
+	sizes[0] = sizeof(struct vivid_uvc_meta_buf);
 	return 0;
 }
 
@@ -116,7 +109,7 @@ static void meta_cap_buf_request_complete(struct vb2_buffer *vb)
 }
 
 const struct vb2_ops vivid_meta_cap_qops = {
-	.queue_setup		= meta_cap_queue_setup,
+	.queue_info		= meta_cap_queue_info,
 	.buf_prepare		= meta_cap_buf_prepare,
 	.buf_queue		= meta_cap_buf_queue,
 	.start_streaming	= meta_cap_start_streaming,
