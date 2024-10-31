@@ -436,6 +436,86 @@ static const struct eqc_pll eqc_eyeq5_plls[] = {
 	{ .index = EQ5C_PLL_DDR1, .name = "pll-ddr1", .reg64 = 0x074 },
 };
 
+/* EQ5C_PLL_CPU children */
+#define EQ5C_CPU_OCC		17
+#define EQ5C_CPU_SI_CSS0	18
+#define EQ5C_CPU_CPC		19
+#define EQ5C_CPU_CM		20
+#define EQ5C_CPU_MEM		21
+#define EQ5C_CPU_OCC_ISRAM	22
+#define EQ5C_CPU_ISRAM		23
+#define EQ5C_CPU_OCC_DBU	24
+#define EQ5C_CPU_SI_DBU_TP	25
+
+/* EQ5C_PLL_VDI children */
+#define EQ5C_VDI_OCC_VDI	26
+#define EQ5C_VDI_VDI		27
+#define EQ5C_VDI_OCC_CAN_SER	28
+#define EQ5C_VDI_CAN_SER	29
+#define EQ5C_VDI_I2C_SER	30
+
+/* EQ5C_PLL_PER children */
+#define EQ5C_PER_PERIPH		31
+#define EQ5C_PER_CAN		32
+#define EQ5C_PER_SPI		33
+#define EQ5C_PER_I2C		34
+#define EQ5C_PER_TIMER		35
+#define EQ5C_PER_GPIO		36
+#define EQ5C_PER_EMMC		37
+#define EQ5C_PER_CCF		38
+#define EQ5C_PER_OCC_MJPEG	39
+#define EQ5C_PER_HSM		40
+#define EQ5C_PER_MJPEG		41
+#define EQ5C_PER_FCMU_A		42
+#define EQ5C_PER_OCC_PCI	43
+
+static const struct eqc_fixed_factor eqc_eyeq5_early_fixed_factors[] = {
+	/* EQ5C_PLL_CPU children */
+	{ EQ5C_CPU_OCC,		"occ-cpu",	1, 1,	EQ5C_PLL_CPU },
+	{ EQ5C_CPU_SI_CSS0,	"si-css0",	1, 1,	EQ5C_CPU_OCC },
+	{ EQ5C_CPU_CORE0,	"core0",	1, 1,	EQ5C_CPU_SI_CSS0 },
+	{ EQ5C_CPU_CORE1,	"core1",	1, 1,	EQ5C_CPU_SI_CSS0 },
+	{ EQ5C_CPU_CORE2,	"core2",	1, 1,	EQ5C_CPU_SI_CSS0 },
+	{ EQ5C_CPU_CORE3,	"core3",	1, 1,	EQ5C_CPU_SI_CSS0 },
+
+	/* EQ5C_PLL_PER children */
+	{ EQ5C_PER_OCC,		"occ-periph",	1, 16,	EQ5C_PLL_PER },
+	{ EQ5C_PER_UART,	"uart",		1, 1,	EQ5C_PER_OCC },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq5_fixed_factors[] = {
+	/* EQ5C_PLL_CPU children */
+	{ EQ5C_CPU_CPC,		"cpc",		1, 1,	EQ5C_CPU_SI_CSS0 },
+	{ EQ5C_CPU_CM,		"cm",		1, 1,	EQ5C_CPU_SI_CSS0 },
+	{ EQ5C_CPU_MEM,		"mem",		1, 1,	EQ5C_CPU_SI_CSS0 },
+	{ EQ5C_CPU_OCC_ISRAM,	"occ-isram",	1, 2,	EQ5C_PLL_CPU },
+	{ EQ5C_CPU_ISRAM,	"isram",	1, 1,	EQ5C_CPU_OCC_ISRAM },
+	{ EQ5C_CPU_OCC_DBU,	"occ-dbu",	1, 10,	EQ5C_PLL_CPU },
+	{ EQ5C_CPU_SI_DBU_TP,	"si-dbu-tp",	1, 1,	EQ5C_CPU_OCC_DBU },
+
+	/* EQ5C_PLL_VDI children */
+	{ EQ5C_VDI_OCC_VDI,	"occ-vdi",	1, 2,	EQ5C_PLL_VDI },
+	{ EQ5C_VDI_VDI,		"vdi",		1, 1,	EQ5C_VDI_OCC_VDI },
+	{ EQ5C_VDI_OCC_CAN_SER,	"occ-can-ser",	1, 16,	EQ5C_PLL_VDI },
+	{ EQ5C_VDI_CAN_SER,	"can-ser",	1, 1,	EQ5C_VDI_OCC_CAN_SER },
+	{ EQ5C_VDI_I2C_SER,	"i2c-ser",	1, 20,	EQ5C_PLL_VDI },
+
+	/* EQ5C_PLL_PER children */
+	{ EQ5C_PER_PERIPH,	"periph",	1, 1,	EQ5C_PER_OCC },
+	{ EQ5C_PER_CAN,		"can",		1, 1,	EQ5C_PER_OCC },
+	{ EQ5C_PER_SPI,		"spi",		1, 1,	EQ5C_PER_OCC },
+	{ EQ5C_PER_I2C,		"i2c",		1, 1,	EQ5C_PER_OCC },
+	{ EQ5C_PER_TIMER,	"timer",	1, 1,	EQ5C_PER_OCC },
+	{ EQ5C_PER_GPIO,	"gpio",		1, 1,	EQ5C_PER_OCC },
+	{ EQ5C_PER_EMMC,	"emmc-sys",	1, 10,	EQ5C_PLL_PER },
+	{ EQ5C_PER_CCF,		"ccf-ctrl",	1, 4,	EQ5C_PLL_PER },
+	{ EQ5C_PER_OCC_MJPEG,	"occ-mjpeg",	1, 2,	EQ5C_PLL_PER },
+	{ EQ5C_PER_HSM,		"hsm",		1, 1,	EQ5C_PER_OCC_MJPEG },
+	{ EQ5C_PER_MJPEG,	"mjpeg",	1, 1,	EQ5C_PER_OCC_MJPEG },
+	{ EQ5C_PER_FCMU_A,	"fcmu-a",	1, 20,	EQ5C_PLL_PER },
+	{ EQ5C_PER_OCC_PCI,	"occ-pci-sys",	1, 8,	EQ5C_PLL_PER },
+};
+
 static const struct eqc_div eqc_eyeq5_divs[] = {
 	{
 		.index = EQ5C_DIV_OSPI,
@@ -451,7 +531,11 @@ static const struct eqc_early_match_data eqc_eyeq5_early_match_data __initconst 
 	.early_pll_count	= ARRAY_SIZE(eqc_eyeq5_early_plls),
 	.early_plls		= eqc_eyeq5_early_plls,
 
-	.late_clk_count		= ARRAY_SIZE(eqc_eyeq5_plls) + ARRAY_SIZE(eqc_eyeq5_divs),
+	.early_fixed_factor_count	= ARRAY_SIZE(eqc_eyeq5_early_fixed_factors),
+	.early_fixed_factors		= eqc_eyeq5_early_fixed_factors,
+
+	.late_clk_count		= ARRAY_SIZE(eqc_eyeq5_plls) + ARRAY_SIZE(eqc_eyeq5_divs) +
+				  ARRAY_SIZE(eqc_eyeq5_fixed_factors),
 };
 
 static const struct eqc_match_data eqc_eyeq5_match_data = {
@@ -461,10 +545,14 @@ static const struct eqc_match_data eqc_eyeq5_match_data = {
 	.div_count	= ARRAY_SIZE(eqc_eyeq5_divs),
 	.divs		= eqc_eyeq5_divs,
 
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq5_fixed_factors),
+	.fixed_factors		= eqc_eyeq5_fixed_factors,
+
 	.reset_auxdev_name = "reset",
 	.pinctrl_auxdev_name = "pinctrl",
 
-	.early_clk_count = ARRAY_SIZE(eqc_eyeq5_early_plls),
+	.early_clk_count = ARRAY_SIZE(eqc_eyeq5_early_plls) +
+			   ARRAY_SIZE(eqc_eyeq5_early_fixed_factors),
 };
 
 static const struct eqc_pll eqc_eyeq6l_plls[] = {
