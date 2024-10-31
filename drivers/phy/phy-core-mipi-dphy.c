@@ -33,8 +33,7 @@ static int phy_mipi_dphy_calc_config(unsigned long pixel_clock,
 		do_div(hs_clk_rate, lanes);
 	}
 
-	ui = ALIGN(PSEC_PER_SEC, hs_clk_rate);
-	do_div(ui, hs_clk_rate);
+	ui = DIV_ROUND_UP(PSEC_PER_SEC, hs_clk_rate);
 
 	cfg->clk_miss = 0;
 	cfg->clk_post = 60000 + 52 * ui;
@@ -111,8 +110,7 @@ int phy_mipi_dphy_config_validate(struct phy_configure_opts_mipi_dphy *cfg)
 	if (!cfg)
 		return -EINVAL;
 
-	ui = ALIGN(PSEC_PER_SEC, cfg->hs_clk_rate);
-	do_div(ui, cfg->hs_clk_rate);
+	ui = DIV_ROUND_UP(PSEC_PER_SEC, cfg->hs_clk_rate);
 
 	if (cfg->clk_miss > 60000)
 		return -EINVAL;
