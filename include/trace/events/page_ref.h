@@ -18,6 +18,7 @@ DECLARE_EVENT_CLASS(page_ref_mod_template,
 
 	TP_STRUCT__entry(
 		__field(unsigned long, pfn)
+		__field(const struct page *, page)
 		__field(unsigned long, flags)
 		__field(int, count)
 		__field(int, mapcount)
@@ -28,6 +29,7 @@ DECLARE_EVENT_CLASS(page_ref_mod_template,
 
 	TP_fast_assign(
 		__entry->pfn = page_to_pfn(page);
+		__entry->page = page;
 		__entry->flags = page->flags;
 		__entry->count = page_ref_count(page);
 		__entry->mapcount = atomic_read(&page->_mapcount);
@@ -36,8 +38,9 @@ DECLARE_EVENT_CLASS(page_ref_mod_template,
 		__entry->val = v;
 	),
 
-	TP_printk("pfn=0x%lx flags=%s count=%d mapcount=%d mapping=%p mt=%d val=%d",
+	TP_printk("pfn=0x%lx page=%p flags=%s count=%d mapcount=%d mapping=%p mt=%d val=%d",
 		__entry->pfn,
+		__entry->page,
 		show_page_flags(__entry->flags & PAGEFLAGS_MASK),
 		__entry->count,
 		__entry->mapcount, __entry->mapping, __entry->mt,
@@ -66,6 +69,7 @@ DECLARE_EVENT_CLASS(page_ref_mod_and_test_template,
 
 	TP_STRUCT__entry(
 		__field(unsigned long, pfn)
+		__field(const struct page *, page)
 		__field(unsigned long, flags)
 		__field(int, count)
 		__field(int, mapcount)
@@ -77,6 +81,7 @@ DECLARE_EVENT_CLASS(page_ref_mod_and_test_template,
 
 	TP_fast_assign(
 		__entry->pfn = page_to_pfn(page);
+		__entry->page = page;
 		__entry->flags = page->flags;
 		__entry->count = page_ref_count(page);
 		__entry->mapcount = atomic_read(&page->_mapcount);
@@ -86,8 +91,9 @@ DECLARE_EVENT_CLASS(page_ref_mod_and_test_template,
 		__entry->ret = ret;
 	),
 
-	TP_printk("pfn=0x%lx flags=%s count=%d mapcount=%d mapping=%p mt=%d val=%d ret=%d",
+	TP_printk("pfn=0x%lx page=%p flags=%s count=%d mapcount=%d mapping=%p mt=%d val=%d ret=%d",
 		__entry->pfn,
+		__entry->page,
 		show_page_flags(__entry->flags & PAGEFLAGS_MASK),
 		__entry->count,
 		__entry->mapcount, __entry->mapping, __entry->mt,
