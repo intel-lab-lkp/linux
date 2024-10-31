@@ -775,7 +775,10 @@ static void edge_bulk_out_cmd_callback(struct urb *urb)
 	atomic_dec(&CmdUrbs);
 	dev_dbg(&urb->dev->dev, "%s - FREE URB %p (outstanding %d)\n",
 		__func__, urb, atomic_read(&CmdUrbs));
-
+	if (status)
+		dev_dbg(&urb->dev->dev,
+			"%s - nonzero write bulk status received: %d\n",
+			__func__, status);
 
 	/* clean up the transfer buffer */
 	kfree(urb->transfer_buffer);
@@ -783,12 +786,8 @@ static void edge_bulk_out_cmd_callback(struct urb *urb)
 	/* Free the command urb */
 	usb_free_urb(urb);
 
-	if (status) {
-		dev_dbg(&urb->dev->dev,
-			"%s - nonzero write bulk status received: %d\n",
-			__func__, status);
+	if (status)
 		return;
-	}
 
 	/* tell the tty driver that something has changed */
 	if (edge_port->open)
