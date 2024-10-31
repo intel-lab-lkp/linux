@@ -47,6 +47,7 @@ static int ice_q_stats_len(struct net_device *netdev)
 		 / sizeof(u64))
 #define ICE_ALL_STATS_LEN(n)	(ICE_PF_STATS_LEN + ICE_PFC_STATS_LEN + \
 				 ICE_VSI_STATS_LEN + ice_q_stats_len(n))
+#define ICE_SF_STATS_LEN(n)	(ICE_VSI_STATS_LEN + ice_q_stats_len(n))
 
 static const struct ice_stats ice_gstrings_vsi_stats[] = {
 	ICE_VSI_STAT("rx_unicast", eth_stats.rx_unicast),
@@ -4431,6 +4432,16 @@ static int ice_repr_get_sset_count(struct net_device *netdev, int sset)
 	}
 }
 
+static int ice_sf_get_sset_count(struct net_device *netdev, int sset)
+{
+	switch (sset) {
+	case ETH_SS_STATS:
+		return ICE_SF_STATS_LEN(netdev);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 #define ICE_I2C_EEPROM_DEV_ADDR		0xA0
 #define ICE_I2C_EEPROM_DEV_ADDR2	0xA2
 #define ICE_MODULE_TYPE_SFP		0x03
@@ -4868,6 +4879,23 @@ static const struct ethtool_ops ice_ethtool_repr_ops = {
 void ice_set_ethtool_repr_ops(struct net_device *netdev)
 {
 	netdev->ethtool_ops = &ice_ethtool_repr_ops;
+}
+
+static const struct ethtool_ops ice_ethtool_sf_ops = {
+	.get_drvinfo		= ice_get_drvinfo,
+	.get_link		= ethtool_op_get_link,
+	.get_channels		= ice_get_channels,
+	.set_channels		= ice_set_channels,
+	.get_ringparam		= ice_get_ringparam,
+	.set_ringparam		= ice_set_ringparam,
+	.get_strings		= ice_get_strings,
+	.get_ethtool_stats	= ice_get_ethtool_stats,
+	.get_sset_count		= ice_sf_get_sset_count,
+};
+
+void ice_set_ethtool_sf_ops(struct net_device *netdev)
+{
+	netdev->ethtool_ops = &ice_ethtool_sf_ops;
 }
 
 /**
