@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2023 Intel Corporation. All rights reserved. */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/tsm.h>
 #include <linux/err.h>
 #include <linux/slab.h>
@@ -166,8 +164,9 @@ static ssize_t tsm_report_service_guid_store(struct config_item *cfg,
 }
 CONFIGFS_ATTR_WO(tsm_report_, service_guid);
 
-static ssize_t tsm_report_service_manifest_version_store(struct config_item *cfg,
-							 const char *buf, size_t len)
+static ssize_t
+tsm_report_service_manifest_version_store(struct config_item *cfg,
+					  const char *buf, size_t len)
 {
 	struct tsm_report *report = to_tsm_report(cfg);
 	unsigned int val;
@@ -187,8 +186,8 @@ static ssize_t tsm_report_service_manifest_version_store(struct config_item *cfg
 }
 CONFIGFS_ATTR_WO(tsm_report_, service_manifest_version);
 
-static ssize_t tsm_report_inblob_write(struct config_item *cfg,
-				       const void *buf, size_t count)
+static ssize_t tsm_report_inblob_write(struct config_item *cfg, const void *buf,
+				       size_t count)
 {
 	struct tsm_report *report = to_tsm_report(cfg);
 	int rc;
@@ -341,7 +340,8 @@ static struct configfs_attribute *tsm_report_attrs[] = {
 	[TSM_REPORT_PRIVLEVEL_FLOOR] = &tsm_report_attr_privlevel_floor,
 	[TSM_REPORT_SERVICE_PROVIDER] = &tsm_report_attr_service_provider,
 	[TSM_REPORT_SERVICE_GUID] = &tsm_report_attr_service_guid,
-	[TSM_REPORT_SERVICE_MANIFEST_VER] = &tsm_report_attr_service_manifest_version,
+	[TSM_REPORT_SERVICE_MANIFEST_VER] =
+		&tsm_report_attr_service_manifest_version,
 	NULL,
 };
 
@@ -383,7 +383,8 @@ static bool tsm_report_is_visible(struct config_item *item,
 }
 
 static bool tsm_report_is_bin_visible(struct config_item *item,
-				      struct configfs_bin_attribute *attr, int n)
+				      struct configfs_bin_attribute *attr,
+				      int n)
 {
 	guard(rwsem_read)(&tsm_rwsem);
 	if (!provider.ops)
@@ -478,6 +479,9 @@ EXPORT_SYMBOL_GPL(tsm_unregister);
 
 static struct config_group *tsm_report_group;
 
+extern int tsm_mr_init(void);
+extern void tsm_mr_exit(void);
+
 static int __init tsm_init(void)
 {
 	struct config_group *root = &tsm_configfs.su_group;
@@ -497,16 +501,18 @@ static int __init tsm_init(void)
 	}
 	tsm_report_group = tsm;
 
-	return 0;
+	return tsm_mr_init();
 }
 module_init(tsm_init);
 
 static void __exit tsm_exit(void)
 {
+	tsm_mr_exit();
 	configfs_unregister_default_group(tsm_report_group);
 	configfs_unregister_subsystem(&tsm_configfs);
 }
 module_exit(tsm_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Provide Trusted Security Module attestation reports via configfs");
+MODULE_DESCRIPTION(
+	"Provide Trusted Security Module attestation reports via configfs");
