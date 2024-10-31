@@ -541,6 +541,31 @@ void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 		return;
 	}
 
+	/*
+	 * If a performance-conscious caller has gone to the trouble of binding
+	 * their thread to the monitoring domain of the event counter, ensure
+	 * that the counters are read directly. smp_call_on_cpu()
+	 * unconditionally uses a work queue to read the counter, substantially
+	 * increasing the cost of the read.
+	 *
+	 * Preemption must be disabled to prevent a migration out of the domain
+	 * after the CPU is checked, which would result in reading the wrong
+	 * counters. Note that this makes the (slow) remote path a little slower
+	 * by requiring preemption to be reenabled when redirecting the request
+	 * to another domain was in fact necessary.
+	 *
+	 * In the case where all eligible target CPUs are nohz_full and
+	 * smp_call_function_any() is used, keep preemption disabled to avoid
+	 * the cost of reenabling it twice in the same read.
+	 */
+	cpu = get_cpu();
+	if (cpumask_test_cpu(cpu, cpumask)) {
+		mon_event_count(rr);
+		resctrl_arch_mon_ctx_free(r, evtid, rr->arch_mon_ctx);
+		put_cpu();
+		return;
+	}
+
 	cpu = cpumask_any_housekeeping(cpumask, RESCTRL_PICK_ANY_CPU);
 
 	/*
@@ -553,6 +578,9 @@ void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 		smp_call_function_any(cpumask, mon_event_count, rr, 1);
 	else
 		smp_call_on_cpu(cpu, smp_mon_event_count, rr, false);
+
+	/* If smp_call_function_any() was used, preemption is reenabled here. */
+	put_cpu();
 
 	resctrl_arch_mon_ctx_free(r, evtid, rr->arch_mon_ctx);
 }
