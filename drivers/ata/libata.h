@@ -59,6 +59,7 @@ unsigned int ata_exec_internal(struct ata_device *dev, struct ata_taskfile *tf,
 			       const u8 *cdb, enum dma_data_direction dma_dir,
 			       void *buf, unsigned int buflen,
 			       unsigned int timeout);
+unsigned int ata_issue_via_eh(struct ata_queued_cmd *qc);
 extern int ata_wait_ready(struct ata_link *link, unsigned long deadline,
 			  int (*check_ready)(struct ata_link *link));
 extern int ata_dev_read_id(struct ata_device *dev, unsigned int *p_class,

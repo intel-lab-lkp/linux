@@ -1182,7 +1182,35 @@ static void __ata_eh_qc_complete(struct ata_queued_cmd *qc)
 
 	spin_lock_irqsave(ap->lock, flags);
 	qc->scsidone = ata_eh_scsidone;
-	__ata_qc_complete(qc);
+	if (qc->flags & ATA_QCFLAG_NEED_ISSUE_VIA_EH) {
+		/*
+		 * A command that still has ATA_QCFLAG_NEED_ISSUE_VIA_EH set,
+		 * was never issued to the device (and has no DMA mapping), so
+		 * it would be wrong to call __ata_qc_complete(). Such a command
+		 * will be retried by upper layers. Simply call complete_fn() so
+		 * that the QC will be freed.
+		 */
+		WARN_ON_ONCE(qc->flags & ATA_QCFLAG_ACTIVE);
+		qc->complete_fn(qc);
+	} else if (qc->flags & ATA_QCFLAG_ISSUED_VIA_EH) {
+		/*
+		 * For a command that was issued via EH, regardless if we got a
+		 * completion (IRQ -> ata_qc_complete()), or if the command
+		 * didn't receive a completion within timeout time
+		 * (ata_port_freeze() will have called ata_qc_complete() on all
+		 * commands). In either case ata_qc_complete() will have called
+		 * __ata_qc_complete() already.
+		 *
+		 * Simply call complete_fn() to call the original complete_fn().
+		 * (For ATA_QCFLAG_ISSUED_VIA_EH commands, complete_fn() is
+		 * temporarily overloaded, to complete the "struct completion".
+		 * Thus, we still need to call the original complete_fn() here.)
+		 */
+		WARN_ON_ONCE(qc->flags & ATA_QCFLAG_ACTIVE);
+		qc->complete_fn(qc);
+	} else {
+		__ata_qc_complete(qc);
+	}
 	WARN_ON(ata_tag_valid(qc->tag));
 	spin_unlock_irqrestore(ap->lock, flags);
 
@@ -2066,6 +2094,28 @@ out:
 	ata_eh_done(link, dev, ATA_EH_GET_SUCCESS_SENSE);
 }
 
+static void ata_eh_issue_deferred_cmd(struct ata_link *link)
+{
+	struct ata_eh_context *ehc = &link->eh_context;
+	struct ata_device *dev = link->device;
+	struct ata_port *ap = link->ap;
+	struct ata_queued_cmd *qc;
+	int tag;
+
+	if (!(ehc->i.dev_action[dev->devno] & ATA_EH_ISSUE_DEFERRED_CMD))
+		return;
+
+	ata_qc_for_each_raw(ap, qc, tag) {
+		if (!(qc->flags & ATA_QCFLAG_NEED_ISSUE_VIA_EH) ||
+		    qc->err_mask ||
+		    ata_dev_phys_link(qc->dev) != link)
+			continue;
+
+		ata_issue_via_eh(qc);
+	}
+	ata_eh_done(link, dev, ATA_EH_ISSUE_DEFERRED_CMD);
+}
+
 /**
  *	ata_eh_link_autopsy - analyze error and determine recovery action
  *	@link: host link to perform autopsy on
@@ -2105,6 +2155,14 @@ static void ata_eh_link_autopsy(struct ata_link *link)
 
 	/* analyze NCQ failure */
 	ata_eh_analyze_ncq_error(link);
+
+	/*
+	 * Issue deferred non-NCQ command if needed, this should be done before
+	 * ata_eh_get_success_sense(), as the non-NCQ command completion might
+	 * have ATA_SENSE set. Issuing a non-NCQ command will not affect the
+	 * Successful NCQ commands log.
+	 */
+	ata_eh_issue_deferred_cmd(link);
 
 	/*
 	 * Check if this was a successful command that simply needs sense data.

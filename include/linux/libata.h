@@ -257,6 +257,8 @@ enum {
 	ATA_QCFLAG_SENSE_VALID	= (1 << 17), /* sense data valid */
 	ATA_QCFLAG_EH_SCHEDULED = (1 << 18), /* EH scheduled (obsolete) */
 	ATA_QCFLAG_EH_SUCCESS_CMD = (1 << 19), /* EH should fetch sense for this successful cmd */
+	ATA_QCFLAG_NEED_ISSUE_VIA_EH = (1 << 20), /* The command should be issued from EH context */
+	ATA_QCFLAG_ISSUED_VIA_EH = (1 << 21), /* The command has been issued from EH context */
 
 	/* host set flags */
 	ATA_HOST_SIMPLEX	= (1 << 0),	/* Host is simplex, one DMA channel per host only */
@@ -348,6 +350,7 @@ enum {
 	/* return values for ->qc_defer */
 	ATA_DEFER_LINK		= 1,
 	ATA_DEFER_PORT		= 2,
+	ATA_DEFER_ISSUE_VIA_EH	= 3,
 
 	/* desc_len for ata_eh_info and context */
 	ATA_EH_DESC_LEN		= 80,
@@ -361,9 +364,11 @@ enum {
 	ATA_EH_PARK		= (1 << 5), /* unload heads and stop I/O */
 	ATA_EH_GET_SUCCESS_SENSE = (1 << 6), /* Get sense data for successful cmd */
 	ATA_EH_SET_ACTIVE	= (1 << 7), /* Set a device to active power mode */
+	ATA_EH_ISSUE_DEFERRED_CMD = (1 << 8), /* Issue a deferred cmd from EH context */
 
 	ATA_EH_PERDEV_MASK	= ATA_EH_REVALIDATE | ATA_EH_PARK |
-				  ATA_EH_GET_SUCCESS_SENSE | ATA_EH_SET_ACTIVE,
+				  ATA_EH_GET_SUCCESS_SENSE | ATA_EH_SET_ACTIVE |
+				  ATA_EH_ISSUE_DEFERRED_CMD,
 	ATA_EH_ALL_ACTIONS	= ATA_EH_REVALIDATE | ATA_EH_RESET |
 				  ATA_EH_ENABLE_LINK,
 

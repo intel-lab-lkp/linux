@@ -1634,6 +1634,134 @@ unsigned int ata_exec_internal(struct ata_device *dev, struct ata_taskfile *tf,
 }
 
 /**
+ *	ata_issue_via_eh - issue non-NCQ command via EH synchronously
+ *	@qc: command to issue to device
+ *
+ *	Issues a non-NCQ command via EH and waits for completion. @qc contains
+ *	the command on entry and the result on return. Timeout and error
+ *	conditions are reported via the return value. No recovery action is
+ *	needed, since flag ATA_QCFLAG_EH is set on entry and on exit, so in case
+ *	of error, EH will clean it up during ata_eh_finish().
+ *
+ *	LOCKING:
+ *	None.  Should be called with kernel context, might sleep.
+ *
+ *	RETURNS:
+ *	Zero on success, AC_ERR_* mask on failure
+ */
+unsigned int ata_issue_via_eh(struct ata_queued_cmd *qc)
+{
+	struct ata_device *dev = qc->dev;
+	struct ata_port *ap = qc->ap;
+	u8 command = qc->tf.command;
+	ata_qc_cb_t orig_complete_fn = qc->complete_fn;
+	bool auto_timeout = false;
+	DECLARE_COMPLETION_ONSTACK(wait);
+	unsigned long flags;
+	unsigned int err_mask;
+	unsigned int timeout = 0;
+	int rc;
+
+	spin_lock_irqsave(ap->lock, flags);
+
+	/* This function is only for ATA_QCFLAG_NEED_ISSUE_VIA_EH commands */
+	if (!(qc->flags & ATA_QCFLAG_NEED_ISSUE_VIA_EH)) {
+		spin_unlock_irqrestore(ap->lock, flags);
+		return AC_ERR_INVALID;
+	}
+
+	if (ata_port_is_frozen(ap)) {
+		/*
+		 * If the port is frozen, we will not issue any command, so set
+		 * ATA_QCFLAG_RETRY, so that the command is potentially retried,
+		 * and so that we avoid scrutiny by ata_eh_link_autopsy().
+		 */
+		qc->flags |= ATA_QCFLAG_RETRY;
+		spin_unlock_irqrestore(ap->lock, flags);
+		return AC_ERR_SYSTEM;
+	}
+
+	/*
+	 * Temporarily clear ATA_QCFLAG_EH, such that ata_port_freeze() will
+	 * call ata_qc_complete() on the command if it times out.
+	 * (So that we behave similar to ata_exec_internal().)
+	 */
+	qc->flags &= ~ATA_QCFLAG_EH;
+	qc->flags &= ~ATA_QCFLAG_NEED_ISSUE_VIA_EH;
+	qc->flags |= ATA_QCFLAG_ISSUED_VIA_EH | ATA_QCFLAG_RESULT_TF;
+	qc->private_data = &wait;
+	qc->complete_fn = ata_qc_complete_internal;
+
+	ata_qc_issue(qc);
+
+	spin_unlock_irqrestore(ap->lock, flags);
+
+	if (!timeout) {
+		if (ata_probe_timeout) {
+			timeout = ata_probe_timeout * 1000;
+		} else {
+			timeout = ata_internal_cmd_timeout(dev, command);
+			auto_timeout = true;
+		}
+	}
+
+	ata_eh_release(ap);
+
+	rc = wait_for_completion_timeout(&wait, msecs_to_jiffies(timeout));
+
+	ata_eh_acquire(ap);
+
+	ata_sff_flush_pio_task(ap);
+
+	if (!rc) {
+		/*
+		 * We are racing with irq here. If we lose, the following test
+		 * prevents us from completing the qc twice. If we win, the port
+		 * is frozen and will be cleaned up by ->post_internal_cmd().
+		 */
+		spin_lock_irqsave(ap->lock, flags);
+		if (qc->flags & ATA_QCFLAG_ACTIVE) {
+			qc->err_mask |= AC_ERR_TIMEOUT;
+			/*
+			 * ata_port_freeze() above will cause an abort, which
+			 * will call ata_qc_complete() (and thus
+			 * __ata_qc_complete()), so after this call,
+			 * ATA_QCFLAG_ACTIVE will no longer be set, and the
+			 * DMA mapping will have been cleaned up.
+			 */
+			ata_port_freeze(ap);
+			ata_dev_warn(dev, "qc timeout after %u msecs (cmd 0x%x)\n",
+				     timeout, command);
+		}
+		spin_unlock_irqrestore(ap->lock, flags);
+	}
+
+	if (ap->ops->post_internal_cmd)
+		ap->ops->post_internal_cmd(qc);
+
+	/* Finish up */
+	spin_lock_irqsave(ap->lock, flags);
+
+	err_mask = qc->err_mask;
+
+	/* Restore QC */
+	qc->flags |= ATA_QCFLAG_EH;
+	qc->complete_fn = orig_complete_fn;
+	if (!qc->err_mask) {
+		qc->scsicmd->flags |= SCMD_FORCE_EH_SUCCESS;
+		qc->flags |= ATA_QCFLAG_EH_SUCCESS_CMD;
+		ata_qc_complete_success(qc);
+	}
+
+	spin_unlock_irqrestore(ap->lock, flags);
+
+	if ((err_mask & AC_ERR_TIMEOUT) && auto_timeout)
+		ata_internal_cmd_timed_out(dev, command);
+
+	return err_mask;
+}
+
+/**
  *	ata_pio_need_iordy	-	check if iordy needed
  *	@adev: ATA device
  *
@@ -4574,12 +4702,14 @@ int ata_std_qc_defer(struct ata_queued_cmd *qc)
 	if (ata_is_ncq(qc->tf.protocol)) {
 		if (!ata_tag_valid(link->active_tag))
 			return 0;
+		return ATA_DEFER_LINK;
 	} else {
 		if (!ata_tag_valid(link->active_tag) && !link->sactive)
 			return 0;
+		if (ata_tag_valid(link->active_tag))
+			return ATA_DEFER_LINK;
+		return ATA_DEFER_ISSUE_VIA_EH;
 	}
-
-	return ATA_DEFER_LINK;
 }
 EXPORT_SYMBOL_GPL(ata_std_qc_defer);
 
@@ -4781,12 +4911,16 @@ static void ata_verify_xfer(struct ata_queued_cmd *qc)
  *
  *	When a QC receives a successful completion, we need to perform some
  *	additional post processing.
+ *	Note that a QC that received a successful completion might have flag
+ *	ATA_QCFLAG_EH (and ATA_QCFLAG_ISSUED_VIA_EH) set if the QC was issued
+ *	from EH context.
  */
 void ata_qc_complete_success(struct ata_queued_cmd *qc)
 {
 	struct ata_port *ap = qc->ap;
 	struct ata_device *dev = qc->dev;
 	struct ata_eh_info *ehi = &dev->link->eh_info;
+	bool issued_via_eh = qc->flags & ATA_QCFLAG_ISSUED_VIA_EH;
 
 	WARN_ON_ONCE(ata_port_is_frozen(ap));
 
@@ -4812,13 +4946,16 @@ void ata_qc_complete_success(struct ata_queued_cmd *qc)
 		qc->flags |= ATA_QCFLAG_EH_SUCCESS_CMD;
 		ehi->dev_action[dev->devno] |= ATA_EH_GET_SUCCESS_SENSE;
 
-		/*
-		 * set pending so that ata_qc_schedule_eh() does not trigger
-		 * fast drain, and freeze the port.
-		 */
-		ap->pflags |= ATA_PFLAG_EH_PENDING;
-		ata_qc_schedule_eh(qc);
-		return;
+		/* Do not schedule EH for a command that is already in EH */
+		if (!issued_via_eh) {
+			/*
+			 * set pending so that ata_qc_schedule_eh() does not
+			 * trigger fast drain, and freeze the port.
+			 */
+			ap->pflags |= ATA_PFLAG_EH_PENDING;
+			ata_qc_schedule_eh(qc);
+			return;
+		}
 	}
 
 	/* Some commands need post-processing after successful completion. */
@@ -4845,7 +4982,15 @@ void ata_qc_complete_success(struct ata_queued_cmd *qc)
 	if (unlikely(dev->flags & ATA_DFLAG_DUBIOUS_XFER))
 		ata_verify_xfer(qc);
 
-	__ata_qc_complete(qc);
+	/*
+	 * For a command that was issued via EH, regardless if we got a
+	 * completion (IRQ -> ata_qc_complete()), or if the command didn't
+	 * receive a completion within timeout time (ata_port_freeze() will have
+	 * called ata_qc_complete() on all commands). In either case
+	 * ata_qc_complete() will have called __ata_qc_complete() already.
+	 */
+	if (!issued_via_eh)
+		__ata_qc_complete(qc);
 }
 
 /**
@@ -4865,6 +5010,8 @@ void ata_qc_complete_success(struct ata_queued_cmd *qc)
  */
 void ata_qc_complete(struct ata_queued_cmd *qc)
 {
+	bool issued_via_eh = qc->flags & ATA_QCFLAG_ISSUED_VIA_EH;
+
 	/* Trigger the LED (if available) */
 	ledtrig_disk_activity(!!(qc->tf.flags & ATA_TFLAG_WRITE));
 
@@ -4883,7 +5030,7 @@ void ata_qc_complete(struct ata_queued_cmd *qc)
 	 * Finish internal commands without any further processing and always
 	 * with the result TF filled.
 	 */
-	if (unlikely(ata_tag_internal(qc->tag))) {
+	if (unlikely(ata_tag_internal(qc->tag) || issued_via_eh)) {
 		fill_result_tf(qc);
 		trace_ata_qc_complete_internal(qc);
 		__ata_qc_complete(qc);

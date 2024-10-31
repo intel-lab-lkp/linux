@@ -1774,11 +1774,21 @@ err_mem:
 	return 0;
 
 defer:
-	ata_qc_free(qc);
-	if (rc == ATA_DEFER_LINK)
+	switch (rc) {
+	case ATA_DEFER_LINK:
+		ata_qc_free(qc);
 		return SCSI_MLQUEUE_DEVICE_BUSY;
-	else
+	case ATA_DEFER_PORT:
+		ata_qc_free(qc);
 		return SCSI_MLQUEUE_HOST_BUSY;
+	case ATA_DEFER_ISSUE_VIA_EH:
+		qc->flags |= ATA_QCFLAG_NEED_ISSUE_VIA_EH;
+		dev->link->eh_info.dev_action[dev->devno] |= ATA_EH_ISSUE_DEFERRED_CMD;
+		ata_qc_schedule_eh(qc);
+		return 0;
+	}
+
+	return 0;
 }
 
 struct ata_scsi_args {
