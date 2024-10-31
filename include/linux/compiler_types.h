@@ -469,6 +469,12 @@ struct ftrace_likely_data {
 		unsigned type:	(unsigned type)0,			\
 		signed type:	(signed type)0
 
+#ifdef __SIZEOF_INT128__
+#define __dword_type __int128
+#else
+#define __dword_type long long
+#endif
+
 #define __unqual_scalar_typeof(x) typeof(				\
 		_Generic((x),						\
 			 char:	(char)0,				\
@@ -476,7 +482,7 @@ struct ftrace_likely_data {
 			 __scalar_type_to_expr_cases(short),		\
 			 __scalar_type_to_expr_cases(int),		\
 			 __scalar_type_to_expr_cases(long),		\
-			 __scalar_type_to_expr_cases(long long),	\
+			 __scalar_type_to_expr_cases(__dword_type),	\
 			 default: (x)))
 
 /* Is this type a native word size -- useful for atomic operations */
