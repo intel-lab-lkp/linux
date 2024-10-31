@@ -1768,8 +1768,10 @@ static int nvmet_rdma_cm_handler(struct rdma_cm_id *cm_id,
 		ret = nvmet_rdma_queue_connect(cm_id, event);
 		break;
 	case RDMA_CM_EVENT_ESTABLISHED:
-		nvmet_rdma_queue_established(queue);
-		break;
+		if (!queue) {
+			nvmet_rdma_queue_established(queue);
+			break;
+		}
 	case RDMA_CM_EVENT_ADDR_CHANGE:
 		if (!queue) {
 			struct nvmet_rdma_port *port = cm_id->context;
@@ -1780,8 +1782,10 @@ static int nvmet_rdma_cm_handler(struct rdma_cm_id *cm_id,
 		fallthrough;
 	case RDMA_CM_EVENT_DISCONNECTED:
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
-		nvmet_rdma_queue_disconnect(queue);
-		break;
+		if (!queue) {
+			nvmet_rdma_queue_disconnect(queue);
+			break;
+		}
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
 		ret = nvmet_rdma_device_removal(cm_id, queue);
 		break;
@@ -1791,8 +1795,10 @@ static int nvmet_rdma_cm_handler(struct rdma_cm_id *cm_id,
 		fallthrough;
 	case RDMA_CM_EVENT_UNREACHABLE:
 	case RDMA_CM_EVENT_CONNECT_ERROR:
-		nvmet_rdma_queue_connect_fail(cm_id, queue);
-		break;
+		if (!queue) {
+			nvmet_rdma_queue_connect_fail(cm_id, queue);
+			break;
+		}
 	default:
 		pr_err("received unrecognized RDMA CM event %d\n",
 			event->event);
