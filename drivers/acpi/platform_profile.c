@@ -179,6 +179,11 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 {
 	int err;
 
+	if (!pprof->dev) {
+		pr_err("platform_profile: handler device is not set\n");
+		return -EINVAL;
+	}
+
 	mutex_lock(&profile_lock);
 	/* We can only have one active profile */
 	if (cur_profile) {
