@@ -341,7 +341,7 @@ struct tx_queue {
 #define	FM_LTDPA1	0x79		/* r/w Last Trans desc ptr for A1 qu. */
 /* 0x80-0x9a	PLCS registers of built-in PLCS  (Supernet 3 only) */
 
-/* Supernet 3: Adderss Filter Registers */
+/* Supernet 3: Address Filter Registers */
 #define	FM_AFCMD	0xb0		/* r/w Address Filter Command Reg */
 #define	FM_AFSTAT	0xb2		/* r/w Address Filter Status Reg */
 #define	FM_AFBIST	0xb4		/* r/w Address Filter BIST signature */
