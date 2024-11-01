@@ -323,6 +323,8 @@ void octep_free_iqs(struct octep_device *oct)
 	int i;
 
 	for (i = 0; i < CFG_GET_PORTS_ACTIVE_IO_RINGS(oct->conf); i++) {
+		if (!oct->iq[i])
+			continue;
 		octep_free_iq(oct->iq[i]);
 		dev_dbg(&oct->pdev->dev,
 			"Successfully destroyed IQ(TxQ)-%d.\n", i);
