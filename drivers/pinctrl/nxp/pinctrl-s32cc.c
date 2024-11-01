@@ -950,10 +950,10 @@ int s32_pinctrl_probe(struct platform_device *pdev,
 		return ret;
 	}
 
-	ipctl->pctl = devm_pinctrl_register(&pdev->dev, s32_pinctrl_desc,
-					    ipctl);
-	if (IS_ERR(ipctl->pctl))
-		return dev_err_probe(&pdev->dev, PTR_ERR(ipctl->pctl),
+	ret = devm_pinctrl_register_and_init(&pdev->dev, s32_pinctrl_desc,
+					     ipctl, &ipctl->pctl);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
 				     "could not register s32 pinctrl driver\n");
 
 #ifdef CONFIG_PM_SLEEP
@@ -965,6 +965,11 @@ int s32_pinctrl_probe(struct platform_device *pdev,
 	if (!saved_context->pads)
 		return -ENOMEM;
 #endif
+
+	ret = pinctrl_enable(ipctl->pctl);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to enable pinctrl\n");
 
 	dev_info(&pdev->dev, "initialized s32 pinctrl driver\n");
 
