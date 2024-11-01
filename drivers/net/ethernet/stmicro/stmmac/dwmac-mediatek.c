@@ -85,6 +85,7 @@ struct mediatek_dwmac_plat_data {
 	bool rmii_clk_from_mac;
 	bool rmii_rxc;
 	bool mac_wol;
+	bool mac_wol_noninverted;
 };
 
 struct mediatek_dwmac_variant {
@@ -493,6 +494,7 @@ static int mediatek_dwmac_config_dt(struct mediatek_dwmac_plat_data *plat)
 	plat->rmii_rxc = of_property_read_bool(plat->np, "mediatek,rmii-rxc");
 	plat->rmii_clk_from_mac = of_property_read_bool(plat->np, "mediatek,rmii-clk-from-mac");
 	plat->mac_wol = of_property_read_bool(plat->np, "mediatek,mac-wol");
+	plat->mac_wol_noninverted = of_property_read_bool(plat->np, "mediatek,mac-wol-noninverted");
 
 	return 0;
 }
@@ -588,10 +590,11 @@ static int mediatek_dwmac_common_data(struct platform_device *pdev,
 	int i;
 
 	plat->mac_interface = priv_plat->phy_mode;
-	if (priv_plat->mac_wol)
-		plat->flags |= STMMAC_FLAG_USE_PHY_WOL;
-	else
+	if ((priv_plat->mac_wol_noninverted && priv_plat->mac_wol) ||
+	    (!priv_plat->mac_wol_noninverted && !priv_plat->mac_wol))
 		plat->flags &= ~STMMAC_FLAG_USE_PHY_WOL;
+	else
+		plat->flags |= STMMAC_FLAG_USE_PHY_WOL;
 	plat->riwt_off = 1;
 	plat->maxmtu = ETH_DATA_LEN;
 	plat->host_dma_width = priv_plat->variant->dma_bit_mask;
