@@ -3681,8 +3681,6 @@ static irqreturn_t sdhci_thread_irq(int irq, void *dev_id)
  *                                                                           *
 \*****************************************************************************/
 
-#ifdef CONFIG_PM
-
 static bool sdhci_cd_irq_can_wakeup(struct sdhci_host *host)
 {
 	return mmc_card_is_removable(host->mmc) &&
@@ -3762,8 +3760,7 @@ int sdhci_suspend_host(struct sdhci_host *host)
 
 	return 0;
 }
-
-EXPORT_SYMBOL_GPL(sdhci_suspend_host);
+EXPORT_PM_FN_GPL(sdhci_suspend_host);
 
 int sdhci_resume_host(struct sdhci_host *host)
 {
@@ -3801,8 +3798,7 @@ int sdhci_resume_host(struct sdhci_host *host)
 
 	return ret;
 }
-
-EXPORT_SYMBOL_GPL(sdhci_resume_host);
+EXPORT_PM_FN_GPL(sdhci_resume_host);
 
 int sdhci_runtime_suspend_host(struct sdhci_host *host)
 {
@@ -3824,7 +3820,7 @@ int sdhci_runtime_suspend_host(struct sdhci_host *host)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(sdhci_runtime_suspend_host);
+EXPORT_PM_FN_GPL(sdhci_runtime_suspend_host);
 
 int sdhci_runtime_resume_host(struct sdhci_host *host, int soft_reset)
 {
@@ -3875,9 +3871,7 @@ int sdhci_runtime_resume_host(struct sdhci_host *host, int soft_reset)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(sdhci_runtime_resume_host);
-
-#endif /* CONFIG_PM */
+EXPORT_PM_FN_GPL(sdhci_runtime_resume_host);
 
 /*****************************************************************************\
  *                                                                           *
