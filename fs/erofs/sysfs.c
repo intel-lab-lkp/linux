@@ -57,11 +57,13 @@ static struct erofs_attr erofs_attr_##_name = {			\
 
 #ifdef CONFIG_EROFS_FS_ZIP
 EROFS_ATTR_RW_UI(sync_decompress, erofs_mount_opts);
+EROFS_ATTR_RW_UI(cache_strategy, erofs_mount_opts);
 #endif
 
 static struct attribute *erofs_attrs[] = {
 #ifdef CONFIG_EROFS_FS_ZIP
 	ATTR_LIST(sync_decompress),
+	ATTR_LIST(cache_strategy),
 #endif
 	NULL,
 };
@@ -150,6 +152,12 @@ static ssize_t erofs_attr_store(struct kobject *kobj, struct attribute *attr,
 		if (!strcmp(a->attr.name, "sync_decompress") &&
 		    (t > EROFS_SYNC_DECOMPRESS_FORCE_OFF))
 			return -EINVAL;
+		else if (!strcmp(a->attr.name, "cache_strategy")) {
+			if (t > EROFS_ZIP_CACHE_READAROUND)
+				return -EINVAL;
+			else if (t == EROFS_ZIP_CACHE_DISABLED)
+				z_erofs_shrink_scan(sbi, ~0UL);
+		}
 #endif
 		*(unsigned int *)ptr = t;
 		return len;

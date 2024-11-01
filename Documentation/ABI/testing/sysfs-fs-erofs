@@ -16,3 +16,17 @@ Description:	Control strategy of sync decompression:
 		  readahead on atomic contexts only.
 		- 1 (force on): enable for readpage and readahead.
 		- 2 (force off): disable for all situations.
+
+What:		/sys/fs/erofs/<disk>/cache_strategy
+Date:		November 2024
+Contact:	"Guo Chunhai" <guochunhai@vivo.com>
+Description:	Control strategy of cached decompression strategy
+
+		- 0 (disabled): In-place I/O decompression only.
+		- 1 (readahead): Cache the last incomplete compressed physical
+			cluster for further reading. It still does in-place I/O
+			decompression for the rest compressed physical clusters.
+		- 2 (default, readaround): Cache the both ends of incomplete
+			compressed physical clusters for further reading. It
+			still does in-place I/O decompression for the rest
+			compressed physical clusters.
