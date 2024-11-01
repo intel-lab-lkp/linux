@@ -1419,6 +1419,8 @@ struct intel_crtc {
 #endif
 
 	bool block_dc_for_vblank;
+
+	u32 trans_push_enabled;
 };
 
 struct intel_plane {

@@ -321,13 +321,14 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 void intel_vrr_send_push(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
 	if (!crtc_state->vrr.enable)
 		return;
 
 	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
-		       TRANS_PUSH_EN | TRANS_PUSH_SEND);
+		       crtc->trans_push_enabled | TRANS_PUSH_SEND);
 }
 
 bool intel_vrr_is_push_sent(const struct intel_crtc_state *crtc_state)
@@ -341,16 +342,28 @@ bool intel_vrr_is_push_sent(const struct intel_crtc_state *crtc_state)
 	return intel_de_read(display, TRANS_PUSH(display, cpu_transcoder)) & TRANS_PUSH_SEND;
 }
 
+static void intel_vrr_trans_push_enabled_set_clear(struct intel_crtc *crtc,
+						   enum transcoder cpu_transcoder,
+						   u32 clear, u32 set)
+{
+	struct intel_display *display = to_intel_display(crtc);
+
+	crtc->trans_push_enabled = (crtc->trans_push_enabled & ~clear) | set;
+	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
+		       crtc->trans_push_enabled);
+}
+
 void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
 	if (!crtc_state->vrr.enable)
 		return;
 
-	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
-		       TRANS_PUSH_EN);
+	intel_vrr_trans_push_enabled_set_clear(crtc, cpu_transcoder, 0,
+					       TRANS_PUSH_EN);
 
 	if (HAS_AS_SDP(display))
 		intel_de_write(display,
@@ -371,6 +384,7 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
 {
 	struct intel_display *display = to_intel_display(old_crtc_state);
+	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
 	enum transcoder cpu_transcoder = old_crtc_state->cpu_transcoder;
 
 	if (!old_crtc_state->vrr.enable)
@@ -381,7 +395,9 @@ void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
 	intel_de_wait_for_clear(display,
 				TRANS_VRR_STATUS(display, cpu_transcoder),
 				VRR_STATUS_VRR_EN_LIVE, 1000);
-	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder), 0);
+
+	intel_vrr_trans_push_enabled_set_clear(crtc, cpu_transcoder,
+					       TRANS_PUSH_EN, 0);
 
 	if (HAS_AS_SDP(display))
 		intel_de_write(display,
