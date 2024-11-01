@@ -266,7 +266,8 @@ tests="
 	list_flush_ipv4_exception	ipv4: list and flush cached exceptions	1
 	list_flush_ipv6_exception	ipv6: list and flush cached exceptions	1
 	pmtu_ipv4_route_change		ipv4: PMTU exception w/route replace	1
-	pmtu_ipv6_route_change		ipv6: PMTU exception w/route replace	1"
+	pmtu_ipv6_route_change		ipv6: PMTU exception w/route replace	1
+	pmtu_ipv4_mp_exceptions		ipv4: PMTU multipath nh exceptions		0"
 
 # Addressing and routing for tests with routers: four network segments, with
 # index SEGMENT between 1 and 4, a common prefix (PREFIX4 or PREFIX6) and an
@@ -2327,6 +2328,81 @@ test_pmtu_ipv4_route_change() {
 
 test_pmtu_ipv6_route_change() {
 	test_pmtu_ipvX_route_change 6
+}
+
+test_pmtu_ipv4_mp_exceptions() {
+	setup namespaces routing || return $ksft_skip
+
+	ip nexthop ls >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		echo "Nexthop objects not supported; skipping tests"
+		exit $ksft_skip
+	fi
+
+	trace "${ns_a}"  veth_A-R1    "${ns_r1}" veth_R1-A \
+	      "${ns_r1}" veth_R1-B    "${ns_b}"  veth_B-R1 \
+	      "${ns_a}"  veth_A-R2    "${ns_r2}" veth_R2-A \
+	      "${ns_r2}" veth_R2-B    "${ns_b}"  veth_B-R2
+
+	dummy0_a="192.168.99.99"
+	dummy0_b="192.168.88.88"
+
+	# Set up initial MTU values
+	mtu "${ns_a}"  veth_A-R1 2000
+	mtu "${ns_r1}" veth_R1-A 2000
+	mtu "${ns_r1}" veth_R1-B 1500
+	mtu "${ns_b}"  veth_B-R1 1500
+
+	mtu "${ns_a}"  veth_A-R2 2000
+	mtu "${ns_r2}" veth_R2-A 2000
+	mtu "${ns_r2}" veth_R2-B 1500
+	mtu "${ns_b}"  veth_B-R2 1500
+
+	fail=0
+
+	#Set up host A with multipath routes to host B dummy0_b
+	run_cmd ${ns_a} sysctl -q net.ipv4.fib_multipath_hash_policy=1
+	run_cmd ${ns_a} sysctl -q net.ipv4.ip_forward=1
+	run_cmd ${ns_a} ip link add dummy0 mtu 2000 type dummy
+	run_cmd ${ns_a} ip link set dummy0 up
+	run_cmd ${ns_a} ip addr add ${dummy0_a} dev dummy0
+	run_cmd ${ns_a} ip nexthop add id 201 via ${prefix4}.${a_r1}.2 dev veth_A-R1
+	run_cmd ${ns_a} ip nexthop add id 202 via ${prefix4}.${a_r2}.2 dev veth_A-R2
+	run_cmd ${ns_a} ip nexthop add id 203 group 201/202
+	run_cmd ${ns_a} ip route add ${dummy0_b} nhid 203
+
+	#Set up host B with multipath routes to host A dummy0_a
+	run_cmd ${ns_b} sysctl -q net.ipv4.fib_multipath_hash_policy=1
+	run_cmd ${ns_b} sysctl -q net.ipv4.ip_forward=1
+	run_cmd ${ns_b} ip link add dummy0 mtu 2000 type dummy
+	run_cmd ${ns_b} ip link set dummy0 up
+	run_cmd ${ns_b} ip addr add ${dummy0_b} dev dummy0
+	run_cmd ${ns_b} ip nexthop add id 201 via ${prefix4}.${b_r1}.2 dev veth_A-R1
+	run_cmd ${ns_b} ip nexthop add id 202 via ${prefix4}.${b_r2}.2 dev veth_A-R2
+	run_cmd ${ns_b} ip nexthop add id 203 group 201/202
+	run_cmd ${ns_b} ip route add ${dummy0_a} nhid 203
+
+	#Set up routers with routes to dummies
+	run_cmd ${ns_r1} ip route add ${dummy0_a} via ${prefix4}.${a_r1}.1
+	run_cmd ${ns_r2} ip route add ${dummy0_a} via ${prefix4}.${a_r2}.1
+	run_cmd ${ns_r1} ip route add ${dummy0_b} via ${prefix4}.${b_r1}.1
+	run_cmd ${ns_r2} ip route add ${dummy0_b} via ${prefix4}.${b_r2}.1
+
+
+	#Ping and expect two nexthop exceptions for two routes in nh group
+	run_cmd ${ns_a} ping -q -M want -i 0.1 -c 2 -s 1800 "${dummy0_b}"
+
+	#Do route lookup before checking cached exceptions
+	run_cmd ${ns_a} ip route get ${dummy0_b} oif veth_A-R1
+	run_cmd ${ns_a} ip route get ${dummy0_b} oif veth_A-R2
+
+	#Check cached exceptions
+	if [ "$(${ns_a} ip -oneline route list cache| grep mtu | wc -l)" -ne 2 ]; then
+		err "  there are not enough cached exceptions"
+		fail=1
+	fi
+
+	return ${fail}
 }
 
 usage() {
