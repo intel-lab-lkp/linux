@@ -44,6 +44,7 @@ struct btrfs_log_ctx {
 	struct list_head conflict_inodes;
 	int num_conflict_inodes;
 	bool logging_conflict_inodes;
+	spinlock_t logging_conflict_inodes_lock;
 	/*
 	 * Used for fsyncs that need to copy items from the subvolume tree to
 	 * the log tree (full sync flag set or copy everything flag set) to

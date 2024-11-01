@@ -2854,6 +2854,7 @@ void btrfs_init_log_ctx(struct btrfs_log_ctx *ctx, struct btrfs_inode *inode)
 	INIT_LIST_HEAD(&ctx->conflict_inodes);
 	ctx->num_conflict_inodes = 0;
 	ctx->logging_conflict_inodes = false;
+	spin_lock_init(&ctx->logging_conflict_inodes_lock);
 	ctx->scratch_eb = NULL;
 }
 
@@ -5779,16 +5780,20 @@ static int log_conflicting_inodes(struct btrfs_trans_handle *trans,
 				  struct btrfs_log_ctx *ctx)
 {
 	int ret = 0;
+	unsigned long logging_conflict_inodes_flags;
 
 	/*
 	 * Conflicting inodes are logged by the first call to btrfs_log_inode(),
 	 * otherwise we could have unbounded recursion of btrfs_log_inode()
 	 * calls. This check guarantees we can have only 1 level of recursion.
 	 */
+	spin_lock_irqsave(&ctx->conflict_inodes_lock, logging_conflict_inodes_flags);
 	if (ctx->logging_conflict_inodes)
+		spin_unlock_irqrestore(&ctx->conflict_inodes_lock, logging_conflict_inodes_flags);
 		return 0;
 
 	ctx->logging_conflict_inodes = true;
+	spin_unlock_irqrestore(&ctx->conflict_inodes_lock, logging_conflict_inodes_flags);
 
 	/*
 	 * New conflicting inodes may be found and added to the list while we
@@ -5869,7 +5874,9 @@ static int log_conflicting_inodes(struct btrfs_trans_handle *trans,
 			break;
 	}
 
+	spin_lock_irqsave(&ctx->conflict_inodes_lock, logging_conflict_inodes_flags);
 	ctx->logging_conflict_inodes = false;
+	spin_unlock_irqrestore(&ctx->conflict_inodes_lock, logging_conflict_inodes_flags);
 	if (ret)
 		free_conflicting_inodes(ctx);
 
