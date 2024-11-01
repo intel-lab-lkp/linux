@@ -1729,6 +1729,10 @@ static ssize_t iov_iter_extract_bvec_pages(struct iov_iter *i,
 		(*pages)[k++] = bv.bv_page;
 		size += bv.bv_len;
 
+		if (size >= maxsize) {
+			size = maxsize;
+			break;
+		}
 		if (k >= maxpages)
 			break;
 
