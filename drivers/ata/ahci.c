@@ -1985,7 +1985,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	if (ahci_init_msi(pdev, n_ports, hpriv) < 0) {
 		/* legacy intx interrupts */
-		pci_intx(pdev, 1);
+		pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_INTX);
 	}
 	hpriv->irq = pci_irq_vector(pdev, 0);
 
