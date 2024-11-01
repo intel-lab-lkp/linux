@@ -3119,28 +3119,8 @@ unlock:
 
 static void _psr_invalidate_handle(struct intel_dp *intel_dp)
 {
-	struct intel_display *display = to_intel_display(intel_dp);
-	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
-
 	if (intel_dp->psr.psr2_sel_fetch_enabled) {
-		u32 val;
-
-		if (intel_dp->psr.psr2_sel_fetch_cff_enabled) {
-			/* Send one update otherwise lag is observed in screen */
-			intel_de_write(display,
-				       CURSURFLIVE(display, intel_dp->psr.pipe),
-				       0);
-			return;
-		}
-
-		val = man_trk_ctl_enable_bit_get(display) |
-		      man_trk_ctl_partial_frame_bit_get(display) |
-		      man_trk_ctl_continuos_full_frame(display);
-		intel_de_write(display,
-			       PSR2_MAN_TRK_CTL(display, cpu_transcoder),
-			       val);
-		intel_de_write(display,
-			       CURSURFLIVE(display, intel_dp->psr.pipe), 0);
+		psr_force_exit(intel_dp);
 		intel_dp->psr.psr2_sel_fetch_cff_enabled = true;
 	} else {
 		intel_psr_exit(intel_dp);
@@ -3222,43 +3202,21 @@ static void _psr_flush_handle(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct drm_i915_private *dev_priv = to_i915(display->drm);
-	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
+
+	psr_force_exit(intel_dp);
 
 	if (intel_dp->psr.psr2_sel_fetch_enabled) {
-		if (intel_dp->psr.psr2_sel_fetch_cff_enabled) {
-			/* can we turn CFF off? */
-			if (intel_dp->psr.busy_frontbuffer_bits == 0) {
-				u32 val = man_trk_ctl_enable_bit_get(display) |
-					man_trk_ctl_partial_frame_bit_get(display) |
-					man_trk_ctl_single_full_frame_bit_get(display) |
-					man_trk_ctl_continuos_full_frame(display);
-
-				/*
-				 * Set psr2_sel_fetch_cff_enabled as false to allow selective
-				 * updates. Still keep cff bit enabled as we don't have proper
-				 * SU configuration in case update is sent for any reason after
-				 * sff bit gets cleared by the HW on next vblank.
-				 */
-				intel_de_write(display,
-					       PSR2_MAN_TRK_CTL(display, cpu_transcoder),
-					       val);
-				intel_de_write(display,
-					       CURSURFLIVE(display, intel_dp->psr.pipe),
-					       0);
-				intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
-			}
-		} else {
+		/* can we turn CFF off? */
+		if (intel_dp->psr.busy_frontbuffer_bits == 0)
 			/*
-			 * continuous full frame is disabled, only a single full
-			 * frame is required
+			 * Set psr2_sel_fetch_cff_enabled as false to allow selective
+			 * updates. Still keep cff bit enabled as we don't have proper
+			 * SU configuration in case update is sent for any reason after
+			 * sff bit gets cleared by the HW on next vblank.
 			 */
-			psr_force_exit(intel_dp);
-		}
-	} else {
-		psr_force_exit(intel_dp);
-
-		if (!intel_dp->psr.active && !intel_dp->psr.busy_frontbuffer_bits)
-			queue_work(dev_priv->unordered_wq, &intel_dp->psr.work);
+			intel_dp->psr.psr2_sel_fetch_cff_enabled = false;
+	} else if (!intel_dp->psr.active && !intel_dp->psr.busy_frontbuffer_bits) {
+		queue_work(dev_priv->unordered_wq, &intel_dp->psr.work);
 	}
 }
 
