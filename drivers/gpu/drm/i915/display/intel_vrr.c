@@ -324,7 +324,8 @@ void intel_vrr_send_push(const struct intel_crtc_state *crtc_state)
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
-	if (!crtc_state->vrr.enable)
+	if (!crtc_state->vrr.enable && (DISPLAY_VER(display) < 20 ||
+					!crtc_state->has_psr))
 		return;
 
 	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
@@ -336,7 +337,8 @@ bool intel_vrr_is_push_sent(const struct intel_crtc_state *crtc_state)
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
-	if (!crtc_state->vrr.enable)
+	if (!crtc_state->vrr.enable && (DISPLAY_VER(display) < 20 ||
+					!crtc_state->has_psr))
 		return false;
 
 	return intel_de_read(display, TRANS_PUSH(display, cpu_transcoder)) & TRANS_PUSH_SEND;
@@ -379,6 +381,37 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 		intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder),
 			       VRR_CTL_VRR_ENABLE | trans_vrr_ctl(crtc_state));
 	}
+}
+
+/**
+ * intel_vrr_psr_frame_change_enable - Enable PSR frame change mechanism
+ * @crtc_state: Intel crtc state
+ *
+ * This function is for PSR to enable PSR frame change mechanism which is more
+ * controlled way to generate frame change event.
+ */
+void intel_vrr_psr_frame_change_enable(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	intel_vrr_trans_push_enabled_set_clear(crtc, cpu_transcoder, 0,
+					       LNL_TRANS_PUSH_PSR_PR_EN);
+}
+
+/**
+ * intel_vrr_psr_frame_change_disable - Disable PSR frame change mechanism
+ * @crtc_state: Intel crtc state
+ *
+ * This function is for PSR to disable PSR frame change mechanism.
+ */
+void intel_vrr_psr_frame_change_disable(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+
+	intel_vrr_trans_push_enabled_set_clear(crtc, cpu_transcoder,
+					       LNL_TRANS_PUSH_PSR_PR_EN, 0);
 }
 
 void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)

@@ -44,6 +44,7 @@
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
 #include "intel_snps_phy.h"
+#include "intel_vrr.h"
 #include "skl_universal_plane.h"
 
 /**
@@ -1934,6 +1935,9 @@ static void intel_psr_enable_source(struct intel_dp *intel_dp,
 			intel_de_rmw(display, CLKGATE_DIS_MISC, 0,
 				     CLKGATE_DIS_MISC_DMASC_GATING_DIS);
 	}
+
+	if (DISPLAY_VER(dev_priv) >= 20)
+		intel_vrr_psr_frame_change_enable(crtc_state);
 }
 
 static bool psr_interrupt_error_check(struct intel_dp *intel_dp)
@@ -2170,6 +2174,8 @@ void intel_psr_disable(struct intel_dp *intel_dp,
 
 	mutex_lock(&intel_dp->psr.lock);
 
+	if (DISPLAY_VER(display) >= 20)
+		intel_vrr_psr_frame_change_disable(old_crtc_state);
 	intel_psr_disable_locked(intel_dp);
 
 	mutex_unlock(&intel_dp->psr.lock);
