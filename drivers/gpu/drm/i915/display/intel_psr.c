@@ -2310,6 +2310,7 @@ static u32 man_trk_ctl_continuos_full_frame(struct intel_display *display)
 static void psr_force_exit(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
+	struct intel_crtc *crtc = to_intel_crtc(intel_dp->attached_connector->base.state->crtc);
 	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
 
 	if (intel_dp->psr.psr2_sel_fetch_enabled)
@@ -2332,8 +2333,12 @@ static void psr_force_exit(struct intel_dp *intel_dp)
 	 * This workaround do not exist for platforms with display 10 or newer
 	 * but testing proved that it works for up display 13, for newer
 	 * than that testing will be needed.
+	 *
+	 * In Lunarlake we can use TRANS_PUSH mechanism to force sending update
+	 * to sink.
 	 */
-	intel_de_write(display, CURSURFLIVE(display, intel_dp->psr.pipe), 0);
+	DISPLAY_VER(display) >= 20 ? intel_vrr_psr_send_push(crtc, cpu_transcoder) :
+		intel_de_write(display, CURSURFLIVE(display, intel_dp->psr.pipe), 0);
 }
 
 void intel_psr2_program_trans_man_trk_ctl(const struct intel_crtc_state *crtc_state)

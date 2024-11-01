@@ -332,6 +332,26 @@ void intel_vrr_send_push(const struct intel_crtc_state *crtc_state)
 		       crtc->trans_push_enabled | TRANS_PUSH_SEND);
 }
 
+/**
+ * intel_vrr_psr_send_push - Send push interface for PSR code
+ * @crtc: Intel crtc
+ * @cpu_transcoder: cpu transcoder
+ *
+ * This is for PSR usage to perform push on frontbuffer tracking invalidate and
+ * flush call back. PSR mutex should be taken by caller.
+ */
+void
+intel_vrr_psr_send_push(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
+{
+	struct intel_display *display = to_intel_display(crtc);
+
+	if (DISPLAY_VER(display) < 20)
+		return;
+
+	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
+		       crtc->trans_push_enabled | TRANS_PUSH_SEND);
+}
+
 bool intel_vrr_is_push_sent(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
