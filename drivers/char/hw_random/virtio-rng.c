@@ -218,6 +218,10 @@ static int virtrng_restore(struct virtio_device *vdev)
 {
 	int err;
 
+	err = virtio_device_reset_and_restore_status(vdev);
+	if (err)
+		return err;
+
 	err = probe_common(vdev);
 	if (!err) {
 		struct virtrng_info *vi = vdev->priv;

@@ -412,6 +412,10 @@ static int virtsnd_restore(struct virtio_device *vdev)
 	struct virtio_snd *snd = vdev->priv;
 	int rc;
 
+	rc = virtio_device_reset_and_restore_status(vdev);
+	if (rc)
+		return rc;
+
 	rc = virtsnd_find_vqs(snd);
 	if (rc)
 		return rc;

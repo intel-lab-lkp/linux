@@ -3018,6 +3018,10 @@ static int virtio_mem_restore(struct virtio_device *vdev)
 	struct virtio_mem *vm = vdev->priv;
 	int ret;
 
+	ret = virtio_device_reset_and_restore_status(vdev);
+	if (ret)
+		return ret;
+
 	ret = virtio_mem_init_vq(vm);
 	if (ret)
 		return ret;

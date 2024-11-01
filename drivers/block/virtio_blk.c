@@ -1612,6 +1612,10 @@ static int virtblk_restore(struct virtio_device *vdev)
 	struct virtio_blk *vblk = vdev->priv;
 	int ret;
 
+	ret = virtio_device_reset_and_restore_status(vdev);
+	if (ret)
+		return ret;
+
 	ret = init_vq(vdev->priv);
 	if (ret)
 		return ret;

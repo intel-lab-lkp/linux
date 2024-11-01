@@ -1163,6 +1163,10 @@ static int virtballoon_restore(struct virtio_device *vdev)
 	struct virtio_balloon *vb = vdev->priv;
 	int ret;
 
+	ret = virtio_device_reset_and_restore_status(vdev);
+	if (ret)
+		return ret;
+
 	ret = init_vqs(vdev->priv);
 	if (ret)
 		return ret;

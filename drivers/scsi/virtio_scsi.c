@@ -1016,6 +1016,10 @@ static int virtscsi_restore(struct virtio_device *vdev)
 	struct virtio_scsi *vscsi = shost_priv(sh);
 	int err;
 
+	err = virtio_device_reset_and_restore_status(vdev);
+	if (err)
+		return err;
+
 	err = virtscsi_init(vdev, vscsi);
 	if (err)
 		return err;

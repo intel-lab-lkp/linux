@@ -536,6 +536,10 @@ static int virtcrypto_restore(struct virtio_device *vdev)
 	struct virtio_crypto *vcrypto = vdev->priv;
 	int err;
 
+	err = virtio_device_reset_and_restore_status(vdev);
+	if (err)
+		return err;
+
 	err = virtcrypto_init_vqs(vcrypto);
 	if (err)
 		return err;
