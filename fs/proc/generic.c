@@ -641,6 +641,7 @@ static const struct proc_ops proc_single_ops = {
 	.proc_read_iter = seq_read_iter,
 	.proc_lseek	= seq_lseek,
 	.proc_release	= single_release,
+	.proc_write	= proc_simple_write,
 };
 
 struct proc_dir_entry *proc_create_single_data(const char *name, umode_t mode,
@@ -657,6 +658,23 @@ struct proc_dir_entry *proc_create_single_data(const char *name, umode_t mode,
 	return proc_register(parent, p);
 }
 EXPORT_SYMBOL(proc_create_single_data);
+
+struct proc_dir_entry *proc_create_single_write_data(const char *name,
+		umode_t mode, struct proc_dir_entry *parent,
+		int (*show)(struct seq_file *, void *), proc_write_t write,
+		void *data)
+{
+	struct proc_dir_entry *p;
+
+	p = proc_create_reg(name, mode, &parent, data);
+	if (!p)
+		return NULL;
+	p->proc_ops = &proc_single_ops;
+	p->single_show = show;
+	p->write = write;
+	return proc_register(parent, p);
+}
+EXPORT_SYMBOL(proc_create_single_write_data);
 
 void proc_set_size(struct proc_dir_entry *de, loff_t size)
 {

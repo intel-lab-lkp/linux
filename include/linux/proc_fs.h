@@ -102,7 +102,13 @@ struct proc_dir_entry *proc_create_single_data(const char *name, umode_t mode,
 		int (*show)(struct seq_file *, void *), void *data);
 #define proc_create_single(name, mode, parent, show) \
 	proc_create_single_data(name, mode, parent, show, NULL)
- 
+struct proc_dir_entry *proc_create_single_write_data(const char *name,
+		umode_t mode, struct proc_dir_entry *parent,
+		int (*show)(struct seq_file *, void *), proc_write_t write,
+		void *data);
+#define proc_create_single_write(name, mode, parent, show, write) \
+	proc_create_single_write_data(name, mode, parent, show, write, NULL)
+
 extern struct proc_dir_entry *proc_create_data(const char *, umode_t,
 					       struct proc_dir_entry *,
 					       const struct proc_ops *,
