@@ -512,8 +512,8 @@ static int serdes_probe(struct platform_device *pdev)
 						    res->name);
 	}
 
-	if (IS_ERR(ctrl->regs))
-		return PTR_ERR(ctrl->regs);
+	if (!ctrl->regs)
+		return -EINVAL;
 
 	for (i = 0; i < SERDES_MAX; i++) {
 		ret = serdes_phy_create(ctrl, i, &ctrl->phys[i]);
