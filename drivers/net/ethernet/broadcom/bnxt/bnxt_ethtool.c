@@ -1289,10 +1289,13 @@ static int bnxt_add_l2_cls_rule(struct bnxt *bp,
 static bool bnxt_verify_ntuple_ip4_flow(struct ethtool_usrip4_spec *ip_spec,
 					struct ethtool_usrip4_spec *ip_mask)
 {
+	u8 mproto = ip_mask->proto;
+	u8 sproto = ip_spec->proto;
+
 	if (ip_mask->l4_4_bytes || ip_mask->tos ||
 	    ip_spec->ip_ver != ETH_RX_NFC_IP4 ||
-	    ip_mask->proto != BNXT_IP_PROTO_FULL_MASK ||
-	    (ip_spec->proto != IPPROTO_RAW && ip_spec->proto != IPPROTO_ICMP))
+	    (mproto && mproto != BNXT_IP_PROTO_FULL_MASK) ||
+	    (mproto && sproto != IPPROTO_RAW && sproto != IPPROTO_ICMP))
 		return false;
 	return true;
 }
@@ -1300,10 +1303,12 @@ static bool bnxt_verify_ntuple_ip4_flow(struct ethtool_usrip4_spec *ip_spec,
 static bool bnxt_verify_ntuple_ip6_flow(struct ethtool_usrip6_spec *ip_spec,
 					struct ethtool_usrip6_spec *ip_mask)
 {
+	u8 mproto = ip_mask->l4_proto;
+	u8 sproto = ip_spec->l4_proto;
+
 	if (ip_mask->l4_4_bytes || ip_mask->tclass ||
-	    ip_mask->l4_proto != BNXT_IP_PROTO_FULL_MASK ||
-	    (ip_spec->l4_proto != IPPROTO_RAW &&
-	     ip_spec->l4_proto != IPPROTO_ICMPV6))
+	    (mproto && mproto != BNXT_IP_PROTO_FULL_MASK) ||
+	    (mproto && sproto != IPPROTO_RAW && sproto != IPPROTO_ICMPV6))
 		return false;
 	return true;
 }
