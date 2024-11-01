@@ -1481,8 +1481,8 @@ static void usage(const char *prog)
 
 int main(int argc, char *argv[])
 {
-	int n_tests = sizeof(uffd_tests) / sizeof(uffd_test_case_t);
-	int n_mems = sizeof(mem_types) / sizeof(mem_type_t);
+	int n_tests = ARRAY_SIZE(uffd_tests);
+	int n_mems = ARRAY_SIZE(mem_types);
 	const char *test_filter = NULL;
 	bool list_only = false;
 	uffd_test_case_t *test;
