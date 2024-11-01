@@ -70,9 +70,8 @@ static inline void eq_update_ci(struct mlx5_eq *eq, int arm)
 	__be32 __iomem *addr = eq->doorbell + (arm ? 0 : 2);
 	u32 val = (eq->cons_index & 0xffffff) | (eq->eqn << 24);
 
-	__raw_writel((__force u32)cpu_to_be32(val), addr);
-	/* We still want ordering, just not swabbing, so add a barrier */
-	mb();
+	/* Ensure ordering of consecutive doorbell writes */
+	writel((__force u32)cpu_to_be32(val), addr);
 }
 
 int mlx5_eq_table_init(struct mlx5_core_dev *dev);
