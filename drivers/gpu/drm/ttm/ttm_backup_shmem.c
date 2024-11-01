@@ -5,6 +5,7 @@
 
 #include <drm/ttm/ttm_backup.h>
 #include <linux/page-flags.h>
+#include <linux/swap.h>
 
 /**
  * struct ttm_backup_shmem - A shmem based ttm_backup subclass.
@@ -106,6 +107,28 @@ static const struct ttm_backup_ops ttm_backup_shmem_ops = {
 	.backup_page = ttm_backup_shmem_backup_page,
 	.fini = ttm_backup_shmem_fini,
 };
+
+/**
+ * ttm_backup_shmem_bytes_avail() - Report the approximate number of bytes of backup space
+ * left for backup.
+ *
+ * This function is intended also for driver use to indicate whether a
+ * backup attempt is meaningful.
+ *
+ * Return: An approximate size of backup space available.
+ */
+u64 ttm_backup_shmem_bytes_avail(void)
+{
+	/*
+	 * The idea behind backing up to shmem is that shmem objects may
+	 * eventually be swapped out. So no point swapping out if there
+	 * is no or low swap-space available. But the accuracy of this
+	 * number also depends on shmem actually swapping out backed-up
+	 * shmem objects without too much buffering.
+	 */
+	return (u64)get_nr_swap_pages() << PAGE_SHIFT;
+}
+EXPORT_SYMBOL_GPL(ttm_backup_shmem_bytes_avail);
 
 /**
  * ttm_backup_shmem_create() - Create a shmem-based struct backup.
