@@ -38,6 +38,7 @@ struct s32_pinctrl_soc_data {
 	const struct pinctrl_pin_desc *pins;
 	unsigned int npins;
 	const struct s32_pin_range *mem_pin_ranges;
+	const struct regmap **regmaps;
 	unsigned int mem_regions;
 };
 

@@ -12,6 +12,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/mfd/nxp-siul2.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -42,12 +43,6 @@
 enum s32_write_type {
 	S32_PINCONF_UPDATE_ONLY,
 	S32_PINCONF_OVERWRITE,
-};
-
-static struct regmap_config s32_regmap_config = {
-	.reg_bits = 32,
-	.val_bits = 32,
-	.reg_stride = 4,
 };
 
 static u32 get_pin_no(u32 pinmux)
@@ -85,14 +80,15 @@ struct s32_pinctrl_context {
 	unsigned int *pads;
 };
 
-/*
+/**
+ * struct s32_pinctrl - private driver data
  * @dev: a pointer back to containing device
  * @pctl: a pointer to the pinctrl device structure
  * @regions: reserved memory regions with start/end pin
  * @info: structure containing information about the pin
  * @gpio_configs: Saved configurations for GPIO pins
  * @gpiop_configs_lock: lock for the `gpio_configs` list
- * @s32_pinctrl_context: Configuration saved over system sleep
+ * @saved_context: Configuration saved over system sleep
  */
 struct s32_pinctrl {
 	struct device *dev;
@@ -123,14 +119,13 @@ s32_get_region(struct pinctrl_dev *pctldev, unsigned int pin)
 	return NULL;
 }
 
-static inline int s32_check_pin(struct pinctrl_dev *pctldev,
-				unsigned int pin)
+static int s32_check_pin(struct pinctrl_dev *pctldev, unsigned int pin)
 {
 	return s32_get_region(pctldev, pin) ? 0 : -EINVAL;
 }
 
-static inline int s32_regmap_read(struct pinctrl_dev *pctldev,
-			   unsigned int pin, unsigned int *val)
+static int s32_regmap_read(struct pinctrl_dev *pctldev, unsigned int pin,
+			   unsigned int *val)
 {
 	struct s32_pinctrl_mem_region *region;
 	unsigned int offset;
@@ -145,7 +140,7 @@ static inline int s32_regmap_read(struct pinctrl_dev *pctldev,
 	return regmap_read(region->map, offset, val);
 }
 
-static inline int s32_regmap_write(struct pinctrl_dev *pctldev,
+static int s32_regmap_write(struct pinctrl_dev *pctldev,
 			    unsigned int pin,
 			    unsigned int val)
 {
@@ -163,7 +158,7 @@ static inline int s32_regmap_write(struct pinctrl_dev *pctldev,
 
 }
 
-static inline int s32_regmap_update(struct pinctrl_dev *pctldev, unsigned int pin,
+static int s32_regmap_update(struct pinctrl_dev *pctldev, unsigned int pin,
 			     unsigned int mask, unsigned int val)
 {
 	struct s32_pinctrl_mem_region *region;
@@ -475,8 +470,8 @@ static int s32_get_slew_regval(int arg)
 	return -EINVAL;
 }
 
-static inline void s32_pin_set_pull(enum pin_config_param param,
-				   unsigned int *mask, unsigned int *config)
+static void s32_pin_set_pull(enum pin_config_param param,
+			     unsigned int *mask, unsigned int *config)
 {
 	switch (param) {
 	case PIN_CONFIG_BIAS_DISABLE:
@@ -838,20 +833,21 @@ static int s32_pinctrl_parse_functions(struct device_node *np,
 static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 				struct s32_pinctrl *ipctl)
 {
+	struct nxp_siul2_mfd *mfd = dev_get_drvdata(pdev->dev.parent);
 	struct s32_pinctrl_soc_info *info = ipctl->info;
-	struct device_node *np = pdev->dev.of_node;
-	struct resource *res;
-	struct regmap *map;
-	void __iomem *base;
-	unsigned int mem_regions = info->soc_data->mem_regions;
+	unsigned int mem_regions;
+	struct device_node *np;
+	u32 nfuncs = 0, i = 0, j;
+	u8 regmap_type;
 	int ret;
-	u32 nfuncs = 0;
-	u32 i = 0;
 
+	np = pdev->dev.parent->of_node;
 	if (!np)
 		return -ENODEV;
 
-	if (mem_regions == 0 || mem_regions >= 10000) {
+	/* one MSCR and one IMCR region per SIUL2 module */
+	mem_regions =  info->soc_data->mem_regions;
+	if (mem_regions != mfd->num_siul2 * 2) {
 		dev_err(&pdev->dev, "mem_regions is invalid: %u\n", mem_regions);
 		return -EINVAL;
 	}
@@ -861,26 +857,11 @@ static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 	if (!ipctl->regions)
 		return -ENOMEM;
 
+	/* Order is MSCR regions first, then IMCR ones */
 	for (i = 0; i < mem_regions; i++) {
-		base = devm_platform_get_and_ioremap_resource(pdev, i, &res);
-		if (IS_ERR(base))
-			return PTR_ERR(base);
-
-		snprintf(ipctl->regions[i].name,
-			 sizeof(ipctl->regions[i].name), "map%u", i);
-
-		s32_regmap_config.name = ipctl->regions[i].name;
-		s32_regmap_config.max_register = resource_size(res) -
-						 s32_regmap_config.reg_stride;
-
-		map = devm_regmap_init_mmio(&pdev->dev, base,
-						&s32_regmap_config);
-		if (IS_ERR(map)) {
-			dev_err(&pdev->dev, "Failed to init regmap[%u]\n", i);
-			return PTR_ERR(map);
-		}
-
-		ipctl->regions[i].map = map;
+		regmap_type = i < mem_regions / 2 ? SIUL2_MSCR : SIUL2_IMCR;
+		j = i % mfd->num_siul2;
+		ipctl->regions[i].map = mfd->siul2[j].regmaps[regmap_type];
 		ipctl->regions[i].pin_range = &info->soc_data->mem_pin_ranges[i];
 	}
 
@@ -918,13 +899,13 @@ static int s32_pinctrl_probe_dt(struct platform_device *pdev,
 int s32_pinctrl_probe(struct platform_device *pdev,
 		      const struct s32_pinctrl_soc_data *soc_data)
 {
-	struct s32_pinctrl *ipctl;
-	int ret;
-	struct pinctrl_desc *s32_pinctrl_desc;
-	struct s32_pinctrl_soc_info *info;
 #ifdef CONFIG_PM_SLEEP
 	struct s32_pinctrl_context *saved_context;
 #endif
+	struct pinctrl_desc *s32_pinctrl_desc;
+	struct s32_pinctrl_soc_info *info;
+	struct s32_pinctrl *ipctl;
+	int ret;
 
 	if (!soc_data || !soc_data->pins || !soc_data->npins) {
 		dev_err(&pdev->dev, "wrong pinctrl info\n");

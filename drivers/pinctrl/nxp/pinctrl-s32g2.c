@@ -10,6 +10,7 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/mfd/nxp-siul2.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -765,12 +766,10 @@ static const struct pinctrl_pin_desc s32_pinctrl_pads_siul2[] = {
 static const struct s32_pin_range s32_pin_ranges_siul2[] = {
 	/* MSCR pin ID ranges */
 	S32_PIN_RANGE(0, 101),
-	S32_PIN_RANGE(112, 122),
-	S32_PIN_RANGE(144, 190),
+	S32_PIN_RANGE(112, 190),
 	/* IMCR pin ID ranges */
 	S32_PIN_RANGE(512, 595),
-	S32_PIN_RANGE(631, 909),
-	S32_PIN_RANGE(942, 1007),
+	S32_PIN_RANGE(631, 1007),
 };
 
 static const struct s32_pinctrl_soc_data s32_pinctrl_data = {
@@ -780,22 +779,9 @@ static const struct s32_pinctrl_soc_data s32_pinctrl_data = {
 	.mem_regions = ARRAY_SIZE(s32_pin_ranges_siul2),
 };
 
-static const struct of_device_id s32_pinctrl_of_match[] = {
-	{
-		.compatible = "nxp,s32g2-siul2-pinctrl",
-		.data = &s32_pinctrl_data,
-	},
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(of, s32_pinctrl_of_match);
-
 static int s32g_pinctrl_probe(struct platform_device *pdev)
 {
-	const struct s32_pinctrl_soc_data *soc_data;
-
-	soc_data = of_device_get_match_data(&pdev->dev);
-
-	return s32_pinctrl_probe(pdev, soc_data);
+	return s32_pinctrl_probe(pdev, &s32_pinctrl_data);
 }
 
 static const struct dev_pm_ops s32g_pinctrl_pm_ops = {
@@ -805,7 +791,6 @@ static const struct dev_pm_ops s32g_pinctrl_pm_ops = {
 static struct platform_driver s32g_pinctrl_driver = {
 	.driver = {
 		.name = "s32g-siul2-pinctrl",
-		.of_match_table = s32_pinctrl_of_match,
 		.pm = pm_sleep_ptr(&s32g_pinctrl_pm_ops),
 		.suppress_bind_attrs = true,
 	},
