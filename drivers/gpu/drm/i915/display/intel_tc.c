@@ -97,6 +97,11 @@ static struct drm_i915_private *tc_to_i915(struct intel_tc_port *tc)
 	return to_i915(tc->dig_port->base.base.dev);
 }
 
+static struct intel_display *tc_to_intel_display(struct intel_tc_port *tc)
+{
+	return to_intel_display(tc->dig_port->base.base.dev);
+}
+
 static bool intel_tc_port_in_mode(struct intel_digital_port *dig_port,
 				  enum tc_port_mode mode)
 {
@@ -1039,9 +1044,9 @@ static void wa_14020908590(struct intel_display *display, bool enable)
 
 static void __xelpdp_tc_phy_enable_tcss_power(struct intel_tc_port *tc, bool enable)
 {
-	struct drm_i915_private *i915 = tc_to_i915(tc);
+	struct intel_display *display = tc_to_intel_display(tc);
 	enum port port = tc->dig_port->base.port;
-	i915_reg_t reg = XELPDP_PORT_BUF_CTL1(i915, port);
+	i915_reg_t reg = XELPDP_PORT_BUF_CTL1(display, port);
 	u32 val;
 
 	assert_tc_cold_blocked(tc);
@@ -1050,15 +1055,15 @@ static void __xelpdp_tc_phy_enable_tcss_power(struct intel_tc_port *tc, bool ena
 	 * Gfx driver WA 14020908590 for PTL tcss_rxdetect_clkswb_req/ack
 	 * handshake violation when pwwreq= 0->1 during TC7/10 entry
 	 */
-	if (DISPLAY_VER(i915) == 30)
-		wa_14020908590(&i915->display, enable);
+	if (DISPLAY_VER(display) == 30)
+		wa_14020908590(display, enable);
 
-	val = intel_de_read(i915, reg);
+	val = intel_de_read(display, reg);
 	if (enable)
 		val |= XELPDP_TCSS_POWER_REQUEST;
 	else
 		val &= ~XELPDP_TCSS_POWER_REQUEST;
-	intel_de_write(i915, reg, val);
+	intel_de_write(display, reg, val);
 }
 
 static bool xelpdp_tc_phy_enable_tcss_power(struct intel_tc_port *tc, bool enable)
