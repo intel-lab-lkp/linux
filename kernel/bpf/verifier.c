@@ -6070,7 +6070,8 @@ static int round_up_stack_depth(struct bpf_verifier_env *env, int stack_depth)
  */
 static int check_max_stack_depth_subprog(struct bpf_verifier_env *env, int idx,
 					 int *subtree_depth, int *depth_frame,
-					 int priv_stack_supported)
+					 int priv_stack_supported,
+					 char *subprog_visited)
 {
 	struct bpf_subprog_info *subprog = env->subprog_info;
 	struct bpf_insn *insn = env->prog->insnsi;
@@ -6120,8 +6121,12 @@ process_func:
 					idx, subprog_depth);
 				return -EACCES;
 			}
-			if (subprog_depth >= BPF_PRIV_STACK_MIN_SIZE)
+			if (subprog_depth >= BPF_PRIV_STACK_MIN_SIZE) {
 				subprog[idx].use_priv_stack = true;
+				subprog_visited[idx] = 1;
+			}
+		} else {
+			subprog_visited[idx] = 1;
 		}
 	}
 continue_func:
@@ -6222,19 +6227,42 @@ continue_func:
 static int check_max_stack_depth(struct bpf_verifier_env *env)
 {
 	struct bpf_subprog_info *si = env->subprog_info;
+	char *subprogs1 = NULL, *subprogs2 = NULL;
 	int ret, subtree_depth = 0, depth_frame;
+	int orig_priv_stack_supported;
 	int priv_stack_supported;
 
 	priv_stack_supported = bpf_enable_priv_stack(env);
 	if (priv_stack_supported < 0)
 		return priv_stack_supported;
 
+	orig_priv_stack_supported = priv_stack_supported;
+	if (orig_priv_stack_supported != NO_PRIV_STACK) {
+		subprogs1 = kvmalloc(env->subprog_cnt * 2, __GFP_ZERO);
+		if (!subprogs1)
+			priv_stack_supported = NO_PRIV_STACK;
+		else
+			subprogs2 = subprogs1 + env->subprog_cnt;
+	}
+
 	for (int i = 0; i < env->subprog_cnt; i++) {
 		if (!i || si[i].is_async_cb) {
 			ret = check_max_stack_depth_subprog(env, i, &subtree_depth, &depth_frame,
-							    priv_stack_supported);
+							    priv_stack_supported, subprogs2);
 			if (ret < 0)
-				return ret;
+				goto out;
+
+			if (priv_stack_supported != NO_PRIV_STACK) {
+				for (int j = 0; j < env->subprog_cnt; j++) {
+					if (subprogs1[j] && subprogs2[j]) {
+						priv_stack_supported = NO_PRIV_STACK;
+						break;
+					}
+					subprogs1[j] |= subprogs2[j];
+				}
+			}
+			if (priv_stack_supported != NO_PRIV_STACK)
+				memset(subprogs2, 0, env->subprog_cnt);
 		}
 	}
 	if (priv_stack_supported == NO_PRIV_STACK) {
@@ -6243,10 +6271,18 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 				depth_frame, subtree_depth);
 			return -EACCES;
 		}
+		if (orig_priv_stack_supported == PRIV_STACK_ADAPTIVE) {
+			for (int i = 0; i < env->subprog_cnt; i++)
+				si[i].use_priv_stack = false;
+		}
 	}
 	if (si[0].use_priv_stack)
 		env->prog->aux->use_priv_stack = true;
-	return 0;
+	ret = 0;
+
+out:
+	kvfree(subprogs1);
+	return ret;
 }
 
 #ifndef CONFIG_BPF_JIT_ALWAYS_ON
