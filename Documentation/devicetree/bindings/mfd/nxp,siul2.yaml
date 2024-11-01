@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2024 NXP
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/nxp,siul2.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: System Integration Unit Lite2 (SIUL2)
+
+maintainers:
+  - Andrei Stefanescu <andrei.stefanescu@oss.nxp.com>
+
+description: |
+  SIUL2 is a hardware block which implements pinmuxing,
+  pinconf, GPIOs (some with interrupt capability) and
+  registers which contain information about the SoC.
+  There are generally two SIUL2 modules whose functionality
+  is grouped together. For example interrupt configuration
+  registers are part of SIUL2_1 even though interrupts are
+  also available for SIUL2_0 pins.
+
+  The following register types are exported by SIUL2:
+    - MIDR (MCU ID Register) - information related to the SoC
+    - interrupt configuration registers
+    - MSCR (Multiplexed Signal Configuration Register) - pinmuxing and pinconf
+    - IMCR (Input Multiplexed Signal Configuration Register)- pinmuxing
+    - PGPDO (Parallel GPIO Pad Data Out Register) - GPIO output value
+    - PGPDI (Parallel GPIO Pad Data In Register) - GPIO input value
+
+  Most registers are 32bit wide with the exception of PGPDO/PGPDI which are
+  16bit wide.
+
+properties:
+  compatible:
+    enum:
+      - nxp,s32g2-siul2
+      - nxp,s32g3-siul2
+
+  reg:
+    items:
+      - description: SIUL2_0 module memory
+      - description: SIUL2_1 module memory
+
+  reg-names:
+    items:
+      - const: siul20
+      - const: siul21
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+  gpio-ranges:
+    minItems: 2
+    maxItems: 2
+
+  gpio-reserved-ranges:
+    minItems: 2
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-controller: true
+
+  '#interrupt-cells':
+    const: 2
+
+  nvmem-layout:
+    $ref: /schemas/nvmem/layouts/nvmem-layout.yaml#
+    description:
+      This container may reference an NVMEM layout parser.
+
+patternProperties:
+  '-hog(-[0-9]+)?$':
+    required:
+      - gpio-hog
+
+  '-pins$':
+    type: object
+    additionalProperties: false
+
+    patternProperties:
+      '-grp[0-9]$':
+        type: object
+        allOf:
+          - $ref: /schemas/pinctrl/pinmux-node.yaml#
+          - $ref: /schemas/pinctrl/pincfg-node.yaml#
+        description:
+          Pinctrl node's client devices specify pin muxes using subnodes,
+          which in turn use the standard properties below.
+
+        properties:
+          bias-disable: true
+          bias-high-impedance: true
+          bias-pull-up: true
+          bias-pull-down: true
+          drive-open-drain: true
+          input-enable: true
+          output-enable: true
+
+          pinmux:
+            description: |
+              An integer array for representing pinmux configurations of
+              a device. Each integer consists of a PIN_ID and a 4-bit
+              selected signal source(SSS) as IOMUX setting, which is
+              calculated as: pinmux = (PIN_ID << 4 | SSS)
+
+          slew-rate:
+            description: Supported slew rate based on Fmax values (MHz)
+            enum: [83, 133, 150, 166, 208]
+
+        additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - gpio-controller
+  - "#gpio-cells"
+  - gpio-ranges
+  - gpio-reserved-ranges
+  - interrupts
+  - interrupt-controller
+  - "#interrupt-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    siul2: siul2@4009c000 {
+      compatible = "nxp,s32g2-siul2";
+      reg = <0x4009c000 0x179c>,
+            <0x44010000 0x17b0>;
+      reg-names = "siul20", "siul21";
+      gpio-controller;
+      #gpio-cells = <2>;
+      gpio-ranges = <&siul2 0 0 102>, <&siul2 112 112 79>;
+      gpio-reserved-ranges = <102 10>, <123 21>;
+      interrupt-controller;
+      #interrupt-cells = <2>;
+      interrupts = <GIC_SPI 210 IRQ_TYPE_LEVEL_HIGH>;
+
+      jtag_pins: jtag-pins {
+        jtag-grp0 {
+          pinmux = <0x0>;
+          input-enable;
+          bias-pull-up;
+          slew-rate = <166>;
+        };
+
+        jtag-grp1 {
+          pinmux = <0x11>;
+          slew-rate = <166>;
+        };
+
+        jtag-grp2 {
+          pinmux = <0x40>;
+          input-enable;
+          bias-pull-down;
+          slew-rate = <166>;
+        };
+
+        jtag-grp3 {
+          pinmux = <0x23c0>,
+                   <0x23d0>,
+                   <0x2320>;
+        };
+
+        jtag-grp4 {
+          pinmux = <0x51>;
+          input-enable;
+          bias-pull-up;
+          slew-rate = <166>;
+        };
+      };
+
+      nvmem-layout {
+        compatible = "fixed-layout";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        soc-major@0 {
+          reg = <0 0x4>;
+        };
+      };
+    };
+...
