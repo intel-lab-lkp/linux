@@ -206,6 +206,12 @@ static int bbnsm_rtc_probe(struct platform_device *pdev)
 	return devm_rtc_register_device(bbnsm->rtc);
 }
 
+static void bbnsm_rtc_remove(struct platform_device *pdev)
+{
+	dev_pm_clear_wake_irq(&pdev->dev);
+	device_init_wakeup(&pdev->dev, false);
+}
+
 static const struct of_device_id bbnsm_dt_ids[] = {
 	{ .compatible = "nxp,imx93-bbnsm-rtc" },
 	{ /* sentinel */ },
@@ -218,6 +224,7 @@ static struct platform_driver bbnsm_rtc_driver = {
 		.of_match_table = bbnsm_dt_ids,
 	},
 	.probe = bbnsm_rtc_probe,
+	.remove_new = bbnsm_rtc_remove,
 };
 module_platform_driver(bbnsm_rtc_driver);
 
