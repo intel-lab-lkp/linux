@@ -125,6 +125,15 @@ properties:
       3. the inside clock, which be sent to MAC, will be inversed in RMII case when
          the reference clock is from MAC.
 
+  mediatek,mac-wol-noninverted:
+    type: boolean
+    description:
+      Previously the driver parsed the mediatek,mac-wol property backwards,
+      enabling the PHY WOL when the property was present, and vice versa. That
+      behavior is kept for backwards compatility, but newer DTs should specify
+      this property to have the driver handle the mediatek,mac-wol property as
+      it is described in this binding.
+
   mediatek,mac-wol:
     type: boolean
     description:
@@ -140,6 +149,7 @@ required:
   - clock-names
   - phy-mode
   - mediatek,pericfg
+  - mediatek,mac-wol-noninverted
 
 unevaluatedProperties: false
 
@@ -181,4 +191,5 @@ examples:
         snps,rxpbl = <1>;
         snps,reset-gpio = <&pio 87 GPIO_ACTIVE_LOW>;
         snps,reset-delays-us = <0 10000 10000>;
+        mediatek,mac-wol-noninverted;
     };
