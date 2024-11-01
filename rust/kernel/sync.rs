@@ -9,6 +9,7 @@ use crate::types::Opaque;
 
 mod arc;
 pub mod atomic;
+pub mod barrier;
 mod condvar;
 pub mod lock;
 mod locked_by;
