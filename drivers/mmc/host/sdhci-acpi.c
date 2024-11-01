@@ -5,27 +5,30 @@
  * Copyright (c) 2012, Intel Corporation.
  */
 
+#include <linux/acpi.h>
 #include <linux/bitfield.h>
-#include <linux/init.h>
-#include <linux/export.h>
-#include <linux/module.h>
+#include <linux/bitops.h>
+#include <linux/compiler.h>
+#include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/dma-mapping.h>
+#include <linux/dmi.h>
+#include <linux/err.h>
+#include <linux/errno.h>
+#include <linux/export.h>
+#include <linux/init.h>
+#include <linux/interrupt.h>
+#include <linux/io.h>
+#include <linux/ioport.h>
+#include <linux/mod_devicetable.h>
+#include <linux/module.h>
 #include <linux/pinctrl/pinconf-generic.h>
 #include <linux/platform_device.h>
-#include <linux/ioport.h>
-#include <linux/io.h>
-#include <linux/dma-mapping.h>
-#include <linux/compiler.h>
-#include <linux/stddef.h>
-#include <linux/bitops.h>
-#include <linux/types.h>
-#include <linux/err.h>
-#include <linux/interrupt.h>
-#include <linux/acpi.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
-#include <linux/delay.h>
-#include <linux/dmi.h>
+#include <linux/stddef.h>
+#include <linux/types.h>
+#include <linux/uuid.h>
 
 #include <linux/mmc/host.h>
 #include <linux/mmc/pm.h>
