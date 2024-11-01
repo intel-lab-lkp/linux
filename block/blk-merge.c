@@ -358,7 +358,8 @@ split:
 	 * split size so that each bio is properly block size aligned, even if
 	 * we do not use the full hardware limits.
 	 */
-	bytes = ALIGN_DOWN(bytes, lim->logical_block_size);
+	bytes = ALIGN_DOWN(bytes, lim->zone_write_granularity ?
+			lim->zone_write_granularity : lim->logical_block_size);
 
 	/*
 	 * Bio splitting may cause subtle trouble such as hang when doing sync
