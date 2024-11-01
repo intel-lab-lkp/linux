@@ -35,6 +35,7 @@ pub mod error;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
 pub mod firmware;
 pub mod init;
+pub mod io;
 pub mod ioctl;
 #[cfg(CONFIG_KUNIT)]
 pub mod kunit;
@@ -44,6 +45,7 @@ pub mod net;
 pub mod page;
 pub mod prelude;
 pub mod print;
+pub mod processor;
 pub mod sizes;
 pub mod rbtree;
 mod static_assert;
