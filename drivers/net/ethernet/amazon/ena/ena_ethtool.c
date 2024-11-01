@@ -1121,7 +1121,7 @@ static void ena_dump_stats_ex(struct ena_adapter *adapter, u8 *buf)
 	u8 *strings_buf;
 	u64 *data_buf;
 	int strings_num;
-	int i, rc;
+	int i;
 
 	strings_num = ena_get_sw_stats_count(adapter);
 	if (strings_num <= 0) {
@@ -1150,17 +1150,16 @@ static void ena_dump_stats_ex(struct ena_adapter *adapter, u8 *buf)
 	/* If there is a buffer, dump stats, otherwise print them to dmesg */
 	if (buf)
 		for (i = 0; i < strings_num; i++) {
-			rc = snprintf(buf, ETH_GSTRING_LEN + sizeof(u64),
-				      "%s %llu\n",
-				      strings_buf + i * ETH_GSTRING_LEN,
-				      data_buf[i]);
-			buf += rc;
+			ethtool_sprintf(&buf, "%s %llu\n", strings_buf,
+					data_buf[i]);
+			strings_buf += ETH_GSTRING_LEN;
 		}
 	else
-		for (i = 0; i < strings_num; i++)
+		for (i = 0; i < strings_num; i++) {
 			netif_err(adapter, drv, netdev, "%s: %llu\n",
-				  strings_buf + i * ETH_GSTRING_LEN,
-				  data_buf[i]);
+				  strings_buf, data_buf[i]);
+			strings_buf += ETH_GSTRING_LEN;
+		}
 
 	kfree(strings_buf);
 	kfree(data_buf);
