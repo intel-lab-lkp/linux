@@ -682,33 +682,35 @@ struct sdhci_acpi_uid_slot {
 };
 
 static const struct sdhci_acpi_uid_slot sdhci_acpi_uids[] = {
-	{ "80865ACA", NULL, &sdhci_acpi_slot_int_sd },
-	{ "80865ACC", NULL, &sdhci_acpi_slot_int_emmc },
-	{ "80865AD0", NULL, &sdhci_acpi_slot_int_sdio },
 	{ "80860F14" , "1" , &sdhci_acpi_slot_int_emmc },
 	{ "80860F14" , "2" , &sdhci_acpi_slot_int_sdio },
 	{ "80860F14" , "3" , &sdhci_acpi_slot_int_sd   },
 	{ "80860F16" , NULL, &sdhci_acpi_slot_int_sd   },
+	{ "80865ACA", NULL, &sdhci_acpi_slot_int_sd },
+	{ "80865ACC", NULL, &sdhci_acpi_slot_int_emmc },
+	{ "80865AD0", NULL, &sdhci_acpi_slot_int_sdio },
+	{ "AMDI0040", NULL, &sdhci_acpi_slot_amd_emmc },
+	{ "AMDI0041", NULL, &sdhci_acpi_slot_amd_emmc },
 	{ "INT33BB"  , "2" , &sdhci_acpi_slot_int_sdio },
 	{ "INT33BB"  , "3" , &sdhci_acpi_slot_int_sd },
 	{ "INT33C6"  , NULL, &sdhci_acpi_slot_int_sdio },
 	{ "INT3436"  , NULL, &sdhci_acpi_slot_int_sdio },
 	{ "INT344D"  , NULL, &sdhci_acpi_slot_int_sdio },
-	{ "PNP0FFF"  , "3" , &sdhci_acpi_slot_int_sd   },
 	{ "PNP0D40"  },
+	{ "PNP0FFF"  , "3" , &sdhci_acpi_slot_int_sd   },
 	{ "QCOM8051", NULL, &sdhci_acpi_slot_qcom_sd_3v },
 	{ "QCOM8052", NULL, &sdhci_acpi_slot_qcom_sd },
-	{ "AMDI0040", NULL, &sdhci_acpi_slot_amd_emmc },
-	{ "AMDI0041", NULL, &sdhci_acpi_slot_amd_emmc },
-	{ },
+	{ }
 };
 
 static const struct acpi_device_id sdhci_acpi_ids[] = {
+	{ "80860F14" },
+	{ "80860F16" },
 	{ "80865ACA" },
 	{ "80865ACC" },
 	{ "80865AD0" },
-	{ "80860F14" },
-	{ "80860F16" },
+	{ "AMDI0040" },
+	{ "AMDI0041" },
 	{ "INT33BB"  },
 	{ "INT33C6"  },
 	{ "INT3436"  },
@@ -716,9 +718,7 @@ static const struct acpi_device_id sdhci_acpi_ids[] = {
 	{ "PNP0D40"  },
 	{ "QCOM8051" },
 	{ "QCOM8052" },
-	{ "AMDI0040" },
-	{ "AMDI0041" },
-	{ },
+	{ }
 };
 MODULE_DEVICE_TABLE(acpi, sdhci_acpi_ids);
 
