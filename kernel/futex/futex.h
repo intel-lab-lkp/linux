@@ -349,6 +349,9 @@ extern int __futex_wait(u32 __user *uaddr, unsigned int flags, u32 val,
 extern int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val,
 		      ktime_t *abs_time, u32 bitset);
 
+extern long do_set_robust_list2(struct robust_list_head __user *head,
+			 int index, unsigned int type);
+
 /**
  * struct futex_vector - Auxiliary struct for futex_waitv()
  * @w: Userspace provided data
