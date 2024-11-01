@@ -64,3 +64,4 @@ documentation, or deleted if it has served its purpose.
    vmemmap_dedup
    z3fold
    zsmalloc
+   vma_locks
