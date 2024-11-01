@@ -114,6 +114,28 @@ static __poll_t pidfd_poll(struct file *file, struct poll_table_struct *pts)
 	return poll_flags;
 }
 
+static bool can_borrow_groups(const struct cred *cred)
+{
+	kuid_t uid = current_uid();
+	kgid_t gid = current_gid();
+	kuid_t euid = current_euid();
+	kgid_t egid = current_egid();
+
+	if (may_setgroups())
+		return 1;
+	/* TODO: make sure peer actually allowed to borrow his groups. */
+
+	/* Make sure the process can't switch uid/gid. */
+	if (!uid_eq(euid, uid) || !uid_eq(current_suid(), uid))
+		return 0;
+	if (!gid_eq(egid, gid) || !gid_eq(current_sgid(), gid))
+		return 0;
+	/* Make sure the euid/egid of 2 processes are equal. */
+	if (!uid_eq(cred->euid, euid) || !gid_eq(cred->egid, egid))
+		return 0;
+	return 1;
+}
+
 static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct task_struct *task __free(put_task) = NULL;
@@ -141,8 +163,10 @@ static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	 * We're trying to open a file descriptor to the namespace so perform a
 	 * filesystem cred ptrace check. Also, we mirror nsfs behavior.
 	 */
+/*
 	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS))
 		return -EACCES;
+*/
 
 	switch (cmd) {
 	/* Namespaces that hang of nsproxy. */
@@ -209,6 +233,13 @@ static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			rcu_read_unlock();
 		}
 		break;
+	case PIDFD_BORROW_GROUPS:
+		if (task == current)
+			return 0;
+		if (!can_borrow_groups(file->f_cred))
+			return -EPERM;
+		set_current_groups(file->f_cred->group_info);
+		return 0;
 	default:
 		return -ENOIOCTLCMD;
 	}
