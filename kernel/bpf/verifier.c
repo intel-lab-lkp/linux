@@ -6023,16 +6023,30 @@ static int check_ptr_alignment(struct bpf_verifier_env *env,
 
 static int bpf_enable_priv_stack(struct bpf_verifier_env *env)
 {
+	bool force_priv_stack = env->prog->aux->use_priv_stack;
 	struct bpf_subprog_info *si;
+	int ret;
 
-	if (!bpf_jit_supports_private_stack())
+	if (!bpf_jit_supports_private_stack()) {
+		if (force_priv_stack) {
+			verbose(env, "Private stack not supported by jit\n");
+			return -EACCES;
+		}
+
 		return NO_PRIV_STACK;
+	}
 
+	ret = PRIV_STACK_ADAPTIVE;
 	switch (env->prog->type) {
 	case BPF_PROG_TYPE_KPROBE:
 	case BPF_PROG_TYPE_TRACEPOINT:
 	case BPF_PROG_TYPE_PERF_EVENT:
 	case BPF_PROG_TYPE_RAW_TRACEPOINT:
+		break;
+	case BPF_PROG_TYPE_STRUCT_OPS:
+		if (!force_priv_stack)
+			return NO_PRIV_STACK;
+		ret = PRIV_STACK_ALWAYS;
 		break;
 	case BPF_PROG_TYPE_TRACING:
 		if (env->prog->expected_attach_type != BPF_TRACE_ITER)
@@ -6044,11 +6058,18 @@ static int bpf_enable_priv_stack(struct bpf_verifier_env *env)
 
 	si = env->subprog_info;
 	for (int i = 0; i < env->subprog_cnt; i++) {
-		if (si[i].has_tail_call)
+		if (si[i].has_tail_call) {
+			if (ret == PRIV_STACK_ALWAYS) {
+				verbose(env,
+					"Private stack not supported due to tail call presence\n");
+				return -EACCES;
+			}
+
 			return NO_PRIV_STACK;
+		}
 	}
 
-	return PRIV_STACK_ADAPTIVE;
+	return ret;
 }
 
 static int round_up_stack_depth(struct bpf_verifier_env *env, int stack_depth)
@@ -6121,7 +6142,8 @@ process_func:
 					idx, subprog_depth);
 				return -EACCES;
 			}
-			if (subprog_depth >= BPF_PRIV_STACK_MIN_SIZE) {
+			if (priv_stack_supported == PRIV_STACK_ALWAYS ||
+			    subprog_depth >= BPF_PRIV_STACK_MIN_SIZE) {
 				subprog[idx].use_priv_stack = true;
 				subprog_visited[idx] = 1;
 			}
@@ -6270,6 +6292,12 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 			verbose(env, "combined stack size of %d calls is %d. Too large\n",
 				depth_frame, subtree_depth);
 			return -EACCES;
+		}
+		if (orig_priv_stack_supported == PRIV_STACK_ALWAYS) {
+			verbose(env,
+				"Private stack not supported due to possible nested subprog run\n");
+			ret = -EACCES;
+			goto out;
 		}
 		if (orig_priv_stack_supported == PRIV_STACK_ADAPTIVE) {
 			for (int i = 0; i < env->subprog_cnt; i++)
