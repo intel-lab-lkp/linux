@@ -82,7 +82,7 @@ struct drm_dp_mst_branch;
  * by &drm_dp_mst_topology_mgr.base.lock.
  * @dsc_aux: aux to which DSC decompression request should be sent,
  * only set if DSC decompression is possible.
- * @passthrough_aux: parent aux to which DSC pass-through requests should be
+ * @dsc_passthrough_aux: parent aux to which DSC pass-through requests should be
  * sent, only set if DSC pass-through is possible.
  * @parent: branch device parent of this port
  * @connector: DRM connector this port is connected to. Protected by
@@ -138,7 +138,7 @@ struct drm_dp_mst_port {
 	struct drm_dp_mst_branch *mstb;
 	struct drm_dp_aux aux; /* i2c bus for this port? */
 	struct drm_dp_aux *dsc_aux;
-	struct drm_dp_aux *passthrough_aux;
+	struct drm_dp_aux *dsc_passthrough_aux;
 	struct drm_dp_mst_branch *parent;
 
 	struct drm_connector *connector;
@@ -959,7 +959,7 @@ bool drm_dp_mst_port_is_logical(struct drm_dp_mst_port *port)
 }
 
 struct drm_dp_aux *drm_dp_mst_aux_for_parent(struct drm_dp_mst_port *port);
-struct drm_dp_aux *drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port);
+void drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port);
 
 static inline struct drm_dp_mst_topology_state *
 to_drm_dp_mst_topology_state(struct drm_private_state *state)
