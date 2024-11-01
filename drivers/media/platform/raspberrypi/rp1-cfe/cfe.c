@@ -2341,6 +2341,12 @@ static int cfe_probe(struct platform_device *pdev)
 		goto err_cfe_put;
 	}
 
+	ret = vb2_dma_contig_set_max_seg_size(&pdev->dev, UINT_MAX);
+	if (ret) {
+		dev_err(&pdev->dev, "Unable to set max_seg_size\n");
+		goto err_cfe_put;
+	}
+
 	/* TODO: Enable clock only when running. */
 	cfe->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(cfe->clk))
