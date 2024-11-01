@@ -114,20 +114,18 @@
 		#size-cells = <1>;
 		ranges = <0 0 0 0x80000000>;
 
-		pinctrl: pinctrl@4009c240 {
-			compatible = "nxp,s32g2-siul2-pinctrl";
-				/* MSCR0-MSCR101 registers on siul2_0 */
-			reg = <0x4009c240 0x198>,
-				/* MSCR112-MSCR122 registers on siul2_1 */
-			      <0x44010400 0x2c>,
-				/* MSCR144-MSCR190 registers on siul2_1 */
-			      <0x44010480 0xbc>,
-				/* IMCR0-IMCR83 registers on siul2_0 */
-			      <0x4009ca40 0x150>,
-				/* IMCR119-IMCR397 registers on siul2_1 */
-			      <0x44010c1c 0x45c>,
-				/* IMCR430-IMCR495 registers on siul2_1 */
-			      <0x440110f8 0x108>;
+		siul2: siul2@4009c000 {
+			compatible = "nxp,s32g2-siul2";
+			reg = <0x4009c000 0x179c>,
+			      <0x44010000 0x17b0>;
+			reg-names = "siul20", "siul21";
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&siul2 0 0 102>, <&siul2 112 112 79>;
+			gpio-reserved-ranges = <102 10>, <123 21>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			interrupts = <GIC_SPI 210 IRQ_TYPE_LEVEL_HIGH>;
 
 			jtag_pins: jtag-pins {
 				jtag-grp0 {
