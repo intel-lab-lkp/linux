@@ -1006,8 +1006,6 @@ static void __maybe_unused sdhci_acpi_reset_signal_voltage_if_needed(
 	}
 }
 
-#ifdef CONFIG_PM_SLEEP
-
 static int sdhci_acpi_suspend(struct device *dev)
 {
 	struct sdhci_acpi_host *c = dev_get_drvdata(dev);
@@ -1033,10 +1031,6 @@ static int sdhci_acpi_resume(struct device *dev)
 
 	return sdhci_resume_host(c->host);
 }
-
-#endif
-
-#ifdef CONFIG_PM
 
 static int sdhci_acpi_runtime_suspend(struct device *dev)
 {
@@ -1064,12 +1058,9 @@ static int sdhci_acpi_runtime_resume(struct device *dev)
 	return sdhci_runtime_resume_host(c->host, 0);
 }
 
-#endif
-
 static const struct dev_pm_ops sdhci_acpi_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(sdhci_acpi_suspend, sdhci_acpi_resume)
-	SET_RUNTIME_PM_OPS(sdhci_acpi_runtime_suspend,
-			sdhci_acpi_runtime_resume, NULL)
+	SYSTEM_SLEEP_PM_OPS(sdhci_acpi_suspend, sdhci_acpi_resume)
+	RUNTIME_PM_OPS(sdhci_acpi_runtime_suspend, sdhci_acpi_runtime_resume, NULL)
 };
 
 static struct platform_driver sdhci_acpi_driver = {
@@ -1077,7 +1068,7 @@ static struct platform_driver sdhci_acpi_driver = {
 		.name			= "sdhci-acpi",
 		.probe_type		= PROBE_PREFER_ASYNCHRONOUS,
 		.acpi_match_table	= sdhci_acpi_ids,
-		.pm			= &sdhci_acpi_pm_ops,
+		.pm			= pm_ptr(&sdhci_acpi_pm_ops),
 	},
 	.probe	= sdhci_acpi_probe,
 	.remove = sdhci_acpi_remove,
