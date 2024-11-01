@@ -1424,8 +1424,8 @@ static int ltr501_probe(struct i2c_client *client)
 	struct ltr501_data *data;
 	struct iio_dev *indio_dev;
 	struct regmap *regmap;
+	const void *ddata = NULL;
 	int partid, chip_idx;
-	const void *ddata;
 	const char *name;
 	int ret;
 
