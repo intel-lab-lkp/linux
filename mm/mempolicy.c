@@ -420,7 +420,7 @@ void mpol_rebind_mm(struct mm_struct *mm, nodemask_t *new)
 	mmap_write_lock(mm);
 	for_each_vma(vmi, vma) {
 		vma_start_write(vma);
-		mpol_rebind_policy(vma->vm_policy, new);
+		mpol_rebind_policy(vma_policy(vma), new);
 	}
 	mmap_write_unlock(mm);
 }
@@ -805,8 +805,8 @@ static int vma_replace_policy(struct vm_area_struct *vma,
 			goto err_out;
 	}
 
-	old = vma->vm_policy;
-	vma->vm_policy = new; /* protected by mmap_lock */
+	old = vma_policy(vma);
+	vma_policy(vma) = new; /* protected by mmap_lock */
 	mpol_put(old);
 
 	return 0;
@@ -830,7 +830,7 @@ static int mbind_range(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		vmstart = vma->vm_start;
 	}
 
-	if (mpol_equal(vma->vm_policy, new_pol)) {
+	if (mpol_equal(vma_policy(vma), new_pol)) {
 		*prev = vma;
 		return 0;
 	}
@@ -1797,7 +1797,7 @@ struct mempolicy *__get_vma_policy(struct vm_area_struct *vma,
 {
 	*ilx = 0;
 	return (vma->vm_ops && vma->vm_ops->get_policy) ?
-		vma->vm_ops->get_policy(vma, addr, ilx) : vma->vm_policy;
+		vma->vm_ops->get_policy(vma, addr, ilx) : vma_policy(vma);
 }
 
 /*
@@ -1847,7 +1847,7 @@ bool vma_policy_mof(struct vm_area_struct *vma)
 		return ret;
 	}
 
-	pol = vma->vm_policy;
+	pol = vma_policy(vma);
 	if (!pol)
 		pol = get_task_policy(current);
 
@@ -2558,11 +2558,11 @@ unsigned long alloc_pages_bulk_array_mempolicy_noprof(gfp_t gfp,
 
 int vma_dup_policy(struct vm_area_struct *src, struct vm_area_struct *dst)
 {
-	struct mempolicy *pol = mpol_dup(src->vm_policy);
+	struct mempolicy *pol = mpol_dup(vma_policy(src));
 
 	if (IS_ERR(pol))
 		return PTR_ERR(pol);
-	dst->vm_policy = pol;
+	vma_policy(dst) = pol;
 	return 0;
 }
 

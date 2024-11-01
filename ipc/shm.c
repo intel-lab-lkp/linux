@@ -577,7 +577,7 @@ static struct mempolicy *shm_get_policy(struct vm_area_struct *vma,
 					unsigned long addr, pgoff_t *ilx)
 {
 	struct shm_file_data *sfd = shm_file_data(vma->vm_file);
-	struct mempolicy *mpol = vma->vm_policy;
+	struct mempolicy *mpol = vma_policy(vma);
 
 	if (sfd->vm_ops->get_policy)
 		mpol = sfd->vm_ops->get_policy(vma, addr, ilx);
