@@ -5960,7 +5960,8 @@ __kmem_cache_alias(const char *name, unsigned int size, unsigned int align,
 	s = find_mergeable(size, align, flags, name, ctor);
 	if (s) {
 		if (sysfs_slab_alias(s, name))
-			return NULL;
+			pr_err("SLUB: Unable to add slab alias %s to sysfs\n",
+			       name);
 
 		s->refcount++;
 
@@ -6048,9 +6049,15 @@ int do_kmem_cache_create(struct kmem_cache *s, const char *name,
 		goto out;
 	}
 
+	/*
+	 * Failing to create sysfs files is not critical to SLUB functionality.
+	 * If it fails, proceed with cache creation without these files.
+	 */
 	err = sysfs_slab_add(s);
-	if (err)
-		goto out;
+	if (err) {
+		err = 0;
+		pr_err("SLUB: Unable to add slab %s to sysfs\n", s->name);
+	}
 
 	if (s->flags & SLAB_STORE_USER)
 		debugfs_slab_add(s);
@@ -7120,7 +7127,8 @@ out_del_kobj:
 
 void sysfs_slab_unlink(struct kmem_cache *s)
 {
-	kobject_del(&s->kobj);
+	if (s->kobj.state_in_sysfs)
+		kobject_del(&s->kobj);
 }
 
 void sysfs_slab_release(struct kmem_cache *s)
@@ -7149,6 +7157,11 @@ static int sysfs_slab_alias(struct kmem_cache *s, const char *name)
 		 * If we have a leftover link then remove it.
 		 */
 		sysfs_remove_link(&slab_kset->kobj, name);
+		/*
+		 * The original cache may have failed to generate sysfs file.
+		 * In that case, sysfs_create_link() returns -ENOENT and
+		 * symbolic link creation is skipped.
+		 */
 		return sysfs_create_link(&slab_kset->kobj, &s->kobj, name);
 	}
 
