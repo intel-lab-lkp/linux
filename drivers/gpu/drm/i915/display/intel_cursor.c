@@ -25,6 +25,7 @@
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
 #include "intel_vblank.h"
+#include "intel_vrr.h"
 #include "skl_watermark.h"
 
 /* Cursor formats */
@@ -798,6 +799,7 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 		to_intel_crtc_state(crtc->base.state);
 	struct intel_crtc_state *new_crtc_state;
 	struct intel_vblank_evade_ctx evade;
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 	int ret;
 
 	/*
@@ -916,6 +918,9 @@ intel_legacy_cursor_update(struct drm_plane *_plane,
 	} else {
 		intel_plane_disable_arm(NULL, plane, crtc_state);
 	}
+
+	if (crtc_state->has_psr)
+		intel_vrr_psr_send_push(crtc, cpu_transcoder);
 
 	local_irq_enable();
 
