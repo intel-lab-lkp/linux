@@ -244,7 +244,7 @@ void *codetag_alloc_module_section(struct module *mod, const char *name,
 {
 	const char *type_name = name + strlen(CODETAG_SECTION_PREFIX);
 	struct codetag_type *cttype;
-	void *ret = NULL;
+	void *ret = ERR_PTR(-EINVAL);
 
 	mutex_lock(&codetag_lock);
 	list_for_each_entry(cttype, &codetag_types, link) {

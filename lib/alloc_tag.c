@@ -437,7 +437,7 @@ static void *reserve_module_tags(struct module *mod, unsigned long size,
 
 	/* If no tags return NULL */
 	if (size < sizeof(struct alloc_tag))
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
 	/*
 	 * align is always power of 2, so we can use IS_ALIGNED and ALIGN.

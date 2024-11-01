@@ -2316,6 +2316,10 @@ static int move_module(struct module *mod, struct load_info *info)
 		if (codetag_needs_module_section(mod, sname, shdr->sh_size)) {
 			dest = codetag_alloc_module_section(mod, sname, shdr->sh_size,
 					arch_mod_section_prepend(mod, i), shdr->sh_addralign);
+			if (WARN_ON(!dest)) {
+				ret = -EINVAL;
+				goto out_err;
+			}
 			if (IS_ERR(dest)) {
 				ret = PTR_ERR(dest);
 				goto out_err;
