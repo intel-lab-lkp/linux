@@ -71,8 +71,8 @@ int vc4_dumb_fixup_args(struct drm_mode_create_dumb *args)
 	if (args->pitch < min_pitch)
 		args->pitch = min_pitch;
 
-	if (args->size < args->pitch * args->height)
-		args->size = args->pitch * args->height;
+	if (args->size < (__u64)args->pitch * args->height)
+		args->size = (__u64)args->pitch * args->height;
 
 	return 0;
 }
