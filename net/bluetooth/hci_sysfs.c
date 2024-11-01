@@ -73,6 +73,8 @@ void hci_conn_del_sysfs(struct hci_conn *conn)
 		return;
 	}
 
+	device_move(&conn->dev, NULL, DPM_ORDER_DEV_LAST);
+
 	while (1) {
 		struct device *dev;
 
