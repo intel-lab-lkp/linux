@@ -181,7 +181,10 @@ enum attr_idn {
 	QUERY_ATTR_IDN_WB_BUFF_LIFE_TIME_EST    = 0x1E,
 	QUERY_ATTR_IDN_CURR_WB_BUFF_SIZE        = 0x1F,
 	QUERY_ATTR_IDN_EXT_IID_EN		= 0x2A,
-	QUERY_ATTR_IDN_TIMESTAMP		= 0x30
+	QUERY_ATTR_IDN_TIMESTAMP		= 0x30,
+	QUERY_ATTR_IDN_WB_BUF_RESIZE_HINT	= 0x3C,
+	QUERY_ATTR_IDN_WB_BUF_RESIZE_EN		= 0x3D,
+	QUERY_ATTR_IDN_WB_BUF_RESIZE_STATUS	= 0x3E,
 };
 
 /* Descriptor idn for Query requests */
@@ -453,6 +456,13 @@ enum ufs_ref_clk_freq {
 	REF_CLK_FREQ_38_4_MHZ	= 2,
 	REF_CLK_FREQ_52_MHZ	= 3,
 	REF_CLK_FREQ_INVAL	= -1,
+};
+
+/* bWriteBoosterBufferResizeEn attribute */
+enum wb_resize_en {
+	WB_RESIZE_EN_IDLE	= 0,
+	WB_RESIZE_EN_DECREASE	= 1,
+	WB_RESIZE_EN_INCREASE	= 2,
 };
 
 /* Query response result code */
