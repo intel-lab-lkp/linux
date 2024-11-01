@@ -3821,7 +3821,7 @@ static struct fib6_info *ip6_route_info_create(struct fib6_config *cfg,
 			rt->fib6_flags = RTF_REJECT | RTF_NONEXTHOP;
 	}
 
-	if (!ipv6_addr_any(&cfg->fc_prefsrc)) {
+	if (!ipv6_addr_any(&cfg->fc_prefsrc) && fib6_nh) {
 		struct net_device *dev = fib6_nh->fib_nh_dev;
 
 		if (!ipv6_chk_addr(net, &cfg->fc_prefsrc, dev, 0)) {
