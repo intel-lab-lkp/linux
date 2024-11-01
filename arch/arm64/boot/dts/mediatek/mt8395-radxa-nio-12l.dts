@@ -179,7 +179,7 @@
 	pinctrl-0 = <&eth_default_pins>;
 	pinctrl-1 = <&eth_sleep_pins>;
 	mediatek,tx-delay-ps = <2030>;
-	mediatek,mac-wol;
+	mediatek,mac-wol-noninverted;
 	snps,reset-gpio = <&pio 93 GPIO_ACTIVE_HIGH>;
 	snps,reset-delays-us = <0 20000 100000>;
 	status = "okay";
