@@ -1860,10 +1860,11 @@ int __xa_alloc(struct xarray *xa, u32 *id, void *entry,
 		xas_find_marked(&xas, limit.max, XA_FREE_MARK);
 		if (xas.xa_node == XAS_RESTART)
 			xas_set_err(&xas, -EBUSY);
-		else
+		else {
 			*id = xas.xa_index;
-		xas_store(&xas, entry);
-		xas_clear_mark(&xas, XA_FREE_MARK);
+			xas_store(&xas, entry);
+			xas_clear_mark(&xas, XA_FREE_MARK);
+		}
 	} while (__xas_nomem(&xas, gfp));
 
 	return xas_error(&xas);
