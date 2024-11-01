@@ -16,6 +16,7 @@
 #include <linux/wait.h>
 #include <linux/reboot.h>
 #include <linux/mutex.h>
+#include <linux/llist.h>
 #include <linux/list.h>
 #include <linux/smc.h>
 #include <net/tcp.h>
@@ -909,6 +910,8 @@ static int smc_lgr_create(struct smc_sock *smc, struct smc_init_info *ini)
 	for (i = 0; i < SMC_RMBE_SIZES; i++) {
 		INIT_LIST_HEAD(&lgr->sndbufs[i]);
 		INIT_LIST_HEAD(&lgr->rmbs[i]);
+		init_llist_head(&lgr->rmbs_free[i]);
+		init_llist_head(&lgr->sndbufs_free[i]);
 	}
 	lgr->next_link_id = 0;
 	smc_lgr_list.num += SMC_LGR_NUM_INCR;
@@ -1183,6 +1186,10 @@ static void smcr_buf_unuse(struct smc_buf_desc *buf_desc, bool is_rmb,
 		/* memzero_explicit provides potential memory barrier semantics */
 		memzero_explicit(buf_desc->cpu_addr, buf_desc->len);
 		WRITE_ONCE(buf_desc->used, 0);
+		if (is_rmb)
+			llist_add(&buf_desc->llist, &lgr->rmbs_free[buf_desc->bufsiz_comp]);
+		else
+			llist_add(&buf_desc->llist, &lgr->sndbufs_free[buf_desc->bufsiz_comp]);
 	}
 }
 
@@ -1214,6 +1221,8 @@ static void smc_buf_unuse(struct smc_connection *conn,
 		} else {
 			memzero_explicit(conn->sndbuf_desc->cpu_addr, bufsize);
 			WRITE_ONCE(conn->sndbuf_desc->used, 0);
+			llist_add(&conn->sndbuf_desc->llist,
+				  &lgr->sndbufs_free[conn->sndbuf_desc->bufsiz_comp]);
 		}
 		SMC_STAT_RMB_SIZE(smc, is_smcd, false, false, bufsize);
 	}
@@ -1225,6 +1234,8 @@ static void smc_buf_unuse(struct smc_connection *conn,
 			bufsize += sizeof(struct smcd_cdc_msg);
 			memzero_explicit(conn->rmb_desc->cpu_addr, bufsize);
 			WRITE_ONCE(conn->rmb_desc->used, 0);
+			llist_add(&conn->rmb_desc->llist,
+				  &lgr->rmbs_free[conn->rmb_desc->bufsiz_comp]);
 		}
 		SMC_STAT_RMB_SIZE(smc, is_smcd, true, false, bufsize);
 	}
@@ -1413,13 +1424,20 @@ static void __smc_lgr_free_bufs(struct smc_link_group *lgr, bool is_rmb)
 {
 	struct smc_buf_desc *buf_desc, *bf_desc;
 	struct list_head *buf_list;
+	struct llist_head *buf_llist;
 	int i;
 
 	for (i = 0; i < SMC_RMBE_SIZES; i++) {
-		if (is_rmb)
+		if (is_rmb) {
 			buf_list = &lgr->rmbs[i];
-		else
+			buf_llist = &lgr->rmbs_free[i];
+		} else {
 			buf_list = &lgr->sndbufs[i];
+			buf_llist = &lgr->sndbufs_free[i];
+		}
+		// just invalid this list first, and then free the memory
+		// in the following loop
+		llist_del_all(buf_llist);
 		list_for_each_entry_safe(buf_desc, bf_desc, buf_list,
 					 list) {
 			smc_lgr_buf_list_del(lgr, is_rmb, buf_desc);
@@ -2087,24 +2105,19 @@ int smc_uncompress_bufsize(u8 compressed)
 	return (int)size;
 }
 
-/* try to reuse a sndbuf or rmb description slot for a certain
- * buffer size; if not available, return NULL
- */
-static struct smc_buf_desc *smc_buf_get_slot(int compressed_bufsize,
-					     struct rw_semaphore *lock,
-					     struct list_head *buf_list)
+/* use lock less list to save and find reuse buf desc */
+static struct smc_buf_desc *smc_buf_get_slot_free(struct llist_head *buf_llist)
 {
-	struct smc_buf_desc *buf_slot;
+	struct smc_buf_desc *buf_free;
+	struct llist_node *llnode;
 
-	down_read(lock);
-	list_for_each_entry(buf_slot, buf_list, list) {
-		if (cmpxchg(&buf_slot->used, 0, 1) == 0) {
-			up_read(lock);
-			return buf_slot;
-		}
-	}
-	up_read(lock);
-	return NULL;
+	if (llist_empty(buf_llist))
+		return NULL;
+	// lock-less link list don't need an lock
+	llnode = llist_del_first(buf_llist);
+	buf_free = llist_entry(llnode, struct smc_buf_desc, llist);
+	WRITE_ONCE(buf_free->used, 1);
+	return buf_free;
 }
 
 /* one of the conditions for announcing a receiver's current window size is
@@ -2409,6 +2422,7 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 	struct smc_connection *conn = &smc->conn;
 	struct smc_link_group *lgr = conn->lgr;
 	struct list_head *buf_list;
+	struct llist_head *buf_llist;
 	int bufsize, bufsize_comp;
 	struct rw_semaphore *lock;	/* lock buffer list */
 	bool is_dgraded = false;
@@ -2424,15 +2438,17 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 	     bufsize_comp >= 0; bufsize_comp--) {
 		if (is_rmb) {
 			lock = &lgr->rmbs_lock;
+			buf_llist = &lgr->rmbs_free[bufsize_comp];
 			buf_list = &lgr->rmbs[bufsize_comp];
 		} else {
 			lock = &lgr->sndbufs_lock;
+			buf_llist = &lgr->sndbufs_free[bufsize_comp];
 			buf_list = &lgr->sndbufs[bufsize_comp];
 		}
 		bufsize = smc_uncompress_bufsize(bufsize_comp);
 
 		/* check for reusable slot in the link group */
-		buf_desc = smc_buf_get_slot(bufsize_comp, lock, buf_list);
+		buf_desc = smc_buf_get_slot_free(buf_llist);
 		if (buf_desc) {
 			buf_desc->is_dma_need_sync = 0;
 			SMC_STAT_RMB_SIZE(smc, is_smcd, is_rmb, true, bufsize);
@@ -2457,7 +2473,8 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 
 		SMC_STAT_RMB_ALLOC(smc, is_smcd, is_rmb);
 		SMC_STAT_RMB_SIZE(smc, is_smcd, is_rmb, true, bufsize);
-		buf_desc->used = 1;
+		WRITE_ONCE(buf_desc->used, 1);
+		WRITE_ONCE(buf_desc->bufsiz_comp, bufsize_comp);
 		down_write(lock);
 		smc_lgr_buf_list_add(lgr, is_rmb, buf_list, buf_desc);
 		up_write(lock);

@@ -188,10 +188,12 @@ struct smc_link {
 /* tx/rx buffer list element for sndbufs list and rmbs list of a lgr */
 struct smc_buf_desc {
 	struct list_head	list;
+	struct llist_node	llist;
 	void			*cpu_addr;	/* virtual address of buffer */
 	struct page		*pages;
 	int			len;		/* length of buffer */
 	u32			used;		/* currently used / unused */
+	int			bufsiz_comp;
 	union {
 		struct { /* SMC-R */
 			struct sg_table	sgt[SMC_LINKS_PER_LGR_MAX];
@@ -278,8 +280,10 @@ struct smc_link_group {
 	unsigned short		vlan_id;	/* vlan id of link group */
 
 	struct list_head	sndbufs[SMC_RMBE_SIZES];/* tx buffers */
+	struct llist_head	sndbufs_free[SMC_RMBE_SIZES]; /* tx buffer free list */
 	struct rw_semaphore	sndbufs_lock;	/* protects tx buffers */
 	struct list_head	rmbs[SMC_RMBE_SIZES];	/* rx buffers */
+	struct llist_head	rmbs_free[SMC_RMBE_SIZES]; /* rx buffer free list */
 	struct rw_semaphore	rmbs_lock;	/* protects rx buffers */
 	u64			alloc_sndbufs;	/* stats of tx buffers */
 	u64			alloc_rmbs;	/* stats of rx buffers */
