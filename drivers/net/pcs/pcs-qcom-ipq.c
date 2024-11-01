@@ -26,6 +26,7 @@
 #define PCS_MODE_SEL_MASK		GENMASK(12, 8)
 #define PCS_MODE_SGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x4)
 #define PCS_MODE_QSGMII			FIELD_PREP(PCS_MODE_SEL_MASK, 0x1)
+#define PCS_MODE_XPCS			FIELD_PREP(PCS_MODE_SEL_MASK, 0x10)
 #define PCS_MODE_AN_MODE		BIT(0)
 
 #define PCS_MII_CTRL(x)			(0x480 + 0x18 * (x))
@@ -56,6 +57,35 @@
 #define XPCS_INDIRECT_DATA_ADDR(reg)	(FIELD_PREP(GENMASK(15, 10), 0x20) | \
 					 FIELD_PREP(GENMASK(9, 2), \
 					 FIELD_GET(XPCS_INDIRECT_ADDR_L, reg)))
+
+#define XPCS_DIG_CTRL			0x38000
+#define XPCS_USXG_ADPT_RESET		BIT(10)
+#define XPCS_USXG_EN			BIT(9)
+
+#define XPCS_MII_CTRL			0x1f0000
+#define XPCS_MII_AN_EN			BIT(12)
+#define XPCS_DUPLEX_FULL		BIT(8)
+#define XPCS_SPEED_MASK			(BIT(13) | BIT(6) | BIT(5))
+#define XPCS_SPEED_10000		(BIT(13) | BIT(6))
+#define XPCS_SPEED_5000			(BIT(13) | BIT(5))
+#define XPCS_SPEED_2500			BIT(5)
+#define XPCS_SPEED_1000			BIT(6)
+#define XPCS_SPEED_100			BIT(13)
+#define XPCS_SPEED_10			0
+
+#define XPCS_MII_AN_CTRL		0x1f8001
+#define XPCS_MII_AN_8BIT		BIT(8)
+
+#define XPCS_MII_AN_INTR_STS		0x1f8002
+#define XPCS_USXG_AN_LINK_STS		BIT(14)
+#define XPCS_USXG_AN_DUPLEX_FULL	BIT(13)
+#define XPCS_USXG_AN_SPEED_MASK		GENMASK(12, 10)
+#define XPCS_USXG_AN_SPEED_10		0
+#define XPCS_USXG_AN_SPEED_100		1
+#define XPCS_USXG_AN_SPEED_1000		2
+#define XPCS_USXG_AN_SPEED_2500		4
+#define XPCS_USXG_AN_SPEED_5000		5
+#define XPCS_USXG_AN_SPEED_10000	3
 
 /* Private data for the PCS instance */
 struct ipq_pcs {
@@ -144,9 +174,57 @@ static void ipq_pcs_get_state_sgmii(struct ipq_pcs *qpcs,
 		state->pause |= MLO_PAUSE_RX;
 }
 
+static void ipq_pcs_get_state_usxgmii(struct ipq_pcs *qpcs,
+				      struct phylink_link_state *state)
+{
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(qpcs->regmap, XPCS_MII_AN_INTR_STS, &val);
+	if (ret) {
+		state->link = 0;
+		return;
+	}
+
+	state->link = !!(val & XPCS_USXG_AN_LINK_STS);
+
+	if (!state->link)
+		return;
+
+	switch (FIELD_GET(XPCS_USXG_AN_SPEED_MASK, val)) {
+	case XPCS_USXG_AN_SPEED_10000:
+		state->speed = SPEED_10000;
+		break;
+	case XPCS_USXG_AN_SPEED_5000:
+		state->speed = SPEED_5000;
+		break;
+	case XPCS_USXG_AN_SPEED_2500:
+		state->speed = SPEED_2500;
+		break;
+	case XPCS_USXG_AN_SPEED_1000:
+		state->speed = SPEED_1000;
+		break;
+	case XPCS_USXG_AN_SPEED_100:
+		state->speed = SPEED_100;
+		break;
+	case XPCS_USXG_AN_SPEED_10:
+		state->speed = SPEED_10;
+		break;
+	default:
+		state->link = false;
+		return;
+	}
+
+	if (val & XPCS_USXG_AN_DUPLEX_FULL)
+		state->duplex = DUPLEX_FULL;
+	else
+		state->duplex = DUPLEX_HALF;
+}
+
 static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 			       phy_interface_t interface)
 {
+	unsigned long rate = 125000000;
 	unsigned int val;
 	int ret;
 
@@ -164,6 +242,13 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 		ret = regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL,
 					 PCS_MODE_SEL_MASK | PCS_MODE_AN_MODE,
 					 PCS_MODE_QSGMII);
+		if (ret)
+			return ret;
+		break;
+	case PHY_INTERFACE_MODE_USXGMII:
+		rate = 312500000;
+		ret = regmap_update_bits(qpcs->regmap, PCS_MODE_CTRL,
+					 PCS_MODE_SEL_MASK, PCS_MODE_XPCS);
 		if (ret)
 			return ret;
 		break;
@@ -195,6 +280,21 @@ static int ipq_pcs_config_mode(struct ipq_pcs *qpcs,
 	}
 
 	qpcs->interface = interface;
+
+	/* Configure the RX and TX clock to NSSCC as 125M or 312.5M based
+	 * on current interface mode.
+	 */
+	ret = clk_set_rate(qpcs->rx_hw.clk, rate);
+	if (ret) {
+		dev_err(qpcs->dev, "Failed to set RX clock rate\n");
+		return ret;
+	}
+
+	ret = clk_set_rate(qpcs->tx_hw.clk, rate);
+	if (ret) {
+		dev_err(qpcs->dev, "Failed to set TX clock rate\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -238,6 +338,35 @@ err:
 		mutex_unlock(&qpcs->config_lock);
 
 	return ret;
+}
+
+static int ipq_pcs_config_usxgmii(struct ipq_pcs *qpcs)
+{
+	int ret;
+
+	/* Configure the XPCS for USXGMII mode if required */
+	if (qpcs->interface != PHY_INTERFACE_MODE_USXGMII) {
+		ret = ipq_pcs_config_mode(qpcs, PHY_INTERFACE_MODE_USXGMII);
+		if (ret)
+			return ret;
+
+		ret = regmap_update_bits(qpcs->regmap, XPCS_DIG_CTRL,
+					 XPCS_USXG_EN, XPCS_USXG_EN);
+		if (ret)
+			return ret;
+
+		ret = regmap_update_bits(qpcs->regmap, XPCS_MII_AN_CTRL,
+					 XPCS_MII_AN_8BIT, XPCS_MII_AN_8BIT);
+		if (ret)
+			return ret;
+
+		ret = regmap_update_bits(qpcs->regmap, XPCS_MII_CTRL,
+					 XPCS_MII_AN_EN, XPCS_MII_AN_EN);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 static int ipq_pcs_link_up_config_sgmii(struct ipq_pcs *qpcs,
@@ -288,6 +417,49 @@ pcs_adapter_reset:
 				  PCS_MII_ADPT_RESET, PCS_MII_ADPT_RESET);
 }
 
+static int ipq_pcs_link_up_config_usxgmii(struct ipq_pcs *qpcs, int speed)
+{
+	unsigned int val;
+	int ret;
+
+	switch (speed) {
+	case SPEED_10000:
+		val = XPCS_SPEED_10000;
+		break;
+	case SPEED_5000:
+		val = XPCS_SPEED_5000;
+		break;
+	case SPEED_2500:
+		val = XPCS_SPEED_2500;
+		break;
+	case SPEED_1000:
+		val = XPCS_SPEED_1000;
+		break;
+	case SPEED_100:
+		val = XPCS_SPEED_100;
+		break;
+	case SPEED_10:
+		val = XPCS_SPEED_10;
+		break;
+	default:
+		dev_err(qpcs->dev, "Invalid USXGMII speed %d\n", speed);
+		return -EINVAL;
+	}
+
+	/* USXGMII only support full duplex mode */
+	val |= XPCS_DUPLEX_FULL;
+
+	/* Configure XPCS speed */
+	ret = regmap_update_bits(qpcs->regmap, XPCS_MII_CTRL,
+				 XPCS_SPEED_MASK | XPCS_DUPLEX_FULL, val);
+	if (ret)
+		return ret;
+
+	/* XPCS adapter reset */
+	return regmap_update_bits(qpcs->regmap, XPCS_DIG_CTRL,
+				  XPCS_USXG_ADPT_RESET, XPCS_USXG_ADPT_RESET);
+}
+
 static void ipq_pcs_get_state(struct phylink_pcs *pcs,
 			      struct phylink_link_state *state)
 {
@@ -299,6 +471,9 @@ static void ipq_pcs_get_state(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 		ipq_pcs_get_state_sgmii(qpcs, index, state);
+		break;
+	case PHY_INTERFACE_MODE_USXGMII:
+		ipq_pcs_get_state_usxgmii(qpcs, state);
 		break;
 	default:
 		break;
@@ -326,6 +501,8 @@ static int ipq_pcs_config(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_QSGMII:
 		return ipq_pcs_config_sgmii(qpcs, index, neg_mode, interface);
+	case PHY_INTERFACE_MODE_USXGMII:
+		return ipq_pcs_config_usxgmii(qpcs);
 	default:
 		dev_err(qpcs->dev,
 			"Unsupported interface %s\n", phy_modes(interface));
@@ -348,6 +525,9 @@ static void ipq_pcs_link_up(struct phylink_pcs *pcs,
 	case PHY_INTERFACE_MODE_QSGMII:
 		ret = ipq_pcs_link_up_config_sgmii(qpcs, index,
 						   neg_mode, speed);
+		break;
+	case PHY_INTERFACE_MODE_USXGMII:
+		ret = ipq_pcs_link_up_config_usxgmii(qpcs, speed);
 		break;
 	default:
 		dev_err(qpcs->dev,
