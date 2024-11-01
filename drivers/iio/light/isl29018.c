@@ -703,7 +703,7 @@ static int isl29018_probe(struct i2c_client *client)
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct isl29018_chip *chip;
 	struct iio_dev *indio_dev;
-	const void *ddata;
+	const void *ddata = NULL;
 	const char *name;
 	int dev_id;
 	int err;
