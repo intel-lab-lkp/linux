@@ -4,6 +4,9 @@
 # Script which clones and installs the latest pm-graph
 # from http://github.com/intel/pm-graph.git
 
+# Save the current directory
+CURRENT_DIR=$(pwd)
+
 OUT=`mktemp -d 2>/dev/null`
 if [ -z "$OUT" -o ! -e $OUT ]; then
 	echo "ERROR: mktemp failed to create folder"
@@ -36,3 +39,6 @@ else
 	echo "INSTALL FAILED"
 fi
 cleanup
+
+# Return to the original directory
+cd "$CURRENT_DIR"
