@@ -1512,10 +1512,10 @@ static int bprm_add_fixup_comm(struct linux_binprm *bprm,
 		return 0;
 
 	bprm->argv0 = strndup_user(p, MAX_ARG_STRLEN);
-	if (bprm->argv0)
-		return 0;
+	if (IS_ERR(bprm->argv0))
+		return PTR_ERR(bprm->argv0);
 
-	return -EFAULT;
+	return 0;
 }
 
 static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int flags)
