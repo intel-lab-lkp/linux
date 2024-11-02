@@ -1599,6 +1599,16 @@ The following nested keys are defined.
 	  pglazyfreed (npn)
 		Amount of reclaimed lazyfree pages
 
+	  swpin_zero
+		Number of pages moved into memory with zero content, meaning no
+		copy exists in the backend swapfile, allowing swap-in to avoid
+		I/O read overhead.
+
+	  swpout_zero
+		Number of pages moved out of memory with zero content, meaning no
+		copy is needed in the backend swapfile, allowing swap-out to avoid
+		I/O write overhead.
+
 	  zswpin
 		Number of pages moved in to memory from zswap.
 
