@@ -750,7 +750,7 @@ static void nvmet_rdma_read_data_done(struct ib_cq *cq, struct ib_wc *wc)
 	struct nvmet_rdma_queue *queue = wc->qp->qp_context;
 	u16 status = 0;
 
-	WARN_ON(rsp->n_rdma <= 0);
+	WARN_ON(rsp->n_rdma == 0);
 	atomic_add(rsp->n_rdma, &queue->sq_wr_avail);
 	rsp->n_rdma = 0;
 
@@ -787,7 +787,7 @@ static void nvmet_rdma_write_data_done(struct ib_cq *cq, struct ib_wc *wc)
 	if (!IS_ENABLED(CONFIG_BLK_DEV_INTEGRITY))
 		return;
 
-	WARN_ON(rsp->n_rdma <= 0);
+	WARN_ON(rsp->n_rdma == 0);
 	atomic_add(rsp->n_rdma, &queue->sq_wr_avail);
 	rsp->n_rdma = 0;
 
