@@ -6644,7 +6644,7 @@ static int selinux_ismaclabel(const char *name)
 static int selinux_secid_to_secctx(u32 secid, struct lsm_context *cp)
 {
 	u32 seclen;
-	u32 ret;
+	int ret;
 
 	if (cp) {
 		cp->id = LSM_ID_SELINUX;
