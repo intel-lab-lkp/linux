@@ -930,7 +930,7 @@ hfcmulti_resync(struct hfc_multi *locked, struct hfc_multi *newmaster, int rm)
 	if (newmaster) {
 		hc = newmaster;
 		if (debug & DEBUG_HFCMULTI_PLXSD)
-			printk(KERN_DEBUG "id=%d (0x%p) = syncronized with "
+			printk(KERN_DEBUG "id=%d (0x%p) = synchronized with "
 			       "interface.\n", hc->id, hc);
 		/* Enable new sync master */
 		plx_acc_32 = hc->plx_membase + PLX_GPIOC;
@@ -949,7 +949,7 @@ hfcmulti_resync(struct hfc_multi *locked, struct hfc_multi *newmaster, int rm)
 			hc = pcmmaster;
 			if (debug & DEBUG_HFCMULTI_PLXSD)
 				printk(KERN_DEBUG
-				       "id=%d (0x%p) = PCM master syncronized "
+				       "id=%d (0x%p) = PCM master synchronized "
 				       "with QUARTZ\n", hc->id, hc);
 			if (hc->ctype == HFC_TYPE_E1) {
 				/* Use the crystal clock for the PCM
@@ -4672,7 +4672,7 @@ init_e1_port_hw(struct hfc_multi *hc, struct hm_map *m)
 			if (debug & DEBUG_HFCMULTI_INIT)
 				printk(KERN_DEBUG
 				       "%s: PORT set optical "
-				       "interfacs: card(%d) "
+				       "interface: card(%d) "
 				       "port(%d)\n",
 				       __func__,
 				       HFC_cnt + 1, 1);
