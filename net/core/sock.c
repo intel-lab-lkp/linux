@@ -2941,6 +2941,14 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 	case SCM_RIGHTS:
 	case SCM_CREDENTIALS:
 		break;
+	case SO_PRIORITY:
+		if (cmsg->cmsg_len != CMSG_LEN(sizeof(u32)))
+			return -EINVAL;
+		if (sk_set_prio_allowed(sk, *(u32 *)CMSG_DATA(cmsg))) {
+			sockc->priority = *(u32 *)CMSG_DATA(cmsg);
+			break;
+		}
+		return -EPERM;
 	default:
 		return -EINVAL;
 	}
