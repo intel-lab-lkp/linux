@@ -1941,9 +1941,6 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 	retval = count(argv, MAX_ARG_STRINGS);
-	if (retval == 0)
-		pr_warn_once("process '%s' launched '%s' with NULL argv: empty string added\n",
-			     current->comm, bprm->filename);
 	if (retval < 0)
 		goto out_free;
 	bprm->argc = retval;
@@ -1981,6 +1978,9 @@ static int do_execveat_common(int fd, struct filename *filename,
 		if (retval < 0)
 			goto out_free;
 		bprm->argc = 1;
+
+		pr_warn_once("process '%s' launched '%s' with NULL argv: empty string added\n",
+			     current->comm, bprm->filename);
 	}
 
 	retval = bprm_execve(bprm);
