@@ -308,6 +308,8 @@ extern void arch_scale_freq_tick(void);
 #ifdef CONFIG_ACPI_CPPC_LIB
 void init_freq_invariance_cppc(void);
 #define arch_init_invariance_cppc init_freq_invariance_cppc
+#else
+static inline void arch_init_invariance_cppc(void) { }
 #endif
 
 #endif /* _ASM_X86_TOPOLOGY_H */
