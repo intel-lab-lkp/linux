@@ -225,7 +225,6 @@ static void dev_free(struct kref *kref)
 		kfree(dev->eps[i].ep->desc);
 		dev->eps[i].state = STATE_EP_DISABLED;
 	}
-	kfree(dev);
 }
 
 /*----------------------------------------------------------------------*/
@@ -330,7 +329,8 @@ static void gadget_unbind(struct usb_gadget *gadget)
 
 	set_gadget_data(gadget, NULL);
 	/* Matches kref_get() in gadget_bind(). */
-	kref_put(&dev->count, dev_free);
+	if (kref_put(&dev->count, dev_free))
+		kfree(dev);
 }
 
 static int gadget_setup(struct usb_gadget *gadget,
@@ -443,34 +443,38 @@ static int raw_open(struct inode *inode, struct file *fd)
 static int raw_release(struct inode *inode, struct file *fd)
 {
 	int ret = 0;
+	int freed = 0;
 	struct raw_dev *dev = fd->private_data;
 	unsigned long flags;
-	bool unregister = false;
 
 	spin_lock_irqsave(&dev->lock, flags);
 	dev->state = STATE_DEV_CLOSED;
-	if (!dev->gadget) {
-		spin_unlock_irqrestore(&dev->lock, flags);
-		goto out_put;
-	}
-	if (dev->gadget_registered)
-		unregister = true;
+	if (!dev->gadget)
+		goto out_put_locked;
+	if (!dev->gadget_registered)
+		goto out_put_locked;
 	dev->gadget_registered = false;
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-	if (unregister) {
-		ret = usb_gadget_unregister_driver(&dev->driver);
-		if (ret != 0)
-			dev_err(dev->dev,
-				"usb_gadget_unregister_driver() failed with %d\n",
-				ret);
-		/* Matches kref_get() in raw_ioctl_run(). */
-		kref_put(&dev->count, dev_free);
-	}
+	ret = usb_gadget_unregister_driver(&dev->driver);
+	if (ret != 0)
+		dev_err(dev->dev,
+			"usb_gadget_unregister_driver() failed with %d\n",
+			ret);
 
-out_put:
+	spin_lock_irqsave(&dev->lock, flags);
+	/* Matches kref_get() in raw_ioctl_run(). */
+	freed = kref_put(&dev->count, dev_free);
+	if (freed)
+		goto out_free_dev;
+
+out_put_locked:
 	/* Matches dev_new() in raw_open(). */
-	kref_put(&dev->count, dev_free);
+	freed = kref_put(&dev->count, dev_free);
+out_free_dev:
+	spin_unlock_irqrestore(&dev->lock, flags);
+	if (freed)
+		kfree(dev);
 	return ret;
 }
 
