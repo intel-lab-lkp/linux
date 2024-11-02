@@ -718,7 +718,7 @@ static int xtpg_parse_of(struct xtpg_device *xtpg)
 
 	ports = of_get_child_by_name(node, "ports");
 	if (ports == NULL)
-		ports = node;
+		ports = of_node_get(node);
 
 	for_each_child_of_node(ports, port) {
 		const struct xvip_video_format *format;
@@ -731,6 +731,7 @@ static int xtpg_parse_of(struct xtpg_device *xtpg)
 		if (IS_ERR(format)) {
 			dev_err(dev, "invalid format in DT");
 			of_node_put(port);
+			of_node_put(ports);
 			return PTR_ERR(format);
 		}
 
@@ -740,6 +741,7 @@ static int xtpg_parse_of(struct xtpg_device *xtpg)
 		} else if (xtpg->vip_format != format) {
 			dev_err(dev, "in/out format mismatch in DT");
 			of_node_put(port);
+			of_node_put(ports);
 			return -EINVAL;
 		}
 
@@ -753,6 +755,7 @@ static int xtpg_parse_of(struct xtpg_device *xtpg)
 		/* Count the number of ports. */
 		nports++;
 	}
+	of_node_put(ports);
 
 	if (nports != 1 && nports != 2) {
 		dev_err(dev, "invalid number of ports %u\n", nports);
