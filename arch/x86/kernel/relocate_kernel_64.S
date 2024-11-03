@@ -117,6 +117,11 @@ SYM_CODE_START_NOALIGN(relocate_kernel)
 	int3
 SYM_CODE_END(relocate_kernel)
 
+#ifdef DEBUG
+	UNWIND_HINT_UNDEFINED
+	.balign 0x100	/* relocate_kernel will be overwritten with an IDT */
+#endif
+
 SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	UNWIND_HINT_END_OF_STACK
 	/*
@@ -144,6 +149,52 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	/* Test that we can load segments */
 	movq	%ds, %rax
 	movq	%rax, %ds
+
+	/* Load address of reloc_kernel, at start of this page, into %r8 */
+	lea	relocate_kernel(%rip), %r8
+
+	/*
+	 * Build an IDT descriptor in %rax/%rbx. The address is in the low 16
+	 * and high 16 bits of %rax, and low 32 of %rbx. The niddle 32 bits
+	 * of %rax hold the selector/ist/flags which are hard-coded below.
+         */
+	movq	%r8, %rax         // 1234567890abcdef
+
+	andq	$-0xFFFF, %rax    // 1234567890ab....
+	shlq	$16, %rax         // 567890ab........
+
+	movq	$0x8F000010, %rcx // Present, DPL0, Interrupt Gate, __KERNEL_CS.
+	orq	%rcx, %rax        // 567890ab8F000010
+	shlq	$16, %rax         // 90ab8F000010....
+
+	movq	%r8, %rcx
+	andq	$0xffff, %rcx     // ............cdef
+	orq	%rcx, %rax        // 90ab87000010cdef
+
+	movq	%r8, %rbx
+	shrq	$32, %rbx
+
+	/*
+	 * The descriptor was built using the address of relocate_kernel. Add
+	 * the required offset to point to the actual entry points.
+	 */
+	addq	$(exc_vectors - relocate_kernel), %rax
+
+	/* Loop 16 times to handle exception 0-15 */
+	movq	$16, %rcx
+1:
+	movq	%rax, (%r8)
+	movq	%rbx, 8(%r8)
+	addq	$16, %r8
+	addq	$6, %rax
+	loop	1b
+
+	/* Now put an IDTR on the stack (temporarily) to load it */
+	subq	$0x100, %r8
+	pushq	%r8
+	pushw	$0xff
+	lidt	(%rsp)
+	addq	$10, %rsp
 #endif /* DEBUG */
 
 	/*
@@ -347,6 +398,65 @@ SYM_CODE_START_LOCAL_NOALIGN(swap_pages)
 SYM_CODE_END(swap_pages)
 
 #ifdef DEBUG
+SYM_CODE_START_LOCAL_NOALIGN(exc_vectors)
+	/* Each of these is 6 bytes. */
+.macro vec_err exc
+	UNWIND_HINT_ENTRY
+	. = exc_vectors + (\exc * 6)
+	nop
+	nop
+	pushq	$\exc
+	jmp	exc_handler
+.endm
+
+.macro vec_noerr exc
+	UNWIND_HINT_ENTRY
+	. = exc_vectors + (\exc * 6)
+	pushq	$0
+	pushq	$\exc
+	jmp	exc_handler
+.endm
+
+	vec_noerr 0 // #DE
+	vec_noerr 1 // #DB
+	vec_noerr 2 // #NMI
+	vec_noerr 3 // #BP
+	vec_noerr 4 // #OF
+	vec_noerr 5 // #BR
+	vec_noerr 6 // #UD
+	vec_noerr 7 // #NM
+	vec_err 8   // #DF
+	vec_noerr 9
+	vec_err 10 // #TS
+	vec_err 11 // #NP
+	vec_err 12 // #SS
+	vec_err 13 // #GP
+	vec_err 14 // #PF
+	vec_noerr 15
+SYM_CODE_END(exc_vectors)
+
+SYM_CODE_START_LOCAL_NOALIGN(exc_handler)
+	pushq	%rax
+	pushq	%rdx
+	movw	$0x3f8, %dx
+	movb	$'A', %al
+	outb	%al, %dx
+	popq	%rdx
+	popq	%rax
+
+	/* Only return from int3 */
+	cmpq	$3, (%rsp)
+	jne	.Ldie
+
+	addq	$16, %rsp
+	iretq
+
+.Ldie:
+	hlt
+	jmp	.Ldie
+
+SYM_CODE_END(exc_handler)
+
 .Lreloc_kernel_gdt:
 	.word   1f - .Lreloc_kernel_gdt - 1
 	.long   0
