@@ -14,6 +14,8 @@
 #include <asm/nospec-branch.h>
 #include <asm/unwind_hints.h>
 
+#define DEBUG
+
 /*
  * Must be relocatable PIC code callable as a C function, in particular
  * there must be a plain RET and not jump to return thunk.
@@ -195,6 +197,8 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	pushw	$0xff
 	lidt	(%rsp)
 	addq	$10, %rsp
+
+	int3
 #endif /* DEBUG */
 
 	/*
