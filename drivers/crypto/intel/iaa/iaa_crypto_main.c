@@ -29,14 +29,23 @@ static unsigned int nr_iaa;
 static unsigned int nr_cpus;
 static unsigned int nr_nodes;
 static unsigned int nr_cpus_per_node;
-
 /* Number of physical cpus sharing each iaa instance */
 static unsigned int cpus_per_iaa;
 
 static struct crypto_comp *deflate_generic_tfm;
 
 /* Per-cpu lookup table for balanced wqs */
-static struct wq_table_entry __percpu *wq_table;
+static struct wq_table_entry __percpu *wq_table = NULL;
+
+/* Per-cpu lookup table for global wqs shared by all cpus. */
+static struct wq_table_entry __percpu *global_wq_table = NULL;
+
+/*
+ * Per-cpu counter of consecutive descriptors allocated to
+ * the same wq in the global_wq_table, so that we know
+ * when to switch to the next wq in the global_wq_table.
+ */
+static int __percpu *num_consec_descs_per_wq = NULL;
 
 static struct idxd_wq *wq_table_next_wq(int cpu)
 {
@@ -104,26 +113,68 @@ static void wq_table_add(int cpu, struct idxd_wq *wq)
 
 	entry->wqs[entry->n_wqs++] = wq;
 
-	pr_debug("%s: added iaa wq %d.%d to idx %d of cpu %d\n", __func__,
-		 entry->wqs[entry->n_wqs - 1]->idxd->id,
-		 entry->wqs[entry->n_wqs - 1]->id, entry->n_wqs - 1, cpu);
+	pr_debug("%s: added iaa local wq %d.%d to idx %d of cpu %d\n", __func__,
+		entry->wqs[entry->n_wqs - 1]->idxd->id,
+		entry->wqs[entry->n_wqs - 1]->id, entry->n_wqs - 1, cpu);
+}
+
+static void global_wq_table_add(int cpu, struct idxd_wq *wq)
+{
+	struct wq_table_entry *entry = per_cpu_ptr(global_wq_table, cpu);
+
+	if (WARN_ON(entry->n_wqs == entry->max_wqs))
+		return;
+
+	entry->wqs[entry->n_wqs++] = wq;
+
+	pr_debug("%s: added iaa global wq %d.%d to idx %d of cpu %d\n", __func__,
+		entry->wqs[entry->n_wqs - 1]->idxd->id,
+		entry->wqs[entry->n_wqs - 1]->id, entry->n_wqs - 1, cpu);
+}
+
+static void global_wq_table_set_start_wq(int cpu)
+{
+	struct wq_table_entry *entry = per_cpu_ptr(global_wq_table, cpu);
+	int start_wq = (entry->n_wqs / nr_iaa) * cpu_to_iaa(cpu);
+
+	if ((start_wq >= 0) && (start_wq < entry->n_wqs))
+		entry->cur_wq = start_wq;
 }
 
 static void wq_table_free_entry(int cpu)
 {
 	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
 
-	kfree(entry->wqs);
-	memset(entry, 0, sizeof(*entry));
+	if (entry) {
+		kfree(entry->wqs);
+		memset(entry, 0, sizeof(*entry));
+	}
+
+	entry = per_cpu_ptr(global_wq_table, cpu);
+
+	if (entry) {
+		kfree(entry->wqs);
+		memset(entry, 0, sizeof(*entry));
+	}
 }
 
 static void wq_table_clear_entry(int cpu)
 {
 	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
 
-	entry->n_wqs = 0;
-	entry->cur_wq = 0;
-	memset(entry->wqs, 0, entry->max_wqs * sizeof(struct idxd_wq *));
+	if (entry) {
+		entry->n_wqs = 0;
+		entry->cur_wq = 0;
+		memset(entry->wqs, 0, entry->max_wqs * sizeof(struct idxd_wq *));
+	}
+
+	entry = per_cpu_ptr(global_wq_table, cpu);
+
+	if (entry) {
+		entry->n_wqs = 0;
+		entry->cur_wq = 0;
+		memset(entry->wqs, 0, entry->max_wqs * sizeof(struct idxd_wq *));
+	}
 }
 
 LIST_HEAD(iaa_devices);
@@ -162,6 +213,70 @@ out:
 	return ret;
 }
 static DRIVER_ATTR_RW(verify_compress);
+
+/* Number of global wqs per iaa*/
+static int g_wqs_per_iaa = 1;
+
+static ssize_t g_wqs_per_iaa_show(struct device_driver *driver, char *buf)
+{
+	return sprintf(buf, "%d\n", g_wqs_per_iaa);
+}
+
+static ssize_t g_wqs_per_iaa_store(struct device_driver *driver,
+				     const char *buf, size_t count)
+{
+	int ret = -EBUSY;
+
+	mutex_lock(&iaa_devices_lock);
+
+	if (iaa_crypto_enabled)
+		goto out;
+
+	ret = kstrtoint(buf, 10, &g_wqs_per_iaa);
+	if (ret)
+		goto out;
+
+	ret = count;
+out:
+	mutex_unlock(&iaa_devices_lock);
+
+	return ret;
+}
+static DRIVER_ATTR_RW(g_wqs_per_iaa);
+
+/*
+ * Number of consecutive descriptors to allocate from a
+ * given global wq before switching to the next wq in
+ * the global_wq_table.
+ */
+static int g_consec_descs_per_gwq = 1;
+
+static ssize_t g_consec_descs_per_gwq_show(struct device_driver *driver, char *buf)
+{
+	return sprintf(buf, "%d\n", g_consec_descs_per_gwq);
+}
+
+static ssize_t g_consec_descs_per_gwq_store(struct device_driver *driver,
+				     const char *buf, size_t count)
+{
+	int ret = -EBUSY;
+
+	mutex_lock(&iaa_devices_lock);
+
+	if (iaa_crypto_enabled)
+		goto out;
+
+	ret = kstrtoint(buf, 10, &g_consec_descs_per_gwq);
+	if (ret)
+		goto out;
+
+	ret = count;
+out:
+	mutex_unlock(&iaa_devices_lock);
+
+	return ret;
+}
+static DRIVER_ATTR_RW(g_consec_descs_per_gwq);
 
 /*
  * The iaa crypto driver supports three 'sync' methods determining how
@@ -751,7 +866,20 @@ static void free_wq_table(void)
 	for (cpu = 0; cpu < nr_cpus; cpu++)
 		wq_table_free_entry(cpu);
 
-	free_percpu(wq_table);
+	if (wq_table) {
+		free_percpu(wq_table);
+		wq_table = NULL;
+	}
+
+	if (global_wq_table) {
+		free_percpu(global_wq_table);
+		global_wq_table = NULL;
+	}
+
+	if (num_consec_descs_per_wq) {
+		free_percpu(num_consec_descs_per_wq);
+		num_consec_descs_per_wq = NULL;
+	}
 
 	pr_debug("freed wq table\n");
 }
@@ -774,6 +902,38 @@ static int alloc_wq_table(int max_wqs)
 		}
 
 		entry->max_wqs = max_wqs;
+		entry->n_wqs = 0;
+		entry->cur_wq = 0;
+	}
+
+	global_wq_table = alloc_percpu(struct wq_table_entry);
+	if (!global_wq_table) {
+		free_wq_table();
+		return -ENOMEM;
+	}
+
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		entry = per_cpu_ptr(global_wq_table, cpu);
+		entry->wqs = kzalloc(GFP_KERNEL, max_wqs * sizeof(struct wq *));
+		if (!entry->wqs) {
+			free_wq_table();
+			return -ENOMEM;
+		}
+
+		entry->max_wqs = max_wqs;
+		entry->n_wqs = 0;
+		entry->cur_wq = 0;
+	}
+
+	num_consec_descs_per_wq = alloc_percpu(int);
+	if (!num_consec_descs_per_wq) {
+		free_wq_table();
+		return -ENOMEM;
+	}
+
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		int *num_consec_descs = per_cpu_ptr(num_consec_descs_per_wq, cpu);
+		*num_consec_descs = 0;
 	}
 
 	pr_debug("initialized wq table\n");
@@ -912,9 +1072,14 @@ static int wq_table_add_wqs(int iaa, int cpu)
 	}
 
 	list_for_each_entry(iaa_wq, &found_device->wqs, list) {
-		wq_table_add(cpu, iaa_wq->wq);
+
+		if (((found_device->n_wq - g_wqs_per_iaa) < 1) ||
+			(n_wqs_added < (found_device->n_wq - g_wqs_per_iaa))) {
+			wq_table_add(cpu, iaa_wq->wq);
+		}
+
 		pr_debug("rebalance: added wq for cpu=%d: iaa wq %d.%d\n",
-			 cpu, iaa_wq->wq->idxd->id, iaa_wq->wq->id);
+			cpu, iaa_wq->wq->idxd->id, iaa_wq->wq->id);
 		n_wqs_added++;
 	}
 
@@ -924,6 +1089,63 @@ static int wq_table_add_wqs(int iaa, int cpu)
 		goto out;
 	}
 out:
+	return ret;
+}
+
+static int global_wq_table_add_wqs(void)
+{
+	struct iaa_device *iaa_device;
+	int ret = 0, n_wqs_added;
+	struct idxd_device *idxd;
+	struct iaa_wq *iaa_wq;
+	struct pci_dev *pdev;
+	struct device *dev;
+	int cpu, node, node_of_cpu = -1;
+
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+
+#ifdef CONFIG_NUMA
+		node_of_cpu = -1;
+		for_each_online_node(node) {
+			const struct cpumask *node_cpus;
+			node_cpus = cpumask_of_node(node);
+			if (!cpumask_test_cpu(cpu, node_cpus))
+				continue;
+			node_of_cpu = node;
+			break;
+		}
+#endif
+		list_for_each_entry(iaa_device, &iaa_devices, list) {
+			idxd = iaa_device->idxd;
+			pdev = idxd->pdev;
+			dev = &pdev->dev;
+
+#ifdef CONFIG_NUMA
+			if (dev && (node_of_cpu != dev->numa_node))
+				continue;
+#endif
+
+			if (iaa_device->n_wq <= g_wqs_per_iaa)
+				continue;
+
+			n_wqs_added = 0;
+
+			list_for_each_entry(iaa_wq, &iaa_device->wqs, list) {
+
+				if (n_wqs_added < (iaa_device->n_wq - g_wqs_per_iaa)) {
+					n_wqs_added++;
+				}
+				else {
+					global_wq_table_add(cpu, iaa_wq->wq);
+					pr_debug("rebalance: added global wq for cpu=%d: iaa wq %d.%d\n",
+						cpu, iaa_wq->wq->idxd->id, iaa_wq->wq->id);
+				}
+			}
+		}
+
+		global_wq_table_set_start_wq(cpu);
+	}
+
 	return ret;
 }
 
@@ -961,6 +1183,7 @@ static void rebalance_wq_table(void)
 	}
 
 	pr_debug("Finished rebalance local wqs.");
+	global_wq_table_add_wqs();
 }
 
 static inline int check_completion(struct device *dev,
@@ -1509,6 +1732,27 @@ err:
 	goto out;
 }
 
+/*
+ * Caller should make sure to call only if the
+ * per_cpu_ptr "global_wq_table" is non-NULL
+ * and has at least one wq configured.
+ */
+static struct idxd_wq *global_wq_table_next_wq(int cpu)
+{
+	struct wq_table_entry *entry = per_cpu_ptr(global_wq_table, cpu);
+	int *num_consec_descs = per_cpu_ptr(num_consec_descs_per_wq, cpu);
+
+	if ((*num_consec_descs) == g_consec_descs_per_gwq) {
+		if (++entry->cur_wq >= entry->n_wqs)
+			entry->cur_wq = 0;
+		*num_consec_descs = 0;
+	}
+
+	++(*num_consec_descs);
+
+	return entry->wqs[entry->cur_wq];
+}
+
 static int iaa_comp_acompress(struct acomp_req *req)
 {
 	struct iaa_compression_ctx *compression_ctx;
@@ -1521,6 +1765,7 @@ static int iaa_comp_acompress(struct acomp_req *req)
 	struct idxd_wq *wq;
 	struct device *dev;
 	int order = -1;
+	struct wq_table_entry *entry;
 
 	compression_ctx = crypto_tfm_ctx(tfm);
 
@@ -1539,8 +1784,15 @@ static int iaa_comp_acompress(struct acomp_req *req)
 		disable_async = true;
 
 	cpu = get_cpu();
-	wq = wq_table_next_wq(cpu);
+	entry = per_cpu_ptr(global_wq_table, cpu);
+
+	if (!entry || entry->n_wqs == 0) {
+		wq = wq_table_next_wq(cpu);
+	} else {
+		wq = global_wq_table_next_wq(cpu);
+	}
 	put_cpu();
+
 	if (!wq) {
 		pr_debug("no wq configured for cpu=%d\n", cpu);
 		return -ENODEV;
@@ -2393,13 +2645,32 @@ static int __init iaa_crypto_init_module(void)
 		goto err_sync_attr_create;
 	}
 
+	ret = driver_create_file(&iaa_crypto_driver.drv,
+				&driver_attr_g_wqs_per_iaa);
+	if (ret) {
+		pr_debug("IAA g_wqs_per_iaa attr creation failed\n");
+		goto err_g_wqs_per_iaa_attr_create;
+	}
+
+	ret = driver_create_file(&iaa_crypto_driver.drv,
+				&driver_attr_g_consec_descs_per_gwq);
+	if (ret) {
+		pr_debug("IAA g_consec_descs_per_gwq attr creation failed\n");
+		goto err_g_consec_descs_per_gwq_attr_create;
+	}
+
 	if (iaa_crypto_debugfs_init())
 		pr_warn("debugfs init failed, stats not available\n");
 
 	pr_debug("initialized\n");
 out:
 	return ret;
-
+err_g_consec_descs_per_gwq_attr_create:
+	driver_remove_file(&iaa_crypto_driver.drv,
+			   &driver_attr_g_wqs_per_iaa);
+err_g_wqs_per_iaa_attr_create:
+	driver_remove_file(&iaa_crypto_driver.drv,
+			   &driver_attr_sync_mode);
 err_sync_attr_create:
 	driver_remove_file(&iaa_crypto_driver.drv,
 			   &driver_attr_verify_compress);
@@ -2423,6 +2694,10 @@ static void __exit iaa_crypto_cleanup_module(void)
 			   &driver_attr_sync_mode);
 	driver_remove_file(&iaa_crypto_driver.drv,
 			   &driver_attr_verify_compress);
+	driver_remove_file(&iaa_crypto_driver.drv,
+			   &driver_attr_g_wqs_per_iaa);
+	driver_remove_file(&iaa_crypto_driver.drv,
+			   &driver_attr_g_consec_descs_per_gwq);
 	idxd_driver_unregister(&iaa_crypto_driver);
 	iaa_aecs_cleanup_fixed();
 	crypto_free_comp(deflate_generic_tfm);
