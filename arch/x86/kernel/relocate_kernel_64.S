@@ -398,6 +398,53 @@ SYM_CODE_START_LOCAL_NOALIGN(swap_pages)
 SYM_CODE_END(swap_pages)
 
 #ifdef DEBUG
+/*
+ * This allows other types of serial ports to be used.
+ *  - %al: Character to be printed (no clobber %rax)
+ *  - %rdx: MMIO address or port.
+ */
+.macro pr_char
+	outb	%al, %dx
+.endm
+
+/* Print the byte in %bl, clobber %rax */
+SYM_CODE_START_LOCAL_NOALIGN(pr_byte)
+	movb	%bl, %al
+	nop
+	andb	$0x0f, %al
+	addb 	$0x30, %al
+	cmpb	$0x3a, %al
+	jb	1f
+	addb	$('a' - '0' - 10), %al
+1:	pr_char
+	ANNOTATE_UNRET_SAFE
+	ret
+SYM_CODE_END(pr_byte)
+
+SYM_CODE_START_LOCAL_NOALIGN(pr_qword)
+	movq	$16, %rcx
+1:	rolq	$4, %rbx
+	call	pr_byte
+	loop	1b
+	movb	$'\n', %al
+	pr_char
+	ANNOTATE_UNRET_SAFE
+	ret
+SYM_CODE_END(pr_qword)
+
+.macro print_reg a, b, c, d, r
+	movb	$\a, %al
+	pr_char
+	movb	$\b, %al
+	pr_char
+	movb	$\c, %al
+	pr_char
+	movb	$\d, %al
+	pr_char
+	movq	\r, %rbx
+	call	pr_qword
+.endm
+
 SYM_CODE_START_LOCAL_NOALIGN(exc_vectors)
 	/* Each of these is 6 bytes. */
 .macro vec_err exc
@@ -437,11 +484,39 @@ SYM_CODE_END(exc_vectors)
 
 SYM_CODE_START_LOCAL_NOALIGN(exc_handler)
 	pushq	%rax
+	pushq	%rbx
+	pushq	%rcx
 	pushq	%rdx
+
 	movw	$0x3f8, %dx
-	movb	$'A', %al
-	outb	%al, %dx
+
+	/* rip and exception info */
+	print_reg 'E', 'x', 'c', ':', 32(%rsp)
+	print_reg 'E', 'r', 'r', ':', 40(%rsp)
+	print_reg 'r', 'i', 'p', ':', 48(%rsp)
+
+	/* We spilled these to the stack */
+	print_reg 'r', 'a', 'x', ':', 24(%rsp)
+	print_reg 'r', 'b', 'x', ':', 16(%rsp)
+	print_reg 'r', 'c', 'x', ':', 8(%rsp)
+	print_reg 'r', 'd', 'x', ':', (%rsp)
+
+	/* Other registers */
+	print_reg 'r', 's', 'i', ':', %rsi
+	print_reg 'r', 'd', 'i', ':', %rdi
+	print_reg 'r', '8', ' ', ':', %r8
+	print_reg 'r', '9', ' ', ':', %r9
+	print_reg 'r', '1', '0', ':', %r10
+	print_reg 'r', '1', '1', ':', %r11
+	print_reg 'r', '1', '2', ':', %r12
+	print_reg 'r', '1', '3', ':', %r13
+	print_reg 'r', '1', '4', ':', %r14
+	print_reg 'r', '1', '5', ':', %r15
+	print_reg 'c', 'r', '2', ':', %cr2
+
 	popq	%rdx
+	popq	%rcx
+	popq	%rbx
 	popq	%rax
 
 	/* Only return from int3 */
@@ -454,7 +529,6 @@ SYM_CODE_START_LOCAL_NOALIGN(exc_handler)
 .Ldie:
 	hlt
 	jmp	.Ldie
-
 SYM_CODE_END(exc_handler)
 
 .Lreloc_kernel_gdt:
