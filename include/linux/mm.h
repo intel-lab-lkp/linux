@@ -82,8 +82,10 @@ extern const int page_cluster_max;
 
 #ifdef CONFIG_SYSCTL
 extern int sysctl_legacy_va_layout;
+extern unsigned int compress_batching;
 #else
 #define sysctl_legacy_va_layout 0
+#define compress_batching 0
 #endif
 
 #ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS

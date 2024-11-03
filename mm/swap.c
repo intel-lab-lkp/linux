@@ -47,6 +47,9 @@
 int page_cluster;
 const int page_cluster_max = 31;
 
+/* Enable/disable compress batching during swapout. */
+unsigned int compress_batching;
+
 struct cpu_fbatches {
 	/*
 	 * The following folio batches are grouped together because they are protected
@@ -1074,4 +1077,7 @@ void __init swap_setup(void)
 	 * Right now other parts of the system means that we
 	 * _really_ don't want to cluster much more
 	 */
+
+	/* Disable compress batching during swapout by default. */
+	compress_batching = 0;
 }
