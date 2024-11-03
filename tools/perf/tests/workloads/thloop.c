@@ -18,14 +18,16 @@ static void sighandler(int sig __maybe_unused)
 
 noinline void test_loop(void)
 {
-	while (!done);
+	for (volatile int i = 0; i < 10000; i++)
+		continue;
 }
 
 static void *thfunc(void *arg)
 {
 	void (*loop_fn)(void) = arg;
 
-	loop_fn();
+	while (!done)
+		loop_fn();
 	return NULL;
 }
 
@@ -42,7 +44,8 @@ static int thloop(int argc, const char **argv)
 	alarm(sec);
 
 	pthread_create(&th, NULL, thfunc, test_loop);
-	test_loop();
+	while (!done)
+		test_loop();
 	pthread_join(th, NULL);
 
 	return 0;

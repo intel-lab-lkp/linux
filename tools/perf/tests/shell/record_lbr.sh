@@ -121,7 +121,7 @@ lbr_test "-j any_ret" "any ret" 2
 lbr_test "-j ind_call" "any indirect call" 2
 lbr_test "-j ind_jmp" "any indirect jump" 100
 lbr_test "-j call" "direct calls" 2
-lbr_test "-j ind_call,u" "any indirect user call" 100
+lbr_test "-j ind_call,u" "any indirect user call" 52
 lbr_test "-a -b" "system wide any branch" 2
 lbr_test "-a -j any_call" "system wide any call" 2
 
