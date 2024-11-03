@@ -453,8 +453,8 @@ void show_ipi_list(struct seq_file *p, int prec)
 	for (i = 0; i < IPI_MAX; ++i) {
 		seq_printf(p, "%*s:", prec, ipi_text[i].short_text);
 		for_each_online_cpu(cpu)
-			seq_printf(p, " %10lu",
-					per_cpu(ipi_data, cpu).ipi_count[i]);
+			seq_put_decimal_ull_width(p, " ",
+						  per_cpu(ipi_data, cpu).ipi_count[i], 10);
 		seq_printf(p, "   %s\n", ipi_text[i].long_text);
 	}
 }

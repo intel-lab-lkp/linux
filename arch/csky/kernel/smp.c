@@ -112,8 +112,8 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 		seq_printf(p, "%*s%u:%s", prec - 1, "IPI", i,
 			   prec >= 4 ? " " : "");
 		for_each_online_cpu(cpu)
-			seq_printf(p, "%10lu ",
-				per_cpu_ptr(&ipi_data, cpu)->stats[i]);
+			seq_put_decimal_ull_width(p, " ",
+						  per_cpu_ptr(&ipi_data, cpu)->stats[i], 10);
 		seq_printf(p, " %s\n", ipi_names[i]);
 	}
 
