@@ -1782,46 +1782,12 @@ void exhalbtc_periodical(struct btc_coexist *btcoexist)
 	halbtc_normal_low_power(btcoexist);
 }
 
-void exhalbtc_dbg_control(struct btc_coexist *btcoexist,
-			  u8 code, u8 len, u8 *data)
-{
-	if (!halbtc_is_bt_coexist_available(btcoexist))
-		return;
-	btcoexist->statistics.cnt_dbg_ctrl++;
-
-	halbtc_leave_low_power(btcoexist);
-
-	halbtc_normal_low_power(btcoexist);
-}
-
-void exhalbtc_stack_update_profile_info(void)
-{
-}
-
 void exhalbtc_update_min_bt_rssi(struct btc_coexist *btcoexist, s8 bt_rssi)
 {
 	if (!halbtc_is_bt_coexist_available(btcoexist))
 		return;
 
 	btcoexist->stack_info.min_bt_rssi = bt_rssi;
-}
-
-void exhalbtc_set_hci_version(struct btc_coexist *btcoexist, u16 hci_version)
-{
-	if (!halbtc_is_bt_coexist_available(btcoexist))
-		return;
-
-	btcoexist->stack_info.hci_version = hci_version;
-}
-
-void exhalbtc_set_bt_patch_version(struct btc_coexist *btcoexist,
-				   u16 bt_hci_version, u16 bt_patch_version)
-{
-	if (!halbtc_is_bt_coexist_available(btcoexist))
-		return;
-
-	btcoexist->bt_info.bt_real_fw_ver = bt_patch_version;
-	btcoexist->bt_info.bt_hci_ver = bt_hci_version;
 }
 
 void exhalbtc_set_chip_type(struct btc_coexist *btcoexist, u8 chip_type)
