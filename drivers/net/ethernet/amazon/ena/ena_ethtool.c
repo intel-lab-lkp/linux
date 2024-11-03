@@ -5,9 +5,11 @@
 
 #include <linux/ethtool.h>
 #include <linux/pci.h>
+#include <linux/net_tstamp.h>
 
 #include "ena_netdev.h"
 #include "ena_xdp.h"
+#include "ena_phc.h"
 
 struct ena_stats {
 	char name[ETH_GSTRING_LEN];
@@ -18,9 +20,14 @@ struct ena_hw_metrics {
 	char name[ETH_GSTRING_LEN];
 };
 
-#define ENA_STAT_ENA_COM_ENTRY(stat) { \
+#define ENA_STAT_ENA_COM_ADMIN_ENTRY(stat) { \
 	.name = #stat, \
 	.stat_offset = offsetof(struct ena_com_stats_admin, stat) / sizeof(u64) \
+}
+
+#define ENA_STAT_ENA_COM_PHC_ENTRY(stat) { \
+	.name = #stat, \
+	.stat_offset = offsetof(struct ena_com_stats_phc, stat) / sizeof(u64) \
 }
 
 #define ENA_STAT_ENTRY(stat, stat_type) { \
@@ -136,18 +143,26 @@ static const struct ena_stats ena_stats_rx_strings[] = {
 	ENA_STAT_RX_ENTRY(xdp_redirect),
 };
 
-static const struct ena_stats ena_stats_ena_com_strings[] = {
-	ENA_STAT_ENA_COM_ENTRY(aborted_cmd),
-	ENA_STAT_ENA_COM_ENTRY(submitted_cmd),
-	ENA_STAT_ENA_COM_ENTRY(completed_cmd),
-	ENA_STAT_ENA_COM_ENTRY(out_of_space),
-	ENA_STAT_ENA_COM_ENTRY(no_completion),
+static const struct ena_stats ena_stats_ena_com_admin_strings[] = {
+	ENA_STAT_ENA_COM_ADMIN_ENTRY(aborted_cmd),
+	ENA_STAT_ENA_COM_ADMIN_ENTRY(submitted_cmd),
+	ENA_STAT_ENA_COM_ADMIN_ENTRY(completed_cmd),
+	ENA_STAT_ENA_COM_ADMIN_ENTRY(out_of_space),
+	ENA_STAT_ENA_COM_ADMIN_ENTRY(no_completion),
+};
+
+static const struct ena_stats ena_stats_ena_com_phc_strings[] = {
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_cnt),
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_exp),
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_skp),
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_err),
 };
 
 #define ENA_STATS_ARRAY_GLOBAL		ARRAY_SIZE(ena_stats_global_strings)
 #define ENA_STATS_ARRAY_TX		ARRAY_SIZE(ena_stats_tx_strings)
 #define ENA_STATS_ARRAY_RX		ARRAY_SIZE(ena_stats_rx_strings)
-#define ENA_STATS_ARRAY_ENA_COM		ARRAY_SIZE(ena_stats_ena_com_strings)
+#define ENA_STATS_ARRAY_ENA_COM_ADMIN	ARRAY_SIZE(ena_stats_ena_com_admin_strings)
+#define ENA_STATS_ARRAY_ENA_COM_PHC	ARRAY_SIZE(ena_stats_ena_com_phc_strings)
 #define ENA_STATS_ARRAY_ENI		ARRAY_SIZE(ena_stats_eni_strings)
 #define ENA_STATS_ARRAY_ENA_SRD		ARRAY_SIZE(ena_srd_info_strings)
 #define ENA_METRICS_ARRAY_ENI		ARRAY_SIZE(ena_hw_stats_strings)
@@ -250,18 +265,31 @@ static void ena_queue_stats(struct ena_adapter *adapter, u64 **data)
 	}
 }
 
-static void ena_dev_admin_queue_stats(struct ena_adapter *adapter, u64 **data)
+static void ena_get_admin_queue_stats(struct ena_adapter *adapter, u64 **data)
 {
 	const struct ena_stats *ena_stats;
 	u64 *ptr;
 	int i;
 
-	for (i = 0; i < ENA_STATS_ARRAY_ENA_COM; i++) {
-		ena_stats = &ena_stats_ena_com_strings[i];
+	for (i = 0; i < ENA_STATS_ARRAY_ENA_COM_ADMIN; i++) {
+		ena_stats = &ena_stats_ena_com_admin_strings[i];
 
 		ptr = (u64 *)&adapter->ena_dev->admin_queue.stats +
 			ena_stats->stat_offset;
 
+		*(*data)++ = *ptr;
+	}
+}
+
+static void ena_get_phc_stats(struct ena_adapter *adapter, u64 **data)
+{
+	const struct ena_stats *ena_stats;
+	u64 *ptr;
+	int i;
+
+	for (i = 0; i < ENA_STATS_ARRAY_ENA_COM_PHC; i++) {
+		ena_stats = &ena_stats_ena_com_phc_strings[i];
+		ptr = (u64 *)&adapter->ena_dev->phc.stats + ena_stats->stat_offset;
 		*(*data)++ = *ptr;
 	}
 }
@@ -286,7 +314,10 @@ static void ena_get_stats(struct ena_adapter *adapter,
 		ena_metrics_stats(adapter, &data);
 
 	ena_queue_stats(adapter, &data);
-	ena_dev_admin_queue_stats(adapter, &data);
+	ena_get_admin_queue_stats(adapter, &data);
+
+	if (ena_phc_is_active(adapter))
+		ena_get_phc_stats(adapter, &data);
 }
 
 static void ena_get_ethtool_stats(struct net_device *netdev,
@@ -298,11 +329,28 @@ static void ena_get_ethtool_stats(struct net_device *netdev,
 	ena_get_stats(adapter, data, true);
 }
 
+static int ena_get_ts_info(struct net_device *netdev,
+			   struct kernel_ethtool_ts_info *info)
+{
+	struct ena_adapter *adapter = netdev_priv(netdev);
+
+	info->so_timestamping = SOF_TIMESTAMPING_TX_SOFTWARE;
+
+	info->phc_index = ena_phc_get_index(adapter);
+
+	return 0;
+}
+
 static int ena_get_sw_stats_count(struct ena_adapter *adapter)
 {
-	return adapter->num_io_queues * (ENA_STATS_ARRAY_TX + ENA_STATS_ARRAY_RX)
-		+ adapter->xdp_num_queues * ENA_STATS_ARRAY_TX
-		+ ENA_STATS_ARRAY_GLOBAL + ENA_STATS_ARRAY_ENA_COM;
+	int count = adapter->num_io_queues * (ENA_STATS_ARRAY_TX + ENA_STATS_ARRAY_RX)
+		    + adapter->xdp_num_queues * ENA_STATS_ARRAY_TX
+		    + ENA_STATS_ARRAY_GLOBAL + ENA_STATS_ARRAY_ENA_COM_ADMIN;
+
+	if (ena_phc_is_active(adapter))
+		count += ENA_STATS_ARRAY_ENA_COM_PHC;
+
+	return count;
 }
 
 static int ena_get_hw_stats_count(struct ena_adapter *adapter)
@@ -392,16 +440,27 @@ static void ena_queue_strings(struct ena_adapter *adapter, u8 **data)
 	}
 }
 
-static void ena_com_dev_strings(u8 **data)
+static void ena_get_admin_strings(u8 **data)
 {
 	const struct ena_stats *ena_stats;
 	int i;
 
-	for (i = 0; i < ENA_STATS_ARRAY_ENA_COM; i++) {
-		ena_stats = &ena_stats_ena_com_strings[i];
+	for (i = 0; i < ENA_STATS_ARRAY_ENA_COM_ADMIN; i++) {
+		ena_stats = &ena_stats_ena_com_admin_strings[i];
 
 		ethtool_sprintf(data,
 				"ena_admin_q_%s", ena_stats->name);
+	}
+}
+
+static void ena_get_phc_strings(u8 **data)
+{
+	const struct ena_stats *ena_stats;
+	int i;
+
+	for (i = 0; i < ENA_STATS_ARRAY_ENA_COM_PHC; i++) {
+		ena_stats = &ena_stats_ena_com_phc_strings[i];
+		ethtool_puts(data, ena_stats->name);
 	}
 }
 
@@ -421,7 +480,10 @@ static void ena_get_strings(struct ena_adapter *adapter,
 		ena_metrics_stats_strings(adapter, &data);
 
 	ena_queue_strings(adapter, &data);
-	ena_com_dev_strings(&data);
+	ena_get_admin_strings(&data);
+
+	if (ena_phc_is_active(adapter))
+		ena_get_phc_strings(&data);
 }
 
 static void ena_get_ethtool_strings(struct net_device *netdev,
@@ -1107,7 +1169,7 @@ static const struct ethtool_ops ena_ethtool_ops = {
 	.set_channels		= ena_set_channels,
 	.get_tunable		= ena_get_tunable,
 	.set_tunable		= ena_set_tunable,
-	.get_ts_info            = ethtool_op_get_ts_info,
+	.get_ts_info		= ena_get_ts_info,
 };
 
 void ena_set_ethtool_ops(struct net_device *netdev)
