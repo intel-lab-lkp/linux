@@ -160,6 +160,7 @@ struct crypto_acomp_ctx {
 struct zswap_pool {
 	struct zpool *zpool;
 	struct crypto_acomp_ctx __percpu *acomp_ctx;
+	struct crypto_acomp_ctx __percpu *acomp_batch_ctx;
 	struct percpu_ref ref;
 	struct list_head list;
 	struct work_struct release_work;
@@ -287,9 +288,13 @@ static struct zswap_pool *zswap_pool_create(char *type, char *compressor)
 
 	pool->acomp_ctx = alloc_percpu(*pool->acomp_ctx);
 	if (!pool->acomp_ctx) {
-		pr_err("percpu alloc failed\n");
+		pr_err("percpu acomp_ctx alloc failed\n");
 		goto error;
 	}
+
+	pool->acomp_batch_ctx = alloc_percpu(*pool->acomp_batch_ctx);
+	if (!pool->acomp_batch_ctx)
+		pr_err("percpu acomp_batch_ctx alloc failed\n");
 
 	ret = cpuhp_state_add_instance(CPUHP_MM_ZSWP_POOL_PREPARE,
 				       &pool->node);
@@ -312,6 +317,8 @@ static struct zswap_pool *zswap_pool_create(char *type, char *compressor)
 ref_fail:
 	cpuhp_state_remove_instance(CPUHP_MM_ZSWP_POOL_PREPARE, &pool->node);
 error:
+	if (pool->acomp_batch_ctx)
+		free_percpu(pool->acomp_batch_ctx);
 	if (pool->acomp_ctx)
 		free_percpu(pool->acomp_ctx);
 	if (pool->zpool)
@@ -368,6 +375,8 @@ static void zswap_pool_destroy(struct zswap_pool *pool)
 
 	cpuhp_state_remove_instance(CPUHP_MM_ZSWP_POOL_PREPARE, &pool->node);
 	free_percpu(pool->acomp_ctx);
+	if (pool->acomp_batch_ctx)
+		free_percpu(pool->acomp_batch_ctx);
 
 	zpool_destroy_pool(pool->zpool);
 	kfree(pool);
@@ -924,6 +933,11 @@ static int zswap_cpu_comp_prepare(unsigned int cpu, struct hlist_node *node)
 	struct zswap_pool *pool = hlist_entry(node, struct zswap_pool, node);
 	struct crypto_acomp_ctx *acomp_ctx;
 
+	if (pool->acomp_batch_ctx) {
+		acomp_ctx = per_cpu_ptr(pool->acomp_batch_ctx, cpu);
+		acomp_ctx->nr_reqs = 0;
+	}
+
 	acomp_ctx = per_cpu_ptr(pool->acomp_ctx, cpu);
 	return zswap_create_acomp_ctx(cpu, acomp_ctx, pool->tfm_name, 1);
 }
@@ -932,6 +946,12 @@ static int zswap_cpu_comp_dead(unsigned int cpu, struct hlist_node *node)
 {
 	struct zswap_pool *pool = hlist_entry(node, struct zswap_pool, node);
 	struct crypto_acomp_ctx *acomp_ctx;
+
+	if (pool->acomp_batch_ctx) {
+		acomp_ctx = per_cpu_ptr(pool->acomp_batch_ctx, cpu);
+		if (!IS_ERR_OR_NULL(acomp_ctx) && (acomp_ctx->nr_reqs > 0))
+			zswap_delete_acomp_ctx(acomp_ctx);
+	}
 
 	acomp_ctx = per_cpu_ptr(pool->acomp_ctx, cpu);
 	zswap_delete_acomp_ctx(acomp_ctx);
