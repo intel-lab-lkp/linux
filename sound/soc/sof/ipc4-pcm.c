@@ -633,8 +633,11 @@ static int sof_ipc4_pcm_dai_link_fixup_rate(struct snd_sof_dev *sdev,
 			return -EINVAL;
 		}
 
-		rate->min = be_rate;
-		rate->max = rate->min;
+		/* Set rate only if be_rate was assigned */
+		if (num_input_formats > 0) {
+			rate->min = be_rate;
+			rate->max = rate->min;
+		}
 	}
 
 	return 0;
