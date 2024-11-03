@@ -1708,19 +1708,6 @@ void exhalbtc_bt_info_notify(struct btc_coexist *btcoexist,
 	halbtc_normal_low_power(btcoexist);
 }
 
-void exhalbtc_rf_status_notify(struct btc_coexist *btcoexist, u8 type)
-{
-	if (!halbtc_is_bt_coexist_available(btcoexist))
-		return;
-
-	if (IS_HARDWARE_TYPE_8821(btcoexist->adapter)) {
-	} else if (IS_HARDWARE_TYPE_8723B(btcoexist->adapter)) {
-		if (btcoexist->board_info.btdm_ant_num == 1)
-			ex_btc8723b1ant_rf_status_notify(btcoexist, type);
-	} else if (IS_HARDWARE_TYPE_8192E(btcoexist->adapter)) {
-	}
-}
-
 void exhalbtc_halt_notify(struct btc_coexist *btcoexist)
 {
 	if (!halbtc_is_bt_coexist_available(btcoexist))
@@ -1768,31 +1755,6 @@ void exhalbtc_pnp_notify(struct btc_coexist *btcoexist, u8 pnp_state)
 	}
 }
 
-void exhalbtc_coex_dm_switch(struct btc_coexist *btcoexist)
-{
-	struct rtl_priv *rtlpriv = btcoexist->adapter;
-
-	if (!halbtc_is_bt_coexist_available(btcoexist))
-		return;
-	btcoexist->statistics.cnt_coex_dm_switch++;
-
-	halbtc_leave_low_power(btcoexist);
-
-	if (IS_HARDWARE_TYPE_8723B(btcoexist->adapter)) {
-		if (btcoexist->board_info.btdm_ant_num == 1) {
-			btcoexist->stop_coex_dm = true;
-			ex_btc8723b1ant_coex_dm_reset(btcoexist);
-			exhalbtc_set_ant_num(rtlpriv,
-					     BT_COEX_ANT_TYPE_DETECTED, 2);
-			ex_btc8723b2ant_init_hwconfig(btcoexist);
-			ex_btc8723b2ant_init_coex_dm(btcoexist);
-			btcoexist->stop_coex_dm = false;
-		}
-	}
-
-	halbtc_normal_low_power(btcoexist);
-}
-
 void exhalbtc_periodical(struct btc_coexist *btcoexist)
 {
 	if (!halbtc_is_bt_coexist_available(btcoexist))
@@ -1830,13 +1792,6 @@ void exhalbtc_dbg_control(struct btc_coexist *btcoexist,
 	halbtc_leave_low_power(btcoexist);
 
 	halbtc_normal_low_power(btcoexist);
-}
-
-void exhalbtc_antenna_detection(struct btc_coexist *btcoexist, u32 cent_freq,
-				u32 offset, u32 span, u32 seconds)
-{
-	if (!halbtc_is_bt_coexist_available(btcoexist))
-		return;
 }
 
 void exhalbtc_stack_update_profile_info(void)
