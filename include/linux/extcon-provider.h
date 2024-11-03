@@ -55,9 +55,6 @@ int extcon_set_state_sync(struct extcon_dev *edev, unsigned int id,
 int extcon_set_property(struct extcon_dev *edev, unsigned int id,
 				unsigned int prop,
 				union extcon_property_value prop_val);
-int extcon_set_property_sync(struct extcon_dev *edev, unsigned int id,
-				unsigned int prop,
-				union extcon_property_value prop_val);
 int extcon_set_property_capability(struct extcon_dev *edev,
 				unsigned int id, unsigned int prop);
 
@@ -113,13 +110,6 @@ static inline int extcon_sync(struct extcon_dev *edev, unsigned int id)
 
 static inline int extcon_set_property(struct extcon_dev *edev, unsigned int id,
 				unsigned int prop,
-				union extcon_property_value prop_val)
-{
-	return 0;
-}
-
-static inline int extcon_set_property_sync(struct extcon_dev *edev,
-				unsigned int id, unsigned int prop,
 				union extcon_property_value prop_val)
 {
 	return 0;

@@ -756,63 +756,6 @@ int extcon_set_property(struct extcon_dev *edev, unsigned int id,
 EXPORT_SYMBOL_GPL(extcon_set_property);
 
 /**
- * extcon_set_property_sync() - Set property of an external connector with sync.
- * @edev:	the extcon device
- * @id:		the unique id indicating an external connector
- * @prop:	the property id indicating an extcon property
- * @prop_val:	the pointer including the new value of extcon property
- *
- * Note that when setting the property value of external connector,
- * the external connector should be attached. The each property should
- * be included in the list of supported properties according to extcon type.
- *
- * Returns 0 if success or error number if fail.
- */
-int extcon_set_property_sync(struct extcon_dev *edev, unsigned int id,
-				unsigned int prop,
-				union extcon_property_value prop_val)
-{
-	int ret;
-
-	ret = extcon_set_property(edev, id, prop, prop_val);
-	if (ret < 0)
-		return ret;
-
-	return extcon_sync(edev, id);
-}
-EXPORT_SYMBOL_GPL(extcon_set_property_sync);
-
-/**
- * extcon_get_property_capability() - Get the capability of the property
- *					for an external connector.
- * @edev:	the extcon device
- * @id:		the unique id indicating an external connector
- * @prop:	the property id indicating an extcon property
- *
- * Returns 1 if the property is available or 0 if not available.
- */
-int extcon_get_property_capability(struct extcon_dev *edev, unsigned int id,
-					unsigned int prop)
-{
-	int index;
-
-	if (!edev)
-		return -EINVAL;
-
-	/* Check whether the property is supported or not */
-	if (!is_extcon_property_supported(id, prop))
-		return -EINVAL;
-
-	/* Find the cable index of external connector by using id */
-	index = find_cable_index_by_id(edev, id);
-	if (index < 0)
-		return index;
-
-	return is_extcon_property_capability(edev, id, index, prop);
-}
-EXPORT_SYMBOL_GPL(extcon_get_property_capability);
-
-/**
  * extcon_set_property_capability() - Set the capability of the property
  *					for an external connector.
  * @edev:	the extcon device
@@ -1464,16 +1407,6 @@ struct extcon_dev *extcon_get_edev_by_phandle(struct device *dev, int index)
 
 EXPORT_SYMBOL_GPL(extcon_find_edev_by_node);
 EXPORT_SYMBOL_GPL(extcon_get_edev_by_phandle);
-
-/**
- * extcon_get_edev_name() - Get the name of the extcon device.
- * @edev:	the extcon device
- */
-const char *extcon_get_edev_name(struct extcon_dev *edev)
-{
-	return !edev ? NULL : edev->name;
-}
-EXPORT_SYMBOL_GPL(extcon_get_edev_name);
 
 static int __init extcon_class_init(void)
 {

@@ -175,19 +175,14 @@ struct extcon_dev;
 int extcon_get_state(struct extcon_dev *edev, unsigned int id);
 
 /*
- * Following APIs get the property of each external connector.
+ * Following API get the property of each external connector.
  * The 'id' argument indicates the defined external connector
  * and the 'prop' indicates the extcon property.
  *
- * And extcon_get_property_capability() get the capability of the property
- * for each external connector. They are used to get the capability of the
- * property of each external connector based on the id and property.
  */
 int extcon_get_property(struct extcon_dev *edev, unsigned int id,
 				unsigned int prop,
 				union extcon_property_value *prop_val);
-int extcon_get_property_capability(struct extcon_dev *edev,
-				unsigned int id, unsigned int prop);
 
 /*
  * Following APIs register the notifier block in order to detect
@@ -228,9 +223,6 @@ struct extcon_dev *extcon_find_edev_by_node(struct device_node *node);
 struct extcon_dev *extcon_get_edev_by_phandle(struct device *dev,
 						     int index);
 
-/* Following API get the name of extcon device. */
-const char *extcon_get_edev_name(struct extcon_dev *edev);
-
 #else /* CONFIG_EXTCON */
 static inline int extcon_get_state(struct extcon_dev *edev, unsigned int id)
 {
@@ -240,12 +232,6 @@ static inline int extcon_get_state(struct extcon_dev *edev, unsigned int id)
 static inline int extcon_get_property(struct extcon_dev *edev, unsigned int id,
 				unsigned int prop,
 				union extcon_property_value *prop_val)
-{
-	return 0;
-}
-
-static inline int extcon_get_property_capability(struct extcon_dev *edev,
-				unsigned int id, unsigned int prop)
 {
 	return 0;
 }
@@ -312,10 +298,6 @@ static inline struct extcon_dev *extcon_get_edev_by_phandle(struct device *dev,
 	return ERR_PTR(-ENODEV);
 }
 
-static inline const char *extcon_get_edev_name(struct extcon_dev *edev)
-{
-	return NULL;
-}
 #endif /* CONFIG_EXTCON */
 
 /*
