@@ -35,16 +35,28 @@ static int bfs_move_block(unsigned long from, unsigned long to,
 					struct super_block *sb)
 {
 	struct buffer_head *bh, *new;
+	int err = 0;
 
 	bh = sb_bread(sb, from);
 	if (!bh)
 		return -EIO;
 	new = sb_getblk(sb, to);
+	if (!new) {
+		bforget(bh);
+		return -ENOMEM;
+	}
+
+	if (!buffer_uptodate(new)) {
+		err = -EIO;
+		goto out;
+	}
+
 	memcpy(new->b_data, bh->b_data, bh->b_size);
 	mark_buffer_dirty(new);
+out:
 	bforget(bh);
 	brelse(new);
-	return 0;
+	return err;
 }
 
 static int bfs_move_blocks(struct super_block *sb, unsigned long start,
