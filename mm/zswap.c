@@ -151,6 +151,12 @@ struct crypto_acomp_ctx {
 	bool is_sleepable;
 };
 
+enum batch_comp_status {
+	UNINIT_BATCH_COMP = -1,
+	CANNOT_BATCH_COMP = 0,
+	BATCH_COMP_ENABLED = 1,
+};
+
 /*
  * The lock ordering is zswap_tree.lock -> zswap_pool.lru_lock.
  * The only case where lru_lock is not acquired while holding tree.lock is
@@ -159,6 +165,7 @@ struct crypto_acomp_ctx {
  */
 struct zswap_pool {
 	struct zpool *zpool;
+	enum batch_comp_status can_batch_comp;
 	struct crypto_acomp_ctx __percpu *acomp_ctx;
 	struct crypto_acomp_ctx __percpu *acomp_batch_ctx;
 	struct percpu_ref ref;
@@ -310,6 +317,7 @@ static struct zswap_pool *zswap_pool_create(char *type, char *compressor)
 		goto ref_fail;
 	INIT_LIST_HEAD(&pool->list);
 
+	pool->can_batch_comp = UNINIT_BATCH_COMP;
 	zswap_pool_debug("created", pool);
 
 	return pool;
@@ -695,6 +703,36 @@ static int zswap_enabled_param_set(const char *val,
 	return ret;
 }
 
+/* Called only if sysctl vm.compress-batching is set to "1". */
+static __always_inline bool zswap_pool_can_batch(struct zswap_pool *pool)
+{
+	if (pool->can_batch_comp == BATCH_COMP_ENABLED)
+		return true;
+
+	if (pool->can_batch_comp == CANNOT_BATCH_COMP)
+		return false;
+
+	if ((pool->can_batch_comp == UNINIT_BATCH_COMP) && pool->acomp_batch_ctx) {
+		struct crypto_acomp_ctx *acomp_ctx = per_cpu_ptr(
+							pool->acomp_batch_ctx,
+							raw_smp_processor_id());
+		if (!IS_ERR_OR_NULL(acomp_ctx)) {
+			if ((acomp_ctx->nr_reqs == SWAP_CRYPTO_BATCH_SIZE) ||
+			    (!acomp_ctx->nr_reqs &&
+			     !zswap_create_acomp_ctx(raw_smp_processor_id(),
+						     acomp_ctx,
+						     pool->tfm_name,
+						     SWAP_CRYPTO_BATCH_SIZE))) {
+				pool->can_batch_comp = BATCH_COMP_ENABLED;
+				return true;
+			}
+		}
+	}
+
+	pool->can_batch_comp = CANNOT_BATCH_COMP;
+	return false;
+}
+
 /*********************************
 * lru functions
 **********************************/
@@ -849,6 +887,17 @@ static int zswap_create_acomp_ctx(unsigned int cpu,
 
 	acomp_ctx->acomp = acomp;
 	acomp_ctx->is_sleepable = acomp_is_async(acomp);
+
+	/*
+	 * Cannot create a batching ctx without the crypto acomp alg supporting
+	 * batch_compress and batch_decompress API.
+	 */
+	if ((nr_reqs > 1) && (!acomp->batch_compress || !acomp->batch_decompress)) {
+		WARN_ONCE(1, "Cannot alloc acomp_ctx with %d reqs since crypto acomp %s\nhas not registered batch_compress() and/or batch_decompress()\n",
+			  nr_reqs, tfm_name);
+		ret = -ENODEV;
+		goto buf_fail;
+	}
 
 	acomp_ctx->buffers = kmalloc_node(nr_reqs * sizeof(u8 *),
 					  GFP_KERNEL, cpu_to_node(cpu));
