@@ -2040,6 +2040,8 @@ static int xfs_init_fs_context(
 	mp->m_logbufs = -1;
 	mp->m_logbsize = -1;
 	mp->m_allocsize_log = 16; /* 64k */
+	mp->m_af[0] = 0;
+	mp->m_af[1] = 0;
 
 	xfs_hooks_init(&mp->m_dir_update_hooks);
 
