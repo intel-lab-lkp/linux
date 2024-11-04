@@ -24,6 +24,7 @@ ALL_TESTS="
 	kci_test_macsec_offload
 	kci_test_ipsec
 	kci_test_ipsec_offload
+	kci_test_ipsec_packet_offload
 	kci_test_fdb_get
 	kci_test_neigh_get
 	kci_test_bridge_parent_id
@@ -839,6 +840,129 @@ EOF
 		return 1
 	fi
 	end_test "PASS: ipsec_offload"
+}
+
+#-------------------------------------------------------------------
+# Example commands
+#   ip x s add proto esp src 14.0.0.52 dst 14.0.0.70 \
+#            spi 0x07 mode tunnel reqid 0x07 replay-window 32 \
+#            aead 'rfc4106(gcm(aes))' 1234567890123456dcba 128 \
+#            sel src 14.0.0.52/24 dst 14.0.0.70/24
+#            offload packet dev ipsec1 dir out if_id 1
+#   ip x p add dir out src 14.0.0.52/24 dst 14.0.0.70/24 \
+#            tmpl proto esp src 14.0.0.52 dst 14.0.0.70 \
+#            spi 0x07 mode tunnel reqid 0x07 \
+#            offload packet dev ipsec1 if_id 1
+#
+#-------------------------------------------------------------------
+kci_test_ipsec_packet_offload()
+{
+	local ret=0
+	algo="aead rfc4106(gcm(aes)) 0x3132333435363738393031323334353664636261 128"
+	srcip=192.168.123.3
+	dstip=192.168.123.4
+	sysfsd=/sys/kernel/debug/netdevsim/netdevsim0/ports/0/
+	sysfsf=$sysfsd/ipsec
+	sysfsnet=/sys/bus/netdevsim/devices/netdevsim0/net/
+	probed=false
+
+	if ! mount | grep -q debugfs; then
+		mount -t debugfs none /sys/kernel/debug/ &> /dev/null
+	fi
+
+	# setup netdevsim since dummydev doesn't have offload support
+	if [ ! -w /sys/bus/netdevsim/new_device ] ; then
+		run_cmd modprobe -q netdevsim
+		if [ $ret -ne 0 ]; then
+			end_test "SKIP: ipsec_packet_offload can't load netdevsim"
+			return $ksft_skip
+		fi
+		probed=true
+	fi
+
+	echo "0" > /sys/bus/netdevsim/new_device
+	while [ ! -d $sysfsnet ] ; do :; done
+	udevadm settle
+	dev=`ls $sysfsnet`
+
+	ip addr add $netdevsimip dev $dev
+	ip link set $dev up
+	if [ ! -d $sysfsd ] ; then
+		end_test "FAIL: ipsec_packet_offload can't create device $dev"
+		return 1
+	fi
+	if [ ! -f $sysfsf ] ; then
+		end_test "FAIL: ipsec_packet_offload netdevsim doesn't support offload"
+		return 1
+	fi
+
+	# flush to be sure there's nothing configured
+	ip x s flush ; ip x p flush
+
+	# create offloaded out SA
+	run_cmd ip x p add offload packet dev $dev dir out src $srcip/24 \
+	    dst $dstip/24 tmpl proto esp src $srcip dst $dstip spi 9 \
+	    mode tunnel reqid 42 if_id $ipsec_if_id
+
+	run_cmd ip x s add proto esp src $srcip dst $dstip spi 9 \
+	    mode tunnel reqid 42 $algo sel src $srcip/24 dst $dstip/24 \
+	    offload packet dev $dev dir out if_id $ipsec_if_id
+
+	if [ $ret -ne 0 ]; then
+		end_test "FAIL: ipsec_packet_offload can't create SA"
+		return 1
+	fi
+
+	# does offload show up in ip output
+	lines=`ip x s list | grep -c "crypto offload parameters: dev $dev dir"`
+	if [ $lines -ne 1 ] ; then
+		check_err 1
+		end_test "FAIL: ipsec_packet_offload SA missing from list output"
+	fi
+
+	# setup xfrm interface
+	ip link add $ipsecdev type xfrm dev lo if_id $ipsec_if_id
+	ip link set $ipsecdev up
+	ip addr add $srcip/24 dev $ipsecdev
+
+	# we didn't create a peer, make sure we can Tx
+	ip neigh add $dstip dev $dev lladdr 00:11:22:33:44:55
+	# use ping to exercise the Tx path
+	ping -I $ipsecdev -c 3 -W 1 -i 0 $dstip >/dev/null
+
+	# remove xfrm interface
+	ip link delete $ipsecdev
+
+	# does driver have correct offload info
+	run_cmd diff $sysfsf - << EOF
+SA count=1 tx=3
+sa[0] tx ipaddr=0x00000000 00000000 00000000 00000000
+sa[0]    spi=0x00000009 proto=0x32 salt=0x61626364 crypt=1
+sa[0]    key=0x34333231 38373635 32313039 36353433
+EOF
+	if [ $? -ne 0 ] ; then
+		end_test "FAIL: ipsec_packet_offload incorrect driver data"
+		check_err 1
+	fi
+
+	# does offload get removed from driver
+	ip x s flush
+	ip x p flush
+	lines=`grep -c "SA count=0" $sysfsf`
+	if [ $lines -ne 1 ] ; then
+		check_err 1
+		end_test "FAIL: ipsec_packet_offload SA not removed from driver"
+	fi
+
+	# clean up any leftovers
+	echo 0 > /sys/bus/netdevsim/del_device
+	$probed && rmmod netdevsim
+
+	if [ $ret -ne 0 ]; then
+		end_test "FAIL: ipsec_packet_offload"
+		return 1
+	fi
+	end_test "PASS: ipsec_packet_offload"
 }
 
 kci_test_gretap()
