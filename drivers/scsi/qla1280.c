@@ -8,9 +8,11 @@
 * Copyright (C) 2003-2004 Christoph Hellwig
 *
 ******************************************************************************/
-#define QLA1280_VERSION      "3.27.1"
+#define QLA1280_VERSION      "3.27.2"
 /*****************************************************************************
     Revision History:
+    Rev  3.27.2, November 3, 2024, Magnus Lindholm
+	- Use dma_get_required_mask() to determine DMA_BIT_MASK if QLA_64BIT_PTR
     Rev  3.27.1, February 8, 2010, Michael Reed
 	- Retain firmware image for error recovery.
     Rev  3.27, February 10, 2009, Michael Reed
@@ -4143,6 +4145,8 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct Scsi_Host *host;
 	struct scsi_qla_host *ha;
 	int error = -ENODEV;
+	/* use 32-bit mask as default in case driver is built for 32-only */
+	u64 required_mask = DMA_BIT_MASK(32);
 
 	/* Bypass all AMI SUBSYS VENDOR IDs */
 	if (pdev->subsystem_vendor == PCI_VENDOR_ID_AMI) {
@@ -4177,7 +4181,8 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	ha->devnum = devnum;	/* specifies microcode load address */
 
 #ifdef QLA_64BIT_PTR
-	if (dma_set_mask_and_coherent(&ha->pdev->dev, DMA_BIT_MASK(64))) {
+	required_mask = dma_get_required_mask(&ha->pdev->dev);
+	if (dma_set_mask_and_coherent(&ha->pdev->dev, required_mask)) {
 		if (dma_set_mask(&ha->pdev->dev, DMA_BIT_MASK(32))) {
 			printk(KERN_WARNING "scsi(%li): Unable to set a "
 			       "suitable DMA mask - aborting\n", ha->host_no);
@@ -4185,10 +4190,10 @@ qla1280_probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 			goto error_put_host;
 		}
 	} else
-		dprintk(2, "scsi(%li): 64 Bit PCI Addressing Enabled\n",
-			ha->host_no);
+		dprintk(2, "scsi(%li): %d-bit PCI Addressing Enabled\n",
+			ha->host_no, fls64(required_mask));
 #else
-	if (dma_set_mask(&ha->pdev->dev, DMA_BIT_MASK(32))) {
+	if (dma_set_mask(&ha->pdev->dev, required_mask)) {
 		printk(KERN_WARNING "scsi(%li): Unable to set a "
 		       "suitable DMA mask - aborting\n", ha->host_no);
 		error = -ENODEV;
