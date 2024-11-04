@@ -194,6 +194,8 @@ struct bpf_verifier_stack_elem {
 
 #define BPF_GLOBAL_PERCPU_MA_MAX_SIZE  512
 
+#define BPF_PRIV_STACK_MIN_SIZE		64
+
 static int acquire_reference_state(struct bpf_verifier_env *env, int insn_idx);
 static int release_reference(struct bpf_verifier_env *env, int ref_obj_id);
 static void invalidate_non_owning_refs(struct bpf_verifier_env *env);
@@ -6015,6 +6017,38 @@ static int check_ptr_alignment(struct bpf_verifier_env *env,
 					   strict);
 }
 
+enum priv_stack_mode {
+	NO_PRIV_STACK,
+	PRIV_STACK_ADAPTIVE,
+	PRIV_STACK_ALWAYS,
+};
+
+static enum priv_stack_mode bpf_enable_priv_stack(struct bpf_prog *prog)
+{
+	if (!bpf_jit_supports_private_stack())
+		return NO_PRIV_STACK;
+
+	/* bpf_prog_check_recur() checks all prog types that use bpf trampoline
+	 * while kprobe/tp/perf_event/raw_tp don't use trampoline hence checked
+	 * explicitly.
+	 */
+	switch (prog->type) {
+	case BPF_PROG_TYPE_KPROBE:
+	case BPF_PROG_TYPE_TRACEPOINT:
+	case BPF_PROG_TYPE_PERF_EVENT:
+	case BPF_PROG_TYPE_RAW_TRACEPOINT:
+		return PRIV_STACK_ADAPTIVE;
+	default:
+		break;
+	}
+
+	if (!bpf_prog_check_recur(prog))
+		return NO_PRIV_STACK;
+
+
+	return PRIV_STACK_ADAPTIVE;
+}
+
 static int round_up_stack_depth(struct bpf_verifier_env *env, int stack_depth)
 {
 	if (env->prog->jit_requested)
@@ -6033,11 +6067,12 @@ static int round_up_stack_depth(struct bpf_verifier_env *env, int stack_depth)
  * only needs a local stack of MAX_CALL_FRAMES to remember callsites
  */
 static int check_max_stack_depth_subprog(struct bpf_verifier_env *env, int idx,
-					 int *subtree_depth, int *depth_frame)
+					 int *subtree_depth, int *depth_frame,
+					 int priv_stack_supported)
 {
 	struct bpf_subprog_info *subprog = env->subprog_info;
 	struct bpf_insn *insn = env->prog->insnsi;
-	int depth = 0, frame = 0, i, subprog_end;
+	int depth = 0, frame = 0, i, subprog_end, subprog_depth;
 	bool tail_call_reachable = false;
 	int ret_insn[MAX_CALL_FRAMES];
 	int ret_prog[MAX_CALL_FRAMES];
@@ -6070,10 +6105,22 @@ process_func:
 			depth);
 		return -EACCES;
 	}
-	depth += round_up_stack_depth(env, subprog[idx].stack_depth);
+	subprog_depth = round_up_stack_depth(env, subprog[idx].stack_depth);
+	depth += subprog_depth;
 	if (depth > MAX_BPF_STACK && !*subtree_depth) {
 		*subtree_depth = depth;
 		*depth_frame = frame + 1;
+	}
+	if (priv_stack_supported != NO_PRIV_STACK) {
+		if (!subprog[idx].use_priv_stack) {
+			if (subprog_depth > MAX_BPF_STACK) {
+				verbose(env, "stack size of subprog %d is %d. Too large\n",
+					idx, subprog_depth);
+				return -EACCES;
+			}
+			if (subprog_depth >= BPF_PRIV_STACK_MIN_SIZE)
+				subprog[idx].use_priv_stack = true;
+		}
 	}
 continue_func:
 	subprog_end = subprog[idx + 1].start;
@@ -6173,20 +6220,36 @@ continue_func:
 static int check_max_stack_depth(struct bpf_verifier_env *env)
 {
 	struct bpf_subprog_info *si = env->subprog_info;
+	enum priv_stack_mode priv_stack_supported;
 	int ret, subtree_depth = 0, depth_frame;
+
+	priv_stack_supported = bpf_enable_priv_stack(env->prog);
+
+	if (priv_stack_supported != NO_PRIV_STACK) {
+		for (int i = 0; i < env->subprog_cnt; i++) {
+			if (!si[i].has_tail_call)
+				continue;
+			priv_stack_supported = NO_PRIV_STACK;
+			break;
+		}
+	}
 
 	for (int i = 0; i < env->subprog_cnt; i++) {
 		if (!i || si[i].is_async_cb) {
-			ret = check_max_stack_depth_subprog(env, i, &subtree_depth, &depth_frame);
+			ret = check_max_stack_depth_subprog(env, i, &subtree_depth, &depth_frame,
+							    priv_stack_supported);
 			if (ret < 0)
 				return ret;
 		}
 	}
-	if (subtree_depth > MAX_BPF_STACK) {
+
+	if (priv_stack_supported == NO_PRIV_STACK && subtree_depth > MAX_BPF_STACK) {
 		verbose(env, "combined stack size of %d calls is %d. Too large\n",
 			depth_frame, subtree_depth);
 		return -EACCES;
 	}
+	if (si[0].use_priv_stack)
+		env->prog->aux->use_priv_stack = true;
 	return 0;
 }
 
