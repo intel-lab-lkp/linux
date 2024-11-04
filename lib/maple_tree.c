@@ -6299,9 +6299,7 @@ bool mas_nomem(struct ma_state *mas, gfp_t gfp)
 
 void __init maple_tree_init(void)
 {
-	maple_node_cache = kmem_cache_create("maple_node",
-			sizeof(struct maple_node), sizeof(struct maple_node),
-			SLAB_PANIC, NULL);
+	maple_node_cache = KMEM_CACHE(maple_node, SLAB_PANIC);
 }
 
 /**
