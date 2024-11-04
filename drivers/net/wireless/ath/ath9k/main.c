@@ -186,6 +186,7 @@ static void __ath_cancel_work(struct ath_softc *sc)
 	cancel_work_sync(&sc->paprd_work);
 	cancel_delayed_work_sync(&sc->hw_check_work);
 	cancel_delayed_work_sync(&sc->hw_pll_work);
+	cancel_delayed_work_sync(&sc->hw_hang_work);
 
 #ifdef CONFIG_ATH9K_BTCOEX_SUPPORT
 	if (ath9k_hw_mci_is_enabled(sc->sc_ah))
@@ -207,6 +208,9 @@ void ath_restart_work(struct ath_softc *sc)
 	if (AR_SREV_9340(sc->sc_ah) || AR_SREV_9330(sc->sc_ah))
 		ieee80211_queue_delayed_work(sc->hw, &sc->hw_pll_work,
 				     msecs_to_jiffies(ATH_PLL_WORK_INTERVAL));
+
+	ieee80211_queue_delayed_work(sc->hw, &sc->hw_hang_work,
+				     msecs_to_jiffies(ATH_HANG_WORK_INTERVAL));
 
 	ath_start_ani(sc);
 }
