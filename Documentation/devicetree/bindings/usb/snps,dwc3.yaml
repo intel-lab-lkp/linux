@@ -68,6 +68,12 @@ properties:
         - enum: [bus_early, ref, suspend]
         - true
 
+  connector:
+    $ref: /schemas/connector/usb-connector.yaml#
+    description: Connector for dual role switch
+    type: object
+    unevaluatedProperties: false
+
   dma-coherent: true
 
   extcon:
