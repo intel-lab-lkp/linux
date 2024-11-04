@@ -1302,7 +1302,7 @@ static bool __note_gp_changes(struct rcu_node *rnp, struct rcu_data *rdp)
 		zero_cpu_stall_ticks(rdp);
 	}
 	rdp->gp_seq = rnp->gp_seq;  /* Remember new grace-period state. */
-	if (ULONG_CMP_LT(rdp->gp_seq_needed, rnp->gp_seq_needed) || rdp->gpwrap)
+	if (ULONG_CMP_LT(rdp->gp_seq_needed, rnp->gp_seq_needed) || READ_ONCE(rdp->gpwrap))
 		WRITE_ONCE(rdp->gp_seq_needed, rnp->gp_seq_needed);
 	if (IS_ENABLED(CONFIG_PROVE_RCU) && READ_ONCE(rdp->gpwrap))
 		WRITE_ONCE(rdp->last_sched_clock, jiffies);
