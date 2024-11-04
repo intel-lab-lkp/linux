@@ -5143,7 +5143,7 @@ static int inet6_fill_ifaddr(struct sk_buff *skb,
 		return -EMSGSIZE;
 
 	flags = READ_ONCE(ifa->flags);
-	put_ifaddrmsg(nlh, ifa->prefix_len, ifa->flags, rt_scope(ifa->scope),
+	put_ifaddrmsg(nlh, ifa->prefix_len, flags, rt_scope(ifa->scope),
 		      ifa->idev->dev->ifindex);
 
 	if (args->netnsid >= 0 &&
