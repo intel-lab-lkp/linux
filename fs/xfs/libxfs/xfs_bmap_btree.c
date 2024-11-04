@@ -234,6 +234,8 @@ xfs_bmbt_alloc_block(
 		args.minleft = xfs_bmapi_minleft(cur->bc_tp, cur->bc_ino.ip,
 					cur->bc_ino.whichfork);
 
+	args.curr_af = 0;
+	args.next_af = args.mp->m_sb.sb_agcount;
 	error = xfs_alloc_vextent_start_ag(&args, be64_to_cpu(start->l));
 	if (error)
 		return error;

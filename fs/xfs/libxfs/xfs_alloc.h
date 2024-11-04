@@ -56,6 +56,8 @@ typedef struct xfs_alloc_arg {
 	bool		alloc_minlen_only; /* allocate exact minlen extent */
 	struct xfs_owner_info	oinfo;	/* owner of blocks being allocated */
 	enum xfs_ag_resv_type	resv;	/* block reservation to use */
+	xfs_agnumber_t	curr_af;	/* start agno of the allocation field */
+	xfs_agnumber_t	next_af;	/* next point of the allocation field */
 } xfs_alloc_arg_t;
 
 /*
