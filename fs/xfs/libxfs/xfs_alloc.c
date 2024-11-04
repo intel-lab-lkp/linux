@@ -3707,12 +3707,30 @@ xfs_alloc_vextent_iterate_ags(
 	xfs_agnumber_t		restart_agno = minimum_agno;
 	xfs_agnumber_t		agno;
 	int			error = 0;
+	xfs_agnumber_t		start_af = args->curr_af;
+	xfs_agnumber_t		end_af = args->next_af - 1;
+
 
 	if (alloc_flags & XFS_ALLOC_FLAG_TRYLOCK)
 		restart_agno = 0;
 restart:
+	/* if start_agno is not in current AF range, make it be. */
+	if ((start_agno < start_af) || (start_agno > end_af))
+		start_agno = start_af;
+
+	/* Only iterate the cross region between current allocation field and
+	 * [restart_agno, start_agno].
+	 */
+	restart_agno = max(start_af, restart_agno);
+	start_agno = min(end_af, start_agno);
+
+	WARN_ON_ONCE((args->next_af <= 0) || (args->next_af > mp->m_sb.sb_agcount));
+	WARN_ON_ONCE((args->curr_af < 0) || (args->curr_af >= mp->m_sb.sb_agcount));
+	WARN_ON_ONCE(restart_agno > start_agno);
+	WARN_ON_ONCE(restart_agno < start_af);
+	WARN_ON_ONCE(start_agno > end_af);
 	for_each_perag_wrap_range(mp, start_agno, restart_agno,
-			mp->m_sb.sb_agcount, agno, args->pag) {
+			args->next_af, agno, args->pag) {
 		args->agno = agno;
 		error = xfs_alloc_vextent_prepare_ag(args, alloc_flags);
 		if (error)
