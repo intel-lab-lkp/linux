@@ -726,7 +726,90 @@ out_destroy_cset:
 out_free_name:
 	kfree(name);
 }
-#endif
+
+void of_pci_remove_root_bus_node(struct pci_bus *bus)
+{
+	struct device_node *np;
+
+	np = pci_bus_to_OF_node(bus);
+	if (!np || !of_node_check_flag(np, OF_DYNAMIC))
+		return;
+
+	device_remove_of_node(&bus->dev);
+	of_changeset_revert(np->data);
+	of_changeset_destroy(np->data);
+	of_node_put(np);
+}
+
+void of_pci_make_root_bus_node(struct pci_bus *bus)
+{
+	struct device_node *np = NULL;
+	struct of_changeset *cset;
+	const char *name;
+	int ret;
+
+	/*
+	 * If there is already a device tree node linked to this device,
+	 * return immediately.
+	 */
+	if (pci_bus_to_OF_node(bus))
+		return;
+
+	/* Check if there is a DT root node to attach this created node */
+	if (!of_root) {
+		pr_err("of_root node is NULL, cannot create PCI root bus node");
+		return;
+	}
+
+	name = kasprintf(GFP_KERNEL, "pci-root@%x,%x", pci_domain_nr(bus),
+			 bus->number);
+	if (!name)
+		return;
+
+	cset = kmalloc(sizeof(*cset), GFP_KERNEL);
+	if (!cset)
+		goto out_free_name;
+	of_changeset_init(cset);
+
+	np = of_changeset_create_node(cset, of_root, name);
+	if (!np)
+		goto out_destroy_cset;
+
+	ret = of_pci_add_root_bus_properties(bus, cset, np);
+	if (ret)
+		goto out_free_node;
+
+	/*
+	 * This of_node will be added to an existing device. The of_node parent
+	 * is the root OF node and so this node will be handled by the platform
+	 * bus. Avoid any new device creation.
+	 */
+	of_node_set_flag(np, OF_POPULATED);
+	np->fwnode.dev = &bus->dev;
+	fwnode_dev_initialized(&np->fwnode, true);
+
+	ret = of_changeset_apply(cset);
+	if (ret)
+		goto out_free_node;
+
+	np->data = cset;
+
+	/* Add the of_node to the existing device */
+	device_add_of_node(&bus->dev, np);
+	kfree(name);
+
+	return;
+
+out_free_node:
+	of_node_put(np);
+out_destroy_cset:
+	of_changeset_destroy(cset);
+	kfree(cset);
+out_free_name:
+	kfree(name);
+}
+
+#endif /* CONFIG_PCI_DYNAMIC_OF_NODES */
 
 #endif /* CONFIG_PCI */
 
