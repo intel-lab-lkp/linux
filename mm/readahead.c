@@ -672,6 +672,15 @@ void page_cache_async_ra(struct readahead_control *ractl,
 	ra->async_size = ra->size;
 readit:
 	ractl->_index = ra->start;
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	if (ractl->_large_folio) {
+		ractl->_index &= ~((unsigned long)HPAGE_PMD_NR - 1);
+		if (!ractl->_rand_read)
+			ra->size = 2 * HPAGE_PMD_NR;
+		ra->async_size = HPAGE_PMD_NR;
+		order = HPAGE_PMD_ORDER;
+	}
+#endif
 	page_cache_ra_order(ractl, ra, order);
 }
 EXPORT_SYMBOL_GPL(page_cache_async_ra);

@@ -3225,6 +3225,10 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
 		WRITE_ONCE(ra->mmap_miss, --mmap_miss);
 
 	if (folio_test_readahead(folio)) {
+		if (vmf->vma->vm_flags & VM_HUGEPAGE)
+			ractl._large_folio = true;
+		if (vmf->vma->vm_flags & VM_RAND_READ)
+			ractl._rand_read = true;
 		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
 		page_cache_async_ra(&ractl, folio, ra->ra_pages);
 	}
