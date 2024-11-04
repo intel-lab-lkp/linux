@@ -354,6 +354,38 @@ out_unlock:
 }
 EXPORT_SYMBOL(__kmem_cache_create_args);
 
+static unsigned int __kmalloc_minalign(void)
+{
+	unsigned int minalign = dma_get_cache_alignment();
+
+	if (IS_ENABLED(CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC) &&
+	    is_swiotlb_allocated())
+		minalign = ARCH_KMALLOC_MINALIGN;
+
+	return max(minalign, arch_slab_minalign());
+}
+
+static unsigned int __kmalloc_aligned_size(unsigned int idx)
+{
+	unsigned int aligned_size = kmalloc_info[idx].size;
+	unsigned int minalign = __kmalloc_minalign();
+
+	if (minalign > ARCH_KMALLOC_MINALIGN)
+		aligned_size = ALIGN(aligned_size, minalign);
+
+	return aligned_size;
+}
+
+static unsigned int __kmalloc_aligned_idx(unsigned int idx)
+{
+	unsigned int minalign = __kmalloc_minalign();
+
+	if (minalign > ARCH_KMALLOC_MINALIGN)
+		return __kmalloc_index(__kmalloc_aligned_size(idx), false);
+
+	return idx;
+}
+
 static struct kmem_cache *kmem_buckets_cache __ro_after_init;
 
 /**
@@ -381,7 +413,10 @@ kmem_buckets *kmem_buckets_create(const char *name, slab_flags_t flags,
 				  void (*ctor)(void *))
 {
 	kmem_buckets *b;
-	int idx;
+	unsigned int idx;
+	unsigned long mask = 0;
+
+	BUILD_BUG_ON(ARRAY_SIZE(kmalloc_caches[KMALLOC_NORMAL]) > BITS_PER_LONG);
 
 	/*
 	 * When the separate buckets API is not built in, just return
@@ -402,43 +437,47 @@ kmem_buckets *kmem_buckets_create(const char *name, slab_flags_t flags,
 
 	for (idx = 0; idx < ARRAY_SIZE(kmalloc_caches[KMALLOC_NORMAL]); idx++) {
 		char *short_size, *cache_name;
+		unsigned int aligned_size = __kmalloc_aligned_size(idx);
+		unsigned int aligned_idx = __kmalloc_aligned_idx(idx);
 		unsigned int cache_useroffset, cache_usersize;
-		unsigned int size;
 
+		/* this might be an aliased kmem_cache */
 		if (!kmalloc_caches[KMALLOC_NORMAL][idx])
-			continue;
-
-		size = kmalloc_caches[KMALLOC_NORMAL][idx]->object_size;
-		if (!size)
 			continue;
 
 		short_size = strchr(kmalloc_caches[KMALLOC_NORMAL][idx]->name, '-');
 		if (WARN_ON(!short_size))
 			goto fail;
 
-		cache_name = kasprintf(GFP_KERNEL, "%s-%s", name, short_size + 1);
-		if (WARN_ON(!cache_name))
-			goto fail;
-
-		if (useroffset >= size) {
+		if (useroffset >= aligned_size) {
 			cache_useroffset = 0;
 			cache_usersize = 0;
 		} else {
 			cache_useroffset = useroffset;
-			cache_usersize = min(size - cache_useroffset, usersize);
+			cache_usersize = min(aligned_size - cache_useroffset, usersize);
 		}
-		(*b)[idx] = kmem_cache_create_usercopy(cache_name, size,
-					0, flags, cache_useroffset,
-					cache_usersize, ctor);
-		kfree(cache_name);
-		if (WARN_ON(!(*b)[idx]))
-			goto fail;
+
+		if (!(*b)[aligned_idx]) {
+			cache_name = kasprintf(GFP_KERNEL, "%s-%s", name, short_size + 1);
+			if (WARN_ON(!cache_name))
+				goto fail;
+			(*b)[aligned_idx] = kmem_cache_create_usercopy(cache_name, aligned_size,
+						0, flags, cache_useroffset,
+						cache_usersize, ctor);
+			if (WARN_ON(!(*b)[aligned_idx])) {
+				kfree(cache_name);
+				goto fail;
+			}
+			set_bit(aligned_idx, &mask);
+		}
+		if (idx != aligned_idx)
+			(*b)[idx] = (*b)[aligned_idx];
 	}
 
 	return b;
 
 fail:
-	for (idx = 0; idx < ARRAY_SIZE(kmalloc_caches[KMALLOC_NORMAL]); idx++)
+	for_each_set_bit(idx, &mask, ARRAY_SIZE(kmalloc_caches[KMALLOC_NORMAL]))
 		kmem_cache_destroy((*b)[idx]);
 	kmem_cache_free(kmem_buckets_cache, b);
 
@@ -871,24 +910,12 @@ void __init setup_kmalloc_cache_index_table(void)
 	}
 }
 
-static unsigned int __kmalloc_minalign(void)
-{
-	unsigned int minalign = dma_get_cache_alignment();
-
-	if (IS_ENABLED(CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC) &&
-	    is_swiotlb_allocated())
-		minalign = ARCH_KMALLOC_MINALIGN;
-
-	return max(minalign, arch_slab_minalign());
-}
-
 static void __init
-new_kmalloc_cache(int idx, enum kmalloc_cache_type type)
+new_kmalloc_cache(unsigned int idx, enum kmalloc_cache_type type)
 {
 	slab_flags_t flags = 0;
-	unsigned int minalign = __kmalloc_minalign();
-	unsigned int aligned_size = kmalloc_info[idx].size;
-	int aligned_idx = idx;
+	unsigned int aligned_size = __kmalloc_aligned_size(idx);
+	unsigned int aligned_idx = __kmalloc_aligned_idx(idx);
 
 	if ((KMALLOC_RECLAIM != KMALLOC_NORMAL) && (type == KMALLOC_RECLAIM)) {
 		flags |= SLAB_RECLAIM_ACCOUNT;
@@ -914,11 +941,6 @@ new_kmalloc_cache(int idx, enum kmalloc_cache_type type)
 	if (IS_ENABLED(CONFIG_MEMCG) && (type == KMALLOC_NORMAL))
 		flags |= SLAB_NO_MERGE;
 
-	if (minalign > ARCH_KMALLOC_MINALIGN) {
-		aligned_size = ALIGN(aligned_size, minalign);
-		aligned_idx = __kmalloc_index(aligned_size, false);
-	}
-
 	if (!kmalloc_caches[type][aligned_idx])
 		kmalloc_caches[type][aligned_idx] = create_kmalloc_cache(
 					kmalloc_info[aligned_idx].name[type],
@@ -934,7 +956,7 @@ new_kmalloc_cache(int idx, enum kmalloc_cache_type type)
  */
 void __init create_kmalloc_caches(void)
 {
-	int i;
+	unsigned int i;
 	enum kmalloc_cache_type type;
 
 	/*
