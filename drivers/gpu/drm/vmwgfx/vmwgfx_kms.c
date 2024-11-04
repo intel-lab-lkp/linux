@@ -2151,27 +2151,6 @@ vmw_du_connector_detect(struct drm_connector *connector, bool force)
 }
 
 /**
- * vmw_guess_mode_timing - Provide fake timings for a
- * 60Hz vrefresh mode.
- *
- * @mode: Pointer to a struct drm_display_mode with hdisplay and vdisplay
- * members filled in.
- */
-void vmw_guess_mode_timing(struct drm_display_mode *mode)
-{
-	mode->hsync_start = mode->hdisplay + 50;
-	mode->hsync_end = mode->hsync_start + 50;
-	mode->htotal = mode->hsync_end + 50;
-
-	mode->vsync_start = mode->vdisplay + 50;
-	mode->vsync_end = mode->vsync_start + 50;
-	mode->vtotal = mode->vsync_end + 50;
-
-	mode->clock = (u32)mode->htotal * (u32)mode->vtotal / 100 * 6;
-}
-
-
-/**
  * vmw_kms_update_layout_ioctl - Handler for DRM_VMW_UPDATE_LAYOUT ioctl
  * @dev: drm device for the ioctl
  * @data: data pointer for the ioctl
@@ -2681,6 +2660,16 @@ enum drm_mode_status vmw_connector_mode_valid(struct drm_connector *connector,
 	return MODE_OK;
 }
 
+/*
+ * Common modes not present in the VESA DMT standard or assigned a VIC.
+ */
+static const struct {
+	int width;
+	int height;
+} vmw_extra_modes[] = { {2560, 1440}, // QHD
+			{3440, 1440}, // UWQHD
+			{3840, 2400}}; // WQUXGA
+
 /**
  * vmw_connector_get_modes - implements drm_connector_helper_funcs.get_modes callback
  *
@@ -2694,26 +2683,19 @@ int vmw_connector_get_modes(struct drm_connector *connector)
 	struct drm_device *dev = connector->dev;
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct drm_display_mode *mode = NULL;
-	struct drm_display_mode prefmode = { DRM_MODE("preferred",
-		DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC)
-	};
 	u32 max_width;
 	u32 max_height;
-	u32 num_modes;
+	u32 num_modes = 0;
 
 	/* Add preferred mode */
-	mode = drm_mode_duplicate(dev, &prefmode);
+	mode = drm_cvt_mode(dev, du->pref_width, du->pref_height,
+			    60, true, false, false);
 	if (!mode)
 		return 0;
 
-	mode->hdisplay = du->pref_width;
-	mode->vdisplay = du->pref_height;
-	vmw_guess_mode_timing(mode);
-	drm_mode_set_name(mode);
-
+	mode->type |= DRM_MODE_TYPE_PREFERRED | DRM_MODE_TYPE_DRIVER;
 	drm_mode_probed_add(connector, mode);
+	num_modes++;
 	drm_dbg_kms(dev, "preferred mode " DRM_MODE_FMT "\n", DRM_MODE_ARG(mode));
 
 	/* Probe connector for all modes not exceeding our geom limits */
@@ -2725,7 +2707,24 @@ int vmw_connector_get_modes(struct drm_connector *connector)
 		max_height = min(dev_priv->stdu_max_height, max_height);
 	}
 
-	num_modes = 1 + drm_add_modes_noedid(connector, max_width, max_height);
+	mode = drm_display_mode_from_cea_vic(dev, 97); // 4K UHD 16:9
+	if (mode) {
+		drm_mode_probed_add(connector, mode);
+		num_modes++;
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(vmw_extra_modes); i++) {
+		mode = drm_cvt_mode(dev, vmw_extra_modes[i].width,
+				    vmw_extra_modes[i].height,
+				    60, true, false, false);
+		if (mode) {
+			mode->type |= DRM_MODE_TYPE_DRIVER;
+			drm_mode_probed_add(connector, mode);
+			num_modes++;
+		}
+	}
+
+	num_modes += drm_add_modes_noedid(connector, max_width, max_height);
 
 	return num_modes;
 }
