@@ -1123,6 +1123,11 @@ struct journal_s
 	struct jbd2_revoke_table_s *j_revoke_table[2];
 
 	/**
+	 * @j_revoke_rhtable:	rhashtable for revoke records during recovery
+	 */
+	struct rhashtable	j_revoke_rhtable;
+
+	/**
 	 * @j_wbuf: Array of bhs for jbd2_journal_commit_transaction.
 	 */
 	struct buffer_head	**j_wbuf;
@@ -1644,6 +1649,7 @@ extern void	   jbd2_journal_write_revoke_records(transaction_t *transaction,
 /* Recovery revoke support */
 extern int	jbd2_journal_set_revoke(journal_t *, unsigned long long, tid_t);
 extern int	jbd2_journal_test_revoke(journal_t *, unsigned long long, tid_t);
+extern int	jbd2_journal_init_recovery_revoke(journal_t *);
 extern void	jbd2_journal_clear_revoke(journal_t *);
 extern void	jbd2_journal_switch_revoke_table(journal_t *journal);
 extern void	jbd2_clear_buffer_revoked_flags(journal_t *journal);
