@@ -3226,6 +3226,10 @@ static void __split_huge_page_tail(struct folio *folio, int tail,
 		folio_set_large_rmappable(new_folio);
 	}
 
+#ifdef CONFIG_MEMCG
+	new_folio->memcg_data = folio->memcg_data;
+#endif
+
 	/* Finally unfreeze refcount. Additional reference from page cache. */
 	page_ref_unfreeze(page_tail,
 		1 + ((!folio_test_anon(folio) || folio_test_swapcache(folio)) ?
@@ -3259,8 +3263,11 @@ static void __split_huge_page(struct page *page, struct list_head *list,
 	int order = folio_order(folio);
 	unsigned int nr = 1 << order;
 
-	/* complete memcg works before add pages to LRU */
-	split_page_memcg(head, order, new_order);
+#ifdef CONFIG_MEMCG
+	if (folio_memcg_charged(folio))
+		css_get_many(&folio_memcg(folio)->css,
+				(1 << (order - new_order)) - 1);
+#endif
 
 	if (folio_test_anon(folio) && folio_test_swapcache(folio)) {
 		offset = swap_cache_index(folio->swap);
