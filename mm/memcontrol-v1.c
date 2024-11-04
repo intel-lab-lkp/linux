@@ -460,6 +460,7 @@ bool memcg1_wait_acct_move(struct mem_cgroup *memcg)
 	if (mc.moving_task && current != mc.moving_task) {
 		if (mem_cgroup_under_move(memcg)) {
 			DEFINE_WAIT(wait);
+
 			prepare_to_wait(&mc.waitq, &wait, TASK_INTERRUPTIBLE);
 			/* moving charge context might have finished. */
 			if (mc.moving_task)
@@ -490,7 +491,7 @@ void folio_memcg_lock(struct folio *folio)
 	 * The RCU lock is held throughout the transaction.  The fast
 	 * path can get away without acquiring the memcg->move_lock
 	 * because page moving starts with an RCU grace period.
-         */
+	 */
 	rcu_read_lock();
 
 	if (mem_cgroup_disabled())
@@ -2096,8 +2097,8 @@ static bool mem_cgroup_oom_trylock(struct mem_cgroup *memcg)
 			failed = iter;
 			mem_cgroup_iter_break(memcg, iter);
 			break;
-		} else
-			iter->oom_lock = true;
+		}
+		iter->oom_lock = true;
 	}
 
 	if (failed) {
