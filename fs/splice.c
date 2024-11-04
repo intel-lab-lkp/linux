@@ -756,7 +756,8 @@ iter_file_splice_write(struct pipe_inode_info *pipe, struct file *out,
 			if (ret >= buf->len) {
 				ret -= buf->len;
 				buf->len = 0;
-				pipe_buf_release(pipe, buf);
+				if (buf->ops)
+					pipe_buf_release(pipe, buf);
 				tail++;
 				pipe->tail = tail;
 				if (pipe->files)
