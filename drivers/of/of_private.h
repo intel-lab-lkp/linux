@@ -29,7 +29,7 @@ struct alias_prop {
 	char stem[];
 };
 
-#if defined(CONFIG_SPARC)
+#if defined(CONFIG_SPARC) || defined(CONFIG_X86)
 #define OF_ROOT_NODE_ADDR_CELLS_DEFAULT 2
 #else
 #define OF_ROOT_NODE_ADDR_CELLS_DEFAULT 1
