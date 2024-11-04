@@ -3034,25 +3034,27 @@ void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
 }
 
 /*
- * Because folio_memcg(head) is not set on tails, set it now.
+ * The memcg data is only set on the first page, now transfer it to all the
+ * other pages.
  */
-void split_page_memcg(struct page *head, int old_order, int new_order)
+void split_page_memcg(struct page *first, int order)
 {
-	struct folio *folio = page_folio(head);
+	unsigned long memcg_data = first->memcg_data;
+	struct obj_cgroup *objcg;
 	int i;
-	unsigned int old_nr = 1 << old_order;
-	unsigned int new_nr = 1 << new_order;
+	unsigned int nr = 1 << order;
 
-	if (mem_cgroup_disabled() || !folio_memcg_charged(folio))
+	if (!memcg_data)
 		return;
 
-	for (i = new_nr; i < old_nr; i += new_nr)
-		folio_page(folio, i)->memcg_data = folio->memcg_data;
+	VM_BUG_ON_PAGE((memcg_data & OBJEXTS_FLAGS_MASK) != MEMCG_DATA_KMEM,
+			first);
+	objcg = (void *)(memcg_data & ~OBJEXTS_FLAGS_MASK);
 
-	if (folio_memcg_kmem(folio))
-		obj_cgroup_get_many(__folio_objcg(folio), old_nr / new_nr - 1);
-	else
-		css_get_many(&folio_memcg(folio)->css, old_nr / new_nr - 1);
+	for (i = 1; i < nr; i++)
+		first[i].memcg_data = memcg_data;
+
+	obj_cgroup_get_many(objcg, nr - 1);
 }
 
 unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap)
