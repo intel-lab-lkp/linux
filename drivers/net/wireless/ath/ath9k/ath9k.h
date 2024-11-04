@@ -739,11 +739,13 @@ void ath9k_csa_update(struct ath_softc *sc);
 #define ATH_ANI_MAX_SKIP_COUNT    10
 #define ATH_PAPRD_TIMEOUT         100 /* msecs */
 #define ATH_PLL_WORK_INTERVAL     100
+#define ATH_HANG_WORK_INTERVAL    4000
 
 void ath_hw_check_work(struct work_struct *work);
 void ath_reset_work(struct work_struct *work);
 bool ath_hw_check(struct ath_softc *sc);
 void ath_hw_pll_work(struct work_struct *work);
+void ath_hw_hang_work(struct work_struct *work);
 void ath_paprd_calibrate(struct work_struct *work);
 void ath_ani_calibrate(struct timer_list *t);
 void ath_start_ani(struct ath_softc *sc);
@@ -1044,6 +1046,7 @@ struct ath_softc {
 #endif
 	struct delayed_work hw_check_work;
 	struct delayed_work hw_pll_work;
+	struct delayed_work hw_hang_work;
 	struct timer_list sleep_timer;
 
 #ifdef CONFIG_ATH9K_BTCOEX_SUPPORT

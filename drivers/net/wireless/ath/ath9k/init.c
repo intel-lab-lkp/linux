@@ -740,6 +740,7 @@ static int ath9k_init_softc(u16 devid, struct ath_softc *sc,
 	INIT_WORK(&sc->paprd_work, ath_paprd_calibrate);
 	INIT_DELAYED_WORK(&sc->hw_pll_work, ath_hw_pll_work);
 	INIT_DELAYED_WORK(&sc->hw_check_work, ath_hw_check_work);
+	INIT_DELAYED_WORK(&sc->hw_hang_work, ath_hw_hang_work);
 
 	ath9k_init_channel_context(sc);
 
