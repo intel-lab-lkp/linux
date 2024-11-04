@@ -105,7 +105,7 @@ enum {
 	Opt_filestreams, Opt_quota, Opt_noquota, Opt_usrquota, Opt_grpquota,
 	Opt_prjquota, Opt_uquota, Opt_gquota, Opt_pquota,
 	Opt_uqnoenforce, Opt_gqnoenforce, Opt_pqnoenforce, Opt_qnoenforce,
-	Opt_discard, Opt_nodiscard, Opt_dax, Opt_dax_enum,
+	Opt_discard, Opt_nodiscard, Opt_dax, Opt_dax_enum, Opt_af1, Opt_af2,
 };
 
 static const struct fs_parameter_spec xfs_fs_parameters[] = {
@@ -150,6 +150,8 @@ static const struct fs_parameter_spec xfs_fs_parameters[] = {
 	fsparam_flag("nodiscard",	Opt_nodiscard),
 	fsparam_flag("dax",		Opt_dax),
 	fsparam_enum("dax",		Opt_dax_enum, dax_param_enums),
+	fsparam_u32("af1",		Opt_af1),
+	fsparam_u32("af2",		Opt_af2),
 	{}
 };
 
@@ -1395,6 +1397,12 @@ xfs_fs_parse_param(
 	case Opt_noattr2:
 		xfs_fs_warn_deprecated(fc, param, XFS_FEAT_NOATTR2, true);
 		parsing_mp->m_features |= XFS_FEAT_NOATTR2;
+		return 0;
+	case Opt_af1:
+		parsing_mp->m_af[0] = result.uint_32;
+		return 0;
+	case Opt_af2:
+		parsing_mp->m_af[1] = result.uint_32;
 		return 0;
 	default:
 		xfs_warn(parsing_mp, "unknown mount option [%s].", param->key);
