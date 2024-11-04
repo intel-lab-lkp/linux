@@ -94,6 +94,11 @@ static inline void device_set_wakeup_path(struct device *dev)
 	dev->power.wakeup_path = true;
 }
 
+static inline void device_clr_wakeup_path(struct device *dev)
+{
+	dev->power.wakeup_path = false;
+}
+
 /* drivers/base/power/wakeup.c */
 extern struct wakeup_source *wakeup_source_create(const char *name);
 extern void wakeup_source_destroy(struct wakeup_source *ws);
@@ -176,6 +181,8 @@ static inline bool device_wakeup_path(struct device *dev)
 }
 
 static inline void device_set_wakeup_path(struct device *dev) {}
+
+static inline void device_clr_wakeup_path(struct device *dev) {}
 
 static inline void __pm_stay_awake(struct wakeup_source *ws) {}
 
