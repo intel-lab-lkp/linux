@@ -411,5 +411,8 @@ void mmc_remove_card(struct mmc_card *card)
 		host->cqe_enabled = false;
 	}
 
+	card->state &= ~MMC_STATE_PRESENT; // TBD: mmc_card_clear_present()
+	host->bus_ops->suspend(host);
+
 	put_device(&card->dev);
 }
