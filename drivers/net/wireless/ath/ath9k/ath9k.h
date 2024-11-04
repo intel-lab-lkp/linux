@@ -1026,6 +1026,9 @@ struct ath_softc {
 	short nbcnvifs;
 	unsigned long ps_usecount;
 
+	unsigned long last_check_time;
+	u32 last_check_interrupts;
+
 	struct ath_rx rx;
 	struct ath_tx tx;
 	struct ath_beacon beacon;
