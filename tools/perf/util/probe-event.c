@@ -1341,7 +1341,7 @@ static bool is_c_func_name(const char *name)
  * Stuff 'lr' according to the line range described by 'arg'.
  * The line range syntax is described by:
  *
- *         SRC[:SLN[+NUM|-ELN]]
+ *         @SRC[:SLN[+NUM|-ELN]]
  *         FNC[@SRC][:SLN[+NUM|-ELN]]
  */
 int parse_line_range_desc(const char *arg, struct line_range *lr)
@@ -1404,16 +1404,10 @@ int parse_line_range_desc(const char *arg, struct line_range *lr)
 			err = -ENOMEM;
 			goto err;
 		}
+		if (*name != '\0')
+			lr->function = name;
+	} else
 		lr->function = name;
-	} else if (strpbrk_esc(name, "/."))
-		lr->file = name;
-	else if (is_c_func_name(name))/* We reuse it for checking funcname */
-		lr->function = name;
-	else {	/* Invalid name */
-		semantic_error("'%s' is not a valid function name.\n", name);
-		err = -EINVAL;
-		goto err;
-	}
 
 	return 0;
 err:
@@ -1463,7 +1457,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 
 	/*
 	 * <Syntax>
-	 * perf probe [GRP:][EVENT=]SRC[:LN|;PTN]
+	 * perf probe [GRP:][EVENT=]@SRC[:LN|;PTN]
 	 * perf probe [GRP:][EVENT=]FUNC[@SRC][+OFFS|%return|:LN|;PAT]
 	 * perf probe %[GRP:]SDT_EVENT
 	 */
@@ -1516,19 +1510,12 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 	/*
 	 * Check arg is function or file name and copy it.
 	 *
-	 * We consider arg to be a file spec if and only if it satisfies
-	 * all of the below criteria::
-	 * - it does not include any of "+@%",
-	 * - it includes one of ":;", and
-	 * - it has a period '.' in the name.
-	 *
+	 * We consider arg to be a file spec if it starts with '@'.
 	 * Otherwise, we consider arg to be a function specification.
 	 */
-	if (!strpbrk_esc(arg, "+@%")) {
-		ptr = strpbrk_esc(arg, ";:");
-		/* This is a file spec if it includes a '.' before ; or : */
-		if (ptr && memchr(arg, '.', ptr - arg))
-			file_spec = true;
+	if (*arg == '@') {
+		file_spec = true;
+		arg++;
 	}
 
 	ptr = strpbrk_esc(arg, ";:+@%");
