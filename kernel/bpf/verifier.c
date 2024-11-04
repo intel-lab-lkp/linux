@@ -6045,6 +6045,8 @@ static enum priv_stack_mode bpf_enable_priv_stack(struct bpf_prog *prog)
 	if (!bpf_prog_check_recur(prog))
 		return NO_PRIV_STACK;
 
+	if (prog->type == BPF_PROG_TYPE_STRUCT_OPS)
+		return PRIV_STACK_ALWAYS;
 
 	return PRIV_STACK_ADAPTIVE;
 }
@@ -6118,7 +6120,8 @@ process_func:
 					idx, subprog_depth);
 				return -EACCES;
 			}
-			if (subprog_depth >= BPF_PRIV_STACK_MIN_SIZE) {
+			if (priv_stack_supported == PRIV_STACK_ALWAYS ||
+			    subprog_depth >= BPF_PRIV_STACK_MIN_SIZE) {
 				subprog[idx].use_priv_stack = true;
 				subprog[idx].visited_with_priv_stack = true;
 			}
@@ -6235,6 +6238,11 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 		for (int i = 0; i < env->subprog_cnt; i++) {
 			if (!si[i].has_tail_call)
 				continue;
+			if (priv_stack_supported == PRIV_STACK_ALWAYS) {
+				verbose(env,
+					"Private stack not supported due to tail call\n");
+				return -EACCES;
+			}
 			priv_stack_supported = NO_PRIV_STACK;
 			break;
 		}
@@ -6273,6 +6281,11 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 		if (subtree_depth > MAX_BPF_STACK) {
 			verbose(env, "combined stack size of %d calls is %d. Too large\n",
 				depth_frame, subtree_depth);
+			return -EACCES;
+		}
+		if (orig_priv_stack_supported == PRIV_STACK_ALWAYS) {
+			verbose(env,
+				"Private stack not supported due to possible nested subprog run\n");
 			return -EACCES;
 		}
 		if (orig_priv_stack_supported == PRIV_STACK_ADAPTIVE) {
@@ -21948,6 +21961,11 @@ static int check_struct_ops_btf_id(struct bpf_verifier_env *env)
 				mname, st_ops->name);
 			return err;
 		}
+	}
+
+	if (prog->aux->use_priv_stack && !bpf_jit_supports_private_stack()) {
+		verbose(env, "Private stack not supported by jit\n");
+		return -EACCES;
 	}
 
 	/* btf_ctx_access() used this to provide argument type info */
