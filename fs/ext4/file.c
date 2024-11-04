@@ -19,6 +19,7 @@
  *	(jj@sunsite.ms.mff.cuni.cz)
  */
 
+#include "linux/mutex.h"
 #include <linux/time.h>
 #include <linux/fs.h>
 #include <linux/iomap.h>
@@ -282,6 +283,9 @@ static ssize_t ext4_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	return count;
 }
 
+/* lock for critical section of generic_write_sync */
+static DEFINE_MUTEX(write_sync_lock);
+
 static ssize_t ext4_buffered_write_iter(struct kiocb *iocb,
 					struct iov_iter *from)
 {
@@ -302,7 +306,13 @@ out:
 	inode_unlock(inode);
 	if (unlikely(ret <= 0))
 		return ret;
-	return generic_write_sync(iocb, ret);
+
+	/* prevent read-write data race */
+	mutex_lock(&write_sync_lock);
+	ret = generic_write_sync(iocb, ret);
+	mutex_unlock(&write_sync_lock);
+
+	return ret;
 }
 
 static ssize_t ext4_handle_inode_extension(struct inode *inode, loff_t offset,
