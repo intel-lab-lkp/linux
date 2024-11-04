@@ -32,6 +32,32 @@
 #define HDCP2_LC_RETRY_CNT			3
 
 static void
+intel_hdcp_enable_hdcp_line_rekeying(struct intel_encoder *encoder,
+				     struct intel_hdcp *hdcp)
+{
+	struct intel_display *display = to_intel_display(encoder);
+
+	/* Here we assume HDMI is in TMDS mode of operation */
+	if (encoder->type != INTEL_OUTPUT_HDMI)
+		return;
+
+	if (DISPLAY_VER(display) >= 14) {
+		if (DISPLAY_VER(display) >= 30)
+			intel_de_rmw(display,
+				     TRANS_DDI_FUNC_CTL(display, hdcp->cpu_transcoder),
+				     XE3_TRANS_DDI_HDCP_LINE_REKEY_DISABLE, 0);
+		else if (IS_DISPLAY_VERx100_STEP(display, 1400, STEP_D0, STEP_FOREVER))
+			intel_de_rmw(display, MTL_CHICKEN_TRANS(hdcp->cpu_transcoder),
+				     HDCP_LINE_REKEY_DISABLE, 0);
+		else if (IS_DISPLAY_VERx100_STEP(display, 1401, STEP_B0, STEP_FOREVER) ||
+			 IS_DISPLAY_VERx100_STEP(display, 2000, STEP_B0, STEP_FOREVER))
+			intel_de_rmw(display,
+				     TRANS_DDI_FUNC_CTL(display, hdcp->cpu_transcoder),
+				     TRANS_DDI_HDCP_LINE_REKEY_DISABLE, 0);
+	}
+}
+
+static void
 intel_hdcp_disable_hdcp_line_rekeying(struct intel_encoder *encoder,
 				      struct intel_hdcp *hdcp)
 {
@@ -1050,6 +1076,8 @@ static int intel_hdcp1_enable(struct intel_connector *connector)
 			ret);
 		return ret;
 	}
+
+	intel_hdcp_enable_hdcp_line_rekeying(connector->encoder, hdcp);
 
 	/* Incase of authentication failures, HDCP spec expects reauth. */
 	for (i = 0; i < tries; i++) {
