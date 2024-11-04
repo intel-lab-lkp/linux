@@ -1463,10 +1463,7 @@ void nfs_pageio_stop_mirroring(struct nfs_pageio_descriptor *pgio)
 
 int __init nfs_init_nfspagecache(void)
 {
-	nfs_page_cachep = kmem_cache_create("nfs_page",
-					    sizeof(struct nfs_page),
-					    0, SLAB_HWCACHE_ALIGN,
-					    NULL);
+	nfs_page_cachep = KMEM_CACHE(nfs_page, SLAB_HWCACHE_ALIGN);
 	if (nfs_page_cachep == NULL)
 		return -ENOMEM;
 
