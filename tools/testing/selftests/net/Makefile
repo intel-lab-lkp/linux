@@ -96,9 +96,10 @@ TEST_PROGS += fdb_flush.sh
 TEST_PROGS += fq_band_pktlimit.sh
 TEST_PROGS += vlan_hw_filter.sh
 TEST_PROGS += bpf_offload.py
+TEST_PROGS += busy_poll_test.sh
 
 # YNL files, must be before "include ..lib.mk"
-YNL_GEN_FILES := ncdevmem
+YNL_GEN_FILES := ncdevmem busy_poller
 TEST_GEN_FILES += $(YNL_GEN_FILES)
 
 TEST_FILES := settings
