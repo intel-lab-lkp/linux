@@ -2729,7 +2729,7 @@ int show_perf_probe_events(struct strfilter *filter)
 
 static int get_new_event_name(char *buf, size_t len, const char *base,
 			      struct strlist *namelist, bool ret_event,
-			      bool allow_suffix)
+			      bool allow_suffix, bool is_C_symname)
 {
 	int i, ret;
 	char *p, *nbase;
@@ -2740,10 +2740,24 @@ static int get_new_event_name(char *buf, size_t len, const char *base,
 	if (!nbase)
 		return -ENOMEM;
 
-	/* Cut off the dot suffixes (e.g. .const, .isra) and version suffixes */
-	p = strpbrk(nbase, ".@");
-	if (p && p != nbase)
-		*p = '\0';
+	if (is_C_symname) {
+		/* Cut off the dot suffixes (e.g. .const, .isra) and version suffixes */
+		p = strpbrk(nbase, ".@");
+		if (p && p != nbase)
+			*p = '\0';
+	} else {
+		/* Replace non-alnum with '_' */
+		char *s, *d;
+
+		s = d = nbase;
+		do {
+			if (*s && !isalnum(*s)) {
+				if (d != nbase && *(d - 1) != '_')
+					*d++ = '_';
+			} else
+				*d++ = *s;
+		} while (*s++);
+	}
 
 	/* Try no suffix number */
 	ret = e_snprintf(buf, len, "%s%s", nbase, ret_event ? "__return" : "");
@@ -2832,6 +2846,7 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 				       bool allow_suffix)
 {
 	const char *event, *group;
+	bool is_C_symname = false;
 	char buf[64];
 	int ret;
 
@@ -2846,8 +2861,16 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 			(strncmp(pev->point.function, "0x", 2) != 0) &&
 			!strisglob(pev->point.function))
 			event = pev->point.function;
-		else
+		else {
 			event = tev->point.realname;
+			/*
+			 * `realname` comes from real symbol, which can have a suffix.
+			 * However, if we see some glab-like wildcard in the symbol, it
+			 * might not be a C program.
+			 */
+			if (!strisglob(event))
+				is_C_symname = true;
+		}
 	}
 	if (pev->group && !pev->sdt)
 		group = pev->group;
@@ -2858,7 +2881,7 @@ static int probe_trace_event__set_name(struct probe_trace_event *tev,
 
 	/* Get an unused new event name */
 	ret = get_new_event_name(buf, sizeof(buf), event, namelist,
-				 tev->point.retprobe, allow_suffix);
+				 tev->point.retprobe, allow_suffix, is_C_symname);
 	if (ret < 0)
 		return ret;
 
