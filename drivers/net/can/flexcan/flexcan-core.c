@@ -1379,8 +1379,7 @@ static int flexcan_rx_offload_setup(struct net_device *dev)
 	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_NR_MB_16)
 		priv->mb_count = 16;
 	else
-		priv->mb_count = (sizeof(priv->regs->mb[0]) / priv->mb_size) +
-				 (sizeof(priv->regs->mb[1]) / priv->mb_size);
+		priv->mb_count = sizeof(priv->regs->mb) / priv->mb_size;
 
 	if (priv->devtype_data.quirks & FLEXCAN_QUIRK_USE_RX_MAILBOX)
 		priv->tx_mb_reserved =
