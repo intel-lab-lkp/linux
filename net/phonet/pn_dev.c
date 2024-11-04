@@ -406,7 +406,9 @@ int phonet_route_del(struct net_device *dev, u8 daddr)
 
 	if (!dev)
 		return -ENOENT;
-	synchronize_rcu();
+
+	/* Note : our caller must call synchronize_rcu() */
+
 	dev_put(dev);
 	return 0;
 }
