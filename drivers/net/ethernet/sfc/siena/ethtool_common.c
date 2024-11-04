@@ -403,24 +403,19 @@ static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 	efx_for_each_channel(channel, efx) {
 		if (efx_channel_has_tx_queues(channel)) {
 			n_stats++;
-			if (strings != NULL) {
-				snprintf(strings, ETH_GSTRING_LEN,
-					 "tx-%u.tx_packets",
-					 channel->tx_queue[0].queue /
-					 EFX_MAX_TXQ_PER_CHANNEL);
-
-				strings += ETH_GSTRING_LEN;
-			}
+			if (strings)
+				ethtool_sprintf(
+					&strings, "tx-%u.tx_packets",
+					channel->tx_queue[0].queue /
+						EFX_MAX_TXQ_PER_CHANNEL);
 		}
 	}
 	efx_for_each_channel(channel, efx) {
 		if (efx_channel_has_rx_queue(channel)) {
 			n_stats++;
-			if (strings != NULL) {
-				snprintf(strings, ETH_GSTRING_LEN,
-					 "rx-%d.rx_packets", channel->channel);
-				strings += ETH_GSTRING_LEN;
-			}
+			if (strings)
+				ethtool_sprintf(&strings, "rx-%d.rx_packets",
+						channel->channel);
 		}
 	}
 	if (efx->xdp_tx_queue_count && efx->xdp_tx_queues) {
@@ -428,11 +423,10 @@ static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 
 		for (xdp = 0; xdp < efx->xdp_tx_queue_count; xdp++) {
 			n_stats++;
-			if (strings) {
-				snprintf(strings, ETH_GSTRING_LEN,
-					 "tx-xdp-cpu-%hu.tx_packets", xdp);
-				strings += ETH_GSTRING_LEN;
-			}
+			if (strings)
+				ethtool_sprintf(&strings,
+						"tx-xdp-cpu-%hu.tx_packets",
+						xdp);
 		}
 	}
 
@@ -467,9 +461,7 @@ void efx_siena_ethtool_get_strings(struct net_device *net_dev,
 		strings += (efx->type->describe_stats(efx, strings) *
 			    ETH_GSTRING_LEN);
 		for (i = 0; i < EFX_ETHTOOL_SW_STAT_COUNT; i++)
-			strscpy(strings + i * ETH_GSTRING_LEN,
-				efx_sw_stat_desc[i].name, ETH_GSTRING_LEN);
-		strings += EFX_ETHTOOL_SW_STAT_COUNT * ETH_GSTRING_LEN;
+			ethtool_puts(&strings, efx_sw_stat_desc[i].name);
 		strings += (efx_describe_per_queue_stats(efx, strings) *
 			    ETH_GSTRING_LEN);
 		efx_siena_ptp_describe_stats(efx, strings);
