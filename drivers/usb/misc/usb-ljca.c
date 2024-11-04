@@ -43,6 +43,7 @@ enum ljca_client_type {
 
 /* MNG client commands */
 enum ljca_mng_cmd {
+	LJCA_MNG_GET_VERSION = 1,
 	LJCA_MNG_RESET = 2,
 	LJCA_MNG_ENUM_GPIO = 4,
 	LJCA_MNG_ENUM_I2C = 5,
@@ -66,6 +67,13 @@ struct ljca_msg {
 	u8 flags;
 	u8 len;
 	u8 data[] __counted_by(len);
+} __packed;
+
+struct ljca_fw_version {
+	u8 major;
+	u8 minor;
+	__le16 patch;
+	__le16 build;
 } __packed;
 
 struct ljca_i2c_ctr_info {
@@ -694,6 +702,24 @@ static int ljca_reset_handshake(struct ljca_adapter *adap)
 	return 0;
 }
 
+static void ljca_print_fw_version(struct ljca_adapter *adap)
+{
+	struct ljca_fw_version version = {};
+	int ret;
+
+	ret = ljca_send(adap, LJCA_CLIENT_MNG, LJCA_MNG_GET_VERSION, NULL, 0,
+			(u8 *)&version, sizeof(version), true, LJCA_WRITE_ACK_TIMEOUT_MS);
+
+	if (ret != sizeof(version)) {
+		dev_err(adap->dev, "Get version failed, ret: %d\n", ret);
+		return;
+	}
+
+	dev_info(adap->dev, "Firmware version: %d.%d.%d.%d\n",
+		 version.major, version.minor,
+		 le16_to_cpu(version.patch), le16_to_cpu(version.build));
+}
+
 static int ljca_enumerate_clients(struct ljca_adapter *adap)
 {
 	struct ljca_client *client, *next;
@@ -809,6 +835,8 @@ static int ljca_probe(struct usb_interface *interface,
 	ret = ljca_enumerate_clients(adap);
 	if (ret)
 		goto err_free;
+
+	ljca_print_fw_version(adap);
 
 	pm_runtime_set_autosuspend_delay(&usb_dev->dev, 10);
 	usb_enable_autosuspend(usb_dev);
