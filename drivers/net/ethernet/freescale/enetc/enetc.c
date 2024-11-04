@@ -28,6 +28,9 @@ EXPORT_SYMBOL_GPL(enetc_port_mac_wr);
 static void enetc_change_preemptible_tcs(struct enetc_ndev_priv *priv,
 					 u8 preemptible_tcs)
 {
+	if (!(priv->si->hw_features & ENETC_SI_F_QBU))
+		return;
+
 	priv->preemptible_tcs = preemptible_tcs;
 	enetc_mm_commit_preemptible_tcs(priv);
 }
@@ -1752,7 +1755,12 @@ void enetc_get_si_caps(struct enetc_si *si)
 	if (val & ENETC_SIPCAPR0_QBV)
 		si->hw_features |= ENETC_SI_F_QBV;
 
-	if (val & ENETC_SIPCAPR0_QBU)
+	/* Although the SIPCAPR0 of VF indicates that VF supports Qbu,
+	 * only PF can access the related registers to configure Qbu.
+	 * Therefore, ENETC_SI_F_QBU is set only for PFs which support
+	 * this feature.
+	 */
+	if (val & ENETC_SIPCAPR0_QBU && enetc_si_is_pf(si))
 		si->hw_features |= ENETC_SI_F_QBU;
 
 	if (val & ENETC_SIPCAPR0_PSFP)
