@@ -506,7 +506,7 @@ static inline int print_page_owner_memcg(char *kbuf, size_t count, int ret,
 	char name[80];
 
 	rcu_read_lock();
-	memcg_data = READ_ONCE(page->memcg_data);
+	memcg_data = READ_ONCE(page_acctmem(page)->memcg_data);
 	if (!memcg_data)
 		goto out_unlock;
 

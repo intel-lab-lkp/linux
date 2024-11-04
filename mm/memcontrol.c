@@ -2661,6 +2661,7 @@ out:
  */
 int __memcg_kmem_charge_page(struct page *page, gfp_t gfp, int order)
 {
+	struct acctmem *acctmem = page_acctmem(page);
 	struct obj_cgroup *objcg;
 	int ret = 0;
 
@@ -2669,7 +2670,7 @@ int __memcg_kmem_charge_page(struct page *page, gfp_t gfp, int order)
 		ret = obj_cgroup_charge_pages(objcg, gfp, 1 << order);
 		if (!ret) {
 			obj_cgroup_get(objcg);
-			page->memcg_data = (unsigned long)objcg |
+			acctmem->memcg_data = (unsigned long)objcg |
 				MEMCG_DATA_KMEM;
 			return 0;
 		}
@@ -3039,7 +3040,7 @@ void __memcg_slab_free_hook(struct kmem_cache *s, struct slab *slab,
  */
 void split_page_memcg(struct page *first, int order)
 {
-	unsigned long memcg_data = first->memcg_data;
+	unsigned long memcg_data = page_acctmem(first)->memcg_data;
 	struct obj_cgroup *objcg;
 	int i;
 	unsigned int nr = 1 << order;
@@ -3052,7 +3053,7 @@ void split_page_memcg(struct page *first, int order)
 	objcg = (void *)(memcg_data & ~OBJEXTS_FLAGS_MASK);
 
 	for (i = 1; i < nr; i++)
-		first[i].memcg_data = memcg_data;
+		page_acctmem(first + i)->memcg_data = memcg_data;
 
 	obj_cgroup_get_many(objcg, nr - 1);
 }

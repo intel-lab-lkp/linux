@@ -30,6 +30,30 @@ struct page;
 struct mm_struct;
 struct kmem_cache;
 
+/*
+ * For now, this data structure overlays struct page.  Eventually it
+ * will be separately allocated and become a memdesc type of its own
+ * like slab and ptdesc.  memcg_data is only valid on the first page
+ * of an allocation, but that allocation might not be compound!
+ */
+struct acctmem {
+	unsigned long __page_flags;
+	unsigned long __padding[5];
+	unsigned int ___padding[2];
+	unsigned long memcg_data;
+};
+#ifdef CONFIG_MEMCG
+static_assert(offsetof(struct page, __acct_memcg_data) ==
+		offsetof(struct acctmem, memcg_data));
+static_assert(offsetof(struct folio, memcg_data) ==
+		offsetof(struct acctmem, memcg_data));
+static_assert(sizeof(struct acctmem) <= sizeof(struct page));
+#endif
+
+#define page_acctmem(_page)	(_Generic((_page),			\
+	const struct page *:	(const struct acctmem *)(_page),	\
+	struct page *:		(struct acctmem *)(_page)))
+
 /* Cgroup-specific page state, on top of universal node page state */
 enum memcg_stat_item {
 	MEMCG_SWAP = NR_VM_NODE_STAT_ITEMS,

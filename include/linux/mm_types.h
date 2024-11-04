@@ -181,7 +181,7 @@ struct page {
 	atomic_t _refcount;
 
 #ifdef CONFIG_MEMCG
-	unsigned long memcg_data;
+	unsigned long __acct_memcg_data;
 #elif defined(CONFIG_SLAB_OBJ_EXT)
 	unsigned long _unused_slab_obj_exts;
 #endif
@@ -410,7 +410,7 @@ FOLIO_MATCH(private, private);
 FOLIO_MATCH(_mapcount, _mapcount);
 FOLIO_MATCH(_refcount, _refcount);
 #ifdef CONFIG_MEMCG
-FOLIO_MATCH(memcg_data, memcg_data);
+FOLIO_MATCH(__acct_memcg_data, memcg_data);
 #endif
 #if defined(WANT_PAGE_VIRTUAL)
 FOLIO_MATCH(virtual, virtual);
@@ -499,7 +499,7 @@ TABLE_MATCH(rcu_head, pt_rcu_head);
 TABLE_MATCH(page_type, __page_type);
 TABLE_MATCH(_refcount, __page_refcount);
 #ifdef CONFIG_MEMCG
-TABLE_MATCH(memcg_data, pt_memcg_data);
+TABLE_MATCH(__acct_memcg_data, pt_memcg_data);
 #endif
 #undef TABLE_MATCH
 static_assert(sizeof(struct ptdesc) <= sizeof(struct page));

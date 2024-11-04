@@ -870,7 +870,7 @@ static inline bool page_expected_state(struct page *page,
 	if (unlikely((unsigned long)page->mapping |
 			page_ref_count(page) |
 #ifdef CONFIG_MEMCG
-			page->memcg_data |
+			page_acctmem(page)->memcg_data |
 #endif
 #ifdef CONFIG_PAGE_POOL
 			((page->pp_magic & ~0x3UL) == PP_SIGNATURE) |
@@ -898,7 +898,7 @@ static const char *page_bad_reason(struct page *page, unsigned long flags)
 			bad_reason = "PAGE_FLAGS_CHECK_AT_FREE flag(s) set";
 	}
 #ifdef CONFIG_MEMCG
-	if (unlikely(page->memcg_data))
+	if (unlikely(page_acctmem(page)->memcg_data))
 		bad_reason = "page still charged to cgroup";
 #endif
 #ifdef CONFIG_PAGE_POOL
