@@ -162,13 +162,59 @@ static bool ath_hw_hang_deadbeef(struct ath_softc *sc)
 	return true;
 }
 
+static bool ath_hw_hang_deaf(struct ath_softc *sc)
+{
+#if !defined(CPTCFG_ATH9K_DEBUGFS) || defined(CPTCFG_ATH9K_TX99)
+	return false;
+#else
+	struct ath_common *common = ath9k_hw_common(sc->sc_ah);
+	u32 interrupts, interrupt_per_s;
+	unsigned int interval;
+
+	/* get historic data */
+	interval = jiffies_to_msecs(jiffies - sc->last_check_time);
+	if (sc->sc_ah->caps.hw_caps & ATH9K_HW_CAP_EDMA)
+		interrupts = sc->debug.stats.istats.rxlp;
+	else
+		interrupts = sc->debug.stats.istats.rxok;
+
+	interrupts -= sc->last_check_interrupts;
+
+	/* save current data */
+	sc->last_check_time = jiffies;
+	if (sc->sc_ah->caps.hw_caps & ATH9K_HW_CAP_EDMA)
+		sc->last_check_interrupts = sc->debug.stats.istats.rxlp;
+	else
+		sc->last_check_interrupts = sc->debug.stats.istats.rxok;
+
+	/* sanity check, should be 4 seconds */
+	if (interval > 10000 || interval < 1000)
+		return false;
+
+	/* should be at least one interrupt per second */
+	interrupt_per_s = interrupts / (interval / 1000);
+	if (interrupt_per_s >= 1)
+		return false;
+
+	ath_dbg(common, RESET,
+		"RX deaf hang is detected. Schedule chip reset\n");
+	ath9k_queue_reset(sc, RESET_TYPE_DEAF);
+
+	return true;
+#endif
+}
+
 void ath_hw_hang_work(struct work_struct *work)
 {
 	struct ath_softc *sc = container_of(work, struct ath_softc,
 					    hw_hang_work.work);
 
-	ath_hw_hang_deadbeef(sc);
+	if (ath_hw_hang_deadbeef(sc))
+		goto requeue_worker;
 
+	ath_hw_hang_deaf(sc);
+
+requeue_worker:
 	ieee80211_queue_delayed_work(sc->hw, &sc->hw_hang_work,
 				     msecs_to_jiffies(ATH_HANG_WORK_INTERVAL));
 }

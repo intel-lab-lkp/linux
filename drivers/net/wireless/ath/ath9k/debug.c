@@ -751,6 +751,7 @@ static int read_file_reset(struct seq_file *file, void *data)
 		[RESET_TX_DMA_ERROR] = "Tx DMA stop error",
 		[RESET_RX_DMA_ERROR] = "Rx DMA stop error",
 		[RESET_TYPE_DEADBEEF] = "deadbeef hang",
+		[RESET_TYPE_DEAF] = "deaf hang",
 	};
 	int i;
 
