@@ -1,0 +1,28 @@
+drm drm-fixes 59b723cd2adbac2a34fc8e12c74ae26ae45bf230
+	Linux 6.12-rc6
+drm-misc drm-misc-fixes b04ce1e718bd55302b52d05d6873e233cb3ec7a1
+	drm/imagination: Break an object reference loop
+drm-intel drm-intel-fixes 59b723cd2adbac2a34fc8e12c74ae26ae45bf230
+	Linux 6.12-rc6
+drm-xe drm-xe-fixes fe05cee4d9533892210e1ee90147175d87e7c053
+	drm/xe: Don't short circuit TDR on jobs not started
+drm drm-next 30169bb64580bd7bce9290c1952bf0aa6cc37fe5
+	Backmerge v6.12-rc6 of git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux into drm-next
+drm-misc drm-misc-next-fixes ba2b9de0c1ac2abfbe663414a292c5881e64c361
+	drm/tegra: fix potential uninitialized variable use
+drm-intel drm-intel-next-fixes e860513f56d8428fcb2bd0282ac8ab691a53fc6c
+	drm/i915/dp: Fix colorimetry detection
+drm-xe drm-xe-next-fixes d7126c0cfc137a580eba92bd82b6d288bd43961d
+	Merge tag 'drm-xe-next-fixes-2024-09-19' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next d78f0ee0406803cda8801fd5201746ccf89e5e4a
+	Merge remote-tracking branch 'drm/drm-next' into drm-misc-next
+drm-intel drm-intel-next 82ab75c4520cfa77c0409e70a2623561233cd109
+	drm/i915/display: Allow fastset for change in HDR infoframe
+drm-intel drm-intel-gt-next b7cfe79f06d673fccd388896ff67f305b8378716
+	drm/i915/gt: Remove unused execlists_unwind_incomplete_requests
+drm-xe drm-xe-next c787c2901e2c03008e536b86cb0103ce6fd05e2d
+	Merge drm/drm-next into drm-xe-next
+drm-intel topic/core-for-CI 8db9a55ae3149e377b72f80da5078e347f0fde3c
+	x86/apic: Stop the TSC Deadline timer during lapic timer shutdown
+drm-xe topic/xe-for-CI fefe873265210efca14d239382df9243cb6387b9
+	drm/xe/ptl: Define HuC FW version for PTL
