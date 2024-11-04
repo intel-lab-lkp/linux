@@ -197,6 +197,12 @@
 #
 # - pmtu_ipv6_route_change
 #	Same as above but with IPv6
+#
+# - pmtu_ipv4_mp_exceptions
+#	Use the same topology as in pmtu_ipv4, but add routeable "dummy"
+#	addresses on host A and B on lo0 reachable via both routers.
+#	Host A and B "dummy" addresses have multipath routes to each other.
+#	Check that PMTU exceptions are created for both paths.
 
 source lib.sh
 source net_helper.sh
@@ -266,7 +272,8 @@ tests="
 	list_flush_ipv4_exception	ipv4: list and flush cached exceptions	1
 	list_flush_ipv6_exception	ipv6: list and flush cached exceptions	1
 	pmtu_ipv4_route_change		ipv4: PMTU exception w/route replace	1
-	pmtu_ipv6_route_change		ipv6: PMTU exception w/route replace	1"
+	pmtu_ipv6_route_change		ipv6: PMTU exception w/route replace	1
+	pmtu_ipv4_mp_exceptions		ipv4: PMTU multipath nh exceptions	1"
 
 # Addressing and routing for tests with routers: four network segments, with
 # index SEGMENT between 1 and 4, a common prefix (PREFIX4 or PREFIX6) and an
@@ -342,6 +349,9 @@ tunnel4_mask="24"
 tunnel6_a_addr="fd00:2::a"
 tunnel6_b_addr="fd00:2::b"
 tunnel6_mask="64"
+
+dummy4_a_addr="192.168.99.99"
+dummy4_b_addr="192.168.88.88"
 
 dummy6_0_prefix="fc00:1000::"
 dummy6_1_prefix="fc00:1001::"
@@ -982,6 +992,50 @@ setup_ovs_bridge() {
 	run_cmd ip link set veth_A-R1 up
 	run_cmd ip route add ${prefix4}.${b_r1}.1 via ${prefix4}.${a_r1}.2
 	run_cmd ip route add ${prefix6}:${b_r1}::1 via ${prefix6}:${a_r1}::2
+}
+
+setup_multipath() {
+	if [ "$USE_NH" = "yes" ]; then
+		setup_multipath_new
+	else
+		setup_multipath_old
+	fi
+
+	# Set up routers with routes to dummies
+	run_cmd ${ns_r1} ip route add ${dummy4_a_addr} via ${prefix4}.${a_r1}.1
+	run_cmd ${ns_r2} ip route add ${dummy4_a_addr} via ${prefix4}.${a_r2}.1
+	run_cmd ${ns_r1} ip route add ${dummy4_b_addr} via ${prefix4}.${b_r1}.1
+	run_cmd ${ns_r2} ip route add ${dummy4_b_addr} via ${prefix4}.${b_r2}.1
+}
+
+setup_multipath_new() {
+	# Set up host A with multipath routes to host B dummy4_b_addr
+	run_cmd ${ns_a} ip addr add ${dummy4_a_addr} dev lo0
+	run_cmd ${ns_a} ip nexthop add id 201 via ${prefix4}.${a_r1}.2 dev veth_A-R1
+	run_cmd ${ns_a} ip nexthop add id 202 via ${prefix4}.${a_r2}.2 dev veth_A-R2
+	run_cmd ${ns_a} ip nexthop add id 203 group 201/202
+	run_cmd ${ns_a} ip route add ${dummy4_b_addr} nhid 203
+
+	# Set up host B with multipath routes to host A dummy4_a_addr
+	run_cmd ${ns_b} ip addr add ${dummy4_b_addr} dev lo0
+	run_cmd ${ns_b} ip nexthop add id 201 via ${prefix4}.${b_r1}.2 dev veth_A-R1
+	run_cmd ${ns_b} ip nexthop add id 202 via ${prefix4}.${b_r2}.2 dev veth_A-R2
+	run_cmd ${ns_b} ip nexthop add id 203 group 201/202
+	run_cmd ${ns_b} ip route add ${dummy4_a_addr} nhid 203
+}
+
+setup_multipath_old() {
+	# Set up host A with multipath routes to host B dummy4_b_addr
+	run_cmd ${ns_a} ip addr add ${dummy4_a_addr} dev lo0
+	run_cmd ${ns_a} ip route add ${dummy4_b_addr} \
+			nexthop via ${prefix4}.${a_r1}.2 weight 1 \
+			nexthop via ${prefix4}.${a_r2}.2 weight 1
+
+	# Set up host B with multipath routes to host A dummy4_a_addr
+	run_cmd ${ns_b} ip addr add ${dummy4_b_addr} dev lo0
+	run_cmd ${ns_a} ip route add ${dummy4_a_addr} \
+			nexthop via ${prefix4}.${a_b1}.2 weight 1 \
+			nexthop via ${prefix4}.${a_b2}.2 weight 1
 }
 
 setup() {
@@ -2327,6 +2381,45 @@ test_pmtu_ipv4_route_change() {
 
 test_pmtu_ipv6_route_change() {
 	test_pmtu_ipvX_route_change 6
+}
+
+test_pmtu_ipv4_mp_exceptions() {
+	setup namespaces routing multipath || return $ksft_skip
+
+	trace "${ns_a}"  veth_A-R1    "${ns_r1}" veth_R1-A \
+	      "${ns_r1}" veth_R1-B    "${ns_b}"  veth_B-R1 \
+	      "${ns_a}"  veth_A-R2    "${ns_r2}" veth_R2-A \
+	      "${ns_r2}" veth_R2-B    "${ns_b}"  veth_B-R2
+
+	# Set up initial MTU values
+	mtu "${ns_a}"  veth_A-R1 2000
+	mtu "${ns_r1}" veth_R1-A 2000
+	mtu "${ns_r1}" veth_R1-B 1400
+	mtu "${ns_b}"  veth_B-R1 1400
+
+	mtu "${ns_a}"  veth_A-R2 2000
+	mtu "${ns_r2}" veth_R2-A 2000
+	mtu "${ns_r2}" veth_R2-B 1500
+	mtu "${ns_b}"  veth_B-R2 1500
+
+	fail=0
+
+	# Ping and expect two nexthop exceptions for two routes in nh group
+	run_cmd ${ns_a} ping -q -M want -i 0.1 -c 1 -s 1800 "${dummy4_b_addr}"
+
+	# Do route lookup before checking cached exceptions.
+	# The following commands are needed for dst entries to be cached
+	# in both paths exceptions and therefore dumped to user space
+	run_cmd ${ns_a} ip route get ${dummy4_b_addr} oif veth_A-R1
+	run_cmd ${ns_a} ip route get ${dummy4_b_addr} oif veth_A-R2
+
+	# Check cached exceptions
+	if [ "$(${ns_a} ip -oneline route list cache | grep mtu | wc -l)" -ne 2 ]; then
+		err "  there are not enough cached exceptions"
+		fail=1
+	fi
+
+	return ${fail}
 }
 
 usage() {
