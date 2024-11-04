@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "linux/kstrtox.h"
 #include <linux/memcontrol.h>
 #include <linux/swap.h>
 #include <linux/mm_inline.h>
@@ -1922,17 +1923,15 @@ static ssize_t memcg_write_event_control(struct kernfs_open_file *of,
 
 	buf = strstrip(buf);
 
-	efd = simple_strtoul(buf, &endp, 10);
-	if (*endp != ' ')
+	kstrtoul(buf, 10, efd);
+	if (*buf != ' ')
 		return -EINVAL;
-	buf = endp + 1;
+	buf++;
 
-	cfd = simple_strtoul(buf, &endp, 10);
-	if (*endp == '\0')
-		buf = endp;
-	else if (*endp == ' ')
-		buf = endp + 1;
-	else
+	kstrtoul(buf, 10, cfd);
+	if (*buf == ' ')
+		buf++;
+	else if (*buf != '\0')
 		return -EINVAL;
 
 	event = kzalloc(sizeof(*event), GFP_KERNEL);
