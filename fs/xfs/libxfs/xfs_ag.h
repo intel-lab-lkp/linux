@@ -311,6 +311,23 @@ xfs_perag_next_wrap(
 	for_each_perag_wrap_at((mp), (start_agno), (mp)->m_sb.sb_agcount, \
 				(agno), (pag))
 
+/*
+ * Iterate all AGs from start_agno through wrap_agno, then curr_af through
+ * (start_agno - 1).
+ */
+#define for_each_perag_af_wrap_at(mp, start_agno, wrap_agno, agno, pag, curr_af) \
+	for_each_perag_wrap_range((mp), (start_agno), (curr_af), (wrap_agno), (agno), \
+				  (pag))
+
+/*
+ * Iterate all AGs from start_agno through to the end of the AF, then curr_af
+ * through (start_agno - 1).
+ */
+#define for_each_perag_af_wrap(mp, start_agno, agno, pag, curr_af, next_af) \
+	for_each_perag_af_wrap_at((mp), (start_agno), (next_af), (agno), (pag), \
+				  (curr_af))
+
+
 
 struct aghdr_init_data {
 	/* per ag data */
