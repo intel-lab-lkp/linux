@@ -344,7 +344,7 @@ static int em_create_perf_table(struct device *dev, struct em_perf_domain *pd,
 				struct em_data_callback *cb,
 				unsigned long flags)
 {
-	unsigned long power, freq, prev_freq = 0;
+	unsigned long power = 0, freq, prev_freq = 0;
 	int nr_states = pd->nr_perf_states;
 	int i, ret;
 
