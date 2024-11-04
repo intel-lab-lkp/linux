@@ -789,7 +789,7 @@ static inline void bio_put_percpu_cache(struct bio *bio)
 		bio_uninit(bio);
 		bio->bi_next = cache->free_list_irq;
 		cache->free_list_irq = bio;
-		cache->nr_irq++;
+		WRITE_ONCE(cache->nr_irq, cache->nr_irq + 1);
 	} else {
 		goto out_free;
 	}
