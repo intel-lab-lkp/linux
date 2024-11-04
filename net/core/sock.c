@@ -1906,7 +1906,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 	{
 		struct sockaddr_storage address;
 
-		lv = READ_ONCE(sock->ops)->getname(sock, (struct sockaddr *)&address, 2);
+		lv = READ_ONCE(sock->ops)->getname(sock, &address, 2);
 		if (lv < 0)
 			return -ENOTCONN;
 		if (lv < len)
@@ -3345,7 +3345,7 @@ int sock_no_accept(struct socket *sock, struct socket *newsock,
 }
 EXPORT_SYMBOL(sock_no_accept);
 
-int sock_no_getname(struct socket *sock, struct sockaddr *saddr,
+int sock_no_getname(struct socket *sock, struct sockaddr_storage *saddr,
 		    int peer)
 {
 	return -EOPNOTSUPP;

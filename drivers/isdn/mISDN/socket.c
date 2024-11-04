@@ -549,7 +549,7 @@ done:
 }
 
 static int
-data_sock_getname(struct socket *sock, struct sockaddr *addr,
+data_sock_getname(struct socket *sock, struct sockaddr_storage *addr,
 		  int peer)
 {
 	struct sockaddr_mISDN	*maddr = (struct sockaddr_mISDN *) addr;

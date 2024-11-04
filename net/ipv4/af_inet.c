@@ -792,7 +792,7 @@ EXPORT_SYMBOL(inet_accept);
 /*
  *	This does both peername and sockname.
  */
-int inet_getname(struct socket *sock, struct sockaddr *uaddr,
+int inet_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 		 int peer)
 {
 	struct sock *sk		= sock->sk;

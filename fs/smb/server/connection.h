@@ -140,7 +140,7 @@ struct ksmbd_transport {
 
 #define KSMBD_TCP_RECV_TIMEOUT	(7 * HZ)
 #define KSMBD_TCP_SEND_TIMEOUT	(5 * HZ)
-#define KSMBD_TCP_PEER_SOCKADDR(c)	((struct sockaddr *)&((c)->peer_addr))
+#define KSMBD_TCP_PEER_SOCKADDR(c)	(&((c)->peer_addr))
 
 extern struct list_head conn_list;
 extern struct rw_semaphore conn_list_lock;

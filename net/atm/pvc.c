@@ -86,7 +86,7 @@ static int pvc_getsockopt(struct socket *sock, int level, int optname,
 	return error;
 }
 
-static int pvc_getname(struct socket *sock, struct sockaddr *sockaddr,
+static int pvc_getname(struct socket *sock, struct sockaddr_storage *sockaddr,
 		       int peer)
 {
 	struct sockaddr_atmpvc *addr;

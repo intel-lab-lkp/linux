@@ -658,8 +658,7 @@ int tomoyo_socket_listen_permission(struct socket *sock)
 	if (!family || (type != SOCK_STREAM && type != SOCK_SEQPACKET))
 		return 0;
 	{
-		const int error = sock->ops->getname(sock, (struct sockaddr *)
-						     &addr, 0);
+		const int error = sock->ops->getname(sock, &addr, 0);
 
 		if (error < 0)
 			return error;

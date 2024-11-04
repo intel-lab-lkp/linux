@@ -2648,7 +2648,7 @@ static int nvme_tcp_get_address(struct nvme_ctrl *ctrl, char *buf, int size)
 
 	if (!test_bit(NVME_TCP_Q_LIVE, &queue->flags))
 		goto done;
-	ret = kernel_getsockname(queue->sock, (struct sockaddr *)&src_addr);
+	ret = kernel_getsockname(queue->sock, &src_addr);
 	if (ret > 0) {
 		if (len > 0)
 			len--; /* strip trailing newline */

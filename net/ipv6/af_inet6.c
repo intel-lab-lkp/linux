@@ -518,7 +518,7 @@ EXPORT_SYMBOL_GPL(inet6_cleanup_sock);
 /*
  *	This does both peername and sockname.
  */
-int inet6_getname(struct socket *sock, struct sockaddr *uaddr,
+int inet6_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 		  int peer)
 {
 	struct sockaddr_in6 *sin = (struct sockaddr_in6 *)uaddr;

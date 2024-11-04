@@ -500,8 +500,8 @@ error:
 	return ret;
 }
 
-static int llcp_sock_getname(struct socket *sock, struct sockaddr *uaddr,
-			     int peer)
+static int llcp_sock_getname(struct socket *sock,
+			     struct sockaddr_storage *uaddr, int peer)
 {
 	struct sock *sk = sock->sk;
 	struct nfc_llcp_sock *llcp_sock = nfc_llcp_sock(sk);

@@ -993,7 +993,7 @@ static int accept_from_sock(void)
 
 	/* Get the connected socket's peer */
 	memset(&peeraddr, 0, sizeof(peeraddr));
-	len = newsock->ops->getname(newsock, (struct sockaddr *)&peeraddr, 2);
+	len = newsock->ops->getname(newsock, &peeraddr, 2);
 	if (len < 0) {
 		result = -ECONNABORTED;
 		goto accept_err;

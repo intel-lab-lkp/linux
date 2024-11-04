@@ -593,7 +593,7 @@ static struct socket *qmi_sock_create(struct qmi_handle *qmi,
 	if (ret < 0)
 		return ERR_PTR(ret);
 
-	ret = kernel_getsockname(sock, (struct sockaddr *)sq);
+	ret = kernel_getsockname(sock, (struct sockaddr_storage *)sq);
 	if (ret < 0) {
 		sock_release(sock);
 		return ERR_PTR(ret);

@@ -1478,7 +1478,7 @@ done:
 	return err;
 }
 
-static int hci_sock_getname(struct socket *sock, struct sockaddr *addr,
+static int hci_sock_getname(struct socket *sock, struct sockaddr_storage *addr,
 			    int peer)
 {
 	struct sockaddr_hci *haddr = (struct sockaddr_hci *)addr;

@@ -598,7 +598,7 @@ static void j1939_sk_sock2sockaddr_can(struct sockaddr_can *addr,
 	}
 }
 
-static int j1939_sk_getname(struct socket *sock, struct sockaddr *uaddr,
+static int j1939_sk_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			    int peer)
 {
 	struct sockaddr_can *addr = (struct sockaddr_can *)uaddr;

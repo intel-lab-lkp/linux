@@ -903,7 +903,7 @@ static struct svc_xprt *svc_tcp_accept(struct svc_xprt *xprt)
 
 	set_bit(XPT_CONN, &svsk->sk_xprt.xpt_flags);
 
-	err = kernel_getpeername(newsock, sin);
+	err = kernel_getpeername(newsock, &addr);
 	if (err < 0) {
 		trace_svcsock_getpeername_err(xprt, serv->sv_name, err);
 		goto failed;		/* aborted connection or whatever */
@@ -925,7 +925,7 @@ static struct svc_xprt *svc_tcp_accept(struct svc_xprt *xprt)
 	if (IS_ERR(newsvsk))
 		goto failed;
 	svc_xprt_set_remote(&newsvsk->sk_xprt, sin, slen);
-	err = kernel_getsockname(newsock, sin);
+	err = kernel_getsockname(newsock, &addr);
 	slen = err;
 	if (unlikely(err < 0))
 		slen = offsetof(struct sockaddr, sa_data);
@@ -1478,7 +1478,7 @@ int svc_addsock(struct svc_serv *serv, struct net *net, const int fd,
 		err = PTR_ERR(svsk);
 		goto out;
 	}
-	salen = kernel_getsockname(svsk->sk_sock, sin);
+	salen = kernel_getsockname(svsk->sk_sock, &addr);
 	if (salen >= 0)
 		svc_xprt_set_local(&svsk->sk_xprt, sin, salen);
 	svsk->sk_xprt.xpt_cred = get_cred(cred);
@@ -1545,7 +1545,7 @@ static struct svc_xprt *svc_create_socket(struct svc_serv *serv,
 	if (error < 0)
 		goto bummer;
 
-	error = kernel_getsockname(sock, newsin);
+	error = kernel_getsockname(sock, &addr);
 	if (error < 0)
 		goto bummer;
 	newlen = error;

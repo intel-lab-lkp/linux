@@ -913,7 +913,7 @@ out:
 	return rc;
 }
 
-static int x25_getname(struct socket *sock, struct sockaddr *uaddr,
+static int x25_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 		       int peer)
 {
 	struct sockaddr_x25 *sx25 = (struct sockaddr_x25 *)uaddr;

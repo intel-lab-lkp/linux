@@ -3640,27 +3640,28 @@ out:
 	return err;
 }
 
-static int packet_getname_spkt(struct socket *sock, struct sockaddr *uaddr,
-			       int peer)
+static int packet_getname_spkt(struct socket *sock,
+			       struct sockaddr_storage *uaddr, int peer)
 {
+	struct sockaddr *addr = (struct sockaddr *)uaddr;
 	struct net_device *dev;
 	struct sock *sk	= sock->sk;
 
 	if (peer)
 		return -EOPNOTSUPP;
 
-	uaddr->sa_family = AF_PACKET;
-	memset(uaddr->sa_data, 0, sizeof(uaddr->sa_data));
+	addr->sa_family = AF_PACKET;
+	memset(addr->sa_data, 0, sizeof(addr->sa_data));
 	rcu_read_lock();
 	dev = dev_get_by_index_rcu(sock_net(sk), READ_ONCE(pkt_sk(sk)->ifindex));
 	if (dev)
-		strscpy(uaddr->sa_data, dev->name, sizeof(uaddr->sa_data));
+		strscpy(addr->sa_data, dev->name, sizeof(addr->sa_data));
 	rcu_read_unlock();
 
-	return sizeof(*uaddr);
+	return sizeof(*addr);
 }
 
-static int packet_getname(struct socket *sock, struct sockaddr *uaddr,
+static int packet_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			  int peer)
 {
 	struct net_device *dev;

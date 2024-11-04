@@ -141,12 +141,12 @@ struct erdma_cm_work {
 
 static inline int getname_peer(struct socket *s, struct sockaddr_storage *a)
 {
-	return s->ops->getname(s, (struct sockaddr *)a, 1);
+	return s->ops->getname(s, a, 1);
 }
 
 static inline int getname_local(struct socket *s, struct sockaddr_storage *a)
 {
-	return s->ops->getname(s, (struct sockaddr *)a, 0);
+	return s->ops->getname(s, a, 0);
 }
 
 int erdma_connect(struct iw_cm_id *id, struct iw_cm_conn_param *param);

@@ -588,7 +588,7 @@ struct ksmbd_tree_connect_response *
 ksmbd_ipc_tree_connect_request(struct ksmbd_session *sess,
 			       struct ksmbd_share_config *share,
 			       struct ksmbd_tree_connect *tree_conn,
-			       struct sockaddr *peer_addr)
+			       struct sockaddr_storage *peer_addr)
 {
 	struct ksmbd_ipc_msg *msg;
 	struct ksmbd_tree_connect_request *req;
@@ -615,7 +615,7 @@ ksmbd_ipc_tree_connect_request(struct ksmbd_session *sess,
 	strscpy(req->share, share->name, KSMBD_REQ_MAX_SHARE_NAME);
 	snprintf(req->peer_addr, sizeof(req->peer_addr), "%pIS", peer_addr);
 
-	if (peer_addr->sa_family == AF_INET6)
+	if (peer_addr->ss_family == AF_INET6)
 		req->flags |= KSMBD_TREE_CONN_FLAG_REQUEST_IPV6;
 	if (test_session_flag(sess, CIFDS_SESSION_FLAG_SMB2))
 		req->flags |= KSMBD_TREE_CONN_FLAG_REQUEST_SMB2;

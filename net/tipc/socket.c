@@ -741,7 +741,7 @@ static int tipc_bind(struct socket *sock, struct sockaddr *skaddr, int alen)
  *       accesses socket information that is unchanging (or which changes in
  *       a completely predictable manner).
  */
-static int tipc_getname(struct socket *sock, struct sockaddr *uaddr,
+static int tipc_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			int peer)
 {
 	struct sockaddr_tipc *addr = (struct sockaddr_tipc *)uaddr;

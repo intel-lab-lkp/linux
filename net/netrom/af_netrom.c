@@ -835,7 +835,7 @@ out_release:
 	return err;
 }
 
-static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
+static int nr_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 	int peer)
 {
 	struct full_sockaddr_ax25 *sax = (struct full_sockaddr_ax25 *)uaddr;

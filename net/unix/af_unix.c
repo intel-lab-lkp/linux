@@ -813,7 +813,7 @@ static int unix_stream_connect(struct socket *, struct sockaddr *,
 			       int addr_len, int flags);
 static int unix_socketpair(struct socket *, struct socket *);
 static int unix_accept(struct socket *, struct socket *, struct proto_accept_arg *arg);
-static int unix_getname(struct socket *, struct sockaddr *, int);
+static int unix_getname(struct socket *, struct sockaddr_storage *, int);
 static __poll_t unix_poll(struct file *, struct socket *, poll_table *);
 static __poll_t unix_dgram_poll(struct file *, struct socket *,
 				    poll_table *);
@@ -1789,7 +1789,8 @@ out:
 }
 
 
-static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int peer)
+static int unix_getname(struct socket *sock, struct sockaddr_storage *uaddr,
+			int peer)
 {
 	struct sock *sk = sock->sk;
 	struct unix_address *addr;
@@ -1817,10 +1818,10 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int peer)
 		memcpy(sunaddr, addr->name, addr->len);
 
 		if (peer)
-			BPF_CGROUP_RUN_SA_PROG(sk, uaddr, &err,
+			BPF_CGROUP_RUN_SA_PROG(sk, (struct sockaddr *)uaddr, &err,
 					       CGROUP_UNIX_GETPEERNAME);
 		else
-			BPF_CGROUP_RUN_SA_PROG(sk, uaddr, &err,
+			BPF_CGROUP_RUN_SA_PROG(sk, (struct sockaddr *)uaddr, &err,
 					       CGROUP_UNIX_GETSOCKNAME);
 	}
 	sock_put(sk);

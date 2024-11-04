@@ -1258,7 +1258,7 @@ out:
  * Find the name of an AppleTalk socket. Just copy the right
  * fields into the sockaddr.
  */
-static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
+static int atalk_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			 int peer)
 {
 	struct sockaddr_at sat;

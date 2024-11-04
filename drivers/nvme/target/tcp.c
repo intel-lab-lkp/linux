@@ -1689,13 +1689,11 @@ static int nvmet_tcp_set_queue_sock(struct nvmet_tcp_queue *queue)
 	struct inet_sock *inet = inet_sk(sock->sk);
 	int ret;
 
-	ret = kernel_getsockname(sock,
-		(struct sockaddr *)&queue->sockaddr);
+	ret = kernel_getsockname(sock, &queue->sockaddr);
 	if (ret < 0)
 		return ret;
 
-	ret = kernel_getpeername(sock,
-		(struct sockaddr *)&queue->sockaddr_peer);
+	ret = kernel_getpeername(sock, &queue->sockaddr_peer);
 	if (ret < 0)
 		return ret;
 

@@ -697,7 +697,7 @@ int qrtr_ns_init(void)
 	if (ret < 0)
 		return ret;
 
-	ret = kernel_getsockname(qrtr_ns.sock, (struct sockaddr *)&sq);
+	ret = kernel_getsockname(qrtr_ns.sock, (struct sockaddr_storage *)&sq);
 	if (ret < 0) {
 		pr_err("failed to get socket name\n");
 		goto err_sock;

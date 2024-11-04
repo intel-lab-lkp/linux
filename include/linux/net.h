@@ -175,7 +175,7 @@ struct proto_ops {
 				      struct socket *newsock,
 				      struct proto_accept_arg *arg);
 	int		(*getname)   (struct socket *sock,
-				      struct sockaddr *addr,
+				      struct sockaddr_storage *addr,
 				      int peer);
 	__poll_t	(*poll)	     (struct file *file, struct socket *sock,
 				      struct poll_table_struct *wait);
@@ -353,8 +353,8 @@ int kernel_listen(struct socket *sock, int backlog);
 int kernel_accept(struct socket *sock, struct socket **newsock, int flags);
 int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
 		   int flags);
-int kernel_getsockname(struct socket *sock, struct sockaddr *addr);
-int kernel_getpeername(struct socket *sock, struct sockaddr *addr);
+int kernel_getsockname(struct socket *sock, struct sockaddr_storage *addr);
+int kernel_getpeername(struct socket *sock, struct sockaddr_storage *addr);
 int kernel_sock_shutdown(struct socket *sock, enum sock_shutdown_cmd how);
 
 /* Routine returns the IP overhead imposed by a (caller-protected) socket. */

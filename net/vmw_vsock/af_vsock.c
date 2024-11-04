@@ -927,7 +927,7 @@ vsock_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 }
 
 static int vsock_getname(struct socket *sock,
-			 struct sockaddr *addr, int peer)
+			 struct sockaddr_storage *addr, int peer)
 {
 	int err;
 	struct sock *sk;

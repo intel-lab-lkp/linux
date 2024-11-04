@@ -1128,8 +1128,8 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 	return err;
 }
 
-static int netlink_getname(struct socket *sock, struct sockaddr *addr,
-			   int peer)
+static int netlink_getname(struct socket *sock,
+			   struct sockaddr_storage *addr, int peer)
 {
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);

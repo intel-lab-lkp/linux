@@ -1445,7 +1445,7 @@ static const struct sockaddr_in6 rpc_in6addr_loopback = {
  * negative errno is returned.
  */
 static int rpc_sockname(struct net *net, struct sockaddr *sap, size_t salen,
-			struct sockaddr *buf)
+			struct sockaddr_storage *buf)
 {
 	struct socket *sock;
 	int err;
@@ -1490,7 +1490,7 @@ static int rpc_sockname(struct net *net, struct sockaddr *sap, size_t salen,
 	}
 
 	err = 0;
-	if (buf->sa_family == AF_INET6) {
+	if (buf->ss_family == AF_INET6) {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)buf;
 		sin6->sin6_scope_id = 0;
 	}
@@ -1510,7 +1510,7 @@ out:
  * Returns zero and fills in "buf" if successful; otherwise, a
  * negative errno is returned.
  */
-static int rpc_anyaddr(int family, struct sockaddr *buf, size_t buflen)
+static int rpc_anyaddr(int family, struct sockaddr_storage *buf, size_t buflen)
 {
 	switch (family) {
 	case AF_INET:
@@ -1550,7 +1550,8 @@ static int rpc_anyaddr(int family, struct sockaddr *buf, size_t buflen)
  * succession may give different results, depending on how local
  * networking configuration changes over time.
  */
-int rpc_localaddr(struct rpc_clnt *clnt, struct sockaddr *buf, size_t buflen)
+int rpc_localaddr(struct rpc_clnt *clnt, struct sockaddr_storage *buf,
+		  size_t buflen)
 {
 	struct sockaddr_storage address;
 	struct sockaddr *sap = (struct sockaddr *)&address;

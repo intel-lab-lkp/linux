@@ -530,7 +530,7 @@ out:
 	return err;
 }
 
-static int raw_getname(struct socket *sock, struct sockaddr *uaddr,
+static int raw_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 		       int peer)
 {
 	struct sockaddr_can *addr = (struct sockaddr_can *)uaddr;

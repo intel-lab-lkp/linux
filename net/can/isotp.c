@@ -1352,7 +1352,8 @@ out:
 	return err;
 }
 
-static int isotp_getname(struct socket *sock, struct sockaddr *uaddr, int peer)
+static int isotp_getname(struct socket *sock, struct sockaddr_storage *uaddr,
+			 int peer)
 {
 	struct sockaddr_can *addr = (struct sockaddr_can *)uaddr;
 	struct sock *sk = sock->sk;

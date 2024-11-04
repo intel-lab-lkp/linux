@@ -907,8 +907,11 @@ int iscsi_target_setup_login_socket(
 int iscsit_accept_np(struct iscsi_np *np, struct iscsit_conn *conn)
 {
 	struct socket *new_sock, *sock = np->np_socket;
-	struct sockaddr_in sock_in;
-	struct sockaddr_in6 sock_in6;
+	union {
+		struct sockaddr_storage storage;
+		struct sockaddr_in sock_in;
+		struct sockaddr_in6 sock_in6;
+	} u;
 	int rc;
 
 	rc = kernel_accept(sock, &new_sock, 0);
@@ -919,47 +922,43 @@ int iscsit_accept_np(struct iscsi_np *np, struct iscsit_conn *conn)
 	conn->login_family = np->np_sockaddr.ss_family;
 
 	if (np->np_sockaddr.ss_family == AF_INET6) {
-		memset(&sock_in6, 0, sizeof(struct sockaddr_in6));
+		memset(&u.sock_in6, 0, sizeof(struct sockaddr_in6));
 
-		rc = conn->sock->ops->getname(conn->sock,
-				(struct sockaddr *)&sock_in6, 1);
+		rc = conn->sock->ops->getname(conn->sock, &u.storage, 1);
 		if (rc >= 0) {
-			if (!ipv6_addr_v4mapped(&sock_in6.sin6_addr)) {
-				memcpy(&conn->login_sockaddr, &sock_in6, sizeof(sock_in6));
+			if (!ipv6_addr_v4mapped(&u.sock_in6.sin6_addr)) {
+				memcpy(&conn->login_sockaddr, &u.sock_in6, sizeof(u.sock_in6));
 			} else {
 				/* Pretend to be an ipv4 socket */
-				sock_in.sin_family = AF_INET;
-				sock_in.sin_port = sock_in6.sin6_port;
-				memcpy(&sock_in.sin_addr, &sock_in6.sin6_addr.s6_addr32[3], 4);
-				memcpy(&conn->login_sockaddr, &sock_in, sizeof(sock_in));
+				u.sock_in.sin_family = AF_INET;
+				u.sock_in.sin_port = u.sock_in6.sin6_port;
+				memcpy(&u.sock_in.sin_addr, &u.sock_in6.sin6_addr.s6_addr32[3], 4);
+				memcpy(&conn->login_sockaddr, &u.sock_in, sizeof(u.sock_in));
 			}
 		}
 
-		rc = conn->sock->ops->getname(conn->sock,
-				(struct sockaddr *)&sock_in6, 0);
+		rc = conn->sock->ops->getname(conn->sock, &u.storage, 0);
 		if (rc >= 0) {
-			if (!ipv6_addr_v4mapped(&sock_in6.sin6_addr)) {
-				memcpy(&conn->local_sockaddr, &sock_in6, sizeof(sock_in6));
+			if (!ipv6_addr_v4mapped(&u.sock_in6.sin6_addr)) {
+				memcpy(&conn->local_sockaddr, &u.sock_in6, sizeof(u.sock_in6));
 			} else {
 				/* Pretend to be an ipv4 socket */
-				sock_in.sin_family = AF_INET;
-				sock_in.sin_port = sock_in6.sin6_port;
-				memcpy(&sock_in.sin_addr, &sock_in6.sin6_addr.s6_addr32[3], 4);
-				memcpy(&conn->local_sockaddr, &sock_in, sizeof(sock_in));
+				u.sock_in.sin_family = AF_INET;
+				u.sock_in.sin_port = u.sock_in6.sin6_port;
+				memcpy(&u.sock_in.sin_addr, &u.sock_in6.sin6_addr.s6_addr32[3], 4);
+				memcpy(&conn->local_sockaddr, &u.sock_in, sizeof(u.sock_in));
 			}
 		}
 	} else {
-		memset(&sock_in, 0, sizeof(struct sockaddr_in));
+		memset(&u.sock_in, 0, sizeof(struct sockaddr_in));
 
-		rc = conn->sock->ops->getname(conn->sock,
-				(struct sockaddr *)&sock_in, 1);
+		rc = conn->sock->ops->getname(conn->sock, &u.storage, 1);
 		if (rc >= 0)
-			memcpy(&conn->login_sockaddr, &sock_in, sizeof(sock_in));
+			memcpy(&conn->login_sockaddr, &u.sock_in, sizeof(u.sock_in));
 
-		rc = conn->sock->ops->getname(conn->sock,
-				(struct sockaddr *)&sock_in, 0);
+		rc = conn->sock->ops->getname(conn->sock, &u.storage, 0);
 		if (rc >= 0)
-			memcpy(&conn->local_sockaddr, &sock_in, sizeof(sock_in));
+			memcpy(&conn->local_sockaddr, &u.sock_in, sizeof(u.sock_in));
 	}
 
 	return 0;

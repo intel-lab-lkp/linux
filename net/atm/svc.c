@@ -423,7 +423,7 @@ out:
 	return error;
 }
 
-static int svc_getname(struct socket *sock, struct sockaddr *sockaddr,
+static int svc_getname(struct socket *sock, struct sockaddr_storage *sockaddr,
 		       int peer)
 {
 	struct sockaddr_atmsvc *addr;

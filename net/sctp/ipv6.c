@@ -1058,7 +1058,7 @@ static int sctp_inet6_supported_addrs(const struct sctp_sock *opt,
 }
 
 /* Handle SCTP_I_WANT_MAPPED_V4_ADDR for getpeername() and getsockname() */
-static int sctp_getname(struct socket *sock, struct sockaddr *uaddr,
+static int sctp_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			int peer)
 {
 	int rc;

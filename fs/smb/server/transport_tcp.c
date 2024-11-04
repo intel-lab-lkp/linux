@@ -160,9 +160,9 @@ static struct kvec *get_conn_iovec(struct tcp_transport *t, unsigned int nr_segs
 	return new_iov;
 }
 
-static unsigned short ksmbd_tcp_get_port(const struct sockaddr *sa)
+static unsigned short ksmbd_tcp_get_port(const struct sockaddr_storage *sa)
 {
-	switch (sa->sa_family) {
+	switch (sa->ss_family) {
 	case AF_INET:
 		return ntohs(((struct sockaddr_in *)sa)->sin_port);
 	case AF_INET6:
@@ -182,7 +182,7 @@ static unsigned short ksmbd_tcp_get_port(const struct sockaddr *sa)
  */
 static int ksmbd_tcp_new_connection(struct socket *client_sk)
 {
-	struct sockaddr *csin;
+	struct sockaddr_storage *csin;
 	int rc = 0;
 	struct tcp_transport *t;
 	struct task_struct *handler;

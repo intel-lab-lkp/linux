@@ -311,17 +311,17 @@ static int pn_socket_accept(struct socket *sock, struct socket *newsock,
 	return 0;
 }
 
-static int pn_socket_getname(struct socket *sock, struct sockaddr *addr,
-				int peer)
+static int pn_socket_getname(struct socket *sock,
+			     struct sockaddr_storage *uaddr, int peer)
 {
+	struct sockaddr_pn *addr = (struct sockaddr_pn *)uaddr;
 	struct sock *sk = sock->sk;
 	struct pn_sock *pn = pn_sk(sk);
 
 	memset(addr, 0, sizeof(struct sockaddr_pn));
-	addr->sa_family = AF_PHONET;
+	addr->spn_family = AF_PHONET;
 	if (!peer) /* Race with bind() here is userland's problem. */
-		pn_sockaddr_set_object((struct sockaddr_pn *)addr,
-					pn->sobject);
+		pn_sockaddr_set_object(addr, pn->sobject);
 
 	return sizeof(struct sockaddr_pn);
 }

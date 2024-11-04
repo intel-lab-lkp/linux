@@ -16,13 +16,13 @@ ksmbd_ipc_login_request(const char *account);
 struct ksmbd_session;
 struct ksmbd_share_config;
 struct ksmbd_tree_connect;
-struct sockaddr;
+struct __kernel_sockaddr_storage;
 
 struct ksmbd_tree_connect_response *
 ksmbd_ipc_tree_connect_request(struct ksmbd_session *sess,
 			       struct ksmbd_share_config *share,
 			       struct ksmbd_tree_connect *tree_conn,
-			       struct sockaddr *peer_addr);
+			       struct __kernel_sockaddr_storage *peer_addr);
 int ksmbd_ipc_tree_disconnect_request(unsigned long long session_id,
 				      unsigned long long connect_id);
 int ksmbd_ipc_logout_request(const char *account, int flags);

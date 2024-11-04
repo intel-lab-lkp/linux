@@ -1115,7 +1115,7 @@ static int qrtr_connect(struct socket *sock, struct sockaddr *saddr,
 	return 0;
 }
 
-static int qrtr_getname(struct socket *sock, struct sockaddr *saddr,
+static int qrtr_getname(struct socket *sock, struct sockaddr_storage *saddr,
 			int peer)
 {
 	struct qrtr_sock *ipc = qrtr_sk(sock->sk);

@@ -248,7 +248,7 @@ struct nfs_client *nfs4_alloc_client(const struct nfs_client_initdata *cl_init)
 		struct sockaddr_storage cb_addr;
 		struct sockaddr *sap = (struct sockaddr *)&cb_addr;
 
-		err = rpc_localaddr(clp->cl_rpcclient, sap, sizeof(cb_addr));
+		err = rpc_localaddr(clp->cl_rpcclient, &cb_addr, sizeof(cb_addr));
 		if (err < 0)
 			goto error;
 		err = rpc_ntop(sap, buf, sizeof(buf));
@@ -1352,7 +1352,7 @@ int nfs4_update_server(struct nfs_server *server, const char *hostname,
 	if (error != 0)
 		return error;
 
-	error = rpc_localaddr(clnt, localaddr, sizeof(address));
+	error = rpc_localaddr(clnt, &address, sizeof(address));
 	if (error != 0)
 		return error;
 

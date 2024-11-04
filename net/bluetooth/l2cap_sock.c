@@ -382,8 +382,8 @@ done:
 	return err;
 }
 
-static int l2cap_sock_getname(struct socket *sock, struct sockaddr *addr,
-			      int peer)
+static int l2cap_sock_getname(struct socket *sock,
+			      struct sockaddr_storage *addr, int peer)
 {
 	struct sockaddr_l2 *la = (struct sockaddr_l2 *) addr;
 	struct sock *sk = sock->sk;
@@ -397,7 +397,7 @@ static int l2cap_sock_getname(struct socket *sock, struct sockaddr *addr,
 		return -ENOTCONN;
 
 	memset(la, 0, sizeof(struct sockaddr_l2));
-	addr->sa_family = AF_BLUETOOTH;
+	la->l2_family = AF_BLUETOOTH;
 
 	la->l2_psm = chan->psm;
 

@@ -886,7 +886,7 @@ err:
 
 /* getname() support.
  */
-static int pppol2tp_getname(struct socket *sock, struct sockaddr *uaddr,
+static int pppol2tp_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			    int peer)
 {
 	int len = 0;

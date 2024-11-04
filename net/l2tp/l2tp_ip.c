@@ -373,7 +373,7 @@ static int l2tp_ip_disconnect(struct sock *sk, int flags)
 	return __udp_disconnect(sk, flags);
 }
 
-static int l2tp_ip_getname(struct socket *sock, struct sockaddr *uaddr,
+static int l2tp_ip_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			   int peer)
 {
 	struct sock *sk		= sock->sk;

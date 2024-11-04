@@ -48,7 +48,7 @@ int smc_connect(struct socket *sock, struct sockaddr *addr,
 		int alen, int flags);
 int smc_accept(struct socket *sock, struct socket *new_sock,
 	       struct proto_accept_arg *arg);
-int smc_getname(struct socket *sock, struct sockaddr *addr,
+int smc_getname(struct socket *sock, struct sockaddr_storage *addr,
 		int peer);
 __poll_t smc_poll(struct file *file, struct socket *sock,
 		  poll_table *wait);

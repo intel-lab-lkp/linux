@@ -1779,7 +1779,10 @@ int o2net_register_hb_callbacks(void)
 static int o2net_accept_one(struct socket *sock, int *more)
 {
 	int ret;
-	struct sockaddr_in sin;
+	union {
+		struct sockaddr_storage storage;
+		struct sockaddr_in sin;
+	} u;
 	struct socket *new_sock = NULL;
 	struct o2nm_node *node = NULL;
 	struct o2nm_node *local_node = NULL;
@@ -1815,15 +1818,15 @@ static int o2net_accept_one(struct socket *sock, int *more)
 	tcp_sock_set_nodelay(new_sock->sk);
 	tcp_sock_set_user_timeout(new_sock->sk, O2NET_TCP_USER_TIMEOUT);
 
-	ret = new_sock->ops->getname(new_sock, (struct sockaddr *) &sin, 1);
+	ret = new_sock->ops->getname(new_sock, &u.storage, 1);
 	if (ret < 0)
 		goto out;
 
-	node = o2nm_get_node_by_ip(sin.sin_addr.s_addr);
+	node = o2nm_get_node_by_ip(u.sin.sin_addr.s_addr);
 	if (node == NULL) {
 		printk(KERN_NOTICE "o2net: Attempt to connect from unknown "
-		       "node at %pI4:%d\n", &sin.sin_addr.s_addr,
-		       ntohs(sin.sin_port));
+		       "node at %pI4:%d\n", &u.sin.sin_addr.s_addr,
+		       ntohs(u.sin.sin_port));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -1838,8 +1841,8 @@ static int o2net_accept_one(struct socket *sock, int *more)
 					&(local_node->nd_ipv4_address),
 					ntohs(local_node->nd_ipv4_port),
 					node->nd_name,
-					node->nd_num, &sin.sin_addr.s_addr,
-					ntohs(sin.sin_port));
+					node->nd_num, &u.sin.sin_addr.s_addr,
+					ntohs(u.sin.sin_port));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -1849,8 +1852,8 @@ static int o2net_accept_one(struct socket *sock, int *more)
 	if (!o2hb_check_node_heartbeating_from_callback(node->nd_num)) {
 		mlog(ML_CONN, "attempt to connect from node '%s' at "
 		     "%pI4:%d but it isn't heartbeating\n",
-		     node->nd_name, &sin.sin_addr.s_addr,
-		     ntohs(sin.sin_port));
+		     node->nd_name, &u.sin.sin_addr.s_addr,
+		     ntohs(u.sin.sin_port));
 		ret = -EINVAL;
 		goto out;
 	}
@@ -1866,8 +1869,8 @@ static int o2net_accept_one(struct socket *sock, int *more)
 	if (ret) {
 		printk(KERN_NOTICE "o2net: Attempt to connect from node '%s' "
 		       "at %pI4:%d but it already has an open connection\n",
-		       node->nd_name, &sin.sin_addr.s_addr,
-		       ntohs(sin.sin_port));
+		       node->nd_name, &u.sin.sin_addr.s_addr,
+		       ntohs(u.sin.sin_port));
 		goto out;
 	}
 

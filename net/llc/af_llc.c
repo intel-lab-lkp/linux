@@ -1023,7 +1023,7 @@ out:
  *
  *	Return the address information of a socket.
  */
-static int llc_ui_getname(struct socket *sock, struct sockaddr *uaddr,
+static int llc_ui_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			  int peer)
 {
 	struct sockaddr_llc sllc;

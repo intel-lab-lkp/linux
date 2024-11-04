@@ -443,7 +443,7 @@ static int l2tp_ip6_disconnect(struct sock *sk, int flags)
 	return __udp_disconnect(sk, flags);
 }
 
-static int l2tp_ip6_getname(struct socket *sock, struct sockaddr *uaddr,
+static int l2tp_ip6_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 			    int peer)
 {
 	struct sockaddr_l2tpip6 *lsa = (struct sockaddr_l2tpip6 *)uaddr;

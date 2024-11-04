@@ -111,7 +111,7 @@ void rds_wake_sk_sleep(struct rds_sock *rs)
 	read_unlock_irqrestore(&rs->rs_recv_lock, flags);
 }
 
-static int rds_getname(struct socket *sock, struct sockaddr *uaddr,
+static int rds_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 		       int peer)
 {
 	struct rds_sock *rs = rds_sk_to_rs(sock->sk);

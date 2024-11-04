@@ -174,24 +174,24 @@ int usnic_transport_sock_get_addr(struct socket *sock, int *proto,
 					uint32_t *addr, uint16_t *port)
 {
 	int err;
-	struct sockaddr_in sock_addr;
+	union {
+		struct sockaddr_storage storage;
+		struct sockaddr_in sock_addr;
+	} u;
 
-	err = sock->ops->getname(sock,
-				(struct sockaddr *)&sock_addr,
-				0);
+	err = sock->ops->getname(sock, &u.storage, 0);
 	if (err < 0)
 		return err;
 
-	if (sock_addr.sin_family != AF_INET)
+	if (u.sock_addr.sin_family != AF_INET)
 		return -EINVAL;
 
 	if (proto)
 		*proto = sock->sk->sk_protocol;
 	if (port)
-		*port = ntohs(((struct sockaddr_in *)&sock_addr)->sin_port);
+		*port = ntohs(u.sock_addr.sin_port);
 	if (addr)
-		*addr = ntohl(((struct sockaddr_in *)
-					&sock_addr)->sin_addr.s_addr);
+		*addr = ntohl(u.sock_addr.sin_addr.s_addr);
 
 	return 0;
 }

@@ -984,7 +984,7 @@ out_release:
 	return err;
 }
 
-static int rose_getname(struct socket *sock, struct sockaddr *uaddr,
+static int rose_getname(struct socket *sock, struct sockaddr_storage *uaddr,
 	int peer)
 {
 	struct full_sockaddr_rose *srose = (struct full_sockaddr_rose *)uaddr;

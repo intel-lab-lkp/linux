@@ -1219,15 +1219,15 @@ done:
 	return err;
 }
 
-static int iso_sock_getname(struct socket *sock, struct sockaddr *addr,
-			    int peer)
+static int iso_sock_getname(struct socket *sock,
+			    struct sockaddr_storage *addr, int peer)
 {
 	struct sockaddr_iso *sa = (struct sockaddr_iso *)addr;
 	struct sock *sk = sock->sk;
 
 	BT_DBG("sock %p, sk %p", sock, sk);
 
-	addr->sa_family = AF_BLUETOOTH;
+	sa->iso_family = AF_BLUETOOTH;
 
 	if (peer) {
 		bacpy(&sa->iso_bdaddr, &iso_pi(sk)->dst);

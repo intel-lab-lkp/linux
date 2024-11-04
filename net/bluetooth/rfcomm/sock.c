@@ -529,7 +529,8 @@ done:
 	return err;
 }
 
-static int rfcomm_sock_getname(struct socket *sock, struct sockaddr *addr, int peer)
+static int rfcomm_sock_getname(struct socket *sock, struct sockaddr_storage *addr,
+			       int peer)
 {
 	struct sockaddr_rc *sa = (struct sockaddr_rc *) addr;
 	struct sock *sk = sock->sk;

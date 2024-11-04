@@ -22,7 +22,7 @@ ksmbd_tree_conn_connect(struct ksmbd_work *work, const char *share_name)
 	struct ksmbd_tree_connect_response *resp = NULL;
 	struct ksmbd_share_config *sc;
 	struct ksmbd_tree_connect *tree_conn = NULL;
-	struct sockaddr *peer_addr;
+	struct sockaddr_storage *peer_addr;
 	struct ksmbd_conn *conn = work->conn;
 	struct ksmbd_session *sess = work->sess;
 	int ret;
