@@ -2914,21 +2914,17 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_ADDRESS]) {
-		struct sockaddr *sa;
-		int len;
+		struct sockaddr_storage addr;
+		struct sockaddr *sa = (struct sockaddr *)&addr;
 
-		len = sizeof(sa_family_t) + max_t(size_t, dev->addr_len,
-						  sizeof(*sa));
-		sa = kmalloc(len, GFP_KERNEL);
-		if (!sa) {
+		if (dev->addr_len > sizeof(addr.__data)) {
 			err = -ENOMEM;
 			goto errout;
 		}
 		sa->sa_family = dev->type;
-		memcpy(sa->sa_data, nla_data(tb[IFLA_ADDRESS]),
+		memcpy(addr.__data, nla_data(tb[IFLA_ADDRESS]),
 		       dev->addr_len);
 		err = dev_set_mac_address_user(dev, sa, extack);
-		kfree(sa);
 		if (err)
 			goto errout;
 		status |= DO_SETLINK_MODIFIED;
