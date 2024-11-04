@@ -99,7 +99,9 @@ DECLARE_SUITE(dso_data_cache);
 DECLARE_SUITE(dso_data_reopen);
 DECLARE_SUITE(parse_events);
 DECLARE_SUITE(hists_link);
+#ifdef HAVE_LIBPYTHON_SUPPORT
 DECLARE_SUITE(python_use);
+#endif
 DECLARE_SUITE(bp_signal);
 DECLARE_SUITE(bp_signal_overflow);
 DECLARE_SUITE(bp_accounting);

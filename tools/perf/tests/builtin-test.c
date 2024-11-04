@@ -79,7 +79,9 @@ static struct test_suite *generic_tests[] = {
 	&suite__syscall_openat_tp_fields,
 #endif
 	&suite__hists_link,
+#ifdef HAVE_LIBPYTHON_SUPPORT
 	&suite__python_use,
+#endif
 	&suite__bp_signal,
 	&suite__bp_signal_overflow,
 	&suite__bp_accounting,
