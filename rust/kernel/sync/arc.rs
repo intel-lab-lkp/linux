@@ -127,7 +127,6 @@ mod std_vendor;
 /// ```
 pub struct Arc<T: ?Sized> {
     ptr: NonNull<ArcInner<T>>,
-    _p: PhantomData<ArcInner<T>>,
 }
 
 #[pin_data]
@@ -219,7 +218,6 @@ impl<T: ?Sized> Arc<T> {
         // INVARIANT: By the safety requirements, the invariants hold.
         Arc {
             ptr: inner,
-            _p: PhantomData,
         }
     }
 
