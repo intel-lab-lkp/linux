@@ -9134,7 +9134,8 @@ EXPORT_SYMBOL(dev_pre_changeaddr_notify);
 /**
  *	dev_set_mac_address - Change Media Access Control Address
  *	@dev: device
- *	@sa: new address
+ *	@sa: new address in a classic "struct sockaddr", which will never
+ *	     have more than 14 bytes in @sa::sa_data
  *	@extack: netlink extended ack
  *
  *	Change the hardware (MAC) address of the device
@@ -9168,6 +9169,7 @@ EXPORT_SYMBOL(dev_set_mac_address);
 
 DECLARE_RWSEM(dev_addr_sem);
 
+/* "sa" is a classic sockaddr: it will only ever use 14 bytes from sa_data. */
 int dev_set_mac_address_user(struct net_device *dev, struct sockaddr *sa,
 			     struct netlink_ext_ack *extack)
 {
@@ -9180,6 +9182,7 @@ int dev_set_mac_address_user(struct net_device *dev, struct sockaddr *sa,
 }
 EXPORT_SYMBOL(dev_set_mac_address_user);
 
+/* "sa" is a classic sockaddr: it will only ever use 14 bytes from sa_data. */
 int dev_get_mac_address(struct sockaddr *sa, struct net *net, char *dev_name)
 {
 	size_t size = sizeof(sa->sa_data);
