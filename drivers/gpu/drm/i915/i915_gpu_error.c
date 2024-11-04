@@ -67,10 +67,8 @@
 static void __sg_set_buf(struct scatterlist *sg,
 			 void *addr, unsigned int len, loff_t it)
 {
-	sg->page_link = (unsigned long)virt_to_page(addr);
-	sg->offset = offset_in_page(addr);
-	sg->length = len;
-	sg->dma_address = it;
+	sg_set_buf(sg, addr, len);
+	sg_dma_address(sg) = it;
 }
 
 static bool __i915_error_grow(struct drm_i915_error_state_buf *e, size_t len)
