@@ -20073,6 +20073,7 @@ static int jit_subprogs(struct bpf_verifier_env *env)
 {
 	struct bpf_prog *prog = env->prog, **func, *tmp;
 	int i, j, subprog_start, subprog_end = 0, len, subprog;
+	void __percpu *priv_stack_ptr;
 	struct bpf_map *map_ptr;
 	struct bpf_insn *insn;
 	void *old_bpf_func;
@@ -20169,6 +20170,17 @@ static int jit_subprogs(struct bpf_verifier_env *env)
 
 		func[i]->aux->name[0] = 'F';
 		func[i]->aux->stack_depth = env->subprog_info[i].stack_depth;
+
+		if (env->subprog_info[i].use_priv_stack && func[i]->aux->stack_depth) {
+			priv_stack_ptr = __alloc_percpu_gfp(func[i]->aux->stack_depth, 16,
+							    GFP_KERNEL);
+			if (!priv_stack_ptr) {
+				err = -ENOMEM;
+				goto out_free;
+			}
+			func[i]->aux->priv_stack_ptr = priv_stack_ptr;
+		}
+
 		func[i]->jit_requested = 1;
 		func[i]->blinding_requested = prog->blinding_requested;
 		func[i]->aux->kfunc_tab = prog->aux->kfunc_tab;
@@ -20201,6 +20213,7 @@ static int jit_subprogs(struct bpf_verifier_env *env)
 			func[i]->aux->exception_boundary = env->seen_exception;
 		func[i] = bpf_int_jit_compile(func[i]);
 		if (!func[i]->jited) {
+			free_percpu(func[i]->aux->priv_stack_ptr);
 			err = -ENOTSUPP;
 			goto out_free;
 		}

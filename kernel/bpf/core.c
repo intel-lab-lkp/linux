@@ -2396,6 +2396,7 @@ static void bpf_prog_select_func(struct bpf_prog *fp)
  */
 struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)
 {
+	void __percpu *priv_stack_ptr = NULL;
 	/* In case of BPF to BPF calls, verifier did all the prep
 	 * work with regards to JITing, etc.
 	 */
@@ -2421,11 +2422,23 @@ struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)
 		if (*err)
 			return fp;
 
+		if (fp->aux->use_priv_stack && fp->aux->stack_depth) {
+			priv_stack_ptr = __alloc_percpu_gfp(fp->aux->stack_depth, 16, GFP_KERNEL);
+			if (!priv_stack_ptr) {
+				*err = -ENOMEM;
+				return fp;
+			}
+			fp->aux->priv_stack_ptr = priv_stack_ptr;
+		}
+
 		fp = bpf_int_jit_compile(fp);
 		bpf_prog_jit_attempt_done(fp);
-		if (!fp->jited && jit_needed) {
-			*err = -ENOTSUPP;
-			return fp;
+		if (!fp->jited) {
+			free_percpu(priv_stack_ptr);
+			if (jit_needed) {
+				*err = -ENOTSUPP;
+				return fp;
+			}
 		}
 	} else {
 		*err = bpf_prog_offload_compile(fp);
