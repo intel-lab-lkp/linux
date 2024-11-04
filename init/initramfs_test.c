@@ -305,11 +305,6 @@ static void __init initramfs_test_hardlink(struct kunit *test)
 		.namesize = sizeof("initramfs_test_hardlink_link"),
 		.fname = "initramfs_test_hardlink_link",
 		.data = "ASDF",
-	}, {
-		/* hardlink hashtable leaks when the archive omits a trailer */
-		.magic = "070701",
-		.namesize = sizeof("TRAILER!!!"),
-		.fname = "TRAILER!!!",
 	} };
 
 	cpio_srcbuf = kmalloc(8192, GFP_KERNEL);
