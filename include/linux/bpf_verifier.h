@@ -669,6 +669,8 @@ struct bpf_subprog_info {
 	/* true if bpf_fastcall stack region is used by functions that can't be inlined */
 	bool keep_fastcall_stack: 1;
 	bool use_priv_stack: 1;
+	bool visited_with_priv_stack_accum: 1;
+	bool visited_with_priv_stack: 1;
 
 	u8 arg_cnt;
 	struct bpf_subprog_arg_info args[MAX_BPF_FUNC_REG_ARGS];

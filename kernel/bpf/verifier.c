@@ -6118,8 +6118,12 @@ process_func:
 					idx, subprog_depth);
 				return -EACCES;
 			}
-			if (subprog_depth >= BPF_PRIV_STACK_MIN_SIZE)
+			if (subprog_depth >= BPF_PRIV_STACK_MIN_SIZE) {
 				subprog[idx].use_priv_stack = true;
+				subprog[idx].visited_with_priv_stack = true;
+			}
+		} else {
+			subprog[idx].visited_with_priv_stack = true;
 		}
 	}
 continue_func:
@@ -6220,10 +6224,12 @@ continue_func:
 static int check_max_stack_depth(struct bpf_verifier_env *env)
 {
 	struct bpf_subprog_info *si = env->subprog_info;
+	enum priv_stack_mode orig_priv_stack_supported;
 	enum priv_stack_mode priv_stack_supported;
 	int ret, subtree_depth = 0, depth_frame;
 
 	priv_stack_supported = bpf_enable_priv_stack(env->prog);
+	orig_priv_stack_supported = priv_stack_supported;
 
 	if (priv_stack_supported != NO_PRIV_STACK) {
 		for (int i = 0; i < env->subprog_cnt; i++) {
@@ -6240,13 +6246,39 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 							    priv_stack_supported);
 			if (ret < 0)
 				return ret;
+
+			if (priv_stack_supported != NO_PRIV_STACK) {
+				for (int j = 0; j < env->subprog_cnt; j++) {
+					if (si[j].visited_with_priv_stack_accum &&
+					    si[j].visited_with_priv_stack) {
+						/* si[j] is visited by both main/async subprog
+						 * and another async subprog.
+						 */
+						priv_stack_supported = NO_PRIV_STACK;
+						break;
+					}
+					if (!si[j].visited_with_priv_stack_accum)
+						si[j].visited_with_priv_stack_accum =
+							si[j].visited_with_priv_stack;
+				}
+			}
+			if (priv_stack_supported != NO_PRIV_STACK) {
+				for (int j = 0; j < env->subprog_cnt; j++)
+					si[j].visited_with_priv_stack = false;
+			}
 		}
 	}
 
-	if (priv_stack_supported == NO_PRIV_STACK && subtree_depth > MAX_BPF_STACK) {
-		verbose(env, "combined stack size of %d calls is %d. Too large\n",
-			depth_frame, subtree_depth);
-		return -EACCES;
+	if (priv_stack_supported == NO_PRIV_STACK) {
+		if (subtree_depth > MAX_BPF_STACK) {
+			verbose(env, "combined stack size of %d calls is %d. Too large\n",
+				depth_frame, subtree_depth);
+			return -EACCES;
+		}
+		if (orig_priv_stack_supported == PRIV_STACK_ADAPTIVE) {
+			for (int i = 0; i < env->subprog_cnt; i++)
+				si[i].use_priv_stack = false;
+		}
 	}
 	if (si[0].use_priv_stack)
 		env->prog->aux->use_priv_stack = true;
