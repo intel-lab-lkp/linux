@@ -1796,6 +1796,7 @@ int debuginfo__find_line_range(struct debuginfo *dbg, struct line_range *lr)
 		struct dwarf_callback_param line_range_param = {
 			.data = (void *)&lf, .retval = 0};
 
+		pr_debug2("Start searching function '%s' in getpubname\n", lr->function);
 		dwarf_getpubnames(dbg->dbg, pubname_search_cb,
 				  &pubname_param, 0);
 		if (pubname_param.found) {
@@ -1803,8 +1804,10 @@ int debuginfo__find_line_range(struct debuginfo *dbg, struct line_range *lr)
 			if (lf.found)
 				goto found;
 		}
+		pr_debug2("Not found, use DIE tree\n");
 	}
 
+	pr_debug2("Search function '%s' in DIE tree\n", lr->function);
 	/* Loop on CUs (Compilation Unit) */
 	while (!lf.found && ret >= 0) {
 		if (dwarf_nextcu(dbg->dbg, off, &noff, &cuhl,

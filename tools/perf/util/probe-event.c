@@ -1065,6 +1065,7 @@ static int __show_line_range(struct line_range *lr, const char *module,
 
 	ret = debuginfo__find_line_range(dinfo, lr);
 	if (!ret) {	/* Not found, retry with an alternative */
+		pr_debug2("Failed to find line range in debuginfo. Fallback to alternative\n");
 		ret = get_alternative_line_range(dinfo, lr, module, user);
 		if (!ret)
 			ret = debuginfo__find_line_range(dinfo, lr);
@@ -1078,7 +1079,7 @@ static int __show_line_range(struct line_range *lr, const char *module,
 		pr_warning("Specified source line is not found.\n");
 		return -ENOENT;
 	} else if (ret < 0) {
-		pr_warning("Debuginfo analysis failed.\n");
+		pr_warning("Debuginfo analysis failed (%d).\n", ret);
 		return ret;
 	}
 
@@ -1187,7 +1188,7 @@ static int show_available_vars_at(struct debuginfo *dinfo,
 			pr_err("Failed to find the address of %s\n", buf);
 			ret = -ENOENT;
 		} else
-			pr_warning("Debuginfo analysis failed.\n");
+			pr_warning("Debuginfo analysis failed(2).\n");
 		goto end;
 	}
 
@@ -1343,30 +1344,39 @@ static bool is_c_func_name(const char *name)
  *
  *         @SRC[:SLN[+NUM|-ELN]]
  *         FNC[@SRC][:SLN[+NUM|-ELN]]
+ *
+ * SRC and FUNC can be quoted by double/single quotes.
  */
 int parse_line_range_desc(const char *arg, struct line_range *lr)
 {
-	char *range, *file, *name = strdup(arg);
+	char *buf = strdup(arg);
+	char *p;
 	int err;
 
-	if (!name)
+	if (!buf)
 		return -ENOMEM;
 
 	lr->start = 0;
 	lr->end = INT_MAX;
 
-	range = strpbrk_esc(name, ":");
-	if (range) {
-		*range++ = '\0';
+	pr_debug2("Input line range: %s\n", buf);
+	p = strpbrk_esq(buf, ":");
+	if (p) {
+		if (p == buf) {
+			semantic_error("No file/function name in '%s'.\n", p);
+			err = -EINVAL;
+			goto err;
+		}
+		*(p++) = '\0';
 
-		err = parse_line_num(&range, &lr->start, "start line");
+		err = parse_line_num(&p, &lr->start, "start line");
 		if (err)
 			goto err;
 
-		if (*range == '+' || *range == '-') {
-			const char c = *range++;
+		if (*p == '+' || *p == '-') {
+			const char c = *(p++);
 
-			err = parse_line_num(&range, &lr->end, "end line");
+			err = parse_line_num(&p, &lr->end, "end line");
 			if (err)
 				goto err;
 
@@ -1390,28 +1400,22 @@ int parse_line_range_desc(const char *arg, struct line_range *lr)
 				       " than end line.\n");
 			goto err;
 		}
-		if (*range != '\0') {
-			semantic_error("Tailing with invalid str '%s'.\n", range);
+		if (*p != '\0') {
+			semantic_error("Tailing with invalid str '%s'.\n", p);
 			goto err;
 		}
 	}
 
-	file = strpbrk_esc(name, "@");
-	if (file) {
-		*file = '\0';
-		lr->file = strdup_esc(++file);
-		if (lr->file == NULL) {
-			err = -ENOMEM;
-			goto err;
-		}
-		if (*name != '\0')
-			lr->function = name;
-	} else
-		lr->function = name;
+	p = strpbrk_esq(buf, "@");
+	if (p) {
+		*(p++) = '\0';
+		lr->file = strdup_esq(p);
+	}
+	lr->function = strdup_esq(buf);
+	err = 0;
 
-	return 0;
 err:
-	free(name);
+	free(buf);
 	return err;
 }
 
@@ -1419,19 +1423,19 @@ static int parse_perf_probe_event_name(char **arg, struct perf_probe_event *pev)
 {
 	char *ptr;
 
-	ptr = strpbrk_esc(*arg, ":");
+	ptr = strpbrk_esq(*arg, ":");
 	if (ptr) {
 		*ptr = '\0';
 		if (!pev->sdt && !is_c_func_name(*arg))
 			goto ng_name;
-		pev->group = strdup_esc(*arg);
+		pev->group = strdup_esq(*arg);
 		if (!pev->group)
 			return -ENOMEM;
 		*arg = ptr + 1;
 	} else
 		pev->group = NULL;
 
-	pev->event = strdup_esc(*arg);
+	pev->event = strdup_esq(*arg);
 	if (pev->event == NULL)
 		return -ENOMEM;
 
@@ -1470,7 +1474,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 			arg++;
 	}
 
-	ptr = strpbrk_esc(arg, ";=@+%");
+	ptr = strpbrk_esq(arg, ";=@+%");
 	if (pev->sdt) {
 		if (ptr) {
 			if (*ptr != '@') {
@@ -1484,7 +1488,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 				pev->target = build_id_cache__origname(tmp);
 				free(tmp);
 			} else
-				pev->target = strdup_esc(ptr + 1);
+				pev->target = strdup_esq(ptr + 1);
 			if (!pev->target)
 				return -ENOMEM;
 			*ptr = '\0';
@@ -1518,7 +1522,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 		arg++;
 	}
 
-	ptr = strpbrk_esc(arg, ";:+@%");
+	ptr = strpbrk_esq(arg, ";:+@%");
 	if (ptr) {
 		nc = *ptr;
 		*ptr++ = '\0';
@@ -1527,7 +1531,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 	if (arg[0] == '\0')
 		tmp = NULL;
 	else {
-		tmp = strdup_esc(arg);
+		tmp = strdup_esq(arg);
 		if (tmp == NULL)
 			return -ENOMEM;
 	}
@@ -1565,7 +1569,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 				return -ENOMEM;
 			break;
 		}
-		ptr = strpbrk_esc(arg, ";:+@%");
+		ptr = strpbrk_esq(arg, ";:+@%");
 		if (ptr) {
 			nc = *ptr;
 			*ptr++ = '\0';
@@ -1592,7 +1596,7 @@ static int parse_perf_probe_point(char *arg, struct perf_probe_event *pev)
 				semantic_error("SRC@SRC is not allowed.\n");
 				return -EINVAL;
 			}
-			pp->file = strdup_esc(arg);
+			pp->file = strdup_esq(arg);
 			if (pp->file == NULL)
 				return -ENOMEM;
 			break;
