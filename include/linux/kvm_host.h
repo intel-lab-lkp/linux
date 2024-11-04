@@ -600,7 +600,7 @@ struct kvm_memory_slot {
 
 #ifdef CONFIG_KVM_PRIVATE_MEM
 	struct {
-		struct file __rcu *file;
+		struct file *file;
 		pgoff_t pgoff;
 	} gmem;
 #endif
