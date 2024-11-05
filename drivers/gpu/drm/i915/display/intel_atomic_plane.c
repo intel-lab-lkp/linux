@@ -213,6 +213,15 @@ use_min_ddb(const struct intel_crtc_state *crtc_state,
 {
 	struct intel_display *display = to_intel_display(plane);
 
+	/*
+	 * For xe3 onwards this feature is implemented in
+	 * hardware, so no need to force relative data rate to 0,
+	 * we will update a specific register with min_ddb without
+	 * extra blocks.
+	 */
+	if (DISPLAY_VER(display) >= 30)
+		return false;
+
 	return DISPLAY_VER(display) >= 13 &&
 	       crtc_state->uapi.async_flip &&
 	       plane->async_flip;

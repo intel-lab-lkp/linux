@@ -770,6 +770,7 @@ struct skl_wm_level {
 	bool enable;
 	bool ignore_lines;
 	bool can_sagv;
+	bool auto_min_ddb_allowed;
 };
 
 struct skl_plane_wm {
@@ -863,6 +864,13 @@ struct intel_crtc_wm_state {
 			struct skl_ddb_entry plane_ddb[I915_MAX_PLANES];
 			/* pre-icl: for planar Y */
 			struct skl_ddb_entry plane_ddb_y[I915_MAX_PLANES];
+
+			/*
+			 * xe3: Minimum amount of display blocks and minimum
+			 * sagv allocation required for async flip
+			 */
+			struct skl_ddb_entry plane_min_ddb[I915_MAX_PLANES];
+			struct skl_ddb_entry plane_interim_ddb[I915_MAX_PLANES];
 		} skl;
 
 		struct {

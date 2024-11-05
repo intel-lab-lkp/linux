@@ -797,7 +797,9 @@ skl_ddb_get_hw_plane_state(struct intel_display *display,
 			   const enum pipe pipe,
 			   const enum plane_id plane_id,
 			   struct skl_ddb_entry *ddb,
-			   struct skl_ddb_entry *ddb_y)
+			   struct skl_ddb_entry *ddb_y,
+			   struct skl_ddb_entry *min_ddb,
+			   struct skl_ddb_entry *interim_ddb)
 {
 	u32 val;
 
@@ -811,6 +813,17 @@ skl_ddb_get_hw_plane_state(struct intel_display *display,
 	val = intel_de_read(display, PLANE_BUF_CFG(pipe, plane_id));
 	skl_ddb_entry_init_from_hw(ddb, val);
 
+	if (DISPLAY_VER(display) >= 30) {
+		val = intel_de_read(display, PLANE_MIN_BUF_CFG(pipe, plane_id));
+
+		skl_ddb_entry_init(min_ddb, 0,
+				   REG_FIELD_GET(PLANE_MIN_DDB_BLOCKS_MASK,
+						 val));
+		skl_ddb_entry_init(interim_ddb, 0,
+				   REG_FIELD_GET(PLANE_INTERIM_DDB_BLOCKS_MASK,
+						 val));
+	}
+
 	if (DISPLAY_VER(display) >= 11)
 		return;
 
@@ -820,7 +833,9 @@ skl_ddb_get_hw_plane_state(struct intel_display *display,
 
 static void skl_pipe_ddb_get_hw_state(struct intel_crtc *crtc,
 				      struct skl_ddb_entry *ddb,
-				      struct skl_ddb_entry *ddb_y)
+				      struct skl_ddb_entry *ddb_y,
+				      struct skl_ddb_entry *min_ddb,
+				      struct skl_ddb_entry *interim_ddb)
 {
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	enum intel_display_power_domain power_domain;
@@ -837,7 +852,9 @@ static void skl_pipe_ddb_get_hw_state(struct intel_crtc *crtc,
 		skl_ddb_get_hw_plane_state(&i915->display, pipe,
 					   plane_id,
 					   &ddb[plane_id],
-					   &ddb_y[plane_id]);
+					   &ddb_y[plane_id],
+					   &min_ddb[plane_id],
+					   &interim_ddb[plane_id]);
 
 	intel_display_power_put(i915, power_domain, wakeref);
 }
@@ -1374,7 +1391,9 @@ use_minimal_wm0_only(const struct intel_crtc_state *crtc_state,
 {
 	struct intel_display *display = to_intel_display(plane);
 
+	/* Xe3 (ver >= 30) has auto minimum DDB enabled */
 	return DISPLAY_VER(display) >= 13 &&
+	       DISPLAY_VER(display) < 30 &&
 	       crtc_state->uapi.async_flip &&
 	       plane->async_flip;
 }
@@ -1515,6 +1534,7 @@ skl_crtc_allocate_plane_ddb(struct intel_atomic_state *state,
 	const struct intel_dbuf_state *dbuf_state =
 		intel_atomic_get_new_dbuf_state(state);
 	const struct skl_ddb_entry *alloc = &dbuf_state->ddb[crtc->pipe];
+	struct intel_display *display = to_intel_display(state);
 	int num_active = hweight8(dbuf_state->active_pipes);
 	struct skl_plane_ddb_iter iter;
 	enum plane_id plane_id;
@@ -1525,6 +1545,8 @@ skl_crtc_allocate_plane_ddb(struct intel_atomic_state *state,
 	/* Clear the partitioning for disabled planes. */
 	memset(crtc_state->wm.skl.plane_ddb, 0, sizeof(crtc_state->wm.skl.plane_ddb));
 	memset(crtc_state->wm.skl.plane_ddb_y, 0, sizeof(crtc_state->wm.skl.plane_ddb_y));
+	memset(crtc_state->wm.skl.plane_min_ddb, 0, sizeof(crtc_state->wm.skl.plane_min_ddb));
+	memset(crtc_state->wm.skl.plane_interim_ddb, 0, sizeof(crtc_state->wm.skl.plane_interim_ddb));
 
 	if (!crtc_state->hw.active)
 		return 0;
@@ -1597,6 +1619,10 @@ skl_crtc_allocate_plane_ddb(struct intel_atomic_state *state,
 			&crtc_state->wm.skl.plane_ddb[plane_id];
 		struct skl_ddb_entry *ddb_y =
 			&crtc_state->wm.skl.plane_ddb_y[plane_id];
+		struct skl_ddb_entry *min_ddb =
+			&crtc_state->wm.skl.plane_min_ddb[plane_id];
+		struct skl_ddb_entry *interim_ddb =
+			&crtc_state->wm.skl.plane_interim_ddb[plane_id];
 		const struct skl_plane_wm *wm =
 			&crtc_state->wm.skl.optimal.planes[plane_id];
 
@@ -1612,6 +1638,20 @@ skl_crtc_allocate_plane_ddb(struct intel_atomic_state *state,
 		} else {
 			skl_allocate_plane_ddb(&iter, ddb, &wm->wm[level],
 					       crtc_state->rel_data_rate[plane_id]);
+
+			/*
+			 * xe3: Handle min_ddb and interim_ddb. Unlike the
+			 * normal ddb allocation, min_ddb and interim_ddb config
+			 * expects only the number of blocks from 0. The buffer
+			 * start is found in PLANE_BUF_CFG
+			 * Bspec: 72053
+			 */
+			if (DISPLAY_VER(display) >= 30) {
+				skl_ddb_entry_init(min_ddb, 0,
+						   wm->wm[0].min_ddb_alloc);
+				skl_ddb_entry_init(interim_ddb, 0,
+						   wm->sagv.wm0.min_ddb_alloc);
+			}
 		}
 	}
 	drm_WARN_ON(&i915->drm, iter.size != 0 || iter.data_rate != 0);
@@ -1656,6 +1696,8 @@ skl_crtc_allocate_plane_ddb(struct intel_atomic_state *state,
 			&crtc_state->wm.skl.plane_ddb[plane_id];
 		const struct skl_ddb_entry *ddb_y =
 			&crtc_state->wm.skl.plane_ddb_y[plane_id];
+		struct skl_ddb_entry *interim_ddb =
+			&crtc_state->wm.skl.plane_interim_ddb[plane_id];
 		struct skl_plane_wm *wm =
 			&crtc_state->wm.skl.optimal.planes[plane_id];
 
@@ -1669,6 +1711,11 @@ skl_crtc_allocate_plane_ddb(struct intel_atomic_state *state,
 		}
 
 		skl_check_wm_level(&wm->sagv.wm0, ddb);
+		/* update the interim ddb, in case if it is changed */
+		if (DISPLAY_VER(display) >= 30)
+			skl_ddb_entry_init(interim_ddb, 0,
+					   wm->sagv.wm0.min_ddb_alloc);
+
 		skl_check_wm_level(&wm->sagv.trans_wm, ddb);
 	}
 
@@ -1747,6 +1794,7 @@ skl_compute_wm_params(const struct intel_crtc_state *crtc_state,
 		      int color_plane, unsigned int pan_x)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_display *display = to_intel_display(crtc_state);
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	u32 interm_pbpl;
 
@@ -1805,7 +1853,7 @@ skl_compute_wm_params(const struct intel_crtc_state *crtc_state,
 					   wp->y_min_scanlines,
 					   wp->dbuf_block_size);
 
-		if (DISPLAY_VER(i915) >= 30)
+		if (DISPLAY_VER(display) >= 30)
 			interm_pbpl += (pan_x != 0);
 		else if (DISPLAY_VER(i915) >= 10)
 			interm_pbpl++;
@@ -1870,6 +1918,11 @@ static int skl_wm_max_lines(struct drm_i915_private *i915)
 		return 31;
 }
 
+static bool can_use_min_ddb(struct intel_display *display, int level)
+{
+	return DISPLAY_VER(display) >= 30 && level == 0;
+}
+
 static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 				 struct intel_plane *plane,
 				 int level,
@@ -1879,6 +1932,7 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 				 struct skl_wm_level *result /* out */)
 {
 	struct drm_i915_private *i915 = to_i915(crtc_state->uapi.crtc->dev);
+	struct intel_display *display = to_intel_display(crtc_state);
 	uint_fixed_16_16_t method1, method2;
 	uint_fixed_16_16_t selected_result;
 	u32 blocks, lines, min_ddb_alloc = 0;
@@ -2002,6 +2056,11 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 	/* Bspec says: value >= plane ddb allocation -> invalid, hence the +1 here */
 	result->min_ddb_alloc = max(min_ddb_alloc, blocks) + 1;
 	result->enable = true;
+	/*
+	 * For Xe3, when auto min DDB is enabled, it automatically switches to
+	 * the wm level where this auto min ddb is enabled
+	 */
+	result->auto_min_ddb_allowed = can_use_min_ddb(display, level);
 
 	if (DISPLAY_VER(i915) < 12 && i915->display.sagv.block_time_us)
 		result->can_sagv = latency >= i915->display.sagv.block_time_us;
@@ -2397,6 +2456,10 @@ static bool skl_plane_wm_equals(struct intel_display *display,
 		 * ddb allocation.
 		 */
 		if (!skl_wm_level_equals(&wm1->wm[level], &wm2->wm[level]))
+			return false;
+
+		if (DISPLAY_VER(display) >= 30 &&
+		    wm1->wm[level].auto_min_ddb_allowed != wm2->wm[level].auto_min_ddb_allowed)
 			return false;
 	}
 
@@ -2929,6 +2992,8 @@ static void skl_wm_level_from_reg_val(struct intel_display *display,
 	level->ignore_lines = val & PLANE_WM_IGNORE_LINES;
 	level->blocks = REG_FIELD_GET(PLANE_WM_BLOCKS_MASK, val);
 	level->lines = REG_FIELD_GET(PLANE_WM_LINES_MASK, val);
+	level->auto_min_ddb_allowed = DISPLAY_VER(display) >= 30 &&
+					val & PLANE_WM_AUTO_MIN_ALLOC_EN;
 }
 
 static void skl_pipe_wm_get_hw_state(struct intel_crtc *crtc,
@@ -3014,12 +3079,17 @@ static void skl_wm_get_hw_state(struct drm_i915_private *i915)
 				&crtc_state->wm.skl.plane_ddb[plane_id];
 			struct skl_ddb_entry *ddb_y =
 				&crtc_state->wm.skl.plane_ddb_y[plane_id];
+			struct skl_ddb_entry *min_ddb =
+				&crtc_state->wm.skl.plane_min_ddb[plane_id];
+			struct skl_ddb_entry *interim_ddb =
+				&crtc_state->wm.skl.plane_interim_ddb[plane_id];
 
 			if (!crtc_state->hw.active)
 				continue;
 
 			skl_ddb_get_hw_plane_state(display, crtc->pipe,
-						   plane_id, ddb, ddb_y);
+						   plane_id, ddb, ddb_y,
+						   min_ddb, interim_ddb);
 
 			skl_ddb_entry_union(&dbuf_state->ddb[pipe], ddb);
 			skl_ddb_entry_union(&dbuf_state->ddb[pipe], ddb_y);
@@ -3136,6 +3206,8 @@ void intel_wm_state_verify(struct intel_atomic_state *state,
 	struct skl_hw_state {
 		struct skl_ddb_entry ddb[I915_MAX_PLANES];
 		struct skl_ddb_entry ddb_y[I915_MAX_PLANES];
+		struct skl_ddb_entry min_ddb[I915_MAX_PLANES];
+		struct skl_ddb_entry interim_ddb[I915_MAX_PLANES];
 		struct skl_pipe_wm wm;
 	} *hw;
 	const struct skl_pipe_wm *sw_wm = &new_crtc_state->wm.skl.optimal;
@@ -3152,7 +3224,8 @@ void intel_wm_state_verify(struct intel_atomic_state *state,
 
 	skl_pipe_wm_get_hw_state(crtc, &hw->wm);
 
-	skl_pipe_ddb_get_hw_state(crtc, hw->ddb, hw->ddb_y);
+	skl_pipe_ddb_get_hw_state(crtc, hw->ddb, hw->ddb_y, hw->min_ddb,
+				  hw->interim_ddb);
 
 	hw_enabled_slices = intel_enabled_dbuf_slices_mask(display);
 
