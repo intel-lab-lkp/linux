@@ -1143,7 +1143,7 @@ struct media_entity *media_graph_walk_next(struct media_graph *graph);
 
 /**
  * media_pipeline_start - Mark a pipeline as streaming
- * @pad: Starting pad
+ * @origin: Starting pad
  * @pipe: Media pipeline to be assigned to all pads in the pipeline.
  *
  * Mark all pads connected to a given pad through enabled links, either
@@ -1155,7 +1155,7 @@ struct media_entity *media_graph_walk_next(struct media_graph *graph);
  * pipeline pointer must be identical for all nested calls to
  * media_pipeline_start().
  */
-__must_check int media_pipeline_start(struct media_pad *pad,
+__must_check int media_pipeline_start(struct media_pad *origin,
 				      struct media_pipeline *pipe);
 /**
  * __media_pipeline_start - Mark a pipeline as streaming
