@@ -234,13 +234,63 @@ static inline bool binder_alloc_is_mapped(struct binder_alloc *alloc)
 	return smp_load_acquire(&alloc->mapped);
 }
 
+static struct vm_area_struct *binder_find_lock_vma(struct binder_alloc *alloc,
+						   unsigned long addr,
+						   bool *mm_locked)
+{
+	struct mm_struct *mm = alloc->mm;
+	struct vm_area_struct *vma;
+
+	/* attempt per-vma lock first */
+	vma = lock_vma_under_rcu(mm, addr);
+	if (vma) {
+		*mm_locked = false;
+		return vma;
+	}
+
+	/* fallback to mmap_lock */
+	mmap_read_lock(mm);
+	vma = vma_lookup(mm, addr);
+	if (!vma || !binder_alloc_is_mapped(alloc)) {
+		mmap_read_unlock(mm);
+		return NULL;
+	}
+	*mm_locked = true;
+
+	return vma;
+}
+
+static struct page *binder_page_lookup(struct mm_struct *mm,
+				       struct vm_area_struct *vma,
+				       unsigned long addr,
+				       bool mm_locked)
+{
+	struct folio_walk fw;
+	struct page *page;
+
+	/* folio_walk_start() requires the mmap_lock */
+	if (!mm_locked)
+		mmap_read_lock(mm);
+
+	if (!folio_walk_start(&fw, vma, addr, 0))
+		return NULL;
+
+	page = fw.page;
+	folio_walk_end(&fw, vma);
+
+	if (!mm_locked)
+		mmap_read_unlock(mm);
+
+	return page;
+}
+
 static int binder_install_single_page(struct binder_alloc *alloc,
 				      unsigned long index,
 				      unsigned long addr)
 {
 	struct vm_area_struct *vma;
-	struct folio_walk fw;
 	struct page *page;
+	bool mm_locked;
 	int ret = 0;
 
 	if (!mmget_not_zero(alloc->mm))
@@ -257,12 +307,11 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 	INIT_LIST_HEAD(&page->lru);
 	page->index = index;
 
-	mmap_read_lock(alloc->mm);
-	vma = vma_lookup(alloc->mm, addr);
-	if (!vma || !binder_alloc_is_mapped(alloc)) {
+	vma = binder_find_lock_vma(alloc, addr, &mm_locked);
+	if (!vma) {
 		pr_err("%d: %s failed, no vma\n", alloc->pid, __func__);
 		ret = -ESRCH;
-		goto unlock;
+		goto out;
 	}
 
 	ret = vm_insert_page(vma, addr, page);
@@ -275,14 +324,13 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 		 */
 		ret = 0;
 		__free_page(page);
-		if (!folio_walk_start(&fw, vma, addr, 0)) {
+		page = binder_page_lookup(alloc->mm, vma, addr, mm_locked);
+		if (!page) {
 			pr_err("%d: failed to find page at offset %lx\n",
 			       alloc->pid, addr - alloc->vm_start);
 			ret = -ESRCH;
 			break;
 		}
-		page = fw.page;
-		folio_walk_end(&fw, vma);
 		fallthrough;
 	case 0:
 		/* Mark page installation complete and safe to use */
@@ -296,8 +344,10 @@ static int binder_install_single_page(struct binder_alloc *alloc,
 		break;
 	}
 
-unlock:
-	mmap_read_unlock(alloc->mm);
+	if (mm_locked)
+		mmap_read_unlock(alloc->mm);
+	else
+		vma_end_read(vma);
 	if (page)
 		__free_page(page);
 out:
