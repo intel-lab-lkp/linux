@@ -60,8 +60,19 @@ struct pvr_fw_version {
 /**
  * struct pvr_device_overrides - Hardware-level overrides loaded from
  * MODULE_DEVICE_TABLE() or similar.
+ *
+ * @device_memory_force_cpu_cached: By default, all device memory buffer objects
+ * are mapped write-combined on the CPU (see %PVR_BO_CPU_CACHED) including MMU
+ * page table backing pages which do not use the regular device memory objects.
+ * This override forces all CPU mappings to be mapped cached instead. Since this
+ * could require additional cache maintenance operations to be performed,
+ * pvr_device_overrides_validate() ensures that the dma-coherent attribute is
+ * set when this override is specified. Required on some TI platforms where a
+ * bug causes device-to-cpu cache snooping to behave incorrectly when
+ * interacting with cpu-uncached memory.
  */
 struct pvr_device_overrides {
+	bool device_memory_force_cpu_cached;
 };
 
 /**

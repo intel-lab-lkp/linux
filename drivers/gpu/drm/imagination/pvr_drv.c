@@ -1490,7 +1490,7 @@ static void pvr_remove(struct platform_device *plat_dev)
 	pvr_power_domains_fini(pvr_dev);
 }
 
-static const struct pvr_device_overrides pvr_device_overrides_default = {};
+static const struct pvr_device_overrides pvr_device_overrides_default = { 0 };
 
 /*
  * Always specify &pvr_device_overrides_default instead of %NULL for &struct of_device_id->data so

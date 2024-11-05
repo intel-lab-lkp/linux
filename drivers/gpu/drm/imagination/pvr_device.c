@@ -24,6 +24,7 @@
 #include <linux/gfp.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
@@ -635,6 +636,7 @@ bool
 pvr_device_overrides_validate(struct pvr_device *pvr_dev,
 			      const struct pvr_device_overrides *overrides)
 {
+	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
 	bool ret = true;
 
 	/*
@@ -643,7 +645,14 @@ pvr_device_overrides_validate(struct pvr_device *pvr_dev,
 	 *
 	 * Note that this function may be called early during device initialization
 	 * so it should not be assumed that @pvr_dev is ready for normal use yet.
-	 */
+	*/
+
+	if (overrides->device_memory_force_cpu_cached &&
+	    device_get_dma_attr(drm_dev->dev) != DEV_DMA_COHERENT) {
+		drm_err(drm_dev,
+			"Specifying device_memory_force_cpu_cached override without dma-coherent attribute is unsupported.");
+		ret = false;
+	}
 
 	return ret;
 }

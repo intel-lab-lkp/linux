@@ -44,8 +44,11 @@ struct pvr_file;
  * Bits not defined anywhere are "undefined".
  *
  * CPU mapping options
- *    :PVR_BO_CPU_CACHED: By default, all GEM objects are mapped write-combined on the CPU. Set this
- *       flag to override this behaviour and map the object cached.
+ *    :PVR_BO_CPU_CACHED: By default, all GEM objects are mapped write-combined on the CPU. Set
+ *       this flag to override this behaviour and map the object cached. If
+ *       &struct pvr_device_overrides->device_memory_force_cpu_cached is specified, all allocations
+ *       will be mapped as if this flag was set. This does not require any additional consideration
+ *       at allocation time since the override is only valid if the dma-coherent attribute is set.
  *
  * Firmware options
  *    :PVR_BO_FW_NO_CLEAR_ON_RESET: By default, all FW objects are cleared and reinitialised on hard

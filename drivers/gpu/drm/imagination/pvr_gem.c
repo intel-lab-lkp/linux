@@ -345,6 +345,9 @@ pvr_gem_object_create(struct pvr_device *pvr_dev, size_t size, u64 flags)
 	if (size == 0 || !pvr_gem_object_flags_validate(flags))
 		return ERR_PTR(-EINVAL);
 
+	if (PVR_HAS_OVERRIDE(pvr_dev, device_memory_force_cpu_cached))
+		flags |= PVR_BO_CPU_CACHED;
+
 	shmem_obj = drm_gem_shmem_create(from_pvr_device(pvr_dev), size);
 	if (IS_ERR(shmem_obj))
 		return ERR_CAST(shmem_obj);
