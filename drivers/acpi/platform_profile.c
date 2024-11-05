@@ -65,6 +65,78 @@ static int _get_class_choices(struct device *dev, unsigned long *choices)
 	return 0;
 }
 
+/**
+ * _store_class_profile - Set the profile for a class device
+ * @dev: The class device
+ * @data: The profile to set
+ */
+static int _store_class_profile(struct device *dev, void *data)
+{
+	enum platform_profile_option profile;
+	unsigned long choices;
+	int *i = (int *)data;
+	int err;
+
+	err = _get_class_choices(dev, &choices);
+	if (err)
+		return err;
+
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
+		struct platform_profile_handler *handler;
+
+		if (!test_bit(*i, &choices))
+			return -EOPNOTSUPP;
+
+		handler = dev_get_drvdata(dev);
+		err = handler->profile_get(handler, &profile);
+		if (err)
+			return err;
+
+		err = handler->profile_set(handler, *i);
+		if (err) {
+			int recover_err;
+
+			dev_err(dev, "Failed to set profile: %d\n", err);
+			recover_err = handler->profile_set(handler, profile);
+			if (recover_err)
+				dev_err(dev, "Failed to reset profile: %d\n", recover_err);
+		}
+		sysfs_notify(&handler->class_dev->kobj, NULL, "platform_profile");
+		kobject_uevent(&handler->class_dev->kobj, KOBJ_CHANGE);
+	}
+
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
+	return err ? err : 0;
+}
+
+/**
+ * get_class_profile - Show the current profile for a class device
+ * @dev: The class device
+ * @profile: The profile to return
+ * Return: 0 on success, -errno on failure
+ */
+static int get_class_profile(struct device *dev,
+			     enum platform_profile_option *profile)
+{
+	struct platform_profile_handler *handler;
+	enum platform_profile_option val;
+	int err;
+
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
+		handler = dev_get_drvdata(dev);
+		err = handler->profile_get(handler, &val);
+		if (err) {
+			pr_err("Failed to get profile for handler %s\n", handler->name);
+			return err;
+		}
+	}
+
+	if (WARN_ON(val >= PLATFORM_PROFILE_LAST))
+		return -EINVAL;
+	*profile = val;
+
+	return 0;
+}
 
 /**
  * name_show - Show the name of the profile handler
@@ -102,12 +174,58 @@ static ssize_t choices_show(struct device *dev,
 	return _commmon_choices_show(choices, buf);
 }
 
+/**
+ * profile_show - Show the current profile for a class device
+ * @dev: The device
+ * @attr: The attribute
+ * @buf: The buffer to write to
+ * Return: The number of bytes written
+ */
+static ssize_t profile_show(struct device *dev,
+			    struct device_attribute *attr,
+			    char *buf)
+{
+	enum platform_profile_option profile = PLATFORM_PROFILE_LAST;
+	int err;
+
+	err = get_class_profile(dev, &profile);
+	if (err)
+		return err;
+
+	return sysfs_emit(buf, "%s\n", profile_names[profile]);
+}
+
+/**
+ * profile_store - Set the profile for a class device
+ * @dev: The device
+ * @attr: The attribute
+ * @buf: The buffer to read from
+ * @count: The number of bytes to read
+ * Return: The number of bytes read
+ */
+static ssize_t profile_store(struct device *dev,
+			     struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	int i, ret;
+
+	i = sysfs_match_string(profile_names, buf);
+	if (i < 0)
+		return -EINVAL;
+
+	ret = _store_class_profile(dev, (void *)(long)&i);
+
+	return ret ? ret : count;
+}
 
 static DEVICE_ATTR_RO(name);
 static DEVICE_ATTR_RO(choices);
+static DEVICE_ATTR_RW(profile);
+
 static struct attribute *profile_attrs[] = {
 	&dev_attr_name.attr,
 	&dev_attr_choices.attr,
+	&dev_attr_profile.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(profile);
