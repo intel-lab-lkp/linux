@@ -378,34 +378,37 @@ EXPORT_SYMBOL_GPL(platform_profile_notify);
 
 int platform_profile_cycle(void)
 {
+	enum platform_profile_option next = PLATFORM_PROFILE_LAST;
 	enum platform_profile_option profile;
-	enum platform_profile_option next;
+	unsigned long choices;
 	int err;
 
 	if (!class_is_registered(&platform_profile_class))
 		return -ENODEV;
 
-	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
-		if (!cur_profile)
-			return -ENODEV;
+	err = class_for_each_device(&platform_profile_class, NULL,
+				    &profile, _aggregate_profiles);
+	if (err)
+		return err;
 
-		err = cur_profile->profile_get(cur_profile, &profile);
-		if (err)
-			return err;
+	err = class_for_each_device(&platform_profile_class, NULL,
+				    &choices, _aggregate_choices);
+	if (err)
+		return err;
 
-		next = find_next_bit_wrap(cur_profile->choices, PLATFORM_PROFILE_LAST,
-					  profile + 1);
+	next = find_next_bit_wrap(&choices,
+				  PLATFORM_PROFILE_LAST,
+				  profile + 1);
 
-		if (WARN_ON(next == PLATFORM_PROFILE_LAST))
-			return -EINVAL;
+	err = class_for_each_device(&platform_profile_class, NULL, &next,
+				    _store_class_profile);
 
-		err = cur_profile->profile_set(cur_profile, next);
-		if (err)
-			return err;
-	}
+	if (err)
+		return err;
 
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
-	return 0;
+
+	return err;
 }
 EXPORT_SYMBOL_GPL(platform_profile_cycle);
 
