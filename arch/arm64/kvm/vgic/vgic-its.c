@@ -2176,10 +2176,12 @@ static int vgic_its_ite_cmp(void *priv, const struct list_head *a,
 static int vgic_its_save_itt(struct vgic_its *its, struct its_device *device)
 {
 	const struct vgic_its_abi *abi = vgic_its_get_abi(its);
+	struct its_ite *ite, *first_ite = NULL;
+	struct kvm *kvm = its->dev->kvm;
 	gpa_t base = device->itt_addr;
-	struct its_ite *ite;
-	int ret;
 	int ite_esz = abi->ite_esz;
+	u64 val = 0;
+	int ret;
 
 	list_sort(NULL, &device->itt_head, vgic_its_ite_cmp);
 
@@ -2198,7 +2200,24 @@ static int vgic_its_save_itt(struct vgic_its *its, struct its_device *device)
 		ret = vgic_its_save_ite(its, device, ite, gpa, ite_esz);
 		if (ret)
 			return ret;
+
+		if (!first_ite)
+			first_ite = ite;
 	}
+
+	/*
+	 * As for DTEs, add a dummy ITE if necessary for ITT to avoid uncessary
+	 * sanning in the store operation.
+	 */
+	if (first_ite && first_ite->event_id)
+		val = (u64)first_ite->event_id << KVM_ITS_ITE_NEXT_SHIFT;
+
+	if (!first_ite || first_ite->event_id) {
+		val |= KVM_ITS_ENTRY_DUMMY_MAGIC << KVM_ITS_ENTRY_DUMMY_SHIFT;
+		val = cpu_to_le64(val);
+		vgic_write_guest_lock(kvm, base, &val, ite_esz);
+	}
+
 	return 0;
 }
 
@@ -2328,8 +2347,11 @@ static int vgic_its_save_device_tables(struct vgic_its *its)
 {
 	const struct vgic_its_abi *abi = vgic_its_get_abi(its);
 	u64 baser = its->baser_device_table;
-	struct its_device *dev;
+	struct its_device *dev, *first_dev = NULL;
+	struct kvm *kvm = its->dev->kvm;
 	int dte_esz = abi->dte_esz;
+	gpa_t dummy_eaddr;
+	u64 val = 0;
 
 	if (!(baser & GITS_BASER_VALID))
 		return 0;
@@ -2351,7 +2373,35 @@ static int vgic_its_save_device_tables(struct vgic_its *its)
 		ret = vgic_its_save_dte(its, dev, eaddr, dte_esz);
 		if (ret)
 			return ret;
+
+		if (!first_dev)
+			first_dev = dev;
 	}
+
+	/*
+	 * The valid DTEs in the device table are linked with a static single
+	 * linked list, but the list head is not always the first DTE. That's
+	 * why the restore operation has to scan the device table from the first
+	 * entry all the time.
+	 * To avoid the uncessary scanning in the restore operation, if the
+	 * first valid DTE is not the first one in the table, add a dummy DTE
+	 * with valid bit as 0 pointing to the first valid DTE.
+	 * This way, the first DTE in the table is always the head of the DTE
+	 * list. It is either a valid DTE or a dummy DTE (V= 0) pointing to the
+	 * first valid DTE if there is a valid DTE in the table.
+	 */
+	if (first_dev && first_dev->device_id)
+		val = (u64)first_dev->device_id << KVM_ITS_DTE_DUMMY_NEXT_SHIFT;
+
+	if (!first_dev || first_dev->device_id) {
+		if (!vgic_its_check_id(its, baser, 0, &dummy_eaddr))
+			return -EINVAL;
+
+		val |= KVM_ITS_ENTRY_DUMMY_MAGIC << KVM_ITS_ENTRY_DUMMY_SHIFT;
+		val = cpu_to_le64(val);
+		vgic_write_guest_lock(kvm, dummy_eaddr, &val, dte_esz);
+	}
+
 	return 0;
 }
 
