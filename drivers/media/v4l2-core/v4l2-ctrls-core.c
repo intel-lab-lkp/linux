@@ -1676,6 +1676,7 @@ int handler_new_ref(struct v4l2_ctrl_handler *hdl,
 	u32 class_ctrl = V4L2_CTRL_ID2WHICH(id) | 1;
 	int bucket = id % hdl->nr_of_buckets;	/* which bucket to use */
 	unsigned int size_extra_req = 0;
+	int ret = 0;
 
 	if (ctrl_ref)
 		*ctrl_ref = NULL;
@@ -1719,13 +1720,32 @@ int handler_new_ref(struct v4l2_ctrl_handler *hdl,
 	list_for_each_entry(ref, &hdl->ctrl_refs, node) {
 		if (ref->ctrl->id < id)
 			continue;
-		/* Don't add duplicates */
-		if (ref->ctrl->id == id) {
-			kfree(new_ref);
-			goto unlock;
+		/* Check we're not adding a duplicate */
+		if (ref->ctrl->id != id) {
+			list_add(&new_ref->node, ref->node.prev);
+			break;
 		}
-		list_add(&new_ref->node, ref->node.prev);
-		break;
+
+		/*
+		 * If we add a new control to this control handler, and we find
+		 * that it is a duplicate, then that is a driver bug. Warn and
+		 * return an error.
+		 *
+		 * It can be caused by either adding the same control twice, or
+		 * by first calling v4l2_ctrl_add_handler, and then adding a new
+		 * control to this control handler.
+		 *
+		 * Either sequence is incorrect.
+		 *
+		 * However, if the control is owned by another handler, and
+		 * a control with that ID already exists in the list, then we
+		 * can safely skip it: in that case it the control is overridden
+		 * by the existing control.
+		 */
+		if (WARN_ON(hdl == ctrl->handler))
+			ret = -EEXIST;
+		kfree(new_ref);
+		goto unlock;
 	}
 
 insert_in_hash:
@@ -1746,6 +1766,8 @@ insert_in_hash:
 
 unlock:
 	mutex_unlock(hdl->lock);
+	if (ret)
+		return handler_set_err(hdl, ret);
 	return 0;
 }
 
