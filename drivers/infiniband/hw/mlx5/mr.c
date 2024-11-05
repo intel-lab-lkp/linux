@@ -2545,17 +2545,13 @@ mlx5_ib_map_pa_mr_sg_pi(struct ib_mr *ibmr, struct scatterlist *data_sg,
 	if (data_sg_nents == 1) {
 		n++;
 		mr->mmkey.ndescs = 1;
-		if (data_sg_offset)
-			sg_offset = *data_sg_offset;
+		sg_offset = *data_sg_offset;
 		mr->data_length = sg_dma_len(data_sg) - sg_offset;
 		mr->data_iova = sg_dma_address(data_sg) + sg_offset;
 		if (meta_sg_nents == 1) {
 			n++;
 			mr->meta_ndescs = 1;
-			if (meta_sg_offset)
-				sg_offset = *meta_sg_offset;
-			else
-				sg_offset = 0;
+			sg_offset = *meta_sg_offset;
 			mr->meta_length = sg_dma_len(meta_sg) - sg_offset;
 			mr->pi_iova = sg_dma_address(meta_sg) + sg_offset;
 		}
@@ -2576,7 +2572,7 @@ mlx5_ib_sg_to_klms(struct mlx5_ib_mr *mr,
 {
 	struct scatterlist *sg = sgl;
 	struct mlx5_klm *klms = mr->descs;
-	unsigned int sg_offset = sg_offset_p ? *sg_offset_p : 0;
+	unsigned int sg_offset = *sg_offset_p;
 	u32 lkey = mr->ibmr.pd->local_dma_lkey;
 	int i, j = 0;
 
@@ -2594,15 +2590,14 @@ mlx5_ib_sg_to_klms(struct mlx5_ib_mr *mr,
 		sg_offset = 0;
 	}
 
-	if (sg_offset_p)
-		*sg_offset_p = sg_offset;
+	*sg_offset_p = sg_offset;
 
 	mr->mmkey.ndescs = i;
 	mr->data_length = mr->ibmr.length;
 
 	if (meta_sg_nents) {
 		sg = meta_sgl;
-		sg_offset = meta_sg_offset_p ? *meta_sg_offset_p : 0;
+		sg_offset = *meta_sg_offset_p;
 		for_each_sg(meta_sgl, sg, meta_sg_nents, j) {
 			if (unlikely(i + j >= mr->max_descs))
 				break;
@@ -2615,8 +2610,7 @@ mlx5_ib_sg_to_klms(struct mlx5_ib_mr *mr,
 
 			sg_offset = 0;
 		}
-		if (meta_sg_offset_p)
-			*meta_sg_offset_p = sg_offset;
+		*meta_sg_offset_p = sg_offset;
 
 		mr->meta_ndescs = j;
 		mr->meta_length = mr->ibmr.length - mr->data_length;

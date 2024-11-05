@@ -159,7 +159,7 @@ TRACE_EVENT(
 		__entry->user_base = to_imr(ibmr)->mr.user_base;
 		__entry->ibmr_length = to_imr(ibmr)->mr.length;
 		__entry->sg_nents = sg_nents;
-		__entry->sg_offset = sg_offset ? *sg_offset : 0;
+		__entry->sg_offset = *sg_offset;
 	),
 	TP_printk(
 		"[%s] ibmr_iova %llx iova %llx user_base %llx length %llx sg_nents %d sg_offset %u",
