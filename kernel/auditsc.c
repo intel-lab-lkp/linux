@@ -2419,7 +2419,8 @@ void __audit_inode_child(struct inode *parent,
 	struct audit_names *n, *found_parent = NULL, *found_child = NULL;
 	struct audit_entry *e;
 	struct list_head *list = &audit_filter_list[AUDIT_FILTER_FS];
-	int i;
+	int i, dlen, nlen;
+	char *fn = NULL;
 
 	if (context->context == AUDIT_CTX_UNUSED)
 		return;
@@ -2443,6 +2444,7 @@ void __audit_inode_child(struct inode *parent,
 	if (inode)
 		handle_one(inode);
 
+	dlen = strlen(dname->name);
 	/* look for a parent entry first */
 	list_for_each_entry(n, &context->names_list, list) {
 		if (!n->name ||
@@ -2450,15 +2452,27 @@ void __audit_inode_child(struct inode *parent,
 		     n->type != AUDIT_TYPE_UNKNOWN))
 			continue;
 
+		/* special case, entry name has the sufix "/" */
+		nlen = strlen(n->name->name);
+		if (dname->name[dlen - 1] != '/' && n->name->name[nlen - 1] == '/') {
+			fn = kmalloc(PATH_MAX, GFP_KERNEL);
+			if (!fn) {
+				audit_panic("out of memory in __audit_inode_child()");
+				return;
+			}
+			strscpy(fn, n->name->name, nlen);
+		}
+
 		if (n->ino == parent->i_ino && n->dev == parent->i_sb->s_dev &&
 		    !audit_compare_dname_path(dname,
-					      n->name->name, n->name_len)) {
+					      fn ? fn : n->name->name, n->name_len)) {
 			if (n->type == AUDIT_TYPE_UNKNOWN)
 				n->type = AUDIT_TYPE_PARENT;
 			found_parent = n;
 			break;
 		}
 	}
+	kfree(fn);
 
 	cond_resched();
 
