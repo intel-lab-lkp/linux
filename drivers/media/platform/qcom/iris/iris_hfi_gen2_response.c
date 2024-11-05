@@ -332,6 +332,7 @@ static int iris_hfi_gen2_handle_output_buffer(struct iris_inst *inst,
 	struct v4l2_m2m_buffer *m2m_buffer, *n;
 	struct iris_buffer *buf;
 	bool found = false;
+	int ret;
 
 	if (hfi_buffer->flags & HFI_BUF_FW_FLAG_PSC_LAST) {
 		ret = iris_inst_sub_state_change_drc_last(inst);
