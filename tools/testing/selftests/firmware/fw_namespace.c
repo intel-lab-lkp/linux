@@ -112,12 +112,49 @@ static bool test_fw_in_ns(const char *fw_name, const char *sys_path, bool block_
 	exit(EXIT_SUCCESS);
 }
 
+static void verify_init_ns(void)
+{
+    struct stat init_ns, self_ns;
+
+    if (stat("/proc/1/ns/mnt", &init_ns) != 0)
+        die("Failed to stat init mount namespace: %s\n",
+            strerror(errno));
+
+    if (stat("/proc/self/ns/mnt", &self_ns) != 0)
+        die("Failed to stat self mount namespace: %s\n",
+            strerror(errno));
+
+    if (init_ns.st_ino != self_ns.st_ino)
+        die("Test must run in init mount namespace\n");
+}
+
+static void ensure_firmware_dir(void)
+{
+    struct stat st;
+
+    if (stat("/lib/firmware", &st) == 0) {
+        if (!S_ISDIR(st.st_mode))
+            die("/lib/firmware exists but is not a directory\n");
+        return;
+    }
+
+    if (errno != ENOENT)
+        die("Failed to stat /lib/firmware: %s\n", strerror(errno));
+
+    if (mkdir("/lib/firmware", 0755) != 0)
+        die("Failed to create /lib/firmware directory: %s\n",
+            strerror(errno));
+}
+
 int main(int argc, char **argv)
 {
 	const char *fw_name = "test-firmware.bin";
 	char *sys_path;
 	if (argc != 2)
 		die("usage: %s sys_path\n", argv[0]);
+
+	verify_init_ns();
+	ensure_firmware_dir();
 
 	/* Mount tmpfs to /lib/firmware so we don't have to assume
 	   that it is writable for us.*/
