@@ -1506,7 +1506,8 @@ static void free_bprm(struct linux_binprm *bprm)
 	if (bprm->interp != bprm->filename)
 		kfree(bprm->interp);
 	kfree(bprm->fdpath);
-	kfree(bprm->argv0);
+	if (!IS_ERR(bprm->argv0))
+		kfree(bprm->argv0);
 	kfree(bprm);
 }
 
