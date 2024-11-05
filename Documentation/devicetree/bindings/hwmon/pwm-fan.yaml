@@ -31,6 +31,17 @@ properties:
       it must be self resetting edge interrupts.
     maxItems: 1
 
+  fan-dead-stop-start-percent:
+    description:
+      Minimum fan RPM in percent to start from dead stop.
+    minimum: 0
+    maximum: 100
+
+  fan-dead-stop-start-usec:
+    description:
+      Time to wait in microseconds after start from dead stop.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
   pulses-per-revolution:
     description:
       Define the number of pulses per fan revolution for each tachometer
