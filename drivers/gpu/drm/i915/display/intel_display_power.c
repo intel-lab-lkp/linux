@@ -1090,7 +1090,7 @@ static void gen9_dbuf_enable(struct drm_i915_private *dev_priv)
 	u8 slices_mask;
 
 	dev_priv->display.dbuf.enabled_slices =
-		intel_enabled_dbuf_slices_mask(dev_priv);
+		intel_enabled_dbuf_slices_mask(&dev_priv->display);
 
 	slices_mask = BIT(DBUF_S1) | dev_priv->display.dbuf.enabled_slices;
 

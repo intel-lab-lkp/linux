@@ -52,13 +52,13 @@ struct skl_wm_params {
 	u32 dbuf_block_size;
 };
 
-u8 intel_enabled_dbuf_slices_mask(struct drm_i915_private *i915)
+u8 intel_enabled_dbuf_slices_mask(struct intel_display *display)
 {
 	u8 enabled_slices = 0;
 	enum dbuf_slice slice;
 
-	for_each_dbuf_slice(i915, slice) {
-		if (intel_de_read(i915, DBUF_CTL_S(slice)) & DBUF_POWER_STATE)
+	for_each_dbuf_slice(display, slice) {
+		if (intel_de_read(display, DBUF_CTL_S(slice)) & DBUF_POWER_STATE)
 			enabled_slices |= BIT(slice);
 	}
 
@@ -3126,6 +3126,7 @@ void intel_wm_state_verify(struct intel_atomic_state *state,
 			   struct intel_crtc *crtc)
 {
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
+	struct intel_display *display = to_intel_display(state);
 	const struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 	struct skl_hw_state {
@@ -3149,7 +3150,7 @@ void intel_wm_state_verify(struct intel_atomic_state *state,
 
 	skl_pipe_ddb_get_hw_state(crtc, hw->ddb, hw->ddb_y);
 
-	hw_enabled_slices = intel_enabled_dbuf_slices_mask(i915);
+	hw_enabled_slices = intel_enabled_dbuf_slices_mask(display);
 
 	if (DISPLAY_VER(i915) >= 11 &&
 	    hw_enabled_slices != i915->display.dbuf.enabled_slices)
