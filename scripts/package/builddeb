@@ -96,6 +96,11 @@ install_linux_image_dbg () {
 
 	# Parse modules.order directly because 'make modules_install' may sign,
 	# compress modules, and then run unneeded depmod.
+	modules_file=modules.order
+	if [ ! -s $modules_file ]; then
+		modules_file=/dev/null
+	fi
+
 	while read -r mod; do
 		mod="${mod%.o}.ko"
 		dbg="${pdir}/usr/lib/debug/lib/modules/${KERNELRELEASE}/kernel/${mod}"
@@ -105,7 +110,7 @@ install_linux_image_dbg () {
 		mkdir -p "${dbg%/*}" "${link%/*}"
 		"${OBJCOPY}" --only-keep-debug "${mod}" "${dbg}"
 		ln -sf --relative "${dbg}" "${link}"
-	done < modules.order
+	done < $modules_file
 
 	# Build debug package
 	# Different tools want the image in different locations
