@@ -358,18 +358,15 @@ static int mid_pwr_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return ret;
 	}
 
-	ret = pcim_iomap_regions(pdev, 1 << 0, pci_name(pdev));
-	if (ret) {
-		dev_err(&pdev->dev, "I/O memory remapping failed\n");
-		return ret;
-	}
-
 	pwr = devm_kzalloc(dev, sizeof(*pwr), GFP_KERNEL);
 	if (!pwr)
 		return -ENOMEM;
 
+	pwr->regs = pcim_iomap_region(pdev, 0, "intel_mid_pwr");
+	if (IS_ERR(pwr->regs))
+		return PTR_ERR(pwr->regs);
+
 	pwr->dev = dev;
-	pwr->regs = pcim_iomap_table(pdev)[0];
 	pwr->irq = pdev->irq;
 
 	mutex_init(&pwr->lock);
