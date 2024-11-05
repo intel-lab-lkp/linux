@@ -873,6 +873,11 @@ static int pci_epf_mhi_bind(struct pci_epf *epf)
 
 	/* Get MMIO base address from Endpoint controller */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mmio");
+	if (!res) {
+		dev_err(&pdev->dev, "Failed to get MMIO base address\n");
+		return -ENODEV;
+	}
+
 	epf_mhi->mmio_phys = res->start;
 	epf_mhi->mmio_size = resource_size(res);
 
