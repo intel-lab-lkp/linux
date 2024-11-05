@@ -7,6 +7,7 @@
 #include "bench.h"
 #include "trigger_bench.skel.h"
 #include "trace_helpers.h"
+#include "../sdt.h"
 
 #define MAX_TRIG_BATCH_ITERS 1000
 
@@ -332,6 +333,13 @@ static void *uprobe_producer_ret(void *input)
 	return NULL;
 }
 
+static void *uprobe_producer_usdt(void *input)
+{
+	while (true)
+		STAP_PROBE(trigger, usdt);
+	return NULL;
+}
+
 static void usetup(bool use_retprobe, bool use_multi, void *target_addr)
 {
 	size_t uprobe_offset;
@@ -380,6 +388,37 @@ static void usetup(bool use_retprobe, bool use_multi, void *target_addr)
 		fprintf(stderr, "failed to attach %s!\n", use_multi ? "multi-uprobe" : "uprobe");
 		exit(1);
 	}
+}
+
+static void __usdt_setup(const char *provider, const char *name)
+{
+	struct bpf_link *link;
+	int err;
+
+	setup_libbpf();
+
+	ctx.skel = trigger_bench__open();
+	if (!ctx.skel) {
+		fprintf(stderr, "failed to open skeleton\n");
+		exit(1);
+	}
+
+	bpf_program__set_autoload(ctx.skel->progs.bench_trigger_usdt, true);
+
+	err = trigger_bench__load(ctx.skel);
+	if (err) {
+		fprintf(stderr, "failed to load skeleton\n");
+		exit(1);
+	}
+
+	link = bpf_program__attach_usdt(ctx.skel->progs.bench_trigger_usdt,
+					-1 /* all PIDs */, "/proc/self/exe",
+					provider, name, NULL);
+	if (!link) {
+		fprintf(stderr, "failed to attach uprobe!\n");
+		exit(1);
+	}
+	ctx.skel->links.bench_trigger_usdt = link;
 }
 
 static void usermode_count_setup(void)
@@ -447,6 +486,11 @@ static void uretprobe_multi_ret_setup(void)
 	usetup(true, true /* use_multi */, &uprobe_target_ret);
 }
 
+static void usdt_setup(void)
+{
+	__usdt_setup("trigger", "usdt");
+}
+
 const struct bench bench_trig_syscall_count = {
 	.name = "trig-syscall-count",
 	.validate = trigger_validate,
@@ -505,3 +549,4 @@ BENCH_TRIG_USERMODE(uprobe_multi_ret, ret, "uprobe-multi-ret");
 BENCH_TRIG_USERMODE(uretprobe_multi_nop, nop, "uretprobe-multi-nop");
 BENCH_TRIG_USERMODE(uretprobe_multi_push, push, "uretprobe-multi-push");
 BENCH_TRIG_USERMODE(uretprobe_multi_ret, ret, "uretprobe-multi-ret");
+BENCH_TRIG_USERMODE(usdt, usdt, "usdt");

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2020 Facebook
-#include <linux/bpf.h>
+#include "vmlinux.h"
 #include <asm/unistd.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/usdt.bpf.h>
 #include <bpf/bpf_tracing.h>
 #include "bpf_misc.h"
 
@@ -134,6 +135,13 @@ int bench_trigger_tp(void *ctx)
 
 SEC("?raw_tp/bpf_trigger_tp")
 int bench_trigger_rawtp(void *ctx)
+{
+	inc_counter();
+	return 0;
+}
+
+SEC("?usdt")
+int bench_trigger_usdt(struct pt_regs *ctx)
 {
 	inc_counter();
 	return 0;
