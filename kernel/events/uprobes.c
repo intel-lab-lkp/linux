@@ -264,7 +264,13 @@ static void copy_to_page(struct page *page, unsigned long vaddr, const void *src
 	kunmap_atomic(kaddr);
 }
 
-static int verify_opcode(struct page *page, unsigned long vaddr, uprobe_opcode_t *new_opcode)
+__weak bool arch_uprobe_is_register(uprobe_opcode_t *insn, int len, void *data)
+{
+	return is_swbp_insn(insn);
+}
+
+int uprobe_verify_opcode(struct page *page, unsigned long vaddr,
+			 uprobe_opcode_t *new_opcode)
 {
 	uprobe_opcode_t old_opcode;
 	bool is_swbp;
@@ -290,6 +296,12 @@ static int verify_opcode(struct page *page, unsigned long vaddr, uprobe_opcode_t
 	}
 
 	return 1;
+}
+
+__weak int arch_uprobe_verify_opcode(struct page *page, unsigned long vaddr,
+				     uprobe_opcode_t *new_opcode, void *data)
+{
+	return uprobe_verify_opcode(page, vaddr, new_opcode);
 }
 
 static struct delayed_uprobe *
@@ -471,7 +483,8 @@ static int update_ref_ctr(struct uprobe *uprobe, struct mm_struct *mm,
  * Return 0 (success) or a negative errno.
  */
 int uprobe_write_opcode(struct arch_uprobe *auprobe, struct mm_struct *mm,
-			unsigned long vaddr, uprobe_opcode_t *insn, int len)
+			unsigned long vaddr, uprobe_opcode_t *insn, int len,
+			void *data)
 {
 	struct uprobe *uprobe;
 	struct page *old_page, *new_page;
@@ -480,7 +493,7 @@ int uprobe_write_opcode(struct arch_uprobe *auprobe, struct mm_struct *mm,
 	bool orig_page_huge = false;
 	unsigned int gup_flags = FOLL_FORCE;
 
-	is_register = is_swbp_insn(insn);
+	is_register = arch_uprobe_is_register(insn, len, data);
 	uprobe = container_of(auprobe, struct uprobe, arch);
 
 retry:
@@ -491,7 +504,7 @@ retry:
 	if (IS_ERR(old_page))
 		return PTR_ERR(old_page);
 
-	ret = verify_opcode(old_page, vaddr, insn);
+	ret = arch_uprobe_verify_opcode(old_page, vaddr, insn, data);
 	if (ret <= 0)
 		goto put_old;
 
@@ -584,7 +597,7 @@ int __weak set_swbp(struct arch_uprobe *auprobe, struct mm_struct *mm, unsigned 
 {
 	uprobe_opcode_t insn = UPROBE_SWBP_INSN;
 
-	return uprobe_write_opcode(auprobe, mm, vaddr, &insn, UPROBE_SWBP_INSN_SIZE);
+	return uprobe_write_opcode(auprobe, mm, vaddr, &insn, UPROBE_SWBP_INSN_SIZE, NULL);
 }
 
 /**
@@ -600,7 +613,7 @@ int __weak
 set_orig_insn(struct arch_uprobe *auprobe, struct mm_struct *mm, unsigned long vaddr)
 {
 	return uprobe_write_opcode(auprobe, mm, vaddr,
-			(uprobe_opcode_t *)&auprobe->insn, UPROBE_SWBP_INSN_SIZE);
+			(uprobe_opcode_t *)&auprobe->insn, UPROBE_SWBP_INSN_SIZE, NULL);
 }
 
 /* uprobe should have guaranteed positive refcount */
