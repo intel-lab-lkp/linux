@@ -68,6 +68,16 @@ static inline int rtnl_msg_family(const struct nlmsghdr *nlh)
 		return AF_UNSPEC;
 }
 
+struct rtnl_nets {
+	/* ->newlink() needs to freeze 3 netns at most;
+	 * 2 for the new device, 1 for its peer.
+	 */
+	struct net *net[3];
+	unsigned char len;
+};
+
+void rtnl_nets_add(struct rtnl_nets *rtnl_nets, struct net *net);
+
 /**
  *	struct rtnl_link_ops - rtnetlink link operations
  *
