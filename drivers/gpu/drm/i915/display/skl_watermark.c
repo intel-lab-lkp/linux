@@ -2922,7 +2922,8 @@ skl_compute_wm(struct intel_atomic_state *state)
 	return 0;
 }
 
-static void skl_wm_level_from_reg_val(u32 val, struct skl_wm_level *level)
+static void skl_wm_level_from_reg_val(struct intel_display *display,
+				      u32 val, struct skl_wm_level *level)
 {
 	level->enable = val & PLANE_WM_EN;
 	level->ignore_lines = val & PLANE_WM_IGNORE_LINES;
@@ -2949,7 +2950,7 @@ static void skl_pipe_wm_get_hw_state(struct intel_crtc *crtc,
 			else
 				val = intel_de_read(display, CUR_WM(pipe, level));
 
-			skl_wm_level_from_reg_val(val, &wm->wm[level]);
+			skl_wm_level_from_reg_val(display, val, &wm->wm[level]);
 		}
 
 		if (plane_id != PLANE_CURSOR)
@@ -2957,7 +2958,7 @@ static void skl_pipe_wm_get_hw_state(struct intel_crtc *crtc,
 		else
 			val = intel_de_read(display, CUR_WM_TRANS(pipe));
 
-		skl_wm_level_from_reg_val(val, &wm->trans_wm);
+		skl_wm_level_from_reg_val(display, val, &wm->trans_wm);
 
 		if (HAS_HW_SAGV_WM(i915)) {
 			if (plane_id != PLANE_CURSOR)
@@ -2965,14 +2966,14 @@ static void skl_pipe_wm_get_hw_state(struct intel_crtc *crtc,
 			else
 				val = intel_de_read(display, CUR_WM_SAGV(pipe));
 
-			skl_wm_level_from_reg_val(val, &wm->sagv.wm0);
+			skl_wm_level_from_reg_val(display, val, &wm->sagv.wm0);
 
 			if (plane_id != PLANE_CURSOR)
 				val = intel_de_read(display, PLANE_WM_SAGV_TRANS(pipe, plane_id));
 			else
 				val = intel_de_read(display, CUR_WM_SAGV_TRANS(pipe));
 
-			skl_wm_level_from_reg_val(val, &wm->sagv.trans_wm);
+			skl_wm_level_from_reg_val(display, val, &wm->sagv.trans_wm);
 		} else if (DISPLAY_VER(i915) >= 12) {
 			wm->sagv.wm0 = wm->wm[0];
 			wm->sagv.trans_wm = wm->trans_wm;
