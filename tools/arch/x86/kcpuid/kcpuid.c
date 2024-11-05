@@ -117,7 +117,7 @@ static void leaf_print_raw(struct subleaf *leaf)
 		if (leaf->sub == 0)
 			printf("0x%08x: subleafs:\n", leaf->index);
 
-		printf(" %2d: EAX=0x%08x, EBX=0x%08x, ECX=0x%08x, EDX=0x%08x\n",
+		printf(" %2u: EAX=0x%08x, EBX=0x%08x, ECX=0x%08x, EDX=0x%08x\n",
 			leaf->sub, leaf->eax, leaf->ebx, leaf->ecx, leaf->edx);
 	} else {
 		printf("0x%08x: EAX=0x%08x, EBX=0x%08x, ECX=0x%08x, EDX=0x%08x\n",
