@@ -1538,6 +1538,10 @@ int amdgpu_device_resize_fb_bar(struct amdgpu_device *adev)
 	if (!IS_ENABLED(CONFIG_PHYS_ADDR_T_64BIT))
 		return 0;
 
+	/* Bypass for PVH dom0 which doesn't support resizable bar */
+	if (xen_initial_domain() && xen_pvh_domain())
+		return 0;
+
 	/* Bypass for VF */
 	if (amdgpu_sriov_vf(adev))
 		return 0;
