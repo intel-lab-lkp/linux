@@ -27,6 +27,13 @@
 #include "../kselftest_harness.h"
 #include "clone3_selftests.h"
 
+/*
+ * Prevent not being defined in the header file
+ */
+#ifndef CAP_CHECKPOINT_RESTORE
+#define CAP_CHECKPOINT_RESTORE 40
+#endif
+
 static void child_exit(int ret)
 {
 	fflush(stdout);
@@ -87,47 +94,49 @@ static int test_clone3_set_tid(struct __test_metadata *_metadata,
 	return ret;
 }
 
-struct libcap {
-	struct __user_cap_header_struct hdr;
-	struct __user_cap_data_struct data[2];
-};
-
-static int set_capability(void)
+static int set_capability(struct __test_metadata *_metadata)
 {
-	cap_value_t cap_values[] = { CAP_SETUID, CAP_SETGID };
-	struct libcap *cap;
-	int ret = -1;
-	cap_t caps;
+	struct __user_cap_data_struct data[2];
 
-	caps = cap_get_proc();
-	if (!caps) {
-		perror("cap_get_proc");
-		return -1;
+	/*
+	 * Only _LINUX_CAPABILITY_VERSION_3 can be used here.
+	 * _LINUX_CAPABILITY_VERSION_1 represents use 32-bit capabilities,
+	 * using it will cause CAP_CHECKPOINT_RESTORE to not be set.
+	 * _LINUX_CAPABILITY_VERSION_2 has already been deprecated.
+	 */
+	struct __user_cap_header_struct hdr = {
+		.version = _LINUX_CAPABILITY_VERSION_3,
+	};
+
+	/*
+	 * CAP_CHECKPOINT_RESTORE is greater than 31, so we need two u32.
+	 * cap0 is the lower 32bit and cap1 is the higher 32bit, they will
+	 * be combined into a u64 in mk_kernel_cap.
+	 */
+	__u32 cap0 = 1 << CAP_SETUID | 1 << CAP_SETGID;
+	__u32 cap1 = 1 << (CAP_CHECKPOINT_RESTORE - 32);
+	int ret;
+
+	ret = capget(&hdr, data);
+	if (ret) {
+		TH_LOG("%s - Failed to get capability", strerror(errno));
+		return -errno;
 	}
 
 	/* Drop all capabilities */
-	if (cap_clear(caps)) {
-		perror("cap_clear");
-		goto out;
+	memset(&data, 0, sizeof(data));
+
+	data[0].effective |= cap0;
+	data[0].permitted |= cap0;
+
+	data[1].effective |= cap1;
+	data[1].permitted |= cap1;
+
+	ret = capset(&hdr, data);
+	if (ret) {
+		TH_LOG("%s - Failed to set capability", strerror(errno));
+		return -errno;
 	}
-
-	cap_set_flag(caps, CAP_EFFECTIVE, 2, cap_values, CAP_SET);
-	cap_set_flag(caps, CAP_PERMITTED, 2, cap_values, CAP_SET);
-
-	cap = (struct libcap *) caps;
-
-	/* 40 -> CAP_CHECKPOINT_RESTORE */
-	cap->data[1].effective |= 1 << (40 - 32);
-	cap->data[1].permitted |= 1 << (40 - 32);
-
-	if (cap_set_proc(caps)) {
-		perror("cap_set_proc");
-		goto out;
-	}
-	ret = 0;
-out:
-	if (cap_free(caps))
-		perror("cap_free");
 	return ret;
 }
 
@@ -157,7 +166,7 @@ TEST(clone3_cap_checkpoint_restore)
 	/* After the child has finished, its PID should be free. */
 	set_tid[0] = pid;
 
-	ASSERT_EQ(set_capability(), 0)
+	ASSERT_EQ(set_capability(_metadata), 0)
 		TH_LOG("Could not set CAP_CHECKPOINT_RESTORE");
 
 	ASSERT_EQ(prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0), 0);
@@ -169,7 +178,7 @@ TEST(clone3_cap_checkpoint_restore)
 	set_tid[0] = pid;
 	/* This would fail without CAP_CHECKPOINT_RESTORE */
 	ASSERT_EQ(test_clone3_set_tid(_metadata, set_tid, 1), -EPERM);
-	ASSERT_EQ(set_capability(), 0)
+	ASSERT_EQ(set_capability(_metadata), 0)
 		TH_LOG("Could not set CAP_CHECKPOINT_RESTORE");
 	/* This should work as we have CAP_CHECKPOINT_RESTORE as non-root */
 	ASSERT_EQ(test_clone3_set_tid(_metadata, set_tid, 1), 0);
