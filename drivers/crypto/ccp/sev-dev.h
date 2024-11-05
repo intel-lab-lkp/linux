@@ -57,6 +57,13 @@ struct sev_device {
 	bool cmd_buf_backup_active;
 
 	bool snp_initialized;
+
+#ifdef CONFIG_FW_UPLOAD
+	u32 last_snp_asid;
+	u64 *snp_asid_to_gctx_pages_map;
+	u64 *snp_unbound_gctx_pages;
+	u32 snp_unbound_gctx_end;
+#endif /* CONFIG_FW_UPLOAD */
 };
 
 int sev_dev_init(struct psp_device *psp);
@@ -64,5 +71,13 @@ void sev_dev_destroy(struct psp_device *psp);
 
 void sev_pci_init(void);
 void sev_pci_exit(void);
+
+#ifdef CONFIG_FW_UPLOAD
+void snp_cmd_bookkeeping_locked(int cmd, struct sev_device *sev, void *data);
+int sev_snp_platform_init_firmware_upload(struct sev_device *sev);
+#else
+static inline void snp_cmd_bookkeeping_locked(int cmd, struct sev_device *sev, void *data) { }
+static inline int sev_snp_platform_init_firmware_upload(struct sev_device *sev) { return 0; }
+#endif /* CONFIG_FW_UPLOAD */
 
 #endif /* __SEV_DEV_H */

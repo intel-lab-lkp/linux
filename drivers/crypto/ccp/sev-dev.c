@@ -993,6 +993,9 @@ static int __sev_do_cmd_locked(int cmd, void *data, int *psp_ret)
 	print_hex_dump_debug("(out): ", DUMP_PREFIX_OFFSET, 16, 2, data,
 			     buf_len, false);
 
+	if (!ret)
+		snp_cmd_bookkeeping_locked(cmd, sev, data);
+
 	return ret;
 }
 
@@ -1189,6 +1192,8 @@ static int __sev_snp_init_locked(int *error)
 	dev_dbg(sev->dev, "SEV-SNP firmware initialized\n");
 
 	sev_es_tmr_size = SNP_TMR_SIZE;
+
+	rc = sev_snp_platform_init_firmware_upload(sev);
 
 	return rc;
 }
