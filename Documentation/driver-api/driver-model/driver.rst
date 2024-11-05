@@ -171,10 +171,13 @@ released all resources it allocated.
 Optionally, probe() may return -EPROBE_DEFER if the driver depends on
 resources that are not yet available (e.g., supplied by a driver that
 hasn't initialized yet).  The driver core will put the device onto the
-deferred probe list and will try to call it again later. If a driver
-must defer, it should return -EPROBE_DEFER as early as possible to
-reduce the amount of time spent on setup work that will need to be
-unwound and reexecuted at a later time.
+deferred probe list and will retry again as and when a device or driver
+gets added to the system. A successful probe of any device will trigger
+moving all devices from pending list to active list. A workqueue processes
+the active list to retry deferred probes. If a driver must defer, it
+should return -EPROBE_DEFER as early as possible to reduce the amount
+of time spent on setup work that will need to be unwound and reexecuted
+at a later time.
 
 .. warning::
       -EPROBE_DEFER must not be returned if probe() has already created
