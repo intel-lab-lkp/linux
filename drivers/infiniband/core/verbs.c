@@ -2670,6 +2670,9 @@ int ib_map_mr_sg_pi(struct ib_mr *mr, struct scatterlist *data_sg,
 		    struct scatterlist *meta_sg, int meta_sg_nents,
 		    unsigned int *meta_sg_offset, unsigned int page_size)
 {
+	unsigned int data_dummy = 0;
+	unsigned int meta_dummy = 0;
+
 	if (unlikely(!mr->device->ops.map_mr_sg_pi ||
 		     WARN_ON_ONCE(mr->type != IB_MR_TYPE_INTEGRITY)))
 		return -EOPNOTSUPP;
@@ -2677,8 +2680,9 @@ int ib_map_mr_sg_pi(struct ib_mr *mr, struct scatterlist *data_sg,
 	mr->page_size = page_size;
 
 	return mr->device->ops.map_mr_sg_pi(mr, data_sg, data_sg_nents,
-					    data_sg_offset, meta_sg,
-					    meta_sg_nents, meta_sg_offset);
+					    data_sg_offset ? : &data_dummy,
+					    meta_sg, meta_sg_nents,
+					    meta_sg_offset ? : &meta_dummy);
 }
 EXPORT_SYMBOL(ib_map_mr_sg_pi);
 
@@ -2711,12 +2715,14 @@ EXPORT_SYMBOL(ib_map_mr_sg_pi);
 int ib_map_mr_sg(struct ib_mr *mr, struct scatterlist *sg, int sg_nents,
 		 unsigned int *sg_offset, unsigned int page_size)
 {
+	unsigned int dummy = 0;
+
 	if (unlikely(!mr->device->ops.map_mr_sg))
 		return -EOPNOTSUPP;
 
 	mr->page_size = page_size;
 
-	return mr->device->ops.map_mr_sg(mr, sg, sg_nents, sg_offset);
+	return mr->device->ops.map_mr_sg(mr, sg, sg_nents, sg_offset ? : &dummy);
 }
 EXPORT_SYMBOL(ib_map_mr_sg);
 
