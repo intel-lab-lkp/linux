@@ -1294,7 +1294,7 @@ lpfc_bsg_hba_get_event(struct bsg_job *job)
 	if (evt_dat == NULL) {
 		bsg_reply->reply_payload_rcv_len = 0;
 		rc = -ENOENT;
-		goto job_error;
+		goto job_error_unref;
 	}
 
 	if (evt_dat->len > job->request_payload.payload_len) {
@@ -1329,6 +1329,10 @@ lpfc_bsg_hba_get_event(struct bsg_job *job)
 		       bsg_reply->reply_payload_rcv_len);
 	return 0;
 
+job_err_unref:
+	spin_lock_irqsave(&phba->ct_ev_lock, flags);
+	lpfc_bsg_event_unref(evt);
+	spin_unlock_irqrestore(&phba->ct_ev_lock, flags);
 job_error:
 	job->dd_data = NULL;
 	bsg_reply->result = rc;
