@@ -646,25 +646,9 @@ int xe_device_probe(struct xe_device *xe)
 		err = xe_gt_init_early(gt);
 		if (err)
 			return err;
-
-		/*
-		 * Only after this point can GT-specific MMIO operations
-		 * (including things like communication with the GuC)
-		 * be performed.
-		 */
-		xe_gt_mmio_init(gt);
 	}
 
 	for_each_tile(tile, xe, id) {
-		if (IS_SRIOV_VF(xe)) {
-			xe_guc_comm_init_early(&tile->primary_gt->uc.guc);
-			err = xe_gt_sriov_vf_bootstrap(tile->primary_gt);
-			if (err)
-				return err;
-			err = xe_gt_sriov_vf_query_config(tile->primary_gt);
-			if (err)
-				return err;
-		}
 		err = xe_ggtt_init_early(tile->mem.ggtt);
 		if (err)
 			return err;
