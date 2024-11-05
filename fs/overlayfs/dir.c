@@ -573,7 +573,12 @@ static int ovl_setup_cred_for_create(struct dentry *dentry, struct inode *inode,
 		put_cred(override_cred);
 		return err;
 	}
-	put_cred(override_creds(override_cred));
+
+	/*
+	 * We must be called with creator creds already, otherwise we risk
+	 * leaking creds.
+	 */
+	WARN_ON_ONCE(override_creds(override_cred) != ovl_creds(dentry->d_sb));
 	put_cred(override_cred);
 
 	return 0;
