@@ -39,6 +39,7 @@
 #include "intel_pps.h"
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
+#include "skl_universal_plane_regs.h"
 #include "intel_vdsc.h"
 #include "intel_wm.h"
 
@@ -688,9 +689,24 @@ static int i915_shared_dplls_info(struct seq_file *m, void *unused)
 	return 0;
 }
 
+static u32 dbuf_alloc_status(struct intel_display *display,
+			     enum pipe pipe, enum plane_id plane_id)
+{
+	u32 val = 0;
+
+	if (DISPLAY_VER(display) >= 30) {
+		u32 reg = intel_de_read(display,
+					PLANE_MIN_BUF_CFG(pipe, plane_id));
+		val = REG_FIELD_GET(PLANE_DBUF_ALLOC_STATUS_MASK, reg);
+	}
+
+	return val;
+}
+
 static int i915_ddb_info(struct seq_file *m, void *unused)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
+	struct intel_display *display = &dev_priv->display;
 	struct skl_ddb_entry *entry;
 	struct intel_crtc *crtc;
 
@@ -699,7 +715,7 @@ static int i915_ddb_info(struct seq_file *m, void *unused)
 
 	drm_modeset_lock_all(&dev_priv->drm);
 
-	seq_printf(m, "%-15s%8s%8s%8s\n", "", "Start", "End", "Size");
+	seq_printf(m, "%-15s%8s%8s%8s%16s\n", "", "Start", "End", "Size", "Alloc Status");
 
 	for_each_intel_crtc(&dev_priv->drm, crtc) {
 		struct intel_crtc_state *crtc_state =
@@ -711,9 +727,10 @@ static int i915_ddb_info(struct seq_file *m, void *unused)
 
 		for_each_plane_id_on_crtc(crtc, plane_id) {
 			entry = &crtc_state->wm.skl.plane_ddb[plane_id];
-			seq_printf(m, "  Plane%-8d%8u%8u%8u\n", plane_id + 1,
+			seq_printf(m, "  Plane%-8d%8u%8u%8u%8u\n", plane_id + 1,
 				   entry->start, entry->end,
-				   skl_ddb_entry_size(entry));
+				   skl_ddb_entry_size(entry),
+				   dbuf_alloc_status(display, pipe, plane_id));
 		}
 
 		entry = &crtc_state->wm.skl.plane_ddb[PLANE_CURSOR];
