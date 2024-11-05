@@ -2129,23 +2129,30 @@ static int vgic_its_restore_ite(struct vgic_its *its, u32 event_id,
 	u32 coll_id, lpi_id;
 	struct its_ite *ite;
 	u32 offset;
+	u32 magic;
 
 	val = *p;
 
 	val = le64_to_cpu(val);
 
-	coll_id = val & KVM_ITS_ITE_ICID_MASK;
 	lpi_id = (val & KVM_ITS_ITE_PINTID_MASK) >> KVM_ITS_ITE_PINTID_SHIFT;
-
-	if (!lpi_id)
-		return event_id + 1; /* invalid entry, no choice but to scan next entry */
-
-	if (lpi_id < VGIC_MIN_LPI)
-		return -EINVAL;
 
 	offset = val >> KVM_ITS_ITE_NEXT_SHIFT;
 	if (event_id + offset >= BIT_ULL(dev->num_eventid_bits))
 		return -EINVAL;
+
+	if (!lpi_id) {
+		magic = (val & KVM_ITS_ENTRY_DUMMY_MASK) >> KVM_ITS_ENTRY_DUMMY_SHIFT;
+		if (magic != KVM_ITS_ENTRY_DUMMY_MAGIC)
+			offset = 1;
+
+		return event_id + offset;
+	}
+
+	if (lpi_id < VGIC_MIN_LPI)
+		return -EINVAL;
+
+	coll_id = val & KVM_ITS_ITE_ICID_MASK;
 
 	collection = find_collection(its, coll_id);
 	if (!collection)
@@ -2303,23 +2310,40 @@ static int vgic_its_restore_dte(struct vgic_its *its, u32 id,
 	u64 entry = *(u64 *)ptr;
 	bool valid;
 	u32 offset;
+	u32 magic;
 	int ret;
 
 	entry = le64_to_cpu(entry);
 
 	valid = entry >> KVM_ITS_DTE_VALID_SHIFT;
-	num_eventid_bits = (entry & KVM_ITS_DTE_SIZE_MASK) + 1;
-	itt_addr = ((entry & KVM_ITS_DTE_ITTADDR_MASK)
-			>> KVM_ITS_DTE_ITTADDR_SHIFT) << 8;
 
-	if (!valid)
-		return id + 1;
+	/*
+	 * Since we created a dummy head entry for the DTE static linked list in
+	 * the table if necessary, no need to scan to find the list head.
+	 * But if the saved table was done without dummy entry support, we still
+	 * have to scan one by one.
+	 */
+	if (!valid) {
+		magic = (entry & KVM_ITS_ENTRY_DUMMY_MASK) >>
+			KVM_ITS_ENTRY_DUMMY_SHIFT;
+		if (magic != KVM_ITS_ENTRY_DUMMY_MAGIC)
+			offset = 1;
+		else
+			offset = (entry & KVM_ITS_DTE_DUMMY_NEXT_MASK) >>
+				  KVM_ITS_DTE_DUMMY_NEXT_SHIFT;
+
+		return id + offset;
+	}
 
 	/* dte entry is valid */
 	offset = (entry & KVM_ITS_DTE_NEXT_MASK) >> KVM_ITS_DTE_NEXT_SHIFT;
 
 	if (!vgic_its_check_id(its, baser, id, NULL))
 		return -EINVAL;
+
+	num_eventid_bits = (entry & KVM_ITS_DTE_SIZE_MASK) + 1;
+	itt_addr = ((entry & KVM_ITS_DTE_ITTADDR_MASK)
+			>> KVM_ITS_DTE_ITTADDR_SHIFT) << 8;
 
 	dev = vgic_its_alloc_device(its, id, itt_addr, num_eventid_bits);
 	if (IS_ERR(dev))
