@@ -294,6 +294,10 @@ int jbd2_journal_recover(journal_t *journal)
 	memset(&info, 0, sizeof(info));
 	sb = journal->j_superblock;
 
+	err = jbd2_journal_init_recovery_revoke(journal);
+	if (err)
+		return err;
+
 	/*
 	 * The journal superblock's s_start field (the current log head)
 	 * is always zero if, and only if, the journal was cleanly

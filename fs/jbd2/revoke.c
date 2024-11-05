@@ -90,6 +90,7 @@
 #include <linux/bio.h>
 #include <linux/log2.h>
 #include <linux/hash.h>
+#include <linux/rhashtable.h>
 #endif
 
 static struct kmem_cache *jbd2_revoke_record_cache;
@@ -101,7 +102,10 @@ static struct kmem_cache *jbd2_revoke_table_cache;
 
 struct jbd2_revoke_record_s
 {
-	struct list_head  hash;
+	union {
+		struct list_head  hash;
+		struct rhash_head linkage;
+	};
 	tid_t		  sequence;	/* Used for recovery only */
 	unsigned long long	  blocknr;
 };
@@ -680,13 +684,22 @@ static void flush_descriptor(journal_t *journal,
  * single block.
  */
 
+static const struct rhashtable_params revoke_rhashtable_params = {
+	.key_len     = sizeof(unsigned long long),
+	.key_offset  = offsetof(struct jbd2_revoke_record_s, blocknr),
+	.head_offset = offsetof(struct jbd2_revoke_record_s, linkage),
+};
+
 int jbd2_journal_set_revoke(journal_t *journal,
 		       unsigned long long blocknr,
 		       tid_t sequence)
 {
 	struct jbd2_revoke_record_s *record;
+	gfp_t gfp_mask = GFP_NOFS;
+	int err;
 
-	record = find_revoke_record(journal, blocknr);
+	record = rhashtable_lookup(&journal->j_revoke_rhtable, &blocknr,
+				   revoke_rhashtable_params);
 	if (record) {
 		/* If we have multiple occurrences, only record the
 		 * latest sequence number in the hashed record */
@@ -694,7 +707,22 @@ int jbd2_journal_set_revoke(journal_t *journal,
 			record->sequence = sequence;
 		return 0;
 	}
-	return insert_revoke_hash(journal, blocknr, sequence);
+
+	if (journal_oom_retry)
+		gfp_mask |= __GFP_NOFAIL;
+	record = kmem_cache_alloc(jbd2_revoke_record_cache, gfp_mask);
+	if (!record)
+		return -ENOMEM;
+
+	record->sequence = sequence;
+	record->blocknr = blocknr;
+	err = rhashtable_lookup_insert_fast(&journal->j_revoke_rhtable,
+					    &record->linkage,
+					    revoke_rhashtable_params);
+	if (err)
+		kmem_cache_free(jbd2_revoke_record_cache, record);
+
+	return err;
 }
 
 /*
@@ -710,12 +738,24 @@ int jbd2_journal_test_revoke(journal_t *journal,
 {
 	struct jbd2_revoke_record_s *record;
 
-	record = find_revoke_record(journal, blocknr);
+	record = rhashtable_lookup(&journal->j_revoke_rhtable, &blocknr,
+				   revoke_rhashtable_params);
 	if (!record)
 		return 0;
 	if (tid_gt(sequence, record->sequence))
 		return 0;
 	return 1;
+}
+
+int jbd2_journal_init_recovery_revoke(journal_t *journal)
+{
+	return rhashtable_init(&journal->j_revoke_rhtable,
+			       &revoke_rhashtable_params);
+}
+
+static void jbd2_revoke_record_free(void *ptr, void *arg)
+{
+	kmem_cache_free(jbd2_revoke_record_cache, ptr);
 }
 
 /*
@@ -725,19 +765,6 @@ int jbd2_journal_test_revoke(journal_t *journal,
 
 void jbd2_journal_clear_revoke(journal_t *journal)
 {
-	int i;
-	struct list_head *hash_list;
-	struct jbd2_revoke_record_s *record;
-	struct jbd2_revoke_table_s *revoke;
-
-	revoke = journal->j_revoke;
-
-	for (i = 0; i < revoke->hash_size; i++) {
-		hash_list = &revoke->hash_table[i];
-		while (!list_empty(hash_list)) {
-			record = (struct jbd2_revoke_record_s*) hash_list->next;
-			list_del(&record->hash);
-			kmem_cache_free(jbd2_revoke_record_cache, record);
-		}
-	}
+	rhashtable_free_and_destroy(&journal->j_revoke_rhtable,
+				    jbd2_revoke_record_free, NULL);
 }
