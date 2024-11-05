@@ -158,7 +158,7 @@ copy_class_filename(const char * class_sign, const char * file_name, char * resu
 		result[i] = '\0';
 	} else {
 		/* fallback case */
-		strlcpy(result, file_name, max_length);
+		strscpy(result, file_name, max_length);
 	}
 }
 
