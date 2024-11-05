@@ -172,7 +172,6 @@ pvr_device_irq_init(struct pvr_device *pvr_dev)
 
 	/* Clear any pending events before requesting the IRQ line. */
 	pvr_fw_irq_clear(pvr_dev);
-	pvr_fw_irq_enable(pvr_dev);
 
 	return request_irq(pvr_dev->irq, pvr_device_irq_handler, 0, "gpu", pvr_dev);
 
