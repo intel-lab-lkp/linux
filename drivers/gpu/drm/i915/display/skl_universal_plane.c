@@ -27,6 +27,18 @@
 #include "skl_watermark.h"
 #include "pxp/intel_pxp.h"
 
+static u32 skl_async_plane_formats[] = {
+	DRM_FORMAT_RGB565,
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ARGB8888,
+	DRM_FORMAT_ABGR8888,
+	DRM_FORMAT_XRGB2101010,
+	DRM_FORMAT_XBGR2101010,
+	DRM_FORMAT_XRGB16161616F,
+	DRM_FORMAT_XBGR16161616F,
+};
+
 static const u32 skl_plane_formats[] = {
 	DRM_FORMAT_C8,
 	DRM_FORMAT_RGB565,
@@ -2649,6 +2661,9 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 		formats = skl_get_plane_formats(dev_priv, pipe,
 						plane_id, &num_formats);
 
+	plane->base.async_format_count = ARRAY_SIZE(skl_async_plane_formats);
+	plane->base.async_format_types = skl_async_plane_formats;
+
 	if (DISPLAY_VER(dev_priv) >= 12)
 		plane_funcs = &tgl_plane_funcs;
 	else if (DISPLAY_VER(dev_priv) == 11)
@@ -2660,6 +2675,13 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 		plane_type = DRM_PLANE_TYPE_PRIMARY;
 	else
 		plane_type = DRM_PLANE_TYPE_OVERLAY;
+
+	plane->base.async_modifier_count = intel_fb_plane_get_modifiers_count(dev_priv,
+									      skl_get_plane_caps(dev_priv, pipe, plane_id),
+									      true);
+	plane->base.async_modifiers = intel_fb_plane_get_modifiers(dev_priv,
+								   skl_get_plane_caps(dev_priv, pipe, plane_id),
+								   true);
 
 	modifiers = intel_fb_plane_get_modifiers(dev_priv,
 						 skl_get_plane_caps(dev_priv, pipe, plane_id),
