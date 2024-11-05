@@ -51,6 +51,11 @@ properties:
       (Legacy property supported: "linux,wakeup")
     default: false
 
+  gpio-activelow:
+    type: boolean
+    description: The GPIOs are low active.
+    default: false
+
   debounce-delay-ms:
     description: Debounce interval in milliseconds.
     default: 0
