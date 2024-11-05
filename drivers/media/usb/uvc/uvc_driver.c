@@ -1868,16 +1868,12 @@ static int uvc_scan_device(struct uvc_device *dev)
 /*
  * Delete the UVC device.
  *
- * Called by the kernel when the last reference to the uvc_device structure
- * is released.
- *
- * As this function is called after or during disconnect(), all URBs have
+ * As this function is called during disconnect(), all URBs have
  * already been cancelled by the USB core. There is no need to kill the
  * interrupt URB manually.
  */
-static void uvc_delete(struct kref *kref)
+static void uvc_delete(struct uvc_device *dev)
 {
-	struct uvc_device *dev = container_of(kref, struct uvc_device, ref);
 	struct list_head *p, *n;
 
 	uvc_status_cleanup(dev);
@@ -1917,14 +1913,6 @@ static void uvc_delete(struct kref *kref)
 	}
 
 	kfree(dev);
-}
-
-static void uvc_release(struct video_device *vdev)
-{
-	struct uvc_streaming *stream = video_get_drvdata(vdev);
-	struct uvc_device *dev = stream->dev;
-
-	kref_put(&dev->ref, uvc_delete);
 }
 
 /*
@@ -2009,7 +1997,7 @@ int uvc_register_video_device(struct uvc_device *dev,
 	vdev->v4l2_dev = &dev->vdev;
 	vdev->fops = fops;
 	vdev->ioctl_ops = ioctl_ops;
-	vdev->release = uvc_release;
+	vdev->release = video_device_release_empty;
 	vdev->prio = &stream->chain->prio;
 	if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
 		vdev->vfl_dir = VFL_DIR_TX;
@@ -2045,7 +2033,6 @@ int uvc_register_video_device(struct uvc_device *dev,
 		return ret;
 	}
 
-	kref_get(&dev->ref);
 	return 0;
 }
 
@@ -2160,7 +2147,6 @@ static int uvc_probe(struct usb_interface *intf,
 	INIT_LIST_HEAD(&dev->entities);
 	INIT_LIST_HEAD(&dev->chains);
 	INIT_LIST_HEAD(&dev->streams);
-	kref_init(&dev->ref);
 	atomic_set(&dev->nmappings, 0);
 
 	dev->udev = usb_get_dev(udev);
@@ -2300,7 +2286,7 @@ static int uvc_probe(struct usb_interface *intf,
 
 error:
 	uvc_unregister_video(dev);
-	kref_put(&dev->ref, uvc_delete);
+	uvc_delete(dev);
 	return -ENODEV;
 }
 
@@ -2319,7 +2305,7 @@ static void uvc_disconnect(struct usb_interface *intf)
 		return;
 
 	uvc_unregister_video(dev);
-	kref_put(&dev->ref, uvc_delete);
+	uvc_delete(dev);
 }
 
 static int uvc_suspend(struct usb_interface *intf, pm_message_t message)

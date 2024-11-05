@@ -578,7 +578,6 @@ struct uvc_device {
 
 	/* Video Streaming interfaces */
 	struct list_head streams;
-	struct kref ref;
 
 	/* Status Interrupt Endpoint */
 	struct usb_host_endpoint *int_ep;
