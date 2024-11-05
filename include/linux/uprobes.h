@@ -233,6 +233,7 @@ void put_tramp_area(struct tramp_area *area);
 bool arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr);
 extern void *arch_uprobe_trampoline(unsigned long *psize);
 extern void handle_syscall_uprobe(struct pt_regs *regs, unsigned long bp_vaddr);
+extern void arch_uprobe_optimize(struct arch_uprobe *auprobe, unsigned long vaddr);
 #else /* !CONFIG_UPROBES */
 struct uprobes_state {
 };

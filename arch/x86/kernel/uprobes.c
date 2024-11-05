@@ -18,6 +18,7 @@
 #include <asm/processor.h>
 #include <asm/insn.h>
 #include <asm/mmu_context.h>
+#include <asm/nops.h>
 
 /* Post-execution fixups. */
 
@@ -877,6 +878,33 @@ static const struct uprobe_xol_ops push_xol_ops = {
 	.emulate  = push_emulate_op,
 };
 
+static int is_nop5_insns(uprobe_opcode_t *insn)
+{
+	return !memcmp(insn, x86_nops[5], 5);
+}
+
+static int is_call_insns(uprobe_opcode_t *insn)
+{
+	return *insn == 0xe8;
+}
+
+static void relative_insn(void *dest, void *from, void *to, u8 op)
+{
+	struct __arch_relative_insn {
+		u8 op;
+		s32 raddr;
+	} __packed *insn;
+
+	insn = (struct __arch_relative_insn *)dest;
+	insn->raddr = (s32)((long)(to) - ((long)(from) + 5));
+	insn->op = op;
+}
+
+static void relative_call(void *dest, void *from, void *to)
+{
+	relative_insn(dest, from, to, CALL_INSN_OPCODE);
+}
+
 /* Returns -ENOSYS if branch_xol_ops doesn't handle this insn */
 static int branch_setup_xol_ops(struct arch_uprobe *auprobe, struct insn *insn)
 {
@@ -896,6 +924,10 @@ static int branch_setup_xol_ops(struct arch_uprobe *auprobe, struct insn *insn)
 		break;
 
 	case 0x0f:
+		if (is_nop5_insns((uprobe_opcode_t *) &auprobe->insn)) {
+			set_bit(ARCH_UPROBE_FLAG_CAN_OPTIMIZE, &auprobe->flags);
+			break;
+		}
 		if (insn->opcode.nbytes != 2)
 			return -ENOSYS;
 		/*
@@ -1266,4 +1298,102 @@ bool arch_uretprobe_is_alive(struct return_instance *ret, enum rp_check ctx,
 		return regs->sp < ret->stack;
 	else
 		return regs->sp <= ret->stack;
+}
+
+int arch_uprobe_verify_opcode(struct page *page, unsigned long vaddr,
+			      uprobe_opcode_t *new_opcode, void *opt)
+{
+	if (opt) {
+		uprobe_opcode_t old_opcode[5];
+		bool is_call;
+
+		uprobe_copy_from_page(page, vaddr, (uprobe_opcode_t *) &old_opcode, 5);
+		is_call = is_call_insns((uprobe_opcode_t *) &old_opcode);
+
+		if (is_call_insns(new_opcode)) {
+			if (is_call)		/* register: already installed? */
+				return 0;
+		} else {
+			if (!is_call)		/* unregister: was it changed by us? */
+				return 0;
+		}
+
+		return 1;
+	}
+
+	return uprobe_verify_opcode(page, vaddr, new_opcode);
+}
+
+bool arch_uprobe_is_register(uprobe_opcode_t *insn, int len, void *data)
+{
+	return data ? len == 5 && is_call_insns(insn) : is_swbp_insn(insn);
+}
+
+static void __arch_uprobe_optimize(struct arch_uprobe *auprobe, struct mm_struct *mm,
+				   unsigned long vaddr)
+{
+	struct tramp_area *area = NULL;
+	char call[5];
+
+	/* We can't do cross page atomic writes yet. */
+	if (PAGE_SIZE - (vaddr & ~PAGE_MASK) < 5)
+		goto fail;
+
+	area = get_tramp_area(vaddr);
+	if (!area)
+		goto fail;
+
+	relative_call(call, (void *) vaddr, (void *) area->vaddr);
+	if (uprobe_write_opcode(auprobe, mm, vaddr, call, 5, (void *) 1))
+		goto fail;
+
+	set_bit(ARCH_UPROBE_FLAG_OPTIMIZED, &auprobe->flags);
+	return;
+
+fail:
+	/* Once we fail we never try again. */
+	put_tramp_area(area);
+	clear_bit(ARCH_UPROBE_FLAG_CAN_OPTIMIZE, &auprobe->flags);
+}
+
+static bool should_optimize(struct arch_uprobe *auprobe)
+{
+	if (!test_bit(ARCH_UPROBE_FLAG_CAN_OPTIMIZE, &auprobe->flags))
+		return false;
+	if (test_bit(ARCH_UPROBE_FLAG_OPTIMIZED, &auprobe->flags))
+		return false;
+	return true;
+}
+
+void arch_uprobe_optimize(struct arch_uprobe *auprobe, unsigned long vaddr)
+{
+	struct mm_struct *mm = current->mm;
+
+	if (!should_optimize(auprobe))
+		return;
+
+	mmap_write_lock(mm);
+	if (should_optimize(auprobe))
+		__arch_uprobe_optimize(auprobe, mm, vaddr);
+	mmap_write_unlock(mm);
+}
+
+int set_orig_insn(struct arch_uprobe *auprobe, struct mm_struct *mm, unsigned long vaddr)
+{
+	uprobe_opcode_t *insn = (uprobe_opcode_t *) auprobe->insn;
+
+	if (test_bit(ARCH_UPROBE_FLAG_OPTIMIZED, &auprobe->flags))
+		return uprobe_write_opcode(auprobe, mm, vaddr, insn, 5, (void *) 1);
+
+	return uprobe_write_opcode(auprobe, mm, vaddr, insn, UPROBE_SWBP_INSN_SIZE, NULL);
+}
+
+bool arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr)
+{
+	unsigned long delta;
+
+	/* call instructions size */
+	vaddr += 5;
+	delta = vaddr < vtramp ? vtramp - vaddr : vaddr - vtramp;
+	return delta < 0xffffffff;
 }
