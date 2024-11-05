@@ -718,12 +718,14 @@ static void vhost_detach_mm(struct vhost_dev *dev)
 static void vhost_worker_destroy(struct vhost_dev *dev,
 				 struct vhost_worker *worker)
 {
-	if (!worker)
+	if (!worker && !worker->fn)
 		return;
 
 	WARN_ON(!llist_empty(&worker->work_list));
 	xa_erase(&dev->worker_xa, worker->id);
-	vhost_task_stop(worker->vtsk);
+	worker->fn->stop(dev->inherit_owner ? (void *)worker->vtsk :
+					      (void *)worker->task);
+	kfree(worker->fn);
 	kfree(worker);
 }
 
