@@ -482,6 +482,9 @@ int mddev_suspend(struct mddev *mddev, bool interruptible)
 		return err;
 	}
 
+	if (mddev->pers)
+		mddev->pers->quiesce(mddev, 1);
+
 	/*
 	 * For raid456, io might be waiting for reshape to make progress,
 	 * allow new reshape to start while waiting for io to be done to
@@ -513,6 +516,9 @@ static void __mddev_resume(struct mddev *mddev, bool recovery_needed)
 
 	percpu_ref_resurrect(&mddev->active_io);
 	wake_up(&mddev->sb_wait);
+
+	if (mddev->pers)
+		mddev->pers->quiesce(mddev, 0);
 
 	if (recovery_needed)
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
