@@ -25,8 +25,13 @@ struct vhost_work {
 	vhost_work_fn_t		fn;
 	unsigned long		flags;
 };
+struct vhost_task_fn {
+	int (*wakeup)(void *task);
+	int (*stop)(void *task);
+};
 
 struct vhost_worker {
+	struct task_struct	*task;
 	struct vhost_task	*vtsk;
 	struct vhost_dev	*dev;
 	/* Used to serialize device wide flushing with worker swapping. */
@@ -36,6 +41,7 @@ struct vhost_worker {
 	u32			id;
 	int			attachment_cnt;
 	bool			killed;
+	struct vhost_task_fn *fn;
 };
 
 /* Poll a file (eventfd or socket) */
