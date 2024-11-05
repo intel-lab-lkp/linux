@@ -231,6 +231,7 @@ struct intel_modifier_desc {
 		u8 packed_aux_planes:4;
 		u8 planar_aux_planes:4;
 	} ccs;
+	bool async_flip;
 };
 
 #define INTEL_PLANE_CAP_CCS_MASK	(INTEL_PLANE_CAP_CCS_RC | \
@@ -247,10 +248,12 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 		.modifier = I915_FORMAT_MOD_4_TILED_LNL_CCS,
 		.display_ver = { 20, -1 },
 		.plane_caps = INTEL_PLANE_CAP_TILING_4,
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_4_TILED_BMG_CCS,
 		.display_ver = { 14, -1 },
 		.plane_caps = INTEL_PLANE_CAP_TILING_4 | INTEL_PLANE_CAP_NEED64K_PHYS,
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_4_TILED_MTL_MC_CCS,
 		.display_ver = { 14, 14 },
@@ -268,6 +271,7 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 		.ccs.packed_aux_planes = BIT(1),
 
 		FORMAT_OVERRIDE(gen12_ccs_formats),
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC,
 		.display_ver = { 14, 14 },
@@ -293,10 +297,12 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 		.modifier = I915_FORMAT_MOD_4_TILED_DG2_RC_CCS,
 		.display_ver = { 13, 13 },
 		.plane_caps = INTEL_PLANE_CAP_TILING_4 | INTEL_PLANE_CAP_CCS_RC,
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_4_TILED,
 		.display_ver = { 13, -1 },
 		.plane_caps = INTEL_PLANE_CAP_TILING_4,
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS,
 		.display_ver = { 12, 13 },
@@ -314,6 +320,7 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 		.ccs.packed_aux_planes = BIT(1),
 
 		FORMAT_OVERRIDE(gen12_ccs_formats),
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC,
 		.display_ver = { 12, 13 },
@@ -331,6 +338,7 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 		.ccs.packed_aux_planes = BIT(1),
 
 		FORMAT_OVERRIDE(skl_ccs_formats),
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED_CCS,
 		.display_ver = { 9, 11 },
@@ -339,21 +347,26 @@ static const struct intel_modifier_desc intel_modifiers[] = {
 		.ccs.packed_aux_planes = BIT(1),
 
 		FORMAT_OVERRIDE(skl_ccs_formats),
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_Yf_TILED,
 		.display_ver = { 9, 11 },
 		.plane_caps = INTEL_PLANE_CAP_TILING_Yf,
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_Y_TILED,
 		.display_ver = { 9, 13 },
 		.plane_caps = INTEL_PLANE_CAP_TILING_Y,
+		.async_flip = true,
 	}, {
 		.modifier = I915_FORMAT_MOD_X_TILED,
 		.display_ver = { 0, 29 },
 		.plane_caps = INTEL_PLANE_CAP_TILING_X,
+		.async_flip = true,
 	}, {
 		.modifier = DRM_FORMAT_MOD_LINEAR,
 		.display_ver = DISPLAY_VER_ALL,
+		.async_flip = true,
 	},
 };
 
