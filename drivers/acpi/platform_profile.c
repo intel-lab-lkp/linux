@@ -404,6 +404,7 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	if (IS_ERR(pprof->class_dev))
 		return PTR_ERR(pprof->class_dev);
 	dev_set_drvdata(pprof->class_dev, pprof);
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
 	cur_profile = pprof;
 	return 0;
@@ -419,7 +420,9 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 {
 	guard(mutex)(&profile_lock);
 
-	sysfs_remove_group(acpi_kobj, &platform_profile_group);
+	cur_profile = NULL;
+
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
 	device_destroy(&platform_profile_class, MKDEV(0, pprof->minor));
 
