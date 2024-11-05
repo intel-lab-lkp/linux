@@ -82,12 +82,14 @@ intel_has_sagv(struct drm_i915_private *i915)
 }
 
 static u32
-intel_sagv_block_time(struct drm_i915_private *i915)
+intel_sagv_block_time(struct intel_display *display)
 {
+	struct drm_i915_private *i915 = to_i915(display->drm);
+
 	if (DISPLAY_VER(i915) >= 14) {
 		u32 val;
 
-		val = intel_de_read(i915, MTL_LATENCY_SAGV);
+		val = intel_de_read(display, MTL_LATENCY_SAGV);
 
 		return REG_FIELD_GET(MTL_LATENCY_QCLK_SAGV, val);
 	} else if (DISPLAY_VER(i915) >= 12) {
@@ -126,7 +128,7 @@ static void intel_sagv_init(struct drm_i915_private *i915)
 
 	drm_WARN_ON(&i915->drm, i915->display.sagv.status == I915_SAGV_UNKNOWN);
 
-	i915->display.sagv.block_time_us = intel_sagv_block_time(i915);
+	i915->display.sagv.block_time_us = intel_sagv_block_time(&i915->display);
 
 	drm_dbg_kms(&i915->drm, "SAGV supported: %s, original SAGV block time: %u us\n",
 		    str_yes_no(intel_has_sagv(i915)), i915->display.sagv.block_time_us);
@@ -791,7 +793,7 @@ static void skl_ddb_entry_init_from_hw(struct skl_ddb_entry *entry, u32 reg)
 }
 
 static void
-skl_ddb_get_hw_plane_state(struct drm_i915_private *i915,
+skl_ddb_get_hw_plane_state(struct intel_display *display,
 			   const enum pipe pipe,
 			   const enum plane_id plane_id,
 			   struct skl_ddb_entry *ddb,
@@ -801,18 +803,18 @@ skl_ddb_get_hw_plane_state(struct drm_i915_private *i915,
 
 	/* Cursor doesn't support NV12/planar, so no extra calculation needed */
 	if (plane_id == PLANE_CURSOR) {
-		val = intel_de_read(i915, CUR_BUF_CFG(pipe));
+		val = intel_de_read(display, CUR_BUF_CFG(pipe));
 		skl_ddb_entry_init_from_hw(ddb, val);
 		return;
 	}
 
-	val = intel_de_read(i915, PLANE_BUF_CFG(pipe, plane_id));
+	val = intel_de_read(display, PLANE_BUF_CFG(pipe, plane_id));
 	skl_ddb_entry_init_from_hw(ddb, val);
 
-	if (DISPLAY_VER(i915) >= 11)
+	if (DISPLAY_VER(display) >= 11)
 		return;
 
-	val = intel_de_read(i915, PLANE_NV12_BUF_CFG(pipe, plane_id));
+	val = intel_de_read(display, PLANE_NV12_BUF_CFG(pipe, plane_id));
 	skl_ddb_entry_init_from_hw(ddb_y, val);
 }
 
@@ -832,7 +834,7 @@ static void skl_pipe_ddb_get_hw_state(struct intel_crtc *crtc,
 		return;
 
 	for_each_plane_id_on_crtc(crtc, plane_id)
-		skl_ddb_get_hw_plane_state(i915, pipe,
+		skl_ddb_get_hw_plane_state(&i915->display, pipe,
 					   plane_id,
 					   &ddb[plane_id],
 					   &ddb_y[plane_id]);
@@ -2932,6 +2934,7 @@ static void skl_pipe_wm_get_hw_state(struct intel_crtc *crtc,
 				     struct skl_pipe_wm *out)
 {
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
+	struct intel_display *display = &i915->display;
 	enum pipe pipe = crtc->pipe;
 	enum plane_id plane_id;
 	int level;
@@ -2942,32 +2945,32 @@ static void skl_pipe_wm_get_hw_state(struct intel_crtc *crtc,
 
 		for (level = 0; level < i915->display.wm.num_levels; level++) {
 			if (plane_id != PLANE_CURSOR)
-				val = intel_de_read(i915, PLANE_WM(pipe, plane_id, level));
+				val = intel_de_read(display, PLANE_WM(pipe, plane_id, level));
 			else
-				val = intel_de_read(i915, CUR_WM(pipe, level));
+				val = intel_de_read(display, CUR_WM(pipe, level));
 
 			skl_wm_level_from_reg_val(val, &wm->wm[level]);
 		}
 
 		if (plane_id != PLANE_CURSOR)
-			val = intel_de_read(i915, PLANE_WM_TRANS(pipe, plane_id));
+			val = intel_de_read(display, PLANE_WM_TRANS(pipe, plane_id));
 		else
-			val = intel_de_read(i915, CUR_WM_TRANS(pipe));
+			val = intel_de_read(display, CUR_WM_TRANS(pipe));
 
 		skl_wm_level_from_reg_val(val, &wm->trans_wm);
 
 		if (HAS_HW_SAGV_WM(i915)) {
 			if (plane_id != PLANE_CURSOR)
-				val = intel_de_read(i915, PLANE_WM_SAGV(pipe, plane_id));
+				val = intel_de_read(display, PLANE_WM_SAGV(pipe, plane_id));
 			else
-				val = intel_de_read(i915, CUR_WM_SAGV(pipe));
+				val = intel_de_read(display, CUR_WM_SAGV(pipe));
 
 			skl_wm_level_from_reg_val(val, &wm->sagv.wm0);
 
 			if (plane_id != PLANE_CURSOR)
-				val = intel_de_read(i915, PLANE_WM_SAGV_TRANS(pipe, plane_id));
+				val = intel_de_read(display, PLANE_WM_SAGV_TRANS(pipe, plane_id));
 			else
-				val = intel_de_read(i915, CUR_WM_SAGV_TRANS(pipe));
+				val = intel_de_read(display, CUR_WM_SAGV_TRANS(pipe));
 
 			skl_wm_level_from_reg_val(val, &wm->sagv.trans_wm);
 		} else if (DISPLAY_VER(i915) >= 12) {
@@ -2985,7 +2988,7 @@ static void skl_wm_get_hw_state(struct drm_i915_private *i915)
 	struct intel_crtc *crtc;
 
 	if (HAS_MBUS_JOINING(i915))
-		dbuf_state->joined_mbus = intel_de_read(i915, MBUS_CTL) & MBUS_JOIN;
+		dbuf_state->joined_mbus = intel_de_read(display, MBUS_CTL) & MBUS_JOIN;
 
 	dbuf_state->mdclk_cdclk_ratio = intel_mdclk_cdclk_ratio(display, &display->cdclk.hw);
 
@@ -3014,7 +3017,7 @@ static void skl_wm_get_hw_state(struct drm_i915_private *i915)
 			if (!crtc_state->hw.active)
 				continue;
 
-			skl_ddb_get_hw_plane_state(i915, crtc->pipe,
+			skl_ddb_get_hw_plane_state(display, crtc->pipe,
 						   plane_id, ddb, ddb_y);
 
 			skl_ddb_entry_union(&dbuf_state->ddb[pipe], ddb);
@@ -3330,18 +3333,19 @@ adjust_wm_latency(struct drm_i915_private *i915,
 
 static void mtl_read_wm_latency(struct drm_i915_private *i915, u16 wm[])
 {
+	struct intel_display *display = &i915->display;
 	int num_levels = i915->display.wm.num_levels;
 	u32 val;
 
-	val = intel_de_read(i915, MTL_LATENCY_LP0_LP1);
+	val = intel_de_read(display, MTL_LATENCY_LP0_LP1);
 	wm[0] = REG_FIELD_GET(MTL_LATENCY_LEVEL_EVEN_MASK, val);
 	wm[1] = REG_FIELD_GET(MTL_LATENCY_LEVEL_ODD_MASK, val);
 
-	val = intel_de_read(i915, MTL_LATENCY_LP2_LP3);
+	val = intel_de_read(display, MTL_LATENCY_LP2_LP3);
 	wm[2] = REG_FIELD_GET(MTL_LATENCY_LEVEL_EVEN_MASK, val);
 	wm[3] = REG_FIELD_GET(MTL_LATENCY_LEVEL_ODD_MASK, val);
 
-	val = intel_de_read(i915, MTL_LATENCY_LP4_LP5);
+	val = intel_de_read(display, MTL_LATENCY_LP4_LP5);
 	wm[4] = REG_FIELD_GET(MTL_LATENCY_LEVEL_EVEN_MASK, val);
 	wm[5] = REG_FIELD_GET(MTL_LATENCY_LEVEL_ODD_MASK, val);
 
