@@ -120,72 +120,24 @@ static int pvr_device_clk_init(struct pvr_device *pvr_dev)
 	return 0;
 }
 
-/**
- * pvr_device_process_active_queues() - Process all queue related events.
- * @pvr_dev: PowerVR device to check
- *
- * This is called any time we receive a FW event. It iterates over all
- * active queues and calls pvr_queue_process() on them.
- */
-static void pvr_device_process_active_queues(struct pvr_device *pvr_dev)
-{
-	struct pvr_queue *queue, *tmp_queue;
-	LIST_HEAD(active_queues);
-
-	mutex_lock(&pvr_dev->queues.lock);
-
-	/* Move all active queues to a temporary list. Queues that remain
-	 * active after we're done processing them are re-inserted to
-	 * the queues.active list by pvr_queue_process().
-	 */
-	list_splice_init(&pvr_dev->queues.active, &active_queues);
-
-	list_for_each_entry_safe(queue, tmp_queue, &active_queues, node)
-		pvr_queue_process(queue);
-
-	mutex_unlock(&pvr_dev->queues.lock);
-}
-
-static irqreturn_t pvr_device_irq_thread_handler(int irq, void *data)
-{
-	struct pvr_device *pvr_dev = data;
-	irqreturn_t ret = IRQ_NONE;
-
-	/* We are in the threaded handler, we can keep dequeuing events until we
-	 * don't see any. This should allow us to reduce the number of interrupts
-	 * when the GPU is receiving a massive amount of short jobs.
-	 */
-	while (pvr_fw_irq_pending(pvr_dev)) {
-		pvr_fw_irq_clear(pvr_dev);
-
-		if (pvr_dev->fw_dev.booted) {
-			pvr_fwccb_process(pvr_dev);
-			pvr_kccb_wake_up_waiters(pvr_dev);
-			pvr_device_process_active_queues(pvr_dev);
-		}
-
-		pm_runtime_mark_last_busy(from_pvr_device(pvr_dev)->dev);
-
-		ret = IRQ_HANDLED;
-	}
-
-	/* Unmask FW irqs before returning, so new interrupts can be received. */
-	pvr_fw_irq_enable(pvr_dev);
-	return ret;
-}
-
 static irqreturn_t pvr_device_irq_handler(int irq, void *data)
 {
 	struct pvr_device *pvr_dev = data;
 
 	if (!pvr_fw_irq_pending(pvr_dev))
-		return IRQ_NONE; /* Spurious IRQ - ignore. */
+		return IRQ_NONE; /* Spurious IRQ - ignore */
 
-	/* Mask the FW interrupts before waking up the thread. Will be unmasked
-	 * when the thread handler is done processing events.
-	 */
-	pvr_fw_irq_disable(pvr_dev);
-	return IRQ_WAKE_THREAD;
+	pvr_fw_irq_clear(pvr_dev);
+
+	/* Only process IRQ work if FW is currently running */
+	if (pvr_dev->fw_dev.booted) {
+		queue_work(pvr_dev->irq_wq, &pvr_dev->fwccb_work);
+		wake_up_all(&pvr_dev->kccb.rtn_q);
+		queue_work(pvr_dev->irq_wq, &pvr_dev->kccb.work);
+		queue_work(pvr_dev->irq_wq, &pvr_dev->queues.work);
+	}
+
+	return IRQ_HANDLED;
 }
 
 /**
@@ -202,20 +154,33 @@ pvr_device_irq_init(struct pvr_device *pvr_dev)
 {
 	struct drm_device *drm_dev = from_pvr_device(pvr_dev);
 	struct platform_device *plat_dev = to_platform_device(drm_dev->dev);
+	int err;
 
 	init_waitqueue_head(&pvr_dev->kccb.rtn_q);
 
+	pvr_dev->irq_wq = alloc_workqueue("powervr-irq", WQ_UNBOUND, 0);
+	if (!pvr_dev->irq_wq) {
+		err = -ENOMEM;
+		goto err_out;
+	}
+
 	pvr_dev->irq = platform_get_irq(plat_dev, 0);
-	if (pvr_dev->irq < 0)
-		return pvr_dev->irq;
+	if (pvr_dev->irq < 0) {
+		err = pvr_dev->irq;
+		goto err_destroy_wq;
+	}
 
 	/* Clear any pending events before requesting the IRQ line. */
 	pvr_fw_irq_clear(pvr_dev);
 	pvr_fw_irq_enable(pvr_dev);
 
-	return request_threaded_irq(pvr_dev->irq, pvr_device_irq_handler,
-				    pvr_device_irq_thread_handler,
-				    IRQF_SHARED, "gpu", pvr_dev);
+	return request_irq(pvr_dev->irq, pvr_device_irq_handler, 0, "gpu", pvr_dev);
+
+err_destroy_wq:
+	destroy_workqueue(pvr_dev->irq_wq);
+
+err_out:
+	return err;
 }
 
 /**
@@ -226,6 +191,7 @@ static void
 pvr_device_irq_fini(struct pvr_device *pvr_dev)
 {
 	free_irq(pvr_dev->irq, pvr_dev);
+	destroy_workqueue(pvr_dev->irq_wq);
 }
 
 /**

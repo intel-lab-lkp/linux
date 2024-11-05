@@ -156,6 +156,13 @@ process_fwccb_command(struct pvr_device *pvr_dev, struct rogue_fwif_fwccb_cmd *c
 	}
 }
 
+static void pvr_fwccb_process_worker(struct work_struct *work)
+{
+	struct pvr_device *pvr_dev = container_of_const(work, struct pvr_device, fwccb_work);
+
+	pvr_fwccb_process(pvr_dev);
+}
+
 /**
  * pvr_fwccb_process() - Process any pending FWCCB commands
  * @pvr_dev: Target PowerVR device
@@ -463,18 +470,15 @@ struct pvr_kccb_fence {
 };
 
 /**
- * pvr_kccb_wake_up_waiters() - Check the KCCB waiters
+ * pvr_kccb_check_waiters() - Check the KCCB waiters
  * @pvr_dev: Target PowerVR device
  *
  * Signal as many KCCB fences as we have slots available.
  */
-void pvr_kccb_wake_up_waiters(struct pvr_device *pvr_dev)
+static void pvr_kccb_check_waiters(struct pvr_device *pvr_dev)
 {
 	struct pvr_kccb_fence *fence, *tmp_fence;
 	u32 used_count, available_count;
-
-	/* Wake up those waiting for KCCB slot execution. */
-	wake_up_all(&pvr_dev->kccb.rtn_q);
 
 	/* Then iterate over all KCCB fences and signal as many as we can. */
 	mutex_lock(&pvr_dev->kccb.ccb.lock);
@@ -499,12 +503,20 @@ out_unlock:
 	mutex_unlock(&pvr_dev->kccb.ccb.lock);
 }
 
+static void pvr_kccb_process_worker(struct work_struct *work)
+{
+	struct pvr_device *pvr_dev = container_of_const(work, struct pvr_device, kccb.work);
+
+	pvr_kccb_check_waiters(pvr_dev);
+}
+
 /**
  * pvr_kccb_fini() - Cleanup device KCCB
  * @pvr_dev: Target PowerVR device
  */
 void pvr_kccb_fini(struct pvr_device *pvr_dev)
 {
+	cancel_work_sync(&pvr_dev->kccb.work);
 	pvr_ccb_fini(&pvr_dev->kccb.ccb);
 	WARN_ON(!list_empty(&pvr_dev->kccb.waiters));
 	WARN_ON(pvr_dev->kccb.reserved_count);
@@ -525,6 +537,7 @@ pvr_kccb_init(struct pvr_device *pvr_dev)
 	INIT_LIST_HEAD(&pvr_dev->kccb.waiters);
 	pvr_dev->kccb.fence_ctx.id = dma_fence_context_alloc(1);
 	spin_lock_init(&pvr_dev->kccb.fence_ctx.lock);
+	INIT_WORK(&pvr_dev->kccb.work, pvr_kccb_process_worker);
 
 	return pvr_ccb_init(pvr_dev, &pvr_dev->kccb.ccb,
 			    ROGUE_FWIF_KCCB_NUMCMDS_LOG2_DEFAULT,
@@ -639,6 +652,8 @@ void pvr_kccb_release_slot(struct pvr_device *pvr_dev)
 int
 pvr_fwccb_init(struct pvr_device *pvr_dev)
 {
+	INIT_WORK(&pvr_dev->fwccb_work, pvr_fwccb_process_worker);
+
 	return pvr_ccb_init(pvr_dev, &pvr_dev->fwccb,
 			    ROGUE_FWIF_FWCCB_NUMCMDS_LOG2,
 			    sizeof(struct rogue_fwif_fwccb_cmd));

@@ -838,7 +838,7 @@ pvr_queue_timedout_job(struct drm_sched_job *s_job)
 	} else {
 		atomic_set(&queue->in_flight_job_count, job_count);
 		list_move_tail(&queue->node, &pvr_dev->queues.active);
-		pvr_queue_process(queue);
+		queue_work(pvr_dev->irq_wq, &pvr_dev->queues.work);
 	}
 	mutex_unlock(&pvr_dev->queues.lock);
 
@@ -989,6 +989,26 @@ void pvr_queue_process(struct pvr_queue *queue)
 	pvr_queue_check_job_waiting_for_cccb_space(queue);
 	pvr_queue_signal_done_fences(queue);
 	pvr_queue_update_active_state_locked(queue);
+}
+
+static void pvr_queue_process_worker(struct work_struct *work)
+{
+	struct pvr_device *pvr_dev = container_of_const(work, struct pvr_device, queues.work);
+	struct pvr_queue *queue, *tmp_queue;
+	LIST_HEAD(active_queues);
+
+	mutex_lock(&pvr_dev->queues.lock);
+
+	list_splice_init(&pvr_dev->queues.active, &active_queues);
+
+	list_for_each_entry_safe(queue, tmp_queue, &active_queues, node) {
+		pvr_queue_check_job_waiting_for_cccb_space(queue);
+		pvr_queue_signal_done_fences(queue);
+
+		pvr_queue_update_active_state_locked(queue);
+	}
+
+	mutex_unlock(&pvr_dev->queues.lock);
 }
 
 static u32 get_dm_type(struct pvr_queue *queue)
@@ -1407,6 +1427,7 @@ int pvr_queue_device_init(struct pvr_device *pvr_dev)
 {
 	int err;
 
+	INIT_WORK(&pvr_dev->queues.work, pvr_queue_process_worker);
 	INIT_LIST_HEAD(&pvr_dev->queues.active);
 	INIT_LIST_HEAD(&pvr_dev->queues.idle);
 	err = drmm_mutex_init(from_pvr_device(pvr_dev), &pvr_dev->queues.lock);

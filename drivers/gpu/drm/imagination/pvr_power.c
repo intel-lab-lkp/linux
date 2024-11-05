@@ -122,7 +122,7 @@ pvr_power_fw_enable(struct pvr_device *pvr_dev)
 		return err;
 	}
 
-	queue_delayed_work(pvr_dev->sched_wq, &pvr_dev->watchdog.work,
+	queue_delayed_work(pvr_dev->irq_wq, &pvr_dev->watchdog.work,
 			   msecs_to_jiffies(WATCHDOG_TIME_MS));
 
 	return 0;
@@ -212,7 +212,7 @@ out_pm_runtime_put:
 
 out_requeue:
 	if (!pvr_dev->lost) {
-		queue_delayed_work(pvr_dev->sched_wq, &pvr_dev->watchdog.work,
+		queue_delayed_work(pvr_dev->irq_wq, &pvr_dev->watchdog.work,
 				   msecs_to_jiffies(WATCHDOG_TIME_MS));
 	}
 }

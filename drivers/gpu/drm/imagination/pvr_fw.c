@@ -1036,6 +1036,7 @@ pvr_fw_fini(struct pvr_device *pvr_dev)
 	 * Ensure FWCCB worker has finished executing before destroying FWCCB. The IRQ handler has
 	 * been unregistered at this point so no new work should be being submitted.
 	 */
+	flush_work(&pvr_dev->fwccb_work);
 	pvr_ccb_fini(&pvr_dev->fwccb);
 	pvr_kccb_fini(pvr_dev);
 	pvr_fw_cleanup(pvr_dev);
