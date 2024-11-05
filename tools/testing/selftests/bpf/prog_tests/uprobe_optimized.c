@@ -170,6 +170,64 @@ cleanup:
 	uprobe_optimized__destroy(skel);
 }
 
+static bool race_stop;
+
+static void *worker(void*)
+{
+	while (!race_stop)
+		uprobe_test();
+	return NULL;
+}
+
+static void test_race(void)
+{
+	int err, i, nr_cpus, rounds = 0;
+	struct uprobe_optimized *skel;
+	pthread_t *threads;
+	time_t start;
+
+        nr_cpus = libbpf_num_possible_cpus();
+	if (!ASSERT_GE(nr_cpus, 0, "nr_cpus"))
+		return;
+
+	threads = malloc(sizeof(*threads) * nr_cpus);
+	if (!ASSERT_OK_PTR(threads, "malloc"))
+		return;
+
+	for (i = 0; i < nr_cpus; i++) {
+		err = pthread_create(&threads[i], NULL, worker, NULL);
+		if (!ASSERT_OK(err, "pthread_create"))
+			goto cleanup;
+	}
+
+	skel = uprobe_optimized__open_and_load();
+	if (!ASSERT_OK_PTR(skel, "uprobe_optimized__open_and_load"))
+		goto cleanup;
+
+	start = time(NULL);
+	while (1) {
+		skel->links.test_2 = bpf_program__attach_uprobe_multi(skel->progs.test_2, -1,
+						"/proc/self/exe", "uprobe_test", NULL);
+		if (!ASSERT_OK_PTR(skel->links.test_2, "bpf_program__attach_uprobe_multi"))
+			break;
+
+		bpf_link__destroy(skel->links.test_2);
+		skel->links.test_2 = NULL;
+		rounds++;
+
+		if (start + 2 < time(NULL))
+			break;
+	}
+
+	printf("rounds: %d hits: %d\n", rounds, skel->bss->executed);
+
+cleanup:
+	race_stop = true;
+	for (i = 0; i < nr_cpus; i++)
+		pthread_join(threads[i], NULL);
+	uprobe_optimized__destroy(skel);
+}
+
 static void test_optimized(void)
 {
 	if (test__start_subtest("uprobe"))
@@ -178,6 +236,8 @@ static void test_optimized(void)
 		test_uprobe_multi();
 	if (test__start_subtest("usdt"))
 		test_usdt();
+	if (test__start_subtest("race"))
+		test_race();
 }
 #else
 static void test_optimized(void)
