@@ -5,6 +5,7 @@
 #include <linux/acpi.h>
 #include <linux/bits.h>
 #include <linux/init.h>
+#include <linux/kdev_t.h>
 #include <linux/mutex.h>
 #include <linux/platform_profile.h>
 #include <linux/sysfs.h>
@@ -21,6 +22,12 @@ static const char * const profile_names[] = {
 	[PLATFORM_PROFILE_PERFORMANCE] = "performance",
 };
 static_assert(ARRAY_SIZE(profile_names) == PLATFORM_PROFILE_LAST);
+
+static DEFINE_IDR(platform_profile_minor_idr);
+
+static const struct class platform_profile_class = {
+	.name = "platform-profile",
+};
 
 static ssize_t platform_profile_choices_show(struct device *dev,
 					struct device_attribute *attr,
@@ -113,6 +120,8 @@ void platform_profile_notify(void)
 {
 	if (!cur_profile)
 		return;
+	if (!class_is_registered(&platform_profile_class))
+		return;
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 }
 EXPORT_SYMBOL_GPL(platform_profile_notify);
@@ -122,6 +131,9 @@ int platform_profile_cycle(void)
 	enum platform_profile_option profile;
 	enum platform_profile_option next;
 	int err;
+
+	if (!class_is_registered(&platform_profile_class))
+		return -ENODEV;
 
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
 		if (!cur_profile)
@@ -167,12 +179,33 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	if (cur_profile)
 		return -EEXIST;
 
-	err = sysfs_create_group(acpi_kobj, &platform_profile_group);
-	if (err)
-		return err;
+	if (!class_is_registered(&platform_profile_class)) {
+		/* class for individual handlers */
+		err = class_register(&platform_profile_class);
+		if (err)
+			return err;
+		/* legacy sysfs files */
+		err = sysfs_create_group(acpi_kobj, &platform_profile_group);
+		if (err)
+			goto cleanup_class;
+	}
+
+	/* create class interface for individual handler */
+	pprof->minor = idr_alloc(&platform_profile_minor_idr, pprof, 0, 0, GFP_KERNEL);
+	pprof->class_dev = device_create(&platform_profile_class, pprof->dev,
+					 MKDEV(0, pprof->minor), NULL, "platform-profile-%d",
+					 pprof->minor);
+	if (IS_ERR(pprof->class_dev))
+		return PTR_ERR(pprof->class_dev);
+	dev_set_drvdata(pprof->class_dev, pprof);
 
 	cur_profile = pprof;
 	return 0;
+
+cleanup_class:
+	class_unregister(&platform_profile_class);
+
+	return err;
 }
 EXPORT_SYMBOL_GPL(platform_profile_register);
 
@@ -181,6 +214,9 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 	guard(mutex)(&profile_lock);
 
 	sysfs_remove_group(acpi_kobj, &platform_profile_group);
+
+	device_destroy(&platform_profile_class, MKDEV(0, pprof->minor));
+
 	cur_profile = NULL;
 	return 0;
 }
