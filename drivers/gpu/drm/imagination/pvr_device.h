@@ -16,6 +16,7 @@
 #include <drm/drm_mm.h>
 
 #include <linux/bits.h>
+#include <linux/compiler.h>
 #include <linux/compiler_attributes.h>
 #include <linux/compiler_types.h>
 #include <linux/device.h>
@@ -57,6 +58,13 @@ struct pvr_fw_version {
 };
 
 /**
+ * struct pvr_device_overrides - Hardware-level overrides loaded from
+ * MODULE_DEVICE_TABLE() or similar.
+ */
+struct pvr_device_overrides {
+};
+
+/**
  * struct pvr_device - powervr-specific wrapper for &struct drm_device
  */
 struct pvr_device {
@@ -93,6 +101,13 @@ struct pvr_device {
 	 * PVR_HAS_ENHANCEMENT().
 	 */
 	struct pvr_device_enhancements enhancements;
+
+	/**
+	 * @overrides: Platform-specific overrides required for this device.
+	 *
+	 * Do not access this member directly, instead use PVR_HAS_OVERRIDE().
+	 */
+	struct pvr_device_overrides overrides;
 
 	/** @fw_version: Firmware version detected at runtime. */
 	struct pvr_fw_version fw_version;
@@ -436,6 +451,13 @@ struct pvr_file {
  */
 #define PVR_HAS_ENHANCEMENT(pvr_dev, enhancement) ((pvr_dev)->enhancements.has_ern##enhancement)
 
+/**
+ * PVR_HAS_OVERRIDE() - Tests whether a physical device requires a given override
+ * @pvr_dev: [IN] Target PowerVR device.
+ * @override: [IN] Override name.
+ */
+#define PVR_HAS_OVERRIDE(pvr_dev, override) unlikely((pvr_dev)->overrides.override)
+
 #define from_pvr_device(pvr_dev) (&(pvr_dev)->base)
 
 #define to_pvr_device(drm_dev) container_of_const(drm_dev, struct pvr_device, base)
@@ -515,6 +537,10 @@ bool
 pvr_device_has_uapi_enhancement(struct pvr_device *pvr_dev, u32 enhancement);
 bool
 pvr_device_has_feature(struct pvr_device *pvr_dev, u32 feature);
+
+bool
+pvr_device_overrides_validate(struct pvr_device *pvr_dev,
+			      const struct pvr_device_overrides *overrides);
 
 /**
  * PVR_CR_FIELD_GET() - Extract a single field from a PowerVR control register

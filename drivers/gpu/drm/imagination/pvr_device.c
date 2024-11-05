@@ -621,3 +621,29 @@ pvr_device_has_feature(struct pvr_device *pvr_dev, u32 feature)
 		return false;
 	}
 }
+
+/**
+ * pvr_device_overrides_validate() - Ensure the overrides specified are compatible with a device.
+ * @pvr_dev: Target PowerVR device.
+ * @overrides: Device overrides to validate.
+ *
+ * Return:
+ *  * %true if every override specified in @overrides is compatible with the current device, or
+ *  * %false otherwise; as many incompatibilities as possible will be reported in the kernel log.
+ */
+bool
+pvr_device_overrides_validate(struct pvr_device *pvr_dev,
+			      const struct pvr_device_overrides *overrides)
+{
+	bool ret = true;
+
+	/*
+	 * Where possible, avoid early returns in this function. This allows for as
+	 * many errors to be reported at once as possible.
+	 *
+	 * Note that this function may be called early during device initialization
+	 * so it should not be assumed that @pvr_dev is ready for normal use yet.
+	 */
+
+	return ret;
+}

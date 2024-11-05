@@ -31,6 +31,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -1396,11 +1397,13 @@ static struct drm_driver pvr_drm_driver = {
 static int
 pvr_probe(struct platform_device *plat_dev)
 {
+	const struct pvr_device_overrides *overrides;
+	struct device *dev = &plat_dev->dev;
 	struct pvr_device *pvr_dev;
 	struct drm_device *drm_dev;
 	int err;
 
-	pvr_dev = devm_drm_dev_alloc(&plat_dev->dev, &pvr_drm_driver,
+	pvr_dev = devm_drm_dev_alloc(dev, &pvr_drm_driver,
 				     struct pvr_device, base);
 	if (IS_ERR(pvr_dev))
 		return PTR_ERR(pvr_dev);
@@ -1408,6 +1411,15 @@ pvr_probe(struct platform_device *plat_dev)
 	drm_dev = &pvr_dev->base;
 
 	platform_set_drvdata(plat_dev, drm_dev);
+
+	overrides = of_device_get_match_data(dev);
+	if (!overrides)
+		return -EINVAL;
+
+	if (!pvr_device_overrides_validate(pvr_dev, overrides))
+		return -EINVAL;
+
+	pvr_dev->overrides = *overrides;
 
 	err = pvr_power_domains_init(pvr_dev);
 	if (err)
@@ -1421,11 +1433,11 @@ pvr_probe(struct platform_device *plat_dev)
 	if (err)
 		goto err_power_domains_fini;
 
-	devm_pm_runtime_enable(&plat_dev->dev);
-	pm_runtime_mark_last_busy(&plat_dev->dev);
+	devm_pm_runtime_enable(dev);
+	pm_runtime_mark_last_busy(dev);
 
-	pm_runtime_set_autosuspend_delay(&plat_dev->dev, 50);
-	pm_runtime_use_autosuspend(&plat_dev->dev);
+	pm_runtime_set_autosuspend_delay(dev, 50);
+	pm_runtime_use_autosuspend(dev);
 	pvr_watchdog_init(pvr_dev);
 
 	err = pvr_device_init(pvr_dev);
@@ -1478,18 +1490,24 @@ static void pvr_remove(struct platform_device *plat_dev)
 	pvr_power_domains_fini(pvr_dev);
 }
 
+static const struct pvr_device_overrides pvr_device_overrides_default = {};
+
+/*
+ * Always specify &pvr_device_overrides_default instead of %NULL for &struct of_device_id->data so
+ * that we know of_device_get_match_data() returning %NULL is an error.
+ */
 static const struct of_device_id dt_match[] = {
-	{ .compatible = "img,img-rogue", .data = NULL },
+	{ .compatible = "img,img-rogue", .data = &pvr_device_overrides_default },
 
 	/* All supported GPU models */
-	{ .compatible = "img,img-axe-1-16m", .data = NULL },
+	{ .compatible = "img,img-axe-1-16m", .data = &pvr_device_overrides_default },
 
 	/*
 	 * This legacy compatible string was introduced early on before the more specific GPU
 	 * identifiers were used. Keep it around here for compatibility, but never use
 	 * "img,img-axe" in new devicetrees.
 	 */
-	{ .compatible = "img,img-axe", .data = NULL },
+	{ .compatible = "img,img-axe", .data = &pvr_device_overrides_default },
 	{}
 };
 MODULE_DEVICE_TABLE(of, dt_match);
