@@ -16,6 +16,15 @@
 
 #define SEV_FW_BLOB_MAX_SIZE	0x4000	/* 16KB */
 
+/*
+ * SEV FW expects the physical address given to it to be 32
+ * byte aligned. Memory allocated has structure placed at the
+ * beginning followed by the firmware being passed to the SEV
+ * FW. Allocate enough memory for data structure + alignment
+ * padding + SEV FW.
+ */
+#define SEV_FW_ALIGNMENT       32
+
 /**
  * SEV platform state
  */
@@ -183,6 +192,23 @@ struct sev_data_pek_cert_import {
 struct sev_data_download_firmware {
 	u64 address;				/* In */
 	u32 len;				/* In */
+} __packed;
+
+/**
+ * struct sev_data_download_firmware_ex - DOWNLOAD_FIRMWARE_EX command parameters
+ *
+ * @length: length of this command buffer
+ * @address: physical address of firmware image
+ * @len: len of the firmware image
+ * @commit: automatically commit the newly installed image
+ */
+struct sev_data_download_firmware_ex {
+	u32 cmdlen;				/* In */
+	u32 reserved;				/* In */
+	u64 address;				/* In */
+	u32 len;				/* In */
+	u32 commit:1;				/* In */
+	u32 reserved2:31;			/* In */
 } __packed;
 
 /**
