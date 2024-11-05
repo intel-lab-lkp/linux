@@ -223,6 +223,14 @@ If found, those virtio devices will be created and added, so as a result
 of registering this remote processor, additional virtio drivers might get
 probed.
 
+.. note::
+
+  there is a resource managed version of this api called devm_rproc_add.
+  Most of the times, you should use that unless you need to explicitly
+  control the rproc registration with the core. If you are using devm
+  variant of this api, then rproc_del will automatically get called when
+  driver is unloaded.
+
 ::
 
   int rproc_del(struct rproc *rproc)
