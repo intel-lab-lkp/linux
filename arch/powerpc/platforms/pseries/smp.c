@@ -199,6 +199,13 @@ static __init void pSeries_smp_probe(void)
 	else
 		xics_smp_probe();
 
+	/*
+	 * Make sure this is called regardless of doorbell/SMT status, as
+	 * we disable hardlockup detector in an early_initcall where we need to
+	 * know KVM status for disabling hardlockup detector in KVM guests.
+	 */
+	check_kvm_guest();
+
 	/* No doorbell facility, must use the interrupt controller for IPIs */
 	if (!cpu_has_feature(CPU_FTR_DBELL))
 		return;
@@ -206,8 +213,6 @@ static __init void pSeries_smp_probe(void)
 	/* Doorbells can only be used for IPIs between SMT siblings */
 	if (!cpu_has_feature(CPU_FTR_SMT))
 		return;
-
-	check_kvm_guest();
 
 	if (is_kvm_guest()) {
 		/*
