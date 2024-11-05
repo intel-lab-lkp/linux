@@ -3798,6 +3798,37 @@ out_unregister:
 	goto out;
 }
 
+static int rtnl_add_peer_net(struct rtnl_nets *rtnl_nets,
+			     const struct rtnl_link_ops *ops,
+			     struct nlattr *data[],
+			     struct netlink_ext_ack *extack)
+{
+	struct nlattr *tb[IFLA_MAX + 1];
+	struct net *net;
+	int err;
+
+	if (!data || !data[ops->peer_type])
+		return 0;
+
+	err = rtnl_nla_parse_ifinfomsg(tb, data[ops->peer_type], extack);
+	if (err < 0)
+		return err;
+
+	if (ops->validate) {
+		err = ops->validate(tb, NULL, extack);
+		if (err < 0)
+			return err;
+	}
+
+	net = rtnl_link_get_net_tb(tb);
+	if (IS_ERR(net))
+		return PTR_ERR(net);
+	if (net)
+		rtnl_nets_add(rtnl_nets, net);
+
+	return 0;
+}
+
 static int __rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			  const struct rtnl_link_ops *ops,
 			  struct net *tgt_net, struct net *link_net,
@@ -3926,12 +3957,18 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			if (ret < 0)
 				goto put_ops;
 		}
+
+		if (ops->peer_type) {
+			ret = rtnl_add_peer_net(&rtnl_nets, ops, data, extack);
+			if (ret < 0)
+				goto put_ops;
+		}
 	}
 
 	tgt_net = rtnl_link_get_net_capable(skb, sock_net(skb->sk), tb, CAP_NET_ADMIN);
 	if (IS_ERR(tgt_net)) {
 		ret = PTR_ERR(tgt_net);
-		goto put_ops;
+		goto put_net;
 	}
 
 	rtnl_nets_add(&rtnl_nets, tgt_net);
