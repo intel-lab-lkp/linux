@@ -1893,7 +1893,7 @@ int dso__load(struct dso *dso, struct map *map)
 			char *new_name = dso__filename_with_chroot(dso, name);
 			if (new_name) {
 				is_reg = is_regular_file(new_name);
-				strlcpy(name, new_name, PATH_MAX);
+				strscpy(name, new_name, PATH_MAX);
 				free(new_name);
 			}
 		}
