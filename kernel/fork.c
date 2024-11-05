@@ -1248,6 +1248,8 @@ static void mm_init_uprobes_state(struct mm_struct *mm)
 {
 #ifdef CONFIG_UPROBES
 	mm->uprobes_state.xol_area = NULL;
+	mutex_init(&mm->uprobes_state.tramp_mutex);
+	INIT_HLIST_HEAD(&mm->uprobes_state.tramp_head);
 #endif
 }
 

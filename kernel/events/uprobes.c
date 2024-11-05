@@ -616,6 +616,145 @@ set_orig_insn(struct arch_uprobe *auprobe, struct mm_struct *mm, unsigned long v
 			(uprobe_opcode_t *)&auprobe->insn, UPROBE_SWBP_INSN_SIZE, NULL);
 }
 
+bool __weak arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr)
+{
+	return false;
+}
+
+static unsigned long find_nearest_page(unsigned long vaddr)
+{
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma, *prev;
+	VMA_ITERATOR(vmi, mm, 0);
+
+	prev = vma_next(&vmi);
+	vma = vma_next(&vmi);
+	while (vma) {
+		if (vma->vm_start - prev->vm_end  >= PAGE_SIZE &&
+		    arch_uprobe_is_callable(prev->vm_end, vaddr))
+			return prev->vm_end;
+
+		prev = vma;
+		vma = vma_next(&vmi);
+	}
+
+	return 0;
+}
+
+static vm_fault_t tramp_fault(const struct vm_special_mapping *sm,
+			      struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct hlist_head *head = &vma->vm_mm->uprobes_state.tramp_head;
+	struct tramp_area *area;
+
+	hlist_for_each_entry(area, head, node) {
+		if (vma->vm_start == area->vaddr) {
+			vmf->page = area->page;
+			get_page(vmf->page);
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static int tramp_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma)
+{
+	return -EPERM;
+}
+
+static const struct vm_special_mapping tramp_mapping = {
+	.name = "[uprobes-trampoline]",
+	.fault = tramp_fault,
+	.mremap = tramp_mremap,
+};
+
+static struct tramp_area *create_tramp_area(unsigned long vaddr)
+{
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma;
+	struct tramp_area *area;
+
+	vaddr = find_nearest_page(vaddr);
+	if (!vaddr)
+		return NULL;
+
+	area = kzalloc(sizeof(*area), GFP_KERNEL);
+	if (unlikely(!area))
+		return NULL;
+
+	area->page = alloc_page(GFP_HIGHUSER);
+	if (!area->page)
+		goto free_area;
+
+	refcount_set(&area->ref, 1);
+	area->vaddr = vaddr;
+
+	vma = _install_special_mapping(mm, area->vaddr, PAGE_SIZE,
+				VM_READ|VM_EXEC|VM_MAYEXEC|VM_MAYREAD|VM_DONTCOPY|VM_IO,
+				&tramp_mapping);
+	if (!IS_ERR(vma))
+		return area;
+
+	__free_page(area->page);
+ free_area:
+	kfree(area);
+	return NULL;
+}
+
+struct tramp_area *get_tramp_area(unsigned long vaddr)
+{
+	struct uprobes_state *state = &current->mm->uprobes_state;
+	struct tramp_area *area = NULL;
+
+	mutex_lock(&state->tramp_mutex);
+	hlist_for_each_entry(area, &state->tramp_head, node) {
+		if (arch_uprobe_is_callable(area->vaddr, vaddr)) {
+			refcount_inc(&area->ref);
+			goto unlock;
+		}
+	}
+
+	area = create_tramp_area(vaddr);
+	if (area)
+		hlist_add_head(&area->node, &state->tramp_head);
+
+unlock:
+	mutex_unlock(&state->tramp_mutex);
+	return area;
+}
+
+static void destroy_tramp_area(struct tramp_area *area)
+{
+	hlist_del(&area->node);
+	put_page(area->page);
+	kfree(area);
+}
+
+void put_tramp_area(struct tramp_area *area)
+{
+	struct mm_struct *mm = current->mm;
+	struct uprobes_state *state = &mm->uprobes_state;
+
+	if (area == NULL)
+		return;
+
+	mutex_lock(&state->tramp_mutex);
+	if (refcount_dec_and_test(&area->ref))
+		destroy_tramp_area(area);
+	mutex_unlock(&state->tramp_mutex);
+}
+
+static void clear_tramp_head(struct mm_struct *mm)
+{
+	struct uprobes_state *state = &mm->uprobes_state;
+	struct tramp_area *area;
+	struct hlist_node *n;
+
+	hlist_for_each_entry_safe(area, n, &state->tramp_head, node)
+		destroy_tramp_area(area);
+}
+
 /* uprobe should have guaranteed positive refcount */
 static struct uprobe *get_uprobe(struct uprobe *uprobe)
 {
@@ -1787,6 +1926,8 @@ void uprobe_clear_state(struct mm_struct *mm)
 	mutex_lock(&delayed_uprobe_lock);
 	delayed_uprobe_remove(NULL, mm);
 	mutex_unlock(&delayed_uprobe_lock);
+
+	clear_tramp_head(mm);
 
 	if (!area)
 		return;

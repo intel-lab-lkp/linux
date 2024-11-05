@@ -172,6 +172,15 @@ struct xol_area;
 
 struct uprobes_state {
 	struct xol_area		*xol_area;
+	struct hlist_head	tramp_head;
+	struct mutex		tramp_mutex;
+};
+
+struct tramp_area {
+	unsigned long		vaddr;
+	struct page		*page;
+	struct hlist_node	node;
+	refcount_t		ref;
 };
 
 extern void __init uprobes_init(void);
@@ -219,6 +228,9 @@ extern int uprobe_verify_opcode(struct page *page, unsigned long vaddr, uprobe_o
 extern int arch_uprobe_verify_opcode(struct page *page, unsigned long vaddr,
 				     uprobe_opcode_t *new_opcode, void *data);
 extern bool arch_uprobe_is_register(uprobe_opcode_t *insn, int len, void *data);
+struct tramp_area *get_tramp_area(unsigned long vaddr);
+void put_tramp_area(struct tramp_area *area);
+bool arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr);
 #else /* !CONFIG_UPROBES */
 struct uprobes_state {
 };
