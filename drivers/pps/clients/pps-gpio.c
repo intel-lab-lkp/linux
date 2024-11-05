@@ -214,7 +214,7 @@ static int pps_gpio_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	dev_info(data->pps->dev, "Registered IRQ %d as PPS source\n",
+	dev_info(&data->pps->dev, "Registered IRQ %d as PPS source\n",
 		 data->irq);
 
 	return 0;
