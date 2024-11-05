@@ -2384,13 +2384,13 @@ static bool skl_wm_level_equals(const struct skl_wm_level *l1,
 		l1->blocks == l2->blocks;
 }
 
-static bool skl_plane_wm_equals(struct drm_i915_private *i915,
+static bool skl_plane_wm_equals(struct intel_display *display,
 				const struct skl_plane_wm *wm1,
 				const struct skl_plane_wm *wm2)
 {
 	int level;
 
-	for (level = 0; level < i915->display.wm.num_levels; level++) {
+	for (level = 0; level < display->wm.num_levels; level++) {
 		/*
 		 * We don't check uv_wm as the hardware doesn't actually
 		 * use it. It only gets used for calculating the required
@@ -2650,7 +2650,7 @@ skl_print_wm_changes(struct intel_atomic_state *state)
 			old_wm = &old_pipe_wm->planes[plane_id];
 			new_wm = &new_pipe_wm->planes[plane_id];
 
-			if (skl_plane_wm_equals(i915, old_wm, new_wm))
+			if (skl_plane_wm_equals(&i915->display, old_wm, new_wm))
 				continue;
 
 			drm_dbg_kms(&i915->drm,
