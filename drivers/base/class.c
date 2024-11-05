@@ -408,8 +408,6 @@ int class_for_each_device(const struct class *class, const struct device *start,
 	struct device *dev;
 	int error = 0;
 
-	if (!class)
-		return -EINVAL;
 	if (!sp) {
 		WARN(1, "%s called for class '%s' before it was registered",
 		     __func__, class->name);
@@ -456,8 +454,6 @@ struct device *class_find_device(const struct class *class, const struct device 
 	struct class_dev_iter iter;
 	struct device *dev;
 
-	if (!class)
-		return NULL;
 	if (!sp) {
 		WARN(1, "%s called for class '%s' before it was registered",
 		     __func__, class->name);
