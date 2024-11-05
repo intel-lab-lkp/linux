@@ -1200,6 +1200,9 @@ lpfc_bsg_hba_set_event(struct bsg_job *job)
 	spin_unlock_irqrestore(&phba->ct_ev_lock, flags);
 
 	if (&evt->node == &phba->ct_ev_waiters) {
+		spin_lock_irqsave(&phba->ct_ev_lock, flags);
+		lpfc_bsg_event_unref(evt);
+		spin_unlock_irqrestore(&phba->ct_ev_lock, flags);
 		/* no event waiting struct yet - first call */
 		dd_data = kmalloc(sizeof(struct bsg_job_data), GFP_KERNEL);
 		if (dd_data == NULL) {
