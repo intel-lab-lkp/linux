@@ -1516,10 +1516,11 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
-	bool done = false;
-	u32 val = SWITCHABLE_SIGNALING_VOLTAGE;
 	const struct sdhci_msm_offset *msm_offset =
 					msm_host->offset;
+	struct mmc_host *mmc = host->mmc;
+	bool done = false;
+	u32 val = SWITCHABLE_SIGNALING_VOLTAGE;
 
 	pr_debug("%s: %s: request %d curr_pwr_state %x curr_io_level %x\n",
 			mmc_hostname(host->mmc), __func__, req_type,
@@ -1573,6 +1574,13 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 				 "%s: pwr_irq for req: (%d) timed out\n",
 				 mmc_hostname(host->mmc), req_type);
 	}
+
+	if (mmc->card && mmc->ops && mmc->ops->get_cd &&
+		!mmc->ops->get_cd(mmc) && (req_type & REQ_BUS_ON)) {
+		sdhci_writeb(host, 0, SDHCI_POWER_CONTROL);
+		host->pwr = 0;
+	}
+
 	pr_debug("%s: %s: request %d done\n", mmc_hostname(host->mmc),
 			__func__, req_type);
 }
@@ -1629,6 +1637,14 @@ static void sdhci_msm_handle_pwr_irq(struct sdhci_host *host, int irq)
 			msm_offset->core_pwrctl_clear);
 		retry--;
 		udelay(10);
+	}
+
+	if (mmc->card && mmc->ops && mmc->ops->get_cd &&
+		!mmc->ops->get_cd(mmc) && irq_status & CORE_PWRCTL_BUS_ON) {
+		irq_ack = CORE_PWRCTL_BUS_FAIL;
+		msm_host_writel(msm_host, irq_ack, host,
+				msm_offset->core_pwrctl_ctl);
+		return;
 	}
 
 	/* Handle BUS ON/OFF*/
