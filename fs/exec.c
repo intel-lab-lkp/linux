@@ -1512,8 +1512,12 @@ static int bprm_add_fixup_comm(struct linux_binprm *bprm,
 		return 0;
 
 	bprm->argv0 = strndup_user(p, MAX_ARG_STRLEN);
-	if (IS_ERR(bprm->argv0))
-		return PTR_ERR(bprm->argv0);
+	if (IS_ERR(bprm->argv0)) {
+		int rc = PTR_ERR(bprm->argv0);
+
+		bprm->argv0 = NULL;
+		return rc;
+	}
 
 	return 0;
 }
