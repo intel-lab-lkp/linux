@@ -211,9 +211,9 @@ static bool
 use_min_ddb(const struct intel_crtc_state *crtc_state,
 	    struct intel_plane *plane)
 {
-	struct drm_i915_private *i915 = to_i915(plane->base.dev);
+	struct intel_display *display = to_intel_display(plane);
 
-	return DISPLAY_VER(i915) >= 13 &&
+	return DISPLAY_VER(display) >= 13 &&
 	       crtc_state->uapi.async_flip &&
 	       plane->async_flip;
 }
