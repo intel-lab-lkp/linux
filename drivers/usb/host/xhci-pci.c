@@ -284,6 +284,20 @@ static void xhci_pci_quirks(struct device *dev, struct xhci_hcd *xhci)
 	if (pdev->vendor == PCI_VENDOR_ID_NEC)
 		xhci->quirks |= XHCI_NEC_HOST;
 
+	if (pdev->vendor == PCI_VENDOR_ID_AMD &&
+	    (pdev->device == 0x13ed ||
+	     pdev->device == 0x13ee ||
+	     pdev->device == 0x148c ||
+	     pdev->device == 0x15d4 ||
+	     pdev->device == 0x15d5 ||
+	     pdev->device == 0x15e0 ||
+	     pdev->device == 0x15e1 ||
+	     pdev->device == 0x15e5))
+		xhci->quirks |= XHCI_LIMIT_ENDPOINT_INTERVAL_9;
+
+	if (pdev->vendor == PCI_VENDOR_ID_ATI && pdev->device == 0x7316)
+		xhci->quirks |= XHCI_LIMIT_ENDPOINT_INTERVAL_9;
+
 	if (pdev->vendor == PCI_VENDOR_ID_AMD && xhci->hci_version == 0x96)
 		xhci->quirks |= XHCI_AMD_0x96_HOST;
 
