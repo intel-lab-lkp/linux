@@ -410,7 +410,6 @@ static int compute_score(struct sock *sk, const struct net *net,
 	return score;
 }
 
-INDIRECT_CALLABLE_SCOPE
 u32 udp_ehashfn(const struct net *net, const __be32 laddr, const __u16 lport,
 		const __be32 faddr, const __be16 fport)
 {
