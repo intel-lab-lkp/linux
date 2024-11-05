@@ -133,6 +133,7 @@ int adv7533_patch_cec_registers(struct adv7511 *adv)
 
 int adv7533_attach_dsi(struct adv7511 *adv)
 {
+	struct device_node *np __free(device_node) = adv->host_node;
 	struct device *dev = &adv->i2c_main->dev;
 	struct mipi_dsi_host *host;
 	struct mipi_dsi_device *dsi;
@@ -180,8 +181,6 @@ int adv7533_parse_dt(struct device_node *np, struct adv7511 *adv)
 	adv->host_node = of_graph_get_remote_node(np, 0, 0);
 	if (!adv->host_node)
 		return -ENODEV;
-
-	of_node_put(adv->host_node);
 
 	adv->use_timing_gen = !of_property_read_bool(np,
 						"adi,disable-timing-generator");
