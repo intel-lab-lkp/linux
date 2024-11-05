@@ -1409,13 +1409,17 @@ pvr_probe(struct platform_device *plat_dev)
 
 	platform_set_drvdata(plat_dev, drm_dev);
 
+	err = pvr_power_domains_init(pvr_dev);
+	if (err)
+		goto err_context_fini;
+
 	init_rwsem(&pvr_dev->reset_sem);
 
 	pvr_context_device_init(pvr_dev);
 
 	err = pvr_queue_device_init(pvr_dev);
 	if (err)
-		goto err_context_fini;
+		goto err_power_domains_fini;
 
 	devm_pm_runtime_enable(&plat_dev->dev);
 	pm_runtime_mark_last_busy(&plat_dev->dev);
@@ -1448,6 +1452,9 @@ err_watchdog_fini:
 err_context_fini:
 	pvr_context_device_fini(pvr_dev);
 
+err_power_domains_fini:
+	pvr_power_domains_fini(pvr_dev);
+
 	return err;
 }
 
@@ -1468,6 +1475,7 @@ static void pvr_remove(struct platform_device *plat_dev)
 	pvr_watchdog_fini(pvr_dev);
 	pvr_queue_device_fini(pvr_dev);
 	pvr_context_device_fini(pvr_dev);
+	pvr_power_domains_fini(pvr_dev);
 }
 
 static const struct of_device_id dt_match[] = {
