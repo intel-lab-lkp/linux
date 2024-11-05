@@ -2041,15 +2041,17 @@ typedef int (*entry_fn_t)(struct vgic_its *its, u32 id, void *entry,
  * (non zero for 2d level tables)
  * @fn: function to apply on each entry
  * @opaque: pointer to opaque data
+ * @l1_tbl: true if it is a l1 table in a 2-level structure
  *
- * Return: < 0 on error, 0 if last element was identified, 1 otherwise
- * (the last element may not be found on second level tables)
+ * Return: < 0 on error, 0 if last element was identified, next id (device id or
+ * event id) of next valid entry.
  */
 static int scan_its_table(struct vgic_its *its, gpa_t base, int size, u32 esz,
-			  int start_id, entry_fn_t fn, void *opaque)
+			  int start_id, entry_fn_t fn, void *opaque, bool l1_tbl)
 {
 	struct kvm *kvm = its->dev->kvm;
 	unsigned long len = size;
+	int next_id = start_id;
 	int id = start_id;
 	gpa_t gpa = base;
 	char entry[ESZ_MAX];
@@ -2065,8 +2067,16 @@ static int scan_its_table(struct vgic_its *its, gpa_t base, int size, u32 esz,
 		if (ret)
 			return ret;
 
-		next_offset = fn(its, id, entry, opaque);
-		if (next_offset <= 0)
+		next_id = fn(its, next_id, entry, opaque);
+		if (next_id <= 0)
+			return next_id;
+
+		if (l1_tbl)
+			next_offset = next_id * esz / SZ_64K - id;
+		else
+			next_offset = next_id - id;
+
+		if (!next_offset)
 			return next_offset;
 
 		byte_offset = next_offset * esz;
@@ -2077,7 +2087,7 @@ static int scan_its_table(struct vgic_its *its, gpa_t base, int size, u32 esz,
 		gpa += byte_offset;
 		len -= byte_offset;
 	}
-	return 1;
+	return next_id;
 }
 
 /*
@@ -2128,7 +2138,7 @@ static int vgic_its_restore_ite(struct vgic_its *its, u32 event_id,
 	lpi_id = (val & KVM_ITS_ITE_PINTID_MASK) >> KVM_ITS_ITE_PINTID_SHIFT;
 
 	if (!lpi_id)
-		return 1; /* invalid entry, no choice but to scan next entry */
+		return event_id + 1; /* invalid entry, no choice but to scan next entry */
 
 	if (lpi_id < VGIC_MIN_LPI)
 		return -EINVAL;
@@ -2158,7 +2168,7 @@ static int vgic_its_restore_ite(struct vgic_its *its, u32 event_id,
 	}
 	ite->irq = irq;
 
-	return offset;
+	return event_id + offset;
 }
 
 static int vgic_its_ite_cmp(void *priv, const struct list_head *a,
@@ -2238,7 +2248,7 @@ static int vgic_its_restore_itt(struct vgic_its *its, struct its_device *dev)
 	size_t max_size = BIT_ULL(dev->num_eventid_bits) * ite_esz;
 
 	ret = scan_its_table(its, base, max_size, ite_esz, 0,
-			     vgic_its_restore_ite, dev);
+			     vgic_its_restore_ite, dev, false);
 
 	/* scan_its_table returns +1 if all ITEs are invalid */
 	if (ret > 0)
@@ -2280,8 +2290,8 @@ static int vgic_its_save_dte(struct vgic_its *its, struct its_device *dev,
  * @ptr: kernel VA where the 8 byte DTE is located
  * @opaque: unused
  *
- * Return: < 0 on error, 0 if the dte is the last one, id offset to the
- * next dte otherwise
+ * Return: < 0 on error, device id of the current DTE if it
+ * is the last one, device id of the next DTE otherwise
  */
 static int vgic_its_restore_dte(struct vgic_its *its, u32 id,
 				void *ptr, void *opaque)
@@ -2303,7 +2313,7 @@ static int vgic_its_restore_dte(struct vgic_its *its, u32 id,
 			>> KVM_ITS_DTE_ITTADDR_SHIFT) << 8;
 
 	if (!valid)
-		return 1;
+		return id + 1;
 
 	/* dte entry is valid */
 	offset = (entry & KVM_ITS_DTE_NEXT_MASK) >> KVM_ITS_DTE_NEXT_SHIFT;
@@ -2321,7 +2331,7 @@ static int vgic_its_restore_dte(struct vgic_its *its, u32 id,
 		return ret;
 	}
 
-	return offset;
+	return id + offset;
 }
 
 static int vgic_its_device_cmp(void *priv, const struct list_head *a,
@@ -2409,33 +2419,33 @@ static int vgic_its_save_device_tables(struct vgic_its *its)
  * handle_l1_dte - callback used for L1 device table entries (2 stage case)
  *
  * @its: its handle
- * @id: index of the entry in the L1 table
+ * @id: the start device id to scan in the L2 table
  * @addr: kernel VA
  * @opaque: unused
  *
- * L1 table entries are scanned by steps of 1 entry
  * Return < 0 if error, 0 if last dte was found when scanning the L2
- * table, +1 otherwise (meaning next L1 entry must be scanned)
+ * table, device id of the next valid DTE otherwise
  */
 static int handle_l1_dte(struct vgic_its *its, u32 id, void *addr,
 			 void *opaque)
 {
 	const struct vgic_its_abi *abi = vgic_its_get_abi(its);
-	int l2_start_id = id * (SZ_64K / abi->dte_esz);
 	u64 entry = *(u64 *)addr;
 	int dte_esz = abi->dte_esz;
+	int dte_per_table = SZ_64K / dte_esz;
+	gpa_t gpa_offset = (id % dte_per_table) * dte_esz;
 	gpa_t gpa;
 	int ret;
 
 	entry = le64_to_cpu(entry);
 
 	if (!(entry & KVM_ITS_L1E_VALID_MASK))
-		return 1;
+		return (id + 1) * dte_per_table;
 
-	gpa = entry & KVM_ITS_L1E_ADDR_MASK;
+	gpa = (entry & KVM_ITS_L1E_ADDR_MASK) + gpa_offset;
 
-	ret = scan_its_table(its, gpa, SZ_64K, dte_esz,
-			     l2_start_id, vgic_its_restore_dte, NULL);
+	ret = scan_its_table(its, gpa, SZ_64K - gpa_offset , dte_esz,
+			     id, vgic_its_restore_dte, NULL, false);
 
 	return ret;
 }
@@ -2460,11 +2470,11 @@ static int vgic_its_restore_device_tables(struct vgic_its *its)
 	if (baser & GITS_BASER_INDIRECT) {
 		l1_esz = GITS_LVL1_ENTRY_SIZE;
 		ret = scan_its_table(its, l1_gpa, l1_tbl_size, l1_esz, 0,
-				     handle_l1_dte, NULL);
+				     handle_l1_dte, NULL, true);
 	} else {
 		l1_esz = abi->dte_esz;
 		ret = scan_its_table(its, l1_gpa, l1_tbl_size, l1_esz, 0,
-				     vgic_its_restore_dte, NULL);
+				     vgic_its_restore_dte, NULL, false);
 	}
 
 	/* scan_its_table returns +1 if all entries are invalid */
