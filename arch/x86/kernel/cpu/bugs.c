@@ -72,6 +72,7 @@ static void __init rfds_select_mitigation(void);
 static void __init rfds_update_mitigation(void);
 static void __init rfds_apply_mitigation(void);
 static void __init srbds_select_mitigation(void);
+static void __init srbds_apply_mitigation(void);
 static void __init l1d_flush_select_mitigation(void);
 static void __init srso_select_mitigation(void);
 static void __init gds_select_mitigation(void);
@@ -218,6 +219,7 @@ void __init cpu_select_mitigations(void)
 	taa_apply_mitigation();
 	mmio_apply_mitigation();
 	rfds_apply_mitigation();
+	srbds_apply_mitigation();
 }
 
 /*
@@ -663,6 +665,7 @@ early_param("reg_file_data_sampling", rfds_parse_cmdline);
 
 enum srbds_mitigations {
 	SRBDS_MITIGATION_OFF,
+	SRBDS_MITIGATION_AUTO,
 	SRBDS_MITIGATION_UCODE_NEEDED,
 	SRBDS_MITIGATION_FULL,
 	SRBDS_MITIGATION_TSX_OFF,
@@ -670,7 +673,7 @@ enum srbds_mitigations {
 };
 
 static enum srbds_mitigations srbds_mitigation __ro_after_init =
-	IS_ENABLED(CONFIG_MITIGATION_SRBDS) ? SRBDS_MITIGATION_FULL : SRBDS_MITIGATION_OFF;
+	IS_ENABLED(CONFIG_MITIGATION_SRBDS) ? SRBDS_MITIGATION_AUTO : SRBDS_MITIGATION_OFF;
 
 static const char * const srbds_strings[] = {
 	[SRBDS_MITIGATION_OFF]		= "Vulnerable",
@@ -724,6 +727,9 @@ static void __init srbds_select_mitigation(void)
 	if (!boot_cpu_has_bug(X86_BUG_SRBDS))
 		return;
 
+	if (srbds_mitigation == SRBDS_MITIGATION_AUTO)
+		srbds_mitigation = SRBDS_MITIGATION_FULL;
+
 	/*
 	 * Check to see if this is one of the MDS_NO systems supporting TSX that
 	 * are only exposed to SRBDS when TSX is enabled or when CPU is affected
@@ -738,6 +744,12 @@ static void __init srbds_select_mitigation(void)
 		srbds_mitigation = SRBDS_MITIGATION_UCODE_NEEDED;
 	else if (cpu_mitigations_off() || srbds_off)
 		srbds_mitigation = SRBDS_MITIGATION_OFF;
+}
+
+static void __init srbds_apply_mitigation(void)
+{
+	if (!boot_cpu_has_bug(X86_BUG_SRBDS))
+		return;
 
 	update_srbds_msr();
 	pr_info("%s\n", srbds_strings[srbds_mitigation]);
