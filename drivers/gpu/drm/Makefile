@@ -155,6 +155,7 @@ obj-$(CONFIG_DRM_KMS_HELPER) += drm_kms_helper.o
 
 drm_client_lib-y := drm_client_setup.o
 drm_client_lib-$(CONFIG_DRM_FBDEV_EMULATION) += drm_fbdev_client.o
+drm_client_lib-$(CONFIG_DRM_LOG) += drm_log.o
 obj-$(CONFIG_DRM_CLIENT_LIB) += drm_client_lib.o
 
 #
