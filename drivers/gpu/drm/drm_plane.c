@@ -141,6 +141,12 @@
  *     various bugs in this area with inconsistencies between the capability
  *     flag and per-plane properties.
  *
+ * IN_FORMATS_ASYNC:
+ *     Blob property which contains the set of buffer format and modifier
+ *     pairs supported by this plane for asynchronous flips. The blob is a struct
+ *     drm_format_modifier_blob. Without this property the plane doesn't
+ *     support buffers with modifiers. Userspace cannot change this property.
+ *
  * SIZE_HINTS:
  *     Blob property which contains the set of recommended plane size
  *     which can used for simple "cursor like" use cases (eg. no scaling).
@@ -244,6 +250,70 @@ static int create_in_format_blob(struct drm_device *dev, struct drm_plane *plane
 	}
 
 	drm_object_attach_property(&plane->base, config->modifiers_property,
+				   blob->base.id);
+
+	return 0;
+}
+
+static int create_in_format_async_blob(struct drm_device *dev, struct drm_plane *plane)
+{
+	const struct drm_mode_config *config = &dev->mode_config;
+	struct drm_property_blob *blob;
+	struct drm_format_modifier *async_mod;
+	size_t blob_size, async_formats_size, async_modifiers_size;
+	struct drm_format_modifier_blob *blob_data;
+	unsigned int i, j;
+
+	async_formats_size = sizeof(__u32) * plane->async_format_count;
+	if (WARN_ON(!async_formats_size)) {
+		/* 0 formats are never expected */
+		return 0;
+	}
+
+	async_modifiers_size =
+		sizeof(struct drm_format_modifier) * plane->async_modifier_count;
+
+	blob_size = sizeof(struct drm_format_modifier_blob);
+	/* Modifiers offset is a pointer to a struct with a 64 bit field so it
+	 * should be naturally aligned to 8B.
+	 */
+	BUILD_BUG_ON(sizeof(struct drm_format_modifier_blob) % 8);
+	blob_size += ALIGN(async_formats_size, 8);
+	blob_size += async_modifiers_size;
+
+	blob = drm_property_create_blob(dev, blob_size, NULL);
+	if (IS_ERR(blob))
+		return -1;
+
+	blob_data = blob->data;
+	blob_data->version = FORMAT_BLOB_CURRENT;
+	blob_data->count_formats = plane->async_format_count;
+	blob_data->formats_offset = sizeof(struct drm_format_modifier_blob);
+	blob_data->count_modifiers = plane->async_modifier_count;
+
+	blob_data->modifiers_offset =
+		ALIGN(blob_data->formats_offset + async_formats_size, 8);
+
+	memcpy(formats_ptr(blob_data), plane->async_format_types, async_formats_size);
+
+	async_mod = modifiers_ptr(blob_data);
+	for (i = 0; i < plane->async_modifier_count; i++) {
+		for (j = 0; j < plane->async_format_count; j++) {
+			if (!plane->funcs->format_mod_supported ||
+			    plane->funcs->format_mod_supported(plane,
+							       plane->async_format_types[j],
+							       plane->async_modifiers[i])) {
+				async_mod->formats |= 1ULL << j;
+			}
+		}
+
+		async_mod->modifier = plane->async_modifiers[i];
+		async_mod->offset = 0;
+		async_mod->pad = 0;
+		async_mod++;
+	}
+
+	drm_object_attach_property(&plane->base, config->async_modifiers_property,
 				   blob->base.id);
 
 	return 0;
@@ -471,6 +541,9 @@ static int __drm_universal_plane_init(struct drm_device *dev,
 
 	if (format_modifier_count)
 		create_in_format_blob(dev, plane);
+
+	if (plane->async_modifier_count)
+		create_in_format_async_blob(dev, plane);
 
 	return 0;
 }

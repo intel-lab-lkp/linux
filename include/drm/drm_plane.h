@@ -658,10 +658,20 @@ struct drm_plane {
 	 */
 	bool format_default;
 
+	/** @format_types: array of formats supported by this plane */
+	uint32_t *async_format_types;
+	/** @format_count: Size of the array pointed at by @format_types. */
+	unsigned int async_format_count;
+
 	/** @modifiers: array of modifiers supported by this plane */
 	uint64_t *modifiers;
 	/** @modifier_count: Size of the array pointed at by @modifier_count. */
 	unsigned int modifier_count;
+
+	/** @modifiers: array of modifiers supported by this plane */
+	uint64_t *async_modifiers;
+	/** @modifier_count: Size of the array pointed at by @modifier_count. */
+	unsigned int async_modifier_count;
 
 	/**
 	 * @crtc:
