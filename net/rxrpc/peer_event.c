@@ -33,7 +33,6 @@ static struct rxrpc_peer *rxrpc_lookup_peer_local_rcu(struct rxrpc_local *local,
 
 	_enter("");
 
-	memset(srx, 0, sizeof(*srx));
 	srx->transport_type = local->srx.transport_type;
 	srx->transport_len = local->srx.transport_len;
 	srx->transport.family = local->srx.transport.family;
@@ -134,7 +133,7 @@ static void rxrpc_adjust_mtu(struct rxrpc_peer *peer, unsigned int mtu)
 void rxrpc_input_error(struct rxrpc_local *local, struct sk_buff *skb)
 {
 	struct sock_exterr_skb *serr = SKB_EXT_ERR(skb);
-	struct sockaddr_rxrpc srx;
+	struct sockaddr_rxrpc srx = {};
 	struct rxrpc_peer *peer = NULL;
 
 	_enter("L=%x", local->debug_id);
