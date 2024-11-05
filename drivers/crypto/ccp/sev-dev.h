@@ -59,7 +59,13 @@ struct sev_device {
 	bool snp_initialized;
 
 #ifdef CONFIG_FW_UPLOAD
+	/* Lock to protect fw_cancel */
+	struct mutex fw_lock;
+	struct fw_upload *fwl;
+	bool fw_cancel;
+
 	u32 last_snp_asid;
+	bool synthetic_restore_required;
 	u64 *snp_asid_to_gctx_pages_map;
 	u64 *snp_unbound_gctx_pages;
 	u32 snp_unbound_gctx_end;
@@ -72,12 +78,22 @@ void sev_dev_destroy(struct psp_device *psp);
 void sev_pci_init(void);
 void sev_pci_exit(void);
 
+void *sev_fw_alloc(unsigned long len);
+int sev_get_api_version(void);
+int sev_snp_download_firmware_ex(struct sev_device *sev, const u8 *data, u32 size, int *error);
+
 #ifdef CONFIG_FW_UPLOAD
 void snp_cmd_bookkeeping_locked(int cmd, struct sev_device *sev, void *data);
 int sev_snp_platform_init_firmware_upload(struct sev_device *sev);
+void sev_snp_dev_init_firmware_upload(struct sev_device *sev);
+void sev_snp_destroy_firmware_upload(struct sev_device *sev);
+int sev_snp_synthetic_error(struct sev_device *sev, int *psp_ret);
 #else
 static inline void snp_cmd_bookkeeping_locked(int cmd, struct sev_device *sev, void *data) { }
 static inline int sev_snp_platform_init_firmware_upload(struct sev_device *sev) { return 0; }
+static inline void sev_snp_dev_init_firmware_upload(struct sev_device *sev) { }
+static inline void sev_snp_destroy_firmware_upload(struct sev_device *sev) { }
+static inline int sev_snp_synthetic_error(struct sev_device *sev, int *psp_ret) { return 0; }
 #endif /* CONFIG_FW_UPLOAD */
 
 #endif /* __SEV_DEV_H */
