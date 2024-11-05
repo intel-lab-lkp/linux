@@ -764,7 +764,8 @@ void amdgpu_detect_virtualization(struct amdgpu_device *adev)
 
 	if (!reg) {
 		/* passthrough mode exclus sriov mod */
-		if (is_virtual_machine() && !xen_initial_domain())
+		if (is_virtual_machine() &&
+		    !(xen_initial_domain() && xen_pv_domain()))
 			adev->virt.caps |= AMDGPU_PASSTHROUGH_MODE;
 	}
 
