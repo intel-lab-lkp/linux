@@ -23,6 +23,8 @@ static void init_codecs(struct venus_core *core)
 		return;
 
 	for_each_set_bit(bit, &core->dec_codecs, MAX_CODEC_NUM) {
+		if (core->codecs_count >= MAX_CODEC_NUM)
+			return;
 		cap = &caps[core->codecs_count++];
 		cap->codec = BIT(bit);
 		cap->domain = VIDC_SESSION_TYPE_DEC;
@@ -30,6 +32,8 @@ static void init_codecs(struct venus_core *core)
 	}
 
 	for_each_set_bit(bit, &core->enc_codecs, MAX_CODEC_NUM) {
+		if (core->codecs_count >= MAX_CODEC_NUM)
+			return;
 		cap = &caps[core->codecs_count++];
 		cap->codec = BIT(bit);
 		cap->domain = VIDC_SESSION_TYPE_ENC;
