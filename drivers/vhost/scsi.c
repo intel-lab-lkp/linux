@@ -2086,6 +2086,11 @@ vhost_scsi_ioctl(struct file *f,
 			return -EFAULT;
 		return vhost_scsi_set_features(vs, features);
 	case VHOST_NEW_WORKER:
+		/*vhost-scsi VHOST_NEW_WORKER requires inherit_owner to be true*/
+		if (vs->dev.inherit_owner != true)
+			return -EFAULT;
+
+		fallthrough;
 	case VHOST_FREE_WORKER:
 	case VHOST_ATTACH_VRING_WORKER:
 	case VHOST_GET_VRING_WORKER:
