@@ -621,6 +621,11 @@ bool __weak arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr)
 	return false;
 }
 
+void * __weak arch_uprobe_trampoline(unsigned long *psize)
+{
+	return NULL;
+}
+
 static unsigned long find_nearest_page(unsigned long vaddr)
 {
 	struct mm_struct *mm = current->mm;
@@ -673,7 +678,13 @@ static struct tramp_area *create_tramp_area(unsigned long vaddr)
 {
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
+	unsigned long tramp_size;
 	struct tramp_area *area;
+	void *tramp;
+
+	tramp = arch_uprobe_trampoline(&tramp_size);
+	if (!tramp)
+		return NULL;
 
 	vaddr = find_nearest_page(vaddr);
 	if (!vaddr)
@@ -689,6 +700,8 @@ static struct tramp_area *create_tramp_area(unsigned long vaddr)
 
 	refcount_set(&area->ref, 1);
 	area->vaddr = vaddr;
+
+	arch_uprobe_copy_ixol(area->page, 0, tramp, tramp_size);
 
 	vma = _install_special_mapping(mm, area->vaddr, PAGE_SIZE,
 				VM_READ|VM_EXEC|VM_MAYEXEC|VM_MAYREAD|VM_DONTCOPY|VM_IO,
@@ -2754,6 +2767,28 @@ static void handle_swbp(struct pt_regs *regs)
 
 out:
 	/* arch_uprobe_skip_sstep() succeeded, or restart if can't singlestep */
+	rcu_read_unlock_trace();
+}
+
+void handle_syscall_uprobe(struct pt_regs *regs, unsigned long bp_vaddr)
+{
+	struct uprobe *uprobe;
+	int is_swbp;
+
+	rcu_read_lock_trace();
+	uprobe = find_active_uprobe_rcu(bp_vaddr, &is_swbp);
+	if (!uprobe)
+		goto unlock;
+
+	if (!get_utask())
+		goto unlock;
+
+	if (arch_uprobe_ignore(&uprobe->arch, regs))
+		goto unlock;
+
+	handler_chain(uprobe, regs);
+
+unlock:
 	rcu_read_unlock_trace();
 }
 

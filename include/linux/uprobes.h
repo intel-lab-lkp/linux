@@ -231,6 +231,8 @@ extern bool arch_uprobe_is_register(uprobe_opcode_t *insn, int len, void *data);
 struct tramp_area *get_tramp_area(unsigned long vaddr);
 void put_tramp_area(struct tramp_area *area);
 bool arch_uprobe_is_callable(unsigned long vtramp, unsigned long vaddr);
+extern void *arch_uprobe_trampoline(unsigned long *psize);
+extern void handle_syscall_uprobe(struct pt_regs *regs, unsigned long bp_vaddr);
 #else /* !CONFIG_UPROBES */
 struct uprobes_state {
 };
