@@ -27,7 +27,9 @@
 #define KVM_DEV_PATH "/dev/kvm"
 #define KVM_MAX_VCPUS 512
 
-#define NSEC_PER_SEC 1000000000L
+#define NSEC_PER_USEC	1000L
+#define USEC_PER_SEC	1000000L
+#define NSEC_PER_SEC	1000000000L
 
 struct userspace_mem_region {
 	struct kvm_userspace_memory_region2 region;
