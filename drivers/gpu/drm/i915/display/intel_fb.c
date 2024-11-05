@@ -541,12 +541,16 @@ static bool check_modifier_display_ver_range(const struct intel_modifier_desc *m
 
 static bool plane_has_modifier(struct drm_i915_private *i915,
 			       u8 plane_caps,
-			       const struct intel_modifier_desc *md)
+			       const struct intel_modifier_desc *md,
+			       bool is_async_flip)
 {
 	if (!IS_DISPLAY_VER(i915, md->display_ver.from, md->display_ver.until))
 		return false;
 
 	if (!plane_caps_contain_all(plane_caps, md->plane_caps))
+		return false;
+
+	if (!(is_async_flip && md->async_flip))
 		return false;
 
 	/*
@@ -569,25 +573,47 @@ static bool plane_has_modifier(struct drm_i915_private *i915,
 }
 
 /**
+ * intel_fb_plane_get_modifiers_count - return the number of supported modifiers for a
+ *					given platform and plane capabilities
+ * @i915: i915 device instance
+ * @plane_caps: capabilities for the plane the modifiers are queried for
+ * @async_flip: flag to convey modifiers that support async flip
+ *
+ * Returns:
+ * Returns the number for modifiers supported by the @i915 platform and @plane_caps
+ * with/without @async_flip.
+ */
+int intel_fb_plane_get_modifiers_count(struct drm_i915_private *i915,
+				       u8 plane_caps, bool async_flip)
+{
+	int count = 1;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(intel_modifiers); i++) {
+		if (plane_has_modifier(i915, plane_caps, &intel_modifiers[i], async_flip))
+			count++;
+	}
+	return count;
+}
+
+/**
  * intel_fb_plane_get_modifiers: Get the modifiers for the given platform and plane capabilities
  * @i915: i915 device instance
  * @plane_caps: capabilities for the plane the modifiers are queried for
+ * @async_flip: flag to convey modifiers that support async flip
  *
  * Returns:
  * Returns the list of modifiers allowed by the @i915 platform and @plane_caps.
  * The caller must free the returned buffer.
  */
 u64 *intel_fb_plane_get_modifiers(struct drm_i915_private *i915,
-				  u8 plane_caps)
+				  u8 plane_caps, bool async_flip)
 {
 	u64 *list, *p;
 	int count = 1;		/* +1 for invalid modifier terminator */
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(intel_modifiers); i++) {
-		if (plane_has_modifier(i915, plane_caps, &intel_modifiers[i]))
-			count++;
-	}
+	count = intel_fb_plane_get_modifiers_count(i915, plane_caps, async_flip);
 
 	list = kmalloc_array(count, sizeof(*list), GFP_KERNEL);
 	if (drm_WARN_ON(&i915->drm, !list))
@@ -595,7 +621,7 @@ u64 *intel_fb_plane_get_modifiers(struct drm_i915_private *i915,
 
 	p = list;
 	for (i = 0; i < ARRAY_SIZE(intel_modifiers); i++) {
-		if (plane_has_modifier(i915, plane_caps, &intel_modifiers[i]))
+		if (plane_has_modifier(i915, plane_caps, &intel_modifiers[i], async_flip))
 			*p++ = intel_modifiers[i].modifier;
 	}
 	*p++ = DRM_FORMAT_MOD_INVALID;

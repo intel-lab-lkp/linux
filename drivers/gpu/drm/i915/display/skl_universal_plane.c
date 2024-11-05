@@ -2662,7 +2662,8 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 		plane_type = DRM_PLANE_TYPE_OVERLAY;
 
 	modifiers = intel_fb_plane_get_modifiers(dev_priv,
-						 skl_get_plane_caps(dev_priv, pipe, plane_id));
+						 skl_get_plane_caps(dev_priv, pipe, plane_id),
+						 false);
 
 	ret = drm_universal_plane_init(&dev_priv->drm, &plane->base,
 				       0, plane_funcs,

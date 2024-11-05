@@ -40,8 +40,10 @@ bool intel_fb_needs_64k_phys(u64 modifier);
 bool intel_fb_is_ccs_aux_plane(const struct drm_framebuffer *fb, int color_plane);
 int intel_fb_rc_ccs_cc_plane(const struct drm_framebuffer *fb);
 
+int intel_fb_plane_get_modifiers_count(struct drm_i915_private *i915,
+				       u8 plane_caps, bool async_flip);
 u64 *intel_fb_plane_get_modifiers(struct drm_i915_private *i915,
-				  u8 plane_caps);
+				  u8 plane_caps, bool async_flip);
 bool intel_fb_plane_supports_modifier(struct intel_plane *plane, u64 modifier);
 
 const struct drm_format_info *
