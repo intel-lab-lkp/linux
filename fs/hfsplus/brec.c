@@ -51,6 +51,13 @@ u16 hfs_brec_keylen(struct hfs_bnode *node, u16 rec)
 		}
 
 		retval = hfs_bnode_read_u16(node, recoff) + 2;
+		if (node->tree->cnid == HFSPLUS_CAT_CNID &&
+		    retval < offsetof(struct hfsplus_cat_key, parent) +
+			     sizeof(hfsplus_cnid)) {
+			pr_err("keylen %d too small\n",
+				retval);
+			return 0;
+		}
 		if (retval > node->tree->max_key_len + 2) {
 			pr_err("keylen %d too large\n",
 				retval);
