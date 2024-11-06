@@ -513,6 +513,7 @@ static void bch_cache_read_endio(struct bio *bio)
 		s->iop.status = bio->bi_status;
 	else if (!KEY_DIRTY(&b->key) &&
 		 ptr_stale(s->iop.c, &b->key, 0)) {
+		BUG_ON(s->recoverable && s->read_dirty_data);
 		atomic_long_inc(&s->iop.c->cache_read_races);
 		s->iop.status = BLK_STS_IOERR;
 	}
@@ -558,8 +559,9 @@ static int cache_lookup_fn(struct btree_op *op, struct btree *b, struct bkey *k)
 
 	PTR_BUCKET(b->c, k, ptr)->prio = INITIAL_PRIO;
 
-	if (KEY_DIRTY(k))
-		s->read_dirty_data = true;
+	s->read_dirty_data = KEY_DIRTY(k) ? true : false;
+	/* Cache read errors are recoverable */
+	s->recoverable = true;
 
 	n = bio_next_split(bio, min_t(uint64_t, INT_MAX,
 				      KEY_OFFSET(k) - bio->bi_iter.bi_sector),
@@ -573,6 +575,7 @@ static int cache_lookup_fn(struct btree_op *op, struct btree *b, struct bkey *k)
 
 	n->bi_end_io	= bch_cache_read_endio;
 	n->bi_private	= &s->cl;
+
 
 	/*
 	 * The bucket we're reading from might be reused while our bio
