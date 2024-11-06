@@ -448,6 +448,12 @@ REGULATOR
   devm_regulator_register_supply_alias()
   devm_regulator_unregister_notifier()
 
+REMOTEPROC
+  devm_rproc_add()
+  devm_rproc_free()
+  devm_rproc_alloc()
+  devm_rproc_remove()
+
 RESET
   devm_reset_control_get()
   devm_reset_controller_register()
