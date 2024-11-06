@@ -661,12 +661,7 @@ static void v9fs_destroy_inode_cache(void)
 
 static int v9fs_cache_register(void)
 {
-	int ret;
-
-	ret = v9fs_init_inode_cache();
-	if (ret < 0)
-		return ret;
-	return ret;
+	return v9fs_init_inode_cache();
 }
 
 static void v9fs_cache_unregister(void)
