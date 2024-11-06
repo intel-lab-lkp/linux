@@ -1252,6 +1252,56 @@ int aer_get_device_error_info(struct pci_dev *dev, struct aer_err_info *info)
 	return 1;
 }
 
+/**
+ * aer_get_device_fatal_error_info - read fatal error status from EP or RCiEP
+ * and store it to info
+ * @dev: pointer to the device expected to have a error record
+ * @info: pointer to structure to store the error record
+ *
+ * Return 1 on success, 0 on error.
+ *
+ * Note that @info is reused among all error devices. Clear fields properly.
+ */
+int aer_get_device_fatal_error_info(struct pci_dev *dev, struct aer_err_info *info)
+{
+	int type = pci_pcie_type(dev);
+	int aer = dev->aer_cap;
+	u32 aercc;
+
+	pci_info(dev, "type :%d\n", type);
+
+	/* Must reset in this function */
+	info->status = 0;
+	info->tlp_header_valid = 0;
+	info->severity = AER_FATAL;
+
+	/* The device might not support AER */
+	if (!aer)
+		return 0;
+
+
+	if (type == PCI_EXP_TYPE_ENDPOINT || type == PCI_EXP_TYPE_RC_END) {
+		/* Link is healthy for IO reads now */
+		pci_read_config_dword(dev, aer + PCI_ERR_UNCOR_STATUS,
+			&info->status);
+		pci_read_config_dword(dev, aer + PCI_ERR_UNCOR_MASK,
+			&info->mask);
+		if (!(info->status & ~info->mask))
+			return 0;
+
+		/* Get First Error Pointer */
+		pci_read_config_dword(dev, aer + PCI_ERR_CAP, &aercc);
+		info->first_error = PCI_ERR_CAP_FEP(aercc);
+
+		if (info->status & AER_LOG_TLP_MASKS) {
+			info->tlp_header_valid = 1;
+			pcie_read_tlp_log(dev, aer + PCI_ERR_HEADER_LOG, &info->tlp);
+		}
+	}
+
+	return 1;
+}
+
 static inline void aer_process_err_devices(struct aer_err_info *e_info)
 {
 	int i;
