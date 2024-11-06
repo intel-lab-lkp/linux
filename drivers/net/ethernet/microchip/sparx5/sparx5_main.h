@@ -134,6 +134,9 @@ enum sparx5_feature {
 
 #define SPARX5_MAX_PTP_ID	512
 
+#define SPX5_ETYPE_TAG_C     0x8100
+#define SPX5_ETYPE_TAG_S     0x88a8
+
 struct sparx5;
 
 struct sparx5_calendar_data {
