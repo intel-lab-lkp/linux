@@ -40,8 +40,16 @@ enum io_uring_cmd_flags {
 	IO_URING_F_COMPAT		= (1 << 12),
 };
 
+struct io_mapped_buf;
+typedef void (io_uring_kbuf_ack_t) (const struct io_mapped_buf *);
+
 struct io_mapped_buf {
-	u64		start;
+	/* start is always 0 for kernel buffer */
+	union {
+		u64			start;
+		/* called for returning back the kernel buffer */
+		io_uring_kbuf_ack_t	*kbuf_ack;
+	};
 	unsigned int	len;
 	unsigned int	nr_bvecs;
 
@@ -504,6 +512,7 @@ enum {
 	REQ_F_BUFFERS_COMMIT_BIT,
 	REQ_F_GROUP_LEADER_BIT,
 	REQ_F_BUF_NODE_BIT,
+	REQ_F_GROUP_BUF_BIT,
 
 	/* not a real bit, just to check we're not overflowing the space */
 	__REQ_F_LAST_BIT,
@@ -588,6 +597,16 @@ enum {
 	REQ_F_GROUP_LEADER	= IO_REQ_FLAG(REQ_F_GROUP_LEADER_BIT),
 	/* buf node is valid */
 	REQ_F_BUF_NODE		= IO_REQ_FLAG(REQ_F_BUF_NODE_BIT),
+	/*
+	 * Use group leader's buffer
+	 *
+	 * For group member, this flag is mapped from IOSQE_IO_DRAIN which
+	 * isn't used for group member
+	 *
+	 * Group buffer has to be imported in ->issue() since it depends on
+	 * group leader.
+	 */
+	REQ_F_GROUP_BUF	= IO_REQ_FLAG(REQ_F_GROUP_BUF_BIT),
 };
 
 typedef void (*io_req_tw_func_t)(struct io_kiocb *req, struct io_tw_state *ts);
@@ -670,6 +689,14 @@ struct io_kiocb {
 		struct io_buffer_list	*buf_list;
 
 		struct io_rsrc_node	*buf_node;
+
+		/* valid IFF REQ_F_GROUP_BUF is set */
+		union {
+			/* store group buffer for group leader */
+			const struct io_mapped_buf *grp_buf;
+			/* for group member */
+			bool	grp_buf_imported;
+		};
 	};
 
 	union {

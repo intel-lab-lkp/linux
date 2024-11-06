@@ -847,9 +847,9 @@ int io_pbuf_mmap(struct file *file, struct vm_area_struct *vma)
  * Also kernel buffer lifetime is bound with request, and we needn't
  * to use rsrc_node to track its lifetime
  */
-int io_import_kbuf(int ddir, struct iov_iter *iter,
-		    const struct io_mapped_buf *kbuf,
-		    u64 buf_off, size_t len)
+static int io_import_kbuf(int ddir, struct iov_iter *iter,
+			  const struct io_mapped_buf *kbuf,
+			  u64 buf_off, size_t len)
 {
 	unsigned long offset = kbuf->offset;
 
@@ -870,5 +870,54 @@ int io_import_kbuf(int ddir, struct iov_iter *iter,
 	if (offset)
 		iov_iter_advance(iter, offset);
 
+	return 0;
+}
+
+int io_import_group_buf(struct io_kiocb *req, int dir, struct iov_iter *iter,
+			unsigned long buf_off, unsigned int len)
+{
+	struct io_kiocb *lead = req->grp_leader;
+	int ret;
+
+	if (!req_is_group_member(req))
+		return -EINVAL;
+
+	if (!lead || !(lead->flags & REQ_F_GROUP_BUF))
+		return -EINVAL;
+
+	/* buffer node may be assigned just before importing */
+	if (req->flags & REQ_F_BUF_NODE)
+		return -EINVAL;
+
+	if (io_req_group_buf_imported(req))
+		return 0;
+
+	ret = io_import_kbuf(dir, iter, lead->grp_buf, buf_off, len);
+	if (!ret)
+		io_req_mark_group_buf(req, true);
+	return ret;
+}
+
+int io_lease_group_kbuf(struct io_kiocb *req,
+			const struct io_mapped_buf *grp_buf)
+{
+	if (!(req->flags & REQ_F_GROUP_LEADER))
+		return -EINVAL;
+
+	if (req->flags & (REQ_F_BUFFER_SELECT | REQ_F_BUF_NODE))
+		return -EINVAL;
+
+	if (!grp_buf->kbuf_ack || !grp_buf->pbvec || !grp_buf->kbuf)
+		return -EINVAL;
+
+	/*
+	 * Allow io_uring OPs to borrow this leased kbuf, which is returned
+	 * back by calling `kbuf_ack` when the group leader is freed.
+	 *
+	 * Not like pipe/splice, this kernel buffer is always owned by the
+	 * provider, and has to be returned back.
+	 */
+	req->grp_buf = grp_buf;
+	req->flags |= REQ_F_GROUP_BUF;
 	return 0;
 }

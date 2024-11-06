@@ -364,6 +364,11 @@ static inline bool req_is_group_leader(struct io_kiocb *req)
 	return req->flags & REQ_F_GROUP_LEADER;
 }
 
+static inline bool req_is_group_member(struct io_kiocb *req)
+{
+	return (req->flags & REQ_F_GROUP) && !req_is_group_leader(req);
+}
+
 /*
  * Don't complete immediately but use deferred completion infrastructure.
  * Protected by ->uring_lock and can only be used either with

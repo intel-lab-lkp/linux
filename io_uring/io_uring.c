@@ -114,7 +114,7 @@
 
 #define IO_REQ_CLEAN_FLAGS (REQ_F_BUFFER_SELECTED | REQ_F_NEED_CLEANUP | \
 				REQ_F_POLLED | REQ_F_INFLIGHT | REQ_F_CREDS | \
-				REQ_F_ASYNC_DATA)
+				REQ_F_ASYNC_DATA | REQ_F_GROUP_BUF)
 
 #define IO_REQ_CLEAN_SLOW_FLAGS (REQ_F_REFCOUNT | REQ_F_LINK | REQ_F_HARDLINK |\
 				 REQ_F_GROUP | IO_REQ_CLEAN_FLAGS)
@@ -390,6 +390,8 @@ static bool req_need_defer(struct io_kiocb *req, u32 seq)
 
 static void io_clean_op(struct io_kiocb *req)
 {
+	if (req->flags & REQ_F_GROUP_BUF)
+		io_drop_group_buf(req);
 	if (req->flags & REQ_F_BUFFER_SELECTED) {
 		spin_lock(&req->ctx->completion_lock);
 		io_kbuf_drop(req);
@@ -924,14 +926,20 @@ static void io_queue_group_members(struct io_kiocb *req)
 	req->grp_link = NULL;
 	while (member) {
 		struct io_kiocb *next = member->grp_link;
+		bool grp_buf = member->flags & REQ_F_GROUP_BUF;
 
 		member->grp_leader = req;
 		if (unlikely(member->flags & REQ_F_FAIL))
 			io_req_task_queue_fail(member, member->cqe.res);
+		else if (unlikely(grp_buf && member->flags & REQ_F_BUF_NODE))
+			io_req_task_queue_fail(member, -EINVAL);
 		else if (unlikely(req->flags & REQ_F_FAIL))
 			io_req_task_queue_fail(member, -ECANCELED);
-		else
+		else {
+			if (grp_buf)
+				io_req_mark_group_buf(member, false);
 			io_req_task_queue(member);
+		}
 		member = next;
 	}
 }
@@ -996,6 +1004,11 @@ static enum group_mem io_prep_free_group_req(struct io_kiocb *req,
 			io_queue_group_members(req);
 		return GROUP_LEADER;
 	}
+
+	/* we are done with leased group buffer */
+	if (req->flags & REQ_F_GROUP_BUF)
+		req->flags &= ~REQ_F_GROUP_BUF;
+
 	if (!req_is_last_group_member(req))
 		return GROUP_OTHER_MEMBER;
 
@@ -2195,9 +2208,18 @@ static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
 		if (sqe_flags & IOSQE_CQE_SKIP_SUCCESS)
 			ctx->drain_disabled = true;
 		if (sqe_flags & IOSQE_IO_DRAIN) {
-			if (ctx->drain_disabled)
-				return io_init_fail_req(req, -EOPNOTSUPP);
-			io_init_req_drain(req);
+			/* IO_DRAIN is mapped to GROUP_BUF for group members */
+			if (ctx->submit_state.group.head) {
+				/* can't do buffer select */
+				if (sqe_flags & IOSQE_BUFFER_SELECT)
+					return io_init_fail_req(req, -EINVAL);
+				req->flags &= ~REQ_F_IO_DRAIN;
+				req->flags |= REQ_F_GROUP_BUF;
+			} else {
+				if (ctx->drain_disabled)
+					return io_init_fail_req(req, -EOPNOTSUPP);
+				io_init_req_drain(req);
+			}
 		}
 	}
 	if (unlikely(ctx->restricted || ctx->drain_active || ctx->drain_next)) {

@@ -88,9 +88,11 @@ void io_put_bl(struct io_ring_ctx *ctx, struct io_buffer_list *bl);
 struct io_buffer_list *io_pbuf_get_bl(struct io_ring_ctx *ctx,
 				      unsigned long bgid);
 int io_pbuf_mmap(struct file *file, struct vm_area_struct *vma);
-int io_import_kbuf(int ddir, struct iov_iter *iter,
-		    const struct io_mapped_buf *kbuf,
-		    u64 buf_off, size_t len);
+
+int io_import_group_buf(struct io_kiocb *req, int dir, struct iov_iter *iter,
+			unsigned long buf_off, unsigned int len);
+int io_lease_group_kbuf(struct io_kiocb *req,
+			const struct io_mapped_buf *grp_buf);
 
 static inline bool io_kbuf_recycle_ring(struct io_kiocb *req)
 {
@@ -222,5 +224,46 @@ static inline unsigned int io_put_kbufs(struct io_kiocb *req, int len,
 					int nbufs, unsigned issue_flags)
 {
 	return __io_put_kbufs(req, len, nbufs, issue_flags);
+}
+
+static inline bool io_use_group_buf(struct io_kiocb *req)
+{
+	return req->flags & REQ_F_GROUP_BUF;
+}
+
+static inline bool io_use_group_kbuf(struct io_kiocb *req)
+{
+	if (io_use_group_buf(req))
+		return req->grp_leader && req->grp_leader->grp_buf->kbuf;
+	return false;
+}
+
+static inline void io_drop_group_buf(struct io_kiocb *req)
+{
+	const struct io_mapped_buf *gbuf = req->grp_buf;
+
+	if (gbuf && gbuf->kbuf)
+		gbuf->kbuf_ack(gbuf);
+}
+
+/* zero remained bytes of kernel buffer for avoiding to leak data */
+static inline void io_req_zero_remained(struct io_kiocb *req, struct iov_iter *iter)
+{
+	size_t left = iov_iter_count(iter);
+
+	if (iov_iter_rw(iter) == READ && left > 0)
+		iov_iter_zero(left, iter);
+}
+
+/* For group member only */
+static inline void io_req_mark_group_buf(struct io_kiocb *req, bool imported)
+{
+	req->grp_buf_imported = imported;
+}
+
+/* For group member only */
+static inline bool io_req_group_buf_imported(struct io_kiocb *req)
+{
+	return req->grp_buf_imported;
 }
 #endif
