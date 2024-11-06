@@ -452,8 +452,8 @@ as it was propagated to the maintainers and ultimately to Linus, with
 the first SoB entry signalling primary authorship of a single author.
 
 
-When to use Acked-by:, Cc:, and Co-developed-by:
-------------------------------------------------
+When to use Acked-by:, Cc:, Co-developed-by:, and Helped-by
+-----------------------------------------------------------
 
 The Signed-off-by: tag indicates that the signer was involved in the
 development of the patch, or that he/she was in the patch's delivery path.
@@ -494,6 +494,14 @@ procedure applies, i.e. the ordering of Signed-off-by: tags should reflect the
 chronological history of the patch insofar as possible, regardless of whether
 the author is attributed via From: or Co-developed-by:.  Notably, the last
 Signed-off-by: must always be that of the developer submitting the patch.
+
+Helped-by: gives attribution to the persons that helped the patch authors
+in a way that didn't directly produce the patch itself.  For example, someone
+may provide significant assistance to the authors by researching the schematic
+of a device that the patch addresses, or by providing the patch authors with
+some background information required to develop the patch, while contributing
+no actual source code.  As a result of no direct patch authorship, no
+Signed-off-by: tags are needed together with Helped-by: tags.
 
 Note, the From: tag is optional when the From: author is also the person (and
 email) listed in the From: line of the email header.
