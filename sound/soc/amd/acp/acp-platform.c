@@ -137,13 +137,15 @@ EXPORT_SYMBOL_NS_GPL(acp_machine_select, SND_SOC_ACP_COMMON);
 static irqreturn_t i2s_irq_handler(int irq, void *data)
 {
 	struct acp_dev_data *adata = data;
-	struct acp_resource *rsrc = adata->rsrc;
+	struct acp_resource *rsrc;
 	struct acp_stream *stream;
 	u16 i2s_flag = 0;
 	u32 ext_intr_stat, ext_intr_stat1;
 
 	if (!adata)
 		return IRQ_NONE;
+
+	rsrc = adata->rsrc;
 
 	if (adata->rsrc->no_of_ctrls == 2)
 		ext_intr_stat1 = readl(ACP_EXTERNAL_INTR_STAT(adata, (rsrc->irqp_used - 1)));
