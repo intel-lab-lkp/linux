@@ -351,6 +351,17 @@ err_put_vm:
 	return ret;
 }
 
+static struct panthor_heap *panthor_heap_from_id(struct pathor_heap_pool *pool, u32 id)
+{
+	struct panthor_heap *heap;
+
+	xa_lock(&pool->xa);
+	heap = xa_load(&pool->xa, id);
+	xa_unlock(&pool->va);
+
+	return heap;
+}
+
 /**
  * panthor_heap_return_chunk() - Return an unused heap chunk
  * @pool: The pool this heap belongs to.
@@ -375,7 +386,7 @@ int panthor_heap_return_chunk(struct panthor_heap_pool *pool,
 		return -EINVAL;
 
 	down_read(&pool->lock);
-	heap = xa_load(&pool->xa, heap_id);
+	heap = panthor_heap_from_id(pool, heap_id);
 	if (!heap) {
 		ret = -EINVAL;
 		goto out_unlock;
@@ -438,7 +449,7 @@ int panthor_heap_grow(struct panthor_heap_pool *pool,
 		return -EINVAL;
 
 	down_read(&pool->lock);
-	heap = xa_load(&pool->xa, heap_id);
+	heap = panthor_heap_from_id(pool, heap_id);
 	if (!heap) {
 		ret = -EINVAL;
 		goto out_unlock;
