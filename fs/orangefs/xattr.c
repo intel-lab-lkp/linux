@@ -150,7 +150,7 @@ ssize_t orangefs_inode_getxattr(struct inode *inode, const char *name,
 		goto out_unlock;
 
 	new_op->upcall.req.getxattr.refn = orangefs_inode->refn;
-	strcpy(new_op->upcall.req.getxattr.key, name);
+	strscpy(new_op->upcall.req.getxattr.key, name);
 
 	/*
 	 * NOTE: Although keys are meant to be NULL terminated textual
