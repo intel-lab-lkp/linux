@@ -253,4 +253,22 @@ struct ptp_extts_event {
 	unsigned int rsv[2];     /* Reserved for future use. */
 };
 
+/**
+ * enum ptp_ts_point - possible timestamp latch points (IEEE 802.3cx)
+ *
+ * @PTP_TS_POINT_NONE: no timestamp latch point was provided
+ * @PTP_TS_POINT_SFD: timestamp latched at the beginning of sending Start
+ *		      of Frame Delimiter (SFD)
+ * @PTP_TS_POINT_POST_SFD: timestamp latched after the end of sending Start
+ *			   of Frame Delimiter (SFD)
+ */
+enum ptp_ts_point {
+	PTP_TS_POINT_NONE = 0,
+	PTP_TS_POINT_SFD,
+	PTP_TS_POINT_POST_SFD,
+
+	/* private: */
+	PTP_TS_POINT_MAX
+};
+
 #endif
