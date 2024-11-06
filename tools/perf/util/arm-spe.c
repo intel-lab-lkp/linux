@@ -531,6 +531,44 @@ static void arm_spe__synth_data_source_common(const struct arm_spe_record *recor
 	}
 }
 
+/*
+ * Source is IMPDEF. Here we convert the source code used on AmpereOne cores
+ * to the common (Neoverse, Cortex) to avoid duplicating the decoding code.
+ */
+static void arm_spe__synth_data_source_ampereone(const struct arm_spe_record *record,
+						 union perf_mem_data_src *data_src)
+{
+	struct arm_spe_record common_record;
+
+	switch (record->source) {
+	case ARM_SPE_AMPEREONE_LOCAL_CHIP_CACHE_OR_DEVICE:
+		common_record.source = ARM_SPE_COMMON_DS_PEER_CORE;
+		break;
+	case ARM_SPE_AMPEREONE_SLC:
+		common_record.source = ARM_SPE_COMMON_DS_SYS_CACHE;
+		break;
+	case ARM_SPE_AMPEREONE_REMOTE_CHIP_CACHE:
+		common_record.source = ARM_SPE_COMMON_DS_REMOTE;
+		break;
+	case ARM_SPE_AMPEREONE_DDR:
+		common_record.source = ARM_SPE_COMMON_DS_DRAM;
+		break;
+	case ARM_SPE_AMPEREONE_L1D:
+		common_record.source = ARM_SPE_COMMON_DS_L1D;
+		break;
+	case ARM_SPE_AMPEREONE_L2D:
+		common_record.source = ARM_SPE_COMMON_DS_L2;
+		break;
+	default:
+		/* Assign a bogus value that's not used for common coding */
+		common_record.source = 0xffff;
+		break;
+	}
+
+	common_record.op = record->op;
+	arm_spe__synth_data_source_common(&common_record, data_src);
+}
+
 static const struct data_src data_sources[] = {
 	DS(MIDR_ALL_VERSIONS(MIDR_CORTEX_A720), data_source_common),
 	DS(MIDR_ALL_VERSIONS(MIDR_CORTEX_A725), data_source_common),
@@ -541,6 +579,7 @@ static const struct data_src data_sources[] = {
 	DS(MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2), data_source_common),
 	DS(MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1), data_source_common),
 	DS(MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_AMPERE1A), data_source_ampereone),
 	{},
 };
 
