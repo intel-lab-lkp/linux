@@ -1873,10 +1873,12 @@ int security_xfrm_policy_alloc(struct xfrm_sec_ctx **ctxp,
 int security_xfrm_policy_clone(struct xfrm_sec_ctx *old_ctx, struct xfrm_sec_ctx **new_ctxp);
 void security_xfrm_policy_free(struct xfrm_sec_ctx *ctx);
 int security_xfrm_policy_delete(struct xfrm_sec_ctx *ctx);
+void security_xfrm_policy_deleted(struct xfrm_sec_ctx *ctx);
 int security_xfrm_state_alloc(struct xfrm_state *x, struct xfrm_user_sec_ctx *sec_ctx);
 int security_xfrm_state_alloc_acquire(struct xfrm_state *x,
 				      struct xfrm_sec_ctx *polsec, u32 secid);
 int security_xfrm_state_delete(struct xfrm_state *x);
+void security_xfrm_state_deleted(struct xfrm_state *x);
 void security_xfrm_state_free(struct xfrm_state *x);
 int security_xfrm_policy_lookup(struct xfrm_sec_ctx *ctx, u32 fl_secid);
 int security_xfrm_state_pol_flow_match(struct xfrm_state *x,
@@ -1908,6 +1910,10 @@ static inline int security_xfrm_policy_delete(struct xfrm_sec_ctx *ctx)
 	return 0;
 }
 
+static inline void security_xfrm_policy_deleted(struct xfrm_sec_ctx *ctx)
+{
+}
+
 static inline int security_xfrm_state_alloc(struct xfrm_state *x,
 					struct xfrm_user_sec_ctx *sec_ctx)
 {
@@ -1927,6 +1933,10 @@ static inline void security_xfrm_state_free(struct xfrm_state *x)
 static inline int security_xfrm_state_delete(struct xfrm_state *x)
 {
 	return 0;
+}
+
+static inline void security_xfrm_state_deleted(struct xfrm_state *x)
+{
 }
 
 static inline int security_xfrm_policy_lookup(struct xfrm_sec_ctx *ctx, u32 fl_secid)

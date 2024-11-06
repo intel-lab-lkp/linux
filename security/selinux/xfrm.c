@@ -124,7 +124,6 @@ static void selinux_xfrm_free(struct xfrm_sec_ctx *ctx)
 	if (!ctx)
 		return;
 
-	atomic_dec(&selinux_xfrm_refcount);
 	kfree(ctx);
 }
 
@@ -322,6 +321,14 @@ int selinux_xfrm_policy_delete(struct xfrm_sec_ctx *ctx)
 }
 
 /*
+ * LSM hook implementation that handles deletion of labeled SAs.
+ */
+void selinux_xfrm_policy_deleted(struct xfrm_sec_ctx *ctx)
+{
+	atomic_dec(&selinux_xfrm_refcount);
+}
+
+/*
  * LSM hook implementation that allocates a xfrm_sec_state, populates it using
  * the supplied security context, and assigns it to the xfrm_state.
  */
@@ -387,6 +394,14 @@ void selinux_xfrm_state_free(struct xfrm_state *x)
 int selinux_xfrm_state_delete(struct xfrm_state *x)
 {
 	return selinux_xfrm_delete(x->security);
+}
+
+/*
+ * LSM hook implementation that handles deletion of labeled SAs.
+ */
+void selinux_xfrm_state_deleted(struct xfrm_state *x)
+{
+	atomic_dec(&selinux_xfrm_refcount);
 }
 
 /*

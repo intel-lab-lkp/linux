@@ -2313,6 +2313,7 @@ static struct xfrm_policy *__xfrm_policy_unlink(struct xfrm_policy *pol,
 	list_del_init(&pol->walk.all);
 	net->xfrm.policy_count[dir]--;
 
+	security_xfrm_policy_deleted(pol->security);
 	return pol;
 }
 

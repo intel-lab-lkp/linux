@@ -5296,6 +5296,19 @@ int security_xfrm_policy_delete(struct xfrm_sec_ctx *ctx)
 }
 
 /**
+ * security_xfrm_policy_deleted() - Handle deletion of xfrm policy
+ * @ctx: xfrm security context
+ *
+ * Handle deletion of xfrm policy. This is called on the actual deletion
+ * of the policy from the xfrm system. References to the policy may be
+ * still held elsewhere, so resources should not be freed yet.
+ */
+void security_xfrm_policy_deleted(struct xfrm_sec_ctx *ctx)
+{
+	call_void_hook(xfrm_policy_deleted, ctx);
+}
+
+/**
  * security_xfrm_state_alloc() - Allocate a xfrm state LSM blob
  * @x: xfrm state being added to the SAD
  * @sec_ctx: security label provided by userspace
@@ -5344,6 +5357,19 @@ int security_xfrm_state_delete(struct xfrm_state *x)
 	return call_int_hook(xfrm_state_delete_security, x);
 }
 EXPORT_SYMBOL(security_xfrm_state_delete);
+
+/**
+ * security_xfrm_state_deleted() - Handle deletion of xfrm state
+ * @x: xfrm state
+ *
+ * Handle deletion of xfrm state. This is called on the actual deletion
+ * of the state from the xfrm system. References to the state may be
+ * still held elsewhere, so resources should not be freed yet.
+ */
+void security_xfrm_state_deleted(struct xfrm_state *x)
+{
+	call_void_hook(xfrm_state_deleted, x);
+}
 
 /**
  * security_xfrm_state_free() - Free a xfrm state

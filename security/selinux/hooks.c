@@ -7315,8 +7315,10 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 #ifdef CONFIG_SECURITY_NETWORK_XFRM
 	LSM_HOOK_INIT(xfrm_policy_free_security, selinux_xfrm_policy_free),
 	LSM_HOOK_INIT(xfrm_policy_delete_security, selinux_xfrm_policy_delete),
+	LSM_HOOK_INIT(xfrm_policy_deleted, selinux_xfrm_policy_deleted),
 	LSM_HOOK_INIT(xfrm_state_free_security, selinux_xfrm_state_free),
 	LSM_HOOK_INIT(xfrm_state_delete_security, selinux_xfrm_state_delete),
+	LSM_HOOK_INIT(xfrm_state_deleted, selinux_xfrm_state_deleted),
 	LSM_HOOK_INIT(xfrm_policy_lookup, selinux_xfrm_policy_lookup),
 	LSM_HOOK_INIT(xfrm_state_pol_flow_match,
 			selinux_xfrm_state_pol_flow_match),
