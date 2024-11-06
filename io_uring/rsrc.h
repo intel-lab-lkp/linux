@@ -27,7 +27,7 @@ struct io_rsrc_node {
 };
 
 struct io_mapped_buf {
-	u64		ubuf;
+	u64		start;
 	unsigned int	len;
 	unsigned int	nr_bvecs;
 	unsigned int    folio_shift;
