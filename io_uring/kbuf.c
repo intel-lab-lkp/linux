@@ -838,3 +838,37 @@ int io_pbuf_mmap(struct file *file, struct vm_area_struct *vma)
 	io_put_bl(ctx, bl);
 	return ret;
 }
+
+/*
+ * kernel buffer is built over generic bvec, and can't be always
+ * virt-contiguous, which is different with userspace fixed buffer,
+ * so we can't reuse io_import_fixed() here
+ *
+ * Also kernel buffer lifetime is bound with request, and we needn't
+ * to use rsrc_node to track its lifetime
+ */
+int io_import_kbuf(int ddir, struct iov_iter *iter,
+		    const struct io_mapped_buf *kbuf,
+		    u64 buf_off, size_t len)
+{
+	unsigned long offset = kbuf->offset;
+
+	WARN_ON_ONCE(!kbuf->kbuf);
+
+	if (ddir != kbuf->dir)
+		return -EINVAL;
+
+	if (unlikely(buf_off > kbuf->len))
+		return -EFAULT;
+
+	if (unlikely(len > kbuf->len - buf_off))
+		return -EFAULT;
+
+	offset += buf_off;
+	iov_iter_bvec(iter, ddir, kbuf->pbvec, kbuf->nr_bvecs, offset + len);
+
+	if (offset)
+		iov_iter_advance(iter, offset);
+
+	return 0;
+}

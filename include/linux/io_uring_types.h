@@ -2,6 +2,7 @@
 #define IO_URING_TYPES_H
 
 #include <linux/blkdev.h>
+#include <linux/bvec.h>
 #include <linux/hashtable.h>
 #include <linux/task_work.h>
 #include <linux/bitmap.h>
@@ -37,6 +38,28 @@ enum io_uring_cmd_flags {
 	/* set when uring wants to cancel a previously issued command */
 	IO_URING_F_CANCEL		= (1 << 11),
 	IO_URING_F_COMPAT		= (1 << 12),
+};
+
+struct io_mapped_buf {
+	u64		start;
+	unsigned int	len;
+	unsigned int	nr_bvecs;
+
+	/* kbuf hasn't refs and accounting, its lifetime is bound with req */
+	union {
+		struct {
+			refcount_t	refs;
+			unsigned int	acct_pages;
+		};
+		/* pbvec is only for kbuf */
+		const struct bio_vec	*pbvec;
+	};
+	unsigned int	folio_shift:6;
+	unsigned int	dir:1;		/* ITER_DEST or ITER_SOURCE */
+	unsigned int	kbuf:1;		/* kernel buffer or not */
+	/* offset in the 1st bvec, for kbuf only */
+	unsigned int	offset;
+	struct bio_vec	bvec[] __counted_by(nr_bvecs);
 };
 
 struct io_wq_work_node {
