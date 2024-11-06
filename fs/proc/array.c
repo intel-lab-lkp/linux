@@ -489,25 +489,8 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	vsize = eip = esp = 0;
 	permitted = ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS | PTRACE_MODE_NOAUDIT);
 	mm = get_task_mm(task);
-	if (mm) {
+	if (mm)
 		vsize = task_vsize(mm);
-		/*
-		 * esp and eip are intentionally zeroed out.  There is no
-		 * non-racy way to read them without freezing the task.
-		 * Programs that need reliable values can use ptrace(2).
-		 *
-		 * The only exception is if the task is core dumping because
-		 * a program is not able to use ptrace(2) in that case. It is
-		 * safe because the task has stopped executing permanently.
-		 */
-		if (permitted && (task->flags & (PF_EXITING|PF_DUMPCORE))) {
-			if (try_get_task_stack(task)) {
-				eip = KSTK_EIP(task);
-				esp = KSTK_ESP(task);
-				put_task_stack(task);
-			}
-		}
-	}
 
 	sigemptyset(&sigign);
 	sigemptyset(&sigcatch);
@@ -533,6 +516,23 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 		sid = task_session_nr_ns(task, ns);
 		ppid = task_tgid_nr_ns(task->real_parent, ns);
 		pgid = task_pgrp_nr_ns(task, ns);
+
+		/*
+		 * esp and eip are intentionally zeroed out.  There is no
+		 * non-racy way to read them without freezing the task.
+		 * Programs that need reliable values can use ptrace(2).
+		 *
+		 * The only exception is if the task is core dumping because
+		 * a program is not able to use ptrace(2) in that case. It is
+		 * safe because the task has stopped executing permanently.
+		 */
+		if (permitted && task->signal->core_state) {
+			if (try_get_task_stack(task)) {
+				eip = KSTK_EIP(task);
+				esp = KSTK_ESP(task);
+				put_task_stack(task);
+			}
+		}
 
 		unlock_task_sighand(task, &flags);
 	}
