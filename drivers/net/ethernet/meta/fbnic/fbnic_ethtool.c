@@ -6,6 +6,39 @@
 #include "fbnic_netdev.h"
 #include "fbnic_tlv.h"
 
+struct fbnic_stat {
+	u8 string[ETH_GSTRING_LEN];
+	unsigned int size;
+	unsigned int offset;
+};
+
+#define FBNIC_STAT_FIELDS(type, name, stat) { \
+	.string = name, \
+	.size = sizeof_field(struct type, stat), \
+	.offset = offsetof(struct type, stat), \
+}
+
+/* Hardware statistics not captured in rtnl_link_stats */
+#define FBNIC_HW_STAT(name, stat) \
+	FBNIC_STAT_FIELDS(fbnic_hw_stats, name, stat)
+
+static const struct fbnic_stat fbnic_gstrings_hw_stats[] = {
+	/* PCIE */
+	FBNIC_HW_STAT("pcie_ob_rd_tlp", pcie.ob_rd_tlp),
+	FBNIC_HW_STAT("pcie_ob_rd_dword", pcie.ob_rd_dword),
+	FBNIC_HW_STAT("pcie_ob_wr_tlp", pcie.ob_wr_tlp),
+	FBNIC_HW_STAT("pcie_ob_wr_dword", pcie.ob_wr_dword),
+	FBNIC_HW_STAT("pcie_ob_cpl_tlp", pcie.ob_cpl_tlp),
+	FBNIC_HW_STAT("pcie_ob_cpl_dword", pcie.ob_cpl_dword),
+	FBNIC_HW_STAT("pcie_ob_rd_no_tag", pcie.ob_rd_no_tag),
+	FBNIC_HW_STAT("pcie_ob_rd_no_cpl_cred", pcie.ob_rd_no_cpl_cred),
+	FBNIC_HW_STAT("pcie_ob_rd_no_np_cred", pcie.ob_rd_no_np_cred),
+};
+
+#define FBNIC_HW_FIXED_STATS_LEN ARRAY_SIZE(fbnic_gstrings_hw_stats)
+#define FBNIC_HW_STATS_LEN \
+	(FBNIC_HW_FIXED_STATS_LEN)
+
 static int
 fbnic_get_ts_info(struct net_device *netdev,
 		  struct kernel_ethtool_ts_info *tsinfo)
@@ -49,6 +82,43 @@ static void fbnic_set_counter(u64 *stat, struct fbnic_stat_counter *counter)
 {
 	if (counter->reported)
 		*stat = counter->value;
+}
+
+static void fbnic_get_strings(struct net_device *dev, u32 sset, u8 *data)
+{
+	int i;
+
+	switch (sset) {
+	case ETH_SS_STATS:
+		for (i = 0; i < FBNIC_HW_STATS_LEN; i++)
+			ethtool_puts(&data, fbnic_gstrings_hw_stats[i].string);
+		break;
+	}
+}
+
+static int fbnic_get_sset_count(struct net_device *dev, int sset)
+{
+	switch (sset) {
+	case ETH_SS_STATS:
+		return FBNIC_HW_STATS_LEN;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static void fbnic_get_ethtool_stats(struct net_device *dev,
+				    struct ethtool_stats *stats, u64 *data)
+{
+	struct fbnic_net *fbn = netdev_priv(dev);
+	const struct fbnic_stat *stat;
+	int i;
+
+	fbnic_get_hw_stats(fbn->fbd);
+
+	for (i = 0; i < FBNIC_HW_STATS_LEN; i++) {
+		stat = &fbnic_gstrings_hw_stats[i];
+		data[i] = *(u64 *)((u8 *)&fbn->fbd->hw_stats + stat->offset);
+	}
 }
 
 static void
@@ -117,10 +187,13 @@ static void fbnic_get_ts_stats(struct net_device *netdev,
 }
 
 static const struct ethtool_ops fbnic_ethtool_ops = {
-	.get_drvinfo		= fbnic_get_drvinfo,
 	.get_ts_info		= fbnic_get_ts_info,
-	.get_ts_stats		= fbnic_get_ts_stats,
+	.get_drvinfo		= fbnic_get_drvinfo,
+	.get_strings		= fbnic_get_strings,
+	.get_sset_count		= fbnic_get_sset_count,
+	.get_ethtool_stats	= fbnic_get_ethtool_stats,
 	.get_eth_mac_stats	= fbnic_get_eth_mac_stats,
+	.get_ts_stats		= fbnic_get_ts_stats,
 };
 
 void fbnic_set_ethtool_ops(struct net_device *dev)
