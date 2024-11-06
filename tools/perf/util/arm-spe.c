@@ -103,6 +103,18 @@ struct arm_spe_queue {
 	u32				flags;
 };
 
+struct data_src {
+	struct midr_range midr_range;
+	void (*ds_synth)(const struct arm_spe_record *record,
+			 union perf_mem_data_src *data_src);
+};
+
+#define DS(range, func)			\
+	{						\
+		.midr_range = range,			\
+		.ds_synth = arm_spe__synth_##func,	\
+	}
+
 static void arm_spe_dump(struct arm_spe *spe __maybe_unused,
 			 unsigned char *buf, size_t len)
 {
@@ -430,19 +442,6 @@ static int arm_spe__synth_instruction_sample(struct arm_spe_queue *speq,
 	return arm_spe_deliver_synth_event(spe, speq, event, &sample);
 }
 
-static const struct midr_range common_ds_encoding_cpus[] = {
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_A720),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_A725),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_X1C),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_X3),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_X925),
-	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1),
-	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2),
-	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1),
-	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2),
-	{},
-};
-
 static void arm_spe__sample_flags(struct arm_spe_queue *speq)
 {
 	const struct arm_spe_record *record = &speq->decoder->record;
@@ -532,6 +531,19 @@ static void arm_spe__synth_data_source_common(const struct arm_spe_record *recor
 	}
 }
 
+static const struct data_src data_sources[] = {
+	DS(MIDR_ALL_VERSIONS(MIDR_CORTEX_A720), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_CORTEX_A725), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_CORTEX_X1C), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_CORTEX_X3), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_CORTEX_X925), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1), data_source_common),
+	DS(MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2), data_source_common),
+	{},
+};
+
 static void arm_spe__synth_memory_level(const struct arm_spe_record *record,
 					union perf_mem_data_src *data_src)
 {
@@ -555,12 +567,14 @@ static void arm_spe__synth_memory_level(const struct arm_spe_record *record,
 		data_src->mem_lvl |= PERF_MEM_LVL_REM_CCE1;
 }
 
-static bool arm_spe__is_common_ds_encoding(struct arm_spe_queue *speq)
+static bool arm_spe__synth_ds(struct arm_spe_queue *speq,
+			      const struct arm_spe_record *record,
+			      union perf_mem_data_src *data_src)
 {
 	struct arm_spe *spe = speq->spe;
-	bool is_in_cpu_list;
+	const struct data_src *src = data_sources;
 	u64 *metadata = NULL;
-	u64 midr = 0;
+	u64 midr;
 
 	/* Metadata version 1 assumes all CPUs are the same (old behavior) */
 	if (spe->metadata_ver == 1) {
@@ -592,18 +606,21 @@ static bool arm_spe__is_common_ds_encoding(struct arm_spe_queue *speq)
 		midr = metadata[ARM_SPE_CPU_MIDR];
 	}
 
-	is_in_cpu_list = is_midr_in_range_list(midr, common_ds_encoding_cpus);
-	if (is_in_cpu_list)
-		return true;
-	else
-		return false;
+	while (src->midr_range.model) {
+		if (is_midr_in_range(midr, &src->midr_range)) {
+			src->ds_synth(record, data_src);
+			return true;
+		}
+		src++;
+	}
+
+	return false;
 }
 
 static u64 arm_spe__synth_data_source(struct arm_spe_queue *speq,
 				      const struct arm_spe_record *record)
 {
 	union perf_mem_data_src	data_src = { .mem_op = PERF_MEM_OP_NA };
-	bool is_common = arm_spe__is_common_ds_encoding(speq);
 
 	if (record->op & ARM_SPE_OP_LD)
 		data_src.mem_op = PERF_MEM_OP_LOAD;
@@ -612,9 +629,7 @@ static u64 arm_spe__synth_data_source(struct arm_spe_queue *speq,
 	else
 		return 0;
 
-	if (is_common)
-		arm_spe__synth_data_source_common(record, &data_src);
-	else
+	if (!arm_spe__synth_ds(speq, record, &data_src))
 		arm_spe__synth_memory_level(record, &data_src);
 
 	if (record->type & (ARM_SPE_TLB_ACCESS | ARM_SPE_TLB_MISS)) {
