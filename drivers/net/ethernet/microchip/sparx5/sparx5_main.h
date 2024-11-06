@@ -324,6 +324,8 @@ struct sparx5_ops {
 	irqreturn_t (*ptp_irq_handler)(int irq, void *args);
 	int (*dsm_calendar_calc)(struct sparx5 *sparx5, u32 taxi,
 				 struct sparx5_calendar_data *data);
+	int (*rgmii_config)(struct sparx5 *sparx5, struct sparx5_port *port,
+			    struct sparx5_port_config *conf);
 };
 
 struct sparx5_main_io_resource {

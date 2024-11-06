@@ -9,6 +9,17 @@
 #define LAN969X_SDLB_GRP_CNT 5
 #define LAN969X_HSCH_LEAK_GRP_CNT 4
 
+#define LAN969X_RGMII_TX_CLK_DISABLE 0  /* Disable TX clock generation*/
+#define LAN969X_RGMII_TX_CLK_125MHZ 1   /* 1000Mbps */
+#define LAN969X_RGMII_TX_CLK_25MHZ  2   /* 100Mbps */
+#define LAN969X_RGMII_TX_CLK_2M5MHZ 3   /* 10Mbps */
+#define LAN969X_RGMII_PORT_START_IDX 28 /* Index of the first RGMII port */
+#define LAN969X_RGMII_PORT_RATE 2       /* 1000Mbps  */
+#define LAN969X_RGMII_SHIFT_90DEG 3     /* Phase shift 90deg. (2 ns @ 125MHz) */
+#define LAN969X_RGMII_IFG_TX 4          /* TX Inter Frame Gap value */
+#define LAN969X_RGMII_IFG_RX1 5         /* RX1 Inter Frame Gap value */
+#define LAN969X_RGMII_IFG_RX2 1         /* RX2 Inter Frame Gap value */
+
 static const struct sparx5_main_io_resource lan969x_main_iomap[] =  {
 	{ TARGET_CPU,                   0xc0000, 0 }, /* 0xe00c0000 */
 	{ TARGET_FDMA,                  0xc0400, 0 }, /* 0xe00c0400 */
@@ -293,6 +304,99 @@ static irqreturn_t lan969x_ptp_irq_handler(int irq, void *args)
 	return IRQ_HANDLED;
 }
 
+static int lan969x_port_config_rgmii(struct sparx5 *sparx5,
+				     struct sparx5_port *port,
+				     struct sparx5_port_config *conf)
+{
+	int tx_clk_freq, idx = port->portno - LAN969X_RGMII_PORT_START_IDX;
+	enum sparx5_port_max_tags max_tags = port->max_vlan_tags;
+	enum sparx5_vlan_port_type vlan_type = port->vlan_type;
+	bool dtag, dotag, tx_delay = false, rx_delay = false;
+	u32 etype;
+
+	tx_clk_freq = (conf->speed == SPEED_10	? LAN969X_RGMII_TX_CLK_2M5MHZ :
+		       conf->speed == SPEED_100 ? LAN969X_RGMII_TX_CLK_25MHZ :
+						  LAN969X_RGMII_TX_CLK_125MHZ);
+
+	etype = (vlan_type == SPX5_VLAN_PORT_TYPE_S_CUSTOM ?
+		 port->custom_etype :
+		 vlan_type == SPX5_VLAN_PORT_TYPE_C ?
+		 SPX5_ETYPE_TAG_C : SPX5_ETYPE_TAG_S);
+
+	dtag = max_tags == SPX5_PORT_MAX_TAGS_TWO;
+	dotag = max_tags != SPX5_PORT_MAX_TAGS_NONE;
+
+	if (conf->phy_mode == PHY_INTERFACE_MODE_RGMII ||
+	    conf->phy_mode == PHY_INTERFACE_MODE_RGMII_TXID)
+		rx_delay = true;
+
+	if (conf->phy_mode == PHY_INTERFACE_MODE_RGMII ||
+	    conf->phy_mode == PHY_INTERFACE_MODE_RGMII_RXID)
+		tx_delay = true;
+
+	/* Take the RGMII clock domains out of reset and set tx clock
+	 * frequency.
+	 */
+	spx5_rmw(HSIO_WRAP_RGMII_CFG_TX_CLK_CFG_SET(tx_clk_freq) |
+		HSIO_WRAP_RGMII_CFG_RGMII_TX_RST_SET(0) |
+		HSIO_WRAP_RGMII_CFG_RGMII_RX_RST_SET(0),
+		HSIO_WRAP_RGMII_CFG_TX_CLK_CFG |
+		HSIO_WRAP_RGMII_CFG_RGMII_TX_RST |
+		HSIO_WRAP_RGMII_CFG_RGMII_RX_RST,
+		sparx5, HSIO_WRAP_RGMII_CFG(idx));
+
+	/* Enable the RGMII0 on the GPIOs */
+	spx5_wr(HSIO_WRAP_XMII_CFG_GPIO_XMII_CFG_SET(1),
+		sparx5, HSIO_WRAP_XMII_CFG(!idx));
+
+	/* Configure rx delay, the signal is shifted 90 degrees. */
+	spx5_rmw(HSIO_WRAP_DLL_CFG_DLL_RST_SET(0) |
+		 HSIO_WRAP_DLL_CFG_DLL_ENA_SET(1) |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_ENA_SET(rx_delay) |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_SEL_SET(LAN969X_RGMII_SHIFT_90DEG),
+		 HSIO_WRAP_DLL_CFG_DLL_RST |
+		 HSIO_WRAP_DLL_CFG_DLL_ENA |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_ENA |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_SEL,
+		 sparx5, HSIO_WRAP_DLL_CFG(idx, 0));
+
+	/* Configure tx delay, the signal is shifted 90 degrees. */
+	spx5_rmw(HSIO_WRAP_DLL_CFG_DLL_RST_SET(0) |
+		 HSIO_WRAP_DLL_CFG_DLL_ENA_SET(1) |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_ENA_SET(tx_delay) |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_SEL_SET(LAN969X_RGMII_SHIFT_90DEG),
+		 HSIO_WRAP_DLL_CFG_DLL_RST |
+		 HSIO_WRAP_DLL_CFG_DLL_ENA |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_ENA |
+		 HSIO_WRAP_DLL_CFG_DLL_CLK_SEL,
+		 sparx5, HSIO_WRAP_DLL_CFG(idx, 1));
+
+	/* Configure the port now */
+	spx5_wr(DEVRGMII_MAC_ENA_CFG_RX_ENA_SET(1) |
+		DEVRGMII_MAC_ENA_CFG_TX_ENA_SET(1),
+		sparx5, DEVRGMII_MAC_ENA_CFG(idx));
+
+	/* Configure the Inter Frame Gap */
+	spx5_wr(DEVRGMII_MAC_IFG_CFG_TX_IFG_SET(LAN969X_RGMII_IFG_TX) |
+		DEVRGMII_MAC_IFG_CFG_RX_IFG1_SET(LAN969X_RGMII_IFG_RX1) |
+		DEVRGMII_MAC_IFG_CFG_RX_IFG2_SET(LAN969X_RGMII_IFG_RX2),
+		sparx5, DEVRGMII_MAC_IFG_CFG(idx));
+
+	/* Configure port data rate */
+	spx5_wr(DEVRGMII_DEV_RST_CTRL_SPEED_SEL_SET(LAN969X_RGMII_PORT_RATE),
+		sparx5, DEVRGMII_DEV_RST_CTRL(idx));
+
+	/* Configure VLAN awareness */
+	spx5_wr(DEVRGMII_MAC_TAGS_CFG_TAG_ID_SET(etype) |
+		DEVRGMII_MAC_TAGS_CFG_PB_ENA_SET(dtag) |
+		DEVRGMII_MAC_TAGS_CFG_VLAN_AWR_ENA_SET(dotag) |
+		DEVRGMII_MAC_TAGS_CFG_VLAN_LEN_AWR_ENA_SET(dotag),
+		sparx5,
+		DEVRGMII_MAC_TAGS_CFG(idx));
+
+	return 0;
+}
+
 static const struct sparx5_regs lan969x_regs = {
 	.tsize = lan969x_tsize,
 	.gaddr = lan969x_gaddr,
@@ -337,6 +441,7 @@ static const struct sparx5_ops lan969x_ops = {
 	.set_port_mux            = &lan969x_port_mux_set,
 	.ptp_irq_handler         = &lan969x_ptp_irq_handler,
 	.dsm_calendar_calc       = &lan969x_dsm_calendar_calc,
+	.rgmii_config            = &lan969x_port_config_rgmii,
 };
 
 const struct sparx5_match_data lan969x_desc = {
