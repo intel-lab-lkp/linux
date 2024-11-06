@@ -94,5 +94,7 @@ extern const struct pci_ecam_ops loongson_pci_ecam_ops; /* Loongson PCIe */
 /* for DT-based PCI controllers that support ECAM */
 int pci_host_common_probe(struct platform_device *pdev);
 void pci_host_common_remove(struct platform_device *pdev);
+struct pci_config_window *gen_pci_init(struct device *dev,
+		struct pci_host_bridge *bridge, const struct pci_ecam_ops *ops);
 #endif
 #endif
