@@ -92,6 +92,11 @@ struct io_uring_sqe {
 			__u16	addr_len;
 			__u16	__pad3[1];
 		};
+		struct {
+			/* flags indicating additional information being passed */
+			__u16	ext_cap;
+			__u16	__pad4[1];
+		};
 	};
 	union {
 		struct {
@@ -104,6 +109,35 @@ struct io_uring_sqe {
 		 * this field is used for 80 bytes of arbitrary command data
 		 */
 		__u8	cmd[0];
+	};
+};
+
+enum io_uring_sqe_ext_cap_bits {
+	EXT_CAP_PI_BIT,
+	/*
+	 * not a real extended capability; just to make sure that we don't
+	 * overflow
+	 */
+	EXT_CAP_LAST_BIT,
+};
+
+/* extended capability flags */
+#define EXT_CAP_PI	(1U << EXT_CAP_PI_BIT)
+
+/* Second half of SQE128 for IORING_OP_READ/WRITE */
+struct io_uring_sqe_ext {
+	__u64	rsvd0[4];
+	/* if sqe->ext_cap is EXT_CAP_PI, last 32 bytes are for PI */
+	union {
+		__u64	rsvd1[4];
+		struct {
+			__u16	flags;
+			__u16	app_tag;
+			__u32	len;
+			__u64	addr;
+			__u64	seed;
+			__u64	rsvd;
+		} rw_pi;
 	};
 };
 
