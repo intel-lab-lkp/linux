@@ -194,6 +194,8 @@ static struct raw_dev *dev_new(void)
 		return NULL;
 	/* Matches kref_put() in raw_release(). */
 	kref_init(&dev->count);
+	dev_dbg(dev->dev, "%s kref count initialized: %d\n",
+		__func__, kref_read(&dev->count));
 	spin_lock_init(&dev->lock);
 	init_completion(&dev->ep0_done);
 	raw_event_queue_init(&dev->queue);
@@ -464,13 +466,21 @@ static int raw_release(struct inode *inode, struct file *fd)
 			dev_err(dev->dev,
 				"usb_gadget_unregister_driver() failed with %d\n",
 				ret);
+		dev_dbg(dev->dev, "%s kref count before unregister driver put: %d\n",
+				__func__, kref_read(&dev->count));
 		/* Matches kref_get() in raw_ioctl_run(). */
 		kref_put(&dev->count, dev_free);
+		dev_dbg(dev->dev, "%s kref count after unregister driver put: %d\n",
+				__func__, kref_read(&dev->count));
 	}
 
 out_put:
+	dev_dbg(dev->dev, "%s kref count before final put: %d\n",
+			__func__, kref_read(&dev->count));
 	/* Matches dev_new() in raw_open(). */
 	kref_put(&dev->count, dev_free);
+	dev_dbg(dev->dev, "%s kref count after final put: %d\n",
+			__func__, kref_read(&dev->count));
 	return ret;
 }
 
@@ -603,8 +613,12 @@ static int raw_ioctl_run(struct raw_dev *dev, unsigned long value)
 	}
 	dev->gadget_registered = true;
 	dev->state = STATE_DEV_RUNNING;
+	dev_dbg(dev->dev, "%s kref count before get: %d\n",
+			__func__, kref_read(&dev->count));
 	/* Matches kref_put() in raw_release(). */
 	kref_get(&dev->count);
+	dev_dbg(dev->dev, "%s kref count after get: %d\n",
+			__func__, kref_read(&dev->count));
 
 out_unlock:
 	spin_unlock_irqrestore(&dev->lock, flags);
