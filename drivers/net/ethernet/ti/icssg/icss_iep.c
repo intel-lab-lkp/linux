@@ -195,6 +195,12 @@ static void icss_iep_enable_shadow_mode(struct icss_iep *iep)
 
 	icss_iep_disable(iep);
 
+	/* clear compare config */
+	for (cmp = IEP_MIN_CMP; cmp < IEP_MAX_CMP; cmp++) {
+		regmap_update_bits(iep->map, ICSS_IEP_CMP_CFG_REG,
+				   IEP_CMP_CFG_CMP_EN(cmp), 0);
+	}
+
 	/* disable shadow mode */
 	regmap_update_bits(iep->map, ICSS_IEP_CMP_CFG_REG,
 			   IEP_CMP_CFG_SHADOW_EN, 0);
@@ -778,6 +784,10 @@ int icss_iep_exit(struct icss_iep *iep)
 		ptp_clock_unregister(iep->ptp_clock);
 		iep->ptp_clock = NULL;
 	}
+
+	iep->pps_enabled = false;
+	iep->perout_enabled = false;
+
 	icss_iep_disable(iep);
 
 	return 0;
