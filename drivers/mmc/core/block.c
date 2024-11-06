@@ -3261,6 +3261,9 @@ static int mmc_blk_probe(struct mmc_card *card)
 		goto out_free;
 	}
 
+	if (card->host->ops->config_host)
+		card->host->ops->config_host(card, &md->queue);
+
 	ret = mmc_blk_alloc_parts(card, md);
 	if (ret)
 		goto out;

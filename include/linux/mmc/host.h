@@ -113,6 +113,8 @@ enum mmc_err_stat {
 	MMC_ERR_MAX,
 };
 
+struct mmc_queue;
+
 struct mmc_host_ops {
 	/*
 	 * It is optional for the host to implement pre_req and post_req in
@@ -219,6 +221,9 @@ struct mmc_host_ops {
 
 	/* Initialize an SD express card, mandatory for MMC_CAP2_SD_EXP. */
 	int	(*init_sd_express)(struct mmc_host *host, struct mmc_ios *ios);
+
+	/* Configure block layer setting related on MMC queue */
+	void	(*config_host)(struct mmc_card *card, struct mmc_queue *mq);
 };
 
 struct mmc_cqe_ops {
