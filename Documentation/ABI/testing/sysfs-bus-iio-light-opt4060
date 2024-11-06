@@ -1,0 +1,66 @@
+What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_red_raw
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Unit-less raw value for red intensity.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_red_scale
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Decimal value for the red component of the light. The value
+		is normalized to give the relative red component
+		independently of the light intensity. The raw value for red
+		is multiplied by 2.4 before being normalized, this to adapt
+		to the relative sensitivity of the red filter of the sensor.
+		The factor for green is 1.0 and the factor for blue is 1.3.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_green_raw
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Unit-less raw value for green intensity.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_green_scale
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Decimal value for the green component of the light. The
+		value is normalized to give the relative green component
+		independently of the light intensity. The raw value for
+		green is multiplied by 1.0 before being normalized, this to
+		adapt to the relative sensitivity of the green filter of
+		the sensor. The factor for red is 2.4 and the factor for
+		blue is 1.3.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_blue_raw
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Unit-less raw value for blue intensity.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_blue_scale
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Decimal value for the blue component of the light. The
+		value is normalized to give the relative blue component
+		independently of the light intensity. The raw value for
+		blue is multiplied by 1.3 before being normalized, this to
+		adapt to the relative sensitivity of the blue filter of the
+		sensor. The factor for red is 2.4 and the factor for green
+		is 1.0.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_intensity_clear_raw
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Unit-less raw value for clear intensity.
+
+What:		/sys/bus/iio/devices/iio:deviceX/in_illuminance_input
+KernelVersion:
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Lux value for the light illuminance. The value is
+		calculated using the wide spectrum green channel and
+		multiplied by 2.15e-3.
