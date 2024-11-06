@@ -1149,11 +1149,27 @@ static int wait_for_concurrent_writes(struct file *file)
 	return err;
 }
 
+/**
+ * nfsd_vfs_write - Invoke vfs_write()
+ * @rqstp: RPC execution context
+ * @fhp: verified file handle
+ * @nf: open nfsd_file matching @fhp
+ * @offset: starting byte offset
+ * @vec: array of vectors containing write payload
+ * @vlen: size of @vec
+ * @cnt: count of bytes to write
+ * @stable: whether to persist the payload immediately
+ * @verf: NFS write verifier to be filled in
+ *
+ * Upon return, caller must fh_put @fhp .
+ *
+ * Returns nfs_ok on success, otherwise an nfserr stat value is
+ * returned.
+ */
 __be32
 nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
-				loff_t offset, struct kvec *vec, int vlen,
-				unsigned long *cnt, int stable,
-				__be32 *verf)
+	       loff_t offset, struct kvec *vec, int vlen, unsigned long *cnt,
+	       u32 *stable, __be32 *verf)
 {
 	struct nfsd_net		*nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 	struct file		*file = nf->nf_file;
@@ -1190,9 +1206,9 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 	exp = fhp->fh_export;
 
 	if (!EX_ISSYNC(exp))
-		stable = NFS_UNSTABLE;
+		*stable = NFS_UNSTABLE;
 
-	if (stable && !fhp->fh_use_wgather)
+	if (*stable && !fhp->fh_use_wgather)
 		flags |= RWF_SYNC;
 
 	iov_iter_kvec(&iter, ITER_SOURCE, vec, vlen, *cnt);
@@ -1211,7 +1227,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 	if (host_err < 0)
 		goto out_nfserr;
 
-	if (stable && fhp->fh_use_wgather) {
+	if (*stable && fhp->fh_use_wgather) {
 		host_err = wait_for_concurrent_writes(file);
 		if (host_err < 0)
 			commit_reset_write_verifier(nn, rqstp, host_err);
@@ -1293,14 +1309,25 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	return err;
 }
 
-/*
- * Write data to a file.
- * The stable flag requests synchronous writes.
- * N.B. After this call fhp needs an fh_put
+/**
+ * nfsd_write - Write data to a file.
+ * @rqstp: RPC execution context
+ * @fhp: verified file handle
+ * @offset: starting byte offset
+ * @vec: array of vectors containing write payload
+ * @vlen: size of @vec
+ * @cnt: count of bytes to write
+ * @stable: whether to persist the payload immediately
+ * @verf: NFS write verifier to be filled in
+ *
+ * Upon return, caller must fh_put @fhp .
+ *
+ * Returns nfs_ok on success, otherwise an nfserr stat value is
+ * returned.
  */
 __be32
 nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
-	   struct kvec *vec, int vlen, unsigned long *cnt, int stable,
+	   struct kvec *vec, int vlen, unsigned long *cnt, u32 *stable,
 	   __be32 *verf)
 {
 	struct nfsd_file *nf;
