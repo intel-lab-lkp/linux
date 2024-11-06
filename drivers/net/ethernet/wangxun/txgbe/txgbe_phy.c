@@ -401,17 +401,21 @@ static void txgbe_gpio_irq_unmask(struct irq_data *d)
 static void txgbe_toggle_trigger(struct gpio_chip *gc, unsigned int offset)
 {
 	struct wx *wx = gpiochip_get_data(gc);
-	u32 pol, val;
+	u32 pol_r, pol_w, val;
 
-	pol = rd32(wx, WX_GPIO_POLARITY);
+	pol_r = rd32(wx, WX_GPIO_POLARITY);
 	val = rd32(wx, WX_GPIO_EXT);
 
 	if (val & BIT(offset))
-		pol &= ~BIT(offset);
+		pol_w = pol_r & ~BIT(offset);
 	else
-		pol |= BIT(offset);
+		pol_w = pol_r | BIT(offset);
 
-	wr32(wx, WX_GPIO_POLARITY, pol);
+	wr32(wx, WX_GPIO_POLARITY, pol_w);
+
+	/* manually trigger the lost inpterrupt */
+	if (wx->gpio_trigger)
+		wr32(wx, WX_GPIO_POLARITY, pol_r);
 }
 
 static int txgbe_gpio_set_type(struct irq_data *d, unsigned int type)
@@ -560,6 +564,7 @@ static int txgbe_gpio_init(struct txgbe *txgbe)
 		return ret;
 
 	txgbe->gpio = gc;
+	wx->gpio_trigger = false;
 
 	return 0;
 }

@@ -1078,6 +1078,7 @@ struct wx {
 	bool wol_hw_supported;
 	bool ncsi_enabled;
 	bool gpio_ctrl;
+	bool gpio_trigger;
 	raw_spinlock_t gpio_lock;
 
 	/* Tx fast path data */

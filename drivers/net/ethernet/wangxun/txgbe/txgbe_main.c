@@ -82,7 +82,6 @@ static void txgbe_up_complete(struct wx *wx)
 {
 	struct net_device *netdev = wx->netdev;
 
-	txgbe_reinit_gpio_intr(wx);
 	wx_control_hw(wx, true);
 	wx_configure_vectors(wx);
 
@@ -97,6 +96,9 @@ static void txgbe_up_complete(struct wx *wx)
 	rd32(wx, WX_PX_IC(1));
 	rd32(wx, WX_PX_MISC_IC);
 	txgbe_irq_enable(wx, true);
+	wx->gpio_trigger = true;
+	txgbe_reinit_gpio_intr(wx);
+	wx->gpio_trigger = false;
 
 	/* enable transmits */
 	netif_tx_start_all_queues(netdev);
@@ -169,6 +171,7 @@ void txgbe_down(struct wx *wx)
 	txgbe_disable_device(wx);
 	txgbe_reset(wx);
 	phylink_stop(wx->phylink);
+	txgbe_reinit_gpio_intr(wx);
 
 	wx_clean_all_tx_rings(wx);
 	wx_clean_all_rx_rings(wx);
