@@ -414,3 +414,37 @@ macro_rules! pr_cont (
         $crate::print_macro!($crate::print::format_strings::CONT, true, $($arg)*)
     )
 );
+
+/// Executes code only once.
+///
+/// Equivalent to the kernel's [`do_once_lite_if`] macro when called with
+/// a condition expression.
+/// Public but hidden since it should only be used from public macros.
+///
+/// # Examples
+///
+/// ```
+/// kernel::do_once_lite!(pr_warn!("warn once"));
+/// kernel::do_once_lite!({ /* perform_complex_test() */ true }, pr_warn!("warn only once"));
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! do_once_lite (
+    ($e:expr) => (
+         $crate::do_once_lite!(true, $e);
+    );
+    ($condition:expr, $e:expr) => (
+        {
+            #[link_section = ".data.once"]
+            static ALREADY_DONE: core::sync::atomic::AtomicBool =
+                core::sync::atomic::AtomicBool::new(false);
+
+            if !ALREADY_DONE.load(core::sync::atomic::Ordering::Relaxed)
+                && $condition
+                && !ALREADY_DONE.swap(true, core::sync::atomic::Ordering::Relaxed)
+            {
+                $e;
+            }
+        }
+    );
+);
