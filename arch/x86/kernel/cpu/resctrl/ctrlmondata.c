@@ -548,8 +548,14 @@ void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 	 * are all the CPUs nohz_full? If yes, pick a CPU to IPI.
 	 * MPAM's resctrl_arch_rmid_read() is unable to read the
 	 * counters on some platforms if its called in IRQ context.
+	 *
+	 * smp_call_on_cpu() dispatches to a kernel worker
+	 * unconditionally, even when the event can be read much more
+	 * efficiently on the current CPU, so only use it when
+	 * blocking is required.
 	 */
-	if (tick_nohz_full_cpu(cpu))
+	if (tick_nohz_full_cpu(cpu) ||
+	    !resctrl_arch_event_read_blocks(r, evtid))
 		smp_call_function_any(cpumask, mon_event_count, rr, 1);
 	else
 		smp_call_on_cpu(cpu, smp_mon_event_count, rr, false);
