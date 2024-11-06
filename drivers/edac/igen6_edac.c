@@ -1349,16 +1349,18 @@ static int register_err_handler(void)
 {
 	int rc;
 
-	if (res_cfg->machine_check) {
+	if (edac_op_state == EDAC_OPSTATE_INT) {
 		mce_register_decode_chain(&ecclog_mce_dec);
 		return 0;
 	}
 
-	rc = register_nmi_handler(NMI_SERR, ecclog_nmi_handler,
-				  0, IGEN6_NMI_NAME);
-	if (rc) {
-		igen6_printk(KERN_ERR, "Failed to register NMI handler\n");
-		return rc;
+	if (edac_op_state == EDAC_OPSTATE_NMI) {
+		rc = register_nmi_handler(NMI_SERR, ecclog_nmi_handler,
+					  0, IGEN6_NMI_NAME);
+		if (rc) {
+			igen6_printk(KERN_ERR, "Failed to register NMI handler\n");
+			return rc;
+		}
 	}
 
 	return 0;
@@ -1366,16 +1368,29 @@ static int register_err_handler(void)
 
 static void unregister_err_handler(void)
 {
-	if (res_cfg->machine_check) {
+	if (edac_op_state == EDAC_OPSTATE_INT) {
 		mce_unregister_decode_chain(&ecclog_mce_dec);
 		return;
 	}
 
-	unregister_nmi_handler(NMI_SERR, IGEN6_NMI_NAME);
+	if (edac_op_state == EDAC_OPSTATE_NMI)
+		unregister_nmi_handler(NMI_SERR, IGEN6_NMI_NAME);
 }
 
 static void opstate_set(struct res_config *cfg, const struct pci_device_id *ent)
 {
+	switch (edac_op_state) {
+	case EDAC_OPSTATE_POLL:
+	case EDAC_OPSTATE_NMI:
+	case EDAC_OPSTATE_INT:
+		return;
+	case EDAC_OPSTATE_INVAL:
+		break;
+	default:
+		edac_op_state = EDAC_OPSTATE_INVAL;
+		break;
+	}
+
 	/*
 	 * Quirk: Certain SoCs' error reporting interrupts don't work.
 	 *        Force polling mode for them to ensure that memory error
@@ -1517,3 +1532,6 @@ module_exit(igen6_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Qiuxu Zhuo");
 MODULE_DESCRIPTION("MC Driver for Intel client SoC using In-Band ECC");
+
+module_param(edac_op_state, int, 0444);
+MODULE_PARM_DESC(edac_op_state, "EDAC Error Reporting state: 0=Poll, 1=NMI, 2=Machine Check, Default=Auto detect");
