@@ -280,7 +280,7 @@ void nfs_sysfs_link_rpc_client(struct nfs_server *server,
 	char name[RPC_CLIENT_NAME_SIZE];
 	int ret;
 
-	strcpy(name, clnt->cl_program->name);
+	strscpy(name, clnt->cl_program->name);
 	strcat(name, uniq ? uniq : "");
 	strcat(name, "_client");
 
