@@ -143,6 +143,7 @@ int adv7533_attach_dsi(struct adv7511 *adv)
 						 };
 
 	host = of_find_mipi_dsi_host_by_node(adv->host_node);
+	of_node_put(adv->host_node);
 	if (!host)
 		return dev_err_probe(dev, -EPROBE_DEFER,
 				     "failed to find dsi host\n");
@@ -180,8 +181,6 @@ int adv7533_parse_dt(struct device_node *np, struct adv7511 *adv)
 	adv->host_node = of_graph_get_remote_node(np, 0, 0);
 	if (!adv->host_node)
 		return -ENODEV;
-
-	of_node_put(adv->host_node);
 
 	adv->use_timing_gen = !of_property_read_bool(np,
 						"adi,disable-timing-generator");
