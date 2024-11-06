@@ -202,9 +202,8 @@ Style-check your changes
 ------------------------
 
 Check your patch for basic style violations, details of which can be
-found in Documentation/process/coding-style.rst.
-Failure to do so simply wastes
-the reviewers time and will get your patch rejected, probably
+found in Documentation/process/coding-style.rst.  Failure to do so simply
+wastes the reviewers time and will get your patch rejected, probably
 without even being read.
 
 One significant exception is when moving code from one file to
