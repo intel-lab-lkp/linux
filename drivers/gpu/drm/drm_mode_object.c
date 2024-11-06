@@ -218,6 +218,26 @@ void drm_mode_object_get(struct drm_mode_object *obj)
 EXPORT_SYMBOL(drm_mode_object_get);
 
 /**
+ * drm_mode_object_get - read the refcount for a mode object
+ * @obj: DRM mode object
+ *
+ * This function returns the current object's refcount if it is a
+ * refcounted modeset object, or 0 on any other object.
+ */
+unsigned int drm_mode_object_read_refcount(struct drm_mode_object *obj)
+{
+	unsigned int refcount = 0;
+
+	if (obj->free_cb) {
+		refcount = kref_read(&obj->refcount);
+		DRM_DEBUG("OBJ ID: %d (%d)\n", obj->id, refcount);
+	}
+
+	return refcount;
+}
+EXPORT_SYMBOL(drm_mode_object_read_refcount);
+
+/**
  * drm_object_attach_property - attach a property to a modeset object
  * @obj: drm modeset object
  * @property: property to attach
