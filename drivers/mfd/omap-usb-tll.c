@@ -202,7 +202,7 @@ static int usbtll_omap_probe(struct platform_device *pdev)
 	struct device				*dev =  &pdev->dev;
 	struct usbtll_omap			*tll;
 	void __iomem				*base;
-	int					i, nch, ver;
+	int					i, nch, ver, err;
 
 	dev_dbg(dev, "starting TI HSUSB TLL Controller\n");
 
@@ -252,7 +252,11 @@ static int usbtll_omap_probe(struct platform_device *pdev)
 		if (IS_ERR(tll->ch_clk[i]))
 			dev_dbg(dev, "can't get clock : %s\n", clkname);
 		else
-			clk_prepare(tll->ch_clk[i]);
+			err = clk_prepare(tll->ch_clk[i]);
+			if (err) {
+				dev_err(dev, "Unable to prepare clock\n");
+				return err;
+	}
 	}
 
 	pm_runtime_put_sync(dev);
