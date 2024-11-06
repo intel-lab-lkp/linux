@@ -11,6 +11,7 @@
 #include <linux/bitfield.h>
 #include <linux/string.h>
 #include <linux/delay.h>
+#include <linux/dmi.h>
 #include <linux/highmem.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -21,6 +22,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/gpio.h>
+#include <linux/gpio/machine.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_qos.h>
 #include <linux/debugfs.h>
@@ -2054,6 +2056,29 @@ static const struct dev_pm_ops sdhci_pci_pm_ops = {
  *                                                                           *
 \*****************************************************************************/
 
+/* DMI quirks for devices with missing or broken CD GPIO info */
+static struct gpiod_lookup_table vexia_edu_atla10_cd_gpios = {
+	.dev_id = "0000:00:12.0",
+	.table = {
+		GPIO_LOOKUP("INT33FC:00", 38, "cd", GPIO_ACTIVE_HIGH),
+		{ }
+	},
+};
+
+const struct dmi_system_id sdhci_pci_dmi_cd_gpio_overrides[] = {
+	{
+		/* Vexia Edu Atla 10 tablet 9V version */
+		.matches = {
+			DMI_MATCH(DMI_BOARD_VENDOR, "AMI Corporation"),
+			DMI_MATCH(DMI_BOARD_NAME, "Aptio CRB"),
+			/* Above strings are too generic, also match on BIOS date */
+			DMI_MATCH(DMI_BIOS_DATE, "08/25/2014"),
+		},
+		.driver_data = (void *)&vexia_edu_atla10_cd_gpios,
+	},
+	{ }
+};
+
 static struct sdhci_pci_slot *sdhci_pci_probe_slot(
 	struct pci_dev *pdev, struct sdhci_pci_chip *chip, int first_bar,
 	int slotno)
@@ -2129,8 +2154,22 @@ static struct sdhci_pci_slot *sdhci_pci_probe_slot(
 		device_init_wakeup(&pdev->dev, true);
 
 	if (slot->cd_idx >= 0) {
+		struct gpiod_lookup_table *cd_gpio_lookup_table = NULL;
+		const struct dmi_system_id *dmi_id;
+
+		dmi_id = dmi_first_match(sdhci_pci_dmi_cd_gpio_overrides);
+		if (dmi_id)
+			cd_gpio_lookup_table = dmi_id->driver_data;
+
+		if (cd_gpio_lookup_table)
+			gpiod_add_lookup_table(cd_gpio_lookup_table);
+
 		ret = mmc_gpiod_request_cd(host->mmc, "cd", slot->cd_idx,
 					   slot->cd_override_level, 0);
+
+		if (cd_gpio_lookup_table)
+			gpiod_remove_lookup_table(cd_gpio_lookup_table);
+
 		if (ret && ret != -EPROBE_DEFER)
 			ret = mmc_gpiod_request_cd(host->mmc, NULL,
 						   slot->cd_idx,
