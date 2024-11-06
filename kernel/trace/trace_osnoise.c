@@ -1538,18 +1538,20 @@ static int run_osnoise(void)
 		/*
 		 * In some cases, notably when running on a nohz_full CPU with
 		 * a stopped tick PREEMPT_RCU has no way to account for QSs.
-		 * This will eventually cause unwarranted noise as PREEMPT_RCU
-		 * will force preemption as the means of ending the current
-		 * grace period. We avoid this problem by calling
-		 * rcu_momentary_eqs(), which performs a zero duration
-		 * EQS allowing PREEMPT_RCU to end the current grace period.
-		 * This call shouldn't be wrapped inside an RCU critical
-		 * section.
+		 * This will eventually cause unwarranted noise as RCU forces
+		 * preemption as the means of ending the current grace period.
+		 * We avoid this by calling rcu_momentary_eqs(), which performs
+		 * a zero duration EQS allowing RCU to end the current grace
+		 * period. This call shouldn't be wrapped inside an RCU
+		 * critical section.
 		 *
-		 * Note that in non PREEMPT_RCU kernels QSs are handled through
-		 * cond_resched()
+		 * For non-PREEMPT_RCU kernels with cond_resched() (non-
+		 * PREEMPT_LAZY configurations), QSs are handled through
+		 * cond_resched(). For PREEMPT_LAZY kernels, we fallback to
+		 * the zero duration QS via rcu_momentary_eqs().
 		 */
-		if (IS_ENABLED(CONFIG_PREEMPT_RCU)) {
+		if (IS_ENABLED(CONFIG_PREEMPT_RCU) ||
+		    (!IS_ENABLED(CONFIG_PREEMPT_RCU) && IS_ENABLED(CONFIG_PREEMPTION))) {
 			if (!disable_irq)
 				local_irq_disable();
 
