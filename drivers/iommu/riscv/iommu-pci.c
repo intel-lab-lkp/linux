@@ -99,6 +99,7 @@ static void riscv_iommu_pci_remove(struct pci_dev *pdev)
 	struct riscv_iommu_device *iommu = dev_get_drvdata(&pdev->dev);
 
 	riscv_iommu_remove(iommu);
+	pci_free_irq_vectors(pdev);
 }
 
 static const struct pci_device_id riscv_iommu_pci_tbl[] = {
