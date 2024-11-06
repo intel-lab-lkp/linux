@@ -1293,9 +1293,12 @@ void proc_sched_set_task(struct task_struct *p)
 void resched_latency_warn(int cpu, u64 latency)
 {
 	static DEFINE_RATELIMIT_STATE(latency_check_ratelimit, 60 * 60 * HZ, 1);
+	char *nr;
+
+	nr = tif_need_resched() ? "need_resched" : "need_resched_lazy";
 
 	WARN(__ratelimit(&latency_check_ratelimit),
-	     "sched: CPU %d need_resched set for > %llu ns (%d ticks) "
+	     "sched: CPU %d %s set for > %llu ns (%d ticks) "
 	     "without schedule\n",
-	     cpu, latency, cpu_rq(cpu)->ticks_without_resched);
+	     cpu, nr, latency, cpu_rq(cpu)->ticks_without_resched);
 }
