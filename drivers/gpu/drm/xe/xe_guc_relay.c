@@ -322,7 +322,7 @@ static void __fini_relay(struct drm_device *drm, void *arg)
 }
 
 /**
- * xe_guc_relay_init - Initialize a &xe_guc_relay
+ * xe_guc_relay_init_noalloc - Initialize a &xe_guc_relay
  * @relay: the &xe_guc_relay to initialize
  *
  * Initialize remaining members of &xe_guc_relay that may depend
@@ -330,7 +330,7 @@ static void __fini_relay(struct drm_device *drm, void *arg)
  *
  * Return: 0 on success or a negative error code on failure.
  */
-int xe_guc_relay_init(struct xe_guc_relay *relay)
+int xe_guc_relay_init_noalloc(struct xe_guc_relay *relay)
 {
 	const int XE_RELAY_MEMPOOL_MIN_NUM = 1;
 	struct xe_device *xe = relay_to_xe(relay);
@@ -356,7 +356,7 @@ int xe_guc_relay_init(struct xe_guc_relay *relay)
 
 	return drmm_add_action_or_reset(&xe->drm, __fini_relay, relay);
 }
-ALLOW_ERROR_INJECTION(xe_guc_relay_init, ERRNO); /* See xe_pci_probe() */
+ALLOW_ERROR_INJECTION(xe_guc_relay_init_noalloc, ERRNO); /* See xe_pci_probe() */
 
 static u32 to_relay_error(int err)
 {

@@ -11,7 +11,7 @@
 
 struct xe_guc_relay;
 
-int xe_guc_relay_init(struct xe_guc_relay *relay);
+int xe_guc_relay_init_noalloc(struct xe_guc_relay *relay);
 
 int xe_guc_relay_send_to_pf(struct xe_guc_relay *relay,
 			    const u32 *msg, u32 len, u32 *buf, u32 buf_size);
