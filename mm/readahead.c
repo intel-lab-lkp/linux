@@ -390,6 +390,8 @@ static unsigned long get_next_ra_size(struct file_ra_state *ra,
 		return 4 * cur;
 	if (cur <= max / 2)
 		return 2 * cur;
+	if (cur > max)
+		return cur;
 	return max;
 }
 
@@ -647,7 +649,7 @@ void page_cache_async_ra(struct readahead_control *ractl,
 			1UL << order);
 	if (index == expected) {
 		ra->start += ra->size;
-		ra->size = get_next_ra_size(ra, max_pages);
+		ra->size = ALIGN(get_next_ra_size(ra, max_pages), 1 << order);
 		ra->async_size = ra->size;
 		goto readit;
 	}
