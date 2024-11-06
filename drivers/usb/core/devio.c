@@ -2608,7 +2608,8 @@ static long usbdev_do_ioctl(struct file *file, unsigned int cmd,
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EPERM;
 
-	usb_lock_device(dev);
+	if (!usb_trylock_device(dev))
+		return -EBUSY;
 
 	/* Reap operations are allowed even after disconnection */
 	switch (cmd) {
