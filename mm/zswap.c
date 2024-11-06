@@ -880,6 +880,9 @@ static int zswap_cpu_comp_dead(unsigned int cpu, struct hlist_node *node)
 	return 0;
 }
 
+/*
+ * The acomp_ctx->mutex must be locked/unlocked in the calling procedure.
+ */
 static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 			   struct zswap_pool *pool)
 {
@@ -894,8 +897,6 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 	u8 *dst;
 
 	acomp_ctx = raw_cpu_ptr(pool->acomp_ctx);
-
-	mutex_lock(&acomp_ctx->mutex);
 
 	dst = acomp_ctx->buffer;
 	sg_init_table(&input, 1);
@@ -949,7 +950,6 @@ unlock:
 	else if (alloc_ret)
 		zswap_reject_alloc_fail++;
 
-	mutex_unlock(&acomp_ctx->mutex);
 	return comp_ret == 0 && alloc_ret == 0;
 }
 
@@ -986,10 +986,16 @@ static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 	acomp_request_set_params(acomp_ctx->req, &input, &output, entry->length, PAGE_SIZE);
 	BUG_ON(crypto_wait_req(crypto_acomp_decompress(acomp_ctx->req), &acomp_ctx->wait));
 	BUG_ON(acomp_ctx->req->dlen != PAGE_SIZE);
-	mutex_unlock(&acomp_ctx->mutex);
 
 	if (src != acomp_ctx->buffer)
 		zpool_unmap_handle(zpool, entry->handle);
+
+	/*
+	 * It is safer to unlock the mutex after the check for
+	 * "src != acomp_ctx->buffer" so that the value of "src"
+	 * does not change.
+	 */
+	mutex_unlock(&acomp_ctx->mutex);
 }
 
 /*********************************
@@ -1487,6 +1493,7 @@ bool zswap_store(struct folio *folio)
 {
 	long nr_pages = folio_nr_pages(folio);
 	swp_entry_t swp = folio->swap;
+	struct crypto_acomp_ctx *acomp_ctx;
 	struct obj_cgroup *objcg = NULL;
 	struct mem_cgroup *memcg = NULL;
 	struct zswap_pool *pool;
@@ -1526,6 +1533,9 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
+	acomp_ctx = raw_cpu_ptr(pool->acomp_ctx);
+	mutex_lock(&acomp_ctx->mutex);
+
 	for (index = 0; index < nr_pages; ++index) {
 		struct page *page = folio_page(folio, index);
 		ssize_t bytes;
@@ -1547,6 +1557,7 @@ bool zswap_store(struct folio *folio)
 	ret = true;
 
 put_pool:
+	mutex_unlock(&acomp_ctx->mutex);
 	zswap_pool_put(pool);
 put_objcg:
 	obj_cgroup_put(objcg);
