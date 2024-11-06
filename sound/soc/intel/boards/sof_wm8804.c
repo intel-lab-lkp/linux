@@ -123,7 +123,12 @@ static int sof_wm8804_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
-	snd_soc_dai_set_clkdiv(codec_dai, WM8804_MCLK_DIV, mclk_div);
+	ret = snd_soc_dai_set_clkdiv(codec_dai, WM8804_MCLK_DIV, mclk_div);
+	if (ret < 0) {
+		dev_err(rtd->card->dev, "Failed to set WM8804 CLKDIV\n");
+		return ret;
+	}
+
 	ret = snd_soc_dai_set_pll(codec_dai, 0, 0, sysclk, mclk_freq);
 	if (ret < 0) {
 		dev_err(rtd->card->dev, "Failed to set WM8804 PLL\n");
