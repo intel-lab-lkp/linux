@@ -186,7 +186,7 @@ static int ovl_parse_monolithic(struct fs_context *fc, void *data)
 	return vfs_parse_monolithic_sep(fc, data, ovl_next_opt);
 }
 
-static ssize_t ovl_parse_param_split_lowerdirs(char *str)
+static ssize_t ovl_parse_param_split_lowerdirs(struct p_log *log, char *str)
 {
 	ssize_t nr_layers = 1, nr_colons = 0;
 	char *s, *d;
@@ -199,10 +199,8 @@ static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 			bool next_colon = (*(s + 1) == ':');
 
 			nr_colons++;
-			if (nr_colons == 2 && next_colon) {
-				pr_err("only single ':' or double '::' sequences of unescaped colons in lowerdir mount option allowed.\n");
-				return -EINVAL;
-			}
+			if (nr_colons == 2 && next_colon)
+				return inval_plog(log, "only single ':' or double '::' sequences of unescaped colons in lowerdir mount option allowed");
 			/* count layers, not colons */
 			if (!next_colon)
 				nr_layers++;
@@ -214,10 +212,8 @@ static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 		*d = *s;
 		if (!*s) {
 			/* trailing colons */
-			if (nr_colons) {
-				pr_err("unescaped trailing colons in lowerdir mount option.\n");
-				return -EINVAL;
-			}
+			if (nr_colons)
+				return inval_plog(log, "unescaped trailing colons in lowerdir mount option");
 			break;
 		}
 		nr_colons = 0;
@@ -226,22 +222,17 @@ static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 	return nr_layers;
 }
 
-static int ovl_mount_dir_noesc(const char *name, struct path *path)
+static int ovl_mount_dir_noesc(struct p_log *log, const char *name,
+			       struct path *path)
 {
 	int err = -EINVAL;
 
-	if (!*name) {
-		pr_err("empty lowerdir\n");
-		goto out;
-	}
-	err = kern_path(name, LOOKUP_FOLLOW, path);
-	if (err) {
-		pr_err("failed to resolve '%s': %i\n", name, err);
-		goto out;
-	}
-	return 0;
+	if (!*name)
+		return inval_plog(log, "empty lowerdir");
 
-out:
+	err = kern_path(name, LOOKUP_FOLLOW, path);
+	if (err)
+		error_plog(log, "failed to resolve '%s': %i", name, err);
 	return err;
 }
 
@@ -258,14 +249,15 @@ static void ovl_unescape(char *s)
 	}
 }
 
-static int ovl_mount_dir(const char *name, struct path *path)
+static int ovl_mount_dir(struct p_log *log, const char *name,
+			 struct path *path)
 {
 	int err = -ENOMEM;
 	char *tmp = kstrdup(name, GFP_KERNEL);
 
 	if (tmp) {
 		ovl_unescape(tmp);
-		err = ovl_mount_dir_noesc(tmp, path);
+		err = ovl_mount_dir_noesc(log, tmp, path);
 		kfree(tmp);
 	}
 	return err;
@@ -378,9 +370,9 @@ static int ovl_parse_layer(struct fs_context *fc, const char *layer_name, enum o
 		return -ENOMEM;
 
 	if (upper || layer == Opt_lowerdir)
-		err = ovl_mount_dir(name, &path);
+		err = ovl_mount_dir(&fc->log, name, &path);
 	else
-		err = ovl_mount_dir_noesc(name, &path);
+		err = ovl_mount_dir_noesc(&fc->log, name, &path);
 	if (err)
 		goto out_free;
 
@@ -448,10 +440,8 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 	if (!*name)
 		return 0;
 
-	if (*name == ':') {
-		pr_err("cannot append lower layer\n");
-		return -EINVAL;
-	}
+	if (*name == ':')
+		return invalfc(fc, "cannot append lower layer");
 
 	// Store user provided lowerdir string to show in mount options
 	ctx->lowerdir_all = kstrdup(name, GFP_KERNEL);
@@ -463,12 +453,12 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 		return -ENOMEM;
 
 	err = -EINVAL;
-	nr_lower = ovl_parse_param_split_lowerdirs(dup);
+	nr_lower = ovl_parse_param_split_lowerdirs(&fc->log, dup);
 	if (nr_lower < 0)
 		goto out_err;
 
 	if (nr_lower > OVL_MAX_STACK) {
-		pr_err("too many lower directories, limit is %d\n", OVL_MAX_STACK);
+		errorfc(fc, "too many lower directories, limit is %d", OVL_MAX_STACK);
 		goto out_err;
 	}
 
@@ -493,7 +483,7 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 			 * there are no data layers.
 			 */
 			if (ctx->nr_data > 0) {
-				pr_err("regular lower layers cannot follow data lower layers\n");
+				errorfc(fc, "regular lower layers cannot follow data lower layers");
 				goto out_err;
 			}
 
@@ -597,9 +587,8 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		config->userxattr = true;
 		break;
 	default:
-		pr_err("unrecognized mount option \"%s\" or missing value\n",
-		       param->key);
-		return -EINVAL;
+		return invalfc(fc, "unrecognized mount option \"%s\" or missing value",
+			       param->key);
 	}
 
 	return err;
@@ -750,44 +739,43 @@ void ovl_free_fs(struct ovl_fs *ofs)
 	kfree(ofs);
 }
 
-int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
+int ovl_fs_params_verify(struct fs_context *fc,
 			 struct ovl_config *config)
 {
+	const struct ovl_fs_context *ctx = fc->fs_private;
 	struct ovl_opt_set set = ctx->set;
 
 	/* Workdir/index are useless in non-upper mount */
 	if (!config->upperdir) {
 		if (config->workdir) {
-			pr_info("option \"workdir=%s\" is useless in a non-upper mount, ignore\n",
-				config->workdir);
+			infofc(fc, "option \"workdir=%s\" is useless in a non-upper mount, ignore",
+			       config->workdir);
 			kfree(config->workdir);
 			config->workdir = NULL;
 		}
 		if (config->index && set.index) {
-			pr_info("option \"index=on\" is useless in a non-upper mount, ignore\n");
+			infofc(fc, "option \"index=on\" is useless in a non-upper mount, ignore");
 			set.index = false;
 		}
 		config->index = false;
 	}
 
 	if (!config->upperdir && config->ovl_volatile) {
-		pr_info("option \"volatile\" is meaningless in a non-upper mount, ignoring it.\n");
+		infofc(fc, "option \"volatile\" is meaningless in a non-upper mount, ignoring it");
 		config->ovl_volatile = false;
 	}
 
 	if (!config->upperdir && config->uuid == OVL_UUID_ON) {
-		pr_info("option \"uuid=on\" requires an upper fs, falling back to uuid=null.\n");
+		infofc(fc, "option \"uuid=on\" requires an upper fs, falling back to uuid=null");
 		config->uuid = OVL_UUID_NULL;
 	}
 
 	/* Resolve verity -> metacopy dependency */
 	if (config->verity_mode && !config->metacopy) {
 		/* Don't allow explicit specified conflicting combinations */
-		if (set.metacopy) {
-			pr_err("conflicting options: metacopy=off,verity=%s\n",
-			       ovl_verity_mode(config));
-			return -EINVAL;
-		}
+		if (set.metacopy)
+			return invalfc(fc, "conflicting options: metacopy=off,verity=%s",
+				       ovl_verity_mode(config));
 		/* Otherwise automatically enable metacopy. */
 		config->metacopy = true;
 	}
@@ -801,23 +789,21 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 
 	/* Resolve verity -> metacopy -> redirect_dir dependency */
 	if (config->metacopy && config->redirect_mode != OVL_REDIRECT_ON) {
-		if (set.metacopy && set.redirect) {
-			pr_err("conflicting options: metacopy=on,redirect_dir=%s\n",
-			       ovl_redirect_mode(config));
-			return -EINVAL;
-		}
-		if (config->verity_mode && set.redirect) {
-			pr_err("conflicting options: verity=%s,redirect_dir=%s\n",
-			       ovl_verity_mode(config), ovl_redirect_mode(config));
-			return -EINVAL;
-		}
+		if (set.metacopy && set.redirect)
+			return invalfc(fc, "conflicting options: metacopy=on,redirect_dir=%s",
+				       ovl_redirect_mode(config));
+		if (config->verity_mode && set.redirect)
+			return invalfc(fc, "conflicting options: verity=%s,redirect_dir=%s",
+				       ovl_verity_mode(config),
+				       ovl_redirect_mode(config));
+
 		if (set.redirect) {
 			/*
 			 * There was an explicit redirect_dir=... that resulted
 			 * in this conflict.
 			 */
-			pr_info("disabling metacopy due to redirect_dir=%s\n",
-				ovl_redirect_mode(config));
+			infofc(fc, "disabling metacopy due to redirect_dir=%s",
+			       ovl_redirect_mode(config));
 			config->metacopy = false;
 		} else {
 			/* Automatically enable redirect otherwise. */
@@ -829,17 +815,16 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 	if (config->nfs_export && !config->index) {
 		if (!config->upperdir &&
 		    config->redirect_mode != OVL_REDIRECT_NOFOLLOW) {
-			pr_info("NFS export requires \"redirect_dir=nofollow\" on non-upper mount, falling back to nfs_export=off.\n");
+			infofc(fc, "NFS export requires \"redirect_dir=nofollow\" on non-upper mount, falling back to nfs_export=off");
 			config->nfs_export = false;
 		} else if (set.nfs_export && set.index) {
-			pr_err("conflicting options: nfs_export=on,index=off\n");
-			return -EINVAL;
+			return invalfc(fc, "conflicting options: nfs_export=on,index=off");
 		} else if (set.index) {
 			/*
 			 * There was an explicit index=off that resulted
 			 * in this conflict.
 			 */
-			pr_info("disabling nfs_export due to index=off\n");
+			infofc(fc, "disabling nfs_export due to index=off");
 			config->nfs_export = false;
 		} else {
 			/* Automatically enable index otherwise. */
@@ -849,31 +834,29 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 
 	/* Resolve nfs_export -> !metacopy && !verity dependency */
 	if (config->nfs_export && config->metacopy) {
-		if (set.nfs_export && set.metacopy) {
-			pr_err("conflicting options: nfs_export=on,metacopy=on\n");
-			return -EINVAL;
-		}
+		if (set.nfs_export && set.metacopy)
+			return invalfc(fc, "conflicting options: nfs_export=on,metacopy=on");
 		if (set.metacopy) {
 			/*
 			 * There was an explicit metacopy=on that resulted
 			 * in this conflict.
 			 */
-			pr_info("disabling nfs_export due to metacopy=on\n");
+			infofc(fc, "disabling nfs_export due to metacopy=on");
 			config->nfs_export = false;
 		} else if (config->verity_mode) {
 			/*
 			 * There was an explicit verity=.. that resulted
 			 * in this conflict.
 			 */
-			pr_info("disabling nfs_export due to verity=%s\n",
-				ovl_verity_mode(config));
+			infofc(fc, "disabling nfs_export due to verity=%s",
+			       ovl_verity_mode(config));
 			config->nfs_export = false;
 		} else {
 			/*
 			 * There was an explicit nfs_export=on that resulted
 			 * in this conflict.
 			 */
-			pr_info("disabling metacopy due to nfs_export=on\n");
+			infofc(fc, "disabling metacopy due to nfs_export=on");
 			config->metacopy = false;
 		}
 	}
@@ -882,20 +865,14 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 	/* Resolve userxattr -> !redirect && !metacopy && !verity dependency */
 	if (config->userxattr) {
 		if (set.redirect &&
-		    config->redirect_mode != OVL_REDIRECT_NOFOLLOW) {
-			pr_err("conflicting options: userxattr,redirect_dir=%s\n",
-			       ovl_redirect_mode(config));
-			return -EINVAL;
-		}
-		if (config->metacopy && set.metacopy) {
-			pr_err("conflicting options: userxattr,metacopy=on\n");
-			return -EINVAL;
-		}
-		if (config->verity_mode) {
-			pr_err("conflicting options: userxattr,verity=%s\n",
-			       ovl_verity_mode(config));
-			return -EINVAL;
-		}
+		    config->redirect_mode != OVL_REDIRECT_NOFOLLOW)
+			return invalfc(fc, "conflicting options: userxattr,redirect_dir=%s",
+				       ovl_redirect_mode(config));
+		if (config->metacopy && set.metacopy)
+			return invalfc(fc, "conflicting options: userxattr,metacopy=on");
+		if (config->verity_mode)
+			return invalfc(fc, "conflicting options: userxattr,verity=%s",
+				       ovl_verity_mode(config));
 		/*
 		 * Silently disable default setting of redirect and metacopy.
 		 * This shall be the default in the future as well: these
@@ -934,10 +911,8 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 		 */
 	}
 
-	if (ctx->nr_data > 0 && !config->metacopy) {
-		pr_err("lower data-only dirs require metacopy support.\n");
-		return -EINVAL;
-	}
+	if (ctx->nr_data > 0 && !config->metacopy)
+		return invalfc(fc, "lower data-only dirs require metacopy support");
 
 	return 0;
 }

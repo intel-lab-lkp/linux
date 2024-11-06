@@ -37,7 +37,6 @@ struct ovl_fs_context {
 
 int ovl_init_fs_context(struct fs_context *fc);
 void ovl_free_fs(struct ovl_fs *ofs);
-int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
-			 struct ovl_config *config);
+int ovl_fs_params_verify(struct fs_context *fc, struct ovl_config *config);
 int ovl_show_options(struct seq_file *m, struct dentry *dentry);
 const char *ovl_xino_mode(struct ovl_config *config);
