@@ -7,6 +7,13 @@
 
 struct lruvec;
 
+/*
+ * For IAA compression batching:
+ * Maximum number of IAA acomp compress requests that will be processed
+ * in a batch: in parallel, if iaa_crypto async/no irq mode is enabled
+ * (the default); else sequentially, if iaa_crypto sync mode is in effect.
+ */
+#define SWAP_CRYPTO_BATCH_SIZE 8UL
 extern atomic_long_t zswap_stored_pages;
 
 #ifdef CONFIG_ZSWAP
