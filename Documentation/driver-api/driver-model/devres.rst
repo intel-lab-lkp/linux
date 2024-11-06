@@ -346,6 +346,10 @@ LED
   devm_led_trigger_register()
   devm_of_led_get()
 
+MAILBOX
+  devm_mbox_controller_register()
+  devm_mbox_controller_unregister()
+
 MDIO
   devm_mdiobus_alloc()
   devm_mdiobus_alloc_size()
