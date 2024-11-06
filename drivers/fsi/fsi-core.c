@@ -784,7 +784,7 @@ static ssize_t slave_send_echo_show(struct device *dev,
 {
 	struct fsi_slave *slave = to_fsi_slave(dev);
 
-	return sprintf(buf, "%u\n", slave->t_send_delay);
+	return sysfs_emit(buf, "%u\n", slave->t_send_delay);
 }
 
 static ssize_t slave_send_echo_store(struct device *dev,
@@ -828,7 +828,7 @@ static ssize_t chip_id_show(struct device *dev,
 {
 	struct fsi_slave *slave = to_fsi_slave(dev);
 
-	return sprintf(buf, "%d\n", slave->chip_id);
+	return sysfs_emit(buf, "%d\n", slave->chip_id);
 }
 
 static DEVICE_ATTR_RO(chip_id);
@@ -839,7 +839,7 @@ static ssize_t cfam_id_show(struct device *dev,
 {
 	struct fsi_slave *slave = to_fsi_slave(dev);
 
-	return sprintf(buf, "0x%x\n", slave->cfam_id);
+	return sysfs_emit(buf, "0x%x\n", slave->cfam_id);
 }
 
 static DEVICE_ATTR_RO(cfam_id);
