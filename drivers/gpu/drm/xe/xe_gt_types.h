@@ -375,6 +375,8 @@ struct xe_gt {
 		u16 group_target;
 		/** @steering.instance_target: instance to steer accesses to */
 		u16 instance_target;
+		/** @steering.initialised: Whether this steering range is initialised */
+		bool initialised;
 	} steering[NUM_STEERING_TYPES];
 
 	/**
