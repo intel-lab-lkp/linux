@@ -988,7 +988,7 @@ static void de21040_media_timer (struct timer_list *t)
 	de_link_down(de);
 
 	if (de->media_lock)
-		return;
+		goto set_media;
 
 	if (de->media_type == DE_MEDIA_AUI) {
 		static const u32 next_state = DE_MEDIA_TP;
@@ -998,6 +998,7 @@ static void de21040_media_timer (struct timer_list *t)
 		de_next_media(de, &next_state, 1);
 	}
 
+set_media:
 	spin_lock_irqsave(&de->lock, flags);
 	de_stop_rxtx(de);
 	spin_unlock_irqrestore(&de->lock, flags);
