@@ -14,6 +14,13 @@
 #include "intel_frontbuffer.h"
 #include "intel_plane_initial.h"
 
+void intel_plane_initial_vblank_wait(plane);(struct intel_plane *plane)
+{
+	struct intel_crtc *crtc = intel_crtc_for_pipe(to_intel_display(plane), plane->pipe);
+
+	intel_crtc_wait_for_next_vblank(crtc);
+}
+
 static bool
 intel_reuse_initial_plane_obj(struct intel_crtc *this,
 			      const struct intel_initial_plane_config plane_configs[],
@@ -438,7 +445,7 @@ void intel_initial_plane_config(struct drm_i915_private *i915)
 		intel_find_initial_plane_obj(crtc, plane_configs);
 
 		if (i915->display.funcs.display->fixup_initial_plane_config(crtc, plane_config))
-			intel_crtc_wait_for_next_vblank(crtc);
+			intel_initial_vblank_wait(crtc);
 
 		plane_config_fini(plane_config);
 	}
