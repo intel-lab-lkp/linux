@@ -1269,6 +1269,7 @@ nfsd4_clone(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	status = nfsd4_clone_file_range(rqstp, src, clone->cl_src_pos,
 			dst, clone->cl_dst_pos, clone->cl_count,
 			EX_ISSYNC(cstate->current_fh.fh_export));
+	/* cel: check the "file_sync" export option as well */
 
 	nfsd_file_put(dst);
 	nfsd_file_put(src);

@@ -1297,6 +1297,7 @@ static struct flags {
 	{ NFSEXP_V4ROOT, {"v4root", ""}},
 	{ NFSEXP_PNFS, {"pnfs", ""}},
 	{ NFSEXP_SECURITY_LABEL, {"security_label", ""}},
+	{ NFSEXP_FILE_SYNC, {"file_sync", ""}},
 	{ 0, {"", ""}}
 };
 

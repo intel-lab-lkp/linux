@@ -1205,9 +1205,10 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 
 	exp = fhp->fh_export;
 
-	if (!EX_ISSYNC(exp))
+	if (exp->ex_flags & NFSEXP_FILE_SYNC)
+		*stable = NFS_FILE_SYNC;
+	else if (!EX_ISSYNC(exp))
 		*stable = NFS_UNSTABLE;
-
 	if (*stable && !fhp->fh_use_wgather)
 		flags |= RWF_SYNC;
 
