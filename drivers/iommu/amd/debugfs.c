@@ -18,6 +18,7 @@ static struct dentry *amd_iommu_debugfs;
 #define	OFS_IN_SZ	8
 
 static int mmio_offset = -1;
+static int cap_offset = -1;
 
 static ssize_t iommu_mmio_write(struct file *filp, const char __user *ubuf,
 				size_t cnt, loff_t *ppos)
@@ -69,6 +70,61 @@ static int iommu_mmio_dump_show(struct seq_file *m, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(iommu_mmio_dump);
 
+static ssize_t iommu_capability_write(struct file *filp, const char __user *ubuf,
+				      size_t cnt, loff_t *ppos)
+{
+	int ret;
+
+	if (cnt > OFS_IN_SZ)
+		return -EINVAL;
+
+	ret = kstrtou32_from_user(ubuf, cnt, 0, &cap_offset);
+	if (ret)
+		return ret;
+
+	/* Capability register at offset 0x14 is the last IOMMU capability register. */
+	if (cap_offset > 0x14) {
+		cap_offset = -1;
+		return -EINVAL;
+	}
+
+	return cnt;
+}
+
+static int iommu_capability_show(struct seq_file *m, void *unused)
+{
+	if (cap_offset >= 0)
+		seq_printf(m, "0x%x\n", cap_offset);
+	else
+		seq_puts(m, "No or invalid input provided\n");
+
+	return 0;
+}
+DEFINE_SHOW_STORE_ATTRIBUTE(iommu_capability);
+
+static int iommu_capability_dump_show(struct seq_file *m, void *unused)
+{
+	struct amd_iommu *iommu = m->private;
+	u32 value;
+	int err;
+
+	if (cap_offset < 0) {
+		seq_puts(m, "Please provide capability register's offset\n");
+		return 0;
+	}
+
+	err = pci_read_config_dword(iommu->dev, iommu->cap_ptr + cap_offset, &value);
+	if (err) {
+		seq_printf(m, "Not able to read capability register at 0x%x\n", cap_offset);
+		return 0;
+	}
+
+	seq_printf(m, "0x%08x\n", value);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(iommu_capability_dump);
+
 void amd_iommu_debugfs_setup(void)
 {
 	struct amd_iommu *iommu;
@@ -84,5 +140,9 @@ void amd_iommu_debugfs_setup(void)
 				    &iommu_mmio_fops);
 		debugfs_create_file("mmio_dump", 0444, iommu->debugfs, iommu,
 				    &iommu_mmio_dump_fops);
+		debugfs_create_file("capability", 0644, iommu->debugfs, iommu,
+				    &iommu_capability_fops);
+		debugfs_create_file("capability_dump", 0444, iommu->debugfs,
+				    iommu, &iommu_capability_dump_fops);
 	}
 }
