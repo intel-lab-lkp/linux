@@ -5014,6 +5014,19 @@ static void statmount_fs_subtype(struct kstatmount *s, struct seq_file *seq)
 		seq_puts(seq, sb->s_subtype);
 }
 
+static int statmount_mnt_devname(struct kstatmount *s, struct seq_file *seq)
+{
+	struct super_block *sb = s->mnt->mnt_sb;
+	struct mount *r = real_mount(s->mnt);
+
+	if (sb->s_op->show_devname)
+		return sb->s_op->show_devname(seq, s->mnt->mnt_root);
+
+	if (r->mnt_devname)
+		seq_puts(seq, r->mnt_devname);
+	return 0;
+}
+
 static void statmount_mnt_ns_id(struct kstatmount *s, struct mnt_namespace *ns)
 {
 	s->sm.mask |= STATMOUNT_MNT_NS_ID;
@@ -5077,6 +5090,12 @@ static int statmount_string(struct kstatmount *s, u64 flag)
 		statmount_fs_subtype(s, seq);
 		if (seq->count == sm->fs_subtype)
 			return 0;
+		break;
+	case STATMOUNT_MNT_DEVNAME:
+		sm->mnt_devname = seq->count;
+		ret = statmount_mnt_devname(s, seq);
+		if (seq->count == sm->mnt_devname)
+			return ret;
 		break;
 	default:
 		WARN_ON_ONCE(true);
@@ -5220,6 +5239,9 @@ static int do_statmount(struct kstatmount *s, u64 mnt_id, u64 mnt_ns_id,
 	if (!err && s->mask & STATMOUNT_FS_SUBTYPE)
 		err = statmount_string(s, STATMOUNT_FS_SUBTYPE);
 
+	if (!err && s->mask & STATMOUNT_MNT_DEVNAME)
+		err = statmount_string(s, STATMOUNT_MNT_DEVNAME);
+
 	if (!err && s->mask & STATMOUNT_MNT_NS_ID)
 		statmount_mnt_ns_id(s, ns);
 
@@ -5241,7 +5263,8 @@ static inline bool retry_statmount(const long ret, size_t *seq_size)
 }
 
 #define STATMOUNT_STRING_REQ (STATMOUNT_MNT_ROOT | STATMOUNT_MNT_POINT | \
-			      STATMOUNT_FS_TYPE | STATMOUNT_MNT_OPTS | STATMOUNT_FS_SUBTYPE)
+			      STATMOUNT_FS_TYPE | STATMOUNT_MNT_OPTS | \
+			      STATMOUNT_FS_SUBTYPE | STATMOUNT_MNT_DEVNAME)
 
 static int prepare_kstatmount(struct kstatmount *ks, struct mnt_id_req *kreq,
 			      struct statmount __user *buf, size_t bufsize,
