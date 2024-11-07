@@ -224,6 +224,13 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 }
 EXPORT_SYMBOL_GPL(platform_profile_remove);
 
+static void __exit platform_profile_exit(void)
+{
+	class_unregister(&platform_profile_class);
+	sysfs_remove_group(acpi_kobj, &platform_profile_group);
+}
+module_exit(platform_profile_exit);
+
 MODULE_AUTHOR("Mark Pearson <markpearson@lenovo.com>");
 MODULE_DESCRIPTION("ACPI platform profile sysfs interface");
 MODULE_LICENSE("GPL");
