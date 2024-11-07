@@ -28,6 +28,8 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/iio/events.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 
 /* Device registers */
 #define VEML6030_REG_ALS_CONF   0x00
@@ -37,6 +39,7 @@
 #define VEML6030_REG_ALS_DATA   0x04
 #define VEML6030_REG_WH_DATA    0x05
 #define VEML6030_REG_ALS_INT    0x06
+#define VEML6030_REG_DATA(ch)   (VEML6030_REG_ALS_DATA + (ch))
 
 /* Bit masks for specific functionality */
 #define VEML6030_ALS_IT       GENMASK(9, 6)
@@ -55,6 +58,18 @@
 #define VEML6035_SENS         BIT(12)
 #define VEML6035_INT_CHAN     BIT(3)
 #define VEML6035_CHAN_EN      BIT(2)
+
+enum veml6030_scan {
+	VEML6030_SCAN_ALS,
+	VEML6030_SCAN_WH,
+	VEML6030_SCAN_TIMESTAMP,
+};
+
+static const unsigned long veml6030_avail_scan_masks[] = {
+	(BIT(VEML6030_SCAN_ALS) |
+	 BIT(VEML6030_SCAN_WH)),
+	0
+};
 
 struct veml603x_chip {
 	const char *name;
@@ -86,6 +101,10 @@ struct veml6030_data {
 	int cur_gain;
 	int cur_integration_time;
 	const struct veml603x_chip *chip;
+	struct {
+		__le16 chans[2];
+		aligned_s64 timestamp;
+	} scan;
 };
 
 static const int veml6030_it_times[][2] = {
@@ -242,6 +261,14 @@ static const struct iio_chan_spec veml6030_channels[] = {
 						     BIT(IIO_CHAN_INFO_SCALE),
 		.event_spec = veml6030_event_spec,
 		.num_event_specs = ARRAY_SIZE(veml6030_event_spec),
+		.scan_index = VEML6030_SCAN_ALS,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 16,
+			.shift = 0,
+			.storagebits = 16,
+			.endianness = IIO_LE,
+		},
 	},
 	{
 		.type = IIO_INTENSITY,
@@ -253,7 +280,16 @@ static const struct iio_chan_spec veml6030_channels[] = {
 				BIT(IIO_CHAN_INFO_SCALE),
 		.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_INT_TIME) |
 						     BIT(IIO_CHAN_INFO_SCALE),
+		.scan_index = VEML6030_SCAN_WH,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 16,
+			.shift = 0,
+			.storagebits = 16,
+			.endianness = IIO_LE,
+		},
 	},
+	IIO_CHAN_SOFT_TIMESTAMP(VEML6030_SCAN_TIMESTAMP),
 };
 
 static const struct iio_chan_spec veml7700_channels[] = {
@@ -266,6 +302,14 @@ static const struct iio_chan_spec veml7700_channels[] = {
 				BIT(IIO_CHAN_INFO_SCALE),
 		.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_INT_TIME) |
 						     BIT(IIO_CHAN_INFO_SCALE),
+		.scan_index = VEML6030_SCAN_ALS,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 16,
+			.shift = 0,
+			.storagebits = 16,
+			.endianness = IIO_LE,
+		},
 	},
 	{
 		.type = IIO_INTENSITY,
@@ -277,7 +321,16 @@ static const struct iio_chan_spec veml7700_channels[] = {
 				BIT(IIO_CHAN_INFO_SCALE),
 		.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_INT_TIME) |
 						     BIT(IIO_CHAN_INFO_SCALE),
+		.scan_index = VEML6030_SCAN_WH,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 16,
+			.shift = 0,
+			.storagebits = 16,
+			.endianness = IIO_LE,
+		},
 	},
+	IIO_CHAN_SOFT_TIMESTAMP(VEML6030_SCAN_TIMESTAMP),
 };
 
 static const struct regmap_config veml6030_regmap_config = {
@@ -889,6 +942,30 @@ static irqreturn_t veml6030_event_handler(int irq, void *private)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t veml6030_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *iio = pf->indio_dev;
+	struct veml6030_data *data = iio_priv(iio);
+	int i, ret, reg;
+	int j = 0;
+
+	iio_for_each_active_channel(iio, i) {
+		ret = regmap_read(data->regmap, VEML6030_REG_DATA(i), &reg);
+		if (ret)
+			goto done;
+
+		data->scan.chans[j++] = reg;
+	}
+
+	iio_push_to_buffers_with_timestamp(iio, &data->scan, pf->timestamp);
+
+done:
+	iio_trigger_notify_done(iio->trig);
+
+	return IRQ_HANDLED;
+}
+
 static int veml6030_set_info(struct iio_dev *indio_dev)
 {
 	struct veml6030_data *data = iio_priv(indio_dev);
@@ -1068,6 +1145,7 @@ static int veml6030_probe(struct i2c_client *client)
 	indio_dev->channels = data->chip->channels;
 	indio_dev->num_channels = data->chip->num_channels;
 	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->available_scan_masks = veml6030_avail_scan_masks;
 
 	ret = data->chip->set_info(indio_dev);
 	if (ret < 0)
@@ -1076,6 +1154,12 @@ static int veml6030_probe(struct i2c_client *client)
 	ret = data->chip->hw_init(indio_dev, &client->dev);
 	if (ret < 0)
 		return ret;
+
+	ret = devm_iio_triggered_buffer_setup(&client->dev, indio_dev, NULL,
+					      veml6030_trigger_handler, NULL);
+	if (ret)
+		return dev_err_probe(&client->dev, ret,
+				     "Failed to register triggered buffer");
 
 	return devm_iio_device_register(&client->dev, indio_dev);
 }
