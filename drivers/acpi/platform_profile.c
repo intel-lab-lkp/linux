@@ -26,6 +26,46 @@ static_assert(ARRAY_SIZE(profile_names) == PLATFORM_PROFILE_LAST);
 static DEFINE_IDA(platform_profile_ida);
 
 /**
+ * _commmon_choices_show - Show the available profile choices
+ * @choices: The available profile choices
+ * @buf: The buffer to write to
+ * Return: The number of bytes written
+ */
+static ssize_t _commmon_choices_show(unsigned long choices, char *buf)
+{
+	int i, len = 0;
+
+	for_each_set_bit(i, &choices, PLATFORM_PROFILE_LAST) {
+		if (len == 0)
+			len += sysfs_emit_at(buf, len, "%s", profile_names[i]);
+		else
+			len += sysfs_emit_at(buf, len, " %s", profile_names[i]);
+	}
+	len += sysfs_emit_at(buf, len, "\n");
+
+	return len;
+}
+
+/**
+ * _get_class_choices - Get the available profile choices for a class device
+ * @dev: The class device
+ * @choices: Pointer to return the available profile choices
+ * Return: The available profile choices
+ */
+static int _get_class_choices(struct device *dev, unsigned long *choices)
+{
+	struct platform_profile_handler *handler;
+	int i;
+
+	lockdep_assert_held(&profile_lock);
+	handler = dev_get_drvdata(dev);
+	for_each_set_bit(i, handler->choices, PLATFORM_PROFILE_LAST)
+		*choices |= BIT(i);
+
+	return 0;
+}
+
+/**
  * name_show - Show the name of the profile handler
  * @dev: The device
  * @attr: The attribute
@@ -44,9 +84,34 @@ static ssize_t name_show(struct device *dev,
 	return -ERESTARTSYS;
 }
 
+/**
+ * choices_show - Show the available profile choices
+ * @dev: The device
+ * @attr: The attribute
+ * @buf: The buffer to write to
+ */
+static ssize_t choices_show(struct device *dev,
+			    struct device_attribute *attr,
+			    char *buf)
+{
+	unsigned long choices = 0;
+	int err;
+
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
+		err = _get_class_choices(dev, &choices);
+		if (err)
+			return err;
+	}
+
+	return _commmon_choices_show(choices, buf);
+}
+
 static DEVICE_ATTR_RO(name);
+static DEVICE_ATTR_RO(choices);
+
 static struct attribute *profile_attrs[] = {
 	&dev_attr_name.attr,
+	&dev_attr_choices.attr,
 	NULL
 };
 ATTRIBUTE_GROUPS(profile);
