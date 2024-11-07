@@ -879,10 +879,17 @@ int sev_platform_status(struct sev_user_data_status *status, int *error);
  * -%ENOTSUPP  if the SEV does not support SEV
  * -%ETIMEDOUT if the SEV command timed out
  * -%EIO       if the SEV returned a non-zero return code
- * -%EINVAL    if the SEV file descriptor is not valid
+ * -%EBADF     if the file pointer is bad or does not grant access
  */
 int sev_issue_cmd_external_user(struct file *filep, unsigned int id,
 				void *data, int *error);
+
+/**
+ * file_is_sev - returns whether a file pointer is for the SEV device
+ *
+ * @filep - SEV device file pointer
+ */
+bool file_is_sev(struct file *filep);
 
 /**
  * sev_guest_deactivate - perform SEV DEACTIVATE command
@@ -1038,6 +1045,8 @@ static inline int sev_guest_df_flush(int *error) { return -ENODEV; }
 
 static inline int
 sev_issue_cmd_external_user(struct file *filep, unsigned int id, void *data, int *error) { return -ENODEV; }
+
+static inline bool file_is_sev(struct file *filep) { return false; }
 
 static inline void *psp_copy_user_blob(u64 __user uaddr, u32 len) { return ERR_PTR(-EINVAL); }
 

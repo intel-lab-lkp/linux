@@ -8,6 +8,7 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/file.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
@@ -2486,11 +2487,19 @@ static struct notifier_block snp_panic_notifier = {
 	.notifier_call = snp_shutdown_on_panic,
 };
 
+bool file_is_sev(struct file *p)
+{
+	return p && p->f_op == &sev_fops;
+}
+EXPORT_SYMBOL_GPL(file_is_sev);
+
 int sev_issue_cmd_external_user(struct file *filep, unsigned int cmd,
 				void *data, int *error)
 {
-	if (!filep || filep->f_op != &sev_fops)
-		return -EBADF;
+	int rc = file_is_sev(filep) ? 0 : -EBADF;
+
+	if (rc)
+		return rc;
 
 	return sev_do_cmd(cmd, data, error);
 }
