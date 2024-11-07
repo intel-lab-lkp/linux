@@ -23,6 +23,7 @@ MODULE_PARM_DESC(enable_uring,
 
 struct fuse_uring_cmd_pdu {
 	struct fuse_ring_ent *ring_ent;
+	struct fuse_ring_queue *queue;
 };
 
 /*
@@ -383,6 +384,61 @@ void fuse_uring_stop_queues(struct fuse_ring *ring)
 }
 
 /*
+ * Handle IO_URING_F_CANCEL, typically should come on daemon termination
+ */
+static void fuse_uring_cancel(struct io_uring_cmd *cmd,
+			      unsigned int issue_flags, struct fuse_conn *fc)
+{
+	struct fuse_uring_cmd_pdu *pdu = (struct fuse_uring_cmd_pdu *)cmd->pdu;
+	struct fuse_ring_queue *queue = pdu->queue;
+	struct fuse_ring_ent *ent;
+	bool found = false;
+	bool need_cmd_done = false;
+
+	spin_lock(&queue->lock);
+
+	/* XXX: This is cumbersome for large queues. */
+	list_for_each_entry(ent, &queue->ent_avail_queue, list) {
+		if (pdu->ring_ent == ent) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		pr_info("qid=%d Did not find ent=%p", queue->qid, ent);
+		spin_unlock(&queue->lock);
+		return;
+	}
+
+	if (ent->state == FRRS_WAIT) {
+		ent->state = FRRS_USERSPACE;
+		list_move(&ent->list, &queue->ent_in_userspace);
+		need_cmd_done = true;
+	}
+	spin_unlock(&queue->lock);
+
+	if (need_cmd_done)
+		io_uring_cmd_done(cmd, -ENOTCONN, 0, issue_flags);
+
+	/*
+	 * releasing the last entry should trigger fuse_dev_release() if
+	 * the daemon was terminated
+	 */
+}
+
+static void fuse_uring_prepare_cancel(struct io_uring_cmd *cmd, int issue_flags,
+				      struct fuse_ring_ent *ring_ent)
+{
+	struct fuse_uring_cmd_pdu *pdu = (struct fuse_uring_cmd_pdu *)cmd->pdu;
+
+	pdu->ring_ent = ring_ent;
+	pdu->queue = ring_ent->queue;
+
+	io_uring_cmd_mark_cancelable(cmd, issue_flags);
+}
+
+/*
  * Checks for errors and stores it into the request
  */
 static int fuse_uring_out_header_has_err(struct fuse_out_header *oh,
@@ -606,7 +662,8 @@ err:
  * Put a ring request onto hold, it is no longer used for now.
  */
 static void fuse_uring_ent_avail(struct fuse_ring_ent *ring_ent,
-				 struct fuse_ring_queue *queue)
+				 struct fuse_ring_queue *queue,
+				 unsigned int issue_flags)
 	__must_hold(&queue->lock)
 {
 	struct fuse_ring *ring = queue->ring;
@@ -626,6 +683,7 @@ static void fuse_uring_ent_avail(struct fuse_ring_ent *ring_ent,
 	list_move(&ring_ent->list, &queue->ent_avail_queue);
 
 	ring_ent->state = FRRS_WAIT;
+	fuse_uring_prepare_cancel(ring_ent->cmd, issue_flags, ring_ent);
 }
 
 /* Used to find the request on SQE commit */
@@ -729,7 +787,8 @@ out:
  * Get the next fuse req and send it
  */
 static void fuse_uring_next_fuse_req(struct fuse_ring_ent *ring_ent,
-				    struct fuse_ring_queue *queue)
+				    struct fuse_ring_queue *queue,
+				    unsigned int issue_flags)
 {
 	int has_next, err;
 	int prev_state = ring_ent->state;
@@ -738,7 +797,7 @@ static void fuse_uring_next_fuse_req(struct fuse_ring_ent *ring_ent,
 		spin_lock(&queue->lock);
 		has_next = fuse_uring_ent_assign_req(ring_ent);
 		if (!has_next) {
-			fuse_uring_ent_avail(ring_ent, queue);
+			fuse_uring_ent_avail(ring_ent, queue, issue_flags);
 			spin_unlock(&queue->lock);
 			break; /* no request left */
 		}
@@ -813,7 +872,7 @@ static int fuse_uring_commit_fetch(struct io_uring_cmd *cmd, int issue_flags,
 	 * and fetching is done in one step vs legacy fuse, which has separated
 	 * read (fetch request) and write (commit result).
 	 */
-	fuse_uring_next_fuse_req(ring_ent, queue);
+	fuse_uring_next_fuse_req(ring_ent, queue, issue_flags);
 	return 0;
 }
 
@@ -853,7 +912,7 @@ static void _fuse_uring_fetch(struct fuse_ring_ent *ring_ent,
 	struct fuse_ring *ring = queue->ring;
 
 	spin_lock(&queue->lock);
-	fuse_uring_ent_avail(ring_ent, queue);
+	fuse_uring_ent_avail(ring_ent, queue, issue_flags);
 	ring_ent->cmd = cmd;
 	spin_unlock(&queue->lock);
 
@@ -1021,6 +1080,11 @@ int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	if (fc->aborted)
 		goto out;
 
+	if ((unlikely(issue_flags & IO_URING_F_CANCEL))) {
+		fuse_uring_cancel(cmd, issue_flags, fc);
+		return 0;
+	}
+
 	switch (cmd_op) {
 	case FUSE_URING_REQ_FETCH:
 		err = fuse_uring_fetch(cmd, issue_flags, fc);
@@ -1080,7 +1144,7 @@ terminating:
 
 	return;
 err:
-	fuse_uring_next_fuse_req(ring_ent, queue);
+	fuse_uring_next_fuse_req(ring_ent, queue, issue_flags);
 }
 
 /* queue a fuse request and send it if a ring entry is available */
