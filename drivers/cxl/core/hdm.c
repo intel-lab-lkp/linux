@@ -548,6 +548,7 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	switch (mode) {
 	case CXL_DECODER_RAM:
 	case CXL_DECODER_PMEM:
+	case CXL_DECODER_DC0 ... CXL_DECODER_DC7:
 		break;
 	default:
 		dev_dbg(dev, "unsupported mode: %d\n", mode);
@@ -569,6 +570,21 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 	if (mode == CXL_DECODER_RAM && !resource_size(&cxlds->ram_res)) {
 		dev_dbg(dev, "no available ram capacity\n");
 		return -ENXIO;
+	}
+
+	if (mode >= CXL_DECODER_DC0 && mode <= CXL_DECODER_DC7) {
+		struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlds);
+		int index;
+
+		index = dc_mode_to_region_index(mode);
+		if (!resource_size(&cxlds->dc_res[index])) {
+			dev_dbg(dev, "no available dynamic capacity\n");
+			return -ENXIO;
+		}
+		if (mds->dc_region[index].shareable) {
+			dev_err(dev, "DC region %d is shareable\n", index);
+			return -EINVAL;
+		}
 	}
 
 	cxled->mode = mode;
