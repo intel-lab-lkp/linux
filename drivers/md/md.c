@@ -1177,7 +1177,7 @@ struct super_type  {
  */
 int md_check_no_bitmap(struct mddev *mddev)
 {
-	if (!mddev->bitmap_info.file && !mddev->bitmap_info.offset)
+	if (!mddev->bitmap_info.offset)
 		return 0;
 	pr_warn("%s: bitmaps are not supported for %s\n",
 		mdname(mddev), mddev->pers->name);
@@ -1371,8 +1371,7 @@ static int super_90_validate(struct mddev *mddev, struct md_rdev *freshest, stru
 
 		mddev->max_disks = MD_SB_DISKS;
 
-		if (sb->state & (1<<MD_SB_BITMAP_PRESENT) &&
-		    mddev->bitmap_info.file == NULL) {
+		if (sb->state & (1<<MD_SB_BITMAP_PRESENT)) {
 			mddev->bitmap_info.offset =
 				mddev->bitmap_info.default_offset;
 			mddev->bitmap_info.space =
@@ -1498,7 +1497,7 @@ static void super_90_sync(struct mddev *mddev, struct md_rdev *rdev)
 	sb->layout = mddev->layout;
 	sb->chunk_size = mddev->chunk_sectors << 9;
 
-	if (mddev->bitmap && mddev->bitmap_info.file == NULL)
+	if (mddev->bitmap)
 		sb->state |= (1<<MD_SB_BITMAP_PRESENT);
 
 	sb->disks[0].state = (1<<MD_DISK_REMOVED);
@@ -1846,8 +1845,7 @@ static int super_1_validate(struct mddev *mddev, struct md_rdev *freshest, struc
 
 		mddev->max_disks =  (4096-256)/2;
 
-		if ((le32_to_cpu(sb->feature_map) & MD_FEATURE_BITMAP_OFFSET) &&
-		    mddev->bitmap_info.file == NULL) {
+		if (le32_to_cpu(sb->feature_map) & MD_FEATURE_BITMAP_OFFSET) {
 			mddev->bitmap_info.offset =
 				(__s32)le32_to_cpu(sb->bitmap_offset);
 			/* Metadata doesn't record how much space is available.
@@ -2052,7 +2050,7 @@ static void super_1_sync(struct mddev *mddev, struct md_rdev *rdev)
 	sb->data_offset = cpu_to_le64(rdev->data_offset);
 	sb->data_size = cpu_to_le64(rdev->sectors);
 
-	if (mddev->bitmap && mddev->bitmap_info.file == NULL) {
+	if (mddev->bitmap) {
 		sb->bitmap_offset = cpu_to_le32((__u32)mddev->bitmap_info.offset);
 		sb->feature_map = cpu_to_le32(MD_FEATURE_BITMAP_OFFSET);
 	}
@@ -2249,6 +2247,10 @@ static int
 super_1_allow_new_offset(struct md_rdev *rdev,
 			 unsigned long long new_offset)
 {
+	struct mddev *mddev = rdev->mddev;
+	struct md_bitmap_stats stats;
+	int err;
+
 	/* All necessary checks on new >= old have been done */
 	if (new_offset >= rdev->data_offset)
 		return 1;
@@ -2267,21 +2269,12 @@ super_1_allow_new_offset(struct md_rdev *rdev,
 	if (rdev->sb_start + (32+4)*2 > new_offset)
 		return 0;
 
-	if (!rdev->mddev->bitmap_info.file) {
-		struct mddev *mddev = rdev->mddev;
-		struct md_bitmap_stats stats;
-		int err;
+	err = mddev->bitmap_ops->get_stats(mddev->bitmap, &stats);
+	if (err)
+		return 1;
 
-		err = mddev->bitmap_ops->get_stats(mddev->bitmap, &stats);
-		if (!err && rdev->sb_start + mddev->bitmap_info.offset +
-		    stats.file_pages * (PAGE_SIZE >> 9) > new_offset)
-			return 0;
-	}
-
-	if (rdev->badblocks.sector + rdev->badblocks.size > new_offset)
-		return 0;
-
-	return 1;
+	return rdev->sb_start + mddev->bitmap_info.offset +
+		stats.file_pages * (PAGE_SIZE >> 9) <= new_offset;
 }
 
 static struct super_type super_types[] = {
@@ -6172,8 +6165,7 @@ int md_run(struct mddev *mddev)
 			(unsigned long long)pers->size(mddev, 0, 0) / 2);
 		err = -EINVAL;
 	}
-	if (err == 0 && pers->sync_request &&
-	    (mddev->bitmap_info.file || mddev->bitmap_info.offset)) {
+	if (err == 0 && pers->sync_request && mddev->bitmap_info.offset) {
 		err = mddev->bitmap_ops->create(mddev, -1);
 		if (err)
 			pr_warn("%s: failed to create bitmap (%d)\n",
@@ -6585,17 +6577,8 @@ static int do_md_stop(struct mddev *mddev, int mode)
 	if (mode == 0) {
 		pr_info("md: %s stopped.\n", mdname(mddev));
 
-		if (mddev->bitmap_info.file) {
-			struct file *f = mddev->bitmap_info.file;
-			spin_lock(&mddev->lock);
-			mddev->bitmap_info.file = NULL;
-			spin_unlock(&mddev->lock);
-			fput(f);
-		}
 		mddev->bitmap_info.offset = 0;
-
 		export_array(mddev);
-
 		md_clean(mddev);
 		if (mddev->hold_active == UNTIL_STOP)
 			mddev->hold_active = 0;
@@ -6787,38 +6770,6 @@ static int get_array_info(struct mddev *mddev, void __user *arg)
 		return -EFAULT;
 
 	return 0;
-}
-
-static int get_bitmap_file(struct mddev *mddev, void __user * arg)
-{
-	mdu_bitmap_file_t *file = NULL; /* too big for stack allocation */
-	char *ptr;
-	int err;
-
-	file = kzalloc(sizeof(*file), GFP_NOIO);
-	if (!file)
-		return -ENOMEM;
-
-	err = 0;
-	spin_lock(&mddev->lock);
-	/* bitmap enabled */
-	if (mddev->bitmap_info.file) {
-		ptr = file_path(mddev->bitmap_info.file, file->pathname,
-				sizeof(file->pathname));
-		if (IS_ERR(ptr))
-			err = PTR_ERR(ptr);
-		else
-			memmove(file->pathname, ptr,
-				sizeof(file->pathname)-(ptr-file->pathname));
-	}
-	spin_unlock(&mddev->lock);
-
-	if (err == 0 &&
-	    copy_to_user(arg, file, sizeof(*file)))
-		err = -EFAULT;
-
-	kfree(file);
-	return err;
 }
 
 static int get_disk_info(struct mddev *mddev, void __user * arg)
@@ -7175,92 +7126,6 @@ abort_export:
 	return err;
 }
 
-static int set_bitmap_file(struct mddev *mddev, int fd)
-{
-	int err = 0;
-
-	if (mddev->pers) {
-		if (!mddev->pers->quiesce || !mddev->thread)
-			return -EBUSY;
-		if (mddev->recovery || mddev->sync_thread)
-			return -EBUSY;
-		/* we should be able to change the bitmap.. */
-	}
-
-	if (fd >= 0) {
-		struct inode *inode;
-		struct file *f;
-
-		if (mddev->bitmap || mddev->bitmap_info.file)
-			return -EEXIST; /* cannot add when bitmap is present */
-
-		if (!IS_ENABLED(CONFIG_MD_BITMAP_FILE)) {
-			pr_warn("%s: bitmap files not supported by this kernel\n",
-				mdname(mddev));
-			return -EINVAL;
-		}
-		pr_warn("%s: using deprecated bitmap file support\n",
-			mdname(mddev));
-
-		f = fget(fd);
-
-		if (f == NULL) {
-			pr_warn("%s: error: failed to get bitmap file\n",
-				mdname(mddev));
-			return -EBADF;
-		}
-
-		inode = f->f_mapping->host;
-		if (!S_ISREG(inode->i_mode)) {
-			pr_warn("%s: error: bitmap file must be a regular file\n",
-				mdname(mddev));
-			err = -EBADF;
-		} else if (!(f->f_mode & FMODE_WRITE)) {
-			pr_warn("%s: error: bitmap file must open for write\n",
-				mdname(mddev));
-			err = -EBADF;
-		} else if (atomic_read(&inode->i_writecount) != 1) {
-			pr_warn("%s: error: bitmap file is already in use\n",
-				mdname(mddev));
-			err = -EBUSY;
-		}
-		if (err) {
-			fput(f);
-			return err;
-		}
-		mddev->bitmap_info.file = f;
-		mddev->bitmap_info.offset = 0; /* file overrides offset */
-	} else if (mddev->bitmap == NULL)
-		return -ENOENT; /* cannot remove what isn't there */
-	err = 0;
-	if (mddev->pers) {
-		if (fd >= 0) {
-			err = mddev->bitmap_ops->create(mddev, -1);
-			if (!err)
-				err = mddev->bitmap_ops->load(mddev);
-
-			if (err) {
-				mddev->bitmap_ops->destroy(mddev);
-				fd = -1;
-			}
-		} else if (fd < 0) {
-			mddev->bitmap_ops->destroy(mddev);
-		}
-	}
-
-	if (fd < 0) {
-		struct file *f = mddev->bitmap_info.file;
-		if (f) {
-			spin_lock(&mddev->lock);
-			mddev->bitmap_info.file = NULL;
-			spin_unlock(&mddev->lock);
-			fput(f);
-		}
-	}
-
-	return err;
-}
-
 /*
  * md_set_array_info is used two different ways
  * The original usage is when creating a new array.
@@ -7542,11 +7407,6 @@ static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 			if (rv)
 				goto err;
 
-			if (stats.file) {
-				rv = -EINVAL;
-				goto err;
-			}
-
 			if (mddev->bitmap_info.nodes) {
 				/* hold PW on all the bitmap lock */
 				if (md_cluster_ops->lock_all_bitmaps(mddev) <= 0) {
@@ -7611,18 +7471,19 @@ static int md_getgeo(struct block_device *bdev, struct hd_geometry *geo)
 static inline int md_ioctl_valid(unsigned int cmd)
 {
 	switch (cmd) {
+	case GET_BITMAP_FILE:
+	case SET_BITMAP_FILE:
+		return -EOPNOTSUPP;
 	case GET_ARRAY_INFO:
 	case GET_DISK_INFO:
 	case RAID_VERSION:
 		return 0;
 	case ADD_NEW_DISK:
-	case GET_BITMAP_FILE:
 	case HOT_ADD_DISK:
 	case HOT_REMOVE_DISK:
 	case RESTART_ARRAY_RW:
 	case RUN_ARRAY:
 	case SET_ARRAY_INFO:
-	case SET_BITMAP_FILE:
 	case SET_DISK_FAULTY:
 	case STOP_ARRAY:
 	case STOP_ARRAY_RO:
@@ -7641,7 +7502,6 @@ static bool md_ioctl_need_suspend(unsigned int cmd)
 	case ADD_NEW_DISK:
 	case HOT_ADD_DISK:
 	case HOT_REMOVE_DISK:
-	case SET_BITMAP_FILE:
 	case SET_ARRAY_INFO:
 		return true;
 	default:
@@ -7721,9 +7581,6 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 
 	case SET_DISK_FAULTY:
 		return set_disk_faulty(mddev, new_decode_dev(arg));
-
-	case GET_BITMAP_FILE:
-		return get_bitmap_file(mddev, argp);
 	}
 
 	if (cmd == STOP_ARRAY || cmd == STOP_ARRAY_RO) {
@@ -7756,10 +7613,8 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 	 */
 	/* if we are not initialised yet, only ADD_NEW_DISK, STOP_ARRAY,
 	 * RUN_ARRAY, and GET_ and SET_BITMAP_FILE are allowed */
-	if ((!mddev->raid_disks && !mddev->external)
-	    && cmd != ADD_NEW_DISK && cmd != STOP_ARRAY
-	    && cmd != RUN_ARRAY && cmd != SET_BITMAP_FILE
-	    && cmd != GET_BITMAP_FILE) {
+	if (!mddev->raid_disks && !mddev->external && cmd != ADD_NEW_DISK &&
+	    cmd != STOP_ARRAY && cmd != RUN_ARRAY) {
 		err = -ENODEV;
 		goto unlock;
 	}
@@ -7855,10 +7710,6 @@ static int md_ioctl(struct block_device *bdev, blk_mode_t mode,
 		err = do_md_run(mddev);
 		goto unlock;
 
-	case SET_BITMAP_FILE:
-		err = set_bitmap_file(mddev, (int)arg);
-		goto unlock;
-
 	default:
 		err = -EINVAL;
 		goto unlock;
@@ -7877,6 +7728,7 @@ out:
 		clear_bit(MD_CLOSING, &mddev->flags);
 	return err;
 }
+
 #ifdef CONFIG_COMPAT
 static int md_compat_ioctl(struct block_device *bdev, blk_mode_t mode,
 		    unsigned int cmd, unsigned long arg)
@@ -8349,11 +8201,6 @@ static void md_bitmap_status(struct seq_file *seq, struct mddev *mddev)
 		   used_pages, stats.pages, used_pages << (PAGE_SHIFT - 10),
 		   chunk_kb ? chunk_kb : mddev->bitmap_info.chunksize,
 		   chunk_kb ? "KB" : "B");
-
-	if (stats.file) {
-		seq_puts(seq, ", file: ");
-		seq_file_path(seq, stats.file, " \t\n");
-	}
 
 	seq_putc(seq, '\n');
 }

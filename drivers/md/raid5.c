@@ -7812,7 +7812,7 @@ static int raid5_run(struct mddev *mddev)
 	}
 
 	if ((test_bit(MD_HAS_JOURNAL, &mddev->flags) || journal_dev) &&
-	    (mddev->bitmap_info.offset || mddev->bitmap_info.file)) {
+	    (mddev->bitmap_info.offset)) {
 		pr_notice("md/raid:%s: array cannot have both journal and bitmap\n",
 			  mdname(mddev));
 		return -EINVAL;

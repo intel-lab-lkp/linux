@@ -1332,7 +1332,7 @@ int ppl_init_log(struct r5conf *conf)
 		return -EINVAL;
 	}
 
-	if (mddev->bitmap_info.file || mddev->bitmap_info.offset) {
+	if (mddev->bitmap_info.offset) {
 		pr_warn("md/raid:%s PPL is not compatible with bitmap\n",
 			mdname(mddev));
 		return -EINVAL;

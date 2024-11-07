@@ -360,6 +360,34 @@ enum {
 	MD_RESYNC_ACTIVE = 3,
 };
 
+struct bitmap_info {
+	/*
+	 * offset from superblock of start of bitmap. May be negative, but not
+	 * '0' For external metadata, offset from start of device.
+	 */
+	loff_t			offset;
+	/* space available at this offset */
+	unsigned long		space;
+	/*
+	 * this is the offset to use when hot-adding a bitmap.  It should
+	 * eventually be settable by sysfs.
+	 */
+	loff_t			default_offset;
+	/* space available at default offset */
+	unsigned long		default_space;
+	struct mutex		mutex;
+	unsigned long		chunksize;
+	/* how many jiffies between updates? */
+	unsigned long		daemon_sleep;
+	/* write-behind mode */
+	unsigned long		max_write_behind;
+	int			external;
+	/* Maximum number of nodes in the cluster */
+	int			nodes;
+	/* Name of the cluster */
+	char                    cluster_name[64];
+};
+
 struct mddev {
 	void				*private;
 	struct md_personality		*pers;
@@ -519,7 +547,6 @@ struct mddev {
 	 *   in_sync - and related safemode and MD_CHANGE changes
 	 *   pers (also protected by reconfig_mutex and pending IO).
 	 *   clearing ->bitmap
-	 *   clearing ->bitmap_info.file
 	 *   changing ->resync_{min,max}
 	 *   setting MD_RECOVERY_RUNNING (which interacts with resync_{min,max})
 	 */
@@ -537,29 +564,7 @@ struct mddev {
 
 	void				*bitmap; /* the bitmap for the device */
 	struct bitmap_operations	*bitmap_ops;
-	struct {
-		struct file		*file; /* the bitmap file */
-		loff_t			offset; /* offset from superblock of
-						 * start of bitmap. May be
-						 * negative, but not '0'
-						 * For external metadata, offset
-						 * from start of device.
-						 */
-		unsigned long		space; /* space available at this offset */
-		loff_t			default_offset; /* this is the offset to use when
-							 * hot-adding a bitmap.  It should
-							 * eventually be settable by sysfs.
-							 */
-		unsigned long		default_space; /* space available at
-							* default offset */
-		struct mutex		mutex;
-		unsigned long		chunksize;
-		unsigned long		daemon_sleep; /* how many jiffies between updates? */
-		unsigned long		max_write_behind; /* write-behind mode */
-		int			external;
-		int			nodes; /* Maximum number of nodes in the cluster */
-		char                    cluster_name[64]; /* Name of the cluster */
-	} bitmap_info;
+	struct bitmap_info		bitmap_info;
 
 	atomic_t			max_corr_read_errors; /* max read retries */
 	struct list_head		all_mddevs;
