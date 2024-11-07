@@ -52,7 +52,8 @@ static unsigned long its_find_baser(unsigned int type)
 	return -1;
 }
 
-static void its_install_table(unsigned int type, vm_paddr_t base, size_t size)
+static void its_install_table(unsigned int type, vm_paddr_t base,
+			      size_t size, bool indirect)
 {
 	unsigned long offset = its_find_baser(type);
 	u64 baser;
@@ -63,6 +64,9 @@ static void its_install_table(unsigned int type, vm_paddr_t base, size_t size)
 		base |
 		GITS_BASER_RaWaWb |
 		GITS_BASER_VALID;
+
+	if (indirect)
+		baser |= GITS_BASER_INDIRECT;
 
 	its_write_u64(offset, baser);
 }
@@ -82,12 +86,13 @@ static void its_install_cmdq(vm_paddr_t base, size_t size)
 
 void its_init(vm_paddr_t coll_tbl, size_t coll_tbl_sz,
 	      vm_paddr_t device_tbl, size_t device_tbl_sz,
-	      vm_paddr_t cmdq, size_t cmdq_size)
+	      vm_paddr_t cmdq, size_t cmdq_size, bool indirect_device_tbl)
 {
 	u32 ctlr;
 
-	its_install_table(GITS_BASER_TYPE_COLLECTION, coll_tbl, coll_tbl_sz);
-	its_install_table(GITS_BASER_TYPE_DEVICE, device_tbl, device_tbl_sz);
+	its_install_table(GITS_BASER_TYPE_COLLECTION, coll_tbl, coll_tbl_sz, false);
+	its_install_table(GITS_BASER_TYPE_DEVICE, device_tbl, device_tbl_sz,
+			  indirect_device_tbl);
 	its_install_cmdq(cmdq, cmdq_size);
 
 	ctlr = its_read_u32(GITS_CTLR);
@@ -233,6 +238,17 @@ void its_send_mapti_cmd(void *cmdq_base, u32 device_id, u32 event_id,
 	its_encode_event_id(&cmd, event_id);
 	its_encode_phys_id(&cmd, intid);
 	its_encode_collection(&cmd, collection_id);
+
+	its_send_cmd(cmdq_base, &cmd);
+}
+
+void its_send_discard_cmd(void *cmdq_base, u32 device_id, u32 event_id)
+{
+	struct its_cmd_block cmd = {};
+
+	its_encode_cmd(&cmd, GITS_CMD_DISCARD);
+	its_encode_devid(&cmd, device_id);
+	its_encode_event_id(&cmd, event_id);
 
 	its_send_cmd(cmdq_base, &cmd);
 }
