@@ -24,11 +24,11 @@ struct io_rsrc_node {
 	u64 tag;
 	union {
 		unsigned long file_ptr;
-		struct io_mapped_ubuf *buf;
+		struct io_mapped_buf *buf;
 	};
 };
 
-struct io_mapped_ubuf {
+struct io_mapped_buf {
 	u64		ubuf;
 	unsigned int	len;
 	unsigned int	nr_bvecs;
@@ -52,7 +52,7 @@ void io_rsrc_data_free(struct io_ring_ctx *ctx, struct io_rsrc_data *data);
 int io_rsrc_data_alloc(struct io_rsrc_data *data, unsigned nr);
 
 int io_import_fixed(int ddir, struct iov_iter *iter,
-			   struct io_mapped_ubuf *imu,
+			   struct io_mapped_buf *imu,
 			   u64 buf_addr, size_t len);
 
 int io_register_clone_buffers(struct io_ring_ctx *ctx, void __user *arg);
