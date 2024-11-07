@@ -259,12 +259,12 @@ static int hd3ss3220_probe(struct i2c_client *client)
 		goto err_put_fwnode;
 	}
 
-	typec_cap.prefer_role = TYPEC_NO_PREFERRED_ROLE;
+	ret = typec_get_fw_cap(&typec_cap, connector);
+	if (ret)
+		goto err_put_role;
+
 	typec_cap.driver_data = hd3ss3220;
-	typec_cap.type = TYPEC_PORT_DRP;
-	typec_cap.data = TYPEC_PORT_DRD;
 	typec_cap.ops = &hd3ss3220_ops;
-	typec_cap.fwnode = connector;
 
 	hd3ss3220->port = typec_register_port(&client->dev, &typec_cap);
 	if (IS_ERR(hd3ss3220->port)) {
