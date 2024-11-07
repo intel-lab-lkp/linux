@@ -861,30 +861,6 @@ int sev_platform_init(struct sev_platform_init_args *args);
 int sev_platform_status(struct sev_user_data_status *status, int *error);
 
 /**
- * sev_issue_cmd_external_user - issue SEV command by other driver with a file
- * handle.
- *
- * This function can be used by other drivers to issue a SEV command on
- * behalf of userspace. The caller must pass a valid SEV file descriptor
- * so that we know that it has access to SEV device.
- *
- * @filep - SEV device file pointer
- * @cmd - command to issue
- * @data - command buffer
- * @error: SEV command return code
- *
- * Returns:
- * 0 if the SEV successfully processed the command
- * -%ENODEV    if the SEV device is not available
- * -%ENOTSUPP  if the SEV does not support SEV
- * -%ETIMEDOUT if the SEV command timed out
- * -%EIO       if the SEV returned a non-zero return code
- * -%EBADF     if the file pointer is bad or does not grant access
- */
-int sev_issue_cmd_external_user(struct file *filep, unsigned int id,
-				void *data, int *error);
-
-/**
  * file_is_sev - returns whether a file pointer is for the SEV device
  *
  * @filep - SEV device file pointer
@@ -1042,9 +1018,6 @@ static inline int
 sev_guest_activate(struct sev_data_activate *data, int *error) { return -ENODEV; }
 
 static inline int sev_guest_df_flush(int *error) { return -ENODEV; }
-
-static inline int
-sev_issue_cmd_external_user(struct file *filep, unsigned int id, void *data, int *error) { return -ENODEV; }
 
 static inline bool file_is_sev(struct file *filep) { return false; }
 
