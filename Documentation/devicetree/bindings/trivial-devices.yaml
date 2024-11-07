@@ -301,6 +301,8 @@ properties:
           - national,lm92
             # Nuvoton Temperature Sensor
           - nuvoton,w83773g
+            # NXP I2C/I3C Temperature Sensor (-40 °C to +125 °C)
+          - nxp,p3t1085
             # OKI ML86V7667 video decoder
           - oki,ml86v7667
             # ON Semiconductor ADT7462 Temperature, Voltage Monitor and Fan Controller
