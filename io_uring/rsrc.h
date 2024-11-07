@@ -14,18 +14,7 @@ enum {
 	__IORING_RSRC_LAST_TYPE,
 
 	IORING_RSRC_F_NEED_FREE		= 1 << 0,
-};
-
-struct io_rsrc_node {
-	unsigned char			type;
-	unsigned char			flags;
-	int				refs;
-
-	u64 tag;
-	union {
-		unsigned long file_ptr;
-		struct io_mapped_buf *buf;
-	};
+	IORING_RSRC_F_BUF_KERNEL	= 1 << 1,
 };
 
 struct io_imu_folio_data {

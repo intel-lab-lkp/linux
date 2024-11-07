@@ -40,8 +40,26 @@ enum io_uring_cmd_flags {
 	IO_URING_F_COMPAT		= (1 << 12),
 };
 
+struct io_rsrc_node {
+	unsigned char			type;
+	unsigned char			flags;
+	int				refs;
+
+	u64 tag;
+	union {
+		unsigned long file_ptr;
+		struct io_mapped_buf *buf;
+	};
+};
+
+typedef void (io_uring_kbuf_ack_t) (struct io_rsrc_node *);
+
 struct io_mapped_buf {
-	u64		addr;
+	/* 'addr' is always 0 for kernel buffer */
+	union {
+		u64			addr;
+		io_uring_kbuf_ack_t	*kbuf_ack;
+	};
 	unsigned int	len;
 	unsigned int	nr_bvecs;
 	refcount_t	refs;

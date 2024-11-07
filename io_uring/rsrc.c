@@ -441,6 +441,18 @@ int io_files_update(struct io_kiocb *req, unsigned int issue_flags)
 	return IOU_OK;
 }
 
+static void __io_free_buf_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
+{
+	struct io_mapped_buf *buf = node->buf;
+
+	if (node->flags & IORING_RSRC_F_BUF_KERNEL) {
+		if (buf->kbuf_ack)
+			buf->kbuf_ack(node);
+	} else {
+		io_buffer_unmap(ctx, node);
+	}
+}
+
 void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 {
 	bool need_free = node->flags & IORING_RSRC_F_NEED_FREE;
@@ -457,7 +469,7 @@ void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 		break;
 	case IORING_RSRC_BUFFER:
 		if (node->buf)
-			io_buffer_unmap(ctx, node);
+			__io_free_buf_node(ctx, node);
 		break;
 	default:
 		WARN_ON_ONCE(1);
