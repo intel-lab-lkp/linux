@@ -28,16 +28,6 @@ struct io_rsrc_node {
 	};
 };
 
-struct io_mapped_buf {
-	u64		addr;
-	unsigned int	len;
-	unsigned int	nr_bvecs;
-	refcount_t	refs;
-	unsigned int	acct_pages;
-	unsigned int	folio_shift:6;
-	struct bio_vec	bvec[] __counted_by(nr_bvecs);
-};
-
 struct io_imu_folio_data {
 	/* Head folio can be partially included in the fixed buf */
 	unsigned int	nr_pages_head;
