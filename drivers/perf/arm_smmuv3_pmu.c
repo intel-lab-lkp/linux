@@ -431,6 +431,11 @@ static int smmu_pmu_event_init(struct perf_event *event)
 			return -EINVAL;
 	}
 
+	hwc->idx = -1;
+
+	if (event->group_leader == event)
+		return 0;
+
 	for_each_sibling_event(sibling, event->group_leader) {
 		if (is_software_event(sibling))
 			continue;
@@ -441,8 +446,6 @@ static int smmu_pmu_event_init(struct perf_event *event)
 		if (++group_num_events > smmu_pmu->num_counters)
 			return -EINVAL;
 	}
-
-	hwc->idx = -1;
 
 	/*
 	 * Ensure all events are on the same cpu so all events are in the
