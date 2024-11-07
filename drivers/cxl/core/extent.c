@@ -117,6 +117,12 @@ static void region_extent_unregister(void *ext)
 
 	dev_dbg(&region_extent->dev, "DAX region rm extent HPA [range 0x%016llx-0x%016llx]\n",
 		region_extent->hpa_range.start, region_extent->hpa_range.end);
+	/*
+	 * Extent is not in use or an error has occur.  No mappings
+	 * exist at this point.  Write and invalidate caches to ensure
+	 * the device has all data prior to final release.
+	 */
+	cxl_region_invalidate_memregion(region_extent->cxlr_dax->cxlr);
 	device_unregister(&region_extent->dev);
 }
 
@@ -270,20 +276,67 @@ static void calc_hpa_range(struct cxl_endpoint_decoder *cxled,
 	hpa_range->end = hpa_range->start + range_len(dpa_range) - 1;
 }
 
+static int cxlr_notify_extent(struct cxl_region *cxlr, enum dc_event event,
+			      struct region_extent *region_extent)
+{
+	struct device *dev = &cxlr->cxlr_dax->dev;
+	struct cxl_notify_data notify_data;
+	struct cxl_driver *driver;
+
+	dev_dbg(dev, "Trying notify: type %d HPA [range 0x%016llx-0x%016llx]\n",
+		event,
+		region_extent->hpa_range.start, region_extent->hpa_range.end);
+
+	guard(device)(dev);
+
+	/*
+	 * The lack of a driver indicates a notification has failed.  No user
+	 * space coordination was possible.
+	 */
+	if (!dev->driver)
+		return 0;
+	driver = to_cxl_drv(dev->driver);
+	if (!driver->notify)
+		return 0;
+
+	notify_data = (struct cxl_notify_data) {
+		.event = event,
+		.region_extent = region_extent,
+	};
+
+	dev_dbg(dev, "Notify: type %d HPA [range 0x%016llx-0x%016llx]\n",
+		event,
+		region_extent->hpa_range.start, region_extent->hpa_range.end);
+	return driver->notify(dev, &notify_data);
+}
+
+struct rm_data {
+	struct cxl_region *cxlr;
+	struct range *range;
+};
+
 static int cxlr_rm_extent(struct device *dev, void *data)
 {
 	struct region_extent *region_extent = to_region_extent(dev);
-	struct range *region_hpa_range = data;
+	struct rm_data *rm_data = data;
+	int rc;
 
 	if (!region_extent)
 		return 0;
 
 	/*
-	 * Any extent which 'touches' the released range is removed.
+	 * Any extent which 'touches' the released range is attempted to be
+	 * removed.
 	 */
-	if (range_overlaps(region_hpa_range, &region_extent->hpa_range)) {
+	if (range_overlaps(rm_data->range, &region_extent->hpa_range)) {
+		struct cxl_region *cxlr = rm_data->cxlr;
+
 		dev_dbg(dev, "Remove region extent HPA [range 0x%016llx-0x%016llx]\n",
 			region_extent->hpa_range.start, region_extent->hpa_range.end);
+		rc = cxlr_notify_extent(cxlr, DCD_RELEASE_CAPACITY, region_extent);
+		if (rc == -EBUSY)
+			return 0;
+
 		region_rm_extent(region_extent);
 	}
 	return 0;
@@ -328,8 +381,13 @@ int cxl_rm_extent(struct cxl_memdev_state *mds, struct cxl_extent *extent)
 
 	calc_hpa_range(cxled, cxlr->cxlr_dax, &dpa_range, &hpa_range);
 
+	struct rm_data rm_data = {
+		.cxlr = cxlr,
+		.range = &hpa_range,
+	};
+
 	/* Remove region extents which overlap */
-	return device_for_each_child(&cxlr->cxlr_dax->dev, &hpa_range,
+	return device_for_each_child(&cxlr->cxlr_dax->dev, &rm_data,
 				     cxlr_rm_extent);
 }
 
@@ -354,8 +412,23 @@ static int cxlr_add_extent(struct cxl_dax_region *cxlr_dax,
 		return rc;
 	}
 
-	/* device model handles freeing region_extent */
-	return online_region_extent(region_extent);
+	/* Ensure caches are clean prior onlining */
+	cxl_region_invalidate_memregion(cxlr_dax->cxlr);
+
+	rc = online_region_extent(region_extent);
+	/* device model handled freeing region_extent */
+	if (rc)
+		return rc;
+
+	rc = cxlr_notify_extent(cxlr_dax->cxlr, DCD_ADD_CAPACITY, region_extent);
+	/*
+	 * The region device was briefly live but DAX layer ensures it was not
+	 * used
+	 */
+	if (rc)
+		region_rm_extent(region_extent);
+
+	return rc;
 }
 
 /* Callers are expected to ensure cxled has been attached to a region */
