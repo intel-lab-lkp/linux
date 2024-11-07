@@ -907,7 +907,8 @@ class YnlFamily(SpecFamily):
         msg['msg'] = attrs
         self.async_msg_queue.put(msg)
 
-    def check_ntf(self, interval=0.1):
+    def check_ntf(self, interval=0.1, max_retries=None):
+        retry = 0
         while True:
             try:
                 reply = self.sock.recv(self._recv_size, socket.MSG_DONTWAIT)
@@ -933,7 +934,11 @@ class YnlFamily(SpecFamily):
 
             try:
                 yield self.async_msg_queue.get_nowait()
+                retry = 0
             except queue.Empty:
+                retry += 1
+                if max_retries is not None and retry > max_retries:
+                    return
                 try:
                     time.sleep(interval)
                 except KeyboardInterrupt:
