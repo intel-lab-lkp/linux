@@ -291,6 +291,42 @@ static void mmdc_ch1_reenable(void __iomem *ccm_base)
 	writel_relaxed(reg, ccm_base + CCM_CCSR);
 }
 
+#define CCM_ANALOG_PLL_VIDEO    0xa0
+#define CCM_ANALOG_PFD_480      0xf0
+#define CCM_ANALOG_PFD_528      0x100
+
+#define PLL_ENABLE              BIT(13)
+
+#define PFD0_CLKGATE            BIT(7)
+#define PFD1_CLKGATE            BIT(15)
+#define PFD2_CLKGATE            BIT(23)
+#define PFD3_CLKGATE            BIT(31)
+
+static void disable_anatop_clocks(void __iomem *anatop_base)
+{
+	unsigned int reg;
+
+	/* Make sure PLL2 PFDs 0-2 are gated */
+	reg = readl_relaxed(anatop_base + CCM_ANALOG_PFD_528);
+	/* Cannot gate PFD2 if pll2_pfd2_396m is the parent of MMDC clock */
+	if (clk_get_parent(hws[IMX6QDL_CLK_PERIPH_PRE]->clk) ==
+	   hws[IMX6QDL_CLK_PLL2_PFD2_396M]->clk)
+		reg |= PFD0_CLKGATE | PFD1_CLKGATE;
+	else
+		reg |= PFD0_CLKGATE | PFD1_CLKGATE | PFD2_CLKGATE;
+	writel_relaxed(reg, anatop_base + CCM_ANALOG_PFD_528);
+
+	/* Make sure PLL3 PFDs 0-3 are gated */
+	reg = readl_relaxed(anatop_base + CCM_ANALOG_PFD_480);
+	reg |= PFD0_CLKGATE | PFD1_CLKGATE | PFD2_CLKGATE | PFD3_CLKGATE;
+	writel_relaxed(reg, anatop_base + CCM_ANALOG_PFD_480);
+
+	/* Make sure PLL5 is disabled */
+	reg = readl_relaxed(anatop_base + CCM_ANALOG_PLL_VIDEO);
+	reg &= ~PLL_ENABLE;
+	writel_relaxed(reg, anatop_base + CCM_ANALOG_PLL_VIDEO);
+}
+
 /*
  * We have to follow a strict procedure when changing the LDB clock source,
  * otherwise we risk introducing a glitch that can lock up the LDB divider.
@@ -320,7 +356,7 @@ static void mmdc_ch1_reenable(void __iomem *ccm_base)
  * switches the parent to the bottom mux first and then manipulates the top
  * mux to ensure that no glitch will enter the divider.
  */
-static void init_ldb_clks(struct device_node *np, void __iomem *ccm_base)
+static void init_ldb_clks(struct device_node *np, void __iomem *ccm_base, void __iomem *anatop_base)
 {
 	unsigned int reg;
 	unsigned int sel[2][4];
@@ -368,6 +404,10 @@ static void init_ldb_clks(struct device_node *np, void __iomem *ccm_base)
 	if (sel[0][0] == sel[0][3] && sel[1][0] == sel[1][3])
 		return;
 
+	disable_anatop_clocks(anatop_base);
+
+	imx_mmdc_mask_handshake(ccm_base, 1);
+
 	mmdc_ch1_disable(ccm_base);
 
 	for (i = 1; i < 4; i++) {
@@ -380,42 +420,6 @@ static void init_ldb_clks(struct device_node *np, void __iomem *ccm_base)
 	}
 
 	mmdc_ch1_reenable(ccm_base);
-}
-
-#define CCM_ANALOG_PLL_VIDEO	0xa0
-#define CCM_ANALOG_PFD_480	0xf0
-#define CCM_ANALOG_PFD_528	0x100
-
-#define PLL_ENABLE		BIT(13)
-
-#define PFD0_CLKGATE		BIT(7)
-#define PFD1_CLKGATE		BIT(15)
-#define PFD2_CLKGATE		BIT(23)
-#define PFD3_CLKGATE		BIT(31)
-
-static void disable_anatop_clocks(void __iomem *anatop_base)
-{
-	unsigned int reg;
-
-	/* Make sure PLL2 PFDs 0-2 are gated */
-	reg = readl_relaxed(anatop_base + CCM_ANALOG_PFD_528);
-	/* Cannot gate PFD2 if pll2_pfd2_396m is the parent of MMDC clock */
-	if (clk_get_parent(hws[IMX6QDL_CLK_PERIPH_PRE]->clk) ==
-	    hws[IMX6QDL_CLK_PLL2_PFD2_396M]->clk)
-		reg |= PFD0_CLKGATE | PFD1_CLKGATE;
-	else
-		reg |= PFD0_CLKGATE | PFD1_CLKGATE | PFD2_CLKGATE;
-	writel_relaxed(reg, anatop_base + CCM_ANALOG_PFD_528);
-
-	/* Make sure PLL3 PFDs 0-3 are gated */
-	reg = readl_relaxed(anatop_base + CCM_ANALOG_PFD_480);
-	reg |= PFD0_CLKGATE | PFD1_CLKGATE | PFD2_CLKGATE | PFD3_CLKGATE;
-	writel_relaxed(reg, anatop_base + CCM_ANALOG_PFD_480);
-
-	/* Make sure PLL5 is disabled */
-	reg = readl_relaxed(anatop_base + CCM_ANALOG_PLL_VIDEO);
-	reg &= ~PLL_ENABLE;
-	writel_relaxed(reg, anatop_base + CCM_ANALOG_PLL_VIDEO);
 }
 
 static struct clk_hw * __init imx6q_obtain_fixed_clk_hw(struct device_node *np,
@@ -641,10 +645,6 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	hws[IMX6QDL_CLK_IPU1_SEL]         = imx_clk_hw_mux("ipu1_sel",         base + 0x3c, 9,  2, ipu_sels,          ARRAY_SIZE(ipu_sels));
 	hws[IMX6QDL_CLK_IPU2_SEL]         = imx_clk_hw_mux("ipu2_sel",         base + 0x3c, 14, 2, ipu_sels,          ARRAY_SIZE(ipu_sels));
 
-	disable_anatop_clocks(anatop_base);
-
-	imx_mmdc_mask_handshake(base, 1);
-
 	if (clk_on_imx6qp()) {
 		hws[IMX6QDL_CLK_LDB_DI0_SEL]      = imx_clk_hw_mux_flags("ldb_di0_sel", base + 0x2c, 9,  3, ldb_di_sels,      ARRAY_SIZE(ldb_di_sels), CLK_SET_RATE_PARENT);
 		hws[IMX6QDL_CLK_LDB_DI1_SEL]      = imx_clk_hw_mux_flags("ldb_di1_sel", base + 0x2c, 12, 3, ldb_di_sels,      ARRAY_SIZE(ldb_di_sels), CLK_SET_RATE_PARENT);
@@ -654,7 +654,7 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 		 * bug. Set the muxes to the requested values before registering the
 		 * ldb_di_sel clocks.
 		 */
-		init_ldb_clks(np, base);
+		init_ldb_clks(np, base, anatop_base);
 
 		hws[IMX6QDL_CLK_LDB_DI0_SEL]      = imx_clk_hw_mux_ldb("ldb_di0_sel", base + 0x2c, 9,  3, ldb_di_sels,      ARRAY_SIZE(ldb_di_sels));
 		hws[IMX6QDL_CLK_LDB_DI1_SEL]      = imx_clk_hw_mux_ldb("ldb_di1_sel", base + 0x2c, 12, 3, ldb_di_sels,      ARRAY_SIZE(ldb_di_sels));
