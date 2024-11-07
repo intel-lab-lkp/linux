@@ -19,6 +19,9 @@ enum fuse_ring_req_state {
 	/* The ring request waits for a new fuse request */
 	FRRS_WAIT,
 
+	/* The ring req got assigned a fuse req */
+	FRRS_FUSE_REQ,
+
 	/* request is in or on the way to user space */
 	FRRS_USERSPACE,
 };
@@ -72,6 +75,14 @@ struct fuse_ring_queue {
 	 * to be send to userspace
 	 */
 	struct list_head ent_intermediate_queue;
+
+	/* entries in userspace */
+	struct list_head ent_in_userspace;
+
+	/* fuse requests waiting for an entry slot */
+	struct list_head fuse_req_queue;
+
+	struct fuse_pqueue fpq;
 };
 
 /**
