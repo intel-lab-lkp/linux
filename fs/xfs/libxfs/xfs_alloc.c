@@ -1069,6 +1069,10 @@ xfs_alloc_cur_check(
 	if (bnew == NULLAGBLOCK)
 		goto out;
 
+	args->len = XFS_EXTLEN_MIN(bnoa + lena - bnew, args->maxlen);
+	if (args->len < acur->len)
+		goto out;
+
 	/*
 	 * Deactivate a bnobt cursor with worse locality than the current best.
 	 */
