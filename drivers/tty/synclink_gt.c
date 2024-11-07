@@ -519,7 +519,7 @@ static void trace_block(struct slgt_info *info, const char *data, int count, con
 static void dump_tbufs(struct slgt_info *info)
 {
 	int i;
-	printk("tbuf_current=%d\n", info->tbuf_current);
+	printk("tbuf_current=%u\n", info->tbuf_current);
 	for (i=0 ; i < info->tbuf_count ; i++) {
 		printk("%d: count=%04X status=%04X\n",
 			i, le16_to_cpu(info->tbufs[i].count), le16_to_cpu(info->tbufs[i].status));
