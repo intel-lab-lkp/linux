@@ -109,6 +109,10 @@ static void *sev_init_ex_buffer;
  */
 static struct sev_data_range_list *snp_range_list;
 
+/* SEV ASID data tracks resources associated with an ASID to safely manage operations. */
+struct sev_asid_data *sev_asid_data;
+u32 nr_asids, sev_min_asid, sev_max_asid, sev_es_max_asid;
+
 static inline bool sev_version_greater_or_equal(u8 maj, u8 min)
 {
 	struct sev_device *sev = psp_master->sev_data;
@@ -1093,6 +1097,81 @@ static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 	return 0;
 }
 
+void *sev_snp_create_context(int asid, int *psp_ret)
+{
+	struct sev_data_snp_addr data = {};
+	void *context;
+	int rc;
+
+	if (!sev_asid_data)
+		return ERR_PTR(-ENODEV);
+
+	/* Can't create a context for a used ASID. */
+	if (sev_asid_data[asid].snp_context)
+		return ERR_PTR(-EBUSY);
+
+	/* Allocate memory for context page */
+	context = snp_alloc_firmware_page(GFP_KERNEL_ACCOUNT);
+	if (!context)
+		return ERR_PTR(-ENOMEM);
+
+	data.address = __psp_pa(context);
+	rc = sev_do_cmd(SEV_CMD_SNP_GCTX_CREATE, &data, psp_ret);
+	if (rc) {
+		pr_warn("Failed to create SEV-SNP context, rc %d fw_error %d",
+			rc, *psp_ret);
+		snp_free_firmware_page(context);
+		return ERR_PTR(-EIO);
+	}
+
+	sev_asid_data[asid].snp_context = context;
+
+	return context;
+}
+
+int sev_snp_activate_asid(int asid, int *psp_ret)
+{
+	struct sev_data_snp_activate data = {0};
+	void *context;
+
+	if (!sev_asid_data)
+		return -ENODEV;
+
+	context = sev_asid_data[asid].snp_context;
+	if (!context)
+		return -EINVAL;
+
+	data.gctx_paddr = __psp_pa(context);
+	data.asid = asid;
+	return sev_do_cmd(SEV_CMD_SNP_ACTIVATE, &data, psp_ret);
+}
+
+int sev_snp_guest_decommission(int asid, int *psp_ret)
+{
+	struct sev_data_snp_addr addr = {};
+	struct sev_asid_data *data = &sev_asid_data[asid];
+	int ret;
+
+	if (!sev_asid_data)
+		return -ENODEV;
+
+	/* If context is not created then do nothing */
+	if (!data->snp_context)
+		return 0;
+
+	/* Do the decommision, which will unbind the ASID from the SNP context */
+	addr.address = __sme_pa(data->snp_context);
+	ret = sev_do_cmd(SEV_CMD_SNP_DECOMMISSION, &addr, NULL);
+
+	if (WARN_ONCE(ret, "Failed to release guest context, ret %d", ret))
+		return ret;
+
+	snp_free_firmware_page(data->snp_context);
+	data->snp_context = NULL;
+
+	return 0;
+}
+
 static int __sev_snp_init_locked(int *error)
 {
 	struct psp_device *psp = psp_master;
@@ -1306,6 +1385,27 @@ static int __sev_platform_init_locked(int *error)
 	return 0;
 }
 
+static int __sev_asid_data_init(void)
+{
+	u32 eax, ebx;
+
+	if (sev_asid_data)
+		return 0;
+
+	cpuid(0x8000001f, &eax, &ebx, &sev_max_asid, &sev_min_asid);
+	if (!sev_max_asid)
+		return -ENODEV;
+
+	nr_asids = sev_max_asid + 1;
+	sev_es_max_asid = sev_min_asid - 1;
+
+	sev_asid_data = kcalloc(nr_asids, sizeof(*sev_asid_data), GFP_KERNEL);
+	if (!sev_asid_data)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static int _sev_platform_init_locked(struct sev_platform_init_args *args)
 {
 	struct sev_device *sev;
@@ -1318,6 +1418,10 @@ static int _sev_platform_init_locked(struct sev_platform_init_args *args)
 
 	if (sev->state == SEV_STATE_INIT)
 		return 0;
+
+	rc = __sev_asid_data_init();
+	if (rc)
+		return rc;
 
 	/*
 	 * Legacy guests cannot be running while SNP_INIT(_EX) is executing,
@@ -2328,6 +2432,9 @@ static void __sev_firmware_shutdown(struct sev_device *sev, bool panic)
 		kfree(snp_range_list);
 		snp_range_list = NULL;
 	}
+
+	kfree(sev_asid_data);
+	sev_asid_data = NULL;
 
 	__sev_snp_shutdown_locked(&error, panic);
 }
