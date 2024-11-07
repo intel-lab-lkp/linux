@@ -237,6 +237,24 @@ config ZSMALLOC_CHAIN_SIZE
 
 	  For more information, see zsmalloc documentation.
 
+config ZSMALLOC_MULTI_PAGES
+	bool "support zsmalloc multiple pages"
+	depends on ZSMALLOC && !CONFIG_HIGHMEM
+	help
+	  This option configures zsmalloc to support allocations larger than
+	  PAGE_SIZE, enabling compression across multiple pages. The size of
+	  these multiple pages is determined by the configured
+	  ZSMALLOC_MULTI_PAGES_ORDER.
+
+config ZSMALLOC_MULTI_PAGES_ORDER
+	int "zsmalloc multiple pages order"
+	default 2
+	range 1 9
+	depends on ZSMALLOC_MULTI_PAGES
+	help
+	  This option is used to configure zsmalloc to support the compression
+	  of multiple pages.
+
 menu "Slab allocator options"
 
 config SLUB

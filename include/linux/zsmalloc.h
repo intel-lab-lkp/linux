@@ -33,6 +33,14 @@ enum zs_mapmode {
 	 */
 };
 
+enum zsmalloc_type {
+	ZSMALLOC_TYPE_BASEPAGE,
+#ifdef CONFIG_ZSMALLOC_MULTI_PAGES
+	ZSMALLOC_TYPE_MULTI_PAGES,
+#endif
+	ZSMALLOC_TYPE_MAX,
+};
+
 struct zs_pool_stats {
 	/* How many pages were migrated (freed) */
 	atomic_long_t pages_compacted;
@@ -46,7 +54,7 @@ void zs_destroy_pool(struct zs_pool *pool);
 unsigned long zs_malloc(struct zs_pool *pool, size_t size, gfp_t flags);
 void zs_free(struct zs_pool *pool, unsigned long obj);
 
-size_t zs_huge_class_size(struct zs_pool *pool);
+size_t zs_huge_class_size(struct zs_pool *pool, enum zsmalloc_type type);
 
 void *zs_map_object(struct zs_pool *pool, unsigned long handle,
 			enum zs_mapmode mm);
