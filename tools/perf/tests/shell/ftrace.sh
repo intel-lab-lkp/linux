@@ -80,10 +80,21 @@ test_ftrace_profile() {
     echo "perf ftrace profile test  [Success]"
 }
 
+if [ "$(uname -m)" = "s390x" ]
+then
+	ftrace_size=$(cat /sys/kernel/tracing/buffer_size_kb)
+	echo 16384 > /sys/kernel/tracing/buffer_size_kb
+fi
+
 test_ftrace_list
 test_ftrace_trace
 test_ftrace_latency
 test_ftrace_profile
+
+if [ "$(uname -m)" = "s390x" ]
+then
+	echo $ftrace_size > /sys/kernel/tracing/buffer_size_kb
+fi
 
 cleanup
 exit 0
