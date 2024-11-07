@@ -235,7 +235,7 @@ static void geneve_rx(struct geneve_dev *geneve, struct geneve_sock *gs,
 					 vni_to_tunnel_id(gnvh->vni),
 					 gnvh->opt_len * 4);
 		if (!tun_dst) {
-			DEV_STATS_INC(geneve->dev, rx_dropped);
+			dev_core_stats_rx_dropped_inc(geneve->dev);
 			goto drop;
 		}
 		/* Update tunnel dst according to Geneve options. */
@@ -387,14 +387,14 @@ static int geneve_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 
 	if (unlikely((!geneve->cfg.inner_proto_inherit &&
 		      inner_proto != htons(ETH_P_TEB)))) {
-		DEV_STATS_INC(geneve->dev, rx_dropped);
+		dev_core_stats_rx_dropped_inc(geneve->dev);
 		goto drop;
 	}
 
 	opts_len = geneveh->opt_len * 4;
 	if (iptunnel_pull_header(skb, GENEVE_BASE_HLEN + opts_len, inner_proto,
 				 !net_eq(geneve->net, dev_net(geneve->dev)))) {
-		DEV_STATS_INC(geneve->dev, rx_dropped);
+		dev_core_stats_rx_dropped_inc(geneve->dev);
 		goto drop;
 	}
 
@@ -1023,7 +1023,7 @@ static netdev_tx_t geneve_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (unlikely(!info || !(info->mode & IP_TUNNEL_INFO_TX))) {
 			netdev_dbg(dev, "no tunnel metadata\n");
 			dev_kfree_skb(skb);
-			DEV_STATS_INC(dev, tx_dropped);
+			dev_core_stats_tx_dropped_inc(dev);
 			return NETDEV_TX_OK;
 		}
 	} else {
