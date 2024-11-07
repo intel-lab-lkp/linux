@@ -60,6 +60,8 @@ void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
 /* Execute the request from a blocking context */
 void io_uring_cmd_issue_blocking(struct io_uring_cmd *ioucmd);
 
+int io_uring_cmd_lease_kbuf(struct io_uring_cmd *ioucmd,
+			    struct io_rsrc_node *node);
 #else
 static inline int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			      struct iov_iter *iter, void *ioucmd)
@@ -81,6 +83,11 @@ static inline void io_uring_cmd_mark_cancelable(struct io_uring_cmd *cmd,
 }
 static inline void io_uring_cmd_issue_blocking(struct io_uring_cmd *ioucmd)
 {
+}
+static inline int io_uring_cmd_lease_kbuf(struct io_uring_cmd *ioucmd,
+					  struct io_rsrc_node *node);
+{
+	return -EOPNOTSUPP;
 }
 #endif
 
