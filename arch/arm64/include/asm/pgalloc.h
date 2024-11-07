@@ -12,6 +12,7 @@
 #include <asm/processor.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
+#include <asm/cpu.h>
 
 #define __HAVE_ARCH_PGD_FREE
 #define __HAVE_ARCH_PUD_FREE
@@ -136,5 +137,73 @@ pmd_populate(struct mm_struct *mm, pmd_t *pmdp, pgtable_t ptep)
 	VM_BUG_ON(mm == &init_mm);
 	__pmd_populate(pmdp, page_to_phys(ptep), PMD_TYPE_TABLE | PMD_TABLE_PXN);
 }
+
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+
+#define VMEMMAP_ARCH_TLB_FLUSH_FLAGS (VMEMMAP_SPLIT_NO_TLB_FLUSH | VMEMMAP_REMAP_NO_TLB_FLUSH)
+
+#define vmemmap_update_supported vmemmap_update_supported
+static inline bool vmemmap_update_supported(void)
+{
+	return system_uses_irq_prio_masking();
+}
+
+#define vmemmap_update_lock vmemmap_update_lock
+static inline void vmemmap_update_lock(void)
+{
+	cpus_read_lock();
+}
+
+#define vmemmap_update_unlock vmemmap_update_unlock
+static inline void vmemmap_update_unlock(void)
+{
+	cpus_read_unlock();
+}
+
+#define vmemmap_update_pte_range_start vmemmap_update_pte_range_start
+static inline void vmemmap_update_pte_range_start(pte_t *pte,
+						  unsigned long start, unsigned long end)
+{
+	unsigned long addr;
+
+	local_irq_disable();
+	pause_remote_cpus();
+
+	for (addr = start; addr != end; addr += PAGE_SIZE, pte++)
+		pte_clear(&init_mm, addr, pte);
+
+	flush_tlb_kernel_range(start, end);
+}
+
+#define vmemmap_update_pte_range_end vmemmap_update_pte_range_end
+static inline void vmemmap_update_pte_range_end(void)
+{
+	resume_remote_cpus();
+	local_irq_enable();
+}
+
+#define vmemmap_update_pmd_range_start vmemmap_update_pmd_range_start
+static inline void vmemmap_update_pmd_range_start(pmd_t *pmd,
+						  unsigned long start, unsigned long end)
+{
+	unsigned long addr;
+
+	local_irq_disable();
+	pause_remote_cpus();
+
+	for (addr = start; addr != end; addr += PMD_SIZE, pmd++)
+		pmd_clear(pmd);
+
+	flush_tlb_kernel_range(start, end);
+}
+
+#define vmemmap_update_pmd_range_end vmemmap_update_pmd_range_end
+static inline void vmemmap_update_pmd_range_end(void)
+{
+	resume_remote_cpus();
+	local_irq_enable();
+}
+
+#endif /* CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP */
 
 #endif
