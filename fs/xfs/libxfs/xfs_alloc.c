@@ -393,7 +393,8 @@ xfs_alloc_compute_diff(
 	 * grows in the short term.
 	 */
 	if (freebno >= wantbno || (userdata && freeend < wantend)) {
-		if ((newbno1 = roundup(freebno, alignment)) >= freeend)
+		newbno1 = roundup(freebno, alignment);
+		if (newbno1 >= freeend || newbno1 > freeend - wantlen)
 			newbno1 = NULLAGBLOCK;
 	} else if (freeend >= wantend && alignment > 1) {
 		newbno1 = roundup(wantbno, alignment);
@@ -414,6 +415,8 @@ xfs_alloc_compute_diff(
 				newbno1 = newbno2;
 		} else if (newbno2 != NULLAGBLOCK)
 			newbno1 = newbno2;
+		if (newbno1 > freeend - wantlen)
+			newbno1 = NULLAGBLOCK;
 	} else if (freeend >= wantend) {
 		newbno1 = wantbno;
 	} else if (alignment > 1) {
