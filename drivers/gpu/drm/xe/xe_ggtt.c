@@ -838,3 +838,55 @@ u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer 
 
 	return total;
 }
+
+#ifdef CONFIG_DEBUG_FS
+
+/**
+ * xe_ggtt_node_read() - Copy PTEs from the GGTT node to the user space buffer
+ * @node: the GGTT node to read from
+ * @buf: the user space buffer to read to
+ * @count: the maximum number of bytes to read
+ * @ppos: the current position
+ *
+ * Return: On success, the number of bytes read is returned and the offset
+ * @ppos is advanced by this number, or negative value is returned on error.
+ */
+ssize_t xe_ggtt_node_read(struct xe_ggtt_node *node, char __user *buf,
+			  size_t count, loff_t *ppos)
+{
+	if (!xe_ggtt_node_allocated(node))
+		return 0;
+
+	xe_tile_assert(node->ggtt->tile, IS_ALIGNED(node->base.start, XE_PAGE_SIZE));
+	xe_tile_assert(node->ggtt->tile, IS_ALIGNED(node->base.size, XE_PAGE_SIZE));
+
+	return simple_read_from_iomem(buf, count, ppos,
+				      &node->ggtt->gsm[node->base.start / XE_PAGE_SIZE],
+				      size_mul(sizeof(u64), node->base.size / XE_PAGE_SIZE));
+}
+
+/**
+ * xe_ggtt_node_write() - Update PTEs of the GGTT node using data from the user space buffer
+ * @node: the GGTT node to write to
+ * @buf: the user space buffer to read from
+ * @count: the maximum number of bytes to read
+ * @ppos: the current position
+ *
+ * Return: On success, the number of bytes written is returned and the offset
+ * @ppos is advanced by this number, or negative value is returned on error.
+ */
+ssize_t xe_ggtt_node_write(struct xe_ggtt_node *node, const char __user *buf,
+			   size_t count, loff_t *ppos)
+{
+	if (!xe_ggtt_node_allocated(node))
+		return -ENXIO;
+
+	xe_tile_assert(node->ggtt->tile, IS_ALIGNED(node->base.start, XE_PAGE_SIZE));
+	xe_tile_assert(node->ggtt->tile, IS_ALIGNED(node->base.size, XE_PAGE_SIZE));
+
+	return simple_write_to_iomem(&node->ggtt->gsm[node->base.start / XE_PAGE_SIZE],
+				     size_mul(sizeof(u64), node->base.size / XE_PAGE_SIZE),
+				     ppos, buf, count);
+}
+
+#endif

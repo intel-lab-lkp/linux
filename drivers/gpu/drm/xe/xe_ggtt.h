@@ -34,6 +34,13 @@ u64 xe_ggtt_largest_hole(struct xe_ggtt *ggtt, u64 alignment, u64 *spare);
 int xe_ggtt_dump(struct xe_ggtt *ggtt, struct drm_printer *p);
 u64 xe_ggtt_print_holes(struct xe_ggtt *ggtt, u64 alignment, struct drm_printer *p);
 
+#ifdef CONFIG_DEBUG_FS
+ssize_t xe_ggtt_node_read(struct xe_ggtt_node *node, char __user *buf,
+			  size_t count, loff_t *pos);
+ssize_t xe_ggtt_node_write(struct xe_ggtt_node *node, const char __user *buf,
+			   size_t count, loff_t *pos);
+#endif
+
 #ifdef CONFIG_PCI_IOV
 void xe_ggtt_assign(const struct xe_ggtt_node *node, u16 vfid);
 #endif
