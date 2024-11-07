@@ -552,4 +552,6 @@ struct procmap_query {
 	__u64 build_id_addr;		/* in */
 };
 
+#define PROCFS_SET_GROUPS	_IO(PROCFS_IOCTL_MAGIC, 18)
+
 #endif /* _UAPI_LINUX_FS_H */
