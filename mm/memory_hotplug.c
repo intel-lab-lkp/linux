@@ -1770,13 +1770,14 @@ found:
 	return 0;
 }
 
-static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
+static int do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 {
 	struct folio *folio;
 	unsigned long pfn;
 	LIST_HEAD(source);
 	static DEFINE_RATELIMIT_STATE(migrate_rs, DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
+	int ret = 0;
 
 	for (pfn = start_pfn; pfn < end_pfn; pfn++) {
 		struct page *page;
@@ -1833,7 +1834,6 @@ put_folio:
 			.gfp_mask = GFP_USER | __GFP_MOVABLE | __GFP_RETRY_MAYFAIL,
 			.reason = MR_MEMORY_HOTPLUG,
 		};
-		int ret;
 
 		/*
 		 * We have checked that migration range is on a single zone so
@@ -1863,6 +1863,7 @@ put_folio:
 			putback_movable_pages(&source);
 		}
 	}
+	return ret;
 }
 
 static int __init cmdline_parse_movable_node(char *p)
@@ -1940,6 +1941,7 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 	const int node = zone_to_nid(zone);
 	unsigned long flags;
 	struct memory_notify arg;
+	unsigned int tries = 0;
 	char *reason;
 	int ret;
 
@@ -2028,11 +2030,8 @@ int offline_pages(unsigned long start_pfn, unsigned long nr_pages,
 
 			ret = scan_movable_pages(pfn, end_pfn, &pfn);
 			if (!ret) {
-				/*
-				 * TODO: fatal migration failures should bail
-				 * out
-				 */
-				do_migrate_range(pfn, end_pfn);
+				if (do_migrate_range(pfn, end_pfn) && ++tries == 5)
+					ret = -EBUSY;
 			}
 		} while (!ret);
 
