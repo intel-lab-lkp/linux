@@ -141,6 +141,7 @@ struct nvme_dev {
 	struct nvme_ctrl ctrl;
 	u32 last_ps;
 	bool hmb;
+	u32 small_dmapool_seg_size;
 
 	mempool_t *iod_mempool;
 
@@ -611,7 +612,7 @@ static blk_status_t nvme_pci_setup_prps(struct nvme_dev *dev,
 	}
 
 	nprps = DIV_ROUND_UP(length, NVME_CTRL_PAGE_SIZE);
-	if (nprps <= (256 / 8)) {
+	if (nprps <= (dev->small_dmapool_seg_size / 8)) {
 		pool = dev->prp_small_pool;
 		iod->nr_allocations = 0;
 	} else {
@@ -701,7 +702,7 @@ static blk_status_t nvme_pci_setup_sgls(struct nvme_dev *dev,
 		return BLK_STS_OK;
 	}
 
-	if (entries <= (256 / sizeof(struct nvme_sgl_desc))) {
+	if (entries <= (dev->small_dmapool_seg_size / sizeof(struct nvme_sgl_desc))) {
 		pool = dev->prp_small_pool;
 		iod->nr_allocations = 0;
 	} else {
@@ -2700,8 +2701,9 @@ static int nvme_setup_prp_pools(struct nvme_dev *dev)
 		return -ENOMEM;
 
 	/* Optimisation for I/Os between 4k and 128k */
-	dev->prp_small_pool = dma_pool_create("prp list 256", dev->dev,
-						256, 256, 0);
+	dev->prp_small_pool = dma_pool_create("prp list small", dev->dev,
+						dev->small_dmapool_seg_size,
+						dev->small_dmapool_seg_size, 0);
 	if (!dev->prp_small_pool) {
 		dma_pool_destroy(dev->prp_page_pool);
 		return -ENOMEM;
@@ -3063,6 +3065,11 @@ static struct nvme_dev *nvme_pci_alloc_dev(struct pci_dev *pdev,
 	 * a single integrity segment for the separate metadata pointer.
 	 */
 	dev->ctrl.max_integrity_segments = 1;
+
+	if (dev->ctrl.quirks & NVME_QUIRK_SMALL_DMAPOOL_512)
+		dev->small_dmapool_seg_size = 512;
+	else
+		dev->small_dmapool_seg_size = 256;
 	return dev;
 
 out_put_device:
@@ -3449,7 +3456,7 @@ static const struct pci_device_id nvme_id_table[] = {
 	{ PCI_VDEVICE(REDHAT, 0x0010),	/* Qemu emulated controller */
 		.driver_data = NVME_QUIRK_BOGUS_NID, },
 	{ PCI_DEVICE(0x1217, 0x8760), /* O2 Micro 64GB Steam Deck */
-		.driver_data = NVME_QUIRK_QDEPTH_ONE },
+		.driver_data = NVME_QUIRK_SMALL_DMAPOOL_512 },
 	{ PCI_DEVICE(0x126f, 0x2262),	/* Silicon Motion generic */
 		.driver_data = NVME_QUIRK_NO_DEEPEST_PS |
 				NVME_QUIRK_BOGUS_NID, },

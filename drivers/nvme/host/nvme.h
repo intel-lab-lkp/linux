@@ -173,6 +173,11 @@ enum nvme_quirks {
 	 * MSI (but not MSI-X) interrupts are broken and never fire.
 	 */
 	NVME_QUIRK_BROKEN_MSI			= (1 << 21),
+
+	/*
+	 * Min. dma pool segment size 512 bytes
+	 */
+	NVME_QUIRK_SMALL_DMAPOOL_512		= (1 << 22),
 };
 
 /*
