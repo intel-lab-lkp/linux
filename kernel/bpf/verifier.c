@@ -6278,6 +6278,10 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 				return ret;
 		}
 	}
+
+	if (si[0].priv_stack_mode == PRIV_STACK_ADAPTIVE)
+		env->prog->aux->priv_stack_requested = true;
+
 	return 0;
 }
 
@@ -20211,6 +20215,9 @@ static int jit_subprogs(struct bpf_verifier_env *env)
 
 		func[i]->aux->name[0] = 'F';
 		func[i]->aux->stack_depth = env->subprog_info[i].stack_depth;
+		if (env->subprog_info[i].priv_stack_mode == PRIV_STACK_ADAPTIVE)
+			func[i]->aux->priv_stack_requested = true;
+
 		func[i]->jit_requested = 1;
 		func[i]->blinding_requested = prog->blinding_requested;
 		func[i]->aux->kfunc_tab = prog->aux->kfunc_tab;
