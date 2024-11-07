@@ -1739,6 +1739,7 @@ int perf_pmu__for_each_format(struct perf_pmu *pmu, void *state, pmu_format_call
 		"aux-output",
 		"aux-sample-size=number",
 		"alt-period=number",
+		"alt-period-jitter=number",
 	};
 	struct perf_pmu_format *format;
 	int ret;
