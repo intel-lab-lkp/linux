@@ -270,6 +270,11 @@ struct hw_perf_event {
 	 */
 	u64				freq_time_stamp;
 	u64				freq_count_stamp;
+
+	/*
+	 * Indicates that the alternative_sample_period is used
+	 */
+	bool				using_alternative_sample_period;
 #endif
 };
 
