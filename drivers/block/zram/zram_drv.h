@@ -28,6 +28,10 @@
 #define ZRAM_SECTOR_PER_LOGICAL_BLOCK	\
 	(1 << (ZRAM_LOGICAL_BLOCK_SHIFT - SECTOR_SHIFT))
 
+#ifdef CONFIG_ZRAM_MULTI_PAGES
+#define SECTORS_PER_MULTI_PAGE_SHIFT	(MULTI_PAGE_SHIFT - SECTOR_SHIFT)
+#define SECTORS_PER_MULTI_PAGE	(1 << SECTORS_PER_MULTI_PAGE_SHIFT)
+#endif
 
 /*
  * ZRAM is mainly used for memory efficiency so we want to keep memory
@@ -38,7 +42,15 @@
  *
  * We use BUILD_BUG_ON() to make sure that zram pageflags don't overflow.
  */
+
+#ifdef CONFIG_ZRAM_MULTI_PAGES
+#define ZRAM_FLAG_SHIFT (PAGE_SHIFT +  \
+	CONFIG_ZSMALLOC_MULTI_PAGES_ORDER + 1)
+#else
 #define ZRAM_FLAG_SHIFT (PAGE_SHIFT + 1)
+#endif
+
+#define ENABLE_HUGEPAGE_ZRAM_DEBUG 1
 
 /* Only 2 bits are allowed for comp priority index */
 #define ZRAM_COMP_PRIORITY_MASK	0x3
@@ -54,6 +66,10 @@ enum zram_pageflags {
 
 	ZRAM_COMP_PRIORITY_BIT1, /* First bit of comp priority index */
 	ZRAM_COMP_PRIORITY_BIT2, /* Second bit of comp priority index */
+
+#ifdef CONFIG_ZRAM_MULTI_PAGES
+	ZRAM_COMP_MULTI_PAGES,	/* Compressed by multi-pages */
+#endif
 
 	__NR_ZRAM_PAGEFLAGS,
 };
@@ -89,6 +105,16 @@ struct zram_stats {
 	atomic64_t bd_count;		/* no. of pages in backing device */
 	atomic64_t bd_reads;		/* no. of reads from backing device */
 	atomic64_t bd_writes;		/* no. of writes from backing device */
+#endif
+
+#ifdef CONFIG_ZRAM_MULTI_PAGES
+	atomic64_t zram_bio_write_multi_pages_count;
+	atomic64_t zram_bio_read_multi_pages_count;
+	atomic64_t multi_pages_failed_writes;
+	atomic64_t multi_pages_failed_reads;
+	atomic64_t zram_bio_write_multi_pages_partial_count;
+	atomic64_t zram_bio_read_multi_pages_partial_count;
+	atomic64_t multi_pages_miss_free;
 #endif
 };
 
@@ -141,4 +167,23 @@ struct zram {
 #endif
 	atomic_t pp_in_progress;
 };
+
+#ifdef CONFIG_ZRAM_MULTI_PAGES
+ #define multi_pages_bvec_iter_offset(bvec, iter)				\
+	(mp_bvec_iter_offset((bvec), (iter)) % ZCOMP_MULTI_PAGES_SIZE)
+
+#define multi_pages_bvec_iter_len(bvec, iter)				\
+	min_t(unsigned int, mp_bvec_iter_len((bvec), (iter)),		\
+	      ZCOMP_MULTI_PAGES_SIZE - bvec_iter_offset((bvec), (iter)))
+
+#define multi_pages_bvec_iter_bvec(bvec, iter)				\
+((struct bio_vec) {						\
+	.bv_page	= bvec_iter_page((bvec), (iter)),	\
+	.bv_len		= multi_pages_bvec_iter_len((bvec), (iter)),	\
+	.bv_offset	= multi_pages_bvec_iter_offset((bvec), (iter)),	\
+})
+
+#define multi_pages_bio_iter_iovec(bio, iter)				\
+	multi_pages_bvec_iter_bvec((bio)->bi_io_vec, (iter))
+#endif
 #endif

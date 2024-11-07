@@ -30,6 +30,13 @@ struct zcomp_ctx {
 	void *context;
 };
 
+#ifdef CONFIG_ZRAM_MULTI_PAGES
+#define ZCOMP_MULTI_PAGES_ORDER	(_AC(CONFIG_ZSMALLOC_MULTI_PAGES_ORDER, UL))
+#define ZCOMP_MULTI_PAGES_NR	(1 << ZCOMP_MULTI_PAGES_ORDER)
+#define ZCOMP_MULTI_PAGES_SIZE	(PAGE_SIZE * ZCOMP_MULTI_PAGES_NR)
+#define MULTI_PAGE_SHIFT (ZCOMP_MULTI_PAGES_ORDER + PAGE_SHIFT)
+#endif
+
 struct zcomp_strm {
 	local_lock_t lock;
 	/* compression buffer */
@@ -80,8 +87,9 @@ struct zcomp_strm *zcomp_stream_get(struct zcomp *comp);
 void zcomp_stream_put(struct zcomp *comp);
 
 int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
-		   const void *src, unsigned int *dst_len);
+		   const void *src, unsigned int src_len, unsigned int *dst_len);
 int zcomp_decompress(struct zcomp *comp, struct zcomp_strm *zstrm,
-		     const void *src, unsigned int src_len, void *dst);
+		     const void *src, unsigned int src_len, void *dst,
+		     unsigned int dst_len);
 
 #endif /* _ZCOMP_H_ */

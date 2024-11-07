@@ -145,3 +145,12 @@ config ZRAM_MULTI_COMP
 	  re-compress pages using a potentially slower but more effective
 	  compression algorithm. Note, that IDLE page recompression
 	  requires ZRAM_TRACK_ENTRY_ACTIME.
+
+config ZRAM_MULTI_PAGES
+	bool "Enable multiple pages compression and decompression"
+	depends on ZRAM && ZSMALLOC_MULTI_PAGES
+	help
+	  Initially, zram divided large folios into blocks of nr_pages, each sized
+	  equal to PAGE_SIZE, for compression. This option fine-tunes zram to
+	  improve compression granularity by dividing large folios into larger
+	  parts defined by the configuration option ZSMALLOC_MULTI_PAGES_ORDER.

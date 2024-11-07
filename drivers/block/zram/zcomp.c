@@ -52,6 +52,11 @@ static void zcomp_strm_free(struct zcomp *comp, struct zcomp_strm *zstrm)
 
 static int zcomp_strm_init(struct zcomp *comp, struct zcomp_strm *zstrm)
 {
+#ifdef CONFIG_ZRAM_MULTI_PAGES
+	unsigned long page_size = ZCOMP_MULTI_PAGES_SIZE;
+#else
+	unsigned long page_size = PAGE_SIZE;
+#endif
 	int ret;
 
 	ret = comp->ops->create_ctx(comp->params, &zstrm->ctx);
@@ -62,7 +67,7 @@ static int zcomp_strm_init(struct zcomp *comp, struct zcomp_strm *zstrm)
 	 * allocate 2 pages. 1 for compressed data, plus 1 extra for the
 	 * case when compressed size is larger than the original one
 	 */
-	zstrm->buffer = vzalloc(2 * PAGE_SIZE);
+	zstrm->buffer = vzalloc(2 * page_size);
 	if (!zstrm->buffer) {
 		zcomp_strm_free(comp, zstrm);
 		return -ENOMEM;
@@ -119,13 +124,13 @@ void zcomp_stream_put(struct zcomp *comp)
 }
 
 int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
-		   const void *src, unsigned int *dst_len)
+		   const void *src, unsigned int src_len, unsigned int *dst_len)
 {
 	struct zcomp_req req = {
 		.src = src,
 		.dst = zstrm->buffer,
-		.src_len = PAGE_SIZE,
-		.dst_len = 2 * PAGE_SIZE,
+		.src_len = src_len,
+		.dst_len = src_len * 2,
 	};
 	int ret;
 
@@ -136,13 +141,13 @@ int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
 }
 
 int zcomp_decompress(struct zcomp *comp, struct zcomp_strm *zstrm,
-		     const void *src, unsigned int src_len, void *dst)
+		     const void *src, unsigned int src_len, void *dst, unsigned int dst_len)
 {
 	struct zcomp_req req = {
 		.src = src,
 		.dst = dst,
 		.src_len = src_len,
-		.dst_len = PAGE_SIZE,
+		.dst_len = dst_len,
 	};
 
 	return comp->ops->decompress(comp->params, &zstrm->ctx, &req);
