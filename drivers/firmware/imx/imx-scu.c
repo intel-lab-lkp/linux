@@ -242,9 +242,11 @@ int imx_scu_call_rpc(struct imx_sc_ipc *sc_ipc, void *msg, bool have_resp)
 		 * APIs are defined as void function in SCU firmware, so they
 		 * should be treated as return success always.
 		 */
-		if ((saved_svc == IMX_SC_RPC_SVC_MISC) &&
+		if (((saved_svc == IMX_SC_RPC_SVC_MISC) &&
 			(saved_func == IMX_SC_MISC_FUNC_UNIQUE_ID ||
 			 saved_func == IMX_SC_MISC_FUNC_GET_BUTTON_STATUS))
+			 || (saved_svc == IMX_SC_RPC_SVC_SECO &&
+			 saved_func == IMX_SC_SECO_FUNC_BUILD_INFO))
 			ret = 0;
 	}
 
