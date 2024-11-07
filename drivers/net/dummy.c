@@ -138,6 +138,7 @@ static struct rtnl_link_ops dummy_link_ops __read_mostly = {
 	.kind		= DRV_NAME,
 	.setup		= dummy_setup,
 	.validate	= dummy_validate,
+	.netns_atomic	= true,
 };
 
 /* Number of dummy devices to be set up by this module. */
