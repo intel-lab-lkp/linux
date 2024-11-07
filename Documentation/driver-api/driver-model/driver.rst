@@ -2,7 +2,8 @@
 Device Drivers
 ==============
 
-See the kerneldoc for the struct device_driver.
+.. kernel-doc:: include/linux/device/driver.h
+    :identifiers: struct device_driver
 
 Allocation
 ~~~~~~~~~~

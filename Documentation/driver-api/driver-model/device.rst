@@ -2,8 +2,8 @@
 The Basic Device Structure
 ==========================
 
-See the kerneldoc for the struct device.
-
+.. kernel-doc:: include/linux/device/device.h
+    :identifiers: struct device
 
 Programming Interface
 ~~~~~~~~~~~~~~~~~~~~~

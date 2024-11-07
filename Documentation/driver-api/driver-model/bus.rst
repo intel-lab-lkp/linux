@@ -4,7 +4,9 @@ Bus Types
 
 Definition
 ~~~~~~~~~~
-See the kerneldoc for the struct bus_type.
+
+.. kernel-doc:: include/linux/device/bus.h
+    :identifiers: struct bus_type
 
 int bus_register(struct bus_type * bus);
 
