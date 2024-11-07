@@ -154,9 +154,11 @@ msix_alloc_err:
  */
 static void octep_disable_msix(struct octep_device *oct)
 {
-	pci_disable_msix(oct->pdev);
-	kfree(oct->msix_entries);
-	oct->msix_entries = NULL;
+	if (oct->msix_entries) {
+		pci_disable_msix(oct->pdev);
+		kfree(oct->msix_entries);
+		oct->msix_entries = NULL;
+	}
 	dev_info(&oct->pdev->dev, "Disabled MSI-X\n");
 }
 
@@ -496,16 +498,18 @@ static void octep_free_irqs(struct octep_device *oct)
 {
 	int i;
 
-	/* First few MSI-X interrupts are non queue interrupts; free them */
-	for (i = 0; i < CFG_GET_NON_IOQ_MSIX(oct->conf); i++)
-		free_irq(oct->msix_entries[i].vector, oct);
-	kfree(oct->non_ioq_irq_names);
+	if (oct->msix_entries) {
+		/* First few MSI-X interrupts are non queue interrupts; free them */
+		for (i = 0; i < CFG_GET_NON_IOQ_MSIX(oct->conf); i++)
+			free_irq(oct->msix_entries[i].vector, oct);
+		kfree(oct->non_ioq_irq_names);
 
-	/* Free IRQs for Input/Output (Tx/Rx) queues */
-	for (i = CFG_GET_NON_IOQ_MSIX(oct->conf); i < oct->num_irqs; i++) {
-		irq_set_affinity_hint(oct->msix_entries[i].vector, NULL);
-		free_irq(oct->msix_entries[i].vector,
-			 oct->ioq_vector[i - CFG_GET_NON_IOQ_MSIX(oct->conf)]);
+		/* Free IRQs for Input/Output (Tx/Rx) queues */
+		for (i = CFG_GET_NON_IOQ_MSIX(oct->conf); i < oct->num_irqs; i++) {
+			irq_set_affinity_hint(oct->msix_entries[i].vector, NULL);
+			free_irq(oct->msix_entries[i].vector,
+				 oct->ioq_vector[i - CFG_GET_NON_IOQ_MSIX(oct->conf)]);
+		}
 	}
 	netdev_info(oct->netdev, "IRQs freed\n");
 }
@@ -635,8 +639,10 @@ static void octep_napi_delete(struct octep_device *oct)
 
 	for (i = 0; i < oct->num_oqs; i++) {
 		netdev_dbg(oct->netdev, "Deleting NAPI on Q-%d\n", i);
-		netif_napi_del(&oct->ioq_vector[i]->napi);
-		oct->oq[i]->napi = NULL;
+		if (oct->oq[i]->napi) {
+			netif_napi_del(&oct->ioq_vector[i]->napi);
+			oct->oq[i]->napi = NULL;
+		}
 	}
 }
 
@@ -666,7 +672,8 @@ static void octep_napi_disable(struct octep_device *oct)
 
 	for (i = 0; i < oct->num_oqs; i++) {
 		netdev_dbg(oct->netdev, "Disabling NAPI on Q-%d\n", i);
-		napi_disable(&oct->ioq_vector[i]->napi);
+		if (oct->oq[i]->napi)
+			napi_disable(&oct->ioq_vector[i]->napi);
 	}
 }
 
