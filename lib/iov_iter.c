@@ -435,6 +435,48 @@ size_t copy_page_from_iter(struct page *page, size_t offset, size_t bytes,
 }
 EXPORT_SYMBOL(copy_page_from_iter);
 
+size_t copy_iomem_to_iter(const void __iomem *from, size_t offset,
+			  size_t bytes, struct iov_iter *i)
+{
+	unsigned char buf[SMP_CACHE_BYTES];
+	size_t progress = 0, copied, len;
+
+	from += offset;
+	while (bytes) {
+		len = min(bytes, sizeof(buf));
+		memcpy_fromio(buf, from + progress, len);
+		copied = _copy_to_iter(buf, len, i);
+		if (!copied)
+			break;
+		bytes -= copied;
+		progress += copied;
+	}
+
+	return progress;
+}
+EXPORT_SYMBOL(copy_iomem_to_iter);
+
+size_t copy_iomem_from_iter(void __iomem *to, size_t offset,
+			    size_t bytes, struct iov_iter *i)
+{
+	unsigned char buf[SMP_CACHE_BYTES];
+	size_t progress = 0, copied, len;
+
+	to += offset;
+	while (bytes) {
+		len = min(bytes, sizeof(buf));
+		copied = _copy_from_iter(buf, len, i);
+		if (!copied)
+			break;
+		memcpy_toio(to + progress, buf, copied);
+		bytes -= copied;
+		progress += copied;
+	}
+
+	return progress;
+}
+EXPORT_SYMBOL(copy_iomem_from_iter);
+
 static __always_inline
 size_t zero_to_user_iter(void __user *iter_to, size_t progress,
 			 size_t len, void *priv, void *priv2)
