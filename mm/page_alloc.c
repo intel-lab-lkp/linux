@@ -5598,8 +5598,14 @@ void __meminit setup_zone_pageset(struct zone *zone)
 	/* Size may be 0 on !SMP && !NUMA */
 	if (sizeof(struct per_cpu_zonestat) > 0)
 		zone->per_cpu_zonestats = alloc_percpu(struct per_cpu_zonestat);
+	if (!zone->per_cpu_zonestats)
+		return;
 
 	zone->per_cpu_pageset = alloc_percpu(struct per_cpu_pages);
+	if (!zone->per_cpu_pageset) {
+		free_percpu(zone->per_cpu_zonestats);
+		return;
+	}
 	for_each_possible_cpu(cpu) {
 		struct per_cpu_pages *pcp;
 		struct per_cpu_zonestat *pzstats;
