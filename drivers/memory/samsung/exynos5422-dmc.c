@@ -1570,10 +1570,10 @@ static const struct of_device_id exynos5_dmc_of_match[] = {
 MODULE_DEVICE_TABLE(of, exynos5_dmc_of_match);
 
 static struct platform_driver exynos5_dmc_platdrv = {
-	.probe	= exynos5_dmc_probe,
-	.remove_new = exynos5_dmc_remove,
+	.probe = exynos5_dmc_probe,
+	.remove = exynos5_dmc_remove,
 	.driver = {
-		.name	= "exynos5-dmc",
+		.name = "exynos5-dmc",
 		.of_match_table = exynos5_dmc_of_match,
 	},
 };
