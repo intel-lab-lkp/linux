@@ -70,16 +70,17 @@ bool esas2r_process_vda_ioctl(struct esas2r_adapter *a,
 	u32 datalen = 0;
 	struct atto_vda_sge *firstsg = NULL;
 	u8 vercnt = (u8)ARRAY_SIZE(esas2r_vdaioctl_versions);
+	u8 vi_function = vi->function;
 
 	vi->status = ATTO_STS_SUCCESS;
 	vi->vda_status = RS_PENDING;
 
-	if (vi->function >= vercnt) {
+	if (vi_function >= vercnt) {
 		vi->status = ATTO_STS_INV_FUNC;
 		return false;
 	}
 
-	if (vi->version > esas2r_vdaioctl_versions[vi->function]) {
+	if (vi->version > esas2r_vdaioctl_versions[vi_function]) {
 		vi->status = ATTO_STS_INV_VERSION;
 		return false;
 	}
@@ -89,14 +90,14 @@ bool esas2r_process_vda_ioctl(struct esas2r_adapter *a,
 		return false;
 	}
 
-	if (vi->function != VDA_FUNC_SCSI)
+	if (vi_function != VDA_FUNC_SCSI)
 		clear_vda_request(rq);
 
-	rq->vrq->scsi.function = vi->function;
+	rq->vrq->scsi.function = vi_function;
 	rq->interrupt_cb = esas2r_complete_vda_ioctl;
 	rq->interrupt_cx = vi;
 
-	switch (vi->function) {
+	switch (vi_function) {
 	case VDA_FUNC_FLASH:
 
 		if (vi->cmd.flash.sub_func != VDA_FLASH_FREAD
