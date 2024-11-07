@@ -23,3 +23,6 @@
 
 --allowlist-function spin_lock
 --allowlist-function spin_unlock
+
+--allowlist-function get_task_struct
+--allowlist-function put_task_struct
