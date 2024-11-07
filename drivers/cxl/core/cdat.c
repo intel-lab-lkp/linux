@@ -571,17 +571,17 @@ static bool dpa_perf_contains(struct cxl_dpa_perf *perf,
 }
 
 static struct cxl_dpa_perf *cxled_get_dpa_perf(struct cxl_endpoint_decoder *cxled,
-					       enum cxl_decoder_mode mode)
+					       enum cxl_region_mode mode)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_memdev_state *mds = to_cxl_memdev_state(cxlmd->cxlds);
 	struct cxl_dpa_perf *perf;
 
 	switch (mode) {
-	case CXL_DECODER_RAM:
+	case CXL_REGION_RAM:
 		perf = &mds->ram_perf;
 		break;
-	case CXL_DECODER_PMEM:
+	case CXL_REGION_PMEM:
 		perf = &mds->pmem_perf;
 		break;
 	default:
