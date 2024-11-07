@@ -32,9 +32,9 @@ struct io_mapped_buf {
 	u64		addr;
 	unsigned int	len;
 	unsigned int	nr_bvecs;
-	unsigned int    folio_shift;
 	refcount_t	refs;
-	unsigned long	acct_pages;
+	unsigned int	acct_pages;
+	unsigned int	folio_shift:6;
 	struct bio_vec	bvec[] __counted_by(nr_bvecs);
 };
 
@@ -43,7 +43,7 @@ struct io_imu_folio_data {
 	unsigned int	nr_pages_head;
 	/* For non-head/tail folios, has to be fully included */
 	unsigned int	nr_pages_mid;
-	unsigned int	folio_shift;
+	unsigned char	folio_shift;
 };
 
 struct io_rsrc_node *io_rsrc_node_alloc(struct io_ring_ctx *ctx, int type);
