@@ -112,6 +112,9 @@ properties:
           - const: rx2
           - const: rx3
           - const: gip3
+  nvmem:
+    description:
+      phandle of NVMEM driver provided by the SCU
 
   pinctrl:
     description:
