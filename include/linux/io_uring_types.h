@@ -518,6 +518,8 @@ enum {
 	REQ_F_BUFFERS_COMMIT_BIT,
 	REQ_F_BUF_NODE_BIT,
 	REQ_F_GROUP_LEADER_BIT,
+	REQ_F_GROUP_BUF_BIT,
+	REQ_F_BUF_IMPORTED_BIT,
 
 	/* not a real bit, just to check we're not overflowing the space */
 	__REQ_F_LAST_BIT,
@@ -602,6 +604,10 @@ enum {
 	REQ_F_BUF_NODE		= IO_REQ_FLAG(REQ_F_BUF_NODE_BIT),
 	/* sqe group lead */
 	REQ_F_GROUP_LEADER	= IO_REQ_FLAG(REQ_F_GROUP_LEADER_BIT),
+	/* Use group leader's buffer */
+	REQ_F_GROUP_BUF	= IO_REQ_FLAG(REQ_F_GROUP_BUF_BIT),
+	/* used in case buffer has to be imported from ->issue() once */
+	REQ_F_BUF_IMPORTED = IO_REQ_FLAG(REQ_F_BUF_IMPORTED_BIT),
 };
 
 typedef void (*io_req_tw_func_t)(struct io_kiocb *req, struct io_tw_state *ts);

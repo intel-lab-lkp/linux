@@ -88,6 +88,13 @@ struct io_sr_msg {
  */
 #define MULTISHOT_MAX_RETRY	32
 
+#define user_ptr_to_u64(x) (		\
+{					\
+	typecheck(void __user *, (x));	\
+	(u64)(unsigned long)(x);	\
+}					\
+)
+
 int io_shutdown_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_shutdown *shutdown = io_kiocb_to_cmd(req, struct io_shutdown);
@@ -384,7 +391,7 @@ static int io_send_setup(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		kmsg->msg.msg_name = &kmsg->addr;
 		kmsg->msg.msg_namelen = addr_len;
 	}
-	if (!io_do_buffer_select(req)) {
+	if (!io_do_buffer_select(req) && !io_use_group_buf(req)) {
 		ret = import_ubuf(ITER_SOURCE, sr->buf, sr->len,
 				  &kmsg->msg.msg_iter);
 		if (unlikely(ret < 0))
@@ -598,6 +605,15 @@ int io_send(struct io_kiocb *req, unsigned int issue_flags)
 	flags = sr->msg_flags;
 	if (issue_flags & IO_URING_F_NONBLOCK)
 		flags |= MSG_DONTWAIT;
+
+	if (io_use_group_buf(req)) {
+		ret = io_import_group_buf(req, ITER_SOURCE,
+					  &kmsg->msg.msg_iter,
+					  user_ptr_to_u64(sr->buf),
+					  sr->len);
+		if (unlikely(ret))
+			return ret;
+	}
 
 retry_bundle:
 	if (io_do_buffer_select(req)) {
@@ -889,6 +905,8 @@ finish:
 		*ret = IOU_STOP_MULTISHOT;
 	else
 		*ret = IOU_OK;
+	if (io_use_group_kbuf(req))
+		io_req_zero_remained(req, &kmsg->msg.msg_iter);
 	io_req_msg_cleanup(req, issue_flags);
 	return true;
 }
@@ -1161,6 +1179,13 @@ retry_multishot:
 			goto out_free;
 		}
 		sr->buf = NULL;
+	} else if (io_use_group_buf(req)) {
+		ret = io_import_group_buf(req, ITER_DEST,
+					  &kmsg->msg.msg_iter,
+					  user_ptr_to_u64(sr->buf),
+					  sr->len);
+		if (unlikely(ret))
+			goto out_free;
 	}
 
 	kmsg->msg.msg_flags = 0;

@@ -487,6 +487,11 @@ static bool __io_complete_rw_common(struct io_kiocb *req, long res)
 		}
 		req_set_fail(req);
 		req->cqe.res = res;
+		if (io_use_group_kbuf(req)) {
+			struct io_async_rw *io = req->async_data;
+
+			io_req_zero_remained(req, &io->iter);
+		}
 	}
 	return false;
 }
@@ -628,10 +633,14 @@ static inline loff_t *io_kiocb_ppos(struct kiocb *kiocb)
  */
 static ssize_t loop_rw_iter(int ddir, struct io_rw *rw, struct iov_iter *iter)
 {
+	struct io_kiocb *req = cmd_to_io_kiocb(rw);
 	struct kiocb *kiocb = &rw->kiocb;
 	struct file *file = kiocb->ki_filp;
 	ssize_t ret = 0;
 	loff_t *ppos;
+
+	if (io_use_group_kbuf(req))
+		return -EOPNOTSUPP;
 
 	/*
 	 * Don't support polled IO through this interface, and we can't
@@ -831,20 +840,32 @@ static int io_rw_init_file(struct io_kiocb *req, fmode_t mode, int rw_type)
 	return 0;
 }
 
+static int rw_import_group_buf(struct io_kiocb *req, int dir,
+			       struct io_rw *rw, struct io_async_rw *io)
+{
+	int ret = io_import_group_buf(req, dir, &io->iter, rw->addr, rw->len);
+
+	if (!ret)
+		iov_iter_save_state(&io->iter, &io->iter_state);
+	return ret;
+}
+
 static int __io_read(struct io_kiocb *req, unsigned int issue_flags)
 {
 	bool force_nonblock = issue_flags & IO_URING_F_NONBLOCK;
 	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
 	struct io_async_rw *io = req->async_data;
 	struct kiocb *kiocb = &rw->kiocb;
-	ssize_t ret;
+	ssize_t ret = 0;
 	loff_t *ppos;
 
-	if (io_do_buffer_select(req)) {
+	if (io_do_buffer_select(req))
 		ret = io_import_iovec(ITER_DEST, req, io, issue_flags);
-		if (unlikely(ret < 0))
-			return ret;
-	}
+	else if (io_use_group_buf(req))
+		ret = rw_import_group_buf(req, ITER_DEST, rw, io);
+	if (unlikely(ret < 0))
+		return ret;
+
 	ret = io_rw_init_file(req, FMODE_READ, READ);
 	if (unlikely(ret))
 		return ret;
@@ -1045,6 +1066,12 @@ int io_write(struct io_kiocb *req, unsigned int issue_flags)
 	struct kiocb *kiocb = &rw->kiocb;
 	ssize_t ret, ret2;
 	loff_t *ppos;
+
+	if (io_use_group_buf(req)) {
+		ret = rw_import_group_buf(req, ITER_SOURCE, rw, io);
+		if (unlikely(ret < 0))
+			return ret;
+	}
 
 	ret = io_rw_init_file(req, FMODE_WRITE, WRITE);
 	if (unlikely(ret))

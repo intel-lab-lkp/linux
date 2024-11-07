@@ -110,6 +110,13 @@ static inline void io_req_assign_buf_node(struct io_kiocb *req,
 	req->flags |= REQ_F_BUF_NODE;
 }
 
+static inline bool io_req_use_kernel_buf(struct io_kiocb *req)
+{
+	if (req->flags & REQ_F_BUF_NODE)
+		return req->buf_node->flags & IORING_RSRC_F_BUF_KERNEL;
+	return false;
+}
+
 int io_files_update(struct io_kiocb *req, unsigned int issue_flags);
 int io_files_update_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe);
 
