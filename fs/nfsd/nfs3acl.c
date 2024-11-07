@@ -29,10 +29,12 @@ static __be32 nfsd3_proc_getacl(struct svc_rqst *rqstp)
 {
 	struct nfsd3_getaclargs *argp = rqstp->rq_argp;
 	struct nfsd3_getaclres *resp = rqstp->rq_resp;
-	struct posix_acl *acl;
+	struct posix_acl *acl = NULL, *dacl = NULL;
 	struct inode *inode;
 	svc_fh *fh;
 
+	resp->acl_access = NULL;
+	resp->acl_default = NULL;
 	fh = fh_copy(&resp->fh, &argp->fh);
 	resp->status = fh_verify(rqstp, &resp->fh, 0, NFSD_MAY_NOP);
 	if (resp->status != nfs_ok)
@@ -56,19 +58,19 @@ static __be32 nfsd3_proc_getacl(struct svc_rqst *rqstp)
 			resp->status = nfserrno(PTR_ERR(acl));
 			goto fail;
 		}
-		resp->acl_access = acl;
 	}
 	if (resp->mask & (NFS_DFACL|NFS_DFACLCNT)) {
 		/* Check how Solaris handles requests for the Default ACL
 		   of a non-directory! */
-		acl = get_inode_acl(inode, ACL_TYPE_DEFAULT);
-		if (IS_ERR(acl)) {
-			resp->status = nfserrno(PTR_ERR(acl));
+		dacl = get_inode_acl(inode, ACL_TYPE_DEFAULT);
+		if (IS_ERR(dacl)) {
+			resp->status = nfserrno(PTR_ERR(dacl));
 			goto fail;
 		}
-		resp->acl_default = acl;
 	}
 
+	resp->acl_access = acl;
+	resp->acl_default = dacl;
 	/* resp->acl_{access,default} are released in nfs3svc_release_getacl. */
 out:
 	return rpc_success;
