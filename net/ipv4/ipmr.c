@@ -2612,8 +2612,10 @@ static int ipmr_rtm_dumproute(struct sk_buff *skb, struct netlink_callback *cb)
 			NL_SET_ERR_MSG(cb->extack, "ipv4: MR table does not exist");
 			return -ENOENT;
 		}
+		rcu_read_lock();
 		err = mr_table_dump(mrt, skb, cb, _ipmr_fill_mroute,
 				    &mfc_unres_lock, &filter);
+		rcu_read_unlock();
 		return skb->len ? : err;
 	}
 
