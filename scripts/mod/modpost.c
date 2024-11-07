@@ -209,19 +209,6 @@ struct symbol {
 
 static HASHTABLE_DEFINE(symbol_hashtable, 1U << 10);
 
-/* This is based on the hash algorithm from gdbm, via tdb */
-static inline unsigned int tdb_hash(const char *name)
-{
-	unsigned value;	/* Used to compute the hash value.  */
-	unsigned   i;	/* Used to cycle through random values. */
-
-	/* Set the initial value from the key size. */
-	for (value = 0x238F13AF * strlen(name), i = 0; name[i]; i++)
-		value = (value + (((unsigned char *)name)[i] << (i*5 % 24)));
-
-	return (1103515243 * value + 12345);
-}
-
 /**
  * Allocate a new symbols for use in the hash of exported symbols or
  * the list of unresolved symbols per module
@@ -327,7 +314,7 @@ static const char *sech_name(const struct elf_info *info, Elf_Shdr *sechdr)
 				      sechdr->sh_name);
 }
 
-static const char *sec_name(const struct elf_info *info, unsigned int secindex)
+const char *sec_name(const struct elf_info *info, unsigned int secindex)
 {
 	/*
 	 * If sym->st_shndx is a special section index, there is no
@@ -1602,6 +1589,7 @@ static void read_symbols(const char *modname)
 
 		handle_symbol(mod, &info, sym, symname);
 		handle_moddevtable(mod, &info, sym, symname);
+		handle_packed_field_symbol(mod, &info, sym, symname);
 	}
 
 	check_sec_ref(mod, &info);
@@ -2221,6 +2209,8 @@ int main(int argc, char **argv)
 
 	if (missing_namespace_deps)
 		write_namespace_deps_files(missing_namespace_deps);
+
+	check_packed_field_symbols();
 
 	if (dump_write)
 		write_dump(dump_write);

@@ -160,6 +160,19 @@ static inline bool is_valid_name(struct elf_info *elf, Elf_Sym *sym)
 	return !is_mapping_symbol(name);
 }
 
+/* This is based on the hash algorithm from gdbm, via tdb */
+static inline unsigned int tdb_hash(const char *name)
+{
+	unsigned value;	/* Used to compute the hash value.  */
+	unsigned   i;	/* Used to cycle through random values. */
+
+	/* Set the initial value from the key size. */
+	for (value = 0x238F13AF * strlen(name), i = 0; name[i]; i++)
+		value = (value + (((unsigned char *)name)[i] << (i*5 % 24)));
+
+	return (1103515243 * value + 12345);
+}
+
 /* symsearch.c */
 void symsearch_init(struct elf_info *elf);
 void symsearch_finish(struct elf_info *elf);
@@ -175,12 +188,18 @@ void add_moddevtable(struct buffer *buf, struct module *mod);
 /* sumversion.c */
 void get_src_version(const char *modname, char sum[], unsigned sumlen);
 
+/* packed_fields.c */
+void handle_packed_field_symbol(struct module *mod, struct elf_info *info,
+				Elf_Sym *sym, const char *symname);
+void check_packed_field_symbols(void);
+
 /* from modpost.c */
 extern bool target_is_big_endian;
 extern bool host_is_big_endian;
 char *read_text_file(const char *filename);
 char *get_line(char **stringp);
 void *sym_get_data(const struct elf_info *info, const Elf_Sym *sym);
+const char *sec_name(const struct elf_info *info, unsigned int secindex);
 
 void __attribute__((format(printf, 2, 3)))
 modpost_log(bool is_error, const char *fmt, ...);
