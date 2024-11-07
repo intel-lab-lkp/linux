@@ -29,6 +29,15 @@
 #define SEV_CMD_COMPLETE		BIT(1)
 #define SEV_CMDRESP_IOC			BIT(0)
 
+/*
+ * SEV FW expects the physical address given to it to be 32
+ * byte aligned. Memory allocated has structure placed at the
+ * beginning followed by the firmware being passed to the SEV
+ * FW. Allocate enough memory for data structure + alignment
+ * padding + SEV FW.
+ */
+#define SEV_FW_ALIGNMENT       32
+
 struct sev_misc_dev {
 	struct kref refcount;
 	struct miscdevice misc;
@@ -57,6 +66,11 @@ struct sev_device {
 	bool cmd_buf_backup_active;
 
 	bool snp_initialized;
+
+#ifdef CONFIG_FW_UPLOAD
+	struct fw_upload *fwl;
+	bool fw_cancel;
+#endif /* CONFIG_FW_UPLOAD */
 };
 
 int sev_dev_init(struct psp_device *psp);
@@ -72,5 +86,18 @@ struct sev_asid_data {
 /* Extern to be shared with firmware_upload API implementation if configured. */
 extern struct sev_asid_data *sev_asid_data;
 extern u32 nr_asids, sev_min_asid, sev_max_asid, sev_es_max_asid;
+
+void *sev_fw_alloc(unsigned long len);
+int sev_get_api_version(void);
+
+#ifdef CONFIG_CRYPTO_DEV_SP_PSP_FW_UPLOAD
+void sev_snp_dev_init_firmware_upload(struct sev_device *sev);
+void sev_snp_destroy_firmware_upload(struct sev_device *sev);
+int sev_snp_synthetic_error(struct sev_device *sev, int *psp_ret);
+#else
+static inline void sev_snp_dev_init_firmware_upload(struct sev_device *sev) { }
+static inline void sev_snp_destroy_firmware_upload(struct sev_device *sev) { }
+static inline int sev_snp_synthetic_error(struct sev_device *sev, int *psp_ret) { return 0; }
+#endif /* CONFIG_CRYPTO_DEV_SP_PSP_FW_UPLOAD */
 
 #endif /* __SEV_DEV_H */
