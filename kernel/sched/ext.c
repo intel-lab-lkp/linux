@@ -3158,11 +3158,76 @@ found:
 }
 
 /*
+ * Return true if the LLC domains do not perfectly overlap with the NUMA
+ * domains, false otherwise.
+ */
+static bool llc_and_numa_mismatch(void)
+{
+	struct sched_domain *sd;
+	int cpu;
+
+	/*
+	 * We need to scan all online CPUs to verify whether their scheduling
+	 * domains overlap.
+	 *
+	 * While it is rare to encounter architectures with asymmetric NUMA
+	 * topologies, CPU hotplugging or virtualized environments can result
+	 * in asymmetric configurations.
+	 *
+	 * For example:
+	 *
+	 *  NUMA 0:
+	 *    - LLC 0: cpu0..cpu7
+	 *    - LLC 1: cpu8..cpu15 [offline]
+	 *
+	 *  NUMA 1:
+	 *    - LLC 0: cpu16..cpu23
+	 *    - LLC 1: cpu24..cpu31
+	 *
+	 * In this case, if we only check the first online CPU (cpu0), we might
+	 * incorrectly assume that the LLC and NUMA domains are fully
+	 * overlapping, which is incorrect (as NUMA 1 has two distinct LLC
+	 * domains).
+	 */
+	for_each_online_cpu(cpu) {
+		sd = cpu_rq(cpu)->sd;
+
+		while (sd) {
+			bool is_llc = sd->flags & SD_SHARE_LLC;
+			bool is_numa = sd->flags & SD_NUMA;
+
+			if (is_llc != is_numa)
+				return true;
+
+			sd = sd->parent;
+		}
+	}
+
+	return false;
+}
+
+/*
  * Initialize topology-aware scheduling.
  *
  * Detect if the system has multiple LLC or multiple NUMA domains and enable
  * cache-aware / NUMA-aware scheduling optimizations in the default CPU idle
  * selection policy.
+ *
+ * Assumption: under normal circumstances we can assume that each CPU belongs
+ * to a single NUMA domain and a single LLC domain.
+ *
+ * However, in complex or highly specialized systems (e.g., multi-socket,
+ * chiplet-based, or virtualized systems), the relationship between NUMA and
+ * LLC domains can become more intricate, though each CPU is still considered
+ * to belong to a single NUMA and LLC domain in the kernel's internal
+ * representation.
+ *
+ * Another assumption is that each LLC domain is always fully contained within
+ * a single NUMA domain. In reality, in chiplet-based or virtualized systems,
+ * LLC domains may logically span multiple NUMA nodes. However, the kernel’s
+ * internal topology representation does not account for this, so this logic is
+ * also making the assumption that each LLC domain is always fully contained
+ * inside a single NUMA domain.
  */
 static void update_selcpu_topology(void)
 {
@@ -3172,24 +3237,37 @@ static void update_selcpu_topology(void)
 	s32 cpu = cpumask_first(cpu_online_mask);
 
 	/*
-	 * We only need to check the NUMA node and LLC domain of the first
-	 * available CPU to determine if they cover all CPUs.
+	 * Enable LLC domain optimization only when there are multiple LLC
+	 * domains among the online CPUs. If all online CPUs are part of a
+	 * single LLC domain, the idle CPU selection logic can choose any
+	 * online CPU without bias.
 	 *
-	 * If all CPUs belong to the same NUMA node or share the same LLC
-	 * domain, enabling NUMA or LLC optimizations is unnecessary.
-	 * Otherwise, these optimizations can be enabled.
+	 * Note that it is sufficient to check the LLC domain of the first
+	 * online CPU to determine whether a single LLC domain includes all
+	 * CPUs.
 	 */
 	rcu_read_lock();
 	sd = rcu_dereference(per_cpu(sd_llc, cpu));
 	if (sd) {
 		cpus = sched_domain_span(sd);
-		if (cpumask_weight(cpus) < num_possible_cpus())
+		if (cpumask_weight(cpus) < num_online_cpus())
 			enable_llc = true;
 	}
+
+	/*
+	 * Enable NUMA optimization only when there are multiple NUMA domains
+	 * among the online CPUs and the NUMA domains don't perfectly overlaps
+	 * with the LLC domains.
+	 *
+	 * If all CPUs belong to the same NUMA node and the same LLC domain,
+	 * enabling both NUMA and LLC optimizations is unnecessary, as checking
+	 * for an idle CPU in the same domain twice is redundant.
+	 */
 	sd = highest_flag_domain(cpu, SD_NUMA);
 	if (sd) {
 		cpus = sched_group_span(sd->groups);
-		if (cpumask_weight(cpus) < num_possible_cpus())
+		if ((cpumask_weight(cpus) < num_online_cpus()) &&
+		    llc_and_numa_mismatch())
 			enable_numa = true;
 	}
 	rcu_read_unlock();
