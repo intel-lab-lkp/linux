@@ -10,7 +10,6 @@
 #include "bug.c"
 #include "build_assert.c"
 #include "page.c"
-#include "rbtree.c"
 #include "refcount.c"
 #include "signal.c"
 #include "slab.c"
