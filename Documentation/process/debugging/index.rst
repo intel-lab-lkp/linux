@@ -10,6 +10,7 @@ Debugging advice for Linux Kernel developers
    general_advice
    driver_development_debugging_guide
    userspace_debugging_guide
+   media_specific_debugging_guide
 
 .. only::  subproject and html
 
