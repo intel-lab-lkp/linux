@@ -59,6 +59,9 @@ static int inv_icm42600_probe(struct spi_device *spi)
 		return -EINVAL;
 	chip = (uintptr_t)match;
 
+	/* spi doesn't support burst write */
+	inv_icm42600_regmap_config.use_single_write = true;
+
 	regmap = devm_regmap_init_spi(spi, &inv_icm42600_regmap_config);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);

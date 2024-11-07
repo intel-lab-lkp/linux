@@ -74,7 +74,7 @@ static const struct regmap_access_table inv_icm42600_regmap_rd_noinc_accesses[] 
 	},
 };
 
-const struct regmap_config inv_icm42600_regmap_config = {
+struct regmap_config inv_icm42600_regmap_config = {
 	.name = "inv_icm42600",
 	.reg_bits = 8,
 	.val_bits = 8,
