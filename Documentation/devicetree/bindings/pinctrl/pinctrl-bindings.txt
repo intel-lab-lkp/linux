@@ -18,7 +18,7 @@ states. The number and names of those states is defined by the client device's
 own binding.
 
 The common pinctrl bindings defined in this file provide an infrastructure
-for client device device tree nodes to map those state names to the pin
+for client device tree nodes to map those state names to the pin
 configuration used by those states.
 
 Note that pin controllers themselves may also be client devices of themselves.

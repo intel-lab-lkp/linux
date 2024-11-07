@@ -15,7 +15,7 @@ Properties:
 
 - #size-cells: Must be <1>.
 
-- ranges: There must be one one triplet of (child-bus-address,
+- ranges: There must be one triplet of (child-bus-address,
   parent-bus-address, length) for each active chip select.  If the
   length element for any triplet is zero, the chip select is disabled,
   making it inactive.

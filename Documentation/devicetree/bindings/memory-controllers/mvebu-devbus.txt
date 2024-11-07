@@ -43,7 +43,7 @@ Read parameters:
  - devbus,bus-width:    Defines the bus width, in bits (e.g. <16>).
                         Mandatory, except if devbus,keep-config is used.
 
- - devbus,badr-skew-ps: Defines the time delay from from A[2:0] toggle,
+ - devbus,badr-skew-ps: Defines the time delay from A[2:0] toggle,
                         to read data sample. This parameter is useful for
                         synchronous pipelined devices, where the address
                         precedes the read data by one or two cycles.
