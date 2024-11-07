@@ -1322,6 +1322,7 @@ static void gic_cpu_init(void)
 
 #define MPIDR_TO_SGI_RS(mpidr)	(MPIDR_RS(mpidr) << ICC_SGI1R_RS_SHIFT)
 #define MPIDR_TO_SGI_CLUSTER_ID(mpidr)	((mpidr) & ~0xFUL)
+#define MPIDR_TO_SGI_TARGET_LIST(mpidr)	(1 << ((mpidr) & 0xf))
 
 /*
  * gic_starting_cpu() is called after the last point where cpuhp is allowed
@@ -1356,7 +1357,7 @@ static u16 gic_compute_target_list(int *base_cpu, const struct cpumask *mask,
 	mpidr = gic_cpu_to_affinity(cpu);
 
 	while (cpu < nr_cpu_ids) {
-		tlist |= 1 << (mpidr & 0xf);
+		tlist |= MPIDR_TO_SGI_TARGET_LIST(mpidr);
 
 		next_cpu = cpumask_next(cpu, mask);
 		if (next_cpu >= nr_cpu_ids)
@@ -1394,9 +1395,20 @@ static void gic_send_sgi(u64 cluster_id, u16 tlist, unsigned int irq)
 	gic_write_sgi1r(val);
 }
 
+static void gic_broadcast_sgi(unsigned int irq)
+{
+	u64 val;
+
+	val = BIT_ULL(ICC_SGI1R_IRQ_ROUTING_MODE_BIT) | (irq << ICC_SGI1R_SGI_ID_SHIFT);
+
+	pr_devel("CPU %d: broadcasting SGI %u\n", smp_processor_id(), irq);
+	gic_write_sgi1r(val);
+}
+
 static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 {
-	int cpu;
+	int cpu = smp_processor_id();
+	bool self = cpumask_test_cpu(cpu, mask);
 
 	if (WARN_ON(d->hwirq >= 16))
 		return;
@@ -1407,6 +1419,19 @@ static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 	 */
 	dsb(ishst);
 
+	if (cpumask_weight(mask) + !self == num_online_cpus()) {
+		/* Broadcast to all but self */
+		gic_broadcast_sgi(d->hwirq);
+		if (self) {
+			unsigned long mpidr = gic_cpu_to_affinity(cpu);
+
+			/* Send to self */
+			gic_send_sgi(MPIDR_TO_SGI_CLUSTER_ID(mpidr),
+				     MPIDR_TO_SGI_TARGET_LIST(mpidr), d->hwirq);
+		}
+		goto done;
+	}
+
 	for_each_cpu(cpu, mask) {
 		u64 cluster_id = MPIDR_TO_SGI_CLUSTER_ID(gic_cpu_to_affinity(cpu));
 		u16 tlist;
@@ -1414,7 +1439,7 @@ static void gic_ipi_send_mask(struct irq_data *d, const struct cpumask *mask)
 		tlist = gic_compute_target_list(&cpu, mask, cluster_id);
 		gic_send_sgi(cluster_id, tlist, d->hwirq);
 	}
-
+done:
 	/* Force the above writes to ICC_SGI1R_EL1 to be executed */
 	isb();
 }
