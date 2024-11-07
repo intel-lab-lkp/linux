@@ -10,7 +10,6 @@
 #include <linux/platform_profile.h>
 #include <linux/sysfs.h>
 
-static struct platform_profile_handler *cur_profile;
 static DEFINE_MUTEX(profile_lock);
 
 static const char * const profile_names[] = {
@@ -401,8 +400,7 @@ static const struct attribute_group platform_profile_group = {
 
 void platform_profile_notify(void)
 {
-	if (!cur_profile)
-		return;
+	guard(mutex)(&profile_lock);
 	if (!class_is_registered(&platform_profile_class))
 		return;
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
@@ -459,9 +457,6 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	}
 
 	guard(mutex)(&profile_lock);
-	/* We can only have one active profile */
-	if (cur_profile)
-		return -EEXIST;
 
 	if (!class_is_registered(&platform_profile_class)) {
 		/* class for individual handlers */
@@ -487,7 +482,6 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
-	cur_profile = pprof;
 	return 0;
 
 cleanup_ida:
@@ -511,7 +505,6 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 
 	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
-	cur_profile = NULL;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(platform_profile_remove);
