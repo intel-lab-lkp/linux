@@ -399,6 +399,8 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	}
 	dev_set_drvdata(pprof->class_dev, pprof);
 
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
+
 	cur_profile = pprof;
 	return 0;
 
@@ -420,6 +422,8 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 	id = pprof->minor;
 	device_unregister(pprof->class_dev);
 	ida_free(&platform_profile_ida, id);
+
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
 	cur_profile = NULL;
 	return 0;
