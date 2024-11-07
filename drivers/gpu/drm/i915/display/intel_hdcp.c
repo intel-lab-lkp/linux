@@ -51,7 +51,7 @@ intel_hdcp_disable_hdcp_line_rekeying(struct intel_encoder *encoder,
 			     TRANS_DDI_FUNC_CTL(display, hdcp->cpu_transcoder),
 			     0, TRANS_DDI_HDCP_LINE_REKEY_DISABLE);
 	else if (IS_DISPLAY_VERx100_STEP(display, 1400, STEP_D0, STEP_FOREVER))
-		intel_de_rmw(display, MTL_CHICKEN_TRANS(hdcp->cpu_transcoder),
+		intel_de_rmw(display, CHICKEN_TRANS(display, hdcp->cpu_transcoder),
 			     0, HDCP_LINE_REKEY_DISABLE);
 }
 
