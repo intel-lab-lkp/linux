@@ -11,7 +11,6 @@
 #include "build_assert.c"
 #include "page.c"
 #include "refcount.c"
-#include "signal.c"
 #include "slab.c"
 #include "spinlock.c"
 #include "task.c"
