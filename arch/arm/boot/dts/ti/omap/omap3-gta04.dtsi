@@ -612,19 +612,23 @@
 };
 
 &mcspi1 {
-	status = "disabled";
+	/delete-property/ dmas;
+	/delete-property/ dma-names;
 };
 
 &mcspi2 {
-	status = "disabled";
+	/delete-property/ dmas;
+	/delete-property/ dma-names;
 };
 
 &mcspi3 {
-	status = "disabled";
+	/delete-property/ dmas;
+	/delete-property/ dma-names;
 };
 
 &mcspi4 {
-	status = "disabled";
+	/delete-property/ dmas;
+	/delete-property/ dma-names;
 };
 
 &usb_otg_hs {
