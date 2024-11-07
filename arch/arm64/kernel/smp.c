@@ -85,7 +85,12 @@ static int ipi_irq_base __ro_after_init;
 static int nr_ipi __ro_after_init = NR_IPI;
 static struct irq_desc *ipi_desc[MAX_IPI] __ro_after_init;
 
-static bool crash_stop;
+enum {
+	SEND_STOP,
+	CRASH_STOP,
+};
+
+static unsigned long stop_in_progress;
 
 static void ipi_setup(int cpu);
 
@@ -917,6 +922,72 @@ static void __noreturn ipi_cpu_crash_stop(unsigned int cpu, struct pt_regs *regs
 #endif
 }
 
+static DEFINE_RAW_SPINLOCK(cpu_pause_lock);
+static bool __cacheline_aligned_in_smp cpu_paused;
+static atomic_t __cacheline_aligned_in_smp nr_cpus_paused;
+
+static void pause_local_cpu(void)
+{
+	atomic_inc(&nr_cpus_paused);
+
+	while (READ_ONCE(cpu_paused))
+		cpu_relax();
+
+	atomic_dec(&nr_cpus_paused);
+
+	/*
+	 * The caller of resume_remote_cpus() should make sure that clearing
+	 * cpu_paused is ordered after other changes that can have any impact on
+	 * this CPU. The isb() below makes sure this CPU doesn't speculatively
+	 * execute the next instruction before it sees all those changes.
+	 */
+	isb();
+}
+
+void pause_remote_cpus(void)
+{
+	cpumask_t cpus_to_pause;
+	int nr_cpus_to_pause = num_online_cpus() - 1;
+
+	lockdep_assert_cpus_held();
+	lockdep_assert_preemption_disabled();
+
+	if (!nr_cpus_to_pause)
+		return;
+
+	cpumask_copy(&cpus_to_pause, cpu_online_mask);
+	cpumask_clear_cpu(smp_processor_id(), &cpus_to_pause);
+
+	raw_spin_lock(&cpu_pause_lock);
+
+	WARN_ON_ONCE(cpu_paused);
+	WARN_ON_ONCE(atomic_read(&nr_cpus_paused));
+
+	cpu_paused = true;
+
+	smp_cross_call(&cpus_to_pause, IPI_CPU_STOP_NMI);
+
+	while (atomic_read(&nr_cpus_paused) != nr_cpus_to_pause)
+		cpu_relax();
+
+	raw_spin_unlock(&cpu_pause_lock);
+}
+
+void resume_remote_cpus(void)
+{
+	if (!cpu_paused)
+		return;
+
+	raw_spin_lock(&cpu_pause_lock);
+
+	WRITE_ONCE(cpu_paused, false);
+
+	while (atomic_read(&nr_cpus_paused))
+		cpu_relax();
+
+	raw_spin_unlock(&cpu_pause_lock);
+}
+
 static void arm64_backtrace_ipi(cpumask_t *mask)
 {
 	__ipi_send_mask(ipi_desc[IPI_CPU_BACKTRACE], mask);
@@ -970,7 +1041,9 @@ static void do_handle_IPI(int ipinr)
 
 	case IPI_CPU_STOP:
 	case IPI_CPU_STOP_NMI:
-		if (IS_ENABLED(CONFIG_KEXEC_CORE) && crash_stop) {
+		if (!test_bit(SEND_STOP, &stop_in_progress)) {
+			pause_local_cpu();
+		} else if (test_bit(CRASH_STOP, &stop_in_progress)) {
 			ipi_cpu_crash_stop(cpu, get_irq_regs());
 			unreachable();
 		} else {
@@ -1142,7 +1215,6 @@ static inline unsigned int num_other_online_cpus(void)
 
 void smp_send_stop(void)
 {
-	static unsigned long stop_in_progress;
 	cpumask_t mask;
 	unsigned long timeout;
 
@@ -1154,7 +1226,7 @@ void smp_send_stop(void)
 		goto skip_ipi;
 
 	/* Only proceed if this is the first CPU to reach this code */
-	if (test_and_set_bit(0, &stop_in_progress))
+	if (test_and_set_bit(SEND_STOP, &stop_in_progress))
 		return;
 
 	/*
@@ -1230,12 +1302,11 @@ void crash_smp_send_stop(void)
 	 * This function can be called twice in panic path, but obviously
 	 * we execute this only once.
 	 *
-	 * We use this same boolean to tell whether the IPI we send was a
+	 * We use the CRASH_STOP bit to tell whether the IPI we send was a
 	 * stop or a "crash stop".
 	 */
-	if (crash_stop)
+	if (test_and_set_bit(CRASH_STOP, &stop_in_progress))
 		return;
-	crash_stop = 1;
 
 	smp_send_stop();
 
