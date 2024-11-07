@@ -42,7 +42,7 @@ static int relay_test_init(struct kunit *test)
 	kunit_activate_static_stub(test, relay_get_totalvfs,
 				   replacement_relay_get_totalvfs);
 
-	KUNIT_ASSERT_EQ(test, xe_guc_relay_init(relay), 0);
+	KUNIT_ASSERT_EQ(test, xe_guc_relay_init_noalloc(relay), 0);
 	KUNIT_EXPECT_TRUE(test, relay_is_ready(relay));
 	relay->last_rid = TEST_RID - 1;
 
