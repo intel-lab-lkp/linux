@@ -940,6 +940,10 @@ struct module;
  *		how to manage the DMA themselves and set this flag so that
  *		the IOMMU layer will allow them to setup and manage their
  *		own I/O address space.
+ * @downgrade_vpd_read: Device doesn't require root permissions from the users
+ *              to read VPD information. The driver doesn't expose any sensitive
+ *              information through that interface and safe to be accessed by
+ *              unprivileged users.
  */
 struct pci_driver {
 	const char		*name;
@@ -957,7 +961,8 @@ struct pci_driver {
 	const struct attribute_group **dev_groups;
 	struct device_driver	driver;
 	struct pci_dynids	dynids;
-	bool driver_managed_dma;
+	bool driver_managed_dma : 1;
+	bool downgrade_vpd_read : 1;
 };
 
 #define to_pci_driver(__drv)	\

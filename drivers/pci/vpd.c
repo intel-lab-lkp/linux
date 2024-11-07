@@ -156,6 +156,7 @@ static ssize_t pci_vpd_read(struct pci_dev *dev, loff_t pos, size_t count,
 			    void *arg, bool check_size)
 {
 	struct pci_vpd *vpd = &dev->vpd;
+	struct pci_driver *drv;
 	unsigned int max_len;
 	int ret = 0;
 	loff_t end = pos + count;
@@ -166,6 +167,12 @@ static ssize_t pci_vpd_read(struct pci_dev *dev, loff_t pos, size_t count,
 
 	if (pos < 0)
 		return -EINVAL;
+
+	if (!capable(CAP_SYS_ADMIN)) {
+		drv = to_pci_driver(dev->dev.driver);
+		if (!drv || !drv->downgrade_vpd_read)
+			return -EPERM;
+	}
 
 	max_len = check_size ? vpd->len : PCI_VPD_MAX_SIZE;
 
@@ -317,7 +324,7 @@ static ssize_t vpd_write(struct file *filp, struct kobject *kobj,
 
 	return ret;
 }
-static BIN_ATTR(vpd, 0600, vpd_read, vpd_write, 0);
+static BIN_ATTR_RW(vpd, 0);
 
 static struct bin_attribute *vpd_attrs[] = {
 	&bin_attr_vpd,
