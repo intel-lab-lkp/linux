@@ -9,7 +9,6 @@
 
 #include "bug.c"
 #include "build_assert.c"
-#include "kunit.c"
 #include "mutex.c"
 #include "page.c"
 #include "rbtree.c"
