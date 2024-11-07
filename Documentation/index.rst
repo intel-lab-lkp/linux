@@ -57,6 +57,7 @@ Various other manuals with useful information for all kernel developers.
    dev-tools/testing-overview
    kernel-hacking/index
    trace/index
+   process/debugging/index
    fault-injection/index
    livepatch/index
    rust/index
@@ -76,6 +77,7 @@ developers seeking information on the kernel's user-space APIs.
    The kernel build system <kbuild/index>
    admin-guide/reporting-issues.rst
    User-space tools <tools/index>
+   process/debugging/userspace_debugging_guide.rst
    userspace-api/index
 
 See also: the `Linux man pages <https://www.kernel.org/doc/man-pages/>`_,
