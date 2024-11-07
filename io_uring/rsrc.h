@@ -10,11 +10,15 @@
 
 enum {
 	IORING_RSRC_FILE		= 0,
-	IORING_RSRC_BUFFER		= 1,
+	IORING_RSRC_BUFFER,
+	__IORING_RSRC_LAST_TYPE,
+
+	IORING_RSRC_F_NEED_FREE		= 1 << 0,
 };
 
 struct io_rsrc_node {
 	unsigned char			type;
+	unsigned char			flags;
 	int				refs;
 
 	u64 tag;
@@ -66,6 +70,15 @@ int io_register_rsrc_update(struct io_ring_ctx *ctx, void __user *arg,
 int io_register_rsrc(struct io_ring_ctx *ctx, void __user *arg,
 			unsigned int size, unsigned int type);
 
+static inline void io_rsrc_node_init(struct io_rsrc_node *node, int type,
+				     unsigned char flags)
+{
+	WARN_ON_ONCE(type >= __IORING_RSRC_LAST_TYPE);
+
+	node->type = type;
+	node->refs = 1;
+	node->flags = flags;
+}
 static inline struct io_rsrc_node *io_rsrc_node_lookup(struct io_rsrc_data *data,
 						       int index)
 {

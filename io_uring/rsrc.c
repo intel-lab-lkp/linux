@@ -123,10 +123,9 @@ struct io_rsrc_node *io_rsrc_node_alloc(struct io_ring_ctx *ctx, int type)
 	struct io_rsrc_node *node;
 
 	node = kzalloc(sizeof(*node), GFP_KERNEL);
-	if (node) {
-		node->type = type;
-		node->refs = 1;
-	}
+	if (node)
+		io_rsrc_node_init(node, type, IORING_RSRC_F_NEED_FREE);
+
 	return node;
 }
 
@@ -444,6 +443,8 @@ int io_files_update(struct io_kiocb *req, unsigned int issue_flags)
 
 void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 {
+	bool need_free = node->flags & IORING_RSRC_F_NEED_FREE;
+
 	lockdep_assert_held(&ctx->uring_lock);
 
 	if (node->tag)
@@ -463,7 +464,8 @@ void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 		break;
 	}
 
-	kfree(node);
+	if (need_free)
+		kfree(node);
 }
 
 int io_sqe_files_unregister(struct io_ring_ctx *ctx)
