@@ -6279,6 +6279,7 @@ static int check_max_stack_depth(struct bpf_verifier_env *env)
 		}
 	}
 
+	env->prog->aux->priv_stack_requested = false;
 	if (si[0].priv_stack_mode == PRIV_STACK_ADAPTIVE)
 		env->prog->aux->priv_stack_requested = true;
 
@@ -21984,6 +21985,11 @@ static int check_struct_ops_btf_id(struct bpf_verifier_env *env)
 				mname, st_ops->name);
 			return err;
 		}
+	}
+
+	if (prog->aux->priv_stack_requested && !bpf_jit_supports_private_stack()) {
+		verbose(env, "Private stack not supported by jit\n");
+		return -EACCES;
 	}
 
 	/* btf_ctx_access() used this to provide argument type info */
