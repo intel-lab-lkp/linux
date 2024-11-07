@@ -15,6 +15,17 @@
 struct intel_display;
 
 struct intel_dmc_wl {
+	/*
+	 * There is a bit of a chicken and egg situation where we depend
+	 * on runtime info to know that DMC and wakelock are supported
+	 * by the hardware, and such information is grabbed via display
+	 * MMIO functions, which in turns call intel_dmc_wl_get() and
+	 * intel_dmc_wl_put() as part of their regular flow.
+	 *
+	 * So we need the initialized field to ensure that we turn the
+	 * get/put routines into a no-op until we have initialized.
+	 */
+	bool initialized;
 	spinlock_t lock; /* protects enabled, taken, dc_state and refcount */
 	bool enabled;
 	bool taken;

@@ -264,6 +264,11 @@ static bool intel_dmc_wl_check_range(i915_reg_t reg, u32 dc_state)
 
 static bool __intel_dmc_wl_supported(struct intel_display *display)
 {
+	struct intel_dmc_wl *wl = &display->wl;
+
+	if (drm_WARN_ON(display->drm, !wl->initialized))
+		return false;
+
 	return display->params.enable_dmc_wl && intel_dmc_has_payload(display);
 }
 
@@ -281,6 +286,8 @@ void intel_dmc_wl_init(struct intel_display *display)
 	struct intel_dmc_wl *wl = &display->wl;
 
 	intel_dmc_wl_sanitize_param(display);
+
+	wl->initialized = true;
 
 	if (!display->params.enable_dmc_wl)
 		return;
@@ -378,6 +385,9 @@ void intel_dmc_wl_get(struct intel_display *display, i915_reg_t reg)
 	struct intel_dmc_wl *wl = &display->wl;
 	unsigned long flags;
 
+	if (!wl->initialized)
+		return;
+
 	if (!__intel_dmc_wl_supported(display))
 		return;
 
@@ -409,6 +419,9 @@ void intel_dmc_wl_put(struct intel_display *display, i915_reg_t reg)
 {
 	struct intel_dmc_wl *wl = &display->wl;
 	unsigned long flags;
+
+	if (!wl->initialized)
+		return;
 
 	if (!__intel_dmc_wl_supported(display))
 		return;
