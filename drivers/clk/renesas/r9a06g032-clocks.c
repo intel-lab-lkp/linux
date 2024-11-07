@@ -20,14 +20,23 @@
 #include <linux/platform_device.h>
 #include <linux/pm_clock.h>
 #include <linux/pm_domain.h>
+#include <linux/reboot.h>
 #include <linux/slab.h>
 #include <linux/soc/renesas/r9a06g032-sysctrl.h>
 #include <linux/spinlock.h>
 #include <dt-bindings/clock/r9a06g032-sysctrl.h>
 
 #define R9A06G032_SYSCTRL_USB    0x00
-#define R9A06G032_SYSCTRL_USB_H2MODE  (1<<1)
+#define R9A06G032_SYSCTRL_USB_H2MODE BIT(1)
 #define R9A06G032_SYSCTRL_DMAMUX 0xA0
+
+#define R9A06G032_SYSCTRL_RSTEN 0x120
+#define R9A06G032_SYSCTRL_RSTEN_MRESET_EN BIT(0)
+#define R9A06G032_SYSCTRL_RSTCTRL 0x198
+/* These work for both reset registers */
+#define R9A06G032_SYSCTRL_SWRST BIT(6)
+#define R9A06G032_SYSCTRL_WDA7RST_1 BIT(2)
+#define R9A06G032_SYSCTRL_WDA7RST_0 BIT(1)
 
 /**
  * struct regbit - describe one bit in a register
@@ -670,6 +679,7 @@ struct r9a06g032_priv {
 	struct clk_onecell_data data;
 	spinlock_t lock; /* protects concurrent access to gates */
 	void __iomem *reg;
+	struct notifier_block restart_nb;
 };
 
 static struct r9a06g032_priv *sysctrl_priv;
@@ -1270,6 +1280,13 @@ static void r9a06g032_clocks_del_clk_provider(void *data)
 	of_clk_del_provider(data);
 }
 
+static int r9a06g032_restart_notifier(struct notifier_block *nb,
+				      unsigned long action, void *data)
+{
+	writel(R9A06G032_SYSCTRL_SWRST, sysctrl_priv->reg + R9A06G032_SYSCTRL_RSTCTRL);
+	return NOTIFY_DONE;
+}
+
 static void __init r9a06g032_init_h2mode(struct r9a06g032_priv *clocks)
 {
 	struct device_node *usbf_np;
@@ -1323,6 +1340,20 @@ static int __init r9a06g032_clocks_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	r9a06g032_init_h2mode(clocks);
+
+	/* Clear potentially pending resets */
+	writel(R9A06G032_SYSCTRL_WDA7RST_0 | R9A06G032_SYSCTRL_WDA7RST_1,
+	       clocks->reg + R9A06G032_SYSCTRL_RSTCTRL);
+	/* Allow software reset */
+	writel(R9A06G032_SYSCTRL_SWRST | R9A06G032_SYSCTRL_RSTEN_MRESET_EN,
+	       clocks->reg + R9A06G032_SYSCTRL_RSTEN);
+
+	clocks->restart_nb.notifier_call = r9a06g032_restart_notifier;
+	clocks->restart_nb.priority = 192;
+
+	error = register_restart_handler(&clocks->restart_nb);
+	if (error)
+		dev_warn(dev, "couldn't register restart handler (%d)\n", error);
 
 	for (i = 0; i < ARRAY_SIZE(r9a06g032_clocks); ++i) {
 		const struct r9a06g032_clkdesc *d = &r9a06g032_clocks[i];
