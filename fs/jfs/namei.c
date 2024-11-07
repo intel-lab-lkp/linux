@@ -1467,8 +1467,14 @@ static struct dentry *jfs_lookup(struct inode *dip, struct dentry *dentry, unsig
 		ip = ERR_PTR(rc);
 	} else {
 		ip = jfs_iget(dip->i_sb, inum);
-		if (IS_ERR(ip))
-			jfs_err("jfs_lookup: iget failed on inum %d", (uint)inum);
+		if (IS_ERR(ip)) {
+			long err = PTR_ERR(ip);
+
+			jfs_err("%s: iget failed on inum %d with error"
+				" %ld, consider running 'jfs_fsck -f /dev/%s'",
+				__func__, (uint)inum, err, dip->i_sb->s_id);
+			return ERR_PTR(err);
+		}
 	}
 
 	return d_splice_alias(ip, dentry);
