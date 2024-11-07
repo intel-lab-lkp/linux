@@ -1137,6 +1137,95 @@ static int octep_set_features(struct net_device *dev, netdev_features_t features
 	return err;
 }
 
+static int octep_get_vf_config(struct net_device *dev, int vf, struct ifla_vf_info *ivi)
+{
+	struct octep_device *oct = netdev_priv(dev);
+
+	ivi->vf = vf;
+	ether_addr_copy(ivi->mac, oct->vf_info[vf].mac_addr);
+	ivi->vlan = 0;
+	ivi->qos = 0;
+	ivi->spoofchk = 0;
+	ivi->linkstate = IFLA_VF_LINK_STATE_ENABLE;
+	ivi->trusted = true;
+	ivi->max_tx_rate = 10000;
+	ivi->min_tx_rate = 0;
+
+	return 0;
+}
+
+static int octep_set_vf_mac(struct net_device *dev, int vf, u8 *mac)
+{
+	struct octep_device *oct = netdev_priv(dev);
+	int i, err;
+
+	if (!is_valid_ether_addr(mac)) {
+		dev_err(&oct->pdev->dev, "Invalid  MAC Address %pM\n", mac);
+		return -EADDRNOTAVAIL;
+	}
+
+	dev_dbg(&oct->pdev->dev, "set vf-%d mac to %pM\n", vf, mac);
+	for (i = 0; i < ETH_ALEN; i++)
+		oct->vf_info[vf].mac_addr[i] = mac[i];
+	oct->vf_info[vf].flags |=  OCTEON_PFVF_FLAG_MAC_SET_BY_PF;
+
+	err = octep_ctrl_net_set_mac_addr(oct, vf, mac, true);
+	if (err) {
+		dev_err(&oct->pdev->dev, "Set VF%d MAC address failed via host control Mbox\n", vf);
+		return err;
+	}
+
+	return 0;
+}
+
+static int octep_set_vf_vlan(struct net_device *dev, int vf, u16 vlan, u8 qos, __be16 vlan_proto)
+{
+	struct octep_device *oct = netdev_priv(dev);
+
+	dev_err(&oct->pdev->dev, "Setting VF VLAN not supported\n");
+	return 0;
+}
+
+static int octep_set_vf_spoofchk(struct net_device *dev, int vf, bool setting)
+{
+	struct octep_device *oct = netdev_priv(dev);
+
+	dev_err(&oct->pdev->dev, "Setting VF spoof check not supported\n");
+	return 0;
+}
+
+static int octep_set_vf_trust(struct net_device *dev, int vf, bool setting)
+{
+	struct octep_device *oct = netdev_priv(dev);
+
+	dev_err(&oct->pdev->dev, "Setting VF trust not supported\n");
+	return 0;
+}
+
+static int octep_set_vf_rate(struct net_device *dev, int vf, int min_tx_rate, int max_tx_rate)
+{
+	struct octep_device *oct = netdev_priv(dev);
+
+	dev_err(&oct->pdev->dev, "Setting VF rate not supported\n");
+	return 0;
+}
+
+static int octep_set_vf_link_state(struct net_device *dev, int vf, int link_state)
+{
+	struct octep_device *oct = netdev_priv(dev);
+
+	dev_err(&oct->pdev->dev, "Setting VF link state not supported\n");
+	return 0;
+}
+
+static int octep_get_vf_stats(struct net_device *dev, int vf, struct ifla_vf_stats *vf_stats)
+{
+	struct octep_device *oct = netdev_priv(dev);
+
+	dev_err(&oct->pdev->dev, "Getting VF stats not supported\n");
+	return 0;
+}
+
 static const struct net_device_ops octep_netdev_ops = {
 	.ndo_open                = octep_open,
 	.ndo_stop                = octep_stop,
@@ -1146,6 +1235,15 @@ static const struct net_device_ops octep_netdev_ops = {
 	.ndo_set_mac_address     = octep_set_mac,
 	.ndo_change_mtu          = octep_change_mtu,
 	.ndo_set_features        = octep_set_features,
+	/* for VFs */
+	.ndo_get_vf_config       = octep_get_vf_config,
+	.ndo_set_vf_mac          = octep_set_vf_mac,
+	.ndo_set_vf_vlan         = octep_set_vf_vlan,
+	.ndo_set_vf_spoofchk     = octep_set_vf_spoofchk,
+	.ndo_set_vf_trust        = octep_set_vf_trust,
+	.ndo_set_vf_rate         = octep_set_vf_rate,
+	.ndo_set_vf_link_state   = octep_set_vf_link_state,
+	.ndo_get_vf_stats        = octep_get_vf_stats,
 };
 
 /**
