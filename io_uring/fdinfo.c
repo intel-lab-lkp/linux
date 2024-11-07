@@ -223,7 +223,7 @@ __cold void io_uring_show_fdinfo(struct seq_file *m, struct file *file)
 		if (ctx->buf_table.nodes[i])
 			buf = ctx->buf_table.nodes[i]->buf;
 		if (buf)
-			seq_printf(m, "%5u: 0x%llx/%u\n", i, buf->ubuf, buf->len);
+			seq_printf(m, "%5u: 0x%llx/%u\n", i, buf->addr, buf->len);
 		else
 			seq_printf(m, "%5u: <none>\n", i);
 	}
