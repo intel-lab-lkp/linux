@@ -15,6 +15,7 @@
 #include <linux/idr.h>
 #include <linux/file.h>
 #include <linux/poll.h>
+#include <linux/random.h>
 #include <linux/slab.h>
 #include <linux/hash.h>
 #include <linux/tick.h>
@@ -9831,7 +9832,11 @@ static int __perf_event_overflow(struct perf_event *event,
 	if (event->attr.alternative_sample_period) {
 		bool using_alt = hwc->using_alternative_sample_period;
 		u64 sample_period = (using_alt ? event->attr.sample_period
-					       : event->attr.alternative_sample_period);
+					       : event->attr.alternative_sample_period)
+				  + (event->attr.jitter_alternate_period
+					? get_random_u32_below(2 <<
+								event->attr.jitter_alternate_period)
+					: 0);
 
 		hwc->sample_period = sample_period;
 		hwc->using_alternative_sample_period = !using_alt;
@@ -12743,6 +12748,9 @@ SYSCALL_DEFINE5(perf_event_open,
 				attr.alternative_sample_period = 0;
 		}
 	}
+
+	if (attr.jitter_alternate_period && !attr.alternative_sample_period)
+		return -EINVAL;
 
 	/* Only privileged users can get physical addresses */
 	if ((attr.sample_type & PERF_SAMPLE_PHYS_ADDR)) {
