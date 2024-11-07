@@ -21,6 +21,9 @@ cros-ec-typec-objs			:= cros_ec_typec.o cros_typec_vdm.o
 ifneq ($(CONFIG_TYPEC_DP_ALTMODE),)
 	cros-ec-typec-objs		+= cros_typec_altmode.o
 endif
+ifneq ($(CONFIG_TYPEC_TBT_ALTMODE),)
+	cros-ec-typec-objs		+= cros_typec_altmode.o
+endif
 obj-$(CONFIG_CROS_EC_TYPEC)		+= cros-ec-typec.o
 
 obj-$(CONFIG_CROS_EC_LPC)		+= cros_ec_lpcs.o
