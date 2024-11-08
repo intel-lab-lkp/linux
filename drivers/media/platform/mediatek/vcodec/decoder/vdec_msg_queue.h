@@ -55,7 +55,7 @@ struct vdec_msg_queue_ctx {
  * @rd_mv_addr:	mv addr for av1 lat hardware output, core hardware input
  * @tile_addr:	tile buffer for av1 core input
  * @ts_info: need to set timestamp from output to capture
- * @src_buf_req: output buffer media request object
+ * @vb2_v4l2_src: vb2 buffer of output queue
  *
  * @private_data: shared information used to lat and core hardware
  * @ctx: mtk vcodec context information
@@ -71,7 +71,7 @@ struct vdec_lat_buf {
 	struct mtk_vcodec_mem rd_mv_addr;
 	struct mtk_vcodec_mem tile_addr;
 	struct vb2_v4l2_buffer ts_info;
-	struct media_request *src_buf_req;
+	struct vb2_v4l2_buffer *vb2_v4l2_src;
 
 	void *private_data;
 	struct mtk_vcodec_dec_ctx *ctx;
