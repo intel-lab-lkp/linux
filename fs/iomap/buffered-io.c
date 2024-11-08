@@ -1369,6 +1369,7 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 {
 	loff_t pos = iter->pos;
 	loff_t length = iomap_length(iter);
+	loff_t isize = iter->inode->i_size;
 	loff_t written = 0;
 
 	do {
@@ -1384,6 +1385,8 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 		if (iter->iomap.flags & IOMAP_F_STALE)
 			break;
 
+		/* warn about zeroing folios beyond eof that won't write back */
+		WARN_ON_ONCE(folio_pos(folio) > isize);
 		offset = offset_in_folio(folio, pos);
 		if (bytes > folio_size(folio) - offset)
 			bytes = folio_size(folio) - offset;
