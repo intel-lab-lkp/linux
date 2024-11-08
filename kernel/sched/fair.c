@@ -3397,12 +3397,24 @@ retry_pids:
 			continue;
 		}
 
+		/*
+		 * In case of the shared vma, the vma->numab_state will be
+		 * overwritten if two or more cores observe vma->numab_state
+		 * is NULL at the same time. Make sure that only one core
+		 * allocates memory for vma->numab_state. This can prevent
+		 * the memory leak.
+		 */
+		if (!mutex_trylock(&vma->numab_state_lock))
+			continue;
+
 		/* Initialise new per-VMA NUMAB state. */
 		if (!vma->numab_state) {
 			vma->numab_state = kzalloc(sizeof(struct vma_numab_state),
 				GFP_KERNEL);
-			if (!vma->numab_state)
+			if (!vma->numab_state) {
+				mutex_unlock(&vma->numab_state_lock);
 				continue;
+			}
 
 			vma->numab_state->start_scan_seq = mm->numa_scan_seq;
 
@@ -3428,6 +3440,7 @@ retry_pids:
 		if (mm->numa_scan_seq && time_before(jiffies,
 						vma->numab_state->next_scan)) {
 			trace_sched_skip_vma_numa(mm, vma, NUMAB_SKIP_SCAN_DELAY);
+			mutex_unlock(&vma->numab_state_lock);
 			continue;
 		}
 
@@ -3439,6 +3452,8 @@ retry_pids:
 			vma->numab_state->pids_active[0] = READ_ONCE(vma->numab_state->pids_active[1]);
 			vma->numab_state->pids_active[1] = 0;
 		}
+
+		mutex_unlock(&vma->numab_state_lock);
 
 		/* Do not rescan VMAs twice within the same sequence. */
 		if (vma->numab_state->prev_scan_seq == mm->numa_scan_seq) {

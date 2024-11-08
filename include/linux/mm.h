@@ -673,6 +673,7 @@ struct vm_operations_struct {
 static inline void vma_numab_state_init(struct vm_area_struct *vma)
 {
 	vma->numab_state = NULL;
+	mutex_init(&vma->numab_state_lock);
 }
 static inline void vma_numab_state_free(struct vm_area_struct *vma)
 {

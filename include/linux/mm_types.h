@@ -768,6 +768,7 @@ struct vm_area_struct {
 #endif
 #ifdef CONFIG_NUMA_BALANCING
 	struct vma_numab_state *numab_state;	/* NUMA Balancing state */
+	struct mutex numab_state_lock;		/* NUMA Balancing state lock */
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
 } __randomize_layout;
