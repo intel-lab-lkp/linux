@@ -683,6 +683,9 @@ void ieee802154_if_remove(struct ieee802154_sub_if_data *sdata)
 {
 	ASSERT_RTNL();
 
+	if (test_bit(SDATA_STATE_LISTDONE, &sdata->state))
+		return;
+
 	mutex_lock(&sdata->local->iflist_mtx);
 	list_del_rcu(&sdata->list);
 	mutex_unlock(&sdata->local->iflist_mtx);
@@ -698,6 +701,7 @@ void ieee802154_remove_interfaces(struct ieee802154_local *local)
 	mutex_lock(&local->iflist_mtx);
 	list_for_each_entry_safe(sdata, tmp, &local->interfaces, list) {
 		list_del(&sdata->list);
+		set_bit(SDATA_STATE_LISTDONE, &sdata->state);
 
 		unregister_netdevice(sdata->dev);
 	}

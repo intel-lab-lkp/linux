@@ -101,6 +101,7 @@ enum {
 
 enum ieee802154_sdata_state_bits {
 	SDATA_STATE_RUNNING,
+	SDATA_STATE_LISTDONE,
 };
 
 /* Slave interface definition.
