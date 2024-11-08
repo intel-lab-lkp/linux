@@ -1455,7 +1455,7 @@ static void ip6gre_tunnel_setup(struct net_device *dev)
 	dev->type = ARPHRD_IP6GRE;
 
 	dev->flags |= IFF_NOARP;
-	dev->addr_len = sizeof(struct in6_addr);
+	dev->addr_len = ETH_ALEN;
 	netif_keep_dst(dev);
 	/* This perm addr will be used as interface identifier by IPv6 */
 	dev->addr_assign_type = NET_ADDR_RANDOM;
