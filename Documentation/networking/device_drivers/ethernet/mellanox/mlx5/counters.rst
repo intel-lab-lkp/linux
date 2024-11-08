@@ -1135,7 +1135,7 @@ like flow control, FEC and more.
      - Informative
 
    * - `rx_pcs_symbol_err_phy`
-     - This counter counts the number of symbol errors that wasn’t corrected by
+     - This counter counts the number of symbol errors that wasn't corrected by
        FEC correction algorithm or that FEC algorithm was not active on this
        interface. If this counter is increasing, it implies that the link
        between the NIC and the network is suffering from high BER, and that
