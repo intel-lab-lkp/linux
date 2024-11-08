@@ -1117,6 +1117,7 @@ static int uvc_video_decode_start(struct uvc_streaming *stream,
 		struct uvc_buffer *buf, const u8 *data, int len)
 {
 	u8 fid;
+	u8 header_len = data[0];
 
 	/*
 	 * Sanity checks:
@@ -1212,7 +1213,7 @@ static int uvc_video_decode_start(struct uvc_streaming *stream,
 
 	stream->last_fid = fid;
 
-	return data[0];
+	return header_len;
 }
 
 static inline enum dma_data_direction uvc_stream_dir(
