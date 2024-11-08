@@ -89,6 +89,33 @@ static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma);
 static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
 		unsigned long start, unsigned long end);
 static struct resv_map *vma_resv_map(struct vm_area_struct *vma);
+static void free_huge_folio(struct folio *folio);
+
+static const struct folio_owner_ops hugetlb_owner_ops = {
+	.free = free_huge_folio,
+};
+
+/*
+ * Mark this folio as a hugetlb-owned folio.
+ *
+ * Set the folio hugetlb flag and owner operations.
+ */
+static void folio_set_hugetlb_owner(struct folio *folio)
+{
+	__folio_set_hugetlb(folio);
+	folio_set_owner_ops(folio, &hugetlb_owner_ops);
+}
+
+/*
+ * Unmark this folio from being a hugetlb-owned folio.
+ *
+ * Clear the folio hugetlb flag and owner operations.
+ */
+static void folio_clear_hugetlb_owner(struct folio *folio)
+{
+	folio_clear_owner_ops(folio);
+	__folio_clear_hugetlb(folio);
+}
 
 static void hugetlb_free_folio(struct folio *folio)
 {
@@ -1617,7 +1644,7 @@ static void remove_hugetlb_folio(struct hstate *h, struct folio *folio,
 	 * to tail struct pages.
 	 */
 	if (!folio_test_hugetlb_vmemmap_optimized(folio)) {
-		__folio_clear_hugetlb(folio);
+		folio_clear_hugetlb_owner(folio);
 	}
 
 	h->nr_huge_pages--;
@@ -1641,7 +1668,7 @@ static void add_hugetlb_folio(struct hstate *h, struct folio *folio,
 		h->surplus_huge_pages++;
 		h->surplus_huge_pages_node[nid]++;
 	}
-	__folio_set_hugetlb(folio);
+	folio_set_hugetlb_owner(folio);
 
 	folio_change_private(folio, NULL);
 	/*
@@ -1692,7 +1719,7 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 	 */
 	if (folio_test_hugetlb(folio)) {
 		spin_lock_irq(&hugetlb_lock);
-		__folio_clear_hugetlb(folio);
+		folio_clear_hugetlb_owner(folio);
 		spin_unlock_irq(&hugetlb_lock);
 	}
 
@@ -1793,7 +1820,7 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 		list_for_each_entry_safe(folio, t_folio, non_hvo_folios, _hugetlb_list) {
 			list_del(&folio->_hugetlb_list);
 			spin_lock_irq(&hugetlb_lock);
-			__folio_clear_hugetlb(folio);
+			folio_clear_hugetlb_owner(folio);
 			spin_unlock_irq(&hugetlb_lock);
 			update_and_free_hugetlb_folio(h, folio, false);
 			cond_resched();
@@ -1818,7 +1845,7 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 			} else {
 				list_del(&folio->_hugetlb_list);
 				spin_lock_irq(&hugetlb_lock);
-				__folio_clear_hugetlb(folio);
+				folio_clear_hugetlb_owner(folio);
 				spin_unlock_irq(&hugetlb_lock);
 				update_and_free_hugetlb_folio(h, folio, false);
 				cond_resched();
@@ -1851,14 +1878,14 @@ retry:
 	 * should only be pages on the non_hvo_folios list.
 	 * Do note that the non_hvo_folios list could be empty.
 	 * Without HVO enabled, ret will be 0 and there is no need to call
-	 * __folio_clear_hugetlb as this was done previously.
+	 * folio_clear_hugetlb_owner as this was done previously.
 	 */
 	VM_WARN_ON(!list_empty(folio_list));
 	VM_WARN_ON(ret < 0);
 	if (!list_empty(&non_hvo_folios) && ret) {
 		spin_lock_irq(&hugetlb_lock);
 		list_for_each_entry(folio, &non_hvo_folios, _hugetlb_list)
-			__folio_clear_hugetlb(folio);
+			folio_clear_hugetlb_owner(folio);
 		spin_unlock_irq(&hugetlb_lock);
 	}
 
@@ -1879,7 +1906,7 @@ struct hstate *size_to_hstate(unsigned long size)
 	return NULL;
 }
 
-void free_huge_folio(struct folio *folio)
+static void free_huge_folio(struct folio *folio)
 {
 	/*
 	 * Can't pass hstate in here because it is called from the
@@ -1959,7 +1986,7 @@ static void __prep_account_new_huge_page(struct hstate *h, int nid)
 
 static void init_new_hugetlb_folio(struct hstate *h, struct folio *folio)
 {
-	__folio_set_hugetlb(folio);
+	folio_set_hugetlb_owner(folio);
 	INIT_LIST_HEAD(&folio->_hugetlb_list);
 	hugetlb_set_folio_subpool(folio, NULL);
 	set_hugetlb_cgroup(folio, NULL);
@@ -7428,6 +7455,14 @@ bool folio_isolate_hugetlb(struct folio *folio, struct list_head *list)
 		goto unlock;
 	}
 	folio_clear_hugetlb_migratable(folio);
+	/*
+	 * Clear folio->owner_ops; now we can use folio->lru.
+	 * Note that the folio cannot get freed because we are holding a
+	 * reference. The reference will be put in folio_putback_hugetlb(),
+	 * after restoring folio->owner_ops.
+	 */
+	folio_clear_owner_ops(folio);
+	INIT_LIST_HEAD(&folio->lru);
 	list_del_init(&folio->_hugetlb_list);
 	list_add_tail(&folio->lru, list);
 unlock:
@@ -7480,7 +7515,9 @@ void folio_putback_hugetlb(struct folio *folio)
 {
 	spin_lock_irq(&hugetlb_lock);
 	folio_set_hugetlb_migratable(folio);
-	list_del_init(&folio->lru);
+	list_del(&folio->lru);
+	/* Restore folio->owner_ops since we can no longer use folio->lru. */
+	folio_set_owner_ops(folio, &hugetlb_owner_ops);
 	list_add_tail(&folio->_hugetlb_list, &(folio_hstate(folio))->hugepage_activelist);
 	spin_unlock_irq(&hugetlb_lock);
 	folio_put(folio);

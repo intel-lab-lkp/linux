@@ -20,8 +20,6 @@ struct user_struct;
 struct mmu_gather;
 struct node;
 
-void free_huge_folio(struct folio *folio);
-
 #ifdef CONFIG_HUGETLB_PAGE
 
 #include <linux/pagemap.h>
