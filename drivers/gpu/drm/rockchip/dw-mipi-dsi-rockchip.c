@@ -1379,7 +1379,7 @@ static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 	}
 
 	if (!dsi->cdata) {
-		DRM_DEV_ERROR(dev, "no dsi-config for %s node\n", np->name);
+		DRM_DEV_ERROR(dev, "No dsi-config for %s node\n", np->name);
 		return -EINVAL;
 	}
 
@@ -1408,9 +1408,7 @@ static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 			dsi->pllref_clk = NULL;
 		} else {
 			ret = PTR_ERR(dsi->pllref_clk);
-			DRM_DEV_ERROR(dev,
-				      "Unable to get pll reference clock: %d\n",
-				      ret);
+			DRM_DEV_ERROR(dev, "Unable to get pll reference clock: %d\n", ret);
 			return ret;
 		}
 	}
@@ -1419,8 +1417,7 @@ static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 		dsi->phy_cfg_clk = devm_clk_get(dev, "phy_cfg");
 		if (IS_ERR(dsi->phy_cfg_clk)) {
 			ret = PTR_ERR(dsi->phy_cfg_clk);
-			DRM_DEV_ERROR(dev,
-				      "Unable to get phy_cfg_clk: %d\n", ret);
+			DRM_DEV_ERROR(dev, "Unable to get phy_cfg_clk: %d\n", ret);
 			return ret;
 		}
 	}
@@ -1465,8 +1462,7 @@ static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 	if (IS_ERR(dsi->dmd)) {
 		ret = PTR_ERR(dsi->dmd);
 		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev,
-				      "Failed to probe dw_mipi_dsi: %d\n", ret);
+			DRM_DEV_ERROR(dev, "Failed to probe dw_mipi_dsi: %d\n", ret);
 		return ret;
 	}
 
