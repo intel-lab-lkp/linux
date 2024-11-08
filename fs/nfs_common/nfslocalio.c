@@ -43,6 +43,8 @@ void nfs_uuid_init(nfs_uuid_t *nfs_uuid)
 	INIT_LIST_HEAD(&nfs_uuid->list);
 	INIT_LIST_HEAD(&nfs_uuid->files);
 	spin_lock_init(&nfs_uuid->lock);
+	mutex_init(&nfs_uuid->local_probe_mutex);
+	nfs_uuid->local_probe_count = 0;
 }
 EXPORT_SYMBOL_GPL(nfs_uuid_init);
 
@@ -143,6 +145,8 @@ void nfs_localio_enable_client(struct nfs_client *clp)
 
 	spin_lock(&nfs_uuid->lock);
 	set_bit(NFS_CS_LOCAL_IO, &clp->cl_flags);
+	/* Also set hint that client and server are LOCALIO capable */
+	set_bit(NFS_CS_LOCAL_IO_CAPABLE, &clp->cl_flags);
 	trace_nfs_localio_enable_client(clp);
 	spin_unlock(&nfs_uuid->lock);
 }

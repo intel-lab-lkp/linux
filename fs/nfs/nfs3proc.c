@@ -844,6 +844,29 @@ nfs3_proc_pathconf(struct nfs_server *server, struct nfs_fh *fhandle,
 	return status;
 }
 
+static void nfs3_local_probe(struct nfs_server *server)
+{
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	struct nfs_client *clp = server->nfs_client;
+	nfs_uuid_t *nfs_uuid = &clp->cl_uuid;
+
+	if (likely(!nfs_server_was_local(clp)))
+		return;
+	/*
+	 * Try re-enabling LOCALIO if it was previously enabled, but
+	 * was disabled due to server restart, and IO has successfully
+	 * completed in terms of normal RPC.
+	 */
+	mutex_lock(&nfs_uuid->local_probe_mutex);
+	/* Arbitrary throttle to reduce nfs_local_probe_async() frequency */
+	if ((nfs_uuid->local_probe_count++ & 255) == 0) {
+		if (unlikely(!nfs_server_is_local(clp) && nfs_server_was_local(clp)))
+			nfs_local_probe_async(clp);
+	}
+	mutex_unlock(&nfs_uuid->local_probe_mutex);
+#endif
+}
+
 static int nfs3_read_done(struct rpc_task *task, struct nfs_pgio_header *hdr)
 {
 	struct inode *inode = hdr->inode;
@@ -855,8 +878,11 @@ static int nfs3_read_done(struct rpc_task *task, struct nfs_pgio_header *hdr)
 	if (nfs3_async_handle_jukebox(task, inode))
 		return -EAGAIN;
 
-	if (task->tk_status >= 0 && !server->read_hdrsize)
-		cmpxchg(&server->read_hdrsize, 0, hdr->res.replen);
+	if (task->tk_status >= 0) {
+		if (!server->read_hdrsize)
+			cmpxchg(&server->read_hdrsize, 0, hdr->res.replen);
+		nfs3_local_probe(server);
+	}
 
 	nfs_invalidate_atime(inode);
 	nfs_refresh_inode(inode, &hdr->fattr);
@@ -886,8 +912,10 @@ static int nfs3_write_done(struct rpc_task *task, struct nfs_pgio_header *hdr)
 
 	if (nfs3_async_handle_jukebox(task, inode))
 		return -EAGAIN;
-	if (task->tk_status >= 0)
+	if (task->tk_status >= 0) {
 		nfs_writeback_update_inode(hdr);
+		nfs3_local_probe(NFS_SERVER(inode));
+	}
 	return 0;
 }
 

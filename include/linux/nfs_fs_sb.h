@@ -51,6 +51,7 @@ struct nfs_client {
 #define NFS_CS_REUSEPORT	8		/* - reuse src port on reconnect */
 #define NFS_CS_PNFS		9		/* - Server used for pnfs */
 #define NFS_CS_LOCAL_IO		10		/* - client is local */
+#define NFS_CS_LOCAL_IO_CAPABLE		11	/* - client was previously local */
 	struct sockaddr_storage	cl_addr;	/* server identifier */
 	size_t			cl_addrlen;
 	char *			cl_hostname;	/* hostname of server */

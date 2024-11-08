@@ -64,6 +64,17 @@ bool nfs_server_is_local(const struct nfs_client *clp)
 }
 EXPORT_SYMBOL_GPL(nfs_server_is_local);
 
+static inline bool nfs_client_was_local(const struct nfs_client *clp)
+{
+	return !!test_bit(NFS_CS_LOCAL_IO_CAPABLE, &clp->cl_flags);
+}
+
+bool nfs_server_was_local(const struct nfs_client *clp)
+{
+	return nfs_client_was_local(clp) && localio_enabled;
+}
+EXPORT_SYMBOL_GPL(nfs_server_was_local);
+
 /*
  * UUID_IS_LOCAL XDR functions
  */
