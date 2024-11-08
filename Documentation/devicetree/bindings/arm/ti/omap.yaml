@@ -138,6 +138,7 @@ properties:
               - motorola,xyboard-mz617
               - ti,omap4-panda
               - ti,omap4-sdp
+              - samsung,espresso7
           - const: ti,omap4430
           - const: ti,omap4
 
