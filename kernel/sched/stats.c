@@ -122,15 +122,18 @@ static int show_schedstat(struct seq_file *seq, void *v)
 		rq = cpu_rq(cpu);
 
 		/* runqueue-specific stats */
-		seq_printf(seq,
-		    "cpu%d %u 0 %u %u %u %u %llu %llu %lu",
-		    cpu, rq->yld_count,
-		    rq->sched_count, rq->sched_goidle,
-		    rq->ttwu_count, rq->ttwu_local,
-		    rq->rq_cpu_time,
-		    rq->rq_sched_info.run_delay, rq->rq_sched_info.pcount);
-
-		seq_printf(seq, "\n");
+		seq_puts(seq, "cpu");
+		seq_put_decimal_ull(seq, "", cpu);
+		seq_put_decimal_ull(seq, " ", rq->yld_count);
+		seq_put_decimal_ull(seq, " ", 0);
+		seq_put_decimal_ull(seq, " ", rq->sched_count);
+		seq_put_decimal_ull(seq, " ", rq->sched_goidle);
+		seq_put_decimal_ull(seq, " ", rq->ttwu_count);
+		seq_put_decimal_ull(seq, " ", rq->ttwu_local);
+		seq_put_decimal_ull(seq, " ", rq->rq_cpu_time);
+		seq_put_decimal_ull(seq, " ", rq->rq_sched_info.run_delay);
+		seq_put_decimal_ull(seq, " ", rq->rq_sched_info.pcount);
+		seq_putc(seq, '\n');
 
 #ifdef CONFIG_SMP
 		/* domain-specific stats */
@@ -138,26 +141,33 @@ static int show_schedstat(struct seq_file *seq, void *v)
 		for_each_domain(cpu, sd) {
 			enum cpu_idle_type itype;
 
-			seq_printf(seq, "domain%d %*pb", dcount++,
+			seq_puts(seq, "domain");
+			seq_put_decimal_ull(seq, "", dcount++);
+			seq_printf(seq, " %*pb",
 				   cpumask_pr_args(sched_domain_span(sd)));
 			for (itype = 0; itype < CPU_MAX_IDLE_TYPES; itype++) {
-				seq_printf(seq, " %u %u %u %u %u %u %u %u",
-				    sd->lb_count[itype],
-				    sd->lb_balanced[itype],
-				    sd->lb_failed[itype],
-				    sd->lb_imbalance[itype],
-				    sd->lb_gained[itype],
-				    sd->lb_hot_gained[itype],
-				    sd->lb_nobusyq[itype],
-				    sd->lb_nobusyg[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_count[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_balanced[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_failed[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_imbalance[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_gained[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_hot_gained[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_nobusyq[itype]);
+				seq_put_decimal_ull(seq, " ", sd->lb_nobusyg[itype]);
 			}
-			seq_printf(seq,
-				   " %u %u %u %u %u %u %u %u %u %u %u %u\n",
-			    sd->alb_count, sd->alb_failed, sd->alb_pushed,
-			    sd->sbe_count, sd->sbe_balanced, sd->sbe_pushed,
-			    sd->sbf_count, sd->sbf_balanced, sd->sbf_pushed,
-			    sd->ttwu_wake_remote, sd->ttwu_move_affine,
-			    sd->ttwu_move_balance);
+			seq_put_decimal_ull(seq, " ", sd->alb_count);
+			seq_put_decimal_ull(seq, " ", sd->alb_failed);
+			seq_put_decimal_ull(seq, " ", sd->alb_pushed);
+			seq_put_decimal_ull(seq, " ", sd->sbe_count);
+			seq_put_decimal_ull(seq, " ", sd->sbe_balanced);
+			seq_put_decimal_ull(seq, " ", sd->sbe_pushed);
+			seq_put_decimal_ull(seq, " ", sd->sbf_count);
+			seq_put_decimal_ull(seq, " ", sd->sbf_balanced);
+			seq_put_decimal_ull(seq, " ", sd->sbf_pushed);
+			seq_put_decimal_ull(seq, " ", sd->ttwu_wake_remote);
+			seq_put_decimal_ull(seq, " ", sd->ttwu_move_affine);
+			seq_put_decimal_ull(seq, " ", sd->ttwu_move_balance);
+			seq_putc(seq, '\n');
 		}
 		rcu_read_unlock();
 #endif
