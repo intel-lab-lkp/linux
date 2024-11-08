@@ -142,7 +142,7 @@ this documentation.
 						  const struct ethtool_link_ksettings *cmd)
 	{
 		struct foo_priv *priv = netdev_priv(dev);
-	
+
 		return phylink_ethtool_ksettings_set(priv->phylink, cmd);
 	}
 
@@ -150,7 +150,7 @@ this documentation.
 						  struct ethtool_link_ksettings *cmd)
 	{
 		struct foo_priv *priv = netdev_priv(dev);
-	
+
 		return phylink_ethtool_ksettings_get(priv->phylink, cmd);
 	}
 
