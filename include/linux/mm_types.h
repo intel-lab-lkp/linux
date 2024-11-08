@@ -427,6 +427,7 @@ FOLIO_MATCH(lru, lru);
 FOLIO_MATCH(mapping, mapping);
 FOLIO_MATCH(compound_head, lru);
 FOLIO_MATCH(compound_head, owner_ops);
+FOLIO_MATCH(pgmap, owner_ops);
 FOLIO_MATCH(index, index);
 FOLIO_MATCH(private, private);
 FOLIO_MATCH(_mapcount, _mapcount);
@@ -618,15 +619,26 @@ static inline const struct folio_owner_ops *folio_get_owner_ops(struct folio *fo
 
 /*
  * Get the page dev_pagemap pgmap pointer.
+ *
+ * The page pgmap is overlaid with the folio owner_ops, where bit 1 is used to
+ * indicate that the page/folio has owner ops. The dev_pagemap contains
+ * owner_ops and is handled the same way. The getter returns a sanitized
+ * pointer.
  */
-#define page_get_pgmap(page)	((page)->pgmap)
+#define page_get_pgmap(page)							\
+	((struct dev_pagemap *)((unsigned long)(page)->pgmap & ~FOLIO_OWNER_OPS))
 
 /*
  * Set the page dev_pagemap pgmap pointer.
+ *
+ * The page pgmap is overlaid with the folio owner_ops, where bit 1 is used to
+ * indicate that the page/folio has owner ops. The dev_pagemap contains
+ * owner_ops and is handled the same way. The setter sets bit 1 to indicate
+ * that the page owner_ops.
  */
 static inline void page_set_pgmap(struct page *page, struct dev_pagemap *pgmap)
 {
-	page->pgmap = pgmap;
+	page->pgmap = (struct dev_pagemap *)((unsigned long)pgmap | FOLIO_OWNER_OPS);
 }
 
 struct page_frag_cache {

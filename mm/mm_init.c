@@ -974,6 +974,51 @@ static void __init memmap_init(void)
 }
 
 #ifdef CONFIG_ZONE_DEVICE
+
+static void free_zone_device_folio(struct folio *folio)
+{
+	struct dev_pagemap *pgmap = page_get_pgmap(&folio->page);
+
+	if (WARN_ON_ONCE(!pgmap->ops || !pgmap->ops->page_free))
+		return;
+
+	mem_cgroup_uncharge(folio);
+
+	/*
+	 * Note: we don't expect anonymous compound pages yet. Once supported
+	 * and we could PTE-map them similar to THP, we'd have to clear
+	 * PG_anon_exclusive on all tail pages.
+	 */
+	if (folio_test_anon(folio)) {
+		VM_BUG_ON_FOLIO(folio_test_large(folio), folio);
+		__ClearPageAnonExclusive(folio_page(folio, 0));
+	}
+
+	/*
+	 * When a device managed page is freed, the folio->mapping field
+	 * may still contain a (stale) mapping value. For example, the
+	 * lower bits of folio->mapping may still identify the folio as an
+	 * anonymous folio. Ultimately, this entire field is just stale
+	 * and wrong, and it will cause errors if not cleared.
+	 *
+	 * For other types of ZONE_DEVICE pages, migration is either
+	 * handled differently or not done at all, so there is no need
+	 * to clear folio->mapping.
+	 */
+	folio->mapping = NULL;
+	pgmap->ops->page_free(folio_page(folio, 0));
+
+	if (pgmap->type != MEMORY_DEVICE_PRIVATE &&
+	    pgmap->type != MEMORY_DEVICE_COHERENT)
+		/*
+		 * Reset the refcount to 1 to prepare for handing out the page
+		 * again.
+		 */
+		folio_set_count(folio, 1);
+	else
+		put_dev_pagemap(pgmap);
+}
+
 static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
 					  unsigned long zone_idx, int nid,
 					  struct dev_pagemap *pgmap)
@@ -995,6 +1040,7 @@ static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
 	 * and zone_device_data.  It is a bug if a ZONE_DEVICE page is
 	 * ever freed or placed on a driver-private list.
 	 */
+	pgmap->folio_ops.free = free_zone_device_folio;
 	page_set_pgmap(page, pgmap);
 	page->zone_device_data = NULL;
 

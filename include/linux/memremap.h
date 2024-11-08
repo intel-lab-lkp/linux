@@ -106,6 +106,7 @@ struct dev_pagemap_ops {
 
 /**
  * struct dev_pagemap - metadata for ZONE_DEVICE mappings
+ * @folio_ops: method table for folio operations.
  * @altmap: pre-allocated/reserved memory for vmemmap allocations
  * @ref: reference count that pins the devm_memremap_pages() mapping
  * @done: completion for @ref
@@ -125,6 +126,7 @@ struct dev_pagemap_ops {
  * @ranges: array of ranges to be mapped when nr_range > 1
  */
 struct dev_pagemap {
+	struct folio_owner_ops folio_ops;
 	struct vmem_altmap altmap;
 	struct percpu_ref ref;
 	struct completion done;
@@ -139,6 +141,12 @@ struct dev_pagemap {
 		DECLARE_FLEX_ARRAY(struct range, ranges);
 	};
 };
+
+/*
+ * The folio_owner_ops structure needs to be first since pgmap in struct page is
+ * overlaid with owner_ops in struct folio.
+ */
+static_assert(offsetof(struct dev_pagemap, folio_ops) == 0);
 
 static inline bool pgmap_has_memory_failure(struct dev_pagemap *pgmap)
 {
