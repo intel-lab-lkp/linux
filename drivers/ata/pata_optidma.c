@@ -390,7 +390,7 @@ static int optiplus_with_udma(struct pci_dev *pdev)
 	if (r & 0x80)	/* IDEDIR disabled */
 		ret = 1;
 done:
-	printk(KERN_WARNING "UDMA not supported in this configuration.\n");
+	dev_warn(&pdev->dev, "UDMA not supported in this configuration.\n");
 done_nomsg:		/* Wrong chip revision */
 	pci_dev_put(dev1);
 	return ret;
