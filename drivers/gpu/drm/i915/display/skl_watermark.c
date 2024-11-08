@@ -2840,9 +2840,11 @@ static int skl_wm_add_affected_planes(struct intel_atomic_state *state,
  * Program PKG_C_LATENCY Added Wake Time = 0
  */
 static void
-skl_program_dpkgc_latency(struct drm_i915_private *i915, bool enable_dpkgc)
+skl_program_dpkgc_latency(struct drm_i915_private *i915,
+			  bool enable_dpkgc,
+			  u32 max_linetime)
 {
-	u32 max_latency = 0;
+	u32 adjusted_latency = 0;
 	u32 clear = 0, val = 0;
 	u32 added_wake_time = 0;
 
@@ -2850,18 +2852,23 @@ skl_program_dpkgc_latency(struct drm_i915_private *i915, bool enable_dpkgc)
 		return;
 
 	if (enable_dpkgc) {
-		max_latency = skl_watermark_max_latency(i915, 1);
-		if (max_latency == 0)
-			max_latency = LNL_PKG_C_LATENCY_MASK;
+		adjusted_latency = skl_watermark_max_latency(i915, 1);
+		if (adjusted_latency == 0)
+			adjusted_latency = LNL_PKG_C_LATENCY_MASK;
+
+		/* Wa_22020299601 */
+		if (DISPLAY_VER(i915) == 20 || DISPLAY_VER(i915) == 30)
+			adjusted_latency = max_linetime *
+				DIV_ROUND_UP(adjusted_latency, max_linetime);
 		added_wake_time = DSB_EXE_TIME +
 			i915->display.sagv.block_time_us;
 	} else {
-		max_latency = LNL_PKG_C_LATENCY_MASK;
+		adjusted_latency = LNL_PKG_C_LATENCY_MASK;
 		added_wake_time = 0;
 	}
 
 	clear |= LNL_ADDED_WAKE_TIME_MASK | LNL_PKG_C_LATENCY_MASK;
-	val |= REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, max_latency);
+	val |= REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, adjusted_latency);
 	val |= REG_FIELD_PREP(LNL_ADDED_WAKE_TIME_MASK, added_wake_time);
 
 	intel_uncore_rmw(&i915->uncore, LNL_PKG_C_LATENCY, clear, val);
@@ -2874,6 +2881,7 @@ skl_compute_wm(struct intel_atomic_state *state)
 	struct intel_crtc_state __maybe_unused *new_crtc_state;
 	int ret, i;
 	bool enable_dpkgc = false;
+	u32 max_linetime = 0;
 
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
 		ret = skl_build_pipe_wm(state, crtc);
@@ -2903,9 +2911,11 @@ skl_compute_wm(struct intel_atomic_state *state)
 		     new_crtc_state->vrr.vmin == new_crtc_state->vrr.flipline) ||
 		    !new_crtc_state->vrr.enable)
 			enable_dpkgc = true;
+
+		max_linetime = max(new_crtc_state->linetime, max_linetime);
 	}
 
-	skl_program_dpkgc_latency(to_i915(state->base.dev), enable_dpkgc);
+	skl_program_dpkgc_latency(to_i915(state->base.dev), enable_dpkgc, max_linetime);
 
 	skl_print_wm_changes(state);
 
