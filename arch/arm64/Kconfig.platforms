@@ -101,6 +101,11 @@ config ARCH_BITMAIN
 	help
 	  This enables support for the Bitmain SoC Family.
 
+config ARCH_BLAIZE_BLZP1600
+	bool "Blaize BLZP1600 SoC Platforms"
+	help
+	  This enables support for the Blaize BLZP1600 SoC family
+
 config ARCH_EXYNOS
 	bool "Samsung Exynos SoC family"
 	select COMMON_CLK_SAMSUNG
