@@ -19,6 +19,7 @@
 #include <linux/types.h>
 #include <linux/pm_runtime.h>
 #include <linux/pci.h>
+#include <ras/ras_event.h>
 #include "pciehp.h"
 
 /* The following routines constitute the bulk of the
@@ -245,6 +246,8 @@ void pciehp_handle_presence_or_link_change(struct controller *ctrl, u32 events)
 		if (events & PCI_EXP_SLTSTA_PDC)
 			ctrl_info(ctrl, "Slot(%s): Card not present\n",
 				  slot_name(ctrl));
+		trace_pciehp_event(dev_name(&ctrl->pcie->port->dev),
+				   slot_name(ctrl), ON_STATE, events);
 		pciehp_disable_slot(ctrl, SURPRISE_REMOVAL);
 		break;
 	default:
@@ -282,6 +285,8 @@ void pciehp_handle_presence_or_link_change(struct controller *ctrl, u32 events)
 		if (link_active)
 			ctrl_info(ctrl, "Slot(%s): Link Up\n",
 				  slot_name(ctrl));
+		trace_pciehp_event(dev_name(&ctrl->pcie->port->dev),
+				   slot_name(ctrl), OFF_STATE, events);
 		ctrl->request_result = pciehp_enable_slot(ctrl);
 		break;
 	default:

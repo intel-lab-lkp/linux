@@ -338,6 +338,35 @@ TRACE_EVENT(aer_event,
 			"Not available")
 );
 
+TRACE_EVENT(pciehp_event,
+	TP_PROTO(const char *port_name,
+		 const char *slot,
+		 const u8 state,
+		 const u32 events),
+
+	TP_ARGS(port_name, slot, state, events),
+
+	TP_STRUCT__entry(
+		__string(	port_name,	port_name	)
+		__string(	slot,		slot		)
+		__field(	u8,		state		)
+		__field(	u32,		events		)
+	),
+
+	TP_fast_assign(
+		__assign_str(port_name);
+		__assign_str(slot);
+		__entry->state		= state;
+		__entry->events		= events;
+	),
+
+	TP_printk("%s slot:%s, state:%d, events:%d\n",
+		__get_str(port_name),
+		__get_str(slot),
+		__entry->state,
+		__entry->events)
+);
+
 /*
  * memory-failure recovery action result event
  *
