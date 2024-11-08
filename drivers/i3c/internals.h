@@ -10,6 +10,9 @@
 
 #include <linux/i3c/master.h>
 
+#define I3C_GET_PID		0x08
+#define I3C_GET_ADDR		0x7F
+
 void i3c_bus_normaluse_lock(struct i3c_bus *bus);
 void i3c_bus_normaluse_unlock(struct i3c_bus *bus);
 
