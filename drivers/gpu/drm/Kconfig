@@ -234,7 +234,7 @@ config DRM_CLIENT_LIB
 config DRM_CLIENT_SELECTION
 	tristate
 	depends on DRM
-	select DRM_CLIENT_LIB if DRM_FBDEV_EMULATION
+	select DRM_CLIENT_LIB
 	help
 	  Drivers that support in-kernel DRM clients have to select this
 	  option.
