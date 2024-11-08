@@ -597,6 +597,9 @@ static int mtk_cpufreq_init(struct cpufreq_policy *policy)
 	policy->driver_data = info;
 	policy->clk = info->cpu_clk;
 
+	if (info->soc_data->ccifreq_supported)
+		policy->transition_delay_us = 10000;
+
 	return 0;
 }
 
