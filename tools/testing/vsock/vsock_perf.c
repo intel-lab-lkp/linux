@@ -21,6 +21,7 @@
 #include <sys/mman.h>
 
 #include "msg_zerocopy_common.h"
+#include "util_socket.h"
 
 #define DEFAULT_BUF_SIZE_BYTES	(128 * 1024)
 #define DEFAULT_TO_SEND_BYTES	(64 * 1024)
@@ -88,13 +89,16 @@ static unsigned long memparse(const char *ptr)
 
 static void vsock_increase_buf_size(int fd)
 {
-	if (setsockopt(fd, AF_VSOCK, SO_VM_SOCKETS_BUFFER_MAX_SIZE,
-		       &vsock_buf_bytes, sizeof(vsock_buf_bytes)))
-		error("setsockopt(SO_VM_SOCKETS_BUFFER_MAX_SIZE)");
+	if (!setsockopt_ull_check(fd, AF_VSOCK,
+			SO_VM_SOCKETS_BUFFER_MAX_SIZE, vsock_buf_bytes,
+			"setsockopt(SO_VM_SOCKETS_BUFFER_MAX_SIZE)"))
+		exit(EXIT_FAILURE);
 
-	if (setsockopt(fd, AF_VSOCK, SO_VM_SOCKETS_BUFFER_SIZE,
-		       &vsock_buf_bytes, sizeof(vsock_buf_bytes)))
-		error("setsockopt(SO_VM_SOCKETS_BUFFER_SIZE)");
+	if (!setsockopt_ull_check(fd, AF_VSOCK,
+			SO_VM_SOCKETS_BUFFER_SIZE, vsock_buf_bytes,
+			"setsockopt(SO_VM_SOCKETS_BUFFER_SIZE)"))
+		exit(EXIT_FAILURE);
+
 }
 
 static int vsock_connect(unsigned int cid, unsigned int port)
@@ -183,10 +187,10 @@ static void run_receiver(int rcvlowat_bytes)
 
 	vsock_increase_buf_size(client_fd);
 
-	if (setsockopt(client_fd, SOL_SOCKET, SO_RCVLOWAT,
-		       &rcvlowat_bytes,
-		       sizeof(rcvlowat_bytes)))
-		error("setsockopt(SO_RCVLOWAT)");
+
+	if (!setsockopt_int_check(client_fd, SOL_SOCKET, SO_RCVLOWAT,
+			rcvlowat_bytes, "setsockopt(SO_RCVLOWAT)"))
+		exit(EXIT_FAILURE);
 
 	data = malloc(buf_size_bytes);
 

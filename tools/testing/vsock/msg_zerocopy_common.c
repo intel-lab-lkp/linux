@@ -13,15 +13,13 @@
 #include <linux/errqueue.h>
 
 #include "msg_zerocopy_common.h"
+#include "util_socket.h"
 
 void enable_so_zerocopy(int fd)
 {
-	int val = 1;
-
-	if (setsockopt(fd, SOL_SOCKET, SO_ZEROCOPY, &val, sizeof(val))) {
-		perror("setsockopt");
+	if (!setsockopt_int_check(fd, SOL_SOCKET, SO_ZEROCOPY, 1,
+			"setsockopt SO_ZEROCOPY"))
 		exit(EXIT_FAILURE);
-	}
 }
 
 void vsock_recv_completion(int fd, const bool *zerocopied)
