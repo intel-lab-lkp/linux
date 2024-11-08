@@ -40,9 +40,8 @@ struct ieee802154_local {
 	int open_count;
 
 	/* As in mac80211 slaves list is modified:
-	 * 1) under the RTNL
-	 * 2) protected by slaves_mtx;
-	 * 3) in an RCU manner
+	 * 1) under the RTNL;
+	 * 2) protected by iflist_mtx.
 	 *
 	 * So atomic readers can use any of this protection methods.
 	 */
@@ -101,6 +100,7 @@ enum {
 
 enum ieee802154_sdata_state_bits {
 	SDATA_STATE_RUNNING,
+	SDATA_STATE_REMOVED,
 };
 
 /* Slave interface definition.
