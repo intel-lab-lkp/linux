@@ -1270,13 +1270,14 @@ void play_dead_common(void)
 	local_irq_disable();
 }
 
+int mwait_play_dead_with_hint(unsigned long eax_hint);
+
 /*
  * We need to flush the caches before going to sleep, lest we have
  * dirty data in our caches when we come back up.
  */
-static inline void mwait_play_dead(void)
+static inline int mwait_play_dead(void)
 {
-	struct mwait_cpu_dead *md = this_cpu_ptr(&mwait_cpu_dead);
 	unsigned int eax, ebx, ecx, edx;
 	unsigned int highest_cstate = 0;
 	unsigned int highest_subcstate = 0;
@@ -1284,13 +1285,13 @@ static inline void mwait_play_dead(void)
 
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
 	    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
-		return;
+		return 1;
 	if (!this_cpu_has(X86_FEATURE_MWAIT))
-		return;
+		return 1;
 	if (!this_cpu_has(X86_FEATURE_CLFLUSH))
-		return;
+		return 1;
 	if (__this_cpu_read(cpu_info.cpuid_level) < CPUID_MWAIT_LEAF)
-		return;
+		return 1;
 
 	eax = CPUID_MWAIT_LEAF;
 	ecx = 0;
@@ -1314,6 +1315,13 @@ static inline void mwait_play_dead(void)
 			(highest_subcstate - 1);
 	}
 
+	return mwait_play_dead_with_hint(eax);
+}
+
+int mwait_play_dead_with_hint(unsigned long eax_hint)
+{
+	struct mwait_cpu_dead *md = this_cpu_ptr(&mwait_cpu_dead);
+
 	/* Set up state for the kexec() hack below */
 	md->status = CPUDEAD_MWAIT_WAIT;
 	md->control = CPUDEAD_MWAIT_WAIT;
@@ -1333,7 +1341,7 @@ static inline void mwait_play_dead(void)
 		mb();
 		__monitor(md, 0, 0);
 		mb();
-		__mwait(eax, 0);
+		__mwait(eax_hint, 0);
 
 		if (READ_ONCE(md->control) == CPUDEAD_MWAIT_KEXEC_HLT) {
 			/*
@@ -1353,6 +1361,9 @@ static inline void mwait_play_dead(void)
 				native_halt();
 		}
 	}
+
+	/* Never reached */
+	return 0;
 }
 
 /*
