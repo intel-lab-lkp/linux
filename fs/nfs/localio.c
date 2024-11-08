@@ -214,6 +214,21 @@ void nfs_local_probe(struct nfs_client *clp)
 }
 EXPORT_SYMBOL_GPL(nfs_local_probe);
 
+static void nfs_local_probe_async_work(struct work_struct *work)
+{
+	struct nfs_client *clp =
+		container_of(work, struct nfs_client, cl_local_probe_work);
+
+	nfs_local_probe(clp);
+}
+
+void nfs_local_probe_async(struct nfs_client *clp)
+{
+	INIT_WORK(&clp->cl_local_probe_work, nfs_local_probe_async_work);
+	queue_work(nfsiod_workqueue, &clp->cl_local_probe_work);
+}
+EXPORT_SYMBOL_GPL(nfs_local_probe_async);
+
 static inline struct nfsd_file *nfs_local_file_get(struct nfsd_file *nf)
 {
 	return nfs_to->nfsd_file_get(nf);
