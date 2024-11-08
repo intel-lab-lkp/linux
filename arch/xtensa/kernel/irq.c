@@ -58,7 +58,7 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 #if XTENSA_FAKE_NMI
 	seq_printf(p, "%*s:", prec, "NMI");
 	for_each_online_cpu(cpu)
-		seq_printf(p, " %10lu", per_cpu(nmi_count, cpu));
+		seq_put_decimal_ull_width(p, " ", per_cpu(nmi_count, cpu), 10);
 	seq_puts(p, "   Non-maskable interrupts\n");
 #endif
 	return 0;
