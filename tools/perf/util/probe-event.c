@@ -2698,6 +2698,8 @@ static int __show_perf_probe_events(int fd, bool is_kprobe,
 next:
 		clear_perf_probe_event(&pev);
 		clear_probe_trace_event(&tev);
+		memset(&tev, 0, sizeof(tev));
+		memset(&pev, 0, sizeof(pev));
 		if (ret < 0)
 			break;
 	}
