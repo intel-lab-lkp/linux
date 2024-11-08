@@ -1603,7 +1603,16 @@ int debuginfo__find_probe_point(struct debuginfo *dbg, u64 addr,
 			goto post;
 		}
 
-		fname = die_get_decl_file(&spdie);
+		tmp = die_get_decl_file(&spdie);
+		/*
+		 * cu_find_lineinfo() uses cu_getsrc_die() to get fname, which
+		 * may differ from the result of die_get_decl_file(). Add a check
+		 * to ensure that lineno and baseline are in the same file.
+		 */
+		if (!tmp || (fname && strcmp(tmp, fname) != 0))
+			lineno = 0;
+		fname = tmp;
+
 		if (addr == baseaddr) {
 			/* Function entry - Relative line number is 0 */
 			lineno = baseline;
