@@ -6232,6 +6232,8 @@
 						#sound-dai-cells = <0>;
 						qcom,protection-domain = "avs/audio",
 									 "msm/adsp/audio_pd";
+						#address-cells = <1>;
+						#size-cells = <0>;
 
 						q6apmbedai: bedais {
 							compatible = "qcom,q6apm-lpass-dais";
@@ -6250,6 +6252,8 @@
 						reg = <GPR_PRM_MODULE_IID>;
 						qcom,protection-domain = "avs/audio",
 									 "msm/adsp/audio_pd";
+						#address-cells = <1>;
+						#size-cells = <0>;
 
 						q6prmcc: clock-controller {
 							compatible = "qcom,q6prm-lpass-clocks";
