@@ -145,6 +145,8 @@ static int fdb_fill_info(struct sk_buff *skb, const struct net_bridge *br,
 			goto nla_put_failure;
 		if (test_bit(BR_FDB_NOTIFY_INACTIVE, &fdb->flags))
 			notify_bits |= FDB_NOTIFY_INACTIVE_BIT;
+		if (test_bit(BR_FDB_NOTIFY_ROAMING, &fdb->flags))
+			notify_bits |= FDB_NOTIFY_ROAMING_BIT;
 
 		if (nla_put_u8(skb, NFEA_ACTIVITY_NOTIFY, notify_bits)) {
 			nla_nest_cancel(skb, nest);
@@ -554,8 +556,10 @@ void br_fdb_cleanup(struct work_struct *work)
 					work_delay = min(work_delay,
 							 this_timer - now);
 				else if (!test_and_set_bit(BR_FDB_NOTIFY_INACTIVE,
-							   &f->flags))
+							   &f->flags)) {
+					clear_bit(BR_FDB_NOTIFY_ROAMING, &f->flags);
 					fdb_notify(br, f, RTM_NEWNEIGH, false);
+				}
 			}
 			continue;
 		}
@@ -880,6 +884,19 @@ static bool __fdb_mark_active(struct net_bridge_fdb_entry *fdb)
 		  test_and_clear_bit(BR_FDB_NOTIFY_INACTIVE, &fdb->flags));
 }
 
+void br_fdb_notify_roaming(struct net_bridge *br, struct net_bridge_port *p,
+			   struct net_bridge_fdb_entry *fdb)
+{
+	struct net_bridge_port *old_p = READ_ONCE(fdb->dst);
+
+	if (test_bit(BR_FDB_NOTIFY, &fdb->flags) &&
+	    !test_and_set_bit(BR_FDB_NOTIFY_ROAMING, &fdb->flags)) {
+		WRITE_ONCE(fdb->dst, p);
+		fdb_notify(br, fdb, RTM_NEWNEIGH, false);
+		WRITE_ONCE(fdb->dst, old_p);
+	}
+}
+
 void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 		   const unsigned char *addr, u16 vid, unsigned long flags)
 {
@@ -906,21 +923,24 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 			}
 
 			/* fastpath: update of existing entry */
-			if (unlikely(source != READ_ONCE(fdb->dst) &&
-				     !test_bit(BR_FDB_STICKY, &fdb->flags))) {
-				br_switchdev_fdb_notify(br, fdb, RTM_DELNEIGH);
-				WRITE_ONCE(fdb->dst, source);
-				fdb_modified = true;
-				/* Take over HW learned entry */
-				if (unlikely(test_bit(BR_FDB_ADDED_BY_EXT_LEARN,
-						      &fdb->flags)))
-					clear_bit(BR_FDB_ADDED_BY_EXT_LEARN,
-						  &fdb->flags);
-				/* Clear locked flag when roaming to an
-				 * unlocked port.
-				 */
-				if (unlikely(test_bit(BR_FDB_LOCKED, &fdb->flags)))
-					clear_bit(BR_FDB_LOCKED, &fdb->flags);
+			if (unlikely(source != READ_ONCE(fdb->dst))) {
+				if (unlikely(test_bit(BR_FDB_STICKY, &fdb->flags))) {
+					br_fdb_notify_roaming(br, source, fdb);
+				} else {
+					br_switchdev_fdb_notify(br, fdb, RTM_DELNEIGH);
+					WRITE_ONCE(fdb->dst, source);
+					fdb_modified = true;
+					/* Take over HW learned entry */
+					if (unlikely(test_bit(BR_FDB_ADDED_BY_EXT_LEARN,
+							      &fdb->flags)))
+						clear_bit(BR_FDB_ADDED_BY_EXT_LEARN,
+							  &fdb->flags);
+					/* Clear locked flag when roaming to an
+					 * unlocked port.
+					 */
+					if (unlikely(test_bit(BR_FDB_LOCKED, &fdb->flags)))
+						clear_bit(BR_FDB_LOCKED, &fdb->flags);
+				}
 			}
 
 			if (unlikely(test_bit(BR_FDB_ADDED_BY_USER, &flags))) {
@@ -1045,6 +1065,7 @@ static bool fdb_handle_notify(struct net_bridge_fdb_entry *fdb, u8 notify)
 		   test_and_clear_bit(BR_FDB_NOTIFY, &fdb->flags)) {
 		/* disabled activity tracking, clear notify state */
 		clear_bit(BR_FDB_NOTIFY_INACTIVE, &fdb->flags);
+		clear_bit(BR_FDB_NOTIFY_ROAMING, &fdb->flags);
 		modified = true;
 	}
 
@@ -1457,10 +1478,13 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 
 		fdb->updated = jiffies;
 
-		if (READ_ONCE(fdb->dst) != p &&
-		    !test_bit(BR_FDB_STICKY, &fdb->flags)) {
-			WRITE_ONCE(fdb->dst, p);
-			modified = true;
+		if (READ_ONCE(fdb->dst) != p) {
+			if (test_bit(BR_FDB_STICKY, &fdb->flags)) {
+				br_fdb_notify_roaming(br, p, fdb);
+			} else {
+				WRITE_ONCE(fdb->dst, p);
+				modified = true;
+			}
 		}
 
 		if (test_and_set_bit(BR_FDB_ADDED_BY_EXT_LEARN, &fdb->flags)) {

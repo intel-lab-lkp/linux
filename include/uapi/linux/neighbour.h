@@ -201,10 +201,12 @@ enum {
  /* FDB activity notification bits used in NFEA_ACTIVITY_NOTIFY:
   * - FDB_NOTIFY_BIT - notify on activity/expire for any entry
   * - FDB_NOTIFY_INACTIVE_BIT - mark as inactive to avoid multiple notifications
+  * - FDB_NOTIFY_ROAMING_BIT - mark as attempting to roam
   */
 enum {
 	FDB_NOTIFY_BIT		= (1 << 0),
-	FDB_NOTIFY_INACTIVE_BIT	= (1 << 1)
+	FDB_NOTIFY_INACTIVE_BIT	= (1 << 1),
+	FDB_NOTIFY_ROAMING_BIT	= (1 << 2)
 };
 
 /* embedded into NDA_FDB_EXT_ATTRS:
