@@ -399,12 +399,36 @@ int mv88e6xxx_g1_atu_remove(struct mv88e6xxx_chip *chip, u16 fid, int port,
 	return mv88e6xxx_g1_atu_move(chip, fid, from_port, to_port, all);
 }
 
+static int mv88e6xxx_g1_atu_entry_check(struct mv88e6xxx_chip *chip, u16 fid, u8 mac[ETH_ALEN],
+					bool *in_atu, u16 *dpv)
+{
+	struct mv88e6xxx_atu_entry entry;
+	int err;
+
+	entry.state = 0;
+	ether_addr_copy(entry.mac, mac);
+	eth_addr_dec(entry.mac);
+
+	mv88e6xxx_reg_lock(chip);
+	err = mv88e6xxx_g1_atu_getnext(chip, fid, &entry);
+	mv88e6xxx_reg_unlock(chip);
+	if (err)
+		return err;
+
+	*in_atu = ether_addr_equal(entry.mac, mac);
+	if (dpv)
+		*dpv = entry.portvec;
+
+	return err;
+}
+
 static irqreturn_t mv88e6xxx_g1_atu_prob_irq_thread_fn(int irq, void *dev_id)
 {
 	struct mv88e6xxx_chip *chip = dev_id;
 	struct mv88e6xxx_atu_entry entry;
 	int err, spid;
 	u16 val, fid;
+	bool in_atu = false;
 
 	mv88e6xxx_reg_lock(chip);
 
@@ -437,6 +461,20 @@ static irqreturn_t mv88e6xxx_g1_atu_prob_irq_thread_fn(int irq, void *dev_id)
 						     entry.portvec, entry.mac,
 						     fid);
 		chip->ports[spid].atu_member_violation++;
+
+		if (fid != MV88E6XXX_FID_STANDALONE && chip->ports[spid].mab) {
+			u16 dpv = 0;
+
+			err = mv88e6xxx_g1_atu_entry_check(chip, fid, entry.mac, &in_atu, &dpv);
+			if (err)
+				goto out;
+
+			if (in_atu && dpv != 0 && !(dpv & BIT(spid))) {
+				err = mv88e6xxx_handle_member_violation(chip, spid, &entry, fid);
+				if (err)
+					goto out;
+			}
+		}
 	}
 
 	if (val & MV88E6XXX_G1_ATU_OP_MISS_VIOLATION) {
