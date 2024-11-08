@@ -6443,8 +6443,7 @@ static void __init ata_parse_force_param(void)
 
 	ata_force_tbl = kcalloc(size, sizeof(ata_force_tbl[0]), GFP_KERNEL);
 	if (!ata_force_tbl) {
-		printk(KERN_WARNING "ata: failed to extend force table, "
-		       "libata.force ignored\n");
+		pr_warn("ata: failed to extend force table, libata.force ignored\n");
 		return;
 	}
 
@@ -6455,9 +6454,8 @@ static void __init ata_parse_force_param(void)
 
 		next = cur;
 		if (ata_parse_force_one(&next, &te, &reason)) {
-			printk(KERN_WARNING "ata: failed to parse force "
-			       "parameter \"%s\" (%s)\n",
-			       cur, reason);
+			pr_warn("ata: failed to parse force parameter \"%s\" (%s)\n",
+				cur, reason);
 			continue;
 		}
 
