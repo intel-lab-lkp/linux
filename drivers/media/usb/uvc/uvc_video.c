@@ -1211,6 +1211,30 @@ static int uvc_video_decode_start(struct uvc_streaming *stream,
 		return -EAGAIN;
 	}
 
+	/*
+	 * Some cameras, such as the Sonix Technology Co. 292A exhibit issues
+	 * when running two parallel streams, causing USB packets to be dropped
+	 * when an H.264 stream posts a keyframe while an MJPEG stream is
+	 * running simultaneously. This occasionally causes the driver to
+	 * erroneously output two consecutive JPEG images as a single frame.
+	 *
+	 * Check the buffer for a new SOI on JPEG streams and complete the
+	 * preceding buffer using EAGAIN, and invert the FID to make sure the
+	 * erroneous frame is not dropped.
+	 */
+	if ((stream->dev->quirks & UVC_QUIRK_MJPEG_NO_EOF) &&
+	    (stream->cur_format->fcc == V4L2_PIX_FMT_MJPEG ||
+	     stream->cur_format->fcc == V4L2_PIX_FMT_JPEG)) {
+		const u8 *packet = data + header_len;
+
+		if ((packet[0] == 0xff && packet[1] == 0xd8) && buf->bytesused != 0) {
+			buf->state = UVC_BUF_STATE_READY;
+			buf->error = 1;
+			stream->last_fid ^= UVC_STREAM_FID;
+			return -EAGAIN;
+		}
+	}
+
 	stream->last_fid = fid;
 
 	return header_len;
