@@ -527,7 +527,7 @@ static int proc_pid_schedstat(struct seq_file *m, struct pid_namespace *ns,
 static int lstats_show_proc(struct seq_file *m, void *v)
 {
 	int i;
-	struct inode *inode = m->private;
+	struct inode *inode = file_inode(m->file);
 	struct task_struct *task = get_proc_task(inode);
 
 	if (!task)
@@ -556,7 +556,7 @@ static int lstats_show_proc(struct seq_file *m, void *v)
 
 static int lstats_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, lstats_show_proc, inode);
+	return single_open(file, lstats_show_proc, NULL);
 }
 
 static ssize_t lstats_write(struct file *file, const char __user *buf,
@@ -799,7 +799,7 @@ static const struct inode_operations proc_def_inode_operations = {
 
 static int proc_single_show(struct seq_file *m, void *v)
 {
-	struct inode *inode = m->private;
+	struct inode *inode = file_inode(m->file);
 	struct pid_namespace *ns = proc_pid_ns(inode->i_sb);
 	struct pid *pid = proc_pid(inode);
 	struct task_struct *task;
@@ -817,7 +817,7 @@ static int proc_single_show(struct seq_file *m, void *v)
 
 static int proc_single_open(struct inode *inode, struct file *filp)
 {
-	return single_open(filp, proc_single_show, inode);
+	return single_open(filp, proc_single_show, NULL);
 }
 
 static const struct file_operations proc_single_file_operations = {
@@ -1493,7 +1493,7 @@ static const struct file_operations proc_fail_nth_operations = {
  */
 static int sched_show(struct seq_file *m, void *v)
 {
-	struct inode *inode = m->private;
+	struct inode *inode = file_inode(m->file);
 	struct pid_namespace *ns = proc_pid_ns(inode->i_sb);
 	struct task_struct *p;
 
@@ -1526,7 +1526,7 @@ sched_write(struct file *file, const char __user *buf,
 
 static int sched_open(struct inode *inode, struct file *filp)
 {
-	return single_open(filp, sched_show, inode);
+	return single_open(filp, sched_show, NULL);
 }
 
 static const struct file_operations proc_pid_sched_operations = {
@@ -1545,7 +1545,7 @@ static const struct file_operations proc_pid_sched_operations = {
  */
 static int sched_autogroup_show(struct seq_file *m, void *v)
 {
-	struct inode *inode = m->private;
+	struct inode *inode = file_inode(m->file);
 	struct task_struct *p;
 
 	p = get_proc_task(inode);
@@ -1592,15 +1592,7 @@ sched_autogroup_write(struct file *file, const char __user *buf,
 
 static int sched_autogroup_open(struct inode *inode, struct file *filp)
 {
-	int ret;
-
-	ret = single_open(filp, sched_autogroup_show, NULL);
-	if (!ret) {
-		struct seq_file *m = filp->private_data;
-
-		m->private = inode;
-	}
-	return ret;
+	return single_open(filp, sched_autogroup_show, NULL);
 }
 
 static const struct file_operations proc_pid_sched_autogroup_operations = {
@@ -1703,7 +1695,7 @@ out:
 
 static int timens_offsets_open(struct inode *inode, struct file *filp)
 {
-	return single_open(filp, timens_offsets_show, inode);
+	return single_open(filp, timens_offsets_show, NULL);
 }
 
 static const struct file_operations proc_timens_offsets_operations = {
@@ -1744,7 +1736,7 @@ static ssize_t comm_write(struct file *file, const char __user *buf,
 
 static int comm_show(struct seq_file *m, void *v)
 {
-	struct inode *inode = m->private;
+	struct inode *inode = file_inode(m->file);
 	struct task_struct *p;
 
 	p = get_proc_task(inode);
@@ -1761,7 +1753,7 @@ static int comm_show(struct seq_file *m, void *v)
 
 static int comm_open(struct inode *inode, struct file *filp)
 {
-	return single_open(filp, comm_show, inode);
+	return single_open(filp, comm_show, NULL);
 }
 
 static const struct file_operations proc_pid_set_comm_operations = {
@@ -2640,7 +2632,7 @@ out:
 
 static int timerslack_ns_show(struct seq_file *m, void *v)
 {
-	struct inode *inode = m->private;
+	struct inode *inode = file_inode(m->file);
 	struct task_struct *p;
 	int err = 0;
 
@@ -2674,7 +2666,7 @@ out:
 
 static int timerslack_ns_open(struct inode *inode, struct file *filp)
 {
-	return single_open(filp, timerslack_ns_show, inode);
+	return single_open(filp, timerslack_ns_show, NULL);
 }
 
 static const struct file_operations proc_pid_set_timerslack_ns_operations = {
