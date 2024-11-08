@@ -820,20 +820,20 @@ bool dm_helpers_dp_write_dsc_enable(
 	uint8_t ret = 0;
 
 	if (stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
-		if (!aconnector->dsc_aux)
+		if (!aconnector->mst_output_port->dsc_aux)
 			return false;
 
 		// apply w/a to synaptics
 		if (needs_dsc_aux_workaround(aconnector->dc_link) &&
 		    (aconnector->mst_downstream_port_present.byte & 0x7) != 0x3)
 			return write_dsc_enable_synaptics_non_virtual_dpcd_mst(
-				aconnector->dsc_aux, stream, enable_dsc);
+				aconnector->mst_output_port->dsc_aux, stream, enable_dsc);
 
 		port = aconnector->mst_output_port;
 
 		if (enable) {
-			if (port->passthrough_aux) {
-				ret = drm_dp_dpcd_write(port->passthrough_aux,
+			if (port->dsc_passthrough_aux) {
+				ret = drm_dp_dpcd_write(port->dsc_passthrough_aux,
 							DP_DSC_ENABLE,
 							&enable_passthrough, 1);
 				drm_dbg_dp(dev,
@@ -841,24 +841,24 @@ bool dm_helpers_dp_write_dsc_enable(
 					   ret);
 			}
 
-			ret = drm_dp_dpcd_write(aconnector->dsc_aux,
+			ret = drm_dp_dpcd_write(aconnector->mst_output_port->dsc_aux,
 						DP_DSC_ENABLE, &enable_dsc, 1);
 			drm_dbg_dp(dev,
 				   "MST_DSC Sent DSC decoding enable to %s port, ret = %u\n",
-				   (port->passthrough_aux) ? "remote RX" :
+				   (port->dsc_passthrough_aux) ? "remote RX" :
 				   "virtual dpcd",
 				   ret);
 		} else {
-			ret = drm_dp_dpcd_write(aconnector->dsc_aux,
+			ret = drm_dp_dpcd_write(aconnector->mst_output_port->dsc_aux,
 						DP_DSC_ENABLE, &enable_dsc, 1);
 			drm_dbg_dp(dev,
 				   "MST_DSC Sent DSC decoding disable to %s port, ret = %u\n",
-				   (port->passthrough_aux) ? "remote RX" :
+				   (port->dsc_passthrough_aux) ? "remote RX" :
 				   "virtual dpcd",
 				   ret);
 
-			if (port->passthrough_aux) {
-				ret = drm_dp_dpcd_write(port->passthrough_aux,
+			if (port->dsc_passthrough_aux) {
+				ret = drm_dp_dpcd_write(port->dsc_passthrough_aux,
 							DP_DSC_ENABLE,
 							&enable_passthrough, 1);
 				drm_dbg_dp(dev,

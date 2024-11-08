@@ -2259,7 +2259,7 @@ void drm_dp_mst_connector_early_unregister(struct drm_connector *connector,
 		    port->aux.name, connector->kdev->kobj.name);
 	drm_dp_aux_unregister_devnode(&port->aux);
 	port->dsc_aux = NULL;
-	port->passthrough_aux = NULL;
+	port->dsc_passthrough_aux = NULL;
 }
 EXPORT_SYMBOL(drm_dp_mst_connector_early_unregister);
 
@@ -5447,7 +5447,8 @@ int drm_dp_mst_add_affected_dsc_crtcs(struct drm_atomic_state *state, struct drm
 		if (!crtc)
 			continue;
 
-		if (!drm_dp_mst_dsc_aux_for_port(pos->port))
+		drm_dp_mst_dsc_aux_for_port(pos->port);
+		if (!pos->port->dsc_aux)
 			continue;
 
 		crtc_state = drm_atomic_get_crtc_state(mst_state->base.state, crtc);
@@ -6019,16 +6020,13 @@ EXPORT_SYMBOL(drm_dp_mst_aux_for_parent);
  * Depending on the situation, DSC may be enabled via the endpoint aux,
  * the immediately upstream aux, or the connector's physical aux.
  *
- * This is both the correct aux to read DSC_CAPABILITY and the
- * correct aux to write DSC_ENABLED.
- *
- * This operation can be expensive (up to four aux reads), so
- * the caller should cache the return.
- *
  * Returns:
- * NULL if DSC cannot be enabled on this port, otherwise the aux device
+ * port->dsc_aux - point for dsc decompression
+ *   null if dsc decompression point not found
+ * port->dsc_passthrough_aux - point for dsc passthrough
+ *   null no dsc passthrough support found
  */
-struct drm_dp_aux *drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port)
+void drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port)
 {
 	struct drm_dp_mst_topology_mgr *mgr;
 	struct drm_dp_mst_port *immediate_upstream_port = NULL;
@@ -6041,20 +6039,20 @@ struct drm_dp_aux *drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port)
 	u8 fec_cap;
 
 	if (!port)
-		return NULL;
+		return;
 
 	mgr = port->mgr;
 	end_has_dpcd = (port->dpcd_rev > 0);
 
 	port->dsc_aux = NULL;
-	port->passthrough_aux = NULL;
+	port->dsc_passthrough_aux = NULL;
 
 	/* Policy start */
 	if (!drm_dp_mst_is_end_device(port->pdt, port->mcs)) {
 		drm_err(mgr->dev,
 			"MST_DSC Can't determine dsc aux for port %p which is not connected to end device\n",
 			port);
-		return NULL;
+		return;
 	}
 
 	if (port->parent->port_parent)
@@ -6082,12 +6080,12 @@ struct drm_dp_aux *drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port)
 		goto out_dsc_fail;
 	}
 
-	/* Consider passthrough as the first option for dsc_aux/passthrough_aux */
+	/* Consider passthrough as the first option for dsc_aux/dsc_passthrough_aux */
 	if (endpoint_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED &&
 			upstream_dsc & DP_DSC_PASSTHROUGH_IS_SUPPORTED) {
 		dsc_port = port;
 		port->dsc_aux = &port->aux;
-		port->passthrough_aux = upstream_aux;
+		port->dsc_passthrough_aux = upstream_aux;
 		drm_info(mgr->dev, "MST_DSC dsc passthrough to endpoint\n");
 	}
 
@@ -6150,11 +6148,11 @@ struct drm_dp_aux *drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port)
 		goto out_dsc_fail;
 	}
 
-	return port->dsc_aux;
+	return;
 
 out_dsc_fail:
 	port->dsc_aux = NULL;
-	port->passthrough_aux = NULL;
-	return NULL;
+	port->dsc_passthrough_aux = NULL;
+	return;
 }
 EXPORT_SYMBOL(drm_dp_mst_dsc_aux_for_port);

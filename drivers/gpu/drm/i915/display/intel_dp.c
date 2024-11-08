@@ -3267,7 +3267,7 @@ intel_dp_sink_set_dsc_passthrough(const struct intel_connector *connector,
 {
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
 	struct drm_dp_aux *aux = connector->port ?
-				 connector->port->passthrough_aux : NULL;
+				 connector->port->dsc_passthrough_aux : NULL;
 
 	if (!aux)
 		return;
