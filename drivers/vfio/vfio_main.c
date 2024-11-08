@@ -1694,6 +1694,61 @@ int vfio_dma_rw(struct vfio_device *device, dma_addr_t iova, void *data,
 }
 EXPORT_SYMBOL(vfio_dma_rw);
 
+/**
+ * vfio_copy_from_user - Copy the user struct that may have extended fields
+ *
+ * @buffer: The local buffer to store the data copied from user
+ * @arg: The user buffer pointer
+ * @minsz: The minimum size of the user struct
+ * @flags_mask: The combination of all the falgs defined
+ * @xend_array: The array that stores the xend size for set flags.
+ *
+ * This helper requires the user struct put the argsz and flags fields in
+ * the first 8 bytes.
+ *
+ * Return 0 for success, otherwise -errno
+ */
+int vfio_copy_from_user(void *buffer, void __user *arg,
+			unsigned long minsz, u32 flags_mask,
+			unsigned long *xend_array)
+{
+	unsigned long xend = minsz;
+	struct user_header {
+		u32 argsz;
+		u32 flags;
+	} *header;
+	unsigned long flags;
+	u32 flag;
+
+	if (copy_from_user(buffer, arg, minsz))
+		return -EFAULT;
+
+	header = (struct user_header *)buffer;
+	if (header->argsz < minsz)
+		return -EINVAL;
+
+	if (header->flags & ~flags_mask)
+		return -EINVAL;
+
+	/* Loop each set flag to decide the xend */
+	flags = header->flags;
+	for_each_set_bit(flag, &flags, BITS_PER_TYPE(u32)) {
+		if (xend_array[flag] > xend)
+			xend = xend_array[flag];
+	}
+
+	if (xend > minsz) {
+		if (header->argsz < xend)
+			return -EINVAL;
+
+		if (copy_from_user(buffer + minsz,
+				   arg + minsz, xend - minsz))
+			return -EFAULT;
+	}
+
+	return 0;
+}
+
 /*
  * Module/class support
  */

@@ -159,40 +159,33 @@ void vfio_df_unbind_iommufd(struct vfio_device_file *df)
 	vfio_device_unblock_group(device);
 }
 
+#define VFIO_ATTACH_FLAGS_MASK VFIO_DEVICE_ATTACH_PASID
+static unsigned long
+vfio_attach_xends[ilog2(VFIO_ATTACH_FLAGS_MASK) + 1] = {
+	XEND_SIZE(VFIO_DEVICE_ATTACH_PASID,
+		  struct vfio_device_attach_iommufd_pt, pasid),
+};
+
+#define VFIO_DETACH_FLAGS_MASK VFIO_DEVICE_DETACH_PASID
+static unsigned long
+vfio_detach_xends[ilog2(VFIO_DETACH_FLAGS_MASK) + 1] = {
+	XEND_SIZE(VFIO_DEVICE_DETACH_PASID,
+		  struct vfio_device_detach_iommufd_pt, pasid),
+};
+
 int vfio_df_ioctl_attach_pt(struct vfio_device_file *df,
 			    struct vfio_device_attach_iommufd_pt __user *arg)
 {
 	struct vfio_device_attach_iommufd_pt attach;
 	struct vfio_device *device = df->device;
-	unsigned long minsz, xend = 0;
 	int ret;
 
-	minsz = offsetofend(struct vfio_device_attach_iommufd_pt, pt_id);
-
-	if (copy_from_user(&attach, arg, minsz))
-		return -EFAULT;
-
-	if (attach.argsz < minsz)
-		return -EINVAL;
-
-	if (attach.flags & (~VFIO_DEVICE_ATTACH_PASID))
-		return -EINVAL;
-
-	if (attach.flags & VFIO_DEVICE_ATTACH_PASID)
-		xend = offsetofend(struct vfio_device_attach_iommufd_pt, pasid);
-
-	/*
-	 * xend may be equal to minsz if a flag is defined for reusing a
-	 * reserved field or a special usage of an existing field.
-	 */
-	if (xend > minsz) {
-		if (attach.argsz < xend)
-			return -EINVAL;
-
-		if (copy_from_user((void *)&attach + minsz,
-				   (void __user *)arg + minsz, xend - minsz))
-			return -EFAULT;
-	}
+	ret = vfio_copy_user_data((void __user *)arg, &attach,
+				  struct vfio_device_attach_iommufd_pt,
+				  pt_id, VFIO_ATTACH_FLAGS_MASK,
+				  vfio_attach_xends);
+	if (ret)
+		return ret;
 
 	if ((attach.flags & VFIO_DEVICE_ATTACH_PASID) &&
 	    !device->ops->pasid_attach_ioas)
@@ -227,34 +220,14 @@ int vfio_df_ioctl_detach_pt(struct vfio_device_file *df,
 {
 	struct vfio_device_detach_iommufd_pt detach;
 	struct vfio_device *device = df->device;
-	unsigned long minsz, xend = 0;
+	int ret;
 
-	minsz = offsetofend(struct vfio_device_detach_iommufd_pt, flags);
-
-	if (copy_from_user(&detach, arg, minsz))
-		return -EFAULT;
-
-	if (detach.argsz < minsz)
-		return -EINVAL;
-
-	if (detach.flags & (~VFIO_DEVICE_DETACH_PASID))
-		return -EINVAL;
-
-	if (detach.flags & VFIO_DEVICE_DETACH_PASID)
-		xend = offsetofend(struct vfio_device_detach_iommufd_pt, pasid);
-
-	/*
-	 * xend may be equal to minsz if a flag is defined for reusing a
-	 * reserved field or a special usage of an existing field.
-	 */
-	if (xend > minsz) {
-		if (detach.argsz < xend)
-			return -EINVAL;
-
-		if (copy_from_user((void *)&detach + minsz,
-				   (void __user *)arg + minsz, xend - minsz))
-			return -EFAULT;
-	}
+	ret = vfio_copy_user_data((void __user *)arg, &detach,
+				  struct vfio_device_detach_iommufd_pt,
+				  flags, VFIO_DETACH_FLAGS_MASK,
+				  vfio_detach_xends);
+	if (ret)
+		return ret;
 
 	if ((detach.flags & VFIO_DEVICE_DETACH_PASID) &&
 	    !device->ops->pasid_detach_ioas)
