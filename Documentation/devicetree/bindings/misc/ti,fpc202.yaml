@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/ti,fpc202.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI FPC202 dual port controller with expanded IOs
+
+maintainers:
+  - Romain Gantois <romain.gantois@bootlin.com>
+
+allOf:
+  - $ref: /schemas/i2c/i2c-atr.yaml#
+
+properties:
+  compatible:
+    const: ti,fpc202
+
+  reg:
+    maxItems: 1
+
+  gpio-controller: true
+
+  "#gpio-cells":
+    const: 2
+
+  enable-gpios:
+    description:
+      Specifier for the GPIO connected to the EN pin.
+    maxItems: 1
+
+  port0:
+    $ref: /schemas/i2c/i2c-controller.yaml
+    description:
+      Device port 0, accessible over I2C.
+
+  port1:
+    $ref: /schemas/i2c/i2c-controller.yaml
+    description:
+      Device port 1, accessible over I2C.
+
+
+required:
+  - compatible
+  - gpio-controller
+  - "#gpio-cells"
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        fpc202: i2c-mux@f {
+            compatible = "ti,fpc202";
+            reg = <0xf>;
+
+            gpio-controller;
+            #gpio-cells = <2>;
+
+            port0 {
+                #address-cells = <1>;
+                #size-cells = <0>;
+            };
+
+            port1 {
+                #address-cells = <1>;
+                #size-cells = <0>;
+            };
+        };
+    };
+...
