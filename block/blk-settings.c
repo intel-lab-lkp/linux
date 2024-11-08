@@ -43,6 +43,7 @@ void blk_set_stacking_limits(struct queue_limits *lim)
 	lim->seg_boundary_mask = BLK_SEG_BOUNDARY_MASK;
 
 	/* Inherit limits from component devices */
+	lim->max_write_hints = USHRT_MAX;
 	lim->max_segments = USHRT_MAX;
 	lim->max_discard_segments = USHRT_MAX;
 	lim->max_hw_sectors = UINT_MAX;
@@ -543,6 +544,8 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 
 	t->max_segment_size = min_not_zero(t->max_segment_size,
 					   b->max_segment_size);
+
+	t->max_write_hints = min(t->max_write_hints, b->max_write_hints);
 
 	alignment = queue_limit_alignment_offset(b, start);
 
