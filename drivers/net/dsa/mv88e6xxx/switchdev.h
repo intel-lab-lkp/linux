@@ -15,5 +15,7 @@
 int mv88e6xxx_handle_miss_violation(struct mv88e6xxx_chip *chip, int port,
 				    struct mv88e6xxx_atu_entry *entry,
 				    u16 fid);
+int mv88e6xxx_handle_member_violation(struct mv88e6xxx_chip *chip, int port,
+				      struct mv88e6xxx_atu_entry *entry, u16 fid);
 
 #endif /* _MV88E6XXX_SWITCHDEV_H_ */
