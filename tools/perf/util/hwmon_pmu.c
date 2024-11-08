@@ -126,7 +126,7 @@ bool parse_hwmon_filename(const char *filename,
 	fn_item_len = strlen(fn_item);
 	if (fn_item_len > 6 && !strcmp(&fn_item[fn_item_len - 6], "_alarm")) {
 		assert(strlen(LONGEST_HWMON_ITEM_STR) < sizeof(fn_type));
-		strlcpy(fn_type, fn_item, fn_item_len - 6);
+		strlcpy(fn_type, fn_item, fn_item_len - 5);
 		fn_item = fn_type;
 		*alarm = true;
 	}
