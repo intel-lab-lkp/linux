@@ -18,6 +18,7 @@
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
+#include <linux/stringify.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/adc/ad_sigma_delta.h>
@@ -820,6 +821,11 @@ static int ad7124_parse_channel_config(struct iio_dev *indio_dev,
 	st->num_channels = device_get_child_node_count(dev);
 	if (!st->num_channels)
 		return dev_err_probe(dev, -ENODEV, "no channel children\n");
+
+	if (st->num_channels > AD7124_MAX_CHANNELS) {
+		dev_warn(dev, "Limit number of channels to " __stringify(AD7124_MAX_CHANNELS) "\n");
+		st->num_channels = AD7124_MAX_CHANNELS;
+	}
 
 	chan = devm_kcalloc(indio_dev->dev.parent, st->num_channels,
 			    sizeof(*chan), GFP_KERNEL);
