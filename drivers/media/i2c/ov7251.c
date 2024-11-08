@@ -1696,7 +1696,21 @@ static int ov7251_probe(struct i2c_client *client)
 		return PTR_ERR(ov7251->analog_regulator);
 	}
 
+	/*
+	 * The device-tree bindings call this pin "enable", but the
+	 * datasheet describes the pin as "reset (active low with internal
+	 * pull down resistor)". The ACPI tables describing this sensor
+	 * on, e.g., the Microsoft Surface Book use the ACPI equivalent of
+	 * "reset" as pin name, which ACPI glue code then maps to "reset".
+	 * Check for a "reset" pin if there is no "enable" pin.
+	 */
 	ov7251->enable_gpio = devm_gpiod_get(dev, "enable", GPIOD_OUT_HIGH);
+	if (IS_ERR(ov7251->enable_gpio) &&
+	    PTR_ERR(ov7251->enable_gpio) != -EPROBE_DEFER) {
+		ov7251->enable_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+		if (!IS_ERR(ov7251->enable_gpio))
+			gpiod_toggle_active_low(ov7251->enable_gpio);
+	}
 	if (IS_ERR(ov7251->enable_gpio)) {
 		dev_err(dev, "cannot get enable gpio\n");
 		return PTR_ERR(ov7251->enable_gpio);
