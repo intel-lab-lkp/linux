@@ -485,6 +485,7 @@ static void mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
 	struct mctp_i2c_hdr *hdr;
 	struct i2c_msg msg = {0};
 	u8 *pecp;
+	struct sock *sk;
 	int rc;
 
 	fs = mctp_i2c_get_tx_flow_state(midev, skb);
@@ -551,6 +552,14 @@ static void mctp_i2c_xmit(struct mctp_i2c_dev *midev, struct sk_buff *skb)
 		dev_warn_ratelimited(&midev->adapter->dev,
 				     "__i2c_transfer failed %d\n", rc);
 		stats->tx_errors++;
+
+		sk = skb->sk;
+		if (sk) {
+			sk->sk_err = -rc;
+			if (!sock_flag(sk, SOCK_DEAD))
+				sk_error_report(sk);
+		}
+
 	} else {
 		stats->tx_bytes += skb->len;
 		stats->tx_packets++;
