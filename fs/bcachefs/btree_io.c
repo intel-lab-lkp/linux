@@ -826,7 +826,6 @@ static int validate_bset(struct bch_fs *c, struct bch_dev *ca,
 			       BSET_BIG_ENDIAN(i), write,
 			       &bn->format);
 	}
-out:
 fsck_err:
 	printbuf_exit(&buf2);
 	printbuf_exit(&buf1);
