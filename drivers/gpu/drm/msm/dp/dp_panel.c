@@ -242,34 +242,6 @@ void msm_dp_panel_handle_sink_request(struct msm_dp_panel *msm_dp_panel)
 	}
 }
 
-void msm_dp_panel_tpg_config(struct msm_dp_panel *msm_dp_panel, bool enable)
-{
-	struct msm_dp_catalog *catalog;
-	struct msm_dp_panel_private *panel;
-
-	if (!msm_dp_panel) {
-		DRM_ERROR("invalid input\n");
-		return;
-	}
-
-	panel = container_of(msm_dp_panel, struct msm_dp_panel_private, msm_dp_panel);
-	catalog = panel->catalog;
-
-	if (!panel->panel_on) {
-		drm_dbg_dp(panel->drm_dev,
-				"DP panel not enabled, handle TPG on next on\n");
-		return;
-	}
-
-	if (!enable) {
-		msm_dp_catalog_panel_tpg_disable(catalog);
-		return;
-	}
-
-	drm_dbg_dp(panel->drm_dev, "calling catalog tpg_enable\n");
-	msm_dp_catalog_panel_tpg_enable(catalog, &panel->msm_dp_panel.msm_dp_mode.drm_mode);
-}
-
 static int msm_dp_panel_setup_vsc_sdp_yuv_420(struct msm_dp_panel *msm_dp_panel)
 {
 	struct msm_dp_catalog *catalog;
