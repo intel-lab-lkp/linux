@@ -56,6 +56,7 @@
 #include <asm/mwait.h>
 #include <asm/spec-ctrl.h>
 #include <asm/fpu/api.h>
+#include <asm/smp.h>
 
 #define INTEL_IDLE_VERSION "0.5.1"
 
@@ -219,6 +220,17 @@ static __cpuidle int intel_idle_s2idle(struct cpuidle_device *dev,
 	mwait_idle_with_hints(eax, ecx);
 
 	return 0;
+}
+
+static __cpuidle int intel_idle_enter_dead(struct cpuidle_device *dev,
+					   int index)
+{
+	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
+	struct cpuidle_state *state = &drv->states[index];
+	unsigned long eax = flg2MWAIT(state->flags);
+
+	/* Retruns only in case of an error. */
+	return mwait_play_dead_with_hint(eax);
 }
 
 /*
@@ -1303,6 +1315,7 @@ static struct cpuidle_state srf_cstates[] __initdata = {
 		.exit_latency = 1,
 		.target_residency = 1,
 		.enter = &intel_idle,
+		.enter_dead = &intel_idle_enter_dead,
 		.enter_s2idle = intel_idle_s2idle, },
 	{
 		.name = "C1E",
@@ -1311,6 +1324,7 @@ static struct cpuidle_state srf_cstates[] __initdata = {
 		.exit_latency = 2,
 		.target_residency = 10,
 		.enter = &intel_idle,
+		.enter_dead = &intel_idle_enter_dead,
 		.enter_s2idle = intel_idle_s2idle, },
 	{
 		.name = "C6S",
@@ -1319,6 +1333,7 @@ static struct cpuidle_state srf_cstates[] __initdata = {
 		.exit_latency = 270,
 		.target_residency = 700,
 		.enter = &intel_idle,
+		.enter_dead = &intel_idle_enter_dead,
 		.enter_s2idle = intel_idle_s2idle, },
 	{
 		.name = "C6SP",
@@ -1327,6 +1342,7 @@ static struct cpuidle_state srf_cstates[] __initdata = {
 		.exit_latency = 310,
 		.target_residency = 900,
 		.enter = &intel_idle,
+		.enter_dead = &intel_idle_enter_dead,
 		.enter_s2idle = intel_idle_s2idle, },
 	{
 		.enter = NULL }
