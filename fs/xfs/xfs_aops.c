@@ -37,8 +37,8 @@ XFS_WPC(struct iomap_writepage_ctx *ctx)
  */
 static inline bool xfs_ioend_is_append(struct iomap_ioend *ioend)
 {
-	return ioend->io_offset + ioend->io_size >
-		XFS_I(ioend->io_inode)->i_disk_size;
+	WARN_ON_ONCE(ioend->io_end > ioend->io_offset + ioend->io_size);
+	return ioend->io_end > XFS_I(ioend->io_inode)->i_disk_size;
 }
 
 /*
@@ -86,6 +86,7 @@ xfs_end_ioend(
 	struct xfs_inode	*ip = XFS_I(ioend->io_inode);
 	struct xfs_mount	*mp = ip->i_mount;
 	xfs_off_t		offset = ioend->io_offset;
+	xfs_off_t		end = ioend->io_end;
 	size_t			size = ioend->io_size;
 	unsigned int		nofs_flag;
 	int			error;
@@ -131,7 +132,7 @@ xfs_end_ioend(
 		error = xfs_iomap_write_unwritten(ip, offset, size, false);
 
 	if (!error && xfs_ioend_is_append(ioend))
-		error = xfs_setfilesize(ip, ioend->io_offset, ioend->io_size);
+		error = xfs_setfilesize(ip, offset, end - offset);
 done:
 	iomap_finish_ioends(ioend, error);
 	memalloc_nofs_restore(nofs_flag);

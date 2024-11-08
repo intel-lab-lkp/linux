@@ -1652,6 +1652,7 @@ iomap_ioend_try_merge(struct iomap_ioend *ioend, struct list_head *more_ioends)
 			break;
 		list_move_tail(&next->io_list, &ioend->io_list);
 		ioend->io_size += next->io_size;
+		ioend->io_end = next->io_end;
 	}
 }
 EXPORT_SYMBOL_GPL(iomap_ioend_try_merge);
@@ -1738,6 +1739,7 @@ static struct iomap_ioend *iomap_alloc_ioend(struct iomap_writepage_ctx *wpc,
 	ioend->io_inode = inode;
 	ioend->io_size = 0;
 	ioend->io_offset = pos;
+	ioend->io_end = pos;
 	ioend->io_sector = bio->bi_iter.bi_sector;
 
 	wpc->nr_folios = 0;
@@ -1783,6 +1785,7 @@ static int iomap_add_to_ioend(struct iomap_writepage_ctx *wpc,
 {
 	struct iomap_folio_state *ifs = folio->private;
 	size_t poff = offset_in_folio(folio, pos);
+	loff_t isize = i_size_read(inode);
 	int error;
 
 	if (!wpc->ioend || !iomap_can_add_to_ioend(wpc, pos)) {
@@ -1799,6 +1802,7 @@ new_ioend:
 	if (ifs)
 		atomic_add(len, &ifs->write_bytes_pending);
 	wpc->ioend->io_size += len;
+	wpc->ioend->io_end = min_t(loff_t, pos + len, isize);
 	wbc_account_cgroup_owner(wbc, folio, len);
 	return 0;
 }
