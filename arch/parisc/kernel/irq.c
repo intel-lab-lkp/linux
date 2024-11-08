@@ -133,40 +133,42 @@ int arch_show_interrupts(struct seq_file *p, int prec)
 	int j;
 
 #ifdef CONFIG_DEBUG_STACKOVERFLOW
-	seq_printf(p, "%*s: ", prec, "STK");
+	seq_printf(p, "%*s:", prec, "STK");
 	for_each_online_cpu(j)
-		seq_printf(p, "%10u ", irq_stats(j)->kernel_stack_usage);
+		seq_put_decimal_ull_width(p, " ", irq_stats(j)->kernel_stack_usage, 10);
 	seq_puts(p, "  Kernel stack usage\n");
 # ifdef CONFIG_IRQSTACKS
-	seq_printf(p, "%*s: ", prec, "IST");
+	seq_printf(p, "%*s:", prec, "IST");
 	for_each_online_cpu(j)
-		seq_printf(p, "%10u ", irq_stats(j)->irq_stack_usage);
+		seq_put_decimal_ull_width(p, " ", irq_stats(j)->irq_stack_usage, 10);
 	seq_puts(p, "  Interrupt stack usage\n");
 # endif
 #endif
 #ifdef CONFIG_SMP
 	if (num_online_cpus() > 1) {
-		seq_printf(p, "%*s: ", prec, "RES");
+		seq_printf(p, "%*s:", prec, "RES");
 		for_each_online_cpu(j)
-			seq_printf(p, "%10u ", irq_stats(j)->irq_resched_count);
+			seq_put_decimal_ull_width(p, " ",
+						  irq_stats(j)->irq_resched_count, 10);
 		seq_puts(p, "  Rescheduling interrupts\n");
-		seq_printf(p, "%*s: ", prec, "CAL");
+		seq_printf(p, "%*s:", prec, "CAL");
 		for_each_online_cpu(j)
-			seq_printf(p, "%10u ", irq_stats(j)->irq_call_count);
+			seq_put_decimal_ull_width(p, " ",
+						  irq_stats(j)->irq_call_count, 10);
 		seq_puts(p, "  Function call interrupts\n");
 	}
 #endif
-	seq_printf(p, "%*s: ", prec, "UAH");
+	seq_printf(p, "%*s:", prec, "UAH");
 	for_each_online_cpu(j)
-		seq_printf(p, "%10u ", irq_stats(j)->irq_unaligned_count);
+		seq_put_decimal_ull_width(p, " ", irq_stats(j)->irq_unaligned_count, 10);
 	seq_puts(p, "  Unaligned access handler traps\n");
-	seq_printf(p, "%*s: ", prec, "FPA");
+	seq_printf(p, "%*s:", prec, "FPA");
 	for_each_online_cpu(j)
-		seq_printf(p, "%10u ", irq_stats(j)->irq_fpassist_count);
+		seq_put_decimal_ull_width(p, " ", irq_stats(j)->irq_fpassist_count, 10);
 	seq_puts(p, "  Floating point assist traps\n");
-	seq_printf(p, "%*s: ", prec, "TLB");
+	seq_printf(p, "%*s:", prec, "TLB");
 	for_each_online_cpu(j)
-		seq_printf(p, "%10u ", irq_stats(j)->irq_tlb_count);
+		seq_put_decimal_ull_width(p, " ", irq_stats(j)->irq_tlb_count, 10);
 	seq_puts(p, "  TLB shootdowns\n");
 	return 0;
 }
@@ -195,10 +197,10 @@ int show_interrupts(struct seq_file *p, void *v)
 		action = desc->action;
 		if (!action)
 			goto skip;
-		seq_printf(p, "%3d: ", i);
+		seq_printf(p, "%3d:", i);
 
 		for_each_online_cpu(j)
-			seq_printf(p, "%10u ", irq_desc_kstat_cpu(desc, j));
+			seq_put_decimal_ull_width(p, " ", irq_desc_kstat_cpu(desc, j), 10);
 
 		seq_printf(p, " %14s", irq_desc_get_chip(desc)->name);
 #ifndef PARISC_IRQ_CR16_COUNTS
