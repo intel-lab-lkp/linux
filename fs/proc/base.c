@@ -97,6 +97,7 @@
 #include <linux/resctrl.h>
 #include <linux/cn_proc.h>
 #include <linux/ksm.h>
+#include <linux/cred.h>
 #include <uapi/linux/lsm.h>
 #include <trace/events/oom.h>
 #include "internal.h"
@@ -825,6 +826,138 @@ static const struct file_operations proc_single_file_operations = {
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= single_release,
+};
+
+
+static int proc_status_open(struct inode *inode, struct file *filp)
+{
+	struct proc_inode *pi = PROC_I(inode);
+	struct pid *opener = get_task_pid(current, PIDTYPE_PID);
+
+	pi->op.proc_show = proc_pid_status;
+	return single_open(filp, proc_single_show, opener);
+}
+
+static int proc_status_release(struct inode *inode, struct file *file)
+{
+	struct seq_file *seq = file->private_data;
+	struct pid *opener = seq->private;
+
+	put_pid(opener);
+	return single_release(inode, file);
+}
+
+static bool can_borrow_groups(const struct cred *cur_cred,
+			      const struct cred *f_cred)
+{
+	if (may_setgroups())
+		return 1;
+	/* Make sure the process can't switch uid/gid. */
+	if (!uid_eq(cur_cred->euid, cur_cred->uid) ||
+			!uid_eq(cur_cred->suid, cur_cred->uid))
+		return 0;
+	if (!gid_eq(cur_cred->egid, cur_cred->gid) ||
+			!gid_eq(cur_cred->sgid, cur_cred->gid))
+		return 0;
+	/* Make sure the euid/egid of current processes are equal
+	 * to uid/gid of an opener at file open time.
+	 */
+	if (!uid_eq(f_cred->uid, cur_cred->euid) ||
+			!gid_eq(f_cred->gid, cur_cred->egid))
+		return 0;
+	return 1;
+}
+
+static int do_proc_setgroups(const struct cred *task_cred,
+			     const struct cred *cur_cred,
+			     const struct cred *f_cred)
+{
+	struct group_info *cgi = get_group_info(cur_cred->group_info);
+	struct group_info *gi = get_group_info(task_cred->group_info);
+	int err;
+
+	/* Make sure groups didn't change since file open. */
+	err = -EPERM;
+	if (f_cred->group_info != gi)
+		goto out_gi;
+	/* Don't error if the process is setting the same list again. */
+	err = 0;
+	if (cgi == gi)
+		goto out_gi;
+
+	err = -EPERM;
+	if (!can_borrow_groups(cur_cred, f_cred))
+		goto out_gi;
+	err = set_current_groups(gi);
+
+out_gi:
+	put_group_info(gi);
+	put_group_info(cgi);
+	return err;
+}
+
+static int do_status_ioctl(struct task_struct *task, struct file *file,
+			    unsigned int cmd, unsigned long arg)
+{
+	const struct cred *task_cred;
+	const struct cred *cur_cred;
+	int err = -EINVAL;
+
+	switch (cmd) {
+	case PROCFS_SET_GROUPS:
+		if (arg)
+			break;
+		/* Disallow opener process to set his own groups. */
+		err = -EPERM;
+		if (task == current)
+			break;
+		/* Don't change anything if current has NO_NEW_PRIVS. */
+		if (task_no_new_privs(current))
+			break;
+		/* Opener must be capable of granting his groups. */
+		if (!file_ns_capable(file, &init_user_ns, CAP_SYS_ADMIN))
+			break;
+		task_cred = get_task_cred(task);
+		cur_cred = get_current_cred();
+		err = do_proc_setgroups(task_cred, cur_cred, file->f_cred);
+		put_cred(cur_cred);
+		put_cred(task_cred);
+		break;
+	}
+	return err;
+}
+
+static long proc_status_ioctl(struct file *file, unsigned int cmd,
+			      unsigned long arg)
+{
+	struct inode *inode = file_inode(file);
+	struct pid *pid = proc_pid(inode);
+	struct seq_file *seq = file->private_data;
+	struct pid *opener = seq->private;
+	struct task_struct *task;
+	long err;
+
+	/* Make sure opener opened his own proc entry. */
+	if (pid != opener)
+		return -EPERM;
+
+	task = get_pid_task(pid, PIDTYPE_PID);
+	if (!task)
+		return -ESRCH;
+
+	err = do_status_ioctl(task, file, cmd, arg);
+
+	put_task_struct(task);
+	return err;
+}
+
+static const struct file_operations proc_status_operations = {
+	.open		= proc_status_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= proc_status_release,
+	.unlocked_ioctl	= proc_status_ioctl,
+	.compat_ioctl	= proc_status_ioctl,
 };
 
 
@@ -3313,7 +3446,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 #endif
 	REG("environ",    S_IRUSR, proc_environ_operations),
 	REG("auxv",       S_IRUSR, proc_auxv_operations),
-	ONE("status",     S_IRUGO, proc_pid_status),
+	REG("status",     S_IRUGO, proc_status_operations),
 	ONE("personality", S_IRUSR, proc_pid_personality),
 	ONE("limits",	  S_IRUGO, proc_pid_limits),
 #ifdef CONFIG_SCHED_DEBUG
@@ -3664,7 +3797,7 @@ static const struct pid_entry tid_base_stuff[] = {
 #endif
 	REG("environ",   S_IRUSR, proc_environ_operations),
 	REG("auxv",      S_IRUSR, proc_auxv_operations),
-	ONE("status",    S_IRUGO, proc_pid_status),
+	REG("status",    S_IRUGO, proc_status_operations),
 	ONE("personality", S_IRUSR, proc_pid_personality),
 	ONE("limits",	 S_IRUGO, proc_pid_limits),
 #ifdef CONFIG_SCHED_DEBUG
