@@ -259,6 +259,7 @@ static int thermometer_add_tz(const char *path, const char *name, int polling,
 {
 	int fd;
 	char tz_path[PATH_MAX];
+	void *tmp;
 
 	sprintf(tz_path, CLASS_THERMAL"/%s/temp", path);
 
@@ -268,12 +269,13 @@ static int thermometer_add_tz(const char *path, const char *name, int polling,
 		return -1;
 	}
 
-	thermometer->tz = realloc(thermometer->tz,
+	tmp = realloc(thermometer->tz,
 				  sizeof(*thermometer->tz) * (thermometer->nr_tz + 1));
-	if (!thermometer->tz) {
+	if (!tmp) {
 		ERROR("Failed to allocate thermometer->tz\n");
 		return -1;
 	}
+	thermometer->tz = tmp;
 
 	thermometer->tz[thermometer->nr_tz].fd_temp = fd;
 	thermometer->tz[thermometer->nr_tz].name = strdup(name);
