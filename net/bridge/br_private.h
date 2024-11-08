@@ -277,6 +277,7 @@ enum {
 	BR_FDB_NOTIFY_INACTIVE,
 	BR_FDB_LOCKED,
 	BR_FDB_DYNAMIC_LEARNED,
+	BR_FDB_NOTIFY_ROAMING,
 };
 
 struct net_bridge_fdb_key {
@@ -874,6 +875,8 @@ int br_fdb_external_learn_del(struct net_bridge *br, struct net_bridge_port *p,
 			      bool swdev_notify);
 void br_fdb_offloaded_set(struct net_bridge *br, struct net_bridge_port *p,
 			  const unsigned char *addr, u16 vid, bool offloaded);
+void br_fdb_notify_roaming(struct net_bridge *br, struct net_bridge_port *p,
+			   struct net_bridge_fdb_entry *fdb);
 
 /* br_forward.c */
 enum br_pkt_type {

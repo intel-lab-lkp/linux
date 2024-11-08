@@ -120,8 +120,14 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 				br_fdb_update(br, p, eth_hdr(skb)->h_source,
 					      vid, BIT(BR_FDB_LOCKED));
 			goto drop;
-		} else if (READ_ONCE(fdb_src->dst) != p ||
-			   test_bit(BR_FDB_LOCAL, &fdb_src->flags)) {
+		} else if (READ_ONCE(fdb_src->dst) != p) {
+			/* FDB is trying to roam. Notify userspace and drop
+			 * the packet
+			 */
+			if (test_bit(BR_FDB_STICKY, &fdb_src->flags))
+				br_fdb_notify_roaming(br, p, fdb_src);
+			goto drop;
+		} else if (test_bit(BR_FDB_LOCAL, &fdb_src->flags)) {
 			/* FDB mismatch. Drop the packet without roaming. */
 			goto drop;
 		} else if (test_bit(BR_FDB_LOCKED, &fdb_src->flags)) {
