@@ -6154,7 +6154,7 @@ int noinline kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 err
 		vcpu->stat.pf_spurious++;
 
 	if (r != RET_PF_EMULATE)
-		return 1;
+		return RET_PF_RETRY;
 
 emulate:
 	return x86_emulate_instruction(vcpu, cr2_or_gpa, emulation_type, insn,
