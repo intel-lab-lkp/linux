@@ -3468,7 +3468,13 @@ static int dl_bw_manage(enum dl_bw_request req, int cpu, u64 dl_bw)
 	} else {
 		unsigned long cap = dl_bw_capacity(cpu);
 
-		overflow = __dl_overflow(dl_b, cap, 0, dl_bw);
+		/*
+		 * In the unlikely case of 0 capacity (e.g. a sched domain
+		 * with no active CPUs), skip the overflow check as it will
+		 * always return a false positive.
+		 */
+		if (likely(cap))
+			overflow = __dl_overflow(dl_b, cap, 0, dl_bw);
 
 		if (req == dl_bw_req_alloc && !overflow) {
 			/*
