@@ -4335,8 +4335,15 @@ static void ieee80211_auth_challenge(struct ieee80211_sub_if_data *sdata,
 static bool ieee80211_mark_sta_auth(struct ieee80211_sub_if_data *sdata)
 {
 	struct ieee80211_if_managed *ifmgd = &sdata->u.mgd;
-	const u8 *ap_addr = ifmgd->auth_data->ap_addr;
+	const u8 *ap_addr;
 	struct sta_info *sta;
+	
+	if (!ifmgd->auth_data || !ifmgd->auth_data->ap_addr) {
+		sdata_info(sdata, "auth_data not set or ap_addr missing\n");
+		return false;
+	}
+
+	ap_addr = ifmgd->auth_data->ap_addr;
 
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
@@ -4349,7 +4356,7 @@ static bool ieee80211_mark_sta_auth(struct ieee80211_sub_if_data *sdata)
 	/* move station state to auth */
 	sta = sta_info_get(sdata, ap_addr);
 	if (!sta) {
-		WARN_ONCE(1, "%s: STA %pM not found", sdata->name, ap_addr);
+	        sdata_info(sdata, "STA %pM not found, skipping authentication mark\n", ap_addr);
 		return false;
 	}
 	if (sta_info_move_state(sta, IEEE80211_STA_AUTH)) {
