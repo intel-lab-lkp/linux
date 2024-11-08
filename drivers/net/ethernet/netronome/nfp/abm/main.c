@@ -407,22 +407,20 @@ nfp_abm_port_get_stats_count(struct nfp_app *app, struct nfp_port *port)
 	return alink->vnic->dp.num_r_vecs * 2;
 }
 
-static u8 *
-nfp_abm_port_get_stats_strings(struct nfp_app *app, struct nfp_port *port,
-			       u8 *data)
+static void nfp_abm_port_get_stats_strings(struct nfp_app *app,
+					   struct nfp_port *port, u8 **data)
 {
 	struct nfp_repr *repr = netdev_priv(port->netdev);
 	struct nfp_abm_link *alink;
 	unsigned int i;
 
 	if (port->type != NFP_PORT_PF_PORT)
-		return data;
+		return;
 	alink = repr->app_priv;
 	for (i = 0; i < alink->vnic->dp.num_r_vecs; i++) {
-		ethtool_sprintf(&data, "q%u_no_wait", i);
-		ethtool_sprintf(&data, "q%u_delayed", i);
+		ethtool_sprintf(data, "q%u_no_wait", i);
+		ethtool_sprintf(data, "q%u_delayed", i);
 	}
-	return data;
 }
 
 static int nfp_abm_fw_init_reset(struct nfp_abm *abm)

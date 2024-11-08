@@ -92,11 +92,11 @@ int nfp_app_port_get_stats_count(struct nfp_port *port)
 	return port->app->type->port_get_stats_count(port->app, port);
 }
 
-u8 *nfp_app_port_get_stats_strings(struct nfp_port *port, u8 *data)
+void nfp_app_port_get_stats_strings(struct nfp_port *port, u8 **data)
 {
 	if (!port || !port->app || !port->app->type->port_get_stats_strings)
-		return data;
-	return port->app->type->port_get_stats_strings(port->app, port, data);
+		return;
+	port->app->type->port_get_stats_strings(port->app, port, data);
 }
 
 struct sk_buff *

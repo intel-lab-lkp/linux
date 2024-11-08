@@ -848,37 +848,35 @@ static unsigned int nfp_vnic_get_sw_stats_count(struct net_device *netdev)
 		NN_CTRL_PATH_STATS;
 }
 
-static u8 *nfp_vnic_get_sw_stats_strings(struct net_device *netdev, u8 *data)
+static void nfp_vnic_get_sw_stats_strings(struct net_device *netdev, u8 **data)
 {
 	struct nfp_net *nn = netdev_priv(netdev);
 	int i;
 
 	for (i = 0; i < nn->max_r_vecs; i++) {
-		ethtool_sprintf(&data, "rvec_%u_rx_pkts", i);
-		ethtool_sprintf(&data, "rvec_%u_tx_pkts", i);
-		ethtool_sprintf(&data, "rvec_%u_tx_busy", i);
+		ethtool_sprintf(data, "rvec_%u_rx_pkts", i);
+		ethtool_sprintf(data, "rvec_%u_tx_pkts", i);
+		ethtool_sprintf(data, "rvec_%u_tx_busy", i);
 	}
 
-	ethtool_puts(&data, "hw_rx_csum_ok");
-	ethtool_puts(&data, "hw_rx_csum_inner_ok");
-	ethtool_puts(&data, "hw_rx_csum_complete");
-	ethtool_puts(&data, "hw_rx_csum_err");
-	ethtool_puts(&data, "rx_replace_buf_alloc_fail");
-	ethtool_puts(&data, "rx_tls_decrypted_packets");
-	ethtool_puts(&data, "hw_tx_csum");
-	ethtool_puts(&data, "hw_tx_inner_csum");
-	ethtool_puts(&data, "tx_gather");
-	ethtool_puts(&data, "tx_lso");
-	ethtool_puts(&data, "tx_tls_encrypted_packets");
-	ethtool_puts(&data, "tx_tls_ooo");
-	ethtool_puts(&data, "tx_tls_drop_no_sync_data");
+	ethtool_puts(data, "hw_rx_csum_ok");
+	ethtool_puts(data, "hw_rx_csum_inner_ok");
+	ethtool_puts(data, "hw_rx_csum_complete");
+	ethtool_puts(data, "hw_rx_csum_err");
+	ethtool_puts(data, "rx_replace_buf_alloc_fail");
+	ethtool_puts(data, "rx_tls_decrypted_packets");
+	ethtool_puts(data, "hw_tx_csum");
+	ethtool_puts(data, "hw_tx_inner_csum");
+	ethtool_puts(data, "tx_gather");
+	ethtool_puts(data, "tx_lso");
+	ethtool_puts(data, "tx_tls_encrypted_packets");
+	ethtool_puts(data, "tx_tls_ooo");
+	ethtool_puts(data, "tx_tls_drop_no_sync_data");
 
-	ethtool_puts(&data, "hw_tls_no_space");
-	ethtool_puts(&data, "rx_tls_resync_req_ok");
-	ethtool_puts(&data, "rx_tls_resync_req_ign");
-	ethtool_puts(&data, "rx_tls_resync_sent");
-
-	return data;
+	ethtool_puts(data, "hw_tls_no_space");
+	ethtool_puts(data, "rx_tls_resync_req_ok");
+	ethtool_puts(data, "rx_tls_resync_req_ign");
+	ethtool_puts(data, "rx_tls_resync_sent");
 }
 
 static u64 *nfp_vnic_get_sw_stats(struct net_device *netdev, u64 *data)
@@ -937,8 +935,8 @@ static unsigned int nfp_vnic_get_hw_stats_count(unsigned int num_vecs)
 	return NN_ET_GLOBAL_STATS_LEN + num_vecs * 4;
 }
 
-static u8 *
-nfp_vnic_get_hw_stats_strings(u8 *data, unsigned int num_vecs, bool repr)
+static void nfp_vnic_get_hw_stats_strings(u8 **data, unsigned int num_vecs,
+					  bool repr)
 {
 	int swap_off, i;
 
@@ -950,22 +948,20 @@ nfp_vnic_get_hw_stats_strings(u8 *data, unsigned int num_vecs, bool repr)
 	swap_off = repr * NN_ET_SWITCH_STATS_LEN;
 
 	for (i = 0; i < NN_ET_SWITCH_STATS_LEN; i++)
-		ethtool_puts(&data, nfp_net_et_stats[i + swap_off].name);
+		ethtool_puts(data, nfp_net_et_stats[i + swap_off].name);
 
 	for (i = NN_ET_SWITCH_STATS_LEN; i < NN_ET_SWITCH_STATS_LEN * 2; i++)
-		ethtool_puts(&data, nfp_net_et_stats[i - swap_off].name);
+		ethtool_puts(data, nfp_net_et_stats[i - swap_off].name);
 
 	for (i = NN_ET_SWITCH_STATS_LEN * 2; i < NN_ET_GLOBAL_STATS_LEN; i++)
-		ethtool_puts(&data, nfp_net_et_stats[i].name);
+		ethtool_puts(data, nfp_net_et_stats[i].name);
 
 	for (i = 0; i < num_vecs; i++) {
-		ethtool_sprintf(&data, "rxq_%u_pkts", i);
-		ethtool_sprintf(&data, "rxq_%u_bytes", i);
-		ethtool_sprintf(&data, "txq_%u_pkts", i);
-		ethtool_sprintf(&data, "txq_%u_bytes", i);
+		ethtool_sprintf(data, "rxq_%u_pkts", i);
+		ethtool_sprintf(data, "rxq_%u_bytes", i);
+		ethtool_sprintf(data, "txq_%u_pkts", i);
+		ethtool_sprintf(data, "txq_%u_bytes", i);
 	}
-
-	return data;
 }
 
 static u64 *
@@ -991,7 +987,7 @@ static unsigned int nfp_vnic_get_tlv_stats_count(struct nfp_net *nn)
 	return nn->tlv_caps.vnic_stats_cnt + nn->max_r_vecs * 4;
 }
 
-static u8 *nfp_vnic_get_tlv_stats_strings(struct nfp_net *nn, u8 *data)
+static void nfp_vnic_get_tlv_stats_strings(struct nfp_net *nn, u8 **data)
 {
 	unsigned int i, id;
 	u8 __iomem *mem;
@@ -1006,22 +1002,18 @@ static u8 *nfp_vnic_get_tlv_stats_strings(struct nfp_net *nn, u8 *data)
 		id_word >>= 16;
 
 		if (id < ARRAY_SIZE(nfp_tlv_stat_names) &&
-		    nfp_tlv_stat_names[id][0]) {
-			memcpy(data, nfp_tlv_stat_names[id], ETH_GSTRING_LEN);
-			data += ETH_GSTRING_LEN;
-		} else {
-			ethtool_sprintf(&data, "dev_unknown_stat%u", id);
-		}
+		    nfp_tlv_stat_names[id][0])
+			ethtool_puts(data, nfp_tlv_stat_names[id]);
+		else
+			ethtool_sprintf(data, "dev_unknown_stat%u", id);
 	}
 
 	for (i = 0; i < nn->max_r_vecs; i++) {
-		ethtool_sprintf(&data, "rxq_%u_pkts", i);
-		ethtool_sprintf(&data, "rxq_%u_bytes", i);
-		ethtool_sprintf(&data, "txq_%u_pkts", i);
-		ethtool_sprintf(&data, "txq_%u_bytes", i);
+		ethtool_sprintf(data, "rxq_%u_pkts", i);
+		ethtool_sprintf(data, "rxq_%u_bytes", i);
+		ethtool_sprintf(data, "txq_%u_pkts", i);
+		ethtool_sprintf(data, "txq_%u_bytes", i);
 	}
-
-	return data;
 }
 
 static u64 *nfp_vnic_get_tlv_stats(struct nfp_net *nn, u64 *data)
@@ -1056,19 +1048,17 @@ static unsigned int nfp_mac_get_stats_count(struct net_device *netdev)
 	return ARRAY_SIZE(nfp_mac_et_stats);
 }
 
-static u8 *nfp_mac_get_stats_strings(struct net_device *netdev, u8 *data)
+static void nfp_mac_get_stats_strings(struct net_device *netdev, u8 **data)
 {
 	struct nfp_port *port;
 	unsigned int i;
 
 	port = nfp_port_from_netdev(netdev);
 	if (!__nfp_port_get_eth_port(port) || !port->eth_stats)
-		return data;
+		return;
 
 	for (i = 0; i < ARRAY_SIZE(nfp_mac_et_stats); i++)
-		ethtool_sprintf(&data, "mac.%s", nfp_mac_et_stats[i].name);
-
-	return data;
+		ethtool_sprintf(data, "mac.%s", nfp_mac_et_stats[i].name);
 }
 
 static u64 *nfp_mac_get_stats(struct net_device *netdev, u64 *data)
@@ -1093,15 +1083,14 @@ static void nfp_net_get_strings(struct net_device *netdev,
 
 	switch (stringset) {
 	case ETH_SS_STATS:
-		data = nfp_vnic_get_sw_stats_strings(netdev, data);
+		nfp_vnic_get_sw_stats_strings(netdev, &data);
 		if (!nn->tlv_caps.vnic_stats_off)
-			data = nfp_vnic_get_hw_stats_strings(data,
-							     nn->max_r_vecs,
-							     false);
+			nfp_vnic_get_hw_stats_strings(&data, nn->max_r_vecs,
+						      false);
 		else
-			data = nfp_vnic_get_tlv_stats_strings(nn, data);
-		data = nfp_mac_get_stats_strings(netdev, data);
-		data = nfp_app_port_get_stats_strings(nn->port, data);
+			nfp_vnic_get_tlv_stats_strings(nn, &data);
+		nfp_mac_get_stats_strings(netdev, &data);
+		nfp_app_port_get_stats_strings(nn->port, &data);
 		break;
 	case ETH_SS_TEST:
 		nfp_get_self_test_strings(netdev, data);
@@ -1155,10 +1144,10 @@ static void nfp_port_get_strings(struct net_device *netdev,
 	switch (stringset) {
 	case ETH_SS_STATS:
 		if (nfp_port_is_vnic(port))
-			data = nfp_vnic_get_hw_stats_strings(data, 0, true);
+			nfp_vnic_get_hw_stats_strings(&data, 0, true);
 		else
-			data = nfp_mac_get_stats_strings(netdev, data);
-		data = nfp_app_port_get_stats_strings(port, data);
+			nfp_mac_get_stats_strings(netdev, &data);
+		nfp_app_port_get_stats_strings(port, &data);
 		break;
 	case ETH_SS_TEST:
 		nfp_get_self_test_strings(netdev, data);

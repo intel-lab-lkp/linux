@@ -116,8 +116,8 @@ struct nfp_app_type {
 	u64 *(*port_get_stats)(struct nfp_app *app,
 			       struct nfp_port *port, u64 *data);
 	int (*port_get_stats_count)(struct nfp_app *app, struct nfp_port *port);
-	u8 *(*port_get_stats_strings)(struct nfp_app *app,
-				      struct nfp_port *port, u8 *data);
+	void (*port_get_stats_strings)(struct nfp_app *app,
+				       struct nfp_port *port, u8 **data);
 
 	int (*start)(struct nfp_app *app);
 	void (*stop)(struct nfp_app *app);
@@ -421,7 +421,7 @@ struct nfp_app *nfp_app_from_netdev(struct net_device *netdev);
 
 u64 *nfp_app_port_get_stats(struct nfp_port *port, u64 *data);
 int nfp_app_port_get_stats_count(struct nfp_port *port);
-u8 *nfp_app_port_get_stats_strings(struct nfp_port *port, u8 *data);
+void nfp_app_port_get_stats_strings(struct nfp_port *port, u8 **data);
 
 struct nfp_reprs *
 nfp_reprs_get_locked(struct nfp_app *app, enum nfp_repr_type type);
