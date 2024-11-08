@@ -53,3 +53,4 @@ libtraceevent_plugins/
 fixdep
 Documentation/doc.dep
 python_ext_build/
+source
