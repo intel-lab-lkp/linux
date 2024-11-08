@@ -179,7 +179,7 @@ enum {
 
 /*
  * struct rpcrdma_rep -- this structure encapsulates state required
- * to receive and complete an RPC Reply, asychronously. It needs
+ * to receive and complete an RPC Reply, asynchronously. It needs
  * several pieces of state:
  *
  *   o receive buffer and ib_sge (donated to provider)
