@@ -2,5 +2,11 @@
 /dts-v1/;
 
 / {
-
+	/*
+	 * #address-cells/#size-cells are required properties at root node
+	 * according to the devicetree specification. Use same values as default
+	 * values mentioned for #address-cells/#size-cells properties.
+	 */
+	#address-cells = <0x02>;
+	#size-cells = <0x01>;
 };
