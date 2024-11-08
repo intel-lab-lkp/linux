@@ -44,19 +44,66 @@ to_v2_context(struct etnaviv_iommu_context *context)
 	return container_of(context, struct etnaviv_iommuv2_context, base);
 }
 
+static int etnaviv_iommuv2_stlb_free(struct etnaviv_iommuv2_context *context)
+{
+	struct device *dev = context->base.global->dev;
+	unsigned int i;
+
+	for (i = 0; i < MMUv2_MAX_STLB_ENTRIES; ++i) {
+		u32 *vaddr = context->stlb_cpu[i];
+
+		if (!vaddr)
+			continue;
+
+		context->stlb_cpu[i] = NULL;
+
+		if (i % (PAGE_SIZE / SZ_4K))
+			continue;
+
+		dma_free_wc(dev, PAGE_SIZE, vaddr, context->stlb_dma[i]);
+	}
+
+	return 0;
+}
+
+static int
+etnaviv_iommuv2_ensure_stlb_new(struct etnaviv_iommuv2_context *context,
+				unsigned int stlb)
+{
+	struct device *dev = context->base.global->dev;
+	void *vaddr;
+	dma_addr_t daddr;
+	unsigned int i;
+
+	if (context->stlb_cpu[stlb])
+		return 0;
+
+	vaddr = dma_alloc_wc(dev, PAGE_SIZE, &daddr, GFP_KERNEL);
+	if (!vaddr)
+		return -ENOMEM;
+
+	memset32(vaddr, MMUv2_PTE_EXCEPTION, PAGE_SIZE / sizeof(u32));
+
+	stlb &= ~(PAGE_SIZE / SZ_4K - 1);
+
+	for (i = 0; i < PAGE_SIZE / SZ_4K; ++i) {
+		context->stlb_cpu[stlb + i] = vaddr;
+		context->stlb_dma[stlb + i] = daddr;
+		context->mtlb_cpu[stlb + i] = daddr | MMUv2_PTE_PRESENT;
+		vaddr += SZ_4K;
+		daddr += SZ_4K;
+	}
+
+	return 0;
+}
+
 static void etnaviv_iommuv2_free(struct etnaviv_iommu_context *context)
 {
 	struct etnaviv_iommuv2_context *v2_context = to_v2_context(context);
-	int i;
 
 	drm_mm_takedown(&context->mm);
 
-	for (i = 0; i < MMUv2_MAX_STLB_ENTRIES; i++) {
-		if (v2_context->stlb_cpu[i])
-			dma_free_wc(context->global->dev, SZ_4K,
-				    v2_context->stlb_cpu[i],
-				    v2_context->stlb_dma[i]);
-	}
+	etnaviv_iommuv2_stlb_free(v2_context);
 
 	dma_free_wc(context->global->dev, SZ_4K, v2_context->mtlb_cpu,
 		    v2_context->mtlb_dma);
@@ -65,6 +112,7 @@ static void etnaviv_iommuv2_free(struct etnaviv_iommu_context *context)
 
 	vfree(v2_context);
 }
+
 static int
 etnaviv_iommuv2_ensure_stlb(struct etnaviv_iommuv2_context *v2_context,
 			    int stlb)
@@ -109,7 +157,7 @@ static int etnaviv_iommuv2_map(struct etnaviv_iommu_context *context,
 	mtlb_entry = (iova & MMUv2_MTLB_MASK) >> MMUv2_MTLB_SHIFT;
 	stlb_entry = (iova & MMUv2_STLB_MASK) >> MMUv2_STLB_SHIFT;
 
-	ret = etnaviv_iommuv2_ensure_stlb(v2_context, mtlb_entry);
+	ret = etnaviv_iommuv2_ensure_stlb_new(v2_context, mtlb_entry);
 	if (ret)
 		return ret;
 
