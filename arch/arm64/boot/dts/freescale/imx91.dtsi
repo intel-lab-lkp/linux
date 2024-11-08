@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright 2024 NXP
+ */
+
+#include "imx91-pinfunc.h"
+#include "imx93.dtsi"
+
+&{/thermal-zones/cpu-thermal/cooling-maps/map0} {
+	cooling-device =
+		<&A55_0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+};
+
+&clk {
+	compatible = "fsl,imx91-ccm";
+};
+
+&eqos {
+	clocks = <&clk IMX91_CLK_ENET1_QOS_TSN_GATE>,
+			<&clk IMX91_CLK_ENET1_QOS_TSN_GATE>,
+			<&clk IMX91_CLK_ENET_TIMER>,
+			<&clk IMX91_CLK_ENET1_QOS_TSN>,
+			<&clk IMX91_CLK_ENET1_QOS_TSN_GATE>;
+	assigned-clocks = <&clk IMX91_CLK_ENET_TIMER>,
+				<&clk IMX91_CLK_ENET1_QOS_TSN>;
+	assigned-clock-parents = <&clk IMX93_CLK_SYS_PLL_PFD1_DIV2>,
+					<&clk IMX93_CLK_SYS_PLL_PFD0_DIV2>;
+};
+
+&fec {
+	clocks = <&clk IMX91_CLK_ENET2_REGULAR_GATE>,
+			<&clk IMX91_CLK_ENET2_REGULAR_GATE>,
+			<&clk IMX91_CLK_ENET_TIMER>,
+			<&clk IMX91_CLK_ENET2_REGULAR>,
+			<&clk IMX93_CLK_DUMMY>;
+	assigned-clocks = <&clk IMX91_CLK_ENET_TIMER>,
+				<&clk IMX91_CLK_ENET2_REGULAR>;
+	assigned-clock-parents = <&clk IMX93_CLK_SYS_PLL_PFD1_DIV2>,
+					<&clk IMX93_CLK_SYS_PLL_PFD0_DIV2>;
+	assigned-clock-rates = <100000000>, <250000000>;
+};
+
+&i3c1 {
+	clocks = <&clk IMX93_CLK_BUS_AON>,
+			<&clk IMX93_CLK_I3C1_GATE>,
+			<&clk IMX93_CLK_DUMMY>;
+};
+
+&i3c2 {
+	clocks = <&clk IMX93_CLK_BUS_WAKEUP>,
+			<&clk IMX93_CLK_I3C2_GATE>,
+			<&clk IMX93_CLK_DUMMY>;
+};
+
+&tmu {
+	status = "disabled";
+};
+
+/* i.MX91 only has one A core */
+/delete-node/ &A55_1;
+
+/* i.MX91 not has cm33 */
+/delete-node/ &cm33;
+
+/* i.MX91 not has power-domain@44461800 */
+/delete-node/ &mlmix;
