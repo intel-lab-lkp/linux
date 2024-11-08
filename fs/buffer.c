@@ -2889,14 +2889,23 @@ drop_buffers(struct folio *folio, struct buffer_head **buffers_to_free)
 	struct buffer_head *head = folio_buffers(folio);
 	struct buffer_head *bh;
 
+	if (!head) {
+		goto failed;
+	}
+
 	bh = head;
 	do {
+		if (!bh)
+			goto failed;
 		if (buffer_busy(bh))
 			goto failed;
 		bh = bh->b_this_page;
 	} while (bh != head);
 
 	do {
+		if (!bh)
+			goto failed;
+
 		struct buffer_head *next = bh->b_this_page;
 
 		if (bh->b_assoc_map)
