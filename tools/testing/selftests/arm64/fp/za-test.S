@@ -16,6 +16,7 @@
 #include "sme-inst.h"
 
 .arch_extension sve
+.arch_extension sme
 
 #define MAXVL     2048
 #define MAXVL_B   (MAXVL / 8)

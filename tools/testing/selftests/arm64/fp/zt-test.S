@@ -12,6 +12,7 @@
 #include "sme-inst.h"
 
 .arch_extension sve
+.arch_extension sme
 
 #define ZT_SZ	512
 #define ZT_B	(ZT_SZ / 8)
