@@ -12,42 +12,11 @@
 #include "global1.h"
 #include "switchdev.h"
 
-struct mv88e6xxx_fid_search_ctx {
-	u16 fid_search;
-	u16 vid_found;
-};
-
-static int __mv88e6xxx_find_vid(struct mv88e6xxx_chip *chip,
-				const struct mv88e6xxx_vtu_entry *entry,
-				void *priv)
-{
-	struct mv88e6xxx_fid_search_ctx *ctx = priv;
-
-	if (ctx->fid_search == entry->fid) {
-		ctx->vid_found = entry->vid;
-		return 1;
-	}
-
-	return 0;
-}
-
 static int mv88e6xxx_find_vid(struct mv88e6xxx_chip *chip, u16 fid, u16 *vid)
 {
-	struct mv88e6xxx_fid_search_ctx ctx;
-	int err;
+	*vid = chip->vid_cache[fid];
 
-	ctx.fid_search = fid;
-	mv88e6xxx_reg_lock(chip);
-	err = mv88e6xxx_vtu_walk(chip, __mv88e6xxx_find_vid, &ctx);
-	mv88e6xxx_reg_unlock(chip);
-	if (err < 0)
-		return err;
-	if (err == 1)
-		*vid = ctx.vid_found;
-	else
-		return -ENOENT;
-
-	return 0;
+	return *vid ? 0 : -ENOENT;
 }
 
 int mv88e6xxx_handle_miss_violation(struct mv88e6xxx_chip *chip, int port,
