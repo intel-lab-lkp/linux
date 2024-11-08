@@ -36,11 +36,6 @@ properties:
   reset-gpios:
     maxItems: 1
 
-  goodix,hid-report-addr:
-    $ref: /schemas/types.yaml#/definitions/uint32
-    description:
-      The register address for retrieving HID report data.
-
   spi-max-frequency: true
 
 required:
@@ -48,7 +43,6 @@ required:
   - reg
   - interrupts
   - reset-gpios
-  - goodix,hid-report-addr
 
 unevaluatedProperties: false
 
@@ -68,7 +62,6 @@ examples:
         interrupts = <25 IRQ_TYPE_LEVEL_LOW>;
         reset-gpios = <&gpio1 1 GPIO_ACTIVE_LOW>;
         spi-max-frequency = <10000000>;
-        goodix,hid-report-addr = <0x22c8c>;
       };
     };
 
