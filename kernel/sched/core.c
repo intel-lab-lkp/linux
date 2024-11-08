@@ -8288,10 +8288,6 @@ int sched_cpu_deactivate(unsigned int cpu)
 	 */
 	sched_smt_present_dec(cpu);
 
-#ifdef CONFIG_SCHED_SMT
-	sched_core_cpu_deactivate(cpu);
-#endif
-
 	if (!sched_smp_initialized)
 		return 0;
 
@@ -8305,6 +8301,7 @@ int sched_cpu_deactivate(unsigned int cpu)
 		sched_update_numa(cpu, true);
 		return ret;
 	}
+	sched_core_cpu_deactivate(cpu);
 	sched_domains_numa_masks_clear(cpu);
 	return 0;
 }
