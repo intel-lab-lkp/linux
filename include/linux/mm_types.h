@@ -616,6 +616,19 @@ static inline const struct folio_owner_ops *folio_get_owner_ops(struct folio *fo
 	return owner_ops;
 }
 
+/*
+ * Get the page dev_pagemap pgmap pointer.
+ */
+#define page_get_pgmap(page)	((page)->pgmap)
+
+/*
+ * Set the page dev_pagemap pgmap pointer.
+ */
+static inline void page_set_pgmap(struct page *page, struct dev_pagemap *pgmap)
+{
+	page->pgmap = pgmap;
+}
+
 struct page_frag_cache {
 	void * va;
 #if (PAGE_SIZE < PAGE_FRAG_CACHE_MAX_SIZE)
