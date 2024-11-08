@@ -2180,11 +2180,20 @@ static bool hci_conn_check_create_big_sync(struct hci_conn *conn)
 	return true;
 }
 
-int hci_le_big_create_sync_pending(struct hci_dev *hdev)
+static void big_create_sync_complete(struct hci_dev *hdev, void *data, int err)
+{
+	bt_dev_dbg(hdev, "");
+
+	if (err)
+		bt_dev_err(hdev, "Unable to create BIG sync: %d", err);
+}
+
+static int big_create_sync(struct hci_dev *hdev, void *data)
 {
 	DEFINE_FLEX(struct hci_cp_le_big_create_sync, pdu, bis, num_bis, 0x11);
 	struct hci_conn *conn;
 
+	hci_dev_lock(hdev);
 	rcu_read_lock();
 
 	pdu->num_bis = 0;
@@ -2229,12 +2238,20 @@ int hci_le_big_create_sync_pending(struct hci_dev *hdev)
 
 unlock:
 	rcu_read_unlock();
+	hci_dev_unlock(hdev);
 
 	if (!pdu->num_bis)
 		return 0;
 
 	return hci_send_cmd(hdev, HCI_OP_LE_BIG_CREATE_SYNC,
 			    struct_size(pdu, bis, pdu->num_bis), pdu);
+}
+
+int hci_le_big_create_sync_pending(struct hci_dev *hdev)
+{
+	/* Queue big_create_sync */
+	return hci_cmd_sync_queue(hdev, big_create_sync,
+				  NULL, big_create_sync_complete);
 }
 
 int hci_le_big_create_sync(struct hci_dev *hdev, struct hci_conn *hcon,
