@@ -80,8 +80,11 @@ static void v9fs_issue_read(struct netfs_io_subrequest *subreq)
 	if (pos + total >= i_size_read(rreq->inode))
 		__set_bit(NETFS_SREQ_HIT_EOF, &subreq->flags);
 
-	if (!err)
+	if (!err) {
 		subreq->transferred += total;
+		subreq->fresh_len = total;
+	} else
+		subreq->fresh_len = 0;
 
 	netfs_read_subreq_terminated(subreq, err, false);
 }

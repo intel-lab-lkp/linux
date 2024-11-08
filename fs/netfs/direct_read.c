@@ -66,6 +66,7 @@ static int netfs_dispatch_unbuffered_reads(struct netfs_io_request *rreq)
 		subreq->source	= NETFS_DOWNLOAD_FROM_SERVER;
 		subreq->start	= start;
 		subreq->len	= size;
+		subreq->rretry_times = 0;
 
 		atomic_inc(&rreq->nr_outstanding);
 		spin_lock_bh(&rreq->lock);

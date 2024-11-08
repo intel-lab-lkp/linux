@@ -191,6 +191,8 @@ struct netfs_io_subrequest {
 	unsigned char		curr_folio_order; /* Order of folio */
 	struct folio_queue	*curr_folioq;	/* Queue segment in which current folio resides */
 	unsigned long		flags;
+	size_t			fresh_len;	/* The length of the data just read */
+	u8			rretry_times;   /* The times of retry read */
 #define NETFS_SREQ_COPY_TO_CACHE	0	/* Set if should copy the data to the cache */
 #define NETFS_SREQ_CLEAR_TAIL		1	/* Set if the rest of the read should be cleared */
 #define NETFS_SREQ_SEEK_DATA_READ	3	/* Set if ->read() should SEEK_DATA first */

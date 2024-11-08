@@ -56,6 +56,7 @@ static void netfs_retry_read_subrequests(struct netfs_io_request *rreq)
 			if (test_bit(NETFS_SREQ_FAILED, &subreq->flags))
 				break;
 			if (__test_and_clear_bit(NETFS_SREQ_NEED_RETRY, &subreq->flags)) {
+				subreq->rretry_times++;
 				netfs_reset_iter(subreq);
 				netfs_reissue_read(rreq, subreq);
 			}
@@ -183,6 +184,7 @@ static void netfs_retry_read_subrequests(struct netfs_io_request *rreq)
 					goto abandon;
 				subreq->source = NETFS_DOWNLOAD_FROM_SERVER;
 				subreq->start = start;
+				subreq->rretry_times = 0;
 
 				/* We get two refs, but need just one. */
 				netfs_put_subrequest(subreq, false, netfs_sreq_trace_new);

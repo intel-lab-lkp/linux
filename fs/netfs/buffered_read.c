@@ -241,6 +241,7 @@ static void netfs_read_to_pagecache(struct netfs_io_request *rreq)
 
 		subreq->start	= start;
 		subreq->len	= size;
+		subreq->rretry_times = 0;
 
 		atomic_inc(&rreq->nr_outstanding);
 		spin_lock_bh(&rreq->lock);
