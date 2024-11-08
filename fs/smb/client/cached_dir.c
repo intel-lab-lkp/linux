@@ -484,6 +484,9 @@ void close_all_cached_dirs(struct cifs_sb_info *cifs_sb)
 			cfid->dentry = NULL;
 		}
 	}
+
+	/* Flush any pending lease breaks */
+	flush_workqueue(cifsiod_wq);
 }
 
 /*
