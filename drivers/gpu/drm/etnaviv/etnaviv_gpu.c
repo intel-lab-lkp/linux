@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2015-2018 Etnaviv Project
+ * Copyright (C) 2024 Thales
  */
 
 #include <linux/clk.h>
@@ -8,11 +9,13 @@
 #include <linux/delay.h>
 #include <linux/dma-fence.h>
 #include <linux/dma-mapping.h>
+#include <linux/irq.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
+#include <linux/reset.h>
 #include <linux/thermal.h>
 
 #include "etnaviv_cmdbuf.h"
@@ -1629,8 +1632,24 @@ static int etnaviv_gpu_clk_enable(struct etnaviv_gpu *gpu)
 	if (ret)
 		goto disable_clk_core;
 
+	/* 32 core clock cycles (slowest clock) required before deassertion. */
+	/* 1 microsecond might match all implementations */
+	usleep_range(1, 2);
+
+	ret = reset_control_deassert(gpu->rst);
+	if (ret)
+		goto disable_clk_shader;
+
+	/* 128 core clock cycles (slowest clock) required before any activity on AHB. */
+	/* 1 microsecond might match all implementations */
+	usleep_range(1, 2);
+
+	enable_irq(gpu->irq);
+
 	return 0;
 
+disable_clk_shader:
+	clk_disable_unprepare(gpu->clk_shader);
 disable_clk_core:
 	clk_disable_unprepare(gpu->clk_core);
 disable_clk_bus:
@@ -1643,6 +1662,8 @@ disable_clk_reg:
 
 static int etnaviv_gpu_clk_disable(struct etnaviv_gpu *gpu)
 {
+	disable_irq(gpu->irq);
+	reset_control_assert(gpu->rst);
 	clk_disable_unprepare(gpu->clk_shader);
 	clk_disable_unprepare(gpu->clk_core);
 	clk_disable_unprepare(gpu->clk_bus);
@@ -1876,12 +1897,21 @@ static int etnaviv_gpu_platform_probe(struct platform_device *pdev)
 	if (gpu->irq < 0)
 		return gpu->irq;
 
+	/* Avoid enabling the interrupt until everything is ready */
+	irq_set_status_flags(gpu->irq, IRQ_NOAUTOEN);
+
 	err = devm_request_irq(&pdev->dev, gpu->irq, irq_handler, 0,
 			       dev_name(gpu->dev), gpu);
 	if (err) {
 		dev_err(dev, "failed to request IRQ%u: %d\n", gpu->irq, err);
 		return err;
 	}
+
+	/* Get Reset: */
+	gpu->rst = devm_reset_control_get_optional(&pdev->dev, NULL);
+	if (IS_ERR(gpu->rst))
+		return dev_err_probe(dev, PTR_ERR(gpu->rst),
+				     "failed to get reset\n");
 
 	/* Get Clocks: */
 	gpu->clk_reg = devm_clk_get_optional(&pdev->dev, "reg");
