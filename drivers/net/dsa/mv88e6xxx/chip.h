@@ -445,6 +445,8 @@ struct mv88e6xxx_chip {
 
 	/* FID map */
 	DECLARE_BITMAP(fid_bitmap, MV88E6XXX_N_FID);
+
+	u16 vid_cache[MV88E6XXX_N_FID];
 };
 
 struct mv88e6xxx_bus_ops {

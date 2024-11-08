@@ -464,7 +464,11 @@ int mv88e6390_g1_vtu_loadpurge(struct mv88e6xxx_chip *chip,
 	}
 
 	/* Load/Purge VTU entry */
-	return mv88e6xxx_g1_vtu_op(chip, MV88E6XXX_G1_VTU_OP_VTU_LOAD_PURGE);
+	err = mv88e6xxx_g1_vtu_op(chip, MV88E6XXX_G1_VTU_OP_VTU_LOAD_PURGE);
+	if (err == 0)
+		chip->vid_cache[entry->fid] = entry->valid ? entry->vid : 0;
+
+	return err;
 }
 
 int mv88e6xxx_g1_vtu_flush(struct mv88e6xxx_chip *chip)
