@@ -57,8 +57,10 @@ static int kernfs_get_target_path(struct kernfs_node *parent,
 				  struct kernfs_node *target, char *path)
 {
 	struct kernfs_node *base, *kn;
+	const char *name;
 	char *s = path;
 	int len = 0;
+	int slen;
 
 	/* go up to the root, stop at the base */
 	base = parent;
@@ -81,7 +83,8 @@ static int kernfs_get_target_path(struct kernfs_node *parent,
 	/* determine end of target string for reverse fillup */
 	kn = target;
 	while (kn->parent && kn != base) {
-		len += strlen(kn->name) + 1;
+		name = kernfs_rcu_get_name(kn);
+		len += strlen(name) + 1;
 		kn = kn->parent;
 	}
 
@@ -95,10 +98,11 @@ static int kernfs_get_target_path(struct kernfs_node *parent,
 	/* reverse fillup of target string from target to base */
 	kn = target;
 	while (kn->parent && kn != base) {
-		int slen = strlen(kn->name);
+		name = kernfs_rcu_get_name(kn);
+		slen = strlen(name);
 
 		len -= slen;
-		memcpy(s + len, kn->name, slen);
+		memcpy(s + len, name, slen);
 		if (len)
 			s[--len] = '/';
 
