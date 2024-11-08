@@ -41,10 +41,12 @@ struct mem_cgroup;
  *
  * If you allocate the page using alloc_pages(), you can use some of the
  * space in struct page for your own purposes.  The five words in the main
- * union are available, except for bit 0 of the first word which must be
- * kept clear.  Many users use this word to store a pointer to an object
- * which is guaranteed to be aligned.  If you use the same storage as
- * page->mapping, you must restore it to NULL before freeing the page.
+ * union are available, except for bit 0 (used for compound_head pages)
+ * and bit 1 (used for owner_ops) of the first word, which must be kept
+ * clear and used with care.  Many users use this word to store a pointer
+ * to an object which is guaranteed to be aligned.  If you use the same
+ * storage as page->mapping, you must restore it to NULL before freeing
+ * the page.
  *
  * The mapcount field must not be used for own purposes.
  *
@@ -283,10 +285,16 @@ typedef struct {
 	unsigned long val;
 } swp_entry_t;
 
+struct folio_owner_ops;
+
 /**
  * struct folio - Represents a contiguous set of bytes.
  * @flags: Identical to the page flags.
  * @lru: Least Recently Used list; tracks how recently this folio was used.
+ * @owner_ops: Pointer to callback operations of the folio owner. Valid if bit 1
+ *    is set.
+ *    NOTE: Cannot be used with lru, since it is overlaid with it. To use lru,
+ *          owner_ops must be cleared first, and restored once done with lru.
  * @mlock_count: Number of times this folio has been pinned by mlock().
  * @mapping: The file this page belongs to, or refers to the anon_vma for
  *    anonymous memory.
@@ -330,6 +338,7 @@ struct folio {
 			unsigned long flags;
 			union {
 				struct list_head lru;
+				const struct folio_owner_ops *owner_ops; /* Bit 1 is set */
 	/* private: avoid cluttering the output */
 				struct {
 					void *__filler;
@@ -417,6 +426,7 @@ FOLIO_MATCH(flags, flags);
 FOLIO_MATCH(lru, lru);
 FOLIO_MATCH(mapping, mapping);
 FOLIO_MATCH(compound_head, lru);
+FOLIO_MATCH(compound_head, owner_ops);
 FOLIO_MATCH(index, index);
 FOLIO_MATCH(private, private);
 FOLIO_MATCH(_mapcount, _mapcount);
@@ -451,6 +461,13 @@ FOLIO_MATCH(compound_head, _head_2a);
 FOLIO_MATCH(flags, _flags_3);
 FOLIO_MATCH(compound_head, _head_3);
 #undef FOLIO_MATCH
+
+struct folio_owner_ops {
+	/*
+	 * Called once the folio refcount reaches 0.
+	 */
+	void (*free)(struct folio *folio);
+};
 
 /**
  * struct ptdesc -    Memory descriptor for page tables.
@@ -558,6 +575,45 @@ static inline void set_page_private(struct page *page, unsigned long private)
 static inline void *folio_get_private(struct folio *folio)
 {
 	return folio->private;
+}
+
+/*
+ * Use bit 1, since bit 0 is used to indicate a compound page in compound_head,
+ * which owner_ops is overlaid with.
+ */
+#define FOLIO_OWNER_OPS_BIT    1UL
+#define FOLIO_OWNER_OPS        (1UL << FOLIO_OWNER_OPS_BIT)
+
+/*
+ * Set the folio owner_ops as well as bit 1 of the pointer to indicate that the
+ * folio has owner_ops.
+ */
+static inline void folio_set_owner_ops(struct folio *folio, const struct folio_owner_ops *owner_ops)
+{
+	owner_ops = (const struct folio_owner_ops *)((unsigned long)owner_ops | FOLIO_OWNER_OPS);
+	folio->owner_ops = owner_ops;
+}
+
+/*
+ * Clear the folio owner_ops including bit 1 of the pointer.
+ */
+static inline void folio_clear_owner_ops(struct folio *folio)
+{
+	folio->owner_ops = NULL;
+}
+
+/*
+ * Return the folio's owner_ops if it has them, otherwise, return NULL.
+ */
+static inline const struct folio_owner_ops *folio_get_owner_ops(struct folio *folio)
+{
+	const struct folio_owner_ops *owner_ops = folio->owner_ops;
+
+	if (!((unsigned long)owner_ops & FOLIO_OWNER_OPS))
+		return NULL;
+
+	owner_ops = (const struct folio_owner_ops *)((unsigned long)owner_ops & ~FOLIO_OWNER_OPS);
+	return owner_ops;
 }
 
 struct page_frag_cache {

@@ -110,6 +110,13 @@ static void page_cache_release(struct folio *folio)
 
 void __folio_put(struct folio *folio)
 {
+	const struct folio_owner_ops *owner_ops = folio_get_owner_ops(folio);
+
+	if (unlikely(owner_ops)) {
+		owner_ops->free(folio);
+		return;
+	}
+
 	if (unlikely(folio_is_zone_device(folio))) {
 		free_zone_device_folio(folio);
 		return;
@@ -929,9 +936,21 @@ void folios_put_refs(struct folio_batch *folios, unsigned int *refs)
 	for (i = 0, j = 0; i < folios->nr; i++) {
 		struct folio *folio = folios->folios[i];
 		unsigned int nr_refs = refs ? refs[i] : 1;
+		const struct folio_owner_ops *owner_ops;
 
 		if (is_huge_zero_folio(folio))
 			continue;
+
+		owner_ops = folio_get_owner_ops(folio);
+		if (unlikely(owner_ops)) {
+			if (lruvec) {
+				unlock_page_lruvec_irqrestore(lruvec, flags);
+				lruvec = NULL;
+			}
+			if (folio_ref_sub_and_test(folio, nr_refs))
+				owner_ops->free(folio);
+			continue;
+		}
 
 		if (folio_is_zone_device(folio)) {
 			if (lruvec) {
