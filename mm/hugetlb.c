@@ -1316,7 +1316,7 @@ static void enqueue_hugetlb_folio(struct hstate *h, struct folio *folio)
 	lockdep_assert_held(&hugetlb_lock);
 	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
 
-	list_move(&folio->lru, &h->hugepage_freelists[nid]);
+	list_move(&folio->_hugetlb_list, &h->hugepage_freelists[nid]);
 	h->free_huge_pages++;
 	h->free_huge_pages_node[nid]++;
 	folio_set_hugetlb_freed(folio);
@@ -1329,14 +1329,14 @@ static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
 	bool pin = !!(current->flags & PF_MEMALLOC_PIN);
 
 	lockdep_assert_held(&hugetlb_lock);
-	list_for_each_entry(folio, &h->hugepage_freelists[nid], lru) {
+	list_for_each_entry(folio, &h->hugepage_freelists[nid], _hugetlb_list) {
 		if (pin && !folio_is_longterm_pinnable(folio))
 			continue;
 
 		if (folio_test_hwpoison(folio))
 			continue;
 
-		list_move(&folio->lru, &h->hugepage_activelist);
+		list_move(&folio->_hugetlb_list, &h->hugepage_activelist);
 		folio_ref_unfreeze(folio, 1);
 		folio_clear_hugetlb_freed(folio);
 		h->free_huge_pages--;
@@ -1599,7 +1599,7 @@ static void remove_hugetlb_folio(struct hstate *h, struct folio *folio,
 	if (hstate_is_gigantic(h) && !gigantic_page_runtime_supported())
 		return;
 
-	list_del(&folio->lru);
+	list_del(&folio->_hugetlb_list);
 
 	if (folio_test_hugetlb_freed(folio)) {
 		folio_clear_hugetlb_freed(folio);
@@ -1616,8 +1616,9 @@ static void remove_hugetlb_folio(struct hstate *h, struct folio *folio,
 	 * pages.  Otherwise, someone (memory error handling) may try to write
 	 * to tail struct pages.
 	 */
-	if (!folio_test_hugetlb_vmemmap_optimized(folio))
+	if (!folio_test_hugetlb_vmemmap_optimized(folio)) {
 		__folio_clear_hugetlb(folio);
+	}
 
 	h->nr_huge_pages--;
 	h->nr_huge_pages_node[nid]--;
@@ -1632,7 +1633,7 @@ static void add_hugetlb_folio(struct hstate *h, struct folio *folio,
 
 	lockdep_assert_held(&hugetlb_lock);
 
-	INIT_LIST_HEAD(&folio->lru);
+	INIT_LIST_HEAD(&folio->_hugetlb_list);
 	h->nr_huge_pages++;
 	h->nr_huge_pages_node[nid]++;
 
@@ -1640,8 +1641,8 @@ static void add_hugetlb_folio(struct hstate *h, struct folio *folio,
 		h->surplus_huge_pages++;
 		h->surplus_huge_pages_node[nid]++;
 	}
-
 	__folio_set_hugetlb(folio);
+
 	folio_change_private(folio, NULL);
 	/*
 	 * We have to set hugetlb_vmemmap_optimized again as above
@@ -1789,8 +1790,8 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 		 * hugetlb pages with vmemmap we will free up memory so that we
 		 * can allocate vmemmap for more hugetlb pages.
 		 */
-		list_for_each_entry_safe(folio, t_folio, non_hvo_folios, lru) {
-			list_del(&folio->lru);
+		list_for_each_entry_safe(folio, t_folio, non_hvo_folios, _hugetlb_list) {
+			list_del(&folio->_hugetlb_list);
 			spin_lock_irq(&hugetlb_lock);
 			__folio_clear_hugetlb(folio);
 			spin_unlock_irq(&hugetlb_lock);
@@ -1808,14 +1809,14 @@ static void bulk_vmemmap_restore_error(struct hstate *h,
 		 * If are able to restore vmemmap and free one hugetlb page, we
 		 * quit processing the list to retry the bulk operation.
 		 */
-		list_for_each_entry_safe(folio, t_folio, folio_list, lru)
+		list_for_each_entry_safe(folio, t_folio, folio_list, _hugetlb_list)
 			if (hugetlb_vmemmap_restore_folio(h, folio)) {
-				list_del(&folio->lru);
+				list_del(&folio->_hugetlb_list);
 				spin_lock_irq(&hugetlb_lock);
 				add_hugetlb_folio(h, folio, true);
 				spin_unlock_irq(&hugetlb_lock);
 			} else {
-				list_del(&folio->lru);
+				list_del(&folio->_hugetlb_list);
 				spin_lock_irq(&hugetlb_lock);
 				__folio_clear_hugetlb(folio);
 				spin_unlock_irq(&hugetlb_lock);
@@ -1856,12 +1857,12 @@ retry:
 	VM_WARN_ON(ret < 0);
 	if (!list_empty(&non_hvo_folios) && ret) {
 		spin_lock_irq(&hugetlb_lock);
-		list_for_each_entry(folio, &non_hvo_folios, lru)
+		list_for_each_entry(folio, &non_hvo_folios, _hugetlb_list)
 			__folio_clear_hugetlb(folio);
 		spin_unlock_irq(&hugetlb_lock);
 	}
 
-	list_for_each_entry_safe(folio, t_folio, &non_hvo_folios, lru) {
+	list_for_each_entry_safe(folio, t_folio, &non_hvo_folios, _hugetlb_list) {
 		update_and_free_hugetlb_folio(h, folio, false);
 		cond_resched();
 	}
@@ -1959,7 +1960,7 @@ static void __prep_account_new_huge_page(struct hstate *h, int nid)
 static void init_new_hugetlb_folio(struct hstate *h, struct folio *folio)
 {
 	__folio_set_hugetlb(folio);
-	INIT_LIST_HEAD(&folio->lru);
+	INIT_LIST_HEAD(&folio->_hugetlb_list);
 	hugetlb_set_folio_subpool(folio, NULL);
 	set_hugetlb_cgroup(folio, NULL);
 	set_hugetlb_cgroup_rsvd(folio, NULL);
@@ -2112,7 +2113,7 @@ static void prep_and_add_allocated_folios(struct hstate *h,
 
 	/* Add all new pool pages to free lists in one lock cycle */
 	spin_lock_irqsave(&hugetlb_lock, flags);
-	list_for_each_entry_safe(folio, tmp_f, folio_list, lru) {
+	list_for_each_entry_safe(folio, tmp_f, folio_list, _hugetlb_list) {
 		__prep_account_new_huge_page(h, folio_nid(folio));
 		enqueue_hugetlb_folio(h, folio);
 	}
@@ -2165,7 +2166,7 @@ static struct folio *remove_pool_hugetlb_folio(struct hstate *h,
 		if ((!acct_surplus || h->surplus_huge_pages_node[node]) &&
 		    !list_empty(&h->hugepage_freelists[node])) {
 			folio = list_entry(h->hugepage_freelists[node].next,
-					  struct folio, lru);
+					  struct folio, _hugetlb_list);
 			remove_hugetlb_folio(h, folio, acct_surplus);
 			break;
 		}
@@ -2491,7 +2492,7 @@ retry:
 			alloc_ok = false;
 			break;
 		}
-		list_add(&folio->lru, &surplus_list);
+		list_add(&folio->_hugetlb_list, &surplus_list);
 		cond_resched();
 	}
 	allocated += i;
@@ -2526,7 +2527,7 @@ retry:
 	ret = 0;
 
 	/* Free the needed pages to the hugetlb pool */
-	list_for_each_entry_safe(folio, tmp, &surplus_list, lru) {
+	list_for_each_entry_safe(folio, tmp, &surplus_list, _hugetlb_list) {
 		if ((--needed) < 0)
 			break;
 		/* Add the page to the hugetlb allocator */
@@ -2539,7 +2540,7 @@ free:
 	 * Free unnecessary surplus pages to the buddy allocator.
 	 * Pages have no ref count, call free_huge_folio directly.
 	 */
-	list_for_each_entry_safe(folio, tmp, &surplus_list, lru)
+	list_for_each_entry_safe(folio, tmp, &surplus_list, _hugetlb_list)
 		free_huge_folio(folio);
 	spin_lock_irq(&hugetlb_lock);
 
@@ -2588,7 +2589,7 @@ static void return_unused_surplus_pages(struct hstate *h,
 		if (!folio)
 			goto out;
 
-		list_add(&folio->lru, &page_list);
+		list_add(&folio->_hugetlb_list, &page_list);
 	}
 
 out:
@@ -3051,7 +3052,7 @@ struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
 			folio_set_hugetlb_restore_reserve(folio);
 			h->resv_huge_pages--;
 		}
-		list_add(&folio->lru, &h->hugepage_activelist);
+		list_add(&folio->_hugetlb_list, &h->hugepage_activelist);
 		folio_ref_unfreeze(folio, 1);
 		/* Fall through */
 	}
@@ -3211,7 +3212,7 @@ static void __init prep_and_add_bootmem_folios(struct hstate *h,
 	/* Send list for bulk vmemmap optimization processing */
 	hugetlb_vmemmap_optimize_folios(h, folio_list);
 
-	list_for_each_entry_safe(folio, tmp_f, folio_list, lru) {
+	list_for_each_entry_safe(folio, tmp_f, folio_list, _hugetlb_list) {
 		if (!folio_test_hugetlb_vmemmap_optimized(folio)) {
 			/*
 			 * If HVO fails, initialize all tail struct pages
@@ -3260,7 +3261,7 @@ static void __init gather_bootmem_prealloc_node(unsigned long nid)
 		hugetlb_folio_init_vmemmap(folio, h,
 					   HUGETLB_VMEMMAP_RESERVE_PAGES);
 		init_new_hugetlb_folio(h, folio);
-		list_add(&folio->lru, &folio_list);
+		list_add(&folio->_hugetlb_list, &folio_list);
 
 		/*
 		 * We need to restore the 'stolen' pages to totalram_pages
@@ -3317,7 +3318,7 @@ static void __init hugetlb_hstate_alloc_pages_onenode(struct hstate *h, int nid)
 					&node_states[N_MEMORY], NULL);
 			if (!folio)
 				break;
-			list_add(&folio->lru, &folio_list);
+			list_add(&folio->_hugetlb_list, &folio_list);
 		}
 		cond_resched();
 	}
@@ -3379,7 +3380,7 @@ static void __init hugetlb_pages_alloc_boot_node(unsigned long start, unsigned l
 		if (!folio)
 			break;
 
-		list_move(&folio->lru, &folio_list);
+		list_move(&folio->_hugetlb_list, &folio_list);
 		cond_resched();
 	}
 
@@ -3544,13 +3545,13 @@ static void try_to_free_low(struct hstate *h, unsigned long count,
 	for_each_node_mask(i, *nodes_allowed) {
 		struct folio *folio, *next;
 		struct list_head *freel = &h->hugepage_freelists[i];
-		list_for_each_entry_safe(folio, next, freel, lru) {
+		list_for_each_entry_safe(folio, next, freel, _hugetlb_list) {
 			if (count >= h->nr_huge_pages)
 				goto out;
 			if (folio_test_highmem(folio))
 				continue;
 			remove_hugetlb_folio(h, folio, false);
-			list_add(&folio->lru, &page_list);
+			list_add(&folio->_hugetlb_list, &page_list);
 		}
 	}
 
@@ -3703,7 +3704,7 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 			goto out;
 		}
 
-		list_add(&folio->lru, &page_list);
+		list_add(&folio->_hugetlb_list, &page_list);
 		allocated++;
 
 		/* Bail for signals. Probably ctrl-c from user */
@@ -3750,7 +3751,7 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 		if (!folio)
 			break;
 
-		list_add(&folio->lru, &page_list);
+		list_add(&folio->_hugetlb_list, &page_list);
 	}
 	/* free the pages after dropping lock */
 	spin_unlock_irq(&hugetlb_lock);
@@ -3793,13 +3794,13 @@ static long demote_free_hugetlb_folios(struct hstate *src, struct hstate *dst,
 	 */
 	mutex_lock(&dst->resize_lock);
 
-	list_for_each_entry_safe(folio, next, src_list, lru) {
+	list_for_each_entry_safe(folio, next, src_list, _hugetlb_list) {
 		int i;
 
 		if (folio_test_hugetlb_vmemmap_optimized(folio))
 			continue;
 
-		list_del(&folio->lru);
+		list_del(&folio->_hugetlb_list);
 
 		split_page_owner(&folio->page, huge_page_order(src), huge_page_order(dst));
 		pgalloc_tag_split(folio, huge_page_order(src), huge_page_order(dst));
@@ -3814,7 +3815,7 @@ static long demote_free_hugetlb_folios(struct hstate *src, struct hstate *dst,
 			new_folio = page_folio(page);
 
 			init_new_hugetlb_folio(dst, new_folio);
-			list_add(&new_folio->lru, &dst_list);
+			list_add(&new_folio->_hugetlb_list, &dst_list);
 		}
 	}
 
@@ -3847,12 +3848,12 @@ static long demote_pool_huge_page(struct hstate *src, nodemask_t *nodes_allowed,
 		LIST_HEAD(list);
 		struct folio *folio, *next;
 
-		list_for_each_entry_safe(folio, next, &src->hugepage_freelists[node], lru) {
+		list_for_each_entry_safe(folio, next, &src->hugepage_freelists[node], _hugetlb_list) {
 			if (folio_test_hwpoison(folio))
 				continue;
 
 			remove_hugetlb_folio(src, folio, false);
-			list_add(&folio->lru, &list);
+			list_add(&folio->_hugetlb_list, &list);
 
 			if (++nr_demoted == nr_to_demote)
 				break;
@@ -3864,8 +3865,8 @@ static long demote_pool_huge_page(struct hstate *src, nodemask_t *nodes_allowed,
 
 		spin_lock_irq(&hugetlb_lock);
 
-		list_for_each_entry_safe(folio, next, &list, lru) {
-			list_del(&folio->lru);
+		list_for_each_entry_safe(folio, next, &list, _hugetlb_list) {
+			list_del(&folio->_hugetlb_list);
 			add_hugetlb_folio(src, folio, false);
 
 			nr_demoted--;
@@ -7427,7 +7428,8 @@ bool folio_isolate_hugetlb(struct folio *folio, struct list_head *list)
 		goto unlock;
 	}
 	folio_clear_hugetlb_migratable(folio);
-	list_move_tail(&folio->lru, list);
+	list_del_init(&folio->_hugetlb_list);
+	list_add_tail(&folio->lru, list);
 unlock:
 	spin_unlock_irq(&hugetlb_lock);
 	return ret;
@@ -7478,7 +7480,8 @@ void folio_putback_hugetlb(struct folio *folio)
 {
 	spin_lock_irq(&hugetlb_lock);
 	folio_set_hugetlb_migratable(folio);
-	list_move_tail(&folio->lru, &(folio_hstate(folio))->hugepage_activelist);
+	list_del_init(&folio->lru);
+	list_add_tail(&folio->_hugetlb_list, &(folio_hstate(folio))->hugepage_activelist);
 	spin_unlock_irq(&hugetlb_lock);
 	folio_put(folio);
 }

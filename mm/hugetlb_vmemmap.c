@@ -519,7 +519,7 @@ long hugetlb_vmemmap_restore_folios(const struct hstate *h,
 	long ret = 0;
 	unsigned long flags = VMEMMAP_REMAP_NO_TLB_FLUSH | VMEMMAP_SYNCHRONIZE_RCU;
 
-	list_for_each_entry_safe(folio, t_folio, folio_list, lru) {
+	list_for_each_entry_safe(folio, t_folio, folio_list, _hugetlb_list) {
 		if (folio_test_hugetlb_vmemmap_optimized(folio)) {
 			ret = __hugetlb_vmemmap_restore_folio(h, folio, flags);
 			/* only need to synchronize_rcu() once for each batch */
@@ -531,7 +531,7 @@ long hugetlb_vmemmap_restore_folios(const struct hstate *h,
 		}
 
 		/* Add non-optimized folios to output list */
-		list_move(&folio->lru, non_hvo_folios);
+		list_move(&folio->_hugetlb_list, non_hvo_folios);
 	}
 
 	if (restored)
@@ -651,7 +651,7 @@ void hugetlb_vmemmap_optimize_folios(struct hstate *h, struct list_head *folio_l
 	LIST_HEAD(vmemmap_pages);
 	unsigned long flags = VMEMMAP_REMAP_NO_TLB_FLUSH | VMEMMAP_SYNCHRONIZE_RCU;
 
-	list_for_each_entry(folio, folio_list, lru) {
+	list_for_each_entry(folio, folio_list, _hugetlb_list) {
 		int ret = hugetlb_vmemmap_split_folio(h, folio);
 
 		/*
@@ -666,7 +666,7 @@ void hugetlb_vmemmap_optimize_folios(struct hstate *h, struct list_head *folio_l
 
 	flush_tlb_all();
 
-	list_for_each_entry(folio, folio_list, lru) {
+	list_for_each_entry(folio, folio_list, _hugetlb_list) {
 		int ret;
 
 		ret = __hugetlb_vmemmap_optimize_folio(h, folio, &vmemmap_pages, flags);
