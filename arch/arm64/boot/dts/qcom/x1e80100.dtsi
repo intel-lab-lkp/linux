@@ -304,6 +304,9 @@
 	};
 
 	firmware {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
 		scm: scm {
 			compatible = "qcom,scm-x1e80100", "qcom,scm";
 			interconnects = <&aggre2_noc MASTER_CRYPTO QCOM_ICC_TAG_ALWAYS
@@ -5803,6 +5806,9 @@
 
 			label = "apps_rsc";
 			power-domains = <&system_pd>;
+
+			#address-cells = <1>;
+			#size-cells = <0>;
 
 			apps_bcm_voter: bcm-voter {
 				compatible = "qcom,bcm-voter";
