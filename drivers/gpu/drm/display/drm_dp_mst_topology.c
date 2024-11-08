@@ -2258,6 +2258,8 @@ void drm_dp_mst_connector_early_unregister(struct drm_connector *connector,
 	drm_dbg_kms(port->mgr->dev, "unregistering %s remote bus for %s\n",
 		    port->aux.name, connector->kdev->kobj.name);
 	drm_dp_aux_unregister_devnode(&port->aux);
+	port->dsc_aux = NULL;
+	port->passthrough_aux = NULL;
 }
 EXPORT_SYMBOL(drm_dp_mst_connector_early_unregister);
 
@@ -5995,57 +5997,6 @@ static void drm_dp_mst_unregister_i2c_bus(struct drm_dp_mst_port *port)
 }
 
 /**
- * drm_dp_mst_is_virtual_dpcd() - Is the given port a virtual DP Peer Device
- * @port: The port to check
- *
- * A single physical MST hub object can be represented in the topology
- * by multiple branches, with virtual ports between those branches.
- *
- * As of DP1.4, An MST hub with internal (virtual) ports must expose
- * certain DPCD registers over those ports. See sections 2.6.1.1.1
- * and 2.6.1.1.2 of Display Port specification v1.4 for details.
- *
- * May acquire mgr->lock
- *
- * Returns:
- * true if the port is a virtual DP peer device, false otherwise
- */
-static bool drm_dp_mst_is_virtual_dpcd(struct drm_dp_mst_port *port)
-{
-	struct drm_dp_mst_port *downstream_port;
-
-	if (!port || port->dpcd_rev < DP_DPCD_REV_14)
-		return false;
-
-	/* Virtual DP Sink (Internal Display Panel) */
-	if (drm_dp_mst_port_is_logical(port))
-		return true;
-
-	/* DP-to-HDMI Protocol Converter */
-	if (port->pdt == DP_PEER_DEVICE_DP_LEGACY_CONV &&
-	    !port->mcs &&
-	    port->ldps)
-		return true;
-
-	/* DP-to-DP */
-	mutex_lock(&port->mgr->lock);
-	if (port->pdt == DP_PEER_DEVICE_MST_BRANCHING &&
-	    port->mstb &&
-	    port->mstb->num_ports == 2) {
-		list_for_each_entry(downstream_port, &port->mstb->ports, next) {
-			if (downstream_port->pdt == DP_PEER_DEVICE_SST_SINK &&
-			    !downstream_port->input) {
-				mutex_unlock(&port->mgr->lock);
-				return true;
-			}
-		}
-	}
-	mutex_unlock(&port->mgr->lock);
-
-	return false;
-}
-
-/**
  * drm_dp_mst_aux_for_parent() - Get the AUX device for an MST port's parent
  * @port: MST port whose parent's AUX device is returned
  *
@@ -6079,115 +6030,131 @@ EXPORT_SYMBOL(drm_dp_mst_aux_for_parent);
  */
 struct drm_dp_aux *drm_dp_mst_dsc_aux_for_port(struct drm_dp_mst_port *port)
 {
-	struct drm_dp_mst_port *immediate_upstream_port;
-	struct drm_dp_aux *immediate_upstream_aux;
-	struct drm_dp_mst_port *fec_port;
-	struct drm_dp_desc desc = {};
+	struct drm_dp_mst_topology_mgr *mgr;
+	struct drm_dp_mst_port *immediate_upstream_port = NULL;
+	struct drm_dp_mst_port *fec_port = NULL;
+	struct drm_dp_mst_port *dsc_port = NULL;
+	struct drm_dp_aux *upstream_aux;
+	bool end_has_dpcd;
+	u8 endpoint_dsc = 0;
 	u8 upstream_dsc;
-	u8 endpoint_fec;
-	u8 endpoint_dsc;
+	u8 fec_cap;
 
 	if (!port)
 		return NULL;
 
+	mgr = port->mgr;
+	end_has_dpcd = (port->dpcd_rev > 0);
+
+	port->dsc_aux = NULL;
+	port->passthrough_aux = NULL;
+
+	/* Policy start */
+	if (!drm_dp_mst_is_end_device(port->pdt, port->mcs)) {
+		drm_err(mgr->dev,
+			"MST_DSC Can't determine dsc aux for port %p which is not connected to end device\n",
+			port);
+		return NULL;
+	}
+
 	if (port->parent->port_parent)
 		immediate_upstream_port = port->parent->port_parent;
-	else
-		immediate_upstream_port = NULL;
 
-	fec_port = immediate_upstream_port;
+	if (end_has_dpcd) {
+		drm_info(mgr->dev, "MST_DSC check port %p for dsc decompression capability\n", port);
+		if (drm_dp_dpcd_read(&port->aux, DP_DSC_SUPPORT, &endpoint_dsc, 1) != 1) {
+			drm_err(mgr->dev, "MST_DSC Can't retrieve dsc caps from endpoint port\n");
+			goto out_dsc_fail;
+		}
+	}
+
+	if (immediate_upstream_port) {
+		upstream_aux = &immediate_upstream_port->aux;
+		drm_info(mgr->dev, "MST_DSC check immediate_upstream_port %p for dsc passthrough capability\n",
+				    immediate_upstream_port);
+	} else {
+		upstream_aux = mgr->aux;
+		drm_info(mgr->dev, "MST_DSC check root aux for dsc passthrough capability\n");
+	}
+
+	if (drm_dp_dpcd_read(upstream_aux, DP_DSC_SUPPORT, &upstream_dsc, 1) != 1) {
+		drm_err(mgr->dev, "MST_DSC Can't retrieve dsc caps from upstream port\n");
+		goto out_dsc_fail;
+	}
+
+	/* Consider passthrough as the first option for dsc_aux/passthrough_aux */
+	if (endpoint_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED &&
+			upstream_dsc & DP_DSC_PASSTHROUGH_IS_SUPPORTED) {
+		dsc_port = port;
+		port->dsc_aux = &port->aux;
+		port->passthrough_aux = upstream_aux;
+		drm_info(mgr->dev, "MST_DSC dsc passthrough to endpoint\n");
+	}
+
+	if (!dsc_port) {
+		if (!immediate_upstream_port) {
+			/* Topology with 1 mstb only */
+			if (upstream_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED)
+				port->dsc_aux = mgr->aux;
+
+			if (!port->dsc_aux) {
+				drm_err(mgr->dev, "MST_DSC dsc decompression not support at root branch\n");
+				goto out_dsc_fail;
+			}
+
+			drm_info(mgr->dev, "MST_DSC topology with 1 mstb only, dsc decompression at root branch\n");
+		} else {
+			/* Topology with multiple mstbs */
+			dsc_port = immediate_upstream_port;
+			endpoint_dsc = upstream_dsc;
+
+			if (endpoint_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED)
+				port->dsc_aux = &dsc_port->aux;
+			else {
+				drm_err(mgr->dev,
+					"MST_DSC dsc decompression not support at immediate_upstream_port %p\n",
+					dsc_port);
+				goto out_dsc_fail;
+			}
+
+			drm_info(mgr->dev, "MST_DSC topology with multiple mstbs, dsc decompression at immediate_upstream_port %p\n",
+					    dsc_port);
+		}
+	}
+
+	/* Check the virtual channel from source till dsc port link support FEC */
+	fec_port = dsc_port;
 	while (fec_port) {
 		/*
-		 * Each physical link (i.e. not a virtual port) between the
-		 * output and the primary device must support FEC
+		 * Each link between the output and the source
+		 * must support FEC. Note that virtual dpcd fec is identical
+		 * to the fec capability of it's MST BU's DPRx
 		 */
-		if (!drm_dp_mst_is_virtual_dpcd(fec_port) &&
-		    !fec_port->fec_capable)
-			return NULL;
+		if (!fec_port->fec_capable) {
+			/* read fec cap one more time in case fec not capable return from enum path result */
+			if ((drm_dp_dpcd_read(&fec_port->aux, DP_FEC_CAPABILITY, &fec_cap, 1) != 1) ||
+					!(fec_cap & DP_FEC_CAPABLE)) {
+				drm_err(mgr->dev, "MST_DSC Failed to retrieve fec caps at port %p\n", fec_port);
+				goto out_dsc_fail;
+			}
+			fec_port->fec_capable = true;
+		}
 
 		fec_port = fec_port->parent->port_parent;
 	}
 
-	/* DP-to-DP peer device */
-	if (drm_dp_mst_is_virtual_dpcd(immediate_upstream_port)) {
-		if (drm_dp_dpcd_read(&port->aux,
-				     DP_DSC_SUPPORT, &endpoint_dsc, 1) != 1)
-			return NULL;
-		if (drm_dp_dpcd_read(&port->aux,
-				     DP_FEC_CAPABILITY, &endpoint_fec, 1) != 1)
-			return NULL;
-		if (drm_dp_dpcd_read(&immediate_upstream_port->aux,
-				     DP_DSC_SUPPORT, &upstream_dsc, 1) != 1)
-			return NULL;
-
-		/* Enpoint decompression with DP-to-DP peer device */
-		if ((endpoint_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED) &&
-		    (endpoint_fec & DP_FEC_CAPABLE) &&
-		    (upstream_dsc & DP_DSC_PASSTHROUGH_IS_SUPPORTED)) {
-			port->passthrough_aux = &immediate_upstream_port->aux;
-			return &port->aux;
-		}
-
-		/* Virtual DPCD decompression with DP-to-DP peer device */
-		return &immediate_upstream_port->aux;
+	/* Ensure fec between source and the connected DPRx */
+	if ((drm_dp_dpcd_read(mgr->aux, DP_FEC_CAPABILITY, &fec_cap, 1) != 1) ||
+			!(fec_cap & DP_FEC_CAPABLE)) {
+		drm_err(mgr->dev, "MST_DSC fec not supported between source and the connected DPRx\n");
+		goto out_dsc_fail;
 	}
 
-	/* Virtual DPCD decompression with DP-to-HDMI or Virtual DP Sink */
-	if (drm_dp_mst_is_virtual_dpcd(port))
-		return &port->aux;
+	return port->dsc_aux;
 
-	/*
-	 * Synaptics quirk
-	 * Applies to ports for which:
-	 * - Physical aux has Synaptics OUI
-	 * - DPv1.4 or higher
-	 * - Port is on primary branch device
-	 * - Not a VGA adapter (DP_DWN_STRM_PORT_TYPE_ANALOG)
-	 */
-	if (immediate_upstream_port)
-		immediate_upstream_aux = &immediate_upstream_port->aux;
-	else
-		immediate_upstream_aux = port->mgr->aux;
-
-	if (drm_dp_read_desc(immediate_upstream_aux, &desc, true))
-		return NULL;
-
-	if (drm_dp_has_quirk(&desc, DP_DPCD_QUIRK_DSC_WITHOUT_VIRTUAL_DPCD)) {
-		u8 dpcd_ext[DP_RECEIVER_CAP_SIZE];
-
-		if (drm_dp_dpcd_read(immediate_upstream_aux,
-				     DP_DSC_SUPPORT, &upstream_dsc, 1) != 1)
-			return NULL;
-
-		if (!(upstream_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED))
-			return NULL;
-
-		if (drm_dp_read_dpcd_caps(immediate_upstream_aux, dpcd_ext) < 0)
-			return NULL;
-
-		if (dpcd_ext[DP_DPCD_REV] >= DP_DPCD_REV_14 &&
-		    ((dpcd_ext[DP_DOWNSTREAMPORT_PRESENT] & DP_DWN_STRM_PORT_PRESENT) &&
-		    ((dpcd_ext[DP_DOWNSTREAMPORT_PRESENT] & DP_DWN_STRM_PORT_TYPE_MASK)
-		     != DP_DWN_STRM_PORT_TYPE_ANALOG)))
-			return immediate_upstream_aux;
-	}
-
-	/*
-	 * The check below verifies if the MST sink
-	 * connected to the GPU is capable of DSC -
-	 * therefore the endpoint needs to be
-	 * both DSC and FEC capable.
-	 */
-	if (drm_dp_dpcd_read(&port->aux,
-	   DP_DSC_SUPPORT, &endpoint_dsc, 1) != 1)
-		return NULL;
-	if (drm_dp_dpcd_read(&port->aux,
-	   DP_FEC_CAPABILITY, &endpoint_fec, 1) != 1)
-		return NULL;
-	if ((endpoint_dsc & DP_DSC_DECOMPRESSION_IS_SUPPORTED) &&
-	   (endpoint_fec & DP_FEC_CAPABLE))
-		return &port->aux;
-
+out_dsc_fail:
+	port->dsc_aux = NULL;
+	port->passthrough_aux = NULL;
 	return NULL;
 }
 EXPORT_SYMBOL(drm_dp_mst_dsc_aux_for_port);
