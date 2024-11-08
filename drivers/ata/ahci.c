@@ -1141,7 +1141,7 @@ static void ahci_mcp89_apple_enable(struct pci_dev *pdev)
 {
 	u32 val;
 
-	printk(KERN_INFO "ahci: enabling MCP89 AHCI mode\n");
+	dev_info(&pdev->dev, "enabling MCP89 AHCI mode\n");
 
 	pci_read_config_dword(pdev, 0xf8, &val);
 	val |= 1 << 0x1b;
@@ -1692,8 +1692,7 @@ static int ahci_init_msi(struct pci_dev *pdev, unsigned int n_ports,
 			 * Fallback to single MSI mode if the controller
 			 * enforced MRSM mode.
 			 */
-			printk(KERN_INFO
-				"ahci: MRSM is on, fallback to single MSI\n");
+			dev_info(&pdev->dev, "AHCI MRSM is on, fallback to single MSI\n");
 			pci_free_irq_vectors(pdev);
 		}
 	}
