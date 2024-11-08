@@ -3846,12 +3846,12 @@ static int addrconf_ifdown(struct net_device *dev, bool unregister)
 {
 	unsigned long event = unregister ? NETDEV_UNREGISTER : NETDEV_DOWN;
 	struct net *net = dev_net(dev);
-	struct inet6_dev *idev;
 	struct inet6_ifaddr *ifa;
 	LIST_HEAD(tmp_addr_list);
+	struct inet6_dev *idev;
 	bool keep_addr = false;
 	bool was_ready;
-	int state, i;
+	int state;
 
 	ASSERT_RTNL();
 
@@ -3890,27 +3890,23 @@ static int addrconf_ifdown(struct net_device *dev, bool unregister)
 	}
 
 	/* Step 2: clear hash table */
-	for (i = 0; i < IN6_ADDR_HSIZE; i++) {
-		struct hlist_head *h = &net->ipv6.inet6_addr_lst[i];
+	read_lock_bh(&idev->lock);
+	spin_lock(&net->ipv6.addrconf_hash_lock);
 
-		spin_lock_bh(&net->ipv6.addrconf_hash_lock);
-restart:
-		hlist_for_each_entry_rcu(ifa, h, addr_lst) {
-			if (ifa->idev == idev) {
-				addrconf_del_dad_work(ifa);
-				/* combined flag + permanent flag decide if
-				 * address is retained on a down event
-				 */
-				if (!keep_addr ||
-				    !(ifa->flags & IFA_F_PERMANENT) ||
-				    addr_is_local(&ifa->addr)) {
-					hlist_del_init_rcu(&ifa->addr_lst);
-					goto restart;
-				}
-			}
-		}
-		spin_unlock_bh(&net->ipv6.addrconf_hash_lock);
+	list_for_each_entry(ifa, &idev->addr_list, if_list) {
+		addrconf_del_dad_work(ifa);
+
+		/* combined flag + permanent flag decide if
+		 * address is retained on a down event
+		 */
+		if (!keep_addr ||
+		    !(ifa->flags & IFA_F_PERMANENT) ||
+		    addr_is_local(&ifa->addr))
+			hlist_del_init_rcu(&ifa->addr_lst);
 	}
+
+	spin_unlock(&net->ipv6.addrconf_hash_lock);
+	read_unlock_bh(&idev->lock);
 
 	write_lock_bh(&idev->lock);
 
