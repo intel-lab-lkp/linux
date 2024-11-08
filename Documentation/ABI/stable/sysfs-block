@@ -187,6 +187,13 @@ Description:
 		partition is offset from the internal allocation unit's
 		natural alignment.
 
+What:		/sys/block/<disk>/<partition>/write_hint_mask
+Date:		October 2024
+Contact:	linux-block@vger.kernel.org
+Description:
+		The mask of allowed write hints. You can limit which hints the
+		block layer will use by writing a new mask.  Only the first
+		partition can access all the write hints by default.
 
 What:		/sys/block/<disk>/<partition>/stat
 Date:		February 2008
