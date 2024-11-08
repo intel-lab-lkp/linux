@@ -209,12 +209,16 @@ static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 	struct dev_pm_opp *opp;
 	long freq_hz, pre_freq_hz;
 	int vproc, pre_vproc, inter_vproc, target_vproc, ret;
+	struct cpufreq_freqs freqs;
 
 	mutex_lock(&mtk_policy_lock);
 
 	inter_vproc = info->intermediate_voltage;
+	pre_freq_hz = policy->cur * 1000;
 
-	pre_freq_hz = clk_get_rate(cpu_clk);
+	freqs.old = policy->cur;
+	freqs.new = freq_table[index].frequency;
+	cpufreq_freq_transition_begin(policy, &freqs);
 
 	if (unlikely(info->pre_vproc <= 0))
 		pre_vproc = regulator_get_voltage(info->proc_reg);
@@ -309,6 +313,7 @@ static int mtk_cpufreq_set_target(struct cpufreq_policy *policy,
 	info->current_freq = freq_hz;
 
 out:
+	cpufreq_freq_transition_end(policy, &freqs, false);
 	mutex_unlock(&mtk_policy_lock);
 
 	return ret;
@@ -632,6 +637,7 @@ static unsigned int mtk_cpufreq_get(unsigned int cpu)
 static struct cpufreq_driver mtk_cpufreq_driver = {
 	.flags = CPUFREQ_NEED_INITIAL_FREQ_CHECK |
 		 CPUFREQ_HAVE_GOVERNOR_PER_POLICY |
+		 CPUFREQ_ASYNC_NOTIFICATION |
 		 CPUFREQ_IS_COOLING_DEV,
 	.verify = cpufreq_generic_frequency_table_verify,
 	.target_index = mtk_cpufreq_set_target,
