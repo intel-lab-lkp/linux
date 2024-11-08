@@ -113,30 +113,6 @@ static void etnaviv_iommuv2_free(struct etnaviv_iommu_context *context)
 	vfree(v2_context);
 }
 
-static int
-etnaviv_iommuv2_ensure_stlb(struct etnaviv_iommuv2_context *v2_context,
-			    int stlb)
-{
-	if (v2_context->stlb_cpu[stlb])
-		return 0;
-
-	v2_context->stlb_cpu[stlb] =
-			dma_alloc_wc(v2_context->base.global->dev, SZ_4K,
-				     &v2_context->stlb_dma[stlb],
-				     GFP_KERNEL);
-
-	if (!v2_context->stlb_cpu[stlb])
-		return -ENOMEM;
-
-	memset32(v2_context->stlb_cpu[stlb], MMUv2_PTE_EXCEPTION,
-		 SZ_4K / sizeof(u32));
-
-	v2_context->mtlb_cpu[stlb] =
-			v2_context->stlb_dma[stlb] | MMUv2_PTE_PRESENT;
-
-	return 0;
-}
-
 static int etnaviv_iommuv2_map(struct etnaviv_iommu_context *context,
 			       unsigned long iova, phys_addr_t paddr,
 			       size_t size, int prot)
