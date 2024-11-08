@@ -10,7 +10,6 @@
 #include "bug.c"
 #include "build_assert.c"
 #include "build_bug.c"
-#include "err.c"
 #include "kunit.c"
 #include "mutex.c"
 #include "page.c"
