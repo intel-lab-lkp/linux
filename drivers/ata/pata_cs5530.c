@@ -177,7 +177,7 @@ static const struct dmi_system_id palmax_dmi_table[] = {
 static int cs5530_is_palmax(void)
 {
 	if (dmi_check_system(palmax_dmi_table)) {
-		printk(KERN_INFO "Palmax PD1100: Disabling DMA on docking port.\n");
+		pr_info("Palmax PD1100: Disabling DMA on docking port.\n");
 		return 1;
 	}
 	return 0;
@@ -206,11 +206,11 @@ static int cs5530_init_chip(void)
 		}
 	}
 	if (!master_0) {
-		printk(KERN_ERR DRV_NAME ": unable to locate PCI MASTER function\n");
+		pr_err(DRV_NAME ": unable to locate PCI MASTER function\n");
 		goto fail_put;
 	}
 	if (!cs5530_0) {
-		printk(KERN_ERR DRV_NAME ": unable to locate CS5530 LEGACY function\n");
+		pr_err(DRV_NAME ": unable to locate CS5530 LEGACY function\n");
 		goto fail_put;
 	}
 
