@@ -178,13 +178,13 @@ lx-symbols command."""
 
         self.load_all_symbols()
 
-        if hasattr(gdb, 'Breakpoint'):
+        if hasattr(gdb, 'Breakpoint') and modules.has_modules():
             if self.breakpoint is not None:
                 self.breakpoint.delete()
                 self.breakpoint = None
             self.breakpoint = LoadModuleBreakpoint(
                 "kernel/module/main.c:do_init_module", self)
-        else:
+        elif modules.has_modules():
             gdb.write("Note: symbol update on module loading not supported "
                       "with this gdb version\n")
 
