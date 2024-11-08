@@ -518,7 +518,6 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon)
 
 	list_for_each_entry_safe(cfid, q, &entry, entry) {
 		list_del(&cfid->entry);
-		cancel_work_sync(&cfid->lease_break);
 		/*
 		 * Drop the ref-count from above, either the lease-ref (if there
 		 * was one) or the extra one acquired.
@@ -596,6 +595,8 @@ static void free_cached_dir(struct cached_fid *cfid)
 {
 	struct cached_dirent *dirent, *q;
 
+	WARN_ON(work_pending(&cfid->lease_break));
+
 	dput(cfid->dentry);
 	cfid->dentry = NULL;
 
@@ -642,11 +643,6 @@ static void cfids_laundromat_worker(struct work_struct *work)
 
 	list_for_each_entry_safe(cfid, q, &entry, entry) {
 		list_del(&cfid->entry);
-		/*
-		 * Cancel and wait for the work to finish in case we are racing
-		 * with it.
-		 */
-		cancel_work_sync(&cfid->lease_break);
 		/*
 		 * Drop the ref-count from above, either the lease-ref (if there
 		 * was one) or the extra one acquired.
