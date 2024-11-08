@@ -7508,6 +7508,11 @@ void move_hugetlb_state(struct folio *old_folio, struct folio *new_folio, int re
 		}
 		spin_unlock_irq(&hugetlb_lock);
 	}
+	/*
+	 * Our old folio is isolated and has "migratable" cleared until it
+	 * is putback. As migration succeeded, set the new folio "migratable".
+	 */
+	folio_set_hugetlb_migratable(new_folio);
 }
 
 static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
