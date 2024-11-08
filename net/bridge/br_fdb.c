@@ -1457,7 +1457,8 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 
 		fdb->updated = jiffies;
 
-		if (READ_ONCE(fdb->dst) != p) {
+		if (READ_ONCE(fdb->dst) != p &&
+		    !test_bit(BR_FDB_STICKY, &fdb->flags)) {
 			WRITE_ONCE(fdb->dst, p);
 			modified = true;
 		}
