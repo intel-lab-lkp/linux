@@ -235,11 +235,50 @@ static void of_alias_destroy(const char *name, void (*dt_free)(void *))
 	}
 }
 
+static void *alias_alloc(u64 size, u64 align)
+{
+	return kzalloc(size, GFP_KERNEL);
+}
+
+static void alias_free(void *p)
+{
+	/* Leak memory */
+}
+
+static int alias_OF_notifier(struct notifier_block *np, unsigned long action,
+			     void *data)
+{
+	struct of_reconfig_data *reconf_data = data;
+
+	if (reconf_data->dn != of_aliases)
+		return NOTIFY_DONE;
+
+	switch (action) {
+	case OF_RECONFIG_ADD_PROPERTY:
+		of_alias_create(reconf_data->prop, alias_alloc);
+		break;
+	case OF_RECONFIG_REMOVE_PROPERTY:
+		of_alias_destroy(reconf_data->prop->name, alias_free);
+		break;
+	case OF_RECONFIG_UPDATE_PROPERTY:
+		of_alias_destroy(reconf_data->old_prop->name, alias_free);
+		of_alias_create(reconf_data->prop, alias_alloc);
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block alias_of_nb = {
+	.notifier_call = alias_OF_notifier,
+};
+
 void __init of_core_init(void)
 {
 	struct device_node *np;
 
 	of_platform_register_reconfig_notifier();
+	of_reconfig_notifier_register(&alias_of_nb);
 
 	/* Create the kset, and register existing nodes */
 	mutex_lock(&of_mutex);
