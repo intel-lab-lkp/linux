@@ -282,7 +282,7 @@ static void pci_msi_set_enable(struct pci_dev *dev, int enable)
 	pci_write_config_word(dev, dev->msi_cap + PCI_MSI_FLAGS, control);
 }
 
-static int msi_setup_msi_desc(struct pci_dev *dev, int nvec,
+static int msi_setup_msi_desc(struct pci_dev *dev, int nvec, dma_addr_t iova,
 			      struct irq_affinity_desc *masks)
 {
 	struct msi_desc desc;
@@ -311,6 +311,10 @@ static int msi_setup_msi_desc(struct pci_dev *dev, int nvec,
 		desc.pci.mask_pos = dev->msi_cap + PCI_MSI_MASK_64;
 	else
 		desc.pci.mask_pos = dev->msi_cap + PCI_MSI_MASK_32;
+
+#ifdef CONFIG_IRQ_MSI_IOMMU
+	desc.msi_iova = iova;
+#endif
 
 	/* Save the initial mask status */
 	if (desc.pci.msi_attrib.can_mask)
@@ -349,7 +353,7 @@ static int msi_verify_entries(struct pci_dev *dev)
  * which could have been allocated.
  */
 static int msi_capability_init(struct pci_dev *dev, int nvec,
-			       struct irq_affinity *affd)
+			       struct irq_affinity *affd, dma_addr_t iova)
 {
 	struct irq_affinity_desc *masks = NULL;
 	struct msi_desc *entry, desc;
@@ -370,7 +374,7 @@ static int msi_capability_init(struct pci_dev *dev, int nvec,
 		masks = irq_create_affinity_masks(nvec, affd);
 
 	msi_lock_descs(&dev->dev);
-	ret = msi_setup_msi_desc(dev, nvec, masks);
+	ret = msi_setup_msi_desc(dev, nvec, iova, masks);
 	if (ret)
 		goto fail;
 
@@ -456,7 +460,7 @@ int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 				return -ENOSPC;
 		}
 
-		rc = msi_capability_init(dev, nvec, affd);
+		rc = msi_capability_init(dev, nvec, affd, PHYS_ADDR_MAX);
 		if (rc == 0)
 			return nvec;
 
@@ -625,6 +629,12 @@ static int msix_setup_msi_descs(struct pci_dev *dev, struct msix_entry *entries,
 	memset(&desc, 0, sizeof(desc));
 
 	for (i = 0, curmsk = masks; i < nvec; i++, curmsk++) {
+#ifdef CONFIG_IRQ_MSI_IOMMU
+		if (entries && entries[i].iova)
+			desc.msi_iova = (dma_addr_t)entries[i].iova;
+		else
+			desc.msi_iova = PHYS_ADDR_MAX;
+#endif
 		desc.msi_index = entries ? entries[i].entry : i;
 		desc.affinity = masks ? curmsk : NULL;
 		desc.pci.msi_attrib.is_virtual = desc.msi_index >= vec_count;

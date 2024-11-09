@@ -1647,6 +1647,7 @@ int pci_set_vga_state(struct pci_dev *pdev, bool decode,
 struct msix_entry {
 	u32	vector;	/* Kernel uses to write allocated vector */
 	u16	entry;	/* Driver uses to specify entry, OS writes */
+	u64	iova;	/* Kernel uses to override doorbell address */
 };
 
 #ifdef CONFIG_PCI_MSI
