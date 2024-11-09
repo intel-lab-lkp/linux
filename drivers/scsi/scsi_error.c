@@ -40,6 +40,7 @@
 #include <scsi/scsi_ioctl.h>
 #include <scsi/scsi_dh.h>
 #include <scsi/scsi_devinfo.h>
+#include <scsi/scsi_multipath.h>
 #include <scsi/sg.h>
 
 #include "scsi_priv.h"
@@ -2046,6 +2047,13 @@ enum scsi_disposition scsi_decide_disposition(struct scsi_cmnd *scmd)
 	return FAILED;
 
 maybe_retry:
+
+	/*
+	 * For SCSI Multipath check if there are path errors to
+	 * trigger failover to available path
+	 */
+	if (scsi_mpath_enabled(scmd->device))
+		return scsi_mpath_failover_disposition(scmd);
 
 	/* we requeue for retry because the error was retryable, and
 	 * the request was not marked fast fail.  Note that above,
