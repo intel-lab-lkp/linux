@@ -167,6 +167,7 @@ static const char *sdebug_version_date = "20210520";
 #define DEF_TUR_MS_TO_READY 0
 #define DEF_UUID_CTL 0
 #define JDELAY_OVERRIDDEN -9999
+#define DEF_ALUA_MPATH	0
 
 /* Default parameters for ZBC drives */
 #define DEF_ZBC_ZONE_SIZE_MB	128
@@ -884,6 +885,8 @@ static bool write_since_sync;
 static bool sdebug_statistics = DEF_STATISTICS;
 static bool sdebug_wp;
 static bool sdebug_allow_restart;
+static unsigned int sdebug_alua_mpath = DEF_ALUA_MPATH;
+
 static enum {
 	BLK_ZONED_NONE	= 0,
 	BLK_ZONED_HA	= 1,
@@ -2070,8 +2073,14 @@ static int resp_inquiry(struct scsi_cmnd *scp, struct sdebug_dev_info *devip)
 	arr[3] = 2;    /* response_data_format==2 */
 	arr[4] = SDEBUG_LONG_INQ_SZ - 5;
 	arr[5] = (int)have_dif_prot;	/* PROTECT bit */
-	if (sdebug_vpd_use_hostno == 0)
-		arr[5] |= 0x10; /* claim: implicit TPGS */
+	if (sdebug_vpd_use_hostno == 0) {
+		 arr[5] |= 0x10;
+	} else {
+		if (sdebug_alua_mpath == 1)
+			arr[5] |= 0x11;
+		else
+			arr[5] |= 0x10;
+	}
 	arr[6] = 0x10; /* claim: MultiP */
 	/* arr[6] |= 0x40; ... claim: EncServ (enclosure services) */
 	arr[7] = 0xa; /* claim: LINKED + CMDQUE */
@@ -6643,6 +6652,7 @@ module_param_named(zone_max_open, sdeb_zbc_max_open, int, S_IRUGO);
 module_param_named(zone_nr_conv, sdeb_zbc_nr_conv, int, S_IRUGO);
 module_param_named(zone_size_mb, sdeb_zbc_zone_size_mb, int, S_IRUGO);
 module_param_named(allow_restart, sdebug_allow_restart, bool, S_IRUGO | S_IWUSR);
+module_param_named(alua_mpath, sdebug_alua_mpath, int, S_IRUGO | S_IWUSR);
 
 MODULE_AUTHOR("Eric Youngdale + Douglas Gilbert");
 MODULE_DESCRIPTION("SCSI debug adapter driver");
@@ -6722,6 +6732,8 @@ MODULE_PARM_DESC(zone_max_open, "Maximum number of open zones; [0] for no limit 
 MODULE_PARM_DESC(zone_nr_conv, "Number of conventional zones (def=1)");
 MODULE_PARM_DESC(zone_size_mb, "Zone size in MiB (def=auto)");
 MODULE_PARM_DESC(allow_restart, "Set scsi_device's allow_restart flag(def=0)");
+MODULE_PARM_DESC(alua_mpath,
+	"\t 1 = implicit alua \n \t 2 = Explicit & Implicit ALUA, \n \t 0 = No ALUA Support (Default) \n");
 
 #define SDEBUG_INFO_LEN 256
 static char sdebug_info[SDEBUG_INFO_LEN];
