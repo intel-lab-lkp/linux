@@ -1723,6 +1723,8 @@ static u64 its_irq_get_msi_base(struct its_device *its_dev)
 static void its_irq_compose_msi_msg(struct irq_data *d, struct msi_msg *msg)
 {
 	struct its_device *its_dev = irq_data_get_irq_chip_data(d);
+	struct msi_desc *desc = irq_data_get_msi_desc(d);
+	dma_addr_t iova = msi_desc_get_iova(desc);
 	struct its_node *its;
 	u64 addr;
 
@@ -1733,7 +1735,13 @@ static void its_irq_compose_msi_msg(struct irq_data *d, struct msi_msg *msg)
 	msg->address_hi		= upper_32_bits(addr);
 	msg->data		= its_get_event_id(d);
 
-	iommu_dma_compose_msi_msg(irq_data_get_msi_desc(d), msg);
+	/* Bypass iommu_dma_compose_msi_msg if msi_iova is preset */
+	if (iova == PHYS_ADDR_MAX) {
+		iommu_dma_compose_msi_msg(desc, msg);
+	} else {
+		msg->address_lo = lower_32_bits(iova);
+		msg->address_hi = upper_32_bits(iova);
+	}
 }
 
 static int its_irq_set_irqchip_state(struct irq_data *d,
@@ -3570,6 +3578,7 @@ static int its_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 {
 	msi_alloc_info_t *info = args;
 	struct its_device *its_dev = info->scratchpad[0].ptr;
+	dma_addr_t iova = msi_desc_get_iova(info->desc);
 	struct its_node *its = its_dev->its;
 	struct irq_data *irqd;
 	irq_hw_number_t hwirq;
@@ -3580,9 +3589,13 @@ static int its_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 	if (err)
 		return err;
 
-	err = iommu_dma_prepare_msi(info->desc, its->get_msi_base(its_dev));
-	if (err)
-		return err;
+	/* Bypass iommu_dma_prepare_msi if msi_iova is preset */
+	if (iova == PHYS_ADDR_MAX) {
+		err = iommu_dma_prepare_msi(info->desc,
+					    its->get_msi_base(its_dev));
+		if (err)
+			return err;
+	}
 
 	for (i = 0; i < nr_irqs; i++) {
 		err = its_irq_gic_domain_alloc(domain, virq + i, hwirq + i);
