@@ -3583,7 +3583,7 @@ static void idpf_vport_intr_rel_irq(struct idpf_vport *vport)
 		irq_num = adapter->msix_entries[vidx].vector;
 
 		/* clear the affinity_mask in the IRQ descriptor */
-		irq_set_affinity_hint(irq_num, NULL);
+		irq_set_affinity_notifier(irq_num, NULL);
 		kfree(free_irq(irq_num, q_vector));
 	}
 }
@@ -3724,12 +3724,40 @@ void idpf_vport_intr_update_itr_ena_irq(struct idpf_q_vector *q_vector)
 }
 
 /**
+ * idpf_irq_affinity_notify - Callback for affinity changes
+ * @notify: context as to what irq was changed
+ * @mask: the new affinity mask
+ *
+ * Callback function registered via irq_set_affinity_notifier function
+ * so that river can receive changes to the irq affinity masks.
+ */
+static void
+idpf_irq_affinity_notify(struct irq_affinity_notify *notify,
+			 const cpumask_t *mask)
+{
+	struct idpf_q_vector *q_vector =
+		container_of(notify, struct idpf_q_vector, affinity_notify);
+
+	cpumask_copy(q_vector->affinity_mask, mask);
+}
+
+/**
+ * idpf_irq_affinity_release - Callback for affinity notifier release
+ * @ref: internal core kernel usage
+ *
+ * Callback function registered via irq_set_affinity_notifier function
+ * to inform the driver that it will no longer receive notifications.
+ */
+static void idpf_irq_affinity_release(struct kref __always_unused *ref) {}
+
+/**
  * idpf_vport_intr_req_irq - get MSI-X vectors from the OS for the vport
  * @vport: main vport structure
  */
 static int idpf_vport_intr_req_irq(struct idpf_vport *vport)
 {
 	struct idpf_adapter *adapter = vport->adapter;
+	struct irq_affinity_notify *affinity_notify;
 	const char *drv_name, *if_name, *vec_name;
 	int vector, err, irq_num, vidx;
 
@@ -3763,7 +3791,10 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport)
 			goto free_q_irqs;
 		}
 		/* assign the mask for this irq */
-		irq_set_affinity_hint(irq_num, q_vector->affinity_mask);
+		affinity_notify = &q_vector->affinity_notify;
+		affinity_notify->notify = idpf_irq_affinity_notify;
+		affinity_notify->release = idpf_irq_affinity_release;
+		irq_set_affinity_notifier(irq_num, affinity_notify);
 	}
 
 	return 0;

@@ -379,6 +379,7 @@ struct idpf_intr_reg {
  * @rx_itr_idx: RX ITR index
  * @v_idx: Vector index
  * @affinity_mask: CPU affinity mask
+ * @affinity_notify: struct with callbacks for notification of affinity changes
  */
 struct idpf_q_vector {
 	__cacheline_group_begin_aligned(read_mostly);
@@ -416,12 +417,15 @@ struct idpf_q_vector {
 	u16 v_idx;
 
 	cpumask_var_t affinity_mask;
+	struct irq_affinity_notify affinity_notify;
 	__cacheline_group_end_aligned(cold);
 };
+
 libeth_cacheline_set_assert(struct idpf_q_vector, 112,
 			    24 + sizeof(struct napi_struct) +
 			    2 * sizeof(struct dim),
-			    8 + sizeof(cpumask_var_t));
+			    8 + sizeof(cpumask_var_t) +
+			    sizeof(struct irq_affinity_notify));
 
 struct idpf_rx_queue_stats {
 	u64_stats_t packets;
