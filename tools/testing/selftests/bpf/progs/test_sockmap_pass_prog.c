@@ -41,7 +41,7 @@ int prog_skb_verdict_clone(struct __sk_buff *skb)
 SEC("sk_skb/stream_parser")
 int prog_skb_parser(struct __sk_buff *skb)
 {
-	return SK_PASS;
+	return skb->len;
 }
 
 char _license[] SEC("license") = "GPL";
