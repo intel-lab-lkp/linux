@@ -354,10 +354,30 @@ static void ksz9477_phylink_mac_link_up(struct phylink_config *config,
 					int speed, int duplex, bool tx_pause,
 					bool rx_pause);
 
+static struct phylink_pcs *
+ksz_phylink_mac_select_pcs(struct phylink_config *config,
+			   phy_interface_t interface)
+{
+	struct dsa_port *dp = dsa_phylink_to_port(config);
+	struct ksz_device *dev = dp->ds->priv;
+	struct ksz_port *p = &dev->ports[dp->index];
+
+	if (!p->sgmii)
+		return ERR_PTR(-EOPNOTSUPP);
+	switch (interface) {
+	case PHY_INTERFACE_MODE_SGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
+		return &p->pcs_priv->pcs;
+	default:
+		return NULL;
+	}
+}
+
 static const struct phylink_mac_ops ksz9477_phylink_mac_ops = {
 	.mac_config	= ksz_phylink_mac_config,
 	.mac_link_down	= ksz_phylink_mac_link_down,
 	.mac_link_up	= ksz9477_phylink_mac_link_up,
+	.mac_select_pcs	= ksz_phylink_mac_select_pcs,
 };
 
 static const struct ksz_dev_ops ksz9477_dev_ops = {
@@ -395,6 +415,8 @@ static const struct ksz_dev_ops ksz9477_dev_ops = {
 	.reset = ksz9477_reset_switch,
 	.init = ksz9477_switch_init,
 	.exit = ksz9477_switch_exit,
+	.pcs_get_state = ksz9477_pcs_get_state,
+	.pcs_link_up = ksz9477_pcs_link_up,
 };
 
 static const struct phylink_mac_ops lan937x_phylink_mac_ops = {
@@ -1033,8 +1055,7 @@ static const struct regmap_range ksz9477_valid_regs[] = {
 	regmap_reg_range(0x701b, 0x701b),
 	regmap_reg_range(0x701f, 0x7020),
 	regmap_reg_range(0x7030, 0x7030),
-	regmap_reg_range(0x7200, 0x7203),
-	regmap_reg_range(0x7206, 0x7207),
+	regmap_reg_range(0x7200, 0x7207),
 	regmap_reg_range(0x7300, 0x7301),
 	regmap_reg_range(0x7400, 0x7401),
 	regmap_reg_range(0x7403, 0x7403),
@@ -1554,6 +1575,7 @@ const struct ksz_chip_data ksz_switch_chips[] = {
 		.internal_phy	= {true, true, true, true,
 				   true, false, false},
 		.gbit_capable	= {true, true, true, true, true, true, true},
+		.sgmii_port = 7,
 		.wr_table = &ksz9477_register_set,
 		.rd_table = &ksz9477_register_set,
 	},
@@ -1972,6 +1994,45 @@ static void ksz_phylink_get_caps(struct dsa_switch *ds, int port,
 		dev->dev_ops->get_caps(dev, port, config);
 }
 
+static void ksz_pcs_get_state(struct phylink_pcs *pcs,
+			      struct phylink_link_state *state)
+{
+	struct ksz_pcs *priv = container_of(pcs, struct ksz_pcs, pcs);
+	struct ksz_device *dev = priv->dev;
+
+	if (dev->dev_ops->pcs_get_state)
+		dev->dev_ops->pcs_get_state(pcs, state);
+}
+
+static int ksz_pcs_config(struct phylink_pcs *pcs, unsigned int mode,
+			  phy_interface_t interface,
+			  const unsigned long *advertising,
+			  bool permit_pause_to_mac)
+{
+	return 0;
+}
+
+static void ksz_pcs_an_restart(struct phylink_pcs *pcs)
+{
+}
+
+static void ksz_pcs_link_up(struct phylink_pcs *pcs, unsigned int mode,
+			    phy_interface_t interface, int speed, int duplex)
+{
+	struct ksz_pcs *priv = container_of(pcs, struct ksz_pcs, pcs);
+	struct ksz_device *dev = priv->dev;
+
+	if (dev->dev_ops->pcs_link_up)
+		dev->dev_ops->pcs_link_up(pcs, mode, interface, speed, duplex);
+}
+
+static const struct phylink_pcs_ops ksz_pcs_ops = {
+	.pcs_get_state = ksz_pcs_get_state,
+	.pcs_config = ksz_pcs_config,
+	.pcs_an_restart = ksz_pcs_an_restart,
+	.pcs_link_up = ksz_pcs_link_up,
+};
+
 void ksz_r_mib_stats64(struct ksz_device *dev, int port)
 {
 	struct ethtool_pause_stats *pstats;
@@ -2021,7 +2082,7 @@ void ksz_r_mib_stats64(struct ksz_device *dev, int port)
 
 	spin_unlock(&mib->stats64_lock);
 
-	if (dev->info->phy_errata_9477) {
+	if (dev->info->phy_errata_9477 && dev->info->sgmii_port != port + 1) {
 		ret = ksz9477_errata_monitor(dev, port, raw->tx_late_col);
 		if (ret)
 			dev_err(dev->dev, "Failed to monitor transmission halt\n");
@@ -2529,6 +2590,12 @@ static int ksz_setup(struct dsa_switch *ds)
 		ret = dev->dev_ops->setup(ds);
 		if (ret)
 			return ret;
+	}
+
+	if (dev->info->sgmii_port > 0) {
+		p = &dev->ports[dev->info->sgmii_port - 1];
+		if (p->pcs_priv)
+			p->pcs_priv->pcs.ops = &ksz_pcs_ops;
 	}
 
 	/* Start with learning disabled on standalone user ports, and enabled
@@ -3353,6 +3420,17 @@ static void ksz_phylink_mac_config(struct phylink_config *config,
 
 	/* Internal PHYs */
 	if (dev->info->internal_phy[port])
+		return;
+
+	/* No need to configure XMII control register when using SGMII. */
+	if (state->interface == PHY_INTERFACE_MODE_SGMII ||
+	    state->interface == PHY_INTERFACE_MODE_1000BASEX) {
+		struct ksz_port *p = &dev->ports[port];
+
+		p->interface = state->interface;
+		return;
+	}
+	if (dev->info->sgmii_port == port + 1)
 		return;
 
 	if (phylink_autoneg_inband(mode)) {
@@ -4783,6 +4861,9 @@ int ksz_switch_register(struct ksz_device *dev)
 		dev->ports[i].num = i;
 	}
 
+	/* Default SGMII mode is detecting which type of SFP is used. */
+	dev->sgmii_mode = 1;
+
 	/* set the real number of ports */
 	dev->ds->num_ports = dev->info->port_cnt;
 
@@ -4812,6 +4893,13 @@ int ksz_switch_register(struct ksz_device *dev)
 				}
 				of_get_phy_mode(port,
 						&dev->ports[port_num].interface);
+
+				/* SGMII port can be used without using SFP. */
+				if (dev->info->sgmii_port == port_num + 1) {
+					if (of_phy_is_fixed_link(port) &&
+					    !dev->ports[port_num].interface)
+						dev->sgmii_mode = 0;
+				}
 
 				ksz_parse_rgmii_delay(dev, port_num, port);
 			}

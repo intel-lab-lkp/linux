@@ -86,6 +86,7 @@ struct ksz_chip_data {
 	bool supports_rgmii[KSZ_MAX_NUM_PORTS];
 	bool internal_phy[KSZ_MAX_NUM_PORTS];
 	bool gbit_capable[KSZ_MAX_NUM_PORTS];
+	u8 sgmii_port;
 	const struct regmap_access_table *wr_table;
 	const struct regmap_access_table *rd_table;
 };
@@ -114,6 +115,13 @@ struct ksz_switch_macaddr {
 	refcount_t refcount;
 };
 
+struct ksz_pcs {
+	struct phylink_pcs pcs;
+	struct ksz_device *dev;
+	int irq;
+	u8 port;
+};
+
 struct ksz_port {
 	bool remove_tag;		/* Remove Tag flag set, for ksz8795 only */
 	bool learning;
@@ -125,6 +133,10 @@ struct ksz_port {
 	u32 force:1;
 	u32 read:1;			/* read MIB counters in background */
 	u32 freeze:1;			/* MIB counter freeze is enabled */
+	u32 sgmii:1;			/* port is SGMII */
+	u32 sgmii_has_intr:1;
+	u32 sgmii_link:8;
+	u32 sgmii_setup:1;
 
 	struct ksz_port_mib mib;
 	phy_interface_t interface;
@@ -134,6 +146,7 @@ struct ksz_port {
 	void *acl_priv;
 	struct ksz_irq pirq;
 	u8 num;
+	struct ksz_pcs *pcs_priv;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_KSZ_PTP)
 	struct hwtstamp_config tstamp_config;
 	bool hwts_tx_en;
@@ -156,6 +169,7 @@ struct ksz_device {
 	struct mutex alu_mutex;		/* ALU access */
 	struct mutex vlan_mutex;	/* vlan access */
 	const struct ksz_dev_ops *dev_ops;
+	const struct phylink_pcs_ops *pcs_ops;
 
 	struct device *dev;
 	struct regmap *regmap[__KSZ_NUM_REGMAPS];
@@ -181,6 +195,8 @@ struct ksz_device {
 	struct ksz_port *ports;
 	struct delayed_work mib_read;
 	unsigned long mib_read_interval;
+	struct delayed_work sgmii_check;
+	u8 sgmii_mode;
 	u16 mirror_rx;
 	u16 mirror_tx;
 	u16 port_mask;
@@ -379,6 +395,11 @@ struct ksz_dev_ops {
 	int (*reset)(struct ksz_device *dev);
 	int (*init)(struct ksz_device *dev);
 	void (*exit)(struct ksz_device *dev);
+
+	void (*pcs_get_state)(struct phylink_pcs *pcs,
+			      struct phylink_link_state *state);
+	void (*pcs_link_up)(struct phylink_pcs *pcs, unsigned int mode,
+			    phy_interface_t interface, int speed, int duplex);
 };
 
 struct ksz_device *ksz_switch_alloc(struct device *base, void *priv);
