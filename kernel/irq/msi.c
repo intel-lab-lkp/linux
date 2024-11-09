@@ -81,6 +81,9 @@ static struct msi_desc *msi_alloc_desc(struct device *dev, int nvec,
 
 	desc->dev = dev;
 	desc->nvec_used = nvec;
+#ifdef CONFIG_IRQ_MSI_IOMMU
+	desc->msi_iova = PHYS_ADDR_MAX;
+#endif
 	if (affinity) {
 		desc->affinity = kmemdup_array(affinity, nvec, sizeof(*desc->affinity), GFP_KERNEL);
 		if (!desc->affinity) {
@@ -158,6 +161,9 @@ int msi_domain_insert_msi_desc(struct device *dev, unsigned int domid,
 
 	/* Copy type specific data to the new descriptor. */
 	desc->pci = init_desc->pci;
+#ifdef CONFIG_IRQ_MSI_IOMMU
+	desc->msi_iova = init_desc->msi_iova;
+#endif
 
 	return msi_insert_desc(dev, desc, domid, init_desc->msi_index);
 }

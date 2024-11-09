@@ -185,6 +185,7 @@ struct msi_desc {
 	struct irq_affinity_desc	*affinity;
 #ifdef CONFIG_IRQ_MSI_IOMMU
 	const void			*iommu_cookie;
+	dma_addr_t			msi_iova;
 #endif
 #ifdef CONFIG_SYSFS
 	struct device_attribute		*sysfs_attrs;
@@ -296,6 +297,11 @@ static inline void msi_desc_set_iommu_cookie(struct msi_desc *desc,
 {
 	desc->iommu_cookie = iommu_cookie;
 }
+
+static inline dma_addr_t msi_desc_get_iova(struct msi_desc *desc)
+{
+	return desc->msi_iova;
+}
 #else
 static inline const void *msi_desc_get_iommu_cookie(struct msi_desc *desc)
 {
@@ -305,6 +311,11 @@ static inline const void *msi_desc_get_iommu_cookie(struct msi_desc *desc)
 static inline void msi_desc_set_iommu_cookie(struct msi_desc *desc,
 					     const void *iommu_cookie)
 {
+}
+
+static inline dma_addr_t msi_desc_get_iova(struct msi_desc *desc)
+{
+	return PHYS_ADDR_MAX;
 }
 #endif
 
