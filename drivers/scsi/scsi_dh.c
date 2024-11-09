@@ -129,6 +129,9 @@ static int scsi_dh_handler_attach(struct scsi_device *sdev,
 	if (!try_module_get(scsi_dh->module))
 		return -EINVAL;
 
+	if (scsi_mpath_enabled(sdev))
+		scsi_multipath_init(sdev);
+
 	error = scsi_dh->attach(sdev);
 	if (error != SCSI_DH_OK) {
 		switch (error) {

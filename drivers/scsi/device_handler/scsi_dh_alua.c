@@ -258,6 +258,21 @@ static struct alua_port_group *alua_alloc_pg(struct scsi_device *sdev,
 		return tmp_pg;
 	}
 
+	if (scsi_mpath_enabled(sdev)) {
+		struct scsi_mpath_dh_data *dh_data = sdev->mpath_pg_data;
+
+		dh_data->group_id = pg->group_id;
+		dh_data->tpgs = pg->tpgs;
+		dh_data->state = pg->state;
+		dh_data->valid_states = pg->valid_states;
+		dh_data->prefrence = pg->pref;
+		dh_data->is_active = 1;
+		dh_data->device_id_str = kstrdup(pg->device_id_str, GFP_KERNEL);
+		dh_data->device_id_len = pg->device_id_len;
+
+		sdev->host->mpath_alua_grpid = pg->group_id;
+	}
+
 	list_add(&pg->node, &port_group_list);
 	spin_unlock(&port_group_lock);
 
