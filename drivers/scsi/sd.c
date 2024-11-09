@@ -1483,6 +1483,9 @@ static void sd_uninit_command(struct scsi_cmnd *SCpnt)
 
 static bool sd_need_revalidate(struct gendisk *disk, struct scsi_disk *sdkp)
 {
+	if (scsi_is_sdev_multipath(sdkp->device))
+		return true;
+
 	if (sdkp->device->removable || sdkp->write_prot) {
 		if (disk_check_media_change(disk))
 			return true;
@@ -1892,6 +1895,10 @@ static int sd_get_unique_id(struct gendisk *disk, u8 id[16],
 		if (len == 16)
 			break;
 	}
+
+	if (scsi_mpath_enabled(sdev))
+		ret = scsi_mpath_unique_id(sdev, id, type);
+
 out_unlock:
 	rcu_read_unlock();
 	return ret;
@@ -3817,6 +3824,33 @@ static int sd_revalidate_disk(struct gendisk *disk)
 	if (sdkp->media_present && scsi_device_supports_vpd(sdp))
 		sd_read_cpr(sdkp);
 
+	/* for multipath device, Adjust queue limits for MPATH disk */
+	if (scsi_is_sdev_multipath(sdp)) {
+		struct queue_limits *mpath_lim = &sdp->mpath_disk->queue->limits;
+
+		blk_mq_freeze_queue(sdp->mpath_disk->queue);
+		lim = queue_limits_start_update(sdp->mpath_disk->queue);
+		lim.logical_block_size = mpath_lim->logical_block_size;
+		lim.physical_block_size = mpath_lim->physical_block_size;
+		lim.io_min = mpath_lim->io_min;
+		lim.io_opt = mpath_lim->io_opt;
+		queue_limits_stack_bdev(&lim, sdp->mpath_disk->part0, 0,
+		    sdp->mpath_disk->disk_name);
+
+		sdp->mpath_disk->flags |= GENHD_FL_HIDDEN;
+
+		set_capacity_and_notify(sdp->mpath_disk,
+		    logical_to_sectors(sdp, sdkp->capacity));
+
+		err = queue_limits_commit_update(sdp->mpath_disk->queue, &lim);
+
+		scsi_mpath_revalidate_path(sdp->mpath_disk,
+		    logical_to_sectors(sdp, sdkp->capacity));
+
+		blk_mq_unfreeze_queue(sdp->mpath_disk->queue);
+		if (err)
+			return err;
+	}
 	/*
 	 * For a zoned drive, revalidating the zones can be done only once
 	 * the gendisk capacity is set. So if this fails, set back the gendisk
@@ -3943,6 +3977,9 @@ static int sd_probe(struct device *dev)
 	if (!sdkp)
 		goto out;
 
+	if (scsi_mpath_enabled(sdp) && sdp->is_shared)
+		scsi_mpath_alloc_disk(sdp);
+
 	gd = blk_mq_alloc_disk_for_queue(sdp->request_queue,
 					 &sd_bio_compl_lkclass);
 	if (!gd)
@@ -3959,6 +3996,10 @@ static int sd_probe(struct device *dev)
 		sdev_printk(KERN_WARNING, sdp, "SCSI disk (sd) name length exceeded.\n");
 		goto out_free_index;
 	}
+
+	if (scsi_is_sdev_multipath(sdp))
+		snprintf(sdp->mpath_disk->disk_name, DISK_NAME_LEN, "mpath%dsd%d",
+		    sdp->host->host_no, index);
 
 	sdkp->device = sdp;
 	sdkp->disk = gd;
@@ -4021,6 +4062,21 @@ static int sd_probe(struct device *dev)
 			sdp->host->rpm_autosuspend_delay);
 	}
 
+	if (scsi_is_sdev_multipath(sdp)) {
+		sdp->mpath_disk->major = sd_major((index & 0xf0) >> 4);
+		sdp->mpath_disk->first_minor = ((index & 0xf) << 4) | (index & 0xfff00);
+		sdp->mpath_disk->minors = SD_MINORS;
+
+		scsi_mpath_add_disk(sdp);
+
+		if (!test_bit(SCSI_MPATH_DISK_LIVE, &sdp->mpath_flags)) {
+			device_unregister(&sdkp->disk_dev);
+			clear_bit(SCSI_MPATH_DISK_LIVE, &sdp->mpath_flags);
+			put_disk(sdp->mpath_disk);
+			goto out;
+		}
+	}
+
 	error = device_add_disk(dev, gd, NULL);
 	if (error) {
 		device_unregister(&sdkp->disk_dev);
@@ -4074,12 +4130,20 @@ static int sd_remove(struct device *dev)
 		sd_shutdown(dev);
 
 	put_disk(sdkp->disk);
+
+	if (scsi_is_sdev_multipath(sdkp->device))
+		scsi_mpath_remove_disk(sdkp->device);
+
 	return 0;
 }
 
 static void scsi_disk_release(struct device *dev)
 {
 	struct scsi_disk *sdkp = to_scsi_disk(dev);
+	struct scsi_device *sdp = to_scsi_device(dev);
+
+	if (scsi_is_sdev_multipath(sdp))
+		scsi_mpath_dev_release(sdp);
 
 	ida_free(&sd_index_ida, sdkp->index);
 	put_device(&sdkp->device->sdev_gendev);
@@ -4170,6 +4234,25 @@ static void sd_shutdown(struct device *dev)
 
 	if (pm_runtime_suspended(dev))
 		return;
+
+	if (scsi_is_sdev_multipath(sdkp->device)) {
+		struct scsi_device *sdp = sdkp->device;
+		bool last_path = false;
+
+		if (scsi_mpath_clear_current_path(sdp))
+			synchronize_srcu(&sdp->host->mpath_dev->srcu);
+
+		mutex_lock(&sdp->host->mpath_dev->mpath_lock);
+		list_del_rcu(&sdp->siblings);
+		if (list_empty(&sdp->host->mpath_sdev)) {
+			list_del_init(&sdp->mpath_entry);
+			last_path = true;
+		}
+		mutex_unlock(&sdp->host->mpath_dev->mpath_lock);
+
+		if (last_path)
+			scsi_mpath_shutdown_disk(sdp);
+	}
 
 	if (sdkp->WCE && sdkp->media_present) {
 		sd_printk(KERN_NOTICE, sdkp, "Synchronizing SCSI cache\n");
