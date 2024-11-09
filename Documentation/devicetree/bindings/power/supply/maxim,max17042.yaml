@@ -83,7 +83,7 @@ examples:
         reg = <0x36>;
         maxim,rsns-microohm = <10000>;
         maxim,over-heat-temp = <600>;
-        maxim,over-volt = <4300>;
+        maxim,over-volt = <4300000>;
         shared-irq;
       };
     };

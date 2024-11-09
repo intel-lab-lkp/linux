@@ -182,8 +182,6 @@ static int max17042_get_battery_health(struct max17042_chip *chip, int *health)
 
 	/* bits [0-3] unused */
 	vavg = val * 625 / 8;
-	/* Convert to millivolts */
-	vavg /= 1000;
 
 	ret = regmap_read(chip->regmap, MAX17042_VCELL, &val);
 	if (ret < 0)
@@ -191,8 +189,6 @@ static int max17042_get_battery_health(struct max17042_chip *chip, int *health)
 
 	/* bits [0-3] unused */
 	vbatt = val * 625 / 8;
-	/* Convert to millivolts */
-	vbatt /= 1000;
 
 	if (vavg < chip->pdata->vmin) {
 		*health = POWER_SUPPLY_HEALTH_DEAD;

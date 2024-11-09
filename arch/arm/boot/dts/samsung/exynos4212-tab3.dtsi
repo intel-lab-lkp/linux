@@ -186,7 +186,7 @@
 			pinctrl-0 = <&max77693_fuel_irq>;
 
 			maxim,over-heat-temp = <500>;
-			maxim,over-volt = <4500>;
+			maxim,over-volt = <450000>;
 		};
 	};
 

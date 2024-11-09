@@ -150,7 +150,7 @@
 
 			reg = <0x36>;
 			maxim,over-heat-temp = <700>;
-			maxim,over-volt = <4500>;
+			maxim,over-volt = <4500000>;
 		};
 	};
 

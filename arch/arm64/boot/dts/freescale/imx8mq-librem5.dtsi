@@ -1141,7 +1141,7 @@
 		pinctrl-0 = <&pinctrl_gauge>;
 		power-supplies = <&bq25895>;
 		maxim,over-heat-temp = <700>;
-		maxim,over-volt = <4500>;
+		maxim,over-volt = <4500000>;
 		maxim,rsns-microohm = <5000>;
 	};
 

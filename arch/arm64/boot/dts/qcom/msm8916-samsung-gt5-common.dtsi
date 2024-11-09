@@ -105,7 +105,7 @@
 
 		maxim,rsns-microohm = <10000>;
 		maxim,over-heat-temp = <600>;
-		maxim,over-volt = <4400>;
+		maxim,over-volt = <4400000>;
 
 		interrupt-parent = <&tlmm>;
 		interrupts = <121 IRQ_TYPE_EDGE_FALLING>;
