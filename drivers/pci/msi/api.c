@@ -204,6 +204,72 @@ void pci_disable_msix(struct pci_dev *dev)
 }
 EXPORT_SYMBOL(pci_disable_msix);
 
+static int __pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
+				   unsigned int max_vecs, unsigned int flags,
+				   struct irq_affinity *affd,
+				   dma_addr_t *msi_iovas)
+{
+	struct irq_affinity msi_default_affd = {0};
+	int nvecs = -ENOSPC;
+
+	if (flags & PCI_IRQ_AFFINITY) {
+		if (!affd)
+			affd = &msi_default_affd;
+	} else {
+		if (WARN_ON(affd))
+			affd = NULL;
+	}
+
+	if (flags & PCI_IRQ_MSIX) {
+		struct msix_entry *entries = NULL;
+
+		if (msi_iovas) {
+			int count = max_vecs - min_vecs + 1;
+			int i;
+
+			entries = kcalloc(max_vecs - min_vecs + 1,
+					  sizeof(*entries), GFP_KERNEL);
+			if (!entries)
+				return -ENOMEM;
+			for (i = 0; i < count; i++) {
+				entries[i].entry = i;
+				entries[i].iova = msi_iovas[i];
+			}
+		}
+
+		nvecs = __pci_enable_msix_range(dev, entries, min_vecs,
+						max_vecs, affd, flags);
+		kfree(entries);
+		if (nvecs > 0)
+			return nvecs;
+	}
+
+	if (flags & PCI_IRQ_MSI) {
+		nvecs = __pci_enable_msi_range(dev, min_vecs, max_vecs, affd,
+					       msi_iovas ? *msi_iovas :
+							   PHYS_ADDR_MAX);
+		if (nvecs > 0)
+			return nvecs;
+	}
+
+	/* use INTx IRQ if allowed */
+	if (flags & PCI_IRQ_INTX) {
+		if (min_vecs == 1 && dev->irq) {
+			/*
+			 * Invoke the affinity spreading logic to ensure that
+			 * the device driver can adjust queue configuration
+			 * for the single interrupt case.
+			 */
+			if (affd)
+				irq_create_affinity_masks(1, affd);
+			pci_intx(dev, 1);
+			return 1;
+		}
+	}
+
+	return nvecs;
+}
+
 /**
  * pci_alloc_irq_vectors() - Allocate multiple device interrupt vectors
  * @dev:      the PCI device to operate on
@@ -235,8 +301,8 @@ EXPORT_SYMBOL(pci_disable_msix);
 int pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
 			  unsigned int max_vecs, unsigned int flags)
 {
-	return pci_alloc_irq_vectors_affinity(dev, min_vecs, max_vecs,
-					      flags, NULL);
+	return __pci_alloc_irq_vectors(dev, min_vecs, max_vecs,
+				       flags, NULL, NULL);
 }
 EXPORT_SYMBOL(pci_alloc_irq_vectors);
 
@@ -256,47 +322,8 @@ int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 				   unsigned int max_vecs, unsigned int flags,
 				   struct irq_affinity *affd)
 {
-	struct irq_affinity msi_default_affd = {0};
-	int nvecs = -ENOSPC;
-
-	if (flags & PCI_IRQ_AFFINITY) {
-		if (!affd)
-			affd = &msi_default_affd;
-	} else {
-		if (WARN_ON(affd))
-			affd = NULL;
-	}
-
-	if (flags & PCI_IRQ_MSIX) {
-		nvecs = __pci_enable_msix_range(dev, NULL, min_vecs, max_vecs,
-						affd, flags);
-		if (nvecs > 0)
-			return nvecs;
-	}
-
-	if (flags & PCI_IRQ_MSI) {
-		nvecs = __pci_enable_msi_range(dev, min_vecs, max_vecs,
-					       affd, PHYS_ADDR_MAX);
-		if (nvecs > 0)
-			return nvecs;
-	}
-
-	/* use INTx IRQ if allowed */
-	if (flags & PCI_IRQ_INTX) {
-		if (min_vecs == 1 && dev->irq) {
-			/*
-			 * Invoke the affinity spreading logic to ensure that
-			 * the device driver can adjust queue configuration
-			 * for the single interrupt case.
-			 */
-			if (affd)
-				irq_create_affinity_masks(1, affd);
-			pci_intx(dev, 1);
-			return 1;
-		}
-	}
-
-	return nvecs;
+	return __pci_alloc_irq_vectors(dev, min_vecs, max_vecs,
+				       flags, affd, NULL);
 }
 EXPORT_SYMBOL(pci_alloc_irq_vectors_affinity);
 
