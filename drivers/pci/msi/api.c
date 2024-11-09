@@ -328,6 +328,27 @@ int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 EXPORT_SYMBOL(pci_alloc_irq_vectors_affinity);
 
 /**
+ * pci_alloc_irq_vectors_iovas() - Allocate multiple device interrupt
+ *                                 vectors with preset msi_iovas
+ * @dev:       the PCI device to operate on
+ * @min_vecs:  minimum required number of vectors (must be >= 1)
+ * @max_vecs:  maximum desired number of vectors
+ * @flags:     allocation flags, as in pci_alloc_irq_vectors()
+ * @msi_iovas: list of IOVAs for MSI between [min_vecs, max_vecs]
+ *
+ * Same as pci_alloc_irq_vectors(), but with the extra @msi_iovas parameter.
+ * Check that function docs, and &struct irq_affinity, for more details.
+ */
+int pci_alloc_irq_vectors_iovas(struct pci_dev *dev, unsigned int min_vecs,
+				unsigned int max_vecs, unsigned int flags,
+				dma_addr_t *msi_iovas)
+{
+	return __pci_alloc_irq_vectors(dev, min_vecs, max_vecs,
+				       flags, NULL, msi_iovas);
+}
+EXPORT_SYMBOL(pci_alloc_irq_vectors_iovas);
+
+/**
  * pci_irq_vector() - Get Linux IRQ number of a device interrupt vector
  * @dev: the PCI device to operate on
  * @nr:  device-relative interrupt vector index (0-based); has different

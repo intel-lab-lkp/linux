@@ -1673,6 +1673,9 @@ int pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
 int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 				   unsigned int max_vecs, unsigned int flags,
 				   struct irq_affinity *affd);
+int pci_alloc_irq_vectors_iovas(struct pci_dev *dev, unsigned int min_vecs,
+				unsigned int max_vecs, unsigned int flags,
+				dma_addr_t *msi_iovas);
 
 bool pci_msix_can_alloc_dyn(struct pci_dev *dev);
 struct msi_map pci_msix_alloc_irq_at(struct pci_dev *dev, unsigned int index,
@@ -1707,6 +1710,13 @@ pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 	if ((flags & PCI_IRQ_INTX) && min_vecs == 1 && dev->irq)
 		return 1;
 	return -ENOSPC;
+}
+static inline int
+pci_alloc_irq_vectors_iovas(struct pci_dev *dev, unsigned int min_vecs,
+			    unsigned int max_vecs, unsigned int flags,
+			    dma_addr_t *msi_iovas)
+
+	return -ENOSPC; /* No support if !CONFIG_PCI_MSI */
 }
 static inline int
 pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
@@ -2069,6 +2079,13 @@ static inline int
 pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 			       unsigned int max_vecs, unsigned int flags,
 			       struct irq_affinity *aff_desc)
+{
+	return -ENOSPC;
+}
+static inline int
+pci_alloc_irq_vectors_iovas(struct pci_dev *dev, unsigned int min_vecs,
+			    unsigned int max_vecs, unsigned int flags,
+			    dma_addr_t *msi_iovas)
 {
 	return -ENOSPC;
 }
