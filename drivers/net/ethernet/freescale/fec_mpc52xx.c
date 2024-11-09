@@ -811,7 +811,7 @@ static int mpc52xx_fec_probe(struct platform_device *op)
 	int rv;
 	struct net_device *ndev;
 	struct mpc52xx_fec_priv *priv = NULL;
-	struct resource mem;
+	struct resource *mem;
 	const u32 *prop;
 	int prop_size;
 	struct device_node *np = op->dev.of_node;
@@ -828,20 +828,21 @@ static int mpc52xx_fec_probe(struct platform_device *op)
 	priv->ndev = ndev;
 
 	/* Reserve FEC control zone */
-	rv = of_address_to_resource(np, 0, &mem);
-	if (rv) {
+	mem = platform_get_resource(op, 0, IORESOURCE_MEM);
+	if (!mem) {
 		pr_err("Error while parsing device node resource\n");
+		rv = -ENODEV;
 		goto err_netdev;
 	}
-	if (resource_size(&mem) < sizeof(struct mpc52xx_fec)) {
+	if (resource_size(mem) < sizeof(struct mpc52xx_fec)) {
 		pr_err("invalid resource size (%lx < %x), check mpc52xx_devices.c\n",
-		       (unsigned long)resource_size(&mem),
+		       (unsigned long)resource_size(mem),
 		       sizeof(struct mpc52xx_fec));
 		rv = -EINVAL;
 		goto err_netdev;
 	}
 
-	if (!request_mem_region(mem.start, sizeof(struct mpc52xx_fec),
+	if (!request_mem_region(mem->start, sizeof(struct mpc52xx_fec),
 				DRIVER_NAME)) {
 		rv = -EBUSY;
 		goto err_netdev;
@@ -851,13 +852,13 @@ static int mpc52xx_fec_probe(struct platform_device *op)
 	ndev->netdev_ops	= &mpc52xx_fec_netdev_ops;
 	ndev->ethtool_ops	= &mpc52xx_fec_ethtool_ops;
 	ndev->watchdog_timeo	= FEC_WATCHDOG_TIMEOUT;
-	ndev->base_addr		= mem.start;
+	ndev->base_addr		= mem->start;
 	SET_NETDEV_DEV(ndev, &op->dev);
 
 	spin_lock_init(&priv->lock);
 
 	/* ioremap the zones */
-	priv->fec = ioremap(mem.start, sizeof(struct mpc52xx_fec));
+	priv->fec = ioremap(mem->start, sizeof(struct mpc52xx_fec));
 
 	if (!priv->fec) {
 		rv = -ENOMEM;
@@ -879,9 +880,9 @@ static int mpc52xx_fec_probe(struct platform_device *op)
 
 	/* Get the IRQ we need one by one */
 		/* Control */
-	ndev->irq = irq_of_parse_and_map(np, 0);
+	ndev->irq = platform_get_irq(op, 0);
 
-		/* RX */
+	/* RX */
 	priv->r_irq = bcom_get_task_irq(priv->rx_dmatsk);
 
 		/* TX */
@@ -967,7 +968,7 @@ err_rx_tx_dmatsk:
 		bcom_fec_tx_release(priv->tx_dmatsk);
 	iounmap(priv->fec);
 err_mem_region:
-	release_mem_region(mem.start, sizeof(struct mpc52xx_fec));
+	release_mem_region(mem->start, sizeof(struct mpc52xx_fec));
 err_netdev:
 	free_netdev(ndev);
 

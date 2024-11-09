@@ -68,7 +68,7 @@ static int mpc52xx_fec_mdio_probe(struct platform_device *of)
 	struct device_node *np = of->dev.of_node;
 	struct mii_bus *bus;
 	struct mpc52xx_fec_mdio_priv *priv;
-	struct resource res;
+	struct resource *res;
 	int err;
 
 	bus = mdiobus_alloc();
@@ -85,16 +85,18 @@ static int mpc52xx_fec_mdio_probe(struct platform_device *of)
 	bus->write = mpc52xx_fec_mdio_write;
 
 	/* setup registers */
-	err = of_address_to_resource(np, 0, &res);
-	if (err)
+	res = platform_get_resource(of, 0, IORESOURCE_MEM);
+	if (!res) {
+		err = -ENODEV;
 		goto out_free;
-	priv->regs = ioremap(res.start, resource_size(&res));
+	}
+	priv->regs = ioremap(res->start, resource_size(res));
 	if (priv->regs == NULL) {
 		err = -ENOMEM;
 		goto out_free;
 	}
 
-	snprintf(bus->id, MII_BUS_ID_SIZE, "%pa", &res.start);
+	snprintf(bus->id, MII_BUS_ID_SIZE, "%pa", &res->start);
 	bus->priv = priv;
 
 	bus->parent = dev;

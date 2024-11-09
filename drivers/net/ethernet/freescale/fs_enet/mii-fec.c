@@ -96,7 +96,7 @@ static int fs_enet_fec_mii_write(struct mii_bus *bus, int phy_id, int location, 
 
 static int fs_enet_mdio_probe(struct platform_device *ofdev)
 {
-	struct resource res;
+	struct resource *res;
 	struct mii_bus *new_bus;
 	struct fec_info *fec;
 	int (*get_bus_freq)(struct device *);
@@ -117,13 +117,15 @@ static int fs_enet_mdio_probe(struct platform_device *ofdev)
 	new_bus->read = &fs_enet_fec_mii_read;
 	new_bus->write = &fs_enet_fec_mii_write;
 
-	ret = of_address_to_resource(ofdev->dev.of_node, 0, &res);
-	if (ret)
+	res = platform_get_resource(ofdev, 0, IORESOURCE_MEM);
+	if (!res) {
+		ret = -ENODEV;
 		goto out_res;
+	}
 
-	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pap", &res.start);
+	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pap", &res->start);
 
-	fec->fecp = ioremap(res.start, resource_size(&res));
+	fec->fecp = ioremap(res->start, resource_size(res));
 	if (!fec->fecp) {
 		ret = -ENOMEM;
 		goto out_fec;
