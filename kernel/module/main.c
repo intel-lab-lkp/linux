@@ -2858,7 +2858,9 @@ static noinline int do_init_module(struct module *mod)
 #endif
 	ret = module_enable_rodata_ro_after_init(mod);
 	if (ret)
-		goto fail_mutex_unlock;
+		pr_warn("%s: %s() returned %d, ro_after_init data might still be writable\n",
+			mod->name, __func__, ret);
+
 	mod_tree_remove_init(mod);
 	module_arch_freeing_init(mod);
 	for_class_mod_mem_type(type, init) {
@@ -2897,8 +2899,6 @@ static noinline int do_init_module(struct module *mod)
 
 	return 0;
 
-fail_mutex_unlock:
-	mutex_unlock(&module_mutex);
 fail_free_freeinit:
 	kfree(freeinit);
 fail:
