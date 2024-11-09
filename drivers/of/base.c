@@ -221,6 +221,20 @@ static void of_alias_create(const struct property *pp,
 	of_alias_add(ap, np, id, start, len);
 }
 
+static void of_alias_destroy(const char *name, void (*dt_free)(void *))
+{
+	struct alias_prop *ap;
+
+	list_for_each_entry(ap, &aliases_lookup, link) {
+		if (strcmp(ap->alias, name))
+			continue;
+
+		list_del(&ap->link);
+		dt_free(ap);
+		return;
+	}
+}
+
 void __init of_core_init(void)
 {
 	struct device_node *np;
