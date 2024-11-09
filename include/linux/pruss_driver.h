@@ -167,7 +167,7 @@ static inline int pruss_cfg_miirt_enable(struct pruss *pruss, bool enable)
 
 static inline int pruss_cfg_xfr_enable(struct pruss *pruss,
 				       enum pru_type pru_type,
-				       bool enable);
+				       bool enable)
 {
 	return ERR_PTR(-EOPNOTSUPP);
 }
