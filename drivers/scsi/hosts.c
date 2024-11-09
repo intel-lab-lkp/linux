@@ -39,6 +39,7 @@
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_transport.h>
 #include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_multipath.h>
 
 #include "scsi_priv.h"
 #include "scsi_logging.h"
@@ -394,6 +395,14 @@ struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int priv
 	struct Scsi_Host *shost;
 	int index;
 
+#ifdef CONFIG_SCSI_MULTIPATH
+	struct scsi_mpath *mpath_dev;
+	size_t	size = sizeof(*mpath_dev);
+
+	size += num_possible_nodes() * sizeof(struct mpath_dev *);
+	privsize = privsize + size;
+#endif
+
 	shost = kzalloc(sizeof(struct Scsi_Host) + privsize, GFP_KERNEL);
 	if (!shost)
 		return NULL;
@@ -409,6 +418,9 @@ struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int priv
 	init_waitqueue_head(&shost->host_wait);
 	mutex_init(&shost->scan_mutex);
 
+#ifdef CONFIG_SCSI_MULTIPATH
+	INIT_LIST_HEAD(&shost->mpath_sdev);
+#endif
 	index = ida_alloc(&host_index_ida, GFP_KERNEL);
 	if (index < 0) {
 		kfree(shost);
