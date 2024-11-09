@@ -3320,9 +3320,11 @@ static s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu,
 		if (static_branch_maybe(CONFIG_SCHED_MC, &scx_selcpu_topo_llc)) {
 			struct sched_domain *sd;
 
+			rcu_read_lock();
 			sd = rcu_dereference(per_cpu(sd_llc, prev_cpu));
 			if (sd)
 				llc_cpus = sched_domain_span(sd);
+			rcu_read_unlock();
 		}
 	}
 
