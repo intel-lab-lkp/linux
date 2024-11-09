@@ -9,6 +9,8 @@
 #include <scsi/scsi.h>
 #include <linux/atomic.h>
 #include <linux/sbitmap.h>
+#include <scsi/scsi_multipath.h>
+#include <scsi/scsi_host.h>
 
 struct bsg_device;
 struct device;
@@ -100,6 +102,11 @@ struct scsi_vpd {
 	unsigned char	data[];
 };
 
+/*
+ * Mark bio as coming from scsi multipath node
+ */
+#define REQ_SCSI_MPATH		REQ_DRV
+
 struct scsi_device {
 	struct Scsi_Host *host;
 	struct request_queue *request_queue;
@@ -120,6 +127,7 @@ struct scsi_device {
 	unsigned short last_queue_full_count; /* scsi_track_queue_full() */
 	unsigned long last_queue_full_time;	/* last queue full time */
 	unsigned long queue_ramp_up_period;	/* ramp up period in jiffies */
+
 #define SCSI_DEFAULT_RAMP_UP_PERIOD	(120 * HZ)
 
 	unsigned long last_queue_ramp_up;	/* last queue ramp up time */
@@ -265,6 +273,25 @@ struct scsi_device {
 	struct device		sdev_gendev,
 				sdev_dev;
 
+#ifdef	CONFIG_SCSI_MULTIPATH
+	int				is_shared; 	/* Set Multipath flag  */
+	int				mpath_first_path; /* Indicate if this was first path */
+	struct gendisk          	*mpath_disk;	/* Multipath disk */
+	int				mpath_numa_node; /* NUMA node for Path  */
+	enum scsi_mpath_access_state	mpath_state;	/* Multipath State */
+	enum scsi_mpath_iopolicy	mpath_iopolicy;	/* IO Policy */
+	struct list_head		mpath_entry;	/* list of all mpath_sdevs */
+	struct scsi_mpath_dh_data	*mpath_pg_data; /* Place holder for Port group data */
+	struct work_struct		activate_mpath; /* Activate path work */
+	atomic_t			nr_mpath;	/* Number of Active mpath */
+
+#define SCSI_MPATH_DISK_LIVE            0
+#define SCSI_MPATH_DISK_IO_PENDING      1
+#define SCSI_MPATH_IO_STATS             2
+
+	unsigned long           mpath_flags;		/* flag for multipath devices*/
+#endif
+
 	struct work_struct	requeue_work;
 
 	struct scsi_device_handler *handler;
@@ -294,6 +321,43 @@ struct scsi_device {
 #define sdev_dbg(sdev, fmt, a...) \
 	dev_dbg(&(sdev)->sdev_gendev, fmt, ##a)
 
+#ifdef CONFIG_SCSI_MULTIPATH
+extern bool scsi_multipath;
+extern const struct block_device_operations scsi_mpath_ops;
+
+static inline bool scsi_sdev_use_alua(struct scsi_device *sdev)
+{
+	return sdev->handler_data != NULL;
+}
+
+static inline bool scsi_disk_is_multipath(struct gendisk *disk)
+{
+	return disk->fops == &scsi_mpath_ops;
+}
+
+static inline bool scsi_mpath_enabled(struct scsi_device *sdev)
+{
+	return IS_ENABLED(CONFIG_SCSI_MULTIPATH);
+}
+static inline bool scsi_is_sdev_multipath(struct scsi_device *sdev)
+{
+	return IS_ENABLED(CONFIG_SCSI_MULTIPATH) && sdev->mpath_disk;
+}
+#else
+#define scsi_multipath	false;
+static inline bool scsi_disk_is_multipath(struct gendisk *disk)
+{
+	return false;
+}
+static inline bool scsi_mpath_enabled(struct scsi_device *sdev)
+{
+	return false;
+}
+static inline bool scsi_is_sdev_multipath(struct scsi_device *sdev)
+{
+	return false;
+}
+#endif
 /*
  * like scmd_printk, but the device name is passed in
  * as a string pointer

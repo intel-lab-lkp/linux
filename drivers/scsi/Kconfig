@@ -76,6 +76,18 @@ config SCSI_LIB_KUNIT_TEST
 
 	  If unsure say N.
 
+config SCSI_MULTIPATH
+	bool "SCSI multipath support"
+	depends on SCSI
+	depends on SCSI_DH  && SCSI_DH_ALUA
+	help
+	  This option enables support for native SCSI multipath support for
+	  SCSI host. This option depends on Asymmetric Logical Unit Access
+	  support to be enabled on the device. If this option is enabled a
+	  single /dev/mpathXsdY device will show up for each SCSI host.
+
+	  If unsure say N.
+
 comment "SCSI support type (disk, tape, CD-ROM)"
 	depends on SCSI
 
