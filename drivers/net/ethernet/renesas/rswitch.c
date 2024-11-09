@@ -2046,14 +2046,7 @@ static int renesas_eth_sw_probe(struct platform_device *pdev)
 {
 	const struct soc_device_attribute *attr;
 	struct rswitch_private *priv;
-	struct resource *res;
 	int ret;
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "secure_base");
-	if (!res) {
-		dev_err(&pdev->dev, "invalid resource\n");
-		return -EINVAL;
-	}
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -2074,7 +2067,7 @@ static int renesas_eth_sw_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, priv);
 	priv->pdev = pdev;
-	priv->addr = devm_ioremap_resource(&pdev->dev, res);
+	priv->addr = devm_platform_ioremap_resource_byname(pdev, "secure_base");
 	if (IS_ERR(priv->addr))
 		return PTR_ERR(priv->addr);
 

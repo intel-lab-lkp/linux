@@ -111,15 +111,11 @@ ipq8064_mdio_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct ipq8064_mdio *priv;
-	struct resource res;
 	struct mii_bus *bus;
 	void __iomem *base;
 	int ret;
 
-	if (of_address_to_resource(np, 0, &res))
-		return -ENOMEM;
-
-	base = devm_ioremap(&pdev->dev, res.start, resource_size(&res));
+	base = devm_platform_ioremap_resource(pdev, 0);
 	if (!base)
 		return -ENOMEM;
 

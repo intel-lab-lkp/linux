@@ -239,7 +239,6 @@ static int unimac_mdio_probe(struct platform_device *pdev)
 	struct unimac_mdio_priv *priv;
 	struct device_node *np;
 	struct mii_bus *bus;
-	struct resource *r;
 	int ret;
 
 	np = pdev->dev.of_node;
@@ -248,17 +247,13 @@ static int unimac_mdio_probe(struct platform_device *pdev)
 	if (!priv)
 		return -ENOMEM;
 
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!r)
-		return -EINVAL;
-
 	/* Just ioremap, as this MDIO block is usually integrated into an
 	 * Ethernet MAC controller register range
 	 */
-	priv->base = devm_ioremap(&pdev->dev, r->start, resource_size(r));
-	if (!priv->base) {
+	priv->base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(priv->base)) {
 		dev_err(&pdev->dev, "failed to remap register\n");
-		return -ENOMEM;
+		return PTR_ERR(priv->base);
 	}
 
 	if (of_property_read_u32(np, "clock-frequency", &priv->clk_freq))

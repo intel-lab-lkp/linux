@@ -90,7 +90,6 @@ static int bcm6368_mdiomux_probe(struct platform_device *pdev)
 {
 	struct bcm6368_mdiomux_desc *md;
 	struct mii_bus *bus;
-	struct resource *res;
 	int rc;
 
 	md = devm_kzalloc(&pdev->dev, sizeof(*md), GFP_KERNEL);
@@ -98,18 +97,14 @@ static int bcm6368_mdiomux_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	md->dev = &pdev->dev;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -EINVAL;
-
 	/*
 	 * Just ioremap, as this MDIO block is usually integrated into an
 	 * Ethernet MAC controller register range
 	 */
-	md->base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
-	if (!md->base) {
+	md->base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(md->base)) {
 		dev_err(&pdev->dev, "failed to ioremap register\n");
-		return -ENOMEM;
+		return PTR_ERR(md->base);
 	}
 
 	md->mii_bus = devm_mdiobus_alloc(&pdev->dev);

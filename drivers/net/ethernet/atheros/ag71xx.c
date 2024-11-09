@@ -1798,15 +1798,16 @@ static int ag71xx_probe(struct platform_device *pdev)
 	if (!ndev)
 		return -ENOMEM;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return -EINVAL;
-
 	dcfg = of_device_get_match_data(&pdev->dev);
 	if (!dcfg)
 		return -EINVAL;
 
 	ag = netdev_priv(ndev);
+
+	ag->mac_base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
+	if (IS_ERR(ag->mac_base))
+		return PTR_ERR(ag->mac_base);
+
 	ag->mac_idx = -1;
 	for (i = 0; i < ARRAY_SIZE(ar71xx_addr_ar7100); i++) {
 		if (ar71xx_addr_ar7100[i] == res->start)
@@ -1835,10 +1836,6 @@ static int ag71xx_probe(struct platform_device *pdev)
 	if (IS_ERR(ag->mac_reset))
 		return dev_err_probe(&pdev->dev, PTR_ERR(ag->mac_reset),
 				     "missing mac reset");
-
-	ag->mac_base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(ag->mac_base))
-		return PTR_ERR(ag->mac_base);
 
 	/* ensure that HW is in manual polling mode before interrupts are
 	 * activated. Otherwise ag71xx_interrupt might call napi_schedule

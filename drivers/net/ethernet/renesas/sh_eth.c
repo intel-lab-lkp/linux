@@ -3349,31 +3349,12 @@ static int sh_eth_drv_probe(struct platform_device *pdev)
 
 	if (mdp->cd->tsu) {
 		int port = pdev->id < 0 ? 0 : pdev->id % 2;
-		struct resource *rtsu;
 
-		rtsu = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-		if (!rtsu) {
-			dev_err(&pdev->dev, "no TSU resource\n");
-			ret = -ENODEV;
-			goto out_release;
-		}
-		/* We can only request the  TSU region  for the first port
-		 * of the two  sharing this TSU for the probe to succeed...
-		 */
-		if (port == 0 &&
-		    !devm_request_mem_region(&pdev->dev, rtsu->start,
-					     resource_size(rtsu),
-					     dev_name(&pdev->dev))) {
-			dev_err(&pdev->dev, "can't request TSU resource.\n");
-			ret = -EBUSY;
-			goto out_release;
-		}
 		/* ioremap the TSU registers */
-		mdp->tsu_addr = devm_ioremap(&pdev->dev, rtsu->start,
-					     resource_size(rtsu));
-		if (!mdp->tsu_addr) {
+		mdp->tsu_addr = devm_platform_ioremap_resource(pdev, 1);
+		if (IS_ERR(mdp->tsu_addr)) {
 			dev_err(&pdev->dev, "TSU region ioremap() failed.\n");
-			ret = -ENOMEM;
+			ret = PTR_ERR(mdp->tsu_addr);
 			goto out_release;
 		}
 		mdp->port = port;

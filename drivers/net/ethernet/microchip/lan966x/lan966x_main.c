@@ -77,20 +77,12 @@ static int lan966x_create_targets(struct platform_device *pdev,
 	 * this.
 	 */
 	for (idx = 0; idx < IO_RANGES; idx++) {
-		iores[idx] = platform_get_resource(pdev, IORESOURCE_MEM,
-						   idx);
-		if (!iores[idx]) {
-			dev_err(&pdev->dev, "Invalid resource\n");
-			return -EINVAL;
-		}
-
-		begin[idx] = devm_ioremap(&pdev->dev,
-					  iores[idx]->start,
-					  resource_size(iores[idx]));
-		if (!begin[idx]) {
+		begin[idx] = devm_platform_get_and_ioremap_resource(
+			pdev, idx, &iores[idx]);
+		if (IS_ERR(begin[idx])) {
 			dev_err(&pdev->dev, "Unable to get registers: %s\n",
 				iores[idx]->name);
-			return -ENOMEM;
+			return PTR_ERR(begin[idx]);
 		}
 	}
 

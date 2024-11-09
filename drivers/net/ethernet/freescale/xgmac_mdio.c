@@ -381,11 +381,6 @@ static int xgmac_mdio_probe(struct platform_device *pdev)
 	 * subdevice areas. Therefore, MDIO cannot claim exclusive access to
 	 * this register area.
 	 */
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(&pdev->dev, "could not obtain address\n");
-		return -EINVAL;
-	}
 
 	bus = devm_mdiobus_alloc_size(&pdev->dev, sizeof(struct mdio_fsl_priv));
 	if (!bus)
@@ -400,10 +395,9 @@ static int xgmac_mdio_probe(struct platform_device *pdev)
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%pa", &res->start);
 
 	priv = bus->priv;
-	priv->mdio_base = devm_ioremap(&pdev->dev, res->start,
-				       resource_size(res));
-	if (!priv->mdio_base)
-		return -ENOMEM;
+	priv->mdio_base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(priv->mdio_base))
+		return PTR_ERR(priv->mdio_base);
 
 	/* For both ACPI and DT cases, endianness of MDIO controller
 	 * needs to be specified using "little-endian" property.
