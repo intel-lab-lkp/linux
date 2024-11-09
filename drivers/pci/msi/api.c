@@ -29,7 +29,8 @@
  */
 int pci_enable_msi(struct pci_dev *dev)
 {
-	int rc = __pci_enable_msi_range(dev, 1, 1, NULL);
+	int rc = __pci_enable_msi_range(dev, 1, 1, NULL,
+					PHYS_ADDR_MAX);
 	if (rc < 0)
 		return rc;
 	return 0;
@@ -274,7 +275,8 @@ int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
 	}
 
 	if (flags & PCI_IRQ_MSI) {
-		nvecs = __pci_enable_msi_range(dev, min_vecs, max_vecs, affd);
+		nvecs = __pci_enable_msi_range(dev, min_vecs, max_vecs,
+					       affd, PHYS_ADDR_MAX);
 		if (nvecs > 0)
 			return nvecs;
 	}

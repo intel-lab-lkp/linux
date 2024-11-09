@@ -417,7 +417,7 @@ unlock:
 }
 
 int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
-			   struct irq_affinity *affd)
+			   struct irq_affinity *affd, dma_addr_t iova)
 {
 	int nvec;
 	int rc;
@@ -460,7 +460,7 @@ int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 				return -ENOSPC;
 		}
 
-		rc = msi_capability_init(dev, nvec, affd, PHYS_ADDR_MAX);
+		rc = msi_capability_init(dev, nvec, affd, iova);
 		if (rc == 0)
 			return nvec;
 
