@@ -103,6 +103,7 @@ enum scsi_disposition {
 	TIMEOUT_ERROR		= 0x2007,
 	SCSI_RETURN_NOT_HANDLED	= 0x2008,
 	FAST_IO_FAIL		= 0x2009,
+	FAILOVER		= 0x2010,
 };
 
 /*
