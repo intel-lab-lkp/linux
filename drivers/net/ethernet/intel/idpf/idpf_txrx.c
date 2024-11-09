@@ -3584,6 +3584,7 @@ static void idpf_vport_intr_rel_irq(struct idpf_vport *vport)
 
 		/* clear the affinity_mask in the IRQ descriptor */
 		irq_set_affinity_notifier(irq_num, NULL);
+		synchronize_irq(irq_num);
 		kfree(free_irq(irq_num, q_vector));
 	}
 }
