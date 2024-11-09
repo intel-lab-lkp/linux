@@ -1142,7 +1142,7 @@
 		power-supplies = <&bq25895>;
 		maxim,over-heat-temp = <700>;
 		maxim,over-volt = <4500000>;
-		maxim,rsns-microohm = <5000>;
+		shunt-resistor-micro-ohms = <5000>;
 	};
 
 	bq25895: charger@6a {

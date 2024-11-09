@@ -29,8 +29,7 @@ properties:
     description: |
       The ALRT pin, an open-drain interrupt.
 
-  maxim,rsns-microohm:
-    $ref: /schemas/types.yaml#/definitions/uint32
+  shunt-resistor-micro-ohms:
     description: |
       Resistance of rsns resistor in micro Ohms (datasheet-recommended value is 10000).
       Defining this property enables current-sense functionality.
@@ -81,7 +80,7 @@ examples:
       battery@36 {
         compatible = "maxim,max17042";
         reg = <0x36>;
-        maxim,rsns-microohm = <10000>;
+        shunt-resistor-micro-ohms = <10000>;
         maxim,over-heat-temp = <600>;
         maxim,over-volt = <4300000>;
         shared-irq;

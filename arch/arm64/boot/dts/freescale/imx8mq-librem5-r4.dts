@@ -11,7 +11,7 @@
 };
 
 &bat {
-	maxim,rsns-microohm = <1667>;
+	shunt-resistor-micro-ohms = <1667>;
 };
 
 &led_backlight {

@@ -103,7 +103,7 @@
 		compatible = "maxim,max77849-battery";
 		reg = <0x36>;
 
-		maxim,rsns-microohm = <10000>;
+		shunt-resistor-micro-ohms = <10000>;
 		maxim,over-heat-temp = <600>;
 		maxim,over-volt = <4400000>;
 

@@ -173,7 +173,7 @@
 			pinctrl-names = "default";
 			interrupt-parent = <&gpx2>;
 			interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
-			maxim,rsns-microohm = <10000>;
+			shunt-resistor-micro-ohms = <10000>;
 			maxim,over-heat-temp = <600>;
 			maxim,over-volt = <4300000>;
 		};
