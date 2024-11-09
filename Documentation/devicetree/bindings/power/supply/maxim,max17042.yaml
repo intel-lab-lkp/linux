@@ -59,6 +59,11 @@ properties:
       Voltage threshold to report battery as over voltage (in mV).
       Default is not to report over-voltage events.
 
+  shared-irq:
+    description: |
+      Request interrupt as shared.
+      Set in case of other devices using same interrupt pin.
+
   power-supplies: true
 
 required:
@@ -79,5 +84,6 @@ examples:
         maxim,rsns-microohm = <10000>;
         maxim,over-heat-temp = <600>;
         maxim,over-volt = <4300>;
+        shared-irq;
       };
     };
