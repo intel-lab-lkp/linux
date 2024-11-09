@@ -180,6 +180,47 @@ void __of_phandle_cache_inv_entry(phandle handle)
 		phandle_cache[handle_hash] = NULL;
 }
 
+static void of_alias_add(struct alias_prop *ap, struct device_node *np,
+			 int id, const char *stem, int stem_len)
+{
+	ap->np = np;
+	ap->id = id;
+	strscpy(ap->stem, stem, stem_len + 1);
+	list_add_tail(&ap->link, &aliases_lookup);
+	pr_debug("adding DT alias:%s: stem=%s id=%i node=%pOF\n",
+		 ap->alias, ap->stem, ap->id, np);
+}
+
+static void of_alias_create(const struct property *pp,
+			    void *(*dt_alloc)(u64 size, u64 align))
+{
+	const char *start = pp->name;
+	const char *end = start + strlen(start);
+	struct device_node *np;
+	struct alias_prop *ap;
+	int id, len;
+
+	np = of_find_node_by_path(pp->value);
+	if (!np)
+		return;
+
+	/* walk the alias backwards to extract the id and work out the 'stem' string */
+	while (isdigit(*(end - 1)) && end > start)
+		end--;
+	len = end - start;
+
+	if (kstrtoint(end, 10, &id) < 0)
+		return;
+
+	/* Allocate an alias_prop with enough space for the stem */
+	ap = dt_alloc(sizeof(*ap) + len + 1, 4);
+	if (!ap)
+		return;
+	memset(ap, 0, sizeof(*ap) + len + 1);
+	ap->alias = start;
+	of_alias_add(ap, np, id, start, len);
+}
+
 void __init of_core_init(void)
 {
 	struct device_node *np;
@@ -1763,17 +1804,6 @@ int of_update_property(struct device_node *np, struct property *newprop)
 	return rc;
 }
 
-static void of_alias_add(struct alias_prop *ap, struct device_node *np,
-			 int id, const char *stem, int stem_len)
-{
-	ap->np = np;
-	ap->id = id;
-	strscpy(ap->stem, stem, stem_len + 1);
-	list_add_tail(&ap->link, &aliases_lookup);
-	pr_debug("adding DT alias:%s: stem=%s id=%i node=%pOF\n",
-		 ap->alias, ap->stem, ap->id, np);
-}
-
 /**
  * of_alias_scan - Scan all properties of the 'aliases' node
  * @dt_alloc:	An allocator that provides a virtual address to memory
@@ -1811,38 +1841,13 @@ void of_alias_scan(void * (*dt_alloc)(u64 size, u64 align))
 		return;
 
 	for_each_property_of_node(of_aliases, pp) {
-		const char *start = pp->name;
-		const char *end = start + strlen(start);
-		struct device_node *np;
-		struct alias_prop *ap;
-		int id, len;
-
 		/* Skip those we do not want to proceed */
 		if (!strcmp(pp->name, "name") ||
 		    !strcmp(pp->name, "phandle") ||
 		    !strcmp(pp->name, "linux,phandle"))
 			continue;
 
-		np = of_find_node_by_path(pp->value);
-		if (!np)
-			continue;
-
-		/* walk the alias backwards to extract the id and work out
-		 * the 'stem' string */
-		while (isdigit(*(end-1)) && end > start)
-			end--;
-		len = end - start;
-
-		if (kstrtoint(end, 10, &id) < 0)
-			continue;
-
-		/* Allocate an alias_prop with enough space for the stem */
-		ap = dt_alloc(sizeof(*ap) + len + 1, __alignof__(*ap));
-		if (!ap)
-			continue;
-		memset(ap, 0, sizeof(*ap) + len + 1);
-		ap->alias = start;
-		of_alias_add(ap, np, id, start, len);
+		of_alias_create(pp, dt_alloc);
 	}
 }
 
