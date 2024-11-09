@@ -755,6 +755,13 @@ cpu_attach_domain(struct sched_domain *sd, struct root_domain *rd, int cpu)
 			 */
 			if (parent->flags & SD_PREFER_SIBLING)
 				tmp->flags |= SD_PREFER_SIBLING;
+			/*
+			 * Transfer SD_NUMA to the child in case of a
+			 * degenerate NUMA parent.
+			 */
+			if (parent->flags & SD_NUMA)
+				tmp->flags |= SD_NUMA;
+
 			destroy_sched_domain(parent);
 		} else
 			tmp = tmp->parent;
@@ -1974,6 +1981,7 @@ void sched_init_numa(int offline_node)
 	 */
 	tl[i++] = (struct sched_domain_topology_level){
 		.mask = sd_numa_mask,
+		.sd_flags = cpu_numa_flags,
 		.numa_level = 0,
 		SD_INIT_NAME(NODE)
 	};
