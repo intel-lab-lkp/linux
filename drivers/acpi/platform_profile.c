@@ -380,6 +380,8 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 		goto cleanup_ida;
 	}
 
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
+
 	cur_profile = pprof;
 
 	err = sysfs_update_group(acpi_kobj, &platform_profile_group);
@@ -407,6 +409,8 @@ int platform_profile_remove(struct platform_profile_handler *pprof)
 	id = pprof->minor;
 	device_unregister(pprof->class_dev);
 	ida_free(&platform_profile_ida, id);
+
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
 
 	cur_profile = NULL;
 
