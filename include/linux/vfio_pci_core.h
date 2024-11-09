@@ -63,6 +63,7 @@ struct vfio_pci_core_device {
 	int			irq_type;
 	int			num_regions;
 	struct vfio_pci_region	*region;
+	dma_addr_t		*msi_iovas;
 	u8			msi_qmax;
 	u8			msix_bar;
 	u16			msix_size;

@@ -383,7 +383,7 @@ static int vfio_msi_enable(struct vfio_pci_core_device *vdev, int nvec, bool msi
 
 	/* return the number of supported vectors if we can't get all: */
 	cmd = vfio_pci_memory_lock_and_enable(vdev);
-	ret = pci_alloc_irq_vectors(pdev, 1, nvec, flag);
+	ret = pci_alloc_irq_vectors_iovas(pdev, 1, nvec, flag, vdev->msi_iovas);
 	if (ret < nvec) {
 		if (ret > 0)
 			pci_free_irq_vectors(pdev);
@@ -685,6 +685,9 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 
 	if (irq_is(vdev, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
 		vfio_msi_disable(vdev, msix);
+		/* FIXME we need a better cleanup routine */
+		kfree(vdev->msi_iovas);
+		vdev->msi_iovas = NULL;
 		return 0;
 	}
 
@@ -725,6 +728,39 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 				eventfd_signal(ctx->trigger);
 		}
 	}
+	return 0;
+}
+
+static int vfio_pci_set_msi_prepare(struct vfio_pci_core_device *vdev,
+				    unsigned index, unsigned start,
+				    unsigned count, uint32_t flags, void *data)
+{
+	uint64_t *iovas = data;
+	unsigned int i;
+
+	if (!(irq_is(vdev, index) || is_irq_none(vdev)))
+		return -EINVAL;
+
+	if (flags & VFIO_IRQ_SET_DATA_NONE) {
+		if (!count)
+			return -EINVAL;
+		/* FIXME support partial unset */
+		kfree(vdev->msi_iovas);
+		vdev->msi_iovas = NULL;
+		return 0;
+	}
+
+	if (!(flags & VFIO_IRQ_SET_DATA_MSI_IOVA))
+		return -EOPNOTSUPP;
+	if (!IS_ENABLED(CONFIG_IRQ_MSI_IOMMU))
+		return -EOPNOTSUPP;
+	if (!vdev->msi_iovas)
+		vdev->msi_iovas = kcalloc(count, sizeof(dma_addr_t), GFP_KERNEL);
+	if (!vdev->msi_iovas)
+		return -ENOMEM;
+	for (i = 0; i < count; i++)
+		vdev->msi_iovas[i] = iovas[i];
+
 	return 0;
 }
 
@@ -836,6 +872,9 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 			break;
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
 			func = vfio_pci_set_msi_trigger;
+			break;
+		case VFIO_IRQ_SET_ACTION_PREPARE:
+			func = vfio_pci_set_msi_prepare;
 			break;
 		}
 		break;
