@@ -175,12 +175,17 @@ void add_moddevtable(struct buffer *buf, struct module *mod);
 /* sumversion.c */
 void get_src_version(const char *modname, char sum[], unsigned sumlen);
 
+/* packed_fields.c */
+void handle_packed_field_symbol(struct module *mod, struct elf_info *info,
+				Elf_Sym *sym, const char *symname);
+
 /* from modpost.c */
 extern bool target_is_big_endian;
 extern bool host_is_big_endian;
 char *read_text_file(const char *filename);
 char *get_line(char **stringp);
 void *sym_get_data(const struct elf_info *info, const Elf_Sym *sym);
+const char *sec_name(const struct elf_info *info, unsigned int secindex);
 
 void __attribute__((format(printf, 2, 3)))
 modpost_log(bool is_error, const char *fmt, ...);
