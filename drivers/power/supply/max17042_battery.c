@@ -933,6 +933,7 @@ max17042_get_of_pdata(struct max17042_chip *chip)
 		pdata->vmin = INT_MIN;
 	if (of_property_read_s32(np, "maxim,over-volt", &pdata->vmax))
 		pdata->vmax = INT_MAX;
+	pdata->is_irq_shared = of_property_read_bool(np, "shared-irq");
 
 	return pdata;
 }
@@ -1109,7 +1110,7 @@ static int max17042_probe(struct i2c_client *client)
 		 * On ACPI systems the IRQ may be handled by ACPI-event code,
 		 * so we need to share (if the ACPI code is willing to share).
 		 */
-		if (acpi_id)
+		if (acpi_id || chip->pdata->is_irq_shared)
 			flags |= IRQF_SHARED | IRQF_PROBE_SHARED;
 
 		ret = devm_request_threaded_irq(&client->dev, client->irq,

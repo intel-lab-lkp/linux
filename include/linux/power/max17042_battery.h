@@ -250,6 +250,7 @@ struct max17042_platform_data {
 	int num_init_data; /* Number of enties in init_data array */
 	bool enable_current_sense;
 	bool enable_por_init; /* Use POR init from Maxim appnote */
+	bool is_irq_shared;
 
 	/*
 	 * R_sns in micro-ohms.
