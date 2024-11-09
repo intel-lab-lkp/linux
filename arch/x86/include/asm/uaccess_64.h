@@ -100,9 +100,11 @@ static inline bool __access_ok(const void __user *ptr, unsigned long size)
 	if (__builtin_constant_p(size <= PAGE_SIZE) && size <= PAGE_SIZE) {
 		return valid_user_address(ptr);
 	} else {
-		unsigned long sum = size + (__force unsigned long)ptr;
+		unsigned long end = (__force unsigned long)ptr;
 
-		return valid_user_address(sum) && sum >= (__force unsigned long)ptr;
+		if (size)
+			end += size - 1;
+		return valid_user_address(end) && end >= (__force unsigned long)ptr;
 	}
 }
 #define __access_ok __access_ok
