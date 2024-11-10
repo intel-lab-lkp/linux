@@ -559,9 +559,12 @@ static void extron_read_edid(struct extron_port *port)
 
 	extron->edid_reading = true;
 
-	if (!extron_send_and_wait(extron, port, cmd, reply))
-		wait_for_completion_killable_timeout(&extron->edid_completion,
+	if (!extron_send_and_wait(extron, port, cmd, reply)) {
+		ret = wait_for_completion_killable_timeout(&extron->edid_completion,
 						     msecs_to_jiffies(1000));
+		if (ret < 0)
+			goto unlock;
+	}
 	if (port->edid_blocks) {
 		extron_parse_edid(port);
 		port->read_edid = true;
