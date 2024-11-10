@@ -408,8 +408,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&vsel2_pin>;
 		regulator-name = "vdd_gpu";
-		regulator-min-microvolt = <875000>;
-		regulator-max-microvolt = <975000>;
+		regulator-min-microvolt = <712500>;
+		regulator-max-microvolt = <1500000>;
 		regulator-ramp-delay = <1000>;
 		regulator-always-on;
 		regulator-boot-on;
