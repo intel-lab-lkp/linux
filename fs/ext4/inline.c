@@ -667,6 +667,7 @@ int ext4_try_to_write_inline_data(struct address_space *mapping,
 	handle_t *handle;
 	struct folio *folio;
 	struct ext4_iloc iloc;
+	fgf_t fgp_flags;
 
 	if (pos + len > ext4_get_max_inline_size(inode))
 		goto convert;
@@ -702,7 +703,11 @@ int ext4_try_to_write_inline_data(struct address_space *mapping,
 	if (ret)
 		goto out;
 
-	folio = __filemap_get_folio(mapping, 0, FGP_WRITEBEGIN | FGP_NOFS,
+	fgp_flags = FGP_WRITEBEGIN | FGP_NOFS;
+	if (*foliop == foliop_uncached)
+		fgp_flags |= FGP_UNCACHED;
+
+	folio = __filemap_get_folio(mapping, 0, fgp_flags,
 					mapping_gfp_mask(mapping));
 	if (IS_ERR(folio)) {
 		ret = PTR_ERR(folio);
