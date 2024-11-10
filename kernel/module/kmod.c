@@ -113,6 +113,27 @@ out:
 	return -ENOMEM;
 }
 
+static inline bool is_module_name_valid(const char *fmt, va_list args)
+{
+	va_list args_verify;
+	bool ret = true;
+	const char *p, *arg;
+
+	va_copy(args_verify, args);
+	for (p = fmt; *p; p++) {
+		if (*p == '%' && *(++p) == 's') {
+			arg = va_arg(args_verify, const char *);
+			if (!arg || arg[0] == '\0') {
+				ret = false;
+				break;
+			}
+		}
+	}
+	va_end(args_verify);
+
+	return ret;
+}
+
 /**
  * __request_module - try to load a kernel module
  * @wait: wait (or not) for the operation to complete
@@ -147,7 +168,13 @@ int __request_module(bool wait, const char *fmt, ...)
 		return -ENOENT;
 
 	va_start(args, fmt);
-	ret = vsnprintf(module_name, MODULE_NAME_LEN, fmt, args);
+	if (is_module_name_valid(fmt, args))
+		ret = vsnprintf(module_name, MODULE_NAME_LEN, fmt, args);
+	else {
+		pr_warn_ratelimited("request_module: modprobe cannot be processed due to invalid module name");
+		va_end(args);
+		return -EINVAL;
+	}
 	va_end(args);
 	if (ret >= MODULE_NAME_LEN)
 		return -ENAMETOOLONG;
