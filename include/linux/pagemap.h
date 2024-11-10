@@ -14,6 +14,7 @@
 #include <linux/gfp.h>
 #include <linux/bitops.h>
 #include <linux/hardirq.h> /* for in_interrupt() */
+#include <linux/writeback.h>
 #include <linux/hugetlb_inline.h>
 
 struct folio_batch;
@@ -69,6 +70,34 @@ static inline int filemap_write_and_wait(struct address_space *mapping)
 {
 	return filemap_write_and_wait_range(mapping, 0, LLONG_MAX);
 }
+
+/*
+ * generic_uncached_write - start uncached writeback
+ * @iocb: the iocb that was written
+ * @written: the amount of bytes written
+ *
+ * When writeback has been handled by write_iter, this helper should be called
+ * if the file system supports uncached writes. If %IOCB_UNCACHED is set, it
+ * will kick off writeback for the specified range.
+ */
+static inline void generic_uncached_write(struct kiocb *iocb, ssize_t written)
+{
+	if (iocb->ki_flags & IOCB_UNCACHED) {
+		struct address_space *mapping = iocb->ki_filp->f_mapping;
+
+		/* kick off uncached writeback */
+		__filemap_fdatawrite_range(mapping, iocb->ki_pos,
+					   iocb->ki_pos + written, WB_SYNC_NONE);
+	}
+}
+
+/*
+ * Value passed in to ->write_begin() if IOCB_UNCACHED is set for the write,
+ * and the ->write_begin() handler on a file system supporting FOP_UNCACHED
+ * must check for this and pass FGP_UNCACHED for folio creation.
+ */
+#define foliop_uncached			((struct folio *) 0xfee1c001)
+#define foliop_is_uncached(foliop)	(*(foliop) == foliop_uncached)
 
 /**
  * filemap_set_wb_err - set a writeback error on an address_space
