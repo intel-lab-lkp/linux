@@ -1063,7 +1063,8 @@ static int wdm_create(struct usb_interface *intf, struct usb_endpoint_descriptor
 	if (!desc->command)
 		goto err;
 
-	desc->ubuf = kmalloc(desc->wMaxCommand, GFP_KERNEL);
+	/* Need to zero this out because it could expose data to userspace. */
+	desc->ubuf = kzalloc(desc->wMaxCommand, GFP_KERNEL);
 	if (!desc->ubuf)
 		goto err;
 
