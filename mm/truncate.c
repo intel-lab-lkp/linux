@@ -533,13 +533,13 @@ EXPORT_SYMBOL(invalidate_mapping_pages);
  * shrink_folio_list() has a temp ref on them, or because they're transiently
  * sitting in the folio_add_lru() caches.
  */
-static int invalidate_complete_folio2(struct address_space *mapping,
-					struct folio *folio)
+int invalidate_complete_folio2(struct address_space *mapping,
+				struct folio *folio, gfp_t gfp_mask)
 {
 	if (folio->mapping != mapping)
 		return 0;
 
-	if (!filemap_release_folio(folio, GFP_KERNEL))
+	if (!filemap_release_folio(folio, gfp_mask))
 		return 0;
 
 	spin_lock(&mapping->host->i_lock);
@@ -639,7 +639,8 @@ int invalidate_inode_pages2_range(struct address_space *mapping,
 
 			ret2 = folio_launder(mapping, folio);
 			if (ret2 == 0) {
-				if (!invalidate_complete_folio2(mapping, folio))
+				if (!invalidate_complete_folio2(mapping, folio,
+								GFP_KERNEL))
 					ret2 = -EBUSY;
 			}
 			if (ret2 < 0)
