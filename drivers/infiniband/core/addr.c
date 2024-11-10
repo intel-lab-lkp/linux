@@ -543,6 +543,29 @@ static void rdma_addr_set_net_defaults(struct rdma_dev_addr *addr)
 	addr->bound_dev_if = 0;
 }
 
+static struct dst_entry *get_default_ipv6_route(struct in6_addr *src_addr, struct net_device *dev)
+{
+	struct flowi6 fl6;
+	struct dst_entry *dst = NULL;
+
+	memset(&fl6, 0, sizeof(fl6));
+	fl6.flowi6_iif = dev_net(dev)->loopback_dev->ifindex;
+	fl6.flowi6_oif = dev->ifindex;
+	fl6.saddr = *src_addr;
+	fl6.daddr = in6addr_any;
+
+	dst = ipv6_stub->ipv6_dst_lookup_flow(dev_net(dev), NULL, &fl6, NULL);
+	if (IS_ERR(dst))
+		return NULL;
+
+	if (dst && dst->error) {
+		dst_release(dst);
+		return NULL;
+	}
+
+	return dst;
+}
+
 static int addr_resolve(struct sockaddr *src_in,
 			const struct sockaddr *dst_in,
 			struct rdma_dev_addr *addr,
@@ -595,9 +618,77 @@ static int addr_resolve(struct sockaddr *src_in,
 	 * Resolve neighbor destination address if requested and
 	 * only if src addr translation didn't fail.
 	 */
-	if (!ret && resolve_neigh)
-		ret = addr_resolve_neigh(dst, dst_in, addr, ndev_flags, seq);
+	if (!ret && resolve_neigh) {
+		if ((src_in->sa_family == AF_INET6) && (ndev_flags & IFF_LOOPBACK)) {
+			rcu_read_lock();
+			/*
+			 * When src net device and dst net device is different device,
+			 * traditional TCP/IP loopback won't work for RDMA. We need to find
+			 * gateway for src net device and send packets to the gateway, then
+			 * let the gateway send it back to the dst device. This is likely
+			 * be problematic in IPv6 scenario, the route logic would likely fill
+			 * the dst MAC address with src net device's MAC, but with dst IP
+			 * belongs to the dst net device, leading to packet drop.
+			 *
+			 * Thus, we need to figure out gateway's MAC address in IPv6 loopback
+			 * scenario.
+			 */
+			struct net_device *ndev = READ_ONCE(dst->dev);
+			struct net_device *src_ndev = rdma_find_ndev_for_src_ip_rcu(dev_net(ndev),
+										    src_in);
+			struct net_device *dst_ndev = rdma_find_ndev_for_src_ip_rcu(dev_net(ndev),
+										    dst_in);
 
+			if (IS_ERR(src_ndev) || IS_ERR(dst_ndev)) {
+				ret = -ENODEV;
+				rcu_read_unlock();
+				goto exit;
+			}
+
+			if (src_ndev != dst_ndev) {
+				dst_release(dst);
+				dst = get_default_ipv6_route((struct in6_addr *)src_in->sa_data,
+							     src_ndev);
+				ndev_flags = src_ndev->flags;
+			} else {
+				rcu_read_unlock();
+				/*
+				 * For real loopback (src and dst is the same device), we can
+				 * just use the original code path.
+				 */
+				ret = addr_resolve_neigh(dst, dst_in, addr, ndev_flags, seq);
+				goto exit;
+			}
+			rcu_read_unlock();
+
+			if (dst == NULL) {
+				ret = -EINVAL;
+				goto done;
+			}
+
+			/*
+			 * Though we fill `in6addr_any` as dst addr here, `xfrm_neigh_lookup`
+			 * would still find nexthop for us, which provides gateway MAC address.
+			 */
+			struct sockaddr_in6 addr_in = {
+				.sin6_family = AF_INET6,
+				.sin6_addr = in6addr_any,
+			};
+			const void *daddr = (const void *)&addr_in.sin6_addr;
+
+			might_sleep();
+
+			/*
+			 * Use `addr_resolve_neigh` here would go into `ib_nl_fetch_ha` branch,
+			 * which would fail because of `rdma_nl_chk_listeners` returns error.
+			 */
+			ret = dst_fetch_ha(dst, addr, daddr);
+		} else {
+			ret = addr_resolve_neigh(dst, dst_in, addr, ndev_flags, seq);
+		}
+	}
+
+exit:
 	if (src_in->sa_family == AF_INET)
 		ip_rt_put(rt);
 	else

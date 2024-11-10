@@ -1612,7 +1612,12 @@ static bool validate_ipv6_net_dev(struct net_device *net_dev,
 	if (!rt)
 		return false;
 
-	ret = rt->rt6i_idev->dev == net_dev;
+	if (rt->rt6i_flags & (RTF_LOCAL | RTF_NONEXTHOP)) {
+		// TODO: how to validate netdev when the device is loopback?
+		ret = true;
+	} else {
+		ret = rt->rt6i_idev->dev == net_dev;
+	}
 	ip6_rt_put(rt);
 
 	return ret;
