@@ -61,6 +61,7 @@ static void set_slot_off(struct controller *ctrl)
 static int board_added(struct controller *ctrl)
 {
 	int retval = 0;
+	u64 dsn = 0;
 	struct pci_bus *parent = ctrl->pcie->port->subordinate;
 
 	if (POWER_CTRL(ctrl)) {
@@ -85,13 +86,21 @@ static int board_added(struct controller *ctrl)
 		goto err_exit;
 	}
 
-	retval = pciehp_configure_device(ctrl);
+	/*
+	 * Release reset_lock during driver binding
+	 * to avoid AB-BA deadlock with device_lock.
+	 */
+	up_read(&ctrl->reset_lock);
+	retval = pciehp_configure_device(ctrl, &dsn);
+	down_read_nested(&ctrl->reset_lock, ctrl->depth);
 	if (retval) {
 		if (retval != -EEXIST) {
 			ctrl_err(ctrl, "Cannot add device at %04x:%02x:00\n",
 				 pci_domain_nr(parent), parent->number);
 			goto err_exit;
 		}
+	} else {
+		ctrl->dsn = dsn;
 	}
 
 	pciehp_set_indicators(ctrl, PCI_EXP_SLTCTL_PWR_IND_ON,

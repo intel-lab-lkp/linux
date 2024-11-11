@@ -24,12 +24,14 @@
 /**
  * pciehp_configure_device() - enumerate PCI devices below a hotplug bridge
  * @ctrl: PCIe hotplug controller
+ * @dsn: Device Serial Number of Function 0 in the hotplug slot
  *
  * Enumerate PCI devices below a hotplug bridge and add them to the system.
+ * On success store the Device Serial Number of Function 0 in @dsn.
  * Return 0 on success, %-EEXIST if the devices are already enumerated or
  * %-ENODEV if enumeration failed.
  */
-int pciehp_configure_device(struct controller *ctrl)
+int pciehp_configure_device(struct controller *ctrl, u64 *dsn)
 {
 	struct pci_dev *dev;
 	struct pci_dev *bridge = ctrl->pcie->port;
@@ -64,16 +66,10 @@ int pciehp_configure_device(struct controller *ctrl)
 	pci_assign_unassigned_bridge_resources(bridge);
 	pcie_bus_configure_settings(parent);
 
-	/*
-	 * Release reset_lock during driver binding
-	 * to avoid AB-BA deadlock with device_lock.
-	 */
-	up_read(&ctrl->reset_lock);
 	pci_bus_add_devices(parent);
-	down_read_nested(&ctrl->reset_lock, ctrl->depth);
 
 	dev = pci_get_slot(parent, PCI_DEVFN(0, 0));
-	ctrl->dsn = pci_get_dsn(dev);
+	*dsn = pci_get_dsn(dev);
 	pci_dev_put(dev);
 
  out:
