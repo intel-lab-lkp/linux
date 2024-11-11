@@ -214,23 +214,7 @@ found:
 		 t->mdiv, t->kdiv);
 }
 
-static long clk_pll1416x_round_rate(struct clk_hw *hw, unsigned long rate,
-			unsigned long *prate)
-{
-	struct clk_pll14xx *pll = to_clk_pll14xx(hw);
-	const struct imx_pll14xx_rate_table *rate_table = pll->rate_table;
-	int i;
-
-	/* Assuming rate_table is in descending order */
-	for (i = 0; i < pll->rate_count; i++)
-		if (rate >= rate_table[i].rate)
-			return rate_table[i].rate;
-
-	/* return minimum supported value */
-	return rate_table[pll->rate_count - 1].rate;
-}
-
-static long clk_pll1443x_round_rate(struct clk_hw *hw, unsigned long rate,
+static long clk_pll14xx_round_rate(struct clk_hw *hw, unsigned long rate,
 			unsigned long *prate)
 {
 	struct clk_pll14xx *pll = to_clk_pll14xx(hw);
@@ -285,22 +269,17 @@ static int clk_pll1416x_set_rate(struct clk_hw *hw, unsigned long drate,
 				 unsigned long prate)
 {
 	struct clk_pll14xx *pll = to_clk_pll14xx(hw);
-	const struct imx_pll14xx_rate_table *rate;
+	struct imx_pll14xx_rate_table rate;
 	u32 tmp, div_val;
 	int ret;
 
-	rate = imx_get_pll_settings(pll, drate);
-	if (!rate) {
-		pr_err("Invalid rate %lu for pll clk %s\n", drate,
-		       clk_hw_get_name(hw));
-		return -EINVAL;
-	}
+	imx_pll14xx_calc_settings(pll, drate, prate, &rate);
 
 	tmp = readl_relaxed(pll->base + DIV_CTL0);
 
-	if (!clk_pll14xx_mp_change(rate, tmp)) {
+	if (!clk_pll14xx_mp_change(&rate, tmp)) {
 		tmp &= ~SDIV_MASK;
-		tmp |= FIELD_PREP(SDIV_MASK, rate->sdiv);
+		tmp |= FIELD_PREP(SDIV_MASK, rate.sdiv);
 		writel_relaxed(tmp, pll->base + DIV_CTL0);
 
 		return 0;
@@ -319,8 +298,8 @@ static int clk_pll1416x_set_rate(struct clk_hw *hw, unsigned long drate,
 	tmp |= BYPASS_MASK;
 	writel(tmp, pll->base + GNRL_CTL);
 
-	div_val = FIELD_PREP(MDIV_MASK, rate->mdiv) | FIELD_PREP(PDIV_MASK, rate->pdiv) |
-		FIELD_PREP(SDIV_MASK, rate->sdiv);
+	div_val = FIELD_PREP(MDIV_MASK, rate.mdiv) | FIELD_PREP(PDIV_MASK, rate.pdiv) |
+		FIELD_PREP(SDIV_MASK, rate.sdiv);
 	writel_relaxed(div_val, pll->base + DIV_CTL0);
 
 	/*
@@ -468,7 +447,7 @@ static const struct clk_ops clk_pll1416x_ops = {
 	.unprepare	= clk_pll14xx_unprepare,
 	.is_prepared	= clk_pll14xx_is_prepared,
 	.recalc_rate	= clk_pll14xx_recalc_rate,
-	.round_rate	= clk_pll1416x_round_rate,
+	.round_rate	= clk_pll14xx_round_rate,
 	.set_rate	= clk_pll1416x_set_rate,
 };
 
@@ -481,7 +460,7 @@ static const struct clk_ops clk_pll1443x_ops = {
 	.unprepare	= clk_pll14xx_unprepare,
 	.is_prepared	= clk_pll14xx_is_prepared,
 	.recalc_rate	= clk_pll14xx_recalc_rate,
-	.round_rate	= clk_pll1443x_round_rate,
+	.round_rate	= clk_pll14xx_round_rate,
 	.set_rate	= clk_pll1443x_set_rate,
 };
 
