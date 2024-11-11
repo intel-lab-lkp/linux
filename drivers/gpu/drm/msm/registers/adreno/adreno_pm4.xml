@@ -563,7 +563,7 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 	<value name="IN_IB_END" value="0x0a" variants="A6XX-"/>
 	<!-- handles IFPC save/restore -->
 	<value name="IN_GMU_INTERRUPT" value="0x0b" variants="A6XX-"/>
-	<!-- preemption/context-swtich routine -->
+	<!-- preemption/context-switch routine -->
 	<value name="IN_PREEMPT" value="0x0f" variants="A6XX-"/>
 
 	<!-- TODO do these exist on A5xx? -->
