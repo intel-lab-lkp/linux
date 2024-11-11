@@ -104,7 +104,7 @@ static struct clk_regmap meson8b_fixed_pll = {
 		.offset = HHI_MPLL_CNTL,
 		.shift = 16,
 		.width = 2,
-		.flags = CLK_DIVIDER_POWER_OF_TWO,
+		.flags = CLK_DIVIDER_POWER_OF_TWO | CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "fixed_pll",
@@ -457,6 +457,7 @@ static struct clk_regmap meson8b_mpll_prediv = {
 		.offset = HHI_MPLL_CNTL5,
 		.shift = 12,
 		.width = 1,
+		.flags = CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "mpll_prediv",
@@ -635,6 +636,7 @@ static struct clk_regmap meson8b_mpeg_clk_div = {
 		.offset = HHI_MPEG_CLK_CNTL,
 		.shift = 0,
 		.width = 7,
+		.flags = CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "mpeg_clk_div",

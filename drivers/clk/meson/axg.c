@@ -71,7 +71,7 @@ static struct clk_regmap axg_fixed_pll = {
 		.offset = HHI_MPLL_CNTL,
 		.shift = 16,
 		.width = 2,
-		.flags = CLK_DIVIDER_POWER_OF_TWO,
+		.flags = CLK_DIVIDER_POWER_OF_TWO | CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "fixed_pll",
@@ -130,7 +130,7 @@ static struct clk_regmap axg_sys_pll = {
 		.offset = HHI_SYS_PLL_CNTL,
 		.shift = 16,
 		.width = 2,
-		.flags = CLK_DIVIDER_POWER_OF_TWO,
+		.flags = CLK_DIVIDER_POWER_OF_TWO | CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "sys_pll",
@@ -471,6 +471,7 @@ static struct clk_regmap axg_mpll_prediv = {
 		.offset = HHI_MPLL_CNTL5,
 		.shift = 12,
 		.width = 1,
+		.flags = CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "mpll_prediv",

@@ -266,6 +266,7 @@ static struct clk_regmap sys_b_div = {
 		.offset = SYS_CLK_CTRL0,
 		.shift = 16,
 		.width = 10,
+		.flags = CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "sys_b_div",
@@ -314,6 +315,7 @@ static struct clk_regmap sys_a_div = {
 		.offset = SYS_CLK_CTRL0,
 		.shift = 0,
 		.width = 10,
+		.flags = CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "sys_a_div",

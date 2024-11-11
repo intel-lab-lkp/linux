@@ -65,7 +65,7 @@ static struct clk_regmap meson8_ddr_pll = {
 		.offset = AM_DDR_PLL_CNTL,
 		.shift = 16,
 		.width = 2,
-		.flags = CLK_DIVIDER_POWER_OF_TWO,
+		.flags = CLK_DIVIDER_POWER_OF_TWO | CLK_DIVIDER_READ_ONLY,
 	},
 	.hw.init = &(struct clk_init_data){
 		.name = "ddr_pll",
