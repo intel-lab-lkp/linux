@@ -210,12 +210,18 @@ int intel_vrr_compute_vmax(struct intel_connector *connector,
 static
 void intel_vrr_prepare_vrr_timings(struct intel_crtc_state *crtc_state, int vmin, int vmax)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
+
 	/*
 	 * flipline determines the min vblank length the hardware will
-	 * generate, and flipline>=vmin+1, hence we reduce vmin by one
+	 * generate. For pre LNL flipline>=vmin+1, hence we reduce vmin by one
 	 * to make sure we can get the actual min vblank length.
+	 * For LNL+ there is no such restrictions.
 	 */
-	crtc_state->vrr.vmin = vmin - 1;
+	if (DISPLAY_VER(display) >= 20)
+		crtc_state->vrr.vmin = vmin;
+	else
+		crtc_state->vrr.vmin = vmin - 1;
 	crtc_state->vrr.vmax = vmax;
 	crtc_state->vrr.flipline = crtc_state->vrr.vmin + 1;
 }
