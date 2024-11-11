@@ -917,6 +917,7 @@ enum intel_vrrtg_mode {
 	INTEL_VRRTG_MODE_NONE,
 	INTEL_VRRTG_MODE_VRR,
 	INTEL_VRRTG_MODE_CMRR,
+	INTEL_VRRTG_MODE_FIXED_RR,
 };
 
 struct intel_crtc_state {
