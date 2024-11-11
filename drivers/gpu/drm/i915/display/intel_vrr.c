@@ -356,6 +356,12 @@ void intel_vrr_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 		       crtc_state->vrr.flipline - 1);
 }
 
+static bool intel_vrr_use_push(const struct intel_crtc_state *crtc_state)
+{
+	return crtc_state->vrr.tg_enable &&
+	       crtc_state->vrr.mode != INTEL_VRRTG_MODE_FIXED_RR;
+}
+
 void intel_vrr_send_push(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -364,7 +370,7 @@ void intel_vrr_send_push(const struct intel_crtc_state *crtc_state)
 	if (intel_crtc_is_joiner_secondary(crtc_state))
 		return;
 
-	if (!crtc_state->vrr.tg_enable)
+	if (!intel_vrr_use_push(crtc_state))
 		return;
 
 	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
@@ -376,7 +382,7 @@ bool intel_vrr_is_push_sent(const struct intel_crtc_state *crtc_state)
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
 
-	if (!crtc_state->vrr.tg_enable)
+	if (!intel_vrr_use_push(crtc_state))
 		return false;
 
 	return intel_de_read(display, TRANS_PUSH(display, cpu_transcoder)) & TRANS_PUSH_SEND;
@@ -393,8 +399,9 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 	if (!crtc_state->vrr.tg_enable)
 		return;
 
-	intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
-		       TRANS_PUSH_EN);
+	if (intel_vrr_use_push(crtc_state))
+		intel_de_write(display, TRANS_PUSH(display, cpu_transcoder),
+			       TRANS_PUSH_EN);
 
 	if (HAS_AS_SDP(display))
 		intel_de_write(display,
