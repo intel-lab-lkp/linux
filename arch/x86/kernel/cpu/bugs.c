@@ -1828,9 +1828,6 @@ static void __init spectre_v2_select_mitigation(void)
 	 *    speculated return targets may come from the branch predictor,
 	 *    which could have a user-poisoned BTB or BHB entry.
 	 *
-	 *    AMD has it even worse: *all* returns are speculated from the BTB,
-	 *    regardless of the state of the RSB.
-	 *
 	 *    When IBRS or eIBRS is enabled, the "user -> kernel" attack
 	 *    scenario is mitigated by the IBRS branch prediction isolation
 	 *    properties, so the RSB buffer filling wouldn't be necessary to
@@ -1852,8 +1849,6 @@ static void __init spectre_v2_select_mitigation(void)
 	 *
 	 * So to mitigate all cases, unconditionally fill RSB on context
 	 * switches.
-	 *
-	 * FIXME: Is this pointless for retbleed-affected AMD?
 	 */
 	setup_force_cpu_cap(X86_FEATURE_RSB_CTXSW);
 	pr_info("Spectre v2 / SpectreRSB mitigation: Filling RSB on context switch\n");
