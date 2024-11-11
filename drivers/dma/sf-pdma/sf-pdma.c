@@ -145,7 +145,6 @@ static void sf_pdma_free_chan_resources(struct dma_chan *dchan)
 
 	spin_lock_irqsave(&chan->vchan.lock, flags);
 	sf_pdma_disable_request(chan);
-	kfree(chan->desc);
 	chan->desc = NULL;
 	vchan_get_all_descriptors(&chan->vchan, &head);
 	sf_pdma_disclaim_chan(chan);
@@ -192,7 +191,6 @@ static int sf_pdma_terminate_all(struct dma_chan *dchan)
 
 	spin_lock_irqsave(&chan->vchan.lock, flags);
 	sf_pdma_disable_request(chan);
-	kfree(chan->desc);
 	chan->desc = NULL;
 	vchan_get_all_descriptors(&chan->vchan, &head);
 	spin_unlock_irqrestore(&chan->vchan.lock, flags);
@@ -279,8 +277,10 @@ static void sf_pdma_donebh_tasklet(struct tasklet_struct *t)
 	spin_lock_irqsave(&chan->vchan.lock, flags);
 	chan->status = DMA_COMPLETE;
 
-	list_del(&chan->desc->vdesc.node);
-	vchan_cookie_complete(&chan->desc->vdesc);
+	if (chan->desc) {
+		list_del(&chan->desc->vdesc.node);
+		vchan_cookie_complete(&chan->desc->vdesc);
+	}
 
 	chan->desc = sf_pdma_get_first_pending_desc(chan);
 	if (chan->desc)
@@ -295,7 +295,8 @@ static void sf_pdma_errbh_tasklet(struct tasklet_struct *t)
 	unsigned long flags;
 
 	spin_lock_irqsave(&chan->vchan.lock, flags);
-	dmaengine_desc_get_callback_invoke(chan->desc->async_tx, NULL);
+	if (chan->desc)
+		dmaengine_desc_get_callback_invoke(chan->desc->async_tx, NULL);
 	chan->status = DMA_ERROR;
 	spin_unlock_irqrestore(&chan->vchan.lock, flags);
 }
@@ -310,7 +311,7 @@ static irqreturn_t sf_pdma_done_isr(int irq, void *dev_id)
 	writel((readl(regs->ctrl)) & ~PDMA_DONE_STATUS_MASK, regs->ctrl);
 	residue = readq(regs->residue);
 
-	if (!residue) {
+	if (!residue || !chan->desc) {
 		tasklet_hi_schedule(&chan->done_tasklet);
 	} else {
 		/* submit next trascatioin if possible */
