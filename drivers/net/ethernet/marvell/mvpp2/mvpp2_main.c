@@ -7425,21 +7425,17 @@ static int mvpp2_init(struct platform_device *pdev, struct mvpp2 *priv)
 static int mvpp2_get_sram(struct platform_device *pdev,
 			  struct mvpp2 *priv)
 {
-	struct resource *res;
 	void __iomem *base;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
-	if (!res) {
+	base = devm_platform_ioremap_resource(pdev, 2);
+	if (IS_ERR(base)) {
 		if (has_acpi_companion(&pdev->dev))
 			dev_warn(&pdev->dev, "ACPI is too old, Flow control not supported\n");
 		else
-			dev_warn(&pdev->dev, "DT is too old, Flow control not supported\n");
-		return 0;
-	}
-
-	base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(base))
+			dev_warn(&pdev->dev,
+				 "DT is too old, Flow control not supported\n");
 		return PTR_ERR(base);
+	}
 
 	priv->cm3_base = base;
 	return 0;

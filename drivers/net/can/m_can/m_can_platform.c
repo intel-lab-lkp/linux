@@ -79,7 +79,6 @@ static int m_can_plat_probe(struct platform_device *pdev)
 {
 	struct m_can_classdev *mcan_class;
 	struct m_can_plat_priv *priv;
-	struct resource *res;
 	void __iomem *addr;
 	void __iomem *mram_addr;
 	struct phy *transceiver;
@@ -112,15 +111,9 @@ static int m_can_plat_probe(struct platform_device *pdev)
 	}
 
 	/* message ram could be shared */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "message_ram");
-	if (!res) {
-		ret = -ENODEV;
-		goto probe_fail;
-	}
-
-	mram_addr = devm_ioremap(&pdev->dev, res->start, resource_size(res));
-	if (!mram_addr) {
-		ret = -ENOMEM;
+	mram_addr = devm_platform_ioremap_resource_byname(pdev, "message_ram");
+	if (IS_ERR(mram_addr)) {
+		ret = PTR_ERR(mram_addr);
 		goto probe_fail;
 	}
 

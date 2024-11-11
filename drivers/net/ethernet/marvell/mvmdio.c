@@ -291,12 +291,6 @@ static int orion_mdio_probe(struct platform_device *pdev)
 
 	type = (uintptr_t)device_get_match_data(&pdev->dev);
 
-	r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!r) {
-		dev_err(&pdev->dev, "No SMI register address given\n");
-		return -ENODEV;
-	}
-
 	bus = devm_mdiobus_alloc_size(&pdev->dev,
 				      sizeof(struct orion_mdio_dev));
 	if (!bus)
@@ -319,10 +313,10 @@ static int orion_mdio_probe(struct platform_device *pdev)
 	bus->parent = &pdev->dev;
 
 	dev = bus->priv;
-	dev->regs = devm_ioremap(&pdev->dev, r->start, resource_size(r));
-	if (!dev->regs) {
+	dev->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &r);
+	if (IS_ERR(dev->regs)) {
 		dev_err(&pdev->dev, "Unable to remap SMI register\n");
-		return -ENODEV;
+		return PTR_ERR(dev->regs);
 	}
 
 	init_waitqueue_head(&dev->smi_busy_wait);
