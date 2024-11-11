@@ -30,6 +30,13 @@ properties:
 
   reset-source: true
 
+  nxp,battery-backed:
+    description: |
+      Indicates that the RTC is battery-backed. This property forces
+      the driver to enable the battery switch-over function, but only if
+      no other mode is already configured.
+    $ref: /schemas/types.yaml#/definitions/flag
+
 required:
   - compatible
   - reg
