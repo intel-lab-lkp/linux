@@ -1997,7 +1997,22 @@ static struct clk_regmap meson8b_mali = {
 			&meson8b_mali_1.hw,
 		},
 		.num_parents = 2,
-		.flags = CLK_SET_RATE_PARENT,
+		/*
+		 * glitch-free mux has two clock channels (channel 0 and
+		 * channel 1) with the same configuration.Channel 0 of
+		 * glitch-free mux is not only the clock source for the mux,
+		 * but also the working clock for glitch free mux. Therefore,
+		 * when glitch-free mux switches, it is necessary to ensure that
+		 * channel 0 has a clock input, otherwise glitch free mux will
+		 * not work and cannot switch to the target channel. So adding
+		 * flag CLK_OPS_PARENT_ENABLE ensures that both channels 0 and 1
+		 * are enabled when mux switches.
+		 *
+		 * In fact, we just need to make sure that channel 0 is enabled.
+		 * The purpose of CLK_OPS_PARENT_ENABLE may not be to solve our
+		 * situation, but adding this flag does solve our current problem.
+		 */
+		.flags = CLK_SET_RATE_PARENT | CLK_OPS_PARENT_ENABLE,
 	},
 };
 
@@ -2252,7 +2267,7 @@ static struct clk_regmap meson8b_vpu = {
 			&meson8b_vpu_1.hw,
 		},
 		.num_parents = 2,
-		.flags = CLK_SET_RATE_PARENT,
+		.flags = CLK_SET_RATE_PARENT | CLK_OPS_PARENT_ENABLE,
 	},
 };
 
@@ -2364,7 +2379,7 @@ static struct clk_regmap meson8b_vdec_1 = {
 			&meson8b_vdec_1_2.hw,
 		},
 		.num_parents = 2,
-		.flags = CLK_SET_RATE_PARENT,
+		.flags = CLK_SET_RATE_PARENT | CLK_OPS_PARENT_ENABLE,
 	},
 };
 
