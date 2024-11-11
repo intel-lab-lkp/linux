@@ -395,18 +395,24 @@ static int ip5xxx_battery_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		ret = ip5xxx_battery_read_adc(ip5xxx, &ip5xxx->regs.battery.adc.volt, &raw);
+		if (ret)
+			return ret;
 
 		val->intval = 2600000 + DIV_ROUND_CLOSEST(raw * 26855, 100);
 		return 0;
 
 	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
 		ret = ip5xxx_battery_read_adc(ip5xxx, &ip5xxx->regs.battery.adc.open_volt, &raw);
+		if (ret)
+			return ret;
 
 		val->intval = 2600000 + DIV_ROUND_CLOSEST(raw * 26855, 100);
 		return 0;
 
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		ret = ip5xxx_battery_read_adc(ip5xxx, &ip5xxx->regs.battery.adc.curr, &raw);
+		if (ret)
+			return ret;
 
 		val->intval = DIV_ROUND_CLOSEST(raw * 149197, 200);
 		return 0;
