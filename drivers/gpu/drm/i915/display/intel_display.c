@@ -1783,7 +1783,6 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 	const struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	enum transcoder cpu_transcoder = new_crtc_state->cpu_transcoder;
 	struct intel_crtc *pipe_crtc;
 	int i;
 
@@ -1819,8 +1818,14 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 			bdw_set_pipe_misc(NULL, pipe_crtc_state);
 	}
 
-	if (!transcoder_is_dsi(cpu_transcoder))
-		hsw_configure_cpu_transcoder(new_crtc_state);
+	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, new_crtc_state, i) {
+		const struct intel_crtc_state *pipe_crtc_state =
+			intel_atomic_get_new_crtc_state(state, pipe_crtc);
+		enum transcoder cpu_transcoder = pipe_crtc_state->cpu_transcoder;
+
+		if (!transcoder_is_dsi(cpu_transcoder))
+			hsw_configure_cpu_transcoder(pipe_crtc_state);
+	}
 
 	for_each_pipe_crtc_modeset_enable(display, pipe_crtc, new_crtc_state, i) {
 		const struct intel_crtc_state *pipe_crtc_state =
