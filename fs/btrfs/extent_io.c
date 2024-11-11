@@ -108,6 +108,14 @@ struct btrfs_bio_ctrl {
 	 * This is to avoid touching ranges covered by compression/inline.
 	 */
 	unsigned long submit_bitmap;
+
+	/*
+	 * The end (exclusive) of the last submitted range in the folio.
+	 *
+	 * This is for sector size < page size case where we may hit error
+	 * half way.
+	 */
+	u64 last_submitted;
 };
 
 static void submit_one_bio(struct btrfs_bio_ctrl *bio_ctrl)
@@ -922,7 +930,8 @@ static struct extent_map *__get_extent_map(struct inode *inode,
 		*em_cached = NULL;
 	}
 
-	btrfs_lock_and_flush_ordered_range(BTRFS_I(inode), start, start + len - 1, &cached_state);
+	btrfs_lock_and_flush_ordered_range(BTRFS_I(inode), folio, start,
+					   start + len - 1, &cached_state);
 	em = btrfs_get_extent(BTRFS_I(inode), folio, start, len);
 	if (!IS_ERR(em)) {
 		BUG_ON(*em_cached);
@@ -953,9 +962,7 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 	u64 block_start;
 	struct extent_map *em;
 	int ret = 0;
-	size_t pg_offset = 0;
-	size_t iosize;
-	size_t blocksize = fs_info->sectorsize;
+	const size_t blocksize = fs_info->sectorsize;
 
 	ret = set_folio_extent_mapped(folio);
 	if (ret < 0) {
@@ -966,24 +973,27 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 	if (folio->index == last_byte >> folio_shift(folio)) {
 		size_t zero_offset = offset_in_folio(folio, last_byte);
 
-		if (zero_offset) {
-			iosize = folio_size(folio) - zero_offset;
-			folio_zero_range(folio, zero_offset, iosize);
-		}
+		if (zero_offset)
+			folio_zero_range(folio, zero_offset,
+					 folio_size(folio) - zero_offset);
 	}
 	bio_ctrl->end_io_func = end_bbio_data_read;
 	begin_folio_read(fs_info, folio);
-	while (cur <= end) {
+	for (cur = start; cur <= end; cur += blocksize) {
 		enum btrfs_compression_type compress_type = BTRFS_COMPRESS_NONE;
+		unsigned long pg_offset = offset_in_folio(folio, cur);
 		bool force_bio_submit = false;
 		u64 disk_bytenr;
 
 		ASSERT(IS_ALIGNED(cur, fs_info->sectorsize));
 		if (cur >= last_byte) {
-			iosize = folio_size(folio) - pg_offset;
-			folio_zero_range(folio, pg_offset, iosize);
-			end_folio_read(folio, true, cur, iosize);
+			folio_zero_range(folio, pg_offset, end - cur + 1);
+			end_folio_read(folio, true, cur, end - cur + 1);
 			break;
+		}
+		if (btrfs_folio_test_uptodate(fs_info, folio, cur, blocksize)) {
+			end_folio_read(folio, true, cur, blocksize);
+			continue;
 		}
 		em = __get_extent_map(inode, folio, cur, end - cur + 1,
 				      em_cached);
@@ -997,8 +1007,6 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 
 		compress_type = extent_map_compression(em);
 
-		iosize = min(extent_map_end(em) - cur, end - cur + 1);
-		iosize = ALIGN(iosize, blocksize);
 		if (compress_type != BTRFS_COMPRESS_NONE)
 			disk_bytenr = em->disk_bytenr;
 		else
@@ -1054,18 +1062,13 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 
 		/* we've found a hole, just zero and go on */
 		if (block_start == EXTENT_MAP_HOLE) {
-			folio_zero_range(folio, pg_offset, iosize);
-
-			end_folio_read(folio, true, cur, iosize);
-			cur = cur + iosize;
-			pg_offset += iosize;
+			folio_zero_range(folio, pg_offset, blocksize);
+			end_folio_read(folio, true, cur, blocksize);
 			continue;
 		}
 		/* the get_extent function already copied into the folio */
 		if (block_start == EXTENT_MAP_INLINE) {
-			end_folio_read(folio, true, cur, iosize);
-			cur = cur + iosize;
-			pg_offset += iosize;
+			end_folio_read(folio, true, cur, blocksize);
 			continue;
 		}
 
@@ -1076,12 +1079,9 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 
 		if (force_bio_submit)
 			submit_one_bio(bio_ctrl);
-		submit_extent_folio(bio_ctrl, disk_bytenr, folio, iosize,
+		submit_extent_folio(bio_ctrl, disk_bytenr, folio, blocksize,
 				    pg_offset);
-		cur = cur + iosize;
-		pg_offset += iosize;
 	}
-
 	return 0;
 }
 
@@ -1435,6 +1435,7 @@ static noinline_for_stack int extent_writepage_io(struct btrfs_inode *inode,
 		ret = submit_one_sector(inode, folio, cur, bio_ctrl, i_size);
 		if (ret < 0)
 			goto out;
+		bio_ctrl->last_submitted = cur + fs_info->sectorsize;
 		submitted_io = true;
 	}
 out:
@@ -1451,6 +1452,24 @@ out:
 		btrfs_folio_clear_writeback(fs_info, folio, start, len);
 	}
 	return ret;
+}
+
+static void cleanup_ordered_extents(struct btrfs_inode *inode,
+				    struct folio *folio, u64 file_pos,
+				    u64 num_bytes, unsigned long *bitmap)
+{
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	unsigned int cur_bit = (file_pos - folio_pos(folio)) >> fs_info->sectorsize_bits;
+
+	for_each_set_bit_from(cur_bit, bitmap, fs_info->sectors_per_page) {
+		u64 cur_pos = folio_pos(folio) + (cur_bit << fs_info->sectorsize_bits);
+
+		if (cur_pos >= file_pos + num_bytes)
+			break;
+
+		btrfs_mark_ordered_io_finished(inode, folio, cur_pos,
+					       fs_info->sectorsize, false);
+	}
 }
 
 /*
@@ -1492,6 +1511,7 @@ static int extent_writepage(struct folio *folio, struct btrfs_bio_ctrl *bio_ctrl
 	 * The proper bitmap can only be initialized until writepage_delalloc().
 	 */
 	bio_ctrl->submit_bitmap = (unsigned long)-1;
+	bio_ctrl->last_submitted = page_start;
 	ret = set_folio_extent_mapped(folio);
 	if (ret < 0)
 		goto done;
@@ -1511,8 +1531,10 @@ static int extent_writepage(struct folio *folio, struct btrfs_bio_ctrl *bio_ctrl
 
 done:
 	if (ret) {
-		btrfs_mark_ordered_io_finished(BTRFS_I(inode), folio,
-					       page_start, PAGE_SIZE, !ret);
+		cleanup_ordered_extents(BTRFS_I(inode), folio,
+				bio_ctrl->last_submitted,
+				page_start + PAGE_SIZE - bio_ctrl->last_submitted,
+				&bio_ctrl->submit_bitmap);
 		mapping_set_error(folio->mapping, ret);
 	}
 
@@ -2288,14 +2310,17 @@ void extent_write_locked_range(struct inode *inode, const struct folio *locked_f
 		 * extent_writepage_io() will do the truncation correctly.
 		 */
 		bio_ctrl.submit_bitmap = (unsigned long)-1;
+		bio_ctrl.last_submitted = cur;
 		ret = extent_writepage_io(BTRFS_I(inode), folio, cur, cur_len,
 					  &bio_ctrl, i_size);
 		if (ret == 1)
 			goto next_page;
 
 		if (ret) {
-			btrfs_mark_ordered_io_finished(BTRFS_I(inode), folio,
-						       cur, cur_len, !ret);
+			cleanup_ordered_extents(BTRFS_I(inode), folio,
+					bio_ctrl.last_submitted,
+					cur_end + 1 - bio_ctrl.last_submitted,
+					&bio_ctrl.submit_bitmap);
 			mapping_set_error(mapping, ret);
 		}
 		btrfs_folio_end_lock(fs_info, folio, cur, cur_len);
