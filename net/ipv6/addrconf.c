@@ -3072,8 +3072,7 @@ static int inet6_addr_add(struct net *net, int ifindex,
 		 */
 		if (!(ifp->flags & (IFA_F_OPTIMISTIC | IFA_F_NODAD)))
 			ipv6_ifa_notify(0, ifp);
-		/*
-		 * Note that section 3.1 of RFC 4429 indicates
+		/* Note that section 3.1 of RFC 4429 indicates
 		 * that the Optimistic flag should not be set for
 		 * manually configured addresses
 		 */
@@ -3082,7 +3081,15 @@ static int inet6_addr_add(struct net *net, int ifindex,
 			manage_tempaddrs(idev, ifp, cfg->valid_lft,
 					 cfg->preferred_lft, true, jiffies);
 		in6_ifa_put(ifp);
-		addrconf_verify_rtnl(net);
+
+		/* Verify only if this address is perishable or has temporary
+		 * offshoots, as this function is too expansive.
+		 */
+		if ((cfg->ifa_flags & IFA_F_MANAGETEMPADDR) ||
+		    !(cfg->ifa_flags & IFA_F_PERMANENT) ||
+		    cfg->preferred_lft != INFINITY_LIFE_TIME)
+			addrconf_verify_rtnl(net);
+
 		return 0;
 	} else if (cfg->ifa_flags & IFA_F_MCAUTOJOIN) {
 		ipv6_mc_config(net->ipv6.mc_autojoin_sk, false,
@@ -3099,6 +3106,7 @@ static int inet6_addr_del(struct net *net, int ifindex, u32 ifa_flags,
 	struct inet6_ifaddr *ifp;
 	struct inet6_dev *idev;
 	struct net_device *dev;
+	int is_mgmt_tmp;
 
 	if (plen > 128) {
 		NL_SET_ERR_MSG_MOD(extack, "Invalid prefix length");
@@ -3124,12 +3132,17 @@ static int inet6_addr_del(struct net *net, int ifindex, u32 ifa_flags,
 			in6_ifa_hold(ifp);
 			read_unlock_bh(&idev->lock);
 
-			if (!(ifp->flags & IFA_F_TEMPORARY) &&
-			    (ifa_flags & IFA_F_MANAGETEMPADDR))
+			is_mgmt_tmp = (!(ifp->flags & IFA_F_TEMPORARY) &&
+				       (ifa_flags & IFA_F_MANAGETEMPADDR));
+
+			if (is_mgmt_tmp)
 				manage_tempaddrs(idev, ifp, 0, 0, false,
 						 jiffies);
 			ipv6_del_addr(ifp);
-			addrconf_verify_rtnl(net);
+
+			if (is_mgmt_tmp)
+				addrconf_verify_rtnl(net);
+
 			if (ipv6_addr_is_multicast(pfx)) {
 				ipv6_mc_config(net->ipv6.mc_autojoin_sk,
 					       false, pfx, dev->ifindex);
@@ -4962,7 +4975,10 @@ static int inet6_addr_modify(struct net *net, struct inet6_ifaddr *ifp,
 				 jiffies);
 	}
 
-	addrconf_verify_rtnl(net);
+	if (was_managetempaddr ||
+	    !(cfg->ifa_flags & IFA_F_PERMANENT) ||
+	    cfg->preferred_lft != INFINITY_LIFE_TIME)
+		addrconf_verify_rtnl(net);
 
 	return 0;
 }
