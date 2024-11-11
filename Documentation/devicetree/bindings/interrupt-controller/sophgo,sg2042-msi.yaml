@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/sophgo,sg2042-msi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Sophgo SG2042 MSI Controller
+
+maintainers:
+  - Chen Wang <unicorn_wang@outlook.com>
+
+description:
+  This interrupt controller is in Sophgo SG2042 for transforming interrupts from
+  PCIe MSI to PLIC interrupts.
+
+allOf:
+  - $ref: /schemas/interrupts.yaml#
+  - $ref: /schemas/interrupt-controller/msi-controller.yaml#
+
+properties:
+  compatible:
+    const: sophgo,sg2042-msi
+
+  reg:
+    items:
+      - description: clear register
+
+  reg-names:
+    items:
+      - const: clr
+
+  sophgo,msi-doorbell-addr:
+    description:
+      u64 value of the MSI doorbell address
+    $ref: /schemas/types.yaml#/definitions/uint64
+
+  sophgo,msi-base-vec:
+    description:
+      u32 value of the base of parent PLIC vector allocated
+      to MSI.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 64
+    maximum: 95
+
+  sophgo,msi-num-vecs:
+    description:
+      u32 value of the number of parent PLIC vectors allocated
+      to MSI.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 1
+    maximum: 32
+
+  msi-controller: true
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - msi-controller
+  - sophgo,msi-doorbell-addr
+  - sophgo,msi-base-vec
+  - sophgo,msi-num-vecs
+
+additionalProperties: true
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    msi: msi-controller@30000000 {
+      compatible = "sophgo,sg2042-msi";
+      reg = <0x30000000 0x4>;
+      reg-names = "clr";
+      msi-controller;
+      sophgo,msi-doorbell-addr = <0x00000070 0x30010300>;
+      sophgo,msi-base-vec = <64>;
+      sophgo,msi-num-vecs = <32>;
+      interrupt-parent = <&plic>;
+    };
