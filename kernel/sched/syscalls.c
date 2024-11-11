@@ -785,6 +785,19 @@ static int _sched_setscheduler(struct task_struct *p, int policy,
 		attr.sched_policy = policy;
 	}
 
+	if (attr.sched_priority > MAX_PRIO-1)
+		return -EINVAL;
+
+	/*
+	 * If priority is set for SCHED_NORMAL or SCHED_BATCH,
+	 * set the niceness instead, but only for user calls.
+	 */
+	if (check && attr.sched_priority > MAX_RT_PRIO-1 &&
+	   ((policy != SETPARAM_POLICY && fair_policy(policy)) || fair_policy(p->policy))) {
+		attr.sched_nice = PRIO_TO_NICE(attr.sched_priority);
+		attr.sched_priority = 0;
+	}
+
 	return __sched_setscheduler(p, &attr, check, true);
 }
 /**
@@ -1532,9 +1545,11 @@ SYSCALL_DEFINE1(sched_get_priority_max, int, policy)
 	case SCHED_RR:
 		ret = MAX_RT_PRIO-1;
 		break;
-	case SCHED_DEADLINE:
 	case SCHED_NORMAL:
 	case SCHED_BATCH:
+		ret = MAX_PRIO-1;
+		break;
+	case SCHED_DEADLINE:
 	case SCHED_IDLE:
 	case SCHED_EXT:
 		ret = 0;
@@ -1560,9 +1575,11 @@ SYSCALL_DEFINE1(sched_get_priority_min, int, policy)
 	case SCHED_RR:
 		ret = 1;
 		break;
-	case SCHED_DEADLINE:
 	case SCHED_NORMAL:
 	case SCHED_BATCH:
+		ret = MAX_RT_PRIO;
+		break;
+	case SCHED_DEADLINE:
 	case SCHED_IDLE:
 	case SCHED_EXT:
 		ret = 0;
