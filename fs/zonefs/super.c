@@ -811,7 +811,7 @@ static int zonefs_readdir_zgroup(struct file *file,
 	for (f = ctx->pos - 2; f < zgroup->g_nr_zones; f++) {
 		z = &zgroup->g_zones[f];
 		ino = z->z_sector >> sbi->s_zone_sectors_shift;
-		fname_len = snprintf(fname, ZONEFS_NAME_MAX - 1, "%u", f);
+		fname_len = snprintf(fname, ZONEFS_NAME_MAX - 1, "%d", f);
 		if (!dir_emit(ctx, fname, fname_len, ino, DT_REG))
 			break;
 		ctx->pos++;
