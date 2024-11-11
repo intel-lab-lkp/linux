@@ -157,10 +157,14 @@ static void ep93xx_keypad_config(struct ep93xx_keypad *keypad)
 static int ep93xx_keypad_open(struct input_dev *pdev)
 {
 	struct ep93xx_keypad *keypad = input_get_drvdata(pdev);
+	int ret;
 
 	if (!keypad->enabled) {
 		ep93xx_keypad_config(keypad);
-		clk_prepare_enable(keypad->clk);
+		ret = clk_prepare_enable(keypad->clk);
+		if (ret)
+			return ret;
+
 		keypad->enabled = true;
 	}
 
@@ -201,13 +205,19 @@ static int ep93xx_keypad_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct ep93xx_keypad *keypad = platform_get_drvdata(pdev);
 	struct input_dev *input_dev = keypad->input_dev;
+	int ret;
 
 	mutex_lock(&input_dev->mutex);
 
 	if (input_device_enabled(input_dev)) {
 		if (!keypad->enabled) {
 			ep93xx_keypad_config(keypad);
-			clk_enable(keypad->clk);
+			ret = clk_enable(keypad->clk);
+			if (ret) {
+				mutex_unlock(&input_dev->mutex);
+				return ret;
+			}
+
 			keypad->enabled = true;
 		}
 	}
