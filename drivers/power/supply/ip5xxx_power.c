@@ -111,6 +111,7 @@ struct ip5xxx {
 	} const_curr;
 };
 
+#define REG_FIELD_UNSUPPORTED { .lsb = 1 }
 /* Register fields layout. Unsupported registers marked as { .lsb = 1 } */
 struct ip5xxx_regfield_config {
 	const struct reg_field charger_enable;
@@ -204,9 +205,11 @@ static int ip5xxx_initialize(struct power_supply *psy)
 	 * Disable shutdown under light load.
 	 * Enable power on when under load.
 	 */
-	ret = ip5xxx_write(ip5xxx, ip5xxx->regs.boost.light_load_shutdown.enable, 0);
-	if (ret)
-		return ret;
+	if (ip5xxx->regs.boost.light_load_shutdown.enable) {
+		ret = ip5xxx_write(ip5xxx, ip5xxx->regs.boost.light_load_shutdown.enable, 0);
+		if (ret)
+			return ret;
+	}
 	ret = ip5xxx_write(ip5xxx, ip5xxx->regs.boost.load_powerup_en, 1);
 	if (ret)
 		return ret;
@@ -229,9 +232,11 @@ static int ip5xxx_initialize(struct power_supply *psy)
 	 * Enable the NTC.
 	 * Configure the button for two presses => LED, long press => shutdown.
 	 */
-	ret = ip5xxx_write(ip5xxx, ip5xxx->regs.battery.ntc_dis, 0);
-	if (ret)
-		return ret;
+	if (ip5xxx->regs.battery.ntc_dis) {
+		ret = ip5xxx_write(ip5xxx, ip5xxx->regs.battery.ntc_dis, 0);
+		if (ret)
+			return ret;
+	}
 	ret = ip5xxx_write(ip5xxx, ip5xxx->regs.btn.wled_mode, 1);
 	if (ret)
 		return ret;
@@ -505,9 +510,12 @@ static int ip5xxx_battery_set_voltage_max(struct ip5xxx *ip5xxx, int val)
 	if (ret)
 		return ret;
 
-	ret = ip5xxx_write(ip5xxx, ip5xxx->regs.battery.vset_en, 1);
-	if (ret)
-		return ret;
+	/* Don't try to auto-detect battery type, even if the IC could */
+	if (ip5xxx->regs.battery.vset_en) {
+		ret = ip5xxx_write(ip5xxx, ip5xxx->regs.battery.vset_en, 1);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
