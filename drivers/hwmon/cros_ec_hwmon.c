@@ -7,20 +7,31 @@
 
 #include <linux/device.h>
 #include <linux/hwmon.h>
+#include <linux/list.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/thermal.h>
 #include <linux/types.h>
 #include <linux/units.h>
 
-#define DRV_NAME	"cros-ec-hwmon"
+#define DRV_NAME		"cros-ec-hwmon"
+#define THERMAL_VAL_OFFSET	200
 
 struct cros_ec_hwmon_priv {
 	struct cros_ec_device *cros_ec;
 	const char *temp_sensor_names[EC_TEMP_SENSOR_ENTRIES + EC_TEMP_SENSOR_B_ENTRIES];
 	u8 usable_fans;
+	struct list_head sensors;
+};
+
+struct cros_ec_sensor_data {
+	struct cros_ec_device *cros_ec;
+	struct thermal_zone_device *tz_dev;
+	int addr;
+	struct list_head node;
 };
 
 static int cros_ec_hwmon_read_fan_speed(struct cros_ec_device *cros_ec, u8 index, u16 *speed)
@@ -185,11 +196,32 @@ static const struct hwmon_chip_info cros_ec_hwmon_chip_info = {
 	.info = cros_ec_hwmon_info,
 };
 
-static void cros_ec_hwmon_probe_temp_sensors(struct device *dev, struct cros_ec_hwmon_priv *priv,
+static int cros_ec_thermal_get_temp(struct thermal_zone_device *tz, int *temp)
+{
+	struct cros_ec_sensor_data *data = thermal_zone_device_priv(tz);
+	int ret;
+	u8 val;
+
+	ret = cros_ec_hwmon_read_temp(data->cros_ec, data->addr, &val);
+	if (ret)
+		return -ENODATA;
+	*temp = (val + THERMAL_VAL_OFFSET - 273) * 1000;
+	return 0;
+}
+
+static const struct thermal_zone_device_ops thermal_ops = {
+	.get_temp = cros_ec_thermal_get_temp,
+};
+
+static void cros_ec_hwmon_probe_temp_sensors(struct cros_ec_device *cros_ec,
+					     struct device *dev,
+					     struct cros_ec_hwmon_priv *priv,
+					     struct list_head *head,
 					     u8 thermal_version)
 {
 	struct ec_params_temp_sensor_get_info req = {};
 	struct ec_response_temp_sensor_get_info resp;
+	struct cros_ec_sensor_data *data;
 	size_t candidates, i, sensor_name_size;
 	int ret;
 	u8 temp;
@@ -216,6 +248,23 @@ static void cros_ec_hwmon_probe_temp_sensors(struct device *dev, struct cros_ec_
 		priv->temp_sensor_names[i] = devm_kasprintf(dev, GFP_KERNEL, "%.*s",
 							    (int)sensor_name_size,
 							    resp.sensor_name);
+
+		data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+		if (!data)
+			continue;
+
+		data->addr = i;
+		data->cros_ec = cros_ec;
+		data->tz_dev = devm_thermal_of_zone_register(
+			cros_ec->dev, i, data, &thermal_ops);
+		if (IS_ERR_VALUE(data->tz_dev)) {
+			dev_err(dev,
+				"failed to register %zu thermal sensor, err = %ld",
+				i, PTR_ERR(data->tz_dev));
+			continue;
+		}
+
+		list_add(&data->node, head);
 	}
 }
 
@@ -255,14 +304,27 @@ static int cros_ec_hwmon_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	priv->cros_ec = cros_ec;
+	INIT_LIST_HEAD(&priv->sensors);
 
-	cros_ec_hwmon_probe_temp_sensors(dev, priv, thermal_version);
+	cros_ec_hwmon_probe_temp_sensors(cros_ec, dev, priv, &priv->sensors,
+					 thermal_version);
 	cros_ec_hwmon_probe_fans(priv);
 
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, "cros_ec", priv,
 							 &cros_ec_hwmon_chip_info, NULL);
 
 	return PTR_ERR_OR_ZERO(hwmon_dev);
+}
+
+static void cros_ec_hwmon_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct cros_ec_hwmon_priv *priv = dev_get_drvdata(dev);
+	struct cros_ec_sensor_data *iter;
+
+	list_for_each_entry(iter, &priv->sensors, node) {
+		devm_thermal_of_zone_unregister(dev, iter->tz_dev);
+	}
 }
 
 static const struct platform_device_id cros_ec_hwmon_id[] = {
@@ -273,6 +335,7 @@ static const struct platform_device_id cros_ec_hwmon_id[] = {
 static struct platform_driver cros_ec_hwmon_driver = {
 	.driver.name	= DRV_NAME,
 	.probe		= cros_ec_hwmon_probe,
+	.remove		= cros_ec_hwmon_remove,
 	.id_table	= cros_ec_hwmon_id,
 };
 module_platform_driver(cros_ec_hwmon_driver);
