@@ -564,7 +564,7 @@ static void get_surf_rq_param(
 	unsigned int vp_height = 0;
 	unsigned int data_pitch = 0;
 	unsigned int meta_pitch = 0;
-	unsigned int ppe = mode_422 ? 2 : 1;
+	unsigned int ppe = 1;
 	bool surf_linear;
 	bool surf_vert;
 	unsigned int bytes_per_element;
