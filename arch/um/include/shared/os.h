@@ -136,6 +136,9 @@ static inline struct openflags of_cloexec(struct openflags flags)
 	return flags;
 }
 
+/* cpu.c */
+extern int host_has_fsgsbase;
+
 /* file.c */
 extern int os_stat_file(const char *file_name, struct uml_stat *buf);
 extern int os_stat_fd(const int fd, struct uml_stat *buf);
@@ -221,6 +224,8 @@ extern int os_drop_memory(void *addr, int length);
 extern int can_drop_memory(void);
 extern int os_mincore(void *addr, unsigned long len);
 #ifndef CONFIG_MMU
+extern long long host_fs;
+extern int os_arch_prctl(int pid, int option, unsigned long *arg);
 extern int os_setup_seccomp(void);
 #endif
 

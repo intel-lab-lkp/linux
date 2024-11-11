@@ -3,6 +3,11 @@
 #define __UM_OS_LINUX_INTERNAL_H
 
 /*
+ * cpu.c
+ */
+void check_fsgsbase(void);
+
+/*
  * elf_aux.c
  */
 void scan_elf_aux(char **envp);
