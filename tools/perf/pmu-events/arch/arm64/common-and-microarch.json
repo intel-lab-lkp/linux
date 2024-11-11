@@ -534,6 +534,12 @@
         "BriefDescription": "SVE operations speculatively executed"
     },
     {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE operations.",
+        "EventCode": "0x8007",
+        "EventName": "ASE_SVE_INST_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE operations."
+    },
+    {
         "PublicDescription": "Microarchitectural operation, Operations speculatively executed.",
         "EventCode": "0x8008",
         "EventName": "UOP_SPEC",
@@ -552,10 +558,46 @@
         "BriefDescription": "Floating-point Operations speculatively executed."
     },
     {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point operation.",
+        "EventCode": "0x8011",
+        "EventName": "ASE_FP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point operation.",
+        "EventCode": "0x8012",
+        "EventName": "SVE_FP_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point operations.",
+        "EventCode": "0x8013",
+        "EventName": "ASE_SVE_FP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point operations."
+    },
+    {
         "PublicDescription": "Floating-point half-precision operations speculatively executed",
         "EventCode": "0x8014",
         "EventName": "FP_HP_SPEC",
         "BriefDescription": "Floating-point half-precision operations speculatively executed"
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD half-precision floating-point operation.",
+        "EventCode": "0x8015",
+        "EventName": "ASE_FP_HP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD half-precision floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE half-precision floating-point operation.",
+        "EventCode": "0x8016",
+        "EventName": "SVE_FP_HP_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE half-precision floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE half-precision floating-point operations.",
+        "EventCode": "0x8017",
+        "EventName": "ASE_SVE_FP_HP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE half-precision floating-point operations."
     },
     {
         "PublicDescription": "Floating-point single-precision operations speculatively executed",
@@ -564,10 +606,94 @@
         "BriefDescription": "Floating-point single-precision operations speculatively executed"
     },
     {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD single-precision floating-point operation.",
+        "EventCode": "0x8019",
+        "EventName": "ASE_FP_SP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD single-precision floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE single-precision floating-point operation.",
+        "EventCode": "0x801A",
+        "EventName": "SVE_FP_SP_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE single-precision floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE single-precision floating-point operations.",
+        "EventCode": "0x801B",
+        "EventName": "ASE_SVE_FP_SP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE single-precision floating-point operations."
+    },
+    {
         "PublicDescription": "Floating-point double-precision operations speculatively executed",
         "EventCode": "0x801C",
         "EventName": "FP_DP_SPEC",
         "BriefDescription": "Floating-point double-precision operations speculatively executed"
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD double-precision floating-point operation.",
+        "EventCode": "0x801D",
+        "EventName": "ASE_FP_DP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD double-precision floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE double-precision floating-point operation.",
+        "EventCode": "0x801E",
+        "EventName": "SVE_FP_DP_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE double-precision floating-point operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE double-precision floating-point operations.",
+        "EventCode": "0x801F",
+        "EventName": "ASE_SVE_FP_DP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE double-precision floating-point operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed floating-point divide operation.",
+        "EventCode": "0x8020",
+        "EventName": "FP_DIV_SPEC",
+        "BriefDescription": "This event counts architecturally executed floating-point divide operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point divide operation.",
+        "EventCode": "0x8021",
+        "EventName": "ASE_FP_DIV_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point divide operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point divide operation.",
+        "EventCode": "0x8022",
+        "EventName": "SVE_FP_DIV_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point divide operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point divide operations.",
+        "EventCode": "0x8023",
+        "EventName": "ASE_SVE_FP_DIV_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point divide operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed floating-point square root operation.",
+        "EventCode": "0x8024",
+        "EventName": "FP_SQRT_SPEC",
+        "BriefDescription": "This event counts architecturally executed floating-point square root operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point square root operation.",
+        "EventCode": "0x8025",
+        "EventName": "ASE_FP_SQRT_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point square root operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point square root operation.",
+        "EventCode": "0x8026",
+        "EventName": "SVE_FP_SQRT_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point square root operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point square root operations.",
+        "EventCode": "0x8027",
+        "EventName": "ASE_SVE_FP_SQRT_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point square root operations."
     },
     {
         "PublicDescription": "Floating-point FMA Operations speculatively executed.",
@@ -576,10 +702,94 @@
         "BriefDescription": "Floating-point FMA Operations speculatively executed."
     },
     {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point FMA operation.",
+        "EventCode": "0x8029",
+        "EventName": "ASE_FP_FMA_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point FMA operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point FMA operation.",
+        "EventCode": "0x802A",
+        "EventName": "SVE_FP_FMA_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point FMA operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point FMA operations.",
+        "EventCode": "0x802B",
+        "EventName": "ASE_SVE_FP_FMA_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point FMA operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed floating-point multiply operations.",
+        "EventCode": "0x802C",
+        "EventName": "FP_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed floating-point multiply operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point multiply operation.",
+        "EventCode": "0x802D",
+        "EventName": "ASE_FP_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point multiply operation.",
+        "EventCode": "0x802E",
+        "EventName": "SVE_FP_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point multiply operations.",
+        "EventCode": "0x802F",
+        "EventName": "ASE_SVE_FP_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point multiply operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed floating-point add or subtract operations.",
+        "EventCode": "0x8030",
+        "EventName": "FP_ADDSUB_SPEC",
+        "BriefDescription": "This event counts architecturally executed floating-point add or subtract operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point add or subtract operation.",
+        "EventCode": "0x8031",
+        "EventName": "ASE_FP_ADDSUB_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point add or subtract operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point add or subtract operation.",
+        "EventCode": "0x8032",
+        "EventName": "SVE_FP_ADDSUB_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point add or subtract operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point add or subtract operations.",
+        "EventCode": "0x8033",
+        "EventName": "ASE_SVE_FP_ADDSUB_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point add or subtract operations."
+    },
+    {
         "PublicDescription": "Floating-point reciprocal estimate Operations speculatively executed.",
         "EventCode": "0x8034",
         "EventName": "FP_RECPE_SPEC",
         "BriefDescription": "Floating-point reciprocal estimate Operations speculatively executed."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point reciprocal estimate operations.",
+        "EventCode": "0x8035",
+        "EventName": "ASE_FP_RECPE_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point reciprocal estimate operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point reciprocal estimate operations.",
+        "EventCode": "0x8036",
+        "EventName": "SVE_FP_RECPE_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point reciprocal estimate operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point reciprocal estimate operations.",
+        "EventCode": "0x8037",
+        "EventName": "ASE_SVE_FP_RECPE_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point reciprocal estimate operations."
     },
     {
         "PublicDescription": "floating-point convert Operations speculatively executed.",
@@ -588,10 +798,220 @@
         "BriefDescription": "floating-point convert Operations speculatively executed."
     },
     {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point convert operation.",
+        "EventCode": "0x8039",
+        "EventName": "ASE_FP_CVT_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point convert operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point convert operation.",
+        "EventCode": "0x803A",
+        "EventName": "SVE_FP_CVT_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point convert operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point convert operations.",
+        "EventCode": "0x803B",
+        "EventName": "ASE_SVE_FP_CVT_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point convert operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point accumulating reduction operations.",
+        "EventCode": "0x803C",
+        "EventName": "SVE_FP_AREDUCE_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point accumulating reduction operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD floating-point pairwise add step operations.",
+        "EventCode": "0x803D",
+        "EventName": "ASE_FP_PREDUCE_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD floating-point pairwise add step operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE floating-point vector reduction operation.",
+        "EventCode": "0x803E",
+        "EventName": "SVE_FP_VREDUCE_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE floating-point vector reduction operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point vector reduction operations.",
+        "EventCode": "0x803F",
+        "EventName": "ASE_SVE_FP_VREDUCE_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE floating-point vector reduction operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operations due to scalar, Advanced SIMD, and SVE instructions listed in Integer instructions section of ARMv9 Reference Manual.",
+        "EventCode": "0x8040",
+        "EventName": "INT_SPEC",
+        "BriefDescription": "This event counts architecturally executed operations due to scalar, Advanced SIMD, and SVE instructions listed in Integer instructions section of ARMv9 Reference Manual."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD integer operations.",
+        "EventCode": "0x8041",
+        "EventName": "ASE_INT_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD integer operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE integer operations.",
+        "EventCode": "0x8042",
+        "EventName": "SVE_INT_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE integer operations."
+    },
+    {
         "PublicDescription": "Advanced SIMD and SVE integer Operations speculatively executed.",
         "EventCode": "0x8043",
         "EventName": "ASE_SVE_INT_SPEC",
         "BriefDescription": "Advanced SIMD and SVE integer Operations speculatively executed."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed integer divide operation.",
+        "EventCode": "0x8044",
+        "EventName": "INT_DIV_SPEC",
+        "BriefDescription": "This event counts architecturally executed integer divide operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed 64-bit integer divide operation.",
+        "EventCode": "0x8045",
+        "EventName": "INT_DIV64_SPEC",
+        "BriefDescription": "This event counts architecturally executed 64-bit integer divide operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE integer divide operation.",
+        "EventCode": "0x8046",
+        "EventName": "SVE_INT_DIV_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE integer divide operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE 64-bit integer divide operation.",
+        "EventCode": "0x8047",
+        "EventName": "SVE_INT_DIV64_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE 64-bit integer divide operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed integer multiply operation.",
+        "EventCode": "0x8048",
+        "EventName": "INT_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed integer multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD integer multiply operation.",
+        "EventCode": "0x8049",
+        "EventName": "ASE_INT_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD integer multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE integer multiply operation.",
+        "EventCode": "0x804A",
+        "EventName": "SVE_INT_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE integer multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE integer multiply operations.",
+        "EventCode": "0x804B",
+        "EventName": "ASE_SVE_INT_MUL_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE integer multiply operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed integer 64-bit x 64-bit multiply operation.",
+        "EventCode": "0x804C",
+        "EventName": "INT_MUL64_SPEC",
+        "BriefDescription": "This event counts architecturally executed integer 64-bit x 64-bit multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE integer 64-bit x 64-bit multiply operation.",
+        "EventCode": "0x804D",
+        "EventName": "SVE_INT_MUL64_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE integer 64-bit x 64-bit multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed integer 64-bit x 64-bit multiply returning high part operation.",
+        "EventCode": "0x804E",
+        "EventName": "INT_MULH64_SPEC",
+        "BriefDescription": "This event counts architecturally executed integer 64-bit x 64-bit multiply returning high part operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE integer 64-bit x 64-bit multiply returning high part operations.",
+        "EventCode": "0x804F",
+        "EventName": "SVE_INT_MULH64_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE integer 64-bit x 64-bit multiply returning high part operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed non-floating-point operations.",
+        "EventCode": "0x8058",
+        "EventName": "NONFP_SPEC",
+        "BriefDescription": "This event counts architecturally executed non-floating-point operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD non-floating-point operations.",
+        "EventCode": "0x8059",
+        "EventName": "ASE_NONFP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD non-floating-point operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE non-floating-point operations.",
+        "EventCode": "0x805A",
+        "EventName": "SVE_NONFP_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE non-floating-point operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE non-floating-point operations.",
+        "EventCode": "0x805B",
+        "EventName": "ASE_SVE_NONFP_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE non-floating-point operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD integer reduction operation.",
+        "EventCode": "0x805D",
+        "EventName": "ASE_INT_VREDUCE_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD integer reduction operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SVE integer reduction operation.",
+        "EventCode": "0x805E",
+        "EventName": "SVE_INT_VREDUCE_SPEC",
+        "BriefDescription": "This event counts architecturally executed SVE integer reduction operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed Advanced SIMD and SVE integer reduction operations.",
+        "EventCode": "0x805F",
+        "EventName": "ASE_SVE_INT_VREDUCE_SPEC",
+        "BriefDescription": "This event counts architecturally executed Advanced SIMD and SVE integer reduction operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed vector or predicate permute operation.",
+        "EventCode": "0x8060",
+        "EventName": "SVE_PERM_SPEC",
+        "BriefDescription": "This event counts architecturally executed vector or predicate permute operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed vector to general-purpose scalar cross-pipeline transfer operation.",
+        "EventCode": "0x8065",
+        "EventName": "SVE_XPIPE_Z2R_SPEC",
+        "BriefDescription": "This event counts architecturally executed vector to general-purpose scalar cross-pipeline transfer operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed general-purpose scalar to vector cross-pipeline transfer operation.",
+        "EventCode": "0x8066",
+        "EventName": "SVE_XPIPE_R2Z_SPEC",
+        "BriefDescription": "This event counts architecturally executed general-purpose scalar to vector cross-pipeline transfer operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed predicate-generating operation.",
+        "EventCode": "0x8068",
+        "EventName": "SVE_PGEN_SPEC",
+        "BriefDescription": "This event counts architecturally executed predicate-generating operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed predicate-generating operation that sets condition flags.",
+        "EventCode": "0x8069",
+        "EventName": "SVE_PGEN_FLG_SPEC",
+        "BriefDescription": "This event counts architecturally executed predicate-generating operation that sets condition flags."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed predicate permute operation.",
+        "EventCode": "0x806D",
+        "EventName": "SVE_PPERM_SPEC",
+        "BriefDescription": "This event counts architecturally executed predicate permute operation."
     },
     {
         "PublicDescription": "SVE predicated Operations speculatively executed.",
@@ -628,6 +1048,18 @@
         "EventCode": "0x807C",
         "EventName": "SVE_MOVPRFX_SPEC",
         "BriefDescription": "SVE MOVPRFX Operations speculatively executed."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operation counted by SVE_MOVPRFX_SPEC where the operation uses zeroing predication.",
+        "EventCode": "0x807D",
+        "EventName": "SVE_MOVPRFX_Z_SPEC",
+        "BriefDescription": "This event counts architecturally executed operation counted by SVE_MOVPRFX_SPEC where the operation uses zeroing predication."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operation counted by SVE_MOVPRFX_SPEC where the operation uses merging predication.",
+        "EventCode": "0x807E",
+        "EventName": "SVE_MOVPRFX_M_SPEC",
+        "BriefDescription": "This event counts architecturally executed operation counted by SVE_MOVPRFX_SPEC where the operation uses merging predication."
     },
     {
         "PublicDescription": "SVE MOVPRFX unfused Operations speculatively executed.",
@@ -694,6 +1126,18 @@
         "EventCode": "0x809F",
         "EventName": "SVE_PRF_CONTIG_SPEC",
         "BriefDescription": "SVE contiguous prefetch element Operations speculatively executed."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operation that reads from memory with a non-temporal hint due to an SVE non-temporal contiguous element load instruction.",
+        "EventCode": "0x80A1",
+        "EventName": "SVE_LDNT_CONTIG_SPEC",
+        "BriefDescription": "This event counts architecturally executed operation that reads from memory with a non-temporal hint due to an SVE non-temporal contiguous element load instruction."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operation that writes to memory with a non-temporal hint due to an SVE non-temporal contiguous element store instruction.",
+        "EventCode": "0x80A2",
+        "EventName": "SVE_STNT_CONTIG_SPEC",
+        "BriefDescription": "This event counts architecturally executed operation that writes to memory with a non-temporal hint due to an SVE non-temporal contiguous element store instruction."
     },
     {
         "PublicDescription": "Advanced SIMD and SVE contiguous load multiple vector Operations speculatively executed.",
@@ -786,6 +1230,18 @@
         "BriefDescription": "Non-scalable double-precision floating-point element Operations speculatively executed."
     },
     {
+        "PublicDescription": "This event counts each integer ALU operation counted by SVE_INT_SPEC. See ALU operation counts section of ARMv9 Reference Manual for information on the counter increment for different types of instruction.",
+        "EventCode": "0x80C8",
+        "EventName": "INT_SCALE_OPS_SPEC",
+        "BriefDescription": "This event counts each integer ALU operation counted by SVE_INT_SPEC. See ALU operation counts section of ARMv9 Reference Manual for information on the counter increment for different types of instruction."
+    },
+    {
+        "PublicDescription": "This event counts each integer ALU operation counted by INT_SPEC that is not counted by SVE_INT_SPEC. See ALU operation counts section of ARMv9 Reference Manual for information on the counter increment for different types of instruction.",
+        "EventCode": "0x80C9",
+        "EventName": "INT_FIXED_OPS_SPEC",
+        "BriefDescription": "This event counts each integer ALU operation counted by INT_SPEC that is not counted by SVE_INT_SPEC. See ALU operation counts section of ARMv9 Reference Manual for information on the counter increment for different types of instruction."
+    },
+    {
         "PublicDescription": "Advanced SIMD and SVE 8-bit integer operations speculatively executed",
         "EventCode": "0x80E3",
         "EventName": "ASE_SVE_INT8_SPEC",
@@ -808,5 +1264,407 @@
         "EventCode": "0x80EF",
         "EventName": "ASE_SVE_INT64_SPEC",
         "BriefDescription": "Advanced SIMD and SVE 64-bit integer operations speculatively executed"
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE floating-point dot-product operation.",
+        "EventCode": "0x80F3",
+        "EventName": "ASE_SVE_FP_DOT_SPEC",
+        "BriefDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE floating-point dot-product operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE floating-point matrix multiply operation.",
+        "EventCode": "0x80F7",
+        "EventName": "ASE_SVE_FP_MMLA_SPEC",
+        "BriefDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE floating-point matrix multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE integer dot-product operation.",
+        "EventCode": "0x80FB",
+        "EventName": "ASE_SVE_INT_DOT_SPEC",
+        "BriefDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE integer dot-product operation."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE integer matrix multiply operation.",
+        "EventCode": "0x80FF",
+        "EventName": "ASE_SVE_INT_MMLA_SPEC",
+        "BriefDescription": "This event counts architecturally executed microarchitectural Advanced SIMD or SVE integer matrix multiply operation."
+    },
+    {
+        "PublicDescription": "This event counts the number of DTLB_WALK events in progress on each Processor cycle.",
+        "EventCode": "0x8128",
+        "EventName": "DTLB_WALK_PERCYC",
+        "BriefDescription": "This event counts the number of DTLB_WALK events in progress on each Processor cycle."
+    },
+    {
+        "PublicDescription": "This event counts the number of ITLB_WALK events in progress on each Processor cycle.",
+        "EventCode": "0x8129",
+        "EventName": "ITLB_WALK_PERCYC",
+        "BriefDescription": "This event counts the number of ITLB_WALK events in progress on each Processor cycle."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk access made by a refill of the data TLB.",
+        "EventCode": "0x8136",
+        "EventName": "DTLB_STEP",
+        "BriefDescription": "This event counts translation table walk access made by a refill of the data TLB."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk access made by a refill of the instruction TLB.",
+        "EventCode": "0x8137",
+        "EventName": "ITLB_STEP",
+        "BriefDescription": "This event counts translation table walk access made by a refill of the instruction TLB."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a large page size.",
+        "EventCode": "0x8138",
+        "EventName": "DTLB_WALK_LARGE",
+        "BriefDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a large page size."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a large page size.",
+        "EventCode": "0x8139",
+        "EventName": "ITLB_WALK_LARGE",
+        "BriefDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a large page size."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a small page size.",
+        "EventCode": "0x813A",
+        "EventName": "DTLB_WALK_SMALL",
+        "BriefDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a small page size."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a small page size.",
+        "EventCode": "0x813B",
+        "EventName": "ITLB_WALK_SMALL",
+        "BriefDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a small page size."
+    },
+    {
+        "PublicDescription": "This event counts demand access that misses in the Level 1 data cache, causing an access to outside of the Level 1 caches of this PE.",
+        "EventCode": "0x8144",
+        "EventName": "L1D_CACHE_MISS",
+        "BriefDescription": "This event counts demand access that misses in the Level 1 data cache, causing an access to outside of the Level 1 caches of this PE."
+    },
+    {
+        "PublicDescription": "This event counts access counted by L1I_CACHE that is due to a hardware prefetch.",
+        "EventCode": "0x8145",
+        "EventName": "L1I_CACHE_HWPRF",
+        "BriefDescription": "This event counts access counted by L1I_CACHE that is due to a hardware prefetch."
+    },
+    {
+        "PublicDescription": "This event counts demand access that misses in the Level 1 data and Level 2 caches, causing an access to outside of the Level 1 and Level 2 caches of this PE.",
+        "EventCode": "0x814C",
+        "EventName": "L2D_CACHE_MISS",
+        "BriefDescription": "This event counts demand access that misses in the Level 1 data and Level 2 caches, causing an access to outside of the Level 1 and Level 2 caches of this PE."
+    },
+    {
+        "PublicDescription": "This event counts access counted by L1D_CACHE that is due to a hardware prefetch.",
+        "EventCode": "0x8154",
+        "EventName": "L1D_CACHE_HWPRF",
+        "BriefDescription": "This event counts access counted by L1D_CACHE that is due to a hardware prefetch."
+    },
+    {
+        "PublicDescription": "This event counts access counted by L2D_CACHE that is due to a hardware prefetch.",
+        "EventCode": "0x8155",
+        "EventName": "L2D_CACHE_HWPRF",
+        "BriefDescription": "This event counts access counted by L2D_CACHE that is due to a hardware prefetch."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND when no instructions are delivered from the memory system.",
+        "EventCode": "0x8158",
+        "EventName": "STALL_FRONTEND_MEMBOUND",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND when no instructions are delivered from the memory system."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the first level of instruction cache.",
+        "EventCode": "0x8159",
+        "EventName": "STALL_FRONTEND_L1I",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the first level of instruction cache."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the second level of instruction cache.",
+        "EventCode": "0x815A",
+        "EventName": "STALL_FRONTEND_L2I",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the second level of instruction cache."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the last level of instruction cache within the PE clock domain or a non-cacheable instruction fetch in progress.",
+        "EventCode": "0x815B",
+        "EventName": "STALL_FRONTEND_MEM",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the last level of instruction cache within the PE clock domain or a non-cacheable instruction fetch in progress."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the instruction TLB.",
+        "EventCode": "0x815C",
+        "EventName": "STALL_FRONTEND_TLB",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND_MEMBOUND when there is a demand instruction miss in the instruction TLB."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND when the frontend is stalled on a frontend processor resource, not including memory.",
+        "EventCode": "0x8160",
+        "EventName": "STALL_FRONTEND_CPUBOUND",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND when the frontend is stalled on a frontend processor resource, not including memory."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND_CPUBOUND when the frontend is stalled on unavailability of prediction flow resources.",
+        "EventCode": "0x8161",
+        "EventName": "STALL_FRONTEND_FLOW",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND_CPUBOUND when the frontend is stalled on unavailability of prediction flow resources."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND_CPUBOUND when the frontend is recovering from a pipeline flush.",
+        "EventCode": "0x8162",
+        "EventName": "STALL_FRONTEND_FLUSH",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND_CPUBOUND when the frontend is recovering from a pipeline flush."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_FRONTEND_CPUBOUND when operations are available from the frontend but at least one is not ready to be sent to the backend because no rename register is available.",
+        "EventCode": "0x8163",
+        "EventName": "STALL_FRONTEND_RENAME",
+        "BriefDescription": "This event counts every cycle counted by STALL_FRONTEND_CPUBOUND when operations are available from the frontend but at least one is not ready to be sent to the backend because no rename register is available."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND when the backend is waiting for a memory access to complete.",
+        "EventCode": "0x8164",
+        "EventName": "STALL_BACKEND_MEMBOUND",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND when the backend is waiting for a memory access to complete."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when there is a demand data miss in L1D cache.",
+        "EventCode": "0x8165",
+        "EventName": "STALL_BACKEND_L1D",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when there is a demand data miss in L1D cache."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when there is a demand data miss in L2D cache.",
+        "EventCode": "0x8166",
+        "EventName": "STALL_BACKEND_L2D",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when there is a demand data miss in L2D cache."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when there is a demand data miss in the data TLB.",
+        "EventCode": "0x8167",
+        "EventName": "STALL_BACKEND_TLB",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when there is a demand data miss in the data TLB."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when the backend is stalled waiting for a store.",
+        "EventCode": "0x8168",
+        "EventName": "STALL_BACKEND_ST",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when the backend is stalled waiting for a store."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND when the backend is stalled on a processor resource, not including memory.",
+        "EventCode": "0x816A",
+        "EventName": "STALL_BACKEND_CPUBOUND",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND when the backend is stalled on a processor resource, not including memory."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND when operations are available from the frontend but the backend is not able to accept an operation because an execution unit is busy.",
+        "EventCode": "0x816B",
+        "EventName": "STALL_BACKEND_BUSY",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND when operations are available from the frontend but the backend is not able to accept an operation because an execution unit is busy."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND when operations are available from the frontend but at least one is not ready to be sent to the backend because of an input dependency.",
+        "EventCode": "0x816C",
+        "EventName": "STALL_BACKEND_ILOCK",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND when operations are available from the frontend but at least one is not ready to be sent to the backend because of an input dependency."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND_CPUBOUND when operations are available from the frontend but at least one is not ready to be sent to the backend because no rename register is available.",
+        "EventCode": "0x816D",
+        "EventName": "STALL_BACKEND_RENAME",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND_CPUBOUND when operations are available from the frontend but at least one is not ready to be sent to the backend because no rename register is available."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when the backend is processing an Atomic operation.",
+        "EventCode": "0x816E",
+        "EventName": "STALL_BACKEND_ATOMIC",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when the backend is processing an Atomic operation."
+    },
+    {
+        "PublicDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when the backend is processing a Memory Copy or Set instruction.",
+        "EventCode": "0x816F",
+        "EventName": "STALL_BACKEND_MEMCPYSET",
+        "BriefDescription": "This event counts every cycle counted by STALL_BACKEND_MEMBOUND when the backend is processing a Memory Copy or Set instruction."
+    },
+    {
+        "PublicDescription": "This event counts micro-operation that would be executed in a Simple sequential execution of the program.",
+        "EventCode": "0x8186",
+        "EventName": "UOP_RETIRED",
+        "BriefDescription": "This event counts micro-operation that would be executed in a Simple sequential execution of the program."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a Block.",
+        "EventCode": "0x8188",
+        "EventName": "DTLB_WALK_BLOCK",
+        "BriefDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a Block."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a Block.",
+        "EventCode": "0x8189",
+        "EventName": "ITLB_WALK_BLOCK",
+        "BriefDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a Block."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a Page.",
+        "EventCode": "0x818A",
+        "EventName": "DTLB_WALK_PAGE",
+        "BriefDescription": "This event counts translation table walk counted by DTLB_WALK where the result of the walk yields a Page."
+    },
+    {
+        "PublicDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a Page.",
+        "EventCode": "0x818B",
+        "EventName": "ITLB_WALK_PAGE",
+        "BriefDescription": "This event counts translation table walk counted by ITLB_WALK where the result of the walk yields a Page."
+    },
+    {
+        "PublicDescription": "This event counts hardware prefetch counted by L1I_CACHE_HWPRF that causes a refill of the Level 1 instruction cache from outside of the Level 1 instruction cache.",
+        "EventCode": "0x81B8",
+        "EventName": "L1I_CACHE_REFILL_HWPRF",
+        "BriefDescription": "This event counts hardware prefetch counted by L1I_CACHE_HWPRF that causes a refill of the Level 1 instruction cache from outside of the Level 1 instruction cache."
+    },
+    {
+        "PublicDescription": "This event counts hardware prefetch counted by L1D_CACHE_HWPRF that causes a refill of the Level 1 data cache from outside of the Level 1 data cache.",
+        "EventCode": "0x81BC",
+        "EventName": "L1D_CACHE_REFILL_HWPRF",
+        "BriefDescription": "This event counts hardware prefetch counted by L1D_CACHE_HWPRF that causes a refill of the Level 1 data cache from outside of the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "This event counts hardware prefetch counted by L2D_CACHE_HWPRF that causes a refill of the Level 2 cache, or any Level 1 data and instruction cache of this PE, from outside of those caches.",
+        "EventCode": "0x81BD",
+        "EventName": "L2D_CACHE_REFILL_HWPRF",
+        "BriefDescription": "This event counts hardware prefetch counted by L2D_CACHE_HWPRF that causes a refill of the Level 2 cache, or any Level 1 data and instruction cache of this PE, from outside of those caches."
+    },
+    {
+        "PublicDescription": "This event counts demand fetch counted by L1I_CACHE_DM_RD that hits in the Level 1 instruction cache.",
+        "EventCode": "0x81C0",
+        "EventName": "L1I_CACHE_HIT_RD",
+        "BriefDescription": "This event counts demand fetch counted by L1I_CACHE_DM_RD that hits in the Level 1 instruction cache."
+    },
+    {
+        "PublicDescription": "This event counts demand read counted by L1D_CACHE_RD that hits in the Level 1 data cache.",
+        "EventCode": "0x81C4",
+        "EventName": "L1D_CACHE_HIT_RD",
+        "BriefDescription": "This event counts demand read counted by L1D_CACHE_RD that hits in the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "This event counts demand read counted by L2D_CACHE_RD that hits in the Level 2 data cache.",
+        "EventCode": "0x81C5",
+        "EventName": "L2D_CACHE_HIT_RD",
+        "BriefDescription": "This event counts demand read counted by L2D_CACHE_RD that hits in the Level 2 data cache."
+    },
+    {
+        "PublicDescription": "This event counts demand write counted by L1D_CACHE_WR that hits in the Level 1 data cache.",
+        "EventCode": "0x81C8",
+        "EventName": "L1D_CACHE_HIT_WR",
+        "BriefDescription": "This event counts demand write counted by L1D_CACHE_WR that hits in the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "This event counts demand write counted by L2D_CACHE_WR that hits in the Level 2 data cache.",
+        "EventCode": "0x81C9",
+        "EventName": "L2D_CACHE_HIT_WR",
+        "BriefDescription": "This event counts demand write counted by L2D_CACHE_WR that hits in the Level 2 data cache."
+    },
+    {
+        "PublicDescription": "This event counts access counted by L1I_CACHE that hits in the Level 1 instruction cache.",
+        "EventCode": "0x8200",
+        "EventName": "L1I_CACHE_HIT",
+        "BriefDescription": "This event counts access counted by L1I_CACHE that hits in the Level 1 instruction cache."
+    },
+    {
+        "PublicDescription": "This event counts access counted by L1D_CACHE that hits in the Level 1 data cache.",
+        "EventCode": "0x8204",
+        "EventName": "L1D_CACHE_HIT",
+        "BriefDescription": "This event counts access counted by L1D_CACHE that hits in the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "This event counts access counted by L2D_CACHE that hits in the Level 2 data cache.",
+        "EventCode": "0x8205",
+        "EventName": "L2D_CACHE_HIT",
+        "BriefDescription": "This event counts access counted by L2D_CACHE that hits in the Level 2 data cache."
+    },
+    {
+        "PublicDescription": "This event counts demand access counted by L1I_CACHE_HIT_RD that hits a cache line that is in the process of being loaded into the Level 1 instruction cache.",
+        "EventCode": "0x8240",
+        "EventName": "L1I_LFB_HIT_RD",
+        "BriefDescription": "This event counts demand access counted by L1I_CACHE_HIT_RD that hits a cache line that is in the process of being loaded into the Level 1 instruction cache."
+    },
+    {
+        "PublicDescription": "This event counts demand access counted by L1D_CACHE_HIT_RD that hits a cache line that is in the process of being loaded into the Level 1 data cache.",
+        "EventCode": "0x8244",
+        "EventName": "L1D_LFB_HIT_RD",
+        "BriefDescription": "This event counts demand access counted by L1D_CACHE_HIT_RD that hits a cache line that is in the process of being loaded into the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "This event counts demand access counted by L2D_CACHE_HIT_RD that hits a recently fetched line in the Level 2 cache.",
+        "EventCode": "0x8245",
+        "EventName": "L2D_LFB_HIT_RD",
+        "BriefDescription": "This event counts demand access counted by L2D_CACHE_HIT_RD that hits a recently fetched line in the Level 2 cache."
+    },
+    {
+        "PublicDescription": "This event counts demand access counted by L1D_CACHE_HIT_WR that hits a cache line that is in the process of being loaded into the Level 1 data cache.",
+        "EventCode": "0x8248",
+        "EventName": "L1D_LFB_HIT_WR",
+        "BriefDescription": "This event counts demand access counted by L1D_CACHE_HIT_WR that hits a cache line that is in the process of being loaded into the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "This event counts demand access counted by L2D_CACHE_HIT_WR that hits a recently fetched line in the Level 2 cache.",
+        "EventCode": "0x8249",
+        "EventName": "L2D_LFB_HIT_WR",
+        "BriefDescription": "This event counts demand access counted by L2D_CACHE_HIT_WR that hits a recently fetched line in the Level 2 cache."
+    },
+    {
+        "PublicDescription": "This event counts fetch counted by either Level 1 instruction hardware prefetch or Level 1 instruction software prefetch.",
+        "EventCode": "0x8280",
+        "EventName": "L1I_CACHE_PRF",
+        "BriefDescription": "This event counts fetch counted by either Level 1 instruction hardware prefetch or Level 1 instruction software prefetch."
+    },
+    {
+        "PublicDescription": "This event counts fetch counted by either Level 1 data hardware prefetch or Level 1 data software prefetch.",
+        "EventCode": "0x8284",
+        "EventName": "L1D_CACHE_PRF",
+        "BriefDescription": "This event counts fetch counted by either Level 1 data hardware prefetch or Level 1 data software prefetch."
+    },
+    {
+        "PublicDescription": "This event counts fetch counted by either Level 2 data hardware prefetch or Level 2 data software prefetch.",
+        "EventCode": "0x8285",
+        "EventName": "L2D_CACHE_PRF",
+        "BriefDescription": "This event counts fetch counted by either Level 2 data hardware prefetch or Level 2 data software prefetch."
+    },
+    {
+        "PublicDescription": "This event counts hardware prefetch counted by L1I_CACHE_PRF that causes a refill of the Level 1 instruction cache from outside of the Level 1 instruction cache.",
+        "EventCode": "0x8288",
+        "EventName": "L1I_CACHE_REFILL_PRF",
+        "BriefDescription": "This event counts hardware prefetch counted by L1I_CACHE_PRF that causes a refill of the Level 1 instruction cache from outside of the Level 1 instruction cache."
+    },
+    {
+        "PublicDescription": "This event counts hardware prefetch counted by L1D_CACHE_PRF that causes a refill of the Level 1 data cache from outside of the Level 1 data cache.",
+        "EventCode": "0x828C",
+        "EventName": "L1D_CACHE_REFILL_PRF",
+        "BriefDescription": "This event counts hardware prefetch counted by L1D_CACHE_PRF that causes a refill of the Level 1 data cache from outside of the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "This event counts hardware prefetch counted by L2D_CACHE_PRF that causes a refill of the Level 2 data cache from outside of the Level 1 data cache.",
+        "EventCode": "0x828D",
+        "EventName": "L2D_CACHE_REFILL_PRF",
+        "BriefDescription": "This event counts hardware prefetch counted by L2D_CACHE_PRF that causes a refill of the Level 2 data cache from outside of the Level 1 data cache."
+    },
+    {
+        "PublicDescription": "The counter counts by the number of cache refills counted by L1D_CACHE_REFILL in progress on each Processor cycle.",
+        "EventCode": "0x8320",
+        "EventName": "L1D_CACHE_REFILL_PERCYC",
+        "BriefDescription": "The counter counts by the number of cache refills counted by L1D_CACHE_REFILL in progress on each Processor cycle."
+    },
+    {
+        "PublicDescription": "The counter counts by the number of cache refills counted by L2D_CACHE_REFILL in progress on each Processor cycle.",
+        "EventCode": "0x8321",
+        "EventName": "L2D_CACHE_REFILL_PERCYC",
+        "BriefDescription": "The counter counts by the number of cache refills counted by L2D_CACHE_REFILL in progress on each Processor cycle."
+    },
+    {
+        "PublicDescription": "The counter counts by the number of cache refills counted by L1I_CACHE_REFILL in progress on each Processor cycle.",
+        "EventCode": "0x8324",
+        "EventName": "L1I_CACHE_REFILL_PERCYC",
+        "BriefDescription": "The counter counts by the number of cache refills counted by L1I_CACHE_REFILL in progress on each Processor cycle."
     }
 ]

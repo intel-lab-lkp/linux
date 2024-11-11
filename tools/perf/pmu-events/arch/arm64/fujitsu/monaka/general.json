@@ -1,0 +1,8 @@
+[
+    {
+        "ArchStdEvent": "CPU_CYCLES"
+    },
+    {
+        "ArchStdEvent": "CNT_CYCLES"
+    }
+]

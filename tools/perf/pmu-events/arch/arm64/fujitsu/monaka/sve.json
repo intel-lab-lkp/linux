@@ -1,0 +1,146 @@
+[
+    {
+        "ArchStdEvent": "ASE_INST_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INST_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INST_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_MATH_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_INT_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INT_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INT_DIV_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INT64_DIV_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_INT_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INT_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INT_MUL64_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INT_MULH64_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_NONFP_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_NONFP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_NONFP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_INT_VREDUCE_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_INT_VREDUCE_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT_VREDUCE_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_PERM_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_XPIPE_Z2R_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_XPIPE_R2Z_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_PGEN_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_PGEN_FLG_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_PPERM_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_PRED_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_MOVPRFX_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_MOVPRFX_Z_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_MOVPRFX_M_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_MOVPRFX_U_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_LD_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_ST_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_LDR_REG_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_STR_REG_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_LDR_PREG_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_STR_PREG_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_PRF_CONTIG_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_LDNT_CONTIG_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_STNT_CONTIG_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_LD_MULTI_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_ST_MULTI_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_LD_GATHER_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_ST_SCATTER_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_PRF_GATHER_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_LDFF_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT_DOT_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT_MMLA_SPEC"
+    }
+]

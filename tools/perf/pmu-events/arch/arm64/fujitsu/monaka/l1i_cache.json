@@ -1,0 +1,47 @@
+[
+    {
+        "ArchStdEvent": "L1I_CACHE"
+    },
+    {
+        "PublicDescription": "This event counts L1I_CACHE caused by demand read access.",
+        "EventCode": "0x0207",
+        "EventName": "L1I_CACHE_DM_RD",
+        "BriefDescription": "This event counts L1I_CACHE caused by demand read access."
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_PRF"
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_HWPRF"
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_REFILL"
+    },
+    {
+        "PublicDescription": "This event counts L1I_CACHE_REFILL caused by demand read access.",
+        "EventCode": "0x020F",
+        "EventName": "L1I_CACHE_REFILL_DM_RD",
+        "BriefDescription": "This event counts L1I_CACHE_REFILL caused by demand read access."
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_REFILL_PRF"
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_REFILL_HWPRF"
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_LMISS"
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_HIT"
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_HIT_RD"
+    },
+    {
+        "ArchStdEvent": "L1I_LFB_HIT_RD"
+    },
+    {
+        "ArchStdEvent": "L1I_CACHE_REFILL_PERCYC"
+    }
+]

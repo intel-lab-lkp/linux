@@ -1,0 +1,146 @@
+[
+    {
+        "ArchStdEvent": "L2D_CACHE"
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE caused by demand access.",
+        "EventCode": "0x0300",
+        "EventName": "L2D_CACHE_DM",
+        "BriefDescription": "This event counts L2D_CACHE caused by demand access."
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE caused by demand read access.",
+        "EventCode": "0x0301",
+        "EventName": "L2D_CACHE_DM_RD",
+        "BriefDescription": "This event counts L2D_CACHE caused by demand read access."
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE caused by demand write access.",
+        "EventCode": "0x0302",
+        "EventName": "L2D_CACHE_DM_WR",
+        "BriefDescription": "This event counts L2D_CACHE caused by demand write access."
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_RD"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_WR"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_PRF"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_HWPRF"
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE caused by hardware adjacent prefetch access.",
+        "EventCode": "0x0305",
+        "EventName": "L2D_CACHE_HWPRF_ADJACENT",
+        "BriefDescription": "This event counts L2D_CACHE caused by hardware adjacent prefetch access."
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_REFILL"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_MISS"
+    },
+    {
+        "PublicDescription": "This event counts demand access that hits cache line with shared status and requests exclusive access in the Level 1 data and Level 2 caches, causing a coherence access to outside of the Level 1 and Level 2 caches of this PE.",
+        "EventCode": "0x030D",
+        "EventName": "L2D_CACHE_BTC",
+        "BriefDescription": "This event counts demand access that hits cache line with shared status and requests exclusive access in the Level 1 data and Level 2 caches, causing a coherence access to outside of the Level 1 and Level 2 caches of this PE."
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE_REFILL caused by demand access.",
+        "EventCode": "0x0308",
+        "EventName": "L2D_CACHE_REFILL_DM",
+        "BriefDescription": "This event counts L2D_CACHE_REFILL caused by demand access."
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE_REFILL caused by demand read access.",
+        "EventCode": "0x0309",
+        "EventName": "L2D_CACHE_REFILL_DM_RD",
+        "BriefDescription": "This event counts L2D_CACHE_REFILL caused by demand read access."
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE_REFILL caused by demand write access.",
+        "EventCode": "0x030A",
+        "EventName": "L2D_CACHE_REFILL_DM_WR",
+        "BriefDescription": "This event counts L2D_CACHE_REFILL caused by demand write access."
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE_REFILL caused by demand write exclusive access.",
+        "EventCode": "0x030B",
+        "EventName": "L2D_CACHE_REFILL_DM_WR_EXCL",
+        "BriefDescription": "This event counts L2D_CACHE_REFILL caused by demand write exclusive access."
+    },
+    {
+        "PublicDescription": "This event counts L2D_CACHE_REFILL caused by demand write atomic access.",
+        "EventCode": "0x030C",
+        "EventName": "L2D_CACHE_REFILL_DM_WR_ATOM",
+        "BriefDescription": "This event counts L2D_CACHE_REFILL caused by demand write atomic access."
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_REFILL_RD"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_LMISS_RD"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_REFILL_WR"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_REFILL_PRF"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_REFILL_HWPRF"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_HIT"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_HIT_RD"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_HIT_WR"
+    },
+    {
+        "ArchStdEvent": "L2D_LFB_HIT_RD"
+    },
+    {
+        "ArchStdEvent": "L2D_LFB_HIT_WR"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_WB"
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_WB_VICTIM"
+    },
+    {
+        "PublicDescription": "This event counts every write-back of data from the L2 cache caused by L2 replace where the data is clean. In this case, the data will usually be written to L3 cache.",
+        "EventCode": "0x03B0",
+        "EventName": "L2D_CACHE_WB_VICTIM_CLEAN",
+        "BriefDescription": "This event counts every write-back of data from the L2 cache caused by L2 replace where the data is clean. In this case, the data will usually be written to L3 cache."
+    },
+    {
+        "PublicDescription": "This event counts every write-back of data from the L2 cache caused by non-temporal-store.",
+        "EventCode": "0x03B1",
+        "EventName": "L2D_CACHE_WB_NT",
+        "BriefDescription": "This event counts every write-back of data from the L2 cache caused by non-temporal-store."
+    },
+    {
+        "PublicDescription": "This event counts every write-back of data from the L2 cache caused by DC ZVA.",
+        "EventCode": "0x03B2",
+        "EventName": "L2D_CACHE_WB_DCZVA",
+        "BriefDescription": "This event counts every write-back of data from the L2 cache caused by DC ZVA."
+    },
+    {
+        "PublicDescription": "This event counts every flush-back (drop) of data from the L2 cache.",
+        "EventCode": "0x03B3",
+        "EventName": "L2D_CACHE_FB",
+        "BriefDescription": "This event counts every flush-back (drop) of data from the L2 cache."
+    },
+    {
+        "ArchStdEvent": "L2D_CACHE_REFILL_PERCYC"
+    }
+]

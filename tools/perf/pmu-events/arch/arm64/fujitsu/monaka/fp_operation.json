@@ -1,0 +1,194 @@
+[
+    {
+        "ArchStdEvent": "FP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_HP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_HP_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_HP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_HP_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_SP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_SP_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_SP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_SP_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_DP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_DP_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_DP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_DP_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_DIV_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_DIV_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_DIV_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_DIV_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_SQRT_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_SQRT_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_SQRT_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_SQRT_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_FMA_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_FMA_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_FMA_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_FMA_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_ADDSUB_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_ADDSUB_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_ADDSUB_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_ADDSUB_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_RECPE_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_RECPE_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_RECPE_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_RECPE_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_CVT_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_CVT_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_CVT_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_CVT_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_AREDUCE_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_FP_PREDUCE_SPEC"
+    },
+    {
+        "ArchStdEvent": "SVE_FP_VREDUCE_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_VREDUCE_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_SCALE_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_FIXED_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_HP_SCALE_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_HP_FIXED_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_SP_SCALE_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_SP_FIXED_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_DP_SCALE_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "FP_DP_FIXED_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_DOT_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_FP_MMLA_SPEC"
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed floating-point move operations.",
+        "EventCode": "0x0105",
+        "EventName": "FP_MV_SPEC",
+        "BriefDescription": "This event counts architecturally executed floating-point move operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed NOSIMD load operations that using SIMD&FP registers.",
+        "EventCode": "0x0112",
+        "EventName": "FP_LD_SPEC",
+        "BriefDescription": "This event counts architecturally executed NOSIMD load operations that using SIMD&FP registers."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed NOSIMD store operations that using SIMD&FP registers.",
+        "EventCode": "0x0113",
+        "EventName": "FP_ST_SPEC",
+        "BriefDescription": "This event counts architecturally executed NOSIMD store operations that using SIMD&FP registers."
+    }
+]
