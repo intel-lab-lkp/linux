@@ -958,6 +958,7 @@ panthor_vm_map_pages(struct panthor_vm *vm, u64 iova, int prot,
 
 		paddr += offset;
 		len -= offset;
+		offset = 0;
 		len = min_t(size_t, len, size);
 		size -= len;
 
