@@ -452,7 +452,7 @@ static int __get_snap_name(struct dentry *parent, char *name,
 		goto out;
 	if (ceph_snap(inode) == CEPH_SNAPDIR) {
 		if (ceph_snap(dir) == CEPH_NOSNAP) {
-			strcpy(name, fsc->mount_options->snapdir_name);
+			strscpy(name, fsc->mount_options->snapdir_name);
 			err = 0;
 		}
 		goto out;
