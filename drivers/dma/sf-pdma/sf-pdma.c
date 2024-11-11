@@ -153,44 +153,6 @@ static void sf_pdma_free_chan_resources(struct dma_chan *dchan)
 	vchan_dma_desc_free_list(&chan->vchan, &head);
 }
 
-static size_t sf_pdma_desc_residue(struct sf_pdma_chan *chan,
-				   dma_cookie_t cookie)
-{
-	struct virt_dma_desc *vd = NULL;
-	struct pdma_regs *regs = &chan->regs;
-	unsigned long flags;
-	u64 residue = 0;
-	struct sf_pdma_desc *desc;
-	struct dma_async_tx_descriptor *tx = NULL;
-
-	spin_lock_irqsave(&chan->vchan.lock, flags);
-
-	list_for_each_entry(vd, &chan->vchan.desc_submitted, node)
-		if (vd->tx.cookie == cookie)
-			tx = &vd->tx;
-
-	if (!tx)
-		goto out;
-
-	if (cookie == tx->chan->completed_cookie)
-		goto out;
-
-	if (cookie == tx->cookie) {
-		residue = readq(regs->residue);
-	} else {
-		vd = vchan_find_desc(&chan->vchan, cookie);
-		if (!vd)
-			goto out;
-
-		desc = to_sf_pdma_desc(vd);
-		residue = desc->xfer_size;
-	}
-
-out:
-	spin_unlock_irqrestore(&chan->vchan.lock, flags);
-	return residue;
-}
-
 static enum dma_status
 sf_pdma_tx_status(struct dma_chan *dchan,
 		  dma_cookie_t cookie,
@@ -198,12 +160,27 @@ sf_pdma_tx_status(struct dma_chan *dchan,
 {
 	struct sf_pdma_chan *chan = to_sf_pdma_chan(dchan);
 	enum dma_status status;
+	unsigned long flags;
+	struct virt_dma_desc *desc;
 
 	status = dma_cookie_status(dchan, cookie, txstate);
 
-	if (txstate && status != DMA_ERROR)
-		dma_set_residue(txstate, sf_pdma_desc_residue(chan, cookie));
+	if (status == DMA_COMPLETE) {
+		dma_set_residue(txstate, 0);
+		return status;
+	}
 
+	spin_lock_irqsave(&chan->vchan.lock, flags);
+
+	desc = vchan_find_desc(&chan->vchan, cookie);
+	if (chan->desc && cookie == chan->desc->async_tx->cookie) {
+		dma_set_residue(txstate, readq(chan->regs.residue));
+		status = chan->status;
+	} else if (desc) {
+		dma_set_residue(txstate, to_sf_pdma_desc(desc)->xfer_size);
+	}
+
+	spin_unlock_irqrestore(&chan->vchan.lock, flags);
 	return status;
 }
 
@@ -217,7 +194,6 @@ static int sf_pdma_terminate_all(struct dma_chan *dchan)
 	sf_pdma_disable_request(chan);
 	kfree(chan->desc);
 	chan->desc = NULL;
-	chan->xfer_err = false;
 	vchan_get_all_descriptors(&chan->vchan, &head);
 	spin_unlock_irqrestore(&chan->vchan.lock, flags);
 	vchan_dma_desc_free_list(&chan->vchan, &head);
@@ -278,7 +254,7 @@ static void sf_pdma_issue_pending(struct dma_chan *dchan)
 
 	spin_lock_irqsave(&chan->vchan.lock, flags);
 
-	if (!chan->desc && vchan_issue_pending(&chan->vchan)) {
+	if (vchan_issue_pending(&chan->vchan) && !chan->desc) {
 		/* vchan_issue_pending has made a check that desc in not NULL */
 		chan->desc = sf_pdma_get_first_pending_desc(chan);
 		sf_pdma_xfer_desc(chan);
@@ -300,15 +276,9 @@ static void sf_pdma_donebh_tasklet(struct tasklet_struct *t)
 	struct sf_pdma_chan *chan = from_tasklet(chan, t, done_tasklet);
 	unsigned long flags;
 
-	spin_lock_irqsave(&chan->lock, flags);
-	if (chan->xfer_err) {
-		chan->retries = MAX_RETRY;
-		chan->status = DMA_COMPLETE;
-		chan->xfer_err = false;
-	}
-	spin_unlock_irqrestore(&chan->lock, flags);
-
 	spin_lock_irqsave(&chan->vchan.lock, flags);
+	chan->status = DMA_COMPLETE;
+
 	list_del(&chan->desc->vdesc.node);
 	vchan_cookie_complete(&chan->desc->vdesc);
 
@@ -322,23 +292,12 @@ static void sf_pdma_donebh_tasklet(struct tasklet_struct *t)
 static void sf_pdma_errbh_tasklet(struct tasklet_struct *t)
 {
 	struct sf_pdma_chan *chan = from_tasklet(chan, t, err_tasklet);
-	struct sf_pdma_desc *desc = chan->desc;
 	unsigned long flags;
 
-	spin_lock_irqsave(&chan->lock, flags);
-	if (chan->retries <= 0) {
-		/* fail to recover */
-		spin_unlock_irqrestore(&chan->lock, flags);
-		dmaengine_desc_get_callback_invoke(desc->async_tx, NULL);
-	} else {
-		/* retry */
-		chan->retries--;
-		chan->xfer_err = true;
-		chan->status = DMA_ERROR;
-
-		sf_pdma_enable_request(chan);
-		spin_unlock_irqrestore(&chan->lock, flags);
-	}
+	spin_lock_irqsave(&chan->vchan.lock, flags);
+	dmaengine_desc_get_callback_invoke(chan->desc->async_tx, NULL);
+	chan->status = DMA_ERROR;
+	spin_unlock_irqrestore(&chan->vchan.lock, flags);
 }
 
 static irqreturn_t sf_pdma_done_isr(int irq, void *dev_id)
@@ -374,9 +333,9 @@ static irqreturn_t sf_pdma_err_isr(int irq, void *dev_id)
 	struct sf_pdma_chan *chan = dev_id;
 	struct pdma_regs *regs = &chan->regs;
 
-	spin_lock(&chan->lock);
+	spin_lock(&chan->vchan.lock);
 	writel((readl(regs->ctrl)) & ~PDMA_ERR_STATUS_MASK, regs->ctrl);
-	spin_unlock(&chan->lock);
+	spin_unlock(&chan->vchan.lock);
 
 	tasklet_schedule(&chan->err_tasklet);
 
@@ -480,8 +439,6 @@ static void sf_pdma_setup_chans(struct sf_pdma *pdma)
 		chan->pdma = pdma;
 		chan->pm_state = RUNNING;
 		chan->slave_id = i;
-		chan->xfer_err = false;
-		spin_lock_init(&chan->lock);
 
 		chan->vchan.desc_free = sf_pdma_free_desc;
 		vchan_init(&chan->vchan, &pdma->dma_dev);

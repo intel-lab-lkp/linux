@@ -102,11 +102,8 @@ struct sf_pdma_chan {
 	struct tasklet_struct		done_tasklet;
 	struct tasklet_struct		err_tasklet;
 	struct pdma_regs		regs;
-	spinlock_t			lock; /* protect chan data */
-	bool				xfer_err;
 	int				txirq;
 	int				errirq;
-	int				retries;
 };
 
 struct sf_pdma {
