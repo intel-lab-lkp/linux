@@ -4797,8 +4797,15 @@ static void svm_enable_smi_window(struct kvm_vcpu *vcpu)
 static int svm_check_emulate_instruction(struct kvm_vcpu *vcpu, int emul_type,
 					 void *insn, int insn_len)
 {
-	bool smep, smap, is_user;
+	bool smep, smap, is_user, is_vect;
 	u64 error_code;
+
+	is_vect = to_svm(vcpu)->vmcb->control.exit_int_info &
+		  SVM_EXITINTINFO_TYPE_MASK;
+
+	/* Emulation is not possible when MMIO happens during event vectoring. */
+	if (kvm_is_emul_type_mmio(emul_type) && is_vect)
+		return X86EMUL_UNHANDLEABLE_VECTORING_IO;
 
 	/* Emulation is always possible when KVM has access to all guest state. */
 	if (!sev_guest(vcpu->kvm))
