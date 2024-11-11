@@ -9096,7 +9096,8 @@ static void btrfs_encoded_read_endio(struct btrfs_bio *bbio)
 		 */
 		WRITE_ONCE(priv->status, bbio->bio.bi_status);
 	}
-	if (atomic_dec_return(&priv->pending) == 0) {
+	bio_put(&bbio->bio);
+	if (atomic_dec_and_test(&priv->pending)) {
 		int err = blk_status_to_errno(READ_ONCE(priv->status));
 
 		if (priv->uring_ctx) {
@@ -9106,7 +9107,6 @@ static void btrfs_encoded_read_endio(struct btrfs_bio *bbio)
 			wake_up(&priv->wait);
 		}
 	}
-	bio_put(&bbio->bio);
 }
 
 int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
