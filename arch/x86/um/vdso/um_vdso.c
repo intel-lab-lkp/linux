@@ -23,10 +23,17 @@ int __vdso_clock_gettime(clockid_t clock, struct __kernel_old_timespec *ts)
 {
 	long ret;
 
+#ifdef CONFIG_MMU
 	asm("syscall"
 		: "=a" (ret)
 		: "0" (__NR_clock_gettime), "D" (clock), "S" (ts)
 		: "rcx", "r11", "memory");
+#else
+	asm("call *%1"
+		: "=a" (ret)
+		: "0" ((unsigned long)__NR_clock_gettime), "D" (clock), "S" (ts)
+		: "rcx", "r11", "memory");
+#endif
 
 	return ret;
 }
@@ -37,10 +44,17 @@ int __vdso_gettimeofday(struct __kernel_old_timeval *tv, struct timezone *tz)
 {
 	long ret;
 
+#ifdef CONFIG_MMU
 	asm("syscall"
 		: "=a" (ret)
 		: "0" (__NR_gettimeofday), "D" (tv), "S" (tz)
 		: "rcx", "r11", "memory");
+#else
+	asm("call *%1"
+		: "=a" (ret)
+		: "0" ((unsigned long)__NR_gettimeofday), "D" (tv), "S" (tz)
+		: "rcx", "r11", "memory");
+#endif
 
 	return ret;
 }
@@ -51,9 +65,15 @@ __kernel_old_time_t __vdso_time(__kernel_old_time_t *t)
 {
 	long secs;
 
+#ifdef CONFIG_MMU
 	asm volatile("syscall"
 		: "=a" (secs)
 		: "0" (__NR_time), "D" (t) : "cc", "r11", "cx", "memory");
+#else
+	asm("call *%1"
+		: "=a" (secs)
+		: "0" ((unsigned long)__NR_time), "D" (t) : "cc", "r11", "cx", "memory");
+#endif
 
 	return secs;
 }
