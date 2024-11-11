@@ -220,6 +220,9 @@ extern int os_unmap_memory(void *addr, int len);
 extern int os_drop_memory(void *addr, int length);
 extern int can_drop_memory(void);
 extern int os_mincore(void *addr, unsigned long len);
+#ifndef CONFIG_MMU
+extern int os_setup_seccomp(void);
+#endif
 
 void os_set_pdeathsig(void);
 
