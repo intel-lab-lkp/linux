@@ -1479,7 +1479,7 @@ static bool intel_psr2_config_valid(struct intel_dp *intel_dp,
 	}
 
 	/* Wa_16011303918:adl-p */
-	if (crtc_state->vrr.enable &&
+	if (crtc_state->vrr.tg_enable &&
 	    IS_ALDERLAKE_P(dev_priv) && IS_DISPLAY_STEP(display, STEP_A0, STEP_B0)) {
 		drm_dbg_kms(display->drm,
 			    "PSR2 not enabled, not compatible with HW stepping + VRR\n");
@@ -1675,7 +1675,7 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 	/*
 	 * Currently PSR/PR doesn't work reliably with VRR enabled.
 	 */
-	if (crtc_state->vrr.enable)
+	if (crtc_state->vrr.tg_enable)
 		return;
 
 	crtc_state->has_panel_replay = _panel_replay_compute_config(intel_dp,

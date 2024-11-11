@@ -106,7 +106,7 @@ static bool pre_commit_is_vrr_active(struct intel_atomic_state *state,
 		return false;
 
 	/* VRR will have been disabled during intel_pre_plane_update() */
-	return old_crtc_state->vrr.enable && !intel_crtc_vrr_disabling(state, crtc);
+	return old_crtc_state->vrr.tg_enable && !intel_crtc_vrr_disabling(state, crtc);
 }
 
 static const struct intel_crtc_state *

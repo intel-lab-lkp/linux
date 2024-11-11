@@ -1129,8 +1129,8 @@ static bool intel_crtc_vrr_enabling(struct intel_atomic_state *state,
 	if (!new_crtc_state->hw.active)
 		return false;
 
-	return is_enabling(vrr.enable, old_crtc_state, new_crtc_state) ||
-		(new_crtc_state->vrr.enable &&
+	return is_enabling(vrr.tg_enable, old_crtc_state, new_crtc_state) ||
+		(new_crtc_state->vrr.tg_enable &&
 		 (new_crtc_state->update_m_n || new_crtc_state->update_lrr ||
 		  vrr_params_changed(old_crtc_state, new_crtc_state)));
 }
@@ -1146,8 +1146,8 @@ bool intel_crtc_vrr_disabling(struct intel_atomic_state *state,
 	if (!old_crtc_state->hw.active)
 		return false;
 
-	return is_disabling(vrr.enable, old_crtc_state, new_crtc_state) ||
-		(old_crtc_state->vrr.enable &&
+	return is_disabling(vrr.tg_enable, old_crtc_state, new_crtc_state) ||
+		(old_crtc_state->vrr.tg_enable &&
 		 (new_crtc_state->update_m_n || new_crtc_state->update_lrr ||
 		  vrr_params_changed(old_crtc_state, new_crtc_state)));
 }
@@ -5751,7 +5751,7 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	PIPE_CONF_CHECK_I(splitter.pixel_overlap);
 
 	if (!fastset) {
-		PIPE_CONF_CHECK_BOOL(vrr.enable);
+		PIPE_CONF_CHECK_BOOL(vrr.tg_enable);
 		PIPE_CONF_CHECK_X(vrr.mode);
 		PIPE_CONF_CHECK_I(vrr.vmin);
 		PIPE_CONF_CHECK_I(vrr.vmax);
@@ -7237,7 +7237,7 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	if (intel_crtc_vrr_enabling(state, crtc) ||
 	    new_crtc_state->update_m_n || new_crtc_state->update_lrr)
 		intel_crtc_update_active_timings(new_crtc_state,
-						 new_crtc_state->vrr.enable);
+						 new_crtc_state->vrr.tg_enable);
 
 	/*
 	 * We usually enable FIFO underrun interrupts as part of the
@@ -7653,7 +7653,7 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 	/* FIXME deal with everything */
 	new_crtc_state->use_dsb =
 		new_crtc_state->update_planes &&
-		!new_crtc_state->vrr.enable &&
+		!new_crtc_state->vrr.tg_enable &&
 		!new_crtc_state->do_async_flip &&
 		!new_crtc_state->has_psr &&
 		!new_crtc_state->scaler_state.scaler_users &&

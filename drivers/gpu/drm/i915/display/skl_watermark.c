@@ -2909,7 +2909,7 @@ skl_compute_wm(struct intel_atomic_state *state)
 
 		if ((new_crtc_state->vrr.vmin == new_crtc_state->vrr.vmax &&
 		     new_crtc_state->vrr.vmin == new_crtc_state->vrr.flipline) ||
-		    !new_crtc_state->vrr.enable)
+		    !new_crtc_state->vrr.tg_enable)
 			enable_dpkgc = true;
 	}
 
