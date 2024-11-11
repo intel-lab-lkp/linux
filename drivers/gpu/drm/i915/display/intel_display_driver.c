@@ -563,6 +563,8 @@ void intel_display_driver_register(struct drm_i915_private *i915)
 					DISPLAY_RUNTIME_INFO(i915), &p);
 
 	intel_power_domains_enable(i915);
+
+	intel_register_dsm_handler();
 }
 
 void intel_display_driver_cleanup(struct drm_i915_private *i915)
@@ -644,6 +646,8 @@ void intel_display_driver_unregister(struct drm_i915_private *i915)
 
 	if (!HAS_DISPLAY(i915))
 		return;
+
+	intel_unregister_dsm_handler();
 
 	intel_power_domains_disable(i915);
 
