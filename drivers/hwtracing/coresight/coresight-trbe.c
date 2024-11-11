@@ -1556,13 +1556,13 @@ MODULE_DEVICE_TABLE(platform, arm_trbe_acpi_match);
 
 static struct platform_driver arm_trbe_driver = {
 	.id_table = ACPI_PTR(arm_trbe_acpi_match),
-	.driver	= {
+	.driver = {
 		.name = DRVNAME,
 		.of_match_table = of_match_ptr(arm_trbe_of_match),
 		.suppress_bind_attrs = true,
 	},
-	.probe	= arm_trbe_device_probe,
-	.remove_new = arm_trbe_device_remove,
+	.probe = arm_trbe_device_probe,
+	.remove = arm_trbe_device_remove,
 };
 
 static int __init arm_trbe_init(void)
