@@ -7142,8 +7142,16 @@ static void intel_enable_crtc(struct intel_atomic_state *state,
 		const struct intel_crtc_state *pipe_crtc_state =
 			intel_atomic_get_new_crtc_state(state, pipe_crtc);
 
-		/* VRR will be enable later, if required */
-		intel_crtc_update_active_timings(pipe_crtc_state, false);
+		/*
+		 * For XE2LPD+ we are always using VRR TG.
+		 * For previous platforms VRR will be enable later, if required
+		 */
+		if (DISPLAY_VER(dev_priv) >= 20)
+			intel_crtc_update_active_timings(pipe_crtc_state,
+							 pipe_crtc_state->vrr.tg_enable);
+		else
+			intel_crtc_update_active_timings(pipe_crtc_state, false);
+
 	}
 
 	dev_priv->display.funcs.display->crtc_enable(state, crtc);

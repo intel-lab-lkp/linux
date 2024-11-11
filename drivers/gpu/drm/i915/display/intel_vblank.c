@@ -626,9 +626,11 @@ void intel_vblank_evade_init(const struct intel_crtc_state *old_crtc_state,
 	adjusted_mode = &crtc_state->hw.adjusted_mode;
 
 	if (crtc->mode_flags & I915_MODE_FLAG_VRR) {
-		/* timing changes should happen with VRR disabled */
-		drm_WARN_ON(crtc->base.dev, intel_crtc_needs_modeset(new_crtc_state) ||
-			    new_crtc_state->update_m_n || new_crtc_state->update_lrr);
+		/* Prior to XE2LPD+, timing changes should happen with VRR disabled */
+		if (DISPLAY_VER(display) < 20) {
+			drm_WARN_ON(crtc->base.dev, intel_crtc_needs_modeset(new_crtc_state) ||
+				    new_crtc_state->update_m_n || new_crtc_state->update_lrr);
+		}
 
 		if (intel_vrr_is_push_sent(crtc_state))
 			evade->vblank_start = intel_vrr_vmin_vblank_start(crtc_state);
