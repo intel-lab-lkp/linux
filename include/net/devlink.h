@@ -1613,6 +1613,15 @@ void devlink_free(struct devlink *devlink);
  *			    of event queues. Should be used by device drivers to
  *			    configure maximum number of event queues
  *			    of a function managed by the devlink port.
+ * @port_fn_bridge_offload_get: Callback used to get port function's bridge
+ *				 offload capability. Should be used by device drivers
+ *				 to report the current state of offload
+ *				 capability of a function managed by the devlink
+ *				 port.
+ * @port_fn_bridge_offload_get: Callback used to set port function's bridge
+ *				 offload capability. Should be used by device drivers to
+ *				 enable/disable offload capability of a
+ *				 function managed by the devlink port.
  *
  * Note: Driver should return -EOPNOTSUPP if it doesn't support
  * port function (@port_fn_*) handling for a particular port.
@@ -1668,6 +1677,10 @@ struct devlink_port_ops {
 	int (*port_fn_max_io_eqs_set)(struct devlink_port *devlink_port,
 				      u32 max_eqs,
 				      struct netlink_ext_ack *extack);
+	void (*port_fn_bridge_offload_get)(struct devlink_port *devlink_port,
+					   bool *is_enable);
+	void (*port_fn_bridge_offload_set)(struct devlink_port *devlink_port,
+					   bool enable);
 };
 
 void devlink_port_init(struct devlink *devlink,
