@@ -48,6 +48,7 @@
 #define PCF2127_BIT_CTRL3_BLF			BIT(2)
 #define PCF2127_BIT_CTRL3_BF			BIT(3)
 #define PCF2127_BIT_CTRL3_BTSE			BIT(4)
+#define PCF2127_BIT_CTRL3_PWRMNG_MASK		(BIT(5) | BIT(6) | BIT(7))
 /* Time and date registers */
 #define PCF2127_REG_TIME_BASE		0x03
 #define PCF2127_BIT_SC_OSF			BIT(7)
@@ -527,6 +528,64 @@ static int pcf2127_watchdog_init(struct device *dev, struct pcf2127 *pcf2127)
 	}
 
 	return devm_watchdog_register_device(dev, &pcf2127->wdd);
+}
+
+static int pcf2127_battery_init(struct device *dev, struct pcf2127 *pcf2127)
+{
+	unsigned int ctrl3;
+	unsigned int pwrmng;
+	int ret;
+
+	/*
+	 * Disable battery low/switch-over timestamp and interrupts.
+	 * Clear battery interrupt flags which can block new trigger events.
+	 * Note: This is the default chip behaviour but added to ensure
+	 * correct tamper timestamp and interrupt function.
+	 */
+	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				 PCF2127_BIT_CTRL3_BTSE |
+				 PCF2127_BIT_CTRL3_BIE |
+				 PCF2127_BIT_CTRL3_BLIE, 0);
+	if (ret) {
+		dev_err(dev, "%s: interrupt config (ctrl3) failed\n",
+			__func__);
+		return ret;
+	}
+
+	if (!device_property_read_bool(dev, "nxp,battery-backed"))
+		return 0;
+
+	ret = regmap_read(pcf2127->regmap, PCF2127_REG_CTRL3, &ctrl3);
+	if (ret) {
+		dev_err(dev, "%s: read ctrl3 faild\n", __func__);
+		return ret;
+	}
+
+	/*
+	 * Don't touch the PWRNMNG bits if any kind of battery switch-over is
+	 * enabled. The PWRMNG values 0-2 use the battery switch-over standard
+	 * mode, while values 3-5 use direct switching mode.
+	 * Only values 6 and 7 have the battery switch-over function disabled.
+	 */
+	pwrmng = (PCF2127_BIT_CTRL3_PWRMNG_MASK & ctrl3) >> 5;
+	if (pwrmng < 6)
+		return 0;
+
+	/*
+	 * Enable battery switch-over function in standard mode.
+	 * Enable battery low detection function.
+	 * Enable extra power fail detection function (PCF2127 only).
+	 */
+	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
+				 PCF2127_BIT_CTRL3_PWRMNG_MASK, 0);
+	if (ret) {
+		dev_err(dev,
+			"%s: battery switch-over config (ctrl3) failed\n",
+			__func__);
+		return ret;
+	}
+
+	return 0;
 }
 
 /* Alarm */
@@ -1224,22 +1283,9 @@ static int pcf2127_probe(struct device *dev, struct regmap *regmap,
 	}
 
 	pcf2127_watchdog_init(dev, pcf2127);
-
-	/*
-	 * Disable battery low/switch-over timestamp and interrupts.
-	 * Clear battery interrupt flags which can block new trigger events.
-	 * Note: This is the default chip behaviour but added to ensure
-	 * correct tamper timestamp and interrupt function.
-	 */
-	ret = regmap_update_bits(pcf2127->regmap, PCF2127_REG_CTRL3,
-				 PCF2127_BIT_CTRL3_BTSE |
-				 PCF2127_BIT_CTRL3_BIE |
-				 PCF2127_BIT_CTRL3_BLIE, 0);
-	if (ret) {
-		dev_err(dev, "%s: interrupt config (ctrl3) failed\n",
-			__func__);
+	ret = pcf2127_battery_init(dev, pcf2127);
+	if (ret < 0)
 		return ret;
-	}
 
 	/*
 	 * Enable timestamp functions 1 to 4.
