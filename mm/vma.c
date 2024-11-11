@@ -984,6 +984,7 @@ struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
 	can_merge_left = can_vma_merge_left(vmg);
 	can_merge_right = !just_expand && can_vma_merge_right(vmg, can_merge_left);
 
+	vmg->next = NULL;
 	/* If we can merge with the next VMA, adjust vmg accordingly. */
 	if (can_merge_right) {
 		vmg->end = next->vm_end;
@@ -1001,8 +1002,12 @@ struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
 		 * are not permitted to do so, reduce the operation to merging
 		 * prev and vma.
 		 */
-		if (can_merge_right && !can_merge_remove_vma(next))
-			vmg->end = end;
+		if (can_merge_right) {
+			if (!can_merge_remove_vma(next))
+				vmg->end = end;
+			else
+				vmg->next = next;
+		}
 
 		/* In expand-only case we are already positioned at prev. */
 		if (!just_expand) {
@@ -1030,9 +1035,9 @@ struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
  * @vmg: Describes a VMA expansion operation.
  *
  * Expand @vma to vmg->start and vmg->end.  Can expand off the start and end.
- * Will expand over vmg->next if it's different from vmg->vma and vmg->end ==
- * vmg->next->vm_end.  Checking if the vmg->vma can expand and merge with
- * vmg->next needs to be handled by the caller.
+ * Will expand over vmg->next if it's set.
+ * Checking if the vmg->vma can expand and merge with vmg->next needs to be
+ * handled by the caller.
  *
  * Returns: 0 on success.
  *
@@ -1043,17 +1048,15 @@ struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
 int vma_expand(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *anon_dup = NULL;
-	bool remove_next = false;
 	struct vm_area_struct *vma = vmg->vma;
 	struct vm_area_struct *next = vmg->next;
 
 	mmap_assert_write_locked(vmg->mm);
 
 	vma_start_write(vma);
-	if (next && (vma != next) && (vmg->end == next->vm_end)) {
+	if (next) {
 		int ret;
 
-		remove_next = true;
 		/* This should already have been checked by this point. */
 		VM_WARN_ON(!can_merge_remove_vma(next));
 		vma_start_write(next);
@@ -1062,13 +1065,10 @@ int vma_expand(struct vma_merge_struct *vmg)
 			return ret;
 	}
 
-	/* Not merging but overwriting any part of next is not handled. */
-	VM_WARN_ON(next && !remove_next &&
-		  next != vma && vmg->end > next->vm_start);
 	/* Only handles expanding */
 	VM_WARN_ON(vma->vm_start < vmg->start || vma->vm_end > vmg->end);
 
-	if (commit_merge(vmg, NULL, remove_next ? next : NULL, NULL, 0, true))
+	if (commit_merge(vmg, NULL, next, NULL, 0, true))
 		goto nomem;
 
 	return 0;
