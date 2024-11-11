@@ -327,7 +327,7 @@ static const char *sech_name(const struct elf_info *info, Elf_Shdr *sechdr)
 				      sechdr->sh_name);
 }
 
-static const char *sec_name(const struct elf_info *info, unsigned int secindex)
+const char *sec_name(const struct elf_info *info, unsigned int secindex)
 {
 	/*
 	 * If sym->st_shndx is a special section index, there is no
@@ -1602,6 +1602,7 @@ static void read_symbols(const char *modname)
 
 		handle_symbol(mod, &info, sym, symname);
 		handle_moddevtable(mod, &info, sym, symname);
+		handle_packed_field_symbol(mod, &info, sym, symname);
 	}
 
 	check_sec_ref(mod, &info);

@@ -235,3 +235,62 @@ programmer against incorrect API use.  The errors are not expected to occur
 during runtime, therefore it is reasonable for xxx_packing() to return void
 and simply swallow those errors. Optionally it can dump stack or print the
 error description.
+
+The pack_fields() and unpack_fields() macros automatically select the
+appropriate function at compile time based on the type of the fields array
+passed in.
+
+Packed Fields
+-------------
+
+Drivers are encouraged to use the ``pack_fields()`` and ``unpack_fields()``
+APIs over using ``pack()``, ``unpack()``, or ``packing()``.
+
+These APIs use field definitions in arrays of ``struct packed_field_s`` or
+``struct packed_field_m`` stored as ``.rodata``. This significantly reduces
+the code footprint required to pack or unpack many fields. In addition,
+sanity checks on the field definitions are handled at compile time via
+``modpost`` warnings, rather than only when the offending code is executed.
+
+The ``pack_fields()`` and ``unpack_fields()`` macros determine the size of
+the packed buffer by its type. Thus, you must ensure the buffer is a pointer
+to a type with the desired size. This is typically achieved by creating a
+typedef with a packed structure.
+
+Here is an example of how to use the fields APIs:
+
+.. code-block:: c
+
+   struct data {
+        u64 field3;
+        u32 field4;
+        u16 field1;
+        u8 field2;
+   };
+
+   #define SIZE 13
+
+   typdef struct __packed { u8 buf[SIZE]; } packed_buf_t;
+
+   DECLARE_PACKED_FIELDS_S(fields, SIZE) = {
+           PACKED_FIELD(100, 90, struct data, field1),
+           PACKED_FIELD(90, 87, struct data, field2),
+           PACKED_FIELD(86, 30, struct data, field3),
+           PACKED_FIELD(29, 0, struct data, field4),
+   };
+
+   void unpack_your_data(const packed_buf_t *buf, struct data *unpacked)
+   {
+           BUILD_BUG_ON(sizeof(*buf) != SIZE;
+
+           unpack_fields(buf, sizeof(*buf), unpacked, fields,
+                         QUIRK_LITTLE_ENDIAN);
+   }
+
+   void pack_your_data(const struct data *unpacked, packed_buf_t *buf)
+   {
+           BUILD_BUG_ON(sizeof(*buf) != SIZE;
+
+           pack_fields(buf, sizeof(*buf), unpacked, fields,
+                       QUIRK_LITTLE_ENDIAN);
+   }
