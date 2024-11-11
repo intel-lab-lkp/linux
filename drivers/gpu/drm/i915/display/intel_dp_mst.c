@@ -160,6 +160,35 @@ static int intel_dp_mst_dsc_get_slice_count(const struct intel_connector *connec
 					    num_joined_pipes);
 }
 
+static void intel_dp_mst_compute_min_hblank(struct intel_crtc_state *crtc_state,
+					    struct intel_connector *connector,
+					    int bpp_x16)
+{
+	struct intel_encoder *encoder = connector->encoder;
+	struct intel_display *display = to_intel_display(encoder);
+	const struct drm_display_mode *adjusted_mode =
+					&crtc_state->hw.adjusted_mode;
+	int symbol_size = intel_dp_is_uhbr(crtc_state) ? 32 : 8;
+	int hblank;
+
+	if (DISPLAY_VER(display) < 20)
+		return;
+
+	/* Calculate min Hblank Link Layer Symbol Cycle Count for 8b/10b MST & 128b/132b */
+	hblank = DIV_ROUND_UP((DIV_ROUND_UP(adjusted_mode->htotal - adjusted_mode->hdisplay, 4) * bpp_x16), symbol_size);
+
+	/* bit 8:0 minimum hblank symbol cylce count, i.e maximul value would be 511 */
+	hblank = min(511, hblank);
+
+	/* Software needs to adjust the BS/BE framing control from the valculated value */
+	hblank = hblank - 2;
+
+	if (intel_dp_is_uhbr(crtc_state))
+		crtc_state->min_hblank = max(hblank, 5);
+	else
+		crtc_state->min_hblank = max(hblank, 3);
+}
+
 static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 						struct intel_crtc_state *crtc_state,
 						int max_bpp,
@@ -236,6 +265,8 @@ static int intel_dp_mst_find_vcpi_slots_for_bpp(struct intel_encoder *encoder,
 							     false, dsc_slice_count, link_bpp_x16);
 		remote_bw_overhead = intel_dp_mst_bw_overhead(crtc_state, connector,
 							      true, dsc_slice_count, link_bpp_x16);
+
+		intel_dp_mst_compute_min_hblank(crtc_state, connector, link_bpp_x16);
 
 		intel_dp_mst_compute_m_n(crtc_state, connector,
 					 local_bw_overhead,
@@ -1287,6 +1318,10 @@ static void intel_mst_enable_dp(struct intel_atomic_state *state,
 		intel_de_write(dev_priv, TRANS_DP2_VFREQLOW(pipe_config->cpu_transcoder),
 			       TRANS_DP2_VFREQ_PIXEL_CLOCK(crtc_clock_hz & 0xffffff));
 	}
+
+	if (DISPLAY_VER(display) >= 20)
+		intel_de_write(display, DP_MIN_HBLANK_CTL(trans),
+			       pipe_config->min_hblank);
 
 	enable_bs_jitter_was(pipe_config);
 

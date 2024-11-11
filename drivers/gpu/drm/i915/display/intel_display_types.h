@@ -1198,6 +1198,7 @@ struct intel_crtc_state {
 
 	int max_link_bpp_x16;	/* in 1/16 bpp units */
 	int pipe_bpp;		/* in 1 bpp units */
+	int min_hblank;		/* min HBlank for DP2.1 */
 	struct intel_link_m_n dp_m_n;
 
 	/* m2_n2 for eDP downclock */
