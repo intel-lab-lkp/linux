@@ -598,8 +598,9 @@ retry:
 		spin_unlock_irq(&desc->iuspin);
 	}
 
-	if (cntr > count)
-		cntr = count;
+	/* Ensure cntr does not exceed available data in ubuf. */
+	cntr = min(count, (size_t) desc->length);
+
 	rv = copy_to_user(buffer, desc->ubuf, cntr);
 	if (rv > 0) {
 		rv = -EFAULT;
