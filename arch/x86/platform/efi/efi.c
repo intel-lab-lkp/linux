@@ -784,6 +784,7 @@ static void __init kexec_enter_virtual_mode(void)
 
 	efi_sync_low_kernel_mappings();
 	efi_native_runtime_setup();
+	efi_runtime_update_mappings();
 #endif
 }
 
