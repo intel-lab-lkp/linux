@@ -490,6 +490,7 @@ static struct rtable *icmp_route_lookup(struct net *net,
 	struct dst_entry *dst, *dst2;
 	struct rtable *rt, *rt2;
 	struct flowi4 fl4_dec;
+	unsigned int addr_type;
 	int err;
 
 	memset(fl4, 0, sizeof(*fl4));
@@ -528,31 +529,15 @@ static struct rtable *icmp_route_lookup(struct net *net,
 	if (err)
 		goto relookup_failed;
 
-	if (inet_addr_type_dev_table(net, route_lookup_dev,
-				     fl4_dec.saddr) == RTN_LOCAL) {
-		rt2 = __ip_route_output_key(net, &fl4_dec);
-		if (IS_ERR(rt2))
-			err = PTR_ERR(rt2);
-	} else {
-		struct flowi4 fl4_2 = {};
-		unsigned long orefdst;
+	addr_type = inet_addr_type_dev_table(net, route_lookup_dev, fl4_dec.saddr);
+	if (addr_type == RTN_LOCAL || addr_type == RTN_UNICAST)
+		fl4_dec.flowi4_flags |= FLOWI_FLAG_ANYSRC;
+	else
+		fl4_dec.saddr = 0;
 
-		fl4_2.daddr = fl4_dec.saddr;
-		rt2 = ip_route_output_key(net, &fl4_2);
-		if (IS_ERR(rt2)) {
-			err = PTR_ERR(rt2);
-			goto relookup_failed;
-		}
-		/* Ugh! */
-		orefdst = skb_in->_skb_refdst; /* save old refdst */
-		skb_dst_set(skb_in, NULL);
-		err = ip_route_input(skb_in, fl4_dec.daddr, fl4_dec.saddr,
-				     tos, rt2->dst.dev);
-
-		dst_release(&rt2->dst);
-		rt2 = skb_rtable(skb_in);
-		skb_in->_skb_refdst = orefdst; /* restore old refdst */
-	}
+	rt2 = __ip_route_output_key(net, &fl4_dec);
+	if (IS_ERR(rt2))
+		err = PTR_ERR(rt2);
 
 	if (err)
 		goto relookup_failed;
