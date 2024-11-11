@@ -235,9 +235,55 @@ void intel_vrr_compute_vrr_timings(struct intel_crtc_state *crtc_state, int vmin
 	crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
 }
 
-void
-intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
-			 struct drm_connector_state *conn_state)
+static
+void intel_vrr_compute_fixed_rr_timings(struct intel_crtc_state *crtc_state)
+{
+	/*
+	 * For fixed refresh rate mode Vmin, Vmax and Flipline all are set to
+	 * Vtotal value. The sink uses MSA timings for the fixed refresh rate
+	 * mode. The HW prepares the Vtotal for the MSA from the VMAX register.
+	 * Since the MSA Vtotal is one-based while Vmax is zero-based we need to
+	 * take care of this while setting Vmax value.
+	 */
+	crtc_state->vrr.vmax = crtc_state->hw.adjusted_mode.vtotal - 1;
+	crtc_state->vrr.vmin = crtc_state->vrr.vmax;
+	crtc_state->vrr.flipline = crtc_state->vrr.vmax;
+	crtc_state->vrr.tg_enable = true;
+	crtc_state->vrr.mode = INTEL_VRRTG_MODE_FIXED_RR;
+	crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
+}
+
+static
+void intel_vrr_compute_xe2lpd_timings(struct intel_crtc_state *crtc_state,
+				      struct drm_connector_state *conn_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
+	struct intel_dp *intel_dp = intel_attached_dp(connector);
+	bool is_edp = intel_dp_is_edp(intel_dp);
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int vmin = 0, vmax = 0;
+
+	if (crtc_state->vrr.in_range) {
+		if (HAS_LRR(display))
+			crtc_state->update_lrr = true;
+
+		vmin = intel_vrr_compute_vmin(connector, adjusted_mode);
+		vmax = intel_vrr_compute_vmax(connector, adjusted_mode);
+	}
+
+	if (vmin < vmax && crtc_state->uapi.vrr_enabled)
+		intel_vrr_compute_vrr_timings(crtc_state, vmin, vmax);
+	else if (vmin < vmax && is_cmrr_frac_required(crtc_state) && is_edp)
+		intel_vrr_compute_cmrr_timings(crtc_state);
+	else
+		intel_vrr_compute_fixed_rr_timings(crtc_state);
+}
+
+static
+void intel_vrr_compute_xelpd_timings(struct intel_crtc_state *crtc_state,
+				     struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_connector *connector =
@@ -247,11 +293,6 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	int vmin, vmax;
 
-	if (adjusted_mode->flags & DRM_MODE_FLAG_INTERLACE)
-		return;
-
-	crtc_state->vrr.in_range =
-		intel_vrr_is_in_range(connector, drm_mode_vrefresh(adjusted_mode));
 	if (!crtc_state->vrr.in_range)
 		return;
 
@@ -270,6 +311,27 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 		intel_vrr_compute_cmrr_timings(crtc_state);
 	else
 		intel_vrr_prepare_vrr_timings(crtc_state, vmin, vmax);
+}
+
+void
+intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
+			 struct drm_connector_state *conn_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_connector *connector =
+		to_intel_connector(conn_state->connector);
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+
+	if (adjusted_mode->flags & DRM_MODE_FLAG_INTERLACE)
+		return;
+
+	crtc_state->vrr.in_range =
+		intel_vrr_is_in_range(connector, drm_mode_vrefresh(adjusted_mode));
+
+	if (DISPLAY_VER(display) >= 20)
+		intel_vrr_compute_xe2lpd_timings(crtc_state, conn_state);
+	else
+		intel_vrr_compute_xelpd_timings(crtc_state, conn_state);
 
 	if (HAS_AS_SDP(display)) {
 		crtc_state->vrr.vsync_start =
