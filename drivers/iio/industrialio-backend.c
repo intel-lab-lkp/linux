@@ -682,6 +682,20 @@ int iio_backend_data_size_set(struct iio_backend *back, unsigned int size)
 EXPORT_SYMBOL_NS_GPL(iio_backend_data_size_set, IIO_BACKEND);
 
 /**
+ * iio_backend_oversampling_en - set the data width/size in the data bus.
+ * @back: Backend device
+ * @en: oversampling enabled/disabled.
+ *
+ * Return:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_oversampling_en(struct iio_backend *back, bool en)
+{
+	return iio_backend_op_call(back, oversampling_en, en);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_oversampling_en, IIO_BACKEND);
+
+/**
  * iio_backend_extend_chan_spec - Extend an IIO channel
  * @back: Backend device
  * @chan: IIO channel
