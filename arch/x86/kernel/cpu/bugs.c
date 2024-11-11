@@ -1818,9 +1818,12 @@ static void __init spectre_v2_select_mitigation(void)
 	pr_info("%s\n", spectre_v2_strings[mode]);
 
 	/*
-	 * If Spectre v2 protection has been enabled, fill the RSB during a
-	 * context switch.  In general there are two types of RSB attacks
-	 * across context switches, for which the CALLs/RETs may be unbalanced.
+	 * If Spectre v2 protection has been enabled, the RSB needs to be
+	 * cleared during a context switch.  Either do it in software by
+	 * filling the RSB, or in hardware via ERAPS.
+	 *
+	 * In general there are two types of RSB attacks across context
+	 * switches, for which the CALLs/RETs may be unbalanced.
 	 *
 	 * 1) RSB underflow
 	 *
@@ -1848,12 +1851,21 @@ static void __init spectre_v2_select_mitigation(void)
 	 *    RSB clearing.
 	 *
 	 * So to mitigate all cases, unconditionally fill RSB on context
-	 * switches.
+	 * switches when ERAPS is not present.
 	 */
-	setup_force_cpu_cap(X86_FEATURE_RSB_CTXSW);
-	pr_info("Spectre v2 / SpectreRSB mitigation: Filling RSB on context switch\n");
+	if (!boot_cpu_has(X86_FEATURE_ERAPS)) {
+		setup_force_cpu_cap(X86_FEATURE_RSB_CTXSW);
+		pr_info("Spectre v2 / SpectreRSB mitigation: Filling RSB on context switch\n");
 
-	spectre_v2_determine_rsb_fill_type_at_vmexit(mode);
+		/*
+		 * For guest -> host (or vice versa) RSB poisoning scenarios,
+		 * determine the mitigation mode here.  With ERAPS, RSB
+		 * entries are tagged as host or guest - ensuring that neither
+		 * the host nor the guest have to clear or fill RSB entries to
+		 * avoid poisoning: skip RSB filling at VMEXIT in that case.
+		 */
+		spectre_v2_determine_rsb_fill_type_at_vmexit(mode);
+	}
 
 	/*
 	 * Retpoline protects the kernel, but doesn't protect firmware.  IBRS
@@ -2866,7 +2878,7 @@ static ssize_t spectre_v2_show_state(char *buf)
 	    spectre_v2_enabled == SPECTRE_V2_EIBRS_LFENCE)
 		return sysfs_emit(buf, "Vulnerable: eIBRS+LFENCE with unprivileged eBPF and SMT\n");
 
-	return sysfs_emit(buf, "%s%s%s%s%s%s%s%s\n",
+	return sysfs_emit(buf, "%s%s%s%s%s%s%s%s%s\n",
 			  spectre_v2_strings[spectre_v2_enabled],
 			  ibpb_state(),
 			  boot_cpu_has(X86_FEATURE_USE_IBRS_FW) ? "; IBRS_FW" : "",
@@ -2874,6 +2886,7 @@ static ssize_t spectre_v2_show_state(char *buf)
 			  boot_cpu_has(X86_FEATURE_RSB_CTXSW) ? "; RSB filling" : "",
 			  pbrsb_eibrs_state(),
 			  spectre_bhi_state(),
+			  boot_cpu_has(X86_FEATURE_ERAPS) ? "; ERAPS hardware RSB flush" : "",
 			  /* this should always be at the end */
 			  spectre_v2_module_string());
 }

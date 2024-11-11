@@ -417,9 +417,10 @@ The possible values in this file are:
 
   - Return stack buffer (RSB) protection status:
 
-  =============   ===========================================
+  =============   ========================================================
   'RSB filling'   Protection of RSB on context switch enabled
-  =============   ===========================================
+  'ERAPS'         Hardware RSB flush on context switches + guest/host tags
+  =============   ========================================================
 
   - EIBRS Post-barrier Return Stack Buffer (PBRSB) protection status:
 
