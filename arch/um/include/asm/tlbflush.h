@@ -30,6 +30,7 @@
  *  - flush_tlb_kernel_range(start, end) flushes a range of kernel pages
  */
 
+#ifdef CONFIG_MMU
 extern int um_tlb_sync(struct mm_struct *mm);
 
 extern void flush_tlb_all(void);
@@ -55,5 +56,26 @@ static inline void flush_tlb_kernel_range(unsigned long start,
 	/* Kernel needs to be synced immediately */
 	um_tlb_sync(&init_mm);
 }
+#else
+static inline int um_tlb_sync(struct mm_struct *mm)
+{
+	return 0;
+}
+
+static inline void flush_tlb_page(struct vm_area_struct *vma,
+				  unsigned long address)
+{
+}
+
+static inline void flush_tlb_range(struct vm_area_struct *vma,
+				   unsigned long start, unsigned long end)
+{
+}
+
+static inline void flush_tlb_kernel_range(unsigned long start,
+					  unsigned long end)
+{
+}
+#endif
 
 #endif

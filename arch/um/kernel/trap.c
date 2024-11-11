@@ -24,6 +24,7 @@
 int handle_page_fault(unsigned long address, unsigned long ip,
 		      int is_write, int is_user, int *code_out)
 {
+#ifdef CONFIG_MMU
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	pmd_t *pmd;
@@ -129,6 +130,9 @@ out_of_memory:
 		goto out_nosemaphore;
 	pagefault_out_of_memory();
 	return 0;
+#else
+	return -EFAULT;
+#endif
 }
 
 static void show_segv_info(struct uml_pt_regs *regs)
