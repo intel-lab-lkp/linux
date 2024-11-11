@@ -1,0 +1,158 @@
+[
+    {
+        "ArchStdEvent": "INST_SPEC"
+    },
+    {
+        "ArchStdEvent": "OP_SPEC"
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operations that uses \"pre-index\" as its addressing mode.",
+        "EventCode": "0x0123",
+        "EventName": "PRE_INDEX_SPEC",
+        "BriefDescription": "This event counts architecturally executed operations that uses \"pre-index\" as its addressing mode."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operations that uses \"post-index\" as its addressing mode.",
+        "EventCode": "0x0124",
+        "EventName": "POST_INDEX_SPEC",
+        "BriefDescription": "This event counts architecturally executed operations that uses \"post-index\" as its addressing mode."
+    },
+    {
+        "ArchStdEvent": "UOP_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_DIV_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_DIV64_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_MUL_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_MUL64_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_MULH64_SPEC"
+    },
+    {
+        "ArchStdEvent": "NONFP_SPEC"
+    },
+    {
+        "ArchStdEvent": "PRF_SPEC"
+    },
+    {
+        "ArchStdEvent": "BASE_LD_REG_SPEC"
+    },
+    {
+        "ArchStdEvent": "BASE_ST_REG_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_SCALE_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "INT_FIXED_OPS_SPEC"
+    },
+    {
+        "ArchStdEvent": "LDREX_SPEC"
+    },
+    {
+        "ArchStdEvent": "STREX_SPEC"
+    },
+    {
+        "ArchStdEvent": "LD_SPEC"
+    },
+    {
+        "ArchStdEvent": "ST_SPEC"
+    },
+    {
+        "ArchStdEvent": "LDST_SPEC"
+    },
+    {
+        "ArchStdEvent": "DP_SPEC"
+    },
+    {
+        "ArchStdEvent": "ASE_SPEC"
+    },
+    {
+        "ArchStdEvent": "VFP_SPEC"
+    },
+    {
+        "ArchStdEvent": "PC_WRITE_SPEC"
+    },
+    {
+        "ArchStdEvent": "CRYPTO_SPEC"
+    },
+    {
+        "ArchStdEvent": "ISB_SPEC"
+    },
+    {
+        "ArchStdEvent": "DSB_SPEC"
+    },
+    {
+        "ArchStdEvent": "DMB_SPEC"
+    },
+    {
+        "ArchStdEvent": "CSDB_SPEC"
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed operations that using predicate register.",
+        "EventCode": "0x0108",
+        "EventName": "PRD_SPEC",
+        "BriefDescription": "This event counts architecturally executed operations that using predicate register."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed inter-element manipulation operations.",
+        "EventCode": "0x0109",
+        "EventName": "IEL_SPEC",
+        "BriefDescription": "This event counts architecturally executed inter-element manipulation operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed inter-register manipulation operations.",
+        "EventCode": "0x010A",
+        "EventName": "IREG_SPEC",
+        "BriefDescription": "This event counts architecturally executed inter-register manipulation operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed SIMD broadcast floating-point load operations.",
+        "EventCode": "0x011A",
+        "EventName": "BC_LD_SPEC",
+        "BriefDescription": "This event counts architecturally executed SIMD broadcast floating-point load operations."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed zero blocking operations due to the \"DC ZVA\" instruction.",
+        "EventCode": "0x011B",
+        "EventName": "DCZVA_SPEC",
+        "BriefDescription": "This event counts architecturally executed zero blocking operations due to the \"DC ZVA\" instruction."
+    },
+    {
+        "PublicDescription": "This event counts architecturally executed instructions, excluding the MOVPRFX instruction.",
+        "EventCode": "0x0121",
+        "EventName": "EFFECTIVE_INST_SPEC",
+        "BriefDescription": "This event counts architecturally executed instructions, excluding the MOVPRFX instruction."
+    },
+    {
+        "PublicDescription": "This event counts the occurrence count of the micro-operation split.",
+        "EventCode": "0x0139",
+        "EventName": "UOP_SPLIT",
+        "BriefDescription": "This event counts the occurrence count of the micro-operation split."
+    },
+    {
+        "ArchStdEvent": "BR_MIS_PRED"
+    },
+    {
+        "ArchStdEvent": "BR_PRED"
+    },
+    {
+        "ArchStdEvent": "BR_IMMED_SPEC"
+    },
+    {
+        "ArchStdEvent": "BR_RETURN_SPEC"
+    },
+    {
+        "ArchStdEvent": "BR_INDIRECT_SPEC"
+    }
+]

@@ -1,0 +1,20 @@
+[
+    {
+        "ArchStdEvent": "PMU_OVFS"
+    },
+    {
+        "ArchStdEvent": "PMU_HOVFS"
+    },
+    {
+        "ArchStdEvent": "TRCEXTOUT0"
+    },
+    {
+        "ArchStdEvent": "CTI_TRIGOUT4"
+    },
+    {
+        "ArchStdEvent": "TRB_WRAP"
+    },
+    {
+        "ArchStdEvent": "TRB_TRIG"
+    }
+]

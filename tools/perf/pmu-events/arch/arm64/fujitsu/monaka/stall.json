@@ -1,0 +1,83 @@
+[
+    {
+        "ArchStdEvent": "STALL_FRONTEND"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND"
+    },
+    {
+        "ArchStdEvent": "STALL"
+    },
+    {
+        "ArchStdEvent": "STALL_SLOT_BACKEND"
+    },
+    {
+        "ArchStdEvent": "STALL_SLOT_FRONTEND"
+    },
+    {
+        "ArchStdEvent": "STALL_SLOT"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_MEM"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_MEMBOUND"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_L1I"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_L2I"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_MEM"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_TLB"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_CPUBOUND"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_FLOW"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_FLUSH"
+    },
+    {
+        "ArchStdEvent": "STALL_FRONTEND_RENAME"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_MEMBOUND"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_L1D"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_L2D"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_TLB"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_ST"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_CPUBOUND"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_BUSY"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_ILOCK"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_RENAME"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_ATOMIC"
+    },
+    {
+        "ArchStdEvent": "STALL_BACKEND_MEMCPYSET"
+    }
+]

@@ -1,0 +1,101 @@
+[
+    {
+        "ArchStdEvent": "L1D_CACHE"
+    },
+    {
+        "PublicDescription": "This event counts L1D_CACHE caused by demand access.",
+        "EventCode": "0x0200",
+        "EventName": "L1D_CACHE_DM",
+        "BriefDescription": "This event counts L1D_CACHE caused by demand access."
+    },
+    {
+        "PublicDescription": "This event counts L1D_CACHE caused by demand read access.",
+        "EventCode": "0x0201",
+        "EventName": "L1D_CACHE_DM_RD",
+        "BriefDescription": "This event counts L1D_CACHE caused by demand read access."
+    },
+    {
+        "PublicDescription": "This event counts L1D_CACHE caused by demand write access.",
+        "EventCode": "0x0202",
+        "EventName": "L1D_CACHE_DM_WR",
+        "BriefDescription": "This event counts L1D_CACHE caused by demand write access."
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_RD"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_WR"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_PRF"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_HWPRF"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_REFILL"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_MISS"
+    },
+    {
+        "PublicDescription": "This event counts demand access that hits cache line with shared status and requests exclusive access in the Level 1 data cache, causing a coherence access to outside of the Level 1 caches of this PE.",
+        "EventCode": "0x020D",
+        "EventName": "L1D_CACHE_BTC",
+        "BriefDescription": "This event counts demand access that hits cache line with shared status and requests exclusive access in the Level 1 data cache, causing a coherence access to outside of the Level 1 caches of this PE."
+    },
+    {
+        "PublicDescription": "This event counts L1D_CACHE_REFILL caused by demand access.",
+        "EventCode": "0x0208",
+        "EventName": "L1D_CACHE_REFILL_DM",
+        "BriefDescription": "This event counts L1D_CACHE_REFILL caused by demand access."
+    },
+    {
+        "PublicDescription": "This event counts L1D_CACHE_REFILL caused by demand read access.",
+        "EventCode": "0x0209",
+        "EventName": "L1D_CACHE_REFILL_DM_RD",
+        "BriefDescription": "This event counts L1D_CACHE_REFILL caused by demand read access."
+    },
+    {
+        "PublicDescription": "This event counts L1D_CACHE_REFILL caused by demand write access.",
+        "EventCode": "0x020A",
+        "EventName": "L1D_CACHE_REFILL_DM_WR",
+        "BriefDescription": "This event counts L1D_CACHE_REFILL caused by demand write access."
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_LMISS_RD"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_REFILL_RD"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_REFILL_WR"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_REFILL_PRF"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_REFILL_HWPRF"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_WB"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_HIT"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_HIT_RD"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_HIT_WR"
+    },
+    {
+        "ArchStdEvent": "L1D_LFB_HIT_RD"
+    },
+    {
+        "ArchStdEvent": "L1D_LFB_HIT_WR"
+    },
+    {
+        "ArchStdEvent": "L1D_CACHE_REFILL_PERCYC"
+    }
+]

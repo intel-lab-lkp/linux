@@ -318,6 +318,12 @@
         "BriefDescription": "Barrier speculatively executed, DMB"
     },
     {
+        "PublicDescription": "This event counts speculatively executed control speculation barrier instructions.",
+        "EventCode": "0x7F",
+        "EventName": "CSDB_SPEC",
+        "BriefDescription": "This event counts speculatively executed control speculation barrier instructions."
+    },
+    {
         "PublicDescription": "Exception taken, Other synchronous",
         "EventCode": "0x81",
         "EventName": "EXC_UNDEF",
