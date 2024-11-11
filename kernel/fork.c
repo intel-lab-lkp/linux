@@ -486,7 +486,7 @@ static void vm_area_free_rcu_cb(struct rcu_head *head)
 						  vm_rcu);
 
 	/* The vma should not be locked while being destroyed. */
-	VM_BUG_ON_VMA(rwsem_is_locked(&vma->vm_lock.lock), vma);
+	VM_BUG_ON_VMA(is_vma_read_locked(vma), vma);
 	__vm_area_free(vma);
 }
 #endif

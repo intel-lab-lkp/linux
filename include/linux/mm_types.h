@@ -615,8 +615,23 @@ static inline struct anon_vma_name *anon_vma_name_alloc(const char *name)
 }
 #endif
 
+#define VMA_LOCK_UNLOCKED		0
+#define VMA_LOCK_WR_LOCKED		(1 << 31)
+#define VMA_LOCK_WR_WAIT		(1 << 30)
+
+#define VMA_LOCK_RD_COUNT_MASK		(VMA_LOCK_WR_WAIT - 1)
+
 struct vma_lock {
-	struct rw_semaphore lock;
+	/*
+	 * count & VMA_LOCK_RD_COUNT_MASK > 0 ==> read-locked with 'count' number of readers
+	 * count & VMA_LOCK_WR_LOCKED != 0 ==> write-locked
+	 * count & VMA_LOCK_WR_WAIT != 0 ==> writer is waiting
+	 * count = 0 ==> unlocked
+	 */
+	atomic_t count;
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	struct lockdep_map dep_map;
+#endif
 };
 
 struct vma_numab_state {
@@ -883,6 +898,7 @@ struct mm_struct {
 					  * by mmlist_lock
 					  */
 #ifdef CONFIG_PER_VMA_LOCK
+		struct wait_queue_head vma_writer_wait;
 		/*
 		 * This field has lock-like semantics, meaning it is sometimes
 		 * accessed with ACQUIRE/RELEASE semantics.

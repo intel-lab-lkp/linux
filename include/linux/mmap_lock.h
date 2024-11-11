@@ -121,6 +121,9 @@ static inline void mmap_init_lock(struct mm_struct *mm)
 {
 	init_rwsem(&mm->mmap_lock);
 	mm_lock_seqcount_init(mm);
+#ifdef CONFIG_PER_VMA_LOCK
+	init_waitqueue_head(&mm->vma_writer_wait);
+#endif
 }
 
 static inline void mmap_write_lock(struct mm_struct *mm)
