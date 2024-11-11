@@ -1294,13 +1294,8 @@ struct intel_crtc_state {
 		u16 flipline, vmin, vmax, guardband;
 		u32 vsync_end, vsync_start;
 		enum intel_vrrtg_mode mode;
+		u64 cmrr_n, cmrr_m; /* Content Match Refresh Rate M and N */
 	} vrr;
-
-	/* Content Match Refresh Rate state */
-	struct {
-		bool enable;
-		u64 cmrr_n, cmrr_m;
-	} cmrr;
 
 	/* Stream Splitter for eDP MSO */
 	struct {
