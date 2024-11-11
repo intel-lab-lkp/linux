@@ -732,7 +732,7 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart8m0_xfer &uart8m0_ctsn &uart8m0_rtsn>;
 	uart-has-rtscts;
-	status = "disabled";
+	status = "okay";
 };
 
 &usb_host0_ehci {
