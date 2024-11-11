@@ -273,11 +273,16 @@ static int spear_kbd_suspend(struct device *dev)
 	struct spear_kbd *kbd = platform_get_drvdata(pdev);
 	struct input_dev *input_dev = kbd->input;
 	unsigned int rate = 0, mode_ctl_reg, val;
+	int ret;
 
 	mutex_lock(&input_dev->mutex);
 
 	/* explicitly enable clock as we may program device */
-	clk_enable(kbd->clk);
+	ret = clk_enable(kbd->clk);
+	if (ret) {
+		mutex_unlock(&input_dev->mutex);
+		return ret;
+	}
 
 	mode_ctl_reg = readl_relaxed(kbd->io_base + MODE_CTL_REG);
 
@@ -325,6 +330,7 @@ static int spear_kbd_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct spear_kbd *kbd = platform_get_drvdata(pdev);
 	struct input_dev *input_dev = kbd->input;
+	int ret;
 
 	mutex_lock(&input_dev->mutex);
 
@@ -334,8 +340,13 @@ static int spear_kbd_resume(struct device *dev)
 			disable_irq_wake(kbd->irq);
 		}
 	} else {
-		if (input_device_enabled(input_dev))
-			clk_enable(kbd->clk);
+		if (input_device_enabled(input_dev)) {
+			ret = clk_enable(kbd->clk);
+			if (ret) {
+				mutex_unlock(&input_dev->mutex);
+				return ret;
+			}
+		}
 	}
 
 	/* restore current configuration */
