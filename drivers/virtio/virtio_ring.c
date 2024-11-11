@@ -441,8 +441,10 @@ static void virtqueue_init(struct vring_virtqueue *vq, u32 num)
  */
 
 static void vring_unmap_one_split_indirect(const struct vring_virtqueue *vq,
-					   const struct vring_desc *desc)
+					   const struct vring_desc *desc,
+					   bool skip_sync)
 {
+	unsigned long attrs = skip_sync ? DMA_ATTR_SKIP_CPU_SYNC : 0;
 	u16 flags;
 
 	if (!vq->do_unmap)
@@ -450,16 +452,18 @@ static void vring_unmap_one_split_indirect(const struct vring_virtqueue *vq,
 
 	flags = virtio16_to_cpu(vq->vq.vdev, desc->flags);
 
-	dma_unmap_page(vring_dma_dev(vq),
-		       virtio64_to_cpu(vq->vq.vdev, desc->addr),
-		       virtio32_to_cpu(vq->vq.vdev, desc->len),
-		       (flags & VRING_DESC_F_WRITE) ?
-		       DMA_FROM_DEVICE : DMA_TO_DEVICE);
+	dma_unmap_page_attrs(vring_dma_dev(vq),
+			     virtio64_to_cpu(vq->vq.vdev, desc->addr),
+			     virtio32_to_cpu(vq->vq.vdev, desc->len),
+			     (flags & VRING_DESC_F_WRITE) ?
+			     DMA_FROM_DEVICE : DMA_TO_DEVICE,
+			     attrs);
 }
 
 static unsigned int vring_unmap_one_split(const struct vring_virtqueue *vq,
-					  unsigned int i)
+					  unsigned int i, bool skip_sync)
 {
+	unsigned long attrs = skip_sync ? DMA_ATTR_SKIP_CPU_SYNC : 0;
 	struct vring_desc_extra *extra = vq->split.desc_extra;
 	u16 flags;
 
@@ -469,20 +473,22 @@ static unsigned int vring_unmap_one_split(const struct vring_virtqueue *vq,
 		if (!vq->use_dma_api)
 			goto out;
 
-		dma_unmap_single(vring_dma_dev(vq),
-				 extra[i].addr,
-				 extra[i].len,
-				 (flags & VRING_DESC_F_WRITE) ?
-				 DMA_FROM_DEVICE : DMA_TO_DEVICE);
+		dma_unmap_single_attrs(vring_dma_dev(vq),
+				       extra[i].addr,
+				       extra[i].len,
+				       (flags & VRING_DESC_F_WRITE) ?
+				       DMA_FROM_DEVICE : DMA_TO_DEVICE,
+				       attrs);
 	} else {
 		if (!vq->do_unmap)
 			goto out;
 
-		dma_unmap_page(vring_dma_dev(vq),
-			       extra[i].addr,
-			       extra[i].len,
-			       (flags & VRING_DESC_F_WRITE) ?
-			       DMA_FROM_DEVICE : DMA_TO_DEVICE);
+		dma_unmap_page_attrs(vring_dma_dev(vq),
+				     extra[i].addr,
+				     extra[i].len,
+				     (flags & VRING_DESC_F_WRITE) ?
+				     DMA_FROM_DEVICE : DMA_TO_DEVICE,
+				     attrs);
 	}
 
 out:
@@ -717,10 +723,10 @@ unmap_release:
 		if (i == err_idx)
 			break;
 		if (indirect) {
-			vring_unmap_one_split_indirect(vq, &desc[i]);
+			vring_unmap_one_split_indirect(vq, &desc[i], true);
 			i = virtio16_to_cpu(_vq->vdev, desc[i].next);
 		} else
-			i = vring_unmap_one_split(vq, i);
+			i = vring_unmap_one_split(vq, i, true);
 	}
 
 free_indirect:
@@ -775,12 +781,12 @@ static void detach_buf_split(struct vring_virtqueue *vq, unsigned int head,
 	i = head;
 
 	while (vq->split.vring.desc[i].flags & nextflag) {
-		vring_unmap_one_split(vq, i);
+		vring_unmap_one_split(vq, i, false);
 		i = vq->split.desc_extra[i].next;
 		vq->vq.num_free++;
 	}
 
-	vring_unmap_one_split(vq, i);
+	vring_unmap_one_split(vq, i, false);
 	vq->split.desc_extra[i].next = vq->free_head;
 	vq->free_head = head;
 
@@ -804,7 +810,8 @@ static void detach_buf_split(struct vring_virtqueue *vq, unsigned int head,
 
 		if (vq->do_unmap) {
 			for (j = 0; j < len / sizeof(struct vring_desc); j++)
-				vring_unmap_one_split_indirect(vq, &indir_desc[j]);
+				vring_unmap_one_split_indirect(vq,
+							&indir_desc[j], false);
 		}
 
 		kfree(indir_desc);
@@ -1221,8 +1228,10 @@ static u16 packed_last_used(u16 last_used_idx)
 }
 
 static void vring_unmap_extra_packed(const struct vring_virtqueue *vq,
-				     const struct vring_desc_extra *extra)
+				     const struct vring_desc_extra *extra,
+				     bool skip_sync)
 {
+	unsigned long attrs = skip_sync ? DMA_ATTR_SKIP_CPU_SYNC : 0;
 	u16 flags;
 
 	flags = extra->flags;
@@ -1231,24 +1240,28 @@ static void vring_unmap_extra_packed(const struct vring_virtqueue *vq,
 		if (!vq->use_dma_api)
 			return;
 
-		dma_unmap_single(vring_dma_dev(vq),
-				 extra->addr, extra->len,
-				 (flags & VRING_DESC_F_WRITE) ?
-				 DMA_FROM_DEVICE : DMA_TO_DEVICE);
+		dma_unmap_single_attrs(vring_dma_dev(vq),
+				       extra->addr, extra->len,
+				       (flags & VRING_DESC_F_WRITE) ?
+				       DMA_FROM_DEVICE : DMA_TO_DEVICE,
+				       attrs);
 	} else {
 		if (!vq->do_unmap)
 			return;
 
-		dma_unmap_page(vring_dma_dev(vq),
-			       extra->addr, extra->len,
-			       (flags & VRING_DESC_F_WRITE) ?
-			       DMA_FROM_DEVICE : DMA_TO_DEVICE);
+		dma_unmap_page_attrs(vring_dma_dev(vq),
+				     extra->addr, extra->len,
+				     (flags & VRING_DESC_F_WRITE) ?
+				     DMA_FROM_DEVICE : DMA_TO_DEVICE,
+				     attrs);
 	}
 }
 
 static void vring_unmap_desc_packed(const struct vring_virtqueue *vq,
-				    const struct vring_packed_desc *desc)
+				    const struct vring_packed_desc *desc,
+				    bool skip_sync)
 {
+	unsigned long attrs = skip_sync ? DMA_ATTR_SKIP_CPU_SYNC : 0;
 	u16 flags;
 
 	if (!vq->do_unmap)
@@ -1256,11 +1269,12 @@ static void vring_unmap_desc_packed(const struct vring_virtqueue *vq,
 
 	flags = le16_to_cpu(desc->flags);
 
-	dma_unmap_page(vring_dma_dev(vq),
-		       le64_to_cpu(desc->addr),
-		       le32_to_cpu(desc->len),
-		       (flags & VRING_DESC_F_WRITE) ?
-		       DMA_FROM_DEVICE : DMA_TO_DEVICE);
+	dma_unmap_page_attrs(vring_dma_dev(vq),
+			     le64_to_cpu(desc->addr),
+			     le32_to_cpu(desc->len),
+			     (flags & VRING_DESC_F_WRITE) ?
+			     DMA_FROM_DEVICE : DMA_TO_DEVICE,
+			     attrs);
 }
 
 static struct vring_packed_desc *alloc_indirect_packed(unsigned int total_sg,
@@ -1389,7 +1403,7 @@ unmap_release:
 	err_idx = i;
 
 	for (i = 0; i < err_idx; i++)
-		vring_unmap_desc_packed(vq, &desc[i]);
+		vring_unmap_desc_packed(vq, &desc[i], true);
 
 free_desc:
 	kfree(desc);
@@ -1539,7 +1553,8 @@ unmap_release:
 	for (n = 0; n < total_sg; n++) {
 		if (i == err_idx)
 			break;
-		vring_unmap_extra_packed(vq, &vq->packed.desc_extra[curr]);
+		vring_unmap_extra_packed(vq,
+					 &vq->packed.desc_extra[curr], true);
 		curr = vq->packed.desc_extra[curr].next;
 		i++;
 		if (i >= vq->packed.vring.num)
@@ -1619,7 +1634,8 @@ static void detach_buf_packed(struct vring_virtqueue *vq,
 		curr = id;
 		for (i = 0; i < state->num; i++) {
 			vring_unmap_extra_packed(vq,
-						 &vq->packed.desc_extra[curr]);
+						 &vq->packed.desc_extra[curr],
+						 false);
 			curr = vq->packed.desc_extra[curr].next;
 		}
 	}
@@ -1636,7 +1652,7 @@ static void detach_buf_packed(struct vring_virtqueue *vq,
 			len = vq->packed.desc_extra[id].len;
 			for (i = 0; i < len / sizeof(struct vring_packed_desc);
 					i++)
-				vring_unmap_desc_packed(vq, &desc[i]);
+				vring_unmap_desc_packed(vq, &desc[i], false);
 		}
 		kfree(desc);
 		state->indir_desc = NULL;
