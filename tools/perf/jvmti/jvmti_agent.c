@@ -408,9 +408,7 @@ jvmti_write_code(void *agent, char const *sym,
 
 	funlockfile(fp);
 
-	ret = 0;
-
-	return ret;
+	return 0;
 }
 
 int
