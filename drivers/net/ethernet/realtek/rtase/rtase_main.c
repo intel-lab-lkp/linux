@@ -1984,9 +1984,9 @@ static void rtase_init_software_variable(struct pci_dev *pdev,
 	tp->dev->max_mtu = RTASE_MAX_JUMBO_SIZE;
 }
 
-static bool rtase_check_mac_version_valid(struct rtase_private *tp)
+static int rtase_check_mac_version_valid(struct rtase_private *tp)
 {
-	bool known_ver = false;
+	int ret = -ENODEV;
 
 	tp->hw_ver = rtase_r32(tp, RTASE_TX_CONFIG_0) & RTASE_HW_VER_MASK;
 
@@ -1995,11 +1995,11 @@ static bool rtase_check_mac_version_valid(struct rtase_private *tp)
 	case RTASE_HW_VER_906X_7XC:
 	case RTASE_HW_VER_907XD_V1:
 	case RTASE_HW_VER_907XD_VA:
-		known_ver = true;
+		ret = 0;
 		break;
 	}
 
-	return known_ver;
+	return ret;
 }
 
 static int rtase_init_board(struct pci_dev *pdev, struct net_device **dev_out,
@@ -2119,9 +2119,12 @@ static int rtase_init_one(struct pci_dev *pdev,
 	tp->pdev = pdev;
 
 	/* identify chip attached to board */
-	if (!rtase_check_mac_version_valid(tp))
-		return dev_err_probe(&pdev->dev, -ENODEV,
-				     "unknown chip version, contact rtase maintainers (see MAINTAINERS file)\n");
+	ret = rtase_check_mac_version_valid(tp);
+	if (ret != 0) {
+		dev_err(&pdev->dev,
+			"unknown chip version, contact rtase maintainers (see MAINTAINERS file)\n");
+		goto err_out_release_board;
+	}
 
 	rtase_init_software_variable(pdev, tp);
 	rtase_init_hardware(tp);
@@ -2129,7 +2132,7 @@ static int rtase_init_one(struct pci_dev *pdev,
 	ret = rtase_alloc_interrupt(pdev, tp);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "unable to alloc MSIX/MSI\n");
-		goto err_out_1;
+		goto err_out_del_napi;
 	}
 
 	rtase_init_netdev_ops(dev);
@@ -2162,7 +2165,7 @@ static int rtase_init_one(struct pci_dev *pdev,
 					     GFP_KERNEL);
 	if (!tp->tally_vaddr) {
 		ret = -ENOMEM;
-		goto err_out;
+		goto err_out_free_dma;
 	}
 
 	rtase_tally_counter_clear(tp);
@@ -2173,13 +2176,13 @@ static int rtase_init_one(struct pci_dev *pdev,
 
 	ret = register_netdev(dev);
 	if (ret != 0)
-		goto err_out;
+		goto err_out_free_dma;
 
 	netdev_dbg(dev, "%pM, IRQ %d\n", dev->dev_addr, dev->irq);
 
 	return 0;
 
-err_out:
+err_out_free_dma:
 	if (tp->tally_vaddr) {
 		dma_free_coherent(&pdev->dev,
 				  sizeof(*tp->tally_vaddr),
@@ -2189,12 +2192,13 @@ err_out:
 		tp->tally_vaddr = NULL;
 	}
 
-err_out_1:
+err_out_del_napi:
 	for (i = 0; i < tp->int_nums; i++) {
 		ivec = &tp->int_vector[i];
 		netif_napi_del(&ivec->napi);
 	}
 
+err_out_release_board:
 	rtase_release_board(pdev, dev, ioaddr);
 
 	return ret;
