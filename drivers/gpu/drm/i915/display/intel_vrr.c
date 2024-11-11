@@ -473,6 +473,10 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 						     TRANS_VRR_VMAX(display, cpu_transcoder)) + 1;
 		crtc_state->vrr.vmin = intel_de_read(display,
 						     TRANS_VRR_VMIN(display, cpu_transcoder)) + 1;
+		if (crtc_state->vrr.mode != INTEL_VRRTG_MODE_CMRR &&
+		    crtc_state->vrr.vmax == crtc_state->vrr.flipline &&
+		    crtc_state->vrr.vmin == crtc_state->vrr.flipline)
+			crtc_state->vrr.mode = INTEL_VRRTG_MODE_FIXED_RR;
 	}
 
 	if (crtc_state->vrr.tg_enable) {
