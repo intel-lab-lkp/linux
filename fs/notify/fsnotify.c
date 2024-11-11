@@ -333,12 +333,14 @@ static int fsnotify_handle_event(struct fsnotify_group *group, __u32 mask,
 	if (!inode_mark)
 		return 0;
 
-	if (mask & FS_EVENT_ON_CHILD) {
+	if (mask & FS_EVENTS_POSS_ON_CHILD) {
 		/*
 		 * Some events can be sent on both parent dir and child marks
 		 * (e.g. FS_ATTRIB).  If both parent dir and child are
 		 * watching, report the event once to parent dir with name (if
 		 * interested) and once to child without name (if interested).
+		 *
+		 * In any case, whether the parent is watching or not watching,
 		 * The child watcher is expecting an event without a file name
 		 * and without the FS_EVENT_ON_CHILD flag.
 		 */
