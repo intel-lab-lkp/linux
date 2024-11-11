@@ -3,9 +3,10 @@
  * Freescale LINFlexD UART serial port driver
  *
  * Copyright 2012-2016 Freescale Semiconductor, Inc.
- * Copyright 2017-2019 NXP
+ * Copyright 2017-2019, 2024 NXP
  */
 
+#include <linux/clk.h>
 #include <linux/console.h>
 #include <linux/io.h>
 #include <linux/irq.h>
@@ -120,9 +121,29 @@
 
 #define PREINIT_DELAY			2000 /* us */
 
+struct linflex_devtype_data {
+	const char * const *clks_names;
+	int n_clks;
+};
+
+struct linflex_port {
+	struct uart_port port;
+	struct clk_bulk_data *clks;
+	const struct linflex_devtype_data *devtype_data;
+};
+
+static const char * const s32v234_clk_names[] = {
+	"ipg", "lin",
+};
+
+static const struct linflex_devtype_data s32v234_data = {
+	.clks_names = s32v234_clk_names,
+	.n_clks = ARRAY_SIZE(s32v234_clk_names),
+};
+
 static const struct of_device_id linflex_dt_ids[] = {
 	{
-		.compatible = "fsl,s32v234-linflexuart",
+		.compatible = "fsl,s32v234-linflexuart", .data = &s32v234_data,
 	},
 	{ /* sentinel */ }
 };
@@ -807,12 +828,13 @@ static struct uart_driver linflex_reg = {
 static int linflex_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
+	struct linflex_port *lfport;
 	struct uart_port *sport;
 	struct resource *res;
-	int ret;
+	int i, ret;
 
-	sport = devm_kzalloc(&pdev->dev, sizeof(*sport), GFP_KERNEL);
-	if (!sport)
+	lfport = devm_kzalloc(&pdev->dev, sizeof(*lfport), GFP_KERNEL);
+	if (!lfport)
 		return -ENOMEM;
 
 	ret = of_alias_get_id(np, "serial");
@@ -826,7 +848,13 @@ static int linflex_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	sport = &lfport->port;
 	sport->line = ret;
+
+	lfport->devtype_data = of_device_get_match_data(&pdev->dev);
+	if (!lfport->devtype_data)
+		return dev_err_probe(&pdev->dev, -ENODEV,
+				"Failed to get linflexuart driver data\n");
 
 	sport->membase = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(sport->membase))
@@ -844,37 +872,63 @@ static int linflex_probe(struct platform_device *pdev)
 	sport->flags = UPF_BOOT_AUTOCONF;
 	sport->has_sysrq = IS_ENABLED(CONFIG_SERIAL_FSL_LINFLEXUART_CONSOLE);
 
-	linflex_ports[sport->line] = sport;
+	lfport->clks = devm_kmalloc_array(&pdev->dev, lfport->devtype_data->n_clks,
+				    sizeof(*lfport->clks), GFP_KERNEL);
+	if (!lfport->clks)
+		return -ENOMEM;
 
-	platform_set_drvdata(pdev, sport);
+	for (i = 0; i < lfport->devtype_data->n_clks; i++)
+		lfport->clks[i].id = lfport->devtype_data->clks_names[i];
+
+	ret = devm_clk_bulk_get_optional(&pdev->dev,
+					 lfport->devtype_data->n_clks, lfport->clks);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				"Failed to get linflexuart clocks\n");
+
+	ret = clk_bulk_prepare_enable(lfport->devtype_data->n_clks,
+				      lfport->clks);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				"Failed to enable linflexuart clocks\n");
+
+	linflex_ports[sport->line] = sport;
+	platform_set_drvdata(pdev, lfport);
 
 	return uart_add_one_port(&linflex_reg, sport);
 }
 
 static void linflex_remove(struct platform_device *pdev)
 {
-	struct uart_port *sport = platform_get_drvdata(pdev);
+	struct linflex_port *lfport = platform_get_drvdata(pdev);
 
-	uart_remove_one_port(&linflex_reg, sport);
+	uart_remove_one_port(&linflex_reg, &lfport->port);
 }
 
 #ifdef CONFIG_PM_SLEEP
 static int linflex_suspend(struct device *dev)
 {
-	struct uart_port *sport = dev_get_drvdata(dev);
+	struct linflex_port *lfport = dev_get_drvdata(dev);
 
-	uart_suspend_port(&linflex_reg, sport);
+	uart_suspend_port(&linflex_reg, &lfport->port);
+
+	clk_bulk_disable_unprepare(lfport->devtype_data->n_clks,
+				   lfport->clks);
 
 	return 0;
 }
 
 static int linflex_resume(struct device *dev)
 {
-	struct uart_port *sport = dev_get_drvdata(dev);
+	struct linflex_port *lfport = dev_get_drvdata(dev);
+	int ret;
 
-	uart_resume_port(&linflex_reg, sport);
+	ret = clk_bulk_prepare_enable(lfport->devtype_data->n_clks,
+				      lfport->clks);
+	if (ret)
+		return ret;
 
-	return 0;
+	return uart_resume_port(&linflex_reg, &lfport->port);
 }
 #endif
 
