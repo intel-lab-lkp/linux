@@ -1693,6 +1693,8 @@ static int vmx_rtit_ctl_check(struct kvm_vcpu *vcpu, u64 data)
 int vmx_check_emulate_instruction(struct kvm_vcpu *vcpu, int emul_type,
 				  void *insn, int insn_len)
 {
+	bool is_vect;
+
 	/*
 	 * Emulation of instructions in SGX enclaves is impossible as RIP does
 	 * not point at the failing instruction, and even if it did, the code
@@ -1704,6 +1706,13 @@ int vmx_check_emulate_instruction(struct kvm_vcpu *vcpu, int emul_type,
 		kvm_queue_exception(vcpu, UD_VECTOR);
 		return X86EMUL_PROPAGATE_FAULT;
 	}
+
+	is_vect = to_vmx(vcpu)->idt_vectoring_info & VECTORING_INFO_VALID_MASK;
+
+	/* Emulation is not possible when MMIO happens during event vectoring. */
+	if (kvm_is_emul_type_mmio(emul_type) && is_vect)
+		return X86EMUL_UNHANDLEABLE_VECTORING_IO;
+
 	return X86EMUL_CONTINUE;
 }
 
@@ -6452,7 +6461,6 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 	union vmx_exit_reason exit_reason = vmx->exit_reason;
 	u32 vectoring_info = vmx->idt_vectoring_info;
 	u16 exit_handler_index;
-	gpa_t gpa;
 
 	/*
 	 * Flush logged GPAs PML buffer, this will make dirty_bitmap more
@@ -6537,24 +6545,15 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 		return 0;
 	}
 
-	/*
-	 * Note:
-	 * Do not try to fix EXIT_REASON_EPT_MISCONFIG if it caused by
-	 * delivery event since it indicates guest is accessing MMIO.
-	 * The vm-exit can be triggered again after return to guest that
-	 * will cause infinite loop.
-	 */
 	if ((vectoring_info & VECTORING_INFO_VALID_MASK) &&
 	    (exit_reason.basic != EXIT_REASON_EXCEPTION_NMI &&
 	     exit_reason.basic != EXIT_REASON_EPT_VIOLATION &&
 	     exit_reason.basic != EXIT_REASON_PML_FULL &&
 	     exit_reason.basic != EXIT_REASON_APIC_ACCESS &&
 	     exit_reason.basic != EXIT_REASON_TASK_SWITCH &&
-	     exit_reason.basic != EXIT_REASON_NOTIFY)) {
-		gpa = exit_reason.basic == EXIT_REASON_EPT_MISCONFIG
-		      ? vmcs_read64(GUEST_PHYSICAL_ADDRESS) : INVALID_GPA;
-
-		kvm_prepare_event_vectoring_exit(vcpu, gpa);
+	     exit_reason.basic != EXIT_REASON_NOTIFY &&
+	     exit_reason.basic != EXIT_REASON_EPT_MISCONFIG)) {
+		kvm_prepare_event_vectoring_exit(vcpu, INVALID_GPA);
 		return 0;
 	}
 

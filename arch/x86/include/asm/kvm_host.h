@@ -2017,8 +2017,8 @@ u64 vcpu_tsc_khz(struct kvm_vcpu *vcpu);
  *			VMware backdoor emulation handles select instructions
  *			and reinjects the #GP for all other cases.
  *
- * EMULTYPE_PF - Set when emulating MMIO by way of an intercepted #PF, in which
- *		 case the CR2/GPA value pass on the stack is valid.
+ * EMULTYPE_PF - Set when an intercepted #PF triggers the emulation, in which case
+ *		 the CR2/GPA value pass on the stack is valid.
  *
  * EMULTYPE_COMPLETE_USER_EXIT - Set when the emulator should update interruptibility
  *				 state and inject single-step #DBs after skipping
@@ -2052,6 +2052,12 @@ u64 vcpu_tsc_khz(struct kvm_vcpu *vcpu);
 #define EMULTYPE_PF		    (1 << 6)
 #define EMULTYPE_COMPLETE_USER_EXIT (1 << 7)
 #define EMULTYPE_WRITE_PF_TO_SP	    (1 << 8)
+
+static inline bool kvm_is_emul_type_mmio(int emul_type)
+{
+	return (emul_type & EMULTYPE_PF) &&
+		!(emul_type & EMULTYPE_WRITE_PF_TO_SP);
+}
 
 int kvm_emulate_instruction(struct kvm_vcpu *vcpu, int emulation_type);
 int kvm_emulate_instruction_from_buffer(struct kvm_vcpu *vcpu,
