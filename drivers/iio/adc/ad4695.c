@@ -91,6 +91,7 @@
 #define AD4695_T_WAKEUP_SW_MS		3
 #define AD4695_T_REFBUF_MS		100
 #define AD4695_T_REGCONFIG_NS		20
+#define AD4695_T_SCK_CNV_DELAY_NS	80
 #define AD4695_REG_ACCESS_SCLK_HZ	(10 * MEGA)
 
 /* Max number of voltage input channels. */
@@ -132,8 +133,13 @@ struct ad4695_state {
 	unsigned int vref_mv;
 	/* Common mode input pin voltage. */
 	unsigned int com_mv;
-	/* 1 per voltage and temperature chan plus 1 xfer to trigger 1st CNV */
-	struct spi_transfer buf_read_xfer[AD4695_MAX_CHANNELS + 2];
+	/*
+	 * 2 per voltage and temperature chan plus 1 xfer to trigger 1st
+	 * CNV. Excluding the trigger xfer, every 2nd xfer only serves
+	 * to control CS and add a delay between the last SCLK and next
+	 * CNV rising edges.
+	 */
+	struct spi_transfer buf_read_xfer[AD4695_MAX_CHANNELS * 2 + 3];
 	struct spi_message buf_read_msg;
 	/* Raw conversion data received. */
 	u8 buf[ALIGN((AD4695_MAX_CHANNELS + 2) * AD4695_MAX_CHANNEL_SIZE,
@@ -451,9 +457,6 @@ static int ad4695_buffer_preenable(struct iio_dev *indio_dev)
 		xfer->bits_per_word = 16;
 		xfer->rx_buf = &st->buf[(num_xfer - 1) * 2];
 		xfer->len = 2;
-		xfer->cs_change = 1;
-		xfer->cs_change_delay.value = AD4695_T_CONVERT_NS;
-		xfer->cs_change_delay.unit = SPI_DELAY_UNIT_NSECS;
 
 		if (bit == temp_chan_bit) {
 			temp_en = 1;
@@ -466,6 +469,20 @@ static int ad4695_buffer_preenable(struct iio_dev *indio_dev)
 
 			num_slots++;
 		}
+
+		num_xfer++;
+
+		/*
+		 * We need to add a blank xfer in data reads, to meet
+		 * the timing requirement of a minimum delay between the
+		 * last SCLK rising edge and the CS deassert.
+		 */
+		xfer = &st->buf_read_xfer[num_xfer];
+		xfer->delay.value = AD4695_T_SCK_CNV_DELAY_NS;
+		xfer->delay.unit = SPI_DELAY_UNIT_NSECS;
+		xfer->cs_change = 1;
+		xfer->cs_change_delay.value = AD4695_T_CONVERT_NS;
+		xfer->cs_change_delay.unit = SPI_DELAY_UNIT_NSECS;
 
 		num_xfer++;
 	}
