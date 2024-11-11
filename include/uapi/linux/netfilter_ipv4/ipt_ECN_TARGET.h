@@ -11,7 +11,7 @@
 #define _IPT_ECN_TARGET_H
 
 #include <linux/types.h>
-#include <linux/netfilter/xt_DSCP.h>
+#include <linux/netfilter/xt_DSCP_TARGET.h>
 
 #define IPT_ECN_IP_MASK	(~XT_DSCP_MASK)
 
