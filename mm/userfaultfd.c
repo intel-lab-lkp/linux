@@ -86,13 +86,11 @@ static struct vm_area_struct *uffd_lock_vma(struct mm_struct *mm,
 	vma = find_vma_and_prepare_anon(mm, address);
 	if (!IS_ERR(vma)) {
 		/*
+		 * While holding mmap_lock we can't fail
 		 * We cannot use vma_start_read() as it may fail due to
-		 * false locked (see comment in vma_start_read()). We
-		 * can avoid that by directly locking vm_lock under
-		 * mmap_lock, which guarantees that nobody can lock the
-		 * vma for write (vma_start_write()) under us.
+		 * false locked (see comment in vma_start_read()).
 		 */
-		down_read(&vma->vm_lock->lock);
+		vma_start_read_locked(vma);
 	}
 
 	mmap_read_unlock(mm);
@@ -1480,10 +1478,10 @@ static int uffd_move_lock(struct mm_struct *mm,
 		 * See comment in uffd_lock_vma() as to why not using
 		 * vma_start_read() here.
 		 */
-		down_read(&(*dst_vmap)->vm_lock->lock);
+		vma_start_read_locked(*dst_vmap);
 		if (*dst_vmap != *src_vmap)
-			down_read_nested(&(*src_vmap)->vm_lock->lock,
-					 SINGLE_DEPTH_NESTING);
+			vma_start_read_locked_nested(*src_vmap,
+						SINGLE_DEPTH_NESTING);
 	}
 	mmap_read_unlock(mm);
 	return err;
