@@ -688,14 +688,20 @@
 	cap-sd-highspeed;
 	cap-sdio-irq;
 	keep-power-in-suspend;
+	max-frequency = <200000000>;
 	mmc-pwrseq = <&sdio_pwrseq>;
 	non-removable;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdmmc2m0_bus4 &sdmmc2m0_clk &sdmmc2m0_cmd>;
+	sd-uhs-sdr12;
+	sd-uhs-sdr25;
+	sd-uhs-sdr50;
 	sd-uhs-sdr104;
+	sd-uhs-ddr50;
 	vmmc-supply = <&vcc3v3_sys2>;
 	vqmmc-supply = <&vcc_1v8>;
-	status = "disabled";
+	wakeup-source;
+	status = "okay";
 };
 
 &sfc {
