@@ -149,7 +149,7 @@ Z6.0+pooncelock+pooncelock+pombonce.litmus
 	spin_lock() sufficient to make ordering apparent to accesses
 	by a process not holding the lock?
 
-Z6.0+pooncelock+poonceLock+pombonce.litmus
+Z6.0+pooncelock+poonceLock+after_spinlock+pombonce.litmus
 	As above, but with smp_mb__after_spinlock() immediately
 	following the spin_lock().
 

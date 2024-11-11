@@ -184,7 +184,7 @@ ordering properties.
 Ordering can be extended to CPUs not holding the lock by careful use
 of smp_mb__after_spinlock():
 
-	/* See Z6.0+pooncelock+poonceLock+pombonce.litmus. */
+	/* See Z6.0+pooncelock+poonceLock+after_spinlock+pombonce.litmus. */
 	void CPU0(void)
 	{
 		spin_lock(&mylock);
