@@ -1674,8 +1674,9 @@ void intel_psr_compute_config(struct intel_dp *intel_dp,
 
 	/*
 	 * Currently PSR/PR doesn't work reliably with VRR enabled.
+	 * Avoid PSR/PR when not in fixed refresh rate mode.
 	 */
-	if (crtc_state->vrr.tg_enable)
+	if (crtc_state->vrr.tg_enable && crtc_state->vrr.mode != INTEL_VRRTG_MODE_FIXED_RR)
 		return;
 
 	crtc_state->has_panel_replay = _panel_replay_compute_config(intel_dp,
