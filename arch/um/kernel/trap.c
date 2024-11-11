@@ -174,6 +174,16 @@ void fatal_sigsegv(void)
 	os_dump_core();
 }
 
+#ifndef CONFIG_MMU
+void sigsegv_post_routine(void)
+{
+	change_sig(SIGIO, 1);
+	change_sig(SIGALRM, 1);
+	change_sig(SIGWINCH, 1);
+	userspace(&current->thread.regs.regs);
+}
+#endif
+
 /**
  * segv_handler() - the SIGSEGV handler
  * @sig:	the signal number

@@ -36,7 +36,15 @@ static void sig_handler_common(int sig, struct siginfo *si, mcontext_t *mc)
 	struct uml_pt_regs r;
 	int save_errno = errno;
 
-	r.is_user = 0;
+#ifndef CONFIG_MMU
+	memset(&r, 0, sizeof(r));
+	/* mark is_user=1 when the IP is from userspace code. */
+	if (mc && (REGS_IP(mc->gregs) > uml_reserved
+		   && REGS_IP(mc->gregs) < high_physmem))
+		r.is_user = 1;
+	else
+#endif
+		r.is_user = 0;
 	if (sig == SIGSEGV) {
 		/* For segfaults, we want the data from the sigcontext. */
 		get_regs_from_mc(&r, mc);
@@ -191,6 +199,7 @@ static void hard_handler(int sig, siginfo_t *si, void *p)
 	ucontext_t *uc = p;
 	mcontext_t *mc = &uc->uc_mcontext;
 	unsigned long pending = 1UL << sig;
+	int is_segv = 0;
 
 	do {
 		int nested, bail;
@@ -214,6 +223,7 @@ static void hard_handler(int sig, siginfo_t *si, void *p)
 
 		while ((sig = ffs(pending)) != 0){
 			sig--;
+			is_segv = (sig == SIGSEGV) ? 1 : 0;
 			pending &= ~(1 << sig);
 			(*handlers[sig])(sig, (struct siginfo *)si, mc);
 		}
@@ -227,6 +237,12 @@ static void hard_handler(int sig, siginfo_t *si, void *p)
 		if (!nested)
 			pending = from_irq_stack(nested);
 	} while (pending);
+
+#ifndef CONFIG_MMU
+	/* if there is SIGSEGV notified, let the userspace run w/ __noreturn */
+	if (is_segv)
+		sigsegv_post_routine();
+#endif
 }
 
 void set_handler(int sig)
