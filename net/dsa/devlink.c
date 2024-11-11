@@ -298,6 +298,31 @@ void dsa_devlink_region_destroy(struct devlink_region *region)
 }
 EXPORT_SYMBOL_GPL(dsa_devlink_region_destroy);
 
+static void
+dsa_devlink_port_bridge_offload_get(struct devlink_port *dlp,
+				    bool *is_enable)
+{
+	struct dsa_port *dp = dsa_to_port(dsa_devlink_port_to_ds(dlp),
+					  dsa_devlink_port_to_port(dlp));
+
+	*is_enable = dp->bridge_offloading;
+}
+
+static void
+dsa_devlink_port_bridge_offload_set(struct devlink_port *dlp,
+				    bool enable)
+{
+	struct dsa_port *dp = dsa_to_port(dsa_devlink_port_to_ds(dlp),
+					  dsa_devlink_port_to_port(dlp));
+
+	dp->bridge_offloading = enable;
+}
+
+static const struct devlink_port_ops dsa_devlink_port_ops = {
+	.port_fn_bridge_offload_get = dsa_devlink_port_bridge_offload_get,
+	.port_fn_bridge_offload_set = dsa_devlink_port_bridge_offload_set,
+};
+
 int dsa_port_devlink_setup(struct dsa_port *dp)
 {
 	struct devlink_port *dlp = &dp->devlink_port;
@@ -341,7 +366,7 @@ int dsa_port_devlink_setup(struct dsa_port *dp)
 	}
 
 	devlink_port_attrs_set(dlp, &attrs);
-	err = devlink_port_register(dl, dlp, dp->index);
+	err = devlink_port_register_with_ops(dl, dlp, dp->index, &dsa_devlink_port_ops);
 	if (err) {
 		if (ds->ops->port_teardown)
 			ds->ops->port_teardown(ds, dp->index);

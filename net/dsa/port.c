@@ -493,7 +493,8 @@ int dsa_port_bridge_join(struct dsa_port *dp, struct net_device *br,
 	struct net_device *brport_dev;
 	int err;
 
-	if (br_mst_enabled(br) && !dsa_port_supports_mst(dp))
+	if ((br_mst_enabled(br) && !dsa_port_supports_mst(dp)) ||
+	    !dp->bridge_offloading)
 		return -EOPNOTSUPP;
 
 	/* Here the interface is already bridged. Reflect the current

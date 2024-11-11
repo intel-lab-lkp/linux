@@ -529,6 +529,7 @@ static int dsa_port_setup(struct dsa_port *dp)
 		return err;
 	}
 
+	dp->bridge_offloading = true;
 	dp->setup = true;
 
 	return 0;

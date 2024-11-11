@@ -291,6 +291,7 @@ struct dsa_port {
 
 	struct device_node	*dn;
 	unsigned int		ageing_time;
+	bool bridge_offloading;
 
 	struct dsa_bridge	*bridge;
 	struct devlink_port	devlink_port;
