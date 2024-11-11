@@ -153,7 +153,7 @@ static struct kvm_mmu_page *tdp_mmu_next_root(struct kvm *kvm,
 	for (_root = tdp_mmu_next_root(_kvm, NULL, _only_valid);		\
 	     ({ lockdep_assert_held(&(_kvm)->mmu_lock); }), _root;		\
 	     _root = tdp_mmu_next_root(_kvm, _root, _only_valid))		\
-		if (_as_id >= 0 && kvm_mmu_page_as_id(_root) != _as_id) {	\
+		if (kvm_mmu_page_as_id(_root) != _as_id) {	\
 		} else
 
 #define for_each_valid_tdp_mmu_root_yield_safe(_kvm, _root, _as_id)	\
