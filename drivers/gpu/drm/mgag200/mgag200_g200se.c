@@ -216,8 +216,7 @@ static int mgag200_g200se_04_pixpllc_atomic_check(struct drm_crtc *crtc,
 	m = n = p = s = 0;
 	delta = 0xffffffff;
 
-	if (clock < 25000)
-		clock = 25000;
+	clock = clamp(clock, 25000L, 800000L);
 	clock = clock * 2;
 
 	/* Permited delta is 0.5% as VESA Specification */
