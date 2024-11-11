@@ -26,6 +26,7 @@
 #include <linux/wait.h>
 #include <linux/async.h>
 #include <linux/pm_runtime.h>
+#include <linux/pm_wakeirq.h>
 #include <linux/pinctrl/devinfo.h>
 #include <linux/slab.h>
 
@@ -556,6 +557,7 @@ static void device_unbind_cleanup(struct device *dev)
 		dev->pm_domain->dismiss(dev);
 	pm_runtime_reinit(dev);
 	dev_pm_set_driver_flags(dev, 0);
+	dev_pm_clear_wake_irq(dev);
 }
 
 static void device_remove(struct device *dev)
