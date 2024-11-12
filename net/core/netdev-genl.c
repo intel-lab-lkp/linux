@@ -216,6 +216,23 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+/* must be called under rcu_read_lock(), because napi_by_id requires it */
+static struct napi_struct *__do_napi_by_id(unsigned int napi_id,
+					   struct genl_info *info, int *err)
+{
+	struct napi_struct *napi;
+
+	napi = napi_by_id(napi_id);
+	if (napi) {
+		*err = 0;
+	} else {
+		NL_SET_BAD_ATTR(info->extack, info->attrs[NETDEV_A_NAPI_ID]);
+		*err = -ENOENT;
+	}
+
+	return napi;
+}
+
 int netdev_nl_napi_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct napi_struct *napi;
@@ -233,15 +250,13 @@ int netdev_nl_napi_get_doit(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 
 	rtnl_lock();
+	rcu_read_lock();
 
-	napi = napi_by_id(napi_id);
-	if (napi) {
+	napi = __do_napi_by_id(napi_id, info, &err);
+	if (!err)
 		err = netdev_nl_napi_fill_one(rsp, napi, info);
-	} else {
-		NL_SET_BAD_ATTR(info->extack, info->attrs[NETDEV_A_NAPI_ID]);
-		err = -ENOENT;
-	}
 
+	rcu_read_unlock();
 	rtnl_unlock();
 
 	if (err)
