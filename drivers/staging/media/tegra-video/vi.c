@@ -980,6 +980,11 @@ static int tegra_channel_setup_ctrl_handler(struct tegra_vi_channel *chan)
 	if (!subdev)
 		return -ENODEV;
 
+	if (chan->vi->soc->has_h_v_flip) {
+		v4l2_ctrl_new_std(&chan->ctrl_handler, &vi_ctrl_ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
+		v4l2_ctrl_new_std(&chan->ctrl_handler, &vi_ctrl_ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
+	}
+
 	ret = v4l2_ctrl_add_handler(&chan->ctrl_handler, subdev->ctrl_handler,
 				    NULL, true);
 	if (ret < 0) {
@@ -989,12 +994,6 @@ static int tegra_channel_setup_ctrl_handler(struct tegra_vi_channel *chan)
 		v4l2_ctrl_handler_free(&chan->ctrl_handler);
 		return ret;
 	}
-
-	if (chan->vi->soc->has_h_v_flip) {
-		v4l2_ctrl_new_std(&chan->ctrl_handler, &vi_ctrl_ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
-		v4l2_ctrl_new_std(&chan->ctrl_handler, &vi_ctrl_ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
-	}
-
 #endif
 
 	/* setup the controls */
