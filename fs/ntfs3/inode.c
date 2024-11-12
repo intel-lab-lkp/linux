@@ -947,9 +947,6 @@ out:
 	return err;
 }
 
-/*
- * ntfs_write_end - Address_space_operations::write_end.
- */
 int ntfs_write_end(struct file *file, struct address_space *mapping, loff_t pos,
 		   u32 len, u32 copied, struct folio *folio, void *fsdata)
 {
@@ -2092,8 +2089,6 @@ const struct address_space_operations ntfs_aops = {
 	.read_folio	= ntfs_read_folio,
 	.readahead	= ntfs_readahead,
 	.writepages	= ntfs_writepages,
-	.write_begin	= ntfs_write_begin,
-	.write_end	= ntfs_write_end,
 	.direct_IO	= ntfs_direct_IO,
 	.bmap		= ntfs_bmap,
 	.dirty_folio	= block_dirty_folio,
