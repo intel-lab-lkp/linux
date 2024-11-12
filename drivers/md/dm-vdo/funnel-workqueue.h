@@ -11,7 +11,7 @@
 #include "types.h"
 
 enum {
-	MAX_VDO_WORK_QUEUE_NAME_LEN = TASK_COMM_LEN,
+	MAX_VDO_WORK_QUEUE_NAME_LEN = TASK_COMM_LEN + 41,
 };
 
 struct vdo_work_queue_type {
