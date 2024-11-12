@@ -777,11 +777,8 @@ out:
 static int fuse_dax_writepages(struct address_space *mapping,
 			       struct writeback_control *wbc)
 {
-
-	struct inode *inode = mapping->host;
-	struct fuse_conn *fc = get_fuse_conn(inode);
-
-	return dax_writeback_mapping_range(mapping, fc->dax->dev, wbc);
+	/* nothing to flush, fuse cache coherency is managed by the host */
+	return 0;
 }
 
 static vm_fault_t __fuse_dax_fault(struct vm_fault *vmf, unsigned int order,
