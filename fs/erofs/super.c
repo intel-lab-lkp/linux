@@ -745,6 +745,11 @@ static int erofs_fc_reconfigure(struct fs_context *fc)
 	else
 		fc->sb_flags &= ~SB_POSIXACL;
 
+	if (new_sbi->opt.cache_strategy == EROFS_ZIP_CACHE_DISABLED) {
+		mutex_lock(&sbi->umount_mutex);
+		z_erofs_shrink_scan(sbi, ~0UL);
+		mutex_unlock(&sbi->umount_mutex);
+	}
 	sbi->opt = new_sbi->opt;
 
 	fc->sb_flags |= SB_RDONLY;
