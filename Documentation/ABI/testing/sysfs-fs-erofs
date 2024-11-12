@@ -16,3 +16,10 @@ Description:	Control strategy of sync decompression:
 		  readahead on atomic contexts only.
 		- 1 (force on): enable for readpage and readahead.
 		- 2 (force off): disable for all situations.
+
+What:		/sys/fs/erofs/<disk>/drop_caches
+Date:		November 2024
+Contact:	"Guo Chunhai" <guochunhai@vivo.com>
+Description:	Writing 1 to this will cause the erofs to drop all
+		compression-related caches, including pclusters and attached
+		compressed pages. Any other value is invalid.
