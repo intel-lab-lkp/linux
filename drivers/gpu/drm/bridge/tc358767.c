@@ -39,6 +39,8 @@
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
+#include <video/display_timing.h>
+
 /* Registers */
 
 /* DSI D-PHY Layer registers */
@@ -1648,13 +1650,33 @@ static int tc_edp_atomic_check(struct drm_bridge *bridge,
 			       struct drm_crtc_state *crtc_state,
 			       struct drm_connector_state *conn_state)
 {
+	u32 mode_clock = crtc_state->mode.clock * 1000;
 	struct tc_data *tc = bridge_to_tc(bridge);
-	int adjusted_clock = 0;
+	struct drm_bridge *nb = bridge;
+	struct display_timing timings;
+	struct drm_panel *panel;
+	int adjusted_clock;
 	int ret;
 
+	do {
+		if (!drm_bridge_is_panel(nb))
+			continue;
+
+		panel = drm_bridge_get_panel(nb);
+		if (!panel || !panel->funcs || !panel->funcs->get_timings)
+			continue;
+
+		ret = panel->funcs->get_timings(panel, 1, &timings);
+		if (ret <= 0)
+			break;
+
+		if (timings.pixelclock.max > mode_clock)
+			mode_clock = timings.pixelclock.max;
+		break;
+	} while ((nb = drm_bridge_get_next_bridge(nb)));
+
 	ret = tc_pxl_pll_calc(tc, clk_get_rate(tc->refclk),
-			      crtc_state->mode.clock * 1000,
-			      &adjusted_clock, NULL);
+			      mode_clock, &adjusted_clock, NULL);
 	if (ret)
 		return ret;
 
@@ -1701,9 +1723,18 @@ tc_edp_mode_valid(struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
-static void tc_bridge_mode_set(struct drm_bridge *bridge,
-			       const struct drm_display_mode *mode,
-			       const struct drm_display_mode *adj)
+static void tc_dpi_bridge_mode_set(struct drm_bridge *bridge,
+				   const struct drm_display_mode *mode,
+				   const struct drm_display_mode *adj)
+{
+	struct tc_data *tc = bridge_to_tc(bridge);
+
+	drm_mode_copy(&tc->mode, adj);
+}
+
+static void tc_edp_bridge_mode_set(struct drm_bridge *bridge,
+				   const struct drm_display_mode *mode,
+				   const struct drm_display_mode *adj)
 {
 	struct tc_data *tc = bridge_to_tc(bridge);
 
@@ -1920,7 +1951,7 @@ tc_edp_atomic_get_output_bus_fmts(struct drm_bridge *bridge,
 static const struct drm_bridge_funcs tc_dpi_bridge_funcs = {
 	.attach = tc_dpi_bridge_attach,
 	.mode_valid = tc_dpi_mode_valid,
-	.mode_set = tc_bridge_mode_set,
+	.mode_set = tc_dpi_bridge_mode_set,
 	.atomic_check = tc_dpi_atomic_check,
 	.atomic_enable = tc_dpi_bridge_atomic_enable,
 	.atomic_disable = tc_dpi_bridge_atomic_disable,
@@ -1934,7 +1965,7 @@ static const struct drm_bridge_funcs tc_edp_bridge_funcs = {
 	.attach = tc_edp_bridge_attach,
 	.detach = tc_edp_bridge_detach,
 	.mode_valid = tc_edp_mode_valid,
-	.mode_set = tc_bridge_mode_set,
+	.mode_set = tc_edp_bridge_mode_set,
 	.atomic_check = tc_edp_atomic_check,
 	.atomic_enable = tc_edp_bridge_atomic_enable,
 	.atomic_disable = tc_edp_bridge_atomic_disable,
