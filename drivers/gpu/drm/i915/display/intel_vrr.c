@@ -10,7 +10,12 @@
 #include "intel_display_types.h"
 #include "intel_vrr.h"
 #include "intel_vrr_regs.h"
+#include "skl_watermark_regs.h"
+#include "intel_crtc.h"
 #include "intel_dp.h"
+#include "intel_psr.h"
+#include "skl_watermark.h"
+#include "skl_scaler.h"
 
 #define FIXED_POINT_PRECISION		100
 #define CMRR_PRECISION_TOLERANCE	10
@@ -255,8 +260,17 @@ void intel_vrr_compute_config_late(struct intel_crtc_state *crtc_state)
 		return;
 
 	if (DISPLAY_VER(display) >= 13) {
-		crtc_state->vrr.guardband =
-			crtc_state->vrr.vmin + 1 - adjusted_mode->crtc_vblank_start;
+		int sagv_block_time_in_scanline =
+			intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
+						 display->sagv.block_time_us);
+		/*
+		 * TODO: DSC , PKGC and SDP latency to be computed
+		 */
+		crtc_state->vrr.guardband = MAX(crtc_state->framestart_delay +
+						 skl_calc_scaler_prefill_latency(crtc_state) +
+						 skl_calc_wm0_prefill_latency(crtc_state) +
+						 sagv_block_time_in_scanline,
+						 intel_psr2_calc_prefill(crtc_state));
 	} else {
 		crtc_state->vrr.pipeline_full =
 			min(255, crtc_state->vrr.vmin - adjusted_mode->crtc_vblank_start -
