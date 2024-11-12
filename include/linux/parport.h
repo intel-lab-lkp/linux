@@ -182,8 +182,8 @@ struct ieee1284_info {
 
 /* A parallel port */
 struct parport {
-	unsigned long base;	/* base address */
-	unsigned long base_hi;  /* base address (hi - ECR) */
+	unsigned long iobase;	/* base address for ioport */
+	unsigned long iobase_hi;  /* base address (hi - ECR) */
 	unsigned int size;	/* IO extent */
 	const char *name;
 	unsigned int modes;

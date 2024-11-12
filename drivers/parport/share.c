@@ -7,8 +7,6 @@
  *          Philip Blundell <philb@gnu.org>
  *	    Andrea Arcangeli
  *
- * based on work by Grant Guenther <grant@torque.net>
- *          and Philip Blundell
  *
  * Any part of this program may be used in documents licensed under
  * the GNU Free Documentation License, Version 1.1 or any later version
@@ -435,7 +433,7 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 		return NULL;
 
 	/* Init our structure */
-	tmp->base = base;
+	tmp->iobase = base;
 	tmp->irq = irq;
 	tmp->dma = dma;
 	tmp->muxport = tmp->daisy = tmp->muxsel = -1;
@@ -931,7 +929,7 @@ struct parport *parport_find_base(unsigned long base)
 
 	spin_lock(&parportlist_lock);
 	list_for_each_entry(port, &portlist, list) {
-		if (port->base == base) {
+		if (port->iobase == base) {
 			result = parport_get_port(port);
 			break;
 		}

@@ -539,7 +539,7 @@ static struct pi_adapter *pi_init_one(struct parport *parport,
 
 	pi->delay = (delay == -1) ? pi->proto->default_delay : delay;
 	pi->mode = mode;
-	pi->port = parport->base;
+	pi->port = parport->iobase;
 
 	par_cb.private = pi;
 	pi->pardev = parport_register_dev_model(parport, DRV_NAME, &par_cb, id);

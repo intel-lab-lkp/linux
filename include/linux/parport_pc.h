@@ -6,15 +6,15 @@
 
 /* --- register definitions ------------------------------- */
 
-#define ECONTROL(p) ((p)->base_hi + 0x2)
-#define CONFIGB(p)  ((p)->base_hi + 0x1)
-#define CONFIGA(p)  ((p)->base_hi + 0x0)
-#define FIFO(p)     ((p)->base_hi + 0x0)
-#define EPPDATA(p)  ((p)->base    + 0x4)
-#define EPPADDR(p)  ((p)->base    + 0x3)
-#define CONTROL(p)  ((p)->base    + 0x2)
-#define STATUS(p)   ((p)->base    + 0x1)
-#define DATA(p)     ((p)->base    + 0x0)
+#define ECONTROL(p) ((p)->iobase_hi + 0x2)
+#define CONFIGB(p)  ((p)->iobase_hi + 0x1)
+#define CONFIGA(p)  ((p)->iobase_hi + 0x0)
+#define FIFO(p)     ((p)->iobase_hi + 0x0)
+#define EPPDATA(p)  ((p)->iobase    + 0x4)
+#define EPPADDR(p)  ((p)->iobase    + 0x3)
+#define CONTROL(p)  ((p)->iobase    + 0x2)
+#define STATUS(p)   ((p)->iobase    + 0x1)
+#define DATA(p)     ((p)->iobase    + 0x0)
 
 struct parport_pc_private {
 	/* Contents of CTR. */

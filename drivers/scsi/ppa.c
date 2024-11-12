@@ -64,7 +64,7 @@ static DEFINE_SPINLOCK(arbitration_lock);
 
 static void got_it(ppa_struct *dev)
 {
-	dev->base = dev->dev->port->base;
+	dev->base = dev->dev->port->iobase;
 	if (dev->cur_cmd)
 		ppa_scsi_pointer(dev->cur_cmd)->phase = 1;
 	else
@@ -232,7 +232,7 @@ static inline void epp_reset(unsigned short ppb)
  */
 static inline void ecp_sync(ppa_struct *dev)
 {
-	int i, ppb_hi = dev->dev->port->base_hi;
+	int i, ppb_hi = dev->dev->port->iobase_hi;
 
 	if (ppb_hi == 0)
 		return;
@@ -472,7 +472,7 @@ static int ppa_init(ppa_struct *dev)
 
 	if (autodetect) {
 		int modes = dev->dev->port->modes;
-		int ppb_hi = dev->dev->port->base_hi;
+		int ppb_hi = dev->dev->port->iobase_hi;
 
 		/* Mode detection works up the chain of speed
 		 * This avoids a nasty if-then-else-if-... tree
@@ -1081,7 +1081,7 @@ static int __ppa_attach(struct parport *pb)
 	}
 	dev->waiting = NULL;
 	finish_wait(&waiting, &wait);
-	dev->base = dev->dev->port->base;
+	dev->base = dev->dev->port->iobase;
 	w_ctr(dev->base, 0x0c);
 
 	/* Done configuration */
@@ -1105,7 +1105,7 @@ static int __ppa_attach(struct parport *pb)
 	if (!host)
 		goto out1;
 	host->no_highmem = true;
-	host->io_port = pb->base;
+	host->io_port = pb->iobase;
 	host->n_io_port = ports;
 	host->dma_channel = -1;
 	host->unique_id = pb->number;

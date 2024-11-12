@@ -74,7 +74,7 @@
 static struct parport *this_port[MAX_MFC] = {NULL, };
 static volatile int dummy; /* for trigger readds */
 
-#define pia(dev) ((struct pia *)(dev->base))
+#define pia(dev) ((struct pia *)(dev->iobase))
 static struct parport_operations pp_mfc3_ops;
 
 static void mfc3_write_data(struct parport *p, unsigned char data)

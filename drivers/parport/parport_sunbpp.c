@@ -50,7 +50,7 @@
 
 static void parport_sunbpp_disable_irq(struct parport *p)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 	u32 tmp;
 
 	tmp = sbus_readl(&regs->p_csr);
@@ -60,7 +60,7 @@ static void parport_sunbpp_disable_irq(struct parport *p)
 
 static void parport_sunbpp_enable_irq(struct parport *p)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 	u32 tmp;
 
 	tmp = sbus_readl(&regs->p_csr);
@@ -70,7 +70,7 @@ static void parport_sunbpp_enable_irq(struct parport *p)
 
 static void parport_sunbpp_write_data(struct parport *p, unsigned char d)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 
 	sbus_writeb(d, &regs->p_dr);
 	dprintk((KERN_DEBUG "wrote 0x%x\n", d));
@@ -78,14 +78,14 @@ static void parport_sunbpp_write_data(struct parport *p, unsigned char d)
 
 static unsigned char parport_sunbpp_read_data(struct parport *p)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 
 	return sbus_readb(&regs->p_dr);
 }
 
 static unsigned char status_sunbpp_to_pc(struct parport *p)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 	unsigned char bits = 0;
 	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
 	unsigned char value_ir = sbus_readb(&regs->p_ir);
@@ -108,7 +108,7 @@ static unsigned char status_sunbpp_to_pc(struct parport *p)
 
 static unsigned char control_sunbpp_to_pc(struct parport *p)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 	unsigned char bits = 0;
 	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
 	unsigned char value_or = sbus_readb(&regs->p_or);
@@ -136,7 +136,7 @@ static unsigned char parport_sunbpp_frob_control(struct parport *p,
 						 unsigned char mask,
 						 unsigned char val)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
 	unsigned char value_or = sbus_readb(&regs->p_or);
 
@@ -195,7 +195,7 @@ static unsigned char parport_sunbpp_read_status(struct parport *p)
 
 static void parport_sunbpp_data_forward (struct parport *p)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
 
 	dprintk((KERN_DEBUG "forward\n"));
@@ -205,7 +205,7 @@ static void parport_sunbpp_data_forward (struct parport *p)
 
 static void parport_sunbpp_data_reverse (struct parport *p)
 {
-	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->base;
+	struct bpp_regs __iomem *regs = (struct bpp_regs __iomem *)p->iobase;
 	u8 val = sbus_readb(&regs->p_tcr);
 
 	dprintk((KERN_DEBUG "reverse\n"));
@@ -308,13 +308,13 @@ static int bpp_probe(struct platform_device *op)
 
 	parport_sunbpp_enable_irq(p);
 
-	regs = (struct bpp_regs __iomem *)p->base;
+	regs = (struct bpp_regs __iomem *)p->iobase;
 
 	value_tcr = sbus_readb(&regs->p_tcr);
 	value_tcr &= ~P_TCR_DIR;
 	sbus_writeb(value_tcr, &regs->p_tcr);
 
-	pr_info("%s: sunbpp at 0x%lx\n", p->name, p->base);
+	pr_info("%s: sunbpp at 0x%lx\n", p->name, p->iobase);
 
 	dev_set_drvdata(&op->dev, p);
 
@@ -346,7 +346,7 @@ static void bpp_remove(struct platform_device *op)
 		free_irq(p->irq, p);
 	}
 
-	of_iounmap(&op->resource[0], (void __iomem *) p->base, p->size);
+	of_iounmap(&op->resource[0], (void __iomem *) p->iobase, p->size);
 	parport_put_port(p);
 	kfree(ops);
 

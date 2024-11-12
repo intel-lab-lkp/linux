@@ -68,7 +68,7 @@ static void add_dev(int devnum, struct parport *port, int daisy)
 /* Clone a parport (actually, make an alias). */
 static struct parport *clone_parport(struct parport *real, int muxport)
 {
-	struct parport *extra = parport_register_port(real->base,
+	struct parport *extra = parport_register_port(real->iobase,
 						       real->irq,
 						       real->dma,
 						       real->ops);

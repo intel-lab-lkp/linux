@@ -307,12 +307,12 @@ static int par96_open(struct net_device *dev)
 		return -ENXIO;
 	}
 	if (pp->irq < 0) {
-		pr_err("baycom_par: parport at 0x%lx has no irq\n", pp->base);
+		pr_err("baycom_par: parport at 0x%lx has no irq\n", pp->iobase);
 		parport_put_port(pp);
 		return -ENXIO;
 	}
 	if ((~pp->modes) & (PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT)) {
-		pr_err("baycom_par: parport at 0x%lx cannot be used\n", pp->base);
+		pr_err("baycom_par: parport at 0x%lx cannot be used\n", pp->iobase);
 		parport_put_port(pp);
 		return -ENXIO;
 	}
@@ -339,7 +339,7 @@ static int par96_open(struct net_device *dev)
 		return -ENXIO;
 	}
 	if (parport_claim(bc->pdev)) {
-		pr_err("baycom_par: parport at 0x%lx busy\n", pp->base);
+		pr_err("baycom_par: parport at 0x%lx busy\n", pp->iobase);
 		parport_unregister_device(bc->pdev);
 		return -EBUSY;
 	}

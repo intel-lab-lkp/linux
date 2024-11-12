@@ -1380,7 +1380,7 @@ static struct superio_struct *find_superio(struct parport *p)
 {
 	int i;
 	for (i = 0; i < NR_SUPERIOS; i++)
-		if (superios[i].io == p->base)
+		if (superios[i].io == p->iobase)
 			return &superios[i];
 	return NULL;
 }
@@ -1448,7 +1448,7 @@ static int parport_SPP_supported(struct parport *pb)
 		/* That didn't work, but the user thinks there's a
 		 * port here. */
 		pr_info("parport 0x%lx (WARNING): CTR: wrote 0x%02x, read 0x%02x\n",
-			pb->base, w, r);
+			pb->iobase, w, r);
 
 	/* Try the data register.  The data lines aren't tri-stated at
 	 * this stage, so we expect back what we wrote. */
@@ -1467,9 +1467,9 @@ static int parport_SPP_supported(struct parport *pb)
 		/* Didn't work, but the user is convinced this is the
 		 * place. */
 		pr_info("parport 0x%lx (WARNING): DATA: wrote 0x%02x, read 0x%02x\n",
-			pb->base, w, r);
+			pb->iobase, w, r);
 		pr_info("parport 0x%lx: You gave this address, but there is probably no parallel port there!\n",
-			pb->base);
+			pb->iobase);
 	}
 
 	/* It's possible that we can't read the control register or
@@ -1609,7 +1609,7 @@ static int parport_ECP_supported(struct parport *pb)
 
 	priv->fifo_depth = i;
 	if (verbose_probing)
-		pr_debug("0x%lx: FIFO is %d bytes\n", pb->base, i);
+		pr_debug("0x%lx: FIFO is %d bytes\n", pb->iobase, i);
 
 	/* Find out writeIntrThreshold */
 	frob_econtrol(pb, 1<<2, 1<<2);
@@ -1624,7 +1624,7 @@ static int parport_ECP_supported(struct parport *pb)
 	if (i <= priv->fifo_depth) {
 		if (verbose_probing)
 			pr_debug("0x%lx: writeIntrThreshold is %d\n",
-			       pb->base, i);
+			       pb->iobase, i);
 	} else
 		/* Number of bytes we know we can write if we get an
 		   interrupt. */
@@ -1647,7 +1647,7 @@ static int parport_ECP_supported(struct parport *pb)
 	if (i <= priv->fifo_depth) {
 		if (verbose_probing)
 			pr_info("0x%lx: readIntrThreshold is %d\n",
-				pb->base, i);
+				pb->iobase, i);
 	} else
 		/* Number of bytes we can read if we get an interrupt. */
 		i = 0;
@@ -1661,14 +1661,14 @@ static int parport_ECP_supported(struct parport *pb)
 	switch (pword) {
 	case 0:
 		pword = 2;
-		pr_warn("0x%lx: Unsupported pword size!\n", pb->base);
+		pr_warn("0x%lx: Unsupported pword size!\n", pb->iobase);
 		break;
 	case 2:
 		pword = 4;
-		pr_warn("0x%lx: Unsupported pword size!\n", pb->base);
+		pr_warn("0x%lx: Unsupported pword size!\n", pb->iobase);
 		break;
 	default:
-		pr_warn("0x%lx: Unknown implementation ID\n", pb->base);
+		pr_warn("0x%lx: Unknown implementation ID\n", pb->iobase);
 		fallthrough;	/* Assume 1 */
 	case 1:
 		pword = 1;
@@ -1677,15 +1677,15 @@ static int parport_ECP_supported(struct parport *pb)
 
 	if (verbose_probing) {
 		pr_debug("0x%lx: PWord is %d bits\n",
-		       pb->base, 8 * pword);
+		       pb->iobase, 8 * pword);
 
 		pr_debug("0x%lx: Interrupts are ISA-%s\n",
-		       pb->base, config & 0x80 ? "Level" : "Pulses");
+		       pb->iobase, config & 0x80 ? "Level" : "Pulses");
 
 		configb = inb(CONFIGB(pb));
 		pr_debug("0x%lx: ECP port cfgA=0x%02x cfgB=0x%02x\n",
-		       pb->base, config, configb);
-		pr_debug("0x%lx: ECP settings irq=", pb->base);
+		       pb->iobase, config, configb);
+		pr_debug("0x%lx: ECP settings irq=", pb->iobase);
 		if ((configb >> 3) & 0x07)
 			pr_cont("%d", intrline[(configb >> 3) & 0x07]);
 		else
@@ -2085,7 +2085,7 @@ static struct parport *__parport_pc_probe_port(unsigned long int base,
 	priv->port = p;
 
 	p->dev = dev;
-	p->base_hi = base_hi;
+	p->iobase_hi = base_hi;
 	p->modes = PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT;
 	p->private_data = priv;
 
@@ -2111,9 +2111,9 @@ static struct parport *__parport_pc_probe_port(unsigned long int base,
 
 	p->size = (p->modes & PARPORT_MODE_EPP) ? 8 : 3;
 
-	pr_info("%s: PC-style at 0x%lx", p->name, p->base);
-	if (p->base_hi && priv->ecr)
-		pr_cont(" (0x%lx)", p->base_hi);
+	pr_info("%s: PC-style at 0x%lx", p->name, p->iobase);
+	if (p->iobase_hi && priv->ecr)
+		pr_cont(" (0x%lx)", p->iobase_hi);
 	if (p->irq == PARPORT_IRQ_AUTO) {
 		p->irq = PARPORT_IRQ_NONE;
 		parport_irq_probe(p);
@@ -2299,11 +2299,11 @@ void parport_pc_unregister_port(struct parport *p)
 #endif
 	if (p->irq != PARPORT_IRQ_NONE)
 		free_irq(p->irq, p);
-	release_region(p->base, 3);
+	release_region(p->iobase, 3);
 	if (p->size > 3)
-		release_region(p->base + 3, p->size - 3);
+		release_region(p->iobase + 3, p->size - 3);
 	if (p->modes & PARPORT_MODE_ECP)
-		release_region(p->base_hi, 3);
+		release_region(p->iobase_hi, 3);
 #if defined(CONFIG_PARPORT_PC_FIFO) && defined(HAS_DMA)
 	if (priv->dma_buf)
 		dma_free_coherent(p->physport->dev, PAGE_SIZE,

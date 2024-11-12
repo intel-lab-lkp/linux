@@ -394,7 +394,7 @@ static void bpck6_disconnect(struct pi_adapter *pi)
 static int bpck6_test_port(struct pi_adapter *pi)
 {
 	dev_dbg(&pi->dev, "PARPORT indicates modes=%x for lp=0x%lx\n",
-		pi->pardev->port->modes, pi->pardev->port->base);
+		pi->pardev->port->modes, pi->pardev->port->iobase);
 
 	/* look at the parport device to see what modes we can use */
 	if (pi->pardev->port->modes & PARPORT_MODE_EPP)
