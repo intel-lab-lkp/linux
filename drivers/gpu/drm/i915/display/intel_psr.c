@@ -3970,3 +3970,26 @@ void intel_psr_connector_debugfs_add(struct intel_connector *connector)
 		debugfs_create_file("i915_psr_status", 0444, root,
 				    connector, &i915_psr_status_fops);
 }
+
+int intel_psr2_calc_prefill(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	int wake_lines;
+	struct intel_encoder *encoder;
+
+	intel_psr_lock(crtc_state);
+	for_each_intel_encoder_mask_with_psr(display->drm, encoder,
+					     crtc_state->uapi.encoder_mask) {
+		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
+		lockdep_assert_held(&intel_dp->psr.lock);
+
+		if (!intel_psr2_config_valid(intel_dp, crtc_state))
+			return false;
+
+		wake_lines = psr2_block_count_lines(intel_dp);
+	}
+	intel_psr_unlock(crtc_state);
+
+	return wake_lines;
+}

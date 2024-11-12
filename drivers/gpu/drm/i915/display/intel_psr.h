@@ -24,6 +24,7 @@ struct intel_plane_state;
 #define CAN_PANEL_REPLAY(intel_dp) ((intel_dp)->psr.sink_panel_replay_support && \
 				    (intel_dp)->psr.source_panel_replay_support)
 
+int intel_psr2_calc_prefill(struct intel_crtc_state *crtc_state);
 bool intel_encoder_can_psr(struct intel_encoder *encoder);
 bool intel_psr_needs_aux_io_power(struct intel_encoder *encoder,
 				  const struct intel_crtc_state *crtc_state);
