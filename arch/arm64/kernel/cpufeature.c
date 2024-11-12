@@ -75,6 +75,7 @@
 #include <linux/cpu.h>
 #include <linux/kasan.h>
 #include <linux/percpu.h>
+#include <linux/sched/isolation.h>
 
 #include <asm/cpu.h>
 #include <asm/cpufeature.h>
@@ -134,6 +135,7 @@ DEFINE_STATIC_KEY_FALSE(arm64_mismatched_32bit_el0);
  * Only valid if arm64_mismatched_32bit_el0 is enabled.
  */
 static cpumask_var_t cpu_32bit_el0_mask __cpumask_var_read_mostly;
+static cpumask_var_t fallback_32bit_el0_mask __cpumask_var_read_mostly;
 
 void dump_cpu_features(void)
 {
@@ -1620,6 +1622,23 @@ const struct cpumask *system_32bit_el0_cpumask(void)
 		return cpu_32bit_el0_mask;
 
 	return cpu_possible_mask;
+}
+
+const struct cpumask *task_cpu_fallback_mask(struct task_struct *p)
+{
+	if (!static_branch_unlikely(&arm64_mismatched_32bit_el0))
+		return housekeeping_cpumask(HK_TYPE_TICK);
+
+	if (!is_compat_thread(task_thread_info(p)))
+		return housekeeping_cpumask(HK_TYPE_TICK);
+
+	if (!system_supports_32bit_el0())
+		return cpu_none_mask;
+
+	if (!cpumask_empty(fallback_32bit_el0_mask))
+		return fallback_32bit_el0_mask;
+	else
+		return cpu_32bit_el0_mask;
 }
 
 static int __init parse_32bit_el0_param(char *str)
@@ -3650,22 +3669,33 @@ static int mismatched_32bit_el0_online(unsigned int cpu)
 
 	if (cpu_32bit) {
 		cpumask_set_cpu(cpu, cpu_32bit_el0_mask);
+		if (housekeeping_cpu(cpu, HK_TYPE_TICK))
+			cpumask_set_cpu(cpu, fallback_32bit_el0_mask);
 		static_branch_enable_cpuslocked(&arm64_mismatched_32bit_el0);
+	}
+
+	if (cpu_32bit_unofflineable >= 0) {
+		if (!housekeeping_cpu(cpu_32bit_unofflineable, HK_TYPE_TICK) &&
+		    cpu_32bit && housekeeping_cpu(cpu, HK_TYPE_TICK)) {
+			cpu_32bit_unofflineable = cpu;
+			pr_info("Asymmetric 32-bit EL0 support detected on housekeeping CPU %u;"
+				"CPU hot-unplug disabled on CPU %u\n", cpu, cpu);
+		}
+		return 0;
 	}
 
 	if (cpumask_test_cpu(0, cpu_32bit_el0_mask) == cpu_32bit)
 		return 0;
 
-	if (cpu_32bit_unofflineable < 0)
-		return 0;
-
 	/*
-	 * We've detected a mismatch. We need to keep one of our CPUs with
-	 * 32-bit EL0 online so that is_cpu_allowed() doesn't end up rejecting
-	 * every CPU in the system for a 32-bit task.
+	 * We've detected a mismatch. We need to keep one of our CPUs, preferrably
+	 * housekeeping, with 32-bit EL0 online so that is_cpu_allowed() doesn't end up
+	 * rejecting every CPU in the system for a 32-bit task.
 	 */
-	cpu_32bit_unofflineable = cpu_32bit ? cpu : cpumask_any_and(cpu_32bit_el0_mask,
-								    cpu_active_mask);
+	cpu_32bit_unofflineable = cpumask_any_and(fallback_32bit_el0_mask, cpu_active_mask);
+	if (cpu_32bit_unofflineable >= nr_cpu_ids)
+		cpu_32bit_unofflineable = cpumask_any_and(cpu_32bit_el0_mask, cpu_active_mask);
+
 	setup_elf_hwcaps(compat_elf_hwcaps);
 	elf_hwcap_fixup();
 	pr_info("Asymmetric 32-bit EL0 support detected on CPU %u; CPU hot-unplug disabled on CPU %u\n",
@@ -3684,6 +3714,9 @@ static int __init init_32bit_el0_mask(void)
 		return 0;
 
 	if (!zalloc_cpumask_var(&cpu_32bit_el0_mask, GFP_KERNEL))
+		return -ENOMEM;
+
+	if (!zalloc_cpumask_var(&fallback_32bit_el0_mask, GFP_KERNEL))
 		return -ENOMEM;
 
 	return cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
