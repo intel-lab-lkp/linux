@@ -939,6 +939,8 @@ struct kvm_vcpu_arch {
 #define HOST_FEAT_HAS_SPE	__kvm_single_flag(feats, BIT(0))
 /* Save TRBE context if active  */
 #define HOST_FEAT_HAS_TRBE	__kvm_single_flag(feats, BIT(1))
+/* CPU has Feat_TRF */
+#define HOST_FEAT_HAS_TRF	__kvm_single_flag(feats, BIT(2))
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
 #define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
