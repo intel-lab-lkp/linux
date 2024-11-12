@@ -515,7 +515,7 @@ static void __init ms_hyperv_init_platform(void)
 	machine_ops.crash_shutdown = hv_machine_crash_shutdown;
 #endif
 #endif
-	if (ms_hyperv.features & HV_ACCESS_TSC_INVARIANT) {
+	if (ms_hyperv.features & HV_ACCESS_TSC_INVARIANT)
 		/*
 		 * Writing to synthetic MSR 0x40000118 updates/changes the
 		 * guest visible CPUIDs. Setting bit 0 of this MSR  enables
@@ -526,8 +526,8 @@ static void __init ms_hyperv_init_platform(void)
 		 * is called.
 		 */
 		wrmsrl(HV_X64_MSR_TSC_INVARIANT_CONTROL, HV_EXPOSE_INVARIANT_TSC);
-		setup_force_cpu_cap(X86_FEATURE_TSC_RELIABLE);
-	}
+
+	setup_force_cpu_cap(X86_FEATURE_TSC_RELIABLE);
 
 	/*
 	 * Generation 2 instances don't support reading the NMI status from
