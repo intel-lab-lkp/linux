@@ -511,15 +511,15 @@ static int __bnxt_qplib_rcfw_send_message(struct bnxt_qplib_rcfw *rcfw,
 	else
 		rc = __poll_for_resp(rcfw, cookie);
 
-	if (rc) {
-		spin_lock_irqsave(&rcfw->cmdq.hwq.lock, flags);
-		crsqe = &rcfw->crsqe_tbl[cookie];
-		crsqe->is_waiter_alive = false;
-		if (rc == -ENODEV)
-			set_bit(FIRMWARE_STALL_DETECTED, &rcfw->cmdq.flags);
-		spin_unlock_irqrestore(&rcfw->cmdq.hwq.lock, flags);
+
+	spin_lock_irqsave(&rcfw->cmdq.hwq.lock, flags);
+	crsqe = &rcfw->crsqe_tbl[cookie];
+	crsqe->is_waiter_alive = false;
+	if (rc == -ENODEV)
+		set_bit(FIRMWARE_STALL_DETECTED, &rcfw->cmdq.flags);
+	spin_unlock_irqrestore(&rcfw->cmdq.hwq.lock, flags);
+	if (rc)
 		return -ETIMEDOUT;
-	}
 
 	if (evnt->status) {
 		/* failed with status */
