@@ -11,6 +11,7 @@
 #include "xe_bo.h"
 #include "xe_debugfs.h"
 #include "xe_device.h"
+#include "xe_ggtt.h"
 #include "xe_gt.h"
 #include "xe_gt_debugfs.h"
 #include "xe_gt_sriov_pf_config.h"
@@ -502,6 +503,64 @@ static const struct file_operations config_blob_ops = {
 	.llseek		= default_llseek,
 };
 
+/*
+ *      /sys/kernel/debug/dri/0/
+ *      ├── gt0
+ *      │   ├── vf1
+ *      │   │   ├── ggtt_raw
+ */
+
+static ssize_t ggtt_raw_read(struct file *file, char __user *buf,
+			     size_t count, loff_t *pos)
+{
+	struct dentry *dent = file_dentry(file);
+	struct dentry *parent = dent->d_parent;
+	unsigned int vfid = extract_vfid(parent);
+	struct xe_gt *gt = extract_gt(parent);
+	struct xe_device *xe = gt_to_xe(gt);
+	ssize_t ret;
+
+	xe_pm_runtime_get(xe);
+	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+
+	ret = xe_ggtt_node_read(gt->sriov.pf.vfs[vfid].config.ggtt_region,
+				buf, count, pos);
+
+	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+	xe_pm_runtime_put(xe);
+
+	return ret;
+}
+
+static ssize_t ggtt_raw_write(struct file *file, const char __user *buf,
+			      size_t count, loff_t *pos)
+{
+	struct dentry *dent = file_dentry(file);
+	struct dentry *parent = dent->d_parent;
+	unsigned int vfid = extract_vfid(parent);
+	struct xe_gt *gt = extract_gt(parent);
+	struct xe_device *xe = gt_to_xe(gt);
+	ssize_t ret;
+
+	xe_pm_runtime_get(xe);
+	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+
+	ret = xe_ggtt_node_write(gt->sriov.pf.vfs[vfid].config.ggtt_region,
+				 buf, count, pos);
+
+	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+	xe_pm_runtime_put(xe);
+
+	return ret;
+}
+
+static const struct file_operations ggtt_raw_ops = {
+	.owner		= THIS_MODULE,
+	.read		= ggtt_raw_read,
+	.write		= ggtt_raw_write,
+	.llseek		= default_llseek,
+};
+
 /**
  * xe_gt_sriov_pf_debugfs_register - Register SR-IOV PF specific entries in GT debugfs.
  * @gt: the &xe_gt to register
@@ -559,6 +618,9 @@ void xe_gt_sriov_pf_debugfs_register(struct xe_gt *gt, struct dentry *root)
 			debugfs_create_file("config_blob",
 					    IS_ENABLED(CONFIG_DRM_XE_DEBUG_SRIOV) ? 0600 : 0400,
 					    vfdentry, NULL, &config_blob_ops);
+			debugfs_create_file("ggtt_raw",
+					    IS_ENABLED(CONFIG_DRM_XE_DEBUG_SRIOV) ? 0600 : 0400,
+					    vfdentry, NULL, &ggtt_raw_ops);
 		}
 	}
 }
