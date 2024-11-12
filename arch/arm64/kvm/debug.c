@@ -335,3 +335,32 @@ void kvm_arm_clear_debug(struct kvm_vcpu *vcpu)
 		}
 	}
 }
+
+static bool kvm_arm_skip_trace_state(void)
+{
+	/* pKVM hyp finds out the state for itself */
+	if (is_protected_kvm_enabled())
+		return true;
+
+	/* Make sure state gets there in one piece */
+	if (WARN_ON_ONCE(preemptible()))
+		return true;
+
+	return false;
+}
+
+void kvm_set_pmblimitr(u64 pmblimitr)
+{
+	/* Only read in nVHE */
+	if (has_vhe())
+		return;
+
+	if (kvm_arm_skip_trace_state())
+		return;
+
+	if (pmblimitr & PMBLIMITR_EL1_E)
+		host_data_set_flag(HOST_STATE_SPE_EN);
+	else
+		host_data_clear_flag(HOST_STATE_SPE_EN);
+}
+EXPORT_SYMBOL_GPL(kvm_set_pmblimitr);

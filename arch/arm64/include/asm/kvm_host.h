@@ -641,6 +641,8 @@ struct kvm_host_data {
 	struct {
 		/* Host CPU features, set at init */
 		u8 feats;
+		/* Host CPU state */
+		u8 state;
 	} flags;
 
 	/*
@@ -941,6 +943,8 @@ struct kvm_vcpu_arch {
 #define HOST_FEAT_HAS_TRBE	__kvm_single_flag(feats, BIT(1))
 /* CPU has Feat_TRF */
 #define HOST_FEAT_HAS_TRF	__kvm_single_flag(feats, BIT(2))
+/* PMBLIMITR_EL1_E is set (SPE profiling buffer enabled) */
+#define HOST_STATE_SPE_EN	__kvm_single_flag(state, BIT(0))
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
 #define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
@@ -1382,6 +1386,7 @@ static inline bool kvm_pmu_counter_deferred(struct perf_event_attr *attr)
 void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr);
 void kvm_clr_pmu_events(u64 clr);
 bool kvm_set_pmuserenr(u64 val);
+void kvm_set_pmblimitr(u64 pmblimitr);
 #else
 static inline void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr) {}
 static inline void kvm_clr_pmu_events(u64 clr) {}
@@ -1389,6 +1394,7 @@ static inline bool kvm_set_pmuserenr(u64 val)
 {
 	return false;
 }
+static inline void kvm_set_pmblimitr(u64 pmblimitr) {}
 #endif
 
 void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu);

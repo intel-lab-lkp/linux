@@ -23,6 +23,7 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/kernel.h>
+#include <linux/kvm_host.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -496,6 +497,12 @@ static u64 arm_spe_pmu_next_off(struct perf_output_handle *handle)
 	return limit;
 }
 
+static void arm_spe_write_pmblimitr(u64 val)
+{
+	write_sysreg_s(val, SYS_PMBLIMITR_EL1);
+	kvm_set_pmblimitr(val);
+}
+
 static void arm_spe_perf_aux_output_begin(struct perf_output_handle *handle,
 					  struct perf_event *event)
 {
@@ -524,7 +531,7 @@ static void arm_spe_perf_aux_output_begin(struct perf_output_handle *handle,
 	write_sysreg_s(base, SYS_PMBPTR_EL1);
 
 out_write_limit:
-	write_sysreg_s(limit, SYS_PMBLIMITR_EL1);
+	arm_spe_write_pmblimitr(limit);
 }
 
 static void arm_spe_perf_aux_output_end(struct perf_output_handle *handle)
@@ -552,7 +559,7 @@ static void arm_spe_pmu_disable_and_drain_local(void)
 	dsb(nsh);
 
 	/* Disable the profiling buffer */
-	write_sysreg_s(0, SYS_PMBLIMITR_EL1);
+	arm_spe_write_pmblimitr(0);
 	isb();
 }
 
@@ -1095,7 +1102,9 @@ static void __arm_spe_pmu_reset_local(void)
 	 * This is probably overkill, as we have no idea where we're
 	 * draining any buffered data to...
 	 */
+	preempt_disable();
 	arm_spe_pmu_disable_and_drain_local();
+	preempt_enable();
 
 	/* Reset the buffer base pointer */
 	write_sysreg_s(0, SYS_PMBPTR_EL1);
