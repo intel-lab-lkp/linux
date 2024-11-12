@@ -4752,6 +4752,11 @@ static void btrfs_uring_read_finished(struct io_uring_cmd *cmd, unsigned int iss
 	size_t page_offset;
 	ssize_t ret;
 
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	/* The inode lock has already been acquired in btrfs_uring_read_extent.  */
+	rwsem_acquire_read(&inode->vfs_inode.i_rwsem.dep_map, 0, 0, _THIS_IP_);
+#endif
+
 	if (priv->err) {
 		ret = priv->err;
 		goto out;
@@ -4859,6 +4864,15 @@ static int btrfs_uring_read_extent(struct kiocb *iocb, struct iov_iter *iter,
 	 * btrfs_uring_read_finished(), which will handle unlocking the extent
 	 * and inode and freeing the allocations.
 	 */
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	/*
+	 * We're returning to userspace with the inode lock held, and that's
+	 * okay - it'll get unlocked in a kthread.  Call rwsem_release to
+	 * avoid confusing lockdep.
+	 */
+	rwsem_release(&inode->vfs_inode.i_rwsem.dep_map, _THIS_IP_);
+#endif
 
 	return -EIOCBQUEUED;
 
