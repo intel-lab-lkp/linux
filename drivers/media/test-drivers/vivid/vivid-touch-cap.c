@@ -8,22 +8,14 @@
 #include "vivid-vid-common.h"
 #include "vivid-touch-cap.h"
 
-static int touch_cap_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
-				 unsigned int *nplanes, unsigned int sizes[],
-				 struct device *alloc_devs[])
+static int touch_cap_queue_info(struct vb2_queue *vq,
+				unsigned int *nplanes, unsigned int sizes[],
+				struct device *alloc_devs[])
 {
 	struct vivid_dev *dev = vb2_get_drv_priv(vq);
-	struct v4l2_pix_format *f = &dev->tch_format;
-	unsigned int size = f->sizeimage;
-
-	if (*nplanes) {
-		if (*nplanes != 1)
-			return -EINVAL;
-		return sizes[0] < size ? -EINVAL : 0;
-	}
 
 	*nplanes = 1;
-	sizes[0] = size;
+	sizes[0] = dev->tch_format.sizeimage;
 	return 0;
 }
 
@@ -104,7 +96,7 @@ static void touch_cap_buf_request_complete(struct vb2_buffer *vb)
 }
 
 const struct vb2_ops vivid_touch_cap_qops = {
-	.queue_setup		= touch_cap_queue_setup,
+	.queue_info		= touch_cap_queue_info,
 	.buf_prepare		= touch_cap_buf_prepare,
 	.buf_queue		= touch_cap_buf_queue,
 	.start_streaming	= touch_cap_start_streaming,

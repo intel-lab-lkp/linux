@@ -20,9 +20,9 @@
 #include "vivid-kthread-out.h"
 #include "vivid-vid-out.h"
 
-static int vid_out_queue_setup(struct vb2_queue *vq,
-		       unsigned *nbuffers, unsigned *nplanes,
-		       unsigned sizes[], struct device *alloc_devs[])
+static int vid_out_queue_info(struct vb2_queue *vq,
+			      unsigned int *nplanes, unsigned int sizes[],
+			      struct device *alloc_devs[])
 {
 	struct vivid_dev *dev = vb2_get_drv_priv(vq);
 	const struct vivid_fmt *vfmt = dev->fmt_out;
@@ -53,31 +53,12 @@ static int vid_out_queue_setup(struct vb2_queue *vq,
 		return -EINVAL;
 	}
 
-	if (*nplanes) {
-		/*
-		 * Check if the number of requested planes match
-		 * the number of planes in the current format. You can't mix that.
-		 */
-		if (*nplanes != planes)
-			return -EINVAL;
-		if (sizes[0] < size)
-			return -EINVAL;
-		for (p = 1; p < planes; p++) {
-			if (sizes[p] < dev->bytesperline_out[p] * h /
-					vfmt->vdownsampling[p] +
-					vfmt->data_offset[p])
-				return -EINVAL;
-		}
-	} else {
-		for (p = 0; p < planes; p++)
-			sizes[p] = p ? dev->bytesperline_out[p] * h /
-					vfmt->vdownsampling[p] +
-					vfmt->data_offset[p] : size;
-	}
-
 	*nplanes = planes;
+	for (p = 0; p < planes; p++)
+		sizes[p] = p ? dev->bytesperline_out[p] * h /
+			vfmt->vdownsampling[p] +
+			vfmt->data_offset[p] : size;
 
-	dprintk(dev, 1, "%s: count=%u\n", __func__, *nbuffers);
 	for (p = 0; p < planes; p++)
 		dprintk(dev, 1, "%s: size[%u]=%u\n", __func__, p, sizes[p]);
 	return 0;
@@ -194,8 +175,8 @@ static void vid_out_buf_request_complete(struct vb2_buffer *vb)
 }
 
 const struct vb2_ops vivid_vid_out_qops = {
-	.queue_setup		= vid_out_queue_setup,
-	.buf_out_validate		= vid_out_buf_out_validate,
+	.queue_info		= vid_out_queue_info,
+	.buf_out_validate	= vid_out_buf_out_validate,
 	.buf_prepare		= vid_out_buf_prepare,
 	.buf_queue		= vid_out_buf_queue,
 	.start_streaming	= vid_out_start_streaming,
