@@ -698,6 +698,15 @@ source "lib/Kconfig.kgdb"
 source "lib/Kconfig.ubsan"
 source "lib/Kconfig.kcsan"
 
+config BACKTRACE
+	bool "Support trigger backtrace according cpulist"
+	depends on SMP && DEBUG_FS
+	help
+	  When the number of CPUs is large, the echo l > /proc/sysrq-trigger
+	  prints a large number of logs. Users can echo cpulist >
+	  /sys/kernel/debug/backtrace to trigger backtrace on specified
+	  CPUs.
+
 endmenu
 
 menu "Networking Debugging"
