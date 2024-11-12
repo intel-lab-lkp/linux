@@ -100,6 +100,15 @@ static void __debug_save_trace(void)
 	host_data_set_flag(HOST_STATE_RESTORE_TRFCR);
 }
 
+static void __debug_swap_trace(void)
+{
+	u64 trfcr = read_sysreg_el1(SYS_TRFCR);
+
+	write_sysreg_el1(*host_data_ptr(host_debug_state.trfcr_el1), SYS_TRFCR);
+	*host_data_ptr(host_debug_state.trfcr_el1) = trfcr;
+	host_data_set_flag(HOST_STATE_RESTORE_TRFCR);
+}
+
 static void __debug_restore_trace(void)
 {
 	u64 trfcr_el1;
@@ -124,10 +133,14 @@ void __debug_save_host_buffers_nvhe(void)
 	if (!host_data_get_flag(HOST_FEAT_HAS_TRF))
 		return;
 
-	/* Disable and flush Self-Hosted Trace generation */
+	/*
+	 * Disable and flush Self-Hosted Trace generation for pKVM and TRBE,
+	 * or swap if host requires different guest filters.
+	 */
 	if (__debug_should_save_trace())
 		__debug_save_trace();
-
+	else if (host_data_get_flag(HOST_STATE_SWAP_TRFCR))
+		__debug_swap_trace();
 }
 
 void __debug_switch_to_guest(struct kvm_vcpu *vcpu)

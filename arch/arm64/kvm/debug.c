@@ -380,3 +380,19 @@ void kvm_set_trblimitr(u64 trblimitr)
 		host_data_clear_flag(HOST_STATE_TRBE_EN);
 }
 EXPORT_SYMBOL_GPL(kvm_set_trblimitr);
+
+void kvm_set_trfcr(u64 host_trfcr, u64 guest_trfcr)
+{
+	if (kvm_arm_skip_trace_state())
+		return;
+
+	if (has_vhe())
+		write_sysreg_s(guest_trfcr, SYS_TRFCR_EL12);
+	else
+		if (host_trfcr != guest_trfcr) {
+			*host_data_ptr(host_debug_state.trfcr_el1) = guest_trfcr;
+			host_data_set_flag(HOST_STATE_SWAP_TRFCR);
+		} else
+			host_data_clear_flag(HOST_STATE_SWAP_TRFCR);
+}
+EXPORT_SYMBOL_GPL(kvm_set_trfcr);

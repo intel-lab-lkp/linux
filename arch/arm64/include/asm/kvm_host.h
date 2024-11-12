@@ -949,6 +949,8 @@ struct kvm_vcpu_arch {
 #define HOST_STATE_TRBE_EN	__kvm_single_flag(state, BIT(1))
 /* Hyp modified TRFCR */
 #define HOST_STATE_RESTORE_TRFCR __kvm_single_flag(state, BIT(2))
+/* Host wants a different trace filters for the guest */
+#define HOST_STATE_SWAP_TRFCR	__kvm_single_flag(state, BIT(3))
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
 #define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
@@ -1392,6 +1394,7 @@ void kvm_clr_pmu_events(u64 clr);
 bool kvm_set_pmuserenr(u64 val);
 void kvm_set_pmblimitr(u64 pmblimitr);
 void kvm_set_trblimitr(u64 trblimitr);
+void kvm_set_trfcr(u64 host_trfcr, u64 guest_trfcr);
 #else
 static inline void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr) {}
 static inline void kvm_clr_pmu_events(u64 clr) {}
@@ -1401,6 +1404,7 @@ static inline bool kvm_set_pmuserenr(u64 val)
 }
 static inline void kvm_set_pmblimitr(u64 pmblimitr) {}
 static inline void kvm_set_trblimitr(u64 trblimitr) {}
+static inline void kvm_set_trfcr(u64 host_trfcr, u64 guest_trfcr) {}
 #endif
 
 void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu);
