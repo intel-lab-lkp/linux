@@ -210,6 +210,12 @@ static int load_waveform(u8 *mem, size_t size, int m, int t,
 	}
 	wfm_hdr->mc += 1;
 	wfm_hdr->trc += 1;
+
+	if (sizeof(wfm_hdr->stuff2a) < 5) {
+		dev_err(dev, "Error: insufficient space in stuff2a\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < 5; i++) {
 		if (*(wfm_hdr->stuff2a + i) != 0) {
 			dev_err(dev, "Error: unexpected value in padding\n");
