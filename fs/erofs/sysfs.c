@@ -10,6 +10,7 @@
 
 enum {
 	attr_feature,
+	attr_drop_caches,
 	attr_pointer_ui,
 	attr_pointer_bool,
 };
@@ -57,11 +58,13 @@ static struct erofs_attr erofs_attr_##_name = {			\
 
 #ifdef CONFIG_EROFS_FS_ZIP
 EROFS_ATTR_RW_UI(sync_decompress, erofs_mount_opts);
+EROFS_ATTR_FUNC(drop_caches, 0200);
 #endif
 
 static struct attribute *erofs_attrs[] = {
 #ifdef CONFIG_EROFS_FS_ZIP
 	ATTR_LIST(sync_decompress),
+	ATTR_LIST(drop_caches),
 #endif
 	NULL,
 };
@@ -162,6 +165,18 @@ static ssize_t erofs_attr_store(struct kobject *kobj, struct attribute *attr,
 		if (t != 0 && t != 1)
 			return -EINVAL;
 		*(bool *)ptr = !!t;
+		return len;
+	case attr_drop_caches:
+		ret = kstrtoul(skip_spaces(buf), 0, &t);
+		if (ret)
+			return ret;
+		if (t < 1 || t > 3)
+			return -EINVAL;
+
+		if (t & 1)
+			invalidate_mapping_pages(MNGD_MAPPING(sbi), 0, -1);
+		if (t & 2)
+			z_erofs_shrink_scan(sbi, ~0UL);
 		return len;
 	}
 	return 0;
