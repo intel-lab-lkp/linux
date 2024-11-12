@@ -280,6 +280,9 @@ struct intel_wm {
 	struct mutex wm_mutex;
 
 	bool ipc_enabled;
+
+	u32 dpkgc_latency;
+	u32 dpkgc_added_waketime;
 };
 
 struct intel_display {

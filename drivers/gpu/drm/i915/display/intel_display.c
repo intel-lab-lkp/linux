@@ -4331,6 +4331,10 @@ static int intel_crtc_atomic_check(struct intel_atomic_state *state,
 
 	}
 
+	ret = intel_wm_compute_dpkgc_latency(state, dev_priv);
+	if (ret)
+		return ret;
+
 	ret = intel_psr2_sel_fetch_update(state, crtc);
 	if (ret)
 		return ret;
@@ -6857,6 +6861,9 @@ static void commit_pipe_post_planes(struct intel_atomic_state *state,
 
 	if (intel_crtc_vrr_enabling(state, crtc))
 		intel_vrr_enable(new_crtc_state);
+
+	if (DISPLAY_VER(dev_priv) >= 20)
+		intel_wm_write_dpkgc_latency(to_intel_display(crtc));
 }
 
 static void intel_enable_crtc(struct intel_atomic_state *state,

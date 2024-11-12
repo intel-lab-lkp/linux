@@ -9,6 +9,7 @@
 #include <linux/types.h>
 
 struct drm_i915_private;
+struct intel_display;
 struct intel_atomic_state;
 struct intel_crtc;
 struct intel_crtc_state;
@@ -33,5 +34,8 @@ void intel_print_wm_latency(struct drm_i915_private *i915,
 			    const char *name, const u16 wm[]);
 void intel_wm_init(struct drm_i915_private *i915);
 void intel_wm_debugfs_register(struct drm_i915_private *i915);
+int intel_wm_compute_dpkgc_latency(struct intel_atomic_state *state,
+				   struct drm_i915_private *i915);
+int intel_wm_write_dpkgc_latency(struct intel_display *display);
 
 #endif /* __INTEL_WM_H__ */
