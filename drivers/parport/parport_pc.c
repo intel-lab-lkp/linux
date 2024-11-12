@@ -1609,7 +1609,7 @@ static int parport_ECP_supported(struct parport *pb)
 
 	priv->fifo_depth = i;
 	if (verbose_probing)
-		printk(KERN_DEBUG "0x%lx: FIFO is %d bytes\n", pb->base, i);
+		pr_debug("0x%lx: FIFO is %d bytes\n", pb->base, i);
 
 	/* Find out writeIntrThreshold */
 	frob_econtrol(pb, 1<<2, 1<<2);
@@ -1623,7 +1623,7 @@ static int parport_ECP_supported(struct parport *pb)
 
 	if (i <= priv->fifo_depth) {
 		if (verbose_probing)
-			printk(KERN_DEBUG "0x%lx: writeIntrThreshold is %d\n",
+			pr_debug("0x%lx: writeIntrThreshold is %d\n",
 			       pb->base, i);
 	} else
 		/* Number of bytes we know we can write if we get an
@@ -1676,16 +1676,16 @@ static int parport_ECP_supported(struct parport *pb)
 	priv->pword = pword;
 
 	if (verbose_probing) {
-		printk(KERN_DEBUG "0x%lx: PWord is %d bits\n",
+		pr_debug("0x%lx: PWord is %d bits\n",
 		       pb->base, 8 * pword);
 
-		printk(KERN_DEBUG "0x%lx: Interrupts are ISA-%s\n",
+		pr_debug("0x%lx: Interrupts are ISA-%s\n",
 		       pb->base, config & 0x80 ? "Level" : "Pulses");
 
 		configb = inb(CONFIGB(pb));
-		printk(KERN_DEBUG "0x%lx: ECP port cfgA=0x%02x cfgB=0x%02x\n",
+		pr_debug("0x%lx: ECP port cfgA=0x%02x cfgB=0x%02x\n",
 		       pb->base, config, configb);
-		printk(KERN_DEBUG "0x%lx: ECP settings irq=", pb->base);
+		pr_debug("0x%lx: ECP settings irq=", pb->base);
 		if ((configb >> 3) & 0x07)
 			pr_cont("%d", intrline[(configb >> 3) & 0x07]);
 		else
