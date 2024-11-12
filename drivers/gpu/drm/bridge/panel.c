@@ -236,6 +236,24 @@ bool drm_bridge_is_panel(const struct drm_bridge *bridge)
 EXPORT_SYMBOL(drm_bridge_is_panel);
 
 /**
+ * drm_bridge_get_panel - Return panel if a drm_bridge is a panel_bridge.
+ *
+ * @bridge: The drm_bridge.
+ *
+ * Returns drm_panel pointer if the bridge is a panel bridge, or NULL otherwise.
+ */
+struct drm_panel *drm_bridge_get_panel(struct drm_bridge *bridge)
+{
+	struct panel_bridge *panel_bridge = drm_bridge_to_panel_bridge(bridge);
+
+	if (!drm_bridge_is_panel(bridge))
+		return NULL;
+
+	return panel_bridge->panel;
+}
+EXPORT_SYMBOL(drm_bridge_get_panel);
+
+/**
  * drm_panel_bridge_add - Creates a &drm_bridge and &drm_connector that
  * just calls the appropriate functions from &drm_panel.
  *
