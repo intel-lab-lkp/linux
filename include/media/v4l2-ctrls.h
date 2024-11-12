@@ -381,6 +381,10 @@ struct v4l2_ctrl_ref {
  * @notify_priv: Passed as argument to the v4l2_ctrl notify callback.
  * @nr_of_buckets: Total number of buckets in the array.
  * @error:	The error code of the first failed control addition.
+ * @add_handler_called: v4l2_ctrl_add_handler() was called for this control
+ *		handler. If this is true, then WARN if someone attempts to
+ *		add new controls to this handler. Eventually the WARN will
+ *		be replaced by an error.
  * @request_is_queued: True if the request was queued.
  * @requests:	List to keep track of open control handler request objects.
  *		For the parent control handler (@req_obj.ops == NULL) this
@@ -404,6 +408,7 @@ struct v4l2_ctrl_handler {
 	void *notify_priv;
 	u16 nr_of_buckets;
 	int error;
+	bool add_handler_called;
 	bool request_is_queued;
 	struct list_head requests;
 	struct list_head requests_queued;
