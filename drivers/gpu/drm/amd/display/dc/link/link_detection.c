@@ -618,16 +618,25 @@ static bool detect_dp(struct dc_link *link,
 	return true;
 }
 
-static bool is_same_edid(struct dc_edid *old_edid, struct dc_edid *new_edid)
+static bool is_same_edid(const struct drm_edid *old_drm_edid,
+			 const struct drm_edid *new_drm_edid)
 {
-	if (old_edid->length != new_edid->length)
+	const struct edid *old_edid, *new_edid;
+	size_t old_edid_length, new_edid_length;
+
+	old_edid = drm_edid_raw(old_drm_edid);
+	new_edid = drm_edid_raw(new_drm_edid);
+
+	if (!old_edid || !new_edid)
 		return false;
 
-	if (new_edid->length == 0)
+	old_edid_length = (old_edid->extensions + 1) * EDID_LENGTH;
+	new_edid_length = (new_edid->extensions + 1) * EDID_LENGTH;
+
+	if (old_edid_length != new_edid_length)
 		return false;
 
-	return (memcmp(old_edid->raw_edid,
-		       new_edid->raw_edid, new_edid->length) == 0);
+	return memcmp(old_edid, new_edid, old_edid_length) == 0;
 }
 
 static bool wait_for_entering_dp_alt_mode(struct dc_link *link)
@@ -878,6 +887,7 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 	struct dpcd_caps prev_dpcd_caps;
 	enum dc_connection_type new_connection_type = dc_connection_none;
 	const uint32_t post_oui_delay = 30; // 30ms
+	const struct edid *edid;
 
 	DC_LOGGER_INIT(link->ctx->logger);
 
@@ -1112,8 +1122,8 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 		// Check if edid is the same
 		if ((prev_sink) &&
 		    (edid_status == EDID_THE_SAME || edid_status == EDID_OK))
-			same_edid = is_same_edid(&prev_sink->dc_edid,
-						 &sink->dc_edid);
+			same_edid = is_same_edid(prev_sink->drm_edid,
+						 sink->drm_edid);
 
 		if (sink->edid_caps.panel_patch.skip_scdc_overwrite)
 			link->ctx->dc->debug.hdmi20_disable = true;
@@ -1150,11 +1160,12 @@ static bool detect_link_and_local_sink(struct dc_link *link,
 		if (link->local_sink && dc_is_dp_signal(sink_caps.signal))
 			dp_trace_init(link);
 
+		edid = drm_edid_raw(sink->drm_edid);
 		/* Connectivity log: detection */
-		for (i = 0; i < sink->dc_edid.length / DC_EDID_BLOCK_SIZE; i++) {
+		for (i = 0; i < edid->extensions + 1; i++) {
 			CONN_DATA_DETECT(link,
-					 &sink->dc_edid.raw_edid[i * DC_EDID_BLOCK_SIZE],
-					 DC_EDID_BLOCK_SIZE,
+					 edid + i,
+					 EDID_LENGTH,
 					 "%s: [Block %d] ", sink->edid_caps.display_name, i);
 		}
 
@@ -1399,11 +1410,6 @@ struct dc_sink *link_add_remote_sink(
 	struct dc_sink *dc_sink;
 	enum dc_edid_status edid_status;
 
-	if (len > DC_MAX_EDID_BUFFER_SIZE) {
-		dm_error("Max EDID buffer size breached!\n");
-		return NULL;
-	}
-
 	if (!init_data) {
 		BREAK_TO_DEBUGGER();
 		return NULL;
@@ -1419,8 +1425,7 @@ struct dc_sink *link_add_remote_sink(
 	if (!dc_sink)
 		return NULL;
 
-	memmove(dc_sink->dc_edid.raw_edid, edid, len);
-	dc_sink->dc_edid.length = len;
+	dc_sink->drm_edid = drm_edid_alloc(edid, len);
 
 	if (!link_add_remote_sink_helper(
 			link,
@@ -1429,7 +1434,7 @@ struct dc_sink *link_add_remote_sink(
 
 	edid_status = dm_helpers_parse_edid_caps(
 			link,
-			&dc_sink->dc_edid,
+			dc_sink->drm_edid,
 			&dc_sink->edid_caps);
 
 	/*
@@ -1437,7 +1442,8 @@ struct dc_sink *link_add_remote_sink(
 	 * parsing fails
 	 */
 	if (edid_status != EDID_OK && edid_status != EDID_PARTIAL_VALID) {
-		dc_sink->dc_edid.length = 0;
+		drm_edid_free(dc_sink->drm_edid);
+		dc_sink->drm_edid = NULL;
 		dm_error("Bad EDID, status%d!\n", edid_status);
 	}
 

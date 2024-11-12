@@ -149,11 +149,6 @@ struct dc_cea_audio_mode {
 	};
 };
 
-struct dc_edid {
-	uint32_t length;
-	uint8_t raw_edid[DC_MAX_EDID_BUFFER_SIZE];
-};
-
 /* When speaker location data block is not available, DEFAULT_SPEAKER_LOCATION
  * is used. In this case we assume speaker location are: front left, front
  * right and front center. */
