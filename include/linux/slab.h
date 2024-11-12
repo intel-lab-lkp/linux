@@ -309,6 +309,40 @@ struct kmem_cache_args {
 	 * %NULL means no constructor.
 	 */
 	void (*ctor)(void *);
+	/**
+	 * @sheaf_capacity: Enable sheaves of given capacity for the cache.
+	 *
+	 * With a non-zero value, allocations from the cache go through caching
+	 * arrays called sheaves. Each cpu has a main sheaf that's always
+	 * present, and a spare sheaf thay may be not present. When both become
+	 * empty, there's an attempt to replace an empty sheaf with a full sheaf
+	 * from the per-node barn.
+	 *
+	 * When no full sheaf is available, and gfp flags allow blocking, a
+	 * sheaf is allocated and filled from slab(s) using bulk allocation.
+	 * Otherwise the allocation falls back to the normal operation
+	 * allocating a single object from a slab.
+	 *
+	 * Analogically when freeing and both percpu sheaves are full, the barn
+	 * may replace it with an empty sheaf, unless it's over capacity. In
+	 * that case a sheaf is bulk freed to slab pages.
+	 *
+	 * The sheaves does not distinguish NUMA placement of objects, so
+	 * allocations via kmem_cache_alloc_node() with a node specified other
+	 * than NUMA_NO_NODE will bypass them.
+	 *
+	 * Bulk allocation and free operations also try to use the cpu sheaves
+	 * and barn, but fallback to using slab pages directly.
+	 *
+	 * Limitations: when slub_debug is enabled for the cache, all relevant
+	 * actions (i.e. poisoning, obtaining stacktraces) and checks happen
+	 * when objects move between sheaves and slab pages, which may result in
+	 * e.g. not detecting a use-after-free while the object is in the array
+	 * cache, and the stacktraces may be less useful.
+	 *
+	 * %0 means no sheaves will be created
+	 */
+	unsigned int sheaf_capacity;
 };
 
 struct kmem_cache *__kmem_cache_create_args(const char *name,
