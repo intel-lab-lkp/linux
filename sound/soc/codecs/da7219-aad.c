@@ -33,10 +33,6 @@ void da7219_aad_jack_det(struct snd_soc_component *component, struct snd_soc_jac
 	struct da7219_priv *da7219 = snd_soc_component_get_drvdata(component);
 
 	da7219->aad->jack = jack;
-	da7219->aad->jack_inserted = false;
-
-	/* Send an initial empty report */
-	snd_soc_jack_report(jack, 0, DA7219_AAD_REPORT_ALL_MASK);
 
 	/* Enable/Disable jack detection */
 	snd_soc_component_update_bits(component, DA7219_ACCDET_CONFIG_1,
