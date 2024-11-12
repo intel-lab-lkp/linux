@@ -61,6 +61,11 @@ SECTIONS
 	/* read-only */
 	_text = .;	/* Text and read-only data */
 	.text : {
+		/* Explicitly set _stext to the beginning of text output
+		   section. _stext is in text section and might be matched
+		   after symbols in sections with a specific prefix (like
+		   .text.unlikely).  */
+		_stext = .;
 		TEXT_TEXT
 		SCHED_TEXT
 		LOCK_TEXT
