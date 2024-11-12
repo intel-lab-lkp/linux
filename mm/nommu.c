@@ -1192,6 +1192,7 @@ share:
 	current->mm->map_count++;
 	/* add the VMA to the tree */
 	vma_iter_store(&vmi, vma);
+	vma_mark_detached(vma, false);
 
 	/* we flush the region from the icache only when the first executable
 	 * mapping of it is made  */
@@ -1357,6 +1358,7 @@ static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	setup_vma_to_mm(vma, mm);
 	setup_vma_to_mm(new, mm);
 	vma_iter_store(vmi, new);
+	vma_mark_detached(new, false);
 	mm->map_count++;
 	return 0;
 

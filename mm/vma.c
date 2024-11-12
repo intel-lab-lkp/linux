@@ -275,6 +275,7 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 		 * (it may either follow vma or precede it).
 		 */
 		vma_iter_store(vmi, vp->insert);
+		vma_mark_detached(vp->insert, false);
 		mm->map_count++;
 	}
 
@@ -1690,6 +1691,7 @@ int vma_link(struct mm_struct *mm, struct vm_area_struct *vma)
 
 	vma_start_write(vma);
 	vma_iter_store(&vmi, vma);
+	vma_mark_detached(vma, false);
 	vma_link_file(vma);
 	mm->map_count++;
 	validate_mm(mm);
@@ -2369,6 +2371,7 @@ static int __mmap_new_vma(struct mmap_state *map, struct vm_area_struct **vmap)
 	/* Lock the VMA since it is modified after insertion into VMA tree */
 	vma_start_write(vma);
 	vma_iter_store(vmi, vma);
+	vma_mark_detached(vma, false);
 	map->mm->map_count++;
 	vma_link_file(vma);
 

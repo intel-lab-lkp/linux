@@ -1570,6 +1570,7 @@ static int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	if (vma_iter_store_gfp(vmi, vma, GFP_KERNEL))
 		goto mas_store_fail;
 
+	vma_mark_detached(vma, false);
 	mm->map_count++;
 	validate_mm(mm);
 	ksm_add_vma(vma);
@@ -1890,6 +1891,7 @@ static struct vm_area_struct *__install_special_mapping(
 	if (ret)
 		goto out;
 
+	vma_mark_detached(vma, false);
 	vm_stat_account(mm, vma->vm_flags, len >> PAGE_SHIFT);
 
 	perf_event_mmap(vma);
