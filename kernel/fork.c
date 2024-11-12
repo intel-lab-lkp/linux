@@ -516,22 +516,24 @@ void __vm_area_free(struct vm_area_struct *vma)
 	kmem_cache_free(vm_area_cachep, vma);
 }
 
-#ifdef CONFIG_PER_VMA_LOCK
-static void vm_area_free_rcu_cb(struct rcu_head *head)
+static void __vma_area_rcu_free_dtor(void *ptr)
 {
-	struct vm_area_struct *vma = container_of(head, struct vm_area_struct,
-						  vm_rcu);
+	struct vm_area_struct *vma = ptr;
 
 	/* The vma should not be locked while being destroyed. */
+#ifdef CONFIG_PER_VMA_LOCK
 	VM_BUG_ON_VMA(rwsem_is_locked(&vma->vm_lock->lock), vma);
-	__vm_area_free(vma);
-}
 #endif
+
+	vma_numab_state_free(vma);
+	free_anon_vma_name(vma);
+	vma_lock_free(vma);
+}
 
 void vm_area_free(struct vm_area_struct *vma)
 {
 #ifdef CONFIG_PER_VMA_LOCK
-	call_rcu(&vma->vm_rcu, vm_area_free_rcu_cb);
+	kfree_rcu(vma, vm_rcu);
 #else
 	__vm_area_free(vma);
 #endif
@@ -3155,6 +3157,12 @@ void __init mm_cache_init(void)
 
 void __init proc_caches_init(void)
 {
+	struct kmem_cache_args vm_args = {
+		.align = __alignof__(struct vm_area_struct),
+		.sheaf_capacity = 32,
+		.sheaf_rcu_dtor = __vma_area_rcu_free_dtor,
+	};
+
 	sighand_cachep = kmem_cache_create("sighand_cache",
 			sizeof(struct sighand_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_TYPESAFE_BY_RCU|
@@ -3172,7 +3180,10 @@ void __init proc_caches_init(void)
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
 			NULL);
 
-	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
+	vm_area_cachep = kmem_cache_create("vm_area_struct",
+				sizeof(struct vm_area_struct), &vm_args,
+				SLAB_PANIC|SLAB_ACCOUNT);
+
 #ifdef CONFIG_PER_VMA_LOCK
 	vma_lock_cachep = KMEM_CACHE(vma_lock, SLAB_PANIC|SLAB_ACCOUNT);
 #endif
