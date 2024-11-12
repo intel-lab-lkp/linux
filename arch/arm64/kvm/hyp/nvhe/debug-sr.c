@@ -14,24 +14,23 @@
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
 
-static void __debug_save_spe(u64 *pmscr_el1)
+static bool __debug_spe_enabled(void)
 {
-	u64 reg;
-
-	/* Clear pmscr in case of early return */
-	*pmscr_el1 = 0;
-
 	/*
-	 * At this point, we know that this CPU implements
-	 * SPE and is available to the host.
-	 * Check if the host is actually using it ?
+	 * Check if the host is actually using SPE. In pKVM read the state,
+	 * otherwise just trust that the host told us it was being used.
 	 */
-	reg = read_sysreg_s(SYS_PMBLIMITR_EL1);
-	if (!(reg & BIT(PMBLIMITR_EL1_E_SHIFT)))
-		return;
+	if (unlikely(is_protected_kvm_enabled()))
+		return host_data_get_flag(HOST_FEAT_HAS_SPE) &&
+		       (read_sysreg_s(SYS_PMBLIMITR_EL1) & PMBLIMITR_EL1_E);
+	else
+		return host_data_get_flag(HOST_STATE_SPE_EN);
+}
 
-	/* Yes; save the control register and disable data generation */
-	*pmscr_el1 = read_sysreg_el1(SYS_PMSCR);
+static void __debug_save_spe(void)
+{
+	/* Save the control register and disable data generation */
+	*host_data_ptr(host_debug_state.pmscr_el1) = read_sysreg_el1(SYS_PMSCR);
 	write_sysreg_el1(0, SYS_PMSCR);
 	isb();
 
@@ -39,8 +38,14 @@ static void __debug_save_spe(u64 *pmscr_el1)
 	psb_csync();
 }
 
-static void __debug_restore_spe(u64 pmscr_el1)
+static void __debug_restore_spe(void)
 {
+	u64 pmscr_el1 = *host_data_ptr(host_debug_state.pmscr_el1);
+
+	/*
+	 * PMSCR was set to 0 to disable so if it's already 0, no restore is
+	 * necessary.
+	 */
 	if (!pmscr_el1)
 		return;
 
@@ -49,6 +54,13 @@ static void __debug_restore_spe(u64 pmscr_el1)
 
 	/* Re-enable data generation */
 	write_sysreg_el1(pmscr_el1, SYS_PMSCR);
+
+	/*
+	 * Disable future restores until a non zero value is saved again. Since
+	 * this is called unconditionally on exit, future register writes are
+	 * skipped until they are needed again.
+	 */
+	*host_data_ptr(host_debug_state.pmscr_el1) = 0;
 }
 
 static void __debug_save_trace(u64 *trfcr_el1)
@@ -79,11 +91,12 @@ static void __debug_restore_trace(u64 trfcr_el1)
 	write_sysreg_el1(trfcr_el1, SYS_TRFCR);
 }
 
-void __debug_save_host_buffers_nvhe(struct kvm_vcpu *vcpu)
+void __debug_save_host_buffers_nvhe(void)
 {
 	/* Disable and flush SPE data generation */
-	if (host_data_get_flag(HOST_FEAT_HAS_SPE))
-		__debug_save_spe(host_data_ptr(host_debug_state.pmscr_el1));
+	if (__debug_spe_enabled())
+		__debug_save_spe();
+
 	/* Disable and flush Self-Hosted Trace generation */
 	if (host_data_get_flag(HOST_FEAT_HAS_TRBE))
 		__debug_save_trace(host_data_ptr(host_debug_state.trfcr_el1));
@@ -96,8 +109,7 @@ void __debug_switch_to_guest(struct kvm_vcpu *vcpu)
 
 void __debug_restore_host_buffers_nvhe(struct kvm_vcpu *vcpu)
 {
-	if (host_data_get_flag(HOST_FEAT_HAS_SPE))
-		__debug_restore_spe(*host_data_ptr(host_debug_state.pmscr_el1));
+	__debug_restore_spe();
 	if (host_data_get_flag(HOST_FEAT_HAS_TRBE))
 		__debug_restore_trace(*host_data_ptr(host_debug_state.trfcr_el1));
 }
