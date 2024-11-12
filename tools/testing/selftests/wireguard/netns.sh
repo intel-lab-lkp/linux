@@ -66,6 +66,7 @@ cleanup() {
 orig_message_cost="$(< /proc/sys/net/core/message_cost)"
 trap cleanup EXIT
 printf 0 > /proc/sys/net/core/message_cost
+modprobe nf_conntrack
 
 ip netns del $netns0 2>/dev/null || true
 ip netns del $netns1 2>/dev/null || true
