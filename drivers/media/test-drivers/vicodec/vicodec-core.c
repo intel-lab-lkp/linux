@@ -1709,7 +1709,7 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	if (ctx->is_enc) {
 		src_vq->lock = &ctx->dev->stateful_enc.mutex;
-		src_vq->min_reqbufs_allocation = VICODEC_REC_BUFS;
+		src_vq->rec_num_buffers = VICODEC_REC_BUFS;
 	} else if (ctx->is_stateless) {
 		src_vq->lock = &ctx->dev->stateless_dec.mutex;
 	} else {
@@ -1733,7 +1733,7 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	dst_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	dst_vq->lock = src_vq->lock;
 	if (!ctx->is_stateless && !ctx->is_enc)
-		dst_vq->min_reqbufs_allocation = VICODEC_REC_BUFS;
+		dst_vq->rec_num_buffers = VICODEC_REC_BUFS;
 
 	return vb2_queue_init(dst_vq);
 }

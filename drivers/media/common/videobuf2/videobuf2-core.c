@@ -923,7 +923,7 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	/*
 	 * Make sure the requested values and current defaults are sane.
 	 */
-	num_buffers = max_t(unsigned int, *count, q->min_reqbufs_allocation);
+	num_buffers = max_t(unsigned int, *count, q->rec_num_buffers);
 	num_buffers = min_t(unsigned int, num_buffers, q->max_num_buffers);
 	memset(q->alloc_devs, 0, sizeof(q->alloc_devs));
 	/*
@@ -974,7 +974,7 @@ int vb2_core_reqbufs(struct vb2_queue *q, enum vb2_memory memory,
 	 * There is no point in continuing if we can't allocate the minimum
 	 * number of buffers needed by this vb2_queue.
 	 */
-	if (allocated_buffers < q->min_reqbufs_allocation)
+	if (allocated_buffers < q->rec_num_buffers)
 		ret = -ENOMEM;
 
 	/*
@@ -2647,10 +2647,10 @@ int vb2_core_queue_init(struct vb2_queue *q)
 	 * 'min_queued_buffers + 1' to keep at least one buffer available
 	 * for userspace.
 	 */
-	if (q->min_reqbufs_allocation < q->min_queued_buffers + 1)
-		q->min_reqbufs_allocation = q->min_queued_buffers + 1;
+	if (q->rec_num_buffers < q->min_queued_buffers + 1)
+		q->rec_num_buffers = q->min_queued_buffers + 1;
 
-	if (WARN_ON(q->min_reqbufs_allocation > q->max_num_buffers))
+	if (WARN_ON(q->rec_num_buffers > q->max_num_buffers))
 		return -EINVAL;
 
 	/* Either both or none are set */
@@ -2874,7 +2874,7 @@ static int __vb2_init_fileio(struct vb2_queue *q, int read)
 		return -EBUSY;
 
 	dprintk(q, 3, "setting up file io: mode %s, count %d, read_once %d, write_immediately %d\n",
-		(read) ? "read" : "write", q->min_reqbufs_allocation, q->fileio_read_once,
+		(read) ? "read" : "write", q->rec_num_buffers, q->fileio_read_once,
 		q->fileio_write_immediately);
 
 	fileio = kzalloc(sizeof(*fileio), GFP_KERNEL);
@@ -2888,7 +2888,7 @@ static int __vb2_init_fileio(struct vb2_queue *q, int read)
 	 * Request buffers and use MMAP type to force driver
 	 * to allocate buffers by itself.
 	 */
-	fileio->count = q->min_reqbufs_allocation;
+	fileio->count = q->rec_num_buffers;
 	fileio->memory = VB2_MEMORY_MMAP;
 	fileio->type = q->type;
 	q->fileio = fileio;

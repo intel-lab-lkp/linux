@@ -705,7 +705,7 @@ static void vb2_set_flags_and_caps(struct vb2_queue *q, u32 memory,
 	}
 	if (min_num_bufs && rec_num_bufs) {
 		*min_num_bufs = q->min_queued_buffers + 1;
-		*rec_num_bufs = q->min_reqbufs_allocation;
+		*rec_num_bufs = q->rec_num_buffers;
 		*caps |= V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS;
 	}
 }
