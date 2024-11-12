@@ -155,7 +155,8 @@ static int proxy_send_to_gsc(struct intel_gsc_uc *gsc)
 	return err;
 }
 
-static int validate_proxy_header(struct intel_gsc_proxy_header *header,
+static int validate_proxy_header(struct intel_gt *gt,
+				 struct intel_gsc_proxy_header *header,
 				 u32 source, u32 dest)
 {
 	u32 type = FIELD_GET(GSC_PROXY_TYPE, header->hdr);
@@ -164,6 +165,12 @@ static int validate_proxy_header(struct intel_gsc_proxy_header *header,
 
 	if (header->destination != dest || header->source != source) {
 		ret = -ENOEXEC;
+		goto fail;
+	}
+
+	/* We only care about the status if this is a message for the driver */
+	if (dest == GSC_PROXY_ADDRESSING_KMD && header->status != 0) {
+		ret = -EIO;
 		goto fail;
 	}
 
@@ -180,6 +187,11 @@ static int validate_proxy_header(struct intel_gsc_proxy_header *header,
 	}
 
 fail:
+	if (ret)
+		gt_err(gt,
+		       "GSC proxy error: s=0x%x[0x%x], d=0x%x[0x%x], t=%u, l=0x%x, st=0x%x\n",
+		       header->source, source, header->destination, dest,
+		       type, length, header->status);
 	return ret;
 }
 
@@ -214,13 +226,17 @@ static int proxy_query(struct intel_gsc_uc *gsc)
 			goto proxy_error;
 		}
 
-		/* stop if this was the last message */
+		/* Check the status and stop if this was the last message */
 		if (FIELD_GET(GSC_PROXY_TYPE, to_csme->proxy_header.hdr) ==
-				GSC_PROXY_MSG_TYPE_PROXY_END)
+				GSC_PROXY_MSG_TYPE_PROXY_END) {
+			ret = validate_proxy_header(gt, &to_csme->proxy_header,
+						    GSC_PROXY_ADDRESSING_GSC,
+						    GSC_PROXY_ADDRESSING_KMD);
 			break;
+		}
 
 		/* make sure the GSC-to-CSME proxy header is sane */
-		ret = validate_proxy_header(&to_csme->proxy_header,
+		ret = validate_proxy_header(gt, &to_csme->proxy_header,
 					    GSC_PROXY_ADDRESSING_GSC,
 					    GSC_PROXY_ADDRESSING_CSME);
 		if (ret) {
@@ -239,7 +255,7 @@ static int proxy_query(struct intel_gsc_uc *gsc)
 		to_gsc->header.message_size = ret + sizeof(struct intel_gsc_mtl_header);
 
 		/* make sure the CSME-to-GSC proxy header is sane */
-		ret = validate_proxy_header(&to_gsc->proxy_header,
+		ret = validate_proxy_header(gt, &to_gsc->proxy_header,
 					    GSC_PROXY_ADDRESSING_CSME,
 					    GSC_PROXY_ADDRESSING_GSC);
 		if (ret) {
