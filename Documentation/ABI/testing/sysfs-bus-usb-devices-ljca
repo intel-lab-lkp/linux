@@ -1,0 +1,9 @@
+What:		/sys/bus/usb/devices/.../ljca_version
+Date:		November 2024
+KernelVersion:	6.13
+Contact:	Sakari Ailus <sakari.ailus@linux.intel.com>
+Description:
+		Provides the firmware version of LJCA device.
+		The format is Major.Minor.Patch.Build, where
+		Major, Minor, Patch, and Build are decimal numbers.
+		For example: 1.0.0.256

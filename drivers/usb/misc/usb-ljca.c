@@ -43,6 +43,7 @@ enum ljca_client_type {
 
 /* MNG client commands */
 enum ljca_mng_cmd {
+	LJCA_MNG_GET_VERSION = 1,
 	LJCA_MNG_RESET = 2,
 	LJCA_MNG_ENUM_GPIO = 4,
 	LJCA_MNG_ENUM_I2C = 5,
@@ -66,6 +67,13 @@ struct ljca_msg {
 	u8 flags;
 	u8 len;
 	u8 data[] __counted_by(len);
+} __packed;
+
+struct ljca_fw_version {
+	u8 major;
+	u8 minor;
+	__le16 patch;
+	__le16 build;
 } __packed;
 
 struct ljca_i2c_ctr_info {
@@ -152,8 +160,10 @@ struct ljca_adapter {
 	struct mutex mutex;
 
 	struct list_head client_list;
+	struct ljca_fw_version fw_version;
 
 	bool disconnect;
+	bool fw_version_valid;
 
 	u32 reset_id;
 };
@@ -740,6 +750,24 @@ err_kill:
 	return ret;
 }
 
+static void ljca_read_fw_version(struct ljca_adapter *adap)
+{
+	struct ljca_fw_version version;
+	int ret;
+
+	ret = ljca_send(adap, LJCA_CLIENT_MNG, LJCA_MNG_GET_VERSION, NULL, 0,
+			(u8 *)&version, sizeof(version), true,
+			LJCA_WRITE_ACK_TIMEOUT_MS);
+
+	if (ret != sizeof(version)) {
+		dev_err(adap->dev, "Get version failed, ret: %d\n", ret);
+		return;
+	}
+
+	adap->fw_version = version;
+	adap->fw_version_valid = true;
+}
+
 static int ljca_probe(struct usb_interface *interface,
 		      const struct usb_device_id *id)
 {
@@ -811,6 +839,8 @@ static int ljca_probe(struct usb_interface *interface,
 	if (ret)
 		goto err_free;
 
+	ljca_read_fw_version(adap);
+
 	/*
 	 * This works around problems with ov2740 initialization on some
 	 * Lenovo platforms. The autosuspend delay, has to be smaller than
@@ -874,6 +904,28 @@ static int ljca_resume(struct usb_interface *interface)
 	return usb_submit_urb(adap->rx_urb, GFP_KERNEL);
 }
 
+static ssize_t ljca_version_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct usb_interface *intf = to_usb_interface(dev);
+	struct ljca_adapter *adap = usb_get_intfdata(intf);
+	struct ljca_fw_version ver = adap->fw_version;
+
+	if (!adap->fw_version_valid)
+		return -ENODATA;
+
+	return sysfs_emit(buf, "%d.%d.%d.%d\n", ver.major, ver.minor,
+			  le16_to_cpu(ver.patch), le16_to_cpu(ver.build));
+}
+
+static DEVICE_ATTR_RO(ljca_version);
+
+static struct attribute *ljca_attrs[] = {
+	&dev_attr_ljca_version.attr,
+};
+
+ATTRIBUTE_GROUPS(ljca);
+
 static const struct usb_device_id ljca_table[] = {
 	{ USB_DEVICE(0x8086, 0x0b63) },
 	{ /* sentinel */ }
@@ -888,6 +940,7 @@ static struct usb_driver ljca_driver = {
 	.suspend = ljca_suspend,
 	.resume = ljca_resume,
 	.supports_autosuspend = 1,
+	.dev_groups = ljca_groups,
 };
 module_usb_driver(ljca_driver);
 
