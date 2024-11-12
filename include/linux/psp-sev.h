@@ -186,6 +186,23 @@ struct sev_data_download_firmware {
 } __packed;
 
 /**
+ * struct sev_data_download_firmware_ex - DOWNLOAD_FIRMWARE_EX command parameters
+ *
+ * @length: length of this command buffer
+ * @fw_paddr: physical address of firmware image
+ * @fw_len: len of the firmware image
+ * @commit: automatically commit the newly installed image
+ */
+struct sev_data_download_firmware_ex {
+	u32 length;				/* In */
+	u32 reserved;				/* In */
+	u64 fw_paddr;				/* In */
+	u32 fw_len;				/* In */
+	u32 commit:1;				/* In */
+	u32 reserved2:31;			/* In */
+} __packed;
+
+/**
  * struct sev_data_get_id - GET_ID command parameters
  *
  * @address: physical address of region to place unique CPU ID(s)
