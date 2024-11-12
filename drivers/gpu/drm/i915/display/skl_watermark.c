@@ -2266,6 +2266,27 @@ static int skl_max_wm0_lines(const struct intel_crtc_state *crtc_state)
 	return wm0_lines;
 }
 
+int skl_calc_wm0_prefill_latency(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	int cdclk_prefill_latency, wm0_prefill_latency;
+	int linetime =
+		DIV_ROUND_UP(crtc_state->hw.adjusted_mode.htotal * 1000,
+			     crtc_state->hw.adjusted_mode.crtc_clock);
+	/*
+	 * TODO: DIV_ROUND_UP will also round off to 1, so need to
+	 * check upon if this can be eliminated here
+	 */
+	cdclk_prefill_latency =
+		MIN(1, DIV_ROUND_UP(crtc_state->pixel_rate,
+				    2 * display->cdclk.hw.cdclk));
+	wm0_prefill_latency =
+		20 + (linetime * skl_max_wm0_lines(crtc_state) * cdclk_prefill_latency);
+
+	return intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
+									wm0_prefill_latency);
+}
+
 static int skl_max_wm_level_for_vblank(struct intel_crtc_state *crtc_state,
 				       int wm0_lines)
 {

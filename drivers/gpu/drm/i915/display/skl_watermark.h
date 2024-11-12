@@ -23,6 +23,7 @@ struct skl_wm_level;
 
 u8 intel_enabled_dbuf_slices_mask(struct drm_i915_private *i915);
 
+int skl_calc_wm0_prefill_latency(struct intel_crtc_state *crtc_state);
 void intel_sagv_pre_plane_update(struct intel_atomic_state *state);
 void intel_sagv_post_plane_update(struct intel_atomic_state *state);
 bool intel_can_enable_sagv(struct drm_i915_private *i915,
