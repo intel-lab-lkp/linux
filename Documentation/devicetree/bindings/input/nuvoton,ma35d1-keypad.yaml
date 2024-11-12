@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/nuvoton,ma35d1-keypad.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton MA35D1 Keypad
+
+maintainers:
+  - Ming-jen Chen <mjchen0829@gmail.com>
+
+allOf:
+  - $ref: /schemas/input/matrix-keymap.yaml#
+
+properties:
+  compatible:
+    const: nuvoton,ma35d1-kpi
+
+  debounce-period:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
+    description: |
+      Key debounce period select, specified in terms of keypad IP clock cycles.
+      Valid values include 0 (no debounce) and specific clock cycle values:
+      8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, and 8192.
+
+  nuvoton,key-scan-time:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Set the time it takes to scan each key in the keypad, in clock cycles of the IP.
+      This parameter controls how frequently the keypad is scanned, adjusting the response time.
+      The valid range is from 1 to 256 clock cycles.
+    minimum: 1
+    maximum: 256
+
+  nuvoton,key-scan-time-div:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Set a divider that adjusts the scan time for each key.
+      This value scales the time it takes to scan each key
+      by multiplying the key-scan-time by the specified factor.
+      For example, if you set key-scan-time to 64 cycles and configure key-scan-time-div to 2,
+      the scan time for each key will be increased to 128 cycles (64 cycles * 2). time.
+    minimum: 1
+    maximum: 256
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  clocks:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - linux,keymap
+  - debounce-period
+  - nuvoton,key-scan-time
+  - nuvoton,key-scan-time-div
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/input/input.h>
+    keypad@404A0000 {
+      compatible = "nuvoton,ma35d1-kpi";
+      reg = <0x404A0000 0x10000>;
+      interrupts = <79>;
+      clocks = <&clk>;
+      keypad,num-rows = <2>;
+      keypad,num-columns = <2>;
+
+      linux,keymap = <
+         MATRIX_KEY(0, 0, KEY_ENTER)
+         MATRIX_KEY(0, 1, KEY_ENTER)
+         MATRIX_KEY(1, 0, KEY_SPACE)
+         MATRIX_KEY(1, 1, KEY_Z)
+      >;
+
+      debounce-period = <8>;
+      nuvoton,key-scan-time = <1>;
+      nuvoton,key-scan-time-div = <24>;
+    };
