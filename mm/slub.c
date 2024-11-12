@@ -444,6 +444,7 @@ struct slab_sheaf {
 	union {
 		struct rcu_head rcu_head;
 		struct list_head barn_list;
+		bool oversize;
 	};
 	struct kmem_cache *cache;
 	unsigned int size;
@@ -2819,6 +2820,30 @@ static int barn_put_full_sheaf(struct node_barn *barn, struct slab_sheaf *sheaf,
 	return ret;
 }
 
+static struct slab_sheaf *barn_get_full_or_empty_sheaf(struct node_barn *barn)
+{
+	struct slab_sheaf *sheaf = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&barn->lock, flags);
+
+	if (barn->nr_empty) {
+		sheaf = list_first_entry(&barn->sheaves_empty,
+					 struct slab_sheaf, barn_list);
+		list_del(&sheaf->barn_list);
+		barn->nr_empty--;
+	} else if (barn->nr_full) {
+		sheaf = list_first_entry(&barn->sheaves_full, struct slab_sheaf,
+					barn_list);
+		list_del(&sheaf->barn_list);
+		barn->nr_full--;
+	}
+
+	spin_unlock_irqrestore(&barn->lock, flags);
+
+	return sheaf;
+}
+
 /*
  * If a full sheaf is available, return it and put the supplied empty one to
  * barn. We ignore the limit on empty sheaves as the number of sheaves doesn't
@@ -4892,6 +4917,130 @@ void *kmem_cache_alloc_node_noprof(struct kmem_cache *s, gfp_t gfpflags, int nod
 	return ret;
 }
 EXPORT_SYMBOL(kmem_cache_alloc_node_noprof);
+
+
+/*
+ * returns a sheaf that has least the given count of objects
+ * when prefilling is needed, do so with given gfp flags
+ *
+ * return NULL if prefilling failed, or when the requested count is
+ * above cache's sheaf_capacity (TODO: lift this limitation)
+ */
+struct slab_sheaf *
+kmem_cache_prefill_sheaf(struct kmem_cache *s, gfp_t gfp, unsigned int count)
+{
+	struct slub_percpu_sheaves *pcs;
+	struct slab_sheaf *sheaf = NULL;
+
+	//TODO: handle via oversize sheaf
+	if (count > s->sheaf_capacity)
+		return NULL;
+
+	pcs = cpu_sheaves_lock(s->cpu_sheaves);
+
+	if (pcs->spare && pcs->spare->size > 0) {
+		sheaf = pcs->spare;
+		pcs->spare = NULL;
+	}
+
+	if (!sheaf)
+		sheaf = barn_get_full_or_empty_sheaf(pcs->barn);
+
+	cpu_sheaves_unlock(s->cpu_sheaves);
+
+	if (!sheaf)
+		sheaf = alloc_empty_sheaf(s, gfp);
+
+	if (sheaf && sheaf->size < count) {
+		if (refill_sheaf(s, sheaf, gfp)) {
+			sheaf_flush(s, sheaf);
+			free_empty_sheaf(s, sheaf);
+			sheaf = NULL;
+		}
+	}
+
+	return sheaf;
+}
+
+/*
+ * Use this to return a sheaf obtained by kmem_cache_prefill_sheaf()
+ * It tries to refill the sheaf back to the cache's sheaf_capacity
+ * to avoid handling partially full sheaves.
+ *
+ * If the refill fails because gfp is e.g. GFP_NOWAIT, the sheaf is
+ * instead dissolved
+ */
+void kmem_cache_return_sheaf(struct kmem_cache *s, gfp_t gfp,
+			     struct slab_sheaf *sheaf)
+{
+	struct slub_percpu_sheaves *pcs;
+	bool refill = false;
+	struct node_barn *barn;
+
+	//TODO: handle oversize sheaf
+
+	pcs = cpu_sheaves_lock(s->cpu_sheaves);
+
+	if (!pcs->spare) {
+		pcs->spare = sheaf;
+		sheaf = NULL;
+	}
+
+	/* racy check */
+	if (!sheaf && pcs->barn->nr_full >= MAX_FULL_SHEAVES) {
+		barn = pcs->barn;
+		refill = true;
+	}
+
+	cpu_sheaves_unlock(s->cpu_sheaves);
+
+	if (!sheaf)
+		return;
+
+	/*
+	 * if the barn is full of full sheaves or we fail to refill the sheaf,
+	 * simply flush and free it
+	 */
+	if (!refill || refill_sheaf(s, sheaf, gfp)) {
+		sheaf_flush(s, sheaf);
+		free_empty_sheaf(s, sheaf);
+		return;
+	}
+
+	/* we racily determined the sheaf would fit, so now force it */
+	barn_put_full_sheaf(barn, sheaf, true);
+}
+
+/*
+ * Allocate from a sheaf obtained by kmem_cache_prefill_sheaf()
+ *
+ * Guaranteed not to fail as many allocations as was the requested count.
+ * After the sheaf is emptied, it fails - no fallback to the slab cache itself.
+ *
+ * The gfp parameter is meant only to specify __GFP_ZERO or __GFP_ACCOUNT
+ * memcg charging is forced over limit if necessary, to avoid failure.
+ */
+void *
+kmem_cache_alloc_from_sheaf_noprof(struct kmem_cache *s, gfp_t gfp,
+				   struct slab_sheaf *sheaf)
+{
+	void *ret = NULL;
+	bool init;
+
+	if (sheaf->size == 0)
+		goto out;
+
+	ret = sheaf->objects[--sheaf->size];
+
+	init = slab_want_init_on_alloc(gfp, s);
+
+	/* add __GFP_NOFAIL to force successful memcg charging */
+	slab_post_alloc_hook(s, NULL, gfp | __GFP_NOFAIL, 1, &ret, init, s->object_size);
+out:
+	trace_kmem_cache_alloc(_RET_IP_, ret, s, gfp, NUMA_NO_NODE);
+
+	return ret;
+}
 
 /*
  * To avoid unnecessary overhead, we pass through large allocation requests
