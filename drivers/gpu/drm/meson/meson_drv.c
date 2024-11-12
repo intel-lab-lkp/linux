@@ -182,7 +182,6 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 	struct platform_device *pdev = to_platform_device(dev);
 	const struct meson_drm_match_data *match;
 	struct meson_drm *priv;
-	struct drm_device *drm;
 	struct resource *res;
 	void __iomem *regs;
 	int ret, i;
@@ -197,58 +196,49 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 	if (!match)
 		return -ENODEV;
 
-	drm = drm_dev_alloc(&meson_driver, dev);
-	if (IS_ERR(drm))
-		return PTR_ERR(drm);
+	priv = devm_drm_dev_alloc(dev, &meson_driver,
+				 struct meson_drm, drm);
 
-	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv) {
-		ret = -ENOMEM;
-		goto free_drm;
-	}
-	drm->dev_private = priv;
-	priv->drm = drm;
+	if (IS_ERR(priv))
+		return PTR_ERR(priv);
+
+	priv->drm.dev_private = priv;
 	priv->dev = dev;
 	priv->compat = match->compat;
 	priv->afbcd.ops = match->afbcd_ops;
 
 	regs = devm_platform_ioremap_resource_byname(pdev, "vpu");
 	if (IS_ERR(regs)) {
-		ret = PTR_ERR(regs);
-		goto free_drm;
+		return PTR_ERR(regs);
 	}
 
 	priv->io_base = regs;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "hhi");
 	if (!res) {
-		ret = -EINVAL;
-		goto free_drm;
+		return -EINVAL;
 	}
 	/* Simply ioremap since it may be a shared register zone */
 	regs = devm_ioremap(dev, res->start, resource_size(res));
 	if (!regs) {
-		ret = -EADDRNOTAVAIL;
-		goto free_drm;
+		return -EADDRNOTAVAIL;
 	}
 
 	priv->hhi = devm_regmap_init_mmio(dev, regs,
 					  &meson_regmap_config);
 	if (IS_ERR(priv->hhi)) {
 		dev_err(&pdev->dev, "Couldn't create the HHI regmap\n");
-		ret = PTR_ERR(priv->hhi);
-		goto free_drm;
+		return PTR_ERR(priv->hhi);
 	}
 
 	priv->canvas = meson_canvas_get(dev);
 	if (IS_ERR(priv->canvas)) {
-		ret = PTR_ERR(priv->canvas);
-		goto free_drm;
+		return PTR_ERR(priv->canvas);
 	}
 
 	ret = meson_canvas_alloc(priv->canvas, &priv->canvas_id_osd1);
 	if (ret)
-		goto free_drm;
+		return ret;
 	ret = meson_canvas_alloc(priv->canvas, &priv->canvas_id_vd1_0);
 	if (ret)
 		goto free_canvas_osd1;
@@ -261,7 +251,7 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 
 	priv->vsync_irq = platform_get_irq(pdev, 0);
 
-	ret = drm_vblank_init(drm, 1);
+	ret = drm_vblank_init(&priv->drm, 1);
 	if (ret)
 		goto free_canvas_vd1_2;
 
@@ -281,13 +271,13 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 	if (ret)
 		goto free_canvas_vd1_2;
 
-	ret = drmm_mode_config_init(drm);
+	ret = drmm_mode_config_init(&priv->drm);
 	if (ret)
 		goto free_canvas_vd1_2;
-	drm->mode_config.max_width = 3840;
-	drm->mode_config.max_height = 2160;
-	drm->mode_config.funcs = &meson_mode_config_funcs;
-	drm->mode_config.helper_private	= &meson_mode_config_helpers;
+	priv->drm.mode_config.max_width = 3840;
+	priv->drm.mode_config.max_height = 2160;
+	priv->drm.mode_config.funcs = &meson_mode_config_funcs;
+	priv->drm.mode_config.helper_private = &meson_mode_config_helpers;
 
 	/* Hardware Initialization */
 
@@ -308,9 +298,9 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 		goto exit_afbcd;
 
 	if (has_components) {
-		ret = component_bind_all(dev, drm);
+		ret = component_bind_all(dev, &priv->drm);
 		if (ret) {
-			dev_err(drm->dev, "Couldn't bind all components\n");
+			dev_err(priv->drm.dev, "Couldn't bind all components\n");
 			/* Do not try to unbind */
 			has_components = false;
 			goto exit_afbcd;
@@ -319,46 +309,49 @@ static int meson_drv_bind_master(struct device *dev, bool has_components)
 
 	ret = meson_encoder_hdmi_probe(priv);
 	if (ret)
-		goto exit_afbcd;
+		goto unbind_components;
 
 	if (meson_vpu_is_compatible(priv, VPU_COMPATIBLE_G12A)) {
 		ret = meson_encoder_dsi_probe(priv);
 		if (ret)
-			goto exit_afbcd;
+			goto unbind_components;
 	}
 
 	ret = meson_plane_create(priv);
 	if (ret)
-		goto exit_afbcd;
+		goto unbind_components;
 
 	ret = meson_overlay_create(priv);
 	if (ret)
-		goto exit_afbcd;
+		goto unbind_components;
 
 	ret = meson_crtc_create(priv);
 	if (ret)
-		goto exit_afbcd;
+		goto unbind_components;
 
-	ret = request_irq(priv->vsync_irq, meson_irq, 0, drm->driver->name, drm);
+	ret = request_irq(priv->vsync_irq, meson_irq, 0, priv->drm.driver->name, &priv->drm);
 	if (ret)
-		goto exit_afbcd;
+		goto unbind_components;
 
-	drm_mode_config_reset(drm);
+	drm_mode_config_reset(&priv->drm);
 
-	drm_kms_helper_poll_init(drm);
+	drm_kms_helper_poll_init(&priv->drm);
 
 	platform_set_drvdata(pdev, priv);
 
-	ret = drm_dev_register(drm, 0);
+	ret = drm_dev_register(&priv->drm, 0);
 	if (ret)
 		goto uninstall_irq;
 
-	drm_fbdev_dma_setup(drm, 32);
+	drm_fbdev_dma_setup(&priv->drm, 32);
 
 	return 0;
 
 uninstall_irq:
-	free_irq(priv->vsync_irq, drm);
+	free_irq(priv->vsync_irq, &priv->drm);
+unbind_components:
+	if (has_components)
+		component_unbind_all(dev, &priv->drm);
 exit_afbcd:
 	if (priv->afbcd.ops)
 		priv->afbcd.ops->exit(priv);
@@ -370,15 +363,10 @@ free_canvas_vd1_0:
 	meson_canvas_free(priv->canvas, priv->canvas_id_vd1_0);
 free_canvas_osd1:
 	meson_canvas_free(priv->canvas, priv->canvas_id_osd1);
-free_drm:
-	drm_dev_put(drm);
 
 	meson_encoder_dsi_remove(priv);
 	meson_encoder_hdmi_remove(priv);
 	meson_encoder_cvbs_remove(priv);
-
-	if (has_components)
-		component_unbind_all(dev, drm);
 
 	return ret;
 }
@@ -391,7 +379,7 @@ static int meson_drv_bind(struct device *dev)
 static void meson_drv_unbind(struct device *dev)
 {
 	struct meson_drm *priv = dev_get_drvdata(dev);
-	struct drm_device *drm = priv->drm;
+	struct drm_device *drm = &priv->drm;
 
 	if (priv->canvas) {
 		meson_canvas_free(priv->canvas, priv->canvas_id_osd1);
@@ -404,7 +392,6 @@ static void meson_drv_unbind(struct device *dev)
 	drm_kms_helper_poll_fini(drm);
 	drm_atomic_helper_shutdown(drm);
 	free_irq(priv->vsync_irq, drm);
-	drm_dev_put(drm);
 
 	meson_encoder_dsi_remove(priv);
 	meson_encoder_hdmi_remove(priv);
@@ -428,7 +415,7 @@ static int __maybe_unused meson_drv_pm_suspend(struct device *dev)
 	if (!priv)
 		return 0;
 
-	return drm_mode_config_helper_suspend(priv->drm);
+	return drm_mode_config_helper_suspend(&priv->drm);
 }
 
 static int __maybe_unused meson_drv_pm_resume(struct device *dev)
@@ -445,7 +432,7 @@ static int __maybe_unused meson_drv_pm_resume(struct device *dev)
 	if (priv->afbcd.ops)
 		priv->afbcd.ops->init(priv);
 
-	return drm_mode_config_helper_resume(priv->drm);
+	return drm_mode_config_helper_resume(&priv->drm);
 }
 
 static void meson_drv_shutdown(struct platform_device *pdev)
@@ -455,8 +442,8 @@ static void meson_drv_shutdown(struct platform_device *pdev)
 	if (!priv)
 		return;
 
-	drm_kms_helper_poll_fini(priv->drm);
-	drm_atomic_helper_shutdown(priv->drm);
+	drm_kms_helper_poll_fini(&priv->drm);
+	drm_atomic_helper_shutdown(&priv->drm);
 }
 
 /*

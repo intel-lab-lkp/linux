@@ -8,6 +8,7 @@
 #define __MESON_DRV_H
 
 #include <linux/device.h>
+#include <drm/drm_device.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
 
@@ -53,7 +54,7 @@ struct meson_drm {
 	u8 canvas_id_vd1_1;
 	u8 canvas_id_vd1_2;
 
-	struct drm_device *drm;
+	struct drm_device drm;
 	struct drm_crtc *crtc;
 	struct drm_plane *primary_plane;
 	struct drm_plane *overlay_plane;
