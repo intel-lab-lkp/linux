@@ -169,8 +169,9 @@ intel_wm_compute_dpkgc_latency(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(state);
 	struct intel_crtc *crtc;
 	struct intel_crtc_state *new_crtc_state;
-	u32 max_latency = LNL_PKG_C_LATENCY_MASK;
+	u32 latency = LNL_PKG_C_LATENCY_MASK;
 	u32 added_waketime = 0;
+	u32 max_linetime = 0;
 	int i;
 	bool fixed_refresh_rate = false;
 
@@ -182,17 +183,27 @@ intel_wm_compute_dpkgc_latency(struct intel_atomic_state *state,
 		     new_crtc_state->vrr.vmin == new_crtc_state->vrr.flipline) ||
 		    !new_crtc_state->vrr.enable)
 			fixed_refresh_rate = true;
+
+		max_linetime = max(new_crtc_state->linetime, max_linetime);
 	}
 
 	if (fixed_refresh_rate) {
-		max_latency = skl_watermark_max_latency(i915, 1);
-		if (max_latency == 0)
-			max_latency = LNL_PKG_C_LATENCY_MASK;
+		latency = skl_watermark_max_latency(i915, 1);
+
+		/* Wa_22020299601 */
+		if (latency) {
+			if (DISPLAY_VER(display) == 20 || DISPLAY_VER(display) == 30)
+				latency = max_linetime *
+					DIV_ROUND_UP(latency, max_linetime);
+		} else {
+			latency = LNL_PKG_C_LATENCY_MASK;
+		}
+
 		added_waketime = DSB_EXE_TIME +
 			display->sagv.block_time_us;
 	}
 
-	display->wm.dpkgc_latency = max_latency;
+	display->wm.dpkgc_latency = latency;
 	display->wm.dpkgc_added_waketime = added_waketime;
 
 	return 0;
