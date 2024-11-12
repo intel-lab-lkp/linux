@@ -68,7 +68,12 @@ When the ioctl is called with a pointer to this structure the driver
 will attempt to allocate up to the requested number of buffers and store
 the actual number allocated and the starting index in the ``count`` and
 the ``index`` fields respectively. On return ``count`` can be smaller
-than the number requested.
+than the number requested, but never larger. If no buffers could be
+allocated, then -1 is returned and errno is set to the ``ENOMEM`` error code.
+
+If ``count`` was set to 0, then no buffers are allocated, and instead
+it just sets the various informative fields, e.g. ``capabilities``,
+``max_num_buffers``, etc.
 
 .. c:type:: v4l2_create_buffers
 
@@ -88,9 +93,9 @@ than the number requested.
 	:ref:`VIDIOC_CREATE_BUFS` will set ``index`` to the current number of
 	created buffers, and it will check the validity of ``memory`` and
 	``format.type``. If those are invalid -1 is returned and errno is
-	set to ``EINVAL`` error code, otherwise :ref:`VIDIOC_CREATE_BUFS` returns
-	0. It will never set errno to ``EBUSY`` error code in this particular
-	case.
+	set to the ``EINVAL`` error code, otherwise :ref:`VIDIOC_CREATE_BUFS`
+	returns	0. It will never set errno to the ``EBUSY`` error code in this
+	particular case.
     * - __u32
       - ``memory``
       - Applications set this field to ``V4L2_MEMORY_MMAP``,
@@ -118,11 +123,26 @@ than the number requested.
 	See :ref:`memory-flags`.
     * - __u32
       - ``max_num_buffers``
-      - If the V4L2_BUF_CAP_SUPPORTS_MAX_NUM_BUFFERS capability flag is set
-        this field indicates the maximum possible number of buffers
+      - If the ``V4L2_BUF_CAP_SUPPORTS_MAX_NUM_BUFFERS`` capability flag is
+        set this field indicates the maximum possible number of buffers
         for this queue.
+    * - __u16
+      - ``min_num_buffers``
+      - If the ``V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS`` capability flag is
+        set this field indicates the minimum number of buffers for this queue.
+	Allocating this number of buffers will allow video streaming, but frame
+	drops might happen.
+    * - __u16
+      - ``rec_num_buffers``
+      - If the ``V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS`` capability flag is
+        set this field indicates the recommended number of buffers for this
+	queue.
+	The :ref:`VIDIOC_REQBUFS` will use this value if the requested number of
+	buffers	is less than this value. This value ensures reliable video
+	streaming without frame drops, provided the application can process
+	a dequeued buffer within a single frame period.
     * - __u32
-      - ``reserved``\ [5]
+      - ``reserved``\ [4]
       - A place holder for future extensions. Drivers and applications
 	must set the array to zero.
 

@@ -124,6 +124,7 @@ aborting or finishing any DMA in progress, an implicit
 .. _V4L2-BUF-CAP-SUPPORTS-MMAP-CACHE-HINTS:
 .. _V4L2-BUF-CAP-SUPPORTS-MAX-NUM-BUFFERS:
 .. _V4L2-BUF-CAP-SUPPORTS-REMOVE-BUFS:
+.. _V4L2-BUF-CAP-SUPPORTS-MIN-REC-NUM-BUFFERS:
 
 .. flat-table:: V4L2 Buffer Capabilities Flags
     :header-rows:  0
@@ -167,6 +168,11 @@ aborting or finishing any DMA in progress, an implicit
     * - ``V4L2_BUF_CAP_SUPPORTS_REMOVE_BUFS``
       - 0x00000100
       - If set, then ``VIDIOC_REMOVE_BUFS`` is supported.
+    * - ``V4L2_BUF_CAP_SUPPORTS_MIN_REC_NUM_BUFFERS``
+      - 0x00000200
+      - If set, then the ``min_num_buffers`` and ``rec_num_buffers`` fields in
+        ``struct v4l2_create_buffers`` are valid. If not set, then these fields
+	are 0.
 
 .. _memory-flags:
 .. _V4L2-MEMORY-FLAG-NON-COHERENT:
