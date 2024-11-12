@@ -180,19 +180,37 @@ struct ieee1284_info {
 	struct semaphore irq;
 };
 
+#define PARPORT_IOPORT 1
+#define PARPORT_IOMEM  2
+
 struct parport_data {
+	unsigned char iotype;   /* io access style */
 	/* for ioport */
 	unsigned long iobase;   /* base address for ioport */
 	unsigned long iobase_hi;        /* base address (hi - ECR) */
+	/* for iomem */
+	resource_size_t mapbase;        /* base address for iomem */
+	resource_size_t mapsize;
+	resource_size_t mapbase_hi;     /* base address (hi - ECR) */
+	resource_size_t mapsize_hi;
 	int irq;
 	int dma;
 };
 
 /* A parallel port */
 struct parport {
+	unsigned char iotype;   /* io access style */
+	/* for ioport */
 	unsigned long iobase;	/* base address for ioport */
 	unsigned long iobase_hi;  /* base address (hi - ECR) */
 	unsigned int size;	/* IO extent */
+	/* for iomem */
+	resource_size_t mapbase;        /* base address for iomem */
+	resource_size_t mapsize;
+	resource_size_t mapbase_hi;     /* base address for iomem */
+	resource_size_t mapsize_hi;
+	unsigned char __iomem   *membase;       /* read/write[bwl] */
+	unsigned char __iomem   *membase_hi;    /* read/write[bwl] */
 	const char *name;
 	unsigned int modes;
 	int irq;		/* interrupt (or -1 for none) */

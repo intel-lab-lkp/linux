@@ -5,16 +5,20 @@
 #include <asm/io.h>
 
 /* --- register definitions ------------------------------- */
-
-#define ECONTROL(p) ((p)->iobase_hi + 0x2)
-#define CONFIGB(p)  ((p)->iobase_hi + 0x1)
-#define CONFIGA(p)  ((p)->iobase_hi + 0x0)
-#define FIFO(p)     ((p)->iobase_hi + 0x0)
-#define EPPDATA(p)  ((p)->iobase    + 0x4)
-#define EPPADDR(p)  ((p)->iobase    + 0x3)
-#define CONTROL(p)  ((p)->iobase    + 0x2)
-#define STATUS(p)   ((p)->iobase    + 0x1)
-#define DATA(p)     ((p)->iobase    + 0x0)
+#define is_ioport(p)   (p == NULL || (p)->iotype == PARPORT_IOPORT)
+#define get_base(p)    (is_ioport(p) ? (p)->iobase :\
+				(unsigned long)(p)->membase)
+#define get_base_hi(p) (is_ioport(p) ? (p)->iobase_hi :\
+				(unsigned long)(p)->membase_hi)
+#define ECONTROL(p)    (get_base_hi(p) + 0x2)
+#define CONFIGB(p)     (get_base_hi(p) + 0x1)
+#define CONFIGA(p)     (get_base_hi(p) + 0x0)
+#define FIFO(p)                (get_base_hi(p) + 0x0)
+#define EPPDATA(p)     (get_base(p) + 0x4)
+#define EPPADDR(p)     (get_base(p) + 0x3)
+#define CONTROL(p)     (get_base(p) + 0x2)
+#define STATUS(p)      (get_base(p) + 0x1)
+#define DATA(p)                (get_base(p) + 0x0)
 
 struct parport_pc_private {
 	/* Contents of CTR. */
@@ -63,17 +67,78 @@ struct parport_pc_via_data
 	u8 viacfg_parport_base;
 };
 
+static inline void parport_pc_writeb(struct parport *p,
+					unsigned char d,
+					unsigned long addr)
+{
+	is_ioport(p) ? outb(d, addr) : writeb(d, (void __iomem *)addr);
+}
+
+static inline void parport_pc_writesb(struct parport *p,
+					unsigned long addr, const void *buf,
+					unsigned int count)
+{
+	is_ioport(p) ? outsb(addr, buf, count) :
+			writesb((void __iomem *)addr, buf, count);
+}
+
+static inline void parport_pc_writesl(struct parport *p,
+					unsigned long addr, const void *buf,
+					unsigned int count)
+{
+	is_ioport(p) ? outsl(addr, buf, count) :
+			writesl((void __iomem *)addr, buf, count);
+}
+
+static inline void parport_pc_writesw(struct parport *p,
+					unsigned long addr, const void *buf,
+					unsigned int count)
+{
+	is_ioport(p) ? outsw(addr, buf, count) :
+	writesw((void __iomem *)addr, buf, count);
+}
+
+static inline unsigned char parport_pc_readb(struct parport *p,
+						unsigned long addr)
+{
+	return is_ioport(p) ? inb(addr) : readb((void __iomem *)addr);
+}
+
+static inline void parport_pc_readsb(struct parport *p,
+					unsigned long addr, void *buf,
+					unsigned int count)
+{
+	is_ioport(p) ? insb(addr, buf, count) :
+			readsb((void __iomem *)addr, buf, count);
+}
+
+static inline void parport_pc_readsl(struct parport *p,
+					unsigned long addr, void *buf,
+					unsigned int count)
+{
+	is_ioport(p) ? insl(addr, buf, count) :
+			readsl((void __iomem *)addr, buf, count);
+}
+
+static inline void parport_pc_readsw(struct parport *p,
+					unsigned long addr, void *buf,
+					unsigned int count)
+{
+	is_ioport(p) ? insw(addr, buf, count) :
+			readsw((void __iomem *)addr, buf, count);
+}
+
 static __inline__ void parport_pc_write_data(struct parport *p, unsigned char d)
 {
 #ifdef DEBUG_PARPORT
 	printk (KERN_DEBUG "parport_pc_write_data(%p,0x%02x)\n", p, d);
 #endif
-	outb(d, DATA(p));
+	parport_pc_writeb(p, d, DATA(p));
 }
 
 static __inline__ unsigned char parport_pc_read_data(struct parport *p)
 {
-	unsigned char val = inb (DATA (p));
+	unsigned char val = parport_pc_readb(p, DATA(p));
 #ifdef DEBUG_PARPORT
 	printk (KERN_DEBUG "parport_pc_read_data(%p) = 0x%02x\n",
 		p, val);
@@ -85,9 +150,9 @@ static __inline__ unsigned char parport_pc_read_data(struct parport *p)
 static inline void dump_parport_state (char *str, struct parport *p)
 {
 	/* here's hoping that reading these ports won't side-effect anything underneath */
-	unsigned char ecr = inb (ECONTROL (p));
-	unsigned char dcr = inb (CONTROL (p));
-	unsigned char dsr = inb (STATUS (p));
+	unsigned char ecr = parport_pc_readb(p, ECONTROL(p));
+	unsigned char dcr = parport_pc_readb(p, CONTROL(p));
+	unsigned char dsr = parport_pc_readb(p, STATUS(p));
 	static const char *const ecr_modes[] = {"SPP", "PS2", "PPFIFO", "ECP", "xXx", "yYy", "TST", "CFG"};
 	const struct parport_pc_private *priv = p->physport->private_data;
 	int i;
@@ -100,7 +165,7 @@ static inline void dump_parport_state (char *str, struct parport *p)
 	if (ecr & 0x01) printk (",f_empty");
 	for (i=0; i<2; i++) {
 		printk ("]  dcr(%s)=[", i ? "soft" : "hard");
-		dcr = i ? priv->ctr : inb (CONTROL (p));
+		dcr = i ? priv->ctr : parport_pc_readb(p, CONTROL(p));
 	
 		if (dcr & 0x20) {
 			printk ("rev");
@@ -141,7 +206,7 @@ static __inline__ unsigned char __parport_pc_frob_control (struct parport *p,
 #endif
 	ctr = (ctr & ~mask) ^ val;
 	ctr &= priv->ctr_writable; /* only write writable bits. */
-	outb (ctr, CONTROL (p));
+	parport_pc_writeb(p, ctr, CONTROL(p));
 	priv->ctr = ctr;	/* Update soft copy */
 	return ctr;
 }
@@ -213,7 +278,7 @@ static __inline__ unsigned char parport_pc_frob_control (struct parport *p,
 
 static __inline__ unsigned char parport_pc_read_status(struct parport *p)
 {
-	return inb(STATUS(p));
+	return parport_pc_readb(p, STATUS(p));
 }
 
 
