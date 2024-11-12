@@ -506,6 +506,9 @@ static int genpd_dev_pm_set_performance_state(struct device *dev,
 	struct generic_pm_domain *genpd = dev_to_genpd(dev);
 	int ret = 0;
 
+	if (IS_ERR(genpd))
+		return PTR_ERR(genpd);
+
 	genpd_lock(genpd);
 	if (pm_runtime_suspended(dev)) {
 		dev_gpd_data(dev)->rpm_pstate = state;
@@ -962,6 +965,9 @@ static int genpd_power_on(struct generic_pm_domain *genpd, unsigned int depth)
 static int genpd_dev_pm_start(struct device *dev)
 {
 	struct generic_pm_domain *genpd = dev_to_genpd(dev);
+
+	if (IS_ERR(genpd))
+		return PTR_ERR(genpd);
 
 	return genpd_start_dev(genpd, dev);
 }
