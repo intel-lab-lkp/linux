@@ -454,7 +454,6 @@ static const struct net_device_ops moxart_netdev_ops = {
 static int moxart_mac_probe(struct platform_device *pdev)
 {
 	struct device *p_dev = &pdev->dev;
-	struct device_node *node = p_dev->of_node;
 	struct net_device *ndev;
 	struct moxart_mac_priv_t *priv;
 	struct resource *res;
@@ -465,9 +464,8 @@ static int moxart_mac_probe(struct platform_device *pdev)
 	if (!ndev)
 		return -ENOMEM;
 
-	irq = irq_of_parse_and_map(node, 0);
-	if (irq <= 0) {
-		netdev_err(ndev, "irq_of_parse_and_map failed\n");
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0) {
 		ret = -EINVAL;
 		goto irq_map_fail;
 	}

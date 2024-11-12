@@ -1673,9 +1673,8 @@ static int grcan_probe(struct platform_device *ofdev)
 		goto exit_error;
 	}
 
-	irq = irq_of_parse_and_map(np, GRCAN_IRQIX_IRQ);
-	if (!irq) {
-		dev_err(&ofdev->dev, "no irq found\n");
+	irq = platform_get_irq(ofdev, GRCAN_IRQIX_IRQ);
+	if (irq < 0) {
 		err = -ENODEV;
 		goto exit_error;
 	}

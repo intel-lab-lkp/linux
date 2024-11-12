@@ -111,37 +111,29 @@ static int sxgbe_platform_probe(struct platform_device *pdev)
 	}
 
 	/* Get the SXGBE common INT information */
-	priv->irq  = irq_of_parse_and_map(node, 0);
-	if (priv->irq <= 0) {
-		dev_err(dev, "sxgbe common irq parsing failed\n");
+	priv->irq = platform_get_irq(pdev, 0);
+	if (priv->irq < 0)
 		goto err_drv_remove;
-	}
 
 	/* Get MAC address if available (DT) */
 	of_get_ethdev_address(node, priv->dev);
 
 	/* Get the TX/RX IRQ numbers */
 	for (i = 0, chan = 1; i < SXGBE_TX_QUEUES; i++) {
-		priv->txq[i]->irq_no = irq_of_parse_and_map(node, chan++);
-		if (priv->txq[i]->irq_no <= 0) {
-			dev_err(dev, "sxgbe tx irq parsing failed\n");
+		priv->txq[i]->irq_no = platform_get_irq(pdev, chan++);
+		if (priv->txq[i]->irq_no < 0)
 			goto err_tx_irq_unmap;
-		}
 	}
 
 	for (i = 0; i < SXGBE_RX_QUEUES; i++) {
-		priv->rxq[i]->irq_no = irq_of_parse_and_map(node, chan++);
-		if (priv->rxq[i]->irq_no <= 0) {
-			dev_err(dev, "sxgbe rx irq parsing failed\n");
+		priv->rxq[i]->irq_no = platform_get_irq(pdev, chan++);
+		if (priv->rxq[i]->irq_no < 0)
 			goto err_rx_irq_unmap;
-		}
 	}
 
-	priv->lpi_irq = irq_of_parse_and_map(node, chan);
-	if (priv->lpi_irq <= 0) {
-		dev_err(dev, "sxgbe lpi irq parsing failed\n");
+	priv->lpi_irq = platform_get_irq(pdev, chan);
+	if (priv->lpi_irq < 0)
 		goto err_rx_irq_unmap;
-	}
 
 	platform_set_drvdata(pdev, priv->dev);
 

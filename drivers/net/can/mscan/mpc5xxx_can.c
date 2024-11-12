@@ -300,9 +300,8 @@ static int mpc5xxx_can_probe(struct platform_device *ofdev)
 	if (!base)
 		return dev_err_probe(&ofdev->dev, err, "couldn't ioremap\n");
 
-	irq = irq_of_parse_and_map(np, 0);
-	if (!irq) {
-		dev_err(&ofdev->dev, "no irq found\n");
+	irq = platform_get_irq(ofdev, 0);
+	if (irq < 0) {
 		err = -ENODEV;
 		goto exit_unmap_mem;
 	}

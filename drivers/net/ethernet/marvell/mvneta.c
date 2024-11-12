@@ -5511,8 +5511,8 @@ static int mvneta_probe(struct platform_device *pdev)
 		pp->neta_ac5 = true;
 	}
 
-	dev->irq = irq_of_parse_and_map(dn, 0);
-	if (dev->irq == 0)
+	dev->irq = platform_get_irq(pdev, 0);
+	if (dev->irq < 0)
 		return -EINVAL;
 
 	pp->clk = devm_clk_get(&pdev->dev, "core");
