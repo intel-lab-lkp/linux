@@ -320,13 +320,13 @@ static void kvm_inject_exception(struct kvm_vcpu *vcpu)
 {
 	if (vcpu_el1_is_32bit(vcpu)) {
 		switch (vcpu_get_flag(vcpu, EXCEPT_MASK)) {
-		case unpack_vcpu_flag(EXCEPT_AA32_UND):
+		case unpack_kvm_flag(EXCEPT_AA32_UND):
 			enter_exception32(vcpu, PSR_AA32_MODE_UND, 4);
 			break;
-		case unpack_vcpu_flag(EXCEPT_AA32_IABT):
+		case unpack_kvm_flag(EXCEPT_AA32_IABT):
 			enter_exception32(vcpu, PSR_AA32_MODE_ABT, 12);
 			break;
-		case unpack_vcpu_flag(EXCEPT_AA32_DABT):
+		case unpack_kvm_flag(EXCEPT_AA32_DABT):
 			enter_exception32(vcpu, PSR_AA32_MODE_ABT, 16);
 			break;
 		default:
@@ -335,15 +335,15 @@ static void kvm_inject_exception(struct kvm_vcpu *vcpu)
 		}
 	} else {
 		switch (vcpu_get_flag(vcpu, EXCEPT_MASK)) {
-		case unpack_vcpu_flag(EXCEPT_AA64_EL1_SYNC):
+		case unpack_kvm_flag(EXCEPT_AA64_EL1_SYNC):
 			enter_exception64(vcpu, PSR_MODE_EL1h, except_type_sync);
 			break;
 
-		case unpack_vcpu_flag(EXCEPT_AA64_EL2_SYNC):
+		case unpack_kvm_flag(EXCEPT_AA64_EL2_SYNC):
 			enter_exception64(vcpu, PSR_MODE_EL2h, except_type_sync);
 			break;
 
-		case unpack_vcpu_flag(EXCEPT_AA64_EL2_IRQ):
+		case unpack_kvm_flag(EXCEPT_AA64_EL2_IRQ):
 			enter_exception64(vcpu, PSR_MODE_EL2h, except_type_irq);
 			break;
 

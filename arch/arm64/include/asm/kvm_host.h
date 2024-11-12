@@ -790,22 +790,22 @@ struct kvm_vcpu_arch {
 /*
  * Each 'flag' is composed of a comma-separated triplet:
  *
- * - the flag-set it belongs to in the vcpu->arch structure
+ * - the flag-set it belongs to in the structure pointed to by 'v'
  * - the value for that flag
  * - the mask for that flag
  *
- *  __vcpu_single_flag() builds such a triplet for a single-bit flag.
- * unpack_vcpu_flag() extract the flag value from the triplet for
+ *  __kvm_single_flag() builds such a triplet for a single-bit flag.
+ * unpack_kvm_flag() extract the flag value from the triplet for
  * direct use outside of the flag accessors.
  */
-#define __vcpu_single_flag(_set, _f)	_set, (_f), (_f)
+#define __kvm_single_flag(_set, _f)	_set, (_f), (_f)
 
 #define __unpack_flag(_set, _f, _m)	_f
-#define unpack_vcpu_flag(...)		__unpack_flag(__VA_ARGS__)
+#define unpack_kvm_flag(...)		__unpack_flag(__VA_ARGS__)
 
 #define __build_check_flag(v, flagset, f, m)			\
 	do {							\
-		typeof(v->arch.flagset) *_fset;			\
+		typeof(v.flagset) *_fset;			\
 								\
 		/* Check that the flags fit in the mask */	\
 		BUILD_BUG_ON(HWEIGHT(m) != HWEIGHT((f) | (m)));	\
@@ -813,11 +813,11 @@ struct kvm_vcpu_arch {
 		BUILD_BUG_ON((sizeof(*_fset) * 8) <= __fls(m));	\
 	} while (0)
 
-#define __vcpu_get_flag(v, flagset, f, m)			\
+#define __kvm_get_flag(v, flagset, f, m)			\
 	({							\
 		__build_check_flag(v, flagset, f, m);		\
 								\
-		READ_ONCE(v->arch.flagset) & (m);		\
+		READ_ONCE(v.flagset) & (m);		\
 	})
 
 /*
@@ -826,64 +826,64 @@ struct kvm_vcpu_arch {
  */
 #ifdef __KVM_NVHE_HYPERVISOR__
 /* the nVHE hypervisor is always non-preemptible */
-#define __vcpu_flags_preempt_disable()
-#define __vcpu_flags_preempt_enable()
+#define __kvm_flags_preempt_disable()
+#define __kvm_flags_preempt_enable()
 #else
-#define __vcpu_flags_preempt_disable()	preempt_disable()
-#define __vcpu_flags_preempt_enable()	preempt_enable()
+#define __kvm_flags_preempt_disable()	preempt_disable()
+#define __kvm_flags_preempt_enable()	preempt_enable()
 #endif
 
-#define __vcpu_set_flag(v, flagset, f, m)			\
+#define __kvm_set_flag(v, flagset, f, m)			\
 	do {							\
-		typeof(v->arch.flagset) *fset;			\
+		typeof(v.flagset) *fset;			\
 								\
 		__build_check_flag(v, flagset, f, m);		\
 								\
-		fset = &v->arch.flagset;			\
-		__vcpu_flags_preempt_disable();			\
+		fset = &v.flagset;			\
+		__kvm_flags_preempt_disable();			\
 		if (HWEIGHT(m) > 1)				\
 			*fset &= ~(m);				\
 		*fset |= (f);					\
-		__vcpu_flags_preempt_enable();			\
+		__kvm_flags_preempt_enable();			\
 	} while (0)
 
-#define __vcpu_clear_flag(v, flagset, f, m)			\
+#define __kvm_clear_flag(v, flagset, f, m)			\
 	do {							\
-		typeof(v->arch.flagset) *fset;			\
+		typeof(v.flagset) *fset;			\
 								\
 		__build_check_flag(v, flagset, f, m);		\
 								\
-		fset = &v->arch.flagset;			\
-		__vcpu_flags_preempt_disable();			\
+		fset = &v.flagset;			\
+		__kvm_flags_preempt_disable();			\
 		*fset &= ~(m);					\
-		__vcpu_flags_preempt_enable();			\
+		__kvm_flags_preempt_enable();			\
 	} while (0)
 
-#define vcpu_get_flag(v, ...)	__vcpu_get_flag((v), __VA_ARGS__)
-#define vcpu_set_flag(v, ...)	__vcpu_set_flag((v), __VA_ARGS__)
-#define vcpu_clear_flag(v, ...)	__vcpu_clear_flag((v), __VA_ARGS__)
+#define vcpu_get_flag(v, ...)	__kvm_get_flag(((v)->arch), __VA_ARGS__)
+#define vcpu_set_flag(v, ...)	__kvm_set_flag(((v)->arch), __VA_ARGS__)
+#define vcpu_clear_flag(v, ...)	__kvm_clear_flag(((v)->arch), __VA_ARGS__)
 
 /* SVE exposed to guest */
-#define GUEST_HAS_SVE		__vcpu_single_flag(cflags, BIT(0))
+#define GUEST_HAS_SVE		__kvm_single_flag(cflags, BIT(0))
 /* SVE config completed */
-#define VCPU_SVE_FINALIZED	__vcpu_single_flag(cflags, BIT(1))
+#define VCPU_SVE_FINALIZED	__kvm_single_flag(cflags, BIT(1))
 /* PTRAUTH exposed to guest */
-#define GUEST_HAS_PTRAUTH	__vcpu_single_flag(cflags, BIT(2))
+#define GUEST_HAS_PTRAUTH	__kvm_single_flag(cflags, BIT(2))
 /* KVM_ARM_VCPU_INIT completed */
-#define VCPU_INITIALIZED	__vcpu_single_flag(cflags, BIT(3))
+#define VCPU_INITIALIZED	__kvm_single_flag(cflags, BIT(3))
 
 /* Exception pending */
-#define PENDING_EXCEPTION	__vcpu_single_flag(iflags, BIT(0))
+#define PENDING_EXCEPTION	__kvm_single_flag(iflags, BIT(0))
 /*
  * PC increment. Overlaps with EXCEPT_MASK on purpose so that it can't
  * be set together with an exception...
  */
-#define INCREMENT_PC		__vcpu_single_flag(iflags, BIT(1))
+#define INCREMENT_PC		__kvm_single_flag(iflags, BIT(1))
 /* Target EL/MODE (not a single flag, but let's abuse the macro) */
-#define EXCEPT_MASK		__vcpu_single_flag(iflags, GENMASK(3, 1))
+#define EXCEPT_MASK		__kvm_single_flag(iflags, GENMASK(3, 1))
 
 /* Helpers to encode exceptions with minimum fuss */
-#define __EXCEPT_MASK_VAL	unpack_vcpu_flag(EXCEPT_MASK)
+#define __EXCEPT_MASK_VAL	unpack_kvm_flag(EXCEPT_MASK)
 #define __EXCEPT_SHIFT		__builtin_ctzl(__EXCEPT_MASK_VAL)
 #define __vcpu_except_flags(_f)	iflags, (_f << __EXCEPT_SHIFT), __EXCEPT_MASK_VAL
 
@@ -907,28 +907,28 @@ struct kvm_vcpu_arch {
 #define EXCEPT_AA64_EL2_FIQ	__vcpu_except_flags(6)
 #define EXCEPT_AA64_EL2_SERR	__vcpu_except_flags(7)
 /* Guest debug is live */
-#define DEBUG_DIRTY		__vcpu_single_flag(iflags, BIT(4))
+#define DEBUG_DIRTY		__kvm_single_flag(iflags, BIT(4))
 /* Save SPE context if active  */
-#define DEBUG_STATE_SAVE_SPE	__vcpu_single_flag(iflags, BIT(5))
+#define DEBUG_STATE_SAVE_SPE	__kvm_single_flag(iflags, BIT(5))
 /* Save TRBE context if active  */
-#define DEBUG_STATE_SAVE_TRBE	__vcpu_single_flag(iflags, BIT(6))
+#define DEBUG_STATE_SAVE_TRBE	__kvm_single_flag(iflags, BIT(6))
 
 /* SVE enabled for host EL0 */
-#define HOST_SVE_ENABLED	__vcpu_single_flag(sflags, BIT(0))
+#define HOST_SVE_ENABLED	__kvm_single_flag(sflags, BIT(0))
 /* SME enabled for EL0 */
-#define HOST_SME_ENABLED	__vcpu_single_flag(sflags, BIT(1))
+#define HOST_SME_ENABLED	__kvm_single_flag(sflags, BIT(1))
 /* Physical CPU not in supported_cpus */
-#define ON_UNSUPPORTED_CPU	__vcpu_single_flag(sflags, BIT(2))
+#define ON_UNSUPPORTED_CPU	__kvm_single_flag(sflags, BIT(2))
 /* WFIT instruction trapped */
-#define IN_WFIT			__vcpu_single_flag(sflags, BIT(3))
+#define IN_WFIT			__kvm_single_flag(sflags, BIT(3))
 /* vcpu system registers loaded on physical CPU */
-#define SYSREGS_ON_CPU		__vcpu_single_flag(sflags, BIT(4))
+#define SYSREGS_ON_CPU		__kvm_single_flag(sflags, BIT(4))
 /* Software step state is Active-pending */
-#define DBG_SS_ACTIVE_PENDING	__vcpu_single_flag(sflags, BIT(5))
+#define DBG_SS_ACTIVE_PENDING	__kvm_single_flag(sflags, BIT(5))
 /* PMUSERENR for the guest EL0 is on physical CPU */
-#define PMUSERENR_ON_CPU	__vcpu_single_flag(sflags, BIT(6))
+#define PMUSERENR_ON_CPU	__kvm_single_flag(sflags, BIT(6))
 /* WFI instruction trapped */
-#define IN_WFI			__vcpu_single_flag(sflags, BIT(7))
+#define IN_WFI			__kvm_single_flag(sflags, BIT(7))
 
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */

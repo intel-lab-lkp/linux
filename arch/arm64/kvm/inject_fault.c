@@ -83,7 +83,7 @@ static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr
 
 	esr |= ESR_ELx_FSC_EXTABT;
 
-	if (match_target_el(vcpu, unpack_vcpu_flag(EXCEPT_AA64_EL1_SYNC))) {
+	if (match_target_el(vcpu, unpack_kvm_flag(EXCEPT_AA64_EL1_SYNC))) {
 		vcpu_write_sys_reg(vcpu, addr, FAR_EL1);
 		vcpu_write_sys_reg(vcpu, esr, ESR_EL1);
 	} else {
@@ -105,7 +105,7 @@ static void inject_undef64(struct kvm_vcpu *vcpu)
 	if (kvm_vcpu_trap_il_is32bit(vcpu))
 		esr |= ESR_ELx_IL;
 
-	if (match_target_el(vcpu, unpack_vcpu_flag(EXCEPT_AA64_EL1_SYNC)))
+	if (match_target_el(vcpu, unpack_kvm_flag(EXCEPT_AA64_EL1_SYNC)))
 		vcpu_write_sys_reg(vcpu, esr, ESR_EL1);
 	else
 		vcpu_write_sys_reg(vcpu, esr, ESR_EL2);
