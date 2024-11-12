@@ -49,7 +49,7 @@ exar_offset_to_sel_addr(struct exar_gpio_chip *exar_gpio, unsigned int offset)
 {
 	unsigned int pin = exar_gpio->first_pin + (offset % 16);
 	unsigned int cascaded = offset / 16;
-	unsigned int addr = pin / 8 ? EXAR_OFFSET_MPIOSEL_HI : EXAR_OFFSET_MPIOSEL_LO;
+	unsigned int addr = pin >= 8 ? EXAR_OFFSET_MPIOSEL_HI : EXAR_OFFSET_MPIOSEL_LO;
 
 	return addr + (cascaded ? exar_gpio->cascaded_offset : 0);
 }
@@ -59,7 +59,7 @@ exar_offset_to_lvl_addr(struct exar_gpio_chip *exar_gpio, unsigned int offset)
 {
 	unsigned int pin = exar_gpio->first_pin + (offset % 16);
 	unsigned int cascaded = offset / 16;
-	unsigned int addr = pin / 8 ? EXAR_OFFSET_MPIOLVL_HI : EXAR_OFFSET_MPIOLVL_LO;
+	unsigned int addr = pin >= 8 ? EXAR_OFFSET_MPIOLVL_HI : EXAR_OFFSET_MPIOLVL_LO;
 
 	return addr + (cascaded ? exar_gpio->cascaded_offset : 0);
 }
