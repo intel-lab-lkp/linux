@@ -638,6 +638,11 @@ struct kvm_host_data {
 		FP_STATE_GUEST_OWNED,
 	} fp_owner;
 
+	struct {
+		/* Host CPU features, set at init */
+		u8 feats;
+	} flags;
+
 	/*
 	 * host_debug_state contains the host registers which are
 	 * saved and restored during world switches.
@@ -908,10 +913,6 @@ struct kvm_vcpu_arch {
 #define EXCEPT_AA64_EL2_SERR	__vcpu_except_flags(7)
 /* Guest debug is live */
 #define DEBUG_DIRTY		__kvm_single_flag(iflags, BIT(4))
-/* Save SPE context if active  */
-#define DEBUG_STATE_SAVE_SPE	__kvm_single_flag(iflags, BIT(5))
-/* Save TRBE context if active  */
-#define DEBUG_STATE_SAVE_TRBE	__kvm_single_flag(iflags, BIT(6))
 
 /* SVE enabled for host EL0 */
 #define HOST_SVE_ENABLED	__kvm_single_flag(sflags, BIT(0))
@@ -930,6 +931,14 @@ struct kvm_vcpu_arch {
 /* WFI instruction trapped */
 #define IN_WFI			__kvm_single_flag(sflags, BIT(7))
 
+#define host_data_get_flag(...)	__kvm_get_flag((*host_data_ptr(flags)), __VA_ARGS__)
+#define host_data_set_flag(...)	__kvm_set_flag((*host_data_ptr(flags)), __VA_ARGS__)
+#define host_data_clear_flag(...) __kvm_clear_flag((*host_data_ptr(flags)), __VA_ARGS__)
+
+/* Save SPE context if active  */
+#define HOST_FEAT_HAS_SPE	__kvm_single_flag(feats, BIT(0))
+/* Save TRBE context if active  */
+#define HOST_FEAT_HAS_TRBE	__kvm_single_flag(feats, BIT(1))
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
 #define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
@@ -1366,10 +1375,6 @@ static inline bool kvm_pmu_counter_deferred(struct perf_event_attr *attr)
 {
 	return (!has_vhe() && attr->exclude_host);
 }
-
-/* Flags for host debug state */
-void kvm_arch_vcpu_load_debug_state_flags(struct kvm_vcpu *vcpu);
-void kvm_arch_vcpu_put_debug_state_flags(struct kvm_vcpu *vcpu);
 
 #ifdef CONFIG_KVM
 void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr);
