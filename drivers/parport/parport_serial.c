@@ -648,6 +648,7 @@ static int parport_register(struct pci_dev *dev, const struct pci_device_id *id)
 		return -ENODEV;
 
 	for (n = 0; n < card->numports; n++) {
+		struct parport_data tmp_pdata;
 		struct parport *port;
 		int lo = card->addr[n].lo;
 		int hi = card->addr[n].hi;
@@ -684,8 +685,10 @@ static int parport_register(struct pci_dev *dev, const struct pci_device_id *id)
 				"PCI parallel port detected: I/O at %#lx(%#lx), IRQ %d\n",
 				io_lo, io_hi, irq);
 		}
-		port = parport_pc_probe_port (io_lo, io_hi, irq,
-			      PARPORT_DMA_NONE, &dev->dev, IRQF_SHARED);
+		parport_data_ioport_init(&tmp_pdata, io_lo, io_hi,
+					irq, PARPORT_DMA_NONE);
+		port = parport_pc_probe_port(tmp_pdata, &dev->dev,
+						IRQF_SHARED);
 		if (port) {
 			priv->port[priv->num_par++] = port;
 			success = 1;

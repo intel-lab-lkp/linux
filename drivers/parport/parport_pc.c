@@ -2022,9 +2022,7 @@ static int parport_dma_probe(struct parport *p)
 static LIST_HEAD(ports_list);
 static DEFINE_SPINLOCK(ports_lock);
 
-static struct parport *__parport_pc_probe_port(unsigned long int base,
-					       unsigned long int base_hi,
-					       int irq, int dma,
+static struct parport *__parport_pc_probe_port(struct parport_data data,
 					       struct device *dev,
 					       int irqflags,
 					       unsigned int mode_mask,
@@ -2044,7 +2042,7 @@ static struct parport *__parport_pc_probe_port(unsigned long int base,
 		/* We need a physical device to attach to, but none was
 		 * provided. Create our own. */
 		pdev = platform_device_register_simple("parport_pc",
-						       base, NULL, 0);
+						       data.iobase, NULL, 0);
 		if (IS_ERR(pdev))
 			return NULL;
 		dev = &pdev->dev;
@@ -2052,7 +2050,7 @@ static struct parport *__parport_pc_probe_port(unsigned long int base,
 		ret = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(24));
 		if (ret) {
 			dev_err(dev, "Unable to set coherent dma mask: disabling DMA\n");
-			dma = PARPORT_DMA_NONE;
+			data.dma = PARPORT_DMA_NONE;
 		}
 	}
 
@@ -2065,13 +2063,17 @@ static struct parport *__parport_pc_probe_port(unsigned long int base,
 		goto out2;
 
 	/* a misnomer, actually - it's allocate and reserve parport number */
-	p = parport_register_port(base, irq, dma, ops);
+	p = parport_register_port(data.iobase, data.irq, data.dma, ops);
 	if (!p)
 		goto out3;
 
-	base_res = request_region(base, 3, p->name);
-	if (!base_res)
+	if (p->iobase) {
+		base_res = request_region(data.iobase, 3, p->name);
+		if (!base_res)
+			goto out4;
+	} else {
 		goto out4;
+	}
 
 	memcpy(ops, &parport_pc_ops, sizeof(struct parport_operations));
 	priv->ctr = 0xc;
@@ -2085,18 +2087,18 @@ static struct parport *__parport_pc_probe_port(unsigned long int base,
 	priv->port = p;
 
 	p->dev = dev;
-	p->iobase_hi = base_hi;
+	p->iobase_hi = data.iobase_hi;
 	p->modes = PARPORT_MODE_PCSPP | PARPORT_MODE_SAFEININT;
 	p->private_data = priv;
 
-	if (base_hi) {
-		ECR_res = request_region(base_hi, 3, p->name);
+	if (p->iobase_hi) {
+		ECR_res = request_region(data.iobase_hi, 3, p->name);
 		if (ECR_res)
 			parport_ECR_present(p);
 	}
 
-	if (base != 0x3bc) {
-		EPP_res = request_region(base+0x3, 5, p->name);
+	if (p->iobase != 0x3bc) {
+		EPP_res = request_region(data.iobase + 0x3, 5, p->name);
 		if (EPP_res)
 			if (!parport_EPP_supported(p))
 				parport_ECPEPP_supported(p);
@@ -2191,13 +2193,16 @@ do {									\
 		pr_info("%s: irq %d detected\n", p->name, probedirq);
 
 	/* If No ECP release the ports grabbed above. */
-	if (ECR_res && (p->modes & PARPORT_MODE_ECP) == 0) {
-		release_region(base_hi, 3);
-		ECR_res = NULL;
+	if ((p->modes & PARPORT_MODE_ECP) == 0) {
+		if (p->iobase_hi && ECR_res) {
+			release_region(p->iobase_hi, 3);
+			ECR_res = NULL;
+		}
 	}
+
 	/* Likewise for EEP ports */
-	if (EPP_res && (p->modes & PARPORT_MODE_EPP) == 0) {
-		release_region(base+3, 5);
+	if (p->iobase && EPP_res && (p->modes & PARPORT_MODE_EPP) == 0) {
+		release_region(p->iobase + 3, 5);
 		EPP_res = NULL;
 	}
 	if (p->irq != PARPORT_IRQ_NONE) {
@@ -2257,10 +2262,10 @@ do {									\
 
 out5:
 	if (ECR_res)
-		release_region(base_hi, 3);
+		release_region(p->iobase_hi, 3);
 	if (EPP_res)
-		release_region(base+0x3, 5);
-	release_region(base, 3);
+		release_region(p->iobase + 0x3, 5);
+	release_region(p->iobase, 3);
 out4:
 	parport_del_port(p);
 out3:
@@ -2273,14 +2278,24 @@ out1:
 	return NULL;
 }
 
-struct parport *parport_pc_probe_port(unsigned long int base,
-				      unsigned long int base_hi,
-				      int irq, int dma,
+void parport_data_ioport_init(struct parport_data *tmp_pdata,
+			      unsigned long iobase,
+			      unsigned long iobase_hi,
+			      int irq, int dma)
+{
+	memset(tmp_pdata, 0, sizeof(struct parport_data));
+	tmp_pdata->iobase = iobase;
+	tmp_pdata->iobase_hi = iobase_hi;
+	tmp_pdata->irq = irq;
+	tmp_pdata->dma = dma;
+}
+EXPORT_SYMBOL(parport_data_ioport_init);
+
+struct parport *parport_pc_probe_port(struct parport_data data,
 				      struct device *dev,
 				      int irqflags)
 {
-	return __parport_pc_probe_port(base, base_hi, irq, dma,
-				       dev, irqflags, 0, 0);
+	return __parport_pc_probe_port(data, dev, irqflags, 0, 0);
 }
 EXPORT_SYMBOL(parport_pc_probe_port);
 
@@ -2325,6 +2340,7 @@ static int sio_ite_8872_probe(struct pci_dev *pdev, int autoirq, int autodma,
 	short inta_addr[6] = { 0x2A0, 0x2C0, 0x220, 0x240, 0x1E0 };
 	u32 ite8872set;
 	u32 ite8872_lpt, ite8872_lpthi;
+	struct parport_data tmp_pdata;
 	u8 ite8872_irq, type;
 	int irq;
 	int i;
@@ -2407,8 +2423,9 @@ static int sio_ite_8872_probe(struct pci_dev *pdev, int autoirq, int autodma,
 	 * Release the resource so that parport_pc_probe_port can get it.
 	 */
 	release_region(inta_addr[i], 32);
-	if (parport_pc_probe_port(ite8872_lpt, ite8872_lpthi,
-				   irq, PARPORT_DMA_NONE, &pdev->dev, 0)) {
+	parport_data_ioport_init(&tmp_pdata, ite8872_lpt, ite8872_lpthi, irq,
+				PARPORT_DMA_NONE);
+	if (parport_pc_probe_port(tmp_pdata, &pdev->dev, 0)) {
 		pr_info("parport_pc: ITE 8872 parallel port: io=0x%X",
 			ite8872_lpt);
 		if (irq != PARPORT_IRQ_NONE)
@@ -2447,6 +2464,7 @@ static struct parport_pc_via_data via_8231_data = {
 static int sio_via_probe(struct pci_dev *pdev, int autoirq, int autodma,
 			 const struct parport_pc_via_data *via)
 {
+	struct parport_data tmp_pdata;
 	u8 tmp, tmp2, siofunc;
 	u8 ppcontrol = 0;
 	int dma, irq;
@@ -2587,7 +2605,8 @@ static int sio_via_probe(struct pci_dev *pdev, int autoirq, int autodma,
 	}
 
 	/* finally, do the probe with values obtained */
-	if (parport_pc_probe_port(port1, port2, irq, dma, &pdev->dev, 0)) {
+	parport_data_ioport_init(&tmp_pdata, port1, port2, irq, dma);
+	if (parport_pc_probe_port(tmp_pdata, &pdev->dev, 0)) {
 		pr_info("parport_pc: VIA parallel port: io=0x%X", port1);
 		if (irq != PARPORT_IRQ_NONE)
 			pr_cont(", irq=%d", irq);
@@ -2868,6 +2887,7 @@ static int parport_pc_pci_probe(struct pci_dev *dev,
 {
 	int err, count, n, i = id->driver_data;
 	struct pci_parport_data *data;
+	struct parport_data tmp_pdata;
 
 	if (i < last_sio)
 		/* This is an onboard Super-IO and has already been probed */
@@ -2913,9 +2933,10 @@ static int parport_pc_pci_probe(struct pci_dev *dev,
 			printk(KERN_DEBUG "PCI parallel port detected: %04x:%04x, I/O at %#lx(%#lx), IRQ %d\n",
 			       id->vendor, id->device, io_lo, io_hi, irq);
 		}
+		parport_data_ioport_init(&tmp_pdata, io_lo, io_hi,
+					irq, PARPORT_DMA_NONE);
 		data->ports[count] =
-			__parport_pc_probe_port(io_lo, io_hi, irq,
-						PARPORT_DMA_NONE, &dev->dev,
+			__parport_pc_probe_port(tmp_pdata, &dev->dev,
 						IRQF_SHARED,
 						cards[i].mode_mask,
 						cards[i].ecr_writable);
@@ -3002,35 +3023,35 @@ static int parport_pc_pnp_probe(struct pnp_dev *dev,
 						const struct pnp_device_id *id)
 {
 	struct parport *pdata;
-	unsigned long io_lo, io_hi;
-	int dma, irq;
+	struct parport_data tmp_pdata;
 
+	memset(&tmp_pdata, 0, sizeof(struct parport_data));
 	if (pnp_port_valid(dev, 0) &&
 		!(pnp_port_flags(dev, 0) & IORESOURCE_DISABLED)) {
-		io_lo = pnp_port_start(dev, 0);
+		tmp_pdata.iobase = pnp_port_start(dev, 0);
 	} else
 		return -EINVAL;
 
 	if (pnp_port_valid(dev, 1) &&
 		!(pnp_port_flags(dev, 1) & IORESOURCE_DISABLED)) {
-		io_hi = pnp_port_start(dev, 1);
+		tmp_pdata.iobase_hi = pnp_port_start(dev, 1);
 	} else
-		io_hi = 0;
+		tmp_pdata.iobase_hi = 0;
 
 	if (pnp_irq_valid(dev, 0) &&
 		!(pnp_irq_flags(dev, 0) & IORESOURCE_DISABLED)) {
-		irq = pnp_irq(dev, 0);
+		tmp_pdata.irq = pnp_irq(dev, 0);
 	} else
-		irq = PARPORT_IRQ_NONE;
+		tmp_pdata.irq = PARPORT_IRQ_NONE;
 
 	if (pnp_dma_valid(dev, 0) &&
 		!(pnp_dma_flags(dev, 0) & IORESOURCE_DISABLED)) {
-		dma = pnp_dma(dev, 0);
+		tmp_pdata.dma = pnp_dma(dev, 0);
 	} else
-		dma = PARPORT_DMA_NONE;
+		tmp_pdata.dma = PARPORT_DMA_NONE;
 
 	dev_info(&dev->dev, "reported by %s\n", dev->protocol->name);
-	pdata = parport_pc_probe_port(io_lo, io_hi, irq, dma, &dev->dev, 0);
+	pdata = parport_pc_probe_port(tmp_pdata, &dev->dev, 0);
 	if (pdata == NULL)
 		return -ENODEV;
 
@@ -3077,13 +3098,17 @@ static struct platform_driver parport_pc_platform_driver = {
 static int __attribute__((unused))
 parport_pc_find_isa_ports(int autoirq, int autodma)
 {
+	struct parport_data tmp_pdata;
 	int count = 0;
 
-	if (parport_pc_probe_port(0x3bc, 0x7bc, autoirq, autodma, NULL, 0))
+	parport_data_ioport_init(&tmp_pdata, 0x3bc, 0x7bc, autoirq, autodma);
+	if (parport_pc_probe_port(tmp_pdata, NULL, 0))
 		count++;
-	if (parport_pc_probe_port(0x378, 0x778, autoirq, autodma, NULL, 0))
+	parport_data_ioport_init(&tmp_pdata, 0x378, 0x778, autoirq, autodma);
+	if (parport_pc_probe_port(tmp_pdata, NULL, 0))
 		count++;
-	if (parport_pc_probe_port(0x278, 0x678, autoirq, autodma, NULL, 0))
+	parport_data_ioport_init(&tmp_pdata, 0x278, 0x678, autoirq, autodma);
+	if (parport_pc_probe_port(tmp_pdata, NULL, 0))
 		count++;
 
 	return count;
@@ -3352,6 +3377,7 @@ __setup("parport_init_mode=", parport_init_mode_setup);
 
 static int __init parport_pc_init(void)
 {
+	struct parport_data tmp_pdata;
 	int err;
 
 	if (parse_parport_params())
@@ -3370,8 +3396,9 @@ static int __init parport_pc_init(void)
 				break;
 			if (io_hi[i] == PARPORT_IOHI_AUTO)
 				io_hi[i] = 0x400 + io[i];
-			parport_pc_probe_port(io[i], io_hi[i],
-					irqval[i], dmaval[i], NULL, 0);
+			parport_data_ioport_init(&tmp_pdata, io[i], io_hi[i],
+						irqval[i], dmaval[i]);
+			parport_pc_probe_port(tmp_pdata, NULL, 0);
 		}
 	} else
 		parport_pc_find_ports(irqval[0], dmaval[0]);

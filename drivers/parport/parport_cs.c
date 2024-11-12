@@ -118,42 +118,43 @@ static int parport_config_check(struct pcmcia_device *p_dev, void *priv_data)
 
 static int parport_config(struct pcmcia_device *link)
 {
-    parport_info_t *info = link->priv;
-    struct parport *p;
-    int ret;
+	parport_info_t *info = link->priv;
+	struct parport *p;
+	struct parport_data tmp_pdata;
+	int ret;
 
-    dev_dbg(&link->dev, "parport_config\n");
+	dev_dbg(&link->dev, "parport_config\n");
 
-    if (epp_mode)
-	    link->config_index |= FORCE_EPP_MODE;
+	if (epp_mode)
+		link->config_index |= FORCE_EPP_MODE;
 
-    ret = pcmcia_loop_config(link, parport_config_check, NULL);
-    if (ret)
-	    goto failed;
+	ret = pcmcia_loop_config(link, parport_config_check, NULL);
+	if (ret)
+		goto failed;
 
-    if (!link->irq)
-	    goto failed;
-    ret = pcmcia_enable_device(link);
-    if (ret)
-	    goto failed;
+	if (!link->irq)
+		goto failed;
+	ret = pcmcia_enable_device(link);
+	if (ret)
+		goto failed;
 
-    p = parport_pc_probe_port(link->resource[0]->start,
-			      link->resource[1]->start,
-			      link->irq, PARPORT_DMA_NONE,
-			      &link->dev, IRQF_SHARED);
-    if (p == NULL) {
-	    pr_notice("parport_cs: parport_pc_probe_port() at 0x%3x, irq %u failed\n",
-		      (unsigned int)link->resource[0]->start, link->irq);
-	goto failed;
-    }
+	parport_data_ioport_init(&tmp_pdata, link->resource[0]->start,
+				link->resource[1]->start,
+				link->irq, PARPORT_DMA_NONE);
+	p = parport_pc_probe_port(tmp_pdata, &link->dev, IRQF_SHARED);
+	if (p == NULL) {
+		pr_notice("parport_cs: parport_pc_probe_port() at 0x%3x, irq %u failed\n",
+				(unsigned int)link->resource[0]->start, link->irq);
+		goto failed;
+	}
 
-    p->modes |= PARPORT_MODE_PCSPP;
-    if (epp_mode)
-	p->modes |= PARPORT_MODE_TRISTATE | PARPORT_MODE_EPP;
-    info->ndev = 1;
-    info->port = p;
+	p->modes |= PARPORT_MODE_PCSPP;
+	if (epp_mode)
+		p->modes |= PARPORT_MODE_TRISTATE | PARPORT_MODE_EPP;
+	info->ndev = 1;
+	info->port = p;
 
-    return 0;
+	return 0;
 
 failed:
 	parport_cs_release(link);
