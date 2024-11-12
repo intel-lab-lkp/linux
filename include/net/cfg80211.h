@@ -9671,7 +9671,8 @@ void cfg80211_schedule_channels_check(struct wireless_dev *wdev);
  * wiphy_locked_debugfs_read - do a locked read in debugfs
  * @wiphy: the wiphy to use
  * @file: the file being read
- * @buf: the buffer to fill and then read from
+ * @buf: the buffer to fill and then read from, can be %NULL
+ *	to allocate a buffer of @bufsize size
  * @bufsize: size of the buffer
  * @userbuf: the user buffer to copy to
  * @count: read count
@@ -9696,7 +9697,8 @@ ssize_t wiphy_locked_debugfs_read(struct wiphy *wiphy, struct file *file,
  * wiphy_locked_debugfs_write - do a locked write in debugfs
  * @wiphy: the wiphy to use
  * @file: the file being written to
- * @buf: the buffer to copy the user data to
+ * @buf: the buffer to copy the user data to, can be %NULL
+ *	to allocate a buffer of @bufsize size
  * @bufsize: size of the buffer
  * @userbuf: the user buffer to copy from
  * @count: read count

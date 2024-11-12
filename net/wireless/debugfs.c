@@ -160,7 +160,6 @@ ssize_t wiphy_locked_debugfs_read(struct wiphy *wiphy, struct file *file,
 		.handler = handler,
 		.wiphy = wiphy,
 		.file = file,
-		.buf = buf,
 		.bufsize = bufsize,
 		.data = data,
 		.ret = -ENODEV,
@@ -170,10 +169,19 @@ ssize_t wiphy_locked_debugfs_read(struct wiphy *wiphy, struct file *file,
 		.cancel = wiphy_locked_debugfs_read_cancel,
 		.cancel_data = &work,
 	};
+	void *tmp __free(kfree) = NULL;
 
-	/* don't leak stack data or whatever */
-	memset(buf, 0, bufsize);
+	if (buf) {
+		/* don't leak stack data or whatever */
+		memset(buf, 0, bufsize);
+	} else {
+		tmp = kzalloc(bufsize, GFP_KERNEL);
+		if (!tmp)
+			return -ENOMEM;
+		buf = tmp;
+	}
 
+	work.buf = buf;
 	wiphy_work_init(&work.work, wiphy_locked_debugfs_read_work);
 	wiphy_work_queue(wiphy, &work.work);
 
@@ -239,7 +247,6 @@ ssize_t wiphy_locked_debugfs_write(struct wiphy *wiphy,
 		.handler = handler,
 		.wiphy = wiphy,
 		.file = file,
-		.buf = buf,
 		.count = count,
 		.data = data,
 		.ret = -ENODEV,
@@ -249,12 +256,23 @@ ssize_t wiphy_locked_debugfs_write(struct wiphy *wiphy,
 		.cancel = wiphy_locked_debugfs_write_cancel,
 		.cancel_data = &work,
 	};
+	void *tmp __free(kfree) = NULL;
 
 	/* mostly used for strings so enforce NUL-termination for safety */
 	if (count >= bufsize)
 		return -EINVAL;
 
-	memset(buf, 0, bufsize);
+	if (buf) {
+		/* don't leak stack data or whatever */
+		memset(buf, 0, bufsize);
+	} else {
+		tmp = kzalloc(bufsize, GFP_KERNEL);
+		if (!tmp)
+			return -ENOMEM;
+		buf = tmp;
+	}
+
+	work.buf = buf;
 
 	if (copy_from_user(buf, userbuf, count))
 		return -EFAULT;
