@@ -7242,8 +7242,7 @@ static void create_eml_sink(struct amdgpu_dm_connector *aconnector)
 	edid = drm_edid_raw(drm_edid); // FIXME: Get rid of drm_edid_raw()
 	aconnector->dc_em_sink = dc_link_add_remote_sink(
 		aconnector->dc_link,
-		(uint8_t *)edid,
-		(edid->extensions + 1) * EDID_LENGTH,
+		edid,
 		&init_params);
 
 	if (aconnector->base.force == DRM_FORCE_ON) {

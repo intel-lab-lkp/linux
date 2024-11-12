@@ -48,6 +48,8 @@
 #include "dm_helpers.h"
 #include "clk_mgr.h"
 
+#include <drm/drm_edid.h>
+
  // Offset DPCD 050Eh == 0x5A
 #define MST_HUB_ID_0x5A  0x5A
 
@@ -1390,10 +1392,10 @@ static bool link_add_remote_sink_helper(struct dc_link *dc_link, struct dc_sink 
 
 struct dc_sink *link_add_remote_sink(
 		struct dc_link *link,
-		const uint8_t *edid,
-		int len,
+		const struct edid *edid,
 		struct dc_sink_init_data *init_data)
 {
+	int len = edid ? (edid->extensions + 1) * EDID_LENGTH : 0;
 	struct dc_sink *dc_sink;
 	enum dc_edid_status edid_status;
 

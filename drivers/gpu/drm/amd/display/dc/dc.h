@@ -1846,14 +1846,12 @@ struct dc_sink_init_data;
  * called.
  *
  * @dc_link - link the remote sink will be added to.
- * @edid - byte array of EDID raw data.
- * @len - size of the edid in byte
+ * @edid - EDID data.
  * @init_data -
  */
 struct dc_sink *dc_link_add_remote_sink(
 		struct dc_link *dc_link,
-		const uint8_t *edid,
-		int len,
+		const struct edid *edid,
 		struct dc_sink_init_data *init_data);
 
 /* Remove remote sink from a link with dc_connection_mst_branch connection type.
