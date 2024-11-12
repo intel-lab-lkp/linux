@@ -2844,11 +2844,12 @@ skl_program_dpkgc_latency(struct drm_i915_private *i915,
 			  bool fixed_refresh_rate,
 			  u32 max_linetime)
 {
+	struct intel_display *display = to_intel_display(&i915->drm);
 	u32 latency = LNL_PKG_C_LATENCY_MASK;
 	u32 clear = 0, val = 0;
 	u32 added_wake_time = 0;
 
-	if (DISPLAY_VER(i915) < 20)
+	if (DISPLAY_VER(display) < 20)
 		return;
 
 	if (fixed_refresh_rate) {
@@ -2864,14 +2865,14 @@ skl_program_dpkgc_latency(struct drm_i915_private *i915,
 		}
 
 		added_wake_time = DSB_EXE_TIME +
-			i915->display.sagv.block_time_us;
+			display->sagv.block_time_us;
 	}
 
 	clear |= LNL_ADDED_WAKE_TIME_MASK | LNL_PKG_C_LATENCY_MASK;
 	val |= REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, latency) |
 		REG_FIELD_PREP(LNL_ADDED_WAKE_TIME_MASK, added_wake_time);
 
-	intel_uncore_rmw(&i915->uncore, LNL_PKG_C_LATENCY, clear, val);
+	intel_de_rmw(display, LNL_PKG_C_LATENCY, clear, val);
 }
 
 static int
