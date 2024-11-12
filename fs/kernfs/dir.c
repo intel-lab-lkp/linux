@@ -51,14 +51,6 @@ static bool kernfs_lockdep(struct kernfs_node *kn)
 #endif
 }
 
-static int kernfs_name_locked(struct kernfs_node *kn, char *buf, size_t buflen)
-{
-	if (!kn)
-		return strscpy(buf, "(null)", buflen);
-
-	return strscpy(buf, kn->parent ? kn->name : "/", buflen);
-}
-
 /* kernfs_node_depth - compute depth from @from to @to */
 static size_t kernfs_depth(struct kernfs_node *from, struct kernfs_node *to)
 {
@@ -168,10 +160,13 @@ static int kernfs_path_from_node_locked(struct kernfs_node *kn_to,
 
 	/* Calculate how many bytes we need for the rest */
 	for (i = depth_to - 1; i >= 0; i--) {
+		const char *name;
+
 		for (kn = kn_to, j = 0; j < i; j++)
 			kn = kn->parent;
 
-		len += scnprintf(buf + len, buflen - len, "/%s", kn->name);
+		name = rcu_dereference_check(kn->name_rcu, lockdep_is_held(&kernfs_rename_lock));
+		len += scnprintf(buf + len, buflen - len, "/%s", name);
 	}
 
 	return len;
@@ -184,7 +179,8 @@ static int kernfs_path_from_node_locked(struct kernfs_node *kn_to,
  * @buflen: size of @buf
  *
  * Copies the name of @kn into @buf of @buflen bytes.  The behavior is
- * similar to strscpy().
+ * similar to strscpy(). The root node must not be initialized with
+ * KERNFS_ROOT_SAME_PARENT.
  *
  * Fills buffer with "(null)" if @kn is %NULL.
  *
@@ -195,13 +191,47 @@ static int kernfs_path_from_node_locked(struct kernfs_node *kn_to,
  */
 int kernfs_name(struct kernfs_node *kn, char *buf, size_t buflen)
 {
-	unsigned long flags;
-	int ret;
+	struct kernfs_root *root;
 
-	read_lock_irqsave(&kernfs_rename_lock, flags);
-	ret = kernfs_name_locked(kn, buf, buflen);
-	read_unlock_irqrestore(&kernfs_rename_lock, flags);
-	return ret;
+	guard(read_lock_irqsave)(&kernfs_rename_lock);
+	if (kn) {
+		root = kernfs_root(kn);
+		if (WARN_ON_ONCE(root->flags & KERNFS_ROOT_SAME_PARENT))
+			kn = NULL;
+	}
+
+	if (!kn)
+		return strscpy(buf, "(null)", buflen);
+
+	return strscpy(buf, kn->parent ? kn->name : "/", buflen);
+}
+
+/**
+ * kernfs_name_rcu - obtain the name of a given node
+ * @kn: kernfs_node of interest
+ * @buf: buffer to copy @kn's name into
+ * @buflen: size of @buf
+ *
+ * Same as kernfs_name except it uses RCU for name lookup. The root node must
+ * be with KERNFS_ROOT_SAME_PARENT.
+ *
+ * This function can be called from any context.
+ */
+
+int kernfs_name_rcu(struct kernfs_node *kn, char *buf, size_t buflen)
+{
+	struct kernfs_root *root;
+
+	if (kn) {
+		root = kernfs_root(kn);
+		if (WARN_ON_ONCE(!(root->flags & KERNFS_ROOT_SAME_PARENT)))
+			kn = NULL;
+	}
+	if (!kn)
+		return strscpy(buf, "(null)", buflen);
+
+	guard(rcu)();
+	return strscpy(buf, kn->parent ? rcu_dereference(kn->name_rcu) : "/", buflen);
 }
 
 /**
@@ -214,7 +244,8 @@ int kernfs_name(struct kernfs_node *kn, char *buf, size_t buflen)
  * Builds @to's path relative to @from in @buf. @from and @to must
  * be on the same kernfs-root. If @from is not parent of @to, then a relative
  * path (which includes '..'s) as needed to reach from @from to @to is
- * returned.
+ * returned. The root node must not be initialized with
+ * KERNFS_ROOT_SAME_PARENT.
  *
  * Return: the length of the constructed path.  If the path would have been
  * greater than @buflen, @buf contains the truncated path with the trailing
@@ -223,15 +254,41 @@ int kernfs_name(struct kernfs_node *kn, char *buf, size_t buflen)
 int kernfs_path_from_node(struct kernfs_node *to, struct kernfs_node *from,
 			  char *buf, size_t buflen)
 {
-	unsigned long flags;
-	int ret;
+	struct kernfs_root *root;
 
-	read_lock_irqsave(&kernfs_rename_lock, flags);
-	ret = kernfs_path_from_node_locked(to, from, buf, buflen);
-	read_unlock_irqrestore(&kernfs_rename_lock, flags);
-	return ret;
+	guard(read_lock_irqsave)(&kernfs_rename_lock);
+	if (to) {
+		root = kernfs_root(to);
+		if (WARN_ON_ONCE(root->flags & KERNFS_ROOT_SAME_PARENT))
+			to = NULL;
+	}
+	return kernfs_path_from_node_locked(to, from, buf, buflen);
 }
 EXPORT_SYMBOL_GPL(kernfs_path_from_node);
+
+/**
+ * kernfs_path_from_node_rcu - build path of node @to relative to @from.
+ * @from: parent kernfs_node relative to which we need to build the path
+ * @to: kernfs_node of interest
+ * @buf: buffer to copy @to's path into
+ * @buflen: size of @buf
+ *
+ * Same as kernfs_path_from_node. Uses RCU for the name lookup. The root node
+ * must be initialized with KERNFS_ROOT_SAME_PARENT.
+ */
+int kernfs_path_from_node_rcu(struct kernfs_node *to, struct kernfs_node *from,
+			      char *buf, size_t buflen)
+{
+	struct kernfs_root *root;
+
+	if (to) {
+		root = kernfs_root(to);
+		if (WARN_ON_ONCE(!(root->flags & KERNFS_ROOT_SAME_PARENT)))
+			to = NULL;
+	}
+	guard(rcu)();
+	return kernfs_path_from_node_locked(to, from, buf, buflen);
+}
 
 /**
  * pr_cont_kernfs_name - pr_cont name of a kernfs_node
@@ -1717,7 +1774,8 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 {
 	struct kernfs_node *old_parent;
 	struct kernfs_root *root;
-	const char *old_name = NULL;
+	bool rcu_name = false;
+	const char *kn_name;
 	int error;
 
 	/* can't move or rename root */
@@ -1732,9 +1790,18 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 	    (new_parent->flags & KERNFS_EMPTY_DIR))
 		goto out;
 
+	if (root->flags & KERNFS_ROOT_SAME_PARENT) {
+		error = -EINVAL;
+		if (WARN_ON_ONCE(kn->parent != new_parent))
+			goto out;
+		rcu_name = true;
+	}
+
 	error = 0;
+	kn_name = rcu_dereference_check(kn->name_rcu,
+					lockdep_is_held(&root->kernfs_rwsem));
 	if ((kn->parent == new_parent) && (kn->ns == new_ns) &&
-	    (strcmp(kn->name, new_name) == 0))
+	    (strcmp(kn_name, new_name) == 0))
 		goto out;	/* nothing to rename */
 
 	error = -EEXIST;
@@ -1742,7 +1809,7 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 		goto out;
 
 	/* rename kernfs_node */
-	if (strcmp(kn->name, new_name) != 0) {
+	if (strcmp(kn_name, new_name) != 0) {
 		error = -ENOMEM;
 		new_name = kstrdup_const(new_name, GFP_KERNEL);
 		if (!new_name)
@@ -1755,27 +1822,33 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 	 * Move to the appropriate place in the appropriate directories rbtree.
 	 */
 	kernfs_unlink_sibling(kn);
-	kernfs_get(new_parent);
 
 	/* rename_lock protects ->parent and ->name accessors */
-	write_lock_irq(&kernfs_rename_lock);
+	if (!rcu_name) {
+		write_lock_irq(&kernfs_rename_lock);
 
-	old_parent = kn->parent;
-	kn->parent = new_parent;
+		kernfs_get(new_parent);
+		old_parent = kn->parent;
+		kn->parent = new_parent;
 
-	kn->ns = new_ns;
-	if (new_name) {
-		old_name = kn->name;
-		kn->name = new_name;
+		kn->ns = new_ns;
+		if (new_name)
+			kn->name = new_name;
+
+		write_unlock_irq(&kernfs_rename_lock);
+		kernfs_put(old_parent);
+	} else {
+		/* name assignment is RCU protected, parent is the same */
+		kn->ns = new_ns;
+		if (new_name)
+			rcu_assign_pointer(kn->name_rcu, new_name);
 	}
 
-	write_unlock_irq(&kernfs_rename_lock);
-
-	kn->hash = kernfs_name_hash(kn->name, kn->ns);
+	kn->hash = kernfs_name_hash(new_name ?: kn_name, kn->ns);
 	kernfs_link_sibling(kn);
 
-	kernfs_put(old_parent);
-	kfree_const(old_name);
+	if (new_name && !is_kernel_rodata((unsigned long)kn_name))
+		kfree_rcu_mightsleep(kn_name);
 
 	error = 0;
  out:

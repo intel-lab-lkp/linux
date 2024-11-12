@@ -147,6 +147,11 @@ enum kernfs_root_flag {
 	 * Support user xattrs to be written to nodes rooted at this root.
 	 */
 	KERNFS_ROOT_SUPPORT_USER_XATTR		= 0x0008,
+
+	/*
+	 * Renames must not change the parent node.
+	 */
+	KERNFS_ROOT_SAME_PARENT			= 0x0010,
 };
 
 /* type-specific structures for kernfs_node union members */
@@ -200,7 +205,10 @@ struct kernfs_node {
 	 * parent directly.
 	 */
 	struct kernfs_node	*parent;
-	const char		*name;
+	union {
+		const char		__rcu *name_rcu;
+		const char		*name;
+	};
 
 	struct rb_node		rb;
 
@@ -395,8 +403,11 @@ static inline bool kernfs_ns_enabled(struct kernfs_node *kn)
 }
 
 int kernfs_name(struct kernfs_node *kn, char *buf, size_t buflen);
-int kernfs_path_from_node(struct kernfs_node *root_kn, struct kernfs_node *kn,
+int kernfs_name_rcu(struct kernfs_node *kn, char *buf, size_t buflen);
+int kernfs_path_from_node(struct kernfs_node *kn_to, struct kernfs_node *kn_from,
 			  char *buf, size_t buflen);
+int kernfs_path_from_node_rcu(struct kernfs_node *kn_to, struct kernfs_node *kn_from,
+			      char *buf, size_t buflen);
 void pr_cont_kernfs_name(struct kernfs_node *kn);
 void pr_cont_kernfs_path(struct kernfs_node *kn);
 struct kernfs_node *kernfs_get_parent(struct kernfs_node *kn);
@@ -475,9 +486,17 @@ static inline bool kernfs_ns_enabled(struct kernfs_node *kn)
 static inline int kernfs_name(struct kernfs_node *kn, char *buf, size_t buflen)
 { return -ENOSYS; }
 
+static inline int kernfs_name_rcu(struct kernfs_node *kn, char *buf, size_t buflen)
+{ return -ENOSYS; }
+
 static inline int kernfs_path_from_node(struct kernfs_node *root_kn,
 					struct kernfs_node *kn,
 					char *buf, size_t buflen)
+{ return -ENOSYS; }
+
+static inline int kernfs_path_from_node_rcu(struct kernfs_node *root_kn,
+					    struct kernfs_node *kn,
+					    char *buf, size_t buflen)
 { return -ENOSYS; }
 
 static inline void pr_cont_kernfs_name(struct kernfs_node *kn) { }
