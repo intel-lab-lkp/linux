@@ -5011,6 +5011,116 @@ out_acct:
 	return ret;
 }
 
+static int btrfs_uring_encoded_write(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	struct btrfs_ioctl_encoded_io_args args;
+	struct iovec iovstack[UIO_FASTIOV];
+	struct iovec *iov = iovstack;
+	struct iov_iter iter;
+	loff_t pos;
+	struct kiocb kiocb;
+	struct file *file;
+	ssize_t ret;
+	void __user *sqe_addr;
+
+	if (!capable(CAP_SYS_ADMIN)) {
+		ret = -EPERM;
+		goto out_acct;
+	}
+
+	file = cmd->file;
+	sqe_addr = u64_to_user_ptr(READ_ONCE(cmd->sqe->addr));
+
+	if (!(file->f_mode & FMODE_WRITE)) {
+		ret = -EBADF;
+		goto out_acct;
+	}
+
+	if (issue_flags & IO_URING_F_COMPAT) {
+#if defined(CONFIG_64BIT) && defined(CONFIG_COMPAT)
+		struct btrfs_ioctl_encoded_io_args_32 args32;
+
+		if (copy_from_user(&args32, sqe_addr, sizeof(args32))) {
+			ret = -EFAULT;
+			goto out_acct;
+		}
+		args.iov = compat_ptr(args32.iov);
+		args.iovcnt = args32.iovcnt;
+		args.offset = args32.offset;
+		args.flags = args32.flags;
+		args.len = args32.len;
+		args.unencoded_len = args32.unencoded_len;
+		args.unencoded_offset = args32.unencoded_offset;
+		args.compression = args32.compression;
+		args.encryption = args32.encryption;
+		memcpy(args.reserved, args32.reserved, sizeof(args.reserved));
+#else
+		return -ENOTTY;
+#endif
+	} else {
+		if (copy_from_user(&args, sqe_addr, sizeof(args))) {
+			ret = -EFAULT;
+			goto out_acct;
+		}
+	}
+
+	ret = -EINVAL;
+	if (args.flags != 0)
+		goto out_acct;
+	if (memchr_inv(args.reserved, 0, sizeof(args.reserved)))
+		goto out_acct;
+	if (args.compression == BTRFS_ENCODED_IO_COMPRESSION_NONE &&
+	    args.encryption == BTRFS_ENCODED_IO_ENCRYPTION_NONE)
+		goto out_acct;
+	if (args.compression >= BTRFS_ENCODED_IO_COMPRESSION_TYPES ||
+	    args.encryption >= BTRFS_ENCODED_IO_ENCRYPTION_TYPES)
+		goto out_acct;
+	if (args.unencoded_offset > args.unencoded_len)
+		goto out_acct;
+	if (args.len > args.unencoded_len - args.unencoded_offset)
+		goto out_acct;
+
+	if (issue_flags & IO_URING_F_NONBLOCK) {
+		ret = -EAGAIN;
+		goto out_acct;
+	}
+
+	ret = import_iovec(ITER_SOURCE, args.iov, args.iovcnt, ARRAY_SIZE(iovstack),
+			   &iov, &iter);
+	if (ret < 0)
+		goto out_acct;
+
+	if (iov_iter_count(&iter) == 0) {
+		ret = 0;
+		goto out_iov;
+	}
+	pos = args.offset;
+	ret = rw_verify_area(WRITE, file, &pos, args.len);
+	if (ret < 0)
+		goto out_iov;
+
+	init_sync_kiocb(&kiocb, file);
+	ret = kiocb_set_rw_flags(&kiocb, 0, WRITE);
+	if (ret)
+		goto out_iov;
+	kiocb.ki_pos = pos;
+
+	file_start_write(file);
+
+	ret = btrfs_do_write_iter(&kiocb, &iter, &args);
+	if (ret > 0)
+		fsnotify_modify(file);
+
+	file_end_write(file);
+out_iov:
+	kfree(iov);
+out_acct:
+	if (ret > 0)
+		add_wchar(current, ret);
+	inc_syscw(current);
+	return ret;
+}
+
 int btrfs_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 {
 	switch (cmd->cmd_op) {
@@ -5019,6 +5129,12 @@ int btrfs_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	case BTRFS_IOC_ENCODED_READ_32:
 #endif
 		return btrfs_uring_encoded_read(cmd, issue_flags);
+
+	case BTRFS_IOC_ENCODED_WRITE:
+#if defined(CONFIG_64BIT) && defined(CONFIG_COMPAT)
+	case BTRFS_IOC_ENCODED_WRITE_32:
+#endif
+		return btrfs_uring_encoded_write(cmd, issue_flags);
 	}
 
 	return -EINVAL;
