@@ -139,7 +139,7 @@ static struct aat2870_regulator *aat2870_get_regulator(int id)
 	ri->enable_shift = id - AAT2870_ID_LDOA;
 	ri->enable_mask = 0x1 << ri->enable_shift;
 
-	ri->voltage_addr = (id - AAT2870_ID_LDOA) / 2 ?
+	ri->voltage_addr = (id - AAT2870_ID_LDOA) >= 2 ?
 			   AAT2870_LDO_CD : AAT2870_LDO_AB;
 	ri->voltage_shift = (id - AAT2870_ID_LDOA) % 2 ? 0 : 4;
 	ri->voltage_mask = 0xF << ri->voltage_shift;
