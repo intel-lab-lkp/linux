@@ -29,4 +29,5 @@ void skl_scaler_disable(const struct intel_crtc_state *old_crtc_state);
 
 void skl_scaler_get_config(struct intel_crtc_state *crtc_state);
 
+int skl_calc_scaler_prefill_latency(struct intel_crtc_state *crtc_state);
 #endif

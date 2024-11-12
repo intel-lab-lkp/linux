@@ -6,6 +6,7 @@
 #include "i915_reg.h"
 #include "intel_de.h"
 #include "intel_display_types.h"
+#include "intel_crtc.h"
 #include "intel_fb.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
@@ -844,4 +845,42 @@ void skl_scaler_get_config(struct intel_crtc_state *crtc_state)
 		scaler_state->scaler_users |= (1 << SKL_CRTC_INDEX);
 	else
 		scaler_state->scaler_users &= ~(1 << SKL_CRTC_INDEX);
+}
+
+int skl_calc_scaler_prefill_latency(struct intel_crtc_state *crtc_state)
+{
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_plane *plane = to_intel_plane(crtc->base.primary);
+	const struct intel_plane_state *plane_state = to_intel_plane_state(plane->base.state);
+	struct intel_crtc_scaler_state *scaler_state = &crtc_state->scaler_state;
+	int scaler_prefill_latency[2];
+	int num_scaler_in_use, count, hscale, vscale, tot_scaler_prefill_usec;
+	int hscan_time = DIV_ROUND_UP(crtc_state->hw.adjusted_mode.htotal * 1000,
+				      crtc_state->hw.adjusted_mode.crtc_clock);
+
+	for (count = 0; count < crtc->num_scalers; count++)
+		if (scaler_state->scalers[count].in_use)
+			num_scaler_in_use++;
+
+	if (!num_scaler_in_use)
+		return 0;
+
+	if (num_scaler_in_use == 2) {
+		hscale = drm_rect_calc_hscale(&plane_state->uapi.src,
+					      &plane_state->uapi.dst,
+					      0, INT_MAX);
+		vscale = drm_rect_calc_vscale(&plane_state->uapi.src,
+					      &plane_state->uapi.dst,
+					      0, INT_MAX);
+		scaler_prefill_latency[1] = 4 * hscan_time * hscale * vscale;
+	}
+
+	/*
+	 * FIXME : When only 1 scaler used, 1st scaler can be downscale/upscale
+	 */
+	scaler_prefill_latency[0] = 4 * hscan_time;
+	tot_scaler_prefill_usec = scaler_prefill_latency[0] + scaler_prefill_latency[1];
+
+	return intel_usecs_to_scanlines(&crtc_state->hw.adjusted_mode,
+					tot_scaler_prefill_usec);
 }
