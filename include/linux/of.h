@@ -1247,14 +1247,15 @@ static inline int of_property_read_string_index(const struct device_node *np,
  * Search for a boolean property in a device node. Usage on non-boolean
  * property types is deprecated.
  *
- * Return: true if the property exists false otherwise.
+ * Return: true if the property exists and value is not "false",
+ * false otherwise.
  */
 static inline bool of_property_read_bool(const struct device_node *np,
 					 const char *propname)
 {
-	struct property *prop = of_find_property(np, propname, NULL);
+	int ret = of_property_match_string(np, propname, "false");
 
-	return prop ? true : false;
+	return ret == -ENODATA ? true : false;
 }
 
 /**
@@ -1268,7 +1269,9 @@ static inline bool of_property_read_bool(const struct device_node *np,
  */
 static inline bool of_property_present(const struct device_node *np, const char *propname)
 {
-	return of_property_read_bool(np, propname);
+	struct property *prop = of_find_property(np, propname, NULL);
+
+	return prop ? true : false;
 }
 
 /**
@@ -1679,7 +1682,7 @@ static inline int of_reconfig_get_state_change(unsigned long action,
  * of_device_is_system_power_controller - Tells if system-power-controller is found for device_node
  * @np: Pointer to the given device_node
  *
- * Return: true if present false otherwise
+ * Return: true if enabled, false otherwise
  */
 static inline bool of_device_is_system_power_controller(const struct device_node *np)
 {
