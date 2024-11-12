@@ -323,6 +323,72 @@ size_t _copy_from_iter_flushcache(void *addr, size_t bytes, struct iov_iter *i)
 EXPORT_SYMBOL_GPL(_copy_from_iter_flushcache);
 #endif
 
+static __always_inline
+size_t memcpy_iomem_to_iter(void *iter_to, size_t progress, size_t len,
+			    void *from, void *priv2)
+{
+	memcpy_fromio(iter_to, from + progress, len);
+	return 0;
+}
+
+static __always_inline
+size_t memcpy_iomem_from_iter(void *iter_from, size_t progress, size_t len,
+			      void *to, void *priv2)
+{
+	memcpy_toio(to + progress, iter_from, len);
+	return 0;
+}
+
+static __always_inline
+size_t copy_iomem_to_user_iter(void __user *iter_to, size_t progress,
+			       size_t len, void *from, void *priv2)
+{
+	unsigned char buf[SMP_CACHE_BYTES];
+	size_t chunk = min(len, sizeof(buf));
+
+	memcpy_fromio(buf, from + progress, chunk);
+	chunk -= copy_to_user_iter(iter_to, progress, chunk, buf, priv2);
+	return len - chunk;
+}
+
+static __always_inline
+size_t copy_iomem_from_user_iter(void __user *iter_from, size_t progress,
+				 size_t len, void *to, void *priv2)
+{
+	unsigned char buf[SMP_CACHE_BYTES];
+	size_t chunk = min(len, sizeof(buf));
+
+	chunk -= copy_from_user_iter(iter_from, progress, chunk, buf, priv2);
+	memcpy_toio(to, buf, chunk);
+	return len - chunk;
+}
+
+size_t copy_iomem_to_iter(const void __iomem *from, size_t bytes, struct iov_iter *i)
+{
+	if (WARN_ON_ONCE(i->data_source))
+		return 0;
+	if (user_backed_iter(i))
+		might_fault();
+
+	return iterate_and_advance(i, bytes, (void *)from,
+				   copy_iomem_to_user_iter,
+				   memcpy_iomem_to_iter);
+}
+EXPORT_SYMBOL(copy_iomem_to_iter);
+
+size_t copy_iomem_from_iter(void __iomem *to, size_t bytes, struct iov_iter *i)
+{
+	if (WARN_ON_ONCE(!i->data_source))
+		return 0;
+	if (user_backed_iter(i))
+		might_fault();
+
+	return iterate_and_advance(i, bytes, (void *)to,
+				   copy_iomem_from_user_iter,
+				   memcpy_iomem_from_iter);
+}
+EXPORT_SYMBOL(copy_iomem_from_iter);
+
 static inline bool page_copy_sane(struct page *page, size_t offset, size_t n)
 {
 	struct page *head;
