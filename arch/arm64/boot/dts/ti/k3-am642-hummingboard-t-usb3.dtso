@@ -34,7 +34,7 @@
 };
 
 &usbss0 {
-	/delete-property/ ti,usb2-only;
+	ti,usb2-only = "false";
 };
 
 &usb0 {
