@@ -947,6 +947,8 @@ struct kvm_vcpu_arch {
 #define HOST_STATE_SPE_EN	__kvm_single_flag(state, BIT(0))
 /* TRBLIMITR_EL1_E is set (TRBE trace buffer enabled) */
 #define HOST_STATE_TRBE_EN	__kvm_single_flag(state, BIT(1))
+/* Hyp modified TRFCR */
+#define HOST_STATE_RESTORE_TRFCR __kvm_single_flag(state, BIT(2))
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
 #define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
