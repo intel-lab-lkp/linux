@@ -945,6 +945,8 @@ struct kvm_vcpu_arch {
 #define HOST_FEAT_HAS_TRF	__kvm_single_flag(feats, BIT(2))
 /* PMBLIMITR_EL1_E is set (SPE profiling buffer enabled) */
 #define HOST_STATE_SPE_EN	__kvm_single_flag(state, BIT(0))
+/* TRBLIMITR_EL1_E is set (TRBE trace buffer enabled) */
+#define HOST_STATE_TRBE_EN	__kvm_single_flag(state, BIT(1))
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
 #define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
@@ -1387,6 +1389,7 @@ void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr);
 void kvm_clr_pmu_events(u64 clr);
 bool kvm_set_pmuserenr(u64 val);
 void kvm_set_pmblimitr(u64 pmblimitr);
+void kvm_set_trblimitr(u64 trblimitr);
 #else
 static inline void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr) {}
 static inline void kvm_clr_pmu_events(u64 clr) {}
@@ -1395,6 +1398,7 @@ static inline bool kvm_set_pmuserenr(u64 val)
 	return false;
 }
 static inline void kvm_set_pmblimitr(u64 pmblimitr) {}
+static inline void kvm_set_trblimitr(u64 trblimitr) {}
 #endif
 
 void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu);

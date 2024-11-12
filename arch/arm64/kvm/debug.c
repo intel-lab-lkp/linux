@@ -364,3 +364,19 @@ void kvm_set_pmblimitr(u64 pmblimitr)
 		host_data_clear_flag(HOST_STATE_SPE_EN);
 }
 EXPORT_SYMBOL_GPL(kvm_set_pmblimitr);
+
+void kvm_set_trblimitr(u64 trblimitr)
+{
+	/* Only read in nVHE */
+	if (has_vhe())
+		return;
+
+	if (kvm_arm_skip_trace_state())
+		return;
+
+	if (trblimitr & TRBLIMITR_EL1_E)
+		host_data_set_flag(HOST_STATE_TRBE_EN);
+	else
+		host_data_clear_flag(HOST_STATE_TRBE_EN);
+}
+EXPORT_SYMBOL_GPL(kvm_set_trblimitr);
