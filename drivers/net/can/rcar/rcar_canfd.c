@@ -1312,7 +1312,7 @@ static void rcar_canfd_set_bittiming(struct net_device *dev)
 	struct rcar_canfd_channel *priv = netdev_priv(dev);
 	struct rcar_canfd_global *gpriv = priv->gpriv;
 	const struct can_bittiming *bt = &priv->can.bittiming;
-	const struct can_bittiming *dbt = &priv->can.data_bittiming;
+	const struct can_bittiming *dbt = &priv->can.fd.data_bittiming;
 	u16 brp, sjw, tseg1, tseg2;
 	u32 cfg;
 	u32 ch = priv->channel;
@@ -1791,7 +1791,7 @@ static int rcar_canfd_channel_probe(struct rcar_canfd_global *gpriv, u32 ch,
 
 	if (gpriv->fdmode) {
 		priv->can.bittiming_const = &rcar_canfd_nom_bittiming_const;
-		priv->can.data_bittiming_const =
+		priv->can.fd.data_bittiming_const =
 			&rcar_canfd_data_bittiming_const;
 
 		/* Controller starts in CAN FD only mode */
