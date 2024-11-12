@@ -236,6 +236,9 @@ static struct kmem_cache *create_cache(const char *name,
 	     !IS_ALIGNED(args->freeptr_offset, sizeof(freeptr_t))))
 		goto out;
 
+	if (args->sheaf_rcu_dtor && !args->sheaf_capacity)
+		goto out;
+
 	err = -ENOMEM;
 	s = kmem_cache_zalloc(kmem_cache, GFP_KERNEL);
 	if (!s)

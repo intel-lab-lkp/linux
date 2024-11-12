@@ -276,6 +276,9 @@ struct kmem_cache {
 	gfp_t allocflags;		/* gfp flags to use on each alloc */
 	int refcount;			/* Refcount for slab cache destroy */
 	void (*ctor)(void *object);	/* Object constructor */
+	void (*rcu_dtor)(void *object);	/* Object destructor to execute after
+					 * kfree_rcu grace period
+					 */
 	unsigned int inuse;		/* Offset to metadata */
 	unsigned int align;		/* Alignment */
 	unsigned int red_left_pad;	/* Left redzone padding size */
@@ -452,6 +455,28 @@ static inline bool is_kmalloc_normal(struct kmem_cache *s)
 	if (!is_kmalloc_cache(s))
 		return false;
 	return !(s->flags & (SLAB_CACHE_DMA|SLAB_ACCOUNT|SLAB_RECLAIM_ACCOUNT));
+}
+
+void __kvfree_rcu(void *obj);
+
+bool __kfree_rcu_sheaf(struct kmem_cache *s, void *obj);
+
+static inline bool kfree_rcu_sheaf(void *obj)
+{
+	struct kmem_cache *s;
+	struct folio *folio;
+	struct slab *slab;
+
+	folio = virt_to_folio(obj);
+	if (unlikely(!folio_test_slab(folio)))
+		return false;
+
+	slab = folio_slab(folio);
+	s = slab->slab_cache;
+	if (s->cpu_sheaves)
+		return __kfree_rcu_sheaf(s, obj);
+
+	return false;
 }
 
 /* Legal flag mask for kmem_cache_create(), for various configurations */

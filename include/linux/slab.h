@@ -343,6 +343,21 @@ struct kmem_cache_args {
 	 * %0 means no sheaves will be created
 	 */
 	unsigned int sheaf_capacity;
+	/**
+	 * @sheaf_rcu_dtor: A destructor for objects freed by kfree_rcu()
+	 *
+	 * Only valid when non-zero @sheaf_capacity is specified. When freeing
+	 * objects by kfree_rcu() in a cache with sheaves, the objects are put
+	 * to a special percpu sheaf. When that sheaf is full, it's passed to
+	 * call_rcu() and after a grace period the sheaf can be reused for new
+	 * allocations. In case a cleanup is necessary after the grace period
+	 * and before reusal, a pointer to such function can be given as
+	 * @sheaf_rcu_dtor and will be called on each object in the rcu sheaf
+	 * after the grace period passes and before the sheaf's reuse.
+	 *
+	 * %NULL means no destructor is called.
+	 */
+	void (*sheaf_rcu_dtor)(void *obj);
 };
 
 struct kmem_cache *__kmem_cache_create_args(const char *name,
