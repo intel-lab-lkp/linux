@@ -7218,7 +7218,6 @@ static void create_eml_sink(struct amdgpu_dm_connector *aconnector)
 			.sink_signal = SIGNAL_TYPE_VIRTUAL
 	};
 	const struct drm_edid *drm_edid;
-	const struct edid *edid;
 
 	drm_edid = drm_edid_read(connector);
 	drm_edid_connector_update(connector, drm_edid);
@@ -7232,10 +7231,9 @@ static void create_eml_sink(struct amdgpu_dm_connector *aconnector)
 
 	aconnector->drm_edid = drm_edid;
 
-	edid = drm_edid_raw(drm_edid); // FIXME: Get rid of drm_edid_raw()
 	aconnector->dc_em_sink = dc_link_add_remote_sink(
 		aconnector->dc_link,
-		edid,
+		drm_edid,
 		&init_params);
 
 	if (aconnector->base.force == DRM_FORCE_ON) {

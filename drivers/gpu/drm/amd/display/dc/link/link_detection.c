@@ -1403,10 +1403,9 @@ static bool link_add_remote_sink_helper(struct dc_link *dc_link, struct dc_sink 
 
 struct dc_sink *link_add_remote_sink(
 		struct dc_link *link,
-		const struct edid *edid,
+		const struct drm_edid *drm_edid,
 		struct dc_sink_init_data *init_data)
 {
-	int len = edid ? (edid->extensions + 1) * EDID_LENGTH : 0;
 	struct dc_sink *dc_sink;
 	enum dc_edid_status edid_status;
 
@@ -1425,7 +1424,7 @@ struct dc_sink *link_add_remote_sink(
 	if (!dc_sink)
 		return NULL;
 
-	dc_sink->drm_edid = drm_edid_alloc(edid, len);
+	dc_sink->drm_edid = drm_edid_dup(drm_edid);
 
 	if (!link_add_remote_sink_helper(
 			link,
