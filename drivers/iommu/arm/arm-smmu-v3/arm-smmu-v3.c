@@ -1814,9 +1814,7 @@ static void arm_smmu_decode_event(struct arm_smmu_device *smmu, u64 *raw,
 static int arm_smmu_handle_evt(struct arm_smmu_device *smmu,
 			       struct arm_smmu_event *event)
 {
-	int ret = 0;
 	u32 perm = 0;
-	struct arm_smmu_master *master;
 	struct iopf_fault fault_evt = { };
 	struct iommu_fault *flt = &fault_evt.fault;
 
@@ -1857,17 +1855,14 @@ static int arm_smmu_handle_evt(struct arm_smmu_device *smmu,
 		flt->prm.pasid = event->ssid;
 	}
 
-	mutex_lock(&smmu->streams_mutex);
-	master = arm_smmu_find_master(smmu, event->sid);
-	if (!master) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
+	/*
+	 * If the master wasn't found while reading the event or
+	 * get_device() returned NULL, we shouldn't report a fault.
+	 */
+	if (!event->dev)
+		return -EINVAL;
 
-	ret = iommu_report_device_fault(master->dev, &fault_evt);
-out_unlock:
-	mutex_unlock(&smmu->streams_mutex);
-	return ret;
+	return iommu_report_device_fault(event->dev, &fault_evt);
 }
 
 static void arm_smmu_dump_raw_event(struct arm_smmu_device *smmu, u64 *raw,
@@ -1926,6 +1921,7 @@ static void arm_smmu_dump_event(struct arm_smmu_device *smmu, u64 *raw,
 		ARM_SMMU_EVT_LOG(smmu->dev, evt, "");
 	}
 }
+
 
 static irqreturn_t arm_smmu_evtq_thread(int irq, void *dev)
 {
