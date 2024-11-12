@@ -1096,6 +1096,84 @@ void simple_release_fs(struct vfsmount **mount, int *count)
 EXPORT_SYMBOL(simple_release_fs);
 
 /**
+ * simple_read_from_iomem() - copy data from the I/O memory to user space
+ * @to: the user space buffer to read to
+ * @count: the maximum number of bytes to read
+ * @ppos: the current position in the buffer
+ * @from: the I/O memory to read from
+ * @available: the size of the iomem memory
+ *
+ * The simple_read_from_iomem() function reads up to @count bytes from the
+ * I/O memory @from at offset @ppos into the user space address starting at @to.
+ *
+ * Return: On success, the number of bytes read is returned and the offset
+ * @ppos is advanced by this number, or negative value is returned on error.
+ */
+ssize_t simple_read_from_iomem(void __user *to, size_t count, loff_t *ppos,
+			       const void __iomem *from, size_t available)
+{
+	struct iov_iter iter;
+	loff_t pos = *ppos;
+	size_t copied;
+
+	if (pos < 0)
+		return -EINVAL;
+	if (pos >= available || !count)
+		return 0;
+	if (count > available - pos)
+		count = available - pos;
+	if (import_ubuf(ITER_DEST, to, count, &iter))
+		return -EFAULT;
+
+	copied = copy_iomem_to_iter(from + pos, count, &iter);
+	if (!copied)
+		return -EFAULT;
+
+	*ppos = pos + copied;
+	return copied;
+}
+EXPORT_SYMBOL(simple_read_from_iomem);
+
+/**
+ * simple_write_to_iomem() - copy data from user space to the I/O memory
+ * @to: the I/O memory to write to
+ * @available: the size of the I/O memory
+ * @ppos: the current position in the buffer
+ * @from: the user space buffer to read from
+ * @count: the maximum number of bytes to read
+ *
+ * The simple_write_to_iomem() function reads up to @count bytes from the user
+ * space address starting at @from into the I/O memory @to at offset @ppos.
+ *
+ * Return: On success, the number of bytes written is returned and the offset
+ * @ppos is advanced by this number, or negative value is returned on error.
+ */
+ssize_t simple_write_to_iomem(void __iomem *to, size_t available, loff_t *ppos,
+			      const void __user *from, size_t count)
+{
+	struct iov_iter iter;
+	loff_t pos = *ppos;
+	size_t copied;
+
+	if (pos < 0)
+		return -EINVAL;
+	if (pos >= available || !count)
+		return 0;
+	if (count > available - pos)
+		count = available - pos;
+	if (import_ubuf(ITER_SOURCE, (void __user *)from, count, &iter))
+		return -EFAULT;
+
+	copied = copy_iomem_from_iter(to + pos, count, &iter);
+	if (!copied)
+		return -EFAULT;
+
+	*ppos = pos + copied;
+	return copied;
+}
+EXPORT_SYMBOL(simple_write_to_iomem);
+
+/**
  * simple_read_from_buffer - copy data from the buffer to user space
  * @to: the user space buffer to read to
  * @count: the maximum number of bytes to read
