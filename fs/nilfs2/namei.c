@@ -60,6 +60,9 @@ nilfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 	if (dentry->d_name.len > NILFS_NAME_LEN)
 		return ERR_PTR(-ENAMETOOLONG);
 
+	if (!dir->i_size)
+		return ERR_PTR(-EINVAL);
+
 	res = nilfs_inode_by_name(dir, &dentry->d_name, &ino);
 	if (res) {
 		if (res != -ENOENT)
