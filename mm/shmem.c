@@ -4377,7 +4377,7 @@ static int shmem_parse_opt_casefold(struct fs_context *fc, struct fs_parameter *
 				       "in the format: utf8-<version number>");
 
 		version = utf8_parse_version(version_str);
-		if (version < 0)
+		if ((int)version < 0)
 			return invalfc(fc, "Invalid UTF-8 version: %s", version_str);
 	}
 
