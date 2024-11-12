@@ -563,7 +563,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		if (inet_opt) {
 			memcpy(&opt_copy, inet_opt,
 			       sizeof(*inet_opt) + inet_opt->opt.optlen);
-			ipc.opt = &opt_copy.opt;
+			ipc.opt = (struct ip_options_rcu *)&opt_copy.opt;
 		}
 		rcu_read_unlock();
 	}
