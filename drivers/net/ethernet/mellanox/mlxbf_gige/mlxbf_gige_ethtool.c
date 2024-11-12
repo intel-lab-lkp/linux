@@ -74,8 +74,9 @@ static void mlxbf_gige_get_strings(struct net_device *netdev, u32 stringset,
 {
 	if (stringset != ETH_SS_STATS)
 		return;
-	memcpy(buf, &mlxbf_gige_ethtool_stats_keys,
-	       sizeof(mlxbf_gige_ethtool_stats_keys));
+
+	for (int i = 0; i < ARRAY_SIZE(mlxbf_gige_ethtool_stats_keys); i++)
+		ethtool_puts(&buf, mlxbf_gige_ethtool_stats_keys[i].string);
 }
 
 static void mlxbf_gige_get_ethtool_stats(struct net_device *netdev,
