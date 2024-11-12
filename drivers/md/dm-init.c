@@ -88,13 +88,33 @@ static void __init dm_setup_cleanup(struct list_head *devices)
 static char __init *str_field_delimit(char **str, char separator)
 {
 	char *s;
+	/* This variable handles removing escape characters, which are
+	 * only used to avoid the separator and aren't needed in the
+	 * final string.
+	 */
+	char *write;
 
-	/* TODO: add support for escaped characters */
 	*str = skip_spaces(*str);
-	s = strchr(*str, separator);
+	s = *str;
+	write = *str;
+
+	/* Find the separator and handle escape character */
+	while (*s) {
+		/* If '\' is followed by the separator, skip '\' by
+		 * incrementing s, write will then overwrite the
+		 * escape character with the separator.
+		 */
+		if (*s == '\\' && *(s + 1) != '\0' && *(s + 1) == separator)
+			s++;
+		else if (*s == separator)
+			break;
+
+		*write++ = *s++;
+	}
+
 	/* Delimit the field and remove trailing spaces */
-	if (s)
-		*s = '\0';
+	if (write)
+		*write = '\0';
 	*str = strim(*str);
 	return s ? ++s : NULL;
 }
