@@ -3636,15 +3636,15 @@ void __init setup_user_features(void)
 	minsigstksz_setup();
 }
 
-static int enable_mismatched_32bit_el0(unsigned int cpu)
-{
-	/*
-	 * The first 32-bit-capable CPU we detected and so can no longer
-	 * be offlined by userspace. -1 indicates we haven't yet onlined
-	 * a 32-bit-capable CPU.
-	 */
-	static int lucky_winner = -1;
+/*
+ * The first 32-bit-capable CPU we detected and so can no longer
+ * be offlined by userspace. -1 indicates we haven't yet onlined
+ * a 32-bit-capable CPU.
+ */
+static int cpu_32bit_unofflineable = -1;
 
+static int mismatched_32bit_el0_online(unsigned int cpu)
+{
 	struct cpuinfo_arm64 *info = &per_cpu(cpu_data, cpu);
 	bool cpu_32bit = id_aa64pfr0_32bit_el0(info->reg_id_aa64pfr0);
 
@@ -3656,7 +3656,7 @@ static int enable_mismatched_32bit_el0(unsigned int cpu)
 	if (cpumask_test_cpu(0, cpu_32bit_el0_mask) == cpu_32bit)
 		return 0;
 
-	if (lucky_winner >= 0)
+	if (cpu_32bit_unofflineable < 0)
 		return 0;
 
 	/*
@@ -3664,14 +3664,18 @@ static int enable_mismatched_32bit_el0(unsigned int cpu)
 	 * 32-bit EL0 online so that is_cpu_allowed() doesn't end up rejecting
 	 * every CPU in the system for a 32-bit task.
 	 */
-	lucky_winner = cpu_32bit ? cpu : cpumask_any_and(cpu_32bit_el0_mask,
-							 cpu_active_mask);
-	get_cpu_device(lucky_winner)->offline_disabled = true;
+	cpu_32bit_unofflineable = cpu_32bit ? cpu : cpumask_any_and(cpu_32bit_el0_mask,
+								    cpu_active_mask);
 	setup_elf_hwcaps(compat_elf_hwcaps);
 	elf_hwcap_fixup();
 	pr_info("Asymmetric 32-bit EL0 support detected on CPU %u; CPU hot-unplug disabled on CPU %u\n",
-		cpu, lucky_winner);
+		cpu, cpu_32bit_unofflineable);
 	return 0;
+}
+
+static int mismatched_32bit_el0_offline(unsigned int cpu)
+{
+	return cpu == cpu_32bit_unofflineable ? -EBUSY : 0;
 }
 
 static int __init init_32bit_el0_mask(void)
@@ -3684,7 +3688,7 @@ static int __init init_32bit_el0_mask(void)
 
 	return cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
 				 "arm64/mismatched_32bit_el0:online",
-				 enable_mismatched_32bit_el0, NULL);
+				 mismatched_32bit_el0_online, mismatched_32bit_el0_offline);
 }
 subsys_initcall_sync(init_32bit_el0_mask);
 
