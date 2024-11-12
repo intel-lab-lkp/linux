@@ -18,6 +18,7 @@
 #include <soc/amlogic/reset-meson-aux.h>
 
 #include "meson-clkc-utils.h"
+#include "meson-audio.h"
 #include "axg-audio.h"
 #include "clk-regmap.h"
 #include "clk-phase.h"
@@ -25,155 +26,9 @@
 
 #include <dt-bindings/clock/axg-audio-clkc.h>
 
-#define AUD_GATE(_name, _reg, _bit, _pname, _iflags) {			\
-	.data = &(struct clk_regmap_gate_data){				\
-		.offset = (_reg),					\
-		.bit_idx = (_bit),					\
-	},								\
-	.hw.init = &(struct clk_init_data) {				\
-		.name = "aud_"#_name,					\
-		.ops = &clk_regmap_gate_ops,				\
-		.parent_names = (const char *[]){ #_pname },		\
-		.num_parents = 1,					\
-		.flags = CLK_DUTY_CYCLE_PARENT | (_iflags),		\
-	},								\
-}
-
-#define AUD_MUX(_name, _reg, _mask, _shift, _dflags, _pdata, _iflags) {	\
-	.data = &(struct clk_regmap_mux_data){				\
-		.offset = (_reg),					\
-		.mask = (_mask),					\
-		.shift = (_shift),					\
-		.flags = (_dflags),					\
-	},								\
-	.hw.init = &(struct clk_init_data){				\
-		.name = "aud_"#_name,					\
-		.ops = &clk_regmap_mux_ops,				\
-		.parent_data = _pdata,					\
-		.num_parents = ARRAY_SIZE(_pdata),			\
-		.flags = CLK_DUTY_CYCLE_PARENT | (_iflags),		\
-	},								\
-}
-
-#define AUD_DIV(_name, _reg, _shift, _width, _dflags, _pname, _iflags) { \
-	.data = &(struct clk_regmap_div_data){				\
-		.offset = (_reg),					\
-		.shift = (_shift),					\
-		.width = (_width),					\
-		.flags = (_dflags),					\
-	},								\
-	.hw.init = &(struct clk_init_data){				\
-		.name = "aud_"#_name,					\
-		.ops = &clk_regmap_divider_ops,				\
-		.parent_names = (const char *[]){ #_pname },		\
-		.num_parents = 1,					\
-		.flags = (_iflags),					\
-	},								\
-}
-
-#define AUD_PCLK_GATE(_name, _reg, _bit) {				\
-	.data = &(struct clk_regmap_gate_data){				\
-		.offset = (_reg),					\
-		.bit_idx = (_bit),					\
-	},								\
-	.hw.init = &(struct clk_init_data) {				\
-		.name = "aud_"#_name,					\
-		.ops = &clk_regmap_gate_ops,				\
-		.parent_names = (const char *[]){ "aud_top" },		\
-		.num_parents = 1,					\
-	},								\
-}
-
-#define AUD_SCLK_DIV(_name, _reg, _div_shift, _div_width,		\
-		     _hi_shift, _hi_width, _pname, _iflags) {		\
-	.data = &(struct meson_sclk_div_data) {				\
-		.div = {						\
-			.reg_off = (_reg),				\
-			.shift   = (_div_shift),			\
-			.width   = (_div_width),			\
-		},							\
-		.hi = {							\
-			.reg_off = (_reg),				\
-			.shift   = (_hi_shift),				\
-			.width   = (_hi_width),				\
-		},							\
-	},								\
-	.hw.init = &(struct clk_init_data) {				\
-		.name = "aud_"#_name,					\
-		.ops = &meson_sclk_div_ops,				\
-		.parent_names = (const char *[]){ #_pname },		\
-		.num_parents = 1,					\
-		.flags = (_iflags),					\
-	},								\
-}
-
-#define AUD_TRIPHASE(_name, _reg, _width, _shift0, _shift1, _shift2,	\
-		     _pname, _iflags) {					\
-	.data = &(struct meson_clk_triphase_data) {			\
-		.ph0 = {						\
-			.reg_off = (_reg),				\
-			.shift   = (_shift0),				\
-			.width   = (_width),				\
-		},							\
-		.ph1 = {						\
-			.reg_off = (_reg),				\
-			.shift   = (_shift1),				\
-			.width   = (_width),				\
-		},							\
-		.ph2 = {						\
-			.reg_off = (_reg),				\
-			.shift   = (_shift2),				\
-			.width   = (_width),				\
-		},							\
-	},								\
-	.hw.init = &(struct clk_init_data) {				\
-		.name = "aud_"#_name,					\
-		.ops = &meson_clk_triphase_ops,				\
-		.parent_names = (const char *[]){ #_pname },		\
-		.num_parents = 1,					\
-		.flags = CLK_DUTY_CYCLE_PARENT | (_iflags),		\
-	},								\
-}
-
-#define AUD_PHASE(_name, _reg, _width, _shift, _pname, _iflags) {	\
-	.data = &(struct meson_clk_phase_data) {			\
-		.ph = {							\
-			.reg_off = (_reg),				\
-			.shift   = (_shift),				\
-			.width   = (_width),				\
-		},							\
-	},								\
-	.hw.init = &(struct clk_init_data) {				\
-		.name = "aud_"#_name,					\
-		.ops = &meson_clk_phase_ops,				\
-		.parent_names = (const char *[]){ #_pname },		\
-		.num_parents = 1,					\
-		.flags = (_iflags),					\
-	},								\
-}
-
-#define AUD_SCLK_WS(_name, _reg, _width, _shift_ph, _shift_ws, _pname,	\
-		    _iflags) {						\
-	.data = &(struct meson_sclk_ws_inv_data) {			\
-		.ph = {							\
-			.reg_off = (_reg),				\
-			.shift   = (_shift_ph),				\
-			.width   = (_width),				\
-		},							\
-		.ws = {							\
-			.reg_off = (_reg),				\
-			.shift   = (_shift_ws),				\
-			.width   = (_width),				\
-		},							\
-	},								\
-	.hw.init = &(struct clk_init_data) {				\
-		.name = "aud_"#_name,					\
-		.ops = &meson_clk_phase_ops,				\
-		.parent_names = (const char *[]){ #_pname },		\
-		.num_parents = 1,					\
-		.flags = (_iflags),					\
-	},								\
-}
+static const struct clk_parent_data pclk_parent_data[] = {
+	{ .name = "aud_top" },
+};
 
 /* Audio Master Clocks */
 static const struct clk_parent_data mst_mux_parent_data[] = {
@@ -327,45 +182,45 @@ static const struct clk_parent_data lrclk_pad_ctrl_parent_data[] = {
 
 /* Common Clocks */
 static struct clk_regmap ddr_arb =
-	AUD_PCLK_GATE(ddr_arb, AUDIO_CLK_GATE_EN, 0);
+	AUD_PCLK_GATE(ddr_arb, AUDIO_CLK_GATE_EN, 0, pclk_parent_data);
 static struct clk_regmap pdm =
-	AUD_PCLK_GATE(pdm, AUDIO_CLK_GATE_EN, 1);
+	AUD_PCLK_GATE(pdm, AUDIO_CLK_GATE_EN, 1, pclk_parent_data);
 static struct clk_regmap tdmin_a =
-	AUD_PCLK_GATE(tdmin_a, AUDIO_CLK_GATE_EN, 2);
+	AUD_PCLK_GATE(tdmin_a, AUDIO_CLK_GATE_EN, 2, pclk_parent_data);
 static struct clk_regmap tdmin_b =
-	AUD_PCLK_GATE(tdmin_b, AUDIO_CLK_GATE_EN, 3);
+	AUD_PCLK_GATE(tdmin_b, AUDIO_CLK_GATE_EN, 3, pclk_parent_data);
 static struct clk_regmap tdmin_c =
-	AUD_PCLK_GATE(tdmin_c, AUDIO_CLK_GATE_EN, 4);
+	AUD_PCLK_GATE(tdmin_c, AUDIO_CLK_GATE_EN, 4, pclk_parent_data);
 static struct clk_regmap tdmin_lb =
-	AUD_PCLK_GATE(tdmin_lb, AUDIO_CLK_GATE_EN, 5);
+	AUD_PCLK_GATE(tdmin_lb, AUDIO_CLK_GATE_EN, 5, pclk_parent_data);
 static struct clk_regmap tdmout_a =
-	AUD_PCLK_GATE(tdmout_a, AUDIO_CLK_GATE_EN, 6);
+	AUD_PCLK_GATE(tdmout_a, AUDIO_CLK_GATE_EN, 6, pclk_parent_data);
 static struct clk_regmap tdmout_b =
-	AUD_PCLK_GATE(tdmout_b, AUDIO_CLK_GATE_EN, 7);
+	AUD_PCLK_GATE(tdmout_b, AUDIO_CLK_GATE_EN, 7, pclk_parent_data);
 static struct clk_regmap tdmout_c =
-	AUD_PCLK_GATE(tdmout_c, AUDIO_CLK_GATE_EN, 8);
+	AUD_PCLK_GATE(tdmout_c, AUDIO_CLK_GATE_EN, 8, pclk_parent_data);
 static struct clk_regmap frddr_a =
-	AUD_PCLK_GATE(frddr_a, AUDIO_CLK_GATE_EN, 9);
+	AUD_PCLK_GATE(frddr_a, AUDIO_CLK_GATE_EN, 9, pclk_parent_data);
 static struct clk_regmap frddr_b =
-	AUD_PCLK_GATE(frddr_b, AUDIO_CLK_GATE_EN, 10);
+	AUD_PCLK_GATE(frddr_b, AUDIO_CLK_GATE_EN, 10, pclk_parent_data);
 static struct clk_regmap frddr_c =
-	AUD_PCLK_GATE(frddr_c, AUDIO_CLK_GATE_EN, 11);
+	AUD_PCLK_GATE(frddr_c, AUDIO_CLK_GATE_EN, 11, pclk_parent_data);
 static struct clk_regmap toddr_a =
-	AUD_PCLK_GATE(toddr_a, AUDIO_CLK_GATE_EN, 12);
+	AUD_PCLK_GATE(toddr_a, AUDIO_CLK_GATE_EN, 12, pclk_parent_data);
 static struct clk_regmap toddr_b =
-	AUD_PCLK_GATE(toddr_b, AUDIO_CLK_GATE_EN, 13);
+	AUD_PCLK_GATE(toddr_b, AUDIO_CLK_GATE_EN, 13, pclk_parent_data);
 static struct clk_regmap toddr_c =
-	AUD_PCLK_GATE(toddr_c, AUDIO_CLK_GATE_EN, 14);
+	AUD_PCLK_GATE(toddr_c, AUDIO_CLK_GATE_EN, 14, pclk_parent_data);
 static struct clk_regmap loopback =
-	AUD_PCLK_GATE(loopback, AUDIO_CLK_GATE_EN, 15);
+	AUD_PCLK_GATE(loopback, AUDIO_CLK_GATE_EN, 15, pclk_parent_data);
 static struct clk_regmap spdifin =
-	AUD_PCLK_GATE(spdifin, AUDIO_CLK_GATE_EN, 16);
+	AUD_PCLK_GATE(spdifin, AUDIO_CLK_GATE_EN, 16, pclk_parent_data);
 static struct clk_regmap spdifout =
-	AUD_PCLK_GATE(spdifout, AUDIO_CLK_GATE_EN, 17);
+	AUD_PCLK_GATE(spdifout, AUDIO_CLK_GATE_EN, 17, pclk_parent_data);
 static struct clk_regmap resample =
-	AUD_PCLK_GATE(resample, AUDIO_CLK_GATE_EN, 18);
+	AUD_PCLK_GATE(resample, AUDIO_CLK_GATE_EN, 18, pclk_parent_data);
 static struct clk_regmap power_detect =
-	AUD_PCLK_GATE(power_detect, AUDIO_CLK_GATE_EN, 19);
+	AUD_PCLK_GATE(power_detect, AUDIO_CLK_GATE_EN, 19, pclk_parent_data);
 
 static struct clk_regmap spdifout_clk_sel =
 	AUD_MST_MCLK_MUX(spdifout_clk, AUDIO_CLK_SPDIFOUT_CTRL);
@@ -633,11 +488,11 @@ static struct clk_regmap g12a_tdmout_c_sclk =
 	AUD_TDM_SCLK_WS(out_c, AUDIO_CLK_TDMOUT_C_CTRL);
 
 static struct clk_regmap toram =
-	AUD_PCLK_GATE(toram, AUDIO_CLK_GATE_EN, 20);
+	AUD_PCLK_GATE(toram, AUDIO_CLK_GATE_EN, 20, pclk_parent_data);
 static struct clk_regmap spdifout_b =
-	AUD_PCLK_GATE(spdifout_b, AUDIO_CLK_GATE_EN, 21);
+	AUD_PCLK_GATE(spdifout_b, AUDIO_CLK_GATE_EN, 21, pclk_parent_data);
 static struct clk_regmap eqdrc =
-	AUD_PCLK_GATE(eqdrc, AUDIO_CLK_GATE_EN, 22);
+	AUD_PCLK_GATE(eqdrc, AUDIO_CLK_GATE_EN, 22, pclk_parent_data);
 
 /* SM1 Clocks */
 static struct clk_regmap sm1_clk81_en = {
@@ -742,21 +597,21 @@ static struct clk_regmap sm1_aud_top = {
 };
 
 static struct clk_regmap resample_b =
-	AUD_PCLK_GATE(resample_b, AUDIO_CLK_GATE_EN, 26);
+	AUD_PCLK_GATE(resample_b, AUDIO_CLK_GATE_EN, 26, pclk_parent_data);
 static struct clk_regmap tovad =
-	AUD_PCLK_GATE(tovad, AUDIO_CLK_GATE_EN, 27);
+	AUD_PCLK_GATE(tovad, AUDIO_CLK_GATE_EN, 27, pclk_parent_data);
 static struct clk_regmap locker =
-	AUD_PCLK_GATE(locker, AUDIO_CLK_GATE_EN, 28);
+	AUD_PCLK_GATE(locker, AUDIO_CLK_GATE_EN, 28, pclk_parent_data);
 static struct clk_regmap spdifin_lb =
-	AUD_PCLK_GATE(spdifin_lb, AUDIO_CLK_GATE_EN, 29);
+	AUD_PCLK_GATE(spdifin_lb, AUDIO_CLK_GATE_EN, 29, pclk_parent_data);
 static struct clk_regmap frddr_d =
-	AUD_PCLK_GATE(frddr_d, AUDIO_CLK_GATE_EN1, 0);
+	AUD_PCLK_GATE(frddr_d, AUDIO_CLK_GATE_EN1, 0, pclk_parent_data);
 static struct clk_regmap toddr_d =
-	AUD_PCLK_GATE(toddr_d, AUDIO_CLK_GATE_EN1, 1);
+	AUD_PCLK_GATE(toddr_d, AUDIO_CLK_GATE_EN1, 1, pclk_parent_data);
 static struct clk_regmap loopback_b =
-	AUD_PCLK_GATE(loopback_b, AUDIO_CLK_GATE_EN1, 2);
+	AUD_PCLK_GATE(loopback_b, AUDIO_CLK_GATE_EN1, 2, pclk_parent_data);
 static struct clk_regmap earcrx =
-	AUD_PCLK_GATE(earcrx, AUDIO_CLK_GATE_EN1, 6);
+	AUD_PCLK_GATE(earcrx, AUDIO_CLK_GATE_EN1, 6, pclk_parent_data);
 
 
 static struct clk_regmap sm1_mst_a_mclk_sel =
