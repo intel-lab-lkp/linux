@@ -309,6 +309,20 @@ static inline void *offset_to_ptr(const int *off)
 #define statically_true(x) (__builtin_constant_p(x) && (x))
 
 /*
+ * Similar to statically_true() but produces a constant expression
+ *
+ * To be used in conjunction with macros, such as BUILD_BUG_ON_ZERO(),
+ * which require their input to be a constant expression and for which
+ * statically_true() would otherwise fail.
+ *
+ * This is a tradeoff: _statically_true() is less efficient at
+ * constant folding and will fail to optimize any expressions in which
+ * at least one of the subcomponents is not constant. For the general
+ * case, statically_true() is better.
+ */
+#define _statically_true(x) __builtin_choose_expr(__is_constexpr(x), x, false)
+
+/*
  * This is needed in functions which generate the stack canary, see
  * arch/x86/kernel/smpboot.c::start_secondary() for an example.
  */
