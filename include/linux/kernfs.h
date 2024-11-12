@@ -408,8 +408,8 @@ int kernfs_path_from_node(struct kernfs_node *kn_to, struct kernfs_node *kn_from
 			  char *buf, size_t buflen);
 int kernfs_path_from_node_rcu(struct kernfs_node *kn_to, struct kernfs_node *kn_from,
 			      char *buf, size_t buflen);
-void pr_cont_kernfs_name(struct kernfs_node *kn);
-void pr_cont_kernfs_path(struct kernfs_node *kn);
+void pr_cont_kernfs_name_rcu(struct kernfs_node *kn);
+void pr_cont_kernfs_path_rcu(struct kernfs_node *kn);
 struct kernfs_node *kernfs_get_parent(struct kernfs_node *kn);
 struct kernfs_node *kernfs_find_and_get_ns(struct kernfs_node *parent,
 					   const char *name, const void *ns);
@@ -499,8 +499,8 @@ static inline int kernfs_path_from_node_rcu(struct kernfs_node *root_kn,
 					    char *buf, size_t buflen)
 { return -ENOSYS; }
 
-static inline void pr_cont_kernfs_name(struct kernfs_node *kn) { }
-static inline void pr_cont_kernfs_path(struct kernfs_node *kn) { }
+static inline void pr_cont_kernfs_name_rcu(struct kernfs_node *kn) { }
+static inline void pr_cont_kernfs_path_rcu(struct kernfs_node *kn) { }
 
 static inline struct kernfs_node *kernfs_get_parent(struct kernfs_node *kn)
 { return NULL; }
@@ -615,6 +615,24 @@ static inline void kernfs_init(void) { }
 static inline int kernfs_path(struct kernfs_node *kn, char *buf, size_t buflen)
 {
 	return kernfs_path_from_node(kn, NULL, buf, buflen);
+}
+
+/**
+ * kernfs_path_rcu - build full path of a given node
+ * @kn: kernfs_node of interest
+ * @buf: buffer to copy @kn's name into
+ * @buflen: size of @buf
+ *
+ * If @kn is NULL result will be "(null)". The root node must be with
+ * KERNFS_ROOT_SAME_PARENT.
+ *
+ * Returns the length of the full path.  If the full length is equal to or
+ * greater than @buflen, @buf contains the truncated path with the trailing
+ * '\0'.  On error, -errno is returned.
+ */
+static inline int kernfs_path_rcu(struct kernfs_node *kn, char *buf, size_t buflen)
+{
+	return kernfs_path_from_node_rcu(kn, NULL, buf, buflen);
 }
 
 static inline struct kernfs_node *

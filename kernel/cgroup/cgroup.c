@@ -1906,7 +1906,7 @@ int cgroup_show_path(struct seq_file *sf, struct kernfs_node *kf_node,
 
 	spin_lock_irq(&css_set_lock);
 	ns_cgroup = current_cgns_cgroup_from_root(kf_cgroot);
-	len = kernfs_path_from_node(kf_node, ns_cgroup->kn, buf, PATH_MAX);
+	len = kernfs_path_from_node_rcu(kf_node, ns_cgroup->kn, buf, PATH_MAX);
 	spin_unlock_irq(&css_set_lock);
 
 	if (len == -E2BIG)
@@ -2118,7 +2118,8 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	root->kf_root = kernfs_create_root(kf_sops,
 					   KERNFS_ROOT_CREATE_DEACTIVATED |
 					   KERNFS_ROOT_SUPPORT_EXPORTOP |
-					   KERNFS_ROOT_SUPPORT_USER_XATTR,
+					   KERNFS_ROOT_SUPPORT_USER_XATTR |
+					   KERNFS_ROOT_SAME_PARENT,
 					   root_cgrp);
 	if (IS_ERR(root->kf_root)) {
 		ret = PTR_ERR(root->kf_root);
@@ -2387,7 +2388,7 @@ int cgroup_path_ns_locked(struct cgroup *cgrp, char *buf, size_t buflen,
 {
 	struct cgroup *root = cset_cgroup_from_root(ns->root_cset, cgrp->root);
 
-	return kernfs_path_from_node(cgrp->kn, root->kn, buf, buflen);
+	return kernfs_path_from_node_rcu(cgrp->kn, root->kn, buf, buflen);
 }
 
 int cgroup_path_ns(struct cgroup *cgrp, char *buf, size_t buflen,
@@ -6275,7 +6276,7 @@ void cgroup_path_from_kernfs_id(u64 id, char *buf, size_t buflen)
 	kn = kernfs_find_and_get_node_by_id(cgrp_dfl_root.kf_root, id);
 	if (!kn)
 		return;
-	kernfs_path(kn, buf, buflen);
+	kernfs_path_rcu(kn, buf, buflen);
 	kernfs_put(kn);
 }
 

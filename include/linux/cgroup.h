@@ -591,22 +591,22 @@ static inline struct cgroup_subsys_state *seq_css(struct seq_file *seq)
 
 static inline int cgroup_name(struct cgroup *cgrp, char *buf, size_t buflen)
 {
-	return kernfs_name(cgrp->kn, buf, buflen);
+	return kernfs_name_rcu(cgrp->kn, buf, buflen);
 }
 
 static inline int cgroup_path(struct cgroup *cgrp, char *buf, size_t buflen)
 {
-	return kernfs_path(cgrp->kn, buf, buflen);
+	return kernfs_path_rcu(cgrp->kn, buf, buflen);
 }
 
 static inline void pr_cont_cgroup_name(struct cgroup *cgrp)
 {
-	pr_cont_kernfs_name(cgrp->kn);
+	pr_cont_kernfs_name_rcu(cgrp->kn);
 }
 
 static inline void pr_cont_cgroup_path(struct cgroup *cgrp)
 {
-	pr_cont_kernfs_path(cgrp->kn);
+	pr_cont_kernfs_path_rcu(cgrp->kn);
 }
 
 bool cgroup_psi_enabled(void);

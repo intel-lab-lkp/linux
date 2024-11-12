@@ -264,7 +264,6 @@ int kernfs_path_from_node(struct kernfs_node *to, struct kernfs_node *from,
 	}
 	return kernfs_path_from_node_locked(to, from, buf, buflen);
 }
-EXPORT_SYMBOL_GPL(kernfs_path_from_node);
 
 /**
  * kernfs_path_from_node_rcu - build path of node @to relative to @from.
@@ -291,38 +290,40 @@ int kernfs_path_from_node_rcu(struct kernfs_node *to, struct kernfs_node *from,
 }
 
 /**
- * pr_cont_kernfs_name - pr_cont name of a kernfs_node
+ * pr_cont_kernfs_name_rcu - pr_cont name of a kernfs_node
  * @kn: kernfs_node of interest
  *
- * This function can be called from any context.
+ * This function can be called from any context. The root node must be with
+ * KERNFS_ROOT_SAME_PARENT.
  */
-void pr_cont_kernfs_name(struct kernfs_node *kn)
+void pr_cont_kernfs_name_rcu(struct kernfs_node *kn)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&kernfs_pr_cont_lock, flags);
 
-	kernfs_name(kn, kernfs_pr_cont_buf, sizeof(kernfs_pr_cont_buf));
+	kernfs_name_rcu(kn, kernfs_pr_cont_buf, sizeof(kernfs_pr_cont_buf));
 	pr_cont("%s", kernfs_pr_cont_buf);
 
 	spin_unlock_irqrestore(&kernfs_pr_cont_lock, flags);
 }
 
 /**
- * pr_cont_kernfs_path - pr_cont path of a kernfs_node
+ * pr_cont_kernfs_path_rcu - pr_cont path of a kernfs_node
  * @kn: kernfs_node of interest
  *
- * This function can be called from any context.
+ * This function can be called from any context. The root node must be with
+ * KERNFS_ROOT_SAME_PARENT.
  */
-void pr_cont_kernfs_path(struct kernfs_node *kn)
+void pr_cont_kernfs_path_rcu(struct kernfs_node *kn)
 {
 	unsigned long flags;
 	int sz;
 
 	spin_lock_irqsave(&kernfs_pr_cont_lock, flags);
 
-	sz = kernfs_path_from_node(kn, NULL, kernfs_pr_cont_buf,
-				   sizeof(kernfs_pr_cont_buf));
+	sz = kernfs_path_from_node_rcu(kn, NULL, kernfs_pr_cont_buf,
+				       sizeof(kernfs_pr_cont_buf));
 	if (sz < 0) {
 		if (sz == -E2BIG)
 			pr_cont("(name too long)");
