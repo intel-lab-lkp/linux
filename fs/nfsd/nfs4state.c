@@ -1910,14 +1910,21 @@ gen_sessionid(struct nfsd4_session *ses)
 #define NFSD_MIN_HDR_SEQ_SZ  (24 + 12 + 44)
 
 static void
-free_session_slots(struct nfsd4_session *ses)
+free_session_slots(struct nfsd4_session *ses, int from)
 {
 	int i;
 
-	for (i = 0; i < ses->se_fchannel.maxreqs; i++) {
+	if (from >= ses->se_fchannel.maxreqs)
+		return;
+
+	for (i = from; i < ses->se_fchannel.maxreqs; i++) {
+		uintptr_t seqid = ses->se_slots[i]->sl_seqid;
 		free_svc_cred(&ses->se_slots[i]->sl_cred);
 		kfree(ses->se_slots[i]);
+		/* Save the seqid in case we reactivate this slot */
+		ses->se_slots[i] = (void *)seqid;
 	}
+	ses->se_fchannel.maxreqs = from;
 }
 
 /*
@@ -2069,7 +2076,7 @@ static void nfsd4_del_conns(struct nfsd4_session *s)
 
 static void __free_session(struct nfsd4_session *ses)
 {
-	free_session_slots(ses);
+	free_session_slots(ses, 0);
 	kfree(ses);
 }
 
@@ -4214,6 +4221,9 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (status)
 		goto out_put_session;
 
+	/* If there are lots of unused slots, free some */
+	free_session_slots(session, seq->maxslots + NFSD_MAX_UNUSED_SLOTS);
+
 	buflen = (seq->cachethis) ?
 			session->se_fchannel.maxresp_cached :
 			session->se_fchannel.maxresp_sz;
@@ -4244,10 +4254,13 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	    session->se_fchannel.maxreqs < NFSD_MAX_SLOTS_PER_SESSION) {
 		int s = session->se_fchannel.maxreqs;
 
-		session->se_slots[s] = kzalloc(slot_bytes(&session->se_fchannel),
-					       GFP_NOWAIT);
-		if (session->se_slots[s])
+		struct nfsd4_slot *slot = kzalloc(slot_bytes(&session->se_fchannel),
+						  GFP_NOWAIT);
+		if (slot) {
+			slot->sl_seqid = (uintptr_t)session->se_slots[s];
+			session->se_slots[s] = slot;
 			session->se_fchannel.maxreqs += 1;
+		}
 	}
 	seq->maxslots = session->se_fchannel.maxreqs;
 
