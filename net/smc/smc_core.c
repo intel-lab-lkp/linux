@@ -1951,8 +1951,8 @@ static bool smcd_lgr_match(struct smc_link_group *lgr,
 	return true;
 }
 
-/* create a new SMC connection (and a new link group if necessary) */
-int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini)
+static int __smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini,
+			     bool unlock_with_existed_lgr)
 {
 	struct smc_connection *conn = &smc->conn;
 	struct net *net = sock_net(&smc->sk);
@@ -2026,7 +2026,10 @@ create:
 			smc_lgr_cleanup_early(lgr);
 			goto out;
 		}
+	} else if (unlock_with_existed_lgr) {
+		smc_lgr_pending_unlock(ini);
 	}
+
 	smc_lgr_hold(conn->lgr); /* lgr_put in smc_conn_free() */
 	if (!conn->lgr->is_smcd)
 		smcr_link_hold(conn->lnk); /* link_put in smc_conn_free() */
@@ -2048,6 +2051,16 @@ create:
 
 out:
 	return rc;
+}
+
+/* create a new SMC connection (and a new link group if necessary) */
+int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini)
+{
+	/* Considering that the path for SMC-D is shorter than SMC-R
+	 * the impact of global locking is smaller. So, let's make no
+	 * change on SMC-D.
+	 */
+	return __smc_conn_create(smc, ini, !ini->is_smcd);
 }
 
 #define SMCD_DMBE_SIZES		6 /* 0 -> 16KB, 1 -> 32KB, .. 6 -> 1MB */
