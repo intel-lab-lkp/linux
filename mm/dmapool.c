@@ -207,11 +207,16 @@ static void pool_block_push(struct dma_pool *pool, struct dma_block *block,
  * @boundary: returned blocks won't cross this power of two boundary
  * Context: not in_interrupt()
  *
- * Given one of these pools, dma_pool_alloc()
- * may be used to allocate memory.  Such memory will all have "consistent"
- * DMA mappings, accessible by the device and its driver without using
- * cache flushing primitives.  The actual size of blocks allocated may be
- * larger than requested because of alignment.
+ * This api initializes a pool of DMA-coherent buffers for use with a given
+ * device. It must be called in a context which can sleep. The device's
+ * hardware alignment requirement for this type of data is "align". If your
+ * device has no boundary crossing restrictions, pass 0 for alloc; passing
+ * 4096 says memory allocated from this pool must not cross 4KByte boundaries.
+ *
+ * Given one of these pools, dma_pool_alloc() may be used to allocate memory.
+ * Such memory will all have "consistent" DMA mappings, accessible by the
+ * device and its driver without using cache flushing primitives.  The actual
+ * size of blocks allocated may be larger than requested because of alignment.
  *
  * If @boundary is nonzero, objects returned from dma_pool_alloc() won't
  * cross that size boundary.  This is useful for devices which have
@@ -356,6 +361,7 @@ static struct dma_page *pool_alloc_page(struct dma_pool *pool, gfp_t mem_flags)
  *
  * Caller guarantees that no more memory from the pool is in use,
  * and that nothing will try to use the pool after this call.
+ * It must be called in a context which can sleep.
  */
 void dma_pool_destroy(struct dma_pool *pool)
 {
@@ -392,14 +398,24 @@ void dma_pool_destroy(struct dma_pool *pool)
 EXPORT_SYMBOL(dma_pool_destroy);
 
 /**
- * dma_pool_alloc - get a block of consistent memory
- * @pool: dma pool that will produce the block
- * @mem_flags: GFP_* bitmask
- * @handle: pointer to dma address of block
+ * dma_pool_alloc - Get a block of consistent memory from a DMA pool
+ * @pool:       DMA pool that will produce the block
+ * @mem_flags:  GFP_* bitmask specifying memory allocation flags
+ * @handle:     Pointer to a DMA address that will hold the address of the block
  *
- * Return: the kernel virtual address of a currently unused block,
- * and reports its dma address through the handle.
- * If such a memory block can't be allocated, %NULL is returned.
+ * Return: The kernel virtual address of a currently unused block of memory,
+ *         and reports its DMA address through the handle. If such a memory
+ *         block can't be allocated, %NULL is returned.
+ *
+ * This function allocates memory from the specified DMA pool. The returned
+ * memory will meet the size and alignment requirements specified when the
+ * pool was created. Pass GFP_ATOMIC to prevent blocking, or if permitted
+ * (not in interrupt context, and not holding SMP locks), pass GFP_KERNEL
+ * to allow blocking.
+ *
+ * Similar to dma_alloc_coherent(), this function returns two addresses:
+ *  - A CPU-accessible virtual address
+ *  - A DMA address usable by the pool's associated device.
  */
 void *dma_pool_alloc(struct dma_pool *pool, gfp_t mem_flags,
 		     dma_addr_t *handle)
