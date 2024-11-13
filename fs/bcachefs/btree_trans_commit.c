@@ -364,7 +364,7 @@ static noinline void journal_transaction_name(struct btree_trans *trans)
 	struct jset_entry_log *l =
 		container_of(entry, struct jset_entry_log, entry);
 
-	strncpy(l->d, trans->fn, JSET_ENTRY_LOG_U64s * sizeof(u64));
+	strscpy(l->d, trans->fn, JSET_ENTRY_LOG_U64s * sizeof(u64));
 }
 
 static inline int btree_key_can_insert(struct btree_trans *trans,
