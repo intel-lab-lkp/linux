@@ -63,9 +63,9 @@
 
 	fan: pwm-fan {
 		compatible = "pwm-fan";
-		cooling-levels = <0 95 145 195 255>;
+		cooling-levels = <0 64 128 192 255>;
 		fan-supply = <&vcc_5v0>;
-		pwms = <&pwm3 0 50000 0>;
+		pwms = <&pwm3 0 60000 0>;
 		#cooling-cells = <2>;
 	};
 
