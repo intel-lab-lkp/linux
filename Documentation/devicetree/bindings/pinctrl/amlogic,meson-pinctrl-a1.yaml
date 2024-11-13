@@ -38,6 +38,11 @@ patternProperties:
           - const: mux
           - const: gpio
 
+      gpio-controller: true
+
+      "#gpio-cells":
+        const: 2
+
       gpio-line-names:
         minItems: 62 # A1
         maxItems: 82 # S4

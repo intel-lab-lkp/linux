@@ -36,6 +36,11 @@ patternProperties:
           - const: ds
           - const: gpio
 
+      gpio-controller: true
+
+      "#gpio-cells":
+        const: 2
+
       gpio-line-names:
         maxItems: 15
 

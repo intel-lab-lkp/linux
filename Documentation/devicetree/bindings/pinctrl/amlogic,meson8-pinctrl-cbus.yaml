@@ -45,6 +45,11 @@ patternProperties:
           - const: pull-enable
           - const: gpio
 
+      gpio-controller: true
+
+      "#gpio-cells":
+        const: 2
+
       gpio-line-names:
         minItems: 86 # AXG
         maxItems: 120 # Meson8
