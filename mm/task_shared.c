@@ -285,6 +285,7 @@ bool taskshrd_delay_resched(void)
 			/* not granted */
 			shrdp->kaddr->ts.sched_delay
 				= TASK_PREEMPT_DELAY_DENIED;
+			update_stat_preempt_denied(t);
 		}
 		return false;
 	}
@@ -295,6 +296,7 @@ bool taskshrd_delay_resched(void)
 	/* granted */
 	shrdp->kaddr->ts.sched_delay = TASK_PREEMPT_DELAY_GRANTED;
 	t->taskshrd_sched_delay = 1;
+	update_stat_preempt_delayed(t);
 
 	return true;
 }
