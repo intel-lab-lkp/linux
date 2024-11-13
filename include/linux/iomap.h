@@ -331,7 +331,7 @@ struct iomap_ioend {
 	u16			io_type;
 	u16			io_flags;	/* IOMAP_F_* */
 	struct inode		*io_inode;	/* file being written to */
-	size_t			io_size;	/* size of the extent */
+	size_t			io_size;	/* size of valid data */
 	loff_t			io_offset;	/* offset in the file */
 	sector_t		io_sector;	/* start sector of ioend */
 	struct bio		io_bio;		/* MUST BE LAST! */
@@ -340,6 +340,11 @@ struct iomap_ioend {
 static inline struct iomap_ioend *iomap_ioend_from_bio(struct bio *bio)
 {
 	return container_of(bio, struct iomap_ioend, io_bio);
+}
+
+static inline size_t iomap_ioend_extent_size(struct iomap_ioend *ioend)
+{
+	return round_up(ioend->io_size, i_blocksize(ioend->io_inode));
 }
 
 struct iomap_writeback_ops {

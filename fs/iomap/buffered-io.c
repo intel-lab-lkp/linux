@@ -1599,6 +1599,8 @@ EXPORT_SYMBOL_GPL(iomap_finish_ioends);
 static bool
 iomap_ioend_can_merge(struct iomap_ioend *ioend, struct iomap_ioend *next)
 {
+	size_t size = iomap_ioend_extent_size(ioend);
+
 	if (ioend->io_bio.bi_status != next->io_bio.bi_status)
 		return false;
 	if ((ioend->io_flags & IOMAP_F_SHARED) ^
@@ -1607,7 +1609,7 @@ iomap_ioend_can_merge(struct iomap_ioend *ioend, struct iomap_ioend *next)
 	if ((ioend->io_type == IOMAP_UNWRITTEN) ^
 	    (next->io_type == IOMAP_UNWRITTEN))
 		return false;
-	if (ioend->io_offset + ioend->io_size != next->io_offset)
+	if (ioend->io_offset + size != next->io_offset)
 		return false;
 	/*
 	 * Do not merge physically discontiguous ioends. The filesystem
@@ -1619,7 +1621,7 @@ iomap_ioend_can_merge(struct iomap_ioend *ioend, struct iomap_ioend *next)
 	 * submission so does not point to the start sector of the bio at
 	 * completion.
 	 */
-	if (ioend->io_sector + (ioend->io_size >> 9) != next->io_sector)
+	if (ioend->io_sector + (size >> 9) != next->io_sector)
 		return false;
 	return true;
 }
@@ -1636,7 +1638,7 @@ iomap_ioend_try_merge(struct iomap_ioend *ioend, struct list_head *more_ioends)
 		if (!iomap_ioend_can_merge(ioend, next))
 			break;
 		list_move_tail(&next->io_list, &ioend->io_list);
-		ioend->io_size += next->io_size;
+		ioend->io_size = iomap_ioend_extent_size(ioend) + next->io_size;
 	}
 }
 EXPORT_SYMBOL_GPL(iomap_ioend_try_merge);
@@ -1736,7 +1738,7 @@ static bool iomap_can_add_to_ioend(struct iomap_writepage_ctx *wpc, loff_t pos)
 		return false;
 	if (wpc->iomap.type != wpc->ioend->io_type)
 		return false;
-	if (pos != wpc->ioend->io_offset + wpc->ioend->io_size)
+	if (pos != wpc->ioend->io_offset + iomap_ioend_extent_size(wpc->ioend))
 		return false;
 	if (iomap_sector(&wpc->iomap, pos) !=
 	    bio_end_sector(&wpc->ioend->io_bio))
@@ -1768,6 +1770,8 @@ static int iomap_add_to_ioend(struct iomap_writepage_ctx *wpc,
 {
 	struct iomap_folio_state *ifs = folio->private;
 	size_t poff = offset_in_folio(folio, pos);
+	loff_t isize = i_size_read(inode);
+	struct iomap_ioend *ioend;
 	int error;
 
 	if (!wpc->ioend || !iomap_can_add_to_ioend(wpc, pos)) {
@@ -1778,12 +1782,17 @@ new_ioend:
 		wpc->ioend = iomap_alloc_ioend(wpc, wbc, inode, pos);
 	}
 
-	if (!bio_add_folio(&wpc->ioend->io_bio, folio, len, poff))
+	ioend = wpc->ioend;
+	if (!bio_add_folio(&ioend->io_bio, folio, len, poff))
 		goto new_ioend;
 
 	if (ifs)
 		atomic_add(len, &ifs->write_bytes_pending);
-	wpc->ioend->io_size += len;
+
+	ioend->io_size = iomap_ioend_extent_size(ioend) + len;
+	if (ioend->io_offset + ioend->io_size > isize)
+		ioend->io_size = isize - ioend->io_offset;
+
 	wbc_account_cgroup_owner(wbc, folio, len);
 	return 0;
 }
