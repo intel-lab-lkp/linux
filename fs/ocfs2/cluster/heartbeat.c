@@ -1536,8 +1536,9 @@ static int o2hb_read_block_input(struct o2hb_region *reg,
 	unsigned long bytes;
 	char *p = (char *)page;
 
-	bytes = simple_strtoul(p, &p, 0);
-	if (!p || (*p && (*p != '\n')))
+	int ret = kstrtoul(p, 0, &bytes);
+
+	if (ret)
 		return -EINVAL;
 
 	/* Heartbeat and fs min / max block sizes are the same. */
@@ -1626,8 +1627,9 @@ static ssize_t o2hb_region_blocks_store(struct config_item *item,
 	if (reg->hr_bdev_file)
 		return -EINVAL;
 
-	tmp = simple_strtoul(p, &p, 0);
-	if (!p || (*p && (*p != '\n')))
+	int ret = kstrtoul(p, 0, &tmp);
+
+	if (ret)
 		return -EINVAL;
 
 	if (tmp > O2NM_MAX_NODES || tmp == 0)
@@ -2141,8 +2143,9 @@ static ssize_t o2hb_heartbeat_group_dead_threshold_store(struct config_item *ite
 	unsigned long tmp;
 	char *p = (char *)page;
 
-	tmp = simple_strtoul(p, &p, 10);
-	if (!p || (*p && (*p != '\n')))
+	int ret = kstrtoul(p, 10, &tmp);
+
+	if (ret)
                 return -EINVAL;
 
 	/* this will validate ranges for us. */
