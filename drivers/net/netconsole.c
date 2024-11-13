@@ -90,6 +90,14 @@ static DEFINE_MUTEX(target_cleanup_list_lock);
  */
 static struct console netconsole_ext;
 
+/* Fields requiring kernel auto-population in userdata.
+ * The fields are designed as bitwise flags, allowing multiple fields to be set
+ */
+enum userdata_auto {
+	/* Populate CPU number that is sending the message */
+	AUTO_CPU_NR = BIT(0),
+};
+
 /**
  * struct netconsole_target - Represents a configured netconsole target.
  * @list:	Links this target into the target_list.
@@ -97,6 +105,7 @@ static struct console netconsole_ext;
  * @userdata_group:	Links to the userdata configfs hierarchy
  * @userdata_complete:	Cached, formatted string of append
  * @userdata_length:	String length of userdata_complete
+ * @userdata_auto:	Kernel auto-populated bitwise fields in userdata.
  * @enabled:	On / off knob to enable / disable target.
  *		Visible from userspace (read-write).
  *		We maintain a strict 1:1 correspondence between this and
@@ -123,6 +132,7 @@ struct netconsole_target {
 	struct config_group	userdata_group;
 	char userdata_complete[MAX_USERDATA_ENTRY_LENGTH * MAX_USERDATA_ITEMS];
 	size_t			userdata_length;
+	enum userdata_auto	userdata_auto;
 #endif
 	bool			enabled;
 	bool			extended;
@@ -369,6 +379,18 @@ static ssize_t local_mac_show(struct config_item *item, char *buf)
 static ssize_t remote_mac_show(struct config_item *item, char *buf)
 {
 	return sysfs_emit(buf, "%pM\n", to_target(item)->np.remote_mac);
+}
+
+static ssize_t populate_cpu_nr_show(struct config_item *item, char *buf)
+{
+	struct netconsole_target *nt = to_target(item->ci_parent);
+	bool cpu_nr_enabled;
+
+	mutex_lock(&dynamic_netconsole_mutex);
+	cpu_nr_enabled = nt->userdata_auto & AUTO_CPU_NR;
+	mutex_unlock(&dynamic_netconsole_mutex);
+
+	return sysfs_emit(buf, "%d\n", cpu_nr_enabled);
 }
 
 /*
@@ -726,6 +748,15 @@ static void update_userdata(struct netconsole_target *nt)
 					  MAX_USERDATA_ENTRY_LENGTH, " %s=%s\n",
 					  item->ci_name, udm_item->value);
 	}
+
+	/* Check if CPU NR should be populated, and append it to the user
+	 * dictionary.
+	 */
+	if (child_count < MAX_USERDATA_ITEMS && nt->userdata_auto & AUTO_CPU_NR)
+		scnprintf(&nt->userdata_complete[complete_idx],
+			  MAX_USERDATA_ENTRY_LENGTH, " cpu=%u\n",
+			  raw_smp_processor_id());
+
 	nt->userdata_length = strnlen(nt->userdata_complete,
 				      sizeof(nt->userdata_complete));
 }
@@ -757,7 +788,36 @@ out_unlock:
 	return ret;
 }
 
+static ssize_t populate_cpu_nr_store(struct config_item *item, const char *buf,
+				     size_t count)
+{
+	struct netconsole_target *nt = to_target(item->ci_parent);
+	bool cpu_nr_enabled;
+	ssize_t ret;
+
+	if (!nt)
+		return -EINVAL;
+
+	mutex_lock(&dynamic_netconsole_mutex);
+	ret = kstrtobool(buf, &cpu_nr_enabled);
+	if (ret)
+		goto out_unlock;
+
+	if (cpu_nr_enabled)
+		nt->userdata_auto |= AUTO_CPU_NR;
+	else
+		nt->userdata_auto &= ~AUTO_CPU_NR;
+
+	update_userdata(nt);
+
+	ret = strnlen(buf, count);
+out_unlock:
+	mutex_unlock(&dynamic_netconsole_mutex);
+	return ret;
+}
+
 CONFIGFS_ATTR(userdatum_, value);
+CONFIGFS_ATTR(, populate_cpu_nr);
 
 static struct configfs_attribute *userdatum_attrs[] = {
 	&userdatum_attr_value,
@@ -819,6 +879,7 @@ static void userdatum_drop(struct config_group *group, struct config_item *item)
 }
 
 static struct configfs_attribute *userdata_attrs[] = {
+	&attr_populate_cpu_nr,
 	NULL,
 };
 
