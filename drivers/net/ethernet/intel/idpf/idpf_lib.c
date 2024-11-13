@@ -3,6 +3,7 @@
 
 #include "idpf.h"
 #include "idpf_virtchnl.h"
+#include "idpf_ptp.h"
 
 static const struct net_device_ops idpf_netdev_ops;
 
@@ -2306,6 +2307,44 @@ unlock_mutex:
 }
 
 /**
+ * idpf_eth_ioctl - Access the hwtstamp interface
+ * @netdev: network interface device structure
+ * @ifr: interface request data
+ * @cmd: ioctl command
+ *
+ * Return: 0 on success, negative otherwise.
+ */
+static int idpf_eth_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
+{
+	struct idpf_vport *vport;
+	int err;
+
+	idpf_vport_ctrl_lock(netdev);
+	vport = idpf_netdev_to_vport(netdev);
+
+	if (!idpf_ptp_get_vport_tstamp_capability(vport)) {
+		idpf_vport_ctrl_unlock(netdev);
+		return -EOPNOTSUPP;
+	}
+
+	switch (cmd) {
+	case SIOCGHWTSTAMP:
+		err = idpf_ptp_get_ts_config(vport, ifr);
+		break;
+	case SIOCSHWTSTAMP:
+		err = idpf_ptp_set_ts_config(vport, ifr);
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+
+	idpf_vport_ctrl_unlock(netdev);
+
+	return err;
+}
+
+/**
  * idpf_alloc_dma_mem - Allocate dma memory
  * @hw: pointer to hw struct
  * @mem: pointer to dma_mem struct
@@ -2351,4 +2390,5 @@ static const struct net_device_ops idpf_netdev_ops = {
 	.ndo_get_stats64 = idpf_get_stats64,
 	.ndo_set_features = idpf_set_features,
 	.ndo_tx_timeout = idpf_tx_timeout,
+	.ndo_eth_ioctl = idpf_eth_ioctl,
 };
