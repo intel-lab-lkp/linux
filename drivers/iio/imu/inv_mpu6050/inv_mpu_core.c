@@ -140,6 +140,23 @@ static const struct inv_mpu6050_chip_config chip_config_6500 = {
 	.user_ctrl = 0,
 };
 
+static const struct inv_mpu6050_chip_config chip_config_6500_gyro = {
+	.clk = INV_CLK_PLL,
+	.fsr = INV_MPU6050_FSR_2000DPS,
+	.lpf = INV_MPU6050_FILTER_20HZ,
+	.divider = INV_MPU6050_FIFO_RATE_TO_DIVIDER(50),
+	.gyro_en = true,
+	.accl_en = false,
+	.temp_en = false,
+	.magn_en = false,
+	.gyro_fifo_enable = false,
+	.accl_fifo_enable = false,
+	.temp_fifo_enable = false,
+	.magn_fifo_enable = false,
+	.accl_fs = INV_MPU6050_FS_02G,
+	.user_ctrl = 0,
+};
+
 /* Indexed by enum inv_devices */
 static const struct inv_mpu6050_hw hw_info[] = {
 	{
@@ -276,6 +293,14 @@ static const struct inv_mpu6050_hw hw_info[] = {
 		.fifo_size = 1024,
 		.temp = {INV_ICM20608_TEMP_OFFSET, INV_ICM20608_TEMP_SCALE},
 		.startup_time = {INV_ICM20690_GYRO_STARTUP_TIME, INV_ICM20690_ACCEL_STARTUP_TIME},
+	},
+	{	.whoami = INV_IAM20380_WHOAMI_VALUE,
+		.name = "IAM20380",
+		.reg = &reg_set_6500,
+		.config = &chip_config_6500_gyro,
+		.fifo_size = 512,
+		.temp = {INV_ICM20608_TEMP_OFFSET, INV_ICM20608_TEMP_SCALE},
+		.startup_time = {INV_MPU6500_GYRO_STARTUP_TIME, INV_MPU6500_ACCEL_STARTUP_TIME},
 	},
 	{
 		.whoami = INV_IAM20680_WHOAMI_VALUE,
