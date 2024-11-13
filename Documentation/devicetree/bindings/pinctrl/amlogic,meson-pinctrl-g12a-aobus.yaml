@@ -36,6 +36,9 @@ patternProperties:
           - const: ds
           - const: gpio
 
+      "#gpio-cells":
+        const: 2
+
       gpio-line-names:
         maxItems: 15
 

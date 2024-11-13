@@ -44,6 +44,9 @@ patternProperties:
           - const: pull
           - const: gpio
 
+      "#gpio-cells":
+        const: 2
+
       gpio-line-names:
         minItems: 11 # GXL
         maxItems: 16 # Meson8

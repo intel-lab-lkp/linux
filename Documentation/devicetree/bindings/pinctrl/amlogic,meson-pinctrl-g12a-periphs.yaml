@@ -38,6 +38,9 @@ patternProperties:
           - const: mux
           - const: ds
 
+      "#gpio-cells":
+        const: 2
+
       gpio-line-names:
         maxItems: 85
 

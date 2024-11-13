@@ -35,9 +35,6 @@ $defs:
     properties:
       gpio-controller: true
 
-      "#gpio-cells":
-        const: 2
-
       gpio-ranges:
         maxItems: 1
 
