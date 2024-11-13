@@ -952,6 +952,8 @@ static int smc_ib_add_dev(struct ib_device *ibdev)
 	init_waitqueue_head(&smcibdev->lnks_deleted);
 	mutex_init(&smcibdev->mutex);
 	mutex_lock(&smc_ib_devices.mutex);
+	mutex_init(&smcibdev->smc_server_lgr_pending);
+	mutex_init(&smcibdev->smc_client_lgr_pending);
 	list_add_tail(&smcibdev->list, &smc_ib_devices.list);
 	mutex_unlock(&smc_ib_devices.mutex);
 	ib_set_client_data(ibdev, &smc_ib_client, smcibdev);

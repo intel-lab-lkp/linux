@@ -56,11 +56,8 @@
 #include "smc_loopback.h"
 #include "smc_inet.h"
 
-static DEFINE_MUTEX(smc_server_lgr_pending);	/* serialize link group
-						 * creation on server
-						 */
-static DEFINE_MUTEX(smc_client_lgr_pending);	/* serialize link group
-						 * creation on client
+static DEFINE_MUTEX(smcd_server_lgr_pending);	/* serialize link group
+						 * creation on server for SMC-D
 						 */
 
 static struct workqueue_struct	*smc_tcp_ls_wq;	/* wq for tcp listen work */
@@ -1251,7 +1248,9 @@ static int smc_connect_rdma(struct smc_sock *smc,
 	if (reason_code)
 		return reason_code;
 
-	smc_lgr_pending_lock(ini, &smc_client_lgr_pending);
+	smc_lgr_pending_lock(ini, (ini->smcr_version & SMC_V2) ?
+				&ini->smcrv2.ib_dev_v2->smc_server_lgr_pending :
+				&ini->ib_dev->smc_server_lgr_pending);
 	reason_code = smc_conn_create(smc, ini);
 	if (reason_code) {
 		smc_lgr_pending_unlock(ini);
@@ -1412,7 +1411,7 @@ static int smc_connect_ism(struct smc_sock *smc,
 	ini->ism_peer_gid[ini->ism_selected].gid = ntohll(aclc->d0.gid);
 
 	/* there is only one lgr role for SMC-D; use server lock */
-	smc_lgr_pending_lock(ini, &smc_server_lgr_pending);
+	smc_lgr_pending_lock(ini, &smcd_server_lgr_pending);
 	rc = smc_conn_create(smc, ini);
 	if (rc) {
 		smc_lgr_pending_unlock(ini);
@@ -2044,6 +2043,9 @@ static int smc_listen_rdma_init(struct smc_sock *new_smc,
 {
 	int rc;
 
+	smc_lgr_pending_lock(ini, (ini->smcr_version & SMC_V2) ?
+			     &ini->smcrv2.ib_dev_v2->smc_server_lgr_pending :
+			     &ini->ib_dev->smc_server_lgr_pending);
 	/* allocate connection / link group */
 	rc = smc_conn_create(new_smc, ini);
 	if (rc)
@@ -2064,6 +2066,7 @@ static int smc_listen_ism_init(struct smc_sock *new_smc,
 {
 	int rc;
 
+	smc_lgr_pending_lock(ini, &smcd_server_lgr_pending);
 	rc = smc_conn_create(new_smc, ini);
 	if (rc)
 		return rc;
@@ -2478,7 +2481,6 @@ static void smc_listen_work(struct work_struct *work)
 	if (rc)
 		goto out_decl;
 
-	smc_lgr_pending_lock(ini, &smc_server_lgr_pending);
 	smc_close_init(new_smc);
 	smc_rx_init(new_smc);
 	smc_tx_init(new_smc);

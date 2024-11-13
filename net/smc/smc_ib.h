@@ -57,6 +57,8 @@ struct smc_ib_device {				/* ib-device infos for smc */
 	atomic_t		lnk_cnt_by_port[SMC_MAX_PORTS];
 						/* number of links per port */
 	int			ndev_ifidx[SMC_MAX_PORTS]; /* ndev if indexes */
+	struct mutex    smc_server_lgr_pending; /* serialize link group creation on server */
+	struct mutex    smc_client_lgr_pending; /* serialize link group creation on client */
 };
 
 static inline __be32 smc_ib_gid_to_ipv4(u8 gid[SMC_GID_SIZE])
