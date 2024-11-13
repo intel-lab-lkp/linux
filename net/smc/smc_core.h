@@ -432,6 +432,8 @@ struct smc_init_info {
 	u8			ism_offered_cnt; /* # of ISM devices offered */
 	u8			ism_selected;    /* index of selected ISM dev*/
 	u8			smcd_version;
+	/* mutex holding for conn create */
+	struct mutex *mutex;
 };
 
 /* Find the connection associated with the given alert token in the link group.
@@ -599,6 +601,33 @@ int smc_nl_get_sys_info(struct sk_buff *skb, struct netlink_callback *cb);
 int smcr_nl_get_lgr(struct sk_buff *skb, struct netlink_callback *cb);
 int smcr_nl_get_link(struct sk_buff *skb, struct netlink_callback *cb);
 int smcd_nl_get_lgr(struct sk_buff *skb, struct netlink_callback *cb);
+
+static inline void smc_lgr_pending_lock(struct smc_init_info *ini, struct mutex *lock)
+{
+	if (unlikely(ini->mutex))
+		pr_warn_once("smc: lgr pending deadlock dected.");
+
+	mutex_lock(lock);
+	ini->mutex = lock;
+}
+
+/* It will save the locking status of the ini, which provides a potential functionality
+ * for multiple unlocks without triggering exceptions. This creates conditions
+ * to reduce the scope of locks in the future.
+ */
+static inline void smc_lgr_pending_unlock(struct smc_init_info *ini)
+{
+	/* tempory */
+	struct mutex *lock;
+
+	/* already unlock it, just return */
+	if (!ini->mutex)
+		return;
+
+	lock = ini->mutex;
+	ini->mutex = NULL;
+	mutex_unlock(lock);
+}
 
 static inline struct smc_link_group *smc_get_lgr(struct smc_link *link)
 {
