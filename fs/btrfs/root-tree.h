@@ -38,5 +38,6 @@ void btrfs_set_root_node(struct btrfs_root_item *item,
 			 struct extent_buffer *node);
 void btrfs_check_and_init_root_item(struct btrfs_root_item *item);
 void btrfs_update_root_times(struct btrfs_trans_handle *trans, struct btrfs_root *root);
+u64 btrfs_root_origin_generation(struct btrfs_root *root);
 
 #endif
