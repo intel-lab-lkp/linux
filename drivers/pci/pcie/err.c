@@ -276,3 +276,57 @@ failed:
 
 	return status;
 }
+
+static void cxl_walk_bridge(struct pci_dev *bridge,
+			    int (*cb)(struct pci_dev *, void *),
+			    void *userdata)
+{
+	bool *status = userdata;
+
+	cb(bridge, status);
+	if (bridge->subordinate && !*status)
+		pci_walk_bus(bridge->subordinate, cb, status);
+}
+
+static int cxl_report_error_detected(struct pci_dev *dev, void *data)
+{
+	struct pci_driver *pdrv = dev->driver;
+	bool *status = data;
+
+	device_lock(&dev->dev);
+	if (pdrv && pdrv->cxl_err_handler &&
+	    pdrv->cxl_err_handler->error_detected) {
+		const struct cxl_error_handlers *cxl_err_handler =
+			pdrv->cxl_err_handler;
+		*status |= cxl_err_handler->error_detected(dev);
+	}
+	device_unlock(&dev->dev);
+	return *status;
+}
+
+void cxl_do_recovery(struct pci_dev *dev)
+{
+	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
+	int type = pci_pcie_type(dev);
+	struct pci_dev *bridge;
+	int status;
+
+	if (type == PCI_EXP_TYPE_ROOT_PORT ||
+	    type == PCI_EXP_TYPE_DOWNSTREAM ||
+	    type == PCI_EXP_TYPE_UPSTREAM ||
+	    type == PCI_EXP_TYPE_ENDPOINT)
+		bridge = dev;
+	else
+		bridge = pci_upstream_bridge(dev);
+
+	cxl_walk_bridge(bridge, cxl_report_error_detected, &status);
+	if (status)
+		panic("CXL cachemem error. Invoking panic");
+
+	if (host->native_aer || pcie_ports_native) {
+		pcie_clear_device_status(dev);
+		pci_aer_clear_nonfatal_status(dev);
+	}
+
+	pci_info(bridge, "No uncorrectable error found. Continuing.\n");
+}

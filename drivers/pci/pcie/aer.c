@@ -1048,7 +1048,10 @@ static void cxl_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 			pdrv->cxl_err_handler->cor_error_detected(dev);
 
 		pcie_clear_device_status(dev);
-	}
+	} else if (info->severity == AER_NONFATAL)
+		cxl_do_recovery(dev);
+	else if (info->severity == AER_FATAL)
+		cxl_do_recovery(dev);
 }
 
 static int handles_cxl_error_iter(struct pci_dev *dev, void *data)
