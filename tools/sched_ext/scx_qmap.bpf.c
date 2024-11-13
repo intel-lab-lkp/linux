@@ -5,7 +5,7 @@
  * There are five FIFOs implemented using BPF_MAP_TYPE_QUEUE. A task gets
  * assigned to one depending on its compound weight. Each CPU round robins
  * through the FIFOs and dispatches more from FIFOs with higher indices - 1 from
- * queue0, 2 from queue1, 4 from queue2 and so on.
+ * queue0, 2 from queue1, 3 from queue2 and so on.
  *
  * This scheduler demonstrates:
  *
