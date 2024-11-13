@@ -443,6 +443,7 @@ struct pci_dev {
 	unsigned int	is_hotplug_bridge:1;
 	unsigned int	shpc_managed:1;		/* SHPC owned by shpchp */
 	unsigned int	is_thunderbolt:1;	/* Thunderbolt controller */
+	unsigned int	is_cxl:1;               /* CXL alternate protocol */
 	/*
 	 * Devices marked being untrusted are the ones that can potentially
 	 * execute DMA attacks and similar. They are typically connected
@@ -742,6 +743,9 @@ static inline bool pci_is_vga(struct pci_dev *pdev)
 
 	return false;
 }
+
+#define pcie_is_cxl(dev) (dev->is_cxl)
+bool pcie_is_cxl_port(struct pci_dev *dev);
 
 #define for_each_pci_bridge(dev, bus)				\
 	list_for_each_entry(dev, &bus->devices, bus_list)	\
