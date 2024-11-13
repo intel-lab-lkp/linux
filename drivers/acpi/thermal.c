@@ -119,6 +119,9 @@ struct acpi_thermal {
 	struct work_struct thermal_check_work;
 	struct mutex thermal_check_lock;
 	refcount_t thermal_check_count;
+	int num_domain_devices;
+	struct acpi_device **domain_devices;
+	struct kobject *holders_dir;
 };
 
 /* --------------------------------------------------------------------------
@@ -589,6 +592,103 @@ static const struct thermal_zone_device_ops acpi_thermal_zone_ops = {
 	.critical = acpi_thermal_zone_device_critical,
 };
 
+static void acpi_thermal_remove_domain_devices(struct acpi_thermal *tz)
+{
+	int i;
+
+	if (!tz->num_domain_devices)
+		return;
+
+	for (i = 0; i < tz->num_domain_devices; i++) {
+		struct acpi_device *obj = tz->domain_devices[i];
+
+		if (!obj)
+			continue;
+
+		sysfs_remove_link(tz->holders_dir,
+				  kobject_name(&obj->dev.kobj));
+		acpi_dev_put(obj);
+	}
+
+	kfree(tz->domain_devices);
+	kobject_put(tz->holders_dir);
+	tz->num_domain_devices = 0;
+}
+
+static int acpi_thermal_read_domain_devices(struct acpi_thermal *tz)
+{
+	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+	union acpi_object *pss;
+	acpi_status status;
+	int ret = 0;
+	int i;
+
+	status = acpi_evaluate_object(tz->device->handle, "_TZD", NULL,
+				      &buffer);
+	if (ACPI_FAILURE(status)) {
+		acpi_evaluation_failure_warn(tz->device->handle, "_TZD",
+					     status);
+		return -ENODEV;
+	}
+
+	pss = buffer.pointer;
+	if (!pss ||
+	    pss->type != ACPI_TYPE_PACKAGE) {
+		dev_err(&tz->device->dev, "Thermal zone invalid _TZD data\n");
+		ret = -EFAULT;
+		goto end;
+	}
+
+	if (!pss->package.count)
+		goto end;
+
+	tz->domain_devices = kcalloc(pss->package.count,
+				     sizeof(struct acpi_device *), GFP_KERNEL);
+	if (!tz->domain_devices) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	tz->holders_dir = kobject_create_and_add("measures",
+						 &tz->device->dev.kobj);
+	if (!tz->holders_dir) {
+		ret = -ENOMEM;
+		goto exit_free;
+	}
+
+	tz->num_domain_devices = pss->package.count;
+	for (i = 0; i < pss->package.count; i++) {
+		struct acpi_device *obj;
+		union acpi_object *element = &pss->package.elements[i];
+
+		/* Refuse non-references */
+		if (element->type != ACPI_TYPE_LOCAL_REFERENCE)
+			continue;
+
+		/* Create a symlink to domain objects */
+		obj = acpi_get_acpi_dev(element->reference.handle);
+		tz->domain_devices[i] = obj;
+		if (!obj)
+			continue;
+
+		ret = sysfs_create_link(tz->holders_dir, &obj->dev.kobj,
+					kobject_name(&obj->dev.kobj));
+		if (ret) {
+			acpi_dev_put(obj);
+			tz->domain_devices[i] = NULL;
+		}
+	}
+
+	ret = 0;
+	goto end;
+
+exit_free:
+	kfree(tz->domain_devices);
+end:
+	kfree(buffer.pointer);
+	return ret;
+}
+
 static int acpi_thermal_zone_sysfs_add(struct acpi_thermal *tz)
 {
 	struct device *tzdev = thermal_zone_device(tz->thermal_zone);
@@ -602,8 +702,19 @@ static int acpi_thermal_zone_sysfs_add(struct acpi_thermal *tz)
 	ret = sysfs_create_link(&tzdev->kobj,
 				   &tz->device->dev.kobj, "device");
 	if (ret)
-		sysfs_remove_link(&tz->device->dev.kobj, "thermal_zone");
+		goto remove_thermal_zone;
 
+	/* _TZD method is optional. */
+	ret = acpi_thermal_read_domain_devices(tz);
+	if (ret != -ENODEV)
+		goto remove_device;
+
+	return 0;
+
+remove_device:
+	sysfs_remove_link(&tz->device->dev.kobj, "device");
+remove_thermal_zone:
+	sysfs_remove_link(&tz->device->dev.kobj, "thermal_zone");
 	return ret;
 }
 
@@ -611,6 +722,7 @@ static void acpi_thermal_zone_sysfs_remove(struct acpi_thermal *tz)
 {
 	struct device *tzdev = thermal_zone_device(tz->thermal_zone);
 
+	acpi_thermal_remove_domain_devices(tz);
 	sysfs_remove_link(&tz->device->dev.kobj, "thermal_zone");
 	sysfs_remove_link(&tzdev->kobj, "device");
 }
