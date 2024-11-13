@@ -2002,7 +2002,7 @@ static struct regulator_dev *regulator_dev_lookup(struct device *dev,
 static int regulator_resolve_supply(struct regulator_dev *rdev)
 {
 	struct regulator_dev *r;
-	struct device *dev = rdev->dev.parent;
+	struct device *dev = &rdev->dev;
 	struct ww_acquire_ctx ww_ctx;
 	int ret = 0;
 
