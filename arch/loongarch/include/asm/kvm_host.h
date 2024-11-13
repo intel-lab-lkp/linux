@@ -166,6 +166,9 @@ struct kvm_vcpu_arch {
 	unsigned long host_tp;
 	unsigned long host_pgd;
 
+	/* vmid info for guest VM */
+	unsigned long vmid;
+
 	/* Host CSRs are used when handling exits from guest */
 	unsigned long badi;
 	unsigned long badv;
