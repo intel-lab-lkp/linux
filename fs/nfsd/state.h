@@ -304,12 +304,15 @@ struct nfsd4_session {
 /* See SESSION4_PERSIST, etc. for standard flags; this is internal-only: */
 #define NFS4_SESSION_DEAD	0x010
 	u32			se_flags;
+	struct list_head	se_all_sessions;/* global list of sessions */
 	struct nfs4_client	*se_client;
 	struct nfs4_sessionid	se_sessionid;
 	struct nfsd4_channel_attrs se_fchannel;
 	struct nfsd4_channel_attrs se_bchannel;
 	struct nfsd4_cb_sec	se_cb_sec;
 	struct list_head	se_conns;
+	u8			se_target_maxreqs;
+	u8			se_client_maxreqs;
 	u32			se_cb_prog;
 	u32			se_cb_seq_nr;
 	struct nfsd4_slot	*se_slots[NFSD_MAX_SLOTS_PER_SESSION];	/* forward channel slots */

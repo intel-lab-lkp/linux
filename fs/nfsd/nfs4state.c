@@ -1925,6 +1925,8 @@ free_session_slots(struct nfsd4_session *ses, int from)
 		ses->se_slots[i] = (void *)seqid;
 	}
 	ses->se_fchannel.maxreqs = from;
+	if (ses->se_target_maxreqs > from)
+		ses->se_target_maxreqs = from;
 }
 
 /*
@@ -1968,6 +1970,7 @@ static struct nfsd4_session *alloc_session(struct nfsd4_channel_attrs *fattrs,
 	fattrs->maxreqs = i;
 	memcpy(&new->se_fchannel, fattrs, sizeof(struct nfsd4_channel_attrs));
 	memcpy(&new->se_bchannel, battrs, sizeof(struct nfsd4_channel_attrs));
+	new->se_target_maxreqs = i;
 
 	return new;
 out_free:
@@ -2086,6 +2089,57 @@ static void free_session(struct nfsd4_session *ses)
 	__free_session(ses);
 }
 
+
+static DEFINE_SPINLOCK(nfsd_session_list_lock);
+static LIST_HEAD(nfsd_session_list);
+
+static unsigned long
+nfsd_slot_count(struct shrinker *s, struct shrink_control *sc)
+{
+	struct nfsd4_session *ses;
+	unsigned long cnt = 0;
+
+	spin_lock(&nfsd_session_list_lock);
+	list_for_each_entry(ses, &nfsd_session_list, se_all_sessions)
+		if (ses->se_target_maxreqs > 1)
+			cnt += ses->se_target_maxreqs - 1;
+	spin_unlock(&nfsd_session_list_lock);
+	return cnt ? cnt : SHRINK_EMPTY;
+}
+
+static unsigned long
+nfsd_slot_scan(struct shrinker *s, struct shrink_control *sc)
+{
+	struct nfsd4_session *ses;
+	unsigned long scanned = 0;
+	unsigned long freed = 0;
+
+	spin_lock(&nfsd_session_list_lock);
+	list_for_each_entry(ses, &nfsd_session_list, se_all_sessions) {
+		struct nfsd_net *nn = net_generic(ses->se_client->net,
+						  nfsd_net_id);
+
+		spin_lock(&nn->client_lock);
+		if (ses->se_fchannel.maxreqs > 1 &&
+		    ses->se_target_maxreqs > 1) {
+			freed += 1;
+			ses->se_target_maxreqs -= 1;
+			free_session_slots(ses, max(ses->se_target_maxreqs,
+						    ses->se_client_maxreqs));
+		}
+		spin_unlock(&nn->client_lock);
+		scanned += 1;
+		if (scanned >= sc->nr_to_scan) {
+			/* Move starting point for next scan */
+			list_move(&nfsd_session_list, &ses->se_all_sessions);
+			break;
+		}
+	}
+	spin_unlock(&nfsd_session_list_lock);
+	sc->nr_scanned = scanned;
+	return freed;
+}
+
 static void init_session(struct svc_rqst *rqstp, struct nfsd4_session *new, struct nfs4_client *clp, struct nfsd4_create_session *cses)
 {
 	int idx;
@@ -2106,6 +2160,10 @@ static void init_session(struct svc_rqst *rqstp, struct nfsd4_session *new, stru
 	spin_lock(&clp->cl_lock);
 	list_add(&new->se_perclnt, &clp->cl_sessions);
 	spin_unlock(&clp->cl_lock);
+
+	spin_lock(&nfsd_session_list_lock);
+	list_add_tail(&new->se_all_sessions, &nfsd_session_list);
+	spin_unlock(&nfsd_session_list_lock);
 
 	{
 		struct sockaddr *sa = svc_addr(rqstp);
@@ -2176,6 +2234,9 @@ unhash_session(struct nfsd4_session *ses)
 	spin_lock(&ses->se_client->cl_lock);
 	list_del(&ses->se_perclnt);
 	spin_unlock(&ses->se_client->cl_lock);
+	spin_lock(&nfsd_session_list_lock);
+	list_del(&ses->se_all_sessions);
+	spin_unlock(&nfsd_session_list_lock);
 }
 
 /* SETCLIENTID and SETCLIENTID_CONFIRM Helper functions */
@@ -4221,8 +4282,11 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	if (status)
 		goto out_put_session;
 
-	/* If there are lots of unused slots, free some */
+	/* we can safely free some slots */
 	free_session_slots(session, seq->maxslots + NFSD_MAX_UNUSED_SLOTS);
+	free_session_slots(session, max(seq->maxslots,
+					session->se_target_maxreqs));
+	session->se_client_maxreqs = seq->maxslots;
 
 	buflen = (seq->cachethis) ?
 			session->se_fchannel.maxresp_cached :
@@ -4251,6 +4315,7 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	 * gently try to allocate another one.
 	 */
 	if (seq->slotid == session->se_fchannel.maxreqs - 1 &&
+	    session->se_target_maxreqs >= session->se_fchannel.maxreqs &&
 	    session->se_fchannel.maxreqs < NFSD_MAX_SLOTS_PER_SESSION) {
 		int s = session->se_fchannel.maxreqs;
 
@@ -4260,9 +4325,11 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			slot->sl_seqid = (uintptr_t)session->se_slots[s];
 			session->se_slots[s] = slot;
 			session->se_fchannel.maxreqs += 1;
+			session->se_target_maxreqs = session->se_fchannel.maxreqs;
 		}
 	}
 	seq->maxslots = session->se_fchannel.maxreqs;
+	seq->target_maxslots = session->se_target_maxreqs;
 
 out:
 	switch (clp->cl_cb_state) {
@@ -8642,6 +8709,8 @@ skip_grace:
 
 /* initialization to perform when the nfsd service is started: */
 
+static struct shrinker *nfsd_slot_shrinker;
+
 int
 nfs4_state_start(void)
 {
@@ -8650,6 +8719,16 @@ nfs4_state_start(void)
 	ret = rhltable_init(&nfs4_file_rhltable, &nfs4_file_rhash_params);
 	if (ret)
 		return ret;
+
+	nfsd_slot_shrinker = shrinker_alloc(0, "nfsd-DRC-slot");
+	if (!nfsd_slot_shrinker) {
+		rhltable_destroy(&nfs4_file_rhltable);
+		return -ENOMEM;
+	}
+	nfsd_slot_shrinker->count_objects = nfsd_slot_count;
+	nfsd_slot_shrinker->scan_objects = nfsd_slot_scan;
+	nfsd_slot_shrinker->seeks = 1;
+	shrinker_register(nfsd_slot_shrinker);
 
 	set_max_delegations();
 	return 0;
@@ -8692,6 +8771,7 @@ void
 nfs4_state_shutdown(void)
 {
 	rhltable_destroy(&nfs4_file_rhltable);
+	shrinker_free(nfsd_slot_shrinker);
 }
 
 static void
