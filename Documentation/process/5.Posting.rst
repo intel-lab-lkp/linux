@@ -264,10 +264,19 @@ The tags in common use are:
  - Cc: the named person received a copy of the patch and had the
    opportunity to comment on it.
 
-Be careful in the addition of tags to your patches, as only Cc: is appropriate
-for addition without the explicit permission of the person named; using
-Reported-by: is fine most of the time as well, but ask for permission if
-the bug was reported in private.
+Note, remember to respect other people's privacy when adding these tags:
+
+ - Only specify email addresses, if owners explicitly permitted their use or
+   are fine with exposing them to the public based on previous actions found in
+   the lore archives. In practice you therefore often will be unable to hastily
+   specify addresses for users of bug trackers, as those usually do expose the
+   email addresses at all or only to logged in users. The latter is the case
+   for bugzilla.kernel.org, whose privacy policy explicitly states that 'your
+   email address will never be displayed to logged out users'.
+
+ - Only Cc: is appropriate for addition without the explicit permission of the
+   person named; using Reported-by: is fine most of the time as well given the
+   above constraints, but ask for permission for bugs reported in private.
 
 
 Sending the patch

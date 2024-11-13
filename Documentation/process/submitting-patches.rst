@@ -484,7 +484,9 @@ provided such comments, you may optionally add a ``Cc:`` tag to the patch.
 This is the only tag which might be added without an explicit action by the
 person it names - but it should indicate that this person was copied on the
 patch.  This tag documents that potentially interested parties
-have been included in the discussion.
+have been included in the discussion. Note, ensure owners of email addresses
+are fine with exposing their addresses in tags like this; see 'Privacy aspects
+when using tags...' below for details.
 
 Co-developed-by: states that the patch was co-created by multiple developers;
 it is used to give attribution to co-authors (in addition to the author
@@ -530,9 +532,10 @@ hopefully inspires them to help us again in the future. The tag is intended for
 bugs; please do not use it to credit feature requests. The tag should be
 followed by a Closes: tag pointing to the report, unless the report is not
 available on the web. The Link: tag can be used instead of Closes: if the patch
-fixes a part of the issue(s) being reported. Please note that if the bug was
-reported in private, then ask for permission first before using the Reported-by
-tag.
+fixes a part of the issue(s) being reported. Note, ensure owners of email
+addresses are fine with exposing their addresses in tags like this; see
+'Privacy aspects when using tags...' below for details. And if the bug was
+reported in private, ask for permission first before using the Reported-by-tag.
 
 A Tested-by: tag indicates that the patch has been successfully tested (in
 some environment) by the person named.  This tag informs maintainers that
@@ -599,6 +602,22 @@ Note: Attaching a Fixes: tag does not subvert the stable kernel rules
 process nor the requirement to Cc: stable@vger.kernel.org on all stable
 patch candidates. For more information, please read
 Documentation/process/stable-kernel-rules.rst.
+
+Privacy aspects when using tags like Cc:, Reported-by:, Tested-by:, ...
+-----------------------------------------------------------------------
+
+Only specify email addresses, if owners explicitly permitted their use or
+are fine with exposing them to the public based on previous actions found in
+the lore archives. In practice you therefore often will be unable to blindly
+specify addresses for users of bug trackers, as those usually do expose the
+email addresses at all or only to logged in users. The latter is the case
+for bugzilla.kernel.org, whose privacy policy explicitly states that 'your
+email address will never be displayed to logged out users'.
+
+Furthermore note that only Cc: is appropriate for addition without the
+explicit permission of the person named; using Reported-by: is fine most of
+the time as well given the above constraints, but ask for permission for bugs
+reported in private.
 
 .. _the_canonical_patch_format:
 
