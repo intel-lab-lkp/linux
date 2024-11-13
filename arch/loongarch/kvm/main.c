@@ -207,15 +207,17 @@ static void kvm_update_vpid(struct kvm_vcpu *vcpu, int cpu)
 		++vpid; /* vpid 0 reserved for root */
 
 		/* start new vpid cycle */
-		kvm_flush_tlb_all();
+		if (!cpu_has_guestid)
+			kvm_flush_tlb_all();
+		else
+			kvm_flush_tlb_all_stage1();
 	}
 
 	context->vpid_cache = vpid;
 	vcpu->arch.vpid = vpid;
-	vcpu->arch.vmid = vcpu->arch.vpid & vpid_mask;
 }
 
-void kvm_check_vpid(struct kvm_vcpu *vcpu)
+static void __kvm_check_vpid(struct kvm_vcpu *vcpu)
 {
 	int cpu;
 	bool migrated;
@@ -243,12 +245,32 @@ void kvm_check_vpid(struct kvm_vcpu *vcpu)
 		kvm_update_vpid(vcpu, cpu);
 		trace_kvm_vpid_change(vcpu, vcpu->arch.vpid);
 		vcpu->cpu = cpu;
-		kvm_clear_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
 	}
 
 	/* Restore GSTAT(0x50).vpid */
 	vpid = (vcpu->arch.vpid & vpid_mask) << CSR_GSTAT_GID_SHIFT;
 	change_csr_gstat(vpid_mask << CSR_GSTAT_GID_SHIFT, vpid);
+}
+
+static void __kvm_check_vmid(struct kvm_vcpu *vcpu)
+{
+	unsigned long vmid;
+
+	/* On some machines like 3A5000, vmid needs the same with vpid */
+	if (!cpu_has_guestid) {
+		vmid = vcpu->arch.vpid & vpid_mask;
+		if (vcpu->arch.vmid != vmid) {
+			vcpu->arch.vmid = vmid;
+			kvm_clear_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
+		}
+		return;
+	}
+}
+
+void kvm_check_vpid(struct kvm_vcpu *vcpu)
+{
+	__kvm_check_vpid(vcpu);
+	__kvm_check_vmid(vcpu);
 }
 
 void kvm_init_vmcs(struct kvm *kvm)
