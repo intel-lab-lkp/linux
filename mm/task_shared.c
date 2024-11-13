@@ -268,6 +268,56 @@ repeat:
 	return ret;
 }
 
+bool taskshrd_delay_resched(void)
+{
+	struct task_struct *t = current;
+	struct task_ushrd_struct *shrdp = t->task_ushrd;
+
+	if (!IS_ENABLED(CONFIG_SCHED_HRTICK))
+		return false;
+
+	if(shrdp == NULL || shrdp->kaddr == NULL)
+		return false;
+
+	if (t->taskshrd_sched_delay)
+		return false;
+
+	if (!(shrdp->kaddr->ts.sched_delay))
+		return false;
+
+	shrdp->kaddr->ts.sched_delay = 0;
+	t->taskshrd_sched_delay = 1;
+
+	return true;
+}
+
+void taskshrd_delay_resched_fini(void)
+{
+#ifdef CONFIG_SCHED_HRTICK
+	struct task_struct *t = current;
+	/*
+	* IRQs off, guaranteed to return to userspace, start timer on this CPU
+	* to limit the resched-overdraft.
+	*
+	* If your critical section is longer than 50 us you get to keep the
+	* pieces.
+	*/
+	if (t->taskshrd_sched_delay)
+		hrtick_local_start(50 * NSEC_PER_USEC);
+#endif
+}
+
+void taskshrd_delay_resched_tick(void)
+{
+#ifdef CONFIG_SCHED_HRTICK
+	struct task_struct *t = current;
+
+	if (t->taskshrd_sched_delay) {
+		set_tsk_need_resched(t);
+	}
+#endif
+}
+
 
 /*
  * Get Task Shared structure, allocate if needed and return mapped user address.

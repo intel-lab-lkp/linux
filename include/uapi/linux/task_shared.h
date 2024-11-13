@@ -13,6 +13,6 @@
 #define TASK_SHAREDINFO 1
 
 struct task_sharedinfo {
-		int version;
+		volatile unsigned short sched_delay;
 };
 #endif

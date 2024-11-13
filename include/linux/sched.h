@@ -326,6 +326,7 @@ extern int __must_check io_schedule_prepare(void);
 extern void io_schedule_finish(int token);
 extern long io_schedule_timeout(long timeout);
 extern void io_schedule(void);
+extern void hrtick_local_start(u64 delay);
 
 /**
  * struct prev_cputime - snapshot of system and user cputime
@@ -957,6 +958,9 @@ struct task_struct {
 	 * ->sched_remote_wakeup gets used, so it can be in this word.
 	 */
 	unsigned			sched_remote_wakeup:1;
+#ifdef CONFIG_TASKSHARED
+	unsigned			taskshrd_sched_delay:1;
+#endif
 #ifdef CONFIG_RT_MUTEXES
 	unsigned			sched_rt_mutex:1;
 #endif
@@ -2200,6 +2204,19 @@ static inline bool owner_on_cpu(struct task_struct *owner)
 /* Returns effective CPU energy utilization, as seen by the scheduler */
 unsigned long sched_cpu_util(int cpu);
 #endif /* CONFIG_SMP */
+
+#ifdef CONFIG_TASKSHARED
+
+extern bool taskshrd_delay_resched(void);
+extern void taskshrd_delay_resched_fini(void);
+extern void taskshrd_delay_resched_tick(void);
+#else
+
+static inline bool taskshrd_delay_resched(void) { return false; }
+static inline void taskshrd_delay_resched_fini(void) { }
+static inline void taskshrd_delay_resched_tick(void) { }
+
+#endif
 
 #ifdef CONFIG_SCHED_CORE
 extern void sched_core_free(struct task_struct *tsk);
