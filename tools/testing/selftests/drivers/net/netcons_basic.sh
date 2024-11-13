@@ -153,6 +153,16 @@ function set_user_data() {
 	echo "${USERDATA_VALUE}" > "${VALUE_PATH}"
 }
 
+function set_cpu_nr() {
+	if [[ ! -f "${NETCONS_PATH}""/userdata/populate_cpu_nr" ]]
+	then
+		echo "Populate CPU configfs path not available in ${NETCONS_PATH}/userdata/populate_cpu_nr" >&2
+		exit "${ksft_skip}"
+	fi
+
+	echo 1 > "${NETCONS_PATH}""/userdata/populate_cpu_nr"
+}
+
 function listen_port_and_save_to() {
 	local OUTPUT=${1}
 	# Just wait for 2 seconds
@@ -181,6 +191,12 @@ function validate_result() {
 
 	if ! grep -q "${USERDATA_KEY}=${USERDATA_VALUE}" "${TMPFILENAME}"; then
 		echo "FAIL: ${USERDATA_KEY}=${USERDATA_VALUE} not found in ${TMPFILENAME}" >&2
+		cat "${TMPFILENAME}" >&2
+		exit "${ksft_fail}"
+	fi
+
+	if ! grep -q "cpu=[0-9]\+" "${TMPFILENAME}"; then
+		echo "FAIL: 'cpu=' not found in ${TMPFILENAME}" >&2
 		cat "${TMPFILENAME}" >&2
 		exit "${ksft_fail}"
 	fi
@@ -254,6 +270,8 @@ set_network
 create_dynamic_target
 # Set userdata "key" with the "value" value
 set_user_data
+# Auto populate CPU number
+set_cpu_nr
 # Listed for netconsole port inside the namespace and destination interface
 listen_port_and_save_to "${OUTPUT_FILE}" &
 # Wait for socat to start and listen to the port.
