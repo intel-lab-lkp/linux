@@ -938,7 +938,7 @@ static void dl_rebuild_rd_accounting(void)
 	 * Clear default root domain DL accounting, it will be computed again
 	 * if a task belongs to it.
 	 */
-	dl_clear_root_domain(&def_root_domain);
+	dl_clear_root_domain(&def_root_domain, false);
 
 	cpuset_for_each_descendant_pre(cs, pos_css, &top_cpuset) {
 

@@ -33,7 +33,7 @@ static inline bool dl_time_before(u64 a, u64 b)
 
 struct root_domain;
 extern void dl_add_task_root_domain(struct task_struct *p);
-extern void dl_clear_root_domain(struct root_domain *rd);
+extern void dl_clear_root_domain(struct root_domain *rd, bool restore);
 
 #endif /* CONFIG_SMP */
 

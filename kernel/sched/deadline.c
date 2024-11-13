@@ -2957,13 +2957,21 @@ void dl_add_task_root_domain(struct task_struct *p)
 	task_rq_unlock(rq, p, &rf);
 }
 
-void dl_clear_root_domain(struct root_domain *rd)
+void dl_clear_root_domain(struct root_domain *rd, bool restore)
 {
-	unsigned long flags;
-
-	raw_spin_lock_irqsave(&rd->dl_bw.lock, flags);
+	guard(raw_spinlock_irqsave)(&rd->dl_bw.lock);
 	rd->dl_bw.total_bw = 0;
-	raw_spin_unlock_irqrestore(&rd->dl_bw.lock, flags);
+
+	if (restore) {
+		int i;
+
+		for_each_cpu(i, rd->span) {
+			struct sched_dl_entity *dl_se = &cpu_rq(i)->fair_server;
+
+			if (dl_server(dl_se))
+				rd->dl_bw.total_bw += dl_se->dl_bw;
+		}
+	}
 }
 
 #endif /* CONFIG_SMP */
