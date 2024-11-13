@@ -252,9 +252,33 @@ static void __kvm_check_vpid(struct kvm_vcpu *vcpu)
 	change_csr_gstat(vpid_mask << CSR_GSTAT_GID_SHIFT, vpid);
 }
 
-static void __kvm_check_vmid(struct kvm_vcpu *vcpu)
+static void kvm_update_vmid(struct kvm_vcpu *vcpu, int cpu)
 {
 	unsigned long vmid;
+	struct kvm_context *context;
+
+	context = per_cpu_ptr(vcpu->kvm->arch.vmcs, cpu);
+	vmid = context->vmid_cache + 1;
+	if (!(vmid & vpid_mask)) {
+		/* finish round of vmid loop */
+		if (unlikely(!vmid))
+			vmid = vpid_mask + 1;
+
+		++vmid; /* vmid 0 reserved for root */
+
+		/* start new vmid cycle */
+		kvm_flush_tlb_all_stage2();
+	}
+
+	context->vmid_cache = vmid;
+	vcpu->kvm->arch.vmid[cpu] = vmid;
+}
+
+static void __kvm_check_vmid(struct kvm_vcpu *vcpu)
+{
+	int cpu;
+	unsigned long ver, old, vmid;
+	struct kvm_context *context;
 
 	/* On some machines like 3A5000, vmid needs the same with vpid */
 	if (!cpu_has_guestid) {
@@ -265,6 +289,21 @@ static void __kvm_check_vmid(struct kvm_vcpu *vcpu)
 		}
 		return;
 	}
+
+	cpu = smp_processor_id();
+	context = per_cpu_ptr(vcpu->kvm->arch.vmcs, cpu);
+
+	/*
+	 * Check if our vmid is of an older version
+	 */
+	ver = vcpu->kvm->arch.vmid[cpu] & ~vpid_mask;
+	old = context->vmid_cache  & ~vpid_mask;
+	if (ver != old) {
+		kvm_update_vmid(vcpu, cpu);
+		kvm_clear_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
+	}
+
+	vcpu->arch.vmid = vcpu->kvm->arch.vmid[cpu] & vpid_mask;
 }
 
 void kvm_check_vpid(struct kvm_vcpu *vcpu)
@@ -386,6 +425,7 @@ static int kvm_loongarch_env_init(void)
 	for_each_possible_cpu(cpu) {
 		context = per_cpu_ptr(vmcs, cpu);
 		context->vpid_cache = vpid_mask + 1;
+		context->vmid_cache = vpid_mask + 1;
 		context->last_vcpu = NULL;
 	}
 
