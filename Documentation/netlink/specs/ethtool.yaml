@@ -5,6 +5,7 @@ name: ethtool
 protocol: genetlink-legacy
 
 doc: Partial family for Ethtool Netlink.
+uapi-header: linux/ethetool_netlink_generated.h
 
 definitions:
   -
@@ -12,43 +13,97 @@ definitions:
     enum-name:
     type: enum
     entries: [ vxlan, geneve, vxlan-gpe ]
+    attr-cnt-name: __ETHTOOL_UDP_TUNNEL_TYPE_CNT
+    render-max: true
   -
     name: stringset
     type: enum
     entries: []
+    render: false
   -
     name: header-flags
     type: flags
-    entries: [ compact-bitsets, omit-reply, stats ]
+    name-prefix: ethtool-flag-
+    entries:
+      -
+        name: compact-bitsets
+        doc: use compact bitsets in reply
+      -
+        name: omit-reply
+        doc: provide optional reply for SET or ACT requests
+      -
+        name: stats
+        doc: request statistics, if supported by the driver
   -
     name: module-fw-flash-status
     type: enum
-    entries: [ started, in_progress, completed, error ]
+    doc: plug-in module firmware flashing status
+    render: false
+    entries:
+      -
+        name: started
+        doc: The firmware flashing process has started.
+      -
+        name: in_progress
+        doc: The firmware flashing process is in progress.
+      -
+        name: completed
+        doc: The firmware flashing process was completed successfully.
+      -
+        name: error
+        doc: The firmware flashing process was stopped due to an error.
   -
     name: c33-pse-ext-state
-    enum-name:
+    enum-name: c33-pse-ext-state
+    doc: "groups of PSE extended states functions. IEEE 802.3-2022 33.2.4.4 Variables"
     type: enum
     name-prefix: ethtool-c33-pse-ext-state-
+    render: false
     entries:
         - none
-        - error-condition
-        - mr-mps-valid
-        - mr-pse-enable
-        - option-detect-ted
-        - option-vport-lim
-        - ovld-detected
-        - power-not-available
-        - short-detected
+        -
+          name: error-condition
+          doc: Group of error_condition states
+        -
+          name: mr-mps-valid
+          doc: Group of mr_mps_valid states
+        -
+          name: mr-pse-enable
+          doc: Group of mr_pse_enable states
+        -
+          name: option-detect-ted
+          doc: Group of option_detect_ted states
+        -
+          name: option-vport-lim
+          doc: Group of option_vport_lim states
+        -
+          name: ovld-detected
+          doc: Group of ovld_detected states
+        -
+          name: power-not-available
+          doc: Group of power_not_available states
+        -
+          name: short-detected
+          doc: Group of short_detected states
   -
     name: phy-upstream-type
     enum-name:
     type: enum
     entries: [ mac, phy ]
+  -
+    name: tcp-data-split
+    type: enum
+    entries: [ unknown, disabled, enabled ]
 
 attribute-sets:
   -
     name: header
+    attr-cnt-name: __ETHTOOL_A_HEADER_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: dev-index
         type: u32
@@ -65,7 +120,12 @@ attribute-sets:
 
   -
     name: bitset-bit
+    attr-cnt-name: __ETHTOOL_A_BITSET_BIT_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: index
         type: u32
@@ -77,7 +137,12 @@ attribute-sets:
         type: flag
   -
     name: bitset-bits
+    attr-cnt-name: __ETHTOOL_A_BITSET_BITS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: bit
         type: nest
@@ -85,7 +150,12 @@ attribute-sets:
         nested-attributes: bitset-bit
   -
     name: bitset
+    attr-cnt-name: __ETHTOOL_A_BITSET_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: nomask
         type: flag
@@ -104,7 +174,12 @@ attribute-sets:
         type: binary
   -
     name: string
+    attr-cnt-name: __ETHTOOL_A_STRING_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: index
         type: u32
@@ -113,7 +188,16 @@ attribute-sets:
         type: string
   -
     name: strings
+    attr-cnt-name: __ETHTOOL_A_STRINGS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: string
         type: nest
@@ -121,7 +205,12 @@ attribute-sets:
         nested-attributes: string
   -
     name: stringset
+    attr-cnt-name: __ETHTOOL_A_STRINGSET_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: id
         type: u32
@@ -135,7 +224,12 @@ attribute-sets:
         nested-attributes: strings
   -
     name: stringsets
+    attr-cnt-name: __ETHTOOL_A_STRINGSETS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: stringset
         type: nest
@@ -143,7 +237,12 @@ attribute-sets:
         nested-attributes: stringset
   -
     name: strset
+    attr-cnt-name: __ETHTOOL_A_STRSET_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -158,7 +257,12 @@ attribute-sets:
 
   -
     name: privflags
+    attr-cnt-name: __ETHTOOL_A_PRIVFLAGS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -170,7 +274,12 @@ attribute-sets:
 
   -
     name: rings
+    attr-cnt-name: __ETHTOOL_A_RINGS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -205,6 +314,7 @@ attribute-sets:
       -
         name: tcp-data-split
         type: u8
+        enum: tcp-data-split
       -
         name: cqe-size
         type: u32
@@ -223,31 +333,48 @@ attribute-sets:
 
   -
     name: mm-stat
+    attr-cnt-name: __ETHTOOL_A_MM_STAT_CNT
+    doc: MAC Merge (802.3)
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: pad
         type: pad
       -
         name: reassembly-errors
+        doc: aMACMergeFrameAssErrorCount
         type: u64
       -
         name: smd-errors
+        doc: aMACMergeFrameSmdErrorCount
         type: u64
       -
         name: reassembly-ok
+        doc: aMACMergeFrameAssOkCount
         type: u64
       -
         name: rx-frag-count
+        doc: aMACMergeFragCountRx
         type: u64
       -
         name: tx-frag-count
+        doc: aMACMergeFragCountTx
         type: u64
       -
         name: hold-count
+        doc: aMACMergeHoldCount
         type: u64
   -
     name: mm
+    attr-cnt-name: __ETHTOOL_A_MM_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -285,7 +412,12 @@ attribute-sets:
         nested-attributes: mm-stat
   -
     name: linkinfo
+    attr-cnt-name: __ETHTOOL_A_LINKINFO_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -307,7 +439,12 @@ attribute-sets:
         type: u8
   -
     name: linkmodes
+    attr-cnt-name: __ETHTOOL_A_LINKMODES_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -343,7 +480,12 @@ attribute-sets:
         type: u8
   -
     name: linkstate
+    attr-cnt-name: __ETHTOOL_A_LINKSTATE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -368,7 +510,12 @@ attribute-sets:
         type: u32
   -
     name: debug
+    attr-cnt-name: __ETHTOOL_A_DEBUG_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -379,7 +526,12 @@ attribute-sets:
         nested-attributes: bitset
   -
     name: wol
+    attr-cnt-name: __ETHTOOL_A_WOL_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -393,7 +545,12 @@ attribute-sets:
         type: binary
   -
     name: features
+    attr-cnt-name: __ETHTOOL_A_FEATURES_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -416,7 +573,12 @@ attribute-sets:
         nested-attributes: bitset
   -
     name: channels
+    attr-cnt-name: __ETHTOOL_A_CHANNELS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -448,7 +610,12 @@ attribute-sets:
 
   -
     name: irq-moderation
+    attr-cnt-name: __ETHTOOL_A_IRQ_MODERATION_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: usec
         type: u32
@@ -460,7 +627,12 @@ attribute-sets:
         type: u32
   -
     name: profile
+    attr-cnt-name: __ETHTOOL_A_PROFILE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: irq-moderation
         type: nest
@@ -468,7 +640,12 @@ attribute-sets:
         nested-attributes: irq-moderation
   -
     name: coalesce
+    attr-cnt-name: __ETHTOOL_A_COALESCE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -565,7 +742,12 @@ attribute-sets:
 
   -
     name: pause-stat
+    attr-cnt-name: __ETHTOOL_A_PAUSE_STAT_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: pad
         type: pad
@@ -577,7 +759,12 @@ attribute-sets:
         type: u64
   -
     name: pause
+    attr-cnt-name: __ETHTOOL_A_PAUSE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -600,7 +787,12 @@ attribute-sets:
         type: u32
   -
     name: eee
+    attr-cnt-name: __ETHTOOL_A_EEE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -627,7 +819,12 @@ attribute-sets:
         type: u32
   -
     name: ts-stat
+    attr-cnt-name: __ETHTOOL_A_TS_STAT_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: tx-pkts
         type: uint
@@ -639,7 +836,12 @@ attribute-sets:
         type: uint
   -
     name: tsinfo
+    attr-cnt-name: __ETHTOOL_A_TSINFO_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -665,19 +867,32 @@ attribute-sets:
         nested-attributes: ts-stat
   -
     name: cable-result
+    attr-cnt-name: __ETHTOOL_A_CABLE_RESULT_CNT
     attributes:
       -
+        name: unspec
+        type: unused
+        value: 0
+      -
         name: pair
+        doc: ETHTOOL_A_CABLE_PAIR_
         type: u8
       -
         name: code
+        doc: ETHTOOL_A_CABLE_RESULT_CODE_
         type: u8
       -
         name: src
+        doc: ETHTOOL_A_CABLE_INF_SRC_
         type: u32
   -
     name: cable-fault-length
+    attr-cnt-name: __ETHTOOL_A_CABLE_FAULT_LENGTH_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: pair
         type: u8
@@ -689,7 +904,12 @@ attribute-sets:
         type: u32
   -
     name: cable-nest
+    attr-cnt-name: __ETHTOOL_A_CABLE_NEST_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: result
         type: nest
@@ -700,20 +920,31 @@ attribute-sets:
         nested-attributes: cable-fault-length
   -
     name: cable-test
+    attr-cnt-name: __ETHTOOL_A_CABLE_TEST_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
         nested-attributes: header
   -
     name: cable-test-ntf
+    attr-cnt-name: __ETHTOOL_A_CABLE_TEST_NTF_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
         nested-attributes: header
       -
         name: status
+        doc: _STARTED/_COMPLETE
         type: u8
       -
         name: nest
@@ -721,7 +952,12 @@ attribute-sets:
         nested-attributes: cable-nest
   -
     name: cable-test-tdr-cfg
+    attr-cnt-name: __ETHTOOL_A_CABLE_TEST_TDR_CFG_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: first
         type: u32
@@ -736,7 +972,12 @@ attribute-sets:
         type: u8
   -
     name: cable-test-tdr-ntf
+    attr-cnt-name: __ETHTOOL_A_CABLE_TEST_TDR_NTF_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -750,7 +991,12 @@ attribute-sets:
         nested-attributes: cable-nest
   -
     name: cable-test-tdr
+    attr-cnt-name: __ETHTOOL_A_CABLE_TEST_TDR_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -761,7 +1007,12 @@ attribute-sets:
         nested-attributes: cable-test-tdr-cfg
   -
     name: tunnel-udp-entry
+    attr-cnt-name: __ETHTOOL_A_TUNNEL_UDP_ENTRY_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: port
         type: u16
@@ -772,7 +1023,12 @@ attribute-sets:
         enum: udp-tunnel-type
   -
     name: tunnel-udp-table
+    attr-cnt-name: __ETHTOOL_A_TUNNEL_UDP_TABLE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: size
         type: u32
@@ -787,14 +1043,24 @@ attribute-sets:
         nested-attributes: tunnel-udp-entry
   -
     name: tunnel-udp
+    attr-cnt-name: __ETHTOOL_A_TUNNEL_UDP_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: table
         type: nest
         nested-attributes: tunnel-udp-table
   -
     name: tunnel-info
+    attr-cnt-name: __ETHTOOL_A_TUNNEL_INFO_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -805,7 +1071,12 @@ attribute-sets:
         nested-attributes: tunnel-udp
   -
     name: fec-stat
+    attr-cnt-name: __ETHTOOL_A_FEC_STAT_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: pad
         type: pad
@@ -823,7 +1094,12 @@ attribute-sets:
         sub-type: u64
   -
     name: fec
+    attr-cnt-name: __ETHTOOL_A_FEC_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -844,7 +1120,12 @@ attribute-sets:
         nested-attributes: fec-stat
   -
     name: module-eeprom
+    attr-cnt-name: __ETHTOOL_A_MODULE_EEPROM_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -869,7 +1150,12 @@ attribute-sets:
         type: binary
   -
     name: stats-grp
+    attr-cnt-name: __ETHTOOL_A_STATS_GRP_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: pad
         type: pad
@@ -912,7 +1198,12 @@ attribute-sets:
         name: hist-val
   -
     name: stats
+    attr-cnt-name: __ETHTOOL_A_STATS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: pad
         type: pad
@@ -933,7 +1224,12 @@ attribute-sets:
         type: u32
   -
     name: phc-vclocks
+    attr-cnt-name: __ETHTOOL_A_PHC_VCLOCKS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -947,7 +1243,12 @@ attribute-sets:
         sub-type: s32
   -
     name: module
+    attr-cnt-name: __ETHTOOL_A_MODULE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -960,7 +1261,13 @@ attribute-sets:
         type: u8
   -
     name: c33-pse-pw-limit
+    attr-cnt-name: __ETHTOOL_A_C33_PSE_PW_LIMIT_CNT
+    attr-max-name: __ETHTOOL_A_C33_PSE_PW_LIMIT_MAX
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: min
         type: u32
@@ -969,7 +1276,12 @@ attribute-sets:
         type: u32
   -
     name: pse
+    attr-cnt-name: __ETHTOOL_A_PSE_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -1027,7 +1339,12 @@ attribute-sets:
         nested-attributes: c33-pse-pw-limit
   -
     name: rss
+    attr-cnt-name: __ETHTOOL_A_RSS_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -1053,7 +1370,12 @@ attribute-sets:
         type: u32
   -
     name: plca
+    attr-cnt-name: __ETHTOOL_A_PLCA_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -1084,7 +1406,12 @@ attribute-sets:
         type: u32
   -
     name: module-fw-flash
+    attr-cnt-name: __ETHTOOL_A_MODULE_FW_FLASH_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
@@ -1110,7 +1437,12 @@ attribute-sets:
         type: uint
   -
     name: phy
+    attr-cnt-name: __ETHTOOL_A_PHY_CNT
     attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
       -
         name: header
         type: nest
