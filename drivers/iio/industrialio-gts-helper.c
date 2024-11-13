@@ -4,6 +4,7 @@
  * Copyright (c) 2023 Matti Vaittinen <mazziesaccount@gmail.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/export.h>
@@ -168,7 +169,7 @@ static int iio_gts_gain_cmp(const void *a, const void *b)
 static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 {
 	int ret, i, j, new_idx, time_idx;
-	int *all_gains;
+	int *all_gains __free(kfree) = NULL;
 	size_t gain_bytes;
 
 	for (i = 0; i < gts->num_itime; i++) {
@@ -232,10 +233,9 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 
 	gts->avail_all_scales_table = kcalloc(new_idx, 2 * sizeof(int),
 					      GFP_KERNEL);
-	if (!gts->avail_all_scales_table) {
-		ret = -ENOMEM;
-		goto free_out;
-	}
+	if (!gts->avail_all_scales_table)
+		return -ENOMEM;
+
 	gts->num_avail_all_scales = new_idx;
 
 	for (i = 0; i < gts->num_avail_all_scales; i++) {
@@ -246,14 +246,11 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 		if (ret) {
 			kfree(gts->avail_all_scales_table);
 			gts->num_avail_all_scales = 0;
-			goto free_out;
+			return ret;
 		}
 	}
 
-free_out:
-	kfree(all_gains);
-
-	return ret;
+	return 0;
 }
 
 /**
