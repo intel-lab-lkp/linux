@@ -48,6 +48,8 @@ static int panthor_clk_init(struct panthor_device *ptdev)
 
 void panthor_device_unplug(struct panthor_device *ptdev)
 {
+	int ret;
+
 	/* This function can be called from two different path: the reset work
 	 * and the platform device remove callback. drm_dev_unplug() doesn't
 	 * deal with concurrent callers, so we have to protect drm_dev_unplug()
@@ -74,7 +76,8 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	 */
 	mutex_unlock(&ptdev->unplug.lock);
 
-	drm_WARN_ON(&ptdev->base, pm_runtime_get_sync(ptdev->base.dev) < 0);
+	ret = pm_runtime_get_sync(ptdev->base.dev);
+	drm_WARN_ON(&ptdev->base, ret < 0);
 
 	/* Now, try to cleanly shutdown the GPU before the device resources
 	 * get reclaimed.
@@ -85,7 +88,10 @@ void panthor_device_unplug(struct panthor_device *ptdev)
 	panthor_gpu_unplug(ptdev);
 
 	pm_runtime_dont_use_autosuspend(ptdev->base.dev);
-	pm_runtime_put_sync_suspend(ptdev->base.dev);
+
+	/* If the resume failed, we don't need to suspend here. */
+	if (!ret)
+		pm_runtime_put_sync_suspend(ptdev->base.dev);
 
 	/* If PM is disabled, we need to call the suspend handler manually. */
 	if (!IS_ENABLED(CONFIG_PM))
@@ -541,17 +547,4 @@ int panthor_device_suspend(struct device *dev)
 	clk_disable_unprepare(ptdev->clks.core);
 	atomic_set(&ptdev->pm.state, PANTHOR_DEVICE_PM_STATE_SUSPENDED);
 	return 0;
-
-err_set_active:
-	/* If something failed and we have to revert back to an
-	 * active state, we also need to clear the MMIO userspace
-	 * mappings, so any dumb pages that were mapped while we
-	 * were trying to suspend gets invalidated.
-	 */
-	mutex_lock(&ptdev->pm.mmio_lock);
-	atomic_set(&ptdev->pm.state, PANTHOR_DEVICE_PM_STATE_ACTIVE);
-	unmap_mapping_range(ptdev->base.anon_inode->i_mapping,
-			    DRM_PANTHOR_USER_MMIO_OFFSET, 0, 1);
-	mutex_unlock(&ptdev->pm.mmio_lock);
-	return ret;
 }
