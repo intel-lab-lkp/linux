@@ -390,5 +390,7 @@ COND_SYSCALL(setuid16);
 
 /* restartable sequence */
 COND_SYSCALL(rseq);
+/* task shared */
+COND_SYSCALL(task_getshared);
 
 COND_SYSCALL(uretprobe);

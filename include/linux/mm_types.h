@@ -1033,6 +1033,10 @@ struct mm_struct {
 #endif
 		} lru_gen;
 #endif /* CONFIG_LRU_GEN_WALKS_MMU */
+#ifdef CONFIG_TASKSHARED
+		/* user shared pages */
+		void *usharedpg;
+#endif
 	} __randomize_layout;
 
 	/*

@@ -997,6 +997,8 @@ asmlinkage long sys_spu_create(const char __user *name,
 		unsigned int flags, umode_t mode, int fd);
 
 
+asmlinkage long sys_task_getshared(long opt, long flags, void __user *uaddr);
+
 /*
  * Deprecated system calls which are still defined in
  * include/uapi/asm-generic/unistd.h and wanted by >= 1 arch

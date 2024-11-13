@@ -1830,6 +1830,18 @@ static int special_mapping_split(struct vm_area_struct *vma, unsigned long addr)
 	return -EINVAL;
 }
 
+/*
+ * XXX: Having a mkwrite hook prevents attempt to update file time on
+ * page write fault, these mappings do not have a file structure associated.
+ */
+static vm_fault_t special_mapping_page_mkwrite(struct vm_fault *vmf)
+{
+	struct page *page = vmf->page;
+	lock_page(page);
+
+	return VM_FAULT_LOCKED;
+}
+
 static const struct vm_operations_struct special_mapping_vmops = {
 	.close = special_mapping_close,
 	.fault = special_mapping_fault,
@@ -1838,6 +1850,7 @@ static const struct vm_operations_struct special_mapping_vmops = {
 	/* vDSO code relies that VVAR can't be accessed remotely */
 	.access = NULL,
 	.may_split = special_mapping_split,
+	.page_mkwrite = special_mapping_page_mkwrite,
 };
 
 static vm_fault_t special_mapping_fault(struct vm_fault *vmf)

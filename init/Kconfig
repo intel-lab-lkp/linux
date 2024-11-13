@@ -1790,6 +1790,16 @@ config DEBUG_RSEQ
 	  Enable extra debugging checks for the rseq system call.
 
 	  If unsure, say N.
+config TASKSHARED
+	bool "Enable task getshared syscall" if EXPERT
+	default y
+	help
+	  Enable mechanism to provide per thread shared structure mapped
+	  between userspace<->kernel for faster communication. Used
+	  for sharing per thread information.
+
+	  If unsure, say Y.
+
 
 config CACHESTAT_SYSCALL
 	bool "Enable cachestat() system call" if EXPERT
