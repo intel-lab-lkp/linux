@@ -117,6 +117,7 @@ struct kvm_arch {
 	unsigned long pv_features;
 
 	s64 time_offset;
+	cpumask_t tlb_flush_pending;
 	unsigned long vmid[NR_CPUS];
 	struct kvm_context __percpu *vmcs;
 };
@@ -317,6 +318,8 @@ static inline void kvm_arch_vcpu_unblocking(struct kvm_vcpu *vcpu) {}
 static inline void kvm_arch_vcpu_block_finish(struct kvm_vcpu *vcpu) {}
 static inline void kvm_arch_free_memslot(struct kvm *kvm, struct kvm_memory_slot *slot) {}
 void kvm_check_vpid(struct kvm_vcpu *vcpu);
+#define __KVM_HAVE_ARCH_FLUSH_REMOTE_TLBS
+int kvm_arch_flush_remote_tlbs(struct kvm *kvm);
 enum hrtimer_restart kvm_swtimer_wakeup(struct hrtimer *timer);
 void kvm_arch_flush_remote_tlbs_memslot(struct kvm *kvm, const struct kvm_memory_slot *memslot);
 void kvm_init_vmcs(struct kvm *kvm);

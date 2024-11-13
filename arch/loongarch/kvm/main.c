@@ -292,6 +292,9 @@ static void __kvm_check_vmid(struct kvm_vcpu *vcpu)
 
 	cpu = smp_processor_id();
 	context = per_cpu_ptr(vcpu->kvm->arch.vmcs, cpu);
+	if (cpumask_test_and_clear_cpu(cpu, &vcpu->kvm->arch.tlb_flush_pending))
+		vcpu->kvm->arch.vmid[cpu] = 0;
+
 
 	/*
 	 * Check if our vmid is of an older version
