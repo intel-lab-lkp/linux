@@ -908,6 +908,13 @@ void __init early_init_devtree(void *params)
 
 	mmu_early_init_devtree();
 
+	/*
+	 * Setup param area for passing additional parameters to the fadump
+	 * capture kernel. Since this depends on the MMU type, the function
+	 * must be called after the MMU type is finalized.
+	 */
+	fadump_setup_param_area();
+
 #ifdef CONFIG_PPC_POWERNV
 	/* Scan and build the list of machine check recoverable ranges */
 	of_scan_flat_dt(early_init_dt_scan_recoverable_ranges, NULL);
