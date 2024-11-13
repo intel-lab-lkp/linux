@@ -3956,6 +3956,8 @@ vmxnet3_probe_device(struct pci_dev *pdev,
 	int num_rx_queues;
 	int queues;
 	unsigned long flags;
+	struct device *dev;
+	dma_addr_t adapter_pa;
 
 	if (!pci_msi_enabled())
 		enable_mq = 0;
@@ -3995,14 +3997,19 @@ vmxnet3_probe_device(struct pci_dev *pdev,
 	}
 
 	spin_lock_init(&adapter->cmd_lock);
-	adapter->adapter_pa = dma_map_single(&adapter->pdev->dev, adapter,
+	dev = &adapter->pdev->dev;
+	adapter_pa = dma_map_single(dev, adapter,
 					     sizeof(struct vmxnet3_adapter),
 					     DMA_TO_DEVICE);
-	if (dma_mapping_error(&adapter->pdev->dev, adapter->adapter_pa)) {
+	if (dma_mapping_error(dev, adapter_pa)) {
 		dev_err(&pdev->dev, "Failed to map dma\n");
 		err = -EFAULT;
 		goto err_set_mask;
 	}
+	dma_sync_single_for_cpu(dev, adapter_pa,
+				sizeof(struct vmxnet3_adapter), DMA_TO_DEVICE);
+	adapter->adapter_pa = adapter_pa;
+
 	adapter->shared = dma_alloc_coherent(
 				&adapter->pdev->dev,
 				sizeof(struct Vmxnet3_DriverShared),
@@ -4237,6 +4244,8 @@ vmxnet3_probe_device(struct pci_dev *pdev,
 	}
 
 	vmxnet3_check_link(adapter, false);
+	dma_sync_single_for_device(dev, adapter_pa,
+				sizeof(struct vmxnet3_adapter), DMA_TO_DEVICE);
 	return 0;
 
 err_register:
