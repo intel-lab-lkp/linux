@@ -1709,7 +1709,7 @@ static void sma1307_check_fault_worker(struct work_struct *work)
 
 static void sma1307_setting_loaded(struct sma1307_priv *sma1307, const char *file)
 {
-	const struct firmware *fw;
+	const struct firmware *fw = NULL;
 	int *data, size, offset, num_mode;
 
 	request_firmware(&fw, file, sma1307->dev);
