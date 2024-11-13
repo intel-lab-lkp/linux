@@ -247,6 +247,9 @@ struct export_operations {
 						*/
 #define EXPORT_OP_FLUSH_ON_CLOSE	(0x20) /* fs flushes file data on close */
 #define EXPORT_OP_ASYNC_LOCK		(0x40) /* fs can do async lock request */
+#define EXPORT_OP_UNRESTRICTED_OPEN	(0x80) /* FS allows open_by_handle_at
+						  without CAP_DAC_READ_SEARCH
+						*/
 	unsigned long	flags;
 };
 

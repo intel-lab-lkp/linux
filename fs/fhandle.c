@@ -235,26 +235,32 @@ static int do_handle_to_path(struct file_handle *handle, struct path *path,
 	return 0;
 }
 
-/*
- * Allow relaxed permissions of file handles if the caller has the
- * ability to mount the filesystem or create a bind-mount of the
- * provided @mountdirfd.
- *
- * In both cases the caller may be able to get an unobstructed way to
- * the encoded file handle. If the caller is only able to create a
- * bind-mount we need to verify that there are no locked mounts on top
- * of it that could prevent us from getting to the encoded file.
- *
- * In principle, locked mounts can prevent the caller from mounting the
- * filesystem but that only applies to procfs and sysfs neither of which
- * support decoding file handles.
- */
 static inline bool may_decode_fh(struct handle_to_path_ctx *ctx,
 				 unsigned int o_flags)
 {
 	struct path *root = &ctx->root;
+	struct export_operations *nop = root->mnt->mnt_sb->s_export_op;
+
+	if (nop && nop->flags & EXPORT_OP_UNRESTRICTED_OPEN)
+		return true;
+
+	if (capable(CAP_DAC_READ_SEARCH))
+		return true;
 
 	/*
+	 * Allow relaxed permissions of file handles if the caller has the
+	 * ability to mount the filesystem or create a bind-mount of the
+	 * provided @mountdirfd.
+	 *
+	 * In both cases the caller may be able to get an unobstructed way to
+	 * the encoded file handle. If the caller is only able to create a
+	 * bind-mount we need to verify that there are no locked mounts on top
+	 * of it that could prevent us from getting to the encoded file.
+	 *
+	 * In principle, locked mounts can prevent the caller from mounting the
+	 * filesystem but that only applies to procfs and sysfs neither of which
+	 * support decoding file handles.
+	 *
 	 * Restrict to O_DIRECTORY to provide a deterministic API that avoids a
 	 * confusing api in the face of disconnected non-dir dentries.
 	 *
@@ -293,7 +299,7 @@ static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
 	if (retval)
 		goto out_err;
 
-	if (!capable(CAP_DAC_READ_SEARCH) && !may_decode_fh(&ctx, o_flags)) {
+	if (!may_decode_fh(&ctx, o_flags)) {
 		retval = -EPERM;
 		goto out_path;
 	}
