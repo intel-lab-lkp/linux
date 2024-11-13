@@ -1365,7 +1365,10 @@ static int cs35l45_dsp_init(struct cs35l45_private *cs35l45)
 	dsp->cs_dsp.lock_regions = 0xFFFFFFFF;
 
 	ret = wm_halo_init(dsp);
-
+	if (ret) {
+		dev_err(cs35l45->dev, "wm_halo_init failed: %d\n", ret);
+		return ret;
+	}
 	regmap_multi_reg_write(cs35l45->regmap, cs35l45_fs_errata_patch,
 						   ARRAY_SIZE(cs35l45_fs_errata_patch));
 
