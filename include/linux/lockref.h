@@ -22,15 +22,30 @@
 	(IS_ENABLED(CONFIG_ARCH_USE_CMPXCHG_LOCKREF) && \
 	 IS_ENABLED(CONFIG_SMP) && SPINLOCK_SIZE <= 4)
 
+#define USE_CMPXCHG_LOCKREF_ALTERNATIVE \
+	(IS_ENABLED(CONFIG_ARCH_USE_CMPXCHG_LOCKREF) && \
+	 IS_ENABLED(CONFIG_SMP) && SPINLOCK_SIZE > 4)
+
 struct lockref {
 	union {
 #if USE_CMPXCHG_LOCKREF
 		aligned_u64 lock_count;
-#endif
 		struct {
 			spinlock_t lock;
 			int count;
 		};
+#elif USE_CMPXCHG_LOCKREF_ALTERNATIVE
+		aligned_u64 lock_count;
+		struct {
+			int count;
+			spinlock_t lock;
+		} __packed;
+#else
+		struct {
+			spinlock_t lock;
+			int count;
+		};
+#endif
 	};
 };
 
