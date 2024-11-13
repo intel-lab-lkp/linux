@@ -74,6 +74,7 @@ enum probe_type {
  * @suspend:	Called to put the device to sleep mode. Usually to a
  *		low power state.
  * @resume:	Called to bring a device from sleep mode.
+ * @irq_get_affinity:	Get IRQ affinity mask for the device.
  * @groups:	Default attributes that get created by the driver core
  *		automatically.
  * @dev_groups:	Additional attributes attached to device instance once
@@ -112,6 +113,8 @@ struct device_driver {
 	void (*shutdown) (struct device *dev);
 	int (*suspend) (struct device *dev, pm_message_t state);
 	int (*resume) (struct device *dev);
+	const struct cpumask *(*irq_get_affinity)(struct device *dev,
+			unsigned int irq_vec);
 	const struct attribute_group **groups;
 	const struct attribute_group **dev_groups;
 
