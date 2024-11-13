@@ -3372,7 +3372,7 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 	for (queue_no = 0; queue_no < hisi_hba->cq_nvecs; queue_no++) {
 		struct hisi_sas_cq *cq = &hisi_hba->cq[queue_no];
 
-		cq->irq_no = hisi_hba->irq_map[queue_no + 96];
+		cq->irq_no = hisi_hba->irq_map[queue_no + COQ_IRQ_INDEX];
 		rc = devm_request_threaded_irq(dev, cq->irq_no,
 					       cq_interrupt_v2_hw,
 					       cq_thread_v2_hw, IRQF_ONESHOT,
@@ -3387,6 +3387,14 @@ static int interrupt_init_v2_hw(struct hisi_hba *hisi_hba)
 	}
 err_out:
 	return rc;
+}
+
+static const struct cpumask *hisi_sas_v2_irq_get_affinity(struct device *dev,
+							  unsigned int irq_vec)
+{
+	struct hisi_hba *hisi_hba = dev->driver_data;
+
+	return irq_get_affinity_mask(hisi_hba->irq_map[irq_vec]);
 }
 
 static int hisi_sas_v2_init(struct hisi_hba *hisi_hba)
@@ -3553,17 +3561,8 @@ static void map_queues_v2_hw(struct Scsi_Host *shost)
 {
 	struct hisi_hba *hisi_hba = shost_priv(shost);
 	struct blk_mq_queue_map *qmap = &shost->tag_set.map[HCTX_TYPE_DEFAULT];
-	const struct cpumask *mask;
-	unsigned int queue, cpu;
 
-	for (queue = 0; queue < qmap->nr_queues; queue++) {
-		mask = irq_get_affinity_mask(hisi_hba->irq_map[96 + queue]);
-		if (!mask)
-			continue;
-
-		for_each_cpu(cpu, mask)
-			qmap->mq_map[cpu] = qmap->queue_offset + queue;
-	}
+	blk_mq_hctx_map_queues(qmap, hisi_hba->dev, CQ0_IRQ_INDEX);
 }
 
 static const struct scsi_host_template sht_v2_hw = {
@@ -3636,6 +3635,7 @@ static struct platform_driver hisi_sas_v2_driver = {
 		.name = DRV_NAME,
 		.of_match_table = sas_v2_of_match,
 		.acpi_match_table = ACPI_PTR(sas_v2_acpi_match),
+		.irq_get_affinity = hisi_sas_v2_irq_get_affinity,
 	},
 };
 
