@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/anon_inodes.h>
+#include <linux/exportfs.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/magic.h>
@@ -347,11 +348,69 @@ static const struct dentry_operations pidfs_dentry_operations = {
 	.d_prune	= stashed_dentry_prune,
 };
 
+#define PIDFD_FID_LEN 3
+
+struct pidfd_fid {
+	u64 ino;
+	s32 pid;
+} __packed;
+
+static int pidfs_encode_fh(struct inode *inode, u32 *fh, int *max_len,
+			   struct inode *parent)
+{
+	struct pid *pid = inode->i_private;
+	struct pidfd_fid *fid = (struct pidfd_fid *)fh;
+
+	if (*max_len < PIDFD_FID_LEN) {
+		*max_len = PIDFD_FID_LEN;
+		return FILEID_INVALID;
+	}
+
+	fid->ino = pid->ino;
+	fid->pid = pid_nr(pid);
+	*max_len = PIDFD_FID_LEN;
+	return FILEID_INO64_GEN;
+}
+
+static struct dentry *pidfs_fh_to_dentry(struct super_block *sb,
+					 struct fid *gen_fid,
+					 int fh_len, int fh_type)
+{
+	int ret;
+	struct path path;
+	struct pidfd_fid *fid = (struct pidfd_fid *)gen_fid;
+	struct pid *pid;
+
+	if (fh_type != FILEID_INO64_GEN || fh_len < PIDFD_FID_LEN)
+		return NULL;
+
+	scoped_guard(rcu) {
+		pid = find_pid_ns(fid->pid, &init_pid_ns);
+		if (!pid || pid->ino != fid->ino || pid_vnr(pid) == 0)
+			return NULL;
+
+		pid = get_pid(pid);
+	}
+
+	ret = path_from_stashed(&pid->stashed, pidfs_mnt, pid, &path);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	mntput(path.mnt);
+	return path.dentry;
+}
+
+static const struct export_operations pidfs_export_operations = {
+	.encode_fh = pidfs_encode_fh,
+	.fh_to_dentry = pidfs_fh_to_dentry,
+	.flags = EXPORT_OP_UNRESTRICTED_OPEN,
+};
+
 static int pidfs_init_inode(struct inode *inode, void *data)
 {
 	inode->i_private = data;
 	inode->i_flags |= S_PRIVATE;
-	inode->i_mode |= S_IRWXU;
+	inode->i_mode |= S_IRWXU | S_IRWXG | S_IRWXO;
 	inode->i_op = &pidfs_inode_operations;
 	inode->i_fop = &pidfs_file_operations;
 	/*
@@ -382,6 +441,7 @@ static int pidfs_init_fs_context(struct fs_context *fc)
 		return -ENOMEM;
 
 	ctx->ops = &pidfs_sops;
+	ctx->eops = &pidfs_export_operations;
 	ctx->dops = &pidfs_dentry_operations;
 	fc->s_fs_info = (void *)&pidfs_stashed_ops;
 	return 0;
