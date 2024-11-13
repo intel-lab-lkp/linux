@@ -83,6 +83,11 @@ properties:
           enum: [ const, enum, flags, struct ] # Trim
         doc:
           type: string
+        # Start genetlink-legacy
+        render:
+          description: Render this definition (true by default) or not.
+          type: boolean
+        # End genetlink-legacy
         # For const
         value:
           description: For const - the value.
