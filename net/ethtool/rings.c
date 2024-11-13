@@ -250,6 +250,9 @@ ethnl_set_rings(struct ethnl_req_info *req_info, struct genl_info *info)
 		return -EINVAL;
 	}
 
+	if (tb[ETHTOOL_A_RINGS_TCP_DATA_SPLIT])
+		kernel_ringparam.tcp_data_split_mod = true;
+
 	ret = dev->ethtool_ops->set_ringparam(dev, &ringparam,
 					      &kernel_ringparam, info->extack);
 	return ret < 0 ? ret : 1;

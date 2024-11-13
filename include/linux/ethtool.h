@@ -73,6 +73,7 @@ enum {
  * struct kernel_ethtool_ringparam - RX/TX ring configuration
  * @rx_buf_len: Current length of buffers on the rx ring.
  * @tcp_data_split: Scatter packet headers and data to separate buffers
+ * @tcp_data_split_mod: Updated tcp-data-split from user
  * @tx_push: The flag of tx push mode
  * @rx_push: The flag of rx push mode
  * @cqe_size: Size of TX/RX completion queue event
@@ -82,6 +83,7 @@ enum {
 struct kernel_ethtool_ringparam {
 	u32	rx_buf_len;
 	u8	tcp_data_split;
+	bool	tcp_data_split_mod;
 	u8	tx_push;
 	u8	rx_push;
 	u32	cqe_size;
