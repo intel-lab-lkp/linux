@@ -2559,6 +2559,13 @@ static int mv643xx_eth_change_mtu(struct net_device *dev, int new_mtu)
 	struct mv643xx_eth_private *mp = netdev_priv(dev);
 
 	WRITE_ONCE(dev->mtu, new_mtu);
+	if (mp->shared->tx_csum_limit &&
+	    dev->mtu > mp->shared->tx_csum_limit) {
+		dev->features &= ~(NETIF_F_IP_CSUM | NETIF_F_TSO);
+		netdev_info(dev,
+			    "Disable IP tx csum offload and software TSO for MTU larger than %dB\n",
+			    mp->shared->tx_csum_limit);
+	}
 	mv643xx_eth_recalc_skb_size(mp);
 	tx_set_rate(mp, 1000000000, 16777216);
 
