@@ -1112,10 +1112,6 @@ void cfg80211_cac_event(struct net_device *netdev,
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
 	unsigned long timeout;
 
-	if (WARN_ON(wdev->valid_links &&
-		    !(wdev->valid_links & BIT(link_id))))
-		return;
-
 	trace_cfg80211_cac_event(netdev, event, link_id);
 
 	if (WARN_ON(!wdev->links[link_id].cac_started &&
