@@ -21,9 +21,6 @@
  */
 
 /*
- */
-
-/*
  * This driver is regularly tested thanks to the test suite in hid-tools[1].
  * Please run these regression tests before patching this module so that
  * your patch won't break existing known devices.
