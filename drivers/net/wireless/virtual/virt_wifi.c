@@ -519,7 +519,8 @@ static rx_handler_result_t virt_wifi_rx_handler(struct sk_buff **pskb)
 }
 
 /* Called with rtnl lock held. */
-static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
+static int virt_wifi_newlink(struct rtnl_link_nets *nets,
+			     struct net_device *dev,
 			     struct nlattr *tb[], struct nlattr *data[],
 			     struct netlink_ext_ack *extack)
 {
@@ -532,7 +533,7 @@ static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
 	netif_carrier_off(dev);
 
 	priv->upperdev = dev;
-	priv->lowerdev = __dev_get_by_index(src_net,
+	priv->lowerdev = __dev_get_by_index(rtnl_link_netns(nets),
 					    nla_get_u32(tb[IFLA_LINK]));
 
 	if (!priv->lowerdev)

@@ -967,7 +967,8 @@ out:
 	return dev;
 }
 
-static int wwan_rtnl_newlink(struct net *src_net, struct net_device *dev,
+static int wwan_rtnl_newlink(struct rtnl_link_nets *nets,
+			     struct net_device *dev,
 			     struct nlattr *tb[], struct nlattr *data[],
 			     struct netlink_ext_ack *extack)
 {
@@ -1064,6 +1065,7 @@ static void wwan_create_default_link(struct wwan_device *wwandev,
 	struct net_device *dev;
 	struct nlmsghdr *nlh;
 	struct sk_buff *msg;
+	struct rtnl_link_nets nets = { .src_net = &init_net };
 
 	/* Forge attributes required to create a WWAN netdev. We first
 	 * build a netlink message and then parse it. This looks
@@ -1105,7 +1107,7 @@ static void wwan_create_default_link(struct wwan_device *wwandev,
 	if (WARN_ON(IS_ERR(dev)))
 		goto unlock;
 
-	if (WARN_ON(wwan_rtnl_newlink(&init_net, dev, tb, data, NULL))) {
+	if (WARN_ON(wwan_rtnl_newlink(&nets, dev, tb, data, NULL))) {
 		free_netdev(dev);
 		goto unlock;
 	}

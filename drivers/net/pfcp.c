@@ -184,7 +184,7 @@ static int pfcp_add_sock(struct pfcp_dev *pfcp)
 	return PTR_ERR_OR_ZERO(pfcp->sock);
 }
 
-static int pfcp_newlink(struct net *net, struct net_device *dev,
+static int pfcp_newlink(struct rtnl_link_nets *nets, struct net_device *dev,
 			struct nlattr *tb[], struct nlattr *data[],
 			struct netlink_ext_ack *extack)
 {
@@ -192,7 +192,7 @@ static int pfcp_newlink(struct net *net, struct net_device *dev,
 	struct pfcp_net *pn;
 	int err;
 
-	pfcp->net = net;
+	pfcp->net = rtnl_link_netns(nets);
 
 	err = pfcp_add_sock(pfcp);
 	if (err) {

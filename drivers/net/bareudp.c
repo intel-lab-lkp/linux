@@ -698,7 +698,7 @@ static void bareudp_dellink(struct net_device *dev, struct list_head *head)
 	unregister_netdevice_queue(dev, head);
 }
 
-static int bareudp_newlink(struct net *net, struct net_device *dev,
+static int bareudp_newlink(struct rtnl_link_nets *nets, struct net_device *dev,
 			   struct nlattr *tb[], struct nlattr *data[],
 			   struct netlink_ext_ack *extack)
 {
@@ -709,7 +709,7 @@ static int bareudp_newlink(struct net *net, struct net_device *dev,
 	if (err)
 		return err;
 
-	err = bareudp_configure(net, dev, &conf, extack);
+	err = bareudp_configure(rtnl_link_netns(nets), dev, &conf, extack);
 	if (err)
 		return err;
 

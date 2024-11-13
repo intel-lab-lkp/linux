@@ -1765,7 +1765,7 @@ static int veth_init_queues(struct net_device *dev, struct nlattr *tb[])
 	return 0;
 }
 
-static int veth_newlink(struct net *src_net, struct net_device *dev,
+static int veth_newlink(struct rtnl_link_nets *nets, struct net_device *dev,
 			struct nlattr *tb[], struct nlattr *data[],
 			struct netlink_ext_ack *extack)
 {
@@ -1800,7 +1800,7 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 		name_assign_type = NET_NAME_ENUM;
 	}
 
-	net = rtnl_link_get_net(src_net, tbp);
+	net = rtnl_link_get_net(rtnl_link_netns(nets), tbp);
 	peer = rtnl_create_link(net, ifname, name_assign_type,
 				&veth_link_ops, tbp, extack);
 	if (IS_ERR(peer)) {

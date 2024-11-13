@@ -1614,7 +1614,7 @@ static void geneve_link_config(struct net_device *dev,
 	geneve_change_mtu(dev, ldev_mtu - info->options_len);
 }
 
-static int geneve_newlink(struct net *net, struct net_device *dev,
+static int geneve_newlink(struct rtnl_link_nets *nets, struct net_device *dev,
 			  struct nlattr *tb[], struct nlattr *data[],
 			  struct netlink_ext_ack *extack)
 {
@@ -1631,7 +1631,7 @@ static int geneve_newlink(struct net *net, struct net_device *dev,
 	if (err)
 		return err;
 
-	err = geneve_configure(net, dev, extack, &cfg);
+	err = geneve_configure(rtnl_link_netns(nets), dev, extack, &cfg);
 	if (err)
 		return err;
 

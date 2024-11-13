@@ -532,7 +532,7 @@ err:
 	return ret;
 }
 
-int ipvlan_link_new(struct net *src_net, struct net_device *dev,
+int ipvlan_link_new(struct rtnl_link_nets *nets, struct net_device *dev,
 		    struct nlattr *tb[], struct nlattr *data[],
 		    struct netlink_ext_ack *extack)
 {
@@ -545,7 +545,8 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 	if (!tb[IFLA_LINK])
 		return -EINVAL;
 
-	phy_dev = __dev_get_by_index(src_net, nla_get_u32(tb[IFLA_LINK]));
+	phy_dev = __dev_get_by_index(rtnl_link_netns(nets),
+				     nla_get_u32(tb[IFLA_LINK]));
 	if (!phy_dev)
 		return -ENODEV;
 

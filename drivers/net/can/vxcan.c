@@ -172,7 +172,7 @@ static void vxcan_setup(struct net_device *dev)
 /* forward declaration for rtnl_create_link() */
 static struct rtnl_link_ops vxcan_link_ops;
 
-static int vxcan_newlink(struct net *net, struct net_device *dev,
+static int vxcan_newlink(struct rtnl_link_nets *nets, struct net_device *dev,
 			 struct nlattr *tb[], struct nlattr *data[],
 			 struct netlink_ext_ack *extack)
 {
@@ -203,7 +203,7 @@ static int vxcan_newlink(struct net *net, struct net_device *dev,
 		name_assign_type = NET_NAME_ENUM;
 	}
 
-	peer_net = rtnl_link_get_net(net, tbp);
+	peer_net = rtnl_link_get_net(rtnl_link_netns(nets), tbp);
 	peer = rtnl_create_link(peer_net, ifname, name_assign_type,
 				&vxcan_link_ops, tbp, extack);
 	if (IS_ERR(peer)) {

@@ -70,6 +70,26 @@ static inline int rtnl_msg_family(const struct nlmsghdr *nlh)
 }
 
 /**
+ *	struct rtnl_link_nets - net namespace context of newlink.
+ *
+ *	@src_net: Source netns of rtnetlink socket
+ *	@link_net: Link netns by IFLA_LINK_NETNSID, NULL if not specified.
+ */
+struct rtnl_link_nets {
+	struct net *src_net;
+	struct net *link_net;
+};
+
+/* Get effective link netns from struct rtnl_link_nets. Generally, this is
+ * link_net and falls back to src_net. But for compatibility, a driver may
+ * choose to use dev_net(dev) instead.
+ */
+static inline struct net *rtnl_link_netns(struct rtnl_link_nets *nets)
+{
+	return nets->link_net ? : nets->src_net;
+}
+
+/**
  *	struct rtnl_link_ops - rtnetlink link operations
  *
  *	@list: Used internally, protected by link_ops_mutex and SRCU
@@ -125,7 +145,7 @@ struct rtnl_link_ops {
 					    struct nlattr *data[],
 					    struct netlink_ext_ack *extack);
 
-	int			(*newlink)(struct net *src_net,
+	int			(*newlink)(struct rtnl_link_nets *nets,
 					   struct net_device *dev,
 					   struct nlattr *tb[],
 					   struct nlattr *data[],
