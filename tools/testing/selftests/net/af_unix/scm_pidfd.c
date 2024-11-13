@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <linux/socket.h>
 #include <unistd.h>
@@ -14,6 +15,11 @@
 #include <sys/signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+/* There are problems including linux/pidfd.h, so define. */
+#ifndef PIDFD_NONBLOCK
+#define PIDFD_NONBLOCK  O_NONBLOCK
+#endif
 
 #include "../../kselftest_harness.h"
 
@@ -126,7 +132,7 @@ out:
 	return result;
 }
 
-static int cmsg_check(int fd)
+static int cmsg_check(int fd, unsigned int pidfd_flags)
 {
 	struct msghdr msg = { 0 };
 	struct cmsghdr *cmsg;
@@ -136,6 +142,7 @@ static int cmsg_check(int fd)
 	char control[CMSG_SPACE(sizeof(struct ucred)) +
 		     CMSG_SPACE(sizeof(int))] = { 0 };
 	int *pidfd = NULL;
+	unsigned int flags;
 	pid_t parent_pid;
 	int err;
 
@@ -197,6 +204,13 @@ static int cmsg_check(int fd)
 		return 1;
 	}
 
+	flags = fcntl(*pidfd, F_GETFL, 0);
+	flags &= ~O_ACCMODE;
+	if (flags != pidfd_flags) {
+		log_err("SCM_PIDFD flags mismatch: %x != %x", flags, pidfd_flags);
+		return 1;
+	}
+
 	/* pidfd from SCM_PIDFD should point to the parent process PID */
 	parent_pid =
 		get_pid_from_fdinfo_file(*pidfd, "Pid:", sizeof("Pid:") - 1);
@@ -227,30 +241,49 @@ FIXTURE_VARIANT(scm_pidfd)
 {
 	int type;
 	bool abstract;
+	unsigned int flags;
 };
 
 FIXTURE_VARIANT_ADD(scm_pidfd, stream_pathname)
 {
 	.type = SOCK_STREAM,
 	.abstract = 0,
+	.flags = 0,
 };
 
 FIXTURE_VARIANT_ADD(scm_pidfd, stream_abstract)
 {
 	.type = SOCK_STREAM,
 	.abstract = 1,
+	.flags = 0,
 };
 
 FIXTURE_VARIANT_ADD(scm_pidfd, dgram_pathname)
 {
 	.type = SOCK_DGRAM,
 	.abstract = 0,
+	.flags = 0,
 };
 
 FIXTURE_VARIANT_ADD(scm_pidfd, dgram_abstract)
 {
 	.type = SOCK_DGRAM,
 	.abstract = 1,
+	.flags = 0,
+};
+
+FIXTURE_VARIANT_ADD(scm_pidfd, stream_nonblock)
+{
+	.type = SOCK_STREAM,
+	.abstract = 0,
+	.flags = PIDFD_NONBLOCK,
+};
+
+FIXTURE_VARIANT_ADD(scm_pidfd, dgram_nonblock)
+{
+	.type = SOCK_DGRAM,
+	.abstract = 0,
+	.flags = PIDFD_NONBLOCK,
 };
 
 FIXTURE_SETUP(scm_pidfd)
@@ -335,7 +368,7 @@ static void client(FIXTURE_DATA(scm_pidfd) *self,
 
 	close(self->startup_pipe[1]);
 
-	if (cmsg_check(cfd)) {
+	if (cmsg_check(cfd, variant->flags)) {
 		log_err("cmsg_check failed");
 		child_die();
 	}
@@ -375,6 +408,27 @@ TEST_F(scm_pidfd, test)
 	int err;
 	int pfd;
 	int child_status = 0;
+	char iobuf;
+	unsigned int pidfd_flags;
+	struct msghdr msg = { 0 };
+	struct cmsghdr *cmsg;
+	struct iovec io = {
+		.iov_base = &iobuf,
+		.iov_len = sizeof(iobuf)
+	};
+	union {
+		char buf[CMSG_SPACE(sizeof(pidfd_flags))];
+		struct cmsghdr align;
+	} u;
+
+	msg.msg_iov = &io;
+	msg.msg_iovlen = 1;
+	msg.msg_control = u.buf;
+	msg.msg_controllen = sizeof(u.buf);
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_PIDFD;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(pidfd_flags));
 
 	self->server = socket(AF_UNIX, variant->type, 0);
 	ASSERT_NE(-1, self->server);
@@ -414,12 +468,16 @@ TEST_F(scm_pidfd, test)
 	close(self->startup_pipe[0]);
 
 	if (variant->type == SOCK_DGRAM) {
-		err = sendto(pfd, "x", sizeof(char), 0, (struct sockaddr *)&self->client_addr->listen_addr, self->client_addr->addrlen);
-		ASSERT_NE(-1, err);
-	} else {
-		err = send(pfd, "x", sizeof(char), 0);
+		err = connect(pfd,
+			      (struct sockaddr *)&self->client_addr->listen_addr,
+			      self->client_addr->addrlen);
 		ASSERT_NE(-1, err);
 	}
+	iobuf = 'x';
+	pidfd_flags = variant->flags;
+	memcpy(CMSG_DATA(cmsg), &pidfd_flags, sizeof(pidfd_flags));
+	err = sendmsg(pfd, &msg, 0);
+	ASSERT_NE(-1, err);
 
 	close(pfd);
 	waitpid(self->client_pid, &child_status, 0);
