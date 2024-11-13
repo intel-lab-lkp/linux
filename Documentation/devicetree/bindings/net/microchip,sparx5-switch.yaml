@@ -129,6 +129,26 @@ properties:
             minimum: 0
             maximum: 383
 
+        allOf:
+          - if:
+              properties:
+                phy-mode:
+                  contains:
+                    enum:
+                      - rgmii
+                      - rgmii-rxid
+                      - rgmii-txid
+                      - rgmii-id
+            then:
+              properties:
+                rx-internal-delay-ps:
+                  enum: [0, 1000, 1700, 2000, 2500, 3000, 3300]
+                tx-internal-delay-ps:
+                  enum: [0, 1000, 1700, 2000, 2500, 3000, 3300]
+              required:
+                - rx-internal-delay-ps
+                - tx-internal-delay-ps
+
         required:
           - reg
           - phys
