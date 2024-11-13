@@ -108,6 +108,27 @@ struct aemif_cs_data {
 };
 
 /**
+ * struct aemif_cs_timings: structure to hold CS timing configuration
+ * values are expressed in number of clock cycles - 1
+ * @ta: minimum turn around time
+ * @rhold: read hold width
+ * @rstrobe: read strobe width
+ * @rsetup: read setup width
+ * @whold: write hold width
+ * @wstrobe: write strobe width
+ * @wsetup: write setup width
+ */
+struct aemif_cs_timings {
+	u32	ta;
+	u32	rhold;
+	u32	rstrobe;
+	u32	rsetup;
+	u32	whold;
+	u32	wstrobe;
+	u32	wsetup;
+};
+
+/**
  * struct aemif_device: structure to hold device data
  * @base: base address of AEMIF registers
  * @clk: source clock
@@ -126,17 +147,47 @@ struct aemif_device {
 };
 
 /**
+ * aemif_check_cs_timings - Check the validity of a CS timing configuration.
+ * @timings: timings configuration
+ *
+ * @return: 0 if the timing configuration is valid, negative errno otherwise.
+ */
+static int aemif_check_cs_timings(struct aemif_cs_timings *timings)
+{
+	if (timings->ta > TA_MAX)
+		return -EINVAL;
+
+	if (timings->rhold > RHOLD_MAX)
+		return -EINVAL;
+
+	if (timings->rstrobe > RSTROBE_MAX)
+		return -EINVAL;
+
+	if (timings->rsetup > RSETUP_MAX)
+		return -EINVAL;
+
+	if (timings->whold > WHOLD_MAX)
+		return -EINVAL;
+
+	if (timings->wstrobe > WSTROBE_MAX)
+		return -EINVAL;
+
+	if (timings->wsetup > WSETUP_MAX)
+		return -EINVAL;
+
+	return 0;
+}
+
+/**
  * aemif_calc_rate - calculate timing data.
  * @pdev: platform device to calculate for
  * @wanted: The cycle time needed in nanoseconds.
  * @clk: The input clock rate in kHz.
- * @max: The maximum divider value that can be programmed.
  *
  * On success, returns the calculated timing value minus 1 for easy
  * programming into AEMIF timing registers, else negative errno.
  */
-static int aemif_calc_rate(struct platform_device *pdev, int wanted,
-			   unsigned long clk, int max)
+static int aemif_calc_rate(struct platform_device *pdev, int wanted, unsigned long clk)
 {
 	int result;
 
@@ -148,10 +199,6 @@ static int aemif_calc_rate(struct platform_device *pdev, int wanted,
 	/* It is generally OK to have a more relaxed timing than requested... */
 	if (result < 0)
 		result = 0;
-
-	/* ... But configuring tighter timings is not an option. */
-	else if (result > max)
-		result = -EINVAL;
 
 	return result;
 }
@@ -174,30 +221,32 @@ static int aemif_config_abus(struct platform_device *pdev, int csnum)
 {
 	struct aemif_device *aemif = platform_get_drvdata(pdev);
 	struct aemif_cs_data *data = &aemif->cs_data[csnum];
-	int ta, rhold, rstrobe, rsetup, whold, wstrobe, wsetup;
 	unsigned long clk_rate = aemif->clk_rate;
+	struct aemif_cs_timings timings;
 	unsigned offset;
 	u32 set, val;
+	int ret;
 
 	offset = A1CR_OFFSET + (data->cs - aemif->cs_offset) * 4;
 
-	ta	= aemif_calc_rate(pdev, data->ta, clk_rate, TA_MAX);
-	rhold	= aemif_calc_rate(pdev, data->rhold, clk_rate, RHOLD_MAX);
-	rstrobe	= aemif_calc_rate(pdev, data->rstrobe, clk_rate, RSTROBE_MAX);
-	rsetup	= aemif_calc_rate(pdev, data->rsetup, clk_rate, RSETUP_MAX);
-	whold	= aemif_calc_rate(pdev, data->whold, clk_rate, WHOLD_MAX);
-	wstrobe	= aemif_calc_rate(pdev, data->wstrobe, clk_rate, WSTROBE_MAX);
-	wsetup	= aemif_calc_rate(pdev, data->wsetup, clk_rate, WSETUP_MAX);
+	timings.ta = aemif_calc_rate(pdev, data->ta, clk_rate);
+	timings.rhold = aemif_calc_rate(pdev, data->rhold, clk_rate);
+	timings.rstrobe = aemif_calc_rate(pdev, data->rstrobe, clk_rate);
+	timings.rsetup = aemif_calc_rate(pdev, data->rsetup, clk_rate);
+	timings.whold = aemif_calc_rate(pdev, data->whold, clk_rate);
+	timings.wstrobe = aemif_calc_rate(pdev, data->wstrobe, clk_rate);
+	timings.wsetup = aemif_calc_rate(pdev, data->wsetup, clk_rate);
 
-	if (ta < 0 || rhold < 0 || rstrobe < 0 || rsetup < 0 ||
-	    whold < 0 || wstrobe < 0 || wsetup < 0) {
+	ret = aemif_check_cs_timings(&timings);
+	if (ret) {
 		dev_err(&pdev->dev, "%s: cannot get suitable timings\n",
 			__func__);
-		return -EINVAL;
+		return ret;
 	}
 
-	set = TA(ta) | RHOLD(rhold) | RSTROBE(rstrobe) | RSETUP(rsetup) |
-		WHOLD(whold) | WSTROBE(wstrobe) | WSETUP(wsetup);
+	set = TA(timings.ta) |
+		RHOLD(timings.rhold) | RSTROBE(timings.rstrobe) | RSETUP(timings.rsetup) |
+		WHOLD(timings.whold) | WSTROBE(timings.wstrobe) | WSETUP(timings.wsetup);
 
 	set |= (data->asize & ACR_ASIZE_MASK);
 	if (data->enable_ew)
