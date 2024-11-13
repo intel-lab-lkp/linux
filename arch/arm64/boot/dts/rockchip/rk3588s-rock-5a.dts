@@ -423,11 +423,10 @@
 	cap-sd-highspeed;
 	cd-gpios = <&gpio0 RK_PA4 GPIO_ACTIVE_LOW>;
 	disable-wp;
-	max-frequency = <150000000>;
 	no-sdio;
 	no-mmc;
 	sd-uhs-sdr104;
-	vmmc-supply = <&vcc_3v3_s0>;
+	vmmc-supply = <&vcc_3v3_s3>;
 	vqmmc-supply = <&vccio_sd_s0>;
 	status = "okay";
 };
