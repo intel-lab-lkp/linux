@@ -614,6 +614,16 @@ enum devlink_attr {
 
 	DEVLINK_ATTR_REGION_DIRECT,		/* flag */
 
+	DEVLINK_ATTR_RATE_TC_0_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_1_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_2_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_3_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_4_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_5_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_6_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_7_BW,		/* u32 */
+	DEVLINK_ATTR_RATE_TC_BW,		/* nested */
+
 	/* Add new attributes above here, update the spec in
 	 * Documentation/netlink/specs/devlink.yaml and re-generate
 	 * net/devlink/netlink_gen.c.

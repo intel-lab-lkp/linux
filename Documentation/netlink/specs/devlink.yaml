@@ -818,6 +818,34 @@ attribute-sets:
         name: rate-tx-weight
         type: u32
       -
+        name: rate-tc-0-bw
+        type: u32
+      -
+        name: rate-tc-1-bw
+        type: u32
+      -
+        name: rate-tc-2-bw
+        type: u32
+      -
+        name: rate-tc-3-bw
+        type: u32
+      -
+        name: rate-tc-4-bw
+        type: u32
+      -
+        name: rate-tc-5-bw
+        type: u32
+      -
+        name: rate-tc-6-bw
+        type: u32
+      -
+        name: rate-tc-7-bw
+        type: u32
+      -
+        name: rate-tc-bw
+        type: nest
+        nested-attributes: dl-rate-tc-bw-values
+      -
         name: region-direct
         type: flag
 
@@ -1225,6 +1253,26 @@ attribute-sets:
       -
         name: flash
         type: flag
+  -
+    name: dl-rate-tc-bw-values
+    subset-of: devlink
+    attributes:
+      -
+        name: rate-tc-0-bw
+      -
+        name: rate-tc-1-bw
+      -
+        name: rate-tc-2-bw
+      -
+        name: rate-tc-3-bw
+      -
+        name: rate-tc-4-bw
+      -
+        name: rate-tc-5-bw
+      -
+        name: rate-tc-6-bw
+      -
+        name: rate-tc-7-bw
 
 operations:
   enum-model: directional
@@ -2148,6 +2196,7 @@ operations:
             - rate-tx-max
             - rate-tx-priority
             - rate-tx-weight
+            - rate-tc-bw
             - rate-parent-node-name
 
     -
@@ -2168,6 +2217,7 @@ operations:
             - rate-tx-max
             - rate-tx-priority
             - rate-tx-weight
+            - rate-tc-bw
             - rate-parent-node-name
 
     -
