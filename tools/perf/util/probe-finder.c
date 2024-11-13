@@ -1563,7 +1563,8 @@ int debuginfo__find_probe_point(struct debuginfo *dbg, u64 addr,
 {
 	Dwarf_Die cudie, spdie, indie;
 	Dwarf_Addr _addr = 0, baseaddr = 0;
-	const char *fname = NULL, *func = NULL, *basefunc = NULL, *tmp;
+	const char *fname = NULL, *func = NULL, *basefunc = NULL;
+	const char *basefname = NULL, *tmp;
 	int baseline = 0, lineno = 0, ret = 0;
 
 	/* We always need to relocate the address for aranges */
@@ -1577,11 +1578,7 @@ int debuginfo__find_probe_point(struct debuginfo *dbg, u64 addr,
 		goto end;
 	}
 
-	/* Find a corresponding line (filename and lineno) */
-	cu_find_lineinfo(&cudie, (Dwarf_Addr)addr, &fname, &lineno);
-	/* Don't care whether it failed or not */
-
-	/* Find a corresponding function (name, baseline and baseaddr) */
+	/* Find the basement function (name, baseline and baseaddr) */
 	if (die_find_realfunc(&cudie, (Dwarf_Addr)addr, &spdie)) {
 		/* Get function entry information */
 		func = basefunc = dwarf_diename(&spdie);
@@ -1592,10 +1589,16 @@ int debuginfo__find_probe_point(struct debuginfo *dbg, u64 addr,
 			goto post;
 		}
 
-		fname = die_get_decl_file(&spdie);
+		basefname = die_get_decl_file(&spdie);
+		if (!basefname) {
+			lineno = 0;
+			goto post;
+		}
+
 		if (addr == baseaddr) {
 			/* Function entry - Relative line number is 0 */
 			lineno = baseline;
+			fname = basefname;
 			goto post;
 		}
 
@@ -1612,7 +1615,9 @@ int debuginfo__find_probe_point(struct debuginfo *dbg, u64 addr,
 				 */
 				lineno = die_get_call_lineno(&indie);
 				fname = die_get_call_file(&indie);
-				break;
+				if (!fname || strcmp(fname, basefname))
+					lineno = 0;
+				goto post;
 			} else {
 				/*
 				 * addr is in an inline function body.
@@ -1621,20 +1626,35 @@ int debuginfo__find_probe_point(struct debuginfo *dbg, u64 addr,
 				 * be the entry line of the inline function.
 				 */
 				tmp = dwarf_diename(&indie);
-				if (!tmp ||
-				    dwarf_decl_line(&indie, &baseline) != 0)
-					break;
+				basefname = die_get_decl_file(&indie);
+				if (!tmp || !basefname ||
+				    dwarf_decl_line(&indie, &baseline) != 0) {
+					lineno = 0;
+					goto post;
+				}
 				func = tmp;
 				spdie = indie;
 			}
 		}
+	}
+
+	if (!lineno) {
+		/* Find a corresponding line (filename and lineno) */
+		if (cu_find_lineinfo_after(&cudie, (Dwarf_Addr)addr, &lineno,
+								   basefname, baseline) < 0)
+			lineno = 0;
+		else
+			fname = basefname;
+	}
+
+post:
+	if (lineno) {
 		/* Verify the lineno and baseline are in a same file */
 		tmp = die_get_decl_file(&spdie);
 		if (!tmp || (fname && strcmp(tmp, fname) != 0))
 			lineno = 0;
 	}
 
-post:
 	/* Make a relative line number or an offset */
 	if (lineno)
 		ppt->line = lineno - baseline;

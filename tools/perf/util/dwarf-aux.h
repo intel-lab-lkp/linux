@@ -22,6 +22,13 @@ const char *cu_get_comp_dir(Dwarf_Die *cu_die);
 int cu_find_lineinfo(Dwarf_Die *cudie, Dwarf_Addr addr,
 		     const char **fname, int *lineno);
 
+/*
+ * Get the most likely line number for given address in given filename
+ * and basement line number.
+ */
+int cu_find_lineinfo_after(Dwarf_Die *cudie, Dwarf_Addr addr,
+					int *lineno, const char *fname, int baseline);
+
 /* Walk on functions at given address */
 int cu_walk_functions_at(Dwarf_Die *cu_die, Dwarf_Addr addr,
 			 int (*callback)(Dwarf_Die *, void *), void *data);

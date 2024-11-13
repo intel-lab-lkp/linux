@@ -60,14 +60,33 @@ const char *cu_get_comp_dir(Dwarf_Die *cu_die)
 	return dwarf_formstring(&attr);
 }
 
+static Dwarf_Line *get_next_statement_line(Dwarf_Lines *lines, size_t *idx, Dwarf_Addr addr)
+{
+	bool is_statement = false;
+	Dwarf_Line *line;
+	Dwarf_Addr laddr;
+	size_t l = *idx;
+
+	while (!is_statement) {
+		line = dwarf_onesrcline(lines, ++l);
+		if (!line || dwarf_lineaddr(line, &laddr) != 0 ||
+		    dwarf_linebeginstatement(line, &is_statement) != 0)
+			return NULL;
+		if (laddr > addr)
+			return NULL;
+	}
+	*idx = l;
+	return line;
+}
+
 /* Unlike dwarf_getsrc_die(), cu_getsrc_die() only returns statement line */
-static Dwarf_Line *cu_getsrc_die(Dwarf_Die *cu_die, Dwarf_Addr addr)
+static Dwarf_Line *cu_getsrc_die(Dwarf_Die *cu_die, Dwarf_Addr addr,
+								 Dwarf_Lines **lines_p, size_t *idx)
 {
 	Dwarf_Addr laddr;
 	Dwarf_Lines *lines;
 	Dwarf_Line *line;
 	size_t nlines, l, u, n;
-	bool flag;
 
 	if (dwarf_getsrclines(cu_die, &lines, &nlines) != 0 ||
 	    nlines == 0)
@@ -91,16 +110,14 @@ static Dwarf_Line *cu_getsrc_die(Dwarf_Die *cu_die, Dwarf_Addr addr)
 		if (!line || dwarf_lineaddr(line, &laddr) != 0)
 			return NULL;
 	} while (laddr == addr);
-	l++;
 	/* Going forward to find the statement line */
-	do {
-		line = dwarf_onesrcline(lines, l++);
-		if (!line || dwarf_lineaddr(line, &laddr) != 0 ||
-		    dwarf_linebeginstatement(line, &flag) != 0)
-			return NULL;
-		if (laddr > addr)
-			return NULL;
-	} while (!flag);
+	line = get_next_statement_line(lines, &l, addr);
+	if (!line)
+		return NULL;
+	if (lines_p)
+		*lines_p = lines;
+	if (idx)
+		*idx = l;
 
 	return line;
 }
@@ -129,7 +146,7 @@ int cu_find_lineinfo(Dwarf_Die *cu_die, Dwarf_Addr addr,
 		goto out;
 	}
 
-	line = cu_getsrc_die(cu_die, addr);
+	line = cu_getsrc_die(cu_die, addr, NULL, NULL);
 	if (line && dwarf_lineno(line, lineno) == 0) {
 		*fname = dwarf_linesrc(line, NULL, NULL);
 		if (!*fname)
@@ -139,6 +156,43 @@ int cu_find_lineinfo(Dwarf_Die *cu_die, Dwarf_Addr addr,
 
 out:
 	return (*lineno && *fname) ? *lineno : -ENOENT;
+}
+
+/**
+ * cu_find_lineinfo_after - Get a line number after file:line for given address
+ * @cu_die: a CU DIE
+ * @addr: An address
+ * @lineno: a pointer which returns the line number
+ * @fname: the filename where searching the line
+ * @baseline: the basement line number
+ *
+ * Find a line number after @baseline in @fname for @addr in @cu_die.
+ * Return the found line number, or -ENOENT if not found.
+ */
+int cu_find_lineinfo_after(Dwarf_Die *cu_die, Dwarf_Addr addr,
+					int *lineno, const char *fname, int baseline)
+{
+	const char *line_fname;
+	Dwarf_Lines *lines;
+	Dwarf_Line *line;
+	size_t idx = 0;
+
+	if (cu_find_lineinfo(cu_die, addr, &line_fname, lineno) < 0)
+		return -ENOENT;
+
+	if (!strcmp(line_fname, fname) && baseline <= *lineno)
+		return *lineno;
+
+	line = cu_getsrc_die(cu_die, addr, &lines, &idx);
+
+	while (line && dwarf_lineno(line, lineno) == 0) {
+		line_fname = dwarf_linesrc(line, NULL, NULL);
+		if (line_fname && !strcmp(line_fname, fname) && baseline <= *lineno)
+			return *lineno;
+		line = get_next_statement_line(lines, &idx, addr);
+	}
+
+	return -ENOENT;
 }
 
 static int __die_find_inline_cb(Dwarf_Die *die_mem, void *data);
