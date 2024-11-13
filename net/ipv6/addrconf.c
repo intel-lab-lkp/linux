@@ -4644,6 +4644,10 @@ restart:
 			    !ifp->regen_count && ifp->ifpub) {
 				/* This is a non-regenerated temporary addr. */
 
+				if ((!ifp->valid_lft && !ifp->prefered_lft) ||
+				    ifp->ifpub->state == INET6_IFADDR_STATE_DEAD)
+					goto delete_ifp;
+
 				unsigned long regen_advance = ipv6_get_regen_advance(ifp->idev);
 
 				if (age + regen_advance >= ifp->prefered_lft) {
@@ -4671,6 +4675,7 @@ restart:
 
 			if (ifp->valid_lft != INFINITY_LIFE_TIME &&
 			    age >= ifp->valid_lft) {
+delete_ifp:
 				spin_unlock(&ifp->lock);
 				in6_ifa_hold(ifp);
 				rcu_read_unlock_bh();
