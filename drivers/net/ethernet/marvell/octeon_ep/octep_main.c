@@ -496,6 +496,9 @@ static void octep_free_irqs(struct octep_device *oct)
 {
 	int i;
 
+	if (!oct->msix_entries)
+		return;
+
 	/* First few MSI-X interrupts are non queue interrupts; free them */
 	for (i = 0; i < CFG_GET_NON_IOQ_MSIX(oct->conf); i++)
 		free_irq(oct->msix_entries[i].vector, oct);
@@ -505,7 +508,7 @@ static void octep_free_irqs(struct octep_device *oct)
 	for (i = CFG_GET_NON_IOQ_MSIX(oct->conf); i < oct->num_irqs; i++) {
 		irq_set_affinity_hint(oct->msix_entries[i].vector, NULL);
 		free_irq(oct->msix_entries[i].vector,
-			 oct->ioq_vector[i - CFG_GET_NON_IOQ_MSIX(oct->conf)]);
+				oct->ioq_vector[i - CFG_GET_NON_IOQ_MSIX(oct->conf)]);
 	}
 	netdev_info(oct->netdev, "IRQs freed\n");
 }
@@ -635,8 +638,10 @@ static void octep_napi_delete(struct octep_device *oct)
 
 	for (i = 0; i < oct->num_oqs; i++) {
 		netdev_dbg(oct->netdev, "Deleting NAPI on Q-%d\n", i);
-		netif_napi_del(&oct->ioq_vector[i]->napi);
-		oct->oq[i]->napi = NULL;
+		if (oct->oq[i]->napi) {
+			netif_napi_del(&oct->ioq_vector[i]->napi);
+			oct->oq[i]->napi = NULL;
+		}
 	}
 }
 
@@ -666,7 +671,8 @@ static void octep_napi_disable(struct octep_device *oct)
 
 	for (i = 0; i < oct->num_oqs; i++) {
 		netdev_dbg(oct->netdev, "Disabling NAPI on Q-%d\n", i);
-		napi_disable(&oct->ioq_vector[i]->napi);
+		if (oct->oq[i]->napi)
+			napi_disable(&oct->ioq_vector[i]->napi);
 	}
 }
 
