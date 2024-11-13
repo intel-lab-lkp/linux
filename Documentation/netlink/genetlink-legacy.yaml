@@ -119,6 +119,9 @@ properties:
           type: string
         # End genetlink-c
         # Start genetlink-legacy
+        attr-cnt-name:
+          description: Name of the render-max counter enum entry.
+          type: string
         members:
           description: List of struct members. Only scalars and strings members allowed.
           type: array
