@@ -841,7 +841,6 @@ EXPORT_SYMBOL(page_pool_put_unrefed_page);
 
 /**
  * page_pool_put_page_bulk() - release references on multiple pages
- * @pool:	pool from which pages were allocated
  * @data:	array holding page pointers
  * @count:	number of pages in @data
  *
@@ -854,35 +853,61 @@ EXPORT_SYMBOL(page_pool_put_unrefed_page);
  * Please note the caller must not use data area after running
  * page_pool_put_page_bulk(), as this function overwrites it.
  */
-void page_pool_put_page_bulk(struct page_pool *pool, struct page **data,
-			     u32 count)
+void page_pool_put_page_bulk(struct page **data, u32 count)
 {
-	int i, bulk_len = 0;
+	netmem_ref bulk[XDP_BULK_QUEUE_SIZE];
+	int i, bulk_len, foreign;
+	struct page_pool *pool;
+	bool again = false;
 	bool allow_direct;
 	bool in_softirq;
 
-	allow_direct = page_pool_napi_local(pool);
+again:
+	pool = NULL;
+	bulk_len = 0;
+	foreign = 0;
 
 	for (i = 0; i < count; i++) {
-		netmem_ref netmem = page_to_netmem(compound_head(data[i]));
+		struct page *page;
+		netmem_ref netmem;
 
-		/* It is not the last user for the page frag case */
-		if (!page_pool_is_last_ref(netmem))
+		if (!again) {
+			page = compound_head(data[i]);
+			netmem = page_to_netmem(page);
+
+			/* It is not the last user for the page frag case */
+			if (!page_pool_is_last_ref(netmem))
+				continue;
+		} else {
+			page = data[i];
+			netmem = page_to_netmem(page);
+		}
+
+		if (unlikely(!pool)) {
+			pool = page->pp;
+			allow_direct = page_pool_napi_local(pool);
+		} else if (page->pp != pool) {
+			/*
+			 * If the page belongs to a different page_pool, save
+			 * it for a second round after the main loop.
+			 */
+			data[foreign++] = page;
 			continue;
+		}
 
 		netmem = __page_pool_put_page(pool, netmem, -1, allow_direct);
 		/* Approved for bulk recycling in ptr_ring cache */
 		if (netmem)
-			data[bulk_len++] = (__force void *)netmem;
+			bulk[bulk_len++] = netmem;
 	}
 
 	if (!bulk_len)
-		return;
+		goto out;
 
 	/* Bulk producer into ptr_ring page_pool cache */
 	in_softirq = page_pool_producer_lock(pool);
 	for (i = 0; i < bulk_len; i++) {
-		if (__ptr_ring_produce(&pool->ring, data[i])) {
+		if (__ptr_ring_produce(&pool->ring, (__force void *)bulk[i])) {
 			/* ring full */
 			recycle_stat_inc(pool, ring_full);
 			break;
@@ -893,13 +918,22 @@ void page_pool_put_page_bulk(struct page_pool *pool, struct page **data,
 
 	/* Hopefully all pages was return into ptr_ring */
 	if (likely(i == bulk_len))
-		return;
+		goto out;
 
 	/* ptr_ring cache full, free remaining pages outside producer lock
 	 * since put_page() with refcnt == 1 can be an expensive operation
 	 */
 	for (; i < bulk_len; i++)
-		page_pool_return_page(pool, (__force netmem_ref)data[i]);
+		page_pool_return_page(pool, bulk[i]);
+
+out:
+	if (!foreign)
+		return;
+
+	count = foreign;
+	again = true;
+
+	goto again;
 }
 EXPORT_SYMBOL(page_pool_put_page_bulk);
 
