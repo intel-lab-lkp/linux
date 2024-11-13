@@ -598,16 +598,16 @@ static int iova_reserve_iommu_regions(struct device *dev,
 	return ret;
 }
 
-static bool dev_is_untrusted(struct device *dev)
+static bool dev_has_untrusted_dma(struct device *dev)
 {
-	return dev_is_pci(dev) && to_pci_dev(dev)->untrusted;
+	return dev_is_pci(dev) && to_pci_dev(dev)->untrusted_dma;
 }
 
 static bool dev_use_swiotlb(struct device *dev, size_t size,
 			    enum dma_data_direction dir)
 {
 	return IS_ENABLED(CONFIG_SWIOTLB) &&
-		(dev_is_untrusted(dev) ||
+		(dev_has_untrusted_dma(dev) ||
 		 dma_kmalloc_needs_bounce(dev, size, dir));
 }
 
@@ -620,7 +620,7 @@ static bool dev_use_sg_swiotlb(struct device *dev, struct scatterlist *sg,
 	if (!IS_ENABLED(CONFIG_SWIOTLB))
 		return false;
 
-	if (dev_is_untrusted(dev))
+	if (dev_has_untrusted_dma(dev))
 		return true;
 
 	/*
@@ -1197,7 +1197,7 @@ dma_addr_t iommu_dma_map_page(struct device *dev, struct page *page,
 		 * swiotlb_tbl_map_single() has initialized the bounce buffer
 		 * proper to the contents of the original memory buffer.
 		 */
-		if (dev_is_untrusted(dev)) {
+		if (dev_has_untrusted_dma(dev)) {
 			size_t start, virt = (size_t)phys_to_virt(phys);
 
 			/* Pre-padding */
@@ -1738,7 +1738,7 @@ size_t iommu_dma_opt_mapping_size(void)
 
 size_t iommu_dma_max_mapping_size(struct device *dev)
 {
-	if (dev_is_untrusted(dev))
+	if (dev_has_untrusted_dma(dev))
 		return swiotlb_max_mapping_size(dev);
 
 	return SIZE_MAX;
