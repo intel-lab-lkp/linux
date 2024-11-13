@@ -29,6 +29,7 @@ ALL_TESTS="
 	kci_test_bridge_parent_id
 	kci_test_address_proto
 	kci_test_enslave_bonding
+	kci_test_mngtmpaddr
 "
 
 devdummy="test-dummy0"
@@ -44,6 +45,7 @@ check_err()
 	if [ $ret -eq 0 ]; then
 		ret=$1
 	fi
+	[ -n "$2" ] && echo "$2"
 }
 
 # same but inverted -- used when command must fail for test to pass
@@ -1264,6 +1266,93 @@ kci_test_enslave_bonding()
 	fi
 
 	end_test "PASS: enslave interface in a bond"
+	ip netns del "$testns"
+}
+
+# If the mngtmpaddr or tempaddr missing, return 0 and stop waiting
+check_tempaddr_exists()
+{
+	local start=${1-"1"}
+	addr_list=$(ip -j -n $testns addr show dev ${devdummy})
+	for i in $(seq $start 4); do
+		if ! echo ${addr_list} | \
+		     jq -r '.[].addr_info[] | select(.mngtmpaddr == true) | .local' | \
+		     grep -q "200${i}"; then
+			check_err $? "No mngtmpaddr 200${i}:db8::1"
+			return 0
+		fi
+
+		if ! echo ${addr_list} | \
+		     jq -r '.[].addr_info[] | select(.temporary == true) | .local' | \
+		     grep -q "200${i}"; then
+			check_err $? "No tempaddr for 200${i}:db8::1"
+			return 0
+		fi
+	done
+	return 1
+}
+
+kci_test_mngtmpaddr()
+{
+	local ret=0
+
+	setup_ns testns
+	if [ $? -ne 0 ]; then
+		end_test "SKIP mngtmpaddr tests: cannot add net namespace $testns"
+		return $ksft_skip
+	fi
+
+	# 1. Create a dummy Ethernet interface
+	run_cmd ip -n $testns link add ${devdummy} type dummy
+	run_cmd ip -n $testns link set ${devdummy} up
+	run_cmd ip netns exec $testns sysctl -w net.ipv6.conf.${devdummy}.use_tempaddr=1
+	# 2. Create several (3-4) mngtmpaddr addresses on that interface.
+	# with temp_*_lft configured to be pretty short (10 and 35 seconds
+	# for prefer/valid respectively)
+	for i in $(seq 1 4); do
+		run_cmd ip -n $testns addr add 200${i}:db8::1/64 dev ${devdummy} mngtmpaddr
+		tempaddr=$(ip -j -n $testns addr show dev ${devdummy} | \
+			   jq -r '.[].addr_info[] | select(.temporary == true) | .local' | \
+			   grep 200${i})
+		#3. Confirm that temporary addresses are created immediately.
+		if [ -z $tempaddr ]; then
+			check_err 1 "no tempaddr created for 200${i}:db8::1"
+		else
+			run_cmd ip -n $testns addr change $tempaddr dev ${devdummy} \
+				preferred_lft 10 valid_lft 35
+		fi
+	done
+
+	#4. Confirm that a preferred temporary address exists for each mngtmpaddr
+	#   address at all times, polling once per second for at least 5 minutes.
+	slowwait 300 check_tempaddr_exists
+
+	#5. Delete each mngtmpaddr address, one at a time (alternating between
+	#   deleting and merely un-mngtmpaddr-ing), and confirm that the other
+	#   mngtmpaddr addresses still have preferred temporaries.
+	for i in $(seq 1 4); do
+		if (( $i % 2 == 1 )); then
+			run_cmd ip -n $testns addr del 200${i}:db8::1/64 dev ${devdummy}
+		else
+			run_cmd ip -n $testns addr change 200${i}:db8::1/64 dev ${devdummy}
+		fi
+		# the temp addr should be deleted
+		if ip -j -n $testns addr show dev ${devdummy} | \
+		   jq -r '.[].addr_info[] | select(.temporary == true) | .local' | \
+		   grep -q "200${i}"; then
+			check_err 1 "tempaddr not deleted for 200${i}:db8::1"
+		fi
+		# Check other addresses are still exist
+		check_tempaddr_exists $((i + 1))
+	done
+
+	if [ $ret -ne 0 ]; then
+		end_test "FAIL: mngtmpaddr add/remove incorrect"
+		ip netns del "$testns"
+		return 1
+	fi
+
+	end_test "PASS: mngtmpaddr add/remove correctly"
 	ip netns del "$testns"
 }
 
