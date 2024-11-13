@@ -120,6 +120,18 @@ values programmed by the register sequences. The default values of these
 controls shall be 0 (disabled). Especially these controls shall not be inverted,
 independently of the sensor's mounting rotation.
 
+Binning
+-------
+
+Binning has traditionally been configured using :ref:`the compose selection
+rectangle <v4l2-selection-targets-table>`. The :ref:`V4L2_CID_BINNING_FACTORS
+<image_source_control_binning_factors>` control is also available for binning
+configuration and users should use it when it's available. Drivers supporting
+the control shall also support the compose rectangle, albeit the rectangle may
+be read-only when the control is present.
+
+Binning isn't affected by flipping.
+
 .. _media_using_camera_sensor_drivers_embedded_data:
 
 Embedded data

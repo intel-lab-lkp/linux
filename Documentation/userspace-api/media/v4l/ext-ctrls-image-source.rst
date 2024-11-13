@@ -163,3 +163,33 @@ Image Source Control IDs
     interface for metadata streams. The control is used in conjunction with
     :ref:`generic metadata formats <media-bus-format-generic-meta>` formats to
     specify the layout of the data.
+
+.. _image_source_control_binning_factors:
+
+``V4L2_CID_BINNING_FACTORS (integer menu)``
+
+    This control determines horizontal and vertical binning factors. Binning
+    combines several horizontal, vertical or both pixel values into a single
+    pixel. It is a way to scale an image. Binning typically produces fairly good
+    quality output.
+
+    Determines both horizontal and vertical binning factors for a camera
+    sensor. The values are encoded in the following way:
+
+.. flat-table::
+    :header-rows:  1
+    :stub-columns: 0
+
+    * - Bits
+      - Synopsis
+    * - 48--63
+      - Horizontal binning numerator.
+    * - 32--47
+      - Horizontal binning denominator.
+    * - 16--31
+      - Vertical binning numerator.
+    * - 0--15
+      - Vertical binning denominator.
+
+For instance, a value of ``0x0003000100030002`` indicates binning by 3
+(horizontally) * 3/2 (vertically).
