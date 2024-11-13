@@ -60,6 +60,10 @@ properties:
   power-domains:
     maxItems: 1
 
+  qcom,shared-se:
+    description: True if I2C controller is shared between two or more system processors.
+    type: boolean
+
   reg:
     maxItems: 1
 
