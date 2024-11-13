@@ -279,13 +279,21 @@ bool taskshrd_delay_resched(void)
 	if(shrdp == NULL || shrdp->kaddr == NULL)
 		return false;
 
-	if (t->taskshrd_sched_delay)
+	if (t->taskshrd_sched_delay) {
+		if (shrdp->kaddr->ts.sched_delay
+				== TASK_PREEMPT_DELAY_REQ) {
+			/* not granted */
+			shrdp->kaddr->ts.sched_delay
+				= TASK_PREEMPT_DELAY_DENIED;
+		}
+		return false;
+	}
+
+	if (shrdp->kaddr->ts.sched_delay != TASK_PREEMPT_DELAY_REQ)
 		return false;
 
-	if (!(shrdp->kaddr->ts.sched_delay))
-		return false;
-
-	shrdp->kaddr->ts.sched_delay = 0;
+	/* granted */
+	shrdp->kaddr->ts.sched_delay = TASK_PREEMPT_DELAY_GRANTED;
 	t->taskshrd_sched_delay = 1;
 
 	return true;
