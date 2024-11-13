@@ -2379,12 +2379,38 @@ static void intel_pmu_drain_pebs_nhm(struct pt_regs *iregs, struct perf_sample_d
 	}
 }
 
+static inline void __intel_pmu_pebs_event_output(struct perf_event *event,
+						 struct pt_regs *iregs,
+						 void *record, bool last,
+						 struct perf_sample_data *data)
+{
+	struct x86_perf_regs perf_regs;
+	struct pt_regs *regs = &perf_regs.regs;
+	static struct pt_regs dummy_iregs;
+
+	if (!iregs)
+		iregs = &dummy_iregs;
+
+	setup_pebs_adaptive_sample_data(event, iregs, record, data, regs);
+	if (last) {
+		/*
+		 * All but the last records are processed.
+		 * The last one is left to be able to call the overflow handler.
+		 */
+		if (perf_event_overflow(event, data, regs))
+			x86_pmu_stop(event, 0);
+	} else
+		perf_event_output(event, data, regs);
+}
+
 static void intel_pmu_drain_pebs_icl(struct pt_regs *iregs, struct perf_sample_data *data)
 {
 	short counts[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS] = {};
+	void *unprocessed[INTEL_PMC_IDX_FIXED + MAX_FIXED_PEBS_EVENTS];
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
 	struct debug_store *ds = cpuc->ds;
 	struct perf_event *event;
+	struct pebs_basic *basic;
 	void *base, *at, *top;
 	int bit;
 	u64 mask;
@@ -2405,30 +2431,63 @@ static void intel_pmu_drain_pebs_icl(struct pt_regs *iregs, struct perf_sample_d
 		return;
 	}
 
-	for (at = base; at < top; at += cpuc->pebs_record_size) {
+	for (at = base; at < top; at += basic->format_size) {
 		u64 pebs_status;
 
-		pebs_status = get_pebs_status(at) & cpuc->pebs_enabled;
-		pebs_status &= mask;
+		basic = at;
+		if (WARN_ON_ONCE(basic->format_size != cpuc->pebs_record_size))
+			continue;
 
-		for_each_set_bit(bit, (unsigned long *)&pebs_status, X86_PMC_IDX_MAX)
-			counts[bit]++;
+		pebs_status = basic->applicable_counters & cpuc->pebs_enabled & mask;
+		for_each_set_bit(bit, (unsigned long *)&pebs_status, X86_PMC_IDX_MAX) {
+			event = cpuc->events[bit];
+
+			if (WARN_ON_ONCE(!event) ||
+			    WARN_ON_ONCE(!event->attr.precise_ip))
+				continue;
+
+			/*
+			 * Need at least one record to call the overflow handler later.
+			 * Initialize the unprocessed[] variable with the first record.
+			 */
+			if (!counts[bit]++) {
+				unprocessed[bit] = at;
+				continue;
+			}
+
+			__intel_pmu_pebs_event_output(event, iregs, unprocessed[bit], false, data);
+
+			unprocessed[bit] = at;
+		}
 	}
 
 	for_each_set_bit(bit, (unsigned long *)&mask, X86_PMC_IDX_MAX) {
-		if (counts[bit] == 0)
+		if (!counts[bit])
 			continue;
 
 		event = cpuc->events[bit];
-		if (WARN_ON_ONCE(!event))
-			continue;
 
-		if (WARN_ON_ONCE(!event->attr.precise_ip))
-			continue;
+		if (!iregs) {
+			/*
+			 * The PEBS records may be drained in the non-overflow context,
+			 * e.g., large PEBS + context switch. Perf should treat the
+			 * last record the same as other PEBS records, and doesn't
+			 * invoke the generic overflow handler.
+			 */
+			__intel_pmu_pebs_event_output(event, iregs, unprocessed[bit], false, data);
+		} else
+			__intel_pmu_pebs_event_output(event, iregs, unprocessed[bit], true, data);
 
-		__intel_pmu_pebs_event(event, iregs, data, base,
-				       top, bit, counts[bit],
-				       setup_pebs_adaptive_sample_data);
+		if (event->hw.flags & PERF_X86_EVENT_AUTO_RELOAD) {
+			/*
+			 * Now, auto-reload is only enabled in fixed period mode.
+			 * The reload value is always hwc->sample_period.
+			 * May need to change it, if auto-reload is enabled in
+			 * freq mode later.
+			 */
+			intel_pmu_save_and_restart_reload(event, counts[bit]);
+		} else
+			intel_pmu_save_and_restart(event);
 	}
 }
 
