@@ -697,6 +697,8 @@ static void update_userdata(struct netconsole_target *nt)
 	int complete_idx = 0, child_count = 0;
 	struct list_head *entry;
 
+	lockdep_assert_held(&dynamic_netconsole_mutex);
+
 	/* Clear the current string in case the last userdatum was deleted */
 	nt->userdata_length = 0;
 	nt->userdata_complete[0] = 0;
