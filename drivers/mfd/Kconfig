@@ -1098,6 +1098,18 @@ config MFD_NTXEC
 	  certain e-book readers designed by the original design manufacturer
 	  Netronix.
 
+config MFD_NXP_SIUL2
+	tristate "NXP SIUL2 MFD driver"
+	select MFD_CORE
+	select REGMAP_MMIO
+	depends on ARCH_S32 || COMPILE_TEST
+	help
+	  Select this to get support for the NXP SIUL2 (System Integration
+	  Unit Lite) module. This hardware block contains registers for
+	  SoC information, pinctrl and GPIO functionality. This will
+	  probe a MFD driver which will contain cells for a combined
+	  pinctrl&GPIO driver and nvmem drivers for the SoC information.
+
 config MFD_RETU
 	tristate "Nokia Retu and Tahvo multi-function device"
 	select MFD_CORE
