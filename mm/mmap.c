@@ -1922,6 +1922,16 @@ struct vm_area_struct *_install_special_mapping(
 	unsigned long addr, unsigned long len,
 	unsigned long vm_flags, const struct vm_special_mapping *spec)
 {
+	/*
+	 * At present, all mappings (vdso, vvar, sigpage, and uprobe) that
+	 * invoke the _install_special_mapping function can be sealed.
+	 * Therefore, it is logical to call the seal_system_mappings_enabled()
+	 * function here. In the future, if this is not the case, i.e. if certain
+	 * mappings cannot be sealed, then it would be necessary to move this
+	 * check to the calling function.
+	 */
+	vm_flags |= seal_system_mappings();
+
 	return __install_special_mapping(mm, addr, len, vm_flags, (void *)spec,
 					&special_mapping_vmops);
 }

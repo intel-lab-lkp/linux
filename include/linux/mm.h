@@ -4179,4 +4179,16 @@ int arch_get_shadow_stack_status(struct task_struct *t, unsigned long __user *st
 int arch_set_shadow_stack_status(struct task_struct *t, unsigned long status);
 int arch_lock_shadow_stack_status(struct task_struct *t, unsigned long status);
 
+#ifdef CONFIG_64BIT
+/*
+ * return VM_SEALED if seal system mapping is enabled.
+ */
+unsigned long seal_system_mappings(void);
+#else
+static inline unsigned long seal_system_mappings(void)
+{
+	return 0;
+}
+#endif
+
 #endif /* _LINUX_MM_H */

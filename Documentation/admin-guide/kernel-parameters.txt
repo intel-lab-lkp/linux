@@ -1542,6 +1542,16 @@
 			Permit 'security.evm' to be updated regardless of
 			current integrity status.
 
+	exec.seal_system_mappings = [KNL]
+			Format: { no | yes }
+			Seal system mappings: vdso, vvar, sigpage, vsyscall,
+			uprobe.
+			This overwrites KCONFIG CONFIG_SEAL_SYSTEM_MAPPINGS
+			- 'no':  do not seal system mappings.
+			- 'yes': seal system mappings.
+			If not specified or invalid, default is the KCONFIG value.
+			This option has no effect if CONFIG_64BIT=n
+
 	early_page_ext [KNL,EARLY] Enforces page_ext initialization to earlier
 			stages so cover more early boot allocations.
 			Please note that as side effect some optimizations

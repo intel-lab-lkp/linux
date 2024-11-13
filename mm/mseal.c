@@ -7,6 +7,7 @@
  *  Author: Jeff Xu <jeffxu@chromium.org>
  */
 
+#include <linux/fs_parser.h>
 #include <linux/mempolicy.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
@@ -266,4 +267,42 @@ SYSCALL_DEFINE3(mseal, unsigned long, start, size_t, len, unsigned long,
 		flags)
 {
 	return do_mseal(start, len, flags);
+}
+
+/*
+ * Kernel cmdline overwrite for CONFIG_SEAL_SYSTEM_MAPPINGS
+ */
+enum seal_system_mappings_type {
+	SEAL_SYSTEM_MAPPINGS_DISABLED,
+	SEAL_SYSTEM_MAPPINGS_ENABLED
+};
+
+static enum seal_system_mappings_type seal_system_mappings_v __ro_after_init =
+	IS_ENABLED(CONFIG_SEAL_SYSTEM_MAPPINGS) ? SEAL_SYSTEM_MAPPINGS_ENABLED :
+	SEAL_SYSTEM_MAPPINGS_DISABLED;
+
+static const struct constant_table value_table_sys_mapping[] __initconst = {
+	{ "no", SEAL_SYSTEM_MAPPINGS_DISABLED},
+	{ "yes", SEAL_SYSTEM_MAPPINGS_ENABLED},
+	{ }
+};
+
+static int __init early_seal_system_mappings_override(char *buf)
+{
+	if (!buf)
+		return -EINVAL;
+
+	seal_system_mappings_v = lookup_constant(value_table_sys_mapping,
+			buf, seal_system_mappings_v);
+	return 0;
+}
+
+early_param("exec.seal_system_mappings", early_seal_system_mappings_override);
+
+unsigned long seal_system_mappings(void)
+{
+	if (seal_system_mappings_v == SEAL_SYSTEM_MAPPINGS_ENABLED)
+		return VM_SEALED;
+
+	return 0;
 }
