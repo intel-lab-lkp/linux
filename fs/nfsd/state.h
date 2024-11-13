@@ -310,7 +310,7 @@ struct nfsd4_session {
 	struct list_head	se_conns;
 	u32			se_cb_prog;
 	u32			se_cb_seq_nr;
-	struct nfsd4_slot	*se_slots[];	/* forward channel slots */
+	struct nfsd4_slot	*se_slots[NFSD_MAX_SLOTS_PER_SESSION];	/* forward channel slots */
 };
 
 /* formatted contents of nfs4_sessionid */
