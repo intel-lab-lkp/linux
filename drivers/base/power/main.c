@@ -1678,7 +1678,11 @@ static int device_suspend(struct device *dev, pm_message_t state, bool async)
 		callback = pm_op(dev->driver->pm, state);
 	}
 
+#if CONFIG_PM_SLEEP_LEGACY_CALLBACK_ABORT
 	error = dpm_run_callback(callback, dev, state, info);
+#else
+	dpm_run_callback(callback, dev, state, info);
+#endif
 
  End:
 	if (!error) {
