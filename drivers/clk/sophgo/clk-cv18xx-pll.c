@@ -45,14 +45,13 @@ static unsigned long ipll_recalc_rate(struct clk_hw *hw,
 }
 
 static int ipll_find_rate(const struct cv1800_clk_pll_limit *limit,
-			  unsigned long prate, unsigned long *rate,
-			  u32 *value)
+			  unsigned long prate, unsigned long *rate)
 {
 	unsigned long best_rate = 0;
 	unsigned long trate = *rate;
 	unsigned long pre_div_sel = 0, div_sel = 0, post_div_sel = 0;
 	unsigned long pre, div, post;
-	u32 detected = *value;
+	u32 detected = 0;
 	unsigned long tmp;
 
 	for_each_pll_limit_range(pre, &limit->pre_div) {
@@ -77,7 +76,6 @@ static int ipll_find_rate(const struct cv1800_clk_pll_limit *limit,
 		detected = PLL_SET_PRE_DIV_SEL(detected, pre_div_sel);
 		detected = PLL_SET_POST_DIV_SEL(detected, post_div_sel);
 		detected = PLL_SET_DIV_SEL(detected, div_sel);
-		*value = detected;
 		*rate = best_rate;
 		return 0;
 	}
@@ -87,11 +85,10 @@ static int ipll_find_rate(const struct cv1800_clk_pll_limit *limit,
 
 static int ipll_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 {
-	u32 val;
 	struct cv1800_clk_pll *pll = hw_to_cv1800_clk_pll(hw);
 
 	return ipll_find_rate(pll->pll_limit, req->best_parent_rate,
-			      &req->rate, &val);
+			      &req->rate);
 }
 
 static void pll_get_mode_ctrl(unsigned long div_sel,
@@ -134,7 +131,7 @@ static int ipll_set_rate(struct clk_hw *hw, unsigned long rate,
 	unsigned long flags;
 	struct cv1800_clk_pll *pll = hw_to_cv1800_clk_pll(hw);
 
-	ipll_find_rate(pll->pll_limit, parent_rate, &rate, &detected);
+	ipll_find_rate(pll->pll_limit, parent_rate, &rate);
 	pll_get_mode_ctrl(PLL_GET_DIV_SEL(detected),
 			  ipll_check_mode_ctrl_restrict,
 			  pll->pll_limit, &detected);
