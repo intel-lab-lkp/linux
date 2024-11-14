@@ -32,7 +32,6 @@ obj-$(CONFIG_I2C_VIAPRO)	+= i2c-viapro.o
 obj-$(CONFIG_I2C_ZHAOXIN)	+= i2c-viai2c-zhaoxin.o i2c-viai2c-common.o
 
 # Mac SMBus host controller drivers
-obj-$(CONFIG_I2C_HYDRA)		+= i2c-hydra.o
 obj-$(CONFIG_I2C_POWERMAC)	+= i2c-powermac.o
 
 # Embedded system I2C/SMBus host controller drivers

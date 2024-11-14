@@ -373,18 +373,6 @@ endif # ACPI
 comment "Mac SMBus host controller drivers"
 	depends on PPC_CHRP || PPC_PMAC
 
-config I2C_HYDRA
-	tristate "CHRP Apple Hydra Mac I/O I2C interface"
-	depends on PCI && PPC_CHRP
-	select I2C_ALGOBIT
-	help
-	  This supports the use of the I2C interface in the Apple Hydra Mac
-	  I/O chip on some CHRP machines (e.g. the LongTrail).  Say Y if you
-	  have such a machine.
-
-	  This support is also available as a module.  If so, the module
-	  will be called i2c-hydra.
-
 config I2C_POWERMAC
 	tristate "Powermac I2C interface"
 	depends on PPC_PMAC
