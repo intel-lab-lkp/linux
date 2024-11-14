@@ -682,12 +682,6 @@ isolate_fail:
 	if (locked)
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
 
-	/*
-	 * Be careful to not go outside of the pageblock.
-	 */
-	if (unlikely(blockpfn > end_pfn))
-		blockpfn = end_pfn;
-
 	trace_mm_compaction_isolate_freepages(*start_pfn, blockpfn,
 					nr_scanned, total_isolated);
 
