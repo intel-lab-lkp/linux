@@ -141,6 +141,23 @@ config PM_SLEEP
 	depends on SUSPEND || HIBERNATE_CALLBACKS
 	select PM
 
+config PM_SLEEP_LEGACY_CALLBACK_ABORT
+	bool "Enable legacy callback abort via return value"
+	depends on PM_SLEEP
+	help
+	This option enables the legacy API for device .suspend() callbacks.
+	That API empowered any driver to abort system-wide suspend
+	by returning any non-zero value from its suspend calbacks:
+	(.suspend/.suspend_noirq/.suspend_late)
+	In practice, these aborts are almost always spurious and unwanted.
+
+	Disabling this option (default) ignores .suspend() callback return values,
+	though they are still traced and logged.
+
+	The proper way for a device driver to abort system-wide suspend is to
+	invoke pm_system_wakeup() during the suspend flow.  This method is
+	valid, independent of this config option.
+
 config PM_SLEEP_SMP
 	def_bool y
 	depends on SMP

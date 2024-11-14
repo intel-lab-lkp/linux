@@ -7,6 +7,7 @@ Power Management
 .. toctree::
     :maxdepth: 1
 
+    driver_api
     apm-acpi
     basic-pm-debugging
     charger-manager

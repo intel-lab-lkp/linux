@@ -1244,7 +1244,6 @@ static int device_suspend_noirq(struct device *dev, pm_message_t state, bool asy
 Run:
 	error = dpm_run_callback(callback, dev, state, info);
 	if (error) {
-		async_error = error;
 		dpm_save_failed_dev(dev_name(dev));
 		pm_dev_err(dev, state, async ? " async noirq" : " noirq", error);
 		goto Complete;
@@ -1270,7 +1269,12 @@ Skip:
 Complete:
 	complete_all(&dev->power.completion);
 	TRACE_SUSPEND(error);
-	return error;
+
+	if (IS_ENABLED(CONFIG_PM_SLEEP_LEGACY_CALLBACK_ABORT)) {
+		async_error = error;
+		return error;
+	}
+	return 0;
 }
 
 static void async_suspend_noirq(void *data, async_cookie_t cookie)
@@ -1424,7 +1428,6 @@ static int device_suspend_late(struct device *dev, pm_message_t state, bool asyn
 Run:
 	error = dpm_run_callback(callback, dev, state, info);
 	if (error) {
-		async_error = error;
 		dpm_save_failed_dev(dev_name(dev));
 		pm_dev_err(dev, state, async ? " async late" : " late", error);
 		goto Complete;
@@ -1437,7 +1440,12 @@ Skip:
 Complete:
 	TRACE_SUSPEND(error);
 	complete_all(&dev->power.completion);
-	return error;
+
+	if (IS_ENABLED(CONFIG_PM_SLEEP_LEGACY_CALLBACK_ABORT)) {
+		async_error = error;
+		return error;
+	}
+	return 0;
 }
 
 static void async_suspend_late(void *data, async_cookie_t cookie)
@@ -1681,7 +1689,7 @@ static int device_suspend(struct device *dev, pm_message_t state, bool async)
 	error = dpm_run_callback(callback, dev, state, info);
 
  End:
-	if (!error) {
+	if (!error || !IS_ENABLED(CONFIG_PM_SLEEP_LEGACY_CALLBACK_ABORT)) {
 		dev->power.is_suspended = true;
 		if (device_may_wakeup(dev))
 			dev->power.wakeup_path = true;
@@ -1695,14 +1703,17 @@ static int device_suspend(struct device *dev, pm_message_t state, bool async)
 
  Complete:
 	if (error) {
-		async_error = error;
 		dpm_save_failed_dev(dev_name(dev));
 		pm_dev_err(dev, state, async ? " async" : "", error);
 	}
 
 	complete_all(&dev->power.completion);
 	TRACE_SUSPEND(error);
-	return error;
+	if (IS_ENABLED(CONFIG_PM_SLEEP_LEGACY_CALLBACK_ABORT)) {
+		async_error = error;
+		return error;
+	}
+	return 0;
 }
 
 static void async_suspend(void *data, async_cookie_t cookie)
