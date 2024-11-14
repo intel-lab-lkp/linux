@@ -344,6 +344,56 @@ static int adxl345_get_fifo_entries(struct adxl34x_state *st, int *fifo_entries)
 	return 0;
 }
 
+/**
+ * Read fifo_entries number of elements into *st
+ *
+ * It is recommended that a multiple-byte read of all registers be
+ * performed to prevent a change in data between reads of sequential
+ * registers.
+ * That is to read out the data registers X0, X1, Y0, Y1, Z0, Z1 at once.
+ *
+ * @st: The instance of the state object of this sensor.
+ * @fifo_entries: The number of lines in the FIFO referred to as fifo_entry,
+ * a fifo_entry has 3 elements for X, Y and Z direction of 2 bytes each.
+ */
+static int adxl345_read_fifo_elements(struct adxl34x_state *st, int fifo_entries)
+{
+	size_t count, ndirs = 3;
+	int i, ret;
+
+	count = 2 * ndirs; /* 2 byte per direction */
+	for (i = 0; i < fifo_entries; i++) {
+		ret = regmap_noinc_read(st->regmap, ADXL345_REG_XYZ_BASE,
+				st->fifo_buf + (i * count / 2), count);
+		if (ret) {
+			pr_warn("%s(): regmap_noinc_read() failed\n", __func__);
+			return -EFAULT;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * Empty the fifo. This is needed also in case of overflow or error handling.
+ * Read out all remaining elements and reset the fifo_entries counter.
+ *
+ * @st: The instance to the state object of the sensor.
+ */
+void adxl345_empty_fifo(struct adxl34x_state *st)
+{
+	int regval;
+	int fifo_entries;
+
+	/* In case the HW is not "clean" just read out remaining elements */
+	adxl345_get_fifo_entries(st, &fifo_entries);
+	if (fifo_entries > 0)
+		adxl345_read_fifo_elements(st, fifo_entries);
+
+	/* Reset the INT_SOURCE register by reading the register */
+	regmap_read(st->regmap, ADXL345_REG_INT_SOURCE, &regval);
+}
+
 static const struct iio_buffer_setup_ops adxl345_buffer_ops = {
 };
 
@@ -390,30 +440,34 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 
 	ret = adxl345_get_status(st, &int_stat);
 	if (ret < 0)
-		goto done;
+		goto err;
 
 	/* Ignore already read event by reissued too fast */
 	if (int_stat == 0x0)
-		goto done;
+		goto err;
 
 	/* evaluation */
 
 	if (int_stat & ADXL345_INT_OVERRUN) {
 		pr_debug("%s(): OVERRUN event detected\n", __func__);
-		goto done;
+		goto err;
 	}
 
 	if (int_stat & (ADXL345_INT_DATA_READY | ADXL345_INT_WATERMARK)) {
 		pr_debug("%s(): WATERMARK or DATA_READY event detected\n", __func__);
 		if (adxl345_get_fifo_entries(st, &fifo_entries) < 0)
-			goto done;
-	}
-	goto done;
-done:
+			goto err;
 
-	if (indio_dev)
 		iio_trigger_notify_done(indio_dev->trig);
+	}
 
+	goto done;
+err:
+	iio_trigger_notify_done(indio_dev->trig);
+	adxl345_empty_fifo(st);
+	return IRQ_NONE;
+
+done:
 	return IRQ_HANDLED;
 }
 
