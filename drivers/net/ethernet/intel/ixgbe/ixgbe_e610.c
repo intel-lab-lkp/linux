@@ -77,15 +77,15 @@ static int ixgbe_aci_send_cmd_execute(struct ixgbe_hw *hw,
 		return -EBUSY;
 	}
 
-	opcode = desc->opcode;
+	opcode = le16_to_cpu(desc->opcode);
 
 	if (buf_size > IXGBE_ACI_MAX_BUFFER_SIZE)
 		return -EINVAL;
 
 	if (buf)
-		desc->flags |= IXGBE_ACI_FLAG_BUF;
+		desc->flags |= cpu_to_le16(IXGBE_ACI_FLAG_BUF);
 
-	if (desc->flags & IXGBE_ACI_FLAG_BUF) {
+	if (desc->flags & cpu_to_le16(IXGBE_ACI_FLAG_BUF)) {
 		if ((buf && !buf_size) ||
 		    (!buf && buf_size))
 			return -EINVAL;
@@ -99,11 +99,11 @@ static int ixgbe_aci_send_cmd_execute(struct ixgbe_hw *hw,
 			       buf_tail_size);
 
 		if (((buf_size + 3) & ~0x3) > IXGBE_ACI_LG_BUF)
-			desc->flags |= IXGBE_ACI_FLAG_LB;
+			desc->flags |= cpu_to_le16(IXGBE_ACI_FLAG_LB);
 
-		desc->datalen = buf_size;
+		desc->datalen = cpu_to_le16(buf_size);
 
-		if (desc->flags & IXGBE_ACI_FLAG_RD) {
+		if (desc->flags & cpu_to_le16(IXGBE_ACI_FLAG_RD)) {
 			for (i = 0; i < buf_size / 4; i++)
 				IXGBE_WRITE_REG(hw, IXGBE_PF_HIBA(i), ((u32 *)buf)[i]);
 			if (buf_tail_size)
@@ -169,12 +169,13 @@ static int ixgbe_aci_send_cmd_execute(struct ixgbe_hw *hw,
 	 * is a descriptor of an event which is expected to contain
 	 * different opcode than the command.
 	 */
-	if (desc->opcode != opcode &&
+	if (desc->opcode != cpu_to_le16(opcode) &&
 	    opcode != ixgbe_aci_opc_get_fw_event)
 		return -EIO;
 
 	if (desc->retval) {
-		hw->aci.last_status = (enum ixgbe_aci_err)desc->retval;
+		hw->aci.last_status = (enum ixgbe_aci_err)
+			le16_to_cpu(desc->retval);
 		return -EIO;
 	}
 
@@ -210,9 +211,9 @@ int ixgbe_aci_send_cmd(struct ixgbe_hw *hw, struct ixgbe_aci_desc *desc,
 		       void *buf, u16 buf_size)
 {
 	u8 idx = 0, *buf_cpy __free(kfree) = NULL;
+	u16 opcode = le16_to_cpu(desc->opcode);
 	struct ixgbe_aci_desc desc_cpy;
 	enum ixgbe_aci_err last_status;
-	u16 opcode = desc->opcode;
 	bool is_cmd_for_retry;
 	unsigned long timeout;
 	int err;
@@ -305,13 +306,13 @@ int ixgbe_aci_get_event(struct ixgbe_hw *hw, struct ixgbe_aci_event *e,
 		goto aci_get_event_exit;
 
 	/* Returned 0x0014 opcode indicates that no event was obtained */
-	if (desc.opcode == ixgbe_aci_opc_get_fw_event) {
+	if (desc.opcode == cpu_to_le16(ixgbe_aci_opc_get_fw_event)) {
 		err = -ENOENT;
 		goto aci_get_event_exit;
 	}
 
 	/* Determine size of event data */
-	e->msg_len = min_t(u16, desc.datalen, e->buf_len);
+	e->msg_len = min_t(u16, le16_to_cpu(desc.datalen), e->buf_len);
 	/* Write event descriptor to event info structure */
 	memcpy(&e->desc, &desc, sizeof(e->desc));
 
@@ -337,8 +338,8 @@ void ixgbe_fill_dflt_direct_cmd_desc(struct ixgbe_aci_desc *desc, u16 opcode)
 {
 	/* Zero out the desc. */
 	memset(desc, 0, sizeof(*desc));
-	desc->opcode = opcode;
-	desc->flags = IXGBE_ACI_FLAG_SI;
+	desc->opcode = cpu_to_le16(opcode);
+	desc->flags = cpu_to_le16(IXGBE_ACI_FLAG_SI);
 }
 
 /**
@@ -369,10 +370,10 @@ static int ixgbe_aci_req_res(struct ixgbe_hw *hw, enum ixgbe_aci_res_ids res,
 
 	ixgbe_fill_dflt_direct_cmd_desc(&desc, ixgbe_aci_opc_req_res);
 
-	cmd_resp->res_id = res;
-	cmd_resp->access_type = access;
-	cmd_resp->res_number = sdp_number;
-	cmd_resp->timeout = *timeout;
+	cmd_resp->res_id = cpu_to_le16(res);
+	cmd_resp->access_type = cpu_to_le16(access);
+	cmd_resp->res_number = cpu_to_le32(sdp_number);
+	cmd_resp->timeout = cpu_to_le32(*timeout);
 	*timeout = 0;
 
 	err = ixgbe_aci_send_cmd(hw, &desc, NULL, 0);
@@ -382,7 +383,7 @@ static int ixgbe_aci_req_res(struct ixgbe_hw *hw, enum ixgbe_aci_res_ids res,
 	 * time the current owner of the resource has to free it.
 	 */
 	if (!err || hw->aci.last_status == IXGBE_ACI_RC_EBUSY)
-		*timeout = cmd_resp->timeout;
+		*timeout = le32_to_cpu(cmd_resp->timeout);
 
 	return err;
 }
@@ -407,8 +408,8 @@ static int ixgbe_aci_release_res(struct ixgbe_hw *hw,
 
 	ixgbe_fill_dflt_direct_cmd_desc(&desc, ixgbe_aci_opc_release_res);
 
-	cmd->res_id = res;
-	cmd->res_number = sdp_number;
+	cmd->res_id = cpu_to_le16(res);
+	cmd->res_number = cpu_to_le32(sdp_number);
 
 	return ixgbe_aci_send_cmd(hw, &desc, NULL, 0);
 }
@@ -514,10 +515,10 @@ static bool ixgbe_parse_e610_caps(struct ixgbe_hw *hw,
 				  struct ixgbe_aci_cmd_list_caps_elem *elem,
 				  const char *prefix)
 {
-	u32 logical_id = elem->logical_id;
-	u32 phys_id = elem->phys_id;
-	u32 number = elem->number;
-	u16 cap = elem->cap;
+	u32 logical_id = le32_to_cpu(elem->logical_id);
+	u32 phys_id = le32_to_cpu(elem->phys_id);
+	u32 number = le32_to_cpu(elem->number);
+	u16 cap = le16_to_cpu(elem->cap);
 
 	switch (cap) {
 	case IXGBE_ACI_CAPS_VALID_FUNCTIONS:
@@ -599,7 +600,7 @@ ixgbe_parse_valid_functions_cap(struct ixgbe_hw *hw,
 				struct ixgbe_hw_dev_caps *dev_p,
 				struct ixgbe_aci_cmd_list_caps_elem *cap)
 {
-	dev_p->num_funcs = hweight32(cap->number);
+	dev_p->num_funcs = hweight32(le32_to_cpu(cap->number));
 }
 
 /**
@@ -614,7 +615,7 @@ static void ixgbe_parse_vf_dev_caps(struct ixgbe_hw *hw,
 				    struct ixgbe_hw_dev_caps *dev_p,
 				    struct ixgbe_aci_cmd_list_caps_elem *cap)
 {
-	dev_p->num_vfs_exposed = cap->number;
+	dev_p->num_vfs_exposed = le32_to_cpu(cap->number);
 }
 
 /**
@@ -629,7 +630,7 @@ static void ixgbe_parse_vsi_dev_caps(struct ixgbe_hw *hw,
 				     struct ixgbe_hw_dev_caps *dev_p,
 				     struct ixgbe_aci_cmd_list_caps_elem *cap)
 {
-	dev_p->num_vsi_allocd_to_host = cap->number;
+	dev_p->num_vsi_allocd_to_host = le32_to_cpu(cap->number);
 }
 
 /**
@@ -644,7 +645,7 @@ static void ixgbe_parse_fdir_dev_caps(struct ixgbe_hw *hw,
 				      struct ixgbe_hw_dev_caps *dev_p,
 				      struct ixgbe_aci_cmd_list_caps_elem *cap)
 {
-	dev_p->num_flow_director_fltr = cap->number;
+	dev_p->num_flow_director_fltr = le32_to_cpu(cap->number);
 }
 
 /**
@@ -673,7 +674,7 @@ static void ixgbe_parse_dev_caps(struct ixgbe_hw *hw,
 	memset(dev_p, 0, sizeof(*dev_p));
 
 	for (i = 0; i < cap_count; i++) {
-		u16 cap = cap_resp[i].cap;
+		u16 cap = le16_to_cpu(cap_resp[i].cap);
 
 		ixgbe_parse_e610_caps(hw, &dev_p->common_cap, &cap_resp[i],
 				      "dev caps");
@@ -711,8 +712,8 @@ static void ixgbe_parse_vf_func_caps(struct ixgbe_hw *hw,
 				     struct ixgbe_hw_func_caps *func_p,
 				     struct ixgbe_aci_cmd_list_caps_elem *cap)
 {
-	func_p->num_allocd_vfs = cap->number;
-	func_p->vf_base_id = cap->logical_id;
+	func_p->num_allocd_vfs = le32_to_cpu(cap->number);
+	func_p->vf_base_id = le32_to_cpu(cap->logical_id);
 }
 
 /**
@@ -776,7 +777,7 @@ static void ixgbe_parse_func_caps(struct ixgbe_hw *hw,
 	memset(func_p, 0, sizeof(*func_p));
 
 	for (i = 0; i < cap_count; i++) {
-		u16 cap = cap_resp[i].cap;
+		u16 cap = le16_to_cpu(cap_resp[i].cap);
 
 		ixgbe_parse_e610_caps(hw, &func_p->common_cap,
 				      &cap_resp[i], "func caps");
@@ -833,7 +834,7 @@ int ixgbe_aci_list_caps(struct ixgbe_hw *hw, void *buf, u16 buf_size,
 	err = ixgbe_aci_send_cmd(hw, &desc, buf, buf_size);
 
 	if (cap_count)
-		*cap_count = cmd->count;
+		*cap_count = le32_to_cpu(cmd->count);
 
 	return err;
 }
@@ -984,14 +985,14 @@ int ixgbe_aci_get_phy_caps(struct ixgbe_hw *hw, bool qual_mods, u8 report_mode,
 	ixgbe_fill_dflt_direct_cmd_desc(&desc, ixgbe_aci_opc_get_phy_caps);
 
 	if (qual_mods)
-		cmd->param0 |= IXGBE_ACI_GET_PHY_RQM;
+		cmd->param0 |= cpu_to_le16(IXGBE_ACI_GET_PHY_RQM);
 
-	cmd->param0 |= report_mode;
+	cmd->param0 |= cpu_to_le16(report_mode);
 	err = ixgbe_aci_send_cmd(hw, &desc, pcaps, pcaps_size);
 
 	if (!err && report_mode == IXGBE_ACI_REPORT_TOPO_CAP_MEDIA) {
-		hw->phy.phy_type_low = pcaps->phy_type_low;
-		hw->phy.phy_type_high = pcaps->phy_type_high;
+		hw->phy.phy_type_low = le64_to_cpu(pcaps->phy_type_low);
+		hw->phy.phy_type_high = le64_to_cpu(pcaps->phy_type_high);
 		memcpy(hw->link.link_info.module_type, &pcaps->module_type,
 		       sizeof(hw->link.link_info.module_type));
 	}
@@ -1052,7 +1053,7 @@ int ixgbe_aci_set_phy_cfg(struct ixgbe_hw *hw,
 
 	ixgbe_fill_dflt_direct_cmd_desc(&desc, ixgbe_aci_opc_set_phy_cfg);
 	desc.params.set_phy.lport_num = hw->bus.func;
-	desc.flags |= IXGBE_ACI_FLAG_RD;
+	desc.flags |= cpu_to_le16(IXGBE_ACI_FLAG_RD);
 
 	err = ixgbe_aci_send_cmd(hw, &desc, cfg, sizeof(*cfg));
 	if (!err)
@@ -1309,7 +1310,7 @@ int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, bool ena_lse,
 	ixgbe_fill_dflt_direct_cmd_desc(&desc, ixgbe_aci_opc_get_link_status);
 	cmd_flags = (ena_lse) ? IXGBE_ACI_LSE_ENA : IXGBE_ACI_LSE_DIS;
 	resp = &desc.params.get_link_status;
-	resp->cmd_flags = cmd_flags;
+	resp->cmd_flags = cpu_to_le16(cmd_flags);
 	resp->lport_num = hw->bus.func;
 
 	err = ixgbe_aci_send_cmd(hw, &desc, &link_data, sizeof(link_data));
@@ -1320,14 +1321,14 @@ int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, bool ena_lse,
 	*li_old = *li;
 
 	/* Update current link status information. */
-	li->link_speed = link_data.link_speed;
-	li->phy_type_low = link_data.phy_type_low;
-	li->phy_type_high = link_data.phy_type_high;
+	li->link_speed = le16_to_cpu(link_data.link_speed);
+	li->phy_type_low = le64_to_cpu(link_data.phy_type_low);
+	li->phy_type_high = le64_to_cpu(link_data.phy_type_high);
 	li->link_info = link_data.link_info;
 	li->link_cfg_err = link_data.link_cfg_err;
 	li->an_info = link_data.an_info;
 	li->ext_info = link_data.ext_info;
-	li->max_frame_size = link_data.max_frame_size;
+	li->max_frame_size = le16_to_cpu(link_data.max_frame_size);
 	li->fec_info = link_data.cfg & IXGBE_ACI_FEC_MASK;
 	li->topo_media_conflict = link_data.topo_media_conflict;
 	li->pacing = link_data.cfg & (IXGBE_ACI_CFG_PACING_M |
@@ -1345,7 +1346,8 @@ int ixgbe_aci_get_link_info(struct ixgbe_hw *hw, bool ena_lse,
 	else
 		hw_fc_info->current_mode = ixgbe_fc_none;
 
-	li->lse_ena = !!(resp->cmd_flags & IXGBE_ACI_LSE_IS_ENABLED);
+	li->lse_ena = !!(le16_to_cpu(resp->cmd_flags) &
+			 IXGBE_ACI_LSE_IS_ENABLED);
 
 	/* Save link status information. */
 	if (link)
@@ -1378,7 +1380,7 @@ int ixgbe_aci_set_event_mask(struct ixgbe_hw *hw, u8 port_num, u16 mask)
 
 	cmd->lport_num = port_num;
 
-	cmd->event_mask = mask;
+	cmd->event_mask = cpu_to_le16(mask);
 	return ixgbe_aci_send_cmd(hw, &desc, NULL, 0);
 }
 
@@ -1441,13 +1443,13 @@ enum ixgbe_media_type ixgbe_get_media_type_e610(struct ixgbe_hw *hw)
 		if (rc)
 			return ixgbe_media_type_unknown;
 
-		highest_bit = fls64(pcaps.phy_type_high);
+		highest_bit = fls64(le64_to_cpu(pcaps.phy_type_high));
 		if (highest_bit) {
 			hw->link.link_info.phy_type_high =
 				BIT_ULL(highest_bit - 1);
 			hw->link.link_info.phy_type_low = 0;
 		} else {
-			highest_bit = fls64(pcaps.phy_type_low);
+			highest_bit = fls64(le64_to_cpu(pcaps.phy_type_low));
 			if (highest_bit)
 				hw->link.link_info.phy_type_low =
 					BIT_ULL(highest_bit - 1);
@@ -1769,6 +1771,7 @@ int ixgbe_init_phy_ops_e610(struct ixgbe_hw *hw)
 int ixgbe_identify_phy_e610(struct ixgbe_hw *hw)
 {
 	struct ixgbe_aci_cmd_get_phy_caps_data pcaps;
+	u64 phy_type_low, phy_type_high;
 	int err;
 
 	/* Set PHY type */
@@ -1791,29 +1794,31 @@ int ixgbe_identify_phy_e610(struct ixgbe_hw *hw)
 
 	/* Determine supported speeds */
 	hw->phy.speeds_supported = IXGBE_LINK_SPEED_UNKNOWN;
+	phy_type_high = le64_to_cpu(pcaps.phy_type_high);
+	phy_type_low = le64_to_cpu(pcaps.phy_type_low);
 
-	if (pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_10BASE_T ||
-	    pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_10M_SGMII)
+	if (phy_type_high & IXGBE_PHY_TYPE_HIGH_10BASE_T ||
+	    phy_type_high & IXGBE_PHY_TYPE_HIGH_10M_SGMII)
 		hw->phy.speeds_supported |= IXGBE_LINK_SPEED_10_FULL;
-	if (pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_100BASE_TX ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_100M_SGMII ||
-	    pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_100M_USXGMII)
+	if (phy_type_low  & IXGBE_PHY_TYPE_LOW_100BASE_TX ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_100M_SGMII ||
+	    phy_type_high & IXGBE_PHY_TYPE_HIGH_100M_USXGMII)
 		hw->phy.speeds_supported |= IXGBE_LINK_SPEED_100_FULL;
-	if (pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_T  ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_SX ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_LX ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_KX ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_1G_SGMII    ||
-	    pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_1G_USXGMII)
+	if (phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_T  ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_SX ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_LX ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_1000BASE_KX ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_1G_SGMII    ||
+	    phy_type_high & IXGBE_PHY_TYPE_HIGH_1G_USXGMII)
 		hw->phy.speeds_supported |= IXGBE_LINK_SPEED_1GB_FULL;
-	if (pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_T       ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_10G_SFI_DA      ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_SR      ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_LR      ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_KR_CR1  ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_10G_SFI_AOC_ACC ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_10G_SFI_C2C     ||
-	    pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_10G_USXGMII)
+	if (phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_T       ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_10G_SFI_DA      ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_SR      ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_LR      ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_10GBASE_KR_CR1  ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_10G_SFI_AOC_ACC ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_10G_SFI_C2C     ||
+	    phy_type_high & IXGBE_PHY_TYPE_HIGH_10G_USXGMII)
 		hw->phy.speeds_supported |= IXGBE_LINK_SPEED_10GB_FULL;
 
 	/* 2.5 and 5 Gbps link speeds must be excluded from the
@@ -1825,20 +1830,20 @@ int ixgbe_identify_phy_e610(struct ixgbe_hw *hw)
 	    hw->device_id != IXGBE_DEV_ID_E610_2_5G_T)
 		hw->phy.autoneg_advertised = hw->phy.speeds_supported;
 
-	if (pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_2500BASE_T   ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_2500BASE_X   ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_2500BASE_KX  ||
-	    pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_2500M_SGMII ||
-	    pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_2500M_USXGMII)
+	if (phy_type_low  & IXGBE_PHY_TYPE_LOW_2500BASE_T   ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_2500BASE_X   ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_2500BASE_KX  ||
+	    phy_type_high & IXGBE_PHY_TYPE_HIGH_2500M_SGMII ||
+	    phy_type_high & IXGBE_PHY_TYPE_HIGH_2500M_USXGMII)
 		hw->phy.speeds_supported |= IXGBE_LINK_SPEED_2_5GB_FULL;
 
 	if (!hw->phy.autoneg_advertised &&
 	    hw->device_id == IXGBE_DEV_ID_E610_2_5G_T)
 		hw->phy.autoneg_advertised = hw->phy.speeds_supported;
 
-	if (pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_5GBASE_T  ||
-	    pcaps.phy_type_low  & IXGBE_PHY_TYPE_LOW_5GBASE_KR ||
-	    pcaps.phy_type_high & IXGBE_PHY_TYPE_HIGH_5G_USXGMII)
+	if (phy_type_low  & IXGBE_PHY_TYPE_LOW_5GBASE_T  ||
+	    phy_type_low  & IXGBE_PHY_TYPE_LOW_5GBASE_KR ||
+	    phy_type_high & IXGBE_PHY_TYPE_HIGH_5G_USXGMII)
 		hw->phy.speeds_supported |= IXGBE_LINK_SPEED_5GB_FULL;
 
 	/* Set PHY ID */
@@ -1912,6 +1917,7 @@ int ixgbe_setup_phy_link_e610(struct ixgbe_hw *hw)
 	struct ixgbe_aci_cmd_set_phy_cfg_data pcfg;
 	u8 rmode = IXGBE_ACI_REPORT_TOPO_CAP_MEDIA;
 	u64 sup_phy_type_low, sup_phy_type_high;
+	u64 phy_type_low = 0, phy_type_high = 0;
 	int err;
 
 	err = ixgbe_aci_get_link_info(hw, false, NULL);
@@ -1926,8 +1932,8 @@ int ixgbe_setup_phy_link_e610(struct ixgbe_hw *hw)
 	if (err)
 		return err;
 
-	sup_phy_type_low = pcaps.phy_type_low;
-	sup_phy_type_high = pcaps.phy_type_high;
+	sup_phy_type_low = le64_to_cpu(pcaps.phy_type_low);
+	sup_phy_type_high = le64_to_cpu(pcaps.phy_type_high);
 
 	/* Get Active configuration to avoid unintended changes. */
 	err = ixgbe_aci_get_phy_caps(hw, false, IXGBE_ACI_REPORT_ACTIVE_CFG,
@@ -1938,52 +1944,52 @@ int ixgbe_setup_phy_link_e610(struct ixgbe_hw *hw)
 	ixgbe_copy_phy_caps_to_cfg(&pcaps, &pcfg);
 
 	/* Set default PHY types for a given speed */
-	pcfg.phy_type_low = 0;
-	pcfg.phy_type_high = 0;
 
 	if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_10_FULL) {
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_10BASE_T;
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_10M_SGMII;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_10BASE_T;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_10M_SGMII;
 	}
 	if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_100_FULL) {
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_100BASE_TX;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_100M_SGMII;
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_100M_USXGMII;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_100BASE_TX;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_100M_SGMII;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_100M_USXGMII;
 	}
 	if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_1GB_FULL) {
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_T;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_SX;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_LX;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_KX;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_1G_SGMII;
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_1G_USXGMII;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_T;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_SX;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_LX;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_1000BASE_KX;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_1G_SGMII;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_1G_USXGMII;
 	}
 	if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_2_5GB_FULL) {
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_2500BASE_T;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_2500BASE_X;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_2500BASE_KX;
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_2500M_SGMII;
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_2500M_USXGMII;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_2500BASE_T;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_2500BASE_X;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_2500BASE_KX;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_2500M_SGMII;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_2500M_USXGMII;
 	}
 	if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_5GB_FULL) {
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_5GBASE_T;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_5GBASE_KR;
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_5G_USXGMII;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_5GBASE_T;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_5GBASE_KR;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_5G_USXGMII;
 	}
 	if (hw->phy.autoneg_advertised & IXGBE_LINK_SPEED_10GB_FULL) {
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_T;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_10G_SFI_DA;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_SR;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_LR;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_KR_CR1;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_10G_SFI_AOC_ACC;
-		pcfg.phy_type_low  |= IXGBE_PHY_TYPE_LOW_10G_SFI_C2C;
-		pcfg.phy_type_high |= IXGBE_PHY_TYPE_HIGH_10G_USXGMII;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_T;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_10G_SFI_DA;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_SR;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_LR;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_10GBASE_KR_CR1;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_10G_SFI_AOC_ACC;
+		phy_type_low  |= IXGBE_PHY_TYPE_LOW_10G_SFI_C2C;
+		phy_type_high |= IXGBE_PHY_TYPE_HIGH_10G_USXGMII;
 	}
 
 	/* Mask the set values to avoid requesting unsupported link types */
-	pcfg.phy_type_low &= sup_phy_type_low;
-	pcfg.phy_type_high &= sup_phy_type_high;
+	phy_type_low &= sup_phy_type_low;
+	pcfg.phy_type_low = cpu_to_le64(phy_type_low);
+	phy_type_high &= sup_phy_type_high;
+	pcfg.phy_type_high = cpu_to_le64(phy_type_high);
 
 	if (pcfg.phy_type_high != pcaps.phy_type_high ||
 	    pcfg.phy_type_low != pcaps.phy_type_low ||
@@ -2093,7 +2099,8 @@ int ixgbe_aci_get_netlist_node(struct ixgbe_hw *hw,
 		return -EOPNOTSUPP;
 
 	if (node_handle)
-		*node_handle = desc.params.get_link_topo.addr.handle;
+		*node_handle =
+			le16_to_cpu(desc.params.get_link_topo.addr.handle);
 	if (node_part_number)
 		*node_part_number = desc.params.get_link_topo.node_part_num;
 
@@ -2175,10 +2182,10 @@ int ixgbe_aci_read_nvm(struct ixgbe_hw *hw, u16 module_typeid, u32 offset,
 	/* If this is the last command in a series, set the proper flag. */
 	if (last_command)
 		cmd->cmd_flags |= IXGBE_ACI_NVM_LAST_CMD;
-	cmd->module_typeid = module_typeid;
-	cmd->offset_low = offset & 0xFFFF;
+	cmd->module_typeid = cpu_to_le16(module_typeid);
+	cmd->offset_low = cpu_to_le16(offset & 0xFFFF);
 	cmd->offset_high = (offset >> 16) & 0xFF;
-	cmd->length = length;
+	cmd->length = cpu_to_le16(length);
 
 	return ixgbe_aci_send_cmd(hw, &desc, data, length);
 }
@@ -2212,7 +2219,8 @@ int ixgbe_nvm_validate_checksum(struct ixgbe_hw *hw)
 
 	ixgbe_release_nvm(hw);
 
-	if (!err && cmd->checksum != IXGBE_ACI_NVM_CHECKSUM_CORRECT) {
+	if (!err && cmd->checksum !=
+		    cpu_to_le16(IXGBE_ACI_NVM_CHECKSUM_CORRECT)) {
 		struct ixgbe_adapter *adapter = container_of(hw, struct ixgbe_adapter,
 							     hw);
 

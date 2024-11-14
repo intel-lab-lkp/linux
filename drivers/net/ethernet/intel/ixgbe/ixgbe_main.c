@@ -3121,7 +3121,7 @@ ixgbe_handle_link_status_event(struct ixgbe_adapter *adapter,
 	link_data = (struct ixgbe_aci_cmd_get_link_status_data *)e->msg_buf;
 
 	link_up = !!(link_data->link_info & IXGBE_ACI_LINK_UP);
-	link_speed = link_data->link_speed;
+	link_speed = le16_to_cpu(link_data->link_speed);
 
 	if (ixgbe_process_link_status_event(adapter, link_up, link_speed))
 		e_dev_warn("Could not process link status event");
@@ -3181,7 +3181,7 @@ static void ixgbe_handle_fw_event(struct ixgbe_adapter *adapter)
 		if (err)
 			break;
 
-		switch (event.desc.opcode) {
+		switch (le16_to_cpu(event.desc.opcode)) {
 		case ixgbe_aci_opc_get_link_status:
 			ixgbe_handle_link_status_event(adapter, &event);
 			break;

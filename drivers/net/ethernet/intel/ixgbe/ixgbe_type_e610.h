@@ -176,8 +176,8 @@ enum ixgbe_aci_opc {
 
 /* Get version (direct 0x0001) */
 struct ixgbe_aci_cmd_get_ver {
-	u32 rom_ver;
-	u32 fw_build;
+	__le32 rom_ver;
+	__le32 fw_build;
 	u8 fw_branch;
 	u8 fw_major;
 	u8 fw_minor;
@@ -197,15 +197,15 @@ struct ixgbe_aci_cmd_driver_ver {
 	u8 build_ver;
 	u8 subbuild_ver;
 	u8 reserved[4];
-	u32 addr_high;
-	u32 addr_low;
+	__le32 addr_high;
+	__le32 addr_low;
 };
 
 /* Get Expanded Error Code (0x0005, direct) */
 struct ixgbe_aci_cmd_get_exp_err {
-	u32 reason;
+	__le32 reason;
 #define IXGBE_ACI_EXPANDED_ERROR_NOT_PROVIDED	0xFFFFFFFF
-	u32 identifier;
+	__le32 identifier;
 	u8 rsvd[8];
 };
 
@@ -228,21 +228,21 @@ enum ixgbe_aci_res_ids {
  * Release resource ownership (direct 0x0009)
  */
 struct ixgbe_aci_cmd_req_res {
-	u16 res_id;
-	u16 access_type;
+	__le16 res_id;
+	__le16 access_type;
 
 	/* Upon successful completion, FW writes this value and driver is
 	 * expected to release resource before timeout. This value is provided
 	 * in milliseconds.
 	 */
-	u32 timeout;
+	__le32 timeout;
 #define IXGBE_ACI_RES_NVM_READ_DFLT_TIMEOUT_MS	3000
 #define IXGBE_ACI_RES_NVM_WRITE_DFLT_TIMEOUT_MS	180000
 #define IXGBE_ACI_RES_CHNG_LOCK_DFLT_TIMEOUT_MS	1000
 #define IXGBE_ACI_RES_GLBL_LOCK_DFLT_TIMEOUT_MS	3000
 	/* For SDP: pin ID of the SDP */
-	u32 res_number;
-	u16 status;
+	__le32 res_number;
+	__le16 status;
 #define IXGBE_ACI_RES_GLBL_SUCCESS		0
 #define IXGBE_ACI_RES_GLBL_IN_PROG		1
 #define IXGBE_ACI_RES_GLBL_DONE			2
@@ -256,14 +256,14 @@ struct ixgbe_aci_cmd_list_caps {
 	u8 cmd_flags;
 	u8 pf_index;
 	u8 reserved[2];
-	u32 count;
-	u32 addr_high;
-	u32 addr_low;
+	__le32 count;
+	__le32 addr_high;
+	__le32 addr_low;
 };
 
 /* Device/Function buffer entry, repeated per reported capability */
 struct ixgbe_aci_cmd_list_caps_elem {
-	u16 cap;
+	__le16 cap;
 #define IXGBE_ACI_CAPS_VALID_FUNCTIONS			0x0005
 #define IXGBE_ACI_MAX_VALID_FUNCTIONS			0x8
 #define IXGBE_ACI_CAPS_SRIOV				0x0012
@@ -295,13 +295,13 @@ struct ixgbe_aci_cmd_list_caps_elem {
 	u8 major_ver;
 	u8 minor_ver;
 	/* Number of resources described by this capability */
-	u32 number;
+	__le32 number;
 	/* Only meaningful for some types of resources */
-	u32 logical_id;
+	__le32 logical_id;
 	/* Only meaningful for some types of resources */
-	u32 phys_id;
-	u64 rsvd1;
-	u64 rsvd2;
+	__le32 phys_id;
+	__le64 rsvd1;
+	__le64 rsvd2;
 };
 
 /* Disable RXEN (direct 0x000C) */
@@ -314,7 +314,7 @@ struct ixgbe_aci_cmd_disable_rxen {
 struct ixgbe_aci_cmd_get_phy_caps {
 	u8 lport_num;
 	u8 reserved;
-	u16 param0;
+	__le16 param0;
 	/* 18.0 - Report qualified modules */
 #define IXGBE_ACI_GET_PHY_RQM		BIT(0)
 	/* 18.1 - 18.3 : Report mode
@@ -329,9 +329,9 @@ struct ixgbe_aci_cmd_get_phy_caps {
 #define IXGBE_ACI_REPORT_TOPO_CAP_MEDIA		BIT(1)
 #define IXGBE_ACI_REPORT_ACTIVE_CFG		BIT(2)
 #define IXGBE_ACI_REPORT_DFLT_CFG		BIT(3)
-	u32 reserved1;
-	u32 addr_high;
-	u32 addr_low;
+	__le32 reserved1;
+	__le32 addr_high;
+	__le32 addr_low;
 };
 
 /* This is #define of PHY type (Extended):
@@ -380,8 +380,8 @@ struct ixgbe_aci_cmd_get_phy_caps {
 #define IXGBE_PHY_TYPE_HIGH_MAX_INDEX		61
 
 struct ixgbe_aci_cmd_get_phy_caps_data {
-	u64 phy_type_low; /* Use values from IXGBE_PHY_TYPE_LOW_* */
-	u64 phy_type_high; /* Use values from IXGBE_PHY_TYPE_HIGH_* */
+	__le64 phy_type_low; /* Use values from IXGBE_PHY_TYPE_LOW_* */
+	__le64 phy_type_high; /* Use values from IXGBE_PHY_TYPE_HIGH_* */
 	u8 caps;
 #define IXGBE_ACI_PHY_EN_TX_LINK_PAUSE			BIT(0)
 #define IXGBE_ACI_PHY_EN_RX_LINK_PAUSE			BIT(1)
@@ -397,7 +397,7 @@ struct ixgbe_aci_cmd_get_phy_caps_data {
 #define IXGBE_ACI_PHY_AN_EN_CLAUSE28			BIT(1)
 #define IXGBE_ACI_PHY_AN_EN_CLAUSE73			BIT(2)
 #define IXGBE_ACI_PHY_AN_EN_CLAUSE37			BIT(3)
-	u16 eee_cap;
+	__le16 eee_cap;
 #define IXGBE_ACI_PHY_EEE_EN_100BASE_TX			BIT(0)
 #define IXGBE_ACI_PHY_EEE_EN_1000BASE_T			BIT(1)
 #define IXGBE_ACI_PHY_EEE_EN_10GBASE_T			BIT(2)
@@ -405,7 +405,7 @@ struct ixgbe_aci_cmd_get_phy_caps_data {
 #define IXGBE_ACI_PHY_EEE_EN_10GBASE_KR			BIT(4)
 #define IXGBE_ACI_PHY_EEE_EN_25GBASE_KR			BIT(5)
 #define IXGBE_ACI_PHY_EEE_EN_10BASE_T			BIT(11)
-	u16 eeer_value;
+	__le16 eeer_value;
 	u8 phy_id_oui[4]; /* PHY/Module ID connected on the port */
 	u8 phy_fw_ver[8];
 	u8 link_fec_options;
@@ -440,8 +440,8 @@ struct ixgbe_aci_cmd_get_phy_caps_data {
 		u8 v_oui[3];
 		u8 rsvd3;
 		u8 v_part[16];
-		u32 v_rev;
-		u64 rsvd4;
+		__le32 v_rev;
+		__le64 rsvd4;
 	} qual_modules[IXGBE_ACI_QUAL_MOD_COUNT_MAX];
 };
 
@@ -451,14 +451,14 @@ struct ixgbe_aci_cmd_get_phy_caps_data {
 struct ixgbe_aci_cmd_set_phy_cfg {
 	u8 lport_num;
 	u8 reserved[7];
-	u32 addr_high;
-	u32 addr_low;
+	__le32 addr_high;
+	__le32 addr_low;
 };
 
 /* Set PHY config command data structure */
 struct ixgbe_aci_cmd_set_phy_cfg_data {
-	u64 phy_type_low; /* Use values from IXGBE_PHY_TYPE_LOW_* */
-	u64 phy_type_high; /* Use values from IXGBE_PHY_TYPE_HIGH_* */
+	__le64 phy_type_low; /* Use values from IXGBE_PHY_TYPE_LOW_* */
+	__le64 phy_type_high; /* Use values from IXGBE_PHY_TYPE_HIGH_* */
 	u8 caps;
 #define IXGBE_ACI_PHY_ENA_VALID_MASK		0xef
 #define IXGBE_ACI_PHY_ENA_TX_PAUSE_ABILITY	BIT(0)
@@ -469,8 +469,8 @@ struct ixgbe_aci_cmd_set_phy_cfg_data {
 #define IXGBE_ACI_PHY_ENA_LESM			BIT(6)
 #define IXGBE_ACI_PHY_ENA_AUTO_FEC		BIT(7)
 	u8 low_power_ctrl_an;
-	u16 eee_cap; /* Value from ixgbe_aci_get_phy_caps */
-	u16 eeer_value; /* Use defines from ixgbe_aci_get_phy_caps */
+	__le16 eee_cap; /* Value from ixgbe_aci_get_phy_caps */
+	__le16 eeer_value; /* Use defines from ixgbe_aci_get_phy_caps */
 	u8 link_fec_opt; /* Use defines from ixgbe_aci_get_phy_caps */
 	u8 module_compliance_enforcement;
 };
@@ -491,16 +491,16 @@ struct ixgbe_aci_cmd_restart_an {
 struct ixgbe_aci_cmd_get_link_status {
 	u8 lport_num;
 	u8 reserved;
-	u16 cmd_flags;
+	__le16 cmd_flags;
 #define IXGBE_ACI_LSE_M				GENMASK(1, 0)
 #define IXGBE_ACI_LSE_NOP			0x0
 #define IXGBE_ACI_LSE_DIS			0x2
 #define IXGBE_ACI_LSE_ENA			0x3
 	/* only response uses this flag */
 #define IXGBE_ACI_LSE_IS_ENABLED		0x1
-	u32 reserved2;
-	u32 addr_high;
-	u32 addr_low;
+	__le32 reserved2;
+	__le32 addr_high;
+	__le32 addr_low;
 };
 
 /* Get link status response data structure, also used for Link Status Event */
@@ -551,7 +551,7 @@ struct ixgbe_aci_cmd_get_link_status_data {
 #define IXGBE_ACI_LINK_LB_PHY_LCL	BIT(0)
 #define IXGBE_ACI_LINK_LB_PHY_RMT	BIT(1)
 #define IXGBE_ACI_LINK_LB_MAC_LCL	BIT(2)
-	u16 max_frame_size;
+	__le16 max_frame_size;
 	u8 cfg;
 #define IXGBE_ACI_LINK_25G_KR_FEC_EN		BIT(0)
 #define IXGBE_ACI_LINK_25G_RS_528_FEC_EN	BIT(1)
@@ -571,7 +571,7 @@ struct ixgbe_aci_cmd_get_link_status_data {
 #define IXGBE_ACI_LINK_PWR_QSFP_CLASS_2		1
 #define IXGBE_ACI_LINK_PWR_QSFP_CLASS_3		2
 #define IXGBE_ACI_LINK_PWR_QSFP_CLASS_4		3
-	u16 link_speed;
+	__le16 link_speed;
 #define IXGBE_ACI_LINK_SPEED_M			GENMASK(10, 0)
 #define IXGBE_ACI_LINK_SPEED_10MB		BIT(0)
 #define IXGBE_ACI_LINK_SPEED_100MB		BIT(1)
@@ -586,15 +586,15 @@ struct ixgbe_aci_cmd_get_link_status_data {
 #define IXGBE_ACI_LINK_SPEED_100GB		BIT(10)
 #define IXGBE_ACI_LINK_SPEED_200GB		BIT(11)
 #define IXGBE_ACI_LINK_SPEED_UNKNOWN		BIT(15)
-	u16 reserved3;
+	__le16 reserved3;
 	u8 ext_fec_status;
 #define IXGBE_ACI_LINK_RS_272_FEC_EN	BIT(0) /* RS 272 FEC enabled */
 	u8 reserved4;
-	u64 phy_type_low; /* Use values from ICE_PHY_TYPE_LOW_* */
-	u64 phy_type_high; /* Use values from ICE_PHY_TYPE_HIGH_* */
+	__le64 phy_type_low; /* Use values from ICE_PHY_TYPE_LOW_* */
+	__le64 phy_type_high; /* Use values from ICE_PHY_TYPE_HIGH_* */
 	/* Get link status version 2 link partner data */
-	u64 lp_phy_type_low; /* Use values from ICE_PHY_TYPE_LOW_* */
-	u64 lp_phy_type_high; /* Use values from ICE_PHY_TYPE_HIGH_* */
+	__le64 lp_phy_type_low; /* Use values from ICE_PHY_TYPE_LOW_* */
+	__le64 lp_phy_type_high; /* Use values from ICE_PHY_TYPE_HIGH_* */
 	u8 lp_fec_adv;
 #define IXGBE_ACI_LINK_LP_10G_KR_FEC_CAP	BIT(0)
 #define IXGBE_ACI_LINK_LP_25G_KR_FEC_CAP	BIT(1)
@@ -617,7 +617,7 @@ struct ixgbe_aci_cmd_get_link_status_data {
 struct ixgbe_aci_cmd_set_event_mask {
 	u8	lport_num;
 	u8	reserved[7];
-	u16	event_mask;
+	__le16	event_mask;
 #define IXGBE_ACI_LINK_EVENT_UPDOWN		BIT(1)
 #define IXGBE_ACI_LINK_EVENT_MEDIA_NA		BIT(2)
 #define IXGBE_ACI_LINK_EVENT_LINK_FAULT		BIT(3)
@@ -665,7 +665,7 @@ struct ixgbe_aci_cmd_link_topo_params {
 
 struct ixgbe_aci_cmd_link_topo_addr {
 	struct ixgbe_aci_cmd_link_topo_params topo_params;
-	u16 handle;
+	__le16 handle;
 /* Used to decode the handle field */
 #define IXGBE_ACI_LINK_TOPO_HANDLE_BRD_TYPE_M		BIT(9)
 #define IXGBE_ACI_LINK_TOPO_HANDLE_BRD_TYPE_LOM		BIT(9)
@@ -723,7 +723,7 @@ struct ixgbe_aci_cmd_sff_eeprom {
 	u8 lport_num;
 	u8 lport_num_valid;
 #define IXGBE_ACI_SFF_PORT_NUM_VALID		BIT(0)
-	u16 i2c_bus_addr;
+	__le16 i2c_bus_addr;
 #define IXGBE_ACI_SFF_I2CBUS_7BIT_M		GENMASK(6, 0)
 #define IXGBE_ACI_SFF_I2CBUS_10BIT_M		GENMASK(9, 0)
 #define IXGBE_ACI_SFF_I2CBUS_TYPE_M		BIT(10)
@@ -734,11 +734,11 @@ struct ixgbe_aci_cmd_sff_eeprom {
 #define IXGBE_ACI_SFF_UPDATE_BANK		2
 #define IXGBE_ACI_SFF_UPDATE_PAGE_BANK		3
 #define IXGBE_ACI_SFF_IS_WRITE			BIT(15)
-	u16 i2c_offset;
+	__le16 i2c_offset;
 	u8 module_bank;
 	u8 module_page;
-	u32 addr_high;
-	u32 addr_low;
+	__le32 addr_high;
+	__le32 addr_low;
 };
 
 /* NVM Read command (indirect 0x0701)
@@ -749,7 +749,7 @@ struct ixgbe_aci_cmd_sff_eeprom {
  */
 struct ixgbe_aci_cmd_nvm {
 #define IXGBE_ACI_NVM_MAX_OFFSET	0xFFFFFF
-	u16 offset_low;
+	__le16 offset_low;
 	u8 offset_high; /* For Write Activate offset_high is used as flags2 */
 	u8 cmd_flags;
 #define IXGBE_ACI_NVM_LAST_CMD		BIT(0)
@@ -772,11 +772,11 @@ struct ixgbe_aci_cmd_nvm {
 	 * all offset by 8 bits
 	 */
 #define IXGBE_ACI_NVM_ACTIV_REQ_EMPR	BIT(8) /* NVM Write Activate only */
-	u16 module_typeid;
-	u16 length;
+	__le16 module_typeid;
+	__le16 length;
 #define IXGBE_ACI_NVM_ERASE_LEN	0xFFFF
-	u32 addr_high;
-	u32 addr_low;
+	__le32 addr_high;
+	__le32 addr_low;
 };
 
 /* NVM Module_Type ID, needed offset and read_len for
@@ -790,7 +790,7 @@ struct ixgbe_aci_cmd_nvm_checksum {
 #define IXGBE_ACI_NVM_CHECKSUM_VERIFY	BIT(0)
 #define IXGBE_ACI_NVM_CHECKSUM_RECALC	BIT(1)
 	u8 rsvd;
-	u16 checksum; /* Used only by response */
+	__le16 checksum; /* Used only by response */
 #define IXGBE_ACI_NVM_CHECKSUM_CORRECT	0xBABA
 	u8 rsvd2[12];
 };
@@ -814,12 +814,12 @@ struct ixgbe_aci_cmd_nvm_checksum {
  * 32-bit words.
  */
 struct ixgbe_aci_desc {
-	u16 flags;
-	u16 opcode;
-	u16 datalen;
-	u16 retval;
-	u32 cookie_high;
-	u32 cookie_low;
+	__le16 flags;
+	__le16 opcode;
+	__le16 datalen;
+	__le16 retval;
+	__le32 cookie_high;
+	__le32 cookie_low;
 	union {
 		u8 raw[16];
 		struct ixgbe_aci_cmd_get_ver get_ver;
