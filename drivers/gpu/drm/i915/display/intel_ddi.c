@@ -4634,7 +4634,11 @@ intel_ddi_init_hdmi_connector(struct intel_digital_port *dig_port)
 		return NULL;
 
 	dig_port->hdmi.hdmi_reg = DDI_BUF_CTL(port);
-	intel_hdmi_init_connector(dig_port, connector);
+
+	if (!intel_hdmi_init_connector(dig_port, connector)) {
+		kfree(connector);
+		return NULL;
+	}
 
 	return connector;
 }
