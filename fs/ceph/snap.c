@@ -341,7 +341,11 @@ static int build_snap_context(struct ceph_mds_client *mdsc,
 	struct ceph_snap_realm *parent = realm->parent;
 	struct ceph_snap_context *snapc;
 	int err = 0;
-	u32 num = realm->num_prior_parent_snaps + realm->num_snaps;
+	u32 num, cnt;
+
+	if (check_add_overflow(realm->num_prior_parent_snaps,
+			       realm->num_snaps, &cnt))
+		return -EOVERFLOW;
 
 	/*
 	 * build parent context, if it hasn't been built.
@@ -354,8 +358,11 @@ static int build_snap_context(struct ceph_mds_client *mdsc,
 			list_add(&parent->rebuild_item, realm_queue);
 			return 1;
 		}
-		num += parent->cached_context->num_snaps;
-	}
+		if (check_add_overflow(parent->cached_context->num_snaps,
+				       cnt, &num))
+			return -EOVERFLOW;
+	} else
+		num = cnt;
 
 	/* do i actually need to update?  not if my context seq
 	   matches realm seq, and my parents' does to.  (this works
@@ -374,8 +381,6 @@ static int build_snap_context(struct ceph_mds_client *mdsc,
 
 	/* alloc new snap context */
 	err = -ENOMEM;
-	if (num > (SIZE_MAX - sizeof(*snapc)) / sizeof(u64))
-		goto fail;
 	snapc = ceph_create_snap_context(num, GFP_NOFS);
 	if (!snapc)
 		goto fail;
