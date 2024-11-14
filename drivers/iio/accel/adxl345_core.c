@@ -138,6 +138,37 @@ static int adxl345_write_raw_get_fmt(struct iio_dev *indio_dev,
 	}
 }
 
+/**
+ * For lowest power operation, standby mode can be used. In standby mode,
+ * current consumption is supposed to be reduced to 0.1uA (typical). In this
+ * mode no measurements are made. Placing the device into standby mode
+ * preserves the contents of FIFO.
+ *
+ * Unloading the driver puts the device in standby mode (measuring off).
+ *
+ * @st: The device data.
+ * @en: Enable measurements, else standby mode.
+ */
+static int adxl345_set_measure_en(struct adxl34x_state *st, bool en)
+{
+	unsigned int val = 0;
+	int ret;
+
+	val = (en) ? ADXL345_POWER_CTL_MEASURE : ADXL345_POWER_CTL_STANDBY;
+	ret = regmap_write(st->regmap, ADXL345_REG_POWER_CTL, val);
+	if (ret)
+		return -EINVAL;
+
+	return 0;
+}
+
+static void adxl345_powerdown(void *ptr)
+{
+	struct adxl34x_state *st = ptr;
+
+	adxl345_set_measure_en(st, false);
+}
+
 static IIO_CONST_ATTR_SAMP_FREQ_AVAIL(
 "0.09765625 0.1953125 0.390625 0.78125 1.5625 3.125 6.25 12.5 25 50 100 200 400 800 1600 3200"
 );
@@ -157,16 +188,6 @@ static const struct iio_info adxl345_info = {
 	.write_raw	= adxl345_write_raw,
 	.write_raw_get_fmt	= adxl345_write_raw_get_fmt,
 };
-
-static int adxl345_powerup(void *regmap)
-{
-	return regmap_write(regmap, ADXL345_REG_POWER_CTL, ADXL345_POWER_CTL_MEASURE);
-}
-
-static void adxl345_powerdown(void *regmap)
-{
-	regmap_write(regmap, ADXL345_REG_POWER_CTL, ADXL345_POWER_CTL_STANDBY);
-}
 
 /**
  * adxl345_core_probe() - probe and setup for the adxl345 accelerometer,
@@ -242,14 +263,12 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 		return dev_err_probe(dev, -ENODEV, "Invalid device ID: %x, expected %x\n",
 				     regval, ADXL345_DEVID);
 
-	/* Enable measurement mode */
-	ret = adxl345_powerup(st->regmap);
+	ret = devm_add_action_or_reset(dev, adxl345_powerdown, st);
 	if (ret < 0)
-		return dev_err_probe(dev, ret, "Failed to enable measurement mode\n");
+		return dev_err_probe(dev, ret, "Failed to add action or reset\n");
 
-	ret = devm_add_action_or_reset(dev, adxl345_powerdown, st->regmap);
-	if (ret < 0)
-		return ret;
+	/* Enable measurement mode */
+	adxl345_set_measure_en(st, true);
 
 	return devm_iio_device_register(dev, indio_dev);
 }
