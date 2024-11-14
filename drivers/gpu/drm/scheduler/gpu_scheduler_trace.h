@@ -33,6 +33,28 @@
 #define TRACE_SYSTEM gpu_scheduler
 #define TRACE_INCLUDE_FILE gpu_scheduler_trace
 
+
+/**
+ * DOC: uAPI trace events
+ *
+ * ``drm_sched_job``, ``drm_run_job``, ``drm_sched_process_job``,
+ * and ``drm_sched_job_wait_dep`` are considered stable uAPI.
+ *
+ * Common trace events attributes:
+ *
+ * * ``id``    - this is &drm_sched_job->id. It uniquely idenfies a job
+ *   inside a &struct drm_gpu_scheduler.
+ *
+ * * ``dev``   - the dev_name() of the device running the job.
+ *
+ * * ``ring``  - the hardware ring running the job. Together with ``dev`` it
+ *   uniquely identifies where the job is going to be executed.
+ *
+ * * ``fence`` - the &dma_fence.context and the &dma_fence.seqno of
+ *   &drm_sched_fence.finished
+ *
+ */
+
 #ifndef __TRACE_EVENT_GPU_SCHEDULER_PRINT_FN
 #define __TRACE_EVENT_GPU_SCHEDULER_PRINT_FN
 /* Similar to trace_print_array_seq but for fences. */
