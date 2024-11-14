@@ -1586,6 +1586,50 @@ int cppc_set_epp_perf(int cpu, struct cppc_perf_ctrls *perf_ctrls, bool enable)
 EXPORT_SYMBOL_GPL(cppc_set_epp_perf);
 
 /**
+ * cppc_set_epp() - Write the EPP register.
+ * @cpu: CPU on which to write register.
+ * @epp_val: Value to write to the EPP register.
+ */
+int cppc_set_epp(int cpu, u64 epp_val)
+{
+	return cppc_set_reg(cpu, ENERGY_PERF, epp_val);
+}
+EXPORT_SYMBOL_GPL(cppc_set_epp);
+
+/**
+ * cppc_get_auto_act_window() - Read autonomous activity window register.
+ * @cpu: CPU from which to read register.
+ * @auto_act_window: Return address.
+ */
+int cppc_get_auto_act_window(int cpu, u64 *auto_act_window)
+{
+	return cppc_get_reg(cpu, AUTO_ACT_WINDOW, auto_act_window);
+}
+EXPORT_SYMBOL_GPL(cppc_get_auto_act_window);
+
+/**
+ * cppc_set_auto_act_window() - Write autonomous activity window register.
+ * @cpu: CPU on which to write register.
+ * @auto_act_window: Value to write to the autonomous activity window register.
+ */
+int cppc_set_auto_act_window(int cpu, u64 auto_act_window)
+{
+	return cppc_set_reg(cpu, AUTO_ACT_WINDOW, auto_act_window);
+}
+EXPORT_SYMBOL_GPL(cppc_set_auto_act_window);
+
+/**
+ * cppc_get_auto_sel() - Read autonomous selection register.
+ * @cpu: CPU from which to read register.
+ * @auto_sel: Return address.
+ */
+int cppc_get_auto_sel(int cpu, u64 *auto_sel)
+{
+	return cppc_get_reg(cpu, AUTO_SEL_ENABLE, auto_sel);
+}
+EXPORT_SYMBOL_GPL(cppc_get_auto_sel);
+
+/**
  * cppc_get_auto_sel_caps - Read autonomous selection register.
  * @cpunum : CPU from which to read register.
  * @perf_caps : struct where autonomous selection register value is updated.
