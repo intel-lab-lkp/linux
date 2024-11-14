@@ -818,6 +818,59 @@ int vmw_validation_preload_res(struct vmw_validation_context *ctx,
 }
 
 /**
+ * vmw_validation_bo_reserve - Reserve buffer objects registered with a
+ * validation context
+ * @ctx: The validation context
+ * @intr: Perform waits interruptible
+ *
+ * Return: Zero on success, -ERESTARTSYS when interrupted, negative error
+ * code on failure
+ */
+int vmw_validation_bo_reserve(struct vmw_validation_context *ctx, bool intr)
+{
+	struct vmw_validation_bo_node *entry;
+	int ret;
+
+	drm_exec_init(&ctx->exec, intr ? DRM_EXEC_INTERRUPTIBLE_WAIT : 0, 0);
+	drm_exec_until_all_locked(&ctx->exec) {
+		list_for_each_entry(entry, &ctx->bo_list, base.head) {
+			ret = drm_exec_prepare_obj(&ctx->exec,
+						   &entry->base.bo->base, 1);
+			drm_exec_retry_on_contention(&ctx->exec);
+			if (ret)
+				goto error;
+		}
+	}
+	return 0;
+
+error:
+	drm_exec_fini(&ctx->exec);
+	return ret;
+}
+
+/**
+ * vmw_validation_bo_fence - Unreserve and fence buffer objects registered
+ * with a validation context
+ * @ctx: The validation context
+ *
+ * This function unreserves the buffer objects previously reserved using
+ * vmw_validation_bo_reserve, and fences them with a fence object.
+ */
+void vmw_validation_bo_fence(struct vmw_validation_context *ctx,
+			     struct vmw_fence_obj *fence)
+{
+	struct vmw_validation_bo_node *entry;
+
+	list_for_each_entry(entry, &ctx->bo_list, base.head) {
+		dma_resv_add_fence(entry->base.bo->base.resv, &fence->base,
+				   DMA_RESV_USAGE_READ);
+	}
+	drm_exec_fini(&ctx->exec);
+}
+
+
+
+/**
  * vmw_validation_bo_backoff - Unreserve buffer objects registered with a
  * validation context
  * @ctx: The validation context
@@ -842,6 +895,5 @@ void vmw_validation_bo_backoff(struct vmw_validation_context *ctx)
 				vmw_bo_dirty_release(vbo);
 		}
 	}
-
-	ttm_eu_backoff_reservation(&ctx->ticket, &ctx->bo_list);
+	drm_exec_fini(&ctx->exec);
 }
