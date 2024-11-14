@@ -1083,17 +1083,6 @@ config ISA_DMA_API
 
 menu "Bus options"
 
-config ISA
-	bool "Support for ISA-bus hardware"
-	depends on PPC_CHRP
-	select PPC_I8259
-	help
-	  Find out whether you have ISA slots on your motherboard.  ISA is the
-	  name of a bus system, i.e. the way the CPU talks to the other stuff
-	  inside your box.  If you have an Apple machine, say N here; if you
-	  have an IBM RS/6000 or pSeries machine, say Y.  If you have an
-	  embedded board, consult your board documentation.
-
 config GENERIC_ISA_DMA
 	bool
 	depends on ISA_DMA_API
