@@ -1636,6 +1636,33 @@ static void check_no_speaker_on_headset(struct snd_kcontrol *kctl,
 	snd_ctl_rename(card, kctl, "Headphone");
 }
 
+static void fix_plt_control_name(struct snd_kcontrol *kctl)
+{
+	static const char * const names_to_remove[] = {
+		"Earphone",
+		"Microphone",
+		"Receive",
+		"Transmit",
+		NULL
+	};
+	const char * const *n2r;
+	char *dst, *src;
+	size_t len;
+
+	for (n2r = names_to_remove; *n2r; ++n2r) {
+		dst = strstr(kctl->id.name, *n2r);
+		if (dst != NULL) {
+			src = dst + strlen(*n2r);
+			len = strlen(src) + 1;
+			if ((char *)kctl->id.name != dst && *(dst - 1) == ' ')
+				--dst;
+			memmove(dst, src, len);
+		}
+	}
+	if (kctl->id.name[0] == '\0')
+		strscpy(kctl->id.name, "Headset", SNDRV_CTL_ELEM_ID_NAME_MAXLEN);
+}
+
 static const struct usb_feature_control_info *get_feature_control_info(int control)
 {
 	int i;
@@ -1751,6 +1778,9 @@ static void __build_feature_ctl(struct usb_mixer_interface *mixer,
 
 		if (!mapped_name)
 			check_no_speaker_on_headset(kctl, mixer->chip->card);
+
+		if (USB_ID_VENDOR(mixer->chip->usb_id) == 0x047f)
+			fix_plt_control_name(kctl);
 
 		/*
 		 * determine the stream direction:
