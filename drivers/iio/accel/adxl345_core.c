@@ -33,7 +33,7 @@ struct adxl34x_state {
 		BIT(IIO_CHAN_INFO_SAMP_FREQ),				\
 }
 
-static const struct iio_chan_spec adxl345_channels[] = {
+static const struct iio_chan_spec adxl34x_channels[] = {
 	ADXL345_CHANNEL(0, X),
 	ADXL345_CHANNEL(1, Y),
 	ADXL345_CHANNEL(2, Z),
@@ -203,8 +203,8 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	indio_dev->name = st->info->name;
 	indio_dev->info = &adxl345_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->channels = adxl345_channels;
-	indio_dev->num_channels = ARRAY_SIZE(adxl345_channels);
+	indio_dev->channels = adxl34x_channels;
+	indio_dev->num_channels = ARRAY_SIZE(adxl34x_channels);
 
 	if (setup) {
 		/* Perform optional initial bus specific configuration */
