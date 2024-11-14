@@ -16,6 +16,18 @@
 
 #define XFEATURE_MASK_X87_AVX (XFEATURE_MASK_FP | XFEATURE_MASK_SSE | XFEATURE_MASK_YMM)
 
+static void guest_snp_code(void)
+{
+	uint64_t sev_msr = rdmsr(MSR_AMD64_SEV);
+
+	GUEST_ASSERT(sev_msr & MSR_AMD64_SEV_ENABLED);
+	GUEST_ASSERT(sev_msr & MSR_AMD64_SEV_ES_ENABLED);
+	GUEST_ASSERT(sev_msr & MSR_AMD64_SEV_SNP_ENABLED);
+
+	wrmsr(MSR_AMD64_SEV_ES_GHCB, GHCB_MSR_TERM_REQ);
+	VMGEXIT();
+}
+
 static void guest_sev_es_code(void)
 {
 	/* TODO: Check CPUID after GHCB-based hypercall support is added. */
@@ -157,9 +169,19 @@ static void test_sev_es(uint64_t policy)
 	__test_sev(guest_sev_es_code, KVM_X86_SEV_ES_VM, policy);
 }
 
+static void test_snp(uint64_t policy)
+{
+	__test_sev(guest_snp_code, KVM_X86_SNP_VM, policy);
+}
+
 static void test_sync_vmsa_sev_es(uint64_t policy)
 {
 	__test_sync_vmsa(KVM_X86_SEV_ES_VM, policy);
+}
+
+static void test_sync_vmsa_snp(uint64_t policy)
+{
+	__test_sync_vmsa(KVM_X86_SNP_VM, policy);
 }
 
 static void guest_shutdown_code(void)
@@ -195,6 +217,11 @@ static void test_sev_es_shutdown(uint64_t policy)
 	__test_sev_shutdown(KVM_X86_SEV_ES_VM, SEV_POLICY_ES);
 }
 
+static void test_snp_shutdown(uint64_t policy)
+{
+	__test_sev_shutdown(KVM_X86_SNP_VM, policy);
+}
+
 int main(int argc, char *argv[])
 {
 	const u64 xf_mask = XFEATURE_MASK_X87_AVX;
@@ -215,6 +242,21 @@ int main(int argc, char *argv[])
 			test_sync_vmsa_sev_es(SEV_POLICY_ES);
 			test_sync_vmsa_sev_es(SEV_POLICY_NO_DBG | SEV_POLICY_ES);
 		}
+	}
+
+	if (kvm_cpu_has(X86_FEATURE_SNP)) {
+		uint64_t snp_policy = snp_default_policy();
+
+		test_snp(snp_policy);
+		/* Test minimum firmware level */
+		test_snp(snp_policy | SNP_FW_VER_MAJOR(SNP_MIN_API_MAJOR) |
+			SNP_FW_VER_MINOR(SNP_MIN_API_MINOR));
+
+		test_snp_shutdown(snp_policy);
+
+		if (kvm_has_cap(KVM_CAP_XCRS) &&
+		    (xgetbv(0) & kvm_cpu_supported_xcr0() & xf_mask) == xf_mask)
+			test_sync_vmsa_snp(snp_policy);
 	}
 
 	return 0;
