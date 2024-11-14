@@ -256,20 +256,8 @@ __secondary_hold_acknowledge:
  */
 	START_EXCEPTION(INTERRUPT_MACHINE_CHECK, MachineCheck)
 	EXCEPTION_PROLOG_0
-#ifdef CONFIG_PPC_CHRP
-	mtspr	SPRN_SPRG_SCRATCH2,r1
-	mfspr	r1, SPRN_SPRG_THREAD
-	lwz	r1, RTAS_SP(r1)
-	cmpwi	cr1, r1, 0
-	bne	cr1, 7f
-	mfspr	r1, SPRN_SPRG_SCRATCH2
-#endif /* CONFIG_PPC_CHRP */
 	EXCEPTION_PROLOG_1
 7:	EXCEPTION_PROLOG_2 0x200 MachineCheck
-#ifdef CONFIG_PPC_CHRP
-	beq	cr1, 1f
-	twi	31, 0, 0
-#endif
 1:	prepare_transfer_to_handler
 	bl	machine_check_exception
 	b	interrupt_return

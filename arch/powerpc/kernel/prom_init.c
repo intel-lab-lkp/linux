@@ -2792,61 +2792,6 @@ static void __init flatten_device_tree(void)
 		    dt_struct_start, dt_struct_end);
 }
 
-#ifdef CONFIG_PPC_CHRP
-/*
- * Pegasos and BriQ lacks the "ranges" property in the isa node
- * Pegasos needs decimal IRQ 14/15, not hexadecimal
- * Pegasos has the IDE configured in legacy mode, but advertised as native
- */
-static void __init fixup_device_tree_chrp(void)
-{
-	phandle ph;
-	u32 prop[6];
-	u32 rloc = 0x01006000; /* IO space; PCI device = 12 */
-	char *name;
-	int rc;
-
-	name = "/pci@80000000/isa@c";
-	ph = call_prom("finddevice", 1, 1, ADDR(name));
-	if (!PHANDLE_VALID(ph)) {
-		name = "/pci@ff500000/isa@6";
-		ph = call_prom("finddevice", 1, 1, ADDR(name));
-		rloc = 0x01003000; /* IO space; PCI device = 6 */
-	}
-	if (PHANDLE_VALID(ph)) {
-		rc = prom_getproplen(ph, "ranges");
-		if (rc == 0 || rc == PROM_ERROR) {
-			prom_printf("Fixing up missing ISA range on Pegasos...\n");
-
-			prop[0] = 0x1;
-			prop[1] = 0x0;
-			prop[2] = rloc;
-			prop[3] = 0x0;
-			prop[4] = 0x0;
-			prop[5] = 0x00010000;
-			prom_setprop(ph, name, "ranges", prop, sizeof(prop));
-		}
-	}
-
-	name = "/pci@80000000/ide@C,1";
-	ph = call_prom("finddevice", 1, 1, ADDR(name));
-	if (PHANDLE_VALID(ph)) {
-		prom_printf("Fixing up IDE interrupt on Pegasos...\n");
-		prop[0] = 14;
-		prop[1] = 0x0;
-		prom_setprop(ph, name, "interrupts", prop, 2*sizeof(u32));
-		prom_printf("Fixing up IDE class-code on Pegasos...\n");
-		rc = prom_getprop(ph, "class-code", prop, sizeof(u32));
-		if (rc == sizeof(u32)) {
-			prop[0] &= ~0x5;
-			prom_setprop(ph, name, "class-code", prop, sizeof(u32));
-		}
-	}
-}
-#else
-#define fixup_device_tree_chrp()
-#endif
-
 #if defined(CONFIG_PPC64) && defined(CONFIG_PPC_PMAC)
 static void __init fixup_device_tree_pmac(void)
 {
@@ -3109,7 +3054,6 @@ static inline void fixup_device_tree_pasemi(void) { }
 
 static void __init fixup_device_tree(void)
 {
-	fixup_device_tree_chrp();
 	fixup_device_tree_pmac();
 	fixup_device_tree_efika();
 	fixup_device_tree_pasemi();

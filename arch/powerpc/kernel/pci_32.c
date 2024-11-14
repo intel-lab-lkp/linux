@@ -277,7 +277,7 @@ static int __init pcibios_init(void)
 #endif
 	}
 
-#if defined(CONFIG_PPC_PMAC) || defined(CONFIG_PPC_CHRP)
+#ifdef CONFIG_PPC_PMAC
 #ifdef CONFIG_PPC_PCI_OF_BUS_MAP
 	pci_bus_count = next_busno;
 
