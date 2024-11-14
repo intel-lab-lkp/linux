@@ -139,7 +139,7 @@ struct pvr_queue {
 
 bool pvr_queue_fence_is_ufo_backed(struct dma_fence *f);
 
-int pvr_queue_job_init(struct pvr_job *job);
+int pvr_queue_job_init(struct pvr_job *job, uint64_t drm_client_id);
 
 void pvr_queue_job_cleanup(struct pvr_job *job);
 
