@@ -2297,7 +2297,7 @@ static void pull_rt_task(struct rq *this_rq)
 	}
 #endif
 
-	for_each_cpu(cpu, this_rq->rd->rto_mask) {
+	for_each_cpu_wrap(cpu, this_rq->rd->rto_mask, this_cpu+1) {
 		if (this_cpu == cpu)
 			continue;
 
