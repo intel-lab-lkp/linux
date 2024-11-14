@@ -884,21 +884,18 @@ static int get_chip(struct map_info *map, struct flchip *chip, unsigned long adr
 	switch (chip->state) {
 
 	case FL_STATUS:
-		for (;;) {
-			if (chip_ready(map, chip, adr, NULL))
-				break;
+		if (chip_ready(map, chip, adr, NULL))
+			return 0;
 
-			if (time_after(jiffies, timeo)) {
-				printk(KERN_ERR "Waiting for chip to be ready timed out.\n");
-				return -EIO;
-			}
-			mutex_unlock(&chip->mutex);
-			cfi_udelay(1);
-			mutex_lock(&chip->mutex);
-			/* Someone else might have been playing with it. */
-			goto retry;
+		if (time_after(jiffies, timeo)) {
+			printk(KERN_ERR "Waiting for chip to be ready timed out.\n");
+			return -EIO;
 		}
-		return 0;
+		mutex_unlock(&chip->mutex);
+		cfi_udelay(1);
+		mutex_lock(&chip->mutex);
+		/* Someone else might have been playing with it. */
+		goto retry;
 
 	case FL_READY:
 	case FL_CFI_QUERY:
