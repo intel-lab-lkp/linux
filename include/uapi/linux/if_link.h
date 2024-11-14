@@ -144,10 +144,6 @@ struct rtnl_link_stats {
  *   not correspond one-to-one with dropped packets.
  *
  *   This statistics was used interchangeably with @rx_over_errors.
- *   Not recommended for use in drivers for high speed interfaces.
- *
- *   This statistic is used on software devices, e.g. to count software
- *   packet queue overflow (can) or sequencing errors (GRE).
  *
  * @rx_missed_errors: Count of packets missed by the host.
  *   Folded into the "drop" counter in `/proc/net/dev`.
