@@ -1725,6 +1725,7 @@ static int rtase_get_settings(struct net_device *dev,
 		cmd->base.speed = SPEED_5000;
 		break;
 	case 0x04800000:
+	case 0x08000000:
 		cmd->base.speed = SPEED_10000;
 		break;
 	}
@@ -1993,6 +1994,7 @@ static int rtase_check_mac_version_valid(struct rtase_private *tp)
 	case 0x00800000:
 	case 0x04000000:
 	case 0x04800000:
+	case 0x08000000:
 		ret = 0;
 		break;
 	}
