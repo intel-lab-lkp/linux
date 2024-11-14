@@ -420,6 +420,41 @@ static int adxl345_get_status(struct adxl34x_state *st, u8 *int_stat)
 	return 0;
 }
 
+static int adxl345_push_fifo_data(struct iio_dev *indio_dev,
+				  u8 status,
+				  int fifo_entries)
+{
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	int ndirs = 3; /* 3 directions */
+	int i, ret;
+
+	if (fifo_entries <= 0)
+		return true;
+
+	ret = adxl345_read_fifo_elements(st, fifo_entries);
+	if (ret)
+		return false;
+
+	for (i = 0; i < ndirs * fifo_entries; i += ndirs) {
+		/* To ensure that the FIFO has completely popped, there must be at least 5
+		 * us between the end of reading the data registers, signified by the
+		 * transition to register 0x38 from 0x37 or the CS pin going high, and the
+		 * start of new reads of the FIFO or reading the FIFO_STATUS register. For
+		 * SPI operation at 1.5 MHz or lower, the register addressing portion of the
+		 * transmission is sufficient delay to ensure the FIFO has completely
+		 * popped. It is necessary for SPI operation greater than 1.5 MHz to
+		 * de-assert the CS pin to ensure a total of 5 us, which is at most 3.4 us
+		 * at 5 MHz operation.
+		 */
+		if (st->fifo_delay && (fifo_entries > 1))
+			udelay(3);
+
+		iio_push_to_buffers(indio_dev, &st->fifo_buf[i]);
+	}
+
+	return true;
+}
+
 /* data ready trigger */
 
 static int adxl345_trig_dready(struct iio_trigger *trig, bool state)
@@ -490,6 +525,9 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 	if (int_stat & (ADXL345_INT_DATA_READY | ADXL345_INT_WATERMARK)) {
 		pr_debug("%s(): WATERMARK or DATA_READY event detected\n", __func__);
 		if (adxl345_get_fifo_entries(st, &fifo_entries) < 0)
+			goto err;
+
+		if (adxl345_push_fifo_data(indio_dev, int_stat, fifo_entries) < 0)
 			goto err;
 
 		iio_trigger_notify_done(indio_dev->trig);
