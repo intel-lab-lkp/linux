@@ -184,8 +184,13 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	struct adxl34x_state *st;
 	struct iio_dev *indio_dev;
 	u32 regval;
+
+	/* NB: ADXL345_DATA_FORMAT_JUSTIFY or 0:
+	 * do right-justified: 0, then adjust resolution according to 10-bit
+	 * through 13-bit in channel - this is the default behavior, and can
+	 * be modified here by oring ADXL345_DATA_FORMAT_JUSTIFY
+	 */
 	unsigned int data_format_mask = (ADXL345_DATA_FORMAT_RANGE |
-					 ADXL345_DATA_FORMAT_JUSTIFY |
 					 ADXL345_DATA_FORMAT_FULL_RES |
 					 ADXL345_DATA_FORMAT_SELF_TEST);
 	int ret;
