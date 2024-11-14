@@ -623,16 +623,16 @@ static void can327_handle_prompt(struct can327 *elm)
 			snprintf(local_txbuf, sizeof(local_txbuf), "ATRTR\r");
 		} else {
 			/* Send a regular CAN data frame */
+			int off = 0;
 			int i;
 
 			for (i = 0; i < frame->len; i++) {
-				snprintf(&local_txbuf[2 * i],
-					 sizeof(local_txbuf), "%02X",
-					 frame->data[i]);
+				off += scnprintf(&local_txbuf[off],
+						 sizeof(local_txbuf) - off,
+						 "%02X", frame->data[i]);
 			}
 
-			snprintf(&local_txbuf[2 * i], sizeof(local_txbuf),
-				 "\r");
+			scnprintf(&local_txbuf[off], sizeof(local_txbuf) - off, "\r");
 		}
 
 		elm->drop_next_line = 1;
