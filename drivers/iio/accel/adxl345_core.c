@@ -181,6 +181,28 @@ static const struct iio_chan_spec adxl34x_channels[] = {
 	ADXL34x_CHANNEL(2, chan_z, Z),
 };
 
+static int adxl345_set_interrupts(struct adxl34x_state *st)
+{
+	int ret;
+	unsigned int int_enable = st->int_map;
+	unsigned int int_map;
+
+	/* Any bits set to 0 in the INT map register send their respective
+	 * interrupts to the INT1 pin, whereas bits set to 1 send their respective
+	 * interrupts to the INT2 pin. The intio shall convert this accordingly.
+	 */
+	int_map = 0xFF & (st->intio ? st->int_map : ~st->int_map);
+	pr_debug("%s(): Setting INT_MAP 0x%02X\n", __func__, int_map);
+
+	ret = regmap_write(st->regmap, ADXL345_REG_INT_MAP, int_map);
+	if (ret)
+		return ret;
+
+	pr_debug("%s(): Setting INT_ENABLE 0x%02X\n", __func__, int_enable);
+	ret = regmap_write(st->regmap, ADXL345_REG_INT_ENABLE, int_enable);
+	return ret;
+}
+
 static int adxl345_read_raw(struct iio_dev *indio_dev,
 			    struct iio_chan_spec const *chan,
 			    int *val, int *val2, long mask)
@@ -328,6 +350,41 @@ static const struct attribute_group adxl345_attrs_group = {
 	.attrs = adxl345_attrs,
 };
 
+static int adxl345_set_fifo(struct adxl34x_state *st)
+{
+	struct adxl34x_platform_data *data = &st->data;
+	u8 fifo_ctl;
+	int ret;
+
+	/* FIFO should be configured while in standby mode */
+	adxl345_set_measure_en(st, false);
+
+	/* The watermark bit is set when the number of samples in FIFO
+	 * equals the value stored in the samples bits (register
+	 * FIFO_CTL). The watermark bit is cleared automatically when
+	 * FIFO is read, and the content returns to a value below the
+	 * value stored in the samples bits.
+	 */
+	fifo_ctl = 0x00 |
+		ADXL345_FIFO_CTL_SAMLPES(data->watermark) |
+		ADXL345_FIFO_CTL_TRIGGER(st->intio) |
+		ADXL345_FIFO_CTL_MODE(data->fifo_mode);
+
+	pr_debug("%s(): fifo_ctl 0x%02X\n", __func__, fifo_ctl);
+
+	/* The watermark bit is set when the number of samples in FIFO
+	 * equals the value stored in the samples bits (register
+	 * FIFO_CTL). The watermark bit is cleared automatically when
+	 * FIFO is read, and the content returns to a value below the
+	 * value stored in the samples bits.
+	 */
+	ret = regmap_write(st->regmap, ADXL345_REG_FIFO_CTL, fifo_ctl);
+	if (ret < 0)
+		return ret;
+
+	return adxl345_set_measure_en(st, true);
+}
+
 /**
  * Read number of FIFO entries into *fifo_entries
  */
@@ -399,7 +456,50 @@ void adxl345_empty_fifo(struct adxl34x_state *st)
 	regmap_read(st->regmap, ADXL345_REG_INT_SOURCE, &regval);
 }
 
+static int adxl345_buffer_postenable(struct iio_dev *indio_dev)
+{
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	struct adxl34x_platform_data *data = &st->data;
+	int ret;
+
+	ret = adxl345_set_interrupts(st);
+	if (ret)
+		return -EINVAL;
+
+	/* Default to FIFO mode: STREAM, since it covers the general usage
+	 * and does not bypass the FIFO
+	 */
+	data->fifo_mode = ADXL_FIFO_STREAM;
+	adxl345_set_fifo(st);
+
+	return 0;
+}
+
+static int adxl345_buffer_predisable(struct iio_dev *indio_dev)
+{
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	struct adxl34x_platform_data *data = &st->data;
+	int ret;
+
+	/* Turn off interrupts */
+	st->int_map = 0x00;
+
+	ret = adxl345_set_interrupts(st);
+	if (ret) {
+		pr_warn("%s(): Failed to disable INTs\n", __func__);
+		return -EINVAL;
+	}
+
+	/* Set FIFO mode: BYPASS, according to the situation */
+	data->fifo_mode = ADXL_FIFO_BYPASS;
+	adxl345_set_fifo(st);
+
+	return 0;
+}
+
 static const struct iio_buffer_setup_ops adxl345_buffer_ops = {
+	.postenable = adxl345_buffer_postenable,
+	.predisable = adxl345_buffer_predisable,
 };
 
 static int adxl345_get_status(struct adxl34x_state *st, u8 *int_stat)
@@ -609,7 +709,7 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 
 	indio_dev->name = st->info->name;
 	indio_dev->info = &adxl345_info;
-	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
 	indio_dev->channels = adxl34x_channels;
 	indio_dev->num_channels = ARRAY_SIZE(adxl34x_channels);
 
@@ -669,9 +769,6 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 		ret = regmap_write(st->regmap, ADXL345_REG_FIFO_CTL, fifo_ctl);
 		if (ret < 0)
 			return ret;
-
-		/* Enable measurement mode */
-		adxl345_set_measure_en(st, true);
 	}
 	dev_dbg(dev, "Driver operational\n");
 	return devm_iio_device_register(dev, indio_dev);
