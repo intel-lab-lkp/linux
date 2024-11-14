@@ -94,7 +94,6 @@ static int of_workarounds __prombss;
 #endif
 
 #define OF_WA_CLAIM	1	/* do phys/virt claim separately, then map */
-#define OF_WA_LONGTRAIL	2	/* work around longtrail bugs */
 
 #ifdef DEBUG_PROM
 #define prom_debug(x...)	prom_printf(x)
@@ -267,6 +266,7 @@ static ssize_t __init prom_strscpy_pad(char *dest, const char *src, size_t n)
 	return rc;
 }
 
+#ifdef CONFIG_PPC64
 static int __init prom_strncmp(const char *cs, const char *ct, size_t count)
 {
 	unsigned char c1, c2;
@@ -282,6 +282,7 @@ static int __init prom_strncmp(const char *cs, const char *ct, size_t count)
 	}
 	return 0;
 }
+#endif
 
 static size_t __init prom_strlen(const char *s)
 {
@@ -668,52 +669,11 @@ static inline int __init prom_getproplen(phandle node, const char *pname)
 	return call_prom("getproplen", 2, 1, node, ADDR(pname));
 }
 
-static void __init add_string(char **str, const char *q)
-{
-	char *p = *str;
-
-	while (*q)
-		*p++ = *q++;
-	*p++ = ' ';
-	*str = p;
-}
-
-static char *__init tohex(unsigned int x)
-{
-	static const char digits[] __initconst = "0123456789abcdef";
-	static char result[9] __prombss;
-	int i;
-
-	result[8] = 0;
-	i = 8;
-	do {
-		--i;
-		result[i] = digits[x & 0xf];
-		x >>= 4;
-	} while (x != 0 && i > 0);
-	return &result[i];
-}
-
 static int __init prom_setprop(phandle node, const char *nodename,
 			       const char *pname, void *value, size_t valuelen)
 {
-	char cmd[256], *p;
-
-	if (!(OF_WORKAROUNDS & OF_WA_LONGTRAIL))
-		return call_prom("setprop", 4, 1, node, ADDR(pname),
-				 (u32)(unsigned long) value, (u32) valuelen);
-
-	/* gah... setprop doesn't work on longtrail, have to use interpret */
-	p = cmd;
-	add_string(&p, "dev");
-	add_string(&p, nodename);
-	add_string(&p, tohex((u32)(unsigned long) value));
-	add_string(&p, tohex(valuelen));
-	add_string(&p, tohex(ADDR(pname)));
-	add_string(&p, tohex(prom_strlen(pname)));
-	add_string(&p, "property");
-	*p = 0;
-	return call_prom("interpret", 1, 1, (u32)(unsigned long) cmd);
+	return call_prom("setprop", 4, 1, node, ADDR(pname),
+			 (u32)(unsigned long) value, (u32) valuelen);
 }
 
 /* We can't use the standard versions because of relocation headaches. */
@@ -1678,14 +1638,6 @@ static void __init prom_init_mem(void)
 	for (node = 0; prom_next_node(&node); ) {
 		type[0] = 0;
 		prom_getprop(node, "device_type", type, sizeof(type));
-
-		if (type[0] == 0) {
-			/*
-			 * CHRP Longtrail machines have no device_type
-			 * on the memory node, so check the name instead...
-			 */
-			prom_getprop(node, "name", type, sizeof(type));
-		}
 		if (prom_strcmp(type, "memory"))
 			continue;
 
@@ -2238,7 +2190,6 @@ static void __init prom_init_client_services(unsigned long pp)
 /*
  * For really old powermacs, we need to map things we claim.
  * For that, we need the ihandle of the mmu.
- * Also, on the longtrail, we need to work around other bugs.
  */
 static void __init prom_find_mmu(void)
 {
@@ -2254,10 +2205,7 @@ static void __init prom_find_mmu(void)
 	/* XXX might need to add other versions here */
 	if (prom_strcmp(version, "Open Firmware, 1.0.5") == 0)
 		of_workarounds = OF_WA_CLAIM;
-	else if (prom_strncmp(version, "FirmWorks,3.", 12) == 0) {
-		of_workarounds = OF_WA_CLAIM | OF_WA_LONGTRAIL;
-		call_prom("interpret", 1, 1, "dev /memory 0 to allow-reclaim");
-	} else
+	else
 		return;
 	prom.memory = call_prom("open", 1, 1, ADDR("/memory"));
 	prom_getprop(prom.chosen, "mmu", &prom.mmumap,
