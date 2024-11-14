@@ -99,6 +99,414 @@ static const struct net_device_ops netdev_ops = {
 	.ndo_tx_timeout		= rio_tx_timeout,
 };
 
+static const struct ethtool_rmon_hist_range dlink_rmon_ranges[] = {
+	{    0,    64 },
+	{   65,   127 },
+	{  128,   255 },
+	{  256,   511 },
+	{  512,  1023 },
+	{ 1024,  1518 },
+	{ }
+};
+
+#define STATS_SIZE		ARRAY_SIZE(stats)
+#define RMON_STATS_SIZE		ARRAY_SIZE(rmon_stats)
+#define CTRL_STATS_SIZE		ARRAY_SIZE(ctrl_stats)
+#define MAC_STATS_SIZE		ARRAY_SIZE(mac_stats)
+
+static const struct dlink_stats stats[] = {
+	{
+		.string = "tx_jumbo_frames",
+		.stat_offset = offsetof(struct netdev_private,
+					tx_jumbo_frames),
+		.size = sizeof(u16),
+		.regs = TxJumboFrames
+	},
+	{
+		.string = "rx_jumbo_frames",
+		.stat_offset = offsetof(struct netdev_private,
+					rx_jumbo_frames),
+		.size = sizeof(u16),
+		.regs = RxJumboFrames
+	},
+	{
+		.string = "tcp_checksum_errors",
+		.stat_offset = offsetof(struct netdev_private,
+					tcp_checksum_errors),
+		.size = sizeof(u16),
+		.regs = TCPCheckSumErrors
+	},
+	{
+		.string = "udp_checksum_errors",
+		.stat_offset = offsetof(struct netdev_private,
+					udp_checksum_errors),
+		.size = sizeof(u16),
+		.regs = UDPCheckSumErrors
+	},
+	{
+		.string = "ip_checksum_errors",
+		.stat_offset = offsetof(struct netdev_private,
+					ip_checksum_errors),
+		.size = sizeof(u16),
+		.regs = IPCheckSumErrors
+	},
+	{
+		.string = "tx_multicast_bytes",
+		.stat_offset = offsetof(struct netdev_private,
+					tx_multicast_bytes),
+		.size = sizeof(u32),
+		.regs = McstOctetXmtOk
+	},
+	{
+		.string = "rx_multicast_bytes",
+		.stat_offset = offsetof(struct netdev_private,
+					rx_multicast_bytes),
+		.size = sizeof(u32),
+		.regs = McstOctetRcvOk
+	},
+	{
+		.string = "rmon_collisions",
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_collisions),
+		.size = sizeof(u32),
+		.regs = EtherStatsCollisions
+	},
+	{
+		.string = "rmon_crc_align_errors",
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_crc_align_errors),
+		.size = sizeof(u32),
+		.regs = EtherStatsCRCAlignErrors
+	},
+	{
+		.string = "rmon_tx_bytes",
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_bytes),
+		.size = sizeof(u32),
+		.regs = EtherStatsOctetsTransmit
+	},
+	{
+		.string = "rmon_rx_bytes",
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_bytes),
+		.size = sizeof(u32),
+		.regs = EtherStatsOctets
+	},
+	{
+		.string = "rmon_tx_packets",
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_packets),
+		.size = sizeof(u32),
+		.regs = EtherStatsPktsTransmit
+	},
+	{
+		.string = "rmon_rx_packets",
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_packets),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts
+	}
+}, ctrl_stats[] = {
+	{
+		.data_offset = offsetof(struct ethtool_eth_ctrl_stats,
+					MACControlFramesTransmitted),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_mac_control_frames),
+		.size = sizeof(u16),
+		.regs = MacControlFramesXmtd
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_ctrl_stats,
+					MACControlFramesReceived),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_mac_control_frames),
+		.size = sizeof(u16),
+		.regs = MacControlFramesRcvd
+	}
+}, mac_stats[] = {
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FramesTransmittedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_packets),
+		.size = sizeof(u32),
+		.regs = FramesXmtOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FramesReceivedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_packets),
+		.size = sizeof(u32),
+		.regs = FramesRcvOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					OctetsTransmittedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_bytes),
+		.size = sizeof(u32),
+		.regs = OctetXmtOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					OctetsReceivedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_bytes),
+		.size = sizeof(u32),
+		.regs = OctetRcvOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					SingleCollisionFrames),
+		.stat_offset = offsetof(struct netdev_private,
+					single_collisions),
+		.size = sizeof(u32),
+		.regs = SingleColFrames,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					MultipleCollisionFrames),
+		.stat_offset = offsetof(struct netdev_private,
+					multi_collisions),
+		.size = sizeof(u32),
+		.regs = MultiColFrames,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					LateCollisions),
+		.stat_offset = offsetof(struct netdev_private,
+					late_collisions),
+		.size = sizeof(u32),
+		.regs = LateCollisions,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FrameTooLongErrors),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_frames_too_long_errors),
+		.size = sizeof(u16),
+		.regs = FrameTooLongErrors,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					InRangeLengthErrors),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_in_range_length_errors),
+		.size = sizeof(u16),
+		.regs = InRangeLengthErrors,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FrameCheckSequenceErrors),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_frames_check_seq_errors),
+		.size = sizeof(u16),
+		.regs = FramesCheckSeqErrors,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FramesLostDueToIntMACRcvError),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_frames_lost_errors),
+		.size = sizeof(u16),
+		.regs = FramesLostRxErrors,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FramesAbortedDueToXSColls),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_frames_abort),
+		.size = sizeof(u16),
+		.regs = FramesAbortXSColls,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					CarrierSenseErrors),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_carrier_sense_errors),
+		.size = sizeof(u16),
+		.regs = CarrierSenseErrors,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					MulticastFramesXmittedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_multicast_frames),
+		.size = sizeof(u32),
+		.regs = McstFramesXmtdOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					MulticastFramesReceivedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_multicast_frames),
+		.size = sizeof(u32),
+		.regs = McstFramesRcvdOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					BroadcastFramesXmittedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_broadcast_frames),
+		.size = sizeof(u16),
+		.regs = BcstFramesXmtdOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					BroadcastFramesReceivedOK),
+		.stat_offset = offsetof(struct netdev_private,
+					rx_broadcast_frames),
+		.size = sizeof(u16),
+		.regs = BcstFramesRcvdOk,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FramesWithDeferredXmissions),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_frames_deferred),
+		.size = sizeof(u32),
+		.regs = FramesWDeferredXmt,
+	},
+	{
+		.data_offset = offsetof(struct ethtool_eth_mac_stats,
+					FramesWithExcessiveDeferral),
+		.stat_offset = offsetof(struct netdev_private,
+					tx_frames_excessive_deferral),
+		.size = sizeof(u16),
+		.regs = FramesWEXDeferal,
+	},
+}, rmon_stats[] = {
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					undersize_pkts),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_under_size_packets),
+		.size = sizeof(u32),
+		.regs = EtherStatsUndersizePkts
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					fragments),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_fragments),
+		.size = sizeof(u32),
+		.regs = EtherStatsFragments
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					fragments),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_fragments),
+		.size = sizeof(u32),
+		.regs = EtherStatsFragments
+	},
+	{
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_jabbers),
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					jabbers),
+		.size = sizeof(u32),
+		.regs = EtherStatsJabbers
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist_tx[0]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_byte_64),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts64OctetTransmit
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist[0]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_byte_64),
+		.size = sizeof(u32),
+		.regs = EtherStats64Octets
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist_tx[1]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_byte_65to127),
+		.size = sizeof(u32),
+		.regs = EtherStats65to127OctetsTransmit
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist[1]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_byte_64to127),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts65to127Octets
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist_tx[2]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_byte_128to255),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts128to255OctetsTransmit
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist[2]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_byte_128to255),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts128to255Octets
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist_tx[3]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_byte_256to511),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts256to511OctetsTransmit
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist[3]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_byte_256to511),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts256to511Octets
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist_tx[4]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_byte_512to1023),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts512to1023OctetsTransmit
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist[4]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_byte_512to1203),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts512to1023Octets
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist_tx[5]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_tx_byte_1204to1518),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts1024to1518OctetsTransmit
+	},
+	{
+		.data_offset = offsetof(struct ethtool_rmon_stats,
+					hist[5]),
+		.stat_offset = offsetof(struct netdev_private,
+					rmon_rx_byte_1204to1518),
+		.size = sizeof(u32),
+		.regs = EtherStatsPkts1024to1518Octets
+	}
+};
+
 static int
 rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 {
@@ -137,17 +545,17 @@ rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_out_dev;
 	np->eeprom_addr = ioaddr;
 
-#ifdef MEM_MAPPING
 	/* MM registers range. */
 	ioaddr = pci_iomap(pdev, 1, 0);
 	if (!ioaddr)
 		goto err_out_iounmap;
-#endif
+
 	np->ioaddr = ioaddr;
 	np->chip_id = chip_idx;
 	np->pdev = pdev;
 	spin_lock_init (&np->tx_lock);
 	spin_lock_init (&np->rx_lock);
+	spin_lock_init(&np->stats_lock);
 
 	/* Parse manual configuration */
 	np->an_enable = 1;
@@ -287,9 +695,7 @@ err_out_unmap_tx:
 	dma_free_coherent(&pdev->dev, TX_TOTAL_SIZE, np->tx_ring,
 			  np->tx_ring_dma);
 err_out_iounmap:
-#ifdef MEM_MAPPING
 	pci_iounmap(pdev, np->ioaddr);
-#endif
 	pci_iounmap(pdev, np->eeprom_addr);
 err_out_dev:
 	free_netdev (dev);
@@ -1064,65 +1470,44 @@ rio_error (struct net_device *dev, int int_status)
 	}
 }
 
+#define READ_STAT(S, B, I) (*((u64 *)(((void *)B) + (S)[I].stat_offset)))
+#define READ_DATA(S, B, I) (*((u64 *)(((void *)B) + (S)[I].data_offset)))
+
+#define GET_STATS(STATS, SIZE)						\
+	for (int i = 0; i < (SIZE); i++) {				\
+		if (STATS[i].size == sizeof(u32))			\
+			READ_STAT(STATS, np, i) += dr32(STATS[i].regs);	\
+		else							\
+			READ_STAT(STATS, np, i) += dr16(STATS[i].regs);	\
+	}
+
+#define CLEAR_STATS(STATS, SIZE)					\
+	for (int i = 0; i < (SIZE); i++) {				\
+		if (STATS[i].size == sizeof(u32))			\
+			dr32(STATS[i].regs);				\
+		else							\
+			dr16(STATS[i].regs);				\
+	}
+
 static struct net_device_stats *
 get_stats (struct net_device *dev)
 {
 	struct netdev_private *np = netdev_priv(dev);
 	void __iomem *ioaddr = np->ioaddr;
-#ifdef MEM_MAPPING
-	int i;
-#endif
-	unsigned int stat_reg;
+	unsigned long flags;
+
+	spin_lock_irqsave(&np->stats_lock, flags);
 
 	/* All statistics registers need to be acknowledged,
 	   else statistic overflow could cause problems */
 
-	dev->stats.rx_packets += dr32(FramesRcvOk);
-	dev->stats.tx_packets += dr32(FramesXmtOk);
-	dev->stats.rx_bytes += dr32(OctetRcvOk);
-	dev->stats.tx_bytes += dr32(OctetXmtOk);
+	GET_STATS(stats, STATS_SIZE);
+	GET_STATS(rmon_stats, RMON_STATS_SIZE);
+	GET_STATS(ctrl_stats, CTRL_STATS_SIZE);
+	GET_STATS(mac_stats, MAC_STATS_SIZE);
 
-	dev->stats.multicast = dr32(McstFramesRcvdOk);
-	dev->stats.collisions += dr32(SingleColFrames)
-			     +  dr32(MultiColFrames);
+	spin_unlock_irqrestore(&np->stats_lock, flags);
 
-	/* detailed tx errors */
-	stat_reg = dr16(FramesAbortXSColls);
-	dev->stats.tx_aborted_errors += stat_reg;
-	dev->stats.tx_errors += stat_reg;
-
-	stat_reg = dr16(CarrierSenseErrors);
-	dev->stats.tx_carrier_errors += stat_reg;
-	dev->stats.tx_errors += stat_reg;
-
-	/* Clear all other statistic register. */
-	dr32(McstOctetXmtOk);
-	dr16(BcstFramesXmtdOk);
-	dr32(McstFramesXmtdOk);
-	dr16(BcstFramesRcvdOk);
-	dr16(MacControlFramesRcvd);
-	dr16(FrameTooLongErrors);
-	dr16(InRangeLengthErrors);
-	dr16(FramesCheckSeqErrors);
-	dr16(FramesLostRxErrors);
-	dr32(McstOctetXmtOk);
-	dr32(BcstOctetXmtOk);
-	dr32(McstFramesXmtdOk);
-	dr32(FramesWDeferredXmt);
-	dr32(LateCollisions);
-	dr16(BcstFramesXmtdOk);
-	dr16(MacControlFramesXmtd);
-	dr16(FramesWEXDeferal);
-
-#ifdef MEM_MAPPING
-	for (i = 0x100; i <= 0x150; i += 4)
-		dr32(i);
-#endif
-	dr16(TxJumboFrames);
-	dr16(RxJumboFrames);
-	dr16(TCPCheckSumErrors);
-	dr16(UDPCheckSumErrors);
-	dr16(IPCheckSumErrors);
 	return &dev->stats;
 }
 
@@ -1131,53 +1516,15 @@ clear_stats (struct net_device *dev)
 {
 	struct netdev_private *np = netdev_priv(dev);
 	void __iomem *ioaddr = np->ioaddr;
-#ifdef MEM_MAPPING
-	int i;
-#endif
 
 	/* All statistics registers need to be acknowledged,
 	   else statistic overflow could cause problems */
-	dr32(FramesRcvOk);
-	dr32(FramesXmtOk);
-	dr32(OctetRcvOk);
-	dr32(OctetXmtOk);
 
-	dr32(McstFramesRcvdOk);
-	dr32(SingleColFrames);
-	dr32(MultiColFrames);
-	dr32(LateCollisions);
-	/* detailed rx errors */
-	dr16(FrameTooLongErrors);
-	dr16(InRangeLengthErrors);
-	dr16(FramesCheckSeqErrors);
-	dr16(FramesLostRxErrors);
+	CLEAR_STATS(stats, STATS_SIZE);
+	CLEAR_STATS(rmon_stats, RMON_STATS_SIZE);
+	CLEAR_STATS(ctrl_stats, CTRL_STATS_SIZE);
+	CLEAR_STATS(mac_stats, MAC_STATS_SIZE);
 
-	/* detailed tx errors */
-	dr16(FramesAbortXSColls);
-	dr16(CarrierSenseErrors);
-
-	/* Clear all other statistic register. */
-	dr32(McstOctetXmtOk);
-	dr16(BcstFramesXmtdOk);
-	dr32(McstFramesXmtdOk);
-	dr16(BcstFramesRcvdOk);
-	dr16(MacControlFramesRcvd);
-	dr32(McstOctetXmtOk);
-	dr32(BcstOctetXmtOk);
-	dr32(McstFramesXmtdOk);
-	dr32(FramesWDeferredXmt);
-	dr16(BcstFramesXmtdOk);
-	dr16(MacControlFramesXmtd);
-	dr16(FramesWEXDeferal);
-#ifdef MEM_MAPPING
-	for (i = 0x100; i <= 0x150; i += 4)
-		dr32(i);
-#endif
-	dr16(TxJumboFrames);
-	dr16(RxJumboFrames);
-	dr16(TCPCheckSumErrors);
-	dr16(UDPCheckSumErrors);
-	dr16(IPCheckSumErrors);
 	return 0;
 }
 
@@ -1328,11 +1675,92 @@ static u32 rio_get_link(struct net_device *dev)
 	return np->link_status;
 }
 
+static void get_ethtool_stats(struct net_device *dev,
+			      struct ethtool_stats __always_unused *__,
+			      u64 *data)
+{
+	struct netdev_private *np = netdev_priv(dev);
+
+	get_stats(dev);
+
+	for (int i = 0, j = 0; i < STATS_SIZE; i++)
+		data[j++] = READ_STAT(stats, np, i);
+}
+
+static void
+get_ethtool_rmon_stats(struct net_device *dev,
+		       struct ethtool_rmon_stats *base,
+		       const struct ethtool_rmon_hist_range **ranges)
+{
+	struct netdev_private *np = netdev_priv(dev);
+
+	get_stats(dev);
+
+	for (int i = 0; i < RMON_STATS_SIZE; i++)
+		READ_DATA(rmon_stats, base, i) = READ_STAT(rmon_stats, np, i);
+
+	*ranges = dlink_rmon_ranges;
+}
+
+static void get_ethtool_ctrl_stats(struct net_device *dev,
+				   struct ethtool_eth_ctrl_stats *base)
+{
+	struct netdev_private *np = netdev_priv(dev);
+
+	get_stats(dev);
+
+	if (base->src != ETHTOOL_MAC_STATS_SRC_AGGREGATE)
+		return;
+
+	for (int i = 0; i < CTRL_STATS_SIZE; i++)
+		READ_DATA(ctrl_stats, base, i) = READ_STAT(ctrl_stats, np, i);
+}
+
+static void get_ethtool_mac_stats(struct net_device *dev,
+				  struct ethtool_eth_mac_stats *base)
+{
+	struct netdev_private *np = netdev_priv(dev);
+
+	get_stats(dev);
+
+	if (base->src != ETHTOOL_MAC_STATS_SRC_AGGREGATE)
+		return;
+
+	for (int i = 0; i < MAC_STATS_SIZE; i++)
+		READ_DATA(mac_stats, base, i) = READ_STAT(mac_stats, np, i);
+}
+
+static void get_strings(struct net_device *dev, u32 stringset, u8 *data)
+{
+	switch (stringset) {
+	case ETH_SS_STATS:
+		for (int i = 0; i < STATS_SIZE; i++)
+			ethtool_puts(&data, stats[i].string);
+		break;
+	}
+}
+
+static int get_sset_count(struct net_device *dev, int sset)
+{
+	switch (sset) {
+	case ETH_SS_STATS:
+		return STATS_SIZE;
+	}
+
+	return 0;
+}
+
 static const struct ethtool_ops ethtool_ops = {
 	.get_drvinfo = rio_get_drvinfo,
 	.get_link = rio_get_link,
 	.get_link_ksettings = rio_get_link_ksettings,
 	.set_link_ksettings = rio_set_link_ksettings,
+	.get_ethtool_stats = get_ethtool_stats,
+	.get_rmon_stats = get_ethtool_rmon_stats,
+	.get_eth_ctrl_stats = get_ethtool_ctrl_stats,
+	.get_eth_mac_stats = get_ethtool_mac_stats,
+	.get_strings = get_strings,
+	.get_sset_count = get_sset_count
 };
 
 static int
@@ -1798,9 +2226,7 @@ rio_remove1 (struct pci_dev *pdev)
 				  np->rx_ring_dma);
 		dma_free_coherent(&pdev->dev, TX_TOTAL_SIZE, np->tx_ring,
 				  np->tx_ring_dma);
-#ifdef MEM_MAPPING
 		pci_iounmap(pdev, np->ioaddr);
-#endif
 		pci_iounmap(pdev, np->eeprom_addr);
 		free_netdev (dev);
 		pci_release_regions (pdev);
