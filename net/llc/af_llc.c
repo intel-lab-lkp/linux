@@ -1093,15 +1093,17 @@ static int llc_ui_setsockopt(struct socket *sock, int level, int optname,
 	struct sock *sk = sock->sk;
 	struct llc_sock *llc = llc_sk(sk);
 	unsigned int opt;
-	int rc = -EINVAL;
+	int rc = 0;
 
 	lock_sock(sk);
-	if (unlikely(level != SOL_LLC || optlen != sizeof(int)))
+	if (unlikely(level != SOL_LLC || optlen != sizeof(opt))) {
+		rc = -EINVAL;
 		goto out;
-	rc = copy_from_sockptr(&opt, optval, sizeof(opt));
-	if (rc)
+	}
+	if (copy_from_sockptr(&opt, optval, sizeof(opt))) {
+		rc = -EFAULT;
 		goto out;
-	rc = -EINVAL;
+	}
 	switch (optname) {
 	case LLC_OPT_RETRY:
 		if (opt > LLC_OPT_MAX_RETRY)
@@ -1151,9 +1153,8 @@ static int llc_ui_setsockopt(struct socket *sock, int level, int optname,
 		break;
 	default:
 		rc = -ENOPROTOOPT;
-		goto out;
+		break;
 	}
-	rc = 0;
 out:
 	release_sock(sk);
 	return rc;
