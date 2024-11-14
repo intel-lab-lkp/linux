@@ -86,7 +86,9 @@ static int devlink_nl_rate_fill(struct sk_buff *msg,
 				int flags, struct netlink_ext_ack *extack)
 {
 	struct devlink *devlink = devlink_rate->devlink;
+	struct nlattr *nla_tc_bw;
 	void *hdr;
+	int i;
 
 	hdr = genlmsg_put(msg, portid, seq, &devlink_nl_family, flags, cmd);
 	if (!hdr)
@@ -124,10 +126,29 @@ static int devlink_nl_rate_fill(struct sk_buff *msg,
 			devlink_rate->tx_weight))
 		goto nla_put_failure;
 
-	if (devlink_rate->parent)
-		if (nla_put_string(msg, DEVLINK_ATTR_RATE_PARENT_NODE_NAME,
-				   devlink_rate->parent->name))
+	nla_tc_bw = nla_nest_start(msg, DEVLINK_ATTR_RATE_TC_BW);
+	if (!nla_tc_bw)
+		goto nla_put_failure;
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		struct nlattr *nla_tc_entry = nla_nest_start(msg, i);
+
+		if (!nla_tc_entry) {
+			nla_nest_cancel(msg, nla_tc_bw);
 			goto nla_put_failure;
+		}
+
+		if (nla_put_u8(msg, DEVLINK_ATTR_RATE_TC_INDEX, i) ||
+		    nla_put_u32(msg, DEVLINK_ATTR_RATE_BW, devlink_rate->tc_bw[i])) {
+			nla_nest_cancel(msg, nla_tc_entry);
+			nla_nest_cancel(msg, nla_tc_bw);
+			goto nla_put_failure;
+		}
+
+		nla_nest_end(msg, nla_tc_entry);
+	}
+
+	nla_nest_end(msg, nla_tc_bw);
 
 	genlmsg_end(msg, hdr);
 	return 0;
@@ -380,6 +401,38 @@ static int devlink_nl_rate_set(struct devlink_rate *devlink_rate,
 		devlink_rate->tx_weight = weight;
 	}
 
+	if (attrs[DEVLINK_ATTR_RATE_TC_BW]) {
+		struct nlattr *nla_tc_bw = attrs[DEVLINK_ATTR_RATE_TC_BW];
+		struct nlattr *tb[DEVLINK_ATTR_RATE_BW + 1];
+		u32 tc_bw[IEEE_8021QAZ_MAX_TCS] = {0};
+		struct nlattr *nla_tc_entry;
+		int rem, tc_index;
+
+		nla_for_each_nested(nla_tc_entry, nla_tc_bw, rem) {
+			err = nla_parse_nested(tb, DEVLINK_ATTR_RATE_BW, nla_tc_entry,
+					       devlink_dl_rate_tc_bw_nl_policy, info->extack);
+			if (err)
+				return err;
+
+			if (tb[DEVLINK_ATTR_RATE_TC_INDEX] && tb[DEVLINK_ATTR_RATE_BW]) {
+				tc_index = nla_get_u8(tb[DEVLINK_ATTR_RATE_TC_INDEX]);
+				tc_bw[tc_index] = nla_get_u32(tb[DEVLINK_ATTR_RATE_BW]);
+			}
+		}
+
+		if (devlink_rate_is_leaf(devlink_rate))
+			err = ops->rate_leaf_tc_bw_set(devlink_rate, devlink_rate->priv,
+						       tc_bw, info->extack);
+		else if (devlink_rate_is_node(devlink_rate))
+			err = ops->rate_node_tc_bw_set(devlink_rate, devlink_rate->priv,
+						       tc_bw, info->extack);
+
+		if (err)
+			return err;
+
+		memcpy(devlink_rate->tc_bw, tc_bw, sizeof(tc_bw));
+	}
+
 	nla_parent = attrs[DEVLINK_ATTR_RATE_PARENT_NODE_NAME];
 	if (nla_parent) {
 		err = devlink_nl_rate_parent_node_set(devlink_rate, info,
@@ -423,6 +476,12 @@ static bool devlink_rate_set_ops_supported(const struct devlink_ops *ops,
 					    "TX weight set isn't supported for the leafs");
 			return false;
 		}
+		if (attrs[DEVLINK_ATTR_RATE_TC_BW] && !ops->rate_leaf_tc_bw_set) {
+			NL_SET_ERR_MSG_ATTR(info->extack,
+					    attrs[DEVLINK_ATTR_RATE_TC_BW],
+					    "TC bandwidth set isn't supported for the leafs");
+			return false;
+		}
 	} else if (type == DEVLINK_RATE_TYPE_NODE) {
 		if (attrs[DEVLINK_ATTR_RATE_TX_SHARE] && !ops->rate_node_tx_share_set) {
 			NL_SET_ERR_MSG(info->extack, "TX share set isn't supported for the nodes");
@@ -447,6 +506,12 @@ static bool devlink_rate_set_ops_supported(const struct devlink_ops *ops,
 			NL_SET_ERR_MSG_ATTR(info->extack,
 					    attrs[DEVLINK_ATTR_RATE_TX_WEIGHT],
 					    "TX weight set isn't supported for the nodes");
+			return false;
+		}
+		if (attrs[DEVLINK_ATTR_RATE_TC_BW] && !ops->rate_node_tc_bw_set) {
+			NL_SET_ERR_MSG_ATTR(info->extack,
+					    attrs[DEVLINK_ATTR_RATE_TC_BW],
+					    "TC bandwidth set isn't supported for the nodes");
 			return false;
 		}
 	} else {
