@@ -236,6 +236,8 @@ buildid.*::
 		cache location, or to disable it altogether. If you want to disable it,
 		set buildid.dir to /dev/null. The default is $HOME/.debug
 
+		This option must be an absolute path name.
+
 buildid-cache.*::
 	buildid-cache.debuginfod=URLs
 		Specify debuginfod URLs to be used when retrieving perf.data binaries,

@@ -37,8 +37,8 @@ OPTIONS
         Do not set pager.
 
 --buildid-dir::
-        Setup buildid cache directory. It has higher priority
-        than buildid.dir config file option.
+        Setup buildid cache directory with an absolute path name.
+        It has higher priority than buildid.dir config file option.
 
 --list-cmds::
         List the most commonly used perf commands.

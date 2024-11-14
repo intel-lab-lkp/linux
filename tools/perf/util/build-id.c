@@ -637,8 +637,12 @@ build_id_cache__add(const char *sbuild_id, const char *name, const char *realnam
 		if (unlink(dir_name))
 			goto out_free;
 
-	if (mkdir_p(dir_name, 0755))
+	if (mkdir_p(dir_name, 0755)) {
+		pr_err("Failed to create build_id cache folder: %s.\n"
+		       "  Use an absolute path name or check permissions.\n",
+		       dir_name);
 		goto out_free;
+	}
 
 	/* Save the allocated buildid dirname */
 	if (asprintf(&filename, "%s/%s", dir_name,
