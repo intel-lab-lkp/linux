@@ -1038,7 +1038,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pci_save_state(pdev);
 
-	return rc;
+	return 0;
 }
 
 static const struct pci_device_id cxl_mem_pci_tbl[] = {
