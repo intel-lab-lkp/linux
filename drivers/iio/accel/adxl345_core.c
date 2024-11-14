@@ -26,6 +26,9 @@
 
 #include "adxl345.h"
 
+/* debugging registers */
+#define DEBUG_ADXL345 0
+
 /* ADXL345 register map */
 #define ADXL345_REG_DEVID		0x00 /* r    Device ID */
 #define ADXL345_REG_THRESH_TAP	0x1D /* r/w  Tap Threshold */
@@ -180,6 +183,78 @@ static const struct iio_chan_spec adxl34x_channels[] = {
 	ADXL34x_CHANNEL(1, chan_y, Y),
 	ADXL34x_CHANNEL(2, chan_z, Z),
 };
+
+/*
+ * Debugging
+ */
+
+__maybe_unused
+static void adxl345_debug_registers(const char *func, struct adxl34x_state *st)
+{
+#if DEBUG_ADXL345 == 1
+	struct regmap *regmap = st->regmap;
+	unsigned int regval = 0;
+
+	regmap_read(regmap, ADXL345_REG_THRESH_TAP, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_THRESH_TAP\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_DUR, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_DUR\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_LATENT, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_LATENT\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_WINDOW, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_WINDOW\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_ACT_TAP_STATUS, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_ACT_TAP_STATUS\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_POWER_CTL, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_POWER_CTL\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_INT_ENABLE, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_INT_ENABLE\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_INT_MAP, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_INT_MAP\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_INT_SOURCE, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_INT_SOURCE\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_FIFO_CTL, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_FIFO_CTL\n",
+			func, 0xff & regval);
+
+	regmap_read(regmap, ADXL345_REG_FIFO_STATUS, &regval);
+	pr_debug("%s(): DEBUG - 0x%02X\t- ADXL345_REG_FIFO_STATUS\n",
+			func, 0xff & regval);
+# endif
+}
+
+__maybe_unused
+static void adxl345_debug_fifo(const char *func, s16 *fifo_buf, int entries_line)
+{
+#if DEBUG_ADXL345 == 1
+	s16 xval, yval, zval;
+
+	xval = fifo_buf[0 + entries_line];
+	yval = fifo_buf[1 + entries_line];
+	zval = fifo_buf[2 + entries_line];
+
+	pr_debug("%s(): FIFO[%d] - x=%d, y=%d, z=%d\n",
+		func, entries_line/3, xval, yval, zval);
+#endif
+}
 
 static int adxl345_set_interrupts(struct adxl34x_state *st)
 {
@@ -513,6 +588,8 @@ static int adxl345_read_fifo_elements(struct adxl34x_state *st, int fifo_entries
 	size_t count, ndirs = 3;
 	int i, ret;
 
+	pr_debug("%s(): fifo_entries = %d\n", __func__, fifo_entries);
+
 	count = 2 * ndirs; /* 2 byte per direction */
 	for (i = 0; i < fifo_entries; i++) {
 		ret = regmap_noinc_read(st->regmap, ADXL345_REG_XYZ_BASE,
@@ -522,6 +599,7 @@ static int adxl345_read_fifo_elements(struct adxl34x_state *st, int fifo_entries
 			return -EFAULT;
 		}
 	}
+	adxl345_debug_registers(__func__, st);
 
 	return 0;
 }
@@ -639,6 +717,7 @@ static int adxl345_push_fifo_data(struct iio_dev *indio_dev,
 		if (st->fifo_delay && (fifo_entries > 1))
 			udelay(3);
 
+		adxl345_debug_fifo(__func__, st->fifo_buf, i);
 		iio_push_to_buffers(indio_dev, &st->fifo_buf[i]);
 	}
 
@@ -666,6 +745,7 @@ static int adxl345_trig_dready(struct iio_trigger *trig, bool state)
 			 __func__, st->int_map);
 	}
 
+	adxl345_debug_registers(__func__, st);
 	return 0;
 }
 
@@ -697,6 +777,7 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 	int fifo_entries;
 	int ret;
 
+	pr_debug("%s(): IRQ caught!\n", __func__);
 	ret = adxl345_get_status(st, &int_stat);
 	if (ret < 0)
 		goto err;
@@ -731,6 +812,7 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 
 	goto done;
 err:
+	pr_debug("%s(): error termination\n", __func__);
 	iio_trigger_notify_done(indio_dev->trig);
 	adxl345_set_measure_en(st, false);
 	adxl345_empty_fifo(st);
@@ -738,6 +820,7 @@ err:
 	return IRQ_NONE;
 
 done:
+	pr_debug("%s(): regular termination\n", __func__);
 	return IRQ_HANDLED;
 }
 
@@ -788,6 +871,9 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	st = iio_priv(indio_dev);
 	st->regmap = regmap;
 
+	dev_dbg(dev, "irq '%d'\n", irq);
+	if (!irq) /* fall back to bypass mode w/o IRQ */
+		dev_dbg(dev, "no IRQ, FIFO mode will stay in BYPASS_MODE\n");
 	st->irq = irq;
 	st->info = device_get_match_data(dev);
 	if (!st->info)
@@ -815,7 +901,11 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	indio_dev->channels = adxl34x_channels;
 	indio_dev->num_channels = ARRAY_SIZE(adxl34x_channels);
 
+	dev_dbg(dev, "setting up indio_dev ok\n");
+
 	if (setup) {
+		dev_dbg(dev, "setup() was provided\n");
+
 		/* Perform optional initial bus specific configuration */
 		ret = setup(dev, st->regmap);
 		if (ret)
@@ -830,6 +920,8 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 					     "Failed to set data range\n");
 
 	} else {
+		dev_dbg(dev, "No setup() provided\n");
+
 		/* Enable full-resolution mode (init all data_format bits) */
 		ret = regmap_write(st->regmap, ADXL345_REG_DATA_FORMAT,
 				   ADXL345_DATA_FORMAT_FULL_RES);
@@ -838,6 +930,7 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 					     "Failed to set data range\n");
 	}
 
+	dev_dbg(dev, "Retrieving DEVID\n");
 	ret = regmap_read(st->regmap, ADXL345_REG_DEVID, &regval);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Error reading device ID\n");
@@ -845,7 +938,9 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	if (regval != ADXL345_DEVID)
 		return dev_err_probe(dev, -ENODEV, "Invalid device ID: %x, expected %x\n",
 				     regval, ADXL345_DEVID);
+	dev_dbg(dev, "Retrieving DEVID ok\n");
 
+	dev_dbg(dev, "Registering power down function\n");
 	ret = devm_add_action_or_reset(dev, adxl345_powerdown, st);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to add action or reset\n");
