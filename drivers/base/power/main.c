@@ -247,15 +247,22 @@ static int dpm_wait_fn(struct device *dev, void *async_ptr)
 	return 0;
 }
 
-static void dpm_wait_for_children(struct device *dev, bool async)
+static int dpm_for_each_superior(struct device *dev, void *data,
+				 int (*fn)(struct device *dev, void *data))
 {
-       device_for_each_child(dev, &async, dpm_wait_fn);
-}
-
-static void dpm_wait_for_suppliers(struct device *dev, bool async)
-{
+	struct device *parent;
+	int ret = 0, idx;
 	struct device_link *link;
-	int idx;
+
+	if (!dev)
+		return 0;
+
+	parent = get_device(dev->parent);
+	if (parent)
+		ret = fn(parent, data);
+	put_device(parent);
+	if (ret)
+		return ret;
 
 	idx = device_links_read_lock();
 
@@ -267,29 +274,20 @@ static void dpm_wait_for_suppliers(struct device *dev, bool async)
 	 * walking.
 	 */
 	list_for_each_entry_rcu_locked(link, &dev->links.suppliers, c_node)
-		if (READ_ONCE(link->status) != DL_STATE_DORMANT)
-			dpm_wait(link->supplier, async);
+		if (READ_ONCE(link->status) != DL_STATE_DORMANT) {
+			ret = fn(link->supplier, data);
+			if (ret)
+				break;
+		}
 
 	device_links_read_unlock(idx);
+
+	return ret;
 }
 
 static bool dpm_wait_for_superior(struct device *dev, bool async)
 {
-	struct device *parent;
-
-	/*
-	 * If the device is resumed asynchronously and the parent's callback
-	 * deletes both the device and the parent itself, the parent object may
-	 * be freed while this function is running, so avoid that by reference
-	 * counting the parent once more unless the device has been deleted
-	 * already (in which case return right away).
-	 */
-	parent = get_device(dev->parent);
-	if (device_pm_initialized(dev))
-		dpm_wait(parent, async);
-	put_device(parent);
-
-	dpm_wait_for_suppliers(dev, async);
+	dpm_for_each_superior(dev, &async, dpm_wait_fn);
 
 	/*
 	 * If the parent's callback has deleted the device, attempting to resume
@@ -298,10 +296,18 @@ static bool dpm_wait_for_superior(struct device *dev, bool async)
 	return device_pm_initialized(dev);
 }
 
-static void dpm_wait_for_consumers(struct device *dev, bool async)
+static int dpm_for_each_subordinate(struct device *dev, void *data,
+				    int (*fn)(struct device *dev, void *data))
 {
+	int ret, idx;
 	struct device_link *link;
-	int idx;
+
+	if (!dev)
+		return 0;
+
+	ret = device_for_each_child(dev, data, fn);
+	if (ret)
+		return ret;
 
 	idx = device_links_read_lock();
 
@@ -315,16 +321,20 @@ static void dpm_wait_for_consumers(struct device *dev, bool async)
 	 * unregistration).
 	 */
 	list_for_each_entry_rcu_locked(link, &dev->links.consumers, s_node)
-		if (READ_ONCE(link->status) != DL_STATE_DORMANT)
-			dpm_wait(link->consumer, async);
+		if (READ_ONCE(link->status) != DL_STATE_DORMANT) {
+			ret = fn(link->consumer, data);
+			if (ret)
+				break;
+		}
 
 	device_links_read_unlock(idx);
+
+	return ret;
 }
 
 static void dpm_wait_for_subordinate(struct device *dev, bool async)
 {
-	dpm_wait_for_children(dev, async);
-	dpm_wait_for_consumers(dev, async);
+	dpm_for_each_subordinate(dev, &async, dpm_wait_fn);
 }
 
 /**
