@@ -899,7 +899,7 @@ static int fuse_read_folio(struct file *file, struct folio *folio)
 	int err;
 
 	err = -EIO;
-	if (fuse_is_bad(inode))
+	if (fuse_is_bad(inode) || !file)
 		goto out;
 
 	err = fuse_do_readpage(file, page);
