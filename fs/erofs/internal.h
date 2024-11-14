@@ -214,10 +214,14 @@ enum erofs_kmap_type {
 };
 
 struct erofs_buf {
-	struct address_space *mapping;
+	union {
+		struct address_space *mapping;
+		struct file *filp;
+	};
 	struct page *page;
 	void *base;
 	enum erofs_kmap_type kmap_type;
+	bool use_fp;
 };
 #define __EROFS_BUF_INITIALIZER	((struct erofs_buf){ .page = NULL })
 
