@@ -92,12 +92,18 @@ struct io_uring_sqe {
 			__u16	addr_len;
 			__u16	__pad3[1];
 		};
+		struct {
+			/* number of elements in the attribute vector */
+			__u8	nr_attr_indirect;
+			__u8	__pad4[3];
+		};
 	};
 	union {
 		struct {
 			__u64	addr3;
 			__u64	__pad2[1];
 		};
+		__u64	attr_vec_addr;
 		__u64	optval;
 		/*
 		 * If the ring is initialized with IORING_SETUP_SQE128, then
@@ -105,6 +111,29 @@ struct io_uring_sqe {
 		 */
 		__u8	cmd[0];
 	};
+};
+
+
+/* Attributes to be passed with read/write */
+enum io_uring_attr_type {
+	ATTR_TYPE_PI,
+	/* max supported attributes */
+	ATTR_TYPE_LAST = 16,
+};
+
+struct io_uring_attr_vec {
+	enum io_uring_attr_type	type;
+	__u64			addr;
+};
+
+/* PI attribute information */
+struct io_uring_attr_pi {
+		__u16	flags;
+		__u16	app_tag;
+		__u32	len;
+		__u64	addr;
+		__u64	seed;
+		__u64	rsvd;
 };
 
 /*
