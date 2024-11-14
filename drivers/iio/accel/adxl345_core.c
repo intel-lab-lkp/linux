@@ -141,21 +141,33 @@ struct adxl34x_state {
 	u8 intio;
 };
 
-#define ADXL345_CHANNEL(index, axis) {					\
-	.type = IIO_ACCEL,						\
-	.modified = 1,							\
-	.channel2 = IIO_MOD_##axis,					\
-	.address = index,						\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |			\
-		BIT(IIO_CHAN_INFO_CALIBBIAS),				\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |		\
-		BIT(IIO_CHAN_INFO_SAMP_FREQ),				\
+#define ADXL34x_CHANNEL(index, reg, axis) {				\
+		.type = IIO_ACCEL,					\
+			.address = (reg),				\
+			.modified = 1,					\
+			.channel2 = IIO_MOD_##axis,			\
+			.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |	\
+			BIT(IIO_CHAN_INFO_CALIBBIAS),			\
+			.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) | \
+			BIT(IIO_CHAN_INFO_SAMP_FREQ),			\
+			.scan_index = (index),				\
+			.scan_type = {					\
+				.sign = 's',				\
+				.realbits = 13,				\
+				.storagebits = 16,			\
+				.shift = 0,				\
+				.endianness = IIO_LE,			\
+			},						\
 }
 
+enum adxl34x_chans {
+	chan_x, chan_y, chan_z,
+};
+
 static const struct iio_chan_spec adxl34x_channels[] = {
-	ADXL345_CHANNEL(0, X),
-	ADXL345_CHANNEL(1, Y),
-	ADXL345_CHANNEL(2, Z),
+	ADXL34x_CHANNEL(0, chan_x, X),
+	ADXL34x_CHANNEL(1, chan_y, Y),
+	ADXL34x_CHANNEL(2, chan_z, Z),
 };
 
 static int adxl345_read_raw(struct iio_dev *indio_dev,
