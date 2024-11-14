@@ -393,6 +393,12 @@ void __weak arch_suspend_enable_irqs(void)
 	local_irq_enable();
 }
 
+/*
+ * Intentionally not part of a header file to avoid risk of abuse by other
+ * drivers.
+ */
+void sched_set_energy_aware(unsigned int enable);
+
 /**
  * suspend_enter - Make the system enter the given sleep state.
  * @state: System sleep state to enter.
@@ -468,6 +474,15 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 
  Platform_wake:
 	platform_resume_noirq(state);
+	/*
+	 * We do this only for resume instead of suspend and resume for these
+	 * reasons:
+	 * - Performance is more important than power for resume.
+	 * - Power spent entering suspend is more important for suspend. Also,
+	 *   stangely, disabling EAS was making suspent a few milliseconds
+	 *   slower in my testing.
+	 */
+	sched_set_energy_aware(0);
 	dpm_resume_noirq(PMSG_RESUME);
 
  Platform_early_resume:
@@ -520,6 +535,7 @@ int suspend_devices_and_enter(suspend_state_t state)
  Resume_devices:
 	suspend_test_start();
 	dpm_resume_end(PMSG_RESUME);
+	sched_set_energy_aware(1);
 	suspend_test_finish("resume devices");
 	trace_suspend_resume(TPS("resume_console"), state, true);
 	resume_console();

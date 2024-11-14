@@ -284,6 +284,19 @@ void rebuild_sched_domains_energy(void)
 	mutex_unlock(&sched_energy_mutex);
 }
 
+void sched_set_energy_aware(unsigned int enable)
+{
+	int state;
+
+	if (!sched_is_eas_possible(cpu_active_mask))
+		return;
+
+	sysctl_sched_energy_aware = enable;
+	state = static_branch_unlikely(&sched_energy_present);
+	if (state != sysctl_sched_energy_aware)
+		rebuild_sched_domains_energy();
+}
+
 #ifdef CONFIG_PROC_SYSCTL
 static int sched_energy_aware_handler(const struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
