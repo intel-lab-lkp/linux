@@ -2394,9 +2394,10 @@ static void task_woken_rt(struct rq *rq, struct task_struct *p)
 		push_rt_tasks(rq);
 }
 
-/* Assumes rq->lock is held */
 static void rq_online_rt(struct rq *rq)
 {
+	lockdep_assert_rq_held(rq);
+
 	if (rq->rt.overloaded)
 		rt_set_overload(rq);
 
@@ -2405,9 +2406,10 @@ static void rq_online_rt(struct rq *rq)
 	cpupri_set(&rq->rd->cpupri, rq->cpu, rq->rt.highest_prio.curr);
 }
 
-/* Assumes rq->lock is held */
 static void rq_offline_rt(struct rq *rq)
 {
+	lockdep_assert_rq_held(rq);
+
 	if (rq->rt.overloaded)
 		rt_clear_overload(rq);
 
