@@ -2379,8 +2379,8 @@ void clear_perf_probe_event(struct perf_probe_event *pev)
 			field = next;
 		}
 	}
-	pev->nargs = 0;
 	zfree(&pev->args);
+	memset(pev, 0, sizeof(*pev));
 }
 
 #define strdup_or_goto(str, label)	\
@@ -2478,7 +2478,7 @@ void clear_probe_trace_event(struct probe_trace_event *tev)
 		}
 	}
 	zfree(&tev->args);
-	tev->nargs = 0;
+	memset(tev, 0, sizeof(*tev));
 }
 
 struct kprobe_blacklist_node {
