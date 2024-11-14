@@ -22,6 +22,7 @@ struct adxl34x_state {
 	int irq;
 	const struct adxl345_chip_info *info;
 	struct regmap *regmap;
+	bool fifo_delay; /* delay: delay is needed for SPI */
 };
 
 #define ADXL345_CHANNEL(index, axis) {					\
@@ -197,13 +198,14 @@ static const struct iio_info adxl345_info = {
  * @dev:	Driver model representation of the device
  * @regmap:	Regmap instance for the device
  * @irq:	Interrupt handling for async usage
+ * @fifo_delay_default: Using FIFO with SPI needs delay
  * @setup:	Setup routine to be executed right before the standard device
  *		setup
  *
  * Return: 0 on success, negative errno on error
  */
 int adxl345_core_probe(struct device *dev, struct regmap *regmap,
-		       int irq,
+		       int irq, bool fifo_delay_default,
 		       int (*setup)(struct device*, struct regmap*))
 {
 	struct adxl34x_state *st;
@@ -231,6 +233,8 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	st->info = device_get_match_data(dev);
 	if (!st->info)
 		return -ENODEV;
+
+	st->fifo_delay = fifo_delay_default;
 
 	indio_dev->name = st->info->name;
 	indio_dev->info = &adxl345_info;

@@ -12,6 +12,7 @@
 #include "adxl345.h"
 
 #define ADXL345_MAX_SPI_FREQ_HZ		5000000
+#define ADXL345_MAX_FREQ_NO_FIFO_DELAY	1500000
 
 static const struct regmap_config adxl345_spi_regmap_config = {
 	.reg_bits = 8,
@@ -41,10 +42,12 @@ static int adxl345_spi_probe(struct spi_device *spi)
 	if (spi->mode & SPI_3WIRE)
 		return adxl345_core_probe(&spi->dev, regmap,
 					  spi->irq,
+					  spi->max_speed_hz > ADXL345_MAX_FREQ_NO_FIFO_DELAY,
 					  adxl345_spi_setup);
 	else
 		return adxl345_core_probe(&spi->dev, regmap,
 					  spi->irq,
+					  spi->max_speed_hz > ADXL345_MAX_FREQ_NO_FIFO_DELAY,
 					  NULL);
 }
 
