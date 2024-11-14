@@ -714,6 +714,11 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 
 	if (int_stat & (ADXL345_INT_DATA_READY | ADXL345_INT_WATERMARK)) {
 		pr_debug("%s(): WATERMARK or DATA_READY event detected\n", __func__);
+
+		/* Pause measuring, at low watermarks this would easily brick the
+		 * sensor in permanent OVERRUN state
+		 */
+		adxl345_set_measure_en(st, false);
 		if (adxl345_get_fifo_entries(st, &fifo_entries) < 0)
 			goto err;
 
@@ -721,12 +726,15 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 			goto err;
 
 		iio_trigger_notify_done(indio_dev->trig);
+		adxl345_set_measure_en(st, true);
 	}
 
 	goto done;
 err:
 	iio_trigger_notify_done(indio_dev->trig);
+	adxl345_set_measure_en(st, false);
 	adxl345_empty_fifo(st);
+	adxl345_set_measure_en(st, true);
 	return IRQ_NONE;
 
 done:
