@@ -113,10 +113,6 @@ config GPIO_SWNODE_UNDEFINED
 
 # put drivers in the right section, in alphabetical order
 
-# This symbol is selected by both I2C and SPI expanders
-config GPIO_MAX730X
-	tristate
-
 config GPIO_IDIO_16
 	tristate
 	select REGMAP_IRQ
@@ -162,6 +158,16 @@ config GPIO_AMDPT
 	  Driver for GPIO functionality on Promontory IOHub.
 	  Requires ACPI ASL code to enumerate as a platform device.
 
+config GPIO_AMD_FCH
+	tristate "GPIO support for AMD Fusion Controller Hub (G-series SOCs)"
+	help
+	  This option enables driver for GPIO on AMD's Fusion Controller Hub,
+	  as found on G-series SOCs (e.g. GX-412TC).
+
+	  Note: This driver doesn't register itself automatically, as it
+	  needs to be provided with platform-specific configuration.
+	  (See e.g. CONFIG_PCENGINES_APU2.)
+
 config GPIO_ASPEED
 	tristate "Aspeed GPIO support"
 	depends on (ARCH_ASPEED || COMPILE_TEST) && OF_GPIO
@@ -186,17 +192,6 @@ config GPIO_ATH79
 	help
 	  Select this option to enable GPIO driver for
 	  Atheros AR71XX/AR724X/AR913X SoC devices.
-
-config GPIO_RASPBERRYPI_EXP
-	tristate "Raspberry Pi 3 GPIO Expander"
-	default RASPBERRYPI_FIRMWARE
-	depends on OF_GPIO
-	# Make sure not 'y' when RASPBERRYPI_FIRMWARE is 'm'. This can only
-	# happen when COMPILE_TEST=y, hence the added !RASPBERRYPI_FIRMWARE.
-	depends on (ARCH_BCM2835 && RASPBERRYPI_FIRMWARE) || (COMPILE_TEST && !RASPBERRYPI_FIRMWARE)
-	help
-	  Turn on GPIO support for the expander on Raspberry Pi 3 boards, using
-	  the firmware mailbox to communicate with VideoCore on BCM283x chips.
 
 config GPIO_BCM_KONA
 	bool "Broadcom Kona GPIO"
@@ -377,6 +372,18 @@ config GPIO_ICH
 
 	  If unsure, say N.
 
+config GPIO_IDT3243X
+	tristate "IDT 79RC3243X GPIO support"
+	depends on MIKROTIK_RB532 || COMPILE_TEST
+	select GPIO_GENERIC
+	select GPIOLIB_IRQCHIP
+	help
+	  Select this option to enable GPIO driver for
+	  IDT 79RC3243X-based devices like Mikrotik RB532.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called gpio-idt3243x.
+
 config GPIO_IMX_SCU
        def_bool y
        depends on IMX_SCU
@@ -400,6 +407,13 @@ config GPIO_LOGICVC
 	help
 	  Say yes here to support GPIO functionality of the Xylon LogiCVC
 	  programmable logic block.
+
+config GPIO_LOONGSON1
+	tristate "Loongson1 GPIO support"
+	depends on MACH_LOONGSON32
+	select GPIO_GENERIC
+	help
+	  Say Y or M here to support GPIO on Loongson1 SoCs.
 
 config GPIO_LOONGSON
 	bool "Loongson-2/3 GPIO support"
@@ -471,6 +485,16 @@ config GPIO_MPC8XXX
 	help
 	  Say Y here if you're going to use hardware that connects to the
 	  MPC512x/831x/834x/837x/8572/8610/QorIQ GPIOs.
+
+config GPIO_MSC313
+	bool "MStar MSC313 GPIO support"
+	depends on ARCH_MSTARV7
+	default ARCH_MSTARV7
+	select GPIOLIB_IRQCHIP
+	select IRQ_DOMAIN_HIERARCHY
+	help
+	  Say Y here to support the main GPIO block on MStar/SigmaStar
+	  ARMv7-based SoCs.
 
 config GPIO_MT7621
 	bool "Mediatek MT7621 GPIO Support"
@@ -555,6 +579,17 @@ config GPIO_PXA
 	depends on ARCH_PXA || ARCH_MMP || COMPILE_TEST
 	help
 	  Say yes here to support the PXA GPIO device.
+
+config GPIO_RASPBERRYPI_EXP
+	tristate "Raspberry Pi 3 GPIO Expander"
+	default RASPBERRYPI_FIRMWARE
+	depends on OF_GPIO
+	# Make sure not 'y' when RASPBERRYPI_FIRMWARE is 'm'. This can only
+	# happen when COMPILE_TEST=y, hence the added !RASPBERRYPI_FIRMWARE.
+	depends on (ARCH_BCM2835 && RASPBERRYPI_FIRMWARE) || (COMPILE_TEST && !RASPBERRYPI_FIRMWARE)
+	help
+	  Turn on GPIO support for the expander on Raspberry Pi 3 boards, using
+	  the firmware mailbox to communicate with VideoCore on BCM283x chips.
 
 config GPIO_RCAR
 	tristate "Renesas R-Car and RZ/G GPIO support"
@@ -844,74 +879,10 @@ config GPIO_ZYNQMP_MODEPIN
 	  is 4-bits boot mode pins. It sets and gets the status of
 	  the ps-mode pin. Every pin can be configured as input/output.
 
-config GPIO_LOONGSON1
-	tristate "Loongson1 GPIO support"
-	depends on MACH_LOONGSON32
-	select GPIO_GENERIC
-	help
-	  Say Y or M here to support GPIO on Loongson1 SoCs.
-
-config GPIO_AMD_FCH
-	tristate "GPIO support for AMD Fusion Controller Hub (G-series SOCs)"
-	help
-	  This option enables driver for GPIO on AMD's Fusion Controller Hub,
-	  as found on G-series SOCs (e.g. GX-412TC).
-
-	  Note: This driver doesn't register itself automatically, as it
-	  needs to be provided with platform-specific configuration.
-	  (See e.g. CONFIG_PCENGINES_APU2.)
-
-config GPIO_MSC313
-	bool "MStar MSC313 GPIO support"
-	depends on ARCH_MSTARV7
-	default ARCH_MSTARV7
-	select GPIOLIB_IRQCHIP
-	select IRQ_DOMAIN_HIERARCHY
-	help
-	  Say Y here to support the main GPIO block on MStar/SigmaStar
-	  ARMv7-based SoCs.
-
-config GPIO_IDT3243X
-	tristate "IDT 79RC3243X GPIO support"
-	depends on MIKROTIK_RB532 || COMPILE_TEST
-	select GPIO_GENERIC
-	select GPIOLIB_IRQCHIP
-	help
-	  Select this option to enable GPIO driver for
-	  IDT 79RC3243X-based devices like Mikrotik RB532.
-
-	  To compile this driver as a module, choose M here: the module will
-	  be called gpio-idt3243x.
-
 endmenu
 
 menu "Port-mapped I/O GPIO drivers"
 	depends on X86 && HAS_IOPORT # I/O space access
-
-config GPIO_VX855
-	tristate "VIA VX855/VX875 GPIO"
-	depends on PCI
-	select MFD_CORE
-	select MFD_VX855
-	help
-	  Support access to the VX855/VX875 GPIO lines through the GPIO library.
-
-	  This driver provides common support for accessing the device.
-	  Additional drivers must be enabled in order to use the
-	  functionality of the device.
-
-config GPIO_I8255
-	tristate
-	select GPIO_REGMAP
-	help
-	  Enables support for the i8255 interface library functions. The i8255
-	  interface library provides functions to facilitate communication with
-	  interfaces compatible with the venerable Intel 8255 Programmable
-	  Peripheral Interface (PPI). The Intel 8255 PPI chip was first released
-	  in the early 1970s but compatible interfaces are nowadays typically
-	  found embedded in larger VLSI processing chips and FPGA components.
-
-	  If built as a module its name will be gpio-i8255.
 
 config GPIO_104_DIO_48E
 	tristate "ACCES 104-DIO-48E GPIO support"
@@ -982,6 +953,19 @@ config GPIO_GPIO_MM
 	  The base port addresses for the devices may be configured via the base
 	  array module parameter.
 
+config GPIO_I8255
+	tristate
+	select GPIO_REGMAP
+	help
+	  Enables support for the i8255 interface library functions. The i8255
+	  interface library provides functions to facilitate communication with
+	  interfaces compatible with the venerable Intel 8255 Programmable
+	  Peripheral Interface (PPI). The Intel 8255 PPI chip was first released
+	  in the early 1970s but compatible interfaces are nowadays typically
+	  found embedded in larger VLSI processing chips and FPGA components.
+
+	  If built as a module its name will be gpio-i8255.
+
 config GPIO_IT87
 	tristate "IT87xx GPIO support"
 	help
@@ -1039,6 +1023,18 @@ config GPIO_TS5500
 	  blocks of the TS-5500: DIO1, DIO2 and the LCD port, and the TS-5600
 	  LCD port.
 
+config GPIO_VX855
+	tristate "VIA VX855/VX875 GPIO"
+	depends on PCI
+	select MFD_CORE
+	select MFD_VX855
+	help
+	  Support access to the VX855/VX875 GPIO lines through the GPIO library.
+
+	  This driver provides common support for accessing the device.
+	  Additional drivers must be enabled in order to use the
+	  functionality of the device.
+
 config GPIO_WINBOND
 	tristate "Winbond Super I/O GPIO support"
 	select ISA_BUS_API
@@ -1070,6 +1066,10 @@ config GPIO_WS16C48
 
 endmenu
 
+# This symbol is selected by both I2C and SPI expanders
+config GPIO_MAX730X
+	tristate
+
 menu "I2C GPIO expanders"
 	depends on I2C
 
@@ -1085,16 +1085,6 @@ config GPIO_ADNP
 	  enough to represent all pins, but the driver will assume a
 	  register layout for 64 pins (8 registers).
 
-config GPIO_FXL6408
-	tristate "FXL6408 I2C GPIO expander"
-	select GPIO_REGMAP
-	select REGMAP_I2C
-	help
-	  GPIO driver for Fairchild Semiconductor FXL6408 GPIO expander.
-
-	  To compile this driver as a module, choose M here: the module will
-	  be called gpio-fxl6408.
-
 config GPIO_DS4520
 	tristate "DS4520 I2C GPIO expander"
 	select REGMAP_I2C
@@ -1105,6 +1095,16 @@ config GPIO_DS4520
 
 	  To compile this driver as a module, choose M here: the module will
 	  be called gpio-ds4520.
+
+config GPIO_FXL6408
+	tristate "FXL6408 I2C GPIO expander"
+	select GPIO_REGMAP
+	select REGMAP_I2C
+	help
+	  GPIO driver for Fairchild Semiconductor FXL6408 GPIO expander.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called gpio-fxl6408.
 
 config GPIO_GW_PLD
 	tristate "Gateworks PLD GPIO Expander"
@@ -1348,18 +1348,6 @@ config GPIO_DA9055
 
 	  If driver is built as a module it will be called gpio-da9055.
 
-config GPIO_DLN2
-	tristate "Diolan DLN2 GPIO support"
-	depends on MFD_DLN2
-	select GPIOLIB_IRQCHIP
-
-	help
-	  Select this option to enable GPIO driver for the Diolan DLN2
-	  board.
-
-	  This driver can also be built as a module. If so, the module
-	  will be called gpio-dln2.
-
 config HTC_EGPIO
 	bool "HTC EGPIO support"
 	depends on ARM
@@ -1396,18 +1384,6 @@ config GPIO_KEMPLD
 
 	  This driver can also be built as a module. If so, the module will be
 	  called gpio-kempld.
-
-config GPIO_LJCA
-	tristate "INTEL La Jolla Cove Adapter GPIO support"
-	depends on USB_LJCA
-	select GPIOLIB_IRQCHIP
-	default USB_LJCA
-	help
-	  Select this option to enable GPIO driver for the INTEL
-	  La Jolla Cove Adapter (LJCA) board.
-
-	  This driver can also be built as a module. If so, the module
-	  will be called gpio-ljca.
 
 config GPIO_LP3943
 	tristate "TI/National Semiconductor LP3943 GPIO expander"
@@ -1817,6 +1793,15 @@ config GPIO_MC33880
 	  SPI driver for Freescale MC33880 high-side/low-side switch.
 	  This provides GPIO interface supporting inputs and outputs.
 
+config GPIO_MOXTET
+	tristate "Turris Mox Moxtet bus GPIO expander"
+	depends on MOXTET
+	help
+	  Say yes here if you are building for the Turris Mox router.
+	  This is the driver needed for configuring the GPIOs via the Moxtet
+	  bus. For example the Mox module with SFP cage needs this driver
+	  so that phylink can use corresponding GPIOs.
+
 config GPIO_PISOSR
 	tristate "Generic parallel-in/serial-out shift register"
 	help
@@ -1829,19 +1814,41 @@ config GPIO_XRA1403
 	help
 	  GPIO driver for EXAR XRA1403 16-bit SPI-based GPIO expander.
 
-config GPIO_MOXTET
-	tristate "Turris Mox Moxtet bus GPIO expander"
-	depends on MOXTET
-	help
-	  Say yes here if you are building for the Turris Mox router.
-	  This is the driver needed for configuring the GPIOs via the Moxtet
-	  bus. For example the Mox module with SFP cage needs this driver
-	  so that phylink can use corresponding GPIOs.
-
 endmenu
 
 menu "USB GPIO expanders"
 	depends on USB
+
+config GPIO_DLN2
+	tristate "Diolan DLN2 GPIO support"
+	depends on MFD_DLN2
+	select GPIOLIB_IRQCHIP
+
+	help
+	  Select this option to enable GPIO driver for the Diolan DLN2
+	  board.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called gpio-dln2.
+
+config GPIO_LJCA
+	tristate "INTEL La Jolla Cove Adapter GPIO support"
+	depends on USB_LJCA
+	select GPIOLIB_IRQCHIP
+	default USB_LJCA
+	help
+	  Select this option to enable GPIO driver for the INTEL
+	  La Jolla Cove Adapter (LJCA) board.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called gpio-ljca.
+
+config GPIO_MPSSE
+	tristate "FTDI MPSSE GPIO support"
+	select GPIOLIB_IRQCHIP
+	help
+	  GPIO driver for FTDI's MPSSE interface. These can do input and
+	  output. Each MPSSE provides 16 IO pins.
 
 config GPIO_VIPERBOARD
 	tristate "Viperboard GPIO a & b support"
@@ -1853,13 +1860,6 @@ config GPIO_VIPERBOARD
 	  See viperboard API specification and Nano
 	  River Tech's viperboard.h for detailed meaning
 	  of the module parameters.
-
-config GPIO_MPSSE
-	tristate "FTDI MPSSE GPIO support"
-	select GPIOLIB_IRQCHIP
-	help
-	  GPIO driver for FTDI's MPSSE interface. These can do input and
-	  output. Each MPSSE provides 16 IO pins.
 
 endmenu
 
