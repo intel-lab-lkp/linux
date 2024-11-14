@@ -702,14 +702,14 @@ static int rxrpc_setsockopt(struct socket *sock, int level, int optname,
 
 		case RXRPC_MIN_SECURITY_LEVEL:
 			ret = -EINVAL;
-			if (optlen != sizeof(unsigned int))
+			if (optlen != sizeof(min_sec_level))
 				goto error;
 			ret = -EISCONN;
 			if (rx->sk.sk_state != RXRPC_UNBOUND)
 				goto error;
-			ret = copy_from_sockptr(&min_sec_level, optval,
-				       sizeof(unsigned int));
-			if (ret < 0)
+			ret = -EFAULT;
+			if (copy_from_sockptr(&min_sec_level, optval,
+					      sizeof(min_sec_level)))
 				goto error;
 			ret = -EINVAL;
 			if (min_sec_level > RXRPC_SECURITY_MAX)
