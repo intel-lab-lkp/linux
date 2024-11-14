@@ -140,6 +140,8 @@ struct adxl34x_state {
 	const struct adxl345_chip_info *info;
 	struct regmap *regmap;
 	struct adxl34x_platform_data data;  /* watermark, fifo_mode, etc */
+
+	__le16 fifo_buf[3 * ADXL34x_FIFO_SIZE] __aligned(IIO_DMA_MINALIGN);
 	u8 int_map;
 	bool fifo_delay; /* delay: delay is needed for SPI */
 	u8 intio;
@@ -321,6 +323,27 @@ static const struct attribute_group adxl345_attrs_group = {
 	.attrs = adxl345_attrs,
 };
 
+/**
+ * Read number of FIFO entries into *fifo_entries
+ */
+static int adxl345_get_fifo_entries(struct adxl34x_state *st, int *fifo_entries)
+{
+	unsigned int regval = 0;
+	int ret;
+
+	ret = regmap_read(st->regmap, ADXL345_REG_FIFO_STATUS, &regval);
+	if (ret) {
+		pr_warn("%s(): Failed to read FIFO_STATUS register\n", __func__);
+		*fifo_entries = 0;
+		return ret;
+	}
+
+	*fifo_entries = 0x3f & regval;
+	pr_debug("%s(): fifo_entries %d\n", __func__, *fifo_entries);
+
+	return 0;
+}
+
 static const struct iio_buffer_setup_ops adxl345_buffer_ops = {
 };
 
@@ -362,6 +385,7 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 	struct iio_dev *indio_dev = ((struct iio_poll_func *) p)->indio_dev;
 	struct adxl34x_state *st = iio_priv(indio_dev);
 	u8 int_stat;
+	int fifo_entries;
 	int ret;
 
 	ret = adxl345_get_status(st, &int_stat);
@@ -379,9 +403,11 @@ static irqreturn_t adxl345_trigger_handler(int irq, void *p)
 		goto done;
 	}
 
-	if (int_stat & (ADXL345_INT_DATA_READY | ADXL345_INT_WATERMARK))
+	if (int_stat & (ADXL345_INT_DATA_READY | ADXL345_INT_WATERMARK)) {
 		pr_debug("%s(): WATERMARK or DATA_READY event detected\n", __func__);
-
+		if (adxl345_get_fifo_entries(st, &fifo_entries) < 0)
+			goto done;
+	}
 	goto done;
 done:
 
