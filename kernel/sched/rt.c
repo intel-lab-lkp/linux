@@ -354,9 +354,13 @@ static inline void rt_clear_overload(struct rq *rq)
 	if (!rq->online)
 		return;
 
-	/* the order here really doesn't matter */
 	atomic_dec(&rq->rd->rto_count);
 	cpumask_clear_cpu(rq->cpu, rq->rd->rto_mask);
+	/*
+	 * Barrier pairs with pull_rt_task(), such that threads will
+	 * observe the correct cpu mask for any remaining overloaded CPU(s).
+	 */
+	smp_wmb();
 }
 
 static inline int has_pushable_tasks(struct rq *rq)
