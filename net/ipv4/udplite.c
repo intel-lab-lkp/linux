@@ -57,7 +57,7 @@ struct proto 	udplite_prot = {
 	.recvmsg	   = udp_recvmsg,
 	.hash		   = udp_lib_hash,
 	.unhash		   = udp_lib_unhash,
-	.rehash		   = udp_v4_rehash,
+	.set_rcv_saddr	   = udp_v4_set_rcv_saddr,
 	.get_port	   = udp_v4_get_port,
 
 	.memory_allocated  = &udp_memory_allocated,

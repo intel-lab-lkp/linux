@@ -64,9 +64,10 @@ int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len
 	if (!inet->inet_saddr)
 		inet->inet_saddr = fl4->saddr;	/* Update source address */
 	if (!inet->inet_rcv_saddr) {
-		inet->inet_rcv_saddr = fl4->saddr;
-		if (sk->sk_prot->rehash && sk->sk_family == AF_INET)
-			sk->sk_prot->rehash(sk);
+		if (sk->sk_prot->set_rcv_saddr && sk->sk_family == AF_INET)
+			sk->sk_prot->set_rcv_saddr(sk, &fl4->saddr);
+		else
+			inet->inet_rcv_saddr = fl4->saddr;
 	}
 	inet->inet_daddr = fl4->daddr;
 	inet->inet_dport = usin->sin_port;

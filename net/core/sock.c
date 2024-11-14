@@ -643,8 +643,17 @@ static int sock_bindtoindex_locked(struct sock *sk, int ifindex)
 	/* Paired with all READ_ONCE() done locklessly. */
 	WRITE_ONCE(sk->sk_bound_dev_if, ifindex);
 
-	if (sk->sk_prot->rehash)
-		sk->sk_prot->rehash(sk);
+	/* Force rehash if protocol needs it */
+	if (sk->sk_prot->set_rcv_saddr) {
+		if (IS_ENABLED(CONFIG_IPV6) && sk->sk_family == AF_INET6) {
+			sk->sk_prot->set_rcv_saddr(sk, &sk->sk_v6_rcv_saddr);
+		} else if (sk->sk_family == AF_INET) {
+			struct inet_sock *inet = inet_sk(sk);
+
+			sk->sk_prot->set_rcv_saddr(sk, &inet->inet_rcv_saddr);
+		}
+	}
+
 	sk_dst_reset(sk);
 
 	ret = 0;

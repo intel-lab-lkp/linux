@@ -1222,6 +1222,7 @@ struct proto {
 	int			(*connect)(struct sock *sk,
 					struct sockaddr *uaddr,
 					int addr_len);
+	void			(*set_rcv_saddr)(struct sock *sk, void *addr);
 	int			(*disconnect)(struct sock *sk, int flags);
 
 	struct sock *		(*accept)(struct sock *sk,
@@ -1263,7 +1264,6 @@ struct proto {
 	/* Keeping track of sk's, looking them up, and port selection methods. */
 	int			(*hash)(struct sock *sk);
 	void			(*unhash)(struct sock *sk);
-	void			(*rehash)(struct sock *sk);
 	int			(*get_port)(struct sock *sk, unsigned short snum);
 	void			(*put_port)(struct sock *sk);
 #ifdef CONFIG_BPF_SYSCALL

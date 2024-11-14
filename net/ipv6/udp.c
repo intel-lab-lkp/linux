@@ -105,14 +105,19 @@ int udp_v6_get_port(struct sock *sk, unsigned short snum)
 	return udp_lib_get_port(sk, snum, hash2_nulladdr);
 }
 
-void udp_v6_rehash(struct sock *sk)
+/**
+ * udp_v6_set_rcv_saddr() - Set local address and new hash for IPv6 socket
+ * @sk:		Socket changing local address
+ * @addr:	New address, pointer to struct in6_addr
+ */
+void udp_v6_set_rcv_saddr(struct sock *sk, void *addr)
 {
-	u16 new_hash = ipv6_portaddr_hash(sock_net(sk),
-					  &sk->sk_v6_rcv_saddr,
-					  inet_sk(sk)->inet_num);
+	u16 hash = ipv6_portaddr_hash(sock_net(sk),
+				      addr, inet_sk(sk)->inet_num);
 
-	udp_lib_rehash(sk, new_hash);
+	udp_lib_set_rcv_saddr(sk, addr, hash);
 }
+EXPORT_SYMBOL(udp_v6_set_rcv_saddr);
 
 static int compute_score(struct sock *sk, const struct net *net,
 			 const struct in6_addr *saddr, __be16 sport,
@@ -1765,6 +1770,7 @@ struct proto udpv6_prot = {
 	.close			= udp_lib_close,
 	.pre_connect		= udpv6_pre_connect,
 	.connect		= ip6_datagram_connect,
+	.set_rcv_saddr		= udp_v6_set_rcv_saddr,
 	.disconnect		= udp_disconnect,
 	.ioctl			= udp_ioctl,
 	.init			= udpv6_init_sock,
@@ -1777,7 +1783,6 @@ struct proto udpv6_prot = {
 	.release_cb		= ip6_datagram_release_cb,
 	.hash			= udp_lib_hash,
 	.unhash			= udp_lib_unhash,
-	.rehash			= udp_v6_rehash,
 	.get_port		= udp_v6_get_port,
 	.put_port		= udp_lib_unhash,
 #ifdef CONFIG_BPF_SYSCALL
