@@ -15,6 +15,9 @@
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/events.h>
+#include <linux/iio/kfifo_buf.h>
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
@@ -140,11 +143,13 @@ struct adxl34x_state {
 	const struct adxl345_chip_info *info;
 	struct regmap *regmap;
 	struct adxl34x_platform_data data;  /* watermark, fifo_mode, etc */
+	struct iio_trigger *trig_dready;
 
 	__le16 fifo_buf[3 * ADXL34x_FIFO_SIZE] __aligned(IIO_DMA_MINALIGN);
 	u8 int_map;
 	bool fifo_delay; /* delay: delay is needed for SPI */
 	u8 intio;
+	bool watermark_en;
 };
 
 #define ADXL34x_CHANNEL(index, reg, axis) {				\
@@ -414,6 +419,35 @@ static int adxl345_get_status(struct adxl34x_state *st, u8 *int_stat)
 
 	return 0;
 }
+
+/* data ready trigger */
+
+static int adxl345_trig_dready(struct iio_trigger *trig, bool state)
+{
+	struct iio_dev *indio_dev = iio_trigger_get_drvdata(trig);
+	struct adxl34x_state *st = iio_priv(indio_dev);
+
+	st->int_map = 0x00;
+	if (state) {
+		/* Setting also ADXL345_INT_DATA_READY results in just a single
+		 * generated interrupt, and no continuously re-generation. NB that the
+		 * INT_DATA_READY as well as the INT_OVERRUN are managed automatically,
+		 * setting their bits here is not needed.
+		 */
+		if (st->watermark_en)
+			st->int_map |= ADXL345_INT_WATERMARK;
+
+		pr_debug("%s(): preparing st->int_map 0x%02X\n",
+			 __func__, st->int_map);
+	}
+
+	return 0;
+}
+
+static const struct iio_trigger_ops adxl34x_trig_dready_ops = {
+	.validate_device = &iio_trigger_validate_own_device,
+	.set_trigger_state = adxl345_trig_dready,
+};
 
 /**
  * Interrupt handler used for several features of the ADXL345.
