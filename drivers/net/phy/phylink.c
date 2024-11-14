@@ -3219,6 +3219,11 @@ static int phylink_sfp_config_phy(struct phylink *pl, u8 mode,
 	int ret;
 
 	linkmode_copy(support, phy->supported);
+	if (linkmode_empty(support)) {
+		phylink_err(pl, "PHY %s (id 0x%.8lx) supports no link modes. Maybe its specific PHY driver not loaded?\n",
+			    phydev_name(phy), (unsigned long)phy->phy_id);
+		return -EINVAL;
+	}
 
 	memset(&config, 0, sizeof(config));
 	linkmode_copy(config.advertising, phy->advertising);
