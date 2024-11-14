@@ -211,7 +211,7 @@ ipv4_connected:
 		    ipv6_mapped_addr_any(&sk->sk_v6_rcv_saddr)) {
 			ipv6_addr_set_v4mapped(inet->inet_rcv_saddr,
 					       &sk->sk_v6_rcv_saddr);
-			if (sk->sk_prot->rehash)
+			if (sk->sk_prot->rehash && sk->sk_family == AF_INET6)
 				sk->sk_prot->rehash(sk);
 		}
 
