@@ -131,6 +131,7 @@ struct adxl34x_state {
 	const struct adxl345_chip_info *info;
 	struct regmap *regmap;
 	bool fifo_delay; /* delay: delay is needed for SPI */
+	u8 intio;
 };
 
 #define ADXL345_CHANNEL(index, axis) {					\
@@ -343,6 +344,7 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 		return -ENODEV;
 
 	st->fifo_delay = fifo_delay_default;
+	st->intio = ADXL345_INT1;
 
 	indio_dev->name = st->info->name;
 	indio_dev->info = &adxl345_info;
