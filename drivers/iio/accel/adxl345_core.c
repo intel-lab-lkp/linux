@@ -11,6 +11,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/units.h>
+#include <linux/interrupt.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -18,6 +19,7 @@
 #include "adxl345.h"
 
 struct adxl34x_state {
+	int irq;
 	const struct adxl345_chip_info *info;
 	struct regmap *regmap;
 };
@@ -194,12 +196,14 @@ static const struct iio_info adxl345_info = {
  *                        also covers the adxl375 and adxl346 accelerometer
  * @dev:	Driver model representation of the device
  * @regmap:	Regmap instance for the device
+ * @irq:	Interrupt handling for async usage
  * @setup:	Setup routine to be executed right before the standard device
  *		setup
  *
  * Return: 0 on success, negative errno on error
  */
 int adxl345_core_probe(struct device *dev, struct regmap *regmap,
+		       int irq,
 		       int (*setup)(struct device*, struct regmap*))
 {
 	struct adxl34x_state *st;
@@ -222,6 +226,8 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 
 	st = iio_priv(indio_dev);
 	st->regmap = regmap;
+
+	st->irq = irq;
 	st->info = device_get_match_data(dev);
 	if (!st->info)
 		return -ENODEV;
