@@ -23,6 +23,7 @@
 #include <linux/security.h>
 #include <linux/pid_namespace.h>
 #include <linux/pid.h>
+#include <linux/pidfs.h>
 #include <linux/nsproxy.h>
 #include <linux/slab.h>
 #include <linux/errqueue.h>
@@ -208,6 +209,19 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 
 			p->creds.uid = uid;
 			p->creds.gid = gid;
+			break;
+		}
+		case SCM_PIDFD:
+		{
+			unsigned int flags;
+
+			if (cmsg->cmsg_len != CMSG_LEN(sizeof(flags)))
+				goto error;
+			memcpy(&flags, CMSG_DATA(cmsg), sizeof(flags));
+			err = pidfd_validate_flags(flags);
+			if (err)
+				goto error;
+			p->pidfd_flags = flags;
 			break;
 		}
 		default:
