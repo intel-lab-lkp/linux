@@ -141,5 +141,25 @@ static inline void *page_frag_alloc(struct page_frag_cache *nc,
 }
 
 void page_frag_free(void *addr);
+void page_frag_alloc_abort_ref(struct page_frag_cache *nc, void *va,
+			       unsigned int fragsz);
+
+/**
+ * page_frag_alloc_abort - Abort the page fragment allocation.
+ * @nc: page_frag cache to which the page fragment is aborted back
+ * @va: virtual address of page fragment to be aborted
+ * @fragsz: size of the page fragment to be aborted
+ *
+ * It is expected to be called from the same context as the allocation API.
+ * Mostly used for error handling cases to abort the fragment allocation knowing
+ * that no one else is taking extra reference to the just aborted fragment, so
+ * that the aborted fragment can be reused.
+ */
+static inline void page_frag_alloc_abort(struct page_frag_cache *nc, void *va,
+					 unsigned int fragsz)
+{
+	page_frag_alloc_abort_ref(nc, va, fragsz);
+	nc->offset -= fragsz;
+}
 
 #endif

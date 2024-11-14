@@ -114,9 +114,10 @@ fragsz if there is an alignment requirement for the size of the fragment.
 .. kernel-doc:: include/linux/page_frag_cache.h
    :identifiers: page_frag_cache_init page_frag_cache_is_pfmemalloc
 		 __page_frag_alloc_align page_frag_alloc_align page_frag_alloc
+		 page_frag_alloc_abort
 
 .. kernel-doc:: mm/page_frag_cache.c
-   :identifiers: page_frag_cache_drain page_frag_free
+   :identifiers: page_frag_cache_drain page_frag_free page_frag_alloc_abort_ref
 
 Coding examples
 ===============
@@ -143,8 +144,10 @@ Allocation & freeing API
         goto do_error;
 
     err = do_something(va, size);
-    if (err)
+    if (err) {
+        page_frag_alloc_abort(nc, va, size);
         goto do_error;
+    }
 
     ...
 
