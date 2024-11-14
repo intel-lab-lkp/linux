@@ -517,7 +517,7 @@ static int
 vmw_resource_check_buffer(struct ww_acquire_ctx *ticket,
 			  struct vmw_resource *res,
 			  bool interruptible,
-			  struct ttm_validate_buffer *val_buf)
+			  struct ttm_buffer_object **bo)
 {
 	struct ttm_operation_ctx ctx = { true, false };
 	struct list_head val_list;
@@ -532,10 +532,12 @@ vmw_resource_check_buffer(struct ww_acquire_ctx *ticket,
 
 	INIT_LIST_HEAD(&val_list);
 	ttm_bo_get(&res->guest_memory_bo->tbo);
-	val_buf->bo = &res->guest_memory_bo->tbo;
-	val_buf->num_shared = 0;
-	list_add_tail(&val_buf->head, &val_list);
-	ret = ttm_eu_reserve_buffers(ticket, &val_list, interruptible, NULL);
+
+	*bo = &res->guest_memory_bo->tbo;
+	if (ticket)
+		ww_acquire_init(ticket, &reservation_ww_class);
+
+	ret = ttm_bo_reserve(*bo, interruptible, (ticket == NULL), ticket);
 	if (unlikely(ret != 0))
 		goto out_no_reserve;
 
@@ -555,10 +557,11 @@ vmw_resource_check_buffer(struct ww_acquire_ctx *ticket,
 	return 0;
 
 out_no_validate:
-	ttm_eu_backoff_reservation(ticket, &val_list);
+	dma_resv_unlock((*bo)->base.resv);
+	if (ticket)
+		ww_acquire_fini(ticket);
 out_no_reserve:
-	ttm_bo_put(val_buf->bo);
-	val_buf->bo = NULL;
+	ttm_bo_put(*bo);
 	if (guest_memory_dirty)
 		vmw_user_bo_unref(&res->guest_memory_bo);
 
@@ -601,29 +604,6 @@ int vmw_resource_reserve(struct vmw_resource *res, bool interruptible,
 }
 
 /**
- * vmw_resource_backoff_reservation - Unreserve and unreference a
- *                                    guest memory buffer
- *.
- * @ticket:         The ww acquire ctx used for reservation.
- * @val_buf:        Guest memory buffer information.
- */
-static void
-vmw_resource_backoff_reservation(struct ww_acquire_ctx *ticket,
-				 struct ttm_validate_buffer *val_buf)
-{
-	struct list_head val_list;
-
-	if (likely(val_buf->bo == NULL))
-		return;
-
-	INIT_LIST_HEAD(&val_list);
-	list_add_tail(&val_buf->head, &val_list);
-	ttm_eu_backoff_reservation(ticket, &val_list);
-	ttm_bo_put(val_buf->bo);
-	val_buf->bo = NULL;
-}
-
-/**
  * vmw_resource_do_evict - Evict a resource, and transfer its data
  *                         to a backup buffer.
  *
@@ -642,7 +622,7 @@ static int vmw_resource_do_evict(struct ww_acquire_ctx *ticket,
 
 	val_buf.bo = NULL;
 	val_buf.num_shared = 0;
-	ret = vmw_resource_check_buffer(ticket, res, interruptible, &val_buf);
+	ret = vmw_resource_check_buffer(ticket, res, interruptible, &val_buf.bo);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -657,7 +637,10 @@ static int vmw_resource_do_evict(struct ww_acquire_ctx *ticket,
 	res->guest_memory_dirty = true;
 	res->res_dirty = false;
 out_no_unbind:
-	vmw_resource_backoff_reservation(ticket, &val_buf);
+	dma_resv_unlock(val_buf.bo->base.resv);
+	if (ticket)
+		ww_acquire_fini(ticket);
+	ttm_bo_put(val_buf.bo);
 
 	return ret;
 }
