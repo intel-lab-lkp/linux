@@ -589,13 +589,7 @@ int __init pmac_nvram_init(void)
 	}
 
 #ifdef CONFIG_PPC32
-	if (machine_is(chrp) && nvram_naddrs == 1) {
-		nvram_data = ioremap(r1.start, s1);
-		nvram_mult = 1;
-		ppc_md.nvram_read_val	= direct_nvram_read_byte;
-		ppc_md.nvram_write_val	= direct_nvram_write_byte;
-		ppc_md.nvram_size	= ppc32_nvram_size;
-	} else if (nvram_naddrs == 1) {
+	if (nvram_naddrs == 1) {
 		nvram_data = ioremap(r1.start, s1);
 		nvram_mult = (s1 + NVRAM_SIZE - 1) / NVRAM_SIZE;
 		ppc_md.nvram_read_val	= direct_nvram_read_byte;
