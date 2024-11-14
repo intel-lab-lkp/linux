@@ -269,6 +269,11 @@ static inline void io_meta_restore(struct io_async_rw *io)
 	iov_iter_restore(&io->meta.iter, &io->meta_state.iter_meta);
 }
 
+static inline const void *io_uring_sqe_ext(const struct io_uring_sqe *sqe)
+{
+	return (sqe + 1);
+}
+
 static int io_prep_rw_pi(struct io_kiocb *req, struct io_rw *rw, int ddir,
 			 const struct io_uring_attr_pi *pi_attr)
 {
@@ -343,11 +348,34 @@ static int io_prep_attr_vec(struct io_kiocb *req, struct io_rw *rw, int ddir,
 	return 0;
 }
 
+static int io_prep_inline_attr(struct io_kiocb *req, struct io_rw *rw,
+			       const struct io_uring_sqe *sqe, int ddir,
+			       u16 attr_flags)
+{
+	const struct io_uring_sqe_ext *sqe_ext;
+	const struct io_uring_attr_pi *pi_attr;
+
+	if (!(attr_flags & ATTR_FLAG_PI))
+		return -EINVAL;
+
+	if (!(req->ctx->flags & IORING_SETUP_SQE128))
+		return -EINVAL;
+
+	sqe_ext = io_uring_sqe_ext(sqe);
+	if (READ_ONCE(sqe_ext->rsvd1[0]) || READ_ONCE(sqe_ext->rsvd1[1])
+	    || READ_ONCE(sqe_ext->rsvd1[2]) || READ_ONCE(sqe_ext->rsvd1[3]))
+		return -EINVAL;
+
+	pi_attr = &sqe_ext->rw_pi;
+	return io_prep_rw_pi(req, rw, ddir, pi_attr);
+}
+
 static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 		      int ddir, bool do_import)
 {
 	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
 	unsigned ioprio;
+	u16 attr_flags;
 	u8 nr_attr_indirect;
 	int ret;
 
@@ -376,12 +404,16 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 	if (unlikely(ret))
 		return ret;
 
+	attr_flags = READ_ONCE(sqe->attr_inline_flags);
 	nr_attr_indirect = READ_ONCE(sqe->nr_attr_indirect);
-	if (nr_attr_indirect) {
+	if (attr_flags) {
+		if (READ_ONCE(sqe->__pad4[0]) || nr_attr_indirect)
+			return -EINVAL;
+		ret = io_prep_inline_attr(req, rw, sqe, ddir, attr_flags);
+	} else if (nr_attr_indirect) {
 		u64 attr_vec_usr_addr = READ_ONCE(sqe->attr_vec_addr);
 
-		if (READ_ONCE(sqe->__pad4[0]) || READ_ONCE(sqe->__pad4[1]) ||
-		    READ_ONCE(sqe->__pad4[2]))
+		if (READ_ONCE(sqe->__pad4[0]))
 			return -EINVAL;
 
 		ret = io_prep_attr_vec(req, rw, ddir, attr_vec_usr_addr,

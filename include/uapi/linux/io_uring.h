@@ -93,9 +93,11 @@ struct io_uring_sqe {
 			__u16	__pad3[1];
 		};
 		struct {
+			/* used when extra attribute is passed inline SQE/SQE128 */
+			__u16	attr_inline_flags;
 			/* number of elements in the attribute vector */
 			__u8	nr_attr_indirect;
-			__u8	__pad4[3];
+			__u8	__pad4[1];
 		};
 	};
 	union {
@@ -126,6 +128,8 @@ struct io_uring_attr_vec {
 	__u64			addr;
 };
 
+/* sqe->attr_inline_flags */
+#define ATTR_FLAG_PI	(1U << ATTR_TYPE_PI)
 /* PI attribute information */
 struct io_uring_attr_pi {
 		__u16	flags;
@@ -134,6 +138,13 @@ struct io_uring_attr_pi {
 		__u64	addr;
 		__u64	seed;
 		__u64	rsvd;
+};
+
+/* Second half of SQE128 for IORING_OP_READ/WRITE */
+struct io_uring_sqe_ext {
+	/* if sqe->attr_inline_flags has ATTR_PI, first 32 bytes are for PI */
+	struct io_uring_attr_pi	rw_pi;
+	__u64			rsvd1[4];
 };
 
 /*
