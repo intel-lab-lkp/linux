@@ -43,7 +43,7 @@
  * large numbers and space conservation is desired.
  */
 struct vmw_validation_bo_node {
-	struct ttm_validate_buffer base;
+	struct vmw_validate_buffer base;
 	struct vmwgfx_hash_item hash;
 	unsigned int coherent_count;
 };
@@ -250,7 +250,7 @@ int vmw_validation_add_bo(struct vmw_validation_context *ctx,
 
 	bo_node = vmw_validation_find_bo_dup(ctx, vbo);
 	if (!bo_node) {
-		struct ttm_validate_buffer *val_buf;
+		struct vmw_validate_buffer *val_buf;
 
 		bo_node = vmw_validation_mem_alloc(ctx, sizeof(*bo_node));
 		if (!bo_node)
@@ -265,7 +265,6 @@ int vmw_validation_add_bo(struct vmw_validation_context *ctx,
 		val_buf->bo = ttm_bo_get_unless_zero(&vbo->tbo);
 		if (!val_buf->bo)
 			return -ESRCH;
-		val_buf->num_shared = 0;
 		list_add_tail(&val_buf->head, &ctx->bo_list);
 	}
 

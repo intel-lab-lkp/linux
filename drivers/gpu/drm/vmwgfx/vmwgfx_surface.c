@@ -81,18 +81,18 @@ static void vmw_user_surface_free(struct vmw_resource *res);
 static struct vmw_resource *
 vmw_user_surface_base_to_res(struct ttm_base_object *base);
 static int vmw_legacy_srf_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf);
+			       struct vmw_validate_buffer *val_buf);
 static int vmw_legacy_srf_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf);
+				 struct vmw_validate_buffer *val_buf);
 static int vmw_legacy_srf_create(struct vmw_resource *res);
 static int vmw_legacy_srf_destroy(struct vmw_resource *res);
 static int vmw_gb_surface_create(struct vmw_resource *res);
 static int vmw_gb_surface_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf);
+			       struct vmw_validate_buffer *val_buf);
 static int vmw_gb_surface_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf);
+				 struct vmw_validate_buffer *val_buf);
 static int vmw_gb_surface_destroy(struct vmw_resource *res);
 static int
 vmw_gb_surface_define_internal(struct drm_device *dev,
@@ -461,7 +461,7 @@ out_no_id:
  *
  * @res:            Pointer to a struct vmw_res embedded in a struct
  *                  vmw_surface.
- * @val_buf:        Pointer to a struct ttm_validate_buffer containing
+ * @val_buf:        Pointer to a struct vmw_validate_buffer containing
  *                  information about the backup buffer.
  * @bind:           Boolean wether to DMA to the surface.
  *
@@ -473,7 +473,7 @@ out_no_id:
  * will also be returned reserved iff @bind is true.
  */
 static int vmw_legacy_srf_dma(struct vmw_resource *res,
-			      struct ttm_validate_buffer *val_buf,
+			      struct vmw_validate_buffer *val_buf,
 			      bool bind)
 {
 	SVGAGuestPtr ptr;
@@ -515,14 +515,14 @@ static int vmw_legacy_srf_dma(struct vmw_resource *res,
  *
  * @res:            Pointer to a struct vmw_res embedded in a struct
  *                  vmw_surface.
- * @val_buf:        Pointer to a struct ttm_validate_buffer containing
+ * @val_buf:        Pointer to a struct vmw_validate_buffer containing
  *                  information about the backup buffer.
  *
  * This function will copy backup data to the surface if the
  * backup buffer is dirty.
  */
 static int vmw_legacy_srf_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf)
+			       struct vmw_validate_buffer *val_buf)
 {
 	if (!res->guest_memory_dirty)
 		return 0;
@@ -538,14 +538,14 @@ static int vmw_legacy_srf_bind(struct vmw_resource *res,
  * @res:            Pointer to a struct vmw_res embedded in a struct
  *                  vmw_surface.
  * @readback:       Readback - only true if dirty
- * @val_buf:        Pointer to a struct ttm_validate_buffer containing
+ * @val_buf:        Pointer to a struct vmw_validate_buffer containing
  *                  information about the backup buffer.
  *
  * This function will copy backup data from the surface.
  */
 static int vmw_legacy_srf_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf)
+				 struct vmw_validate_buffer *val_buf)
 {
 	if (unlikely(readback))
 		return vmw_legacy_srf_dma(res, val_buf, false);
@@ -1285,7 +1285,7 @@ out_no_id:
 
 
 static int vmw_gb_surface_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf)
+			       struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct {
@@ -1331,7 +1331,7 @@ static int vmw_gb_surface_bind(struct vmw_resource *res,
 
 static int vmw_gb_surface_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf)
+				 struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct ttm_buffer_object *bo = val_buf->bo;

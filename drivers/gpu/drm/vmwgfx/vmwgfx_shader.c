@@ -60,18 +60,18 @@ vmw_user_shader_base_to_res(struct ttm_base_object *base);
 
 static int vmw_gb_shader_create(struct vmw_resource *res);
 static int vmw_gb_shader_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf);
+			       struct vmw_validate_buffer *val_buf);
 static int vmw_gb_shader_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf);
+				 struct vmw_validate_buffer *val_buf);
 static int vmw_gb_shader_destroy(struct vmw_resource *res);
 
 static int vmw_dx_shader_create(struct vmw_resource *res);
 static int vmw_dx_shader_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf);
+			       struct vmw_validate_buffer *val_buf);
 static int vmw_dx_shader_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf);
+				 struct vmw_validate_buffer *val_buf);
 static void vmw_dx_shader_commit_notify(struct vmw_resource *res,
 					enum vmw_cmdbuf_res_state state);
 static bool vmw_shader_id_ok(u32 user_key, SVGA3dShaderType shader_type);
@@ -243,7 +243,7 @@ out_no_id:
 }
 
 static int vmw_gb_shader_bind(struct vmw_resource *res,
-			      struct ttm_validate_buffer *val_buf)
+			      struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct {
@@ -271,7 +271,7 @@ static int vmw_gb_shader_bind(struct vmw_resource *res,
 
 static int vmw_gb_shader_unbind(struct vmw_resource *res,
 				bool readback,
-				struct ttm_validate_buffer *val_buf)
+				struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct {
@@ -443,7 +443,7 @@ static int vmw_dx_shader_create(struct vmw_resource *res)
  *
  */
 static int vmw_dx_shader_bind(struct vmw_resource *res,
-			      struct ttm_validate_buffer *val_buf)
+			      struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct ttm_buffer_object *bo = val_buf->bo;
@@ -505,7 +505,7 @@ static int vmw_dx_shader_scrub(struct vmw_resource *res)
  */
 static int vmw_dx_shader_unbind(struct vmw_resource *res,
 				bool readback,
-				struct ttm_validate_buffer *val_buf)
+				struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct vmw_fence_obj *fence;
