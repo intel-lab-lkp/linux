@@ -1203,10 +1203,10 @@ static int bio_iov_add_folio(struct bio *bio, struct folio *folio, size_t len,
 	return 0;
 }
 
-static unsigned int get_contig_folio_len(unsigned int *num_pages,
-					 struct page **pages, unsigned int i,
-					 struct folio *folio, size_t left,
-					 size_t offset)
+unsigned int get_contig_folio_len(unsigned int *num_pages,
+				  struct page **pages, unsigned int i,
+				  struct folio *folio, size_t left,
+				  size_t offset)
 {
 	size_t bytes = left;
 	size_t contig_sz = min_t(size_t, PAGE_SIZE - offset, bytes);

@@ -295,8 +295,9 @@ static int bio_map_user_iov(struct request *rq, struct iov_iter *iter,
 		struct page *stack_pages[UIO_FASTIOV];
 		struct page **pages = stack_pages;
 		ssize_t bytes;
-		size_t offs;
 		int npages;
+		unsigned int num_pages;
+		size_t offs, folio_offset, len;
 
 		if (nr_vecs > ARRAY_SIZE(stack_pages))
 			pages = NULL;
@@ -313,21 +314,35 @@ static int bio_map_user_iov(struct request *rq, struct iov_iter *iter,
 		if (unlikely(offs & queue_dma_alignment(rq->q)))
 			j = 0;
 		else {
-			for (j = 0; j < npages; j++) {
+			for (j = 0; j < npages; j += num_pages) {
 				struct page *page = pages[j];
-				unsigned int n = PAGE_SIZE - offs;
+				struct folio *folio = page_folio(page);
 				bool same_page = false;
 
-				if (n > bytes)
-					n = bytes;
 
-				if (!bio_add_hw_page(rq->q, bio, page, n, offs,
-						     max_sectors, &same_page))
+				folio_offset = ((size_t)folio_page_idx(folio,
+						page) << PAGE_SHIFT) + offs;
+
+				len = min(folio_size(folio) - folio_offset,
+					  (size_t)bytes);
+
+				num_pages = DIV_ROUND_UP(offs + len,
+							 PAGE_SIZE);
+
+				if (num_pages > 1)
+					len = get_contig_folio_len(
+							&num_pages, pages, j,
+							folio, (size_t)bytes,
+							offs);
+
+				if (!bio_add_hw_folio(rq->q, bio, folio, len,
+						      folio_offset, max_sectors,
+						      &same_page))
 					break;
 
 				if (same_page)
 					bio_release_page(bio, page);
-				bytes -= n;
+				bytes -= len;
 				offs = 0;
 			}
 		}
