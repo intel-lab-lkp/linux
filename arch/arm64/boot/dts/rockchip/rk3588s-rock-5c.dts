@@ -36,6 +36,14 @@
 			  "Headphone", "Headphones";
 	};
 
+	fan {
+		compatible = "pwm-fan";
+		#cooling-cells = <2>;
+		cooling-levels = <0 64 128 192 255>;
+		fan-supply = <&vcc_5v0>;
+		pwms = <&pwm3 0 60000 0>;
+	};
+
 	hdmi0-con {
 		compatible = "hdmi-connector";
 		type = "a";
@@ -66,14 +74,6 @@
 			gpios = <&gpio3 RK_PD5 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "heartbeat";
 		};
-	};
-
-	fan {
-		compatible = "pwm-fan";
-		#cooling-cells = <2>;
-		cooling-levels = <0 64 128 192 255>;
-		fan-supply = <&vcc_5v0>;
-		pwms = <&pwm3 0 60000 0>;
 	};
 
 	vcc3v3_pcie2x1l2: regulator-vcc3v3_pcie2x1l2 {
@@ -859,11 +859,6 @@
 	status = "okay";
 };
 
-&usbdp_phy0 {
-	rockchip,dp-lane-mux = <2 3>;
-	status = "okay";
-};
-
 &usb_host0_ehci {
 	status = "okay";
 };
@@ -885,11 +880,16 @@
 	status = "okay";
 };
 
-&vop_mmu {
+&usbdp_phy0 {
+	rockchip,dp-lane-mux = <2 3>;
 	status = "okay";
 };
 
 &vop {
+	status = "okay";
+};
+
+&vop_mmu {
 	status = "okay";
 };
 
