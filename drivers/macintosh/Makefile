@@ -23,7 +23,6 @@ obj-$(CONFIG_PMAC_SMU)		+= smu.o
 obj-$(CONFIG_ADB)		+= adb.o
 obj-$(CONFIG_ADB_MACII)		+= via-macii.o
 obj-$(CONFIG_ADB_IOP)		+= adb-iop.o
-obj-$(CONFIG_ADB_MACIO)		+= macio-adb.o
 
 obj-$(CONFIG_THERM_WINDTUNNEL)	+= therm_windtunnel.o
 obj-$(CONFIG_THERM_ADT746X)	+= therm_adt746x.o

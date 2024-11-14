@@ -135,15 +135,6 @@ config PMAC_BACKLIGHT_LEGACY
 	  programs which use this old interface. New and updated programs
 	  should use the backlight classes in sysfs.
 
-config ADB_MACIO
-	bool "Include MacIO (CHRP) ADB driver"
-	depends on ADB && PPC_CHRP && !PPC_PMAC64
-	help
-	  Say Y here to include direct support for the ADB controller in the
-	  Hydra chip used on PowerPC Macintoshes of the CHRP type.  (The Hydra
-	  also includes a MESH II SCSI controller, DBDMA controller, VIA chip,
-	  OpenPIC controller and two RS422/Geoports.)
-
 config INPUT_ADBHID
 	bool "Support for ADB input devices (keyboard, mice, ...)"
 	depends on ADB && INPUT=y

@@ -52,7 +52,6 @@ extern struct adb_driver via_macii_driver;
 extern struct adb_driver via_cuda_driver;
 extern struct adb_driver adb_iop_driver;
 extern struct adb_driver via_pmu_driver;
-extern struct adb_driver macio_adb_driver;
 
 static DEFINE_MUTEX(adb_mutex);
 static struct adb_driver *adb_driver_list[] = {
@@ -67,9 +66,6 @@ static struct adb_driver *adb_driver_list[] = {
 #endif
 #ifdef CONFIG_ADB_PMU
 	&via_pmu_driver,
-#endif
-#ifdef CONFIG_ADB_MACIO
-	&macio_adb_driver,
 #endif
 	NULL
 };
