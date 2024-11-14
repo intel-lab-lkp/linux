@@ -284,18 +284,9 @@ static bool dpm_wait_for_superior(struct device *dev, bool async)
 	 * counting the parent once more unless the device has been deleted
 	 * already (in which case return right away).
 	 */
-	mutex_lock(&dpm_list_mtx);
-
-	if (!device_pm_initialized(dev)) {
-		mutex_unlock(&dpm_list_mtx);
-		return false;
-	}
-
 	parent = get_device(dev->parent);
-
-	mutex_unlock(&dpm_list_mtx);
-
-	dpm_wait(parent, async);
+	if (device_pm_initialized(dev))
+		dpm_wait(parent, async);
 	put_device(parent);
 
 	dpm_wait_for_suppliers(dev, async);
