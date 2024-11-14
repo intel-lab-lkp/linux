@@ -371,7 +371,7 @@ config I2C_SCMI
 endif # ACPI
 
 comment "Mac SMBus host controller drivers"
-	depends on PPC_CHRP || PPC_PMAC
+	depends on PPC_PMAC
 
 config I2C_POWERMAC
 	tristate "Powermac I2C interface"
