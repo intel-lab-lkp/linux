@@ -1657,6 +1657,28 @@ static inline int zap_nonpresent_ptes(struct mmu_gather *tlb,
 	return nr;
 }
 
+static inline int skip_none_ptes(pte_t *pte, unsigned long addr,
+				 unsigned long end)
+{
+	pte_t ptent = ptep_get(pte);
+	int max_nr;
+	int nr;
+
+	if (!pte_none(ptent))
+		return 0;
+
+	max_nr = (end - addr) / PAGE_SIZE;
+	nr = 1;
+
+	for (; nr < max_nr; nr++) {
+		ptent = ptep_get(pte + nr);
+		if (!pte_none(ptent))
+			break;
+	}
+
+	return nr;
+}
+
 static unsigned long zap_pte_range(struct mmu_gather *tlb,
 				struct vm_area_struct *vma, pmd_t *pmd,
 				unsigned long addr, unsigned long end,
@@ -1682,12 +1704,16 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 		pte_t ptent = ptep_get(pte);
 		int max_nr;
 
-		nr = 1;
-		if (pte_none(ptent))
-			continue;
-
 		if (need_resched())
 			break;
+
+		nr = skip_none_ptes(pte, addr, end);
+		if (nr) {
+			addr += PAGE_SIZE * nr;
+			if (addr == end)
+				break;
+			pte += nr;
+		}
 
 		max_nr = (end - addr) / PAGE_SIZE;
 		if (pte_present(ptent)) {
