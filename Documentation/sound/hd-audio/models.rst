@@ -265,6 +265,8 @@ alc298-samsung-headphone
     Samsung laptops with ALC298
 alc256-samsung-headphone
     Samsung laptops with ALC256
+alc287-fixup-acer-nitro-headset-mic
+    Headset mic fixup for Acer Nitro 5
 
 ALC66x/67x/892
 ==============
