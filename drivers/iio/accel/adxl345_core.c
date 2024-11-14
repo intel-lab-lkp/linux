@@ -288,6 +288,26 @@ static int adxl345_write_raw(struct iio_dev *indio_dev,
 	return -EINVAL;
 }
 
+static int adxl345_set_watermark(struct iio_dev *indio_dev, unsigned int value)
+{
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	struct adxl34x_platform_data *data = &st->data;
+	unsigned int fifo_mask = 0x1F;
+	int ret;
+
+	if (value > ADXL34x_FIFO_SIZE)
+		value = ADXL34x_FIFO_SIZE;
+	pr_debug("%s(): set watermark to 0x%02x\n", __func__, value);
+
+	ret = regmap_update_bits(st->regmap, ADXL345_REG_FIFO_CTL,
+				 fifo_mask, value);
+	if (ret)
+		return ret;
+
+	data->watermark = value;
+	return 0;
+}
+
 static int adxl345_write_raw_get_fmt(struct iio_dev *indio_dev,
 				     struct iio_chan_spec const *chan,
 				     long mask)
@@ -333,7 +353,76 @@ static void adxl345_powerdown(void *ptr)
 	adxl345_set_measure_en(st, false);
 }
 
+/* fifo */
+
+static ssize_t adxl345_get_fifo_enabled(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	struct adxl34x_platform_data *data = &st->data;
+
+	return sysfs_emit(buf, "%d\n", data->fifo_mode);
+}
+
+static ssize_t adxl345_get_fifo_watermark(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	struct adxl34x_platform_data *data = &st->data;
+
+	return sprintf(buf, "%d\n", data->watermark);
+}
+
+static ssize_t watermark_en_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl34x_state *st = iio_priv(indio_dev);
+
+	return sysfs_emit(buf, "%d\n", st->watermark_en);
+}
+
+static ssize_t watermark_en_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	bool val;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+	st->watermark_en = val;
+	return len;
+}
+
+/*
+ * NB: The buffer/hwfifo_watermark is a read-only entry to display the
+ * currently set hardware FIFO watermark. First set a value to buffer0/length.
+ * This allows to configure buffer0/watermark. After enabling buffer0/enable
+ * the hwfifo_watermark shall show the configured FIFO watermark value.
+ *
+ * ref: Documentation/ABI/testing/sysfs-bus-iio
+ */
+IIO_STATIC_CONST_DEVICE_ATTR(hwfifo_watermark_min, "1");
+IIO_STATIC_CONST_DEVICE_ATTR(hwfifo_watermark_max,
+			     __stringify(ADXL34x_FIFO_SIZE));
+static IIO_DEVICE_ATTR(hwfifo_watermark, 0444,
+		       adxl345_get_fifo_watermark, NULL, 0);
+static IIO_DEVICE_ATTR(hwfifo_enabled, 0444,
+		       adxl345_get_fifo_enabled, NULL, 0);
+
+static IIO_DEVICE_ATTR_RW(watermark_en, 0);
+
 static const struct iio_dev_attr *adxl345_fifo_attributes[] = {
+	&iio_dev_attr_hwfifo_watermark_min,
+	&iio_dev_attr_hwfifo_watermark_max,
+	&iio_dev_attr_hwfifo_watermark,
+	&iio_dev_attr_hwfifo_enabled,
 	NULL,
 };
 
@@ -343,6 +432,7 @@ static IIO_CONST_ATTR_SAMP_FREQ_AVAIL(
 
 static struct attribute *adxl345_attrs[] = {
 	&iio_const_attr_sampling_frequency_available.dev_attr.attr,
+	&iio_dev_attr_watermark_en.dev_attr.attr,
 	NULL
 };
 
@@ -648,6 +738,7 @@ static const struct iio_info adxl345_info = {
 	.read_raw	= adxl345_read_raw,
 	.write_raw	= adxl345_write_raw,
 	.write_raw_get_fmt	= adxl345_write_raw_get_fmt,
+	.hwfifo_set_watermark = adxl345_set_watermark,
 };
 
 /**
@@ -704,6 +795,9 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 
 	/* some reasonable pre-initialization */
 	st->data.act_axis_control = 0xFF;
+
+	/* default is all features turned off */
+	st->watermark_en = 0;
 
 	st->intio = ADXL345_INT1;
 
