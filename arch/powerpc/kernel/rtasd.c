@@ -502,7 +502,7 @@ static int __init rtas_event_scan_init(void)
 {
 	int err;
 
-	if (!machine_is(pseries) && !machine_is(chrp))
+	if (!machine_is(pseries))
 		return 0;
 
 	/* No RTAS */
@@ -545,7 +545,7 @@ static int __init rtas_init(void)
 {
 	struct proc_dir_entry *entry;
 
-	if (!machine_is(pseries) && !machine_is(chrp))
+	if (!machine_is(pseries))
 		return 0;
 
 	if (!rtas_log_buf)
