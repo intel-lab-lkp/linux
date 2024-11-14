@@ -2338,6 +2338,39 @@ static const char *module_license_offenders[] = {
 
 	/* lve claims to be GPL but upstream won't provide source */
 	"lve",
+
+	/*
+	 * Tuxedo distributes their kernel modules under GPLv3, but intentially
+	 * lies in their MODULE_LICENSE() calls.
+	 * See https://gitlab.com/tuxedocomputers/development/packages/tuxedo-drivers/-/commit/a8c09b6c2ce6393fe39d8652d133af9f06cfb427
+	 */
+	"gxtp7380",
+	"ite_8291",
+	"ite_8291_lb",
+	"ite_8297",
+	"ite_829x",
+	"stk8321",
+	"tuxedo_compatibility_check",
+	"tuxedo_io",
+	"tuxedo_nb02_nvidia_power_ctrl",
+	"tuxedo_nb04_keyboard",
+	"tuxedo_nb04_wmi_ab",
+	"tuxedo_nb04_wmi_bs",
+	"tuxedo_nb04_sensors",
+	"tuxedo_nb04_power_profiles",
+	"tuxedo_nb04_kbd_backlight",
+	"tuxedo_nb05_keyboard",
+	"tuxedo_nb05_kbd_backlight",
+	"tuxedo_nb05_power_profiles",
+	"tuxedo_nb05_ec",
+	"tuxedo_nb05_sensors",
+	"tuxedo_nb05_fan_control",
+	"tuxi_acpi",
+	"tuxedo_tuxi_fan_control",
+	"clevo_wmi",
+	"tuxedo_keyboard",
+	"clevo_acpi",
+	"uniwill_wmi",
 };
 
 /*
