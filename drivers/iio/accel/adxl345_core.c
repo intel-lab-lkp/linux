@@ -16,6 +16,8 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 
+#include <linux/input/adxl34x.h>
+
 #include "adxl345.h"
 
 /* ADXL345 register map */
@@ -126,10 +128,15 @@
  */
 #define ADXL34x_FIFO_SIZE  33
 
+static const struct adxl34x_platform_data adxl345_default_init = {
+	.tap_axis_control = ADXL_TAP_X_EN | ADXL_TAP_Y_EN | ADXL_TAP_Z_EN,
+};
+
 struct adxl34x_state {
 	int irq;
 	const struct adxl345_chip_info *info;
 	struct regmap *regmap;
+	struct adxl34x_platform_data data;  /* watermark, fifo_mode, etc */
 	bool fifo_delay; /* delay: delay is needed for SPI */
 	u8 intio;
 };
@@ -329,6 +336,7 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	unsigned int data_format_mask = (ADXL345_DATA_FORMAT_RANGE |
 					 ADXL345_DATA_FORMAT_FULL_RES |
 					 ADXL345_DATA_FORMAT_SELF_TEST);
+	const struct adxl34x_platform_data *data;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
@@ -344,6 +352,16 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 		return -ENODEV;
 
 	st->fifo_delay = fifo_delay_default;
+	data = dev_get_platdata(dev);
+	if (!data) {
+		dev_dbg(dev, "No platform data: Using default initialization\n");
+		data = &adxl345_default_init;
+	}
+	st->data = *data;
+
+	/* some reasonable pre-initialization */
+	st->data.act_axis_control = 0xFF;
+
 	st->intio = ADXL345_INT1;
 
 	indio_dev->name = st->info->name;
