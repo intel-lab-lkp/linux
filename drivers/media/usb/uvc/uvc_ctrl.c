@@ -2339,6 +2339,18 @@ int uvc_ctrl_set(struct uvc_fh *handle, struct v4l2_ext_control *xctrl)
 
 	ctrl->dirty = 1;
 	ctrl->modified = 1;
+
+	/*
+	 * Compound controls cannot reliable clamp the value when they are
+	 * written to the device. Let the device do the clamping and read back
+	 * the value that the device is using. We do not need to return an
+	 * error if this fails.
+	 */
+	if (uvc_ctrl_mapping_is_compound(mapping) &&
+	    uvc_ctrl_is_readable(V4L2_CTRL_WHICH_CUR_VAL, ctrl, mapping))
+		uvc_mapping_get_xctrl_compound(chain, ctrl, mapping,
+					       V4L2_CTRL_WHICH_CUR_VAL, xctrl);
+
 	return 0;
 }
 
