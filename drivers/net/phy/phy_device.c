@@ -3010,9 +3010,12 @@ EXPORT_SYMBOL_GPL(phy_advertise_eee_all);
  */
 void phy_support_eee(struct phy_device *phydev)
 {
+	bool is_enabled = true;
+
+	genphy_c45_eee_is_active(phydev, NULL, NULL, &is_enabled);
 	linkmode_copy(phydev->advertising_eee, phydev->supported_eee);
-	phydev->eee_cfg.tx_lpi_enabled = true;
-	phydev->eee_cfg.eee_enabled = true;
+	phydev->eee_cfg.tx_lpi_enabled = is_enabled;
+	phydev->eee_cfg.eee_enabled = is_enabled;
 }
 EXPORT_SYMBOL(phy_support_eee);
 
