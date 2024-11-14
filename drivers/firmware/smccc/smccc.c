@@ -18,10 +18,12 @@ static enum arm_smccc_conduit smccc_conduit = SMCCC_CONDUIT_NONE;
 bool __ro_after_init smccc_trng_available = false;
 s32 __ro_after_init smccc_soc_id_version = SMCCC_RET_NOT_SUPPORTED;
 s32 __ro_after_init smccc_soc_id_revision = SMCCC_RET_NOT_SUPPORTED;
+char __ro_after_init smccc_soc_id_name[136] = "";
 
 void __init arm_smccc_version_init(u32 version, enum arm_smccc_conduit conduit)
 {
 	struct arm_smccc_res res;
+	struct arm_smccc_1_2_regs regs_1_2;
 
 	smccc_version = version;
 	smccc_conduit = conduit;
@@ -37,6 +39,66 @@ void __init arm_smccc_version_init(u32 version, enum arm_smccc_conduit conduit)
 			smccc_soc_id_version = (s32)res.a0;
 			arm_smccc_1_1_invoke(ARM_SMCCC_ARCH_SOC_ID, 1, &res);
 			smccc_soc_id_revision = (s32)res.a0;
+
+			/* Issue Number 1.6 of the Arm SMC Calling Convention
+			 * specification introduces an optional "name" string
+			 * to the ARM_SMCCC_ARCH_SOC_ID function.  Fetch it if
+			 * available.
+			 */
+			regs_1_2.a0 = ARM_SMCCC_ARCH_SOC_ID;
+			regs_1_2.a1 = 2;	/* SOC_ID name */
+			arm_smccc_1_2_smc(
+				(const struct arm_smccc_1_2_regs *)&regs_1_2,
+				(struct arm_smccc_1_2_regs *)&regs_1_2);
+
+			if ((u32)regs_1_2.a0 == 0) {
+				unsigned long *destination =
+					(unsigned long *)smccc_soc_id_name;
+
+				/*
+				 * Copy regs_1_2.a1..regs_1_2.a17 to the
+				 * smccc_soc_id_name string with consideration
+				 * to the endianness of the values in a1..a17.
+				 * As per Issue 1.6 of the Arm SMC Calling
+				 * Convention, the string will be NUL terminated
+				 * and padded, from the end of the string to
+				 * the end of the 136 byte buffer, with NULs.
+				 */
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a1);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a2);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a3);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a4);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a5);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a6);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a7);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a8);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a9);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a10);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a11);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a12);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a13);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a14);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a15);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a16);
+				*destination++ =
+				    cpu_to_le64p((const __u64 *)&regs_1_2.a17);
+			}
 		}
 	}
 }
@@ -66,6 +128,14 @@ s32 arm_smccc_get_soc_id_revision(void)
 	return smccc_soc_id_revision;
 }
 EXPORT_SYMBOL_GPL(arm_smccc_get_soc_id_revision);
+
+char *arm_smccc_get_soc_id_name(void)
+{
+	if (strnlen(smccc_soc_id_name, sizeof(smccc_soc_id_name)))
+		return smccc_soc_id_name;
+
+	return NULL;
+}
 
 static int __init smccc_devices_init(void)
 {

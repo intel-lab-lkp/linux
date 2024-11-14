@@ -334,6 +334,16 @@ s32 arm_smccc_get_soc_id_version(void);
 s32 arm_smccc_get_soc_id_revision(void);
 
 /**
+ * arm_smccc_get_soc_id_name()
+ *
+ * Returns the SOC ID name.
+ *
+ * When ARM_SMCCC_ARCH_SOC_ID name is not present, returns NULL.
+ */
+char *arm_smccc_get_soc_id_name(void);
+
+
+/**
  * struct arm_smccc_res - Result from SMC/HVC call
  * @a0-a3 result values from registers 0 to 3
  */

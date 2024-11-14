@@ -72,6 +72,7 @@ static int __init smccc_soc_init(void)
 	soc_dev_attr->soc_id = soc_id_str;
 	soc_dev_attr->revision = soc_id_rev_str;
 	soc_dev_attr->family = soc_id_jep106_id_str;
+	soc_dev_attr->machine = arm_smccc_get_soc_id_name();
 
 	soc_dev = soc_device_register(soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
