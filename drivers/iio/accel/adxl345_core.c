@@ -15,6 +15,9 @@
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 
 #include <linux/input/adxl34x.h>
 
@@ -137,6 +140,7 @@ struct adxl34x_state {
 	const struct adxl345_chip_info *info;
 	struct regmap *regmap;
 	struct adxl34x_platform_data data;  /* watermark, fifo_mode, etc */
+	u8 int_map;
 	bool fifo_delay; /* delay: delay is needed for SPI */
 	u8 intio;
 };
@@ -300,6 +304,10 @@ static void adxl345_powerdown(void *ptr)
 	adxl345_set_measure_en(st, false);
 }
 
+static const struct iio_dev_attr *adxl345_fifo_attributes[] = {
+	NULL,
+};
+
 static IIO_CONST_ATTR_SAMP_FREQ_AVAIL(
 "0.09765625 0.1953125 0.390625 0.78125 1.5625 3.125 6.25 12.5 25 50 100 200 400 800 1600 3200"
 );
@@ -312,6 +320,76 @@ static struct attribute *adxl345_attrs[] = {
 static const struct attribute_group adxl345_attrs_group = {
 	.attrs = adxl345_attrs,
 };
+
+static const struct iio_buffer_setup_ops adxl345_buffer_ops = {
+};
+
+static int adxl345_get_status(struct adxl34x_state *st, u8 *int_stat)
+{
+	int ret;
+	unsigned int regval;
+
+	*int_stat = 0;
+	ret = regmap_read(st->regmap, ADXL345_REG_INT_SOURCE, &regval);
+	if (ret) {
+		pr_warn("%s(): Failed to read INT_SOURCE register\n", __func__);
+		return -EINVAL;
+	}
+
+	*int_stat = 0xff & regval;
+	pr_debug("%s(): int_stat 0x%02X (INT_SOURCE)\n", __func__, *int_stat);
+
+	return 0;
+}
+
+/**
+ * Interrupt handler used for several features of the ADXL345.
+ * - DATA_READY / FIFO watermark
+ * - single tap / double tap
+ * - activity / inactivity
+ * - freefall detection
+ * - overrun
+ *
+ * @irq: The interrupt number. Having an interrupt imples FIFO_STREAM mode was
+ * enabled. Since this is given there will no be further test for being in
+ * FIFO_BYPASS mode. FIFO_TRIGGER and FIFO_FIFO mode (being similar to
+ * FIFO_STREAM mode) are not separately implemented so far. Both should be
+ * work smoothly with the same way of interrupt handling.
+ * @p: The iio poll function instance, used to derive the device and data.
+ */
+static irqreturn_t adxl345_trigger_handler(int irq, void *p)
+{
+	struct iio_dev *indio_dev = ((struct iio_poll_func *) p)->indio_dev;
+	struct adxl34x_state *st = iio_priv(indio_dev);
+	u8 int_stat;
+	int ret;
+
+	ret = adxl345_get_status(st, &int_stat);
+	if (ret < 0)
+		goto done;
+
+	/* Ignore already read event by reissued too fast */
+	if (int_stat == 0x0)
+		goto done;
+
+	/* evaluation */
+
+	if (int_stat & ADXL345_INT_OVERRUN) {
+		pr_debug("%s(): OVERRUN event detected\n", __func__);
+		goto done;
+	}
+
+	if (int_stat & (ADXL345_INT_DATA_READY | ADXL345_INT_WATERMARK))
+		pr_debug("%s(): WATERMARK or DATA_READY event detected\n", __func__);
+
+	goto done;
+done:
+
+	if (indio_dev)
+		iio_trigger_notify_done(indio_dev->trig);
+
+	return IRQ_HANDLED;
+}
 
 static const struct iio_info adxl345_info = {
 	.attrs		= &adxl345_attrs_group,
@@ -349,6 +427,7 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 					 ADXL345_DATA_FORMAT_FULL_RES |
 					 ADXL345_DATA_FORMAT_SELF_TEST);
 	const struct adxl34x_platform_data *data;
+	u8 fifo_ctl;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
@@ -417,9 +496,32 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to add action or reset\n");
 
-	/* Enable measurement mode */
-	adxl345_set_measure_en(st, true);
+	/* Basic common initialization of the driver is done now */
 
+	if (st->irq) { /* Initialization to prepare for FIFO_STREAM mode */
+		ret = devm_iio_triggered_buffer_setup_ext(dev, indio_dev,
+							  NULL,
+							  adxl345_trigger_handler,
+							  IIO_BUFFER_DIRECTION_IN,
+							  &adxl345_buffer_ops,
+							  adxl345_fifo_attributes);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to setup triggered buffer\n");
+
+	} else { /* Initialization to prepare for FIFO_BYPASS mode (fallback) */
+
+		/* The following defaults to 0x00, anyway */
+		fifo_ctl = 0x00 | ADXL345_FIFO_CTL_MODE(ADXL_FIFO_BYPASS);
+
+		dev_dbg(dev, "fifo_ctl 0x%02X [0x00]\n", fifo_ctl);
+		ret = regmap_write(st->regmap, ADXL345_REG_FIFO_CTL, fifo_ctl);
+		if (ret < 0)
+			return ret;
+
+		/* Enable measurement mode */
+		adxl345_set_measure_en(st, true);
+	}
+	dev_dbg(dev, "Driver operational\n");
 	return devm_iio_device_register(dev, indio_dev);
 }
 EXPORT_SYMBOL_NS_GPL(adxl345_core_probe, IIO_ADXL345);
