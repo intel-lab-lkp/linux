@@ -1714,10 +1714,8 @@ static int axg_audio_clkc_probe(struct platform_device *pdev)
 
 	axg_audio_regmap_cfg.max_register = data->max_register;
 	map = devm_regmap_init_mmio(dev, regs, &axg_audio_regmap_cfg);
-	if (IS_ERR(map)) {
-		dev_err(dev, "failed to init regmap: %ld\n", PTR_ERR(map));
-		return PTR_ERR(map);
-	}
+	if (IS_ERR(map))
+		return dev_err_probe(dev, PTR_ERR(map), "failed to init regmap\n");
 
 	/* Get the mandatory peripheral clock */
 	clk = devm_clk_get_enabled(dev, "pclk");
@@ -1725,10 +1723,8 @@ static int axg_audio_clkc_probe(struct platform_device *pdev)
 		return PTR_ERR(clk);
 
 	ret = device_reset(dev);
-	if (ret) {
-		dev_err_probe(dev, ret, "failed to reset device\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to reset device\n");
 
 	/* Populate regmap for the regmap backed clocks */
 	for (i = 0; i < data->regmap_clk_num; i++)
@@ -1746,10 +1742,9 @@ static int axg_audio_clkc_probe(struct platform_device *pdev)
 		name = hw->init->name;
 
 		ret = devm_clk_hw_register(dev, hw);
-		if (ret) {
-			dev_err(dev, "failed to register clock %s\n", name);
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(dev, ret, "failed to register clock %s\n",
+					     name);
 	}
 
 	ret = devm_of_clk_add_hw_provider(dev, meson_clk_hw_get, (void *)&data->hw_clks);
