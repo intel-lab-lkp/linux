@@ -71,6 +71,7 @@ DECLARE_EVENT_CLASS(drm_sched_job,
 			     __field(uint64_t, fence_seqno)
 			     __field(int, n_deps)
 			     __dynamic_array(u64, deps, dep_count * 2)
+			     __field(u64, client_id)
 			     ),
 
 	    TP_fast_assign(
@@ -93,12 +94,14 @@ DECLARE_EVENT_CLASS(drm_sched_job,
 					dyn_arr[2 * idx + 1] = fence->seqno;
 				}
 			   }
+			   __entry->client_id = sched_job->s_fence->drm_client_id;
 			   ),
-	    TP_printk("dev=%s, id=%llu, fence=(context:%llu, seqno:%lld), ring=%s, job count:%u, hw job count:%d, dependencies:%s",
+	    TP_printk("dev=%s, id=%llu, fence=(context:%llu, seqno:%lld), ring=%s, job count:%u, hw job count:%d, dependencies:%s, client_id:%lld",
 		      __get_str(dev), __entry->id,
 		      __entry->fence_context, __entry->fence_seqno, __get_str(name),
 		      __entry->job_count, __entry->hw_job_count,
-		      __print_dma_fence_array(p, __get_dynamic_array(deps), __entry->n_deps))
+		      __print_dma_fence_array(p, __get_dynamic_array(deps), __entry->n_deps),
+		      __entry->client_id)
 );
 
 DEFINE_EVENT(drm_sched_job, drm_sched_job,
