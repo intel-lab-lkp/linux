@@ -8543,7 +8543,10 @@ void __init sched_init(void)
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 
-void __might_sleep(const char *file, int line)
+extern inline void __might_resched_precision(const char *file, int len,
+					     int line, unsigned int offsets);
+
+void __might_sleep_precision(const char *file, int len, int line)
 {
 	unsigned int state = get_current_state();
 	/*
@@ -8557,7 +8560,14 @@ void __might_sleep(const char *file, int line)
 			(void *)current->task_state_change,
 			(void *)current->task_state_change);
 
-	__might_resched(file, line, 0);
+	__might_resched_precision(file, len, line, 0);
+}
+
+void __might_sleep(const char *file, int line)
+{
+	long len = strlen(file);
+
+	__might_sleep_precision(file, len, line);
 }
 EXPORT_SYMBOL(__might_sleep);
 
@@ -8582,7 +8592,7 @@ static inline bool resched_offsets_ok(unsigned int offsets)
 	return nested == offsets;
 }
 
-void __might_resched(const char *file, int line, unsigned int offsets)
+void __might_resched_precision(const char *file, int len, int line, unsigned int offsets)
 {
 	/* Ratelimiting timestamp: */
 	static unsigned long prev_jiffy;
@@ -8605,8 +8615,8 @@ void __might_resched(const char *file, int line, unsigned int offsets)
 	/* Save this before calling printk(), since that will clobber it: */
 	preempt_disable_ip = get_preempt_disable_ip(current);
 
-	pr_err("BUG: sleeping function called from invalid context at %s:%d\n",
-	       file, line);
+	pr_err("BUG: sleeping function called from invalid context at %.*s:%d\n",
+	       len, file, line);
 	pr_err("in_atomic(): %d, irqs_disabled(): %d, non_block: %d, pid: %d, name: %s\n",
 	       in_atomic(), irqs_disabled(), current->non_block_count,
 	       current->pid, current->comm);
@@ -8630,6 +8640,13 @@ void __might_resched(const char *file, int line, unsigned int offsets)
 
 	dump_stack();
 	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
+}
+
+void __might_resched(const char *file, int line, unsigned int offsets)
+{
+	long len = strlen(file);
+
+	__might_resched_precision(file, len, line, offsets);
 }
 EXPORT_SYMBOL(__might_resched);
 
