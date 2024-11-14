@@ -264,7 +264,14 @@ static int hd3ss3220_probe(struct i2c_client *client)
 	typec_cap.type = TYPEC_PORT_DRP;
 	typec_cap.data = TYPEC_PORT_DRD;
 	typec_cap.ops = &hd3ss3220_ops;
-	typec_cap.fwnode = connector;
+
+	/*
+	 * Try to get properties from connector,
+	 * but continue with defaults anyway if they are not found
+	 */
+	ret = typec_get_fw_cap(&typec_cap, connector);
+	if (ret != 0 && ret != -EINVAL && ret != -ENXIO)
+		goto err_put_role;
 
 	hd3ss3220->port = typec_register_port(&client->dev, &typec_cap);
 	if (IS_ERR(hd3ss3220->port)) {
