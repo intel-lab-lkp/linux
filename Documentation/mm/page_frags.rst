@@ -119,7 +119,13 @@ more performant if more memory is available. By using the prepare and commit
 related API, the caller calls prepare API to requests the minimum memory it
 needs and prepare API will return the maximum size of the fragment returned. The
 caller needs to either call the commit API to report how much memory it actually
-uses, or not do so if deciding to not use any memory.
+uses, or not do so if deciding to not use any memory. Some usecase may need a
+bigger fragment if the current fragment can't be coalesced to previous fragment
+because more space for some header may be needed if it is a new fragment, probe
+related API can be used to tell if there are minimum remaining memory in the
+cache to be coalesced to the previous fragment, in order to save memory as much
+as possible.
+
 
 .. kernel-doc:: include/linux/page_frag_cache.h
    :identifiers: page_frag_cache_init page_frag_cache_is_pfmemalloc
@@ -129,9 +135,11 @@ uses, or not do so if deciding to not use any memory.
 		 __page_frag_alloc_refill_prepare_align
 		 page_frag_alloc_refill_prepare_align
 		 page_frag_alloc_refill_prepare
+                 page_frag_alloc_refill_probe page_frag_refill_probe
 
 .. kernel-doc:: mm/page_frag_cache.c
    :identifiers: page_frag_cache_drain page_frag_free page_frag_alloc_abort_ref
+                 __page_frag_alloc_refill_probe_align
 
 Coding examples
 ===============
