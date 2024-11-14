@@ -122,6 +122,12 @@ static inline bool sev_version_greater_or_equal(u8 maj, u8 min)
 	return false;
 }
 
+bool snp_fw_valid(void)
+{
+	return sev_version_greater_or_equal(SNP_MIN_API_MAJOR, SNP_MIN_API_MINOR);
+}
+EXPORT_SYMBOL_GPL(snp_fw_valid);
+
 static void sev_irq_handler(int irq, void *data, unsigned int status)
 {
 	struct sev_device *sev = data;
