@@ -854,6 +854,45 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 		if (ret)
 			return dev_err_probe(dev, ret, "Failed to setup triggered buffer\n");
 
+		dev_dbg(dev, "IRQ: allocating data ready trigger\n");
+		st->trig_dready = devm_iio_trigger_alloc(dev,
+							 "%s-dev%d-dready",
+							 indio_dev->name,
+							 iio_device_id(indio_dev));
+		if (!st->trig_dready)
+			return dev_err_probe(dev, -ENOMEM,
+					     "Failed to setup triggered buffer\n");
+		dev_dbg(dev, "IRQ: allocating data ready trigger ok\n");
+
+		st->trig_dready->ops = &adxl34x_trig_dready_ops;
+		dev_dbg(dev, "IRQ: Setting data ready trigger ops ok\n");
+
+		iio_trigger_set_drvdata(st->trig_dready, indio_dev);
+		dev_dbg(dev, "IRQ: Setting up data ready trigger as driver data ok\n");
+
+		ret = devm_iio_trigger_register(dev, st->trig_dready);
+		if (ret < 0)
+			return dev_err_probe(dev, ret,
+					     "Failed to register dready trigger\n");
+		dev_dbg(dev, "Registering data ready trigger ok\n");
+
+		indio_dev->trig = iio_trigger_get(st->trig_dready);
+
+		dev_dbg(dev, "Requesting threaded IRQ, indio_dev->name '%s'\n",
+			indio_dev->name);
+
+		ret = devm_request_threaded_irq(dev, st->irq,
+						iio_trigger_generic_data_rdy_poll,
+						NULL,
+						IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+						indio_dev->name, st->trig_dready);
+		if (ret < 0)
+			return dev_err_probe(dev, ret, "Failed to request IRQ handler\n");
+		dev_dbg(dev, "Requesting threaded IRQ handler ok\n");
+
+		/* Cleanup */
+		adxl345_empty_fifo(st);
+
 	} else { /* Initialization to prepare for FIFO_BYPASS mode (fallback) */
 
 		/* The following defaults to 0x00, anyway */
