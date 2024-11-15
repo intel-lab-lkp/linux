@@ -1044,10 +1044,18 @@ arm_64_lpae_alloc_pgtable_s2(struct io_pgtable_cfg *cfg, void *cookie)
 		return NULL;
 
 	/*
-	 * Concatenate PGDs at level 1 if possible in order to reduce
-	 * the depth of the stage-2 walk.
+	 * Some cases where concatenation is mandatory after de-ciphering RSRKBC
+	 * in the Arm DDI0487 (K.a):
+	 * - 40 bits with 4K: use 2 table at level 1 instead of level 0
+	 * - 40 bits with 16K: use 16 tables at level 2 instead of level 1
+	 * - 42 bits with 4K: use 8 tabels at level 1 instead of level 0
+	 * - 48 bits with 16K: use 2 tabels at level 1 instead of level 0
+	 * Looking at the possible valid input size, that concludes to always
+	 * use level 1 with concatentation if possible or at level 2 only
+	 * with 16K.
 	 */
-	if (data->start_level == 0) {
+	if ((data->start_level == 0) ||
+	    ((data->start_level == 1) && (ARM_LPAE_GRANULE(data) == SZ_16K))) {
 		unsigned long pgd_pages;
 
 		pgd_pages = ARM_LPAE_PGD_SIZE(data) / sizeof(arm_lpae_iopte);
