@@ -82,4 +82,10 @@ static inline const char *str_plural(size_t num)
 	return num == 1 ? "" : "s";
 }
 
+static inline const char *str_locked_unlocked(bool v)
+{
+	return v ? "locked" : "unlocked";
+}
+#define str_unlocked_locked(v)		str_locked_unlocked(!(v))
+
 #endif
