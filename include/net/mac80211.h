@@ -7497,7 +7497,7 @@ ieee80211_return_txq(struct ieee80211_hw *hw, struct ieee80211_txq *txq,
  * fairness accounting without using the scheduling order enforced by
  * next_txq().
  *
- * Returns %true if the airtime scheduler thinks the TXQ should be allowed to
+ * Returns: %true if the airtime scheduler thinks the TXQ should be allowed to
  * transmit, and %false if it should be throttled. This function can also have
  * the side effect of rotating the TXQ in the scheduler rotation, which will
  * eventually bring the deficit to positive and allow the station to transmit

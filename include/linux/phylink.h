@@ -213,7 +213,7 @@ unsigned long mac_get_caps(struct phylink_config *config,
  * @config: a pointer to a &struct phylink_config.
  * @interface: PHY interface mode for PCS
  *
- * Return the &struct phylink_pcs for the specified interface mode, or
+ * Return: the &struct phylink_pcs for the specified interface mode, or
  * NULL if none is required, or an error pointer on error.
  *
  * This must not modify any state. It is used to query which PCS should
@@ -243,7 +243,7 @@ struct phylink_pcs *mac_select_pcs(struct phylink_config *config,
  * - possible pcs_an_restart()
  * - mac_finish()
  *
- * Returns zero on success, or negative errno on failure which will be
+ * Returns: zero on success, or negative errno on failure which will be
  * reported to the kernel log.
  */
 int mac_prepare(struct phylink_config *config, unsigned int mode,
@@ -336,7 +336,7 @@ void mac_config(struct phylink_config *config, unsigned int mode,
  * for the @mode and @iface. E.g. a MAC driver may wish to re-enable the
  * Serdes PHY here if it was previously disabled by mac_prepare().
  *
- * Returns zero on success, or negative errno on failure which will be
+ * Returns: zero on success, or negative errno on failure which will be
  * reported to the kernel log.
  */
 int mac_finish(struct phylink_config *config, unsigned int mode,
@@ -464,8 +464,8 @@ struct phylink_pcs_ops {
  * mask. Phylink will propagate the changes to the advertising mask. See the
  * &struct phylink_mac_ops validate() method.
  *
- * Returns -EINVAL if the interface mode/autoneg mode is not supported.
- * Returns non-zero positive if the link state can be supported.
+ * Returns: -EINVAL if the interface mode/autoneg mode is not supported.
+ * Returns: non-zero positive if the link state can be supported.
  */
 int pcs_validate(struct phylink_pcs *pcs, unsigned long *supported,
 		 const struct phylink_link_state *state);
@@ -647,7 +647,7 @@ void phylink_set_port_modes(unsigned long *bits);
  * phylink_get_link_timer_ns - return the PCS link timer value
  * @interface: link &typedef phy_interface_t mode
  *
- * Return the PCS link timer setting in nanoseconds for the PHY @interface
+ * Return: the PCS link timer setting in nanoseconds for the PHY @interface
  * mode, or -EINVAL if not appropriate.
  */
 static inline int phylink_get_link_timer_ns(phy_interface_t interface)
