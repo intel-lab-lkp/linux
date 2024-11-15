@@ -485,7 +485,7 @@ static void tda9950_remove(struct i2c_client *client)
 	cec_unregister_adapter(priv->adap);
 }
 
-static struct i2c_device_id tda9950_ids[] = {
+static  struct i2c_device_id tda9950_ids[] = {
 	{ "tda9950", 0 },
 	{ },
 };
