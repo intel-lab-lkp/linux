@@ -1307,8 +1307,11 @@ BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
 static const char * const btrfs_read_policy_name[] = { "pid" };
 
-static enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str)
+static enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str, s64 *value)
 {
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	char *value_str;
+#endif
 	bool found = false;
 	enum btrfs_read_policy index;
 	char *param;
@@ -1319,6 +1322,18 @@ static enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str)
 	param = kstrdup(str, GFP_KERNEL);
 	if (!param)
 		return -ENOMEM;
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	/* Separate value from input in policy:value format. */
+	if ((value_str = strchr(param, ':'))) {
+		*value_str = '\0';
+		value_str++;
+		if (value && kstrtou64(value_str, 10, value) != 0) {
+			kfree(param);
+			return -EINVAL;
+		}
+	}
+#endif
 
 	for (index = 0; index < BTRFS_NR_READ_POLICY; index++) {
 		if (sysfs_streq(param, btrfs_read_policy_name[index])) {
@@ -1367,8 +1382,9 @@ static ssize_t btrfs_read_policy_store(struct kobject *kobj,
 {
 	struct btrfs_fs_devices *fs_devices = to_fs_devs(kobj);
 	enum btrfs_read_policy index;
+	s64 value = -1;
 
-	index = btrfs_read_policy_to_enum(buf);
+	index = btrfs_read_policy_to_enum(buf, &value);
 	if (index == -EINVAL)
 		return -EINVAL;
 
