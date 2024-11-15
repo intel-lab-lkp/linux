@@ -1195,7 +1195,7 @@ bool batadv_dat_snoop_outgoing_arp_request(struct batadv_priv *bat_priv,
 			goto out;
 		}
 
-		skb_new = batadv_dat_arp_create_reply(bat_priv, ip_dst, ip_src,
+		skb_new = batadv_dat_arp_create_reply(bat_priv, ip_src, ip_dst,
 						      dat_entry->mac_addr,
 						      hw_src, vid);
 		if (!skb_new)
