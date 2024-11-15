@@ -118,7 +118,7 @@ static int netmos_parallel_init(struct pci_dev *dev, struct parport_pc_pci *par,
 	return 0;
 }
 
-static struct parport_pc_pci cards[] = {
+static const struct parport_pc_pci cards[] = {
 	/* titan_110l */		{ 1, { { 3, -1 }, } },
 	/* titan_210l */		{ 1, { { 3, -1 }, } },
 	/* netmos_9xx5_combo */		{ 1, { { 2, -1 }, }, netmos_parallel_init },
@@ -168,7 +168,7 @@ static struct parport_pc_pci cards[] = {
 	/* brainboxes_px263 */	{ 1, { { 3, -1 }, } },
 };
 
-static struct pci_device_id parport_serial_pci_tbl[] = {
+static const struct pci_device_id parport_serial_pci_tbl[] = {
 	/* PCI cards */
 	{ PCI_VENDOR_ID_TITAN, PCI_DEVICE_ID_TITAN_110L,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, titan_110l },
@@ -328,7 +328,7 @@ MODULE_DEVICE_TABLE(pci,parport_serial_pci_tbl);
  * Cards not tested are marked n/t
  * If you have one of these cards and it works for you, please tell me..
  */
-static struct pciserial_board pci_parport_serial_boards[] = {
+static const struct pciserial_board pci_parport_serial_boards[] = {
 	[titan_110l] = {
 		.flags		= FL_BASE1 | FL_BASE_BARS,
 		.num_ports	= 1,
@@ -619,7 +619,7 @@ struct parport_serial_private {
 static int serial_register(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	struct parport_serial_private *priv = pci_get_drvdata (dev);
-	struct pciserial_board *board;
+	const struct pciserial_board *board;
 	struct serial_private *serial;
 
 	board = &pci_parport_serial_boards[id->driver_data];
