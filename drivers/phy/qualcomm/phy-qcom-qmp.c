@@ -5714,6 +5714,8 @@ static int qcom_qmp_phy_probe(struct platform_device *pdev)
 
 		usb_cfg = combo_cfg->usb_cfg;
 		cfg = usb_cfg; /* Setup clks and regulators */
+	} else {
+		usb_cfg = cfg;
 	}
 
 	/* per PHY serdes; usually located at base address */
