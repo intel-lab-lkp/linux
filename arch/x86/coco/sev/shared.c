@@ -335,7 +335,7 @@ static int svsm_perform_msr_protocol(struct svsm_call *call)
 
 static int svsm_perform_ghcb_protocol(struct ghcb *ghcb, struct svsm_call *call)
 {
-	struct es_em_ctxt ctxt;
+	struct es_em_ctxt ctxt = NULL;
 	u8 pending = 0;
 
 	vc_ghcb_invalidate(ghcb);
