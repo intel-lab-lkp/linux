@@ -752,7 +752,7 @@ int drm_mode_dirtyfb_ioctl(struct drm_device *dev,
 		}
 
 		ret = copy_from_user(clips, clips_ptr,
-				     num_clips * sizeof(*clips));
+				     array_size(num_clips, sizeof(*clips)));
 		if (ret) {
 			ret = -EFAULT;
 			goto out_err2;
