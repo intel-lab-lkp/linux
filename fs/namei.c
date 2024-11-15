@@ -1885,6 +1885,9 @@ static const char *pick_link(struct nameidata *nd, struct path *link,
 	if (unlikely(error))
 		return ERR_PTR(error);
 
+	if (!S_ISLNK(inode->i_mode))
+		return ERR_PTR(-EINVAL);
+
 	res = READ_ONCE(inode->i_link);
 	if (!res) {
 		const char * (*get)(struct dentry *, struct inode *,
