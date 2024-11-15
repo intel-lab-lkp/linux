@@ -1128,13 +1128,13 @@ static int panthor_ioctl_tiler_heap_create(struct drm_device *ddev, void *data,
 	if (!vm)
 		return -EINVAL;
 
-	pool = panthor_vm_get_heap_pool(vm, true);
+	pool = panthor_vm_get_heap_pool(vm, true, pfile);
 	if (IS_ERR(pool)) {
 		ret = PTR_ERR(pool);
 		goto out_put_vm;
 	}
 
-	ret = panthor_heap_create(pool,
+	ret = panthor_heap_create(pool, pfile,
 				  args->initial_chunk_count,
 				  args->chunk_size,
 				  args->max_chunks,
@@ -1174,7 +1174,7 @@ static int panthor_ioctl_tiler_heap_destroy(struct drm_device *ddev, void *data,
 	if (!vm)
 		return -EINVAL;
 
-	pool = panthor_vm_get_heap_pool(vm, false);
+	pool = panthor_vm_get_heap_pool(vm, false, NULL);
 	if (IS_ERR(pool)) {
 		ret = PTR_ERR(pool);
 		goto out_put_vm;
@@ -1348,6 +1348,8 @@ panthor_open(struct drm_device *ddev, struct drm_file *file)
 
 	pfile->ptdev = ptdev;
 
+	INIT_LIST_HEAD(&pfile->private_file_list);
+
 	ret = panthor_vm_pool_create(pfile);
 	if (ret)
 		goto err_free_file;
@@ -1374,6 +1376,12 @@ static void
 panthor_postclose(struct drm_device *ddev, struct drm_file *file)
 {
 	struct panthor_file *pfile = file->driver_priv;
+
+	/*
+	 * Group's internal BO's are destroyed asynchronously in a separate worker thread,
+	 * so there's a chance by the time BO release happens, the file is already gone.
+	 */
+	panthor_gem_dettach_internal_bos(pfile);
 
 	panthor_group_pool_destroy(pfile);
 	panthor_vm_pool_destroy(pfile);
@@ -1465,6 +1473,7 @@ static void panthor_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 	panthor_gpu_show_fdinfo(ptdev, file->driver_priv, p);
 
 	drm_show_memory_stats(p, file);
+	panthor_show_internal_memory_stats(p, file);
 }
 
 static const struct file_operations panthor_drm_driver_fops = {

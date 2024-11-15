@@ -14,6 +14,7 @@ struct panthor_heap_pool;
 struct panthor_vm;
 struct panthor_vma;
 struct panthor_mmu;
+struct panthor_file;
 
 int panthor_mmu_init(struct panthor_device *ptdev);
 void panthor_mmu_unplug(struct panthor_device *ptdev);
@@ -35,7 +36,7 @@ int panthor_vm_as(struct panthor_vm *vm);
 int panthor_vm_flush_all(struct panthor_vm *vm);
 
 struct panthor_heap_pool *
-panthor_vm_get_heap_pool(struct panthor_vm *vm, bool create);
+panthor_vm_get_heap_pool(struct panthor_vm *vm, bool create, struct panthor_file *pfile);
 
 struct panthor_vm *panthor_vm_get(struct panthor_vm *vm);
 void panthor_vm_put(struct panthor_vm *vm);

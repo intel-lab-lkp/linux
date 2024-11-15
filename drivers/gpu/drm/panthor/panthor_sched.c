@@ -1435,7 +1435,7 @@ static int group_process_tiler_oom(struct panthor_group *group, u32 cs_id)
 		struct panthor_fw_cs_iface *cs_iface;
 
 		cs_iface = panthor_fw_get_cs_iface(ptdev, csg_id, cs_id);
-		heaps = panthor_vm_get_heap_pool(group->vm, false);
+		heaps = panthor_vm_get_heap_pool(group->vm, false, NULL);
 		heap_address = cs_iface->output->heap_address;
 		vt_start = cs_iface->output->heap_vt_start;
 		vt_end = cs_iface->output->heap_vt_end;
@@ -3268,7 +3268,8 @@ static u32 calc_profiling_ringbuf_num_slots(struct panthor_device *ptdev,
 }
 
 static struct panthor_queue *
-group_create_queue(struct panthor_group *group,
+group_create_queue(struct panthor_file *pfile,
+		   struct panthor_group *group,
 		   const struct drm_panthor_queue_create *args)
 {
 	struct drm_gpu_scheduler *drm_sched;
@@ -3295,7 +3296,7 @@ group_create_queue(struct panthor_group *group,
 
 	queue->priority = args->priority;
 
-	queue->ringbuf = panthor_kernel_bo_create(group->ptdev, group->vm,
+	queue->ringbuf = panthor_kernel_bo_create(group->ptdev, pfile, group->vm,
 						  args->ringbuf_size,
 						  DRM_PANTHOR_BO_NO_MMAP,
 						  DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC |
@@ -3310,7 +3311,7 @@ group_create_queue(struct panthor_group *group,
 	if (ret)
 		goto err_free_queue;
 
-	queue->iface.mem = panthor_fw_alloc_queue_iface_mem(group->ptdev,
+	queue->iface.mem = panthor_fw_alloc_queue_iface_mem(group->ptdev, pfile,
 							    &queue->iface.input,
 							    &queue->iface.output,
 							    &queue->iface.input_fw_va,
@@ -3324,7 +3325,7 @@ group_create_queue(struct panthor_group *group,
 		calc_profiling_ringbuf_num_slots(group->ptdev, args->ringbuf_size);
 
 	queue->profiling.slots =
-		panthor_kernel_bo_create(group->ptdev, group->vm,
+		panthor_kernel_bo_create(group->ptdev, pfile, group->vm,
 					 queue->profiling.slot_count *
 					 sizeof(struct panthor_job_profiling_data),
 					 DRM_PANTHOR_BO_NO_MMAP,
@@ -3427,7 +3428,7 @@ int panthor_group_create(struct panthor_file *pfile,
 	}
 
 	suspend_size = csg_iface->control->suspend_size;
-	group->suspend_buf = panthor_fw_alloc_suspend_buf_mem(ptdev, suspend_size);
+	group->suspend_buf = panthor_fw_alloc_suspend_buf_mem(pfile, ptdev, suspend_size);
 	if (IS_ERR(group->suspend_buf)) {
 		ret = PTR_ERR(group->suspend_buf);
 		group->suspend_buf = NULL;
@@ -3435,14 +3436,14 @@ int panthor_group_create(struct panthor_file *pfile,
 	}
 
 	suspend_size = csg_iface->control->protm_suspend_size;
-	group->protm_suspend_buf = panthor_fw_alloc_suspend_buf_mem(ptdev, suspend_size);
+	group->protm_suspend_buf = panthor_fw_alloc_suspend_buf_mem(pfile, ptdev, suspend_size);
 	if (IS_ERR(group->protm_suspend_buf)) {
 		ret = PTR_ERR(group->protm_suspend_buf);
 		group->protm_suspend_buf = NULL;
 		goto err_put_group;
 	}
 
-	group->syncobjs = panthor_kernel_bo_create(ptdev, group->vm,
+	group->syncobjs = panthor_kernel_bo_create(ptdev, pfile, group->vm,
 						   group_args->queues.count *
 						   sizeof(struct panthor_syncobj_64b),
 						   DRM_PANTHOR_BO_NO_MMAP,
@@ -3462,7 +3463,7 @@ int panthor_group_create(struct panthor_file *pfile,
 	       group_args->queues.count * sizeof(struct panthor_syncobj_64b));
 
 	for (i = 0; i < group_args->queues.count; i++) {
-		group->queues[i] = group_create_queue(group, &queue_args[i]);
+		group->queues[i] = group_create_queue(pfile, group, &queue_args[i]);
 		if (IS_ERR(group->queues[i])) {
 			ret = PTR_ERR(group->queues[i]);
 			group->queues[i] = NULL;

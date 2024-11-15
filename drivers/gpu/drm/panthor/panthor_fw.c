@@ -449,6 +449,7 @@ static void panthor_fw_init_section_mem(struct panthor_device *ptdev,
  */
 struct panthor_kernel_bo *
 panthor_fw_alloc_queue_iface_mem(struct panthor_device *ptdev,
+				 struct panthor_file *pfile,
 				 struct panthor_fw_ringbuf_input_iface **input,
 				 const struct panthor_fw_ringbuf_output_iface **output,
 				 u32 *input_fw_va, u32 *output_fw_va)
@@ -456,11 +457,12 @@ panthor_fw_alloc_queue_iface_mem(struct panthor_device *ptdev,
 	struct panthor_kernel_bo *mem;
 	int ret;
 
-	mem = panthor_kernel_bo_create(ptdev, ptdev->fw->vm, SZ_8K,
+	mem = panthor_kernel_bo_create(ptdev, pfile, ptdev->fw->vm, SZ_8K,
 				       DRM_PANTHOR_BO_NO_MMAP,
 				       DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC |
 				       DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED,
 				       PANTHOR_VM_KERNEL_AUTO_VA);
+
 	if (IS_ERR(mem))
 		return mem;
 
@@ -487,9 +489,12 @@ panthor_fw_alloc_queue_iface_mem(struct panthor_device *ptdev,
  * Return: A valid pointer in case of success, an ERR_PTR() otherwise.
  */
 struct panthor_kernel_bo *
-panthor_fw_alloc_suspend_buf_mem(struct panthor_device *ptdev, size_t size)
+panthor_fw_alloc_suspend_buf_mem(struct panthor_file *pfile,
+				 struct panthor_device *ptdev,
+				 size_t size)
 {
-	return panthor_kernel_bo_create(ptdev, panthor_fw_vm(ptdev), size,
+	return panthor_kernel_bo_create(ptdev, pfile,
+					panthor_fw_vm(ptdev), size,
 					DRM_PANTHOR_BO_NO_MMAP,
 					DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC,
 					PANTHOR_VM_KERNEL_AUTO_VA);
@@ -609,7 +614,8 @@ static int panthor_fw_load_section_entry(struct panthor_device *ptdev,
 		if (cache_mode != CSF_FW_BINARY_IFACE_ENTRY_RD_CACHE_MODE_CACHED)
 			vm_map_flags |= DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED;
 
-		section->mem = panthor_kernel_bo_create(ptdev, panthor_fw_vm(ptdev),
+		section->mem = panthor_kernel_bo_create(ptdev, NULL,
+							panthor_fw_vm(ptdev),
 							section_size,
 							DRM_PANTHOR_BO_NO_MMAP,
 							vm_map_flags, va);

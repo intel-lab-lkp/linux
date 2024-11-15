@@ -179,6 +179,8 @@ int panthor_device_init(struct panthor_device *ptdev)
 	if (ret)
 		return ret;
 
+	drmm_mutex_init(&ptdev->base, &ptdev->private_obj_list_lock);
+
 	/*
 	 * Set the dummy page holding the latest flush to 1. This will cause the
 	 * flush to avoided as we know it isn't necessary if the submission

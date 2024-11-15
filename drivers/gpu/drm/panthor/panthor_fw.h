@@ -7,6 +7,7 @@
 #include <linux/types.h>
 
 struct panthor_device;
+struct panthor_file;
 struct panthor_kernel_bo;
 
 #define MAX_CSGS				31
@@ -476,11 +477,14 @@ void panthor_fw_ring_csg_doorbells(struct panthor_device *ptdev, u32 csg_slot);
 
 struct panthor_kernel_bo *
 panthor_fw_alloc_queue_iface_mem(struct panthor_device *ptdev,
+				 struct panthor_file *pfile,
 				 struct panthor_fw_ringbuf_input_iface **input,
 				 const struct panthor_fw_ringbuf_output_iface **output,
 				 u32 *input_fw_va, u32 *output_fw_va);
 struct panthor_kernel_bo *
-panthor_fw_alloc_suspend_buf_mem(struct panthor_device *ptdev, size_t size);
+panthor_fw_alloc_suspend_buf_mem(struct panthor_file *pfile,
+				 struct panthor_device *ptdev,
+				 size_t size);
 
 struct panthor_vm *panthor_fw_vm(struct panthor_device *ptdev);
 

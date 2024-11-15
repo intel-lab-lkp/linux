@@ -12,6 +12,8 @@
 #include <linux/rwsem.h>
 
 struct panthor_vm;
+struct panthor_file;
+struct panthor_device;
 
 /**
  * struct panthor_gem_object - Driver specific GEM object.
@@ -75,6 +77,9 @@ struct panthor_kernel_bo {
 	 * @kmap: Kernel CPU mapping of @gem.
 	 */
 	void *kmap;
+
+	/** @private_node: Link to driver's list of private GEM objects. */
+	struct list_head private_obj;
 };
 
 static inline
@@ -137,10 +142,14 @@ panthor_kernel_bo_vunmap(struct panthor_kernel_bo *bo)
 }
 
 struct panthor_kernel_bo *
-panthor_kernel_bo_create(struct panthor_device *ptdev, struct panthor_vm *vm,
-			 size_t size, u32 bo_flags, u32 vm_map_flags,
+panthor_kernel_bo_create(struct panthor_device *ptdev, struct panthor_file *pfile,
+			 struct panthor_vm *vm, size_t size,
+			 u32 bo_flags, u32 vm_map_flags,
 			 u64 gpu_va);
 
 void panthor_kernel_bo_destroy(struct panthor_kernel_bo *bo);
+
+void panthor_show_internal_memory_stats(struct drm_printer *p, struct drm_file *file);
+void panthor_gem_dettach_internal_bos(struct panthor_file *pfile);
 
 #endif /* __PANTHOR_GEM_H__ */

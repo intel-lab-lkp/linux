@@ -5,6 +5,7 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 
 #include <drm/panthor_drm.h>
@@ -24,6 +25,20 @@ static void panthor_gem_free_object(struct drm_gem_object *obj)
 	drm_gem_object_put(vm_root_gem);
 }
 
+void panthor_gem_dettach_internal_bos(struct panthor_file *pfile)
+{
+	struct panthor_kernel_bo *kbo, *tmp;
+
+	mutex_lock(&pfile->ptdev->private_obj_list_lock);
+	list_for_each_entry_safe(kbo, tmp,
+				 &pfile->private_file_list,
+				 private_obj) {
+		list_del(&kbo->private_obj);
+		INIT_LIST_HEAD(&kbo->private_obj);
+	}
+	mutex_unlock(&pfile->ptdev->private_obj_list_lock);
+}
+
 /**
  * panthor_kernel_bo_destroy() - Destroy a kernel buffer object
  * @bo: Kernel buffer object to destroy. If NULL or an ERR_PTR(), the destruction
@@ -31,11 +46,21 @@ static void panthor_gem_free_object(struct drm_gem_object *obj)
  */
 void panthor_kernel_bo_destroy(struct panthor_kernel_bo *bo)
 {
+	struct panthor_device *ptdev;
 	struct panthor_vm *vm;
 	int ret;
 
 	if (IS_ERR_OR_NULL(bo))
 		return;
+
+	ptdev = container_of(bo->obj->dev, struct panthor_device, base);
+
+	mutex_lock(&ptdev->private_obj_list_lock);
+	if (!list_empty(&bo->private_obj)) {
+		list_del(&bo->private_obj);
+		INIT_LIST_HEAD(&bo->private_obj);
+	}
+	mutex_unlock(&ptdev->private_obj_list_lock);
 
 	vm = bo->vm;
 	panthor_kernel_bo_vunmap(bo);
@@ -56,6 +81,22 @@ out_free_bo:
 	kfree(bo);
 }
 
+void panthor_show_internal_memory_stats(struct drm_printer *p, struct drm_file *file)
+{
+	struct panthor_file *pfile = file->driver_priv;
+	struct drm_memory_stats status = {0};
+	struct panthor_kernel_bo *kbo;
+
+	mutex_lock(&pfile->ptdev->private_obj_list_lock);
+	list_for_each_entry(kbo, &pfile->private_file_list, private_obj) {
+		status.resident += kbo->obj->size;
+		status.private += kbo->obj->size;
+	}
+	mutex_unlock(&pfile->ptdev->private_obj_list_lock);
+
+	drm_print_memory_stats(p, &status, DRM_GEM_OBJECT_RESIDENT, "internal");
+}
+
 /**
  * panthor_kernel_bo_create() - Create and map a GEM object to a VM
  * @ptdev: Device.
@@ -71,9 +112,9 @@ out_free_bo:
  * Return: A valid pointer in case of success, an ERR_PTR() otherwise.
  */
 struct panthor_kernel_bo *
-panthor_kernel_bo_create(struct panthor_device *ptdev, struct panthor_vm *vm,
-			 size_t size, u32 bo_flags, u32 vm_map_flags,
-			 u64 gpu_va)
+panthor_kernel_bo_create(struct panthor_device *ptdev, struct panthor_file *pfile,
+			 struct panthor_vm *vm, size_t size, u32 bo_flags,
+			 u32 vm_map_flags, u64 gpu_va)
 {
 	struct drm_gem_shmem_object *obj;
 	struct panthor_kernel_bo *kbo;
@@ -116,6 +157,16 @@ panthor_kernel_bo_create(struct panthor_device *ptdev, struct panthor_vm *vm,
 	bo->exclusive_vm_root_gem = panthor_vm_root_gem(vm);
 	drm_gem_object_get(bo->exclusive_vm_root_gem);
 	bo->base.base.resv = bo->exclusive_vm_root_gem->resv;
+
+	INIT_LIST_HEAD(&kbo->private_obj);
+
+	/* Only FW regions are not bound to an open file */
+	if (pfile) {
+		mutex_lock(&ptdev->private_obj_list_lock);
+		list_add(&kbo->private_obj, &pfile->private_file_list);
+		mutex_unlock(&ptdev->private_obj_list_lock);
+	}
+
 	return kbo;
 
 err_free_va:

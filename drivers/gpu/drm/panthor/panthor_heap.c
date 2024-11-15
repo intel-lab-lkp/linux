@@ -86,6 +86,9 @@ struct panthor_heap_pool {
 	/** @ptdev: Device. */
 	struct panthor_device *ptdev;
 
+	/** @pfile: Pointer to Panfrost file struct */
+	struct panthor_file *pfile;
+
 	/** @vm: VM this pool is bound to. */
 	struct panthor_vm *vm;
 
@@ -132,6 +135,7 @@ static void panthor_free_heap_chunk(struct panthor_vm *vm,
 }
 
 static int panthor_alloc_heap_chunk(struct panthor_device *ptdev,
+				    struct panthor_file *pfile,
 				    struct panthor_vm *vm,
 				    struct panthor_heap *heap,
 				    bool initial_chunk)
@@ -144,7 +148,7 @@ static int panthor_alloc_heap_chunk(struct panthor_device *ptdev,
 	if (!chunk)
 		return -ENOMEM;
 
-	chunk->bo = panthor_kernel_bo_create(ptdev, vm, heap->chunk_size,
+	chunk->bo = panthor_kernel_bo_create(ptdev, pfile, vm, heap->chunk_size,
 					     DRM_PANTHOR_BO_NO_MMAP,
 					     DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC,
 					     PANTHOR_VM_KERNEL_AUTO_VA);
@@ -201,6 +205,7 @@ static void panthor_free_heap_chunks(struct panthor_vm *vm,
 }
 
 static int panthor_alloc_heap_chunks(struct panthor_device *ptdev,
+				     struct panthor_file *pfile,
 				     struct panthor_vm *vm,
 				     struct panthor_heap *heap,
 				     u32 chunk_count)
@@ -209,7 +214,7 @@ static int panthor_alloc_heap_chunks(struct panthor_device *ptdev,
 	u32 i;
 
 	for (i = 0; i < chunk_count; i++) {
-		ret = panthor_alloc_heap_chunk(ptdev, vm, heap, true);
+		ret = panthor_alloc_heap_chunk(ptdev, pfile, vm, heap, true);
 		if (ret)
 			return ret;
 	}
@@ -265,6 +270,7 @@ int panthor_heap_destroy(struct panthor_heap_pool *pool, u32 handle)
  * Return: a positive handle on success, a negative error otherwise.
  */
 int panthor_heap_create(struct panthor_heap_pool *pool,
+			struct panthor_file *pfile,
 			u32 initial_chunk_count,
 			u32 chunk_size,
 			u32 max_chunks,
@@ -308,7 +314,7 @@ int panthor_heap_create(struct panthor_heap_pool *pool,
 	heap->max_chunks = max_chunks;
 	heap->target_in_flight = target_in_flight;
 
-	ret = panthor_alloc_heap_chunks(pool->ptdev, vm, heap,
+	ret = panthor_alloc_heap_chunks(pool->ptdev, pfile, vm, heap,
 					initial_chunk_count);
 	if (ret)
 		goto err_free_heap;
@@ -466,7 +472,7 @@ int panthor_heap_grow(struct panthor_heap_pool *pool,
 	 * further jobs in this queue fail immediately instead of having to
 	 * wait for the job timeout.
 	 */
-	ret = panthor_alloc_heap_chunk(pool->ptdev, pool->vm, heap, false);
+	ret = panthor_alloc_heap_chunk(pool->ptdev, pool->pfile, pool->vm, heap, false);
 	if (ret)
 		goto out_unlock;
 
@@ -526,7 +532,9 @@ panthor_heap_pool_get(struct panthor_heap_pool *pool)
  * Return: A valid pointer on success, a negative error code otherwise.
  */
 struct panthor_heap_pool *
-panthor_heap_pool_create(struct panthor_device *ptdev, struct panthor_vm *vm)
+panthor_heap_pool_create(struct panthor_device *ptdev,
+			 struct panthor_vm *vm,
+			 struct panthor_file *pfile)
 {
 	size_t bosize = ALIGN(MAX_HEAPS_PER_POOL *
 			      panthor_heap_ctx_stride(ptdev),
@@ -547,7 +555,7 @@ panthor_heap_pool_create(struct panthor_device *ptdev, struct panthor_vm *vm)
 	xa_init_flags(&pool->xa, XA_FLAGS_ALLOC);
 	kref_init(&pool->refcount);
 
-	pool->gpu_contexts = panthor_kernel_bo_create(ptdev, vm, bosize,
+	pool->gpu_contexts = panthor_kernel_bo_create(ptdev, pfile, vm, bosize,
 						      DRM_PANTHOR_BO_NO_MMAP,
 						      DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC,
 						      PANTHOR_VM_KERNEL_AUTO_VA);

@@ -190,6 +190,9 @@ struct panthor_device {
 
 	/** @fast_rate: Maximum device clock frequency. Set by DVFS */
 	unsigned long fast_rate;
+
+	/** @private_obj_list_lock: Lock around per-file lists of internal GEM objects */
+	struct mutex private_obj_list_lock;
 };
 
 struct panthor_gpu_usage {
@@ -212,6 +215,9 @@ struct panthor_file {
 
 	/** @stats: cycle and timestamp measures for job execution. */
 	struct panthor_gpu_usage stats;
+
+	/** @private_file_list: File's list of private GEM objects. */
+	struct list_head private_file_list;
 };
 
 int panthor_device_init(struct panthor_device *ptdev);

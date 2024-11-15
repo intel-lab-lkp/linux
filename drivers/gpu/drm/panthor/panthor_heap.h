@@ -9,8 +9,10 @@
 struct panthor_device;
 struct panthor_heap_pool;
 struct panthor_vm;
+struct panthor_file;
 
 int panthor_heap_create(struct panthor_heap_pool *pool,
+			struct panthor_file *pfile,
 			u32 initial_chunk_count,
 			u32 chunk_size,
 			u32 max_chunks,
@@ -20,7 +22,9 @@ int panthor_heap_create(struct panthor_heap_pool *pool,
 int panthor_heap_destroy(struct panthor_heap_pool *pool, u32 handle);
 
 struct panthor_heap_pool *
-panthor_heap_pool_create(struct panthor_device *ptdev, struct panthor_vm *vm);
+panthor_heap_pool_create(struct panthor_device *ptdev,
+			 struct panthor_vm *vm,
+			 struct panthor_file *pfile);
 void panthor_heap_pool_destroy(struct panthor_heap_pool *pool);
 
 struct panthor_heap_pool *
