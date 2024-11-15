@@ -597,10 +597,8 @@ void netfs_cache_read_terminated(void *priv, ssize_t transferred_or_error, bool 
 
 	if (transferred_or_error > 0) {
 		subreq->error = 0;
-		if (transferred_or_error > 0) {
-			subreq->transferred += transferred_or_error;
-			__set_bit(NETFS_SREQ_MADE_PROGRESS, &subreq->flags);
-		}
+		subreq->transferred += transferred_or_error;
+		__set_bit(NETFS_SREQ_MADE_PROGRESS, &subreq->flags);
 	} else {
 		subreq->error = transferred_or_error;
 	}
