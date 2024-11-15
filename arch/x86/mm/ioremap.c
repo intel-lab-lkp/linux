@@ -628,6 +628,87 @@ static bool memremap_is_efi_data(resource_size_t phys_addr,
 	return false;
 }
 
+#define SD_SIZE sizeof(struct setup_data)
+/*
+ * Examine the physical address to determine if it is boot data by checking
+ * it against the boot params setup_data chain.
+ */
+static bool __init __memremap_is_setup_data(resource_size_t phys_addr,
+						bool early)
+{
+	struct setup_indirect *indirect;
+	struct setup_data *data;
+	u64 paddr, paddr_next;
+
+	paddr = boot_params.hdr.setup_data;
+	while (paddr) {
+		unsigned int len, size;
+
+		if (phys_addr == paddr)
+			return true;
+
+		if (early)
+			data = early_memremap_decrypted(paddr, SD_SIZE);
+		else
+			data = memremap(paddr, SD_SIZE,
+					MEMREMAP_WB | MEMREMAP_DEC);
+		if (!data) {
+			pr_warn("failed to memremap setup_data entry\n");
+			return false;
+		}
+
+		size = SD_SIZE;
+
+		paddr_next = data->next;
+		len = data->len;
+
+		if ((phys_addr > paddr) &&
+		    (phys_addr < (paddr + SD_SIZE + len))) {
+			if (early)
+				early_memunmap(data, SD_SIZE);
+			else
+				memunmap(data);
+			return true;
+		}
+
+		if (data->type == SETUP_INDIRECT) {
+			size += len;
+			if (early) {
+				early_memunmap(data, SD_SIZE);
+				data = early_memremap_decrypted(paddr, size);
+			} else {
+				memunmap(data);
+				data = memremap(paddr, size,
+						MEMREMAP_WB | MEMREMAP_DEC);
+			}
+			if (!data) {
+				pr_warn("failed to memremap indirect setup_data\n");
+				return false;
+			}
+
+			indirect = (struct setup_indirect *)data->data;
+
+			if (indirect->type != SETUP_INDIRECT) {
+				paddr = indirect->addr;
+				len = indirect->len;
+			}
+		}
+
+		if (early)
+			early_memunmap(data, size);
+		else
+			memunmap(data);
+
+		if ((phys_addr > paddr) && (phys_addr < (paddr + len)))
+			return true;
+
+		paddr = paddr_next;
+	}
+
+	return false;
+}
+#undef SD_SIZE
+
 /*
  * Examine the physical address to determine if it is boot data by checking
  * it against the boot params setup_data chain.
