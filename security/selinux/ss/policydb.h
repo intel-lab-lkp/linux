@@ -403,7 +403,10 @@ static inline const char *sym_name(const struct policydb *p, unsigned int sym_nu
 	return p->sym_val_to_name[sym_num][element_nr];
 }
 
-extern int str_read(char **strp, gfp_t flags, struct policy_file *fp, u32 len);
+#define STR_UNCONSTRAINT 0
+#define STR_IDENTIFIER 1
+extern int str_read(char **strp, gfp_t flags, struct policy_file *fp, u32 len,
+		    int kind, u32 max_len);
 
 extern u16 string_to_security_class(struct policydb *p, const char *name);
 extern u32 string_to_av_perm(struct policydb *p, u16 tclass, const char *name);
