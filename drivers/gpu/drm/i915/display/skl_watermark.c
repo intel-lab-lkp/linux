@@ -2846,7 +2846,7 @@ intel_program_dpkgc_latency(struct intel_atomic_state *state)
 	struct drm_i915_private *i915 = to_i915(display->drm);
 	struct intel_crtc *crtc;
 	struct intel_crtc_state *new_crtc_state;
-	u32 max_latency = LNL_PKG_C_LATENCY_MASK, added_wake_time = 0;
+	u32 latency = LNL_PKG_C_LATENCY_MASK, added_wake_time = 0, max_linetime = 0;
 	u32 clear, val;
 	bool fixed_refresh_rate = false;
 	int i;
@@ -2859,18 +2859,28 @@ intel_program_dpkgc_latency(struct intel_atomic_state *state)
 		    (new_crtc_state->vrr.vmin == new_crtc_state->vrr.vmax &&
 		     new_crtc_state->vrr.vmin == new_crtc_state->vrr.flipline))
 			fixed_refresh_rate = true;
+
+		max_linetime = max(new_crtc_state->linetime, max_linetime);
 	}
 
 	if (fixed_refresh_rate) {
-		max_latency = skl_watermark_max_latency(i915, 1);
-		if (max_latency == 0)
-			max_latency = LNL_PKG_C_LATENCY_MASK;
+		latency = skl_watermark_max_latency(i915, 1);
+		/* Wa_22020299601 */
+		if (latency) {
+			if ((DISPLAY_VER(display) == 20 || DISPLAY_VER(display) == 30) &&
+			    max_linetime)
+				latency = max_linetime *
+					DIV_ROUND_UP(latency, max_linetime);
+		} else {
+			latency = LNL_PKG_C_LATENCY_MASK;
+		}
+
 		added_wake_time = DSB_EXE_TIME +
 			display->sagv.block_time_us;
 	}
 
 	clear = LNL_ADDED_WAKE_TIME_MASK | LNL_PKG_C_LATENCY_MASK;
-	val = REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, max_latency) |
+	val = REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, latency) |
 		REG_FIELD_PREP(LNL_ADDED_WAKE_TIME_MASK, added_wake_time);
 
 	intel_de_rmw(display, LNL_PKG_C_LATENCY, clear, val);
