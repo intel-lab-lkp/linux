@@ -1755,7 +1755,6 @@ int remove_arg_zero(struct linux_binprm *bprm)
 }
 EXPORT_SYMBOL(remove_arg_zero);
 
-#define printable(c) (((c)=='\t') || ((c)=='\n') || (0x20<=(c) && (c)<=0x7e))
 /*
  * cycle the list of binary formats handler, until one recognizes the image
  */
@@ -1793,8 +1792,8 @@ static int search_binary_handler(struct linux_binprm *bprm)
 	read_unlock(&binfmt_lock);
 
 	if (need_retry) {
-		if (printable(bprm->buf[0]) && printable(bprm->buf[1]) &&
-		    printable(bprm->buf[2]) && printable(bprm->buf[3]))
+		if (isprint(bprm->buf[0]) && isprint(bprm->buf[1]) &&
+		    isprint(bprm->buf[2]) && isprint(bprm->buf[3]))
 			return retval;
 		if (request_module("binfmt-%04x", *(ushort *)(bprm->buf + 2)) < 0)
 			return retval;
