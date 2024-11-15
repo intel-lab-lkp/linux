@@ -1720,12 +1720,12 @@ static int rtase_get_settings(struct net_device *dev,
 						supported);
 
 	switch (tp->hw_ver) {
-	case 0x00800000:
-	case 0x04000000:
+	case RTASE_HW_VER_906X_7XA:
+	case RTASE_HW_VER_906X_7XC:
 		cmd->base.speed = SPEED_5000;
 		break;
-	case 0x04800000:
-	case 0x08000000:
+	case RTASE_HW_VER_907XD_V1:
+	case RTASE_HW_VER_907XD_VA:
 		cmd->base.speed = SPEED_10000;
 		break;
 	}
@@ -1991,10 +1991,10 @@ static int rtase_check_mac_version_valid(struct rtase_private *tp)
 	tp->hw_ver = rtase_r32(tp, RTASE_TX_CONFIG_0) & RTASE_HW_VER_MASK;
 
 	switch (tp->hw_ver) {
-	case 0x00800000:
-	case 0x04000000:
-	case 0x04800000:
-	case 0x08000000:
+	case RTASE_HW_VER_906X_7XA:
+	case RTASE_HW_VER_906X_7XC:
+	case RTASE_HW_VER_907XD_V1:
+	case RTASE_HW_VER_907XD_VA:
 		ret = 0;
 		break;
 	}
