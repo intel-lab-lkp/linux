@@ -1227,6 +1227,11 @@ struct bnxt_irq {
 	u8		have_cpumask:1;
 	char		name[IFNAMSIZ + BNXT_IRQ_NAME_EXTRA];
 	cpumask_var_t	cpu_mask;
+
+	struct bnxt	*bp;
+	int		msix_nr;
+	int		ring_nr;
+	struct irq_affinity_notify affinity_notify;
 };
 
 #define HWRM_RING_ALLOC_TX	0x1
@@ -2182,6 +2187,8 @@ struct bnxt {
 
 	struct net_device	*dev;
 	struct pci_dev		*pdev;
+
+	u8			tph_mode;
 
 	atomic_t		intr_sem;
 
