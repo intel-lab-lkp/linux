@@ -25,6 +25,9 @@ properties:
   reg:
     maxItems: 1
 
+  vcc-supply:
+    description: phandle of the regulator that provides the supply voltage.
+
 required:
   - compatible
   - reg
