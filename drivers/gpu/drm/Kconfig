@@ -99,6 +99,7 @@ config DRM_KUNIT_TEST
 config DRM_KMS_HELPER
 	tristate
 	depends on DRM
+	select FB_CORE if DRM_FBDEV_EMULATION
 	help
 	  CRTC helpers for KMS drivers.
 
@@ -221,7 +222,6 @@ config DRM_CLIENT_LIB
 	tristate
 	depends on DRM
 	select DRM_KMS_HELPER if DRM_FBDEV_EMULATION
-	select FB_CORE if DRM_FBDEV_EMULATION
 	help
 	  This option enables the DRM client library and selects all
 	  modules and components according to the enabled clients.
@@ -373,6 +373,7 @@ config DRM_GEM_SHMEM_HELPER
 	tristate
 	depends on DRM && MMU
 	select FB_SYSMEM_HELPERS_DEFERRED if DRM_FBDEV_EMULATION
+	select FB_CORE if DRM_FBDEV_EMULATION
 	help
 	  Choose this if you need the GEM shmem helper functions
 
