@@ -16,6 +16,13 @@ endif
 obj-$(CONFIG_ACPI)		+= tables.o
 
 #
+# The hed.o needs to be in front of evged.o to avoid the problem that
+# RAS errors cannot be handled in the special time window of startup
+# phase that evged has initialized while hed not.
+#
+obj-$(CONFIG_ACPI_HED)		+= hed.o
+
+#
 # ACPI Core Subsystem (Interpreter)
 #
 obj-$(CONFIG_ACPI)		+= acpi.o \
@@ -95,7 +102,6 @@ obj-$(CONFIG_ACPI_HOTPLUG_IOAPIC) += ioapic.o
 obj-$(CONFIG_ACPI_BATTERY)	+= battery.o
 obj-$(CONFIG_ACPI_SBS)		+= sbshc.o
 obj-$(CONFIG_ACPI_SBS)		+= sbs.o
-obj-$(CONFIG_ACPI_HED)		+= hed.o
 obj-$(CONFIG_ACPI_EC_DEBUGFS)	+= ec_sys.o
 obj-$(CONFIG_ACPI_BGRT)		+= bgrt.o
 obj-$(CONFIG_ACPI_CPPC_LIB)	+= cppc_acpi.o
