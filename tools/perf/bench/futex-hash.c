@@ -22,6 +22,7 @@
 #include <sys/time.h>
 #include <sys/mman.h>
 #include <perf/cpumap.h>
+#include <sys/prctl.h>
 
 #include "../util/mutex.h"
 #include "../util/stat.h"
@@ -53,6 +54,7 @@ static struct bench_futex_parameters params = {
 };
 
 static const struct option options[] = {
+	OPT_UINTEGER('b', "buckets", &params.nbuckets, "Task local futex buckets to allocate"),
 	OPT_UINTEGER('t', "threads", &params.nthreads, "Specify amount of threads"),
 	OPT_UINTEGER('r', "runtime", &params.runtime, "Specify runtime (in seconds)"),
 	OPT_UINTEGER('f', "futexes", &params.nfutexes, "Specify amount of futexes per threads"),
@@ -120,6 +122,10 @@ static void print_summary(void)
 	       (int)bench__runtime.tv_sec);
 }
 
+#define PR_FUTEX_HASH			74
+# define PR_FUTEX_HASH_SET_SLOTS	1
+# define PR_FUTEX_HASH_GET_SLOTS	2
+
 int bench_futex_hash(int argc, const char **argv)
 {
 	int ret = 0;
@@ -131,6 +137,7 @@ int bench_futex_hash(int argc, const char **argv)
 	struct perf_cpu_map *cpu;
 	int nrcpus;
 	size_t size;
+	int num_buckets;
 
 	argc = parse_options(argc, argv, options, bench_futex_hash_usage, 0);
 	if (argc) {
@@ -147,6 +154,14 @@ int bench_futex_hash(int argc, const char **argv)
 	act.sa_sigaction = toggle_done;
 	sigaction(SIGINT, &act, NULL);
 
+	ret = prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_SET_SLOTS, params.nbuckets);
+	if (ret) {
+		printf("Allocation of %u hash buckets failed: %d/%m\n",
+		       params.nbuckets, ret);
+		goto errmem;
+	}
+	num_buckets = prctl(PR_FUTEX_HASH, PR_FUTEX_HASH_GET_SLOTS);
+
 	if (params.mlockall) {
 		if (mlockall(MCL_CURRENT | MCL_FUTURE))
 			err(EXIT_FAILURE, "mlockall");
@@ -162,8 +177,8 @@ int bench_futex_hash(int argc, const char **argv)
 	if (!params.fshared)
 		futex_flag = FUTEX_PRIVATE_FLAG;
 
-	printf("Run summary [PID %d]: %d threads, each operating on %d [%s] futexes for %d secs.\n\n",
-	       getpid(), params.nthreads, params.nfutexes, params.fshared ? "shared":"private", params.runtime);
+	printf("Run summary [PID %d]: %d threads, hash slots: %d each operating on %d [%s] futexes for %d secs.\n\n",
+	       getpid(), params.nthreads, num_buckets, params.nfutexes, params.fshared ? "shared":"private", params.runtime);
 
 	init_stats(&throughput_stats);
 	mutex_init(&thread_lock);
