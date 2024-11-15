@@ -87,6 +87,8 @@ void requeue_futex(struct futex_q *q, struct futex_hash_bucket *hb1,
 		futex_hb_waiters_inc(hb2);
 		plist_add(&q->list, &hb2->chain);
 		q->lock_ptr = &hb2->lock;
+		futex_hash_put(hb1);
+		futex_hash_get(hb2);
 	}
 	q->key = *key2;
 }
@@ -233,6 +235,7 @@ void requeue_pi_wake_futex(struct futex_q *q, union futex_key *key,
 	q->rt_waiter = NULL;
 
 	q->lock_ptr = &hb->lock;
+	futex_hash_get(hb);
 
 	/* Signal locked state to the waiter */
 	futex_requeue_pi_complete(q, 1);
@@ -327,6 +330,7 @@ futex_proxy_trylock_atomic(u32 __user *pifutex, struct futex_hash_bucket *hb1,
 		 * consistent and the waiter can return to user space
 		 * immediately after the wakeup.
 		 */
+		futex_hash_put(hb1);
 		requeue_pi_wake_futex(top_waiter, key2, hb2);
 	} else if (ret < 0) {
 		/* Rewind top_waiter::requeue_state */
@@ -458,6 +462,8 @@ retry_private:
 		if (unlikely(ret)) {
 			double_unlock_hb(hb1, hb2);
 			futex_hb_waiters_dec(hb2);
+			futex_hash_put(hb1);
+			futex_hash_put(hb2);
 
 			ret = get_user(curval, uaddr1);
 			if (ret)
@@ -544,6 +550,8 @@ retry_private:
 		case -EFAULT:
 			double_unlock_hb(hb1, hb2);
 			futex_hb_waiters_dec(hb2);
+			futex_hash_put(hb1);
+			futex_hash_put(hb2);
 			ret = fault_in_user_writeable(uaddr2);
 			if (!ret)
 				goto retry;
@@ -558,6 +566,8 @@ retry_private:
 			 */
 			double_unlock_hb(hb1, hb2);
 			futex_hb_waiters_dec(hb2);
+			futex_hash_put(hb1);
+			futex_hash_put(hb2);
 			/*
 			 * Handle the case where the owner is in the middle of
 			 * exiting. Wait for the exit to complete otherwise
@@ -677,6 +687,8 @@ out_unlock:
 	double_unlock_hb(hb1, hb2);
 	wake_up_q(&wake_q);
 	futex_hb_waiters_dec(hb2);
+	futex_hash_put(hb1);
+	futex_hash_put(hb2);
 	return ret ? ret : task_count;
 }
 
@@ -815,6 +827,7 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 	 */
 	if (futex_match(&q.key, &key2)) {
 		futex_q_unlock(hb);
+		futex_hash_put(hb);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -828,6 +841,8 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 		spin_lock(&hb->lock);
 		ret = handle_early_requeue_pi_wakeup(hb, &q, to);
 		spin_unlock(&hb->lock);
+		/* XXX */
+		futex_hash_put(hb);
 		break;
 
 	case Q_REQUEUE_PI_LOCKED:
@@ -847,6 +862,7 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 			 */
 			ret = ret < 0 ? ret : 0;
 		}
+		futex_hash_put(futex_hb_from_futex_q(&q));
 		break;
 
 	case Q_REQUEUE_PI_DONE:
@@ -876,6 +892,7 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 
 		futex_unqueue_pi(&q);
 		spin_unlock(q.lock_ptr);
+		futex_hash_put(futex_hb_from_futex_q(&q));
 
 		if (ret == -EINTR) {
 			/*

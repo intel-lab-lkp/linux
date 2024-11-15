@@ -113,6 +113,8 @@ bool __futex_wake_mark(struct futex_q *q)
 		return false;
 
 	__futex_unqueue(q);
+	/* Waiters reference */
+	futex_hash_put(futex_hb_from_futex_q(q));
 	/*
 	 * The waiting task can free the futex_q as soon as q->lock_ptr = NULL
 	 * is written, without taking any locks. This is possible in the event
@@ -173,8 +175,10 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 	hb = futex_hash(&key);
 
 	/* Make sure we really have tasks to wakeup */
-	if (!futex_hb_waiters_pending(hb))
+	if (!futex_hb_waiters_pending(hb)) {
+		futex_hash_put(hb);
 		return ret;
+	}
 
 	spin_lock(&hb->lock);
 
@@ -196,6 +200,7 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 	}
 
 	spin_unlock(&hb->lock);
+	futex_hash_put(hb);
 	wake_up_q(&wake_q);
 	return ret;
 }
@@ -275,6 +280,8 @@ retry_private:
 	op_ret = futex_atomic_op_inuser(op, uaddr2);
 	if (unlikely(op_ret < 0)) {
 		double_unlock_hb(hb1, hb2);
+		futex_hash_put(hb1);
+		futex_hash_put(hb2);
 
 		if (!IS_ENABLED(CONFIG_MMU) ||
 		    unlikely(op_ret != -EFAULT && op_ret != -EAGAIN)) {
@@ -329,6 +336,8 @@ retry_private:
 out_unlock:
 	double_unlock_hb(hb1, hb2);
 	wake_up_q(&wake_q);
+	futex_hash_put(hb1);
+	futex_hash_put(hb2);
 	return ret;
 }
 
@@ -387,7 +396,7 @@ int futex_unqueue_multiple(struct futex_vector *v, int count)
 {
 	int ret = -1, i;
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < count; i++) { //
 		if (!futex_unqueue(&v[i].q))
 			ret = i;
 	}
@@ -466,6 +475,8 @@ retry:
 		}
 
 		futex_q_unlock(hb);
+		futex_hash_put(hb);
+
 		__set_current_state(TASK_RUNNING);
 
 		/*
@@ -625,6 +636,7 @@ retry_private:
 
 	if (ret) {
 		futex_q_unlock(*hb);
+		futex_hash_put(*hb);
 
 		ret = get_user(uval, uaddr);
 		if (ret)
@@ -638,6 +650,7 @@ retry_private:
 
 	if (uval != val) {
 		futex_q_unlock(*hb);
+		futex_hash_put(*hb);
 		ret = -EWOULDBLOCK;
 	}
 

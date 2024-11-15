@@ -114,6 +114,7 @@ static inline bool should_fail_futex(bool fshared)
  */
 struct futex_hash_bucket {
 	atomic_t waiters;
+	unsigned int hb_slot;
 	spinlock_t lock;
 	struct plist_head chain;
 } ____cacheline_aligned_in_smp;
@@ -201,6 +202,13 @@ futex_setup_timer(ktime_t *time, struct hrtimer_sleeper *timeout,
 		  int flags, u64 range_ns);
 
 extern struct futex_hash_bucket *futex_hash(union futex_key *key);
+extern void futex_hash_put(struct futex_hash_bucket *hb);
+extern void futex_hash_get(struct futex_hash_bucket *hb);
+
+static inline struct futex_hash_bucket *futex_hb_from_futex_q(struct futex_q *q)
+{
+	return container_of(q->lock_ptr, struct futex_hash_bucket, lock);
+}
 
 /**
  * futex_match - Check whether two futex keys are equal

@@ -30,7 +30,7 @@
 #define INIT_PASID	0
 
 struct address_space;
-struct futex_hash_bucket;
+struct futex_hash_bucket_private;
 struct mem_cgroup;
 
 /*
@@ -899,8 +899,7 @@ struct mm_struct {
 		int mm_lock_seq;
 #endif
 
-		unsigned int			futex_hash_mask;
-		struct futex_hash_bucket	*futex_hash_bucket;
+		struct futex_hash_bucket_private	__rcu *futex_hash_bucket;
 
 		unsigned long hiwater_rss; /* High-watermark of RSS usage */
 		unsigned long hiwater_vm;  /* High-water virtual memory usage */
