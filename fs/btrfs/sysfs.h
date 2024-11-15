@@ -47,5 +47,10 @@ void btrfs_sysfs_del_qgroups(struct btrfs_fs_info *fs_info);
 int btrfs_sysfs_add_qgroups(struct btrfs_fs_info *fs_info);
 void btrfs_sysfs_del_one_qgroup(struct btrfs_fs_info *fs_info,
 				struct btrfs_qgroup *qgroup);
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str, s64 *value);
+int __init btrfs_raid1_balancing_init(void);
+char *btrfs_get_raid1_balancing(void);
+#endif
 
 #endif

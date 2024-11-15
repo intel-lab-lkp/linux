@@ -1307,11 +1307,28 @@ BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 static const char * const btrfs_read_policy_name[] = { "pid", "round-robin", "devid" };
+
+/* Global module configuration parameters */
+static char *raid1_balancing;
+char *btrfs_get_raid1_balancing(void)
+{
+	return raid1_balancing;
+}
+
+/* Set perm 0, disable sys/module/btrfs/parameter/raid1_balancing interface */
+module_param(raid1_balancing, charp, 0);
+MODULE_PARM_DESC(raid1_balancing,
+"Global read policy; pid (default), round-robin:[min_contiguous_read], devid:[[devid]|[latest-gen]|[oldest-gen]]");
+
 #else
 static const char * const btrfs_read_policy_name[] = { "pid" };
 #endif
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str, s64 *value)
+#else
 static enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str, s64 *value)
+#endif
 {
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	char *value_str;
@@ -1353,6 +1370,18 @@ static enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str, s64 *va
 
 	return -EINVAL;
 }
+
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+int __init btrfs_raid1_balancing_init(void)
+{
+	if (btrfs_read_policy_to_enum(raid1_balancing, NULL) == -EINVAL) {
+		btrfs_err(NULL, "Invalid raid1_balancing %s", raid1_balancing);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+#endif
 
 static ssize_t btrfs_read_policy_show(struct kobject *kobj,
 				      struct kobj_attribute *a, char *buf)

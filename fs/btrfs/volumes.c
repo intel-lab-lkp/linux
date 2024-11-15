@@ -1327,11 +1327,14 @@ static int open_fs_devices(struct btrfs_fs_devices *fs_devices,
 	fs_devices->latest_dev = latest_dev;
 	fs_devices->total_rw_bytes = 0;
 	fs_devices->chunk_alloc_policy = BTRFS_CHUNK_ALLOC_REGULAR;
-	fs_devices->read_policy = BTRFS_READ_POLICY_PID;
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	/* Set min_contiguous_read to a default 256kib */
 	fs_devices->min_contiguous_read = 256 * 1024;
 	fs_devices->read_devid = latest_dev->devid;
+	fs_devices->read_policy =
+		btrfs_read_policy_to_enum(btrfs_get_raid1_balancing(), NULL);
+#else
+	fs_devices->read_policy = BTRFS_READ_POLICY_PID;
 #endif
 
 	return 0;
