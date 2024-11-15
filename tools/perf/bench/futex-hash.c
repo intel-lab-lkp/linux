@@ -122,6 +122,8 @@ static void print_summary(void)
 	       (int)bench__runtime.tv_sec);
 }
 
+#include <numa.h>
+
 #define PR_FUTEX_HASH			74
 # define PR_FUTEX_HASH_SET_SLOTS	1
 # define PR_FUTEX_HASH_GET_SLOTS	2
@@ -212,14 +214,19 @@ int bench_futex_hash(int argc, const char **argv)
 	size = CPU_ALLOC_SIZE(4096);
 
 	for (i = 0; i < params.nthreads; i++) {
+		unsigned int cpu_num;
 		worker[i].tid = i;
-		worker[i].futex = calloc(params.nfutexes, sizeof(*worker[i].futex));
-		if (!worker[i].futex)
-			goto errmem;
 
 		CPU_ZERO_S(size, cpuset);
+		cpu_num = get_cpu_bit(&cpuset_, sizeof(cpuset_), i % nrcpus);
+		//worker[i].futex = calloc(params.nfutexes, sizeof(*worker[i].futex));
 
-		CPU_SET_S(get_cpu_bit(&cpuset_, sizeof(cpuset_), i % nrcpus), size, cpuset);
+		worker[i].futex = numa_alloc_onnode(params.nfutexes * sizeof(*worker[i].futex),
+						    numa_node_of_cpu(cpu_num));
+		if (worker[i].futex == MAP_FAILED || worker[i].futex == NULL)
+			goto errmem;
+
+		CPU_SET_S(cpu_num, size, cpuset);
 
 		ret = pthread_attr_setaffinity_np(&thread_attr, size, cpuset);
 		if (ret) {
@@ -271,7 +278,7 @@ int bench_futex_hash(int argc, const char **argv)
 				       &worker[i].futex[params.nfutexes-1], t);
 		}
 
-		zfree(&worker[i].futex);
+		numa_free(worker[i].futex, params.nfutexes * sizeof(*worker[i].futex));
 	}
 
 	print_summary();
