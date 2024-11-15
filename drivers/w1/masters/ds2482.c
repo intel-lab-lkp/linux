@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/regulator/consumer.h>
 
 #include <linux/w1.h>
 
@@ -117,6 +118,9 @@ struct ds2482_data {
 	u8			channel;
 	u8			read_prt;	/* see DS2482_PTR_CODE_xxx */
 	u8			reg_config;
+
+	/* reference to the optional regulator */
+	struct regulator *vcc_reg;
 };
 
 
@@ -445,6 +449,7 @@ static int ds2482_probe(struct i2c_client *client)
 	int err = -ENODEV;
 	int temp1;
 	int idx;
+	int ret;
 
 	if (!i2c_check_functionality(client->adapter,
 				     I2C_FUNC_SMBUS_WRITE_BYTE_DATA |
@@ -455,6 +460,18 @@ static int ds2482_probe(struct i2c_client *client)
 	if (!data) {
 		err = -ENOMEM;
 		goto exit;
+	}
+
+	/* Get the vcc regulator */
+	data->vcc_reg = devm_regulator_get(&client->dev, "vcc");
+	if (IS_ERR(data->vcc_reg))
+		return PTR_ERR(data->vcc_reg);
+
+	/* Enable the vcc regulator */
+	ret = regulator_enable(data->vcc_reg);
+	if (ret) {
+		dev_err(&client->dev, "Fail to enable regulator\n");
+		return ret;
 	}
 
 	data->client = client;
@@ -517,6 +534,7 @@ exit_w1_remove:
 			w1_remove_master_device(&data->w1_ch[idx].w1_bm);
 	}
 exit_free:
+	regulator_disable(data->vcc_reg);
 	kfree(data);
 exit:
 	return err;
@@ -532,6 +550,9 @@ static void ds2482_remove(struct i2c_client *client)
 		if (data->w1_ch[idx].pdev != NULL)
 			w1_remove_master_device(&data->w1_ch[idx].w1_bm);
 	}
+
+	/* Disable the vcc regulator */
+	regulator_disable(data->vcc_reg);
 
 	/* Free the memory */
 	kfree(data);
