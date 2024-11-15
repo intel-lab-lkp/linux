@@ -28,6 +28,20 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	clocks {
+		xo_board: xo-board {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <76800000>;
+		};
+
+		sleep_clk: sleep-clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <32000>;
+		};
+	};
+
 	pmic-glink {
 		compatible = "qcom,sm8650-pmic-glink",
 			     "qcom,sm8550-pmic-glink",
@@ -729,10 +743,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32000>;
-};
-
 &swr0 {
 	status = "okay";
 
@@ -883,8 +893,4 @@
 
 &usb_dp_qmpphy_out {
 	remote-endpoint = <&pmic_glink_ss_in>;
-};
-
-&xo_board {
-	clock-frequency = <76800000>;
 };
