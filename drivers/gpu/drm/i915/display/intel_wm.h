@@ -33,5 +33,7 @@ void intel_print_wm_latency(struct drm_i915_private *i915,
 			    const char *name, const u16 wm[]);
 void intel_wm_init(struct drm_i915_private *i915);
 void intel_wm_debugfs_register(struct drm_i915_private *i915);
+void intel_program_dpkgc_latency(struct intel_atomic_state *state,
+				 struct drm_i915_private *i915);
 
 #endif /* __INTEL_WM_H__ */

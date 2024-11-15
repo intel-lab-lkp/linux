@@ -5,9 +5,18 @@
 
 #include "i915_drv.h"
 #include "i9xx_wm.h"
+#include "intel_de.h"
 #include "intel_display_types.h"
 #include "intel_wm.h"
 #include "skl_watermark.h"
+#include "skl_watermark_regs.h"
+
+/*
+ * It is expected that DSB can do posted writes to every register in
+ * the pipe and planes within 100us. For flip queue use case, the
+ * recommended DSB execution time is 100us + one SAGV block time.
+ */
+#define DSB_EXE_TIME 100
 
 /**
  * intel_update_watermarks - update FIFO watermark values based on current modes
@@ -141,6 +150,54 @@ bool intel_wm_plane_visible(const struct intel_crtc_state *crtc_state,
 		return plane_state->hw.fb != NULL;
 	else
 		return plane_state->uapi.visible;
+}
+
+/*
+ * If Fixed Refresh Rate or For VRR case Vmin = Vmax = Flipline:
+ * Program DEEP PKG_C_LATENCY Pkg C with highest valid latency from
+ * watermark level1 and up and above. If watermark level 1 is
+ * invalid program it with all 1's.
+ * Program PKG_C_LATENCY Added Wake Time = DSB execution time
+ * If Variable Refresh Rate where Vmin != Vmax != Flipline:
+ * Program DEEP PKG_C_LATENCY Pkg C with all 1's.
+ * Program PKG_C_LATENCY Added Wake Time = 0
+ */
+void
+intel_program_dpkgc_latency(struct intel_atomic_state *state,
+			    struct drm_i915_private *i915)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_crtc *crtc;
+	struct intel_crtc_state *new_crtc_state;
+	u32 max_latency = LNL_PKG_C_LATENCY_MASK;
+	u32 added_waketime = 0;
+	bool fixed_refresh_rate = false;
+	u32 clear, val;
+	int i;
+
+	if (DISPLAY_VER(display) < 20)
+		return;
+
+	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
+		if (!new_crtc_state->vrr.enable ||
+		    (new_crtc_state->vrr.vmin == new_crtc_state->vrr.vmax &&
+		     new_crtc_state->vrr.vmin == new_crtc_state->vrr.flipline))
+			fixed_refresh_rate = true;
+	}
+
+	if (fixed_refresh_rate) {
+		max_latency = skl_watermark_max_latency(i915, 1);
+		if (max_latency == 0)
+			max_latency = LNL_PKG_C_LATENCY_MASK;
+		added_waketime = DSB_EXE_TIME +
+			display->sagv.block_time_us;
+	}
+
+	clear = LNL_ADDED_WAKE_TIME_MASK | LNL_PKG_C_LATENCY_MASK;
+	val = REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, max_latency) |
+		REG_FIELD_PREP(LNL_ADDED_WAKE_TIME_MASK, added_waketime);
+
+	intel_de_rmw(display, LNL_PKG_C_LATENCY, clear, val);
 }
 
 void intel_print_wm_latency(struct drm_i915_private *dev_priv,
