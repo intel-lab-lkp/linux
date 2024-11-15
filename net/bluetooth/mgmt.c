@@ -1441,6 +1441,10 @@ static void settings_rsp(struct mgmt_pending_cmd *cmd, void *data)
 		sock_hold(match->sk);
 	}
 
+	/* dequeue cmd_sync entries using cmd as data as that is about to be
+	 * removed/freed.
+	 */
+	hci_cmd_sync_dequeue(match->hdev, NULL, cmd, NULL);
 	mgmt_pending_free(cmd);
 }
 
