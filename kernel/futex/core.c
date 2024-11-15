@@ -134,8 +134,8 @@ struct futex_hash_bucket *futex_hash(union futex_key *key)
 	if (fhb && futex_key_is_private(key)) {
 		u32 hash_mask = current->mm->futex_hash_mask;
 
-		hash = jhash2((u32 *)key,
-			      offsetof(typeof(*key), both.offset) / 4,
+		hash = jhash2((void *)&key->private.address,
+			      sizeof(key->private.address) / 4,
 			      key->both.offset);
 		return &fhb[hash & hash_mask];
 	}
