@@ -895,7 +895,8 @@ int fsl_mc_device_add(struct fsl_mc_obj_desc *obj_desc,
 		dev_err(parent_dev,
 			"device_add() failed for device %s: %d\n",
 			dev_name(&mc_dev->dev), error);
-		goto error_cleanup_dev;
+		put_device(&mc_dev->dev);
+		return error;
 	}
 
 	dev_dbg(parent_dev, "added %s\n", dev_name(&mc_dev->dev));
