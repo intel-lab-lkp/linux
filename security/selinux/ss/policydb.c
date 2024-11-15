@@ -1015,6 +1015,15 @@ bool policydb_class_isvalid(const struct policydb *p, u16 class)
 	return true;
 }
 
+bool policydb_user_isvalid(const struct policydb *p, u32 user)
+{
+	if (!user || user > p->p_roles.nprim)
+		return false;
+	if (!p->sym_val_to_name[SYM_USERS][user - 1])
+		return false;
+	return true;
+}
+
 bool policydb_role_isvalid(const struct policydb *p, u32 role)
 {
 	if (!role || role > p->p_roles.nprim)
@@ -1935,6 +1944,12 @@ static int user_bounds_sanity_check(void *key, void *datum, void *datap)
 			return -EINVAL;
 		}
 
+		if (!policydb_user_isvalid(p, upper->bounds)) {
+			pr_err("SELinux: user %s: invalid boundary id %d\n",
+			       (char *) key, upper->bounds);
+			return -EINVAL;
+		}
+
 		upper = p->user_val_to_struct[upper->bounds - 1];
 		ebitmap_for_each_positive_bit(&user->roles, node, bit)
 		{
@@ -1972,6 +1987,12 @@ static int role_bounds_sanity_check(void *key, void *datum, void *datap)
 			return -EINVAL;
 		}
 
+		if (!policydb_role_isvalid(p, upper->bounds)) {
+			pr_err("SELinux: role %s: invalid boundary id %d\n",
+			       (char *) key, upper->bounds);
+			return -EINVAL;
+		}
+
 		upper = p->role_val_to_struct[upper->bounds - 1];
 		ebitmap_for_each_positive_bit(&role->types, node, bit)
 		{
@@ -2006,9 +2027,13 @@ static int type_bounds_sanity_check(void *key, void *datum, void *datap)
 			return -EINVAL;
 		}
 
-		upper = p->type_val_to_struct[upper->bounds - 1];
-		BUG_ON(!upper);
+		if (!policydb_type_isvalid(p, upper->bounds)) {
+			pr_err("SELinux: type %s: invalid boundary id %d\n",
+			       (char *) key, upper->bounds);
+			return -EINVAL;
+		}
 
+		upper = p->type_val_to_struct[upper->bounds - 1];
 		if (upper->attribute) {
 			pr_err("SELinux: type %s: "
 			       "bounded by attribute %s\n",
