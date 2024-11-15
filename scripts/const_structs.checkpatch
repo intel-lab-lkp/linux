@@ -23,6 +23,7 @@ file_lock_operations
 file_operations
 hv_ops
 hwmon_ops
+i2c_device_id
 ib_device_ops
 ide_dma_ops
 ide_port_ops
@@ -53,6 +54,7 @@ nft_expr_ops
 nlmsvc_binding
 nvkm_device_chip
 of_device_id
+pci_device_id
 pci_raw_ops
 phy_ops
 pinconf_ops
@@ -91,10 +93,12 @@ snd_soc_dai_ops
 snd_soc_ops
 snd_soc_tplg_ops
 soc_pcmcia_socket_ops
+spi_device_id
 stacktrace_ops
 sysfs_ops
 tty_operations
 uart_ops
+usb_device_id
 usb_mon_operations
 v4l2_ctrl_ops
 v4l2_ioctl_ops
