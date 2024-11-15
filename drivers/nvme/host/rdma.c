@@ -1337,6 +1337,7 @@ static int nvme_rdma_map_sg_fr(struct nvme_rdma_queue *queue,
 	req->reg_wr.wr.opcode = IB_WR_REG_MR;
 	req->reg_wr.wr.wr_cqe = &req->reg_cqe;
 	req->reg_wr.wr.num_sge = 0;
+	req->reg_wr.wr.send_flags = IB_SEND_SIGNALED;
 	req->reg_wr.mr = req->mr;
 	req->reg_wr.key = req->mr->rkey;
 	req->reg_wr.access = IB_ACCESS_LOCAL_WRITE |
@@ -1443,7 +1444,7 @@ static int nvme_rdma_map_sg_pi(struct nvme_rdma_queue *queue,
 	wr->wr.opcode = IB_WR_REG_MR_INTEGRITY;
 	wr->wr.wr_cqe = &req->reg_cqe;
 	wr->wr.num_sge = 0;
-	wr->wr.send_flags = 0;
+	wr->wr.send_flags = IB_SEND_SIGNALED;
 	wr->mr = req->mr;
 	wr->key = req->mr->rkey;
 	wr->access = IB_ACCESS_LOCAL_WRITE |
