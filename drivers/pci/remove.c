@@ -17,7 +17,7 @@ static void pci_free_resources(struct pci_dev *dev)
 	}
 }
 
-static int pci_pwrctl_unregister(struct device *dev, void *data)
+static int pci_pwrctrl_unregister(struct device *dev, void *data)
 {
 	struct device_node *pci_node = data, *plat_node = dev_of_node(dev);
 
@@ -35,7 +35,7 @@ static void pci_stop_dev(struct pci_dev *dev)
 
 	if (pci_dev_is_added(dev)) {
 		device_for_each_child(dev->dev.parent, dev_of_node(&dev->dev),
-				      pci_pwrctl_unregister);
+				      pci_pwrctrl_unregister);
 		device_release_driver(&dev->dev);
 		pci_proc_detach_device(dev);
 		pci_remove_sysfs_dev_files(dev);
