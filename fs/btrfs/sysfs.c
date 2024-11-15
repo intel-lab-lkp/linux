@@ -1305,7 +1305,11 @@ static ssize_t btrfs_temp_fsid_show(struct kobject *kobj,
 }
 BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+static const char * const btrfs_read_policy_name[] = { "pid", "round-robin" };
+#else
 static const char * const btrfs_read_policy_name[] = { "pid" };
+#endif
 
 static enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str, s64 *value)
 {
@@ -1367,6 +1371,12 @@ static ssize_t btrfs_read_policy_show(struct kobject *kobj,
 
 		ret += sysfs_emit_at(buf, ret, "%s", btrfs_read_policy_name[i]);
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+		if (i == BTRFS_READ_POLICY_RR)
+			ret += sysfs_emit_at(buf, ret, ":%d",
+					     fs_devices->min_contiguous_read);
+#endif
+
 		if (i == policy)
 			ret += sysfs_emit_at(buf, ret, "]");
 	}
@@ -1388,6 +1398,34 @@ static ssize_t btrfs_read_policy_store(struct kobject *kobj,
 	if (index == -EINVAL)
 		return -EINVAL;
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	if (index == BTRFS_READ_POLICY_RR) {
+		if (value != -1) {
+			if ((value % fs_devices->fs_info->sectorsize) != 0) {
+				btrfs_err(fs_devices->fs_info,
+"read_policy: min_contiguous_read %lld should be multiples of the sectorsize %u",
+					  value, fs_devices->fs_info->sectorsize);
+				return -EINVAL;
+			}
+		} else {
+			/* value is not provided, set it to the default 256k */
+			value = 256 * 1024;
+		}
+
+		if (index != READ_ONCE(fs_devices->read_policy) ||
+		    value != READ_ONCE(fs_devices->min_contiguous_read)) {
+			WRITE_ONCE(fs_devices->read_policy, index);
+			WRITE_ONCE(fs_devices->min_contiguous_read, value);
+			atomic_set(&fs_devices->total_reads, 0);
+
+			btrfs_info(fs_devices->fs_info, "read policy set to '%s:%lld'",
+				   btrfs_read_policy_name[index], value);
+
+		}
+
+		return len;
+	}
+#endif
 	if (index != READ_ONCE(fs_devices->read_policy)) {
 		WRITE_ONCE(fs_devices->read_policy, index);
 		btrfs_info(fs_devices->fs_info, "read policy set to '%s'",
