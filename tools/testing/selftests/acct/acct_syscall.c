@@ -24,8 +24,7 @@ int main(void)
 
 	// Check if test is run a root
 	if (geteuid()) {
-		ksft_test_result_skip("This test needs root to run!\n");
-		return 1;
+		ksft_exit_fail_msg("Error : Need to run as root");
 	}
 
 	// Create file to log closed processes
