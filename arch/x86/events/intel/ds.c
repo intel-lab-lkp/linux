@@ -2072,7 +2072,7 @@ get_next_pebs_record_by_bit(void *base, void *top, int bit)
 			/* clear non-PEBS bit and re-check */
 			pebs_status = status & cpuc->pebs_enabled;
 			pebs_status &= PEBS_COUNTER_MASK;
-			if (pebs_status == (1 << bit))
+			if (pebs_status == (u64) (1 << bit))
 				return at;
 		}
 	}
