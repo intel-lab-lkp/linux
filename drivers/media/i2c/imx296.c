@@ -931,7 +931,7 @@ static int imx296_read_temperature(struct imx296 *sensor, int *temp)
 static int imx296_identify_model(struct imx296 *sensor)
 {
 	unsigned int model;
-	int temp = 0;
+	int temp = 0, retries;
 	int ret;
 
 	model = (uintptr_t)of_device_get_match_data(sensor->dev);
@@ -943,25 +943,33 @@ static int imx296_identify_model(struct imx296 *sensor)
 		return 0;
 	}
 
-	/*
-	 * While most registers can be read when the sensor is in standby, this
-	 * is not the case of the sensor info register :-(
-	 */
-	ret = imx296_write(sensor, IMX296_CTRL00, 0, NULL);
-	if (ret < 0) {
-		dev_err(sensor->dev,
-			"failed to get sensor out of standby (%d)\n", ret);
-		return ret;
-	}
+	retries = 0;
+	do {
+		/*
+		 * While most registers can be read when the sensor is in
+		 * standby, this is not the case of the sensor info register :-(
+		 */
+		ret = imx296_write(sensor, IMX296_CTRL00, 0, NULL);
+		if (ret < 0) {
+			dev_err(sensor->dev,
+				"failed to get sensor out of standby (%d)\n",
+				ret);
+			return ret;
+		}
 
-	ret = imx296_read(sensor, IMX296_SENSOR_INFO);
-	if (ret < 0) {
-		dev_err(sensor->dev, "failed to read sensor information (%d)\n",
-			ret);
-		goto done;
-	}
+		udelay(10);
 
-	model = (ret >> 6) & 0x1ff;
+		ret = imx296_read(sensor, IMX296_SENSOR_INFO);
+		if (ret < 0) {
+			dev_err(sensor->dev,
+				"failed to read sensor information (%d)\n",
+				ret);
+			goto done;
+		}
+
+		model = (ret >> 6) & 0x1ff;
+	} while (model == 0 && retries++ < 3);
+
 
 	switch (model) {
 	case 296:
