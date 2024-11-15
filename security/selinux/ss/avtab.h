@@ -107,6 +107,7 @@ static inline void avtab_hash_eval(struct avtab *h, const char *tag)
 struct policydb;
 struct policy_file;
 int avtab_read_item(struct avtab *a, struct policy_file *fp, struct policydb *pol,
+		    bool conditional,
 		    int (*insert)(struct avtab *a, const struct avtab_key *k,
 				  const struct avtab_datum *d, void *p),
 		    void *p);
