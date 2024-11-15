@@ -274,6 +274,44 @@ static void kmemleak_disable(void);
 		pr_warn(fmt, ##__VA_ARGS__);		\
 } while (0)
 
+#define PTR_STORAGE_OP_OK	-1
+#define PTR_STORAGE_OP_FAIL	0
+#define PTR_STORAGE_CAPACITY	32
+
+struct ptr_storage {
+	unsigned long	base;
+	u32		data[PTR_STORAGE_CAPACITY];
+	int		nr_entries;
+};
+
+static int ptr_storage_insert(unsigned long p, struct ptr_storage *s)
+{
+	unsigned long diff_data;
+
+	if (s->nr_entries != 0) {
+		diff_data = s->base - p;
+		if (s->nr_entries < PTR_STORAGE_CAPACITY) {
+			s->data[((s->nr_entries - 1))] = diff_data & 0xffffffff;
+			s->nr_entries++;
+			return PTR_STORAGE_OP_OK;
+		}
+		return PTR_STORAGE_OP_FAIL;
+	}
+	s->base = p;
+	s->nr_entries++;
+	return PTR_STORAGE_OP_OK;
+}
+
+static void *ptr_storage_get(struct ptr_storage *s, int item_no)
+{
+	if (item_no < s->nr_entries && item_no > 0)
+		return (void *)s->base - (s32)s->data[(item_no - 1)];
+
+	if (item_no == 0)
+		return (void *)s->base;
+	return NULL;
+}
+
 static void warn_or_seq_hex_dump(struct seq_file *seq, int prefix_type,
 				 int rowsize, int groupsize, const void *buf,
 				 size_t len, bool ascii)
@@ -357,11 +395,13 @@ static bool unreferenced_object(struct kmemleak_object *object)
  * print_unreferenced function must be called with the object->lock held.
  */
 static void print_unreferenced(struct seq_file *seq,
-			       struct kmemleak_object *object)
+			       struct kmemleak_object *object,
+			       struct ptr_storage *s)
 {
 	int i;
 	unsigned long *entries;
 	unsigned int nr_entries;
+	unsigned long tmp;
 
 	nr_entries = stack_depot_fetch(object->trace_handle, &entries);
 	warn_or_seq_printf(seq, "unreferenced object 0x%08lx (size %zu):\n",
@@ -372,8 +412,8 @@ static void print_unreferenced(struct seq_file *seq,
 	warn_or_seq_printf(seq, "  backtrace (crc %x):\n", object->checksum);
 
 	for (i = 0; i < nr_entries; i++) {
-		void *ptr = (void *)entries[i];
-		warn_or_seq_printf(seq, "    [<%pK>] %pS\n", ptr, ptr);
+		tmp = (unsigned long)entries[i];
+		ptr_storage_insert(tmp, s);
 	}
 }
 
@@ -1664,6 +1704,10 @@ static void kmemleak_scan(void)
 	struct zone *zone;
 	int __maybe_unused i;
 	int new_leaks = 0;
+	struct ptr_storage s = {0};
+	bool do_print = false;
+	void *tmp;
+	int inx;
 
 	jiffies_last_scan = jiffies;
 
@@ -1822,12 +1866,20 @@ static void kmemleak_scan(void)
 		    !(object->flags & OBJECT_REPORTED)) {
 			object->flags |= OBJECT_REPORTED;
 
-			if (kmemleak_verbose)
-				print_unreferenced(NULL, object);
+			if (kmemleak_verbose) {
+				print_unreferenced(NULL, object, &s);
+				do_print = true;
+			}
 
 			new_leaks++;
 		}
 		raw_spin_unlock_irq(&object->lock);
+		if (kmemleak_verbose && do_print) {
+			for (inx = 0; inx < s.nr_entries; inx++) {
+				tmp = ptr_storage_get(&s, i);
+				warn_or_seq_printf(NULL, "    [<%pK>] %pS\n", tmp, tmp);
+			}
+		}
 	}
 	rcu_read_unlock();
 
@@ -1978,11 +2030,23 @@ static int kmemleak_seq_show(struct seq_file *seq, void *v)
 {
 	struct kmemleak_object *object = v;
 	unsigned long flags;
+	struct ptr_storage s = {0};
+	void *tmp;
+	int i;
+	bool do_print = false;
 
 	raw_spin_lock_irqsave(&object->lock, flags);
-	if ((object->flags & OBJECT_REPORTED) && unreferenced_object(object))
-		print_unreferenced(seq, object);
+	if ((object->flags & OBJECT_REPORTED) && unreferenced_object(object)) {
+		print_unreferenced(seq, object, &s);
+		do_print = true;
+	}
 	raw_spin_unlock_irqrestore(&object->lock, flags);
+	if (do_print) {
+		for (i = 0; i < s.nr_entries; i++) {
+			tmp = ptr_storage_get(&s, i);
+			warn_or_seq_printf(seq, "    [<%pK>] %pS\n", tmp, tmp);
+		}
+	}
 	return 0;
 }
 
