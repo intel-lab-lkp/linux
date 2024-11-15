@@ -56,10 +56,29 @@ static inline int __ww_mutex_check_kill(struct rt_mutex *lock,
 	return 0;
 }
 
+extern bool futex_check_hb_valid(struct futex_hash_bucket *hb);
+
+static inline bool __internal_retry_reason(struct rt_mutex_waiter *waiter)
+{
+	if (!IS_ENABLED(CONFIG_FUTEX))
+		return false;
+
+	if (!waiter->hb)
+		return false;
+	if (futex_check_hb_valid(waiter->hb))
+		return false;
+	return true;
+}
+
 #else
 # define build_ww_mutex()	(true)
 # define ww_container_of(rtm)	container_of(rtm, struct ww_mutex, base)
 # include "ww_mutex.h"
+
+static inline bool __internal_retry_reason(struct rt_mutex_waiter *waiter)
+{
+	return false;
+}
 #endif
 
 /*
@@ -1625,6 +1644,13 @@ static int __sched rt_mutex_slowlock_block(struct rt_mutex_base *lock,
 			ret = __ww_mutex_check_kill(rtm, waiter, ww_ctx);
 			if (ret)
 				break;
+		}
+
+		if (!build_ww_mutex()) {
+			if (__internal_retry_reason(waiter)) {
+				ret = -EAGAIN;
+				break;
+			}
 		}
 
 		if (waiter == rt_mutex_top_waiter(lock))

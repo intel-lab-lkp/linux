@@ -595,6 +595,7 @@ struct futex_hash_bucket *futex_q_lock(struct futex_q *q)
 {
 	struct futex_hash_bucket *hb;
 
+try_again:
 	hb = futex_hash(&q->key);
 
 	/*
@@ -610,7 +611,13 @@ struct futex_hash_bucket *futex_q_lock(struct futex_q *q)
 	q->lock_ptr = &hb->lock;
 
 	spin_lock(&hb->lock);
-	return hb;
+	if (futex_check_hb_valid(hb))
+		return hb;
+
+	futex_hb_waiters_dec(hb);
+	spin_unlock(&hb->lock);
+	futex_hash_put(hb);
+	goto try_again;
 }
 
 void futex_q_unlock(struct futex_hash_bucket *hb)
@@ -1238,17 +1245,49 @@ void futex_hash_free(struct mm_struct *mm)
 	futex_hash_priv_put(hb_p);
 }
 
+static void futex_put_old_hb_p(struct futex_hash_bucket_private *hb_p)
+{
+	unsigned int slots = hb_p->hash_mask + 1;
+	struct futex_hash_bucket *hb;
+	DEFINE_WAKE_Q(wake_q);
+	unsigned int i;
+
+	for (i = 0; i < slots; i++) {
+		struct futex_q *this;
+
+		hb = &hb_p->queues[i];
+
+		spin_lock(&hb->lock);
+		plist_for_each_entry(this, &hb->chain, list)
+			wake_q_add(&wake_q, this->task);
+		spin_unlock(&hb->lock);
+	}
+	futex_hash_priv_put(hb_p);
+
+	wake_up_q(&wake_q);
+}
+
+bool futex_check_hb_valid(struct futex_hash_bucket *hb)
+{
+	struct futex_hash_bucket_private *hb_p_now;
+	struct futex_hash_bucket_private *hb_p;
+
+	if (hb->hb_slot == 0)
+		return true;
+	guard(rcu)();
+	hb_p_now = rcu_dereference(current->mm->futex_hash_bucket);
+	hb_p = container_of(hb, struct futex_hash_bucket_private,
+			    queues[hb->hb_slot - 1]);
+
+	return hb_p_now == hb_p;
+}
+
 static int futex_hash_allocate(unsigned int hash_slots)
 {
-	struct futex_hash_bucket_private *hb_p;
+	struct futex_hash_bucket_private *hb_p, *hb_p_old = NULL;
+	struct mm_struct *mm;
 	size_t alloc_size;
 	int i;
-
-	if (current->mm->futex_hash_bucket)
-		return -EALREADY;
-
-	if (!thread_group_leader(current))
-		return -EINVAL;
 
 	if (hash_slots < 2)
 		hash_slots = 2;
@@ -1277,7 +1316,14 @@ static int futex_hash_allocate(unsigned int hash_slots)
 		hb_p->queues[i].hb_slot = i + 1;
 	}
 
-	rcu_assign_pointer(current->mm->futex_hash_bucket, hb_p);
+	mm = current->mm;
+	scoped_guard(mutex, &mm->futex_hash_lock) {
+		hb_p_old = rcu_dereference_check(mm->futex_hash_bucket,
+						 lockdep_is_held(&mm->futex_hash_lock));
+		rcu_assign_pointer(mm->futex_hash_bucket, hb_p);
+	}
+	if (hb_p_old)
+		futex_put_old_hb_p(hb_p_old);
 	return 0;
 }
 

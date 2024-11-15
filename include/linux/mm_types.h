@@ -899,6 +899,7 @@ struct mm_struct {
 		int mm_lock_seq;
 #endif
 
+		struct mutex				futex_hash_lock;
 		struct futex_hash_bucket_private	__rcu *futex_hash_bucket;
 
 		unsigned long hiwater_rss; /* High-watermark of RSS usage */

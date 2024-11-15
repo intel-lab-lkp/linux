@@ -998,6 +998,7 @@ retry_private:
 	rt_mutex_pre_schedule();
 
 	rt_mutex_init_waiter(&rt_waiter);
+	rt_waiter.hb = hb;
 
 	/*
 	 * On PREEMPT_RT, when hb->lock becomes an rt_mutex, we must not
@@ -1066,6 +1067,23 @@ cleanup:
 	 */
 	rt_mutex_post_schedule();
 no_block:
+	if (!futex_check_hb_valid(hb)) {
+		/*
+		 * We might got the lock, we might not. If the HB changed under
+		 * us it was all for nothing. Try again from scratch.
+		 */
+		futex_unqueue_pi(&q);
+		spin_unlock(q.lock_ptr);
+		futex_hash_put(hb);
+
+		if (to) {
+			hrtimer_cancel(&to->timer);
+			destroy_hrtimer_on_stack(&to->timer);
+		}
+		if (refill_pi_state_cache())
+			return -ENOMEM;
+		goto retry_private;
+	}
 	/*
 	 * Fixup the pi_state owner and possibly acquire the lock if we
 	 * haven't already.
@@ -1226,6 +1244,12 @@ retry_hb:
 		 * space.
 		 */
 		return ret;
+	} else {
+		if (!futex_check_hb_valid(hb)) {
+			spin_unlock(&hb->lock);
+			futex_hash_put(hb);
+			goto retry;
+		}
 	}
 
 	/*
@@ -1250,6 +1274,7 @@ retry_hb:
 			return ret;
 		}
 	}
+	/* XXX if the HB changed but uval did not, we might need to check if there is a waiter pending */
 
 	/*
 	 * If uval has changed, let user space handle it.
