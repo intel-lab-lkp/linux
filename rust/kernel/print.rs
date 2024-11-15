@@ -24,7 +24,7 @@ unsafe extern "C" fn rust_fmt_argument(
     use fmt::Write;
     // SAFETY: The C contract guarantees that `buf` is valid if it's less than `end`.
     let mut w = unsafe { RawFormatter::from_ptrs(buf.cast(), end.cast()) };
-    // SAFETY: TODO.
+    // SAFETY: The Rust contract guarantees that `ptr` is a valid pointer to a `fmt::Arguments` struct.
     let _ = w.write_fmt(unsafe { *(ptr as *const fmt::Arguments<'_>) });
     w.pos().cast()
 }
