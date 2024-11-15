@@ -417,8 +417,8 @@ struct drm_sched_backend_ops {
 	struct dma_fence *(*run_job)(struct drm_sched_job *sched_job);
 
 	/**
-	 * @timedout_job: Called when a job has taken too long to execute,
-	 * to trigger GPU recovery.
+	 * @timedout_job: Called when a hardware fence didn't signal within a
+	 * configurable amount of time. Triggers GPU recovery.
 	 *
 	 * This method is called in a workqueue context.
 	 *
@@ -429,9 +429,8 @@ struct drm_sched_backend_ops {
 	 *    scheduler thread and cancel the timeout work, guaranteeing that
 	 *    nothing is queued while we reset the hardware queue
 	 * 2. Try to gracefully stop non-faulty jobs (optional)
-	 * 3. Issue a GPU reset (driver-specific)
-	 * 4. Re-submit jobs using drm_sched_resubmit_jobs()
-	 * 5. Restart the scheduler using drm_sched_start(). At that point, new
+	 * 3. Issue a GPU or context reset (driver-specific)
+	 * 4. Restart the scheduler using drm_sched_start(). At that point, new
 	 *    jobs can be queued, and the scheduler thread is unblocked
 	 *
 	 * Note that some GPUs have distinct hardware queues but need to reset
@@ -447,16 +446,15 @@ struct drm_sched_backend_ops {
 	 * 2. Try to gracefully stop non-faulty jobs on all queues impacted by
 	 *    the reset (optional)
 	 * 3. Issue a GPU reset on all faulty queues (driver-specific)
-	 * 4. Re-submit jobs on all schedulers impacted by the reset using
-	 *    drm_sched_resubmit_jobs()
-	 * 5. Restart all schedulers that were stopped in step #1 using
+	 * 4. Restart all schedulers that were stopped in step #1 using
 	 *    drm_sched_start()
 	 *
 	 * Return DRM_GPU_SCHED_STAT_NOMINAL, when all is normal,
 	 * and the underlying driver has started or completed recovery.
 	 *
 	 * Return DRM_GPU_SCHED_STAT_ENODEV, if the device is no longer
-	 * available, i.e. has been unplugged.
+	 * available, for example if it has been unplugged or failed to
+	 * recover.
 	 */
 	enum drm_gpu_sched_stat (*timedout_job)(struct drm_sched_job *sched_job);
 
