@@ -443,7 +443,12 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pOFn@%llx", np,
 		 (unsigned long long)res->start);
 
-	priv->map = of_iomap(np, 0);
+	/*
+	 * While tempting, this cannot be converted to
+	 * devm_platform_get_and_ioremap_resource as some platforms overlap the
+	 * memory regions with the ethernet node.
+	 */
+	priv->map = devm_of_iomap(dev, np, 0, NULL);
 	if (!priv->map)
 		return -ENOMEM;
 
@@ -455,8 +460,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	 */
 	if (data->mii_offset > resource_size(res)) {
 		dev_err(dev, "invalid register map\n");
-		err = -EINVAL;
-		goto error;
+		return -EINVAL;
 	}
 	priv->regs = priv->map + data->mii_offset;
 
@@ -477,8 +481,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 				dev_err(dev,
 					"missing 'reg' property in node %pOF\n",
 					tbi);
-				err = -EBUSY;
-				goto error;
+				return -EBUSY;
 			}
 			set_tbipa(*prop, pdev, data->get_tbipa, priv->map, res);
 		}
@@ -490,16 +493,10 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	err = of_mdiobus_register(new_bus, np);
 	if (err) {
 		dev_err(dev, "cannot register %s as MDIO bus\n", new_bus->name);
-		goto error;
+		return err;
 	}
 
 	return 0;
-
-error:
-	if (priv->map)
-		iounmap(priv->map);
-
-	return err;
 }
 
 
@@ -507,11 +504,8 @@ static void fsl_pq_mdio_remove(struct platform_device *pdev)
 {
 	struct device *device = &pdev->dev;
 	struct mii_bus *bus = dev_get_drvdata(device);
-	struct fsl_pq_mdio_priv *priv = bus->priv;
 
 	mdiobus_unregister(bus);
-
-	iounmap(priv->map);
 }
 
 static struct platform_driver fsl_pq_mdio_driver = {
