@@ -1307,6 +1307,34 @@ BTRFS_ATTR(, temp_fsid, btrfs_temp_fsid_show);
 
 static const char * const btrfs_read_policy_name[] = { "pid" };
 
+static enum btrfs_read_policy btrfs_read_policy_to_enum(const char *str)
+{
+	bool found = false;
+	enum btrfs_read_policy index;
+	char *param;
+
+	if (!str || !strlen(str))
+		return 0;
+
+	param = kstrdup(str, GFP_KERNEL);
+	if (!param)
+		return -ENOMEM;
+
+	for (index = 0; index < BTRFS_NR_READ_POLICY; index++) {
+		if (sysfs_streq(param, btrfs_read_policy_name[index])) {
+			found = true;
+			break;
+		}
+	}
+
+	kfree(param);
+
+	if (found)
+		return index;
+
+	return -EINVAL;
+}
+
 static ssize_t btrfs_read_policy_show(struct kobject *kobj,
 				      struct kobj_attribute *a, char *buf)
 {
@@ -1338,21 +1366,19 @@ static ssize_t btrfs_read_policy_store(struct kobject *kobj,
 				       const char *buf, size_t len)
 {
 	struct btrfs_fs_devices *fs_devices = to_fs_devs(kobj);
-	int i;
+	enum btrfs_read_policy index;
 
-	for (i = 0; i < BTRFS_NR_READ_POLICY; i++) {
-		if (sysfs_streq(buf, btrfs_read_policy_name[i])) {
-			if (i != READ_ONCE(fs_devices->read_policy)) {
-				WRITE_ONCE(fs_devices->read_policy, i);
-				btrfs_info(fs_devices->fs_info,
-					   "read policy set to '%s'",
-					   btrfs_read_policy_name[i]);
-			}
-			return len;
-		}
+	index = btrfs_read_policy_to_enum(buf);
+	if (index == -EINVAL)
+		return -EINVAL;
+
+	if (index != READ_ONCE(fs_devices->read_policy)) {
+		WRITE_ONCE(fs_devices->read_policy, index);
+		btrfs_info(fs_devices->fs_info, "read policy set to '%s'",
+			   btrfs_read_policy_name[index]);
 	}
 
-	return -EINVAL;
+	return len;
 }
 BTRFS_ATTR_RW(, read_policy, btrfs_read_policy_show, btrfs_read_policy_store);
 
