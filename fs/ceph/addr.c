@@ -329,7 +329,7 @@ static int start_read(struct inode *inode, struct ceph_rw_context *rw_ctx,
 	int i;
 	struct page **pages;
 	pgoff_t next_index;
-	int nr_pages = 0;
+	s64 nr_pages = 0;
 	int got = 0;
 	int ret = 0;
 
@@ -370,7 +370,7 @@ static int start_read(struct inode *inode, struct ceph_rw_context *rw_ctx,
 			break;
 	}
 	len = nr_pages << PAGE_SHIFT;
-	dout("start_read %p nr_pages %d is %lld~%lld\n", inode, nr_pages,
+	dout("start_read %p nr_pages %lld is %lld~%lld\n", inode, nr_pages,
 	     off, len);
 	vino = ceph_vino(inode);
 	req = ceph_osdc_new_request(osdc, &ci->i_layout, vino, off, &len,
