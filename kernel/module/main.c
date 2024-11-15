@@ -2304,6 +2304,14 @@ static const char *module_license_offenders[] = {
 
 	/* lve claims to be GPL but upstream won't provide source */
 	"lve",
+
+	/*
+	 * TUXEDO awaits 2 final answers to relicense the last module to GPLv2+
+	 * See https://gitlab.com/tuxedocomputers/development/packages/tuxedo-drivers/-/merge_requests/21 ,
+	 * https://gitlab.com/tuxedocomputers/development/packages/tuxedo-drivers/-/commit/dd34594ab880ed477bb75725176c3fb9352a07eb ,
+	 * and https://gitlab.com/tuxedocomputers/development/packages/tuxedo-drivers/-/commit/c8893684c2f869b2a6b13f1ef1ddeb4922f2ffe3
+	 */
+	"clevo_acpi",
 };
 
 /*
