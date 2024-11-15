@@ -929,7 +929,6 @@ static int npcm7xx_pwm_fan_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np;
 	struct npcm7xx_pwm_fan_data *data;
-	struct resource *res;
 	struct device *hwmon;
 	char name[20];
 	int ret, cnt;
@@ -948,14 +947,7 @@ static int npcm7xx_pwm_fan_probe(struct platform_device *pdev)
 
 	data->pwm_modules = data->info->pwm_max_channel / NPCM7XX_PWM_MAX_CHN_NUM_IN_A_MODULE;
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pwm");
-	if (!res) {
-		dev_err(dev, "pwm resource not found\n");
-		return -ENODEV;
-	}
-
-	data->pwm_base = devm_ioremap_resource(dev, res);
-	dev_dbg(dev, "pwm base resource is %pR\n", res);
+	data->pwm_base = devm_platform_ioremap_resource_byname(pdev, "pwm");
 	if (IS_ERR(data->pwm_base))
 		return PTR_ERR(data->pwm_base);
 
@@ -965,14 +957,7 @@ static int npcm7xx_pwm_fan_probe(struct platform_device *pdev)
 		return PTR_ERR(data->pwm_clk);
 	}
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "fan");
-	if (!res) {
-		dev_err(dev, "fan resource not found\n");
-		return -ENODEV;
-	}
-
-	data->fan_base = devm_ioremap_resource(dev, res);
-	dev_dbg(dev, "fan base resource is %pR\n", res);
+	data->fan_base = devm_platform_ioremap_resource_byname(pdev, "fan");
 	if (IS_ERR(data->fan_base))
 		return PTR_ERR(data->fan_base);
 
