@@ -1096,12 +1096,12 @@ static int llc_ui_setsockopt(struct socket *sock, int level, int optname,
 	int rc = -EINVAL;
 
 	lock_sock(sk);
-	if (unlikely(level != SOL_LLC || optlen != sizeof(int)))
+	if (unlikely(level != SOL_LLC || optlen != sizeof(opt)))
 		goto out;
-	rc = copy_from_sockptr(&opt, optval, sizeof(opt));
-	if (rc)
+	if (copy_from_sockptr(&opt, optval, sizeof(opt))) {
+		rc = -EFAULT;
 		goto out;
-	rc = -EINVAL;
+	}
 	switch (optname) {
 	case LLC_OPT_RETRY:
 		if (opt > LLC_OPT_MAX_RETRY)
