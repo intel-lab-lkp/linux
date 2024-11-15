@@ -1095,6 +1095,9 @@ int str_read(char **strp, gfp_t flags, struct policy_file *fp, u32 len)
 	if ((len == 0) || (len == (u32)-1))
 		return -EINVAL;
 
+	if (oom_check(sizeof(char), len, fp))
+		return -EINVAL;
+
 	str = kmalloc(len + 1, flags | __GFP_NOWARN);
 	if (!str)
 		return -ENOMEM;
@@ -1167,6 +1170,10 @@ static int common_read(struct policydb *p, struct symtab *s, struct policy_file 
 	nel = le32_to_cpu(buf[3]);
 	rc = -EINVAL;
 	if (nel > 32)
+		goto bad;
+
+	rc = oom_check(/*guaranteed read by perm_read()*/2 * sizeof(u32), nel, fp);
+	if (rc)
 		goto bad;
 
 	rc = symtab_init(&comdatum->permissions, nel);
@@ -1342,6 +1349,10 @@ static int class_read(struct policydb *p, struct symtab *s, struct policy_file *
 	if (val >= U16_MAX)
 		goto bad;
 	cladatum->value = val;
+
+	rc = oom_check(/*guaranteed read by perm_read()*/2 * sizeof(u32), nel, fp);
+	if (rc)
+		goto bad;
 
 	rc = symtab_init(&cladatum->permissions, nel);
 	if (rc)
@@ -1915,6 +1926,10 @@ static int range_read(struct policydb *p, struct policy_file *fp)
 		return rc;
 
 	nel = le32_to_cpu(buf[0]);
+
+	rc = oom_check(sizeof(u32) * 2, nel, fp);
+	if (rc)
+		return rc;
 
 	rc = hashtab_init(&p->range_tr, nel);
 	if (rc)
@@ -2684,6 +2699,10 @@ int policydb_read(struct policydb *p, struct policy_file *fp)
 		nprim = le32_to_cpu(buf[0]);
 		nel = le32_to_cpu(buf[1]);
 
+		rc = oom_check(/*guaranteed read by read_f()*/ 4 * sizeof(u32), nel, fp);
+		if (rc)
+			goto out;
+
 		rc = symtab_init(&p->symtab[i], nel);
 		if (rc)
 			goto out;
@@ -2724,6 +2743,10 @@ int policydb_read(struct policydb *p, struct policy_file *fp)
 	if (rc)
 		goto bad;
 	nel = le32_to_cpu(buf[0]);
+
+	rc = oom_check(3 * sizeof(u32), nel, fp);
+	if (rc)
+		goto bad;
 
 	rc = hashtab_init(&p->role_tr, nel);
 	if (rc)

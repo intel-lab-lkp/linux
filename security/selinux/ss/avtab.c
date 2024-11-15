@@ -550,6 +550,10 @@ int avtab_read(struct avtab *a, struct policy_file *fp, struct policydb *pol)
 		goto bad;
 	}
 
+	rc = oom_check(2 * sizeof(u32), nel, fp);
+	if (rc)
+		goto bad;
+
 	rc = avtab_alloc(a, nel);
 	if (rc)
 		goto bad;

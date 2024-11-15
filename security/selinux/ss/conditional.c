@@ -12,6 +12,7 @@
 
 #include "security.h"
 #include "conditional.h"
+#include "policydb.h"
 #include "services.h"
 
 /*
@@ -329,6 +330,10 @@ static int cond_read_av_list(struct policydb *p, struct policy_file *fp,
 	if (len == 0)
 		return 0;
 
+	rc = oom_check(2 * sizeof(u32), len, fp);
+	if (rc)
+		return rc;
+
 	list->nodes = kcalloc(len, sizeof(*list->nodes), GFP_KERNEL);
 	if (!list->nodes)
 		return -ENOMEM;
@@ -379,6 +384,11 @@ static int cond_read_node(struct policydb *p, struct cond_node *node, struct pol
 
 	/* expr */
 	len = le32_to_cpu(buf[1]);
+
+	rc = oom_check(2 * sizeof(u32), len, fp);
+	if (rc)
+		return rc;
+
 	node->expr.nodes = kcalloc(len, sizeof(*node->expr.nodes), GFP_KERNEL);
 	if (!node->expr.nodes)
 		return -ENOMEM;
@@ -416,6 +426,10 @@ int cond_read_list(struct policydb *p, struct policy_file *fp)
 		return rc;
 
 	len = le32_to_cpu(buf[0]);
+
+	rc = oom_check(2 * sizeof(u32), len, fp);
+	if (rc)
+		goto err;
 
 	p->cond_list = kcalloc(len, sizeof(*p->cond_list), GFP_KERNEL);
 	if (!p->cond_list)
