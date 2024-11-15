@@ -1750,12 +1750,16 @@ static void m_can_stop(struct net_device *dev)
 
 	/* Set init mode to disengage from the network */
 	ret = m_can_cccr_update_bits(cdev, CCCR_INIT, CCCR_INIT);
-	if (ret)
-		netdev_err(dev, "failed to enter standby mode: %pe\n",
-			   ERR_PTR(ret));
 
 	/* set the state as STOPPED */
 	cdev->can.state = CAN_STATE_STOPPED;
+
+	if (!ret && cdev->ops->deinit)
+		ret = cdev->ops->deinit(cdev);
+
+	if (ret)
+		netdev_err(dev, "failed to enter standby mode: %pe\n",
+			   ERR_PTR(ret));
 }
 
 static int m_can_close(struct net_device *dev)
