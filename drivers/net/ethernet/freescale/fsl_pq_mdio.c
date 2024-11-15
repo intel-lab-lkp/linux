@@ -414,7 +414,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	struct device_node *tbi;
 	struct mii_bus *new_bus;
 	struct device_node *np;
-	struct resource res;
+	struct resource *res;
 	int err;
 
 	data = device_get_match_data(dev);
@@ -433,15 +433,15 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	new_bus->write = &fsl_pq_mdio_write;
 	new_bus->reset = &fsl_pq_mdio_reset;
 
-	np = dev->of_node;
-	err = of_address_to_resource(np, 0, &res);
-	if (err < 0) {
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
 		dev_err(dev, "could not obtain address information\n");
-		return err;
+		return -ENOMEM;
 	}
 
+	np = dev->of_node;
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%pOFn@%llx", np,
-		 (unsigned long long)res.start);
+		 (unsigned long long)res->start);
 
 	priv->map = of_iomap(np, 0);
 	if (!priv->map)
@@ -453,7 +453,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	 * contains the offset of the MII registers inside the mapped register
 	 * space.
 	 */
-	if (data->mii_offset > resource_size(&res)) {
+	if (data->mii_offset > resource_size(res)) {
 		dev_err(dev, "invalid register map\n");
 		err = -EINVAL;
 		goto error;
@@ -480,13 +480,12 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 				err = -EBUSY;
 				goto error;
 			}
-			set_tbipa(*prop, pdev,
-				  data->get_tbipa, priv->map, &res);
+			set_tbipa(*prop, pdev, data->get_tbipa, priv->map, res);
 		}
 	}
 
 	if (data->ucc_configure)
-		data->ucc_configure(res.start, res.end);
+		data->ucc_configure(res->start, res->end);
 
 	err = of_mdiobus_register(new_bus, np);
 	if (err) {
