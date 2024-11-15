@@ -660,6 +660,19 @@ nlmsg_next(const struct nlmsghdr *nlh, int *remaining)
 }
 
 /**
+ * nlmsg_addr_in_payload - address points to a byte within the message payload
+ * @nlh: netlink message header
+ *
+ * Returns: true if address is within the payload of the message
+ */
+static inline bool nlmsg_addr_in_payload(const struct nlmsghdr *nlh,
+					 const void *addr)
+{
+	return addr >= nlmsg_data(nlh) &&
+		addr - (const void *) nlh < nlh->nlmsg_len;
+}
+
+/**
  * nla_parse - Parse a stream of attributes into a tb buffer
  * @tb: destination array with maxtype+1 elements
  * @maxtype: maximum attribute type to be expected
