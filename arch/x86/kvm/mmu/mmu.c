@@ -6629,9 +6629,10 @@ static bool kvm_rmap_zap_gfn_range(struct kvm *kvm, gfn_t gfn_start, gfn_t gfn_e
 
 /*
  * Invalidate (zap) SPTEs that cover GFNs from gfn_start and up to gfn_end
- * (not including it)
+ * (not including it) for VALID roots specified with attr_filter
  */
-void kvm_zap_gfn_range(struct kvm *kvm, gfn_t gfn_start, gfn_t gfn_end)
+static void kvm_zap_gfn_range_filtered(struct kvm *kvm, gfn_t gfn_start, gfn_t gfn_end,
+				       enum kvm_gfn_range_filter attr_filter)
 {
 	bool flush;
 
@@ -6647,7 +6648,8 @@ void kvm_zap_gfn_range(struct kvm *kvm, gfn_t gfn_start, gfn_t gfn_end)
 	flush = kvm_rmap_zap_gfn_range(kvm, gfn_start, gfn_end);
 
 	if (tdp_mmu_enabled)
-		flush = kvm_tdp_mmu_zap_leafs(kvm, gfn_start, gfn_end, flush);
+		flush = kvm_tdp_mmu_zap_leafs(kvm, gfn_start, gfn_end,
+					      attr_filter, flush);
 
 	if (flush)
 		kvm_flush_remote_tlbs_range(kvm, gfn_start, gfn_end - gfn_start);
@@ -6656,6 +6658,17 @@ void kvm_zap_gfn_range(struct kvm *kvm, gfn_t gfn_start, gfn_t gfn_end)
 
 	write_unlock(&kvm->mmu_lock);
 }
+
+/*
+ * Invalidate (zap) SPTEs that cover GFNs from gfn_start and up to gfn_end
+ * (not including it) for all *VALID* non-mirror roots.
+ */
+void kvm_zap_gfn_range(struct kvm *kvm, gfn_t gfn_start, gfn_t gfn_end)
+{
+	kvm_zap_gfn_range_filtered(kvm, gfn_start, gfn_end,
+				   KVM_FILTER_SHARED);
+}
+EXPORT_SYMBOL_GPL(kvm_zap_gfn_range);
 
 static bool slot_rmap_write_protect(struct kvm *kvm,
 				    struct kvm_rmap_head *rmap_head,
@@ -6998,7 +7011,6 @@ restart:
 
 	return need_tlb_flush;
 }
-EXPORT_SYMBOL_GPL(kvm_zap_gfn_range);
 
 static void kvm_rmap_zap_collapsible_sptes(struct kvm *kvm,
 					   const struct kvm_memory_slot *slot)

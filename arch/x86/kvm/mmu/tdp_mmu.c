@@ -1016,16 +1016,21 @@ static bool tdp_mmu_zap_leafs(struct kvm *kvm, struct kvm_mmu_page *root,
 }
 
 /*
- * Zap leaf SPTEs for the range of gfns, [start, end), for all *VALID** roots.
+ * Zap leaf SPTEs for the range of gfns, [start, end), for *VALID** roots
+ * specified with attr_filter.
  * Returns true if a TLB flush is needed before releasing the MMU lock, i.e. if
  * one or more SPTEs were zapped since the MMU lock was last acquired.
  */
-bool kvm_tdp_mmu_zap_leafs(struct kvm *kvm, gfn_t start, gfn_t end, bool flush)
+bool kvm_tdp_mmu_zap_leafs(struct kvm *kvm, gfn_t start, gfn_t end,
+			   enum kvm_gfn_range_filter attr_filter, bool flush)
 {
+	enum kvm_tdp_mmu_root_types types;
 	struct kvm_mmu_page *root;
 
 	lockdep_assert_held_write(&kvm->mmu_lock);
-	for_each_valid_tdp_mmu_root_yield_safe(kvm, root, -1)
+
+	types = kvm_gfn_range_filter_to_root_types(kvm, attr_filter);
+	__for_each_tdp_mmu_root_yield_safe(kvm, root, -1, types)
 		flush = tdp_mmu_zap_leafs(kvm, root, start, end, true, flush);
 
 	return flush;
