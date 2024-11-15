@@ -730,6 +730,8 @@ int dquot_writeback_dquots(struct super_block *sb, int type)
 			sb->dq_op->write_info(sb, cnt);
 	dqstats_inc(DQST_SYNCS);
 
+	flush_delayed_work(&quota_release_work);
+
 	return ret;
 }
 EXPORT_SYMBOL(dquot_writeback_dquots);
