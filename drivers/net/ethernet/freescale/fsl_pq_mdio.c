@@ -409,16 +409,17 @@ static void set_tbipa(const u32 tbipa_val, struct platform_device *pdev,
 static int fsl_pq_mdio_probe(struct platform_device *pdev)
 {
 	const struct fsl_pq_mdio_data *data;
-	struct device_node *np = pdev->dev.of_node;
-	struct resource res;
-	struct device_node *tbi;
+	struct device *dev = &pdev->dev;
 	struct fsl_pq_mdio_priv *priv;
+	struct device_node *tbi;
 	struct mii_bus *new_bus;
+	struct device_node *np;
+	struct resource res;
 	int err;
 
-	data = device_get_match_data(&pdev->dev);
+	data = device_get_match_data(dev);
 	if (!data) {
-		dev_err(&pdev->dev, "Failed to match device\n");
+		dev_err(dev, "Failed to match device\n");
 		return -ENODEV;
 	}
 
@@ -432,9 +433,10 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	new_bus->write = &fsl_pq_mdio_write;
 	new_bus->reset = &fsl_pq_mdio_reset;
 
+	np = dev->of_node;
 	err = of_address_to_resource(np, 0, &res);
 	if (err < 0) {
-		dev_err(&pdev->dev, "could not obtain address information\n");
+		dev_err(dev, "could not obtain address information\n");
 		goto error;
 	}
 
@@ -454,20 +456,19 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	 * space.
 	 */
 	if (data->mii_offset > resource_size(&res)) {
-		dev_err(&pdev->dev, "invalid register map\n");
+		dev_err(dev, "invalid register map\n");
 		err = -EINVAL;
 		goto error;
 	}
 	priv->regs = priv->map + data->mii_offset;
 
-	new_bus->parent = &pdev->dev;
+	new_bus->parent = dev;
 	platform_set_drvdata(pdev, new_bus);
 
 	if (data->get_tbipa) {
 		for_each_child_of_node(np, tbi) {
 			if (of_node_is_type(tbi, "tbi-phy")) {
-				dev_dbg(&pdev->dev, "found TBI PHY node %pOFP\n",
-					tbi);
+				dev_dbg(dev, "found TBI PHY node %pOFP\n", tbi);
 				break;
 			}
 		}
@@ -475,7 +476,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 		if (tbi) {
 			const u32 *prop = of_get_property(tbi, "reg", NULL);
 			if (!prop) {
-				dev_err(&pdev->dev,
+				dev_err(dev,
 					"missing 'reg' property in node %pOF\n",
 					tbi);
 				err = -EBUSY;
@@ -491,8 +492,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 
 	err = of_mdiobus_register(new_bus, np);
 	if (err) {
-		dev_err(&pdev->dev, "cannot register %s as MDIO bus\n",
-			new_bus->name);
+		dev_err(dev, "cannot register %s as MDIO bus\n", new_bus->name);
 		goto error;
 	}
 
