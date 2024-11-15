@@ -14,6 +14,11 @@ output=$(mktemp /tmp/__perf_test.ftrace.XXXXXX)
 
 cleanup() {
   rm -f "${output}"
+  if [ "$(uname -m)" = "s390x" ]
+  then
+	echo $ftrace_size > /sys/kernel/tracing/buffer_size_kb
+  fi
+
 
   trap - EXIT TERM INT
 }
@@ -79,6 +84,12 @@ test_ftrace_profile() {
     grep -E "^${time_re}${time_re}${time_re}[[:space:]]+1[[:space:]]+.*clock_nanosleep" "${output}"
     echo "perf ftrace profile test  [Success]"
 }
+
+if [ "$(uname -m)" = "s390x" ]
+then
+	ftrace_size=$(cat /sys/kernel/tracing/buffer_size_kb)
+	echo 16384 > /sys/kernel/tracing/buffer_size_kb
+fi
 
 test_ftrace_list
 test_ftrace_trace
