@@ -1117,22 +1117,6 @@ fwnode_graph_get_remote_port_parent(const struct fwnode_handle *fwnode)
 EXPORT_SYMBOL_GPL(fwnode_graph_get_remote_port_parent);
 
 /**
- * fwnode_graph_get_remote_port - Return fwnode of a remote port
- * @fwnode: Endpoint firmware node pointing to the remote endpoint
- *
- * Extracts firmware node of a remote port the @fwnode points to.
- *
- * The caller is responsible for calling fwnode_handle_put() on the returned
- * fwnode pointer.
- */
-struct fwnode_handle *
-fwnode_graph_get_remote_port(const struct fwnode_handle *fwnode)
-{
-	return fwnode_get_next_parent(fwnode_graph_get_remote_endpoint(fwnode));
-}
-EXPORT_SYMBOL_GPL(fwnode_graph_get_remote_port);
-
-/**
  * fwnode_graph_get_remote_endpoint - Return fwnode of a remote endpoint
  * @fwnode: Endpoint firmware node pointing to the remote endpoint
  *
@@ -1226,31 +1210,6 @@ fwnode_graph_get_endpoint_by_id(const struct fwnode_handle *fwnode,
 	return best_ep;
 }
 EXPORT_SYMBOL_GPL(fwnode_graph_get_endpoint_by_id);
-
-/**
- * fwnode_graph_get_endpoint_count - Count endpoints on a device node
- * @fwnode: The node related to a device
- * @flags: fwnode lookup flags
- * Count endpoints in a device node.
- *
- * If FWNODE_GRAPH_DEVICE_DISABLED flag is specified, also unconnected endpoints
- * and endpoints connected to disabled devices are counted.
- */
-unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode,
-					     unsigned long flags)
-{
-	struct fwnode_handle *ep;
-	unsigned int count = 0;
-
-	fwnode_graph_for_each_endpoint(fwnode, ep) {
-		if (flags & FWNODE_GRAPH_DEVICE_DISABLED ||
-		    fwnode_graph_remote_available(ep))
-			count++;
-	}
-
-	return count;
-}
-EXPORT_SYMBOL_GPL(fwnode_graph_get_endpoint_count);
 
 /**
  * fwnode_graph_parse_endpoint - parse common endpoint node properties
