@@ -174,7 +174,7 @@ struct device_node *adv7533_parse_dt(struct device_node *np,
 
 	of_property_read_u32(np, "adi,dsi-lanes", &num_lanes);
 
-	if (num_lanes < 1 || num_lanes > 4)
+	if (num_lanes < 2 || num_lanes > 4)
 		return ERR_PTR(-EINVAL);
 
 	adv->num_dsi_lanes = num_lanes;
