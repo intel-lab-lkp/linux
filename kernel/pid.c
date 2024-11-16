@@ -629,10 +629,12 @@ static int pidfd_create(struct pid *pid, unsigned int flags)
 SYSCALL_DEFINE2(pidfd_open, pid_t, pid, unsigned int, flags)
 {
 	int fd;
+	int err;
 	struct pid *p;
 
-	if (flags & ~(PIDFD_NONBLOCK | PIDFD_THREAD))
-		return -EINVAL;
+	err = pidfd_validate_flags(flags);
+	if (err)
+		return err;
 
 	if (pid <= 0)
 		return -EINVAL;

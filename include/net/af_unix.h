@@ -62,6 +62,7 @@ struct unix_skb_parms {
 #ifdef CONFIG_SECURITY_NETWORK
 	u32			secid;		/* Security ID		*/
 #endif
+	u32			pidfd_flags;
 	u32			consumed;
 } __randomize_layout;
 

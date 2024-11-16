@@ -1892,6 +1892,7 @@ static int unix_scm_to_skb(struct scm_cookie *scm, struct sk_buff *skb, bool sen
 	UNIXCB(skb).uid = scm->creds.uid;
 	UNIXCB(skb).gid = scm->creds.gid;
 	UNIXCB(skb).fp = NULL;
+	UNIXCB(skb).pidfd_flags = scm->pidfd_flags;
 	unix_get_secdata(scm, skb);
 	if (scm->fp && send_fds)
 		err = unix_attach_fds(scm, skb);
@@ -2486,6 +2487,7 @@ int __unix_dgram_recvmsg(struct sock *sk, struct msghdr *msg, size_t size,
 	memset(&scm, 0, sizeof(scm));
 
 	scm_set_cred(&scm, UNIXCB(skb).pid, UNIXCB(skb).uid, UNIXCB(skb).gid);
+	scm.pidfd_flags = UNIXCB(skb).pidfd_flags;
 	unix_set_secdata(&scm, skb);
 
 	if (!(flags & MSG_PEEK)) {
@@ -2873,6 +2875,7 @@ unlock:
 			   test_bit(SOCK_PASSPIDFD, &sock->flags)) {
 			/* Copy credentials */
 			scm_set_cred(&scm, UNIXCB(skb).pid, UNIXCB(skb).uid, UNIXCB(skb).gid);
+			scm.pidfd_flags = UNIXCB(skb).pidfd_flags;
 			unix_set_secdata(&scm, skb);
 			check_creds = true;
 		}
