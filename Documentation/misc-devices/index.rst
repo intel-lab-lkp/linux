@@ -23,6 +23,7 @@ fit into other categories.
    max6875
    mrvl_cn10k_dpi
    oxsemi-tornado
+   page_detective
    pci-endpoint-test
    spear-pcie-gadget
    tps6594-pfsm
