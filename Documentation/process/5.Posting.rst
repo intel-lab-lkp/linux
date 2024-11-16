@@ -268,10 +268,19 @@ The tags in common use are:
  - Cc: the named person received a copy of the patch and had the
    opportunity to comment on it.
 
-Be careful in the addition of tags to your patches, as only Cc: is appropriate
-for addition without the explicit permission of the person named; using
-Reported-by: is fine most of the time as well, but ask for permission if
-the bug was reported in private.
+Be careful in the addition of tags to your patches, as nearly all of them need
+explicit permission of the person named.
+
+The only exceptions are Cc:, Reported-by:, and Suggested-by:, as for them
+implicit permission is sufficient under the following circumstances: when the
+person named according to the lore archives or the commit history regularly
+contributes to the Linux kernel using that name and email address -- and in
+case of Reported-by: and Suggested-by: did the reporting or suggestion in
+public. For all other situations explicit permission is required to among
+others prevent exposing email addresses considered private. Especially ask for
+permission when it comes to bug trackers, as most only show addresses to logged
+in users; that includes bugzilla.kernel.org, whose privacy policy explicitly
+states that 'your email address will never be displayed to logged out users'.
 
 
 Sending the patch
