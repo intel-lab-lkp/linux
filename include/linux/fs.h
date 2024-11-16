@@ -3546,6 +3546,9 @@ void setattr_copy(struct mnt_idmap *, struct inode *inode,
 
 extern int file_update_time(struct file *file);
 
+void get_vma_name(struct vm_area_struct *vma, const struct path **path,
+		  const char **name, const char **name_fmt);
+
 static inline bool vma_is_dax(const struct vm_area_struct *vma)
 {
 	return vma->vm_file && IS_DAX(vma->vm_file->f_mapping->host);
