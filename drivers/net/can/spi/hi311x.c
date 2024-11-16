@@ -701,17 +701,22 @@ static irqreturn_t hi3110_can_ist(int irq, void *dev_id)
 
 				cf->can_id |= CAN_ERR_PROT | CAN_ERR_BUSERROR;
 				priv->can.can_stats.bus_error++;
-				priv->net->stats.rx_errors++;
-				if (eflag & HI3110_ERR_BITERR)
+				if (eflag & HI3110_ERR_BITERR) {
 					cf->data[2] |= CAN_ERR_PROT_BIT;
-				else if (eflag & HI3110_ERR_FRMERR)
+					priv->net->stats.tx_errors++;
+				} else if (eflag & HI3110_ERR_FRMERR) {
 					cf->data[2] |= CAN_ERR_PROT_FORM;
-				else if (eflag & HI3110_ERR_STUFERR)
+					priv->net->stats.rx_errors++;
+				} else if (eflag & HI3110_ERR_STUFERR) {
 					cf->data[2] |= CAN_ERR_PROT_STUFF;
-				else if (eflag & HI3110_ERR_CRCERR)
+					priv->net->stats.rx_errors++;
+				} else if (eflag & HI3110_ERR_CRCERR) {
 					cf->data[3] |= CAN_ERR_PROT_LOC_CRC_SEQ;
-				else if (eflag & HI3110_ERR_ACKERR)
+					priv->net->stats.rx_errors++;
+				} else if (eflag & HI3110_ERR_ACKERR) {
 					cf->data[3] |= CAN_ERR_PROT_LOC_ACK;
+					priv->net->stats.tx_errors++;
+				}
 
 				cf->data[6] = hi3110_read(spi, HI3110_READ_TEC);
 				cf->data[7] = hi3110_read(spi, HI3110_READ_REC);
