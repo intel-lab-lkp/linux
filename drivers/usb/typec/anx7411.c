@@ -29,6 +29,8 @@
 #include <linux/workqueue.h>
 #include <linux/power_supply.h>
 
+#include "mux.h"
+
 #define TCPC_ADDRESS1		0x58
 #define TCPC_ADDRESS2		0x56
 #define TCPC_ADDRESS3		0x54
@@ -1088,6 +1090,7 @@ static void anx7411_unregister_mux(struct anx7411_data *ctx)
 {
 	if (ctx->typec.typec_mux) {
 		typec_mux_unregister(ctx->typec.typec_mux);
+		fwnode_handle_put(ctx->typec.typec_mux->dev.fwnode);
 		ctx->typec.typec_mux = NULL;
 	}
 }
@@ -1096,6 +1099,7 @@ static void anx7411_unregister_switch(struct anx7411_data *ctx)
 {
 	if (ctx->typec.typec_switch) {
 		typec_switch_unregister(ctx->typec.typec_switch);
+		fwnode_handle_put(ctx->typec.typec_switch->dev.fwnode);
 		ctx->typec.typec_switch = NULL;
 	}
 }
