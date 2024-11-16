@@ -67,36 +67,38 @@ static const char *page_type_name(unsigned int page_type)
 	return page_type_names[i];
 }
 
-static void __dump_folio(struct folio *folio, struct page *page,
-		unsigned long pfn, unsigned long idx)
+static void __dump_folio(const char *loglvl, struct folio *folio,
+			 struct page *page, unsigned long pfn,
+			 unsigned long idx)
 {
 	struct address_space *mapping = folio_mapping(folio);
 	int mapcount = atomic_read(&page->_mapcount);
 	char *type = "";
 
 	mapcount = page_mapcount_is_type(mapcount) ? 0 : mapcount + 1;
-	pr_warn("page: refcount:%d mapcount:%d mapping:%p index:%#lx pfn:%#lx\n",
-			folio_ref_count(folio), mapcount, mapping,
-			folio->index + idx, pfn);
+	printk("%spage: refcount:%d mapcount:%d mapping:%p index:%#lx pfn:%#lx\n",
+	       loglvl, folio_ref_count(folio), mapcount, mapping,
+	       folio->index + idx, pfn);
 	if (folio_test_large(folio)) {
-		pr_warn("head: order:%u mapcount:%d entire_mapcount:%d nr_pages_mapped:%d pincount:%d\n",
-				folio_order(folio),
-				folio_mapcount(folio),
-				folio_entire_mapcount(folio),
-				folio_nr_pages_mapped(folio),
-				atomic_read(&folio->_pincount));
+		printk("%shead: order:%u mapcount:%d entire_mapcount:%d nr_pages_mapped:%d pincount:%d\n",
+		       loglvl,
+		       folio_order(folio),
+		       folio_mapcount(folio),
+		       folio_entire_mapcount(folio),
+		       folio_nr_pages_mapped(folio),
+		       atomic_read(&folio->_pincount));
 	}
 
 #ifdef CONFIG_MEMCG
 	if (folio->memcg_data)
-		pr_warn("memcg:%lx\n", folio->memcg_data);
+		printk("%smemcg:%lx\n", loglvl, folio->memcg_data);
 #endif
 	if (folio_test_ksm(folio))
 		type = "ksm ";
 	else if (folio_test_anon(folio))
 		type = "anon ";
 	else if (mapping)
-		dump_mapping(mapping);
+		dump_mapping(loglvl, mapping);
 	BUILD_BUG_ON(ARRAY_SIZE(pageflag_names) != __NR_PAGEFLAGS + 1);
 
 	/*
@@ -105,22 +107,22 @@ static void __dump_folio(struct folio *folio, struct page *page,
 	 * state for debugging, it should be fine to accept a bit of
 	 * inaccuracy here due to racing.
 	 */
-	pr_warn("%sflags: %pGp%s\n", type, &folio->flags,
-		is_migrate_cma_folio(folio, pfn) ? " CMA" : "");
+	printk("%s%sflags: %pGp%s\n", loglvl, type, &folio->flags,
+	       is_migrate_cma_folio(folio, pfn) ? " CMA" : "");
 	if (page_has_type(&folio->page))
 		pr_warn("page_type: %x(%s)\n", folio->page.page_type >> 24,
 				page_type_name(folio->page.page_type));
 
-	print_hex_dump(KERN_WARNING, "raw: ", DUMP_PREFIX_NONE, 32,
-			sizeof(unsigned long), page,
-			sizeof(struct page), false);
+	print_hex_dump(loglvl, "raw: ", DUMP_PREFIX_NONE, 32,
+		       sizeof(unsigned long), page,
+		       sizeof(struct page), false);
 	if (folio_test_large(folio))
-		print_hex_dump(KERN_WARNING, "head: ", DUMP_PREFIX_NONE, 32,
-			sizeof(unsigned long), folio,
-			2 * sizeof(struct page), false);
+		print_hex_dump(loglvl, "head: ", DUMP_PREFIX_NONE, 32,
+			       sizeof(unsigned long), folio,
+			       2 * sizeof(struct page), false);
 }
 
-static void __dump_page(const struct page *page)
+void dump_page_lvl(const char *loglvl, const struct page *page)
 {
 	struct folio *foliop, folio;
 	struct page precise;
@@ -149,22 +151,23 @@ again:
 	if (idx > nr_pages) {
 		if (loops-- > 0)
 			goto again;
-		pr_warn("page does not match folio\n");
+		printk("%spage does not match folio\n", loglvl);
 		precise.compound_head &= ~1UL;
 		foliop = (struct folio *)&precise;
 		idx = 0;
 	}
 
 dump:
-	__dump_folio(foliop, &precise, pfn, idx);
+	__dump_folio(loglvl, foliop, &precise, pfn, idx);
 }
+EXPORT_SYMBOL_GPL(dump_page_lvl);
 
 void dump_page(const struct page *page, const char *reason)
 {
 	if (PagePoisoned(page))
 		pr_warn("page:%p is uninitialized and poisoned", page);
 	else
-		__dump_page(page);
+		dump_page_lvl(KERN_WARNING, page);
 	if (reason)
 		pr_warn("page dumped because: %s\n", reason);
 	dump_page_owner(page);

@@ -11,6 +11,7 @@ struct mm_struct;
 struct vma_iterator;
 
 void dump_page(const struct page *page, const char *reason);
+void dump_page_lvl(const char *loglvl, const struct page *page);
 void dump_vma(const struct vm_area_struct *vma);
 void dump_mm(const struct mm_struct *mm);
 void vma_iter_dump_tree(const struct vma_iterator *vmi);

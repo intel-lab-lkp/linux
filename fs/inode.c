@@ -674,7 +674,7 @@ void __remove_inode_hash(struct inode *inode)
 }
 EXPORT_SYMBOL(__remove_inode_hash);
 
-void dump_mapping(const struct address_space *mapping)
+void dump_mapping(const char *loglvl, const struct address_space *mapping)
 {
 	struct inode *host;
 	const struct address_space_operations *a_ops;
@@ -690,31 +690,31 @@ void dump_mapping(const struct address_space *mapping)
 	 */
 	if (get_kernel_nofault(host, &mapping->host) ||
 	    get_kernel_nofault(a_ops, &mapping->a_ops)) {
-		pr_warn("invalid mapping:%px\n", mapping);
+		printk("%sinvalid mapping:%px\n", loglvl, mapping);
 		return;
 	}
 
 	if (!host) {
-		pr_warn("aops:%ps\n", a_ops);
+		printk("%saops:%ps\n", loglvl, a_ops);
 		return;
 	}
 
 	if (get_kernel_nofault(dentry_first, &host->i_dentry.first) ||
 	    get_kernel_nofault(ino, &host->i_ino)) {
-		pr_warn("aops:%ps invalid inode:%px\n", a_ops, host);
+		printk("%saops:%ps invalid inode:%px\n", loglvl, a_ops, host);
 		return;
 	}
 
 	if (!dentry_first) {
-		pr_warn("aops:%ps ino:%lx\n", a_ops, ino);
+		printk("%saops:%ps ino:%lx\n", loglvl, a_ops, ino);
 		return;
 	}
 
 	dentry_ptr = container_of(dentry_first, struct dentry, d_u.d_alias);
 	if (get_kernel_nofault(dentry, dentry_ptr) ||
 	    !dentry.d_parent || !dentry.d_name.name) {
-		pr_warn("aops:%ps ino:%lx invalid dentry:%px\n",
-				a_ops, ino, dentry_ptr);
+		printk("%saops:%ps ino:%lx invalid dentry:%px\n",
+		       loglvl, a_ops, ino, dentry_ptr);
 		return;
 	}
 
@@ -724,8 +724,8 @@ void dump_mapping(const struct address_space *mapping)
 	 * Even if strncpy_from_kernel_nofault() succeeded,
 	 * the fname could be unreliable
 	 */
-	pr_warn("aops:%ps ino:%lx dentry name(?):\"%s\"\n",
-		a_ops, ino, fname);
+	printk("%saops:%ps ino:%lx dentry name(?):\"%s\"\n",
+	       loglvl, a_ops, ino, fname);
 }
 
 void clear_inode(struct inode *inode)
