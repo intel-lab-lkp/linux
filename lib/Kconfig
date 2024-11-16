@@ -725,6 +725,22 @@ config REF_TRACKER
 	depends on STACKTRACE_SUPPORT
 	select STACKDEPOT
 
+config STACKLOG_DEBUG
+	bool "Debug tool for logging and later displaying stacktraces"
+	depends on STACKTRACE_SUPPORT
+	select STACKDEPOT
+	select STACKDEPOT_ALWAYS_INIT
+	help
+	  Enables debug infrastructure for logging unique stack traces at
+	  a specific point, which can be later displayed from userland.
+
+	  The developer adds: stacklog_debug_save() calls at points of
+	  interest (as they might with stack_dump()).
+
+	  Then after running the kernel, the developer can dump the unique
+	  stack traces from the buffer via:
+	    cat /sys/kernel/debug/stacklog_debug
+
 config SBITMAP
 	bool
 
