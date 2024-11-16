@@ -17402,6 +17402,7 @@ L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/misc-devices/page_detective.rst
 F:	drivers/misc/page_detective.c
+F:	tools/testing/selftests/page_detective/
 
 PAGE POOL
 M:	Jesper Dangaard Brouer <hawk@kernel.org>

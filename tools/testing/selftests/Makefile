@@ -72,6 +72,7 @@ TARGETS += net/packetdrill
 TARGETS += net/rds
 TARGETS += net/tcp_ao
 TARGETS += nsfs
+TARGETS += page_detective
 TARGETS += perf_events
 TARGETS += pidfd
 TARGETS += pid_namespace
