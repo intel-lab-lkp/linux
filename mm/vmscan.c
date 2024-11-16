@@ -1046,6 +1046,7 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 	struct folio_batch free_folios;
 	LIST_HEAD(ret_folios);
 	LIST_HEAD(demote_folios);
+	LIST_HEAD(pageout_folios);
 	unsigned int nr_reclaimed = 0;
 	unsigned int pgactivate = 0;
 	bool do_demote_pass;
@@ -1061,7 +1062,7 @@ retry:
 		struct address_space *mapping;
 		struct folio *folio;
 		enum folio_references references = FOLIOREF_RECLAIM;
-		bool dirty, writeback;
+		bool dirty, writeback, is_pageout = false;
 		unsigned int nr_pages;
 
 		cond_resched();
@@ -1384,6 +1385,7 @@ retry:
 					nr_pages = 1;
 				}
 				stat->nr_pageout += nr_pages;
+				is_pageout = true;
 
 				if (folio_test_writeback(folio))
 					goto keep;
@@ -1508,7 +1510,10 @@ activate_locked:
 keep_locked:
 		folio_unlock(folio);
 keep:
-		list_add(&folio->lru, &ret_folios);
+		if (is_pageout)
+			list_add(&folio->lru, &pageout_folios);
+		else
+			list_add(&folio->lru, &ret_folios);
 		VM_BUG_ON_FOLIO(folio_test_lru(folio) ||
 				folio_test_unevictable(folio), folio);
 	}
@@ -1551,6 +1556,7 @@ keep:
 	free_unref_folios(&free_folios);
 
 	list_splice(&ret_folios, folio_list);
+	list_splice(&pageout_folios, folio_list);
 	count_vm_events(PGACTIVATE, pgactivate);
 
 	if (plug)
@@ -1826,11 +1832,14 @@ static bool too_many_isolated(struct pglist_data *pgdat, int file,
 
 /*
  * move_folios_to_lru() moves folios from private @list to appropriate LRU list.
+ * @lruvec: The LRU vector the list is moved to.
+ * @list: The folio list are moved to lruvec
+ * @nr_io: The first nr folios of the list that have been committed io.
  *
  * Returns the number of pages moved to the given lruvec.
  */
 static unsigned int move_folios_to_lru(struct lruvec *lruvec,
-		struct list_head *list)
+		struct list_head *list, unsigned int nr_io)
 {
 	int nr_pages, nr_moved = 0;
 	struct folio_batch free_folios;
@@ -1880,9 +1889,21 @@ static unsigned int move_folios_to_lru(struct lruvec *lruvec,
 		 * inhibits memcg migration).
 		 */
 		VM_BUG_ON_FOLIO(!folio_matches_lruvec(folio, lruvec), folio);
-		lruvec_add_folio(lruvec, folio);
+		/*
+		 * If the folio have been committed io and writed back completely,
+		 * it should be added to the tailed to the lru, so it can
+		 * be relaimed as soon as possible.
+		 */
+		if (nr_io > 0 &&
+		    !folio_test_reclaim(folio) &&
+		    !folio_test_writeback(folio))
+			lruvec_add_folio_tail(lruvec, folio);
+		else
+			lruvec_add_folio(lruvec, folio);
+
 		nr_pages = folio_nr_pages(folio);
 		nr_moved += nr_pages;
+		nr_io = nr_io > nr_pages ? (nr_io - nr_pages) : 0;
 		if (folio_test_active(folio))
 			workingset_age_nonresident(lruvec, nr_pages);
 	}
@@ -1960,7 +1981,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false);
 
 	spin_lock_irq(&lruvec->lru_lock);
-	move_folios_to_lru(lruvec, &folio_list);
+	move_folios_to_lru(lruvec, &folio_list, stat.nr_pageout);
 
 	__mod_lruvec_state(lruvec, PGDEMOTE_KSWAPD + reclaimer_offset(),
 					stat.nr_demoted);
@@ -2111,8 +2132,8 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	 */
 	spin_lock_irq(&lruvec->lru_lock);
 
-	nr_activate = move_folios_to_lru(lruvec, &l_active);
-	nr_deactivate = move_folios_to_lru(lruvec, &l_inactive);
+	nr_activate = move_folios_to_lru(lruvec, &l_active, 0);
+	nr_deactivate = move_folios_to_lru(lruvec, &l_inactive, 0);
 
 	__count_vm_events(PGDEACTIVATE, nr_deactivate);
 	__count_memcg_events(lruvec_memcg(lruvec), PGDEACTIVATE, nr_deactivate);
@@ -4627,7 +4648,7 @@ retry:
 
 	spin_lock_irq(&lruvec->lru_lock);
 
-	move_folios_to_lru(lruvec, &list);
+	move_folios_to_lru(lruvec, &list, 0);
 
 	walk = current->reclaim_state->mm_walk;
 	if (walk && walk->batched) {
