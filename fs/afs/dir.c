@@ -502,8 +502,6 @@ static int afs_dir_iterate_contents(struct inode *dir, struct dir_context *ctx)
 	iterate_folioq(&iter, iov_iter_count(&iter), dvnode, ctx,
 		       afs_dir_iterate_step);
 
-	if (ret == -ESTALE)
-		afs_invalidate_dir(dvnode, afs_dir_invalid_iter_stale);
 	return ret;
 }
 
