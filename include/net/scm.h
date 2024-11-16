@@ -155,6 +155,10 @@ static __inline__ void scm_pidfd_recv(struct msghdr *msg, struct scm_cookie *scm
 		return;
 
 	pidfd = pidfd_prepare(scm->pid, 0, &pidfd_file);
+	if (pidfd < 0) {
+		msg->msg_flags |= MSG_CTRUNC;
+		return;
+	}
 
 	if (put_cmsg(msg, SOL_SOCKET, SCM_PIDFD, sizeof(int), &pidfd)) {
 		if (pidfd_file) {
