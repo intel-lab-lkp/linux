@@ -253,60 +253,43 @@ static irqreturn_t rcar_gen3_thermal_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static void rcar_gen3_thermal_read_fuses_gen3(struct rcar_gen3_thermal_priv *priv)
+static void rcar_gen3_thermal_fetch_fuses(struct rcar_gen3_thermal_priv *priv,
+					  u32 ptat0, u32 ptat1, u32 ptat2,
+					  u32 thcode0, u32 thcode1, u32 thcode2,
+					  u32 mask)
 {
-	unsigned int i;
-
 	/*
 	 * Set the pseudo calibration points with fused values.
 	 * PTAT is shared between all TSCs but only fused for the first
 	 * TSC while THCODEs are fused for each TSC.
 	 */
-	priv->ptat[0] = rcar_gen3_thermal_read(priv->tscs[0], REG_GEN3_PTAT1) &
-		GEN3_FUSE_MASK;
-	priv->ptat[1] = rcar_gen3_thermal_read(priv->tscs[0], REG_GEN3_PTAT2) &
-		GEN3_FUSE_MASK;
-	priv->ptat[2] = rcar_gen3_thermal_read(priv->tscs[0], REG_GEN3_PTAT3) &
-		GEN3_FUSE_MASK;
+	priv->ptat[0] = rcar_gen3_thermal_read(priv->tscs[0], ptat0) & mask;
+	priv->ptat[1] = rcar_gen3_thermal_read(priv->tscs[0], ptat1) & mask;
+	priv->ptat[2] = rcar_gen3_thermal_read(priv->tscs[0], ptat2) & mask;
 
-	for (i = 0; i < priv->num_tscs; i++) {
+	for (unsigned int i = 0; i < priv->num_tscs; i++) {
 		struct rcar_gen3_thermal_tsc *tsc = priv->tscs[i];
 
-		tsc->thcode[0] = rcar_gen3_thermal_read(tsc, REG_GEN3_THCODE1) &
-			GEN3_FUSE_MASK;
-		tsc->thcode[1] = rcar_gen3_thermal_read(tsc, REG_GEN3_THCODE2) &
-			GEN3_FUSE_MASK;
-		tsc->thcode[2] = rcar_gen3_thermal_read(tsc, REG_GEN3_THCODE3) &
-			GEN3_FUSE_MASK;
+		tsc->thcode[0] = rcar_gen3_thermal_read(tsc, thcode0) & mask;
+		tsc->thcode[1] = rcar_gen3_thermal_read(tsc, thcode1) & mask;
+		tsc->thcode[2] = rcar_gen3_thermal_read(tsc, thcode2) & mask;
 	}
+}
+
+static void rcar_gen3_thermal_read_fuses_gen3(struct rcar_gen3_thermal_priv *priv)
+{
+	rcar_gen3_thermal_fetch_fuses(priv,
+				      REG_GEN3_PTAT1, REG_GEN3_PTAT2, REG_GEN3_PTAT3,
+				      REG_GEN3_THCODE1, REG_GEN3_THCODE2, REG_GEN3_THCODE3,
+				      GEN3_FUSE_MASK);
 }
 
 static void rcar_gen3_thermal_read_fuses_gen4(struct rcar_gen3_thermal_priv *priv)
 {
-	unsigned int i;
-
-	/*
-	 * Set the pseudo calibration points with fused values.
-	 * PTAT is shared between all TSCs but only fused for the first
-	 * TSC while THCODEs are fused for each TSC.
-	 */
-	priv->ptat[0] = rcar_gen3_thermal_read(priv->tscs[0], REG_GEN4_THSFMON16) &
-		GEN4_FUSE_MASK;
-	priv->ptat[1] = rcar_gen3_thermal_read(priv->tscs[0], REG_GEN4_THSFMON17) &
-		GEN4_FUSE_MASK;
-	priv->ptat[2] = rcar_gen3_thermal_read(priv->tscs[0], REG_GEN4_THSFMON15) &
-		GEN4_FUSE_MASK;
-
-	for (i = 0; i < priv->num_tscs; i++) {
-		struct rcar_gen3_thermal_tsc *tsc = priv->tscs[i];
-
-		tsc->thcode[0] = rcar_gen3_thermal_read(tsc, REG_GEN4_THSFMON01) &
-			GEN4_FUSE_MASK;
-		tsc->thcode[1] = rcar_gen3_thermal_read(tsc, REG_GEN4_THSFMON02) &
-			GEN4_FUSE_MASK;
-		tsc->thcode[2] = rcar_gen3_thermal_read(tsc, REG_GEN4_THSFMON00) &
-			GEN4_FUSE_MASK;
-	}
+	rcar_gen3_thermal_fetch_fuses(priv,
+				      REG_GEN4_THSFMON16, REG_GEN4_THSFMON17, REG_GEN4_THSFMON15,
+				      REG_GEN4_THSFMON01, REG_GEN4_THSFMON02, REG_GEN4_THSFMON00,
+				      GEN4_FUSE_MASK);
 }
 
 static bool rcar_gen3_thermal_read_fuses(struct rcar_gen3_thermal_priv *priv)
