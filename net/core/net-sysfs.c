@@ -2000,6 +2000,7 @@ EXPORT_SYMBOL_GPL(net_ns_type_operations);
 static int netdev_uevent(const struct device *d, struct kobj_uevent_env *env)
 {
 	const struct net_device *dev = to_net_dev(d);
+	const char *driver = netdev_drivername(dev);
 	int retval;
 
 	/* pass interface to uevent. */
@@ -2012,6 +2013,12 @@ static int netdev_uevent(const struct device *d, struct kobj_uevent_env *env)
 	 * and is what RtNetlink uses natively.
 	 */
 	retval = add_uevent_var(env, "IFINDEX=%d", dev->ifindex);
+	if (retval)
+		goto exit;
+
+	if (driver[0])
+		/* pass driver to uevent. */
+		retval = add_uevent_var(env, "DRIVER=%s", driver);
 
 exit:
 	return retval;
