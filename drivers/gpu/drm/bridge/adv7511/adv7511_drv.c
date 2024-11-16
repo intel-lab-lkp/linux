@@ -1209,6 +1209,7 @@ static int adv7511_parse_dt(struct device_node *np,
 static int adv7511_probe(struct i2c_client *i2c)
 {
 	struct adv7511_link_config link_config;
+	struct device_node *host_node = NULL;
 	struct adv7511 *adv7511;
 	struct device *dev = &i2c->dev;
 	unsigned int val;
@@ -1233,12 +1234,17 @@ static int adv7511_probe(struct i2c_client *i2c)
 	if (ret && ret != -ENODEV)
 		return ret;
 
-	if (adv7511->info->link_config)
+	if (adv7511->info->link_config) {
 		ret = adv7511_parse_dt(dev->of_node, &link_config);
-	else
-		ret = adv7533_parse_dt(dev->of_node, adv7511);
-	if (ret)
-		return ret;
+		if (ret)
+			return ret;
+	}
+
+	if (adv7511->info->has_dsi) {
+		host_node = adv7533_parse_dt(dev->of_node, adv7511);
+		if (IS_ERR(host_node))
+			return PTR_ERR(host_node);
+	}
 
 	ret = adv7511_init_regulators(adv7511);
 	if (ret)
@@ -1343,9 +1349,11 @@ static int adv7511_probe(struct i2c_client *i2c)
 	}
 
 	if (adv7511->info->has_dsi) {
-		ret = adv7533_attach_dsi(adv7511);
+		ret = adv7533_attach_dsi(adv7511, host_node);
 		if (ret)
 			goto err_unregister_audio;
+
+		of_node_put(host_node);
 	}
 
 	return 0;
@@ -1362,6 +1370,8 @@ err_i2c_unregister_packet:
 err_i2c_unregister_edid:
 	i2c_unregister_device(adv7511->i2c_edid);
 uninit_regulators:
+	if (host_node)
+		of_node_put(host_node);
 	adv7511_uninit_regulators(adv7511);
 
 	return ret;

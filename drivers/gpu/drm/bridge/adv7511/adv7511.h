@@ -383,7 +383,6 @@ struct adv7511 {
 	struct regulator_bulk_data *supplies;
 
 	/* ADV7533 DSI RX related params */
-	struct device_node *host_node;
 	struct mipi_dsi_device *dsi;
 	u8 num_dsi_lanes;
 	bool use_timing_gen;
@@ -417,8 +416,9 @@ enum drm_mode_status adv7533_mode_valid(struct adv7511 *adv,
 					const struct drm_display_mode *mode);
 int adv7533_patch_registers(struct adv7511 *adv);
 int adv7533_patch_cec_registers(struct adv7511 *adv);
-int adv7533_attach_dsi(struct adv7511 *adv);
-int adv7533_parse_dt(struct device_node *np, struct adv7511 *adv);
+int adv7533_attach_dsi(struct adv7511 *adv, struct device_node *host_node);
+struct device_node *adv7533_parse_dt(struct device_node *np,
+				     struct adv7511 *adv);
 
 #ifdef CONFIG_DRM_I2C_ADV7511_AUDIO
 int adv7511_audio_init(struct device *dev, struct adv7511 *adv7511);

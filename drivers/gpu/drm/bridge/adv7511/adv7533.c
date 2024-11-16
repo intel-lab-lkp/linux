@@ -131,7 +131,7 @@ int adv7533_patch_cec_registers(struct adv7511 *adv)
 				    ARRAY_SIZE(adv7533_cec_fixed_registers));
 }
 
-int adv7533_attach_dsi(struct adv7511 *adv)
+int adv7533_attach_dsi(struct adv7511 *adv, struct device_node *host_node)
 {
 	struct device *dev = &adv->i2c_main->dev;
 	struct mipi_dsi_host *host;
@@ -142,7 +142,7 @@ int adv7533_attach_dsi(struct adv7511 *adv)
 						   .node = NULL,
 						 };
 
-	host = of_find_mipi_dsi_host_by_node(adv->host_node);
+	host = of_find_mipi_dsi_host_by_node(host_node);
 	if (!host)
 		return dev_err_probe(dev, -EPROBE_DEFER,
 				     "failed to find dsi host\n");
@@ -166,22 +166,22 @@ int adv7533_attach_dsi(struct adv7511 *adv)
 	return 0;
 }
 
-int adv7533_parse_dt(struct device_node *np, struct adv7511 *adv)
+struct device_node *adv7533_parse_dt(struct device_node *np,
+				     struct adv7511 *adv)
 {
+	struct device_node *host_node;
 	u32 num_lanes;
 
 	of_property_read_u32(np, "adi,dsi-lanes", &num_lanes);
 
 	if (num_lanes < 1 || num_lanes > 4)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	adv->num_dsi_lanes = num_lanes;
 
-	adv->host_node = of_graph_get_remote_node(np, 0, 0);
-	if (!adv->host_node)
-		return -ENODEV;
-
-	of_node_put(adv->host_node);
+	host_node = of_graph_get_remote_node(np, 0, 0);
+	if (!host_node)
+		return ERR_PTR(-ENODEV);
 
 	adv->use_timing_gen = !of_property_read_bool(np,
 						"adi,disable-timing-generator");
@@ -190,5 +190,5 @@ int adv7533_parse_dt(struct device_node *np, struct adv7511 *adv)
 	adv->rgb = true;
 	adv->embedded_sync = false;
 
-	return 0;
+	return host_node;
 }
