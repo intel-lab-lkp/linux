@@ -57,11 +57,11 @@
 /* THSCP bits */
 #define THSCP_COR_PARA_VLD	(BIT(15) | BIT(14))
 
-#define CTEMP_MASK	0xFFF
+#define CTEMP_MASK	0xfff
 
 #define MCELSIUS(temp)	((temp) * 1000)
-#define GEN3_FUSE_MASK	0xFFF
-#define GEN4_FUSE_MASK	0xFFF
+#define GEN3_FUSE_MASK	0xfff
+#define GEN4_FUSE_MASK	0xfff
 
 #define TSC_MAX_NUM	5
 
