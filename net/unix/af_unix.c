@@ -1638,7 +1638,7 @@ out_unlock:
 		unix_state_unlock(other);
 
 out:
-	kfree_skb(skb);
+	consume_skb(skb);
 	if (newsk)
 		unix_release_sock(newsk, 0);
 	if (other)
@@ -2091,7 +2091,7 @@ out_unlock:
 		unix_state_unlock(sk);
 	unix_state_unlock(other);
 out_free:
-	kfree_skb(skb);
+	consume_skb(skb);
 out:
 	if (other)
 		sock_put(other);
