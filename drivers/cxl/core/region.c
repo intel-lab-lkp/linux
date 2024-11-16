@@ -3360,6 +3360,19 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_add_to_region, CXL);
 
+static int is_reserve_ram(struct resource *res, void *arg)
+{
+	struct cxl_region *cxlr = arg;
+	struct cxl_region_params *p = &cxlr->params;
+
+	if ((p->res->start < res->start) || (res->end < p->res->end))
+		return 0;
+
+	dev_dbg(&cxlr->dev, "%pr has Reserve RAM: %pr\n", p->res, res);
+
+	return 1;
+}
+
 static int is_system_ram(struct resource *res, void *arg)
 {
 	struct cxl_region *cxlr = arg;
@@ -3428,6 +3441,16 @@ out:
 	case CXL_DECODER_PMEM:
 		return devm_cxl_add_pmem_region(cxlr);
 	case CXL_DECODER_RAM:
+		/*
+		 * The region can not be manged by CXL if all of
+		 * it is already reserved
+		 */
+		if (walk_iomem_res_desc(IORES_DESC_RESERVED,
+					IORESOURCE_MEM,
+					p->res->start, p->res->end, cxlr,
+					is_reserve_ram) > 0)
+			return 0;
+
 		/*
 		 * The region can not be manged by CXL if any portion of
 		 * it is already online as 'System RAM'
