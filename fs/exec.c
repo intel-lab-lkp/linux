@@ -1755,7 +1755,7 @@ int remove_arg_zero(struct linux_binprm *bprm)
 }
 EXPORT_SYMBOL(remove_arg_zero);
 
-#define printable(c) (((c)=='\t') || ((c)=='\n') || (0x20<=(c) && (c)<=0x7e))
+#define printable(c) (isprint(c) || isspace(c))
 /*
  * cycle the list of binary formats handler, until one recognizes the image
  */
