@@ -826,3 +826,65 @@ u32 of_pci_get_slot_power_limit(struct device_node *node,
 	return slot_power_limit_mw;
 }
 EXPORT_SYMBOL_GPL(of_pci_get_slot_power_limit);
+
+int of_pci_get_equalization_presets(struct device *dev,
+				    struct pci_eq_presets *presets,
+				    int num_lanes)
+{
+	int ret;
+
+	if (of_property_present(dev->of_node, "eq-presets-8gts")) {
+		presets->eq_presets_8gts = devm_kzalloc(dev, sizeof(u16) * num_lanes, GFP_KERNEL);
+		if (!presets->eq_presets_8gts)
+			return -ENOMEM;
+
+		ret = of_property_read_u16_array(dev->of_node, "eq-presets-8gts",
+						 presets->eq_presets_8gts, num_lanes);
+		if (ret) {
+			dev_err(dev, "Error reading eq-presets-8gts %d\n", ret);
+			return ret;
+		}
+	}
+
+	if (of_property_present(dev->of_node, "eq-presets-16gts")) {
+		presets->eq_presets_16gts = devm_kzalloc(dev, sizeof(u8) * num_lanes, GFP_KERNEL);
+		if (!presets->eq_presets_16gts)
+			return -ENOMEM;
+
+		ret = of_property_read_u8_array(dev->of_node, "eq-presets-16gts",
+						presets->eq_presets_16gts, num_lanes);
+		if (ret) {
+			dev_err(dev, "Error reading eq-presets-16gts %d\n", ret);
+			return ret;
+		}
+	}
+
+	if (of_property_present(dev->of_node, "eq-presets-32gts")) {
+		presets->eq_presets_32gts = devm_kzalloc(dev, sizeof(u8) * num_lanes, GFP_KERNEL);
+		if (!presets->eq_presets_32gts)
+			return -ENOMEM;
+
+		ret = of_property_read_u8_array(dev->of_node, "eq-presets-32gts",
+						presets->eq_presets_32gts, num_lanes);
+		if (ret) {
+			dev_err(dev, "Error reading eq-presets-32gts %d\n", ret);
+			return ret;
+		}
+	}
+
+	if (of_property_present(dev->of_node, "eq-presets-64gts")) {
+		presets->eq_presets_64gts = devm_kzalloc(dev, sizeof(u8) * num_lanes, GFP_KERNEL);
+		if (!presets->eq_presets_64gts)
+			return -ENOMEM;
+
+		ret = of_property_read_u8_array(dev->of_node, "eq-presets-64gts",
+						presets->eq_presets_64gts, num_lanes);
+		if (ret) {
+			dev_err(dev, "Error reading eq-presets-64gts %d\n", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(of_pci_get_equalization_presets);
