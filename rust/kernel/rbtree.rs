@@ -36,17 +36,17 @@ use core::{
 ///
 /// // Check the nodes we just inserted.
 /// {
-///     assert_eq!(tree.get(&10).unwrap(), &100);
-///     assert_eq!(tree.get(&20).unwrap(), &200);
-///     assert_eq!(tree.get(&30).unwrap(), &300);
+///     assert_eq!(tree.get(&10), Some(&100));
+///     assert_eq!(tree.get(&20), Some(&200));
+///     assert_eq!(tree.get(&30), Some(&300));
 /// }
 ///
 /// // Iterate over the nodes we just inserted.
 /// {
 ///     let mut iter = tree.iter();
-///     assert_eq!(iter.next().unwrap(), (&10, &100));
-///     assert_eq!(iter.next().unwrap(), (&20, &200));
-///     assert_eq!(iter.next().unwrap(), (&30, &300));
+///     assert_eq!(iter.next(), Some((&10, &100)));
+///     assert_eq!(iter.next(), Some((&20, &200)));
+///     assert_eq!(iter.next(), Some((&30, &300)));
 ///     assert!(iter.next().is_none());
 /// }
 ///
@@ -61,21 +61,23 @@ use core::{
 /// // Check that the tree reflects the replacement.
 /// {
 ///     let mut iter = tree.iter();
-///     assert_eq!(iter.next().unwrap(), (&10, &1000));
-///     assert_eq!(iter.next().unwrap(), (&20, &200));
-///     assert_eq!(iter.next().unwrap(), (&30, &300));
+///     assert_eq!(iter.next(), Some((&10, &1000)));
+///     assert_eq!(iter.next(), Some((&20, &200)));
+///     assert_eq!(iter.next(), Some((&30, &300)));
 ///     assert!(iter.next().is_none());
 /// }
 ///
 /// // Change the value of one of the elements.
-/// *tree.get_mut(&30).unwrap() = 3000;
+/// if let Some(element) = tree.get_mut(&30) {
+///     *element = 3000;
+/// }
 ///
 /// // Check that the tree reflects the update.
 /// {
 ///     let mut iter = tree.iter();
-///     assert_eq!(iter.next().unwrap(), (&10, &1000));
-///     assert_eq!(iter.next().unwrap(), (&20, &200));
-///     assert_eq!(iter.next().unwrap(), (&30, &3000));
+///     assert_eq!(iter.next(), Some((&10, &1000)));
+///     assert_eq!(iter.next(), Some((&20, &200)));
+///     assert_eq!(iter.next(), Some((&30, &3000)));
 ///     assert!(iter.next().is_none());
 /// }
 ///
@@ -85,8 +87,8 @@ use core::{
 /// // Check that the tree reflects the removal.
 /// {
 ///     let mut iter = tree.iter();
-///     assert_eq!(iter.next().unwrap(), (&20, &200));
-///     assert_eq!(iter.next().unwrap(), (&30, &3000));
+///     assert_eq!(iter.next(), Some((&20, &200)));
+///     assert_eq!(iter.next(), Some((&30, &3000)));
 ///     assert!(iter.next().is_none());
 /// }
 ///
@@ -128,20 +130,20 @@ use core::{
 /// // Check the nodes we just inserted.
 /// {
 ///     let mut iter = tree.iter();
-///     assert_eq!(iter.next().unwrap(), (&10, &100));
-///     assert_eq!(iter.next().unwrap(), (&20, &200));
-///     assert_eq!(iter.next().unwrap(), (&30, &300));
+///     assert_eq!(iter.next(), Some((&10, &100)));
+///     assert_eq!(iter.next(), Some((&20, &200)));
+///     assert_eq!(iter.next(), Some((&30, &300)));
 ///     assert!(iter.next().is_none());
 /// }
 ///
 /// // Remove a node, getting back ownership of it.
-/// let existing = tree.remove(&30).unwrap();
+/// let existing = tree.remove(&30);
 ///
 /// // Check that the tree reflects the removal.
 /// {
 ///     let mut iter = tree.iter();
-///     assert_eq!(iter.next().unwrap(), (&10, &100));
-///     assert_eq!(iter.next().unwrap(), (&20, &200));
+///     assert_eq!(iter.next(), Some((&10, &100)));
+///     assert_eq!(iter.next(), Some((&20, &200)));
 ///     assert!(iter.next().is_none());
 /// }
 ///
@@ -155,9 +157,9 @@ use core::{
 /// // Check that the tree reflect the new insertion.
 /// {
 ///     let mut iter = tree.iter();
-///     assert_eq!(iter.next().unwrap(), (&10, &100));
-///     assert_eq!(iter.next().unwrap(), (&15, &150));
-///     assert_eq!(iter.next().unwrap(), (&20, &200));
+///     assert_eq!(iter.next(), Some((&10, &100)));
+///     assert_eq!(iter.next(), Some((&15, &150)));
+///     assert_eq!(iter.next(), Some((&20, &200)));
 ///     assert!(iter.next().is_none());
 /// }
 ///
@@ -677,7 +679,7 @@ impl<K, V> Drop for RBTree<K, V> {
 /// Nodes adjacent to the current node can also be removed.
 ///
 /// ```
-/// use kernel::{alloc::flags, rbtree::RBTree};
+/// use kernel::{alloc::flags, rbtree::{RBTree, RBTreeNode, Cursor}};
 ///
 /// // Create a new tree.
 /// let mut tree = RBTree::new();
@@ -688,31 +690,31 @@ impl<K, V> Drop for RBTree<K, V> {
 /// tree.try_create_and_insert(30, 300, flags::GFP_KERNEL)?;
 ///
 /// // Get a cursor to the first element.
-/// let mut cursor = tree.cursor_front().unwrap();
-/// let mut current = cursor.current();
-/// assert_eq!(current, (&10, &100));
+/// let mut cursor = tree.cursor_front();
+/// let mut current = cursor.as_ref().map(Cursor::current);
+/// assert_eq!(current, Some((&10, &100)));
 ///
 /// // Calling `remove_prev` from the first element returns [`None`].
-/// assert!(cursor.remove_prev().is_none());
+/// assert!(cursor.as_mut().map(Cursor::remove_prev).flatten().is_none());
 ///
 /// // Get a cursor to the last element.
-/// cursor = tree.cursor_back().unwrap();
-/// current = cursor.current();
-/// assert_eq!(current, (&30, &300));
+/// cursor = tree.cursor_back();
+/// current = cursor.as_ref().map(Cursor::current);
+/// assert_eq!(current, Some((&30, &300)));
 ///
 /// // Calling `remove_prev` removes and returns the middle element.
-/// assert_eq!(cursor.remove_prev().unwrap().to_key_value(), (20, 200));
+/// assert_eq!(cursor.as_mut().map(Cursor::remove_prev).flatten().map(RBTreeNode::to_key_value), Some((20, 200)));
 ///
 /// // Calling `remove_next` from the last element returns [`None`].
-/// assert!(cursor.remove_next().is_none());
+/// assert!(cursor.as_mut().map(Cursor::remove_next).flatten().is_none());
 ///
 /// // Move to the first element
-/// cursor = cursor.move_prev().unwrap();
-/// current = cursor.current();
-/// assert_eq!(current, (&10, &100));
+/// cursor = cursor.map(Cursor::move_prev).flatten();
+/// current = cursor.as_ref().map(Cursor::current);
+/// assert_eq!(current, Some((&10, &100)));
 ///
 /// // Calling `remove_next` removes and returns the last element.
-/// assert_eq!(cursor.remove_next().unwrap().to_key_value(), (30, 300));
+/// assert_eq!(cursor.as_mut().map(Cursor::remove_next).flatten().map(RBTreeNode::to_key_value), Some((30, 300)));
 ///
 /// # Ok::<(), Error>(())
 ///
