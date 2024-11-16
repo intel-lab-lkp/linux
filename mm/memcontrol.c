@@ -963,6 +963,7 @@ struct mem_cgroup *get_mem_cgroup_from_folio(struct folio *folio)
 	rcu_read_unlock();
 	return memcg;
 }
+EXPORT_SYMBOL_GPL(get_mem_cgroup_from_folio);
 
 /**
  * mem_cgroup_iter - iterate over memory cgroup hierarchy

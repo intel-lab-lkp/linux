@@ -495,7 +495,7 @@ config MISC_RTSX
 config PAGE_DETECTIVE
 	depends on PAGE_TABLE_CHECK
 	depends on MEMCG
-	bool "Page Detective"
+	tristate "Page Detective"
 	help
 	  A debugging tool designed to provide detailed information about the
 	  usage and mapping of physical memory pages. This tool operates through

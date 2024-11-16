@@ -149,6 +149,7 @@ found:
 
 	return t;
 }
+EXPORT_SYMBOL_GPL(find_lock_task_mm);
 
 /*
  * order == -1 means the oom kill is required by sysrq, otherwise only
