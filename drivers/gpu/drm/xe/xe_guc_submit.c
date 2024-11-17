@@ -28,6 +28,7 @@
 #include "xe_gt_printk.h"
 #include "xe_guc.h"
 #include "xe_guc_capture.h"
+#include "xe_guc_capture_snapshot_types.h"
 #include "xe_guc_ct.h"
 #include "xe_guc_exec_queue_types.h"
 #include "xe_guc_id_mgr.h"
@@ -1033,7 +1034,6 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 	struct xe_gpu_scheduler *sched = &q->guc->sched;
 	struct xe_guc *guc = exec_queue_to_guc(q);
 	const char *process_name = "no process";
-	struct xe_device *xe = guc_to_xe(guc);
 	unsigned int fw_ref;
 	int err = -ETIME;
 	pid_t pid = -1;
@@ -1062,18 +1062,23 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 		exec_queue_destroyed(q);
 
 	/*
-	 * If devcoredump not captured and GuC capture for the job is not ready
-	 * do manual capture first and decide later if we need to use it
+	 * If the queue has't been killed yet or we do not have a firmware-reported
+	 * GuC-Error-Capture node for the matching job, request GuC-Error-Capture to
+	 * store a manual capture within its internal list with a job-match.
+	 * xe_hw_engine_snapshot will decide later if it's needed.
 	 */
-	if (!exec_queue_killed(q) && !xe->devcoredump.captured &&
-	    !xe_guc_capture_get_matching_and_lock(q)) {
+	if (!exec_queue_killed(q) ||
+	    !xe_guc_capture_snapshot_get(guc, q, XE_ENGINE_CAPTURE_SOURCE_GUC)) {
 		/* take force wake before engine register manual capture */
 		fw_ref = xe_force_wake_get(gt_to_fw(q->gt), XE_FORCEWAKE_ALL);
 		if (!xe_force_wake_ref_has_domain(fw_ref, XE_FORCEWAKE_ALL))
 			xe_gt_info(q->gt, "failed to get forcewake for coredump capture\n");
-
-		xe_engine_snapshot_capture_for_queue(q);
-
+		/*
+		 * This will generate a manual capture node and store it in
+		 * This GuC Error Capture link-list as if it came from GuC
+		 * but with a source-id == manual-capture
+		 */
+		xe_guc_capture_snapshot_store_manual_job(guc, q);
 		xe_force_wake_put(gt_to_fw(q->gt), fw_ref);
 	}
 

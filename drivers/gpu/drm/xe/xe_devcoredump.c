@@ -144,9 +144,6 @@ static void xe_devcoredump_snapshot_free(struct xe_devcoredump_snapshot *ss)
 	xe_guc_ct_snapshot_free(ss->guc.ct);
 	ss->guc.ct = NULL;
 
-	xe_guc_capture_put_matched_nodes(&ss->gt->uc.guc);
-	ss->matched_node = NULL;
-
 	xe_guc_exec_queue_snapshot_free(ss->ge);
 	ss->ge = NULL;
 
