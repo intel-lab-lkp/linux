@@ -123,15 +123,15 @@ static void __dump_folio(struct folio *folio, struct page *page,
 static void __dump_page(const struct page *page)
 {
 	struct folio *foliop, folio;
-	struct page precise;
+	struct page precise[2] = { };
 	unsigned long pfn = page_to_pfn(page);
 	unsigned long idx, nr_pages = 1;
 	int loops = 5;
 
 again:
-	memcpy(&precise, page, sizeof(*page));
-	foliop = page_folio(&precise);
-	if (foliop == (struct folio *)&precise) {
+	memcpy(&precise[0], page, sizeof(*page));
+	foliop = page_folio(&precise[0]);
+	if (foliop == (struct folio *)&precise[0]) {
 		idx = 0;
 		if (!folio_test_large(foliop))
 			goto dump;
@@ -150,13 +150,13 @@ again:
 		if (loops-- > 0)
 			goto again;
 		pr_warn("page does not match folio\n");
-		precise.compound_head &= ~1UL;
-		foliop = (struct folio *)&precise;
+		precise[0].compound_head &= ~1UL;
+		foliop = (struct folio *)&precise[0];
 		idx = 0;
 	}
 
 dump:
-	__dump_folio(foliop, &precise, pfn, idx);
+	__dump_folio(foliop, &precise[0], pfn, idx);
 }
 
 void dump_page(const struct page *page, const char *reason)
