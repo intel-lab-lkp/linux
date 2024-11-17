@@ -220,13 +220,21 @@ EXPORT_SYMBOL(vfs_getattr);
  */
 int vfs_fstat(int fd, struct kstat *stat)
 {
+	const struct path *path;
+	struct inode *inode;
 	struct fd f;
 	int error;
 
 	f = fdget_raw(fd);
 	if (!fd_file(f))
 		return -EBADF;
-	error = vfs_getattr(&fd_file(f)->f_path, stat, STATX_BASIC_STATS, 0);
+
+	path = &fd_file(f)->f_path;
+	inode = d_backing_inode(path->dentry);
+
+	inode_lock_shared(inode);
+	error = vfs_getattr(path, stat, STATX_BASIC_STATS, 0);
+	inode_unlock_shared(inode);
 	fdput(f);
 	return error;
 }
@@ -248,7 +256,11 @@ int getname_statx_lookup_flags(int flags)
 static int vfs_statx_path(struct path *path, int flags, struct kstat *stat,
 			  u32 request_mask)
 {
+	struct inode *inode = d_backing_inode(path->dentry);
+
+	inode_lock_shared(inode);
 	int error = vfs_getattr(path, stat, request_mask, flags);
+	inode_unlock_shared(inode);
 
 	if (request_mask & STATX_MNT_ID_UNIQUE) {
 		stat->mnt_id = real_mount(path->mnt)->mnt_id_unique;
