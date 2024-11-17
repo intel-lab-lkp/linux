@@ -256,7 +256,7 @@ static int ipq_mdio_reset(struct mii_bus *bus)
 	/* To indicate CMN_PLL that ethernet_ldo has been ready if platform resource 1
 	 * is specified in the device tree.
 	 */
-	if (priv->eth_ldo_rdy) {
+	if (!IS_ERR_OR_NULL(priv->eth_ldo_rdy)) {
 		val = readl(priv->eth_ldo_rdy);
 		val |= BIT(0);
 		writel(val, priv->eth_ldo_rdy);
