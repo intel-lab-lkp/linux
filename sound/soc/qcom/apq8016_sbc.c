@@ -150,7 +150,7 @@ static int apq8016_sbc_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
 
-	return apq8016_dai_init(rtd, cpu_dai->id);
+	return apq8016_dai_init(rtd, qdsp6_dai_get_lpass_id(cpu_dai));
 }
 
 static void apq8016_sbc_add_ops(struct snd_soc_card *card)
