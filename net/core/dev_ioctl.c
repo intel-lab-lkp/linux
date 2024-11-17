@@ -676,6 +676,9 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr,
 	if (cmd == SIOCGIFNAME)
 		return dev_ifname(net, ifr);
 
+	if (ifr->ifr_name[0] == '\0')
+		return -EINVAL;
+
 	ifr->ifr_name[IFNAMSIZ-1] = 0;
 
 	colon = strchr(ifr->ifr_name, ':');
