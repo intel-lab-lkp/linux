@@ -13,6 +13,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include "kselftest.h"
 
@@ -110,21 +111,41 @@ static __maybe_unused void pair_udp_open(int fds[], uint16_t port)
 	}
 }
 
+static void read_write_checked(int fd, char *buf, size_t sz, bool is_write)
+{
+	int bytes_processed = 0;
+	int ret;
+
+	do {
+		if (is_write)
+			ret = write(fd, buf + bytes_processed,
+				    sz - bytes_processed);
+		else
+			ret = read(fd, buf + bytes_processed,
+				   sz - bytes_processed);
+		if (ret == -1) {
+			if (errno == EAGAIN || errno == EINTR) {
+				continue;
+			} else {
+				fprintf(stderr, "ERROR: %s failed, bytes left=%lu\n",
+					is_write ? "send" : "recv",
+					sz - bytes_processed);
+				exit(1);
+			}
+		}
+		bytes_processed += ret;
+	} while (bytes_processed < sz);
+}
+
 static __maybe_unused void pair_udp_send_char(int fds[], int num, char payload)
 {
 	char buf[DATA_LEN], rbuf[DATA_LEN];
 
 	memset(buf, payload, sizeof(buf));
 	while (num--) {
-		/* Should really handle EINTR and EAGAIN */
-		if (write(fds[0], buf, sizeof(buf)) != sizeof(buf)) {
-			fprintf(stderr, "ERROR: send failed left=%d\n", num);
-			exit(1);
-		}
-		if (read(fds[1], rbuf, sizeof(rbuf)) != sizeof(rbuf)) {
-			fprintf(stderr, "ERROR: recv failed left=%d\n", num);
-			exit(1);
-		}
+		read_write_checked(fds[0], buf, sizeof(buf), true);
+		read_write_checked(fds[1], rbuf, sizeof(rbuf), false);
+
 		if (memcmp(buf, rbuf, sizeof(buf))) {
 			fprintf(stderr, "ERROR: data failed left=%d\n", num);
 			exit(1);
