@@ -26,12 +26,18 @@ enum qcserial_layouts {
 	QCSERIAL_G1K = 1,	/* Gobi 1000 */
 	QCSERIAL_SWI = 2,	/* Sierra Wireless */
 	QCSERIAL_HWI = 3,	/* Huawei */
+	QCSERIAL_SWI_9X50_MBIM = 4, /* Sierra Wireless 9x50 "MBIM USBIF" */
+	QCSERIAL_SWI_9X50_PCIE = 5, /* Sierra Wireless 9x50 "PCIE USBIF" */
 };
 
 #define DEVICE_G1K(v, p) \
 	USB_DEVICE(v, p), .driver_info = QCSERIAL_G1K
 #define DEVICE_SWI(v, p) \
 	USB_DEVICE(v, p), .driver_info = QCSERIAL_SWI
+#define DEVICE_SWI_9X50_PCIE(v, p) \
+	USB_DEVICE(v, p), .driver_info = QCSERIAL_SWI_9X50_PCIE
+#define DEVICE_SWI_9X50_MBIM(v, p) \
+	USB_DEVICE(v, p), .driver_info = QCSERIAL_SWI_9X50_MBIM
 #define DEVICE_HWI(v, p) \
 	USB_DEVICE(v, p), .driver_info = QCSERIAL_HWI
 
@@ -165,6 +171,12 @@ static const struct usb_device_id id_table[] = {
 	{DEVICE_SWI(0x1199, 0x907b)},	/* Sierra Wireless EM74xx */
 	{DEVICE_SWI(0x1199, 0x9090)},	/* Sierra Wireless EM7565 QDL */
 	{DEVICE_SWI(0x1199, 0x9091)},	/* Sierra Wireless EM7565 */
+	{DEVICE_SWI(0x1199, 0x90B0)},	/* Sierra Wireless EM7565 QDL */
+	{DEVICE_SWI_9X50_MBIM(0x1199, 0x90B1)},	/* Sierra Wireless EM7565 "MBIM USBIF" */
+	{DEVICE_SWI(0x1199, 0x90c0)},	/* Sierra Wireless EM7565 QDL */
+	{DEVICE_SWI_9X50_PCIE(0x1199, 0x90c1)},	/* Sierra Wireless EM7565 (unknown configuration, found in on-device AT command help) */
+	{DEVICE_SWI(0x1199, 0x90c2)},	/* Sierra Wireless EM7565 QDL */
+	{DEVICE_SWI_9X50_PCIE(0x1199, 0x90c3)},	/* Sierra Wireless EM7565 "PCIE USBIF" */
 	{DEVICE_SWI(0x1199, 0x90d2)},	/* Sierra Wireless EM9191 QDL */
 	{DEVICE_SWI(0x1199, 0x90e4)},	/* Sierra Wireless EM86xx QDL*/
 	{DEVICE_SWI(0x1199, 0x90e5)},	/* Sierra Wireless EM86xx */
@@ -345,9 +357,11 @@ static int qcprobe(struct usb_serial *serial, const struct usb_device_id *id)
 		/*
 		 * Sierra Wireless layout:
 		 * 0: DM/DIAG (use libqcdm from ModemManager for communication)
+		 * 1: ADB
 		 * 2: NMEA
 		 * 3: AT-capable modem port
 		 * 8: QMI/net
+		 * 12, 13: MBIM
 		 */
 		switch (ifnum) {
 		case 0:
@@ -401,6 +415,65 @@ static int qcprobe(struct usb_serial *serial, const struct usb_device_id *id)
 				intf->desc.bInterfaceClass,
 				intf->desc.bInterfaceSubClass,
 				intf->desc.bInterfaceProtocol);
+		}
+		break;
+	case QCSERIAL_SWI_9X50_MBIM:
+		/*
+		 * Sierra Wireless 9X50 "MBIM USBIF" layout:
+		 * 0, 1: MBIM
+		 * 2: AT-capable modem port
+		 * 3: NMEA
+		 * 4: DM
+		 * 7: ADB
+		 */
+		switch (ifnum) {
+		case 2:
+			dev_dbg(dev, "Modem port found\n");
+			sendsetup = true;
+			break;
+		case 3:
+			dev_dbg(dev, "NMEA GPS interface found\n");
+			sendsetup = true;
+			break;
+		case 4:
+			dev_dbg(dev, "DM/DIAG interface found\n");
+			break;
+		default:
+			/* don't claim any unsupported interface */
+			altsetting = -1;
+			break;
+		}
+		break;
+	case QCSERIAL_SWI_9X50_PCIE:
+		/*
+		 * Sierra Wireless 9X50 "PCIE USBIF" layout:
+		 * 0: AT-capable modem port
+		 * 1: NMEA
+		 * 2: DM
+		 * 5: ADB
+		 * No other interfaces possible, presumably this configuration
+		 * means that data exchange is happening via PCIe (but we are
+		 * not making this an error).
+		 */
+		switch (ifnum) {
+		case 0:
+			dev_dbg(dev, "Modem port found\n");
+			sendsetup = true;
+			break;
+		case 1:
+			dev_dbg(dev, "NMEA GPS interface found\n");
+			sendsetup = true;
+			break;
+		case 2:
+			dev_dbg(dev, "DM/DIAG interface found\n");
+			break;
+		default:
+			dev_err(dev,
+			        "unexpected interface for PCIE-USBIF layout type: %u\n",
+			        (unsigned)ifnum);
+			/* don't claim any unsupported interface */
+			altsetting = -1;
+			break;
 		}
 		break;
 	default:
