@@ -208,6 +208,9 @@ enum ovl_path_type ovl_path_type(struct dentry *dentry)
 	struct ovl_entry *oe = OVL_E(dentry);
 	enum ovl_path_type type = 0;
 
+	if (WARN_ON_ONCE(oe == NULL))
+		return 0;
+
 	if (ovl_dentry_upper(dentry)) {
 		type = __OVL_PATH_UPPER;
 
@@ -1306,6 +1309,9 @@ int ovl_set_metacopy_xattr(struct ovl_fs *ofs, struct dentry *d, struct ovl_meta
 bool ovl_is_metacopy_dentry(struct dentry *dentry)
 {
 	struct ovl_entry *oe = OVL_E(dentry);
+
+	if (WARN_ON_ONCE(oe == NULL))
+		return false;
 
 	if (!d_is_reg(dentry))
 		return false;
