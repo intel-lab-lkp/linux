@@ -2860,6 +2860,12 @@ skl_program_dpkgc_latency(struct drm_i915_private *i915, bool enable_dpkgc)
 		added_wake_time = 0;
 	}
 
+	/* Wa_22020432604 */
+	if (DISPLAY_VER(i915) == 30) {
+		max_latency += added_wake_time;
+		added_wake_time = 0;
+	}
+
 	clear |= LNL_ADDED_WAKE_TIME_MASK | LNL_PKG_C_LATENCY_MASK;
 	val |= REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, max_latency);
 	val |= REG_FIELD_PREP(LNL_ADDED_WAKE_TIME_MASK, added_wake_time);
