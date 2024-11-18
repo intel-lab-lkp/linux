@@ -859,11 +859,16 @@ static void dispose_list(struct list_head *head)
 void evict_inodes(struct super_block *sb)
 {
 	struct inode *inode, *next;
+	struct inode cursor;
 	LIST_HEAD(dispose);
+
+	cursor.i_state = I_CURSOR;
+	INIT_LIST_HEAD(&cursor.i_sb_list);
+	inode = list_entry(&sb->s_inodes, typeof(*inode), i_sb_list);
 
 again:
 	spin_lock(&sb->s_inode_list_lock);
-	sb_for_each_inodes_safe(inode, next, &sb->s_inodes) {
+	sb_for_each_inodes_continue_safe(inode, next, &sb->s_inodes) {
 		if (atomic_read(&inode->i_count))
 			continue;
 
@@ -888,12 +893,16 @@ again:
 		 * bit so we don't livelock.
 		 */
 		if (need_resched()) {
+			list_del(&cursor.i_sb_list);
+			list_add(&cursor.i_sb_list, &inode->i_sb_list);
+			inode = &cursor;
 			spin_unlock(&sb->s_inode_list_lock);
 			cond_resched();
 			dispose_list(&dispose);
 			goto again;
 		}
 	}
+	list_del(&cursor.i_sb_list);
 	spin_unlock(&sb->s_inode_list_lock);
 
 	dispose_list(&dispose);
@@ -909,11 +918,16 @@ EXPORT_SYMBOL_GPL(evict_inodes);
 void invalidate_inodes(struct super_block *sb)
 {
 	struct inode *inode, *next;
+	struct inode cursor;
 	LIST_HEAD(dispose);
+
+	cursor.i_state = I_CURSOR;
+	INIT_LIST_HEAD(&cursor.i_sb_list);
+	inode = list_entry(&sb->s_inodes, typeof(*inode), i_sb_list);
 
 again:
 	spin_lock(&sb->s_inode_list_lock);
-	sb_for_each_inodes_safe(inode, next, &sb->s_inodes) {
+	sb_for_each_inodes_continue_safe(inode, next, &sb->s_inodes) {
 		spin_lock(&inode->i_lock);
 		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
 			spin_unlock(&inode->i_lock);
@@ -929,12 +943,16 @@ again:
 		spin_unlock(&inode->i_lock);
 		list_add(&inode->i_lru, &dispose);
 		if (need_resched()) {
+			list_del(&cursor.i_sb_list);
+			list_add(&cursor.i_sb_list, &inode->i_sb_list);
+			inode = &cursor;
 			spin_unlock(&sb->s_inode_list_lock);
 			cond_resched();
 			dispose_list(&dispose);
 			goto again;
 		}
 	}
+	list_del(&cursor.i_sb_list);
 	spin_unlock(&sb->s_inode_list_lock);
 
 	dispose_list(&dispose);
