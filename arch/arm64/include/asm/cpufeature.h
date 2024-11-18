@@ -847,10 +847,19 @@ static inline bool bbmlv2_available(void)
 {
 	u64 mmfr2;
 	u32 bbm;
+	static const struct midr_range ampereone[] = {
+		MIDR_ALL_VERSIONS(MIDR_AMPERE1),
+		MIDR_ALL_VERSIONS(MIDR_AMPERE1A),
+		{}
+	};
 
 	mmfr2 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR2_EL1);
 	bbm = cpuid_feature_extract_unsigned_field(mmfr2, ID_AA64MMFR2_EL1_BBM_SHIFT);
-	return bbm == ID_AA64MMFR2_EL1_BBM_2;
+	if ((bbm == ID_AA64MMFR2_EL1_BBM_2) ||
+	    is_midr_in_range_list(read_cpuid_id(), ampereone))
+		return true;
+
+	return false;
 }
 
 int do_emulate_mrs(struct pt_regs *regs, u32 sys_reg, u32 rt);
