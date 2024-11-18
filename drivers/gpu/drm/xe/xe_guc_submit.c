@@ -230,6 +230,11 @@ static void set_exec_queue_doorbell_registered(struct xe_exec_queue *q)
 	atomic_or(EXEC_QUEUE_STATE_DB_REGISTERED, &q->guc->state);
 }
 
+static void clear_exec_queue_doorbell_registered(struct xe_exec_queue *q)
+{
+	atomic_and(~EXEC_QUEUE_STATE_DB_REGISTERED, &q->guc->state);
+}
+
 static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
 {
 	return (atomic_read(&q->guc->state) &
@@ -798,6 +803,8 @@ static void disable_scheduling_deregister(struct xe_guc *guc,
 		       G2H_LEN_DW_DEREGISTER_CONTEXT, 2);
 }
 
+static void guc_exec_queue_kill_user(struct xe_exec_queue *q);
+
 static void xe_guc_exec_queue_trigger_cleanup(struct xe_exec_queue *q)
 {
 	struct xe_guc *guc = exec_queue_to_guc(q);
@@ -806,7 +813,9 @@ static void xe_guc_exec_queue_trigger_cleanup(struct xe_exec_queue *q)
 	/** to wakeup xe_wait_user_fence ioctl if exec queue is reset */
 	wake_up_all(&xe->ufence_wq);
 
-	if (xe_exec_queue_is_lr(q))
+	if (xe_exec_queue_is_usermap(q))
+		guc_exec_queue_kill_user(q);
+	else if (xe_exec_queue_is_lr(q))
 		queue_work(guc_to_gt(guc)->ordered_wq, &q->guc->lr_tdr);
 	else
 		xe_sched_tdr_queue_imm(&q->guc->sched);
@@ -1294,8 +1303,10 @@ static void __guc_exec_queue_process_msg_cleanup(struct xe_sched_msg *msg)
 	xe_gt_assert(guc_to_gt(guc), !(q->flags & EXEC_QUEUE_FLAG_PERMANENT));
 	trace_xe_exec_queue_cleanup_entity(q);
 
-	if (exec_queue_doorbell_registered(q))
+	if (exec_queue_doorbell_registered(q)) {
+		clear_exec_queue_doorbell_registered(q);
 		deallocate_doorbell(guc, q->guc->id);
+	}
 
 	if (exec_queue_registered(q))
 		disable_scheduling_deregister(guc, q);
@@ -1382,10 +1393,29 @@ static void __guc_exec_queue_process_msg_resume(struct xe_sched_msg *msg)
 	}
 }
 
+static void __guc_exec_queue_process_msg_kill_user(struct xe_sched_msg *msg)
+{
+	struct xe_exec_queue *q = msg->private_data;
+	struct xe_guc *guc = exec_queue_to_guc(q);
+
+	if (!xe_lrc_ring_is_idle(q->lrc[0]))
+		xe_gt_dbg(q->gt, "Killing non-idle usermap queue: guc_id=%d",
+			  q->guc->id);
+
+	if (exec_queue_doorbell_registered(q)) {
+		clear_exec_queue_doorbell_registered(q);
+		deallocate_doorbell(guc, q->guc->id);
+	}
+
+	if (exec_queue_registered(q))
+		disable_scheduling_deregister(guc, q);
+}
+
 #define CLEANUP		1	/* Non-zero values to catch uninitialized msg */
 #define SET_SCHED_PROPS	2
 #define SUSPEND		3
 #define RESUME		4
+#define KILL_USER	5
 #define OPCODE_MASK	0xf
 #define MSG_LOCKED	BIT(8)
 
@@ -1407,6 +1437,9 @@ static void guc_exec_queue_process_msg(struct xe_sched_msg *msg)
 		break;
 	case RESUME:
 		__guc_exec_queue_process_msg_resume(msg);
+		break;
+	case KILL_USER:
+		__guc_exec_queue_process_msg_kill_user(msg);
 		break;
 	default:
 		XE_WARN_ON("Unknown message type");
@@ -1600,6 +1633,7 @@ static bool guc_exec_queue_try_add_msg(struct xe_exec_queue *q,
 #define STATIC_MSG_CLEANUP	0
 #define STATIC_MSG_SUSPEND	1
 #define STATIC_MSG_RESUME	2
+#define STATIC_MSG_KILL_USER	3
 static void guc_exec_queue_fini(struct xe_exec_queue *q)
 {
 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_CLEANUP;
@@ -1722,6 +1756,24 @@ static void guc_exec_queue_resume(struct xe_exec_queue *q)
 
 	xe_sched_msg_lock(sched);
 	guc_exec_queue_try_add_msg(q, msg, RESUME);
+	xe_sched_msg_unlock(sched);
+}
+
+static void guc_exec_queue_kill_user(struct xe_exec_queue *q)
+{
+	struct xe_gpu_scheduler *sched = &q->guc->sched;
+	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_KILL_USER;
+
+	if (exec_queue_extra_ref(q))
+		return;
+
+	set_exec_queue_banned(q);
+
+	xe_sched_msg_lock(sched);
+	if (guc_exec_queue_try_add_msg(q, msg, KILL_USER)) {
+		set_exec_queue_extra_ref(q);
+		xe_exec_queue_get(q);
+	}
 	xe_sched_msg_unlock(sched);
 }
 
