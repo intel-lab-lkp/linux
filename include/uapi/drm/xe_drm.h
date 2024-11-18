@@ -102,6 +102,7 @@ extern "C" {
 #define DRM_XE_EXEC			0x09
 #define DRM_XE_WAIT_USER_FENCE		0x0a
 #define DRM_XE_OBSERVATION		0x0b
+#define DRM_XE_VM_CONVERT_FENCE		0x0c
 
 /* Must be kept compact -- no holes */
 
@@ -117,6 +118,7 @@ extern "C" {
 #define DRM_IOCTL_XE_EXEC			DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC, struct drm_xe_exec)
 #define DRM_IOCTL_XE_WAIT_USER_FENCE		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_WAIT_USER_FENCE, struct drm_xe_wait_user_fence)
 #define DRM_IOCTL_XE_OBSERVATION		DRM_IOW(DRM_COMMAND_BASE + DRM_XE_OBSERVATION, struct drm_xe_observation_param)
+#define DRM_IOCTL_XE_VM_CONVERT_FENCE		DRM_IOW(DRM_COMMAND_BASE + DRM_XE_VM_CONVERT_FENCE, struct drm_xe_vm_convert_fence)
 
 /**
  * DOC: Xe IOCTL Extensions
@@ -1794,6 +1796,66 @@ struct drm_xe_oa_stream_info {
 
 	/** @reserved: reserved for future use */
 	__u64 reserved[3];
+};
+
+/**
+ * struct drm_xe_semaphore - Semaphore
+ */
+struct drm_xe_semaphore {
+	/**
+	 * @handle: Handle for the semaphore. Must be bound to the VM when
+	 * passed into drm_xe_vm_convert_fence.
+	 */
+	__u32 handle;
+
+	/** @offset: Offset in BO for semaphore, must QW aligned */
+	__u32 offset;
+
+	/** @seqno: Sequence number of semaphore */
+	__u64 seqno;
+
+	/** @token: Semaphore token - MBZ as not supported yet */
+	__u64 token;
+
+	/** @reserved: reserved for future use */
+	__u64 reserved[2];
+};
+
+/**
+ * struct drm_xe_vm_convert_fence - Convert semaphore to / from syncobj
+ *
+ * DRM_XE_SYNC_FLAG_SIGNAL set indicates semaphore -> syncobj
+ * DRM_XE_SYNC_FLAG_SIGNAL clear indicates syncobj -> semaphore
+ */
+struct drm_xe_vm_convert_fence {
+	/**
+	 * @extensions: Pointer to the first extension struct, if any
+	 */
+	__u64 extensions;
+
+	/** @vm_id: VM ID */
+	__u32 vm_id;
+
+	/** @flags: Flags - MBZ */
+	__u32 flags;
+
+	/** @pad: MBZ */
+	__u32 pad;
+
+	/**
+	 * @num_syncs: Number of struct drm_xe_sync and struct drm_xe_semaphore
+	 * in arrays.
+	 */
+	__u32 num_syncs;
+
+	/** @syncs: Pointer to struct drm_xe_sync array. */
+	__u64 syncs;
+
+	/** @semaphores: Pointer to struct drm_xe_semaphore array. */
+	__u64 semaphores;
+
+	/** @reserved: reserved for future use */
+	__u64 reserved[2];
 };
 
 #if defined(__cplusplus)
