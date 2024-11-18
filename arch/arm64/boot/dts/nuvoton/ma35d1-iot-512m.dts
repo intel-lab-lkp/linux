@@ -18,6 +18,8 @@
 		serial12 = &uart12;
 		serial13 = &uart13;
 		serial14 = &uart14;
+		ethernet0 = &gmac0;
+		ethernet1 = &gmac1;
 	};
 
 	chosen {
@@ -124,5 +126,15 @@
 &uart14 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart14>;
+	status = "okay";
+};
+
+&gmac0 {
+	phy-mode = "rgmii-id";
+	status = "okay";
+};
+
+&gmac1 {
+	phy-mode = "rmii";
 	status = "okay";
 };
