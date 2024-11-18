@@ -4369,7 +4369,8 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 			trace_kvm_async_pf_repeated_fault(fault->addr, fault->gfn);
 			kvm_make_request(KVM_REQ_APF_HALT, vcpu);
 			return RET_PF_RETRY;
-		} else if (kvm_arch_setup_async_pf(vcpu, fault)) {
+		} else if (kvm_can_deliver_async_pf(vcpu) &&
+			kvm_arch_setup_async_pf(vcpu, fault)) {
 			return RET_PF_RETRY;
 		}
 	}
