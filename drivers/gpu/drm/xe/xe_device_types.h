@@ -507,6 +507,9 @@ struct xe_device {
 		int mode;
 	} wedged;
 
+	/** @user_fence_irq: User fence IRQ handler */
+	struct xe_hw_fence_irq user_fence_irq;
+
 #ifdef TEST_VM_OPS_ERROR
 	/**
 	 * @vm_inject_error_position: inject errors at different places in VM

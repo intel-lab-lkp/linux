@@ -39,6 +39,7 @@
 #include "xe_gt_sriov_vf.h"
 #include "xe_guc.h"
 #include "xe_hw_engine_group.h"
+#include "xe_hw_fence.h"
 #include "xe_hwmon.h"
 #include "xe_irq.h"
 #include "xe_memirq.h"
@@ -902,6 +903,7 @@ int xe_device_probe(struct xe_device *xe)
 	if (err)
 		goto err;
 
+	xe_hw_fence_irq_init(&xe->user_fence_irq);
 	for_each_gt(gt, xe, id) {
 		last_gt = id;
 
@@ -944,6 +946,7 @@ err_fini_oa:
 	xe_oa_fini(xe);
 
 err_fini_gt:
+	xe_hw_fence_irq_finish(&xe->user_fence_irq);
 	for_each_gt(gt, xe, id) {
 		if (id < last_gt)
 			xe_gt_remove(gt);
@@ -979,6 +982,7 @@ void xe_device_remove(struct xe_device *xe)
 
 	xe_heci_gsc_fini(xe);
 
+	xe_hw_fence_irq_finish(&xe->user_fence_irq);
 	for_each_gt(gt, xe, id)
 		xe_gt_remove(gt);
 }
