@@ -17,10 +17,15 @@ struct xe_bo;
  */
 struct xe_lrc {
 	/**
-	 * @bo: buffer object (memory) for logical ring context, per process HW
-	 * status page, and submission ring.
+	 * @bo: buffer object (memory) for logical ring context and per process
+	 * HW status page.
 	 */
 	struct xe_bo *bo;
+
+	/**
+	 * @submission_ring: buffer object (memory) for submission_ring
+	 */
+	struct xe_bo *submission_ring;
 
 	/** @size: size of lrc including any indirect ring state page */
 	u32 size;

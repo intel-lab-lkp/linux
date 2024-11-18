@@ -632,7 +632,7 @@ static inline u32 __xe_lrc_ring_offset(struct xe_lrc *lrc)
 
 u32 xe_lrc_pphwsp_offset(struct xe_lrc *lrc)
 {
-	return lrc->ring.size;
+	return 0;
 }
 
 /* Make the magic macros work */
@@ -712,7 +712,21 @@ static inline u32 __maybe_unused __xe_lrc_##elem##_ggtt_addr(struct xe_lrc *lrc)
 	return xe_bo_ggtt_addr(lrc->bo) + __xe_lrc_##elem##_offset(lrc); \
 } \
 
-DECL_MAP_ADDR_HELPERS(ring)
+#define DECL_MAP_RING_ADDR_HELPERS(elem) \
+static inline struct iosys_map __xe_lrc_##elem##_map(struct xe_lrc *lrc) \
+{ \
+	struct iosys_map map = lrc->submission_ring->vmap; \
+\
+	xe_assert(lrc_to_xe(lrc), !iosys_map_is_null(&map));  \
+	iosys_map_incr(&map, __xe_lrc_##elem##_offset(lrc)); \
+	return map; \
+} \
+static inline u32 __maybe_unused __xe_lrc_##elem##_ggtt_addr(struct xe_lrc *lrc) \
+{ \
+	return xe_bo_ggtt_addr(lrc->submission_ring) + __xe_lrc_##elem##_offset(lrc); \
+} \
+
+DECL_MAP_RING_ADDR_HELPERS(ring)
 DECL_MAP_ADDR_HELPERS(pphwsp)
 DECL_MAP_ADDR_HELPERS(seqno)
 DECL_MAP_ADDR_HELPERS(regs)
@@ -722,6 +736,7 @@ DECL_MAP_ADDR_HELPERS(ctx_timestamp)
 DECL_MAP_ADDR_HELPERS(parallel)
 DECL_MAP_ADDR_HELPERS(indirect_ring)
 
+#undef DECL_RING_MAP_ADDR_HELPERS
 #undef DECL_MAP_ADDR_HELPERS
 
 /**
@@ -866,10 +881,8 @@ static void xe_lrc_set_ppgtt(struct xe_lrc *lrc, struct xe_vm *vm)
 static void xe_lrc_finish(struct xe_lrc *lrc)
 {
 	xe_hw_fence_ctx_finish(&lrc->fence_ctx);
-	xe_bo_lock(lrc->bo, false);
-	xe_bo_unpin(lrc->bo);
-	xe_bo_unlock(lrc->bo);
-	xe_bo_put(lrc->bo);
+	xe_bo_unpin_map_no_vm(lrc->bo);
+	xe_bo_unpin_map_no_vm(lrc->submission_ring);
 }
 
 #define PVC_CTX_ASID		(0x2e + 1)
@@ -889,7 +902,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 
 	kref_init(&lrc->refcount);
 	lrc->flags = 0;
-	lrc_size = ring_size + xe_gt_lrc_size(gt, hwe->class);
+	lrc_size = xe_gt_lrc_size(gt, hwe->class);
 	if (xe_gt_has_indirect_ring_state(gt))
 		lrc->flags |= XE_LRC_FLAG_INDIRECT_RING_STATE;
 
@@ -904,6 +917,17 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 				       XE_BO_FLAG_GGTT_INVALIDATE);
 	if (IS_ERR(lrc->bo))
 		return PTR_ERR(lrc->bo);
+
+	lrc->submission_ring = xe_bo_create_pin_map(xe, tile, vm, ring_size,
+						    ttm_bo_type_kernel,
+						    XE_BO_FLAG_VRAM_IF_DGFX(tile) |
+						    XE_BO_FLAG_GGTT |
+						    XE_BO_FLAG_GGTT_INVALIDATE);
+	if (IS_ERR(lrc->submission_ring)) {
+		err = PTR_ERR(lrc->submission_ring);
+		lrc->submission_ring = NULL;
+		goto err_lrc_finish;
+	}
 
 	lrc->size = lrc_size;
 	lrc->tile = gt_to_tile(hwe->gt);
