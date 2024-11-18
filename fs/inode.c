@@ -869,6 +869,21 @@ void evict_inodes(struct super_block *sb)
 again:
 	spin_lock(&sb->s_inode_list_lock);
 	sb_for_each_inodes_continue_safe(inode, next, &sb->s_inodes) {
+		/*
+		 * We can have a ton of inodes to evict at unmount time given
+		 * enough memory, check to see if we need to go to sleep for a
+		 * bit so we don't livelock.
+		 */
+		if (need_resched()) {
+			list_del(&cursor.i_sb_list);
+			list_add_tail(&cursor.i_sb_list, &inode->i_sb_list);
+			inode = &cursor;
+			spin_unlock(&sb->s_inode_list_lock);
+			cond_resched();
+			dispose_list(&dispose);
+			goto again;
+		}
+
 		if (atomic_read(&inode->i_count))
 			continue;
 
@@ -886,21 +901,6 @@ again:
 		inode_lru_list_del(inode);
 		spin_unlock(&inode->i_lock);
 		list_add(&inode->i_lru, &dispose);
-
-		/*
-		 * We can have a ton of inodes to evict at unmount time given
-		 * enough memory, check to see if we need to go to sleep for a
-		 * bit so we don't livelock.
-		 */
-		if (need_resched()) {
-			list_del(&cursor.i_sb_list);
-			list_add(&cursor.i_sb_list, &inode->i_sb_list);
-			inode = &cursor;
-			spin_unlock(&sb->s_inode_list_lock);
-			cond_resched();
-			dispose_list(&dispose);
-			goto again;
-		}
 	}
 	list_del(&cursor.i_sb_list);
 	spin_unlock(&sb->s_inode_list_lock);
@@ -928,6 +928,16 @@ void invalidate_inodes(struct super_block *sb)
 again:
 	spin_lock(&sb->s_inode_list_lock);
 	sb_for_each_inodes_continue_safe(inode, next, &sb->s_inodes) {
+		if (need_resched()) {
+			list_del(&cursor.i_sb_list);
+			list_add_tail(&cursor.i_sb_list, &inode->i_sb_list);
+			inode = &cursor;
+			spin_unlock(&sb->s_inode_list_lock);
+			cond_resched();
+			dispose_list(&dispose);
+			goto again;
+		}
+
 		spin_lock(&inode->i_lock);
 		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
 			spin_unlock(&inode->i_lock);
@@ -942,15 +952,6 @@ again:
 		inode_lru_list_del(inode);
 		spin_unlock(&inode->i_lock);
 		list_add(&inode->i_lru, &dispose);
-		if (need_resched()) {
-			list_del(&cursor.i_sb_list);
-			list_add(&cursor.i_sb_list, &inode->i_sb_list);
-			inode = &cursor;
-			spin_unlock(&sb->s_inode_list_lock);
-			cond_resched();
-			dispose_list(&dispose);
-			goto again;
-		}
 	}
 	list_del(&cursor.i_sb_list);
 	spin_unlock(&sb->s_inode_list_lock);
