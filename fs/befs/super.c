@@ -101,9 +101,12 @@ befs_check_sb(struct super_block *sb)
 
 
 	/* ag_shift also encodes the same information as blocks_per_ag in a
-	 * different way, non-fatal consistency check
+	 * different way, non-fatal consistency check.
+	 * Beware that blocks_per_ag holds the number of bitmap blocks in
+	 * each allocation group.
 	 */
-	if ((1 << befs_sb->ag_shift) != befs_sb->blocks_per_ag)
+	if ((1 << befs_sb->ag_shift) !=
+	    befs_sb->blocks_per_ag * befs_sb->block_size * 8)
 		befs_error(sb, "ag_shift disagrees with blocks_per_ag.");
 
 	if (befs_sb->log_start != befs_sb->log_end ||
