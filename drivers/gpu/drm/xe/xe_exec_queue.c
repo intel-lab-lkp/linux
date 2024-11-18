@@ -33,6 +33,8 @@ enum xe_exec_queue_sched_prop {
 
 static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue *q,
 				      u64 extensions, int ext_number);
+static int exec_queue_user_extensions_post_init(struct xe_device *xe, struct xe_exec_queue *q,
+						u64 extensions, int ext_number);
 
 static void __xe_exec_queue_free(struct xe_exec_queue *q)
 {
@@ -446,6 +448,10 @@ static const xe_exec_queue_user_extension_fn exec_queue_user_extension_funcs[] =
 	[DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY] = exec_queue_user_ext_set_property,
 };
 
+static const xe_exec_queue_user_extension_fn exec_queue_user_extension_post_init_funcs[] = {
+	[DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY] = NULL,
+};
+
 #define MAX_USER_EXTENSIONS	16
 static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue *q,
 				      u64 extensions, int ext_number)
@@ -476,6 +482,42 @@ static int exec_queue_user_extensions(struct xe_device *xe, struct xe_exec_queue
 	if (ext.next_extension)
 		return exec_queue_user_extensions(xe, q, ext.next_extension,
 						  ++ext_number);
+
+	return 0;
+}
+
+static int exec_queue_user_extensions_post_init(struct xe_device *xe, struct xe_exec_queue *q,
+						u64 extensions, int ext_number)
+{
+	u64 __user *address = u64_to_user_ptr(extensions);
+	struct drm_xe_user_extension ext;
+	int err;
+	u32 idx;
+
+	if (XE_IOCTL_DBG(xe, ext_number >= MAX_USER_EXTENSIONS))
+		return -E2BIG;
+
+	err = __copy_from_user(&ext, address, sizeof(ext));
+	if (XE_IOCTL_DBG(xe, err))
+		return -EFAULT;
+
+	if (XE_IOCTL_DBG(xe, ext.pad) ||
+	    XE_IOCTL_DBG(xe, ext.name >=
+			 ARRAY_SIZE(exec_queue_user_extension_post_init_funcs)))
+		return -EINVAL;
+
+	idx = array_index_nospec(ext.name,
+				 ARRAY_SIZE(exec_queue_user_extension_post_init_funcs));
+	if (exec_queue_user_extension_post_init_funcs[idx]) {
+		err = exec_queue_user_extension_post_init_funcs[idx](xe, q, extensions);
+		if (XE_IOCTL_DBG(xe, err))
+			return err;
+	}
+
+	if (ext.next_extension)
+		return exec_queue_user_extensions_post_init(xe, q,
+							    ext.next_extension,
+							    ++ext_number);
 
 	return 0;
 }
@@ -646,6 +688,12 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 	}
 
 	q->xef = xe_file_get(xef);
+
+	if (args->extensions) {
+		err = exec_queue_user_extensions_post_init(xe, q, args->extensions, 0);
+		if (err)
+			goto kill_exec_queue;
+	}
 
 	/* user id alloc must always be last in ioctl to prevent UAF */
 	err = xa_alloc(&xef->exec_queue.xa, &id, q, xa_limit_32b, GFP_KERNEL);
