@@ -1470,6 +1470,9 @@ __xe_bo_create_locked(struct xe_device *xe,
 {
 	struct xe_bo *bo = NULL;
 	int err;
+	bool want_bulk = vm && !xe_vm_in_fault_mode(vm) &&
+		flags & XE_BO_FLAG_USER &&
+		!(flags & (XE_BO_FLAG_PINNED | XE_BO_FLAG_GGTT));
 
 	if (vm)
 		xe_vm_assert_held(vm);
@@ -1488,9 +1491,7 @@ __xe_bo_create_locked(struct xe_device *xe,
 	}
 
 	bo = ___xe_bo_create_locked(xe, bo, tile, vm ? xe_vm_resv(vm) : NULL,
-				    vm && !xe_vm_in_fault_mode(vm) &&
-				    flags & XE_BO_FLAG_USER ?
-				    &vm->lru_bulk_move : NULL, size,
+				    want_bulk ? &vm->lru_bulk_move : NULL, size,
 				    cpu_caching, type, flags);
 	if (IS_ERR(bo))
 		return bo;
@@ -1780,9 +1781,6 @@ int xe_bo_pin(struct xe_bo *bo)
 	struct ttm_place *place = &bo->placements[0];
 	struct xe_device *xe = xe_bo_device(bo);
 	int err;
-
-	/* We currently don't expect user BO to be pinned */
-	xe_assert(xe, !xe_bo_is_user(bo));
 
 	/* Pinned object must be in GGTT or have pinned flag */
 	xe_assert(xe, bo->flags & (XE_BO_FLAG_PINNED |
