@@ -166,6 +166,10 @@ patternProperties:
     type: object
     $ref: /schemas/extcon/extcon-usbc-cros-ec.yaml#
 
+  "^charge-chip-*":
+    type: object
+    $ref: /schemas/chrome/google,cros-charge-state.yaml#
+
 required:
   - compatible
 

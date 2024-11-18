@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/chrome/google,cros-charge-state.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Google Chrome OS EC(Embedded Controller) charge state driver.
+
+maintainers:
+  - Sung-Chi, Li <lschyi@chromium.org>
+
+description:
+  Chrome OS devices have an Embedded Controller(EC) which has access to
+  battery charger IC. This node is intended to allow the host to read and
+  control the charger current. The node for this device should be under a
+  cros-ec node like google,cros-ec-spi.
+
+properties:
+  compatible:
+    const: google,cros-ec-charge-state
+
+  min-milliamp:
+    description: min current in milliamp.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  max-milliamp:
+    description: max current in milliamp.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  type:
+    description: current limit type.
+    enum:
+      - charge
+      - input
+
+required:
+  - compatible
+  - min-milliamp
+  - man-milliamp
+  - type
+
+additionalProperties: false
+
+examples:
+  - |+
+    spi {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      cros_ec: ec@0 {
+        compatible = "google,cros-ec-spi";
+        reg = <0>;
+        interrupts = <35 0>;
+
+        charge_chip_battery_current: charge-chip-battery {
+          compatible = "google,cros-ec-charge";
+          type = "charge";
+          min-milliamp = <150>;
+          max-milliamp = <5000>;
+        };
+      };
+    };
