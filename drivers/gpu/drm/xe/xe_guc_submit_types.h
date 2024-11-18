@@ -113,6 +113,8 @@ struct xe_guc_submit_exec_queue_snapshot {
 		u32 wqi_tail;
 		/** @guc.id: GuC id for this exec_queue */
 		u16 id;
+		/** @guc.db_id: Doorbell id */
+		u16 db_id;
 	} guc;
 
 	/**

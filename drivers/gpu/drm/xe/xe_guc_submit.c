@@ -2227,6 +2227,7 @@ xe_guc_exec_queue_snapshot_capture(struct xe_exec_queue *q)
 		return NULL;
 
 	snapshot->guc.id = q->guc->id;
+	snapshot->guc.db_id = q->guc->db.id;
 	memcpy(&snapshot->name, &q->name, sizeof(snapshot->name));
 	snapshot->class = q->class;
 	snapshot->logical_mask = q->logical_mask;
@@ -2321,6 +2322,7 @@ xe_guc_exec_queue_snapshot_print(struct xe_guc_submit_exec_queue_snapshot *snaps
 	drm_printf(p, "\tClass: %d\n", snapshot->class);
 	drm_printf(p, "\tLogical mask: 0x%x\n", snapshot->logical_mask);
 	drm_printf(p, "\tWidth: %d\n", snapshot->width);
+	drm_printf(p, "\tDoorbell ID: %d\n", snapshot->guc.db_id);
 	drm_printf(p, "\tRef: %d\n", snapshot->refcount);
 	drm_printf(p, "\tTimeout: %ld (ms)\n", snapshot->sched_timeout);
 	drm_printf(p, "\tTimeslice: %u (us)\n",
