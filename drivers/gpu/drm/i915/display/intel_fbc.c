@@ -42,6 +42,7 @@
 #include <linux/string_helpers.h>
 
 #include <drm/drm_blend.h>
+#include <drm/drm_damage_helper.h>
 #include <drm/drm_fourcc.h>
 
 #include "gem/i915_gem_stolen.h"
@@ -58,6 +59,7 @@
 #include "intel_display_trace.h"
 #include "intel_display_types.h"
 #include "intel_display_wa.h"
+#include "intel_dsb.h"
 #include "intel_fbc.h"
 #include "intel_fbc_regs.h"
 #include "intel_frontbuffer.h"
@@ -126,6 +128,8 @@ struct intel_fbc {
 	 */
 	struct intel_fbc_state state;
 	const char *no_fbc_reason;
+
+	struct drm_rect dirty_rect;
 };
 
 /* plane stride in pixels */
@@ -669,6 +673,10 @@ static void ivb_fbc_activate(struct intel_fbc *fbc)
 	dpfc_ctl = ivb_dpfc_ctl(fbc);
 	if (DISPLAY_VER(display) >= 20)
 		intel_de_write(display, ILK_DPFC_CONTROL(fbc->id), dpfc_ctl);
+
+	if (DISPLAY_VER(display) >= 30)
+		intel_de_write(display, XE3_FBC_DIRTY_CTL(fbc->id),
+			       FBC_DIRTY_RECT_EN);
 
 	intel_de_write(display, ILK_DPFC_CONTROL(fbc->id),
 		       DPFC_CTL_EN | dpfc_ctl);
@@ -1664,6 +1672,113 @@ void intel_fbc_flush(struct drm_i915_private *i915,
 		__intel_fbc_flush(fbc, frontbuffer_bits, origin);
 }
 
+void
+intel_fbc_program_dirty_rect(struct intel_dsb *dsb, struct intel_plane *plane)
+{
+	struct intel_display *display = to_intel_display(plane);
+	struct intel_fbc *fbc = plane->fbc;
+
+	if (DISPLAY_VER(display) < 30)
+		return;
+
+	if (!fbc)
+		return;
+
+	intel_de_write_dsb(display, dsb, XE3_FBC_DIRTY_RECT(fbc->id),
+			   FBC_DIRTY_RECT_START_LINE(fbc->dirty_rect.y1) |
+			   FBC_DIRTY_RECT_END_LINE(fbc->dirty_rect.y2));
+}
+
+static bool
+intel_fbc_need_full_region_update(struct intel_plane_state *old_plane_state,
+				  struct intel_plane_state *new_plane_state)
+{
+	const struct drm_framebuffer *old_fb = old_plane_state->hw.fb;
+	const struct drm_framebuffer *new_fb = new_plane_state->hw.fb;
+
+	if (!old_fb || !new_fb)
+		return true;
+
+	if (old_fb->format->format != new_fb->format->format)
+		return true;
+
+	if (old_fb->modifier != new_fb->modifier)
+		return true;
+
+	if (intel_fbc_plane_stride(old_plane_state) !=
+	    intel_fbc_plane_stride(new_plane_state))
+		return true;
+
+	if (intel_fbc_cfb_stride(old_plane_state) !=
+	    intel_fbc_cfb_stride(new_plane_state))
+		return true;
+
+	if (intel_fbc_cfb_size(old_plane_state) !=
+	    intel_fbc_cfb_size(new_plane_state))
+		return true;
+
+	return false;
+}
+
+static void
+update_dirty_rect_to_full_region(struct intel_plane_state *plane_state,
+				 struct drm_rect *dirty_rect)
+{
+	int y_offset = plane_state->view.color_plane[0].y;
+	int plane_height = drm_rect_height(&plane_state->uapi.src) >> 16;
+
+	dirty_rect->y1 = y_offset;
+	dirty_rect->y2 = y_offset + plane_height;
+}
+
+static void validate_and_clip_dirty_rect(struct intel_plane_state *plane_state,
+					 struct drm_rect *dirty_rect)
+{
+	int y_offset = plane_state->view.color_plane[0].y;
+	int plane_height = drm_rect_height(&plane_state->uapi.src) >> 16;
+	int max_endline = y_offset + plane_height;
+
+	dirty_rect->y1 = clamp(dirty_rect->y1, y_offset, max_endline);
+	dirty_rect->y2 = clamp(dirty_rect->y2, dirty_rect->y1, max_endline);
+}
+
+static void intel_fbc_compute_dirty_rect(struct intel_plane *plane,
+					struct intel_plane_state *old_plane_state,
+					struct intel_plane_state *new_plane_state,
+					bool need_full_region_update)
+{
+	struct intel_display *display = to_intel_display(plane);
+	struct intel_fbc *fbc = plane->fbc;
+	struct drm_rect *fbc_dirty_rect = &fbc->dirty_rect;
+
+	if (need_full_region_update) {
+		drm_dbg_kms(display->drm,
+			    "[PLANE:%d:%s] Full region update needed\n",
+			    plane->base.base.id, plane->base.name);
+		update_dirty_rect_to_full_region(new_plane_state, fbc_dirty_rect);
+		goto out;
+	}
+
+	if (drm_atomic_helper_damage_merged(&old_plane_state->uapi,
+					    &new_plane_state->uapi,
+					    fbc_dirty_rect)) {
+		validate_and_clip_dirty_rect(new_plane_state, fbc_dirty_rect);
+	} else {
+		drm_dbg_kms(display->drm,
+			    "[PLANE:%d:%s] Damage clips merge cal failed. Use full region\n",
+			    plane->base.base.id, plane->base.name);
+
+		/* TODO! if the drm call failed, update full region? */
+		update_dirty_rect_to_full_region(new_plane_state, fbc_dirty_rect);
+	}
+
+out:
+	drm_dbg_kms(display->drm,
+		    "[PLANE:%d:%s] Dirty rect start line: %d End line: %d\n",
+		    plane->base.base.id, plane->base.name, fbc_dirty_rect->y1,
+		    fbc_dirty_rect->y2);
+}
+
 int intel_fbc_atomic_check(struct intel_atomic_state *state)
 {
 	struct intel_plane_state __maybe_unused *new_plane_state;
@@ -1673,11 +1788,26 @@ int intel_fbc_atomic_check(struct intel_atomic_state *state)
 
 	for_each_oldnew_intel_plane_in_state(state, plane, old_plane_state,
 					     new_plane_state, i) {
+		bool full_region_update;
 		int ret;
+
+		if (!plane->fbc)
+			continue;
 
 		ret = intel_fbc_check_plane(state, plane);
 		if (ret)
 			return ret;
+
+		if (!new_plane_state->no_fbc_reason)
+			continue;
+
+		full_region_update =
+			intel_fbc_need_full_region_update(old_plane_state,
+							  new_plane_state);
+
+		intel_fbc_compute_dirty_rect(plane, old_plane_state,
+					     new_plane_state,
+					     full_region_update);
 	}
 
 	return 0;

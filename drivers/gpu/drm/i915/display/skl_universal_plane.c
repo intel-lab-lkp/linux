@@ -1509,6 +1509,8 @@ icl_plane_update_noarm(struct intel_dsb *dsb,
 		icl_plane_csc_load_black(dsb, plane, crtc_state);
 
 	icl_plane_update_sel_fetch_noarm(dsb, plane, crtc_state, plane_state, color_plane);
+
+	intel_fbc_program_dirty_rect(dsb, plane);
 }
 
 static void icl_plane_update_sel_fetch_arm(struct intel_dsb *dsb,
