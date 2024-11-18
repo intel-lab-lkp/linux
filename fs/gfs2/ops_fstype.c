@@ -1742,7 +1742,7 @@ static void gfs2_evict_inodes(struct super_block *sb)
 	set_bit(SDF_EVICTING, &sdp->sd_flags);
 
 	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+	sb_for_each_inodes(inode, &sb->s_inodes) {
 		spin_lock(&inode->i_lock);
 		if ((inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW)) &&
 		    !need_resched()) {
