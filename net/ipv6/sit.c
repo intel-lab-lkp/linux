@@ -198,10 +198,9 @@ static void ipip6_tunnel_clone_6rd(struct net_device *dev, struct sit_net *sitn)
 #endif
 }
 
-static int ipip6_tunnel_create(struct net_device *dev)
+static int ipip6_tunnel_create(struct net *net, struct net_device *dev)
 {
 	struct ip_tunnel *t = netdev_priv(dev);
-	struct net *net = dev_net(dev);
 	struct sit_net *sitn = net_generic(net, sit_net_id);
 	int err;
 
@@ -270,7 +269,7 @@ static struct ip_tunnel *ipip6_tunnel_locate(struct net *net,
 	nt = netdev_priv(dev);
 
 	nt->parms = *parms;
-	if (ipip6_tunnel_create(dev) < 0)
+	if (ipip6_tunnel_create(net, dev) < 0)
 		goto failed_free;
 
 	if (!parms->name[0])
@@ -1550,11 +1549,12 @@ static bool ipip6_netlink_6rd_parms(struct nlattr *data[],
 }
 #endif
 
-static int ipip6_newlink(struct net *src_net, struct net_device *dev,
-			 struct nlattr *tb[], struct nlattr *data[],
-			 struct netlink_ext_ack *extack)
+static int ipip6_newlink(struct rtnl_newlink_params *params)
 {
-	struct net *net = dev_net(dev);
+	struct net_device *dev = params->dev;
+	struct nlattr **tb = params->tb;
+	struct nlattr **data = params->data;
+	struct net *net = params->link_net ? : dev_net(dev);
 	struct ip_tunnel *nt;
 	struct ip_tunnel_encap ipencap;
 #ifdef CONFIG_IPV6_SIT_6RD
@@ -1575,7 +1575,7 @@ static int ipip6_newlink(struct net *src_net, struct net_device *dev,
 	if (ipip6_tunnel_locate(net, &nt->parms, 0))
 		return -EEXIST;
 
-	err = ipip6_tunnel_create(dev);
+	err = ipip6_tunnel_create(net, dev);
 	if (err < 0)
 		return err;
 

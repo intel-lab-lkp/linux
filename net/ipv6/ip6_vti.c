@@ -174,10 +174,9 @@ vti6_tnl_unlink(struct vti6_net *ip6n, struct ip6_tnl *t)
 	}
 }
 
-static int vti6_tnl_create2(struct net_device *dev)
+static int vti6_tnl_create2(struct net *net, struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
-	struct net *net = dev_net(dev);
 	struct vti6_net *ip6n = net_generic(net, vti6_net_id);
 	int err;
 
@@ -221,7 +220,7 @@ static struct ip6_tnl *vti6_tnl_create(struct net *net, struct __ip6_tnl_parm *p
 	t->parms = *p;
 	t->net = dev_net(dev);
 
-	err = vti6_tnl_create2(dev);
+	err = vti6_tnl_create2(net, dev);
 	if (err < 0)
 		goto failed_free;
 
@@ -997,11 +996,11 @@ static void vti6_netlink_parms(struct nlattr *data[],
 		parms->fwmark = nla_get_u32(data[IFLA_VTI_FWMARK]);
 }
 
-static int vti6_newlink(struct net *src_net, struct net_device *dev,
-			struct nlattr *tb[], struct nlattr *data[],
-			struct netlink_ext_ack *extack)
+static int vti6_newlink(struct rtnl_newlink_params *params)
 {
-	struct net *net = dev_net(dev);
+	struct net_device *dev = params->dev;
+	struct nlattr **data = params->data;
+	struct net *net = params->link_net ? : dev_net(dev);
 	struct ip6_tnl *nt;
 
 	nt = netdev_priv(dev);
@@ -1012,7 +1011,7 @@ static int vti6_newlink(struct net *src_net, struct net_device *dev,
 	if (vti6_locate(net, &nt->parms, 0))
 		return -EEXIST;
 
-	return vti6_tnl_create2(dev);
+	return vti6_tnl_create2(net, dev);
 }
 
 static void vti6_dellink(struct net_device *dev, struct list_head *head)
