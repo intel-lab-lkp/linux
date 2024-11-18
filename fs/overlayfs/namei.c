@@ -1115,6 +1115,13 @@ struct dentry *ovl_lookup(struct inode *dir, struct dentry *dentry,
 	for (i = 0; !d.stop && i < ovl_numlower(poe); i++) {
 		struct ovl_path lower = ovl_lowerstack(poe)[i];
 
+		if (!lower.dentry->d_inode->i_op->lookup) {
+			err = -EIO;
+			pr_warn_ratelimited("missing lookup operation for inode %p\n",
+								lower.dentry->d_inode);
+			goto out_put;
+		}
+
 		if (!ovl_redirect_follow(ofs))
 			d.last = i == ovl_numlower(poe) - 1;
 		else if (d.is_dir || !ofs->numdatalayer)
