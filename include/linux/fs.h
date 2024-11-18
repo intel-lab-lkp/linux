@@ -2474,6 +2474,7 @@ static inline void kiocb_clone(struct kiocb *kiocb, struct kiocb *kiocb_src,
 #define I_DONTCACHE		(1 << 15)
 #define I_SYNC_QUEUED		(1 << 16)
 #define I_PINNING_NETFS_WB	(1 << 17)
+#define I_CURSOR		(1 << 18)
 
 #define I_DIRTY_INODE (I_DIRTY_SYNC | I_DIRTY_DATASYNC)
 #define I_DIRTY (I_DIRTY_INODE | I_DIRTY_PAGES)
@@ -3799,5 +3800,49 @@ static inline bool vfs_empty_path(int dfd, const char __user *path)
 }
 
 int generic_atomic_write_valid(struct kiocb *iocb, struct iov_iter *iter);
+
+static inline bool inode_is_cursor(struct inode *inode)
+{
+	return inode->i_state & I_CURSOR;
+}
+
+static inline struct inode *next_sb_inode(struct inode *pos,
+					  struct list_head *head)
+{
+	struct inode *inode;
+	struct list_head *start;
+
+	if (!pos)
+		return NULL;
+
+	start = &pos->i_sb_list;
+
+	list_for_each_continue(start, head) {
+		inode = list_entry(start, typeof(*inode), i_sb_list);
+		if (likely(!inode_is_cursor(inode)))
+			return inode;
+	}
+
+	return NULL;
+}
+
+#define sb_for_each_inodes_safe(pos, n, head)                 \
+	for (pos = list_entry(head, typeof(*pos), i_sb_list), \
+		pos = next_sb_inode(pos, head),               \
+		n = next_sb_inode(pos, head);                 \
+	     pos != NULL;                                     \
+	     pos = n, n = next_sb_inode(n, head))
+
+#define sb_for_each_inodes(pos, head)                          \
+	for (pos = list_entry(head, typeof(*pos), i_sb_list), \
+		pos = next_sb_inode(pos, head);                \
+	     pos != NULL;                                     \
+	     pos = next_sb_inode(pos, head))
+
+#define sb_for_each_inodes_continue_safe(pos, n, head)        \
+	for (pos = next_sb_inode(pos, head),                  \
+		n = next_sb_inode(pos, head);                 \
+	     pos != NULL;                                     \
+	     pos = n, n = next_sb_inode(n, head))
 
 #endif /* _LINUX_FS_H */
