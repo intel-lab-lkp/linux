@@ -988,5 +988,9 @@ int drm_plane_create_scaling_filter_property(struct drm_plane *plane,
 int drm_plane_add_size_hints_property(struct drm_plane *plane,
 				      const struct drm_plane_size_hint *hints,
 				      int num_hints);
+int drm_plane_create_format_blob(struct drm_device *dev,
+				 struct drm_plane *plane, u64 *modifiers,
+				 unsigned int modifier_count, u32 *formats,
+				 unsigned int format_count, bool is_async);
 
 #endif

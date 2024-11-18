@@ -191,7 +191,10 @@ modifiers_ptr(struct drm_format_modifier_blob *blob)
 	return (struct drm_format_modifier *)(((char *)blob) + blob->modifiers_offset);
 }
 
-static int create_in_format_blob(struct drm_device *dev, struct drm_plane *plane)
+int drm_plane_create_format_blob(struct drm_device *dev,
+				 struct drm_plane *plane, u64 *modifiers,
+				 unsigned int modifier_count, u32 *formats,
+				 unsigned int format_count, bool is_async)
 {
 	const struct drm_mode_config *config = &dev->mode_config;
 	struct drm_property_blob *blob;
@@ -200,14 +203,14 @@ static int create_in_format_blob(struct drm_device *dev, struct drm_plane *plane
 	struct drm_format_modifier_blob *blob_data;
 	unsigned int i, j;
 
-	formats_size = sizeof(__u32) * plane->format_count;
+	formats_size = sizeof(__u32) * format_count;
 	if (WARN_ON(!formats_size)) {
 		/* 0 formats are never expected */
 		return 0;
 	}
 
 	modifiers_size =
-		sizeof(struct drm_format_modifier) * plane->modifier_count;
+		sizeof(struct drm_format_modifier) * modifier_count;
 
 	blob_size = sizeof(struct drm_format_modifier_blob);
 	/* Modifiers offset is a pointer to a struct with a 64 bit field so it
@@ -223,37 +226,45 @@ static int create_in_format_blob(struct drm_device *dev, struct drm_plane *plane
 
 	blob_data = blob->data;
 	blob_data->version = FORMAT_BLOB_CURRENT;
-	blob_data->count_formats = plane->format_count;
+	blob_data->count_formats = format_count;
 	blob_data->formats_offset = sizeof(struct drm_format_modifier_blob);
-	blob_data->count_modifiers = plane->modifier_count;
+	blob_data->count_modifiers = modifier_count;
 
 	blob_data->modifiers_offset =
 		ALIGN(blob_data->formats_offset + formats_size, 8);
 
-	memcpy(formats_ptr(blob_data), plane->format_types, formats_size);
+	memcpy(formats_ptr(blob_data), formats, formats_size);
 
 	mod = modifiers_ptr(blob_data);
-	for (i = 0; i < plane->modifier_count; i++) {
-		for (j = 0; j < plane->format_count; j++) {
-			if (!plane->funcs->format_mod_supported ||
+	for (i = 0; i < modifier_count; i++) {
+		for (j = 0; j < format_count; j++) {
+			if (is_async ||
+			    !plane->funcs->format_mod_supported ||
 			    plane->funcs->format_mod_supported(plane,
-							       plane->format_types[j],
-							       plane->modifiers[i])) {
+							       formats[j],
+							       modifiers[i])) {
 				mod->formats |= 1ULL << j;
 			}
 		}
 
-		mod->modifier = plane->modifiers[i];
+		mod->modifier = modifiers[i];
 		mod->offset = 0;
 		mod->pad = 0;
 		mod++;
 	}
 
-	drm_object_attach_property(&plane->base, config->modifiers_property,
-				   blob->base.id);
+	if (is_async)
+		drm_object_attach_property(&plane->base,
+					   config->async_modifiers_property,
+					   blob->base.id);
+	else
+		drm_object_attach_property(&plane->base,
+					   config->modifiers_property,
+					   blob->base.id);
 
 	return 0;
 }
+EXPORT_SYMBOL(drm_plane_create_format_blob);
 
 /**
  * DOC: hotspot properties
@@ -476,7 +487,10 @@ static int __drm_universal_plane_init(struct drm_device *dev,
 	}
 
 	if (format_modifier_count)
-		create_in_format_blob(dev, plane);
+		drm_plane_create_format_blob(dev, plane, plane->modifiers,
+					     format_modifier_count,
+					     plane->format_types, format_count,
+					     false);
 
 	return 0;
 }
