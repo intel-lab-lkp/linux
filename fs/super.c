@@ -658,7 +658,7 @@ void generic_shutdown_super(struct super_block *sb)
 			struct inode *inode;
 
 			spin_lock(&sb->s_inode_list_lock);
-			list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+			sb_for_each_inodes(inode, &sb->s_inodes) {
 				inode->i_op = VFS_PTR_POISON;
 				inode->i_sb = VFS_PTR_POISON;
 				inode->i_mapping = VFS_PTR_POISON;
