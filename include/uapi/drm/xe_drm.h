@@ -1112,6 +1112,61 @@ struct drm_xe_vm_bind {
 };
 
 /**
+ * struct drm_xe_exec_queue_ext_usermap
+ */
+struct drm_xe_exec_queue_ext_usermap {
+	/** @base: base user extension */
+	struct drm_xe_user_extension base;
+
+	/** @flags: MBZ */
+	__u32 flags;
+
+	/** @version: Version of usermap */
+#define DRM_XE_EXEC_QUEUE_USERMAP_VERSION_XE2_REV0	0
+	__u32 version;
+
+	/**
+	 * @ring_size: The ring size. 4k-2M valid, must be 4k aligned. User
+	 * space has to pad allocation / mapping to avoid prefetch faults.
+	 * Prefetch size is platform dependent.
+	 */
+	__u32 ring_size;
+
+	/** @pad: MBZ */
+	__u32 pad;
+
+	/**
+	 * @ring_addr: Ring address mapped within the VM, should be mapped as
+	 * UC.
+	 */
+	__u64 ring_addr;
+
+	/**
+	 * @indirect_ring_state_offset: The fake indirect ring state offset to
+	 * use for subsequent mmap call. Always 4k in size.
+	 */
+	__u64 indirect_ring_state_offset;
+
+	/**
+	 * @doorbell_offset: The fake doorbell offset to use for subsequent mmap
+	 * call. Always 4k in size.
+	 */
+	__u64 doorbell_offset;
+
+	/** @doorbell_page_offset: The doorbell offset within the mmapped page */
+	__u32 doorbell_page_offset;
+
+	/**
+	  * @indirect_ring_state_handle: Indirect ring state buffer object
+	  * handle. Allocated by KMD and must be closed by user.
+	 */
+	__u32 indirect_ring_state_handle;
+
+	/** @reserved: Reserved */
+	__u64 reserved[2];
+};
+
+/**
  * struct drm_xe_exec_queue_create - Input of &DRM_IOCTL_XE_EXEC_QUEUE_CREATE
  *
  * The example below shows how to use @drm_xe_exec_queue_create to create
@@ -1138,6 +1193,7 @@ struct drm_xe_exec_queue_create {
 #define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_PRIORITY		0
 #define   DRM_XE_EXEC_QUEUE_SET_PROPERTY_TIMESLICE		1
 
+#define DRM_XE_EXEC_QUEUE_EXTENSION_USERMAP			1
 	/** @extensions: Pointer to the first extension struct, if any */
 	__u64 extensions;
 
