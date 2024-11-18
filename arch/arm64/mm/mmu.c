@@ -620,6 +620,18 @@ static inline void arm64_kfence_map_pool(phys_addr_t kfence_pool, pgd_t *pgdp) {
 
 #endif /* CONFIG_KFENCE */
 
+static inline bool force_pte_mapping(void)
+{
+	/*
+	 * Can't use cpufeature API to determine whether BBM level 2
+	 * is supported or not since cpufeature have not been
+	 * finalized yet.
+	 */
+	return (rodata_full && !bbmlv2_available()) ||
+		debug_pagealloc_enabled() ||
+		arm64_kfence_can_set_direct_map();
+}
+
 static void __init map_mem(pgd_t *pgdp)
 {
 	static const u64 direct_map_end = _PAGE_END(VA_BITS_MIN);
@@ -645,8 +657,20 @@ static void __init map_mem(pgd_t *pgdp)
 
 	early_kfence_pool = arm64_kfence_alloc_pool();
 
-	if (can_set_direct_map())
+	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
+
+	/*
+	 * With FEAT_BBM level 2 we can split large block mapping without
+	 * making it invalid.  So kernel linear mapping can be mapped with
+	 * large block instead of PTE level.
+	 *
+	 * Need to break cont for CONT_MAPPINGS when changing permission,
+	 * and need to inspect the adjacent page table entries to make
+	 * them cont again later.  It sounds not worth the complexity.
+	 */
+	if (rodata_full)
+		flags |= NO_CONT_MAPPINGS;
 
 	/*
 	 * Take care not to create a writable alias for the
@@ -1342,8 +1366,11 @@ int arch_add_memory(int nid, u64 start, u64 size,
 
 	VM_BUG_ON(!mhp_range_allowed(start, size, true));
 
-	if (can_set_direct_map())
+	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
+
+	if (rodata_full)
+		flags |= NO_CONT_MAPPINGS;
 
 	__create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
 			     size, params->pgprot, __pgd_pgtable_alloc,

@@ -750,7 +750,7 @@ static inline bool in_swapper_pgdir(void *addr)
 	        ((unsigned long)swapper_pg_dir & PAGE_MASK);
 }
 
-static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
+static inline void __set_pmd_nosync(pmd_t *pmdp, pmd_t pmd)
 {
 #ifdef __PAGETABLE_PMD_FOLDED
 	if (in_swapper_pgdir(pmdp)) {
@@ -760,6 +760,11 @@ static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 #endif /* __PAGETABLE_PMD_FOLDED */
 
 	WRITE_ONCE(*pmdp, pmd);
+}
+
+static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
+{
+	__set_pmd_nosync(pmdp, pmd);
 
 	if (pmd_valid(pmd)) {
 		dsb(ishst);

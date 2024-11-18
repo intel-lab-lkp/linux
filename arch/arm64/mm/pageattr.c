@@ -45,6 +45,145 @@ static int change_page_range(pte_t *ptep, unsigned long addr, void *data)
 	return 0;
 }
 
+static int __split_linear_mapping_pmd(pud_t *pudp,
+				      unsigned long vaddr, unsigned long end)
+{
+	pmd_t *pmdp;
+	unsigned long next;
+
+	pmdp = pmd_offset(pudp, vaddr);
+
+	do {
+		next = pmd_addr_end(vaddr, end);
+
+		if (pmd_leaf(pmdp_get(pmdp))) {
+			struct page *pte_page;
+			unsigned long pfn = pmd_pfn(pmdp_get(pmdp));
+			pgprot_t prot = pmd_pgprot(pmdp_get(pmdp));
+			pte_t *ptep_new;
+			int i;
+
+			pte_page = alloc_page(GFP_KERNEL);
+			if (!pte_page)
+				return -ENOMEM;
+
+			prot = __pgprot(pgprot_val(prot) | PTE_TYPE_PAGE);
+			ptep_new = (pte_t *)page_address(pte_page);
+			for (i = 0; i < PTRS_PER_PTE; ++i, ++ptep_new)
+				__set_pte_nosync(ptep_new,
+						 pfn_pte(pfn + i, prot));
+
+			dsb(ishst);
+			isb();
+
+			set_pmd(pmdp, pfn_pmd(page_to_pfn(pte_page),
+				__pgprot(PMD_TYPE_TABLE)));
+		}
+	} while (pmdp++, vaddr = next, vaddr != end);
+
+	return 0;
+}
+
+static int __split_linear_mapping_pud(p4d_t *p4dp,
+				      unsigned long vaddr, unsigned long end)
+{
+	pud_t *pudp;
+	unsigned long next;
+	int ret;
+
+	pudp = pud_offset(p4dp, vaddr);
+
+	do {
+		next = pud_addr_end(vaddr, end);
+
+		if (pud_leaf(pudp_get(pudp))) {
+			struct page *pmd_page;
+			unsigned long pfn = pud_pfn(pudp_get(pudp));
+			pgprot_t prot = pud_pgprot(pudp_get(pudp));
+			pmd_t *pmdp_new;
+			int i;
+			unsigned int step;
+
+			pmd_page = alloc_page(GFP_KERNEL);
+			if (!pmd_page)
+				return -ENOMEM;
+
+			pmdp_new = (pmd_t *)page_address(pmd_page);
+			for (i = 0; i < PTRS_PER_PMD; ++i, ++pmdp_new) {
+				step = (i * PMD_SIZE) >> PAGE_SHIFT;
+				__set_pmd_nosync(pmdp_new,
+						 pfn_pmd(pfn + step, prot));
+			}
+
+			dsb(ishst);
+			isb();
+
+			set_pud(pudp, pfn_pud(page_to_pfn(pmd_page),
+				__pgprot(PUD_TYPE_TABLE)));
+		}
+
+		ret = __split_linear_mapping_pmd(pudp, vaddr, next);
+		if (ret)
+			return ret;
+	} while (pudp++, vaddr = next, vaddr != end);
+
+	return 0;
+}
+
+static int __split_linear_mapping_p4d(pgd_t *pgdp,
+				      unsigned long vaddr, unsigned long end)
+{
+	p4d_t *p4dp;
+	unsigned long next;
+	int ret;
+
+	p4dp = p4d_offset(pgdp, vaddr);
+
+	do {
+		next = p4d_addr_end(vaddr, end);
+
+		ret = __split_linear_mapping_pud(p4dp, vaddr, next);
+		if (ret)
+			return ret;
+	} while (p4dp++, vaddr = next, vaddr != end);
+
+	return 0;
+}
+
+static int __split_linear_mapping_pgd(pgd_t *pgdp,
+				      unsigned long vaddr,
+				      unsigned long end)
+{
+	unsigned long next;
+	int ret = 0;
+
+	mmap_write_lock(&init_mm);
+
+	do {
+		next = pgd_addr_end(vaddr, end);
+		ret = __split_linear_mapping_p4d(pgdp, vaddr, next);
+		if (ret)
+			break;
+	} while (pgdp++, vaddr = next, vaddr != end);
+
+	mmap_write_unlock(&init_mm);
+
+	return ret;
+}
+
+static int split_linear_mapping(unsigned long start, unsigned long end)
+{
+	int ret;
+
+	if (!system_supports_bbmlv2())
+		return 0;
+
+	ret = __split_linear_mapping_pgd(pgd_offset_k(start), start, end);
+	flush_tlb_kernel_range(start, end);
+
+	return ret;
+}
+
 /*
  * This function assumes that the range is mapped with PAGE_SIZE pages.
  */
@@ -70,8 +209,9 @@ static int change_memory_common(unsigned long addr, int numpages,
 	unsigned long start = addr;
 	unsigned long size = PAGE_SIZE * numpages;
 	unsigned long end = start + size;
+	unsigned long l_start;
 	struct vm_struct *area;
-	int i;
+	int i, ret;
 
 	if (!PAGE_ALIGNED(addr)) {
 		start &= PAGE_MASK;
@@ -108,7 +248,12 @@ static int change_memory_common(unsigned long addr, int numpages,
 	if (rodata_full && (pgprot_val(set_mask) == PTE_RDONLY ||
 			    pgprot_val(clear_mask) == PTE_RDONLY)) {
 		for (i = 0; i < area->nr_pages; i++) {
-			__change_memory_common((u64)page_address(area->pages[i]),
+			l_start = (u64)page_address(area->pages[i]);
+			ret = split_linear_mapping(l_start, l_start + PAGE_SIZE);
+			if (WARN_ON_ONCE(ret))
+				return ret;
+
+			__change_memory_common(l_start,
 					       PAGE_SIZE, set_mask, clear_mask);
 		}
 	}
@@ -164,6 +309,9 @@ int set_memory_valid(unsigned long addr, int numpages, int enable)
 
 int set_direct_map_invalid_noflush(struct page *page)
 {
+	unsigned long l_start;
+	int ret;
+
 	struct page_change_data data = {
 		.set_mask = __pgprot(0),
 		.clear_mask = __pgprot(PTE_VALID),
@@ -172,13 +320,21 @@ int set_direct_map_invalid_noflush(struct page *page)
 	if (!can_set_direct_map())
 		return 0;
 
+	l_start = (unsigned long)page_address(page);
+	ret = split_linear_mapping(l_start, l_start + PAGE_SIZE);
+	if (WARN_ON_ONCE(ret))
+		return ret;
+
 	return apply_to_page_range(&init_mm,
-				   (unsigned long)page_address(page),
-				   PAGE_SIZE, change_page_range, &data);
+				   l_start, PAGE_SIZE, change_page_range,
+				   &data);
 }
 
 int set_direct_map_default_noflush(struct page *page)
 {
+	unsigned long l_start;
+	int ret;
+
 	struct page_change_data data = {
 		.set_mask = __pgprot(PTE_VALID | PTE_WRITE),
 		.clear_mask = __pgprot(PTE_RDONLY),
@@ -187,9 +343,14 @@ int set_direct_map_default_noflush(struct page *page)
 	if (!can_set_direct_map())
 		return 0;
 
+	l_start = (unsigned long)page_address(page);
+	ret = split_linear_mapping(l_start, l_start + PAGE_SIZE);
+	if (WARN_ON_ONCE(ret))
+		return ret;
+
 	return apply_to_page_range(&init_mm,
-				   (unsigned long)page_address(page),
-				   PAGE_SIZE, change_page_range, &data);
+				   l_start, PAGE_SIZE, change_page_range,
+				   &data);
 }
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
