@@ -216,7 +216,7 @@ int xe_vm_invalidate_vma(struct xe_vma *vma);
 
 static inline void xe_vm_queue_rebind_worker(struct xe_vm *vm)
 {
-	xe_assert(vm->xe, xe_vm_in_preempt_fence_mode(vm));
+	xe_assert(vm->xe, !xe_vm_in_fault_mode(vm));
 	queue_work(vm->xe->ordered_wq, &vm->preempt.rebind_work);
 }
 

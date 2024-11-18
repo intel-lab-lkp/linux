@@ -229,7 +229,8 @@ int xe_vm_add_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
 	int err;
 	bool wait;
 
-	xe_assert(vm->xe, xe_vm_in_preempt_fence_mode(vm));
+	xe_assert(vm->xe, xe_vm_in_preempt_fence_mode(vm) ||
+		  xe_exec_queue_is_usermap(q));
 
 	down_write(&vm->lock);
 	err = drm_gpuvm_exec_lock(&vm_exec);
@@ -280,7 +281,7 @@ out_up_write:
  */
 void xe_vm_remove_compute_exec_queue(struct xe_vm *vm, struct xe_exec_queue *q)
 {
-	if (!xe_vm_in_preempt_fence_mode(vm))
+	if (!xe_vm_in_preempt_fence_mode(vm) && !xe_exec_queue_is_usermap(q))
 		return;
 
 	down_write(&vm->lock);
@@ -487,7 +488,7 @@ static void preempt_rebind_work_func(struct work_struct *w)
 	long wait;
 	int __maybe_unused tries = 0;
 
-	xe_assert(vm->xe, xe_vm_in_preempt_fence_mode(vm));
+	xe_assert(vm->xe, !xe_vm_in_fault_mode(vm));
 	trace_xe_vm_rebind_worker_enter(vm);
 
 	down_write(&vm->lock);
@@ -1467,10 +1468,9 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 		vm->batch_invalidate_tlb = true;
 	}
 
-	if (vm->flags & XE_VM_FLAG_LR_MODE) {
-		INIT_WORK(&vm->preempt.rebind_work, preempt_rebind_work_func);
+	INIT_WORK(&vm->preempt.rebind_work, preempt_rebind_work_func);
+	if (vm->flags & XE_VM_FLAG_LR_MODE)
 		vm->batch_invalidate_tlb = false;
-	}
 
 	/* Fill pt_root after allocating scratch tables */
 	for_each_tile(tile, xe, id) {
@@ -1543,8 +1543,7 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 	xe_assert(xe, !vm->preempt.num_exec_queues);
 
 	xe_vm_close(vm);
-	if (xe_vm_in_preempt_fence_mode(vm))
-		flush_work(&vm->preempt.rebind_work);
+	flush_work(&vm->preempt.rebind_work);
 
 	down_write(&vm->lock);
 	for_each_tile(tile, xe, id) {
@@ -1644,8 +1643,7 @@ static void vm_destroy_work_func(struct work_struct *w)
 	/* xe_vm_close_and_put was not called? */
 	xe_assert(xe, !vm->size);
 
-	if (xe_vm_in_preempt_fence_mode(vm))
-		flush_work(&vm->preempt.rebind_work);
+	flush_work(&vm->preempt.rebind_work);
 
 	mutex_destroy(&vm->snap_mutex);
 

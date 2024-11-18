@@ -794,7 +794,8 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 		if (IS_ERR(q))
 			return PTR_ERR(q);
 
-		if (xe_vm_in_preempt_fence_mode(vm)) {
+		if (xe_vm_in_preempt_fence_mode(vm) ||
+		    xe_exec_queue_is_usermap(q)) {
 			q->lr.context = dma_fence_context_alloc(1);
 
 			err = xe_vm_add_compute_exec_queue(vm, q);

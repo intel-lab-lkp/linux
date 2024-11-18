@@ -1882,8 +1882,7 @@ static void bind_op_commit(struct xe_vm *vm, struct xe_tile *tile,
 	 * the rebind worker
 	 */
 	if (pt_update_ops->wait_vm_bookkeep &&
-	    xe_vm_in_preempt_fence_mode(vm) &&
-	    !current->mm)
+	    vm->preempt.num_exec_queues && !current->mm)
 		xe_vm_queue_rebind_worker(vm);
 }
 
