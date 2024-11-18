@@ -310,3 +310,11 @@ driver in that case.
 Note that locking must also be considered when code outside of the common
 clock framework needs to access resources used by the clock operations. This
 is considered out of scope of this document.
+
+Debug in Userspace
+==================
+
+The common clk framework creates read-only debugfs entries at
+``/sys/kernel/debug/clk``. For test and debug purpose, you could define
+``CLOCK_ALLOW_WRITE_DEBUGFS`` in ``drivers/clk/clk.c`` to make them writable.
+This may cause security problems and should *NEVER* be enabled on production.
