@@ -8,6 +8,7 @@
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/aer.h>
+#include <cxl/cxl.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -1055,3 +1056,24 @@ int cxl_pci_get_bandwidth(struct pci_dev *pdev, struct access_coordinate *c)
 
 	return 0;
 }
+
+bool cxl_pci_check_caps(struct cxl_dev_state *cxlds, unsigned long *expected_caps,
+			unsigned long *current_caps, bool is_subset)
+{
+	DECLARE_BITMAP(subset, CXL_MAX_CAPS);
+
+	if (current_caps)
+		bitmap_copy(current_caps, cxlds->capabilities, CXL_MAX_CAPS);
+
+	dev_dbg(cxlds->dev, "Checking cxlds caps 0x%08lx vs expected caps 0x%08lx\n",
+		*cxlds->capabilities, *expected_caps);
+
+	/* Checking a minimum of mandatory capabilities? */
+	if (is_subset) {
+		bitmap_and(subset, cxlds->capabilities, expected_caps, CXL_MAX_CAPS);
+		return bitmap_equal(subset, expected_caps, CXL_MAX_CAPS);
+	} else {
+		return bitmap_equal(cxlds->capabilities, expected_caps, CXL_MAX_CAPS);
+	}
+}
+EXPORT_SYMBOL_NS_GPL(cxl_pci_check_caps, CXL);

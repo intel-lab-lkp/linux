@@ -39,7 +39,7 @@ enum cxl_dev_cap {
 	CXL_DEV_CAP_DEV_STATUS,
 	CXL_DEV_CAP_MAILBOX_PRIMARY,
 	CXL_DEV_CAP_MEMDEV,
-	CXL_MAX_CAPS = 32
+	CXL_MAX_CAPS = 64
 };
 
 struct cxl_dev_state *cxl_accel_state_create(struct device *dev);
@@ -48,4 +48,8 @@ void cxl_set_dvsec(struct cxl_dev_state *cxlds, u16 dvsec);
 void cxl_set_serial(struct cxl_dev_state *cxlds, u64 serial);
 int cxl_set_resource(struct cxl_dev_state *cxlds, struct resource res,
 		     enum cxl_resource);
+bool cxl_pci_check_caps(struct cxl_dev_state *cxlds,
+			unsigned long *expected_caps,
+			unsigned long *current_caps,
+			bool is_subset);
 #endif
