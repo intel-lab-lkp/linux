@@ -18,7 +18,7 @@
 #include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_drm_client.h"
-#include "xe_exec_queue_types.h"
+#include "xe_exec_queue.h"
 #include "xe_gt.h"
 #include "xe_gt_printk.h"
 #include "xe_hw_fence.h"
@@ -912,7 +912,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_exec_queue *q,
 	void *init_data = NULL;
 	u32 arb_enable;
 	u32 lrc_size;
-	bool user_queue = q && q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION;
+	bool user_queue = q && xe_exec_queue_is_usermap(q);;
 	enum ttm_bo_type submit_type = user_queue ? ttm_bo_type_device :
 		ttm_bo_type_kernel;
 	unsigned int submit_flags = user_queue ?

@@ -1522,7 +1522,7 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 		xe_sched_stop(sched);
 
 	q->guc->db.id = -1;
-	if (q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION) {
+	if (xe_exec_queue_is_usermap(q)) {
 		db_id = xe_guc_db_mgr_reserve_id_locked(&guc->dbm);
 		if (db_id < 0) {
 			err = db_id;
@@ -1532,7 +1532,7 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 
 	mutex_unlock(&guc->submission_state.lock);
 
-	if (q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION) {
+	if (xe_exec_queue_is_usermap(q)) {
 		q->guc->db.id = db_id;
 		err = create_doorbell(guc, q);
 		if (err)

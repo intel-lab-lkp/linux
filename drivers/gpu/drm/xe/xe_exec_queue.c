@@ -486,7 +486,7 @@ static int exec_queue_user_ext_usermap(struct xe_device *xe,
 	if (XE_IOCTL_DBG(xe, xe_vm_in_lr_mode(q->vm)))
 		return -EOPNOTSUPP;
 
-	if (XE_IOCTL_DBG(xe, q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION))
+	if (XE_IOCTL_DBG(xe, xe_exec_queue_is_usermap(q)))
 		return -EINVAL;
 
 	err = __copy_from_user(&ext, address, sizeof(ext));
@@ -519,7 +519,6 @@ static int exec_queue_user_ext_usermap(struct xe_device *xe,
 	q->usermap->ring_addr = ext.ring_addr;
 
 	xe_pm_runtime_get_noresume(xe);
-	q->flags |= EXEC_QUEUE_FLAG_UMD_SUBMISSION;
 
 	return 0;
 }
