@@ -41,8 +41,8 @@ struct xe_lrc_snapshot {
 
 #define LRC_PPHWSP_SCRATCH_ADDR (0x34 * 4)
 
-struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
-			     u32 ring_size);
+struct xe_lrc *xe_lrc_create(struct xe_exec_queue *q, struct xe_hw_engine *hwe,
+			     struct xe_vm *vm, u32 ring_size);
 void xe_lrc_destroy(struct kref *ref);
 
 /**

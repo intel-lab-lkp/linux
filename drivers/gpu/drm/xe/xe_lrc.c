@@ -901,8 +901,9 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
 #define PVC_CTX_ASID		(0x2e + 1)
 #define PVC_CTX_ACC_CTR_THOLD	(0x2a + 1)
 
-static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
-		       struct xe_vm *vm, u32 ring_size)
+static int xe_lrc_init(struct xe_lrc *lrc, struct xe_exec_queue *q,
+		       struct xe_hw_engine *hwe, struct xe_vm *vm,
+		       u32 ring_size)
 {
 	struct xe_gt *gt = hwe->gt;
 	struct xe_tile *tile = gt_to_tile(gt);
@@ -911,6 +912,11 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	void *init_data = NULL;
 	u32 arb_enable;
 	u32 lrc_size;
+	bool user_queue = q && q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION;
+	enum ttm_bo_type submit_type = user_queue ? ttm_bo_type_device :
+		ttm_bo_type_kernel;
+	unsigned int submit_flags = user_queue ?
+		XE_BO_FLAG_USER : 0;
 	int err;
 
 	kref_init(&lrc->refcount);
@@ -930,7 +936,8 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 		return PTR_ERR(lrc->bo);
 
 	lrc->submission_ring = xe_bo_create_pin_map(xe, tile, vm, SZ_32K,
-						    ttm_bo_type_kernel,
+						    submit_type,
+						    submit_flags |
 						    XE_BO_FLAG_VRAM_IF_DGFX(tile) |
 						    XE_BO_FLAG_GGTT |
 						    XE_BO_FLAG_GGTT_INVALIDATE);
@@ -944,7 +951,8 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 		lrc->flags |= XE_LRC_FLAG_INDIRECT_RING_STATE;
 
 		lrc->indirect_state = xe_bo_create_pin_map(xe, tile, vm, SZ_8K,
-							   ttm_bo_type_kernel,
+							   submit_type,
+							   submit_flags |
 							   XE_BO_FLAG_VRAM_IF_DGFX(tile) |
 							   XE_BO_FLAG_GGTT |
 							   XE_BO_FLAG_GGTT_INVALIDATE);
@@ -954,6 +962,12 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 			goto err_lrc_finish;
 		}
 	}
+
+	/* Wait for clear */
+	if (user_queue)
+		dma_resv_wait_timeout(xe_vm_resv(vm),
+				      DMA_RESV_USAGE_KERNEL,
+				      false, MAX_SCHEDULE_TIMEOUT);
 
 	lrc->size = lrc_size;
 	lrc->tile = gt_to_tile(hwe->gt);
@@ -1060,6 +1074,7 @@ err_lrc_finish:
 
 /**
  * xe_lrc_create - Create a LRC
+ * @q: Execution queue
  * @hwe: Hardware Engine
  * @vm: The VM (address space)
  * @ring_size: LRC ring size
@@ -1069,8 +1084,8 @@ err_lrc_finish:
  * Return pointer to created LRC upon success and an error pointer
  * upon failure.
  */
-struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
-			     u32 ring_size)
+struct xe_lrc *xe_lrc_create(struct xe_exec_queue *q, struct xe_hw_engine *hwe,
+			     struct xe_vm *vm, u32 ring_size)
 {
 	struct xe_lrc *lrc;
 	int err;
@@ -1079,7 +1094,7 @@ struct xe_lrc *xe_lrc_create(struct xe_hw_engine *hwe, struct xe_vm *vm,
 	if (!lrc)
 		return ERR_PTR(-ENOMEM);
 
-	err = xe_lrc_init(lrc, hwe, vm, ring_size);
+	err = xe_lrc_init(lrc, q, hwe, vm, ring_size);
 	if (err) {
 		kfree(lrc);
 		return ERR_PTR(err);

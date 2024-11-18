@@ -1311,9 +1311,6 @@ struct xe_bo *___xe_bo_create_locked(struct xe_device *xe, struct xe_bo *bo,
 	size_t aligned_size;
 	int err;
 
-	/* Only kernel objects should set GT */
-	xe_assert(xe, !tile || type == ttm_bo_type_kernel);
-
 	if (XE_WARN_ON(!size)) {
 		xe_bo_free(bo);
 		return ERR_PTR(-EINVAL);
