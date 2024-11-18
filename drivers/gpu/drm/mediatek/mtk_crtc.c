@@ -113,7 +113,8 @@ static void mtk_drm_finish_page_flip(struct mtk_crtc *mtk_crtc)
 	drm_crtc_handle_vblank(&mtk_crtc->base);
 
 	spin_lock_irqsave(&mtk_crtc->config_lock, flags);
-	if (!mtk_crtc->config_updating && mtk_crtc->pending_needs_vblank) {
+	if (!mtk_crtc->config_updating && mtk_crtc->pending_needs_vblank &&
+	    !mtk_crtc->pending_planes) {
 		mtk_crtc_finish_page_flip(mtk_crtc);
 		mtk_crtc->pending_needs_vblank = false;
 	}
