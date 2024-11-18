@@ -47,6 +47,13 @@ struct xe_guc_exec_queue {
 	u16 id;
 	/** @suspend_wait: wait queue used to wait on pending suspends */
 	wait_queue_head_t suspend_wait;
+	/** @db: doorbell state */
+	struct {
+		/** @db.id: doorbell ID */
+		int id;
+		/** @db.dpa: doorbell device physical address */
+		u64 dpa;
+	} db;
 	/** @suspend_pending: a suspend of the exec_queue is pending */
 	bool suspend_pending;
 };

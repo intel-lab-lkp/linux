@@ -29,6 +29,7 @@
 #include "xe_guc.h"
 #include "xe_guc_capture.h"
 #include "xe_guc_ct.h"
+#include "xe_guc_db_mgr.h"
 #include "xe_guc_exec_queue_types.h"
 #include "xe_guc_id_mgr.h"
 #include "xe_guc_submit_types.h"
@@ -67,6 +68,7 @@ exec_queue_to_guc(struct xe_exec_queue *q)
 #define EXEC_QUEUE_STATE_BANNED			(1 << 9)
 #define EXEC_QUEUE_STATE_CHECK_TIMEOUT		(1 << 10)
 #define EXEC_QUEUE_STATE_EXTRA_REF		(1 << 11)
+#define EXEC_QUEUE_STATE_DB_REGISTERED		(1 << 12)
 
 static bool exec_queue_registered(struct xe_exec_queue *q)
 {
@@ -218,6 +220,16 @@ static void set_exec_queue_extra_ref(struct xe_exec_queue *q)
 	atomic_or(EXEC_QUEUE_STATE_EXTRA_REF, &q->guc->state);
 }
 
+static bool exec_queue_doorbell_registered(struct xe_exec_queue *q)
+{
+	return atomic_read(&q->guc->state) & EXEC_QUEUE_STATE_DB_REGISTERED;
+}
+
+static void set_exec_queue_doorbell_registered(struct xe_exec_queue *q)
+{
+	atomic_or(EXEC_QUEUE_STATE_DB_REGISTERED, &q->guc->state);
+}
+
 static bool exec_queue_killed_or_banned_or_wedged(struct xe_exec_queue *q)
 {
 	return (atomic_read(&q->guc->state) &
@@ -352,13 +364,6 @@ err_release:
 	__release_guc_id(guc, q, i);
 
 	return ret;
-}
-
-static void release_guc_id(struct xe_guc *guc, struct xe_exec_queue *q)
-{
-	mutex_lock(&guc->submission_state.lock);
-	__release_guc_id(guc, q, q->width);
-	mutex_unlock(&guc->submission_state.lock);
 }
 
 struct exec_queue_policy {
@@ -1238,7 +1243,13 @@ static void __guc_exec_queue_fini_async(struct work_struct *w)
 
 	if (xe_exec_queue_is_lr(q))
 		cancel_work_sync(&ge->lr_tdr);
-	release_guc_id(guc, q);
+
+	mutex_lock(&guc->submission_state.lock);
+	if (q->guc->db.id >= 0)
+		xe_guc_db_mgr_release_id_locked(&guc->dbm, q->guc->db.id);
+	__release_guc_id(guc, q, q->width);
+	mutex_unlock(&guc->submission_state.lock);
+
 	xe_sched_entity_fini(&ge->entity);
 	xe_sched_fini(&ge->sched);
 
@@ -1273,6 +1284,8 @@ static void __guc_exec_queue_fini(struct xe_guc *guc, struct xe_exec_queue *q)
 	guc_exec_queue_fini_async(q);
 }
 
+static void deallocate_doorbell(struct xe_guc *guc, u16 guc_id);
+
 static void __guc_exec_queue_process_msg_cleanup(struct xe_sched_msg *msg)
 {
 	struct xe_exec_queue *q = msg->private_data;
@@ -1280,6 +1293,9 @@ static void __guc_exec_queue_process_msg_cleanup(struct xe_sched_msg *msg)
 
 	xe_gt_assert(guc_to_gt(guc), !(q->flags & EXEC_QUEUE_FLAG_PERMANENT));
 	trace_xe_exec_queue_cleanup_entity(q);
+
+	if (exec_queue_doorbell_registered(q))
+		deallocate_doorbell(guc, q->guc->id);
 
 	if (exec_queue_registered(q))
 		disable_scheduling_deregister(guc, q);
@@ -1399,6 +1415,53 @@ static void guc_exec_queue_process_msg(struct xe_sched_msg *msg)
 	xe_pm_runtime_put(xe);
 }
 
+static int allocate_doorbell(struct xe_guc *guc, u16 guc_id, int doorbell_id,
+			     u64 gpa)
+{
+	u32 action[] = {
+		XE_GUC_ACTION_ALLOCATE_DOORBELL,
+		guc_id,
+		doorbell_id,
+		lower_32_bits(gpa),
+		upper_32_bits(gpa),
+		0,
+	};
+
+	return xe_guc_ct_send_block(&guc->ct, action, ARRAY_SIZE(action));
+}
+
+static void deallocate_doorbell(struct xe_guc *guc, u16 guc_id)
+{
+	u32 action[] = {
+		XE_GUC_ACTION_DEALLOCATE_DOORBELL,
+		guc_id
+	};
+
+	xe_guc_ct_send(&guc->ct, action, ARRAY_SIZE(action), 0, 0);
+}
+
+#define GUC_MMIO_DB_BAR_OFFSET SZ_4M
+
+static int create_doorbell(struct xe_guc *guc, struct xe_exec_queue *q)
+{
+	int ret;
+
+	set_exec_queue_doorbell_registered(q);
+	xe_guc_submit_reset_wait(guc);
+
+	q->guc->db.dpa = GUC_MMIO_DB_BAR_OFFSET + PAGE_SIZE * q->guc->db.id;
+	register_exec_queue(q);
+	enable_scheduling(q);
+
+	ret = allocate_doorbell(guc, q->guc->id, q->guc->db.id, q->guc->db.dpa);
+	if (ret) {
+		disable_scheduling_deregister(guc, q);
+		return ret;
+	}
+
+	return 0;
+}
+
 static const struct drm_sched_backend_ops drm_sched_ops = {
 	.run_job = guc_exec_queue_run_job,
 	.free_job = guc_exec_queue_free_job,
@@ -1415,7 +1478,7 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 	struct xe_guc *guc = exec_queue_to_guc(q);
 	struct xe_guc_exec_queue *ge;
 	long timeout;
-	int err, i;
+	int err, i, db_id = 0;
 
 	xe_gt_assert(guc_to_gt(guc), xe_device_uc_enabled(guc_to_xe(guc)));
 
@@ -1458,7 +1521,23 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 	if (xe_guc_read_stopped(guc))
 		xe_sched_stop(sched);
 
+	q->guc->db.id = -1;
+	if (q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION) {
+		db_id = xe_guc_db_mgr_reserve_id_locked(&guc->dbm);
+		if (db_id < 0) {
+			err = db_id;
+			goto err_id;
+		}
+	}
+
 	mutex_unlock(&guc->submission_state.lock);
+
+	if (q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION) {
+		q->guc->db.id = db_id;
+		err = create_doorbell(guc, q);
+		if (err)
+			goto err_db;
+	}
 
 	xe_exec_queue_assign_name(q, q->guc->id);
 
@@ -1466,6 +1545,11 @@ static int guc_exec_queue_init(struct xe_exec_queue *q)
 
 	return 0;
 
+err_db:
+	mutex_lock(&guc->submission_state.lock);
+	xe_guc_db_mgr_release_id_locked(&guc->dbm, q->guc->db.id);
+err_id:
+	__release_guc_id(guc, q, q->width);
 err_entity:
 	mutex_unlock(&guc->submission_state.lock);
 	xe_sched_entity_fini(&ge->entity);
@@ -1699,7 +1783,10 @@ static void guc_exec_queue_stop(struct xe_guc *guc, struct xe_exec_queue *q)
 		struct xe_sched_job *job = xe_sched_first_pending_job(sched);
 		bool ban = false;
 
-		if (job) {
+		if (exec_queue_doorbell_registered(q)) {
+			/* TODO: Ban via UMD shim too */
+			ban = true;
+		} else if (job) {
 			if ((xe_sched_job_started(job) &&
 			    !xe_sched_job_completed(job)) ||
 			    xe_sched_invalidate_job(job, 2)) {
