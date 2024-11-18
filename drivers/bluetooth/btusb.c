@@ -814,6 +814,7 @@ struct qca_dump_info {
 #define BTUSB_USE_ALT3_FOR_WBS	15
 #define BTUSB_ALT6_CONTINUOUS_TX	16
 #define BTUSB_HW_SSR_ACTIVE	17
+#define BTUSB_ISOC_ALT_CHANGED	18
 
 struct btusb_data {
 	struct hci_dev       *hdev;
@@ -866,6 +867,7 @@ struct btusb_data {
 	unsigned int air_mode;
 	bool usb_alt6_packet_flow;
 	int isoc_altsetting;
+	u16 isoc_mps;
 	int suspend_count;
 
 	int (*recv_event)(struct hci_dev *hdev, struct sk_buff *skb);
@@ -2140,15 +2142,57 @@ static void btusb_notify(struct hci_dev *hdev, unsigned int evt)
 	}
 }
 
+static struct usb_host_interface *btusb_find_altsetting(struct btusb_data *data,
+							int alt)
+{
+	struct usb_interface *intf = data->isoc;
+	int i;
+
+	BT_DBG("Looking for Alt no :%d", alt);
+
+	if (!intf)
+		return NULL;
+
+	for (i = 0; i < intf->num_altsetting; i++) {
+		if (intf->altsetting[i].desc.bAlternateSetting == alt)
+			return &intf->altsetting[i];
+	}
+
+	return NULL;
+}
+
 static inline int __set_isoc_interface(struct hci_dev *hdev, int altsetting)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
 	struct usb_interface *intf = data->isoc;
 	struct usb_endpoint_descriptor *ep_desc;
+	struct usb_host_interface *alt;
 	int i, err;
 
 	if (!data->isoc)
 		return -ENODEV;
+
+	/* For some Realtek chips, they actually have the altsetting 6, but its
+	 * altsetting descriptor is not exposed. We can activate altsetting 6 by
+	 * replacing the altsetting 5.
+	 */
+	if (altsetting == 6 && !btusb_find_altsetting(data, 6) &&
+	    btrealtek_test_flag(hdev, REALTEK_ALT6_FORCE)) {
+		alt = btusb_find_altsetting(data, 5);
+		if (alt) {
+			data->isoc_mps = 49;
+			for (i = 0; i < alt->desc.bNumEndpoints; i++) {
+				ep_desc = &alt->endpoint[i].desc;
+				if (!usb_endpoint_xfer_isoc(ep_desc))
+					continue;
+				data->isoc_mps =
+					le16_to_cpu(ep_desc->wMaxPacketSize);
+				ep_desc->wMaxPacketSize = cpu_to_le16(63);
+			}
+			alt->desc.bAlternateSetting = 6;
+			set_bit(BTUSB_ISOC_ALT_CHANGED, &data->flags);
+		}
+	}
 
 	err = usb_set_interface(data->udev, data->isoc_ifnum, altsetting);
 	if (err < 0) {
@@ -2160,6 +2204,22 @@ static inline int __set_isoc_interface(struct hci_dev *hdev, int altsetting)
 
 	data->isoc_tx_ep = NULL;
 	data->isoc_rx_ep = NULL;
+
+	/* Recover alt 5 desc if alt 0 is set. */
+	if (!altsetting && test_bit(BTUSB_ISOC_ALT_CHANGED, &data->flags)) {
+		alt = btusb_find_altsetting(data, 6);
+		if (alt) {
+			for (i = 0; i < alt->desc.bNumEndpoints; i++) {
+				ep_desc = &alt->endpoint[i].desc;
+				if (!usb_endpoint_xfer_isoc(ep_desc))
+					continue;
+				ep_desc->wMaxPacketSize =
+					cpu_to_le16(data->isoc_mps);
+			}
+			alt->desc.bAlternateSetting = 5;
+			clear_bit(BTUSB_ISOC_ALT_CHANGED, &data->flags);
+		}
+	}
 
 	for (i = 0; i < intf->cur_altsetting->desc.bNumEndpoints; i++) {
 		ep_desc = &intf->cur_altsetting->endpoint[i].desc;
@@ -2223,25 +2283,6 @@ static int btusb_switch_alt_setting(struct hci_dev *hdev, int new_alts)
 	return 0;
 }
 
-static struct usb_host_interface *btusb_find_altsetting(struct btusb_data *data,
-							int alt)
-{
-	struct usb_interface *intf = data->isoc;
-	int i;
-
-	BT_DBG("Looking for Alt no :%d", alt);
-
-	if (!intf)
-		return NULL;
-
-	for (i = 0; i < intf->num_altsetting; i++) {
-		if (intf->altsetting[i].desc.bAlternateSetting == alt)
-			return &intf->altsetting[i];
-	}
-
-	return NULL;
-}
-
 static void btusb_work(struct work_struct *work)
 {
 	struct btusb_data *data = container_of(work, struct btusb_data, work);
@@ -2279,7 +2320,8 @@ static void btusb_work(struct work_struct *work)
 			 * MTU >= 3 (packets) * 25 (size) - 3 (headers) = 72
 			 * see also Core spec 5, vol 4, B 2.1.1 & Table 2.1.
 			 */
-			if (btusb_find_altsetting(data, 6))
+			if (btusb_find_altsetting(data, 6) ||
+			    btrealtek_test_flag(hdev, REALTEK_ALT6_FORCE))
 				new_alts = 6;
 			else if (btusb_find_altsetting(data, 3) &&
 				 hdev->sco_mtu >= 72 &&
