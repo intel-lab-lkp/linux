@@ -112,6 +112,10 @@ static const struct mfd_cell cros_ec_ucsi_cells[] = {
 	{ .name = "cros_ec_ucsi", },
 };
 
+static const struct mfd_cell cros_ec_charge_state_cells[] = {
+	{ .name = "cros-ec-charge-state", },
+};
+
 static const struct cros_feature_to_cells cros_subdevices[] = {
 	{
 		.id		= EC_FEATURE_CEC,
@@ -147,6 +151,11 @@ static const struct cros_feature_to_cells cros_subdevices[] = {
 		.id		= EC_FEATURE_PWM_KEYB,
 		.mfd_cells	= cros_ec_keyboard_leds_cells,
 		.num_cells	= ARRAY_SIZE(cros_ec_keyboard_leds_cells),
+	},
+	{
+		.id		= EC_FEATURE_BATTERY,
+		.mfd_cells	= cros_ec_charge_state_cells,
+		.num_cells	= ARRAY_SIZE(cros_ec_charge_state_cells),
 	},
 };
 
