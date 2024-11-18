@@ -16,12 +16,15 @@
 
 static void bl_unregister_scsi(struct pnfs_block_dev *dev)
 {
-	struct block_device *bdev = file_bdev(dev->bdev_file);
-	const struct pr_ops *ops = bdev->bd_disk->fops->pr_ops;
+	struct block_device *bdev;
+	const struct pr_ops *ops;
 	int status;
 
 	if (!test_and_clear_bit(PNFS_BDEV_REGISTERED, &dev->flags))
 		return;
+
+	bdev = file_bdev(dev->bdev_file);
+	ops = bdev->bd_disk->fops->pr_ops;
 
 	status = ops->pr_register(bdev, dev->pr_key, 0, false);
 	if (status)
