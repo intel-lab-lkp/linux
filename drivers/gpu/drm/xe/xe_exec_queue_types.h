@@ -32,6 +32,16 @@ enum xe_exec_queue_priority {
 };
 
 /**
+ * struct xe_exec_queue_usermap - Execution queue usermap (UMD submission)
+ */
+struct xe_exec_queue_usermap {
+	/** @ring_addr: ring address (PPGTT) */
+	u64 ring_addr;
+	/** @ring_size: ring size */
+	u32 ring_size;
+};
+
+/**
  * struct xe_exec_queue - Execution queue
  *
  * Contains all state necessary for submissions. Can either be a user object or
@@ -129,6 +139,9 @@ struct xe_exec_queue {
 		/** @lr.link: link into VM's list of exec queues */
 		struct list_head link;
 	} lr;
+
+	/** @usermap: user map interface */
+	struct xe_exec_queue_usermap *usermap;
 
 	/** @ops: submission backend exec queue operations */
 	const struct xe_exec_queue_ops *ops;

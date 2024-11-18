@@ -903,7 +903,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
 
 static int xe_lrc_init(struct xe_lrc *lrc, struct xe_exec_queue *q,
 		       struct xe_hw_engine *hwe, struct xe_vm *vm,
-		       u32 ring_size)
+		       u32 ring_size, u64 ring_addr)
 {
 	struct xe_gt *gt = hwe->gt;
 	struct xe_tile *tile = gt_to_tile(gt);
@@ -918,6 +918,8 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_exec_queue *q,
 	unsigned int submit_flags = user_queue ?
 		XE_BO_FLAG_USER : 0;
 	int err;
+
+	xe_assert(xe, (!user_queue && !ring_addr) || (user_queue && ring_addr));
 
 	kref_init(&lrc->refcount);
 	lrc->flags = 0;
@@ -935,16 +937,18 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_exec_queue *q,
 	if (IS_ERR(lrc->bo))
 		return PTR_ERR(lrc->bo);
 
-	lrc->submission_ring = xe_bo_create_pin_map(xe, tile, vm, SZ_32K,
-						    submit_type,
-						    submit_flags |
-						    XE_BO_FLAG_VRAM_IF_DGFX(tile) |
-						    XE_BO_FLAG_GGTT |
-						    XE_BO_FLAG_GGTT_INVALIDATE);
-	if (IS_ERR(lrc->submission_ring)) {
-		err = PTR_ERR(lrc->submission_ring);
-		lrc->submission_ring = NULL;
-		goto err_lrc_finish;
+	if (!user_queue) {
+		lrc->submission_ring = xe_bo_create_pin_map(xe, tile, vm, SZ_32K,
+							    submit_type,
+							    submit_flags |
+							    XE_BO_FLAG_VRAM_IF_DGFX(tile) |
+							    XE_BO_FLAG_GGTT |
+							    XE_BO_FLAG_GGTT_INVALIDATE);
+		if (IS_ERR(lrc->submission_ring)) {
+			err = PTR_ERR(lrc->submission_ring);
+			lrc->submission_ring = NULL;
+			goto err_lrc_finish;
+		}
 	}
 
 	if (xe_gt_has_indirect_ring_state(gt)) {
@@ -1018,12 +1022,19 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_exec_queue *q,
 	}
 
 	if (xe_gt_has_indirect_ring_state(gt)) {
-		xe_lrc_write_ctx_reg(lrc, CTX_INDIRECT_RING_STATE,
-				     __xe_lrc_indirect_ring_ggtt_addr(lrc));
-
-		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_START,
-					      __xe_lrc_ring_ggtt_addr(lrc));
-		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_START_UDW, 0);
+		if (ring_addr) {	/* PPGTT */
+			xe_lrc_write_ctx_reg(lrc, CTX_INDIRECT_RING_STATE,
+					     __xe_lrc_indirect_ring_ggtt_addr(lrc) | BIT(0));
+			xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_START,
+						      ring_addr);
+		} else {
+			xe_lrc_write_ctx_reg(lrc, CTX_INDIRECT_RING_STATE,
+					     __xe_lrc_indirect_ring_ggtt_addr(lrc));
+			xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_START,
+						      __xe_lrc_ring_ggtt_addr(lrc));
+		}
+		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_START_UDW,
+					      ring_addr >> 32);
 		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_HEAD, 0);
 		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_TAIL, lrc->ring.tail);
 		xe_lrc_write_indirect_ctx_reg(lrc, INDIRECT_CTX_RING_CTL,
@@ -1056,8 +1067,10 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_exec_queue *q,
 		lrc->desc |= FIELD_PREP(LRC_ENGINE_CLASS, hwe->class);
 	}
 
-	arb_enable = MI_ARB_ON_OFF | MI_ARB_ENABLE;
-	xe_lrc_write_ring(lrc, &arb_enable, sizeof(arb_enable));
+	if (lrc->submission_ring) {
+		arb_enable = MI_ARB_ON_OFF | MI_ARB_ENABLE;
+		xe_lrc_write_ring(lrc, &arb_enable, sizeof(arb_enable));
+	}
 
 	map = __xe_lrc_seqno_map(lrc);
 	xe_map_write32(lrc_to_xe(lrc), &map, lrc->fence_ctx.next_seqno - 1);
@@ -1078,6 +1091,7 @@ err_lrc_finish:
  * @hwe: Hardware Engine
  * @vm: The VM (address space)
  * @ring_size: LRC ring size
+ * @ring_addr: LRC ring address, only valid for usermap queues
  *
  * Allocate and initialize the Logical Ring Context (LRC).
  *
@@ -1085,7 +1099,7 @@ err_lrc_finish:
  * upon failure.
  */
 struct xe_lrc *xe_lrc_create(struct xe_exec_queue *q, struct xe_hw_engine *hwe,
-			     struct xe_vm *vm, u32 ring_size)
+			     struct xe_vm *vm, u32 ring_size, u64 ring_addr)
 {
 	struct xe_lrc *lrc;
 	int err;
@@ -1094,7 +1108,7 @@ struct xe_lrc *xe_lrc_create(struct xe_exec_queue *q, struct xe_hw_engine *hwe,
 	if (!lrc)
 		return ERR_PTR(-ENOMEM);
 
-	err = xe_lrc_init(lrc, q, hwe, vm, ring_size);
+	err = xe_lrc_init(lrc, q, hwe, vm, ring_size, ring_addr);
 	if (err) {
 		kfree(lrc);
 		return ERR_PTR(err);
@@ -1717,7 +1731,8 @@ struct xe_lrc_snapshot *xe_lrc_snapshot_capture(struct xe_lrc *lrc)
 		xe_vm_get(lrc->bo->vm);
 
 	snapshot->context_desc = xe_lrc_ggtt_addr(lrc);
-	snapshot->ring_addr = __xe_lrc_ring_ggtt_addr(lrc);
+	snapshot->ring_addr = lrc->submission_ring ?
+		__xe_lrc_ring_ggtt_addr(lrc) : 0;
 	snapshot->indirect_context_desc = xe_lrc_indirect_ring_ggtt_addr(lrc);
 	snapshot->head = xe_lrc_ring_head(lrc);
 	snapshot->tail.internal = lrc->ring.tail;

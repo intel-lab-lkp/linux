@@ -11,6 +11,7 @@
 #include <drm/drm_file.h>
 #include <uapi/drm/xe_drm.h>
 
+#include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_gt.h"
 #include "xe_hw_engine_class_sysfs.h"
@@ -38,12 +39,18 @@ static int exec_queue_user_extensions_post_init(struct xe_device *xe, struct xe_
 
 static void __xe_exec_queue_free(struct xe_exec_queue *q)
 {
+	struct xe_device *xe = q->vm ? q->vm->xe : NULL;
+
 	if (q->vm)
 		xe_vm_put(q->vm);
 
 	if (q->xef)
 		xe_file_put(q->xef);
 
+	if (q->usermap)
+		xe_pm_runtime_put(xe);
+
+	kfree(q->usermap);
 	kfree(q);
 }
 
@@ -110,6 +117,8 @@ static struct xe_exec_queue *__xe_exec_queue_alloc(struct xe_device *xe,
 static int __xe_exec_queue_init(struct xe_exec_queue *q)
 {
 	struct xe_vm *vm = q->vm;
+	u64 ring_addr = q->usermap ? q->usermap->ring_addr : 0;
+	u32 ring_size = q->usermap ? q->usermap->ring_size : SZ_16K;
 	int i, err;
 
 	if (vm) {
@@ -119,7 +128,8 @@ static int __xe_exec_queue_init(struct xe_exec_queue *q)
 	}
 
 	for (i = 0; i < q->width; ++i) {
-		q->lrc[i] = xe_lrc_create(q, q->hwe, q->vm, SZ_16K);
+		q->lrc[i] = xe_lrc_create(q, q->hwe, q->vm, ring_size,
+					  ring_addr);
 		if (IS_ERR(q->lrc[i])) {
 			err = PTR_ERR(q->lrc[i]);
 			goto err_unlock;
@@ -444,12 +454,125 @@ typedef int (*xe_exec_queue_user_extension_fn)(struct xe_device *xe,
 					       struct xe_exec_queue *q,
 					       u64 extension);
 
+static int exec_queue_user_ext_usermap(struct xe_device *xe,
+				       struct xe_exec_queue *q,
+				       u64 extension)
+{
+	u64 __user *address = u64_to_user_ptr(extension);
+	struct drm_xe_exec_queue_ext_usermap ext;
+	int err;
+
+	/* Just parse args and make sure they are sane */
+
+	if (XE_IOCTL_DBG(xe, !xe_gt_has_indirect_ring_state(q->gt)))
+		return -EOPNOTSUPP;
+
+	if (XE_IOCTL_DBG(xe, q->width != 1))
+		return -EOPNOTSUPP;
+
+	if (XE_IOCTL_DBG(xe, q->flags & (EXEC_QUEUE_FLAG_KERNEL |
+					 EXEC_QUEUE_FLAG_PERMANENT |
+					 EXEC_QUEUE_FLAG_VM |
+					 EXEC_QUEUE_FLAG_BIND_ENGINE_CHILD)))
+		return -EOPNOTSUPP;
+
+	if (XE_IOCTL_DBG(xe, q->width != 1))
+		return -EOPNOTSUPP;
+
+	/*
+	 * XXX: More or less free to support this but targeting Mesa for now as
+	 * LR mode has ULLS.
+	 */
+	if (XE_IOCTL_DBG(xe, xe_vm_in_lr_mode(q->vm)))
+		return -EOPNOTSUPP;
+
+	if (XE_IOCTL_DBG(xe, q->flags & EXEC_QUEUE_FLAG_UMD_SUBMISSION))
+		return -EINVAL;
+
+	err = __copy_from_user(&ext, address, sizeof(ext));
+	if (XE_IOCTL_DBG(xe, err))
+		return -EFAULT;
+
+	if (XE_IOCTL_DBG(xe, ext.reserved[0] || ext.reserved[1]))
+		return -EINVAL;
+
+	if (XE_IOCTL_DBG(xe, ext.pad))
+		return -EINVAL;
+
+	if (XE_IOCTL_DBG(xe, ext.flags))
+		return -EINVAL;
+
+	if (XE_IOCTL_DBG(xe, ext.ring_size < SZ_4K ||
+			 ext.ring_size > SZ_2M ||
+			 ext.ring_size & ~PAGE_MASK))
+		return -EINVAL;
+
+	if (XE_IOCTL_DBG(xe, ext.version !=
+			 DRM_XE_EXEC_QUEUE_USERMAP_VERSION_XE2_REV0))
+		return -EINVAL;
+
+	q->usermap = kzalloc(sizeof(struct xe_exec_queue_usermap), GFP_KERNEL);
+	if (!q->usermap)
+		return -ENOMEM;
+
+	q->usermap->ring_size = ext.ring_size;
+	q->usermap->ring_addr = ext.ring_addr;
+
+	xe_pm_runtime_get_noresume(xe);
+	q->flags |= EXEC_QUEUE_FLAG_UMD_SUBMISSION;
+
+	return 0;
+}
+
+static int exec_queue_user_ext_post_init_usermap(struct xe_device *xe,
+						 struct xe_exec_queue *q,
+						 u64 extension)
+{
+	struct drm_xe_exec_queue_ext_usermap ext;
+	struct xe_lrc *lrc = q->lrc[0];
+	u64 __user *address = u64_to_user_ptr(extension);
+	u32 indirect_ring_state_handle;
+	int err;
+
+	err = __copy_from_user(&ext, address, sizeof(ext));
+	if (XE_IOCTL_DBG(xe, err))
+		return -EFAULT;
+
+	err = drm_gem_handle_create(q->xef->drm,
+				    &lrc->indirect_state->ttm.base,
+				    &indirect_ring_state_handle);
+	if (err)
+		return err;
+
+	ext.indirect_ring_state_offset =
+		drm_vma_node_offset_addr(&lrc->indirect_state->ttm.base.vma_node);
+	ext.indirect_ring_state_handle = indirect_ring_state_handle;
+	ext.doorbell_offset = XE_MMIO_DOORBELL_MMAP_OFFSET +
+		SZ_4K * q->guc->db.id;
+	ext.doorbell_page_offset = 0;
+
+	err = copy_to_user(address, &ext, sizeof(ext));
+	if (XE_IOCTL_DBG(xe, err)) {
+		err = -EFAULT;
+		goto close_handles;
+	}
+
+	return 0;
+
+close_handles:
+	drm_gem_handle_delete(q->xef->drm, indirect_ring_state_handle);
+
+	return err;
+}
+
 static const xe_exec_queue_user_extension_fn exec_queue_user_extension_funcs[] = {
 	[DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY] = exec_queue_user_ext_set_property,
+	[DRM_XE_EXEC_QUEUE_EXTENSION_USERMAP] = exec_queue_user_ext_usermap,
 };
 
 static const xe_exec_queue_user_extension_fn exec_queue_user_extension_post_init_funcs[] = {
 	[DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY] = NULL,
+	[DRM_XE_EXEC_QUEUE_EXTENSION_USERMAP] = exec_queue_user_ext_post_init_usermap,
 };
 
 #define MAX_USER_EXTENSIONS	16
