@@ -512,6 +512,9 @@ struct cxl_region_params {
  */
 #define CXL_REGION_F_NEEDS_RESET 1
 
+/* Allow Type2 drivers to specify if a dax region should not be created. */
+#define CXL_REGION_F_AVOID_DAX 2
+
 /**
  * struct cxl_region - CXL region
  * @dev: This region's device
