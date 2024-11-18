@@ -478,7 +478,7 @@ long nr_blockdev_pages(void)
 	long ret = 0;
 
 	spin_lock(&blockdev_superblock->s_inode_list_lock);
-	list_for_each_entry(inode, &blockdev_superblock->s_inodes, i_sb_list)
+	sb_for_each_inodes(inode, &blockdev_superblock->s_inodes)
 		ret += inode->i_mapping->nrpages;
 	spin_unlock(&blockdev_superblock->s_inode_list_lock);
 
@@ -1219,7 +1219,7 @@ void sync_bdevs(bool wait)
 	struct inode *inode, *old_inode = NULL;
 
 	spin_lock(&blockdev_superblock->s_inode_list_lock);
-	list_for_each_entry(inode, &blockdev_superblock->s_inodes, i_sb_list) {
+	sb_for_each_inodes(inode, &blockdev_superblock->s_inodes) {
 		struct address_space *mapping = inode->i_mapping;
 		struct block_device *bdev;
 
