@@ -260,6 +260,28 @@ struct xe_vm {
 		struct dma_fence *exported_fence;
 	} preempt;
 
+	/** @userfence: User fence state */
+	struct {
+		/**
+		 * @userfence.lock: fence lock
+		 */
+		spinlock_t lock;
+		/**
+		 * @userfence.pending_list: pending fence list, protected by
+		 * userfence.lock
+		 */
+		struct list_head pending_list;
+		/** @userfence.tdr: fence TDR */
+		struct delayed_work tdr;
+		/** @userfence.kill_work */
+		struct work_struct kill_work;
+		/**
+		 * @userfence.timeout: Fence timeout period, protected by
+		 * userfence.lock
+		 */
+		u32 timeout;
+	} userfence;
+
 	/** @um: unified memory state */
 	struct {
 		/** @asid: address space ID, unique to each VM */

@@ -30,6 +30,7 @@
 #include "xe_exec_queue.h"
 #include "xe_gt_pagefault.h"
 #include "xe_gt_tlb_invalidation.h"
+#include "xe_hw_fence.h"
 #include "xe_migrate.h"
 #include "xe_pat.h"
 #include "xe_pm.h"
@@ -336,11 +337,15 @@ void xe_vm_kill(struct xe_vm *vm, bool unlocked)
 	if (unlocked)
 		xe_vm_lock(vm, false);
 
-	vm->flags |= XE_VM_FLAG_BANNED;
-	trace_xe_vm_kill(vm);
+	if (!(vm->flags |= XE_VM_FLAG_BANNED)) {
+		vm->flags |= XE_VM_FLAG_BANNED;
+		trace_xe_vm_kill(vm);
 
-	list_for_each_entry(q, &vm->preempt.exec_queues, lr.link)
-		q->ops->kill(q);
+		list_for_each_entry(q, &vm->preempt.exec_queues, lr.link)
+			q->ops->kill(q);
+
+		/* TODO: Unmap usermap doorbells */
+	}
 
 	if (unlocked)
 		xe_vm_unlock(vm);
@@ -1393,6 +1398,9 @@ static void xe_vm_free_scratch(struct xe_vm *vm)
 	}
 }
 
+static void userfence_tdr(struct work_struct *w);
+static void userfence_kill(struct work_struct *w);
+
 struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 {
 	struct drm_gem_object *vm_resv_obj;
@@ -1517,6 +1525,12 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 		}
 	}
 
+	spin_lock_init(&vm->userfence.lock);
+	INIT_LIST_HEAD(&vm->userfence.pending_list);
+	vm->userfence.timeout = HZ * 5;
+	INIT_DELAYED_WORK(&vm->userfence.tdr, userfence_tdr);
+	INIT_WORK(&vm->userfence.kill_work, userfence_kill);
+
 	if (number_tiles > 1)
 		vm->composite_fence_ctx = dma_fence_context_alloc(1);
 
@@ -1561,6 +1575,9 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 
 	xe_vm_close(vm);
 	flush_work(&vm->preempt.rebind_work);
+
+	flush_delayed_work(&vm->userfence.tdr);
+	flush_work(&vm->userfence.kill_work);
 
 	down_write(&vm->lock);
 	for_each_tile(tile, xe, id) {
@@ -3449,6 +3466,114 @@ static int check_semaphores(struct xe_vm *vm, struct xe_sync_entry *syncs,
 	return 0;
 }
 
+struct tdr_item {
+	struct dma_fence *fence;
+	struct xe_vm *vm;
+	struct list_head link;
+	struct dma_fence_cb cb;
+	u64 deadline;
+};
+
+static void userfence_kill(struct work_struct *w)
+{
+	struct xe_vm *vm =
+		container_of(w, struct xe_vm, userfence.kill_work);
+
+	down_write(&vm->lock);
+	xe_vm_kill(vm, true);
+	up_write(&vm->lock);
+}
+
+static void userfence_tdr(struct work_struct *w)
+{
+	struct xe_vm *vm =
+		container_of(w, struct xe_vm, userfence.tdr.work);
+	struct tdr_item *tdr_item;
+	bool timeout = false, cookie = dma_fence_begin_signalling();
+
+	xe_hw_fence_irq_stop(&vm->xe->user_fence_irq);
+
+	spin_lock_irq(&vm->userfence.lock);
+	list_for_each_entry(tdr_item, &vm->userfence.pending_list, link) {
+		if (!dma_fence_is_signaled(tdr_item->fence)) {
+			drm_notice(&vm->xe->drm,
+				   "Timedout usermap fence: seqno=%llu, deadline=%llu, jiffies=%llu",
+				   tdr_item->fence->seqno, tdr_item->deadline,
+				   get_jiffies_64());
+			dma_fence_set_error(tdr_item->fence, -ETIME);
+			timeout = true;
+			vm->userfence.timeout = 0;
+		}
+	}
+	spin_unlock_irq(&vm->userfence.lock);
+
+	xe_hw_fence_irq_start(&vm->xe->user_fence_irq);
+
+	/*
+	 * This is dma-fence signaling path so we cannot take the locks requires
+	 * to kill a VM. Defer killing to a worker.
+	 */
+	if (timeout)
+		schedule_work(&vm->userfence.kill_work);
+
+	dma_fence_end_signalling(cookie);
+}
+
+static void userfence_fence_cb(struct dma_fence *fence,
+			       struct dma_fence_cb *cb)
+{
+	struct tdr_item *next, *tdr_item = container_of(cb, struct tdr_item, cb);
+	struct xe_vm *vm = tdr_item->vm;
+	struct xe_gt *gt = xe_device_get_gt(vm->xe, 0);
+
+	if (fence)
+		spin_lock(&vm->userfence.lock);
+	else
+		spin_lock_irq(&vm->userfence.lock);
+
+	list_del(&tdr_item->link);
+	next = list_first_entry_or_null(&vm->userfence.pending_list,
+					typeof(*next), link);
+	if (next)
+		mod_delayed_work(gt->ordered_wq, &vm->userfence.tdr,
+				 next->deadline - get_jiffies_64());
+	else
+		cancel_delayed_work(&vm->userfence.tdr);
+
+	if (fence)
+		spin_unlock(&vm->userfence.lock);
+	else
+		spin_unlock_irq(&vm->userfence.lock);
+
+	dma_fence_put(tdr_item->fence);
+	xe_vm_put(tdr_item->vm);
+	kfree(tdr_item);
+}
+
+static void userfence_tdr_add(struct xe_vm *vm, struct tdr_item *tdr_item,
+			      struct dma_fence *fence)
+{
+	struct xe_gt *gt = xe_device_get_gt(vm->xe, 0);
+	int ret;
+
+	tdr_item->fence = dma_fence_get(fence);
+	tdr_item->vm = xe_vm_get(vm);
+	INIT_LIST_HEAD(&tdr_item->link);
+	tdr_item->deadline = vm->userfence.timeout + get_jiffies_64();
+
+	spin_lock_irq(&vm->userfence.lock);
+	list_add_tail(&tdr_item->link, &vm->userfence.pending_list);
+	if (list_is_singular(&vm->userfence.pending_list))
+		mod_delayed_work(gt->ordered_wq,
+				 &vm->userfence.tdr,
+				 vm->userfence.timeout);
+	spin_unlock_irq(&vm->userfence.lock);
+
+	ret = dma_fence_add_callback(fence, &tdr_item->cb, userfence_fence_cb);
+	if (ret == -ENOENT)
+		userfence_fence_cb(NULL, &tdr_item->cb);
+}
+
 int xe_vm_convert_fence_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file)
 {
@@ -3459,6 +3584,7 @@ int xe_vm_convert_fence_ioctl(struct drm_device *dev, void *data,
 	struct drm_xe_semaphore __user *semaphores_user;
 	struct xe_sync_entry *syncs = NULL;
 	struct xe_vm *vm;
+	struct tdr_item **tdr_items = NULL;
 	int err = 0, i, num_syncs = 0;
 	bool done = false;
 	struct drm_exec exec;
@@ -3493,6 +3619,12 @@ int xe_vm_convert_fence_ioctl(struct drm_device *dev, void *data,
 		goto release_vm_lock;
 	}
 
+	tdr_items = kcalloc(args->num_syncs, sizeof(*tdr_items), GFP_KERNEL);
+	if (!tdr_items) {
+		err = -ENOMEM;
+		goto release_vm_lock;
+	}
+
 	syncs_user = u64_to_user_ptr(args->syncs);
 	semaphores_user = u64_to_user_ptr(args->semaphores);
 	for (i = 0; i < args->num_syncs; i++, num_syncs++) {
@@ -3504,6 +3636,15 @@ int xe_vm_convert_fence_ioctl(struct drm_device *dev, void *data,
 					  SYNC_PARSE_FLAG_DISALLOW_USER_FENCE);
 		if (err)
 			goto release_syncs;
+
+		if (sync->flags & DRM_XE_SYNC_FLAG_SIGNAL) {
+			tdr_items[i] = kmalloc(sizeof(struct tdr_item),
+					       GFP_KERNEL);
+			if (!tdr_items[i]) {
+				xe_sync_entry_cleanup(&syncs[i]);
+				goto release_syncs;
+			}
+		}
 
 		err = xe_sync_semaphore_parse(xe, xef, semaphore_sync,
 					      &semaphores_user[i],
@@ -3591,6 +3732,10 @@ retry:
 				&semaphore_sync->chain_fence->base;
 			semaphore_sync->chain_fence = NULL;
 
+			userfence_tdr_add(vm, tdr_items[i],
+					  semaphore_sync->fence);
+			tdr_items[i] = 0;
+
 			semaphore_sync->fence = NULL;   /* Ref owned by chain */
 		} else {
 			xe_sync_entry_signal(semaphore_sync, sync->fence);
@@ -3617,9 +3762,13 @@ retry:
 out_unlock:
 	drm_exec_fini(&exec);
 release_syncs:
-	while (err != -EAGAIN && num_syncs--) {
-		xe_sync_entry_cleanup(&syncs[num_syncs]);
-		xe_sync_entry_cleanup(&syncs[args->num_syncs + num_syncs]);
+	if (err != -EAGAIN) {
+		for (i = 0; i < num_syncs; ++i)
+			kfree(tdr_items[i]);
+		while (num_syncs--) {
+			xe_sync_entry_cleanup(&syncs[num_syncs]);
+			xe_sync_entry_cleanup(&syncs[args->num_syncs + num_syncs]);
+		}
 	}
 release_vm_lock:
 	if (err == -EAGAIN)
@@ -3629,6 +3778,7 @@ put_vm:
 	xe_vm_put(vm);
 	free_preempt_fences(&preempt_fences);
 	kfree(syncs);
+	kfree(tdr_items);
 
 	return err;
 }
