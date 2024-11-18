@@ -2663,6 +2663,22 @@ err:
 	return ERR_PTR(rc);
 }
 
+int cxl_get_region_params(struct cxl_region *region, resource_size_t *start,
+			  resource_size_t *end)
+{
+	if (!region)
+		return -ENODEV;
+
+	if (!region->params.res)
+		return -ENOSPC;
+
+	*start = region->params.res->start;
+	*end = region->params.res->end;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_get_region_params, CXL);
+
 static ssize_t __create_region_show(struct cxl_root_decoder *cxlrd, char *buf)
 {
 	return sysfs_emit(buf, "region%u\n", atomic_read(&cxlrd->region_id));
