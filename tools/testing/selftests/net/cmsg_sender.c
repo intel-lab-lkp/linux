@@ -52,6 +52,7 @@ struct options {
 		unsigned int tclass;
 		unsigned int hlimit;
 		unsigned int priority;
+		unsigned int priority_cmsg;
 	} sockopt;
 	struct {
 		unsigned int family;
@@ -59,6 +60,7 @@ struct options {
 		unsigned int proto;
 	} sock;
 	struct option_cmsg_u32 mark;
+	struct option_cmsg_u32 priority_cmsg;
 	struct {
 		bool ena;
 		unsigned int delay;
@@ -97,6 +99,7 @@ static void __attribute__((noreturn)) cs_usage(const char *bin)
 	       "\n"
 	       "\t\t-m val  Set SO_MARK with given value\n"
 	       "\t\t-M val  Set SO_MARK via setsockopt\n"
+		   "\t\t-Q val  Set SO_PRIORITY via cmsg\n"
 	       "\t\t-d val  Set SO_TXTIME with given delay (usec)\n"
 	       "\t\t-t      Enable time stamp reporting\n"
 	       "\t\t-f val  Set don't fragment via cmsg\n"
@@ -115,7 +118,7 @@ static void cs_parse_args(int argc, char *argv[])
 {
 	int o;
 
-	while ((o = getopt(argc, argv, "46sS:p:P:m:M:n:d:tf:F:c:C:l:L:H:")) != -1) {
+	while ((o = getopt(argc, argv, "46sS:p:P:m:M:n:d:tf:F:c:C:l:L:H:Q:")) != -1) {
 		switch (o) {
 		case 's':
 			opt.silent_send = true;
@@ -147,6 +150,10 @@ static void cs_parse_args(int argc, char *argv[])
 		case 'm':
 			opt.mark.ena = true;
 			opt.mark.val = atoi(optarg);
+			break;
+		case 'Q':
+			opt.priority_cmsg.ena = true;
+			opt.priority_cmsg.val = atoi(optarg);
 			break;
 		case 'M':
 			opt.sockopt.mark = atoi(optarg);
@@ -252,6 +259,8 @@ cs_write_cmsg(int fd, struct msghdr *msg, char *cbuf, size_t cbuf_sz)
 
 	ca_write_cmsg_u32(cbuf, cbuf_sz, &cmsg_len,
 			  SOL_SOCKET, SO_MARK, &opt.mark);
+	ca_write_cmsg_u32(cbuf, cbuf_sz, &cmsg_len,
+			SOL_SOCKET, SO_PRIORITY, &opt.priority_cmsg);
 	ca_write_cmsg_u32(cbuf, cbuf_sz, &cmsg_len,
 			  SOL_IPV6, IPV6_DONTFRAG, &opt.v6.dontfrag);
 	ca_write_cmsg_u32(cbuf, cbuf_sz, &cmsg_len,
