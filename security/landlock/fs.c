@@ -1234,7 +1234,7 @@ static void hook_sb_delete(struct super_block *const sb)
 		return;
 
 	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+	sb_for_each_inodes(inode, &sb->s_inodes) {
 		struct landlock_object *object;
 
 		/* Only handles referenced inodes. */
