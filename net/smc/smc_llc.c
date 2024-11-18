@@ -559,6 +559,42 @@ put_out:
 	return rc;
 }
 
+enum {
+	SMC_LLC_INTURN_LOCK_INIT,
+	SMC_LLC_INTURN_LOCK_INCR,
+	SMC_LLC_INTURN_LOCK_OVER,
+};
+
+/*
+ * Use different locks for different rmbs/sendbufs. When traversing processing,
+ * only the currently traversed linked list is locked at the same time.
+ */
+static void smc_llc_lock_in_turn(struct rw_semaphore *lock, int *buf_lst, int type)
+{
+	switch (type) {
+	/* set to 0 */
+	case SMC_LLC_INTURN_LOCK_INIT:
+		*buf_lst = 0;
+		down_write(&lock[*buf_lst]);
+		break;
+	/* Release previous lock and lock next */
+	case SMC_LLC_INTURN_LOCK_INCR:
+		up_write(&lock[*buf_lst]);
+		*buf_lst += 1;
+		if (*buf_lst >= SMC_RMBE_SIZES)
+			break;
+		down_write(&lock[*buf_lst]);
+		break;
+	case SMC_LLC_INTURN_LOCK_OVER:
+		if (*buf_lst < 0 || *buf_lst >= SMC_RMBE_SIZES)
+			break;
+		up_write(&lock[*buf_lst]);
+		break;
+	default:
+		break;
+	}
+}
+
 /* return first buffer from any of the next buf lists */
 static struct smc_buf_desc *_smc_llc_get_next_rmb(struct smc_link_group *lgr,
 						  int *buf_lst)
@@ -570,7 +606,7 @@ static struct smc_buf_desc *_smc_llc_get_next_rmb(struct smc_link_group *lgr,
 						   struct smc_buf_desc, list);
 		if (buf_pos)
 			return buf_pos;
-		(*buf_lst)++;
+		smc_llc_lock_in_turn(lgr->rmbs_lock, buf_lst, SMC_LLC_INTURN_LOCK_INCR);
 	}
 	return NULL;
 }
@@ -586,7 +622,7 @@ static struct smc_buf_desc *smc_llc_get_next_rmb(struct smc_link_group *lgr,
 		return _smc_llc_get_next_rmb(lgr, buf_lst);
 
 	if (list_is_last(&buf_pos->list, &lgr->rmbs[*buf_lst])) {
-		(*buf_lst)++;
+		smc_llc_lock_in_turn(lgr->rmbs_lock, buf_lst, SMC_LLC_INTURN_LOCK_INCR);
 		return _smc_llc_get_next_rmb(lgr, buf_lst);
 	}
 	buf_next = list_next_entry(buf_pos, list);
@@ -596,8 +632,24 @@ static struct smc_buf_desc *smc_llc_get_next_rmb(struct smc_link_group *lgr,
 static struct smc_buf_desc *smc_llc_get_first_rmb(struct smc_link_group *lgr,
 						  int *buf_lst)
 {
-	*buf_lst = 0;
+	smc_llc_lock_in_turn(lgr->rmbs_lock, buf_lst, SMC_LLC_INTURN_LOCK_INIT);
 	return smc_llc_get_next_rmb(lgr, buf_lst, NULL);
+}
+
+static inline void smc_llc_bufs_wrlock_all(struct rw_semaphore *lock, int nums)
+{
+	int i = 0;
+
+	for (; i < nums; i++)
+		down_write(&lock[i]);
+}
+
+static inline void smc_llc_bufs_wrunlock_all(struct rw_semaphore *lock, int nums)
+{
+	int i = 0;
+
+	for (; i < nums; i++)
+		up_write(&lock[i]);
 }
 
 static int smc_llc_fill_ext_v2(struct smc_llc_msg_add_link_v2_ext *ext,
@@ -608,18 +660,17 @@ static int smc_llc_fill_ext_v2(struct smc_llc_msg_add_link_v2_ext *ext,
 	int prim_lnk_idx, lnk_idx, i;
 	struct smc_buf_desc *rmb;
 	int len = sizeof(*ext);
-	int buf_lst;
+	int buf_lst = -1;
 
 	ext->v2_direct = !lgr->uses_gateway;
 	memcpy(ext->client_target_gid, link_new->gid, SMC_GID_SIZE);
 
 	prim_lnk_idx = link->link_idx;
 	lnk_idx = link_new->link_idx;
-	down_write(&lgr->rmbs_lock);
+	buf_pos = smc_llc_get_first_rmb(lgr, &buf_lst);
 	ext->num_rkeys = lgr->conns_num;
 	if (!ext->num_rkeys)
 		goto out;
-	buf_pos = smc_llc_get_first_rmb(lgr, &buf_lst);
 	for (i = 0; i < ext->num_rkeys; i++) {
 		while (buf_pos && !(buf_pos)->used)
 			buf_pos = smc_llc_get_next_rmb(lgr, &buf_lst, buf_pos);
@@ -635,7 +686,7 @@ static int smc_llc_fill_ext_v2(struct smc_llc_msg_add_link_v2_ext *ext,
 	}
 	len += i * sizeof(ext->rt[0]);
 out:
-	up_write(&lgr->rmbs_lock);
+	smc_llc_lock_in_turn(lgr->rmbs_lock, &buf_lst, SMC_LLC_INTURN_LOCK_OVER);
 	return len;
 }
 
@@ -892,13 +943,12 @@ static int smc_llc_cli_rkey_exchange(struct smc_link *link,
 	u8 max, num_rkeys_send, num_rkeys_recv;
 	struct smc_llc_qentry *qentry;
 	struct smc_buf_desc *buf_pos;
-	int buf_lst;
+	int buf_lst = -1;
 	int rc = 0;
 	int i;
 
-	down_write(&lgr->rmbs_lock);
-	num_rkeys_send = lgr->conns_num;
 	buf_pos = smc_llc_get_first_rmb(lgr, &buf_lst);
+	num_rkeys_send = lgr->conns_num;
 	do {
 		qentry = smc_llc_wait(lgr, NULL, SMC_LLC_WAIT_TIME,
 				      SMC_LLC_ADD_LINK_CONT);
@@ -923,7 +973,7 @@ static int smc_llc_cli_rkey_exchange(struct smc_link *link,
 			break;
 	} while (num_rkeys_send || num_rkeys_recv);
 
-	up_write(&lgr->rmbs_lock);
+	smc_llc_lock_in_turn(lgr->rmbs_lock, &buf_lst, SMC_LLC_INTURN_LOCK_OVER);
 	return rc;
 }
 
@@ -1006,14 +1056,14 @@ static void smc_llc_save_add_link_rkeys(struct smc_link *link,
 	ext = (struct smc_llc_msg_add_link_v2_ext *)((u8 *)lgr->wr_rx_buf_v2 +
 						     SMC_WR_TX_SIZE);
 	max = min_t(u8, ext->num_rkeys, SMC_LLC_RKEYS_PER_MSG_V2);
-	down_write(&lgr->rmbs_lock);
+	smc_llc_bufs_wrlock_all(lgr->rmbs_lock, SMC_RMBE_SIZES);
 	for (i = 0; i < max; i++) {
 		smc_rtoken_set(lgr, link->link_idx, link_new->link_idx,
 			       ext->rt[i].rmb_key,
 			       ext->rt[i].rmb_vaddr_new,
 			       ext->rt[i].rmb_key_new);
 	}
-	up_write(&lgr->rmbs_lock);
+	smc_llc_bufs_wrunlock_all(lgr->rmbs_lock, SMC_RMBE_SIZES);
 }
 
 static void smc_llc_save_add_link_info(struct smc_link *link,
@@ -1328,7 +1378,6 @@ static int smc_llc_srv_rkey_exchange(struct smc_link *link,
 	int rc = 0;
 	int i;
 
-	down_write(&lgr->rmbs_lock);
 	num_rkeys_send = lgr->conns_num;
 	buf_pos = smc_llc_get_first_rmb(lgr, &buf_lst);
 	do {
@@ -1353,7 +1402,7 @@ static int smc_llc_srv_rkey_exchange(struct smc_link *link,
 		smc_llc_flow_qentry_del(&lgr->llc_flow_lcl);
 	} while (num_rkeys_send || num_rkeys_recv);
 out:
-	up_write(&lgr->rmbs_lock);
+	smc_llc_lock_in_turn(lgr->rmbs_lock, &buf_lst, SMC_LLC_INTURN_LOCK_OVER);
 	return rc;
 }
 

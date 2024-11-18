@@ -192,6 +192,7 @@ struct smc_buf_desc {
 	struct page		*pages;
 	int			len;		/* length of buffer */
 	u32			used;		/* currently used / unused */
+	int			siz_comp;
 	union {
 		struct { /* SMC-R */
 			struct sg_table	sgt[SMC_LINKS_PER_LGR_MAX];
@@ -278,11 +279,11 @@ struct smc_link_group {
 	unsigned short		vlan_id;	/* vlan id of link group */
 
 	struct list_head	sndbufs[SMC_RMBE_SIZES];/* tx buffers */
-	struct rw_semaphore	sndbufs_lock;	/* protects tx buffers */
+	struct rw_semaphore	sndbufs_lock[SMC_RMBE_SIZES];	/* protects tx buffers */
 	struct list_head	rmbs[SMC_RMBE_SIZES];	/* rx buffers */
-	struct rw_semaphore	rmbs_lock;	/* protects rx buffers */
-	u64			alloc_sndbufs;	/* stats of tx buffers */
-	u64			alloc_rmbs;	/* stats of rx buffers */
+	struct rw_semaphore	rmbs_lock[SMC_RMBE_SIZES];	/* protects rx buffers */
+	atomic64_t			alloc_sndbufs;	/* stats of tx buffers */
+	atomic64_t			alloc_rmbs;	/* stats of rx buffers */
 
 	u8			id[SMC_LGR_ID_SIZE];	/* unique lgr id */
 	struct delayed_work	free_work;	/* delayed freeing of an lgr */
