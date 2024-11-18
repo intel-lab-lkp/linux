@@ -27,7 +27,12 @@ struct xe_lrc {
 	 */
 	struct xe_bo *submission_ring;
 
-	/** @size: size of lrc including any indirect ring state page */
+	/**
+	 * @indirect_state: buffer object (memory) for indirect state
+	 */
+	struct xe_bo *indirect_state;
+
+	/** @size: size of lrc */
 	u32 size;
 
 	/** @tile: tile which this LRC belongs to */

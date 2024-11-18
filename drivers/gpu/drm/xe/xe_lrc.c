@@ -74,10 +74,6 @@ size_t xe_gt_lrc_size(struct xe_gt *gt, enum xe_engine_class class)
 		size = 2 * SZ_4K;
 	}
 
-	/* Add indirect ring state page */
-	if (xe_gt_has_indirect_ring_state(gt))
-		size += LRC_INDIRECT_RING_STATE_SIZE;
-
 	return size;
 }
 
@@ -694,8 +690,7 @@ static u32 __xe_lrc_ctx_timestamp_offset(struct xe_lrc *lrc)
 
 static inline u32 __xe_lrc_indirect_ring_offset(struct xe_lrc *lrc)
 {
-	/* Indirect ring state page is at the very end of LRC */
-	return lrc->size - LRC_INDIRECT_RING_STATE_SIZE;
+	return 0;
 }
 
 #define DECL_MAP_ADDR_HELPERS(elem) \
@@ -726,6 +721,20 @@ static inline u32 __maybe_unused __xe_lrc_##elem##_ggtt_addr(struct xe_lrc *lrc)
 	return xe_bo_ggtt_addr(lrc->submission_ring) + __xe_lrc_##elem##_offset(lrc); \
 } \
 
+#define DECL_MAP_INDIRECT_ADDR_HELPERS(elem) \
+static inline struct iosys_map __xe_lrc_##elem##_map(struct xe_lrc *lrc) \
+{ \
+	struct iosys_map map = lrc->indirect_state->vmap; \
+\
+	xe_assert(lrc_to_xe(lrc), !iosys_map_is_null(&map));  \
+	iosys_map_incr(&map, __xe_lrc_##elem##_offset(lrc)); \
+	return map; \
+} \
+static inline u32 __maybe_unused __xe_lrc_##elem##_ggtt_addr(struct xe_lrc *lrc) \
+{ \
+	return xe_bo_ggtt_addr(lrc->indirect_state) + __xe_lrc_##elem##_offset(lrc); \
+} \
+
 DECL_MAP_RING_ADDR_HELPERS(ring)
 DECL_MAP_ADDR_HELPERS(pphwsp)
 DECL_MAP_ADDR_HELPERS(seqno)
@@ -734,8 +743,9 @@ DECL_MAP_ADDR_HELPERS(start_seqno)
 DECL_MAP_ADDR_HELPERS(ctx_job_timestamp)
 DECL_MAP_ADDR_HELPERS(ctx_timestamp)
 DECL_MAP_ADDR_HELPERS(parallel)
-DECL_MAP_ADDR_HELPERS(indirect_ring)
+DECL_MAP_INDIRECT_ADDR_HELPERS(indirect_ring)
 
+#undef DECL_INDIRECT_MAP_ADDR_HELPERS
 #undef DECL_RING_MAP_ADDR_HELPERS
 #undef DECL_MAP_ADDR_HELPERS
 
@@ -845,25 +855,27 @@ void xe_lrc_write_ctx_reg(struct xe_lrc *lrc, int reg_nr, u32 val)
 	xe_map_write32(xe, &map, val);
 }
 
-static void *empty_lrc_data(struct xe_hw_engine *hwe)
+static void *empty_lrc_data(struct xe_hw_engine *hwe, bool has_default)
 {
 	struct xe_gt *gt = hwe->gt;
 	void *data;
 	u32 *regs;
 
-	data = kzalloc(xe_gt_lrc_size(gt, hwe->class), GFP_KERNEL);
+	data = kzalloc(xe_gt_lrc_size(gt, hwe->class) +
+		       LRC_INDIRECT_RING_STATE_SIZE, GFP_KERNEL);
 	if (!data)
 		return NULL;
 
 	/* 1st page: Per-Process of HW status Page */
-	regs = data + LRC_PPHWSP_SIZE;
-	set_offsets(regs, reg_offsets(gt_to_xe(gt), hwe->class), hwe);
-	set_context_control(regs, hwe);
-	set_memory_based_intr(regs, hwe);
-	reset_stop_ring(regs, hwe);
+	if (!has_default) {
+		regs = data + LRC_PPHWSP_SIZE;
+		set_offsets(regs, reg_offsets(gt_to_xe(gt), hwe->class), hwe);
+		set_context_control(regs, hwe);
+		set_memory_based_intr(regs, hwe);
+		reset_stop_ring(regs, hwe);
+	}
 	if (xe_gt_has_indirect_ring_state(gt)) {
-		regs = data + xe_gt_lrc_size(gt, hwe->class) -
-		       LRC_INDIRECT_RING_STATE_SIZE;
+		regs = data + xe_gt_lrc_size(gt, hwe->class);
 		set_offsets(regs, xe2_indirect_ring_state_offsets, hwe);
 	}
 
@@ -883,6 +895,7 @@ static void xe_lrc_finish(struct xe_lrc *lrc)
 	xe_hw_fence_ctx_finish(&lrc->fence_ctx);
 	xe_bo_unpin_map_no_vm(lrc->bo);
 	xe_bo_unpin_map_no_vm(lrc->submission_ring);
+	xe_bo_unpin_map_no_vm(lrc->indirect_state);
 }
 
 #define PVC_CTX_ASID		(0x2e + 1)
@@ -903,8 +916,6 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	kref_init(&lrc->refcount);
 	lrc->flags = 0;
 	lrc_size = xe_gt_lrc_size(gt, hwe->class);
-	if (xe_gt_has_indirect_ring_state(gt))
-		lrc->flags |= XE_LRC_FLAG_INDIRECT_RING_STATE;
 
 	/*
 	 * FIXME: Perma-pinning LRC as we don't yet support moving GGTT address
@@ -929,6 +940,22 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 		goto err_lrc_finish;
 	}
 
+	if (xe_gt_has_indirect_ring_state(gt)) {
+		lrc->flags |= XE_LRC_FLAG_INDIRECT_RING_STATE;
+
+		lrc->indirect_state = xe_bo_create_pin_map(xe, tile, vm,
+							   LRC_INDIRECT_RING_STATE_SIZE,
+							   ttm_bo_type_kernel,
+							   XE_BO_FLAG_VRAM_IF_DGFX(tile) |
+							   XE_BO_FLAG_GGTT |
+							   XE_BO_FLAG_GGTT_INVALIDATE);
+		if (IS_ERR(lrc->indirect_state)) {
+			err = PTR_ERR(lrc->indirect_state);
+			lrc->indirect_state = NULL;
+			goto err_lrc_finish;
+		}
+	}
+
 	lrc->size = lrc_size;
 	lrc->tile = gt_to_tile(hwe->gt);
 	lrc->ring.size = ring_size;
@@ -938,8 +965,8 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	xe_hw_fence_ctx_init(&lrc->fence_ctx, hwe->gt,
 			     hwe->fence_irq, hwe->name);
 
-	if (!gt->default_lrc[hwe->class]) {
-		init_data = empty_lrc_data(hwe);
+	if (!gt->default_lrc[hwe->class] || xe_gt_has_indirect_ring_state(gt)) {
+		init_data = empty_lrc_data(hwe, !!gt->default_lrc[hwe->class]);
 		if (!init_data) {
 			err = -ENOMEM;
 			goto err_lrc_finish;
@@ -951,7 +978,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	 * values
 	 */
 	map = __xe_lrc_pphwsp_map(lrc);
-	if (!init_data) {
+	if (gt->default_lrc[hwe->class]) {
 		xe_map_memset(xe, &map, 0, 0, LRC_PPHWSP_SIZE);	/* PPHWSP */
 		xe_map_memcpy_to(xe, &map, LRC_PPHWSP_SIZE,
 				 gt->default_lrc[hwe->class] + LRC_PPHWSP_SIZE,
@@ -959,8 +986,16 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	} else {
 		xe_map_memcpy_to(xe, &map, 0, init_data,
 				 xe_gt_lrc_size(gt, hwe->class));
-		kfree(init_data);
 	}
+
+	if (xe_gt_has_indirect_ring_state(gt)) {
+		map = __xe_lrc_indirect_ring_map(lrc);
+		xe_map_memcpy_to(xe, &map, 0, init_data +
+				 xe_gt_lrc_size(gt, hwe->class),
+				 LRC_INDIRECT_RING_STATE_SIZE);
+	}
+
+	kfree(init_data);
 
 	if (vm) {
 		xe_lrc_set_ppgtt(lrc, vm);
