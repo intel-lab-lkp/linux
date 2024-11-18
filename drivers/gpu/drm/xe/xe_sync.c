@@ -6,6 +6,7 @@
 #include "xe_sync.h"
 
 #include <linux/dma-fence-array.h>
+#include <linux/dma-fence-user-fence.h>
 #include <linux/kthread.h>
 #include <linux/sched/mm.h>
 #include <linux/uaccess.h>
@@ -14,10 +15,14 @@
 #include <drm/drm_syncobj.h>
 #include <uapi/drm/xe_drm.h>
 
+#include "xe_bo.h"
 #include "xe_device_types.h"
 #include "xe_exec_queue.h"
+#include "xe_hw_fence.h"
 #include "xe_macros.h"
 #include "xe_sched_job_types.h"
+
+#define IS_UNINSTALLED_HW_FENCE		BIT(31)
 
 struct xe_user_fence {
 	struct xe_device *xe;
@@ -211,6 +216,74 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
 	return 0;
 }
 
+int xe_sync_semaphore_parse(struct xe_device *xe, struct xe_file *xef,
+			    struct xe_sync_entry *sync,
+			    struct drm_xe_semaphore __user *semaphore_user,
+			    unsigned int flags)
+{
+	struct drm_xe_semaphore semaphore_in;
+	struct drm_gem_object *gem_obj;
+	struct xe_bo *bo;
+
+	if (copy_from_user(&semaphore_in, semaphore_user,
+			   sizeof(*semaphore_user)))
+		return -EFAULT;
+
+	if (XE_IOCTL_DBG(xe, semaphore_in.offset & 0x7 ||
+			 !semaphore_in.handle || semaphore_in.token ||
+			 semaphore_in.reserved[0] || semaphore_in.reserved[1]))
+		return -EINVAL;
+
+	gem_obj = drm_gem_object_lookup(xef->drm, semaphore_in.handle);
+	if (XE_IOCTL_DBG(xe, !gem_obj))
+		return -ENOENT;
+
+	bo = gem_to_xe_bo(gem_obj);
+
+	if (XE_IOCTL_DBG(xe, bo->size < semaphore_in.offset)) {
+		xe_bo_put(bo);
+		return -EINVAL;
+	}
+
+	if (flags & DRM_XE_SYNC_FLAG_SIGNAL) {
+		struct iosys_map vmap = sync->bo->vmap;
+		struct dma_fence *fence;
+
+		sync->chain_fence = dma_fence_chain_alloc();
+		if (!sync->chain_fence) {
+			xe_bo_put(bo);
+			dma_fence_chain_free(sync->chain_fence);
+			return -ENOMEM;
+		}
+
+		fence = xe_hw_fence_alloc();
+		if (IS_ERR(fence)) {
+			xe_bo_put(bo);
+			return PTR_ERR(fence);
+		}
+
+		vmap = bo->vmap;
+		iosys_map_incr(&vmap, semaphore_in.offset);
+
+		xe_hw_fence_user_init(fence, xe, vmap, semaphore_in.seqno);
+		sync->fence = fence;
+		sync->flags = IS_UNINSTALLED_HW_FENCE;
+	} else {
+		sync->user_fence = dma_fence_user_fence_alloc();
+		if (XE_IOCTL_DBG(xe, !sync->user_fence)) {
+			xe_bo_put(bo);
+			return PTR_ERR(sync->ufence);
+		}
+
+		sync->addr = semaphore_in.offset;
+		sync->timeline_value = semaphore_in.seqno;
+		sync->flags = DRM_XE_SYNC_FLAG_SIGNAL;
+	}
+	sync->bo = bo;
+
+	return 0;
+}
+
 int xe_sync_entry_add_deps(struct xe_sync_entry *sync, struct xe_sched_job *job)
 {
 	if (sync->fence)
@@ -249,17 +322,34 @@ void xe_sync_entry_signal(struct xe_sync_entry *sync, struct dma_fence *fence)
 			user_fence_put(sync->ufence);
 			dma_fence_put(fence);
 		}
+	} else if (sync->user_fence) {
+		struct iosys_map vmap = sync->bo->vmap;
+
+		iosys_map_incr(&vmap, sync->addr);
+		dma_fence_user_fence_attach(fence, sync->user_fence,
+					    &vmap, sync->timeline_value);
+		sync->user_fence = NULL;
 	}
+}
+
+void xe_sync_entry_hw_fence_installed(struct xe_sync_entry *sync)
+{
+	sync->flags &= ~IS_UNINSTALLED_HW_FENCE;
 }
 
 void xe_sync_entry_cleanup(struct xe_sync_entry *sync)
 {
 	if (sync->syncobj)
 		drm_syncobj_put(sync->syncobj);
+	xe_bo_put(sync->bo);
+	if (sync->flags & IS_UNINSTALLED_HW_FENCE)
+		dma_fence_set_error(sync->fence, -ECANCELED);
 	dma_fence_put(sync->fence);
 	dma_fence_chain_free(sync->chain_fence);
 	if (sync->ufence)
 		user_fence_put(sync->ufence);
+	if (sync->user_fence)
+		dma_fence_user_fence_free(sync->user_fence);
 }
 
 /**

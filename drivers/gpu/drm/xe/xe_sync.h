@@ -8,6 +8,9 @@
 
 #include "xe_sync_types.h"
 
+struct drm_xe_semaphore;
+struct drm_xe_sync;
+
 struct xe_device;
 struct xe_exec_queue;
 struct xe_file;
@@ -22,10 +25,15 @@ int xe_sync_entry_parse(struct xe_device *xe, struct xe_file *xef,
 			struct xe_sync_entry *sync,
 			struct drm_xe_sync __user *sync_user,
 			unsigned int flags);
+int xe_sync_semaphore_parse(struct xe_device *xe, struct xe_file *xef,
+			    struct xe_sync_entry *sync,
+			    struct drm_xe_semaphore __user *semaphore_user,
+			    unsigned int flags);
 int xe_sync_entry_add_deps(struct xe_sync_entry *sync,
 			   struct xe_sched_job *job);
 void xe_sync_entry_signal(struct xe_sync_entry *sync,
 			  struct dma_fence *fence);
+void xe_sync_entry_hw_fence_installed(struct xe_sync_entry *sync);
 void xe_sync_entry_cleanup(struct xe_sync_entry *sync);
 struct dma_fence *
 xe_sync_in_fence_get(struct xe_sync_entry *sync, int num_sync,
