@@ -947,6 +947,16 @@ static int smu_v13_0_0_get_dpm_ultimate_freq(struct smu_context *smu,
 	return 0;
 }
 
+static int smu_v13_0_0_get_fan_parameters(struct smu_context *smu)
+{
+	struct smu_table_context *table_context = &smu->smu_table;
+	PPTable_t *smc_pptable = table_context->driver_pptable;
+
+	smu->fan_max_rpm = smc_pptable->SkuTable.FanMaximumRpm;
+
+	return 0;
+}
+
 static int smu_v13_0_0_read_sensor(struct smu_context *smu,
 				   enum amd_pp_sensors sensor,
 				   void *data,
@@ -3045,6 +3055,7 @@ static const struct pptable_funcs smu_v13_0_0_ppt_funcs = {
 	.get_dpm_ultimate_freq = smu_v13_0_0_get_dpm_ultimate_freq,
 	.get_vbios_bootup_values = smu_v13_0_get_vbios_bootup_values,
 	.read_sensor = smu_v13_0_0_read_sensor,
+	.get_fan_parameters = smu_v13_0_0_get_fan_parameters,
 	.feature_is_enabled = smu_cmn_feature_is_enabled,
 	.print_clk_levels = smu_v13_0_0_print_clk_levels,
 	.force_clk_levels = smu_v13_0_0_force_clk_levels,
