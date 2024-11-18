@@ -181,6 +181,8 @@ int xe_vm_destroy_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file);
 int xe_vm_bind_ioctl(struct drm_device *dev, void *data,
 		     struct drm_file *file);
+int xe_vm_convert_fence_ioctl(struct drm_device *dev, void *data,
+			      struct drm_file *file);
 
 void xe_vm_close_and_put(struct xe_vm *vm);
 

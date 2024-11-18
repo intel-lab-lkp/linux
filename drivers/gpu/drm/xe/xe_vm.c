@@ -6,6 +6,7 @@
 #include "xe_vm.h"
 
 #include <linux/dma-fence-array.h>
+#include <linux/dma-fence-chain.h>
 #include <linux/nospec.h>
 
 #include <drm/drm_exec.h>
@@ -441,21 +442,18 @@ int xe_vm_validate_rebind(struct xe_vm *vm, struct drm_exec *exec,
 }
 
 static int xe_preempt_work_begin(struct drm_exec *exec, struct xe_vm *vm,
-				 bool *done)
+				 int extra_fence_count, bool *done)
 {
 	int err;
+
+	*done = false;
 
 	err = drm_gpuvm_prepare_vm(&vm->gpuvm, exec, 0);
 	if (err)
 		return err;
 
-	if (xe_vm_is_idle(vm)) {
+	if (xe_vm_in_preempt_fence_mode(vm) && xe_vm_is_idle(vm)) {
 		vm->preempt.rebind_deactivated = true;
-		*done = true;
-		return 0;
-	}
-
-	if (!preempt_fences_waiting(vm)) {
 		*done = true;
 		return 0;
 	}
@@ -463,6 +461,24 @@ static int xe_preempt_work_begin(struct drm_exec *exec, struct xe_vm *vm,
 	err = drm_gpuvm_prepare_objects(&vm->gpuvm, exec, 0);
 	if (err)
 		return err;
+
+	if (!preempt_fences_waiting(vm)) {
+		*done = true;
+
+		if (extra_fence_count) {
+			struct drm_gem_object *obj;
+			unsigned long index;
+
+			drm_exec_for_each_locked_object(exec, index, obj) {
+				err = dma_resv_reserve_fences(obj->resv,
+							      extra_fence_count);
+				if (err)
+					return err;
+			}
+		}
+
+		return 0;
+	}
 
 	err = wait_for_existing_preempt_fences(vm);
 	if (err)
@@ -474,7 +490,8 @@ static int xe_preempt_work_begin(struct drm_exec *exec, struct xe_vm *vm,
 	 * The fence reservation here is intended for the new preempt fences
 	 * we attach at the end of the rebind work.
 	 */
-	return xe_vm_validate_rebind(vm, exec, vm->preempt.num_exec_queues);
+	return xe_vm_validate_rebind(vm, exec, vm->preempt.num_exec_queues +
+				     extra_fence_count);
 }
 
 static void preempt_rebind_work_func(struct work_struct *w)
@@ -509,9 +526,9 @@ retry:
 	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
 
 	drm_exec_until_all_locked(&exec) {
-		bool done = false;
+		bool done;
 
-		err = xe_preempt_work_begin(&exec, vm, &done);
+		err = xe_preempt_work_begin(&exec, vm, 0, &done);
 		drm_exec_retry_on_contention(&exec);
 		if (err || done) {
 			drm_exec_fini(&exec);
@@ -1638,6 +1655,7 @@ static void vm_destroy_work_func(struct work_struct *w)
 		container_of(w, struct xe_vm, destroy_work);
 	struct xe_device *xe = vm->xe;
 	struct xe_tile *tile;
+	struct dma_fence *fence;
 	u8 id;
 
 	/* xe_vm_close_and_put was not called? */
@@ -1659,6 +1677,9 @@ static void vm_destroy_work_func(struct work_struct *w)
 
 	if (vm->xef)
 		xe_file_put(vm->xef);
+
+	dma_fence_chain_for_each(fence, vm->preempt.exported_fence);
+	dma_fence_put(vm->preempt.exported_fence);
 
 	kfree(vm);
 }
@@ -3402,4 +3423,212 @@ void xe_vm_snapshot_free(struct xe_vm_snapshot *snap)
 			mmput(snap->snap[i].mm);
 	}
 	kvfree(snap);
+}
+
+static int check_semaphores(struct xe_vm *vm, struct xe_sync_entry *syncs,
+			    struct drm_exec *exec, int num_syncs)
+{
+	int i, j;
+
+	for (i = 0; i < num_syncs; ++i) {
+		struct xe_bo *bo = syncs[i].bo;
+		struct drm_gem_object *obj = &bo->ttm.base;
+
+		if (bo->vm == vm)
+			continue;
+
+		for (j = 0; j < exec->num_objects; ++j) {
+			if (obj == exec->objects[j])
+				break;
+		}
+
+		if (j == exec->num_objects)
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+int xe_vm_convert_fence_ioctl(struct drm_device *dev, void *data,
+			      struct drm_file *file)
+{
+	struct xe_device *xe = to_xe_device(dev);
+	struct xe_file *xef = to_xe_file(file);
+	struct drm_xe_vm_convert_fence __user *args = data;
+	struct drm_xe_sync __user *syncs_user;
+	struct drm_xe_semaphore __user *semaphores_user;
+	struct xe_sync_entry *syncs = NULL;
+	struct xe_vm *vm;
+	int err = 0, i, num_syncs = 0;
+	bool done = false;
+	struct drm_exec exec;
+	unsigned int fence_count = 0;
+	LIST_HEAD(preempt_fences);
+	ktime_t end = 0;
+	long wait;
+	int __maybe_unused tries = 0;
+	struct dma_fence *fence, *prev = NULL;
+
+	if (XE_IOCTL_DBG(xe, args->extensions || args->flags ||
+			 args->reserved[0] || args->reserved[1] ||
+			 args->pad))
+		return -EINVAL;
+
+	vm = xe_vm_lookup(xef, args->vm_id);
+	if (XE_IOCTL_DBG(xe, !vm))
+		return -EINVAL;
+
+	err = down_write_killable(&vm->lock);
+	if (err)
+		goto put_vm;
+
+	if (XE_IOCTL_DBG(xe, xe_vm_is_closed_or_banned(vm))) {
+		err = -ENOENT;
+		goto release_vm_lock;
+	}
+
+	syncs = kcalloc(args->num_syncs * 2, sizeof(*syncs), GFP_KERNEL);
+	if (!syncs) {
+		err = -ENOMEM;
+		goto release_vm_lock;
+	}
+
+	syncs_user = u64_to_user_ptr(args->syncs);
+	semaphores_user = u64_to_user_ptr(args->semaphores);
+	for (i = 0; i < args->num_syncs; i++, num_syncs++) {
+		struct xe_sync_entry *sync = &syncs[i];
+		struct xe_sync_entry *semaphore_sync =
+			&syncs[args->num_syncs + i];
+
+		err = xe_sync_entry_parse(xe, xef, sync, &syncs_user[i],
+					  SYNC_PARSE_FLAG_DISALLOW_USER_FENCE);
+		if (err)
+			goto release_syncs;
+
+		err = xe_sync_semaphore_parse(xe, xef, semaphore_sync,
+					      &semaphores_user[i],
+					      sync->flags);
+		if (err) {
+			xe_sync_entry_cleanup(&syncs[i]);
+			goto release_syncs;
+		}
+	}
+
+retry:
+	if (xe_vm_userptr_check_repin(vm)) {
+		err = xe_vm_userptr_pin(vm);
+		if (err)
+			goto release_syncs;
+	}
+
+	drm_exec_init(&exec, DRM_EXEC_INTERRUPTIBLE_WAIT, 0);
+
+	drm_exec_until_all_locked(&exec) {
+		err = xe_preempt_work_begin(&exec, vm, num_syncs, &done);
+		drm_exec_retry_on_contention(&exec);
+		if (err) {
+			drm_exec_fini(&exec);
+			if (err && xe_vm_validate_should_retry(&exec, err, &end))
+				err = -EAGAIN;
+
+			goto release_syncs;
+		}
+	}
+
+	if (XE_IOCTL_DBG(xe, check_semaphores(vm, syncs + num_syncs,
+					      &exec, num_syncs))) {
+		err = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (!done) {
+		err = alloc_preempt_fences(vm, &preempt_fences, &fence_count);
+		if (err)
+			goto out_unlock;
+
+		wait = dma_resv_wait_timeout(xe_vm_resv(vm),
+					     DMA_RESV_USAGE_KERNEL,
+					     false, MAX_SCHEDULE_TIMEOUT);
+		if (wait <= 0) {
+			err = -ETIME;
+			goto out_unlock;
+		}
+	}
+
+#define retry_required(__tries, __vm) \
+	(IS_ENABLED(CONFIG_DRM_XE_USERPTR_INVAL_INJECT) ? \
+	(!(__tries)++ || __xe_vm_userptr_needs_repin(__vm)) : \
+	__xe_vm_userptr_needs_repin(__vm))
+
+	down_read(&vm->userptr.notifier_lock);
+	if (retry_required(tries, vm)) {
+		up_read(&vm->userptr.notifier_lock);
+		err = -EAGAIN;
+		goto out_unlock;
+	}
+
+#undef retry_required
+
+	/* Point of no return. */
+	xe_assert(vm->xe, list_empty(&vm->rebind_list));
+
+	for (i = 0; i < num_syncs; i++) {
+		struct xe_sync_entry *sync = &syncs[i];
+		struct xe_sync_entry *semaphore_sync = &syncs[num_syncs + i];
+
+		if (sync->flags & DRM_XE_SYNC_FLAG_SIGNAL) {
+			xe_sync_entry_signal(sync, semaphore_sync->fence);
+			xe_sync_entry_hw_fence_installed(semaphore_sync);
+
+			dma_fence_put(prev);
+			prev = dma_fence_get(vm->preempt.exported_fence);
+
+			dma_fence_chain_init(semaphore_sync->chain_fence,
+					     prev, semaphore_sync->fence,
+					     vm->preempt.seqno++);
+
+			vm->preempt.exported_fence =
+				&semaphore_sync->chain_fence->base;
+			semaphore_sync->chain_fence = NULL;
+
+			semaphore_sync->fence = NULL;   /* Ref owned by chain */
+		} else {
+			xe_sync_entry_signal(semaphore_sync, sync->fence);
+			drm_gpuvm_resv_add_fence(&vm->gpuvm, &exec,
+						 dma_fence_chain_contained(sync->fence),
+						 DMA_RESV_USAGE_BOOKKEEP,
+						 DMA_RESV_USAGE_BOOKKEEP);
+		}
+	}
+
+	dma_fence_chain_for_each(fence, prev);
+	dma_fence_put(prev);
+
+	if (!done) {
+		spin_lock(&vm->xe->ttm.lru_lock);
+		ttm_lru_bulk_move_tail(&vm->lru_bulk_move);
+		spin_unlock(&vm->xe->ttm.lru_lock);
+
+		arm_preempt_fences(vm, &preempt_fences);
+		resume_and_reinstall_preempt_fences(vm, &exec);
+	}
+	up_read(&vm->userptr.notifier_lock);
+
+out_unlock:
+	drm_exec_fini(&exec);
+release_syncs:
+	while (err != -EAGAIN && num_syncs--) {
+		xe_sync_entry_cleanup(&syncs[num_syncs]);
+		xe_sync_entry_cleanup(&syncs[args->num_syncs + num_syncs]);
+	}
+release_vm_lock:
+	if (err == -EAGAIN)
+		goto retry;
+	up_write(&vm->lock);
+put_vm:
+	xe_vm_put(vm);
+	free_preempt_fences(&preempt_fences);
+	kfree(syncs);
+
+	return err;
 }

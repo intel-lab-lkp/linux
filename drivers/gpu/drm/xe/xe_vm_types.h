@@ -254,6 +254,10 @@ struct xe_vm {
 		 * BOs
 		 */
 		struct work_struct rebind_work;
+		/** @seqno: Seqno of exported dma-fences */
+		u64 seqno;
+		/** @exported_fence: Chain of exported dma-fences */
+		struct dma_fence *exported_fence;
 	} preempt;
 
 	/** @um: unified memory state */

@@ -12,6 +12,14 @@ static struct xe_exec_queue *to_exec_queue(struct dma_fence_preempt *fence)
 	return container_of(fence, struct xe_preempt_fence, base)->q;
 }
 
+static struct dma_fence *
+xe_preempt_fence_preempt_delay(struct dma_fence_preempt *fence)
+{
+	struct xe_exec_queue *q = to_exec_queue(fence);
+
+	return q->vm->preempt.exported_fence ?: dma_fence_get_stub();
+}
+
 static int xe_preempt_fence_preempt(struct dma_fence_preempt *fence)
 {
 	struct xe_exec_queue *q = to_exec_queue(fence);
@@ -35,6 +43,7 @@ static void xe_preempt_fence_preempt_finished(struct dma_fence_preempt *fence)
 }
 
 static const struct dma_fence_preempt_ops xe_preempt_fence_ops = {
+	.preempt_delay = xe_preempt_fence_preempt_delay,
 	.preempt = xe_preempt_fence_preempt,
 	.preempt_wait = xe_preempt_fence_preempt_wait,
 	.preempt_finished = xe_preempt_fence_preempt_finished,
