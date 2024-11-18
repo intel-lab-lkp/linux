@@ -1704,14 +1704,15 @@ static int guc_exec_queue_suspend(struct xe_exec_queue *q)
 {
 	struct xe_gpu_scheduler *sched = &q->guc->sched;
 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_SUSPEND;
+	unsigned long flags;
 
 	if (exec_queue_killed_or_banned_or_wedged(q))
 		return -EINVAL;
 
-	xe_sched_msg_lock(sched);
+	xe_sched_msg_lock(sched, flags);
 	if (guc_exec_queue_try_add_msg(q, msg, SUSPEND))
 		q->guc->suspend_pending = true;
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_unlock(sched, flags);
 
 	return 0;
 }
@@ -1751,30 +1752,32 @@ static void guc_exec_queue_resume(struct xe_exec_queue *q)
 	struct xe_gpu_scheduler *sched = &q->guc->sched;
 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_RESUME;
 	struct xe_guc *guc = exec_queue_to_guc(q);
+	unsigned long flags;
 
 	xe_gt_assert(guc_to_gt(guc), !q->guc->suspend_pending);
 
-	xe_sched_msg_lock(sched);
+	xe_sched_msg_lock(sched, flags);
 	guc_exec_queue_try_add_msg(q, msg, RESUME);
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_unlock(sched, flags);
 }
 
 static void guc_exec_queue_kill_user(struct xe_exec_queue *q)
 {
 	struct xe_gpu_scheduler *sched = &q->guc->sched;
 	struct xe_sched_msg *msg = q->guc->static_msgs + STATIC_MSG_KILL_USER;
+	unsigned long flags;
 
 	if (exec_queue_extra_ref(q))
 		return;
 
 	set_exec_queue_banned(q);
 
-	xe_sched_msg_lock(sched);
+	xe_sched_msg_lock(sched, flags);
 	if (guc_exec_queue_try_add_msg(q, msg, KILL_USER)) {
 		set_exec_queue_extra_ref(q);
 		xe_exec_queue_get(q);
 	}
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_unlock(sched, flags);
 }
 
 static bool guc_exec_queue_reset_status(struct xe_exec_queue *q)

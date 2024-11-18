@@ -14,25 +14,27 @@ static void xe_sched_process_msg_queue(struct xe_gpu_scheduler *sched)
 static void xe_sched_process_msg_queue_if_ready(struct xe_gpu_scheduler *sched)
 {
 	struct xe_sched_msg *msg;
+	unsigned long flags;
 
-	xe_sched_msg_lock(sched);
+	xe_sched_msg_lock(sched, flags);
 	msg = list_first_entry_or_null(&sched->msgs, struct xe_sched_msg, link);
 	if (msg)
 		xe_sched_process_msg_queue(sched);
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_unlock(sched, flags);
 }
 
 static struct xe_sched_msg *
 xe_sched_get_msg(struct xe_gpu_scheduler *sched)
 {
 	struct xe_sched_msg *msg;
+	unsigned long flags;
 
-	xe_sched_msg_lock(sched);
+	xe_sched_msg_lock(sched, flags);
 	msg = list_first_entry_or_null(&sched->msgs,
 				       struct xe_sched_msg, link);
 	if (msg)
 		list_del_init(&msg->link);
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_unlock(sched, flags);
 
 	return msg;
 }
@@ -64,6 +66,7 @@ int xe_sched_init(struct xe_gpu_scheduler *sched,
 		  struct device *dev)
 {
 	sched->ops = xe_ops;
+	spin_lock_init(&sched->msg_lock);
 	INIT_LIST_HEAD(&sched->msgs);
 	INIT_WORK(&sched->work_process_msg, xe_sched_process_msg_work);
 
@@ -98,15 +101,17 @@ void xe_sched_submission_resume_tdr(struct xe_gpu_scheduler *sched)
 void xe_sched_add_msg(struct xe_gpu_scheduler *sched,
 		      struct xe_sched_msg *msg)
 {
-	xe_sched_msg_lock(sched);
+	unsigned long flags;
+
+	xe_sched_msg_lock(sched, flags);
 	xe_sched_add_msg_locked(sched, msg);
-	xe_sched_msg_unlock(sched);
+	xe_sched_msg_unlock(sched, flags);
 }
 
 void xe_sched_add_msg_locked(struct xe_gpu_scheduler *sched,
 			     struct xe_sched_msg *msg)
 {
-	lockdep_assert_held(&sched->base.job_list_lock);
+	lockdep_assert_held(&sched->msg_lock);
 
 	list_add_tail(&msg->link, &sched->msgs);
 	xe_sched_process_msg_queue(sched);
