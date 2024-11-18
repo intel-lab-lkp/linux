@@ -25,7 +25,7 @@ xe_preempt_fence_arm(struct xe_preempt_fence *pfence, struct xe_exec_queue *q,
 static inline struct xe_preempt_fence *
 to_preempt_fence(struct dma_fence *fence)
 {
-	return container_of(fence, struct xe_preempt_fence, base);
+	return container_of(fence, struct xe_preempt_fence, base.base);
 }
 
 /**

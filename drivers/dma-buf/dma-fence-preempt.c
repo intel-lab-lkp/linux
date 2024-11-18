@@ -8,11 +8,11 @@
 
 static void dma_fence_preempt_work_func(struct work_struct *w)
 {
-	bool cookie = dma_fence_begin_signalling();
 	struct dma_fence_preempt *pfence =
 		container_of(w, typeof(*pfence), work);
 	const struct dma_fence_preempt_ops *ops = pfence->ops;
 	int err = pfence->base.error;
+	bool cookie = dma_fence_begin_signalling();
 
 	if (!err) {
 		err = ops->preempt_wait(pfence);
@@ -23,6 +23,7 @@ static void dma_fence_preempt_work_func(struct work_struct *w)
 	dma_fence_signal(&pfence->base);
 	ops->preempt_finished(pfence);
 
+	/* The entire worker is signaling path, thus annotate the entirety */
 	dma_fence_end_signalling(cookie);
 }
 
@@ -109,7 +110,7 @@ EXPORT_SYMBOL(dma_fence_is_preempt);
  *
  * @fence: Preempt fence
  * @ops: Preempt fence operations
- * @wq: Work queue for preempt wait, should have WQ_MEM_RECLAIM set
+ * @wq: Work queue for preempt wait, must have WQ_MEM_RECLAIM set
  * @context: Fence context
  * @seqno: Fence seqence number
  */

@@ -4,73 +4,40 @@
  */
 
 #include "xe_preempt_fence.h"
-
-#include <linux/slab.h>
-
 #include "xe_exec_queue.h"
 #include "xe_vm.h"
 
-static void preempt_fence_work_func(struct work_struct *w)
+static struct xe_exec_queue *to_exec_queue(struct dma_fence_preempt *fence)
 {
-	bool cookie = dma_fence_begin_signalling();
-	struct xe_preempt_fence *pfence =
-		container_of(w, typeof(*pfence), preempt_work);
-	struct xe_exec_queue *q = pfence->q;
+	return container_of(fence, struct xe_preempt_fence, base)->q;
+}
 
-	if (pfence->error) {
-		dma_fence_set_error(&pfence->base, pfence->error);
-	} else if (!q->ops->reset_status(q)) {
-		int err = q->ops->suspend_wait(q);
+static int xe_preempt_fence_preempt(struct dma_fence_preempt *fence)
+{
+	struct xe_exec_queue *q = to_exec_queue(fence);
 
-		if (err)
-			dma_fence_set_error(&pfence->base, err);
-	} else {
-		dma_fence_set_error(&pfence->base, -ENOENT);
-	}
+	return q->ops->suspend(q);
+}
 
-	dma_fence_signal(&pfence->base);
-	/*
-	 * Opt for keep everything in the fence critical section. This looks really strange since we
-	 * have just signalled the fence, however the preempt fences are all signalled via single
-	 * global ordered-wq, therefore anything that happens in this callback can easily block
-	 * progress on the entire wq, which itself may prevent other published preempt fences from
-	 * ever signalling.  Therefore try to keep everything here in the callback in the fence
-	 * critical section. For example if something below grabs a scary lock like vm->lock,
-	 * lockdep should complain since we also hold that lock whilst waiting on preempt fences to
-	 * complete.
-	 */
+static int xe_preempt_fence_preempt_wait(struct dma_fence_preempt *fence)
+{
+	struct xe_exec_queue *q = to_exec_queue(fence);
+
+	return q->ops->suspend_wait(q);
+}
+
+static void xe_preempt_fence_preempt_finished(struct dma_fence_preempt *fence)
+{
+	struct xe_exec_queue *q = to_exec_queue(fence);
+
 	xe_vm_queue_rebind_worker(q->vm);
 	xe_exec_queue_put(q);
-	dma_fence_end_signalling(cookie);
 }
 
-static const char *
-preempt_fence_get_driver_name(struct dma_fence *fence)
-{
-	return "xe";
-}
-
-static const char *
-preempt_fence_get_timeline_name(struct dma_fence *fence)
-{
-	return "preempt";
-}
-
-static bool preempt_fence_enable_signaling(struct dma_fence *fence)
-{
-	struct xe_preempt_fence *pfence =
-		container_of(fence, typeof(*pfence), base);
-	struct xe_exec_queue *q = pfence->q;
-
-	pfence->error = q->ops->suspend(q);
-	queue_work(q->vm->xe->preempt_fence_wq, &pfence->preempt_work);
-	return true;
-}
-
-static const struct dma_fence_ops preempt_fence_ops = {
-	.get_driver_name = preempt_fence_get_driver_name,
-	.get_timeline_name = preempt_fence_get_timeline_name,
-	.enable_signaling = preempt_fence_enable_signaling,
+static const struct dma_fence_preempt_ops xe_preempt_fence_ops = {
+	.preempt = xe_preempt_fence_preempt,
+	.preempt_wait = xe_preempt_fence_preempt_wait,
+	.preempt_finished = xe_preempt_fence_preempt_finished,
 };
 
 /**
@@ -95,7 +62,6 @@ struct xe_preempt_fence *xe_preempt_fence_alloc(void)
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&pfence->link);
-	INIT_WORK(&pfence->preempt_work, preempt_fence_work_func);
 
 	return pfence;
 }
@@ -134,11 +100,11 @@ xe_preempt_fence_arm(struct xe_preempt_fence *pfence, struct xe_exec_queue *q,
 {
 	list_del_init(&pfence->link);
 	pfence->q = xe_exec_queue_get(q);
-	spin_lock_init(&pfence->lock);
-	dma_fence_init(&pfence->base, &preempt_fence_ops,
-		      &pfence->lock, context, seqno);
 
-	return &pfence->base;
+	dma_fence_preempt_init(&pfence->base, &xe_preempt_fence_ops,
+			       q->vm->xe->preempt_fence_wq, context, seqno);
+
+	return &pfence->base.base;
 }
 
 /**
@@ -169,5 +135,5 @@ xe_preempt_fence_create(struct xe_exec_queue *q,
 
 bool xe_fence_is_xe_preempt(const struct dma_fence *fence)
 {
-	return fence->ops == &preempt_fence_ops;
+	return dma_fence_is_preempt(fence);
 }

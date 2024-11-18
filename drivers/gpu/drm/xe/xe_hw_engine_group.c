@@ -163,7 +163,7 @@ int xe_hw_engine_group_add_exec_queue(struct xe_hw_engine_group *group, struct x
 	if (xe_vm_in_fault_mode(q->vm) && group->cur_mode == EXEC_MODE_DMA_FENCE) {
 		q->ops->suspend(q);
 		err = q->ops->suspend_wait(q);
-		if (err)
+		if (err == -ETIME)
 			goto err_suspend;
 
 		xe_hw_engine_group_resume_faulting_lr_jobs(group);
@@ -236,7 +236,7 @@ static int xe_hw_engine_group_suspend_faulting_lr_jobs(struct xe_hw_engine_group
 			continue;
 
 		err = q->ops->suspend_wait(q);
-		if (err)
+		if (err == -ETIME)
 			goto err_suspend;
 	}
 

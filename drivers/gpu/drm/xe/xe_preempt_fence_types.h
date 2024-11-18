@@ -6,8 +6,7 @@
 #ifndef _XE_PREEMPT_FENCE_TYPES_H_
 #define _XE_PREEMPT_FENCE_TYPES_H_
 
-#include <linux/dma-fence.h>
-#include <linux/workqueue.h>
+#include <linux/dma-fence-preempt.h>
 
 struct xe_exec_queue;
 
@@ -18,17 +17,11 @@ struct xe_exec_queue;
  */
 struct xe_preempt_fence {
 	/** @base: dma fence base */
-	struct dma_fence base;
+	struct dma_fence_preempt base;
 	/** @link: link into list of pending preempt fences */
 	struct list_head link;
 	/** @q: exec queue for this preempt fence */
 	struct xe_exec_queue *q;
-	/** @preempt_work: work struct which issues preemption */
-	struct work_struct preempt_work;
-	/** @lock: dma-fence fence lock */
-	spinlock_t lock;
-	/** @error: preempt fence is in error state */
-	int error;
 };
 
 #endif

@@ -1603,6 +1603,9 @@ static int guc_exec_queue_suspend_wait(struct xe_exec_queue *q)
 	struct xe_guc *guc = exec_queue_to_guc(q);
 	int ret;
 
+	if (exec_queue_reset(q) || exec_queue_killed_or_banned_or_wedged(q))
+		return -ECANCELED;
+
 	/*
 	 * Likely don't need to check exec_queue_killed() as we clear
 	 * suspend_pending upon kill but to be paranoid but races in which
