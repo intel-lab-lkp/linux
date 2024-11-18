@@ -40,7 +40,7 @@ static void fsnotify_unmount_inodes(struct super_block *sb)
 	struct inode *inode, *iput_inode = NULL;
 
 	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+	sb_for_each_inodes(inode, &sb->s_inodes) {
 		/*
 		 * We cannot __iget() an inode in state I_FREEING,
 		 * I_WILL_FREE, or I_NEW which is fine because by that point
