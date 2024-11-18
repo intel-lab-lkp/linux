@@ -263,3 +263,20 @@ void xe_hw_fence_init(struct dma_fence *fence, struct xe_hw_fence_ctx *ctx,
 
 	trace_xe_hw_fence_create(hw_fence);
 }
+
+void xe_hw_fence_user_init(struct dma_fence *fence, struct xe_device *xe,
+			   struct iosys_map seqno_map, u64 seqno)
+{
+	struct xe_hw_fence *hw_fence =
+		container_of(fence, typeof(*hw_fence), dma);
+
+	hw_fence->xe = xe;
+	snprintf(hw_fence->name, sizeof(hw_fence->name), "user");
+	hw_fence->seqno_map = seqno_map;
+
+	INIT_LIST_HEAD(&hw_fence->irq_link);
+	dma_fence_init(fence, &xe_hw_fence_ops, &xe->user_fence_irq.lock,
+		       dma_fence_context_alloc(1), seqno);
+
+	trace_xe_hw_fence_create(hw_fence);
+}

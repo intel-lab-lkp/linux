@@ -30,4 +30,7 @@ void xe_hw_fence_free(struct dma_fence *fence);
 
 void xe_hw_fence_init(struct dma_fence *fence, struct xe_hw_fence_ctx *ctx,
 		      struct iosys_map seqno_map);
+void xe_hw_fence_user_init(struct dma_fence *fence, struct xe_device *xe,
+			   struct iosys_map seqno_map, u64 seqno);
+
 #endif
