@@ -929,7 +929,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	if (IS_ERR(lrc->bo))
 		return PTR_ERR(lrc->bo);
 
-	lrc->submission_ring = xe_bo_create_pin_map(xe, tile, vm, ring_size,
+	lrc->submission_ring = xe_bo_create_pin_map(xe, tile, vm, SZ_32K,
 						    ttm_bo_type_kernel,
 						    XE_BO_FLAG_VRAM_IF_DGFX(tile) |
 						    XE_BO_FLAG_GGTT |
@@ -943,8 +943,7 @@ static int xe_lrc_init(struct xe_lrc *lrc, struct xe_hw_engine *hwe,
 	if (xe_gt_has_indirect_ring_state(gt)) {
 		lrc->flags |= XE_LRC_FLAG_INDIRECT_RING_STATE;
 
-		lrc->indirect_state = xe_bo_create_pin_map(xe, tile, vm,
-							   LRC_INDIRECT_RING_STATE_SIZE,
+		lrc->indirect_state = xe_bo_create_pin_map(xe, tile, vm, SZ_8K,
 							   ttm_bo_type_kernel,
 							   XE_BO_FLAG_VRAM_IF_DGFX(tile) |
 							   XE_BO_FLAG_GGTT |
