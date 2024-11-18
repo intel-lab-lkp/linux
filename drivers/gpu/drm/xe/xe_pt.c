@@ -1231,7 +1231,7 @@ static int vma_check_userptr(struct xe_vm *vm, struct xe_vma *vma,
 			       &vm->userptr.invalidated);
 		spin_unlock(&vm->userptr.invalidated_lock);
 
-		if (xe_vm_in_preempt_fence_mode(vm)) {
+		if (vm->preempt.num_exec_queues) {
 			struct dma_resv_iter cursor;
 			struct dma_fence *fence;
 			long err;
