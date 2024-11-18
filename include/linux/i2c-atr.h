@@ -65,6 +65,7 @@ struct i2c_atr_adap_desc {
  * @dev:          The device acting as an ATR
  * @ops:          Driver-specific callbacks
  * @max_adapters: Maximum number of child adapters
+ * @flags:        Options to pass to the ATR framework. Allowed flags are I2C_ATR_FLAG_*
  *
  * The new ATR helper is connected to the parent adapter but has no child
  * adapters. Call i2c_atr_add_adapter() to add some.
@@ -74,7 +75,17 @@ struct i2c_atr_adap_desc {
  * Return: pointer to the new ATR helper object, or ERR_PTR
  */
 struct i2c_atr *i2c_atr_new(struct i2c_adapter *parent, struct device *dev,
-			    const struct i2c_atr_ops *ops, int max_adapters);
+			    const struct i2c_atr_ops *ops, int max_adapters,
+			    u16 flags);
+
+/*
+ * I2C ATR flags
+ *
+ * I2C_ATR_FLAG_DYNAMIC_C2A: Dynamically update translation table when transfers
+ *                           targeting unmapped addresses are requested.
+ *
+ */
+#define I2C_ATR_FLAG_DYNAMIC_C2A BIT(0)
 
 /**
  * i2c_atr_delete - Delete an I2C ATR helper.
