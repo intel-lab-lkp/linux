@@ -316,6 +316,75 @@ static int xe_pci_barrier_mmap(struct file *filp,
 	return 0;
 }
 
+static vm_fault_t doorbell_fault(struct vm_fault *vmf)
+{
+	struct drm_device *dev = vmf->vma->vm_private_data;
+	struct vm_area_struct *vma = vmf->vma;
+	vm_fault_t ret = VM_FAULT_NOPAGE;
+	pgprot_t prot;
+	int idx;
+
+	prot = vm_get_page_prot(vma->vm_flags);
+
+	if (drm_dev_enter(dev, &idx)) {
+		unsigned long pfn;
+
+		pfn = PHYS_PFN(pci_resource_start(to_pci_dev(dev->dev), 0) +
+			       (XE_MMIO_DOORBELL_PFN_START << XE_PTE_SHIFT));
+		pfn += vma->vm_pgoff & (XE_MMIO_DOORBELL_PFN_COUNT - 1);
+
+		ret = vmf_insert_pfn_prot(vma, vma->vm_start, pfn,
+					  pgprot_noncached(prot));
+		drm_dev_exit(idx);
+	} else {
+		struct page *page;
+
+		/* Allocate new dummy page to map all the VA range in this VMA to it*/
+		page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+		if (!page)
+			return VM_FAULT_OOM;
+
+		/* Set the page to be freed using drmm release action */
+		if (drmm_add_action_or_reset(dev, barrier_release_dummy_page, page))
+			return VM_FAULT_OOM;
+
+		ret = vmf_insert_pfn_prot(vma, vma->vm_start, page_to_pfn(page),
+					  prot);
+	}
+
+	return ret;
+}
+
+static const struct vm_operations_struct vm_ops_doorbell = {
+	.open = barrier_open,
+	.close = barrier_close,
+	.fault = doorbell_fault,
+};
+
+static int xe_mmio_doorbell_mmap(struct file *filp,
+				 struct vm_area_struct *vma)
+{
+	struct drm_file *priv = filp->private_data;
+	struct drm_device *dev = priv->minor->dev;
+
+	if (vma->vm_end - vma->vm_start > SZ_4K)
+		return -EINVAL;
+
+	if (is_cow_mapping(vma->vm_flags))
+		return -EINVAL;
+
+	if (vma->vm_flags & VM_EXEC)
+		return -EINVAL;
+
+	vm_flags_clear(vma, VM_MAYEXEC);
+	vm_flags_set(vma, VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
+	vma->vm_ops = &vm_ops_doorbell;
+	vma->vm_private_data = dev;
+	drm_dev_get(vma->vm_private_data);
+
+	return 0;
+}
+
 static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct drm_file *priv = filp->private_data;
@@ -327,6 +396,10 @@ static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
 	switch (vma->vm_pgoff) {
 	case XE_PCI_BARRIER_MMAP_OFFSET >> XE_PTE_SHIFT:
 		return xe_pci_barrier_mmap(filp, vma);
+	case (XE_MMIO_DOORBELL_MMAP_OFFSET >> XE_PTE_SHIFT) ...
+		((XE_MMIO_DOORBELL_MMAP_OFFSET >> XE_PTE_SHIFT) +
+		XE_MMIO_DOORBELL_PFN_COUNT - 1):
+		return xe_mmio_doorbell_mmap(filp, vma);
 	}
 
 	return drm_gem_mmap(filp, vma);
