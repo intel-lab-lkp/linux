@@ -838,6 +838,21 @@ static inline bool system_supports_poe(void)
 		alternative_has_cap_unlikely(ARM64_HAS_S1POE);
 }
 
+static inline bool system_supports_bbmlv2(void)
+{
+	return cpus_have_final_boot_cap(ARM64_HAS_BBMLV2);
+}
+
+static inline bool bbmlv2_available(void)
+{
+	u64 mmfr2;
+	u32 bbm;
+
+	mmfr2 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR2_EL1);
+	bbm = cpuid_feature_extract_unsigned_field(mmfr2, ID_AA64MMFR2_EL1_BBM_SHIFT);
+	return bbm == ID_AA64MMFR2_EL1_BBM_2;
+}
+
 int do_emulate_mrs(struct pt_regs *regs, u32 sys_reg, u32 rt);
 bool try_emulate_mrs(struct pt_regs *regs, u32 isn);
 
