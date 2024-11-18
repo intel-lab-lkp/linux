@@ -1666,11 +1666,13 @@ void intel_fbc_flush(struct drm_i915_private *i915,
 
 int intel_fbc_atomic_check(struct intel_atomic_state *state)
 {
-	struct intel_plane_state __maybe_unused *plane_state;
+	struct intel_plane_state __maybe_unused *new_plane_state;
+	struct intel_plane_state __maybe_unused *old_plane_state;
 	struct intel_plane *plane;
 	int i;
 
-	for_each_new_intel_plane_in_state(state, plane, plane_state, i) {
+	for_each_oldnew_intel_plane_in_state(state, plane, old_plane_state,
+					     new_plane_state, i) {
 		int ret;
 
 		ret = intel_fbc_check_plane(state, plane);
