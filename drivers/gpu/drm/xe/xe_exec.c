@@ -132,7 +132,8 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	if (XE_IOCTL_DBG(xe, !q))
 		return -ENOENT;
 
-	if (XE_IOCTL_DBG(xe, q->flags & EXEC_QUEUE_FLAG_VM)) {
+	if (XE_IOCTL_DBG(xe, q->flags & EXEC_QUEUE_FLAG_VM ||
+			 xe_exec_queue_is_usermap(q))) {
 		err = -EINVAL;
 		goto err_exec_queue;
 	}
