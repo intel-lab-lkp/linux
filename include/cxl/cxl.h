@@ -12,6 +12,36 @@ enum cxl_resource {
 	CXL_RES_PMEM,
 };
 
+/* Capabilities as defined for:
+ *
+ *	Component Registers (Table 8-22 CXL 3.1 specification)
+ *	Device Registers (8.2.8.2.1 CXL 3.1 specification)
+ */
+
+enum cxl_dev_cap {
+	/* capabilities from Component Registers */
+	CXL_DEV_CAP_RAS,
+	CXL_DEV_CAP_SEC,
+	CXL_DEV_CAP_LINK,
+	CXL_DEV_CAP_HDM,
+	CXL_DEV_CAP_SEC_EXT,
+	CXL_DEV_CAP_IDE,
+	CXL_DEV_CAP_SNOOP_FILTER,
+	CXL_DEV_CAP_TIMEOUT_AND_ISOLATION,
+	CXL_DEV_CAP_CACHEMEM_EXT,
+	CXL_DEV_CAP_BI_ROUTE_TABLE,
+	CXL_DEV_CAP_BI_DECODER,
+	CXL_DEV_CAP_CACHEID_ROUTE_TABLE,
+	CXL_DEV_CAP_CACHEID_DECODER,
+	CXL_DEV_CAP_HDM_EXT,
+	CXL_DEV_CAP_METADATA_EXT,
+	/* capabilities from Device Registers */
+	CXL_DEV_CAP_DEV_STATUS,
+	CXL_DEV_CAP_MAILBOX_PRIMARY,
+	CXL_DEV_CAP_MEMDEV,
+	CXL_MAX_CAPS = 32
+};
+
 struct cxl_dev_state *cxl_accel_state_create(struct device *dev);
 
 void cxl_set_dvsec(struct cxl_dev_state *cxlds, u16 dvsec);
