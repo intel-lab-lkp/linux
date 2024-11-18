@@ -123,7 +123,8 @@ int xe_bo_evict_all(struct xe_device *xe)
  * @xe: xe device
  *
  * Move kernel BOs from temporary (typically system) memory to VRAM via CPU. All
- * moves done via TTM calls.
+ * moves done via TTM calls. All GGTT are restored too, first by clearing GGTT
+ * to known state and then restoring individual BO's GGTT mappings.
  *
  * This function should be called early, before trying to init the GT, on device
  * resume.
@@ -131,7 +132,12 @@ int xe_bo_evict_all(struct xe_device *xe)
 int xe_bo_restore_kernel(struct xe_device *xe)
 {
 	struct xe_bo *bo;
+	struct xe_tile *tile;
+	u8 id;
 	int ret;
+
+	for_each_tile(tile, xe, id)
+		xe_ggtt_clear(tile->mem.ggtt);
 
 	spin_lock(&xe->pinned.lock);
 	for (;;) {

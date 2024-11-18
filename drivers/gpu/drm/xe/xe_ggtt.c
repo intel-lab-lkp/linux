@@ -140,7 +140,7 @@ static void xe_ggtt_set_pte_and_flush(struct xe_ggtt *ggtt, u64 addr, u64 pte)
 	ggtt_update_access_counter(ggtt);
 }
 
-static void xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
+static void __xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
 {
 	u16 pat_index = tile_to_xe(ggtt->tile)->pat.idx[XE_CACHE_WB];
 	u64 end = start + size - 1;
@@ -158,6 +158,19 @@ static void xe_ggtt_clear(struct xe_ggtt *ggtt, u64 start, u64 size)
 		ggtt->pt_ops->ggtt_set_pte(ggtt, start, scratch_pte);
 		start += XE_PAGE_SIZE;
 	}
+}
+
+static void xe_ggtt_initial_clear(struct xe_ggtt *ggtt);
+
+/**
+ * xe_ggtt_clear() - GGTT clear
+ * @ggtt: the &xe_ggtt to be cleared
+ *
+ * Clear all GGTT to a known state
+ */
+void xe_ggtt_clear(struct xe_ggtt *ggtt)
+{
+	xe_ggtt_initial_clear(ggtt);
 }
 
 static void ggtt_fini_early(struct drm_device *drm, void *arg)
@@ -277,7 +290,7 @@ static void xe_ggtt_initial_clear(struct xe_ggtt *ggtt)
 	/* Display may have allocated inside ggtt, so be careful with clearing here */
 	mutex_lock(&ggtt->lock);
 	drm_mm_for_each_hole(hole, &ggtt->mm, start, end)
-		xe_ggtt_clear(ggtt, start, end - start);
+		__xe_ggtt_clear(ggtt, start, end - start);
 
 	xe_ggtt_invalidate(ggtt);
 	mutex_unlock(&ggtt->lock);
@@ -294,7 +307,7 @@ static void ggtt_node_remove(struct xe_ggtt_node *node)
 
 	mutex_lock(&ggtt->lock);
 	if (bound)
-		xe_ggtt_clear(ggtt, node->base.start, node->base.size);
+		__xe_ggtt_clear(ggtt, node->base.start, node->base.size);
 	drm_mm_remove_node(&node->base);
 	node->base.size = 0;
 	mutex_unlock(&ggtt->lock);
