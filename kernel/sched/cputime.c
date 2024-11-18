@@ -571,13 +571,9 @@ void cputime_adjust(struct task_cputime *curr, struct prev_cputime *prev,
 	 * Once a task gets some ticks, the monotonicity code at 'update:'
 	 * will ensure things converge to the observed ratio.
 	 */
-	if (stime == 0) {
-		utime = rtime;
-		goto update;
-	}
-
-	if (utime == 0) {
-		stime = rtime;
+	if (stime == 0 || utime == 0) {
+		if (utime == 0)
+			stime = rtime;
 		goto update;
 	}
 
