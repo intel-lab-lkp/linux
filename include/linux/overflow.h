@@ -263,7 +263,7 @@ static inline bool __must_check __must_check_overflow(bool overflow)
  * with any overflow causing the return value to be SIZE_MAX. The
  * lvalue must be size_t to avoid implicit type conversion.
  */
-static inline size_t __must_check size_mul(size_t factor1, size_t factor2)
+static inline size_t __must_check __size_mul(size_t factor1, size_t factor2)
 {
 	size_t bytes;
 
@@ -272,6 +272,18 @@ static inline size_t __must_check size_mul(size_t factor1, size_t factor2)
 
 	return bytes;
 }
+
+#define size_mul(a, b) ({						\
+	typeof(a) __a = (a);						\
+	typeof(b) __b = (b);						\
+	unsigned long __res;						\
+	if (UINT_MAX == SIZE_MAX &&					\
+	    (__a >= (u64)SIZE_MAX || __b >= (u64)SIZE_MAX))		\
+		__res = ULONG_MAX;					\
+	else								\
+		__res = __size_mul(__a, __b);				\
+	__res;								\
+})
 
 /**
  * size_add() - Calculate size_t addition with saturation at SIZE_MAX
@@ -282,7 +294,7 @@ static inline size_t __must_check size_mul(size_t factor1, size_t factor2)
  * with any overflow causing the return value to be SIZE_MAX. The
  * lvalue must be size_t to avoid implicit type conversion.
  */
-static inline size_t __must_check size_add(size_t addend1, size_t addend2)
+static inline size_t __must_check __size_add(size_t addend1, size_t addend2)
 {
 	size_t bytes;
 
@@ -291,6 +303,18 @@ static inline size_t __must_check size_add(size_t addend1, size_t addend2)
 
 	return bytes;
 }
+
+#define size_add(a, b) ({						\
+	typeof(a) __a = (a);						\
+	typeof(b) __b = (b);						\
+	unsigned long __res;						\
+	if (UINT_MAX == SIZE_MAX &&					\
+	    (__a >= (u64)SIZE_MAX || __b >= (u64)SIZE_MAX))		\
+		__res = ULONG_MAX;					\
+	else								\
+		__res = __size_add(__a, __b);				\
+	__res;								\
+})
 
 /**
  * size_sub() - Calculate size_t subtraction with saturation at SIZE_MAX
