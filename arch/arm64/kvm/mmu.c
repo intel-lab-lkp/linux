@@ -180,11 +180,6 @@ int kvm_arch_flush_remote_tlbs_range(struct kvm *kvm,
 	return 0;
 }
 
-static bool kvm_is_device_pfn(unsigned long pfn)
-{
-	return !pfn_is_map_memory(pfn);
-}
-
 static void *stage2_memcache_zalloc_page(void *arg)
 {
 	struct kvm_mmu_memory_cache *mc = arg;
@@ -1430,6 +1425,23 @@ static bool kvm_vma_mte_allowed(struct vm_area_struct *vma)
 	return vma->vm_flags & VM_MTE_ALLOWED;
 }
 
+/*
+ * Determine the memory region cacheability from VMA's pgprot. This
+ * is used to set the stage 2 PTEs.
+ */
+static unsigned long mapping_type(pgprot_t page_prot)
+{
+	return FIELD_GET(PTE_ATTRINDX_MASK, pgprot_val(page_prot));
+}
+
+/*
+ * Determine if the mapping type is normal cacheable.
+ */
+static bool mapping_type_normal_cacheable(unsigned long mt)
+{
+	return (mt == MT_NORMAL || mt == MT_NORMAL_TAGGED);
+}
+
 static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 			  struct kvm_s2_trans *nested,
 			  struct kvm_memory_slot *memslot, unsigned long hva,
@@ -1438,8 +1450,9 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	int ret = 0;
 	bool write_fault, writable, force_pte = false;
 	bool exec_fault, mte_allowed;
-	bool device = false, vfio_allow_any_uc = false;
+	bool noncacheable = false, vfio_allow_any_uc = false;
 	unsigned long mmu_seq;
+	unsigned long mt;
 	phys_addr_t ipa = fault_ipa;
 	struct kvm *kvm = vcpu->kvm;
 	struct kvm_mmu_memory_cache *memcache = &vcpu->arch.mmu_page_cache;
@@ -1568,6 +1581,17 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	vfio_allow_any_uc = vma->vm_flags & VM_ALLOW_ANY_UNCACHED;
 
+	mt = mapping_type(vma->vm_page_prot);
+
+	/*
+	 * Check for potentially ineligible or unsafe conditions for
+	 * cacheable mappings.
+	 */
+	if (vma->vm_flags & VM_IO)
+		noncacheable = true;
+	else if (!mte_allowed && kvm_has_mte(kvm))
+		noncacheable = true;
+
 	/* Don't use the VMA after the unlock -- it may have vanished */
 	vma = NULL;
 
@@ -1591,19 +1615,15 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	if (is_error_noslot_pfn(pfn))
 		return -EFAULT;
 
-	if (kvm_is_device_pfn(pfn)) {
-		/*
-		 * If the page was identified as device early by looking at
-		 * the VMA flags, vma_pagesize is already representing the
-		 * largest quantity we can map.  If instead it was mapped
-		 * via __kvm_faultin_pfn(), vma_pagesize is set to PAGE_SIZE
-		 * and must not be upgraded.
-		 *
-		 * In both cases, we don't let transparent_hugepage_adjust()
-		 * change things at the last minute.
-		 */
-		device = true;
-	} else if (logging_active && !write_fault) {
+	/*
+	 * pfn_valid() indicates to the code if there is a struct page, or
+	 * if the memory is in the kernel map. Any memory region otherwise
+	 * is unsafe to be cacheable.
+	 */
+	if (!pfn_valid(pfn))
+		noncacheable = true;
+
+	if (!noncacheable && logging_active && !write_fault) {
 		/*
 		 * Only actually map the page as writable if this was a write
 		 * fault.
@@ -1611,7 +1631,11 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		writable = false;
 	}
 
-	if (exec_fault && device)
+	/*
+	 * Do not allow exec fault; unless the memory is determined safely
+	 * to be Normal cacheable.
+	 */
+	if (exec_fault && (noncacheable || !mapping_type_normal_cacheable(mt)))
 		return -ENOEXEC;
 
 	/*
@@ -1641,10 +1665,19 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	}
 
 	/*
+	 * If the page was identified as device early by looking at
+	 * the VMA flags, vma_pagesize is already representing the
+	 * largest quantity we can map.  If instead it was mapped
+	 * via gfn_to_pfn_prot(), vma_pagesize is set to PAGE_SIZE
+	 * and must not be upgraded.
+	 *
+	 * In both cases, we don't let transparent_hugepage_adjust()
+	 * change things at the last minute.
+	 *
 	 * If we are not forced to use page mapping, check if we are
 	 * backed by a THP and thus use block mapping if possible.
 	 */
-	if (vma_pagesize == PAGE_SIZE && !(force_pte || device)) {
+	if (vma_pagesize == PAGE_SIZE && !(force_pte || noncacheable)) {
 		if (fault_is_perm && fault_granule > PAGE_SIZE)
 			vma_pagesize = fault_granule;
 		else
@@ -1658,7 +1691,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		}
 	}
 
-	if (!fault_is_perm && !device && kvm_has_mte(kvm)) {
+	if (!fault_is_perm && !noncacheable && kvm_has_mte(kvm)) {
 		/* Check the VMM hasn't introduced a new disallowed VMA */
 		if (mte_allowed) {
 			sanitise_mte_tags(kvm, pfn, vma_pagesize);
@@ -1674,7 +1707,15 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	if (exec_fault)
 		prot |= KVM_PGTABLE_PROT_X;
 
-	if (device) {
+	/*
+	 * If any of the following pgprot modifiers are applied on the pgprot,
+	 * consider as device memory and map in Stage 2 as device or
+	 * Normal noncached:
+	 * pgprot_noncached
+	 * pgprot_writecombine
+	 * pgprot_device
+	 */
+	if (!mapping_type_normal_cacheable(mt)) {
 		if (vfio_allow_any_uc)
 			prot |= KVM_PGTABLE_PROT_NORMAL_NC;
 		else
@@ -1682,6 +1723,20 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	} else if (cpus_have_final_cap(ARM64_HAS_CACHE_DIC) &&
 		   (!nested || kvm_s2_trans_executable(nested))) {
 		prot |= KVM_PGTABLE_PROT_X;
+	}
+
+	/*
+	 *  When FWB is unsupported KVM needs to do cache flushes
+	 *  (via dcache_clean_inval_poc()) of the underlying memory. This is
+	 *  only possible if the memory is already mapped into the kernel map
+	 *  at the usual spot.
+	 *
+	 *  Validate that there is a struct page for the PFN which maps
+	 *  to the KVA that the flushing code expects.
+	 */
+	if (!stage2_has_fwb(pgt) && !(pfn_valid(pfn))) {
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
 	/*
