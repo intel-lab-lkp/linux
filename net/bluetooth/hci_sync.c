@@ -4416,6 +4416,15 @@ static int hci_le_read_num_support_adv_sets_sync(struct hci_dev *hdev)
 	if (!ext_adv_capable(hdev))
 		return 0;
 
+	/* Checking for extended advertising capabilities is not enough; refine
+	 * by checking if the HCI_LE_Read_Number_of_Supported_Advertising_Sets
+	 * command is supported. Since this command is part of the LE init
+	 * stage 3, the initialization will fail whenever the command is not
+	 * supported for devices that indicate extended advertising features.
+	 */
+	if (!(hdev->commands[36] & 0x80))
+		return 0;
+
 	return __hci_cmd_sync_status(hdev,
 				     HCI_OP_LE_READ_NUM_SUPPORTED_ADV_SETS,
 				     0, NULL, HCI_CMD_TIMEOUT);
