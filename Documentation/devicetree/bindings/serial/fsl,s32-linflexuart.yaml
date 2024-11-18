@@ -34,10 +34,24 @@ properties:
   interrupts:
     maxItems: 1
 
+  clocks:
+    items:
+      - description:
+          ipg clock drives the access to the LINFlexD
+          iomapped registers
+      - description: lin is the frequency of the baud clock
+
+  clock-names:
+    items:
+      - const: ipg
+      - const: lin
+
 required:
   - compatible
   - reg
   - interrupts
+  - clocks
+  - clock-names
 
 unevaluatedProperties: false
 
@@ -47,4 +61,6 @@ examples:
         compatible = "fsl,s32v234-linflexuart";
         reg = <0x40053000 0x1000>;
         interrupts = <0 59 4>;
+        clocks = <&clks 132>, <&clks 131>;
+        clock-names = "ipg", "lin";
     };
