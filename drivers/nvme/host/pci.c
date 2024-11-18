@@ -3287,7 +3287,8 @@ static int nvme_suspend(struct device *dev)
 	 */
 	if (pm_suspend_via_firmware() || !ctrl->npss ||
 	    !pcie_aspm_enabled(pdev) ||
-	    (ndev->ctrl.quirks & NVME_QUIRK_SIMPLE_SUSPEND))
+	    (ndev->ctrl.quirks & NVME_QUIRK_SIMPLE_SUSPEND) ||
+	    pdev->d3cold_allowed)
 		return nvme_disable_prepare_reset(ndev, true);
 
 	nvme_start_freeze(ctrl);
