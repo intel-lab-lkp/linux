@@ -265,7 +265,7 @@ The following briefly shows how a waking task is scheduled and executed.
      rather than performing them immediately. There can be up to
      ``ops.dispatch_max_batch`` pending tasks.
 
-   * ``scx_bpf_consume()`` tranfers a task from the specified non-local DSQ
+   * ``scx_bpf_consume()`` transfer a task from the specified non-local DSQ
      to the dispatching DSQ. This function cannot be called with any BPF
      locks held. ``scx_bpf_consume()`` flushes the pending dispatched tasks
      before trying to consume the specified DSQ.
