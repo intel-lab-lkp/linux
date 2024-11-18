@@ -169,6 +169,44 @@ static const u32 icl_hdr_plane_formats[] = {
 	DRM_FORMAT_XVYU16161616,
 };
 
+static u64 tgl_asyn_modifiers[] = {
+	DRM_FORMAT_MOD_LINEAR,
+	I915_FORMAT_MOD_X_TILED,
+	I915_FORMAT_MOD_Y_TILED,
+	I915_FORMAT_MOD_4_TILED,
+	I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
+	I915_FORMAT_MOD_4_TILED_MTL_RC_CCS,
+	I915_FORMAT_MOD_4_TILED_DG2_RC_CCS,
+	I915_FORMAT_MOD_4_TILED_BMG_CCS,
+	I915_FORMAT_MOD_4_TILED_LNL_CCS,
+};
+
+static u64 icl_async_modifiers[] = {
+	I915_FORMAT_MOD_X_TILED,
+	I915_FORMAT_MOD_Y_TILED,
+	I915_FORMAT_MOD_Yf_TILED,
+	I915_FORMAT_MOD_Y_TILED_CCS,
+	I915_FORMAT_MOD_Yf_TILED_CCS,
+};
+
+static u64 skl_async_modifiers[] = {
+	I915_FORMAT_MOD_X_TILED,
+	I915_FORMAT_MOD_Y_TILED,
+	I915_FORMAT_MOD_Yf_TILED,
+};
+
+static u32 intel_async_formats[] = {
+	DRM_FORMAT_RGB565,
+	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ARGB8888,
+	DRM_FORMAT_ABGR8888,
+	DRM_FORMAT_XRGB2101010,
+	DRM_FORMAT_XBGR2101010,
+	DRM_FORMAT_XRGB16161616F,
+	DRM_FORMAT_XBGR16161616F,
+};
+
 int skl_format_to_fourcc(int format, bool rgb_order, bool alpha)
 {
 	switch (format) {
@@ -2480,6 +2518,7 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 	unsigned int supported_rotations;
 	unsigned int supported_csc;
 	const u64 *modifiers;
+	u64 *async_modifiers;
 	const u32 *formats;
 	int num_formats;
 	int ret;
@@ -2575,6 +2614,18 @@ skl_universal_plane_create(struct drm_i915_private *dev_priv,
 
 	if (ret)
 		goto fail;
+
+	if (DISPLAY_VER(dev_priv) >= 12)
+		async_modifiers = tgl_asyn_modifiers;
+	else if (DISPLAY_VER(dev_priv) == 11)
+		async_modifiers = icl_async_modifiers;
+	else
+		async_modifiers = skl_async_modifiers;
+
+	drm_plane_create_format_blob(&dev_priv->drm, &plane->base,
+				     async_modifiers, sizeof(async_modifiers),
+				     intel_async_formats,
+				     sizeof(intel_async_formats), true);
 
 	if (DISPLAY_VER(dev_priv) >= 13)
 		supported_rotations = DRM_MODE_ROTATE_0 | DRM_MODE_ROTATE_180;
