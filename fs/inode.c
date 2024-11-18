@@ -863,7 +863,7 @@ void evict_inodes(struct super_block *sb)
 
 again:
 	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry_safe(inode, next, &sb->s_inodes, i_sb_list) {
+	sb_for_each_inodes_safe(inode, next, &sb->s_inodes) {
 		if (atomic_read(&inode->i_count))
 			continue;
 
@@ -913,7 +913,7 @@ void invalidate_inodes(struct super_block *sb)
 
 again:
 	spin_lock(&sb->s_inode_list_lock);
-	list_for_each_entry_safe(inode, next, &sb->s_inodes, i_sb_list) {
+	sb_for_each_inodes_safe(inode, next, &sb->s_inodes) {
 		spin_lock(&inode->i_lock);
 		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
 			spin_unlock(&inode->i_lock);
