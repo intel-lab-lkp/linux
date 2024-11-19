@@ -70,7 +70,7 @@ static void mlx5_add_cq_to_tasklet(struct mlx5_core_cq *cq,
 				   struct mlx5_eqe *eqe)
 {
 	unsigned long flags;
-	struct mlx5_eq_tasklet *tasklet_ctx = cq->tasklet_ctx.priv;
+	struct mlx5_eq_tasklet *tasklet_ctx = &cq->eq->tasklet_ctx;
 	bool schedule_tasklet = false;
 
 	spin_lock_irqsave(&tasklet_ctx->lock, flags);
@@ -119,14 +119,13 @@ int mlx5_create_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq,
 	cq->cqn = MLX5_GET(create_cq_out, out, cqn);
 	cq->cons_index = 0;
 	cq->arm_sn     = 0;
+	/* assuming CQ will be deleted before the EQ */
 	cq->eq         = eq;
 	cq->uid = MLX5_GET(create_cq_in, in, uid);
 	refcount_set(&cq->refcount, 1);
 	init_completion(&cq->free);
 	if (!cq->comp)
 		cq->comp = mlx5_add_cq_to_tasklet;
-	/* assuming CQ will be deleted before the EQ */
-	cq->tasklet_ctx.priv = &eq->tasklet_ctx;
 	INIT_LIST_HEAD(&cq->tasklet_ctx.list);
 
 	/* Add to comp EQ CQ tree to recv comp events */
