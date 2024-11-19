@@ -411,8 +411,6 @@ struct wmax_u32_args {
 };
 
 static struct platform_device *platform_device;
-static struct device_attribute *zone_dev_attrs;
-static struct attribute **zone_attrs;
 static struct platform_zone *zone_data;
 static struct platform_profile_handler pp_handler;
 static enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
@@ -624,10 +622,12 @@ static ssize_t store_control_state(struct device *dev,
 static DEVICE_ATTR(lighting_control_state, 0644, show_control_state,
 		   store_control_state);
 
-static int alienware_zone_init(struct platform_device *dev)
+static int alienware_zone_init(struct platform_device *pdev)
 {
 	u8 zone;
 	char *name;
+	struct device_attribute *zone_dev_attrs;
+	struct attribute **zone_attrs;
 
 	if (interface == WMAX) {
 		lighting_control_state = WMAX_RUNNING;
@@ -644,28 +644,25 @@ static int alienware_zone_init(struct platform_device *dev)
 	 *        the lighting control + null terminated
 	 *      - zone_data num_zones is for the distinct zones
 	 */
-	zone_dev_attrs =
-	    kcalloc(quirks->num_zones + 1, sizeof(struct device_attribute),
-		    GFP_KERNEL);
+	zone_dev_attrs = devm_kcalloc(&pdev->dev, quirks->num_zones + 1,
+				      sizeof(struct device_attribute), GFP_KERNEL);
 	if (!zone_dev_attrs)
 		return -ENOMEM;
 
-	zone_attrs =
-	    kcalloc(quirks->num_zones + 2, sizeof(struct attribute *),
-		    GFP_KERNEL);
+	zone_attrs = devm_kcalloc(&pdev->dev, quirks->num_zones + 2,
+				  sizeof(struct attribute *), GFP_KERNEL);
 	if (!zone_attrs)
 		return -ENOMEM;
 
-	zone_data =
-	    kcalloc(quirks->num_zones, sizeof(struct platform_zone),
-		    GFP_KERNEL);
+	zone_data = devm_kcalloc(&pdev->dev, quirks->num_zones,
+				 sizeof(struct platform_zone), GFP_KERNEL);
 	if (!zone_data)
 		return -ENOMEM;
 
 	for (zone = 0; zone < quirks->num_zones; zone++) {
-		name = kasprintf(GFP_KERNEL, "zone%02hhX", zone);
-		if (name == NULL)
-			return 1;
+		name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "zone%02hhX", zone);
+		if (!name)
+			return -ENOMEM;
 		sysfs_attr_init(&zone_dev_attrs[zone].attr);
 		zone_dev_attrs[zone].attr.name = name;
 		zone_dev_attrs[zone].attr.mode = 0644;
@@ -678,24 +675,15 @@ static int alienware_zone_init(struct platform_device *dev)
 	zone_attrs[quirks->num_zones] = &dev_attr_lighting_control_state.attr;
 	zone_attribute_group.attrs = zone_attrs;
 
-	led_classdev_register(&dev->dev, &global_led);
+	led_classdev_register(&pdev->dev, &global_led);
 
-	return sysfs_create_group(&dev->dev.kobj, &zone_attribute_group);
+	return sysfs_create_group(&pdev->dev.kobj, &zone_attribute_group);
 }
 
 static void alienware_zone_exit(struct platform_device *dev)
 {
-	u8 zone;
-
 	sysfs_remove_group(&dev->dev.kobj, &zone_attribute_group);
 	led_classdev_unregister(&global_led);
-	if (zone_dev_attrs) {
-		for (zone = 0; zone < quirks->num_zones; zone++)
-			kfree(zone_dev_attrs[zone].attr.name);
-	}
-	kfree(zone_dev_attrs);
-	kfree(zone_data);
-	kfree(zone_attrs);
 }
 
 static acpi_status alienware_wmax_command(void *in_args, size_t in_size,
