@@ -484,9 +484,7 @@ struct search {
 	struct bcache_device	*d;
 
 	unsigned int		insert_bio_sectors;
-	unsigned int		recoverable:1;
 	unsigned int		write:1;
-	unsigned int		read_dirty_data:1;
 	unsigned int		cache_missed:1;
 
 	struct block_device	*orig_bdev;
@@ -507,11 +505,6 @@ static void bch_cache_read_endio(struct bio *bio)
 
 	if (bio->bi_status)
 		s->iop.status = bio->bi_status;
-	else if (!KEY_DIRTY(&b->key) &&
-		 ptr_stale(s->iop.c, &b->key, 0)) {
-		atomic_long_inc(&s->iop.c->cache_read_races);
-		s->iop.status = BLK_STS_IOERR;
-	}
 
 	bch_bbio_endio(s->iop.c, bio, bio->bi_status, "reading from cache");
 }
@@ -609,7 +602,6 @@ static CLOSURE_CALLBACK(cache_lookup)
 {
 	closure_type(s, struct search, iop.cl);
 	struct bio *bio = &s->bio.bio;
-	struct cached_dev *dc;
 	int ret;
 
 	bch_btree_op_init(&s->op, -1);
@@ -633,12 +625,6 @@ static CLOSURE_CALLBACK(cache_lookup)
 	 */
 	if (ret < 0) {
 		BUG_ON(ret == -EINTR);
-		if (s->d && s->d->c &&
-				!UUID_FLASH_ONLY(&s->d->c->uuids[s->d->id])) {
-			dc = container_of(s->d, struct cached_dev, disk);
-			if (dc && atomic_read(&dc->has_dirty))
-				s->recoverable = false;
-		}
 		if (!s->iop.status)
 			s->iop.status = BLK_STS_IOERR;
 	}
@@ -654,10 +640,7 @@ static void request_endio(struct bio *bio)
 
 	if (bio->bi_status) {
 		struct search *s = container_of(cl, struct search, cl);
-
 		s->iop.status = bio->bi_status;
-		/* Only cache read errors are recoverable */
-		s->recoverable = false;
 	}
 
 	bio_put(bio);
@@ -687,7 +670,6 @@ static void backing_request_endio(struct bio *bio)
 			/* set to orig_bio->bi_status in bio_complete() */
 			s->iop.status = bio->bi_status;
 		}
-		s->recoverable = false;
 		/* should count I/O error for backing device here */
 		bch_count_backing_io_errors(dc, bio);
 	}
@@ -758,9 +740,7 @@ static inline struct search *search_alloc(struct bio *bio,
 	s->cache_miss		= NULL;
 	s->cache_missed		= 0;
 	s->d			= d;
-	s->recoverable		= 1;
 	s->write		= op_is_write(bio_op(bio));
-	s->read_dirty_data	= 0;
 	/* Count on the bcache device */
 	s->orig_bdev		= orig_bdev;
 	s->start_time		= start_time;
@@ -805,29 +785,6 @@ static CLOSURE_CALLBACK(cached_dev_read_error_done)
 
 static CLOSURE_CALLBACK(cached_dev_read_error)
 {
-	closure_type(s, struct search, cl);
-	struct bio *bio = &s->bio.bio;
-
-	/*
-	 * If read request hit dirty data (s->read_dirty_data is true),
-	 * then recovery a failed read request from cached device may
-	 * get a stale data back. So read failure recovery is only
-	 * permitted when read request hit clean data in cache device,
-	 * or when cache read race happened.
-	 */
-	if (s->recoverable && !s->read_dirty_data) {
-		/* Retry from the backing device: */
-		trace_bcache_read_retry(s->orig_bio);
-
-		s->iop.status = 0;
-		do_bio_hook(s, s->orig_bio, backing_request_endio);
-
-		/* XXX: invalidate cache */
-
-		/* I/O request sent to backing device */
-		closure_bio_submit(s->iop.c, bio, cl);
-	}
-
 	continue_at(cl, cached_dev_read_error_done, NULL);
 }
 
@@ -873,7 +830,7 @@ static CLOSURE_CALLBACK(cached_dev_read_done)
 		s->cache_miss = NULL;
 	}
 
-	if (verify(dc) && s->recoverable && !s->read_dirty_data)
+	if (verify(dc))
 		bch_data_verify(dc, s->orig_bio);
 
 	closure_get(&dc->disk.cl);
