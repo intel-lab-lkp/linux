@@ -406,6 +406,7 @@ int rtsx_usb_switch_clock(struct rtsx_ucr *ucr, unsigned int card_clock,
 {
 	int ret;
 	u8 n, clk_divider, mcu_cnt, div;
+	unsigned int original_card_clock = card_clock;
 
 	if (!card_clock) {
 		ucr->cur_clk = 0;
@@ -494,7 +495,7 @@ int rtsx_usb_switch_clock(struct rtsx_ucr *ucr, unsigned int card_clock,
 	if (ret < 0)
 		return ret;
 
-	ucr->cur_clk = card_clock;
+	ucr->cur_clk = original_card_clock;
 
 	return 0;
 }
