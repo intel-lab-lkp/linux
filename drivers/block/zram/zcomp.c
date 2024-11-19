@@ -20,6 +20,9 @@
 #include "backend_zstd.h"
 #include "backend_deflate.h"
 #include "backend_842.h"
+#include "backend_crypto_api.h"
+
+extern struct list_head crypto_alg_list;
 
 static LIST_HEAD(backends);
 
@@ -216,57 +219,111 @@ void clean_zcomp_backends(void)
 		backend->destroy(backend);
 }
 
+static bool backend_enabled(const char *name)
+{
+	struct zcomp_ops *backend;
+
+	list_for_each_entry(backend, &backends, list)
+		if (!strcmp(backend->name, name))
+			return true;
+
+	return false;
+}
+
+static int init_crypto_api_backends(void)
+{
+	struct crypto_alg *alg;
+	struct zcomp_ops *ops;
+
+	list_for_each_entry(alg, &crypto_alg_list, cra_list) {
+		if (!crypto_has_comp(alg->cra_name, 0, 0))
+			continue;
+
+		if (backend_enabled(alg->cra_name))
+			continue;
+
+		ops = get_backend_crypto_api(alg->cra_name);
+		if (IS_ERR_OR_NULL(ops))
+			return PTR_ERR(ops);
+
+		list_add(&ops->list, &backends);
+	}
+
+	return 0;
+}
+
 int init_zcomp_backends(void)
 {
 	struct zcomp_ops *ops;
+	int ret;
 
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZO)
 	ops = get_backend_lzorle();
-	if (IS_ERR_OR_NULL(ops))
+	if (IS_ERR_OR_NULL(ops)) {
+		ret = PTR_ERR(ops);
 		goto err;
+	}
 
 	list_add(&ops->list, &backends);
 
 	ops = get_backend_lzo();
-	if (IS_ERR_OR_NULL(ops))
+	if (IS_ERR_OR_NULL(ops)) {
+		ret = PTR_ERR(ops);
 		goto err;
+	}
 
 	list_add(&ops->list, &backends);
 #endif
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZ4)
 	ops = get_backend_lz4();
-	if (IS_ERR_OR_NULL(ops))
+	if (IS_ERR_OR_NULL(ops)) {
+		ret = PTR_ERR(ops);
 		goto err;
+	}
 
 	list_add(&ops->list, &backends);
 #endif
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZ4HC)
 	ops = get_backend_lz4hc();
-	if (IS_ERR_OR_NULL(ops))
+	if (IS_ERR_OR_NULL(ops)) {
+		ret = PTR_ERR(ops);
 		goto err;
+	}
 
 	list_add(&ops->list, &backends);
 #endif
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_ZSTD)
 	ops = get_backend_zstd();
-	if (IS_ERR_OR_NULL(ops))
+	if (IS_ERR_OR_NULL(ops)) {
+		ret = PTR_ERR(ops);
 		goto err;
+	}
 
 	list_add(&ops->list, &backends);
 #endif
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_DEFLATE)
 	ops = get_backend_deflate();
-	if (IS_ERR_OR_NULL(ops))
+	if (IS_ERR_OR_NULL(ops)) {
+		ret = PTR_ERR(ops);
 		goto err;
+	}
 
 	list_add(&ops->list, &backends);
 #endif
 #if IS_ENABLED(CONFIG_ZRAM_BACKEND_842)
 	ops = get_backend_842();
-	if (IS_ERR_OR_NULL(ops))
+	if (IS_ERR_OR_NULL(ops)) {
+		ret = PTR_ERR(ops);
 		goto err;
+	}
 
 	list_add(&ops->list, &backends);
+#endif
+
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_CRYPTO_API)
+	ret = init_crypto_api_backends();
+	if (ret)
+		goto err;
 #endif
 
 	return 0;
@@ -274,5 +331,5 @@ int init_zcomp_backends(void)
 err:
 	clean_zcomp_backends();
 
-	return PTR_ERR(ops);
+	return ret;
 }

@@ -57,6 +57,16 @@ config ZRAM_BACKEND_LZO
 	select LZO_COMPRESS
 	select LZO_DECOMPRESS
 
+config ZRAM_BACKEND_CRYPTO_API
+	bool "Enable support for compression algorithms available in Crypto API"
+	depends on ZRAM
+	default y
+	select CRYPTO
+	help
+	  If you still want to use Crypto API as a backend, enable this option.
+	  All compression algorithms enabled on your system will be available in ZRAM.
+	  This option is useful if you are using hardware compression using any driver.
+
 choice
 	prompt "Default zram compressor"
 	default ZRAM_DEF_COMP_LZORLE
