@@ -17448,8 +17448,10 @@ L:	netdev@vger.kernel.org
 S:	Supported
 F:	Documentation/core-api/packing.rst
 F:	include/linux/packing.h
+F:	include/linux/packing_types.h
 F:	lib/packing.c
 F:	lib/packing_test.c
+F:	scripts/gen_packed_field_checks.c
 
 PADATA PARALLEL EXECUTION MECHANISM
 M:	Steffen Klassert <steffen.klassert@secunet.com>
