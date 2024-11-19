@@ -52,7 +52,12 @@ static inline void sanity_check_pinned_pages(struct page **pages,
 	 */
 	for (; npages; npages--, pages++) {
 		struct page *page = *pages;
-		struct folio *folio = page_folio(page);
+		struct folio *folio;
+
+		if (!page)
+			continue;
+
+		folio = page_folio(page);
 
 		if (is_zero_page(page) ||
 		    !folio_test_anon(folio))
@@ -248,8 +253,13 @@ static inline struct folio *gup_folio_range_next(struct page *start,
 static inline struct folio *gup_folio_next(struct page **list,
 		unsigned long npages, unsigned long i, unsigned int *ntails)
 {
-	struct folio *folio = page_folio(list[i]);
+	struct folio *folio;
 	unsigned int nr;
+
+	if (!list[i])
+		return NULL;
+
+	folio = page_folio(list[i]);
 
 	for (nr = i + 1; nr < npages; nr++) {
 		if (page_folio(list[nr]) != folio)
@@ -410,6 +420,9 @@ void unpin_user_pages(struct page **pages, unsigned long npages)
 	sanity_check_pinned_pages(pages, npages);
 	for (i = 0; i < npages; i += nr) {
 		folio = gup_folio_next(pages, npages, i, &nr);
+		if (!folio)
+			continue;
+
 		gup_put_folio(folio, nr, FOLL_PIN);
 	}
 }
