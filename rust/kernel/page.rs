@@ -3,7 +3,7 @@
 //! Kernel page allocation and management.
 
 use crate::{
-    alloc::{AllocError, Flags},
+    alloc::{AllocError, Allocator, Flags, VVec, KVec, KVVec, Vec, flags::*},
     bindings,
     error::code::*,
     error::Result,
@@ -85,6 +85,49 @@ impl Page {
         // INVARIANT: We just successfully allocated a page, ptr points to the new `Page` object.
         // SAFETY: According to invariant above ptr is valid.
         Ok(unsafe { ARef::from_raw(NonNull::new_unchecked(ptr)) })
+    }
+
+    /// Create a page object from a buffer which is associated with an existing C `struct page`.
+    ///
+    /// This function ensures it takes a page-sized buffer as represented by `PageSlice`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::page::*;
+    ///
+    /// let somedata: [u8; PAGE_SIZE * 2] = [0; PAGE_SIZE * 2];
+    /// let buf: &[u8] = &somedata;
+    /// let pages: VVec<PageSlice> = buf.try_into()?;
+    /// let page = Page::page_slice_to_page(&pages[0])?;
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn page_slice_to_page<'a>(page: &PageSlice) -> Result<&'a Self>
+    {
+        let ptr: *const core::ffi::c_void = page.0.as_ptr() as _;
+        if ptr.is_null() {
+            return Err(EINVAL)
+        }
+        // SAFETY: We've checked that `ptr` is non-null, hence it's safe to call this method.
+        let page = if unsafe { bindings::is_vmalloc_addr(ptr) } {
+            // SAFETY: We've checked that `ptr` is non-null and within the vmalloc range, hence
+            // it's safe to call this method.
+            unsafe { bindings::vmalloc_to_page(ptr) }
+        // SAFETY: We've checked that `ptr` is non-null, hence it's safe to call this method.
+        } else if unsafe { bindings::virt_addr_valid(ptr) } {
+            // SAFETY: We've checked that `ptr` is non-null and a valid virtual address, hence
+            // it's safe to call this method.
+            unsafe { bindings::virt_to_page(ptr) }
+        } else {
+            ptr::null_mut()
+        };
+        if page.is_null() {
+            return Err(EINVAL);
+        }
+        // CAST: `Self` is a `repr(transparent)` wrapper around `bindings::page`.
+        // SAFETY: We just successfully retrieved an existing `bindings::page`, therefore
+        // dereferencing the page pointer is valid.
+        Ok(unsafe { &*page.cast() })
     }
 
     /// Returns a raw pointer to the page.
@@ -268,5 +311,57 @@ unsafe impl crate::types::AlwaysRefCounted for Page {
     unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
         // SAFETY: The safety requirements guarantee that the refcount is non-zero.
         unsafe { bindings::put_page(obj.cast().as_ptr()) }
+    }
+}
+
+/// A page-aligned, page-sized object.
+///
+/// This is used for convenience to convert a large buffer into an array of page-sized chunks
+/// allocated with the kernel's allocators which can then be used in the
+/// `Page::page_slice_to_page` wrapper.
+///
+// FIXME: This should be `PAGE_SIZE`, but the compiler rejects everything except a literal
+// integer argument for the `repr(align)` attribute.
+#[repr(align(4096))]
+pub struct PageSlice([u8; PAGE_SIZE]);
+
+fn to_vec_with_allocator<A: Allocator>(val: &[u8]) -> Result<Vec<PageSlice, A>, AllocError> {
+    let mut k = Vec::<PageSlice, A>::new();
+    let pages = page_align(val.len()) >> PAGE_SHIFT;
+    match k.reserve(pages, GFP_KERNEL) {
+        Ok(()) => {
+            // SAFETY: from above, the length should be equal to the vector's capacity
+            unsafe { k.set_len(pages); }
+            // SAFETY: src buffer sized val.len() does not overlap with dst buffer since
+            // the dst buffer's size is val.len() padded up to a multiple of PAGE_SIZE.
+            unsafe { ptr::copy_nonoverlapping(val.as_ptr(), k.as_mut_ptr() as *mut u8,
+                                              val.len()) };
+            Ok(k)
+        },
+        Err(_) => Err(AllocError),
+    }
+}
+
+impl TryFrom<&[u8]> for VVec<PageSlice> {
+    type Error = AllocError;
+
+    fn try_from(val: &[u8]) -> Result<Self, AllocError> {
+        to_vec_with_allocator(val)
+    }
+}
+
+impl TryFrom<&[u8]> for KVec<PageSlice> {
+    type Error = AllocError;
+
+    fn try_from(val: &[u8]) -> Result<Self, AllocError> {
+        to_vec_with_allocator(val)
+    }
+}
+
+impl TryFrom<&[u8]> for KVVec<PageSlice> {
+    type Error = AllocError;
+
+    fn try_from(val: &[u8]) -> Result<Self, AllocError> {
+        to_vec_with_allocator(val)
     }
 }

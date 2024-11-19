@@ -27,3 +27,13 @@ void rust_helper_get_page(struct page *page)
 {
 	get_page(page);
 }
+
+struct page *rust_helper_virt_to_page(const void *kaddr)
+{
+	return virt_to_page(kaddr);
+}
+
+bool rust_helper_virt_addr_valid(const void *kaddr)
+{
+	return virt_addr_valid(kaddr);
+}
