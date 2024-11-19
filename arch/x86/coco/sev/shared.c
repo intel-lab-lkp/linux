@@ -239,6 +239,8 @@ static enum es_result verify_exception_info(struct ghcb *ghcb, struct es_em_ctxt
 		if ((info & SVM_EVTINJ_VALID) &&
 		    ((v == X86_TRAP_GP) || (v == X86_TRAP_UD)) &&
 		    ((info & SVM_EVTINJ_TYPE_MASK) == SVM_EVTINJ_TYPE_EXEPT)) {
+			memset(&ctxt->fi, 0, sizeof(ctxt->fi));
+
 			ctxt->fi.vector = v;
 
 			if (info & SVM_EVTINJ_VALID_ERR)
