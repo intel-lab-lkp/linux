@@ -457,12 +457,9 @@ static inline bool disk_should_remove_zone_wplug(struct gendisk *disk,
 	 * blk_zone_write_plug_finish_request() (e.g. with split BIOs
 	 * that are chained). In such case, disk_zone_wplug_unplug_bio()
 	 * should not attempt to remove the zone write plug until all BIO
-	 * completions are seen. Check by looking at the zone write plug
-	 * reference count, which is 2 when the plug is unused (one reference
-	 * taken when the plug was allocated and another reference taken by the
-	 * caller context).
+	 * completions are seen.
 	 */
-	if (refcount_read(&zwplug->ref) > 2)
+	if (zwplug->wp_offset != zwplug->wp_offset_compl)
 		return false;
 
 	/* We can remove zone write plugs for zones that are empty or full. */
