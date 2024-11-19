@@ -278,7 +278,7 @@ static void drm_sched_entity_kill(struct drm_sched_entity *entity)
  * waiting, removes the entity from the runqueue and returns an error when the
  * process was killed.
  *
- * Returns the remaining time in jiffies left from the input timeout
+ * Returns: 0 if the timeout ellapsed, the remaining time otherwise.
  */
 long drm_sched_entity_flush(struct drm_sched_entity *entity, long timeout)
 {
@@ -294,15 +294,24 @@ long drm_sched_entity_flush(struct drm_sched_entity *entity, long timeout)
 	 * The client will not queue more IBs during this fini, consume existing
 	 * queued IBs or discard them on SIGKILL
 	 */
-	if (current->flags & PF_EXITING) {
-		if (timeout)
-			ret = wait_event_timeout(
-					sched->job_scheduled,
-					drm_sched_entity_is_idle(entity),
-					timeout);
+	if (timeout != 0 && (current->flags & PF_EXITING)) {
+		ret = wait_event_timeout(sched->job_scheduled,
+				drm_sched_entity_is_idle(entity),
+				timeout);
+		/*
+		 * wait_event_timeout() returns 1 if it timed out but the
+		 * condition became true on timeout. We only care about whether
+		 * it timed out or not.
+		 */
+		if (ret == 1)
+			ret = 0;
 	} else {
 		wait_event_killable(sched->job_scheduled,
 				    drm_sched_entity_is_idle(entity));
+
+		ret -= (long)get_jiffies_64();
+		if (ret < 0)
+			ret = 0;
 	}
 
 	/* For killed process disable any more IBs enqueue right now */
