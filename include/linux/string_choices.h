@@ -41,6 +41,12 @@ static inline const char *str_high_low(bool v)
 }
 #define str_low_high(v)		str_high_low(!(v))
 
+static inline const char *str_locked_unlocked(bool v)
+{
+	return v ? "locked" : "unlocked";
+}
+#define str_unlocked_locked(v)         str_locked_unlocked(!(v))
+
 static inline const char *str_on_off(bool v)
 {
 	return v ? "on" : "off";
