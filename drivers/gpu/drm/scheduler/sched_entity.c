@@ -270,15 +270,12 @@ static void drm_sched_entity_kill(struct drm_sched_entity *entity)
 
 /**
  * drm_sched_entity_flush - Flush a context entity
- *
  * @entity: scheduler entity
- * @timeout: time to wait in for Q to become empty in jiffies.
- *
- * Splitting drm_sched_entity_fini() into two functions, The first one does the
- * waiting, removes the entity from the runqueue and returns an error when the
- * process was killed.
+ * @timeout: time to wait in jiffies
  *
  * Returns: 0 if the timeout ellapsed, the remaining time otherwise.
+
+ * Waits at most @timeout jiffies for the entity's job queue to become empty.
  */
 long drm_sched_entity_flush(struct drm_sched_entity *entity, long timeout)
 {
@@ -290,7 +287,7 @@ long drm_sched_entity_flush(struct drm_sched_entity *entity, long timeout)
 		return 0;
 
 	sched = entity->rq->sched;
-	/**
+	/*
 	 * The client will not queue more IBs during this fini, consume existing
 	 * queued IBs or discard them on SIGKILL
 	 */
@@ -359,8 +356,11 @@ EXPORT_SYMBOL(drm_sched_entity_fini);
  * drm_sched_entity_destroy - Destroy a context entity
  * @entity: scheduler entity
  *
- * Calls drm_sched_entity_flush() and drm_sched_entity_fini() as a
- * convenience wrapper.
+ * Convenience wrapper for entity teardown.
+ *
+ * Teardown of entities is split into two functions. The first one,
+ * drm_sched_entity_flush(), waits for the entity to become empty. The second
+ * one, drm_sched_entity_fini(), does the actual cleanup of the entity object.
  */
 void drm_sched_entity_destroy(struct drm_sched_entity *entity)
 {
