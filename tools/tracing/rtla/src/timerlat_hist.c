@@ -504,51 +504,90 @@ timerlat_print_stats_all(struct timerlat_hist_params *params,
 	if (!params->no_index)
 		trace_seq_printf(trace->seq, "min:  ");
 
-	if (!params->no_irq)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.min_irq);
+	if (!params->no_irq) {
+		if (sum.irq_count != 0)
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.min_irq);
+		else
+			trace_seq_printf(trace->seq, "%9c ", '-');
+	}
 
-	if (!params->no_thread)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.min_thread);
+	if (!params->no_thread) {
+		if (sum.thread_count != 0)
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.min_thread);
+		else
+			trace_seq_printf(trace->seq, "%9c ", '-');
+	}
 
-	if (params->user_hist)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.min_user);
+	if (params->user_hist) {
+		if (sum.user_count != 0) {
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.min_user);
+		} else {
+			trace_seq_printf(trace->seq, "%9c ", '-');
+		}
+	}
 
 	trace_seq_printf(trace->seq, "\n");
 
 	if (!params->no_index)
 		trace_seq_printf(trace->seq, "avg:  ");
 
-	if (!params->no_irq)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.sum_irq / sum.irq_count);
+	if (!params->no_irq) {
+		if (sum.irq_count != 0)
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.sum_irq / sum.irq_count);
+		else
+			trace_seq_printf(trace->seq, "%9c ", '-');
+	}
 
-	if (!params->no_thread)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.sum_thread / sum.thread_count);
+	if (!params->no_thread) {
+		if (sum.thread_count != 0)
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.sum_thread / sum.thread_count);
+		else
+			trace_seq_printf(trace->seq, "%9c ", '-');
+	}
 
-	if (params->user_hist)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.sum_user / sum.user_count);
+	if (params->user_hist) {
+		if (sum.user_count != 0) {
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.sum_user / sum.user_count);
+		} else {
+			trace_seq_printf(trace->seq, "%9c ", '-');
+		}
+	}
 
 	trace_seq_printf(trace->seq, "\n");
 
 	if (!params->no_index)
 		trace_seq_printf(trace->seq, "max:  ");
 
-	if (!params->no_irq)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.max_irq);
+	if (!params->no_irq) {
+		if (sum.irq_count != 0)
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.max_irq);
+		else
+			trace_seq_printf(trace->seq, "%9c ", '-');
+	}
 
-	if (!params->no_thread)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.max_thread);
+	if (!params->no_thread) {
+		if (sum.thread_count != 0)
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.max_thread);
+		else
+			trace_seq_printf(trace->seq, "%9c ", '-');
+	}
 
-	if (params->user_hist)
-		trace_seq_printf(trace->seq, "%9llu ",
-				 sum.max_user);
+	if (params->user_hist) {
+		if (sum.user_count != 0) {
+			trace_seq_printf(trace->seq, "%9llu ",
+					 sum.max_user);
+		} else {
+			trace_seq_printf(trace->seq, "%9c ", '-');
+		}
+	}
 
 	trace_seq_printf(trace->seq, "\n");
 	trace_seq_do_printf(trace->seq);
