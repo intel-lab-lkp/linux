@@ -335,6 +335,8 @@ properties:
           - sensirion,sgp40
             # Sensirion low power multi-pixel gas sensor with I2C interface
           - sensirion,sgpc3
+            # Sensirion SHT3x-DIS humidity and temperature sensor with I2C interface
+          - sensirion,sht3x
             # Sensirion temperature & humidity sensor with I2C interface
           - sensirion,sht4x
             # Sensortek 3 axis accelerometer
