@@ -144,8 +144,12 @@ separately horizontally and vertically.
 
 The combined effect of binning and sub-sampling is configured using the
 ``V4L2_SEL_TGT_COMPOSE`` rectangle, relative to the analogue crop rectangle, on
-(pad, stream) pair 1/0. The driver implementation determines how to configure
-binning and sub-sampling to achieve the desired size.
+(pad, stream) pair 1/0. It depends on the driver which of these operations are
+being used to achieve the resulting size. Binning and sub-sampling are also
+directly configured using :ref:`V4L2_CID_BINNING_FACTORS
+<image_source_control_binning_factors>` and
+:ref:`V4L2_CID_SUBSAMPLING_HORIZONTAL and V4L2_CID_SUBSAMPLING_VERTICAL
+<image_source_control_subsampling>` controls on drivers that support them.
 
 The digital crop operation takes place after binning and sub-sampling. It is
 configured by setting the ``V4L2_SEL_TGT_CROP`` rectangle on (pad, stream) pair
@@ -216,9 +220,13 @@ Also refer to :ref:`Selection targets <v4l2-selection-targets-table>`.
       - \-
       - \-
       - Binning and sub-sampling. This rectangle is relative to the
-        ``V4L2_SEL_TGT_CROP`` rectangle on the same (pad, stream). The
-        combination of binning and sub-sampling is expressed with this selection
-        target.
+        ``V4L2_SEL_TGT_CROP`` rectangle on the same (pad, stream). Binning is
+        configured using the :ref:`V4L2_CID_BINNING_FACTORS
+        <image_source_control_binning_factors>` control and sub-sampling is
+        configured using the :ref:`V4L2_CID_SUBSAMPLING_HORIZONTAL and
+        V4L2_CID_SUBSAMPLING_VERTICAL <image_source_control_subsampling>`
+        controls. The width and the height of this selection rectangle reflect
+        the combined effect of binning and subsampling.
     * - 2/0
       - Format
       - X
