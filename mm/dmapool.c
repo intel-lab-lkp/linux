@@ -141,39 +141,25 @@ static void pool_check_block(struct dma_pool *pool, struct dma_block *block,
 		memset(block->vaddr, POOL_POISON_ALLOCATED, pool->size);
 }
 
-static struct dma_page *pool_find_page(struct dma_pool *pool, dma_addr_t dma)
-{
-	struct dma_page *page;
-
-	list_for_each_entry(page, &pool->page_list, page_list) {
-		if (dma < page->dma)
-			continue;
-		if ((dma - page->dma) < pool->allocation)
-			return page;
-	}
-	return NULL;
-}
-
 static bool pool_block_err(struct dma_pool *pool, void *vaddr, dma_addr_t dma)
 {
-	struct dma_block *block = pool->next_block;
-	struct dma_page *page;
+	struct dma_block *block = pool_find_block(pool, vaddr);
 
-	page = pool_find_page(pool, dma);
-	if (!page) {
-		dev_err(pool->dev, "%s %s, %p/%pad (bad dma)\n",
-			__func__, pool->name, vaddr, &dma);
+	if (!block) {
+		dev_err(pool->dev, "%s %s, invalid block %p\n",
+			__func__, pool->name, vaddr);
 		return true;
 	}
 
-	while (block) {
-		if (block->vaddr != vaddr) {
-			block = block->next_block;
-			continue;
+	struct dma_block *iter = pool->next_block;
+
+	while (iter) {
+		if (iter == block) {
+			dev_err(pool->dev, "%s %s, dma %pad already free\n",
+				__func__, pool->name, &dma);
+			return true;
 		}
-		dev_err(pool->dev, "%s %s, dma %pad already free\n",
-			__func__, pool->name, &dma);
-		return true;
+		iter = iter->next_block;
 	}
 
 	memset(vaddr, POOL_POISON_FREED, pool->size);
