@@ -48,12 +48,22 @@ static int lzo_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	return ret == LZO_E_OK ? 0 : ret;
 }
 
-const struct zcomp_ops backend_lzo = {
+static void lzo_destroy_ops(struct zcomp_ops *backend_lzo)
+{
+}
+
+struct zcomp_ops backend_lzo = {
 	.compress	= lzo_compress,
 	.decompress	= lzo_decompress,
 	.create_ctx	= lzo_create,
 	.destroy_ctx	= lzo_destroy,
 	.setup_params	= lzo_setup_params,
 	.release_params	= lzo_release_params,
+	.destroy	= lzo_destroy_ops,
 	.name		= "lzo",
 };
+
+struct zcomp_ops *get_backend_lzo(void)
+{
+	return &backend_lzo;
+}

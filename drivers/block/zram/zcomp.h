@@ -59,7 +59,11 @@ struct zcomp_ops {
 	int (*setup_params)(struct zcomp_params *params);
 	void (*release_params)(struct zcomp_params *params);
 
+	void (*destroy)(struct zcomp_ops *ops);
+
 	const char *name;
+
+	struct list_head list;
 };
 
 /* dynamic per-device compression frontend */
@@ -85,5 +89,8 @@ int zcomp_compress(struct zcomp *comp, struct zcomp_strm *zstrm,
 		   const void *src, unsigned int *dst_len);
 int zcomp_decompress(struct zcomp *comp, struct zcomp_strm *zstrm,
 		     const void *src, unsigned int src_len, void *dst);
+
+void clean_zcomp_backends(void);
+int init_zcomp_backends(void);
 
 #endif /* _ZCOMP_H_ */

@@ -5,6 +5,6 @@
 
 #include "zcomp.h"
 
-extern const struct zcomp_ops backend_lz4;
+struct zcomp_ops *get_backend_lz4(void);
 
 #endif /* __BACKEND_LZ4_H__ */

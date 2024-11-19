@@ -48,12 +48,22 @@ static int lzorle_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	return ret == LZO_E_OK ? 0 : ret;
 }
 
-const struct zcomp_ops backend_lzorle = {
+static void lzorle_destroy_ops(struct zcomp_ops *backend_lzorle)
+{
+}
+
+struct zcomp_ops backend_lzorle = {
 	.compress	= lzorle_compress,
 	.decompress	= lzorle_decompress,
 	.create_ctx	= lzorle_create,
 	.destroy_ctx	= lzorle_destroy,
 	.setup_params	= lzorle_setup_params,
 	.release_params	= lzorle_release_params,
+	.destroy	= lzorle_destroy_ops,
 	.name		= "lzo-rle",
 };
+
+struct zcomp_ops *get_backend_lzorle(void)
+{
+	return &backend_lzorle;
+}

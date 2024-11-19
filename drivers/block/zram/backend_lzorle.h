@@ -5,6 +5,6 @@
 
 #include "zcomp.h"
 
-extern const struct zcomp_ops backend_lzorle;
+struct zcomp_ops *get_backend_lzorle(void);
 
 #endif /* __BACKEND_LZORLE_H__ */

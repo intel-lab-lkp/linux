@@ -2535,6 +2535,7 @@ static void destroy_devices(void)
 	idr_destroy(&zram_index_idr);
 	unregister_blkdev(zram_major, "zram");
 	cpuhp_remove_multi_state(CPUHP_ZCOMP_PREPARE);
+	clean_zcomp_backends();
 }
 
 static int __init zram_init(void)
@@ -2572,6 +2573,12 @@ static int __init zram_init(void)
 		if (ret < 0)
 			goto out_error;
 		num_devices--;
+	}
+
+	ret = init_zcomp_backends();
+	if (ret) {
+		pr_err("Unable to create zcomp devices\n");
+		goto out_error;
 	}
 
 	return 0;

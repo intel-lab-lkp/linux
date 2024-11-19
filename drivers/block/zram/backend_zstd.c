@@ -216,12 +216,22 @@ static int zstd_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	return 0;
 }
 
-const struct zcomp_ops backend_zstd = {
+static void zstd_destroy_ops(struct zcomp_ops *backend_zstd)
+{
+}
+
+struct zcomp_ops backend_zstd = {
 	.compress	= zstd_compress,
 	.decompress	= zstd_decompress,
 	.create_ctx	= zstd_create,
 	.destroy_ctx	= zstd_destroy,
 	.setup_params	= zstd_setup_params,
 	.release_params	= zstd_release_params,
+	.destroy	= zstd_destroy_ops,
 	.name		= "zstd",
 };
+
+struct zcomp_ops *get_backend_zstd(void)
+{
+	return &backend_zstd;
+}

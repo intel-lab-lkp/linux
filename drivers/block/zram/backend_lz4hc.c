@@ -118,12 +118,22 @@ static int lz4hc_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	return 0;
 }
 
-const struct zcomp_ops backend_lz4hc = {
+static void lz4hc_destroy_ops(struct zcomp_ops *backend_lz4hc)
+{
+}
+
+struct zcomp_ops backend_lz4hc = {
 	.compress	= lz4hc_compress,
 	.decompress	= lz4hc_decompress,
 	.create_ctx	= lz4hc_create,
 	.destroy_ctx	= lz4hc_destroy,
 	.setup_params	= lz4hc_setup_params,
 	.release_params	= lz4hc_release_params,
+	.destroy	= lz4hc_destroy_ops,
 	.name		= "lz4hc",
 };
+
+struct zcomp_ops *get_backend_lz4hc(void)
+{
+	return &backend_lz4hc;
+}

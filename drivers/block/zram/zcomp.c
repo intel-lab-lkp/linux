@@ -9,6 +9,7 @@
 #include <linux/cpu.h>
 #include <linux/crypto.h>
 #include <linux/vmalloc.h>
+#include <linux/list.h>
 
 #include "zcomp.h"
 
@@ -20,28 +21,7 @@
 #include "backend_deflate.h"
 #include "backend_842.h"
 
-static const struct zcomp_ops *backends[] = {
-#if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZO)
-	&backend_lzorle,
-	&backend_lzo,
-#endif
-#if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZ4)
-	&backend_lz4,
-#endif
-#if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZ4HC)
-	&backend_lz4hc,
-#endif
-#if IS_ENABLED(CONFIG_ZRAM_BACKEND_ZSTD)
-	&backend_zstd,
-#endif
-#if IS_ENABLED(CONFIG_ZRAM_BACKEND_DEFLATE)
-	&backend_deflate,
-#endif
-#if IS_ENABLED(CONFIG_ZRAM_BACKEND_842)
-	&backend_842,
-#endif
-	NULL
-};
+static LIST_HEAD(backends);
 
 static void zcomp_strm_free(struct zcomp *comp, struct zcomp_strm *zstrm)
 {
@@ -72,14 +52,13 @@ static int zcomp_strm_init(struct zcomp *comp, struct zcomp_strm *zstrm)
 
 static const struct zcomp_ops *lookup_backend_ops(const char *comp)
 {
-	int i = 0;
+	struct zcomp_ops *backend;
 
-	while (backends[i]) {
-		if (sysfs_streq(comp, backends[i]->name))
-			break;
-		i++;
-	}
-	return backends[i];
+	list_for_each_entry(backend, &backends, list)
+		if (sysfs_streq(comp, backend->name))
+			return backend;
+
+	return NULL;
 }
 
 bool zcomp_available_algorithm(const char *comp)
@@ -91,15 +70,15 @@ bool zcomp_available_algorithm(const char *comp)
 ssize_t zcomp_available_show(const char *comp, char *buf)
 {
 	ssize_t sz = 0;
-	int i;
+	struct zcomp_ops *backend;
 
-	for (i = 0; i < ARRAY_SIZE(backends) - 1; i++) {
-		if (!strcmp(comp, backends[i]->name)) {
+	list_for_each_entry(backend, &backends, list) {
+		if (!strcmp(comp, backend->name)) {
 			sz += scnprintf(buf + sz, PAGE_SIZE - sz - 2,
-					"[%s] ", backends[i]->name);
+					"[%s] ", backend->name);
 		} else {
 			sz += scnprintf(buf + sz, PAGE_SIZE - sz - 2,
-					"%s ", backends[i]->name);
+					"%s ", backend->name);
 		}
 	}
 
@@ -211,14 +190,6 @@ struct zcomp *zcomp_create(const char *alg, struct zcomp_params *params)
 	struct zcomp *comp;
 	int error;
 
-	/*
-	 * The backends array has a sentinel NULL value, so the minimum
-	 * size is 1. In order to be valid the array, apart from the
-	 * sentinel NULL element, should have at least one compression
-	 * backend selected.
-	 */
-	BUILD_BUG_ON(ARRAY_SIZE(backends) <= 1);
-
 	comp = kzalloc(sizeof(struct zcomp), GFP_KERNEL);
 	if (!comp)
 		return ERR_PTR(-ENOMEM);
@@ -235,4 +206,73 @@ struct zcomp *zcomp_create(const char *alg, struct zcomp_params *params)
 		return ERR_PTR(error);
 	}
 	return comp;
+}
+
+void clean_zcomp_backends(void)
+{
+	struct zcomp_ops *backend;
+
+	list_for_each_entry(backend, &backends, list)
+		backend->destroy(backend);
+}
+
+int init_zcomp_backends(void)
+{
+	struct zcomp_ops *ops;
+
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZO)
+	ops = get_backend_lzorle();
+	if (IS_ERR_OR_NULL(ops))
+		goto err;
+
+	list_add(&ops->list, &backends);
+
+	ops = get_backend_lzo();
+	if (IS_ERR_OR_NULL(ops))
+		goto err;
+
+	list_add(&ops->list, &backends);
+#endif
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZ4)
+	ops = get_backend_lz4();
+	if (IS_ERR_OR_NULL(ops))
+		goto err;
+
+	list_add(&ops->list, &backends);
+#endif
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_LZ4HC)
+	ops = get_backend_lz4hc();
+	if (IS_ERR_OR_NULL(ops))
+		goto err;
+
+	list_add(&ops->list, &backends);
+#endif
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_ZSTD)
+	ops = get_backend_zstd();
+	if (IS_ERR_OR_NULL(ops))
+		goto err;
+
+	list_add(&ops->list, &backends);
+#endif
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_DEFLATE)
+	ops = get_backend_deflate();
+	if (IS_ERR_OR_NULL(ops))
+		goto err;
+
+	list_add(&ops->list, &backends);
+#endif
+#if IS_ENABLED(CONFIG_ZRAM_BACKEND_842)
+	ops = get_backend_842();
+	if (IS_ERR_OR_NULL(ops))
+		goto err;
+
+	list_add(&ops->list, &backends);
+#endif
+
+	return 0;
+
+err:
+	clean_zcomp_backends();
+
+	return PTR_ERR(ops);
 }

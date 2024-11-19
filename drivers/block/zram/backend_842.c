@@ -50,12 +50,22 @@ static int decompress_842(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	return sw842_decompress(req->src, req->src_len, req->dst, &dlen);
 }
 
-const struct zcomp_ops backend_842 = {
+static void destroy_ops_842(struct zcomp_ops *backend_842)
+{
+}
+
+struct zcomp_ops backend_842 = {
 	.compress	= compress_842,
 	.decompress	= decompress_842,
 	.create_ctx	= create_842,
 	.destroy_ctx	= destroy_842,
 	.setup_params	= setup_params_842,
 	.release_params	= release_params_842,
+	.destroy	= destroy_ops_842,
 	.name		= "842",
 };
+
+struct zcomp_ops *get_backend_842(void)
+{
+	return &backend_842;
+}

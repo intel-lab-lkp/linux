@@ -136,12 +136,22 @@ static int deflate_decompress(struct zcomp_params *params,
 	return 0;
 }
 
-const struct zcomp_ops backend_deflate = {
+static void deflate_destroy_ops(struct zcomp_ops *backend_delfate)
+{
+}
+
+struct zcomp_ops backend_deflate = {
 	.compress	= deflate_compress,
 	.decompress	= deflate_decompress,
 	.create_ctx	= deflate_create,
 	.destroy_ctx	= deflate_destroy,
 	.setup_params	= deflate_setup_params,
 	.release_params	= deflate_release_params,
+	.destroy	= deflate_destroy_ops,
 	.name		= "deflate",
 };
+
+struct zcomp_ops *get_backend_deflate(void)
+{
+	return &backend_deflate;
+}

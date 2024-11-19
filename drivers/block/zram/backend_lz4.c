@@ -117,12 +117,22 @@ static int lz4_decompress(struct zcomp_params *params, struct zcomp_ctx *ctx,
 	return 0;
 }
 
-const struct zcomp_ops backend_lz4 = {
+static void lz4_destroy_ops(struct zcomp_ops *backend_lz4)
+{
+}
+
+struct zcomp_ops backend_lz4 = {
 	.compress	= lz4_compress,
 	.decompress	= lz4_decompress,
 	.create_ctx	= lz4_create,
 	.destroy_ctx	= lz4_destroy,
 	.setup_params	= lz4_setup_params,
 	.release_params	= lz4_release_params,
+	.destroy	= lz4_destroy_ops,
 	.name		= "lz4",
 };
+
+struct zcomp_ops *get_backend_lz4(void)
+{
+	return &backend_lz4;
+}
