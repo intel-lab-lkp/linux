@@ -628,6 +628,7 @@ static int alienware_zone_init(struct platform_device *pdev)
 	char *name;
 	struct device_attribute *zone_dev_attrs;
 	struct attribute **zone_attrs;
+	int ret;
 
 	if (interface == WMAX) {
 		lighting_control_state = WMAX_RUNNING;
@@ -675,9 +676,19 @@ static int alienware_zone_init(struct platform_device *pdev)
 	zone_attrs[quirks->num_zones] = &dev_attr_lighting_control_state.attr;
 	zone_attribute_group.attrs = zone_attrs;
 
-	led_classdev_register(&pdev->dev, &global_led);
+	ret = led_classdev_register(&pdev->dev, &global_led);
+	if (ret < 0)
+		return ret;
 
-	return sysfs_create_group(&pdev->dev.kobj, &zone_attribute_group);
+	ret = sysfs_create_group(&pdev->dev.kobj, &zone_attribute_group);
+	if (ret < 0)
+		goto fail_prep_zone_group;
+
+	return 0;
+
+fail_prep_zone_group:
+	led_classdev_unregister(&global_led);
+	return ret;
 }
 
 static void alienware_zone_exit(struct platform_device *dev)
@@ -1223,7 +1234,6 @@ static int __init alienware_wmi_init(void)
 	return 0;
 
 fail_prep_zones:
-	alienware_zone_exit(platform_device);
 	remove_thermal_profile();
 fail_prep_thermal_profile:
 fail_prep_deepsleep:
