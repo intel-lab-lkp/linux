@@ -76,6 +76,32 @@ static void regmap_irq_lock(struct irq_data *data)
 	mutex_lock(&d->lock);
 }
 
+static int regmap_irq_ack(struct regmap_irq_chip_data *d, unsigned int ack, int bank)
+{
+	int ret = 0;
+	u32 reg;
+
+	if (d->chip->ack_base || d->chip->use_ack) {
+		reg = d->get_irq_reg(d, d->chip->ack_base, bank);
+
+		/* some chips ack by write 0 */
+		if (d->chip->ack_invert)
+			ret = regmap_write(d->map, reg, ~ack);
+		else
+			ret = regmap_write(d->map, reg, ack);
+		if (d->chip->clear_ack) {
+			if (d->chip->ack_invert && !ret)
+				ret = regmap_write(d->map, reg, UINT_MAX);
+			else if (!ret)
+				ret = regmap_write(d->map, reg, 0);
+		}
+		if (ret != 0)
+			dev_err(d->map->dev, "Failed to ack 0x%x: %d\n",
+				reg, ret);
+	}
+	return ret;
+}
+
 static void regmap_irq_sync_unlock(struct irq_data *data)
 {
 	struct regmap_irq_chip_data *d = irq_data_get_irq_chip_data(data);
@@ -156,24 +182,8 @@ static void regmap_irq_sync_unlock(struct irq_data *data)
 		 * OR if there is masked interrupt which hasn't been Acked,
 		 * it'll be ignored in irq handler, then may introduce irq storm
 		 */
-		if (d->mask_buf[i] && (d->chip->ack_base || d->chip->use_ack)) {
-			reg = d->get_irq_reg(d, d->chip->ack_base, i);
-
-			/* some chips ack by write 0 */
-			if (d->chip->ack_invert)
-				ret = regmap_write(map, reg, ~d->mask_buf[i]);
-			else
-				ret = regmap_write(map, reg, d->mask_buf[i]);
-			if (d->chip->clear_ack) {
-				if (d->chip->ack_invert && !ret)
-					ret = regmap_write(map, reg, UINT_MAX);
-				else if (!ret)
-					ret = regmap_write(map, reg, 0);
-			}
-			if (ret != 0)
-				dev_err(d->map->dev, "Failed to ack 0x%x: %d\n",
-					reg, ret);
-		}
+		if (d->mask_buf[i])
+			regmap_irq_ack(d, d->mask_buf[i], i);
 	}
 
 	for (i = 0; i < d->chip->num_config_bases; i++) {
@@ -469,25 +479,8 @@ static irqreturn_t regmap_irq_thread(int irq, void *d)
 	for (i = 0; i < data->chip->num_regs; i++) {
 		data->status_buf[i] &= ~data->mask_buf[i];
 
-		if (data->status_buf[i] && (chip->ack_base || chip->use_ack)) {
-			reg = data->get_irq_reg(data, data->chip->ack_base, i);
-
-			if (chip->ack_invert)
-				ret = regmap_write(map, reg,
-						~data->status_buf[i]);
-			else
-				ret = regmap_write(map, reg,
-						data->status_buf[i]);
-			if (chip->clear_ack) {
-				if (chip->ack_invert && !ret)
-					ret = regmap_write(map, reg, UINT_MAX);
-				else if (!ret)
-					ret = regmap_write(map, reg, 0);
-			}
-			if (ret != 0)
-				dev_err(map->dev, "Failed to ack 0x%x: %d\n",
-					reg, ret);
-		}
+		if (data->status_buf[i])
+			regmap_irq_ack(data, data->status_buf[i], i);
 	}
 
 	for (i = 0; i < chip->num_irqs; i++) {
@@ -837,26 +830,9 @@ int regmap_add_irq_chip_fwnode(struct fwnode_handle *fwnode,
 		if (chip->status_invert)
 			d->status_buf[i] = ~d->status_buf[i];
 
-		if (d->status_buf[i] && (chip->ack_base || chip->use_ack)) {
-			reg = d->get_irq_reg(d, d->chip->ack_base, i);
-			if (chip->ack_invert)
-				ret = regmap_write(map, reg,
-					~(d->status_buf[i] & d->mask_buf[i]));
-			else
-				ret = regmap_write(map, reg,
-					d->status_buf[i] & d->mask_buf[i]);
-			if (chip->clear_ack) {
-				if (chip->ack_invert && !ret)
-					ret = regmap_write(map, reg, UINT_MAX);
-				else if (!ret)
-					ret = regmap_write(map, reg, 0);
-			}
-			if (ret != 0) {
-				dev_err(map->dev, "Failed to ack 0x%x: %d\n",
-					reg, ret);
+		if (d->status_buf[i])
+			if (regmap_irq_ack(d, d->status_buf[i] & d->mask_buf[i], i))
 				goto err_alloc;
-			}
-		}
 	}
 
 	/* Wake is disabled by default */
