@@ -21,7 +21,7 @@ static void destroy_842(struct zcomp_ctx *ctx)
 	kfree(ctx->context);
 }
 
-static int create_842(struct zcomp_params *params, struct zcomp_ctx *ctx)
+static int create_842(struct zcomp *zcomp, struct zcomp_ctx *ctx)
 {
 	ctx->context = kmalloc(SW842_MEM_COMPRESS, GFP_KERNEL);
 	if (!ctx->context)

@@ -54,7 +54,7 @@ static int zcomp_strm_init(struct zcomp *comp, struct zcomp_strm *zstrm)
 {
 	int ret;
 
-	ret = comp->ops->create_ctx(comp->params, &zstrm->ctx);
+	ret = comp->ops->create_ctx(comp, &zstrm->ctx);
 	if (ret)
 		return ret;
 

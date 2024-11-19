@@ -45,13 +45,15 @@ struct zcomp_req {
 	size_t dst_len;
 };
 
+struct zcomp;
+
 struct zcomp_ops {
 	int (*compress)(struct zcomp_params *params, struct zcomp_ctx *ctx,
 			struct zcomp_req *req);
 	int (*decompress)(struct zcomp_params *params, struct zcomp_ctx *ctx,
 			  struct zcomp_req *req);
 
-	int (*create_ctx)(struct zcomp_params *params, struct zcomp_ctx *ctx);
+	int (*create_ctx)(struct zcomp *zcomp, struct zcomp_ctx *ctx);
 	void (*destroy_ctx)(struct zcomp_ctx *ctx);
 
 	int (*setup_params)(struct zcomp_params *params);

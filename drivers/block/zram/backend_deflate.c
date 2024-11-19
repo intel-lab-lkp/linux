@@ -46,8 +46,9 @@ static void deflate_destroy(struct zcomp_ctx *ctx)
 	kfree(zctx);
 }
 
-static int deflate_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
+static int deflate_create(struct zcomp *zcomp, struct zcomp_ctx *ctx)
 {
+	struct zcomp_params *params = zcomp->params;
 	struct deflate_ctx *zctx;
 	size_t sz;
 	int ret;

@@ -37,8 +37,9 @@ static void lz4_destroy(struct zcomp_ctx *ctx)
 	kfree(zctx);
 }
 
-static int lz4_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
+static int lz4_create(struct zcomp *zcomp, struct zcomp_ctx *ctx)
 {
+	struct zcomp_params *params = zcomp->params;
 	struct lz4_ctx *zctx;
 
 	zctx = kzalloc(sizeof(*zctx), GFP_KERNEL);

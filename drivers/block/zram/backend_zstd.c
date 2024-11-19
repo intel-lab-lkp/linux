@@ -125,8 +125,9 @@ static void zstd_destroy(struct zcomp_ctx *ctx)
 	kfree(zctx);
 }
 
-static int zstd_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
+static int zstd_create(struct zcomp *zcomp, struct zcomp_ctx *ctx)
 {
+	struct zcomp_params *params = zcomp->params;
 	struct zstd_ctx *zctx;
 	zstd_parameters prm;
 	size_t sz;

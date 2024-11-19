@@ -15,7 +15,7 @@ static int lzorle_setup_params(struct zcomp_params *params)
 	return 0;
 }
 
-static int lzorle_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
+static int lzorle_create(struct zcomp *zcomp, struct zcomp_ctx *ctx)
 {
 	ctx->context = kzalloc(LZO1X_MEM_COMPRESS, GFP_KERNEL);
 	if (!ctx->context)
