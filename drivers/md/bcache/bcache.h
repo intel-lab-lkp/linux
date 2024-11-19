@@ -196,6 +196,7 @@
 
 struct bucket {
 	atomic_t	pin;
+	spinlock_t	lock;
 	uint16_t	prio;
 	uint8_t		gen;
 	uint8_t		last_gc; /* Most out of date gen in the btree */
@@ -981,7 +982,7 @@ uint8_t bch_inc_gen(struct cache *ca, struct bucket *b);
 void bch_rescale_priorities(struct cache_set *c, int sectors);
 
 bool bch_can_invalidate_bucket(struct cache *ca, struct bucket *b);
-void __bch_invalidate_one_bucket(struct cache *ca, struct bucket *b);
+bool __bch_invalidate_one_bucket(struct cache *ca, struct bucket *b);
 
 void __bch_bucket_free(struct cache *ca, struct bucket *b);
 void bch_bucket_free(struct cache_set *c, struct bkey *k);

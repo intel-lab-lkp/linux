@@ -134,25 +134,41 @@ bool bch_can_invalidate_bucket(struct cache *ca, struct bucket *b)
 	       !atomic_read(&b->pin) && can_inc_bucket_gen(b));
 }
 
-void __bch_invalidate_one_bucket(struct cache *ca, struct bucket *b)
+bool __bch_invalidate_one_bucket(struct cache *ca, struct bucket *b)
 {
 	lockdep_assert_held(&ca->set->bucket_lock);
 	BUG_ON(GC_MARK(b) && GC_MARK(b) != GC_MARK_RECLAIMABLE);
+
+	if (!spin_trylock(&b->lock))
+		return false;
+
+	/*
+	 * If the bucket was reused while read bio was in flight, it will
+	 * reread the data from the backing device. This will increase latency
+	 * and cause other errors. When b->pin is not 0, do not invalidate
+	 * the bucket.
+	 */
+
+	if (atomic_inc_return(&b->pin) > 1) {
+		atomic_dec(&b->pin);
+		spin_unlock(&b->lock);
+		return false;
+	}
 
 	if (GC_SECTORS_USED(b))
 		trace_bcache_invalidate(ca, b - ca->buckets);
 
 	bch_inc_gen(ca, b);
 	b->prio = INITIAL_PRIO;
-	atomic_inc(&b->pin);
 	b->reclaimable_in_gc = 0;
+	spin_unlock(&b->lock);
+	return true;
 }
 
 static void bch_invalidate_one_bucket(struct cache *ca, struct bucket *b)
 {
-	__bch_invalidate_one_bucket(ca, b);
-
-	fifo_push(&ca->free_inc, b - ca->buckets);
+	if (bch_can_invalidate_bucket(ca, b) && __bch_invalidate_one_bucket(ca, b))
+		fifo_push(&ca->free_inc, b - ca->buckets);
 }
 
 /*
@@ -246,8 +262,7 @@ static void invalidate_buckets_fifo(struct cache *ca)
 
 		b = ca->buckets + ca->fifo_last_bucket++;
 
-		if (bch_can_invalidate_bucket(ca, b))
-			bch_invalidate_one_bucket(ca, b);
+		bch_invalidate_one_bucket(ca, b);
 
 		if (++checked >= ca->sb.nbuckets) {
 			ca->invalidate_needs_gc = 1;
@@ -272,8 +287,7 @@ static void invalidate_buckets_random(struct cache *ca)
 
 		b = ca->buckets + n;
 
-		if (bch_can_invalidate_bucket(ca, b))
-			bch_invalidate_one_bucket(ca, b);
+		bch_invalidate_one_bucket(ca, b);
 
 		if (++checked >= ca->sb.nbuckets / 2) {
 			ca->invalidate_needs_gc = 1;
