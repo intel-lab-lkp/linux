@@ -1337,6 +1337,8 @@ unplug:
 
 unlock:
 	spin_unlock_irqrestore(&zwplug->lock, flags);
+
+	disk_put_zone_wplug(zwplug);
 }
 
 static void disk_zone_wplugs_work(struct work_struct *work)
