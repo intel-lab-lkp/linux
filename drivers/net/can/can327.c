@@ -18,6 +18,7 @@
 #include <linux/bitops.h>
 #include <linux/ctype.h>
 #include <linux/errno.h>
+#include <linux/hex.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/lockdep.h>
@@ -622,17 +623,14 @@ static void can327_handle_prompt(struct can327 *elm)
 			 */
 			snprintf(local_txbuf, sizeof(local_txbuf), "ATRTR\r");
 		} else {
-			/* Send a regular CAN data frame */
-			int i;
-
-			for (i = 0; i < frame->len; i++) {
-				snprintf(&local_txbuf[2 * i],
-					 sizeof(local_txbuf), "%02X",
-					 frame->data[i]);
-			}
-
-			snprintf(&local_txbuf[2 * i], sizeof(local_txbuf),
-				 "\r");
+			/* Send a regular CAN data frame.
+			 *
+			 * frame->len is guaranteed to be <= 8. Please refer
+			 * to the comment in can327_netdev_start_xmit().
+			 */
+			bin2hex(local_txbuf, frame->data, frame->len);
+			local_txbuf[2 * frame->len] = '\r';
+			local_txbuf[2 * frame->len + 1] = '\0';
 		}
 
 		elm->drop_next_line = 1;
@@ -815,6 +813,26 @@ static netdev_tx_t can327_netdev_start_xmit(struct sk_buff *skb,
 	struct can327 *elm = netdev_priv(dev);
 	struct can_frame *frame = (struct can_frame *)skb->data;
 
+	/* Why this driver can rely on frame->len <= 8:
+	 *
+	 * While can_dev_dropped_skb() sanity checks the skb to contain a
+	 * CAN 2.0, CAN FD, or other CAN frame type supported by the CAN
+	 * stack, it does not restrict these types of CAN frames.
+	 *
+	 * Instead, this driver is guaranteed to receive only classic CAN 2.0
+	 * frames, with frame->len <= 8, by a chain of checks around the CAN
+	 * device's MTU (as of v6.12):
+	 *
+	 *  - can_changelink() sets the CAN device's MTU to CAN_MTU since we
+	 *    don't advertise CAN_CTRLMODE_FD support in ctrlmode_supported.
+	 *  - can_send() then refuses to pass any skb that exceeds CAN_MTU.
+	 *  - Since CAN_MTU is the smallest currently (v6.12) supported CAN
+	 *    MTU, it is clear that we are dealing with an ETH_P_CAN frame.
+	 *  - All ETH_P_CAN (classic CAN 2.0) frames have frame->len <= 8,
+	 *    as enforced by a call to can_is_can_skb() in can_send().
+	 *  - Thus for all CAN frames reaching this function, frame->len <= 8.
+	 */
+
 	if (can_dev_dropped_skb(dev, skb))
 		return NETDEV_TX_OK;
 
@@ -871,8 +889,10 @@ static bool can327_is_valid_rx_char(u8 c)
 		['H'] = true, true, true, true, true, true, true,
 		['O'] = true, true, true, true, true, true, true,
 		['V'] = true, true, true, true, true,
-		['a'] = true,
-		['b'] = true,
+		/* Note: c-f are needed only if outgoing CAN payloads are
+		 * sent as lowercase hex dumps instead of uppercase.
+		 */
+		['a'] = true, true, true, true, true, true,
 		['v'] = true,
 		[CAN327_DUMMY_CHAR] = true,
 	};
