@@ -577,33 +577,6 @@ static void disk_zone_wplug_abort(struct blk_zone_wplug *zwplug)
 		blk_zone_wplug_bio_io_error(zwplug, bio);
 }
 
-/*
- * Abort (fail) all plugged BIOs of a zone write plug that are not aligned
- * with the assumed write pointer location of the zone when the BIO will
- * be unplugged.
- */
-static void disk_zone_wplug_abort_unaligned(struct gendisk *disk,
-					    struct blk_zone_wplug *zwplug)
-{
-	unsigned int wp_offset = zwplug->wp_offset;
-	struct bio_list bl = BIO_EMPTY_LIST;
-	struct bio *bio;
-
-	while ((bio = bio_list_pop(&zwplug->bio_list))) {
-		if (disk_zone_is_full(disk, zwplug->zone_no, wp_offset) ||
-		    (bio_op(bio) != REQ_OP_ZONE_APPEND &&
-		     bio_offset_from_zone_start(bio) != wp_offset)) {
-			blk_zone_wplug_bio_io_error(zwplug, bio);
-			continue;
-		}
-
-		wp_offset += bio_sectors(bio);
-		bio_list_add(&bl, bio);
-	}
-
-	bio_list_merge(&zwplug->bio_list, &bl);
-}
-
 static inline void disk_zone_wplug_set_error(struct gendisk *disk,
 					     struct blk_zone_wplug *zwplug)
 {
@@ -982,14 +955,6 @@ static bool blk_zone_wplug_prepare_bio(struct blk_zone_wplug *zwplug,
 		 * so that we can restore its operation code on completion.
 		 */
 		bio_set_flag(bio, BIO_EMULATES_ZONE_APPEND);
-	} else {
-		/*
-		 * Check for non-sequential writes early because we avoid a
-		 * whole lot of error handling trouble if we don't send it off
-		 * to the driver.
-		 */
-		if (bio_offset_from_zone_start(bio) != zwplug->wp_offset)
-			goto err;
 	}
 
 	/* Advance the zone write pointer offset. */
@@ -1425,7 +1390,6 @@ static void disk_zone_wplug_handle_error(struct gendisk *disk,
 
 	/* Update the zone write pointer offset. */
 	zwplug->wp_offset = zwplug->wp_offset_compl;
-	disk_zone_wplug_abort_unaligned(disk, zwplug);
 
 	/* Restart BIO submission if we still have any BIO left. */
 	if (!bio_list_empty(&zwplug->bio_list)) {
