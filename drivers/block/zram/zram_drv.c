@@ -37,6 +37,17 @@
 
 #include "zram_drv.h"
 
+/*
+ * This determines sizes of the ZRAM_HUGE object split.  Currently we perform
+ * a 2-way split.  One part is stored in 2048 size-class and the other one is
+ * stored in the size-class above 2048.
+ *
+ * To store an object in a target size-class we need to sub zsmalloc
+ * handle size (which is added to every object by zsmalloc internally).
+ */
+#define ZRAM_MHANDLE_HEAD_LEN	((PAGE_SIZE) / 2 - ZS_HANDLE_SIZE)
+#define ZRAM_MHANDLE_TAIL_LEN	((PAGE_SIZE) - ZRAM_MHANDLE_HEAD_LEN)
+
 static DEFINE_IDR(zram_index_idr);
 /* idr index must be protected */
 static DEFINE_MUTEX(zram_index_mutex);
@@ -91,6 +102,18 @@ static unsigned long zram_get_handle(struct zram *zram, u32 index)
 static void zram_set_handle(struct zram *zram, u32 index, unsigned long handle)
 {
 	zram->table[index].handle = handle;
+}
+
+static struct zram_multi_handle *zram_get_multi_handle(struct zram *zram,
+						       u32 index)
+{
+	return zram->table[index].mhandle;
+}
+
+static void zram_set_multi_handle(struct zram *zram, u32 index,
+				  struct zram_multi_handle *mhandle)
+{
+	zram->table[index].mhandle = mhandle;
 }
 
 /* flag operations require table entry bit_spin_lock() being held */
@@ -1479,8 +1502,6 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
  */
 static void zram_free_page(struct zram *zram, size_t index)
 {
-	unsigned long handle;
-
 #ifdef CONFIG_ZRAM_TRACK_ENTRY_ACTIME
 	zram->table[index].ac_time = 0;
 #endif
@@ -1489,11 +1510,6 @@ static void zram_free_page(struct zram *zram, size_t index)
 	zram_clear_flag(zram, index, ZRAM_INCOMPRESSIBLE);
 	zram_clear_flag(zram, index, ZRAM_PP_SLOT);
 	zram_set_priority(zram, index, 0);
-
-	if (zram_test_flag(zram, index, ZRAM_HUGE)) {
-		zram_clear_flag(zram, index, ZRAM_HUGE);
-		atomic64_dec(&zram->stats.huge_pages);
-	}
 
 	if (zram_test_flag(zram, index, ZRAM_WB)) {
 		zram_clear_flag(zram, index, ZRAM_WB);
@@ -1511,11 +1527,26 @@ static void zram_free_page(struct zram *zram, size_t index)
 		goto out;
 	}
 
-	handle = zram_get_handle(zram, index);
-	if (!handle)
-		return;
+	if (zram_test_flag(zram, index, ZRAM_HUGE)) {
+		struct zram_multi_handle *handle;
 
-	zs_free(zram->mem_pool, handle);
+		handle = zram_get_multi_handle(zram, index);
+		if (!handle)
+			return;
+
+		zs_free(zram->mem_pool, handle->head);
+		zs_free(zram->mem_pool, handle->tail);
+		kfree(handle);
+
+		zram_clear_flag(zram, index, ZRAM_HUGE);
+		atomic64_dec(&zram->stats.huge_pages);
+	} else {
+		unsigned long handle = zram_get_handle(zram, index);
+
+		if (!handle)
+			return;
+		zs_free(zram->mem_pool, handle);
+	}
 
 	atomic64_sub(zram_get_obj_size(zram, index),
 		     &zram->stats.compr_data_size);
@@ -1528,16 +1559,21 @@ out:
 static int read_incompressible_page(struct zram *zram, struct page *page,
 				    u32 index)
 {
-	unsigned long handle;
+	struct zram_multi_handle *handle;
 	void *src, *dst;
 
-	handle = zram_get_handle(zram, index);
-	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
+	handle = zram_get_multi_handle(zram, index);
 	dst = kmap_local_page(page);
-	copy_page(dst, src);
-	kunmap_local(dst);
-	zs_unmap_object(zram->mem_pool, handle);
 
+	src = zs_map_object(zram->mem_pool, handle->head, ZS_MM_RO);
+	memcpy(dst, src, ZRAM_MHANDLE_HEAD_LEN);
+	zs_unmap_object(zram->mem_pool, handle->head);
+
+	src = zs_map_object(zram->mem_pool, handle->tail, ZS_MM_RO);
+	memcpy(dst + ZRAM_MHANDLE_HEAD_LEN, src, ZRAM_MHANDLE_TAIL_LEN);
+	zs_unmap_object(zram->mem_pool, handle->tail);
+
+	kunmap_local(dst);
 	return 0;
 }
 
@@ -1662,34 +1698,54 @@ static int zram_write_same_filled_page(struct zram *zram, unsigned long fill,
 static int zram_write_incompressible_page(struct zram *zram, struct page *page,
 					  u32 index)
 {
-	unsigned long handle;
+	struct zram_multi_handle *handle;
 	void *src, *dst;
+	int ret;
 
 	/*
 	 * This function is called from preemptible context so we don't need
 	 * to do optimistic and fallback to pessimistic handle allocation,
 	 * like we do for compressible pages.
 	 */
-	handle = zs_malloc(zram->mem_pool, PAGE_SIZE,
-			   GFP_NOIO | __GFP_HIGHMEM | __GFP_MOVABLE);
-	if (IS_ERR_VALUE(handle))
-		return PTR_ERR((void *)handle);
+	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	handle->head = zs_malloc(zram->mem_pool, ZRAM_MHANDLE_HEAD_LEN,
+				 GFP_NOIO | __GFP_HIGHMEM | __GFP_MOVABLE);
+	if (IS_ERR_VALUE(handle->head)) {
+		ret = PTR_ERR((void *)handle->head);
+		goto error;
+	}
+
+	handle->tail = zs_malloc(zram->mem_pool, ZRAM_MHANDLE_TAIL_LEN,
+				 GFP_NOIO | __GFP_HIGHMEM | __GFP_MOVABLE);
+	if (IS_ERR_VALUE(handle->tail)) {
+		ret = PTR_ERR((void *)handle->tail);
+		goto error;
+	}
 
 	if (!zram_can_store_page(zram)) {
 		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
-		zs_free(zram->mem_pool, handle);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto error;
 	}
 
-	dst = zs_map_object(zram->mem_pool, handle, ZS_MM_WO);
 	src = kmap_local_page(page);
-	memcpy(dst, src, PAGE_SIZE);
+
+	dst = zs_map_object(zram->mem_pool, handle->head, ZS_MM_WO);
+	memcpy(dst, src, ZRAM_MHANDLE_HEAD_LEN);
+	zs_unmap_object(zram->mem_pool, handle->head);
+
+	dst = zs_map_object(zram->mem_pool, handle->tail, ZS_MM_WO);
+	memcpy(dst, src + ZRAM_MHANDLE_HEAD_LEN, ZRAM_MHANDLE_TAIL_LEN);
+	zs_unmap_object(zram->mem_pool, handle->tail);
+
 	kunmap_local(src);
-	zs_unmap_object(zram->mem_pool, handle);
 
 	zram_slot_lock(zram, index);
 	zram_set_flag(zram, index, ZRAM_HUGE);
-	zram_set_handle(zram, index, handle);
+	zram_set_multi_handle(zram, index, handle);
 	zram_set_obj_size(zram, index, PAGE_SIZE);
 	zram_slot_unlock(zram, index);
 
@@ -1699,6 +1755,14 @@ static int zram_write_incompressible_page(struct zram *zram, struct page *page,
 	atomic64_inc(&zram->stats.pages_stored);
 
 	return 0;
+
+error:
+	if (!IS_ERR_VALUE(handle->head))
+		zs_free(zram->mem_pool, handle->head);
+	if (!IS_ERR_VALUE(handle->tail))
+		zs_free(zram->mem_pool, handle->tail);
+	kfree(handle);
+	return ret;
 }
 
 static int zram_write_page(struct zram *zram, struct page *page, u32 index)

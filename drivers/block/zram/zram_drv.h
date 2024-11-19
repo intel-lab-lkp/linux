@@ -60,9 +60,22 @@ enum zram_pageflags {
 
 /*-- Data structures */
 
+/*
+ * Unlike regular zram table entries, ZRAM_HUGE entries are stored in zsmalloc
+ * as smaller objects in multiple locations (size-classes).  This keeps tracks
+ * of those locations.
+ */
+struct zram_multi_handle {
+	unsigned long head;
+	unsigned long tail;
+};
+
 /* Allocated for each disk page */
 struct zram_table_entry {
-	unsigned long handle;
+	union {
+		unsigned long handle;
+		struct zram_multi_handle *mhandle;
+	};
 	unsigned int flags;
 	spinlock_t lock;
 #ifdef CONFIG_ZRAM_TRACK_ENTRY_ACTIME
