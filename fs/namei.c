@@ -1886,7 +1886,7 @@ static const char *pick_link(struct nameidata *nd, struct path *link,
 		return ERR_PTR(error);
 
 	res = READ_ONCE(inode->i_link);
-	if (!res) {
+	if (!virt_addr_valid(res)) {
 		const char * (*get)(struct dentry *, struct inode *,
 				struct delayed_call *);
 		get = inode->i_op->get_link;
