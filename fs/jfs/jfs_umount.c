@@ -104,14 +104,15 @@ int jfs_umount(struct super_block *sb)
 	 * list (to signify skip logredo()).
 	 */
 	if (log) {		/* log = NULL if read-only mount */
-		updateSuper(sb, FM_CLEAN);
-
-		/*
-		 * close log:
-		 *
-		 * remove file system from log active file system list.
-		 */
-		rc = lmLogClose(sb);
+		rc = updateSuper(sb, FM_CLEAN);
+		if (!rc) {
+			/*
+			 * close log:
+			 *
+			 * remove file system from log active file system list.
+			 */
+			rc = lmLogClose(sb);
+		}
 	}
 	jfs_info("UnMount JFS Complete: rc = %d", rc);
 	return rc;
@@ -122,6 +123,7 @@ int jfs_umount_rw(struct super_block *sb)
 {
 	struct jfs_sb_info *sbi = JFS_SBI(sb);
 	struct jfs_log *log = sbi->log;
+	int rc;
 
 	if (!log)
 		return 0;
@@ -147,7 +149,7 @@ int jfs_umount_rw(struct super_block *sb)
 	 */
 	filemap_write_and_wait(sbi->direct_inode->i_mapping);
 
-	updateSuper(sb, FM_CLEAN);
+	rc = updateSuper(sb, FM_CLEAN);
 
-	return lmLogClose(sb);
+	return rc ? rc : lmLogClose(sb);
 }

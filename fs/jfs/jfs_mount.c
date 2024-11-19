@@ -303,12 +303,6 @@ static int chkSuper(struct super_block *sb)
 	/*
 	 * validate superblock
 	 */
-	/* validate fs signature */
-	if (strncmp(j_sb->s_magic, JFS_MAGIC, 4) ||
-	    le32_to_cpu(j_sb->s_version) > JFS_VERSION) {
-		rc = -EINVAL;
-		goto out;
-	}
 
 	bsize = le32_to_cpu(j_sb->s_bsize);
 	if (bsize != PSIZE) {
@@ -449,6 +443,18 @@ int updateSuper(struct super_block *sb, uint state)
 	return 0;
 }
 
+static int validateSuper(struct buffer_head *bh)
+{
+	struct jfs_superblock *j_sb;
+
+	if (!bh)
+		return -EIO;
+
+	j_sb = (struct jfs_superblock *)bh->b_data;
+
+	return (strncmp(j_sb->s_magic, JFS_MAGIC, 4) == 0 &&
+		le32_to_cpu(j_sb->s_version) <= JFS_VERSION) ? 0 : -EINVAL;
+}
 
 /*
  *	readSuper()
@@ -457,17 +463,17 @@ int updateSuper(struct super_block *sb, uint state)
  */
 int readSuper(struct super_block *sb, struct buffer_head **bpp)
 {
-	/* read in primary superblock */
+	/* read in and validate primary superblock */
 	*bpp = sb_bread(sb, SUPER1_OFF >> sb->s_blocksize_bits);
-	if (*bpp)
+	if (!validateSuper(*bpp))
 		return 0;
 
-	/* read in secondary/replicated superblock */
+	/* read in and validate secondary/replicated superblock */
 	*bpp = sb_bread(sb, SUPER2_OFF >> sb->s_blocksize_bits);
-	if (*bpp)
+	if (!validateSuper(*bpp))
 		return 0;
 
-	return -EIO;
+	return -EINVAL;
 }
 
 
