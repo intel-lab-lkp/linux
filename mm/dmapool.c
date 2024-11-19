@@ -43,6 +43,7 @@
 struct dma_block {
 	struct dma_block *next_block;
 	dma_addr_t dma;
+	void *vaddr;
 };
 
 struct dma_pool {		/* the pool */
@@ -64,6 +65,8 @@ struct dma_page {		/* cacheable header for 'allocation' bytes */
 	struct list_head page_list;
 	void *vaddr;
 	dma_addr_t dma;
+	struct dma_block *blocks;
+	size_t blocks_per_page;
 };
 
 static DEFINE_MUTEX(pools_lock);
@@ -91,14 +94,35 @@ static ssize_t pools_show(struct device *dev, struct device_attribute *attr, cha
 
 static DEVICE_ATTR_RO(pools);
 
+static struct dma_block *pool_find_block(struct dma_pool *pool, void *vaddr)
+{
+	struct dma_page *page;
+	size_t offset, index;
+
+	list_for_each_entry(page, &pool->page_list, page_list) {
+		if (vaddr < page->vaddr)
+			continue;
+		offset = vaddr - page->vaddr;
+		if (offset >= pool->allocation)
+			continue;
+
+		index = offset / pool->size;
+		if (index >= page->blocks_per_page)
+			return NULL;
+
+		return &page->blocks[index];
+	}
+	return NULL;
+}
+
 #ifdef DMAPOOL_DEBUG
 static void pool_check_block(struct dma_pool *pool, struct dma_block *block,
 			     gfp_t mem_flags)
 {
-	u8 *data = (void *)block;
+	u8 *data = (void *)block->vaddr;
 	int i;
 
-	for (i = sizeof(struct dma_block); i < pool->size; i++) {
+	for (i = 0; i < pool->size; i++) {
 		if (data[i] == POOL_POISON_FREED)
 			continue;
 		dev_err(pool->dev, "%s %s, %p (corrupted)\n", __func__,
@@ -114,7 +138,7 @@ static void pool_check_block(struct dma_pool *pool, struct dma_block *block,
 	}
 
 	if (!want_init_on_alloc(mem_flags))
-		memset(block, POOL_POISON_ALLOCATED, pool->size);
+		memset(block->vaddr, POOL_POISON_ALLOCATED, pool->size);
 }
 
 static struct dma_page *pool_find_page(struct dma_pool *pool, dma_addr_t dma)
@@ -143,7 +167,7 @@ static bool pool_block_err(struct dma_pool *pool, void *vaddr, dma_addr_t dma)
 	}
 
 	while (block) {
-		if (block != vaddr) {
+		if (block->vaddr != vaddr) {
 			block = block->next_block;
 			continue;
 		}
@@ -301,6 +325,7 @@ static void pool_initialise_page(struct dma_pool *pool, struct dma_page *page)
 {
 	unsigned int next_boundary = pool->boundary, offset = 0;
 	struct dma_block *block, *first = NULL, *last = NULL;
+	size_t i = 0;
 
 	pool_init_page(pool, page);
 	while (offset + pool->size <= pool->allocation) {
@@ -310,7 +335,8 @@ static void pool_initialise_page(struct dma_pool *pool, struct dma_page *page)
 			continue;
 		}
 
-		block = page->vaddr + offset;
+		block = &page->blocks[i];
+		block->vaddr = page->vaddr + offset;
 		block->dma = page->dma + offset;
 		block->next_block = NULL;
 
@@ -322,6 +348,7 @@ static void pool_initialise_page(struct dma_pool *pool, struct dma_page *page)
 
 		offset += pool->size;
 		pool->nr_blocks++;
+		i++;
 	}
 
 	last->next_block = pool->next_block;
@@ -339,9 +366,18 @@ static struct dma_page *pool_alloc_page(struct dma_pool *pool, gfp_t mem_flags)
 	if (!page)
 		return NULL;
 
+	page->blocks_per_page = pool->allocation / pool->size;
+	page->blocks = kmalloc_array(page->blocks_per_page,
+				     sizeof(struct dma_block), GFP_KERNEL);
+	if (!page->blocks) {
+		kfree(page);
+		return NULL;
+	}
+
 	page->vaddr = dma_alloc_coherent(pool->dev, pool->allocation,
 					 &page->dma, mem_flags);
 	if (!page->vaddr) {
+		kfree(page->blocks);
 		kfree(page);
 		return NULL;
 	}
@@ -383,6 +419,7 @@ void dma_pool_destroy(struct dma_pool *pool)
 		if (!busy)
 			dma_free_coherent(pool->dev, pool->allocation,
 					  page->vaddr, page->dma);
+		kfree(page->blocks);
 		list_del(&page->page_list);
 		kfree(page);
 	}
@@ -432,9 +469,9 @@ void *dma_pool_alloc(struct dma_pool *pool, gfp_t mem_flags,
 	*handle = block->dma;
 	pool_check_block(pool, block, mem_flags);
 	if (want_init_on_alloc(mem_flags))
-		memset(block, 0, pool->size);
+		memset(block->vaddr, 0, pool->size);
 
-	return block;
+	return block->vaddr;
 }
 EXPORT_SYMBOL(dma_pool_alloc);
 
@@ -449,8 +486,15 @@ EXPORT_SYMBOL(dma_pool_alloc);
  */
 void dma_pool_free(struct dma_pool *pool, void *vaddr, dma_addr_t dma)
 {
-	struct dma_block *block = vaddr;
+	struct dma_block *block;
 	unsigned long flags;
+
+	block = pool_find_block(pool, vaddr);
+	if (!block) {
+		dev_err(pool->dev, "%s %s, invalid vaddr %p\n",
+			__func__, pool->name, vaddr);
+		return;
+	}
 
 	spin_lock_irqsave(&pool->lock, flags);
 	if (!pool_block_err(pool, vaddr, dma)) {
