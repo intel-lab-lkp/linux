@@ -1079,6 +1079,8 @@ void snp_kexec_finish(void)
 		data = per_cpu(runtime_data, cpu);
 		ghcb = &data->ghcb_page;
 		pte = lookup_address((unsigned long)ghcb, &level);
+		if (!pte)
+			continue;
 		size = page_level_size(level);
 		set_pte_enc(pte, level, (void *)ghcb);
 		snp_set_memory_private((unsigned long)ghcb, (size / PAGE_SIZE));
