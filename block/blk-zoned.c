@@ -558,8 +558,8 @@ again:
 	return zwplug;
 }
 
-static inline void blk_zone_wplug_bio_io_error(struct blk_zone_wplug *zwplug,
-					       struct bio *bio)
+static void blk_zone_wplug_bio_io_error(struct blk_zone_wplug *zwplug,
+					struct bio *bio)
 {
 	struct request_queue *q = zwplug->disk->queue;
 
@@ -580,8 +580,8 @@ static void disk_zone_wplug_abort(struct blk_zone_wplug *zwplug)
 		blk_zone_wplug_bio_io_error(zwplug, bio);
 }
 
-static inline void disk_zone_wplug_set_error(struct gendisk *disk,
-					     struct blk_zone_wplug *zwplug)
+static void disk_zone_wplug_set_error(struct gendisk *disk,
+				      struct blk_zone_wplug *zwplug)
 {
 	unsigned long flags;
 
@@ -607,8 +607,8 @@ static inline void disk_zone_wplug_set_error(struct gendisk *disk,
 	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
 }
 
-static inline void disk_zone_wplug_clear_error(struct gendisk *disk,
-					       struct blk_zone_wplug *zwplug)
+static void disk_zone_wplug_clear_error(struct gendisk *disk,
+					struct blk_zone_wplug *zwplug)
 {
 	unsigned long flags;
 
@@ -1597,7 +1597,7 @@ void disk_free_zone_resources(struct gendisk *disk)
 	disk->nr_zones = 0;
 }
 
-static inline bool disk_need_zone_resources(struct gendisk *disk)
+static bool disk_need_zone_resources(struct gendisk *disk)
 {
 	/*
 	 * All mq zoned devices need zone resources so that the block layer
