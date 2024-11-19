@@ -1416,6 +1416,7 @@ static int sunxi_pinctrl_setup_debounce(struct sunxi_pinctrl *pctl,
 	unsigned int hosc_diff, losc_diff;
 	unsigned int hosc_div, losc_div;
 	struct clk *hosc, *losc;
+	bool debounce_minimal = false;
 	u8 div, src;
 	int i, ret;
 
@@ -1423,9 +1424,9 @@ static int sunxi_pinctrl_setup_debounce(struct sunxi_pinctrl *pctl,
 	if (of_clk_get_parent_count(node) != 3)
 		return 0;
 
-	/* If we don't have any setup, bail out */
+	/* If we don't have any setup, use minimal debouncing. */
 	if (!of_property_present(node, "input-debounce"))
-		return 0;
+		debounce_minimal = true;
 
 	losc = devm_clk_get(pctl->dev, "losc");
 	if (IS_ERR(losc))
@@ -1439,29 +1440,37 @@ static int sunxi_pinctrl_setup_debounce(struct sunxi_pinctrl *pctl,
 		unsigned long debounce_freq;
 		u32 debounce;
 
-		ret = of_property_read_u32_index(node, "input-debounce",
-						 i, &debounce);
-		if (ret)
-			return ret;
+		if (!debounce_minimal) {
+			ret = of_property_read_u32_index(node, "input-debounce",
+							 i, &debounce);
+			if (ret)
+				return ret;
 
-		if (!debounce)
-			continue;
+			if (!debounce)
+				continue;
 
-		debounce_freq = DIV_ROUND_CLOSEST(USEC_PER_SEC, debounce);
-		losc_div = sunxi_pinctrl_get_debounce_div(losc,
-							  debounce_freq,
-							  &losc_diff);
+			debounce_freq = DIV_ROUND_CLOSEST(USEC_PER_SEC,
+							  debounce);
 
-		hosc_div = sunxi_pinctrl_get_debounce_div(hosc,
-							  debounce_freq,
-							  &hosc_diff);
+			losc_div = sunxi_pinctrl_get_debounce_div(losc,
+								  debounce_freq,
+								  &losc_diff);
 
-		if (hosc_diff < losc_diff) {
-			div = hosc_div;
-			src = 1;
+			hosc_div = sunxi_pinctrl_get_debounce_div(hosc,
+								  debounce_freq,
+								  &hosc_diff);
+
+			if (hosc_diff < losc_diff) {
+				div = hosc_div;
+				src = 1;
+			} else {
+				div = losc_div;
+				src = 0;
+			}
 		} else {
-			div = losc_div;
-			src = 0;
+			/* Achieve minimal debouncing using undivided hosc. */
+			div = 0;
+			src = 1;
 		}
 
 		writel(src | div << 4,
