@@ -1363,6 +1363,8 @@ err_i2c_unregister_edid:
 	i2c_unregister_device(adv7511->i2c_edid);
 uninit_regulators:
 	adv7511_uninit_regulators(adv7511);
+	if (adv7511->host_node)
+		of_node_put(adv7511->host_node);
 
 	return ret;
 }
@@ -1370,6 +1372,9 @@ uninit_regulators:
 static void adv7511_remove(struct i2c_client *i2c)
 {
 	struct adv7511 *adv7511 = i2c_get_clientdata(i2c);
+
+	if (adv7511->host_node)
+		of_node_put(adv7511->host_node);
 
 	adv7511_uninit_regulators(adv7511);
 
