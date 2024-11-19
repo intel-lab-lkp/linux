@@ -1341,10 +1341,8 @@ unlock:
 	disk_put_zone_wplug(zwplug);
 }
 
-static void disk_zone_wplugs_work(struct work_struct *work)
+static void disk_zone_process_err_list(struct gendisk *disk)
 {
-	struct gendisk *disk =
-		container_of(work, struct gendisk, zone_wplugs_work);
 	struct blk_zone_wplug *zwplug;
 	unsigned long flags;
 
@@ -1363,6 +1361,14 @@ static void disk_zone_wplugs_work(struct work_struct *work)
 	}
 
 	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
+}
+
+static void disk_zone_wplugs_work(struct work_struct *work)
+{
+	struct gendisk *disk =
+		container_of(work, struct gendisk, zone_wplugs_work);
+
+	disk_zone_process_err_list(disk);
 }
 
 static inline unsigned int disk_zone_wplugs_hash_size(struct gendisk *disk)
