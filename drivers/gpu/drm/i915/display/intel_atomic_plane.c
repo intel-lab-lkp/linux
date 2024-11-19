@@ -1030,6 +1030,11 @@ int intel_plane_check_src_coordinates(struct intel_plane_state *plane_state)
 		     DISPLAY_VERx100(i915) == 3000) &&
 		     src_x % 2 != 0)
 			hsub = 2;
+
+		if (DISPLAY_VERx100(i915) >= 3000 &&
+		    DISPLAY_VERx100(i915) <= 3500)
+			vsub = 2;
+
 	} else {
 		hsub = fb->format->hsub;
 		vsub = fb->format->vsub;
