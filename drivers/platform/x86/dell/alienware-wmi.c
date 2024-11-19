@@ -1196,14 +1196,13 @@ static int __init alienware_wmi_init(void)
 	ret = platform_driver_register(&platform_driver);
 	if (ret)
 		goto fail_platform_driver;
-	platform_device = platform_device_alloc("alienware-wmi", PLATFORM_DEVID_NONE);
-	if (!platform_device) {
-		ret = -ENOMEM;
+
+	platform_device = platform_device_register_simple("alienware-wmi",
+							  PLATFORM_DEVID_NONE, NULL, 0);
+	if (IS_ERR(platform_device)) {
+		ret = PTR_ERR(platform_device);
 		goto fail_platform_device1;
 	}
-	ret = platform_device_add(platform_device);
-	if (ret)
-		goto fail_platform_device2;
 
 	if (quirks->hdmi_mux > 0) {
 		ret = create_hdmi(platform_device);
@@ -1242,9 +1241,7 @@ fail_prep_thermal_profile:
 fail_prep_deepsleep:
 fail_prep_amplifier:
 fail_prep_hdmi:
-	platform_device_del(platform_device);
-fail_platform_device2:
-	platform_device_put(platform_device);
+	platform_device_unregister(platform_device);
 fail_platform_device1:
 	platform_driver_unregister(&platform_driver);
 fail_platform_driver:
