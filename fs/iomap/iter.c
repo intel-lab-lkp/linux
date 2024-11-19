@@ -25,6 +25,8 @@ static inline int iomap_iter_advance(struct iomap_iter *iter)
 
 	/* handle the previous iteration (if any) */
 	if (iter->iomap.length) {
+		if (iter->iomap.flags & IOMAP_F_HAS_FOLIOS)
+			folio_batch_release(&iter->iomap.fbatch);
 		if (iter->processed < 0)
 			return iter->processed;
 		if (!iter->processed && !stale)
