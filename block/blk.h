@@ -473,6 +473,18 @@ static inline void blk_zone_update_request_bio(struct request *rq,
 	if (req_op(rq) == REQ_OP_ZONE_APPEND || bio_zone_write_plugging(bio))
 		bio->bi_iter.bi_sector = rq->__sector;
 }
+
+void blk_zone_write_plug_requeue_request(struct request *rq);
+static inline void blk_zone_requeue_request(struct request *rq)
+{
+	if (!blk_rq_is_seq_zoned_write(rq))
+		return;
+
+	blk_zone_write_plug_requeue_request(rq);
+}
+
+void blk_zone_requeue_work(struct request_queue *q);
+
 void blk_zone_write_plug_bio_endio(struct bio *bio);
 static inline void blk_zone_bio_endio(struct bio *bio)
 {
@@ -490,6 +502,14 @@ static inline void blk_zone_finish_request(struct request *rq)
 	if (rq->rq_flags & RQF_ZONE_WRITE_PLUGGING)
 		blk_zone_write_plug_finish_request(rq);
 }
+
+void blk_zone_write_plug_free_request(struct request *rq);
+static inline void blk_zone_free_request(struct request *rq)
+{
+	if (blk_queue_is_zoned(rq->q))
+		blk_zone_write_plug_free_request(rq);
+}
+
 int blkdev_report_zones_ioctl(struct block_device *bdev, unsigned int cmd,
 		unsigned long arg);
 int blkdev_zone_mgmt_ioctl(struct block_device *bdev, blk_mode_t mode,
@@ -515,10 +535,19 @@ static inline void blk_zone_update_request_bio(struct request *rq,
 					       struct bio *bio)
 {
 }
+static inline void blk_zone_requeue_request(struct request *rq)
+{
+}
+static inline void blk_zone_requeue_work(struct request_queue *q)
+{
+}
 static inline void blk_zone_bio_endio(struct bio *bio)
 {
 }
 static inline void blk_zone_finish_request(struct request *rq)
+{
+}
+static inline void blk_zone_free_request(struct request *rq)
 {
 }
 static inline int blkdev_report_zones_ioctl(struct block_device *bdev,

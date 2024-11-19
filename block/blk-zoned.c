@@ -608,6 +608,8 @@ static inline void disk_zone_wplug_set_error(struct gendisk *disk,
 	if (zwplug->flags & BLK_ZONE_WPLUG_ERROR)
 		return;
 
+	zwplug->flags |= BLK_ZONE_WPLUG_PLUGGED;
+	zwplug->flags |= BLK_ZONE_WPLUG_ERROR;
 	/*
 	 * At this point, we already have a reference on the zone write plug.
 	 * However, since we are going to add the plug to the disk zone write
@@ -616,7 +618,6 @@ static inline void disk_zone_wplug_set_error(struct gendisk *disk,
 	 * handled, or in disk_zone_wplug_clear_error() if the zone is reset or
 	 * finished.
 	 */
-	zwplug->flags |= BLK_ZONE_WPLUG_ERROR;
 	refcount_inc(&zwplug->ref);
 
 	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
@@ -642,6 +643,7 @@ static inline void disk_zone_wplug_clear_error(struct gendisk *disk,
 	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
 	if (!list_empty(&zwplug->link)) {
 		list_del_init(&zwplug->link);
+		zwplug->flags &= ~BLK_ZONE_WPLUG_PLUGGED;
 		zwplug->flags &= ~BLK_ZONE_WPLUG_ERROR;
 		disk_put_zone_wplug(zwplug);
 	}
@@ -744,6 +746,70 @@ static bool blk_zone_wplug_handle_reset_all(struct bio *bio)
 	}
 
 	return false;
+}
+
+struct all_zwr_inserted_data {
+	struct blk_zone_wplug *zwplug;
+	bool res;
+};
+
+/*
+ * Changes @data->res to %false if and only if @rq is a zoned write for the
+ * given zone and if it is owned by the block driver.
+ *
+ * @rq members may change while this function is in progress. Hence, use
+ * READ_ONCE() to read @rq members.
+ */
+static bool blk_zwr_inserted(struct request *rq, void *data)
+{
+	struct all_zwr_inserted_data *d = data;
+	struct blk_zone_wplug *zwplug = d->zwplug;
+	struct request_queue *q = zwplug->disk->queue;
+	struct bio *bio = READ_ONCE(rq->bio);
+
+	if (rq->q == q && READ_ONCE(rq->state) != MQ_RQ_IDLE &&
+	    blk_rq_is_seq_zoned_write(rq) && bio &&
+	    bio_zone_no(bio) == zwplug->zone_no) {
+		d->res = false;
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * Report whether or not all zoned writes for a zone have been inserted into a
+ * software queue, elevator queue or hardware queue.
+ */
+static bool blk_zone_all_zwr_inserted(struct blk_zone_wplug *zwplug)
+{
+	struct gendisk *disk = zwplug->disk;
+	struct request_queue *q = disk->queue;
+	struct all_zwr_inserted_data d = { .zwplug = zwplug, .res = true };
+	struct blk_mq_hw_ctx *hctx;
+	long unsigned int i;
+	struct request *rq;
+
+	scoped_guard(spinlock_irqsave, &q->requeue_lock) {
+		list_for_each_entry(rq, &q->requeue_list, queuelist)
+			if (blk_rq_is_seq_zoned_write(rq) &&
+			    bio_zone_no(rq->bio) == zwplug->zone_no)
+				return false;
+		list_for_each_entry(rq, &q->flush_list, queuelist)
+			if (blk_rq_is_seq_zoned_write(rq) &&
+			    bio_zone_no(rq->bio) == zwplug->zone_no)
+				return false;
+	}
+
+	queue_for_each_hw_ctx(q, hctx, i) {
+		struct blk_mq_tags *tags = hctx->sched_tags ?: hctx->tags;
+
+		blk_mq_all_tag_iter(tags, blk_zwr_inserted, &d);
+		if (!d.res || blk_mq_is_shared_tags(q->tag_set->flags))
+			break;
+	}
+
+	return d.res;
 }
 
 static inline void blk_zone_wplug_add_bio(struct blk_zone_wplug *zwplug,
@@ -1096,6 +1162,29 @@ static void disk_zone_wplug_schedule_bio_work(struct gendisk *disk,
 	queue_work(disk->zone_wplugs_wq, &zwplug->bio_work);
 }
 
+/*
+ * Change the zone state to "error" if a request is requeued to postpone
+ * processing of requeued requests until all pending requests have either
+ * completed or have been requeued.
+ */
+void blk_zone_write_plug_requeue_request(struct request *rq)
+{
+	struct gendisk *disk = rq->q->disk;
+	struct blk_zone_wplug *zwplug;
+
+	if (!disk->zone_wplugs_hash_bits || !blk_rq_is_seq_zoned_write(rq))
+		return;
+
+	zwplug = disk_get_zone_wplug(disk, blk_rq_pos(rq));
+	if (WARN_ON_ONCE(!zwplug))
+		return;
+
+	scoped_guard(spinlock_irqsave, &zwplug->lock)
+		disk_zone_wplug_set_error(disk, zwplug);
+
+	disk_put_zone_wplug(zwplug);
+}
+
 static void disk_zone_wplug_unplug_bio(struct gendisk *disk,
 				       struct blk_zone_wplug *zwplug)
 {
@@ -1199,6 +1288,33 @@ void blk_zone_write_plug_finish_request(struct request *req)
 	disk_zone_wplug_unplug_bio(disk, zwplug);
 
 	/* Drop the reference we took when entering this function. */
+	disk_put_zone_wplug(zwplug);
+}
+
+/*
+ * Schedule zone_plugs_work if a zone is in the error state and if no requests
+ * are in flight. Called from blk_mq_free_request().
+ */
+void blk_zone_write_plug_free_request(struct request *rq)
+{
+	struct gendisk *disk = rq->q->disk;
+	struct blk_zone_wplug *zwplug;
+
+	/*
+	 * Do nothing if this function is called before the zone information
+	 * has been initialized.
+	 */
+	if (!disk->zone_wplugs_hash_bits)
+		return;
+
+	zwplug = disk_get_zone_wplug(disk, blk_rq_pos(rq));
+
+	if (!zwplug)
+		return;
+
+	if (zwplug->flags & BLK_ZONE_WPLUG_ERROR)
+		kblockd_schedule_work(&disk->zone_wplugs_work);
+
 	disk_put_zone_wplug(zwplug);
 }
 
@@ -1343,14 +1459,15 @@ unlock:
 
 static void disk_zone_process_err_list(struct gendisk *disk)
 {
-	struct blk_zone_wplug *zwplug;
+	struct blk_zone_wplug *zwplug, *next;
 	unsigned long flags;
 
 	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
 
-	while (!list_empty(&disk->zone_wplugs_err_list)) {
-		zwplug = list_first_entry(&disk->zone_wplugs_err_list,
-					  struct blk_zone_wplug, link);
+	list_for_each_entry_safe(zwplug, next, &disk->zone_wplugs_err_list,
+				 link) {
+		if (!blk_zone_all_zwr_inserted(zwplug))
+			continue;
 		list_del_init(&zwplug->link);
 		spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
 
@@ -1361,6 +1478,12 @@ static void disk_zone_process_err_list(struct gendisk *disk)
 	}
 
 	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
+
+	/*
+	 * If one or more zones have been skipped, this work will be requeued
+	 * when a request is requeued (blk_zone_requeue_work()) or freed
+	 * (blk_zone_write_plug_free_request()).
+	 */
 }
 
 static void disk_zone_wplugs_work(struct work_struct *work)
@@ -1369,6 +1492,20 @@ static void disk_zone_wplugs_work(struct work_struct *work)
 		container_of(work, struct gendisk, zone_wplugs_work);
 
 	disk_zone_process_err_list(disk);
+}
+
+/* May be called from interrupt context and hence must not sleep. */
+void blk_zone_requeue_work(struct request_queue *q)
+{
+	struct gendisk *disk = q->disk;
+
+	if (!disk)
+		return;
+
+	if (in_interrupt())
+		kblockd_schedule_work(&disk->zone_wplugs_work);
+	else
+		disk_zone_process_err_list(disk);
 }
 
 static inline unsigned int disk_zone_wplugs_hash_size(struct gendisk *disk)
@@ -1854,8 +1991,11 @@ static void queue_zone_wplug_show(struct blk_zone_wplug *zwplug,
 	zwp_bio_list_size = bio_list_size(&zwplug->bio_list);
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 
-	seq_printf(m, "%u 0x%x %u %u %u\n", zwp_zone_no, zwp_flags, zwp_ref,
-		   zwp_wp_offset, zwp_bio_list_size);
+	bool all_zwr_inserted = blk_zone_all_zwr_inserted(zwplug);
+
+	seq_printf(m, "zone_no %u flags 0x%x ref %u wp_offset %u bio_list_size %u all_zwr_inserted %d\n",
+		   zwp_zone_no, zwp_flags, zwp_ref, zwp_wp_offset,
+		   zwp_bio_list_size, all_zwr_inserted);
 }
 
 int queue_zone_wplugs_show(void *data, struct seq_file *m)
