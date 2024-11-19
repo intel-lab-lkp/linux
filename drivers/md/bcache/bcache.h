@@ -201,6 +201,7 @@ struct bucket {
 	uint8_t		last_gc; /* Most out of date gen in the btree */
 	uint16_t	gc_mark; /* Bitfield used by GC. See below for field */
 	uint16_t	reclaimable_in_gc:1;
+	uint16_t	invalidating:1;
 };
 
 /*
@@ -981,7 +982,7 @@ uint8_t bch_inc_gen(struct cache *ca, struct bucket *b);
 void bch_rescale_priorities(struct cache_set *c, int sectors);
 
 bool bch_can_invalidate_bucket(struct cache *ca, struct bucket *b);
-void __bch_invalidate_one_bucket(struct cache *ca, struct bucket *b);
+bool __bch_invalidate_one_bucket(struct cache *ca, struct bucket *b);
 
 void __bch_bucket_free(struct cache *ca, struct bucket *b);
 void bch_bucket_free(struct cache_set *c, struct bkey *k);
