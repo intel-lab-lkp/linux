@@ -8,6 +8,7 @@ use crate::{
     error::code::*,
     error::Result,
     uaccess::UserSliceReader,
+    types::{Opaque, ARef},
 };
 use core::ptr::{self, NonNull};
 
@@ -30,13 +31,14 @@ pub const fn page_align(addr: usize) -> usize {
     (addr + (PAGE_SIZE - 1)) & PAGE_MASK
 }
 
-/// A pointer to a page that owns the page allocation.
+/// A pointer to a reference-counted page.
 ///
 /// # Invariants
 ///
-/// The pointer is valid, and has ownership over the page.
+/// The pointer is valid.
+#[repr(transparent)]
 pub struct Page {
-    page: NonNull<bindings::page>,
+    page: Opaque<bindings::page>,
 }
 
 // SAFETY: Pages have no logic that relies on them staying on a given thread, so moving them across
@@ -71,19 +73,23 @@ impl Page {
     /// let page = Page::alloc_page(GFP_KERNEL | __GFP_ZERO)?;
     /// # Ok(()) }
     /// ```
-    pub fn alloc_page(flags: Flags) -> Result<Self, AllocError> {
+    pub fn alloc_page(flags: Flags) -> Result<ARef<Self>, AllocError> {
         // SAFETY: Depending on the value of `gfp_flags`, this call may sleep. Other than that, it
         // is always safe to call this method.
         let page = unsafe { bindings::alloc_pages(flags.as_raw(), 0) };
-        let page = NonNull::new(page).ok_or(AllocError)?;
-        // INVARIANT: We just successfully allocated a page, so we now have ownership of the newly
-        // allocated page. We transfer that ownership to the new `Page` object.
-        Ok(Self { page })
+        if page.is_null() {
+            return Err(AllocError);
+        }
+        // CAST: Self` is a `repr(transparent)` wrapper around `bindings::page`.
+        let ptr = page.cast::<Self>();
+        // INVARIANT: We just successfully allocated a page, ptr points to the new `Page` object.
+        // SAFETY: According to invariant above ptr is valid.
+        Ok(unsafe { ARef::from_raw(NonNull::new_unchecked(ptr)) })
     }
 
     /// Returns a raw pointer to the page.
     pub fn as_ptr(&self) -> *mut bindings::page {
-        self.page.as_ptr()
+        self.page.get()
     }
 
     /// Runs a piece of code with this page mapped to an address.
@@ -252,9 +258,15 @@ impl Page {
     }
 }
 
-impl Drop for Page {
-    fn drop(&mut self) {
-        // SAFETY: By the type invariants, we have ownership of the page and can free it.
-        unsafe { bindings::__free_pages(self.page.as_ptr(), 0) };
+// SAFETY: Instances of `Page` are always reference-counted.
+unsafe impl crate::types::AlwaysRefCounted for Page {
+    fn inc_ref(&self) {
+        // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
+        unsafe { bindings::get_page(self.as_ptr()) };
+    }
+
+    unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
+        // SAFETY: The safety requirements guarantee that the refcount is non-zero.
+        unsafe { bindings::put_page(obj.cast().as_ptr()) }
     }
 }

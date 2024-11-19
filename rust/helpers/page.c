@@ -17,3 +17,13 @@ void rust_helper_kunmap_local(const void *addr)
 {
 	kunmap_local(addr);
 }
+
+void rust_helper_put_page(struct page *page)
+{
+	put_page(page);
+}
+
+void rust_helper_get_page(struct page *page)
+{
+	get_page(page);
+}
