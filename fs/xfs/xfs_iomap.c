@@ -1037,6 +1037,15 @@ xfs_buffered_write_iomap_begin(
 				goto convert_delay;
 			if (end_fsb > eof_fsb)
 				end_fsb = eof_fsb;
+		} else if (imap.br_state == XFS_EXT_UNWRITTEN) {
+			u64 end;
+
+			xfs_trim_extent(&imap, offset_fsb, end_fsb - offset_fsb);
+			end = iomap_fill_dirty_folios(VFS_I(ip), iomap,
+					XFS_FSB_TO_B(mp, imap.br_startoff),
+					XFS_FSB_TO_B(mp, imap.br_blockcount));
+			end_fsb = min_t(xfs_fileoff_t, end_fsb, XFS_B_TO_FSB(mp, end));
+			iomap_flags |= IOMAP_F_HAS_FOLIOS;
 		}
 		xfs_trim_extent(&imap, offset_fsb, end_fsb - offset_fsb);
 	}
