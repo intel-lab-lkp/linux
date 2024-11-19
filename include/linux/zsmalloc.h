@@ -16,6 +16,8 @@
 
 #include <linux/types.h>
 
+#define ZS_HANDLE_SIZE (sizeof(unsigned long))
+
 /*
  * zsmalloc mapping modes
  *
