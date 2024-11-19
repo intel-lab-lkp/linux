@@ -502,12 +502,8 @@ static void bch_cache_read_endio(struct bio *bio)
 	struct closure *cl = bio->bi_private;
 	struct search *s = container_of(cl, struct search, cl);
 
-	/*
-	 * If the bucket was reused while our bio was in flight, we might have
-	 * read the wrong data. Set s->error but not error so it doesn't get
-	 * counted against the cache device, but we'll still reread the data
-	 * from the backing device.
-	 */
+	BUG_ON(ptr_stale(s->iop.c, &b->key, 0)); // bucket should not be reused
+	atomic_dec(&PTR_BUCKET(s->iop.c, &b->key, 0)->pin);
 
 	if (bio->bi_status)
 		s->iop.status = bio->bi_status;
@@ -520,6 +516,8 @@ static void bch_cache_read_endio(struct bio *bio)
 	bch_bbio_endio(s->iop.c, bio, bio->bi_status, "reading from cache");
 }
 
+static void backing_request_endio(struct bio *bio);
+
 /*
  * Read from a single key, handling the initial cache miss if the key starts in
  * the middle of the bio
@@ -529,7 +527,6 @@ static int cache_lookup_fn(struct btree_op *op, struct btree *b, struct bkey *k)
 	struct search *s = container_of(op, struct search, op);
 	struct bio *n, *bio = &s->bio.bio;
 	struct bkey *bio_key;
-	unsigned int ptr;
 
 	if (bkey_cmp(k, &KEY(s->iop.inode, bio->bi_iter.bi_sector, 0)) <= 0)
 		return MAP_CONTINUE;
@@ -553,20 +550,36 @@ static int cache_lookup_fn(struct btree_op *op, struct btree *b, struct bkey *k)
 	if (!KEY_SIZE(k))
 		return MAP_CONTINUE;
 
-	/* XXX: figure out best pointer - for multiple cache devices */
-	ptr = 0;
+	/*
+	 * If the bucket was reused while our bio was in flight, we might have
+	 * read the wrong data. Set s->cache_read_races and reread the data
+	 * from the backing device.
+	 */
+	spin_lock(&PTR_BUCKET(b->c, k, 0)->lock);
+	if (ptr_stale(s->iop.c, k, 0)) {
+		spin_unlock(&PTR_BUCKET(b->c, k, 0)->lock);
+		atomic_long_inc(&s->iop.c->cache_read_races);
+		pr_warn("%pU cache read race count: %lu", s->iop.c->sb.set_uuid,
+			atomic_long_read(&s->iop.c->cache_read_races));
 
-	PTR_BUCKET(b->c, k, ptr)->prio = INITIAL_PRIO;
+		n->bi_end_io	= backing_request_endio;
+		n->bi_private	= &s->cl;
 
-	if (KEY_DIRTY(k))
-		s->read_dirty_data = true;
+		/* I/O request sent to backing device */
+		closure_bio_submit(s->iop.c, n, &s->cl);
+		return n == bio ? MAP_DONE : MAP_CONTINUE;
+	}
+	atomic_inc(&PTR_BUCKET(s->iop.c, k, 0)->pin);
+	spin_unlock(&PTR_BUCKET(b->c, k, 0)->lock);
+
+	PTR_BUCKET(b->c, k, 0)->prio = INITIAL_PRIO;
 
 	n = bio_next_split(bio, min_t(uint64_t, INT_MAX,
 				      KEY_OFFSET(k) - bio->bi_iter.bi_sector),
 			   GFP_NOIO, &s->d->bio_split);
 
 	bio_key = &container_of(n, struct bbio, bio)->key;
-	bch_bkey_copy_single_ptr(bio_key, k, ptr);
+	bch_bkey_copy_single_ptr(bio_key, k, 0);
 
 	bch_cut_front(&KEY(s->iop.inode, n->bi_iter.bi_sector, 0), bio_key);
 	bch_cut_back(&KEY(s->iop.inode, bio_end_sector(n), 0), bio_key);
