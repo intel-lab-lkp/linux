@@ -1318,6 +1318,10 @@ static bool __init vulnerable_to_rfds(u64 x86_arch_cap_msr)
 	return cpu_matches(cpu_vuln_blacklist, RFDS);
 }
 
+/*
+ * This sets up what we _really_ think the CPU has. The user might override this
+ * later via force_cpu_bug.
+ */
 static void __init cpu_set_bug_bits(struct cpuinfo_x86 *c)
 {
 	u64 x86_arch_cap_msr = x86_read_arch_cap_msr();
@@ -1461,6 +1465,42 @@ static void __init cpu_set_bug_bits(struct cpuinfo_x86 *c)
 
 	setup_force_cpu_bug(X86_BUG_L1TF);
 }
+
+static int __init force_cpu_bug_parse_cmdline(char *str)
+{
+	if (!str)
+		return -EINVAL;
+
+	while (str) {
+		char *next = strchr(str, ',');
+		int i;
+
+		if (next) {
+			*next = 0;
+			next++;
+		}
+
+		/*
+		 * Linear search because there aren't many bugs (well, at least
+		 * not for the definition of "many" that is relevant here...).
+		 *
+		 * Some configs have no gaps so we could stop at the first NULL,
+		 * but it isn't worth the ifdeffery.
+		 */
+		for (i = 0; i < ARRAY_SIZE(x86_bug_flags); i++) {
+			if (x86_bug_flags[i] && !strcmp(str, x86_bug_flags[i])) {
+				setup_force_cpu_bug(X86_BUG(i));
+				goto found;
+			}
+		}
+		pr_err("Ignoring unknown force_cpu_bug= option (%s).", str);
+found:
+		str = next;
+	}
+
+	return 0;
+}
+early_param("force_cpu_bug", force_cpu_bug_parse_cmdline);
 
 /*
  * The NOPL instruction is supposed to exist on all CPUs of family >= 6;

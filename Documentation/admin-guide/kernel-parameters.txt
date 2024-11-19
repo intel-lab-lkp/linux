@@ -1559,6 +1559,12 @@
 	floppy=		[HW]
 			See Documentation/admin-guide/blockdev/floppy.rst.
 
+	force_cpu_bug=	[X86,EARLY]
+			Force the kernel to assume the CPU is affected by the
+			given bug, regardless of its built-in information about
+			individual models.  Comma-separated list of the names of
+			vulnerabilities that would appear in /proc/cpuinfo.
+
 	forcepae	[X86-32]
 			Forcefully enable Physical Address Extension (PAE).
 			Many Pentium M systems disable PAE but may have a
