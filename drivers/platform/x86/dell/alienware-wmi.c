@@ -410,8 +410,10 @@ struct wmax_u32_args {
 	u8 arg3;
 };
 
+
 static struct platform_device *platform_device;
 static struct platform_zone *zone_data;
+const struct attribute_group *wmax_groups[4];
 static struct platform_profile_handler pp_handler;
 static enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
 
@@ -810,22 +812,6 @@ static const struct attribute_group hdmi_attribute_group = {
 	.attrs = hdmi_attrs,
 };
 
-static void remove_hdmi(struct platform_device *dev)
-{
-	if (quirks->hdmi_mux > 0)
-		sysfs_remove_group(&dev->dev.kobj, &hdmi_attribute_group);
-}
-
-static int create_hdmi(struct platform_device *dev)
-{
-	int ret;
-
-	ret = sysfs_create_group(&dev->dev.kobj, &hdmi_attribute_group);
-	if (ret)
-		remove_hdmi(dev);
-	return ret;
-}
-
 /*
  * Alienware GFX amplifier support
  * - Currently supports reading cable status
@@ -863,22 +849,6 @@ static const struct attribute_group amplifier_attribute_group = {
 	.name = "amplifier",
 	.attrs = amplifier_attrs,
 };
-
-static void remove_amplifier(struct platform_device *dev)
-{
-	if (quirks->amplifier > 0)
-		sysfs_remove_group(&dev->dev.kobj, &amplifier_attribute_group);
-}
-
-static int create_amplifier(struct platform_device *dev)
-{
-	int ret;
-
-	ret = sysfs_create_group(&dev->dev.kobj, &amplifier_attribute_group);
-	if (ret)
-		remove_amplifier(dev);
-	return ret;
-}
 
 /*
  * Deep Sleep Control support
@@ -941,22 +911,6 @@ static const struct attribute_group deepsleep_attribute_group = {
 	.name = "deepsleep",
 	.attrs = deepsleep_attrs,
 };
-
-static void remove_deepsleep(struct platform_device *dev)
-{
-	if (quirks->deepslp > 0)
-		sysfs_remove_group(&dev->dev.kobj, &deepsleep_attribute_group);
-}
-
-static int create_deepsleep(struct platform_device *dev)
-{
-	int ret;
-
-	ret = sysfs_create_group(&dev->dev.kobj, &deepsleep_attribute_group);
-	if (ret)
-		remove_deepsleep(dev);
-	return ret;
-}
 
 /*
  * Thermal Profile control
@@ -1165,6 +1119,34 @@ static void remove_thermal_profile(void)
 		platform_profile_remove();
 }
 
+static int __init create_wmax_groups(struct platform_device *pdev)
+{
+	int no_groups = 0;
+
+	if (quirks->hdmi_mux) {
+		wmax_groups[no_groups] = &hdmi_attribute_group;
+		no_groups++;
+	}
+
+	if (quirks->amplifier) {
+		wmax_groups[no_groups] = &amplifier_attribute_group;
+		no_groups++;
+	}
+
+	if (quirks->deepslp) {
+		wmax_groups[no_groups] = &deepsleep_attribute_group;
+		no_groups++;
+	}
+
+	return no_groups > 0 ? device_add_groups(&pdev->dev, wmax_groups) : 0;
+}
+
+static void __exit remove_wmax_groups(struct platform_device *pdev)
+{
+	if (!wmax_groups[0])
+		device_remove_groups(&pdev->dev, wmax_groups);
+}
+
 static int __init alienware_wmi_init(void)
 {
 	int ret;
@@ -1203,23 +1185,9 @@ static int __init alienware_wmi_init(void)
 		goto fail_platform_device1;
 	}
 
-	if (quirks->hdmi_mux > 0) {
-		ret = create_hdmi(platform_device);
-		if (ret)
-			goto fail_prep_hdmi;
-	}
-
-	if (quirks->amplifier > 0) {
-		ret = create_amplifier(platform_device);
-		if (ret)
-			goto fail_prep_amplifier;
-	}
-
-	if (quirks->deepslp > 0) {
-		ret = create_deepsleep(platform_device);
-		if (ret)
-			goto fail_prep_deepsleep;
-	}
+	ret = create_wmax_groups(platform_device);
+	if (ret)
+		goto fail_prep_groups;
 
 	if (quirks->thermal) {
 		ret = create_thermal_profile();
@@ -1236,9 +1204,8 @@ static int __init alienware_wmi_init(void)
 fail_prep_zones:
 	remove_thermal_profile();
 fail_prep_thermal_profile:
-fail_prep_deepsleep:
-fail_prep_amplifier:
-fail_prep_hdmi:
+	remove_wmax_groups(platform_device);
+fail_prep_groups:
 	platform_device_unregister(platform_device);
 fail_platform_device1:
 	platform_driver_unregister(&platform_driver);
@@ -1251,7 +1218,7 @@ module_init(alienware_wmi_init);
 static void __exit alienware_wmi_exit(void)
 {
 	alienware_zone_exit(platform_device);
-	remove_hdmi(platform_device);
+	remove_wmax_groups(platform_device);
 	remove_thermal_profile();
 	platform_device_unregister(platform_device);
 	platform_driver_unregister(&platform_driver);
