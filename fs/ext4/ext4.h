@@ -2460,22 +2460,24 @@ static inline __le16 ext4_rec_len_to_disk(unsigned len, unsigned blocksize)
 #define DX_HASH_SIPHASH			6
 #define DX_HASH_LAST 			DX_HASH_SIPHASH
 
+#define EXT4_MAX_CHECKSUM_SIZE	4
+
 static inline u32 ext4_chksum(struct ext4_sb_info *sbi, u32 crc,
 			      const void *address, unsigned int length)
 {
-	struct {
-		struct shash_desc shash;
-		char ctx[4];
-	} desc;
+	DEFINE_RAW_FLEX(struct shash_desc, desc, __ctx,
+		DIV_ROUND_UP(EXT4_MAX_CHECKSUM_SIZE,
+			     sizeof(*((struct shash_desc *)0)->__ctx)));
 
-	BUG_ON(crypto_shash_descsize(sbi->s_chksum_driver)!=sizeof(desc.ctx));
+	BUG_ON(crypto_shash_descsize(sbi->s_chksum_driver) !=
+		EXT4_MAX_CHECKSUM_SIZE);
 
-	desc.shash.tfm = sbi->s_chksum_driver;
-	*(u32 *)desc.ctx = crc;
+	desc->tfm = sbi->s_chksum_driver;
+	*(u32 *)desc->__ctx = crc;
 
-	BUG_ON(crypto_shash_update(&desc.shash, address, length));
+	BUG_ON(crypto_shash_update(desc, address, length));
 
-	return *(u32 *)desc.ctx;
+	return *(u32 *)desc->__ctx;
 }
 
 #ifdef __KERNEL__
