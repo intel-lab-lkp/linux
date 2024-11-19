@@ -840,6 +840,15 @@ void dw_pcie_iatu_detect(struct dw_pcie *pci)
 	pci->region_align = 1 << fls(min);
 	pci->region_limit = (max << 32) | (SZ_4G - 1);
 
+	if (pci->ops && pci->ops->cpu_addr_fixup) {
+		/*
+		 * If the parent 'ranges' property in DT correctly describes
+		 * the address translation, cpu_addr_fixup() callback is not
+		 * needed.
+		 */
+		dev_warn_once(pci->dev, "cpu_addr_fixup() usage detected. Please fix DT!\n");
+	}
+
 	dev_info(pci->dev, "iATU: unroll %s, %u ob, %u ib, align %uK, limit %lluG\n",
 		 dw_pcie_cap_is(pci, IATU_UNROLL) ? "T" : "F",
 		 pci->num_ob_windows, pci->num_ib_windows,
