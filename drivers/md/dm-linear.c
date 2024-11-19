@@ -148,6 +148,11 @@ static int linear_report_zones(struct dm_target *ti,
 #define linear_report_zones NULL
 #endif
 
+static void linear_io_hints(struct dm_target *ti, struct queue_limits *limits)
+{
+	limits->driver_preserves_write_order = true;
+}
+
 static int linear_iterate_devices(struct dm_target *ti,
 				  iterate_devices_callout_fn fn, void *data)
 {
@@ -209,6 +214,7 @@ static struct target_type linear_target = {
 	.map    = linear_map,
 	.status = linear_status,
 	.prepare_ioctl = linear_prepare_ioctl,
+	.io_hints = linear_io_hints,
 	.iterate_devices = linear_iterate_devices,
 	.direct_access = linear_dax_direct_access,
 	.dax_zero_page_range = linear_dax_zero_page_range,
