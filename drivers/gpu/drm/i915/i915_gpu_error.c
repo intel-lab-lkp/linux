@@ -1643,11 +1643,13 @@ capture_engine(struct intel_engine_cs *engine,
 		return NULL;
 
 	intel_engine_get_hung_entity(engine, &ce, &rq);
-	if (rq && !i915_request_started(rq))
-		drm_info(&engine->gt->i915->drm, "Got hung context on %s with active request %lld:%lld [0x%04X] not yet started\n",
-			 engine->name, rq->fence.context, rq->fence.seqno, ce->guc_id.id);
-
 	if (rq) {
+		if (!i915_request_started(rq)) {
+			u16 guc_id = ce ? ce->guc_id.id : 0;
+
+			drm_info(&engine->gt->i915->drm, "Got hung context on %s with active request %lld:%lld [0x%04X] not yet started\n",
+				 engine->name, rq->fence.context, rq->fence.seqno, guc_id);
+		}
 		capture = intel_engine_coredump_add_request(ee, rq, ATOMIC_MAYFAIL);
 		i915_request_put(rq);
 	} else if (ce) {
