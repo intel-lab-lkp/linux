@@ -479,7 +479,7 @@ static irqreturn_t regmap_irq_thread(int irq, void *d)
 	for (i = 0; i < data->chip->num_regs; i++) {
 		data->status_buf[i] &= ~data->mask_buf[i];
 
-		if (data->status_buf[i])
+		if (!chip->ack_after_handle && data->status_buf[i])
 			regmap_irq_ack(data, data->status_buf[i], i);
 	}
 
@@ -490,6 +490,12 @@ static irqreturn_t regmap_irq_thread(int irq, void *d)
 			handled = true;
 		}
 	}
+
+	if (chip->ack_after_handle)
+		for (i = 0; i < data->chip->num_regs; i++) {
+			if (data->status_buf[i])
+				regmap_irq_ack(data, data->status_buf[i], i);
+		}
 
 exit:
 	if (chip->handle_post_irq)
