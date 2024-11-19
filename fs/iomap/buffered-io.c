@@ -1378,6 +1378,10 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 	loff_t pos = iter->pos;
 	loff_t length = iomap_length(iter);
 	loff_t written = 0;
+	bool has_folios = !!(iter->iomap.flags & IOMAP_F_HAS_FOLIOS);
+
+	if (WARN_ON_ONCE(has_folios && srcmap->type != IOMAP_UNWRITTEN))
+		return -EIO;
 
 	/*
 	 * We must zero subranges of unwritten mappings that might be dirty in
@@ -1396,7 +1400,8 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 	 * post-eof ranges can be dirtied via mapped write and the flush
 	 * triggers writeback time post-eof zeroing.
 	 */
-	if (srcmap->type == IOMAP_HOLE || srcmap->type == IOMAP_UNWRITTEN) {
+	if (!has_folios &&
+	    (srcmap->type == IOMAP_HOLE || srcmap->type == IOMAP_UNWRITTEN)) {
 		if (*range_dirty) {
 			*range_dirty = false;
 			return iomap_zero_iter_flush_and_stale(iter);
@@ -1410,7 +1415,27 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 		int status;
 		size_t offset;
 		size_t bytes = min_t(u64, SIZE_MAX, length);
+		size_t skipped = 0;
 		bool ret;
+
+		if (has_folios) {
+			folio = folio_batch_next(&iter->iomap.fbatch);
+			if (!folio) {
+				written += length;
+				break;
+			}
+			folio_get(folio);
+			folio_lock(folio);
+			if (pos < folio_pos(folio)) {
+				skipped = folio_pos(folio) - pos;
+				if (WARN_ON_ONCE(skipped >= length))
+					break;
+				pos += skipped;
+				length -= skipped;
+				bytes = min_t(u64, SIZE_MAX, length);
+			} else
+				WARN_ON_ONCE(pos >= folio_pos(folio) + folio_size(folio));
+		}
 
 		status = iomap_write_begin(iter, pos, bytes, &folio);
 		if (status)
@@ -1432,13 +1457,57 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 
 		pos += bytes;
 		length -= bytes;
-		written += bytes;
+		written += bytes + skipped;
 	} while (length > 0);
 
 	if (did_zero)
 		*did_zero = true;
 	return written;
 }
+
+loff_t
+iomap_fill_dirty_folios(
+	struct inode		*inode,
+	struct iomap		*iomap,
+	loff_t			offset,
+	loff_t			length)
+{
+	struct address_space	*mapping = inode->i_mapping;
+	struct folio_batch	fbatch;
+	pgoff_t			start, end;
+	loff_t			end_pos;
+
+	folio_batch_init(&fbatch);
+	folio_batch_init(&iomap->fbatch);
+
+	end_pos = offset + length;
+	start = offset >> PAGE_SHIFT;
+	end = (end_pos - 1) >> PAGE_SHIFT;
+
+	while (filemap_get_folios(mapping, &start, end, &fbatch) &&
+	       folio_batch_space(&iomap->fbatch)) {
+		struct folio *folio;
+		while ((folio = folio_batch_next(&fbatch))) {
+			if (folio_trylock(folio)) {
+				bool clean = !folio_test_dirty(folio) &&
+					     !folio_test_writeback(folio);
+				folio_unlock(folio);
+				if (clean)
+					continue;
+			}
+
+			folio_get(folio);
+			if (!folio_batch_add(&iomap->fbatch, folio)) {
+				end_pos = folio_pos(folio) + folio_size(folio);
+				break;
+			}
+		}
+		folio_batch_release(&fbatch);
+	}
+
+	return end_pos;
+}
+EXPORT_SYMBOL_GPL(iomap_fill_dirty_folios);
 
 int
 iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
