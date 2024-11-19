@@ -3933,11 +3933,11 @@ static void amdgpu_device_xgmi_reset_func(struct work_struct *__work)
 
 		task_barrier_enter(&hive->tb);
 		adev->asic_reset_res = amdgpu_device_baco_enter(adev_to_drm(adev));
+		task_barrier_exit(&hive->tb);
 
 		if (adev->asic_reset_res)
 			goto fail;
 
-		task_barrier_exit(&hive->tb);
 		adev->asic_reset_res = amdgpu_device_baco_exit(adev_to_drm(adev));
 
 		if (adev->asic_reset_res)
