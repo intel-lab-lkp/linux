@@ -781,7 +781,7 @@ static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
 {
 	const struct iomap_folio_ops *folio_ops = iter->iomap.folio_ops;
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
-	struct folio *folio;
+	struct folio *folio = *foliop;
 	int status = 0;
 
 	BUG_ON(pos + len > iter->iomap.offset + iter->iomap.length);
@@ -794,9 +794,15 @@ static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
 	if (!mapping_large_folio_support(iter->inode->i_mapping))
 		len = min_t(size_t, len, PAGE_SIZE - offset_in_page(pos));
 
-	folio = __iomap_get_folio(iter, pos, len);
-	if (IS_ERR(folio))
-		return PTR_ERR(folio);
+	/*
+	 * XXX: Might want to plumb batch handling down through here. For now
+	 * let the caller do it.
+	 */
+	if (!folio) {
+		folio = __iomap_get_folio(iter, pos, len);
+		if (IS_ERR(folio))
+			return PTR_ERR(folio);
+	}
 
 	/*
 	 * Now we have a locked folio, before we do anything with it we need to
@@ -918,7 +924,7 @@ static loff_t iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i)
 	unsigned int bdp_flags = (iter->flags & IOMAP_NOWAIT) ? BDP_ASYNC : 0;
 
 	do {
-		struct folio *folio;
+		struct folio *folio = NULL;
 		loff_t old_size;
 		size_t offset;		/* Offset into folio */
 		size_t bytes;		/* Bytes to write to folio */
@@ -1296,7 +1302,7 @@ static loff_t iomap_unshare_iter(struct iomap_iter *iter)
 		return length;
 
 	do {
-		struct folio *folio;
+		struct folio *folio = NULL;
 		int status;
 		size_t offset;
 		size_t bytes = min_t(u64, SIZE_MAX, length);
@@ -1400,7 +1406,7 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero,
 	}
 
 	do {
-		struct folio *folio;
+		struct folio *folio = NULL;
 		int status;
 		size_t offset;
 		size_t bytes = min_t(u64, SIZE_MAX, length);
