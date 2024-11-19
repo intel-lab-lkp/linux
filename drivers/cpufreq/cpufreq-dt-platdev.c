@@ -97,6 +97,7 @@ static const struct of_device_id allowlist[] __initconst = {
 
 	{ }
 };
+MODULE_DEVICE_TABLE(of, allowlist);
 
 /*
  * Machines for which the cpufreq device is *not* created, mostly used for
@@ -235,4 +236,16 @@ create_pdev:
 }
 core_initcall(cpufreq_dt_platdev_init);
 MODULE_DESCRIPTION("Generic DT based cpufreq platdev driver");
+/*
+ * The module alias is needed because the driver automatically registers a
+ * platform device for any CPU device node that has an operating-points-v2
+ * property and is not in the block list.
+ *
+ * For this reason the MODULE_DEVICE_TABLE() macro can only export aliases
+ * of the devices in the allow list, which means that the driver will not
+ * autoload for devices whose cpufreq-dt will be registered automatically.
+ *
+ * Adding an "of:N*T*Coperating-points-v2" alias is a workaround for this.
+ */
+MODULE_ALIAS("of:N*T*Coperating-points-v2");
 MODULE_LICENSE("GPL");
