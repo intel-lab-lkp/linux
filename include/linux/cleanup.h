@@ -351,8 +351,8 @@ _label:									\
 	__scoped_cond_guard(_name, _fail, __UNIQUE_ID(label), args)
 
 #define __if_not_guard(_name, _id, args...)		\
-	BUILD_BUG_ON(!__is_cond_ptr(_name));		\
 	CLASS(_name, _id)(args);			\
+	BUILD_BUG_ON(!__is_cond_ptr(_name));		\
 	if (!__guard_ptr(_name)(&_id))
 
 #define if_not_guard(_name, args...) \
