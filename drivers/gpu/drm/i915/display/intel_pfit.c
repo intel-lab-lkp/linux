@@ -188,9 +188,6 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 	int num_pipes = intel_crtc_num_joined_pipes(crtc_state);
 	int ret, x, y, width, height, hdisplay_full, src_w_full;
 
-	if (crtc_state->joiner_pipes)
-		return 0;
-
 	/* Native modes don't need fitting */
 	if (pipe_mode->crtc_hdisplay == pipe_src_w &&
 	    pipe_mode->crtc_vdisplay == pipe_src_h &&
