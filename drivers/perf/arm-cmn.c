@@ -386,7 +386,7 @@ static struct arm_cmn_nodeid arm_cmn_nid(const struct arm_cmn_node *dn)
 static struct arm_cmn_node *arm_cmn_node_to_xp(const struct arm_cmn *cmn,
 					       const struct arm_cmn_node *dn)
 {
-	int id = dn->id >> (dn->portid_bits + dn->deviceid_bits);
+	int id = dn->id >> (cmn->num_xps == 1 ? 5 : 3);
 	int bits = arm_cmn_xyidbits(cmn);
 	int x = id >> bits;
 	int y = id & ((1U << bits) - 1);
