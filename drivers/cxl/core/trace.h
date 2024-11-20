@@ -287,7 +287,7 @@ TRACE_EVENT(cxl_generic_event,
 
 /*
  * General Media Event Record - GMER
- * CXL rev 3.0 Section 8.2.9.2.1.1; Table 8-43
+ * CXL rev 3.1 Section 8.2.9.2.1.1; Table 8-45
  */
 #define CXL_GMER_EVT_DESC_UNCORECTABLE_EVENT		BIT(0)
 #define CXL_GMER_EVT_DESC_THRESHOLD_EVENT		BIT(1)
@@ -301,10 +301,18 @@ TRACE_EVENT(cxl_generic_event,
 #define CXL_GMER_MEM_EVT_TYPE_ECC_ERROR			0x00
 #define CXL_GMER_MEM_EVT_TYPE_INV_ADDR			0x01
 #define CXL_GMER_MEM_EVT_TYPE_DATA_PATH_ERROR		0x02
-#define show_gmer_mem_event_type(type)	__print_symbolic(type,			\
-	{ CXL_GMER_MEM_EVT_TYPE_ECC_ERROR,		"ECC Error" },		\
-	{ CXL_GMER_MEM_EVT_TYPE_INV_ADDR,		"Invalid Address" },	\
-	{ CXL_GMER_MEM_EVT_TYPE_DATA_PATH_ERROR,	"Data Path Error" }	\
+#define CXL_GMER_MEM_EVT_TYPE_TE_STATE_VIOLATION	0x03
+#define CXL_GMER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR	0x04
+#define CXL_GMER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE	0x05
+#define CXL_GMER_MEM_EVT_TYPE_CKID_VIOLATION		0x06
+#define show_gmer_mem_event_type(type)	__print_symbolic(type,				\
+	{ CXL_GMER_MEM_EVT_TYPE_ECC_ERROR,		"ECC Error" },			\
+	{ CXL_GMER_MEM_EVT_TYPE_INV_ADDR,		"Invalid Address" },		\
+	{ CXL_GMER_MEM_EVT_TYPE_DATA_PATH_ERROR,	"Data Path Error" },		\
+	{ CXL_GMER_MEM_EVT_TYPE_TE_STATE_VIOLATION,	"TE State Violation" },		\
+	{ CXL_GMER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR,	"Scrub Media ECC Error" },	\
+	{ CXL_GMER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE,	"Adv Prog CME Counter Expiration" },	\
+	{ CXL_GMER_MEM_EVT_TYPE_CKID_VIOLATION,		"CKID Violation" }		\
 )
 
 #define CXL_GMER_TRANS_UNKNOWN				0x00
@@ -314,6 +322,8 @@ TRACE_EVENT(cxl_generic_event,
 #define CXL_GMER_TRANS_HOST_INJECT_POISON		0x04
 #define CXL_GMER_TRANS_INTERNAL_MEDIA_SCRUB		0x05
 #define CXL_GMER_TRANS_INTERNAL_MEDIA_MANAGEMENT	0x06
+#define CXL_GMER_TRANS_INTERNAL_MEDIA_ECS		0x07
+#define CXL_GMER_TRANS_MEDIA_INITIALIZATION		0x08
 #define show_trans_type(type)	__print_symbolic(type,					\
 	{ CXL_GMER_TRANS_UNKNOWN,			"Unknown" },			\
 	{ CXL_GMER_TRANS_HOST_READ,			"Host Read" },			\
@@ -321,18 +331,22 @@ TRACE_EVENT(cxl_generic_event,
 	{ CXL_GMER_TRANS_HOST_SCAN_MEDIA,		"Host Scan Media" },		\
 	{ CXL_GMER_TRANS_HOST_INJECT_POISON,		"Host Inject Poison" },		\
 	{ CXL_GMER_TRANS_INTERNAL_MEDIA_SCRUB,		"Internal Media Scrub" },	\
-	{ CXL_GMER_TRANS_INTERNAL_MEDIA_MANAGEMENT,	"Internal Media Management" }	\
+	{ CXL_GMER_TRANS_INTERNAL_MEDIA_MANAGEMENT,	"Internal Media Management" },	\
+	{ CXL_GMER_TRANS_INTERNAL_MEDIA_ECS,		"Internal Media Error Check Scrub" },	\
+	{ CXL_GMER_TRANS_MEDIA_INITIALIZATION,		"Media Initialization" }	\
 )
 
 #define CXL_GMER_VALID_CHANNEL				BIT(0)
 #define CXL_GMER_VALID_RANK				BIT(1)
 #define CXL_GMER_VALID_DEVICE				BIT(2)
 #define CXL_GMER_VALID_COMPONENT			BIT(3)
+#define CXL_GMER_VALID_COMPONENT_ID_FORMAT		BIT(4)
 #define show_valid_flags(flags)	__print_flags(flags, "|",		   \
 	{ CXL_GMER_VALID_CHANNEL,			"CHANNEL"	}, \
 	{ CXL_GMER_VALID_RANK,				"RANK"		}, \
 	{ CXL_GMER_VALID_DEVICE,			"DEVICE"	}, \
-	{ CXL_GMER_VALID_COMPONENT,			"COMPONENT"	}  \
+	{ CXL_GMER_VALID_COMPONENT,			"COMPONENT"	}, \
+	{ CXL_GMER_VALID_COMPONENT_ID_FORMAT,		"COMPONENT PLDM FORMAT"	} \
 )
 
 TRACE_EVENT(cxl_general_media,
@@ -348,6 +362,7 @@ TRACE_EVENT(cxl_general_media,
 		__field(u64, dpa)
 		__field(u8, descriptor)
 		__field(u8, type)
+		__field(u8, sub_type)
 		__field(u8, transaction_type)
 		__field(u8, channel)
 		__field(u32, device)
@@ -359,6 +374,8 @@ TRACE_EVENT(cxl_general_media,
 		__field(u8, rank)
 		__field(u8, dpa_flags)
 		__string(region_name, cxlr ? dev_name(&cxlr->dev) : "")
+		__field(u8, cme_threshold_ev_flags)
+		__field(u32, cme_count)
 	),
 
 	TP_fast_assign(
@@ -372,6 +389,7 @@ TRACE_EVENT(cxl_general_media,
 		__entry->dpa &= CXL_DPA_MASK;
 		__entry->descriptor = rec->media_hdr.descriptor;
 		__entry->type = rec->media_hdr.type;
+		__entry->sub_type = rec->sub_type;
 		__entry->transaction_type = rec->media_hdr.transaction_type;
 		__entry->channel = rec->media_hdr.channel;
 		__entry->rank = rec->media_hdr.rank;
@@ -380,6 +398,8 @@ TRACE_EVENT(cxl_general_media,
 			CXL_EVENT_GEN_MED_COMP_ID_SIZE);
 		__entry->validity_flags = get_unaligned_le16(&rec->media_hdr.validity_flags);
 		__entry->hpa = hpa;
+		__entry->cme_threshold_ev_flags = rec->cme_threshold_ev_flags;
+		__entry->cme_count = get_unaligned_le24(rec->cme_count);
 		if (cxlr) {
 			__assign_str(region_name);
 			uuid_copy(&__entry->region_uuid, &cxlr->params.uuid);
@@ -389,18 +409,26 @@ TRACE_EVENT(cxl_general_media,
 		}
 	),
 
-	CXL_EVT_TP_printk("dpa=%llx dpa_flags='%s' " \
-		"descriptor='%s' type='%s' transaction_type='%s' channel=%u rank=%u " \
-		"device=%x comp_id=%s validity_flags='%s' " \
-		"hpa=%llx region=%s region_uuid=%pUb",
-		__entry->dpa, show_dpa_flags(__entry->dpa_flags),
+	CXL_EVT_TP_printk("dpa=0x%llx dpa_flags=0x%x " \
+		"descriptor='%s' type='%s' sub_type=0x%x " \
+		"transaction_type=0x%x channel=%u rank=%u " \
+		"device=0x%x validity_flags=0x%x " \
+		"comp_id=%s pldm_entity_id=%s pldm_resource_id=%s " \
+		"hpa=0x%llx region=%s region_uuid=%pUb " \
+		"cme_threshold_ev_flags=0x%x cme_count=0x%x ",
+		__entry->dpa, __entry->dpa_flags,
 		show_event_desc_flags(__entry->descriptor),
 		show_gmer_mem_event_type(__entry->type),
-		show_trans_type(__entry->transaction_type),
+		__entry->sub_type, __entry->transaction_type,
 		__entry->channel, __entry->rank, __entry->device,
+		__entry->validity_flags,
 		__print_hex(__entry->comp_id, CXL_EVENT_GEN_MED_COMP_ID_SIZE),
-		show_valid_flags(__entry->validity_flags),
-		__entry->hpa, __get_str(region_name), &__entry->region_uuid
+		show_pldm_entity_id(__entry->validity_flags, CXL_GMER_VALID_COMPONENT,
+				    CXL_GMER_VALID_COMPONENT_ID_FORMAT, __entry->comp_id),
+		show_pldm_resource_id(__entry->validity_flags, CXL_GMER_VALID_COMPONENT,
+				      CXL_GMER_VALID_COMPONENT_ID_FORMAT, __entry->comp_id),
+		__entry->hpa, __get_str(region_name), &__entry->region_uuid,
+		__entry->cme_threshold_ev_flags, __entry->cme_count
 	)
 );
 
