@@ -187,6 +187,9 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 	int pipe_src_h = drm_rect_height(&crtc_state->pipe_src);
 	int ret, x, y, width, height;
 
+	if (crtc_state->joiner_pipes)
+		return 0;
+
 	/* Native modes don't need fitting */
 	if (adjusted_mode->crtc_hdisplay == pipe_src_w &&
 	    adjusted_mode->crtc_vdisplay == pipe_src_h &&
