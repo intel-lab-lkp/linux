@@ -226,6 +226,24 @@
 		steppings, X86_FEATURE_ANY, data)
 
 /**
+ * X86_MATCH_VFM_STEPPING - Match encoded vendor/family/model/stepping
+ * @vfm:	Encoded 8-bits each for vendor, family, model
+ * @stepping:	A single integer stepping
+ * @data:	Driver specific data or NULL. The internal storage
+ *		format is unsigned long. The supplied value, pointer
+ *		etc. is cast to unsigned long internally.
+ *
+ * feature is set to wildcard
+ */
+#define X86_MATCH_VFM_STEPPING(vfm, stepping, data)	\
+	X86_MATCH_VENDORID_FAM_MODEL_STEPPINGS_FEATURE(	\
+		VFM_VENDOR(vfm),			\
+		VFM_FAMILY(vfm),			\
+		VFM_MODEL(vfm),				\
+		X86_STEPPINGS(stepping, stepping), 	\
+		X86_FEATURE_ANY, data)
+
+/**
  * X86_MATCH_VFM_FEATURE - Match encoded vendor/family/model/feature
  * @vfm:	Encoded 8-bits each for vendor, family, model
  * @feature:	A X86_FEATURE bit
