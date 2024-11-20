@@ -266,6 +266,9 @@ config HAVE_KERNEL_ZSTD
 config HAVE_KERNEL_UNCOMPRESSED
 	bool
 
+config HAVE_PYTHON3
+	def_bool $(success,$(PYTHON3) -V)
+
 choice
 	prompt "Kernel compression mode"
 	default KERNEL_GZIP
