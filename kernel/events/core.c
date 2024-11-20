@@ -1214,14 +1214,6 @@ static void free_task_ctx_data(struct pmu *pmu, void *task_ctx_data)
 		kmem_cache_free(pmu->task_ctx_cache, task_ctx_data);
 }
 
-static void free_ctx(struct rcu_head *head)
-{
-	struct perf_event_context *ctx;
-
-	ctx = container_of(head, struct perf_event_context, rcu_head);
-	kfree(ctx);
-}
-
 static void put_ctx(struct perf_event_context *ctx)
 {
 	if (refcount_dec_and_test(&ctx->refcount)) {
@@ -1229,7 +1221,7 @@ static void put_ctx(struct perf_event_context *ctx)
 			put_ctx(ctx->parent_ctx);
 		if (ctx->task && ctx->task != TASK_TOMBSTONE)
 			put_task_struct(ctx->task);
-		call_rcu(&ctx->rcu_head, free_ctx);
+		kfree_rcu(ctx, rcu_head);
 	}
 }
 
