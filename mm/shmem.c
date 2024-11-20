@@ -4325,14 +4325,15 @@ static int shmem_parse_opt_casefold(struct fs_context *fc, struct fs_parameter *
 	unsigned int version = UTF8_LATEST;
 	struct unicode_map *encoding;
 	char *version_str = param->string + 5;
+	int ret;
 
 	if (!latest_version) {
 		if (strncmp(param->string, "utf8-", 5))
 			return invalfc(fc, "Only UTF-8 encodings are supported "
 				       "in the format: utf8-<version number>");
 
-		version = utf8_parse_version(version_str);
-		if (version < 0)
+		ret = utf8_parse_version(version_str, &version);
+		if (ret < 0)
 			return invalfc(fc, "Invalid UTF-8 version: %s", version_str);
 	}
 

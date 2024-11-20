@@ -219,9 +219,9 @@ EXPORT_SYMBOL(utf8_unload);
  *
  * @version: input string
  *
- * Returns the parsed version on success, negative code on error
+ * Returns 0 on success, negative code on error
  */
-int utf8_parse_version(char *version)
+int utf8_parse_version(char *version_str, unsigned int *version)
 {
 	substring_t args[3];
 	unsigned int maj, min, rev;
@@ -230,13 +230,14 @@ int utf8_parse_version(char *version)
 		{0, NULL}
 	};
 
-	if (match_token(version, token, args) != 1)
+	if (match_token(version_str, token, args) != 1)
 		return -EINVAL;
 
 	if (match_int(&args[0], &maj) || match_int(&args[1], &min) ||
 	    match_int(&args[2], &rev))
 		return -EINVAL;
 
-	return UNICODE_AGE(maj, min, rev);
+	*version = UNICODE_AGE(maj, min, rev);
+	return 0;
 }
 EXPORT_SYMBOL(utf8_parse_version);
