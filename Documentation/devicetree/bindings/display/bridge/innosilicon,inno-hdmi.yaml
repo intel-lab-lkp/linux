@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/bridge/innosilicon,inno-hdmi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Common Properties for Innosilicon HDMI TX IP
+
+maintainers:
+  - keith zhao <keith.zhao@starfivetech.com>
+
+description: |
+  Innosilicon HDMI TX is an HDMI transmission device integrated into the zap SoC.
+  This document specifies the device tree properties for the INNO HDMI IP core.
+  It is intended to be referenced by platform-specific device tree bindings,
+  which will determine the necessity of each property.
+
+properties:
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+
+    properties:
+      port@0:
+        $ref: /schemas/graph.yaml#/properties/port
+        description:
+          Port node with one endpoint connected to a display controller node.
+
+      port@1:
+        $ref: /schemas/graph.yaml#/properties/port
+        description:
+          Port node with one endpoint connected to a hdmi-connector node.
+
+    required:
+      - port@0
+      - port@1
+
+additionalProperties: true
+
+...
