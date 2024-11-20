@@ -1455,7 +1455,7 @@ ptp_ocp_verify(struct ptp_clock_info *ptp_info, unsigned pin,
 		 * channels 1..4 are the frequency generators.
 		 */
 		if (chan)
-			snprintf(buf, sizeof(buf), "OUT: GEN%d", chan);
+			snprintf(buf, sizeof(buf), "OUT: GEN%u", chan);
 		else
 			snprintf(buf, sizeof(buf), "OUT: PHC");
 		break;
