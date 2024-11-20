@@ -947,13 +947,6 @@ static ssize_t show_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 	return sysfs_emit(buf, "%lu\n", val);
 }
 
-static void rps_dev_flow_table_release(struct rcu_head *rcu)
-{
-	struct rps_dev_flow_table *table = container_of(rcu,
-	    struct rps_dev_flow_table, rcu);
-	vfree(table);
-}
-
 static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 					    const char *buf, size_t len)
 {
@@ -1008,7 +1001,7 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 	spin_unlock(&rps_dev_flow_lock);
 
 	if (old_table)
-		call_rcu(&old_table->rcu, rps_dev_flow_table_release);
+		kvfree_rcu(old_table, rcu);
 
 	return len;
 }
@@ -1046,7 +1039,7 @@ static void rx_queue_release(struct kobject *kobj)
 	flow_table = rcu_dereference_protected(queue->rps_flow_table, 1);
 	if (flow_table) {
 		RCU_INIT_POINTER(queue->rps_flow_table, NULL);
-		call_rcu(&flow_table->rcu, rps_dev_flow_table_release);
+		kvfree_rcu(flow_table, rcu);
 	}
 #endif
 
