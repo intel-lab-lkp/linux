@@ -1382,12 +1382,6 @@ asym_cpu_capacity_classify(const struct cpumask *sd_span,
 
 }
 
-static void free_asym_cap_entry(struct rcu_head *head)
-{
-	struct asym_cap_data *entry = container_of(head, struct asym_cap_data, rcu);
-	kfree(entry);
-}
-
 static inline void asym_cpu_capacity_update_data(int cpu)
 {
 	unsigned long capacity = arch_scale_cpu_capacity(cpu);
@@ -1438,7 +1432,7 @@ static void asym_cpu_capacity_scan(void)
 	list_for_each_entry_safe(entry, next, &asym_cap_list, link) {
 		if (cpumask_empty(cpu_capacity_span(entry))) {
 			list_del_rcu(&entry->link);
-			call_rcu(&entry->rcu, free_asym_cap_entry);
+			kfree_rcu(entry, rcu);
 		}
 	}
 
@@ -1449,7 +1443,7 @@ static void asym_cpu_capacity_scan(void)
 	if (list_is_singular(&asym_cap_list)) {
 		entry = list_first_entry(&asym_cap_list, typeof(*entry), link);
 		list_del_rcu(&entry->link);
-		call_rcu(&entry->rcu, free_asym_cap_entry);
+		kfree_rcu(entry, rcu);
 	}
 }
 
