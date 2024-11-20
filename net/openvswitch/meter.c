@@ -83,14 +83,6 @@ static void dp_meter_instance_free(struct dp_meter_instance *ti)
 	kvfree(ti);
 }
 
-static void dp_meter_instance_free_rcu(struct rcu_head *rcu)
-{
-	struct dp_meter_instance *ti;
-
-	ti = container_of(rcu, struct dp_meter_instance, rcu);
-	kvfree(ti);
-}
-
 static int
 dp_meter_instance_realloc(struct dp_meter_table *tbl, u32 size)
 {
@@ -108,7 +100,7 @@ dp_meter_instance_realloc(struct dp_meter_table *tbl, u32 size)
 			new_ti->dp_meters[i] = ti->dp_meters[i];
 
 	rcu_assign_pointer(tbl->ti, new_ti);
-	call_rcu(&ti->rcu, dp_meter_instance_free_rcu);
+	kvfree_rcu(ti, rcu);
 
 	return 0;
 }
