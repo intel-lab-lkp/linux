@@ -856,7 +856,8 @@
 	status = "okay";
 
 	bluetooth {
-		compatible = "qcom,wcn6855-bt";
+		compatible = "qcom,qca6698-bt";
+		qcom,product-variant = <0x20000>;
 
 		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
 		vddaon-supply = <&vreg_pmu_aon_0p59>;
