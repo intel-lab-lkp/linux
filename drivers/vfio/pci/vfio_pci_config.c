@@ -320,6 +320,10 @@ static struct perm_bits cap_perms[PCI_CAP_ID_MAX + 1] = {
 static struct perm_bits ecap_perms[PCI_EXT_CAP_ID_MAX + 1] = {
 	[0 ... PCI_EXT_CAP_ID_MAX] = { .readfn = vfio_direct_config_read }
 };
+/* Perms for a first-in-list hidden extended capability */
+static struct perm_bits hidden_ecap_perm = {
+	.readfn = vfio_direct_config_read,
+};
 /*
  * Default unassigned regions to raw read-write access.  Some devices
  * require this to function as they hide registers between the gaps in
@@ -1582,7 +1586,7 @@ static int vfio_cap_init(struct vfio_pci_core_device *vdev)
 				 __func__, pos + i, map[pos + i], cap);
 		}
 
-		BUILD_BUG_ON(PCI_CAP_ID_MAX >= PCI_CAP_ID_INVALID_VIRT);
+		BUILD_BUG_ON(PCI_CAP_ID_MAX >= PCI_CAP_ID_FIRST_HIDDEN);
 
 		memset(map + pos, cap, len);
 		ret = vfio_fill_vconfig_bytes(vdev, pos, len);
@@ -1673,9 +1677,9 @@ static int vfio_ecap_init(struct vfio_pci_core_device *vdev)
 		/*
 		 * Even though ecap is 2 bytes, we're currently a long way
 		 * from exceeding 1 byte capabilities.  If we ever make it
-		 * up to 0xFE we'll need to up this to a two-byte, byte map.
+		 * up to 0xFD we'll need to up this to a two-byte, byte map.
 		 */
-		BUILD_BUG_ON(PCI_EXT_CAP_ID_MAX >= PCI_CAP_ID_INVALID_VIRT);
+		BUILD_BUG_ON(PCI_EXT_CAP_ID_MAX >= PCI_CAP_ID_FIRST_HIDDEN);
 
 		memset(map + epos, ecap, len);
 		ret = vfio_fill_vconfig_bytes(vdev, epos, len);
@@ -1688,10 +1692,11 @@ static int vfio_ecap_init(struct vfio_pci_core_device *vdev)
 		 * indicates to use cap id = 0, version = 0, next = 0 if
 		 * ecaps are absent, hope users check all the way to next.
 		 */
-		if (hidden)
+		if (hidden) {
 			*(__le32 *)&vdev->vconfig[epos] &=
 				cpu_to_le32((0xffcU << 20));
-		else
+			memset(map + epos, PCI_CAP_ID_FIRST_HIDDEN, len);
+		} else
 			ecaps++;
 
 		prev = (__le32 *)&vdev->vconfig[epos];
@@ -1895,6 +1900,9 @@ static ssize_t vfio_config_do_rw(struct vfio_pci_core_device *vdev, char __user 
 	} else if (cap_id == PCI_CAP_ID_INVALID_VIRT) {
 		perm = &virt_perms;
 		cap_start = *ppos;
+	} else if (cap_id == PCI_CAP_ID_FIRST_HIDDEN) {
+		perm = &hidden_ecap_perm;
+		cap_start = PCI_CFG_SPACE_SIZE;
 	} else {
 		if (*ppos >= PCI_CFG_SPACE_SIZE) {
 			WARN_ON(cap_id > PCI_EXT_CAP_ID_MAX);
