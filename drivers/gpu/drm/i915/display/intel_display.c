@@ -104,6 +104,7 @@
 #include "intel_pch_display.h"
 #include "intel_pch_refclk.h"
 #include "intel_pcode.h"
+#include "intel_pfit.h"
 #include "intel_pipe_crc.h"
 #include "intel_plane_initial.h"
 #include "intel_pmdemand.h"
@@ -2563,6 +2564,25 @@ static int intel_crtc_compute_pipe_src(struct intel_crtc_state *crtc_state)
 	return 0;
 }
 
+static void intel_crtc_compute_pfit(struct intel_atomic_state *state,
+				    struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct drm_connector *connector;
+	struct drm_connector_state *connector_state;
+	int i;
+
+	for_each_new_connector_in_state(&state->base, connector,
+					connector_state, i) {
+		if (connector_state->crtc != &crtc->base)
+			continue;
+
+		if (!HAS_GMCH(display))
+			intel_pch_panel_fitting(crtc_state, connector_state);
+	}
+}
+
 static int intel_crtc_compute_pipe_mode(struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
@@ -2644,6 +2664,8 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 	ret = intel_crtc_compute_pipe_mode(crtc_state);
 	if (ret)
 		return ret;
+
+	intel_crtc_compute_pfit(state, crtc_state);
 
 	intel_crtc_compute_pixel_rate(crtc_state);
 
