@@ -11,6 +11,7 @@ config DRM_MSM
 	depends on QCOM_LLCC || QCOM_LLCC=n
 	depends on QCOM_COMMAND_DB || QCOM_COMMAND_DB=n
 	depends on PM
+	depends on $(success,$(PYTHON3) -V)
 	select IOMMU_IO_PGTABLE
 	select QCOM_MDT_LOADER if ARCH_QCOM
 	select REGULATOR
@@ -36,7 +37,7 @@ config DRM_MSM
 	select PM_GENERIC_DOMAINS
 	select TRACE_GPU_MEM
 	help
-	  DRM/KMS driver for MSM/snapdragon.
+	  DRM/KMS driver for MSM/snapdragon.  Requires python3.
 
 config DRM_MSM_GPU_STATE
 	bool
