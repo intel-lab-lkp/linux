@@ -33,25 +33,51 @@
 #include <asm/smap.h>
 #include <asm/gsseg.h>
 
+/*
+ * The first GDT descriptor is reserved as 'null descriptor'.  As bits 0
+ * and 1 of a segment selector, i.e., the DPL bits, are NOT used to index
+ * GDT, selector values 0~3 all point to the null descriptor, thus values
+ * 0, 1, 2 and 3 are all valid null selector values.
+ *
+ * Furthermore IRET zeros ES, FS, GS, and DS segment registers if any of
+ * them is found to have any null selector value, essentially making 0 a
+ * preferred null selector value.
+ *
+ * Normalizes any null selector value, 0~3, to 0, while for any non-null
+ * selector, sets both DPL bits to force it to be a user level segment
+ * selector.
+ */
+static inline u16 normalize_useg_selector(u16 sel)
+{
+	return sel <= 3 ? 0 : sel | 3;
+}
+
 #ifdef CONFIG_IA32_EMULATION
 #include <asm/unistd_32_ia32.h>
 
 static inline void reload_segments(struct sigcontext_32 *sc)
 {
-	unsigned int cur;
+	unsigned int new, cur;
 
+	new = normalize_useg_selector(sc->gs);
 	savesegment(gs, cur);
-	if ((sc->gs | 0x03) != cur)
-		load_gs_index(sc->gs | 0x03);
-	savesegment(fs, cur);
-	if ((sc->fs | 0x03) != cur)
-		loadsegment(fs, sc->fs | 0x03);
-	savesegment(ds, cur);
-	if ((sc->ds | 0x03) != cur)
-		loadsegment(ds, sc->ds | 0x03);
-	savesegment(es, cur);
-	if ((sc->es | 0x03) != cur)
-		loadsegment(es, sc->es | 0x03);
+	cur = normalize_useg_selector(cur);
+	if (new != cur)
+		load_gs_index(new);
+
+#define RELOAD_USEG_SELECTOR(seg) {			\
+	new = normalize_useg_selector(sc->seg);		\
+	savesegment(seg, cur);				\
+	cur = normalize_useg_selector(cur);		\
+	if (new != cur)					\
+		loadsegment(seg, new);			\
+}
+
+	RELOAD_USEG_SELECTOR(fs);
+	RELOAD_USEG_SELECTOR(ds);
+	RELOAD_USEG_SELECTOR(es);
+
+#undef RELOAD_USEG_SELECTOR
 }
 
 #define sigset32_t			compat_sigset_t
@@ -113,10 +139,10 @@ static bool ia32_restore_sigcontext(struct pt_regs *regs,
 	 */
 	reload_segments(&sc);
 #else
-	loadsegment(gs, sc.gs);
-	regs->fs = sc.fs;
-	regs->es = sc.es;
-	regs->ds = sc.ds;
+	loadsegment(gs, normalize_useg_selector(sc.gs));
+	regs->fs = normalize_useg_selector(sc.fs);
+	regs->es = normalize_useg_selector(sc.es);
+	regs->ds = normalize_useg_selector(sc.ds);
 #endif
 
 	return fpu__restore_sig(compat_ptr(sc.fpstate), 1);
