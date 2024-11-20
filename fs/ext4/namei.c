@@ -3408,7 +3408,6 @@ retry:
 			inode->i_op = &ext4_symlink_inode_operations;
 		} else {
 			inode->i_op = &ext4_fast_symlink_inode_operations;
-			inode->i_link = (char *)&EXT4_I(inode)->i_data;
 		}
 	}
 
@@ -3424,6 +3423,9 @@ retry:
 		       disk_link.len);
 		inode->i_size = disk_link.len - 1;
 		EXT4_I(inode)->i_disksize = inode->i_size;
+		if (!IS_ENCRYPTED(inode))
+			inode_set_cached_link(inode, (char *)&EXT4_I(inode)->i_data,
+					      inode->i_size);
 	}
 	err = ext4_add_nondir(handle, dentry, &inode);
 	if (handle)
