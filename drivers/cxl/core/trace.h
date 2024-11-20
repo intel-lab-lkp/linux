@@ -435,7 +435,7 @@ TRACE_EVENT(cxl_general_media,
 /*
  * DRAM Event Record - DER
  *
- * CXL rev 3.0 section 8.2.9.2.1.2; Table 8-44
+ * CXL rev 3.1 section 8.2.9.2.1.2; Table 8-46
  */
 /*
  * DRAM Event Record defines many fields the same as the General Media Event
@@ -445,11 +445,17 @@ TRACE_EVENT(cxl_general_media,
 #define CXL_DER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR	0x01
 #define CXL_DER_MEM_EVT_TYPE_INV_ADDR			0x02
 #define CXL_DER_MEM_EVT_TYPE_DATA_PATH_ERROR		0x03
-#define show_dram_mem_event_type(type)  __print_symbolic(type,				\
-	{ CXL_DER_MEM_EVT_TYPE_ECC_ERROR,		"ECC Error" },			\
-	{ CXL_DER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR,	"Scrub Media ECC Error" },	\
-	{ CXL_DER_MEM_EVT_TYPE_INV_ADDR,		"Invalid Address" },		\
-	{ CXL_DER_MEM_EVT_TYPE_DATA_PATH_ERROR,		"Data Path Error" }		\
+#define CXL_DER_MEM_EVT_TYPE_TE_STATE_VIOLATION	0x04
+#define CXL_DER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE	0x05
+#define CXL_DER_MEM_EVT_TYPE_CKID_VIOLATION		0x06
+#define show_dram_mem_event_type(type)	__print_symbolic(type,					\
+	{ CXL_DER_MEM_EVT_TYPE_ECC_ERROR,		"ECC Error" },				\
+	{ CXL_DER_MEM_EVT_TYPE_SCRUB_MEDIA_ECC_ERROR,	"Scrub Media ECC Error" },		\
+	{ CXL_DER_MEM_EVT_TYPE_INV_ADDR,		"Invalid Address" },			\
+	{ CXL_DER_MEM_EVT_TYPE_DATA_PATH_ERROR,		"Data Path Error" },			\
+	{ CXL_DER_MEM_EVT_TYPE_TE_STATE_VIOLATION,	"TE State Violation" },			\
+	{ CXL_DER_MEM_EVT_TYPE_AP_CME_COUNTER_EXPIRE,	"Adv Prog CME Counter Expiration" },	\
+	{ CXL_DER_MEM_EVT_TYPE_CKID_VIOLATION,		"CKID Violation" }			\
 )
 
 #define CXL_DER_VALID_CHANNEL				BIT(0)
@@ -460,15 +466,21 @@ TRACE_EVENT(cxl_general_media,
 #define CXL_DER_VALID_ROW				BIT(5)
 #define CXL_DER_VALID_COLUMN				BIT(6)
 #define CXL_DER_VALID_CORRECTION_MASK			BIT(7)
-#define show_dram_valid_flags(flags)	__print_flags(flags, "|",			   \
-	{ CXL_DER_VALID_CHANNEL,			"CHANNEL"		}, \
-	{ CXL_DER_VALID_RANK,				"RANK"			}, \
-	{ CXL_DER_VALID_NIBBLE,				"NIBBLE"		}, \
-	{ CXL_DER_VALID_BANK_GROUP,			"BANK GROUP"		}, \
-	{ CXL_DER_VALID_BANK,				"BANK"			}, \
-	{ CXL_DER_VALID_ROW,				"ROW"			}, \
-	{ CXL_DER_VALID_COLUMN,				"COLUMN"		}, \
-	{ CXL_DER_VALID_CORRECTION_MASK,		"CORRECTION MASK"	}  \
+#define CXL_DER_VALID_COMPONENT				BIT(8)
+#define CXL_DER_VALID_COMPONENT_ID_FORMAT		BIT(9)
+#define CXL_DER_VALID_SUB_CHANNEL			BIT(10)
+#define show_dram_valid_flags(flags)	__print_flags(flags, "|",			\
+	{ CXL_DER_VALID_CHANNEL,			"CHANNEL"		},	\
+	{ CXL_DER_VALID_RANK,				"RANK"			},	\
+	{ CXL_DER_VALID_NIBBLE,				"NIBBLE"		},	\
+	{ CXL_DER_VALID_BANK_GROUP,			"BANK GROUP"		},	\
+	{ CXL_DER_VALID_BANK,				"BANK"			},	\
+	{ CXL_DER_VALID_ROW,				"ROW"			},	\
+	{ CXL_DER_VALID_COLUMN,				"COLUMN"		},	\
+	{ CXL_DER_VALID_CORRECTION_MASK,		"CORRECTION MASK"	},	\
+	{ CXL_DER_VALID_COMPONENT,			"COMPONENT"		},	\
+	{ CXL_DER_VALID_COMPONENT_ID_FORMAT,		"COMPONENT PLDM FORMAT"	},	\
+	{ CXL_DER_VALID_SUB_CHANNEL,			"SUB CHANNEL"		}	\
 )
 
 TRACE_EVENT(cxl_dram,
@@ -484,6 +496,7 @@ TRACE_EVENT(cxl_dram,
 		__field(u64, dpa)
 		__field(u8, descriptor)
 		__field(u8, type)
+		__field(u8, sub_type)
 		__field(u8, transaction_type)
 		__field(u8, channel)
 		__field(u16, validity_flags)
@@ -498,6 +511,10 @@ TRACE_EVENT(cxl_dram,
 		__field(u8, bank)	/* Out of order to pack trace record */
 		__field(u8, dpa_flags)	/* Out of order to pack trace record */
 		__string(region_name, cxlr ? dev_name(&cxlr->dev) : "")
+		__array(u8, comp_id, CXL_EVENT_GEN_MED_COMP_ID_SIZE)
+		__field(u8, sub_channel)
+		__field(u8, cme_threshold_ev_flags)
+		__field(u32, cvme_count)
 	),
 
 	TP_fast_assign(
@@ -510,6 +527,7 @@ TRACE_EVENT(cxl_dram,
 		__entry->dpa &= CXL_DPA_MASK;
 		__entry->descriptor = rec->media_hdr.descriptor;
 		__entry->type = rec->media_hdr.type;
+		__entry->sub_type = rec->sub_type;
 		__entry->transaction_type = rec->media_hdr.transaction_type;
 		__entry->validity_flags = get_unaligned_le16(rec->media_hdr.validity_flags);
 		__entry->channel = rec->media_hdr.channel;
@@ -529,23 +547,35 @@ TRACE_EVENT(cxl_dram,
 			__assign_str(region_name);
 			uuid_copy(&__entry->region_uuid, &uuid_null);
 		}
+		memcpy(__entry->comp_id, &rec->component_id,
+		       CXL_EVENT_GEN_MED_COMP_ID_SIZE);
+		__entry->sub_channel = rec->sub_channel;
+		__entry->cme_threshold_ev_flags = rec->cme_threshold_ev_flags;
+		__entry->cvme_count = get_unaligned_le24(rec->cvme_count);
 	),
 
-	CXL_EVT_TP_printk("dpa=%llx dpa_flags='%s' descriptor='%s' type='%s' " \
-		"transaction_type='%s' channel=%u rank=%u nibble_mask=%x " \
-		"bank_group=%u bank=%u row=%u column=%u cor_mask=%s " \
-		"validity_flags='%s' " \
-		"hpa=%llx region=%s region_uuid=%pUb",
-		__entry->dpa, show_dpa_flags(__entry->dpa_flags),
-		show_event_desc_flags(__entry->descriptor),
-		show_dram_mem_event_type(__entry->type),
-		show_trans_type(__entry->transaction_type),
+	CXL_EVT_TP_printk("dpa=0x%llx dpa_flags=0x%x " \
+		"descriptor=0x%x type=0x%x sub_type=0x%x " \
+		"transaction_type=0x%x channel=%u rank=%u " \
+		"nibble_mask=0x%x bank_group=%u bank=%u " \
+		"row=%u column=%u cor_mask=%s validity_flags=0x%x " \
+		"comp_id=%s pldm_entity_id=%s pldm_resource_id=%s " \
+		"hpa=0x%llx region=%s region_uuid=%pUb " \
+		"sub_channel=%u cme_threshold_ev_flags=0x%x cvme_count=0x%x ", \
+		__entry->dpa, __entry->dpa_flags, __entry->descriptor,
+		__entry->type, __entry->sub_type, __entry->transaction_type,
 		__entry->channel, __entry->rank, __entry->nibble_mask,
 		__entry->bank_group, __entry->bank,
 		__entry->row, __entry->column,
 		__print_hex(__entry->cor_mask, CXL_EVENT_DER_CORRECTION_MASK_SIZE),
-		show_dram_valid_flags(__entry->validity_flags),
-		__entry->hpa, __get_str(region_name), &__entry->region_uuid
+		__entry->validity_flags,
+		__print_hex(__entry->comp_id, CXL_EVENT_GEN_MED_COMP_ID_SIZE),
+		show_pldm_entity_id(__entry->validity_flags, CXL_DER_VALID_COMPONENT,
+				    CXL_DER_VALID_COMPONENT_ID_FORMAT, __entry->comp_id),
+		show_pldm_resource_id(__entry->validity_flags, CXL_DER_VALID_COMPONENT,
+				      CXL_DER_VALID_COMPONENT_ID_FORMAT, __entry->comp_id),
+		__entry->hpa, __get_str(region_name), &__entry->region_uuid,
+		__entry->sub_channel, __entry->cme_threshold_ev_flags, __entry->cvme_count
 	)
 );
 
