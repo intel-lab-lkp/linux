@@ -73,6 +73,7 @@ TARGETS += net/rds
 TARGETS += net/tcp_ao
 TARGETS += nsfs
 TARGETS += perf_events
+TARGETS += perf_qos
 TARGETS += pidfd
 TARGETS += pid_namespace
 TARGETS += power_supply
