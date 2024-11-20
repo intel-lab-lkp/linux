@@ -8,7 +8,7 @@ endif
 
 KASAN_SANITIZE_snapshot.o	:= n
 
-obj-y				+= qos.o
+obj-y				+= qos.o perf_qos.o
 obj-$(CONFIG_PM)		+= main.o
 obj-$(CONFIG_VT_CONSOLE_SLEEP)	+= console.o
 obj-$(CONFIG_FREEZER)		+= process.o
