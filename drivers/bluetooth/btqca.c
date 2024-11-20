@@ -700,8 +700,79 @@ static int qca_check_bdaddr(struct hci_dev *hdev, const struct qca_fw_config *co
 	return 0;
 }
 
-static void qca_generate_hsp_nvm_name(char *fwname, size_t max_size,
-		struct qca_btsoc_version ver, u8 rom_ver, u16 bid)
+
+const char *qca_get_soc_name(enum qca_btsoc_type soc_type)
+{
+	const char *soc_name = "";
+
+	switch (soc_type) {
+	case QCA_QCA2066:
+		soc_name = "QCA2066";
+		break;
+
+	case QCA_QCA6698:
+		soc_name = "QCA6698";
+		break;
+
+	case QCA_WCN3988:
+	case QCA_WCN3990:
+	case QCA_WCN3991:
+	case QCA_WCN3998:
+		soc_name = "WCN399x";
+		break;
+
+	case QCA_WCN6750:
+		soc_name = "WCN6750";
+		break;
+
+	case QCA_WCN6855:
+		soc_name = "WCN6855";
+		break;
+
+	case QCA_WCN7850:
+		soc_name = "WCN7850";
+		break;
+
+	default:
+		soc_name = "ROME/QCA6390";
+	}
+
+	return soc_name;
+}
+EXPORT_SYMBOL_GPL(qca_get_soc_name);
+
+static void qca_get_firmware_path(enum qca_btsoc_type soc_type, char *fw_path,
+		size_t max_size, enum qca_product_type product_type)
+{
+	const char *fw_dir = NULL;
+
+	switch (product_type) {
+	case QCA_MCC:
+		fw_dir = "qca";
+		break;
+	case QCA_CE:
+		fw_dir = "qca/ce";
+		break;
+	case QCA_IOT:
+		fw_dir = "qca/iot";
+		break;
+	case QCA_AUTO:
+		fw_dir = "qca/auto";
+		break;
+	default:
+		fw_dir = "qca";
+		break;
+	}
+
+	if (product_type == QCA_IOT)
+		snprintf(fw_path, max_size, "%s/%s", fw_dir, qca_get_soc_name(soc_type));
+	else
+		snprintf(fw_path, max_size, "%s", fw_dir);
+}
+
+static void qca_generate_hsp_nvm_name(enum qca_btsoc_type soc_type, char *fwname,
+		size_t max_size, const char *fw_path, struct qca_btsoc_version ver, u8 rom_ver,
+		u16 bid)
 {
 	const char *variant;
 
@@ -712,33 +783,36 @@ static void qca_generate_hsp_nvm_name(char *fwname, size_t max_size,
 		variant = "";
 
 	if (bid == 0x0)
-		snprintf(fwname, max_size, "qca/hpnv%02x%s.bin", rom_ver, variant);
+		snprintf(fwname, max_size, "%s/hpnv%02x%s.bin", fw_path, rom_ver, variant);
 	else
-		snprintf(fwname, max_size, "qca/hpnv%02x%s.%x", rom_ver, variant, bid);
+		snprintf(fwname, max_size, "%s/hpnv%02x%s.%x", fw_path, rom_ver, variant, bid);
 }
 
-static inline void qca_get_nvm_name_generic(struct qca_fw_config *cfg,
+static inline void qca_get_nvm_name_generic(struct qca_fw_config *cfg, const char *fw_path,
 					    const char *stem, u8 rom_ver, u16 bid)
 {
 	if (bid == 0x0)
-		snprintf(cfg->fwname, sizeof(cfg->fwname), "qca/%snv%02x.bin", stem, rom_ver);
+		snprintf(cfg->fwname, sizeof(cfg->fwname),
+			 "%s/%snv%02x.bin", fw_path, stem, rom_ver);
 	else if (bid & 0xff00)
 		snprintf(cfg->fwname, sizeof(cfg->fwname),
-			 "qca/%snv%02x.b%x", stem, rom_ver, bid);
+			 "%s/%snv%02x.b%x", fw_path, stem, rom_ver, bid);
 	else
 		snprintf(cfg->fwname, sizeof(cfg->fwname),
-			 "qca/%snv%02x.b%02x", stem, rom_ver, bid);
+			 "%s/%snv%02x.b%02x", fw_path, stem, rom_ver, bid);
 }
 
 int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		   enum qca_btsoc_type soc_type, struct qca_btsoc_version ver,
-		   const char *firmware_name)
+		   const char *firmware_name, uint32_t product_variant)
 {
 	struct qca_fw_config config = {};
 	int err;
 	u8 rom_ver = 0;
 	u32 soc_ver;
 	u16 boardid = 0;
+	enum qca_product_type product_type;
+	char fw_path[64] = {0};
 
 	bt_dev_dbg(hdev, "QCA setup on UART");
 
@@ -759,6 +833,10 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	if (soc_type == QCA_WCN6750)
 		qca_send_patch_config_cmd(hdev);
 
+	/* Get the f/w path based on product variant */
+	product_type = (product_variant >> 16) & 0xff;
+	qca_get_firmware_path(soc_type, fw_path, sizeof(fw_path), product_type);
+
 	/* Download rampatch file */
 	config.type = TLV_TYPE_PATCH;
 	switch (soc_type) {
@@ -766,19 +844,23 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	case QCA_WCN3991:
 	case QCA_WCN3998:
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/crbtfw%02x.tlv", rom_ver);
+			 "%s/crbtfw%02x.tlv", fw_path, rom_ver);
 		break;
 	case QCA_WCN3988:
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/apbtfw%02x.tlv", rom_ver);
+			 "%s/apbtfw%02x.tlv", fw_path, rom_ver);
 		break;
 	case QCA_QCA2066:
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/hpbtfw%02x.tlv", rom_ver);
+			 "%s/hpbtfw%02x.tlv", fw_path, rom_ver);
 		break;
 	case QCA_QCA6390:
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/htbtfw%02x.tlv", rom_ver);
+			 "%s/htbtfw%02x.tlv", fw_path, rom_ver);
+		break;
+	case QCA_QCA6698:
+		snprintf(config.fwname, sizeof(config.fwname),
+			 "%s/hpbtfw%02x.tlv", fw_path, rom_ver);
 		break;
 	case QCA_WCN6750:
 		/* Choose mbn file by default.If mbn file is not found
@@ -786,19 +868,19 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		 */
 		config.type = ELF_TYPE_PATCH;
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/msbtfw%02x.mbn", rom_ver);
+			 "%s/msbtfw%02x.mbn", fw_path, rom_ver);
 		break;
 	case QCA_WCN6855:
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/hpbtfw%02x.tlv", rom_ver);
+			 "%s/hpbtfw%02x.tlv", fw_path, rom_ver);
 		break;
 	case QCA_WCN7850:
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/hmtbtfw%02x.tlv", rom_ver);
+			 "%s/hmtbtfw%02x.tlv", fw_path, rom_ver);
 		break;
 	default:
 		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/rampatch_%08x.bin", soc_ver);
+			 "%s/rampatch_%08x.bin", fw_path, soc_ver);
 	}
 
 	err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
@@ -810,7 +892,8 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	/* Give the controller some time to get ready to receive the NVM */
 	msleep(10);
 
-	if (soc_type == QCA_QCA2066 || soc_type == QCA_WCN7850)
+	if (soc_type == QCA_QCA2066 || soc_type == QCA_WCN7850 ||
+		soc_type == QCA_QCA6698)
 		qca_read_fw_board_id(hdev, &boardid);
 
 	/* Download NVM configuration */
@@ -825,39 +908,40 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		case QCA_WCN3998:
 			if (le32_to_cpu(ver.soc_id) == QCA_WCN3991_SOC_ID) {
 				snprintf(config.fwname, sizeof(config.fwname),
-					 "qca/crnv%02xu.bin", rom_ver);
+					 "%s/crnv%02xu.bin", fw_path, rom_ver);
 			} else {
 				snprintf(config.fwname, sizeof(config.fwname),
-					 "qca/crnv%02x.bin", rom_ver);
+					 "%s/crnv%02x.bin", fw_path, rom_ver);
 			}
 			break;
 		case QCA_WCN3988:
 			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/apnv%02x.bin", rom_ver);
+				 "%s/apnv%02x.bin", fw_path, rom_ver);
 			break;
 		case QCA_QCA2066:
-			qca_generate_hsp_nvm_name(config.fwname,
-				sizeof(config.fwname), ver, rom_ver, boardid);
+		case QCA_QCA6698:
+			qca_generate_hsp_nvm_name(soc_type, config.fwname,
+				sizeof(config.fwname), fw_path, ver, rom_ver, boardid);
 			break;
 		case QCA_QCA6390:
 			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/htnv%02x.bin", rom_ver);
+				 "%s/htnv%02x.bin", fw_path, rom_ver);
 			break;
 		case QCA_WCN6750:
 			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/msnv%02x.bin", rom_ver);
+				 "%s/msnv%02x.bin", fw_path, rom_ver);
 			break;
 		case QCA_WCN6855:
 			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/hpnv%02x.bin", rom_ver);
+				 "%s/hpnv%02x.bin", fw_path, rom_ver);
 			break;
 		case QCA_WCN7850:
-			qca_get_nvm_name_generic(&config, "hmt", rom_ver, boardid);
+			qca_get_nvm_name_generic(&config, "hmt", fw_path, rom_ver, boardid);
 			break;
 
 		default:
 			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/nvm_%08x.bin", soc_ver);
+				 "%s/nvm_%08x.bin", fw_path, soc_ver);
 		}
 	}
 
@@ -871,6 +955,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	case QCA_WCN3991:
 	case QCA_QCA2066:
 	case QCA_QCA6390:
+	case QCA_QCA6698:
 	case QCA_WCN6750:
 	case QCA_WCN6855:
 	case QCA_WCN7850:
@@ -909,6 +994,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	case QCA_WCN6750:
 	case QCA_WCN6855:
 	case QCA_WCN7850:
+	case QCA_QCA6698:
 		/* get fw build info */
 		err = qca_read_fw_build_info(hdev);
 		if (err < 0)

@@ -151,9 +151,17 @@ enum qca_btsoc_type {
 	QCA_WCN3991,
 	QCA_QCA2066,
 	QCA_QCA6390,
+	QCA_QCA6698,
 	QCA_WCN6750,
 	QCA_WCN6855,
 	QCA_WCN7850,
+};
+
+enum qca_product_type {
+	QCA_MCC = 0,
+	QCA_CE,
+	QCA_IOT,
+	QCA_AUTO,
 };
 
 #if IS_ENABLED(CONFIG_BT_QCA)
@@ -161,11 +169,12 @@ enum qca_btsoc_type {
 int qca_set_bdaddr_rome(struct hci_dev *hdev, const bdaddr_t *bdaddr);
 int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		   enum qca_btsoc_type soc_type, struct qca_btsoc_version ver,
-		   const char *firmware_name);
+		   const char *firmware_name, uint32_t product_variant);
 int qca_read_soc_version(struct hci_dev *hdev, struct qca_btsoc_version *ver,
 			 enum qca_btsoc_type);
 int qca_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr);
 int qca_send_pre_shutdown_cmd(struct hci_dev *hdev);
+const char *qca_get_soc_name(enum qca_btsoc_type soc_type);
 #else
 
 static inline int qca_set_bdaddr_rome(struct hci_dev *hdev, const bdaddr_t *bdaddr)
