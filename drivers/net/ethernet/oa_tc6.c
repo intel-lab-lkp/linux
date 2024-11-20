@@ -1003,7 +1003,7 @@ static u16 oa_tc6_prepare_spi_tx_buf_for_tx_skbs(struct oa_tc6 *tc6)
 	 */
 	for (used_tx_credits = 0; used_tx_credits < tc6->tx_credits;
 	     used_tx_credits++) {
-		if (!tc6->ongoing_tx_skb) {
+		if (!tc6->ongoing_tx_skb && tc6->waiting_tx_skb) {
 			tc6->ongoing_tx_skb = tc6->waiting_tx_skb;
 			tc6->waiting_tx_skb = NULL;
 		}
