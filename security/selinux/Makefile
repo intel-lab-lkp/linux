@@ -41,5 +41,8 @@ targets += flask.h
 $(obj)/flask.h: $(obj)/genheaders FORCE
 	$(call if_changed,genhdrs)
 
+# see the note above, remove this line
+clean-files += av_permissions.h
+
 hostprogs := genheaders
 HOST_EXTRACFLAGS += -I$(srctree)/security/selinux/include
