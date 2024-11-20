@@ -30,11 +30,13 @@
 	(ADVERTISED_TP | ADVERTISED_MII | ADVERTISED_FIBRE | \
 	 ADVERTISED_BNC | ADVERTISED_AUI | ADVERTISED_Backplane)
 
-enum {
+enum phylink_disable_state {
 	PHYLINK_DISABLE_STOPPED,
 	PHYLINK_DISABLE_LINK,
 	PHYLINK_DISABLE_MAC_WOL,
+};
 
+enum phylink_pcs_state {
 	PCS_STATE_DOWN = 0,
 	PCS_STATE_STARTING,
 	PCS_STATE_STARTED,
@@ -76,7 +78,7 @@ struct phylink {
 	struct phylink_link_state phy_state;
 	struct work_struct resolve;
 	unsigned int pcs_neg_mode;
-	unsigned int pcs_state;
+	enum phylink_pcs_state pcs_state;
 
 	bool link_failed;
 	bool using_mac_select_pcs;
