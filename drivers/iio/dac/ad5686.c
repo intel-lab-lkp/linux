@@ -464,7 +464,6 @@ int ad5686_probe(struct device *dev,
 		return  -ENOMEM;
 
 	st = iio_priv(indio_dev);
-	dev_set_drvdata(dev, indio_dev);
 
 	st->dev = dev;
 	st->write = write;
@@ -521,17 +520,9 @@ int ad5686_probe(struct device *dev,
 	if (ret)
 		return ret;
 
-	return iio_device_register(indio_dev);
+	return devm_iio_device_register(dev, indio_dev);
 }
 EXPORT_SYMBOL_NS_GPL(ad5686_probe, IIO_AD5686);
-
-void ad5686_remove(struct device *dev)
-{
-	struct iio_dev *indio_dev = dev_get_drvdata(dev);
-
-	iio_device_unregister(indio_dev);
-}
-EXPORT_SYMBOL_NS_GPL(ad5686_remove, IIO_AD5686);
 
 MODULE_AUTHOR("Michael Hennerich <michael.hennerich@analog.com>");
 MODULE_DESCRIPTION("Analog Devices AD5686/85/84 DAC");
