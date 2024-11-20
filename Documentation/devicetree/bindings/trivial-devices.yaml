@@ -161,6 +161,8 @@ properties:
           - isil,isl69269
             # Intersil ISL76682 Ambient Light Sensor
           - isil,isl76682
+            # Renesas RAA228004 Power Converters
+          - isil,raa228004
             # JEDEC JESD300 (SPD5118) Hub and Serial Presence Detect
           - jedec,spd5118
             # Linear Technology LTC2488
