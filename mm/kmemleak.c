@@ -356,20 +356,32 @@ static bool unreferenced_object(struct kmemleak_object *object)
  * Printing of the unreferenced objects information to the seq file. The
  * print_unreferenced function must be called with the object->lock held.
  */
-static void print_unreferenced(struct seq_file *seq,
+static depot_stack_handle_t print_unreferenced(struct seq_file *seq,
 			       struct kmemleak_object *object)
 {
-	int i;
-	unsigned long *entries;
-	unsigned int nr_entries;
-
-	nr_entries = stack_depot_fetch(object->trace_handle, &entries);
 	warn_or_seq_printf(seq, "unreferenced object 0x%08lx (size %zu):\n",
 			  object->pointer, object->size);
 	warn_or_seq_printf(seq, "  comm \"%s\", pid %d, jiffies %lu\n",
 			   object->comm, object->pid, object->jiffies);
 	hex_dump_object(seq, object);
 	warn_or_seq_printf(seq, "  backtrace (crc %x):\n", object->checksum);
+
+	return object->trace_handle;
+}
+
+/*
+ * Prints stack traces of unreferenced objects outside of the lock context.
+ * This avoids potential issues with printing pointers that might require
+ * additional locking.
+ */
+static void print_stack_trace(struct seq_file *seq,
+			      depot_stack_handle_t h)
+{
+	int i;
+	unsigned long *entries;
+	unsigned int nr_entries;
+
+	nr_entries = stack_depot_fetch(h, &entries);
 
 	for (i = 0; i < nr_entries; i++) {
 		void *ptr = (void *)entries[i];
@@ -1660,7 +1672,9 @@ unlock_put:
  */
 static void kmemleak_scan(void)
 {
+	depot_stack_handle_t stackdepot_handle;
 	struct kmemleak_object *object;
+	bool do_print = false;
 	struct zone *zone;
 	int __maybe_unused i;
 	int new_leaks = 0;
@@ -1822,12 +1836,17 @@ static void kmemleak_scan(void)
 		    !(object->flags & OBJECT_REPORTED)) {
 			object->flags |= OBJECT_REPORTED;
 
-			if (kmemleak_verbose)
-				print_unreferenced(NULL, object);
+			if (kmemleak_verbose) {
+				stackdepot_handle = print_unreferenced(NULL, object);
+				do_print = true;
+			}
 
 			new_leaks++;
 		}
 		raw_spin_unlock_irq(&object->lock);
+		if (kmemleak_verbose && do_print)
+			print_stack_trace(NULL, stackdepot_handle);
+
 	}
 	rcu_read_unlock();
 
@@ -1976,13 +1995,20 @@ static void kmemleak_seq_stop(struct seq_file *seq, void *v)
  */
 static int kmemleak_seq_show(struct seq_file *seq, void *v)
 {
+	depot_stack_handle_t stackdepot_handle;
 	struct kmemleak_object *object = v;
+	bool do_print = false;
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&object->lock, flags);
-	if ((object->flags & OBJECT_REPORTED) && unreferenced_object(object))
-		print_unreferenced(seq, object);
+	if ((object->flags & OBJECT_REPORTED) && unreferenced_object(object)) {
+		stackdepot_handle = print_unreferenced(seq, object);
+		do_print = true;
+	}
 	raw_spin_unlock_irqrestore(&object->lock, flags);
+	if (do_print)
+		print_stack_trace(seq, stackdepot_handle);
+
 	return 0;
 }
 
