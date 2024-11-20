@@ -6563,6 +6563,22 @@
 			them frequently to increase the rate of SLB faults
 			on kernel addresses.
 
+	strict_devmem=
+			[KNL] Under CONFIG_STRICT_DEVMEM, whether strict devmem
+			is enabled for this boot. Strict devmem checking is used
+			to protect the userspace (root) access to all of memory,
+			including kernel and userspace memory. Accidental access
+			to this is obviously disastrous, but specific access can
+			be used by people debugging the kernel. Note that with
+			PAT support enabled, even in this case there are
+			restrictions on /dev/mem use due to the cache aliasing
+			requirements.
+		on	If IO_STRICT_DEVMEM=n, the /dev/mem file only allows
+			userspace access to PCI space and the BIOS code and data
+			regions. This is sufficient for dosemu and X and all
+			common users of /dev/mem. (default)
+		off	Disable strict devmem checks.
+
 	sunrpc.min_resvport=
 	sunrpc.max_resvport=
 			[NFS,SUNRPC]

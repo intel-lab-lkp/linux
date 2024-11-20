@@ -57,15 +57,23 @@ static inline int valid_mmap_phys_addr_range(unsigned long pfn, size_t size)
 #endif
 
 #ifdef CONFIG_STRICT_DEVMEM
+static DEFINE_STATIC_KEY_FALSE_RO(bypass_strict_devmem);
+
 static inline int page_is_allowed(unsigned long pfn)
 {
+	if (static_branch_unlikely(&bypass_strict_devmem))
+		return 1;
 	return devmem_is_allowed(pfn);
 }
+
 static inline int range_is_allowed(unsigned long pfn, unsigned long size)
 {
 	u64 from = ((u64)pfn) << PAGE_SHIFT;
 	u64 to = from + size;
 	u64 cursor = from;
+
+	if (static_branch_unlikely(&bypass_strict_devmem))
+		return 1;
 
 	while (cursor < to) {
 		if (!devmem_is_allowed(pfn))
@@ -75,6 +83,19 @@ static inline int range_is_allowed(unsigned long pfn, unsigned long size)
 	}
 	return 1;
 }
+
+static bool enable_strict_devmem __initdata = true;
+static int __init parse_strict_devmem(char *str)
+{
+	if (kstrtobool(str, &enable_strict_devmem))
+		pr_warn("Invalid option string for strict_devmem: '%s'\n",
+			str);
+	if (enable_strict_devmem == false)
+		static_branch_enable(&bypass_strict_devmem);
+	return 1;
+}
+
+__setup("strict_devmem=", parse_strict_devmem);
 #else
 static inline int page_is_allowed(unsigned long pfn)
 {
