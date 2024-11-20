@@ -436,6 +436,11 @@ static struct kmem_cache *vm_area_cachep;
 /* SLAB cache for mm_struct structures (tsk->mm) */
 static struct kmem_cache *mm_cachep;
 
+static void vm_area_ctor(void *data)
+{
+	vma_lock_init(data);
+}
+
 struct vm_area_struct *vm_area_alloc(struct mm_struct *mm)
 {
 	struct vm_area_struct *vma;
@@ -462,8 +467,7 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 	 * orig->shared.rb may be modified concurrently, but the clone
 	 * will be reinitialized.
 	 */
-	data_race(memcpy(new, orig, sizeof(*new)));
-	vma_lock_init(new);
+	vma_copy(new, orig);
 	INIT_LIST_HEAD(&new->anon_vma_chain);
 #ifdef CONFIG_PER_VMA_LOCK
 	/* vma is not locked, can't use vma_mark_detached() */
@@ -475,32 +479,37 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 	return new;
 }
 
-void __vm_area_free(struct vm_area_struct *vma)
+static void __vm_area_free(struct vm_area_struct *vma, bool unreachable)
 {
+#ifdef CONFIG_PER_VMA_LOCK
+	/*
+	 * With SLAB_TYPESAFE_BY_RCU, vma can be reused and we need
+	 * vma->detached to be set before vma is returned into the cache.
+	 * This way reused object won't be used by readers until it's
+	 * initialized and reattached.
+	 * If vma is unreachable, there can be no other users and we
+	 * can set vma->detached directly with no risk of a race.
+	 * If vma is reachable, then it should have been already detached
+	 * under vma write-lock or it was never attached.
+	 */
+	if (unreachable)
+		vma->detached = true;
+	else
+		VM_BUG_ON_VMA(!is_vma_detached(vma), vma);
+#endif
 	vma_numab_state_free(vma);
 	free_anon_vma_name(vma);
 	kmem_cache_free(vm_area_cachep, vma);
 }
 
-#ifdef CONFIG_PER_VMA_LOCK
-static void vm_area_free_rcu_cb(struct rcu_head *head)
-{
-	struct vm_area_struct *vma = container_of(head, struct vm_area_struct,
-						  vm_rcu);
-
-	/* The vma should not be locked while being destroyed. */
-	VM_BUG_ON_VMA(rwsem_is_locked(&vma->vm_lock.lock), vma);
-	__vm_area_free(vma);
-}
-#endif
-
 void vm_area_free(struct vm_area_struct *vma)
 {
-#ifdef CONFIG_PER_VMA_LOCK
-	call_rcu(&vma->vm_rcu, vm_area_free_rcu_cb);
-#else
-	__vm_area_free(vma);
-#endif
+	__vm_area_free(vma, false);
+}
+
+void vm_area_free_unreachable(struct vm_area_struct *vma)
+{
+	__vm_area_free(vma, true);
 }
 
 static void account_kernel_stack(struct task_struct *tsk, int account)
@@ -3135,9 +3144,11 @@ void __init proc_caches_init(void)
 			sizeof(struct fs_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
 			NULL);
-	vm_area_cachep = KMEM_CACHE(vm_area_struct,
-			SLAB_HWCACHE_ALIGN|SLAB_NO_MERGE|SLAB_PANIC|
-			SLAB_ACCOUNT);
+	vm_area_cachep = kmem_cache_create("vm_area_struct",
+			sizeof(struct vm_area_struct), 0,
+			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_TYPESAFE_BY_RCU|
+			SLAB_ACCOUNT, vm_area_ctor);
+
 	mmap_init();
 	nsproxy_cache_init();
 }

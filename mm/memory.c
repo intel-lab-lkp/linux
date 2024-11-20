@@ -6275,10 +6275,16 @@ retry:
 	if (!vma)
 		goto inval;
 
-	if (!vma_start_read(vma))
+	if (!vma_start_read(mm, vma))
 		goto inval;
 
-	/* Check if the VMA got isolated after we found it */
+	/*
+	 * Check if the VMA got isolated after we found it.
+	 * Note: vma we found could have been recycled and is being reattached.
+	 * It's possible to attach a vma while it is read-locked, however a
+	 * read-locked vma can't be detached (detaching requires write-locking).
+	 * Therefore if this check passes, we have an attached and stable vma.
+	 */
 	if (is_vma_detached(vma)) {
 		vma_end_read(vma);
 		count_vm_vma_lock_event(VMA_LOCK_MISS);
@@ -6292,8 +6298,9 @@ retry:
 	 * fields are accessible for RCU readers.
 	 */
 
-	/* Check since vm_start/vm_end might change before we lock the VMA */
-	if (unlikely(address < vma->vm_start || address >= vma->vm_end))
+	/* Check if the vma we locked is the right one. */
+	if (unlikely(vma->vm_mm != mm ||
+		     address < vma->vm_start || address >= vma->vm_end))
 		goto inval_end_read;
 
 	rcu_read_unlock();

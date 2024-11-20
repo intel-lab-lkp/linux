@@ -667,15 +667,10 @@ struct vma_numab_state {
 struct vm_area_struct {
 	/* The first cache line has the info for VMA tree walking. */
 
-	union {
-		struct {
-			/* VMA covers [vm_start; vm_end) addresses within mm */
-			unsigned long vm_start;
-			unsigned long vm_end;
-		};
-#ifdef CONFIG_PER_VMA_LOCK
-		struct rcu_head vm_rcu;	/* Used for deferred freeing. */
-#endif
+	struct {
+		/* VMA covers [vm_start; vm_end) addresses within mm */
+		unsigned long vm_start;
+		unsigned long vm_end;
 	};
 
 	/*

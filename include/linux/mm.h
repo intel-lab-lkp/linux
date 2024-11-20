@@ -257,7 +257,7 @@ struct vm_area_struct *vm_area_alloc(struct mm_struct *);
 struct vm_area_struct *vm_area_dup(struct vm_area_struct *);
 void vm_area_free(struct vm_area_struct *);
 /* Use only if VMA has no other users */
-void __vm_area_free(struct vm_area_struct *vma);
+void vm_area_free_unreachable(struct vm_area_struct *vma);
 
 #ifndef CONFIG_MMU
 extern struct rb_root nommu_region_tree;
@@ -690,12 +690,32 @@ static inline void vma_lock_init(struct vm_area_struct *vma)
 	vma->vm_lock_seq = UINT_MAX;
 }
 
+#define VMA_BEFORE_LOCK		offsetof(struct vm_area_struct, vm_lock)
+#define VMA_LOCK_END(vma)	\
+	(((void *)(vma)) + offsetofend(struct vm_area_struct, vm_lock))
+#define VMA_AFTER_LOCK		\
+	(sizeof(struct vm_area_struct) - offsetofend(struct vm_area_struct, vm_lock))
+
+static inline void vma_clear(struct vm_area_struct *vma)
+{
+	/* Preserve vma->vm_lock */
+	memset(vma, 0, VMA_BEFORE_LOCK);
+	memset(VMA_LOCK_END(vma), 0, VMA_AFTER_LOCK);
+}
+
+static inline void vma_copy(struct vm_area_struct *new, struct vm_area_struct *orig)
+{
+	/* Preserve vma->vm_lock */
+	data_race(memcpy(new, orig, VMA_BEFORE_LOCK));
+	data_race(memcpy(VMA_LOCK_END(new), VMA_LOCK_END(orig), VMA_AFTER_LOCK));
+}
+
 /*
  * Try to read-lock a vma. The function is allowed to occasionally yield false
  * locked result to avoid performance overhead, in which case we fall back to
  * using mmap_lock. The function should never yield false unlocked result.
  */
-static inline bool vma_start_read(struct vm_area_struct *vma)
+static inline bool vma_start_read(struct mm_struct *mm, struct vm_area_struct *vma)
 {
 	/*
 	 * Check before locking. A race might cause false locked result.
@@ -704,7 +724,7 @@ static inline bool vma_start_read(struct vm_area_struct *vma)
 	 * we don't rely on for anything - the mm_lock_seq read against which we
 	 * need ordering is below.
 	 */
-	if (READ_ONCE(vma->vm_lock_seq) == READ_ONCE(vma->vm_mm->mm_lock_seq.sequence))
+	if (READ_ONCE(vma->vm_lock_seq) == READ_ONCE(mm->mm_lock_seq.sequence))
 		return false;
 
 	if (unlikely(down_read_trylock(&vma->vm_lock.lock) == 0))
@@ -721,7 +741,7 @@ static inline bool vma_start_read(struct vm_area_struct *vma)
 	 * after it has been unlocked.
 	 * This pairs with RELEASE semantics in vma_end_write_all().
 	 */
-	if (unlikely(vma->vm_lock_seq == raw_read_seqcount(&vma->vm_mm->mm_lock_seq))) {
+	if (unlikely(vma->vm_lock_seq == raw_read_seqcount(&mm->mm_lock_seq))) {
 		up_read(&vma->vm_lock.lock);
 		return false;
 	}
@@ -810,7 +830,15 @@ static inline void vma_assert_locked(struct vm_area_struct *vma)
 
 static inline void vma_mark_attached(struct vm_area_struct *vma)
 {
-	vma->detached = false;
+	/*
+	 * This pairs with smp_rmb() inside is_vma_detached().
+	 * vma is marked attached after all vma modifications are done and it
+	 * got added into the vma tree. All prior vma modifications should be
+	 * made visible before marking the vma attached.
+	 */
+	smp_wmb();
+	/* This pairs with READ_ONCE() in is_vma_detached(). */
+	WRITE_ONCE(vma->detached, false);
 }
 
 static inline void vma_mark_detached(struct vm_area_struct *vma)
@@ -822,7 +850,18 @@ static inline void vma_mark_detached(struct vm_area_struct *vma)
 
 static inline bool is_vma_detached(struct vm_area_struct *vma)
 {
-	return vma->detached;
+	bool detached;
+
+	/* This pairs with WRITE_ONCE() in vma_mark_attached(). */
+	detached = READ_ONCE(vma->detached);
+	/*
+	 * This pairs with smp_wmb() inside vma_mark_attached() to ensure
+	 * vma->detached is read before vma attributes read later inside
+	 * lock_vma_under_rcu().
+	 */
+	smp_rmb();
+
+	return detached;
 }
 
 static inline void release_fault_lock(struct vm_fault *vmf)
@@ -847,7 +886,11 @@ struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
 #else /* CONFIG_PER_VMA_LOCK */
 
 static inline void vma_lock_init(struct vm_area_struct *vma) {}
-static inline bool vma_start_read(struct vm_area_struct *vma)
+static inline void vma_clear(struct vm_area_struct *vma)
+		{ memset(vma, 0, sizeof(*vma)); }
+static inline void vma_copy(struct vm_area_struct *new, struct vm_area_struct *orig)
+		{ data_race(memcpy(new, orig, sizeof(*new))); }
+static inline bool vma_start_read(struct mm_struct *mm, struct vm_area_struct *vma)
 		{ return false; }
 static inline void vma_end_read(struct vm_area_struct *vma) {}
 static inline void vma_start_write(struct vm_area_struct *vma) {}
@@ -883,7 +926,7 @@ extern const struct vm_operations_struct vma_dummy_vm_ops;
 
 static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 {
-	memset(vma, 0, sizeof(*vma));
+	vma_clear(vma);
 	vma->vm_mm = mm;
 	vma->vm_ops = &vma_dummy_vm_ops;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
@@ -892,7 +935,6 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 	vma->detached = true;
 #endif
 	vma_numab_state_init(vma);
-	vma_lock_init(vma);
 }
 
 /* Use when VMA is not part of the VMA tree and needs no locking */
