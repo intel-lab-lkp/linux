@@ -1481,18 +1481,20 @@ static int do_prlimit(struct task_struct *tsk, unsigned int resource,
 
 	/* Holding a refcount on tsk protects tsk->signal from disappearing. */
 	rlim = tsk->signal->rlim + resource;
-	task_lock(tsk->group_leader);
 	if (new_rlim) {
 		/*
 		 * Keep the capable check against init_user_ns until cgroups can
 		 * contain all limits.
 		 */
 		if (new_rlim->rlim_max > rlim->rlim_max &&
-				!capable(CAP_SYS_RESOURCE))
-			retval = -EPERM;
-		if (!retval)
-			retval = security_task_setrlimit(tsk, resource, new_rlim);
+		    !capable(CAP_SYS_RESOURCE))
+			return -EPERM;
+		retval = security_task_setrlimit(tsk, resource, new_rlim);
+		if (retval)
+			return retval;
 	}
+
+	task_lock(tsk->group_leader);
 	if (!retval) {
 		if (old_rlim)
 			*old_rlim = *rlim;
