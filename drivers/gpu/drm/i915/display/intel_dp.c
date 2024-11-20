@@ -2789,7 +2789,7 @@ static void intel_dp_compute_as_sdp(struct intel_dp *intel_dp,
 		as_sdp->target_rr_divider = true;
 	} else {
 		as_sdp->mode = DP_AS_SDP_AVT_DYNAMIC_VTOTAL;
-		as_sdp->vtotal = adjusted_mode->vtotal;
+		as_sdp->vtotal = crtc_state->vrr.vmin;
 		as_sdp->target_rr = 0;
 	}
 }
