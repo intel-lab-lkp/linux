@@ -286,10 +286,16 @@ void kunit_print_attr(void *test_or_suite, bool is_test, unsigned int test_level
 {
 	int i;
 	bool to_free = false;
+	bool printed = false;
 	void *attr;
 	const char *attr_name, *attr_str;
 	struct kunit_suite *suite = is_test ? NULL : test_or_suite;
 	struct kunit_case *test = is_test ? test_or_suite : NULL;
+
+	if (suite) {
+		kunit_log(KERN_INFO, suite, "%*s#:ktap_test: %s",
+					KUNIT_INDENT_LEN * test_level, "", suite->name);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(kunit_attr_list); i++) {
 		if (kunit_attr_list[i].print == PRINT_NEVER ||
@@ -300,12 +306,19 @@ void kunit_print_attr(void *test_or_suite, bool is_test, unsigned int test_level
 			attr_name = kunit_attr_list[i].name;
 			attr_str = kunit_attr_list[i].to_string(attr, &to_free);
 			if (test) {
-				kunit_log(KERN_INFO, test, "%*s# %s.%s: %s",
-					KUNIT_INDENT_LEN * test_level, "", test->name,
-					attr_name, attr_str);
+				if (!printed) {
+					kunit_log(KERN_INFO, test, "%*s#:ktap_test: %s",
+							KUNIT_INDENT_LEN * test_level, "",
+							test->name);
+					printed = true;
+				}
+				kunit_log(KERN_INFO, test, "%*s#:ktap_%s: %s",
+						KUNIT_INDENT_LEN * test_level, "",
+						attr_name, attr_str);
 			} else {
-				kunit_log(KERN_INFO, suite, "%*s# %s: %s",
-					KUNIT_INDENT_LEN * test_level, "", attr_name, attr_str);
+				kunit_log(KERN_INFO, suite, "%*s#:ktap_%s: %s",
+						KUNIT_INDENT_LEN * test_level, "",
+						attr_name, attr_str);
 			}
 
 			/* Free to_string of attribute if needed */

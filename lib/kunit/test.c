@@ -158,8 +158,6 @@ static void kunit_print_suite_start(struct kunit_suite *suite)
 	 * representation.
 	 */
 	pr_info(KUNIT_SUBTEST_INDENT "KTAP version 1\n");
-	pr_info(KUNIT_SUBTEST_INDENT "# Subtest: %s\n",
-		  suite->name);
 	kunit_print_attr((void *)suite, false, KUNIT_LEVEL_CASE);
 	pr_info(KUNIT_SUBTEST_INDENT "1..%zd\n",
 		  kunit_suite_num_test_cases(suite));
@@ -627,9 +625,11 @@ int kunit_run_tests(struct kunit_suite *suite)
 		if (test_case->status == KUNIT_SKIPPED) {
 			/* Test marked as skip */
 			test.status = KUNIT_SKIPPED;
+			kunit_print_attr((void *)test_case, true, KUNIT_LEVEL_CASE);
 			kunit_update_stats(&param_stats, test.status);
 		} else if (!test_case->generate_params) {
 			/* Non-parameterised test. */
+			kunit_print_attr((void *)test_case, true, KUNIT_LEVEL_CASE);
 			test_case->status = KUNIT_SKIPPED;
 			kunit_run_case_catch_errors(suite, test_case, &test);
 			kunit_update_stats(&param_stats, test.status);
@@ -641,7 +641,8 @@ int kunit_run_tests(struct kunit_suite *suite)
 			kunit_log(KERN_INFO, &test, KUNIT_SUBTEST_INDENT KUNIT_SUBTEST_INDENT
 				  "KTAP version 1\n");
 			kunit_log(KERN_INFO, &test, KUNIT_SUBTEST_INDENT KUNIT_SUBTEST_INDENT
-				  "# Subtest: %s", test_case->name);
+				  "#:ktap_test: %s", test_case->name);
+			kunit_print_attr((void *)test_case, true, KUNIT_LEVEL_CASE);
 
 			while (test.param_value) {
 				kunit_run_case_catch_errors(suite, test_case, &test);
@@ -668,8 +669,6 @@ int kunit_run_tests(struct kunit_suite *suite)
 				test.priv = NULL;
 			}
 		}
-
-		kunit_print_attr((void *)test_case, true, KUNIT_LEVEL_CASE);
 
 		kunit_print_test_stats(&test, param_stats);
 

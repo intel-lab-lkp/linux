@@ -78,7 +78,7 @@ static int debugfs_print_results(struct seq_file *seq, void *v)
 
 	/* Print suite header because it is not stored in the test logs. */
 	seq_puts(seq, KUNIT_SUBTEST_INDENT "KTAP version 1\n");
-	seq_printf(seq, KUNIT_SUBTEST_INDENT "# Subtest: %s\n", suite->name);
+	seq_printf(seq, KUNIT_SUBTEST_INDENT "#:ktap_test: %s\n", suite->name);
 	seq_printf(seq, KUNIT_SUBTEST_INDENT "1..%zd\n", kunit_suite_num_test_cases(suite));
 
 	kunit_suite_for_each_test_case(suite, test_case)

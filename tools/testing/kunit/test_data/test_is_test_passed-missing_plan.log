@@ -1,4 +1,5 @@
 KTAP version 1
+	KTAP version 1
 	# Subtest: sysctl_test
 	# sysctl_test_dointvec_null_tbl_data: sysctl_test_dointvec_null_tbl_data passed
 	ok 1 - sysctl_test_dointvec_null_tbl_data
@@ -18,6 +19,7 @@ KTAP version 1
 	ok 8 - sysctl_test_dointvec_single_greater_int_max
 kunit sysctl_test: all tests passed
 ok 1 - sysctl_test
+	KTAP version 1
 	# Subtest: example
 	1..2
 init_suite

@@ -247,7 +247,7 @@ def extract_tap_lines(kernel_output: Iterable[str]) -> LineStream:
 				yield line_num, line
 	return LineStream(lines=isolate_ktap_output(kernel_output))
 
-KTAP_VERSIONS = [1]
+KTAP_VERSIONS = [1, 2]
 TAP_VERSIONS = [13, 14]
 
 def check_version(version_num: int, accepted_versions: List[int],
@@ -322,6 +322,39 @@ def parse_test_header(lines: LineStream, test: Test) -> bool:
 		return False
 	test.name = match.group(1)
 	lines.pop()
+	return True
+
+TEST_METADATA_HEADER = re.compile(r'^\s*#:ktap_test: (.*)$')
+TEST_METADATA = re.compile(r'^\s*#:(ktap_.*): (.*)$')
+
+def parse_test_metadata(lines: LineStream, test: Test) -> bool:
+	"""
+	Parses test metadata and stores test information in test object.
+	Returns False if fails to parse test metadata lines
+
+	Accepted format:
+	- '# [metadata_category]: [metadata]'
+
+	Recognized metadata categories:
+	- 'ktap_test' to indicate test name
+
+	Parameters:
+	lines - LineStream of KTAP output to parse
+	test - Test object for current test being parsed
+
+	Return:
+	True if successfully parsed test metadata
+	"""
+	match = TEST_METADATA_HEADER.match(lines.peek())
+	if not match:
+		return False
+	test.name = match.group(1)
+	test.log.append(lines.pop())
+	non_metadata_lines = [TEST_PLAN, TEST_RESULT, KTAP_START]
+	while lines and not any(re.match(lines.peek())
+			for re in non_metadata_lines):
+		# Add checks for metadata cateories here: Attributes, Files, Other...
+		test.log.append(lines.pop())
 	return True
 
 TEST_PLAN = re.compile(r'^\s*1\.\.([0-9]+)')
@@ -442,6 +475,7 @@ def parse_diagnostic(lines: LineStream) -> List[str]:
 
 	Line formats that are not parsed:
 	- '# Subtest: [test name]'
+	- '#:ktap_test: [test name]'
 	- '[ok|not ok] [test number] [-] [test name] [optional skip
 		directive]'
 	- 'KTAP version [version number]'
@@ -453,7 +487,8 @@ def parse_diagnostic(lines: LineStream) -> List[str]:
 	Log of diagnostic lines
 	"""
 	log = []  # type: List[str]
-	non_diagnostic_lines = [TEST_RESULT, TEST_HEADER, KTAP_START, TAP_START, TEST_PLAN]
+	non_diagnostic_lines = [TEST_RESULT, TEST_HEADER, KTAP_START, TAP_START,
+						 TEST_PLAN, TEST_METADATA_HEADER]
 	while lines and not any(re.match(lines.peek())
 			for re in non_diagnostic_lines):
 		log.append(lines.pop())
@@ -504,7 +539,7 @@ def print_test_header(test: Test, printer: Printer) -> None:
 	message = test.name
 	if message != "":
 		# Add a leading space before the subtest counts only if a test name
-		# is provided using a "# Subtest" header line.
+		# is provided using a "#:ktap_test" or "# Subtest" header line.
 		message += " "
 	if test.expected_count:
 		if test.expected_count == 1:
@@ -702,6 +737,7 @@ def parse_test(lines: LineStream, expected_num: int, log: List[str], is_subtest:
 	Example:
 
 	KTAP version 1
+	[test metadata]
 	1..4
 	[subtests]
 
@@ -709,10 +745,11 @@ def parse_test(lines: LineStream, expected_num: int, log: List[str], is_subtest:
 	  "# Subtest" header line)
 
 	Example (preferred format with both KTAP version line and
-	"# Subtest" line):
+	"#:ktap_test" line):
 
 	KTAP version 1
-	# Subtest: name
+	#:ktap_test: name
+	[test metadata]
 	1..3
 	[subtests]
 	ok 1 name
@@ -727,6 +764,7 @@ def parse_test(lines: LineStream, expected_num: int, log: List[str], is_subtest:
 	Example (only KTAP version line, compliant with KTAP v1 spec):
 
 	KTAP version 1
+	[test metadata]
 	1..3
 	[subtests]
 	ok 1 name
@@ -755,26 +793,23 @@ def parse_test(lines: LineStream, expected_num: int, log: List[str], is_subtest:
 	err_log = parse_diagnostic(lines)
 	test.log.extend(err_log)
 
-	if not is_subtest:
-		# If parsing the main/top-level test, parse KTAP version line and
-		# test plan
-		test.name = "main"
-		ktap_line = parse_ktap_header(lines, test, printer)
-		test.log.extend(parse_diagnostic(lines))
-		parse_test_plan(lines, test)
-		parent_test = True
-	else:
-		# If not the main test, attempt to parse a test header containing
-		# the KTAP version line and/or subtest header line
-		ktap_line = parse_ktap_header(lines, test, printer)
-		subtest_line = parse_test_header(lines, test)
+	# If parsing the main/top-level test, parse KTAP version line, any
+	# test metadata, and test plan
+	ktap_line = parse_ktap_header(lines, test, printer)
+	subtest_line = parse_test_header(lines, test)
+	parse_test_metadata(lines, test)
+	parse_test_plan(lines, test)
+
+	# Determine if the test is a parent test
+	if is_subtest:
 		parent_test = (ktap_line or subtest_line)
 		if parent_test:
-			# If KTAP version line and/or subtest header is found, attempt
-			# to parse test plan and print test header
-			test.log.extend(parse_diagnostic(lines))
-			parse_test_plan(lines, test)
 			print_test_header(test, printer)
+	else:
+		parent_test = True
+		if test.name == "":
+			test.name = "main"
+
 	expected_count = test.expected_count
 	subtests = []
 	test_num = 1

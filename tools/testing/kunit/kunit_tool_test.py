@@ -345,8 +345,8 @@ class KUnitParserTest(unittest.TestCase):
 		self.print_mock.assert_any_call(StrContains('suite (1 subtest)'))
 
 		# Ensure attributes in correct test log
-		self.assertContains('# module: example', result.subtests[0].log)
-		self.assertContains('# test.speed: slow', result.subtests[0].subtests[0].log)
+		self.assertContains('#:ktap_module: example', result.subtests[0].log)
+		self.assertContains('#:ktap_speed: slow', result.subtests[0].subtests[0].log)
 
 	def test_show_test_output_on_failure(self):
 		output = """
@@ -362,6 +362,14 @@ class KUnitParserTest(unittest.TestCase):
 		self.print_mock.assert_any_call(StrContains('Test output.'))
 		self.print_mock.assert_any_call(StrContains('  Indented more.'))
 		self.noPrintCallContains('not ok 1 test1')
+
+	def test_metadata(self):
+		name_log = test_data_path('test_parse_metadata.log')
+		with open(name_log) as file:
+			result = kunit_parser.parse_run_tests(file.readlines(), stdout)
+		self.assertEqual(kunit_parser.TestStatus.SUCCESS, result.status)
+		self.assertEqual("main_test", result.name)
+		self.assertContains("#:ktap_speed: slow", result.subtests[0].log)
 
 def line_stream_from_strs(strs: Iterable[str]) -> kunit_parser.LineStream:
 	return kunit_parser.LineStream(enumerate(strs, start=1))

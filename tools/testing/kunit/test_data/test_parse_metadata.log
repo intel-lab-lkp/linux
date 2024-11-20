@@ -1,0 +1,11 @@
+KTAP version 2
+#:ktap_test: main_test
+#:ktap_module: example
+1..2
+  KTAP version 2
+  #:ktap_test: test_1
+  #:ktap_speed: slow
+  1..1
+  ok 1 subtest_1
+ok 1 test_1
+ok 2 test_2
