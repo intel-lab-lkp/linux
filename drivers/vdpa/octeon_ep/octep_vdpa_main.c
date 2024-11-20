@@ -44,7 +44,35 @@ static struct octep_hw *vdpa_to_octep_hw(struct vdpa_device *vdpa_dev)
 	return oct_vdpa->oct_hw;
 }
 
-static irqreturn_t octep_vdpa_intr_handler(int irq, void *data)
+static irqreturn_t octep_vdpa_crypto_irq_handler(int irq, void *data)
+{
+	struct octep_hw *oct_hw = data;
+	int i;
+
+	/* Each device interrupt (nb_irqs) maps to specific receive rings
+	 * (nr_vring) in a round-robin fashion.
+	 *
+	 * For example, if nb_irqs = 8 and nr_vring = 64:
+	 * 0 -> 0, 8, 16, 24, 32, 40, 48, 56;
+	 * 1 -> 1, 9, 17, 25, 33, 41, 49, 57;
+	 * ...
+	 * 7 -> 7, 15, 23, 31, 39, 47, 55, 63;
+	 */
+	for (i = irq - oct_hw->irqs[0]; i < oct_hw->nr_vring; i += oct_hw->nb_irqs) {
+		if (ioread32(oct_hw->vqs[i].cb_notify_addr)) {
+			/* Acknowledge the per ring notification to the device */
+			iowrite32(0, oct_hw->vqs[i].cb_notify_addr);
+
+			if (likely(oct_hw->vqs[i].cb.callback))
+				oct_hw->vqs[i].cb.callback(oct_hw->vqs[i].cb.private);
+			break;
+		}
+	}
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t octep_vdpa_net_irq_handler(int irq, void *data)
 {
 	struct octep_hw *oct_hw = data;
 	int i, ring_start, ring_stride;
@@ -85,6 +113,18 @@ static irqreturn_t octep_vdpa_intr_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t (*octep_vdpa_get_irq_handler(u32 dev_id))(int, void *)
+{
+	switch (dev_id) {
+	case VIRTIO_ID_NET:
+		return octep_vdpa_net_irq_handler;
+	case VIRTIO_ID_CRYPTO:
+		return octep_vdpa_crypto_irq_handler;
+	default:
+		return NULL;
+	}
+}
+
 static void octep_free_irqs(struct octep_hw *oct_hw)
 {
 	struct pci_dev *pdev = oct_hw->pdev;
@@ -103,6 +143,7 @@ static void octep_free_irqs(struct octep_hw *oct_hw)
 
 static int octep_request_irqs(struct octep_hw *oct_hw)
 {
+	irqreturn_t (*irq_handler)(int irq, void *data);
 	struct pci_dev *pdev = oct_hw->pdev;
 	int ret, irq, idx;
 
@@ -119,10 +160,16 @@ static int octep_request_irqs(struct octep_hw *oct_hw)
 	}
 
 	memset(oct_hw->irqs, -1, sizeof(oct_hw->irqs));
+	irq_handler = octep_vdpa_get_irq_handler(oct_hw->dev_id);
+	if (!irq_handler) {
+		dev_err(&pdev->dev, "Invalid device id %d\n", oct_hw->dev_id);
+		ret = -EINVAL;
+		goto free_irqs;
+	}
 
 	for (idx = 0; idx < oct_hw->nb_irqs; idx++) {
 		irq = pci_irq_vector(pdev, idx);
-		ret = devm_request_irq(&pdev->dev, irq, octep_vdpa_intr_handler, 0,
+		ret = devm_request_irq(&pdev->dev, irq, irq_handler, 0,
 				       dev_name(&pdev->dev), oct_hw);
 		if (ret) {
 			dev_err(&pdev->dev, "Failed to register interrupt handler\n");
