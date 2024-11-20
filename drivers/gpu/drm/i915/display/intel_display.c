@@ -4857,6 +4857,13 @@ copy_joiner_crtc_state_modeset(struct intel_atomic_state *state,
 		drm_dp_tunnel_ref_get(primary_crtc_state->dp_tunnel_ref.tunnel,
 				      &secondary_crtc_state->dp_tunnel_ref);
 
+	if (secondary_crtc_state->pch_pfit.enabled) {
+		struct drm_rect *dst = &secondary_crtc_state->pch_pfit.dst;
+		int y = dst->y1;
+
+		drm_rect_translate_to(dst, 0, y);
+	}
+
 	copy_joiner_crtc_state_nomodeset(state, secondary_crtc);
 
 	secondary_crtc_state->uapi.mode_changed = primary_crtc_state->uapi.mode_changed;

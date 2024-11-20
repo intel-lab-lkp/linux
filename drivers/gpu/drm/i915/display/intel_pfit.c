@@ -181,18 +181,19 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 			     const struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
-	const struct drm_display_mode *adjusted_mode =
-		&crtc_state->hw.adjusted_mode;
+	const struct drm_display_mode *pipe_mode =
+		&crtc_state->hw.pipe_mode;
 	int pipe_src_w = drm_rect_width(&crtc_state->pipe_src);
 	int pipe_src_h = drm_rect_height(&crtc_state->pipe_src);
-	int ret, x, y, width, height;
+	int num_pipes = intel_crtc_num_joined_pipes(crtc_state);
+	int ret, x, y, width, height, hdisplay_full, src_w_full;
 
 	if (crtc_state->joiner_pipes)
 		return 0;
 
 	/* Native modes don't need fitting */
-	if (adjusted_mode->crtc_hdisplay == pipe_src_w &&
-	    adjusted_mode->crtc_vdisplay == pipe_src_h &&
+	if (pipe_mode->crtc_hdisplay == pipe_src_w &&
+	    pipe_mode->crtc_vdisplay == pipe_src_h &&
 	    crtc_state->output_format != INTEL_OUTPUT_FORMAT_YCBCR420)
 		return 0;
 
@@ -200,46 +201,66 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 	case DRM_MODE_SCALE_CENTER:
 		width = pipe_src_w;
 		height = pipe_src_h;
-		x = (adjusted_mode->crtc_hdisplay - width + 1)/2;
-		y = (adjusted_mode->crtc_vdisplay - height + 1)/2;
+		x = (pipe_mode->crtc_hdisplay - width + 1) / 2;
+		y = (pipe_mode->crtc_vdisplay - height + 1) / 2;
+		/*
+		 * The x-coordinate for Primary should be calculated in such a way
+		 * that it remains consistent whether the pipes are joined or not.
+		 * This means we need to consider the full width of the display even
+		 * when the pipes are joined. The x-coordinate for secondaries is 0
+		 * because it starts at the leftmost point of its own display area,
+		 * ensuring that the framebuffer is centered within Pipe B’s portion
+		 * of the overall display.
+		 */
+		if (intel_crtc_is_joiner_primary(crtc_state)) {
+			hdisplay_full = pipe_mode->crtc_hdisplay * num_pipes;
+			src_w_full = width * num_pipes;
+			x = (hdisplay_full - src_w_full + 1) / 2;
+		}
 		break;
 
 	case DRM_MODE_SCALE_ASPECT:
 		/* Scale but preserve the aspect ratio */
 		{
-			u32 scaled_width = adjusted_mode->crtc_hdisplay * pipe_src_h;
-			u32 scaled_height = pipe_src_w * adjusted_mode->crtc_vdisplay;
+			u32 scaled_width = pipe_mode->crtc_hdisplay * pipe_src_h;
+			u32 scaled_height = pipe_src_w * pipe_mode->crtc_vdisplay;
 
 			if (scaled_width > scaled_height) { /* pillar */
 				width = scaled_height / pipe_src_h;
 				if (width & 1)
 					width++;
-				x = (adjusted_mode->crtc_hdisplay - width + 1) / 2;
+				x = (pipe_mode->crtc_hdisplay - width + 1) / 2;
 				y = 0;
-				height = adjusted_mode->crtc_vdisplay;
+				height = pipe_mode->crtc_vdisplay;
+				if (intel_crtc_is_joiner_primary(crtc_state)) {
+					hdisplay_full = pipe_mode->crtc_hdisplay * num_pipes;
+					src_w_full = width * num_pipes;
+					x = (hdisplay_full - src_w_full + 1) / 2;
+				}
 			} else if (scaled_width < scaled_height) { /* letter */
 				height = scaled_width / pipe_src_w;
 				if (height & 1)
 					height++;
-				y = (adjusted_mode->crtc_vdisplay - height + 1) / 2;
+				y = (pipe_mode->crtc_vdisplay - height + 1) / 2;
 				x = 0;
-				width = adjusted_mode->crtc_hdisplay;
+				width = pipe_mode->crtc_hdisplay;
+
 			} else {
 				x = y = 0;
-				width = adjusted_mode->crtc_hdisplay;
-				height = adjusted_mode->crtc_vdisplay;
+				width = pipe_mode->crtc_hdisplay;
+				height = pipe_mode->crtc_vdisplay;
 			}
 		}
 		break;
 
 	case DRM_MODE_SCALE_NONE:
-		WARN_ON(adjusted_mode->crtc_hdisplay != pipe_src_w);
-		WARN_ON(adjusted_mode->crtc_vdisplay != pipe_src_h);
+		WARN_ON(pipe_mode->crtc_hdisplay != pipe_src_w);
+		WARN_ON(pipe_mode->crtc_vdisplay != pipe_src_h);
 		fallthrough;
 	case DRM_MODE_SCALE_FULLSCREEN:
 		x = y = 0;
-		width = adjusted_mode->crtc_hdisplay;
-		height = adjusted_mode->crtc_vdisplay;
+		width = pipe_mode->crtc_hdisplay;
+		height = pipe_mode->crtc_vdisplay;
 		break;
 
 	default:
