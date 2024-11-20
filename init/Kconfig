@@ -2052,3 +2052,6 @@ config ARCH_HAS_SYNC_CORE_BEFORE_USERMODE
 # <asm/syscall_wrapper.h>.
 config ARCH_HAS_SYSCALL_WRAPPER
 	def_bool n
+
+config HAVE_PYTHON3
+	def_bool $(success,$(PYTHON3) -V)
