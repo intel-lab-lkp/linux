@@ -175,6 +175,7 @@ struct mtk_hdmi_conf {
 	bool tz_disabled;
 	bool cea_modes_only;
 	unsigned long max_mode_clock;
+	u32 reg_hdmi_tx_cfg;
 };
 
 static inline struct mtk_hdmi *hdmi_ctx_from_bridge(struct drm_bridge *b)
