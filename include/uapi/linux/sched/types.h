@@ -66,9 +66,15 @@
  * and policies, that can be used to ensure all the tasks will make their
  * timing constraints.
  *
- * As of now, the SCHED_DEADLINE policy (sched_dl scheduling class) is the
- * only user of this new interface. More information about the algorithm
- * available in the scheduling class file or in Documentation/.
+ * The SCHED_DEADLINE policy (sched_dl scheduling class) is the main
+ * user of this new interface. For SCHED_NORMAL and SCHED_BATCH tasks
+ * scheduled by the fair(EEVDF) scheduler, although not exactly the same
+ * as the sporadic time-constrained task we mentioned, some concepts are
+ * similar to the model. The period and deadline for SCHED_NORMAL/SCHED_BATCH
+ * task are decided by the scheduler algorithm. However, the user can still
+ * suggest the request/slice length using sched_runtime in this policy. More
+ * information about these algorithms is available in the scheduling class
+ * file or Documentation/.
  *
  * Task Utilization Attributes
  * ===========================
@@ -107,8 +113,9 @@ struct sched_attr {
 	/* SCHED_FIFO, SCHED_RR */
 	__u32 sched_priority;
 
-	/* SCHED_DEADLINE */
+	/* SCHED_NORMAL, SCHED_BATCH, SCHED_DEADLINE */
 	__u64 sched_runtime;
+	/* SCHED_DEADLINE */
 	__u64 sched_deadline;
 	__u64 sched_period;
 
