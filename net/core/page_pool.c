@@ -272,9 +272,6 @@ static int page_pool_init(struct page_pool *pool,
 	/* Driver calling page_pool_create() also call page_pool_destroy() */
 	refcount_set(&pool->user_cnt, 1);
 
-	if (pool->dma_map)
-		get_device(pool->p.dev);
-
 	if (pool->slow.flags & PP_FLAG_ALLOW_UNREADABLE_NETMEM) {
 		/* We rely on rtnl_lock()ing to make sure netdev_rx_queue
 		 * configuration doesn't change while we're initializing
@@ -311,9 +308,6 @@ free_ptr_ring:
 static void page_pool_uninit(struct page_pool *pool)
 {
 	ptr_ring_cleanup(&pool->ring, NULL);
-
-	if (pool->dma_map)
-		put_device(pool->p.dev);
 
 #ifdef CONFIG_PAGE_POOL_STATS
 	if (!pool->system)
@@ -365,7 +359,7 @@ struct page_pool *page_pool_create(const struct page_pool_params *params)
 }
 EXPORT_SYMBOL(page_pool_create);
 
-static void page_pool_return_page(struct page_pool *pool, netmem_ref netmem);
+static void __page_pool_return_page(struct page_pool *pool, netmem_ref netmem);
 
 static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 {
@@ -403,7 +397,7 @@ static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 			 * (2) break out to fallthrough to alloc_pages_node.
 			 * This limit stress on page buddy alloactor.
 			 */
-			page_pool_return_page(pool, netmem);
+			__page_pool_return_page(pool, netmem);
 			alloc_stat_inc(pool, waive);
 			netmem = 0;
 			break;
@@ -670,7 +664,7 @@ static __always_inline void __page_pool_release_page_dma(struct page_pool *pool,
  * a regular page (that will eventually be returned to the normal
  * page-allocator via put_page).
  */
-void page_pool_return_page(struct page_pool *pool, netmem_ref netmem)
+void __page_pool_return_page(struct page_pool *pool, netmem_ref netmem)
 {
 	int count;
 	bool put;
@@ -695,6 +689,27 @@ void page_pool_return_page(struct page_pool *pool, netmem_ref netmem)
 	 * knowing page is not part of page-cache (thus avoiding a
 	 * __page_cache_release() call).
 	 */
+}
+
+/* Called from page_pool_put_*() path, need to synchronizated with
+ * page_pool_destory() path.
+ */
+static void page_pool_return_page(struct page_pool *pool, netmem_ref netmem)
+{
+	unsigned int destroy_cnt;
+
+	rcu_read_lock();
+
+	destroy_cnt = READ_ONCE(pool->destroy_cnt);
+	if (unlikely(destroy_cnt)) {
+		spin_lock_bh(&pool->destroy_lock);
+		__page_pool_return_page(pool, netmem);
+		spin_unlock_bh(&pool->destroy_lock);
+	} else {
+		__page_pool_return_page(pool, netmem);
+	}
+
+	rcu_read_unlock();
 }
 
 static bool page_pool_recycle_in_ring(struct page_pool *pool, netmem_ref netmem)
@@ -924,7 +939,7 @@ static netmem_ref page_pool_drain_frag(struct page_pool *pool,
 		return netmem;
 	}
 
-	page_pool_return_page(pool, netmem);
+	__page_pool_return_page(pool, netmem);
 	return 0;
 }
 
@@ -938,7 +953,7 @@ static void page_pool_free_frag(struct page_pool *pool)
 	if (!netmem || page_pool_unref_netmem(netmem, drain_count))
 		return;
 
-	page_pool_return_page(pool, netmem);
+	__page_pool_return_page(pool, netmem);
 }
 
 netmem_ref page_pool_alloc_frag_netmem(struct page_pool *pool,
@@ -1045,7 +1060,7 @@ static void page_pool_empty_alloc_cache_once(struct page_pool *pool)
 static void page_pool_scrub(struct page_pool *pool)
 {
 	page_pool_empty_alloc_cache_once(pool);
-	pool->destroy_cnt++;
+	WRITE_ONCE(pool->destroy_cnt, pool->destroy_cnt + 1);
 
 	/* No more consumers should exist, but producers could still
 	 * be in-flight.
@@ -1119,6 +1134,58 @@ void page_pool_disable_direct_recycling(struct page_pool *pool)
 }
 EXPORT_SYMBOL(page_pool_disable_direct_recycling);
 
+static void page_pool_inflight_unmap(struct page_pool *pool)
+{
+	unsigned int unmapped = 0;
+	struct zone *zone;
+	int inflight;
+
+	if (!pool->dma_map || pool->mp_priv)
+		return;
+
+	get_online_mems();
+	spin_lock_bh(&pool->destroy_lock);
+
+	inflight = page_pool_inflight(pool, false);
+	for_each_populated_zone(zone) {
+		unsigned long end_pfn = zone_end_pfn(zone);
+		unsigned long pfn;
+
+		for (pfn = zone->zone_start_pfn; pfn < end_pfn; pfn++) {
+			struct page *page = pfn_to_online_page(pfn);
+
+			if (!page || !page_count(page) ||
+			    (page->pp_magic & ~0x3UL) != PP_SIGNATURE ||
+			    page->pp != pool)
+				continue;
+
+			dma_unmap_page_attrs(pool->p.dev,
+					     page_pool_get_dma_addr(page),
+					     PAGE_SIZE << pool->p.order,
+					     pool->p.dma_dir,
+					     DMA_ATTR_SKIP_CPU_SYNC |
+					     DMA_ATTR_WEAK_ORDERING);
+			page_pool_set_dma_addr(page, 0);
+
+			unmapped++;
+
+			/* Skip scanning all pages when debug is disabled */
+			if (!IS_ENABLED(CONFIG_DEBUG_NET) &&
+			    inflight == unmapped)
+				goto out;
+		}
+	}
+
+out:
+	WARN_ONCE(page_pool_inflight(pool, false) != unmapped,
+		  "page_pool(%u): unmapped(%u) != inflight pages(%d)\n",
+		  pool->user.id, unmapped, inflight);
+
+	pool->dma_map = false;
+	spin_unlock_bh(&pool->destroy_lock);
+	put_online_mems();
+}
+
 void page_pool_destroy(struct page_pool *pool)
 {
 	if (!pool)
@@ -1138,6 +1205,8 @@ void page_pool_destroy(struct page_pool *pool)
 	 * before returning to driver to free the napi instance.
 	 */
 	synchronize_rcu();
+
+	page_pool_inflight_unmap(pool);
 
 	page_pool_detached(pool);
 	pool->defer_start = jiffies;
@@ -1159,7 +1228,7 @@ void page_pool_update_nid(struct page_pool *pool, int new_nid)
 	/* Flush pool alloc cache, as refill will check NUMA node */
 	while (pool->alloc.count) {
 		netmem = pool->alloc.cache[--pool->alloc.count];
-		page_pool_return_page(pool, netmem);
+		__page_pool_return_page(pool, netmem);
 	}
 }
 EXPORT_SYMBOL(page_pool_update_nid);

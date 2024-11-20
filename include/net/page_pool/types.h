@@ -228,7 +228,11 @@ struct page_pool {
 	 */
 	refcount_t user_cnt;
 
-	u64 destroy_cnt;
+	/* Lock to avoid doing dma unmapping concurrently when
+	 * destroy_cnt > 0.
+	 */
+	spinlock_t destroy_lock;
+	unsigned int destroy_cnt;
 
 	/* Slow/Control-path information follows */
 	struct page_pool_params_slow slow;
