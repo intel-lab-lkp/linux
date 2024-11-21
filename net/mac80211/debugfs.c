@@ -284,7 +284,8 @@ static ssize_t aql_txq_limit_write(struct file *file,
 	q_limit_low_old = local->aql_txq_limit_low[ac];
 	q_limit_high_old = local->aql_txq_limit_high[ac];
 
-	wiphy_lock(local->hw.wiphy);
+	guard(wiphy)(local->hw.wiphy);
+
 	local->aql_txq_limit_low[ac] = q_limit_low;
 	local->aql_txq_limit_high[ac] = q_limit_high;
 
@@ -296,7 +297,6 @@ static ssize_t aql_txq_limit_write(struct file *file,
 			sta->airtime[ac].aql_limit_high = q_limit_high;
 		}
 	}
-	wiphy_unlock(local->hw.wiphy);
 
 	return count;
 }
@@ -414,10 +414,10 @@ static ssize_t reset_write(struct file *file, const char __user *user_buf,
 	int ret;
 
 	rtnl_lock();
-	wiphy_lock(local->hw.wiphy);
-	__ieee80211_suspend(&local->hw, NULL);
-	ret = __ieee80211_resume(&local->hw);
-	wiphy_unlock(local->hw.wiphy);
+	scoped_guard(wiphy, local->hw.wiphy) {
+		__ieee80211_suspend(&local->hw, NULL);
+		ret = __ieee80211_resume(&local->hw);
+	}
 
 	if (ret)
 		cfg80211_shutdown_all_interfaces(local->hw.wiphy);
@@ -590,9 +590,9 @@ static ssize_t format_devstat_counter(struct ieee80211_local *local,
 	char buf[20];
 	int res;
 
-	wiphy_lock(local->hw.wiphy);
-	res = drv_get_stats(local, &stats);
-	wiphy_unlock(local->hw.wiphy);
+	scoped_guard(wiphy, local->hw.wiphy) {
+		res = drv_get_stats(local, &stats);
+	}
 	if (res)
 		return res;
 	res = printvalue(&stats, buf, sizeof(buf));
