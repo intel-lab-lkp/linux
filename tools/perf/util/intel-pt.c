@@ -3402,7 +3402,6 @@ static int intel_pt_text_poke(struct intel_pt *pt, union perf_event *event)
 	struct machine *machine = pt->machine;
 	struct intel_pt_cache_entry *e;
 	u64 offset;
-	int ret = 0;
 
 	addr_location__init(&al);
 	if (!event->text_poke.new_len)
@@ -3443,7 +3442,7 @@ static int intel_pt_text_poke(struct intel_pt *pt, union perf_event *event)
 	}
 out:
 	addr_location__exit(&al);
-	return ret;
+	return 0;
 }
 
 static int intel_pt_process_event(struct perf_session *session,
