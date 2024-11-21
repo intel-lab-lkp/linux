@@ -1277,13 +1277,15 @@ struct memory_failure_stats {
 	/*
 	 * Recovery results of poisoned raw pages handled by memory_failure,
 	 * in sync with mf_result.
-	 * total = ignored + failed + delayed + recovered.
+	 * total = ignored + failed + delayed + recovered + soft_offline.
 	 * total * PAGE_SIZE * #nodes = /proc/meminfo/HardwareCorrupted.
 	 */
 	unsigned long ignored;
 	unsigned long failed;
 	unsigned long delayed;
 	unsigned long recovered;
+
+	unsigned long soft_offline;
 };
 #endif
 

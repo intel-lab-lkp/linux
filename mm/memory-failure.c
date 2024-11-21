@@ -109,6 +109,7 @@ MF_ATTR_RO(ignored);
 MF_ATTR_RO(failed);
 MF_ATTR_RO(delayed);
 MF_ATTR_RO(recovered);
+MF_ATTR_RO(soft_offline);
 
 static struct attribute *memory_failure_attr[] = {
 	&dev_attr_total.attr,
@@ -116,6 +117,7 @@ static struct attribute *memory_failure_attr[] = {
 	&dev_attr_failed.attr,
 	&dev_attr_delayed.attr,
 	&dev_attr_recovered.attr,
+	&dev_attr_soft_offline.attr,
 	NULL,
 };
 
@@ -185,6 +187,9 @@ static int __page_handle_poison(struct page *page)
 	return ret;
 }
 
+static void update_per_node_mf_stats(unsigned long pfn,
+		enum mf_result result);
+
 static bool page_handle_poison(struct page *page, bool hugepage_or_freepage, bool release)
 {
 	if (hugepage_or_freepage) {
@@ -208,6 +213,7 @@ static bool page_handle_poison(struct page *page, bool hugepage_or_freepage, boo
 		put_page(page);
 	page_ref_inc(page);
 	num_poisoned_pages_inc(page_to_pfn(page));
+	update_per_node_mf_stats(page_to_pfn(page), MF_RES_SOFT_OFFLINE);
 
 	return true;
 }
@@ -1311,6 +1317,9 @@ static void update_per_node_mf_stats(unsigned long pfn,
 		break;
 	case MF_RECOVERED:
 		++mf_stats->recovered;
+		break;
+	case MF_RES_SOFT_OFFLINE:
+		++mf_stats->soft_offline;
 		break;
 	default:
 		WARN_ONCE(1, "Memory failure: mf_result=%d is not properly handled", result);

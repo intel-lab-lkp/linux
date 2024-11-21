@@ -3993,6 +3993,8 @@ enum mf_result {
 	MF_FAILED,	/* Error: handling failed */
 	MF_DELAYED,	/* Will be handled later */
 	MF_RECOVERED,	/* Successfully recovered */
+
+	MF_RES_SOFT_OFFLINE, /* Soft-offline */
 };
 
 enum mf_action_page_type {
