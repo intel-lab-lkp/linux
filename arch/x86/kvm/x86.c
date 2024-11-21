@@ -334,6 +334,7 @@ static const u32 msrs_to_save_base[] = {
 	MSR_IA32_UMWAIT_CONTROL,
 
 	MSR_IA32_XFD, MSR_IA32_XFD_ERR,
+	MSR_IA32_APERF, MSR_IA32_MPERF,
 };
 
 static const u32 msrs_to_save_pmu[] = {
@@ -4151,6 +4152,26 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		vcpu->arch.msr_misc_features_enables = data;
 		break;
+	case MSR_IA32_APERF:
+		if ((data || !msr_info->host_initiated) &&
+		    !guest_can_use(vcpu, X86_FEATURE_APERFMPERF))
+			return 1;
+
+		vcpu->arch.aperfmperf.guest_aperf = data;
+		if (unlikely(!msr_info->host_initiated))
+			set_guest_aperf(data);
+		break;
+	case MSR_IA32_MPERF:
+		if ((data || !msr_info->host_initiated) &&
+		    !guest_can_use(vcpu, X86_FEATURE_APERFMPERF))
+			return 1;
+
+		vcpu->arch.aperfmperf.guest_mperf = data;
+		if (likely(msr_info->host_initiated))
+			vcpu->arch.aperfmperf.host_tsc = rdtsc();
+		else
+			set_guest_mperf(data);
+		break;
 #ifdef CONFIG_X86_64
 	case MSR_IA32_XFD:
 		if (!msr_info->host_initiated &&
@@ -4524,6 +4545,22 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		msr_info->data = vcpu->arch.guest_fpu.xfd_err;
 		break;
 #endif
+	case MSR_IA32_APERF:
+		/* Guest read access should never reach here. */
+		if (!msr_info->host_initiated)
+			return 1;
+
+		msr_info->data = vcpu->arch.aperfmperf.guest_aperf;
+		break;
+	case MSR_IA32_MPERF:
+		/* Guest read access should never reach here. */
+		if (!msr_info->host_initiated)
+			return 1;
+
+		if (vcpu->arch.mp_state != KVM_MP_STATE_HALTED)
+			kvm_accumulate_background_guest_mperf(vcpu);
+		msr_info->data = vcpu->arch.aperfmperf.guest_mperf;
+		break;
 	default:
 		if (kvm_pmu_is_valid_msr(vcpu, msr_info->index))
 			return kvm_pmu_get_msr(vcpu, msr_info);
@@ -7533,6 +7570,11 @@ static void kvm_probe_msr_to_save(u32 msr_index)
 		break;
 	case MSR_IA32_TSX_CTRL:
 		if (!(kvm_get_arch_capabilities() & ARCH_CAP_TSX_CTRL_MSR))
+			return;
+		break;
+	case MSR_IA32_APERF:
+	case MSR_IA32_MPERF:
+		if (!kvm_cpu_cap_has(KVM_X86_FEATURE_APERFMPERF))
 			return;
 		break;
 	default:
