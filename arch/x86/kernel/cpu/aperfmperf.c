@@ -94,19 +94,46 @@ void arch_set_max_freq_ratio(bool turbo_disabled)
 }
 EXPORT_SYMBOL_GPL(arch_set_max_freq_ratio);
 
+DEFINE_PER_CPU(u64, host_aperf_offset);
+DEFINE_PER_CPU(u64, host_mperf_offset);
+
 u64 get_host_aperf(void)
 {
 	WARN_ON_ONCE(!irqs_disabled());
-	return native_read_msr(MSR_IA32_APERF);
+	return native_read_msr(MSR_IA32_APERF) +
+		this_cpu_read(host_aperf_offset);
 }
 EXPORT_SYMBOL_GPL(get_host_aperf);
 
 u64 get_host_mperf(void)
 {
 	WARN_ON_ONCE(!irqs_disabled());
-	return native_read_msr(MSR_IA32_MPERF);
+	return native_read_msr(MSR_IA32_MPERF) +
+		this_cpu_read(host_mperf_offset);
 }
 EXPORT_SYMBOL_GPL(get_host_mperf);
+
+void set_guest_aperf(u64 guest_aperf)
+{
+	u64 host_aperf;
+
+	WARN_ON_ONCE(!irqs_disabled());
+	host_aperf = get_host_aperf();
+	wrmsrl(MSR_IA32_APERF, guest_aperf);
+	this_cpu_write(host_aperf_offset, host_aperf - guest_aperf);
+}
+EXPORT_SYMBOL_GPL(set_guest_aperf);
+
+void set_guest_mperf(u64 guest_mperf)
+{
+	u64 host_mperf;
+
+	WARN_ON_ONCE(!irqs_disabled());
+	host_mperf = get_host_mperf();
+	wrmsrl(MSR_IA32_MPERF, guest_mperf);
+	this_cpu_write(host_mperf_offset, host_mperf - guest_mperf);
+}
+EXPORT_SYMBOL_GPL(set_guest_mperf);
 
 static bool __init turbo_disabled(void)
 {

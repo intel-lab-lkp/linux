@@ -302,8 +302,13 @@ static inline void arch_set_max_freq_ratio(bool turbo_disabled) { }
 static inline void freq_invariance_set_perf_ratio(u64 ratio, bool turbo_disabled) { }
 #endif
 
+DECLARE_PER_CPU(u64, host_aperf_offset);
+DECLARE_PER_CPU(u64, host_mperf_offset);
+
 extern u64 get_host_aperf(void);
 extern u64 get_host_mperf(void);
+extern void set_guest_aperf(u64 aperf);
+extern void set_guest_mperf(u64 mperf);
 
 extern void arch_scale_freq_tick(void);
 #define arch_scale_freq_tick arch_scale_freq_tick
