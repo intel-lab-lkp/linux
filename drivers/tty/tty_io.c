@@ -157,6 +157,8 @@ static long tty_compat_ioctl(struct file *file, unsigned int cmd,
 static int __tty_fasync(int fd, struct file *filp, int on);
 static int tty_fasync(int fd, struct file *filp, int on);
 static void release_tty(struct tty_struct *tty, int idx);
+static long hung_up_tty_ioctl(struct file *file, unsigned int cmd,
+				unsigned long arg);
 
 /**
  * free_tty_struct - free a disused tty
@@ -433,16 +435,10 @@ static __poll_t hung_up_tty_poll(struct file *filp, poll_table *wait)
 	return EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLRDNORM | EPOLLWRNORM;
 }
 
-static long hung_up_tty_ioctl(struct file *file, unsigned int cmd,
-		unsigned long arg)
-{
-	return cmd == TIOCSPGRP ? -ENOTTY : -EIO;
-}
-
 static long hung_up_tty_compat_ioctl(struct file *file,
 				     unsigned int cmd, unsigned long arg)
 {
-	return cmd == TIOCSPGRP ? -ENOTTY : -EIO;
+	return hung_up_tty_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
 }
 
 static int hung_up_tty_fasync(int fd, struct file *file, int on)
@@ -2815,6 +2811,25 @@ long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 	tty_ldisc_deref(ld);
 	return retval;
+}
+
+static long hung_up_tty_ioctl(struct file *file, unsigned int cmd,
+		unsigned long arg)
+{
+	struct tty_struct *tty = file_tty(file);
+	struct tty_struct *real_tty;
+	void __user *p = (void __user *)arg;
+
+	real_tty = tty_pair_get_tty(tty);
+
+	switch (cmd) {
+	case TIOCGWINSZ:
+	return tiocgwinsz(real_tty, p);
+	case TIOCSPGRP:
+		return -ENOTTY;
+	}
+
+	return -EIO;
 }
 
 #ifdef CONFIG_COMPAT
