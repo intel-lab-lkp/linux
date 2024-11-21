@@ -87,11 +87,11 @@ INSTALL_SCRIPT = ${INSTALL} -m 644
 # to something more interesting, like "arm-linux-".  If you want
 # to compile vs uClibc, that can be done here as well.
 CROSS ?= #/usr/i386-linux-uclibc/usr/bin/i386-uclibc-
-CC ?= $(CROSS)gcc
-LD ?= $(CROSS)gcc
-AR ?= $(CROSS)ar
-STRIP ?= $(CROSS)strip
-RANLIB ?= $(CROSS)ranlib
+CC = $(CROSS)gcc
+LD = $(CROSS)gcc
+AR = $(CROSS)ar
+STRIP = $(CROSS)strip
+RANLIB = $(CROSS)ranlib
 HOSTCC = gcc
 MKDIR = mkdir
 
