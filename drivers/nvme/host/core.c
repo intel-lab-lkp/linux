@@ -3596,9 +3596,7 @@ static struct nvme_ns_head *nvme_alloc_ns_head(struct nvme_ctrl *ctrl,
 	size_t size = sizeof(*head);
 	int ret = -ENOMEM;
 
-#ifdef CONFIG_NVME_MULTIPATH
 	size += num_possible_nodes() * sizeof(struct nvme_ns *);
-#endif
 
 	head = kzalloc(size, GFP_KERNEL);
 	if (!head)
@@ -3746,14 +3744,6 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 					info->nsid);
 			goto out_put_ns_head;
 		}
-
-		if (!multipath) {
-			dev_warn(ctrl->device,
-				"Found shared namespace %d, but multipathing not supported.\n",
-				info->nsid);
-			dev_warn_once(ctrl->device,
-				"Support for shared namespaces without CONFIG_NVME_MULTIPATH is deprecated and will be removed in Linux 6.0.\n");
-		}
 	}
 
 	list_add_tail_rcu(&ns->siblings, &head->list);
@@ -3851,11 +3841,8 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 		sprintf(disk->disk_name, "nvme%dc%dn%d", ctrl->subsys->instance,
 			ctrl->instance, ns->head->instance);
 		disk->flags |= GENHD_FL_HIDDEN;
-	} else if (multipath) {
-		sprintf(disk->disk_name, "nvme%dn%d", ctrl->subsys->instance,
-			ns->head->instance);
 	} else {
-		sprintf(disk->disk_name, "nvme%dn%d", ctrl->instance,
+		sprintf(disk->disk_name, "nvme%dn%d", ctrl->subsys->instance,
 			ns->head->instance);
 	}
 
@@ -4452,13 +4439,11 @@ static bool nvme_handle_aen_notice(struct nvme_ctrl *ctrl, u32 result)
 			queue_work(nvme_wq, &ctrl->fw_act_work);
 		}
 		break;
-#ifdef CONFIG_NVME_MULTIPATH
 	case NVME_AER_NOTICE_ANA:
 		if (!ctrl->ana_log_buf)
 			break;
 		queue_work(nvme_wq, &ctrl->ana_work);
 		break;
-#endif
 	case NVME_AER_NOTICE_DISC_CHANGED:
 		ctrl->aen_result = result;
 		break;

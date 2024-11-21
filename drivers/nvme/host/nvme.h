@@ -186,9 +186,7 @@ struct nvme_request {
 	u8			retries;
 	u8			flags;
 	u16			status;
-#ifdef CONFIG_NVME_MULTIPATH
 	unsigned long		start_time;
-#endif
 	struct nvme_ctrl	*ctrl;
 };
 
@@ -355,7 +353,6 @@ struct nvme_ctrl {
 	struct work_struct fw_act_work;
 	unsigned long events;
 
-#ifdef CONFIG_NVME_MULTIPATH
 	/* asymmetric namespace access: */
 	u8 anacap;
 	u8 anatt;
@@ -367,7 +364,6 @@ struct nvme_ctrl {
 	struct timer_list anatt_timer;
 	struct work_struct ana_work;
 	atomic_t nr_active;
-#endif
 
 #ifdef CONFIG_NVME_HOST_AUTH
 	struct work_struct dhchap_auth_work;
@@ -439,9 +435,7 @@ struct nvme_subsystem {
 	u16			vendor_id;
 	u16			awupf;	/* 0's based awupf value. */
 	struct ida		ns_ida;
-#ifdef CONFIG_NVME_MULTIPATH
 	enum nvme_iopolicy	iopolicy;
-#endif
 };
 
 /*
@@ -490,7 +484,6 @@ struct nvme_ns_head {
 	struct device		cdev_device;
 
 	struct gendisk		*disk;
-#ifdef CONFIG_NVME_MULTIPATH
 	struct bio_list		requeue_list;
 	spinlock_t		requeue_lock;
 	struct work_struct	requeue_work;
@@ -498,12 +491,11 @@ struct nvme_ns_head {
 	unsigned long		flags;
 #define NVME_NSHEAD_DISK_LIVE	0
 	struct nvme_ns __rcu	*current_path[];
-#endif
 };
 
 static inline bool nvme_ns_head_multipath(struct nvme_ns_head *head)
 {
-	return IS_ENABLED(CONFIG_NVME_MULTIPATH) && head->disk;
+	return head->disk;
 }
 
 enum nvme_ns_features {
@@ -518,10 +510,8 @@ struct nvme_ns {
 	struct nvme_ctrl *ctrl;
 	struct request_queue *queue;
 	struct gendisk *disk;
-#ifdef CONFIG_NVME_MULTIPATH
 	enum nvme_ana_state ana_state;
 	u32 ana_grpid;
-#endif
 	struct list_head siblings;
 	struct kref kref;
 	struct nvme_ns_head *head;
@@ -935,7 +925,7 @@ extern const struct block_device_operations nvme_bdev_ops;
 
 void nvme_delete_ctrl_sync(struct nvme_ctrl *ctrl);
 struct nvme_ns *nvme_find_path(struct nvme_ns_head *head);
-#ifdef CONFIG_NVME_MULTIPATH
+
 static inline bool nvme_ctrl_use_ana(struct nvme_ctrl *ctrl)
 {
 	return ctrl->ana_log_buf != NULL;
@@ -970,7 +960,6 @@ static inline void nvme_trace_bio_complete(struct request *req)
 		trace_block_bio_complete(ns->head->disk->queue, req->bio);
 }
 
-extern bool multipath;
 extern struct device_attribute dev_attr_ana_grpid;
 extern struct device_attribute dev_attr_ana_state;
 extern struct device_attribute subsys_attr_iopolicy;
@@ -979,88 +968,6 @@ static inline bool nvme_disk_is_ns_head(struct gendisk *disk)
 {
 	return disk->fops == &nvme_ns_head_ops;
 }
-#else
-#define multipath false
-static inline bool nvme_ctrl_use_ana(struct nvme_ctrl *ctrl)
-{
-	return false;
-}
-static inline void nvme_failover_req(struct request *req)
-{
-}
-static inline void nvme_kick_requeue_lists(struct nvme_ctrl *ctrl)
-{
-}
-static inline int nvme_mpath_alloc_disk(struct nvme_ctrl *ctrl,
-		struct nvme_ns_head *head)
-{
-	return 0;
-}
-static inline void nvme_mpath_add_disk(struct nvme_ns *ns, __le32 anagrpid)
-{
-}
-static inline void nvme_mpath_remove_disk(struct nvme_ns_head *head)
-{
-}
-static inline bool nvme_mpath_clear_current_path(struct nvme_ns *ns)
-{
-	return false;
-}
-static inline void nvme_mpath_revalidate_paths(struct nvme_ns *ns)
-{
-}
-static inline void nvme_mpath_clear_ctrl_paths(struct nvme_ctrl *ctrl)
-{
-}
-static inline void nvme_mpath_shutdown_disk(struct nvme_ns_head *head)
-{
-}
-static inline void nvme_trace_bio_complete(struct request *req)
-{
-}
-static inline void nvme_mpath_init_ctrl(struct nvme_ctrl *ctrl)
-{
-}
-static inline int nvme_mpath_init_identify(struct nvme_ctrl *ctrl,
-		struct nvme_id_ctrl *id)
-{
-	if (ctrl->subsys->cmic & NVME_CTRL_CMIC_ANA)
-		dev_warn(ctrl->device,
-"Please enable CONFIG_NVME_MULTIPATH for full support of multi-port devices.\n");
-	return 0;
-}
-static inline void nvme_mpath_update(struct nvme_ctrl *ctrl)
-{
-}
-static inline void nvme_mpath_uninit(struct nvme_ctrl *ctrl)
-{
-}
-static inline void nvme_mpath_stop(struct nvme_ctrl *ctrl)
-{
-}
-static inline void nvme_mpath_unfreeze(struct nvme_subsystem *subsys)
-{
-}
-static inline void nvme_mpath_wait_freeze(struct nvme_subsystem *subsys)
-{
-}
-static inline void nvme_mpath_start_freeze(struct nvme_subsystem *subsys)
-{
-}
-static inline void nvme_mpath_default_iopolicy(struct nvme_subsystem *subsys)
-{
-}
-static inline void nvme_mpath_start_request(struct request *rq)
-{
-}
-static inline void nvme_mpath_end_request(struct request *rq)
-{
-}
-static inline bool nvme_disk_is_ns_head(struct gendisk *disk)
-{
-	return false;
-}
-#endif /* CONFIG_NVME_MULTIPATH */
 
 int nvme_ns_get_unique_id(struct nvme_ns *ns, u8 id[16],
 		enum blk_unique_id type);

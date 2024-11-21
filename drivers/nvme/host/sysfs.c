@@ -255,10 +255,8 @@ static struct attribute *nvme_ns_attrs[] = {
 	&dev_attr_nsid.attr,
 	&dev_attr_metadata_bytes.attr,
 	&dev_attr_nuse.attr,
-#ifdef CONFIG_NVME_MULTIPATH
 	&dev_attr_ana_grpid.attr,
 	&dev_attr_ana_state.attr,
-#endif
 	&dev_attr_io_passthru_err_log_enabled.attr,
 	NULL,
 };
@@ -282,7 +280,6 @@ static umode_t nvme_ns_attrs_are_visible(struct kobject *kobj,
 		if (!memchr_inv(ids->eui64, 0, sizeof(ids->eui64)))
 			return 0;
 	}
-#ifdef CONFIG_NVME_MULTIPATH
 	if (a == &dev_attr_ana_grpid.attr || a == &dev_attr_ana_state.attr) {
 		/* per-path attr */
 		if (nvme_disk_is_ns_head(dev_to_disk(dev)))
@@ -290,7 +287,6 @@ static umode_t nvme_ns_attrs_are_visible(struct kobject *kobj,
 		if (!nvme_ctrl_use_ana(nvme_get_ns_from_dev(dev)->ctrl))
 			return 0;
 	}
-#endif
 	return a->mode;
 }
 
@@ -860,9 +856,7 @@ static struct attribute *nvme_subsys_attrs[] = {
 	&subsys_attr_firmware_rev.attr,
 	&subsys_attr_subsysnqn.attr,
 	&subsys_attr_subsystype.attr,
-#ifdef CONFIG_NVME_MULTIPATH
 	&subsys_attr_iopolicy.attr,
-#endif
 	NULL,
 };
 
