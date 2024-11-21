@@ -2132,11 +2132,14 @@ bool init_nodemask_of_mempolicy(nodemask_t *mask)
 {
 	struct mempolicy *mempolicy;
 
-	if (!(mask && current->mempolicy))
+	if (!mask)
+		return false;
+
+	mempolicy = READ_ONCE(current->mempolicy);
+	if (!mempolicy)
 		return false;
 
 	task_lock(current);
-	mempolicy = current->mempolicy;
 	switch (mempolicy->mode) {
 	case MPOL_PREFERRED:
 	case MPOL_PREFERRED_MANY:
