@@ -11167,6 +11167,16 @@ int kvm_arch_vcpu_runnable(struct kvm_vcpu *vcpu)
 	return kvm_vcpu_running(vcpu) || kvm_vcpu_has_events(vcpu);
 }
 
+void kvm_vcpu_make_runnable(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.mp_state == KVM_MP_STATE_HALTED ||
+	    vcpu->arch.mp_state == KVM_MP_STATE_AP_RESET_HOLD)
+		vcpu->arch.pv.pv_unhalted = false;
+	vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
+	vcpu->arch.apf.halted = false;
+}
+EXPORT_SYMBOL_GPL(kvm_vcpu_make_runnable);
+
 /* Called within kvm->srcu read side.  */
 static inline int vcpu_block(struct kvm_vcpu *vcpu)
 {
@@ -11222,12 +11232,8 @@ static inline int vcpu_block(struct kvm_vcpu *vcpu)
 	switch(vcpu->arch.mp_state) {
 	case KVM_MP_STATE_HALTED:
 	case KVM_MP_STATE_AP_RESET_HOLD:
-		vcpu->arch.pv.pv_unhalted = false;
-		vcpu->arch.mp_state =
-			KVM_MP_STATE_RUNNABLE;
-		fallthrough;
 	case KVM_MP_STATE_RUNNABLE:
-		vcpu->arch.apf.halted = false;
+		kvm_vcpu_make_runnable(vcpu);
 		break;
 	case KVM_MP_STATE_INIT_RECEIVED:
 		break;
