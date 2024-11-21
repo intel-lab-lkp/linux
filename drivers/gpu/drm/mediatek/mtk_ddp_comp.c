@@ -72,7 +72,7 @@ void mtk_ddp_write(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (cmdq_pkt)
-		cmdq_pkt_write(cmdq_pkt, cmdq_reg->subsys,
+		cmdq_pkt_write(cmdq_pkt, cmdq_reg->subsys, cmdq_reg->pa_base,
 			       cmdq_reg->offset + offset, value);
 	else
 #endif
@@ -85,7 +85,7 @@ void mtk_ddp_write_relaxed(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (cmdq_pkt)
-		cmdq_pkt_write(cmdq_pkt, cmdq_reg->subsys,
+		cmdq_pkt_write(cmdq_pkt, cmdq_reg->subsys, cmdq_reg->pa_base,
 			       cmdq_reg->offset + offset, value);
 	else
 #endif
@@ -98,7 +98,7 @@ void mtk_ddp_write_mask(struct cmdq_pkt *cmdq_pkt, unsigned int value,
 {
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (cmdq_pkt) {
-		cmdq_pkt_write_mask(cmdq_pkt, cmdq_reg->subsys,
+		cmdq_pkt_write_mask(cmdq_pkt, cmdq_reg->subsys, cmdq_reg->pa_base,
 				    cmdq_reg->offset + offset, value, mask);
 	} else {
 #endif
