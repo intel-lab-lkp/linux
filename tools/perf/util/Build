@@ -127,6 +127,7 @@ perf-util-$(CONFIG_AUXTRACE) += arm-spe.o
 perf-util-$(CONFIG_AUXTRACE) += arm-spe-decoder/
 perf-util-$(CONFIG_AUXTRACE) += hisi-ptt.o
 perf-util-$(CONFIG_AUXTRACE) += hisi-ptt-decoder/
+perf-util-$(CONFIG_AUXTRACE) += cxl-hmu.o
 perf-util-$(CONFIG_AUXTRACE) += s390-cpumsf.o
 
 ifdef CONFIG_LIBOPENCSD

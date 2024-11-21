@@ -4,6 +4,7 @@
  * Copyright (c) 2013-2014, Intel Corporation.
  */
 
+#include <dirent.h>
 #include <errno.h>
 #include <stdbool.h>
 
@@ -14,6 +15,7 @@
 #include "../../../util/auxtrace.h"
 #include "../../../util/intel-pt.h"
 #include "../../../util/intel-bts.h"
+#include "../../../util/cxl-hmu.h"
 #include "../../../util/evlist.h"
 
 static
@@ -51,13 +53,87 @@ struct auxtrace_record *auxtrace_record__init_intel(struct evlist *evlist,
 	return NULL;
 }
 
+static struct perf_pmu **find_all_cxl_hmu_pmus(int *nr_hmus, int *err)
+{
+	struct perf_pmu **cxl_hmu_pmus = NULL;
+	struct dirent *dent;
+	char path[PATH_MAX];
+	DIR *dir = NULL;
+	int idx = 0;
+
+	perf_pmu__event_source_devices_scnprintf(path, sizeof(path));
+	dir = opendir(path);
+	if (!dir) {
+		*err = -EINVAL;
+		return NULL;
+	}
+
+	while ((dent = readdir(dir))) {
+		if (strstr(dent->d_name, "cxl_hmu"))
+			(*nr_hmus)++;
+	}
+
+	if (!(*nr_hmus))
+		goto out;
+
+	cxl_hmu_pmus = zalloc(sizeof(struct perf_pmu *) * (*nr_hmus));
+	if (!cxl_hmu_pmus) {
+		*err = -ENOMEM;
+		goto out;
+	}
+
+	rewinddir(dir);
+	while ((dent = readdir(dir))) {
+		if (strstr(dent->d_name, "cxl_hmu") && idx < *nr_hmus) {
+			cxl_hmu_pmus[idx] = perf_pmus__find(dent->d_name);
+			if (cxl_hmu_pmus[idx])
+				idx++;
+		}
+	}
+
+out:
+	closedir(dir);
+	return cxl_hmu_pmus;
+}
+
+static struct perf_pmu *find_pmu_for_event(struct perf_pmu **pmus,
+					   int pmu_nr, struct evsel *evsel)
+{
+	int i;
+
+	if (!pmus)
+		return NULL;
+
+	for (i = 0; i < pmu_nr; i++) {
+		if (evsel->core.attr.type == pmus[i]->type)
+			return pmus[i];
+	}
+
+	return NULL;
+}
+
 struct auxtrace_record *auxtrace_record__init(struct evlist *evlist,
 					      int *err)
 {
 	char buffer[64];
 	int ret;
+	struct perf_pmu **chmu_pmus = NULL;
+	struct perf_pmu *found_chmu = NULL;
+	struct evsel *evsel;
+	int nr_chmus = 0;
 
 	*err = 0;
+
+	chmu_pmus = find_all_cxl_hmu_pmus(&nr_chmus, err);
+
+	evlist__for_each_entry(evlist, evsel) {
+		if (chmu_pmus && !found_chmu)
+			found_chmu = find_pmu_for_event(chmu_pmus, nr_chmus, evsel);
+	}
+	free(chmu_pmus);
+
+	if (found_chmu)
+		return chmu_recording_init(err, found_chmu);
 
 	ret = get_cpuid(buffer, sizeof(buffer));
 	if (ret) {

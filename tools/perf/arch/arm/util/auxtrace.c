@@ -18,6 +18,7 @@
 #include "cs-etm.h"
 #include "arm-spe.h"
 #include "hisi-ptt.h"
+#include "cxl-hmu.h"
 
 static struct perf_pmu **find_all_arm_spe_pmus(int *nr_spes, int *err)
 {
@@ -99,6 +100,49 @@ out:
 	return hisi_ptt_pmus;
 }
 
+static struct perf_pmu **find_all_cxl_hmu_pmus(int *nr_hmus, int *err)
+{
+	struct perf_pmu **cxl_hmu_pmus = NULL;
+	struct dirent *dent;
+	char path[PATH_MAX];
+	DIR *dir = NULL;
+	int idx = 0;
+
+	perf_pmu__event_source_devices_scnprintf(path, sizeof(path));
+	dir = opendir(path);
+	if (!dir) {
+		*err = -EINVAL;
+		return NULL;
+	}
+
+	while ((dent = readdir(dir))) {
+		if (strstr(dent->d_name, "cxl_hmu"))
+			(*nr_hmus)++;
+	}
+
+	if (!(*nr_hmus))
+		goto out;
+
+	cxl_hmu_pmus = zalloc(sizeof(struct perf_pmu *) * (*nr_hmus));
+	if (!cxl_hmu_pmus) {
+		*err = -ENOMEM;
+		goto out;
+	}
+
+	rewinddir(dir);
+	while ((dent = readdir(dir))) {
+		if (strstr(dent->d_name, "cxl_hmu") && idx < *nr_hmus) {
+			cxl_hmu_pmus[idx] = perf_pmus__find(dent->d_name);
+			if (cxl_hmu_pmus[idx])
+				idx++;
+		}
+	}
+
+out:
+	closedir(dir);
+	return cxl_hmu_pmus;
+}
+
 static struct perf_pmu *find_pmu_for_event(struct perf_pmu **pmus,
 					   int pmu_nr, struct evsel *evsel)
 {
@@ -121,13 +165,16 @@ struct auxtrace_record
 	struct perf_pmu	*cs_etm_pmu = NULL;
 	struct perf_pmu **arm_spe_pmus = NULL;
 	struct perf_pmu **hisi_ptt_pmus = NULL;
+	struct perf_pmu **chmu_pmus = NULL;
 	struct evsel *evsel;
 	struct perf_pmu *found_etm = NULL;
 	struct perf_pmu *found_spe = NULL;
 	struct perf_pmu *found_ptt = NULL;
+	struct perf_pmu *found_chmu = NULL;
 	int auxtrace_event_cnt = 0;
 	int nr_spes = 0;
 	int nr_ptts = 0;
+	int nr_chmus = 0;
 
 	if (!evlist)
 		return NULL;
@@ -135,6 +182,7 @@ struct auxtrace_record
 	cs_etm_pmu = perf_pmus__find(CORESIGHT_ETM_PMU_NAME);
 	arm_spe_pmus = find_all_arm_spe_pmus(&nr_spes, err);
 	hisi_ptt_pmus = find_all_hisi_ptt_pmus(&nr_ptts, err);
+	chmu_pmus = find_all_cxl_hmu_pmus(&nr_chmus, err);
 
 	evlist__for_each_entry(evlist, evsel) {
 		if (cs_etm_pmu && !found_etm)
@@ -145,10 +193,14 @@ struct auxtrace_record
 
 		if (hisi_ptt_pmus && !found_ptt)
 			found_ptt = find_pmu_for_event(hisi_ptt_pmus, nr_ptts, evsel);
+
+		if (chmu_pmus && !found_chmu)
+			found_chmu = find_pmu_for_event(chmu_pmus, nr_chmus, evsel);
 	}
 
 	free(arm_spe_pmus);
 	free(hisi_ptt_pmus);
+	free(chmu_pmus);
 
 	if (found_etm)
 		auxtrace_event_cnt++;
@@ -157,6 +209,9 @@ struct auxtrace_record
 		auxtrace_event_cnt++;
 
 	if (found_ptt)
+		auxtrace_event_cnt++;
+
+	if (found_chmu)
 		auxtrace_event_cnt++;
 
 	if (auxtrace_event_cnt > 1) {
@@ -174,6 +229,9 @@ struct auxtrace_record
 
 	if (found_ptt)
 		return hisi_ptt_recording_init(err, found_ptt);
+
+	if (found_chmu)
+		return chmu_recording_init(err, found_chmu);
 #endif
 
 	/*
