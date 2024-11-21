@@ -37,3 +37,4 @@ Linux Tracing Technologies
    user_events
    rv/index
    hisi-ptt
+   cxl-hmu
