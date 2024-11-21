@@ -561,6 +561,11 @@ swpin
 	is incremented every time a huge page is swapped in from a non-zswap
 	swap device in one piece.
 
+swpin_fallback
+	is incremented if a huge page swapin fails to allocate a huge page
+	and instead falls back to using huge pages with lower orders or
+	small pages.
+
 swpout
 	is incremented every time a huge page is swapped out to a non-zswap
 	swap device in one piece without splitting.

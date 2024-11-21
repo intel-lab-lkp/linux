@@ -4191,6 +4191,7 @@ static struct folio *alloc_swap_folio(struct vm_fault *vmf)
 				return folio;
 			folio_put(folio);
 		}
+		count_mthp_stat(order, MTHP_STAT_SWPIN_FALLBACK);
 		order = next_order(&orders, order);
 	}
 
