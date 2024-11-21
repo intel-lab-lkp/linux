@@ -20,7 +20,7 @@ Please pick something while reading :)
     to the device. If MSI provides per-endpoint interrupt this dummy
     interrupt chip can be replaced with "real" interrupts.
   - interrupts are requested / allocated on usb_ep_enable() and removed on
-    usb_ep_disable(). Worst case are 32 interrupts, the lower limit is two
+    usb_ep_disable(). The worst case is 32 interrupts, the lower limit is two
     for ep0/1.
   - dwc3_send_gadget_ep_cmd() will sleep in wait_for_completion_timeout()
     until the command completes.
