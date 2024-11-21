@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/mailbox_controller.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
 
 #define CMDQ_WRITE_ENABLE_MASK	BIT(0)
@@ -60,10 +61,17 @@ int cmdq_dev_get_client_reg(struct device *dev,
 			    struct cmdq_client_reg *client_reg, int idx)
 {
 	struct of_phandle_args spec;
+	struct resource res;
 	int err;
 
 	if (!client_reg)
 		return -ENOENT;
+
+	if (of_address_to_resource(dev->of_node, 0, &res) != 0) {
+		dev_err(dev, "Missing reg in %s node\n", dev->of_node->full_name);
+		return -EINVAL;
+	}
+	client_reg->pa_base = res.start;
 
 	err = of_parse_phandle_with_fixed_args(dev->of_node,
 					       "mediatek,gce-client-reg",
@@ -73,7 +81,10 @@ int cmdq_dev_get_client_reg(struct device *dev,
 			"error %d can't parse gce-client-reg property (%d)",
 			err, idx);
 
-		return err;
+		/* make subsys invalid */
+		client_reg->subsys = U8_MAX;
+
+		return 0;
 	}
 
 	client_reg->subsys = (u8)spec.args[0];
@@ -129,6 +140,9 @@ int cmdq_pkt_create(struct cmdq_client *client, struct cmdq_pkt *pkt, size_t siz
 		return -ENOMEM;
 
 	pkt->buf_size = size;
+
+	/* need to use pkt->cl->chan later to call mbox APIs when generating instruction */
+	pkt->cl = (void *)client;
 
 	dev = client->chan->mbox->dev;
 	dma_addr = dma_map_single(dev, pkt->va_base, pkt->buf_size,
@@ -189,32 +203,65 @@ static int cmdq_pkt_mask(struct cmdq_pkt *pkt, u32 mask)
 	return cmdq_pkt_append_command(pkt, inst);
 }
 
-int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u16 offset, u32 value)
+int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base, u16 offset, u32 value)
 {
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
 	struct cmdq_instruction inst = {
 		.op = CMDQ_CODE_WRITE,
 		.value = value,
 		.offset = offset,
 		.subsys = subsys
 	};
-	return cmdq_pkt_append_command(pkt, inst);
-}
-EXPORT_SYMBOL(cmdq_pkt_write);
-
-int cmdq_pkt_write_mask(struct cmdq_pkt *pkt, u8 subsys,
-			u16 offset, u32 value, u32 mask)
-{
-	u16 offset_mask = offset;
 	int err;
 
-	if (mask != GENMASK(31, 0)) {
-		err = cmdq_pkt_mask(pkt, mask);
+	if (!cl) {
+		pr_err("%s %d: pkt->cl is NULL!\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	if (cmdq_subsys_is_valid(cl->chan, subsys)) {
+		err = cmdq_pkt_append_command(pkt, inst);
+	} else {
+		err = cmdq_pkt_assign(pkt, 0, CMDQ_ADDR_HIGH(pa_base));
 		if (err < 0)
 			return err;
 
-		offset_mask |= CMDQ_WRITE_ENABLE_MASK;
+		err = cmdq_pkt_write_s_value(pkt, 0, CMDQ_ADDR_LOW(offset), value);
 	}
-	return cmdq_pkt_write(pkt, subsys, offset_mask, value);
+
+	return err;
+}
+EXPORT_SYMBOL(cmdq_pkt_write);
+
+int cmdq_pkt_write_mask(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
+			u16 offset, u32 value, u32 mask)
+{
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
+	u16 offset_mask = offset;
+	int err;
+
+	if (!cl) {
+		pr_err("%s %d: pkt->cl is NULL!\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	if (cmdq_subsys_is_valid(cl->chan, subsys)) {
+		if (mask != GENMASK(31, 0)) {
+			err = cmdq_pkt_mask(pkt, mask);
+			if (err < 0)
+				return err;
+
+			offset_mask |= CMDQ_WRITE_ENABLE_MASK;
+		}
+		err = cmdq_pkt_write(pkt, subsys, pa_base, offset_mask, value);
+	} else {
+		err = cmdq_pkt_assign(pkt, 0, CMDQ_ADDR_HIGH(pa_base));
+		if (err < 0)
+			return err;
+
+		err = cmdq_pkt_write_s_mask_value(pkt, 0, CMDQ_ADDR_LOW(offset), value, mask);
+	}
+	return err;
 }
 EXPORT_SYMBOL(cmdq_pkt_write_mask);
 
@@ -385,20 +432,39 @@ int cmdq_pkt_set_event(struct cmdq_pkt *pkt, u16 event)
 }
 EXPORT_SYMBOL(cmdq_pkt_set_event);
 
-int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys,
+int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 		  u16 offset, u32 value)
 {
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
 	struct cmdq_instruction inst = {
 		.op = CMDQ_CODE_POLL,
 		.value = value,
 		.offset = offset,
 		.subsys = subsys
 	};
-	return cmdq_pkt_append_command(pkt, inst);
+	int err;
+
+	if (!cl) {
+		pr_err("%s %d: pkt->cl is NULL!\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	if (!cmdq_subsys_is_valid(cl->chan, subsys)) {
+		err = cmdq_pkt_assign(pkt, CMDQ_POLL_ADDR_GPR, pa_base);
+		if (err < 0)
+			return err;
+
+		inst.offset = CMDQ_ADDR_LOW(offset);
+		inst.subsys = CMDQ_POLL_ADDR_GPR;
+	}
+
+	err = cmdq_pkt_append_command(pkt, inst);
+
+	return err;
 }
 EXPORT_SYMBOL(cmdq_pkt_poll);
 
-int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys,
+int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 		       u16 offset, u32 value, u32 mask)
 {
 	int err;
@@ -408,7 +474,7 @@ int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys,
 		return err;
 
 	offset = offset | CMDQ_POLL_ENABLE_MASK;
-	return cmdq_pkt_poll(pkt, subsys, offset, value);
+	return cmdq_pkt_poll(pkt, subsys, pa_base, offset, value);
 }
 EXPORT_SYMBOL(cmdq_pkt_poll_mask);
 

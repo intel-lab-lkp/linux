@@ -52,6 +52,7 @@ struct cmdq_operand {
 
 struct cmdq_client_reg {
 	u8 subsys;
+	u32 pa_base;
 	u16 offset;
 	u16 size;
 };
@@ -114,24 +115,26 @@ void cmdq_pkt_destroy(struct cmdq_client *client, struct cmdq_pkt *pkt);
  * cmdq_pkt_write() - append write command to the CMDQ packet
  * @pkt:	the CMDQ packet
  * @subsys:	the CMDQ sub system code
+ * @pa_base:	register pa base address, use this when subsys is invalid
  * @offset:	register offset from CMDQ sub system
  * @value:	the specified target register value
  *
  * Return: 0 for success; else the error code is returned
  */
-int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u16 offset, u32 value);
+int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base, u16 offset, u32 value);
 
 /**
  * cmdq_pkt_write_mask() - append write command with mask to the CMDQ packet
  * @pkt:	the CMDQ packet
  * @subsys:	the CMDQ sub system code
+ * @pa_base:	register pa base address, use this when subsys is invalid
  * @offset:	register offset from CMDQ sub system
  * @value:	the specified target register value
  * @mask:	the specified target register mask
  *
  * Return: 0 for success; else the error code is returned
  */
-int cmdq_pkt_write_mask(struct cmdq_pkt *pkt, u8 subsys,
+int cmdq_pkt_write_mask(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 			u16 offset, u32 value, u32 mask);
 
 /*
@@ -272,12 +275,13 @@ int cmdq_pkt_set_event(struct cmdq_pkt *pkt, u16 event);
  *		     instruction.
  * @pkt:	the CMDQ packet
  * @subsys:	the CMDQ sub system code
+ * @pa_base:	register pa base address, use this when subsys is invalid
  * @offset:	register offset from CMDQ sub system
  * @value:	the specified target register value
  *
  * Return: 0 for success; else the error code is returned
  */
-int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys,
+int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 		  u16 offset, u32 value);
 
 /**
@@ -288,13 +292,14 @@ int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys,
  *		          instruction.
  * @pkt:	the CMDQ packet
  * @subsys:	the CMDQ sub system code
+ * @pa_base:	register pa base address, use this when subsys is invalid
  * @offset:	register offset from CMDQ sub system
  * @value:	the specified target register value
  * @mask:	the specified target register mask
  *
  * Return: 0 for success; else the error code is returned
  */
-int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys,
+int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 		       u16 offset, u32 value, u32 mask);
 
 /**
@@ -421,12 +426,13 @@ static inline int cmdq_pkt_create(struct cmdq_client *client, struct cmdq_pkt *p
 
 static inline void cmdq_pkt_destroy(struct cmdq_client *client, struct cmdq_pkt *pkt) { }
 
-static inline int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u16 offset, u32 value)
+static inline int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
+				 u16 offset, u32 value)
 {
 	return -ENOENT;
 }
 
-static inline int cmdq_pkt_write_mask(struct cmdq_pkt *pkt, u8 subsys,
+static inline int cmdq_pkt_write_mask(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 				      u16 offset, u32 value, u32 mask)
 {
 	return -ENOENT;
@@ -477,13 +483,13 @@ static inline int cmdq_pkt_set_event(struct cmdq_pkt *pkt, u16 event)
 	return -EINVAL;
 }
 
-static inline int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys,
+static inline int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 				u16 offset, u32 value)
 {
 	return -EINVAL;
 }
 
-static inline int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys,
+static inline int cmdq_pkt_poll_mask(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 				     u16 offset, u32 value, u32 mask)
 {
 	return -EINVAL;
