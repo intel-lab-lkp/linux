@@ -69,6 +69,9 @@
 #define PCI_ENDPOINT_TEST_FLAGS			0x2c
 #define FLAG_USE_DMA				BIT(0)
 
+#define PCI_ENDPOINT_TEST_CAPS			0x30
+#define CAP_UNALIGNED_ACCESS			BIT(0)
+
 #define PCI_DEVICE_ID_TI_AM654			0xb00c
 #define PCI_DEVICE_ID_TI_J7200			0xb00f
 #define PCI_DEVICE_ID_TI_AM64			0xb010
@@ -805,6 +808,22 @@ static const struct file_operations pci_endpoint_test_fops = {
 	.unlocked_ioctl = pci_endpoint_test_ioctl,
 };
 
+static void pci_endpoint_test_get_capabilities(struct pci_endpoint_test *test)
+{
+	struct pci_dev *pdev = test->pdev;
+	struct device *dev = &pdev->dev;
+	u32 caps;
+	bool ep_can_do_unaligned_access;
+
+	caps = pci_endpoint_test_readl(test, PCI_ENDPOINT_TEST_CAPS);
+
+	ep_can_do_unaligned_access = caps & CAP_UNALIGNED_ACCESS;
+	dev_dbg(dev, "CAP_UNALIGNED_ACCESS: %d\n", ep_can_do_unaligned_access);
+
+	if (ep_can_do_unaligned_access)
+		test->alignment = 0;
+}
+
 static int pci_endpoint_test_probe(struct pci_dev *pdev,
 				   const struct pci_device_id *ent)
 {
@@ -905,6 +924,8 @@ static int pci_endpoint_test_probe(struct pci_dev *pdev,
 		err = -EINVAL;
 		goto err_kfree_test_name;
 	}
+
+	pci_endpoint_test_get_capabilities(test);
 
 	misc_device = &test->miscdev;
 	misc_device->minor = MISC_DYNAMIC_MINOR;
