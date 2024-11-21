@@ -178,6 +178,7 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t start, loff_t end)
 {
 	loff_t pos = folio_pos(folio);
 	unsigned int offset, length;
+	long in_folio_offset;
 
 	if (pos < start)
 		offset = start - pos;
@@ -207,7 +208,9 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t start, loff_t end)
 		folio_invalidate(folio, offset, length);
 	if (!folio_test_large(folio))
 		return true;
-	if (split_folio(folio) == 0)
+
+	in_folio_offset = PAGE_ALIGN_DOWN(offset) / PAGE_SIZE;
+	if (split_folio_at(folio, folio_page(folio, in_folio_offset), NULL) == 0)
 		return true;
 	if (folio_test_dirty(folio))
 		return false;
