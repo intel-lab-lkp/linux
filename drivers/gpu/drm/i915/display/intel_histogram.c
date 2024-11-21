@@ -68,6 +68,11 @@ static void intel_histogram_handle_int_work(struct work_struct *work)
 		     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_BIN_REG_MASK, 0);
 	for (retry = 0; retry < HISTOGRAM_BIN_READ_RETRY_COUNT; retry++) {
 		if (intel_histogram_get_data(intel_crtc)) {
+			drm_property_replace_global_blob(display->drm,
+				&intel_crtc->config->histogram.histogram,
+				sizeof(histogram->bin_data),
+				histogram->bin_data, &intel_crtc->base.base,
+				intel_crtc->histogram_property);
 			/* Notify user for Histogram rediness */
 			if (kobject_uevent_env(&display->drm->primary->kdev->kobj,
 					       KOBJ_CHANGE, histogram_event))
@@ -194,6 +199,7 @@ static void intel_histogram_disable(struct intel_crtc *intel_crtc)
 
 	cancel_delayed_work(&histogram->work);
 	histogram->enable = false;
+	intel_crtc->config->histogram.histogram_enable = false;
 }
 
 int intel_histogram_update(struct intel_crtc *intel_crtc, bool enable)

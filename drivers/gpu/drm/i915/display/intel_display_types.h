@@ -1306,6 +1306,15 @@ struct intel_crtc_state {
 
 	/* LOBF flag */
 	bool has_lobf;
+
+	/* Histogram data */
+	struct {
+		int histogram_enable;
+		struct drm_property_blob *global_iet;
+		struct drm_property_blob *histogram;
+		bool global_iet_changed;
+		bool histogram_enable_changed;
+	} histogram;
 };
 
 enum intel_pipe_crc_source {
@@ -1415,6 +1424,10 @@ struct intel_crtc {
 	struct pm_qos_request vblank_pm_qos;
 
 	struct intel_histogram *histogram;
+	/* HISTOGRAM properties */
+	struct drm_property *histogram_en_property;
+	struct drm_property *global_iet_property;
+	struct drm_property *histogram_property;
 
 #ifdef CONFIG_DEBUG_FS
 	struct intel_pipe_crc pipe_crc;
