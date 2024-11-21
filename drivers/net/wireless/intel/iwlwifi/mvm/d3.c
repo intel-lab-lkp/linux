@@ -2495,14 +2495,15 @@ static void iwl_mvm_parse_wowlan_info_notif(struct iwl_mvm *mvm,
 					    struct iwl_wowlan_status_data *status,
 					    u32 len)
 {
-	u32 expected_len = sizeof(*data) +
-		data->num_mlo_link_keys * sizeof(status->mlo_keys[0]);
+	u32 expected_len = 0;
 
 	if (!data) {
 		IWL_ERR(mvm, "iwl_wowlan_info_notif data is NULL\n");
 		status = NULL;
 		return;
 	}
+
+	expected_len = sizeof(*data) + data->num_mlo_link_keys * sizeof(status->mlo_keys[0]);
 
 	if (len < expected_len) {
 		IWL_ERR(mvm, "Invalid WoWLAN info notification!\n");
