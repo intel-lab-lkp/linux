@@ -3391,7 +3391,7 @@ static int intel_pt_find_map(struct thread *thread, u8 cpumode, u64 addr,
 }
 
 /* Invalidate all instruction cache entries that overlap the text poke */
-static int intel_pt_text_poke(struct intel_pt *pt, union perf_event *event)
+static void intel_pt_text_poke(struct intel_pt *pt, union perf_event *event)
 {
 	u8 cpumode = event->header.misc & PERF_RECORD_MISC_CPUMODE_MASK;
 	u64 addr = event->text_poke.addr + event->text_poke.new_len - 1;
@@ -3402,7 +3402,6 @@ static int intel_pt_text_poke(struct intel_pt *pt, union perf_event *event)
 	struct machine *machine = pt->machine;
 	struct intel_pt_cache_entry *e;
 	u64 offset;
-	int ret = 0;
 
 	addr_location__init(&al);
 	if (!event->text_poke.new_len)
@@ -3443,7 +3442,6 @@ static int intel_pt_text_poke(struct intel_pt *pt, union perf_event *event)
 	}
 out:
 	addr_location__exit(&al);
-	return ret;
 }
 
 static int intel_pt_process_event(struct perf_session *session,
@@ -3522,7 +3520,7 @@ static int intel_pt_process_event(struct perf_session *session,
 		err = intel_pt_context_switch(pt, event, sample);
 
 	if (!err && event->header.type == PERF_RECORD_TEXT_POKE)
-		err = intel_pt_text_poke(pt, event);
+		intel_pt_text_poke(pt, event);
 
 	if (intel_pt_enable_logging && intel_pt_log_events(pt, sample->time)) {
 		intel_pt_log("event %u: cpu %d time %"PRIu64" tsc %#"PRIx64" ",
