@@ -76,13 +76,13 @@ static int kdb_handle_escape(char *buf, size_t sz)
 	case 3:
 		switch (*lastkey) {
 		case 'A': /* \e[A, up arrow */
-			return 16;
+			return CTRL_KEY('P');
 		case 'B': /* \e[B, down arrow */
-			return 14;
+			return CTRL_KEY('N');
 		case 'C': /* \e[C, right arrow */
-			return 6;
+			return CTRL_KEY('F');
 		case 'D': /* \e[D, left arrow */
-			return 2;
+			return CTRL_KEY('B');
 		case '1': /* \e[<1,3,4>], may be home, del, end */
 		case '3':
 		case '4':
@@ -94,11 +94,11 @@ static int kdb_handle_escape(char *buf, size_t sz)
 		if (*lastkey == '~') {
 			switch (buf[2]) {
 			case '1': /* \e[1~, home */
-				return 1;
+				return CTRL_KEY('A');
 			case '3': /* \e[3~, del */
-				return 4;
+				return CTRL_KEY('D');
 			case '4': /* \e[4~, end */
-				return 5;
+				return CTRL_KEY('E');
 			}
 		}
 		break;
@@ -267,7 +267,7 @@ poll_again:
 	if (key != 9)
 		tab = 0;
 	switch (key) {
-	case 8: /* backspace */
+	case CTRL_KEY('H'): /* backspace */
 		if (cp > buffer) {
 			memmove(cp-1, cp, lastchar - cp + 1);
 			lastchar--;
@@ -276,8 +276,8 @@ poll_again:
 			kdb_position_cursor(kdb_prompt_str, buffer, cp);
 		}
 		break;
-	case 10: /* linefeed */
-	case 13: /* carriage return */
+	case CTRL_KEY('J'): /* linefeed */
+	case CTRL_KEY('M'): /* carriage return */
 		*lastchar++ = '\n';
 		*lastchar++ = '\0';
 		if (!KDB_STATE(KGDB_TRANS)) {
@@ -286,7 +286,7 @@ poll_again:
 		}
 		kdb_printf("\n");
 		return buffer;
-	case 4: /* Del */
+	case CTRL_KEY('D'): /* Del */
 		if (cp < lastchar) {
 			memmove(cp, cp+1, lastchar - cp);
 			lastchar--;
@@ -294,39 +294,39 @@ poll_again:
 			kdb_position_cursor(kdb_prompt_str, buffer, cp);
 		}
 		break;
-	case 1: /* Home */
+	case CTRL_KEY('A'): /* Home */
 		if (cp > buffer) {
 			cp = buffer;
 			kdb_position_cursor(kdb_prompt_str, buffer, cp);
 		}
 		break;
-	case 5: /* End */
+	case CTRL_KEY('E'): /* End */
 		if (cp < lastchar) {
 			kdb_printf("%s", cp);
 			cp = lastchar;
 		}
 		break;
-	case 2: /* Left */
+	case CTRL_KEY('B'): /* Left */
 		if (cp > buffer) {
 			kdb_printf("\b");
 			--cp;
 		}
 		break;
-	case 14: /* Down */
-	case 16: /* Up */
+	case CTRL_KEY('N'): /* Down */
+	case CTRL_KEY('P'): /* Up */
 		kdb_printf("\r%*c\r",
 			   (int)(strlen(kdb_prompt_str) + (lastchar - buffer)),
 			   ' ');
 		*lastchar = (char)key;
 		*(lastchar+1) = '\0';
 		return lastchar;
-	case 6: /* Right */
+	case CTRL_KEY('F'): /* Right */
 		if (cp < lastchar) {
 			kdb_printf("%c", *cp);
 			++cp;
 		}
 		break;
-	case 9: /* Tab */
+	case CTRL_KEY('I'): /* Tab */
 		if (tab < 2)
 			++tab;
 

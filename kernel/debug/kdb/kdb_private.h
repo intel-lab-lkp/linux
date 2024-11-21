@@ -227,6 +227,8 @@ extern char kdb_prompt_str[];
 
 #define	KDB_WORD_SIZE	((int)sizeof(unsigned long))
 
+#define CTRL_KEY(c) ((c) - 64)
+
 #endif /* CONFIG_KGDB_KDB */
 
 #define kdb_func_printf(format, args...) \

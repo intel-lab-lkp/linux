@@ -25,8 +25,6 @@
 #define KBD_STAT_OBF 		0x01	/* Keyboard output buffer full */
 #define KBD_STAT_MOUSE_OBF	0x20	/* Mouse output buffer full */
 
-#define CTRL(c) ((c) - 64)
-
 static int kbd_exists;
 static int kbd_last_ret;
 
@@ -128,21 +126,21 @@ int kdb_get_kbd_char(void)
 	/* Translate special keys to equivalent CTRL control characters */
 	switch (scancode) {
 	case 0xF: /* Tab */
-		return CTRL('I');
+		return CTRL_KEY('I');
 	case 0x53: /* Del */
-		return CTRL('D');
+		return CTRL_KEY('D');
 	case 0x47: /* Home */
-		return CTRL('A');
+		return CTRL_KEY('A');
 	case 0x4F: /* End */
-		return CTRL('E');
+		return CTRL_KEY('E');
 	case 0x4B: /* Left */
-		return CTRL('B');
+		return CTRL_KEY('B');
 	case 0x48: /* Up */
-		return CTRL('P');
+		return CTRL_KEY('P');
 	case 0x50: /* Down */
-		return CTRL('N');
+		return CTRL_KEY('N');
 	case 0x4D: /* Right */
-		return CTRL('F');
+		return CTRL_KEY('F');
 	}
 
 	if (scancode == 0xe0)
@@ -176,14 +174,16 @@ int kdb_get_kbd_char(void)
 	case KT_LATIN:
 		switch (keychar) {
 		/* non-printable supported control characters */
-		case CTRL('A'): /* Home */
-		case CTRL('B'): /* Left */
-		case CTRL('D'): /* Del */
-		case CTRL('E'): /* End */
-		case CTRL('F'): /* Right */
-		case CTRL('I'): /* Tab */
-		case CTRL('N'): /* Down */
-		case CTRL('P'): /* Up */
+		case CTRL_KEY('A'): /* Home */
+		case CTRL_KEY('B'): /* Left */
+		case CTRL_KEY('D'): /* Del */
+		case CTRL_KEY('E'): /* End */
+		case CTRL_KEY('F'): /* Right */
+		case CTRL_KEY('I'): /* Tab */
+		case CTRL_KEY('K'):
+		case CTRL_KEY('N'): /* Down */
+		case CTRL_KEY('P'): /* Up */
+		case CTRL_KEY('U'):
 			return keychar;
 		}
 
