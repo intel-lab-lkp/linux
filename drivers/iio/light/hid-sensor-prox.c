@@ -94,6 +94,7 @@ static int prox_read_raw(struct iio_dev *indio_dev,
 	*val2 = 0;
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
+	case IIO_CHAN_INFO_PROCESSED:
 		if (chan->scan_index >= prox_state->num_channels)
 			return -EINVAL;
 		address = prox_state->channel2usage[chan->scan_index];
@@ -107,8 +108,7 @@ static int prox_read_raw(struct iio_dev *indio_dev,
 							   report_id,
 							   SENSOR_HUB_SYNC,
 							   min < 0);
-		if (prox_state->channel2usage[chan->scan_index] ==
-		    HID_USAGE_SENSOR_HUMAN_ATTENTION)
+		if (mask == IIO_CHAN_INFO_PROCESSED)
 			*val *= 100;
 		hid_sensor_power_state(&prox_state->common_attributes, false);
 		ret_type = IIO_VAL_INT;
