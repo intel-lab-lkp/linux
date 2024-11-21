@@ -48,7 +48,10 @@ int ahci_platform_enable_phys(struct ahci_host_priv *hpriv)
 {
 	int rc, i;
 
-	for (i = 0; i < hpriv->nports; i++) {
+	for (i = 0; i < AHCI_MAX_PORTS; i++) {
+		if (!(hpriv->mask_port_map & (1 << i)))
+			continue;
+
 		rc = phy_init(hpriv->phys[i]);
 		if (rc)
 			goto disable_phys;
@@ -70,8 +73,10 @@ int ahci_platform_enable_phys(struct ahci_host_priv *hpriv)
 
 disable_phys:
 	while (--i >= 0) {
-		phy_power_off(hpriv->phys[i]);
-		phy_exit(hpriv->phys[i]);
+		if (hpriv->mask_port_map & (1 << i)) {
+			phy_power_off(hpriv->phys[i]);
+			phy_exit(hpriv->phys[i]);
+		}
 	}
 	return rc;
 }
@@ -87,9 +92,11 @@ void ahci_platform_disable_phys(struct ahci_host_priv *hpriv)
 {
 	int i;
 
-	for (i = 0; i < hpriv->nports; i++) {
-		phy_power_off(hpriv->phys[i]);
-		phy_exit(hpriv->phys[i]);
+	for (i = 0; i < AHCI_MAX_PORTS; i++) {
+		if (hpriv->mask_port_map & (1 << i)) {
+			phy_power_off(hpriv->phys[i]);
+			phy_exit(hpriv->phys[i]);
+		}
 	}
 }
 EXPORT_SYMBOL_GPL(ahci_platform_disable_phys);
@@ -209,13 +216,12 @@ int ahci_platform_enable_regulators(struct ahci_host_priv *hpriv)
 	if (rc)
 		goto disable_ahci_pwrs;
 
-	for (i = 0; i < hpriv->nports; i++) {
-		if (!hpriv->target_pwrs[i])
-			continue;
-
-		rc = regulator_enable(hpriv->target_pwrs[i]);
-		if (rc)
-			goto disable_target_pwrs;
+	for (i = 0; i < AHCI_MAX_PORTS; i++) {
+		if (hpriv->mask_port_map & (1 << i)) {
+			rc = regulator_enable(hpriv->target_pwrs[i]);
+			if (rc)
+				goto disable_target_pwrs;
+		}
 	}
 
 	return 0;
@@ -243,10 +249,9 @@ void ahci_platform_disable_regulators(struct ahci_host_priv *hpriv)
 {
 	int i;
 
-	for (i = 0; i < hpriv->nports; i++) {
-		if (!hpriv->target_pwrs[i])
-			continue;
-		regulator_disable(hpriv->target_pwrs[i]);
+	for (i = 0; i < AHCI_MAX_PORTS; i++) {
+		if (hpriv->mask_port_map & (1 << i))
+			regulator_disable(hpriv->target_pwrs[i]);
 	}
 
 	regulator_disable(hpriv->ahci_regulator);
@@ -343,8 +348,8 @@ static void ahci_platform_put_resources(struct device *dev, void *res)
 	 * SATA device itself. So we can't use devm for automatically
 	 * releasing them. We have to do it manually here.
 	 */
-	for (c = 0; c < hpriv->nports; c++)
-		if (hpriv->target_pwrs && hpriv->target_pwrs[c])
+	for (c = 0; c < AHCI_MAX_PORTS; c++)
+		if ((hpriv->mask_port_map & (1 << c)) && hpriv->target_pwrs[c])
 			regulator_put(hpriv->target_pwrs[c]);
 
 	kfree(hpriv->target_pwrs);
@@ -539,41 +544,7 @@ struct ahci_host_priv *ahci_platform_get_resources(struct platform_device *pdev,
 		hpriv->f_rsts = flags & AHCI_PLATFORM_RST_TRIGGER;
 	}
 
-	/*
-	 * Too many sub-nodes most likely means having something wrong with
-	 * the firmware.
-	 */
 	child_nodes = of_get_child_count(dev->of_node);
-	if (child_nodes > AHCI_MAX_PORTS) {
-		rc = -EINVAL;
-		goto err_out;
-	}
-
-	/*
-	 * If no sub-node was found, we still need to set nports to
-	 * one in order to be able to use the
-	 * ahci_platform_[en|dis]able_[phys|regulators] functions.
-	 */
-	if (child_nodes)
-		hpriv->nports = child_nodes;
-	else
-		hpriv->nports = 1;
-
-	hpriv->phys = devm_kcalloc(dev, hpriv->nports, sizeof(*hpriv->phys), GFP_KERNEL);
-	if (!hpriv->phys) {
-		rc = -ENOMEM;
-		goto err_out;
-	}
-	/*
-	 * We cannot use devm_ here, since ahci_platform_put_resources() uses
-	 * target_pwrs after devm_ have freed memory
-	 */
-	hpriv->target_pwrs = kcalloc(hpriv->nports, sizeof(*hpriv->target_pwrs), GFP_KERNEL);
-	if (!hpriv->target_pwrs) {
-		rc = -ENOMEM;
-		goto err_out;
-	}
-
 	if (child_nodes) {
 		for_each_child_of_node_scoped(dev->of_node, child) {
 			u32 port;
@@ -587,7 +558,7 @@ struct ahci_host_priv *ahci_platform_get_resources(struct platform_device *pdev,
 				goto err_out;
 			}
 
-			if (port >= hpriv->nports) {
+			if (port >= AHCI_MAX_PORTS) {
 				dev_warn(dev, "invalid port number %d\n", port);
 				continue;
 			}
@@ -625,6 +596,8 @@ struct ahci_host_priv *ahci_platform_get_resources(struct platform_device *pdev,
 		 * If no sub-node was found, keep this for device tree
 		 * compatibility
 		 */
+		hpriv->mask_port_map |= BIT(0);
+
 		rc = ahci_platform_get_phy(hpriv, 0, dev, dev->of_node);
 		if (rc)
 			goto err_out;

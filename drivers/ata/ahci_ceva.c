@@ -205,20 +205,24 @@ static int ceva_ahci_platform_enable_resources(struct ahci_host_priv *hpriv)
 	if (rc)
 		goto disable_clks;
 
-	for (i = 0; i < hpriv->nports; i++) {
-		rc = phy_init(hpriv->phys[i]);
-		if (rc)
-			goto disable_rsts;
+	for (i = 0; i < AHCI_MAX_PORTS; i++) {
+		if (hpriv->mask_port_map & (1 << i)) {
+			rc = phy_init(hpriv->phys[i]);
+			if (rc)
+				goto disable_rsts;
+		}
 	}
 
 	/* De-assert the controller reset */
 	ahci_platform_deassert_rsts(hpriv);
 
-	for (i = 0; i < hpriv->nports; i++) {
-		rc = phy_power_on(hpriv->phys[i]);
-		if (rc) {
-			phy_exit(hpriv->phys[i]);
-			goto disable_phys;
+	for (i = 0; i < AHCI_MAX_PORTS; i++) {
+		if (hpriv->mask_port_map & (1 << i)) {
+			rc = phy_power_on(hpriv->phys[i]);
+			if (rc) {
+				phy_exit(hpriv->phys[i]);
+				goto disable_phys;
+			}
 		}
 	}
 

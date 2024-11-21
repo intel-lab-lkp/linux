@@ -348,15 +348,14 @@ struct ahci_host_priv {
 	struct clk_bulk_data	*clks;		/* Optional */
 	unsigned int		f_rsts;
 	struct reset_control	*rsts;		/* Optional */
-	struct regulator	**target_pwrs;	/* Optional */
+	struct regulator	*target_pwrs[AHCI_MAX_PORTS];	/* Optional */
 	struct regulator	*ahci_regulator;/* Optional */
 	struct regulator	*phy_regulator;/* Optional */
 	/*
 	 * If platform uses PHYs. There is a 1:1 relation between the port number and
 	 * the PHY position in this array.
 	 */
-	struct phy		**phys;
-	unsigned		nports;		/* Number of ports */
+	struct phy		*phys[AHCI_MAX_PORTS];
 	void			*plat_data;	/* Other platform data */
 	unsigned int		irq;		/* interrupt line */
 	/*
