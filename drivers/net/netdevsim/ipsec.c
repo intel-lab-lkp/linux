@@ -153,7 +153,8 @@ static int nsim_ipsec_add_sa(struct xfrm_state *xs,
 		return -EINVAL;
 	}
 
-	if (xs->xso.type != XFRM_DEV_OFFLOAD_CRYPTO) {
+	if (xs->xso.type != XFRM_DEV_OFFLOAD_CRYPTO &&
+	    xs->xso.type != XFRM_DEV_OFFLOAD_PACKET) {
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported ipsec offload type");
 		return -EINVAL;
 	}
@@ -169,6 +170,7 @@ static int nsim_ipsec_add_sa(struct xfrm_state *xs,
 	memset(&sa, 0, sizeof(sa));
 	sa.used = true;
 	sa.xs = xs;
+	sa.if_id = xs->if_id;
 
 	if (sa.xs->id.proto & IPPROTO_ESP)
 		sa.crypt = xs->ealg || xs->aead;
@@ -227,16 +229,31 @@ static bool nsim_ipsec_offload_ok(struct sk_buff *skb, struct xfrm_state *xs)
 	return true;
 }
 
+static int nsim_ipsec_add_policy(struct xfrm_policy *policy,
+				 struct netlink_ext_ack *extack)
+{
+	return 0;
+}
+
+static void nsim_ipsec_del_policy(struct xfrm_policy *policy)
+{
+}
+
 static const struct xfrmdev_ops nsim_xfrmdev_ops = {
 	.xdo_dev_state_add	= nsim_ipsec_add_sa,
 	.xdo_dev_state_delete	= nsim_ipsec_del_sa,
 	.xdo_dev_offload_ok	= nsim_ipsec_offload_ok,
+
+	.xdo_dev_policy_add     = nsim_ipsec_add_policy,
+	.xdo_dev_policy_delete  = nsim_ipsec_del_policy,
+
 };
 
 bool nsim_ipsec_tx(struct netdevsim *ns, struct sk_buff *skb)
 {
 	struct sec_path *sp = skb_sec_path(skb);
 	struct nsim_ipsec *ipsec = &ns->ipsec;
+	struct xfrm_offload *xo;
 	struct xfrm_state *xs;
 	struct nsim_sa *tsa;
 	u32 sa_idx;
@@ -273,6 +290,19 @@ bool nsim_ipsec_tx(struct netdevsim *ns, struct sk_buff *skb)
 	if (xs->id.proto != IPPROTO_ESP && xs->id.proto != IPPROTO_AH) {
 		netdev_err(ns->netdev, "unexpected proto=%d\n", xs->id.proto);
 		return false;
+	}
+
+	if (xs->if_id) {
+		if (xs->if_id != tsa->if_id) {
+			netdev_err(ns->netdev, "unmatched if_id %d %d\n",
+				   xs->if_id, tsa->if_id);
+			return false;
+		}
+		xo = xfrm_offload(skb);
+		if (!xo || !(xo->flags & XFRM_XMIT)) {
+			netdev_err(ns->netdev, "offload flag missing or wrong\n");
+			return false;
+		}
 	}
 
 	ipsec->tx++;
