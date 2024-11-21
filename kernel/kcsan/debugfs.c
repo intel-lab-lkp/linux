@@ -145,6 +145,8 @@ static ssize_t insert_report_filterlist(const char *func)
 {
 	unsigned long flags;
 	unsigned long addr = kallsyms_lookup_name(func);
+	unsigned long *new_addrs;
+	size_t new_size = 0;
 	ssize_t ret = 0;
 
 	if (!addr) {
@@ -156,18 +158,12 @@ static ssize_t insert_report_filterlist(const char *func)
 
 	if (report_filterlist.addrs == NULL) {
 		/* initial allocation */
-		report_filterlist.addrs =
-			kmalloc_array(report_filterlist.size,
-				      sizeof(unsigned long), GFP_ATOMIC);
-		if (report_filterlist.addrs == NULL) {
-			ret = -ENOMEM;
-			goto out;
-		}
+		new_size = report_filterlist.size;
 	} else if (report_filterlist.used == report_filterlist.size) {
 		/* resize filterlist */
-		size_t new_size = report_filterlist.size * 2;
-		unsigned long *new_addrs;
-
+		new_size = report_filterlist.size * 2;
+	}
+	if (new_size) {
 		new_addrs = krealloc_array(report_filterlist.addrs,
 					   new_size, sizeof(*new_addrs), GFP_ATOMIC);
 		if (new_addrs == NULL) {
