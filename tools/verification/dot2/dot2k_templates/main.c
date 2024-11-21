@@ -88,4 +88,4 @@ module_exit(unregister_%%MODEL_NAME%%);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("dot2k: auto-generated");
-MODULE_DESCRIPTION("%%MODEL_NAME%%");
+MODULE_DESCRIPTION("%%DESCRIPTION%%");
