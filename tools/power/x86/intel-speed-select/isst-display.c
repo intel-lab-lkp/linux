@@ -617,14 +617,14 @@ void isst_clos_display_information(struct isst_id *id, FILE *outf, int clos,
 	format_and_print(outf, level + 2, header, value);
 
 	snprintf(header, sizeof(header), "clos-min");
-	snprintf(value, sizeof(value), "%d MHz", clos_config->clos_min * isst_get_disp_freq_multiplier());
+	snprintf(value, sizeof(value), "%u MHz", clos_config->clos_min * isst_get_disp_freq_multiplier());
 	format_and_print(outf, level + 2, header, value);
 
 	snprintf(header, sizeof(header), "clos-max");
 	if ((clos_config->clos_max * isst_get_disp_freq_multiplier()) == 25500)
 		snprintf(value, sizeof(value), "Max Turbo frequency");
 	else
-		snprintf(value, sizeof(value), "%d MHz", clos_config->clos_max * isst_get_disp_freq_multiplier());
+		snprintf(value, sizeof(value), "%u MHz", clos_config->clos_max * isst_get_disp_freq_multiplier());
 	format_and_print(outf, level + 2, header, value);
 
 	snprintf(header, sizeof(header), "clos-desired");
