@@ -207,6 +207,7 @@ module_param(mitigate_smt_rsb, bool, 0444);
 struct kvm_user_return_msrs {
 	struct user_return_notifier urn;
 	bool registered;
+	bool restore_aperfmperf;
 	struct kvm_user_return_msr_values {
 		u64 host;
 		u64 curr;
@@ -571,6 +572,11 @@ static void kvm_on_user_return(struct user_return_notifier *urn)
 	 * interrupted and executed through kvm_arch_disable_virtualization_cpu()
 	 */
 	local_irq_save(flags);
+	if (msrs->restore_aperfmperf) {
+		restore_host_aperf();
+		restore_host_mperf();
+		msrs->restore_aperfmperf = false;
+	}
 	if (msrs->registered) {
 		msrs->registered = false;
 		user_return_notifier_unregister(urn);
@@ -5003,6 +5009,7 @@ static bool need_emulate_wbinvd(struct kvm_vcpu *vcpu)
 
 static void kvm_load_guest_aperfmperf(struct kvm_vcpu *vcpu, bool update_mperf)
 {
+	struct kvm_user_return_msrs *msrs;
 	unsigned long flags;
 
 	local_irq_save(flags);
@@ -5011,6 +5018,9 @@ static void kvm_load_guest_aperfmperf(struct kvm_vcpu *vcpu, bool update_mperf)
 	set_guest_aperf(vcpu->arch.aperfmperf.guest_aperf);
 	set_guest_mperf(vcpu->arch.aperfmperf.guest_mperf);
 	vcpu->arch.aperfmperf.loaded_while_running = true;
+	msrs = this_cpu_ptr(user_return_msrs);
+	kvm_user_return_notifier_register(msrs);
+	msrs->restore_aperfmperf = true;
 	local_irq_restore(flags);
 }
 
