@@ -10,7 +10,7 @@
 #include "mtk-mdp3-cmdq.h"
 
 #define MM_REG_WRITE_MASK(cmd, id, base, ofst, val, mask, ...)	\
-	cmdq_pkt_write_mask(&((cmd)->pkt), id,			\
+	cmdq_pkt_write_mask(&((cmd)->pkt), id, base,		\
 		(base) + (ofst), (val), (mask), ##__VA_ARGS__)
 
 #define MM_REG_WRITE(cmd, id, base, ofst, val, mask, ...)	\
@@ -52,7 +52,7 @@ do {								\
 #define MM_REG_POLL_MASK(cmd, id, base, ofst, val, _mask, ...)	\
 do {								\
 	typeof(_mask) (_m) = (_mask);				\
-	cmdq_pkt_poll_mask(&((cmd)->pkt), id,			\
+	cmdq_pkt_poll_mask(&((cmd)->pkt), id, base,		\
 		(base) + (ofst), (val), (_m), ##__VA_ARGS__);	\
 } while (0)
 

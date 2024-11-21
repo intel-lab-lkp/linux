@@ -326,7 +326,7 @@ static int mdp_path_config_subfrm(struct mdp_cmdq_cmd *cmd,
 	for (index = 0; index < ctrl->num_sets; index++) {
 		set = &ctrl->sets[index];
 		cmdq_pkt_write_mask(&cmd->pkt, set->subsys_id, set->reg,
-				    set->value, 0xFFFFFFFF);
+				    (u16)set->reg, set->value, 0xFFFFFFFF);
 	}
 	/* Config sub-frame information */
 	for (index = (num_comp - 1); index >= 0; index--) {
@@ -382,7 +382,7 @@ static int mdp_path_config_subfrm(struct mdp_cmdq_cmd *cmd,
 	for (index = 0; index < ctrl->num_sets; index++) {
 		set = &ctrl->sets[index];
 		cmdq_pkt_write_mask(&cmd->pkt, set->subsys_id, set->reg,
-				    0, 0xFFFFFFFF);
+				    (u16)set->reg, 0, 0xFFFFFFFF);
 	}
 
 	return 0;
