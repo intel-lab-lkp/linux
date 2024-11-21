@@ -388,7 +388,7 @@ static void cond_mitigation(struct task_struct *next)
 	prev_mm = this_cpu_read(cpu_tlbstate.last_user_mm_spec);
 
 	/*
-	 * Avoid user/user BTB poisoning by flushing the branch predictor
+	 * Avoid user->user BTB/RSB poisoning by flushing the branch predictor
 	 * when switching between processes. This stops one process from
 	 * doing Spectre-v2 attacks on another.
 	 *
