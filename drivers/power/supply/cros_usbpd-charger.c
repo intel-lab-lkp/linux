@@ -325,7 +325,7 @@ static int cros_usbpd_charger_set_ext_power_limit(struct charger_data *charger,
 	req.current_lim = current_lim;
 	req.voltage_lim = voltage_lim;
 
-	ret = cros_usbpd_charger_ec_command(charger, 0,
+	ret = cros_usbpd_charger_ec_command(charger, 1,
 					    EC_CMD_EXTERNAL_POWER_LIMIT,
 					    &req, sizeof(req), NULL, 0);
 	if (ret < 0)
