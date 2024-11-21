@@ -222,6 +222,9 @@ int cmdq_pkt_write(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base, u16 offset, u32
 	if (cmdq_subsys_is_valid(cl->chan, subsys)) {
 		err = cmdq_pkt_append_command(pkt, inst);
 	} else {
+		if (cmdq_addr_need_offset(cl->chan, pa_base))
+			pa_base += cmdq_get_offset_pa(cl->chan);
+
 		err = cmdq_pkt_assign(pkt, 0, CMDQ_ADDR_HIGH(pa_base));
 		if (err < 0)
 			return err;
@@ -255,12 +258,16 @@ int cmdq_pkt_write_mask(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 		}
 		err = cmdq_pkt_write(pkt, subsys, pa_base, offset_mask, value);
 	} else {
+		if (cmdq_addr_need_offset(cl->chan, pa_base))
+			pa_base += cmdq_get_offset_pa(cl->chan);
+
 		err = cmdq_pkt_assign(pkt, 0, CMDQ_ADDR_HIGH(pa_base));
 		if (err < 0)
 			return err;
 
 		err = cmdq_pkt_write_s_mask_value(pkt, 0, CMDQ_ADDR_LOW(offset), value, mask);
 	}
+
 	return err;
 }
 EXPORT_SYMBOL(cmdq_pkt_write_mask);
@@ -347,9 +354,21 @@ EXPORT_SYMBOL(cmdq_pkt_write_s_mask_value);
 
 int cmdq_pkt_mem_move(struct cmdq_pkt *pkt, dma_addr_t src_addr, dma_addr_t dst_addr)
 {
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
 	const u16 high_addr_reg_idx  = CMDQ_THR_SPR_IDX0;
 	const u16 value_reg_idx = CMDQ_THR_SPR_IDX1;
 	int ret;
+
+	if (!cl) {
+		pr_err("%s %d: pkt->cl is NULL!\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	if (cmdq_addr_need_offset(cl->chan, src_addr))
+		src_addr += cmdq_get_offset_pa(cl->chan);
+
+	if (cmdq_addr_need_offset(cl->chan, dst_addr))
+		dst_addr += cmdq_get_offset_pa(cl->chan);
 
 	/* read the value of src_addr into high_addr_reg_idx */
 	ret = cmdq_pkt_assign(pkt, high_addr_reg_idx, CMDQ_ADDR_HIGH(src_addr));
@@ -450,6 +469,9 @@ int cmdq_pkt_poll(struct cmdq_pkt *pkt, u8 subsys, u32 pa_base,
 	}
 
 	if (!cmdq_subsys_is_valid(cl->chan, subsys)) {
+		if (cmdq_addr_need_offset(cl->chan, pa_base))
+			pa_base += cmdq_get_offset_pa(cl->chan);
+
 		err = cmdq_pkt_assign(pkt, CMDQ_POLL_ADDR_GPR, pa_base);
 		if (err < 0)
 			return err;
@@ -480,9 +502,18 @@ EXPORT_SYMBOL(cmdq_pkt_poll_mask);
 
 int cmdq_pkt_poll_addr(struct cmdq_pkt *pkt, dma_addr_t addr, u32 value, u32 mask)
 {
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
 	struct cmdq_instruction inst = { {0} };
 	u8 use_mask = 0;
 	int ret;
+
+	if (!cl) {
+		pr_err("%s %d: pkt->cl is NULL!\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	if (cmdq_addr_need_offset(cl->chan, addr))
+		addr += cmdq_get_offset_pa(cl->chan);
 
 	/*
 	 * Append an MASK instruction to set the mask for following POLL instruction
@@ -561,11 +592,21 @@ EXPORT_SYMBOL(cmdq_pkt_assign);
 
 int cmdq_pkt_jump_abs(struct cmdq_pkt *pkt, dma_addr_t addr, u8 shift_pa)
 {
+	struct cmdq_client *cl = (struct cmdq_client *)pkt->cl;
 	struct cmdq_instruction inst = {
 		.op = CMDQ_CODE_JUMP,
 		.offset = CMDQ_JUMP_ABSOLUTE,
-		.value = addr >> shift_pa
 	};
+
+	if (!cl) {
+		pr_err("%s %d: pkt->cl is NULL!\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	if (cmdq_addr_need_offset(cl->chan, addr))
+		addr += cmdq_get_offset_pa(cl->chan);
+
+	inst.value = addr >> shift_pa;
 	return cmdq_pkt_append_command(pkt, inst);
 }
 EXPORT_SYMBOL(cmdq_pkt_jump_abs);
