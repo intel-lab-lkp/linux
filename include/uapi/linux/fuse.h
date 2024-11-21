@@ -1206,4 +1206,61 @@ struct fuse_supp_groups {
 	uint32_t	groups[];
 };
 
+/**
+ * Size of the ring buffer header
+ */
+#define FUSE_RING_IN_OUT_HEADER_SZ 128
+#define FUSE_RING_OP_IN_OUT_SZ 128
+
+struct fuse_ring_ent_in_out {
+	uint64_t flags;
+
+	/* size of use payload buffer */
+	uint32_t payload_sz;
+	uint32_t padding;
+
+	uint8_t reserved[30];
+};
+
+/**
+ * This structure mapped onto the
+ */
+struct fuse_ring_req_header {
+	/* struct fuse_in / struct fuse_out */
+	char in_out[FUSE_RING_IN_OUT_HEADER_SZ];
+
+	/* per op code structs */
+	char op_in[FUSE_RING_OP_IN_OUT_SZ];
+
+	/* struct fuse_ring_in_out */
+	char ring_ent_in_out[sizeof(struct fuse_ring_ent_in_out)];
+};
+
+/**
+ * sqe commands to the kernel
+ */
+enum fuse_uring_cmd {
+	FUSE_URING_REQ_INVALID = 0,
+
+	/* submit sqe to kernel to get a request */
+	FUSE_URING_REQ_FETCH = 1,
+
+	/* commit result and fetch next request */
+	FUSE_URING_REQ_COMMIT_AND_FETCH = 2,
+};
+
+/**
+ * In the 80B command area of the SQE.
+ */
+struct fuse_uring_cmd_req {
+	uint64_t flags;
+
+	/* entry identifier */
+	uint64_t commit_id;
+
+	/* queue the command is for (queue index) */
+	uint16_t qid;
+	uint8_t padding[6];
+};
+
 #endif /* _LINUX_FUSE_H */
