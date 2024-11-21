@@ -35,15 +35,15 @@ fi
 
 check_result "% insmod test_modules/$MOD_LIVEPATCH1.ko
 livepatch: enabling patch '$MOD_LIVEPATCH1'
-livepatch: '$MOD_LIVEPATCH1': initializing patching transition
-livepatch: '$MOD_LIVEPATCH1': starting patching transition
-livepatch: '$MOD_LIVEPATCH1': completing patching transition
-livepatch: '$MOD_LIVEPATCH1': patching complete
+transition: '$MOD_LIVEPATCH1': initializing patching transition
+transition: '$MOD_LIVEPATCH1': starting patching transition
+transition: '$MOD_LIVEPATCH1': completing patching transition
+transition: '$MOD_LIVEPATCH1': patching complete
 % echo 0 > /sys/kernel/livepatch/$MOD_LIVEPATCH1/enabled
-livepatch: '$MOD_LIVEPATCH1': initializing unpatching transition
-livepatch: '$MOD_LIVEPATCH1': starting unpatching transition
-livepatch: '$MOD_LIVEPATCH1': completing unpatching transition
-livepatch: '$MOD_LIVEPATCH1': unpatching complete
+transition: '$MOD_LIVEPATCH1': initializing unpatching transition
+transition: '$MOD_LIVEPATCH1': starting unpatching transition
+transition: '$MOD_LIVEPATCH1': completing unpatching transition
+transition: '$MOD_LIVEPATCH1': unpatching complete
 % rmmod $MOD_LIVEPATCH1"
 
 
@@ -79,31 +79,31 @@ grep 'live patched' /proc/meminfo > /dev/kmsg
 
 check_result "% insmod test_modules/$MOD_LIVEPATCH1.ko
 livepatch: enabling patch '$MOD_LIVEPATCH1'
-livepatch: '$MOD_LIVEPATCH1': initializing patching transition
-livepatch: '$MOD_LIVEPATCH1': starting patching transition
-livepatch: '$MOD_LIVEPATCH1': completing patching transition
-livepatch: '$MOD_LIVEPATCH1': patching complete
+transition: '$MOD_LIVEPATCH1': initializing patching transition
+transition: '$MOD_LIVEPATCH1': starting patching transition
+transition: '$MOD_LIVEPATCH1': completing patching transition
+transition: '$MOD_LIVEPATCH1': patching complete
 $MOD_LIVEPATCH1: this has been live patched
 % insmod test_modules/$MOD_REPLACE.ko replace=0
 livepatch: enabling patch '$MOD_REPLACE'
-livepatch: '$MOD_REPLACE': initializing patching transition
-livepatch: '$MOD_REPLACE': starting patching transition
-livepatch: '$MOD_REPLACE': completing patching transition
-livepatch: '$MOD_REPLACE': patching complete
+transition: '$MOD_REPLACE': initializing patching transition
+transition: '$MOD_REPLACE': starting patching transition
+transition: '$MOD_REPLACE': completing patching transition
+transition: '$MOD_REPLACE': patching complete
 $MOD_LIVEPATCH1: this has been live patched
 $MOD_REPLACE: this has been live patched
 % echo 0 > /sys/kernel/livepatch/$MOD_REPLACE/enabled
-livepatch: '$MOD_REPLACE': initializing unpatching transition
-livepatch: '$MOD_REPLACE': starting unpatching transition
-livepatch: '$MOD_REPLACE': completing unpatching transition
-livepatch: '$MOD_REPLACE': unpatching complete
+transition: '$MOD_REPLACE': initializing unpatching transition
+transition: '$MOD_REPLACE': starting unpatching transition
+transition: '$MOD_REPLACE': completing unpatching transition
+transition: '$MOD_REPLACE': unpatching complete
 % rmmod $MOD_REPLACE
 $MOD_LIVEPATCH1: this has been live patched
 % echo 0 > /sys/kernel/livepatch/$MOD_LIVEPATCH1/enabled
-livepatch: '$MOD_LIVEPATCH1': initializing unpatching transition
-livepatch: '$MOD_LIVEPATCH1': starting unpatching transition
-livepatch: '$MOD_LIVEPATCH1': completing unpatching transition
-livepatch: '$MOD_LIVEPATCH1': unpatching complete
+transition: '$MOD_LIVEPATCH1': initializing unpatching transition
+transition: '$MOD_LIVEPATCH1': starting unpatching transition
+transition: '$MOD_LIVEPATCH1': completing unpatching transition
+transition: '$MOD_LIVEPATCH1': unpatching complete
 % rmmod $MOD_LIVEPATCH1"
 
 
@@ -158,41 +158,41 @@ grep 'live patched' /proc/meminfo > /dev/kmsg
 
 check_result "% insmod test_modules/$MOD_LIVEPATCH1.ko
 livepatch: enabling patch '$MOD_LIVEPATCH1'
-livepatch: '$MOD_LIVEPATCH1': initializing patching transition
-livepatch: '$MOD_LIVEPATCH1': starting patching transition
-livepatch: '$MOD_LIVEPATCH1': completing patching transition
-livepatch: '$MOD_LIVEPATCH1': patching complete
+transition: '$MOD_LIVEPATCH1': initializing patching transition
+transition: '$MOD_LIVEPATCH1': starting patching transition
+transition: '$MOD_LIVEPATCH1': completing patching transition
+transition: '$MOD_LIVEPATCH1': patching complete
 $MOD_LIVEPATCH1: this has been live patched
 % insmod test_modules/$MOD_LIVEPATCH2.ko
 livepatch: enabling patch '$MOD_LIVEPATCH2'
-livepatch: '$MOD_LIVEPATCH2': initializing patching transition
-livepatch: '$MOD_LIVEPATCH2': starting patching transition
-livepatch: '$MOD_LIVEPATCH2': completing patching transition
-livepatch: '$MOD_LIVEPATCH2': patching complete
+transition: '$MOD_LIVEPATCH2': initializing patching transition
+transition: '$MOD_LIVEPATCH2': starting patching transition
+transition: '$MOD_LIVEPATCH2': completing patching transition
+transition: '$MOD_LIVEPATCH2': patching complete
 % insmod test_modules/$MOD_LIVEPATCH3.ko
 livepatch: enabling patch '$MOD_LIVEPATCH3'
-livepatch: '$MOD_LIVEPATCH3': initializing patching transition
+transition: '$MOD_LIVEPATCH3': initializing patching transition
 $MOD_LIVEPATCH3: pre_patch_callback: vmlinux
-livepatch: '$MOD_LIVEPATCH3': starting patching transition
-livepatch: '$MOD_LIVEPATCH3': completing patching transition
+transition: '$MOD_LIVEPATCH3': starting patching transition
+transition: '$MOD_LIVEPATCH3': completing patching transition
 $MOD_LIVEPATCH3: post_patch_callback: vmlinux
-livepatch: '$MOD_LIVEPATCH3': patching complete
+transition: '$MOD_LIVEPATCH3': patching complete
 % insmod test_modules/$MOD_REPLACE.ko replace=1
 livepatch: enabling patch '$MOD_REPLACE'
-livepatch: '$MOD_REPLACE': initializing patching transition
-livepatch: '$MOD_REPLACE': starting patching transition
-livepatch: '$MOD_REPLACE': completing patching transition
-livepatch: '$MOD_REPLACE': patching complete
+transition: '$MOD_REPLACE': initializing patching transition
+transition: '$MOD_REPLACE': starting patching transition
+transition: '$MOD_REPLACE': completing patching transition
+transition: '$MOD_REPLACE': patching complete
 $MOD_REPLACE: this has been live patched
 % rmmod $MOD_LIVEPATCH3
 % rmmod $MOD_LIVEPATCH2
 % rmmod $MOD_LIVEPATCH1
 $MOD_REPLACE: this has been live patched
 % echo 0 > /sys/kernel/livepatch/$MOD_REPLACE/enabled
-livepatch: '$MOD_REPLACE': initializing unpatching transition
-livepatch: '$MOD_REPLACE': starting unpatching transition
-livepatch: '$MOD_REPLACE': completing unpatching transition
-livepatch: '$MOD_REPLACE': unpatching complete
+transition: '$MOD_REPLACE': initializing unpatching transition
+transition: '$MOD_REPLACE': starting unpatching transition
+transition: '$MOD_REPLACE': completing unpatching transition
+transition: '$MOD_REPLACE': unpatching complete
 % rmmod $MOD_REPLACE"
 
 
