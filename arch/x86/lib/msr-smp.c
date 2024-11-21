@@ -4,6 +4,15 @@
 #include <linux/smp.h>
 #include <linux/completion.h>
 #include <asm/msr.h>
+#include <asm/topology.h>
+
+static void adjust_host_aperfmperf(u32 msr_no, struct msr *reg)
+{
+	if (msr_no == MSR_IA32_APERF)
+		reg->q += this_cpu_read(host_aperf_offset);
+	else if (msr_no == MSR_IA32_MPERF)
+		reg->q += this_cpu_read(host_mperf_offset);
+}
 
 static void __rdmsr_on_cpu(void *info)
 {
@@ -16,6 +25,7 @@ static void __rdmsr_on_cpu(void *info)
 		reg = &rv->reg;
 
 	rdmsr(rv->msr_no, reg->l, reg->h);
+	adjust_host_aperfmperf(rv->msr_no, reg);
 }
 
 static void __wrmsr_on_cpu(void *info)
@@ -154,6 +164,7 @@ static void __rdmsr_safe_on_cpu(void *info)
 	struct msr_info_completion *rv = info;
 
 	rv->msr.err = rdmsr_safe(rv->msr.msr_no, &rv->msr.reg.l, &rv->msr.reg.h);
+	adjust_host_aperfmperf(rv->msr.msr_no, &rv->msr.reg);
 	complete(&rv->done);
 }
 
