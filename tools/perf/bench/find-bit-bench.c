@@ -104,7 +104,7 @@ static int do_for_each_set_bit(unsigned int num_bits)
 			update_stats(&tb_time_stats, runtime_us);
 		}
 
-		printf("%d operations %d bits set of %d bits\n",
+		printf("%u operations %u bits set of %u bits\n",
 			inner_iterations, set_bits, num_bits);
 		time_average = avg_stats(&fb_time_stats);
 		time_stddev = stddev_stats(&fb_time_stats);
