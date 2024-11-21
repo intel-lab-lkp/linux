@@ -14,13 +14,13 @@
 enum fuse_ring_req_state {
 	FRRS_INVALID = 0,
 
-	/* ring entry received from userspace and it being processed */
+	/* The ring entry received from userspace and it being processed */
 	FRRS_COMMIT,
 
-	/* The ring request waits for a new fuse request */
+	/* The ring entry is waiting for new fuse requests */
 	FRRS_WAIT,
 
-	/* request is in or on the way to user space */
+	/* The ring entry is in or on the way to user space */
 	FRRS_USERSPACE,
 };
 
