@@ -23,9 +23,9 @@ EQL Driver: Serial IP Load Balancing HOWTO
 
   Which is worse? A huge fee for a 56K leased line or two phone lines?
   It's probably the former.  If you find yourself craving more bandwidth,
-  and have a ISP that is flexible, it is now possible to bind modems
+  and have an ISP that is flexible, it is now possible to bind modems
   together to work as one point-to-point link to increase your
-  bandwidth.  All without having to have a special black box on either
+  bandwidth. All without having to have a special black box on either
   side.
 
 
@@ -288,7 +288,7 @@ EQL Driver: Serial IP Load Balancing HOWTO
   the load across two or more Cirrus chips.
 
   The good news is that one gets nearly the full advantage of the
-  second, third, and fourth line's bandwidth.  (The bad news is
+  second, third, and fourth line's bandwidth. (The bad news is
   that the connection establishment seemed fragile for the higher
   speeds.  Once established, the connection seemed robust enough.)
 
