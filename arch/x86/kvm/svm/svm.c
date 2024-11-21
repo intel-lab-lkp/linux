@@ -142,6 +142,8 @@ static const struct svm_direct_access_msrs {
 	{ .index = X2APIC_MSR(APIC_TMICT),		.always = false },
 	{ .index = X2APIC_MSR(APIC_TMCCT),		.always = false },
 	{ .index = X2APIC_MSR(APIC_TDCR),		.always = false },
+	{ .index = MSR_IA32_APERF,			.always = false },
+	{ .index = MSR_IA32_MPERF,			.always = false },
 	{ .index = MSR_INVALID,				.always = false },
 };
 
@@ -1231,6 +1233,11 @@ static inline void init_vmcb_after_set_cpuid(struct kvm_vcpu *vcpu)
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SYSENTER_EIP, 1, 1);
 		set_msr_interception(vcpu, svm->msrpm, MSR_IA32_SYSENTER_ESP, 1, 1);
 	}
+
+	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_APERF,
+			     guest_can_use(vcpu, X86_FEATURE_APERFMPERF), 0);
+	set_msr_interception(vcpu, svm->msrpm, MSR_IA32_MPERF,
+			     guest_can_use(vcpu, X86_FEATURE_APERFMPERF), 0);
 }
 
 static void init_vmcb(struct kvm_vcpu *vcpu)
