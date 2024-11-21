@@ -227,6 +227,9 @@ struct cxl_regs {
 	struct_group_tagged(cxl_pmu_regs, pmu_regs,
 		void __iomem *pmu;
 	);
+	struct_group_tagged(cxl_hmu_regs, hmu_regs,
+		void __iomem *hmu;
+	);
 
 	/*
 	 * RCH downstream port specific RAS register
@@ -292,6 +295,7 @@ int cxl_map_component_regs(const struct cxl_register_map *map,
 			   unsigned long map_mask);
 int cxl_map_device_regs(const struct cxl_register_map *map,
 			struct cxl_device_regs *regs);
+int cxl_map_hmu_regs(struct cxl_register_map *map, struct cxl_hmu_regs *regs);
 int cxl_map_pmu_regs(struct cxl_register_map *map, struct cxl_pmu_regs *regs);
 
 enum cxl_regloc_type;

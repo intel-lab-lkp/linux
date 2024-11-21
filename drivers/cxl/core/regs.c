@@ -401,6 +401,20 @@ int cxl_map_pmu_regs(struct cxl_register_map *map, struct cxl_pmu_regs *regs)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_map_pmu_regs, CXL);
 
+int cxl_map_hmu_regs(struct cxl_register_map *map, struct cxl_hmu_regs *regs)
+{
+	struct device *dev = map->host;
+	resource_size_t phys_addr;
+
+	phys_addr = map->resource;
+	regs->hmu = devm_cxl_iomap_block(dev, phys_addr, map->max_size);
+	if (!regs->hmu)
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_map_hmu_regs, CXL);
+
 static int cxl_map_regblock(struct cxl_register_map *map)
 {
 	struct device *host = map->host;
