@@ -11204,9 +11204,16 @@ int kvm_arch_vcpu_runnable(struct kvm_vcpu *vcpu)
 
 void kvm_vcpu_make_runnable(struct kvm_vcpu *vcpu)
 {
-	if (vcpu->arch.mp_state == KVM_MP_STATE_HALTED ||
-	    vcpu->arch.mp_state == KVM_MP_STATE_AP_RESET_HOLD)
+	switch (vcpu->arch.mp_state) {
+	case KVM_MP_STATE_HALTED:
+		if (guest_can_use(vcpu, X86_FEATURE_APERFMPERF) &&
+		    vcpu->wants_to_run)
+			kvm_load_guest_aperfmperf(vcpu, false);
+		fallthrough;
+	case KVM_MP_STATE_AP_RESET_HOLD:
 		vcpu->arch.pv.pv_unhalted = false;
+		break;
+	}
 	vcpu->arch.mp_state = KVM_MP_STATE_RUNNABLE;
 	vcpu->arch.apf.halted = false;
 }
