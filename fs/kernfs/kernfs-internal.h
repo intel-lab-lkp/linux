@@ -64,11 +64,14 @@ struct kernfs_root {
  *
  * Return: the kernfs_root @kn belongs to.
  */
-static inline struct kernfs_root *kernfs_root(struct kernfs_node *kn)
+static inline struct kernfs_root *kernfs_root(const struct kernfs_node *kn)
 {
+	const struct kernfs_node *knp;
 	/* if parent exists, it's always a dir; otherwise, @sd is a dir */
-	if (kn->parent)
-		kn = kn->parent;
+	guard(rcu)();
+	knp = rcu_dereference(kn->parent);
+	if (knp)
+		kn = knp;
 	return kn->dir.root;
 }
 
@@ -96,6 +99,21 @@ struct kernfs_super_info {
 	struct list_head	node;
 };
 #define kernfs_info(SB) ((struct kernfs_super_info *)(SB->s_fs_info))
+
+static inline bool kernfs_root_is_locked(const struct kernfs_node *kn)
+{
+	return lockdep_is_held(&kernfs_root(kn)->kernfs_rwsem);
+}
+
+static inline const char *kernfs_rcu_get_name(const struct kernfs_node *kn)
+{
+	return rcu_dereference_check(kn->name, kernfs_root_is_locked(kn));
+}
+
+static inline struct kernfs_node *kernfs_rcu_get_parent(const struct kernfs_node *kn)
+{
+	return rcu_dereference_check(kn->parent, kernfs_root_is_locked(kn));
+}
 
 static inline struct kernfs_node *kernfs_dentry_node(struct dentry *dentry)
 {
