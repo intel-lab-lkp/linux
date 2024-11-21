@@ -168,6 +168,7 @@ static void mtk_mmsys_update_bits(struct mtk_mmsys *mmsys, u32 offset, u32 mask,
 
 	if (mmsys->cmdq_base.size && cmdq_pkt) {
 		ret = cmdq_pkt_write_mask(cmdq_pkt, mmsys->cmdq_base.subsys,
+					  mmsys->cmdq_base.pa_base,
 					  mmsys->cmdq_base.offset + offset, val,
 					  mask);
 		if (ret)

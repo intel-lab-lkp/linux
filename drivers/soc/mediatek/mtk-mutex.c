@@ -971,7 +971,7 @@ int mtk_mutex_enable_by_cmdq(struct mtk_mutex *mutex, void *pkt)
 		return -ENODEV;
 	}
 
-	cmdq_pkt_write(cmdq_pkt, mtx->cmdq_reg.subsys,
+	cmdq_pkt_write(cmdq_pkt, mtx->cmdq_reg.subsys, mtx->cmdq_reg.pa_base,
 		       mtx->addr + DISP_REG_MUTEX_EN(mutex->id), 1);
 	return 0;
 }
