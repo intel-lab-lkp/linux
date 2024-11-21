@@ -12476,6 +12476,13 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 
 		__kvm_set_xcr(vcpu, 0, XFEATURE_MASK_FP);
 		__kvm_set_msr(vcpu, MSR_IA32_XSS, 0, true);
+
+		/*
+		 * IA32_MPERF should start running now. Record the host TSC
+		 * so that we can add the host TSC delta the next time that
+		 * we load the guest [am]perf values into the hardware MSRs.
+		 */
+		vcpu->arch.aperfmperf.host_tsc = rdtsc();
 	}
 
 	/* All GPRs except RDX (handled below) are zeroed on RESET/INIT. */

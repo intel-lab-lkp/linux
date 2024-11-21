@@ -738,6 +738,13 @@ struct kvm_queued_exception {
 	bool has_payload;
 };
 
+struct kvm_vcpu_aperfmperf {
+	u64 guest_aperf;
+	u64 guest_mperf;
+	u64 host_tsc;
+	bool loaded_while_running;
+};
+
 struct kvm_vcpu_arch {
 	/*
 	 * rip and regs accesses must go through
@@ -1040,6 +1047,8 @@ struct kvm_vcpu_arch {
 #if IS_ENABLED(CONFIG_HYPERV)
 	hpa_t hv_root_tdp;
 #endif
+
+	struct kvm_vcpu_aperfmperf aperfmperf;
 };
 
 struct kvm_lpage_info {
