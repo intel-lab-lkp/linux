@@ -722,15 +722,26 @@ disable_iface_clk:
 	return ret;
 }
 
+#define QUSB2PHY_HPM_LOAD 30000 /*uA*/
+
 static int qusb2_phy_init(struct phy *phy)
 {
 	struct qusb2_phy *qphy = phy_get_drvdata(phy);
 	const struct qusb2_phy_cfg *cfg = qphy->cfg;
 	unsigned int val = 0;
 	unsigned int clk_scheme;
-	int ret;
+	int ret, i;
 
 	dev_vdbg(&phy->dev, "%s(): Initializing QUSB2 phy\n", __func__);
+
+	/* set the current load */
+	for (i = 0; i < ARRAY_SIZE(qphy->vregs); i++) {
+		ret = regulator_set_load(qphy->vregs[i].consumer, QUSB2PHY_HPM_LOAD);
+		if (ret) {
+			dev_err(&phy->dev, "failed to set load at %s\n", qphy->vregs[i].supply);
+			return ret;
+		}
+	}
 
 	/* turn on regulator supplies */
 	ret = regulator_bulk_enable(ARRAY_SIZE(qphy->vregs), qphy->vregs);
