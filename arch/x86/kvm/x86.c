@@ -1919,6 +1919,22 @@ static int kvm_set_msr_ignored_check(struct kvm_vcpu *vcpu,
 }
 
 /*
+ * Add elapsed TSC ticks to guest IA32_MPERF while vCPU is in C0 but
+ * not running. Uses TSC instead of host MPERF to include time when
+ * physical CPU is in lower C-states, as guest MPERF should count
+ * whenever vCPU is in C0.  Assumes TSC and MPERF frequencies match.
+ */
+static void kvm_accumulate_background_guest_mperf(struct kvm_vcpu *vcpu)
+{
+	u64 now = rdtsc();
+	s64 tsc_delta = now - vcpu->arch.aperfmperf.host_tsc;
+
+	if (tsc_delta > 0)
+		vcpu->arch.aperfmperf.guest_mperf += tsc_delta;
+	vcpu->arch.aperfmperf.host_tsc = now;
+}
+
+/*
  * Read the MSR specified by @index into @data.  Select MSR specific fault
  * checks are bypassed if @host_initiated is %true.
  * Returns 0 on success, non-0 otherwise.
@@ -4980,6 +4996,19 @@ static bool need_emulate_wbinvd(struct kvm_vcpu *vcpu)
 	return kvm_arch_has_noncoherent_dma(vcpu->kvm);
 }
 
+static void kvm_load_guest_aperfmperf(struct kvm_vcpu *vcpu, bool update_mperf)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	if (update_mperf)
+		kvm_accumulate_background_guest_mperf(vcpu);
+	set_guest_aperf(vcpu->arch.aperfmperf.guest_aperf);
+	set_guest_mperf(vcpu->arch.aperfmperf.guest_mperf);
+	vcpu->arch.aperfmperf.loaded_while_running = true;
+	local_irq_restore(flags);
+}
+
 void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
@@ -5038,6 +5067,12 @@ void kvm_arch_vcpu_load(struct kvm_vcpu *vcpu, int cpu)
 			kvm_make_request(KVM_REQ_MIGRATE_TIMER, vcpu);
 		vcpu->cpu = cpu;
 	}
+
+	if (vcpu->wants_to_run &&
+	    guest_can_use(vcpu, X86_FEATURE_APERFMPERF) &&
+	    (vcpu->scheduled_out ? vcpu->arch.aperfmperf.loaded_while_running :
+	     (vcpu->arch.mp_state != KVM_MP_STATE_HALTED)))
+		kvm_load_guest_aperfmperf(vcpu, true);
 
 	kvm_make_request(KVM_REQ_STEAL_UPDATE, vcpu);
 }
