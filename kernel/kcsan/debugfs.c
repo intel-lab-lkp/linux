@@ -166,10 +166,10 @@ static ssize_t insert_report_filterlist(const char *func)
 	} else if (report_filterlist.used == report_filterlist.size) {
 		/* resize filterlist */
 		size_t new_size = report_filterlist.size * 2;
-		unsigned long *new_addrs =
-			krealloc(report_filterlist.addrs,
-				 new_size * sizeof(unsigned long), GFP_ATOMIC);
+		unsigned long *new_addrs;
 
+		new_addrs = krealloc_array(report_filterlist.addrs,
+					   new_size, sizeof(*new_addrs), GFP_ATOMIC);
 		if (new_addrs == NULL) {
 			/* leave filterlist itself untouched */
 			ret = -ENOMEM;
