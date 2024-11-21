@@ -48,17 +48,17 @@ vmw_user_context_base_to_res(struct ttm_base_object *base);
 
 static int vmw_gb_context_create(struct vmw_resource *res);
 static int vmw_gb_context_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf);
+			       struct vmw_validate_buffer *val_buf);
 static int vmw_gb_context_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf);
+				 struct vmw_validate_buffer *val_buf);
 static int vmw_gb_context_destroy(struct vmw_resource *res);
 static int vmw_dx_context_create(struct vmw_resource *res);
 static int vmw_dx_context_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf);
+			       struct vmw_validate_buffer *val_buf);
 static int vmw_dx_context_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf);
+				 struct vmw_validate_buffer *val_buf);
 static int vmw_dx_context_destroy(struct vmw_resource *res);
 
 static const struct vmw_user_resource_conv user_context_conv = {
@@ -339,7 +339,7 @@ out_no_id:
 }
 
 static int vmw_gb_context_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf)
+			       struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct {
@@ -367,7 +367,7 @@ static int vmw_gb_context_bind(struct vmw_resource *res,
 
 static int vmw_gb_context_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf)
+				 struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct ttm_buffer_object *bo = val_buf->bo;
@@ -506,7 +506,7 @@ out_no_id:
 }
 
 static int vmw_dx_context_bind(struct vmw_resource *res,
-			       struct ttm_validate_buffer *val_buf)
+			       struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct {
@@ -576,7 +576,7 @@ void vmw_dx_context_scrub_cotables(struct vmw_resource *ctx,
 
 static int vmw_dx_context_unbind(struct vmw_resource *res,
 				 bool readback,
-				 struct ttm_validate_buffer *val_buf)
+				 struct vmw_validate_buffer *val_buf)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct ttm_buffer_object *bo = val_buf->bo;

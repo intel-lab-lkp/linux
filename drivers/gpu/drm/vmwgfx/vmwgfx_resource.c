@@ -130,10 +130,9 @@ static void vmw_resource_release(struct kref *kref)
 		BUG_ON(ret);
 		if (vmw_resource_mob_attached(res) &&
 		    res->func->unbind != NULL) {
-			struct ttm_validate_buffer val_buf;
+			struct vmw_validate_buffer val_buf;
 
 			val_buf.bo = bo;
-			val_buf.num_shared = 0;
 			res->func->unbind(res, false, &val_buf);
 		}
 		res->guest_memory_size = false;
@@ -370,7 +369,7 @@ out_no_bo:
  * should be retried once resources have been freed up.
  */
 static int vmw_resource_do_validate(struct vmw_resource *res,
-				    struct ttm_validate_buffer *val_buf,
+				    struct vmw_validate_buffer *val_buf,
 				    bool dirtying)
 {
 	int ret = 0;
@@ -614,14 +613,13 @@ int vmw_resource_reserve(struct vmw_resource *res, bool interruptible,
 static int vmw_resource_do_evict(struct ww_acquire_ctx *ticket,
 				 struct vmw_resource *res, bool interruptible)
 {
-	struct ttm_validate_buffer val_buf;
+	struct vmw_validate_buffer val_buf;
 	const struct vmw_res_func *func = res->func;
 	int ret;
 
 	BUG_ON(!func->may_evict);
 
 	val_buf.bo = NULL;
-	val_buf.num_shared = 0;
 	ret = vmw_resource_check_buffer(ticket, res, interruptible, &val_buf.bo);
 	if (unlikely(ret != 0))
 		return ret;
@@ -668,14 +666,13 @@ int vmw_resource_validate(struct vmw_resource *res, bool intr,
 	struct vmw_resource *evict_res;
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct list_head *lru_list = &dev_priv->res_lru[res->func->res_type];
-	struct ttm_validate_buffer val_buf;
+	struct vmw_validate_buffer val_buf;
 	unsigned err_count = 0;
 
 	if (!res->func->create)
 		return 0;
 
 	val_buf.bo = NULL;
-	val_buf.num_shared = 0;
 	if (res->guest_memory_bo)
 		val_buf.bo = &res->guest_memory_bo->tbo;
 	do {
@@ -742,9 +739,8 @@ out_no_validate:
  */
 void vmw_resource_unbind_list(struct vmw_bo *vbo)
 {
-	struct ttm_validate_buffer val_buf = {
+	struct vmw_validate_buffer val_buf = {
 		.bo = &vbo->tbo,
-		.num_shared = 0
 	};
 
 	dma_resv_assert_held(vbo->tbo.base.resv);
