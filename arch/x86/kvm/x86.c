@@ -11904,6 +11904,18 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 	     mp_state->mp_state == KVM_MP_STATE_INIT_RECEIVED))
 		goto out;
 
+	if (kvm_vcpu_has_run(vcpu) &&
+	    guest_can_use(vcpu, X86_FEATURE_APERFMPERF)) {
+		if (mp_state->mp_state == KVM_MP_STATE_HALTED &&
+		    vcpu->arch.mp_state != KVM_MP_STATE_HALTED) {
+			kvm_accumulate_background_guest_mperf(vcpu);
+			vcpu->arch.aperfmperf.loaded_while_running = false;
+		} else if (mp_state->mp_state != KVM_MP_STATE_HALTED &&
+			   vcpu->arch.mp_state == KVM_MP_STATE_HALTED) {
+			vcpu->arch.aperfmperf.host_tsc = rdtsc();
+		}
+	}
+
 	if (mp_state->mp_state == KVM_MP_STATE_SIPI_RECEIVED) {
 		vcpu->arch.mp_state = KVM_MP_STATE_INIT_RECEIVED;
 		set_bit(KVM_APIC_SIPI, &vcpu->arch.apic->pending_events);
