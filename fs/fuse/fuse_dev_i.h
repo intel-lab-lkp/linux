@@ -7,7 +7,7 @@
 #define _FS_FUSE_DEV_I_H
 
 #include <linux/types.h>
-
+#include <linux/fs.h>
 
 /* Ordinary requests have even IDs, while interrupts IDs are odd */
 #define FUSE_INT_REQ_BIT (1ULL << 0)
@@ -15,6 +15,8 @@
 
 struct fuse_arg;
 struct fuse_args;
+struct fuse_pqueue;
+struct fuse_req;
 
 struct fuse_copy_state {
 	int write;
@@ -43,6 +45,9 @@ static inline struct fuse_dev *fuse_get_dev(struct file *file)
 	 */
 	return READ_ONCE(file->private_data);
 }
+
+unsigned int fuse_req_hash(u64 unique);
+struct fuse_req *fuse_request_find(struct fuse_pqueue *fpq, u64 unique);
 
 void fuse_dev_end_requests(struct list_head *head);
 
