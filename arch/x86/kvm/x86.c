@@ -5139,6 +5139,21 @@ static void kvm_steal_time_set_preempted(struct kvm_vcpu *vcpu)
 	mark_page_dirty_in_slot(vcpu->kvm, ghc->memslot, gpa_to_gfn(ghc->gpa));
 }
 
+static void kvm_put_guest_aperfmperf(struct kvm_vcpu *vcpu)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	if (vcpu->arch.aperfmperf.loaded_while_running) {
+		rdmsrl(MSR_IA32_APERF, vcpu->arch.aperfmperf.guest_aperf);
+		rdmsrl(MSR_IA32_MPERF, vcpu->arch.aperfmperf.guest_mperf);
+		vcpu->arch.aperfmperf.host_tsc = rdtsc();
+		if (vcpu->arch.mp_state == KVM_MP_STATE_HALTED)
+			vcpu->arch.aperfmperf.loaded_while_running = false;
+	}
+	local_irq_restore(flags);
+}
+
 void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 {
 	int idx;
@@ -11363,10 +11378,13 @@ static int __kvm_emulate_halt(struct kvm_vcpu *vcpu, int state, int reason)
 	 */
 	++vcpu->stat.halt_exits;
 	if (lapic_in_kernel(vcpu)) {
-		if (kvm_vcpu_has_events(vcpu))
+		if (kvm_vcpu_has_events(vcpu)) {
 			vcpu->arch.pv.pv_unhalted = false;
-		else
+		} else {
 			vcpu->arch.mp_state = state;
+			if (guest_can_use(vcpu, X86_FEATURE_APERFMPERF))
+				kvm_put_guest_aperfmperf(vcpu);
+		}
 		return 1;
 	} else {
 		vcpu->run->exit_reason = reason;
