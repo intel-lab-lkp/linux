@@ -186,6 +186,8 @@ static u32 vmx_possible_passthrough_msrs[MAX_POSSIBLE_PASSTHROUGH_MSRS] = {
 	MSR_CORE_C3_RESIDENCY,
 	MSR_CORE_C6_RESIDENCY,
 	MSR_CORE_C7_RESIDENCY,
+	MSR_IA32_APERF,
+	MSR_IA32_MPERF,
 };
 
 /*
@@ -7870,6 +7872,11 @@ void vmx_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 	if (boot_cpu_has(X86_FEATURE_FLUSH_L1D))
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_FLUSH_CMD, MSR_TYPE_W,
 					  !guest_cpuid_has(vcpu, X86_FEATURE_FLUSH_L1D));
+
+	vmx_set_intercept_for_msr(vcpu, MSR_IA32_APERF, MSR_TYPE_R,
+				  !guest_can_use(vcpu, X86_FEATURE_APERFMPERF));
+	vmx_set_intercept_for_msr(vcpu, MSR_IA32_MPERF, MSR_TYPE_R,
+				  !guest_can_use(vcpu, X86_FEATURE_APERFMPERF));
 
 	set_cr4_guest_host_mask(vmx);
 
