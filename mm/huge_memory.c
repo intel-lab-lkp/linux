@@ -3014,9 +3014,12 @@ void vma_adjust_trans_huge(struct vm_area_struct *vma,
 	 */
 	if (adjust_next > 0) {
 		struct vm_area_struct *next = find_vma(vma->vm_mm, vma->vm_end);
-		unsigned long nstart = next->vm_start;
-		nstart += adjust_next;
-		split_huge_pmd_if_needed(next, nstart);
+
+		if (likely(next)) {
+			unsigned long nstart = next->vm_start;
+			nstart += adjust_next;
+			split_huge_pmd_if_needed(next, nstart);
+		}
 	}
 }
 
