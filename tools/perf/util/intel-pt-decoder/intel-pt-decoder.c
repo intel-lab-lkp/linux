@@ -883,7 +883,7 @@ static int intel_pt_calc_cyc_cb(struct intel_pt_pkt_info *pkt_info)
 			return 1;
 		timestamp = pkt_info->packet.payload |
 			    (data->timestamp & (0xffULL << 56));
-		if (data->from_mtc && timestamp < data->timestamp &&
+		if (timestamp < data->timestamp &&
 		    data->timestamp - timestamp < decoder->tsc_slip)
 			return 1;
 		if (timestamp < data->timestamp)
