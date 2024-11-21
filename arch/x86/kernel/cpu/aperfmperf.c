@@ -40,8 +40,8 @@ static void init_counter_refs(void)
 {
 	u64 aperf, mperf;
 
-	rdmsrl(MSR_IA32_APERF, aperf);
-	rdmsrl(MSR_IA32_MPERF, mperf);
+	aperf = get_host_aperf();
+	mperf = get_host_mperf();
 
 	this_cpu_write(cpu_samples.aperf, aperf);
 	this_cpu_write(cpu_samples.mperf, mperf);
@@ -93,6 +93,20 @@ void arch_set_max_freq_ratio(bool turbo_disabled)
 					arch_turbo_freq_ratio;
 }
 EXPORT_SYMBOL_GPL(arch_set_max_freq_ratio);
+
+u64 get_host_aperf(void)
+{
+	WARN_ON_ONCE(!irqs_disabled());
+	return native_read_msr(MSR_IA32_APERF);
+}
+EXPORT_SYMBOL_GPL(get_host_aperf);
+
+u64 get_host_mperf(void)
+{
+	WARN_ON_ONCE(!irqs_disabled());
+	return native_read_msr(MSR_IA32_MPERF);
+}
+EXPORT_SYMBOL_GPL(get_host_mperf);
 
 static bool __init turbo_disabled(void)
 {
@@ -474,8 +488,8 @@ void arch_scale_freq_tick(void)
 	if (!cpu_feature_enabled(X86_FEATURE_APERFMPERF))
 		return;
 
-	rdmsrl(MSR_IA32_APERF, aperf);
-	rdmsrl(MSR_IA32_MPERF, mperf);
+	aperf = get_host_aperf();
+	mperf = get_host_mperf();
 	acnt = aperf - s->aperf;
 	mcnt = mperf - s->mperf;
 

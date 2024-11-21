@@ -27,6 +27,7 @@
 #include <linux/vmalloc.h>
 #include <linux/pm_qos.h>
 #include <linux/bitfield.h>
+#include <linux/topology.h>
 #include <trace/events/power.h>
 
 #include <asm/cpu.h>
@@ -2423,8 +2424,8 @@ static inline bool intel_pstate_sample(struct cpudata *cpu, u64 time)
 	u64 tsc;
 
 	local_irq_save(flags);
-	rdmsrl(MSR_IA32_APERF, aperf);
-	rdmsrl(MSR_IA32_MPERF, mperf);
+	aperf = get_host_aperf();
+	mperf = get_host_mperf();
 	tsc = rdtsc();
 	if (cpu->prev_mperf == mperf || cpu->prev_tsc == tsc) {
 		local_irq_restore(flags);
