@@ -41,16 +41,16 @@ unload_lp $MOD_SYSCALL
 
 check_result "% insmod test_modules/$MOD_SYSCALL.ko klp_pids=$pid_list
 livepatch: enabling patch '$MOD_SYSCALL'
-livepatch: '$MOD_SYSCALL': initializing patching transition
-livepatch: '$MOD_SYSCALL': starting patching transition
-livepatch: '$MOD_SYSCALL': completing patching transition
-livepatch: '$MOD_SYSCALL': patching complete
+transition: '$MOD_SYSCALL': initializing patching transition
+transition: '$MOD_SYSCALL': starting patching transition
+transition: '$MOD_SYSCALL': completing patching transition
+transition: '$MOD_SYSCALL': patching complete
 $MOD_SYSCALL: Remaining not livepatched processes: 0
 % echo 0 > /sys/kernel/livepatch/$MOD_SYSCALL/enabled
-livepatch: '$MOD_SYSCALL': initializing unpatching transition
-livepatch: '$MOD_SYSCALL': starting unpatching transition
-livepatch: '$MOD_SYSCALL': completing unpatching transition
-livepatch: '$MOD_SYSCALL': unpatching complete
+transition: '$MOD_SYSCALL': initializing unpatching transition
+transition: '$MOD_SYSCALL': starting unpatching transition
+transition: '$MOD_SYSCALL': completing unpatching transition
+transition: '$MOD_SYSCALL': unpatching complete
 % rmmod $MOD_SYSCALL"
 
 exit 0
