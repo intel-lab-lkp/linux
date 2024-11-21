@@ -135,6 +135,22 @@ void set_guest_mperf(u64 guest_mperf)
 }
 EXPORT_SYMBOL_GPL(set_guest_mperf);
 
+void restore_host_aperf(void)
+{
+	WARN_ON_ONCE(!irqs_disabled());
+	wrmsrl(MSR_IA32_APERF, get_host_aperf());
+	this_cpu_write(host_aperf_offset, 0);
+}
+EXPORT_SYMBOL_GPL(restore_host_aperf);
+
+void restore_host_mperf(void)
+{
+	WARN_ON_ONCE(!irqs_disabled());
+	wrmsrl(MSR_IA32_MPERF, get_host_mperf());
+	this_cpu_write(host_mperf_offset, 0);
+}
+EXPORT_SYMBOL_GPL(restore_host_mperf);
+
 static bool __init turbo_disabled(void)
 {
 	u64 misc_en;

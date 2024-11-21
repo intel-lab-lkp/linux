@@ -309,6 +309,8 @@ extern u64 get_host_aperf(void);
 extern u64 get_host_mperf(void);
 extern void set_guest_aperf(u64 aperf);
 extern void set_guest_mperf(u64 mperf);
+extern void restore_host_aperf(void);
+extern void restore_host_mperf(void);
 
 extern void arch_scale_freq_tick(void);
 #define arch_scale_freq_tick arch_scale_freq_tick
