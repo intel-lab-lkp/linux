@@ -146,4 +146,10 @@ config CXL_REGION_INVALIDATION_TEST
 	  If unsure, or if this kernel is meant for production environments,
 	  say N.
 
+config CXL_HMU
+       tristate "CXL: Hotness Monitoring Unit Driver"
+       depends on PERF_EVENTS
+       help
+	 Read data out from the CXL hotness units and provide it to userspace
+	 via the perf auxbuffer framework.
 endif

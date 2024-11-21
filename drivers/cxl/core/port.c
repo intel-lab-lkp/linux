@@ -74,6 +74,8 @@ static int cxl_device_id(const struct device *dev)
 		return CXL_DEVICE_REGION;
 	if (dev->type == &cxl_pmu_type)
 		return CXL_DEVICE_PMU;
+	if (dev->type == &cxl_hmu_type)
+		return CXL_DEVICE_HMU;
 	return 0;
 }
 
