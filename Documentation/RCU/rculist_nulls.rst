@@ -13,7 +13,7 @@ Please read the basics in listRCU.rst.
 Using 'nulls'
 =============
 
-Using special makers (called 'nulls') is a convenient way
+Using special markers (called 'nulls') is a convenient way
 to solve following problem.
 
 Without 'nulls', a typical RCU linked list managing objects which are
