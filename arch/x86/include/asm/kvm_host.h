@@ -1041,6 +1041,7 @@ struct kvm_vcpu_arch {
 #if IS_ENABLED(CONFIG_HYPERV)
 	hpa_t hv_root_tdp;
 #endif
+	DECLARE_BITMAP(ioapic_pending_vectors, 256);
 };
 
 struct kvm_lpage_info {

@@ -284,6 +284,8 @@ void kvm_ioapic_scan_entry(struct kvm_vcpu *vcpu, ulong *ioapic_handled_vectors)
 
 	spin_lock(&ioapic->lock);
 
+	bitmap_zero(vcpu->arch.ioapic_pending_vectors, 256);
+
 	/* Make sure we see any missing RTC EOI */
 	if (test_bit(vcpu->vcpu_id, dest_map->map))
 		__set_bit(dest_map->vectors[vcpu->vcpu_id],
@@ -297,10 +299,15 @@ void kvm_ioapic_scan_entry(struct kvm_vcpu *vcpu, ulong *ioapic_handled_vectors)
 			u16 dm = kvm_lapic_irq_dest_mode(!!e->fields.dest_mode);
 
 			if (kvm_apic_match_dest(vcpu, NULL, APIC_DEST_NOSHORT,
-						e->fields.dest_id, dm) ||
-			    kvm_apic_pending_eoi(vcpu, e->fields.vector))
+						e->fields.dest_id, dm))
 				__set_bit(e->fields.vector,
 					  ioapic_handled_vectors);
+			else if (kvm_apic_pending_eoi(vcpu, e->fields.vector)) {
+				__set_bit(e->fields.vector,
+					  ioapic_handled_vectors);
+				__set_bit(e->fields.vector,
+					  vcpu->arch.ioapic_pending_vectors);
+			}
 		}
 	}
 	spin_unlock(&ioapic->lock);

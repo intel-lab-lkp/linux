@@ -5710,6 +5710,16 @@ static int handle_apic_eoi_induced(struct kvm_vcpu *vcpu)
 
 	/* EOI-induced VM exit is trap-like and thus no need to adjust IP */
 	kvm_apic_set_eoi_accelerated(vcpu, vector);
+
+	/* When there are instances where ioapic_handled_vectors is
+	 * set due to pending interrupts, clean up the record and the
+	 * corresponding bit after the interrupt is completed.
+	 */
+	if (test_bit(vector, vcpu->arch.ioapic_pending_vectors)) {
+		clear_bit(vector, vcpu->arch.ioapic_pending_vectors);
+		clear_bit(vector, vcpu->arch.ioapic_handled_vectors);
+		kvm_make_request(KVM_REQ_LOAD_EOI_EXITMAP, vcpu);
+	}
 	return 1;
 }
 
