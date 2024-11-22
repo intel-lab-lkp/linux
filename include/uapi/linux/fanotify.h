@@ -3,6 +3,7 @@
 #define _UAPI_LINUX_FANOTIFY_H
 
 #include <linux/types.h>
+#include <linux/ioctl.h>
 
 /* the following events that user-space can register for */
 #define FAN_ACCESS		0x00000001	/* File was accessed */
@@ -242,5 +243,40 @@ struct fanotify_response_info_audit_rule {
 #define FAN_EVENT_OK(meta, len)	((long)(len) >= (long)FAN_EVENT_METADATA_LEN && \
 				(long)(meta)->event_len >= (long)FAN_EVENT_METADATA_LEN && \
 				(long)(meta)->event_len <= (long)(len))
+
+/*
+ * fanotify filter.
+ * Please check out include/linux/fanotify.h for more information about
+ * the kernel module API.
+ */
+
+/* Return value of filter */
+enum fanotify_filter_return {
+	/* The event should NOT be sent to user space */
+	FAN_FILTER_RET_SKIP_EVENT = 0,
+	/* The event should be sent to user space */
+	FAN_FILTER_RET_SEND_TO_USERSPACE = 1,
+};
+
+#define FAN_FILTER_NAME_MAX 64
+#define FAN_FILTER_ARGS_MAX 64
+
+/* This is the arguments used to add filter to a group. */
+struct fanotify_filter_args {
+	char name[FAN_FILTER_NAME_MAX];
+
+	/*
+	 * user space pointer to the init args of filter,
+	 * up to init_args_len (<= FAN_FILTER_ARGS_MAX).
+	 */
+	__u64 init_args;
+	/* size of init_args */
+	__u32 init_args_size;
+} __attribute__((__packed__));
+
+#define FAN_IOC_MAGIC 'F'
+
+#define FAN_IOC_ADD_FILTER _IOW(FAN_IOC_MAGIC, 0, struct fanotify_filter_args)
+#define FAN_IOC_DEL_FILTER _IOW(FAN_IOC_MAGIC, 1, char[FAN_FILTER_NAME_MAX])
 
 #endif /* _UAPI_LINUX_FANOTIFY_H */

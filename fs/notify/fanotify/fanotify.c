@@ -18,6 +18,8 @@
 
 #include "fanotify.h"
 
+extern struct srcu_struct fsnotify_mark_srcu;
+
 static bool fanotify_path_equal(const struct path *p1, const struct path *p2)
 {
 	return p1->mnt == p2->mnt && p1->dentry == p2->dentry;
@@ -888,6 +890,7 @@ static int fanotify_handle_event(struct fsnotify_group *group, u32 mask,
 	struct fsnotify_event *fsn_event;
 	__kernel_fsid_t fsid = {};
 	u32 match_mask = 0;
+	struct fanotify_filter_hook *filter_hook __maybe_unused;
 
 	BUILD_BUG_ON(FAN_ACCESS != FS_ACCESS);
 	BUILD_BUG_ON(FAN_MODIFY != FS_MODIFY);
@@ -921,6 +924,39 @@ static int fanotify_handle_event(struct fsnotify_group *group, u32 mask,
 	pr_debug("%s: group=%p mask=%x report_mask=%x\n", __func__,
 		 group, mask, match_mask);
 
+	if (FAN_GROUP_FLAG(group, FANOTIFY_FID_BITS))
+		fsid = fanotify_get_fsid(iter_info);
+
+#ifdef CONFIG_FANOTIFY_FILTER
+	filter_hook = srcu_dereference(group->fanotify_data.filter_hook, &fsnotify_mark_srcu);
+	if (filter_hook) {
+		struct fanotify_filter_event filter_event = {
+			.mask = mask,
+			.data = data,
+			.data_type = data_type,
+			.dir = dir,
+			.file_name = file_name,
+			.fsid = &fsid,
+			.match_mask = match_mask,
+		};
+
+		ret = filter_hook->ops->filter(group, filter_hook, &filter_event);
+
+		/*
+		 * The filter may return
+		 * - FAN_FILTER_RET_SEND_TO_USERSPACE => continue the rest;
+		 * - FAN_FILTER_RET_SKIP_EVENT => return 0 now;
+		 * - < 0 error => return error now.
+		 *
+		 * For the latter two cases, we can just return ret.
+		 */
+		BUILD_BUG_ON(FAN_FILTER_RET_SKIP_EVENT != 0);
+
+		if (ret != FAN_FILTER_RET_SEND_TO_USERSPACE)
+			return ret;
+	}
+#endif
+
 	if (fanotify_is_perm_event(mask)) {
 		/*
 		 * fsnotify_prepare_user_wait() fails if we race with mark
@@ -929,9 +965,6 @@ static int fanotify_handle_event(struct fsnotify_group *group, u32 mask,
 		if (!fsnotify_prepare_user_wait(iter_info))
 			return 0;
 	}
-
-	if (FAN_GROUP_FLAG(group, FANOTIFY_FID_BITS))
-		fsid = fanotify_get_fsid(iter_info);
 
 	event = fanotify_alloc_event(group, mask, data, data_type, dir,
 				     file_name, &fsid, match_mask);
@@ -976,6 +1009,11 @@ static void fanotify_free_group_priv(struct fsnotify_group *group)
 
 	if (mempool_initialized(&group->fanotify_data.error_events_pool))
 		mempool_exit(&group->fanotify_data.error_events_pool);
+
+#ifdef CONFIG_FANOTIFY_FILTER
+	if (group->fanotify_data.filter_hook)
+		fanotify_filter_hook_free(group->fanotify_data.filter_hook);
+#endif
 }
 
 static void fanotify_free_path_event(struct fanotify_event *event)

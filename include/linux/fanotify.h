@@ -2,6 +2,7 @@
 #ifndef _LINUX_FANOTIFY_H
 #define _LINUX_FANOTIFY_H
 
+#include <linux/kobject.h>
 #include <linux/sysctl.h>
 #include <uapi/linux/fanotify.h>
 
@@ -135,5 +136,132 @@
 #undef FAN_ALL_EVENTS
 #undef FAN_ALL_PERM_EVENTS
 #undef FAN_ALL_OUTGOING_EVENTS
+
+struct fsnotify_group;
+struct qstr;
+struct inode;
+struct fanotify_filter_hook;
+
+/*
+ * Event passed to fanotify filter
+ *
+ * @mask:	event type and flags
+ * @data:	object that event happened on
+ * @data_type:	type of object for fanotify_data_XXX() accessors
+ * @dir:	optional directory associated with event -
+ *		if @file_name is not NULL, this is the directory that
+ *		@file_name is relative to
+ * @file_name:	optional file name associated with event
+ * @match_mask:	mark types of this group that matched the event
+ */
+struct fanotify_filter_event {
+	u32 mask;
+	const void *data;
+	int data_type;
+	struct inode *dir;
+	const struct qstr *file_name;
+	__kernel_fsid_t *fsid;
+	u32 match_mask;
+};
+
+/*
+ * fanotify filter should implement these ops.
+ *
+ * filter - Main call for the filter.
+ * @group:	The group being notified
+ * @filter_hook:	fanotify_filter_hook for the attach on @group.
+ * Returns: enum fanotify_filter_return.
+ *
+ * filter_init - Initialize the fanotify_filter_hook.
+ * @group:	The group that getting the filter
+ * @hook:	fanotify_filter_hook to be initialized
+ * @args:	Arguments used to initialize @hook
+ *
+ * filter_free - Free the fanotify_filter_hook.
+ * @hook:	fanotify_filter_hook to be freed.
+ *
+ * @name:	Name of the fanotify_filter_ops. This need to be unique
+ *		in the system
+ * @owner:	Owner module of this fanotify_filter_ops
+ * @list:	Attach to global list of fanotify_filter_ops
+ * @flags:	Flags for the fanotify_filter_ops
+ * @init_args_size: expected size of @args of filter_init()
+ * @desc:	Description of what this filter do (optional)
+ * @init_args:	Description of the init_args in a string (optional)
+ */
+struct fanotify_filter_ops {
+	int (*filter)(struct fsnotify_group *group,
+		      struct fanotify_filter_hook *filter_hook,
+		      struct fanotify_filter_event *filter_event);
+	int (*filter_init)(struct fsnotify_group *group,
+			   struct fanotify_filter_hook *hook,
+			   void *args);
+	void (*filter_free)(struct fanotify_filter_hook *hook);
+
+	char name[FAN_FILTER_NAME_MAX];
+	struct module *owner;
+	struct list_head list;
+	u32 flags;
+	u32 init_args_size;
+	const char *desc;
+	const char *init_args;
+
+	/* internal */
+	struct kobject kobj;
+};
+
+/* Flags for fanotify_filter_ops->flags */
+enum fanotify_filter_flags {
+	/* CAP_SYS_ADMIN is required to use this filter */
+	FAN_FILTER_F_SYS_ADMIN_ONLY = BIT(0),
+
+	FAN_FILTER_F_ALL = FAN_FILTER_F_SYS_ADMIN_ONLY,
+};
+
+/*
+ * Hook that attaches fanotify_filter_ops to a group.
+ * @ops:	the ops
+ * @data:	per group data used by the ops
+ */
+struct fanotify_filter_hook {
+	struct fanotify_filter_ops *ops;
+	void *data;
+};
+
+#ifdef CONFIG_FANOTIFY_FILTER
+
+int fanotify_filter_register(struct fanotify_filter_ops *ops);
+void fanotify_filter_unregister(struct fanotify_filter_ops *ops);
+int fanotify_filter_add(struct fsnotify_group *group,
+			struct fanotify_filter_args __user *args);
+void fanotify_filter_del(struct fsnotify_group *group);
+void fanotify_filter_hook_free(struct fanotify_filter_hook *filter_hook);
+
+#else /* CONFIG_FANOTIFY_FILTER */
+
+static inline int fanotify_filter_register(struct fanotify_filter_ops *ops)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void fanotify_filter_unregister(struct fanotify_filter_ops *ops)
+{
+}
+
+static inline int fanotify_filter_add(struct fsnotify_group *group,
+				      struct fanotify_filter_args __user *args)
+{
+	return -ENOENT;
+}
+
+static inline void fanotify_filter_del(struct fsnotify_group *group)
+{
+}
+
+static inline void fanotify_filter_hook_free(struct fanotify_filter_hook *filter_hook)
+{
+}
+
+#endif /* CONFIG_FANOTIFY_FILTER */
 
 #endif /* _LINUX_FANOTIFY_H */

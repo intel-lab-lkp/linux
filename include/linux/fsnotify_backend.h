@@ -117,6 +117,7 @@ struct fsnotify_fname;
 struct fsnotify_iter_info;
 
 struct mem_cgroup;
+struct fanotify_filter_hook;
 
 /*
  * Each group much define these ops.  The fsnotify infrastructure will call
@@ -255,8 +256,11 @@ struct fsnotify_group {
 			int f_flags; /* event_f_flags from fanotify_init() */
 			struct ucounts *ucounts;
 			mempool_t error_events_pool;
+#ifdef CONFIG_FANOTIFY_FILTER
+			struct fanotify_filter_hook __rcu *filter_hook;
+#endif /* CONFIG_FANOTIFY_FILTER */
 		} fanotify_data;
-#endif /* CONFIG_FANOTIFY */
+#endif
 	};
 };
 
