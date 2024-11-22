@@ -1500,7 +1500,6 @@ static int avs_tplg_parse_initial_configs(struct snd_soc_component *comp,
 				      AVS_TKN_MANIFEST_NUM_INIT_CONFIGS_U32);
 	if (ret)
 		return ret;
-
 	block_size -= le32_to_cpu(tuples->size);
 	/* With header parsed, move on to parsing entries. */
 	tuples = avs_tplg_vendor_array_next(tuples);
@@ -1522,6 +1521,8 @@ static int avs_tplg_parse_initial_configs(struct snd_soc_component *comp,
 					       AVS_TKN_MOD_INIT_CONFIG_ID_U32,
 					       mod_init_config_parsers,
 					       ARRAY_SIZE(mod_init_config_parsers));
+		if (ret)
+			return ret;
 
 		block_size -= esize;
 
