@@ -358,6 +358,11 @@ bool ipmr_rule_default(const struct fib_rule *rule)
 EXPORT_SYMBOL(ipmr_rule_default);
 #endif
 
+static bool ipmr_can_free_table(struct net *net)
+{
+	return !check_net(net) || !net->ipv4.mr_rules_ops;
+}
+
 static inline int ipmr_hash_cmp(struct rhashtable_compare_arg *arg,
 				const void *ptr)
 {
@@ -413,6 +418,10 @@ static struct mr_table *ipmr_new_table(struct net *net, u32 id)
 
 static void ipmr_free_table(struct mr_table *mrt)
 {
+	struct net *net = read_pnet(&mrt->net);
+
+	DEBUG_NET_WARN_ON_ONCE(!ipmr_can_free_table(net));
+
 	timer_shutdown_sync(&mrt->ipmr_expire_timer);
 	mroute_clean_tables(mrt, MRT_FLUSH_VIFS | MRT_FLUSH_VIFS_STATIC |
 				 MRT_FLUSH_MFC | MRT_FLUSH_MFC_STATIC);

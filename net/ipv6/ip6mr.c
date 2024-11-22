@@ -341,6 +341,11 @@ static unsigned int ip6mr_rules_seq_read(const struct net *net)
 }
 #endif
 
+static bool ip6mr_can_free_table(struct net *net)
+{
+	return !check_net(net) || !net->ipv6.mr6_rules_ops;
+}
+
 static int ip6mr_hash_cmp(struct rhashtable_compare_arg *arg,
 			  const void *ptr)
 {
@@ -392,6 +397,10 @@ static struct mr_table *ip6mr_new_table(struct net *net, u32 id)
 
 static void ip6mr_free_table(struct mr_table *mrt)
 {
+	struct net *net = read_pnet(&mrt->net);
+
+	DEBUG_NET_WARN_ON_ONCE(!ip6mr_can_free_table(net));
+
 	timer_shutdown_sync(&mrt->ipmr_expire_timer);
 	mroute_clean_tables(mrt, MRT6_FLUSH_MIFS | MRT6_FLUSH_MIFS_STATIC |
 				 MRT6_FLUSH_MFC | MRT6_FLUSH_MFC_STATIC);
