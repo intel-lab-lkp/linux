@@ -505,12 +505,12 @@ void ida_simple_get_remove_test(void)
 	unsigned long i;
 
 	for (i = 0; i < 10000; i++) {
-		assert(ida_simple_get(&ida, 0, 20000, GFP_KERNEL) == i);
+		assert(ida_alloc_range(&ida, 0, 19999, GFP_KERNEL) == i);
 	}
-	assert(ida_simple_get(&ida, 5, 30, GFP_KERNEL) < 0);
+	assert(ida_alloc_range(&ida, 5, 29, GFP_KERNEL) < 0);
 
 	for (i = 0; i < 10000; i++) {
-		ida_simple_remove(&ida, i);
+		ida_free(&ida, i);
 	}
 	assert(ida_is_empty(&ida));
 
