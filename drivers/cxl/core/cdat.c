@@ -634,7 +634,6 @@ static int cxl_endpoint_gather_bandwidth(struct cxl_region *cxlr,
 	struct access_coordinate ep_coord[ACCESS_COORDINATE_MAX];
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
-	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
 	struct cxl_perf_ctx *perf_ctx;
 	struct cxl_dpa_perf *perf;
 	unsigned long index;
@@ -675,7 +674,7 @@ static int cxl_endpoint_gather_bandwidth(struct cxl_region *cxlr,
 	}
 
 	/* Direct upstream link from EP bandwidth */
-	rc = cxl_pci_get_bandwidth(pdev, pci_coord);
+	rc = cxl_pci_get_bandwidth(cxlds->dev, pci_coord);
 	if (rc < 0)
 		return rc;
 
@@ -809,7 +808,7 @@ static struct xarray *cxl_switch_gather_bandwidth(struct cxl_region *cxlr,
 			return ERR_PTR(-EINVAL);
 
 		/* Retrieve the upstream link bandwidth */
-		rc = cxl_pci_get_bandwidth(to_pci_dev(dev), coords);
+		rc = cxl_pci_get_bandwidth(dev, coords);
 		if (rc)
 			return ERR_PTR(-ENXIO);
 

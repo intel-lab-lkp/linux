@@ -7,6 +7,7 @@
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
 #include <linux/aer.h>
+#include <linux/platform_device.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
 #include <cxl.h>
@@ -1032,19 +1033,28 @@ bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_decoder_reset_detected, CXL);
 
-int cxl_pci_get_bandwidth(struct pci_dev *pdev, struct access_coordinate *c)
+int cxl_pci_get_bandwidth(struct device *dev, struct access_coordinate *c)
 {
 	int speed, bw;
 	u16 lnksta;
 	u32 width;
 
-	speed = pcie_link_speed_mbps(pdev);
-	if (speed < 0)
-		return speed;
-	speed /= BITS_PER_BYTE;
+	if (dev_is_platform(dev)) {
+		/* PCIE_SPEED_64_0GT as fake speed for platform device */
+		speed = 64000 / BITS_PER_BYTE;
+		/* PCI_EXP_LNKSTA_NLW_X8 as fake width for platform device */
+		width = FIELD_GET(PCI_EXP_LNKSTA_NLW, PCI_EXP_LNKSTA_NLW_X8);
+	} else {
+		struct pci_dev *pdev = to_pci_dev(dev);
 
-	pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
-	width = FIELD_GET(PCI_EXP_LNKSTA_NLW, lnksta);
+		speed = pcie_link_speed_mbps(pdev);
+		if (speed < 0)
+			return speed;
+		speed /= BITS_PER_BYTE;
+
+		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
+		width = FIELD_GET(PCI_EXP_LNKSTA_NLW, lnksta);
+	}
 	bw = speed * width;
 
 	for (int i = 0; i < ACCESS_COORDINATE_MAX; i++) {
