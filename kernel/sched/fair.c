@@ -9773,6 +9773,8 @@ static bool __update_blocked_fair(struct rq *rq, bool *done)
 	return decayed;
 }
 
+static DEFINE_PER_CPU(raw_spinlock_t, h_load_lock);
+
 /*
  * Compute the hierarchical load factor for cfs_rq and all its ascendants.
  * This needs to be done in a top-down fashion because the load of a child
@@ -9780,18 +9782,26 @@ static bool __update_blocked_fair(struct rq *rq, bool *done)
  */
 static void update_cfs_rq_h_load(struct cfs_rq *cfs_rq)
 {
-	struct rq *rq = rq_of(cfs_rq);
-	struct sched_entity *se = cfs_rq->tg->se[cpu_of(rq)];
+	int cpu = cpu_of(rq_of(cfs_rq));
+	struct sched_entity *se = cfs_rq->tg->se[cpu];
+	raw_spinlock_t * lock;
 	unsigned long now = jiffies;
 	unsigned long load;
 
 	if (cfs_rq->last_h_load_update == now)
 		return;
 
-	WRITE_ONCE(cfs_rq->h_load_next, NULL);
+	/* Protects cfs_rq->h_load_next and cfs_rq->last_h_load_update */
+	raw_spin_lock(lock = &per_cpu(h_load_lock, cpu));
+
+	now = jiffies;
+	if (cfs_rq->last_h_load_update == now)
+		goto unlock;
+
+	cfs_rq->h_load_next = NULL;
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
-		WRITE_ONCE(cfs_rq->h_load_next, se);
+		cfs_rq->h_load_next = se;
 		if (cfs_rq->last_h_load_update == now)
 			break;
 	}
@@ -9801,7 +9811,7 @@ static void update_cfs_rq_h_load(struct cfs_rq *cfs_rq)
 		cfs_rq->last_h_load_update = now;
 	}
 
-	while ((se = READ_ONCE(cfs_rq->h_load_next)) != NULL) {
+	while ((se = cfs_rq->h_load_next) != NULL) {
 		load = cfs_rq->h_load;
 		load = div64_ul(load * se->avg.load_avg,
 			cfs_rq_load_avg(cfs_rq) + 1);
@@ -9809,6 +9819,8 @@ static void update_cfs_rq_h_load(struct cfs_rq *cfs_rq)
 		cfs_rq->h_load = load;
 		cfs_rq->last_h_load_update = now;
 	}
+unlock:
+	raw_spin_unlock(lock);
 }
 
 static unsigned long task_h_load(struct task_struct *p)
@@ -13652,6 +13664,9 @@ __init void init_sched_fair_class(void)
 		zalloc_cpumask_var_node(&per_cpu(should_we_balance_tmpmask, i),
 					GFP_KERNEL, cpu_to_node(i));
 
+#ifdef CONFIG_FAIR_GROUP_SCHED
+		raw_spin_lock_init(&per_cpu(h_load_lock, i));
+#endif
 #ifdef CONFIG_CFS_BANDWIDTH
 		INIT_CSD(&cpu_rq(i)->cfsb_csd, __cfsb_csd_unthrottle, cpu_rq(i));
 		INIT_LIST_HEAD(&cpu_rq(i)->cfsb_csd_list);
