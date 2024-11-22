@@ -77,6 +77,8 @@ static const char *perf_event__names[] = {
 	[PERF_RECORD_HEADER_FEATURE]		= "FEATURE",
 	[PERF_RECORD_COMPRESSED]		= "COMPRESSED",
 	[PERF_RECORD_FINISHED_INIT]		= "FINISHED_INIT",
+	[PERF_RECORD_SCHEDSTAT_CPU]		= "SCHEDSTAT_CPU",
+	[PERF_RECORD_SCHEDSTAT_DOMAIN]		= "SCHEDSTAT_DOMAIN",
 };
 
 const char *perf_event__name(unsigned int id)
@@ -548,6 +550,102 @@ size_t perf_event__fprintf_text_poke(union perf_event *event, struct machine *ma
 	ret += binary__fprintf(tp->bytes + tp->old_len, tp->new_len, 16,
 			       text_poke_printer, &old, fp);
 	return ret;
+}
+
+size_t perf_event__fprintf_schedstat_cpu(union perf_event *event, FILE *fp)
+{
+	struct perf_record_schedstat_cpu *cs = &event->schedstat_cpu;
+	__u16 version = cs->version;
+	size_t size = 0;
+
+	size = fprintf(fp, "\ncpu%u ", cs->cpu);
+
+#define CPU_FIELD(_type, _name, _ver)						\
+	size += fprintf(fp, "%" PRIu64 " ", (unsigned long)cs->_ver._name)
+
+	if (version == 15) {
+#include <perf/schedstat-v15.h>
+		return size;
+	}
+#undef CPU_FIELD
+
+	return fprintf(fp, "Unsupported /proc/schedstat version %d.\n",
+		       event->schedstat_cpu.version);
+}
+
+size_t perf_event__fprintf_schedstat_domain(union perf_event *event, FILE *fp)
+{
+	struct perf_record_schedstat_domain *ds = &event->schedstat_domain;
+	__u16 version = ds->version;
+	size_t cpu_mask_len_2;
+	size_t cpu_mask_len;
+	size_t size = 0;
+	char *cpu_mask;
+	int idx;
+	int i, j;
+	bool low;
+
+	if (ds->name[0])
+		size = fprintf(fp, "\ndomain%u:%s ", ds->domain, ds->name);
+	else
+		size = fprintf(fp, "\ndomain%u ", ds->domain);
+
+	cpu_mask_len = ((ds->nr_cpus + 3) >> 2);
+	cpu_mask_len_2 = cpu_mask_len + ((cpu_mask_len - 1) / 8);
+
+	cpu_mask = zalloc(cpu_mask_len_2 + 1);
+	if (!cpu_mask)
+		return fprintf(fp, "Cannot allocate memory for cpumask\n");
+
+	idx = ((ds->nr_cpus + 7) >> 3) - 1;
+
+	i = cpu_mask_len_2 - 1;
+
+	low = true;
+	j = 1;
+	while (i >= 0) {
+		__u8 m;
+
+		if (low)
+			m = ds->cpu_mask[idx] & 0xf;
+		else
+			m = (ds->cpu_mask[idx] & 0xf0) >> 4;
+
+		if (m >= 0 && m <= 9)
+			m += '0';
+		else if (m >= 0xa && m <= 0xf)
+			m = m + 'a' - 10;
+		else if (m >= 0xA && m <= 0xF)
+			m = m + 'A' - 10;
+
+		cpu_mask[i] = m;
+
+		if (j == 8 && i != 0) {
+			cpu_mask[i - 1] = ',';
+			j = 0;
+			i--;
+		}
+
+		if (!low)
+			idx--;
+		low = !low;
+		i--;
+		j++;
+	}
+	size += fprintf(fp, "%s ", cpu_mask);
+	free(cpu_mask);
+
+#define DOMAIN_FIELD(_type, _name, _ver)					\
+	size += fprintf(fp, "%" PRIu64 " ", (unsigned long)ds->_ver._name)
+
+	if (version == 15) {
+#include <perf/schedstat-v15.h>
+		return size;
+	}
+#undef DOMAIN_FIELD
+
+	return fprintf(fp, "Unsupported /proc/schedstat version %d.\n",
+		       event->schedstat_domain.version);
 }
 
 size_t perf_event__fprintf(union perf_event *event, struct machine *machine, FILE *fp)

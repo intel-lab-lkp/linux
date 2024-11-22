@@ -2507,3 +2507,253 @@ int parse_synth_opt(char *synth)
 
 	return ret;
 }
+
+static union perf_event *__synthesize_schedstat_cpu(struct io *io, __u16 version,
+						    __u64 *cpu, __u64 timestamp)
+{
+	struct perf_record_schedstat_cpu *cs;
+	union perf_event *event;
+	size_t size;
+	char ch;
+
+	size = sizeof(struct perf_record_schedstat_cpu);
+	size = PERF_ALIGN(size, sizeof(u64));
+	event = zalloc(size);
+
+	if (!event)
+		return NULL;
+
+	cs = &event->schedstat_cpu;
+	cs->header.type = PERF_RECORD_SCHEDSTAT_CPU;
+	cs->header.size = size;
+	cs->timestamp = timestamp;
+
+	if (io__get_char(io) != 'p' || io__get_char(io) != 'u')
+		goto out_cpu;
+
+	if (io__get_dec(io, (__u64 *)cpu) != ' ')
+		goto out_cpu;
+
+#define CPU_FIELD(_type, _name, _ver)					\
+	do {								\
+		__u64 _tmp;						\
+		ch = io__get_dec(io, &_tmp);				\
+		if (ch != ' ' && ch != '\n')				\
+			goto out_cpu;					\
+		cs->_ver._name = _tmp;					\
+	} while (0)
+
+	if (version == 15) {
+#include <perf/schedstat-v15.h>
+	}
+#undef CPU_FIELD
+
+	cs->cpu = *cpu;
+	cs->version = version;
+
+	return event;
+out_cpu:
+	free(event);
+	return NULL;
+}
+
+static size_t schedstat_sanitize_cpumask(char *cpu_mask, size_t cpu_mask_len)
+{
+	char *dst = cpu_mask;
+	char *src = cpu_mask;
+	int i = 0;
+
+	for ( ; src < cpu_mask + cpu_mask_len; dst++, src++) {
+		while (*src == ',')
+			src++;
+
+		*dst = *src;
+	}
+
+	for ( ; dst < src; dst++, i++)
+		*dst = '\0';
+
+	return cpu_mask_len - i;
+}
+
+static union perf_event *__synthesize_schedstat_domain(struct io *io, __u16 version,
+						       __u64 cpu, __u64 timestamp)
+{
+	struct perf_env env = { .total_mem = 0, };
+	int nr_cpus_avail = perf_env__nr_cpus_avail(&env);
+	struct perf_record_schedstat_domain *ds;
+	union perf_event *event;
+	size_t d_name_len = 0;
+	char *d_name = NULL;
+	size_t cpu_mask_len = 0;
+	char *cpu_mask = NULL;
+	__u64 d_num;
+	size_t size;
+	int i = 0;
+	bool low;
+	char ch;
+	int idx;
+
+	if (io__get_char(io) != 'o' || io__get_char(io) != 'm' || io__get_char(io) != 'a' ||
+	    io__get_char(io) != 'i' || io__get_char(io) != 'n')
+		return NULL;
+
+	ch = io__get_dec(io, &d_num);
+	if (ch == ':') {
+		if (io__getdelim(io, &d_name, &d_name_len, ' ') < 0 || !d_name_len)
+			return NULL;
+		d_name[d_name_len - 1] = '\0';
+		d_name_len--;
+	} else if (ch != ' ') {
+		return NULL;
+	}
+
+	if (io__getdelim(io, &cpu_mask, &cpu_mask_len, ' ') < 0 || !cpu_mask_len)
+		goto out;
+
+	cpu_mask[cpu_mask_len - 1] = '\0';
+	cpu_mask_len--;
+	cpu_mask_len = schedstat_sanitize_cpumask(cpu_mask, cpu_mask_len);
+
+	size = sizeof(struct perf_record_schedstat_domain) + ((nr_cpus_avail + 7) >> 3);
+	size = PERF_ALIGN(size, sizeof(u64));
+	event = zalloc(size);
+
+	if (!event)
+		goto out_cpu_mask;
+
+	ds = &event->schedstat_domain;
+	ds->header.type = PERF_RECORD_SCHEDSTAT_DOMAIN;
+	ds->header.size = size;
+	ds->version = version;
+	ds->timestamp = timestamp;
+	if (d_name)
+		strncpy(ds->name, d_name, DOMAIN_NAME_LEN - 1);
+	ds->domain = d_num;
+	ds->nr_cpus = nr_cpus_avail;
+
+	idx = ((nr_cpus_avail + 7) >> 3) - 1;
+	low = true;
+	for (i = cpu_mask_len - 1; i >= 0 && idx >= 0; i--) {
+		char mask = cpu_mask[i];
+
+		if (mask >= '0' && mask <= '9')
+			mask -= '0';
+		else if (mask >= 'a' && mask <= 'f')
+			mask = mask - 'a' + 10;
+		else if (mask >= 'A' && mask <= 'F')
+			mask = mask - 'A' + 10;
+
+		if (low) {
+			ds->cpu_mask[idx] = mask;
+		} else {
+			ds->cpu_mask[idx] |= (mask << 4);
+			idx--;
+		}
+		low = !low;
+	}
+
+	free(d_name);
+	free(cpu_mask);
+
+#define DOMAIN_FIELD(_type, _name, _ver)				\
+	do {								\
+		__u64 _tmp;						\
+		ch = io__get_dec(io, &_tmp);				\
+		if (ch != ' ' && ch != '\n')				\
+			goto out_domain;				\
+		ds->_ver._name = _tmp;					\
+	} while (0)
+
+	if (version == 15) {
+#include <perf/schedstat-v15.h>
+	}
+#undef DOMAIN_FIELD
+
+	ds->cpu = cpu;
+	return event;
+
+out_domain:
+	free(event);
+out_cpu_mask:
+	free(cpu_mask);
+out:
+	free(d_name);
+	return NULL;
+}
+
+int perf_event__synthesize_schedstat(const struct perf_tool *tool,
+				     perf_event__handler_t process,
+				     struct perf_cpu_map *user_requested_cpus)
+{
+	char *line = NULL, path[PATH_MAX];
+	union perf_event *event = NULL;
+	size_t line_len = 0;
+	char bf[BUFSIZ];
+	__u64 timestamp;
+	__u64 cpu = -1;
+	__u16 version;
+	struct io io;
+	int ret = -1;
+	char ch;
+
+	snprintf(path, PATH_MAX, "%s/schedstat", procfs__mountpoint());
+	io.fd = open(path, O_RDONLY, 0);
+	if (io.fd < 0) {
+		pr_err("Failed to open %s. Possibly CONFIG_SCHEDSTAT is disabled.\n", path);
+		return -1;
+	}
+	io__init(&io, io.fd, bf, sizeof(bf));
+
+	if (io__getline(&io, &line, &line_len) < 0 || !line_len)
+		goto out;
+
+	if (!strcmp(line, "version 15\n")) {
+		version = 15;
+	} else {
+		pr_err("Unsupported %s version: %s", path, line + 8);
+		goto out_free_line;
+	}
+
+	if (io__getline(&io, &line, &line_len) < 0 || !line_len)
+		goto out_free_line;
+	timestamp = atol(line + 10);
+
+	/*
+	 * FIXME: Can be optimized a bit by not synthesizing domain samples
+	 * for filtered out cpus.
+	 */
+	for (ch = io__get_char(&io); !io.eof; ch = io__get_char(&io)) {
+		struct perf_cpu this_cpu;
+
+		if (ch == 'c') {
+			event = __synthesize_schedstat_cpu(&io, version,
+							   &cpu, timestamp);
+		} else if (ch == 'd') {
+			event = __synthesize_schedstat_domain(&io, version,
+							      cpu, timestamp);
+		}
+		if (!event)
+			goto out_free_line;
+
+		this_cpu.cpu = cpu;
+
+		if (user_requested_cpus && !perf_cpu_map__has(user_requested_cpus, this_cpu))
+			continue;
+
+		if (process(tool, event, NULL, NULL) < 0) {
+			free(event);
+			goto out_free_line;
+		}
+
+		free(event);
+	}
+
+	ret = 0;
+
+out_free_line:
+	free(line);
+out:
+	close(io.fd);
+	return ret;
+}
