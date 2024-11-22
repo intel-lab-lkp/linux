@@ -910,6 +910,31 @@ void cxl_coordinates_combine(struct access_coordinate *out,
 
 bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port);
 
+#ifdef CONFIG_CXL_ARCH_LOW_MEMORY_HOLE
+bool arch_match_spa(struct cxl_root_decoder *cxlrd,
+		    struct cxl_endpoint_decoder *cxled);
+bool arch_match_region(struct cxl_region_params *p,
+		       struct cxl_decoder *cxld);
+void arch_trim_hpa_by_spa(struct resource *res,
+			  struct cxl_root_decoder *cxlrd);
+#else
+bool arch_match_spa(struct cxl_root_decoder *cxlrd,
+		    struct cxl_endpoint_decoder *cxled)
+{
+	return false;
+}
+
+bool arch_match_region(struct cxl_region_params *p,
+		       struct cxl_decoder *cxld)
+{
+	return false;
+}
+
+void arch_trim_hpa_by_spa(struct resource *res,
+			  struct cxl_root_decoder *cxlrd)
+{ }
+#endif /* CXL_ARCH_LOW_MEMORY_HOLE */
+
 /*
  * Unit test builds overrides this to __weak, find the 'strong' version
  * of these symbols in tools/testing/cxl/.
