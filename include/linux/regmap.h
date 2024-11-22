@@ -771,6 +771,7 @@ struct regmap *__devm_regmap_init_fsi(struct fsi_device *fsi_dev,
 				dev, bus, bus_context, config)
 int regmap_attach_dev(struct device *dev, struct regmap *map,
 		      const struct regmap_config *config);
+int regmap_detach_dev(struct device *dev, struct regmap *map);
 
 /**
  * regmap_init_i2c() - Initialise register map
