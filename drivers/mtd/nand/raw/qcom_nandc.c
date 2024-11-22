@@ -207,7 +207,7 @@ nandc_set_reg(chip, reg,			\
 #define dev_cmd_reg_addr(nandc, reg) ((nandc)->props->dev_cmd_reg_start + (reg))
 
 /* Returns the NAND register physical address */
-#define nandc_reg_phys(chip, offset) ((chip)->base_phys + (offset))
+#define nandc_reg_phys(chip, offset)  ((nandc)->props->nandc_offset + (offset))
 
 /* Returns the dma address for reg read buffer */
 #define reg_buf_dma_addr(chip, vaddr) \
@@ -561,6 +561,7 @@ struct qcom_nandc_props {
 	bool is_qpic;
 	bool qpic_v2;
 	bool use_codeword_fixup;
+	u32 nandc_offset;
 };
 
 /* Frees the BAM transaction memory */
@@ -3477,6 +3478,7 @@ static const struct qcom_nandc_props ipq806x_nandc_props = {
 	.is_bam = false,
 	.use_codeword_fixup = true,
 	.dev_cmd_reg_start = 0x0,
+	.nandc_offset = 0x30000,
 };
 
 static const struct qcom_nandc_props ipq4019_nandc_props = {
@@ -3484,6 +3486,7 @@ static const struct qcom_nandc_props ipq4019_nandc_props = {
 	.is_bam = true,
 	.is_qpic = true,
 	.dev_cmd_reg_start = 0x0,
+	.nandc_offset = 0x30000,
 };
 
 static const struct qcom_nandc_props ipq8074_nandc_props = {
@@ -3491,6 +3494,7 @@ static const struct qcom_nandc_props ipq8074_nandc_props = {
 	.is_bam = true,
 	.is_qpic = true,
 	.dev_cmd_reg_start = 0x7000,
+	.nandc_offset = 0x30000,
 };
 
 static const struct qcom_nandc_props sdx55_nandc_props = {
@@ -3498,7 +3502,8 @@ static const struct qcom_nandc_props sdx55_nandc_props = {
 	.is_bam = true,
 	.is_qpic = true,
 	.qpic_v2 = true,
-	.dev_cmd_reg_start = 0x7000,
+	.dev_cmd_reg_start = 0x0,
+	.nandc_offset = 0x30000,
 };
 
 /*
