@@ -42,6 +42,12 @@
 #define ADF4371_MOD2WORD_MSK		GENMASK(5, 0)
 #define ADF4371_MOD2WORD(x)		FIELD_PREP(ADF4371_MOD2WORD_MSK, x)
 
+/* ADF4371_REG22 */
+#define ADF4371_REF_DOUB_MASK		BIT(5)
+#define ADF4371_REF_DOUB(x)		FIELD_PREP(ADF4371_REF_DOUB_MASK, x)
+#define ADF4371_RDIV2_MASK		BIT(4)
+#define ADF4371_RDIV2(x)		FIELD_PREP(ADF4371_RDIV2_MASK, x)
+
 /* ADF4371_REG24 */
 #define ADF4371_RF_DIV_SEL_MSK		GENMASK(6, 4)
 #define ADF4371_RF_DIV_SEL(x)		FIELD_PREP(ADF4371_RF_DIV_SEL_MSK, x)
@@ -70,6 +76,9 @@
 
 #define ADF4371_MAX_FREQ_PFD		250000000UL /* Hz */
 #define ADF4371_MAX_FREQ_REFIN		600000000UL /* Hz */
+
+#define ADF4371_MIN_CLKIN_DOUB_FREQ	10000000ULL /* Hz */
+#define ADF4371_MAX_CLKIN_DOUB_FREQ	125000000ULL /* Hz */
 
 /* MOD1 is a 24-bit primary modulus with fixed value of 2^25 */
 #define ADF4371_MODULUS1		33554432ULL
@@ -176,6 +185,8 @@ struct adf4371_state {
 	unsigned int mod2;
 	unsigned int rf_div_sel;
 	unsigned int ref_div_factor;
+	bool ref_doubler_en;
+	bool ref_div2_en;
 	u8 buf[10] __aligned(IIO_DMA_MINALIGN);
 };
 
@@ -499,22 +510,44 @@ static int adf4371_setup(struct adf4371_state *st)
 			return ret;
 	}
 
+	if (device_property_read_bool(&st->spi->dev,
+				      "adi,reference-doubler-enable"))
+		st->ref_doubler_en = true;
+
+	if (device_property_read_bool(&st->spi->dev,
+				      "adi,reference-div2-enable"))
+		st->ref_div2_en = true;
+
 	/* Set address in ascending order, so the bulk_write() will work */
 	ret = regmap_update_bits(st->regmap, ADF4371_REG(0x0),
 				 ADF4371_ADDR_ASC_MSK | ADF4371_ADDR_ASC_R_MSK,
 				 ADF4371_ADDR_ASC(1) | ADF4371_ADDR_ASC_R(1));
 	if (ret < 0)
 		return ret;
+
+	if (st->ref_doubler_en &&
+	    (st->clkin_freq > ADF4371_MAX_CLKIN_DOUB_FREQ ||
+	     st->clkin_freq < ADF4371_MIN_CLKIN_DOUB_FREQ))
+		st->ref_doubler_en = false;
+
+	ret = regmap_update_bits(st->regmap,  ADF4371_REG(0x22),
+				 ADF4371_REF_DOUB_MASK |
+				 ADF4371_RDIV2_MASK,
+				 ADF4371_REF_DOUB(st->ref_doubler_en) |
+				 ADF4371_RDIV2(st->ref_div2_en));
+	if (ret < 0)
+		return ret;
+
 	/*
 	 * Calculate and maximize PFD frequency
 	 * fPFD = REFIN × ((1 + D)/(R × (1 + T)))
 	 * Where D is the REFIN doubler bit, T is the reference divide by 2,
 	 * R is the reference division factor
-	 * TODO: it is assumed D and T equal 0.
 	 */
 	do {
 		st->ref_div_factor++;
-		st->fpfd = st->clkin_freq / st->ref_div_factor;
+		st->fpfd = (st->clkin_freq * (st->ref_doubler_en ? 2 : 1)) /
+			   (st->ref_div_factor * (st->ref_div2_en ? 2 : 1));
 	} while (st->fpfd > ADF4371_MAX_FREQ_PFD);
 
 	/* Calculate Timeouts */
