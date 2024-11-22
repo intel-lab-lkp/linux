@@ -973,7 +973,8 @@ static int smc_connect_decline_fallback(struct smc_sock *smc, int reason_code,
 	return smc_connect_fallback(smc, reason_code);
 }
 
-static void smc_conn_abort(struct smc_sock *smc, int local_first)
+static void __smc_conn_abort(struct smc_sock *smc, int local_first,
+			     bool locked)
 {
 	struct smc_connection *conn = &smc->conn;
 	struct smc_link_group *lgr = conn->lgr;
@@ -982,9 +983,25 @@ static void smc_conn_abort(struct smc_sock *smc, int local_first)
 	if (smc_conn_lgr_valid(conn))
 		lgr_valid = true;
 
-	smc_conn_free(conn);
+	if (!locked) {
+		lock_sock(&smc->sk);
+		smc_conn_free(conn);
+		release_sock(&smc->sk);
+	} else {
+		smc_conn_free(conn);
+	}
 	if (local_first && lgr_valid)
 		smc_lgr_cleanup_early(lgr);
+}
+
+static void smc_conn_abort(struct smc_sock *smc, int local_first)
+{
+	__smc_conn_abort(smc, local_first, false);
+}
+
+static void smc_conn_abort_locked(struct smc_sock *smc, int local_first)
+{
+	__smc_conn_abort(smc, local_first, true);
 }
 
 /* check if there is a rdma device available for this connection. */
@@ -1352,7 +1369,7 @@ static int smc_connect_rdma(struct smc_sock *smc,
 
 	return 0;
 connect_abort:
-	smc_conn_abort(smc, ini->first_contact_local);
+	smc_conn_abort_locked(smc, ini->first_contact_local);
 	mutex_unlock(&smc_client_lgr_pending);
 	smc->connect_nonblock = 0;
 
@@ -1454,7 +1471,7 @@ static int smc_connect_ism(struct smc_sock *smc,
 
 	return 0;
 connect_abort:
-	smc_conn_abort(smc, ini->first_contact_local);
+	smc_conn_abort_locked(smc, ini->first_contact_local);
 	mutex_unlock(&smc_server_lgr_pending);
 	smc->connect_nonblock = 0;
 
