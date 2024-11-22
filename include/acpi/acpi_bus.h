@@ -1005,6 +1005,9 @@ static inline int acpi_wait_for_acpi_ipmi(void) { return 0; }
 
 #define acpi_get_physical_device_location(handle, pld) (AE_ERROR)
 
+#define for_each_acpi_consumer_dev(supplier, consumer)			\
+	for (consumer = NULL; false && (supplier);)
+
 #define for_each_acpi_dev_match(adev, hid, uid, hrv)			\
 	for (adev = NULL; false && (hid) && (uid) && (hrv);)
 
