@@ -363,6 +363,29 @@ struct damos_filter {
 	struct list_head list;
 };
 
+struct damon_ctx;
+struct damos;
+
+/**
+ * struct damos_walk_control - Control walking DAMOS target regions.
+ *
+ * @prep_fn:	Function to be called back once before walk_fn.
+ * @walk_fn:	Function to be called back for each region.
+ * @data:	Data that will be passed to walk functions.
+ */
+struct damos_walk_control {
+	int (*prep_fn)(void *data, struct damon_ctx *ctx);
+	int (*walk_fn)(void *data, struct damon_ctx *ctx,
+			struct damon_target *t, struct damon_region *r,
+			struct damos *s);
+	void *data;
+/* private: internal use only */
+	/* for waiting on walk completion from DAMON worker thrad. */
+	struct completion completion;
+	/* for saving if the walk is canceled. */
+	bool canceled;
+};
+
 /**
  * struct damos_access_pattern - Target access pattern of the given scheme.
  * @min_sz_region:	Minimum size of target regions.
@@ -448,6 +471,8 @@ struct damos {
 	 * @action
 	 */
 	unsigned long next_apply_sis;
+	/* represents if ongoing DAMOS walk for this scheme is finished */
+	bool walk_completed;
 /* public: */
 	struct damos_quota quota;
 	struct damos_watermarks wmarks;
@@ -474,8 +499,6 @@ enum damon_ops_id {
 	DAMON_OPS_PADDR,
 	NR_DAMON_OPS,
 };
-
-struct damon_ctx;
 
 /**
  * struct damon_operations - Monitoring operations for given use cases.
@@ -681,6 +704,10 @@ struct damon_ctx {
 	struct damon_call_control *call_control;
 	struct mutex call_control_lock;
 
+	/* for damos_walk() */
+	struct damos_walk_control *walk_control;
+	struct mutex walk_control_lock;
+
 /* public: */
 	struct task_struct *kdamond;
 	struct mutex kdamond_lock;
@@ -829,6 +856,7 @@ int damon_start(struct damon_ctx **ctxs, int nr_ctxs, bool exclusive);
 int damon_stop(struct damon_ctx **ctxs, int nr_ctxs);
 
 int damon_call(struct damon_ctx *ctx, struct damon_call_control *control);
+int damos_walk(struct damon_ctx *ctx, struct damos_walk_control *control);
 
 int damon_set_region_biggest_system_ram_default(struct damon_target *t,
 				unsigned long *start, unsigned long *end);
