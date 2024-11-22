@@ -246,6 +246,7 @@ int v4l2_event_subscribe(struct v4l2_fh *fh,
 	sev->flags = sub->flags;
 	sev->fh = fh;
 	sev->ops = ops;
+	INIT_LIST_HEAD(&sev->node);
 
 	mutex_lock(&fh->subscribe_lock);
 

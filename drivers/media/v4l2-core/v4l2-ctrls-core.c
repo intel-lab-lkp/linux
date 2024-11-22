@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-event.h>
+#include <media/v4l2-fh.h>
 #include <media/v4l2-fwnode.h>
 
 #include "v4l2-ctrls-priv.h"
@@ -1569,13 +1570,20 @@ void v4l2_ctrl_handler_free(struct v4l2_ctrl_handler *hdl)
 		list_del(&ref->node);
 		if (ref->p_req_array_alloc_elems)
 			kvfree(ref->p_req.p);
+		if (ref->ctrl->handler != hdl) {
+			mutex_lock(ref->ctrl->handler->lock);
+			list_for_each_entry_safe(sev, next_sev, &ref->ctrl->ev_subs, node)
+				if (sev->fh->ctrl_handler == hdl)
+					list_del_init(&sev->node);
+			mutex_unlock(ref->ctrl->handler->lock);
+		}
 		kfree(ref);
 	}
 	/* Free all controls owned by the handler */
 	list_for_each_entry_safe(ctrl, next_ctrl, &hdl->ctrls, node) {
 		list_del(&ctrl->node);
 		list_for_each_entry_safe(sev, next_sev, &ctrl->ev_subs, node)
-			list_del(&sev->node);
+			list_del_init(&sev->node);
 		kvfree(ctrl->p_array);
 		kvfree(ctrl);
 	}
