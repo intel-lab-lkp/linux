@@ -361,6 +361,7 @@ int main(int argc, char **argv)
 		get_symbol_from_map(hdr, system_map, USED_SYM, &used_sym);
 		get_symbol_from_map(hdr, system_map, LSIZE_SYM, &lsize_sym);
 		cert_sym.size = used_sym.address - cert_sym.address;
+		fclose(system_map);
 	} else {
 		info("Symbol table found.\n");
 		if (system_map_file)
