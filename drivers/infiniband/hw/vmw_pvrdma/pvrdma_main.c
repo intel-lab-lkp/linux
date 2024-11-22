@@ -181,6 +181,7 @@ static const struct ib_device_ops pvrdma_dev_ops = {
 	.query_qp = pvrdma_query_qp,
 	.reg_user_mr = pvrdma_reg_user_mr,
 	.req_notify_cq = pvrdma_req_notify_cq,
+	.report_port_event = pvrdma_report_event_handle,
 
 	INIT_RDMA_OBJ_SIZE(ib_ah, pvrdma_ah, ibah),
 	INIT_RDMA_OBJ_SIZE(ib_cq, pvrdma_cq, ibcq),
@@ -666,20 +667,7 @@ static void pvrdma_netdevice_event_handle(struct pvrdma_dev *dev,
 
 	switch (event) {
 	case NETDEV_REBOOT:
-	case NETDEV_DOWN:
 		pvrdma_dispatch_event(dev, 1, IB_EVENT_PORT_ERR);
-		break;
-	case NETDEV_UP:
-		pvrdma_write_reg(dev, PVRDMA_REG_CTL,
-				 PVRDMA_DEVICE_CTL_UNQUIESCE);
-
-		mb();
-
-		if (pvrdma_read_reg(dev, PVRDMA_REG_ERR))
-			dev_err(&dev->pdev->dev,
-				"failed to activate device during link up\n");
-		else
-			pvrdma_dispatch_event(dev, 1, IB_EVENT_PORT_ACTIVE);
 		break;
 	case NETDEV_UNREGISTER:
 		ib_device_set_netdev(&dev->ib_dev, NULL, 1);
@@ -704,6 +692,34 @@ static void pvrdma_netdevice_event_handle(struct pvrdma_dev *dev,
 	default:
 		dev_dbg(&dev->pdev->dev, "ignore netdevice event %ld on %s\n",
 			event, dev_name(&dev->ib_dev.dev));
+		break;
+	}
+}
+
+static void pvrdma_report_event_handle(struct ib_device *ibdev,
+				       struct net_device *ndev,
+				       unsigned long event)
+{
+	struct pvrdma_dev *dev = container_of(ibdev, struct pvrdma_dev, ib_dev);
+
+	switch (event) {
+	case NETDEV_DOWN:
+		pvrdma_dispatch_event(dev, 1, IB_EVENT_PORT_ERR);
+		break;
+	case NETDEV_UP:
+		pvrdma_write_reg(dev, PVRDMA_REG_CTL,
+				 PVRDMA_DEVICE_CTL_UNQUIESCE);
+
+		mb();
+
+		if (pvrdma_read_reg(dev, PVRDMA_REG_ERR))
+			dev_err(&dev->pdev->dev,
+				"failed to activate device during link up\n");
+		else
+			pvrdma_dispatch_event(dev, 1, IB_EVENT_PORT_ACTIVE);
+		break;
+
+	default:
 		break;
 	}
 }
