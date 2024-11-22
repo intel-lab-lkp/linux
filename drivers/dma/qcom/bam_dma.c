@@ -59,6 +59,9 @@ struct bam_desc_hw {
 #define DESC_FLAG_NWD BIT(12)
 #define DESC_FLAG_CMD BIT(11)
 
+#define BAM_LITE	0x13
+#define BAM_NDP		0x20
+
 struct bam_async_desc {
 	struct virt_dma_desc vd;
 
@@ -398,6 +401,7 @@ struct bam_device {
 
 	/* dma start transaction tasklet */
 	struct tasklet_struct task;
+	u32 bam_revision;
 };
 
 /**
@@ -441,8 +445,9 @@ static void bam_reset(struct bam_device *bdev)
 	writel_relaxed(val, bam_addr(bdev, 0, BAM_CTRL));
 
 	/* set descriptor threshold, start with 4 bytes */
-	writel_relaxed(DEFAULT_CNT_THRSHLD,
-			bam_addr(bdev, 0, BAM_DESC_CNT_TRSHLD));
+	if (bdev->bam_revision >= BAM_LITE && bdev->bam_revision < BAM_NDP)
+		writel_relaxed(DEFAULT_CNT_THRSHLD,
+			       bam_addr(bdev, 0, BAM_DESC_CNT_TRSHLD));
 
 	/* Enable default set of h/w workarounds, ie all except BAM_FULL_PIPE */
 	writel_relaxed(BAM_CNFG_BITS_DEFAULT, bam_addr(bdev, 0, BAM_CNFG_BITS));
@@ -1000,9 +1005,9 @@ static void bam_apply_new_config(struct bam_chan *bchan,
 			maxburst = bchan->slave.src_maxburst;
 		else
 			maxburst = bchan->slave.dst_maxburst;
-
-		writel_relaxed(maxburst,
-			       bam_addr(bdev, 0, BAM_DESC_CNT_TRSHLD));
+		if (bdev->bam_revision >= BAM_LITE && bdev->bam_revision < BAM_NDP)
+			writel_relaxed(maxburst,
+				       bam_addr(bdev, 0, BAM_DESC_CNT_TRSHLD));
 	}
 
 	bchan->reconfigure = 0;
@@ -1192,10 +1197,11 @@ static int bam_init(struct bam_device *bdev)
 	u32 val;
 
 	/* read revision and configuration information */
-	if (!bdev->num_ees) {
-		val = readl_relaxed(bam_addr(bdev, 0, BAM_REVISION));
+	val = readl_relaxed(bam_addr(bdev, 0, BAM_REVISION));
+	if (!bdev->num_ees)
 		bdev->num_ees = (val >> NUM_EES_SHIFT) & NUM_EES_MASK;
-	}
+
+	bdev->bam_revision = val & 0xff;
 
 	/* check that configured EE is within range */
 	if (bdev->ee >= bdev->num_ees)
