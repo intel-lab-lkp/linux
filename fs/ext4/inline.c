@@ -2022,9 +2022,15 @@ out:
 
 int ext4_convert_inline_data(struct inode *inode)
 {
+	struct ext4_xattr_ibody_find is = {
+		.s = { .not_found = -ENODATA, },
+	};
+	struct ext4_xattr_info i = {
+		.name_index = EXT4_XATTR_INDEX_SYSTEM,
+		.name = EXT4_XATTR_SYSTEM_DATA,
+	};
 	int error, needed_blocks, no_expand;
 	handle_t *handle;
-	struct ext4_iloc iloc;
 
 	if (!ext4_has_inline_data(inode)) {
 		ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
@@ -2045,8 +2051,8 @@ int ext4_convert_inline_data(struct inode *inode)
 
 	needed_blocks = ext4_writepage_trans_blocks(inode);
 
-	iloc.bh = NULL;
-	error = ext4_get_inode_loc(inode, &iloc);
+	is.iloc.bh = NULL;
+	error = ext4_get_inode_loc(inode, &is.iloc);
 	if (error)
 		return error;
 
@@ -2057,11 +2063,17 @@ int ext4_convert_inline_data(struct inode *inode)
 	}
 
 	ext4_write_lock_xattr(inode, &no_expand);
+
+	error = ext4_xattr_ibody_find(inode, &i, &is);
+	if (error)
+		goto out_xattr;
+
 	if (ext4_has_inline_data(inode))
-		error = ext4_convert_inline_data_nolock(handle, inode, &iloc);
+		error = ext4_convert_inline_data_nolock(handle, inode, &is.iloc);
+out_xattr:
 	ext4_write_unlock_xattr(inode, &no_expand);
 	ext4_journal_stop(handle);
 out_free:
-	brelse(iloc.bh);
+	brelse(is.iloc.bh);
 	return error;
 }
