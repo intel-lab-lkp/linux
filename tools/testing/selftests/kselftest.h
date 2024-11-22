@@ -147,6 +147,10 @@ static inline void ksft_set_plan(unsigned int plan)
 
 static inline void ksft_print_cnts(void)
 {
+	if (ksft_cnt.ksft_xskip > 0)
+		printf(
+			"# Skipped tests detected. Consider enabling relevant config options to improve coverage.\n"
+		);
 	if (ksft_plan != ksft_test_num())
 		printf("# Planned tests != run tests (%u != %u)\n",
 			ksft_plan, ksft_test_num());
