@@ -653,6 +653,8 @@ EXPORT_SYMBOL_NS_GPL(devm_ad_sd_setup_buffer_and_trigger, IIO_AD_SIGMA_DELTA);
 int ad_sd_init(struct ad_sigma_delta *sigma_delta, struct iio_dev *indio_dev,
 	struct spi_device *spi, const struct ad_sigma_delta_info *info)
 {
+	int ret;
+
 	sigma_delta->spi = spi;
 	sigma_delta->info = info;
 
@@ -674,10 +676,16 @@ int ad_sd_init(struct ad_sigma_delta *sigma_delta, struct iio_dev *indio_dev,
 		}
 	}
 
-	if (info->irq_line)
-		sigma_delta->irq_line = info->irq_line;
-	else
+	if (info->get_irq_by_name) {
+		ret = fwnode_irq_get_byname(dev_fwnode(&spi->dev), "rdy");
+		if (ret < 0)
+			return dev_err_probe(&spi->dev, ret,
+					     "Interrupt 'rdy' is required\n");
+
+		sigma_delta->irq_line = ret;
+	} else {
 		sigma_delta->irq_line = spi->irq;
+	}
 
 	iio_device_set_drvdata(indio_dev, sigma_delta);
 

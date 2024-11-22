@@ -758,6 +758,7 @@ static struct ad_sigma_delta_info ad7173_sigma_delta_info = {
 	.disable_all = ad7173_disable_all,
 	.disable_one = ad7173_disable_one,
 	.set_mode = ad7173_set_mode,
+	.get_irq_by_name = true,
 	.has_registers = true,
 	.addr_shift = 0,
 	.read_mask = BIT(6),
@@ -1396,12 +1397,6 @@ static int ad7173_fw_parse_device_config(struct iio_dev *indio_dev)
 		if (ret)
 			return ret;
 	}
-
-	ret = fwnode_irq_get_byname(dev_fwnode(dev), "rdy");
-	if (ret < 0)
-		return dev_err_probe(dev, ret, "Interrupt 'rdy' is required\n");
-
-	ad7173_sigma_delta_info.irq_line = ret;
 
 	return ad7173_fw_parse_channel_config(indio_dev);
 }

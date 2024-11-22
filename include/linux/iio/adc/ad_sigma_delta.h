@@ -43,6 +43,8 @@ struct iio_dev;
  *		the value required for the driver to identify the channel.
  * @postprocess_sample: Is called for each sampled data word, can be used to
  *		modify or drop the sample data, it, may be NULL.
+ * @get_irq_by_name: Usually, the RDY IRQ is the first one and therefore ==
+ *		spi->irq. If not, set this to true to get the IRQ by name.
  * @has_registers: true if the device has writable and readable registers, false
  *		if there is just one read-only sample data shift register.
  * @addr_shift: Shift of the register address in the communications register.
@@ -52,7 +54,6 @@ struct iio_dev;
  *   be used.
  * @irq_flags: flags for the interrupt used by the triggered buffer
  * @num_slots: Number of sequencer slots
- * @irq_line: IRQ for reading conversions. If 0, spi->irq will be used
  */
 struct ad_sigma_delta_info {
 	int (*set_channel)(struct ad_sigma_delta *, unsigned int channel);
@@ -61,6 +62,7 @@ struct ad_sigma_delta_info {
 	int (*disable_all)(struct ad_sigma_delta *);
 	int (*disable_one)(struct ad_sigma_delta *, unsigned int chan);
 	int (*postprocess_sample)(struct ad_sigma_delta *, unsigned int raw_sample);
+	bool get_irq_by_name;
 	bool has_registers;
 	unsigned int addr_shift;
 	unsigned int read_mask;
@@ -68,7 +70,6 @@ struct ad_sigma_delta_info {
 	unsigned int data_reg;
 	unsigned long irq_flags;
 	unsigned int num_slots;
-	int irq_line;
 };
 
 /**
