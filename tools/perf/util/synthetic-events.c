@@ -2534,7 +2534,7 @@ static union perf_event *__synthesize_schedstat_cpu(struct io *io, __u16 version
 	if (io__get_dec(io, (__u64 *)cpu) != ' ')
 		goto out_cpu;
 
-#define CPU_FIELD(_type, _name, _ver)					\
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)	\
 	do {								\
 		__u64 _tmp;						\
 		ch = io__get_dec(io, &_tmp);				\
@@ -2658,7 +2658,7 @@ static union perf_event *__synthesize_schedstat_domain(struct io *io, __u16 vers
 	free(d_name);
 	free(cpu_mask);
 
-#define DOMAIN_FIELD(_type, _name, _ver)				\
+#define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)	\
 	do {								\
 		__u64 _tmp;						\
 		ch = io__get_dec(io, &_tmp);				\

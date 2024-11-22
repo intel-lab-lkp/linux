@@ -458,13 +458,13 @@ struct perf_record_compressed {
 };
 
 struct perf_record_schedstat_cpu_v15 {
-#define CPU_FIELD(_type, _name, _ver)		_type _name
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)		_type _name
 #include "schedstat-v15.h"
 #undef CPU_FIELD
 };
 
 struct perf_record_schedstat_cpu_v16 {
-#define CPU_FIELD(_type, _name, _ver)		_type _name
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)		_type _name
 #include "schedstat-v16.h"
 #undef CPU_FIELD
 };
@@ -481,13 +481,13 @@ struct perf_record_schedstat_cpu {
 };
 
 struct perf_record_schedstat_domain_v15 {
-#define DOMAIN_FIELD(_type, _name, _ver)	_type _name
+#define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)		_type _name
 #include "schedstat-v15.h"
 #undef DOMAIN_FIELD
 };
 
 struct perf_record_schedstat_domain_v16 {
-#define DOMAIN_FIELD(_type, _name, _ver)	_type _name
+#define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)		_type _name
 #include "schedstat-v16.h"
 #undef DOMAIN_FIELD
 };

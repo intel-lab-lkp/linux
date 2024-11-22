@@ -560,7 +560,7 @@ size_t perf_event__fprintf_schedstat_cpu(union perf_event *event, FILE *fp)
 
 	size = fprintf(fp, "\ncpu%u ", cs->cpu);
 
-#define CPU_FIELD(_type, _name, _ver)						\
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)		\
 	size += fprintf(fp, "%" PRIu64 " ", (unsigned long)cs->_ver._name)
 
 	if (version == 15) {
@@ -638,7 +638,7 @@ size_t perf_event__fprintf_schedstat_domain(union perf_event *event, FILE *fp)
 	size += fprintf(fp, "%s ", cpu_mask);
 	free(cpu_mask);
 
-#define DOMAIN_FIELD(_type, _name, _ver)					\
+#define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)		\
 	size += fprintf(fp, "%" PRIu64 " ", (unsigned long)ds->_ver._name)
 
 	if (version == 15) {

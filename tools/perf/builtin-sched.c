@@ -3859,6 +3859,489 @@ out:
 	return err;
 }
 
+struct schedstat_domain {
+	struct perf_record_schedstat_domain *domain_data;
+	struct schedstat_domain *next;
+};
+
+struct schedstat_cpu {
+	struct perf_record_schedstat_cpu *cpu_data;
+	struct schedstat_domain *domain_head;
+	struct schedstat_cpu *next;
+};
+
+struct schedstat_cpu *cpu_head = NULL, *cpu_tail = NULL, *cpu_second_pass = NULL;
+struct schedstat_domain *domain_tail = NULL, *domain_second_pass = NULL;
+bool after_workload_flag;
+
+static void store_schedtstat_cpu_diff(struct schedstat_cpu *after_workload)
+{
+	struct perf_record_schedstat_cpu *before = cpu_second_pass->cpu_data;
+	struct perf_record_schedstat_cpu *after = after_workload->cpu_data;
+	__u16 version = after_workload->cpu_data->version;
+
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)	\
+	(before->_ver._name = after->_ver._name - before->_ver._name)
+
+	if (version == 15) {
+#include <perf/schedstat-v15.h>
+	} else if (version == 16) {
+#include <perf/schedstat-v16.h>
+	}
+
+#undef CPU_FIELD
+}
+
+static void store_schedstat_domain_diff(struct schedstat_domain *after_workload)
+{
+	struct perf_record_schedstat_domain *before = domain_second_pass->domain_data;
+	struct perf_record_schedstat_domain *after = after_workload->domain_data;
+	__u16 version = after_workload->domain_data->version;
+
+#define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)	\
+	(before->_ver._name = after->_ver._name - before->_ver._name)
+
+	if (version == 15) {
+#include <perf/schedstat-v15.h>
+	} else if (version == 16) {
+#include <perf/schedstat-v16.h>
+	}
+#undef DOMAIN_FIELD
+}
+
+static void print_separator(size_t pre_dash_cnt, const char *s, size_t post_dash_cnt)
+{
+	size_t i;
+
+	for (i = 0; i < pre_dash_cnt; ++i)
+		printf("-");
+
+	printf("%s", s);
+
+	for (i = 0; i < post_dash_cnt; ++i)
+		printf("-");
+
+	printf("\n");
+}
+
+static inline void print_cpu_stats(struct perf_record_schedstat_cpu *cs)
+{
+	printf("%-65s %12s %12s\n", "DESC", "COUNT", "PCT_CHANGE");
+	print_separator(100, "", 0);
+
+#define CALC_PCT(_x, _y)	((_y) ? ((double)(_x) / (_y)) * 100 : 0.0)
+
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)		\
+	do {									\
+		printf("%-65s: " _format, _desc, cs->_ver._name);		\
+		if (_is_pct) {							\
+			printf("  ( %8.2lf%% )",				\
+			       CALC_PCT(cs->_ver._name, cs->_ver._pct_of));	\
+		}								\
+		printf("\n");							\
+	} while (0)
+
+	if (cs->version == 15) {
+#include <perf/schedstat-v15.h>
+	} else if (cs->version == 16) {
+#include <perf/schedstat-v16.h>
+	}
+
+#undef CPU_FIELD
+#undef CALC_PCT
+}
+
+static inline void print_domain_stats(struct perf_record_schedstat_domain *ds,
+				      __u64 jiffies)
+{
+	printf("%-65s %12s %14s\n", "DESC", "COUNT", "AVG_JIFFIES");
+
+#define DOMAIN_CATEGORY(_desc)							\
+	do {									\
+		size_t _len = strlen(_desc);					\
+		size_t _pre_dash_cnt = (100 - _len) / 2;			\
+		size_t _post_dash_cnt = 100 - _len - _pre_dash_cnt;		\
+		print_separator(_pre_dash_cnt, _desc, _post_dash_cnt);		\
+	} while (0)
+
+#define CALC_AVG(_x, _y)	((_y) ? (long double)(_x) / (_y) : 0.0)
+
+#define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)		\
+	do {									\
+		printf("%-65s: " _format, _desc, ds->_ver._name);		\
+		if (_is_jiffies) {						\
+			printf("  $ %11.2Lf $",					\
+			       CALC_AVG(jiffies, ds->_ver._name));		\
+		}								\
+		printf("\n");							\
+	} while (0)
+
+#define DERIVED_CNT_FIELD(_desc, _format, _x, _y, _z, _ver)			\
+	printf("*%-64s: " _format "\n", _desc,					\
+	       (ds->_ver._x) - (ds->_ver._y) - (ds->_ver._z))
+
+#define DERIVED_AVG_FIELD(_desc, _format, _x, _y, _z, _w, _ver)			\
+	printf("*%-64s: " _format "\n", _desc, CALC_AVG(ds->_ver._w,		\
+	       ((ds->_ver._x) - (ds->_ver._y) - (ds->_ver._z))))
+
+	if (ds->version == 15) {
+#include <perf/schedstat-v15.h>
+	} else if (ds->version == 16) {
+#include <perf/schedstat-v16.h>
+	}
+
+#undef DERIVED_AVG_FIELD
+#undef DERIVED_CNT_FIELD
+#undef DOMAIN_FIELD
+#undef CALC_AVG
+#undef DOMAIN_CATEGORY
+}
+
+static void print_domain_cpu_list(struct perf_record_schedstat_domain *ds)
+{
+	char bin[16][5] = {"0000", "0001", "0010", "0011",
+			   "0100", "0101", "0110", "0111",
+			   "1000", "1001", "1010", "1011",
+			   "1100", "1101", "1110", "1111"};
+	bool print_flag = false, low = true;
+	int cpu = 0, start, end, idx;
+
+	idx = ((ds->nr_cpus + 7) >> 3) - 1;
+
+	printf("<");
+	while (idx >= 0) {
+		__u8 index;
+
+		if (low)
+			index = ds->cpu_mask[idx] & 0xf;
+		else
+			index = (ds->cpu_mask[idx--] & 0xf0) >> 4;
+
+		for (int i = 3; i >= 0; i--) {
+			if (!print_flag && bin[index][i] == '1') {
+				start = cpu;
+				print_flag = true;
+			} else if (print_flag && bin[index][i] == '0') {
+				end = cpu - 1;
+				print_flag = false;
+				if (start == end)
+					printf("%d, ", start);
+				else
+					printf("%d-%d, ", start, end);
+			}
+			cpu++;
+		}
+
+		low = !low;
+	}
+
+	if (print_flag) {
+		if (start == cpu-1)
+			printf("%d, ", start);
+		else
+			printf("%d-%d, ", start, cpu-1);
+	}
+	printf("\b\b>\n");
+}
+
+static void summarize_schedstat_cpu(struct schedstat_cpu *summary_cpu,
+				    struct schedstat_cpu *cptr,
+				    int cnt, bool is_last)
+{
+	struct perf_record_schedstat_cpu *summary_cs = summary_cpu->cpu_data,
+					 *temp_cs = cptr->cpu_data;
+
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)		\
+	do {									\
+		summary_cs->_ver._name += temp_cs->_ver._name;			\
+		if (is_last)							\
+			summary_cs->_ver._name /= cnt;				\
+	} while (0)
+
+	if (cptr->cpu_data->version == 15) {
+#include <perf/schedstat-v15.h>
+	} else if (cptr->cpu_data->version == 16) {
+#include <perf/schedstat-v16.h>
+	}
+#undef CPU_FIELD
+}
+
+static void summarize_schedstat_domain(struct schedstat_domain *summary_domain,
+				       struct schedstat_domain *dptr,
+				       int cnt, bool is_last)
+{
+	struct perf_record_schedstat_domain *summary_ds = summary_domain->domain_data,
+					    *temp_ds = dptr->domain_data;
+
+#define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)		\
+	do {									\
+		summary_ds->_ver._name += temp_ds->_ver._name;			\
+		if (is_last)							\
+			summary_ds->_ver._name /= cnt;				\
+	} while (0)
+
+	if (dptr->domain_data->version == 15) {
+#include <perf/schedstat-v15.h>
+	} else if (dptr->domain_data->version == 16) {
+#include <perf/schedstat-v16.h>
+	}
+#undef DOMAIN_FIELD
+}
+
+static void get_all_cpu_stats(struct schedstat_cpu **cptr)
+{
+	struct schedstat_domain *dptr = NULL, *tdptr = NULL, *dtail = NULL;
+	struct schedstat_cpu *tcptr = *cptr, *summary_head = NULL;
+	struct perf_record_schedstat_domain *ds = NULL;
+	struct perf_record_schedstat_cpu *cs = NULL;
+	bool is_last = false;
+	int cnt = 0;
+
+	if (tcptr) {
+		summary_head = zalloc(sizeof(*summary_head));
+		summary_head->cpu_data = zalloc(sizeof(*cs));
+		memcpy(summary_head->cpu_data, tcptr->cpu_data, sizeof(*cs));
+		summary_head->next = NULL;
+		summary_head->domain_head = NULL;
+		dptr = tcptr->domain_head;
+
+		while (dptr) {
+			size_t cpu_mask_size = (dptr->domain_data->nr_cpus + 7) >> 3;
+
+			tdptr = zalloc(sizeof(*tdptr));
+			tdptr->domain_data = zalloc(sizeof(*ds) + cpu_mask_size);
+			memcpy(tdptr->domain_data, dptr->domain_data, sizeof(*ds) + cpu_mask_size);
+
+			tdptr->next = NULL;
+			if (!dtail) {
+				summary_head->domain_head = tdptr;
+				dtail = tdptr;
+			} else {
+				dtail->next = tdptr;
+				dtail = dtail->next;
+			}
+			dptr = dptr->next;
+		}
+	}
+
+	tcptr = (*cptr)->next;
+	while (tcptr) {
+		if (!tcptr->next)
+			is_last = true;
+
+		cnt++;
+		summarize_schedstat_cpu(summary_head, tcptr, cnt, is_last);
+		tdptr = summary_head->domain_head;
+		dptr = tcptr->domain_head;
+
+		while (tdptr) {
+			summarize_schedstat_domain(tdptr, dptr, cnt, is_last);
+			tdptr = tdptr->next;
+			dptr = dptr->next;
+		}
+		tcptr = tcptr->next;
+	}
+
+	tcptr = *cptr;
+	summary_head->next = tcptr;
+	*cptr = summary_head;
+}
+
+/* FIXME: The code fails (segfaults) when one or ore cpus are offline. */
+static void show_schedstat_data(struct schedstat_cpu *cptr)
+{
+	struct perf_record_schedstat_domain *ds = NULL;
+	struct perf_record_schedstat_cpu *cs = NULL;
+	__u64 jiffies = cptr->cpu_data->timestamp;
+	struct schedstat_domain *dptr = NULL;
+	bool is_summary = true;
+
+	printf("Columns description\n");
+	print_separator(100, "", 0);
+	printf("DESC\t\t\t-> Description of the field\n");
+	printf("COUNT\t\t\t-> Value of the field\n");
+	printf("PCT_CHANGE\t\t-> Percent change with corresponding base value\n");
+	printf("AVG_JIFFIES\t\t-> Avg time in jiffies between two consecutive occurrence of event\n");
+
+	print_separator(100, "", 0);
+	printf("Time elapsed (in jiffies)                                        : %11llu\n",
+	       jiffies);
+	print_separator(100, "", 0);
+
+	get_all_cpu_stats(&cptr);
+
+	while (cptr) {
+		cs = cptr->cpu_data;
+		printf("\n");
+		print_separator(100, "", 0);
+		if (is_summary)
+			printf("CPU <ALL CPUS SUMMARY>\n");
+		else
+			printf("CPU %d\n", cs->cpu);
+
+		print_separator(100, "", 0);
+		print_cpu_stats(cs);
+		print_separator(100, "", 0);
+
+		dptr = cptr->domain_head;
+
+		while (dptr) {
+			ds = dptr->domain_data;
+			if (is_summary)
+				if (ds->name[0])
+					printf("CPU <ALL CPUS SUMMARY>, DOMAIN %s\n", ds->name);
+				else
+					printf("CPU <ALL CPUS SUMMARY>, DOMAIN %d\n", ds->domain);
+			else {
+				if (ds->name[0])
+					printf("CPU %d, DOMAIN %s CPUS ", cs->cpu, ds->name);
+				else
+					printf("CPU %d, DOMAIN %d CPUS ", cs->cpu, ds->domain);
+
+				print_domain_cpu_list(ds);
+			}
+			print_separator(100, "", 0);
+			print_domain_stats(ds, jiffies);
+			print_separator(100, "", 0);
+
+			dptr = dptr->next;
+		}
+		is_summary = false;
+		cptr = cptr->next;
+	}
+}
+
+static int perf_sched__process_schedstat(struct perf_session *session __maybe_unused,
+					 union perf_event *event)
+{
+	struct perf_cpu this_cpu;
+	static __u32 initial_cpu;
+
+	switch (event->header.type) {
+	case PERF_RECORD_SCHEDSTAT_CPU:
+		this_cpu.cpu = event->schedstat_cpu.cpu;
+		break;
+	case PERF_RECORD_SCHEDSTAT_DOMAIN:
+		this_cpu.cpu = event->schedstat_domain.cpu;
+		break;
+	default:
+		return 0;
+	}
+
+	if (user_requested_cpus && !perf_cpu_map__has(user_requested_cpus, this_cpu))
+		return 0;
+
+	if (event->header.type == PERF_RECORD_SCHEDSTAT_CPU) {
+		struct schedstat_cpu *temp = zalloc(sizeof(struct schedstat_cpu));
+
+		temp->cpu_data = zalloc(sizeof(struct perf_record_schedstat_cpu));
+		memcpy(temp->cpu_data, &event->schedstat_cpu,
+		       sizeof(struct perf_record_schedstat_cpu));
+		temp->next = NULL;
+		temp->domain_head = NULL;
+
+		if (cpu_head && temp->cpu_data->cpu == initial_cpu)
+			after_workload_flag = true;
+
+		if (!after_workload_flag) {
+			if (!cpu_head) {
+				initial_cpu = temp->cpu_data->cpu;
+				cpu_head = temp;
+			} else
+				cpu_tail->next = temp;
+
+			cpu_tail = temp;
+		} else {
+			if (temp->cpu_data->cpu == initial_cpu) {
+				cpu_second_pass = cpu_head;
+				cpu_head->cpu_data->timestamp =
+					temp->cpu_data->timestamp - cpu_second_pass->cpu_data->timestamp;
+			} else {
+				cpu_second_pass = cpu_second_pass->next;
+			}
+			domain_second_pass = cpu_second_pass->domain_head;
+			store_schedtstat_cpu_diff(temp);
+		}
+	} else if (event->header.type == PERF_RECORD_SCHEDSTAT_DOMAIN) {
+		size_t cpu_mask_size = (event->schedstat_domain.nr_cpus + 7) >> 3;
+		struct schedstat_domain *temp = zalloc(sizeof(struct schedstat_domain));
+
+		temp->domain_data = zalloc(sizeof(struct perf_record_schedstat_domain) + cpu_mask_size);
+		memcpy(temp->domain_data, &event->schedstat_domain,
+		       sizeof(struct perf_record_schedstat_domain) + cpu_mask_size);
+		temp->next = NULL;
+
+		if (!after_workload_flag) {
+			if (cpu_tail->domain_head == NULL) {
+				cpu_tail->domain_head = temp;
+				domain_tail = temp;
+			} else {
+				domain_tail->next = temp;
+				domain_tail = temp;
+			}
+		} else {
+			store_schedstat_domain_diff(temp);
+			domain_second_pass = domain_second_pass->next;
+		}
+	}
+
+	return 0;
+}
+
+static void free_schedstat(struct schedstat_cpu *cptr)
+{
+	struct schedstat_domain *dptr = NULL, *tmp_dptr;
+	struct schedstat_cpu *tmp_cptr;
+
+	while (cptr) {
+		tmp_cptr = cptr;
+		dptr = cptr->domain_head;
+
+		while (dptr) {
+			tmp_dptr = dptr;
+			dptr = dptr->next;
+			free(tmp_dptr);
+		}
+		cptr = cptr->next;
+		free(tmp_cptr);
+	}
+}
+
+static int perf_sched__schedstat_report(struct perf_sched *sched)
+{
+	struct perf_session *session;
+	struct perf_data data = {
+		.path  = input_name,
+		.mode  = PERF_DATA_MODE_READ,
+	};
+	int err;
+
+	if (cpu_list) {
+		user_requested_cpus = perf_cpu_map__new(cpu_list);
+		if (!user_requested_cpus)
+			return -EINVAL;
+	}
+
+	sched->tool.schedstat_cpu = perf_sched__process_schedstat;
+	sched->tool.schedstat_domain = perf_sched__process_schedstat;
+
+	session = perf_session__new(&data, &sched->tool);
+	if (IS_ERR(session)) {
+		pr_err("Perf session creation failed.\n");
+		return PTR_ERR(session);
+	}
+
+	err = perf_session__process_events(session);
+
+	perf_session__delete(session);
+	if (!err) {
+		setup_pager();
+		show_schedstat_data(cpu_head);
+		free_schedstat(cpu_head);
+	}
+	return err;
+}
+
 static bool schedstat_events_exposed(void)
 {
 	/*
@@ -4035,6 +4518,8 @@ int cmd_sched(int argc, const char **argv)
 	OPT_PARENT(sched_options)
 	};
 	const struct option stats_options[] = {
+	OPT_STRING('i', "input", &input_name, "file",
+		   "`stats report` with input filename"),
 	OPT_STRING('o', "output", &output_name, "file",
 		   "`stats record` with output filename"),
 	OPT_STRING('C', "cpu", &cpu_list, "cpu", "list of cpus to profile"),
@@ -4160,7 +4645,7 @@ int cmd_sched(int argc, const char **argv)
 
 		return perf_sched__timehist(&sched);
 	} else if (!strcmp(argv[0], "stats")) {
-		const char *const stats_subcommands[] = {"record", NULL};
+		const char *const stats_subcommands[] = {"record", "report", NULL};
 
 		argc = parse_options_subcommand(argc, argv, stats_options,
 						stats_subcommands,
@@ -4172,6 +4657,11 @@ int cmd_sched(int argc, const char **argv)
 				argc = parse_options(argc, argv, stats_options,
 						     stats_usage, 0);
 			return perf_sched__schedstat_record(&sched, argc, argv);
+		} else if (argv[0] && !strcmp(argv[0], "report")) {
+			if (argc)
+				argc = parse_options(argc, argv, stats_options,
+						     stats_usage, 0);
+			return perf_sched__schedstat_report(&sched);
 		}
 		usage_with_options(stats_usage, stats_options);
 	} else {
