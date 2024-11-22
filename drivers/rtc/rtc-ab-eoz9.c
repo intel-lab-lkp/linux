@@ -116,15 +116,15 @@ static int abeoz9_check_validity(struct device *dev)
 		return -EINVAL;
 	}
 
-	if (val & ABEOZ9_REG_CTRL_STATUS_V1F) {
+	if (val & ABEOZ9_REG_CTRL_STATUS_V2F) {
 		dev_warn(dev,
-			 "voltage drops below VLOW1 threshold, date is invalid\n");
+			 "voltage drops below VLOW2 threshold, date is invalid\n");
 		return -EINVAL;
 	}
 
-	if ((val & ABEOZ9_REG_CTRL_STATUS_V2F)) {
+	if ((val & ABEOZ9_REG_CTRL_STATUS_V1F)) {
 		dev_warn(dev,
-			 "voltage drops below VLOW2 threshold, date is invalid\n");
+			 "voltage drops below VLOW1 threshold, date is invalid\n");
 		return -EINVAL;
 	}
 
