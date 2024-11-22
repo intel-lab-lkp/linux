@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# SIPA network device configuration
+#
+
+config SPRD_IPA
+	tristate "SPREADTRUM IP PACKET ACCELERATOR"
+	depends on ARCH_SPRD
+	help
+	  IPA is a hardware block present in some Unisoc SoCs, choose
+	  Y or M to enabel it if you are sure current Soc include it.
+	  IP Packet Accelerator(IPA) is a programmable protocol processor
+	  which can process L2/L3 network packets, its mainly used in
+	  5g scenarios.
+
+	  If unsure, say N.
