@@ -1999,9 +1999,10 @@ static void transfer_surpluses(struct list_head *surpluses, struct ioc_now *now)
 		parent = iocg->ancestors[iocg->level - 1];
 
 		/* b' = gamma * b_f + b_t' */
-		iocg->hweight_inuse = DIV64_U64_ROUND_UP(
-			(u64)gamma * (iocg->hweight_active - iocg->hweight_donating),
-			WEIGHT_ONE) + iocg->hweight_after_donation;
+		iocg->hweight_inuse = max_t(u64, 1,
+			DIV64_U64_ROUND_UP(
+				(u64)gamma * (iocg->hweight_active - iocg->hweight_donating),
+				WEIGHT_ONE) + iocg->hweight_after_donation);
 
 		/* w' = s' * b' / b'_p */
 		inuse = DIV64_U64_ROUND_UP(
