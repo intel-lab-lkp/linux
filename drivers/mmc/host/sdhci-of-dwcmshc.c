@@ -81,6 +81,8 @@
 #define DWCMSHC_EMMC_DLL_TXCLK		0x808
 #define DWCMSHC_EMMC_DLL_STRBIN		0x80c
 #define DECMSHC_EMMC_DLL_CMDOUT		0x810
+#define MISC_INTCLK_EN			BIT(1)
+#define DECMSHC_EMMC_MISC_CON		0x81c
 #define DWCMSHC_EMMC_DLL_STATUS0	0x840
 #define DWCMSHC_EMMC_DLL_START		BIT(0)
 #define DWCMSHC_EMMC_DLL_LOCKED		BIT(8)
@@ -213,6 +215,7 @@ enum dwcmshc_rk_type {
 struct rk35xx_priv {
 	struct reset_control *reset;
 	enum dwcmshc_rk_type devtype;
+	bool has_misc_con;
 	u8 txclk_tapnum;
 };
 
@@ -720,6 +723,7 @@ static void rk35xx_sdhci_reset(struct sdhci_host *host, u8 mask)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
 	struct rk35xx_priv *priv = dwc_priv->priv;
+	int misc_con;
 
 	if (mask & SDHCI_RESET_ALL && priv->reset) {
 		reset_control_assert(priv->reset);
@@ -728,6 +732,12 @@ static void rk35xx_sdhci_reset(struct sdhci_host *host, u8 mask)
 	}
 
 	sdhci_reset(host, mask);
+
+	/* Restore DECMSHC_EMMC_MISC_CON */
+	if (priv->has_misc_con) {
+		misc_con = sdhci_readl(host, DECMSHC_EMMC_MISC_CON);
+		sdhci_writel(host, misc_con | MISC_INTCLK_EN, DECMSHC_EMMC_MISC_CON);
+	}
 }
 
 static int dwcmshc_rk35xx_init(struct device *dev, struct sdhci_host *host,
@@ -735,7 +745,7 @@ static int dwcmshc_rk35xx_init(struct device *dev, struct sdhci_host *host,
 {
 	static const char * const clk_ids[] = {"axi", "block", "timer"};
 	struct rk35xx_priv *priv;
-	int err;
+	int err, misc_con;
 
 	priv = devm_kzalloc(dev, sizeof(struct rk35xx_priv), GFP_KERNEL);
 	if (!priv)
@@ -745,6 +755,9 @@ static int dwcmshc_rk35xx_init(struct device *dev, struct sdhci_host *host,
 		priv->devtype = DWCMSHC_RK3588;
 	else
 		priv->devtype = DWCMSHC_RK3568;
+
+	if (of_device_is_compatible(dev->of_node, "rockchip,rk3576-dwcmshc"))
+		priv->has_misc_con = true;
 
 	priv->reset = devm_reset_control_array_get_optional_exclusive(mmc_dev(host->mmc));
 	if (IS_ERR(priv->reset)) {
@@ -767,6 +780,10 @@ static int dwcmshc_rk35xx_init(struct device *dev, struct sdhci_host *host,
 	/* Reset previous settings */
 	sdhci_writel(host, 0, DWCMSHC_EMMC_DLL_TXCLK);
 	sdhci_writel(host, 0, DWCMSHC_EMMC_DLL_STRBIN);
+	if (priv->has_misc_con) {
+		misc_con = sdhci_readl(host, DECMSHC_EMMC_MISC_CON);
+		sdhci_writel(host, misc_con | MISC_INTCLK_EN, DECMSHC_EMMC_MISC_CON);
+	}
 
 	dwc_priv->priv = priv;
 
