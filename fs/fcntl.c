@@ -376,6 +376,8 @@ static long fcntl_set_rw_hint(struct file *file, unsigned int cmd,
 
 	if (!inode_owner_or_capable(file_mnt_idmap(file), inode))
 		return -EPERM;
+	if (!(file->f_mode & FMODE_WRITE))
+		return -EBADF;
 
 	if (copy_from_user(&hint, argp, sizeof(hint)))
 		return -EFAULT;
