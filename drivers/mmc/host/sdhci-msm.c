@@ -134,8 +134,21 @@
 /* Timeout value to avoid infinite waiting for pwr_irq */
 #define MSM_PWR_IRQ_TIMEOUT_MS 5000
 
+/* Max load for eMMC Vdd supply */
+#define MMC_VMMC_MAX_LOAD_UA	570000
+
 /* Max load for eMMC Vdd-io supply */
 #define MMC_VQMMC_MAX_LOAD_UA	325000
+
+/* Max load for SD Vdd supply */
+#define SD_VMMC_MAX_LOAD_UA	800000
+
+/* Max load for SD Vdd-io supply */
+#define SD_VQMMC_MAX_LOAD_UA	22000
+
+#define MAX_MMC_SD_VMMC_LOAD_UA  max(MMC_VMMC_MAX_LOAD_UA, SD_VMMC_MAX_LOAD_UA)
+
+#define MAX_MMC_SD_VQMMC_LOAD_UA max(MMC_VQMMC_MAX_LOAD_UA, SD_VQMMC_MAX_LOAD_UA)
 
 #define msm_host_readl(msm_host, host, offset) \
 	msm_host->var_ops->msm_readl_relaxed(host, offset)
@@ -146,6 +159,11 @@
 /* CQHCI vendor specific registers */
 #define CQHCI_VENDOR_CFG1	0xA00
 #define CQHCI_VENDOR_DIS_RST_ON_CQ_EN	(0x3 << 13)
+
+enum {
+	VMMC_REGULATOR,
+	VQMMC_REGULATOR,
+};
 
 struct sdhci_msm_offset {
 	u32 core_hc_mode;
@@ -1403,10 +1421,69 @@ static int sdhci_msm_set_pincfg(struct sdhci_msm_host *msm_host, bool level)
 	return ret;
 }
 
-static int sdhci_msm_set_vmmc(struct mmc_host *mmc)
+static int sdhci_msm_get_regulator_load(struct mmc_host *mmc, int max_current, int type)
 {
+	int load = 0;
+
+	/*
+	 * When eMMC and SD are powered on for the first time, select a higher
+	 * current value from the corresponding current for eMMC and SD to
+	 * ensure that the eMMC and SD cards start up properly and complete
+	 * initialization. After the initialization process is finished, use
+	 * the corresponding current to set the eMMC and SD to ensure the
+	 * normal work of the device.
+	 */
+
+	if (!mmc->card)
+		return max_current;
+
+	if (mmc_card_is_removable(mmc) && mmc_card_mmc(mmc->card))
+		load = (type == VMMC_REGULATOR) ? MMC_VMMC_MAX_LOAD_UA : MMC_VQMMC_MAX_LOAD_UA;
+	else if (mmc_card_sd(mmc->card))
+		load = (type == VMMC_REGULATOR) ? SD_VMMC_MAX_LOAD_UA : SD_VQMMC_MAX_LOAD_UA;
+
+	return load;
+}
+
+static int msm_config_regulator_load(struct sdhci_msm_host *msm_host, struct mmc_host *mmc,
+				     bool hpm, int max_current, int type)
+{
+	int ret;
+	int load = 0;
+
+	/*
+	 * After the initialization process is finished, Once the type of card
+	 * is determined，only set the corresponding current for SD and eMMC.
+	 */
+
+	if (mmc->card && !(mmc_card_mmc(mmc->card) || mmc_card_sd(mmc->card)))
+		return 0;
+
+	if (hpm)
+		load = sdhci_msm_get_regulator_load(mmc, max_current, type);
+
+	if (type == VMMC_REGULATOR)
+		ret = regulator_set_load(mmc->supply.vmmc, load);
+	else
+		ret = regulator_set_load(mmc->supply.vqmmc, load);
+	if (ret)
+		dev_err(mmc_dev(mmc), "%s: set load failed: %d\n",
+			mmc_hostname(mmc), ret);
+	return ret;
+}
+
+static int sdhci_msm_set_vmmc(struct sdhci_msm_host *msm_host,
+			      struct mmc_host *mmc, bool hpm)
+{
+	int ret;
+
 	if (IS_ERR(mmc->supply.vmmc))
 		return 0;
+
+	ret = msm_config_regulator_load(msm_host, mmc, hpm,
+					MAX_MMC_SD_VMMC_LOAD_UA, VMMC_REGULATOR);
+	if (ret)
+		return ret;
 
 	return mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, mmc->ios.vdd);
 }
@@ -1435,6 +1512,15 @@ static int msm_toggle_vqmmc(struct sdhci_msm_host *msm_host,
 				goto out;
 			}
 		}
+
+		ret = msm_config_regulator_load(msm_host, mmc, level,
+						MAX_MMC_SD_VQMMC_LOAD_UA, VQMMC_REGULATOR);
+		if (ret < 0) {
+			dev_err(mmc_dev(mmc), "%s: vqmmc set regulator load failed: %d\n",
+				mmc_hostname(mmc), ret);
+			goto out;
+		}
+
 		ret = regulator_enable(mmc->supply.vqmmc);
 	} else {
 		ret = regulator_disable(mmc->supply.vqmmc);
@@ -1642,7 +1728,8 @@ static void sdhci_msm_handle_pwr_irq(struct sdhci_host *host, int irq)
 	}
 
 	if (pwr_state) {
-		ret = sdhci_msm_set_vmmc(mmc);
+		ret = sdhci_msm_set_vmmc(msm_host, mmc,
+					 pwr_state & REQ_BUS_ON);
 		if (!ret)
 			ret = sdhci_msm_set_vqmmc(msm_host, mmc,
 					pwr_state & REQ_BUS_ON);
