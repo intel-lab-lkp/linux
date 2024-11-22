@@ -911,12 +911,19 @@ void cxl_coordinates_combine(struct access_coordinate *out,
 bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port);
 
 #ifdef CONFIG_CXL_ARCH_LOW_MEMORY_HOLE
+
+/* Range start address of misaligned CFMWS in x86 with LMH */
+#define MISALIGNED_CFMWS_RANGE_START 0x0
+/* Range start address of mock misaligned CFMWS for tests */
+#define MISALIGNED_MOCK_CFMWS_RANGE_START 0xf010000000
+
 bool arch_match_spa(struct cxl_root_decoder *cxlrd,
 		    struct cxl_endpoint_decoder *cxled);
 bool arch_match_region(struct cxl_region_params *p,
 		       struct cxl_decoder *cxld);
 void arch_trim_hpa_by_spa(struct resource *res,
 			  struct cxl_root_decoder *cxlrd);
+u64 get_cfmws_range_start(struct device *dev);
 #else
 bool arch_match_spa(struct cxl_root_decoder *cxlrd,
 		    struct cxl_endpoint_decoder *cxled)
