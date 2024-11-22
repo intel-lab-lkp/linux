@@ -579,6 +579,24 @@ struct damon_callback {
 	void (*before_terminate)(struct damon_ctx *context);
 };
 
+/*
+ * struct damon_call_control - Control DAMON worker thread callback.
+ *
+ * @fn:			Function to be called back from DAMON.
+ * @data:		Data that will be passed to @fn.
+ * @return_code:	Return code from @fn.
+ */
+struct damon_call_control {
+	int (*fn)(void *data);
+	void *data;
+	int return_code;
+/* private: internal use only */
+	/* for waiting on DAMON's @fn invocation completion. */
+	struct completion completion;
+	/* for saving if the request is canceled. */
+	bool canceled;
+};
+
 /**
  * struct damon_attrs - Monitoring attributes for accuracy/overhead control.
  *
@@ -658,6 +676,10 @@ struct damon_ctx {
 	struct completion kdamond_started;
 	/* for scheme quotas prioritization */
 	unsigned long *regions_score_histogram;
+
+	/* for damon_call() */
+	struct damon_call_control *call_control;
+	struct mutex call_control_lock;
 
 /* public: */
 	struct task_struct *kdamond;
@@ -805,6 +827,8 @@ static inline unsigned int damon_max_nr_accesses(const struct damon_attrs *attrs
 
 int damon_start(struct damon_ctx **ctxs, int nr_ctxs, bool exclusive);
 int damon_stop(struct damon_ctx **ctxs, int nr_ctxs);
+
+int damon_call(struct damon_ctx *ctx, struct damon_call_control *control);
 
 int damon_set_region_biggest_system_ram_default(struct damon_target *t,
 				unsigned long *start, unsigned long *end);
