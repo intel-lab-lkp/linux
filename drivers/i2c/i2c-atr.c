@@ -54,6 +54,7 @@ struct i2c_atr_chan {
 
 	/* Lock orig_addrs during xfer */
 	struct mutex orig_addrs_lock;
+	struct lock_class_key orig_addrs_lock_key;
 	u16 *orig_addrs;
 	unsigned int orig_addrs_size;
 };
@@ -84,6 +85,7 @@ struct i2c_atr {
 	struct i2c_algorithm algo;
 	/* lock for the I2C bus segment (see struct i2c_lock_operations) */
 	struct mutex lock;
+	struct lock_class_key lock_key;
 	int max_adapters;
 
 	size_t num_aliases;
@@ -505,7 +507,9 @@ struct i2c_atr *i2c_atr_new(struct i2c_adapter *parent, struct device *dev,
 	if (!atr)
 		return ERR_PTR(-ENOMEM);
 
-	mutex_init(&atr->lock);
+	lockdep_register_key(&atr->lock_key);
+	mutex_init_with_key(&atr->lock, &atr->lock_key);
+
 	spin_lock_init(&atr->alias_mask_lock);
 
 	atr->parent = parent;
@@ -535,6 +539,7 @@ err_free_aliases:
 	kfree(atr->aliases);
 err_destroy_mutex:
 	mutex_destroy(&atr->lock);
+	lockdep_unregister_key(&atr->lock_key);
 	kfree(atr);
 
 	return ERR_PTR(ret);
@@ -552,6 +557,7 @@ void i2c_atr_delete(struct i2c_atr *atr)
 	bitmap_free(atr->alias_use_mask);
 	kfree(atr->aliases);
 	mutex_destroy(&atr->lock);
+	lockdep_unregister_key(&atr->lock_key);
 	kfree(atr);
 }
 EXPORT_SYMBOL_NS_GPL(i2c_atr_delete, I2C_ATR);
@@ -586,7 +592,8 @@ int i2c_atr_add_adapter(struct i2c_atr *atr, u32 chan_id,
 	chan->atr = atr;
 	chan->chan_id = chan_id;
 	INIT_LIST_HEAD(&chan->alias_list);
-	mutex_init(&chan->orig_addrs_lock);
+	lockdep_register_key(&chan->orig_addrs_lock_key);
+	mutex_init_with_key(&chan->orig_addrs_lock, &chan->orig_addrs_lock_key);
 
 	snprintf(chan->adap.name, sizeof(chan->adap.name), "i2c-%d-atr-%d",
 		 i2c_adapter_id(parent), chan_id);
@@ -646,6 +653,7 @@ int i2c_atr_add_adapter(struct i2c_atr *atr, u32 chan_id,
 err_fwnode_put:
 	fwnode_handle_put(dev_fwnode(&chan->adap.dev));
 	mutex_destroy(&chan->orig_addrs_lock);
+	lockdep_unregister_key(&chan->orig_addrs_lock_key);
 	kfree(chan);
 	return ret;
 }
@@ -679,6 +687,7 @@ void i2c_atr_del_adapter(struct i2c_atr *atr, u32 chan_id)
 
 	fwnode_handle_put(fwnode);
 	mutex_destroy(&chan->orig_addrs_lock);
+	lockdep_unregister_key(&chan->orig_addrs_lock_key);
 	kfree(chan->orig_addrs);
 	kfree(chan);
 }
