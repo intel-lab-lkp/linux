@@ -221,8 +221,6 @@ static void rtw8821a_iqk_tx_vdf_true(struct rtw_dev *rtwdev, u32 cal,
 				/* Originally: if (~tx_fail) {
 				 * It looks like a typo, so make it more explicit.
 				 */
-				tx_fail = false;
-
 				if (!tx_fail) {
 					rtw_write32(rtwdev, REG_RFECTL_A,
 						    0x02000000);
