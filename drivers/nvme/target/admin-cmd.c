@@ -901,12 +901,14 @@ static void nvmet_execute_identify_ctrl_nvm(struct nvmet_req *req)
 static void nvme_execute_identify_ns_nvm(struct nvmet_req *req)
 {
 	u16 status;
+	void *zero_buf;
 
 	status = nvmet_req_find_ns(req);
 	if (status)
 		goto out;
 
-	status = nvmet_copy_to_sgl(req, 0, ZERO_PAGE(0),
+	zero_buf = page_to_virt(ZERO_PAGE(0));
+	status = nvmet_copy_to_sgl(req, 0, zero_buf,
 				   NVME_IDENTIFY_DATA_SIZE);
 out:
 	nvmet_req_complete(req, status);
