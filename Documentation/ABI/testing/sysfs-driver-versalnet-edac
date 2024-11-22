@@ -1,0 +1,11 @@
+What:		/sys/devices/system/edac/.../reset
+Date:		Nov 2024
+Contact:	shubhrajyoti.datta@amd.com
+Description:
+		Writing 1/2 to this file will send a reset request to the NMC (Network
+		Management Controller). 1 will request a SRST (Soft reset) and 2 will
+		request a POR ( Power-On Reset).
+
+		For example::
+
+		  # echo 1 > /sys/devices/system/edac/.../reset

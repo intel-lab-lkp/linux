@@ -564,5 +564,14 @@ config EDAC_VERSAL
 	  Support injecting both correctable and uncorrectable errors
 	  for debugging purposes.
 
+config EDAC_VERSALNET
+	tristate "AMD Versal NET EDAC"
+	depends on CDX_CONTROLLER
+	help
+	  Support for error detection and correction on the AMD Versal NET DDR
+	  memory controller.
+
+	  The memory controller supports single bit error correction, double bit
+	  error detection. Report various errors to the userspace.
 
 endif # EDAC
