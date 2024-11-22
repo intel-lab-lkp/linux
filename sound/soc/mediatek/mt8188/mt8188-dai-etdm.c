@@ -430,6 +430,8 @@ static int mtk_dai_etdm_enable_mclk(struct mtk_base_afe *afe, int dai_id)
 	/* set rate */
 	ret = mt8188_afe_set_clk_rate(afe, afe_priv->clk[clkdiv_id],
 				      etdm_data->mclk_freq);
+	if (ret)
+		return ret;
 
 	mt8188_afe_enable_clk(afe, afe_priv->clk[clkdiv_id]);
 
