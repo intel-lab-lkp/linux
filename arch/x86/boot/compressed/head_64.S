@@ -25,7 +25,6 @@
 	.code32
 	.text
 
-#include <linux/init.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
 #include <asm/boot.h>
@@ -36,6 +35,10 @@
 #include <asm/desc_defs.h>
 #include <asm/trapnr.h>
 #include "pgtable.h"
+
+#ifdef KERNEL_PROPER_HEADER
+#error Do not include kernel proper namespace headers
+#endif
 
 /*
  * Fix alignment at 16 bytes. Following CONFIG_FUNCTION_ALIGNMENT will result
@@ -52,7 +55,7 @@
 	.hidden _ebss
 	.hidden _end
 
-	__HEAD
+	.section ".head.text","ax"
 
 /*
  * This macro gives the relative virtual address of X, i.e. the offset of X

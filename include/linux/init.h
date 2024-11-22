@@ -2,6 +2,8 @@
 #ifndef _LINUX_INIT_H
 #define _LINUX_INIT_H
 
+#define KERNEL_PROPER_HEADER
+
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
 #include <linux/stringify.h>

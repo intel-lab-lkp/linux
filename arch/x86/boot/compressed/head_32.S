@@ -24,13 +24,16 @@
  */
 	.text
 
-#include <linux/init.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
 #include <asm/page_types.h>
 #include <asm/boot.h>
 #include <asm/asm-offsets.h>
 #include <asm/bootparam.h>
+
+#ifdef KERNEL_PROPER_HEADER
+#error Do not include kernel proper namespace headers
+#endif
 
 /*
  * These symbols needed to be marked as .hidden to prevent the BFD linker from
@@ -42,7 +45,7 @@
 	.hidden _ebss
 	.hidden _end
 
-	__HEAD
+	.section ".head.text","ax"
 SYM_FUNC_START(startup_32)
 	cld
 	cli
