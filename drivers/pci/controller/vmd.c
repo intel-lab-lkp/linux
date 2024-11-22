@@ -410,8 +410,22 @@ static void vmd_remove_irq_domain(struct vmd_dev *vmd)
 static void __iomem *vmd_cfg_addr(struct vmd_dev *vmd, struct pci_bus *bus,
 				  unsigned int devfn, int reg, int len)
 {
-	unsigned int busnr_ecam = bus->number - vmd->busn_start[VMD_BUS_0];
-	u32 offset = PCIE_ECAM_OFFSET(busnr_ecam, devfn, reg);
+	unsigned char bus_number;
+	unsigned int busnr_ecam;
+	u32 offset;
+
+	/*
+	 * VMD workaraund: for BUS1, bus->number is set to VMD_PRIMARY_BUS1
+	 * (see comment under vmd_create_bus() for BUS1) but original value
+	 * is 225 which is stored in vmd->busn_start[VMD_BUS_1].
+	 */
+	if (vmd->bus1_rootbus && bus->number == VMD_PRIMARY_BUS1)
+		bus_number = vmd->busn_start[VMD_BUS_1];
+	else
+		bus_number = bus->number;
+
+	busnr_ecam = bus_number - vmd->busn_start[VMD_BUS_0];
+	offset = PCIE_ECAM_OFFSET(busnr_ecam, devfn, reg);
 
 	if (offset + len >= resource_size(&vmd->dev->resource[VMD_CFGBAR]))
 		return NULL;
@@ -1163,6 +1177,18 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 		 * updated here
 		 */
 		vmd->bus[VMD_BUS_1]->primary = VMD_PRIMARY_BUS1;
+
+		/*
+		 * This is a workaround for pci_scan_bridge_extend() code.
+		 * It detects that non-zero (0x80) primary bus number doesn't
+		 * match the bus it's sitting on. As a result rootbus number is
+		 * deconfigured in the first pass of pci_scan_bridge() to be
+		 * re-assigned to 0x0 in the second pass.
+		 * Update vmd->bus[VMD_BUS_1]->number and
+		 * vmd->bus[VMD_BUS_1]->primary to the same value, which
+		 * bypasses bus number reconfiguration.
+		 */
+		vmd->bus[VMD_BUS_1]->number = VMD_PRIMARY_BUS1;
 
 		WARN(sysfs_create_link(&vmd->dev->dev.kobj,
 				       &vmd->bus[VMD_BUS_1]->dev.kobj,
