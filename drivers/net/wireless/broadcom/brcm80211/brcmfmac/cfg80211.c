@@ -3125,6 +3125,7 @@ brcmf_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 	s32 total_rssi = 0;
 	s32 count_rssi = 0;
 	int rssi;
+	int rx_lastpkt_rssi;
 	u32 i;
 
 	brcmf_dbg(TRACE, "Enter, MAC %pM\n", mac);
@@ -3190,15 +3191,16 @@ brcmf_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 			sinfo->rx_bytes = le64_to_cpu(sta_info_le.rx_tot_bytes);
 		}
 		for (i = 0; i < BRCMF_ANT_MAX; i++) {
-			if (sta_info_le.rssi[i] == 0 ||
-			    sta_info_le.rx_lastpkt_rssi[i] == 0)
+			if (sta_info_le.rssi[i] == 0)
 				continue;
+			rx_lastpkt_rssi = sta_info_le.rx_lastpkt_rssi[i] != 0 ?
+				sta_info_le.rx_lastpkt_rssi[i] :
+				sta_info_le.rssi[i];
 			sinfo->chains |= BIT(count_rssi);
-			sinfo->chain_signal[count_rssi] =
-				sta_info_le.rx_lastpkt_rssi[i];
+			sinfo->chain_signal[count_rssi] = rx_lastpkt_rssi;
 			sinfo->chain_signal_avg[count_rssi] =
 				sta_info_le.rssi[i];
-			total_rssi += sta_info_le.rx_lastpkt_rssi[i];
+			total_rssi += rx_lastpkt_rssi;
 			total_rssi_avg += sta_info_le.rssi[i];
 			count_rssi++;
 		}
