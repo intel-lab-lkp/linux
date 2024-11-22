@@ -777,6 +777,7 @@ const char *acpi_get_subsystem_id(acpi_handle handle);
 
 #define acpi_disabled 1
 
+#define acpi_device_handle(adev)	(NULL)
 #define ACPI_COMPANION(dev)		(NULL)
 #define ACPI_COMPANION_SET(dev, adev)	do { } while (0)
 #define ACPI_HANDLE(dev)		(NULL)
