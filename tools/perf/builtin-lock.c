@@ -15,6 +15,7 @@
 #include "util/lock-contention.h"
 #include "util/bpf_skel/lock_data.h"
 
+#include <string.h>
 #include <subcmd/pager.h>
 #include <subcmd/parse-options.h>
 #include "util/trace-event.h"
@@ -1575,8 +1576,13 @@ static void sort_result(void)
 
 static const struct {
 	unsigned int flags;
-	const char *str;
+	/* Name of the lock. */
 	const char *name;
+	/*
+	 * Name of the group this lock belongs to.
+	 * For example, both rwlock:R and rwlock:W belong to rwlock.
+	 */
+	const char *group;
 } lock_type_table[] = {
 	{ 0,				"semaphore",	"semaphore" },
 	{ LCB_F_SPIN,			"spinlock",	"spinlock" },
@@ -1591,20 +1597,7 @@ static const struct {
 	{ LCB_F_PERCPU | LCB_F_WRITE,	"pcpu-sem:W",	"percpu-rwsem" },
 	{ LCB_F_MUTEX,			"mutex",	"mutex" },
 	{ LCB_F_MUTEX | LCB_F_SPIN,	"mutex",	"mutex" },
-	/* alias for get_type_flag() */
-	{ LCB_F_MUTEX | LCB_F_SPIN,	"mutex-spin",	"mutex" },
 };
-
-static const char *get_type_str(unsigned int flags)
-{
-	flags &= LCB_F_MAX_FLAGS - 1;
-
-	for (unsigned int i = 0; i < ARRAY_SIZE(lock_type_table); i++) {
-		if (lock_type_table[i].flags == flags)
-			return lock_type_table[i].str;
-	}
-	return "unknown";
-}
 
 static const char *get_type_name(unsigned int flags)
 {
@@ -1617,16 +1610,25 @@ static const char *get_type_name(unsigned int flags)
 	return "unknown";
 }
 
-static unsigned int get_type_flag(const char *str)
+static const char *get_type_group(unsigned int flags)
+{
+	flags &= LCB_F_MAX_FLAGS - 1;
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(lock_type_table); i++) {
+		if (lock_type_table[i].flags == flags)
+			return lock_type_table[i].group;
+	}
+	return "unknown";
+}
+
+static unsigned int get_type_flags_by_name(const char *name)
 {
 	for (unsigned int i = 0; i < ARRAY_SIZE(lock_type_table); i++) {
-		if (!strcmp(lock_type_table[i].name, str))
+		if (!strcmp(lock_type_table[i].name, name))
 			return lock_type_table[i].flags;
 	}
-	for (unsigned int i = 0; i < ARRAY_SIZE(lock_type_table); i++) {
-		if (!strcmp(lock_type_table[i].str, str))
-			return lock_type_table[i].flags;
-	}
+
+	pr_err("Unknown lock flags: %s\n", name);
 	return UINT_MAX;
 }
 
@@ -1732,7 +1734,8 @@ static void print_lock_stat_stdio(struct lock_contention *con, struct lock_stat 
 
 	switch (aggr_mode) {
 	case LOCK_AGGR_CALLER:
-		fprintf(lock_output, "  %10s   %s\n", get_type_str(st->flags), st->name);
+		fprintf(lock_output, "  %10s   %s\n",
+			get_type_name(st->flags), st->name);
 		break;
 	case LOCK_AGGR_TASK:
 		pid = st->addr;
@@ -1742,7 +1745,7 @@ static void print_lock_stat_stdio(struct lock_contention *con, struct lock_stat 
 		break;
 	case LOCK_AGGR_ADDR:
 		fprintf(lock_output, "  %016llx   %s (%s)\n", (unsigned long long)st->addr,
-			st->name, get_type_name(st->flags));
+			st->name, get_type_group(st->flags));
 		break;
 	case LOCK_AGGR_CGROUP:
 		fprintf(lock_output, "  %s\n", st->name);
@@ -1783,7 +1786,8 @@ static void print_lock_stat_csv(struct lock_contention *con, struct lock_stat *s
 
 	switch (aggr_mode) {
 	case LOCK_AGGR_CALLER:
-		fprintf(lock_output, "%s%s %s", get_type_str(st->flags), sep, st->name);
+		fprintf(lock_output, "%s%s %s",
+			get_type_name(st->flags), sep, st->name);
 		if (verbose <= 0)
 			fprintf(lock_output, "\n");
 		break;
@@ -1795,7 +1799,7 @@ static void print_lock_stat_csv(struct lock_contention *con, struct lock_stat *s
 		break;
 	case LOCK_AGGR_ADDR:
 		fprintf(lock_output, "%llx%s %s%s %s\n", (unsigned long long)st->addr, sep,
-			st->name, sep, get_type_name(st->flags));
+			st->name, sep, get_type_group(st->flags));
 		break;
 	case LOCK_AGGR_CGROUP:
 		fprintf(lock_output, "%s\n",st->name);
@@ -2338,41 +2342,68 @@ static bool add_lock_type(unsigned int flags)
 	unsigned int *tmp;
 
 	tmp = realloc(filters.types, (filters.nr_types + 1) * sizeof(*filters.types));
-	if (tmp == NULL)
+	if (tmp == NULL) {
+		pr_err("Failed to add lock flags: %u\n", flags);
 		return false;
+	}
 
 	tmp[filters.nr_types++] = flags;
 	filters.types = tmp;
 	return true;
 }
 
-static int parse_lock_type(const struct option *opt __maybe_unused, const char *str,
-			   int unset __maybe_unused)
+static int parse_lock_type(const struct option *opt __maybe_unused,
+			   const char *str, int unset __maybe_unused)
 {
 	char *s, *tmp, *tok;
-	int ret = 0;
 
 	s = strdup(str);
 	if (s == NULL)
 		return -1;
 
-	for (tok = strtok_r(s, ", ", &tmp); tok; tok = strtok_r(NULL, ", ", &tmp)) {
-		unsigned int flags = get_type_flag(tok);
+	for (tok = strtok_r(s, ", ", &tmp); tok;
+	     tok = strtok_r(NULL, ", ", &tmp)) {
+		bool found = false;
 
-		if (flags == -1U) {
-			pr_err("Unknown lock flags: %s\n", tok);
-			ret = -1;
-			break;
+		/* `tok` is a lock name if it contains ':'. */
+		if (strchr(tok, ':')) {
+			unsigned int flags = get_type_flags_by_name(tok);
+
+			if (flags == UINT_MAX || !add_lock_type(flags)) {
+				free(s);
+				return -1;
+			}
+			continue;
 		}
 
-		if (!add_lock_type(flags)) {
-			ret = -1;
-			break;
+		/* Otherwise look up flags by lock group */
+		/*
+		 * By documentation, `percpu-rwmem` should be `pcpu-sem`.
+		 * For backward compatibility, we replace pcpu-sem with percpu-rwmem.
+		 */
+		if (!strcmp(tok, "pcpu-sem"))
+			tok = (char *)"percpu-rwsem";
+
+		for (unsigned int i = 0; i < ARRAY_SIZE(lock_type_table); i++) {
+			if (!strcmp(lock_type_table[i].group, tok)) {
+				if (add_lock_type(lock_type_table[i].flags)) {
+					found = true;
+				} else {
+					free(s);
+					return -1;
+				}
+			}
+		}
+
+		if (!found) {
+			pr_err("Unknown lock flags: %s\n", tok);
+			free(s);
+			return -1;
 		}
 	}
 
 	free(s);
-	return ret;
+	return 0;
 }
 
 static bool add_lock_addr(unsigned long addr)
