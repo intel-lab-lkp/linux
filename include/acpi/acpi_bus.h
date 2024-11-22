@@ -1003,6 +1003,8 @@ static inline int unregister_acpi_bus_type(void *bus) { return 0; }
 
 static inline int acpi_wait_for_acpi_ipmi(void) { return 0; }
 
+#define acpi_device_hid(device) ""
+
 #define acpi_get_physical_device_location(handle, pld) (AE_ERROR)
 
 #define for_each_acpi_consumer_dev(supplier, consumer)			\
