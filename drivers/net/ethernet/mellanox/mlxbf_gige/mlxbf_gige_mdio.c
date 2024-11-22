@@ -96,6 +96,7 @@ static struct mlxbf_gige_mdio_gw mlxbf_gige_mdio_gw_t[] = {
 #define MLXBF_GIGE_MDIO_FREQ_REFERENCE 156250000ULL
 #define MLXBF_GIGE_MDIO_COREPLL_CONST  16384ULL
 #define MLXBF_GIGE_MDC_CLK_NS          400
+#define MLXBF_GIGE_BF3_MDIO_PERIOD     0xFF
 #define MLXBF_GIGE_MDIO_PLL_I1CLK_REG1 0x4
 #define MLXBF_GIGE_MDIO_PLL_I1CLK_REG2 0x8
 #define MLXBF_GIGE_MDIO_CORE_F_SHIFT   0
@@ -178,9 +179,16 @@ static u8 mdio_period_map(struct mlxbf_gige *priv)
 	u8 mdio_period;
 	u64 i1clk;
 
-	i1clk = calculate_i1clk(priv);
-
-	mdio_period = div_u64((MLXBF_GIGE_MDC_CLK_NS >> 1) * i1clk, 1000000000) - 1;
+	/* The MDIO clock frequency need to be set as low as possible to avoid
+	 * a BF3 hardware GPIO degradation. The lowest frequency can be achieved
+	 * by setting MdioPeriod = 0xFF.
+	 */
+	if (priv->hw_version == MLXBF_GIGE_VERSION_BF3) {
+		mdio_period = MLXBF_GIGE_BF3_MDIO_PERIOD;
+	} else {
+		i1clk = calculate_i1clk(priv);
+		mdio_period = div_u64((MLXBF_GIGE_MDC_CLK_NS >> 1) * i1clk, 1000000000) - 1;
+	}
 
 	return mdio_period;
 }
