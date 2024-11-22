@@ -149,6 +149,8 @@ struct hv_fc_wwn_packet {
 */
 static int vmstor_proto_version;
 
+static bool hv_dev_is_fc(struct hv_device *hv_dev);
+
 #define STORVSC_LOGGING_NONE	0
 #define STORVSC_LOGGING_ERROR	1
 #define STORVSC_LOGGING_WARN	2
@@ -980,6 +982,13 @@ static void storvsc_handle_error(struct vmscsi_request *vm_srb,
 	void (*process_err_fn)(struct work_struct *work);
 	struct hv_host_device *host_dev = shost_priv(host);
 
+	// HyperV FC does not support MAINTENANCE_IN ignore
+	if ((scmnd->cmnd[0] == MAINTENANCE_IN) &&
+		(SRB_STATUS(vm_srb->srb_status) == SRB_STATUS_DATA_OVERRUN) &&
+		hv_dev_is_fc(host_dev->dev)) {
+		return;
+	}
+
 	switch (SRB_STATUS(vm_srb->srb_status)) {
 	case SRB_STATUS_ERROR:
 	case SRB_STATUS_ABORTED:
@@ -1161,6 +1170,12 @@ static void storvsc_on_io_completion(struct storvsc_device *stor_device,
 	stor_pkt->vm_srb.sense_info_length = min_t(u8, STORVSC_SENSE_BUFFER_SIZE,
 		vstor_packet->vm_srb.sense_info_length);
 
+	// HyperV FC does not support MAINTENANCE_IN ignore
+	if ((SRB_STATUS(vstor_packet->vm_srb.srb_status) == SRB_STATUS_DATA_OVERRUN) &&
+		(stor_pkt->vm_srb.cdb[0] == MAINTENANCE_IN) &&
+		hv_dev_is_fc(device))
+		goto skip_logging;
+
 	if (vstor_packet->vm_srb.scsi_status != 0 ||
 	    vstor_packet->vm_srb.srb_status != SRB_STATUS_SUCCESS) {
 
@@ -1181,6 +1196,7 @@ static void storvsc_on_io_completion(struct storvsc_device *stor_device,
 			vstor_packet->status);
 	}
 
+skip_logging:
 	if (vstor_packet->vm_srb.scsi_status == SAM_STAT_CHECK_CONDITION &&
 	    (vstor_packet->vm_srb.srb_status & SRB_STATUS_AUTOSENSE_VALID))
 		memcpy(request->cmd->sense_buffer,
