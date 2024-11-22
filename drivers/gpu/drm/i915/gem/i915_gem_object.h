@@ -285,7 +285,7 @@ i915_gem_object_is_shrinkable(const struct drm_i915_gem_object *obj)
 {
 	/* TODO: make DPT shrinkable when it has no bound vmas */
 	return i915_gem_object_type_has(obj, I915_GEM_OBJECT_IS_SHRINKABLE) &&
-		!obj->is_dpt;
+		!(obj->is_dpt && obj->mm.mapping);
 }
 
 static inline bool
