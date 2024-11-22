@@ -185,6 +185,9 @@ static const struct usb_device_id quirks_table[] = {
 	/* Broadcom BCM2045 devices */
 	{ USB_DEVICE(0x0a5c, 0x2045), .driver_info = BTUSB_BCM2045 },
 
+	/* Broadcom BCM2045 with Nintendo Wii firmware */
+	{ USB_DEVICE(0x057E, 0x0305), .driver_info = BTUSB_IGNORE },
+
 	/* Atheros 3011 with sflash firmware */
 	{ USB_DEVICE(0x0489, 0xe027), .driver_info = BTUSB_IGNORE },
 	{ USB_DEVICE(0x0489, 0xe03d), .driver_info = BTUSB_IGNORE },
