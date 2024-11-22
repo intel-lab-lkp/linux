@@ -111,7 +111,7 @@ sesInfoFree(struct cifs_ses *buf_to_free)
 }
 
 struct cifs_tcon *
-tcon_info_alloc(bool dir_leases_enabled, enum smb3_tcon_ref_trace trace)
+tcon_info_alloc(bool enable_dir_cache, enum smb3_tcon_ref_trace trace)
 {
 	struct cifs_tcon *ret_buf;
 	static atomic_t tcon_debug_id;
@@ -120,7 +120,7 @@ tcon_info_alloc(bool dir_leases_enabled, enum smb3_tcon_ref_trace trace)
 	if (!ret_buf)
 		return NULL;
 
-	if (dir_leases_enabled == true) {
+	if (enable_dir_cache) {
 		ret_buf->cfids = init_cached_dirs();
 		if (!ret_buf->cfids) {
 			kfree(ret_buf);

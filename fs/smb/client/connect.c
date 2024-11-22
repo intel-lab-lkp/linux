@@ -2593,7 +2593,7 @@ static struct cifs_tcon *
 cifs_get_tcon(struct cifs_ses *ses, struct smb3_fs_context *ctx)
 {
 	struct cifs_tcon *tcon;
-	bool nohandlecache;
+	bool enable_dir_cache;
 	int rc, xid;
 
 	tcon = cifs_find_tcon(ses, ctx);
@@ -2614,15 +2614,15 @@ cifs_get_tcon(struct cifs_ses *ses, struct smb3_fs_context *ctx)
 
 	if (ses->server->dialect >= SMB20_PROT_ID &&
 	    (ses->server->capabilities & SMB2_GLOBAL_CAP_DIRECTORY_LEASING))
-		nohandlecache = ctx->nohandlecache;
+		enable_dir_cache = !ctx->nohandlecache && (dir_cache_timeout != 0);
 	else
-		nohandlecache = true;
-	tcon = tcon_info_alloc(!nohandlecache, netfs_trace_tcon_ref_new);
+		enable_dir_cache = false;
+	tcon = tcon_info_alloc(enable_dir_cache, netfs_trace_tcon_ref_new);
 	if (tcon == NULL) {
 		rc = -ENOMEM;
 		goto out_fail;
 	}
-	tcon->nohandlecache = nohandlecache;
+	tcon->nohandlecache = !enable_dir_cache;
 
 	if (ctx->snapshot_time) {
 		if (ses->server->vals->protocol_id == 0) {

@@ -530,7 +530,7 @@ extern int CIFSSMBLogoff(const unsigned int xid, struct cifs_ses *ses);
 
 extern struct cifs_ses *sesInfoAlloc(void);
 extern void sesInfoFree(struct cifs_ses *);
-extern struct cifs_tcon *tcon_info_alloc(bool dir_leases_enabled,
+extern struct cifs_tcon *tcon_info_alloc(bool enable_dir_cache,
 					 enum smb3_tcon_ref_trace trace);
 extern void tconInfoFree(struct cifs_tcon *tcon, enum smb3_tcon_ref_trace trace);
 
