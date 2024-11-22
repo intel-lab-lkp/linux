@@ -1461,7 +1461,11 @@ static void swiotlb_release_slots(struct device *dev, phys_addr_t tlb_addr,
 	 * While returning the entries to the free list, we merge the entries
 	 * with slots below and above the pool being returned.
 	 */
-	BUG_ON(aindex >= mem->nareas);
+	if (unlikely(aindex >= mem->nareas)) {
+		dev_err(dev, "%s: invalid area index (%d >= %d)\n", __func__,
+			aindex, mem->nareas);
+		return;
+	}
 
 	spin_lock_irqsave(&area->lock, flags);
 	if (index + nslots < ALIGN(index + 1, IO_TLB_SEGSIZE))
