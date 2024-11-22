@@ -3924,26 +3924,42 @@ static void print_separator(size_t pre_dash_cnt, const char *s, size_t post_dash
 	printf("\n");
 }
 
-static inline void print_cpu_stats(struct perf_record_schedstat_cpu *cs)
+#define PCT_CHNG(_x, _y)        ((_x) ? ((double)((double)(_y) - (_x)) / (_x)) * 100 : 0.0)
+static inline void print_cpu_stats(struct perf_record_schedstat_cpu *cs1,
+				   struct perf_record_schedstat_cpu *cs2)
 {
-	printf("%-65s %12s %12s\n", "DESC", "COUNT", "PCT_CHANGE");
+	printf("%-65s ", "DESC");
+	if (!cs2)
+		printf("%12s %12s", "COUNT", "PCT_CHANGE");
+	else
+		printf("%12s %11s %12s %14s %10s", "COUNT1", "COUNT2", "PCT_CHANGE",
+		       "PCT_CHANGE1", "PCT_CHANGE2");
+
+	printf("\n");
 	print_separator(100, "", 0);
 
 #define CALC_PCT(_x, _y)	((_y) ? ((double)(_x) / (_y)) * 100 : 0.0)
-
-#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)		\
-	do {									\
-		printf("%-65s: " _format, _desc, cs->_ver._name);		\
-		if (_is_pct) {							\
-			printf("  ( %8.2lf%% )",				\
-			       CALC_PCT(cs->_ver._name, cs->_ver._pct_of));	\
-		}								\
-		printf("\n");							\
+#define CPU_FIELD(_type, _name, _desc, _format, _is_pct, _pct_of, _ver)			\
+	do {										\
+		printf("%-65s: " _format, _desc, cs1->_ver._name);			\
+		if (!cs2) {								\
+			if (_is_pct)							\
+				printf("  ( %8.2lf%% )",				\
+				       CALC_PCT(cs1->_ver._name, cs1->_ver._pct_of));	\
+		} else {								\
+			printf("," _format "  | %8.2lf%% |", cs2->_ver._name,		\
+			       PCT_CHNG(cs1->_ver._name, cs2->_ver._name));		\
+			if (_is_pct)							\
+				printf("  ( %8.2lf%%,  %8.2lf%% )",			\
+				       CALC_PCT(cs1->_ver._name, cs1->_ver._pct_of),	\
+				       CALC_PCT(cs2->_ver._name, cs2->_ver._pct_of));	\
+		}									\
+		printf("\n");								\
 	} while (0)
 
-	if (cs->version == 15) {
+	if (cs1->version == 15) {
 #include <perf/schedstat-v15.h>
-	} else if (cs->version == 16) {
+	} else if (cs1->version == 16) {
 #include <perf/schedstat-v16.h>
 	}
 
@@ -3951,10 +3967,17 @@ static inline void print_cpu_stats(struct perf_record_schedstat_cpu *cs)
 #undef CALC_PCT
 }
 
-static inline void print_domain_stats(struct perf_record_schedstat_domain *ds,
-				      __u64 jiffies)
+static inline void print_domain_stats(struct perf_record_schedstat_domain *ds1,
+				      struct perf_record_schedstat_domain *ds2,
+				      __u64 jiffies1, __u64 jiffies2)
 {
-	printf("%-65s %12s %14s\n", "DESC", "COUNT", "AVG_JIFFIES");
+	printf("%-65s ", "DESC");
+	if (!ds2)
+		printf("%12s %14s", "COUNT", "AVG_JIFFIES");
+	else
+		printf("%12s %11s %12s %16s %12s", "COUNT1", "COUNT2", "PCT_CHANGE",
+		       "AVG_JIFFIES1", "AVG_JIFFIES2");
+	printf("\n");
 
 #define DOMAIN_CATEGORY(_desc)							\
 	do {									\
@@ -3968,25 +3991,52 @@ static inline void print_domain_stats(struct perf_record_schedstat_domain *ds,
 
 #define DOMAIN_FIELD(_type, _name, _desc, _format, _is_jiffies, _ver)		\
 	do {									\
-		printf("%-65s: " _format, _desc, ds->_ver._name);		\
-		if (_is_jiffies) {						\
-			printf("  $ %11.2Lf $",					\
-			       CALC_AVG(jiffies, ds->_ver._name));		\
+		printf("%-65s: " _format, _desc, ds1->_ver._name);		\
+		if (!ds2) {							\
+			if (_is_jiffies)					\
+				printf("  $ %11.2Lf $",				\
+				       CALC_AVG(jiffies1, ds1->_ver._name));	\
+		} else {							\
+			printf("," _format "  | %8.2lf%% |", ds2->_ver._name,	\
+			       PCT_CHNG(ds1->_ver._name, ds2->_ver._name));	\
+			if (_is_jiffies)					\
+				printf("  $ %11.2Lf, %11.2Lf $",		\
+				       CALC_AVG(jiffies1, ds1->_ver._name),	\
+				       CALC_AVG(jiffies2, ds2->_ver._name));	\
 		}								\
 		printf("\n");							\
 	} while (0)
 
 #define DERIVED_CNT_FIELD(_desc, _format, _x, _y, _z, _ver)			\
-	printf("*%-64s: " _format "\n", _desc,					\
-	       (ds->_ver._x) - (ds->_ver._y) - (ds->_ver._z))
+	do {									\
+		__u32 t1 = ds1->_ver._x - ds1->_ver._y - ds1->_ver._z;		\
+		printf("*%-64s: " _format, _desc, t1);				\
+		if (ds2) {							\
+			__u32 t2 = ds2->_ver._x - ds2->_ver._y - ds2->_ver._z;	\
+			printf("," _format "  | %8.2lf%% |", t2,		\
+			       PCT_CHNG(t1, t2));				\
+		}								\
+		printf("\n");							\
+	} while (0)
 
 #define DERIVED_AVG_FIELD(_desc, _format, _x, _y, _z, _w, _ver)			\
-	printf("*%-64s: " _format "\n", _desc, CALC_AVG(ds->_ver._w,		\
-	       ((ds->_ver._x) - (ds->_ver._y) - (ds->_ver._z))))
+	do {									\
+		__u32 t1 = ds1->_ver._x - ds1->_ver._y - ds1->_ver._z;		\
+		printf("*%-64s: " _format, _desc,				\
+		       CALC_AVG(ds1->_ver._w, t1));				\
+		if (ds2) {							\
+			__u32 t2 = ds2->_ver._x - ds2->_ver._y - ds2->_ver._z;	\
+			printf("," _format "  | %8.2Lf%% |",			\
+			       CALC_AVG(ds2->_ver._w, t2),			\
+			       PCT_CHNG(CALC_AVG(ds1->_ver._w, t1),		\
+					CALC_AVG(ds2->_ver._w, t2)));		\
+		}								\
+		printf("\n");							\
+	} while (0)
 
-	if (ds->version == 15) {
+	if (ds1->version == 15) {
 #include <perf/schedstat-v15.h>
-	} else if (ds->version == 16) {
+	} else if (ds1->version == 16) {
 #include <perf/schedstat-v16.h>
 	}
 
@@ -3996,6 +4046,7 @@ static inline void print_domain_stats(struct perf_record_schedstat_domain *ds,
 #undef CALC_AVG
 #undef DOMAIN_CATEGORY
 }
+#undef PCT_CHNG
 
 static void print_domain_cpu_list(struct perf_record_schedstat_domain *ds)
 {
@@ -4148,12 +4199,12 @@ static void get_all_cpu_stats(struct schedstat_cpu **cptr)
 }
 
 /* FIXME: The code fails (segfaults) when one or ore cpus are offline. */
-static void show_schedstat_data(struct schedstat_cpu *cptr)
+static void show_schedstat_data(struct schedstat_cpu *cptr1, struct schedstat_cpu *cptr2)
 {
-	struct perf_record_schedstat_domain *ds = NULL;
-	struct perf_record_schedstat_cpu *cs = NULL;
-	__u64 jiffies = cptr->cpu_data->timestamp;
-	struct schedstat_domain *dptr = NULL;
+	struct perf_record_schedstat_domain *ds1 = NULL, *ds2 = NULL;
+	struct perf_record_schedstat_cpu *cs1 = NULL, *cs2 = NULL;
+	struct schedstat_domain *dptr1 = NULL, *dptr2 = NULL;
+	__u64 jiffies1 = 0, jiffies2 = 0;
 	bool is_summary = true;
 
 	printf("Columns description\n");
@@ -4164,50 +4215,82 @@ static void show_schedstat_data(struct schedstat_cpu *cptr)
 	printf("AVG_JIFFIES\t\t-> Avg time in jiffies between two consecutive occurrence of event\n");
 
 	print_separator(100, "", 0);
-	printf("Time elapsed (in jiffies)                                        : %11llu\n",
-	       jiffies);
+	printf("Time elapsed (in jiffies)                                        : ");
+	jiffies1 = cptr1->cpu_data->timestamp;
+	printf("%11llu", jiffies1);
+	if (cptr2) {
+		jiffies2 = cptr2->cpu_data->timestamp;
+		printf(",%11llu", jiffies2);
+	}
+	printf("\n");
+
 	print_separator(100, "", 0);
 
-	get_all_cpu_stats(&cptr);
+	get_all_cpu_stats(&cptr1);
+	if (cptr2)
+		get_all_cpu_stats(&cptr2);
 
-	while (cptr) {
-		cs = cptr->cpu_data;
+	while (cptr1) {
+		cs1 = cptr1->cpu_data;
+		if (cptr2) {
+			cs2 = cptr2->cpu_data;
+			dptr2 = cptr2->domain_head;
+		}
+
+		if (cs2 && cs1->cpu != cs2->cpu) {
+			pr_err("Failed because matching cpus not found for diff\n");
+			return;
+		}
+
 		printf("\n");
 		print_separator(100, "", 0);
 		if (is_summary)
 			printf("CPU <ALL CPUS SUMMARY>\n");
 		else
-			printf("CPU %d\n", cs->cpu);
+			printf("CPU %d\n", cs1->cpu);
 
 		print_separator(100, "", 0);
-		print_cpu_stats(cs);
+		print_cpu_stats(cs1, cs2);
 		print_separator(100, "", 0);
 
-		dptr = cptr->domain_head;
+		dptr1 = cptr1->domain_head;
 
-		while (dptr) {
-			ds = dptr->domain_data;
+		while (dptr1) {
+			ds1 = dptr1->domain_data;
+
+			if (dptr2)
+				ds2 = dptr2->domain_data;
+
+			if (dptr2 && ds1->domain != ds2->domain) {
+				pr_err("Failed because matching domain not found for diff\n");
+				return;
+			}
+
 			if (is_summary)
-				if (ds->name[0])
-					printf("CPU <ALL CPUS SUMMARY>, DOMAIN %s\n", ds->name);
+				if (ds1->name[0])
+					printf("CPU <ALL CPUS SUMMARY>, DOMAIN %s\n", ds1->name);
 				else
-					printf("CPU <ALL CPUS SUMMARY>, DOMAIN %d\n", ds->domain);
+					printf("CPU <ALL CPUS SUMMARY>, DOMAIN %d\n", ds1->domain);
 			else {
-				if (ds->name[0])
-					printf("CPU %d, DOMAIN %s CPUS ", cs->cpu, ds->name);
+				if (ds1->name[0])
+					printf("CPU %d, DOMAIN %s CPUS ", cs1->cpu, ds1->name);
 				else
-					printf("CPU %d, DOMAIN %d CPUS ", cs->cpu, ds->domain);
+					printf("CPU %d, DOMAIN %d CPUS ", cs1->cpu, ds1->domain);
 
-				print_domain_cpu_list(ds);
+				print_domain_cpu_list(ds1);
 			}
 			print_separator(100, "", 0);
-			print_domain_stats(ds, jiffies);
+			print_domain_stats(ds1, ds2, jiffies1, jiffies2);
 			print_separator(100, "", 0);
 
-			dptr = dptr->next;
+			dptr1 = dptr1->next;
+			if (dptr2)
+				dptr2 = dptr2->next;
 		}
 		is_summary = false;
-		cptr = cptr->next;
+		cptr1 = cptr1->next;
+		if (cptr2)
+			cptr2 = cptr2->next;
 	}
 }
 
@@ -4336,10 +4419,86 @@ static int perf_sched__schedstat_report(struct perf_sched *sched)
 	perf_session__delete(session);
 	if (!err) {
 		setup_pager();
-		show_schedstat_data(cpu_head);
+		show_schedstat_data(cpu_head, NULL);
 		free_schedstat(cpu_head);
 	}
 	return err;
+}
+
+static int perf_sched__schedstat_diff(struct perf_sched *sched,
+				      int argc, const char **argv)
+{
+	struct schedstat_cpu *cpu_head_ses0 = NULL, *cpu_head_ses1 = NULL;
+	struct perf_session *session[2];
+	struct perf_data data[2];
+	int ret, err;
+	static const char *defaults[] = {
+		"perf.data.old",
+		"perf.data",
+	};
+
+	if (argc) {
+		if (argc == 1)
+			defaults[1] = argv[0];
+		else if (argc == 2) {
+			defaults[0] = argv[0];
+			defaults[1] = argv[1];
+		} else {
+			pr_err("perf sched stats diff is not supported with more than 2 files.\n");
+			goto out_ret;
+		}
+	}
+
+	sched->tool.schedstat_cpu = perf_sched__process_schedstat;
+	sched->tool.schedstat_domain = perf_sched__process_schedstat;
+
+	data[0].path = defaults[0];
+	data[0].mode  = PERF_DATA_MODE_READ;
+	session[0] = perf_session__new(&data[0], &sched->tool);
+	if (IS_ERR(session[0])) {
+		ret = PTR_ERR(session[0]);
+		pr_err("Failed to open %s\n", data[0].path);
+		goto out_delete_ses0;
+	}
+
+	err = perf_session__process_events(session[0]);
+	if (err)
+		goto out_delete_ses0;
+
+	cpu_head_ses0 = cpu_head;
+	after_workload_flag = false;
+	cpu_head = NULL;
+
+	data[1].path = defaults[1];
+	data[1].mode  = PERF_DATA_MODE_READ;
+	session[1] = perf_session__new(&data[1], &sched->tool);
+	if (IS_ERR(session[1])) {
+		ret = PTR_ERR(session[1]);
+		pr_err("Failed to open %s\n", data[1].path);
+		goto out_delete_ses1;
+	}
+
+	err = perf_session__process_events(session[1]);
+	if (err)
+		goto out_delete_ses1;
+
+	cpu_head_ses1 = cpu_head;
+	after_workload_flag = false;
+	setup_pager();
+	show_schedstat_data(cpu_head_ses0, cpu_head_ses1);
+	free_schedstat(cpu_head_ses0);
+	free_schedstat(cpu_head_ses1);
+
+out_delete_ses1:
+	if (!IS_ERR(session[1]))
+		perf_session__delete(session[1]);
+
+out_delete_ses0:
+	if (!IS_ERR(session[0]))
+		perf_session__delete(session[0]);
+
+out_ret:
+	return ret;
 }
 
 static int process_synthesized_event_live(const struct perf_tool *tool __maybe_unused,
@@ -4420,7 +4579,7 @@ static int perf_sched__schedstat_live(struct perf_sched *sched,
 		goto out_target;
 
 	setup_pager();
-	show_schedstat_data(cpu_head);
+	show_schedstat_data(cpu_head, NULL);
 	free_schedstat(cpu_head);
 out_target:
 	free(target);
@@ -4747,6 +4906,11 @@ int cmd_sched(int argc, const char **argv)
 				argc = parse_options(argc, argv, stats_options,
 						     stats_usage, 0);
 			return perf_sched__schedstat_report(&sched);
+		} else if (argv[0] && !strcmp(argv[0], "diff")) {
+			if (argc)
+				argc = parse_options(argc, argv, stats_options,
+						     stats_usage, 0);
+			return perf_sched__schedstat_diff(&sched, argc, argv);
 		}
 		return perf_sched__schedstat_live(&sched, argc, argv);
 	} else {
