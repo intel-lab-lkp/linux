@@ -15,6 +15,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_framebuffer.h>
+#include <drm/drm_managed.h>
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_property.h>
 #include <drm/drm_writeback.h>
@@ -196,6 +197,78 @@ int drm_writeback_connector_init(struct drm_device *dev,
 EXPORT_SYMBOL(drm_writeback_connector_init);
 
 /**
+ * __drm_writeback_connector_init - Common initialization code for writeback
+ * connector
+ *
+ * @dev: DRM device
+ * @wb_connector: Writeback connector to initialize
+ * @enc: handle to the already initialized drm encoder
+ * @formats: Array of supported pixel formats for the writeback engine
+ * @n_formats: Length of the formats array
+ *
+ * This function creates the writeback-connector-specific properties if they
+ * have not been already created, initializes the connector as
+ * type DRM_MODE_CONNECTOR_WRITEBACK, and correctly initializes the property
+ * values.
+ *
+ * This function assumes that the drm_writeback_connector's encoder has already been
+ * created and initialized before invoking this function.
+ *
+ * In addition, this function also assumes that callers of this API will manage
+ * assigning the encoder helper functions, possible_crtcs and any other encoder
+ * specific operation.
+ *
+ * Returns: 0 on success, or a negative error code
+ */
+static int __drm_writeback_connector_init(struct drm_device *dev,
+					  struct drm_writeback_connector *wb_connector,
+					  struct drm_encoder *enc,
+					  const u32 *formats, int n_formats)
+{
+	struct drm_connector *connector = &wb_connector->base;
+	struct drm_mode_config *config = &dev->mode_config;
+	struct drm_property_blob *blob;
+	int ret;
+
+	connector->interlace_allowed = 0;
+
+	ret = create_writeback_properties(dev);
+	if (ret)
+		return ret;
+
+	ret = drm_connector_attach_encoder(connector, enc);
+	if (ret)
+		return ret;
+
+	blob = drm_property_create_blob(dev, n_formats * sizeof(*formats),
+					formats);
+	if (IS_ERR(blob))
+		return PTR_ERR(blob);
+
+	INIT_LIST_HEAD(&wb_connector->job_queue);
+	spin_lock_init(&wb_connector->job_lock);
+
+	wb_connector->fence_context = dma_fence_context_alloc(1);
+	spin_lock_init(&wb_connector->fence_lock);
+	snprintf(wb_connector->timeline_name,
+		 sizeof(wb_connector->timeline_name),
+		 "CONNECTOR:%d-%s", connector->base.id, connector->name);
+
+	drm_object_attach_property(&connector->base,
+				   config->writeback_out_fence_ptr_property, 0);
+
+	drm_object_attach_property(&connector->base,
+				   config->writeback_fb_id_property, 0);
+
+	drm_object_attach_property(&connector->base,
+				   config->writeback_pixel_formats_property,
+				   blob->base.id);
+	wb_connector->pixel_formats_blob_ptr = blob;
+
+	return 0;
+}
+
+/**
  * drm_writeback_connector_init_with_encoder - Initialize a writeback connector with
  * a custom encoder
  *
@@ -225,64 +298,155 @@ EXPORT_SYMBOL(drm_writeback_connector_init);
  * Returns: 0 on success, or a negative error code
  */
 int drm_writeback_connector_init_with_encoder(struct drm_device *dev,
-		struct drm_writeback_connector *wb_connector, struct drm_encoder *enc,
-		const struct drm_connector_funcs *con_funcs, const u32 *formats,
-		int n_formats)
+					      struct drm_writeback_connector *wb_connector,
+					      struct drm_encoder *enc,
+					      const struct drm_connector_funcs *con_funcs,
+					      const u32 *formats, int n_formats)
 {
-	struct drm_property_blob *blob;
 	struct drm_connector *connector = &wb_connector->base;
-	struct drm_mode_config *config = &dev->mode_config;
-	int ret = create_writeback_properties(dev);
-
-	if (ret != 0)
-		return ret;
-
-	blob = drm_property_create_blob(dev, n_formats * sizeof(*formats),
-					formats);
-	if (IS_ERR(blob))
-		return PTR_ERR(blob);
-
-
-	connector->interlace_allowed = 0;
+	int ret;
 
 	ret = drm_connector_init(dev, connector, con_funcs,
 				 DRM_MODE_CONNECTOR_WRITEBACK);
 	if (ret)
-		goto connector_fail;
+		return ret;
 
-	ret = drm_connector_attach_encoder(connector, enc);
+	ret = __drm_writeback_connector_init(dev, wb_connector, enc, formats,
+					     n_formats);
 	if (ret)
-		goto attach_fail;
+		drm_connector_cleanup(connector);
 
-	INIT_LIST_HEAD(&wb_connector->job_queue);
-	spin_lock_init(&wb_connector->job_lock);
-
-	wb_connector->fence_context = dma_fence_context_alloc(1);
-	spin_lock_init(&wb_connector->fence_lock);
-	snprintf(wb_connector->timeline_name,
-		 sizeof(wb_connector->timeline_name),
-		 "CONNECTOR:%d-%s", connector->base.id, connector->name);
-
-	drm_object_attach_property(&connector->base,
-				   config->writeback_out_fence_ptr_property, 0);
-
-	drm_object_attach_property(&connector->base,
-				   config->writeback_fb_id_property, 0);
-
-	drm_object_attach_property(&connector->base,
-				   config->writeback_pixel_formats_property,
-				   blob->base.id);
-	wb_connector->pixel_formats_blob_ptr = blob;
-
-	return 0;
-
-attach_fail:
-	drm_connector_cleanup(connector);
-connector_fail:
-	drm_property_blob_put(blob);
 	return ret;
 }
 EXPORT_SYMBOL(drm_writeback_connector_init_with_encoder);
+
+/**
+ * drm_writeback_connector_cleanup - Cleanup the writeback connector
+ * @dev: DRM device
+ * @data: Opaque pointer to the connector
+ *
+ * This will decrement the reference counter of blobs and it will clean the
+ * remaining jobs in this writeback connector.
+ */
+void drm_writeback_connector_cleanup(struct drm_device *dev, void *data)
+{
+	struct drm_connector *connector = data;
+	struct drm_writeback_connector *wb_connector = container_of(connector,
+								    struct drm_writeback_connector,
+								    base);
+	unsigned long flags;
+	struct drm_writeback_job *pos, *n;
+
+	drm_property_blob_put(wb_connector->pixel_formats_blob_ptr);
+
+	spin_lock_irqsave(&wb_connector->job_lock, flags);
+	list_for_each_entry_safe(pos, n, &wb_connector->job_queue, list_entry) {
+		drm_writeback_cleanup_job(pos);
+		list_del(&pos->list_entry);
+	}
+	spin_unlock_irqrestore(&wb_connector->job_lock, flags);
+}
+
+/**
+ * __drmm_writeback_connector_init - Initialize a writeback connector with
+ * a custom encoder
+ *
+ * @dev: DRM device
+ * @wb_connector: Writeback connector to initialize
+ * @con_funcs: Connector funcs vtable
+ * @enc: handle to the already initialized drm encoder
+ * @formats: Array of supported pixel formats for the writeback engine
+ * @n_formats: Length of the formats array
+ *
+ * This function initialize a writeback connector and register its cleanup.
+ * It uses the common helper @__drm_writeback_connector_init to do the
+ * general initialization.
+ *
+ * This function assumes that @enc has already been created and initialized
+ * before invoking this function.
+ *
+ * In addition, this function also assumes that callers of this API will manage
+ * assigning the encoder helper functions, possible_crtcs and any other encoder
+ * specific operation.
+ *
+ * Returns: 0 on success, or a negative error code
+ */
+static int __drmm_writeback_connector_init(struct drm_device *dev,
+					   struct drm_writeback_connector *wb_connector,
+					   const struct drm_connector_funcs *con_funcs,
+					   struct drm_encoder *enc,
+					   const u32 *formats, int n_formats)
+{
+	struct drm_connector *connector = &wb_connector->base;
+	int ret;
+
+	ret = drmm_connector_init(dev, connector, con_funcs,
+				  DRM_MODE_CONNECTOR_WRITEBACK, NULL);
+	if (ret)
+		return ret;
+
+	ret = __drm_writeback_connector_init(dev, wb_connector, enc, formats,
+					     n_formats);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+/**
+ * drmm_writeback_connector_init - Initialize a writeback connector with
+ * a custom encoder
+ *
+ * @dev: DRM device
+ * @wb_connector: Writeback connector to initialize
+ * @con_funcs: Connector funcs vtable
+ * @enc: handle to the already initialized drm encoder, optional
+ * @enc_funcs: Encoder funcs vtable, optional, only used when @enc is NULL
+ * @formats: Array of supported pixel formats for the writeback engine
+ * @n_formats: Length of the formats array
+ * @possible_crtcs: if @enc is NULL, this will set the possible_crtc for the
+ *		    newly created encoder
+ *
+ * This function initialize a writeback connector and register its cleanup.
+ *
+ * This function creates the writeback-connector-specific properties if they
+ * have not been already created, initializes the connector as
+ * type DRM_MODE_CONNECTOR_WRITEBACK, and correctly initializes the property
+ * values.
+ *
+ * If @enc is NULL, this function will create a drm-managed encoder and will
+ * attach @enc_funcs on it. It will also attach the CRTC passed in
+ * @possible_crtcs
+ *
+ * Returns: 0 on success, or a negative error code
+ */
+int drmm_writeback_connector_init(struct drm_device *dev,
+				  struct drm_writeback_connector *wb_connector,
+				  const struct drm_connector_funcs *con_funcs,
+				  struct drm_encoder *enc,
+				  const struct drm_encoder_helper_funcs *enc_funcs,
+				  const u32 *formats, int n_formats,
+				  u32 possible_crtcs)
+{
+	int ret;
+
+	if (!enc) {
+		ret = drmm_encoder_init(dev, &wb_connector->encoder,
+					NULL, DRM_MODE_ENCODER_VIRTUAL, NULL);
+		if (ret)
+			return ret;
+
+		enc = &wb_connector->encoder;
+		enc->possible_crtcs |= possible_crtcs;
+		if (enc_funcs)
+			drm_encoder_helper_add(enc, enc_funcs);
+	}
+
+	return __drmm_writeback_connector_init(dev, wb_connector, con_funcs,
+					       &wb_connector->encoder, formats,
+					       n_formats);
+}
+EXPORT_SYMBOL(drmm_writeback_connector_init);
 
 int drm_writeback_set_fb(struct drm_connector_state *conn_state,
 			 struct drm_framebuffer *fb)

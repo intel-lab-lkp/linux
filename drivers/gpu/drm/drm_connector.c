@@ -613,6 +613,7 @@ static void drm_mode_remove(struct drm_connector *connector,
 	drm_mode_destroy(connector->dev, mode);
 }
 
+void drm_writeback_connector_cleanup(struct drm_device *dev, void *data);
 /**
  * drm_connector_cleanup - cleans up an initialised connector
  * @connector: connector to cleanup
@@ -630,6 +631,9 @@ void drm_connector_cleanup(struct drm_connector *connector)
 	if (WARN_ON(connector->registration_state ==
 		    DRM_CONNECTOR_REGISTERED))
 		drm_connector_unregister(connector);
+
+	if (connector->connector_type == DRM_MODE_CONNECTOR_WRITEBACK)
+		drm_writeback_connector_cleanup(dev, connector);
 
 	if (connector->privacy_screen) {
 		drm_privacy_screen_put(connector->privacy_screen);

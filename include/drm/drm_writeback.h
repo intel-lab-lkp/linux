@@ -161,6 +161,14 @@ int drm_writeback_connector_init_with_encoder(struct drm_device *dev,
 				const struct drm_connector_funcs *con_funcs, const u32 *formats,
 				int n_formats);
 
+int drmm_writeback_connector_init(struct drm_device *dev,
+				  struct drm_writeback_connector *wb_connector,
+				  const struct drm_connector_funcs *con_funcs,
+				  struct drm_encoder *enc,
+				  const struct drm_encoder_helper_funcs *enc_funcs,
+				  const u32 *formats, int n_formats,
+				  u32 possible_crtcs);
+
 int drm_writeback_set_fb(struct drm_connector_state *conn_state,
 			 struct drm_framebuffer *fb);
 
@@ -174,6 +182,8 @@ void drm_writeback_cleanup_job(struct drm_writeback_job *job);
 void
 drm_writeback_signal_completion(struct drm_writeback_connector *wb_connector,
 				int status);
+
+void drm_writeback_connector_cleanup(struct drm_device *dev, void *data);
 
 struct dma_fence *
 drm_writeback_get_out_fence(struct drm_writeback_connector *wb_connector);
