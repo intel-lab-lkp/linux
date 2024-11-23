@@ -944,6 +944,27 @@ int proc_douintvec_minmax(const struct ctl_table *table, int write,
 				 do_proc_douintvec_minmax_conv, &param);
 }
 
+/*
+ * Used for 'sysctl -w fs.nr_open', ensuring its value will not be greater
+ * than files_stat.max_files.
+ */
+int proc_douintvec_nropen_minmax(const struct ctl_table *table, int write,
+		void *buffer, size_t *lenp, loff_t *ppos)
+{
+	unsigned int file_max;
+	struct do_proc_douintvec_minmax_conv_param param = {
+		.min = (unsigned int *) table->extra1,
+		.max = (unsigned int *) table->extra2,
+	};
+
+	file_max = min_t(unsigned int, files_stat.max_files,
+			*(unsigned int *)table->extra2);
+	if (write)
+		param.max = &file_max;
+	return do_proc_douintvec(table, write, buffer, lenp, ppos,
+				 do_proc_douintvec_minmax_conv, &param);
+}
+
 /**
  * proc_dou8vec_minmax - read a vector of unsigned chars with min/max values
  * @table: the sysctl table
