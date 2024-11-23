@@ -574,8 +574,7 @@ static int wanxl_pci_init_one(struct pci_dev *pdev,
 	 * and pray pci_alloc_consistent() will use this info. It should
 	 * work on most platforms
 	 */
-	if (dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(28)) ||
-	    dma_set_mask(&pdev->dev, DMA_BIT_MASK(28))) {
+	if (dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(28))) {
 		pr_err("No usable DMA configuration\n");
 		pci_disable_device(pdev);
 		return -EIO;
@@ -626,8 +625,7 @@ static int wanxl_pci_init_one(struct pci_dev *pdev,
 	 * We set both dma_mask and consistent_dma_mask back to 32 bits
 	 * to indicate the card can do 32-bit DMA addressing
 	 */
-	if (dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32)) ||
-	    dma_set_mask(&pdev->dev, DMA_BIT_MASK(32))) {
+	if (dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32))) {
 		pr_err("No usable DMA configuration\n");
 		wanxl_pci_remove_one(pdev);
 		return -EIO;
