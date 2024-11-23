@@ -20,6 +20,7 @@ struct special_alt {
 	bool skip_alt;
 	bool jump_or_nop;
 	u8 key_addend;
+	struct symbol *key;
 
 	struct section *orig_sec;
 	unsigned long orig_off;
