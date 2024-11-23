@@ -1519,6 +1519,18 @@ static int damon_sysfs_turn_damon_off(struct damon_sysfs_kdamond *kdamond)
 	 */
 }
 
+static int damon_sysfs_damon_call(int (*fn)(void *data),
+		struct damon_sysfs_kdamond *kdamond)
+{
+	struct damon_call_control call_control = {};
+
+	if (!kdamond->damon_ctx)
+		return -EINVAL;
+	call_control.fn = fn;
+	call_control.data = kdamond;
+	return damon_call(kdamond->damon_ctx, &call_control);
+}
+
 /*
  * damon_sysfs_handle_cmd() - Handle a command for a specific kdamond.
  * @cmd:	The command to handle.
@@ -1536,7 +1548,6 @@ static int damon_sysfs_handle_cmd(enum damon_sysfs_cmd cmd,
 		struct damon_sysfs_kdamond *kdamond)
 {
 	bool need_wait = true;
-	struct damon_call_control call_control = {};
 
 	switch (cmd) {
 	case DAMON_SYSFS_CMD_ON:
@@ -1544,17 +1555,12 @@ static int damon_sysfs_handle_cmd(enum damon_sysfs_cmd cmd,
 	case DAMON_SYSFS_CMD_OFF:
 		return damon_sysfs_turn_damon_off(kdamond);
 	case DAMON_SYSFS_CMD_UPDATE_SCHEMES_STATS:
-		if (!kdamond->damon_ctx)
-			return -EINVAL;
-		call_control.fn = damon_sysfs_upd_schemes_stats;
-		call_control.data = kdamond;
-		return damon_call(kdamond->damon_ctx, &call_control);
+		return damon_sysfs_damon_call(
+				damon_sysfs_upd_schemes_stats, kdamond);
 	case DAMON_SYSFS_CMD_COMMIT_SCHEMES_QUOTA_GOALS:
-		if (!kdamond->damon_ctx)
-			return -EINVAL;
-		call_control.fn = damon_sysfs_commit_schemes_quota_goals;
-		call_control.data = kdamond;
-		return damon_call(kdamond->damon_ctx, &call_control);
+		return damon_sysfs_damon_call(
+				damon_sysfs_commit_schemes_quota_goals,
+				kdamond);
 	default:
 		break;
 	}
