@@ -265,8 +265,7 @@ obj-$(CONFIG_IRQ_POLL) += irq_poll.o
 obj-$(CONFIG_POLYNOMIAL) += polynomial.o
 
 # stackdepot.c should not be instrumented or call instrumented functions.
-# Prevent the compiler from calling builtins like memcmp() or bcmp() from this
-# file.
+# Prevent the compiler from calling builtins like memcmp() from this file.
 CFLAGS_stackdepot.o += -fno-builtin
 obj-$(CONFIG_STACKDEPOT) += stackdepot.o
 KASAN_SANITIZE_stackdepot.o := n
