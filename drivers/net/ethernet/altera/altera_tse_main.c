@@ -1219,11 +1219,8 @@ static int altera_tse_probe(struct platform_device *pdev)
 		goto err_free_netdev;
 	}
 
-	if (!dma_set_mask(priv->device, DMA_BIT_MASK(priv->dmaops->dmamask))) {
-		dma_set_coherent_mask(priv->device,
-				      DMA_BIT_MASK(priv->dmaops->dmamask));
-	} else if (!dma_set_mask(priv->device, DMA_BIT_MASK(32))) {
-		dma_set_coherent_mask(priv->device, DMA_BIT_MASK(32));
+	if (dma_set_mask_and_coherent(priv->device, DMA_BIT_MASK(priv->dmaops->dmamask))) {
+		dma_set_mask_and_coherent(priv->device, DMA_BIT_MASK(32));
 	} else {
 		ret = -EIO;
 		goto err_free_netdev;
