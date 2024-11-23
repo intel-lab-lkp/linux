@@ -1205,7 +1205,7 @@ static bool damon_is_running(struct damon_ctx *ctx)
  * internal data of &struct damon_ctx including &struct damon_region objects
  * without additional locking.  The return code of the callback function will
  * be saved in &->return_code of @control.
-
+ *
  * If DAMON is deactivated by watermarks or terminated before the function is
  * called back, the request is canceled.
  *
