@@ -2769,7 +2769,7 @@ int mpol_misplaced(struct folio *folio, struct vm_fault *vmf,
 		break;
 
 	case MPOL_PREFERRED:
-		if (node_isset(curnid, pol->nodes))
+		if (curnid == first_node(pol->nodes))
 			goto out;
 		polnid = first_node(pol->nodes);
 		break;
