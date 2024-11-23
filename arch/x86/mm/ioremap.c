@@ -628,6 +628,7 @@ static bool memremap_is_efi_data(resource_size_t phys_addr,
 	return false;
 }
 
+#define SD_SIZE sizeof(struct setup_data)
 /*
  * Examine the physical address to determine if it is boot data by checking
  * it against the boot params setup_data chain.
@@ -647,24 +648,24 @@ static bool __ref __memremap_is_setup_data(resource_size_t phys_addr,
 			return true;
 
 		if (early)
-			data = early_memremap_decrypted(paddr, sizeof(*data));
+			data = early_memremap_decrypted(paddr, SD_SIZE);
 		else
-			data = memremap(paddr, sizeof(*data),
+			data = memremap(paddr, SD_SIZE,
 					MEMREMAP_WB | MEMREMAP_DEC);
 		if (!data) {
 			pr_warn("failed to memremap setup_data entry\n");
 			return false;
 		}
 
-		size = sizeof(*data);
+		size = SD_SIZE;
 
 		paddr_next = data->next;
 		len = data->len;
 
 		if ((phys_addr > paddr) &&
-		    (phys_addr < (paddr + sizeof(*data) + len))) {
+		    (phys_addr < (paddr + SD_SIZE + len))) {
 			if (early)
-				early_memunmap(data, sizeof(*data));
+				early_memunmap(data, SD_SIZE);
 			else
 				memunmap(data);
 			return true;
@@ -673,7 +674,7 @@ static bool __ref __memremap_is_setup_data(resource_size_t phys_addr,
 		if (data->type == SETUP_INDIRECT) {
 			size += len;
 			if (early) {
-				early_memunmap(data, sizeof(*data));
+				early_memunmap(data, SD_SIZE);
 				data = early_memremap_decrypted(paddr, size);
 			} else {
 				memunmap(data);
@@ -706,6 +707,7 @@ static bool __ref __memremap_is_setup_data(resource_size_t phys_addr,
 
 	return false;
 }
+#undef SD_SIZE
 
 static bool memremap_is_setup_data(resource_size_t phys_addr,
 				   unsigned long size)
