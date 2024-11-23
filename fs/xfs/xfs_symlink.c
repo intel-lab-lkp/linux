@@ -28,6 +28,30 @@
 #include "xfs_parent.h"
 #include "xfs_defer.h"
 
+void
+xfs_setup_cached_symlink(
+	struct xfs_inode	*ip)
+{
+	struct inode		*inode = &ip->i_vnode;
+	xfs_fsize_t		pathlen;
+
+	/*
+	 * If we have the symlink readily accessible let the VFS know where to
+	 * find it. This avoids calls to xfs_readlink().
+	 */
+	pathlen = ip->i_disk_size;
+	if (pathlen <= 0 || pathlen > XFS_SYMLINK_MAXLEN)
+		return;
+
+	if (ip->i_df.if_format != XFS_DINODE_FMT_LOCAL)
+		return;
+
+	if (XFS_IS_CORRUPT(ip->i_mount, !ip->i_df.if_data))
+		return;
+
+	inode_set_cached_link(inode, ip->i_df.if_data, pathlen);
+}
+
 int
 xfs_readlink(
 	struct xfs_inode	*ip,

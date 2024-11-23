@@ -1376,6 +1376,7 @@ xfs_setup_iops(
 		break;
 	case S_IFLNK:
 		inode->i_op = &xfs_symlink_inode_operations;
+		xfs_setup_cached_symlink(ip);
 		break;
 	default:
 		inode->i_op = &xfs_inode_operations;

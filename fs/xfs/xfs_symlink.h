@@ -12,5 +12,6 @@ int xfs_symlink(struct mnt_idmap *idmap, struct xfs_inode *dp,
 		umode_t mode, struct xfs_inode **ipp);
 int xfs_readlink(struct xfs_inode *ip, char *link);
 int xfs_inactive_symlink(struct xfs_inode *ip);
+void xfs_setup_cached_symlink(struct xfs_inode *ip);
 
 #endif /* __XFS_SYMLINK_H */
