@@ -83,7 +83,7 @@ static int damon_sample_prcl_start(void)
 			.min_nr_accesses = 0,
 			.max_nr_accesses = 0,
 			.min_age_region = 50,
-			.max_age_region = ULONG_MAX},
+			.max_age_region = UINT_MAX},
 			DAMOS_PAGEOUT,
 			0,
 			&(struct damos_quota){},
