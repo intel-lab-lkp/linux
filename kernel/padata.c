@@ -319,6 +319,7 @@ static void padata_reorder(struct parallel_data *pd)
 	if (!spin_trylock_bh(&pd->lock))
 		return;
 
+	padata_get_pd(pd);
 	while (1) {
 		padata = padata_find_next(pd, true);
 
@@ -355,6 +356,7 @@ static void padata_reorder(struct parallel_data *pd)
 	reorder = per_cpu_ptr(pd->reorder_list, pd->cpu);
 	if (!list_empty(&reorder->list) && padata_find_next(pd, false))
 		queue_work(pinst->serial_wq, &pd->reorder_work);
+	padata_put_pd(pd);
 }
 
 static void invoke_padata_reorder(struct work_struct *work)
