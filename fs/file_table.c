@@ -33,7 +33,7 @@
 #include "internal.h"
 
 /* sysctl tunables... */
-static struct files_stat_struct files_stat = {
+struct files_stat_struct files_stat = {
 	.max_files = NR_FILE
 };
 

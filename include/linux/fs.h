@@ -89,6 +89,7 @@ extern void __init files_maxfiles_init(void);
 
 extern unsigned long get_max_files(void);
 extern unsigned int sysctl_nr_open;
+extern struct files_stat_struct files_stat;
 
 typedef __kernel_rwf_t rwf_t;
 
