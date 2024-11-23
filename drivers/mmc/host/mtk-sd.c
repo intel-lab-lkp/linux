@@ -1008,11 +1008,13 @@ static inline u32 msdc_cmd_find_resp(struct msdc_host *host,
 	u32 resp;
 
 	switch (mmc_resp_type(cmd)) {
-		/* Actually, R1, R5, R6, R7 are the same */
+	/* Actually, R1, R5, R6, R7 are the same */
 	case MMC_RSP_R1:
+	case MMC_RSP_R1_NO_CRC:
 		resp = 0x1;
 		break;
 	case MMC_RSP_R1B:
+	case MMC_RSP_R1B_NO_CRC:
 		resp = 0x7;
 		break;
 	case MMC_RSP_R2:
@@ -1216,6 +1218,7 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 {
 	bool done = false;
 	bool sbc_error;
+	bool ignore_crc = false;
 	unsigned long flags;
 	u32 *rsp;
 
@@ -1240,6 +1243,10 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 		return true;
 	rsp = cmd->resp;
 
+	if (mmc_resp_type(cmd) == MMC_RSP_R1_NO_CRC ||
+	    mmc_resp_type(cmd) == MMC_RSP_R1B_NO_CRC)
+		ignore_crc = true;
+
 	sdr_clr_bits(host->base + MSDC_INTEN, cmd_ints_mask);
 
 	if (cmd->flags & MMC_RSP_PRESENT) {
@@ -1262,7 +1269,7 @@ static bool msdc_cmd_done(struct msdc_host *host, int events,
 			 * CRC error.
 			 */
 			msdc_reset_hw(host);
-		if (events & MSDC_INT_RSPCRCERR) {
+		if (events & MSDC_INT_RSPCRCERR && !ignore_crc) {
 			cmd->error = -EILSEQ;
 			host->error |= REQ_CMD_EIO;
 		} else if (events & MSDC_INT_CMDTMO) {
