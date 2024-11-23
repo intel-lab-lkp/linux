@@ -951,18 +951,22 @@ int proc_douintvec_minmax(const struct ctl_table *table, int write,
 int proc_douintvec_nropen_minmax(const struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
 {
+	int ret;
 	unsigned int file_max;
 	struct do_proc_douintvec_minmax_conv_param param = {
 		.min = (unsigned int *) table->extra1,
 		.max = (unsigned int *) table->extra2,
 	};
 
+	down_write(&file_number_sem);
 	file_max = min_t(unsigned int, files_stat.max_files,
 			*(unsigned int *)table->extra2);
 	if (write)
 		param.max = &file_max;
-	return do_proc_douintvec(table, write, buffer, lenp, ppos,
+	ret = do_proc_douintvec(table, write, buffer, lenp, ppos,
 				 do_proc_douintvec_minmax_conv, &param);
+	up_write(&file_number_sem);
+	return ret;
 }
 
 /**
@@ -1150,14 +1154,20 @@ int proc_doulongvec_minmax(const struct ctl_table *table, int write,
 int proc_doulongvec_maxfiles_minmax(const struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos)
 {
+	int ret;
 	unsigned long *min = table->extra1;
 	unsigned long *max = table->extra2;
-	unsigned long nr_open = sysctl_nr_open;
+	unsigned long nr_open;
 
-	if (write)
+	down_write(&file_number_sem);
+	if (write) {
+		nr_open = sysctl_nr_open;
 		min = &nr_open;
-	return __do_proc_doulongvec_minmax(table->data, table, write,
+	}
+	ret = __do_proc_doulongvec_minmax(table->data, table, write,
 			buffer, lenp, ppos, 1l, 1l, min, max);
+	up_write(&file_number_sem);
+	return ret;
 }
 
 /**

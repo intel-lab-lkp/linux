@@ -37,6 +37,8 @@ struct files_stat_struct files_stat = {
 	.max_files = NR_FILE
 };
 
+DECLARE_RWSEM(file_number_sem);
+
 /* SLAB cache for file structures */
 static struct kmem_cache *filp_cachep __ro_after_init;
 static struct kmem_cache *bfilp_cachep __ro_after_init;
@@ -102,8 +104,13 @@ EXPORT_SYMBOL_GPL(get_max_files);
 static int proc_nr_files(const struct ctl_table *table, int write, void *buffer,
 			 size_t *lenp, loff_t *ppos)
 {
+	int ret;
+
+	down_read(&file_number_sem);
 	files_stat.nr_files = get_nr_files();
-	return proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_doulongvec_minmax(table, write, buffer, lenp, ppos);
+	up_read(&file_number_sem);
+	return ret;
 }
 
 static struct ctl_table fs_stat_sysctls[] = {
