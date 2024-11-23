@@ -276,7 +276,21 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		 */
 		swap_zeromap_folio_clear(folio);
 	}
-	if (zswap_store(folio)) {
+
+	if (folio_test_large(folio) && zswap_can_batch()) {
+		struct folio_batch batch;
+		int error = -1;
+
+		folio_batch_init(&batch);
+		folio_batch_add(&batch, folio);
+		zswap_batch_store(&batch, &error);
+
+		if (!error) {
+			count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
+			folio_unlock(folio);
+			return 0;
+		}
+	} else if (zswap_store(folio)) {
 		count_mthp_stat(folio_order(folio), MTHP_STAT_ZSWPOUT);
 		folio_unlock(folio);
 		return 0;

@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 #include <linux/mm_types.h>
+#include <linux/pagevec.h>
 
 struct lruvec;
 
@@ -33,6 +34,8 @@ struct zswap_lruvec_state {
 
 unsigned long zswap_total_pages(void);
 bool zswap_store(struct folio *folio);
+bool zswap_can_batch(void);
+void zswap_batch_store(struct folio_batch *batch, int *errors);
 bool zswap_load(struct folio *folio);
 void zswap_invalidate(swp_entry_t swp);
 int zswap_swapon(int type, unsigned long nr_pages);
@@ -49,6 +52,15 @@ struct zswap_lruvec_state {};
 static inline bool zswap_store(struct folio *folio)
 {
 	return false;
+}
+
+static inline bool zswap_can_batch(void)
+{
+	return false;
+}
+
+static inline void zswap_batch_store(struct folio_batch *batch, int *errors)
+{
 }
 
 static inline bool zswap_load(struct folio *folio)
