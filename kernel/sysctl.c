@@ -1122,6 +1122,23 @@ int proc_doulongvec_minmax(const struct ctl_table *table, int write,
     return do_proc_doulongvec_minmax(table, write, buffer, lenp, ppos, 1l, 1l);
 }
 
+/*
+ * Used for 'sysctl -w fs.file-max', ensuring its value will not be less
+ * than sysctl_nr_open.
+ */
+int proc_doulongvec_maxfiles_minmax(const struct ctl_table *table, int write,
+		void *buffer, size_t *lenp, loff_t *ppos)
+{
+	unsigned long *min = table->extra1;
+	unsigned long *max = table->extra2;
+	unsigned long nr_open = sysctl_nr_open;
+
+	if (write)
+		min = &nr_open;
+	return __do_proc_doulongvec_minmax(table->data, table, write,
+			buffer, lenp, ppos, 1l, 1l, min, max);
+}
+
 /**
  * proc_doulongvec_ms_jiffies_minmax - read a vector of millisecond values with min/max values
  * @table: the sysctl table

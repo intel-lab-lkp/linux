@@ -119,7 +119,7 @@ static struct ctl_table fs_stat_sysctls[] = {
 		.data		= &files_stat.max_files,
 		.maxlen		= sizeof(files_stat.max_files),
 		.mode		= 0644,
-		.proc_handler	= proc_doulongvec_minmax,
+		.proc_handler	= proc_doulongvec_maxfiles_minmax,
 		.extra1		= SYSCTL_LONG_ZERO,
 		.extra2		= SYSCTL_LONG_MAX,
 	},

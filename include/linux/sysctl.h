@@ -82,6 +82,8 @@ int proc_dointvec_userhz_jiffies(const struct ctl_table *, int, void *, size_t *
 int proc_dointvec_ms_jiffies(const struct ctl_table *, int, void *, size_t *,
 		loff_t *);
 int proc_doulongvec_minmax(const struct ctl_table *, int, void *, size_t *, loff_t *);
+int proc_doulongvec_maxfiles_minmax(const struct ctl_table *, int, void *,
+		size_t *, loff_t *);
 int proc_doulongvec_ms_jiffies_minmax(const struct ctl_table *table, int, void *,
 		size_t *, loff_t *);
 int proc_do_large_bitmap(const struct ctl_table *, int, void *, size_t *, loff_t *);
