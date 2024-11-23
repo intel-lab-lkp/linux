@@ -1020,9 +1020,10 @@ static int sysrq_sysctl_handler(const struct ctl_table *table, int write,
 static int __do_proc_doulongvec_minmax(void *data,
 		const struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos,
-		unsigned long convmul, unsigned long convdiv)
+		unsigned long convmul, unsigned long convdiv,
+		unsigned long *min, unsigned long *max)
 {
-	unsigned long *i, *min, *max;
+	unsigned long *i;
 	int vleft, first = 1, err = 0;
 	size_t left;
 	char *p;
@@ -1033,8 +1034,6 @@ static int __do_proc_doulongvec_minmax(void *data,
 	}
 
 	i = data;
-	min = table->extra1;
-	max = table->extra2;
 	vleft = table->maxlen / sizeof(unsigned long);
 	left = *lenp;
 
@@ -1095,8 +1094,10 @@ static int do_proc_doulongvec_minmax(const struct ctl_table *table, int write,
 		void *buffer, size_t *lenp, loff_t *ppos, unsigned long convmul,
 		unsigned long convdiv)
 {
+	unsigned long *min = table->extra1;
+	unsigned long *max = table->extra2;
 	return __do_proc_doulongvec_minmax(table->data, table, write,
-			buffer, lenp, ppos, convmul, convdiv);
+			buffer, lenp, ppos, convmul, convdiv, min, max);
 }
 
 /**
