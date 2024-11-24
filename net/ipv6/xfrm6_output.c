@@ -75,10 +75,14 @@ static int __xfrm6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	if (x->props.mode != XFRM_MODE_TUNNEL)
 		goto skip_frag;
 
-	if (skb->protocol == htons(ETH_P_IPV6))
+	if (x->xso.type == XFRM_DEV_OFFLOAD_PACKET) {
+		mtu = xfrm_state_mtu(x, dst_mtu(skb_dst(skb)));
+		IP6CB(skb)->frag_max_size = mtu;
+	} else if (skb->protocol == htons(ETH_P_IPV6)) {
 		mtu = ip6_skb_dst_mtu(skb);
-	else
+	} else {
 		mtu = dst_mtu(skb_dst(skb));
+	}
 
 	toobig = skb->len > mtu && !skb_is_gso(skb);
 

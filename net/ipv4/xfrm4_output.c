@@ -14,17 +14,44 @@
 #include <net/xfrm.h>
 #include <net/icmp.h>
 
+static int __xfrm4_output_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+	return xfrm_output(sk, skb);
+}
+
 static int __xfrm4_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-#ifdef CONFIG_NETFILTER
-	struct xfrm_state *x = skb_dst(skb)->xfrm;
+	struct dst_entry *dst = skb_dst(skb);
+	struct xfrm_state *x = dst->xfrm;
+	unsigned int mtu;
+	bool toobig;
 
+#ifdef CONFIG_NETFILTER
 	if (!x) {
 		IPCB(skb)->flags |= IPSKB_REROUTED;
 		return dst_output(net, sk, skb);
 	}
 #endif
 
+	if (x->props.mode != XFRM_MODE_TUNNEL || x->xso.type != XFRM_DEV_OFFLOAD_PACKET)
+		goto skip_frag;
+
+	mtu = xfrm_state_mtu(x, dst_mtu(skb_dst(skb)));
+
+	toobig = skb->len > mtu && !skb_is_gso(skb);
+
+	if (!skb->ignore_df && toobig && skb->sk) {
+		xfrm_local_error(skb, mtu);
+		kfree_skb(skb);
+		return -EMSGSIZE;
+	}
+
+	if (toobig) {
+		IPCB(skb)->frag_max_size = mtu;
+		return ip_do_fragment(net, sk, skb, __xfrm4_output_finish);
+	}
+
+skip_frag:
 	return xfrm_output(sk, skb);
 }
 
