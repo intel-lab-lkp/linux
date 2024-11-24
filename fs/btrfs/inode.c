@@ -4775,7 +4775,7 @@ int btrfs_truncate_block(struct btrfs_inode *inode, loff_t from, loff_t len,
 	}
 again:
 	folio = __filemap_get_folio(mapping, index,
-				    FGP_LOCK | FGP_ACCESSED | FGP_CREAT, mask);
+			FGP_LOCK | FGP_ACCESSED | FGP_CREAT | FGP_STABLE, mask);
 	if (IS_ERR(folio)) {
 		btrfs_delalloc_release_space(inode, data_reserved, block_start,
 					     blocksize, true);
@@ -4807,8 +4807,6 @@ again:
 	ret = set_folio_extent_mapped(folio);
 	if (ret < 0)
 		goto out_unlock;
-
-	folio_wait_writeback(folio);
 
 	lock_extent(io_tree, block_start, block_end, &cached_state);
 
