@@ -729,7 +729,7 @@ static void btrfs_run_ordered_extent_work(struct btrfs_work *work)
 	struct btrfs_ordered_extent *ordered;
 
 	ordered = container_of(work, struct btrfs_ordered_extent, flush_work);
-	btrfs_start_ordered_extent(ordered);
+	btrfs_start_ordered_extent(ordered, NULL);
 	complete(&ordered->completion);
 }
 
@@ -845,12 +845,14 @@ void btrfs_wait_ordered_roots(struct btrfs_fs_info *fs_info, u64 nr,
  * Wait on page writeback for all the pages in the extent and the IO completion
  * code to insert metadata into the btree corresponding to the extent.
  */
-void btrfs_start_ordered_extent(struct btrfs_ordered_extent *entry)
+void btrfs_start_ordered_extent(struct btrfs_ordered_extent *entry,
+				struct folio *locked_folio)
 {
 	u64 start = entry->file_offset;
 	u64 end = start + entry->num_bytes - 1;
 	struct btrfs_inode *inode = entry->inode;
 	bool freespace_inode;
+	bool skip_writeback = false;
 
 	trace_btrfs_ordered_extent_start(inode, entry);
 
@@ -861,12 +863,58 @@ void btrfs_start_ordered_extent(struct btrfs_ordered_extent *entry)
 	freespace_inode = btrfs_is_free_space_inode(inode);
 
 	/*
+	 * The locked folio covers the ordered extent range and the full
+	 * folio is dirty.
+	 * We can not trigger writeback on it, as we will try to lock
+	 * the same folio we already hold.
+	 *
+	 * This only happens for sector size < page size case, and even
+	 * that happens we're still safe because this can only happen
+	 * when the range is submitted and finished, but OE is not yet
+	 * finished.
+	 */
+	if (locked_folio) {
+		const u64 skip_start = max_t(u64, folio_pos(locked_folio), start);
+		const u64 skip_end = min_t(u64,
+				folio_pos(locked_folio) + folio_size(locked_folio),
+				end + 1) - 1;
+
+		ASSERT(folio_test_locked(locked_folio));
+
+		/* The folio should intersect with the OE range. */
+		ASSERT(folio_pos(locked_folio) <= end ||
+		       folio_pos(locked_folio) + folio_size(locked_folio) > start);
+
+		/*
+		 * The range must not be dirty.
+		 *
+		 * Since we will skip writeback for the folio, if the involved range
+		 * is dirty the range will never be submitted, thus the ordered
+		 * extent we are going to wait will never finish, cause another deadlock.
+		 */
+		btrfs_folio_assert_not_dirty(inode->root->fs_info, locked_folio,
+					     skip_start, skip_end  + 1 - skip_start);
+		skip_writeback = true;
+	}
+	/*
 	 * pages in the range can be dirty, clean or writeback.  We
 	 * start IO on any dirty ones so the wait doesn't stall waiting
 	 * for the flusher thread to find them
 	 */
-	if (!test_bit(BTRFS_ORDERED_DIRECT, &entry->flags))
-		filemap_fdatawrite_range(inode->vfs_inode.i_mapping, start, end);
+	if (!test_bit(BTRFS_ORDERED_DIRECT, &entry->flags)) {
+		if (!skip_writeback) {
+			filemap_fdatawrite_range(inode->vfs_inode.i_mapping, start, end);
+		} else {
+			/* Need to skip the locked folio range. */
+			if (start < folio_pos(locked_folio))
+				filemap_fdatawrite_range(inode->vfs_inode.i_mapping,
+						start, folio_pos(locked_folio) - 1);
+			if (end + 1 > folio_pos(locked_folio) + folio_size(locked_folio))
+				filemap_fdatawrite_range(inode->vfs_inode.i_mapping,
+						folio_pos(locked_folio) + folio_size(locked_folio),
+						end);
+		}
+	}
 
 	if (!freespace_inode)
 		btrfs_might_wait_for_event(inode->root->fs_info, btrfs_ordered_extent);
@@ -921,7 +969,7 @@ int btrfs_wait_ordered_range(struct btrfs_inode *inode, u64 start, u64 len)
 			btrfs_put_ordered_extent(ordered);
 			break;
 		}
-		btrfs_start_ordered_extent(ordered);
+		btrfs_start_ordered_extent(ordered, NULL);
 		end = ordered->file_offset;
 		/*
 		 * If the ordered extent had an error save the error but don't
@@ -1141,6 +1189,8 @@ out:
  * @inode:        Inode whose ordered tree is to be searched
  * @start:        Beginning of range to flush
  * @end:          Last byte of range to lock
+ * @locked_folio: If passed, will not start writeback of this folio, to avoid
+ *		  locking the same folio already locked by the caller.
  * @cached_state: If passed, will return the extent state responsible for the
  *                locked range. It's the caller's responsibility to free the
  *                cached state.
@@ -1148,8 +1198,9 @@ out:
  * Always return with the given range locked, ensuring after it's called no
  * order extent can be pending.
  */
-void btrfs_lock_and_flush_ordered_range(struct btrfs_inode *inode, u64 start,
-					u64 end,
+void btrfs_lock_and_flush_ordered_range(struct btrfs_inode *inode,
+					struct folio *locked_folio,
+					u64 start, u64 end,
 					struct extent_state **cached_state)
 {
 	struct btrfs_ordered_extent *ordered;
@@ -1174,7 +1225,7 @@ void btrfs_lock_and_flush_ordered_range(struct btrfs_inode *inode, u64 start,
 			break;
 		}
 		unlock_extent(&inode->io_tree, start, end, cachedp);
-		btrfs_start_ordered_extent(ordered);
+		btrfs_start_ordered_extent(ordered, locked_folio);
 		btrfs_put_ordered_extent(ordered);
 	}
 }
