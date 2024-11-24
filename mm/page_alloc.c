@@ -7013,9 +7013,8 @@ bool put_page_back_buddy(struct page *page)
 
 		ClearPageHWPoisonTakenOff(page);
 		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE);
-		if (TestClearPageHWPoison(page)) {
+		if (TestClearPageHWPoison(page))
 			ret = true;
-		}
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
 
