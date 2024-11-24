@@ -1719,6 +1719,9 @@ int ntfs_link_inode(struct inode *inode, struct dentry *dentry)
 	struct ntfs_sb_info *sbi = inode->i_sb->s_fs_info;
 	struct NTFS_DE *de;
 
+	if (is_bad_inode(inode))
+		return -EIO;
+
 	/* Allocate PATH_MAX bytes. */
 	de = __getname();
 	if (!de)
