@@ -428,9 +428,15 @@ void __init topology_apply_cmdline_limits_early(void)
 {
 	unsigned int possible = nr_cpu_ids;
 
-	/* 'maxcpus=0' 'nosmp' 'nolapic' 'disableapic' 'noapic' */
-	if (!setup_max_cpus || ioapic_is_disabled || apic_is_disabled)
+	/* 'maxcpus=0' 'nosmp' */
+	if (!setup_max_cpus)
 		possible = 1;
+
+#if defined(CONFIG_X86_32)
+	/* 'nolapic' 'disableapic' 'noapic' */
+	if (apic_is_disabled || ioapic_is_disabled)
+		possible = 1;
+#endif
 
 	/* 'possible_cpus=N' */
 	possible = min_t(unsigned int, max_possible_cpus, possible);
@@ -443,8 +449,14 @@ void __init topology_apply_cmdline_limits_early(void)
 
 static __init bool restrict_to_up(void)
 {
-	if (!smp_found_config || ioapic_is_disabled)
+	if (!smp_found_config)
 		return true;
+
+#if defined(CONFIG_X86_32)
+	if (ioapic_is_disabled)
+		return true;
+#endif
+
 	/*
 	 * XEN PV is special as it does not advertise the local APIC
 	 * properly, but provides a fake topology for it so that the
