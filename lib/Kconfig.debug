@@ -240,6 +240,7 @@ config AS_HAS_NON_CONST_ULEB128
 choice
 	prompt "Debug information"
 	depends on DEBUG_KERNEL
+	default DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
 	help
 	  Selecting something other than "None" results in a kernel image
 	  that will include debugging info resulting in a larger kernel image.
