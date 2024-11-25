@@ -505,6 +505,18 @@ bool _cfg80211_chandef_usable(struct wiphy *wiphy,
 			      u32 prohibited_flags,
 			      u32 permitting_flags);
 
+#define for_each_subchan(wiphy, center_freq, bandwidth, punctured,	\
+			       subchan)						\
+	for (subchan = ieee80211_next_subchan(wiphy, center_freq, bandwidth,	\
+					      punctured, NULL);			\
+	     subchan && !IS_ERR(subchan);					\
+	     subchan = ieee80211_next_subchan(wiphy, center_freq, bandwidth,	\
+					      punctured, subchan))
+
+struct ieee80211_channel *
+ieee80211_next_subchan(struct wiphy *wiphy, u32 center_freq, u32 bandwidth,
+		       u16 punctured, struct ieee80211_channel *subchan);
+
 static inline unsigned int elapsed_jiffies_msecs(unsigned long start)
 {
 	unsigned long end = jiffies;

@@ -184,6 +184,70 @@ struct ieee80211_channel *ieee80211_get_channel_khz(struct wiphy *wiphy,
 }
 EXPORT_SYMBOL(ieee80211_get_channel_khz);
 
+static u32 cfg80211_get_start_freq(u32 center_freq,
+				   u32 bandwidth)
+{
+	u32 start_freq;
+
+	bandwidth = MHZ_TO_KHZ(bandwidth);
+	if (bandwidth <= MHZ_TO_KHZ(20))
+		start_freq = center_freq;
+	else
+		start_freq = center_freq - bandwidth / 2 + MHZ_TO_KHZ(10);
+
+	return start_freq;
+}
+
+static u32 cfg80211_get_end_freq(u32 center_freq,
+				 u32 bandwidth)
+{
+	u32 end_freq;
+
+	bandwidth = MHZ_TO_KHZ(bandwidth);
+	if (bandwidth <= MHZ_TO_KHZ(20))
+		end_freq = center_freq;
+	else
+		end_freq = center_freq + bandwidth / 2 - MHZ_TO_KHZ(10);
+
+	return end_freq;
+}
+
+struct ieee80211_channel *ieee80211_next_subchan(struct wiphy *wiphy,
+						 u32 center_freq, u32 bandwidth,
+						 u16 punctured,
+						 struct ieee80211_channel *subchan)
+{
+	struct ieee80211_channel *next_subchan;
+	u32 freq, start_freq, end_freq;
+	int pos;
+
+	start_freq = cfg80211_get_start_freq(center_freq, bandwidth);
+	end_freq = cfg80211_get_end_freq(center_freq, bandwidth);
+
+	if (!subchan) {
+		freq = start_freq;
+	} else {
+		freq = ieee80211_channel_to_khz(subchan);
+		freq += MHZ_TO_KHZ(20);
+	}
+
+	while (freq <= end_freq) {
+		next_subchan = ieee80211_get_channel_khz(wiphy, freq);
+
+		if (!next_subchan)
+			return ERR_PTR(-EINVAL);
+
+		pos = (freq - start_freq) / MHZ_TO_KHZ(20);
+
+		if (!(punctured & BIT(pos)))
+			return next_subchan;
+
+		freq += MHZ_TO_KHZ(20);
+	}
+
+	return NULL;
+}
+
 static void set_mandatory_flags_band(struct ieee80211_supported_band *sband)
 {
 	int i, want;
