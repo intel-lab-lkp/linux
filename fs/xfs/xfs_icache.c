@@ -1948,19 +1948,20 @@ xfs_inodegc_worker(
 {
 	struct xfs_inodegc	*gc = container_of(to_delayed_work(work),
 						struct xfs_inodegc, work);
-	struct llist_node	*node = llist_del_all(&gc->list);
+	struct llist_node	*node;
 	struct xfs_inode	*ip, *n;
 	struct xfs_mount	*mp = gc->mp;
 	unsigned int		nofs_flag;
 
-	/*
-	 * Clear the cpu mask bit and ensure that we have seen the latest
-	 * update of the gc structure associated with this CPU. This matches
-	 * with the release semantics used when setting the cpumask bit in
-	 * xfs_inodegc_queue.
-	 */
 	cpumask_clear_cpu(gc->cpu, &mp->m_inodegc_cpumask);
-	smp_mb__after_atomic();
+
+	/*
+	 * llist_del_all provides ordering semantics that ensure the CPU mask
+	 * clearing is always visible before removing all entries from the gc
+	 * list. This prevents list being added while the CPU mask bit is
+	 * unset in xfs_inodegc_queue()
+	 */
+	node = llist_del_all(&gc->list);
 
 	WRITE_ONCE(gc->items, 0);
 
@@ -2188,13 +2189,11 @@ xfs_inodegc_queue(
 	shrinker_hits = READ_ONCE(gc->shrinker_hits);
 
 	/*
-	 * Ensure the list add is always seen by anyone who finds the cpumask
-	 * bit set. This effectively gives the cpumask bit set operation
-	 * release ordering semantics.
+	 * llist_add provides necessary ordering semantics to ensure list
+	 * additions are visible when cpumask bit is found set, so no
+	 * additional memory barrier is needed.
 	 */
-	smp_mb__before_atomic();
-	if (!cpumask_test_cpu(cpu_nr, &mp->m_inodegc_cpumask))
-		cpumask_test_and_set_cpu(cpu_nr, &mp->m_inodegc_cpumask);
+	cpumask_test_and_set_cpu(cpu_nr, &mp->m_inodegc_cpumask);
 
 	/*
 	 * We queue the work while holding the current CPU so that the work
