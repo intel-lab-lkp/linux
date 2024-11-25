@@ -1409,11 +1409,7 @@ static int sc92031_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pci_set_master(pdev);
 
-	err = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
-	if (unlikely(err < 0))
-		goto out_set_dma_mask;
-
-	err = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
+	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
 	if (unlikely(err < 0))
 		goto out_set_dma_mask;
 

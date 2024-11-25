@@ -6559,8 +6559,7 @@ static int pcidev_init(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	result = -ENODEV;
 
-	if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(32)) ||
-	    dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32)))
+	if (dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32)))
 		return result;
 
 	reg_base = pci_resource_start(pdev, 0);
