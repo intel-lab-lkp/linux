@@ -2022,9 +2022,6 @@ static const struct of_device_id rcar_dmac_of_ids[] = {
 	}, {
 		.compatible = "renesas,rcar-gen4-dmac",
 		.data = &rcar_gen4_dmac_data,
-	}, {
-		.compatible = "renesas,dmac-r8a779a0",
-		.data = &rcar_gen4_dmac_data,
 	},
 	{ /* Sentinel */ }
 };
