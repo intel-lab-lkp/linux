@@ -3018,6 +3018,8 @@ static const struct dmi_system_id bridge_d3_blacklist[] = {
  */
 bool pci_bridge_d3_possible(struct pci_dev *bridge)
 {
+	struct pci_host_bridge *host_bridge;
+
 	if (!pci_is_pcie(bridge))
 		return false;
 
@@ -3036,6 +3038,15 @@ bool pci_bridge_d3_possible(struct pci_dev *bridge)
 			return false;
 
 		if (pci_bridge_d3_force)
+			return true;
+
+		/*
+		 * Allow D3 for all Device Tree based systems. We assume a host
+		 * bridge's parent will have a device node, even if this bridge
+		 * may not have its own.
+		 */
+		host_bridge = pci_find_host_bridge(bridge->bus);
+		if (dev_of_node(host_bridge->dev.parent))
 			return true;
 
 		/* Even the oldest 2010 Thunderbolt controller supports D3. */
