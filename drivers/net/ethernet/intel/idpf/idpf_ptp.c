@@ -318,11 +318,40 @@ static int idpf_ptp_gettimex64(struct ptp_clock_info *info,
 }
 
 /**
+ * idpf_ptp_update_phctime_rxq_grp - Update the cached PHC time for a given Rx
+ *				     queue group.
+ * @grp: receive queue group in which Rx timestamp is enabled
+ * @split: Indicates whether the queue model is split or single queue
+ * @systime: Cached system time
+ */
+static void
+idpf_ptp_update_phctime_rxq_grp(const struct idpf_rxq_group *grp, bool split,
+				u64 systime)
+{
+	struct idpf_rx_queue *rxq;
+	u16 i;
+
+	if (!split) {
+		for (i = 0; i < grp->singleq.num_rxq; i++) {
+			rxq = grp->singleq.rxqs[i];
+			if (rxq)
+				WRITE_ONCE(rxq->cached_phc_time, systime);
+		}
+	} else {
+		for (i = 0; i < grp->splitq.num_rxq_sets; i++) {
+			rxq = &grp->splitq.rxq_sets[i]->rxq;
+			if (rxq)
+				WRITE_ONCE(rxq->cached_phc_time, systime);
+		}
+	}
+}
+
+/**
  * idpf_ptp_update_cached_phctime - Update the cached PHC time values
  * @adapter: Driver specific private structure
  *
  * This function updates the system time values which are cached in the adapter
- * structure.
+ * structure and the Rx queues.
  *
  * This function must be called periodically to ensure that the cached value
  * is never more than 2 seconds old.
@@ -332,7 +361,7 @@ static int idpf_ptp_gettimex64(struct ptp_clock_info *info,
 static int idpf_ptp_update_cached_phctime(struct idpf_adapter *adapter)
 {
 	u64 systime;
-	int err;
+	int err, i;
 
 	err = idpf_ptp_read_src_clk_reg(adapter, &systime, NULL);
 	if (err)
@@ -344,6 +373,22 @@ static int idpf_ptp_update_cached_phctime(struct idpf_adapter *adapter)
 	 */
 	WRITE_ONCE(adapter->ptp->cached_phc_time, systime);
 	WRITE_ONCE(adapter->ptp->cached_phc_jiffies, jiffies);
+
+	idpf_for_each_vport(adapter, i) {
+		struct idpf_vport *vport = adapter->vports[i];
+		bool split;
+
+		if (!vport || !vport->rxq_grps)
+			continue;
+
+		split = idpf_is_queue_model_split(vport->rxq_model);
+
+		for (u16 i = 0; i < vport->num_rxq_grp; i++) {
+			struct idpf_rxq_group *grp = &vport->rxq_grps[i];
+
+			idpf_ptp_update_phctime_rxq_grp(grp, split, systime);
+		}
+	}
 
 	return 0;
 }
@@ -609,6 +654,33 @@ int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
 }
 
 /**
+ * idpf_ptp_set_rx_tstamp - Enable or disable Rx timestamping
+ * @vport: Virtual port structure
+ * @rx_filter: bool value for whether timestamps are enabled or disabled
+ */
+static void idpf_ptp_set_rx_tstamp(struct idpf_vport *vport, int rx_filter)
+{
+	vport->tstamp_config.rx_filter = rx_filter;
+
+	if (rx_filter == HWTSTAMP_FILTER_NONE)
+		return;
+
+	for (u16 i = 0; i < vport->num_rxq_grp; i++) {
+		struct idpf_rxq_group *grp = &vport->rxq_grps[i];
+		u16 j;
+
+		if (idpf_is_queue_model_split(vport->rxq_model)) {
+			for (j = 0; j < grp->singleq.num_rxq; j++)
+				idpf_queue_set(PTP, grp->singleq.rxqs[j]);
+		} else {
+			for (j = 0; j < grp->splitq.num_rxq_sets; j++)
+				idpf_queue_set(PTP,
+					       &grp->splitq.rxq_sets[j]->rxq);
+		}
+	}
+}
+
+/**
  * idpf_ptp_set_timestamp_mode - Setup driver for requested timestamp mode
  * @vport: Virtual port structure
  * @config: Hwtstamp settings requested or saved
@@ -627,6 +699,7 @@ int idpf_ptp_set_timestamp_mode(struct idpf_vport *vport,
 	}
 
 	vport->tstamp_config.tx_type = config->tx_type;
+	idpf_ptp_set_rx_tstamp(vport, config->rx_filter);
 
 	return 0;
 }
