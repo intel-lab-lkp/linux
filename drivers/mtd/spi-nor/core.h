@@ -428,6 +428,7 @@ struct spi_nor_fixups {
 			 const struct sfdp_bfpt *bfpt);
 	int (*post_sfdp)(struct spi_nor *nor);
 	int (*late_init)(struct spi_nor *nor);
+	int (*post_get_map_id)(struct spi_nor *nor, const u32 *smpt, u8 smpt_len);
 };
 
 /**
@@ -660,6 +661,9 @@ void spi_nor_init_uniform_erase_map(struct spi_nor_erase_map *map,
 int spi_nor_post_bfpt_fixups(struct spi_nor *nor,
 			     const struct sfdp_parameter_header *bfpt_header,
 			     const struct sfdp_bfpt *bfpt);
+
+int spi_nor_post_get_map_id_fixups(struct spi_nor *nor, const u32 *smpt,
+				   u8 smpt_len, u8 *map_id);
 
 void spi_nor_init_default_locking_ops(struct spi_nor *nor);
 void spi_nor_try_unlock_all(struct spi_nor *nor);

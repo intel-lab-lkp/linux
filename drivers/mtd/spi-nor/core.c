@@ -2408,6 +2408,31 @@ int spi_nor_post_bfpt_fixups(struct spi_nor *nor,
 	return 0;
 }
 
+/**
+ * spi_nor_post_get_map_id_fixups - Apply post-processing fixups for map ID
+ * @nor: Pointer to the spi_nor structure
+ * @smpt: Pointer to the sector map parameter table
+ * @smpt_len: Length of the sector map parameter table
+ * @map_id: Pointer to store the updated map ID
+ *
+ * Return: 0 on success (including when no fixup is applied),
+ *         positive value if a new map_id is set,
+ *         negative value on error
+ */
+int spi_nor_post_get_map_id_fixups(struct spi_nor *nor, const u32 *smpt,
+				   u8 smpt_len, u8 *map_id)
+{
+	int ret;
+
+	if (nor->info->fixups && nor->info->fixups->post_get_map_id) {
+		ret = nor->info->fixups->post_get_map_id(nor, smpt, smpt_len);
+		if (ret < 0)
+			return ret;
+		*map_id = ret;
+	}
+	return 0;
+}
+
 static int spi_nor_select_read(struct spi_nor *nor,
 			       u32 shared_hwcaps)
 {

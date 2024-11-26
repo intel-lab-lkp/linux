@@ -769,6 +769,13 @@ static const u32 *spi_nor_get_map_in_use(struct spi_nor *nor, const u32 *smpt,
 		map_id = map_id << 1 | !!(*buf & read_data_mask);
 	}
 
+	err = spi_nor_post_get_map_id_fixups(nor, smpt, smpt_len, &map_id);
+
+	if (err < 0) {
+		dev_err(nor->dev, "Error in post_get_map_id fixup: %d\n", err);
+		return ERR_PTR(err);
+	}
+
 	/*
 	 * If command descriptors are provided, they always precede map
 	 * descriptors in the table. There is no need to start the iteration

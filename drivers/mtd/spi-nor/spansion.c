@@ -25,6 +25,7 @@
 #define SPINOR_REG_CYPRESS_STR1V					\
 	(SPINOR_REG_CYPRESS_VREG + SPINOR_REG_CYPRESS_STR1)
 #define SPINOR_REG_CYPRESS_CFR1			0x2
+#define SPINOR_REG_CYPRESS_CFR1V		0x00800002
 #define SPINOR_REG_CYPRESS_CFR1_QUAD_EN		BIT(1)	/* Quad Enable */
 #define SPINOR_REG_CYPRESS_CFR2			0x3
 #define SPINOR_REG_CYPRESS_CFR2V					\
@@ -33,6 +34,7 @@
 #define SPINOR_REG_CYPRESS_CFR2_MEMLAT_11_24	0xb
 #define SPINOR_REG_CYPRESS_CFR2_ADRBYT		BIT(7)
 #define SPINOR_REG_CYPRESS_CFR3			0x4
+#define SPINOR_REG_CYPRESS_CFR3V		0x00800004
 #define SPINOR_REG_CYPRESS_CFR3_PGSZ		BIT(4) /* Page size. */
 #define SPINOR_REG_CYPRESS_CFR5			0x6
 #define SPINOR_REG_CYPRESS_CFR5_BIT6		BIT(6)
@@ -754,8 +756,47 @@ s25fs_s_nor_post_bfpt_fixups(struct spi_nor *nor,
 	return 0;
 }
 
+static int s25fs_s_nor_post_get_map_id(struct spi_nor *nor, const u32 *smpt, u8 smpt_len)
+{
+	struct spi_mem_op op =
+		SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RD_ANY_REG, 1),
+			   SPI_MEM_OP_ADDR(3, 0, 1),
+			   SPI_MEM_OP_NO_DUMMY,
+			   SPI_MEM_OP_DATA_IN(1, nor->bouncebuf, 1));
+
+	u8 reg_cr3v_val, reg_cr1v_val;
+	int ret;
+
+	/* Read CR3V value from Configuration Register 3 Volatile */
+	op.addr.val = SPINOR_REG_CYPRESS_CFR3V;
+	ret = spi_mem_exec_op(nor->spimem, &op);
+	if (ret)
+		return ret;
+	reg_cr3v_val = nor->bouncebuf[0];
+
+	/* Read CR1V value from Configuration Register 1 Volatile */
+	op.addr.val = SPINOR_REG_CYPRESS_CFR1V;
+	ret = spi_mem_exec_op(nor->spimem, &op);
+	if (ret)
+		return ret;
+	reg_cr1v_val = nor->bouncebuf[0];
+
+	/* Determine the map ID based on CR3V[3] and CR1V[2] values */
+	if (!(reg_cr3v_val & BIT(3)) && !(reg_cr1v_val & BIT(2)))
+		return 1; /* CR3V[3] = 0, CR1V[2] = 0, map id = 1 */
+
+	if (!(reg_cr3v_val & BIT(3)) && (reg_cr1v_val & BIT(2)))
+		return 3; /* CR3V[3] = 0, CR1V[2] = 1, map id = 3 */
+
+	if ((reg_cr3v_val & BIT(3)) && !(reg_cr1v_val & BIT(2)))
+		return 5; /* CR3V[3] = 1, CR1V[2] = 0, map id = 5 */
+
+	return 0;
+}
+
 static const struct spi_nor_fixups s25fs_s_nor_fixups = {
 	.post_bfpt = s25fs_s_nor_post_bfpt_fixups,
+	.post_get_map_id = s25fs_s_nor_post_get_map_id,
 };
 
 static const struct flash_info spansion_nor_parts[] = {
