@@ -1398,7 +1398,7 @@ config PROVE_LOCKING
 
 config PROVE_RAW_LOCK_NESTING
 	bool
-	depends on PROVE_LOCKING
+	depends on PROVE_LOCKING && ARCH_SUPPORTS_RT
 	default y
 	help
 	 Enable the raw_spinlock vs. spinlock nesting checks which ensure
