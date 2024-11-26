@@ -2069,6 +2069,7 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 
 		netdev = eth->netdev[mac];
 		ppe_idx = eth->mac[mac]->ppe_idx;
+		ring->xdp_q.dev = netdev;
 
 		if (unlikely(test_bit(MTK_RESETTING, &eth->state)))
 			goto release_desc;
