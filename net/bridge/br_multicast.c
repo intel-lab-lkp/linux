@@ -2105,13 +2105,43 @@ static void __br_multicast_enable_port_ctx(struct net_bridge_mcast_port *pmctx)
 	}
 }
 
+static void br_multicast_enable_port_ctx(struct net_bridge_mcast_port *pmctx)
+{
+	struct net_bridge *br = pmctx->port->br;
+
+	spin_lock_bh(&br->multicast_lock);
+	__br_multicast_enable_port_ctx(pmctx);
+	spin_unlock_bh(&br->multicast_lock);
+}
+
 void br_multicast_enable_port(struct net_bridge_port *port)
 {
 	struct net_bridge *br = port->br;
 
-	spin_lock_bh(&br->multicast_lock);
-	__br_multicast_enable_port_ctx(&port->multicast_ctx);
-	spin_unlock_bh(&br->multicast_lock);
+	if (br_opt_get(br, BROPT_MCAST_VLAN_SNOOPING_ENABLED)) {
+		struct net_bridge_vlan_group *vg;
+		struct net_bridge_vlan *vlan;
+
+		rcu_read_lock();
+		vg = nbp_vlan_group_rcu(port);
+		if (!vg) {
+			rcu_read_unlock();
+			return;
+		}
+
+		/* iterate each vlan of the port, enable port_mcast_ctx per vlan
+		 * when vlan is in allowed states.
+		 */
+		list_for_each_entry_rcu(vlan, &vg->vlan_list, vlist) {
+			if ((vlan->priv_flags & BR_VLFLAG_MCAST_ENABLED) &&
+			    br_vlan_state_allowed(br_vlan_get_state(vlan), true))
+				br_multicast_enable_port_ctx(&vlan->port_mcast_ctx);
+		}
+		rcu_read_unlock();
+	} else {
+		/* use the port's multicast context when vlan snooping is disabled */
+		br_multicast_enable_port_ctx(&port->multicast_ctx);
+	}
 }
 
 static void __br_multicast_disable_port_ctx(struct net_bridge_mcast_port *pmctx)
@@ -2137,11 +2167,40 @@ static void __br_multicast_disable_port_ctx(struct net_bridge_mcast_port *pmctx)
 	br_multicast_rport_del_notify(pmctx, del);
 }
 
+static void br_multicast_disable_port_ctx(struct net_bridge_mcast_port *pmctx)
+{
+	struct net_bridge *br = pmctx->port->br;
+
+	spin_lock_bh(&br->multicast_lock);
+	__br_multicast_disable_port_ctx(pmctx);
+	spin_unlock_bh(&br->multicast_lock);
+}
+
 void br_multicast_disable_port(struct net_bridge_port *port)
 {
-	spin_lock_bh(&port->br->multicast_lock);
-	__br_multicast_disable_port_ctx(&port->multicast_ctx);
-	spin_unlock_bh(&port->br->multicast_lock);
+	struct net_bridge *br = port->br;
+
+	if (br_opt_get(br, BROPT_MCAST_VLAN_SNOOPING_ENABLED)) {
+		struct net_bridge_vlan_group *vg;
+		struct net_bridge_vlan *vlan;
+
+		rcu_read_lock();
+		vg = nbp_vlan_group_rcu(port);
+		if (!vg) {
+			rcu_read_unlock();
+			return;
+		}
+
+		/* iterate each vlan of the port, disable port_mcast_ctx per vlan */
+		list_for_each_entry(vlan, &vg->vlan_list, vlist) {
+			if (vlan->priv_flags & BR_VLFLAG_MCAST_ENABLED)
+				br_multicast_disable_port_ctx(&vlan->port_mcast_ctx);
+		}
+		rcu_read_unlock();
+	} else {
+		/* use the port's multicast context when vlan snooping is disabled */
+		br_multicast_disable_port_ctx(&port->multicast_ctx);
+	}
 }
 
 static int __grp_src_delete_marked(struct net_bridge_port_group *pg)
@@ -4304,9 +4363,9 @@ int br_multicast_toggle_vlan_snooping(struct net_bridge *br, bool on,
 		__br_multicast_open(&br->multicast_ctx);
 	list_for_each_entry(p, &br->port_list, list) {
 		if (on)
-			br_multicast_disable_port(p);
+			br_multicast_disable_port_ctx(&p->multicast_ctx);
 		else
-			br_multicast_enable_port(p);
+			br_multicast_enable_port_ctx(&p->multicast_ctx);
 	}
 
 	list_for_each_entry(vlan, &vg->vlan_list, vlist)
