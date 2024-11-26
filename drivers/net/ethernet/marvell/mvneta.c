@@ -5551,7 +5551,9 @@ static int mvneta_probe(struct platform_device *pdev)
 	pp->phylink_config.mac_capabilities = MAC_SYM_PAUSE | MAC_10 |
 		MAC_100 | MAC_1000FD | MAC_2500FD;
 
-	/* Setup EEE.  Choose 250us idle. */
+	/* Setup EEE. Choose 250us idle. Only supported in SGMII modes. */
+	__set_bit(PHY_INTERFACE_MODE_QSGMII, pp->phylink_config.lpi_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_SGMII, pp->phylink_config.lpi_interfaces);
 	pp->phylink_config.lpi_capabilities = MAC_100FD | MAC_1000FD;
 	pp->phylink_config.lpi_timer_limit_us = 255;
 	pp->phylink_config.lpi_timer_default = 250;
