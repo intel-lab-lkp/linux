@@ -513,7 +513,7 @@ static struct sk_buff *virtnet_skb_append_frag(struct sk_buff *head_skb,
 					       struct sk_buff *curr_skb,
 					       struct page *page, void *buf,
 					       int len, int truesize);
-static void virtnet_xsk_completed(struct send_queue *sq, int num);
+static void virtnet_xsk_completed(struct send_queue *sq, int num, bool drain);
 
 enum virtnet_xmit_type {
 	VIRTNET_XMIT_TYPE_SKB,
@@ -580,7 +580,8 @@ static void sg_fill_dma(struct scatterlist *sg, dma_addr_t addr, u32 len)
 }
 
 static void __free_old_xmit(struct send_queue *sq, struct netdev_queue *txq,
-			    bool in_napi, struct virtnet_sq_free_stats *stats)
+			    bool in_napi, struct virtnet_sq_free_stats *stats,
+			    bool drain)
 {
 	struct xdp_frame *frame;
 	struct sk_buff *skb;
@@ -620,7 +621,8 @@ static void __free_old_xmit(struct send_queue *sq, struct netdev_queue *txq,
 			break;
 		}
 	}
-	netdev_tx_completed_queue(txq, stats->napi_packets, stats->napi_bytes);
+	if (!drain)
+		netdev_tx_completed_queue(txq, stats->napi_packets, stats->napi_bytes);
 }
 
 static void virtnet_free_old_xmit(struct send_queue *sq,
@@ -628,10 +630,21 @@ static void virtnet_free_old_xmit(struct send_queue *sq,
 				  bool in_napi,
 				  struct virtnet_sq_free_stats *stats)
 {
-	__free_old_xmit(sq, txq, in_napi, stats);
+	__free_old_xmit(sq, txq, in_napi, stats, false);
 
 	if (stats->xsk)
-		virtnet_xsk_completed(sq, stats->xsk);
+		virtnet_xsk_completed(sq, stats->xsk, false);
+}
+
+static void virtnet_drain_old_xmit(struct send_queue *sq,
+				   struct netdev_queue *txq)
+{
+	struct virtnet_sq_free_stats stats = {0};
+
+	__free_old_xmit(sq, txq, false, &stats, true);
+
+	if (stats.xsk)
+		virtnet_xsk_completed(sq, stats.xsk, true);
 }
 
 /* Converting between virtqueue no. and kernel tx/rx queue no.
@@ -1499,7 +1512,8 @@ static bool virtnet_xsk_xmit(struct send_queue *sq, struct xsk_buff_pool *pool,
 	/* Avoid to wakeup napi meanless, so call __free_old_xmit instead of
 	 * free_old_xmit().
 	 */
-	__free_old_xmit(sq, netdev_get_tx_queue(dev, sq - vi->sq), true, &stats);
+	__free_old_xmit(sq, netdev_get_tx_queue(dev, sq - vi->sq), true,
+			&stats, false);
 
 	if (stats.xsk)
 		xsk_tx_completed(sq->xsk_pool, stats.xsk);
@@ -1556,9 +1570,12 @@ static int virtnet_xsk_wakeup(struct net_device *dev, u32 qid, u32 flag)
 	return 0;
 }
 
-static void virtnet_xsk_completed(struct send_queue *sq, int num)
+static void virtnet_xsk_completed(struct send_queue *sq, int num, bool drain)
 {
 	xsk_tx_completed(sq->xsk_pool, num);
+
+	if (drain)
+		return;
 
 	/* If this is called by rx poll, start_xmit and xdp xmit we should
 	 * wakeup the tx napi to consume the xsk tx queue, because the tx
@@ -3041,6 +3058,7 @@ static void virtnet_disable_queue_pair(struct virtnet_info *vi, int qp_index)
 
 static int virtnet_enable_queue_pair(struct virtnet_info *vi, int qp_index)
 {
+	struct netdev_queue *txq = netdev_get_tx_queue(vi->dev, qp_index);
 	struct net_device *dev = vi->dev;
 	int err;
 
@@ -3054,7 +3072,10 @@ static int virtnet_enable_queue_pair(struct virtnet_info *vi, int qp_index)
 	if (err < 0)
 		goto err_xdp_reg_mem_model;
 
-	netdev_tx_reset_queue(netdev_get_tx_queue(vi->dev, qp_index));
+	/* Drain any unconsumed TX skbs transmitted before the last virtnet_close */
+	virtnet_drain_old_xmit(&vi->sq[qp_index], txq);
+
+	netdev_tx_reset_queue(txq);
 	virtnet_napi_enable(vi->rq[qp_index].vq, &vi->rq[qp_index].napi);
 	virtnet_napi_tx_enable(vi, vi->sq[qp_index].vq, &vi->sq[qp_index].napi);
 
