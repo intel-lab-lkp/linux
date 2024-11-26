@@ -84,6 +84,34 @@
 			};
 		};
 
+		spi@3210000 {
+			status = "okay";
+			spi@0 {
+				compatible = "nvidia,tegra-spidev";
+				reg = <0x0>;
+				spi-max-frequency = <81000000>;
+			};
+			spi@1 {
+				compatible = "nvidia,tegra-spidev";
+				reg = <0x1>;
+				spi-max-frequency = <81000000>;
+			};
+		};
+
+		spi@3230000 {
+			status = "okay";
+			spi@0 {
+				compatible = "nvidia,tegra-spidev";
+				reg = <0x0>;
+				spi-max-frequency = <81000000>;
+			};
+			spi@1 {
+				compatible = "nvidia,tegra-spidev";
+				reg = <0x1>;
+				spi-max-frequency = <81000000>;
+			};
+		};
+
 		pwm@3280000 {
 			status = "okay";
 		};
