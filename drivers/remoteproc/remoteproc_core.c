@@ -1488,6 +1488,7 @@ clean_up_resources:
 	kfree(rproc->cached_table);
 	rproc->cached_table = NULL;
 	rproc->table_ptr = NULL;
+	rproc_release_fw(rproc);
 unprepare_rproc:
 	/* release HW resources if needed */
 	rproc_unprepare_device(rproc);
@@ -1855,8 +1856,14 @@ static int rproc_boot_recovery(struct rproc *rproc)
 		return ret;
 	}
 
+	ret = rproc_load_fw(rproc, firmware_p);
+	if (ret)
+		return ret;
+
 	/* boot the remote processor up again */
 	ret = rproc_start(rproc, firmware_p);
+	if (ret)
+		rproc_release_fw(rproc);
 
 	release_firmware(firmware_p);
 
@@ -1997,7 +2004,13 @@ int rproc_boot(struct rproc *rproc)
 			goto downref_rproc;
 		}
 
+		ret = rproc_load_fw(rproc, firmware_p);
+		if (ret)
+			goto downref_rproc;
+
 		ret = rproc_fw_boot(rproc, firmware_p);
+		if (ret)
+			rproc_release_fw(rproc);
 
 		release_firmware(firmware_p);
 	}
@@ -2071,6 +2084,7 @@ int rproc_shutdown(struct rproc *rproc)
 	kfree(rproc->cached_table);
 	rproc->cached_table = NULL;
 	rproc->table_ptr = NULL;
+	rproc_release_fw(rproc);
 out:
 	mutex_unlock(&rproc->lock);
 	return ret;
@@ -2471,7 +2485,7 @@ static int rproc_alloc_ops(struct rproc *rproc, const struct rproc_ops *ops)
 	if (!rproc->ops->coredump)
 		rproc->ops->coredump = rproc_coredump;
 
-	if (rproc->ops->load)
+	if (rproc->ops->load || rproc->ops->load_fw)
 		return 0;
 
 	/* Default to ELF loader if no load function is specified */
