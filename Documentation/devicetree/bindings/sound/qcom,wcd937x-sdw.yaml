@@ -58,6 +58,44 @@ properties:
     items:
       enum: [1, 2, 3, 4, 5]
 
+  qcom,tx-channel-mapping:
+    description: |
+      Specifies static channel mapping between slave and master tx port
+      channels.
+      In the order of slave port channels which is adc1, adc2, adc3,
+      dmic0, dmic1, mbhc, dmic2, dmic3, dmci4, dmic5, dmic6, dmic7.
+      The channel map index values are fixed values.
+      SWRM_CH1 ==> 1
+      SWRM_CH2 ==> 2
+      SWRM_CH3 ==> 4
+      SWRM_CH4 ==> 8
+
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+    minItems: 12
+    maxItems: 12
+    additionalItems: false
+    items:
+      enum: [1, 2, 4, 8]
+
+  qcom,rx-channel-mapping:
+    description: |
+      Specifies static channels mapping between slave and master rx port
+      channels.
+      In the order of slave port channels, which is
+      hph_l, hph_r, clsh, comp_l, comp_r, lo, dsd_r, dsd_l.
+      The channel map index values are fixed values.
+      SWRM_CH1 ==> 1
+      SWRM_CH2 ==> 2
+      SWRM_CH3 ==> 4
+      SWRM_CH4 ==> 8
+
+    $ref: /schemas/types.yaml#/definitions/uint8-array
+    minItems: 8
+    maxItems: 8
+    additionalItems: false
+    items:
+      enum: [1, 2, 4, 8]
+
 required:
   - compatible
   - reg
@@ -66,6 +104,9 @@ additionalProperties: false
 
 examples:
   - |
+
+    #include <dt-bindings/sound/qcom,wcd93xx.h>
+
     soundwire@3210000 {
         reg = <0x03210000 0x2000>;
         #address-cells = <2>;
@@ -74,6 +115,9 @@ examples:
             compatible = "sdw20217010a00";
             reg = <0 4>;
             qcom,rx-port-mapping = <1 2 3 4 5>;
+            qcom,rx-channel-mapping =  /bits/ 8 <SWRM_CH1 SWRM_CH2 SWRM_CH1
+                                                 SWRM_CH1 SWRM_CH2 SWRM_CH1
+                                                 SWRM_CH1 SWRM_CH2>;
         };
     };
 
@@ -85,6 +129,10 @@ examples:
             compatible = "sdw20217010a00";
             reg = <0 3>;
             qcom,tx-port-mapping = <2 2 3 4>;
+            qcom,tx-channel-mapping = /bits/ 8 <SWRM_CH1 SWRM_CH2 SWRM_CH2
+                                                SWRM_CH1 SWRM_CH2 SWRM_CH3
+                                                SWRM_CH3 SWRM_CH4 SWRM_CH1
+                                                SWRM_CH2 SWRM_CH3 SWRM_CH4>;
         };
     };
 
