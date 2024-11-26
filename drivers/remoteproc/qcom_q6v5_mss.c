@@ -1687,7 +1687,7 @@ static const struct rproc_ops q6v5_ops = {
 	.start = q6v5_start,
 	.stop = q6v5_stop,
 	.parse_fw = qcom_q6v5_register_dump_segments,
-	.load = q6v5_load,
+	.load_segments = q6v5_load,
 	.panic = q6v5_panic,
 };
 

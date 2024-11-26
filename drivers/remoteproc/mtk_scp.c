@@ -924,7 +924,7 @@ static int scp_stop(struct rproc *rproc)
 static const struct rproc_ops scp_ops = {
 	.start		= scp_start,
 	.stop		= scp_stop,
-	.load		= scp_load,
+	.load_segments	= scp_load,
 	.da_to_va	= scp_da_to_va,
 	.parse_fw	= scp_parse_fw,
 	.sanity_check	= rproc_elf_sanity_check,

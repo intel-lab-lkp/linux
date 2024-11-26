@@ -771,7 +771,7 @@ static const struct rproc_ops q6v5_wcss_ipq8074_ops = {
 	.start = q6v5_wcss_start,
 	.stop = q6v5_wcss_stop,
 	.da_to_va = q6v5_wcss_da_to_va,
-	.load = q6v5_wcss_load,
+	.load_segments = q6v5_wcss_load,
 	.get_boot_addr = rproc_elf_get_boot_addr,
 };
 
@@ -779,7 +779,7 @@ static const struct rproc_ops q6v5_wcss_qcs404_ops = {
 	.start = q6v5_qcs404_wcss_start,
 	.stop = q6v5_wcss_stop,
 	.da_to_va = q6v5_wcss_da_to_va,
-	.load = q6v5_wcss_load,
+	.load_segments = q6v5_wcss_load,
 	.get_boot_addr = rproc_elf_get_boot_addr,
 	.parse_fw = qcom_register_dump_segments,
 };
