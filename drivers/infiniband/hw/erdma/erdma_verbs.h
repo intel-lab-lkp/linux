@@ -485,6 +485,7 @@ int erdma_del_gid(const struct ib_gid_attr *attr, void **context);
 int erdma_query_pkey(struct ib_device *ibdev, u32 port, u16 index, u16 *pkey);
 void erdma_attr_to_av(const struct rdma_ah_attr *ah_attr, struct erdma_av *av,
 		      u16 sport);
+void erdma_av_to_attr(struct erdma_av *av, struct rdma_ah_attr *attr);
 void erdma_set_av_cfg(struct erdma_av_cfg *av_cfg, struct erdma_av *av);
 int erdma_create_ah(struct ib_ah *ibah, struct rdma_ah_init_attr *init_attr,
 		    struct ib_udata *udata);
