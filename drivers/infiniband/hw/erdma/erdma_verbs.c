@@ -336,8 +336,10 @@ int erdma_query_device(struct ib_device *ibdev, struct ib_device_attr *attr,
 	attr->max_fast_reg_page_list_len = ERDMA_MAX_FRMR_PA;
 	attr->page_size_cap = ERDMA_PAGE_SIZE_SUPPORT;
 
-	if (erdma_device_rocev2(dev))
+	if (erdma_device_rocev2(dev)) {
 		attr->max_pkeys = ERDMA_MAX_PKEYS;
+		attr->max_ah = dev->attrs.max_ah;
+	}
 
 	if (dev->attrs.cap_flags & ERDMA_DEV_CAP_FLAGS_ATOMIC)
 		attr->atomic_cap = IB_ATOMIC_GLOB;
@@ -1915,5 +1917,136 @@ int erdma_query_pkey(struct ib_device *ibdev, u32 port, u16 index, u16 *pkey)
 		return -EINVAL;
 
 	*pkey = ERDMA_DEFAULT_PKEY;
+	return 0;
+}
+
+static void erdma_attr_to_av(const struct rdma_ah_attr *ah_attr,
+			     struct erdma_av *av, u16 sport)
+{
+	const struct ib_global_route *grh = rdma_ah_read_grh(ah_attr);
+
+	av->port = rdma_ah_get_port_num(ah_attr);
+	av->sgid_index = grh->sgid_index;
+	av->hop_limit = grh->hop_limit;
+	av->traffic_class = grh->traffic_class;
+	av->sl = rdma_ah_get_sl(ah_attr);
+
+	av->flow_label = grh->flow_label;
+	av->udp_sport = sport;
+
+	ether_addr_copy(av->dmac, ah_attr->roce.dmac);
+	memcpy(av->dgid, grh->dgid.raw, ERDMA_ROCEV2_GID_SIZE);
+
+	if (ipv6_addr_v4mapped((struct in6_addr *)&grh->dgid))
+		av->ntype = ERDMA_NETWORK_TYPE_IPV4;
+	else
+		av->ntype = ERDMA_NETWORK_TYPE_IPV6;
+}
+
+static void erdma_av_to_attr(struct erdma_av *av, struct rdma_ah_attr *attr)
+{
+	attr->type = RDMA_AH_ATTR_TYPE_ROCE;
+
+	rdma_ah_set_sl(attr, av->sl);
+	rdma_ah_set_port_num(attr, av->port);
+	rdma_ah_set_ah_flags(attr, IB_AH_GRH);
+
+	rdma_ah_set_grh(attr, NULL, av->flow_label, av->sgid_index,
+			av->hop_limit, av->traffic_class);
+	rdma_ah_set_dgid_raw(attr, av->dgid);
+}
+
+static void erdma_set_av_cfg(struct erdma_av_cfg *av_cfg, struct erdma_av *av)
+{
+	av_cfg->cfg0 = FIELD_PREP(ERDMA_CMD_CREATE_AV_FL_MASK, av->flow_label) |
+		       FIELD_PREP(ERDMA_CMD_CREATE_AV_NTYPE_MASK, av->ntype);
+
+	av_cfg->traffic_class = av->traffic_class;
+	av_cfg->hop_limit = av->hop_limit;
+	av_cfg->sl = av->sl;
+
+	av_cfg->udp_sport = av->udp_sport;
+	av_cfg->sgid_index = av->sgid_index;
+
+	ether_addr_copy(av_cfg->dmac, av->dmac);
+	memcpy(av_cfg->dgid, av->dgid, ERDMA_ROCEV2_GID_SIZE);
+}
+
+int erdma_create_ah(struct ib_ah *ibah, struct rdma_ah_init_attr *init_attr,
+		    struct ib_udata *udata)
+{
+	const struct ib_global_route *grh =
+		rdma_ah_read_grh(init_attr->ah_attr);
+	struct erdma_dev *dev = to_edev(ibah->device);
+	struct erdma_pd *pd = to_epd(ibah->pd);
+	struct erdma_ah *ah = to_eah(ibah);
+	struct erdma_cmdq_create_ah_req req;
+	u32 udp_sport;
+	int ret;
+
+	ret = erdma_check_gid_attr(grh->sgid_attr);
+	if (ret)
+		return ret;
+
+	ret = erdma_alloc_idx(&dev->res_cb[ERDMA_RES_TYPE_AH]);
+	if (ret < 0)
+		return ret;
+
+	ah->ahn = ret;
+
+	if (grh->flow_label)
+		udp_sport = rdma_flow_label_to_udp_sport(grh->flow_label);
+	else
+		udp_sport =
+			IB_ROCE_UDP_ENCAP_VALID_PORT_MIN + (ah->ahn & 0x3FFF);
+
+	erdma_attr_to_av(init_attr->ah_attr, &ah->av, udp_sport);
+
+	erdma_cmdq_build_reqhdr(&req.hdr, CMDQ_SUBMOD_RDMA,
+				CMDQ_OPCODE_CREATE_AH);
+
+	req.pdn = pd->pdn;
+	req.ahn = ah->ahn;
+	erdma_set_av_cfg(&req.av_cfg, &ah->av);
+
+	ret = erdma_post_cmd_wait(&dev->cmdq, &req, sizeof(req), NULL, NULL);
+	if (ret) {
+		erdma_free_idx(&dev->res_cb[ERDMA_RES_TYPE_AH], ah->ahn);
+		return ret;
+	}
+
+	return 0;
+}
+
+int erdma_destroy_ah(struct ib_ah *ibah, u32 flags)
+{
+	struct erdma_dev *dev = to_edev(ibah->device);
+	struct erdma_pd *pd = to_epd(ibah->pd);
+	struct erdma_ah *ah = to_eah(ibah);
+	struct erdma_cmdq_destroy_ah_req req;
+	int ret;
+
+	erdma_cmdq_build_reqhdr(&req.hdr, CMDQ_SUBMOD_RDMA,
+				CMDQ_OPCODE_DESTROY_AH);
+
+	req.pdn = pd->pdn;
+	req.ahn = ah->ahn;
+
+	ret = erdma_post_cmd_wait(&dev->cmdq, &req, sizeof(req), NULL, NULL);
+	if (ret)
+		return ret;
+
+	erdma_free_idx(&dev->res_cb[ERDMA_RES_TYPE_AH], ah->ahn);
+
+	return 0;
+}
+
+int erdma_query_ah(struct ib_ah *ibah, struct rdma_ah_attr *ah_attr)
+{
+	struct erdma_ah *ah = to_eah(ibah);
+
+	memset(ah_attr, 0, sizeof(*ah_attr));
+	erdma_av_to_attr(&ah->av, ah_attr);
+
 	return 0;
 }
