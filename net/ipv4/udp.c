@@ -1722,6 +1722,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	if (!sock_flag(sk, SOCK_DEAD)) {
 		if (becomes_readable ||
 		    sk->sk_data_ready != sock_def_readable ||
+		    !sock_flag(sk, SOCK_FASYNC) ||
 		    READ_ONCE(sk->sk_peek_off) >= 0)
 			INDIRECT_CALL_1(sk->sk_data_ready,
 					sock_def_readable, sk);
