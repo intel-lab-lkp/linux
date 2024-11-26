@@ -17,6 +17,10 @@ struct ox05b1s_reglist {
 	struct ox05b1s_reg *regs;
 };
 
+extern struct ox05b1s_reglist os08a20_reglist_4k_hdr[];
+extern struct ox05b1s_reglist os08a20_reglist_4k[];
+extern struct ox05b1s_reglist os08a20_reglist_1080p[];
+
 extern struct ox05b1s_reglist ox05b1s_reglist_2592x1944[];
 
 #endif /* OX05B1S_H */
