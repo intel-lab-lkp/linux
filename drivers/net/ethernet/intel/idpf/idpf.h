@@ -250,6 +250,19 @@ struct idpf_port_stats {
 };
 
 /**
+ * struct idpf_tx_tstamp_stats - Tx timestamp statistics
+ * @tx_hwtstamp_skipped: number of Tx time stamp requests skipped
+ * @tx_hwtstamp_skipped: number of Tx skbs discarded due to cached PHC time
+ *			 being too old to correctly extend timestamp
+ * @tx_hwtstamp_flushed: number of Tx skbs flushed due to interface closed
+ */
+struct idpf_tx_tstamp_stats {
+	u32 tx_hwtstamp_skipped;
+	u32 tx_hwtstamp_discarded;
+	u32 tx_hwtstamp_flushed;
+};
+
+/**
  * struct idpf_vport - Handle for netdevices and queue resources
  * @num_txq: Number of allocated TX queues
  * @num_complq: Number of allocated completion queues
@@ -293,6 +306,9 @@ struct idpf_port_stats {
  * @link_up: True if link is up
  * @sw_marker_wq: workqueue for marker packets
  * @tx_tstamp_caps: The capabilities negotiated for Tx timestamping
+ * @tstamp_config: The Tx tstamp config
+ * @tstamp_task: Tx timestamping task
+ * @tstamp_stats: Tx timestamping statistics
  */
 struct idpf_vport {
 	u16 num_txq;
@@ -339,6 +355,9 @@ struct idpf_vport {
 	wait_queue_head_t sw_marker_wq;
 
 	struct idpf_ptp_vport_tx_tstamp_caps *tx_tstamp_caps;
+	struct kernel_hwtstamp_config tstamp_config;
+	struct work_struct tstamp_task;
+	struct idpf_tx_tstamp_stats tstamp_stats;
 };
 
 /**
