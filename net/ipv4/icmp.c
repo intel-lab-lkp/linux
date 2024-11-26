@@ -515,7 +515,10 @@ static struct rtable *icmp_route_lookup(struct net *net, struct flowi4 *fl4,
 			  flowi4_to_flowi(fl4), NULL, 0);
 	rt = dst_rtable(dst);
 	if (!IS_ERR(dst)) {
-		if (rt != rt2)
+		unsigned int addr_type = inet_addr_type_dev_table(net,
+							route_lookup_dev, fl4->daddr);
+
+		if (rt != rt2 || addr_type == RTN_LOCAL)
 			return rt;
 	} else if (PTR_ERR(dst) == -EPERM) {
 		rt = NULL;
