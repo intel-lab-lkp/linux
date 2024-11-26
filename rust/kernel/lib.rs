@@ -44,6 +44,7 @@ pub mod kunit;
 pub mod list;
 #[cfg(CONFIG_NET)]
 pub mod net;
+pub mod once_lite;
 pub mod page;
 pub mod prelude;
 pub mod print;
