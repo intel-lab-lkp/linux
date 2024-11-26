@@ -1475,12 +1475,12 @@ EXPORT_SYMBOL_GPL(genphy_c45_plca_get_status);
  * advertisements. Compare them return current EEE state.
  */
 int genphy_c45_eee_is_active(struct phy_device *phydev, unsigned long *adv,
-			     unsigned long *lp, bool *is_enabled)
+			     unsigned long *lp)
 {
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(tmp_adv) = {};
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(tmp_lp) = {};
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(common);
-	bool eee_enabled, eee_active;
+	bool eee_active;
 	int ret;
 
 	ret = genphy_c45_read_eee_adv(phydev, tmp_adv);
@@ -1491,9 +1491,8 @@ int genphy_c45_eee_is_active(struct phy_device *phydev, unsigned long *adv,
 	if (ret)
 		return ret;
 
-	eee_enabled = !linkmode_empty(tmp_adv);
 	linkmode_and(common, tmp_adv, tmp_lp);
-	if (eee_enabled && !linkmode_empty(common))
+	if (!linkmode_empty(tmp_adv) && !linkmode_empty(common))
 		eee_active = phy_check_valid(phydev->speed, phydev->duplex,
 					     common);
 	else
@@ -1503,8 +1502,6 @@ int genphy_c45_eee_is_active(struct phy_device *phydev, unsigned long *adv,
 		linkmode_copy(adv, tmp_adv);
 	if (lp)
 		linkmode_copy(lp, tmp_lp);
-	if (is_enabled)
-		*is_enabled = eee_enabled;
 
 	return eee_active;
 }
@@ -1524,7 +1521,7 @@ int genphy_c45_ethtool_get_eee(struct phy_device *phydev,
 	int ret;
 
 	ret = genphy_c45_eee_is_active(phydev, data->advertised,
-				       data->lp_advertised, NULL);
+				       data->lp_advertised);
 	if (ret < 0)
 		return ret;
 
