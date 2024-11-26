@@ -4713,6 +4713,12 @@
 			for debug and development, but should not be
 			needed on a platform with proper driver support.
 
+	pcp_batch_scale_max=n
+			Format: <integer>
+			Range: 0,6 : number
+			Default : CONFIG_PCP_BATCH_SCALE_MAX
+			Used for setting the scale number for PCP batch scale algorithm.
+
 	pdcchassis=	[PARISC,HW] Disable/Enable PDC Chassis Status codes at
 			boot time.
 			Format: { 0 | 1 }
