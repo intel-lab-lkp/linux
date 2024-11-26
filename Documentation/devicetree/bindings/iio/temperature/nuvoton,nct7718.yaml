@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/temperature/nuvoton,nct7718.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nuvoton NCT7718W Thermal Sensor IC
+
+maintainers:
+  - Ming Yu <tmyu0@nuvoton.com>
+
+description:
+  https://www.nuvoton.com/resource-files/Nuvoton_NCT7718W_Datasheet_V11.pdf
+
+properties:
+  compatible:
+    const: nuvoton,nct7718
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        temp-sensor@4c {
+            compatible = "nuvoton,nct7718";
+            reg = <0x4c>;
+            interrupt-parent = <&gpio0>;
+            interrupts = <26 IRQ_TYPE_EDGE_FALLING>;
+        };
+    };
