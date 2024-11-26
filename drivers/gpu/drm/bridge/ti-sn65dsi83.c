@@ -336,7 +336,7 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 	unsigned int pval;
 	__le16 le16val;
 	u16 val;
-	int ret;
+	int ret, hfront, hback;
 
 	ret = regulator_enable(ctx->vcc);
 	if (ret) {
@@ -458,12 +458,22 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 	le16val = cpu_to_le16(mode->vsync_end - mode->vsync_start);
 	regmap_bulk_write(ctx->regmap, REG_VID_CHA_VSYNC_PULSE_WIDTH_LOW,
 			  &le16val, 2);
+
+	hback = mode->htotal - mode->hsync_end;
+	if (ctx->lvds_dual_link)
+		hback /= 2;
+
 	regmap_write(ctx->regmap, REG_VID_CHA_HORIZONTAL_BACK_PORCH,
-		     mode->htotal - mode->hsync_end);
+		     hback);
 	regmap_write(ctx->regmap, REG_VID_CHA_VERTICAL_BACK_PORCH,
 		     mode->vtotal - mode->vsync_end);
+
+	hfront = mode->hsync_start - mode->hdisplay;
+	if (ctx->lvds_dual_link)
+		hfront /= 2;
+
 	regmap_write(ctx->regmap, REG_VID_CHA_HORIZONTAL_FRONT_PORCH,
-		     mode->hsync_start - mode->hdisplay);
+		     hfront);
 	regmap_write(ctx->regmap, REG_VID_CHA_VERTICAL_FRONT_PORCH,
 		     mode->vsync_start - mode->vdisplay);
 	regmap_write(ctx->regmap, REG_VID_CHA_TEST_PATTERN, 0x00);
