@@ -374,8 +374,9 @@ enum rsc_handling_status {
  * @find_loaded_rsc_table: find the loaded resource table from firmware image
  * @get_loaded_rsc_table: get resource table installed in memory
  *			  by external entity
- * @load_segments:	load firmware ELF segment to memory, where the remote processor
- *			expects to find it
+ * @load_segments:	optional load firmware ELF segments to memory, where the remote processor
+ *			expects to find it.
+ *			This operation is exclusive with the load_fw()
  * @sanity_check:	sanity check the fw image
  * @get_boot_addr:	get boot address to entry point specified in firmware
  * @panic:	optional callback to react to system panic, core will delay
@@ -383,8 +384,10 @@ enum rsc_handling_status {
  * @coredump:	  collect firmware dump after the subsystem is shutdown
  * @load_fw:	optional function to load non-ELF firmware image to memory, where the remote
  *		processor expects to find it.
+ *		This operation is exclusive with the load_segments()
  * @release_fw:	optional function to release the firmware image from memories.
  *		This function is called after stopping the remote processor or in case of error
+ *
  */
 struct rproc_ops {
 	int (*prepare)(struct rproc *rproc);
