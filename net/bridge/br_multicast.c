@@ -4270,6 +4270,24 @@ static void __br_multicast_stop(struct net_bridge_mcast *brmctx)
 #endif
 }
 
+void br_multicast_update_vlan_mcast_ctx(struct net_bridge_vlan *v, u8 state)
+{
+	struct net_bridge *br;
+
+	if (!br_vlan_should_use(v))
+		return;
+
+	if (br_vlan_is_master(v))
+		return;
+
+	br = v->port->br;
+
+	if (br_vlan_state_allowed(state, true) &&
+	    (v->priv_flags & BR_VLFLAG_MCAST_ENABLED) &&
+	    br_opt_get(br, BROPT_MCAST_VLAN_SNOOPING_ENABLED))
+		br_multicast_enable_port_ctx(&v->port_mcast_ctx);
+}
+
 void br_multicast_toggle_one_vlan(struct net_bridge_vlan *vlan, bool on)
 {
 	struct net_bridge *br;

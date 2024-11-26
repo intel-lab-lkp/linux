@@ -123,6 +123,8 @@ static int br_vlan_modify_state(struct net_bridge_vlan_group *vg,
 		br_vlan_set_pvid_state(vg, state);
 
 	br_vlan_set_state(v, state);
+	br_vlan_set_state_finish(v, state);
+
 	*changed = true;
 
 	return 0;
