@@ -673,6 +673,7 @@ static int tipc_udp_enable(struct net *net, struct tipc_bearer *b,
 	struct nlattr *opts[TIPC_NLA_UDP_MAX + 1];
 	u8 node_id[NODE_ID_LEN] = {0,};
 	struct net_device *dev;
+	struct sock *sk;
 	int rmcast = 0;
 
 	ub = kzalloc(sizeof(*ub), GFP_ATOMIC);
@@ -791,6 +792,12 @@ static int tipc_udp_enable(struct net *net, struct tipc_bearer *b,
 		err = tipc_udp_rcast_add(b, &remote);
 	if (err)
 		goto free;
+
+	sk = ub->ubsock->sk;
+	__netns_tracker_free(net, &sk->ns_tracker, false);
+	sk->sk_net_refcnt = 1;
+	get_net_track(net, &sk->ns_tracker, GFP_KERNEL);
+	sock_inuse_add(net, 1);
 
 	return 0;
 
