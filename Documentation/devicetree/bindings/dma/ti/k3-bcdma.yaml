@@ -196,7 +196,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: ti,j721s2-dmss-bcdma-csi
+            enum:
+              - ti,j721s2-dmss-bcdma-csi
+              - ti,j722s-dmss-bcdma-csi
     then:
       properties:
         ti,sci-rm-range-bchan: false
