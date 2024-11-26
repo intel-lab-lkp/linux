@@ -16,6 +16,7 @@ ARM64 Architecture
     cpu-feature-registers
     cpu-hotplug
     elf_hwcaps
+    fine-tuning-tips
     gcs
     hugetlbpage
     kdump
