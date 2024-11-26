@@ -104,12 +104,14 @@ static inline struct fsl_ldb *to_fsl_ldb(struct drm_bridge *bridge)
 	return container_of(bridge, struct fsl_ldb, bridge);
 }
 
+static unsigned int fsl_ldb_link_freq_factor(const struct fsl_ldb *fsl_ldb)
+{
+	return fsl_ldb_is_dual(fsl_ldb) ? 3500 : 7000;
+}
+
 static unsigned long fsl_ldb_link_frequency(struct fsl_ldb *fsl_ldb, int clock)
 {
-	if (fsl_ldb_is_dual(fsl_ldb))
-		return clock * 3500;
-	else
-		return clock * 7000;
+	return clock * fsl_ldb_link_freq_factor(fsl_ldb);
 }
 
 static int fsl_ldb_attach(struct drm_bridge *bridge,
@@ -119,6 +121,35 @@ static int fsl_ldb_attach(struct drm_bridge *bridge,
 
 	return drm_bridge_attach(bridge->encoder, fsl_ldb->panel_bridge,
 				 bridge, flags);
+}
+
+static bool fsl_ldb_mode_fixup(struct drm_bridge *bridge,
+				const struct drm_display_mode *mode,
+				struct drm_display_mode *adjusted_mode)
+{
+	const struct fsl_ldb *fsl_ldb = to_fsl_ldb(bridge);
+	unsigned long requested_link_freq =
+		mode->clock * fsl_ldb_link_freq_factor(fsl_ldb);
+	unsigned long freq = clk_round_rate(fsl_ldb->clk, requested_link_freq);
+
+	if (freq != requested_link_freq) {
+		/*
+		 * this will lead to flicker and incomplete lines on
+		 * the attached display, adjust the CRTC clock
+		 * accordingly.
+		 */
+		int pclk = freq / fsl_ldb_link_freq_factor(fsl_ldb);
+
+		if (adjusted_mode->clock != pclk) {
+			dev_warn(fsl_ldb->dev, "Adjusted pixel clk to match LDB clk (%d kHz -> %d kHz)!\n",
+				 adjusted_mode->clock, pclk);
+
+			adjusted_mode->clock = pclk;
+			adjusted_mode->crtc_clock = pclk;
+		}
+	}
+
+	return true;
 }
 
 static void fsl_ldb_atomic_enable(struct drm_bridge *bridge,
@@ -280,6 +311,7 @@ fsl_ldb_mode_valid(struct drm_bridge *bridge,
 
 static const struct drm_bridge_funcs funcs = {
 	.attach = fsl_ldb_attach,
+	.mode_fixup = fsl_ldb_mode_fixup,
 	.atomic_enable = fsl_ldb_atomic_enable,
 	.atomic_disable = fsl_ldb_atomic_disable,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
