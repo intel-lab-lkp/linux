@@ -1006,8 +1006,9 @@ static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se);
  */
 static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	if ((s64)(se->vruntime - se->deadline) < 0)
-		return false;
+
+	u64 vslice;
+	u64 tolerance = 0;
 
 	/*
 	 * For EEVDF the virtual time slope is determined by w_i (iow.
@@ -1016,11 +1017,25 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	 */
 	if (!se->custom_slice)
 		se->slice = sysctl_sched_base_slice;
+	vslice = calc_delta_fair(se->slice, se);
+
+
+	/*
+	 * When the deadline is only 1/128 away,
+	 * it is considered to have been reached.
+	 */
+	if (sched_feat(FORWARD_DEADLINE))
+		tolerance = vslice>>7;
+
+
+
+	if ((s64)(se->vruntime + tolerance - se->deadline) < 0)
+		return false;
 
 	/*
 	 * EEVDF: vd_i = ve_i + r_i / w_i
 	 */
-	se->deadline = se->vruntime + calc_delta_fair(se->slice, se);
+	se->deadline = se->vruntime + vslice;
 
 	/*
 	 * The task has consumed its request, reschedule.

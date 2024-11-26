@@ -25,6 +25,13 @@ SCHED_FEAT(RUN_TO_PARITY, true)
 SCHED_FEAT(PREEMPT_SHORT, true)
 
 /*
+ * For some cases where the tick is faster than expected,
+ * move the deadline forward.
+ */
+SCHED_FEAT(FORWARD_DEADLINE, true)
+
+
+/*
  * Prefer to schedule the task we woke last (assuming it failed
  * wakeup-preemption), since its likely going to consume data we
  * touched, increases cache locality.
