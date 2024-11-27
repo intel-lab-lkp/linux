@@ -161,7 +161,7 @@ is_eth_port_of_netdev_filter(struct ib_device *ib_dev, u32 port,
 	res = ((rdma_is_upper_dev_rcu(rdma_ndev, cookie) &&
 	       (is_eth_active_slave_of_bonding_rcu(rdma_ndev, real_dev) &
 		REQUIRED_BOND_STATES)) ||
-	       real_dev == rdma_ndev);
+	       (real_dev == rdma_ndev && !netif_is_bond_slave(rdma_ndev)));
 
 	rcu_read_unlock();
 	return res;
