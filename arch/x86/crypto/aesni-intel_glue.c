@@ -398,7 +398,7 @@ static int ctr_crypt(struct skcipher_request *req)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct crypto_aes_ctx *ctx = aes_ctx(crypto_skcipher_ctx(tfm));
 	u8 keystream[AES_BLOCK_SIZE];
-	struct skcipher_walk walk;
+	struct skcipher_walk walk = {};
 	unsigned int nbytes;
 	int err;
 
@@ -447,7 +447,7 @@ static int xctr_crypt(struct skcipher_request *req)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct crypto_aes_ctx *ctx = aes_ctx(crypto_skcipher_ctx(tfm));
 	u8 keystream[AES_BLOCK_SIZE];
-	struct skcipher_walk walk;
+	struct skcipher_walk walk = {};
 	unsigned int nbytes;
 	unsigned int byte_ctr = 0;
 	int err;
@@ -517,7 +517,7 @@ xts_crypt_slowpath(struct skcipher_request *req, xts_crypt_func crypt_func)
 	int tail = req->cryptlen % AES_BLOCK_SIZE;
 	struct scatterlist sg_src[2], sg_dst[2];
 	struct skcipher_request subreq;
-	struct skcipher_walk walk;
+	struct skcipher_walk walk = {};
 	struct scatterlist *src, *dst;
 	int err;
 
@@ -1339,7 +1339,7 @@ gcm_crypt(struct aead_request *req, int flags)
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
 	const struct aes_gcm_key *key = aes_gcm_key_get(tfm, flags);
 	unsigned int assoclen = req->assoclen;
-	struct skcipher_walk walk;
+	struct skcipher_walk walk = {};
 	unsigned int nbytes;
 	u8 ghash_acc[16]; /* GHASH accumulator */
 	u32 le_ctr[4]; /* Counter in little-endian format */
