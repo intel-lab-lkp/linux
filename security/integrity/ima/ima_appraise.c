@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/file.h>
+#include <linux/binfmts.h>
 #include <linux/fs.h>
 #include <linux/xattr.h>
 #include <linux/magic.h>
@@ -16,6 +17,7 @@
 #include <linux/fsverity.h>
 #include <keys/system_keyring.h>
 #include <uapi/linux/fsverity.h>
+#include <linux/securebits.h>
 
 #include "ima.h"
 
@@ -276,7 +278,8 @@ static int calc_file_id_hash(enum evm_ima_xattr_type type,
  */
 static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 			struct evm_ima_xattr_data *xattr_value, int xattr_len,
-			enum integrity_status *status, const char **cause)
+			enum integrity_status *status, const char **cause,
+			bool is_check)
 {
 	struct ima_max_digest_data hash;
 	struct signature_v2_hdr *sig;
@@ -292,9 +295,11 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 		if (*status != INTEGRITY_PASS_IMMUTABLE) {
 			if (iint->flags & IMA_DIGSIG_REQUIRED) {
 				if (iint->flags & IMA_VERITY_REQUIRED)
-					*cause = "verity-signature-required";
+					*cause = !is_check ? "verity-signature-required" :
+						"verity-signature-required(userspace)";
 				else
-					*cause = "IMA-signature-required";
+					*cause = !is_check ? "IMA-signature-required" :
+						"IMA-signature-required(userspace)";
 				*status = INTEGRITY_FAIL;
 				break;
 			}
@@ -314,7 +319,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 		else
 			rc = -EINVAL;
 		if (rc) {
-			*cause = "invalid-hash";
+			*cause = !is_check ? "invalid-hash" :
+				"invalid-hash(userspace)";
 			*status = INTEGRITY_FAIL;
 			break;
 		}
@@ -325,14 +331,16 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 
 		mask = IMA_DIGSIG_REQUIRED | IMA_VERITY_REQUIRED;
 		if ((iint->flags & mask) == mask) {
-			*cause = "verity-signature-required";
+			*cause = !is_check ? "verity-signature-required" :
+				"verity-signature-required(userspace)";
 			*status = INTEGRITY_FAIL;
 			break;
 		}
 
 		sig = (typeof(sig))xattr_value;
 		if (sig->version >= 3) {
-			*cause = "invalid-signature-version";
+			*cause = !is_check ? "invalid-signature-version" :
+				"invalid-signature-version(userspace)";
 			*status = INTEGRITY_FAIL;
 			break;
 		}
@@ -353,7 +361,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 						     iint->ima_hash->digest,
 						     iint->ima_hash->length);
 		if (rc) {
-			*cause = "invalid-signature";
+			*cause = !is_check ? "invalid-signature" :
+				"invalid-signature(userspace)";
 			*status = INTEGRITY_FAIL;
 		} else {
 			*status = INTEGRITY_PASS;
@@ -364,7 +373,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 
 		if (iint->flags & IMA_DIGSIG_REQUIRED) {
 			if (!(iint->flags & IMA_VERITY_REQUIRED)) {
-				*cause = "IMA-signature-required";
+				*cause = !is_check ? "IMA-signature-required" :
+					"IMA-signature-required(userspace)";
 				*status = INTEGRITY_FAIL;
 				break;
 			}
@@ -372,7 +382,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 
 		sig = (typeof(sig))xattr_value;
 		if (sig->version != 3) {
-			*cause = "invalid-signature-version";
+			*cause = !is_check ? "invalid-signature-version" :
+				"invalid-signature-version(userspace)";
 			*status = INTEGRITY_FAIL;
 			break;
 		}
@@ -382,7 +393,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 				       container_of(&hash.hdr,
 					       struct ima_digest_data, hdr));
 		if (rc) {
-			*cause = "sigv3-hashing-error";
+			*cause = !is_check ? "sigv3-hashing-error" :
+				"sigv3-hashing-error(userspace)";
 			*status = INTEGRITY_FAIL;
 			break;
 		}
@@ -392,7 +404,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 					     xattr_len, hash.digest,
 					     hash.hdr.length);
 		if (rc) {
-			*cause = "invalid-verity-signature";
+			*cause = !is_check ? "invalid-verity-signature" :
+				"invalid-verify-signature(userspace)";
 			*status = INTEGRITY_FAIL;
 		} else {
 			*status = INTEGRITY_PASS;
@@ -401,7 +414,8 @@ static int xattr_verify(enum ima_hooks func, struct ima_iint_cache *iint,
 		break;
 	default:
 		*status = INTEGRITY_UNKNOWN;
-		*cause = "unknown-ima-data";
+		*cause = !is_check ? "unknown-ima-data" :
+			"unknown-ima-data(userspace)";
 		break;
 	}
 
@@ -469,6 +483,18 @@ int ima_check_blacklist(struct ima_iint_cache *iint,
 	return rc;
 }
 
+static int is_bprm_creds_for_exec(enum ima_hooks func, struct file *file)
+{
+	struct linux_binprm *bprm = NULL;
+
+	if (func == BPRM_CHECK) {
+		bprm = container_of(&file, struct linux_binprm, file);
+		if (bprm->is_check)
+			return 1;
+	}
+	return 0;
+}
+
 /*
  * ima_appraise_measurement - appraise file measurement
  *
@@ -489,10 +515,23 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 	enum integrity_status status = INTEGRITY_UNKNOWN;
 	int rc = xattr_len;
 	bool try_modsig = iint->flags & IMA_MODSIG_ALLOWED && modsig;
+	bool is_check = false;
 
 	/* If not appraising a modsig, we need an xattr. */
 	if (!(inode->i_opflags & IOP_XATTR) && !try_modsig)
 		return INTEGRITY_UNKNOWN;
+
+	/*
+	 * Unlike any of the other LSM hooks where the kernel enforces file
+	 * integrity, enforcing file integrity for the bprm_creds_for_exec()
+	 * LSM hook is left up to the discretion of the script interpreter
+	 * (userspace).
+	 *
+	 * Since the SECBIT_EXEC_RESTRICT_FILE flag is just a hint as to
+	 * userspace intentions, simply annotate the audit messages indicating
+	 * a userspace based query.
+	 */
+	is_check = is_bprm_creds_for_exec(func, file);
 
 	/* If reading the xattr failed and there's no modsig, error out. */
 	if (rc <= 0 && !try_modsig) {
@@ -501,11 +540,14 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 
 		if (iint->flags & IMA_DIGSIG_REQUIRED) {
 			if (iint->flags & IMA_VERITY_REQUIRED)
-				cause = "verity-signature-required";
+				cause = !is_check ? "verity-signature-required" :
+					"verity-signature-required(userspace)";
 			else
-				cause = "IMA-signature-required";
+				cause = !is_check ? "IMA-signature-required" :
+					"IMA-signature-required(userspace)";
 		} else {
-			cause = "missing-hash";
+			cause = !is_check ? "missing-hash" :
+				"missing-hash(userspace)";
 		}
 
 		status = INTEGRITY_NOLABEL;
@@ -531,14 +573,15 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 			break;
 		fallthrough;
 	case INTEGRITY_NOLABEL:		/* No security.evm xattr. */
-		cause = "missing-HMAC";
+		cause = !is_check ? "missing-HMAC" : "missing-HMAC(userspace)";
 		goto out;
 	case INTEGRITY_FAIL_IMMUTABLE:
 		set_bit(IMA_DIGSIG, &iint->atomic_flags);
-		cause = "invalid-fail-immutable";
+		cause = !is_check ? "invalid-fail-immutable" :
+		       "invalid-fail-immutable(userspace)";
 		goto out;
 	case INTEGRITY_FAIL:		/* Invalid HMAC/signature. */
-		cause = "invalid-HMAC";
+		cause = !is_check ? "invalid-HMAC" : "invalid-HMAC(userspace)";
 		goto out;
 	default:
 		WARN_ONCE(true, "Unexpected integrity status %d\n", status);
@@ -546,7 +589,7 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 
 	if (xattr_value)
 		rc = xattr_verify(func, iint, xattr_value, xattr_len, &status,
-				  &cause);
+				  &cause, is_check);
 
 	/*
 	 * If we have a modsig and either no imasig or the imasig's key isn't
@@ -568,7 +611,8 @@ out:
 	    ((inode->i_sb->s_iflags & SB_I_UNTRUSTED_MOUNTER) ||
 	     (iint->flags & IMA_FAIL_UNVERIFIABLE_SIGS))) {
 		status = INTEGRITY_FAIL;
-		cause = "unverifiable-signature";
+		cause = !is_check ? "unverifiable-signature" :
+			"unverifiable-signature(userspace)";
 		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode, filename,
 				    op, cause, rc, 0);
 	} else if (status != INTEGRITY_PASS) {
