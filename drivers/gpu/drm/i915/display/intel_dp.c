@@ -109,6 +109,8 @@
 /* DP Audio bw params calculations. Bspec: 67768 */
 #define DP_AUDIO_BW_HBLANK_OVERHEAD_AVAIL	64
 #define DP_AUDIO_BW_HBLANK_OVERHEAD_REQ		80
+#define MTL_DP_AUDIO_BW_HBLANK_OVERHEAD_REQ	0
+
 
 /* Constants for DP DSC configurations */
 static const u8 valid_dsc_bpp[] = {6, 8, 10, 12, 15};
@@ -3037,9 +3039,14 @@ intel_dp_audio_compute_bw_limits(struct intel_encoder *encoder,
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	int hblank_bytes_avail_overhead = DP_AUDIO_BW_HBLANK_OVERHEAD_AVAIL;
-	int hblank_bytes_req_overhead = DP_AUDIO_BW_HBLANK_OVERHEAD_REQ;
+	int hblank_bytes_req_overhead;
 	int hblank_slots_lanes_bytes;
 	int line_freq_khz;
+
+	if (DISPLAY_VER(display) >= 14)
+		hblank_bytes_req_overhead = MTL_DP_AUDIO_BW_HBLANK_OVERHEAD_REQ;
+	else
+		hblank_bytes_req_overhead = DP_AUDIO_BW_HBLANK_OVERHEAD_REQ;
 
 	intel_dp_compute_audio_bwparams(crtc_state, &line_freq_khz,
 					&hblank_slots_lanes_bytes);
