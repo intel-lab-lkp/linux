@@ -674,10 +674,7 @@ int ad_sd_init(struct ad_sigma_delta *sigma_delta, struct iio_dev *indio_dev,
 		}
 	}
 
-	if (info->irq_line)
-		sigma_delta->irq_line = info->irq_line;
-	else
-		sigma_delta->irq_line = spi->irq;
+	sigma_delta->irq_line = spi->irq;
 
 	iio_device_set_drvdata(indio_dev, sigma_delta);
 
