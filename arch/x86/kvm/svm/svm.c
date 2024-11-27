@@ -781,14 +781,14 @@ static void set_shadow_msr_intercept(struct kvm_vcpu *vcpu, u32 msr, int read,
 
 	/* Set the shadow bitmaps to the desired intercept states */
 	if (read)
-		__set_bit(slot, svm->shadow_msr_intercept.read);
-	else
 		__clear_bit(slot, svm->shadow_msr_intercept.read);
+	else
+		__set_bit(slot, svm->shadow_msr_intercept.read);
 
 	if (write)
-		__set_bit(slot, svm->shadow_msr_intercept.write);
-	else
 		__clear_bit(slot, svm->shadow_msr_intercept.write);
+	else
+		__set_bit(slot, svm->shadow_msr_intercept.write);
 }
 
 static bool valid_msr_intercept(u32 index)
@@ -934,9 +934,10 @@ static void svm_msr_filter_changed(struct kvm_vcpu *vcpu)
 	 */
 	for (i = 0; direct_access_msrs[i].index != MSR_INVALID; i++) {
 		u32 msr = direct_access_msrs[i].index;
-		u32 read = test_bit(i, svm->shadow_msr_intercept.read);
-		u32 write = test_bit(i, svm->shadow_msr_intercept.write);
+		u32 read = !test_bit(i, svm->shadow_msr_intercept.read);
+		u32 write = !test_bit(i, svm->shadow_msr_intercept.write);
 
+		/* FIXME: Align the polarity of the bitmaps and params. */
 		set_msr_interception_bitmap(vcpu, svm->msrpm, msr, read, write);
 	}
 }
@@ -1452,6 +1453,10 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 	err = avic_init_vcpu(svm);
 	if (err)
 		goto error_free_vmsa_page;
+
+	/* All MSRs start out in the "intercepted" state. */
+	bitmap_fill(svm->shadow_msr_intercept.read, MAX_DIRECT_ACCESS_MSRS);
+	bitmap_fill(svm->shadow_msr_intercept.write, MAX_DIRECT_ACCESS_MSRS);
 
 	svm->msrpm = svm_vcpu_alloc_msrpm();
 	if (!svm->msrpm) {
