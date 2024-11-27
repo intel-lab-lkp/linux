@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/file.h>
+#include <linux/binfmts.h>
 #include <linux/fs.h>
 #include <linux/xattr.h>
 #include <linux/magic.h>
@@ -16,6 +17,7 @@
 #include <linux/fsverity.h>
 #include <keys/system_keyring.h>
 #include <uapi/linux/fsverity.h>
+#include <linux/securebits.h>
 
 #include "ima.h"
 
@@ -469,6 +471,26 @@ int ima_check_blacklist(struct ima_iint_cache *iint,
 	return rc;
 }
 
+static int is_bprm_creds_for_exec(enum ima_hooks func, struct file *file,
+				  const char **cause)
+{
+	const struct cred *cred = current_cred();
+	struct linux_binprm *bprm = NULL;
+
+	if (func == BPRM_CHECK) {
+		bprm = container_of(&file, struct linux_binprm, file);
+		if (!bprm->is_check)
+			return 0;
+
+		if (cred->securebits & SECBIT_EXEC_RESTRICT_FILE)
+			*cause = "Userspace-enforcing-IMA-signature-required";
+		else
+			*cause = "Userspace-not-enforcing-IMA-signature-required";
+		return 1;
+	}
+	return 0;
+}
+
 /*
  * ima_appraise_measurement - appraise file measurement
  *
@@ -502,7 +524,7 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 		if (iint->flags & IMA_DIGSIG_REQUIRED) {
 			if (iint->flags & IMA_VERITY_REQUIRED)
 				cause = "verity-signature-required";
-			else
+			else if (!is_bprm_creds_for_exec(func, file, &cause))
 				cause = "IMA-signature-required";
 		} else {
 			cause = "missing-hash";
