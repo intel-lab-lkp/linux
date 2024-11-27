@@ -1809,6 +1809,19 @@ out:
 }
 EXPORT_SYMBOL_GPL(kvm_msr_allowed);
 
+int kvm_passthrough_msr_slot(u32 msr)
+{
+	u32 i;
+
+	for (i = 0; i < kvm_x86_ops.nr_possible_passthrough_msrs; i++) {
+		if (kvm_x86_ops.possible_passthrough_msrs[i] == msr)
+			return i;
+	}
+
+	return -ENOENT;
+}
+EXPORT_SYMBOL_GPL(kvm_passthrough_msr_slot);
+
 /*
  * Write @data into the MSR specified by @index.  Select MSR specific fault
  * checks are bypassed if @host_initiated is %true.
