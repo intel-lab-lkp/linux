@@ -1727,7 +1727,7 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 
 	vmg.vma = NULL; /* New VMA range. */
 	vmg.pgoff = pgoff;
-	vmg.next = vma_iter_next_rewind(&vmi, NULL);
+	vmg.next = new_vma;
 	new_vma = vma_merge_new_range(&vmg);
 
 	if (new_vma) {
