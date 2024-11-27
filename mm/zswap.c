@@ -1409,78 +1409,96 @@ resched:
 * main API
 **********************************/
 
-static ssize_t zswap_store_page(struct page *page,
-				struct obj_cgroup *objcg,
-				struct zswap_pool *pool)
+/*
+ * Store multiple pages in @folio, starting from the page at index @si up to
+ * and including the page at index @ei.
+ */
+static ssize_t zswap_store_pages(struct folio *folio,
+				 long si,
+				 long ei,
+				 struct obj_cgroup *objcg,
+				 struct zswap_pool *pool)
 {
-	swp_entry_t page_swpentry = page_swap_entry(page);
+	struct page *page;
+	swp_entry_t page_swpentry;
 	struct zswap_entry *entry, *old;
+	size_t compressed_bytes = 0;
+	u8 nr_pages = ei - si + 1;
+	u8 i;
 
-	/* allocate entry */
-	entry = zswap_entry_cache_alloc(GFP_KERNEL, page_to_nid(page));
-	if (!entry) {
-		zswap_reject_kmemcache_fail++;
+	for (i = 0; i < nr_pages; ++i) {
+		page = folio_page(folio, si + i);
+		page_swpentry = page_swap_entry(page);
+
+		/* allocate entry */
+		entry = zswap_entry_cache_alloc(GFP_KERNEL, page_to_nid(page));
+		if (!entry) {
+			zswap_reject_kmemcache_fail++;
+			return -EINVAL;
+		}
+
+		if (!zswap_compress(page, entry, pool))
+			goto compress_failed;
+
+		old = xa_store(swap_zswap_tree(page_swpentry),
+			       swp_offset(page_swpentry),
+			       entry, GFP_KERNEL);
+		if (xa_is_err(old)) {
+			int err = xa_err(old);
+
+			WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
+			zswap_reject_alloc_fail++;
+			goto store_failed;
+		}
+
+		/*
+		 * We may have had an existing entry that became stale when
+		 * the folio was redirtied and now the new version is being
+		 * swapped out. Get rid of the old.
+		 */
+		if (old)
+			zswap_entry_free(old);
+
+		/*
+		 * The entry is successfully compressed and stored in the tree, there is
+		 * no further possibility of failure. Grab refs to the pool and objcg.
+		 * These refs will be dropped by zswap_entry_free() when the entry is
+		 * removed from the tree.
+		 */
+		zswap_pool_get(pool);
+		if (objcg)
+			obj_cgroup_get(objcg);
+
+		/*
+		 * We finish initializing the entry while it's already in xarray.
+		 * This is safe because:
+		 *
+		 * 1. Concurrent stores and invalidations are excluded by folio lock.
+		 *
+		 * 2. Writeback is excluded by the entry not being on the LRU yet.
+		 *    The publishing order matters to prevent writeback from seeing
+		 *    an incoherent entry.
+		 */
+		entry->pool = pool;
+		entry->swpentry = page_swpentry;
+		entry->objcg = objcg;
+		entry->referenced = true;
+		if (entry->length) {
+			INIT_LIST_HEAD(&entry->lru);
+			zswap_lru_add(&zswap_list_lru, entry);
+		}
+
+		compressed_bytes += entry->length;
+		continue;
+
+store_failed:
+		zpool_free(pool->zpool, entry->handle);
+compress_failed:
+		zswap_entry_cache_free(entry);
 		return -EINVAL;
 	}
 
-	if (!zswap_compress(page, entry, pool))
-		goto compress_failed;
-
-	old = xa_store(swap_zswap_tree(page_swpentry),
-		       swp_offset(page_swpentry),
-		       entry, GFP_KERNEL);
-	if (xa_is_err(old)) {
-		int err = xa_err(old);
-
-		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
-		zswap_reject_alloc_fail++;
-		goto store_failed;
-	}
-
-	/*
-	 * We may have had an existing entry that became stale when
-	 * the folio was redirtied and now the new version is being
-	 * swapped out. Get rid of the old.
-	 */
-	if (old)
-		zswap_entry_free(old);
-
-	/*
-	 * The entry is successfully compressed and stored in the tree, there is
-	 * no further possibility of failure. Grab refs to the pool and objcg.
-	 * These refs will be dropped by zswap_entry_free() when the entry is
-	 * removed from the tree.
-	 */
-	zswap_pool_get(pool);
-	if (objcg)
-		obj_cgroup_get(objcg);
-
-	/*
-	 * We finish initializing the entry while it's already in xarray.
-	 * This is safe because:
-	 *
-	 * 1. Concurrent stores and invalidations are excluded by folio lock.
-	 *
-	 * 2. Writeback is excluded by the entry not being on the LRU yet.
-	 *    The publishing order matters to prevent writeback from seeing
-	 *    an incoherent entry.
-	 */
-	entry->pool = pool;
-	entry->swpentry = page_swpentry;
-	entry->objcg = objcg;
-	entry->referenced = true;
-	if (entry->length) {
-		INIT_LIST_HEAD(&entry->lru);
-		zswap_lru_add(&zswap_list_lru, entry);
-	}
-
-	return entry->length;
-
-store_failed:
-	zpool_free(pool->zpool, entry->handle);
-compress_failed:
-	zswap_entry_cache_free(entry);
-	return -EINVAL;
+	return compressed_bytes;
 }
 
 bool zswap_store(struct folio *folio)
@@ -1492,7 +1510,7 @@ bool zswap_store(struct folio *folio)
 	struct zswap_pool *pool;
 	size_t compressed_bytes = 0;
 	bool ret = false;
-	long index;
+	long si, ei, incr = SWAP_CRYPTO_BATCH_SIZE;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1526,11 +1544,13 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
-	for (index = 0; index < nr_pages; ++index) {
-		struct page *page = folio_page(folio, index);
+	/* Store the folio in batches of SWAP_CRYPTO_BATCH_SIZE pages. */
+	for (si = 0, ei = min(si + incr - 1, nr_pages - 1);
+	     ((si < nr_pages) && (ei < nr_pages));
+	     si = ei + 1, ei = min(si + incr - 1, nr_pages - 1)) {
 		ssize_t bytes;
 
-		bytes = zswap_store_page(page, objcg, pool);
+		bytes = zswap_store_pages(folio, si, ei, objcg, pool);
 		if (bytes < 0)
 			goto put_pool;
 		compressed_bytes += bytes;
@@ -1565,9 +1585,9 @@ check_old:
 		struct zswap_entry *entry;
 		struct xarray *tree;
 
-		for (index = 0; index < nr_pages; ++index) {
-			tree = swap_zswap_tree(swp_entry(type, offset + index));
-			entry = xa_erase(tree, offset + index);
+		for (si = 0; si < nr_pages; ++si) {
+			tree = swap_zswap_tree(swp_entry(type, offset + si));
+			entry = xa_erase(tree, offset + si);
 			if (entry)
 				zswap_entry_free(entry);
 		}

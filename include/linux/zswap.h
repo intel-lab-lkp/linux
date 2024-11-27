@@ -7,6 +7,7 @@
 
 struct lruvec;
 
+#define SWAP_CRYPTO_BATCH_SIZE 8UL
 extern atomic_long_t zswap_stored_pages;
 
 #ifdef CONFIG_ZSWAP
