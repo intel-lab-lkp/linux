@@ -770,32 +770,6 @@ static int direct_access_msr_slot(u32 msr)
 	return -ENOENT;
 }
 
-static void set_shadow_msr_intercept(struct kvm_vcpu *vcpu, u32 msr, int read,
-				     int write)
-{
-	struct vcpu_svm *svm = to_svm(vcpu);
-	int slot = direct_access_msr_slot(msr);
-
-	if (slot == -ENOENT)
-		return;
-
-	/* Set the shadow bitmaps to the desired intercept states */
-	if (read)
-		__clear_bit(slot, svm->shadow_msr_intercept.read);
-	else
-		__set_bit(slot, svm->shadow_msr_intercept.read);
-
-	if (write)
-		__clear_bit(slot, svm->shadow_msr_intercept.write);
-	else
-		__set_bit(slot, svm->shadow_msr_intercept.write);
-}
-
-static bool valid_msr_intercept(u32 index)
-{
-	return direct_access_msr_slot(index) != -ENOENT;
-}
-
 static bool msr_write_intercepted(struct kvm_vcpu *vcpu, u32 msr)
 {
 	u8 bit_write;
@@ -822,50 +796,6 @@ static bool msr_write_intercepted(struct kvm_vcpu *vcpu, u32 msr)
 	BUG_ON(offset == MSR_INVALID);
 
 	return test_bit(bit_write, &tmp);
-}
-
-static void set_msr_interception_bitmap(struct kvm_vcpu *vcpu, unsigned long *msrpm,
-					u32 msr, int read, int write)
-{
-	struct vcpu_svm *svm = to_svm(vcpu);
-	u8 bit_read, bit_write;
-	unsigned long tmp;
-	u32 offset;
-
-	/*
-	 * If this warning triggers extend the direct_access_msrs list at the
-	 * beginning of the file
-	 */
-	WARN_ON(!valid_msr_intercept(msr));
-
-	/* Enforce non allowed MSRs to trap */
-	if (read && !kvm_msr_allowed(vcpu, msr, KVM_MSR_FILTER_READ))
-		read = 0;
-
-	if (write && !kvm_msr_allowed(vcpu, msr, KVM_MSR_FILTER_WRITE))
-		write = 0;
-
-	offset    = svm_msrpm_offset(msr);
-	bit_read  = 2 * (msr & 0x0f);
-	bit_write = 2 * (msr & 0x0f) + 1;
-	tmp       = msrpm[offset];
-
-	BUG_ON(offset == MSR_INVALID);
-
-	read  ? __clear_bit(bit_read,  &tmp) : __set_bit(bit_read,  &tmp);
-	write ? __clear_bit(bit_write, &tmp) : __set_bit(bit_write, &tmp);
-
-	msrpm[offset] = tmp;
-
-	svm_hv_vmcb_dirty_nested_enlightenments(vcpu);
-	svm->nested.force_msr_bitmap_recalc = true;
-}
-
-void set_msr_interception(struct kvm_vcpu *vcpu, unsigned long *msrpm, u32 msr,
-			  int read, int write)
-{
-	set_shadow_msr_intercept(vcpu, msr, read, write);
-	set_msr_interception_bitmap(vcpu, msrpm, msr, read, write);
 }
 
 static void svm_get_msr_bitmap_entries(struct kvm_vcpu *vcpu, u32 msr,
