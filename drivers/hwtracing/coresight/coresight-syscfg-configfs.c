@@ -791,6 +791,16 @@ static void cscfg_destroy_feature_group(struct config_group *feat_group)
 }
 
 /* Attributes in configfs that allow load and unload of configuration tables */
+static ssize_t cscfg_cfg_load_table_write(struct config_item *item, const void *buffer, size_t size)
+{
+	int err = 0;
+
+	err = cscfg_dyn_load_cfg_table(buffer, size);
+	if (err)
+		return err;
+	return size;
+}
+CONFIGFS_BIN_ATTR_WO(cscfg_cfg_, load_table, NULL, CSCFG_TABLE_MAXSIZE);
 
 static ssize_t
 cscfg_cfg_unload_last_table_store(struct config_item *item, const char *page, size_t count)
@@ -846,6 +856,11 @@ exit_unlock:
 }
 CONFIGFS_ATTR_RO(cscfg_cfg_, show_last_load);
 
+static struct configfs_bin_attribute *cscfg_config_configfs_bin_attrs[] = {
+	&cscfg_cfg_attr_load_table,
+	NULL,
+};
+
 static struct configfs_attribute *cscfg_config_configfs_attrs[] = {
 	&cscfg_cfg_attr_unload_last_table,
 	&cscfg_cfg_attr_show_last_load,
@@ -855,6 +870,7 @@ static struct configfs_attribute *cscfg_config_configfs_attrs[] = {
 static struct config_item_type cscfg_configs_load_type = {
 	.ct_owner = THIS_MODULE,
 	.ct_attrs = cscfg_config_configfs_attrs,
+	.ct_bin_attrs = cscfg_config_configfs_bin_attrs,
 };
 
 /* configurations group */
