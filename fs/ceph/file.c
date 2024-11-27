@@ -1154,6 +1154,16 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 		doutc(cl, "%llu~%llu got %zd i_size %llu%s\n", off, len,
 		      ret, i_size, (more ? " MORE" : ""));
 
+		if (off >= i_size) {
+			/* meanwhile, the file has been truncated by
+			 * another task and the offset is no longer
+			 * valid; stop here
+			 */
+			ceph_release_page_vector(pages, num_pages);
+			ceph_osdc_put_request(req);
+			break;
+		}
+
 		/* Fix it to go to end of extent map */
 		if (sparse && ret >= 0)
 			ret = ceph_sparse_ext_map_end(op);
