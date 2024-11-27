@@ -1060,9 +1060,6 @@ int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	u32 cmd_op = cmd->cmd_op;
 	int err;
 
-	/* Disabled for now, especially as teardown is not implemented yet */
-	pr_info_ratelimited("fuse-io-uring is not enabled yet\n");
-	return -EOPNOTSUPP;
 
 	if (!enable_uring) {
 		pr_info_ratelimited("fuse-io-uring is disabled\n");
