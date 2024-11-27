@@ -548,6 +548,12 @@ static int blkdev_bszset(struct file *file, blk_mode_t mode,
 	return ret;
 }
 
+static int blkdev_set_large_folio(struct block_device *bdev)
+{
+	mapping_set_large_folios(bdev->bd_mapping);
+	return 0;
+}
+
 /*
  * Common commands that are handled the same way on native and compat
  * user space. Note the separate arg/argp parameters that are needed
@@ -632,6 +638,8 @@ static int blkdev_common_ioctl(struct block_device *bdev, blk_mode_t mode,
 		return blkdev_pr_preempt(bdev, mode, argp, true);
 	case IOC_PR_CLEAR:
 		return blkdev_pr_clear(bdev, mode, argp);
+	case BLKSETLFOLIO:
+		return blkdev_set_large_folio(bdev);
 	default:
 		return -ENOIOCTLCMD;
 	}
