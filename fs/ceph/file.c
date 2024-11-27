@@ -1134,6 +1134,7 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 			extent_cnt = __ceph_sparse_read_ext_count(inode, read_len);
 			ret = ceph_alloc_sparse_ext_map(op, extent_cnt);
 			if (ret) {
+				ceph_release_page_vector(pages, num_pages);
 				ceph_osdc_put_request(req);
 				break;
 			}
@@ -1168,6 +1169,7 @@ ssize_t __ceph_sync_read(struct inode *inode, loff_t *ki_pos,
 					op->extent.sparse_ext_cnt);
 			if (fret < 0) {
 				ret = fret;
+				ceph_release_page_vector(pages, num_pages);
 				ceph_osdc_put_request(req);
 				break;
 			}
