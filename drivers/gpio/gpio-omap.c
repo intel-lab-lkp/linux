@@ -140,18 +140,22 @@ static void omap_set_gpio_dataout_mask(struct gpio_bank *bank, unsigned offset,
 					      BIT(offset), enable);
 }
 
-static inline void omap_gpio_dbck_enable(struct gpio_bank *bank)
+/* Returns true if debounce clock has to be enabled by the caller */
+static inline bool omap_gpio_dbck_enable(struct gpio_bank *bank)
 {
 	if (bank->dbck_enable_mask && !bank->dbck_enabled) {
-		clk_enable(bank->dbck);
 		bank->dbck_enabled = true;
-
 		writel_relaxed(bank->dbck_enable_mask,
 			     bank->base + bank->regs->debounce_en);
+
+		return true;
 	}
+
+	return false;
 }
 
-static inline void omap_gpio_dbck_disable(struct gpio_bank *bank)
+/* Returns true if debounce clock has to be disabled by the caller */
+static inline bool omap_gpio_dbck_disable(struct gpio_bank *bank)
 {
 	if (bank->dbck_enable_mask && bank->dbck_enabled) {
 		/*
@@ -160,10 +164,12 @@ static inline void omap_gpio_dbck_disable(struct gpio_bank *bank)
 		 * to detect events and generate interrupts at least on OMAP3.
 		 */
 		writel_relaxed(0, bank->base + bank->regs->debounce_en);
-
-		clk_disable(bank->dbck);
 		bank->dbck_enabled = false;
+
+		return true;
 	}
+
+	return false;
 }
 
 /**
@@ -181,9 +187,11 @@ static inline void omap_gpio_dbck_disable(struct gpio_bank *bank)
 static int omap2_set_gpio_debounce(struct gpio_bank *bank, unsigned offset,
 				   unsigned debounce)
 {
+	unsigned long		flags;
 	u32			val;
 	u32			l;
 	bool			enable = !!debounce;
+	bool			enable_clk;
 
 	if (!bank->dbck_flag)
 		return -ENOTSUPP;
@@ -196,13 +204,18 @@ static int omap2_set_gpio_debounce(struct gpio_bank *bank, unsigned offset,
 
 	l = BIT(offset);
 
+	/*
+	 * Ordering is important here: clk_enable() calls spin_lock_irqsave(),
+	 * therefore it must be outside of the following raw_spin_lock_irqsave()
+	 */
 	clk_enable(bank->dbck);
+	raw_spin_lock_irqsave(&bank->lock, flags);
+
 	writel_relaxed(debounce, bank->base + bank->regs->debounce);
 
 	val = omap_gpio_rmw(bank->base + bank->regs->debounce_en, l, enable);
 	bank->dbck_enable_mask = val;
 
-	clk_disable(bank->dbck);
 	/*
 	 * Enable debounce clock per module.
 	 * This call is mandatory because in omap_gpio_request() when
@@ -211,11 +224,15 @@ static int omap2_set_gpio_debounce(struct gpio_bank *bank, unsigned offset,
 	 * used within _gpio_dbck_enable() is still not initialized at
 	 * that point. Therefore we have to enable dbck here.
 	 */
-	omap_gpio_dbck_enable(bank);
+	enable_clk = omap_gpio_dbck_enable(bank);
 	if (bank->dbck_enable_mask) {
 		bank->context.debounce = debounce;
 		bank->context.debounce_en = val;
 	}
+
+	raw_spin_unlock_irqrestore(&bank->lock, flags);
+	if (!enable_clk)
+		clk_disable(bank->dbck);
 
 	return 0;
 }
@@ -229,16 +246,19 @@ static int omap2_set_gpio_debounce(struct gpio_bank *bank, unsigned offset,
  * this is the only gpio in this bank using debounce, then clear the debounce
  * time too. The debounce clock will also be disabled when calling this function
  * if this is the only gpio in the bank using debounce.
+ *
+ * Return: true if bank->bdck clock has to be disabled by the caller,
+ *         false otherwise
  */
-static void omap_clear_gpio_debounce(struct gpio_bank *bank, unsigned offset)
+static bool omap_clear_gpio_debounce(struct gpio_bank *bank, unsigned int offset)
 {
 	u32 gpio_bit = BIT(offset);
 
 	if (!bank->dbck_flag)
-		return;
+		return false;
 
 	if (!(bank->dbck_enable_mask & gpio_bit))
-		return;
+		return false;
 
 	bank->dbck_enable_mask &= ~gpio_bit;
 	bank->context.debounce_en &= ~gpio_bit;
@@ -249,9 +269,12 @@ static void omap_clear_gpio_debounce(struct gpio_bank *bank, unsigned offset)
 		bank->context.debounce = 0;
 		writel_relaxed(bank->context.debounce, bank->base +
 			     bank->regs->debounce);
-		clk_disable(bank->dbck);
 		bank->dbck_enabled = false;
+
+		return true;
 	}
+
+	return false;
 }
 
 /*
@@ -646,6 +669,7 @@ static void omap_gpio_irq_shutdown(struct irq_data *d)
 	struct gpio_bank *bank = omap_irq_data_get_bank(d);
 	unsigned long flags;
 	unsigned offset = d->hwirq;
+	bool disable_clk = false;
 
 	raw_spin_lock_irqsave(&bank->lock, flags);
 	bank->irq_usage &= ~(BIT(offset));
@@ -653,9 +677,17 @@ static void omap_gpio_irq_shutdown(struct irq_data *d)
 	omap_clear_gpio_irqstatus(bank, offset);
 	omap_set_gpio_irqenable(bank, offset, 0);
 	if (!LINE_USED(bank->mod_usage, offset))
-		omap_clear_gpio_debounce(bank, offset);
+		disable_clk = omap_clear_gpio_debounce(bank, offset);
 	omap_disable_gpio_module(bank, offset);
 	raw_spin_unlock_irqrestore(&bank->lock, flags);
+
+	/*
+	 * This has to be done outside of bank->lock'ed section, because
+	 * spin_lock_irqsave(&enable_lock, ...) <= clk_enable_lock()
+	 * cannot be called from raw_spin_lock'ed section.
+	 */
+	if (disable_clk)
+		clk_disable(bank->dbck);
 }
 
 static void omap_gpio_irq_bus_lock(struct irq_data *data)
@@ -825,16 +857,25 @@ static int omap_gpio_request(struct gpio_chip *chip, unsigned offset)
 static void omap_gpio_free(struct gpio_chip *chip, unsigned offset)
 {
 	struct gpio_bank *bank = gpiochip_get_data(chip);
+	bool disable_clk = false;
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&bank->lock, flags);
 	bank->mod_usage &= ~(BIT(offset));
 	if (!LINE_USED(bank->irq_usage, offset)) {
 		omap_set_gpio_direction(bank, offset, 1);
-		omap_clear_gpio_debounce(bank, offset);
+		disable_clk = omap_clear_gpio_debounce(bank, offset);
 	}
 	omap_disable_gpio_module(bank, offset);
 	raw_spin_unlock_irqrestore(&bank->lock, flags);
+
+	/*
+	 * This has to be done outside of bank->lock'ed section, because
+	 * spin_lock_irqsave(&enable_lock, ...) <= clk_enable_lock()
+	 * cannot be called from raw_spin_lock'ed section.
+	 */
+	if (disable_clk)
+		clk_disable(bank->dbck);
 
 	pm_runtime_put(chip->parent);
 }
@@ -913,15 +954,11 @@ static int omap_gpio_debounce(struct gpio_chip *chip, unsigned offset,
 			      unsigned debounce)
 {
 	struct gpio_bank *bank;
-	unsigned long flags;
 	int ret;
 
 	bank = gpiochip_get_data(chip);
 
-	raw_spin_lock_irqsave(&bank->lock, flags);
 	ret = omap2_set_gpio_debounce(bank, offset, debounce);
-	raw_spin_unlock_irqrestore(&bank->lock, flags);
-
 	if (ret)
 		dev_info(chip->parent,
 			 "Could not set line %u debounce to %u microseconds (%d)",
@@ -1131,7 +1168,8 @@ static void omap_gpio_restore_context(struct gpio_bank *bank)
 	writel_relaxed(bank->context.irqenable2, base + regs->irqenable2);
 }
 
-static void omap_gpio_idle(struct gpio_bank *bank, bool may_lose_context)
+/* Returns true if debounce clock has to be disabled by the caller */
+static bool omap_gpio_idle(struct gpio_bank *bank, bool may_lose_context)
 {
 	struct device *dev = bank->chip.parent;
 	void __iomem *base = bank->base;
@@ -1175,13 +1213,15 @@ update_gpio_context_count:
 		bank->context_loss_count =
 				bank->get_context_loss_count(dev);
 
-	omap_gpio_dbck_disable(bank);
+	return omap_gpio_dbck_disable(bank);
 }
 
-static void omap_gpio_unidle(struct gpio_bank *bank)
+/* Returns true if debounce clock has to be enabled by the caller */
+static bool omap_gpio_unidle(struct gpio_bank *bank)
 {
 	struct device *dev = bank->chip.parent;
 	u32 l = 0, gen, gen0, gen1;
+	bool enable_clk;
 	int c;
 
 	/*
@@ -1197,7 +1237,7 @@ static void omap_gpio_unidle(struct gpio_bank *bank)
 				bank->get_context_loss_count(dev);
 	}
 
-	omap_gpio_dbck_enable(bank);
+	enable_clk = omap_gpio_dbck_enable(bank);
 
 	if (bank->loses_context) {
 		if (!bank->get_context_loss_count) {
@@ -1207,7 +1247,7 @@ static void omap_gpio_unidle(struct gpio_bank *bank)
 			if (c != bank->context_loss_count) {
 				omap_gpio_restore_context(bank);
 			} else {
-				return;
+				return enable_clk;
 			}
 		}
 	} else {
@@ -1267,6 +1307,8 @@ static void omap_gpio_unidle(struct gpio_bank *bank)
 		writel_relaxed(old0, bank->base + bank->regs->leveldetect0);
 		writel_relaxed(old1, bank->base + bank->regs->leveldetect1);
 	}
+
+	return enable_clk;
 }
 
 static int gpio_omap_cpu_notifier(struct notifier_block *nb,
@@ -1276,6 +1318,8 @@ static int gpio_omap_cpu_notifier(struct notifier_block *nb,
 	unsigned long flags;
 	int ret = NOTIFY_OK;
 	u32 isr, mask;
+	bool enable_clk = false;
+	bool disable_clk = false;
 
 	bank = container_of(nb, struct gpio_bank, nb);
 
@@ -1291,16 +1335,22 @@ static int gpio_omap_cpu_notifier(struct notifier_block *nb,
 			ret = NOTIFY_BAD;
 			break;
 		}
-		omap_gpio_idle(bank, true);
+		disable_clk = omap_gpio_idle(bank, true);
 		break;
 	case CPU_CLUSTER_PM_ENTER_FAILED:
 	case CPU_CLUSTER_PM_EXIT:
-		omap_gpio_unidle(bank);
+		enable_clk = omap_gpio_unidle(bank);
 		break;
 	}
 
 out_unlock:
 	raw_spin_unlock_irqrestore(&bank->lock, flags);
+
+	/* This has to happen outside of raw_spin_lock'ed section */
+	if (enable_clk)
+		clk_enable(bank->dbck);
+	if (disable_clk)
+		clk_disable(bank->dbck);
 
 	return ret;
 }
@@ -1503,11 +1553,16 @@ static int __maybe_unused omap_gpio_runtime_suspend(struct device *dev)
 {
 	struct gpio_bank *bank = dev_get_drvdata(dev);
 	unsigned long flags;
+	bool disable_clk;
 
 	raw_spin_lock_irqsave(&bank->lock, flags);
-	omap_gpio_idle(bank, true);
+	disable_clk = omap_gpio_idle(bank, true);
 	bank->is_suspended = true;
 	raw_spin_unlock_irqrestore(&bank->lock, flags);
+
+	/* This has to happen outside of raw_spin_lock'ed section */
+	if (disable_clk)
+		clk_disable(bank->dbck);
 
 	return 0;
 }
@@ -1516,11 +1571,16 @@ static int __maybe_unused omap_gpio_runtime_resume(struct device *dev)
 {
 	struct gpio_bank *bank = dev_get_drvdata(dev);
 	unsigned long flags;
+	bool enable_clk;
 
 	raw_spin_lock_irqsave(&bank->lock, flags);
-	omap_gpio_unidle(bank);
+	enable_clk = omap_gpio_unidle(bank);
 	bank->is_suspended = false;
 	raw_spin_unlock_irqrestore(&bank->lock, flags);
+
+	/* This has to happen outside of raw_spin_lock'ed section */
+	if (enable_clk)
+		clk_enable(bank->dbck);
 
 	return 0;
 }
