@@ -790,14 +790,20 @@ static void cscfg_destroy_feature_group(struct config_group *feat_group)
 	kfree(feat_view);
 }
 
-static struct config_item_type cscfg_configs_type = {
+
+static struct config_item_type cscfg_configs_load_type = {
+	.ct_owner = THIS_MODULE,
+};
+
+/* configurations group */
+static struct config_item_type cscfg_configs_grp_type = {
 	.ct_owner = THIS_MODULE,
 };
 
 static struct config_group cscfg_configs_grp = {
 	.cg_item = {
 		.ci_namebuf = "configurations",
-		.ci_type = &cscfg_configs_type,
+		.ci_type = &cscfg_configs_grp_type,
 	},
 };
 
@@ -867,14 +873,9 @@ void cscfg_configfs_del_feature(struct cscfg_feature_desc *feat_desc)
 int cscfg_configfs_init(struct cscfg_manager *cscfg_mgr)
 {
 	struct configfs_subsystem *subsys;
-	struct config_item_type *ci_type;
 
 	if (!cscfg_mgr)
 		return -EINVAL;
-
-	ci_type = cscfg_create_ci_type();
-	if (!ci_type)
-		return -ENOMEM;
 
 	/* dyncamic load and unload initially disabled */
 	cscfg_dyn_load_enabled = false;
@@ -884,7 +885,7 @@ int cscfg_configfs_init(struct cscfg_manager *cscfg_mgr)
 
 	subsys = &cscfg_mgr->cfgfs_subsys;
 	config_item_set_name(&subsys->su_group.cg_item, CSCFG_FS_SUBSYS_NAME);
-	subsys->su_group.cg_item.ci_type = ci_type;
+	subsys->su_group.cg_item.ci_type = &cscfg_configs_load_type;
 
 	config_group_init(&subsys->su_group);
 	mutex_init(&subsys->su_mutex);
