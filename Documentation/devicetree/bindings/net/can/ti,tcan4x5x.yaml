@@ -29,6 +29,10 @@ properties:
   clocks:
     maxItems: 1
 
+  clock-names:
+    items:
+      - const: cclk
+
   reset-gpios:
     description: Hardwired output GPIO. If not defined then software reset.
     maxItems: 1
@@ -154,6 +158,7 @@ examples:
         can@0 {
             compatible = "ti,tcan4x5x";
             reg = <0>;
+            clock-names = "cclk";
             clocks = <&can0_osc>;
             pinctrl-names = "default";
             pinctrl-0 = <&can0_pins>;
@@ -179,6 +184,7 @@ examples:
         can@0 {
             compatible = "ti,tcan4552", "ti,tcan4x5x";
             reg = <0>;
+            clock-names = "cclk";
             clocks = <&can0_osc>;
             pinctrl-names = "default";
             pinctrl-0 = <&can0_pins>;
