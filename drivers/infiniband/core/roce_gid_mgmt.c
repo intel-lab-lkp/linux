@@ -689,7 +689,7 @@ static const struct netdev_event_work_cmd add_cmd = {
 
 static const struct netdev_event_work_cmd add_cmd_upper_ips = {
 	.cb	= add_netdev_upper_ips,
-	.filter = is_eth_port_of_netdev_filter
+	.filter = upper_device_filter
 };
 
 static void
