@@ -1116,7 +1116,8 @@ static int smc_find_proposal_devices(struct smc_sock *smc,
 	ini->check_smcrv2 = true;
 	ini->smcrv2.saddr = smc->clcsock->sk->sk_rcv_saddr;
 	if (!(ini->smcr_version & SMC_V2) ||
-	    smc->clcsock->sk->sk_family != AF_INET ||
+	    (smc->clcsock->sk->sk_family != AF_INET &&
+	     !ipv6_addr_v4mapped(&smc->clcsock->sk->sk_v6_rcv_saddr)) ||
 	    !smc_clc_ueid_count() ||
 	    smc_find_rdma_device(smc, ini))
 		ini->smcr_version &= ~SMC_V2;
