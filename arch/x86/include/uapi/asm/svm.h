@@ -120,6 +120,7 @@
 #define SVM_VMGEXIT_HVDB_SET                    1
 #define SVM_VMGEXIT_HVDB_QUERY                  2
 #define SVM_VMGEXIT_HVDB_CLEAR                  3
+#define SVM_VMGEXIT_HV_IPI                      0x80000015
 #define SVM_VMGEXIT_SNP_RUN_VMPL		0x80000018
 #define SVM_VMGEXIT_HV_FEATURES			0x8000fffd
 #define SVM_VMGEXIT_TERM_REQUEST		0x8000fffe
