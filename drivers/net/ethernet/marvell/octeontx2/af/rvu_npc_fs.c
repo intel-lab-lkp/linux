@@ -1457,14 +1457,14 @@ process_flow:
 		target = req->vf;
 
 	/* PF installing for its VF */
-	if (!from_vf && req->vf && !from_rep_dev) {
+	else if (!from_vf && req->vf && !from_rep_dev) {
 		target = (req->hdr.pcifunc & ~RVU_PFVF_FUNC_MASK) | req->vf;
 		pf_set_vfs_mac = req->default_rule &&
 				(req->features & BIT_ULL(NPC_DMAC));
 	}
 
 	/* Representor device installing for a representee */
-	if (from_rep_dev && req->vf)
+	else if (from_rep_dev && req->vf)
 		target = req->vf;
 	else
 		/* msg received from PF/VF */
