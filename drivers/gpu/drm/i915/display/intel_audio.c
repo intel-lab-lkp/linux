@@ -766,16 +766,28 @@ static void intel_audio_compute_sad(struct intel_encoder *encoder,
 				    int avail_overhead, int req_overhead,
 				    struct cea_sad *sad)
 {
-	u8 sad_channels = sad->channels + 1;
-	u8 sad_freq;
+	u8 sad_freq = 0;
+	u8 channels;
 
-	sad_freq = intel_audio_get_pruned_audfreq(line_freq_khz,
-						  hblank_slots_lanes_bytes,
-						  avail_overhead,
-						  req_overhead, sad_channels,
-						  sad->freq);
+	/*
+	 * If we don't find any supported audio frequencies for a channel,
+	 * reduce the channel and try
+	 */
+	for (channels = sad->channels + 1; channels >= 1; channels--) {
+		sad_freq = intel_audio_get_pruned_audfreq(line_freq_khz,
+							  hblank_slots_lanes_bytes,
+							  avail_overhead,
+							  req_overhead,
+							  channels,
+							  sad->freq);
+
+		/* Supported frequencies exist! No need to proceed further */
+		if (sad_freq)
+			break;
+	}
 
 	sad->freq = sad_freq;
+	sad->channels = channels ? channels - 1 : 0;
 }
 
 bool intel_audio_compute_eld_config(struct intel_encoder *encoder,
@@ -795,22 +807,25 @@ bool intel_audio_compute_eld_config(struct intel_encoder *encoder,
 	for (int i = 0; i < drm_eld_sad_count(eld); i++) {
 		struct cea_sad sad;
 		u8 sad_freq;
+		u8 sad_channels;
 
 		if (drm_eld_sad_get(eld, i, &sad))
 			continue;
 
 		sad_freq = sad.freq;
+		sad_channels = sad.channels;
 		intel_audio_compute_sad(encoder, line_freq_khz,
 					hblank_slots_lanes_bytes,
 					avail_overhead, req_overhead, &sad);
 
 		/* Update the eld with new sad data if any changes in the list */
-		if (sad_freq != sad.freq) {
+		if (sad_freq != sad.freq || sad_channels != sad.channels) {
 			drm_eld_sad_set(eld, i, &sad);
 			drm_dbg_kms(display->drm,
-				    "[CONNECTOR:%d:%s] SAD updated. Freq: 0x%x(0x%x)\n",
+				    "[CONNECTOR:%d:%s] SAD updated. Freq: 0x%x(0x%x) Channels: %d(%d)\n",
 				    connector->base.base.id, connector->base.name,
-				    sad.freq, sad_freq);
+				    sad.freq, sad_freq, sad.channels,
+				    sad_channels);
 		}
 	}
 
