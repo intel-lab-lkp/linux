@@ -1778,6 +1778,7 @@ static int iomap_add_to_ioend(struct iomap_writepage_ctx *wpc,
 {
 	struct iomap_folio_state *ifs = folio->private;
 	size_t poff = offset_in_folio(folio, pos);
+	loff_t isize = i_size_read(inode);
 	int error;
 
 	if (!wpc->ioend || !iomap_can_add_to_ioend(wpc, pos)) {
@@ -1793,7 +1794,16 @@ new_ioend:
 
 	if (ifs)
 		atomic_add(len, &ifs->write_bytes_pending);
+
+	/*
+	 * If the ioend spans i_size, trim io_size to the former to provide
+	 * the fs with more accurate size information. This is useful for
+	 * completion time on-disk size updates.
+	 */
 	wpc->ioend->io_size += len;
+	if (wpc->ioend->io_offset + wpc->ioend->io_size > isize)
+		wpc->ioend->io_size = isize - wpc->ioend->io_offset;
+
 	wbc_account_cgroup_owner(wbc, folio, len);
 	return 0;
 }
