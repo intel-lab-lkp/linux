@@ -1836,6 +1836,7 @@ struct kvm_x86_ops {
 				       unsigned long **read_map, u8 *read_bit,
 				       unsigned long **write_map, u8 *write_bit);
 	void (*disable_intercept_for_msr)(struct kvm_vcpu *vcpu, u32 msr, int type);
+	bool (*is_valid_passthrough_msr)(u32 msr);
 	void (*msr_filter_changed)(struct kvm_vcpu *vcpu);
 	int (*complete_emulated_msr)(struct kvm_vcpu *vcpu, int err);
 

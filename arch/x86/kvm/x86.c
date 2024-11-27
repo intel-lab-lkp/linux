@@ -1813,6 +1813,10 @@ int kvm_passthrough_msr_slot(u32 msr)
 {
 	u32 i;
 
+	if (!static_call(kvm_x86_is_valid_passthrough_msr)(msr)) {
+		return -EINVAL;
+	}
+
 	for (i = 0; i < kvm_x86_ops.nr_possible_passthrough_msrs; i++) {
 		if (kvm_x86_ops.possible_passthrough_msrs[i] == msr)
 			return i;

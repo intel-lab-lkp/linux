@@ -179,7 +179,9 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 
 	.possible_passthrough_msrs = vmx_possible_passthrough_msrs,
 	.nr_possible_passthrough_msrs = ARRAY_SIZE(vmx_possible_passthrough_msrs),
+	.get_msr_bitmap_entries = vmx_get_msr_bitmap_entries,
 	.disable_intercept_for_msr = vmx_disable_intercept_for_msr,
+	.is_valid_passthrough_msr = vmx_is_valid_passthrough_msr,
 	.msr_filter_changed = vmx_msr_filter_changed,
 	.complete_emulated_msr = kvm_complete_insn_gp,
 

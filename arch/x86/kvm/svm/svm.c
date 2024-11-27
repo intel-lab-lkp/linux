@@ -799,6 +799,11 @@ static void svm_get_msr_bitmap_entries(struct kvm_vcpu *vcpu, u32 msr,
 	*write_map = &svm->msrpm[offset];
 }
 
+static bool svm_is_valid_passthrough_msr(u32 msr)
+{
+	return true;
+}
+
 void svm_disable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type)
 {
 	kvm_disable_intercept_for_msr(vcpu, msr, type);
@@ -5065,6 +5070,7 @@ static struct kvm_x86_ops svm_x86_ops __initdata = {
 	.nr_possible_passthrough_msrs = ARRAY_SIZE(direct_access_msrs),
 	.get_msr_bitmap_entries = svm_get_msr_bitmap_entries,
 	.disable_intercept_for_msr = svm_disable_intercept_for_msr,
+	.is_valid_passthrough_msr = svm_is_valid_passthrough_msr,
 	.complete_emulated_msr = svm_complete_emulated_msr,
 
 	.vcpu_deliver_sipi_vector = svm_vcpu_deliver_sipi_vector,
