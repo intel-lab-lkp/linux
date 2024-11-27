@@ -1219,7 +1219,7 @@ void debug_dma_map_page(struct device *dev, struct page *page, size_t offset,
 
 	entry->dev       = dev;
 	entry->type      = dma_debug_single;
-	entry->paddr	 = page_to_phys(page);
+	entry->paddr	 = page_to_phys(page) + offset;
 	entry->dev_addr  = dma_addr;
 	entry->size      = size;
 	entry->direction = direction;
@@ -1400,7 +1400,8 @@ void debug_dma_alloc_coherent(struct device *dev, size_t size,
 	entry->type      = dma_debug_coherent;
 	entry->dev       = dev;
 	entry->paddr	 = page_to_phys((is_vmalloc_addr(virt) ?
-				vmalloc_to_page(virt) : virt_to_page(virt)));
+				vmalloc_to_page(virt) : virt_to_page(virt))) +
+				offset_in_page(virt);
 	entry->size      = size;
 	entry->dev_addr  = dma_addr;
 	entry->direction = DMA_BIDIRECTIONAL;
@@ -1424,7 +1425,8 @@ void debug_dma_free_coherent(struct device *dev, size_t size,
 		return;
 
 	ref.paddr = page_to_phys((is_vmalloc_addr(virt) ?
-			vmalloc_to_page(virt) : virt_to_page(virt)));
+			vmalloc_to_page(virt) : virt_to_page(virt))) +
+			offset_in_page(virt);
 
 	if (unlikely(dma_debug_disabled()))
 		return;
