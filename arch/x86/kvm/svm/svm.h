@@ -185,7 +185,7 @@ struct svm_nested_state {
 	u64 last_vmcb12_gpa;
 
 	/* These are the merged vectors */
-	u32 *msrpm;
+	unsigned long *msrpm;
 
 	/* A VMRUN has started but has not yet been performed, so
 	 * we cannot inject a nested vmexit yet.  */
@@ -266,7 +266,7 @@ struct vcpu_svm {
 	 */
 	u64 virt_spec_ctrl;
 
-	u32 *msrpm;
+	unsigned long *msrpm;
 
 	ulong nmi_iret_rip;
 
@@ -596,9 +596,9 @@ static inline bool is_vnmi_enabled(struct vcpu_svm *svm)
 extern bool dump_invalid_vmcb;
 
 u32 svm_msrpm_offset(u32 msr);
-u32 *svm_vcpu_alloc_msrpm(void);
-void svm_vcpu_init_msrpm(struct kvm_vcpu *vcpu, u32 *msrpm);
-void svm_vcpu_free_msrpm(u32 *msrpm);
+unsigned long *svm_vcpu_alloc_msrpm(void);
+void svm_vcpu_init_msrpm(struct kvm_vcpu *vcpu, unsigned long *msrpm);
+void svm_vcpu_free_msrpm(unsigned long *msrpm);
 void svm_copy_lbrs(struct vmcb *to_vmcb, struct vmcb *from_vmcb);
 void svm_enable_lbrv(struct kvm_vcpu *vcpu);
 void svm_update_lbrv(struct kvm_vcpu *vcpu);
@@ -612,7 +612,7 @@ bool svm_nmi_blocked(struct kvm_vcpu *vcpu);
 bool svm_interrupt_blocked(struct kvm_vcpu *vcpu);
 void svm_set_gif(struct vcpu_svm *svm, bool value);
 int svm_invoke_exit_handler(struct kvm_vcpu *vcpu, u64 exit_code);
-void set_msr_interception(struct kvm_vcpu *vcpu, u32 *msrpm, u32 msr,
+void set_msr_interception(struct kvm_vcpu *vcpu, unsigned long *msrpm, u32 msr,
 			  int read, int write);
 void svm_set_x2apic_msr_interception(struct vcpu_svm *svm, bool disable);
 void svm_complete_interrupt_delivery(struct kvm_vcpu *vcpu, int delivery_mode,

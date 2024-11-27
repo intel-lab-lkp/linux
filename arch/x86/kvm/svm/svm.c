@@ -276,8 +276,8 @@ u32 svm_msrpm_offset(u32 msr)
 		offset  = (msr - msrpm_ranges[i]) / 4; /* 4 msrs per u8 */
 		offset += (i * MSRS_RANGE_SIZE);       /* add range offset */
 
-		/* Now we have the u8 offset - but need the u32 offset */
-		return offset / 4;
+		/* Now we have the u8 offset - but need the ulong offset */
+		return offset / sizeof(unsigned long);
 	}
 
 	/* MSR not in any range */
@@ -799,9 +799,9 @@ static bool valid_msr_intercept(u32 index)
 static bool msr_write_intercepted(struct kvm_vcpu *vcpu, u32 msr)
 {
 	u8 bit_write;
+	unsigned long *msrpm;
 	unsigned long tmp;
 	u32 offset;
-	u32 *msrpm;
 
 	/*
 	 * For non-nested case:
@@ -824,7 +824,7 @@ static bool msr_write_intercepted(struct kvm_vcpu *vcpu, u32 msr)
 	return test_bit(bit_write, &tmp);
 }
 
-static void set_msr_interception_bitmap(struct kvm_vcpu *vcpu, u32 *msrpm,
+static void set_msr_interception_bitmap(struct kvm_vcpu *vcpu, unsigned long *msrpm,
 					u32 msr, int read, int write)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -861,18 +861,18 @@ static void set_msr_interception_bitmap(struct kvm_vcpu *vcpu, u32 *msrpm,
 	svm->nested.force_msr_bitmap_recalc = true;
 }
 
-void set_msr_interception(struct kvm_vcpu *vcpu, u32 *msrpm, u32 msr,
+void set_msr_interception(struct kvm_vcpu *vcpu, unsigned long *msrpm, u32 msr,
 			  int read, int write)
 {
 	set_shadow_msr_intercept(vcpu, msr, read, write);
 	set_msr_interception_bitmap(vcpu, msrpm, msr, read, write);
 }
 
-u32 *svm_vcpu_alloc_msrpm(void)
+unsigned long *svm_vcpu_alloc_msrpm(void)
 {
 	unsigned int order = get_order(MSRPM_SIZE);
 	struct page *pages = alloc_pages(GFP_KERNEL_ACCOUNT, order);
-	u32 *msrpm;
+	unsigned long *msrpm;
 
 	if (!pages)
 		return NULL;
@@ -883,7 +883,7 @@ u32 *svm_vcpu_alloc_msrpm(void)
 	return msrpm;
 }
 
-void svm_vcpu_init_msrpm(struct kvm_vcpu *vcpu, u32 *msrpm)
+void svm_vcpu_init_msrpm(struct kvm_vcpu *vcpu, unsigned long *msrpm)
 {
 	int i;
 
@@ -917,7 +917,7 @@ void svm_set_x2apic_msr_interception(struct vcpu_svm *svm, bool intercept)
 	svm->x2avic_msrs_intercepted = intercept;
 }
 
-void svm_vcpu_free_msrpm(u32 *msrpm)
+void svm_vcpu_free_msrpm(unsigned long *msrpm)
 {
 	__free_pages(virt_to_page(msrpm), get_order(MSRPM_SIZE));
 }
