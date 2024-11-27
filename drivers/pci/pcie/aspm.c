@@ -99,6 +99,19 @@ void pci_save_aspm_l1ss_state(struct pci_dev *pdev)
 	cap = &save_state->cap.data[0];
 	pci_read_config_dword(pdev, l1ss + PCI_L1SS_CTL2, cap++);
 	pci_read_config_dword(pdev, l1ss + PCI_L1SS_CTL1, cap++);
+
+	/*
+	 * It is possible that the downstream port's L1ss registers were not
+	 * saved after the initial configuration performed in the function
+	 * aspm_calc_l12_info() during the child bus probe. If the upstream port
+	 * config space is saved-restored due to some reason, the downstream
+	 * port L1ss registers will be overwritten with stale configuration due
+	 * to the logic present in pci_restore_aspm_l1ss_state(). So, attempt to
+	 * save the downstream port L1ss registers when we are at the upstream
+	 * component.
+	 */
+	if (!pcie_downstream_port(pdev))
+		pci_save_aspm_l1ss_state(pdev->bus->self);
 }
 
 void pci_restore_aspm_l1ss_state(struct pci_dev *pdev)
