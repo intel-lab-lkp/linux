@@ -790,9 +790,71 @@ static void cscfg_destroy_feature_group(struct config_group *feat_group)
 	kfree(feat_view);
 }
 
+/* Attributes in configfs that allow load and unload of configuration tables */
+
+static ssize_t
+cscfg_cfg_unload_last_table_store(struct config_item *item, const char *page, size_t count)
+{
+	int err;
+	unsigned long val;
+
+	err = kstrtoul(page, 0, &val);
+	if (err)
+		return err;
+
+	if (val > 0) {
+		/* schedule unload of last dynamic loaded configuration */
+		err = cscfg_sched_dyn_unload_cfg_table();
+		if (!err)
+			err = count;
+	} else
+		err = -EINVAL;
+
+	return err;
+}
+CONFIGFS_ATTR_WO(cscfg_cfg_, unload_last_table);
+
+static ssize_t cscfg_cfg_show_last_load_show(struct config_item *item, char *page)
+{
+	struct cscfg_load_owner_info *owner_info = 0;
+	ssize_t size = 0;
+
+	/* ensure we cannot read last load while loading / unloading */
+	if (!mutex_trylock(&cfs_mutex))
+		return -EBUSY;
+
+	/* check dyn load / unload ops are permitted & no ongoing unload */
+	if (!cscfg_load_ops_permitted()) {
+		size = -EBUSY;
+		goto exit_unlock;
+	}
+
+	/* find the last loaded owner info block */
+	owner_info = cscfg_find_last_loaded_cfg_owner();
+	if (!owner_info) {
+		size = scnprintf(page, PAGE_SIZE,
+				 "Failed to find any loaded configuration\n");
+		goto exit_unlock;
+	}
+
+	/* get string desc of last unload configuration from owner info */
+	size = cscfg_get_owner_info_str(owner_info, page, PAGE_SIZE);
+
+exit_unlock:
+	mutex_unlock(&cfs_mutex);
+	return size;
+}
+CONFIGFS_ATTR_RO(cscfg_cfg_, show_last_load);
+
+static struct configfs_attribute *cscfg_config_configfs_attrs[] = {
+	&cscfg_cfg_attr_unload_last_table,
+	&cscfg_cfg_attr_show_last_load,
+	NULL,
+};
 
 static struct config_item_type cscfg_configs_load_type = {
 	.ct_owner = THIS_MODULE,
+	.ct_attrs = cscfg_config_configfs_attrs,
 };
 
 /* configurations group */
