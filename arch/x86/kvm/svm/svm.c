@@ -825,9 +825,9 @@ void svm_disable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type)
 	if (slot >= 0) {
 		/* Set the shadow bitmaps to the desired intercept states */
 		if (type & MSR_TYPE_R)
-			__clear_bit(slot, svm->shadow_msr_intercept.read);
+			__clear_bit(slot, vcpu->arch.shadow_msr_intercept.read);
 		if (type & MSR_TYPE_W)
-			__clear_bit(slot, svm->shadow_msr_intercept.write);
+			__clear_bit(slot, vcpu->arch.shadow_msr_intercept.write);
 	}
 
 	/*
@@ -864,9 +864,9 @@ void svm_enable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type)
 	if (slot >= 0) {
 		/* Set the shadow bitmaps to the desired intercept states */
 		if (type & MSR_TYPE_R)
-			__set_bit(slot, svm->shadow_msr_intercept.read);
+			__set_bit(slot, vcpu->arch.shadow_msr_intercept.read);
 		if (type & MSR_TYPE_W)
-			__set_bit(slot, svm->shadow_msr_intercept.write);
+			__set_bit(slot, vcpu->arch.shadow_msr_intercept.write);
 	}
 
 	if (type & MSR_TYPE_R)
@@ -937,30 +937,6 @@ void svm_set_x2apic_msr_interception(struct vcpu_svm *svm, bool intercept)
 void svm_vcpu_free_msrpm(unsigned long *msrpm)
 {
 	__free_pages(virt_to_page(msrpm), get_order(MSRPM_SIZE));
-}
-
-static void svm_msr_filter_changed(struct kvm_vcpu *vcpu)
-{
-	struct vcpu_svm *svm = to_svm(vcpu);
-	u32 i;
-
-	/*
-	 * Redo intercept permissions for MSRs that KVM is passing through to
-	 * the guest.  Disabling interception will check the new MSR filter and
-	 * ensure that KVM enables interception if usersepace wants to filter
-	 * the MSR.  MSRs that KVM is already intercepting don't need to be
-	 * refreshed since KVM is going to intercept them regardless of what
-	 * userspace wants.
-	 */
-	for (i = 0; i < ARRAY_SIZE(direct_access_msrs); i++) {
-		u32 msr = direct_access_msrs[i];
-
-		if (!test_bit(i, svm->shadow_msr_intercept.read))
-			svm_disable_intercept_for_msr(vcpu, msr, MSR_TYPE_R);
-
-		if (!test_bit(i, svm->shadow_msr_intercept.write))
-			svm_disable_intercept_for_msr(vcpu, msr, MSR_TYPE_W);
-	}
 }
 
 static void add_msr_offset(u32 offset)
@@ -1474,10 +1450,6 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 	err = avic_init_vcpu(svm);
 	if (err)
 		goto error_free_vmsa_page;
-
-	/* All MSRs start out in the "intercepted" state. */
-	bitmap_fill(svm->shadow_msr_intercept.read, MAX_DIRECT_ACCESS_MSRS);
-	bitmap_fill(svm->shadow_msr_intercept.write, MAX_DIRECT_ACCESS_MSRS);
 
 	svm->msrpm = svm_vcpu_alloc_msrpm();
 	if (!svm->msrpm) {
@@ -5155,7 +5127,7 @@ static struct kvm_x86_ops svm_x86_ops __initdata = {
 
 	.possible_passthrough_msrs = direct_access_msrs,
 	.nr_possible_passthrough_msrs = ARRAY_SIZE(direct_access_msrs),
-	.msr_filter_changed = svm_msr_filter_changed,
+	.disable_intercept_for_msr = svm_disable_intercept_for_msr,
 	.complete_emulated_msr = svm_complete_emulated_msr,
 
 	.vcpu_deliver_sipi_vector = svm_vcpu_deliver_sipi_vector,

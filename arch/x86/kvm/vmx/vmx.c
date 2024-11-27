@@ -3989,9 +3989,9 @@ void vmx_disable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type)
 	idx = vmx_get_passthrough_msr_slot(msr);
 	if (idx >= 0) {
 		if (type & MSR_TYPE_R)
-			__clear_bit(idx, vmx->shadow_msr_intercept.read);
+			__clear_bit(idx, vcpu->arch.shadow_msr_intercept.read);
 		if (type & MSR_TYPE_W)
-			__clear_bit(idx, vmx->shadow_msr_intercept.write);
+			__clear_bit(idx, vcpu->arch.shadow_msr_intercept.write);
 	}
 
 	if ((type & MSR_TYPE_R) &&
@@ -4031,9 +4031,9 @@ void vmx_enable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type)
 	idx = vmx_get_passthrough_msr_slot(msr);
 	if (idx >= 0) {
 		if (type & MSR_TYPE_R)
-			__set_bit(idx, vmx->shadow_msr_intercept.read);
+			__set_bit(idx, vcpu->arch.shadow_msr_intercept.read);
 		if (type & MSR_TYPE_W)
-			__set_bit(idx, vmx->shadow_msr_intercept.write);
+			__set_bit(idx, vcpu->arch.shadow_msr_intercept.write);
 	}
 
 	if (type & MSR_TYPE_R)
@@ -4117,6 +4117,16 @@ void pt_update_intercept_for_msr(struct kvm_vcpu *vcpu)
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_RTIT_ADDR0_A + i * 2, MSR_TYPE_RW, flag);
 		vmx_set_intercept_for_msr(vcpu, MSR_IA32_RTIT_ADDR0_B + i * 2, MSR_TYPE_RW, flag);
 	}
+}
+
+void vmx_msr_filter_changed(struct kvm_vcpu *vcpu)
+{
+	if (!cpu_has_vmx_msr_bitmap())
+		return;
+
+	/* PT MSRs can be passed through iff PT is exposed to the guest. */
+	if (vmx_pt_mode_is_host_guest())
+		pt_update_intercept_for_msr(vcpu);
 }
 
 static inline void kvm_vcpu_trigger_posted_interrupt(struct kvm_vcpu *vcpu,
@@ -7514,10 +7524,6 @@ int vmx_vcpu_create(struct kvm_vcpu *vcpu)
 
 		evmcs->hv_enlightenments_control.msr_bitmap = 1;
 	}
-
-	/* The MSR bitmap starts with all ones */
-	bitmap_fill(vmx->shadow_msr_intercept.read, MAX_POSSIBLE_PASSTHROUGH_MSRS);
-	bitmap_fill(vmx->shadow_msr_intercept.write, MAX_POSSIBLE_PASSTHROUGH_MSRS);
 
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_TSC, MSR_TYPE_R);
 #ifdef CONFIG_X86_64

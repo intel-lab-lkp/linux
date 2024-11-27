@@ -1822,6 +1822,31 @@ int kvm_passthrough_msr_slot(u32 msr)
 }
 EXPORT_SYMBOL_GPL(kvm_passthrough_msr_slot);
 
+static void kvm_msr_filter_changed(struct kvm_vcpu *vcpu)
+{
+	u32 msr, i;
+
+	/*
+	 * Redo intercept permissions for MSRs that KVM is passing through to
+	 * the guest.  Disabling interception will check the new MSR filter and
+	 * ensure that KVM enables interception if usersepace wants to filter
+	 * the MSR.  MSRs that KVM is already intercepting don't need to be
+	 * refreshed since KVM is going to intercept them regardless of what
+	 * userspace wants.
+	 */
+	for (i = 0; i < kvm_x86_ops.nr_possible_passthrough_msrs; i++) {
+		msr = kvm_x86_ops.possible_passthrough_msrs[i];
+
+		if (!test_bit(i, vcpu->arch.shadow_msr_intercept.read))
+			static_call(kvm_x86_disable_intercept_for_msr)(vcpu, msr, MSR_TYPE_R);
+
+		if (!test_bit(i, vcpu->arch.shadow_msr_intercept.write))
+			static_call(kvm_x86_disable_intercept_for_msr)(vcpu, msr, MSR_TYPE_W);
+	}
+
+	static_call_cond(kvm_x86_msr_filter_changed)(vcpu);
+}
+
 /*
  * Write @data into the MSR specified by @index.  Select MSR specific fault
  * checks are bypassed if @host_initiated is %true.
@@ -9750,6 +9775,10 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 	if (boot_cpu_has(X86_FEATURE_ARCH_CAPABILITIES))
 		rdmsrl(MSR_IA32_ARCH_CAPABILITIES, kvm_host.arch_capabilities);
 
+	if (ops->runtime_ops->nr_possible_passthrough_msrs >
+	    KVM_MAX_POSSIBLE_PASSTHROUGH_MSRS)
+		return -E2BIG;
+
 	r = ops->hardware_setup();
 	if (r != 0)
 		goto out_mmu_exit;
@@ -10854,7 +10883,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		if (kvm_check_request(KVM_REQ_APF_READY, vcpu))
 			kvm_check_async_pf_completion(vcpu);
 		if (kvm_check_request(KVM_REQ_MSR_FILTER_CHANGED, vcpu))
-			kvm_x86_call(msr_filter_changed)(vcpu);
+			kvm_msr_filter_changed(vcpu);
 
 		if (kvm_check_request(KVM_REQ_UPDATE_CPU_DIRTY_LOGGING, vcpu))
 			kvm_x86_call(update_cpu_dirty_logging)(vcpu);
@@ -12307,6 +12336,12 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 #if IS_ENABLED(CONFIG_HYPERV)
 	vcpu->arch.hv_root_tdp = INVALID_PAGE;
 #endif
+
+	/* All MSRs start out in the "intercepted" state. */
+	bitmap_fill(vcpu->arch.shadow_msr_intercept.read,
+		    KVM_MAX_POSSIBLE_PASSTHROUGH_MSRS);
+	bitmap_fill(vcpu->arch.shadow_msr_intercept.write,
+		    KVM_MAX_POSSIBLE_PASSTHROUGH_MSRS);
 
 	r = kvm_x86_call(vcpu_create)(vcpu);
 	if (r)

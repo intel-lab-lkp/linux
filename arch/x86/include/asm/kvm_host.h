@@ -779,6 +779,16 @@ struct kvm_vcpu_arch {
 	u64 perf_capabilities;
 
 	/*
+	 * KVM's "shadow" of the MSR intercepts, i.e. bitmaps that track KVM's
+	 * desired behavior irrespective of userspace MSR filtering.
+	 */
+#define KVM_MAX_POSSIBLE_PASSTHROUGH_MSRS	64
+	struct {
+		DECLARE_BITMAP(read, KVM_MAX_POSSIBLE_PASSTHROUGH_MSRS);
+		DECLARE_BITMAP(write, KVM_MAX_POSSIBLE_PASSTHROUGH_MSRS);
+	} shadow_msr_intercept;
+
+	/*
 	 * Paging state of the vcpu
 	 *
 	 * If the vcpu runs in guest mode with two level paging this still saves
@@ -1822,6 +1832,7 @@ struct kvm_x86_ops {
 
 	const u32 * const possible_passthrough_msrs;
 	const u32 nr_possible_passthrough_msrs;
+	void (*disable_intercept_for_msr)(struct kvm_vcpu *vcpu, u32 msr, int type);
 	void (*msr_filter_changed)(struct kvm_vcpu *vcpu);
 	int (*complete_emulated_msr)(struct kvm_vcpu *vcpu, int err);
 

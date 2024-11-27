@@ -313,12 +313,6 @@ struct vcpu_svm {
 	struct list_head ir_list;
 	spinlock_t ir_list_lock;
 
-	/* Save desired MSR intercept (read: pass-through) state */
-	struct {
-		DECLARE_BITMAP(read, MAX_DIRECT_ACCESS_MSRS);
-		DECLARE_BITMAP(write, MAX_DIRECT_ACCESS_MSRS);
-	} shadow_msr_intercept;
-
 	struct vcpu_sev_es_state sev_es;
 
 	bool guest_state_loaded;

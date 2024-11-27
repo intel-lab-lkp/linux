@@ -32,37 +32,6 @@ static const u32 vmx_possible_passthrough_msrs[] = {
 	MSR_CORE_C7_RESIDENCY,
 };
 
-void vmx_msr_filter_changed(struct kvm_vcpu *vcpu)
-{
-	struct vcpu_vmx *vmx = to_vmx(vcpu);
-	u32 i;
-
-	if (!cpu_has_vmx_msr_bitmap())
-		return;
-
-	/*
-	 * Redo intercept permissions for MSRs that KVM is passing through to
-	 * the guest.  Disabling interception will check the new MSR filter and
-	 * ensure that KVM enables interception if usersepace wants to filter
-	 * the MSR.  MSRs that KVM is already intercepting don't need to be
-	 * refreshed since KVM is going to intercept them regardless of what
-	 * userspace wants.
-	 */
-	for (i = 0; i < ARRAY_SIZE(vmx_possible_passthrough_msrs); i++) {
-		u32 msr = vmx_possible_passthrough_msrs[i];
-
-		if (!test_bit(i, vmx->shadow_msr_intercept.read))
-			vmx_disable_intercept_for_msr(vcpu, msr, MSR_TYPE_R);
-
-		if (!test_bit(i, vmx->shadow_msr_intercept.write))
-			vmx_disable_intercept_for_msr(vcpu, msr, MSR_TYPE_W);
-	}
-
-	/* PT MSRs can be passed through iff PT is exposed to the guest. */
-	if (vmx_pt_mode_is_host_guest())
-		pt_update_intercept_for_msr(vcpu);
-}
-
 #define VMX_REQUIRED_APICV_INHIBITS				\
 	(BIT(APICV_INHIBIT_REASON_DISABLED) |			\
 	 BIT(APICV_INHIBIT_REASON_ABSENT) |			\
@@ -210,6 +179,7 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 
 	.possible_passthrough_msrs = vmx_possible_passthrough_msrs,
 	.nr_possible_passthrough_msrs = ARRAY_SIZE(vmx_possible_passthrough_msrs),
+	.disable_intercept_for_msr = vmx_disable_intercept_for_msr,
 	.msr_filter_changed = vmx_msr_filter_changed,
 	.complete_emulated_msr = kvm_complete_insn_gp,
 
