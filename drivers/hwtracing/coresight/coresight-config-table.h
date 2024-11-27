@@ -9,7 +9,12 @@
 
 #include <linux/sizes.h>
 
+#ifdef __KERNEL__
 #include "coresight-config.h"
+#else
+#include "coresight-config-uapi.h"
+#endif
+
 
 /*
  * Configurations and features can be dynamically loaded at runtime
