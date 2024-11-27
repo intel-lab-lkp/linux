@@ -798,6 +798,7 @@ bool intel_audio_compute_eld_config(struct intel_encoder *encoder,
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
+	bool audio_supported = false;
 	u8 *eld;
 
 	if (!intel_audio_eld_valid(encoder, conn_state))
@@ -827,9 +828,18 @@ bool intel_audio_compute_eld_config(struct intel_encoder *encoder,
 				    sad.freq, sad_freq, sad.channels,
 				    sad_channels);
 		}
+
+		/* If no supported freq in any sads, report audio not supported */
+		if (sad.freq)
+			audio_supported = true;
 	}
 
-	return true;
+	drm_dbg_kms(display->drm,
+		    "[CONNECTOR:%d:%s][ENCODER:%d:%s] audio supported: %s\n",
+		    connector->base.base.id, connector->base.name,
+		    encoder->base.base.id, encoder->base.name,
+		    str_yes_no(audio_supported));
+	return audio_supported;
 }
 
 bool intel_audio_compute_config(struct intel_encoder *encoder,
