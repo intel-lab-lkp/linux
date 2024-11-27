@@ -10357,12 +10357,19 @@ static int kvm_check_and_inject_events(struct kvm_vcpu *vcpu,
 			}
 		}
 
+		if (vcpu->arch.exception.vector == MC_VECTOR) {
+			r = static_call(kvm_x86_mce_allowed)(vcpu);
+			if (!r)
+				goto out_except;
+		}
+
 		kvm_inject_exception(vcpu);
 
 		vcpu->arch.exception.pending = false;
 		vcpu->arch.exception.injected = true;
 
 		can_inject = false;
+out_except:
 	}
 
 	/* Don't inject interrupts if the user asked to avoid doing so */
