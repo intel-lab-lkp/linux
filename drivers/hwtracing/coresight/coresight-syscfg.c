@@ -554,6 +554,23 @@ static int cscfg_fs_register_cfgs_feats(struct cscfg_config_desc **config_descs,
 	return 0;
 }
 
+/*
+ * check owner info and if module owner, disable / enable
+ * configfs managed dynamic load ops to prevent parallel load attempts.
+ */
+static bool cscfg_check_disable_dyn_load(struct cscfg_load_owner_info *owner_info)
+{
+	if (owner_info->type == CSCFG_OWNER_MODULE)
+		return cscfg_disable_dyn_load();
+	return true;
+}
+
+static void cscfg_check_enable_dyn_load(struct cscfg_load_owner_info *owner_info)
+{
+	if (owner_info->type == CSCFG_OWNER_MODULE)
+		cscfg_enable_dyn_load();
+}
+
 /**
  * cscfg_load_config_sets - API function to load feature and config sets.
  *
@@ -578,10 +595,14 @@ int cscfg_load_config_sets(struct cscfg_config_desc **config_descs,
 {
 	int err = 0;
 
+	/* if this load is by module owner, need to disable dynamic load/unload */
+	if (!cscfg_check_disable_dyn_load(owner_info))
+		return -EBUSY;
+
 	mutex_lock(&cscfg_mutex);
 	if (cscfg_mgr->load_state != CSCFG_NONE) {
-		mutex_unlock(&cscfg_mutex);
-		return -EBUSY;
+		err = -EBUSY;
+		goto exit_unlock;
 	}
 	cscfg_mgr->load_state = CSCFG_LOAD;
 
@@ -616,7 +637,7 @@ int cscfg_load_config_sets(struct cscfg_config_desc **config_descs,
 
 	/* mark any new configs as available for activation */
 	cscfg_set_configs_available(config_descs);
-	goto exit_unlock;
+	goto exit_clear_state;
 
 err_clean_cfs:
 	/* cleanup after error registering with configfs */
@@ -631,9 +652,13 @@ err_clean_owner_list:
 err_clean_load:
 	cscfg_unload_owned_cfgs_feats(owner_info);
 
-exit_unlock:
+exit_clear_state:
 	cscfg_mgr->load_state = CSCFG_NONE;
+
+exit_unlock:
 	mutex_unlock(&cscfg_mutex);
+
+	cscfg_check_enable_dyn_load(owner_info);
 	return err;
 }
 EXPORT_SYMBOL_GPL(cscfg_load_config_sets);
@@ -659,8 +684,13 @@ int cscfg_unload_config_sets(struct cscfg_load_owner_info *owner_info)
 	int err = 0;
 	struct cscfg_load_owner_info *load_list_item = NULL;
 
+	/* if this unload is by module owner, need to disable dynamic load/unload */
+	if (!cscfg_check_disable_dyn_load(owner_info))
+		return -EBUSY;
+
 	mutex_lock(&cscfg_mutex);
-	if (cscfg_mgr->load_state != CSCFG_NONE) {
+	if ((cscfg_mgr->load_state != CSCFG_NONE) &&
+	    (cscfg_mgr->load_state != CSCFG_UNLOAD_START)) {
 		mutex_unlock(&cscfg_mutex);
 		return -EBUSY;
 	}
@@ -705,9 +735,42 @@ int cscfg_unload_config_sets(struct cscfg_load_owner_info *owner_info)
 exit_unlock:
 	cscfg_mgr->load_state = CSCFG_NONE;
 	mutex_unlock(&cscfg_mutex);
+
+	cscfg_check_enable_dyn_load(owner_info);
 	return err;
 }
 EXPORT_SYMBOL_GPL(cscfg_unload_config_sets);
+
+int cscfg_set_unload_start(void)
+{
+	int ret = 0;
+
+	mutex_lock(&cscfg_mutex);
+	if (cscfg_mgr->load_state != CSCFG_NONE)
+		ret = -EBUSY;
+	else
+		cscfg_mgr->load_state = CSCFG_UNLOAD_START;
+	mutex_unlock(&cscfg_mutex);
+
+	return ret;
+}
+
+/* find the last loaded config owner info */
+struct cscfg_load_owner_info *cscfg_find_last_loaded_cfg_owner(void)
+{
+	struct cscfg_load_owner_info *owner_info = NULL;
+
+	mutex_lock(&cscfg_mutex);
+
+	if (!list_empty(&cscfg_mgr->load_order_list))
+		owner_info = list_last_entry(&cscfg_mgr->load_order_list,
+					     struct cscfg_load_owner_info, item);
+
+
+	mutex_unlock(&cscfg_mutex);
+	return owner_info;
+
+}
 
 /* Handle coresight device registration and add configs and features to devices */
 
@@ -881,7 +944,7 @@ static int _cscfg_activate_config(unsigned long cfg_hash)
 	struct cscfg_config_desc *config_desc;
 	int err = -EINVAL;
 
-	if (cscfg_mgr->load_state == CSCFG_UNLOAD)
+	if (cscfg_mgr->load_state >= CSCFG_UNLOAD)
 		return -EBUSY;
 
 	list_for_each_entry(config_desc, &cscfg_mgr->config_desc_list, item) {
@@ -1206,6 +1269,7 @@ create_dev_exit_unlock:
 static void cscfg_unload_cfgs_on_exit(void)
 {
 	struct cscfg_load_owner_info *owner_info = NULL;
+	bool free_dynload_owner = false;
 
 	/*
 	 * grab the mutex - even though we are exiting, some configfs files
@@ -1240,6 +1304,23 @@ static void cscfg_unload_cfgs_on_exit(void)
 			 */
 			pr_err("cscfg: ERROR: prior module failed to unload configuration\n");
 			goto list_remove;
+
+		case CSCFG_OWNER_DYNLOAD:
+			/*
+			 * dynamically loaded items may still be present if the user did not
+			 * unload them during the session. These have dynamically allocated
+			 * descriptor tables (unlike the two types above that are statically
+			 * allocated at compile time)
+			 */
+			pr_info("cscfg: unloading dynamically loaded configuration %s\n",
+				cscfg_get_dyn_load_name(owner_info));
+
+			/*
+			 * as this is not being unloaded by configfs, need to flag the
+			 * requirement to free up the owner info and descriptors.
+			 */
+			free_dynload_owner = true;
+			break;
 		}
 
 		/* remove from configfs - outside the scope of the list mutex */
@@ -1253,6 +1334,12 @@ static void cscfg_unload_cfgs_on_exit(void)
 list_remove:
 		/* remove from load order list */
 		list_del(&owner_info->item);
+
+		/*  dynamic loaded config, free memory now */
+		if (free_dynload_owner) {
+			cscfg_free_dyn_load_owner_info(owner_info);
+			free_dynload_owner = false;
+		}
 	}
 	mutex_unlock(&cscfg_mutex);
 }
@@ -1284,6 +1371,9 @@ int __init cscfg_init(void)
 	if (err)
 		goto exit_err;
 
+	/* can now allow dynamic table load / unload */
+	cscfg_enable_dyn_load();
+
 	dev_info(cscfg_device(), "CoreSight Configuration manager initialised");
 	return 0;
 
@@ -1294,5 +1384,6 @@ exit_err:
 
 void cscfg_exit(void)
 {
+	cscfg_at_exit_dyn_load();
 	cscfg_clear_device();
 }

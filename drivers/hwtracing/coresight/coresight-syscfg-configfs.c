@@ -5,9 +5,368 @@
  */
 
 #include <linux/configfs.h>
+#include <linux/module.h>
+#include <linux/workqueue.h>
 
 #include "coresight-config.h"
+#include "coresight-config-table.h"
 #include "coresight-syscfg-configfs.h"
+
+/* prevent race in load / unload operations */
+static DEFINE_MUTEX(cfs_mutex);
+
+/*
+ * need to enable / disable dynamic table load when
+ * initialising / shutting down the subsystem, or
+ * loading / unloading configurations via module.
+ */
+static bool cscfg_dyn_load_enabled;
+
+/*
+ * Lockdep issues occur if deleting the config directory as part
+ * of the unload operation triggered by configfs.
+ * Therefore we schedule the main part of the unload to be completed as a work item
+ * & save the owner info for the scheduled unload
+ */
+static struct cscfg_load_owner_info *cscfg_sched_dyn_unload_owner;
+
+
+/* determine if load / unload ops are currently permitted. */
+inline bool cscfg_load_ops_permitted(void)
+{
+	return (cscfg_dyn_load_enabled && !cscfg_sched_dyn_unload_owner);
+}
+
+/* do the main unload operations. Called with cfs_mutex held */
+static int cscfg_do_unload(struct cscfg_load_owner_info *unload_owner)
+{
+	int err = 0;
+
+	if (!cscfg_dyn_load_enabled) {
+		pr_warn("cscfg: skipping unload completion\n");
+		return -EINVAL;
+	}
+
+	err = cscfg_unload_config_sets(unload_owner);
+	if (!err)
+		cscfg_free_dyn_load_owner_info(unload_owner);
+	else
+		pr_err("cscfg: dynamic configuration unload error\n");
+
+	return err;
+}
+
+/* complete the unload operation as work item  */
+static void cscfg_complete_unload(struct work_struct *work)
+{
+	mutex_lock(&cfs_mutex);
+
+	if (cscfg_sched_dyn_unload_owner)
+		cscfg_do_unload(cscfg_sched_dyn_unload_owner);
+	cscfg_sched_dyn_unload_owner = NULL;
+
+	mutex_unlock(&cfs_mutex);
+	kfree(work);
+}
+
+static int cscfg_schedule_unload(void)
+{
+	struct work_struct *work;
+
+	work = kzalloc(sizeof(struct work_struct), GFP_KERNEL);
+	if (!work)
+		return -ENOMEM;
+
+	INIT_WORK(work, cscfg_complete_unload);
+	schedule_work(work);
+	return 0;
+}
+
+/* create a string representing a loaded config based on owner info */
+static ssize_t cscfg_get_owner_info_str(struct cscfg_load_owner_info *owner_info,
+					char *buffer, ssize_t size)
+{
+	struct cscfg_table_load_descs *load_descs;
+	ssize_t size_used = 0;
+	int i;
+	static const char * const load_type[] = {
+		"Built in driver",
+		"Loadable module",
+		"Runtime Dynamic table load",
+	};
+
+	/* limited info for none dynamic loaded stuff */
+	if (owner_info->type != CSCFG_OWNER_DYNLOAD) {
+		size_used = scnprintf(buffer, size,
+				      "load name: [Not Set]\nload type: %s\n",
+				      load_type[owner_info->type]);
+		goto buffer_done;
+	}
+
+	/*  dynamic loaded type will have all the info */
+	load_descs = (struct cscfg_table_load_descs *)owner_info->owner_handle;
+
+	/* first is the load name and type - need for unload request */
+	size_used = scnprintf(buffer, size, "load name: %s\nload type: %s\n",
+				      load_descs->load_name,
+				      load_type[owner_info->type]);
+
+	/* list of configurations loaded by this owner element */
+	size_used += scnprintf(buffer + size_used, size - size_used,
+			       "(configurations: ");
+	if (!(size_used < size))
+		goto buffer_done;
+
+	if (!load_descs->config_descs[0]) {
+		size_used += scnprintf(buffer + size_used, size - size_used,
+				       " None )\n");
+		if (!(size_used < size))
+			goto buffer_done;
+	} else {
+		i = 0;
+		while (load_descs->config_descs[i] && (size_used < size)) {
+			size_used += scnprintf(buffer + size_used,
+					       size - size_used, " %s",
+					       load_descs->config_descs[i]->name);
+			i++;
+		}
+		size_used +=
+			scnprintf(buffer + size_used, size - size_used, " )\n");
+	}
+	if (!(size_used < size))
+		goto buffer_done;
+
+	/* list of features loaded by this owner element */
+	size_used += scnprintf(buffer + size_used, size - size_used, "(features: ");
+	if (!(size_used < size))
+		goto buffer_done;
+
+	if (!load_descs->feat_descs[0]) {
+		size_used +=
+			scnprintf(buffer + size_used, size - size_used, " None )\n");
+		if (!(size_used < size))
+			goto buffer_done;
+	} else {
+		i = 0;
+		while (load_descs->feat_descs[i] && (size_used < size)) {
+			size_used += scnprintf(buffer + size_used,
+					       size - size_used, " %s",
+					       load_descs->feat_descs[i]->name);
+			i++;
+		}
+		size_used +=
+			scnprintf(buffer + size_used, size - size_used, " )\n");
+	}
+
+	/* done or buffer full */
+buffer_done:
+	return size_used;
+}
+
+void cscfg_enable_dyn_load(void)
+{
+	mutex_lock(&cfs_mutex);
+	cscfg_dyn_load_enabled = true;
+	mutex_unlock(&cfs_mutex);
+}
+
+/* disable dynamic load / unload if no current unload scheduled */
+bool cscfg_disable_dyn_load(void)
+{
+	mutex_lock(&cfs_mutex);
+	if (!cscfg_sched_dyn_unload_owner)
+		cscfg_dyn_load_enabled = false;
+	mutex_unlock(&cfs_mutex);
+	return !cscfg_dyn_load_enabled;
+}
+
+void cscfg_at_exit_dyn_load(void)
+{
+	mutex_lock(&cfs_mutex);
+	cscfg_dyn_load_enabled = false;
+	cscfg_sched_dyn_unload_owner = NULL;
+	mutex_unlock(&cfs_mutex);
+}
+
+
+struct cscfg_load_owner_info *cscfg_create_dyn_load_owner_info(void)
+{
+	struct cscfg_table_load_descs *load_descs = 0;
+	struct cscfg_load_owner_info *owner_info = 0;
+
+	load_descs = kzalloc(sizeof(struct cscfg_table_load_descs), GFP_KERNEL);
+	if (!load_descs)
+		return owner_info;
+
+	owner_info = kzalloc(sizeof(struct cscfg_load_owner_info), GFP_KERNEL);
+	if (owner_info) {
+		owner_info->owner_handle = load_descs;
+		owner_info->type = CSCFG_OWNER_DYNLOAD;
+	} else
+		kfree(load_descs);
+
+	return owner_info;
+}
+
+/* free memory associated with a dynamically loaded configuration & descriptors */
+void cscfg_free_dyn_load_owner_info(struct cscfg_load_owner_info *owner_info)
+{
+	struct cscfg_table_load_descs *load_descs = 0;
+
+	if (!owner_info)
+		return;
+
+	if (owner_info->type != CSCFG_OWNER_DYNLOAD)
+		return;
+
+	load_descs = (struct cscfg_table_load_descs *)(owner_info->owner_handle);
+
+	if (load_descs) {
+		/* free the data allocated on table load, pointed to by load_descs */
+		cscfg_table_free_load_descs(load_descs);
+		kfree(load_descs);
+	}
+
+	kfree(owner_info);
+}
+
+/* return load name if dynamic load owned element */
+const char *cscfg_get_dyn_load_name(struct cscfg_load_owner_info *owner_info)
+{
+	const char *name = "unknown";
+	struct cscfg_table_load_descs *load_descs;
+
+	if (!owner_info)
+		return name;
+
+	load_descs = (struct cscfg_table_load_descs *)(owner_info->owner_handle);
+	if (owner_info->type == CSCFG_OWNER_DYNLOAD)
+		return load_descs->load_name;
+
+	return name;
+}
+
+/*
+ * Dynamic load and unload configuration table API
+ */
+
+/* dynamically load a configuration and features from a config table
+ */
+int cscfg_dyn_load_cfg_table(const void *table, size_t table_size)
+{
+	struct cscfg_table_load_descs *load_descs = 0;
+	struct cscfg_load_owner_info *owner_info = 0;
+	int err = -EINVAL;
+
+	/* ensure we cannot simultaneously load and unload */
+	if (!mutex_trylock(&cfs_mutex)) {
+		err = -EBUSY;
+		goto exit_unlock;
+	}
+
+	/* check configfs load / unload ops are permitted */
+	if (!cscfg_load_ops_permitted()) {
+		err = -EBUSY;
+		goto exit_unlock;
+	}
+
+	if (table_size > CSCFG_TABLE_MAXSIZE) {
+		pr_err("cscfg: Load error - Input file too large.\n");
+		goto exit_unlock;
+	}
+
+	/* create owner info as dyn load type with descriptor tables to be filled */
+	owner_info = cscfg_create_dyn_load_owner_info();
+	if (owner_info)
+		load_descs = (struct cscfg_table_load_descs *)(owner_info->owner_handle);
+	else {
+		err = -ENOMEM;
+		goto exit_unlock;
+	}
+
+	/* convert table into internal data structures */
+	err = cscfg_table_read_buffer(table, table_size, load_descs);
+	if (err) {
+		pr_err("cscfg: Load error - Failed to read input buffer.\n");
+		goto exit_memfree;
+	}
+
+	err = cscfg_load_config_sets(load_descs->config_descs, load_descs->feat_descs, owner_info);
+	if (err) {
+		pr_err("cscfg: Load error - Failed to load configuaration table.\n");
+		goto exit_memfree;
+	}
+
+	/* load success */
+	goto exit_unlock;
+
+exit_memfree:
+	/* frees up owner_info and load_descs */
+	cscfg_free_dyn_load_owner_info(owner_info);
+
+exit_unlock:
+	mutex_unlock(&cfs_mutex);
+	return err;
+}
+EXPORT_SYMBOL_GPL(cscfg_dyn_load_cfg_table);
+
+/*
+ * schedule the unload of the last dynamically loaded table.
+ * load / unload ordering is strictly enforced.
+ */
+int cscfg_sched_dyn_unload_cfg_table(void)
+{
+	struct cscfg_load_owner_info *owner_info = 0;
+	int err = -EINVAL;
+
+	/* ensure we cannot simultaneously load and unload */
+	if (!mutex_trylock(&cfs_mutex)) {
+		err = -EBUSY;
+		goto exit_unlock;
+	}
+
+	/* check dyn load / unload ops are permitted & no ongoing unload */
+	if (!cscfg_load_ops_permitted()) {
+		err = -EBUSY;
+		goto exit_unlock;
+	}
+
+	/* find the last loaded owner info block */
+	owner_info = cscfg_find_last_loaded_cfg_owner();
+	if (!owner_info) {
+		pr_err("cscfg: Unload error: Failed to find any loaded configuration\n");
+		goto exit_unlock;
+	}
+
+	if (owner_info->type != CSCFG_OWNER_DYNLOAD) {
+		pr_err("cscfg: Unload error: Last loaded configuration not dynamic loaded item\n");
+		goto exit_unlock;
+	}
+
+	/* set cscfg state as starting an unload operation */
+	err = cscfg_set_unload_start();
+	if (err) {
+		pr_err("Config unload %s: failed to set unload start flag\n",
+		       cscfg_get_dyn_load_name(owner_info));
+		goto exit_unlock;
+	}
+
+	/*
+	 * actual unload is scheduled as a work item to avoid
+	 * lockdep issues when triggered from configfs
+	 */
+	cscfg_sched_dyn_unload_owner = owner_info;
+	err = cscfg_schedule_unload();
+
+exit_unlock:
+	mutex_unlock(&cfs_mutex);
+	return err;
+}
+EXPORT_SYMBOL_GPL(cscfg_sched_dyn_unload_cfg_table);
+
+/*
+ * configfs object and directory operations
+ */
 
 /* create a default ci_type. */
 static inline struct config_item_type *cscfg_create_ci_type(void)
@@ -516,6 +875,12 @@ int cscfg_configfs_init(struct cscfg_manager *cscfg_mgr)
 	ci_type = cscfg_create_ci_type();
 	if (!ci_type)
 		return -ENOMEM;
+
+	/* dyncamic load and unload initially disabled */
+	cscfg_dyn_load_enabled = false;
+
+	/* no current scheduled unload operation in progress */
+	cscfg_sched_dyn_unload_owner = NULL;
 
 	subsys = &cscfg_mgr->cfgfs_subsys;
 	config_item_set_name(&subsys->su_group.cg_item, CSCFG_FS_SUBSYS_NAME);

@@ -20,7 +20,8 @@
 enum cscfg_load_ops {
 	CSCFG_NONE,
 	CSCFG_LOAD,
-	CSCFG_UNLOAD
+	CSCFG_UNLOAD,
+	CSCFG_UNLOAD_START, /* unload started by fs, will be completed later */
 };
 
 /**
@@ -79,6 +80,7 @@ struct cscfg_registered_csdev {
 enum cscfg_load_owner_type {
 	CSCFG_OWNER_PRELOAD,
 	CSCFG_OWNER_MODULE,
+	CSCFG_OWNER_DYNLOAD,	/* dynamic loading at runtime */
 };
 
 /**
@@ -108,6 +110,17 @@ int cscfg_update_feat_param_val(struct cscfg_feature_desc *feat_desc,
 int cscfg_config_sysfs_activate(struct cscfg_config_desc *cfg_desc, bool activate);
 void cscfg_config_sysfs_set_preset(int preset);
 
+struct cscfg_load_owner_info *cscfg_find_last_loaded_cfg_owner(void);
+int cscfg_set_unload_start(void);
+
+void cscfg_enable_dyn_load(void);
+bool cscfg_disable_dyn_load(void);
+void cscfg_at_exit_dyn_load(void);
+
+struct cscfg_load_owner_info *cscfg_create_dyn_load_owner_info(void);
+void cscfg_free_dyn_load_owner_info(struct cscfg_load_owner_info *owner_info);
+const char *cscfg_get_dyn_load_name(struct cscfg_load_owner_info *owner_info);
+
 /* syscfg manager external API */
 int cscfg_load_config_sets(struct cscfg_config_desc **cfg_descs,
 			   struct cscfg_feature_desc **feat_descs,
@@ -123,5 +136,9 @@ int cscfg_csdev_enable_active_config(struct coresight_device *csdev,
 				     unsigned long cfg_hash, int preset);
 void cscfg_csdev_disable_active_config(struct coresight_device *csdev);
 void cscfg_config_sysfs_get_active_cfg(unsigned long *cfg_hash, int *preset);
+
+/* Dynamic load and unload configuration table API */
+int cscfg_dyn_load_cfg_table(const void *table, size_t table_size);
+int cscfg_sched_dyn_unload_cfg_table(void);
 
 #endif /* CORESIGHT_SYSCFG_H */
