@@ -49,6 +49,12 @@ properties:
           Properties for single LDO5 regulator.
 
         properties:
+          nxp,sd-vsel-fixed-low:
+            type: boolean
+            description:
+              Let the driver know that SD_VSEL is hardwired to low level and
+              there is no GPIO to get the actual value from.
+
           sd-vsel-gpios:
             description:
               GPIO that can be used to read the current status of the SD_VSEL
