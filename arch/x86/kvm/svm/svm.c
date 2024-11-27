@@ -81,7 +81,7 @@ static DEFINE_PER_CPU(u64, current_tsc_ratio);
 
 #define X2APIC_MSR(x)	(APIC_BASE_MSR + (x >> 4))
 
-static const u32 direct_access_msrs[MAX_DIRECT_ACCESS_MSRS] = {
+static const u32 direct_access_msrs[] = {
 	MSR_STAR,
 	MSR_IA32_SYSENTER_CS,
 	MSR_IA32_SYSENTER_EIP,
@@ -139,7 +139,6 @@ static const u32 direct_access_msrs[MAX_DIRECT_ACCESS_MSRS] = {
 	X2APIC_MSR(APIC_TMICT),
 	X2APIC_MSR(APIC_TMCCT),
 	X2APIC_MSR(APIC_TDCR),
-	MSR_INVALID,
 };
 
 /*
@@ -760,7 +759,7 @@ static int direct_access_msr_slot(u32 msr)
 {
 	u32 i;
 
-	for (i = 0; direct_access_msrs[i] != MSR_INVALID; i++) {
+	for (i = 0; i < ARRAY_SIZE(direct_access_msrs); i++) {
 		if (direct_access_msrs[i] == msr)
 			return i;
 	}
@@ -934,7 +933,7 @@ void svm_set_x2apic_msr_interception(struct vcpu_svm *svm, bool intercept)
 	if (!x2avic_enabled)
 		return;
 
-	for (i = 0; i < MAX_DIRECT_ACCESS_MSRS; i++) {
+	for (i = 0; i < ARRAY_SIZE(direct_access_msrs); i++) {
 		int index = direct_access_msrs[i];
 
 		if ((index < APIC_BASE_MSR) ||
@@ -965,7 +964,7 @@ static void svm_msr_filter_changed(struct kvm_vcpu *vcpu)
 	 * refreshed since KVM is going to intercept them regardless of what
 	 * userspace wants.
 	 */
-	for (i = 0; direct_access_msrs[i] != MSR_INVALID; i++) {
+	for (i = 0; i < ARRAY_SIZE(direct_access_msrs); i++) {
 		u32 msr = direct_access_msrs[i];
 
 		if (!test_bit(i, svm->shadow_msr_intercept.read))
@@ -1009,7 +1008,7 @@ static void init_msrpm_offsets(void)
 
 	memset(msrpm_offsets, 0xff, sizeof(msrpm_offsets));
 
-	for (i = 0; direct_access_msrs[i] != MSR_INVALID; i++) {
+	for (i = 0; i < ARRAY_SIZE(direct_access_msrs); i++) {
 		u32 offset;
 
 		offset = svm_msrpm_offset(direct_access_msrs[i]);
