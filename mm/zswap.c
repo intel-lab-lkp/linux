@@ -1409,9 +1409,56 @@ resched:
 * main API
 **********************************/
 
+static bool zswap_compress_pages(struct page *pages[],
+				 struct zswap_entry *entries[],
+				 u8 nr_pages,
+				 struct zswap_pool *pool)
+{
+	u8 i;
+
+	for (i = 0; i < nr_pages; ++i) {
+		if (!zswap_compress(pages[i], entries[i], pool))
+			return false;
+	}
+
+	return true;
+}
+
+/*
+ * Allocate @nr zswap entries for storing @nr pages in a folio.
+ * If any one of the entry allocation fails, delete all entries allocated
+ * thus far, and return false.
+ * If @nr entries are successfully allocated, set each entry's "handle"
+ * to "ERR_PTR(-EINVAL)" to denote that the handle has not yet been allocated.
+ */
+static bool zswap_alloc_entries(struct zswap_entry *entries[], int node_id, u8 nr)
+{
+	u8 i;
+
+	for (i = 0; i < nr; ++i) {
+		entries[i] = zswap_entry_cache_alloc(GFP_KERNEL, node_id);
+		if (!entries[i]) {
+			u8 j;
+
+			zswap_reject_kmemcache_fail++;
+			for (j = 0; j < i; ++j)
+				zswap_entry_cache_free(entries[j]);
+			return false;
+		}
+
+		entries[i]->handle = (unsigned long)ERR_PTR(-EINVAL);
+	}
+
+	return true;
+}
+
 /*
  * Store multiple pages in @folio, starting from the page at index @si up to
  * and including the page at index @ei.
+ * The error handling from all failure points is handled by the
+ * "store_pages_failed" label, based on the initial ERR_PTR(-EINVAL) value for
+ * the zswap_entry's handle set by zswap_alloc_entries(), and the fact that the
+ * entry's handle is subsequently modified only upon a successful zpool_malloc().
  */
 static ssize_t zswap_store_pages(struct folio *folio,
 				 long si,
@@ -1419,26 +1466,25 @@ static ssize_t zswap_store_pages(struct folio *folio,
 				 struct obj_cgroup *objcg,
 				 struct zswap_pool *pool)
 {
-	struct page *page;
-	swp_entry_t page_swpentry;
-	struct zswap_entry *entry, *old;
+	struct zswap_entry *entries[SWAP_CRYPTO_BATCH_SIZE], *old;
+	struct page *pages[SWAP_CRYPTO_BATCH_SIZE];
 	size_t compressed_bytes = 0;
 	u8 nr_pages = ei - si + 1;
 	u8 i;
 
+	/* allocate entries */
+	if (!zswap_alloc_entries(entries, folio_nid(folio), nr_pages))
+		return -EINVAL;
+
+	for (i = 0; i < nr_pages; ++i)
+		pages[i] = folio_page(folio, si + i);
+
+	if (!zswap_compress_pages(pages, entries, nr_pages, pool))
+		goto store_pages_failed;
+
 	for (i = 0; i < nr_pages; ++i) {
-		page = folio_page(folio, si + i);
-		page_swpentry = page_swap_entry(page);
-
-		/* allocate entry */
-		entry = zswap_entry_cache_alloc(GFP_KERNEL, page_to_nid(page));
-		if (!entry) {
-			zswap_reject_kmemcache_fail++;
-			return -EINVAL;
-		}
-
-		if (!zswap_compress(page, entry, pool))
-			goto compress_failed;
+		swp_entry_t page_swpentry = page_swap_entry(pages[i]);
+		struct zswap_entry *entry = entries[i];
 
 		old = xa_store(swap_zswap_tree(page_swpentry),
 			       swp_offset(page_swpentry),
@@ -1448,7 +1494,7 @@ static ssize_t zswap_store_pages(struct folio *folio,
 
 			WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
 			zswap_reject_alloc_fail++;
-			goto store_failed;
+			goto store_pages_failed;
 		}
 
 		/*
@@ -1489,16 +1535,19 @@ static ssize_t zswap_store_pages(struct folio *folio,
 		}
 
 		compressed_bytes += entry->length;
-		continue;
-
-store_failed:
-		zpool_free(pool->zpool, entry->handle);
-compress_failed:
-		zswap_entry_cache_free(entry);
-		return -EINVAL;
 	}
 
 	return compressed_bytes;
+
+store_pages_failed:
+	for (i = 0; i < nr_pages; ++i) {
+		if (!IS_ERR_VALUE(entries[i]->handle))
+			zpool_free(pool->zpool, entries[i]->handle);
+
+		zswap_entry_cache_free(entries[i]);
+	}
+
+	return -EINVAL;
 }
 
 bool zswap_store(struct folio *folio)
