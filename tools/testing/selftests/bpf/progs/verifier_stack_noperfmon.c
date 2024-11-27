@@ -19,3 +19,18 @@ __naked void stack_noperfmon_rejecte_invalid_read(void)
 	exit;						\
 "	::: __clobber_all);
 }
+
+SEC("socket")
+__description("stack_noperfmon: narrow spill onto 64-bit scalar spilled slots")
+__success
+__naked void stack_noperfmon_spill_32bit_onto_64bit_slot(void)
+{
+	asm volatile("					\
+	*(u64*)(r10 - 8) = 1;				\
+	*(u32*)(r10 - 8) = 1;				\
+	r0 = 0;						\
+	exit;						\
+"	:
+	:
+	: __clobber_all);
+}
