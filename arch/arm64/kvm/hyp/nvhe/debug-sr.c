@@ -67,6 +67,7 @@ static void __trace_do_switch(u64 *saved_trfcr, u64 new_trfcr)
 static bool __trace_needs_switch(void)
 {
 	return host_data_test_flag(TRBE_ENABLED) ||
+	       host_data_test_flag(GUEST_FILTER) ||
 	       (is_protected_kvm_enabled() && host_data_test_flag(HAS_TRF));
 }
 

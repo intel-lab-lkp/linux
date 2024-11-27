@@ -613,6 +613,7 @@ struct kvm_host_data {
 #define KVM_HOST_DATA_FLAG_HAS_SPE	0
 #define KVM_HOST_DATA_FLAG_HAS_TRF	1
 #define KVM_HOST_DATA_FLAG_TRBE_ENABLED	2
+#define KVM_HOST_DATA_FLAG_GUEST_FILTER	3
 	unsigned long flags;
 
 	struct kvm_cpu_context host_ctxt;
@@ -1387,6 +1388,8 @@ void kvm_clr_pmu_events(u64 clr);
 bool kvm_set_pmuserenr(u64 val);
 void kvm_enable_trbe(void);
 void kvm_disable_trbe(void);
+void kvm_set_trfcr(u64 guest_trfcr);
+void kvm_clear_trfcr(void);
 #else
 static inline void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr) {}
 static inline void kvm_clr_pmu_events(u64 clr) {}
@@ -1396,6 +1399,8 @@ static inline bool kvm_set_pmuserenr(u64 val)
 }
 static inline void kvm_enable_trbe(void) {}
 static inline void kvm_disable_trbe(void) {}
+static inline void kvm_set_trfcr(u64 guest_trfcr) {}
+static inline void kvm_clear_trfcr(void) {}
 #endif
 
 void kvm_vcpu_load_vhe(struct kvm_vcpu *vcpu);

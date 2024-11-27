@@ -337,3 +337,31 @@ void kvm_disable_trbe(void)
 	host_data_clear_flag(TRBE_ENABLED);
 }
 EXPORT_SYMBOL_GPL(kvm_disable_trbe);
+
+void kvm_set_trfcr(u64 guest_trfcr)
+{
+	if (is_protected_kvm_enabled() || WARN_ON_ONCE(preemptible()))
+		return;
+
+	if (has_vhe())
+		write_sysreg_s(guest_trfcr, SYS_TRFCR_EL12);
+	else {
+		*host_data_ptr(guest_trfcr_el1) = guest_trfcr;
+		host_data_set_flag(GUEST_FILTER);
+	}
+}
+EXPORT_SYMBOL_GPL(kvm_set_trfcr);
+
+void kvm_clear_trfcr(void)
+{
+	if (is_protected_kvm_enabled() || WARN_ON_ONCE(preemptible()))
+		return;
+
+	if (has_vhe())
+		write_sysreg_s(0, SYS_TRFCR_EL12);
+	else {
+		*host_data_ptr(guest_trfcr_el1) = 0;
+		host_data_clear_flag(GUEST_FILTER);
+	}
+}
+EXPORT_SYMBOL_GPL(kvm_clear_trfcr);
