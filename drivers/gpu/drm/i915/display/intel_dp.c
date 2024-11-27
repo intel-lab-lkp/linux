@@ -106,6 +106,10 @@
 /* DP DSC FEC Overhead factor in ppm = 1/(0.972261) = 1.028530 */
 #define DP_DSC_FEC_OVERHEAD_FACTOR		1028530
 
+/* DP Audio bw params calculations. Bspec: 67768 */
+#define DP_AUDIO_BW_HBLANK_OVERHEAD_AVAIL	64
+#define DP_AUDIO_BW_HBLANK_OVERHEAD_REQ		80
+
 /* Constants for DP DSC configurations */
 static const u8 valid_dsc_bpp[] = {6, 8, 10, 12, 15};
 
@@ -2999,13 +3003,72 @@ intel_dp_compute_output_format(struct intel_encoder *encoder,
 	return ret;
 }
 
+static void
+intel_dp_compute_audio_bwparams(struct intel_crtc_state *crtc_state,
+				int *line_freq_khz,
+				int *hblank_slots_lanes_bytes)
+{
+	/* Calculation steps based on Bspec: 67768 */
+	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int link_rate_mhz = DIV_ROUND_UP(crtc_state->port_clock, 1000);
+	int pixel_clk_mhz = DIV_ROUND_UP(adjusted_mode->crtc_clock, 1000);
+	int htotal = adjusted_mode->crtc_htotal;
+	int hblank_pixels =
+		adjusted_mode->crtc_hblank_end - adjusted_mode->crtc_hblank_start;
+	int mtp_clks_per_slot = DIV_ROUND_UP(4, crtc_state->lane_count);
+	int mtp_size_clks = 64 * mtp_clks_per_slot;
+	int link_clk_mhz = DIV_ROUND_UP(link_rate_mhz, 32);
+	int mtp_size_ns = DIV_ROUND_UP(mtp_size_clks * 1000, link_clk_mhz);
+	int hblank_size_ns = DIV_ROUND_UP(hblank_pixels * 1000, pixel_clk_mhz);
+	int mtps_in_hblank = DIV_ROUND_UP(hblank_size_ns, mtp_size_ns);
+	u32 temp = div_u64(mul_u32_u32(mtp_size_clks, crtc_state->dp_m_n.data_m),
+				crtc_state->dp_m_n.data_n);
+	int hblank_slots = mtps_in_hblank * temp;
+
+	*line_freq_khz = DIV_ROUND_UP(pixel_clk_mhz, htotal) * 1000;
+	*hblank_slots_lanes_bytes = hblank_slots * crtc_state->lane_count * 4;
+}
+
+static bool
+intel_dp_audio_compute_bw_limits(struct intel_encoder *encoder,
+				 struct intel_crtc_state *crtc_state,
+				 struct drm_connector_state *conn_state)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_connector *connector = to_intel_connector(conn_state->connector);
+	int hblank_bytes_avail_overhead = DP_AUDIO_BW_HBLANK_OVERHEAD_AVAIL;
+	int hblank_bytes_req_overhead = DP_AUDIO_BW_HBLANK_OVERHEAD_REQ;
+	int hblank_slots_lanes_bytes;
+	int line_freq_khz;
+
+	intel_dp_compute_audio_bwparams(crtc_state, &line_freq_khz,
+					&hblank_slots_lanes_bytes);
+	drm_dbg_kms(display->drm,
+		    "[CONNECTOR:%d:%s][ENCODER:%d:%s] Bw limits params: line_freq: %d khz hblank_slots: %d bytes\n",
+		    connector->base.base.id, connector->base.name,
+		    encoder->base.base.id, encoder->base.name,
+		    line_freq_khz, hblank_slots_lanes_bytes);
+
+	return intel_audio_compute_eld_config(encoder, conn_state,
+					      line_freq_khz,
+					      hblank_slots_lanes_bytes,
+					      hblank_bytes_avail_overhead,
+					      hblank_bytes_req_overhead);
+}
+
 void
 intel_dp_audio_compute_config(struct intel_encoder *encoder,
 			      struct intel_crtc_state *pipe_config,
 			      struct drm_connector_state *conn_state)
 {
-	pipe_config->has_audio =
-		intel_dp_has_audio(encoder, conn_state) &&
+	pipe_config->has_audio = intel_dp_has_audio(encoder, conn_state);
+
+	if (intel_dp_is_uhbr(pipe_config))
+		pipe_config->has_audio = pipe_config->has_audio &&
+			intel_dp_audio_compute_bw_limits(encoder, pipe_config,
+							 conn_state);
+
+	pipe_config->has_audio = pipe_config->has_audio &&
 		intel_audio_compute_config(encoder, pipe_config, conn_state);
 
 	pipe_config->sdp_split_enable = pipe_config->has_audio &&
