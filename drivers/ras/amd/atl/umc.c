@@ -293,7 +293,8 @@ static unsigned long convert_dram_to_norm_addr_mi300(unsigned long addr)
 	}
 
 	/* PC bit */
-	addr |= pc << bit_shifts.pc;
+	temp = pc;
+	addr |= temp << bit_shifts.pc;
 
 	/* SID bits */
 	for (i = 0; i < NUM_SID_BITS; i++) {
