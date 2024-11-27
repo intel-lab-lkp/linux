@@ -8748,6 +8748,8 @@ static void set_next_buddy(struct sched_entity *se)
 			return;
 		if (se_is_idle(se))
 			return;
+		if (se->sched_delayed)
+			return;
 		cfs_rq_of(se)->next = se;
 	}
 }
