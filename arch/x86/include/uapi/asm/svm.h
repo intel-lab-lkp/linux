@@ -115,6 +115,11 @@
 #define SVM_VMGEXIT_AP_CREATE_ON_INIT		0
 #define SVM_VMGEXIT_AP_CREATE			1
 #define SVM_VMGEXIT_AP_DESTROY			2
+#define SVM_VMGEXIT_HVDB_PAGE                   0x80000014
+#define SVM_VMGEXIT_HVDB_GET_PREFERRED          0
+#define SVM_VMGEXIT_HVDB_SET                    1
+#define SVM_VMGEXIT_HVDB_QUERY                  2
+#define SVM_VMGEXIT_HVDB_CLEAR                  3
 #define SVM_VMGEXIT_SNP_RUN_VMPL		0x80000018
 #define SVM_VMGEXIT_HV_FEATURES			0x8000fffd
 #define SVM_VMGEXIT_TERM_REQUEST		0x8000fffe
