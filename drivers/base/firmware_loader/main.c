@@ -1527,7 +1527,7 @@ static void __device_uncache_fw_images(void)
  * device_cache_fw_images() - cache devices' firmware
  *
  * If one device called request_firmware or its nowait version
- * successfully before, the firmware names are recored into the
+ * successfully before, the firmware names are recorded into the
  * device's devres link list, so device_cache_fw_images can call
  * cache_firmware() to cache these firmwares for the device,
  * then the device driver can load its firmwares easily at

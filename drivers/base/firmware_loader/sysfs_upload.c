@@ -209,7 +209,7 @@ putdev_exit:
 	/*
 	 * Note: fwlp->remaining_size is left unmodified here to provide
 	 * additional information on errors. It will be reinitialized when
-	 * the next firmeware upload begins.
+	 * the next firmware upload begins.
 	 */
 	mutex_lock(&fw_lock);
 	fw_free_paged_buf(fw_sysfs->fw_priv);
