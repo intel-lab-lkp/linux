@@ -799,84 +799,20 @@ static void svm_get_msr_bitmap_entries(struct kvm_vcpu *vcpu, u32 msr,
 	*write_map = &svm->msrpm[offset];
 }
 
-#define BUILD_SVM_MSR_BITMAP_HELPER(fn, bitop, access)			     \
-static inline void fn(struct kvm_vcpu *vcpu, u32 msr)			     \
-{									     \
-	unsigned long *read_map, *write_map;				     \
-	u8 read_bit, write_bit;						     \
-									     \
-	svm_get_msr_bitmap_entries(vcpu, msr, &read_map, &read_bit,	     \
-				   &write_map, &write_bit);		     \
-	bitop(access##_bit, access##_map);				     \
-}
-
-BUILD_SVM_MSR_BITMAP_HELPER(svm_set_msr_bitmap_read, __set_bit, read)
-BUILD_SVM_MSR_BITMAP_HELPER(svm_set_msr_bitmap_write, __set_bit, write)
-BUILD_SVM_MSR_BITMAP_HELPER(svm_clear_msr_bitmap_read, __clear_bit, read)
-BUILD_SVM_MSR_BITMAP_HELPER(svm_clear_msr_bitmap_write, __clear_bit, write)
-
 void svm_disable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type)
 {
-	struct vcpu_svm *svm = to_svm(vcpu);
-	int slot;
-
-	slot = kvm_passthrough_msr_slot(msr);
-	WARN_ON(slot == -ENOENT);
-	if (slot >= 0) {
-		/* Set the shadow bitmaps to the desired intercept states */
-		if (type & MSR_TYPE_R)
-			__clear_bit(slot, vcpu->arch.shadow_msr_intercept.read);
-		if (type & MSR_TYPE_W)
-			__clear_bit(slot, vcpu->arch.shadow_msr_intercept.write);
-	}
-
-	/*
-	 * Don't disabled interception for the MSR if userspace wants to
-	 * handle it.
-	 */
-	if ((type & MSR_TYPE_R) && !kvm_msr_allowed(vcpu, msr, KVM_MSR_FILTER_READ)) {
-		svm_set_msr_bitmap_read(vcpu, msr);
-		type &= ~MSR_TYPE_R;
-	}
-
-	if ((type & MSR_TYPE_W) && !kvm_msr_allowed(vcpu, msr, KVM_MSR_FILTER_WRITE)) {
-		svm_set_msr_bitmap_write(vcpu, msr);
-		type &= ~MSR_TYPE_W;
-	}
-
-	if (type & MSR_TYPE_R)
-		svm_clear_msr_bitmap_read(vcpu, msr);
-
-	if (type & MSR_TYPE_W)
-		svm_clear_msr_bitmap_write(vcpu, msr);
+	kvm_disable_intercept_for_msr(vcpu, msr, type);
 
 	svm_hv_vmcb_dirty_nested_enlightenments(vcpu);
-	svm->nested.force_msr_bitmap_recalc = true;
+	to_svm(vcpu)->nested.force_msr_bitmap_recalc = true;
 }
 
 void svm_enable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type)
 {
-	struct vcpu_svm *svm = to_svm(vcpu);
-	int slot;
-
-	slot = kvm_passthrough_msr_slot(msr);
-	WARN_ON(slot == -ENOENT);
-	if (slot >= 0) {
-		/* Set the shadow bitmaps to the desired intercept states */
-		if (type & MSR_TYPE_R)
-			__set_bit(slot, vcpu->arch.shadow_msr_intercept.read);
-		if (type & MSR_TYPE_W)
-			__set_bit(slot, vcpu->arch.shadow_msr_intercept.write);
-	}
-
-	if (type & MSR_TYPE_R)
-		svm_set_msr_bitmap_read(vcpu, msr);
-
-	if (type & MSR_TYPE_W)
-		svm_set_msr_bitmap_write(vcpu, msr);
+	kvm_enable_intercept_for_msr(vcpu, msr, type);
 
 	svm_hv_vmcb_dirty_nested_enlightenments(vcpu);
-	svm->nested.force_msr_bitmap_recalc = true;
+	to_svm(vcpu)->nested.force_msr_bitmap_recalc = true;
 }
 
 unsigned long *svm_vcpu_alloc_msrpm(void)
@@ -5127,6 +5063,7 @@ static struct kvm_x86_ops svm_x86_ops __initdata = {
 
 	.possible_passthrough_msrs = direct_access_msrs,
 	.nr_possible_passthrough_msrs = ARRAY_SIZE(direct_access_msrs),
+	.get_msr_bitmap_entries = svm_get_msr_bitmap_entries,
 	.disable_intercept_for_msr = svm_disable_intercept_for_msr,
 	.complete_emulated_msr = svm_complete_emulated_msr,
 

@@ -1832,6 +1832,9 @@ struct kvm_x86_ops {
 
 	const u32 * const possible_passthrough_msrs;
 	const u32 nr_possible_passthrough_msrs;
+	void (*get_msr_bitmap_entries)(struct kvm_vcpu *vcpu, u32 msr,
+				       unsigned long **read_map, u8 *read_bit,
+				       unsigned long **write_map, u8 *write_bit);
 	void (*disable_intercept_for_msr)(struct kvm_vcpu *vcpu, u32 msr, int type);
 	void (*msr_filter_changed)(struct kvm_vcpu *vcpu);
 	int (*complete_emulated_msr)(struct kvm_vcpu *vcpu, int err);

@@ -556,6 +556,8 @@ int kvm_handle_memory_failure(struct kvm_vcpu *vcpu, int r,
 int kvm_handle_invpcid(struct kvm_vcpu *vcpu, unsigned long type, gva_t gva);
 bool kvm_msr_allowed(struct kvm_vcpu *vcpu, u32 index, u32 type);
 int kvm_passthrough_msr_slot(u32 msr);
+void kvm_enable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type);
+void kvm_disable_intercept_for_msr(struct kvm_vcpu *vcpu, u32 msr, int type);
 
 enum kvm_msr_access {
 	MSR_TYPE_R	= BIT(0),
