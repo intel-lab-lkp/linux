@@ -58,11 +58,6 @@ module_alias_printf(struct module *mod, bool append_wildcard,
 	n = vsnprintf(NULL, 0, fmt, ap);
 	va_end(ap);
 
-	if (n < 0) {
-		error("vsnprintf failed\n");
-		return;
-	}
-
 	len = n + 1;	/* extra byte for '\0' */
 
 	if (append_wildcard)
