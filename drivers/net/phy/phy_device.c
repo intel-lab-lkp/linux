@@ -3523,7 +3523,7 @@ static int phy_probe(struct device *dev)
 	struct phy_device *phydev = to_phy_device(dev);
 	struct device_driver *drv = phydev->mdio.dev.driver;
 	struct phy_driver *phydrv = to_phy_driver(drv);
-	int err = 0;
+	int err = 0, bmcr;
 
 	phydev->drv = phydrv;
 
@@ -3565,8 +3565,12 @@ static int phy_probe(struct device *dev)
 	if (err)
 		goto out;
 
+	err = bmcr = phy_read(phydev, MII_BMCR);
+	if (err < 0)
+		goto out;
+
 	if (!linkmode_test_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
-			       phydev->supported))
+			       phydev->supported) || !(bmcr & BMCR_ANENABLE))
 		phydev->autoneg = 0;
 
 	if (linkmode_test_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
