@@ -692,6 +692,11 @@ static const struct netdev_event_work_cmd add_cmd_upper_ips = {
 	.filter = upper_device_filter
 };
 
+static const struct netdev_event_work_cmd add_default_gid_cmd = {
+	.cb	= add_default_gids,
+	.filter	= is_ndev_for_default_gid_filter,
+};
+
 static void
 ndev_event_unlink(struct netdev_notifier_changeupper_info *changeupper_info,
 		  struct netdev_event_work_cmd *cmds)
@@ -704,7 +709,8 @@ ndev_event_unlink(struct netdev_notifier_changeupper_info *changeupper_info,
 
 	cmds[0] = upper_ips_del_cmd;
 	cmds[0].ndev = changeupper_info->upper_dev;
-	cmds[1] = add_cmd;
+	cmds[1] = add_default_gid_cmd;
+	cmds[2] = add_cmd;
 }
 
 static const struct netdev_event_work_cmd bonding_default_add_cmd = {
@@ -750,11 +756,6 @@ static void netdevice_event_changeupper(struct net_device *event_ndev,
 	else
 		ndev_event_unlink(changeupper_info, cmds);
 }
-
-static const struct netdev_event_work_cmd add_default_gid_cmd = {
-	.cb	= add_default_gids,
-	.filter	= is_ndev_for_default_gid_filter,
-};
 
 static int netdevice_event(struct notifier_block *this, unsigned long event,
 			   void *ptr)
