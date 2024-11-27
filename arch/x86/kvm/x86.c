@@ -13360,7 +13360,7 @@ static bool kvm_can_deliver_async_pf(struct kvm_vcpu *vcpu)
 	if (!kvm_pv_async_pf_enabled(vcpu))
 		return false;
 
-	if (kvm_x86_call(get_cpl)(vcpu) == 0)
+	if (kvm_x86_call(get_cpl)(vcpu) != 3)
 		return false;
 
 	if (is_guest_mode(vcpu)) {
