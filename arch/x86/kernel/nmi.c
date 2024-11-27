@@ -171,8 +171,23 @@ int __register_nmi_handler(unsigned int type, struct nmiaction *action)
 	if (WARN_ON_ONCE(!action->handler || !list_empty(&action->list)))
 		return -EINVAL;
 
+	if (in_nmi()) {
+		/*
+		 * register_nmi_handler() can be called in NMI context from
+		 * nmi_shootdown_cpus(). In this case, we use trylock to
+		 * acquire the NMI descriptor lock to avoid potential lockdep
+		 * splat. If that fails, we still acquire the lock on the best
+		 * effort basis, but a real deadlock may happen if the CPU is
+		 * acquiring that lock when NMI happens.
+		 */
+		if (raw_spin_trylock_irqsave(&desc->lock, flags))
+			goto locked;
+		pr_err("%s: trylock of NMI desc lock failed in NMI context, may deadlock!\n",
+			__func__);
+	}
 	raw_spin_lock_irqsave(&desc->lock, flags);
 
+locked:
 	/*
 	 * Indicate if there are multiple registrations on the
 	 * internal NMI handler call chains (SERR and IO_CHECK).
