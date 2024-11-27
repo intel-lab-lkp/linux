@@ -277,9 +277,6 @@ static void ast_vhub_remove(struct platform_device *pdev)
 	       VHUB_CTRL_PHY_RESET_DIS,
 	       vhub->regs + AST_VHUB_CTRL);
 
-	if (vhub->clk)
-		clk_disable_unprepare(vhub->clk);
-
 	spin_unlock_irqrestore(&vhub->lock, flags);
 
 	if (vhub->ep0_bufs)
@@ -337,14 +334,10 @@ static int ast_vhub_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, vhub);
 
-	vhub->clk = devm_clk_get(&pdev->dev, NULL);
+	vhub->clk = devm_clk_get_enabled(&pdev->dev, NULL);
 	if (IS_ERR(vhub->clk)) {
 		rc = PTR_ERR(vhub->clk);
-		goto err;
-	}
-	rc = clk_prepare_enable(vhub->clk);
-	if (rc) {
-		dev_err(&pdev->dev, "Error couldn't enable clock (%d)\n", rc);
+		dev_err(&pdev->dev, "Error couldn't get and enable clock (%d)\n", rc);
 		goto err;
 	}
 
