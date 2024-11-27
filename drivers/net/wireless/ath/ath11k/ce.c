@@ -324,8 +324,10 @@ static int ath11k_ce_rx_post_pipe(struct ath11k_ce_pipe *pipe)
 	dma_addr_t paddr;
 	int ret = 0;
 
-	if (!(pipe->dest_ring || pipe->status_ring))
-		return 0;
+	if (!(pipe->dest_ring && pipe->status_ring)) {
+		ret = -EIO;
+		return ret;
+	}
 
 	spin_lock_bh(&ab->ce.ce_lock);
 	while (pipe->rx_buf_needed) {
