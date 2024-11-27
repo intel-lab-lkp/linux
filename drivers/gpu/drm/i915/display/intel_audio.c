@@ -690,21 +690,32 @@ void intel_audio_sdp_split_update(const struct intel_crtc_state *crtc_state)
 			     crtc_state->sdp_split_enable ? AUD_ENABLE_SDP_SPLIT : 0);
 }
 
-bool intel_audio_compute_config(struct intel_encoder *encoder,
-				struct intel_crtc_state *crtc_state,
-				struct drm_connector_state *conn_state)
+static bool intel_audio_eld_valid(struct intel_encoder *encoder,
+				  struct drm_connector_state *conn_state)
 {
-	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct intel_display *display = to_intel_display(encoder);
 	struct drm_connector *connector = conn_state->connector;
-	const struct drm_display_mode *adjusted_mode =
-		&crtc_state->hw.adjusted_mode;
 
 	if (!connector->eld[0]) {
-		drm_dbg_kms(&i915->drm,
+		drm_dbg_kms(display->drm,
 			    "Bogus ELD on [CONNECTOR:%d:%s]\n",
 			    connector->base.id, connector->name);
 		return false;
 	}
+
+	return true;
+}
+
+bool intel_audio_compute_config(struct intel_encoder *encoder,
+				struct intel_crtc_state *crtc_state,
+				struct drm_connector_state *conn_state)
+{
+	struct drm_connector *connector = conn_state->connector;
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+
+	if (!intel_audio_eld_valid(encoder, conn_state))
+		return false;
 
 	BUILD_BUG_ON(sizeof(crtc_state->eld) != sizeof(connector->eld));
 	memcpy(crtc_state->eld, connector->eld, sizeof(crtc_state->eld));
