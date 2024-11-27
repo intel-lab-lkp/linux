@@ -36,11 +36,8 @@ void machine_kexec_mask_interrupts(void) {
 		if (chip->irq_eoi && irqd_irq_inprogress(&desc->irq_data))
 			chip->irq_eoi(&desc->irq_data);
 
-		if (chip->irq_mask)
-			chip->irq_mask(&desc->irq_data);
-
-		if (chip->irq_disable && !irqd_irq_disabled(&desc->irq_data))
-			chip->irq_disable(&desc->irq_data);
+		irq_set_status_flags(i, IRQ_DISABLE_UNLAZY);
+		irq_disable(desc);
 	}
 }
 
