@@ -14,6 +14,7 @@
  *   - builtin:
  *     - cpu
  *     - pid
+ *     - tid
  */
 
 #include <regex.h>
