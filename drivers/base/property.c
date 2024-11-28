@@ -815,11 +815,26 @@ struct fwnode_handle *device_get_next_child_node(const struct device *dev,
 	}
 
 	/* Try to find a child in primary fwnode */
-	next = fwnode_get_next_child_node(fwnode, child);
-	if (next)
-		return next;
+	if (!child || fwnode_get_parent(child) == fwnode) {
+		next = fwnode_get_next_child_node(fwnode, child);
+		if (next)
+			return next;
+		/*
+		 * We ran out of children in primary - reset the child
+		 * node to start from the beginning when scanning secondary
+		 * node.
+		 */
+		child = NULL;
+	}
 
 	/* When no more children in primary, continue with secondary */
+
+	if (IS_ERR_OR_NULL(fwnode->secondary) ||
+	    (child && fwnode_get_parent(child) != fwnode->secondary)) {
+		fwnode_handle_put(child);
+		return NULL;
+	}
+
 	return fwnode_get_next_child_node(fwnode->secondary, child);
 }
 EXPORT_SYMBOL_GPL(device_get_next_child_node);
