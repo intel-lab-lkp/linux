@@ -700,6 +700,21 @@ static int qca_check_bdaddr(struct hci_dev *hdev, const struct qca_fw_config *co
 	return 0;
 }
 
+int qca_check_firmware_exists(const char *name, struct hci_dev *hdev)
+{
+	const struct firmware *fw;
+	int ret;
+
+	ret = firmware_request_nowarn(&fw, name, &hdev->dev);
+	if (ret) {
+		bt_dev_warn(hdev, "Firmware %s does not exist. Use default", name);
+		return 0;
+	}
+
+	release_firmware(fw);
+	return 1;
+}
+
 static void qca_generate_hsp_nvm_name(char *fwname, size_t max_size,
 		struct qca_btsoc_version ver, u8 rom_ver, u16 bid)
 {
@@ -728,6 +743,26 @@ static inline void qca_get_nvm_name_generic(struct qca_fw_config *cfg,
 	else
 		snprintf(cfg->fwname, sizeof(cfg->fwname),
 			 "qca/%snv%02x.b%02x", stem, rom_ver, bid);
+}
+
+static void qca_get_qca6698_nvm_name(struct hci_dev *hdev, char *fwname,
+		size_t max_size, struct qca_btsoc_version ver, u8 rom_ver, u16 bid)
+{
+	const char *variant;
+
+	/* hsp gf chip */
+	if ((le32_to_cpu(ver.soc_id) & QCA_HSP_GF_SOC_MASK) == QCA_HSP_GF_SOC_ID)
+		variant = "g";
+	else
+		variant = "";
+
+	if (bid != 0x0)
+		snprintf(fwname, max_size, "qca/QCA6698/hpnv%02x%s.b%04x", rom_ver,
+			 variant, bid);
+
+	/* if board id is 0 or the nvm file doesn't exisit, use the default */
+	if (bid == 0x0 || !qca_check_firmware_exists(fwname, hdev))
+		snprintf(fwname, max_size, "qca/QCA6698/hpnv%02x%s.bin", rom_ver, variant);
 }
 
 int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
@@ -796,6 +831,10 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		snprintf(config.fwname, sizeof(config.fwname),
 			 "qca/hmtbtfw%02x.tlv", rom_ver);
 		break;
+	case QCA_QCA6698:
+		snprintf(config.fwname, sizeof(config.fwname),
+			 "qca/QCA6698/hpbtfw%02x.tlv", rom_ver);
+		break;
 	default:
 		snprintf(config.fwname, sizeof(config.fwname),
 			 "qca/rampatch_%08x.bin", soc_ver);
@@ -810,7 +849,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	/* Give the controller some time to get ready to receive the NVM */
 	msleep(10);
 
-	if (soc_type == QCA_QCA2066 || soc_type == QCA_WCN7850)
+	if (soc_type == QCA_QCA2066 || soc_type == QCA_QCA6698)
 		qca_read_fw_board_id(hdev, &boardid);
 
 	/* Download NVM configuration */
@@ -854,6 +893,10 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		case QCA_WCN7850:
 			qca_get_nvm_name_generic(&config, "hmt", rom_ver, boardid);
 			break;
+		case QCA_QCA6698:
+			qca_get_qca6698_nvm_name(hdev, config.fwname,
+				sizeof(config.fwname), ver, rom_ver, boardid);
+			break;
 
 		default:
 			snprintf(config.fwname, sizeof(config.fwname),
@@ -874,6 +917,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	case QCA_WCN6750:
 	case QCA_WCN6855:
 	case QCA_WCN7850:
+	case QCA_QCA6698:
 		err = qca_disable_soc_logging(hdev);
 		if (err < 0)
 			return err;
@@ -909,6 +953,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	case QCA_WCN6750:
 	case QCA_WCN6855:
 	case QCA_WCN7850:
+	case QCA_QCA6698:
 		/* get fw build info */
 		err = qca_read_fw_build_info(hdev);
 		if (err < 0)
