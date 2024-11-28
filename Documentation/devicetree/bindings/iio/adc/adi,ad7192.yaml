@@ -59,6 +59,17 @@ properties:
   interrupts:
     maxItems: 1
 
+  sync-gpios:
+    description: |
+      Optional GPIO spec for the SYNC pin. The SYNC pin allows synchronization
+      of the digital filters and analog modulators when using multiple AD7192
+      devices. When SYNC is pulled low, it resets the digital filter nodes,
+      filter control logic, calibration control logic, and holds the analog
+      modulator in reset state. Only specify this property if you need to
+      actively control SYNC for multi-device synchronization, otherwise it
+      defaults to HIGH.
+    maxItems: 1
+
   aincom-supply:
     description: |
       AINCOM voltage supply. Analog inputs AINx are referenced to this input
@@ -182,6 +193,8 @@ unevaluatedProperties: false
 
 examples:
   - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
     spi {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -194,8 +207,9 @@ examples:
             spi-cpha;
             clocks = <&ad7192_mclk>;
             clock-names = "mclk";
-            interrupts = <25 0x2>;
+            interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
             interrupt-parent = <&gpio>;
+            sync-gpios = <&gpio0 26 GPIO_ACTIVE_HIGH>;
             aincom-supply = <&aincom>;
             dvdd-supply = <&dvdd>;
             avdd-supply = <&avdd>;
@@ -208,6 +222,7 @@ examples:
         };
     };
   - |
+    #include <dt-bindings/interrupt-controller/irq.h>
     spi {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -223,7 +238,7 @@ examples:
             spi-cpol;
             spi-cpha;
             #clock-cells = <0>;
-            interrupts = <25 0x2>;
+            interrupts = <25 IRQ_TYPE_EDGE_FALLING>;
             interrupt-parent = <&gpio>;
             aincom-supply = <&aincom>;
             dvdd-supply = <&dvdd>;
