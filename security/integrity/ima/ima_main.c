@@ -705,14 +705,19 @@ static void ima_post_create_tmpfile(struct mnt_idmap *idmap,
 	if (!must_appraise)
 		return;
 
+	ima_iint_lock(inode);
+
 	/* Nothing to do if we can't allocate memory */
 	iint = ima_inode_get(inode);
-	if (!iint)
+	if (!iint) {
+		ima_iint_unlock(inode);
 		return;
+	}
 
 	/* needed for writing the security xattrs */
 	set_bit(IMA_UPDATE_XATTR, &iint->atomic_flags);
 	iint->ima_file_status = INTEGRITY_PASS;
+	ima_iint_unlock(inode);
 }
 
 /**
@@ -737,13 +742,18 @@ static void ima_post_path_mknod(struct mnt_idmap *idmap, struct dentry *dentry)
 	if (!must_appraise)
 		return;
 
+	ima_iint_lock(inode);
+
 	/* Nothing to do if we can't allocate memory */
 	iint = ima_inode_get(inode);
-	if (!iint)
+	if (!iint) {
+		ima_iint_unlock(inode);
 		return;
+	}
 
 	/* needed for re-opening empty files */
 	iint->flags |= IMA_NEW_FILE;
+	ima_iint_unlock(inode);
 }
 
 /**

@@ -97,6 +97,8 @@ struct ima_iint_cache *ima_inode_get(struct inode *inode)
 	if (!iint_lock)
 		return NULL;
 
+	lockdep_assert_held(&iint_lock->mutex);
+
 	iint = iint_lock->iint;
 	if (iint)
 		return iint;
