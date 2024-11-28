@@ -769,6 +769,16 @@ do {									\
 })
 
 /*
+ * Runtime Features - For features that KVM dynamically sets/clears at runtime,
+ * e.g. when CR4 changes, but which are never advertised to userspace.
+ */
+#define RUNTIME_F(name)						\
+({								\
+	KVM_VALIDATE_CPU_CAP_USAGE(name);			\
+	0;							\
+})
+
+/*
  * Undefine the MSR bit macro to avoid token concatenation issues when
  * processing X86_FEATURE_SPEC_CTRL_SSBD.
  */
@@ -790,9 +800,11 @@ void kvm_set_cpu_caps(void)
 		VENDOR_F(DTES64) |
 		/*
 		 * NOTE: MONITOR (and MWAIT) are emulated as NOP, but *not*
-		 * advertised to guests via CPUID!
+		 * advertised to guests via CPUID!  MWAIT is also technically a
+		 * runtime flag thanks to IA32_MISC_ENABLES; mark it as such so
+		 * that KVM is aware that it's a known, unadvertised flag.
 		 */
-		0 /* MONITOR */ |
+		RUNTIME_F(MWAIT) |
 		VENDOR_F(VMX) |
 		0 /* DS-CPL, SMX, EST */ |
 		0 /* TM2 */ |
@@ -813,7 +825,7 @@ void kvm_set_cpu_caps(void)
 		EMULATED_F(TSC_DEADLINE_TIMER) |
 		F(AES) |
 		F(XSAVE) |
-		0 /* OSXSAVE */ |
+		RUNTIME_F(OSXSAVE) |
 		F(AVX) |
 		F(F16C) |
 		F(RDRAND) |
@@ -887,7 +899,7 @@ void kvm_set_cpu_caps(void)
 		F(AVX512VBMI) |
 		PASSTHROUGH_F(LA57) |
 		F(PKU) |
-		0 /*OSPKE*/ |
+		RUNTIME_F(OSPKE) |
 		F(RDPID) |
 		F(AVX512_VPOPCNTDQ) |
 		F(UMIP) |
@@ -1189,6 +1201,7 @@ EXPORT_SYMBOL_GPL(kvm_set_cpu_caps);
 #undef PASSTHROUGH_F
 #undef ALIASED_1_EDX_F
 #undef VENDOR_F
+#undef RUNTIME_F
 
 struct kvm_cpuid_array {
 	struct kvm_cpuid_entry2 *entries;
