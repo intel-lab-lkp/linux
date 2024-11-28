@@ -988,12 +988,24 @@ static void __touch_mnt_namespace(struct mnt_namespace *ns)
 	}
 }
 
+static inline void __fsnotify_mnt_detach(struct mount *mnt)
+{
+	struct path mountpoint = {
+		.mnt = &mnt->mnt_parent->mnt,
+		.dentry = mnt->mnt_mountpoint,
+	};
+	fsnotify_mnt_detach(&mountpoint, &mnt->mnt);
+}
+
 /*
  * vfsmount lock must be held for write
  */
 static struct mountpoint *unhash_mnt(struct mount *mnt)
 {
 	struct mountpoint *mp;
+
+	__fsnotify_mnt_detach(mnt);
+
 	mnt->mnt_parent = mnt;
 	mnt->mnt_mountpoint = mnt->mnt.mnt_root;
 	list_del_init(&mnt->mnt_child);
@@ -1025,6 +1037,15 @@ void mnt_set_mountpoint(struct mount *mnt,
 	child_mnt->mnt_parent = mnt;
 	child_mnt->mnt_mp = mp;
 	hlist_add_head(&child_mnt->mnt_mp_list, &mp->m_list);
+}
+
+static inline void __fsnotify_mnt_attach(struct mount *mnt)
+{
+	struct path mountpoint = {
+		.mnt = &mnt->mnt_parent->mnt,
+		.dentry = mnt->mnt_mountpoint,
+	};
+	fsnotify_mnt_attach(&mountpoint, &mnt->mnt);
 }
 
 /**
@@ -1059,6 +1080,8 @@ static void __attach_mnt(struct mount *mnt, struct mount *parent)
 	hlist_add_head_rcu(&mnt->mnt_hash,
 			   m_hash(&parent->mnt, mnt->mnt_mountpoint));
 	list_add_tail(&mnt->mnt_child, &parent->mnt_mounts);
+
+	__fsnotify_mnt_attach(mnt);
 }
 
 /**

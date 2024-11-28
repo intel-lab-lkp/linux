@@ -17,6 +17,7 @@
 #include <linux/stringhash.h>
 
 #include "fanotify.h"
+#include "../../mount.h"
 
 static bool fanotify_path_equal(const struct path *p1, const struct path *p2)
 {
@@ -716,6 +717,9 @@ static struct fanotify_event *fanotify_alloc_event(
 					      fid_mode);
 	struct inode *dirid = fanotify_dfid_inode(mask, data, data_type, dir);
 	const struct path *path = fsnotify_data_path(data, data_type);
+	struct vfsmount *mnt = fsnotify_data_mnt(data, data_type);
+	u64 mnt_id = mnt ? real_mount(mnt)->mnt_id_unique : 0;
+	u64 parent_id = path ? real_mount(path->mnt)->mnt_id_unique : 0;
 	struct mem_cgroup *old_memcg;
 	struct dentry *moved = NULL;
 	struct inode *child = NULL;
@@ -825,8 +829,12 @@ static struct fanotify_event *fanotify_alloc_event(
 
 	/* Mix event info, FAN_ONDIR flag and pid into event merge key */
 	hash ^= hash_long((unsigned long)pid | ondir, FANOTIFY_EVENT_HASH_BITS);
+	hash ^= hash_64(mnt_id, FANOTIFY_EVENT_HASH_BITS);
+	hash ^= hash_64(parent_id, FANOTIFY_EVENT_HASH_BITS);
 	fanotify_init_event(event, hash, mask);
 	event->pid = pid;
+	event->mnt_id = mnt_id;
+	event->parent_id = parent_id;
 
 out:
 	set_active_memcg(old_memcg);
@@ -911,7 +919,7 @@ static int fanotify_handle_event(struct fsnotify_group *group, u32 mask,
 	BUILD_BUG_ON(FAN_FS_ERROR != FS_ERROR);
 	BUILD_BUG_ON(FAN_RENAME != FS_RENAME);
 
-	BUILD_BUG_ON(HWEIGHT32(ALL_FANOTIFY_EVENT_BITS) != 21);
+	BUILD_BUG_ON(HWEIGHT32(ALL_FANOTIFY_EVENT_BITS) != 23);
 
 	mask = fanotify_group_event_mask(group, iter_info, &match_mask,
 					 mask, data, data_type, dir);

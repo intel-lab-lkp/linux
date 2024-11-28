@@ -56,6 +56,9 @@
 #define FS_ACCESS_PERM		0x00020000	/* access event in a permissions hook */
 #define FS_OPEN_EXEC_PERM	0x00040000	/* open/exec event in a permission hook */
 
+#define FS_MNT_ATTACH		0x00100000	/* Mount was attached */
+#define FS_MNT_DETACH		0x00200000	/* Mount was detached */
+
 /*
  * Set on inode mark that cares about things that happen to its children.
  * Always set for dnotify and inotify.
@@ -102,7 +105,7 @@
 			     FS_EVENTS_POSS_ON_CHILD | \
 			     FS_DELETE_SELF | FS_MOVE_SELF | \
 			     FS_UNMOUNT | FS_Q_OVERFLOW | FS_IN_IGNORED | \
-			     FS_ERROR)
+			     FS_ERROR | FS_MNT_ATTACH | FS_MNT_DETACH)
 
 /* Extra flags that may be reported with event or control handling of events */
 #define ALL_FSNOTIFY_FLAGS  (FS_ISDIR | FS_EVENT_ON_CHILD | FS_DN_MULTISHOT)
@@ -288,6 +291,7 @@ enum fsnotify_data_type {
 	FSNOTIFY_EVENT_PATH,
 	FSNOTIFY_EVENT_INODE,
 	FSNOTIFY_EVENT_DENTRY,
+	FSNOTIFY_EVENT_MNT,
 	FSNOTIFY_EVENT_ERROR,
 };
 
@@ -295,6 +299,11 @@ struct fs_error_report {
 	int error;
 	struct inode *inode;
 	struct super_block *sb;
+};
+
+struct fsnotify_mnt {
+	const struct path *path;
+	struct vfsmount *mnt;
 };
 
 static inline struct inode *fsnotify_data_inode(const void *data, int data_type)
@@ -306,6 +315,8 @@ static inline struct inode *fsnotify_data_inode(const void *data, int data_type)
 		return d_inode(data);
 	case FSNOTIFY_EVENT_PATH:
 		return d_inode(((const struct path *)data)->dentry);
+	case FSNOTIFY_EVENT_MNT:
+		return d_inode(((struct fsnotify_mnt *)data)->path->dentry);
 	case FSNOTIFY_EVENT_ERROR:
 		return ((struct fs_error_report *)data)->inode;
 	default:
@@ -321,6 +332,8 @@ static inline struct dentry *fsnotify_data_dentry(const void *data, int data_typ
 		return (struct dentry *)data;
 	case FSNOTIFY_EVENT_PATH:
 		return ((const struct path *)data)->dentry;
+	case FSNOTIFY_EVENT_MNT:
+		return ((const struct fsnotify_mnt *)data)->path->dentry;
 	default:
 		return NULL;
 	}
@@ -332,6 +345,8 @@ static inline const struct path *fsnotify_data_path(const void *data,
 	switch (data_type) {
 	case FSNOTIFY_EVENT_PATH:
 		return data;
+	case FSNOTIFY_EVENT_MNT:
+		return ((const struct fsnotify_mnt *)data)->path;
 	default:
 		return NULL;
 	}
@@ -347,8 +362,21 @@ static inline struct super_block *fsnotify_data_sb(const void *data,
 		return ((struct dentry *)data)->d_sb;
 	case FSNOTIFY_EVENT_PATH:
 		return ((const struct path *)data)->dentry->d_sb;
+	case FSNOTIFY_EVENT_MNT:
+		return ((const struct fsnotify_mnt *)data)->mnt->mnt_sb;
 	case FSNOTIFY_EVENT_ERROR:
 		return ((struct fs_error_report *) data)->sb;
+	default:
+		return NULL;
+	}
+}
+
+static inline struct vfsmount *fsnotify_data_mnt(const void *data,
+						 int data_type)
+{
+	switch (data_type) {
+	case FSNOTIFY_EVENT_MNT:
+		return ((const struct fsnotify_mnt *)data)->mnt;
 	default:
 		return NULL;
 	}

@@ -463,4 +463,22 @@ static inline int fsnotify_sb_error(struct super_block *sb, struct inode *inode,
 			NULL, NULL, NULL, 0);
 }
 
+static inline void fsnotify_mnt_attach(struct path *mountpoint, struct vfsmount *mnt)
+{
+	struct fsnotify_mnt data = {
+		.path = mountpoint,
+		.mnt = mnt,
+	};
+	fsnotify(FS_MNT_ATTACH, &data, FSNOTIFY_EVENT_MNT, NULL, NULL, NULL, 0);
+}
+
+static inline void fsnotify_mnt_detach(struct path *mountpoint, struct vfsmount *mnt)
+{
+	struct fsnotify_mnt data = {
+		.path = mountpoint,
+		.mnt = mnt,
+	};
+	fsnotify(FS_MNT_DETACH, &data, FSNOTIFY_EVENT_MNT, NULL, NULL, NULL, 0);
+}
+
 #endif	/* _LINUX_FS_NOTIFY_H */

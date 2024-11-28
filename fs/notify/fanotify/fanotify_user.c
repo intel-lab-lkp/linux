@@ -123,6 +123,8 @@ struct kmem_cache *fanotify_perm_event_cachep __ro_after_init;
 	sizeof(struct fanotify_event_info_pidfd)
 #define FANOTIFY_ERROR_INFO_LEN \
 	(sizeof(struct fanotify_event_info_error))
+#define FANOTIFY_MNT_INFO_LEN \
+	(sizeof(struct fanotify_event_info_mnt))
 
 static int fanotify_fid_info_len(int fh_len, int name_len)
 {
@@ -159,6 +161,9 @@ static size_t fanotify_event_len(unsigned int info_mode,
 	size_t event_len = FAN_EVENT_METADATA_LEN;
 	int fh_len;
 	int dot_len = 0;
+
+	if (fanotify_is_mnt_event(event->mask))
+		event_len += FANOTIFY_MNT_INFO_LEN;
 
 	if (!info_mode)
 		return event_len;
@@ -379,6 +384,26 @@ static int process_access_response(struct fsnotify_group *group,
 	spin_unlock(&group->notification_lock);
 
 	return -ENOENT;
+}
+
+static size_t copy_mnt_info_to_user(struct fanotify_event *event,
+				    char __user *buf, int count)
+{
+	struct fanotify_event_info_mnt info = { };
+
+	info.hdr.info_type = FAN_EVENT_INFO_TYPE_MNT;
+	info.hdr.len = FANOTIFY_MNT_INFO_LEN;
+
+	if (WARN_ON(count < info.hdr.len))
+		return -EFAULT;
+
+	info.mnt_id = event->mnt_id;
+	info.parent_id = event->parent_id;
+
+	if (copy_to_user(buf, &info, sizeof(info)))
+		return -EFAULT;
+
+	return info.hdr.len;
 }
 
 static size_t copy_error_info_to_user(struct fanotify_event *event,
@@ -657,6 +682,7 @@ static ssize_t copy_event_to_user(struct fsnotify_group *group,
 	unsigned int pidfd_mode = info_mode & FAN_REPORT_PIDFD;
 	struct file *f = NULL, *pidfd_file = NULL;
 	int ret, pidfd = -ESRCH, fd = -EBADF;
+	int total_bytes = 0;
 
 	pr_debug("%s: group=%p event=%p\n", __func__, group, event);
 
@@ -756,13 +782,28 @@ static ssize_t copy_event_to_user(struct fsnotify_group *group,
 
 	buf += FAN_EVENT_METADATA_LEN;
 	count -= FAN_EVENT_METADATA_LEN;
+	total_bytes += FAN_EVENT_METADATA_LEN;
 
 	if (info_mode) {
 		ret = copy_info_records_to_user(event, info, info_mode, pidfd,
 						buf, count);
 		if (ret < 0)
 			goto out_close_fd;
+
+		buf += ret;
+		count -= ret;
+		total_bytes += ret;
 	}
+
+	if (fanotify_is_mnt_event(event->mask)) {
+		ret = copy_mnt_info_to_user(event, buf, count);
+		if (ret < 0)
+			goto out_close_fd;
+
+		total_bytes += ret;
+	}
+
+	WARN_ON(metadata.event_len != total_bytes);
 
 	if (f)
 		fd_install(fd, f);

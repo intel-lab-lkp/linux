@@ -261,6 +261,8 @@ struct fanotify_event {
 		unsigned int hash : FANOTIFY_EVENT_HASH_BITS;
 	};
 	struct pid *pid;
+	u64 mnt_id;
+	u64 parent_id;
 };
 
 static inline void fanotify_init_event(struct fanotify_event *event,
@@ -454,6 +456,11 @@ static inline struct fanotify_event *FANOTIFY_E(struct fsnotify_event *fse)
 static inline bool fanotify_is_error_event(u32 mask)
 {
 	return mask & FAN_FS_ERROR;
+}
+
+static inline bool fanotify_is_mnt_event(u32 mask)
+{
+	return mask & (FAN_MNT_ATTACH | FAN_MNT_DETACH);
 }
 
 static inline const struct path *fanotify_event_path(struct fanotify_event *event)
