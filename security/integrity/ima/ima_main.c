@@ -126,7 +126,7 @@ static void ima_rdwr_violation_check(struct file *file,
 	bool send_tomtou = false, send_writers = false;
 
 	if (mode & FMODE_WRITE) {
-		if (atomic_read(&inode->i_readcount) && IS_IMA(inode)) {
+		if (atomic_read(&inode->i_readcount)) {
 			if (!iint)
 				iint = ima_iint_find(inode);
 			/* IMA_MEASURE is set from reader side */

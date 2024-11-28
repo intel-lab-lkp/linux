@@ -26,9 +26,6 @@ static struct kmem_cache *ima_iint_cache __ro_after_init;
  */
 struct ima_iint_cache *ima_iint_find(struct inode *inode)
 {
-	if (!IS_IMA(inode))
-		return NULL;
-
 	return ima_inode_get_iint(inode);
 }
 
@@ -102,7 +99,6 @@ struct ima_iint_cache *ima_inode_get(struct inode *inode)
 
 	ima_iint_init_always(iint, inode);
 
-	inode->i_flags |= S_IMA;
 	ima_inode_set_iint(inode, iint);
 
 	return iint;
@@ -118,7 +114,6 @@ void ima_inode_free_rcu(void *inode_security)
 {
 	struct ima_iint_cache **iint_p = inode_security + ima_blob_sizes.lbs_inode;
 
-	/* *iint_p should be NULL if !IS_IMA(inode) */
 	if (*iint_p)
 		ima_iint_free(*iint_p);
 }
