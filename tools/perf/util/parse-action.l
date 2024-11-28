@@ -107,6 +107,7 @@ cpu		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_CPU);  }
 pid		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_PID);  }
 tid		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_TID);  }
 comm		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_COMM); }
+time		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_TIME); }
 
 print		{ return call(EVTACT_EXPR_CALL_TYPE_PRINT); }
 

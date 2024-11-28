@@ -84,6 +84,17 @@ static inline int output_comm(__u8 *data, int size)
 	return __TASK_COMM_MAX_SIZE;
 }
 
+static inline int output_time(__u8 *data, int size)
+{
+	__u64 *ts = (__u64 *)data;
+
+	if (size < sizeof(__u64))
+		return -1;
+
+	*ts = bpf_ktime_get_ns();
+	return sizeof(__u64);
+}
+
 SEC("xxx")
 int sample_output(u64 *ctx)
 {
@@ -114,6 +125,9 @@ int sample_output(u64 *ctx)
 			break;
 		case __OUTPUT_FORMAT_TYPE_COMM:
 			ret = output_comm(data + total, __OUTPUT_DATA_MAX_SIZE - total);
+			break;
+		case __OUTPUT_FORMAT_TYPE_TIME:
+			ret = output_time(data + total, __OUTPUT_DATA_MAX_SIZE - total);
 			break;
 		default:
 			ret = -1;

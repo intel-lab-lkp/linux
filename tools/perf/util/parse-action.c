@@ -16,6 +16,7 @@
  *     - pid
  *     - tid
  *     - comm
+ *     - time
  */
 
 #include <regex.h>
