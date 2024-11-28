@@ -202,7 +202,8 @@ static void ima_file_free(struct file *file)
 	struct inode *inode = file_inode(file);
 	struct ima_iint_cache *iint;
 
-	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
+	if (!ima_policy_flag || !S_ISREG(inode->i_mode) ||
+	    (file->f_flags & O_PATH))
 		return;
 
 	iint = ima_iint_find(inode);
@@ -232,7 +233,8 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	enum hash_algo hash_algo;
 	unsigned int allowed_algos = 0;
 
-	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
+	if (!ima_policy_flag || !S_ISREG(inode->i_mode) ||
+	    (file->f_flags & O_PATH))
 		return 0;
 
 	/* Return an IMA_MEASURE, IMA_APPRAISE, IMA_AUDIT action
