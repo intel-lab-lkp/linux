@@ -127,6 +127,8 @@ static void cc_trng_pm_fini(struct cctrng_drvdata *drvdata)
 {
 	struct device *dev = &(drvdata->pdev->dev);
 
+	cancel_work_sync(&drvdata->compwork);
+	cancel_work_sync(&drvdata->startwork);
 	pm_runtime_disable(dev);
 }
 
