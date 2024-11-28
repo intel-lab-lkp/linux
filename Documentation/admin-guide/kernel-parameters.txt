@@ -424,9 +424,6 @@
 			      useful so that a dump capture kernel won't be
 			      shot down by NMI
 
-	autoconf=	[IPV6]
-			See Documentation/networking/ipv6.rst.
-
 	apm=		[APM] Advanced Power Management
 			See header of arch/x86/kernel/apm_32.c.
 
@@ -1137,9 +1134,6 @@
 			can be useful when debugging issues that require an SLB
 			miss to occur.
 
-	disable=	[IPV6]
-			See Documentation/networking/ipv6.rst.
-
 	disable_radix	[PPC,EARLY]
 			Disable RADIX MMU mode on POWER9
 
@@ -1150,9 +1144,6 @@
 	disable_ddw	[PPC/PSERIES,EARLY]
 			Disable Dynamic DMA Window support. Use this
 			to workaround buggy firmware.
-
-	disable_ipv6=	[IPV6]
-			See Documentation/networking/ipv6.rst.
 
 	disable_mtrr_cleanup [X86,EARLY]
 			The kernel tries to adjust MTRR layout from continuous
@@ -2382,6 +2373,15 @@
 			Start IPE with success auditing enabled, emitting
 			an audit event when a binary is allowed. The default
 			is 0.
+
+	ipv6.autoconf=	[IPV6]
+			See Documentation/networking/ipv6.rst.
+
+	ipv6.disable=	[IPV6]
+			See Documentation/networking/ipv6.rst.
+
+	ipv6.disable_ipv6=	[IPV6]
+			See Documentation/networking/ipv6.rst.
 
 	irqaffinity=	[SMP] Set the default irq affinity mask
 			The argument is a cpu list, as described above.
