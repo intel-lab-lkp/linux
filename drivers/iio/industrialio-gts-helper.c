@@ -4,6 +4,7 @@
  * Copyright (c) 2023 Matti Vaittinen <mazziesaccount@gmail.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/export.h>
@@ -165,11 +166,9 @@ static int iio_gts_gain_cmp(const void *a, const void *b)
 	return *(int *)a - *(int *)b;
 }
 
-static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
+static int fill_and_sort_scaletables(struct iio_gts *gts, int **gains, int **scales)
 {
-	int i, j, new_idx, time_idx, ret = 0;
-	int *all_gains;
-	size_t gain_bytes;
+	int i, j, ret;
 
 	for (i = 0; i < gts->num_itime; i++) {
 		/*
@@ -189,8 +188,15 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 		}
 	}
 
-	gain_bytes = array_size(gts->num_hwgain, sizeof(int));
-	all_gains = kcalloc(gts->num_itime, gain_bytes, GFP_KERNEL);
+	return 0;
+}
+
+static int build_combined_table(struct iio_gts *gts, int **gains, size_t gain_bytes)
+{
+	int ret, i, j, new_idx, time_idx;
+	int *all_gains __free(kfree) = kcalloc(gts->num_itime, gain_bytes,
+					       GFP_KERNEL);
+
 	if (!all_gains)
 		return -ENOMEM;
 
@@ -232,10 +238,9 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 
 	gts->avail_all_scales_table = kcalloc(new_idx, 2 * sizeof(int),
 					      GFP_KERNEL);
-	if (!gts->avail_all_scales_table) {
-		ret = -ENOMEM;
-		goto free_out;
-	}
+	if (!gts->avail_all_scales_table)
+		return -ENOMEM;
+
 	gts->num_avail_all_scales = new_idx;
 
 	for (i = 0; i < gts->num_avail_all_scales; i++) {
@@ -246,14 +251,25 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 		if (ret) {
 			kfree(gts->avail_all_scales_table);
 			gts->num_avail_all_scales = 0;
-			goto free_out;
+			return ret;
 		}
 	}
 
-free_out:
-	kfree(all_gains);
+	return 0;
+}
 
-	return ret;
+static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
+{
+	int ret;
+	size_t gain_bytes;
+
+	ret = fill_and_sort_scaletables(gts, gains, scales);
+	if (ret)
+		return ret;
+
+	gain_bytes = array_size(gts->num_hwgain, sizeof(int));
+
+	return build_combined_table(gts, gains, gain_bytes);
 }
 
 /**
@@ -337,26 +353,11 @@ static void iio_gts_us_to_int_micro(int *time_us, int *int_micro_times,
 	}
 }
 
-/**
- * iio_gts_build_avail_time_table - build table of available integration times
- * @gts:	Gain time scale descriptor
- *
- * Build the table which can represent the available times to be returned
- * to users using the read_avail-callback.
- *
- * NOTE: Space allocated for the tables must be freed using
- * iio_gts_purge_avail_time_table() when the tables are no longer needed.
- *
- * Return: 0 on success.
- */
-static int iio_gts_build_avail_time_table(struct iio_gts *gts)
+static int __iio_gts_build_avail_time_table(struct iio_gts *gts)
 {
-	int *times, i, j, idx = 0, *int_micro_times;
+	int i, j, idx = 0, *int_micro_times;
+	int *times __free(kfree) = kcalloc(gts->num_itime, sizeof(int), GFP_KERNEL);
 
-	if (!gts->num_itime)
-		return 0;
-
-	times = kcalloc(gts->num_itime, sizeof(int), GFP_KERNEL);
 	if (!times)
 		return -ENOMEM;
 
@@ -384,23 +385,40 @@ static int iio_gts_build_avail_time_table(struct iio_gts *gts)
 
 	/* create a list of times formatted as list of IIO_VAL_INT_PLUS_MICRO */
 	int_micro_times = kcalloc(idx, sizeof(int) * 2, GFP_KERNEL);
-	if (int_micro_times) {
-		/*
-		 * This is just to survive a unlikely corner-case where times in
-		 * the given time table were not unique. Else we could just
-		 * trust the gts->num_itime.
-		 */
-		gts->num_avail_time_tables = idx;
-		iio_gts_us_to_int_micro(times, int_micro_times, idx);
-	}
-
-	gts->avail_time_tables = int_micro_times;
-	kfree(times);
-
 	if (!int_micro_times)
 		return -ENOMEM;
 
+	/*
+	 * This is just to survive a unlikely corner-case where times in
+	 * the given time table were not unique. Else we could just
+	 * trust the gts->num_itime.
+	 */
+	gts->num_avail_time_tables = idx;
+	iio_gts_us_to_int_micro(times, int_micro_times, idx);
+
+	gts->avail_time_tables = int_micro_times;
+
 	return 0;
+}
+
+/**
+ * iio_gts_build_avail_time_table - build table of available integration times
+ * @gts:	Gain time scale descriptor
+ *
+ * Build the table which can represent the available times to be returned
+ * to users using the read_avail-callback.
+ *
+ * NOTE: Space allocated for the tables must be freed using
+ * iio_gts_purge_avail_time_table() when the tables are no longer needed.
+ *
+ * Return: 0 on success.
+ */
+static int iio_gts_build_avail_time_table(struct iio_gts *gts)
+{
+	if (!gts->num_itime)
+		return 0;
+
+	return __iio_gts_build_avail_time_table(gts);
 }
 
 /**
