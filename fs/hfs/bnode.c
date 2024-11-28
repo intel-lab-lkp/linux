@@ -67,6 +67,9 @@ void hfs_bnode_read_key(struct hfs_bnode *node, void *key, int off)
 	else
 		key_len = tree->max_key_len + 1;
 
+	if (key_len > tree->max_key_len + 1)
+		return;
+
 	hfs_bnode_read(node, key, off, key_len);
 }
 
