@@ -2477,6 +2477,10 @@ static int rproc_alloc_firmware(struct rproc *rproc,
 
 static int rproc_alloc_ops(struct rproc *rproc, const struct rproc_ops *ops)
 {
+	/* A processor with a load_segments() and a load_fw() functions makes no sense. */
+	if (ops->load_segments && ops->load_fw)
+		return -EINVAL;
+
 	rproc->ops = kmemdup(ops, sizeof(*ops), GFP_KERNEL);
 	if (!rproc->ops)
 		return -ENOMEM;

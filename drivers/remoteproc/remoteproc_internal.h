@@ -170,7 +170,7 @@ int rproc_load_segments(struct rproc *rproc, const struct firmware *fw)
 	if (rproc->ops->load_segments)
 		return rproc->ops->load_segments(rproc, fw);
 
-	return -EINVAL;
+	return 0;
 }
 
 static inline int rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
