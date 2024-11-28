@@ -191,14 +191,10 @@ static int fill_and_sort_scaletables(struct iio_gts *gts, int **gains, int **sca
 	return 0;
 }
 
-static int build_combined_table(struct iio_gts *gts, int **gains, size_t gain_bytes)
+static int combine_gain_tables(struct iio_gts *gts, int **gains,
+			       int *all_gains, size_t gain_bytes)
 {
-	int ret, i, j, new_idx, time_idx;
-	int *all_gains __free(kfree) = kcalloc(gts->num_itime, gain_bytes,
-					       GFP_KERNEL);
-
-	if (!all_gains)
-		return -ENOMEM;
+	int i, new_idx, time_idx;
 
 	/*
 	 * We assume all the gains for same integration time were unique.
@@ -212,8 +208,8 @@ static int build_combined_table(struct iio_gts *gts, int **gains, size_t gain_by
 	new_idx = gts->num_hwgain;
 
 	while (time_idx-- > 0) {
-		for (j = 0; j < gts->num_hwgain; j++) {
-			int candidate = gains[time_idx][j];
+		for (i = 0; i < gts->num_hwgain; i++) {
+			int candidate = gains[time_idx][i];
 			int chk;
 
 			if (candidate > all_gains[new_idx - 1]) {
@@ -236,24 +232,46 @@ static int build_combined_table(struct iio_gts *gts, int **gains, size_t gain_by
 		}
 	}
 
-	gts->avail_all_scales_table = kcalloc(new_idx, 2 * sizeof(int),
-					      GFP_KERNEL);
-	if (!gts->avail_all_scales_table)
+	return new_idx;
+}
+
+static int *build_all_scales_table(struct iio_gts *gts, int *all_gains, int num_scales)
+{
+	int i, ret;
+	int *all_scales __free(kfree) = kcalloc(num_scales, 2 * sizeof(int),
+						GFP_KERNEL);
+
+	if (!all_scales)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 0; i < num_scales; i++) {
+		ret = iio_gts_total_gain_to_scale(gts, all_gains[i], &all_scales[i * 2],
+						  &all_scales[i * 2 + 1]);
+		if (ret)
+			return ERR_PTR(ret);
+	}
+
+	return_ptr(all_scales);
+}
+
+static int build_combined_tables(struct iio_gts *gts,
+				 int **gains, size_t gain_bytes)
+{
+	int *all_scales, num_gains;
+	int *all_gains __free(kfree) = kcalloc(gts->num_itime, gain_bytes,
+					       GFP_KERNEL);
+
+	if (!all_gains)
 		return -ENOMEM;
 
-	gts->num_avail_all_scales = new_idx;
+	num_gains = combine_gain_tables(gts, gains, all_gains, gain_bytes);
 
-	for (i = 0; i < gts->num_avail_all_scales; i++) {
-		ret = iio_gts_total_gain_to_scale(gts, all_gains[i],
-					&gts->avail_all_scales_table[i * 2],
-					&gts->avail_all_scales_table[i * 2 + 1]);
+	all_scales = build_all_scales_table(gts, all_gains, num_gains);
+	if (IS_ERR(all_scales))
+		return PTR_ERR(all_scales);
 
-		if (ret) {
-			kfree(gts->avail_all_scales_table);
-			gts->num_avail_all_scales = 0;
-			return ret;
-		}
-	}
+	gts->num_avail_all_scales = num_gains;
+	gts->avail_all_scales_table = all_scales;
 
 	return 0;
 }
@@ -269,7 +287,7 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 
 	gain_bytes = array_size(gts->num_hwgain, sizeof(int));
 
-	return build_combined_table(gts, gains, gain_bytes);
+	return build_combined_tables(gts, gains, gain_bytes);
 }
 
 /**
