@@ -15,6 +15,7 @@ enum evtact_expr_type {
 
 enum evtact_expr_const_type {
 	EVTACT_EXPR_CONST_TYPE_INT,
+	EVTACT_EXPR_CONST_TYPE_STR,
 	EVTACT_EXPR_CONST_TYPE_MAX,
 };
 

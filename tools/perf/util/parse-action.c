@@ -8,6 +8,7 @@
  * Supported expressions:
  *   - constant:
  *     - integer
+ *     - string
  */
 
 #include "util/debug.h"
@@ -169,8 +170,46 @@ static struct evtact_expr_ops expr_const_int_ops = {
 	.eval = expr_const_int_eval,
 };
 
+static int expr_const_str_new(struct evtact_expr *expr,
+			      void *data, int size __maybe_unused)
+{
+	if (data == NULL) {
+		pr_err("exper const string is NULL\n");
+		return -EINVAL;
+	}
+
+	expr->priv = data;
+	INIT_LIST_HEAD(&expr->opnds);
+	return 0;
+}
+
+static void expr_const_str_free(struct evtact_expr *expr)
+{
+	zfree(&expr->priv);
+}
+
+static int expr_const_str_eval(struct evtact_expr *expr,
+			       void *in __maybe_unused, int in_size __maybe_unused,
+			       void **out, int *out_size)
+{
+	if (out != NULL)
+		*out = expr->priv;
+
+	if (out_size != NULL)
+		*out_size = strlen(expr->priv);
+
+	return 0;
+}
+
+static struct evtact_expr_ops expr_const_str_ops = {
+	.new  = expr_const_str_new,
+	.free = expr_const_str_free,
+	.eval = expr_const_str_eval,
+};
+
 static struct evtact_expr_ops *expr_const_ops_list[EVTACT_EXPR_CONST_TYPE_MAX] = {
 	[EVTACT_EXPR_CONST_TYPE_INT] = &expr_const_int_ops,
+	[EVTACT_EXPR_CONST_TYPE_STR] = &expr_const_str_ops,
 };
 
 static int expr_const_set_ops(struct evtact_expr *expr, u32 opcode)

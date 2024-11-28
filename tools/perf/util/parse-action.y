@@ -37,12 +37,13 @@ static void parse_action_error(struct list_head *expr __maybe_unused,
 	unsigned long long num;
 }
 
-%token IDENT ERROR NUMBER
+%token IDENT ERROR NUMBER STRING
 %token SEMI
 %type <expr> action_term expr_term
 %destructor { parse_action_expr__free($$); } <expr>
 %type <str> IDENT
 %type <num> NUMBER
+%type <str> STRING
 
 %%
 
@@ -72,6 +73,13 @@ expr_term:
 NUMBER
 {
 	$$ = parse_action_expr__new(expr_id(CONST, INT), NULL, (void *)&$1, sizeof($1));
+	if ($$ == NULL)
+		YYERROR;
+}
+|
+STRING
+{
+	$$ = parse_action_expr__new(expr_id(CONST, STR), NULL, (void *)$1, strlen($1));
 	if ($$ == NULL)
 		YYERROR;
 }
