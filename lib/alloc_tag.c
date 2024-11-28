@@ -189,26 +189,29 @@ void pgalloc_tag_split(struct folio *folio, int old_order, int new_order)
 	}
 }
 
-void pgalloc_tag_copy(struct folio *new, struct folio *old)
+void pgalloc_tag_swap(struct folio *new, struct folio *old)
 {
-	union pgtag_ref_handle handle;
-	union codetag_ref ref;
-	struct alloc_tag *tag;
+	union pgtag_ref_handle handles[2];
+	union codetag_ref refs[2];
+	struct alloc_tag *tags[2];
+	struct folio *folios[2] = {new, old};
+	int i;
 
-	tag = pgalloc_tag_get(&old->page);
-	if (!tag)
-		return;
+	for (i = 0; i < 2; i++) {
+		tags[i] = pgalloc_tag_get(&folios[i]->page);
+		if (!tags[i])
+			return;
+		if (!get_page_tag_ref(&folios[i]->page, &refs[i], &handles[i]))
+			return;
+	}
 
-	if (!get_page_tag_ref(&new->page, &ref, &handle))
-		return;
+	swap(tags[0], tags[1]);
 
-	/* Clear the old ref to the original allocation tag. */
-	clear_page_tag_ref(&old->page);
-	/* Decrement the counters of the tag on get_new_folio. */
-	alloc_tag_sub(&ref, folio_size(new));
-	__alloc_tag_ref_set(&ref, tag);
-	update_page_tag_ref(handle, &ref);
-	put_page_tag_ref(handle);
+	for (i = 0; i < 2; i++) {
+		__alloc_tag_ref_set(&refs[i], tags[i]);
+		update_page_tag_ref(handles[i], &refs[i]);
+		put_page_tag_ref(handles[i]);
+	}
 }
 
 static void shutdown_mem_profiling(bool remove_file)
