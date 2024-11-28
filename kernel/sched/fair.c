@@ -5938,7 +5938,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
-	long running_delta, enqueued_delta, idle_task_delta, delayed_delta, dequeue = 1;
+	long running_delta, enqueued_delta, idle_delta, delayed_delta, dequeue = 1;
 	long rq_h_nr_enqueued = rq->cfs.h_nr_enqueued;
 
 	raw_spin_lock(&cfs_b->lock);
@@ -5971,7 +5971,7 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 
 	running_delta = cfs_rq->h_nr_running;
 	enqueued_delta = cfs_rq->h_nr_enqueued;
-	idle_task_delta = cfs_rq->idle_h_nr_running;
+	idle_delta = cfs_rq->h_nr_idle;
 	delayed_delta = cfs_rq->h_nr_delayed;
 	for_each_sched_entity(se) {
 		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
@@ -5992,11 +5992,11 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		dequeue_entity(qcfs_rq, se, flags);
 
 		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_enqueued;
+			idle_delta = cfs_rq->h_nr_enqueued;
 
 		qcfs_rq->h_nr_running -= running_delta;
 		qcfs_rq->h_nr_enqueued -= enqueued_delta;
-		qcfs_rq->idle_h_nr_running -= idle_task_delta;
+		qcfs_rq->h_nr_idle -= idle_delta;
 		qcfs_rq->h_nr_delayed -= delayed_delta;
 
 		if (qcfs_rq->load.weight) {
@@ -6016,11 +6016,11 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 		se_update_runnable(se);
 
 		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_enqueued;
+			idle_delta = cfs_rq->h_nr_enqueued;
 
 		qcfs_rq->h_nr_running -= running_delta;
 		qcfs_rq->h_nr_enqueued -= enqueued_delta;
-		qcfs_rq->idle_h_nr_running -= idle_task_delta;
+		qcfs_rq->h_nr_idle -= idle_delta;
 		qcfs_rq->h_nr_delayed -= delayed_delta;
 	}
 
@@ -6047,7 +6047,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
-	long running_delta, enqueued_delta, idle_task_delta, delayed_delta;
+	long running_delta, enqueued_delta, idle_delta, delayed_delta;
 	long rq_h_nr_enqueued = rq->cfs.h_nr_enqueued;
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
@@ -6083,7 +6083,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 	running_delta = cfs_rq->h_nr_running;
 	enqueued_delta = cfs_rq->h_nr_enqueued;
-	idle_task_delta = cfs_rq->idle_h_nr_running;
+	idle_delta = cfs_rq->h_nr_idle;
 	delayed_delta = cfs_rq->h_nr_delayed;
 	for_each_sched_entity(se) {
 		struct cfs_rq *qcfs_rq = cfs_rq_of(se);
@@ -6098,11 +6098,11 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		enqueue_entity(qcfs_rq, se, ENQUEUE_WAKEUP);
 
 		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_enqueued;
+			idle_delta = cfs_rq->h_nr_enqueued;
 
 		qcfs_rq->h_nr_running += running_delta;
 		qcfs_rq->h_nr_enqueued += enqueued_delta;
-		qcfs_rq->idle_h_nr_running += idle_task_delta;
+		qcfs_rq->h_nr_idle += idle_delta;
 		qcfs_rq->h_nr_delayed += delayed_delta;
 
 		/* end evaluation on encountering a throttled cfs_rq */
@@ -6117,11 +6117,11 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		se_update_runnable(se);
 
 		if (cfs_rq_is_idle(group_cfs_rq(se)))
-			idle_task_delta = cfs_rq->h_nr_enqueued;
+			idle_delta = cfs_rq->h_nr_enqueued;
 
 		qcfs_rq->h_nr_running += running_delta;
 		qcfs_rq->h_nr_enqueued += enqueued_delta;
-		qcfs_rq->idle_h_nr_running += idle_task_delta;
+		qcfs_rq->h_nr_idle += idle_delta;
 		qcfs_rq->h_nr_delayed += delayed_delta;
 
 		/* end evaluation on encountering a throttled cfs_rq */
@@ -6937,7 +6937,7 @@ static inline void check_update_overutilized_status(struct rq *rq) { }
 /* Runqueue only has SCHED_IDLE tasks enqueued */
 static int sched_idle_rq(struct rq *rq)
 {
-	return unlikely(rq->nr_running == rq->cfs.idle_h_nr_running &&
+	return unlikely(rq->nr_running == rq->cfs.h_nr_idle &&
 			rq->nr_running);
 }
 
@@ -6989,7 +6989,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct cfs_rq *cfs_rq;
 	struct sched_entity *se = &p->se;
-	int idle_h_nr_running = task_has_idle_policy(p);
+	int h_nr_idle = task_has_idle_policy(p);
 	int h_nr_delayed = 0;
 	int task_new = !(flags & ENQUEUE_WAKEUP);
 	int rq_h_nr_enqueued = rq->cfs.h_nr_enqueued;
@@ -7043,11 +7043,11 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (!h_nr_delayed)
 			cfs_rq->h_nr_running++;
 		cfs_rq->h_nr_enqueued++;
-		cfs_rq->idle_h_nr_running += idle_h_nr_running;
+		cfs_rq->h_nr_idle += h_nr_idle;
 		cfs_rq->h_nr_delayed += h_nr_delayed;
 
 		if (cfs_rq_is_idle(cfs_rq))
-			idle_h_nr_running = 1;
+			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -7069,11 +7069,11 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (!h_nr_delayed)
 			cfs_rq->h_nr_running++;
 		cfs_rq->h_nr_enqueued++;
-		cfs_rq->idle_h_nr_running += idle_h_nr_running;
+		cfs_rq->h_nr_idle += h_nr_idle;
 		cfs_rq->h_nr_delayed += h_nr_delayed;
 
 		if (cfs_rq_is_idle(cfs_rq))
-			idle_h_nr_running = 1;
+			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -7131,7 +7131,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	bool task_sleep = flags & DEQUEUE_SLEEP;
 	bool task_delayed = flags & DEQUEUE_DELAYED;
 	struct task_struct *p = NULL;
-	int idle_h_nr_running = 0;
+	int h_nr_idle = 0;
 	int h_nr_running = 0;
 	int h_nr_delayed = 0;
 	struct cfs_rq *cfs_rq;
@@ -7140,7 +7140,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	if (entity_is_task(se)) {
 		p = task_of(se);
 		h_nr_running = 1;
-		idle_h_nr_running = task_has_idle_policy(p);
+		h_nr_idle = task_has_idle_policy(p);
 		if (!task_sleep && !task_delayed)
 			h_nr_delayed = !!se->sched_delayed;
 	} else {
@@ -7161,11 +7161,11 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		if (!h_nr_delayed)
 			cfs_rq->h_nr_running -= h_nr_running;
 		cfs_rq->h_nr_enqueued -= h_nr_running;
-		cfs_rq->idle_h_nr_running -= idle_h_nr_running;
+		cfs_rq->h_nr_idle -= h_nr_idle;
 		cfs_rq->h_nr_delayed -= h_nr_delayed;
 
 		if (cfs_rq_is_idle(cfs_rq))
-			idle_h_nr_running = h_nr_running;
+			h_nr_idle = h_nr_running;
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -7202,11 +7202,11 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		if (!h_nr_delayed)
 			cfs_rq->h_nr_running -= h_nr_running;
 		cfs_rq->h_nr_enqueued -= h_nr_running;
-		cfs_rq->idle_h_nr_running -= idle_h_nr_running;
+		cfs_rq->h_nr_idle -= h_nr_idle;
 		cfs_rq->h_nr_delayed -= h_nr_delayed;
 
 		if (cfs_rq_is_idle(cfs_rq))
-			idle_h_nr_running = h_nr_running;
+			h_nr_idle = h_nr_running;
 
 		/* end evaluation on encountering a throttled cfs_rq */
 		if (cfs_rq_throttled(cfs_rq))
@@ -13567,7 +13567,7 @@ int sched_group_set_idle(struct task_group *tg, long idle)
 		}
 
 		idle_task_delta = grp_cfs_rq->h_nr_enqueued -
-				  grp_cfs_rq->idle_h_nr_running;
+				  grp_cfs_rq->h_nr_idle;
 		if (!cfs_rq_is_idle(grp_cfs_rq))
 			idle_task_delta *= -1;
 
@@ -13577,7 +13577,7 @@ int sched_group_set_idle(struct task_group *tg, long idle)
 			if (!se->on_rq)
 				break;
 
-			cfs_rq->idle_h_nr_running += idle_task_delta;
+			cfs_rq->h_nr_idle += idle_task_delta;
 
 			/* Already accounted at parent level and above. */
 			if (cfs_rq_is_idle(cfs_rq))
