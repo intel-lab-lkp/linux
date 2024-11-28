@@ -17,6 +17,8 @@
 #include "util/debug.h"
 #include "util/parse-action.h"
 
+#define expr_id(t, o) evtact_expr_id_encode(EVTACT_EXPR_TYPE_##t, EVTACT_EXPR_##t##_TYPE_##o)
+
 int parse_action_lex(void);
 
 static void parse_action_error(struct list_head *expr __maybe_unused,
@@ -32,13 +34,15 @@ static void parse_action_error(struct list_head *expr __maybe_unused,
 	char *str;
 	struct evtact_expr *expr;
 	struct list_head *list;
+	unsigned long long num;
 }
 
-%token IDENT ERROR
+%token IDENT ERROR NUMBER
 %token SEMI
 %type <expr> action_term expr_term
 %destructor { parse_action_expr__free($$); } <expr>
 %type <str> IDENT
+%type <num> NUMBER
 
 %%
 
@@ -65,6 +69,13 @@ expr_term
 }
 
 expr_term:
+NUMBER
+{
+	$$ = parse_action_expr__new(expr_id(CONST, INT), NULL, (void *)&$1, sizeof($1));
+	if ($$ == NULL)
+		YYERROR;
+}
+|
 IDENT
 {
 	$$ = NULL;

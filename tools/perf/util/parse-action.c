@@ -7,6 +7,7 @@
  *
  * Supported expressions:
  *   - constant:
+ *     - integer
  */
 
 #include "util/debug.h"
@@ -118,7 +119,58 @@ void event_actions__free(void)
 	(void)event_actions__for_each_expr_safe(do_action_free, NULL, false);
 }
 
+static int expr_const_int_new(struct evtact_expr *expr, void *data, int size)
+{
+	if (data == NULL ||
+	    (size != sizeof(int)
+	     && size != sizeof(long) && size != sizeof(long long))) {
+		pr_err("expr_const_int size invalid: %d\n", size);
+		return -EINVAL;
+	}
+
+	expr->priv = malloc(sizeof(long long));
+	if (expr->priv == NULL) {
+		pr_err("exp_ const_int malloc failed\n");
+		return -ENOMEM;
+	}
+
+	if (size == sizeof(int))
+		*(unsigned long long *)(expr->priv) = *(unsigned int *)data;
+	else if (size == sizeof(long))
+		*(unsigned long long *)(expr->priv) = *(unsigned long *)data;
+	else if (size == sizeof(long long))
+		*(unsigned long long *)(expr->priv) = *(unsigned long long *)data;
+
+	INIT_LIST_HEAD(&expr->opnds);
+	return 0;
+}
+
+static void expr_const_int_free(struct evtact_expr *expr)
+{
+	zfree(&expr->priv);
+}
+
+static int expr_const_int_eval(struct evtact_expr *expr,
+			       void *in __maybe_unused, int in_size __maybe_unused,
+			       void **out, int *out_size)
+{
+	if (out != NULL)
+		*out = expr->priv;
+
+	if (out_size != NULL)
+		*out_size = sizeof(long long);
+
+	return 0;
+}
+
+static struct evtact_expr_ops expr_const_int_ops = {
+	.new  = expr_const_int_new,
+	.free = expr_const_int_free,
+	.eval = expr_const_int_eval,
+};
+
 static struct evtact_expr_ops *expr_const_ops_list[EVTACT_EXPR_CONST_TYPE_MAX] = {
+	[EVTACT_EXPR_CONST_TYPE_INT] = &expr_const_int_ops,
 };
 
 static int expr_const_set_ops(struct evtact_expr *expr, u32 opcode)
