@@ -15,6 +15,10 @@ enum spi_transfer_cmd {
 	SPI_DUPLEX,
 };
 
+#define QCOM_GPI_IMMEDIATE_DMA		BIT(1)
+
+#define QCOM_GPI_IMMEDIATE_DMA_LEN	8
+
 /**
  * struct gpi_spi_config - spi config for peripheral
  *
@@ -30,6 +34,7 @@ enum spi_transfer_cmd {
  * @cs: chip select toggle
  * @set_config: set peripheral config
  * @rx_len: receive length for buffer
+ * @flags: true for immediate dma support
  */
 struct gpi_spi_config {
 	u8 set_config;
@@ -44,6 +49,7 @@ struct gpi_spi_config {
 	u32 clk_src;
 	enum spi_transfer_cmd cmd;
 	u32 rx_len;
+	u8 flags;
 };
 
 enum i2c_op {
