@@ -68,6 +68,22 @@ static inline int output_tid(__u8 *data, int size)
 	return sizeof(__u32);
 }
 
+static inline int output_comm(__u8 *data, int size)
+{
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+
+	if (!task) {
+		data[0] = '\0';
+		return 0;
+	}
+
+	if (size < __TASK_COMM_MAX_SIZE)
+		return -1;
+
+	bpf_core_read_str(data, __TASK_COMM_MAX_SIZE, &task->comm);
+	return __TASK_COMM_MAX_SIZE;
+}
+
 SEC("xxx")
 int sample_output(u64 *ctx)
 {
@@ -95,6 +111,9 @@ int sample_output(u64 *ctx)
 			break;
 		case __OUTPUT_FORMAT_TYPE_TID:
 			ret = output_tid(data + total, __OUTPUT_DATA_MAX_SIZE - total);
+			break;
+		case __OUTPUT_FORMAT_TYPE_COMM:
+			ret = output_comm(data + total, __OUTPUT_DATA_MAX_SIZE - total);
 			break;
 		default:
 			ret = -1;

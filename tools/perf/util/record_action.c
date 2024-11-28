@@ -104,6 +104,10 @@ static int set_expr_builtin_output_format(struct evtact_expr *expr,
 		*format = __OUTPUT_FORMAT_TYPE_TID;
 		size = sizeof(u32);
 		break;
+	case EVTACT_EXPR_BUILTIN_TYPE_COMM:
+		*format = __OUTPUT_FORMAT_TYPE_COMM;
+		size = __TASK_COMM_MAX_SIZE;
+		break;
 	default:
 		pr_err("set expr builtin output format unknown opcode: %u\n", opcode);
 		return -1;

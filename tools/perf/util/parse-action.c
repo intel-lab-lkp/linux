@@ -15,6 +15,7 @@
  *     - cpu
  *     - pid
  *     - tid
+ *     - comm
  */
 
 #include <regex.h>
