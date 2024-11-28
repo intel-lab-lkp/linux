@@ -648,7 +648,6 @@ struct cfs_rq {
 	unsigned int		nr_running;
 	unsigned int		h_nr_running;      /* SCHED_{NORMAL,BATCH,IDLE} */
 	unsigned int		h_nr_enqueued;
-	unsigned int		idle_nr_running;   /* SCHED_IDLE */
 	unsigned int		h_nr_idle; /* SCHED_IDLE */
 	unsigned int		h_nr_delayed;
 
