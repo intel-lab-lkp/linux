@@ -29,6 +29,10 @@ properties:
   clocks:
     maxItems: 1
 
+  clock-names:
+    items:
+      - const: cclk
+
   reset-gpios:
     description: Hardwired output GPIO. If not defined then software reset.
     maxItems: 1
@@ -138,6 +142,7 @@ required:
   - reg
   - interrupts
   - clocks
+  - clock-names
   - bosch,mram-cfg
 
 unevaluatedProperties: false
@@ -155,6 +160,7 @@ examples:
             compatible = "ti,tcan4x5x";
             reg = <0>;
             clocks = <&can0_osc>;
+            clock-names = "cclk";
             pinctrl-names = "default";
             pinctrl-0 = <&can0_pins>;
             spi-max-frequency = <10000000>;
@@ -180,6 +186,7 @@ examples:
             compatible = "ti,tcan4552", "ti,tcan4x5x";
             reg = <0>;
             clocks = <&can0_osc>;
+            clock-names = "cclk";
             pinctrl-names = "default";
             pinctrl-0 = <&can0_pins>;
             spi-max-frequency = <10000000>;
