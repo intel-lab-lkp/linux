@@ -10,6 +10,7 @@
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/device.h>
+#include <linux/gpio/consumer.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
@@ -196,6 +197,7 @@ struct ad7192_chip_info {
 	u8				num_channels;
 	const struct ad_sigma_delta_info	*sigma_delta_info;
 	const struct iio_info		*info;
+	const struct iio_info		*info_sync;
 	int (*parse_channels)(struct iio_dev *indio_dev);
 };
 
@@ -215,6 +217,8 @@ struct ad7192_state {
 	u8				clock_sel;
 	struct mutex			lock;	/* protect sensor state */
 	u8				syscalib_mode[8];
+
+	struct gpio_desc		*sync_gpio;
 
 	struct ad_sigma_delta		sd;
 };
@@ -783,6 +787,36 @@ static void ad7192_update_filter_freq_avail(struct ad7192_state *st)
 	st->filter_freq_avail[3][0] = DIV_ROUND_CLOSEST(fadc * 272, 1024);
 }
 
+static ssize_t sync_gpio_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ad7192_state *st = iio_priv(indio_dev);
+
+	return sysfs_emit(buf, "%d\n", gpiod_get_value(st->sync_gpio));
+}
+
+static ssize_t sync_gpio_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct ad7192_state *st = iio_priv(indio_dev);
+	int val;
+	int ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (st->sync_gpio)
+		gpiod_set_value(st->sync_gpio, val);
+
+	return len;
+}
+
 static IIO_DEVICE_ATTR(bridge_switch_en, 0644,
 		       ad7192_show_bridge_switch, ad7192_set,
 		       AD7192_REG_GPOCON);
@@ -791,13 +825,34 @@ static IIO_DEVICE_ATTR(ac_excitation_en, 0644,
 		       ad7192_show_ac_excitation, ad7192_set,
 		       AD7192_REG_CONF);
 
+static IIO_DEVICE_ATTR_RW(sync_gpio, 0);
+
 static struct attribute *ad7192_attributes[] = {
 	&iio_dev_attr_bridge_switch_en.dev_attr.attr,
 	NULL
 };
 
+static struct attribute *ad7192_attributes_sync[] = {
+	&iio_dev_attr_bridge_switch_en.dev_attr.attr,
+	&iio_dev_attr_sync_gpio.dev_attr.attr,
+	NULL
+};
+
 static const struct attribute_group ad7192_attribute_group = {
 	.attrs = ad7192_attributes,
+};
+
+static const struct attribute_group ad7192_attribute_group_sync = {
+	.attrs = ad7192_attributes_sync,
+};
+
+static struct attribute *ad7194_attributes_sync[] = {
+	&iio_dev_attr_sync_gpio.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group ad7194_attribute_group_sync = {
+	.attrs = ad7194_attributes_sync,
 };
 
 static struct attribute *ad7195_attributes[] = {
@@ -806,8 +861,19 @@ static struct attribute *ad7195_attributes[] = {
 	NULL
 };
 
+static struct attribute *ad7195_attributes_sync[] = {
+	&iio_dev_attr_bridge_switch_en.dev_attr.attr,
+	&iio_dev_attr_ac_excitation_en.dev_attr.attr,
+	&iio_dev_attr_sync_gpio.dev_attr.attr,
+	NULL
+};
+
 static const struct attribute_group ad7195_attribute_group = {
 	.attrs = ad7195_attributes,
+};
+
+static const struct attribute_group ad7195_attribute_group_sync = {
+	.attrs = ad7195_attributes_sync,
 };
 
 static unsigned int ad7192_get_temp_scale(bool unipolar)
@@ -1103,11 +1169,30 @@ static const struct iio_info ad7192_info = {
 	.update_scan_mode = ad7192_update_scan_mode,
 };
 
+static const struct iio_info ad7192_info_sync = {
+	.read_raw = ad7192_read_raw,
+	.write_raw = ad7192_write_raw,
+	.write_raw_get_fmt = ad7192_write_raw_get_fmt,
+	.read_avail = ad7192_read_avail,
+	.attrs = &ad7192_attribute_group_sync,
+	.validate_trigger = ad_sd_validate_trigger,
+	.update_scan_mode = ad7192_update_scan_mode,
+};
+
 static const struct iio_info ad7194_info = {
 	.read_raw = ad7192_read_raw,
 	.write_raw = ad7192_write_raw,
 	.write_raw_get_fmt = ad7192_write_raw_get_fmt,
 	.read_avail = ad7192_read_avail,
+	.validate_trigger = ad_sd_validate_trigger,
+};
+
+static const struct iio_info ad7194_info_sync = {
+	.read_raw = ad7192_read_raw,
+	.write_raw = ad7192_write_raw,
+	.write_raw_get_fmt = ad7192_write_raw_get_fmt,
+	.read_avail = ad7192_read_avail,
+	.attrs = &ad7194_attribute_group_sync,
 	.validate_trigger = ad_sd_validate_trigger,
 };
 
@@ -1117,6 +1202,16 @@ static const struct iio_info ad7195_info = {
 	.write_raw_get_fmt = ad7192_write_raw_get_fmt,
 	.read_avail = ad7192_read_avail,
 	.attrs = &ad7195_attribute_group,
+	.validate_trigger = ad_sd_validate_trigger,
+	.update_scan_mode = ad7192_update_scan_mode,
+};
+
+static const struct iio_info ad7195_info_sync = {
+	.read_raw = ad7192_read_raw,
+	.write_raw = ad7192_write_raw,
+	.write_raw_get_fmt = ad7192_write_raw_get_fmt,
+	.read_avail = ad7192_read_avail,
+	.attrs = &ad7195_attribute_group_sync,
 	.validate_trigger = ad_sd_validate_trigger,
 	.update_scan_mode = ad7192_update_scan_mode,
 };
@@ -1292,6 +1387,7 @@ static const struct ad7192_chip_info ad7192_chip_info_tbl[] = {
 		.num_channels = ARRAY_SIZE(ad7192_channels),
 		.sigma_delta_info = &ad7192_sigma_delta_info,
 		.info = &ad7192_info,
+		.info_sync = &ad7192_info_sync,
 	},
 	[ID_AD7192] = {
 		.chip_id = CHIPID_AD7192,
@@ -1300,6 +1396,7 @@ static const struct ad7192_chip_info ad7192_chip_info_tbl[] = {
 		.num_channels = ARRAY_SIZE(ad7192_channels),
 		.sigma_delta_info = &ad7192_sigma_delta_info,
 		.info = &ad7192_info,
+		.info_sync = &ad7192_info_sync,
 	},
 	[ID_AD7193] = {
 		.chip_id = CHIPID_AD7193,
@@ -1308,11 +1405,13 @@ static const struct ad7192_chip_info ad7192_chip_info_tbl[] = {
 		.num_channels = ARRAY_SIZE(ad7193_channels),
 		.sigma_delta_info = &ad7192_sigma_delta_info,
 		.info = &ad7192_info,
+		.info_sync = &ad7192_info_sync,
 	},
 	[ID_AD7194] = {
 		.chip_id = CHIPID_AD7194,
 		.name = "ad7194",
 		.info = &ad7194_info,
+		.info_sync = &ad7194_info_sync,
 		.sigma_delta_info = &ad7194_sigma_delta_info,
 		.parse_channels = ad7194_parse_channels,
 	},
@@ -1323,6 +1422,7 @@ static const struct ad7192_chip_info ad7192_chip_info_tbl[] = {
 		.num_channels = ARRAY_SIZE(ad7192_channels),
 		.sigma_delta_info = &ad7192_sigma_delta_info,
 		.info = &ad7195_info,
+		.info_sync = &ad7195_info_sync,
 	},
 };
 
@@ -1343,6 +1443,11 @@ static int ad7192_probe(struct spi_device *spi)
 	st = iio_priv(indio_dev);
 
 	mutex_init(&st->lock);
+
+	st->sync_gpio = devm_gpiod_get_optional(dev, "sync", GPIOD_OUT_HIGH);
+	if (IS_ERR(st->sync_gpio))
+		return dev_err_probe(dev, PTR_ERR(st->sync_gpio),
+				     "Failed to get sync gpio.\n");
 
 	/*
 	 * Regulator aincom is optional to maintain compatibility with older DT.
@@ -1399,7 +1504,12 @@ static int ad7192_probe(struct spi_device *spi)
 
 	indio_dev->name = st->chip_info->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->info = st->chip_info->info;
+
+	if (st->sync_gpio)
+		indio_dev->info = st->chip_info->info_sync;
+	else
+		indio_dev->info = st->chip_info->info;
+
 	if (st->chip_info->parse_channels) {
 		ret = st->chip_info->parse_channels(indio_dev);
 		if (ret)
