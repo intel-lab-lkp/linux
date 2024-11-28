@@ -222,8 +222,11 @@ int smc_tx_sendmsg(struct smc_sock *smc, struct msghdr *msg, size_t len)
 			conn->local_tx_ctrl.prod_flags.urg_data_pending = 1;
 
 		if (!atomic_read(&conn->sndbuf_space) || conn->urg_tx_pend) {
-			if (send_done)
+			if (send_done) {
+				sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);
+				set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 				return send_done;
+			}
 			rc = smc_tx_wait(smc, msg->msg_flags);
 			if (rc)
 				goto out_err;
