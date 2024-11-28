@@ -341,8 +341,8 @@ static struct platform_driver electra_cf_driver = {
 		.name = driver_name,
 		.of_match_table = electra_cf_match,
 	},
-	.probe	  = electra_cf_probe,
-	.remove_new = electra_cf_remove,
+	.probe = electra_cf_probe,
+	.remove = electra_cf_remove,
 };
 
 module_platform_driver(electra_cf_driver);
