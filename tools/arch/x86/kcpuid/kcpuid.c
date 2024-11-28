@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #define _GNU_SOURCE
 
+#include <errno.h>
 #include <getopt.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,6 +113,36 @@ static inline bool has_subleafs(u32 f)
 	return false;
 }
 
+/**
+ * pr_err - Print passed error message to stderr
+ */
+static void pr_err(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+}
+
+/**
+ * pr_warn - Print passed warning message to stderr
+ */
+#define pr_warn(...)		pr_err(__VA_ARGS__)
+
+/**
+ * pr_err_exit - Print passed error message to stderr, then exit
+ *
+ * @ecode:	One-byte exit code.  errno can be passed here as
+ *		the passed value is quickly cached.
+ */
+#define pr_err_exit(ecode, ...)	do {	\
+	int __ecode = (ecode);		\
+					\
+	pr_err(__VA_ARGS__);		\
+	exit(__ecode);			\
+} while (0)
+
 static void leaf_print_raw(struct subleaf *leaf)
 {
 	if (has_subleafs(leaf->index)) {
@@ -145,14 +177,14 @@ static bool cpuid_store(struct cpuid_range *range, u32 f, int subleaf,
 	if (!func->leafs) {
 		func->leafs = malloc(sizeof(struct subleaf));
 		if (!func->leafs)
-			perror("malloc func leaf");
+			pr_err_exit(errno, "malloc func leaf");
 
 		func->nr = 1;
 	} else {
 		s = func->nr;
 		func->leafs = realloc(func->leafs, (s + 1) * sizeof(*leaf));
 		if (!func->leafs)
-			perror("realloc f->leafs");
+			pr_err_exit(errno, "realloc f->leafs");
 
 		func->nr++;
 	}
@@ -211,7 +243,7 @@ struct cpuid_range *setup_cpuid_range(u32 input_eax)
 
 	range = malloc(sizeof(struct cpuid_range));
 	if (!range)
-		perror("malloc range");
+		pr_err_exit(errno, "malloc range");
 
 	if (input_eax & 0x80000000)
 		range->is_ext = true;
@@ -220,7 +252,7 @@ struct cpuid_range *setup_cpuid_range(u32 input_eax)
 
 	range->funcs = malloc(sizeof(struct cpuid_func) * idx_func);
 	if (!range->funcs)
-		perror("malloc range->funcs");
+		pr_err_exit(errno, "malloc range->funcs");
 
 	range->nr = idx_func;
 	memset(range->funcs, 0, sizeof(struct cpuid_func) * idx_func);
@@ -395,8 +427,8 @@ static int parse_line(char *line)
 	return 0;
 
 err_exit:
-	printf("Warning: wrong line format:\n");
-	printf("\tline[%d]: %s\n", flines, line);
+	pr_warn("Warning: wrong line format:\n"
+		"\tline[%d]: %s\n", flines, line);
 	return -1;
 }
 
@@ -419,7 +451,7 @@ static void parse_text(void)
 	}
 
 	if (!file) {
-		printf("Fail to open '%s'\n", filename);
+		pr_err("Fail to open '%s'\n", filename);
 		return;
 	}
 
@@ -530,7 +562,7 @@ static inline struct cpuid_func *index_to_func(u32 index)
 	func_idx = index & 0xffff;
 
 	if ((func_idx + 1) > (u32)range->nr) {
-		printf("ERR: invalid input index (0x%x)\n", index);
+		pr_err("ERR: invalid input index (0x%x)\n", index);
 		return NULL;
 	}
 	return &range->funcs[func_idx];
@@ -562,7 +594,7 @@ static void show_info(void)
 				return;
 			}
 
-			printf("ERR: invalid input subleaf (0x%x)\n", user_sub);
+			pr_err("ERR: invalid input subleaf (0x%x)\n", user_sub);
 		}
 
 		show_func(func);
@@ -593,7 +625,7 @@ static void setup_platform_cpuid(void)
 
 static void usage(void)
 {
-	printf("kcpuid [-abdfhr] [-l leaf] [-s subleaf]\n"
+	pr_err("kcpuid [-abdfhr] [-l leaf] [-s subleaf]\n"
 		"\t-a|--all             Show both bit flags and complex bit fields info\n"
 		"\t-b|--bitflags        Show boolean flags only\n"
 		"\t-d|--detail          Show details of the flag/fields (default)\n"
@@ -652,7 +684,7 @@ static int parse_options(int argc, char *argv[])
 			user_sub = strtoul(optarg, NULL, 0);
 			break;
 		default:
-			printf("%s: Invalid option '%c'\n", argv[0], optopt);
+			pr_err("%s: Invalid option '%c'\n", argv[0], optopt);
 			return -1;
 	}
 
