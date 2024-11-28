@@ -576,8 +576,10 @@ out:
 		if ((ima_appraise & IMA_APPRAISE_FIX) && !try_modsig &&
 		    (!xattr_value ||
 		     xattr_value->type != EVM_IMA_XATTR_DIGSIG)) {
-			if (!ima_fix_xattr(dentry, iint))
-				status = INTEGRITY_PASS;
+			/* Fix by setting security.ima on file close. */
+			set_bit(IMA_UPDATE_XATTR_FIX, &iint->atomic_flags);
+			status = INTEGRITY_PASS;
+			cause = "fix";
 		}
 
 		/*
@@ -587,6 +589,7 @@ out:
 		if (inode->i_size == 0 && iint->flags & IMA_NEW_FILE &&
 		    test_bit(IMA_DIGSIG, &iint->atomic_flags)) {
 			status = INTEGRITY_PASS;
+			cause = "new-signed-file";
 		}
 
 		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode, filename,

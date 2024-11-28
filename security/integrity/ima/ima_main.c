@@ -158,13 +158,16 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 				  struct inode *inode, struct file *file)
 {
 	fmode_t mode = file->f_mode;
-	bool update;
+	bool update = false, update_fix;
 
-	if (!(mode & FMODE_WRITE))
+	update_fix = test_and_clear_bit(IMA_UPDATE_XATTR_FIX,
+					&iint->atomic_flags);
+
+	if (!(mode & FMODE_WRITE) && !update_fix)
 		return;
 
 	ima_iint_lock(inode);
-	if (atomic_read(&inode->i_writecount) == 1) {
+	if (atomic_read(&inode->i_writecount) == 1 && (mode & FMODE_WRITE)) {
 		struct kstat stat;
 
 		update = test_and_clear_bit(IMA_UPDATE_XATTR,
@@ -181,6 +184,10 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 				ima_update_xattr(iint, file);
 		}
 	}
+
+	if (!update && update_fix)
+		ima_update_xattr(iint, file);
+
 	ima_iint_unlock(inode);
 }
 
@@ -378,13 +385,10 @@ static int process_measurement(struct file *file, const struct cred *cred,
 				      template_desc);
 	if (rc == 0 && (action & IMA_APPRAISE_SUBMASK)) {
 		rc = ima_check_blacklist(iint, modsig, pcr);
-		if (rc != -EPERM) {
-			inode_lock(inode);
+		if (rc != -EPERM)
 			rc = ima_appraise_measurement(func, iint, file,
 						      pathname, xattr_value,
 						      xattr_len, modsig);
-			inode_unlock(inode);
-		}
 		if (!rc)
 			rc = mmap_violation_check(func, file, &pathbuf,
 						  &pathname, filename);
