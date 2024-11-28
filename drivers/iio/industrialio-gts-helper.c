@@ -191,86 +191,61 @@ static int fill_and_sort_scaletables(struct iio_gts *gts, int **gains, int **sca
 	return 0;
 }
 
-static int combine_gain_tables(struct iio_gts *gts, int **gains,
-			       int *all_gains, size_t gain_bytes)
+static int scale_eq(int *sc1, int *sc2)
 {
-	int i, new_idx, time_idx;
+	return *sc1 == *sc2 && *(sc1 + 1) == *(sc2 + 1);
+}
 
-	/*
-	 * We assume all the gains for same integration time were unique.
-	 * It is likely the first time table had greatest time multiplier as
-	 * the times are in the order of preference and greater times are
-	 * usually preferred. Hence we start from the last table which is likely
-	 * to have the smallest total gains.
-	 */
-	time_idx = gts->num_itime - 1;
-	memcpy(all_gains, gains[time_idx], gain_bytes);
-	new_idx = gts->num_hwgain;
+static int scale_smaller(int *sc1, int *sc2)
+{
+	if (*sc1 != *sc2)
+		return *sc1 < *sc2;
 
-	while (time_idx-- > 0) {
-		for (i = 0; i < gts->num_hwgain; i++) {
-			int candidate = gains[time_idx][i];
+	/* If integer parts are equal, fixp parts */
+	return *(sc1 + 1) < *(sc2 + 1);
+}
+
+static int do_combined_scaletable(struct iio_gts *gts, int **scales, size_t scale_bytes)
+{
+	int t_idx, i, new_idx;
+	int *all_scales = kcalloc(gts->num_itime, scale_bytes, GFP_KERNEL);
+
+	if (!all_scales)
+		return -ENOMEM;
+
+	t_idx = gts->num_itime - 1;
+	memcpy(all_scales, scales[t_idx], scale_bytes);
+	new_idx = gts->num_hwgain * 2;
+
+	while (t_idx-- > 0) {
+		for (i = 0; i < gts->num_hwgain ; i++) {
+			int *candidate = &scales[t_idx][i * 2];
 			int chk;
 
-			if (candidate > all_gains[new_idx - 1]) {
-				all_gains[new_idx] = candidate;
-				new_idx++;
+			if (scale_smaller(candidate, &all_scales[new_idx - 2])) {
+				all_scales[new_idx] = *candidate;
+				all_scales[new_idx + 1] = *(candidate + 1);
+				new_idx += 2;
 
 				continue;
 			}
-			for (chk = 0; chk < new_idx; chk++)
-				if (candidate <= all_gains[chk])
+			for (chk = 0; chk < new_idx; chk += 2)
+				if (!scale_smaller(candidate, &all_scales[chk]))
 					break;
 
-			if (candidate == all_gains[chk])
+
+			if (scale_eq(candidate, &all_scales[chk]))
 				continue;
 
-			memmove(&all_gains[chk + 1], &all_gains[chk],
+			memmove(&all_scales[chk + 2], &all_scales[chk],
 				(new_idx - chk) * sizeof(int));
-			all_gains[chk] = candidate;
-			new_idx++;
+			all_scales[chk] = *candidate;
+			all_scales[chk + 1] = *(candidate + 1);
+			new_idx += 2;
 		}
 	}
 
-	return new_idx;
-}
-
-static int *build_all_scales_table(struct iio_gts *gts, int *all_gains, int num_scales)
-{
-	int i, ret;
-	int *all_scales __free(kfree) = kcalloc(num_scales, 2 * sizeof(int),
-						GFP_KERNEL);
-
-	if (!all_scales)
-		return ERR_PTR(-ENOMEM);
-
-	for (i = 0; i < num_scales; i++) {
-		ret = iio_gts_total_gain_to_scale(gts, all_gains[i], &all_scales[i * 2],
-						  &all_scales[i * 2 + 1]);
-		if (ret)
-			return ERR_PTR(ret);
-	}
-
-	return_ptr(all_scales);
-}
-
-static int build_combined_tables(struct iio_gts *gts,
-				 int **gains, size_t gain_bytes)
-{
-	int *all_scales, num_gains;
-	int *all_gains __free(kfree) = kcalloc(gts->num_itime, gain_bytes,
-					       GFP_KERNEL);
-
-	if (!all_gains)
-		return -ENOMEM;
-
-	num_gains = combine_gain_tables(gts, gains, all_gains, gain_bytes);
-
-	all_scales = build_all_scales_table(gts, all_gains, num_gains);
-	if (IS_ERR(all_scales))
-		return PTR_ERR(all_scales);
-
-	gts->num_avail_all_scales = num_gains;
+	gts->num_avail_all_scales = new_idx / 2;
 	gts->avail_all_scales_table = all_scales;
 
 	return 0;
@@ -279,15 +254,15 @@ static int build_combined_tables(struct iio_gts *gts,
 static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 {
 	int ret;
-	size_t gain_bytes;
+	size_t scale_bytes;
 
 	ret = fill_and_sort_scaletables(gts, gains, scales);
 	if (ret)
 		return ret;
 
-	gain_bytes = array_size(gts->num_hwgain, sizeof(int));
+	scale_bytes = array_size(gts->num_hwgain, 2 * sizeof(int));
 
-	return build_combined_tables(gts, gains, gain_bytes);
+	return do_combined_scaletable(gts, scales, scale_bytes);
 }
 
 /**
