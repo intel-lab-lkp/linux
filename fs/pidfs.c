@@ -23,6 +23,88 @@
 #include "internal.h"
 #include "mount.h"
 
+static u32 pidfs_ino_highbits;
+static u32 pidfs_ino_last_ino_lowbits;
+
+static DEFINE_IDR(pidfs_ino_idr);
+
+static inline ino_t pidfs_ino(u64 ino)
+{
+	/* On 32 bit low 32 bits are the inode. */
+	if (sizeof(ino_t) < sizeof(u64))
+		return (u32)ino;
+
+	/* On 64 bit simply return ino. */
+	return ino;
+}
+
+static inline u32 pidfs_gen(u64 ino)
+{
+	/* On 32 bit the generation number are the upper 32 bits. */
+	if (sizeof(ino_t) < sizeof(u64))
+		return ino >> 32;
+
+	/* On 64 bit the generation number is 1. */
+	return 1;
+}
+
+/*
+ * Construct an inode number for struct pid in a way that we can use the
+ * lower 32bit to lookup struct pid independent of any pid numbers that
+ * could be leaked into userspace (e.g., via file handle encoding).
+ */
+int pidfs_add_pid(struct pid *pid)
+{
+	u32 ino_highbits;
+	int ret;
+
+	ret = idr_alloc_cyclic(&pidfs_ino_idr, pid, 1, 0, GFP_ATOMIC);
+	if (ret >= 0 && ret < pidfs_ino_last_ino_lowbits)
+		pidfs_ino_highbits++;
+	ino_highbits = pidfs_ino_highbits;
+	pidfs_ino_last_ino_lowbits = ret;
+	if (ret < 0)
+		return ret;
+
+	pid->ino = (u64)ino_highbits << 32 | ret;
+	pid->stashed = NULL;
+	return 0;
+}
+
+void pidfs_remove_pid(struct pid *pid)
+{
+	idr_remove(&pidfs_ino_idr, (u32)pidfs_ino(pid->ino));
+}
+
+/* Find a struct pid based on the inode number. */
+static __maybe_unused struct pid *pidfs_ino_get_pid(u64 ino)
+{
+	ino_t pid_ino = pidfs_ino(ino);
+	u32 gen = pidfs_gen(ino);
+	struct pid *pid;
+
+	guard(rcu)();
+
+	/* Handle @pid lookup carefully so there's no risk of UAF. */
+	pid = idr_find(&pidfs_ino_idr, (u32)ino);
+	if (!pid)
+		return NULL;
+
+	if (sizeof(ino_t) < sizeof(u64)) {
+		if (gen && pidfs_gen(pid->ino) != gen)
+			pid = NULL;
+	} else {
+		if (pidfs_ino(pid->ino) != pid_ino)
+			pid = NULL;
+	}
+
+	/* Within our pid namespace hierarchy? */
+	if (pid_vnr(pid) == 0)
+		pid = NULL;
+
+	return get_pid(pid);
+}
+
 #ifdef CONFIG_PROC_FS
 /**
  * pidfd_show_fdinfo - print information about a pidfd
@@ -491,6 +573,16 @@ struct file *pidfs_alloc_file(struct pid *pid, unsigned int flags)
 
 void __init pidfs_init(void)
 {
+	/*
+	 * On 32 bit systems the lower 32 bits are the inode number and
+	 * the higher 32 bits are the generation number. The starting
+	 * value for the inode number and the generation number is one.
+	 */
+	if (sizeof(ino_t) < sizeof(u64))
+		pidfs_ino_highbits = 1;
+	else
+		pidfs_ino_highbits = 0;
+
 	pidfs_mnt = kern_mount(&pidfs_type);
 	if (IS_ERR(pidfs_mnt))
 		panic("Failed to mount pidfs pseudo filesystem");
