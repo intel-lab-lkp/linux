@@ -758,7 +758,7 @@ static void test_context_switch(void)
 
 	req_xtiledata_perm();
 
-	printf("[RUN]\tCheck tiledata context switches, %d iterations, %d threads.\n",
+	printf("[RUN]\tCheck tiledata context switches, %u iterations, %u threads.\n",
 	       ctxtswtest_config.iterations,
 	       ctxtswtest_config.num_threads);
 
