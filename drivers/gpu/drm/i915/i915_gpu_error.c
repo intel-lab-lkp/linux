@@ -1643,7 +1643,7 @@ capture_engine(struct intel_engine_cs *engine,
 		return NULL;
 
 	intel_engine_get_hung_entity(engine, &ce, &rq);
-	if (rq && !i915_request_started(rq))
+	if (rq && !i915_request_started(rq) && ce)
 		drm_info(&engine->gt->i915->drm, "Got hung context on %s with active request %lld:%lld [0x%04X] not yet started\n",
 			 engine->name, rq->fence.context, rq->fence.seqno, ce->guc_id.id);
 
