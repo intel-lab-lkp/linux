@@ -11,6 +11,7 @@
  *     - string
  *   - call:
  *     - print
+ *   - builtin:
  */
 
 #include <regex.h>
@@ -19,6 +20,7 @@
 #include "util/parse-action.h"
 #include "util/parse-action-flex.h"
 #include "util/parse-action-bison.h"
+#include "util/record_action.h"
 
 static struct list_head actions_head = LIST_HEAD_INIT(actions_head);
 
@@ -90,9 +92,29 @@ static int parse_action_option(const char *str)
 	return ret;
 }
 
+static bool initialized = false;
+static int parse_action_init(void)
+{
+	int ret;
+
+	if (initialized)
+		return 0;
+
+	ret = bpf_perf_record_init();
+	if (ret)
+		return ret;
+
+	initialized = true;
+	return 0;
+}
+
 int parse_record_action(struct evlist *evlist, const char *str)
 {
 	int ret;
+
+	ret = parse_action_init();
+	if (ret)
+		return ret;
 
 	if (evlist == NULL) {
 		pr_err("--action option should follow a tracer option\n");

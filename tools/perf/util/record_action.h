@@ -7,8 +7,9 @@
 
 #ifdef HAVE_BPF_SKEL
 
-int bpf_perf_record(struct evlist *evlist, int argc, const char **argv);
+int bpf_perf_record_init(void);
 
+int bpf_perf_record(struct evlist *evlist, int argc, const char **argv);
 
 #else /* !HAVE_BPF_SKEL */
 
@@ -17,6 +18,11 @@ static inline int bpf_perf_record(struct evlist *evlist __maybe_unused,
 				  const char **argv __maybe_unused)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline int bpf_perf_record_init(void)
+{
+	return 0;
 }
 
 #endif /* !HAVE_BPF_SKEL */

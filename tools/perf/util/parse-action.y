@@ -38,14 +38,14 @@ static void parse_action_error(struct list_head *expr __maybe_unused,
 	u32 opcode;
 }
 
-%token IDENT ERROR NUMBER STRING CALL
+%token IDENT ERROR NUMBER STRING CALL BUILTIN
 %token SEMI LP RP COM
 %type <expr> action_term expr_term expr_call_term
 %destructor { parse_action_expr__free($$); } <expr>
 %type <str> IDENT
 %type <num> NUMBER
 %type <str> STRING
-%type <opcode> CALL
+%type <opcode> CALL BUILTIN
 %type <list> opnds
 
 %%
@@ -128,6 +128,13 @@ NUMBER
 STRING
 {
 	$$ = parse_action_expr__new(expr_id(CONST, STR), NULL, (void *)$1, strlen($1));
+	if ($$ == NULL)
+		YYERROR;
+}
+|
+BUILTIN
+{
+	$$ = parse_action_expr__new(evtact_expr_id_encode(EVTACT_EXPR_TYPE_BUILTIN, $1), NULL, NULL, 0);
 	if ($$ == NULL)
 		YYERROR;
 }

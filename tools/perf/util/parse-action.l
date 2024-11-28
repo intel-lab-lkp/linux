@@ -82,6 +82,12 @@ static int call(u32 opcode)
 	return CALL;
 }
 
+static int builtin(u32 opcode)
+{
+	parse_action_lval.opcode = opcode;
+	return BUILTIN;
+}
+
 %}
 
 num_dec		[0-9]+

@@ -11,6 +11,7 @@
 enum evtact_expr_type {
 	EVTACT_EXPR_TYPE_CONST,
 	EVTACT_EXPR_TYPE_CALL,
+	EVTACT_EXPR_TYPE_BUILTIN,
 	EVTACT_EXPR_TYPE_MAX,
 };
 
@@ -23,6 +24,10 @@ enum evtact_expr_const_type {
 enum evtact_expr_call_type {
 	EVTACT_EXPR_CALL_TYPE_PRINT,
 	EVTACT_EXPR_CALL_TYPE_MAX,
+};
+
+enum evtact_expr_builtin_type {
+	EVTACT_EXPR_BUILTIN_TYPE_MAX,
 };
 
 struct evtact_expr;
