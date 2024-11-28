@@ -10,6 +10,7 @@ use crate::{
     bindings,
     block::mq::{operations::OperationsVTable, request::RequestDataWrapper, Operations},
     error,
+    init::Zeroable,
     prelude::PinInit,
     try_pin_init,
     types::Opaque,
@@ -32,6 +33,10 @@ pub struct TagSet<T: Operations> {
     _p: PhantomData<T>,
 }
 
+// SAFETY: `blk_mq_tag_set` only contains integers and pointers, which
+// all are allowed to be 0.
+unsafe impl Zeroable for bindings::blk_mq_tag_set {}
+
 impl<T: Operations> TagSet<T> {
     /// Try to create a new tag set
     pub fn new(
@@ -39,9 +44,6 @@ impl<T: Operations> TagSet<T> {
         num_tags: u32,
         num_maps: u32,
     ) -> impl PinInit<Self, error::Error> {
-        // SAFETY: `blk_mq_tag_set` only contains integers and pointers, which
-        // all are allowed to be 0.
-        let tag_set: bindings::blk_mq_tag_set = unsafe { core::mem::zeroed() };
         let tag_set = core::mem::size_of::<RequestDataWrapper>()
             .try_into()
             .map(|cmd_size| {
@@ -55,7 +57,7 @@ impl<T: Operations> TagSet<T> {
                     flags: bindings::BLK_MQ_F_SHOULD_MERGE,
                     driver_data: core::ptr::null_mut::<core::ffi::c_void>(),
                     nr_maps: num_maps,
-                    ..tag_set
+                    ..Zeroable::ZERO
                 }
             });
 

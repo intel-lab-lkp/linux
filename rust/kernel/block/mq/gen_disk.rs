@@ -6,7 +6,7 @@
 //! C header: [`include/linux/blk_mq.h`](srctree/include/linux/blk_mq.h)
 
 use crate::block::mq::{raw_writer::RawWriter, Operations, TagSet};
-use crate::{bindings, error::from_err_ptr, error::Result, sync::Arc};
+use crate::{bindings, error::from_err_ptr, error::Result, init::Zeroable, sync::Arc};
 use crate::{error, static_lock_class};
 use core::fmt::{self, Write};
 
@@ -30,6 +30,9 @@ impl Default for GenDiskBuilder {
         }
     }
 }
+
+// SAFETY: `bindings::queue_limits` contains only fields that are valid when zeroed.
+unsafe impl Zeroable for bindings::queue_limits {}
 
 impl GenDiskBuilder {
     /// Create a new instance.
@@ -93,8 +96,7 @@ impl GenDiskBuilder {
         name: fmt::Arguments<'_>,
         tagset: Arc<TagSet<T>>,
     ) -> Result<GenDisk<T>> {
-        // SAFETY: `bindings::queue_limits` contain only fields that are valid when zeroed.
-        let mut lim: bindings::queue_limits = unsafe { core::mem::zeroed() };
+        let mut lim: bindings::queue_limits = Zeroable::ZERO;
 
         lim.logical_block_size = self.logical_block_size;
         lim.physical_block_size = self.physical_block_size;
