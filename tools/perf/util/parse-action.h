@@ -27,6 +27,7 @@ enum evtact_expr_call_type {
 };
 
 enum evtact_expr_builtin_type {
+	EVTACT_EXPR_BUILTIN_TYPE_CPU,
 	EVTACT_EXPR_BUILTIN_TYPE_MAX,
 };
 

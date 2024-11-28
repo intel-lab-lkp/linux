@@ -7,6 +7,7 @@
 #define __OUTPUT_FORMATS_MAX_NUM 8
 
 enum __output_format_type {
+	__OUTPUT_FORMAT_TYPE_CPU,
 	__OUTPUT_FORMAT_TYPE_MAX,
 };
 

@@ -86,13 +86,16 @@ int bpf_perf_record_init(void)
 }
 
 static int set_expr_builtin_output_format(struct evtact_expr *expr,
-					  u32 opcode, int *offset,
-					  int *format __maybe_unused)
+					  u32 opcode, int *offset, int *format)
 {
 	int size = 0;
 	struct expr_builtin_output_priv *priv = expr->priv;
 
 	switch (opcode) {
+	case EVTACT_EXPR_BUILTIN_TYPE_CPU:
+		*format = __OUTPUT_FORMAT_TYPE_CPU;
+		size = sizeof(u32);
+		break;
 	default:
 		pr_err("set expr builtin output format unknown opcode: %u\n", opcode);
 		return -1;

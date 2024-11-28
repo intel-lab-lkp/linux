@@ -12,6 +12,7 @@
  *   - call:
  *     - print
  *   - builtin:
+ *     - cpu
  */
 
 #include <regex.h>

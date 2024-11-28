@@ -103,6 +103,7 @@ ident		[_a-zA-Z][_a-zA-Z0-9]*
 {num_hex}	{ return value(16); }
 {space}		{ }
 
+cpu		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_CPU);  }
 
 print		{ return call(EVTACT_EXPR_CALL_TYPE_PRINT); }
 

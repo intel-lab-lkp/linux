@@ -35,10 +35,22 @@ static inline struct __output_data_payload *sample_data_payload(void)
 	return bpf_map_lookup_elem(&sample_data_tmp, &key);
 }
 
+static inline int output_cpu(__u8 *data, int size)
+{
+	__u32 *cpu = (__u32 *)data;
+
+	if (size < sizeof(__u32))
+		return -1;
+
+	*cpu = bpf_get_smp_processor_id();
+	return sizeof(__u32);
+}
+
 SEC("xxx")
 int sample_output(u64 *ctx)
 {
 	struct __output_data_payload *sample;
+	__u8 *data;
 	int i;
 	int total = 0;
 	int ret = 0;
@@ -50,8 +62,12 @@ int sample_output(u64 *ctx)
 	if (!sample)
 		return 0;
 
+	data = sample->__data;
 	for (i = 0; i < output_format_num && i < __OUTPUT_FORMATS_MAX_NUM; i++) {
 		switch (output_formats[i]) {
+		case __OUTPUT_FORMAT_TYPE_CPU:
+			ret = output_cpu(data + total, __OUTPUT_DATA_MAX_SIZE - total);
+			break;
 		default:
 			ret = -1;
 			break;
