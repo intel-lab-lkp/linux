@@ -1392,7 +1392,12 @@ pub unsafe trait PinnedDrop: __internal::HasPinData {
 /// ```rust,ignore
 /// let val: Self = unsafe { core::mem::zeroed() };
 /// ```
-pub unsafe trait Zeroable {}
+pub unsafe trait Zeroable: Sized {
+    /// Return a value of Self whose memory representation consists of all zeroes.
+    // SAFETY: the Zeroable trait itself is unsafe, and declaring it (whether
+    // manually or via derivation) implies that this is not undefined behavior.
+    const ZERO: Self = unsafe { core::mem::zeroed() };
+}
 
 /// Create a new zeroed T.
 ///
@@ -1439,7 +1444,7 @@ impl_zeroable! {
     {<T>} Opaque<T>,
 
     // SAFETY: `T: Zeroable` and `UnsafeCell` is `repr(transparent)`.
-    {<T: ?Sized + Zeroable>} UnsafeCell<T>,
+    {<T: Zeroable>} UnsafeCell<T>,
 
     // SAFETY: All zeros is equivalent to `None` (option layout optimization guarantee).
     Option<NonZeroU8>, Option<NonZeroU16>, Option<NonZeroU32>, Option<NonZeroU64>,
