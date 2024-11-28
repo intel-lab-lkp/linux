@@ -94,7 +94,7 @@ static struct dma_fence *panfrost_fence_create(struct panfrost_device *pfdev, in
 	if (!fence)
 		return ERR_PTR(-ENOMEM);
 
-	fence->dev = pfdev->ddev;
+	fence->dev = &pfdev->base;
 	fence->queue = js_num;
 	fence->seqno = ++js->queue[js_num].emit_seqno;
 	dma_fence_init(&fence->base, &panfrost_fence_ops, &js->job_lock,
@@ -205,7 +205,7 @@ static void panfrost_job_hw_submit(struct panfrost_job *job, int js)
 
 	panfrost_devfreq_record_busy(&pfdev->pfdevfreq);
 
-	ret = pm_runtime_get_sync(pfdev->dev);
+	ret = pm_runtime_get_sync(pfdev->base.dev);
 	if (ret < 0)
 		return;
 
@@ -256,7 +256,7 @@ static void panfrost_job_hw_submit(struct panfrost_job *job, int js)
 		}
 
 		job_write(pfdev, JS_COMMAND_NEXT(js), JS_COMMAND_START);
-		dev_dbg(pfdev->dev,
+		dev_dbg(pfdev->base.dev,
 			"JS: Submitting atom %p to js[%d][%d] with head=0x%llx AS %d",
 			job, js, subslot, jc_head, cfg & 0xf);
 	}
@@ -437,12 +437,12 @@ static void panfrost_job_handle_err(struct panfrost_device *pfdev,
 	bool signal_fence = true;
 
 	if (!panfrost_exception_is_fault(js_status)) {
-		dev_dbg(pfdev->dev, "js event, js=%d, status=%s, head=0x%x, tail=0x%x",
+		dev_dbg(pfdev->base.dev, "js event, js=%d, status=%s, head=0x%x, tail=0x%x",
 			js, exception_name,
 			job_read(pfdev, JS_HEAD_LO(js)),
 			job_read(pfdev, JS_TAIL_LO(js)));
 	} else {
-		dev_err(pfdev->dev, "js fault, js=%d, status=%s, head=0x%x, tail=0x%x",
+		dev_err(pfdev->base.dev, "js fault, js=%d, status=%s, head=0x%x, tail=0x%x",
 			js, exception_name,
 			job_read(pfdev, JS_HEAD_LO(js)),
 			job_read(pfdev, JS_TAIL_LO(js)));
@@ -474,7 +474,7 @@ static void panfrost_job_handle_err(struct panfrost_device *pfdev,
 	if (signal_fence)
 		dma_fence_signal_locked(job->done_fence);
 
-	pm_runtime_put_autosuspend(pfdev->dev);
+	pm_runtime_put_autosuspend(pfdev->base.dev);
 
 	if (panfrost_exception_needs_reset(pfdev, js_status)) {
 		atomic_set(&pfdev->reset.pending, 1);
@@ -493,7 +493,7 @@ static void panfrost_job_handle_done(struct panfrost_device *pfdev,
 	panfrost_devfreq_record_idle(&pfdev->pfdevfreq);
 
 	dma_fence_signal_locked(job->done_fence);
-	pm_runtime_put_autosuspend(pfdev->dev);
+	pm_runtime_put_autosuspend(pfdev->base.dev);
 }
 
 static void panfrost_job_handle_irq(struct panfrost_device *pfdev, u32 status)
@@ -602,7 +602,7 @@ static void panfrost_job_handle_irqs(struct panfrost_device *pfdev)
 	u32 status = job_read(pfdev, JOB_INT_RAWSTAT);
 
 	while (status) {
-		pm_runtime_mark_last_busy(pfdev->dev);
+		pm_runtime_mark_last_busy(pfdev->base.dev);
 
 		spin_lock(&pfdev->js->job_lock);
 		panfrost_job_handle_irq(pfdev, status);
@@ -683,7 +683,7 @@ panfrost_reset(struct panfrost_device *pfdev,
 				 10, 10000);
 
 	if (ret)
-		dev_err(pfdev->dev, "Soft-stop failed\n");
+		dev_err(pfdev->base.dev, "Soft-stop failed\n");
 
 	/* Handle the remaining interrupts before we reset. */
 	panfrost_job_handle_irqs(pfdev);
@@ -701,7 +701,7 @@ panfrost_reset(struct panfrost_device *pfdev,
 			if (pfdev->jobs[i][j]->requirements & PANFROST_JD_REQ_CYCLE_COUNT ||
 			    pfdev->jobs[i][j]->is_profiled)
 				panfrost_cycle_counter_put(pfdev->jobs[i][j]->pfdev);
-			pm_runtime_put_noidle(pfdev->dev);
+			pm_runtime_put_noidle(pfdev->base.dev);
 			panfrost_devfreq_record_idle(&pfdev->pfdevfreq);
 		}
 	}
@@ -769,11 +769,11 @@ static enum drm_gpu_sched_stat panfrost_job_timedout(struct drm_sched_job
 	synchronize_irq(pfdev->js->irq);
 
 	if (dma_fence_is_signaled(job->done_fence)) {
-		dev_warn(pfdev->dev, "unexpectedly high interrupt latency\n");
+		dev_warn(pfdev->base.dev, "unexpectedly high interrupt latency\n");
 		return DRM_GPU_SCHED_STAT_NOMINAL;
 	}
 
-	dev_err(pfdev->dev, "gpu sched timeout, js=%d, config=0x%x, status=0x%x, head=0x%x, tail=0x%x, sched_job=%p",
+	dev_err(pfdev->base.dev, "gpu sched timeout, js=%d, config=0x%x, status=0x%x, head=0x%x, tail=0x%x, sched_job=%p",
 		js,
 		job_read(pfdev, JS_CONFIG(js)),
 		job_read(pfdev, JS_STATUS(js)),
@@ -847,24 +847,25 @@ int panfrost_job_init(struct panfrost_device *pfdev)
 	if (!panfrost_has_hw_feature(pfdev, HW_FEATURE_JOBCHAIN_DISAMBIGUATION))
 		nentries = 1;
 
-	pfdev->js = js = devm_kzalloc(pfdev->dev, sizeof(*js), GFP_KERNEL);
+	js = devm_kzalloc(pfdev->base.dev, sizeof(*js), GFP_KERNEL);
 	if (!js)
 		return -ENOMEM;
+	pfdev->js = js;
 
 	INIT_WORK(&pfdev->reset.work, panfrost_reset_work);
 	spin_lock_init(&js->job_lock);
 
-	js->irq = platform_get_irq_byname(to_platform_device(pfdev->dev), "job");
+	js->irq = platform_get_irq_byname(to_platform_device(pfdev->base.dev), "job");
 	if (js->irq < 0)
 		return js->irq;
 
-	ret = devm_request_threaded_irq(pfdev->dev, js->irq,
+	ret = devm_request_threaded_irq(pfdev->base.dev, js->irq,
 					panfrost_job_irq_handler,
 					panfrost_job_irq_handler_thread,
 					IRQF_SHARED, KBUILD_MODNAME "-job",
 					pfdev);
 	if (ret) {
-		dev_err(pfdev->dev, "failed to request job irq");
+		dev_err(pfdev->base.dev, "failed to request job irq");
 		return ret;
 	}
 
@@ -881,9 +882,9 @@ int panfrost_job_init(struct panfrost_device *pfdev)
 				     nentries, 0,
 				     msecs_to_jiffies(JOB_TIMEOUT_MS),
 				     pfdev->reset.wq,
-				     NULL, "pan_js", pfdev->dev);
+				     NULL, "pan_js", pfdev->base.dev);
 		if (ret) {
-			dev_err(pfdev->dev, "Failed to create scheduler: %d.", ret);
+			dev_err(pfdev->base.dev, "Failed to create scheduler: %d.", ret);
 			goto err_sched;
 		}
 	}
