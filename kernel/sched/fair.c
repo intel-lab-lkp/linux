@@ -9351,18 +9351,23 @@ static inline int migrate_degrades_locality(struct task_struct *p,
 static
 int can_migrate_task(struct task_struct *p, struct lb_env *env)
 {
+	struct cfs_rq *cfs_rq = task_cfs_rq(p);
 	int tsk_cache_hot;
 
 	lockdep_assert_rq_held(env->src_rq);
 
 	/*
 	 * We do not migrate tasks that are:
-	 * 1) throttled_lb_pair, or
+	 * 1) throttled_lb_pair, or task ineligible, or
 	 * 2) cannot be migrated to this CPU due to cpus_ptr, or
 	 * 3) running (obviously), or
 	 * 4) are cache-hot on their current CPU.
 	 */
 	if (throttled_lb_pair(task_group(p), env->src_cpu, env->dst_cpu))
+		return 0;
+
+	if (sched_feat(PLACE_LAG) && cfs_rq->nr_running &&
+			!entity_eligible(cfs_rq, &p->se))
 		return 0;
 
 	/* Disregard percpu kthreads; they are where they need to be. */
