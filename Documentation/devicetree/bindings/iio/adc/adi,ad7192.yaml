@@ -9,6 +9,7 @@ title: Analog Devices AD7192 ADC device driver
 
 maintainers:
   - Michael Hennerich <michael.hennerich@analog.com>
+  - Alisa-Dariana Roman <alisa.roman@analog.com>
 
 description: |
   Bindings for the Analog Devices AD7192 ADC device. Datasheet can be
