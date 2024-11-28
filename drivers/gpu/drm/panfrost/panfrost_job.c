@@ -27,6 +27,10 @@
 #define job_write(dev, reg, data) writel(data, dev->iomem + (reg))
 #define job_read(dev, reg) readl(dev->iomem + (reg))
 
+#define JOB_INT_ENABLE_MASK			\
+	(GENMASK(16 + NUM_JOB_SLOTS - 1, 16) |	\
+	 GENMASK(NUM_JOB_SLOTS - 1, 0))
+
 struct panfrost_queue_state {
 	struct drm_gpu_scheduler sched;
 	u64 fence_context;
@@ -421,18 +425,23 @@ static struct dma_fence *panfrost_job_run(struct drm_sched_job *sched_job)
 	return fence;
 }
 
-void panfrost_job_enable_interrupts(struct panfrost_device *pfdev)
+u32 panfrost_job_reset_interrupts(struct panfrost_device *pfdev)
 {
 	int j;
 	u32 irq_mask = 0;
-
-	clear_bit(PANFROST_COMP_BIT_JOB, pfdev->is_suspended);
 
 	for (j = 0; j < NUM_JOB_SLOTS; j++) {
 		irq_mask |= MK_JS_MASK(j);
 	}
 
 	job_write(pfdev, JOB_INT_CLEAR, irq_mask);
+
+	return irq_mask;
+}
+
+void panfrost_enable_interrupts(struct panfrost_device *pfdev, u32 irq_mask)
+{
+	clear_bit(PANFROST_COMP_BIT_JOB, pfdev->is_suspended);
 	job_write(pfdev, JOB_INT_MASK, irq_mask);
 }
 
@@ -725,12 +734,7 @@ panfrost_reset(struct panfrost_device *pfdev,
 	spin_unlock(&pfdev->js->job_lock);
 
 	/* Proceed with reset now. */
-	panfrost_device_reset(pfdev);
-
-	/* panfrost_device_reset() unmasks job interrupts, but we want to
-	 * keep them masked a bit longer.
-	 */
-	job_write(pfdev, JOB_INT_MASK, 0);
+	panfrost_device_reset(pfdev, false);
 
 	/* GPU has been reset, we can clear the reset pending bit. */
 	atomic_set(&pfdev->reset.pending, 0);
@@ -752,9 +756,7 @@ panfrost_reset(struct panfrost_device *pfdev,
 		drm_sched_start(&pfdev->js->queue[i].sched, 0);
 
 	/* Re-enable job interrupts now that everything has been restarted. */
-	job_write(pfdev, JOB_INT_MASK,
-		  GENMASK(16 + NUM_JOB_SLOTS - 1, 16) |
-		  GENMASK(NUM_JOB_SLOTS - 1, 0));
+	panfrost_enable_interrupts(pfdev, JOB_INT_ENABLE_MASK);
 
 	dma_fence_end_signalling(cookie);
 }
@@ -827,9 +829,7 @@ static irqreturn_t panfrost_job_irq_handler_thread(int irq, void *data)
 
 	/* Enable interrupts only if we're not about to get suspended */
 	if (!test_bit(PANFROST_COMP_BIT_JOB, pfdev->is_suspended))
-		job_write(pfdev, JOB_INT_MASK,
-			  GENMASK(16 + NUM_JOB_SLOTS - 1, 16) |
-			  GENMASK(NUM_JOB_SLOTS - 1, 0));
+		job_write(pfdev, JOB_INT_MASK, JOB_INT_ENABLE_MASK);
 
 	return IRQ_HANDLED;
 }
@@ -854,6 +854,7 @@ int panfrost_job_init(struct panfrost_device *pfdev)
 {
 	struct panfrost_job_slot *js;
 	unsigned int nentries = 2;
+	u32 irq_mask;
 	int ret, j;
 
 	/* All GPUs have two entries per queue, but without jobchain
@@ -905,7 +906,8 @@ int panfrost_job_init(struct panfrost_device *pfdev)
 		}
 	}
 
-	panfrost_job_enable_interrupts(pfdev);
+	irq_mask = panfrost_job_reset_interrupts(pfdev);
+	panfrost_enable_interrupts(pfdev, irq_mask);
 
 	return 0;
 
