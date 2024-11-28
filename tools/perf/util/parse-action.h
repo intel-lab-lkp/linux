@@ -10,6 +10,7 @@
 
 enum evtact_expr_type {
 	EVTACT_EXPR_TYPE_CONST,
+	EVTACT_EXPR_TYPE_CALL,
 	EVTACT_EXPR_TYPE_MAX,
 };
 
@@ -17,6 +18,10 @@ enum evtact_expr_const_type {
 	EVTACT_EXPR_CONST_TYPE_INT,
 	EVTACT_EXPR_CONST_TYPE_STR,
 	EVTACT_EXPR_CONST_TYPE_MAX,
+};
+
+enum evtact_expr_call_type {
+	EVTACT_EXPR_CALL_TYPE_MAX,
 };
 
 struct evtact_expr;

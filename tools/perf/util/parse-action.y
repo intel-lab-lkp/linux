@@ -35,15 +35,18 @@ static void parse_action_error(struct list_head *expr __maybe_unused,
 	struct evtact_expr *expr;
 	struct list_head *list;
 	unsigned long long num;
+	u32 opcode;
 }
 
-%token IDENT ERROR NUMBER STRING
-%token SEMI
-%type <expr> action_term expr_term
+%token IDENT ERROR NUMBER STRING CALL
+%token SEMI LP RP COM
+%type <expr> action_term expr_term expr_call_term
 %destructor { parse_action_expr__free($$); } <expr>
 %type <str> IDENT
 %type <num> NUMBER
 %type <str> STRING
+%type <opcode> CALL
+%type <list> opnds
 
 %%
 
@@ -64,9 +67,54 @@ action_term
 }
 
 action_term:
-expr_term
+expr_call_term
 {
 	$$ = $1;
+}
+
+expr_call_term:
+CALL LP RP
+{
+	$$ = parse_action_expr__new(evtact_expr_id_encode(EVTACT_EXPR_TYPE_CALL, $1), NULL, NULL, 0);
+	if ($$ == NULL)
+		YYERROR;
+}
+|
+CALL LP opnds RP
+{
+	$$ = parse_action_expr__new(evtact_expr_id_encode(EVTACT_EXPR_TYPE_CALL, $1), $3, NULL, 0);
+	if ($$ == NULL)
+		YYERROR;
+}
+|
+IDENT LP RP
+{
+	$$ = NULL;
+	pr_err("unknown function '%s()'\n", $1);
+	free($1);
+	YYERROR;
+}
+|
+IDENT LP opnds RP
+{
+	$$ = NULL;
+	pr_err("unknown function '%s()'\n", $1);
+	parse_action_expr__free_opnds($3);
+	free($1);
+	YYERROR;
+}
+
+opnds:
+opnds COM expr_term
+{
+	list_add_tail(&$3->list, $1);
+	$$ = $1;
+}
+|
+expr_term
+{
+	INIT_LIST_HEAD(&$1->list);
+	$$ = &$1->list;
 }
 
 expr_term:

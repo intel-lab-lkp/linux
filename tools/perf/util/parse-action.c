@@ -9,6 +9,7 @@
  *   - constant:
  *     - integer
  *     - string
+ *   - call:
  */
 
 #include "util/debug.h"
@@ -232,8 +233,32 @@ static struct evtact_expr_class expr_const = {
 	.set_ops = expr_const_set_ops,
 };
 
+static struct evtact_expr_ops *expr_call_ops_list[EVTACT_EXPR_CALL_TYPE_MAX] = {
+};
+
+static int expr_call_set_ops(struct evtact_expr *expr, u32 opcode)
+{
+	if (opcode >= EVTACT_EXPR_CALL_TYPE_MAX) {
+		pr_err("expr_call opcode invalid: %u\n", opcode);
+		return -EINVAL;
+	}
+
+	if (expr_call_ops_list[opcode] == NULL) {
+		pr_err("expr_call opcode not supported: %u\n", opcode);
+		return -ENOTSUP;
+	}
+
+	expr->ops = expr_call_ops_list[opcode];
+	return 0;
+}
+
+static struct evtact_expr_class expr_call = {
+	.set_ops = expr_call_set_ops,
+};
+
 static struct evtact_expr_class *expr_class_list[EVTACT_EXPR_TYPE_MAX] = {
 	[EVTACT_EXPR_TYPE_CONST]   = &expr_const,
+	[EVTACT_EXPR_TYPE_CALL]    = &expr_call,
 };
 
 int parse_action_expr__set_class(enum evtact_expr_type type,
