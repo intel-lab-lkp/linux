@@ -282,8 +282,8 @@ static int hfi_platform_parser(struct venus_core *core, struct venus_inst *inst)
 u32 hfi_parser(struct venus_core *core, struct venus_inst *inst, void *buf,
 	       u32 size)
 {
+	u32 *words = buf, *payload, codecs = 0, domain = 0;
 	unsigned int words_count = size >> 2;
-	u32 *word = buf, *data, codecs = 0, domain = 0;
 	int ret;
 
 	ret = hfi_platform_parser(core, inst);
@@ -301,36 +301,71 @@ u32 hfi_parser(struct venus_core *core, struct venus_inst *inst, void *buf,
 	}
 
 	while (words_count) {
-		data = word + 1;
+		payload = words + 1;
 
-		switch (*word) {
+		switch (*words) {
 		case HFI_PROPERTY_PARAM_CODEC_SUPPORTED:
-			parse_codecs(core, data);
+			if (words_count < sizeof(struct hfi_codec_supported))
+				return HFI_ERR_SYS_INSUFFICIENT_RESOURCES;
+
+			parse_codecs(core, payload);
 			init_codecs(core);
+			words_count -= sizeof(struct hfi_codec_supported);
+			words += sizeof(struct hfi_codec_supported);
 			break;
 		case HFI_PROPERTY_PARAM_MAX_SESSIONS_SUPPORTED:
-			parse_max_sessions(core, data);
+			if (words_count < sizeof(struct hfi_max_sessions_supported))
+				return HFI_ERR_SYS_INSUFFICIENT_RESOURCES;
+
+			parse_max_sessions(core, payload);
+			words_count -= sizeof(struct hfi_max_sessions_supported);
+			words += sizeof(struct hfi_max_sessions_supported);
 			break;
 		case HFI_PROPERTY_PARAM_CODEC_MASK_SUPPORTED:
-			parse_codecs_mask(&codecs, &domain, data);
+			if (words_count < sizeof(struct hfi_codec_mask_supported))
+				return HFI_ERR_SYS_INSUFFICIENT_RESOURCES;
+
+			parse_codecs_mask(&codecs, &domain, payload);
+			words_count -= sizeof(struct hfi_codec_mask_supported);
+			words += sizeof(struct hfi_codec_mask_supported);
 			break;
 		case HFI_PROPERTY_PARAM_UNCOMPRESSED_FORMAT_SUPPORTED:
-			parse_raw_formats(core, codecs, domain, data);
+			if (words_count < sizeof(struct hfi_uncompressed_format_supported))
+				return HFI_ERR_SYS_INSUFFICIENT_RESOURCES;
+
+			parse_raw_formats(core, codecs, domain, payload);
+			words_count -= sizeof(struct hfi_uncompressed_format_supported);
+			words += sizeof(struct hfi_uncompressed_format_supported);
 			break;
 		case HFI_PROPERTY_PARAM_CAPABILITY_SUPPORTED:
-			parse_caps(core, codecs, domain, data);
+			if (words_count < sizeof(struct hfi_capabilities))
+				return HFI_ERR_SYS_INSUFFICIENT_RESOURCES;
+
+			parse_caps(core, codecs, domain, payload);
+			words_count -= sizeof(struct hfi_capabilities);
+			words += sizeof(struct hfi_capabilities);
 			break;
 		case HFI_PROPERTY_PARAM_PROFILE_LEVEL_SUPPORTED:
-			parse_profile_level(core, codecs, domain, data);
+			if (words_count < sizeof(struct hfi_profile_level_supported))
+				return HFI_ERR_SYS_INSUFFICIENT_RESOURCES;
+
+			parse_profile_level(core, codecs, domain, payload);
+			words_count -= sizeof(struct hfi_profile_level_supported);
+			words += sizeof(struct hfi_profile_level_supported);
 			break;
 		case HFI_PROPERTY_PARAM_BUFFER_ALLOC_MODE_SUPPORTED:
-			parse_alloc_mode(core, codecs, domain, data);
+			if (words_count < sizeof(struct hfi_buffer_alloc_mode_supported))
+				return HFI_ERR_SYS_INSUFFICIENT_RESOURCES;
+
+			parse_alloc_mode(core, codecs, domain, payload);
+			words_count -= sizeof(struct hfi_buffer_alloc_mode_supported);
+			words += sizeof(struct hfi_buffer_alloc_mode_supported);
 			break;
 		default:
 			break;
 		}
 
-		word++;
+		words++;
 		words_count--;
 	}
 
