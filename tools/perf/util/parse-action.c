@@ -4,6 +4,9 @@
  * Actions are the programs that run when the sampling event is triggered.
  * The action is a list of expressions separated by semicolons (;).
  * Each action is an expression, added to actions_head node as list_head node.
+ *
+ * Supported expressions:
+ *   - constant:
  */
 
 #include "util/debug.h"
@@ -115,7 +118,31 @@ void event_actions__free(void)
 	(void)event_actions__for_each_expr_safe(do_action_free, NULL, false);
 }
 
+static struct evtact_expr_ops *expr_const_ops_list[EVTACT_EXPR_CONST_TYPE_MAX] = {
+};
+
+static int expr_const_set_ops(struct evtact_expr *expr, u32 opcode)
+{
+	if (opcode >= EVTACT_EXPR_CONST_TYPE_MAX) {
+		pr_err("expr_const opcode invalid: %u\n", opcode);
+		return -EINVAL;
+	}
+
+	if (expr_const_ops_list[opcode] == NULL) {
+		pr_err("expr_const opcode not supported: %u\n", opcode);
+		return -ENOTSUP;
+	}
+
+	expr->ops = expr_const_ops_list[opcode];
+	return 0;
+}
+
+static struct evtact_expr_class expr_const = {
+	.set_ops = expr_const_set_ops,
+};
+
 static struct evtact_expr_class *expr_class_list[EVTACT_EXPR_TYPE_MAX] = {
+	[EVTACT_EXPR_TYPE_CONST]   = &expr_const,
 };
 
 int parse_action_expr__set_class(enum evtact_expr_type type,
