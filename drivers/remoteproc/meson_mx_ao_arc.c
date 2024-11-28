@@ -137,7 +137,7 @@ static struct rproc_ops meson_mx_ao_arc_rproc_ops = {
 	.stop		= meson_mx_ao_arc_rproc_stop,
 	.da_to_va	= meson_mx_ao_arc_rproc_da_to_va,
 	.get_boot_addr	= rproc_elf_get_boot_addr,
-	.load		= rproc_elf_load_segments,
+	.load_segments	= rproc_elf_load_segments,
 	.sanity_check	= rproc_elf_sanity_check,
 };
 

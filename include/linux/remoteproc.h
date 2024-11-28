@@ -374,7 +374,7 @@ enum rsc_handling_status {
  * @find_loaded_rsc_table: find the loaded resource table from firmware image
  * @get_loaded_rsc_table: get resource table installed in memory
  *			  by external entity
- * @load:		load firmware to memory, where the remote processor
+ * @load_segments:	load firmware ELF segment to memory, where the remote processor
  *			expects to find it
  * @sanity_check:	sanity check the fw image
  * @get_boot_addr:	get boot address to entry point specified in firmware
@@ -402,7 +402,7 @@ struct rproc_ops {
 				struct rproc *rproc, const struct firmware *fw);
 	struct resource_table *(*get_loaded_rsc_table)(
 				struct rproc *rproc, size_t *size);
-	int (*load)(struct rproc *rproc, const struct firmware *fw);
+	int (*load_segments)(struct rproc *rproc, const struct firmware *fw);
 	int (*sanity_check)(struct rproc *rproc, const struct firmware *fw);
 	u64 (*get_boot_addr)(struct rproc *rproc, const struct firmware *fw);
 	unsigned long (*panic)(struct rproc *rproc);

@@ -1015,7 +1015,7 @@ static int pru_rproc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 	/* use a custom load function to deal with PRU-specific quirks */
-	rproc->ops->load = pru_rproc_load_elf_segments;
+	rproc->ops->load_segments = pru_rproc_load_elf_segments;
 
 	/* use a custom parse function to deal with PRU-specific resources */
 	rproc->ops->parse_fw = pru_rproc_parse_fw;

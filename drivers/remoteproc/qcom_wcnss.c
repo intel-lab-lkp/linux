@@ -335,7 +335,7 @@ static const struct rproc_ops wcnss_ops = {
 	.stop = wcnss_stop,
 	.da_to_va = wcnss_da_to_va,
 	.parse_fw = qcom_register_dump_segments,
-	.load = wcnss_load,
+	.load_segments = wcnss_load,
 };
 
 static irqreturn_t wcnss_wdog_interrupt(int irq, void *dev)

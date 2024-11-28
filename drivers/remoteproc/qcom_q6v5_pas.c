@@ -436,7 +436,7 @@ static const struct rproc_ops adsp_ops = {
 	.stop = adsp_stop,
 	.da_to_va = adsp_da_to_va,
 	.parse_fw = qcom_register_dump_segments,
-	.load = adsp_load,
+	.load_segments = adsp_load,
 	.panic = adsp_panic,
 };
 
@@ -446,7 +446,7 @@ static const struct rproc_ops adsp_minidump_ops = {
 	.stop = adsp_stop,
 	.da_to_va = adsp_da_to_va,
 	.parse_fw = qcom_register_dump_segments,
-	.load = adsp_load,
+	.load_segments = adsp_load,
 	.panic = adsp_panic,
 	.coredump = adsp_minidump,
 };

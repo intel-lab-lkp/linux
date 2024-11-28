@@ -2485,11 +2485,11 @@ static int rproc_alloc_ops(struct rproc *rproc, const struct rproc_ops *ops)
 	if (!rproc->ops->coredump)
 		rproc->ops->coredump = rproc_coredump;
 
-	if (rproc->ops->load || rproc->ops->load_fw)
+	if (rproc->ops->load_segments || rproc->ops->load_fw)
 		return 0;
 
 	/* Default to ELF loader if no load function is specified */
-	rproc->ops->load = rproc_elf_load_segments;
+	rproc->ops->load_segments = rproc_elf_load_segments;
 	rproc->ops->parse_fw = rproc_elf_load_rsc_table;
 	rproc->ops->find_loaded_rsc_table = rproc_elf_find_loaded_rsc_table;
 	rproc->ops->sanity_check = rproc_elf_sanity_check;
