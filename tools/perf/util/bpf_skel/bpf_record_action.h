@@ -8,6 +8,7 @@
 
 enum __output_format_type {
 	__OUTPUT_FORMAT_TYPE_CPU,
+	__OUTPUT_FORMAT_TYPE_PID,
 	__OUTPUT_FORMAT_TYPE_MAX,
 };
 

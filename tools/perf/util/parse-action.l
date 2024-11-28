@@ -104,6 +104,7 @@ ident		[_a-zA-Z][_a-zA-Z0-9]*
 {space}		{ }
 
 cpu		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_CPU);  }
+pid		{ return builtin(EVTACT_EXPR_BUILTIN_TYPE_PID);  }
 
 print		{ return call(EVTACT_EXPR_CALL_TYPE_PRINT); }
 

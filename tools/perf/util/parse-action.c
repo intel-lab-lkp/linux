@@ -13,6 +13,7 @@
  *     - print
  *   - builtin:
  *     - cpu
+ *     - pid
  */
 
 #include <regex.h>

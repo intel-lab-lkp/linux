@@ -46,6 +46,17 @@ static inline int output_cpu(__u8 *data, int size)
 	return sizeof(__u32);
 }
 
+static inline int output_pid(__u8 *data, int size)
+{
+	__u32 *pid = (__u32 *)data;
+
+	if (size < sizeof(__u32))
+		return -1;
+
+	*pid = bpf_get_current_pid_tgid() >> 32;
+	return sizeof(__u32);
+}
+
 SEC("xxx")
 int sample_output(u64 *ctx)
 {
@@ -67,6 +78,9 @@ int sample_output(u64 *ctx)
 		switch (output_formats[i]) {
 		case __OUTPUT_FORMAT_TYPE_CPU:
 			ret = output_cpu(data + total, __OUTPUT_DATA_MAX_SIZE - total);
+			break;
+		case __OUTPUT_FORMAT_TYPE_PID:
+			ret = output_pid(data + total, __OUTPUT_DATA_MAX_SIZE - total);
 			break;
 		default:
 			ret = -1;
