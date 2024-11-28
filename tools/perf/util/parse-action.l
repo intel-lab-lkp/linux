@@ -76,6 +76,12 @@ static int str_end(void)
 	return STRING;
 }
 
+static int call(u32 opcode)
+{
+	parse_action_lval.opcode = opcode;
+	return CALL;
+}
+
 %}
 
 num_dec		[0-9]+
@@ -90,6 +96,9 @@ ident		[_a-zA-Z][_a-zA-Z0-9]*
 {num_dec}	{ return value(10); }
 {num_hex}	{ return value(16); }
 {space}		{ }
+
+
+print		{ return call(EVTACT_EXPR_CALL_TYPE_PRINT); }
 
 ";"		{ return SEMI; }
 "("		{ return LP;   }

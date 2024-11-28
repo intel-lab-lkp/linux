@@ -21,6 +21,7 @@ enum evtact_expr_const_type {
 };
 
 enum evtact_expr_call_type {
+	EVTACT_EXPR_CALL_TYPE_PRINT,
 	EVTACT_EXPR_CALL_TYPE_MAX,
 };
 
