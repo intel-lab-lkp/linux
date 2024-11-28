@@ -163,7 +163,7 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 	if (!(mode & FMODE_WRITE))
 		return;
 
-	mutex_lock(&iint->mutex);
+	ima_iint_lock(inode);
 	if (atomic_read(&inode->i_writecount) == 1) {
 		struct kstat stat;
 
@@ -181,7 +181,7 @@ static void ima_check_last_writer(struct ima_iint_cache *iint,
 				ima_update_xattr(iint, file);
 		}
 	}
-	mutex_unlock(&iint->mutex);
+	ima_iint_unlock(inode);
 }
 
 /**
@@ -247,7 +247,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	if (action & IMA_FILE_APPRAISE)
 		func = FILE_CHECK;
 
-	inode_lock(inode);
+	ima_iint_lock(inode);
 
 	if (action) {
 		iint = ima_inode_get(inode);
@@ -259,14 +259,10 @@ static int process_measurement(struct file *file, const struct cred *cred,
 		ima_rdwr_violation_check(file, iint, action & IMA_MEASURE,
 					 &pathbuf, &pathname, filename);
 
-	inode_unlock(inode);
-
 	if (rc)
 		goto out;
 	if (!action)
 		goto out;
-
-	mutex_lock(&iint->mutex);
 
 	if (test_and_clear_bit(IMA_CHANGE_ATTR, &iint->atomic_flags))
 		/* reset appraisal flags if ima_inode_post_setattr was called */
@@ -412,10 +408,10 @@ out_locked:
 	if ((mask & MAY_WRITE) && test_bit(IMA_DIGSIG, &iint->atomic_flags) &&
 	     !(iint->flags & IMA_NEW_FILE))
 		rc = -EACCES;
-	mutex_unlock(&iint->mutex);
 	kfree(xattr_value);
 	ima_free_modsig(modsig);
 out:
+	ima_iint_unlock(inode);
 	if (pathbuf)
 		__putname(pathbuf);
 	if (must_appraise) {
@@ -580,18 +576,13 @@ static int __ima_inode_hash(struct inode *inode, struct file *file, char *buf,
 	struct ima_iint_cache *iint = NULL, tmp_iint;
 	int rc, hash_algo;
 
-	if (ima_policy_flag) {
+	ima_iint_lock(inode);
+
+	if (ima_policy_flag)
 		iint = ima_iint_find(inode);
-		if (iint)
-			mutex_lock(&iint->mutex);
-	}
 
 	if ((!iint || !(iint->flags & IMA_COLLECTED)) && file) {
-		if (iint)
-			mutex_unlock(&iint->mutex);
-
 		memset(&tmp_iint, 0, sizeof(tmp_iint));
-		mutex_init(&tmp_iint.mutex);
 
 		rc = ima_collect_measurement(&tmp_iint, file, NULL, 0,
 					     ima_hash_algo, NULL);
@@ -600,22 +591,24 @@ static int __ima_inode_hash(struct inode *inode, struct file *file, char *buf,
 			if (rc != -ENOMEM)
 				kfree(tmp_iint.ima_hash);
 
+			ima_iint_unlock(inode);
 			return -EOPNOTSUPP;
 		}
 
 		iint = &tmp_iint;
-		mutex_lock(&iint->mutex);
 	}
 
-	if (!iint)
+	if (!iint) {
+		ima_iint_unlock(inode);
 		return -EOPNOTSUPP;
+	}
 
 	/*
 	 * ima_file_hash can be called when ima_collect_measurement has still
 	 * not been called, we might not always have a hash.
 	 */
 	if (!iint->ima_hash || !(iint->flags & IMA_COLLECTED)) {
-		mutex_unlock(&iint->mutex);
+		ima_iint_unlock(inode);
 		return -EOPNOTSUPP;
 	}
 
@@ -626,10 +619,11 @@ static int __ima_inode_hash(struct inode *inode, struct file *file, char *buf,
 		memcpy(buf, iint->ima_hash->digest, copied_size);
 	}
 	hash_algo = iint->ima_hash->algo;
-	mutex_unlock(&iint->mutex);
 
 	if (iint == &tmp_iint)
 		kfree(iint->ima_hash);
+
+	ima_iint_unlock(inode);
 
 	return hash_algo;
 }
@@ -1118,7 +1112,7 @@ EXPORT_SYMBOL_GPL(ima_measure_critical_data);
  * @kmod_name: kernel module name
  *
  * Avoid a verification loop where verifying the signature of the modprobe
- * binary requires executing modprobe itself. Since the modprobe iint->mutex
+ * binary requires executing modprobe itself. Since the modprobe iint mutex
  * is already held when the signature verification is performed, a deadlock
  * occurs as soon as modprobe is executed within the critical region, since
  * the same lock cannot be taken again.
@@ -1193,6 +1187,7 @@ static struct security_hook_list ima_hooks[] __ro_after_init = {
 #ifdef CONFIG_INTEGRITY_ASYMMETRIC_KEYS
 	LSM_HOOK_INIT(kernel_module_request, ima_kernel_module_request),
 #endif
+	LSM_HOOK_INIT(inode_alloc_security, ima_inode_alloc_security),
 	LSM_HOOK_INIT(inode_free_security_rcu, ima_inode_free_rcu),
 };
 
@@ -1210,7 +1205,7 @@ static int __init init_ima_lsm(void)
 }
 
 struct lsm_blob_sizes ima_blob_sizes __ro_after_init = {
-	.lbs_inode = sizeof(struct ima_iint_cache *),
+	.lbs_inode = sizeof(struct ima_iint_cache_lock),
 };
 
 DEFINE_LSM(ima) = {

@@ -234,7 +234,7 @@ static bool ima_get_verity_digest(struct ima_iint_cache *iint,
  * Calculate the file hash, if it doesn't already exist,
  * storing the measurement and i_version in the iint.
  *
- * Must be called with iint->mutex held.
+ * Must be called with iint mutex held.
  *
  * Return 0 on success, error code otherwise
  */
@@ -343,7 +343,7 @@ out:
  *	- the inode was previously flushed as well as the iint info,
  *	  containing the hashing info.
  *
- * Must be called with iint->mutex held.
+ * Must be called with iint mutex held.
  */
 void ima_store_measurement(struct ima_iint_cache *iint, struct file *file,
 			   const unsigned char *filename,

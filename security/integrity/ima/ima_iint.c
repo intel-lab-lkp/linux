@@ -26,7 +26,13 @@ static struct kmem_cache *ima_iint_cache __ro_after_init;
  */
 struct ima_iint_cache *ima_iint_find(struct inode *inode)
 {
-	return ima_inode_get_iint(inode);
+	struct ima_iint_cache_lock *iint_lock;
+
+	iint_lock = ima_inode_security(inode->i_security);
+	if (!iint_lock)
+		return NULL;
+
+	return iint_lock->iint;
 }
 
 #define IMA_MAX_NESTING (FILESYSTEM_MAX_STACK_DEPTH + 1)
@@ -37,18 +43,18 @@ struct ima_iint_cache *ima_iint_find(struct inode *inode)
  * mutex to avoid lockdep false positives related to IMA + overlayfs.
  * See ovl_lockdep_annotate_inode_mutex_key() for more details.
  */
-static inline void ima_iint_lockdep_annotate(struct ima_iint_cache *iint,
-					     struct inode *inode)
+static inline void ima_iint_lock_lockdep_annotate(struct mutex *mutex,
+						  struct inode *inode)
 {
 #ifdef CONFIG_LOCKDEP
-	static struct lock_class_key ima_iint_mutex_key[IMA_MAX_NESTING];
+	static struct lock_class_key ima_iint_lock_mutex_key[IMA_MAX_NESTING];
 
 	int depth = inode->i_sb->s_stack_depth;
 
 	if (WARN_ON_ONCE(depth < 0 || depth >= IMA_MAX_NESTING))
 		depth = 0;
 
-	lockdep_set_class(&iint->mutex, &ima_iint_mutex_key[depth]);
+	lockdep_set_class(mutex, &ima_iint_lock_mutex_key[depth]);
 #endif
 }
 
@@ -65,14 +71,11 @@ static void ima_iint_init_always(struct ima_iint_cache *iint,
 	iint->ima_read_status = INTEGRITY_UNKNOWN;
 	iint->ima_creds_status = INTEGRITY_UNKNOWN;
 	iint->measured_pcrs = 0;
-	mutex_init(&iint->mutex);
-	ima_iint_lockdep_annotate(iint, inode);
 }
 
 static void ima_iint_free(struct ima_iint_cache *iint)
 {
 	kfree(iint->ima_hash);
-	mutex_destroy(&iint->mutex);
 	kmem_cache_free(ima_iint_cache, iint);
 }
 
@@ -87,9 +90,14 @@ static void ima_iint_free(struct ima_iint_cache *iint)
  */
 struct ima_iint_cache *ima_inode_get(struct inode *inode)
 {
+	struct ima_iint_cache_lock *iint_lock;
 	struct ima_iint_cache *iint;
 
-	iint = ima_iint_find(inode);
+	iint_lock = ima_inode_security(inode->i_security);
+	if (!iint_lock)
+		return NULL;
+
+	iint = iint_lock->iint;
 	if (iint)
 		return iint;
 
@@ -99,9 +107,29 @@ struct ima_iint_cache *ima_inode_get(struct inode *inode)
 
 	ima_iint_init_always(iint, inode);
 
-	ima_inode_set_iint(inode, iint);
+	iint_lock->iint = iint;
 
 	return iint;
+}
+
+/**
+ * ima_inode_alloc_security - Called to init an inode
+ * @inode: Pointer to the inode
+ *
+ * Initialize and annotate the mutex in the ima_iint_cache_lock structure.
+ *
+ * Return: Zero.
+ */
+int ima_inode_alloc_security(struct inode *inode)
+{
+	struct ima_iint_cache_lock *iint_lock;
+
+	iint_lock = ima_inode_security(inode->i_security);
+
+	mutex_init(&iint_lock->mutex);
+	ima_iint_lock_lockdep_annotate(&iint_lock->mutex, inode);
+
+	return 0;
 }
 
 /**
@@ -112,10 +140,48 @@ struct ima_iint_cache *ima_inode_get(struct inode *inode)
  */
 void ima_inode_free_rcu(void *inode_security)
 {
-	struct ima_iint_cache **iint_p = inode_security + ima_blob_sizes.lbs_inode;
+	struct ima_iint_cache_lock *iint_lock;
 
-	if (*iint_p)
-		ima_iint_free(*iint_p);
+	iint_lock = ima_inode_security(inode_security);
+
+	mutex_destroy(&iint_lock->mutex);
+
+	if (iint_lock->iint)
+		ima_iint_free(iint_lock->iint);
+}
+
+/**
+ * ima_iint_lock - Lock integrity metadata
+ * @inode: Pointer to the inode
+ *
+ * Lock integrity metadata.
+ */
+void ima_iint_lock(struct inode *inode)
+{
+	struct ima_iint_cache_lock *iint_lock;
+
+	iint_lock = ima_inode_security(inode->i_security);
+
+	/* Only inodes with i_security are processed by IMA. */
+	if (iint_lock)
+		mutex_lock(&iint_lock->mutex);
+}
+
+/**
+ * ima_iint_unlock - Unlock integrity metadata
+ * @inode: Pointer to the inode
+ *
+ * Unlock integrity metadata.
+ */
+void ima_iint_unlock(struct inode *inode)
+{
+	struct ima_iint_cache_lock *iint_lock;
+
+	iint_lock = ima_inode_security(inode->i_security);
+
+	/* Only inodes with i_security are processed by IMA. */
+	if (iint_lock)
+		mutex_unlock(&iint_lock->mutex);
 }
 
 static void ima_iint_init_once(void *foo)
