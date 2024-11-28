@@ -833,6 +833,14 @@ filtered through the mask provided by -C option.
 	Prepare BPF filter to be used by regular users.  The action should be
 	either "pin" or "unpin".  The filter can be used after it's pinned.
 
+--action=<action>::
+	Actions are the programs that run when the sampling event is triggered.
+	The action is a list of expressions separated by semicolons (;).
+	The sample data is saved by bpf prog attached by the event.
+	The call currently supported is print(); some commonly used built-in special
+	variables are also supported
+	For example:
+	  # perf record -e sched:sched_switch --action 'print("[%llu]comm=%s, cpu=%d, pid=%d, tid=%d\n", time, comm, cpu, pid, tid)' true
 
 include::intel-hybrid.txt[]
 

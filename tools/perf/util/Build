@@ -249,6 +249,12 @@ perf-util-$(CONFIG_LIBBPF) += bpf-utils.o
 
 perf-util-$(CONFIG_LIBPFM4) += pfm.o
 
+# perf record event action
+perf-util-$(CONFIG_PERF_BPF_SKEL) += parse-action.o
+perf-util-$(CONFIG_PERF_BPF_SKEL) += parse-action-flex.o
+perf-util-$(CONFIG_PERF_BPF_SKEL) += parse-action-bison.o
+perf-util-$(CONFIG_PERF_BPF_SKEL) += record_action.o
+
 CFLAGS_config.o   += -DETC_PERFCONFIG="BUILD_STR($(ETC_PERFCONFIG_SQ))"
 
 # avoid compiler warnings in 32-bit mode
@@ -293,6 +299,16 @@ $(OUTPUT)util/bpf-filter-bison.c $(OUTPUT)util/bpf-filter-bison.h: util/bpf-filt
 	$(call rule_mkdir)
 	$(Q)$(call echo-cmd,bison)$(BISON) -v $< -d $(PARSER_DEBUG_BISON) $(BISON_FILE_PREFIX_MAP) \
 		-o $(OUTPUT)util/bpf-filter-bison.c -p perf_bpf_filter_
+
+$(OUTPUT)util/parse-action-flex.c $(OUTPUT)util/parse-action-flex.h: util/parse-action.l $(OUTPUT)util/parse-action-bison.c util/parse-action.h
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,flex)$(FLEX) -o $(OUTPUT)util/parse-action-flex.c \
+		--header-file=$(OUTPUT)util/parse-action-flex.h $(PARSER_DEBUG_FLEX) $<
+
+$(OUTPUT)util/parse-action.c $(OUTPUT)util/parse-action-bison.h: util/parse-action.y util/parse-action.h
+	$(call rule_mkdir)
+	$(Q)$(call echo-cmd,bison)$(BISON) -v $< -d $(PARSER_DEBUG_BISON) $(BISON_FILE_PREFIX_MAP) \
+		-o $(OUTPUT)util/parse-action-bison.c -p parse_action_
 
 FLEX_VERSION := $(shell $(FLEX) --version | cut -d' ' -f2)
 
@@ -345,11 +361,13 @@ CFLAGS_parse-events-flex.o  += $(flex_flags) -Wno-unused-label
 CFLAGS_pmu-flex.o           += $(flex_flags)
 CFLAGS_expr-flex.o          += $(flex_flags)
 CFLAGS_bpf-filter-flex.o    += $(flex_flags)
+CFLAGS_parse-action-flex.o  += $(flex_flags)
 
 CFLAGS_parse-events-bison.o += $(bison_flags)
 CFLAGS_pmu-bison.o          += -DYYLTYPE_IS_TRIVIAL=0 $(bison_flags)
 CFLAGS_expr-bison.o         += -DYYLTYPE_IS_TRIVIAL=0 $(bison_flags)
 CFLAGS_bpf-filter-bison.o   += -DYYLTYPE_IS_TRIVIAL=0 $(bison_flags)
+CFLAGS_parse-action-bison.o += -DYYLTYPE_IS_TRIVIAL=0 $(bison_flags)
 
 $(OUTPUT)util/parse-events.o: $(OUTPUT)util/parse-events-flex.c $(OUTPUT)util/parse-events-bison.c
 $(OUTPUT)util/pmu.o: $(OUTPUT)util/pmu-flex.c $(OUTPUT)util/pmu-bison.c

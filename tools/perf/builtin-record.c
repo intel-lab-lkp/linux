@@ -51,6 +51,10 @@
 #include "util/clockid.h"
 #include "util/off_cpu.h"
 #include "util/bpf-filter.h"
+#ifdef HAVE_BPF_SKEL
+#include "util/parse-action.h"
+#include "util/record_action.h"
+#endif
 #include "asm/bug.h"
 #include "perf.h"
 #include "cputopo.h"
@@ -182,6 +186,7 @@ struct record {
 	struct pollfd_index_map	*index_map;
 	size_t			index_map_sz;
 	size_t			index_map_cnt;
+	bool			custom_action;
 };
 
 static volatile int done;
@@ -3316,6 +3321,23 @@ static int parse_record_synth_option(const struct option *opt,
 	return 0;
 }
 
+#ifdef HAVE_BPF_SKEL
+static int parse_record_action_option(const struct option *opt,
+				      const char *str,
+				      int unset __maybe_unused)
+{
+	int ret;
+	struct record *rec = (struct record *)opt->value;
+
+	ret = parse_record_action(rec->evlist, str);
+	if (ret)
+		return ret;
+
+	rec->custom_action = true;
+	return 0;
+}
+#endif
+
 /*
  * XXX Ideally would be local to cmd_record() and passed to a record__new
  * because we need to have access to it in record__exit, that is called
@@ -3564,6 +3586,9 @@ static struct option __record_options[] = {
 	OPT_BOOLEAN(0, "off-cpu", &record.off_cpu, "Enable off-cpu analysis"),
 	OPT_STRING(0, "setup-filter", &record.filter_action, "pin|unpin",
 		   "BPF filter action"),
+#ifdef HAVE_BPF_SKEL
+	OPT_CALLBACK(0, "action", &record, "action", "event action", parse_record_action_option),
+#endif
 	OPT_END()
 };
 
@@ -4000,6 +4025,12 @@ int cmd_record(int argc, const char **argv)
 			    PARSE_OPT_STOP_AT_NON_OPTION);
 	if (quiet)
 		perf_quiet_option();
+
+#ifdef HAVE_BPF_SKEL
+	/* Currently, event actions only supported using bpf prog. */
+	if (rec->custom_action)
+		return bpf_perf_record(rec->evlist, argc, argv);
+#endif
 
 	err = symbol__validate_sym_arguments();
 	if (err)
