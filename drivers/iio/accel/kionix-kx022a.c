@@ -458,7 +458,7 @@ static void kx022a_reg2scale(struct kx022a_data *data, unsigned int val,
 	*val2 = data->chip_info->scale_table[val][1];
 }
 
-static int __kx022a_turn_on_off(struct kx022a_data *data, bool on)
+static int kx022a_turn_on_off(struct kx022a_data *data, bool on)
 {
 	int ret;
 
@@ -470,28 +470,6 @@ static int __kx022a_turn_on_off(struct kx022a_data *data, bool on)
 					KX022A_MASK_PC1);
 	if (ret)
 		dev_err(data->dev, "Turn %s fail %d\n", str_on_off(on), ret);
-
-	return ret;
-}
-
-static int kx022a_turn_off_lock(struct kx022a_data *data)
-{
-	int ret;
-
-	mutex_lock(&data->mutex);
-	ret = __kx022a_turn_on_off(data, false);
-	if (ret)
-		mutex_unlock(&data->mutex);
-
-	return ret;
-}
-
-static int kx022a_turn_on_unlock(struct kx022a_data *data)
-{
-	int ret;
-
-	ret = __kx022a_turn_on_off(data, true);
-	mutex_unlock(&data->mutex);
 
 	return ret;
 }
@@ -526,9 +504,8 @@ static int kx022a_write_raw(struct iio_dev *idev,
 	 * issues if users trust the watermark to be reached within known
 	 * time-limit).
 	 */
-	ret = iio_device_claim_direct_mode(idev);
-	if (ret)
-		return ret;
+	if_not_cond_guard(iio_claim_direct_try, idev)
+		return -EBUSY;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
@@ -538,20 +515,20 @@ static int kx022a_write_raw(struct iio_dev *idev,
 			if (val == kx022a_accel_samp_freq_table[n][0] &&
 			    val2 == kx022a_accel_samp_freq_table[n][1])
 				break;
-		if (n < 0) {
-			ret = -EINVAL;
-			goto unlock_out;
-		}
-		ret = kx022a_turn_off_lock(data);
-		if (ret)
-			break;
+		if (n < 0)
+			return -EINVAL;
 
-		ret = regmap_update_bits(data->regmap,
-					 data->chip_info->odcntl,
-					 KX022A_MASK_ODR, n);
-		data->odr_ns = kx022a_odrs[n];
-		kx022a_turn_on_unlock(data);
-		break;
+		scoped_guard(mutex, &data->mutex) {
+			ret = kx022a_turn_on_off(data, false);
+			if (ret)
+				return ret;
+
+			ret = regmap_update_bits(data->regmap,
+						 data->chip_info->odcntl,
+						 KX022A_MASK_ODR, n);
+			data->odr_ns = kx022a_odrs[n];
+			return kx022a_turn_on_off(data, true);
+		}
 	case IIO_CHAN_INFO_SCALE:
 		n = data->chip_info->scale_table_size / 2;
 
@@ -559,29 +536,27 @@ static int kx022a_write_raw(struct iio_dev *idev,
 			if (val == data->chip_info->scale_table[n][0] &&
 			    val2 == data->chip_info->scale_table[n][1])
 				break;
-		if (n < 0) {
-			ret = -EINVAL;
-			goto unlock_out;
+		if (n < 0)
+			return -EINVAL;
+
+		scoped_guard(mutex, &data->mutex) {
+			ret = kx022a_turn_on_off(data, false);
+			if (ret)
+				return ret;
+
+			ret = regmap_update_bits(data->regmap,
+						 data->chip_info->cntl,
+						 KX022A_MASK_GSEL,
+						 n << KX022A_GSEL_SHIFT);
+			kx022a_turn_on_off(data, true);
+
+			return ret;
 		}
-
-		ret = kx022a_turn_off_lock(data);
-		if (ret)
-			break;
-
-		ret = regmap_update_bits(data->regmap, data->chip_info->cntl,
-					 KX022A_MASK_GSEL,
-					 n << KX022A_GSEL_SHIFT);
-		kx022a_turn_on_unlock(data);
-		break;
 	default:
-		ret = -EINVAL;
 		break;
 	}
 
-unlock_out:
-	iio_device_release_direct_mode(idev);
-
-	return ret;
+	return -EINVAL;
 }
 
 static int kx022a_fifo_set_wmi(struct kx022a_data *data)
@@ -923,7 +898,7 @@ static int kx022a_fifo_disable(struct kx022a_data *data)
 	int ret = 0;
 
 	guard(mutex)(&data->mutex);
-	ret = __kx022a_turn_on_off(data, false);
+	ret = kx022a_turn_on_off(data, false);
 	if (ret)
 		return ret;
 
@@ -942,7 +917,7 @@ static int kx022a_fifo_disable(struct kx022a_data *data)
 
 	kfree(data->fifo_buffer);
 
-	return __kx022a_turn_on_off(data, true);
+	return kx022a_turn_on_off(data, true);
 }
 
 static int kx022a_buffer_predisable(struct iio_dev *idev)
@@ -966,7 +941,7 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 		return -ENOMEM;
 
 	guard(mutex)(&data->mutex);
-	ret = __kx022a_turn_on_off(data, false);
+	ret = kx022a_turn_on_off(data, false);
 	if (ret)
 		return ret;
 
@@ -987,7 +962,7 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 	if (ret)
 		return ret;
 
-	return __kx022a_turn_on_off(data, true);
+	return kx022a_turn_on_off(data, true);
 }
 
 static int kx022a_buffer_postenable(struct iio_dev *idev)
@@ -1089,7 +1064,7 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 		return -EBUSY;
 	}
 
-	ret = __kx022a_turn_on_off(data, false);
+	ret = kx022a_turn_on_off(data, false);
 	if (ret)
 		return ret;
 
@@ -1098,7 +1073,7 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 	if (ret)
 		return ret;
 
-	return __kx022a_turn_on_off(data, true);
+	return kx022a_turn_on_off(data, true);
 }
 
 static const struct iio_trigger_ops kx022a_trigger_ops = {
@@ -1379,19 +1354,19 @@ int kx022a_probe_internal(struct device *dev, const struct kx022a_chip_info *chi
 		return ret;
 
 	/* The sensor must be turned off for configuration */
-	ret = kx022a_turn_off_lock(data);
-	if (ret)
-		return ret;
+	scoped_guard(mutex, &data->mutex) {
+		ret = kx022a_turn_on_off(data, false);
+		if (ret)
+			return ret;
 
-	ret = kx022a_chip_init(data);
-	if (ret) {
-		mutex_unlock(&data->mutex);
-		return ret;
+		ret = kx022a_chip_init(data);
+		if (ret)
+			return ret;
+
+		ret = kx022a_turn_on_off(data, true);
+		if (ret)
+			return ret;
 	}
-
-	ret = kx022a_turn_on_unlock(data);
-	if (ret)
-		return ret;
 
 	ret = devm_iio_triggered_buffer_setup_ext(dev, idev,
 						  &iio_pollfunc_store_time,
