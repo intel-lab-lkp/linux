@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/anon_inodes.h>
+#include <linux/exportfs.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/cgroup.h>
@@ -454,6 +455,100 @@ static const struct dentry_operations pidfs_dentry_operations = {
 	.d_prune	= stashed_dentry_prune,
 };
 
+static int pidfs_encode_fh(struct inode *inode, u32 *fh, int *max_len,
+			   struct inode *parent)
+{
+	struct pid *pid = inode->i_private;
+
+	if (*max_len < 2) {
+		*max_len = 2;
+		return FILEID_INVALID;
+	}
+
+	*max_len = 2;
+	*(u64 *)fh = pid->ino;
+	return FILEID_KERNFS;
+}
+
+/* Find a struct pid based on the inode number. */
+static struct pid *pidfs_ino_get_pid(u64 ino)
+{
+	ino_t pid_ino = pidfs_ino(ino);
+	u32 gen = pidfs_gen(ino);
+	struct pid *pid;
+
+	guard(rcu)();
+
+	/* Handle @pid lookup carefully so there's no risk of UAF. */
+	pid = idr_find(&pidfs_ino_idr, (u32)pid_ino);
+	if (!pid)
+		return NULL;
+
+	if (sizeof(ino_t) < sizeof(u64)) {
+		if (gen && pidfs_gen(pid->ino) != gen)
+			pid = NULL;
+	} else {
+		if (pidfs_ino(pid->ino) != pid_ino)
+			pid = NULL;
+	}
+
+	/* Within our pid namespace hierarchy? */
+	if (pid_vnr(pid) == 0)
+		pid = NULL;
+
+	return get_pid(pid);
+}
+
+static struct dentry *pidfs_fh_to_dentry(struct super_block *sb,
+					 struct fid *fid, int fh_len,
+					 int fh_type)
+{
+	int ret;
+	u64 pid_ino;
+	struct path path;
+	struct pid *pid;
+
+	if (fh_len < 2)
+		return NULL;
+
+	switch (fh_type) {
+	case FILEID_KERNFS:
+		pid_ino = *(u64 *)fid;
+		break;
+	default:
+		return NULL;
+	}
+
+	pid = pidfs_ino_get_pid(pid_ino);
+	if (!pid)
+		return NULL;
+
+	ret = path_from_stashed(&pid->stashed, pidfs_mnt, pid, &path);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	mntput(path.mnt);
+	return path.dentry;
+}
+
+static int pidfs_export_permission(struct handle_to_path_ctx *ctx,
+				   unsigned int oflags)
+{
+	return 0;
+}
+
+static struct file *pidfs_export_open(struct path *path, unsigned int oflags)
+{
+	return dentry_open(path, oflags | O_RDWR, current_cred());
+}
+
+static const struct export_operations pidfs_export_operations = {
+	.encode_fh	= pidfs_encode_fh,
+	.fh_to_dentry	= pidfs_fh_to_dentry,
+	.open		= pidfs_export_open,
+	.permission	= pidfs_export_permission,
+};
+
 static int pidfs_init_inode(struct inode *inode, void *data)
 {
 	struct pid *pid = data;
@@ -488,6 +583,7 @@ static int pidfs_init_fs_context(struct fs_context *fc)
 		return -ENOMEM;
 
 	ctx->ops = &pidfs_sops;
+	ctx->eops = &pidfs_export_operations;
 	ctx->dops = &pidfs_dentry_operations;
 	fc->s_fs_info = (void *)&pidfs_stashed_ops;
 	return 0;
