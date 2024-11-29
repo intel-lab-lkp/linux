@@ -4592,8 +4592,8 @@ static int ext4_init_metadata_csum(struct super_block *sb, struct ext4_super_blo
 	/* Warn if metadata_csum and gdt_csum are both set. */
 	if (ext4_has_feature_metadata_csum(sb) &&
 	    ext4_has_feature_gdt_csum(sb))
-		ext4_warning(sb, "metadata_csum and uninit_bg are "
-			     "redundant flags; please run fsck.");
+		ext4_warning(sb,
+			"metadata_csum and uninit_bg are redundant flags; please run e2fsck.");
 
 	/* Check for a known checksum algorithm */
 	if (!ext4_verify_csum_type(sb, es)) {
@@ -4615,8 +4615,8 @@ static int ext4_init_metadata_csum(struct super_block *sb, struct ext4_super_blo
 
 	/* Check superblock checksum */
 	if (!ext4_superblock_csum_verify(sb, es)) {
-		ext4_msg(sb, KERN_ERR, "VFS: Found ext4 filesystem with "
-			 "invalid superblock checksum.  Run e2fsck?");
+		ext4_msg(sb, KERN_ERR,
+			"VFS: Found ext4 filesystem with invalid superblock checksum. Run e2fsck?");
 		return -EFSBADCRC;
 	}
 
