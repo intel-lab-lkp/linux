@@ -682,6 +682,32 @@ int iio_backend_data_size_set(struct iio_backend *back, unsigned int size)
 EXPORT_SYMBOL_NS_GPL(iio_backend_data_size_set, IIO_BACKEND);
 
 /**
+ * iio_backend_oversampling_enable - oversampling enable
+ * @back: Backend device
+ *
+ * Return:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_oversampling_enable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, oversampling_enable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_oversampling_enable, IIO_BACKEND);
+
+/**
+ * iio_backend_oversampling_disable - oversampling disable
+ * @back: Backend device
+ *
+ * Return:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_oversampling_disable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, oversampling_disable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_oversampling_disable, IIO_BACKEND);
+
+/**
  * iio_backend_extend_chan_spec - Extend an IIO channel
  * @back: Backend device
  * @chan: IIO channel
