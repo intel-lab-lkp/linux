@@ -375,7 +375,7 @@ static void iscsi_target_sk_data_ready(struct sock *sk)
 	bool rc;
 
 	trace_sk_data_ready(sk);
-	target_debug("Entering iscsi_target_sk_data_ready: conn: %p\n", conn);
+	target_debug("Entering %s(): conn: %p\n", __func__, conn);
 
 	write_lock_bh(&sk->sk_callback_lock);
 	if (!sk->sk_user_data) {
@@ -403,7 +403,7 @@ static void iscsi_target_sk_data_ready(struct sock *sk)
 
 	rc = schedule_delayed_work(&conn->login_work, 0);
 	if (!rc) {
-		target_debug("iscsi_target_sk_data_ready, schedule_delayed_work got false\n");
+		target_debug("%s(): schedule_delayed_work got false\n", __func__);
 	}
 	write_unlock_bh(&sk->sk_callback_lock);
 }
@@ -418,7 +418,7 @@ static void iscsi_target_set_sock_callbacks(struct iscsit_conn *conn)
 		return;
 
 	sk = conn->sock->sk;
-	target_debug("Entering iscsi_target_set_sock_callbacks: conn: %p\n", conn);
+	target_debug("Entering %s(): conn: %p\n", __func__, conn);
 
 	write_lock_bh(&sk->sk_callback_lock);
 	sk->sk_user_data = conn;
@@ -440,7 +440,7 @@ static void iscsi_target_restore_sock_callbacks(struct iscsit_conn *conn)
 		return;
 
 	sk = conn->sock->sk;
-	target_debug("Entering iscsi_target_restore_sock_callbacks: conn: %p\n", conn);
+	target_debug("Entering %s(): conn: %p\n", __func__, conn);
 
 	write_lock_bh(&sk->sk_callback_lock);
 	if (!sk->sk_user_data) {
@@ -461,7 +461,7 @@ static int iscsi_target_do_login(struct iscsit_conn *, struct iscsi_login *);
 static bool __iscsi_target_sk_check_close(struct sock *sk)
 {
 	if (sk->sk_state == TCP_CLOSE_WAIT || sk->sk_state == TCP_CLOSE) {
-		target_debug("__iscsi_target_sk_check_close: TCP_CLOSE_WAIT|TCP_CLOSE,returning TRUE\n");
+		target_debug("%s(): TCP_CLOSE_WAIT|TCP_CLOSE, returning TRUE\n", __func__);
 		return true;
 	}
 	return false;
@@ -533,7 +533,7 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 	int rc, zero_tsih = login->zero_tsih;
 	bool state;
 
-	target_debug("entering iscsi_target_do_login_rx, conn: %p, %s:%d\n", conn, current->comm,
+	target_debug("Entering %s(), conn: %p, %s:%d\n", __func__, conn, current->comm,
 		     current->pid);
 
 	spin_lock(&conn->login_worker_lock);
@@ -559,12 +559,12 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 	spin_unlock(&tpg->tpg_state_lock);
 
 	if (!state) {
-		target_debug("iscsi_target_do_login_rx: tpg_state != TPG_STATE_ACTIVE\n");
+		target_debug("%s(): tpg_state != TPG_STATE_ACTIVE\n", __func__);
 		goto err;
 	}
 
 	if (iscsi_target_sk_check_close(conn)) {
-		target_debug("iscsi_target_do_login_rx, TCP state CLOSE\n");
+		target_debug("%s(): TCP state CLOSE\n", __func__);
 		goto err;
 	}
 
@@ -572,7 +572,7 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 	rc = iscsit_set_login_timer_kworker(conn, current);
 	if (rc < 0) {
 		/* The login timer has already expired */
-		target_debug("iscsi_target_do_login_rx, login failed\n");
+		target_debug("%s(): login failed\n", __func__);
 		goto err;
 	}
 
@@ -582,7 +582,7 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 	if (rc < 0)
 		goto err;
 
-	target_debug("iscsi_target_do_login_rx after rx_login_io, %p, %s:%d\n", conn, current->comm,
+	target_debug("%s(): after rx_login_io, %p, %s:%d\n", __func__, conn, current->comm,
 		     current->pid);
 
 	/*
@@ -646,7 +646,7 @@ static void iscsi_target_sk_state_change(struct sock *sk)
 	void (*orig_state_change)(struct sock *);
 	bool state;
 
-	target_debug("Entering iscsi_target_sk_state_change\n");
+	target_debug("Entering %s()\n", __func__);
 
 	write_lock_bh(&sk->sk_callback_lock);
 	conn = sk->sk_user_data;
@@ -697,7 +697,7 @@ static void iscsi_target_sk_state_change(struct sock *sk)
 	 * the remaining iscsi connection resources.
 	 */
 	if (state) {
-		target_debug("iscsi_target_sk_state_change got failed state\n");
+		target_debug("%s() got failed state\n", __func__);
 		set_bit(LOGIN_FLAGS_CLOSED, &conn->login_flags);
 		state = test_bit(LOGIN_FLAGS_INITIAL_PDU, &conn->login_flags);
 		write_unlock_bh(&sk->sk_callback_lock);

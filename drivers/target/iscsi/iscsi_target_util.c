@@ -1031,7 +1031,7 @@ void iscsit_login_timeout(struct timer_list *t)
 	struct iscsit_conn *conn = from_timer(conn, t, login_timer);
 	struct iscsi_login *login = conn->login;
 
-	target_debug("Entering iscsi_target_login_timeout >>>>>>>>>>>>>>>>>>>\n");
+	target_debug("Entering %s() >>>>>>>>>>>>>>>>>>>\n", __func__);
 
 	spin_lock_bh(&conn->login_timer_lock);
 	login->login_failed = 1;

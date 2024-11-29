@@ -1115,7 +1115,7 @@ static int sbp_fetch_command(struct sbp_target_request *req)
 		min_t(int, cmd_len, sizeof(req->orb.command_block)));
 
 	if (cmd_len > sizeof(req->orb.command_block)) {
-		target_debug("sbp_fetch_command: filling in long command\n");
+		target_debug("%s(): filling in long command\n", __func__);
 		copy_len = cmd_len - sizeof(req->orb.command_block);
 
 		ret = sbp_run_request_transaction(req,
@@ -1194,20 +1194,20 @@ static void sbp_handle_command(struct sbp_target_request *req)
 
 	ret = sbp_fetch_command(req);
 	if (ret) {
-		target_debug("sbp_handle_command: fetch command failed: %d\n", ret);
+		target_debug("%s(): fetch command failed: %d\n", __func__, ret);
 		goto err;
 	}
 
 	ret = sbp_fetch_page_table(req);
 	if (ret) {
-		target_debug("sbp_handle_command: fetch page table failed: %d\n", ret);
+		target_debug("%s(): fetch page table failed: %d\n", __func__, ret);
 		goto err;
 	}
 
 	unpacked_lun = req->login->login_lun;
 	sbp_calc_data_length_direction(req, &data_length, &data_dir);
 
-	target_debug("sbp_handle_command ORB:0x%llx unpacked_lun:%d data_len:%d data_dir:%d\n",
+	target_debug("%s(): ORB:0x%llx unpacked_lun:%d data_len:%d data_dir:%d\n", __func__,
 		     req->orb_pointer, unpacked_lun, data_length, data_dir);
 
 	/* only used for printk until we do TMRs */
@@ -1329,12 +1329,12 @@ static int sbp_send_status(struct sbp_target_request *req)
 	rc = sbp_run_request_transaction(req, TCODE_WRITE_BLOCK_REQUEST,
 			login->status_fifo_addr, &req->status, length);
 	if (rc != RCODE_COMPLETE) {
-		target_debug("sbp_send_status: write failed: 0x%x\n", rc);
+		target_debug("%s(): write failed: 0x%x\n", __func__, rc);
 		ret = -EIO;
 		goto put_ref;
 	}
 
-	target_debug("sbp_send_status: status write complete for ORB: 0x%llx\n", req->orb_pointer);
+	target_debug("%s(): status write complete for ORB: 0x%llx\n", __func__, req->orb_pointer);
 	/*
 	 * Drop the extra ACK_KREF reference taken by target_submit_cmd()
 	 * ahead of sbp_check_stop_free() -> transport_generic_free_cmd()

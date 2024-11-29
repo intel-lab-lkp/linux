@@ -1518,7 +1518,7 @@ static void lio_release_cmd(struct se_cmd *se_cmd)
 {
 	struct iscsit_cmd *cmd = container_of(se_cmd, struct iscsit_cmd, se_cmd);
 
-	target_debug("Entering lio_release_cmd for se_cmd: %p\n", se_cmd);
+	target_debug("Entering %s() for se_cmd: %p\n", __func__, se_cmd);
 	iscsit_release_cmd(cmd);
 }
 
