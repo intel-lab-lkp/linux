@@ -2533,6 +2533,18 @@ static struct net *rtnl_link_get_net_ifla(struct nlattr *tb[])
 	return net;
 }
 
+/**
+ * rtnl_link_get_net - Get the network namespace from the netlink attributes
+ * or just @src_net.
+ *
+ * @src_net: the source network namespace
+ * @tb: the netlink attributes
+ *
+ * Returns:
+ *   The network namespace specified in the netlink attributes,
+ *   in case of error, an error pointer is returned.
+ *   Or, @src_net if no netns attributes were passed.
+ */
 struct net *rtnl_link_get_net(struct net *src_net, struct nlattr *tb[])
 {
 	struct net *net = rtnl_link_get_net_ifla(tb);
