@@ -360,8 +360,7 @@ retry:
 	return -2;
 }
 
-static int parse_long_opt(struct parse_opt_ctx_t *p, const char *arg,
-                          const struct option *options)
+static int parse_long_opt(struct parse_opt_ctx_t *p, const char *arg, const struct option *options)
 {
 	const char *arg_end = strchr(arg, '=');
 	const struct option *abbrev_option = NULL, *ambiguous_option = NULL;
@@ -828,9 +827,10 @@ static struct option *options__order(const struct option *opts)
 
 		nr_parent = nr_opts;
 	}
-	/* copy the last OPTION_END */
-	memcpy(&ordered[nr_opts], o, sizeof(*o));
-
+	/* Check whether o is  valid before using it to copy the last OPTION_END. */
+	if (o && o->type == OPTION_END) {
+		memcpy(&ordered[nr_opts], o, sizeof(*o));
+	}
 	/* sort each option group individually */
 	for (opt = group = ordered; opt->type != OPTION_END; opt++) {
 		if (opt->type == OPTION_GROUP) {
