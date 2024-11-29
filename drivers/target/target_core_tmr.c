@@ -33,7 +33,7 @@ int core_tmr_alloc_req(
 
 	tmr = kzalloc(sizeof(struct se_tmr_req), gfp_flags);
 	if (!tmr) {
-		pr_err("Unable to allocate struct se_tmr_req\n");
+		target_err("Unable to allocate struct se_tmr_req\n");
 		return -ENOMEM;
 	}
 
@@ -87,8 +87,9 @@ static bool __target_check_io_state(struct se_cmd *se_cmd,
 	 */
 	spin_lock(&se_cmd->t_state_lock);
 	if (se_cmd->transport_state & (CMD_T_COMPLETE | CMD_T_FABRIC_STOP)) {
-		pr_debug("Attempted to abort io tag: %llu already complete or"
-			" fabric stop, skipping\n", se_cmd->tag);
+		target_debug("Attempted to abort io tag: %llu already complete or"
+			     " fabric stop, skipping\n",
+			     se_cmd->tag);
 		spin_unlock(&se_cmd->t_state_lock);
 		return false;
 	}
@@ -134,8 +135,8 @@ void core_tmr_abort_task(
 			if (tmr->ref_task_tag != ref_tag)
 				continue;
 
-			pr_err("ABORT_TASK: Found referenced %s task_tag: %llu\n",
-			       se_cmd->se_tfo->fabric_name, ref_tag);
+			target_err("ABORT_TASK: Found referenced %s task_tag: %llu\n",
+				   se_cmd->se_tfo->fabric_name, ref_tag);
 
 			spin_lock(&se_sess->sess_cmd_lock);
 			rc = __target_check_io_state(se_cmd, se_sess, 0);
@@ -154,8 +155,8 @@ void core_tmr_abort_task(
 			list_del_init(&se_cmd->state_list);
 			target_put_cmd_and_wait(se_cmd);
 
-			pr_err("ABORT_TASK: Sending TMR_FUNCTION_COMPLETE for ref_tag: %llu\n",
-			       ref_tag);
+			target_err("ABORT_TASK: Sending TMR_FUNCTION_COMPLETE for ref_tag: %llu\n",
+				   ref_tag);
 			tmr->response = TMR_FUNCTION_COMPLETE;
 			atomic_long_inc(&dev->aborts_complete);
 			return;
@@ -166,8 +167,8 @@ void core_tmr_abort_task(
 	if (dev->transport->tmr_notify)
 		dev->transport->tmr_notify(dev, TMR_ABORT_TASK, &aborted_list);
 
-	printk("ABORT_TASK: Sending TMR_TASK_DOES_NOT_EXIST for ref_tag: %lld\n",
-			tmr->ref_task_tag);
+	target_err("ABORT_TASK: Sending TMR_TASK_DOES_NOT_EXIST for ref_tag: %lld\n",
+		   tmr->ref_task_tag);
 	tmr->response = TMR_TASK_DOES_NOT_EXIST;
 	atomic_long_inc(&dev->aborts_no_task);
 }
@@ -194,7 +195,7 @@ static void core_tmr_drain_tmr_list(
 
 		cmd = tmr_p->task_cmd;
 		if (!cmd) {
-			pr_err("Unable to locate struct se_cmd for TMR\n");
+			target_err("Unable to locate struct se_cmd for TMR\n");
 			continue;
 		}
 
@@ -222,7 +223,7 @@ static void core_tmr_drain_tmr_list(
 		spin_unlock(&sess->sess_cmd_lock);
 
 		if (!rc) {
-			printk("LUN_RESET TMR: non-zero kref_get_unless_zero\n");
+			target_err("LUN_RESET TMR: non-zero kref_get_unless_zero\n");
 			continue;
 		}
 
@@ -235,10 +236,10 @@ static void core_tmr_drain_tmr_list(
 		list_del_init(&tmr_p->tmr_list);
 		cmd = tmr_p->task_cmd;
 
-		pr_debug("LUN_RESET: %s releasing TMR %p Function: 0x%02x,"
-			" Response: 0x%02x, t_state: %d\n",
-			(preempt_and_abort_list) ? "Preempt" : "", tmr_p,
-			tmr_p->function, tmr_p->response, cmd->t_state);
+		target_debug("LUN_RESET: %s releasing TMR %p Function: 0x%02x,"
+			     " Response: 0x%02x, t_state: %d\n",
+			     (preempt_and_abort_list) ? "Preempt" : "", tmr_p, tmr_p->function,
+			     tmr_p->response, cmd->t_state);
 
 		target_put_cmd_and_wait(cmd);
 	}
@@ -343,9 +344,8 @@ static void core_tmr_drain_state_list(
 		list_del_init(&cmd->state_list);
 
 		target_show_cmd("LUN_RESET: ", cmd);
-		pr_debug("LUN_RESET: ITT[0x%08llx] - %s pr_res_key: 0x%016Lx\n",
-			 cmd->tag, (preempt_and_abort_list) ? "preempt" : "",
-			 cmd->pr_res_key);
+		target_debug("LUN_RESET: ITT[0x%08llx] - %s pr_res_key: 0x%016Lx\n", cmd->tag,
+			     (preempt_and_abort_list) ? "preempt" : "", cmd->pr_res_key);
 
 		target_put_cmd_and_wait(cmd);
 	}
@@ -382,10 +382,9 @@ int core_tmr_lun_reset(
 		tmr_nacl = tmr_sess->se_node_acl;
 		tmr_tpg = tmr_sess->se_tpg;
 		if (tmr_nacl && tmr_tpg) {
-			pr_debug("LUN_RESET: TMR caller fabric: %s"
-				" initiator port %s\n",
-				tmr_tpg->se_tpg_tfo->fabric_name,
-				tmr_nacl->initiatorname);
+			target_debug("LUN_RESET: TMR caller fabric: %s"
+				     " initiator port %s\n",
+				     tmr_tpg->se_tpg_tfo->fabric_name, tmr_nacl->initiatorname);
 		}
 	}
 
@@ -398,9 +397,8 @@ int core_tmr_lun_reset(
 	 */
 	mutex_lock(&dev->lun_reset_mutex);
 
-	pr_debug("LUN_RESET: %s starting for [%s], tas: %d\n",
-		(preempt_and_abort_list) ? "Preempt" : "TMR",
-		dev->transport->name, tas);
+	target_debug("LUN_RESET: %s starting for [%s], tas: %d\n",
+		     (preempt_and_abort_list) ? "Preempt" : "TMR", dev->transport->name, tas);
 	core_tmr_drain_tmr_list(dev, tmr, preempt_and_abort_list);
 	core_tmr_drain_state_list(dev, prout_cmd, tmr_sess, tas,
 				preempt_and_abort_list);
@@ -417,14 +415,13 @@ int core_tmr_lun_reset(
 		dev->reservation_holder = NULL;
 		dev->dev_reservation_flags &= ~DRF_SPC2_RESERVATIONS;
 		spin_unlock(&dev->dev_reservation_lock);
-		pr_debug("LUN_RESET: SCSI-2 Released reservation\n");
+		target_debug("LUN_RESET: SCSI-2 Released reservation\n");
 	}
 
 	atomic_long_inc(&dev->num_resets);
 
-	pr_debug("LUN_RESET: %s for [%s] Complete\n",
-			(preempt_and_abort_list) ? "Preempt" : "TMR",
-			dev->transport->name);
+	target_debug("LUN_RESET: %s for [%s] Complete\n",
+		     (preempt_and_abort_list) ? "Preempt" : "TMR", dev->transport->name);
 	return 0;
 }
 

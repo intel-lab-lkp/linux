@@ -23,16 +23,15 @@ static void iscsit_dump_seq_list(struct iscsit_cmd *cmd)
 	int i;
 	struct iscsi_seq *seq;
 
-	pr_debug("Dumping Sequence List for ITT: 0x%08x:\n",
-			cmd->init_task_tag);
+	target_debug("Dumping Sequence List for ITT: 0x%08x:\n", cmd->init_task_tag);
 
 	for (i = 0; i < cmd->seq_count; i++) {
 		seq = &cmd->seq_list[i];
-		pr_debug("i: %d, pdu_start: %d, pdu_count: %d,"
-			" offset: %d, xfer_len: %d, seq_send_order: %d,"
-			" seq_no: %d\n", i, seq->pdu_start, seq->pdu_count,
-			seq->offset, seq->xfer_len, seq->seq_send_order,
-			seq->seq_no);
+		target_debug("i: %d, pdu_start: %d, pdu_count: %d,"
+			     " offset: %d, xfer_len: %d, seq_send_order: %d,"
+			     " seq_no: %d\n",
+			     i, seq->pdu_start, seq->pdu_count, seq->offset, seq->xfer_len,
+			     seq->seq_send_order, seq->seq_no);
 	}
 }
 
@@ -41,14 +40,13 @@ static void iscsit_dump_pdu_list(struct iscsit_cmd *cmd)
 	int i;
 	struct iscsi_pdu *pdu;
 
-	pr_debug("Dumping PDU List for ITT: 0x%08x:\n",
-			cmd->init_task_tag);
+	target_debug("Dumping PDU List for ITT: 0x%08x:\n", cmd->init_task_tag);
 
 	for (i = 0; i < cmd->pdu_count; i++) {
 		pdu = &cmd->pdu_list[i];
-		pr_debug("i: %d, offset: %d, length: %d,"
-			" pdu_send_order: %d, seq_no: %d\n", i, pdu->offset,
-			pdu->length, pdu->pdu_send_order, pdu->seq_no);
+		target_debug("i: %d, offset: %d, length: %d,"
+			     " pdu_send_order: %d, seq_no: %d\n",
+			     i, pdu->offset, pdu->length, pdu->pdu_send_order, pdu->seq_no);
 	}
 }
 #else
@@ -131,8 +129,8 @@ redo:
 		}
 		array = kcalloc(seq_count, sizeof(u32), GFP_KERNEL);
 		if (!array) {
-			pr_err("Unable to allocate memory"
-				" for random array.\n");
+			target_err("Unable to allocate memory"
+				   " for random array.\n");
 			return -ENOMEM;
 		}
 		iscsit_create_random_array(array, seq_count);
@@ -151,8 +149,8 @@ redo:
 	if (seq_count) {
 		array = kcalloc(seq_count, sizeof(u32), GFP_KERNEL);
 		if (!array) {
-			pr_err("Unable to allocate memory for"
-				" random array.\n");
+			target_err("Unable to allocate memory for"
+				   " random array.\n");
 			return -ENOMEM;
 		}
 		iscsit_create_random_array(array, seq_count);
@@ -183,7 +181,7 @@ static int iscsit_randomize_seq_lists(
 
 	array = kcalloc(seq_count, sizeof(u32), GFP_KERNEL);
 	if (!array) {
-		pr_err("Unable to allocate memory for random array.\n");
+		target_err("Unable to allocate memory for random array.\n");
 		return -ENOMEM;
 	}
 	iscsit_create_random_array(array, seq_count);
@@ -537,7 +535,7 @@ int iscsit_build_pdu_and_seq_lists(
 	if (!conn->sess->sess_ops->DataSequenceInOrder) {
 		seq = kcalloc(seq_count, sizeof(struct iscsi_seq), GFP_ATOMIC);
 		if (!seq) {
-			pr_err("Unable to allocate struct iscsi_seq list\n");
+			target_err("Unable to allocate struct iscsi_seq list\n");
 			return -ENOMEM;
 		}
 		cmd->seq_list = seq;
@@ -547,7 +545,7 @@ int iscsit_build_pdu_and_seq_lists(
 	if (!conn->sess->sess_ops->DataPDUInOrder) {
 		pdu = kcalloc(pdu_count, sizeof(struct iscsi_pdu), GFP_ATOMIC);
 		if (!pdu) {
-			pr_err("Unable to allocate struct iscsi_pdu list.\n");
+			target_err("Unable to allocate struct iscsi_pdu list.\n");
 			kfree(seq);
 			return -ENOMEM;
 		}
@@ -567,7 +565,7 @@ struct iscsi_pdu *iscsit_get_pdu_holder(
 	struct iscsi_pdu *pdu = NULL;
 
 	if (!cmd->pdu_list) {
-		pr_err("struct iscsit_cmd->pdu_list is NULL!\n");
+		target_err("struct iscsit_cmd->pdu_list is NULL!\n");
 		return NULL;
 	}
 
@@ -577,8 +575,9 @@ struct iscsi_pdu *iscsit_get_pdu_holder(
 		if ((pdu[i].offset == offset) && (pdu[i].length == length))
 			return &pdu[i];
 
-	pr_err("Unable to locate PDU holder for ITT: 0x%08x, Offset:"
-		" %u, Length: %u\n", cmd->init_task_tag, offset, length);
+	target_err("Unable to locate PDU holder for ITT: 0x%08x, Offset:"
+		   " %u, Length: %u\n",
+		   cmd->init_task_tag, offset, length);
 	return NULL;
 }
 
@@ -591,7 +590,7 @@ struct iscsi_pdu *iscsit_get_pdu_holder_for_seq(
 	struct iscsi_pdu *pdu = NULL;
 
 	if (!cmd->pdu_list) {
-		pr_err("struct iscsit_cmd->pdu_list is NULL!\n");
+		target_err("struct iscsit_cmd->pdu_list is NULL!\n");
 		return NULL;
 	}
 
@@ -600,11 +599,11 @@ redo:
 		pdu = &cmd->pdu_list[cmd->pdu_start];
 
 		for (i = 0; pdu[i].seq_no != cmd->seq_no; i++) {
-			pr_debug("pdu[i].seq_no: %d, pdu[i].pdu"
-				"_send_order: %d, pdu[i].offset: %d,"
-				" pdu[i].length: %d\n", pdu[i].seq_no,
-				pdu[i].pdu_send_order, pdu[i].offset,
-				pdu[i].length);
+			target_debug("pdu[i].seq_no: %d, pdu[i].pdu"
+				     "_send_order: %d, pdu[i].offset: %d,"
+				     " pdu[i].length: %d\n",
+				     pdu[i].seq_no, pdu[i].pdu_send_order, pdu[i].offset,
+				     pdu[i].length);
 
 			if (pdu[i].pdu_send_order == cmd->pdu_send_order) {
 				cmd->pdu_send_order++;
@@ -619,27 +618,26 @@ redo:
 		if (cmd->pdu_start < cmd->pdu_count)
 			goto redo;
 
-		pr_err("Command ITT: 0x%08x unable to locate"
-			" struct iscsi_pdu for cmd->pdu_send_order: %u.\n",
-			cmd->init_task_tag, cmd->pdu_send_order);
+		target_err("Command ITT: 0x%08x unable to locate"
+			   " struct iscsi_pdu for cmd->pdu_send_order: %u.\n",
+			   cmd->init_task_tag, cmd->pdu_send_order);
 		return NULL;
 	} else {
 		if (!seq) {
-			pr_err("struct iscsi_seq is NULL!\n");
+			target_err("struct iscsi_seq is NULL!\n");
 			return NULL;
 		}
 
-		pr_debug("seq->pdu_start: %d, seq->pdu_count: %d,"
-			" seq->seq_no: %d\n", seq->pdu_start, seq->pdu_count,
-			seq->seq_no);
+		target_debug("seq->pdu_start: %d, seq->pdu_count: %d,"
+			     " seq->seq_no: %d\n",
+			     seq->pdu_start, seq->pdu_count, seq->seq_no);
 
 		pdu = &cmd->pdu_list[seq->pdu_start];
 
 		if (seq->pdu_send_order == seq->pdu_count) {
-			pr_err("Command ITT: 0x%08x seq->pdu_send"
-				"_order: %u equals seq->pdu_count: %u\n",
-				cmd->init_task_tag, seq->pdu_send_order,
-				seq->pdu_count);
+			target_err("Command ITT: 0x%08x seq->pdu_send"
+				   "_order: %u equals seq->pdu_count: %u\n",
+				   cmd->init_task_tag, seq->pdu_send_order, seq->pdu_count);
 			return NULL;
 		}
 
@@ -650,9 +648,9 @@ redo:
 			}
 		}
 
-		pr_err("Command ITT: 0x%08x unable to locate iscsi"
-			"_pdu_t for seq->pdu_send_order: %u.\n",
-			cmd->init_task_tag, seq->pdu_send_order);
+		target_err("Command ITT: 0x%08x unable to locate iscsi"
+			   "_pdu_t for seq->pdu_send_order: %u.\n",
+			   cmd->init_task_tag, seq->pdu_send_order);
 		return NULL;
 	}
 
@@ -667,15 +665,15 @@ struct iscsi_seq *iscsit_get_seq_holder(
 	u32 i;
 
 	if (!cmd->seq_list) {
-		pr_err("struct iscsit_cmd->seq_list is NULL!\n");
+		target_err("struct iscsit_cmd->seq_list is NULL!\n");
 		return NULL;
 	}
 
 	for (i = 0; i < cmd->seq_count; i++) {
-		pr_debug("seq_list[i].orig_offset: %d, seq_list[i]."
-			"xfer_len: %d, seq_list[i].seq_no %u\n",
-			cmd->seq_list[i].orig_offset, cmd->seq_list[i].xfer_len,
-			cmd->seq_list[i].seq_no);
+		target_debug("seq_list[i].orig_offset: %d, seq_list[i]."
+			     "xfer_len: %d, seq_list[i].seq_no %u\n",
+			     cmd->seq_list[i].orig_offset, cmd->seq_list[i].xfer_len,
+			     cmd->seq_list[i].seq_no);
 
 		if ((cmd->seq_list[i].orig_offset +
 				cmd->seq_list[i].xfer_len) >=
@@ -683,8 +681,8 @@ struct iscsi_seq *iscsit_get_seq_holder(
 			return &cmd->seq_list[i];
 	}
 
-	pr_err("Unable to locate Sequence holder for ITT: 0x%08x,"
-		" Offset: %u, Length: %u\n", cmd->init_task_tag, offset,
-		length);
+	target_err("Unable to locate Sequence holder for ITT: 0x%08x,"
+		   " Offset: %u, Length: %u\n",
+		   cmd->init_task_tag, offset, length);
 	return NULL;
 }

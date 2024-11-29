@@ -71,8 +71,7 @@ static int tcm_remote_port_link(
 	struct se_portal_group *se_tpg,
 	struct se_lun *lun)
 {
-	pr_debug("TCM_Remote_ConfigFS: Port Link LUN %lld Successful\n",
-		 lun->unpacked_lun);
+	target_debug("TCM_Remote_ConfigFS: Port Link LUN %lld Successful\n", lun->unpacked_lun);
 	return 0;
 }
 
@@ -80,8 +79,7 @@ static void tcm_remote_port_unlink(
 	struct se_portal_group *se_tpg,
 	struct se_lun *lun)
 {
-	pr_debug("TCM_Remote_ConfigFS: Port Unlink LUN %lld Successful\n",
-		 lun->unpacked_lun);
+	target_debug("TCM_Remote_ConfigFS: Port Unlink LUN %lld Successful\n", lun->unpacked_lun);
 }
 
 static struct se_portal_group *tcm_remote_make_tpg(
@@ -95,15 +93,14 @@ static struct se_portal_group *tcm_remote_make_tpg(
 	int ret;
 
 	if (strstr(name, "tpgt_") != name) {
-		pr_err("Unable to locate \"tpgt_#\" directory group\n");
+		target_err("Unable to locate \"tpgt_#\" directory group\n");
 		return ERR_PTR(-EINVAL);
 	}
 	if (kstrtoul(name + 5, 10, &tpgt))
 		return ERR_PTR(-EINVAL);
 
 	if (tpgt >= TL_TPGS_PER_HBA) {
-		pr_err("Passed tpgt: %lu exceeds TL_TPGS_PER_HBA: %u\n",
-		       tpgt, TL_TPGS_PER_HBA);
+		target_err("Passed tpgt: %lu exceeds TL_TPGS_PER_HBA: %u\n", tpgt, TL_TPGS_PER_HBA);
 		return ERR_PTR(-EINVAL);
 	}
 	remote_tpg = &remote_hba->remote_hba_tpgs[tpgt];
@@ -117,9 +114,9 @@ static struct se_portal_group *tcm_remote_make_tpg(
 	if (ret < 0)
 		return ERR_PTR(-ENOMEM);
 
-	pr_debug("TCM_Remote_ConfigFS: Allocated Emulated %s Target Port %s,t,0x%04lx\n",
-		 tcm_remote_dump_proto_id(remote_hba),
-		 config_item_name(&wwn->wwn_group.cg_item), tpgt);
+	target_debug("TCM_Remote_ConfigFS: Allocated Emulated %s Target Port %s,t,0x%04lx\n",
+		     tcm_remote_dump_proto_id(remote_hba),
+		     config_item_name(&wwn->wwn_group.cg_item), tpgt);
 	return &remote_tpg->remote_se_tpg;
 }
 
@@ -142,9 +139,9 @@ static void tcm_remote_drop_tpg(struct se_portal_group *se_tpg)
 	remote_tpg->remote_hba = NULL;
 	remote_tpg->remote_tpgt = 0;
 
-	pr_debug("TCM_Remote_ConfigFS: Deallocated Emulated %s Target Port %s,t,0x%04x\n",
-		 tcm_remote_dump_proto_id(remote_hba),
-		 config_item_name(&wwn->wwn_group.cg_item), tpgt);
+	target_debug("TCM_Remote_ConfigFS: Deallocated Emulated %s Target Port %s,t,0x%04x\n",
+		     tcm_remote_dump_proto_id(remote_hba),
+		     config_item_name(&wwn->wwn_group.cg_item), tpgt);
 }
 
 static struct se_wwn *tcm_remote_make_wwn(
@@ -183,8 +180,7 @@ static struct se_wwn *tcm_remote_make_wwn(
 	}
 	ptr = strstr(name, "iqn.");
 	if (!ptr) {
-		pr_err("Unable to locate prefix for emulated Target Port: %s\n",
-		       name);
+		target_err("Unable to locate prefix for emulated Target Port: %s\n", name);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -192,15 +188,15 @@ static struct se_wwn *tcm_remote_make_wwn(
 
 check_len:
 	if (strlen(name) >= TL_WWN_ADDR_LEN) {
-		pr_err("Emulated NAA %s Address: %s, exceeds max: %d\n",
-		       name, tcm_remote_dump_proto_id(remote_hba), TL_WWN_ADDR_LEN);
+		target_err("Emulated NAA %s Address: %s, exceeds max: %d\n", name,
+			   tcm_remote_dump_proto_id(remote_hba), TL_WWN_ADDR_LEN);
 		ret = -EINVAL;
 		goto out;
 	}
 	snprintf(&remote_hba->remote_wwn_address[0], TL_WWN_ADDR_LEN, "%s", &name[off]);
 
-	pr_debug("TCM_Remote_ConfigFS: Allocated emulated Target %s Address: %s\n",
-		 tcm_remote_dump_proto_id(remote_hba), name);
+	target_debug("TCM_Remote_ConfigFS: Allocated emulated Target %s Address: %s\n",
+		     tcm_remote_dump_proto_id(remote_hba), name);
 	return &remote_hba->remote_hba_wwn;
 out:
 	kfree(remote_hba);
@@ -212,9 +208,8 @@ static void tcm_remote_drop_wwn(struct se_wwn *wwn)
 	struct tcm_remote_hba *remote_hba = container_of(wwn,
 				struct tcm_remote_hba, remote_hba_wwn);
 
-	pr_debug("TCM_Remote_ConfigFS: Deallocating emulated Target %s Address: %s\n",
-		 tcm_remote_dump_proto_id(remote_hba),
-		 remote_hba->remote_wwn_address);
+	target_debug("TCM_Remote_ConfigFS: Deallocating emulated Target %s Address: %s\n",
+		     tcm_remote_dump_proto_id(remote_hba), remote_hba->remote_wwn_address);
 	kfree(remote_hba);
 }
 

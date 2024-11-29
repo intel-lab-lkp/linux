@@ -123,8 +123,9 @@ static int iscsit_dataout_within_command_recovery_check(
 	return DATAOUT_NORMAL;
 
 dump:
-	pr_err("Dumping DataOUT PDU Offset: %u Length: %d DataSN:"
-		" 0x%08x\n", hdr->offset, payload_length, hdr->datasn);
+	target_err("Dumping DataOUT PDU Offset: %u Length: %d DataSN:"
+		   " 0x%08x\n",
+		   hdr->offset, payload_length, hdr->datasn);
 	return iscsit_dump_data_payload(conn, payload_length, 1);
 }
 
@@ -140,20 +141,20 @@ static int iscsit_dataout_check_unsolicited_sequence(
 
 	if ((be32_to_cpu(hdr->offset) < cmd->seq_start_offset) ||
 	   ((be32_to_cpu(hdr->offset) + payload_length) > cmd->seq_end_offset)) {
-		pr_err("Command ITT: 0x%08x with Offset: %u,"
-		" Length: %u outside of Unsolicited Sequence %u:%u while"
-		" DataSequenceInOrder=Yes.\n", cmd->init_task_tag,
-		be32_to_cpu(hdr->offset), payload_length, cmd->seq_start_offset,
-			cmd->seq_end_offset);
+		target_err("Command ITT: 0x%08x with Offset: %u,"
+			   " Length: %u outside of Unsolicited Sequence %u:%u while"
+			   " DataSequenceInOrder=Yes.\n",
+			   cmd->init_task_tag, be32_to_cpu(hdr->offset), payload_length,
+			   cmd->seq_start_offset, cmd->seq_end_offset);
 		return DATAOUT_CANNOT_RECOVER;
 	}
 
 	first_burst_len = (cmd->first_burst_len + payload_length);
 
 	if (first_burst_len > conn->sess->sess_ops->FirstBurstLength) {
-		pr_err("Total %u bytes exceeds FirstBurstLength: %u"
-			" for this Unsolicited DataOut Burst.\n",
-			first_burst_len, conn->sess->sess_ops->FirstBurstLength);
+		target_err("Total %u bytes exceeds FirstBurstLength: %u"
+			   " for this Unsolicited DataOut Burst.\n",
+			   first_burst_len, conn->sess->sess_ops->FirstBurstLength);
 		transport_send_check_condition_and_sense(&cmd->se_cmd,
 				TCM_INCORRECT_AMOUNT_OF_DATA, 0);
 		return DATAOUT_CANNOT_RECOVER;
@@ -174,27 +175,28 @@ static int iscsit_dataout_check_unsolicited_sequence(
 
 		if ((first_burst_len != cmd->se_cmd.data_length) &&
 		    (first_burst_len != conn->sess->sess_ops->FirstBurstLength)) {
-			pr_err("Unsolicited non-immediate data"
-			" received %u does not equal FirstBurstLength: %u, and"
-			" does not equal ExpXferLen %u.\n", first_burst_len,
-				conn->sess->sess_ops->FirstBurstLength,
-				cmd->se_cmd.data_length);
+			target_err("Unsolicited non-immediate data"
+				   " received %u does not equal FirstBurstLength: %u, and"
+				   " does not equal ExpXferLen %u.\n",
+				   first_burst_len, conn->sess->sess_ops->FirstBurstLength,
+				   cmd->se_cmd.data_length);
 			transport_send_check_condition_and_sense(&cmd->se_cmd,
 					TCM_INCORRECT_AMOUNT_OF_DATA, 0);
 			return DATAOUT_CANNOT_RECOVER;
 		}
 	} else {
 		if (first_burst_len == conn->sess->sess_ops->FirstBurstLength) {
-			pr_err("Command ITT: 0x%08x reached"
-			" FirstBurstLength: %u, but ISCSI_FLAG_CMD_FINAL is not set. protocol"
-				" error.\n", cmd->init_task_tag,
-				conn->sess->sess_ops->FirstBurstLength);
+			target_err("Command ITT: 0x%08x reached"
+				   " FirstBurstLength: %u, but ISCSI_FLAG_CMD_FINAL is not set. protocol"
+				   " error.\n",
+				   cmd->init_task_tag, conn->sess->sess_ops->FirstBurstLength);
 			return DATAOUT_CANNOT_RECOVER;
 		}
 		if (first_burst_len == cmd->se_cmd.data_length) {
-			pr_err("Command ITT: 0x%08x reached"
-			" ExpXferLen: %u, but ISCSI_FLAG_CMD_FINAL is not set. protocol"
-			" error.\n", cmd->init_task_tag, cmd->se_cmd.data_length);
+			target_err("Command ITT: 0x%08x reached"
+				   " ExpXferLen: %u, but ISCSI_FLAG_CMD_FINAL is not set. protocol"
+				   " error.\n",
+				   cmd->init_task_tag, cmd->se_cmd.data_length);
 			return DATAOUT_CANNOT_RECOVER;
 		}
 	}
@@ -228,11 +230,11 @@ static int iscsit_dataout_check_sequence(
 		 */
 		if ((be32_to_cpu(hdr->offset) < cmd->seq_start_offset) ||
 		   ((be32_to_cpu(hdr->offset) + payload_length) > cmd->seq_end_offset)) {
-			pr_err("Command ITT: 0x%08x with Offset: %u,"
-			" Length: %u outside of Sequence %u:%u while"
-			" DataSequenceInOrder=Yes.\n", cmd->init_task_tag,
-			be32_to_cpu(hdr->offset), payload_length, cmd->seq_start_offset,
-				cmd->seq_end_offset);
+			target_err("Command ITT: 0x%08x with Offset: %u,"
+				   " Length: %u outside of Sequence %u:%u while"
+				   " DataSequenceInOrder=Yes.\n",
+				   cmd->init_task_tag, be32_to_cpu(hdr->offset), payload_length,
+				   cmd->seq_start_offset, cmd->seq_end_offset);
 
 			if (iscsit_dump_data_payload(conn, payload_length, 1) < 0)
 				return DATAOUT_CANNOT_RECOVER;
@@ -260,11 +262,11 @@ static int iscsit_dataout_check_sequence(
 	}
 
 	if (next_burst_len > conn->sess->sess_ops->MaxBurstLength) {
-		pr_err("Command ITT: 0x%08x, NextBurstLength: %u and"
-			" Length: %u exceeds MaxBurstLength: %u. protocol"
-			" error.\n", cmd->init_task_tag,
-			(next_burst_len - payload_length),
-			payload_length, conn->sess->sess_ops->MaxBurstLength);
+		target_err("Command ITT: 0x%08x, NextBurstLength: %u and"
+			   " Length: %u exceeds MaxBurstLength: %u. protocol"
+			   " error.\n",
+			   cmd->init_task_tag, (next_burst_len - payload_length), payload_length,
+			   conn->sess->sess_ops->MaxBurstLength);
 		return DATAOUT_CANNOT_RECOVER;
 	}
 
@@ -286,16 +288,18 @@ static int iscsit_dataout_check_sequence(
 			     conn->sess->sess_ops->MaxBurstLength) &&
 			   ((cmd->write_data_done + payload_length) <
 			     cmd->se_cmd.data_length)) {
-				pr_err("Command ITT: 0x%08x set ISCSI_FLAG_CMD_FINAL"
-				" before end of DataOUT sequence, protocol"
-				" error.\n", cmd->init_task_tag);
+				target_err("Command ITT: 0x%08x set ISCSI_FLAG_CMD_FINAL"
+					   " before end of DataOUT sequence, protocol"
+					   " error.\n",
+					   cmd->init_task_tag);
 				return DATAOUT_CANNOT_RECOVER;
 			}
 		} else {
 			if (next_burst_len < seq->xfer_len) {
-				pr_err("Command ITT: 0x%08x set ISCSI_FLAG_CMD_FINAL"
-				" before end of DataOUT sequence, protocol"
-				" error.\n", cmd->init_task_tag);
+				target_err("Command ITT: 0x%08x set ISCSI_FLAG_CMD_FINAL"
+					   " before end of DataOUT sequence, protocol"
+					   " error.\n",
+					   cmd->init_task_tag);
 				return DATAOUT_CANNOT_RECOVER;
 			}
 		}
@@ -303,26 +307,27 @@ static int iscsit_dataout_check_sequence(
 		if (conn->sess->sess_ops->DataSequenceInOrder) {
 			if (next_burst_len ==
 					conn->sess->sess_ops->MaxBurstLength) {
-				pr_err("Command ITT: 0x%08x reached"
-				" MaxBurstLength: %u, but ISCSI_FLAG_CMD_FINAL is"
-				" not set, protocol error.", cmd->init_task_tag,
-					conn->sess->sess_ops->MaxBurstLength);
+				target_err("Command ITT: 0x%08x reached"
+					   " MaxBurstLength: %u, but ISCSI_FLAG_CMD_FINAL is"
+					   " not set, protocol error.",
+					   cmd->init_task_tag,
+					   conn->sess->sess_ops->MaxBurstLength);
 				return DATAOUT_CANNOT_RECOVER;
 			}
 			if ((cmd->write_data_done + payload_length) ==
 					cmd->se_cmd.data_length) {
-				pr_err("Command ITT: 0x%08x reached"
-				" last DataOUT PDU in sequence but ISCSI_FLAG_"
-				"CMD_FINAL is not set, protocol error.\n",
-					cmd->init_task_tag);
+				target_err("Command ITT: 0x%08x reached"
+					   " last DataOUT PDU in sequence but ISCSI_FLAG_"
+					   "CMD_FINAL is not set, protocol error.\n",
+					   cmd->init_task_tag);
 				return DATAOUT_CANNOT_RECOVER;
 			}
 		} else {
 			if (next_burst_len == seq->xfer_len) {
-				pr_err("Command ITT: 0x%08x reached"
-				" last DataOUT PDU in sequence but ISCSI_FLAG_"
-				"CMD_FINAL is not set, protocol error.\n",
-					cmd->init_task_tag);
+				target_err("Command ITT: 0x%08x reached"
+					   " last DataOUT PDU in sequence but ISCSI_FLAG_"
+					   "CMD_FINAL is not set, protocol error.\n",
+					   cmd->init_task_tag);
 				return DATAOUT_CANNOT_RECOVER;
 			}
 		}
@@ -357,14 +362,14 @@ static int iscsit_dataout_check_datasn(
 	}
 
 	if (be32_to_cpu(hdr->datasn) > data_sn) {
-		pr_err("Command ITT: 0x%08x, received DataSN: 0x%08x"
-			" higher than expected 0x%08x.\n", cmd->init_task_tag,
-				be32_to_cpu(hdr->datasn), data_sn);
+		target_err("Command ITT: 0x%08x, received DataSN: 0x%08x"
+			   " higher than expected 0x%08x.\n",
+			   cmd->init_task_tag, be32_to_cpu(hdr->datasn), data_sn);
 		goto recover;
 	} else if (be32_to_cpu(hdr->datasn) < data_sn) {
-		pr_err("Command ITT: 0x%08x, received DataSN: 0x%08x"
-			" lower than expected 0x%08x, discarding payload.\n",
-			cmd->init_task_tag, be32_to_cpu(hdr->datasn), data_sn);
+		target_err("Command ITT: 0x%08x, received DataSN: 0x%08x"
+			   " lower than expected 0x%08x, discarding payload.\n",
+			   cmd->init_task_tag, be32_to_cpu(hdr->datasn), data_sn);
 		goto dump;
 	}
 
@@ -372,8 +377,8 @@ static int iscsit_dataout_check_datasn(
 
 recover:
 	if (!conn->sess->sess_ops->ErrorRecoveryLevel) {
-		pr_err("Unable to perform within-command recovery"
-				" while ERL=0.\n");
+		target_err("Unable to perform within-command recovery"
+			   " while ERL=0.\n");
 		return DATAOUT_CANNOT_RECOVER;
 	}
 dump:
@@ -403,9 +408,10 @@ static int iscsit_dataout_pre_datapduinorder_yes(
 	 */
 	if (conn->sess->sess_ops->DataSequenceInOrder) {
 		if (be32_to_cpu(hdr->offset) != cmd->write_data_done) {
-			pr_err("Command ITT: 0x%08x, received offset"
-			" %u different than expected %u.\n", cmd->init_task_tag,
-				be32_to_cpu(hdr->offset), cmd->write_data_done);
+			target_err("Command ITT: 0x%08x, received offset"
+				   " %u different than expected %u.\n",
+				   cmd->init_task_tag, be32_to_cpu(hdr->offset),
+				   cmd->write_data_done);
 			recovery = 1;
 			goto recover;
 		}
@@ -413,16 +419,15 @@ static int iscsit_dataout_pre_datapduinorder_yes(
 		struct iscsi_seq *seq = cmd->seq_ptr;
 
 		if (be32_to_cpu(hdr->offset) > seq->offset) {
-			pr_err("Command ITT: 0x%08x, received offset"
-			" %u greater than expected %u.\n", cmd->init_task_tag,
-				be32_to_cpu(hdr->offset), seq->offset);
+			target_err("Command ITT: 0x%08x, received offset"
+				   " %u greater than expected %u.\n",
+				   cmd->init_task_tag, be32_to_cpu(hdr->offset), seq->offset);
 			recovery = 1;
 			goto recover;
 		} else if (be32_to_cpu(hdr->offset) < seq->offset) {
-			pr_err("Command ITT: 0x%08x, received offset"
-			" %u less than expected %u, discarding payload.\n",
-				cmd->init_task_tag, be32_to_cpu(hdr->offset),
-				seq->offset);
+			target_err("Command ITT: 0x%08x, received offset"
+				   " %u less than expected %u, discarding payload.\n",
+				   cmd->init_task_tag, be32_to_cpu(hdr->offset), seq->offset);
 			dump = 1;
 			goto dump;
 		}
@@ -432,8 +437,8 @@ static int iscsit_dataout_pre_datapduinorder_yes(
 
 recover:
 	if (!conn->sess->sess_ops->ErrorRecoveryLevel) {
-		pr_err("Unable to perform within-command recovery"
-				" while ERL=0.\n");
+		target_err("Unable to perform within-command recovery"
+			   " while ERL=0.\n");
 		return DATAOUT_CANNOT_RECOVER;
 	}
 dump:
@@ -466,9 +471,9 @@ static int iscsit_dataout_pre_datapduinorder_no(
 	case ISCSI_PDU_TIMED_OUT:
 		break;
 	case ISCSI_PDU_RECEIVED_OK:
-		pr_err("Command ITT: 0x%08x received already gotten"
-			" Offset: %u, Length: %u\n", cmd->init_task_tag,
-				be32_to_cpu(hdr->offset), payload_length);
+		target_err("Command ITT: 0x%08x received already gotten"
+			   " Offset: %u, Length: %u\n",
+			   cmd->init_task_tag, be32_to_cpu(hdr->offset), payload_length);
 		return iscsit_dump_data_payload(cmd->conn, payload_length, 1);
 	default:
 		return DATAOUT_CANNOT_RECOVER;
@@ -729,8 +734,8 @@ int iscsit_check_post_dataout(
 		return iscsit_dataout_post_crc_passed(cmd, buf);
 	else {
 		if (!conn->sess->sess_ops->ErrorRecoveryLevel) {
-			pr_err("Unable to recover from DataOUT CRC"
-				" failure while ERL=0, closing session.\n");
+			target_err("Unable to recover from DataOUT CRC"
+				   " failure while ERL=0, closing session.\n");
 			iscsit_reject_cmd(cmd, ISCSI_REASON_DATA_DIGEST_ERROR,
 					  buf);
 			return DATAOUT_CANNOT_RECOVER;
@@ -753,15 +758,16 @@ void iscsit_handle_time2retain_timeout(struct timer_list *t)
 		return;
 	}
 	if (atomic_read(&sess->session_reinstatement)) {
-		pr_err("Exiting Time2Retain handler because"
-				" session_reinstatement=1\n");
+		target_err("Exiting Time2Retain handler because"
+			   " session_reinstatement=1\n");
 		spin_unlock_bh(&se_tpg->session_lock);
 		return;
 	}
 	sess->time2retain_timer_flags |= ISCSI_TF_EXPIRED;
 
-	pr_err("Time2Retain timer expired for SID: %u, cleaning up"
-			" iSCSI session.\n", sess->sid);
+	target_err("Time2Retain timer expired for SID: %u, cleaning up"
+		   " iSCSI session.\n",
+		   sess->sid);
 
 	iscsit_fill_cxn_timeout_err_stats(sess);
 	spin_unlock_bh(&se_tpg->session_lock);
@@ -785,8 +791,9 @@ void iscsit_start_time2retain_handler(struct iscsit_session *sess)
 	if (sess->time2retain_timer_flags & ISCSI_TF_RUNNING)
 		return;
 
-	pr_debug("Starting Time2Retain timer for %u seconds on"
-		" SID: %u\n", sess->sess_ops->DefaultTime2Retain, sess->sid);
+	target_debug("Starting Time2Retain timer for %u seconds on"
+		     " SID: %u\n",
+		     sess->sess_ops->DefaultTime2Retain, sess->sid);
 
 	sess->time2retain_timer_flags &= ~ISCSI_TF_STOP;
 	sess->time2retain_timer_flags |= ISCSI_TF_RUNNING;
@@ -814,8 +821,7 @@ int iscsit_stop_time2retain_timer(struct iscsit_session *sess)
 
 	spin_lock(&se_tpg->session_lock);
 	sess->time2retain_timer_flags &= ~ISCSI_TF_RUNNING;
-	pr_debug("Stopped Time2Retain Timer for SID: %u\n",
-			sess->sid);
+	target_debug("Stopped Time2Retain Timer for SID: %u\n", sess->sid);
 	return 0;
 }
 
@@ -882,8 +888,9 @@ EXPORT_SYMBOL(iscsit_cause_connection_reinstatement);
 
 void iscsit_fall_back_to_erl0(struct iscsit_session *sess)
 {
-	pr_debug("Falling back to ErrorRecoveryLevel=0 for SID:"
-			" %u\n", sess->sid);
+	target_debug("Falling back to ErrorRecoveryLevel=0 for SID:"
+		     " %u\n",
+		     sess->sid);
 
 	atomic_set(&sess->session_fall_back_to_erl0, 1);
 }
@@ -897,9 +904,9 @@ static void iscsit_handle_connection_cleanup(struct iscsit_conn *conn)
 	    !atomic_read(&sess->session_fall_back_to_erl0))
 		iscsit_connection_recovery_transport_reset(conn);
 	else {
-		pr_debug("Performing cleanup for failed iSCSI"
-			" Connection ID: %hu from %s\n", conn->cid,
-			sess->sess_ops->InitiatorName);
+		target_debug("Performing cleanup for failed iSCSI"
+			     " Connection ID: %hu from %s\n",
+			     conn->cid, sess->sess_ops->InitiatorName);
 		iscsit_close_connection(conn);
 	}
 }
@@ -927,7 +934,7 @@ void iscsit_take_action_for_connection_exit(struct iscsit_conn *conn, bool *conn
 		return;
 	}
 
-	pr_debug("Moving to TARG_CONN_STATE_CLEANUP_WAIT.\n");
+	target_debug("Moving to TARG_CONN_STATE_CLEANUP_WAIT.\n");
 	conn->conn_state = TARG_CONN_STATE_CLEANUP_WAIT;
 	spin_unlock_bh(&conn->state_lock);
 

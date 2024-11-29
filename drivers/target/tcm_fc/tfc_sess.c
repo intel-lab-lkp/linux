@@ -28,9 +28,7 @@
 #include "tcm_fc.h"
 
 #define TFC_SESS_DBG(lport, fmt, args...) \
-	pr_debug("host%u: rport %6.6x: " fmt,	   \
-		 (lport)->host->host_no,	   \
-		 (lport)->port_id, ##args )
+	target_debug("host%u: rport %6.6x: " fmt, (lport)->host->host_no, (lport)->port_id, ##args)
 
 static void ft_sess_delete_all(struct ft_tport *);
 

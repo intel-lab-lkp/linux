@@ -28,8 +28,7 @@ int iscsi_login_rx_data(
 
 	rx_got = rx_data(conn, &iov, 1, length);
 	if (rx_got != length) {
-		pr_err("rx_data returned %d, expecting %d.\n",
-				rx_got, length);
+		target_err("rx_data returned %d, expecting %d.\n", rx_got, length);
 		return -1;
 	}
 
@@ -59,8 +58,7 @@ int iscsi_login_tx_data(
 
 	tx_sent = tx_data(conn, &iov[0], iov_cnt, length);
 	if (tx_sent != length) {
-		pr_err("tx_data returned %d, expecting %d.\n",
-				tx_sent, length);
+		target_err("tx_data returned %d, expecting %d.\n", tx_sent, length);
 		return -1;
 	}
 
@@ -69,42 +67,30 @@ int iscsi_login_tx_data(
 
 void iscsi_dump_conn_ops(struct iscsi_conn_ops *conn_ops)
 {
-	pr_debug("HeaderDigest: %s\n", (conn_ops->HeaderDigest) ?
-				"CRC32C" : "None");
-	pr_debug("DataDigest: %s\n", (conn_ops->DataDigest) ?
-				"CRC32C" : "None");
-	pr_debug("MaxRecvDataSegmentLength: %u\n",
-				conn_ops->MaxRecvDataSegmentLength);
+	target_debug("HeaderDigest: %s\n", (conn_ops->HeaderDigest) ? "CRC32C" : "None");
+	target_debug("DataDigest: %s\n", (conn_ops->DataDigest) ? "CRC32C" : "None");
+	target_debug("MaxRecvDataSegmentLength: %u\n", conn_ops->MaxRecvDataSegmentLength);
 }
 
 void iscsi_dump_sess_ops(struct iscsi_sess_ops *sess_ops)
 {
-	pr_debug("InitiatorName: %s\n", sess_ops->InitiatorName);
-	pr_debug("InitiatorAlias: %s\n", sess_ops->InitiatorAlias);
-	pr_debug("TargetName: %s\n", sess_ops->TargetName);
-	pr_debug("TargetAlias: %s\n", sess_ops->TargetAlias);
-	pr_debug("TargetPortalGroupTag: %hu\n",
-			sess_ops->TargetPortalGroupTag);
-	pr_debug("MaxConnections: %hu\n", sess_ops->MaxConnections);
-	pr_debug("InitialR2T: %s\n",
-			(sess_ops->InitialR2T) ? "Yes" : "No");
-	pr_debug("ImmediateData: %s\n", (sess_ops->ImmediateData) ?
-			"Yes" : "No");
-	pr_debug("MaxBurstLength: %u\n", sess_ops->MaxBurstLength);
-	pr_debug("FirstBurstLength: %u\n", sess_ops->FirstBurstLength);
-	pr_debug("DefaultTime2Wait: %hu\n", sess_ops->DefaultTime2Wait);
-	pr_debug("DefaultTime2Retain: %hu\n",
-			sess_ops->DefaultTime2Retain);
-	pr_debug("MaxOutstandingR2T: %hu\n",
-			sess_ops->MaxOutstandingR2T);
-	pr_debug("DataPDUInOrder: %s\n",
-			(sess_ops->DataPDUInOrder) ? "Yes" : "No");
-	pr_debug("DataSequenceInOrder: %s\n",
-			(sess_ops->DataSequenceInOrder) ? "Yes" : "No");
-	pr_debug("ErrorRecoveryLevel: %hu\n",
-			sess_ops->ErrorRecoveryLevel);
-	pr_debug("SessionType: %s\n", (sess_ops->SessionType) ?
-			"Discovery" : "Normal");
+	target_debug("InitiatorName: %s\n", sess_ops->InitiatorName);
+	target_debug("InitiatorAlias: %s\n", sess_ops->InitiatorAlias);
+	target_debug("TargetName: %s\n", sess_ops->TargetName);
+	target_debug("TargetAlias: %s\n", sess_ops->TargetAlias);
+	target_debug("TargetPortalGroupTag: %hu\n", sess_ops->TargetPortalGroupTag);
+	target_debug("MaxConnections: %hu\n", sess_ops->MaxConnections);
+	target_debug("InitialR2T: %s\n", (sess_ops->InitialR2T) ? "Yes" : "No");
+	target_debug("ImmediateData: %s\n", (sess_ops->ImmediateData) ? "Yes" : "No");
+	target_debug("MaxBurstLength: %u\n", sess_ops->MaxBurstLength);
+	target_debug("FirstBurstLength: %u\n", sess_ops->FirstBurstLength);
+	target_debug("DefaultTime2Wait: %hu\n", sess_ops->DefaultTime2Wait);
+	target_debug("DefaultTime2Retain: %hu\n", sess_ops->DefaultTime2Retain);
+	target_debug("MaxOutstandingR2T: %hu\n", sess_ops->MaxOutstandingR2T);
+	target_debug("DataPDUInOrder: %s\n", (sess_ops->DataPDUInOrder) ? "Yes" : "No");
+	target_debug("DataSequenceInOrder: %s\n", (sess_ops->DataSequenceInOrder) ? "Yes" : "No");
+	target_debug("ErrorRecoveryLevel: %hu\n", sess_ops->ErrorRecoveryLevel);
+	target_debug("SessionType: %s\n", (sess_ops->SessionType) ? "Discovery" : "Normal");
 }
 
 void iscsi_print_params(struct iscsi_param_list *param_list)
@@ -112,7 +98,7 @@ void iscsi_print_params(struct iscsi_param_list *param_list)
 	struct iscsi_param *param;
 
 	list_for_each_entry(param, &param_list->param_list, p_list)
-		pr_debug("%s: %s\n", param->name, param->value);
+		target_debug("%s: %s\n", param->name, param->value);
 }
 
 static struct iscsi_param *iscsi_set_default_param(struct iscsi_param_list *param_list,
@@ -123,20 +109,20 @@ static struct iscsi_param *iscsi_set_default_param(struct iscsi_param_list *para
 
 	param = kzalloc(sizeof(struct iscsi_param), GFP_KERNEL);
 	if (!param) {
-		pr_err("Unable to allocate memory for parameter.\n");
+		target_err("Unable to allocate memory for parameter.\n");
 		goto out;
 	}
 	INIT_LIST_HEAD(&param->p_list);
 
 	param->name = kstrdup(name, GFP_KERNEL);
 	if (!param->name) {
-		pr_err("Unable to allocate memory for parameter name.\n");
+		target_err("Unable to allocate memory for parameter name.\n");
 		goto out;
 	}
 
 	param->value = kstrdup(value, GFP_KERNEL);
 	if (!param->value) {
-		pr_err("Unable to allocate memory for parameter value.\n");
+		target_err("Unable to allocate memory for parameter value.\n");
 		goto out;
 	}
 
@@ -173,8 +159,7 @@ static struct iscsi_param *iscsi_set_default_param(struct iscsi_param_list *para
 		param->type = TYPE_STRING;
 		break;
 	default:
-		pr_err("Unknown type_range 0x%02x\n",
-				param->type_range);
+		target_err("Unknown type_range 0x%02x\n", param->type_range);
 		goto out;
 	}
 	list_add_tail(&param->p_list, &param_list->param_list);
@@ -198,8 +183,8 @@ int iscsi_create_default_params(struct iscsi_param_list **param_list_ptr)
 
 	pl = kzalloc(sizeof(struct iscsi_param_list), GFP_KERNEL);
 	if (!pl) {
-		pr_err("Unable to allocate memory for"
-				" struct iscsi_param_list.\n");
+		target_err("Unable to allocate memory for"
+			   " struct iscsi_param_list.\n");
 		return -ENOMEM;
 	}
 	INIT_LIST_HEAD(&pl->param_list);
@@ -569,7 +554,7 @@ int iscsi_copy_param_list(
 
 	param_list = kzalloc(sizeof(struct iscsi_param_list), GFP_KERNEL);
 	if (!param_list) {
-		pr_err("Unable to allocate memory for struct iscsi_param_list.\n");
+		target_err("Unable to allocate memory for struct iscsi_param_list.\n");
 		return -ENOMEM;
 	}
 	INIT_LIST_HEAD(&param_list->param_list);
@@ -585,7 +570,7 @@ int iscsi_copy_param_list(
 
 		new_param = kzalloc(sizeof(struct iscsi_param), GFP_KERNEL);
 		if (!new_param) {
-			pr_err("Unable to allocate memory for struct iscsi_param.\n");
+			target_err("Unable to allocate memory for struct iscsi_param.\n");
 			goto err_out;
 		}
 
@@ -595,7 +580,7 @@ int iscsi_copy_param_list(
 			kfree(new_param->value);
 			kfree(new_param->name);
 			kfree(new_param);
-			pr_err("Unable to allocate memory for parameter name/value.\n");
+			target_err("Unable to allocate memory for parameter name/value.\n");
 			goto err_out;
 		}
 
@@ -613,7 +598,7 @@ int iscsi_copy_param_list(
 	if (!list_empty(&param_list->param_list)) {
 		*dst_param_list = param_list;
 	} else {
-		pr_err("No parameters allocated.\n");
+		target_err("No parameters allocated.\n");
 		goto err_out;
 	}
 
@@ -660,7 +645,7 @@ struct iscsi_param *iscsi_find_param_from_key(
 	struct iscsi_param *param;
 
 	if (!key || !param_list) {
-		pr_err("Key or parameter list pointer is NULL.\n");
+		target_err("Key or parameter list pointer is NULL.\n");
 		return NULL;
 	}
 
@@ -669,7 +654,7 @@ struct iscsi_param *iscsi_find_param_from_key(
 			return param;
 	}
 
-	pr_err("Unable to locate key \"%s\".\n", key);
+	target_err("Unable to locate key \"%s\".\n", key);
 	return NULL;
 }
 EXPORT_SYMBOL(iscsi_find_param_from_key);
@@ -678,8 +663,8 @@ int iscsi_extract_key_value(char *textbuf, char **key, char **value)
 {
 	*value = strchr(textbuf, '=');
 	if (!*value) {
-		pr_err("Unable to locate \"=\" separator for key,"
-				" ignoring request.\n");
+		target_err("Unable to locate \"=\" separator for key,"
+			   " ignoring request.\n");
 		return -1;
 	}
 
@@ -696,12 +681,11 @@ int iscsi_update_param_value(struct iscsi_param *param, char *value)
 
 	param->value = kstrdup(value, GFP_KERNEL);
 	if (!param->value) {
-		pr_err("Unable to allocate memory for value.\n");
+		target_err("Unable to allocate memory for value.\n");
 		return -ENOMEM;
 	}
 
-	pr_debug("iSCSI Parameter updated to %s=%s\n",
-			param->name, param->value);
+	target_debug("iSCSI Parameter updated to %s=%s\n", param->name, param->value);
 	return 0;
 }
 
@@ -713,15 +697,16 @@ static int iscsi_add_notunderstood_response(
 	struct iscsi_extra_response *extra_response;
 
 	if (strlen(value) > VALUE_MAXLEN) {
-		pr_err("Value for notunderstood key \"%s\" exceeds %d,"
-			" protocol error.\n", key, VALUE_MAXLEN);
+		target_err("Value for notunderstood key \"%s\" exceeds %d,"
+			   " protocol error.\n",
+			   key, VALUE_MAXLEN);
 		return -1;
 	}
 
 	extra_response = kzalloc(sizeof(struct iscsi_extra_response), GFP_KERNEL);
 	if (!extra_response) {
-		pr_err("Unable to allocate memory for"
-			" struct iscsi_extra_response.\n");
+		target_err("Unable to allocate memory for"
+			   " struct iscsi_extra_response.\n");
 		return -ENOMEM;
 	}
 	INIT_LIST_HEAD(&extra_response->er_list);
@@ -798,8 +783,9 @@ static void iscsi_check_proposer_for_optional_reply(struct iscsi_param *param,
 static int iscsi_check_boolean_value(struct iscsi_param *param, char *value)
 {
 	if (strcmp(value, YES) && strcmp(value, NO)) {
-		pr_err("Illegal value for \"%s\", must be either"
-			" \"%s\" or \"%s\".\n", param->name, YES, NO);
+		target_err("Illegal value for \"%s\", must be either"
+			   " \"%s\" or \"%s\".\n",
+			   param->name, YES, NO);
 		return -1;
 	}
 
@@ -815,56 +801,63 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 
 	if (IS_TYPERANGE_0_TO_2(param)) {
 		if ((value < 0) || (value > 2)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" between 0 and 2.\n", param->name);
+			target_err("Illegal value for \"%s\", must be"
+				   " between 0 and 2.\n",
+				   param->name);
 			return -1;
 		}
 		return 0;
 	}
 	if (IS_TYPERANGE_0_TO_3600(param)) {
 		if ((value < 0) || (value > 3600)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" between 0 and 3600.\n", param->name);
+			target_err("Illegal value for \"%s\", must be"
+				   " between 0 and 3600.\n",
+				   param->name);
 			return -1;
 		}
 		return 0;
 	}
 	if (IS_TYPERANGE_0_TO_32767(param)) {
 		if ((value < 0) || (value > 32767)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" between 0 and 32767.\n", param->name);
+			target_err("Illegal value for \"%s\", must be"
+				   " between 0 and 32767.\n",
+				   param->name);
 			return -1;
 		}
 		return 0;
 	}
 	if (IS_TYPERANGE_0_TO_65535(param)) {
 		if ((value < 0) || (value > 65535)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" between 0 and 65535.\n", param->name);
+			target_err("Illegal value for \"%s\", must be"
+				   " between 0 and 65535.\n",
+				   param->name);
 			return -1;
 		}
 		return 0;
 	}
 	if (IS_TYPERANGE_1_TO_65535(param)) {
 		if ((value < 1) || (value > 65535)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" between 1 and 65535.\n", param->name);
+			target_err("Illegal value for \"%s\", must be"
+				   " between 1 and 65535.\n",
+				   param->name);
 			return -1;
 		}
 		return 0;
 	}
 	if (IS_TYPERANGE_2_TO_3600(param)) {
 		if ((value < 2) || (value > 3600)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" between 2 and 3600.\n", param->name);
+			target_err("Illegal value for \"%s\", must be"
+				   " between 2 and 3600.\n",
+				   param->name);
 			return -1;
 		}
 		return 0;
 	}
 	if (IS_TYPERANGE_512_TO_16777215(param)) {
 		if ((value < 512) || (value > 16777215)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" between 512 and 16777215.\n", param->name);
+			target_err("Illegal value for \"%s\", must be"
+				   " between 512 and 16777215.\n",
+				   param->name);
 			return -1;
 		}
 		return 0;
@@ -882,26 +875,26 @@ static int iscsi_check_string_or_list_value(struct iscsi_param *param, char *val
 		if (strcmp(value, KRB5) && strcmp(value, SPKM1) &&
 		    strcmp(value, SPKM2) && strcmp(value, SRP) &&
 		    strcmp(value, CHAP) && strcmp(value, NONE)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" \"%s\", \"%s\", \"%s\", \"%s\", \"%s\""
-				" or \"%s\".\n", param->name, KRB5,
-					SPKM1, SPKM2, SRP, CHAP, NONE);
+			target_err("Illegal value for \"%s\", must be"
+				   " \"%s\", \"%s\", \"%s\", \"%s\", \"%s\""
+				   " or \"%s\".\n",
+				   param->name, KRB5, SPKM1, SPKM2, SRP, CHAP, NONE);
 			return -1;
 		}
 	}
 	if (IS_TYPERANGE_DIGEST_PARAM(param)) {
 		if (strcmp(value, CRC32C) && strcmp(value, NONE)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" \"%s\" or \"%s\".\n", param->name,
-					CRC32C, NONE);
+			target_err("Illegal value for \"%s\", must be"
+				   " \"%s\" or \"%s\".\n",
+				   param->name, CRC32C, NONE);
 			return -1;
 		}
 	}
 	if (IS_TYPERANGE_SESSIONTYPE(param)) {
 		if (strcmp(value, DISCOVERY) && strcmp(value, NORMAL)) {
-			pr_err("Illegal value for \"%s\", must be"
-				" \"%s\" or \"%s\".\n", param->name,
-					DISCOVERY, NORMAL);
+			target_err("Illegal value for \"%s\", must be"
+				   " \"%s\" or \"%s\".\n",
+				   param->name, DISCOVERY, NORMAL);
 			return -1;
 		}
 	}
@@ -961,8 +954,7 @@ static int iscsi_check_acceptor_state(struct iscsi_param *param, char *value,
 	char *negotiated_value = NULL;
 
 	if (IS_PSTATE_ACCEPTOR(param)) {
-		pr_err("Received key \"%s\" twice, protocol error.\n",
-				param->name);
+		target_err("Received key \"%s\" twice, protocol error.\n", param->name);
 		return -1;
 	}
 
@@ -1040,9 +1032,9 @@ static int iscsi_check_acceptor_state(struct iscsi_param *param, char *value,
 				return -1;
 
 			conn->conn_ops->MaxRecvDataSegmentLength = tmp;
-			pr_debug("Saving op->MaxRecvDataSegmentLength from"
-				" original initiator received value: %u\n",
-				conn->conn_ops->MaxRecvDataSegmentLength);
+			target_debug("Saving op->MaxRecvDataSegmentLength from"
+				     " original initiator received value: %u\n",
+				     conn->conn_ops->MaxRecvDataSegmentLength);
 
 			param_mxdsl = iscsi_find_param_from_key(
 						MAXXMITDATASEGMENTLENGTH,
@@ -1055,16 +1047,17 @@ static int iscsi_check_acceptor_state(struct iscsi_param *param, char *value,
 			if (rc < 0)
 				return -1;
 
-			pr_debug("Updated %s to target MXDSL value: %s\n",
-					param->name, param->value);
+			target_debug("Updated %s to target MXDSL value: %s\n", param->name,
+				     param->value);
 		}
 	} else if (IS_TYPE_VALUE_LIST(param)) {
 		negotiated_value = iscsi_check_valuelist_for_support(
 					param, value);
 		if (!negotiated_value) {
-			pr_err("Proposer's value list \"%s\" contains"
-				" no valid values from Acceptor's value list"
-				" \"%s\".\n", value, param->value);
+			target_err("Proposer's value list \"%s\" contains"
+				   " no valid values from Acceptor's value list"
+				   " \"%s\".\n",
+				   value, param->value);
 			return -1;
 		}
 		if (iscsi_update_param_value(param, negotiated_value) < 0)
@@ -1081,8 +1074,7 @@ static int iscsi_check_acceptor_state(struct iscsi_param *param, char *value,
 static int iscsi_check_proposer_state(struct iscsi_param *param, char *value)
 {
 	if (IS_PSTATE_RESPONSE_GOT(param)) {
-		pr_err("Received key \"%s\" twice, protocol error.\n",
-				param->name);
+		target_err("Received key \"%s\" twice, protocol error.\n", param->name);
 		return -1;
 	}
 
@@ -1091,8 +1083,7 @@ static int iscsi_check_proposer_state(struct iscsi_param *param, char *value)
 
 		comma_ptr = strchr(value, ',');
 		if (comma_ptr) {
-			pr_err("Illegal \",\" in response for \"%s\".\n",
-					param->name);
+			target_err("Illegal \",\" in response for \"%s\".\n", param->name);
 			return -1;
 		}
 
@@ -1121,24 +1112,24 @@ static int iscsi_check_value(struct iscsi_param *param, char *value)
 			SET_PSTATE_REJECT(param);
 			return 0;
 		}
-		pr_err("Received %s=%s\n", param->name, value);
+		target_err("Received %s=%s\n", param->name, value);
 		return -1;
 	}
 	if (!strcmp(value, IRRELEVANT)) {
-		pr_debug("Received %s=%s\n", param->name, value);
+		target_debug("Received %s=%s\n", param->name, value);
 		SET_PSTATE_IRRELEVANT(param);
 		return 0;
 	}
 	if (!strcmp(value, NOTUNDERSTOOD)) {
 		if (!IS_PSTATE_PROPOSER(param)) {
-			pr_err("Received illegal offer %s=%s\n",
-				param->name, value);
+			target_err("Received illegal offer %s=%s\n", param->name, value);
 			return -1;
 		}
 
 /* #warning FIXME: Add check for X-ExtensionKey here */
-		pr_err("Standard iSCSI key \"%s\" cannot be answered"
-			" with \"%s\", protocol error.\n", param->name, value);
+		target_err("Standard iSCSI key \"%s\" cannot be answered"
+			   " with \"%s\", protocol error.\n",
+			   param->name, value);
 		return -1;
 	}
 
@@ -1147,18 +1138,19 @@ static int iscsi_check_value(struct iscsi_param *param, char *value)
 		comma_ptr = strchr(value, ',');
 
 		if (comma_ptr && !IS_TYPE_VALUE_LIST(param)) {
-			pr_err("Detected value separator \",\", but"
-				" key \"%s\" does not allow a value list,"
-				" protocol error.\n", param->name);
+			target_err("Detected value separator \",\", but"
+				   " key \"%s\" does not allow a value list,"
+				   " protocol error.\n",
+				   param->name);
 			return -1;
 		}
 		if (comma_ptr)
 			*comma_ptr = '\0';
 
 		if (strlen(value) > VALUE_MAXLEN) {
-			pr_err("Value for key \"%s\" exceeds %d,"
-				" protocol error.\n", param->name,
-				VALUE_MAXLEN);
+			target_err("Value for key \"%s\" exceeds %d,"
+				   " protocol error.\n",
+				   param->name, VALUE_MAXLEN);
 			return -1;
 		}
 
@@ -1172,7 +1164,7 @@ static int iscsi_check_value(struct iscsi_param *param, char *value)
 			if (iscsi_check_string_or_list_value(param, value) < 0)
 				return -1;
 		} else {
-			pr_err("Huh? 0x%02x\n", param->type);
+			target_err("Huh? 0x%02x\n", param->type);
 			return -1;
 		}
 
@@ -1193,8 +1185,7 @@ static struct iscsi_param *__iscsi_check_key(
 	struct iscsi_param *param;
 
 	if (strlen(key) > KEY_MAXLEN) {
-		pr_err("Length of key name \"%s\" exceeds %d.\n",
-			key, KEY_MAXLEN);
+		target_err("Length of key name \"%s\" exceeds %d.\n", key, KEY_MAXLEN);
 		return NULL;
 	}
 
@@ -1203,16 +1194,16 @@ static struct iscsi_param *__iscsi_check_key(
 		return NULL;
 
 	if ((sender & SENDER_INITIATOR) && !IS_SENDER_INITIATOR(param)) {
-		pr_err("Key \"%s\" may not be sent to %s,"
-			" protocol error.\n", param->name,
-			(sender & SENDER_RECEIVER) ? "target" : "initiator");
+		target_err("Key \"%s\" may not be sent to %s,"
+			   " protocol error.\n",
+			   param->name, (sender & SENDER_RECEIVER) ? "target" : "initiator");
 		return NULL;
 	}
 
 	if ((sender & SENDER_TARGET) && !IS_SENDER_TARGET(param)) {
-		pr_err("Key \"%s\" may not be sent to %s,"
-			" protocol error.\n", param->name,
-			(sender & SENDER_RECEIVER) ? "initiator" : "target");
+		target_err("Key \"%s\" may not be sent to %s,"
+			   " protocol error.\n",
+			   param->name, (sender & SENDER_RECEIVER) ? "initiator" : "target");
 		return NULL;
 	}
 
@@ -1230,8 +1221,7 @@ static struct iscsi_param *iscsi_check_key(
 	 * Key name length must not exceed 63 bytes. (See iSCSI v20 5.1)
 	 */
 	if (strlen(key) > KEY_MAXLEN) {
-		pr_err("Length of key name \"%s\" exceeds %d.\n",
-			key, KEY_MAXLEN);
+		target_err("Length of key name \"%s\" exceeds %d.\n", key, KEY_MAXLEN);
 		return NULL;
 	}
 
@@ -1240,21 +1230,20 @@ static struct iscsi_param *iscsi_check_key(
 		return NULL;
 
 	if ((sender & SENDER_INITIATOR) && !IS_SENDER_INITIATOR(param)) {
-		pr_err("Key \"%s\" may not be sent to %s,"
-			" protocol error.\n", param->name,
-			(sender & SENDER_RECEIVER) ? "target" : "initiator");
+		target_err("Key \"%s\" may not be sent to %s,"
+			   " protocol error.\n",
+			   param->name, (sender & SENDER_RECEIVER) ? "target" : "initiator");
 		return NULL;
 	}
 	if ((sender & SENDER_TARGET) && !IS_SENDER_TARGET(param)) {
-		pr_err("Key \"%s\" may not be sent to %s,"
-				" protocol error.\n", param->name,
-			(sender & SENDER_RECEIVER) ? "initiator" : "target");
+		target_err("Key \"%s\" may not be sent to %s,"
+			   " protocol error.\n",
+			   param->name, (sender & SENDER_RECEIVER) ? "initiator" : "target");
 		return NULL;
 	}
 
 	if (IS_PSTATE_ACCEPTOR(param)) {
-		pr_err("Key \"%s\" received twice, protocol error.\n",
-				key);
+		target_err("Key \"%s\" received twice, protocol error.\n", key);
 		return NULL;
 	}
 
@@ -1274,8 +1263,8 @@ static struct iscsi_param *iscsi_check_key(
 		default:
 			phase_name = "Unknown";
 		}
-		pr_err("Key \"%s\" may not be negotiated during %s phase.\n",
-				param->name, phase_name);
+		target_err("Key \"%s\" may not be negotiated during %s phase.\n", param->name,
+			   phase_name);
 		return NULL;
 	}
 
@@ -1319,16 +1308,16 @@ static int iscsi_enforce_integrity_rules(
 			if (strcmp(param->value, "1")) {
 				if (iscsi_update_param_value(param, "1") < 0)
 					return -1;
-				pr_debug("Reset \"%s\" to \"%s\".\n",
-					param->name, param->value);
+				target_debug("Reset \"%s\" to \"%s\".\n", param->name,
+					     param->value);
 			}
 		}
 		if (!strcmp(param->name, MAXCONNECTIONS) && !SessionType) {
 			if (strcmp(param->value, "1")) {
 				if (iscsi_update_param_value(param, "1") < 0)
 					return -1;
-				pr_debug("Reset \"%s\" to \"%s\".\n",
-					param->name, param->value);
+				target_debug("Reset \"%s\" to \"%s\".\n", param->name,
+					     param->value);
 			}
 		}
 		if (!strcmp(param->name, FIRSTBURSTLENGTH)) {
@@ -1340,8 +1329,8 @@ static int iscsi_enforce_integrity_rules(
 				sprintf(tmpbuf, "%u", MaxBurstLength);
 				if (iscsi_update_param_value(param, tmpbuf))
 					return -1;
-				pr_debug("Reset \"%s\" to \"%s\".\n",
-					param->name, param->value);
+				target_debug("Reset \"%s\" to \"%s\".\n", param->name,
+					     param->value);
 			}
 		}
 	}
@@ -1361,7 +1350,7 @@ int iscsi_decode_text_input(
 
 	tmpbuf = kmemdup_nul(textbuf, length, GFP_KERNEL);
 	if (!tmpbuf) {
-		pr_err("Unable to allocate %u + 1 bytes for tmpbuf.\n", length);
+		target_err("Unable to allocate %u + 1 bytes for tmpbuf.\n", length);
 		return -ENOMEM;
 	}
 
@@ -1375,7 +1364,7 @@ int iscsi_decode_text_input(
 		if (iscsi_extract_key_value(start, &key, &value) < 0)
 			goto free_buffer;
 
-		pr_debug("Got key: %s=%s\n", key, value);
+		target_debug("Got key: %s=%s\n", key, value);
 
 		if (phase & PHASE_SECURITY) {
 			if (iscsi_check_for_auth_key(key) > 0) {
@@ -1448,8 +1437,7 @@ int iscsi_encode_text_output(
 			*length += 1;
 			output_buf = textbuf + *length;
 			SET_PSTATE_RESPONSE_SENT(param);
-			pr_debug("Sending key: %s=%s\n",
-				param->name, param->value);
+			target_debug("Sending key: %s=%s\n", param->name, param->value);
 			continue;
 		}
 		if (IS_PSTATE_NEGOTIATE(param) &&
@@ -1463,8 +1451,7 @@ int iscsi_encode_text_output(
 			SET_PSTATE_PROPOSER(param);
 			iscsi_check_proposer_for_optional_reply(param,
 							        keys_workaround);
-			pr_debug("Sending key: %s=%s\n",
-				param->name, param->value);
+			target_debug("Sending key: %s=%s\n", param->name, param->value);
 		}
 	}
 
@@ -1472,7 +1459,7 @@ int iscsi_encode_text_output(
 		*length += sprintf(output_buf, "%s=%s", er->key, er->value);
 		*length += 1;
 		output_buf = textbuf + *length;
-		pr_debug("Sending key: %s=%s\n", er->key, er->value);
+		target_debug("Sending key: %s=%s\n", er->key, er->value);
 	}
 	iscsi_release_extra_responses(param_list);
 
@@ -1490,8 +1477,7 @@ int iscsi_check_negotiated_keys(struct iscsi_param_list *param_list)
 		    !IS_PSTATE_RESPONSE_GOT(param) &&
 		    !IS_PSTATE_REPLY_OPTIONAL(param) &&
 		    !IS_PHASE_DECLARATIVE(param)) {
-			pr_err("No response for proposed key \"%s\".\n",
-					param->name);
+			target_err("No response for proposed key \"%s\".\n", param->name);
 			ret = -1;
 		}
 	}
@@ -1541,8 +1527,8 @@ void iscsi_set_connection_parameters(
 	char *tmpptr;
 	struct iscsi_param *param;
 
-	pr_debug("---------------------------------------------------"
-			"---------------\n");
+	target_debug("---------------------------------------------------"
+		     "---------------\n");
 	list_for_each_entry(param, &param_list->param_list, p_list) {
 		/*
 		 * Special case to set MAXXMITDATASEGMENTLENGTH from the
@@ -1552,51 +1538,45 @@ void iscsi_set_connection_parameters(
 		if (!strcmp(param->name, MAXXMITDATASEGMENTLENGTH)) {
 			ops->MaxXmitDataSegmentLength =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("MaxXmitDataSegmentLength:     %s\n",
-				param->value);
+			target_debug("MaxXmitDataSegmentLength:     %s\n", param->value);
 		}
 
 		if (!IS_PSTATE_ACCEPTOR(param) && !IS_PSTATE_PROPOSER(param))
 			continue;
 		if (!strcmp(param->name, AUTHMETHOD)) {
-			pr_debug("AuthMethod:                   %s\n",
-				param->value);
+			target_debug("AuthMethod:                   %s\n", param->value);
 		} else if (!strcmp(param->name, HEADERDIGEST)) {
 			ops->HeaderDigest = !strcmp(param->value, CRC32C);
-			pr_debug("HeaderDigest:                 %s\n",
-				param->value);
+			target_debug("HeaderDigest:                 %s\n", param->value);
 		} else if (!strcmp(param->name, DATADIGEST)) {
 			ops->DataDigest = !strcmp(param->value, CRC32C);
-			pr_debug("DataDigest:                   %s\n",
-				param->value);
+			target_debug("DataDigest:                   %s\n", param->value);
 		} else if (!strcmp(param->name, MAXRECVDATASEGMENTLENGTH)) {
 			/*
 			 * At this point iscsi_check_acceptor_state() will have
 			 * set ops->MaxRecvDataSegmentLength from the original
 			 * initiator provided value.
 			 */
-			pr_debug("MaxRecvDataSegmentLength:     %u\n",
-				ops->MaxRecvDataSegmentLength);
+			target_debug("MaxRecvDataSegmentLength:     %u\n",
+				     ops->MaxRecvDataSegmentLength);
 		} else if (!strcmp(param->name, INITIATORRECVDATASEGMENTLENGTH)) {
 			ops->InitiatorRecvDataSegmentLength =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("InitiatorRecvDataSegmentLength: %s\n",
-				param->value);
+			target_debug("InitiatorRecvDataSegmentLength: %s\n", param->value);
 			ops->MaxRecvDataSegmentLength =
 					ops->InitiatorRecvDataSegmentLength;
-			pr_debug("Set MRDSL from InitiatorRecvDataSegmentLength\n");
+			target_debug("Set MRDSL from InitiatorRecvDataSegmentLength\n");
 		} else if (!strcmp(param->name, TARGETRECVDATASEGMENTLENGTH)) {
 			ops->TargetRecvDataSegmentLength =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("TargetRecvDataSegmentLength:  %s\n",
-				param->value);
+			target_debug("TargetRecvDataSegmentLength:  %s\n", param->value);
 			ops->MaxXmitDataSegmentLength =
 					ops->TargetRecvDataSegmentLength;
-			pr_debug("Set MXDSL from TargetRecvDataSegmentLength\n");
+			target_debug("Set MXDSL from TargetRecvDataSegmentLength\n");
 		}
 	}
-	pr_debug("----------------------------------------------------"
-			"--------------\n");
+	target_debug("----------------------------------------------------"
+		     "--------------\n");
 }
 
 void iscsi_set_session_parameters(
@@ -1607,8 +1587,8 @@ void iscsi_set_session_parameters(
 	char *tmpptr;
 	struct iscsi_param *param;
 
-	pr_debug("----------------------------------------------------"
-			"--------------\n");
+	target_debug("----------------------------------------------------"
+		     "--------------\n");
 	list_for_each_entry(param, &param_list->param_list, p_list) {
 		if (!IS_PSTATE_ACCEPTOR(param) && !IS_PSTATE_PROPOSER(param))
 			continue;
@@ -1619,16 +1599,14 @@ void iscsi_set_session_parameters(
 				snprintf(ops->InitiatorName,
 						sizeof(ops->InitiatorName),
 						"%s", param->value);
-			pr_debug("InitiatorName:                %s\n",
-				param->value);
+			target_debug("InitiatorName:                %s\n", param->value);
 		} else if (!strcmp(param->name, INITIATORALIAS)) {
 			if (!param->value)
 				continue;
 			snprintf(ops->InitiatorAlias,
 						sizeof(ops->InitiatorAlias),
 						"%s", param->value);
-			pr_debug("InitiatorAlias:               %s\n",
-				param->value);
+			target_debug("InitiatorAlias:               %s\n", param->value);
 		} else if (!strcmp(param->name, TARGETNAME)) {
 			if (!param->value)
 				continue;
@@ -1636,82 +1614,65 @@ void iscsi_set_session_parameters(
 				snprintf(ops->TargetName,
 						sizeof(ops->TargetName),
 						"%s", param->value);
-			pr_debug("TargetName:                   %s\n",
-				param->value);
+			target_debug("TargetName:                   %s\n", param->value);
 		} else if (!strcmp(param->name, TARGETALIAS)) {
 			if (!param->value)
 				continue;
 			snprintf(ops->TargetAlias, sizeof(ops->TargetAlias),
 					"%s", param->value);
-			pr_debug("TargetAlias:                  %s\n",
-				param->value);
+			target_debug("TargetAlias:                  %s\n", param->value);
 		} else if (!strcmp(param->name, TARGETPORTALGROUPTAG)) {
 			ops->TargetPortalGroupTag =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("TargetPortalGroupTag:         %s\n",
-				param->value);
+			target_debug("TargetPortalGroupTag:         %s\n", param->value);
 		} else if (!strcmp(param->name, MAXCONNECTIONS)) {
 			ops->MaxConnections =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("MaxConnections:               %s\n",
-				param->value);
+			target_debug("MaxConnections:               %s\n", param->value);
 		} else if (!strcmp(param->name, INITIALR2T)) {
 			ops->InitialR2T = !strcmp(param->value, YES);
-			pr_debug("InitialR2T:                   %s\n",
-				param->value);
+			target_debug("InitialR2T:                   %s\n", param->value);
 		} else if (!strcmp(param->name, IMMEDIATEDATA)) {
 			ops->ImmediateData = !strcmp(param->value, YES);
-			pr_debug("ImmediateData:                %s\n",
-				param->value);
+			target_debug("ImmediateData:                %s\n", param->value);
 		} else if (!strcmp(param->name, MAXBURSTLENGTH)) {
 			ops->MaxBurstLength =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("MaxBurstLength:               %s\n",
-				param->value);
+			target_debug("MaxBurstLength:               %s\n", param->value);
 		} else if (!strcmp(param->name, FIRSTBURSTLENGTH)) {
 			ops->FirstBurstLength =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("FirstBurstLength:             %s\n",
-				param->value);
+			target_debug("FirstBurstLength:             %s\n", param->value);
 		} else if (!strcmp(param->name, DEFAULTTIME2WAIT)) {
 			ops->DefaultTime2Wait =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("DefaultTime2Wait:             %s\n",
-				param->value);
+			target_debug("DefaultTime2Wait:             %s\n", param->value);
 		} else if (!strcmp(param->name, DEFAULTTIME2RETAIN)) {
 			ops->DefaultTime2Retain =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("DefaultTime2Retain:           %s\n",
-				param->value);
+			target_debug("DefaultTime2Retain:           %s\n", param->value);
 		} else if (!strcmp(param->name, MAXOUTSTANDINGR2T)) {
 			ops->MaxOutstandingR2T =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("MaxOutstandingR2T:            %s\n",
-				param->value);
+			target_debug("MaxOutstandingR2T:            %s\n", param->value);
 		} else if (!strcmp(param->name, DATAPDUINORDER)) {
 			ops->DataPDUInOrder = !strcmp(param->value, YES);
-			pr_debug("DataPDUInOrder:               %s\n",
-				param->value);
+			target_debug("DataPDUInOrder:               %s\n", param->value);
 		} else if (!strcmp(param->name, DATASEQUENCEINORDER)) {
 			ops->DataSequenceInOrder = !strcmp(param->value, YES);
-			pr_debug("DataSequenceInOrder:          %s\n",
-				param->value);
+			target_debug("DataSequenceInOrder:          %s\n", param->value);
 		} else if (!strcmp(param->name, ERRORRECOVERYLEVEL)) {
 			ops->ErrorRecoveryLevel =
 				simple_strtoul(param->value, &tmpptr, 0);
-			pr_debug("ErrorRecoveryLevel:           %s\n",
-				param->value);
+			target_debug("ErrorRecoveryLevel:           %s\n", param->value);
 		} else if (!strcmp(param->name, SESSIONTYPE)) {
 			ops->SessionType = !strcmp(param->value, DISCOVERY);
-			pr_debug("SessionType:                  %s\n",
-				param->value);
+			target_debug("SessionType:                  %s\n", param->value);
 		} else if (!strcmp(param->name, RDMAEXTENSIONS)) {
 			ops->RDMAExtensions = !strcmp(param->value, YES);
-			pr_debug("RDMAExtensions:               %s\n",
-				param->value);
+			target_debug("RDMAExtensions:               %s\n", param->value);
 		}
 	}
-	pr_debug("----------------------------------------------------"
-			"--------------\n");
-
+	target_debug("----------------------------------------------------"
+		     "--------------\n");
 }

@@ -66,10 +66,9 @@ transport_lookup_cmd_lun(struct se_cmd *se_cmd)
 
 		if ((se_cmd->data_direction == DMA_TO_DEVICE) &&
 		    deve->lun_access_ro) {
-			pr_err("TARGET_CORE[%s]: Detected WRITE_PROTECTED LUN"
-				" Access for 0x%08llx\n",
-				se_cmd->se_tfo->fabric_name,
-				se_cmd->orig_fe_lun);
+			target_err("TARGET_CORE[%s]: Detected WRITE_PROTECTED LUN"
+				   " Access for 0x%08llx\n",
+				   se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun);
 			rcu_read_unlock();
 			return TCM_WRITE_PROTECTED;
 		}
@@ -96,11 +95,10 @@ out_unlock:
 		 * MappedLUN=0 exists for this Initiator Port.
 		 */
 		if (se_cmd->orig_fe_lun != 0) {
-			pr_err("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN"
-				" Access for 0x%08llx from %s\n",
-				se_cmd->se_tfo->fabric_name,
-				se_cmd->orig_fe_lun,
-				nacl->initiatorname);
+			target_err("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN"
+				   " Access for 0x%08llx from %s\n",
+				   se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun,
+				   nacl->initiatorname);
 			return TCM_NON_EXISTENT_LUN;
 		}
 
@@ -166,11 +164,9 @@ out_unlock:
 	rcu_read_unlock();
 
 	if (!se_lun) {
-		pr_debug("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN"
-			" Access for 0x%08llx for %s\n",
-			se_cmd->se_tfo->fabric_name,
-			se_cmd->orig_fe_lun,
-			nacl->initiatorname);
+		target_debug("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN"
+			     " Access for 0x%08llx for %s\n",
+			     se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun, nacl->initiatorname);
 		return -ENODEV;
 	}
 	se_cmd->se_dev = rcu_dereference_raw(se_lun->lun_se_dev);
@@ -212,9 +208,9 @@ struct se_dev_entry *core_get_se_deve_from_rtpi(
 	hlist_for_each_entry_rcu(deve, &nacl->lun_entry_hlist, link) {
 		lun = deve->se_lun;
 		if (!lun) {
-			pr_err("%s device entries device pointer is"
-				" NULL, but Initiator has access.\n",
-				tpg->se_tpg_tfo->fabric_name);
+			target_err("%s device entries device pointer is"
+				   " NULL, but Initiator has access.\n",
+				   tpg->se_tpg_tfo->fabric_name);
 			continue;
 		}
 		if (lun->lun_tpg->tpg_rtpi != rtpi)
@@ -325,7 +321,7 @@ int core_enable_device_list_for_node(
 
 	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (!new) {
-		pr_err("Unable to allocate se_dev_entry memory\n");
+		target_err("Unable to allocate se_dev_entry memory\n");
 		return -ENOMEM;
 	}
 
@@ -347,18 +343,19 @@ int core_enable_device_list_for_node(
 		struct se_lun *orig_lun = orig->se_lun;
 
 		if (orig_lun != lun) {
-			pr_err("Existing orig->se_lun doesn't match new lun"
-			       " for dynamic -> explicit NodeACL conversion:"
-				" %s\n", nacl->initiatorname);
+			target_err("Existing orig->se_lun doesn't match new lun"
+				   " for dynamic -> explicit NodeACL conversion:"
+				   " %s\n",
+				   nacl->initiatorname);
 			mutex_unlock(&nacl->lun_entry_mutex);
 			kfree(new);
 			return -EINVAL;
 		}
 		if (orig->se_lun_acl != NULL) {
-			pr_warn_ratelimited("Detected existing explicit"
-				" se_lun_acl->se_lun_group reference for %s"
-				" mapped_lun: %llu, failing\n",
-				 nacl->initiatorname, mapped_lun);
+			target_warn_ratelimited("Detected existing explicit"
+						" se_lun_acl->se_lun_group reference for %s"
+						" mapped_lun: %llu, failing\n",
+						nacl->initiatorname, mapped_lun);
 			mutex_unlock(&nacl->lun_entry_mutex);
 			kfree(new);
 			return -EINVAL;
@@ -498,8 +495,8 @@ static u32 se_dev_align_max_sectors(u32 max_sectors, u32 block_size)
 	aligned_max_sectors = rounddown(max_sectors, alignment);
 
 	if (max_sectors != aligned_max_sectors)
-		pr_info("Rounding down aligned max_sectors from %u to %u\n",
-			max_sectors, aligned_max_sectors);
+		target_info("Rounding down aligned max_sectors from %u to %u\n", max_sectors,
+			    aligned_max_sectors);
 
 	return aligned_max_sectors;
 }
@@ -515,10 +512,10 @@ int core_dev_add_lun(
 	if (rc < 0)
 		return rc;
 
-	pr_debug("%s_TPG[%u]_LUN[%llu] - Activated %s Logical Unit from"
-		" CORE HBA: %u\n", tpg->se_tpg_tfo->fabric_name,
-		tpg->se_tpg_tfo->tpg_get_tag(tpg), lun->unpacked_lun,
-		tpg->se_tpg_tfo->fabric_name, dev->se_hba->hba_id);
+	target_debug("%s_TPG[%u]_LUN[%llu] - Activated %s Logical Unit from"
+		     " CORE HBA: %u\n",
+		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
+		     lun->unpacked_lun, tpg->se_tpg_tfo->fabric_name, dev->se_hba->hba_id);
 	/*
 	 * Update LUN maps for dynamically added initiators when
 	 * generate_node_acl is enabled.
@@ -548,10 +545,10 @@ void core_dev_del_lun(
 	struct se_portal_group *tpg,
 	struct se_lun *lun)
 {
-	pr_debug("%s_TPG[%u]_LUN[%llu] - Deactivating %s Logical Unit from"
-		" device object\n", tpg->se_tpg_tfo->fabric_name,
-		tpg->se_tpg_tfo->tpg_get_tag(tpg), lun->unpacked_lun,
-		tpg->se_tpg_tfo->fabric_name);
+	target_debug("%s_TPG[%u]_LUN[%llu] - Deactivating %s Logical Unit from"
+		     " device object\n",
+		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
+		     lun->unpacked_lun, tpg->se_tpg_tfo->fabric_name);
 
 	core_tpg_remove_lun(tpg, lun);
 }
@@ -565,14 +562,14 @@ struct se_lun_acl *core_dev_init_initiator_node_lun_acl(
 	struct se_lun_acl *lacl;
 
 	if (strlen(nacl->initiatorname) >= TRANSPORT_IQN_LEN) {
-		pr_err("%s InitiatorName exceeds maximum size.\n",
-			tpg->se_tpg_tfo->fabric_name);
+		target_err("%s InitiatorName exceeds maximum size.\n",
+			   tpg->se_tpg_tfo->fabric_name);
 		*ret = -EOVERFLOW;
 		return NULL;
 	}
 	lacl = kzalloc(sizeof(struct se_lun_acl), GFP_KERNEL);
 	if (!lacl) {
-		pr_err("Unable to allocate memory for struct se_lun_acl.\n");
+		target_err("Unable to allocate memory for struct se_lun_acl.\n");
 		*ret = -ENOMEM;
 		return NULL;
 	}
@@ -608,11 +605,11 @@ int core_dev_add_initiator_node_lun_acl(
 			lun_access_ro, nacl, tpg) < 0)
 		return -EINVAL;
 
-	pr_debug("%s_TPG[%hu]_LUN[%llu->%llu] - Added %s ACL for "
-		" InitiatorNode: %s\n", tpg->se_tpg_tfo->fabric_name,
-		tpg->se_tpg_tfo->tpg_get_tag(tpg), lun->unpacked_lun, lacl->mapped_lun,
-		lun_access_ro ? "RO" : "RW",
-		nacl->initiatorname);
+	target_debug("%s_TPG[%hu]_LUN[%llu->%llu] - Added %s ACL for "
+		     " InitiatorNode: %s\n",
+		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
+		     lun->unpacked_lun, lacl->mapped_lun, lun_access_ro ? "RO" : "RW",
+		     nacl->initiatorname);
 	/*
 	 * Check to see if there are any existing persistent reservation APTPL
 	 * pre-registrations that need to be enabled for this LUN ACL..
@@ -640,11 +637,10 @@ int core_dev_del_initiator_node_lun_acl(
 		core_disable_device_list_for_node(lun, deve, nacl, tpg);
 	mutex_unlock(&nacl->lun_entry_mutex);
 
-	pr_debug("%s_TPG[%hu]_LUN[%llu] - Removed ACL for"
-		" InitiatorNode: %s Mapped LUN: %llu\n",
-		tpg->se_tpg_tfo->fabric_name,
-		tpg->se_tpg_tfo->tpg_get_tag(tpg), lun->unpacked_lun,
-		nacl->initiatorname, lacl->mapped_lun);
+	target_debug("%s_TPG[%hu]_LUN[%llu] - Removed ACL for"
+		     " InitiatorNode: %s Mapped LUN: %llu\n",
+		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
+		     lun->unpacked_lun, nacl->initiatorname, lacl->mapped_lun);
 
 	return 0;
 }
@@ -653,11 +649,11 @@ void core_dev_free_initiator_node_lun_acl(
 	struct se_portal_group *tpg,
 	struct se_lun_acl *lacl)
 {
-	pr_debug("%s_TPG[%hu] - Freeing ACL for %s InitiatorNode: %s"
-		" Mapped LUN: %llu\n", tpg->se_tpg_tfo->fabric_name,
-		tpg->se_tpg_tfo->tpg_get_tag(tpg),
-		tpg->se_tpg_tfo->fabric_name,
-		lacl->se_lun_nacl->initiatorname, lacl->mapped_lun);
+	target_debug("%s_TPG[%hu] - Freeing ACL for %s InitiatorNode: %s"
+		     " Mapped LUN: %llu\n",
+		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
+		     tpg->se_tpg_tfo->fabric_name, lacl->se_lun_nacl->initiatorname,
+		     lacl->mapped_lun);
 
 	kfree(lacl);
 }
@@ -670,13 +666,10 @@ static void scsi_dump_inquiry(struct se_device *dev)
 	/*
 	 * Print Linux/SCSI style INQUIRY formatting to the kernel ring buffer
 	 */
-	pr_debug("  Vendor: %-" __stringify(INQUIRY_VENDOR_LEN) "s\n",
-		wwn->vendor);
-	pr_debug("  Model: %-" __stringify(INQUIRY_MODEL_LEN) "s\n",
-		wwn->model);
-	pr_debug("  Revision: %-" __stringify(INQUIRY_REVISION_LEN) "s\n",
-		wwn->revision);
-	pr_debug("  Type:   %s ", scsi_device_type(device_type));
+	target_debug("  Vendor: %-" __stringify(INQUIRY_VENDOR_LEN) "s\n", wwn->vendor);
+	target_debug("  Model: %-" __stringify(INQUIRY_MODEL_LEN) "s\n", wwn->model);
+	target_debug("  Revision: %-" __stringify(INQUIRY_REVISION_LEN) "s\n", wwn->revision);
+	target_debug("  Type:   %s ", scsi_device_type(device_type));
 }
 
 struct se_device *target_alloc_device(struct se_hba *hba, const char *name)
@@ -897,8 +890,8 @@ int target_configure_device(struct se_device *dev)
 	int ret, id;
 
 	if (target_dev_configured(dev)) {
-		pr_err("se_dev->se_dev_ptr already set for storage"
-				" object\n");
+		target_err("se_dev->se_dev_ptr already set for storage"
+			   " object\n");
 		return -EEXIST;
 	}
 
@@ -925,7 +918,7 @@ int target_configure_device(struct se_device *dev)
 
 	if (dev->transport->configure_unmap &&
 	    dev->transport->configure_unmap(dev)) {
-		pr_debug("Discard support available, but disabled by default.\n");
+		target_debug("Discard support available, but disabled by default.\n");
 	}
 
 	/*

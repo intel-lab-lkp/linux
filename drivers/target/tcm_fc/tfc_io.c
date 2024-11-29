@@ -91,8 +91,7 @@ int ft_queue_data_in(struct se_cmd *se_cmd)
 		struct fc_seq *seq = cmd->seq;
 
 		if (!seq) {
-			pr_debug("%s: Command aborted, xid 0x%x\n",
-				 __func__, ep->xid);
+			target_debug("%s: Command aborted, xid 0x%x\n", __func__, ep->xid);
 			break;
 		}
 		if (!mem_len) {
@@ -162,11 +161,10 @@ int ft_queue_data_in(struct se_cmd *se_cmd)
 			       FC_TYPE_FCP, f_ctl, fh_off);
 		error = fc_seq_send(lport, seq, fp);
 		if (error) {
-			pr_info_ratelimited("%s: Failed to send frame %p, "
+			target_info_ratelimited("%s: Failed to send frame %p, "
 						"xid <0x%x>, remaining %zu, "
 						"lso_max <0x%x>\n",
-						__func__, fp, ep->xid,
-						remaining, lport->lso_max);
+						__func__, fp, ep->xid, remaining, lport->lso_max);
 			/*
 			 * Go ahead and set TASK_SET_FULL status ignoring the
 			 * rest of the DataIN, and immediately attempt to
@@ -227,13 +225,14 @@ void ft_recv_write_data(struct ft_cmd *cmd, struct fc_frame *fp)
 		 */
 		buf = fc_frame_payload_get(fp, 1);
 		if (buf)
-			pr_err("%s: xid 0x%x, f_ctl 0x%x, cmd->sg %p, "
-				"cmd->sg_cnt 0x%x. DDP was setup"
-				" hence not expected to receive frame with "
-				"payload, Frame will be dropped if"
-				"'Sequence Initiative' bit in f_ctl is"
-				"not set\n", __func__, ep->xid, f_ctl,
-				se_cmd->t_data_sg, se_cmd->t_data_nents);
+			target_err("%s: xid 0x%x, f_ctl 0x%x, cmd->sg %p, "
+				   "cmd->sg_cnt 0x%x. DDP was setup"
+				   " hence not expected to receive frame with "
+				   "payload, Frame will be dropped if"
+				   "'Sequence Initiative' bit in f_ctl is"
+				   "not set\n",
+				   __func__, ep->xid, f_ctl, se_cmd->t_data_sg,
+				   se_cmd->t_data_nents);
 		/*
 		 * Invalidate HW DDP context if it was setup for respective
 		 * command. Invalidation of HW DDP context is requited in both

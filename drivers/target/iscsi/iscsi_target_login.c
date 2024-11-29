@@ -41,7 +41,7 @@ static struct iscsi_login *iscsi_login_init_conn(struct iscsit_conn *conn)
 
 	login = kzalloc(sizeof(struct iscsi_login), GFP_KERNEL);
 	if (!login) {
-		pr_err("Unable to allocate memory for struct iscsi_login.\n");
+		target_err("Unable to allocate memory for struct iscsi_login.\n");
 		return NULL;
 	}
 	conn->login = login;
@@ -50,13 +50,13 @@ static struct iscsi_login *iscsi_login_init_conn(struct iscsit_conn *conn)
 
 	login->req_buf = kzalloc(MAX_KEY_VALUE_PAIRS, GFP_KERNEL);
 	if (!login->req_buf) {
-		pr_err("Unable to allocate memory for response buffer.\n");
+		target_err("Unable to allocate memory for response buffer.\n");
 		goto out_login;
 	}
 
 	login->rsp_buf = kzalloc(MAX_KEY_VALUE_PAIRS, GFP_KERNEL);
 	if (!login->rsp_buf) {
-		pr_err("Unable to allocate memory for request buffer.\n");
+		target_err("Unable to allocate memory for request buffer.\n");
 		goto out_req_buf;
 	}
 
@@ -86,13 +86,13 @@ int iscsi_login_setup_crypto(struct iscsit_conn *conn)
 	 */
 	tfm = crypto_alloc_ahash("crc32c", 0, CRYPTO_ALG_ASYNC);
 	if (IS_ERR(tfm)) {
-		pr_err("crypto_alloc_ahash() failed\n");
+		target_err("crypto_alloc_ahash() failed\n");
 		return -ENOMEM;
 	}
 
 	conn->conn_rx_hash = ahash_request_alloc(tfm, GFP_KERNEL);
 	if (!conn->conn_rx_hash) {
-		pr_err("ahash_request_alloc() failed for conn_rx_hash\n");
+		target_err("ahash_request_alloc() failed for conn_rx_hash\n");
 		crypto_free_ahash(tfm);
 		return -ENOMEM;
 	}
@@ -100,7 +100,7 @@ int iscsi_login_setup_crypto(struct iscsit_conn *conn)
 
 	conn->conn_tx_hash = ahash_request_alloc(tfm, GFP_KERNEL);
 	if (!conn->conn_tx_hash) {
-		pr_err("ahash_request_alloc() failed for conn_tx_hash\n");
+		target_err("ahash_request_alloc() failed for conn_tx_hash\n");
 		ahash_request_free(conn->conn_rx_hash);
 		conn->conn_rx_hash = NULL;
 		crypto_free_ahash(tfm);
@@ -117,9 +117,9 @@ static int iscsi_login_check_initiator_version(
 	u8 version_min)
 {
 	if ((version_max != 0x00) || (version_min != 0x00)) {
-		pr_err("Unsupported iSCSI IETF Pre-RFC Revision,"
-			" version Min/Max 0x%02x/0x%02x, rejecting login.\n",
-			version_min, version_max);
+		target_err("Unsupported iSCSI IETF Pre-RFC Revision,"
+			   " version Min/Max 0x%02x/0x%02x, rejecting login.\n",
+			   version_min, version_max);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_NO_VERSION);
 		return -1;
@@ -184,10 +184,10 @@ int iscsi_check_for_session_reinstatement(struct iscsit_conn *conn)
 	if (!sess)
 		return 0;
 
-	pr_debug("%s iSCSI Session SID %u is still active for %s,"
-		" performing session reinstatement.\n", (sessiontype) ?
-		"Discovery" : "Normal", sess->sid,
-		sess->sess_ops->InitiatorName);
+	target_debug("%s iSCSI Session SID %u is still active for %s,"
+		     " performing session reinstatement.\n",
+		     (sessiontype) ? "Discovery" : "Normal", sess->sid,
+		     sess->sess_ops->InitiatorName);
 
 	spin_lock_bh(&sess->conn_lock);
 	if (sess->session_state == TARG_SESS_STATE_FAILED) {
@@ -264,7 +264,7 @@ static int iscsi_login_zero_tsih_s1(
 	if (!sess) {
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_NO_RESOURCES);
-		pr_err("Could not allocate memory for session\n");
+		target_err("Could not allocate memory for session\n");
 		return -ENOMEM;
 	}
 
@@ -294,7 +294,7 @@ static int iscsi_login_zero_tsih_s1(
 
 	ret = ida_alloc(&sess_ida, GFP_KERNEL);
 	if (ret < 0) {
-		pr_err("Session ID allocation failed %d\n", ret);
+		target_err("Session ID allocation failed %d\n", ret);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_NO_RESOURCES);
 		goto free_sess;
@@ -312,8 +312,8 @@ static int iscsi_login_zero_tsih_s1(
 	if (!sess->sess_ops) {
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_NO_RESOURCES);
-		pr_err("Unable to allocate memory for"
-				" struct iscsi_sess_ops.\n");
+		target_err("Unable to allocate memory for"
+			   " struct iscsi_sess_ops.\n");
 		goto free_id;
 	}
 
@@ -442,8 +442,9 @@ static int iscsi_login_zero_tsih_s2(
 		else
 			mrdsl -= off;
 
-		pr_warn("Aligning ISER MaxRecvDataSegmentLength: %lu down"
-			" to PAGE_SIZE\n", mrdsl);
+		target_warn("Aligning ISER MaxRecvDataSegmentLength: %lu down"
+			    " to PAGE_SIZE\n",
+			    mrdsl);
 
 		if (iscsi_change_param_sprintf(conn, "MaxRecvDataSegmentLength=%lu\n", mrdsl))
 			return -1;
@@ -462,8 +463,8 @@ check_prot:
 			if (iscsi_change_param_sprintf(conn, "InitialR2T=Yes"))
 				return -1;
 
-			pr_debug("Forcing ImmediateData=No + InitialR2T=Yes for"
-				 " T10-PI enabled ISER session\n");
+			target_debug("Forcing ImmediateData=No + InitialR2T=Yes for"
+				     " T10-PI enabled ISER session\n");
 		}
 	}
 
@@ -517,8 +518,8 @@ static int iscsi_login_non_zero_tsih_s2(
 	 * If the Time2Retain handler has expired, the session is already gone.
 	 */
 	if (!sess) {
-		pr_err("Initiator attempting to add a connection to"
-			" a non-existent session, rejecting iSCSI Login.\n");
+		target_err("Initiator attempting to add a connection to"
+			   " a non-existent session, rejecting iSCSI Login.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_NO_SESSION);
 		return -1;
@@ -576,9 +577,9 @@ int iscsi_login_post_auth_non_zero_tsih(
 	 */
 	conn_ptr = iscsit_get_conn_from_cid_rcfr(sess, cid);
 	if (conn_ptr) {
-		pr_err("Connection exists with CID %hu for %s,"
-			" performing connection reinstatement.\n",
-			conn_ptr->cid, sess->sess_ops->InitiatorName);
+		target_err("Connection exists with CID %hu for %s,"
+			   " performing connection reinstatement.\n",
+			   conn_ptr->cid, sess->sess_ops->InitiatorName);
 
 		iscsit_connection_reinstatement_rcfr(conn_ptr);
 		iscsit_dec_conn_usage_count(conn_ptr);
@@ -597,9 +598,9 @@ int iscsi_login_post_auth_non_zero_tsih(
 		cr = iscsit_get_inactive_connection_recovery_entry(
 				sess, cid);
 		if (cr) {
-			pr_debug("Performing implicit logout"
-				" for connection recovery on CID: %hu\n",
-					conn->cid);
+			target_debug("Performing implicit logout"
+				     " for connection recovery on CID: %hu\n",
+				     conn->cid);
 			iscsit_discard_cr_cmds_by_expstatsn(cr, exp_statsn);
 		}
 	}
@@ -610,13 +611,13 @@ int iscsi_login_post_auth_non_zero_tsih(
 	 * CID we go ahead and continue to add a new connection to the
 	 * session.
 	 */
-	pr_debug("Adding CID %hu to existing session for %s.\n",
-			cid, sess->sess_ops->InitiatorName);
+	target_debug("Adding CID %hu to existing session for %s.\n", cid,
+		     sess->sess_ops->InitiatorName);
 
 	if ((atomic_read(&sess->nconn) + 1) > sess->sess_ops->MaxConnections) {
-		pr_err("Adding additional connection to this session"
-			" would exceed MaxConnections %d, login failed.\n",
-				sess->sess_ops->MaxConnections);
+		target_err("Adding additional connection to this session"
+			   " would exceed MaxConnections %d, login failed.\n",
+			   sess->sess_ops->MaxConnections);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_ISID_ERROR);
 		return -1;
@@ -648,15 +649,15 @@ int iscsit_start_kthreads(struct iscsit_conn *conn)
 	spin_unlock(&iscsit_global->ts_bitmap_lock);
 
 	if (conn->bitmap_id < 0) {
-		pr_err("bitmap_find_free_region() failed for"
-		       " iscsit_start_kthreads()\n");
+		target_err("bitmap_find_free_region() failed for"
+			   " iscsit_start_kthreads()\n");
 		return -ENOMEM;
 	}
 
 	conn->tx_thread = kthread_run(iscsi_target_tx_thread, conn,
 				      "%s", ISCSI_TX_THREAD_NAME);
 	if (IS_ERR(conn->tx_thread)) {
-		pr_err("Unable to start iscsi_target_tx_thread\n");
+		target_err("Unable to start iscsi_target_tx_thread\n");
 		ret = PTR_ERR(conn->tx_thread);
 		goto out_bitmap;
 	}
@@ -665,7 +666,7 @@ int iscsit_start_kthreads(struct iscsit_conn *conn)
 	conn->rx_thread = kthread_run(iscsi_target_rx_thread, conn,
 				      "%s", ISCSI_RX_THREAD_NAME);
 	if (IS_ERR(conn->rx_thread)) {
-		pr_err("Unable to start iscsi_target_rx_thread\n");
+		target_err("Unable to start iscsi_target_rx_thread\n");
 		ret = PTR_ERR(conn->rx_thread);
 		goto out_tx;
 	}
@@ -700,7 +701,7 @@ void iscsi_post_login_handler(
 	iscsit_collect_login_stats(conn, ISCSI_STATUS_CLS_SUCCESS,
 			ISCSI_LOGIN_STATUS_ACCEPT);
 
-	pr_debug("Moving to TARG_CONN_STATE_LOGGED_IN.\n");
+	target_debug("Moving to TARG_CONN_STATE_LOGGED_IN.\n");
 	conn->conn_state = TARG_CONN_STATE_LOGGED_IN;
 
 	iscsi_set_connection_parameters(conn->conn_ops, conn->param_list);
@@ -716,21 +717,21 @@ void iscsi_post_login_handler(
 		spin_lock_bh(&sess->conn_lock);
 		atomic_set(&sess->session_continuation, 0);
 		if (sess->session_state == TARG_SESS_STATE_FAILED) {
-			pr_debug("Moving to"
-					" TARG_SESS_STATE_LOGGED_IN.\n");
+			target_debug("Moving to"
+				     " TARG_SESS_STATE_LOGGED_IN.\n");
 			sess->session_state = TARG_SESS_STATE_LOGGED_IN;
 			stop_timer = 1;
 		}
 
-		pr_debug("iSCSI Login successful on CID: %hu from %pISpc to"
-			" %pISpc,%hu\n", conn->cid, &conn->login_sockaddr,
-			&conn->local_sockaddr, tpg->tpgt);
+		target_debug("iSCSI Login successful on CID: %hu from %pISpc to"
+			     " %pISpc,%hu\n",
+			     conn->cid, &conn->login_sockaddr, &conn->local_sockaddr, tpg->tpgt);
 
 		list_add_tail(&conn->conn_list, &sess->sess_conn_list);
 		atomic_inc(&sess->nconn);
-		pr_debug("Incremented iSCSI Connection count to %d"
-			" from node: %s\n", atomic_read(&sess->nconn),
-			sess->sess_ops->InitiatorName);
+		target_debug("Incremented iSCSI Connection count to %d"
+			     " from node: %s\n",
+			     atomic_read(&sess->nconn), sess->sess_ops->InitiatorName);
 		spin_unlock_bh(&sess->conn_lock);
 
 		iscsi_post_login_start_timers(conn);
@@ -766,33 +767,32 @@ void iscsi_post_login_handler(
 	spin_lock_bh(&se_tpg->session_lock);
 	__transport_register_session(&sess->tpg->tpg_se_tpg,
 			se_sess->se_node_acl, se_sess, sess);
-	pr_debug("Moving to TARG_SESS_STATE_LOGGED_IN.\n");
+	target_debug("Moving to TARG_SESS_STATE_LOGGED_IN.\n");
 	sess->session_state = TARG_SESS_STATE_LOGGED_IN;
 
-	pr_debug("iSCSI Login successful on CID: %hu from %pISpc to %pISpc,%hu\n",
-		conn->cid, &conn->login_sockaddr, &conn->local_sockaddr,
-		tpg->tpgt);
+	target_debug("iSCSI Login successful on CID: %hu from %pISpc to %pISpc,%hu\n", conn->cid,
+		     &conn->login_sockaddr, &conn->local_sockaddr, tpg->tpgt);
 
 	spin_lock_bh(&sess->conn_lock);
 	list_add_tail(&conn->conn_list, &sess->sess_conn_list);
 	atomic_inc(&sess->nconn);
-	pr_debug("Incremented iSCSI Connection count to %d from node:"
-		" %s\n", atomic_read(&sess->nconn),
-		sess->sess_ops->InitiatorName);
+	target_debug("Incremented iSCSI Connection count to %d from node:"
+		     " %s\n",
+		     atomic_read(&sess->nconn), sess->sess_ops->InitiatorName);
 	spin_unlock_bh(&sess->conn_lock);
 
 	sess->sid = tpg->sid++;
 	if (!sess->sid)
 		sess->sid = tpg->sid++;
-	pr_debug("Established iSCSI session from node: %s\n",
-			sess->sess_ops->InitiatorName);
+	target_debug("Established iSCSI session from node: %s\n", sess->sess_ops->InitiatorName);
 
 	tpg->nsessions++;
 	if (tpg->tpg_tiqn)
 		tpg->tpg_tiqn->tiqn_nsessions++;
 
-	pr_debug("Incremented number of active iSCSI sessions to %u on"
-		" iSCSI Target Portal Group: %hu\n", tpg->nsessions, tpg->tpgt);
+	target_debug("Incremented number of active iSCSI sessions to %u on"
+		     " iSCSI Target Portal Group: %hu\n",
+		     tpg->nsessions, tpg->tpgt);
 	spin_unlock_bh(&se_tpg->session_lock);
 
 	iscsi_post_login_start_timers(conn);
@@ -832,15 +832,14 @@ int iscsit_setup_np(
 		np->np_sock_type = SOCK_SEQPACKET;
 		break;
 	default:
-		pr_err("Unsupported network_transport: %d\n",
-				np->np_network_transport);
+		target_err("Unsupported network_transport: %d\n", np->np_network_transport);
 		return -EINVAL;
 	}
 
 	ret = sock_create(sockaddr->ss_family, np->np_sock_type,
 			np->np_ip_proto, &sock);
 	if (ret < 0) {
-		pr_err("sock_create() failed.\n");
+		target_err("sock_create() failed.\n");
 		return ret;
 	}
 	np->np_socket = sock;
@@ -865,13 +864,13 @@ int iscsit_setup_np(
 
 	ret = kernel_bind(sock, (struct sockaddr *)&np->np_sockaddr, len);
 	if (ret < 0) {
-		pr_err("kernel_bind() failed: %d\n", ret);
+		target_err("kernel_bind() failed: %d\n", ret);
 		goto fail;
 	}
 
 	ret = kernel_listen(sock, backlog);
 	if (ret != 0) {
-		pr_err("kernel_listen() failed: %d\n", ret);
+		target_err("kernel_listen() failed: %d\n", ret);
 		goto fail;
 	}
 
@@ -977,10 +976,10 @@ int iscsit_get_login_rx(struct iscsit_conn *conn, struct iscsi_login *login)
 	payload_length	= ntoh24(login_req->dlength);
 	padding = ((-payload_length) & 3);
 
-	pr_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x,"
-		" CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %hu, Length: %u\n",
-		login_req->flags, login_req->itt, login_req->cmdsn,
-		login_req->exp_statsn, login_req->cid, payload_length);
+	target_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x,"
+		     " CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %hu, Length: %u\n",
+		     login_req->flags, login_req->itt, login_req->cmdsn, login_req->exp_statsn,
+		     login_req->cid, payload_length);
 	/*
 	 * Setup the initial iscsi_login values from the leading
 	 * login request PDU.
@@ -1031,7 +1030,7 @@ iscsit_conn_set_transport(struct iscsit_conn *conn, struct iscsit_transport *t)
 
 	rc = try_module_get(t->owner);
 	if (!rc) {
-		pr_err("try_module_get() failed for %s\n", t->name);
+		target_err("try_module_get() failed for %s\n", t->name);
 		return -EINVAL;
 	}
 
@@ -1045,10 +1044,10 @@ static struct iscsit_conn *iscsit_alloc_conn(struct iscsi_np *np)
 
 	conn = kzalloc(sizeof(struct iscsit_conn), GFP_KERNEL);
 	if (!conn) {
-		pr_err("Could not allocate memory for new connection\n");
+		target_err("Could not allocate memory for new connection\n");
 		return NULL;
 	}
-	pr_debug("Moving to TARG_CONN_STATE_FREE.\n");
+	target_debug("Moving to TARG_CONN_STATE_FREE.\n");
 	conn->conn_state = TARG_CONN_STATE_FREE;
 
 	init_waitqueue_head(&conn->queues_wq);
@@ -1083,17 +1082,17 @@ static struct iscsit_conn *iscsit_alloc_conn(struct iscsi_np *np)
 
 	conn->conn_ops = kzalloc(sizeof(struct iscsi_conn_ops), GFP_KERNEL);
 	if (!conn->conn_ops) {
-		pr_err("Unable to allocate memory for struct iscsi_conn_ops.\n");
+		target_err("Unable to allocate memory for struct iscsi_conn_ops.\n");
 		goto put_transport;
 	}
 
 	if (!zalloc_cpumask_var(&conn->conn_cpumask, GFP_KERNEL)) {
-		pr_err("Unable to allocate conn->conn_cpumask\n");
+		target_err("Unable to allocate conn->conn_cpumask\n");
 		goto free_conn_ops;
 	}
 
 	if (!zalloc_cpumask_var(&conn->allowed_cpumask, GFP_KERNEL)) {
-		pr_err("Unable to allocate conn->allowed_cpumask\n");
+		target_err("Unable to allocate conn->allowed_cpumask\n");
 		goto free_conn_cpumask;
 	}
 
@@ -1132,7 +1131,7 @@ void iscsi_target_login_sess_out(struct iscsit_conn *conn,
 	if (!new_sess)
 		goto old_sess_out;
 
-	pr_err("iSCSI Login negotiation failed.\n");
+	target_err("iSCSI Login negotiation failed.\n");
 	iscsit_collect_login_stats(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				   ISCSI_LOGIN_STATUS_INIT_ERR);
 	if (!zero_tsih || !conn->sess)
@@ -1256,7 +1255,7 @@ static int __iscsi_target_login_thread(struct iscsi_np *np)
 
 	iscsit_start_login_timer(conn, current);
 
-	pr_debug("Moving to TARG_CONN_STATE_XPT_UP.\n");
+	target_debug("Moving to TARG_CONN_STATE_XPT_UP.\n");
 	conn->conn_state = TARG_CONN_STATE_XPT_UP;
 	/*
 	 * This will process the first login request + payload..
@@ -1278,8 +1277,9 @@ static int __iscsi_target_login_thread(struct iscsi_np *np)
 	spin_lock_bh(&np->np_thread_lock);
 	if (np->np_thread_state != ISCSI_NP_THREAD_ACTIVE) {
 		spin_unlock_bh(&np->np_thread_lock);
-		pr_err("iSCSI Network Portal on %pISpc currently not"
-			" active.\n", &np->np_sockaddr);
+		target_err("iSCSI Network Portal on %pISpc currently not"
+			   " active.\n",
+			   &np->np_sockaddr);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_SVC_UNAVAILABLE);
 		goto new_sess_out;
@@ -1288,11 +1288,11 @@ static int __iscsi_target_login_thread(struct iscsi_np *np)
 
 	conn->network_transport = np->np_network_transport;
 
-	pr_debug("Received iSCSI login request from %pISpc on %s Network"
-		" Portal %pISpc\n", &conn->login_sockaddr, np->np_transport->name,
-		&conn->local_sockaddr);
+	target_debug("Received iSCSI login request from %pISpc on %s Network"
+		     " Portal %pISpc\n",
+		     &conn->login_sockaddr, np->np_transport->name, &conn->local_sockaddr);
 
-	pr_debug("Moving to TARG_CONN_STATE_IN_LOGIN.\n");
+	target_debug("Moving to TARG_CONN_STATE_IN_LOGIN.\n");
 	conn->conn_state	= TARG_CONN_STATE_IN_LOGIN;
 
 	if (iscsi_login_check_initiator_version(conn, pdu->max_version,
@@ -1341,7 +1341,7 @@ static int __iscsi_target_login_thread(struct iscsi_np *np)
 
 	tpg = conn->tpg;
 	if (!tpg) {
-		pr_err("Unable to locate struct iscsit_conn->tpg\n");
+		target_err("Unable to locate struct iscsit_conn->tpg\n");
 		goto new_sess_out;
 	}
 

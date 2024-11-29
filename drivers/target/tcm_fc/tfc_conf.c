@@ -81,8 +81,7 @@ static ssize_t ft_parse_wwn(const char *name, u64 *wwn, int strict)
 	}
 	err = 4;
 fail:
-	pr_debug("err %u len %zu pos %u byte %u\n",
-		    err, cp - name, pos, byte);
+	target_debug("err %u len %zu pos %u byte %u\n", err, cp - name, pos, byte);
 	return -1;
 }
 
@@ -223,7 +222,7 @@ static struct se_portal_group *ft_add_tpg(struct se_wwn *wwn, const char *name)
 	unsigned long index;
 	int ret;
 
-	pr_debug("tcm_fc: add tpg %s\n", name);
+	target_debug("tcm_fc: add tpg %s\n", name);
 
 	/*
 	 * Name must be "tpgt_" followed by the index.
@@ -238,7 +237,7 @@ static struct se_portal_group *ft_add_tpg(struct se_wwn *wwn, const char *name)
 		return NULL;
 
 	if ((index != 1)) {
-		pr_err("Error, a single TPG=1 is used for HW port mappings\n");
+		target_err("Error, a single TPG=1 is used for HW port mappings\n");
 		return ERR_PTR(-ENOSYS);
 	}
 
@@ -276,8 +275,7 @@ static void ft_del_tpg(struct se_portal_group *se_tpg)
 	struct ft_tpg *tpg = container_of(se_tpg, struct ft_tpg, se_tpg);
 	struct ft_lport_wwn *ft_wwn = tpg->lport_wwn;
 
-	pr_debug("del tpg %s\n",
-		    config_item_name(&tpg->se_tpg.tpg_group.cg_item));
+	target_debug("del tpg %s\n", config_item_name(&tpg->se_tpg.tpg_group.cg_item));
 
 	destroy_workqueue(tpg->workqueue);
 
@@ -330,7 +328,7 @@ static struct se_wwn *ft_add_wwn(
 	struct ft_lport_wwn *old_ft_wwn;
 	u64 wwpn;
 
-	pr_debug("add wwn %s\n", name);
+	target_debug("add wwn %s\n", name);
 	if (ft_parse_wwn(name, &wwpn, 1) < 0)
 		return NULL;
 	ft_wwn = kzalloc(sizeof(*ft_wwn), GFP_KERNEL);
@@ -358,7 +356,7 @@ static void ft_del_wwn(struct se_wwn *wwn)
 	struct ft_lport_wwn *ft_wwn = container_of(wwn,
 				struct ft_lport_wwn, se_wwn);
 
-	pr_debug("del wwn %s\n", ft_wwn->name);
+	target_debug("del wwn %s\n", ft_wwn->name);
 	mutex_lock(&ft_lport_lock);
 	list_del(&ft_wwn->ft_wwn_node);
 	mutex_unlock(&ft_lport_lock);

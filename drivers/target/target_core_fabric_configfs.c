@@ -43,7 +43,7 @@ static void target_fabric_setup_##_name##_cit(struct target_fabric_configfs *tf)
 	cit->ct_group_ops = _group_ops;					\
 	cit->ct_attrs = _attrs;						\
 	cit->ct_owner = tf->tf_ops->module;				\
-	pr_debug("Setup generic %s\n", __stringify(_name));		\
+	target_debug("Setup generic %s\n", __stringify(_name));		\
 }
 
 #define TF_CIT_SETUP_DRV(_name, _item_ops, _group_ops)		\
@@ -56,7 +56,7 @@ static void target_fabric_setup_##_name##_cit(struct target_fabric_configfs *tf)
 	cit->ct_group_ops = _group_ops;					\
 	cit->ct_attrs = attrs;						\
 	cit->ct_owner = tf->tf_ops->module;				\
-	pr_debug("Setup generic %s\n", __stringify(_name));		\
+	target_debug("Setup generic %s\n", __stringify(_name));		\
 }
 
 static struct configfs_item_operations target_fabric_port_item_ops;
@@ -77,7 +77,7 @@ static int target_fabric_mappedlun_link(
 
 	if (!lun_ci->ci_type ||
 	    lun_ci->ci_type->ct_item_ops != &target_fabric_port_item_ops) {
-		pr_err("Bad lun_ci, not a valid lun_ci pointer: %p\n", lun_ci);
+		target_err("Bad lun_ci, not a valid lun_ci pointer: %p\n", lun_ci);
 		return -EFAULT;
 	}
 	lun = container_of(to_config_group(lun_ci), struct se_lun, lun_group);
@@ -86,12 +86,12 @@ static int target_fabric_mappedlun_link(
 	 * Ensure that the source port exists
 	 */
 	if (!lun->lun_se_dev) {
-		pr_err("Source se_lun->lun_se_dev does not exist\n");
+		target_err("Source se_lun->lun_se_dev does not exist\n");
 		return -EINVAL;
 	}
 	if (lun->lun_shutdown) {
-		pr_err("Unable to create mappedlun symlink because"
-			" lun->lun_shutdown=true\n");
+		target_err("Unable to create mappedlun symlink because"
+			   " lun->lun_shutdown=true\n");
 		return -EINVAL;
 	}
 	se_tpg = lun->lun_tpg;
@@ -105,14 +105,14 @@ static int target_fabric_mappedlun_link(
 	 * Make sure the SymLink is going to the same $FABRIC/$WWN/tpgt_$TPGT
 	 */
 	if (strcmp(config_item_name(wwn_ci), config_item_name(wwn_ci_s))) {
-		pr_err("Illegal Initiator ACL SymLink outside of %s\n",
-			config_item_name(wwn_ci));
+		target_err("Illegal Initiator ACL SymLink outside of %s\n",
+			   config_item_name(wwn_ci));
 		return -EINVAL;
 	}
 	if (strcmp(config_item_name(tpg_ci), config_item_name(tpg_ci_s))) {
-		pr_err("Illegal Initiator ACL Symlink outside of %s"
-			" TPGT: %s\n", config_item_name(wwn_ci),
-			config_item_name(tpg_ci));
+		target_err("Illegal Initiator ACL Symlink outside of %s"
+			   " TPGT: %s\n",
+			   config_item_name(wwn_ci), config_item_name(tpg_ci));
 		return -EINVAL;
 	}
 	/*
@@ -194,10 +194,10 @@ static ssize_t target_fabric_mappedlun_write_protect_store(
 	/* wp=1 means lun_access_ro=true */
 	core_update_device_list_access(lacl->mapped_lun, wp, lacl->se_lun_nacl);
 
-	pr_debug("%s_ConfigFS: Changed Initiator ACL: %s"
-		" Mapped LUN: %llu Write Protect bit to %s\n",
-		se_tpg->se_tpg_tfo->fabric_name,
-		se_nacl->initiatorname, lacl->mapped_lun, (wp) ? "ON" : "OFF");
+	target_debug("%s_ConfigFS: Changed Initiator ACL: %s"
+		     " Mapped LUN: %llu Write Protect bit to %s\n",
+		     se_tpg->se_tpg_tfo->fabric_name, se_nacl->initiatorname, lacl->mapped_lun,
+		     (wp) ? "ON" : "OFF");
 
 	return count;
 
@@ -277,7 +277,7 @@ static struct config_group *target_fabric_make_mappedlun(
 
 	buf = kzalloc(strlen(name) + 1, GFP_KERNEL);
 	if (!buf) {
-		pr_err("Unable to allocate memory for name buf\n");
+		target_err("Unable to allocate memory for name buf\n");
 		return ERR_PTR(-ENOMEM);
 	}
 	snprintf(buf, strlen(name) + 1, "%s", name);
@@ -285,8 +285,9 @@ static struct config_group *target_fabric_make_mappedlun(
 	 * Make sure user is creating iscsi/$IQN/$TPGT/acls/$INITIATOR/lun_$ID.
 	 */
 	if (strstr(buf, "lun_") != buf) {
-		pr_err("Unable to locate \"lun_\" from buf: %s"
-			" name: %s\n", buf, name);
+		target_err("Unable to locate \"lun_\" from buf: %s"
+			   " name: %s\n",
+			   buf, name);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -474,7 +475,7 @@ static struct config_group *target_fabric_make_np(
 	struct se_tpg_np *se_tpg_np;
 
 	if (!tf->tf_ops->fabric_make_np) {
-		pr_err("tf->tf_ops.fabric_make_np is NULL\n");
+		target_err("tf->tf_ops.fabric_make_np is NULL\n");
 		return ERR_PTR(-ENOSYS);
 	}
 
@@ -631,13 +632,13 @@ static int target_fabric_port_link(
 
 	if (!se_dev_ci->ci_type ||
 	    se_dev_ci->ci_type->ct_item_ops != &target_core_dev_item_ops) {
-		pr_err("Bad se_dev_ci, not a valid se_dev_ci pointer: %p\n", se_dev_ci);
+		target_err("Bad se_dev_ci, not a valid se_dev_ci pointer: %p\n", se_dev_ci);
 		return -EFAULT;
 	}
 	dev = container_of(to_config_group(se_dev_ci), struct se_device, dev_group);
 
 	if (!target_dev_configured(dev)) {
-		pr_err("se_device not configured yet, cannot port link\n");
+		target_err("se_device not configured yet, cannot port link\n");
 		return -ENODEV;
 	}
 
@@ -647,13 +648,13 @@ static int target_fabric_port_link(
 	tf = se_tpg->se_tpg_wwn->wwn_tf;
 
 	if (lun->lun_se_dev !=  NULL) {
-		pr_err("Port Symlink already exists\n");
+		target_err("Port Symlink already exists\n");
 		return -EEXIST;
 	}
 
 	ret = core_dev_add_lun(se_tpg, dev, lun);
 	if (ret) {
-		pr_err("core_dev_add_lun() failed: %d\n", ret);
+		target_err("core_dev_add_lun() failed: %d\n", ret);
 		goto out;
 	}
 
@@ -749,8 +750,8 @@ static struct config_group *target_fabric_make_lun(
 	int errno;
 
 	if (strstr(name, "lun_") != name) {
-		pr_err("Unable to locate \'_\" in"
-				" \"lun_$LUN_NUMBER\"\n");
+		target_err("Unable to locate \'_\" in"
+			   " \"lun_$LUN_NUMBER\"\n");
 		return ERR_PTR(-EINVAL);
 	}
 	errno = kstrtoull(name + 4, 0, &unpacked_lun);
@@ -865,9 +866,9 @@ static ssize_t target_fabric_tpg_base_rtpi_store(struct config_item *item,
 		return -EINVAL;
 
 	if (se_tpg->enabled) {
-		pr_info("%s_TPG[%hu] - Can not change RTPI on enabled TPG",
-			se_tpg->se_tpg_tfo->fabric_name,
-			se_tpg->se_tpg_tfo->tpg_get_tag(se_tpg));
+		target_info("%s_TPG[%hu] - Can not change RTPI on enabled TPG",
+			    se_tpg->se_tpg_tfo->fabric_name,
+			    se_tpg->se_tpg_tfo->tpg_get_tag(se_tpg));
 		return -EINVAL;
 	}
 
@@ -915,7 +916,7 @@ target_fabric_setup_tpg_base_cit(struct target_fabric_configfs *tf)
 	cit->ct_item_ops = &target_fabric_tpg_base_item_ops;
 	cit->ct_attrs = attrs;
 	cit->ct_owner = tf->tf_ops->module;
-	pr_debug("Setup generic tpg_base\n");
+	target_debug("Setup generic tpg_base\n");
 
 	return 0;
 }
@@ -932,7 +933,7 @@ static struct config_group *target_fabric_make_tpg(
 	struct se_portal_group *se_tpg;
 
 	if (!tf->tf_ops->fabric_make_tpg) {
-		pr_err("tf->tf_ops->fabric_make_tpg is NULL\n");
+		target_err("tf->tf_ops->fabric_make_tpg is NULL\n");
 		return ERR_PTR(-ENOSYS);
 	}
 
@@ -1053,9 +1054,8 @@ target_fabric_wwn_cmd_completion_affinity_store(struct config_item *item,
 	default:
 		if (compl_val < 0 || compl_val >= nr_cpu_ids ||
 		    !cpu_online(compl_val)) {
-			pr_err("Command completion value must be between %d and %d or an online CPU.\n",
-			       SE_COMPL_AFFINITY_CPUID,
-			       SE_COMPL_AFFINITY_CURR_CPU);
+			target_err("Command completion value must be between %d and %d or an online CPU.\n",
+				   SE_COMPL_AFFINITY_CPUID, SE_COMPL_AFFINITY_CURR_CPU);
 			return -EINVAL;
 		}
 		wwn->cmd_compl_affinity = compl_val;
@@ -1107,7 +1107,7 @@ static struct config_group *target_fabric_make_wwn(
 	struct se_wwn *wwn;
 
 	if (!tf->tf_ops->fabric_make_wwn) {
-		pr_err("tf->tf_ops.fabric_make_wwn is NULL\n");
+		target_err("tf->tf_ops.fabric_make_wwn is NULL\n");
 		return ERR_PTR(-ENOSYS);
 	}
 

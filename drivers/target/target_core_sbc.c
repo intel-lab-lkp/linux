@@ -280,14 +280,14 @@ sbc_setup_write_same(struct se_cmd *cmd, unsigned char flags,
 	sense_reason_t ret;
 
 	if ((flags & 0x04) || (flags & 0x02)) {
-		pr_err("WRITE_SAME PBDATA and LBDATA"
-			" bits not supported for Block Discard"
-			" Emulation\n");
+		target_err("WRITE_SAME PBDATA and LBDATA"
+			   " bits not supported for Block Discard"
+			   " Emulation\n");
 		return TCM_UNSUPPORTED_SCSI_OPCODE;
 	}
 	if (sectors > cmd->se_dev->dev_attrib.max_write_same_len) {
-		pr_warn("WRITE_SAME sectors: %u exceeds max_write_same_len: %u\n",
-			sectors, cmd->se_dev->dev_attrib.max_write_same_len);
+		target_warn("WRITE_SAME sectors: %u exceeds max_write_same_len: %u\n", sectors,
+			    cmd->se_dev->dev_attrib.max_write_same_len);
 		return TCM_INVALID_CDB_FIELD;
 	}
 	/*
@@ -295,19 +295,19 @@ sbc_setup_write_same(struct se_cmd *cmd, unsigned char flags,
 	 */
 	if (((cmd->t_task_lba + sectors) < cmd->t_task_lba) ||
 	    ((cmd->t_task_lba + sectors) > end_lba)) {
-		pr_err("WRITE_SAME exceeds last lba %llu (lba %llu, sectors %u)\n",
-		       (unsigned long long)end_lba, cmd->t_task_lba, sectors);
+		target_err("WRITE_SAME exceeds last lba %llu (lba %llu, sectors %u)\n",
+			   (unsigned long long)end_lba, cmd->t_task_lba, sectors);
 		return TCM_ADDRESS_OUT_OF_RANGE;
 	}
 
 	/* We always have ANC_SUP == 0 so setting ANCHOR is always an error */
 	if (flags & 0x10) {
-		pr_warn("WRITE SAME with ANCHOR not supported\n");
+		target_warn("WRITE SAME with ANCHOR not supported\n");
 		return TCM_INVALID_CDB_FIELD;
 	}
 
 	if (flags & 0x01) {
-		pr_warn("WRITE SAME with NDOB not supported\n");
+		target_warn("WRITE SAME with NDOB not supported\n");
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -320,8 +320,8 @@ sbc_setup_write_same(struct se_cmd *cmd, unsigned char flags,
 			return TCM_UNSUPPORTED_SCSI_OPCODE;
 
 		if (!dev->dev_attrib.emulate_tpws) {
-			pr_err("Got WRITE_SAME w/ UNMAP=1, but backend device"
-			       " has emulate_tpws disabled\n");
+			target_err("Got WRITE_SAME w/ UNMAP=1, but backend device"
+				   " has emulate_tpws disabled\n");
 			return TCM_UNSUPPORTED_SCSI_OPCODE;
 		}
 		cmd->execute_cmd = sbc_execute_write_same_unmap;
@@ -395,7 +395,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 
 	rc = sg_copy_to_buffer(cmp_sgl, cmp_nents, buf, cmp_len);
 	if (!rc) {
-		pr_err("sg_copy_to_buffer() failed for compare_and_write\n");
+		target_err("sg_copy_to_buffer() failed for compare_and_write\n");
 		ret = TCM_OUT_OF_RESOURCES;
 		goto out;
 	}
@@ -414,8 +414,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 			for (i = 0; i < len && addr[i] == buf[offset + i]; i++)
 				;
 			*miscmp_off = offset + i;
-			pr_warn("Detected MISCOMPARE at offset %u\n",
-				*miscmp_off);
+			target_warn("Detected MISCOMPARE at offset %u\n", *miscmp_off);
 			ret = TCM_MISCOMPARE_VERIFY;
 		}
 		kunmap_atomic(addr);
@@ -427,7 +426,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 		if (!cmp_len)
 			break;
 	}
-	pr_debug("COMPARE AND WRITE read data matches compare data\n");
+	target_debug("COMPARE AND WRITE read data matches compare data\n");
 out:
 	kfree(buf);
 	return ret;
@@ -473,8 +472,9 @@ static sense_reason_t compare_and_write_callback(struct se_cmd *cmd, bool succes
 	 * been failed with a non-zero SCSI status.
 	 */
 	if (cmd->scsi_status) {
-		pr_debug("compare_and_write_callback: non zero scsi_status:"
-			" 0x%02x\n", cmd->scsi_status);
+		target_debug("compare_and_write_callback: non zero scsi_status:"
+			     " 0x%02x\n",
+			     cmd->scsi_status);
 		*post_ret = 1;
 		if (cmd->scsi_status == SAM_STAT_CHECK_CONDITION)
 			ret = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
@@ -500,7 +500,7 @@ static sense_reason_t compare_and_write_callback(struct se_cmd *cmd, bool succes
 		goto out;
 
 	if (sg_alloc_table(&write_tbl, cmd->t_data_nents, GFP_KERNEL) < 0) {
-		pr_err("Unable to allocate compare_and_write sg\n");
+		target_err("Unable to allocate compare_and_write sg\n");
 		ret = TCM_OUT_OF_RESOURCES;
 		goto out;
 	}
@@ -629,7 +629,7 @@ sbc_set_prot_op_checks(u8 protect, bool fabric_prot, enum target_prot_type prot_
 			cmd->prot_checks = TARGET_DIF_CHECK_GUARD;
 			break;
 		default:
-			pr_err("Unsupported protect field %d\n", protect);
+			target_err("Unsupported protect field %d\n", protect);
 			return -EINVAL;
 		}
 	} else {
@@ -655,7 +655,7 @@ sbc_set_prot_op_checks(u8 protect, bool fabric_prot, enum target_prot_type prot_
 			cmd->prot_checks = TARGET_DIF_CHECK_GUARD;
 			break;
 		default:
-			pr_err("Unsupported protect field %d\n", protect);
+			target_err("Unsupported protect field %d\n", protect);
 			return -EINVAL;
 		}
 	}
@@ -674,8 +674,8 @@ sbc_check_prot(struct se_device *dev, struct se_cmd *cmd, unsigned char protect,
 	if (!cmd->t_prot_sg || !cmd->t_prot_nents) {
 		if (unlikely(protect &&
 		    !dev->dev_attrib.pi_prot_type && !cmd->se_sess->sess_prot_type)) {
-			pr_err("CDB contains protect bit, but device + fabric does"
-			       " not advertise PROTECT=1 feature bit\n");
+			target_err("CDB contains protect bit, but device + fabric does"
+				   " not advertise PROTECT=1 feature bit\n");
 			return TCM_INVALID_CDB_FIELD;
 		}
 		if (cmd->prot_pto)
@@ -713,8 +713,9 @@ sbc_check_prot(struct se_device *dev, struct se_cmd *cmd, unsigned char protect,
 			return TCM_NO_SENSE;
 		fallthrough;
 	default:
-		pr_err("Unable to determine pi_prot_type for CDB: 0x%02x "
-		       "PROTECT: 0x%02x\n", cmd->t_task_cdb[0], protect);
+		target_err("Unable to determine pi_prot_type for CDB: 0x%02x "
+			   "PROTECT: 0x%02x\n",
+			   cmd->t_task_cdb[0], protect);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -733,10 +734,10 @@ sbc_check_prot(struct se_device *dev, struct se_cmd *cmd, unsigned char protect,
 	if (protect)
 		cmd->data_length = sectors * dev->dev_attrib.block_size;
 
-	pr_debug("%s: prot_type=%d, data_length=%d, prot_length=%d "
-		 "prot_op=%d prot_checks=%d\n",
-		 __func__, cmd->prot_type, cmd->data_length, cmd->prot_length,
-		 cmd->prot_op, cmd->prot_checks);
+	target_debug("%s: prot_type=%d, data_length=%d, prot_length=%d "
+		     "prot_op=%d prot_checks=%d\n",
+		     __func__, cmd->prot_type, cmd->data_length, cmd->prot_length, cmd->prot_op,
+		     cmd->prot_checks);
 
 	return TCM_NO_SENSE;
 }
@@ -747,16 +748,17 @@ sbc_check_dpofua(struct se_device *dev, struct se_cmd *cmd, unsigned char *cdb)
 	if (cdb[1] & 0x10) {
 		/* see explanation in spc_emulate_modesense */
 		if (!target_check_fua(dev)) {
-			pr_err("Got CDB: 0x%02x with DPO bit set, but device"
-			       " does not advertise support for DPO\n", cdb[0]);
+			target_err("Got CDB: 0x%02x with DPO bit set, but device"
+				   " does not advertise support for DPO\n",
+				   cdb[0]);
 			return -EINVAL;
 		}
 	}
 	if (cdb[1] & 0x8) {
 		if (!target_check_fua(dev)) {
-			pr_err("Got CDB: 0x%02x with FUA bit set, but device"
-			       " does not advertise support for FUA write\n",
-			       cdb[0]);
+			target_err("Got CDB: 0x%02x with FUA bit set, but device"
+				   " does not advertise support for FUA write\n",
+				   cdb[0]);
 			return -EINVAL;
 		}
 		cmd->se_cmd_flags |= SCF_FUA;
@@ -881,8 +883,8 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 		case WRITE_SAME_32:
 			sectors = transport_get_sectors_32(cdb);
 			if (!sectors) {
-				pr_err("WSNZ=1, WRITE_SAME w/sectors=0 not"
-				       " supported\n");
+				target_err("WSNZ=1, WRITE_SAME w/sectors=0 not"
+					   " supported\n");
 				return TCM_INVALID_CDB_FIELD;
 			}
 
@@ -894,18 +896,19 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 				return ret;
 			break;
 		default:
-			pr_err("VARIABLE_LENGTH_CMD service action"
-				" 0x%04x not supported\n", service_action);
+			target_err("VARIABLE_LENGTH_CMD service action"
+				   " 0x%04x not supported\n",
+				   service_action);
 			return TCM_UNSUPPORTED_SCSI_OPCODE;
 		}
 		break;
 	}
 	case COMPARE_AND_WRITE:
 		if (!dev->dev_attrib.emulate_caw) {
-			pr_err_ratelimited("se_device %s/%s (vpd_unit_serial %s) reject COMPARE_AND_WRITE\n",
-					   dev->se_hba->backend->ops->name,
-					   config_item_name(&dev->dev_group.cg_item),
-					   dev->t10_wwn.unit_serial);
+			target_err_ratelimited("se_device %s/%s (vpd_unit_serial %s) reject COMPARE_AND_WRITE\n",
+					       dev->se_hba->backend->ops->name,
+					       config_item_name(&dev->dev_group.cg_item),
+					       dev->t10_wwn.unit_serial);
 			return TCM_UNSUPPORTED_SCSI_OPCODE;
 		}
 		sectors = cdb[13];
@@ -913,8 +916,9 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 		 * Currently enforce COMPARE_AND_WRITE for a single sector
 		 */
 		if (sectors > 1) {
-			pr_err("COMPARE_AND_WRITE contains NoLB: %u greater"
-			       " than 1\n", sectors);
+			target_err("COMPARE_AND_WRITE contains NoLB: %u greater"
+				   " than 1\n",
+				   sectors);
 			return TCM_INVALID_CDB_FIELD;
 		}
 		if (sbc_check_dpofua(dev, cmd, cdb))
@@ -944,8 +948,7 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 			cmd->execute_cmd = target_emulate_report_referrals;
 			break;
 		default:
-			pr_err("Unsupported SA: 0x%02x\n",
-				cmd->t_task_cdb[1] & 0x1f);
+			target_err("Unsupported SA: 0x%02x\n", cmd->t_task_cdb[1] & 0x1f);
 			return TCM_INVALID_CDB_FIELD;
 		}
 		size = get_unaligned_be32(&cdb[10]);
@@ -971,8 +974,8 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 			return TCM_UNSUPPORTED_SCSI_OPCODE;
 
 		if (!dev->dev_attrib.emulate_tpu) {
-			pr_err("Got UNMAP, but backend device has"
-			       " emulate_tpu disabled\n");
+			target_err("Got UNMAP, but backend device has"
+				   " emulate_tpu disabled\n");
 			return TCM_UNSUPPORTED_SCSI_OPCODE;
 		}
 		size = get_unaligned_be16(&cdb[7]);
@@ -981,7 +984,7 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 	case WRITE_SAME_16:
 		sectors = transport_get_sectors_16(cdb);
 		if (!sectors) {
-			pr_err("WSNZ=1, WRITE_SAME w/sectors=0 not supported\n");
+			target_err("WSNZ=1, WRITE_SAME w/sectors=0 not supported\n");
 			return TCM_INVALID_CDB_FIELD;
 		}
 
@@ -995,7 +998,7 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 	case WRITE_SAME:
 		sectors = transport_get_sectors_10(cdb);
 		if (!sectors) {
-			pr_err("WSNZ=1, WRITE_SAME w/sectors=0 not supported\n");
+			target_err("WSNZ=1, WRITE_SAME w/sectors=0 not supported\n");
 			return TCM_INVALID_CDB_FIELD;
 		}
 
@@ -1054,9 +1057,9 @@ check_lba:
 		end_lba = dev->transport->get_blocks(dev) + 1;
 		if (((cmd->t_task_lba + sectors) < cmd->t_task_lba) ||
 		    ((cmd->t_task_lba + sectors) > end_lba)) {
-			pr_err("cmd exceeds last lba %llu "
-				"(lba %llu, sectors %u)\n",
-				end_lba, cmd->t_task_lba, sectors);
+			target_err("cmd exceeds last lba %llu "
+				   "(lba %llu, sectors %u)\n",
+				   end_lba, cmd->t_task_lba, sectors);
 			return TCM_ADDRESS_OUT_OF_RANGE;
 		}
 
@@ -1096,8 +1099,7 @@ sbc_execute_unmap(struct se_cmd *cmd)
 	}
 
 	if (cmd->data_length < 8) {
-		pr_warn("UNMAP parameter list length %u too small\n",
-			cmd->data_length);
+		target_warn("UNMAP parameter list length %u too small\n", cmd->data_length);
 		return TCM_PARAMETER_LIST_LENGTH_ERROR;
 	}
 
@@ -1110,8 +1112,8 @@ sbc_execute_unmap(struct se_cmd *cmd)
 
 	size = cmd->data_length - 8;
 	if (bd_dl > size)
-		pr_warn("UNMAP parameter list length %u too small, ignoring bd_dl %u\n",
-			cmd->data_length, bd_dl);
+		target_warn("UNMAP parameter list length %u too small, ignoring bd_dl %u\n",
+			    cmd->data_length, bd_dl);
 	else
 		size = bd_dl;
 
@@ -1122,14 +1124,15 @@ sbc_execute_unmap(struct se_cmd *cmd)
 
 	/* First UNMAP block descriptor starts at 8 byte offset */
 	ptr = &buf[8];
-	pr_debug("UNMAP: Sub: %s Using dl: %u bd_dl: %u size: %u"
-		" ptr: %p\n", dev->transport->name, dl, bd_dl, size, ptr);
+	target_debug("UNMAP: Sub: %s Using dl: %u bd_dl: %u size: %u"
+		     " ptr: %p\n",
+		     dev->transport->name, dl, bd_dl, size, ptr);
 
 	while (size >= 16) {
 		lba = get_unaligned_be64(&ptr[0]);
 		range = get_unaligned_be32(&ptr[8]);
-		pr_debug("UNMAP: Using lba: %llu and range: %u\n",
-				 (unsigned long long)lba, range);
+		target_debug("UNMAP: Using lba: %llu and range: %u\n", (unsigned long long)lba,
+			     range);
 
 		if (range > dev->dev_attrib.max_unmap_lba_count) {
 			ret = TCM_INVALID_PARAMETER_LIST;
@@ -1211,12 +1214,11 @@ sbc_dif_generate(struct se_cmd *cmd)
 				sdt->ref_tag = cpu_to_be32(sector & 0xffffffff);
 			sdt->app_tag = 0;
 
-			pr_debug("DIF %s INSERT sector: %llu guard_tag: 0x%04x"
-				 " app_tag: 0x%04x ref_tag: %u\n",
-				 (cmd->data_direction == DMA_TO_DEVICE) ?
-				 "WRITE" : "READ", (unsigned long long)sector,
-				 sdt->guard_tag, sdt->app_tag,
-				 be32_to_cpu(sdt->ref_tag));
+			target_debug("DIF %s INSERT sector: %llu guard_tag: 0x%04x"
+				     " app_tag: 0x%04x ref_tag: %u\n",
+				     (cmd->data_direction == DMA_TO_DEVICE) ? "WRITE" : "READ",
+				     (unsigned long long)sector, sdt->guard_tag, sdt->app_tag,
+				     be32_to_cpu(sdt->ref_tag));
 
 			sector++;
 		}
@@ -1238,9 +1240,10 @@ sbc_dif_v1_verify(struct se_cmd *cmd, struct t10_pi_tuple *sdt,
 	csum = cpu_to_be16(crc);
 
 	if (sdt->guard_tag != csum) {
-		pr_err("DIFv1 checksum failed on sector %llu guard tag 0x%04x"
-			" csum 0x%04x\n", (unsigned long long)sector,
-			be16_to_cpu(sdt->guard_tag), be16_to_cpu(csum));
+		target_err("DIFv1 checksum failed on sector %llu guard tag 0x%04x"
+			   " csum 0x%04x\n",
+			   (unsigned long long)sector, be16_to_cpu(sdt->guard_tag),
+			   be16_to_cpu(csum));
 		return TCM_LOGICAL_BLOCK_GUARD_CHECK_FAILED;
 	}
 
@@ -1250,17 +1253,18 @@ check_ref:
 
 	if (cmd->prot_type == TARGET_DIF_TYPE1_PROT &&
 	    be32_to_cpu(sdt->ref_tag) != (sector & 0xffffffff)) {
-		pr_err("DIFv1 Type 1 reference failed on sector: %llu tag: 0x%08x"
-		       " sector MSB: 0x%08x\n", (unsigned long long)sector,
-		       be32_to_cpu(sdt->ref_tag), (u32)(sector & 0xffffffff));
+		target_err("DIFv1 Type 1 reference failed on sector: %llu tag: 0x%08x"
+			   " sector MSB: 0x%08x\n",
+			   (unsigned long long)sector, be32_to_cpu(sdt->ref_tag),
+			   (u32)(sector & 0xffffffff));
 		return TCM_LOGICAL_BLOCK_REF_TAG_CHECK_FAILED;
 	}
 
 	if (cmd->prot_type == TARGET_DIF_TYPE2_PROT &&
 	    be32_to_cpu(sdt->ref_tag) != ei_lba) {
-		pr_err("DIFv1 Type 2 reference failed on sector: %llu tag: 0x%08x"
-		       " ei_lba: 0x%08x\n", (unsigned long long)sector,
-			be32_to_cpu(sdt->ref_tag), ei_lba);
+		target_err("DIFv1 Type 2 reference failed on sector: %llu tag: 0x%08x"
+			   " ei_lba: 0x%08x\n",
+			   (unsigned long long)sector, be32_to_cpu(sdt->ref_tag), ei_lba);
 		return TCM_LOGICAL_BLOCK_REF_TAG_CHECK_FAILED;
 	}
 
@@ -1349,10 +1353,10 @@ sbc_dif_verify(struct se_cmd *cmd, sector_t start, unsigned int sectors,
 
 			sdt = paddr + i;
 
-			pr_debug("DIF READ sector: %llu guard_tag: 0x%04x"
-				 " app_tag: 0x%04x ref_tag: %u\n",
-				 (unsigned long long)sector, sdt->guard_tag,
-				 sdt->app_tag, be32_to_cpu(sdt->ref_tag));
+			target_debug("DIF READ sector: %llu guard_tag: 0x%04x"
+				     " app_tag: 0x%04x ref_tag: %u\n",
+				     (unsigned long long)sector, sdt->guard_tag, sdt->app_tag,
+				     be32_to_cpu(sdt->ref_tag));
 
 			if (sdt->app_tag == T10_PI_APP_ESCAPE) {
 				dsg_off += block_size;

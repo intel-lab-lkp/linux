@@ -40,7 +40,7 @@ cxgbit_wake_up(struct cxgbit_wr_wait *wr_waitp, const char *func, u8 ret)
 		wr_waitp->ret = -EIO;
 
 	if (wr_waitp->ret)
-		pr_err("%s: err:%u", func, ret);
+		target_err("%s: err:%u", func, ret);
 
 	complete(&wr_waitp->completion);
 }
@@ -59,14 +59,14 @@ cxgbit_wait_for_reply(struct cxgbit_device *cdev,
 
 	ret = wait_for_completion_timeout(&wr_waitp->completion, timeout * HZ);
 	if (!ret) {
-		pr_info("%s - Device %s not responding tid %u\n",
-			func, pci_name(cdev->lldi.pdev), tid);
+		target_info("%s - Device %s not responding tid %u\n", func,
+			    pci_name(cdev->lldi.pdev), tid);
 		wr_waitp->ret = -ETIMEDOUT;
 	}
 out:
 	if (wr_waitp->ret)
-		pr_info("%s: FW reply %d tid %u\n",
-			pci_name(cdev->lldi.pdev), wr_waitp->ret, tid);
+		target_info("%s: FW reply %d tid %u\n", pci_name(cdev->lldi.pdev), wr_waitp->ret,
+			    tid);
 	return wr_waitp->ret;
 }
 
@@ -149,8 +149,8 @@ cxgbit_create_server6(struct cxgbit_device *cdev, unsigned int stid,
 	int addr_type;
 	int ret;
 
-	pr_debug("%s: dev = %s; stid = %u; sin6_port = %u\n",
-		 __func__, cdev->lldi.ports[0]->name, stid, sin6->sin6_port);
+	target_debug("%s: dev = %s; stid = %u; sin6_port = %u\n", __func__,
+		     cdev->lldi.ports[0]->name, stid, sin6->sin6_port);
 
 	addr_type = ipv6_addr_type((const struct in6_addr *)
 				   &sin6->sin6_addr);
@@ -158,8 +158,8 @@ cxgbit_create_server6(struct cxgbit_device *cdev, unsigned int stid,
 		ret = cxgb4_clip_get(cdev->lldi.ports[0],
 				     (const u32 *)&sin6->sin6_addr.s6_addr, 1);
 		if (ret) {
-			pr_err("Unable to find clip table entry. laddr %pI6. Error:%d.\n",
-			       sin6->sin6_addr.s6_addr, ret);
+			target_err("Unable to find clip table entry. laddr %pI6. Error:%d.\n",
+				   sin6->sin6_addr.s6_addr, ret);
 			return -ENOMEM;
 		}
 	}
@@ -184,9 +184,8 @@ cxgbit_create_server6(struct cxgbit_device *cdev, unsigned int stid,
 			cxgb4_clip_release(cdev->lldi.ports[0],
 				   (const u32 *)&sin6->sin6_addr.s6_addr, 1);
 
-		pr_err("create server6 err %d stid %d laddr %pI6 lport %d\n",
-		       ret, stid, sin6->sin6_addr.s6_addr,
-		       ntohs(sin6->sin6_port));
+		target_err("create server6 err %d stid %d laddr %pI6 lport %d\n", ret, stid,
+			   sin6->sin6_addr.s6_addr, ntohs(sin6->sin6_port));
 	}
 
 	return ret;
@@ -200,8 +199,8 @@ cxgbit_create_server4(struct cxgbit_device *cdev, unsigned int stid,
 				   &cnp->com.local_addr;
 	int ret;
 
-	pr_debug("%s: dev = %s; stid = %u; sin_port = %u\n",
-		 __func__, cdev->lldi.ports[0]->name, stid, sin->sin_port);
+	target_debug("%s: dev = %s; stid = %u; sin_port = %u\n", __func__,
+		     cdev->lldi.ports[0]->name, stid, sin->sin_port);
 
 	cxgbit_get_cnp(cnp);
 	cxgbit_init_wr_wait(&cnp->com.wr_wait);
@@ -220,8 +219,8 @@ cxgbit_create_server4(struct cxgbit_device *cdev, unsigned int stid,
 		cxgbit_put_cnp(cnp);
 
 	if (ret)
-		pr_err("create server failed err %d stid %d laddr %pI4 lport %d\n",
-		       ret, stid, &sin->sin_addr, ntohs(sin->sin_port));
+		target_err("create server failed err %d stid %d laddr %pI4 lport %d\n", ret, stid,
+			   &sin->sin_addr, ntohs(sin->sin_port));
 	return ret;
 }
 
@@ -248,8 +247,7 @@ struct cxgbit_device *cxgbit_find_device(struct net_device *ndev, u8 *port_id)
 static struct net_device *cxgbit_get_real_dev(struct net_device *ndev)
 {
 	if (ndev->priv_flags & IFF_BONDING) {
-		pr_err("Bond devices are not supported. Interface:%s\n",
-		       ndev->name);
+		target_err("Bond devices are not supported. Interface:%s\n", ndev->name);
 		return NULL;
 	}
 
@@ -640,7 +638,7 @@ static void cxgbit_arp_failure_discard(void *handle, struct sk_buff *skb)
 {
 	struct cxgbit_sock *csk = handle;
 
-	pr_debug("%s cxgbit_device %p\n", __func__, handle);
+	target_debug("%s cxgbit_device %p\n", __func__, handle);
 	kfree_skb(skb);
 	cxgbit_put_csk(csk);
 }
@@ -650,7 +648,7 @@ static void cxgbit_abort_arp_failure(void *handle, struct sk_buff *skb)
 	struct cxgbit_device *cdev = handle;
 	struct cpl_abort_req *req = cplhdr(skb);
 
-	pr_debug("%s cdev %p\n", __func__, cdev);
+	target_debug("%s cdev %p\n", __func__, cdev);
 	req->cmd = CPL_ABORT_NO_RST;
 	cxgbit_ofld_send(cdev, skb);
 }
@@ -660,8 +658,7 @@ static int cxgbit_send_abort_req(struct cxgbit_sock *csk)
 	struct sk_buff *skb;
 	u32 len = roundup(sizeof(struct cpl_abort_req), 16);
 
-	pr_debug("%s: csk %p tid %u; state %d\n",
-		 __func__, csk, csk->tid, csk->com.state);
+	target_debug("%s: csk %p tid %u; state %d\n", __func__, csk, csk->tid, csk->com.state);
 
 	__skb_queue_purge(&csk->txq);
 
@@ -720,8 +717,7 @@ static void __cxgbit_free_conn(struct cxgbit_sock *csk)
 	struct iscsit_conn *conn = csk->conn;
 	bool release = false;
 
-	pr_debug("%s: state %d\n",
-		 __func__, csk->com.state);
+	target_debug("%s: state %d\n", __func__, csk->com.state);
 
 	spin_lock_bh(&csk->lock);
 	switch (csk->com.state) {
@@ -742,8 +738,7 @@ static void __cxgbit_free_conn(struct cxgbit_sock *csk)
 		release = true;
 		break;
 	default:
-		pr_err("%s: csk %p; state %d\n",
-		       __func__, csk, csk->com.state);
+		target_err("%s: csk %p; state %d\n", __func__, csk, csk->com.state);
 	}
 	spin_unlock_bh(&csk->lock);
 
@@ -768,10 +763,10 @@ static void cxgbit_set_emss(struct cxgbit_sock *csk, u16 opt)
 	if (csk->emss < 128)
 		csk->emss = 128;
 	if (csk->emss & 7)
-		pr_info("Warning: misaligned mtu idx %u mss %u emss=%u\n",
-			TCPOPT_MSS_G(opt), csk->mss, csk->emss);
-	pr_debug("%s mss_idx %u mss %u emss=%u\n", __func__, TCPOPT_MSS_G(opt),
-		 csk->mss, csk->emss);
+		target_info("Warning: misaligned mtu idx %u mss %u emss=%u\n", TCPOPT_MSS_G(opt),
+			    csk->mss, csk->emss);
+	target_debug("%s mss_idx %u mss %u emss=%u\n", __func__, TCPOPT_MSS_G(opt), csk->mss,
+		     csk->emss);
 }
 
 static void cxgbit_free_skb(struct cxgbit_sock *csk)
@@ -797,7 +792,7 @@ void _cxgbit_free_csk(struct kref *kref)
 
 	csk = container_of(kref, struct cxgbit_sock, kref);
 
-	pr_debug("%s csk %p state %d\n", __func__, csk, csk->com.state);
+	target_debug("%s csk %p state %d\n", __func__, csk, csk->com.state);
 
 	if (csk->com.local_addr.ss_family == AF_INET6) {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)
@@ -844,8 +839,7 @@ static void cxgbit_set_tcp_window(struct cxgbit_sock *csk, struct port_info *pi)
 		csk->snd_win *= scale;
 	csk->snd_win = min(csk->snd_win, 512U * 1024);
 
-	pr_debug("%s snd_win %d rcv_win %d\n",
-		 __func__, csk->snd_win, csk->rcv_win);
+	target_debug("%s snd_win %d rcv_win %d\n", __func__, csk->snd_win, csk->rcv_win);
 }
 
 #ifdef CONFIG_CHELSIO_T4_DCB
@@ -889,7 +883,7 @@ static u8 cxgbit_get_iscsi_dcb_priority(struct net_device *ndev, u16 local_port)
 		ret = dcb_getapp(ndev, &iscsi_dcb_app);
 	}
 
-	pr_info("iSCSI priority is set to %u\n", cxgbit_select_priority(ret));
+	target_info("iSCSI priority is set to %u\n", cxgbit_select_priority(ret));
 
 	return cxgbit_select_priority(ret);
 }
@@ -1001,7 +995,7 @@ int cxgbit_ofld_send(struct cxgbit_device *cdev, struct sk_buff *skb)
 
 	if (!test_bit(CDEV_STATE_UP, &cdev->flags)) {
 		kfree_skb(skb);
-		pr_err("%s - device not up - dropping\n", __func__);
+		target_err("%s - device not up - dropping\n", __func__);
 		return -EIO;
 	}
 
@@ -1032,7 +1026,7 @@ cxgbit_l2t_send(struct cxgbit_device *cdev, struct sk_buff *skb,
 
 	if (!test_bit(CDEV_STATE_UP, &cdev->flags)) {
 		kfree_skb(skb);
-		pr_err("%s - device not up - dropping\n", __func__);
+		target_err("%s - device not up - dropping\n", __func__);
 		return -EIO;
 	}
 
@@ -1140,7 +1134,7 @@ cxgbit_pass_accept_rpl(struct cxgbit_sock *csk, struct cpl_pass_accept_req *req)
 	u32 wscale;
 	u32 win;
 
-	pr_debug("%s csk %p tid %u\n", __func__, csk, csk->tid);
+	target_debug("%s csk %p tid %u\n", __func__, csk, csk->tid);
 
 	skb = alloc_skb(len, GFP_ATOMIC);
 	if (!skb) {
@@ -1231,26 +1225,22 @@ cxgbit_pass_accept_req(struct cxgbit_device *cdev, struct sk_buff *skb)
 	int ret;
 	int iptype;
 
-	pr_debug("%s: cdev = %p; stid = %u; tid = %u\n",
-		 __func__, cdev, stid, tid);
+	target_debug("%s: cdev = %p; stid = %u; tid = %u\n", __func__, cdev, stid, tid);
 
 	cnp = lookup_stid(t, stid);
 	if (!cnp) {
-		pr_err("%s connect request on invalid stid %d\n",
-		       __func__, stid);
+		target_err("%s connect request on invalid stid %d\n", __func__, stid);
 		goto rel_skb;
 	}
 
 	if (cnp->com.state != CSK_STATE_LISTEN) {
-		pr_err("%s - listening parent not in CSK_STATE_LISTEN\n",
-		       __func__);
+		target_err("%s - listening parent not in CSK_STATE_LISTEN\n", __func__);
 		goto reject;
 	}
 
 	csk = lookup_tid(t, tid);
 	if (csk) {
-		pr_err("%s csk not null tid %u\n",
-		       __func__, tid);
+		target_err("%s csk not null tid %u\n", __func__, tid);
 		goto rel_skb;
 	}
 
@@ -1259,22 +1249,20 @@ cxgbit_pass_accept_req(struct cxgbit_device *cdev, struct sk_buff *skb)
 
 	/* Find output route */
 	if (iptype == 4)  {
-		pr_debug("%s parent sock %p tid %u laddr %pI4 raddr %pI4 "
-			 "lport %d rport %d peer_mss %d\n"
-			 , __func__, cnp, tid,
-			 local_ip, peer_ip, ntohs(local_port),
-			 ntohs(peer_port), peer_mss);
+		target_debug("%s parent sock %p tid %u laddr %pI4 raddr %pI4 "
+			     "lport %d rport %d peer_mss %d\n",
+			     __func__, cnp, tid, local_ip, peer_ip, ntohs(local_port),
+			     ntohs(peer_port), peer_mss);
 		dst = cxgb_find_route(&cdev->lldi, cxgbit_get_real_dev,
 				      *(__be32 *)local_ip,
 				      *(__be32 *)peer_ip,
 				      local_port, peer_port,
 				      PASS_OPEN_TOS_G(ntohl(req->tos_stid)));
 	} else {
-		pr_debug("%s parent sock %p tid %u laddr %pI6 raddr %pI6 "
-			 "lport %d rport %d peer_mss %d\n"
-			 , __func__, cnp, tid,
-			 local_ip, peer_ip, ntohs(local_port),
-			 ntohs(peer_port), peer_mss);
+		target_debug("%s parent sock %p tid %u laddr %pI6 raddr %pI6 "
+			     "lport %d rport %d peer_mss %d\n",
+			     __func__, cnp, tid, local_ip, peer_ip, ntohs(local_port),
+			     ntohs(peer_port), peer_mss);
 		dst = cxgb_find_route6(&cdev->lldi, cxgbit_get_real_dev,
 				       local_ip, peer_ip,
 				       local_port, peer_port,
@@ -1283,8 +1271,7 @@ cxgbit_pass_accept_req(struct cxgbit_device *cdev, struct sk_buff *skb)
 					&cnp->com.local_addr)->sin6_scope_id);
 	}
 	if (!dst) {
-		pr_err("%s - failed to find dst entry!\n",
-		       __func__);
+		target_err("%s - failed to find dst entry!\n", __func__);
 		goto reject;
 	}
 
@@ -1297,8 +1284,7 @@ cxgbit_pass_accept_req(struct cxgbit_device *cdev, struct sk_buff *skb)
 	ret = cxgbit_offload_init(csk, iptype, peer_ip, ntohs(local_port),
 				  dst, cdev);
 	if (ret) {
-		pr_err("%s - failed to allocate l2t entry!\n",
-		       __func__);
+		target_err("%s - failed to allocate l2t entry!\n", __func__);
 		dst_release(dst);
 		kfree(csk);
 		goto reject;
@@ -1469,17 +1455,17 @@ u32 cxgbit_send_tx_flowc_wr(struct cxgbit_sock *csk)
 #ifdef CONFIG_CHELSIO_T4_DCB
 	flowc->mnemval[index].mnemonic = FW_FLOWC_MNEM_DCBPRIO;
 	if (vlan == VLAN_NONE) {
-		pr_warn("csk %u without VLAN Tag on DCB Link\n", csk->tid);
+		target_warn("csk %u without VLAN Tag on DCB Link\n", csk->tid);
 		flowc->mnemval[index].val = cpu_to_be32(0);
 	} else
 		flowc->mnemval[index].val = cpu_to_be32(
 				(vlan & VLAN_PRIO_MASK) >> VLAN_PRIO_SHIFT);
 #endif
 
-	pr_debug("%s: csk %p; tx_chan = %u; rss_qid = %u; snd_seq = %u;"
-		 " rcv_seq = %u; snd_win = %u; emss = %u\n",
-		 __func__, csk, csk->tx_chan, csk->rss_qid, csk->snd_nxt,
-		 csk->rcv_nxt, csk->snd_win, csk->emss);
+	target_debug("%s: csk %p; tx_chan = %u; rss_qid = %u; snd_seq = %u;"
+		     " rcv_seq = %u; snd_win = %u; emss = %u\n",
+		     __func__, csk, csk->tx_chan, csk->rss_qid, csk->snd_nxt, csk->rcv_nxt,
+		     csk->snd_win, csk->emss);
 	set_wr_txq(skb, CPL_PRIORITY_DATA, csk->txq_idx);
 	cxgbit_ofld_send(csk->com.cdev, skb);
 	return flowclen16;
@@ -1491,8 +1477,8 @@ cxgbit_send_tcb_skb(struct cxgbit_sock *csk, struct sk_buff *skb)
 	spin_lock_bh(&csk->lock);
 	if (unlikely(csk->com.state != CSK_STATE_ESTABLISHED)) {
 		spin_unlock_bh(&csk->lock);
-		pr_err("%s: csk 0x%p, tid %u, state %u\n",
-		       __func__, csk, csk->tid, csk->com.state);
+		target_err("%s: csk 0x%p, tid %u, state %u\n", __func__, csk, csk->tid,
+			   csk->com.state);
 		__kfree_skb(skb);
 		return -1;
 	}
@@ -1583,11 +1569,10 @@ cxgbit_pass_open_rpl(struct cxgbit_device *cdev, struct sk_buff *skb)
 	unsigned int stid = GET_TID(rpl);
 	struct cxgbit_np *cnp = lookup_stid(t, stid);
 
-	pr_debug("%s: cnp = %p; stid = %u; status = %d\n",
-		 __func__, cnp, stid, rpl->status);
+	target_debug("%s: cnp = %p; stid = %u; status = %d\n", __func__, cnp, stid, rpl->status);
 
 	if (!cnp) {
-		pr_info("%s stid %d lookup failure\n", __func__, stid);
+		target_info("%s stid %d lookup failure\n", __func__, stid);
 		goto rel_skb;
 	}
 
@@ -1605,11 +1590,10 @@ cxgbit_close_listsrv_rpl(struct cxgbit_device *cdev, struct sk_buff *skb)
 	unsigned int stid = GET_TID(rpl);
 	struct cxgbit_np *cnp = lookup_stid(t, stid);
 
-	pr_debug("%s: cnp = %p; stid = %u; status = %d\n",
-		 __func__, cnp, stid, rpl->status);
+	target_debug("%s: cnp = %p; stid = %u; status = %d\n", __func__, cnp, stid, rpl->status);
 
 	if (!cnp) {
-		pr_info("%s stid %d lookup failure\n", __func__, stid);
+		target_info("%s stid %d lookup failure\n", __func__, stid);
 		goto rel_skb;
 	}
 
@@ -1633,13 +1617,12 @@ cxgbit_pass_establish(struct cxgbit_device *cdev, struct sk_buff *skb)
 
 	csk = lookup_tid(t, tid);
 	if (unlikely(!csk)) {
-		pr_err("can't find connection for tid %u.\n", tid);
+		target_err("can't find connection for tid %u.\n", tid);
 		goto rel_skb;
 	}
 	cnp = csk->cnp;
 
-	pr_debug("%s: csk %p; tid %u; cnp %p\n",
-		 __func__, csk, tid, cnp);
+	target_debug("%s: csk %p; tid %u; cnp %p\n", __func__, csk, tid, cnp);
 
 	csk->write_seq = snd_isn;
 	csk->snd_una = snd_isn;
@@ -1670,8 +1653,7 @@ static void cxgbit_queue_rx_skb(struct cxgbit_sock *csk, struct sk_buff *skb)
 
 static void cxgbit_peer_close(struct cxgbit_sock *csk, struct sk_buff *skb)
 {
-	pr_debug("%s: csk %p; tid %u; state %d\n",
-		 __func__, csk, csk->tid, csk->com.state);
+	target_debug("%s: csk %p; tid %u; state %d\n", __func__, csk, csk->tid, csk->com.state);
 
 	switch (csk->com.state) {
 	case CSK_STATE_ESTABLISHED:
@@ -1689,8 +1671,7 @@ static void cxgbit_peer_close(struct cxgbit_sock *csk, struct sk_buff *skb)
 	case CSK_STATE_ABORTING:
 		break;
 	default:
-		pr_info("%s: cpl_peer_close in bad state %d\n",
-			__func__, csk->com.state);
+		target_info("%s: cpl_peer_close in bad state %d\n", __func__, csk->com.state);
 	}
 
 	__kfree_skb(skb);
@@ -1698,8 +1679,7 @@ static void cxgbit_peer_close(struct cxgbit_sock *csk, struct sk_buff *skb)
 
 static void cxgbit_close_con_rpl(struct cxgbit_sock *csk, struct sk_buff *skb)
 {
-	pr_debug("%s: csk %p; tid %u; state %d\n",
-		 __func__, csk, csk->tid, csk->com.state);
+	target_debug("%s: csk %p; tid %u; state %d\n", __func__, csk, csk->tid, csk->com.state);
 
 	switch (csk->com.state) {
 	case CSK_STATE_CLOSING:
@@ -1713,8 +1693,7 @@ static void cxgbit_close_con_rpl(struct cxgbit_sock *csk, struct sk_buff *skb)
 	case CSK_STATE_DEAD:
 		break;
 	default:
-		pr_info("%s: cpl_close_con_rpl in bad state %d\n",
-			__func__, csk->com.state);
+		target_info("%s: cpl_close_con_rpl in bad state %d\n", __func__, csk->com.state);
 	}
 
 	__kfree_skb(skb);
@@ -1729,12 +1708,10 @@ static void cxgbit_abort_req_rss(struct cxgbit_sock *csk, struct sk_buff *skb)
 	bool wakeup_thread = false;
 	u32 len = roundup(sizeof(struct cpl_abort_rpl), 16);
 
-	pr_debug("%s: csk %p; tid %u; state %d\n",
-		 __func__, csk, tid, csk->com.state);
+	target_debug("%s: csk %p; tid %u; state %d\n", __func__, csk, tid, csk->com.state);
 
 	if (cxgb_is_neg_adv(hdr->status)) {
-		pr_err("%s: got neg advise %d on tid %u\n",
-		       __func__, hdr->status, tid);
+		target_err("%s: got neg advise %d on tid %u\n", __func__, hdr->status, tid);
 		goto rel_skb;
 	}
 
@@ -1756,8 +1733,7 @@ static void cxgbit_abort_req_rss(struct cxgbit_sock *csk, struct sk_buff *skb)
 	case CSK_STATE_ABORTING:
 		break;
 	default:
-		pr_info("%s: cpl_abort_req_rss in bad state %d\n",
-			__func__, csk->com.state);
+		target_info("%s: cpl_abort_req_rss in bad state %d\n", __func__, csk->com.state);
 		csk->com.state = CSK_STATE_DEAD;
 	}
 
@@ -1786,8 +1762,7 @@ static void cxgbit_abort_rpl_rss(struct cxgbit_sock *csk, struct sk_buff *skb)
 {
 	struct cpl_abort_rpl_rss *rpl = cplhdr(skb);
 
-	pr_debug("%s: csk %p; tid %u; state %d\n",
-		 __func__, csk, csk->tid, csk->com.state);
+	target_debug("%s: csk %p; tid %u; state %d\n", __func__, csk, csk->tid, csk->com.state);
 
 	switch (csk->com.state) {
 	case CSK_STATE_ABORTING:
@@ -1798,8 +1773,7 @@ static void cxgbit_abort_rpl_rss(struct cxgbit_sock *csk, struct sk_buff *skb)
 		cxgbit_put_csk(csk);
 		break;
 	default:
-		pr_info("%s: cpl_abort_rpl_rss in state %d\n",
-			__func__, csk->com.state);
+		target_info("%s: cpl_abort_rpl_rss in state %d\n", __func__, csk->com.state);
 	}
 
 	__kfree_skb(skb);
@@ -1811,8 +1785,8 @@ static bool cxgbit_credit_err(const struct cxgbit_sock *csk)
 	u32 credit = 0;
 
 	if (unlikely(csk->wr_cred > csk->wr_max_cred)) {
-		pr_err("csk 0x%p, tid %u, credit %u > %u\n",
-		       csk, csk->tid, csk->wr_cred, csk->wr_max_cred);
+		target_err("csk 0x%p, tid %u, credit %u > %u\n", csk, csk->tid, csk->wr_cred,
+			   csk->wr_max_cred);
 		return true;
 	}
 
@@ -1822,9 +1796,8 @@ static bool cxgbit_credit_err(const struct cxgbit_sock *csk)
 	}
 
 	if (unlikely((csk->wr_cred + credit) != csk->wr_max_cred)) {
-		pr_err("csk 0x%p, tid %u, credit %u + %u != %u.\n",
-		       csk, csk->tid, csk->wr_cred,
-		       credit, csk->wr_max_cred);
+		target_err("csk 0x%p, tid %u, credit %u + %u != %u.\n", csk, csk->tid, csk->wr_cred,
+			   credit, csk->wr_max_cred);
 
 		return true;
 	}
@@ -1847,18 +1820,15 @@ static void cxgbit_fw4_ack(struct cxgbit_sock *csk, struct sk_buff *skb)
 		u32 csum;
 
 		if (unlikely(!p)) {
-			pr_err("csk 0x%p,%u, cr %u,%u+%u, empty.\n",
-			       csk, csk->tid, credits,
-			       csk->wr_cred, csk->wr_una_cred);
+			target_err("csk 0x%p,%u, cr %u,%u+%u, empty.\n", csk, csk->tid, credits,
+				   csk->wr_cred, csk->wr_una_cred);
 			break;
 		}
 
 		csum = (__force u32)p->csum;
 		if (unlikely(credits < csum)) {
-			pr_warn("csk 0x%p,%u, cr %u,%u+%u, < %u.\n",
-				csk,  csk->tid,
-				credits, csk->wr_cred, csk->wr_una_cred,
-				csum);
+			target_warn("csk 0x%p,%u, cr %u,%u+%u, < %u.\n", csk, csk->tid, credits,
+				    csk->wr_cred, csk->wr_una_cred, csum);
 			p->csum = (__force __wsum)(csum - credits);
 			break;
 		}
@@ -1875,9 +1845,8 @@ static void cxgbit_fw4_ack(struct cxgbit_sock *csk, struct sk_buff *skb)
 
 	if (rpl->seq_vld & CPL_FW4_ACK_FLAGS_SEQVAL) {
 		if (unlikely(before(snd_una, csk->snd_una))) {
-			pr_warn("csk 0x%p,%u, snd_una %u/%u.",
-				csk, csk->tid, snd_una,
-				csk->snd_una);
+			target_warn("csk 0x%p,%u, snd_una %u/%u.", csk, csk->tid, snd_una,
+				    csk->snd_una);
 			goto rel_skb;
 		}
 
@@ -1904,7 +1873,7 @@ static void cxgbit_set_tcb_rpl(struct cxgbit_device *cdev, struct sk_buff *skb)
 
 	csk = lookup_tid(t, tid);
 	if (unlikely(!csk)) {
-		pr_err("can't find connection for tid %u.\n", tid);
+		target_err("can't find connection for tid %u.\n", tid);
 		goto rel_skb;
 	} else {
 		cxgbit_wake_up(&csk->com.wr_wait, __func__, rpl->status);
@@ -1925,7 +1894,7 @@ static void cxgbit_rx_data(struct cxgbit_device *cdev, struct sk_buff *skb)
 
 	csk = lookup_tid(t, tid);
 	if (unlikely(!csk)) {
-		pr_err("can't find conn. for tid %u.\n", tid);
+		target_err("can't find conn. for tid %u.\n", tid);
 		goto rel_skb;
 	}
 
@@ -1989,7 +1958,7 @@ static void cxgbit_rx_cpl(struct cxgbit_device *cdev, struct sk_buff *skb)
 
 	csk = lookup_tid(t, tid);
 	if (unlikely(!csk)) {
-		pr_err("can't find conn. for tid %u.\n", tid);
+		target_err("can't find conn. for tid %u.\n", tid);
 		goto rel_skb;
 	}
 

@@ -179,9 +179,8 @@ cxgbit_ddp_reserve(struct cxgbit_sock *csk, struct cxgbi_task_tag_info *ttinfo,
 	int ret;
 
 	if ((xferlen < DDP_THRESHOLD) || (!sgcnt)) {
-		pr_debug("ppm 0x%p, pgidx %u, xfer %u, sgcnt %u, NO ddp.\n",
-			 ppm, ppm->tformat.pgsz_idx_dflt,
-			 xferlen, ttinfo->nents);
+		target_debug("ppm 0x%p, pgidx %u, xfer %u, sgcnt %u, NO ddp.\n", ppm,
+			     ppm->tformat.pgsz_idx_dflt, xferlen, ttinfo->nents);
 		return -EINVAL;
 	}
 
@@ -204,8 +203,8 @@ cxgbit_ddp_reserve(struct cxgbit_sock *csk, struct cxgbi_task_tag_info *ttinfo,
 	ret = dma_map_sg(&ppm->pdev->dev, sgl, sgcnt, DMA_FROM_DEVICE);
 	sgl->offset = sg_offset;
 	if (!ret) {
-		pr_debug("%s: 0x%x, xfer %u, sgl %u dma mapping err.\n",
-			 __func__, 0, xferlen, sgcnt);
+		target_debug("%s: 0x%x, xfer %u, sgl %u dma mapping err.\n", __func__, 0, xferlen,
+			     sgcnt);
 		goto rel_ppods;
 	}
 
@@ -247,8 +246,8 @@ cxgbit_get_r2t_ttt(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 
 	ret = cxgbit_ddp_reserve(csk, ttinfo, cmd->se_cmd.data_length);
 	if (ret < 0) {
-		pr_debug("csk 0x%p, cmd 0x%p, xfer len %u, sgcnt %u no ddp.\n",
-			 csk, cmd, cmd->se_cmd.data_length, ttinfo->nents);
+		target_debug("csk 0x%p, cmd 0x%p, xfer len %u, sgcnt %u no ddp.\n", csk, cmd,
+			     cmd->se_cmd.data_length, ttinfo->nents);
 
 		ttinfo->sgl = NULL;
 		ttinfo->nents = 0;
@@ -256,7 +255,7 @@ cxgbit_get_r2t_ttt(struct iscsit_conn *conn, struct iscsit_cmd *cmd,
 		ccmd->release = true;
 	}
 out:
-	pr_debug("cdev 0x%p, cmd 0x%p, tag 0x%x\n", cdev, cmd, ttinfo->tag);
+	target_debug("cdev 0x%p, cmd 0x%p, tag 0x%x\n", cdev, cmd, ttinfo->tag);
 	r2t->targ_xfer_tag = ttinfo->tag;
 }
 
@@ -301,7 +300,7 @@ int cxgbit_ddp_init(struct cxgbit_device *cdev)
 	int ret, i;
 
 	if (!lldi->vr->iscsi.size) {
-		pr_warn("%s, iscsi NOT enabled, check config!\n", ndev->name);
+		target_warn("%s, iscsi NOT enabled, check config!\n", ndev->name);
 		return -EACCES;
 	}
 

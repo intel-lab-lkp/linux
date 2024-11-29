@@ -42,7 +42,7 @@ static int sas_get_pr_transport_id(
 	/* Skip over 'naa. prefix */
 	ret = hex2bin(&buf[4], &nacl->initiatorname[4], 8);
 	if (ret) {
-		pr_debug("%s: invalid hex string\n", __func__);
+		target_debug("%s: invalid hex string\n", __func__);
 		return ret;
 	}
 
@@ -70,7 +70,7 @@ static int fc_get_pr_transport_id(
 		}
 		ret = hex2bin(&buf[off++], &ptr[i], 1);
 		if (ret < 0) {
-			pr_debug("%s: invalid hex string\n", __func__);
+			target_debug("%s: invalid hex string\n", __func__);
 			return ret;
 		}
 		i += 2;
@@ -90,7 +90,7 @@ static int sbp_get_pr_transport_id(
 
 	ret = hex2bin(&buf[8], nacl->initiatorname, 8);
 	if (ret) {
-		pr_debug("%s: invalid hex string\n", __func__);
+		target_debug("%s: invalid hex string\n", __func__);
 		return ret;
 	}
 
@@ -118,7 +118,7 @@ static int srp_get_pr_transport_id(
 	memset(buf + 8, 0, leading_zero_bytes);
 	rc = hex2bin(buf + 8 + leading_zero_bytes, p, count);
 	if (rc < 0) {
-		pr_debug("hex2bin failed for %s: %d\n", p, rc);
+		target_debug("hex2bin failed for %s: %d\n", p, rc);
 		return rc;
 	}
 
@@ -280,8 +280,9 @@ static char *iscsi_parse_pr_out_transport_id(
 	 *            Reserved
 	 */
 	if ((format_code != 0x00) && (format_code != 0x40)) {
-		pr_err("Illegal format code: 0x%02x for iSCSI"
-			" Initiator Transport ID\n", format_code);
+		target_err("Illegal format code: 0x%02x for iSCSI"
+			   " Initiator Transport ID\n",
+			   format_code);
 		return NULL;
 	}
 	/*
@@ -303,9 +304,9 @@ static char *iscsi_parse_pr_out_transport_id(
 	if (format_code == 0x40) {
 		p = strstr(&buf[4], ",i,0x");
 		if (!p) {
-			pr_err("Unable to locate \",i,0x\" separator"
-				" for Initiator port identifier: %s\n",
-				&buf[4]);
+			target_err("Unable to locate \",i,0x\" separator"
+				   " for Initiator port identifier: %s\n",
+				   &buf[4]);
 			return NULL;
 		}
 		*p = '\0'; /* Terminate iSCSI Name */
@@ -354,7 +355,7 @@ int target_get_pr_transport_id_len(struct se_node_acl *nacl,
 	case SCSI_PROTOCOL_ISCSI:
 		return iscsi_get_pr_transport_id_len(nacl, pr_reg, format_code);
 	default:
-		pr_err("Unknown proto_id: 0x%02x\n", nacl->se_tpg->proto_id);
+		target_err("Unknown proto_id: 0x%02x\n", nacl->se_tpg->proto_id);
 		return -EINVAL;
 	}
 
@@ -382,7 +383,7 @@ int target_get_pr_transport_id(struct se_node_acl *nacl,
 		return iscsi_get_pr_transport_id(nacl, pr_reg, format_code,
 				buf);
 	default:
-		pr_err("Unknown proto_id: 0x%02x\n", nacl->se_tpg->proto_id);
+		target_err("Unknown proto_id: 0x%02x\n", nacl->se_tpg->proto_id);
 		return -EINVAL;
 	}
 }
@@ -409,7 +410,7 @@ const char *target_parse_pr_out_transport_id(struct se_portal_group *tpg,
 		return iscsi_parse_pr_out_transport_id(tpg, buf, out_tid_len,
 					port_nexus_ptr);
 	default:
-		pr_err("Unknown proto_id: 0x%02x\n", tpg->proto_id);
+		target_err("Unknown proto_id: 0x%02x\n", tpg->proto_id);
 		return NULL;
 	}
 

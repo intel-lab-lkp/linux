@@ -62,8 +62,9 @@ spc_find_scsi_transport_vd(int proto_id)
 	case SCSI_PROTOCOL_SRP:
 		return SCSI_VERSION_DESCRIPTOR_SRP;
 	default:
-		pr_warn("Cannot find VERSION DESCRIPTOR value for unknown SCSI"
-			" transport PROTOCOL IDENTIFIER %#x\n", proto_id);
+		target_warn("Cannot find VERSION DESCRIPTOR value for unknown SCSI"
+			    " transport PROTOCOL IDENTIFIER %#x\n",
+			    proto_id);
 		return 0;
 	}
 }
@@ -742,7 +743,7 @@ spc_emulate_inquiry(struct se_cmd *cmd)
 
 	buf = kzalloc(SE_INQUIRY_BUF, GFP_KERNEL);
 	if (!buf) {
-		pr_err("Unable to allocate response buffer for INQUIRY\n");
+		target_err("Unable to allocate response buffer for INQUIRY\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -750,8 +751,7 @@ spc_emulate_inquiry(struct se_cmd *cmd)
 
 	if (!(cdb[1] & 0x1)) {
 		if (cdb[2]) {
-			pr_err("INQUIRY with EVPD==0 but PAGE CODE=%02x\n",
-			       cdb[2]);
+			target_err("INQUIRY with EVPD==0 but PAGE CODE=%02x\n", cdb[2]);
 			ret = TCM_INVALID_CDB_FIELD;
 			goto out;
 		}
@@ -770,7 +770,7 @@ spc_emulate_inquiry(struct se_cmd *cmd)
 		}
 	}
 
-	pr_debug("Unknown VPD Code: 0x%02x\n", cdb[2]);
+	target_debug("Unknown VPD Code: 0x%02x\n", cdb[2]);
 	ret = TCM_INVALID_CDB_FIELD;
 
 out:
@@ -1085,7 +1085,7 @@ static sense_reason_t spc_emulate_modesense(struct se_cmd *cmd)
 
 	if (page == 0x3f) {
 		if (subpage != 0x00 && subpage != 0xff) {
-			pr_warn("MODE_SENSE: Invalid subpage code: 0x%02x\n", subpage);
+			target_warn("MODE_SENSE: Invalid subpage code: 0x%02x\n", subpage);
 			return TCM_INVALID_CDB_FIELD;
 		}
 
@@ -1119,8 +1119,8 @@ static sense_reason_t spc_emulate_modesense(struct se_cmd *cmd)
 	 *  - obsolete page 03h "format parameters" (checked by Solaris)
 	 */
 	if (page != 0x03)
-		pr_err("MODE SENSE: unimplemented page/subpage: 0x%02x/0x%02x\n",
-		       page, subpage);
+		target_err("MODE SENSE: unimplemented page/subpage: 0x%02x/0x%02x\n", page,
+			   subpage);
 
 	return TCM_UNKNOWN_MODE_PAGE;
 
@@ -1212,8 +1212,8 @@ static sense_reason_t spc_emulate_request_sense(struct se_cmd *cmd)
 	memset(buf, 0, SE_SENSE_BUF);
 
 	if (cdb[1] & 0x01) {
-		pr_err("REQUEST_SENSE description emulation not"
-			" supported\n");
+		target_err("REQUEST_SENSE description emulation not"
+			   " supported\n");
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -2125,11 +2125,10 @@ spc_rsoc_get_descr(struct se_cmd *cmd, struct target_opcode_descriptor **opcode)
 	*opcode = NULL;
 
 	if (opts > 3) {
-		pr_debug("TARGET_CORE[%s]: Invalid REPORT SUPPORTED OPERATION CODES"
-			" with unsupported REPORTING OPTIONS %#x for 0x%08llx from %s\n",
-			cmd->se_tfo->fabric_name, opts,
-			cmd->se_lun->unpacked_lun,
-			sess->se_node_acl->initiatorname);
+		target_debug("TARGET_CORE[%s]: Invalid REPORT SUPPORTED OPERATION CODES"
+			     " with unsupported REPORTING OPTIONS %#x for 0x%08llx from %s\n",
+			     cmd->se_tfo->fabric_name, opts, cmd->se_lun->unpacked_lun,
+			     sess->se_node_acl->initiatorname);
 		return TCM_INVALID_CDB_FIELD;
 	}
 

@@ -235,9 +235,8 @@ void cxgbit_push_tx_frames(struct cxgbit_sock *csk)
 		}
 
 		if (csk->wr_cred < credits_needed) {
-			pr_debug("csk 0x%p, skb %u/%u, wr %d < %u.\n",
-				 csk, skb->len, skb->data_len,
-				 credits_needed, csk->wr_cred);
+			target_debug("csk 0x%p, skb %u/%u, wr %d < %u.\n", csk, skb->len,
+				     skb->data_len, credits_needed, csk->wr_cred);
 			break;
 		}
 		__skb_unlink(skb, &csk->txq);
@@ -246,9 +245,8 @@ void cxgbit_push_tx_frames(struct cxgbit_sock *csk)
 		csk->wr_cred -= credits_needed;
 		csk->wr_una_cred += credits_needed;
 
-		pr_debug("csk 0x%p, skb %u/%u, wr %d, left %u, unack %u.\n",
-			 csk, skb->len, skb->data_len, credits_needed,
-			 csk->wr_cred, csk->wr_una_cred);
+		target_debug("csk 0x%p, skb %u/%u, wr %d, left %u, unack %u.\n", csk, skb->len,
+			     skb->data_len, credits_needed, csk->wr_cred, csk->wr_una_cred);
 
 		if (likely(cxgbit_skcb_flags(skb) & SKCBF_TX_NEED_HDR)) {
 			len += cxgbit_skcb_tx_extralen(skb);
@@ -276,8 +274,7 @@ void cxgbit_push_tx_frames(struct cxgbit_sock *csk)
 		t4_set_arp_err_handler(skb, csk,
 				       cxgbit_arp_failure_skb_discard);
 
-		pr_debug("csk 0x%p,%u, skb 0x%p, %u.\n",
-			 csk, csk->tid, skb, len);
+		target_debug("csk 0x%p,%u, skb 0x%p, %u.\n", csk, csk->tid, skb, len);
 
 		cxgbit_l2t_send(csk->com.cdev, skb, csk->l2t);
 	}
@@ -600,7 +597,7 @@ static int cxgbit_set_digest(struct cxgbit_sock *csk)
 
 	param = iscsi_find_param_from_key(HEADERDIGEST, conn->param_list);
 	if (!param) {
-		pr_err("param not found key %s\n", HEADERDIGEST);
+		target_err("param not found key %s\n", HEADERDIGEST);
 		return -1;
 	}
 
@@ -610,7 +607,7 @@ static int cxgbit_set_digest(struct cxgbit_sock *csk)
 	param = iscsi_find_param_from_key(DATADIGEST, conn->param_list);
 	if (!param) {
 		csk->submode = 0;
-		pr_err("param not found key %s\n", DATADIGEST);
+		target_err("param not found key %s\n", DATADIGEST);
 		return -1;
 	}
 
@@ -638,7 +635,7 @@ static int cxgbit_set_iso_npdu(struct cxgbit_sock *csk)
 		param = iscsi_find_param_from_key(MAXBURSTLENGTH,
 						  conn->param_list);
 		if (!param) {
-			pr_err("param not found key %s\n", MAXBURSTLENGTH);
+			target_err("param not found key %s\n", MAXBURSTLENGTH);
 			return -1;
 		}
 
@@ -685,7 +682,7 @@ static int cxgbit_seq_pdu_inorder(struct cxgbit_sock *csk)
 		param = iscsi_find_param_from_key(DATASEQUENCEINORDER,
 						  conn->param_list);
 		if (!param) {
-			pr_err("param not found key %s\n", DATASEQUENCEINORDER);
+			target_err("param not found key %s\n", DATASEQUENCEINORDER);
 			return -1;
 		}
 
@@ -695,7 +692,7 @@ static int cxgbit_seq_pdu_inorder(struct cxgbit_sock *csk)
 		param = iscsi_find_param_from_key(DATAPDUINORDER,
 						  conn->param_list);
 		if (!param) {
-			pr_err("param not found key %s\n", DATAPDUINORDER);
+			target_err("param not found key %s\n", DATAPDUINORDER);
 			return -1;
 		}
 
@@ -731,7 +728,7 @@ static int cxgbit_set_params(struct iscsit_conn *conn)
 		param = iscsi_find_param_from_key(ERRORRECOVERYLEVEL,
 						  conn->param_list);
 		if (!param) {
-			pr_err("param not found key %s\n", ERRORRECOVERYLEVEL);
+			target_err("param not found key %s\n", ERRORRECOVERYLEVEL);
 			return -1;
 		}
 		if (kstrtou8(param->value, 0, &erl) < 0)
@@ -841,7 +838,7 @@ static struct iscsit_cmd *cxgbit_allocate_cmd(struct cxgbit_sock *csk)
 
 	cmd = iscsit_allocate_cmd(conn, TASK_INTERRUPTIBLE);
 	if (!cmd) {
-		pr_err("Unable to allocate iscsit_cmd + cxgbit_cmd\n");
+		target_err("Unable to allocate iscsit_cmd + cxgbit_cmd\n");
 		return NULL;
 	}
 
@@ -861,11 +858,11 @@ cxgbit_handle_immediate_data(struct iscsit_cmd *cmd, struct iscsi_scsi_req *hdr,
 	struct cxgbit_lro_pdu_cb *pdu_cb = cxgbit_rx_pdu_cb(csk->skb);
 
 	if (pdu_cb->flags & PDUCBF_RX_DCRC_ERR) {
-		pr_err("ImmediateData CRC32C DataDigest error\n");
+		target_err("ImmediateData CRC32C DataDigest error\n");
 		if (!conn->sess->sess_ops->ErrorRecoveryLevel) {
-			pr_err("Unable to recover from"
-			       " Immediate Data digest failure while"
-			       " in ERL=0.\n");
+			target_err("Unable to recover from"
+				   " Immediate Data digest failure while"
+				   " in ERL=0.\n");
 			iscsit_reject_cmd(cmd, ISCSI_REASON_DATA_DIGEST_ERROR,
 					  (unsigned char *)hdr);
 			return IMMEDIATE_DATA_CANNOT_RECOVER;
@@ -1037,19 +1034,17 @@ static int cxgbit_handle_iscsi_dataout(struct cxgbit_sock *csk)
 	}
 
 	if (pdu_cb->flags & PDUCBF_RX_DCRC_ERR) {
-		pr_err("ITT: 0x%08x, Offset: %u, Length: %u,"
-		       " DataSN: 0x%08x\n",
-		       hdr->itt, hdr->offset, data_len,
-		       hdr->datasn);
+		target_err("ITT: 0x%08x, Offset: %u, Length: %u,"
+			   " DataSN: 0x%08x\n",
+			   hdr->itt, hdr->offset, data_len, hdr->datasn);
 
 		dcrc_err = true;
 		goto check_payload;
 	}
 
-	pr_debug("DataOut data_len: %u, "
-		"write_data_done: %u, data_length: %u\n",
-		  data_len,  cmd->write_data_done,
-		  cmd->se_cmd.data_length);
+	target_debug("DataOut data_len: %u, "
+		     "write_data_done: %u, data_length: %u\n",
+		     data_len, cmd->write_data_done, cmd->se_cmd.data_length);
 
 	if (!(pdu_cb->flags & PDUCBF_RX_DATA_DDPD)) {
 		u32 skip = data_offset % PAGE_SIZE;
@@ -1099,9 +1094,9 @@ static int cxgbit_handle_nop_out(struct cxgbit_sock *csk, struct iscsit_cmd *cmd
 
 	if (pdu_cb->flags & PDUCBF_RX_DCRC_ERR) {
 		if (!conn->sess->sess_ops->ErrorRecoveryLevel) {
-			pr_err("Unable to recover from"
-			       " NOPOUT Ping DataCRC failure while in"
-			       " ERL=0.\n");
+			target_err("Unable to recover from"
+				   " NOPOUT Ping DataCRC failure while in"
+				   " ERL=0.\n");
 			ret = -1;
 			goto out;
 		} else {
@@ -1109,9 +1104,10 @@ static int cxgbit_handle_nop_out(struct cxgbit_sock *csk, struct iscsit_cmd *cmd
 			 * drop this PDU and let the
 			 * initiator plug the CmdSN gap.
 			 */
-			pr_info("Dropping NOPOUT"
-				" Command CmdSN: 0x%08x due to"
-				" DataCRC error.\n", hdr->cmdsn);
+			target_info("Dropping NOPOUT"
+				    " Command CmdSN: 0x%08x due to"
+				    " DataCRC error.\n",
+				    hdr->cmdsn);
 			ret = 0;
 			goto out;
 		}
@@ -1123,8 +1119,8 @@ static int cxgbit_handle_nop_out(struct cxgbit_sock *csk, struct iscsit_cmd *cmd
 	if (payload_length && hdr->ttt == cpu_to_be32(0xFFFFFFFF)) {
 		ping_data = kzalloc(payload_length + 1, GFP_KERNEL);
 		if (!ping_data) {
-			pr_err("Unable to allocate memory for"
-				" NOPOUT ping data.\n");
+			target_err("Unable to allocate memory for"
+				   " NOPOUT ping data.\n");
 			ret = -1;
 			goto out;
 		}
@@ -1139,9 +1135,10 @@ static int cxgbit_handle_nop_out(struct cxgbit_sock *csk, struct iscsit_cmd *cmd
 		cmd->buf_ptr = ping_data;
 		cmd->buf_ptr_size = payload_length;
 
-		pr_debug("Got %u bytes of NOPOUT ping"
-			" data.\n", payload_length);
-		pr_debug("Ping Data: \"%s\"\n", ping_data);
+		target_debug("Got %u bytes of NOPOUT ping"
+			     " data.\n",
+			     payload_length);
+		target_debug("Ping Data: \"%s\"\n", ping_data);
 	}
 
 	return iscsit_process_nop_out(conn, cmd, hdr);
@@ -1167,18 +1164,19 @@ cxgbit_handle_text_cmd(struct cxgbit_sock *csk, struct iscsit_cmd *cmd)
 
 	if (pdu_cb->flags & PDUCBF_RX_DCRC_ERR) {
 		if (!conn->sess->sess_ops->ErrorRecoveryLevel) {
-			pr_err("Unable to recover from"
-			       " Text Data digest failure while in"
-			       " ERL=0.\n");
+			target_err("Unable to recover from"
+				   " Text Data digest failure while in"
+				   " ERL=0.\n");
 			goto reject;
 		} else {
 			/*
 			 * drop this PDU and let the
 			 * initiator plug the CmdSN gap.
 			 */
-			pr_info("Dropping Text"
-				" Command CmdSN: 0x%08x due to"
-				" DataCRC error.\n", hdr->cmdsn);
+			target_info("Dropping Text"
+				    " Command CmdSN: 0x%08x due to"
+				    " DataCRC error.\n",
+				    hdr->cmdsn);
 			return 0;
 		}
 	}
@@ -1186,8 +1184,8 @@ cxgbit_handle_text_cmd(struct cxgbit_sock *csk, struct iscsit_cmd *cmd)
 	if (payload_length) {
 		text_in = kzalloc(payload_length, GFP_KERNEL);
 		if (!text_in) {
-			pr_err("Unable to allocate text_in of payload_length: %u\n",
-			       payload_length);
+			target_err("Unable to allocate text_in of payload_length: %u\n",
+				   payload_length);
 			return -ENOMEM;
 		}
 		skb_copy_bits(csk->skb, pdu_cb->doffset,
@@ -1270,7 +1268,7 @@ static int cxgbit_target_rx_opcode(struct cxgbit_sock *csk)
 		ret = iscsit_handle_snack(conn, (unsigned char *)hdr);
 		break;
 	default:
-		pr_err("Got unknown iSCSI OpCode: 0x%02x\n", opcode);
+		target_err("Got unknown iSCSI OpCode: 0x%02x\n", opcode);
 		dump_stack();
 		break;
 	}
@@ -1303,8 +1301,9 @@ static int cxgbit_rx_opcode(struct cxgbit_sock *csk)
 	if (conn->sess->sess_ops->SessionType &&
 	    ((!(opcode & ISCSI_OP_TEXT)) ||
 	     (!(opcode & ISCSI_OP_LOGOUT)))) {
-		pr_err("Received illegal iSCSI Opcode: 0x%02x"
-			" while in Discovery Session, rejecting.\n", opcode);
+		target_err("Received illegal iSCSI Opcode: 0x%02x"
+			   " while in Discovery Session, rejecting.\n",
+			   opcode);
 		iscsit_add_reject(conn, ISCSI_REASON_PROTOCOL_ERROR,
 				  (unsigned char *)hdr);
 		goto transport_err;
@@ -1329,10 +1328,10 @@ static int cxgbit_rx_login_pdu(struct cxgbit_sock *csk)
 	login_req = (struct iscsi_login_req *)login->req;
 	memcpy(login_req, pdu_cb->hdr, sizeof(*login_req));
 
-	pr_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x,"
-		" CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %hu, Length: %u\n",
-		login_req->flags, login_req->itt, login_req->cmdsn,
-		login_req->exp_statsn, login_req->cid, pdu_cb->dlen);
+	target_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x,"
+		     " CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %hu, Length: %u\n",
+		     login_req->flags, login_req->itt, login_req->cmdsn, login_req->exp_statsn,
+		     login_req->cid, pdu_cb->dlen);
 	/*
 	 * Setup the initial iscsi_login values from the leading
 	 * login request PDU.
@@ -1388,21 +1387,19 @@ static void cxgbit_lro_skb_dump(struct sk_buff *skb)
 	struct cxgbit_lro_pdu_cb *pdu_cb = cxgbit_skb_lro_pdu_cb(skb, 0);
 	u8 i;
 
-	pr_info("skb 0x%p, head 0x%p, 0x%p, len %u,%u, frags %u.\n",
-		skb, skb->head, skb->data, skb->len, skb->data_len,
-		ssi->nr_frags);
-	pr_info("skb 0x%p, lro_cb, csk 0x%p, pdu %u, %u.\n",
-		skb, lro_cb->csk, lro_cb->pdu_idx, lro_cb->pdu_totallen);
+	target_info("skb 0x%p, head 0x%p, 0x%p, len %u,%u, frags %u.\n", skb, skb->head, skb->data,
+		    skb->len, skb->data_len, ssi->nr_frags);
+	target_info("skb 0x%p, lro_cb, csk 0x%p, pdu %u, %u.\n", skb, lro_cb->csk, lro_cb->pdu_idx,
+		    lro_cb->pdu_totallen);
 
 	for (i = 0; i < lro_cb->pdu_idx; i++, pdu_cb++)
-		pr_info("skb 0x%p, pdu %d, %u, f 0x%x, seq 0x%x, dcrc 0x%x, "
-			"frags %u.\n",
-			skb, i, pdu_cb->pdulen, pdu_cb->flags, pdu_cb->seq,
-			pdu_cb->ddigest, pdu_cb->frags);
+		target_info("skb 0x%p, pdu %d, %u, f 0x%x, seq 0x%x, dcrc 0x%x, "
+			    "frags %u.\n",
+			    skb, i, pdu_cb->pdulen, pdu_cb->flags, pdu_cb->seq, pdu_cb->ddigest,
+			    pdu_cb->frags);
 	for (i = 0; i < ssi->nr_frags; i++)
-		pr_info("skb 0x%p, frag %d, off %u, sz %u.\n",
-			skb, i, skb_frag_off(&ssi->frags[i]),
-			skb_frag_size(&ssi->frags[i]));
+		target_info("skb 0x%p, frag %d, off %u, sz %u.\n", skb, i,
+			    skb_frag_off(&ssi->frags[i]), skb_frag_size(&ssi->frags[i]));
 }
 
 static void cxgbit_lro_hskb_reset(struct cxgbit_sock *csk)
@@ -1539,8 +1536,8 @@ static int cxgbit_t5_rx_lro_skb(struct cxgbit_sock *csk, struct sk_buff *skb)
 
 	if ((pdu_cb->flags & PDUCBF_RX_HDR) &&
 	    (pdu_cb->seq != csk->rcv_nxt)) {
-		pr_info("csk 0x%p, tid 0x%x, seq 0x%x != 0x%x.\n",
-			csk, csk->tid, pdu_cb->seq, csk->rcv_nxt);
+		target_info("csk 0x%p, tid 0x%x, seq 0x%x != 0x%x.\n", csk, csk->tid, pdu_cb->seq,
+			    csk->rcv_nxt);
 		cxgbit_lro_skb_dump(skb);
 		return ret;
 	}

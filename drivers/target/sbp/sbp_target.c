@@ -201,7 +201,7 @@ static struct sbp_session *sbp_session_create(
 					     TARGET_PROT_NORMAL, guid_str,
 					     sess, NULL);
 	if (IS_ERR(sess->se_sess)) {
-		pr_err("failed to init se_session\n");
+		target_err("failed to init se_session\n");
 		ret = PTR_ERR(sess->se_sess);
 		kfree(sess);
 		return ERR_PTR(ret);
@@ -271,8 +271,8 @@ static void sbp_management_request_login(
 	unpacked_lun = sbp_get_lun_from_tpg(tpg,
 			LOGIN_ORB_LUN(be32_to_cpu(req->orb.misc)), &ret);
 	if (ret) {
-		pr_notice("login to unknown LUN: %d\n",
-			LOGIN_ORB_LUN(be32_to_cpu(req->orb.misc)));
+		target_notice("login to unknown LUN: %d\n",
+			      LOGIN_ORB_LUN(be32_to_cpu(req->orb.misc)));
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -282,7 +282,7 @@ static void sbp_management_request_login(
 
 	ret = read_peer_guid(&guid, req);
 	if (ret != RCODE_COMPLETE) {
-		pr_warn("failed to read peer GUID: %d\n", ret);
+		target_warn("failed to read peer GUID: %d\n", ret);
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_TRANSPORT_FAILURE) |
@@ -290,14 +290,13 @@ static void sbp_management_request_login(
 		return;
 	}
 
-	pr_notice("mgt_agent LOGIN to LUN %d from %016llx\n",
-		unpacked_lun, guid);
+	target_notice("mgt_agent LOGIN to LUN %d from %016llx\n", unpacked_lun, guid);
 
 	sess = sbp_session_find_by_guid(tpg, guid);
 	if (sess) {
 		login = sbp_login_find_by_lun(sess, unpacked_lun);
 		if (login) {
-			pr_notice("initiator already logged-in\n");
+			target_notice("initiator already logged-in\n");
 
 			/*
 			 * SBP-2 R4 says we should return access denied, but
@@ -324,7 +323,7 @@ static void sbp_management_request_login(
 	 */
 	if (LOGIN_ORB_EXCLUSIVE(be32_to_cpu(req->orb.misc)) &&
 			sbp_login_count_all_by_lun(tpg, unpacked_lun, 0)) {
-		pr_warn("refusing exclusive login with other active logins\n");
+		target_warn("refusing exclusive login with other active logins\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -337,7 +336,7 @@ static void sbp_management_request_login(
 	 * reject with access_denied if any exclusive logins present
 	 */
 	if (sbp_login_count_all_by_lun(tpg, unpacked_lun, 1)) {
-		pr_warn("refusing login while another exclusive login present\n");
+		target_warn("refusing login while another exclusive login present\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -351,7 +350,7 @@ static void sbp_management_request_login(
 	 */
 	if (sbp_login_count_all_by_lun(tpg, unpacked_lun, 0) >=
 			tport->max_logins_per_lun) {
-		pr_warn("max number of logins reached\n");
+		target_warn("max number of logins reached\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -394,7 +393,7 @@ static void sbp_management_request_login(
 
 	login = kmalloc(sizeof(*login), GFP_KERNEL);
 	if (!login) {
-		pr_err("failed to allocate login descriptor\n");
+		target_err("failed to allocate login descriptor\n");
 
 		sbp_session_release(sess, true);
 
@@ -413,7 +412,7 @@ static void sbp_management_request_login(
 	login->tgt_agt = sbp_target_agent_register(login);
 	if (IS_ERR(login->tgt_agt)) {
 		ret = PTR_ERR(login->tgt_agt);
-		pr_err("failed to map command block handler: %d\n", ret);
+		target_err("failed to map command block handler: %d\n", ret);
 
 		sbp_session_release(sess, true);
 		kfree(login);
@@ -431,7 +430,7 @@ static void sbp_management_request_login(
 already_logged_in:
 	response = kzalloc(sizeof(*response), GFP_KERNEL);
 	if (!response) {
-		pr_err("failed to allocate login response block\n");
+		target_err("failed to allocate login response block\n");
 
 		sbp_login_release(login, true);
 
@@ -456,7 +455,7 @@ already_logged_in:
 		sbp2_pointer_to_addr(&req->orb.ptr2), response,
 		login_response_len);
 	if (ret != RCODE_COMPLETE) {
-		pr_debug("failed to write login response block: %x\n", ret);
+		target_debug("failed to write login response block: %x\n", ret);
 
 		kfree(response);
 		sbp_login_release(login, true);
@@ -478,7 +477,7 @@ static void sbp_management_request_query_logins(
 	struct sbp_management_agent *agent, struct sbp_management_request *req,
 	int *status_data_size)
 {
-	pr_notice("QUERY LOGINS not implemented\n");
+	target_notice("QUERY LOGINS not implemented\n");
 	/* FIXME: implement */
 
 	req->status.status = cpu_to_be32(
@@ -498,7 +497,7 @@ static void sbp_management_request_reconnect(
 
 	ret = read_peer_guid(&guid, req);
 	if (ret != RCODE_COMPLETE) {
-		pr_warn("failed to read peer GUID: %d\n", ret);
+		target_warn("failed to read peer GUID: %d\n", ret);
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_TRANSPORT_FAILURE) |
@@ -506,13 +505,13 @@ static void sbp_management_request_reconnect(
 		return;
 	}
 
-	pr_notice("mgt_agent RECONNECT from %016llx\n", guid);
+	target_notice("mgt_agent RECONNECT from %016llx\n", guid);
 
 	login = sbp_login_find_by_id(tpg,
 		RECONNECT_ORB_LOGIN_ID(be32_to_cpu(req->orb.misc)));
 
 	if (!login) {
-		pr_err("mgt_agent RECONNECT unknown login ID\n");
+		target_err("mgt_agent RECONNECT unknown login ID\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -521,7 +520,7 @@ static void sbp_management_request_reconnect(
 	}
 
 	if (login->sess->guid != guid) {
-		pr_err("mgt_agent RECONNECT login GUID doesn't match\n");
+		target_err("mgt_agent RECONNECT login GUID doesn't match\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -558,7 +557,7 @@ static void sbp_management_request_logout(
 
 	login = sbp_login_find_by_id(tpg, id);
 	if (!login) {
-		pr_warn("cannot find login: %d\n", id);
+		target_warn("cannot find login: %d\n", id);
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -566,11 +565,10 @@ static void sbp_management_request_logout(
 		return;
 	}
 
-	pr_info("mgt_agent LOGOUT from LUN %d session %d\n",
-		login->login_lun, login->login_id);
+	target_info("mgt_agent LOGOUT from LUN %d session %d\n", login->login_lun, login->login_id);
 
 	if (req->node_addr != login->sess->node_id) {
-		pr_warn("logout from different node ID\n");
+		target_warn("logout from different node ID\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -603,8 +601,7 @@ static void session_check_for_reset(struct sbp_session *sess)
 	}
 
 	if (!card_valid || (sess->generation != sess->card->generation)) {
-		pr_info("Waiting for reconnect from node: %016llx\n",
-				sess->guid);
+		target_info("Waiting for reconnect from node: %016llx\n", sess->guid);
 
 		sess->node_id = -1;
 		sess->reconnect_expires = get_jiffies_64() +
@@ -619,7 +616,7 @@ static void session_reconnect_expired(struct sbp_session *sess)
 	struct sbp_login_descriptor *login, *temp;
 	LIST_HEAD(login_list);
 
-	pr_info("Reconnect timer expired for node: %016llx\n", sess->guid);
+	target_info("Reconnect timer expired for node: %016llx\n", sess->guid);
 
 	spin_lock_bh(&sess->lock);
 	list_for_each_entry_safe(login, temp, &sess->login_list, link) {
@@ -672,7 +669,7 @@ static int tgt_agent_rw_agent_state(struct fw_card *card, int tcode, void *data,
 
 	switch (tcode) {
 	case TCODE_READ_QUADLET_REQUEST:
-		pr_debug("tgt_agent AGENT_STATE READ\n");
+		target_debug("tgt_agent AGENT_STATE READ\n");
 
 		spin_lock_bh(&agent->lock);
 		state = agent->state;
@@ -696,7 +693,7 @@ static int tgt_agent_rw_agent_reset(struct fw_card *card, int tcode, void *data,
 {
 	switch (tcode) {
 	case TCODE_WRITE_QUADLET_REQUEST:
-		pr_debug("tgt_agent AGENT_RESET\n");
+		target_debug("tgt_agent AGENT_RESET\n");
 		spin_lock_bh(&agent->lock);
 		agent->state = AGENT_STATE_RESET;
 		spin_unlock_bh(&agent->lock);
@@ -718,7 +715,7 @@ static int tgt_agent_rw_orb_pointer(struct fw_card *card, int tcode, void *data,
 		if (agent->state != AGENT_STATE_SUSPENDED &&
 				agent->state != AGENT_STATE_RESET) {
 			spin_unlock_bh(&agent->lock);
-			pr_notice("Ignoring ORB_POINTER write while active.\n");
+			target_notice("Ignoring ORB_POINTER write while active.\n");
 			return RCODE_CONFLICT_ERROR;
 		}
 		agent->state = AGENT_STATE_ACTIVE;
@@ -727,15 +724,14 @@ static int tgt_agent_rw_orb_pointer(struct fw_card *card, int tcode, void *data,
 		agent->orb_pointer = sbp2_pointer_to_addr(ptr);
 		agent->doorbell = false;
 
-		pr_debug("tgt_agent ORB_POINTER write: 0x%llx\n",
-				agent->orb_pointer);
+		target_debug("tgt_agent ORB_POINTER write: 0x%llx\n", agent->orb_pointer);
 
 		queue_work(system_unbound_wq, &agent->work);
 
 		return RCODE_COMPLETE;
 
 	case TCODE_READ_BLOCK_REQUEST:
-		pr_debug("tgt_agent ORB_POINTER READ\n");
+		target_debug("tgt_agent ORB_POINTER READ\n");
 		spin_lock_bh(&agent->lock);
 		addr_to_sbp2_pointer(agent->orb_pointer, ptr);
 		spin_unlock_bh(&agent->lock);
@@ -754,7 +750,7 @@ static int tgt_agent_rw_doorbell(struct fw_card *card, int tcode, void *data,
 		spin_lock_bh(&agent->lock);
 		if (agent->state != AGENT_STATE_SUSPENDED) {
 			spin_unlock_bh(&agent->lock);
-			pr_debug("Ignoring DOORBELL while active.\n");
+			target_debug("Ignoring DOORBELL while active.\n");
 			return RCODE_CONFLICT_ERROR;
 		}
 		agent->state = AGENT_STATE_ACTIVE;
@@ -762,7 +758,7 @@ static int tgt_agent_rw_doorbell(struct fw_card *card, int tcode, void *data,
 
 		agent->doorbell = true;
 
-		pr_debug("tgt_agent DOORBELL\n");
+		target_debug("tgt_agent DOORBELL\n");
 
 		queue_work(system_unbound_wq, &agent->work);
 
@@ -781,7 +777,7 @@ static int tgt_agent_rw_unsolicited_status_enable(struct fw_card *card,
 {
 	switch (tcode) {
 	case TCODE_WRITE_QUADLET_REQUEST:
-		pr_debug("tgt_agent UNSOLICITED_STATUS_ENABLE\n");
+		target_debug("tgt_agent UNSOLICITED_STATUS_ENABLE\n");
 		/* ignored as we don't send unsolicited status */
 		return RCODE_COMPLETE;
 
@@ -808,14 +804,13 @@ static void tgt_agent_rw(struct fw_card *card, struct fw_request *request,
 	spin_unlock_bh(&sess->lock);
 
 	if (generation != sess_gen) {
-		pr_notice("ignoring request with wrong generation\n");
+		target_notice("ignoring request with wrong generation\n");
 		rcode = RCODE_TYPE_ERROR;
 		goto out;
 	}
 
 	if (source != sess_node) {
-		pr_notice("ignoring request from foreign node (%x != %x)\n",
-				source, sess_node);
+		target_notice("ignoring request from foreign node (%x != %x)\n", source, sess_node);
 		rcode = RCODE_TYPE_ERROR;
 		goto out;
 	}
@@ -856,14 +851,12 @@ static void tgt_agent_process_work(struct work_struct *work)
 	struct sbp_target_request *req =
 		container_of(work, struct sbp_target_request, work);
 
-	pr_debug("tgt_orb ptr:0x%llx next_ORB:0x%llx data_descriptor:0x%llx misc:0x%x\n",
-			req->orb_pointer,
-			sbp2_pointer_to_addr(&req->orb.next_orb),
-			sbp2_pointer_to_addr(&req->orb.data_descriptor),
-			be32_to_cpu(req->orb.misc));
+	target_debug("tgt_orb ptr:0x%llx next_ORB:0x%llx data_descriptor:0x%llx misc:0x%x\n",
+		     req->orb_pointer, sbp2_pointer_to_addr(&req->orb.next_orb),
+		     sbp2_pointer_to_addr(&req->orb.data_descriptor), be32_to_cpu(req->orb.misc));
 
 	if (req->orb_pointer >> 32)
-		pr_debug("ORB with high bits set\n");
+		target_debug("ORB with high bits set\n");
 
 	switch (ORB_REQUEST_FORMAT(be32_to_cpu(req->orb.misc))) {
 		case 0:/* Format specified by this standard */
@@ -959,7 +952,7 @@ static void tgt_agent_fetch_work(struct work_struct *work)
 				sess->node_id, sess->generation, sess->speed,
 				req->orb_pointer, &req->orb, sizeof(req->orb));
 		if (ret != RCODE_COMPLETE) {
-			pr_debug("tgt_orb fetch failed: %x\n", ret);
+			target_debug("tgt_orb fetch failed: %x\n", ret);
 			req->status.status |= cpu_to_be32(
 					STATUS_BLOCK_SRC(
 						STATUS_SRC_ORB_FINISHED) |
@@ -1120,7 +1113,7 @@ static int sbp_fetch_command(struct sbp_target_request *req)
 		min_t(int, cmd_len, sizeof(req->orb.command_block)));
 
 	if (cmd_len > sizeof(req->orb.command_block)) {
-		pr_debug("sbp_fetch_command: filling in long command\n");
+		target_debug("sbp_fetch_command: filling in long command\n");
 		copy_len = cmd_len - sizeof(req->orb.command_block);
 
 		ret = sbp_run_request_transaction(req,
@@ -1199,22 +1192,21 @@ static void sbp_handle_command(struct sbp_target_request *req)
 
 	ret = sbp_fetch_command(req);
 	if (ret) {
-		pr_debug("sbp_handle_command: fetch command failed: %d\n", ret);
+		target_debug("sbp_handle_command: fetch command failed: %d\n", ret);
 		goto err;
 	}
 
 	ret = sbp_fetch_page_table(req);
 	if (ret) {
-		pr_debug("sbp_handle_command: fetch page table failed: %d\n",
-			ret);
+		target_debug("sbp_handle_command: fetch page table failed: %d\n", ret);
 		goto err;
 	}
 
 	unpacked_lun = req->login->login_lun;
 	sbp_calc_data_length_direction(req, &data_length, &data_dir);
 
-	pr_debug("sbp_handle_command ORB:0x%llx unpacked_lun:%d data_len:%d data_dir:%d\n",
-			req->orb_pointer, unpacked_lun, data_length, data_dir);
+	target_debug("sbp_handle_command ORB:0x%llx unpacked_lun:%d data_len:%d data_dir:%d\n",
+		     req->orb_pointer, unpacked_lun, data_length, data_dir);
 
 	/* only used for printk until we do TMRs */
 	req->se_cmd.tag = req->orb_pointer;
@@ -1260,7 +1252,7 @@ static int sbp_rw_data(struct sbp_target_request *req)
 
 	pg_size = CMDBLK_ORB_PG_SIZE(be32_to_cpu(req->orb.misc));
 	if (pg_size) {
-		pr_err("sbp_run_transaction: page size ignored\n");
+		target_err("sbp_run_transaction: page size ignored\n");
 	}
 
 	spin_lock_bh(&sess->lock);
@@ -1335,13 +1327,12 @@ static int sbp_send_status(struct sbp_target_request *req)
 	rc = sbp_run_request_transaction(req, TCODE_WRITE_BLOCK_REQUEST,
 			login->status_fifo_addr, &req->status, length);
 	if (rc != RCODE_COMPLETE) {
-		pr_debug("sbp_send_status: write failed: 0x%x\n", rc);
+		target_debug("sbp_send_status: write failed: 0x%x\n", rc);
 		ret = -EIO;
 		goto put_ref;
 	}
 
-	pr_debug("sbp_send_status: status write complete for ORB: 0x%llx\n",
-			req->orb_pointer);
+	target_debug("sbp_send_status: status write complete for ORB: 0x%llx\n", req->orb_pointer);
 	/*
 	 * Drop the extra ACK_KREF reference taken by target_submit_cmd()
 	 * ahead of sbp_check_stop_free() -> transport_generic_free_cmd()
@@ -1374,8 +1365,7 @@ static void sbp_sense_mangle(struct sbp_target_request *req)
 		 * TODO: SBP-3 specifies what we should do with descriptor
 		 * format sense data
 		 */
-		pr_err("sbp_send_sense: unknown sense format: 0x%x\n",
-			sense[0]);
+		target_err("sbp_send_sense: unknown sense format: 0x%x\n", sense[0]);
 		req->status.status |= cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
 			STATUS_BLOCK_DEAD(0) |
@@ -1460,19 +1450,18 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		req->node_addr, req->generation, req->speed,
 		agent->orb_offset, &req->orb, sizeof(req->orb));
 	if (ret != RCODE_COMPLETE) {
-		pr_debug("mgt_orb fetch failed: %x\n", ret);
+		target_debug("mgt_orb fetch failed: %x\n", ret);
 		goto out;
 	}
 
-	pr_debug("mgt_orb ptr1:0x%llx ptr2:0x%llx misc:0x%x len:0x%x status_fifo:0x%llx\n",
-		sbp2_pointer_to_addr(&req->orb.ptr1),
-		sbp2_pointer_to_addr(&req->orb.ptr2),
-		be32_to_cpu(req->orb.misc), be32_to_cpu(req->orb.length),
-		sbp2_pointer_to_addr(&req->orb.status_fifo));
+	target_debug("mgt_orb ptr1:0x%llx ptr2:0x%llx misc:0x%x len:0x%x status_fifo:0x%llx\n",
+		     sbp2_pointer_to_addr(&req->orb.ptr1), sbp2_pointer_to_addr(&req->orb.ptr2),
+		     be32_to_cpu(req->orb.misc), be32_to_cpu(req->orb.length),
+		     sbp2_pointer_to_addr(&req->orb.status_fifo));
 
 	if (!ORB_NOTIFY(be32_to_cpu(req->orb.misc)) ||
 		ORB_REQUEST_FORMAT(be32_to_cpu(req->orb.misc)) != 0) {
-		pr_err("mgt_orb bad request\n");
+		target_err("mgt_orb bad request\n");
 		goto out;
 	}
 
@@ -1491,7 +1480,7 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		break;
 
 	case MANAGEMENT_ORB_FUNCTION_SET_PASSWORD:
-		pr_notice("SET PASSWORD not implemented\n");
+		target_notice("SET PASSWORD not implemented\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -1504,7 +1493,7 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		break;
 
 	case MANAGEMENT_ORB_FUNCTION_ABORT_TASK:
-		pr_notice("ABORT TASK not implemented\n");
+		target_notice("ABORT TASK not implemented\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -1513,7 +1502,7 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		break;
 
 	case MANAGEMENT_ORB_FUNCTION_ABORT_TASK_SET:
-		pr_notice("ABORT TASK SET not implemented\n");
+		target_notice("ABORT TASK SET not implemented\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -1522,7 +1511,7 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		break;
 
 	case MANAGEMENT_ORB_FUNCTION_LOGICAL_UNIT_RESET:
-		pr_notice("LOGICAL UNIT RESET not implemented\n");
+		target_notice("LOGICAL UNIT RESET not implemented\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -1531,7 +1520,7 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		break;
 
 	case MANAGEMENT_ORB_FUNCTION_TARGET_RESET:
-		pr_notice("TARGET RESET not implemented\n");
+		target_notice("TARGET RESET not implemented\n");
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -1540,8 +1529,8 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		break;
 
 	default:
-		pr_notice("unknown management function 0x%x\n",
-			MANAGEMENT_ORB_FUNCTION(be32_to_cpu(req->orb.misc)));
+		target_notice("unknown management function 0x%x\n",
+			      MANAGEMENT_ORB_FUNCTION(be32_to_cpu(req->orb.misc)));
 
 		req->status.status = cpu_to_be32(
 			STATUS_BLOCK_RESP(STATUS_RESP_REQUEST_COMPLETE) |
@@ -1562,7 +1551,7 @@ static void sbp_mgt_agent_process(struct work_struct *work)
 		sbp2_pointer_to_addr(&req->orb.status_fifo),
 		&req->status, 8 + status_data_len);
 	if (ret != RCODE_COMPLETE) {
-		pr_debug("mgt_orb status write failed: %x\n", ret);
+		target_debug("mgt_orb status write failed: %x\n", ret);
 		goto out;
 	}
 
@@ -1600,7 +1589,7 @@ static void sbp_mgt_agent_rw(struct fw_card *card,
 		spin_unlock_bh(&agent->lock);
 
 		if (prev_state == MANAGEMENT_AGENT_STATE_BUSY) {
-			pr_notice("ignoring management request while busy\n");
+			target_notice("ignoring management request while busy\n");
 			rcode = RCODE_CONFLICT_ERROR;
 			goto out;
 		}
@@ -1910,8 +1899,7 @@ static ssize_t sbp_parse_wwn(const char *name, u64 *wwn)
 	}
 	err = 4;
 fail:
-	printk(KERN_INFO "err %u len %zu pos %u\n",
-			err, cp - name, pos);
+	target_info("err %u len %zu pos %u\n", err, cp - name, pos);
 	return -1;
 }
 
@@ -1951,7 +1939,7 @@ static void sbp_pre_unlink_lun(
 
 	ret = sbp_update_unit_directory(tport);
 	if (ret < 0)
-		pr_err("unlink LUN: failed to update unit directory\n");
+		target_err("unlink LUN: failed to update unit directory\n");
 }
 
 static struct se_portal_group *sbp_make_tpg(struct se_wwn *wwn,
@@ -1970,7 +1958,7 @@ static struct se_portal_group *sbp_make_tpg(struct se_wwn *wwn,
 		return ERR_PTR(-EINVAL);
 
 	if (tport->tpg) {
-		pr_err("Only one TPG per Unit is possible.\n");
+		target_err("Only one TPG per Unit is possible.\n");
 		return ERR_PTR(-EBUSY);
 	}
 
@@ -2082,7 +2070,7 @@ static ssize_t sbp_tpg_directory_id_store(struct config_item *item,
 	unsigned long val;
 
 	if (tport->enable) {
-		pr_err("Cannot change the directory_id on an active target.\n");
+		target_err("Cannot change the directory_id on an active target.\n");
 		return -EBUSY;
 	}
 
@@ -2108,7 +2096,7 @@ static int sbp_enable_tpg(struct se_portal_group *se_tpg, bool enable)
 
 	if (enable) {
 		if (sbp_count_se_tpg_luns(&tpg->se_tpg) == 0) {
-			pr_err("Cannot enable a target with no LUNs!\n");
+			target_err("Cannot enable a target with no LUNs!\n");
 			return -EINVAL;
 		}
 	} else {
@@ -2125,7 +2113,7 @@ static int sbp_enable_tpg(struct se_portal_group *se_tpg, bool enable)
 
 	ret = sbp_update_unit_directory(tport);
 	if (ret < 0) {
-		pr_err("Could not update Config ROM\n");
+		target_err("Could not update Config ROM\n");
 		return ret;
 	}
 

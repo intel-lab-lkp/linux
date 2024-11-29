@@ -47,7 +47,7 @@ int transport_backend_register(const struct target_backend_ops *ops)
 	mutex_lock(&backend_mutex);
 	list_for_each_entry(old, &backend_list, list) {
 		if (!strcmp(old->ops->name, ops->name)) {
-			pr_err("backend %s already registered.\n", ops->name);
+			target_err("backend %s already registered.\n", ops->name);
 			mutex_unlock(&backend_mutex);
 			kfree(tb);
 			return -EEXIST;
@@ -57,8 +57,8 @@ int transport_backend_register(const struct target_backend_ops *ops)
 	list_add_tail(&tb->list, &backend_list);
 	mutex_unlock(&backend_mutex);
 
-	pr_debug("TCM: Registered subsystem plugin: %s struct module: %p\n",
-			ops->name, ops->owner);
+	target_debug("TCM: Registered subsystem plugin: %s struct module: %p\n", ops->name,
+		     ops->owner);
 	return 0;
 }
 EXPORT_SYMBOL(transport_backend_register);
@@ -113,7 +113,7 @@ core_alloc_hba(const char *plugin_name, u32 plugin_dep_id, u32 hba_flags)
 
 	hba = kzalloc(sizeof(*hba), GFP_KERNEL);
 	if (!hba) {
-		pr_err("Unable to allocate struct se_hba\n");
+		target_err("Unable to allocate struct se_hba\n");
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -138,8 +138,9 @@ core_alloc_hba(const char *plugin_name, u32 plugin_dep_id, u32 hba_flags)
 	list_add_tail(&hba->hba_node, &hba_list);
 	spin_unlock(&hba_lock);
 
-	pr_debug("CORE_HBA[%d] - Attached HBA to Generic Target"
-			" Core\n", hba->hba_id);
+	target_debug("CORE_HBA[%d] - Attached HBA to Generic Target"
+		     " Core\n",
+		     hba->hba_id);
 
 	return hba;
 
@@ -162,8 +163,9 @@ core_delete_hba(struct se_hba *hba)
 	list_del(&hba->hba_node);
 	spin_unlock(&hba_lock);
 
-	pr_debug("CORE_HBA[%d] - Detached HBA from Generic Target"
-			" Core\n", hba->hba_id);
+	target_debug("CORE_HBA[%d] - Detached HBA from Generic Target"
+		     " Core\n",
+		     hba->hba_id);
 
 	module_put(hba->backend->ops->owner);
 

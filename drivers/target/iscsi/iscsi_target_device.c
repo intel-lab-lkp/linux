@@ -52,6 +52,6 @@ void iscsit_increment_maxcmdsn(struct iscsit_cmd *cmd, struct iscsit_session *se
 	cmd->maxcmdsn_inc = 1;
 
 	max_cmd_sn = atomic_inc_return(&sess->max_cmd_sn);
-	pr_debug("Updated MaxCmdSN to 0x%08x\n", max_cmd_sn);
+	target_debug("Updated MaxCmdSN to 0x%08x\n", max_cmd_sn);
 }
 EXPORT_SYMBOL(iscsit_increment_maxcmdsn);

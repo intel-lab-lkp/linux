@@ -46,7 +46,7 @@ int iscsit_add_r2t_to_list(
 
 	r2t = kmem_cache_zalloc(lio_r2t_cache, GFP_ATOMIC);
 	if (!r2t) {
-		pr_err("Unable to allocate memory for struct iscsi_r2t.\n");
+		target_err("Unable to allocate memory for struct iscsi_r2t.\n");
 		return -1;
 	}
 	INIT_LIST_HEAD(&r2t->r2t_list);
@@ -81,8 +81,9 @@ struct iscsi_r2t *iscsit_get_r2t_for_eos(
 	}
 	spin_unlock_bh(&cmd->r2t_lock);
 
-	pr_err("Unable to locate R2T for Offset: %u, Length:"
-			" %u\n", offset, length);
+	target_err("Unable to locate R2T for Offset: %u, Length:"
+		   " %u\n",
+		   offset, length);
 	return NULL;
 }
 
@@ -99,8 +100,9 @@ struct iscsi_r2t *iscsit_get_r2t_from_list(struct iscsit_cmd *cmd)
 	}
 	spin_unlock_bh(&cmd->r2t_lock);
 
-	pr_err("Unable to locate next R2T to send for ITT:"
-			" 0x%08x.\n", cmd->init_task_tag);
+	target_err("Unable to locate next R2T to send for ITT:"
+		   " 0x%08x.\n",
+		   cmd->init_task_tag);
 	return NULL;
 }
 
@@ -204,7 +206,7 @@ struct iscsi_seq *iscsit_get_seq_holder_for_r2t(struct iscsit_cmd *cmd)
 	u32 i;
 
 	if (!cmd->seq_list) {
-		pr_err("struct iscsit_cmd->seq_list is NULL!\n");
+		target_err("struct iscsit_cmd->seq_list is NULL!\n");
 		return NULL;
 	}
 
@@ -251,27 +253,28 @@ static inline int iscsit_check_received_cmdsn(struct iscsit_session *sess, u32 c
 	 */
 	max_cmdsn = atomic_read(&sess->max_cmd_sn);
 	if (iscsi_sna_gt(cmdsn, max_cmdsn)) {
-		pr_err("Received CmdSN: 0x%08x is greater than"
-		       " MaxCmdSN: 0x%08x, ignoring.\n", cmdsn, max_cmdsn);
+		target_err("Received CmdSN: 0x%08x is greater than"
+			   " MaxCmdSN: 0x%08x, ignoring.\n",
+			   cmdsn, max_cmdsn);
 		ret = CMDSN_MAXCMDSN_OVERRUN;
 
 	} else if (cmdsn == sess->exp_cmd_sn) {
 		sess->exp_cmd_sn++;
-		pr_debug("Received CmdSN matches ExpCmdSN,"
-		      " incremented ExpCmdSN to: 0x%08x\n",
-		      sess->exp_cmd_sn);
+		target_debug("Received CmdSN matches ExpCmdSN,"
+			     " incremented ExpCmdSN to: 0x%08x\n",
+			     sess->exp_cmd_sn);
 		ret = CMDSN_NORMAL_OPERATION;
 
 	} else if (iscsi_sna_gt(cmdsn, sess->exp_cmd_sn)) {
-		pr_debug("Received CmdSN: 0x%08x is greater"
-		      " than ExpCmdSN: 0x%08x, not acknowledging.\n",
-		      cmdsn, sess->exp_cmd_sn);
+		target_debug("Received CmdSN: 0x%08x is greater"
+			     " than ExpCmdSN: 0x%08x, not acknowledging.\n",
+			     cmdsn, sess->exp_cmd_sn);
 		ret = CMDSN_HIGHER_THAN_EXP;
 
 	} else {
-		pr_err("Received CmdSN: 0x%08x is less than"
-		       " ExpCmdSN: 0x%08x, ignoring.\n", cmdsn,
-		       sess->exp_cmd_sn);
+		target_err("Received CmdSN: 0x%08x is less than"
+			   " ExpCmdSN: 0x%08x, ignoring.\n",
+			   cmdsn, sess->exp_cmd_sn);
 		ret = CMDSN_LOWER_THAN_EXP;
 	}
 
@@ -341,8 +344,8 @@ int iscsit_check_unsolicited_dataout(struct iscsit_cmd *cmd, unsigned char *buf)
 	u32 payload_length = ntoh24(hdr->dlength);
 
 	if (conn->sess->sess_ops->InitialR2T) {
-		pr_err("Received unexpected unsolicited data"
-			" while InitialR2T=Yes, protocol error.\n");
+		target_err("Received unexpected unsolicited data"
+			   " while InitialR2T=Yes, protocol error.\n");
 		transport_send_check_condition_and_sense(se_cmd,
 				TCM_UNEXPECTED_UNSOLICITED_DATA, 0);
 		return -1;
@@ -350,10 +353,10 @@ int iscsit_check_unsolicited_dataout(struct iscsit_cmd *cmd, unsigned char *buf)
 
 	if ((cmd->first_burst_len + payload_length) >
 	     conn->sess->sess_ops->FirstBurstLength) {
-		pr_err("Total %u bytes exceeds FirstBurstLength: %u"
-			" for this Unsolicited DataOut Burst.\n",
-			(cmd->first_burst_len + payload_length),
-				conn->sess->sess_ops->FirstBurstLength);
+		target_err("Total %u bytes exceeds FirstBurstLength: %u"
+			   " for this Unsolicited DataOut Burst.\n",
+			   (cmd->first_burst_len + payload_length),
+			   conn->sess->sess_ops->FirstBurstLength);
 		transport_send_check_condition_and_sense(se_cmd,
 				TCM_INCORRECT_AMOUNT_OF_DATA, 0);
 		return -1;
@@ -365,11 +368,11 @@ int iscsit_check_unsolicited_dataout(struct iscsit_cmd *cmd, unsigned char *buf)
 	if (((cmd->first_burst_len + payload_length) != cmd->se_cmd.data_length) &&
 	    ((cmd->first_burst_len + payload_length) !=
 	      conn->sess->sess_ops->FirstBurstLength)) {
-		pr_err("Unsolicited non-immediate data received %u"
-			" does not equal FirstBurstLength: %u, and does"
-			" not equal ExpXferLen %u.\n",
-			(cmd->first_burst_len + payload_length),
-			conn->sess->sess_ops->FirstBurstLength, cmd->se_cmd.data_length);
+		target_err("Unsolicited non-immediate data received %u"
+			   " does not equal FirstBurstLength: %u, and does"
+			   " not equal ExpXferLen %u.\n",
+			   (cmd->first_burst_len + payload_length),
+			   conn->sess->sess_ops->FirstBurstLength, cmd->se_cmd.data_length);
 		transport_send_check_condition_and_sense(se_cmd,
 				TCM_INCORRECT_AMOUNT_OF_DATA, 0);
 		return -1;
@@ -392,8 +395,7 @@ struct iscsit_cmd *iscsit_find_cmd_from_itt(
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	pr_err("Unable to locate ITT: 0x%08x on CID: %hu",
-			init_task_tag, conn->cid);
+	target_err("Unable to locate ITT: 0x%08x on CID: %hu", init_task_tag, conn->cid);
 	return NULL;
 }
 EXPORT_SYMBOL(iscsit_find_cmd_from_itt);
@@ -416,8 +418,9 @@ struct iscsit_cmd *iscsit_find_cmd_from_itt_or_dump(
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	pr_err("Unable to locate ITT: 0x%08x on CID: %hu,"
-			" dumping payload\n", init_task_tag, conn->cid);
+	target_err("Unable to locate ITT: 0x%08x on CID: %hu,"
+		   " dumping payload\n",
+		   init_task_tag, conn->cid);
 	if (length)
 		iscsit_dump_data_payload(conn, length, 1);
 
@@ -440,8 +443,7 @@ struct iscsit_cmd *iscsit_find_cmd_from_ttt(
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	pr_err("Unable to locate TTT: 0x%08x on CID: %hu\n",
-			targ_xfer_tag, conn->cid);
+	target_err("Unable to locate TTT: 0x%08x on CID: %hu\n", targ_xfer_tag, conn->cid);
 	return NULL;
 }
 
@@ -506,8 +508,8 @@ void iscsit_add_cmd_to_immediate_queue(
 
 	qr = kmem_cache_zalloc(lio_qr_cache, GFP_ATOMIC);
 	if (!qr) {
-		pr_err("Unable to allocate memory for"
-				" struct iscsi_queue_req\n");
+		target_err("Unable to allocate memory for"
+			   " struct iscsi_queue_req\n");
 		return;
 	}
 	INIT_LIST_HEAD(&qr->qr_list);
@@ -567,9 +569,8 @@ static void iscsit_remove_cmd_from_immediate_queue(
 	spin_unlock_bh(&conn->immed_queue_lock);
 
 	if (atomic_read(&cmd->immed_queue_count)) {
-		pr_err("ITT: 0x%08x immed_queue_count: %d\n",
-			cmd->init_task_tag,
-			atomic_read(&cmd->immed_queue_count));
+		target_err("ITT: 0x%08x immed_queue_count: %d\n", cmd->init_task_tag,
+			   atomic_read(&cmd->immed_queue_count));
 	}
 }
 
@@ -582,8 +583,8 @@ int iscsit_add_cmd_to_response_queue(
 
 	qr = kmem_cache_zalloc(lio_qr_cache, GFP_ATOMIC);
 	if (!qr) {
-		pr_err("Unable to allocate memory for"
-			" struct iscsi_queue_req\n");
+		target_err("Unable to allocate memory for"
+			   " struct iscsi_queue_req\n");
 		return -ENOMEM;
 	}
 	INIT_LIST_HEAD(&qr->qr_list);
@@ -644,9 +645,8 @@ static void iscsit_remove_cmd_from_response_queue(
 	spin_unlock_bh(&conn->response_queue_lock);
 
 	if (atomic_read(&cmd->response_queue_count)) {
-		pr_err("ITT: 0x%08x response_queue_count: %d\n",
-			cmd->init_task_tag,
-			atomic_read(&cmd->response_queue_count));
+		target_err("ITT: 0x%08x response_queue_count: %d\n", cmd->init_task_tag,
+			   atomic_read(&cmd->response_queue_count));
 	}
 }
 
@@ -907,10 +907,10 @@ void iscsit_handle_nopin_response_timeout(struct timer_list *t)
 		return;
 	}
 
-	pr_err("Did not receive response to NOPIN on CID: %hu, failing"
-		" connection for I_T Nexus %s,i,0x%6phN,%s,t,0x%02x\n",
-		conn->cid, sess->sess_ops->InitiatorName, sess->isid,
-		sess->tpg->tpg_tiqn->tiqn, (u32)sess->tpg->tpgt);
+	target_err("Did not receive response to NOPIN on CID: %hu, failing"
+		   " connection for I_T Nexus %s,i,0x%6phN,%s,t,0x%02x\n",
+		   conn->cid, sess->sess_ops->InitiatorName, sess->isid, sess->tpg->tpg_tiqn->tiqn,
+		   (u32)sess->tpg->tpgt);
 	conn->nopin_response_timer_flags &= ~ISCSI_TF_RUNNING;
 	spin_unlock_bh(&conn->nopin_timer_lock);
 
@@ -951,8 +951,9 @@ void iscsit_start_nopin_response_timer(struct iscsit_conn *conn)
 	mod_timer(&conn->nopin_response_timer,
 		  jiffies + na->nopin_response_timeout * HZ);
 
-	pr_debug("Started NOPIN Response Timer on CID: %d to %u"
-		" seconds\n", conn->cid, na->nopin_response_timeout);
+	target_debug("Started NOPIN Response Timer on CID: %d to %u"
+		     " seconds\n",
+		     conn->cid, na->nopin_response_timeout);
 	spin_unlock_bh(&conn->nopin_timer_lock);
 }
 
@@ -1012,8 +1013,9 @@ void __iscsit_start_nopin_timer(struct iscsit_conn *conn)
 	conn->nopin_timer_flags |= ISCSI_TF_RUNNING;
 	mod_timer(&conn->nopin_timer, jiffies + na->nopin_timeout * HZ);
 
-	pr_debug("Started NOPIN Timer on CID: %d at %u second"
-		" interval\n", conn->cid, na->nopin_timeout);
+	target_debug("Started NOPIN Timer on CID: %d at %u second"
+		     " interval\n",
+		     conn->cid, na->nopin_timeout);
 }
 
 void iscsit_start_nopin_timer(struct iscsit_conn *conn)
@@ -1045,14 +1047,14 @@ void iscsit_login_timeout(struct timer_list *t)
 	struct iscsit_conn *conn = from_timer(conn, t, login_timer);
 	struct iscsi_login *login = conn->login;
 
-	pr_debug("Entering iscsi_target_login_timeout >>>>>>>>>>>>>>>>>>>\n");
+	target_debug("Entering iscsi_target_login_timeout >>>>>>>>>>>>>>>>>>>\n");
 
 	spin_lock_bh(&conn->login_timer_lock);
 	login->login_failed = 1;
 
 	if (conn->login_kworker) {
-		pr_debug("Sending SIGINT to conn->login_kworker %s/%d\n",
-			 conn->login_kworker->comm, conn->login_kworker->pid);
+		target_debug("Sending SIGINT to conn->login_kworker %s/%d\n",
+			     conn->login_kworker->comm, conn->login_kworker->pid);
 		send_sig(SIGINT, conn->login_kworker, 1);
 	} else {
 		schedule_delayed_work(&conn->login_work, 0);
@@ -1062,7 +1064,7 @@ void iscsit_login_timeout(struct timer_list *t)
 
 void iscsit_start_login_timer(struct iscsit_conn *conn, struct task_struct *kthr)
 {
-	pr_debug("Login timer started\n");
+	target_debug("Login timer started\n");
 
 	conn->login_kworker = kthr;
 	mod_timer(&conn->login_timer, jiffies + TA_LOGIN_TIMEOUT * HZ);
@@ -1087,7 +1089,7 @@ int iscsit_set_login_timer_kworker(struct iscsit_conn *conn, struct task_struct 
 
 void iscsit_stop_login_timer(struct iscsit_conn *conn)
 {
-	pr_debug("Login timer stopped\n");
+	target_debug("Login timer stopped\n");
 	timer_delete_sync(&conn->login_timer);
 }
 
@@ -1114,7 +1116,7 @@ send_data:
 	tx_sent = tx_data(conn, &iov[0], iov_count, tx_size);
 	if (tx_size != tx_sent) {
 		if (tx_sent == -EAGAIN) {
-			pr_err("tx_data() returned -EAGAIN\n");
+			target_err("tx_data() returned -EAGAIN\n");
 			goto send_data;
 		} else
 			return -1;
@@ -1147,7 +1149,7 @@ send_hdr:
 	tx_sent = tx_data(conn, &iov, 1, tx_hdr_size);
 	if (tx_hdr_size != tx_sent) {
 		if (tx_sent == -EAGAIN) {
-			pr_err("tx_data() returned -EAGAIN\n");
+			target_err("tx_data() returned -EAGAIN\n");
 			goto send_hdr;
 		}
 		return -1;
@@ -1181,11 +1183,11 @@ send_pg:
 						   sub_len);
 		if (tx_sent != sub_len) {
 			if (tx_sent == -EAGAIN) {
-				pr_err("sendmsg/splice returned -EAGAIN\n");
+				target_err("sendmsg/splice returned -EAGAIN\n");
 				goto send_pg;
 			}
 
-			pr_err("sendmsg/splice failure: %d\n", tx_sent);
+			target_err("sendmsg/splice failure: %d\n", tx_sent);
 			return -1;
 		}
 
@@ -1201,7 +1203,7 @@ send_padding:
 		tx_sent = tx_data(conn, iov_p, 1, cmd->padding);
 		if (cmd->padding != tx_sent) {
 			if (tx_sent == -EAGAIN) {
-				pr_err("tx_data() returned -EAGAIN\n");
+				target_err("tx_data() returned -EAGAIN\n");
 				goto send_padding;
 			}
 			return -1;
@@ -1215,7 +1217,7 @@ send_datacrc:
 		tx_sent = tx_data(conn, iov_d, 1, ISCSI_CRC_LEN);
 		if (ISCSI_CRC_LEN != tx_sent) {
 			if (tx_sent == -EAGAIN) {
-				pr_err("tx_data() returned -EAGAIN\n");
+				target_err("tx_data() returned -EAGAIN\n");
 				goto send_datacrc;
 			}
 			return -1;
@@ -1256,8 +1258,9 @@ void iscsit_print_session_params(struct iscsit_session *sess)
 {
 	struct iscsit_conn *conn;
 
-	pr_debug("-----------------------------[Session Params for"
-		" SID: %u]-----------------------------\n", sess->sid);
+	target_debug("-----------------------------[Session Params for"
+		     " SID: %u]-----------------------------\n",
+		     sess->sid);
 	spin_lock_bh(&sess->conn_lock);
 	list_for_each_entry(conn, &sess->sess_conn_list, conn_list)
 		iscsi_dump_conn_ops(conn->conn_ops);
@@ -1284,13 +1287,11 @@ int rx_data(
 	while (msg_data_left(&msg)) {
 		rx_loop = sock_recvmsg(conn->sock, &msg, MSG_WAITALL);
 		if (rx_loop <= 0) {
-			pr_debug("rx_loop: %d total_rx: %d\n",
-				rx_loop, total_rx);
+			target_debug("rx_loop: %d total_rx: %d\n", rx_loop, total_rx);
 			return rx_loop;
 		}
 		total_rx += rx_loop;
-		pr_debug("rx_loop: %d, total_rx: %d, data: %d\n",
-				rx_loop, total_rx, data);
+		target_debug("rx_loop: %d, total_rx: %d, data: %d\n", rx_loop, total_rx, data);
 	}
 
 	return total_rx;
@@ -1309,7 +1310,7 @@ int tx_data(
 		return -1;
 
 	if (data <= 0) {
-		pr_err("Data length is: %d\n", data);
+		target_err("Data length is: %d\n", data);
 		return -1;
 	}
 
@@ -1320,13 +1321,11 @@ int tx_data(
 	while (msg_data_left(&msg)) {
 		int tx_loop = sock_sendmsg(conn->sock, &msg);
 		if (tx_loop <= 0) {
-			pr_debug("tx_loop: %d total_tx %d\n",
-				tx_loop, total_tx);
+			target_debug("tx_loop: %d total_tx %d\n", tx_loop, total_tx);
 			return tx_loop;
 		}
 		total_tx += tx_loop;
-		pr_debug("tx_loop: %d, total_tx: %d, data: %d\n",
-					tx_loop, total_tx, data);
+		target_debug("tx_loop: %d, total_tx: %d, data: %d\n", tx_loop, total_tx, data);
 	}
 
 	return total_tx;
