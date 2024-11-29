@@ -720,7 +720,7 @@ void g4x_hdmi_init(struct drm_i915_private *dev_priv,
 
 	intel_encoder->devdata = devdata;
 
-	mutex_init(&dig_port->hdcp_mutex);
+	mutex_init(&dig_port->hdcp.mutex);
 
 	drm_encoder_init(&dev_priv->drm, &intel_encoder->base,
 			 &intel_hdmi_enc_funcs, DRM_MODE_ENCODER_TMDS,
