@@ -1607,7 +1607,6 @@ bool intel_hdmi_hdcp_check_link(struct intel_digital_port *dig_port,
 		if (intel_hdmi_hdcp_check_link_once(dig_port, connector))
 			return true;
 
-	drm_err(display->drm, "Link check failed\n");
 	return false;
 }
 
