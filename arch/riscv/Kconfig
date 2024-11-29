@@ -715,6 +715,16 @@ config RISCV_ISA_ZACAS
 
 	  If you don't know what to do here, say Y.
 
+config RISCV_ISA_ZALRSC_ONLY
+	bool "Zalrsc extension support only"
+	default n
+	help
+	   Use lr and sc to build all atomic functions. Some CPUs have
+	   native support for lr and sc, but emulate amo instructions through
+	   trap handlers that are slow.
+
+	   If you don't know what to do here, say n.
+
 config TOOLCHAIN_HAS_ZBB
 	bool
 	default y
