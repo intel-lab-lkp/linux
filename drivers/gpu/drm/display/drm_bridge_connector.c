@@ -414,7 +414,7 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 	drm_for_each_bridge_in_chain(encoder, bridge) {
 		if (!bridge->interlace_allowed)
 			connector->interlace_allowed = false;
-		if (!bridge->ycbcr_420_allowed)
+		if (!bridge->ycbcr_420_allowed && !(bridge->ops & DRM_BRIDGE_OP_HDMI))
 			connector->ycbcr_420_allowed = false;
 
 		if (bridge->ops & DRM_BRIDGE_OP_EDID)
@@ -436,6 +436,10 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 
 			if (bridge->supported_formats)
 				supported_formats = bridge->supported_formats;
+
+			if (!(bridge->supported_formats & HDMI_COLORSPACE_YUV420))
+				connector->ycbcr_420_allowed = false;
+
 			if (bridge->max_bpc)
 				max_bpc = bridge->max_bpc;
 		}
