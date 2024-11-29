@@ -532,7 +532,7 @@ struct buffer_head *gfs2_meta_ra(struct gfs2_glock *gl, u64 dblock, u32 extlen)
 	first_bh = gfs2_getbuf(gl, dblock, CREATE);
 
 	if (buffer_uptodate(first_bh))
-		goto out;
+		return first_bh;
 	bh_read_nowait(first_bh, REQ_META | REQ_PRIO);
 
 	dblock++;
@@ -546,11 +546,10 @@ struct buffer_head *gfs2_meta_ra(struct gfs2_glock *gl, u64 dblock, u32 extlen)
 		dblock++;
 		extlen--;
 		if (!buffer_locked(first_bh) && buffer_uptodate(first_bh))
-			goto out;
+			return first_bh;
 	}
 
 	wait_on_buffer(first_bh);
-out:
-	return first_bh;
+	return buffer_uptodate(first_bh) ? first_bh : ERR_PTR(-EIO);
 }
 

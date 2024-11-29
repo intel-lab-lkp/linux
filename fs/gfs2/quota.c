@@ -1427,8 +1427,10 @@ int gfs2_quota_init(struct gfs2_sbd *sdp)
 		}
 		error = -EIO;
 		bh = gfs2_meta_ra(ip->i_gl, dblock, extlen);
-		if (!bh)
+		if (IS_ERR(bh)) {
+			error = PTR_ERR(bh);
 			goto fail;
+		}
 		if (gfs2_metatype_check(sdp, bh, GFS2_METATYPE_QC))
 			goto fail_brelse;
 

@@ -49,7 +49,7 @@ int gfs2_replay_read_block(struct gfs2_jdesc *jd, unsigned int blk,
 
 	*bh = gfs2_meta_ra(gl, dblock, extlen);
 
-	return error;
+	return IS_ERR(*bh) ? PTR_ERR(*bh) : 0;
 }
 
 int gfs2_revoke_add(struct gfs2_jdesc *jd, u64 blkno, unsigned int where)
