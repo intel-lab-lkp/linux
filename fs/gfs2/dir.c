@@ -1259,7 +1259,7 @@ static int compare_dents(const void *a, const void *b)
  * @sort_start: index of the directory array to start our sort
  * @copied: pointer to int that's non-zero if a entry has been copied out
  *
- * Jump through some hoops to make sure that if there are hash collsions,
+ * Jump through some hoops to make sure that if there are hash collisions,
  * they are read out at the beginning of a buffer.  We want to minimize
  * the possibility that they will fall into different readdir buffers or
  * that someone will want to seek to that location.

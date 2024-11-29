@@ -11,7 +11,7 @@
  * avoids the bottleneck of constantly touching the quota file, but introduces
  * fuzziness in the current usage value of IDs that are being used on different
  * nodes in the cluster simultaneously.  So, it is possible for a user on
- * multiple nodes to overrun their quota, but that overrun is controlable.
+ * multiple nodes to overrun their quota, but that overrun is controllable.
  * Since quota tags are part of transactions, there is no need for a quota check
  * program to be run on node crashes or anything like that.
  *

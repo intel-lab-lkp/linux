@@ -429,7 +429,7 @@ TRACE_EVENT(gfs2_ail_flush,
  * Objectives:
  * Latency: Bmap request time
  * Performance: Block allocator tracing
- * Correctness: Test of disard generation vs. blocks allocated
+ * Correctness: Test of discard generation vs. blocks allocated
  */
 
 /* Map an extent of blocks, possibly a new allocation */

@@ -1028,7 +1028,7 @@ static int gfs2_ri_update(struct gfs2_inode *ip)
  * special file, which might have been updated if someone expanded the
  * filesystem (via gfs2_grow utility), which adds new resource groups.
  *
- * Returns: 0 on succeess, error code otherwise
+ * Returns: 0 on success, error code otherwise
  */
 
 int gfs2_rindex_update(struct gfs2_sbd *sdp)
@@ -1912,7 +1912,7 @@ static void try_rgrp_unlink(struct gfs2_rgrpd *rgd, u64 *last_unlinked, u64 skip
  * the lock for this rgrp's glock is significantly greater than the
  * time taken for resource groups on average. We introduce a margin in
  * the form of the variable @var which is computed as the sum of the two
- * respective variences, and multiplied by a factor depending on @loops
+ * respective variances, and multiplied by a factor depending on @loops
  * and whether we have a lot of data to base the decision on. This is
  * then tested against the square difference of the means in order to
  * decide whether the result is statistically significant or not.
