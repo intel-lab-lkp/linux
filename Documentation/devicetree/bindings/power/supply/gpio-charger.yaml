@@ -44,6 +44,10 @@ properties:
     maxItems: 32
     description: GPIOs used for current limiting
 
+  charge-disable-gpios:
+    maxItems: 1
+    description: GPIO to disable the charger
+
   charge-current-limit-mapping:
     description: List of tuples with current in uA and a GPIO bitmap (in
       this order). The tuples must be provided in descending order of the
@@ -68,6 +72,8 @@ anyOf:
       - charge-status-gpios
   - required:
       - charge-current-limit-gpios
+  - required:
+      - charge-type-gpios
 
 dependencies:
   charge-current-limit-gpios: [ charge-current-limit-mapping ]

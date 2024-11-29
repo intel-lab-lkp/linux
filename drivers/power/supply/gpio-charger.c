@@ -32,6 +32,7 @@ struct gpio_charger {
 	struct power_supply_desc charger_desc;
 	struct gpio_desc *gpiod;
 	struct gpio_desc *charge_status;
+	struct gpio_desc *charge_type;
 
 	struct gpio_descs *current_limit_gpios;
 	struct gpio_mapping *current_limit_map;
@@ -82,6 +83,26 @@ static int set_charge_current_limit(struct gpio_charger *gpio_charger, int val)
 	return 0;
 }
 
+static int gpio_charger_set_charge_type(struct gpio_desc *gpio_charger, int type)
+{
+	int chg_config = 0;
+
+	switch (type) {
+	case POWER_SUPPLY_CHARGE_TYPE_STANDARD:
+		chg_config = 0;
+		break;
+	case POWER_SUPPLY_CHARGE_TYPE_NONE:
+		chg_config = 1;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	gpiod_set_value_cansleep(gpio_charger, chg_config);
+
+	return 0;
+}
+
 static int gpio_charger_get_property(struct power_supply *psy,
 		enum power_supply_property psp, union power_supply_propval *val)
 {
@@ -100,6 +121,13 @@ static int gpio_charger_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		val->intval = gpio_charger->charge_current_limit;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		if (gpiod_get_value_cansleep(gpio_charger->charge_type))
+			val->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
+		else
+			val->intval = POWER_SUPPLY_CHARGE_TYPE_STANDARD;
+		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -115,6 +143,9 @@ static int gpio_charger_set_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		return set_charge_current_limit(gpio_charger, val->intval);
+	case POWER_SUPPLY_PROP_CHARGE_TYPE:
+		return gpio_charger_set_charge_type(gpio_charger->charge_type, val->intval);
+	break;
 	default:
 		return -EINVAL;
 	}
@@ -126,6 +157,7 @@ static int gpio_charger_property_is_writeable(struct power_supply *psy,
 					      enum power_supply_property psp)
 {
 	switch (psp) {
+	case POWER_SUPPLY_PROP_CHARGE_TYPE:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		return 1;
 	default:
@@ -246,6 +278,7 @@ static enum power_supply_property gpio_charger_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+	POWER_SUPPLY_PROP_CHARGE_TYPE,
 };
 
 static int gpio_charger_probe(struct platform_device *pdev)
@@ -256,6 +289,7 @@ static int gpio_charger_probe(struct platform_device *pdev)
 	struct gpio_charger *gpio_charger;
 	struct power_supply_desc *charger_desc;
 	struct gpio_desc *charge_status;
+	struct gpio_desc *charge_type;
 	int charge_status_irq;
 	int ret;
 	int num_props = 0;
@@ -301,6 +335,15 @@ static int gpio_charger_probe(struct platform_device *pdev)
 	if (gpio_charger->current_limit_map) {
 		gpio_charger_properties[num_props] =
 			POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX;
+		num_props++;
+	}
+
+	charge_type = devm_gpiod_get_optional(dev, "charge-disable", GPIOD_OUT_LOW);
+	if (IS_ERR(charge_type))
+		return PTR_ERR(charge_type);
+	if (charge_type) {
+		gpio_charger->charge_type = charge_type;
+		gpio_charger_properties[num_props] = POWER_SUPPLY_PROP_CHARGE_TYPE;
 		num_props++;
 	}
 
