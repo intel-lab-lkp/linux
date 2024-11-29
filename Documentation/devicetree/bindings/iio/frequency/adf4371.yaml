@@ -40,6 +40,17 @@ properties:
       output stage will shut down until the ADF4371/ADF4372 achieves lock as
       measured by the digital lock detect circuitry.
 
+  adi,reference-doubler-enable:
+    type: boolean
+    description:
+      If this property is present, the reference doubler block is enabled.
+
+  adi,adi,reference-div2-enable:
+    type: boolean
+    description:
+      If this property is present, the reference divide by 2 clock is enabled.
+      This feature can be used to provide a 50% duty cycle signal to the PFD.
+
 required:
   - compatible
   - reg
