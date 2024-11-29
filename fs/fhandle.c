@@ -298,6 +298,9 @@ static inline bool may_decode_fh(struct handle_to_path_ctx *ctx,
 {
 	struct path *root = &ctx->root;
 
+	if (capable(CAP_DAC_READ_SEARCH))
+		return true;
+
 	/*
 	 * Restrict to O_DIRECTORY to provide a deterministic API that avoids a
 	 * confusing api in the face of disconnected non-dir dentries.
@@ -337,7 +340,7 @@ static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
 	if (retval)
 		goto out_err;
 
-	if (!capable(CAP_DAC_READ_SEARCH) && !may_decode_fh(&ctx, o_flags)) {
+	if (!may_decode_fh(&ctx, o_flags)) {
 		retval = -EPERM;
 		goto out_path;
 	}
