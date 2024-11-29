@@ -91,6 +91,15 @@
 #define AQCSFRC_CSFA_FRCHIGH	BIT(1)
 #define AQCSFRC_CSFA_DISSWFRC	(BIT(1) | BIT(0))
 
+#define AQCTLA_CAU_MASK   (BIT(5) | BIT(4)) 
+#define AQCTLA_CAU_SHIFT  4U
+
+#define AQCTLA_CAD_MASK   (BIT(7) | BIT(6)) 
+#define AQCTLA_CAD_SHIFT  6U
+
+#define AQ_SET    0x1
+#define AQ_CLEAR  0x2
+
 #define NUM_PWM_CHANNEL		2	/* EHRPWM channels */
 
 struct ehrpwm_context {
@@ -400,6 +409,134 @@ static void ehrpwm_pwm_free(struct pwm_chip *chip, struct pwm_device *pwm)
 	pc->period_cycles[pwm->hwpwm] = 0;
 }
 
+static bool ehrpwm_is_enabled(struct pwm_chip *chip)
+{
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	bool ret;
+
+	u16 aqcsfrc_reg;
+	u8 csfa_bits;
+
+	u16 aqctla_reg;
+
+	if(chip == NULL) {
+		return -EINVAL;
+	}
+
+	aqcsfrc_reg = readw(pc->mmio_base + AQCSFRC);
+	csfa_bits = (u8)(aqcsfrc_reg & AQCSFRC_CSFA_MASK);
+	
+	aqctla_reg = readw(pc->mmio_base + AQCTLA);
+
+	ret = (csfa_bits != 0u)	 ? false :
+		  (aqctla_reg == 0u) ? false : true;
+
+	return ret;
+}
+
+static u64 ehrpwm_read_period(struct pwm_chip *chip)
+{
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	u64 ret;
+
+	unsigned long tbclk_rate;
+	
+	u16 tbprd_reg;
+	u64 period_cycles;
+	u64 period_ns;
+
+	if(chip == NULL) {
+		return -EINVAL;
+	}
+
+	tbprd_reg = readw(pc->mmio_base + TBPRD);
+	tbclk_rate = clk_get_rate(pc->tbclk);
+
+	period_cycles = tbprd_reg + 1u;
+	
+	/* period_ns = (period_cycles * 1e9) / tblck_rate */
+	period_ns = DIV_ROUND_UP_ULL(period_cycles * NSEC_PER_SEC, tbclk_rate);
+	
+	ret = period_ns;
+
+	return ret;
+}
+
+static u64 ehrpwm_read_duty_cycle(struct pwm_chip *chip)
+{
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	u64 ret;
+	
+	u16 cmpa_reg;
+	u64 duty_cycles;
+	u64 duty_ns;
+
+	unsigned long tbclk_rate;
+
+	if(chip == NULL) {
+		return -EINVAL;
+	}
+
+	cmpa_reg = readw(pc->mmio_base + CMPA);
+
+	tbclk_rate = clk_get_rate(pc->tbclk);
+
+	duty_cycles = cmpa_reg;
+
+	/* duty_ns = (duty_cycles * 1e9) / tblck_rate */
+	duty_ns = DIV_ROUND_UP_ULL(duty_cycles * NSEC_PER_SEC, tbclk_rate);
+
+	ret = duty_ns;
+
+	return ret;
+}
+
+static enum pwm_polarity ehrpwm_read_polarity(struct pwm_chip *chip)
+{
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	enum pwm_polarity ret;
+
+	u16 aqctla_reg;
+	u8 cau_action;
+	u8 cad_action;
+
+	if(chip == NULL) {
+		return -EINVAL;
+	}
+
+	aqctla_reg	= readw(pc->mmio_base + AQCTLA);
+
+	cau_action = (aqctla_reg & AQCTLA_CAU_MASK) >> AQCTLA_CAU_SHIFT;
+	cad_action = (aqctla_reg & AQCTLA_CAD_MASK) >> AQCTLA_CAD_SHIFT;
+
+	ret = (cau_action == AQ_SET && cad_action == AQ_CLEAR) ? PWM_POLARITY_NORMAL :
+		  (cau_action == AQ_CLEAR && cad_action == AQ_SET) ? PWM_POLARITY_INVERSED : PWM_POLARITY_NORMAL;
+
+	return ret;
+}
+
+static int ehrpwm_get_hw_state(struct pwm_chip *chip, struct pwm_device *pwm, 
+								struct pwm_state *state)
+{
+	int ret;
+
+	if(chip == NULL || pwm == NULL || state == NULL){
+		return -EINVAL;
+	}
+
+	state->enabled = ehrpwm_is_enabled(chip);
+
+	state->period = ehrpwm_read_period(chip);
+    state->duty_cycle = ehrpwm_read_duty_cycle(chip);
+    state->polarity = ehrpwm_read_polarity(chip);
+
+	return ret;
+}
+
 static int ehrpwm_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 			    const struct pwm_state *state)
 {
@@ -450,6 +587,7 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	struct ehrpwm_pwm_chip *pc;
 	struct pwm_chip *chip;
+	bool tbclk_enabled;
 	struct clk *clk;
 	int ret;
 
@@ -501,10 +639,32 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, chip);
 	pm_runtime_enable(&pdev->dev);
 
+	ehrpwm_get_hw_state(&pc->chip, &pc->chip.pwms[0], &state);
+
+	if(state.enabled == true) {
+		ret = clk_prepare_enable(pc->tbclk);
+		if (ret) {	
+			dev_err(&pdev->dev, "clk_prepare_enable() failed: %d\n", ret);
+			goto err_pwmchip_remove;
+		}
+		
+		tbclk_enabled = true;
+
+		ret = pm_runtime_get_sync(&pdev->dev);
+		if(ret < 0) {
+			dev_err(&pdev->dev, "pm_runtime_get_sync() failed: %d\n", ret);
+			clk_disable_unprepare(pc->tbclk);
+			goto err_pwmchip_remove;
+		}
+	}
+
 	return 0;
 
+err_pwmchip_remove:
+	pwmchip_remove(&pc->chip);
 err_clk_unprepare:
-	clk_unprepare(pc->tbclk);
+	if(tbclk_enabled)
+		clk_unprepare(pc->tbclk);
 
 	return ret;
 }
