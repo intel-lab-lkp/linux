@@ -268,7 +268,7 @@ int __i915_gem_object_put_pages(struct drm_i915_gem_object *obj)
 }
 
 /* The 'mapping' part of i915_gem_object_pin_map() below */
-static void *i915_gem_object_map_page(struct drm_i915_gem_object *obj,
+void *i915_gem_object_map_page(struct drm_i915_gem_object *obj,
 				      enum i915_map_type type)
 {
 	unsigned long n_pages = obj->base.size >> PAGE_SHIFT, i;
@@ -325,7 +325,7 @@ static void *i915_gem_object_map_page(struct drm_i915_gem_object *obj,
 	return vaddr ?: ERR_PTR(-ENOMEM);
 }
 
-static void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
+void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
 				     enum i915_map_type type)
 {
 	resource_size_t iomap = obj->mm.region->iomap.base -

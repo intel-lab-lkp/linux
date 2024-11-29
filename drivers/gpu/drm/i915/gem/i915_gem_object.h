@@ -694,6 +694,11 @@ i915_gem_object_unpin_pages(struct drm_i915_gem_object *obj)
 int __i915_gem_object_put_pages(struct drm_i915_gem_object *obj);
 int i915_gem_object_truncate(struct drm_i915_gem_object *obj);
 
+void *i915_gem_object_map_page(struct drm_i915_gem_object *obj,
+				      enum i915_map_type type);
+void *i915_gem_object_map_pfn(struct drm_i915_gem_object *obj,
+				     enum i915_map_type type);
+
 /**
  * i915_gem_object_pin_map - return a contiguous mapping of the entire object
  * @obj: the object to map into kernel address space
