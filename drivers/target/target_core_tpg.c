@@ -136,9 +136,8 @@ void core_tpg_add_node_to_devs(
 				lun_access_ro = false;
 		}
 
-		target_debug("TARGET_CORE[%s]->TPG[%u]_LUN[%llu] - Adding %s access for LUN in Demo Mode\n",
-			     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
-			     lun->unpacked_lun, lun_access_ro ? "READ-ONLY" : "READ-WRITE");
+		target_lun_debug(lun, "Adding %s access for LUN in Demo Mode\n",
+				 lun_access_ro ? "READ-ONLY" : "READ-WRITE");
 
 		core_enable_device_list_for_node(lun, NULL, lun->unpacked_lun,
 						 lun_access_ro, acl, tpg);
@@ -544,7 +543,7 @@ int core_tpg_register(
 		}
 	}
 
-	target_debug("TARGET_CORE[%s]: Allocated portal_group for endpoint: %s, Proto: %d, Portal Tag: %u\n",
+	target_debug("[%s]: Allocated portal_group for endpoint: %s, Proto: %d, Portal Tag: %u\n",
 		     se_tpg->se_tpg_tfo->fabric_name,
 		     se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg) ?
 		     se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg) : NULL,
@@ -560,7 +559,7 @@ int core_tpg_deregister(struct se_portal_group *se_tpg)
 	struct se_node_acl *nacl, *nacl_tmp;
 	LIST_HEAD(node_list);
 
-	target_debug("TARGET_CORE[%s]: Deallocating portal_group for endpoint: %s, Proto: %d, Portal Tag: %u\n",
+	target_debug("[%s]: Deallocating portal_group for endpoint: %s, Proto: %d, Portal Tag: %u\n",
 		     tfo->fabric_name, tfo->tpg_get_wwn(se_tpg) ? tfo->tpg_get_wwn(se_tpg) : NULL,
 		     se_tpg->proto_id, tfo->tpg_get_tag(se_tpg));
 

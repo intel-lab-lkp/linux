@@ -196,7 +196,7 @@ static struct config_group *target_core_register_fabric(
 
 	tf = target_core_get_fabric(name);
 	if (!tf) {
-		target_debug("target_core_register_fabric() trying autoload for %s\n", name);
+		target_debug("%s trying autoload for %s\n", __func__, name);
 
 		/*
 		 * Below are some hardcoded request_module() calls to automatically
@@ -3589,8 +3589,8 @@ static int __init target_core_init_configfs(void)
 	const struct cred *old_cred;
 	int ret;
 
-	target_debug("TARGET_CORE[0]: Loading Generic Kernel Storage Engine: %s on %s/%s on "
-		     UTS_RELEASE "\n", TARGET_CORE_VERSION, utsname()->sysname, utsname()->machine);
+	target_debug("Loading Generic Kernel Storage Engine: %s on %s/%s on " UTS_RELEASE "\n",
+		     TARGET_CORE_VERSION, utsname()->sysname, utsname()->machine);
 
 	config_group_init(&subsys->su_group);
 	mutex_init(&subsys->su_mutex);
@@ -3704,7 +3704,7 @@ static void __exit target_core_exit_configfs(void)
 	core_alua_free_lu_gp(default_lu_gp);
 	default_lu_gp = NULL;
 
-	target_debug("TARGET_CORE[0]: Released ConfigFS Fabric Infrastructure\n");
+	target_debug("Released ConfigFS Fabric Infrastructure\n");
 
 	core_dev_release_virtual_lun0();
 	rd_module_exit();

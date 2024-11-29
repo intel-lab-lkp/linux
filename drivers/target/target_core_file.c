@@ -50,9 +50,9 @@ static int fd_attach_hba(struct se_hba *hba, u32 host_id)
 
 	hba->hba_ptr = fd_host;
 
-	target_debug("CORE_HBA[%d] - TCM FILEIO HBA Driver %s on Generic Target Core Stack %s\n",
+	target_debug("hba[%d] - TCM FILEIO HBA Driver %s on Generic Target Core Stack %s\n",
 		     hba->hba_id, FD_VERSION, TARGET_CORE_VERSION);
-	target_debug("CORE_HBA[%d] - Attached FILEIO HBA: %u to Generic\n", hba->hba_id,
+	target_debug("hba[%d] - Attached FILEIO HBA: %u to Generic\n", hba->hba_id,
 		     fd_host->fd_host_id);
 
 	return 0;
@@ -62,8 +62,8 @@ static void fd_detach_hba(struct se_hba *hba)
 {
 	struct fd_host *fd_host = hba->hba_ptr;
 
-	target_debug("CORE_HBA[%d] - Detached FILEIO HBA: %u from Generic Target Core\n",
-		     hba->hba_id, fd_host->fd_host_id);
+	target_debug("hba[%d] - Detached FILEIO HBA: %u from Generic Target Core\n", hba->hba_id,
+		     fd_host->fd_host_id);
 
 	kfree(fd_host);
 	hba->hba_ptr = NULL;
@@ -202,7 +202,7 @@ static int fd_configure_device(struct se_device *dev)
 	fd_dev->fd_dev_id = fd_host->fd_host_dev_id_count++;
 	fd_dev->fd_queue_depth = dev->queue_depth;
 
-	target_debug("CORE_FILE[%u] - Added TCM FILEIO Device ID: %u at %s, %llu total bytes\n",
+	target_debug("Host[%u] - Added TCM FILEIO Device ID: %u at %s, %llu total bytes\n",
 		     fd_host->fd_host_id, fd_dev->fd_dev_id, fd_dev->fd_dev_name,
 		     fd_dev->fd_dev_size);
 
@@ -319,7 +319,7 @@ static int fd_do_rw(struct se_cmd *cmd, struct file *fd,
 
 	bvec = kcalloc(sgl_nents, sizeof(struct bio_vec), GFP_KERNEL);
 	if (!bvec) {
-		target_err("Unable to allocate fd_do_readv iov[]\n");
+		target_cmd_err(cmd, "Unable to allocate fd_do_readv iov[]\n");
 		return -ENOMEM;
 	}
 
@@ -336,7 +336,7 @@ static int fd_do_rw(struct se_cmd *cmd, struct file *fd,
 
 	if (is_write) {
 		if (ret < 0 || ret != data_length) {
-			target_err("%s() write returned %d\n", __func__, ret);
+			target_cmd_err(cmd, "%s() write returned %d\n", __func__, ret);
 			if (ret >= 0)
 				ret = -EINVAL;
 		}
@@ -348,14 +348,15 @@ static int fd_do_rw(struct se_cmd *cmd, struct file *fd,
 		 */
 		if (S_ISBLK(file_inode(fd)->i_mode)) {
 			if (ret < 0 || ret != data_length) {
-				target_err("%s() returned %d, expecting %u for S_ISBLK\n", __func__,
-					   ret, data_length);
+				target_cmd_err(cmd, "%s() returned %d, expecting %u for S_ISBLK\n",
+					       __func__, ret, data_length);
 				if (ret >= 0)
 					ret = -EINVAL;
 			}
 		} else {
 			if (ret < 0) {
-				target_err("%s() returned %d for non S_ISBLK\n", __func__, ret);
+				target_cmd_err(cmd, "%s() returned %d for non S_ISBLK\n", __func__,
+					       ret);
 			} else if (ret != data_length) {
 				/*
 				 * Short read case:
@@ -406,7 +407,7 @@ fd_execute_sync_cache(struct se_cmd *cmd)
 
 	ret = vfs_fsync_range(fd_dev->fd_file, start, end, 1);
 	if (ret != 0)
-		target_err("vfs_fsync_range() failed: %d\n", ret);
+		target_cmd_err(cmd, "vfs_fsync_range() failed: %d\n", ret);
 
 	if (immed)
 		return 0;
@@ -432,7 +433,7 @@ fd_execute_write_same(struct se_cmd *cmd)
 	ssize_t ret;
 
 	if (cmd->prot_op) {
-		target_err("WRITE_SAME: Protection information with FILEIO backends not supported\n");
+		target_cmd_err(cmd, "WRITE_SAME: Protection information with FILEIO backends not supported\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -441,9 +442,9 @@ fd_execute_write_same(struct se_cmd *cmd)
 
 	if (cmd->t_data_nents > 1 ||
 	    cmd->t_data_sg[0].length != cmd->se_dev->dev_attrib.block_size) {
-		target_err("WRITE_SAME: Illegal SGL t_data_nents: %u length: %u block_size: %u\n",
-			   cmd->t_data_nents, cmd->t_data_sg[0].length,
-			   cmd->se_dev->dev_attrib.block_size);
+		target_cmd_err(cmd, "WRITE_SAME: Illegal SGL t_data_nents: %u length: %u block_size: %u\n",
+			       cmd->t_data_nents, cmd->t_data_sg[0].length,
+			       cmd->se_dev->dev_attrib.block_size);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -463,7 +464,7 @@ fd_execute_write_same(struct se_cmd *cmd)
 
 	kfree(bvec);
 	if (ret < 0 || ret != len) {
-		target_err("vfs_iter_write() returned %zd for write same\n", ret);
+		target_cmd_err(cmd, "vfs_iter_write() returned %zd for write same\n", ret);
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -510,7 +511,7 @@ fd_do_prot_unmap(struct se_cmd *cmd, sector_t lba, sector_t nolb)
 
 	buf = (void *)__get_free_page(GFP_KERNEL);
 	if (!buf) {
-		target_err("Unable to allocate FILEIO prot buf\n");
+		target_cmd_err(cmd, "Unable to allocate FILEIO prot buf\n");
 		return -ENOMEM;
 	}
 
@@ -548,7 +549,7 @@ fd_execute_unmap(struct se_cmd *cmd, sector_t lba, sector_t nolb)
 					   target_to_linux_sector(dev,  nolb),
 					   GFP_KERNEL);
 		if (ret < 0) {
-			target_warn("blkdev_issue_discard() failed: %d\n", ret);
+			target_cmd_warn(cmd, "blkdev_issue_discard() failed: %d\n", ret);
 			return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 		}
 	} else {
@@ -563,7 +564,7 @@ fd_execute_unmap(struct se_cmd *cmd, sector_t lba, sector_t nolb)
 
 		ret = file->f_op->fallocate(file, mode, pos, len);
 		if (ret < 0) {
-			target_warn("fallocate() failed: %d\n", ret);
+			target_cmd_warn(cmd, "fallocate() failed: %d\n", ret);
 			return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 		}
 	}
@@ -667,8 +668,8 @@ fd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 	 * single vfs_[writev,readv] call.
 	 */
 	if (cmd->data_length > FD_MAX_BYTES) {
-		target_err("Not able to process I/O of %u bytes due to FD_MAX_BYTES: %u iovec count limitation\n",
-			   cmd->data_length, FD_MAX_BYTES);
+		target_cmd_err(cmd, "Not able to process I/O of %u bytes due to FD_MAX_BYTES: %u iovec count limitation\n",
+			       cmd->data_length, FD_MAX_BYTES);
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -821,7 +822,7 @@ static int fd_init_prot(struct se_device *dev)
 
 	inode = file->f_mapping->host;
 	if (S_ISBLK(inode->i_mode)) {
-		target_err("FILEIO Protection emulation only supported on !S_ISBLK\n");
+		target_err("Protection emulation only supported on !S_ISBLK\n");
 		return -ENOSYS;
 	}
 

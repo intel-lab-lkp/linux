@@ -106,13 +106,13 @@ static int target_fabric_mappedlun_link(
 	 * Make sure the SymLink is going to the same $FABRIC/$WWN/tpgt_$TPGT
 	 */
 	if (strcmp(config_item_name(wwn_ci), config_item_name(wwn_ci_s))) {
-		target_err("Illegal Initiator ACL SymLink outside of %s\n",
-			   config_item_name(wwn_ci));
+		target_lun_err(lun, "Illegal Initiator ACL SymLink outside of %s\n",
+			       config_item_name(wwn_ci));
 		return -EINVAL;
 	}
 	if (strcmp(config_item_name(tpg_ci), config_item_name(tpg_ci_s))) {
-		target_err("Illegal Initiator ACL Symlink outside of %s TPGT: %s\n",
-			   config_item_name(wwn_ci), config_item_name(tpg_ci));
+		target_lun_err(lun, "Illegal Initiator ACL Symlink outside of %s TPGT: %s\n",
+			       config_item_name(wwn_ci), config_item_name(tpg_ci));
 		return -EINVAL;
 	}
 	/*

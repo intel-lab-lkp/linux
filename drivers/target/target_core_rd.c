@@ -44,7 +44,7 @@ static int rd_attach_hba(struct se_hba *hba, u32 host_id)
 
 	hba->hba_ptr = rd_host;
 
-	target_debug("CORE_HBA[%d] - TCM Ramdisk HBA Driver %s on Generic Target Core Stack %s\n",
+	target_debug("hba[%d] - TCM Ramdisk HBA Driver %s on Generic Target Core Stack %s\n",
 		     hba->hba_id, RD_HBA_VERSION, TARGET_CORE_VERSION);
 
 	return 0;
@@ -54,8 +54,8 @@ static void rd_detach_hba(struct se_hba *hba)
 {
 	struct rd_host *rd_host = hba->hba_ptr;
 
-	target_debug("CORE_HBA[%d] - Detached Ramdisk HBA: %u from Generic Target Core\n",
-		     hba->hba_id, rd_host->rd_host_id);
+	target_debug("hba[%d] - Detached Ramdisk HBA: %u from Generic Target Core\n", hba->hba_id,
+		     rd_host->rd_host_id);
 
 	kfree(rd_host);
 	hba->hba_ptr = NULL;
@@ -96,7 +96,7 @@ static void rd_release_device_space(struct rd_dev *rd_dev)
 	page_count = rd_release_sgl_table(rd_dev, rd_dev->sg_table_array,
 					  rd_dev->sg_table_count);
 
-	target_debug("CORE_RD[%u] - Released device space for Ramdisk Device ID: %u, pages %u in %u tables total bytes %lu\n",
+	target_debug("host[%u] - Released device space for Ramdisk Device ID: %u, pages %u in %u tables total bytes %lu\n",
 		     rd_dev->rd_host->rd_host_id, rd_dev->rd_dev_id, page_count,
 		     rd_dev->sg_table_count, (unsigned long)page_count * PAGE_SIZE);
 
@@ -201,7 +201,7 @@ static int rd_build_device_space(struct rd_dev *rd_dev)
 	if (rc)
 		return rc;
 
-	target_debug("CORE_RD[%u] - Built Ramdisk Device ID: %u space of %u pages in %u tables\n",
+	target_debug("host[%u] - Built Ramdisk Device ID: %u space of %u pages in %u tables\n",
 		     rd_dev->rd_host->rd_host_id, rd_dev->rd_dev_id, rd_dev->rd_page_count,
 		     rd_dev->sg_table_count);
 
@@ -218,7 +218,7 @@ static void rd_release_prot_space(struct rd_dev *rd_dev)
 	page_count = rd_release_sgl_table(rd_dev, rd_dev->sg_prot_array,
 					  rd_dev->sg_prot_count);
 
-	target_debug("CORE_RD[%u] - Released protection space for Ramdisk Device ID: %u, pages %u in %u tables total bytes %lu\n",
+	target_debug("host[%u] - Released protection space for Ramdisk Device ID: %u, pages %u in %u tables total bytes %lu\n",
 		     rd_dev->rd_host->rd_host_id, rd_dev->rd_dev_id, page_count,
 		     rd_dev->sg_table_count, (unsigned long)page_count * PAGE_SIZE);
 
@@ -256,7 +256,7 @@ static int rd_build_prot_space(struct rd_dev *rd_dev, int prot_length, int block
 	if (rc)
 		return rc;
 
-	target_debug("CORE_RD[%u] - Built Ramdisk Device ID: %u prot space of %u pages in %u tables\n",
+	target_debug("host[%u] - Built Ramdisk Device ID: %u prot space of %u pages in %u tables\n",
 		     rd_dev->rd_host->rd_host_id, rd_dev->rd_dev_id, total_sg_needed,
 		     rd_dev->sg_prot_count);
 
@@ -299,7 +299,7 @@ static int rd_configure_device(struct se_device *dev)
 
 	rd_dev->rd_dev_id = rd_host->rd_host_dev_id_count++;
 
-	target_debug("CORE_RD[%u] - Added TCM MEMCPY Ramdisk Device ID: %u of %u pages in %u tables, %lu total bytes\n",
+	target_debug("host[%u] - Added TCM MEMCPY Ramdisk Device ID: %u of %u pages in %u tables, %lu total bytes\n",
 		     rd_host->rd_host_id, rd_dev->rd_dev_id, rd_dev->rd_page_count,
 		     rd_dev->sg_table_count, (unsigned long)(rd_dev->rd_page_count * PAGE_SIZE));
 
@@ -437,7 +437,7 @@ rd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 
 	rd_sg = &table->sg_table[rd_page - table->page_start_offset];
 
-	target_debug("RD[%u]: %s LBA: %llu, Size: %u Page: %u, Offset: %u\n", dev->rd_dev_id,
+	target_debug("device[%u]: %s LBA: %llu, Size: %u Page: %u, Offset: %u\n", dev->rd_dev_id,
 		     data_direction == DMA_FROM_DEVICE ? "Read" : "Write", cmd->t_task_lba, rd_size,
 		     rd_page, rd_offset);
 
@@ -458,14 +458,14 @@ rd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 
 		sg_miter_next(&m);
 		if (!(u32)m.length) {
-			target_debug("RD[%u]: invalid sgl %p len %zu\n", dev->rd_dev_id, m.addr,
+			target_debug("device[%u]: invalid sgl %p len %zu\n", dev->rd_dev_id, m.addr,
 				     m.length);
 			sg_miter_stop(&m);
 			return TCM_INCORRECT_AMOUNT_OF_DATA;
 		}
 		len = min((u32)m.length, src_len);
 		if (len > rd_size) {
-			target_debug("RD[%u]: size underrun page %d offset %d size %d\n",
+			target_debug("device[%u]: size underrun page %d offset %d size %d\n",
 				     dev->rd_dev_id, rd_page, rd_offset, rd_size);
 			len = rd_size;
 		}

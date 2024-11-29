@@ -61,9 +61,20 @@ enum register_type {
 	REGISTER_AND_MOVE,
 };
 
+static const char *const pr_register_type_table_str[] = {
+	"REGISTER",
+	"REGISTER_AND_IGNORE_EXISTING_KEY",
+	"REGISTER_AND_MOVE",
+};
+
 enum preempt_type {
 	PREEMPT,
 	PREEMPT_AND_ABORT,
+};
+
+static const char *const pr_preempt_type_table_str[] = {
+	"PREEMPT",
+	"PREEMPT_AND_ABORT",
 };
 
 static void __core_scsi3_complete_pro_release(struct se_device *, struct se_node_acl *,
@@ -180,7 +191,7 @@ static int target_check_scsi2_reservation_conflict(struct se_cmd *cmd)
 	}
 
 	if (conflict) {
-		target_err("Received legacy SPC-2 RESERVE/RELEASE while active SPC-3 registrations exist, returning RESERVATION_CONFLICT\n");
+		target_cmd_err(cmd, "Received legacy SPC-2 RESERVE/RELEASE while active SPC-3 registrations exist, returning RESERVATION_CONFLICT\n");
 		return -EBUSY;
 	}
 
@@ -225,9 +236,8 @@ target_scsi2_reservation_release(struct se_cmd *cmd)
 
 	target_release_reservation(dev);
 	tpg = sess->se_tpg;
-	target_debug("SCSI-2 Released reservation for %s LUN: %llu -> MAPPED LUN: %llu for %s\n",
-		     tpg->se_tpg_tfo->fabric_name, cmd->se_lun->unpacked_lun, cmd->orig_fe_lun,
-		     sess->se_node_acl->initiatorname);
+	target_cmd_debug(cmd, "SCSI-2 Released reservation for %s LUN: %llu\n",
+			 tpg->se_tpg_tfo->fabric_name, cmd->se_lun->unpacked_lun);
 
 out_unlock:
 	spin_unlock(&dev->dev_reservation_lock);
@@ -247,7 +257,7 @@ target_scsi2_reservation_reserve(struct se_cmd *cmd)
 
 	if ((cmd->t_task_cdb[1] & 0x01) &&
 	    (cmd->t_task_cdb[1] & 0x02)) {
-		target_err("LongIO and Obsolete Bits set, returning ILLEGAL_REQUEST\n");
+		target_cmd_err(cmd, "LongIO and Obsolete Bits set, returning ILLEGAL_REQUEST\n");
 		return TCM_UNSUPPORTED_SCSI_OPCODE;
 	}
 	/*
@@ -267,8 +277,8 @@ target_scsi2_reservation_reserve(struct se_cmd *cmd)
 	spin_lock(&dev->dev_reservation_lock);
 	if (dev->reservation_holder &&
 	    dev->reservation_holder->se_node_acl != sess->se_node_acl) {
-		target_err("SCSI-2 RESERVATION CONFLICT for %s fabric\n",
-			   tpg->se_tpg_tfo->fabric_name);
+		target_cmd_err(cmd, "SCSI-2 RESERVATION CONFLICT for %s fabric\n",
+			       tpg->se_tpg_tfo->fabric_name);
 		target_err("Original reserver LUN: %llu %s\n", cmd->se_lun->unpacked_lun,
 			   dev->reservation_holder->se_node_acl->initiatorname);
 		target_err("Current attempt - LUN: %llu -> MAPPED LUN: %llu from %s\n",
@@ -284,9 +294,8 @@ target_scsi2_reservation_reserve(struct se_cmd *cmd)
 		dev->dev_res_bin_isid = sess->sess_bin_isid;
 		dev->dev_reservation_flags |= DRF_SPC2_RESERVATIONS_WITH_ISID;
 	}
-	target_debug("SCSI-2 Reserved %s LUN: %llu -> MAPPED LUN: %llu for %s\n",
-		     tpg->se_tpg_tfo->fabric_name, cmd->se_lun->unpacked_lun, cmd->orig_fe_lun,
-		     sess->se_node_acl->initiatorname);
+	target_cmd_debug(cmd, "SCSI-2 Reserved %s LUN: %llu \n", tpg->se_tpg_tfo->fabric_name,
+			 cmd->se_lun->unpacked_lun);
 
 out_unlock:
 	spin_unlock(&dev->dev_reservation_lock);
@@ -408,8 +417,8 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 			ret = (registered_nexus) ? 0 : 1;
 			break;
 		default:
-			target_err("Unknown PERSISTENT_RESERVE_OUT service action: 0x%02x\n",
-				   cdb[1] & 0x1f);
+			target_cmd_err(cmd, "Unknown PERSISTENT_RESERVE_OUT service action: 0x%02x\n",
+				       cdb[1] & 0x1f);
 			return -EINVAL;
 		}
 		break;
@@ -455,7 +464,7 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 			ret = 0; /* Allowed */
 			break;
 		default:
-			target_err("Unknown MI Service Action: 0x%02x\n", (cdb[1] & 0x1f));
+			target_cmd_err(cmd, "Unknown MI Service Action: 0x%02x\n", (cdb[1] & 0x1f));
 			return -EINVAL;
 		}
 		break;
@@ -479,8 +488,8 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 	 * statement.
 	 */
 	if (!ret && !other_cdb) {
-		target_debug("Allowing explicit CDB: 0x%02x for %s reservation holder\n", cdb[0],
-			     core_scsi3_pr_dump_type(pr_reg_type));
+		target_cmd_debug(cmd, "Allowing explicit CDB: 0x%02x for %s reservation holder\n",
+				 cdb[0], core_scsi3_pr_dump_type(pr_reg_type));
 
 		return ret;
 	}
@@ -493,10 +502,10 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 			/*
 			 * Conflict for write exclusive
 			 */
-			target_debug("%s Conflict for unregistered nexus %s CDB: 0x%02x to %s reservation\n",
-				     transport_dump_cmd_direction(cmd),
-				     se_sess->se_node_acl->initiatorname, cdb[0],
-				     core_scsi3_pr_dump_type(pr_reg_type));
+			target_cmd_debug(cmd, "%s Conflict for unregistered nexus %s CDB: 0x%02x to %s reservation\n",
+					 transport_dump_cmd_direction(cmd),
+					 se_sess->se_node_acl->initiatorname,
+					 cdb[0], core_scsi3_pr_dump_type(pr_reg_type));
 			return 1;
 		} else {
 			/*
@@ -510,8 +519,8 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 			 */
 
 			if (!registered_nexus) {
-				target_debug("Allowing implicit CDB: 0x%02x for %s reservation on unregistered nexus\n",
-					     cdb[0], core_scsi3_pr_dump_type(pr_reg_type));
+				target_cmd_debug(cmd, "Allowing implicit CDB: 0x%02x for %s reservation on unregistered nexus\n",
+						 cdb[0], core_scsi3_pr_dump_type(pr_reg_type));
 			}
 
 			return 0;
@@ -523,8 +532,8 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 			 * allow commands from registered nexuses.
 			 */
 
-			target_debug("Allowing implicit CDB: 0x%02x for %s reservation\n", cdb[0],
-				     core_scsi3_pr_dump_type(pr_reg_type));
+			target_cmd_debug(cmd, "Allowing implicit CDB: 0x%02x for %s reservation\n",
+					 cdb[0], core_scsi3_pr_dump_type(pr_reg_type));
 
 			return 0;
 		}
@@ -534,16 +543,16 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 		 * from all registrants.
 		 */
 		if (cmd->data_direction == DMA_FROM_DEVICE) {
-			target_debug("Allowing READ CDB: 0x%02x for %s reservation\n", cdb[0],
-				     core_scsi3_pr_dump_type(pr_reg_type));
+			target_cmd_debug(cmd, "Allowing READ CDB: 0x%02x for %s reservation\n",
+					 cdb[0], core_scsi3_pr_dump_type(pr_reg_type));
 
 			return 0;
 		}
 	}
-	target_debug("%s Conflict for %sregistered nexus %s CDB: 0x%2x for %s reservation\n",
-		     transport_dump_cmd_direction(cmd), (registered_nexus) ? "" : "un",
-		     se_sess->se_node_acl->initiatorname, cdb[0],
-		     core_scsi3_pr_dump_type(pr_reg_type));
+	target_cmd_debug(cmd, "%s Conflict for %sregistered nexus %s CDB: 0x%2x for %s reservation\n",
+			 transport_dump_cmd_direction(cmd), (registered_nexus) ? "" : "un",
+			 se_sess->se_node_acl->initiatorname, cdb[0],
+			 core_scsi3_pr_dump_type(pr_reg_type));
 
 	return 1; /* Conflict by default */
 }
@@ -942,8 +951,8 @@ static int __core_scsi3_check_aptpl_registration(
 			rcu_read_lock();
 			pr_reg->pr_reg_deve = target_nacl_find_deve(nacl, mapped_lun);
 			if (!pr_reg->pr_reg_deve) {
-				target_err("Unable to locate PR APTPL %s mapped_lun: %llu\n",
-					   nacl->initiatorname, mapped_lun);
+				target_lun_err(lun, "Unable to locate PR APTPL %s mapped_lun: %llu\n",
+					       nacl->initiatorname, mapped_lun);
 				rcu_read_unlock();
 				continue;
 			}
@@ -1464,7 +1473,7 @@ core_scsi3_decode_spec_i_port(
 	 */
 	tidh_new = kzalloc(sizeof(struct pr_transport_id_holder), GFP_KERNEL);
 	if (!tidh_new) {
-		target_err("Unable to allocate tidh_new\n");
+		target_cmd_err(cmd, "Unable to allocate tidh_new\n");
 		return TCM_INSUFFICIENT_REGISTRATION_RESOURCES;
 	}
 	INIT_LIST_HEAD(&tidh_new->dest_list);
@@ -1492,8 +1501,8 @@ core_scsi3_decode_spec_i_port(
 	list_add_tail(&tidh_new->dest_list, &tid_dest_list);
 
 	if (cmd->data_length < 28) {
-		target_warn("SPC-PR: Received PR OUT parameter list length too small: %u\n",
-			    cmd->data_length);
+		target_cmd_warn(cmd, "SPC-PR: Received PR OUT parameter list length too small: %u\n",
+				cmd->data_length);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
@@ -1512,8 +1521,8 @@ core_scsi3_decode_spec_i_port(
 	tpdl = get_unaligned_be32(&buf[24]);
 
 	if ((tpdl + 28) != cmd->data_length) {
-		target_err("SPC-3 PR: Illegal tpdl: %u + 28 byte header does not equal CDB data_length: %u\n",
-			   tpdl, cmd->data_length);
+		target_cmd_err(cmd, "SPC-3 PR: Illegal tpdl: %u + 28 byte header does not equal CDB data_length: %u\n",
+			       tpdl, cmd->data_length);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out_unmap;
 	}
@@ -1555,8 +1564,8 @@ core_scsi3_decode_spec_i_port(
 			if (tpg->se_tpg_tfo->sess_get_initiator_sid &&
 			    dev->dev_attrib.enforce_pr_isids &&
 			    !iport_ptr) {
-				target_warn("SPC-PR: enforce_pr_isids is set but a isid has not been sent in the SPEC_I_PT data for %s.",
-					    i_str);
+				target_cmd_warn(cmd, "SPC-PR: enforce_pr_isids is set but a isid has not been sent in the SPEC_I_PT data for %s.\n",
+						i_str);
 				ret = TCM_INVALID_PARAMETER_LIST;
 				spin_unlock(&dev->se_port_lock);
 				goto out_unmap;
@@ -1566,7 +1575,7 @@ core_scsi3_decode_spec_i_port(
 			spin_unlock(&dev->se_port_lock);
 
 			if (core_scsi3_tpg_depend_item(tmp_tpg)) {
-				target_err(" core_scsi3_tpg_depend_item() for tmp_tpg\n");
+				target_cmd_err(cmd, "core_scsi3_tpg_depend_item() for tmp_tpg\n");
 				atomic_dec_mb(&tmp_tpg->tpg_pr_ref_count);
 				ret = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 				goto out_unmap;
@@ -1590,7 +1599,7 @@ core_scsi3_decode_spec_i_port(
 			}
 
 			if (core_scsi3_nodeacl_depend_item(dest_node_acl)) {
-				target_err("configfs_depend_item() failed for dest_node_acl->acl_group\n");
+				target_cmd_err(cmd, "configfs_depend_item() failed for dest_node_acl->acl_group\n");
 				atomic_dec_mb(&dest_node_acl->acl_pr_ref_count);
 				core_scsi3_tpg_undepend_item(tmp_tpg);
 				ret = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
@@ -1598,9 +1607,9 @@ core_scsi3_decode_spec_i_port(
 			}
 
 			dest_tpg = tmp_tpg;
-			target_debug("SPC-3 PR SPEC_I_PT: Located %s Node: %s Port RTPI: %u\n",
-				     dest_tpg->se_tpg_tfo->fabric_name,
-				     dest_node_acl->initiatorname, dest_rtpi);
+			target_cmd_debug(cmd, "SPC-3 PR SPEC_I_PT: Located %s Node: %s Port RTPI: %u\n",
+					 dest_tpg->se_tpg_tfo->fabric_name,
+					 dest_node_acl->initiatorname, dest_rtpi);
 
 			spin_lock(&dev->se_port_lock);
 			break;
@@ -1608,18 +1617,18 @@ core_scsi3_decode_spec_i_port(
 		spin_unlock(&dev->se_port_lock);
 
 		if (!dest_tpg) {
-			target_err("SPC-3 PR SPEC_I_PT: Unable to locate dest_tpg\n");
+			target_cmd_err(cmd, "SPC-3 PR SPEC_I_PT: Unable to locate dest_tpg\n");
 			ret = TCM_INVALID_PARAMETER_LIST;
 			goto out_unmap;
 		}
 
-		target_debug("SPC-3 PR SPEC_I_PT: Got %s data_length: %u tpdl: %u tid_len: %d for %s + %s\n",
-			     dest_tpg->se_tpg_tfo->fabric_name, cmd->data_length, tpdl, tid_len,
-			     i_str, iport_ptr);
+		target_cmd_debug(cmd, "SPC-3 PR SPEC_I_PT: Got %s data_length: %u tpdl: %u tid_len: %d for %s + %s\n",
+				 dest_tpg->se_tpg_tfo->fabric_name, cmd->data_length, tpdl, tid_len,
+				 i_str, iport_ptr);
 
 		if (tid_len > tpdl) {
-			target_err("SPC-3 PR SPEC_I_PT: Illegal tid_len: %u for Transport ID: %s\n",
-				   tid_len, ptr);
+			target_cmd_err(cmd, "SPC-3 PR SPEC_I_PT: Illegal tid_len: %u for Transport ID: %s\n",
+				       tid_len, ptr);
 			core_scsi3_nodeacl_undepend_item(dest_node_acl);
 			core_scsi3_tpg_undepend_item(dest_tpg);
 			ret = TCM_INVALID_PARAMETER_LIST;
@@ -1633,8 +1642,8 @@ core_scsi3_decode_spec_i_port(
 		dest_se_deve = core_get_se_deve_from_rtpi(dest_node_acl,
 					dest_rtpi);
 		if (!dest_se_deve) {
-			target_err("Unable to locate %s dest_se_deve from destination RTPI: %u\n",
-				   dest_tpg->se_tpg_tfo->fabric_name, dest_rtpi);
+			target_cmd_err(cmd, "Unable to locate %s dest_se_deve from destination RTPI: %u\n",
+				       dest_tpg->se_tpg_tfo->fabric_name, dest_rtpi);
 
 			core_scsi3_nodeacl_undepend_item(dest_node_acl);
 			core_scsi3_tpg_undepend_item(dest_tpg);
@@ -1643,7 +1652,7 @@ core_scsi3_decode_spec_i_port(
 		}
 
 		if (core_scsi3_lunacl_depend_item(dest_se_deve)) {
-			target_err("core_scsi3_lunacl_depend_item() failed\n");
+			target_cmd_err(cmd, "core_scsi3_lunacl_depend_item() failed\n");
 			kref_put(&dest_se_deve->pr_kref, target_pr_kref_release);
 			core_scsi3_nodeacl_undepend_item(dest_node_acl);
 			core_scsi3_tpg_undepend_item(dest_tpg);
@@ -1651,9 +1660,9 @@ core_scsi3_decode_spec_i_port(
 			goto out_unmap;
 		}
 
-		target_debug("SPC-3 PR SPEC_I_PT: Located %s Node: %s dest_se_deve mapped_lun: %llu\n",
-			     dest_tpg->se_tpg_tfo->fabric_name, dest_node_acl->initiatorname,
-			     dest_se_deve->mapped_lun);
+		target_cmd_debug(cmd, "SPC-3 PR SPEC_I_PT: Located %s Node: %s dest_se_deve mapped_lun: %llu\n",
+				 dest_tpg->se_tpg_tfo->fabric_name, dest_node_acl->initiatorname,
+				 dest_se_deve->mapped_lun);
 
 		/*
 		 * Skip any TransportIDs that already have a registration for
@@ -1679,7 +1688,7 @@ core_scsi3_decode_spec_i_port(
 		tidh_new = kzalloc(sizeof(struct pr_transport_id_holder),
 				GFP_KERNEL);
 		if (!tidh_new) {
-			target_err("Unable to allocate tidh_new\n");
+			target_cmd_err(cmd, "Unable to allocate tidh_new\n");
 			core_scsi3_lunacl_undepend_item(dest_se_deve);
 			core_scsi3_nodeacl_undepend_item(dest_node_acl);
 			core_scsi3_tpg_undepend_item(dest_tpg);
@@ -1760,9 +1769,9 @@ core_scsi3_decode_spec_i_port(
 		__core_scsi3_add_registration(cmd->se_dev, dest_node_acl,
 					dest_pr_reg, 0, 0);
 
-		target_debug("SPC-3 PR [%s] SPEC_I_PT: Successfully registered Transport ID for Node: %s%s Mapped LUN: %llu\n",
-			     dest_tpg->se_tpg_tfo->fabric_name, dest_node_acl->initiatorname, i_buf,
-			     (dest_se_deve) ? dest_se_deve->mapped_lun : 0);
+		target_cmd_debug(cmd, "SPC-3 PR [%s] SPEC_I_PT: Successfully registered Transport ID for Node: %s%s Mapped LUN: %llu\n",
+				 dest_tpg->se_tpg_tfo->fabric_name, dest_node_acl->initiatorname,
+				 i_buf, (dest_se_deve) ? dest_se_deve->mapped_lun : 0);
 
 		if (dest_pr_reg == local_pr_reg)
 			continue;
@@ -2024,7 +2033,7 @@ core_scsi3_emulate_pro_register(struct se_cmd *cmd, u64 res_key, u64 sa_res_key,
 	pr_reg = core_scsi3_locate_pr_reg(dev, se_sess->se_node_acl, se_sess);
 	if (!pr_reg) {
 		if (res_key) {
-			target_warn("SPC-3 PR: Reservation Key non-zero for SA REGISTER, returning CONFLICT\n");
+			target_cmd_warn(cmd, "SPC-3 PR: Reservation Key non-zero for SA REGISTER, returning CONFLICT\n");
 			return TCM_RESERVATION_CONFLICT;
 		}
 		/*
@@ -2044,7 +2053,7 @@ core_scsi3_emulate_pro_register(struct se_cmd *cmd, u64 res_key, u64 sa_res_key,
 					NULL, cmd->orig_fe_lun, isid_ptr,
 					sa_res_key, all_tg_pt, aptpl,
 					register_type, 0)) {
-				target_err("Unable to allocate struct t10_pr_registration\n");
+				target_cmd_err(cmd, "Unable to allocate struct t10_pr_registration\n");
 				return TCM_INSUFFICIENT_REGISTRATION_RESOURCES;
 			}
 		} else {
@@ -2067,14 +2076,14 @@ core_scsi3_emulate_pro_register(struct se_cmd *cmd, u64 res_key, u64 sa_res_key,
 	/* ok, existing registration */
 
 	if ((register_type == REGISTER) && (res_key != pr_reg->pr_res_key)) {
-		target_err("SPC-3 PR REGISTER: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
-			   res_key, pr_reg->pr_res_key);
+		target_cmd_err(cmd, "SPC-3 PR REGISTER: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
+			       res_key, pr_reg->pr_res_key);
 		ret = TCM_RESERVATION_CONFLICT;
 		goto out;
 	}
 
 	if (spec_i_pt) {
-		target_err("SPC-3 PR REGISTER: SPEC_I_PT set on a registered nexus\n");
+		target_cmd_err(cmd, "SPC-3 PR REGISTER: SPEC_I_PT set on a registered nexus\n");
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
@@ -2084,7 +2093,7 @@ core_scsi3_emulate_pro_register(struct se_cmd *cmd, u64 res_key, u64 sa_res_key,
 	 * must also set ALL_TG_PT=1 in the incoming PROUT.
 	 */
 	if (pr_reg->pr_reg_all_tg_pt && !all_tg_pt) {
-		target_err("SPC-3 PR REGISTER: ALL_TG_PT=1 registration exists, but ALL_TG_PT=1 bit not present in received PROUT\n");
+		target_cmd_err(cmd, "SPC-3 PR REGISTER: ALL_TG_PT=1 registration exists, but ALL_TG_PT=1 bit not present in received PROUT\n");
 		ret = TCM_INVALID_CDB_FIELD;
 		goto out;
 	}
@@ -2100,11 +2109,12 @@ core_scsi3_emulate_pro_register(struct se_cmd *cmd, u64 res_key, u64 sa_res_key,
 		 */
 		pr_reg->pr_res_generation = core_scsi3_pr_generation(cmd->se_dev);
 		pr_reg->pr_res_key = sa_res_key;
-		target_debug("SPC-3 PR [%s] REGISTER%s: Changed Reservation Key for %s to: 0x%016Lx PRgeneration: 0x%08x\n",
-			     cmd->se_tfo->fabric_name,
-			     (register_type == REGISTER_AND_IGNORE_EXISTING_KEY) ?
-			     "_AND_IGNORE_EXISTING_KEY" : "", pr_reg->pr_reg_nacl->initiatorname,
-			     pr_reg->pr_res_key, pr_reg->pr_res_generation);
+		target_cmd_debug(cmd, "SPC-3 PR [%s] REGISTER%s: Changed Reservation Key for %s to: 0x%016Lx PRgeneration: 0x%08x\n",
+				 cmd->se_tfo->fabric_name,
+				 (register_type == REGISTER_AND_IGNORE_EXISTING_KEY) ?
+				 "_AND_IGNORE_EXISTING_KEY" : "",
+				 pr_reg->pr_reg_nacl->initiatorname, pr_reg->pr_res_key,
+				 pr_reg->pr_res_generation);
 
 	} else {
 		/*
@@ -2229,7 +2239,7 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 	pr_reg = core_scsi3_locate_pr_reg(cmd->se_dev, se_sess->se_node_acl,
 				se_sess);
 	if (!pr_reg) {
-		target_err("SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for RESERVE\n");
+		target_cmd_err(cmd, "SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for RESERVE\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 	/*
@@ -2242,8 +2252,8 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 	 *	 registered with the logical unit for the I_T nexus; and
 	 */
 	if (res_key != pr_reg->pr_res_key) {
-		target_err("SPC-3 PR RESERVE: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
-			   res_key, pr_reg->pr_res_key);
+		target_cmd_err(cmd, "SPC-3 PR RESERVE: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
+			       res_key, pr_reg->pr_res_key);
 		ret = TCM_RESERVATION_CONFLICT;
 		goto out_put_pr_reg;
 	}
@@ -2258,7 +2268,7 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 	 * and that persistent reservation has a scope of LU_SCOPE.
 	 */
 	if (scope != PR_SCOPE_LU_SCOPE) {
-		target_err("SPC-3 PR: Illegal SCOPE: 0x%02x\n", scope);
+		target_cmd_err(cmd, "SPC-3 PR: Illegal SCOPE: 0x%02x\n", scope);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out_put_pr_reg;
 	}
@@ -2283,10 +2293,11 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 		if (!is_reservation_holder(pr_res_holder, pr_reg)) {
 			struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
 
-			target_err("SPC-3 PR: Attempted RESERVE from [%s]: %s while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
-				   cmd->se_tfo->fabric_name, se_sess->se_node_acl->initiatorname,
-				   pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
-				   pr_res_holder->pr_reg_nacl->initiatorname);
+			target_cmd_err(cmd, "SPC-3 PR: Attempted RESERVE from [%s]: %s while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
+				       cmd->se_tfo->fabric_name,
+				       se_sess->se_node_acl->initiatorname,
+				       pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
+				       pr_res_holder->pr_reg_nacl->initiatorname);
 
 			spin_unlock(&dev->dev_reservation_lock);
 			ret = TCM_RESERVATION_CONFLICT;
@@ -2303,10 +2314,11 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 		    (pr_res_holder->pr_res_scope != scope)) {
 			struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
 
-			target_err("SPC-3 PR: Attempted RESERVE from [%s]: %s trying to change TYPE and/or SCOPE, while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
-				   cmd->se_tfo->fabric_name, se_sess->se_node_acl->initiatorname,
-				   pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
-				   pr_res_holder->pr_reg_nacl->initiatorname);
+			target_cmd_err(cmd, "SPC-3 PR: Attempted RESERVE from [%s]: %s trying to change TYPE and/or SCOPE, while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
+				       cmd->se_tfo->fabric_name,
+				       se_sess->se_node_acl->initiatorname,
+				       pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
+				       pr_res_holder->pr_reg_nacl->initiatorname);
 
 			spin_unlock(&dev->dev_reservation_lock);
 			ret = TCM_RESERVATION_CONFLICT;
@@ -2336,11 +2348,11 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 	dev->dev_pr_res_holder = pr_reg;
 	core_pr_dump_initiator_port(pr_reg, i_buf, PR_REG_ISID_ID_LEN);
 
-	target_debug("SPC-3 PR [%s] Service Action: RESERVE created new reservation holder TYPE: %s ALL_TG_PT: %d\n",
-		     cmd->se_tfo->fabric_name, core_scsi3_pr_dump_type(type),
-		     (pr_reg->pr_reg_all_tg_pt) ? 1 : 0);
-	target_debug("SPC-3 PR [%s] RESERVE Node: %s%s\n", cmd->se_tfo->fabric_name,
-		     se_sess->se_node_acl->initiatorname, i_buf);
+	target_cmd_err(cmd, "SPC-3 PR [%s] Service Action: RESERVE created new reservation holder TYPE: %s ALL_TG_PT: %d\n",
+		       cmd->se_tfo->fabric_name, core_scsi3_pr_dump_type(type),
+		       (pr_reg->pr_reg_all_tg_pt) ? 1 : 0);
+	target_cmd_err(cmd, "SPC-3 PR [%s] RESERVE Node: %s%s\n", cmd->se_tfo->fabric_name,
+		       se_sess->se_node_acl->initiatorname, i_buf);
 	spin_unlock(&dev->dev_reservation_lock);
 
 	if (pr_tmpl->pr_aptpl_active)
@@ -2365,7 +2377,8 @@ core_scsi3_emulate_pro_reserve(struct se_cmd *cmd, int type, int scope,
 	case PR_TYPE_EXCLUSIVE_ACCESS_ALLREG:
 		return core_scsi3_pro_reserve(cmd, type, scope, res_key);
 	default:
-		target_err("SPC-3 PR: Unknown Service Action RESERVE Type: 0x%02x\n", type);
+		target_cmd_err(cmd, "SPC-3 PR: Unknown Service Action RESERVE Type: 0x%02x\n",
+			       type);
 		return TCM_INVALID_CDB_FIELD;
 	}
 }
@@ -2455,7 +2468,7 @@ core_scsi3_emulate_pro_release(struct se_cmd *cmd, int type, int scope,
 	 */
 	pr_reg = core_scsi3_locate_pr_reg(dev, se_sess->se_node_acl, se_sess);
 	if (!pr_reg) {
-		target_err("SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for RELEASE\n");
+		target_cmd_err(cmd, "SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for RELEASE\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 	/*
@@ -2504,8 +2517,8 @@ core_scsi3_emulate_pro_release(struct se_cmd *cmd, int type, int scope,
 	 *	  that is registered with the logical unit for the I_T nexus;
 	 */
 	if (res_key != pr_reg->pr_res_key) {
-		target_err("SPC-3 PR RELEASE: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
-			   res_key, pr_reg->pr_res_key);
+		target_cmd_err(cmd, "SPC-3 PR RELEASE: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
+			       res_key, pr_reg->pr_res_key);
 		spin_unlock(&dev->dev_reservation_lock);
 		ret = TCM_RESERVATION_CONFLICT;
 		goto out_put_pr_reg;
@@ -2520,10 +2533,10 @@ core_scsi3_emulate_pro_release(struct se_cmd *cmd, int type, int scope,
 	    (pr_res_holder->pr_res_scope != scope)) {
 		struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
 
-		target_err("SPC-3 PR RELEASE: Attempted to release reservation from [%s]: %s with different TYPE and/or SCOPE  while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
-			   cmd->se_tfo->fabric_name, se_sess->se_node_acl->initiatorname,
-			   pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
-			   pr_res_holder->pr_reg_nacl->initiatorname);
+		target_cmd_err(cmd, "SPC-3 PR RELEASE: Attempted to release reservation from [%s]: %s with different TYPE and/or SCOPE  while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
+			       cmd->se_tfo->fabric_name, se_sess->se_node_acl->initiatorname,
+			       pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
+			       pr_res_holder->pr_reg_nacl->initiatorname);
 
 		spin_unlock(&dev->dev_reservation_lock);
 		ret = TCM_RESERVATION_CONFLICT;
@@ -2603,7 +2616,7 @@ core_scsi3_emulate_pro_clear(struct se_cmd *cmd, u64 res_key)
 	pr_reg_n = core_scsi3_locate_pr_reg(cmd->se_dev,
 			se_sess->se_node_acl, se_sess);
 	if (!pr_reg_n) {
-		target_err("SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for CLEAR\n");
+		target_cmd_err(cmd, "SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for CLEAR\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 	/*
@@ -2618,8 +2631,8 @@ core_scsi3_emulate_pro_clear(struct se_cmd *cmd, u64 res_key)
 	 *	   that is registered with the logical unit for the I_T nexus.
 	 */
 	if (res_key != pr_reg_n->pr_res_key) {
-		target_err("SPC-3 PR REGISTER: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
-			   res_key, pr_reg_n->pr_res_key);
+		target_cmd_err(cmd, "SPC-3 PR REGISTER: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
+			       res_key, pr_reg_n->pr_res_key);
 		core_scsi3_put_pr_reg(pr_reg_n);
 		return TCM_RESERVATION_CONFLICT;
 	}
@@ -2660,7 +2673,8 @@ core_scsi3_emulate_pro_clear(struct se_cmd *cmd, u64 res_key)
 	}
 	spin_unlock(&pr_tmpl->registration_lock);
 
-	target_debug("SPC-3 PR [%s] Service Action: CLEAR complete\n", cmd->se_tfo->fabric_name);
+	target_cmd_debug(cmd, "SPC-3 PR [%s] Service Action: CLEAR complete\n",
+			 cmd->se_tfo->fabric_name);
 
 	core_scsi3_update_and_write_aptpl(cmd->se_dev, false);
 
@@ -2755,8 +2769,8 @@ core_scsi3_pro_preempt(struct se_cmd *cmd, int type, int scope, u64 res_key,
 	pr_reg_n = core_scsi3_locate_pr_reg(cmd->se_dev, se_sess->se_node_acl,
 				se_sess);
 	if (!pr_reg_n) {
-		target_err("SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for PREEMPT%s\n",
-			   (preempt_type == PREEMPT_AND_ABORT) ? "_AND_ABORT" : "");
+		target_cmd_err(cmd, "SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for PREEMPT%s\n",
+			       (preempt_type == PREEMPT_AND_ABORT) ? "_AND_ABORT" : "");
 		return TCM_RESERVATION_CONFLICT;
 	}
 	if (pr_reg_n->pr_res_key != res_key) {
@@ -2764,7 +2778,7 @@ core_scsi3_pro_preempt(struct se_cmd *cmd, int type, int scope, u64 res_key,
 		return TCM_RESERVATION_CONFLICT;
 	}
 	if (scope != PR_SCOPE_LU_SCOPE) {
-		target_err("SPC-3 PR: Illegal SCOPE: 0x%02x\n", scope);
+		target_cmd_err(cmd, "SPC-3 PR: Illegal SCOPE: 0x%02x\n", scope);
 		core_scsi3_put_pr_reg(pr_reg_n);
 		return TCM_INVALID_PARAMETER_LIST;
 	}
@@ -3057,8 +3071,8 @@ core_scsi3_emulate_pro_preempt(struct se_cmd *cmd, int type, int scope,
 		return core_scsi3_pro_preempt(cmd, type, scope, res_key,
 					      sa_res_key, preempt_type);
 	default:
-		target_err("SPC-3 PR: Unknown Service Action PREEMPT%s Type: 0x%02x\n",
-			   (preempt_type == PREEMPT_AND_ABORT) ? "_AND_ABORT" : "", type);
+		target_cmd_err(cmd, "SPC-3 PR: Unknown Service Action PREEMPT%s Type: 0x%02x\n",
+			       (preempt_type == PREEMPT_AND_ABORT) ? "_AND_ABORT" : "", type);
 		return TCM_INVALID_CDB_FIELD;
 	}
 }
@@ -3102,7 +3116,7 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	pr_reg = core_scsi3_locate_pr_reg(cmd->se_dev, se_sess->se_node_acl,
 				se_sess);
 	if (!pr_reg) {
-		target_err("SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for REGISTER_AND_MOVE\n");
+		target_cmd_err(cmd, "SPC-3 PR: Unable to locate PR_REGISTERED *pr_reg for REGISTER_AND_MOVE\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 	/*
@@ -3110,8 +3124,8 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	 * provided during this initiator's I_T nexus registration.
 	 */
 	if (res_key != pr_reg->pr_res_key) {
-		target_warn("SPC-3 PR REGISTER_AND_MOVE: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
-			    res_key, pr_reg->pr_res_key);
+		target_cmd_warn(cmd, "SPC-3 PR REGISTER_AND_MOVE: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
+				res_key, pr_reg->pr_res_key);
 		ret = TCM_RESERVATION_CONFLICT;
 		goto out_put_pr_reg;
 	}
@@ -3119,7 +3133,7 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	 * The service active reservation key needs to be non zero
 	 */
 	if (!sa_res_key) {
-		target_warn("SPC-3 PR REGISTER_AND_MOVE: Received zero sa_res_key\n");
+		target_cmd_warn(cmd, "SPC-3 PR REGISTER_AND_MOVE: Received zero sa_res_key\n");
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out_put_pr_reg;
 	}
@@ -3141,8 +3155,8 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	buf = NULL;
 
 	if ((tid_len + 24) != cmd->data_length) {
-		target_err("SPC-3 PR: Illegal tid_len: %u + 24 byte header does not equal CDB data_length: %u\n",
-			   tid_len, cmd->data_length);
+		target_cmd_err(cmd, "SPC-3 PR: Illegal tid_len: %u + 24 byte header does not equal CDB data_length: %u\n",
+			       tid_len, cmd->data_length);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out_put_pr_reg;
 	}
@@ -3160,7 +3174,7 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 		spin_unlock(&dev->se_port_lock);
 
 		if (core_scsi3_tpg_depend_item(dest_se_tpg)) {
-			target_err("core_scsi3_tpg_depend_item() failed for dest_se_tpg\n");
+			target_cmd_err(cmd, "core_scsi3_tpg_depend_item() failed for dest_se_tpg\n");
 			atomic_dec_mb(&dest_se_tpg->tpg_pr_ref_count);
 			ret = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 			goto out_put_pr_reg;
@@ -3172,8 +3186,8 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	spin_unlock(&dev->se_port_lock);
 
 	if (!dest_se_tpg || !dest_tf_ops) {
-		target_err("SPC-3 PR REGISTER_AND_MOVE: Unable to locate fabric ops from Relative Target Port Identifier: %u\n",
-			   rtpi);
+		target_cmd_err(cmd, "SPC-3 PR REGISTER_AND_MOVE: Unable to locate fabric ops from Relative Target Port Identifier: %u\n",
+			       rtpi);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out_put_pr_reg;
 	}
@@ -3185,19 +3199,19 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	}
 	proto_ident = (buf[24] & 0x0f);
 
-	target_debug("SPC-3 PR REGISTER_AND_MOVE: Extracted Protocol Identifier: 0x%02x\n",
-		     proto_ident);
+	target_cmd_debug(cmd, "SPC-3 PR REGISTER_AND_MOVE: Extracted Protocol Identifier: 0x%02x\n",
+			 proto_ident);
 
 	if (proto_ident != dest_se_tpg->proto_id) {
-		target_err("SPC-3 PR REGISTER_AND_MOVE: Received proto_ident: 0x%02x does not match ident: 0x%02x from fabric: %s\n",
-			   proto_ident, dest_se_tpg->proto_id, dest_tf_ops->fabric_name);
+		target_cmd_err(cmd, "SPC-3 PR REGISTER_AND_MOVE: Received proto_ident: 0x%02x does not match ident: 0x%02x from fabric: %s\n",
+			       proto_ident, dest_se_tpg->proto_id, dest_tf_ops->fabric_name);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
 	initiator_str = target_parse_pr_out_transport_id(dest_se_tpg,
 			&buf[24], &tmp_tid_len, &iport_ptr);
 	if (!initiator_str) {
-		target_err("SPC-3 PR REGISTER_AND_MOVE: Unable to locate initiator_str from Transport ID\n");
+		target_cmd_err(cmd, "SPC-3 PR REGISTER_AND_MOVE: Unable to locate initiator_str from Transport ID\n");
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
@@ -3205,9 +3219,9 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	transport_kunmap_data_sg(cmd);
 	buf = NULL;
 
-	target_debug("SPC-3 PR [%s] Extracted initiator %s identifier: %s %s\n",
-		     dest_tf_ops->fabric_name, (iport_ptr != NULL) ? "port" : "device",
-		     initiator_str, (iport_ptr != NULL) ? iport_ptr : "");
+	target_cmd_debug(cmd, "SPC-3 PR [%s] Extracted initiator %s identifier: %s %s\n",
+			 dest_tf_ops->fabric_name, (iport_ptr != NULL) ? "port" : "device",
+			 initiator_str, (iport_ptr != NULL) ? iport_ptr : "");
 	/*
 	 * If a PERSISTENT RESERVE OUT command with a REGISTER AND MOVE service
 	 * action specifies a TransportID that is the same as the initiator port
@@ -3223,8 +3237,8 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 		goto after_iport_check;
 
 	if (!iport_ptr || !pr_reg->isid_present_at_reg) {
-		target_err("SPC-3 PR REGISTER_AND_MOVE: TransportID: %s matches: %s on received I_T Nexus\n",
-			   initiator_str, pr_reg_nacl->initiatorname);
+		target_cmd_err(cmd, "SPC-3 PR REGISTER_AND_MOVE: TransportID: %s matches: %s on received I_T Nexus\n",
+			       initiator_str, pr_reg_nacl->initiatorname);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
@@ -3247,22 +3261,22 @@ after_iport_check:
 	mutex_unlock(&dest_se_tpg->acl_node_mutex);
 
 	if (!dest_node_acl) {
-		target_err("Unable to locate %s dest_node_acl for TransportID%s\n",
-			   dest_tf_ops->fabric_name, initiator_str);
+		target_cmd_err(cmd, "Unable to locate %s dest_node_acl for TransportID%s\n",
+			       dest_tf_ops->fabric_name, initiator_str);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
 
 	if (core_scsi3_nodeacl_depend_item(dest_node_acl)) {
-		target_err("core_scsi3_nodeacl_depend_item() for dest_node_acl\n");
+		target_cmd_err(cmd, "core_scsi3_nodeacl_depend_item() for dest_node_acl\n");
 		atomic_dec_mb(&dest_node_acl->acl_pr_ref_count);
 		dest_node_acl = NULL;
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
 
-	target_debug("SPC-3 PR REGISTER_AND_MOVE: Found %s dest_node_acl: %s from TransportID\n",
-		     dest_tf_ops->fabric_name, dest_node_acl->initiatorname);
+	target_cmd_debug(cmd, "SPC-3 PR REGISTER_AND_MOVE: Found %s dest_node_acl: %s from TransportID\n",
+			 dest_tf_ops->fabric_name, dest_node_acl->initiatorname);
 
 	/*
 	 * Locate the struct se_dev_entry pointer for the matching RELATIVE TARGET
@@ -3270,23 +3284,23 @@ after_iport_check:
 	 */
 	dest_se_deve = core_get_se_deve_from_rtpi(dest_node_acl, rtpi);
 	if (!dest_se_deve) {
-		target_err("Unable to locate %s dest_se_deve from RTPI: %u\n",
-			   dest_tf_ops->fabric_name, rtpi);
+		target_cmd_err(cmd, "Unable to locate %s dest_se_deve from RTPI: %u\n",
+			       dest_tf_ops->fabric_name, rtpi);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
 	}
 
 	if (core_scsi3_lunacl_depend_item(dest_se_deve)) {
-		target_err("core_scsi3_lunacl_depend_item() failed\n");
+		target_cmd_err(cmd, "core_scsi3_lunacl_depend_item() failed\n");
 		kref_put(&dest_se_deve->pr_kref, target_pr_kref_release);
 		dest_se_deve = NULL;
 		ret = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 		goto out;
 	}
 
-	target_debug("SPC-3 PR REGISTER_AND_MOVE: Located %s node %s LUN ACL for dest_se_deve->mapped_lun: %llu\n",
-		     dest_tf_ops->fabric_name, dest_node_acl->initiatorname,
-		     dest_se_deve->mapped_lun);
+	target_cmd_debug(cmd, "SPC-3 PR REGISTER_AND_MOVE: Located %s node %s LUN ACL for dest_se_deve->mapped_lun: %llu\n",
+			 dest_tf_ops->fabric_name, dest_node_acl->initiatorname,
+			 dest_se_deve->mapped_lun);
 
 	/*
 	 * A persistent reservation needs to already existing in order to
@@ -3295,7 +3309,7 @@ after_iport_check:
 	spin_lock(&dev->dev_reservation_lock);
 	pr_res_holder = dev->dev_pr_res_holder;
 	if (!pr_res_holder) {
-		target_warn("SPC-3 PR REGISTER_AND_MOVE: No reservation currently held\n");
+		target_cmd_warn(cmd, "SPC-3 PR REGISTER_AND_MOVE: No reservation currently held\n");
 		spin_unlock(&dev->dev_reservation_lock);
 		ret = TCM_INVALID_CDB_FIELD;
 		goto out;
@@ -3307,7 +3321,7 @@ after_iport_check:
 	 *	Register behaviors for a REGISTER AND MOVE service action
 	 */
 	if (!is_reservation_holder(pr_res_holder, pr_reg)) {
-		target_warn("SPC-3 PR REGISTER_AND_MOVE: Calling I_T Nexus is not reservation holder\n");
+		target_cmd_warn(cmd, "SPC-3 PR REGISTER_AND_MOVE: Calling I_T Nexus is not reservation holder\n");
 		spin_unlock(&dev->dev_reservation_lock);
 		ret = TCM_RESERVATION_CONFLICT;
 		goto out;
@@ -3323,8 +3337,8 @@ after_iport_check:
 	 */
 	if ((pr_res_holder->pr_res_type == PR_TYPE_WRITE_EXCLUSIVE_ALLREG) ||
 	    (pr_res_holder->pr_res_type == PR_TYPE_EXCLUSIVE_ACCESS_ALLREG)) {
-		target_warn("SPC-3 PR REGISTER_AND_MOVE: Unable to move reservation for type: %s\n",
-			    core_scsi3_pr_dump_type(pr_res_holder->pr_res_type));
+		target_cmd_warn(cmd, "SPC-3 PR REGISTER_AND_MOVE: Unable to move reservation for type: %s\n",
+				core_scsi3_pr_dump_type(pr_res_holder->pr_res_type));
 		spin_unlock(&dev->dev_reservation_lock);
 		ret = TCM_RESERVATION_CONFLICT;
 		goto out;
@@ -3399,13 +3413,13 @@ after_iport_check:
 		dest_pr_reg->pr_res_generation = pr_tmpl->pr_generation++;
 	spin_unlock(&dev->dev_reservation_lock);
 
-	target_debug("SPC-3 PR [%s] Service Action: REGISTER_AND_MOVE created new reservation holder TYPE: %s on object RTPI: %u  PRGeneration: 0x%08x\n",
-		     dest_tf_ops->fabric_name, core_scsi3_pr_dump_type(type), rtpi,
-		     dest_pr_reg->pr_res_generation);
-	target_debug("SPC-3 PR Successfully moved reservation from %s Fabric Node: %s%s -> %s Fabric Node: %s %s\n",
-		     tf_ops->fabric_name, pr_reg_nacl->initiatorname, i_buf,
-		     dest_tf_ops->fabric_name, dest_node_acl->initiatorname,
-		     (iport_ptr != NULL) ? iport_ptr : "");
+	target_cmd_debug(cmd, "SPC-3 PR [%s] Service Action: REGISTER_AND_MOVE created new reservation holder TYPE: %s on object RTPI: %u  PRGeneration: 0x%08x\n",
+			 dest_tf_ops->fabric_name, core_scsi3_pr_dump_type(type), rtpi,
+			 dest_pr_reg->pr_res_generation);
+	target_cmd_debug(cmd, "SPC-3 PR Successfully moved reservation from %s Fabric Node: %s%s -> %s Fabric Node: %s %s\n",
+			 tf_ops->fabric_name, pr_reg_nacl->initiatorname, i_buf,
+			 dest_tf_ops->fabric_name, dest_node_acl->initiatorname,
+			 (iport_ptr != NULL) ? iport_ptr : "");
 	/*
 	 * It is now safe to release configfs group dependencies for destination
 	 * of Transport ID Initiator Device/Port Identifier
@@ -3454,19 +3468,19 @@ target_try_pr_out_pt(struct se_cmd *cmd, u8 sa, u64 res_key, u64 sa_res_key,
 	}
 
 	if (!ops->execute_pr_out) {
-		target_err("SPC-3 PR: Device has been configured for PR passthrough but it's not supported by the backend.\n");
+		target_cmd_err(cmd, "SPC-3 PR: Device has been configured for PR passthrough but it's not supported by the backend.\n");
 		return TCM_UNSUPPORTED_SCSI_OPCODE;
 	}
 
 	switch (sa) {
 	case PRO_REGISTER_AND_MOVE:
 	case PRO_REPLACE_LOST_RESERVATION:
-		target_err("SPC-3 PR: PRO_REGISTER_AND_MOVE and PRO_REPLACE_LOST_RESERVATION are not supported by PR passthrough.\n");
+		target_cmd_err(cmd, "SPC-3 PR: PRO_REGISTER_AND_MOVE and PRO_REPLACE_LOST_RESERVATION are not supported by PR passthrough.\n");
 		return TCM_UNSUPPORTED_SCSI_OPCODE;
 	}
 
 	if (spec_i_pt || all_tg_pt) {
-		target_err("SPC-3 PR: SPEC_I_PT and ALL_TG_PT are not supported by PR passthrough.\n");
+		target_cmd_err(cmd, "SPC-3 PR: SPEC_I_PT and ALL_TG_PT are not supported by PR passthrough.\n");
 		return TCM_UNSUPPORTED_SCSI_OPCODE;
 	}
 
@@ -3497,7 +3511,7 @@ target_scsi3_emulate_pr_out(struct se_cmd *cmd)
 	 * CONFLICT status.
 	 */
 	if (cmd->se_dev->dev_reservation_flags & DRF_SPC2_RESERVATIONS) {
-		target_err("Received PERSISTENT_RESERVE CDB while legacy SPC-2 reservation is held, returning RESERVATION_CONFLICT\n");
+		target_cmd_err(cmd, "Received PERSISTENT_RESERVE CDB while legacy SPC-2 reservation is held, returning RESERVATION_CONFLICT\n");
 		return TCM_RESERVATION_CONFLICT;
 	}
 
@@ -3509,8 +3523,8 @@ target_scsi3_emulate_pr_out(struct se_cmd *cmd)
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 
 	if (cmd->data_length < 24) {
-		target_warn("SPC-PR: Received PR OUT parameter list length too small: %u\n",
-			    cmd->data_length);
+		target_cmd_warn(cmd, "SPC-PR: Received PR OUT parameter list length too small: %u\n",
+				cmd->data_length);
 		return TCM_PARAMETER_LIST_LENGTH_ERROR;
 	}
 
@@ -3569,8 +3583,8 @@ target_scsi3_emulate_pr_out(struct se_cmd *cmd)
 	 */
 	if (!spec_i_pt && (sa != PRO_REGISTER_AND_MOVE) &&
 	    (cmd->data_length != 24)) {
-		target_warn("SPC-PR: Received PR OUT illegal parameter list length: %u\n",
-			    cmd->data_length);
+		target_cmd_warn(cmd, "SPC-PR: Received PR OUT illegal parameter list length: %u\n",
+				cmd->data_length);
 		return TCM_PARAMETER_LIST_LENGTH_ERROR;
 	}
 
@@ -3616,7 +3630,7 @@ target_scsi3_emulate_pr_out(struct se_cmd *cmd)
 				sa_res_key, aptpl, unreg);
 		break;
 	default:
-		target_err("Unknown PERSISTENT_RESERVE_OUT service action: 0x%02x\n", sa);
+		target_cmd_err(cmd, "Unknown PERSISTENT_RESERVE_OUT service action: 0x%02x\n", sa);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -3640,7 +3654,8 @@ core_scsi3_pri_read_keys(struct se_cmd *cmd)
 	u32 add_len = 0, off = 8;
 
 	if (cmd->data_length < 8) {
-		target_err("PRIN SA READ_KEYS SCSI Data Length: %u too small\n", cmd->data_length);
+		target_cmd_err(cmd, "PRIN SA READ_KEYS SCSI Data Length: %u too small\n",
+			       cmd->data_length);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -3694,8 +3709,8 @@ core_scsi3_pri_read_reservation(struct se_cmd *cmd)
 	u32 add_len = 0;
 
 	if (cmd->data_length < 8) {
-		target_err("PRIN SA READ_RESERVATIONS SCSI Data Length: %u too small\n",
-			   cmd->data_length);
+		target_cmd_err(cmd, "PRIN SA READ_RESERVATIONS SCSI Data Length: %u too small\n",
+			       cmd->data_length);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -3770,8 +3785,8 @@ core_scsi3_pri_report_capabilities(struct se_cmd *cmd)
 	u16 len = 8; /* Hardcoded to 8. */
 
 	if (cmd->data_length < 6) {
-		target_err("PRIN SA REPORT_CAPABILITIES SCSI Data Length: %u too small\n",
-			   cmd->data_length);
+		target_cmd_err(cmd, "PRIN SA REPORT_CAPABILITIES SCSI Data Length: %u too small\n",
+			       cmd->data_length);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -3836,8 +3851,8 @@ core_scsi3_pri_read_full_status(struct se_cmd *cmd)
 	bool all_reg = false;
 
 	if (cmd->data_length < 8) {
-		target_err("PRIN SA READ_FULL_STATUS SCSI Data Length: %u too small\n",
-			   cmd->data_length);
+		target_cmd_err(cmd, "PRIN SA READ_FULL_STATUS SCSI Data Length: %u too small\n",
+			       cmd->data_length);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -3878,8 +3893,8 @@ core_scsi3_pri_read_full_status(struct se_cmd *cmd)
 					&format_code);
 		if (exp_desc_len < 0 ||
 		    exp_desc_len + add_len > cmd->data_length) {
-			target_warn("SPC-3 PRIN READ_FULL_STATUS ran out of buffer: %d\n",
-				    cmd->data_length);
+			target_cmd_warn(cmd, "SPC-3 PRIN READ_FULL_STATUS ran out of buffer: %d\n",
+					cmd->data_length);
 			spin_lock(&pr_tmpl->registration_lock);
 			atomic_dec_mb(&pr_reg->pr_res_holders);
 			break;
@@ -3984,17 +3999,17 @@ static sense_reason_t target_try_pr_in_pt(struct se_cmd *cmd, u8 sa)
 	sense_reason_t ret;
 
 	if (cmd->data_length < 8) {
-		target_err("PRIN SA SCSI Data Length: %u too small\n", cmd->data_length);
+		target_cmd_err(cmd, "PRIN SA SCSI Data Length: %u too small\n", cmd->data_length);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
 	if (!ops->execute_pr_in) {
-		target_err("SPC-3 PR: Device has been configured for PR passthrough but it's not supported by the backend.\n");
+		target_cmd_err(cmd, "SPC-3 PR: Device has been configured for PR passthrough but it's not supported by the backend.\n");
 		return TCM_UNSUPPORTED_SCSI_OPCODE;
 	}
 
 	if (sa == PRI_READ_FULL_STATUS) {
-		target_err("SPC-3 PR: PRI_READ_FULL_STATUS is not supported by PR passthrough.\n");
+		target_cmd_err(cmd, "SPC-3 PR: PRI_READ_FULL_STATUS is not supported by PR passthrough.\n");
 		return TCM_UNSUPPORTED_SCSI_OPCODE;
 	}
 
@@ -4024,7 +4039,7 @@ target_scsi3_emulate_pr_in(struct se_cmd *cmd)
 	 * CONFLICT status.
 	 */
 	if (cmd->se_dev->dev_reservation_flags & DRF_SPC2_RESERVATIONS) {
-		target_err("Received PERSISTENT_RESERVE CDB while legacy SPC-2 reservation is held, returning RESERVATION_CONFLICT\n");
+		target_cmd_err(cmd, "Received PERSISTENT_RESERVE CDB while legacy SPC-2 reservation is held, returning RESERVATION_CONFLICT\n");
 		return TCM_RESERVATION_CONFLICT;
 	}
 
@@ -4047,8 +4062,8 @@ target_scsi3_emulate_pr_in(struct se_cmd *cmd)
 		ret = core_scsi3_pri_read_full_status(cmd);
 		break;
 	default:
-		target_err("Unknown PERSISTENT_RESERVE_IN service action: 0x%02x\n",
-			   cmd->t_task_cdb[1] & 0x1f);
+		target_cmd_err(cmd, "Unknown PERSISTENT_RESERVE_IN service action: 0x%02x\n",
+			       cmd->t_task_cdb[1] & 0x1f);
 		return TCM_INVALID_CDB_FIELD;
 	}
 

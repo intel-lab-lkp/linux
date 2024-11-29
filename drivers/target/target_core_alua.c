@@ -64,7 +64,8 @@ target_emulate_report_referrals(struct se_cmd *cmd)
 	u32 rd_len = 0, off;
 
 	if (cmd->data_length < 4) {
-		target_warn("REPORT REFERRALS allocation length %u too small\n", cmd->data_length);
+		target_cmd_warn(cmd, "REPORT REFERRALS allocation length %u too small\n",
+				cmd->data_length);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -153,8 +154,8 @@ target_emulate_report_target_port_groups(struct se_cmd *cmd)
 		off = 4;
 
 	if (cmd->data_length < off) {
-		target_warn("REPORT TARGET PORT GROUPS allocation length %u too small for %s header\n",
-			    cmd->data_length, (ext_hdr) ? "extended" : "normal");
+		target_cmd_warn(cmd, "REPORT TARGET PORT GROUPS allocation length %u too small for %s header\n",
+				cmd->data_length, (ext_hdr) ? "extended" : "normal");
 		return TCM_INVALID_CDB_FIELD;
 	}
 	buf = transport_kmap_data_sg(cmd);
@@ -282,8 +283,8 @@ target_emulate_set_target_port_groups(struct se_cmd *cmd)
 	u16 tg_pt_id, rtpi;
 
 	if (cmd->data_length < 4) {
-		target_warn("SET TARGET PORT GROUPS parameter list length %u too small\n",
-			    cmd->data_length);
+		target_cmd_warn(cmd, "SET TARGET PORT GROUPS parameter list length %u too small\n",
+				cmd->data_length);
 		return TCM_INVALID_PARAMETER_LIST;
 	}
 
@@ -299,14 +300,14 @@ target_emulate_set_target_port_groups(struct se_cmd *cmd)
 	l_tg_pt_gp = rcu_dereference(l_lun->lun_tg_pt_gp);
 	if (!l_tg_pt_gp) {
 		rcu_read_unlock();
-		target_err("Unable to access l_lun->tg_pt_gp\n");
+		target_cmd_err(cmd, "Unable to access l_lun->tg_pt_gp\n");
 		rc = TCM_UNSUPPORTED_SCSI_OPCODE;
 		goto out;
 	}
 
 	if (!(l_tg_pt_gp->tg_pt_gp_alua_access_type & TPGS_EXPLICIT_ALUA)) {
 		rcu_read_unlock();
-		target_debug("Unable to process SET_TARGET_PORT_GROUPS while TPGS_EXPLICIT_ALUA is disabled\n");
+		target_cmd_debug(cmd, "Unable to process SET_TARGET_PORT_GROUPS while TPGS_EXPLICIT_ALUA is disabled\n");
 		rc = TCM_UNSUPPORTED_SCSI_OPCODE;
 		goto out;
 	}
@@ -662,7 +663,7 @@ target_alua_state_check(struct se_cmd *cmd)
 	 * access state: OFFLINE
 	 */
 	if (atomic_read(&lun->lun_tg_pt_secondary_offline)) {
-		target_debug("ALUA: Got secondary offline status for local target port\n");
+		target_cmd_debug(cmd, "ALUA: Got secondary offline status for local target port\n");
 		return TCM_ALUA_OFFLINE;
 	}
 	rcu_read_lock();
@@ -707,13 +708,13 @@ target_alua_state_check(struct se_cmd *cmd)
 	 */
 	case ALUA_ACCESS_STATE_OFFLINE:
 	default:
-		target_err("Unknown ALUA access state: 0x%02x\n", out_alua_state);
+		target_cmd_err(cmd, "Unknown ALUA access state: 0x%02x\n", out_alua_state);
 		rc = TCM_INVALID_CDB_FIELD;
 	}
 
 	if (rc && rc != TCM_INVALID_CDB_FIELD) {
-		target_debug("[%s]: ALUA TG Port not available, SenseKey: NOT_READY, ASC/rc: 0x04/%d\n",
-			     cmd->se_tfo->fabric_name, rc);
+		target_cmd_debug(cmd, "[%s]: ALUA TG Port not available, SenseKey: NOT_READY, ASC/rc: 0x04/%d\n",
+				 cmd->se_tfo->fabric_name, rc);
 	}
 
 	return rc;
@@ -1168,7 +1169,7 @@ static int core_alua_update_tpg_secondary_metadata(struct se_lun *lun)
 
 	md_buf = kzalloc(ALUA_MD_BUF_LEN, GFP_KERNEL);
 	if (!md_buf) {
-		target_err("Unable to allocate buf for ALUA metadata\n");
+		target_lun_err(lun, "Unable to allocate buf for ALUA metadata\n");
 		rc = -ENOMEM;
 		goto out_unlock;
 	}
@@ -1216,7 +1217,7 @@ static int core_alua_set_tg_pt_secondary_state(
 	tg_pt_gp = rcu_dereference(lun->lun_tg_pt_gp);
 	if (!tg_pt_gp) {
 		rcu_read_unlock();
-		target_err("Unable to complete secondary state transition\n");
+		target_lun_err(lun, "Unable to complete secondary state transition\n");
 		return -EINVAL;
 	}
 	trans_delay_msecs = tg_pt_gp->tg_pt_gp_trans_delay_msecs;
@@ -1233,10 +1234,10 @@ static int core_alua_set_tg_pt_secondary_state(
 			ALUA_STATUS_ALTERED_BY_EXPLICIT_STPG :
 			ALUA_STATUS_ALTERED_BY_IMPLICIT_ALUA;
 
-	target_debug("Successful %s ALUA transition TG PT Group: %s ID: %u to secondary access state: %s\n",
-		     (explicit) ? "explicit" : "implicit",
-		     config_item_name(&tg_pt_gp->tg_pt_gp_group.cg_item), tg_pt_gp->tg_pt_gp_id,
-		     (offline) ? "OFFLINE" : "ONLINE");
+	target_lun_debug(lun, "Successful %s ALUA transition TG PT Group: %s ID: %u to secondary access state: %s\n",
+			 (explicit) ? "explicit" : "implicit",
+			 config_item_name(&tg_pt_gp->tg_pt_gp_group.cg_item), tg_pt_gp->tg_pt_gp_id,
+			 (offline) ? "OFFLINE" : "ONLINE");
 
 	rcu_read_unlock();
 	/*
@@ -1898,7 +1899,7 @@ ssize_t core_alua_store_tg_pt_gp_info(
 		return -ENODEV;
 
 	if (count > TG_PT_GROUP_NAME_BUF) {
-		target_err("ALUA Target Port Group alias too large!\n");
+		target_lun_err(lun, "ALUA Target Port Group alias too large!\n");
 		return -EINVAL;
 	}
 	memset(buf, 0, TG_PT_GROUP_NAME_BUF);
@@ -1928,12 +1929,12 @@ ssize_t core_alua_store_tg_pt_gp_info(
 		 * with the default_tg_pt_gp.
 		 */
 		if (!tg_pt_gp_new) {
-			target_debug("configfs: Moving %s/tpgt_%u/%s from ALUA Target Port Group: alua/%s, ID: %u back to default_tg_pt_gp\n",
-				     tpg->se_tpg_tfo->tpg_get_wwn(tpg),
-				     tpg->se_tpg_tfo->tpg_get_tag(tpg),
-				     config_item_name(&lun->lun_group.cg_item),
-				     config_item_name(&tg_pt_gp->tg_pt_gp_group.cg_item),
-				     tg_pt_gp->tg_pt_gp_id);
+			target_lun_debug(lun, "configfs: Moving %s/tpgt_%u/%s from ALUA Target Port Group: alua/%s, ID: %u back to default_tg_pt_gp\n",
+					 tpg->se_tpg_tfo->tpg_get_wwn(tpg),
+					 tpg->se_tpg_tfo->tpg_get_tag(tpg),
+					 config_item_name(&lun->lun_group.cg_item),
+					 config_item_name(&tg_pt_gp->tg_pt_gp_group.cg_item),
+					 tg_pt_gp->tg_pt_gp_id);
 
 			target_swap_tg_pt_gp(lun, tg_pt_gp,
 					dev->t10_alua.default_tg_pt_gp);
@@ -1946,11 +1947,12 @@ ssize_t core_alua_store_tg_pt_gp_info(
 
 	target_swap_tg_pt_gp(lun, tg_pt_gp, tg_pt_gp_new);
 	spin_unlock(&lun->lun_tg_pt_gp_lock);
-	target_debug("configfs: %s %s/tpgt_%u/%s to ALUA Target Port Group: alua/%s, ID: %u\n",
-		     (move) ? "Moving" : "Adding", tpg->se_tpg_tfo->tpg_get_wwn(tpg),
-		     tpg->se_tpg_tfo->tpg_get_tag(tpg), config_item_name(&lun->lun_group.cg_item),
-		     config_item_name(&tg_pt_gp_new->tg_pt_gp_group.cg_item),
-		     tg_pt_gp_new->tg_pt_gp_id);
+	target_lun_debug(lun, "configfs: %s %s/tpgt_%u/%s to ALUA Target Port Group: alua/%s, ID: %u\n",
+			 (move) ? "Moving" : "Adding", tpg->se_tpg_tfo->tpg_get_wwn(tpg),
+			 tpg->se_tpg_tfo->tpg_get_tag(tpg),
+			 config_item_name(&lun->lun_group.cg_item),
+			 config_item_name(&tg_pt_gp_new->tg_pt_gp_group.cg_item),
+			 tg_pt_gp_new->tg_pt_gp_id);
 
 	core_alua_put_tg_pt_gp_from_name(tg_pt_gp_new);
 sync_rcu:
@@ -2147,11 +2149,11 @@ ssize_t core_alua_store_offline_bit(
 
 	ret = kstrtoul(page, 0, &tmp);
 	if (ret < 0) {
-		target_err("Unable to extract alua_tg_pt_offline value\n");
+		target_lun_err(lun, "Unable to extract alua_tg_pt_offline value\n");
 		return ret;
 	}
 	if ((tmp != 0) && (tmp != 1)) {
-		target_err("Illegal value for alua_tg_pt_offline: %lu\n", tmp);
+		target_lun_err(lun, "Illegal value for alua_tg_pt_offline: %lu\n", tmp);
 		return -EINVAL;
 	}
 
@@ -2179,13 +2181,13 @@ ssize_t core_alua_store_secondary_status(
 
 	ret = kstrtoul(page, 0, &tmp);
 	if (ret < 0) {
-		target_err("Unable to extract alua_tg_pt_status\n");
+		target_lun_err(lun, "Unable to extract alua_tg_pt_status\n");
 		return ret;
 	}
 	if ((tmp != ALUA_STATUS_NONE) &&
 	    (tmp != ALUA_STATUS_ALTERED_BY_EXPLICIT_STPG) &&
 	    (tmp != ALUA_STATUS_ALTERED_BY_IMPLICIT_ALUA)) {
-		target_err("Illegal value for alua_tg_pt_status: %lu\n", tmp);
+		target_lun_err(lun, "Illegal value for alua_tg_pt_status: %lu\n", tmp);
 		return -EINVAL;
 	}
 	lun->lun_tg_pt_secondary_stat = (int)tmp;
@@ -2210,11 +2212,11 @@ ssize_t core_alua_store_secondary_write_metadata(
 
 	ret = kstrtoul(page, 0, &tmp);
 	if (ret < 0) {
-		target_err("Unable to extract alua_tg_pt_write_md\n");
+		target_lun_err(lun, "Unable to extract alua_tg_pt_write_md\n");
 		return ret;
 	}
 	if ((tmp != 0) && (tmp != 1)) {
-		target_err("Illegal value for alua_tg_pt_write_md: %lu\n", tmp);
+		target_lun_err(lun, "Illegal value for alua_tg_pt_write_md: %lu\n", tmp);
 		return -EINVAL;
 	}
 	lun->lun_tg_pt_secondary_write_md = (int)tmp;

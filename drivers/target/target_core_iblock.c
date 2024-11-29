@@ -47,7 +47,7 @@ static inline struct iblock_dev *IBLOCK_DEV(struct se_device *dev)
 
 static int iblock_attach_hba(struct se_hba *hba, u32 host_id)
 {
-	target_debug("CORE_HBA[%d] - TCM iBlock HBA Driver %s on Generic Target Core Stack %s\n",
+	target_debug("hba[%d] - TCM iBlock HBA Driver %s on Generic Target Core Stack %s\n",
 		     hba->hba_id, IBLOCK_VERSION, TARGET_CORE_VERSION);
 	return 0;
 }
@@ -100,7 +100,7 @@ static int iblock_configure_device(struct se_device *dev)
 	int ret;
 
 	if (!(ib_dev->ibd_flags & IBDF_HAS_UDEV_PATH)) {
-		target_err("Missing udev_path= parameters for IBLOCK\n");
+		target_err("Missing udev_path= parameters\n");
 		return -EINVAL;
 	}
 
@@ -175,8 +175,7 @@ static int iblock_configure_device(struct se_device *dev)
 			ret = -ENOMEM;
 			goto out_blkdev_put;
 		}
-		target_debug("IBLOCK setup BIP bs->bio_integrity_pool: %p\n",
-			     &bs->bio_integrity_pool);
+		target_debug("Setup BIP bs->bio_integrity_pool: %p\n", &bs->bio_integrity_pool);
 	}
 
 	dev->dev_attrib.hw_pi_prot_type = dev->dev_attrib.pi_prot_type;
@@ -344,7 +343,7 @@ static void iblock_bio_done(struct bio *bio)
 	blk_status_t blk_status = bio->bi_status;
 
 	if (bio->bi_status) {
-		target_err("bio error: %p,  err: %d\n", bio, bio->bi_status);
+		target_cmd_err(cmd, "bio error: %p,  err: %d\n", bio, bio->bi_status);
 		/*
 		 * Bump the ib_bio_err_cnt and release bio.
 		 */
@@ -370,7 +369,7 @@ static struct bio *iblock_get_bio(struct se_cmd *cmd, sector_t lba, u32 sg_num,
 	bio = bio_alloc_bioset(ib_dev->ibd_bd, bio_max_segs(sg_num), opf,
 			       GFP_NOIO, &ib_dev->ibd_bio_set);
 	if (!bio) {
-		target_err("Unable to allocate memory for bio\n");
+		target_cmd_err(cmd, "Unable to allocate memory for bio\n");
 		return NULL;
 	}
 
@@ -400,7 +399,7 @@ static void iblock_end_io_flush(struct bio *bio)
 	struct se_cmd *cmd = bio->bi_private;
 
 	if (bio->bi_status)
-		target_err("cache flush failed: %d\n", bio->bi_status);
+		target_cmd_err(cmd, "Cache flush failed: %d\n", bio->bi_status);
 
 	if (cmd) {
 		if (bio->bi_status)
@@ -451,7 +450,7 @@ iblock_execute_unmap(struct se_cmd *cmd, sector_t lba, sector_t nolb)
 				   target_to_linux_sector(dev,  nolb),
 				   GFP_KERNEL);
 	if (ret < 0) {
-		target_err("blkdev_issue_discard() failed: %d\n", ret);
+		target_cmd_err(cmd, "blkdev_issue_discard() failed: %d\n", ret);
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -505,7 +504,7 @@ iblock_execute_write_same(struct se_cmd *cmd)
 					sbc_get_write_same_sectors(cmd));
 
 	if (cmd->prot_op) {
-		target_err("WRITE_SAME: Protection information with IBLOCK backends not supported\n");
+		target_cmd_err(cmd, "WRITE_SAME: Protection information with IBLOCK backends not supported\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -516,8 +515,8 @@ iblock_execute_write_same(struct se_cmd *cmd)
 
 	if (cmd->t_data_nents > 1 ||
 	    sg->length != cmd->se_dev->dev_attrib.block_size) {
-		target_err("WRITE_SAME: Illegal SGL t_data_nents: %u length: %u block_size: %u\n",
-			   cmd->t_data_nents, sg->length, cmd->se_dev->dev_attrib.block_size);
+		target_cmd_err(cmd, "WRITE_SAME: Illegal SGL t_data_nents: %u length: %u block_size: %u\n",
+			       cmd->t_data_nents, sg->length, cmd->se_dev->dev_attrib.block_size);
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -680,13 +679,13 @@ iblock_alloc_bip(struct se_cmd *cmd, struct bio *bio,
 
 	bi = bdev_get_integrity(ib_dev->ibd_bd);
 	if (!bi) {
-		target_err("Unable to locate bio_integrity\n");
+		target_cmd_err(cmd, "Unable to locate bio_integrity\n");
 		return -ENODEV;
 	}
 
 	bip = bio_integrity_alloc(bio, GFP_NOIO, bio_max_segs(cmd->t_prot_nents));
 	if (IS_ERR(bip)) {
-		target_err("Unable to allocate bio_integrity_payload\n");
+		target_cmd_err(cmd, "Unable to allocate bio_integrity_payload\n");
 		return PTR_ERR(bip);
 	}
 
@@ -694,8 +693,8 @@ iblock_alloc_bip(struct se_cmd *cmd, struct bio *bio,
 	bip_set_seed(bip, bio->bi_iter.bi_sector >>
 				  (bi->interval_exp - SECTOR_SHIFT));
 
-	target_debug("IBLOCK BIP Size: %u Sector: %llu\n", bip->bip_iter.bi_size,
-		     (unsigned long long)bip->bip_iter.bi_sector);
+	target_cmd_debug(cmd, "BIP Size: %u Sector: %llu\n", bip->bip_iter.bi_size,
+			 (unsigned long long)bip->bip_iter.bi_sector);
 
 	resid = bio_integrity_bytes(bi, bio_sectors(bio));
 	while (resid > 0 && sg_miter_next(miter)) {
@@ -704,13 +703,13 @@ iblock_alloc_bip(struct se_cmd *cmd, struct bio *bio,
 		rc = bio_integrity_add_page(bio, miter->page, len,
 					    offset_in_page(miter->addr));
 		if (rc != len) {
-			target_err("bio_integrity_add_page() failed; %d\n", rc);
+			target_cmd_err(cmd, "bio_integrity_add_page() failed; %d\n", rc);
 			sg_miter_stop(miter);
 			return -ENOMEM;
 		}
 
-		target_debug("Added bio integrity page: %p length: %zu offset: %lu\n", miter->page,
-			     len, offset_in_page(miter->addr));
+		target_cmd_debug(cmd, "Added bio integrity page: %p length: %zu offset: %lu\n",
+				 miter->page, len, offset_in_page(miter->addr));
 
 		resid -= len;
 		if (len < miter->length)

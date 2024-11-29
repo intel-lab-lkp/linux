@@ -68,8 +68,8 @@ transport_lookup_cmd_lun(struct se_cmd *se_cmd)
 
 		if ((se_cmd->data_direction == DMA_TO_DEVICE) &&
 		    deve->lun_access_ro) {
-			target_err("TARGET_CORE[%s]: Detected WRITE_PROTECTED LUN Access for 0x%08llx\n",
-				   se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun);
+			target_cmd_err(se_cmd, "[%s]: Detected WRITE_PROTECTED LUN Access\n",
+				       se_cmd->se_tfo->fabric_name);
 			rcu_read_unlock();
 			return TCM_WRITE_PROTECTED;
 		}
@@ -96,9 +96,8 @@ out_unlock:
 		 * MappedLUN=0 exists for this Initiator Port.
 		 */
 		if (se_cmd->orig_fe_lun != 0) {
-			target_err("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN Access for 0x%08llx from %s\n",
-				   se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun,
-				   nacl->initiatorname);
+			target_cmd_err(se_cmd, "[%s]: Detected NON_EXISTENT_LUN Access\n",
+				       se_cmd->se_tfo->fabric_name);
 			return TCM_NON_EXISTENT_LUN;
 		}
 
@@ -164,8 +163,8 @@ out_unlock:
 	rcu_read_unlock();
 
 	if (!se_lun) {
-		target_debug("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN Access for 0x%08llx for %s\n",
-			     se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun, nacl->initiatorname);
+		target_cmd_debug(se_cmd, "[%s]: Detected NON_EXISTENT_LUN Access",
+				 se_cmd->se_tfo->fabric_name);
 		return -ENODEV;
 	}
 	se_cmd->se_dev = rcu_dereference_raw(se_lun->lun_se_dev);
@@ -207,7 +206,7 @@ struct se_dev_entry *core_get_se_deve_from_rtpi(
 	hlist_for_each_entry_rcu(deve, &nacl->lun_entry_hlist, link) {
 		lun = deve->se_lun;
 		if (!lun) {
-			target_err("%s device entries device pointer is NULL, but Initiator has access.\n",
+			target_err("[%s]: device entries lun pointer is NULL, but Initiator has access.\n",
 				   tpg->se_tpg_tfo->fabric_name);
 			continue;
 		}
@@ -319,7 +318,7 @@ int core_enable_device_list_for_node(
 
 	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (!new) {
-		target_err("Unable to allocate se_dev_entry memory\n");
+		target_lun_err(lun, "Unable to allocate se_dev_entry memory\n");
 		return -ENOMEM;
 	}
 
@@ -341,15 +340,15 @@ int core_enable_device_list_for_node(
 		struct se_lun *orig_lun = orig->se_lun;
 
 		if (orig_lun != lun) {
-			target_err("Existing orig->se_lun doesn't match new lun for dynamic -> explicit NodeACL conversion: %s\n",
-				   nacl->initiatorname);
+			target_lun_err(lun, "Existing orig->se_lun doesn't match new lun for dynamic -> explicit NodeACL conversion: %s\n",
+				       nacl->initiatorname);
 			mutex_unlock(&nacl->lun_entry_mutex);
 			kfree(new);
 			return -EINVAL;
 		}
 		if (orig->se_lun_acl != NULL) {
-			target_warn_ratelimited("Detected existing explicit se_lun_acl->se_lun_group reference for %s mapped_lun: %llu, failing\n",
-						nacl->initiatorname, mapped_lun);
+			target_lun_warn_ratelimited(lun, "Detected existing explicit se_lun_acl->se_lun_group reference for %s mapped_lun: %llu, failing\n",
+						    nacl->initiatorname, mapped_lun);
 			mutex_unlock(&nacl->lun_entry_mutex);
 			kfree(new);
 			return -EINVAL;
@@ -506,9 +505,7 @@ int core_dev_add_lun(
 	if (rc < 0)
 		return rc;
 
-	target_debug("%s_TPG[%u]_LUN[%llu] - Activated %s Logical Unit from CORE HBA: %u\n",
-		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
-		     lun->unpacked_lun, tpg->se_tpg_tfo->fabric_name, dev->se_hba->hba_id);
+	target_lun_debug(lun, "Activated Logical Unit from CORE HBA: %u\n", dev->se_hba->hba_id);
 	/*
 	 * Update LUN maps for dynamically added initiators when
 	 * generate_node_acl is enabled.
@@ -538,9 +535,7 @@ void core_dev_del_lun(
 	struct se_portal_group *tpg,
 	struct se_lun *lun)
 {
-	target_debug("%s_TPG[%u]_LUN[%llu] - Deactivating %s Logical Unit from device object\n",
-		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
-		     lun->unpacked_lun, tpg->se_tpg_tfo->fabric_name);
+	target_lun_debug(lun, "Deactivating Logical Unit from device object\n");
 
 	core_tpg_remove_lun(tpg, lun);
 }
@@ -597,10 +592,8 @@ int core_dev_add_initiator_node_lun_acl(
 			lun_access_ro, nacl, tpg) < 0)
 		return -EINVAL;
 
-	target_debug("%s_TPG[%u]_LUN[%llu->%llu] - Added %s ACL for  InitiatorNode: %s\n",
-		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
-		     lun->unpacked_lun, lacl->mapped_lun, lun_access_ro ? "RO" : "RW",
-		     nacl->initiatorname);
+	target_lun_debug(lun, "Added %s ACL for  InitiatorNode: %s, Mapped LUN %llu\n",
+			 lun_access_ro ? "RO" : "RW", nacl->initiatorname, lacl->mapped_lun);
 	/*
 	 * Check to see if there are any existing persistent reservation APTPL
 	 * pre-registrations that need to be enabled for this LUN ACL..
@@ -628,9 +621,8 @@ int core_dev_del_initiator_node_lun_acl(
 		core_disable_device_list_for_node(lun, deve, nacl, tpg);
 	mutex_unlock(&nacl->lun_entry_mutex);
 
-	target_debug("%s_TPG[%u]_LUN[%llu] - Removed ACL for InitiatorNode: %s Mapped LUN: %llu\n",
-		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
-		     lun->unpacked_lun, nacl->initiatorname, lacl->mapped_lun);
+	target_lun_debug(lun, "Removed ACL for InitiatorNode: %s Mapped LUN: %llu\n",
+			 nacl->initiatorname, lacl->mapped_lun);
 
 	return 0;
 }
@@ -639,7 +631,7 @@ void core_dev_free_initiator_node_lun_acl(
 	struct se_portal_group *tpg,
 	struct se_lun_acl *lacl)
 {
-	target_debug("%s_TPG[%u] - Freeing ACL for %s InitiatorNode: %s Mapped LUN: %llu\n",
+	target_debug("%s_tpg[%u] - Freeing ACL for %s InitiatorNode: %s Mapped LUN: %llu\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     tpg->se_tpg_tfo->fabric_name, lacl->se_lun_nacl->initiatorname,
 		     lacl->mapped_lun);

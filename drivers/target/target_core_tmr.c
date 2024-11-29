@@ -89,8 +89,8 @@ static bool __target_check_io_state(struct se_cmd *se_cmd,
 	 */
 	spin_lock(&se_cmd->t_state_lock);
 	if (se_cmd->transport_state & (CMD_T_COMPLETE | CMD_T_FABRIC_STOP)) {
-		target_debug("Attempted to abort io tag: %llu already complete or fabric stop, skipping\n",
-			     se_cmd->tag);
+		target_cmd_debug(se_cmd, "Attempted to abort io tag: %llu already complete or fabric stop, skipping\n",
+				 se_cmd->tag);
 		spin_unlock(&se_cmd->t_state_lock);
 		return false;
 	}
@@ -136,8 +136,8 @@ void core_tmr_abort_task(
 			if (tmr->ref_task_tag != ref_tag)
 				continue;
 
-			target_err("ABORT_TASK: Found referenced %s task_tag: %llu\n",
-				   se_cmd->se_tfo->fabric_name, ref_tag);
+			target_cmd_err(se_cmd, "ABORT_TASK: Found referenced %s task_tag: %llu\n",
+				       se_cmd->se_tfo->fabric_name, ref_tag);
 
 			spin_lock(&se_sess->sess_cmd_lock);
 			rc = __target_check_io_state(se_cmd, se_sess, 0);
@@ -237,9 +237,9 @@ static void core_tmr_drain_tmr_list(
 		list_del_init(&tmr_p->tmr_list);
 		cmd = tmr_p->task_cmd;
 
-		target_debug("LUN_RESET: %s releasing TMR %p Function: 0x%02x, Response: 0x%02x, t_state: %d\n",
-			     (preempt_and_abort_list) ? "Preempt" : "", tmr_p, tmr_p->function,
-			     tmr_p->response, cmd->t_state);
+		target_cmd_debug(cmd, "LUN_RESET: %s releasing TMR %p Function: 0x%02x, Response: 0x%02x, t_state: %d\n",
+				 (preempt_and_abort_list) ? "Preempt" : "", tmr_p, tmr_p->function,
+				 tmr_p->response, cmd->t_state);
 
 		target_put_cmd_and_wait(cmd);
 	}
@@ -344,8 +344,9 @@ static void core_tmr_drain_state_list(
 		list_del_init(&cmd->state_list);
 
 		target_show_cmd("LUN_RESET: ", cmd);
-		target_debug("LUN_RESET: ITT[0x%08llx] - %s pr_res_key: 0x%016Lx\n", cmd->tag,
-			     (preempt_and_abort_list) ? "preempt" : "", cmd->pr_res_key);
+		target_cmd_debug(cmd, "LUN_RESET: ITT[0x%08llx] - %s pr_res_key: 0x%016Lx\n",
+				 cmd->tag, (preempt_and_abort_list) ? "preempt" : "",
+				 cmd->pr_res_key);
 
 		target_put_cmd_and_wait(cmd);
 	}
