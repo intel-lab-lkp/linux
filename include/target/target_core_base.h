@@ -12,6 +12,98 @@
 #define TARGET_CORE_VERSION		"v5.0"
 
 /*
+ * Unified target core logs
+ */
+#define target_sess_log(LVL, SESS, FMT, ...) \
+	pr_##LVL("target " TARGET_PREFIX " (%s -> %d): " FMT, \
+		(SESS)->se_node_acl->initiatorname, \
+		(SESS)->se_tpg->tpg_rtpi, ##__VA_ARGS__)
+
+#define target_cmd_log(LVL, CMD, FMT, ...) \
+	pr_##LVL("target " TARGET_PREFIX " (%s -> %d/%lld): " FMT, \
+		(CMD)->se_sess->se_node_acl->initiatorname, \
+		(CMD)->se_sess->se_tpg->tpg_rtpi, \
+		(CMD)->orig_fe_lun, ##__VA_ARGS__)
+
+#define target_lun_log(LVL, LUN, FMT, ...) \
+	pr_##LVL("target " TARGET_PREFIX " %s_tpg[%hu](%d/%llu): " FMT, \
+		(LUN)->lun_tpg->se_tpg_tfo->fabric_name, \
+		(LUN)->lun_tpg->se_tpg_tfo->tpg_get_tag(LUN->lun_tpg), \
+		(LUN)->lun_tpg->tpg_rtpi, \
+		(LUN)->unpacked_lun, ##__VA_ARGS__)
+
+#define target_log(LVL, FMT, ...) \
+	pr_##LVL("target " TARGET_PREFIX ": " FMT, ##__VA_ARGS__)
+
+#define target_sess_debug(SESS, FMT, ...)  target_sess_log(debug, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_info(SESS, FMT, ...)   target_sess_log(info, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_notice(SESS, FMT, ...) target_sess_log(notice, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_warn(SESS, FMT, ...)   target_sess_log(warn, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_err(SESS, FMT, ...)    target_sess_log(err, SESS, FMT, ##__VA_ARGS__)
+
+#define target_cmd_debug(CMD, FMT, ...)  target_cmd_log(debug, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_info(CMD, FMT, ...)   target_cmd_log(info, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_notice(CMD, FMT, ...) target_cmd_log(notice, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_warn(CMD, FMT, ...)   target_cmd_log(warn, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_err(CMD, FMT, ...)    target_cmd_log(err, CMD, FMT, ##__VA_ARGS__)
+
+#define target_lun_debug(LUN, FMT, ...)  target_lun_log(debug, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_info(LUN, FMT, ...)   target_lun_log(info, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_notice(LUN, FMT, ...) target_lun_log(notice, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_warn(LUN, FMT, ...)   target_lun_log(warn, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_err(LUN, FMT, ...)    target_lun_log(err, LUN, FMT, ##__VA_ARGS__)
+
+#define target_debug(FMT, ...)  target_log(debug, FMT, ##__VA_ARGS__)
+#define target_info(FMT, ...)   target_log(info, FMT, ##__VA_ARGS__)
+#define target_notice(FMT, ...) target_log(notice, FMT, ##__VA_ARGS__)
+#define target_warn(FMT, ...)   target_log(warn, FMT, ##__VA_ARGS__)
+#define target_err(FMT, ...)    target_log(err, FMT, ##__VA_ARGS__)
+
+#define target_sess_debug_ratelimited(SESS, FMT, ...) \
+	target_sess_log(debug_ratelimited, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_info_ratelimited(SESS, FMT, ...) \
+	target_sess_log(info_ratelimited, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_notice_ratelimited(SESS, FMT, ...) \
+	target_sess_log(notice_ratelimited, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_warn_ratelimited(SESS, FMT, ...) \
+	target_sess_log(warn_ratelimited, SESS, FMT, ##__VA_ARGS__)
+#define target_sess_err_ratelimited(SESS, FMT, ...) \
+	target_sess_log(err_ratelimited, SESS, FMT, ##__VA_ARGS__)
+
+#define target_cmd_debug_ratelimited(CMD, FMT, ...) \
+	target_cmd_log(debug_ratelimited, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_info_ratelimited(CMD, FMT, ...) \
+	target_cmd_log(info_ratelimited, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_notice_ratelimited(CMD, FMT, ...) \
+	target_cmd_log(notice_ratelimited, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_warn_ratelimited(CMD, FMT, ...) \
+	target_cmd_log(warn_ratelimited, CMD, FMT, ##__VA_ARGS__)
+#define target_cmd_err_ratelimited(CMD, FMT, ...) \
+	target_cmd_log(err_ratelimited, CMD, FMT, ##__VA_ARGS__)
+
+#define target_lun_debug_ratelimited(LUN, FMT, ...) \
+	target_lun_log(debug_ratelimited, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_info_ratelimited(LUN, FMT, ...) \
+	target_lun_log(info_ratelimited, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_notice_ratelimited(LUN, FMT, ...) \
+	target_lun_log(notice_ratelimited, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_warn_ratelimited(LUN, FMT, ...) \
+	target_lun_log(warn_ratelimited, LUN, FMT, ##__VA_ARGS__)
+#define target_lun_err_ratelimited(LUN, FMT, ...) \
+	target_lun_log(err_ratelimited, LUN, FMT, ##__VA_ARGS__)
+
+#define target_debug_ratelimited(FMT, ...) \
+	target_log(debug_ratelimited, FMT, ##__VA_ARGS__)
+#define target_info_ratelimited(FMT, ...) \
+	target_log(info_ratelimited, FMT, ##__VA_ARGS__)
+#define target_notice_ratelimited(FMT, ...) \
+	target_log(notice_ratelimited, FMT, ##__VA_ARGS__)
+#define target_warn_ratelimited(FMT, ...) \
+	target_log(warn_ratelimited, FMT, ##__VA_ARGS__)
+#define target_err_ratelimited(FMT, ...) \
+	target_log(err_ratelimited, FMT, ##__VA_ARGS__)
+
+/*
  * Maximum size of a CDB that can be stored in se_cmd without allocating
  * memory dynamically for the CDB.
  */
