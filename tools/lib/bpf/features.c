@@ -22,7 +22,7 @@ int probe_fd(int fd)
 
 static int probe_kern_prog_name(int token_fd)
 {
-	const size_t attr_sz = offsetofend(union bpf_attr, prog_token_fd);
+	const size_t attr_sz = offsetofend(union bpf_attr, fd_array_cnt);
 	struct bpf_insn insns[] = {
 		BPF_MOV64_IMM(BPF_REG_0, 0),
 		BPF_EXIT_INSN(),
