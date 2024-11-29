@@ -296,6 +296,8 @@ static inline unsigned long resource_ext_type(const struct resource *res)
 /* True iff r1 completely contains r2 */
 static inline bool resource_contains(const struct resource *r1, const struct resource *r2)
 {
+	if (!resource_size(r1) || !resource_size(r2))
+		return false;
 	if (resource_type(r1) != resource_type(r2))
 		return false;
 	if (r1->flags & IORESOURCE_UNSET || r2->flags & IORESOURCE_UNSET)
