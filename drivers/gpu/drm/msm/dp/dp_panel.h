@@ -11,6 +11,8 @@
 #include "dp_aux.h"
 #include "dp_link.h"
 
+#define DP_MAX_NUM_DP_LANES	4
+
 struct edid;
 
 struct msm_dp_display_mode {
@@ -46,6 +48,7 @@ struct msm_dp_panel {
 	bool video_test;
 	bool vsc_sdp_supported;
 
+	u32 lane_map[DP_MAX_NUM_DP_LANES];
 	u32 max_dp_lanes;
 	u32 max_dp_link_rate;
 
