@@ -48,8 +48,7 @@ static int fd_attach_hba(struct se_hba *hba, u32 host_id)
 
 	hba->hba_ptr = fd_host;
 
-	target_debug("CORE_HBA[%d] - TCM FILEIO HBA Driver %s on Generic"
-		     " Target Core Stack %s\n",
+	target_debug("CORE_HBA[%d] - TCM FILEIO HBA Driver %s on Generic Target Core Stack %s\n",
 		     hba->hba_id, FD_VERSION, TARGET_CORE_VERSION);
 	target_debug("CORE_HBA[%d] - Attached FILEIO HBA: %u to Generic\n", hba->hba_id,
 		     fd_host->fd_host_id);
@@ -61,8 +60,7 @@ static void fd_detach_hba(struct se_hba *hba)
 {
 	struct fd_host *fd_host = hba->hba_ptr;
 
-	target_debug("CORE_HBA[%d] - Detached FILEIO HBA: %u from Generic"
-		     " Target Core\n",
+	target_debug("CORE_HBA[%d] - Detached FILEIO HBA: %u from Generic Target Core\n",
 		     hba->hba_id, fd_host->fd_host_id);
 
 	kfree(fd_host);
@@ -164,8 +162,7 @@ static int fd_configure_device(struct se_device *dev)
 		dev_size = (i_size_read(file->f_mapping->host) -
 				       fd_dev->fd_block_size);
 
-		target_debug("FILEIO: Using size: %llu bytes from struct"
-			     " block_device blocks: %llu logical_block_size: %d\n",
+		target_debug("FILEIO: Using size: %llu bytes from struct block_device blocks: %llu logical_block_size: %d\n",
 			     dev_size, div_u64(dev_size, fd_dev->fd_block_size),
 			     fd_dev->fd_block_size);
 		/*
@@ -178,9 +175,7 @@ static int fd_configure_device(struct se_device *dev)
 			dev->dev_attrib.is_nonrot = 1;
 	} else {
 		if (!(fd_dev->fbd_flags & FBDF_HAS_SIZE)) {
-			target_err("FILEIO: Missing fd_dev_size="
-				   " parameter, and no backing struct"
-				   " block_device\n");
+			target_err("FILEIO: Missing fd_dev_size= parameter, and no backing struct block_device\n");
 			goto fail;
 		}
 
@@ -198,16 +193,14 @@ static int fd_configure_device(struct se_device *dev)
 	dev->dev_attrib.hw_queue_depth = FD_MAX_DEVICE_QUEUE_DEPTH;
 
 	if (fd_dev->fbd_flags & FDBD_HAS_BUFFERED_IO_WCE) {
-		target_debug("FILEIO: Forcing setting of emulate_write_cache=1"
-			     " with FDBD_HAS_BUFFERED_IO_WCE\n");
+		target_debug("FILEIO: Forcing setting of emulate_write_cache=1 with FDBD_HAS_BUFFERED_IO_WCE\n");
 		dev->dev_attrib.emulate_write_cache = 1;
 	}
 
 	fd_dev->fd_dev_id = fd_host->fd_host_dev_id_count++;
 	fd_dev->fd_queue_depth = dev->queue_depth;
 
-	target_debug("CORE_FILE[%u] - Added TCM FILEIO Device ID: %u at %s,"
-		     " %llu total bytes\n",
+	target_debug("CORE_FILE[%u] - Added TCM FILEIO Device ID: %u at %s, %llu total bytes\n",
 		     fd_host->fd_host_id, fd_dev->fd_dev_id, fd_dev->fd_dev_name,
 		     fd_dev->fd_dev_size);
 
@@ -353,9 +346,8 @@ static int fd_do_rw(struct se_cmd *cmd, struct file *fd,
 		 */
 		if (S_ISBLK(file_inode(fd)->i_mode)) {
 			if (ret < 0 || ret != data_length) {
-				target_err("%s() returned %d, expecting %u for "
-					   "S_ISBLK\n",
-					   __func__, ret, data_length);
+				target_err("%s() returned %d, expecting %u for S_ISBLK\n", __func__,
+					   ret, data_length);
 				if (ret >= 0)
 					ret = -EINVAL;
 			}
@@ -438,8 +430,7 @@ fd_execute_write_same(struct se_cmd *cmd)
 	ssize_t ret;
 
 	if (cmd->prot_op) {
-		target_err("WRITE_SAME: Protection information with FILEIO"
-			   " backends not supported\n");
+		target_err("WRITE_SAME: Protection information with FILEIO backends not supported\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -448,8 +439,7 @@ fd_execute_write_same(struct se_cmd *cmd)
 
 	if (cmd->t_data_nents > 1 ||
 	    cmd->t_data_sg[0].length != cmd->se_dev->dev_attrib.block_size) {
-		target_err("WRITE_SAME: Illegal SGL t_data_nents: %u length: %u"
-			   " block_size: %u\n",
+		target_err("WRITE_SAME: Illegal SGL t_data_nents: %u length: %u block_size: %u\n",
 			   cmd->t_data_nents, cmd->t_data_sg[0].length,
 			   cmd->se_dev->dev_attrib.block_size);
 		return TCM_INVALID_CDB_FIELD;
@@ -675,8 +665,7 @@ fd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 	 * single vfs_[writev,readv] call.
 	 */
 	if (cmd->data_length > FD_MAX_BYTES) {
-		target_err("FILEIO: Not able to process I/O of %u bytes due to"
-			   "FD_MAX_BYTES: %u iovec count limitation\n",
+		target_err("FILEIO: Not able to process I/O of %u bytes due to FD_MAX_BYTES: %u iovec count limitation\n",
 			   cmd->data_length, FD_MAX_BYTES);
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
@@ -737,13 +726,10 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 			ret = kstrtoull(arg_p, 0, &fd_dev->fd_dev_size);
 			kfree(arg_p);
 			if (ret < 0) {
-				target_err("kstrtoull() failed for"
-					   " fd_dev_size=\n");
+				target_err("kstrtoull() failed for fd_dev_size=\n");
 				goto out;
 			}
-			target_debug("FILEIO: Referencing Size: %llu"
-				     " bytes\n",
-				     fd_dev->fd_dev_size);
+			target_debug("FILEIO: Referencing Size: %llu bytes\n", fd_dev->fd_dev_size);
 			fd_dev->fbd_flags |= FBDF_HAS_SIZE;
 			break;
 		case Opt_fd_buffered_io:
@@ -756,8 +742,7 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 				goto out;
 			}
 
-			target_debug("FILEIO: Using buffered I/O"
-				     " operations for struct fd_dev\n");
+			target_debug("FILEIO: Using buffered I/O operations for struct fd_dev\n");
 
 			fd_dev->fbd_flags |= FDBD_HAS_BUFFERED_IO_WCE;
 			break;
@@ -771,8 +756,7 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 				goto out;
 			}
 
-			target_debug("FILEIO: Using async I/O"
-				     " operations for struct fd_dev\n");
+			target_debug("FILEIO: Using async I/O operations for struct fd_dev\n");
 
 			fd_dev->fbd_flags |= FDBD_HAS_ASYNC_IO;
 			break;
@@ -835,8 +819,7 @@ static int fd_init_prot(struct se_device *dev)
 
 	inode = file->f_mapping->host;
 	if (S_ISBLK(inode->i_mode)) {
-		target_err("FILEIO Protection emulation only supported on"
-			   " !S_ISBLK\n");
+		target_err("FILEIO Protection emulation only supported on !S_ISBLK\n");
 		return -ENOSYS;
 	}
 

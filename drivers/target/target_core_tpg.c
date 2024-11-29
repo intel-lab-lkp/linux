@@ -134,8 +134,7 @@ void core_tpg_add_node_to_devs(
 				lun_access_ro = false;
 		}
 
-		target_debug("TARGET_CORE[%s]->TPG[%u]_LUN[%llu] - Adding %s"
-			     " access for LUN in Demo Mode\n",
+		target_debug("TARGET_CORE[%s]->TPG[%u]_LUN[%llu] - Adding %s access for LUN in Demo Mode\n",
 			     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 			     lun->unpacked_lun, lun_access_ro ? "READ-ONLY" : "READ-WRITE");
 
@@ -159,8 +158,7 @@ target_set_nacl_queue_depth(struct se_portal_group *tpg,
 	acl->queue_depth = queue_depth;
 
 	if (!acl->queue_depth) {
-		target_warn("Queue depth for %s Initiator Node: %s is 0,"
-			    "defaulting to 1.\n",
+		target_warn("Queue depth for %s Initiator Node: %s is 0, defaulting to 1.\n",
 			    tpg->se_tpg_tfo->fabric_name, acl->initiatorname);
 		acl->queue_depth = 1;
 	}
@@ -209,8 +207,7 @@ static void target_add_node_acl(struct se_node_acl *acl)
 	list_add_tail(&acl->acl_list, &tpg->acl_node_list);
 	mutex_unlock(&tpg->acl_node_mutex);
 
-	target_debug("%s_TPG[%hu] - Added %s ACL with TCQ Depth: %d for %s"
-		     " Initiator Node: %s\n",
+	target_debug("%s_TPG[%hu] - Added %s ACL with TCQ Depth: %d for %s Initiator Node: %s\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     acl->dynamic_node_acl ? "DYNAMIC" : "", acl->queue_depth,
 		     tpg->se_tpg_tfo->fabric_name, acl->initiatorname);
@@ -293,17 +290,14 @@ struct se_node_acl *core_tpg_add_initiator_node_acl(
 	if (acl) {
 		if (acl->dynamic_node_acl) {
 			acl->dynamic_node_acl = 0;
-			target_debug("%s_TPG[%u] - Replacing dynamic ACL"
-				     " for %s\n",
+			target_debug("%s_TPG[%u] - Replacing dynamic ACL for %s\n",
 				     tpg->se_tpg_tfo->fabric_name,
 				     tpg->se_tpg_tfo->tpg_get_tag(tpg), initiatorname);
 			mutex_unlock(&tpg->acl_node_mutex);
 			return acl;
 		}
 
-		target_err("ACL entry for %s Initiator"
-			   " Node %s already exists for TPG %u, ignoring"
-			   " request.\n",
+		target_err("ACL entry for %s Initiator Node %s already exists for TPG %u, ignoring request.\n",
 			   tpg->se_tpg_tfo->fabric_name, initiatorname,
 			   tpg->se_tpg_tfo->tpg_get_tag(tpg));
 		mutex_unlock(&tpg->acl_node_mutex);
@@ -362,8 +356,7 @@ void core_tpg_del_initiator_node_acl(struct se_node_acl *acl)
 	core_tpg_wait_for_nacl_pr_ref(acl);
 	core_free_device_list_for_node(acl, tpg);
 
-	target_debug("%s_TPG[%hu] - Deleted ACL with TCQ Depth: %d for %s"
-		     " Initiator Node: %s\n",
+	target_debug("%s_TPG[%hu] - Deleted ACL with TCQ Depth: %d for %s Initiator Node: %s\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     acl->queue_depth, tpg->se_tpg_tfo->fabric_name, acl->initiatorname);
 
@@ -399,8 +392,7 @@ int core_tpg_set_initiator_node_queue_depth(
 	 */
 	target_shutdown_sessions(acl);
 
-	target_debug("Successfully changed queue depth to: %d for Initiator"
-		     " Node: %s on %s Target Portal Group: %u\n",
+	target_debug("Successfully changed queue depth to: %d for Initiator Node: %s on %s Target Portal Group: %u\n",
 		     acl->queue_depth, acl->initiatorname, tpg->se_tpg_tfo->fabric_name,
 		     tpg->se_tpg_tfo->tpg_get_tag(tpg));
 
@@ -550,8 +542,7 @@ int core_tpg_register(
 		}
 	}
 
-	target_debug("TARGET_CORE[%s]: Allocated portal_group for endpoint: %s, "
-		     "Proto: %d, Portal Tag: %u\n",
+	target_debug("TARGET_CORE[%s]: Allocated portal_group for endpoint: %s, Proto: %d, Portal Tag: %u\n",
 		     se_tpg->se_tpg_tfo->fabric_name,
 		     se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg) ?
 		     se_tpg->se_tpg_tfo->tpg_get_wwn(se_tpg) : NULL,
@@ -567,8 +558,7 @@ int core_tpg_deregister(struct se_portal_group *se_tpg)
 	struct se_node_acl *nacl, *nacl_tmp;
 	LIST_HEAD(node_list);
 
-	target_debug("TARGET_CORE[%s]: Deallocating portal_group for endpoint: %s, "
-		     "Proto: %d, Portal Tag: %u\n",
+	target_debug("TARGET_CORE[%s]: Deallocating portal_group for endpoint: %s, Proto: %d, Portal Tag: %u\n",
 		     tfo->fabric_name, tfo->tpg_get_wwn(se_tpg) ? tfo->tpg_get_wwn(se_tpg) : NULL,
 		     se_tpg->proto_id, tfo->tpg_get_tag(se_tpg));
 

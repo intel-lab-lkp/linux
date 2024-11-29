@@ -45,8 +45,7 @@ static inline struct iblock_dev *IBLOCK_DEV(struct se_device *dev)
 
 static int iblock_attach_hba(struct se_hba *hba, u32 host_id)
 {
-	target_debug("CORE_HBA[%d] - TCM iBlock HBA Driver %s on"
-		     " Generic Target Core Stack %s\n",
+	target_debug("CORE_HBA[%d] - TCM iBlock HBA Driver %s on Generic Target Core Stack %s\n",
 		     hba->hba_id, IBLOCK_VERSION, TARGET_CORE_VERSION);
 	return 0;
 }
@@ -504,8 +503,7 @@ iblock_execute_write_same(struct se_cmd *cmd)
 					sbc_get_write_same_sectors(cmd));
 
 	if (cmd->prot_op) {
-		target_err("WRITE_SAME: Protection information with IBLOCK"
-			   " backends not supported\n");
+		target_err("WRITE_SAME: Protection information with IBLOCK backends not supported\n");
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
 
@@ -516,8 +514,7 @@ iblock_execute_write_same(struct se_cmd *cmd)
 
 	if (cmd->t_data_nents > 1 ||
 	    sg->length != cmd->se_dev->dev_attrib.block_size) {
-		target_err("WRITE_SAME: Illegal SGL t_data_nents: %u length: %u"
-			   " block_size: %u\n",
+		target_err("WRITE_SAME: Illegal SGL t_data_nents: %u length: %u block_size: %u\n",
 			   cmd->t_data_nents, sg->length, cmd->se_dev->dev_attrib.block_size);
 		return TCM_INVALID_CDB_FIELD;
 	}
@@ -604,8 +601,7 @@ static ssize_t iblock_set_configfs_dev_params(struct se_device *dev,
 		switch (token) {
 		case Opt_udev_path:
 			if (ib_dev->ibd_bd) {
-				target_err("Unable to set udev_path= while"
-					   " ib_dev->ibd_bd exists\n");
+				target_err("Unable to set udev_path= while ib_dev->ibd_bd exists\n");
 				ret = -EEXIST;
 				goto out;
 			}
@@ -626,8 +622,7 @@ static ssize_t iblock_set_configfs_dev_params(struct se_device *dev,
 			ret = kstrtoul(arg_p, 0, &tmp_readonly);
 			kfree(arg_p);
 			if (ret < 0) {
-				target_err("kstrtoul() failed for"
-					   " readonly=\n");
+				target_err("kstrtoul() failed for readonly=\n");
 				goto out;
 			}
 			ib_dev->ibd_readonly = tmp_readonly;

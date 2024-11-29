@@ -183,8 +183,7 @@ int iscsi_create_default_params(struct iscsi_param_list **param_list_ptr)
 
 	pl = kzalloc(sizeof(struct iscsi_param_list), GFP_KERNEL);
 	if (!pl) {
-		target_err("Unable to allocate memory for"
-			   " struct iscsi_param_list.\n");
+		target_err("Unable to allocate memory for struct iscsi_param_list.\n");
 		return -ENOMEM;
 	}
 	INIT_LIST_HEAD(&pl->param_list);
@@ -663,8 +662,7 @@ int iscsi_extract_key_value(char *textbuf, char **key, char **value)
 {
 	*value = strchr(textbuf, '=');
 	if (!*value) {
-		target_err("Unable to locate \"=\" separator for key,"
-			   " ignoring request.\n");
+		target_err("Unable to locate \"=\" separator for key, ignoring request.\n");
 		return -1;
 	}
 
@@ -697,16 +695,14 @@ static int iscsi_add_notunderstood_response(
 	struct iscsi_extra_response *extra_response;
 
 	if (strlen(value) > VALUE_MAXLEN) {
-		target_err("Value for notunderstood key \"%s\" exceeds %d,"
-			   " protocol error.\n",
-			   key, VALUE_MAXLEN);
+		target_err("Value for notunderstood key \"%s\" exceeds %d, protocol error.\n", key,
+			   VALUE_MAXLEN);
 		return -1;
 	}
 
 	extra_response = kzalloc(sizeof(struct iscsi_extra_response), GFP_KERNEL);
 	if (!extra_response) {
-		target_err("Unable to allocate memory for"
-			   " struct iscsi_extra_response.\n");
+		target_err("Unable to allocate memory for struct iscsi_extra_response.\n");
 		return -ENOMEM;
 	}
 	INIT_LIST_HEAD(&extra_response->er_list);
@@ -783,8 +779,7 @@ static void iscsi_check_proposer_for_optional_reply(struct iscsi_param *param,
 static int iscsi_check_boolean_value(struct iscsi_param *param, char *value)
 {
 	if (strcmp(value, YES) && strcmp(value, NO)) {
-		target_err("Illegal value for \"%s\", must be either"
-			   " \"%s\" or \"%s\".\n",
+		target_err("Illegal value for \"%s\", must be either \"%s\" or \"%s\".\n",
 			   param->name, YES, NO);
 		return -1;
 	}
@@ -801,8 +796,7 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 
 	if (IS_TYPERANGE_0_TO_2(param)) {
 		if ((value < 0) || (value > 2)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " between 0 and 2.\n",
+			target_err("Illegal value for \"%s\", must be between 0 and 2.\n",
 				   param->name);
 			return -1;
 		}
@@ -810,8 +804,7 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 	}
 	if (IS_TYPERANGE_0_TO_3600(param)) {
 		if ((value < 0) || (value > 3600)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " between 0 and 3600.\n",
+			target_err("Illegal value for \"%s\", must be between 0 and 3600.\n",
 				   param->name);
 			return -1;
 		}
@@ -819,8 +812,7 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 	}
 	if (IS_TYPERANGE_0_TO_32767(param)) {
 		if ((value < 0) || (value > 32767)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " between 0 and 32767.\n",
+			target_err("Illegal value for \"%s\", must be between 0 and 32767.\n",
 				   param->name);
 			return -1;
 		}
@@ -828,8 +820,7 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 	}
 	if (IS_TYPERANGE_0_TO_65535(param)) {
 		if ((value < 0) || (value > 65535)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " between 0 and 65535.\n",
+			target_err("Illegal value for \"%s\", must be between 0 and 65535.\n",
 				   param->name);
 			return -1;
 		}
@@ -837,8 +828,7 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 	}
 	if (IS_TYPERANGE_1_TO_65535(param)) {
 		if ((value < 1) || (value > 65535)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " between 1 and 65535.\n",
+			target_err("Illegal value for \"%s\", must be between 1 and 65535.\n",
 				   param->name);
 			return -1;
 		}
@@ -846,8 +836,7 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 	}
 	if (IS_TYPERANGE_2_TO_3600(param)) {
 		if ((value < 2) || (value > 3600)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " between 2 and 3600.\n",
+			target_err("Illegal value for \"%s\", must be between 2 and 3600.\n",
 				   param->name);
 			return -1;
 		}
@@ -855,8 +844,7 @@ static int iscsi_check_numerical_value(struct iscsi_param *param, char *value_pt
 	}
 	if (IS_TYPERANGE_512_TO_16777215(param)) {
 		if ((value < 512) || (value > 16777215)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " between 512 and 16777215.\n",
+			target_err("Illegal value for \"%s\", must be between 512 and 16777215.\n",
 				   param->name);
 			return -1;
 		}
@@ -875,25 +863,21 @@ static int iscsi_check_string_or_list_value(struct iscsi_param *param, char *val
 		if (strcmp(value, KRB5) && strcmp(value, SPKM1) &&
 		    strcmp(value, SPKM2) && strcmp(value, SRP) &&
 		    strcmp(value, CHAP) && strcmp(value, NONE)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " \"%s\", \"%s\", \"%s\", \"%s\", \"%s\""
-				   " or \"%s\".\n",
+			target_err("Illegal value for \"%s\", must be \"%s\", \"%s\", \"%s\", \"%s\", \"%s\" or \"%s\".\n",
 				   param->name, KRB5, SPKM1, SPKM2, SRP, CHAP, NONE);
 			return -1;
 		}
 	}
 	if (IS_TYPERANGE_DIGEST_PARAM(param)) {
 		if (strcmp(value, CRC32C) && strcmp(value, NONE)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " \"%s\" or \"%s\".\n",
+			target_err("Illegal value for \"%s\", must be \"%s\" or \"%s\".\n",
 				   param->name, CRC32C, NONE);
 			return -1;
 		}
 	}
 	if (IS_TYPERANGE_SESSIONTYPE(param)) {
 		if (strcmp(value, DISCOVERY) && strcmp(value, NORMAL)) {
-			target_err("Illegal value for \"%s\", must be"
-				   " \"%s\" or \"%s\".\n",
+			target_err("Illegal value for \"%s\", must be \"%s\" or \"%s\".\n",
 				   param->name, DISCOVERY, NORMAL);
 			return -1;
 		}
@@ -1032,8 +1016,7 @@ static int iscsi_check_acceptor_state(struct iscsi_param *param, char *value,
 				return -1;
 
 			conn->conn_ops->MaxRecvDataSegmentLength = tmp;
-			target_debug("Saving op->MaxRecvDataSegmentLength from"
-				     " original initiator received value: %u\n",
+			target_debug("Saving op->MaxRecvDataSegmentLength from original initiator received value: %u\n",
 				     conn->conn_ops->MaxRecvDataSegmentLength);
 
 			param_mxdsl = iscsi_find_param_from_key(
@@ -1054,9 +1037,7 @@ static int iscsi_check_acceptor_state(struct iscsi_param *param, char *value,
 		negotiated_value = iscsi_check_valuelist_for_support(
 					param, value);
 		if (!negotiated_value) {
-			target_err("Proposer's value list \"%s\" contains"
-				   " no valid values from Acceptor's value list"
-				   " \"%s\".\n",
+			target_err("Proposer's value list \"%s\" contains no valid values from Acceptor's value list \"%s\".\n",
 				   value, param->value);
 			return -1;
 		}
@@ -1127,8 +1108,7 @@ static int iscsi_check_value(struct iscsi_param *param, char *value)
 		}
 
 /* #warning FIXME: Add check for X-ExtensionKey here */
-		target_err("Standard iSCSI key \"%s\" cannot be answered"
-			   " with \"%s\", protocol error.\n",
+		target_err("Standard iSCSI key \"%s\" cannot be answered with \"%s\", protocol error.\n",
 			   param->name, value);
 		return -1;
 	}
@@ -1138,9 +1118,7 @@ static int iscsi_check_value(struct iscsi_param *param, char *value)
 		comma_ptr = strchr(value, ',');
 
 		if (comma_ptr && !IS_TYPE_VALUE_LIST(param)) {
-			target_err("Detected value separator \",\", but"
-				   " key \"%s\" does not allow a value list,"
-				   " protocol error.\n",
+			target_err("Detected value separator \",\", but key \"%s\" does not allow a value list, protocol error.\n",
 				   param->name);
 			return -1;
 		}
@@ -1148,8 +1126,7 @@ static int iscsi_check_value(struct iscsi_param *param, char *value)
 			*comma_ptr = '\0';
 
 		if (strlen(value) > VALUE_MAXLEN) {
-			target_err("Value for key \"%s\" exceeds %d,"
-				   " protocol error.\n",
+			target_err("Value for key \"%s\" exceeds %d, protocol error.\n",
 				   param->name, VALUE_MAXLEN);
 			return -1;
 		}
@@ -1194,16 +1171,14 @@ static struct iscsi_param *__iscsi_check_key(
 		return NULL;
 
 	if ((sender & SENDER_INITIATOR) && !IS_SENDER_INITIATOR(param)) {
-		target_err("Key \"%s\" may not be sent to %s,"
-			   " protocol error.\n",
-			   param->name, (sender & SENDER_RECEIVER) ? "target" : "initiator");
+		target_err("Key \"%s\" may not be sent to %s, protocol error.\n", param->name,
+			   (sender & SENDER_RECEIVER) ? "target" : "initiator");
 		return NULL;
 	}
 
 	if ((sender & SENDER_TARGET) && !IS_SENDER_TARGET(param)) {
-		target_err("Key \"%s\" may not be sent to %s,"
-			   " protocol error.\n",
-			   param->name, (sender & SENDER_RECEIVER) ? "initiator" : "target");
+		target_err("Key \"%s\" may not be sent to %s, protocol error.\n", param->name,
+			   (sender & SENDER_RECEIVER) ? "initiator" : "target");
 		return NULL;
 	}
 
@@ -1230,15 +1205,13 @@ static struct iscsi_param *iscsi_check_key(
 		return NULL;
 
 	if ((sender & SENDER_INITIATOR) && !IS_SENDER_INITIATOR(param)) {
-		target_err("Key \"%s\" may not be sent to %s,"
-			   " protocol error.\n",
-			   param->name, (sender & SENDER_RECEIVER) ? "target" : "initiator");
+		target_err("Key \"%s\" may not be sent to %s, protocol error.\n", param->name,
+			   (sender & SENDER_RECEIVER) ? "target" : "initiator");
 		return NULL;
 	}
 	if ((sender & SENDER_TARGET) && !IS_SENDER_TARGET(param)) {
-		target_err("Key \"%s\" may not be sent to %s,"
-			   " protocol error.\n",
-			   param->name, (sender & SENDER_RECEIVER) ? "initiator" : "target");
+		target_err("Key \"%s\" may not be sent to %s, protocol error.\n", param->name,
+			   (sender & SENDER_RECEIVER) ? "initiator" : "target");
 		return NULL;
 	}
 
@@ -1527,8 +1500,7 @@ void iscsi_set_connection_parameters(
 	char *tmpptr;
 	struct iscsi_param *param;
 
-	target_debug("---------------------------------------------------"
-		     "---------------\n");
+	target_debug("------------------------------------------------------------------\n");
 	list_for_each_entry(param, &param_list->param_list, p_list) {
 		/*
 		 * Special case to set MAXXMITDATASEGMENTLENGTH from the
@@ -1575,8 +1547,7 @@ void iscsi_set_connection_parameters(
 			target_debug("Set MXDSL from TargetRecvDataSegmentLength\n");
 		}
 	}
-	target_debug("----------------------------------------------------"
-		     "--------------\n");
+	target_debug("------------------------------------------------------------------\n");
 }
 
 void iscsi_set_session_parameters(
@@ -1587,8 +1558,7 @@ void iscsi_set_session_parameters(
 	char *tmpptr;
 	struct iscsi_param *param;
 
-	target_debug("----------------------------------------------------"
-		     "--------------\n");
+	target_debug("------------------------------------------------------------------\n");
 	list_for_each_entry(param, &param_list->param_list, p_list) {
 		if (!IS_PSTATE_ACCEPTOR(param) && !IS_PSTATE_PROPOSER(param))
 			continue;
@@ -1673,6 +1643,5 @@ void iscsi_set_session_parameters(
 			target_debug("RDMAExtensions:               %s\n", param->value);
 		}
 	}
-	target_debug("----------------------------------------------------"
-		     "--------------\n");
+	target_debug("------------------------------------------------------------------\n");
 }

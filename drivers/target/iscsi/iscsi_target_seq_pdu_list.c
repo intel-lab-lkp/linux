@@ -27,9 +27,7 @@ static void iscsit_dump_seq_list(struct iscsit_cmd *cmd)
 
 	for (i = 0; i < cmd->seq_count; i++) {
 		seq = &cmd->seq_list[i];
-		target_debug("i: %d, pdu_start: %d, pdu_count: %d,"
-			     " offset: %d, xfer_len: %d, seq_send_order: %d,"
-			     " seq_no: %d\n",
+		target_debug("i: %d, pdu_start: %d, pdu_count: %d, offset: %d, xfer_len: %d, seq_send_order: %d, seq_no: %d\n",
 			     i, seq->pdu_start, seq->pdu_count, seq->offset, seq->xfer_len,
 			     seq->seq_send_order, seq->seq_no);
 	}
@@ -44,9 +42,8 @@ static void iscsit_dump_pdu_list(struct iscsit_cmd *cmd)
 
 	for (i = 0; i < cmd->pdu_count; i++) {
 		pdu = &cmd->pdu_list[i];
-		target_debug("i: %d, offset: %d, length: %d,"
-			     " pdu_send_order: %d, seq_no: %d\n",
-			     i, pdu->offset, pdu->length, pdu->pdu_send_order, pdu->seq_no);
+		target_debug("i: %d, offset: %d, length: %d, pdu_send_order: %d, seq_no: %d\n", i,
+			     pdu->offset, pdu->length, pdu->pdu_send_order, pdu->seq_no);
 	}
 }
 #else
@@ -129,8 +126,7 @@ redo:
 		}
 		array = kcalloc(seq_count, sizeof(u32), GFP_KERNEL);
 		if (!array) {
-			target_err("Unable to allocate memory"
-				   " for random array.\n");
+			target_err("Unable to allocate memory for random array.\n");
 			return -ENOMEM;
 		}
 		iscsit_create_random_array(array, seq_count);
@@ -149,8 +145,7 @@ redo:
 	if (seq_count) {
 		array = kcalloc(seq_count, sizeof(u32), GFP_KERNEL);
 		if (!array) {
-			target_err("Unable to allocate memory for"
-				   " random array.\n");
+			target_err("Unable to allocate memory for random array.\n");
 			return -ENOMEM;
 		}
 		iscsit_create_random_array(array, seq_count);
@@ -575,8 +570,7 @@ struct iscsi_pdu *iscsit_get_pdu_holder(
 		if ((pdu[i].offset == offset) && (pdu[i].length == length))
 			return &pdu[i];
 
-	target_err("Unable to locate PDU holder for ITT: 0x%08x, Offset:"
-		   " %u, Length: %u\n",
+	target_err("Unable to locate PDU holder for ITT: 0x%08x, Offset: %u, Length: %u\n",
 		   cmd->init_task_tag, offset, length);
 	return NULL;
 }
@@ -599,9 +593,7 @@ redo:
 		pdu = &cmd->pdu_list[cmd->pdu_start];
 
 		for (i = 0; pdu[i].seq_no != cmd->seq_no; i++) {
-			target_debug("pdu[i].seq_no: %d, pdu[i].pdu"
-				     "_send_order: %d, pdu[i].offset: %d,"
-				     " pdu[i].length: %d\n",
+			target_debug("pdu[i].seq_no: %d, pdu[i].pdu_send_order: %d, pdu[i].offset: %d, pdu[i].length: %d\n",
 				     pdu[i].seq_no, pdu[i].pdu_send_order, pdu[i].offset,
 				     pdu[i].length);
 
@@ -618,8 +610,7 @@ redo:
 		if (cmd->pdu_start < cmd->pdu_count)
 			goto redo;
 
-		target_err("Command ITT: 0x%08x unable to locate"
-			   " struct iscsi_pdu for cmd->pdu_send_order: %u.\n",
+		target_err("Command ITT: 0x%08x unable to locate struct iscsi_pdu for cmd->pdu_send_order: %u.\n",
 			   cmd->init_task_tag, cmd->pdu_send_order);
 		return NULL;
 	} else {
@@ -628,15 +619,13 @@ redo:
 			return NULL;
 		}
 
-		target_debug("seq->pdu_start: %d, seq->pdu_count: %d,"
-			     " seq->seq_no: %d\n",
+		target_debug("seq->pdu_start: %d, seq->pdu_count: %d, seq->seq_no: %d\n",
 			     seq->pdu_start, seq->pdu_count, seq->seq_no);
 
 		pdu = &cmd->pdu_list[seq->pdu_start];
 
 		if (seq->pdu_send_order == seq->pdu_count) {
-			target_err("Command ITT: 0x%08x seq->pdu_send"
-				   "_order: %u equals seq->pdu_count: %u\n",
+			target_err("Command ITT: 0x%08x seq->pdu_send_order: %u equals seq->pdu_count: %u\n",
 				   cmd->init_task_tag, seq->pdu_send_order, seq->pdu_count);
 			return NULL;
 		}
@@ -648,8 +637,7 @@ redo:
 			}
 		}
 
-		target_err("Command ITT: 0x%08x unable to locate iscsi"
-			   "_pdu_t for seq->pdu_send_order: %u.\n",
+		target_err("Command ITT: 0x%08x unable to locate iscsi_pdu_t for seq->pdu_send_order: %u.\n",
 			   cmd->init_task_tag, seq->pdu_send_order);
 		return NULL;
 	}
@@ -670,8 +658,7 @@ struct iscsi_seq *iscsit_get_seq_holder(
 	}
 
 	for (i = 0; i < cmd->seq_count; i++) {
-		target_debug("seq_list[i].orig_offset: %d, seq_list[i]."
-			     "xfer_len: %d, seq_list[i].seq_no %u\n",
+		target_debug("seq_list[i].orig_offset: %d, seq_list[i].xfer_len: %d, seq_list[i].seq_no %u\n",
 			     cmd->seq_list[i].orig_offset, cmd->seq_list[i].xfer_len,
 			     cmd->seq_list[i].seq_no);
 
@@ -681,8 +668,7 @@ struct iscsi_seq *iscsit_get_seq_holder(
 			return &cmd->seq_list[i];
 	}
 
-	target_err("Unable to locate Sequence holder for ITT: 0x%08x,"
-		   " Offset: %u, Length: %u\n",
+	target_err("Unable to locate Sequence holder for ITT: 0x%08x, Offset: %u, Length: %u\n",
 		   cmd->init_task_tag, offset, length);
 	return NULL;
 }

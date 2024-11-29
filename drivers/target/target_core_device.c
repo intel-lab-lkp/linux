@@ -66,8 +66,7 @@ transport_lookup_cmd_lun(struct se_cmd *se_cmd)
 
 		if ((se_cmd->data_direction == DMA_TO_DEVICE) &&
 		    deve->lun_access_ro) {
-			target_err("TARGET_CORE[%s]: Detected WRITE_PROTECTED LUN"
-				   " Access for 0x%08llx\n",
+			target_err("TARGET_CORE[%s]: Detected WRITE_PROTECTED LUN Access for 0x%08llx\n",
 				   se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun);
 			rcu_read_unlock();
 			return TCM_WRITE_PROTECTED;
@@ -95,8 +94,7 @@ out_unlock:
 		 * MappedLUN=0 exists for this Initiator Port.
 		 */
 		if (se_cmd->orig_fe_lun != 0) {
-			target_err("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN"
-				   " Access for 0x%08llx from %s\n",
+			target_err("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN Access for 0x%08llx from %s\n",
 				   se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun,
 				   nacl->initiatorname);
 			return TCM_NON_EXISTENT_LUN;
@@ -164,8 +162,7 @@ out_unlock:
 	rcu_read_unlock();
 
 	if (!se_lun) {
-		target_debug("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN"
-			     " Access for 0x%08llx for %s\n",
+		target_debug("TARGET_CORE[%s]: Detected NON_EXISTENT_LUN Access for 0x%08llx for %s\n",
 			     se_cmd->se_tfo->fabric_name, se_cmd->orig_fe_lun, nacl->initiatorname);
 		return -ENODEV;
 	}
@@ -208,8 +205,7 @@ struct se_dev_entry *core_get_se_deve_from_rtpi(
 	hlist_for_each_entry_rcu(deve, &nacl->lun_entry_hlist, link) {
 		lun = deve->se_lun;
 		if (!lun) {
-			target_err("%s device entries device pointer is"
-				   " NULL, but Initiator has access.\n",
+			target_err("%s device entries device pointer is NULL, but Initiator has access.\n",
 				   tpg->se_tpg_tfo->fabric_name);
 			continue;
 		}
@@ -343,18 +339,14 @@ int core_enable_device_list_for_node(
 		struct se_lun *orig_lun = orig->se_lun;
 
 		if (orig_lun != lun) {
-			target_err("Existing orig->se_lun doesn't match new lun"
-				   " for dynamic -> explicit NodeACL conversion:"
-				   " %s\n",
+			target_err("Existing orig->se_lun doesn't match new lun for dynamic -> explicit NodeACL conversion: %s\n",
 				   nacl->initiatorname);
 			mutex_unlock(&nacl->lun_entry_mutex);
 			kfree(new);
 			return -EINVAL;
 		}
 		if (orig->se_lun_acl != NULL) {
-			target_warn_ratelimited("Detected existing explicit"
-						" se_lun_acl->se_lun_group reference for %s"
-						" mapped_lun: %llu, failing\n",
+			target_warn_ratelimited("Detected existing explicit se_lun_acl->se_lun_group reference for %s mapped_lun: %llu, failing\n",
 						nacl->initiatorname, mapped_lun);
 			mutex_unlock(&nacl->lun_entry_mutex);
 			kfree(new);
@@ -512,8 +504,7 @@ int core_dev_add_lun(
 	if (rc < 0)
 		return rc;
 
-	target_debug("%s_TPG[%u]_LUN[%llu] - Activated %s Logical Unit from"
-		     " CORE HBA: %u\n",
+	target_debug("%s_TPG[%u]_LUN[%llu] - Activated %s Logical Unit from CORE HBA: %u\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     lun->unpacked_lun, tpg->se_tpg_tfo->fabric_name, dev->se_hba->hba_id);
 	/*
@@ -545,8 +536,7 @@ void core_dev_del_lun(
 	struct se_portal_group *tpg,
 	struct se_lun *lun)
 {
-	target_debug("%s_TPG[%u]_LUN[%llu] - Deactivating %s Logical Unit from"
-		     " device object\n",
+	target_debug("%s_TPG[%u]_LUN[%llu] - Deactivating %s Logical Unit from device object\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     lun->unpacked_lun, tpg->se_tpg_tfo->fabric_name);
 
@@ -605,8 +595,7 @@ int core_dev_add_initiator_node_lun_acl(
 			lun_access_ro, nacl, tpg) < 0)
 		return -EINVAL;
 
-	target_debug("%s_TPG[%hu]_LUN[%llu->%llu] - Added %s ACL for "
-		     " InitiatorNode: %s\n",
+	target_debug("%s_TPG[%hu]_LUN[%llu->%llu] - Added %s ACL for  InitiatorNode: %s\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     lun->unpacked_lun, lacl->mapped_lun, lun_access_ro ? "RO" : "RW",
 		     nacl->initiatorname);
@@ -637,8 +626,7 @@ int core_dev_del_initiator_node_lun_acl(
 		core_disable_device_list_for_node(lun, deve, nacl, tpg);
 	mutex_unlock(&nacl->lun_entry_mutex);
 
-	target_debug("%s_TPG[%hu]_LUN[%llu] - Removed ACL for"
-		     " InitiatorNode: %s Mapped LUN: %llu\n",
+	target_debug("%s_TPG[%hu]_LUN[%llu] - Removed ACL for InitiatorNode: %s Mapped LUN: %llu\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     lun->unpacked_lun, nacl->initiatorname, lacl->mapped_lun);
 
@@ -649,8 +637,7 @@ void core_dev_free_initiator_node_lun_acl(
 	struct se_portal_group *tpg,
 	struct se_lun_acl *lacl)
 {
-	target_debug("%s_TPG[%hu] - Freeing ACL for %s InitiatorNode: %s"
-		     " Mapped LUN: %llu\n",
+	target_debug("%s_TPG[%hu] - Freeing ACL for %s InitiatorNode: %s Mapped LUN: %llu\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     tpg->se_tpg_tfo->fabric_name, lacl->se_lun_nacl->initiatorname,
 		     lacl->mapped_lun);
@@ -890,8 +877,7 @@ int target_configure_device(struct se_device *dev)
 	int ret, id;
 
 	if (target_dev_configured(dev)) {
-		target_err("se_dev->se_dev_ptr already set for storage"
-			   " object\n");
+		target_err("se_dev->se_dev_ptr already set for storage object\n");
 		return -EEXIST;
 	}
 

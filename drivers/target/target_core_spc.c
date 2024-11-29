@@ -62,8 +62,7 @@ spc_find_scsi_transport_vd(int proto_id)
 	case SCSI_PROTOCOL_SRP:
 		return SCSI_VERSION_DESCRIPTOR_SRP;
 	default:
-		target_warn("Cannot find VERSION DESCRIPTOR value for unknown SCSI"
-			    " transport PROTOCOL IDENTIFIER %#x\n",
+		target_warn("Cannot find VERSION DESCRIPTOR value for unknown SCSI transport PROTOCOL IDENTIFIER %#x\n",
 			    proto_id);
 		return 0;
 	}
@@ -1212,8 +1211,7 @@ static sense_reason_t spc_emulate_request_sense(struct se_cmd *cmd)
 	memset(buf, 0, SE_SENSE_BUF);
 
 	if (cdb[1] & 0x01) {
-		target_err("REQUEST_SENSE description emulation not"
-			   " supported\n");
+		target_err("REQUEST_SENSE description emulation not supported\n");
 		return TCM_INVALID_CDB_FIELD;
 	}
 
@@ -2125,8 +2123,7 @@ spc_rsoc_get_descr(struct se_cmd *cmd, struct target_opcode_descriptor **opcode)
 	*opcode = NULL;
 
 	if (opts > 3) {
-		target_debug("TARGET_CORE[%s]: Invalid REPORT SUPPORTED OPERATION CODES"
-			     " with unsupported REPORTING OPTIONS %#x for 0x%08llx from %s\n",
+		target_debug("TARGET_CORE[%s]: Invalid REPORT SUPPORTED OPERATION CODES with unsupported REPORTING OPTIONS %#x for 0x%08llx from %s\n",
 			     cmd->se_tfo->fabric_name, opts, cmd->se_lun->unpacked_lun,
 			     sess->se_node_acl->initiatorname);
 		return TCM_INVALID_CDB_FIELD;

@@ -81,9 +81,7 @@ struct iscsi_r2t *iscsit_get_r2t_for_eos(
 	}
 	spin_unlock_bh(&cmd->r2t_lock);
 
-	target_err("Unable to locate R2T for Offset: %u, Length:"
-		   " %u\n",
-		   offset, length);
+	target_err("Unable to locate R2T for Offset: %u, Length: %u\n", offset, length);
 	return NULL;
 }
 
@@ -100,9 +98,7 @@ struct iscsi_r2t *iscsit_get_r2t_from_list(struct iscsit_cmd *cmd)
 	}
 	spin_unlock_bh(&cmd->r2t_lock);
 
-	target_err("Unable to locate next R2T to send for ITT:"
-		   " 0x%08x.\n",
-		   cmd->init_task_tag);
+	target_err("Unable to locate next R2T to send for ITT: 0x%08x.\n", cmd->init_task_tag);
 	return NULL;
 }
 
@@ -253,27 +249,23 @@ static inline int iscsit_check_received_cmdsn(struct iscsit_session *sess, u32 c
 	 */
 	max_cmdsn = atomic_read(&sess->max_cmd_sn);
 	if (iscsi_sna_gt(cmdsn, max_cmdsn)) {
-		target_err("Received CmdSN: 0x%08x is greater than"
-			   " MaxCmdSN: 0x%08x, ignoring.\n",
+		target_err("Received CmdSN: 0x%08x is greater than MaxCmdSN: 0x%08x, ignoring.\n",
 			   cmdsn, max_cmdsn);
 		ret = CMDSN_MAXCMDSN_OVERRUN;
 
 	} else if (cmdsn == sess->exp_cmd_sn) {
 		sess->exp_cmd_sn++;
-		target_debug("Received CmdSN matches ExpCmdSN,"
-			     " incremented ExpCmdSN to: 0x%08x\n",
+		target_debug("Received CmdSN matches ExpCmdSN, incremented ExpCmdSN to: 0x%08x\n",
 			     sess->exp_cmd_sn);
 		ret = CMDSN_NORMAL_OPERATION;
 
 	} else if (iscsi_sna_gt(cmdsn, sess->exp_cmd_sn)) {
-		target_debug("Received CmdSN: 0x%08x is greater"
-			     " than ExpCmdSN: 0x%08x, not acknowledging.\n",
+		target_debug("Received CmdSN: 0x%08x is greater than ExpCmdSN: 0x%08x, not acknowledging.\n",
 			     cmdsn, sess->exp_cmd_sn);
 		ret = CMDSN_HIGHER_THAN_EXP;
 
 	} else {
-		target_err("Received CmdSN: 0x%08x is less than"
-			   " ExpCmdSN: 0x%08x, ignoring.\n",
+		target_err("Received CmdSN: 0x%08x is less than ExpCmdSN: 0x%08x, ignoring.\n",
 			   cmdsn, sess->exp_cmd_sn);
 		ret = CMDSN_LOWER_THAN_EXP;
 	}
@@ -344,8 +336,7 @@ int iscsit_check_unsolicited_dataout(struct iscsit_cmd *cmd, unsigned char *buf)
 	u32 payload_length = ntoh24(hdr->dlength);
 
 	if (conn->sess->sess_ops->InitialR2T) {
-		target_err("Received unexpected unsolicited data"
-			   " while InitialR2T=Yes, protocol error.\n");
+		target_err("Received unexpected unsolicited data while InitialR2T=Yes, protocol error.\n");
 		transport_send_check_condition_and_sense(se_cmd,
 				TCM_UNEXPECTED_UNSOLICITED_DATA, 0);
 		return -1;
@@ -353,8 +344,7 @@ int iscsit_check_unsolicited_dataout(struct iscsit_cmd *cmd, unsigned char *buf)
 
 	if ((cmd->first_burst_len + payload_length) >
 	     conn->sess->sess_ops->FirstBurstLength) {
-		target_err("Total %u bytes exceeds FirstBurstLength: %u"
-			   " for this Unsolicited DataOut Burst.\n",
+		target_err("Total %u bytes exceeds FirstBurstLength: %u for this Unsolicited DataOut Burst.\n",
 			   (cmd->first_burst_len + payload_length),
 			   conn->sess->sess_ops->FirstBurstLength);
 		transport_send_check_condition_and_sense(se_cmd,
@@ -368,9 +358,7 @@ int iscsit_check_unsolicited_dataout(struct iscsit_cmd *cmd, unsigned char *buf)
 	if (((cmd->first_burst_len + payload_length) != cmd->se_cmd.data_length) &&
 	    ((cmd->first_burst_len + payload_length) !=
 	      conn->sess->sess_ops->FirstBurstLength)) {
-		target_err("Unsolicited non-immediate data received %u"
-			   " does not equal FirstBurstLength: %u, and does"
-			   " not equal ExpXferLen %u.\n",
+		target_err("Unsolicited non-immediate data received %u does not equal FirstBurstLength: %u, and does not equal ExpXferLen %u.\n",
 			   (cmd->first_burst_len + payload_length),
 			   conn->sess->sess_ops->FirstBurstLength, cmd->se_cmd.data_length);
 		transport_send_check_condition_and_sense(se_cmd,
@@ -418,9 +406,8 @@ struct iscsit_cmd *iscsit_find_cmd_from_itt_or_dump(
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	target_err("Unable to locate ITT: 0x%08x on CID: %hu,"
-		   " dumping payload\n",
-		   init_task_tag, conn->cid);
+	target_err("Unable to locate ITT: 0x%08x on CID: %hu, dumping payload\n", init_task_tag,
+		   conn->cid);
 	if (length)
 		iscsit_dump_data_payload(conn, length, 1);
 
@@ -508,8 +495,7 @@ void iscsit_add_cmd_to_immediate_queue(
 
 	qr = kmem_cache_zalloc(lio_qr_cache, GFP_ATOMIC);
 	if (!qr) {
-		target_err("Unable to allocate memory for"
-			   " struct iscsi_queue_req\n");
+		target_err("Unable to allocate memory for struct iscsi_queue_req\n");
 		return;
 	}
 	INIT_LIST_HEAD(&qr->qr_list);
@@ -583,8 +569,7 @@ int iscsit_add_cmd_to_response_queue(
 
 	qr = kmem_cache_zalloc(lio_qr_cache, GFP_ATOMIC);
 	if (!qr) {
-		target_err("Unable to allocate memory for"
-			   " struct iscsi_queue_req\n");
+		target_err("Unable to allocate memory for struct iscsi_queue_req\n");
 		return -ENOMEM;
 	}
 	INIT_LIST_HEAD(&qr->qr_list);
@@ -907,8 +892,7 @@ void iscsit_handle_nopin_response_timeout(struct timer_list *t)
 		return;
 	}
 
-	target_err("Did not receive response to NOPIN on CID: %hu, failing"
-		   " connection for I_T Nexus %s,i,0x%6phN,%s,t,0x%02x\n",
+	target_err("Did not receive response to NOPIN on CID: %hu, failing connection for I_T Nexus %s,i,0x%6phN,%s,t,0x%02x\n",
 		   conn->cid, sess->sess_ops->InitiatorName, sess->isid, sess->tpg->tpg_tiqn->tiqn,
 		   (u32)sess->tpg->tpgt);
 	conn->nopin_response_timer_flags &= ~ISCSI_TF_RUNNING;
@@ -951,9 +935,8 @@ void iscsit_start_nopin_response_timer(struct iscsit_conn *conn)
 	mod_timer(&conn->nopin_response_timer,
 		  jiffies + na->nopin_response_timeout * HZ);
 
-	target_debug("Started NOPIN Response Timer on CID: %d to %u"
-		     " seconds\n",
-		     conn->cid, na->nopin_response_timeout);
+	target_debug("Started NOPIN Response Timer on CID: %d to %u seconds\n", conn->cid,
+		     na->nopin_response_timeout);
 	spin_unlock_bh(&conn->nopin_timer_lock);
 }
 
@@ -1013,9 +996,8 @@ void __iscsit_start_nopin_timer(struct iscsit_conn *conn)
 	conn->nopin_timer_flags |= ISCSI_TF_RUNNING;
 	mod_timer(&conn->nopin_timer, jiffies + na->nopin_timeout * HZ);
 
-	target_debug("Started NOPIN Timer on CID: %d at %u second"
-		     " interval\n",
-		     conn->cid, na->nopin_timeout);
+	target_debug("Started NOPIN Timer on CID: %d at %u second interval\n", conn->cid,
+		     na->nopin_timeout);
 }
 
 void iscsit_start_nopin_timer(struct iscsit_conn *conn)
@@ -1258,8 +1240,7 @@ void iscsit_print_session_params(struct iscsit_session *sess)
 {
 	struct iscsit_conn *conn;
 
-	target_debug("-----------------------------[Session Params for"
-		     " SID: %u]-----------------------------\n",
+	target_debug("-----------------------------[Session Params for SID: %u]-----------------------------\n",
 		     sess->sid);
 	spin_lock_bh(&sess->conn_lock);
 	list_for_each_entry(conn, &sess->sess_conn_list, conn_list)

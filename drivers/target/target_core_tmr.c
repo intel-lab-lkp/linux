@@ -87,8 +87,7 @@ static bool __target_check_io_state(struct se_cmd *se_cmd,
 	 */
 	spin_lock(&se_cmd->t_state_lock);
 	if (se_cmd->transport_state & (CMD_T_COMPLETE | CMD_T_FABRIC_STOP)) {
-		target_debug("Attempted to abort io tag: %llu already complete or"
-			     " fabric stop, skipping\n",
+		target_debug("Attempted to abort io tag: %llu already complete or fabric stop, skipping\n",
 			     se_cmd->tag);
 		spin_unlock(&se_cmd->t_state_lock);
 		return false;
@@ -236,8 +235,7 @@ static void core_tmr_drain_tmr_list(
 		list_del_init(&tmr_p->tmr_list);
 		cmd = tmr_p->task_cmd;
 
-		target_debug("LUN_RESET: %s releasing TMR %p Function: 0x%02x,"
-			     " Response: 0x%02x, t_state: %d\n",
+		target_debug("LUN_RESET: %s releasing TMR %p Function: 0x%02x, Response: 0x%02x, t_state: %d\n",
 			     (preempt_and_abort_list) ? "Preempt" : "", tmr_p, tmr_p->function,
 			     tmr_p->response, cmd->t_state);
 
@@ -382,8 +380,7 @@ int core_tmr_lun_reset(
 		tmr_nacl = tmr_sess->se_node_acl;
 		tmr_tpg = tmr_sess->se_tpg;
 		if (tmr_nacl && tmr_tpg) {
-			target_debug("LUN_RESET: TMR caller fabric: %s"
-				     " initiator port %s\n",
+			target_debug("LUN_RESET: TMR caller fabric: %s initiator port %s\n",
 				     tmr_tpg->se_tpg_tfo->fabric_name, tmr_nacl->initiatorname);
 		}
 	}

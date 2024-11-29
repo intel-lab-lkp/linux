@@ -72,8 +72,7 @@ static ssize_t lio_target_np_driver_store(struct config_item *item,
 	}
 	np = tpg_np->tpg_np;
 	if (!np) {
-		target_err("Unable to locate struct iscsi_np from"
-			   " struct iscsi_tpg_np\n");
+		target_err("Unable to locate struct iscsi_np from struct iscsi_tpg_np\n");
 		return -EINVAL;
 	}
 
@@ -173,8 +172,7 @@ static struct se_tpg_np *lio_target_call_addnptotpg(
 	if (str) {
 		str2 = strstr(str, "]");
 		if (!str2) {
-			target_err("Unable to locate trailing \"]\""
-				   " in IPv6 iSCSI network portal address\n");
+			target_err("Unable to locate trailing \"]\" in IPv6 iSCSI network portal address\n");
 			return ERR_PTR(-EINVAL);
 		}
 
@@ -184,8 +182,7 @@ static struct se_tpg_np *lio_target_call_addnptotpg(
 
 		port_str = strstr(str2, ":");
 		if (!port_str) {
-			target_err("Unable to locate \":port\""
-				   " in IPv6 iSCSI network portal address\n");
+			target_err("Unable to locate \":port\" in IPv6 iSCSI network portal address\n");
 			return ERR_PTR(-EINVAL);
 		}
 		*port_str = '\0'; /* Terminate string for IP */
@@ -194,8 +191,7 @@ static struct se_tpg_np *lio_target_call_addnptotpg(
 		ip_str = &buf[0];
 		port_str = strstr(ip_str, ":");
 		if (!port_str) {
-			target_err("Unable to locate \":port\""
-				   " in IPv4 iSCSI network portal address\n");
+			target_err("Unable to locate \":port\" in IPv4 iSCSI network portal address\n");
 			return ERR_PTR(-EINVAL);
 		}
 		*port_str = '\0'; /* Terminate string for IP */
@@ -214,8 +210,7 @@ static struct se_tpg_np *lio_target_call_addnptotpg(
 	if (ret < 0)
 		return ERR_PTR(-EINVAL);
 
-	target_debug("LIO_Target_ConfigFS: REGISTER -> %s TPGT: %hu"
-		     " PORTAL: %s\n",
+	target_debug("LIO_Target_ConfigFS: REGISTER -> %s TPGT: %hu PORTAL: %s\n",
 		     config_item_name(&se_tpg->se_tpg_wwn->wwn_group.cg_item), tpg->tpgt, name);
 	/*
 	 * Assume ISCSI_TCP by default.  Other network portals for other
@@ -257,8 +252,7 @@ static void lio_target_call_delnpfromtpg(
 		return;
 
 	se_tpg = &tpg->tpg_se_tpg;
-	target_debug("LIO_Target_ConfigFS: DEREGISTER -> %s TPGT: %hu"
-		     " PORTAL: %pISpc\n",
+	target_debug("LIO_Target_ConfigFS: DEREGISTER -> %s TPGT: %hu PORTAL: %pISpc\n",
 		     config_item_name(&se_tpg->se_tpg_wwn->wwn_group.cg_item), tpg->tpgt,
 		     &tpg_np->tpg_np->np_sockaddr);
 
@@ -657,8 +651,7 @@ static ssize_t lio_target_nacl_cmdsn_depth_store(struct config_item *item,
 	if (ret)
 		return ret;
 	if (cmdsn_depth > TA_DEFAULT_CMDSN_DEPTH_MAX) {
-		target_err("Passed cmdsn_depth: %u exceeds"
-			   " TA_DEFAULT_CMDSN_DEPTH_MAX: %u\n",
+		target_err("Passed cmdsn_depth: %u exceeds TA_DEFAULT_CMDSN_DEPTH_MAX: %u\n",
 			   cmdsn_depth, TA_DEFAULT_CMDSN_DEPTH_MAX);
 		return -EINVAL;
 	}
@@ -683,8 +676,7 @@ static ssize_t lio_target_nacl_cmdsn_depth_store(struct config_item *item,
 
 	ret = core_tpg_set_initiator_node_queue_depth(se_nacl, cmdsn_depth);
 
-	target_debug("LIO_Target_ConfigFS: %s/%s Set CmdSN Window: %u for"
-		     "InitiatorName: %s\n",
+	target_debug("LIO_Target_ConfigFS: %s/%s Set CmdSN Window: %u for InitiatorName: %s\n",
 		     config_item_name(wwn_ci), config_item_name(tpg_ci), cmdsn_depth,
 		     config_item_name(acl_ci));
 
@@ -1052,8 +1044,7 @@ static struct se_portal_group *lio_target_tiqn_addtpg(struct se_wwn *wwn,
 	 */
 	tpgt_str = strstr(name, "tpgt_");
 	if (!tpgt_str) {
-		target_err("Unable to locate \"tpgt_#\" directory"
-			   " group\n");
+		target_err("Unable to locate \"tpgt_#\" directory group\n");
 		return NULL;
 	}
 	tpgt_str += 5; /* Skip ahead of "tpgt_" */
@@ -1192,9 +1183,7 @@ static struct se_wwn *lio_target_call_coreaddtiqn(
 		return ERR_CAST(tiqn);
 
 	target_debug("LIO_Target_ConfigFS: REGISTER -> %s\n", tiqn->tiqn);
-	target_debug("LIO_Target_ConfigFS: REGISTER -> Allocated Node:"
-		     " %s\n",
-		     name);
+	target_debug("LIO_Target_ConfigFS: REGISTER -> Allocated Node: %s\n", name);
 	return &tiqn->tiqn_wwn;
 }
 
@@ -1294,9 +1283,7 @@ static ssize_t iscsi_disc_enforce_discovery_auth_store(struct config_item *item,
 	if (err)
 		return -EINVAL;
 	if ((op != 1) && (op != 0)) {
-		target_err("Illegal value for enforce_discovery_auth:"
-			   " %u\n",
-			   op);
+		target_err("Illegal value for enforce_discovery_auth: %u\n", op);
 		return -EINVAL;
 	}
 
@@ -1319,9 +1306,7 @@ static ssize_t iscsi_disc_enforce_discovery_auth_store(struct config_item *item,
 
 		discovery_tpg->tpg_attrib.authentication = 1;
 		iscsit_global->discovery_acl.node_auth.enforce_discovery_auth = 1;
-		target_debug("LIO-CORE[0] Successfully enabled"
-			     " authentication enforcement for iSCSI"
-			     " Discovery TPG\n");
+		target_debug("LIO-CORE[0] Successfully enabled authentication enforcement for iSCSI Discovery TPG\n");
 	} else {
 		/*
 		 * Reset the AuthMethod key to CHAP,None
@@ -1331,9 +1316,7 @@ static ssize_t iscsi_disc_enforce_discovery_auth_store(struct config_item *item,
 
 		discovery_tpg->tpg_attrib.authentication = 0;
 		iscsit_global->discovery_acl.node_auth.enforce_discovery_auth = 0;
-		target_debug("LIO-CORE[0] Successfully disabled"
-			     " authentication enforcement for iSCSI"
-			     " Discovery TPG\n");
+		target_debug("LIO-CORE[0] Successfully disabled authentication enforcement for iSCSI Discovery TPG\n");
 	}
 
 	return count;

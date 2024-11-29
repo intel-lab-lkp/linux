@@ -90,8 +90,7 @@ static int target_fabric_mappedlun_link(
 		return -EINVAL;
 	}
 	if (lun->lun_shutdown) {
-		target_err("Unable to create mappedlun symlink because"
-			   " lun->lun_shutdown=true\n");
+		target_err("Unable to create mappedlun symlink because lun->lun_shutdown=true\n");
 		return -EINVAL;
 	}
 	se_tpg = lun->lun_tpg;
@@ -110,8 +109,7 @@ static int target_fabric_mappedlun_link(
 		return -EINVAL;
 	}
 	if (strcmp(config_item_name(tpg_ci), config_item_name(tpg_ci_s))) {
-		target_err("Illegal Initiator ACL Symlink outside of %s"
-			   " TPGT: %s\n",
+		target_err("Illegal Initiator ACL Symlink outside of %s TPGT: %s\n",
 			   config_item_name(wwn_ci), config_item_name(tpg_ci));
 		return -EINVAL;
 	}
@@ -194,8 +192,7 @@ static ssize_t target_fabric_mappedlun_write_protect_store(
 	/* wp=1 means lun_access_ro=true */
 	core_update_device_list_access(lacl->mapped_lun, wp, lacl->se_lun_nacl);
 
-	target_debug("%s_ConfigFS: Changed Initiator ACL: %s"
-		     " Mapped LUN: %llu Write Protect bit to %s\n",
+	target_debug("%s_ConfigFS: Changed Initiator ACL: %s Mapped LUN: %llu Write Protect bit to %s\n",
 		     se_tpg->se_tpg_tfo->fabric_name, se_nacl->initiatorname, lacl->mapped_lun,
 		     (wp) ? "ON" : "OFF");
 
@@ -285,9 +282,7 @@ static struct config_group *target_fabric_make_mappedlun(
 	 * Make sure user is creating iscsi/$IQN/$TPGT/acls/$INITIATOR/lun_$ID.
 	 */
 	if (strstr(buf, "lun_") != buf) {
-		target_err("Unable to locate \"lun_\" from buf: %s"
-			   " name: %s\n",
-			   buf, name);
+		target_err("Unable to locate \"lun_\" from buf: %s name: %s\n", buf, name);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -750,8 +745,7 @@ static struct config_group *target_fabric_make_lun(
 	int errno;
 
 	if (strstr(name, "lun_") != name) {
-		target_err("Unable to locate \'_\" in"
-			   " \"lun_$LUN_NUMBER\"\n");
+		target_err("Unable to locate \'_\" in \"lun_$LUN_NUMBER\"\n");
 		return ERR_PTR(-EINVAL);
 	}
 	errno = kstrtoull(name + 4, 0, &unpacked_lun);

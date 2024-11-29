@@ -146,8 +146,7 @@ static struct iscsi_chap *chap_server_open(
 
 	if (!(auth->naf_flags & NAF_USERID_SET) ||
 	    !(auth->naf_flags & NAF_PASSWORD_SET)) {
-		target_err("CHAP user or password not set for"
-			   " Initiator ACL\n");
+		target_err("CHAP user or password not set for Initiator ACL\n");
 		return NULL;
 	}
 
@@ -401,8 +400,7 @@ static int chap_server_compute_hash(
 		target_debug("[server] %s Digests do not match!\n\n", chap->digest_name);
 		goto out;
 	} else
-		target_debug("[server] %s Digests match, CHAP connection"
-			     " successful.\n\n",
+		target_debug("[server] %s Digests match, CHAP connection successful.\n\n",
 			     chap->digest_name);
 	/*
 	 * One way authentication has succeeded, return now if mutual
@@ -501,8 +499,7 @@ static int chap_server_compute_hash(
 	if (initiatorchg_len == chap->challenge_len &&
 				!memcmp(initiatorchg_binhex, chap->challenge,
 				initiatorchg_len)) {
-		target_err("initiator CHAP_C matches target CHAP_C, failing"
-			   " login attempt\n");
+		target_err("initiator CHAP_C matches target CHAP_C, failing login attempt\n");
 		goto out;
 	}
 	/*
@@ -525,8 +522,7 @@ static int chap_server_compute_hash(
 	ret = crypto_shash_update(desc, auth->password_mutual,
 				  strlen(auth->password_mutual));
 	if (ret < 0) {
-		target_err("crypto_shash_update() failed for"
-			   " password_mutual\n");
+		target_err("crypto_shash_update() failed for password_mutual\n");
 		goto out;
 	}
 	/*

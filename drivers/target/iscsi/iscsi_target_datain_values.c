@@ -23,8 +23,7 @@ struct iscsi_datain_req *iscsit_allocate_datain_req(void)
 
 	dr = kmem_cache_zalloc(lio_dr_cache, GFP_ATOMIC);
 	if (!dr) {
-		target_err("Unable to allocate memory for"
-			   " struct iscsi_datain_req\n");
+		target_err("Unable to allocate memory for struct iscsi_datain_req\n");
 		return NULL;
 	}
 	INIT_LIST_HEAD(&dr->cmd_datain_node);
@@ -63,9 +62,7 @@ void iscsit_free_all_datain_reqs(struct iscsit_cmd *cmd)
 struct iscsi_datain_req *iscsit_get_datain_req(struct iscsit_cmd *cmd)
 {
 	if (list_empty(&cmd->datain_list)) {
-		target_err("cmd->datain_list is empty for ITT:"
-			   " 0x%08x\n",
-			   cmd->init_task_tag);
+		target_err("cmd->datain_list is empty for ITT: 0x%08x\n", cmd->init_task_tag);
 		return NULL;
 	}
 

@@ -88,9 +88,7 @@ int extract_param(
 		return -EINVAL;
 
 	if (len >= max_length) {
-		target_err("Length of input: %d exceeds max_length:"
-			   " %d\n",
-			   len, max_length);
+		target_err("Length of input: %d exceeds max_length: %d\n", len, max_length);
 		return -EINVAL;
 	}
 	memcpy(out_buf, ptr, len);
@@ -181,8 +179,7 @@ int iscsi_target_check_login_request(
 
 	if ((login_req->flags & ISCSI_FLAG_LOGIN_CONTINUE) &&
 	    (login_req->flags & ISCSI_FLAG_LOGIN_TRANSIT)) {
-		target_err("Login request has both ISCSI_FLAG_LOGIN_CONTINUE"
-			   " and ISCSI_FLAG_LOGIN_TRANSIT set, protocol error.\n");
+		target_err("Login request has both ISCSI_FLAG_LOGIN_CONTINUE and ISCSI_FLAG_LOGIN_TRANSIT set, protocol error.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_INIT_ERR);
 		return -1;
@@ -192,8 +189,7 @@ int iscsi_target_check_login_request(
 	req_nsg = ISCSI_LOGIN_NEXT_STAGE(login_req->flags);
 
 	if (req_csg != login->current_stage) {
-		target_err("Initiator unexpectedly changed login stage"
-			   " from %d to %d, login failed.\n",
+		target_err("Initiator unexpectedly changed login stage from %d to %d, login failed.\n",
 			   login->current_stage, req_csg);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_INIT_ERR);
@@ -203,8 +199,7 @@ int iscsi_target_check_login_request(
 	if ((req_nsg == 2) || (req_csg >= 2) ||
 	   ((login_req->flags & ISCSI_FLAG_LOGIN_TRANSIT) &&
 	    (req_nsg <= req_csg))) {
-		target_err("Illegal login_req->flags Combination, CSG: %d,"
-			   " NSG: %d, ISCSI_FLAG_LOGIN_TRANSIT: %d.\n",
+		target_err("Illegal login_req->flags Combination, CSG: %d, NSG: %d, ISCSI_FLAG_LOGIN_TRANSIT: %d.\n",
 			   req_csg, req_nsg, (login_req->flags & ISCSI_FLAG_LOGIN_TRANSIT));
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_INIT_ERR);
@@ -213,8 +208,7 @@ int iscsi_target_check_login_request(
 
 	if ((login_req->max_version != login->version_max) ||
 	    (login_req->min_version != login->version_min)) {
-		target_err("Login request changed Version Max/Nin"
-			   " unexpectedly to 0x%02x/0x%02x, protocol error\n",
+		target_err("Login request changed Version Max/Nin unexpectedly to 0x%02x/0x%02x, protocol error\n",
 			   login_req->max_version, login_req->min_version);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_INIT_ERR);
@@ -222,16 +216,14 @@ int iscsi_target_check_login_request(
 	}
 
 	if (memcmp(login_req->isid, login->isid, 6) != 0) {
-		target_err("Login request changed ISID unexpectedly,"
-			   " protocol error.\n");
+		target_err("Login request changed ISID unexpectedly, protocol error.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_INIT_ERR);
 		return -1;
 	}
 
 	if (login_req->itt != login->init_task_tag) {
-		target_err("Login request changed ITT unexpectedly to"
-			   " 0x%08x, protocol error.\n",
+		target_err("Login request changed ITT unexpectedly to 0x%08x, protocol error.\n",
 			   login_req->itt);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_INIT_ERR);
@@ -239,8 +231,7 @@ int iscsi_target_check_login_request(
 	}
 
 	if (payload_length > MAX_KEY_VALUE_PAIRS) {
-		target_err("Login request payload exceeds default"
-			   " MaxRecvDataSegmentLength: %u, protocol error.\n",
+		target_err("Login request payload exceeds default MaxRecvDataSegmentLength: %u, protocol error.\n",
 			   MAX_KEY_VALUE_PAIRS);
 		return -1;
 	}
@@ -261,8 +252,7 @@ static int iscsi_target_check_first_request(
 	list_for_each_entry(param, &conn->param_list->param_list, p_list) {
 		if (!strncmp(param->name, SESSIONTYPE, 11)) {
 			if (!IS_PSTATE_ACCEPTOR(param)) {
-				target_err("SessionType key not received"
-					   " in first login request.\n");
+				target_err("SessionType key not received in first login request.\n");
 				iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 					ISCSI_LOGIN_STATUS_MISSING_FIELDS);
 				return -1;
@@ -276,8 +266,7 @@ static int iscsi_target_check_first_request(
 				if (!login->leading_connection)
 					continue;
 
-				target_err("InitiatorName key not received"
-					   " in first login request.\n");
+				target_err("InitiatorName key not received in first login request.\n");
 				iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 					ISCSI_LOGIN_STATUS_MISSING_FIELDS);
 				return -1;
@@ -291,8 +280,7 @@ static int iscsi_target_check_first_request(
 			if (!login->leading_connection) {
 				se_nacl = conn->sess->se_sess->se_node_acl;
 				if (!se_nacl) {
-					target_err("Unable to locate"
-						   " struct se_node_acl\n");
+					target_err("Unable to locate struct se_node_acl\n");
 					iscsit_tx_login_rsp(conn,
 							ISCSI_STATUS_CLS_INITIATOR_ERR,
 							ISCSI_LOGIN_STATUS_TGT_NOT_FOUND);
@@ -301,9 +289,7 @@ static int iscsi_target_check_first_request(
 
 				if (strcmp(param->value,
 						se_nacl->initiatorname)) {
-					target_err("Incorrect"
-						   " InitiatorName: %s for this"
-						   " iSCSI Initiator Node.\n",
+					target_err("Incorrect InitiatorName: %s for this iSCSI Initiator Node.\n",
 						   param->value);
 					iscsit_tx_login_rsp(conn,
 							ISCSI_STATUS_CLS_INITIATOR_ERR,
@@ -333,9 +319,7 @@ static int iscsi_target_do_tx_login_io(struct iscsit_conn *conn, struct iscsi_lo
 	login_rsp->exp_cmdsn		= cpu_to_be32(conn->sess->exp_cmd_sn);
 	login_rsp->max_cmdsn		= cpu_to_be32((u32) atomic_read(&conn->sess->max_cmd_sn));
 
-	target_debug("Sending Login Response, Flags: 0x%02x, ITT: 0x%08x,"
-		     " ExpCmdSN; 0x%08x, MaxCmdSN: 0x%08x, StatSN: 0x%08x, Length:"
-		     " %u\n",
+	target_debug("Sending Login Response, Flags: 0x%02x, ITT: 0x%08x, ExpCmdSN; 0x%08x, MaxCmdSN: 0x%08x, StatSN: 0x%08x, Length: %u\n",
 		     login_rsp->flags, (__force u32)login_rsp->itt, ntohl(login_rsp->exp_cmdsn),
 		     ntohl(login_rsp->max_cmdsn), ntohl(login_rsp->statsn), login->rsp_length);
 
@@ -416,8 +400,7 @@ static void iscsi_target_sk_data_ready(struct sock *sk)
 
 	rc = schedule_delayed_work(&conn->login_work, 0);
 	if (!rc) {
-		target_debug("iscsi_target_sk_data_ready, schedule_delayed_work"
-			     " got false\n");
+		target_debug("iscsi_target_sk_data_ready, schedule_delayed_work got false\n");
 	}
 	write_unlock_bh(&sk->sk_callback_lock);
 }
@@ -475,8 +458,7 @@ static int iscsi_target_do_login(struct iscsit_conn *, struct iscsi_login *);
 static bool __iscsi_target_sk_check_close(struct sock *sk)
 {
 	if (sk->sk_state == TCP_CLOSE_WAIT || sk->sk_state == TCP_CLOSE) {
-		target_debug("__iscsi_target_sk_check_close: TCP_CLOSE_WAIT|TCP_CLOSE,"
-			     "returning TRUE\n");
+		target_debug("__iscsi_target_sk_check_close: TCP_CLOSE_WAIT|TCP_CLOSE,returning TRUE\n");
 		return true;
 	}
 	return false;
@@ -682,8 +664,7 @@ static void iscsi_target_sk_state_change(struct sock *sk)
 
 	if (test_bit(LOGIN_FLAGS_READ_ACTIVE, &conn->login_flags) ||
 	    test_bit(LOGIN_FLAGS_WRITE_ACTIVE, &conn->login_flags)) {
-		target_debug("Got LOGIN_FLAGS_{READ|WRITE}_ACTIVE=1"
-			     " sk_state_change conn: %p\n",
+		target_debug("Got LOGIN_FLAGS_{READ|WRITE}_ACTIVE=1 sk_state_change conn: %p\n",
 			     conn);
 		if (state)
 			set_bit(LOGIN_FLAGS_CLOSED, &conn->login_flags);
@@ -777,12 +758,10 @@ static int iscsi_target_do_authentication(
 			param->value);
 	switch (authret) {
 	case 0:
-		target_debug("Received OK response"
-			     " from LIO Authentication, continuing.\n");
+		target_debug("Received OK response from LIO Authentication, continuing.\n");
 		break;
 	case 1:
-		target_debug("iSCSI security negotiation"
-			     " completed successfully.\n");
+		target_debug("iSCSI security negotiation completed successfully.\n");
 		login->auth_complete = 1;
 		if ((login_req->flags & ISCSI_FLAG_LOGIN_NEXT_STAGE1) &&
 		    (login_req->flags & ISCSI_FLAG_LOGIN_TRANSIT)) {
@@ -793,15 +772,12 @@ static int iscsi_target_do_authentication(
 		return iscsi_target_check_for_existing_instances(
 				conn, login);
 	case 2:
-		target_err("Security negotiation"
-			   " failed.\n");
+		target_err("Security negotiation failed.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_AUTH_FAILED);
 		return -1;
 	default:
-		target_err("Received unknown error %d from LIO"
-			   " Authentication\n",
-			   authret);
+		target_err("Received unknown error %d from LIO Authentication\n", authret);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_TARGET_ERROR);
 		return -1;
@@ -873,9 +849,7 @@ static int iscsi_target_handle_csg_zero(
 
 	if (ret > 0) {
 		if (login->auth_complete) {
-			target_err("Initiator has already been"
-				   " successfully authenticated, but is still"
-				   " sending %s keys.\n",
+			target_err("Initiator has already been successfully authenticated, but is still sending %s keys.\n",
 				   param->value);
 			iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 					ISCSI_LOGIN_STATUS_INIT_ERR);
@@ -884,8 +858,7 @@ static int iscsi_target_handle_csg_zero(
 
 		goto do_auth;
 	} else if (!payload_length) {
-		target_err("Initiator sent zero length security payload,"
-			   " login failed\n");
+		target_err("Initiator sent zero length security payload, login failed\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				    ISCSI_LOGIN_STATUS_AUTH_FAILED);
 		return -1;
@@ -910,9 +883,7 @@ static int iscsi_target_handle_csg_zero(
 
 		if (auth_required) {
 			if (!strncmp(param->value, NONE, 4)) {
-				target_err("Initiator sent AuthMethod=None but"
-					   " Target is enforcing iSCSI Authentication,"
-					   " login failed.\n");
+				target_err("Initiator sent AuthMethod=None but Target is enforcing iSCSI Authentication, login failed.\n");
 				iscsit_tx_login_rsp(conn,
 						ISCSI_STATUS_CLS_INITIATOR_ERR,
 						ISCSI_LOGIN_STATUS_AUTH_FAILED);
@@ -996,9 +967,7 @@ static int iscsi_target_handle_csg_one(struct iscsit_conn *conn, struct iscsi_lo
 	}
 
 	if (!iscsi_conn_authenticated(conn, login)) {
-		target_err("Initiator is requesting CSG: 1, has not been"
-			   " successfully authenticated, and the Target is"
-			   " enforcing iSCSI Authentication, login failed.\n");
+		target_err("Initiator is requesting CSG: 1, has not been successfully authenticated, and the Target is enforcing iSCSI Authentication, login failed.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_AUTH_FAILED);
 		return -1;
@@ -1067,8 +1036,7 @@ static int iscsi_target_do_login(struct iscsit_conn *conn, struct iscsi_login *l
 			}
 			break;
 		default:
-			target_err("Illegal CSG: %d received from"
-				   " Initiator, protocol error.\n",
+			target_err("Illegal CSG: %d received from Initiator, protocol error.\n",
 				   ISCSI_LOGIN_CURRENT_STAGE(login_req->flags));
 			break;
 		}
@@ -1160,8 +1128,7 @@ int iscsi_target_locate_portal(
 	 * See 5.3.  Login Phase.
 	 */
 	if (!i_buf) {
-		target_err("InitiatorName key not received"
-			   " in first login request.\n");
+		target_err("InitiatorName key not received in first login request.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 			ISCSI_LOGIN_STATUS_MISSING_FIELDS);
 		ret = -1;
@@ -1178,8 +1145,7 @@ int iscsi_target_locate_portal(
 		if (!login->leading_connection)
 			goto get_target;
 
-		target_err("SessionType key not received"
-			   " in first login request.\n");
+		target_err("SessionType key not received in first login request.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 			ISCSI_LOGIN_STATUS_MISSING_FIELDS);
 		ret = -1;
@@ -1221,9 +1187,7 @@ int iscsi_target_locate_portal(
 
 get_target:
 	if (!t_buf) {
-		target_err("TargetName key not received"
-			   " in first login request while"
-			   " SessionType=Normal.\n");
+		target_err("TargetName key not received in first login request while SessionType=Normal.\n");
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 			ISCSI_LOGIN_STATUS_MISSING_FIELDS);
 		ret = -1;
@@ -1235,9 +1199,7 @@ get_target:
 	 */
 	tiqn = iscsit_get_tiqn_for_login(t_buf);
 	if (!tiqn) {
-		target_err("Unable to locate Target IQN: %s in"
-			   " Storage Node\n",
-			   t_buf);
+		target_err("Unable to locate Target IQN: %s in Storage Node\n", t_buf);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_SVC_UNAVAILABLE);
 		ret = -1;
@@ -1250,9 +1212,7 @@ get_target:
 	 */
 	conn->tpg = iscsit_get_tpg_from_np(tiqn, np, &tpg_np);
 	if (!conn->tpg) {
-		target_err("Unable to locate Target Portal Group"
-			   " on %s\n",
-			   tiqn->tiqn);
+		target_err("Unable to locate Target Portal Group on %s\n", tiqn->tiqn);
 		iscsit_put_tiqn_for_login(tiqn);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_SVC_UNAVAILABLE);
@@ -1307,8 +1267,7 @@ get_target:
 	sess->se_sess->se_node_acl = core_tpg_check_initiator_node_acl(
 			&conn->tpg->tpg_se_tpg, i_buf);
 	if (!sess->se_sess->se_node_acl) {
-		target_err("iSCSI Initiator Node: %s is not authorized to"
-			   " access iSCSI target portal group: %hu.\n",
+		target_err("iSCSI Initiator Node: %s is not authorized to access iSCSI target portal group: %hu.\n",
 			   i_buf, conn->tpg->tpgt);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_TGT_FORBIDDEN);

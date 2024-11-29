@@ -44,15 +44,13 @@ static void _ft_dump_cmd(struct ft_cmd *cmd, const char *caller)
 		     se_cmd->t_data_nents, se_cmd->data_length, se_cmd->se_cmd_flags);
 
 	for_each_sg(se_cmd->t_data_sg, sg, se_cmd->t_data_nents, count)
-		target_debug("%s: cmd %p sg %p page %p "
-			     "len 0x%x off 0x%x\n",
-			     caller, cmd, sg, sg_page(sg), sg->length, sg->offset);
+		target_debug("%s: cmd %p sg %p page %p len 0x%x off 0x%x\n", caller, cmd, sg,
+			     sg_page(sg), sg->length, sg->offset);
 
 	sp = cmd->seq;
 	if (sp) {
 		ep = fc_seq_exch(sp);
-		target_debug("%s: cmd %p sid %x did %x "
-			     "ox_id %x rx_id %x seq_id %x e_stat %x\n",
+		target_debug("%s: cmd %p sid %x did %x ox_id %x rx_id %x seq_id %x e_stat %x\n",
 			     caller, cmd, ep->sid, ep->did, ep->oxid, ep->rxid, sp->id,
 			     ep->esb_stat);
 	}
@@ -149,8 +147,7 @@ int ft_queue_status(struct se_cmd *se_cmd)
 
 	rc = fc_seq_send(lport, cmd->seq, fp);
 	if (rc) {
-		target_info_ratelimited("%s: Failed to send response frame %p, "
-					"xid <0x%x>\n",
+		target_info_ratelimited("%s: Failed to send response frame %p, xid <0x%x>\n",
 					__func__, fp, ep->xid);
 		/*
 		 * Generate a TASK_SET_FULL status to notify the initiator

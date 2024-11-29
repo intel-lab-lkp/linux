@@ -146,8 +146,7 @@ int core_scsi3_ua_allocate(
 	list_add_tail(&ua->ua_nacl_list, &deve->ua_list);
 	spin_unlock(&deve->ua_lock);
 
-	target_debug("Allocated UNIT ATTENTION, mapped LUN: %llu, ASC:"
-		     " 0x%02x, ASCQ: 0x%02x\n",
+	target_debug("Allocated UNIT ATTENTION, mapped LUN: %llu, ASC: 0x%02x, ASCQ: 0x%02x\n",
 		     deve->mapped_lun, asc, ascq);
 
 	return 0;
@@ -252,9 +251,7 @@ bool core_scsi3_ua_for_check_condition(struct se_cmd *cmd, u8 *key, u8 *asc,
 	spin_unlock(&deve->ua_lock);
 	rcu_read_unlock();
 
-	target_debug("[%s]: %s UNIT ATTENTION condition with"
-		     " INTLCK_CTRL: %d, mapped LUN: %llu, got CDB: 0x%02x"
-		     " reported ASC: 0x%02x, ASCQ: 0x%02x\n",
+	target_debug("[%s]: %s UNIT ATTENTION condition with INTLCK_CTRL: %d, mapped LUN: %llu, got CDB: 0x%02x reported ASC: 0x%02x, ASCQ: 0x%02x\n",
 		     nacl->se_tpg->se_tpg_tfo->fabric_name,
 		     dev_ua_intlck_clear ? "Releasing" : "Reporting",
 		     dev->dev_attrib.emulate_ua_intlck_ctrl, cmd->orig_fe_lun, cmd->t_task_cdb[0],
@@ -314,9 +311,7 @@ int core_scsi3_ua_clear_for_request_sense(
 	spin_unlock(&deve->ua_lock);
 	rcu_read_unlock();
 
-	target_debug("[%s]: Released UNIT ATTENTION condition, mapped"
-		     " LUN: %llu, got REQUEST_SENSE reported ASC: 0x%02x,"
-		     " ASCQ: 0x%02x\n",
+	target_debug("[%s]: Released UNIT ATTENTION condition, mapped LUN: %llu, got REQUEST_SENSE reported ASC: 0x%02x, ASCQ: 0x%02x\n",
 		     nacl->se_tpg->se_tpg_tfo->fabric_name, cmd->orig_fe_lun, *asc, *ascq);
 
 	return (head) ? -EPERM : 0;

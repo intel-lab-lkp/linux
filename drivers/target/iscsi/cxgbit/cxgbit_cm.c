@@ -1249,8 +1249,7 @@ cxgbit_pass_accept_req(struct cxgbit_device *cdev, struct sk_buff *skb)
 
 	/* Find output route */
 	if (iptype == 4)  {
-		target_debug("%s parent sock %p tid %u laddr %pI4 raddr %pI4 "
-			     "lport %d rport %d peer_mss %d\n",
+		target_debug("%s parent sock %p tid %u laddr %pI4 raddr %pI4 lport %d rport %d peer_mss %d\n",
 			     __func__, cnp, tid, local_ip, peer_ip, ntohs(local_port),
 			     ntohs(peer_port), peer_mss);
 		dst = cxgb_find_route(&cdev->lldi, cxgbit_get_real_dev,
@@ -1259,8 +1258,7 @@ cxgbit_pass_accept_req(struct cxgbit_device *cdev, struct sk_buff *skb)
 				      local_port, peer_port,
 				      PASS_OPEN_TOS_G(ntohl(req->tos_stid)));
 	} else {
-		target_debug("%s parent sock %p tid %u laddr %pI6 raddr %pI6 "
-			     "lport %d rport %d peer_mss %d\n",
+		target_debug("%s parent sock %p tid %u laddr %pI6 raddr %pI6 lport %d rport %d peer_mss %d\n",
 			     __func__, cnp, tid, local_ip, peer_ip, ntohs(local_port),
 			     ntohs(peer_port), peer_mss);
 		dst = cxgb_find_route6(&cdev->lldi, cxgbit_get_real_dev,

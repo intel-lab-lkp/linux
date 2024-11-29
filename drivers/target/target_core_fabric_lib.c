@@ -280,8 +280,7 @@ static char *iscsi_parse_pr_out_transport_id(
 	 *            Reserved
 	 */
 	if ((format_code != 0x00) && (format_code != 0x40)) {
-		target_err("Illegal format code: 0x%02x for iSCSI"
-			   " Initiator Transport ID\n",
+		target_err("Illegal format code: 0x%02x for iSCSI Initiator Transport ID\n",
 			   format_code);
 		return NULL;
 	}
@@ -304,8 +303,7 @@ static char *iscsi_parse_pr_out_transport_id(
 	if (format_code == 0x40) {
 		p = strstr(&buf[4], ",i,0x");
 		if (!p) {
-			target_err("Unable to locate \",i,0x\" separator"
-				   " for Initiator port identifier: %s\n",
+			target_err("Unable to locate \",i,0x\" separator for Initiator port identifier: %s\n",
 				   &buf[4]);
 			return NULL;
 		}

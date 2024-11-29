@@ -227,8 +227,7 @@ static void iscsit_set_default_tpg_attribs(struct iscsi_portal_group *tpg)
 int iscsit_tpg_add_portal_group(struct iscsi_tiqn *tiqn, struct iscsi_portal_group *tpg)
 {
 	if (tpg->tpg_state != TPG_STATE_FREE) {
-		target_err("Unable to add iSCSI Target Portal Group: %d"
-			   " while not in TPG_STATE_FREE state.\n",
+		target_err("Unable to add iSCSI Target Portal Group: %d while not in TPG_STATE_FREE state.\n",
 			   tpg->tpgt);
 		return -EEXIST;
 	}
@@ -271,8 +270,7 @@ int iscsit_tpg_del_portal_group(
 	spin_unlock(&tpg->tpg_state_lock);
 
 	if (iscsit_release_sessions_for_tpg(tpg, force) < 0) {
-		target_err("Unable to delete iSCSI Target Portal Group:"
-			   " %hu while active sessions exist, and force=0\n",
+		target_err("Unable to delete iSCSI Target Portal Group: %hu while active sessions exist, and force=0\n",
 			   tpg->tpgt);
 		tpg->tpg_state = old_state;
 		return -EPERM;
@@ -308,8 +306,7 @@ int iscsit_tpg_enable_portal_group(struct iscsi_portal_group *tpg)
 	int ret;
 
 	if (tpg->tpg_state == TPG_STATE_ACTIVE) {
-		target_err("iSCSI target portal group: %hu is already"
-			   " active, ignoring request.\n",
+		target_err("iSCSI target portal group: %hu is already active, ignoring request.\n",
 			   tpg->tpgt);
 		return -EINVAL;
 	}
@@ -356,8 +353,7 @@ int iscsit_tpg_disable_portal_group(struct iscsi_portal_group *tpg, int force)
 
 	spin_lock(&tpg->tpg_state_lock);
 	if (tpg->tpg_state == TPG_STATE_INACTIVE) {
-		target_err("iSCSI Target Portal Group: %hu is already"
-			   " inactive, ignoring request.\n",
+		target_err("iSCSI Target Portal Group: %hu is already inactive, ignoring request.\n",
 			   tpg->tpgt);
 		spin_unlock(&tpg->tpg_state_lock);
 		return -EINVAL;
@@ -371,8 +367,7 @@ int iscsit_tpg_disable_portal_group(struct iscsi_portal_group *tpg, int force)
 		spin_lock(&tpg->tpg_state_lock);
 		tpg->tpg_state = old_state;
 		spin_unlock(&tpg->tpg_state_lock);
-		target_err("Unable to disable iSCSI Target Portal Group:"
-			   " %hu while active sessions exist, and force=0\n",
+		target_err("Unable to disable iSCSI Target Portal Group: %hu while active sessions exist, and force=0\n",
 			   tpg->tpgt);
 		return -EPERM;
 	}
@@ -463,8 +458,7 @@ struct iscsi_tpg_np *iscsit_tpg_add_network_portal(
 	if (!tpg_np_parent) {
 		if (iscsit_tpg_check_network_portal(tpg->tpg_tiqn, sockaddr,
 				network_transport)) {
-			target_err("Network Portal: %pISc already exists on a"
-				   " different TPG on %s\n",
+			target_err("Network Portal: %pISc already exists on a different TPG on %s\n",
 				   sockaddr, tpg->tpg_tiqn->tiqn);
 			return ERR_PTR(-EEXIST);
 		}
@@ -472,8 +466,7 @@ struct iscsi_tpg_np *iscsit_tpg_add_network_portal(
 
 	tpg_np = kzalloc(sizeof(struct iscsi_tpg_np), GFP_KERNEL);
 	if (!tpg_np) {
-		target_err("Unable to allocate memory for"
-			   " struct iscsi_tpg_np.\n");
+		target_err("Unable to allocate memory for struct iscsi_tpg_np.\n");
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -542,8 +535,7 @@ int iscsit_tpg_del_network_portal(
 
 	np = tpg_np->tpg_np;
 	if (!np) {
-		target_err("Unable to locate struct iscsi_np from"
-			   " struct iscsi_tpg_np\n");
+		target_err("Unable to locate struct iscsi_np from struct iscsi_tpg_np\n");
 		return -EINVAL;
 	}
 
@@ -558,9 +550,7 @@ int iscsit_tpg_del_network_portal(
 				tpg_np_child_list) {
 			ret = iscsit_tpg_del_network_portal(tpg, tpg_np_child);
 			if (ret < 0)
-				target_err("iscsit_tpg_del_network_portal()"
-					   " failed: %d\n",
-					   ret);
+				target_err("iscsit_tpg_del_network_portal() failed: %d\n", ret);
 		}
 	} else {
 		/*
@@ -590,8 +580,7 @@ int iscsit_ta_authentication(struct iscsi_portal_group *tpg, u32 authentication)
 	struct iscsi_tpg_attrib *a = &tpg->tpg_attrib;
 
 	if ((authentication != 1) && (authentication != 0)) {
-		target_err("Illegal value for authentication parameter:"
-			   " %u, ignoring request.\n",
+		target_err("Illegal value for authentication parameter: %u, ignoring request.\n",
 			   authentication);
 		return -EINVAL;
 	}
@@ -650,21 +639,18 @@ int iscsit_ta_login_timeout(
 	struct iscsi_tpg_attrib *a = &tpg->tpg_attrib;
 
 	if (login_timeout > TA_LOGIN_TIMEOUT_MAX) {
-		target_err("Requested Login Timeout %u larger than maximum"
-			   " %u\n",
-			   login_timeout, TA_LOGIN_TIMEOUT_MAX);
+		target_err("Requested Login Timeout %u larger than maximum %u\n", login_timeout,
+			   TA_LOGIN_TIMEOUT_MAX);
 		return -EINVAL;
 	} else if (login_timeout < TA_LOGIN_TIMEOUT_MIN) {
-		target_err("Requested Logout Timeout %u smaller than"
-			   " minimum %u\n",
-			   login_timeout, TA_LOGIN_TIMEOUT_MIN);
+		target_err("Requested Logout Timeout %u smaller than minimum %u\n", login_timeout,
+			   TA_LOGIN_TIMEOUT_MIN);
 		return -EINVAL;
 	}
 
 	a->login_timeout = login_timeout;
-	target_debug("Set Logout Timeout to %u for Target Portal Group"
-		     " %hu\n",
-		     a->login_timeout, tpg->tpgt);
+	target_debug("Set Logout Timeout to %u for Target Portal Group %hu\n", a->login_timeout,
+		     tpg->tpgt);
 
 	return 0;
 }
@@ -685,8 +671,7 @@ int iscsit_ta_generate_node_acls(
 		     (a->generate_node_acls) ? "Enabled" : "Disabled");
 
 	if (flag == 1 && a->cache_dynamic_acls == 0) {
-		target_debug("Explicitly setting cache_dynamic_acls=1 when "
-			     "generate_node_acls=1\n");
+		target_debug("Explicitly setting cache_dynamic_acls=1 when generate_node_acls=1\n");
 		a->cache_dynamic_acls = 1;
 	}
 
@@ -700,14 +685,12 @@ int iscsit_ta_default_cmdsn_depth(
 	struct iscsi_tpg_attrib *a = &tpg->tpg_attrib;
 
 	if (tcq_depth > TA_DEFAULT_CMDSN_DEPTH_MAX) {
-		target_err("Requested Default Queue Depth: %u larger"
-			   " than maximum %u\n",
-			   tcq_depth, TA_DEFAULT_CMDSN_DEPTH_MAX);
+		target_err("Requested Default Queue Depth: %u larger than maximum %u\n", tcq_depth,
+			   TA_DEFAULT_CMDSN_DEPTH_MAX);
 		return -EINVAL;
 	} else if (tcq_depth < TA_DEFAULT_CMDSN_DEPTH_MIN) {
-		target_err("Requested Default Queue Depth: %u smaller"
-			   " than minimum %u\n",
-			   tcq_depth, TA_DEFAULT_CMDSN_DEPTH_MIN);
+		target_err("Requested Default Queue Depth: %u smaller than minimum %u\n", tcq_depth,
+			   TA_DEFAULT_CMDSN_DEPTH_MIN);
 		return -EINVAL;
 	}
 
@@ -730,15 +713,13 @@ int iscsit_ta_cache_dynamic_acls(
 	}
 
 	if (a->generate_node_acls == 1 && flag == 0) {
-		target_debug("Skipping cache_dynamic_acls=0 when"
-			     " generate_node_acls=1\n");
+		target_debug("Skipping cache_dynamic_acls=0 when generate_node_acls=1\n");
 		return 0;
 	}
 
 	a->cache_dynamic_acls = flag;
-	target_debug("iSCSI_TPG[%hu] - Cache Dynamic Initiator Portal Group"
-		     " ACLs %s\n",
-		     tpg->tpgt, (a->cache_dynamic_acls) ? "Enabled" : "Disabled");
+	target_debug("iSCSI_TPG[%hu] - Cache Dynamic Initiator Portal Group ACLs %s\n", tpg->tpgt,
+		     (a->cache_dynamic_acls) ? "Enabled" : "Disabled");
 
 	return 0;
 }
@@ -773,9 +754,8 @@ int iscsit_ta_prod_mode_write_protect(
 	}
 
 	a->prod_mode_write_protect = flag;
-	target_debug("iSCSI_TPG[%hu] - Production Mode Write Protect bit:"
-		     " %s\n",
-		     tpg->tpgt, (a->prod_mode_write_protect) ? "ON" : "OFF");
+	target_debug("iSCSI_TPG[%hu] - Production Mode Write Protect bit: %s\n", tpg->tpgt,
+		     (a->prod_mode_write_protect) ? "ON" : "OFF");
 
 	return 0;
 }
@@ -792,9 +772,8 @@ int iscsit_ta_demo_mode_discovery(
 	}
 
 	a->demo_mode_discovery = flag;
-	target_debug("iSCSI_TPG[%hu] - Demo Mode Discovery bit:"
-		     " %s\n",
-		     tpg->tpgt, (a->demo_mode_discovery) ? "ON" : "OFF");
+	target_debug("iSCSI_TPG[%hu] - Demo Mode Discovery bit: %s\n", tpg->tpgt,
+		     (a->demo_mode_discovery) ? "ON" : "OFF");
 
 	return 0;
 }
@@ -828,9 +807,8 @@ int iscsit_ta_t10_pi(
 	}
 
 	a->t10_pi = flag;
-	target_debug("iSCSI_TPG[%hu] - T10 Protection information bit:"
-		     " %s\n",
-		     tpg->tpgt, (a->t10_pi) ? "ON" : "OFF");
+	target_debug("iSCSI_TPG[%hu] - T10 Protection information bit: %s\n", tpg->tpgt,
+		     (a->t10_pi) ? "ON" : "OFF");
 
 	return 0;
 }
@@ -864,9 +842,8 @@ int iscsit_ta_tpg_enabled_sendtargets(
 	}
 
 	a->tpg_enabled_sendtargets = flag;
-	target_debug("iSCSI_TPG[%hu] - TPG enabled bit required for SendTargets:"
-		     " %s\n",
-		     tpg->tpgt, (a->tpg_enabled_sendtargets) ? "ON" : "OFF");
+	target_debug("iSCSI_TPG[%hu] - TPG enabled bit required for SendTargets: %s\n", tpg->tpgt,
+		     (a->tpg_enabled_sendtargets) ? "ON" : "OFF");
 
 	return 0;
 }
