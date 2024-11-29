@@ -5,6 +5,8 @@
 
 #include "cxgbit.h"
 
+#define TARGET_PREFIX "cxgbit"
+
 static void
 cxgbit_set_one_ppod(struct cxgbi_pagepod *ppod,
 		    struct cxgbi_task_tag_info *ttinfo,

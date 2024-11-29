@@ -27,6 +27,8 @@
 #include "iscsi_target_util.h"
 #include "iscsi_target.h"
 
+#define TARGET_PREFIX "iscsi"
+
 u8 iscsit_tmr_abort_task(
 	struct iscsit_cmd *cmd,
 	unsigned char *buf)

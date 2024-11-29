@@ -30,6 +30,8 @@
 #include "target_core_ua.h"
 #include "target_core_xcopy.h"
 
+#define TARGET_PREFIX "core xcopy"
+
 static struct workqueue_struct *xcopy_wq;
 
 static sense_reason_t target_parse_xcopy_cmd(struct xcopy_op *xop);

@@ -14,6 +14,8 @@
 #include "cxgb4_dcb.h"
 #endif
 
+#define TARGET_PREFIX "cxgbit"
+
 LIST_HEAD(cdev_list_head);
 /* cdev list lock */
 DEFINE_MUTEX(cdev_list_lock);

@@ -28,6 +28,8 @@
 #include "iscsi_target.h"
 #include "iscsi_target_auth.h"
 
+#define TARGET_PREFIX "iscsi"
+
 #define MAX_LOGIN_PDUS  7
 
 void convert_null_to_semi(char *buf, int len)

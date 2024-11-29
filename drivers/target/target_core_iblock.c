@@ -34,6 +34,8 @@
 #include "target_core_iblock.h"
 #include "target_core_pr.h"
 
+#define TARGET_PREFIX "iblock"
+
 #define IBLOCK_MAX_BIO_PER_TASK	 32	/* max # of bios to submit at a time */
 #define IBLOCK_BIO_POOL_SIZE	128
 

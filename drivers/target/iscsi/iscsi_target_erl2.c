@@ -22,6 +22,8 @@
 #include "iscsi_target_erl2.h"
 #include "iscsi_target.h"
 
+#define TARGET_PREFIX "iscsi"
+
 /*
  *	FIXME: Does RData SNACK apply here as well?
  */

@@ -26,6 +26,8 @@
 #include "iscsi_target_erl2.h"
 #include "iscsi_target.h"
 
+#define TARGET_PREFIX "iscsi"
+
 #define OFFLOAD_BUF_SIZE	32768U
 
 /*

@@ -17,6 +17,8 @@
 #include "iscsi_target_tpg.h"
 #include "iscsi_target_seq_pdu_list.h"
 
+#define TARGET_PREFIX "iscsi"
+
 #ifdef DEBUG
 static void iscsit_dump_seq_list(struct iscsit_cmd *cmd)
 {

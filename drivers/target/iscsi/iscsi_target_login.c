@@ -35,6 +35,8 @@
 
 #include <target/iscsi/iscsi_transport.h>
 
+#define TARGET_PREFIX "iscsi"
+
 static struct iscsi_login *iscsi_login_init_conn(struct iscsit_conn *conn)
 {
 	struct iscsi_login *login;

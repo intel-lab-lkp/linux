@@ -40,6 +40,8 @@
 #include "target_core_rd.h"
 #include "target_core_xcopy.h"
 
+#define TARGET_PREFIX "core configfs"
+
 #define TB_CIT_SETUP(_name, _item_ops, _group_ops, _attrs)		\
 static void target_core_setup_##_name##_cit(struct target_backend *tb)	\
 {									\

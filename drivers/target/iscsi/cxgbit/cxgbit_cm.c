@@ -25,6 +25,8 @@
 #include "cxgbit.h"
 #include "clip_tbl.h"
 
+#define TARGET_PREFIX "cxgbit"
+
 static void cxgbit_init_wr_wait(struct cxgbit_wr_wait *wr_waitp)
 {
 	wr_waitp->ret = 0;

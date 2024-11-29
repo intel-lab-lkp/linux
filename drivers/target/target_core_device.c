@@ -36,6 +36,8 @@
 #include "target_core_pr.h"
 #include "target_core_ua.h"
 
+#define TARGET_PREFIX "core"
+
 static DEFINE_MUTEX(device_mutex);
 static DEFINE_IDR(devices_idr);
 

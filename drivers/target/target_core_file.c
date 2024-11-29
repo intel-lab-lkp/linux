@@ -29,6 +29,8 @@
 
 #include "target_core_file.h"
 
+#define TARGET_PREFIX "file"
+
 static inline struct fd_dev *FD_DEV(struct se_device *dev)
 {
 	return container_of(dev, struct fd_dev, dev);

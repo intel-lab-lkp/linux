@@ -44,6 +44,8 @@
 
 #include <target/iscsi/iscsi_transport.h>
 
+#define TARGET_PREFIX "iscsi"
+
 static LIST_HEAD(g_tiqn_list);
 static LIST_HEAD(g_np_list);
 static DEFINE_SPINLOCK(tiqn_lock);

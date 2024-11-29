@@ -28,6 +28,8 @@
 #include "iscsi_target.h"
 #include <target/iscsi/iscsi_target_stat.h>
 
+#define TARGET_PREFIX "iscsi configfs"
+
 
 /* Start items for lio_target_portal_cit */
 

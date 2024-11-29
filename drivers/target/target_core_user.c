@@ -30,6 +30,8 @@
 
 #include <linux/target_core_user.h>
 
+#define TARGET_PREFIX "core user"
+
 /**
  * DOC: Userspace I/O
  * Userspace I/O

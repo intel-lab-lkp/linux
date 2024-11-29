@@ -13,6 +13,8 @@
 #include <target/target_core_fabric.h>
 #include "cxgbit.h"
 
+#define TARGET_PREFIX "cxgbit"
+
 struct sge_opaque_hdr {
 	void *dev;
 	dma_addr_t addr[MAX_SKB_FRAGS + 1];

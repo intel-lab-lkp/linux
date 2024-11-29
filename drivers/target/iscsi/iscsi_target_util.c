@@ -28,6 +28,8 @@
 #include "iscsi_target_util.h"
 #include "iscsi_target.h"
 
+#define TARGET_PREFIX "iscsi"
+
 extern struct list_head g_tiqn_list;
 extern spinlock_t tiqn_lock;
 

@@ -29,6 +29,8 @@
 #include "target_core_pr.h"
 #include "target_core_ua.h"
 
+#define TARGET_PREFIX "core"
+
 /*
  * Used for Specify Initiator Ports Capable Bit (SPEC_I_PT)
  */

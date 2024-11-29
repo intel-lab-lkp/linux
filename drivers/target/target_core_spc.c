@@ -25,6 +25,8 @@
 #include "target_core_ua.h"
 #include "target_core_xcopy.h"
 
+#define TARGET_PREFIX "core"
+
 static void spc_fill_alua_data(struct se_lun *lun, unsigned char *buf)
 {
 	struct t10_alua_tg_pt_gp *tg_pt_gp;

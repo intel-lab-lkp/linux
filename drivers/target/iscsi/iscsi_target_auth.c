@@ -18,6 +18,8 @@
 #include "iscsi_target_nego.h"
 #include "iscsi_target_auth.h"
 
+#define TARGET_PREFIX "iscsi"
+
 static char *chap_get_digest_name(const int digest_type)
 {
 	switch (digest_type) {

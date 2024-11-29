@@ -23,6 +23,8 @@
 #include "target_core_alua.h"
 #include "target_core_pr.h"
 
+#define TARGET_PREFIX "core"
+
 int core_tmr_alloc_req(
 	struct se_cmd *se_cmd,
 	void *fabric_tmr_ptr,

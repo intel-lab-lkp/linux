@@ -16,6 +16,8 @@
 #include "iscsi_target_util.h"
 #include "iscsi_target_nodeattrib.h"
 
+#define TARGET_PREFIX "iscsi"
+
 static inline char *iscsit_na_get_initiatorname(
 	struct iscsi_node_acl *nacl)
 {

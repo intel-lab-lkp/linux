@@ -22,6 +22,8 @@
 
 #include <target/iscsi/iscsi_transport.h>
 
+#define TARGET_PREFIX "iscsi"
+
 struct iscsi_portal_group *iscsit_alloc_portal_group(struct iscsi_tiqn *tiqn, u16 tpgt)
 {
 	struct iscsi_portal_group *tpg;

@@ -25,6 +25,8 @@
 
 #include "target_core_rd.h"
 
+#define TARGET_PREFIX "rd"
+
 static inline struct rd_dev *RD_DEV(struct se_device *dev)
 {
 	return container_of(dev, struct rd_dev, dev);

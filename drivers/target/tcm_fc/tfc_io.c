@@ -34,6 +34,8 @@
 
 #include "tcm_fc.h"
 
+#define TARGET_PREFIX "tcm_fc"
+
 /*
  * Deliver read data back to initiator.
  * XXX TBD handle resource problems later.

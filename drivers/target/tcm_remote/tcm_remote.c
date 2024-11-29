@@ -17,6 +17,8 @@
 
 #include "tcm_remote.h"
 
+#define TARGET_PREFIX "remote"
+
 static inline struct tcm_remote_tpg *remote_tpg(struct se_portal_group *se_tpg)
 {
 	return container_of(se_tpg, struct tcm_remote_tpg, remote_se_tpg);

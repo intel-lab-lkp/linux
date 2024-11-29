@@ -17,6 +17,8 @@
 #include "iscsi_target_tpg.h"
 #include "iscsi_target_util.h"
 
+#define TARGET_PREFIX "iscsi"
+
 void iscsit_determine_maxcmdsn(struct iscsit_session *sess)
 {
 	struct se_node_acl *se_nacl;

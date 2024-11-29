@@ -4,6 +4,8 @@
 #include <linux/module.h>
 #include <target/iscsi/iscsi_transport.h>
 
+#define TARGET_PREFIX "iscsi"
+
 static LIST_HEAD(g_transport_list);
 static DEFINE_MUTEX(transport_mutex);
 

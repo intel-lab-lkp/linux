@@ -14,6 +14,8 @@
 #include "iscsi_target_util.h"
 #include "iscsi_target_parameters.h"
 
+#define TARGET_PREFIX "iscsi"
+
 int iscsi_login_rx_data(
 	struct iscsit_conn *conn,
 	char *buf,

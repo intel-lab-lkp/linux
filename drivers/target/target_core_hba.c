@@ -26,6 +26,8 @@
 
 #include "target_core_internal.h"
 
+#define TARGET_PREFIX "core"
+
 static LIST_HEAD(backend_list);
 static DEFINE_MUTEX(backend_mutex);
 

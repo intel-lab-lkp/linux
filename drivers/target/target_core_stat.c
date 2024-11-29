@@ -27,6 +27,8 @@
 
 #include "target_core_internal.h"
 
+#define TARGET_PREFIX "core"
+
 #ifndef INITIAL_JIFFIES
 #define INITIAL_JIFFIES ((unsigned long)(unsigned int) (-300*HZ))
 #endif

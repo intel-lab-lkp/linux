@@ -24,6 +24,8 @@
 #include "target_core_ua.h"
 #include "target_core_alua.h"
 
+#define TARGET_PREFIX "core"
+
 static sense_reason_t
 sbc_check_prot(struct se_device *, struct se_cmd *, unsigned char, u32, bool);
 static sense_reason_t sbc_execute_unmap(struct se_cmd *cmd);

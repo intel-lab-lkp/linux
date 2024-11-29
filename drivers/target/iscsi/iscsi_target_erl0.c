@@ -23,6 +23,8 @@
 #include "iscsi_target_util.h"
 #include "iscsi_target.h"
 
+#define TARGET_PREFIX "iscsi"
+
 /*
  *	Used to set values in struct iscsit_cmd that iscsit_dataout_check_sequence()
  *	checks against to determine a PDU's Offset+Length is within the current

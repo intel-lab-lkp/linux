@@ -27,6 +27,8 @@
 
 #include "sbp_target.h"
 
+#define TARGET_PREFIX "sbp"
+
 /* FireWire address region for management and command block address handlers */
 static const struct fw_address_region sbp_register_region = {
 	.start	= CSR_REGISTER_BASE + 0x10000,

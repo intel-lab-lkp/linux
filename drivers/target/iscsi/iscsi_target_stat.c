@@ -21,6 +21,8 @@
 #include "iscsi_target_util.h"
 #include <target/iscsi/iscsi_target_stat.h>
 
+#define TARGET_PREFIX "iscsi"
+
 #ifndef INITIAL_JIFFIES
 #define INITIAL_JIFFIES ((unsigned long)(unsigned int) (-300*HZ))
 #endif

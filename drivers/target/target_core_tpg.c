@@ -30,6 +30,8 @@
 #include "target_core_pr.h"
 #include "target_core_ua.h"
 
+#define TARGET_PREFIX "core"
+
 extern struct se_device *g_lun0_dev;
 static DEFINE_XARRAY_ALLOC(tpg_xa);
 

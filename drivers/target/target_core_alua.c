@@ -29,6 +29,8 @@
 #include "target_core_alua.h"
 #include "target_core_ua.h"
 
+#define TARGET_PREFIX "core"
+
 static sense_reason_t core_alua_check_transition(int state, int valid,
 						 int *primary, int explicit);
 static int core_alua_set_tg_pt_secondary_state(

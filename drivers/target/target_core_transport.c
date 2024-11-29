@@ -40,6 +40,8 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/target.h>
 
+#define TARGET_PREFIX "core"
+
 static struct workqueue_struct *target_completion_wq;
 static struct workqueue_struct *target_submission_wq;
 static struct kmem_cache *se_sess_cache;

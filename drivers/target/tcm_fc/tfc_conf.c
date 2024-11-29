@@ -33,6 +33,8 @@
 
 #include "tcm_fc.h"
 
+#define TARGET_PREFIX "tcm_fc"
+
 static LIST_HEAD(ft_wwn_list);
 DEFINE_MUTEX(ft_lport_lock);
 

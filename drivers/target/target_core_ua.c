@@ -22,6 +22,8 @@
 #include "target_core_pr.h"
 #include "target_core_ua.h"
 
+#define TARGET_PREFIX "core"
+
 sense_reason_t
 target_scsi3_ua_check(struct se_cmd *cmd)
 {

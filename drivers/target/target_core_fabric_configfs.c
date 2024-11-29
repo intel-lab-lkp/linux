@@ -34,6 +34,8 @@
 #include "target_core_alua.h"
 #include "target_core_pr.h"
 
+#define TARGET_PREFIX "core"
+
 #define TF_CIT_SETUP(_name, _item_ops, _group_ops, _attrs)		\
 static void target_fabric_setup_##_name##_cit(struct target_fabric_configfs *tf) \
 {									\

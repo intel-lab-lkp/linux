@@ -37,6 +37,8 @@
 
 #include "tcm_loop.h"
 
+#define TARGET_PREFIX "loopback"
+
 #define to_tcm_loop_hba(hba)	container_of(hba, struct tcm_loop_hba, dev)
 
 static struct kmem_cache *tcm_loop_cmd_cache;

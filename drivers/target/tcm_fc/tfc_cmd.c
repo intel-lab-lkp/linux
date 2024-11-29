@@ -25,6 +25,8 @@
 
 #include "tcm_fc.h"
 
+#define TARGET_PREFIX "tcm_fc"
+
 /*
  * Dump cmd state for debugging.
  */

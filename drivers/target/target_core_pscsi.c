@@ -33,6 +33,8 @@
 #include "target_core_internal.h"
 #include "target_core_pscsi.h"
 
+#define TARGET_PREFIX "pscsi"
+
 static inline struct pscsi_dev_virt *PSCSI_DEV(struct se_device *dev)
 {
 	return container_of(dev, struct pscsi_dev_virt, dev);
