@@ -22620,7 +22620,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 	env->ops = bpf_verifier_ops[env->prog->type];
 	ret = init_fd_array(env, attr, uattr);
 	if (ret)
-		goto err_free_aux_data;
+		goto err_release_maps;
 
 	env->allow_ptr_leaks = bpf_allow_ptr_leaks(env->prog->aux->token);
 	env->allow_uninit_stack = bpf_allow_uninit_stack(env->prog->aux->token);
@@ -22773,11 +22773,11 @@ skip_full_check:
 	    copy_to_bpfptr_offset(uattr, offsetof(union bpf_attr, log_true_size),
 				  &log_true_size, sizeof(log_true_size))) {
 		ret = -EFAULT;
-		goto err_release_maps;
+		goto err_ext;
 	}
 
 	if (ret)
-		goto err_release_maps;
+		goto err_ext;
 
 	if (env->used_map_cnt) {
 		/* if program passed verifier, update used_maps in bpf_prog_info */
@@ -22787,7 +22787,7 @@ skip_full_check:
 
 		if (!env->prog->aux->used_maps) {
 			ret = -ENOMEM;
-			goto err_release_maps;
+			goto err_ext;
 		}
 
 		memcpy(env->prog->aux->used_maps, env->used_maps,
@@ -22801,7 +22801,7 @@ skip_full_check:
 							  GFP_KERNEL);
 		if (!env->prog->aux->used_btfs) {
 			ret = -ENOMEM;
-			goto err_release_maps;
+			goto err_ext;
 		}
 
 		memcpy(env->prog->aux->used_btfs, env->used_btfs,
@@ -22817,15 +22817,7 @@ skip_full_check:
 
 	adjust_btf_func(env);
 
-err_release_maps:
-	if (!env->prog->aux->used_maps)
-		/* if we didn't copy map pointers into bpf_prog_info, release
-		 * them now. Otherwise free_used_maps() will release them.
-		 */
-		release_maps(env);
-	if (!env->prog->aux->used_btfs)
-		release_btfs(env);
-
+err_ext:
 	/* extension progs temporarily inherit the attach_type of their targets
 	   for verification purposes, so set it back to zero before returning
 	 */
@@ -22838,7 +22830,15 @@ err_release_maps:
 err_unlock:
 	if (!is_priv)
 		mutex_unlock(&bpf_verifier_lock);
-err_free_aux_data:
+err_release_maps:
+	if (!env->prog->aux->used_maps)
+		/* if we didn't copy map pointers into bpf_prog_info, release
+		 * them now. Otherwise free_used_maps() will release them.
+		 */
+		release_maps(env);
+	if (!env->prog->aux->used_btfs)
+		release_btfs(env);
+
 	vfree(env->insn_aux_data);
 	kvfree(env->insn_hist);
 err_free_env:
