@@ -21,6 +21,9 @@ static void pci_pwrctrl_unregister(struct device *dev)
 {
 	struct platform_device *pdev;
 
+	if (!dev_of_node(dev))
+		return;
+
 	pdev = of_find_device_by_node(dev_of_node(dev));
 	if (!pdev)
 		return;
