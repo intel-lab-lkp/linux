@@ -26,6 +26,7 @@ properties:
           - qcom,sc8280xp-dp
           - qcom,sc8280xp-edp
           - qcom,sdm845-dp
+          - qcom,sm6150-dp
           - qcom,sm8350-dp
           - qcom,sm8650-dp
       - items:
@@ -108,6 +109,18 @@ properties:
     deprecated: true
   vdda-1p2-supply:
     deprecated: true
+
+  max-width:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Maximum allowed width for display modes
+    default: 7680
+
+  dp-hpd-gpio:
+    description: External GPIO for controlling HPD when a 3rd pinctrl is used
+    items:
+      - description: phandle to 3rd GPIO controller
+      - description: GPIO pin number
+      - description: Optional GPIO flags
 
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
