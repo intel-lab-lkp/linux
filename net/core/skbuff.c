@@ -7233,7 +7233,7 @@ ssize_t skb_splice_from_iter(struct sk_buff *skb, struct iov_iter *iter,
 				goto out;
 			}
 
-			if (skb->ip_summed == CHECKSUM_NONE)
+			if (skb->ip_summed == CHECKSUM_NONE && skb->sk->sk_family != AF_UNIX)
 				skb_splice_csum_page(skb, page, off, part);
 
 			off = 0;
