@@ -50,7 +50,7 @@ static int target_xcopy_locate_se_dev_e4_iter(struct se_device *se_dev,
 	int rc;
 
 	if (!se_dev->dev_attrib.emulate_3pc) {
-		target_debug("XCOPY: emulate_3pc disabled on se_dev %p\n", se_dev);
+		target_debug("emulate_3pc disabled on se_dev %p\n", se_dev);
 		return 0;
 	}
 
@@ -59,8 +59,7 @@ static int target_xcopy_locate_se_dev_e4_iter(struct se_device *se_dev,
 
 	rc = memcmp(&tmp_dev_wwn[0], dev_wwn, XCOPY_NAA_IEEE_REGEX_LEN);
 	if (rc != 0) {
-		target_debug("XCOPY: skip non-matching: %*ph\n", XCOPY_NAA_IEEE_REGEX_LEN,
-			     tmp_dev_wwn);
+		target_debug("skip non-matching: %*ph\n", XCOPY_NAA_IEEE_REGEX_LEN, tmp_dev_wwn);
 		return 0;
 	}
 	target_debug("XCOPY 0xe4: located se_dev: %p\n", se_dev);
@@ -582,7 +581,7 @@ static int target_xcopy_read_source(
 	cdb[0] = READ_16;
 	put_unaligned_be64(src_lba, &cdb[2]);
 	put_unaligned_be32(transfer_length_block, &cdb[10]);
-	target_debug("XCOPY: Built READ_16: LBA: %llu Blocks: %u Length: %u\n",
+	target_debug("Built READ_16: LBA: %llu Blocks: %u Length: %u\n",
 		     (unsigned long long)src_lba, transfer_length_block, src_bytes);
 
 	__target_init_cmd(se_cmd, &xcopy_pt_tfo, &xcopy_pt_sess, src_bytes,
@@ -627,7 +626,7 @@ static int target_xcopy_write_destination(
 	cdb[0] = WRITE_16;
 	put_unaligned_be64(dst_lba, &cdb[2]);
 	put_unaligned_be32(transfer_length_block, &cdb[10]);
-	target_debug("XCOPY: Built WRITE_16: LBA: %llu Blocks: %u Length: %u\n",
+	target_debug("Built WRITE_16: LBA: %llu Blocks: %u Length: %u\n",
 		     (unsigned long long)dst_lba, transfer_length_block, dst_bytes);
 
 	__target_init_cmd(se_cmd, &xcopy_pt_tfo, &xcopy_pt_sess, dst_bytes,
@@ -834,7 +833,7 @@ static sense_reason_t target_parse_xcopy_cmd(struct xcopy_op *xop)
 	if (rc <= 0)
 		goto out;
 
-	target_debug("XCOPY: Processed %d segment descriptors, length: %u\n", rc,
+	target_debug("Processed %d segment descriptors, length: %u\n", rc,
 		     rc * XCOPY_SEGMENT_DESC_LEN);
 
 	rc = target_xcopy_parse_target_descriptors(se_cmd, xop, &p[16], tdll, &ret);
@@ -843,7 +842,7 @@ static sense_reason_t target_parse_xcopy_cmd(struct xcopy_op *xop)
 
 	if (xop->src_dev->dev_attrib.block_size !=
 	    xop->dst_dev->dev_attrib.block_size) {
-		target_err("XCOPY: Non matching src_dev block_size: %u + dst_dev block_size: %u currently unsupported\n",
+		target_err("Non matching src_dev block_size: %u + dst_dev block_size: %u currently unsupported\n",
 			   xop->src_dev->dev_attrib.block_size,
 			   xop->dst_dev->dev_attrib.block_size);
 		xcopy_pt_undepend_remotedev(xop);
@@ -851,7 +850,7 @@ static sense_reason_t target_parse_xcopy_cmd(struct xcopy_op *xop)
 		goto out;
 	}
 
-	target_debug("XCOPY: Processed %d target descriptors, length: %u\n", rc,
+	target_debug("Processed %d target descriptors, length: %u\n", rc,
 		     rc * XCOPY_TARGET_DESC_LEN);
 	transport_kunmap_data_sg(se_cmd);
 	return TCM_NO_SENSE;

@@ -96,7 +96,7 @@ int iscsit_load_discovery_tpg(void)
 	spin_unlock(&tpg->tpg_state_lock);
 
 	iscsit_global->discovery_tpg = tpg;
-	target_debug("CORE[0] - Allocated Discovery TPG\n");
+	target_debug("[0]: Allocated Discovery TPG\n");
 
 	return 0;
 free_pl_out:
@@ -247,7 +247,7 @@ int iscsit_tpg_add_portal_group(struct iscsi_tiqn *tiqn, struct iscsi_portal_gro
 	spin_lock(&tiqn->tiqn_tpg_lock);
 	list_add_tail(&tpg->tpg_list, &tiqn->tiqn_tpg_list);
 	tiqn->tiqn_ntpgs++;
-	target_debug("CORE[%s]_TPG[%u] - Added iSCSI Target Portal Group\n", tiqn->tiqn, tpg->tpgt);
+	target_debug("[%s]_tpg[%u]: Added iSCSI Target Portal Group\n", tiqn->tiqn, tpg->tpgt);
 	spin_unlock(&tiqn->tiqn_tpg_lock);
 
 	return 0;
@@ -293,7 +293,7 @@ int iscsit_tpg_del_portal_group(
 	list_del(&tpg->tpg_list);
 	spin_unlock(&tiqn->tiqn_tpg_lock);
 
-	target_debug("CORE[%s]_TPG[%u] - Deleted iSCSI Target Portal Group\n", tiqn->tiqn,
+	target_debug("[%s]_tpg[%u]: Deleted iSCSI Target Portal Group\n", tiqn->tiqn,
 		     tpg->tpgt);
 
 	kfree(tpg);
@@ -338,7 +338,7 @@ int iscsit_tpg_enable_portal_group(struct iscsi_portal_group *tpg)
 
 	spin_lock(&tiqn->tiqn_tpg_lock);
 	tiqn->tiqn_active_tpgs++;
-	target_debug("iSCSI_TPG[%u] - Enabled iSCSI Target Portal Group\n", tpg->tpgt);
+	target_debug("tpg[%u]: Enabled iSCSI Target Portal Group\n", tpg->tpgt);
 	spin_unlock(&tiqn->tiqn_tpg_lock);
 
 	return 0;
@@ -379,7 +379,7 @@ int iscsit_tpg_disable_portal_group(struct iscsi_portal_group *tpg, int force)
 
 	spin_lock(&tiqn->tiqn_tpg_lock);
 	tiqn->tiqn_active_tpgs--;
-	target_debug("iSCSI_TPG[%u] - Disabled iSCSI Target Portal Group\n", tpg->tpgt);
+	target_debug("tpg[%u]: Disabled iSCSI Target Portal Group\n", tpg->tpgt);
 	spin_unlock(&tiqn->tiqn_tpg_lock);
 
 	return 0;
@@ -501,7 +501,7 @@ struct iscsi_tpg_np *iscsit_tpg_add_network_portal(
 		spin_unlock(&tpg_np_parent->tpg_np_parent_lock);
 	}
 
-	target_debug("CORE[%s] - Added Network Portal: %pISpc,%hu on %s\n", tpg->tpg_tiqn->tiqn,
+	target_debug("[%s]: Added Network Portal: %pISpc,%hu on %s\n", tpg->tpg_tiqn->tiqn,
 		     &np->np_sockaddr, tpg->tpgt, np->np_transport->name);
 
 	return tpg_np;
@@ -514,7 +514,7 @@ static int iscsit_tpg_release_np(
 {
 	iscsit_clear_tpg_np_login_thread(tpg_np, tpg, true);
 
-	target_debug("CORE[%s] - Removed Network Portal: %pISpc,%u on %s\n", tpg->tpg_tiqn->tiqn,
+	target_debug("[%s]: Removed Network Portal: %pISpc,%u on %s\n", tpg->tpg_tiqn->tiqn,
 		     &np->np_sockaddr, tpg->tpgt, np->np_transport->name);
 
 	tpg_np->tpg_np = NULL;
@@ -668,7 +668,7 @@ int iscsit_ta_generate_node_acls(
 	}
 
 	a->generate_node_acls = flag;
-	target_debug("iSCSI_TPG[%u] - Generate Initiator Portal Group ACLs: %s\n", tpg->tpgt,
+	target_debug("tpg[%u]: Generate Initiator Portal Group ACLs: %s\n", tpg->tpgt,
 		     (a->generate_node_acls) ? "Enabled" : "Disabled");
 
 	if (flag == 1 && a->cache_dynamic_acls == 0) {
@@ -696,7 +696,7 @@ int iscsit_ta_default_cmdsn_depth(
 	}
 
 	a->default_cmdsn_depth = tcq_depth;
-	target_debug("iSCSI_TPG[%u] - Set Default CmdSN TCQ Depth to %u\n", tpg->tpgt,
+	target_debug("tpg[%u]: Set Default CmdSN TCQ Depth to %u\n", tpg->tpgt,
 		     a->default_cmdsn_depth);
 
 	return 0;
@@ -719,7 +719,7 @@ int iscsit_ta_cache_dynamic_acls(
 	}
 
 	a->cache_dynamic_acls = flag;
-	target_debug("iSCSI_TPG[%u] - Cache Dynamic Initiator Portal Group ACLs %s\n", tpg->tpgt,
+	target_debug("tpg[%u]: Cache Dynamic Initiator Portal Group ACLs %s\n", tpg->tpgt,
 		     (a->cache_dynamic_acls) ? "Enabled" : "Disabled");
 
 	return 0;
@@ -737,7 +737,7 @@ int iscsit_ta_demo_mode_write_protect(
 	}
 
 	a->demo_mode_write_protect = flag;
-	target_debug("iSCSI_TPG[%u] - Demo Mode Write Protect bit: %s\n", tpg->tpgt,
+	target_debug("tpg[%u]: Demo Mode Write Protect bit: %s\n", tpg->tpgt,
 		     (a->demo_mode_write_protect) ? "ON" : "OFF");
 
 	return 0;
@@ -755,7 +755,7 @@ int iscsit_ta_prod_mode_write_protect(
 	}
 
 	a->prod_mode_write_protect = flag;
-	target_debug("iSCSI_TPG[%u] - Production Mode Write Protect bit: %s\n", tpg->tpgt,
+	target_debug("tpg[%u]: Production Mode Write Protect bit: %s\n", tpg->tpgt,
 		     (a->prod_mode_write_protect) ? "ON" : "OFF");
 
 	return 0;
@@ -773,7 +773,7 @@ int iscsit_ta_demo_mode_discovery(
 	}
 
 	a->demo_mode_discovery = flag;
-	target_debug("iSCSI_TPG[%u] - Demo Mode Discovery bit: %s\n", tpg->tpgt,
+	target_debug("tpg[%u]: Demo Mode Discovery bit: %s\n", tpg->tpgt,
 		     (a->demo_mode_discovery) ? "ON" : "OFF");
 
 	return 0;
@@ -791,7 +791,7 @@ int iscsit_ta_default_erl(
 	}
 
 	a->default_erl = default_erl;
-	target_debug("iSCSI_TPG[%u] - DefaultERL: %u\n", tpg->tpgt, a->default_erl);
+	target_debug("tpg[%u]: DefaultERL: %u\n", tpg->tpgt, a->default_erl);
 
 	return 0;
 }
@@ -808,7 +808,7 @@ int iscsit_ta_t10_pi(
 	}
 
 	a->t10_pi = flag;
-	target_debug("iSCSI_TPG[%u] - T10 Protection information bit: %s\n", tpg->tpgt,
+	target_debug("tpg[%u]: T10 Protection information bit: %s\n", tpg->tpgt,
 		     (a->t10_pi) ? "ON" : "OFF");
 
 	return 0;
@@ -826,7 +826,7 @@ int iscsit_ta_fabric_prot_type(
 	}
 
 	a->fabric_prot_type = prot_type;
-	target_debug("iSCSI_TPG[%u] - T10 Fabric Protection Type: %u\n", tpg->tpgt, prot_type);
+	target_debug("tpg[%u]: T10 Fabric Protection Type: %u\n", tpg->tpgt, prot_type);
 
 	return 0;
 }
@@ -843,7 +843,7 @@ int iscsit_ta_tpg_enabled_sendtargets(
 	}
 
 	a->tpg_enabled_sendtargets = flag;
-	target_debug("iSCSI_TPG[%u] - TPG enabled bit required for SendTargets: %s\n", tpg->tpgt,
+	target_debug("tpg[%u]: TPG enabled bit required for SendTargets: %s\n", tpg->tpgt,
 		     (a->tpg_enabled_sendtargets) ? "ON" : "OFF");
 
 	return 0;
@@ -861,7 +861,7 @@ int iscsit_ta_login_keys_workaround(
 	}
 
 	a->login_keys_workaround = flag;
-	target_debug("iSCSI_TPG[%u] - TPG enabled bit for login keys workaround: %s ", tpg->tpgt,
+	target_debug("tpg[%u]: TPG enabled bit for login keys workaround: %s ", tpg->tpgt,
 		     (a->login_keys_workaround) ? "ON" : "OFF");
 
 	return 0;

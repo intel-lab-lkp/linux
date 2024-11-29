@@ -71,7 +71,7 @@ static struct se_device *iblock_alloc_device(struct se_hba *hba, const char *nam
 	if (!ib_dev->ibd_plug)
 		goto free_dev;
 
-	target_debug("IBLOCK: Allocated ib_dev for %s\n", name);
+	target_debug("Allocated ib_dev for %s\n", name);
 
 	return &ib_dev->dev;
 
@@ -106,11 +106,11 @@ static int iblock_configure_device(struct se_device *dev)
 
 	ret = bioset_init(&ib_dev->ibd_bio_set, IBLOCK_BIO_POOL_SIZE, 0, BIOSET_NEED_BVECS);
 	if (ret) {
-		target_err("IBLOCK: Unable to create bioset\n");
+		target_err("Unable to create bioset\n");
 		goto out;
 	}
 
-	target_debug("IBLOCK: Claiming struct block_device: %s\n", ib_dev->ibd_udev_path);
+	target_debug("Claiming struct block_device: %s\n", ib_dev->ibd_udev_path);
 
 	if (!ib_dev->ibd_readonly)
 		mode |= BLK_OPEN_WRITE;
@@ -400,7 +400,7 @@ static void iblock_end_io_flush(struct bio *bio)
 	struct se_cmd *cmd = bio->bi_private;
 
 	if (bio->bi_status)
-		target_err("IBLOCK: cache flush failed: %d\n", bio->bi_status);
+		target_err("cache flush failed: %d\n", bio->bi_status);
 
 	if (cmd) {
 		if (bio->bi_status)
@@ -612,7 +612,7 @@ static ssize_t iblock_set_configfs_dev_params(struct se_device *dev,
 				ret = -EINVAL;
 				break;
 			}
-			target_debug("IBLOCK: Referencing UDEV path: %s\n", ib_dev->ibd_udev_path);
+			target_debug("Referencing UDEV path: %s\n", ib_dev->ibd_udev_path);
 			ib_dev->ibd_flags |= IBDF_HAS_UDEV_PATH;
 			break;
 		case Opt_readonly:
@@ -628,7 +628,7 @@ static ssize_t iblock_set_configfs_dev_params(struct se_device *dev,
 				goto out;
 			}
 			ib_dev->ibd_readonly = tmp_readonly;
-			target_debug("IBLOCK: readonly: %d\n", ib_dev->ibd_readonly);
+			target_debug("readonly: %d\n", ib_dev->ibd_readonly);
 			break;
 		case Opt_force:
 			break;

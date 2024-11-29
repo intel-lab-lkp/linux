@@ -224,7 +224,7 @@ static struct se_portal_group *ft_add_tpg(struct se_wwn *wwn, const char *name)
 	unsigned long index;
 	int ret;
 
-	target_debug("tcm_fc: add tpg %s\n", name);
+	target_debug("add tpg %s\n", name);
 
 	/*
 	 * Name must be "tpgt_" followed by the index.

@@ -553,8 +553,7 @@ static ssize_t rd_set_configfs_dev_params(struct se_device *dev,
 		case Opt_rd_pages:
 			match_int(args, &arg);
 			rd_dev->rd_page_count = arg;
-			target_debug("RAMDISK: Referencing Page Count: %u\n",
-				     rd_dev->rd_page_count);
+			target_debug("Referencing Page Count: %u\n", rd_dev->rd_page_count);
 			rd_dev->rd_flags |= RDF_HAS_PAGE_COUNT;
 			break;
 		case Opt_rd_nullio:
@@ -562,7 +561,7 @@ static ssize_t rd_set_configfs_dev_params(struct se_device *dev,
 			if (arg != 1)
 				break;
 
-			target_debug("RAMDISK: Setting NULLIO flag: %d\n", arg);
+			target_debug("Setting NULLIO flag: %d\n", arg);
 			rd_dev->rd_flags |= RDF_NULLIO;
 			break;
 		case Opt_rd_dummy:
@@ -570,7 +569,7 @@ static ssize_t rd_set_configfs_dev_params(struct se_device *dev,
 			if (arg != 1)
 				break;
 
-			target_debug("RAMDISK: Setting DUMMY flag: %d\n", arg);
+			target_debug("Setting DUMMY flag: %d\n", arg);
 			rd_dev->rd_flags |= RDF_DUMMY;
 			break;
 		default:

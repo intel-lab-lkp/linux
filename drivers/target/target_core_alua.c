@@ -1928,7 +1928,7 @@ ssize_t core_alua_store_tg_pt_gp_info(
 		 * with the default_tg_pt_gp.
 		 */
 		if (!tg_pt_gp_new) {
-			target_debug("Target_Core_ConfigFS: Moving %s/tpgt_%u/%s from ALUA Target Port Group: alua/%s, ID: %u back to default_tg_pt_gp\n",
+			target_debug("configfs: Moving %s/tpgt_%u/%s from ALUA Target Port Group: alua/%s, ID: %u back to default_tg_pt_gp\n",
 				     tpg->se_tpg_tfo->tpg_get_wwn(tpg),
 				     tpg->se_tpg_tfo->tpg_get_tag(tpg),
 				     config_item_name(&lun->lun_group.cg_item),
@@ -1946,7 +1946,7 @@ ssize_t core_alua_store_tg_pt_gp_info(
 
 	target_swap_tg_pt_gp(lun, tg_pt_gp, tg_pt_gp_new);
 	spin_unlock(&lun->lun_tg_pt_gp_lock);
-	target_debug("Target_Core_ConfigFS: %s %s/tpgt_%u/%s to ALUA Target Port Group: alua/%s, ID: %u\n",
+	target_debug("configfs: %s %s/tpgt_%u/%s to ALUA Target Port Group: alua/%s, ID: %u\n",
 		     (move) ? "Moving" : "Adding", tpg->se_tpg_tfo->tpg_get_wwn(tpg),
 		     tpg->se_tpg_tfo->tpg_get_tag(tpg), config_item_name(&lun->lun_group.cg_item),
 		     config_item_name(&tg_pt_gp_new->tg_pt_gp_group.cg_item),

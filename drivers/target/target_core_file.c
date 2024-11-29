@@ -82,7 +82,7 @@ static struct se_device *fd_alloc_device(struct se_hba *hba, const char *name)
 
 	fd_dev->fd_host = fd_host;
 
-	target_debug("FILEIO: Allocated fd_dev for %p\n", name);
+	target_debug("Allocated fd_dev for %p\n", name);
 
 	return &fd_dev->dev;
 }
@@ -134,7 +134,7 @@ static int fd_configure_device(struct se_device *dev)
 	 * to write-out the entire device cache.
 	 */
 	if (fd_dev->fbd_flags & FDBD_HAS_BUFFERED_IO_WCE) {
-		target_debug("FILEIO: Disabling O_DSYNC, using buffered FILEIO\n");
+		target_debug("Disabling O_DSYNC, using buffered FILEIO\n");
 		flags &= ~O_DSYNC;
 	}
 
@@ -164,7 +164,7 @@ static int fd_configure_device(struct se_device *dev)
 		dev_size = (i_size_read(file->f_mapping->host) -
 				       fd_dev->fd_block_size);
 
-		target_debug("FILEIO: Using size: %llu bytes from struct block_device blocks: %llu logical_block_size: %d\n",
+		target_debug("Using size: %llu bytes from struct block_device blocks: %llu logical_block_size: %d\n",
 			     dev_size, div_u64(dev_size, fd_dev->fd_block_size),
 			     fd_dev->fd_block_size);
 		/*
@@ -177,7 +177,7 @@ static int fd_configure_device(struct se_device *dev)
 			dev->dev_attrib.is_nonrot = 1;
 	} else {
 		if (!(fd_dev->fbd_flags & FBDF_HAS_SIZE)) {
-			target_err("FILEIO: Missing fd_dev_size= parameter, and no backing struct block_device\n");
+			target_err("Missing fd_dev_size= parameter, and no backing struct block_device\n");
 			goto fail;
 		}
 
@@ -195,7 +195,7 @@ static int fd_configure_device(struct se_device *dev)
 	dev->dev_attrib.hw_queue_depth = FD_MAX_DEVICE_QUEUE_DEPTH;
 
 	if (fd_dev->fbd_flags & FDBD_HAS_BUFFERED_IO_WCE) {
-		target_debug("FILEIO: Forcing setting of emulate_write_cache=1 with FDBD_HAS_BUFFERED_IO_WCE\n");
+		target_debug("Forcing setting of emulate_write_cache=1 with FDBD_HAS_BUFFERED_IO_WCE\n");
 		dev->dev_attrib.emulate_write_cache = 1;
 	}
 
@@ -406,7 +406,7 @@ fd_execute_sync_cache(struct se_cmd *cmd)
 
 	ret = vfs_fsync_range(fd_dev->fd_file, start, end, 1);
 	if (ret != 0)
-		target_err("FILEIO: vfs_fsync_range() failed: %d\n", ret);
+		target_err("vfs_fsync_range() failed: %d\n", ret);
 
 	if (immed)
 		return 0;
@@ -548,7 +548,7 @@ fd_execute_unmap(struct se_cmd *cmd, sector_t lba, sector_t nolb)
 					   target_to_linux_sector(dev,  nolb),
 					   GFP_KERNEL);
 		if (ret < 0) {
-			target_warn("FILEIO: blkdev_issue_discard() failed: %d\n", ret);
+			target_warn("blkdev_issue_discard() failed: %d\n", ret);
 			return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 		}
 	} else {
@@ -563,7 +563,7 @@ fd_execute_unmap(struct se_cmd *cmd, sector_t lba, sector_t nolb)
 
 		ret = file->f_op->fallocate(file, mode, pos, len);
 		if (ret < 0) {
-			target_warn("FILEIO: fallocate() failed: %d\n", ret);
+			target_warn("fallocate() failed: %d\n", ret);
 			return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 		}
 	}
@@ -667,7 +667,7 @@ fd_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 	 * single vfs_[writev,readv] call.
 	 */
 	if (cmd->data_length > FD_MAX_BYTES) {
-		target_err("FILEIO: Not able to process I/O of %u bytes due to FD_MAX_BYTES: %u iovec count limitation\n",
+		target_err("Not able to process I/O of %u bytes due to FD_MAX_BYTES: %u iovec count limitation\n",
 			   cmd->data_length, FD_MAX_BYTES);
 		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
 	}
@@ -716,7 +716,7 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 				ret = -EINVAL;
 				break;
 			}
-			target_debug("FILEIO: Referencing Path: %s\n", fd_dev->fd_dev_name);
+			target_debug("Referencing Path: %s\n", fd_dev->fd_dev_name);
 			fd_dev->fbd_flags |= FBDF_HAS_PATH;
 			break;
 		case Opt_fd_dev_size:
@@ -731,7 +731,7 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 				target_err("kstrtoull() failed for fd_dev_size=\n");
 				goto out;
 			}
-			target_debug("FILEIO: Referencing Size: %llu bytes\n", fd_dev->fd_dev_size);
+			target_debug("Referencing Size: %llu bytes\n", fd_dev->fd_dev_size);
 			fd_dev->fbd_flags |= FBDF_HAS_SIZE;
 			break;
 		case Opt_fd_buffered_io:
@@ -744,7 +744,7 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 				goto out;
 			}
 
-			target_debug("FILEIO: Using buffered I/O operations for struct fd_dev\n");
+			target_debug("Using buffered I/O operations for struct fd_dev\n");
 
 			fd_dev->fbd_flags |= FDBD_HAS_BUFFERED_IO_WCE;
 			break;
@@ -758,7 +758,7 @@ static ssize_t fd_set_configfs_dev_params(struct se_device *dev,
 				goto out;
 			}
 
-			target_debug("FILEIO: Using async I/O operations for struct fd_dev\n");
+			target_debug("Using async I/O operations for struct fd_dev\n");
 
 			fd_dev->fbd_flags |= FDBD_HAS_ASYNC_IO;
 			break;

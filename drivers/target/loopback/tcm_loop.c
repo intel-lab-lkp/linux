@@ -592,7 +592,7 @@ static int tcm_loop_port_link(
 	 */
 	scsi_add_device(tl_hba->sh, 0, tl_tpg->tl_tpgt, lun->unpacked_lun);
 
-	target_debug("TCM_Loop_ConfigFS: Port Link Successful\n");
+	target_debug("configfs: Port Link Successful\n");
 	return 0;
 }
 
@@ -622,7 +622,7 @@ static void tcm_loop_port_unlink(
 
 	atomic_dec_mb(&tl_tpg->tl_tpg_port_count);
 
-	target_debug("TCM_Loop_ConfigFS: Port Unlink Successful\n");
+	target_debug("configfs: Port Unlink Successful\n");
 }
 
 /* End items for tcm_loop_port_cit */

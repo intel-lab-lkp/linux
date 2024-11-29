@@ -59,8 +59,7 @@ int transport_backend_register(const struct target_backend_ops *ops)
 	list_add_tail(&tb->list, &backend_list);
 	mutex_unlock(&backend_mutex);
 
-	target_debug("TCM: Registered subsystem plugin: %s struct module: %p\n", ops->name,
-		     ops->owner);
+	target_debug("Registered subsystem plugin: %s struct module: %p\n", ops->name, ops->owner);
 	return 0;
 }
 EXPORT_SYMBOL(transport_backend_register);

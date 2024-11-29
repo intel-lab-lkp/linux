@@ -1039,7 +1039,7 @@ static int queue_cmd_ring(struct tcmu_cmd *tcmu_cmd, sense_reason_t *scsi_err)
 		goto queue;
 
 	if (data_length > (size_t)udev->max_blocks * blk_size) {
-		target_warn("TCMU: Request of size %zu is too big for %zu data area\n", data_length,
+		target_warn("Request of size %zu is too big for %zu data area\n", data_length,
 			    (size_t)udev->max_blocks * blk_size);
 		*scsi_err = TCM_INVALID_CDB_FIELD;
 		return -1;
@@ -1057,7 +1057,7 @@ static int queue_cmd_ring(struct tcmu_cmd *tcmu_cmd, sense_reason_t *scsi_err)
 	command_size = tcmu_cmd_get_cmd_size(tcmu_cmd, base_command_size);
 
 	if (command_size > (udev->cmdr_size / 2)) {
-		target_warn("TCMU: Request of size %zu is too big for %u cmd ring\n", command_size,
+		target_warn("Request of size %zu is too big for %u cmd ring\n", command_size,
 			    udev->cmdr_size);
 		tcmu_cmd_free_data(tcmu_cmd, tcmu_cmd->dbi_cur);
 		*scsi_err = TCM_INVALID_CDB_FIELD;
@@ -1073,7 +1073,7 @@ static int queue_cmd_ring(struct tcmu_cmd *tcmu_cmd, sense_reason_t *scsi_err)
 
 	if (xa_alloc(&udev->commands, &cmd_id, tcmu_cmd, XA_LIMIT(1, 0xffff),
 		     GFP_NOWAIT) < 0) {
-		target_err("tcmu: Could not allocate cmd id.\n");
+		target_err("Could not allocate cmd id.\n");
 
 		tcmu_cmd_free_data(tcmu_cmd, tcmu_cmd->dbi_cnt);
 		*scsi_err = TCM_OUT_OF_RESOURCES;
@@ -1346,7 +1346,7 @@ static bool tcmu_handle_completion(struct tcmu_cmd *cmd,
 	tcmu_cmd_reset_dbi_cur(cmd);
 
 	if (entry->hdr.uflags & TCMU_UFLAG_UNKNOWN_OP) {
-		target_warn("TCMU: Userspace set UNKNOWN_OP flag on se_cmd %p\n", cmd->se_cmd);
+		target_warn("Userspace set UNKNOWN_OP flag on se_cmd %p\n", cmd->se_cmd);
 		entry->rsp.scsi_status = SAM_STAT_CHECK_CONDITION;
 		goto done;
 	}
@@ -1374,7 +1374,7 @@ static bool tcmu_handle_completion(struct tcmu_cmd *cmd,
 	} else if (se_cmd->data_direction == DMA_TO_DEVICE) {
 		/* TODO: */
 	} else if (se_cmd->data_direction != DMA_NONE) {
-		target_warn("TCMU: data direction was %d!\n", se_cmd->data_direction);
+		target_warn("data direction was %d!\n", se_cmd->data_direction);
 	}
 
 done:
@@ -2579,7 +2579,7 @@ static ssize_t tcmu_set_configfs_dev_params(struct se_device *dev,
 				ret = -EINVAL;
 				break;
 			}
-			target_debug("TCMU: Referencing Path: %s\n", udev->dev_config);
+			target_debug("Referencing Path: %s\n", udev->dev_config);
 			break;
 		case Opt_dev_size:
 			ret = match_u64(&args[0], &udev->dev_size);

@@ -154,7 +154,7 @@ struct iscsi_tiqn *iscsit_add_tiqn(unsigned char *buf)
 	spin_unlock(&tiqn_lock);
 	idr_preload_end();
 
-	target_debug("CORE[0] - Added iSCSI Target IQN: %s\n", tiqn->tiqn);
+	target_debug("[0]: Added iSCSI Target IQN: %s\n", tiqn->tiqn);
 
 	return tiqn;
 
@@ -194,7 +194,7 @@ void iscsit_del_tiqn(struct iscsi_tiqn *tiqn)
 	idr_remove(&tiqn_idr, tiqn->tiqn_index);
 	spin_unlock(&tiqn_lock);
 
-	target_debug("CORE[0] - Deleted iSCSI Target IQN: %s\n", tiqn->tiqn);
+	target_debug("[0]: Deleted iSCSI Target IQN: %s\n", tiqn->tiqn);
 	kfree(tiqn);
 }
 
@@ -392,7 +392,7 @@ struct iscsi_np *iscsit_add_np(
 	list_add_tail(&np->np_list, &g_np_list);
 	mutex_unlock(&np_lock);
 
-	target_debug("CORE[0] - Added Network Portal: %pISpc on %s\n", &np->np_sockaddr,
+	target_debug("[0]: Added Network Portal: %pISpc on %s\n", &np->np_sockaddr,
 		     np->np_transport->name);
 
 	return np;
@@ -463,7 +463,7 @@ int iscsit_del_np(struct iscsi_np *np)
 	list_del(&np->np_list);
 	mutex_unlock(&np_lock);
 
-	target_debug("CORE[0] - Removed Network Portal: %pISpc on %s\n", &np->np_sockaddr,
+	target_debug("[0]: Removed Network Portal: %pISpc on %s\n", &np->np_sockaddr,
 		     np->np_transport->name);
 
 	iscsit_put_transport(np->np_transport);

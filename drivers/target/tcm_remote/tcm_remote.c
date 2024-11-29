@@ -73,7 +73,7 @@ static int tcm_remote_port_link(
 	struct se_portal_group *se_tpg,
 	struct se_lun *lun)
 {
-	target_debug("TCM_Remote_ConfigFS: Port Link LUN %lld Successful\n", lun->unpacked_lun);
+	target_debug("configfs: Port Link LUN %lld Successful\n", lun->unpacked_lun);
 	return 0;
 }
 
@@ -81,7 +81,7 @@ static void tcm_remote_port_unlink(
 	struct se_portal_group *se_tpg,
 	struct se_lun *lun)
 {
-	target_debug("TCM_Remote_ConfigFS: Port Unlink LUN %lld Successful\n", lun->unpacked_lun);
+	target_debug("configfs: Port Unlink LUN %lld Successful\n", lun->unpacked_lun);
 }
 
 static struct se_portal_group *tcm_remote_make_tpg(
@@ -116,7 +116,7 @@ static struct se_portal_group *tcm_remote_make_tpg(
 	if (ret < 0)
 		return ERR_PTR(-ENOMEM);
 
-	target_debug("TCM_Remote_ConfigFS: Allocated Emulated %s Target Port %s,t,0x%04lx\n",
+	target_debug("configfs: Allocated Emulated %s Target Port %s,t,0x%04lx\n",
 		     tcm_remote_dump_proto_id(remote_hba),
 		     config_item_name(&wwn->wwn_group.cg_item), tpgt);
 	return &remote_tpg->remote_se_tpg;
@@ -141,7 +141,7 @@ static void tcm_remote_drop_tpg(struct se_portal_group *se_tpg)
 	remote_tpg->remote_hba = NULL;
 	remote_tpg->remote_tpgt = 0;
 
-	target_debug("TCM_Remote_ConfigFS: Deallocated Emulated %s Target Port %s,t,0x%04x\n",
+	target_debug("configfs: Deallocated Emulated %s Target Port %s,t,0x%04x\n",
 		     tcm_remote_dump_proto_id(remote_hba),
 		     config_item_name(&wwn->wwn_group.cg_item), tpgt);
 }
@@ -197,7 +197,7 @@ check_len:
 	}
 	snprintf(&remote_hba->remote_wwn_address[0], TL_WWN_ADDR_LEN, "%s", &name[off]);
 
-	target_debug("TCM_Remote_ConfigFS: Allocated emulated Target %s Address: %s\n",
+	target_debug("configfs: Allocated emulated Target %s Address: %s\n",
 		     tcm_remote_dump_proto_id(remote_hba), name);
 	return &remote_hba->remote_hba_wwn;
 out:
@@ -210,7 +210,7 @@ static void tcm_remote_drop_wwn(struct se_wwn *wwn)
 	struct tcm_remote_hba *remote_hba = container_of(wwn,
 				struct tcm_remote_hba, remote_hba_wwn);
 
-	target_debug("TCM_Remote_ConfigFS: Deallocating emulated Target %s Address: %s\n",
+	target_debug("configfs: Deallocating emulated Target %s Address: %s\n",
 		     tcm_remote_dump_proto_id(remote_hba), remote_hba->remote_wwn_address);
 	kfree(remote_hba);
 }

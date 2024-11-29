@@ -114,8 +114,7 @@ static int pscsi_pmode_enable_hba(struct se_hba *hba, unsigned long mode_flag)
 	 */
 	sh = scsi_host_lookup(phv->phv_host_id);
 	if (!sh) {
-		target_err("pSCSI: Unable to locate SCSI Host for phv_host_id: %d\n",
-			   phv->phv_host_id);
+		target_err("Unable to locate SCSI Host for phv_host_id: %d\n", phv->phv_host_id);
 		return -EINVAL;
 	}
 
@@ -334,7 +333,7 @@ static struct se_device *pscsi_alloc_device(struct se_hba *hba,
 		return NULL;
 	}
 
-	target_debug("PSCSI: Allocated pdv: %p for %s\n", pdv, name);
+	target_debug("Allocated pdv: %p for %s\n", pdv, name);
 	return &pdv->dev;
 }
 
@@ -364,7 +363,7 @@ static int pscsi_create_type_disk(struct se_device *dev, struct scsi_device *sd)
 	bdev_file = bdev_file_open_by_path(dev->udev_path,
 				BLK_OPEN_WRITE | BLK_OPEN_READ, pdv, NULL);
 	if (IS_ERR(bdev_file)) {
-		target_err("pSCSI: bdev_file_open_by_path() failed\n");
+		target_err("bdev_file_open_by_path() failed\n");
 		scsi_device_put(sd);
 		return PTR_ERR(bdev_file);
 	}
@@ -435,7 +434,7 @@ static int pscsi_configure_device(struct se_device *dev)
 	 */
 	if (!sh) {
 		if (phv->phv_mode == PHV_LLD_SCSI_HOST_NO) {
-			target_err("pSCSI: Unable to locate struct Scsi_Host for PHV_LLD_SCSI_HOST_NO\n");
+			target_err("Unable to locate struct Scsi_Host for PHV_LLD_SCSI_HOST_NO\n");
 			return -ENODEV;
 		}
 		/*
@@ -443,7 +442,7 @@ static int pscsi_configure_device(struct se_device *dev)
 		 * reference, we enforce that udev_path has been set
 		 */
 		if (!(dev->dev_flags & DF_USING_UDEV_PATH)) {
-			target_err("pSCSI: udev_path attribute has not been set before ENABLE=1\n");
+			target_err("udev_path attribute has not been set before ENABLE=1\n");
 			return -EINVAL;
 		}
 		/*
@@ -453,7 +452,7 @@ static int pscsi_configure_device(struct se_device *dev)
 		 */
 		if (!(pdv->pdv_flags & PDF_HAS_VIRT_HOST_ID)) {
 			if (hba->dev_count) {
-				target_err("pSCSI: Unable to set hba_mode with active devices\n");
+				target_err("Unable to set hba_mode with active devices\n");
 				return -EEXIST;
 			}
 
@@ -466,15 +465,14 @@ static int pscsi_configure_device(struct se_device *dev)
 		} else {
 			sh = scsi_host_lookup(pdv->pdv_host_id);
 			if (!sh) {
-				target_err("pSCSI: Unable to locate pdv_host_id: %d\n",
-					   pdv->pdv_host_id);
+				target_err("Unable to locate pdv_host_id: %d\n", pdv->pdv_host_id);
 				return -EINVAL;
 			}
 			pdv->pdv_lld_host = sh;
 		}
 	} else {
 		if (phv->phv_mode == PHV_VIRTUAL_HOST_ID) {
-			target_err("pSCSI: PHV_VIRTUAL_HOST_ID set while struct Scsi_Host exists\n");
+			target_err("PHV_VIRTUAL_HOST_ID set while struct Scsi_Host exists\n");
 			return -EEXIST;
 		}
 	}
@@ -514,7 +512,7 @@ static int pscsi_configure_device(struct se_device *dev)
 	}
 	spin_unlock_irq(sh->host_lock);
 
-	target_err("pSCSI: Unable to locate %d:%d:%d:%d\n", sh->host_no, pdv->pdv_channel_id,
+	target_err("Unable to locate %d:%d:%d:%d\n", sh->host_no, pdv->pdv_channel_id,
 		   pdv->pdv_target_id, pdv->pdv_lun_id);
 
 	if (phv->phv_mode == PHV_VIRTUAL_HOST_ID)
@@ -820,14 +818,14 @@ pscsi_map_sg(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 
 	BUG_ON(!cmd->data_length);
 
-	target_debug("PSCSI: nr_pages: %d\n", nr_pages);
+	target_debug("nr_pages: %d\n", nr_pages);
 
 	for_each_sg(sgl, sg, sgl_nents, i) {
 		page = sg_page(sg);
 		off = sg->offset;
 		len = sg->length;
 
-		target_debug("PSCSI: i: %d page: %p len: %d off: %d\n", i, page, len, off);
+		target_debug("i: %d page: %p len: %d off: %d\n", i, page, len, off);
 
 		/*
 		 * We only have one page of data in each sg element,
@@ -850,24 +848,23 @@ new_bio:
 					 rw ? REQ_OP_WRITE : REQ_OP_READ);
 				bio->bi_end_io = pscsi_bi_endio;
 
-				target_debug("PSCSI: Allocated bio: %p, dir: %s nr_vecs: %d\n", bio,
+				target_debug("Allocated bio: %p, dir: %s nr_vecs: %d\n", bio,
 					     (rw) ? "rw" : "r", nr_vecs);
 			}
 
-			target_debug("PSCSI: Calling bio_add_pc_page() i: %d bio: %p page: %p len: %d off: %d\n",
+			target_debug("Calling bio_add_pc_page() i: %d bio: %p page: %p len: %d off: %d\n",
 				     i, bio, page, len, off);
 
 			rc = bio_add_pc_page(pdv->pdv_sd->request_queue,
 					bio, page, bytes, off);
-			target_debug("PSCSI: bio->bi_vcnt: %d nr_vecs: %d\n", bio_segments(bio),
-				     nr_vecs);
+			target_debug("bio->bi_vcnt: %d nr_vecs: %d\n", bio_segments(bio), nr_vecs);
 			if (rc != bytes) {
-				target_debug("PSCSI: Reached bio->bi_vcnt max: %d i: %d bio: %p, allocating another bio\n",
+				target_debug("Reached bio->bi_vcnt max: %d i: %d bio: %p, allocating another bio\n",
 					     bio->bi_vcnt, i, bio);
 
 				rc = blk_rq_append_bio(req, bio);
 				if (rc) {
-					target_err("pSCSI: failed to append bio\n");
+					target_err("failed to append bio\n");
 					goto fail;
 				}
 
@@ -881,7 +878,7 @@ new_bio:
 	if (bio) {
 		rc = blk_rq_append_bio(req, bio);
 		if (rc) {
-			target_err("pSCSI: failed to append bio\n");
+			target_err("failed to append bio\n");
 			goto fail;
 		}
 	}
