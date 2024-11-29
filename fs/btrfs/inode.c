@@ -1373,6 +1373,17 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 	alloc_hint = btrfs_get_extent_allocation_hint(inode, start, num_bytes);
 
 	/*
+	 * We're not doing compressed IO, don't unlock the first page
+	 * (which the caller expects to stay locked), don't clear any
+	 * dirty bits and don't set any writeback bits
+	 *
+	 * Do set the Ordered (Private2) bit so we know this page was
+	 * properly setup for writepage.
+	 */
+	page_ops = (keep_locked ? 0 : PAGE_UNLOCK);
+	page_ops |= PAGE_SET_ORDERED;
+
+	/*
 	 * Relocation relies on the relocated extents to have exactly the same
 	 * size as the original extents. Normally writeback for relocation data
 	 * extents follows a NOCOW path because relocation preallocates the
@@ -1477,20 +1488,13 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 		btrfs_dec_block_group_reservations(fs_info, ins.objectid);
 
 		/*
-		 * We're not doing compressed IO, don't unlock the first page
-		 * (which the caller expects to stay locked), don't clear any
-		 * dirty bits and don't set any writeback bits
+		 * There used to be an extent_clear_unlock_delalloc() call.
+		 * But that will clear EXTENT_DELALLOC flag even if we error out
+		 * later, with the page still marked dirty.
 		 *
-		 * Do set the Ordered (Private2) bit so we know this page was
-		 * properly setup for writepage.
+		 * So here we intentionally do not unlock this range.
+		 * But only unlock the full range when everything go OK.
 		 */
-		page_ops = (keep_locked ? 0 : PAGE_UNLOCK);
-		page_ops |= PAGE_SET_ORDERED;
-
-		extent_clear_unlock_delalloc(inode, start, start + cur_alloc_size - 1,
-					     locked_folio, &cached,
-					     EXTENT_LOCKED | EXTENT_DELALLOC,
-					     page_ops);
 		if (num_bytes < cur_alloc_size)
 			num_bytes = 0;
 		else
@@ -1507,6 +1511,10 @@ static noinline int cow_file_range(struct btrfs_inode *inode,
 		if (ret)
 			goto out_unlock;
 	}
+	extent_clear_unlock_delalloc(inode, orig_start, end,
+				     locked_folio, &cached,
+				     EXTENT_LOCKED | EXTENT_DELALLOC,
+				     page_ops);
 done:
 	if (done_offset)
 		*done_offset = end;
@@ -1525,37 +1533,41 @@ out_unlock:
 	 * `- orig_start  `- start  `- start + cur_alloc_size  `- end
 	 *
 	 * We process each region below.
+	 *
+	 *
+	 * For the EXTENT_* flags, we should only unlock them and do not touch
+	 * the EXTENT_DELALLOC* flags.
+	 *
+	 * All pages in above ranges (1)(2)(3) are not submitted thus they are
+	 * still dirty and may be rewritten back later.
+	 * Thus they should still be treated as EXTENT_DEALLOC, or no new
+	 * delalloc range will be run.
+	 * In that case we will fall back to the to-be-deprecated COW fixup
+	 * path.
+	 *
+	 * The same applies to the reserved bytes and qgroup space.
 	 */
-
-	clear_bits = EXTENT_LOCKED | EXTENT_DELALLOC | EXTENT_DELALLOC_NEW |
-		EXTENT_DEFRAG | EXTENT_CLEAR_META_RESV;
-	page_ops = PAGE_UNLOCK | PAGE_START_WRITEBACK | PAGE_END_WRITEBACK;
+	clear_bits = EXTENT_LOCKED;
+	page_ops = PAGE_UNLOCK;
 
 	/*
 	 * For the range (1). We have already instantiated the ordered extents
-	 * for this region. They are cleaned up by
+	 * for this region. Ordered extents are cleaned up by
 	 * btrfs_cleanup_ordered_extents() in e.g,
-	 * btrfs_run_delalloc_range(). EXTENT_LOCKED | EXTENT_DELALLOC are
-	 * already cleared in the above loop. And, EXTENT_DELALLOC_NEW |
-	 * EXTENT_DEFRAG | EXTENT_CLEAR_META_RESV are handled by the cleanup
-	 * function.
-	 *
-	 * However, in case of @keep_locked, we still need to unlock the pages
-	 * (except @locked_folio) to ensure all the pages are unlocked.
+	 * btrfs_run_delalloc_range(), which will also free the reserved extents.
 	 */
-	if (keep_locked && orig_start < start) {
+	if (orig_start < start) {
+		unlock_extent(&inode->io_tree, orig_start, start - 1, NULL);
 		if (!locked_folio)
 			mapping_set_error(inode->vfs_inode.i_mapping, ret);
-		extent_clear_unlock_delalloc(inode, orig_start, start - 1,
-					     locked_folio, NULL, 0, page_ops);
+		/*
+		 * However, in case of @keep_locked, we still need to unlock the pages
+		 * (except @locked_folio) to ensure all the pages are unlocked.
+		 */
+		if (keep_locked)
+			extent_clear_unlock_delalloc(inode, orig_start, start - 1,
+						     locked_folio, NULL, 0, page_ops);
 	}
-
-	/*
-	 * At this point we're unlocked, we want to make sure we're only
-	 * clearing these flags under the extent lock, so lock the rest of the
-	 * range and clear everything up.
-	 */
-	lock_extent(&inode->io_tree, start, end, NULL);
 
 	/*
 	 * For the range (2). If we reserved an extent for our delalloc range
@@ -1567,13 +1579,11 @@ out_unlock:
 	 * to decrement again the data space_info's bytes_may_use counter,
 	 * therefore we do not pass it the flag EXTENT_CLEAR_DATA_RESV.
 	 */
-	if (cur_alloc_size) {
+	if (cur_alloc_size)
 		extent_clear_unlock_delalloc(inode, start,
 					     start + cur_alloc_size - 1,
 					     locked_folio, &cached, clear_bits,
 					     page_ops);
-		btrfs_qgroup_free_data(inode, NULL, start, cur_alloc_size, NULL);
-	}
 
 	/*
 	 * For the range (3). We never touched the region. In addition to the
@@ -1581,14 +1591,10 @@ out_unlock:
 	 * space_info's bytes_may_use counter, reserved in
 	 * btrfs_check_data_free_space().
 	 */
-	if (start + cur_alloc_size < end) {
-		clear_bits |= EXTENT_CLEAR_DATA_RESV;
+	if (start + cur_alloc_size < end)
 		extent_clear_unlock_delalloc(inode, start + cur_alloc_size,
 					     end, locked_folio,
 					     &cached, clear_bits, page_ops);
-		btrfs_qgroup_free_data(inode, NULL, start + cur_alloc_size,
-				       end - start - cur_alloc_size + 1, NULL);
-	}
 	return ret;
 }
 
