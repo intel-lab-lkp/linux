@@ -375,10 +375,12 @@ static sense_reason_t compare_and_write_post(struct se_cmd *cmd, bool success,
  * @miscmp_off and return TCM_MISCOMPARE_VERIFY.
  */
 static sense_reason_t
-compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
-			 struct scatterlist *cmp_sgl, unsigned int cmp_nents,
-			 unsigned int cmp_len, unsigned int *miscmp_off)
+compare_and_write_do_cmp(struct se_cmd *cmd, unsigned int cmp_len, unsigned int *miscmp_off)
 {
+	struct scatterlist *read_sgl = cmd->t_bidi_data_sg;
+	struct scatterlist *cmp_sgl = cmd->t_data_sg;
+	unsigned int read_nents = cmd->t_bidi_data_nents;
+	unsigned int cmp_nents = cmd->t_data_nents;
 	unsigned char *buf = NULL;
 	struct scatterlist *sg;
 	sense_reason_t ret;
@@ -394,7 +396,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 
 	rc = sg_copy_to_buffer(cmp_sgl, cmp_nents, buf, cmp_len);
 	if (!rc) {
-		target_err("sg_copy_to_buffer() failed for compare_and_write\n");
+		target_cmd_err(cmd, "sg_copy_to_buffer() failed for compare_and_write\n");
 		ret = TCM_OUT_OF_RESOURCES;
 		goto out;
 	}
@@ -413,7 +415,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 			for (i = 0; i < len && addr[i] == buf[offset + i]; i++)
 				;
 			*miscmp_off = offset + i;
-			target_warn("Detected MISCOMPARE at offset %u\n", *miscmp_off);
+			target_cmd_warn(cmd, "Detected MISCOMPARE at offset %u\n", *miscmp_off);
 			ret = TCM_MISCOMPARE_VERIFY;
 		}
 		kunmap_atomic(addr);
@@ -425,7 +427,7 @@ compare_and_write_do_cmp(struct scatterlist *read_sgl, unsigned int read_nents,
 		if (!cmp_len)
 			break;
 	}
-	target_debug("COMPARE AND WRITE read data matches compare data\n");
+	target_cmd_debug(cmd, "COMPARE AND WRITE read data matches compare data\n");
 out:
 	kfree(buf);
 	return ret;
@@ -479,12 +481,7 @@ static sense_reason_t compare_and_write_callback(struct se_cmd *cmd, bool succes
 		goto out;
 	}
 
-	ret = compare_and_write_do_cmp(cmd->t_bidi_data_sg,
-				       cmd->t_bidi_data_nents,
-				       cmd->t_data_sg,
-				       cmd->t_data_nents,
-				       compare_len,
-				       &miscmp_off);
+	ret = compare_and_write_do_cmp(cmd, compare_len, &miscmp_off);
 	if (ret == TCM_MISCOMPARE_VERIFY) {
 		/*
 		 * SBC-4 r15: 5.3 COMPARE AND WRITE command
