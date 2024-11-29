@@ -315,6 +315,7 @@ target_emulate_set_target_port_groups(struct se_cmd *cmd)
 
 	while (len < cmd->data_length) {
 		bool found = false;
+
 		alua_access_state = (ptr[0] & 0x0f);
 		/*
 		 * Check the received ALUA access state, and determine if
@@ -470,6 +471,7 @@ static inline sense_reason_t core_alua_state_lba_dependent(
 
 			if (segment_mult) {
 				u64 tmp = lba;
+
 				start_lba = do_div(tmp, segment_size * segment_mult);
 
 				last_lba = first_lba + segment_size - 1;
@@ -496,7 +498,7 @@ static inline sense_reason_t core_alua_state_lba_dependent(
 				    lba_map_mem_list) {
 			if (map_mem->lba_map_mem_alua_pg_id != tg_pt_gp_id)
 				continue;
-			switch(map_mem->lba_map_mem_alua_state) {
+			switch (map_mem->lba_map_mem_alua_state) {
 			case ALUA_ACCESS_STATE_STANDBY:
 				spin_unlock(&dev->t10_alua.lba_map_lock);
 				return TCM_ALUA_TG_PT_STANDBY;
@@ -1144,7 +1146,7 @@ int core_alua_do_port_transition(
 	spin_unlock(&lu_gp->lu_gp_lock);
 
 	if (!rc) {
-		target_debug("Successfully processed LU Group: %s all ALUA TG PT Group IDs: %hu %s transition to primary state: %s\n",
+		target_debug("Successfully processed LU Group: %s all ALUA TG PT Group IDs: %u %s transition to primary state: %s\n",
 			     config_item_name(&lu_gp->lu_gp_group.cg_item), l_tg_pt_gp->tg_pt_gp_id,
 			     (explicit) ? "explicit" : "implicit", core_alua_dump_state(new_state));
 	}
@@ -1229,7 +1231,7 @@ static int core_alua_set_tg_pt_secondary_state(
 			ALUA_STATUS_ALTERED_BY_EXPLICIT_STPG :
 			ALUA_STATUS_ALTERED_BY_IMPLICIT_ALUA;
 
-	target_debug("Successful %s ALUA transition TG PT Group: %s ID: %hu to secondary access state: %s\n",
+	target_debug("Successful %s ALUA transition TG PT Group: %s ID: %u to secondary access state: %s\n",
 		     (explicit) ? "explicit" : "implicit",
 		     config_item_name(&tg_pt_gp->tg_pt_gp_group.cg_item), tg_pt_gp->tg_pt_gp_id,
 		     (offline) ? "OFFLINE" : "ONLINE");
@@ -1404,7 +1406,7 @@ again:
 			if (!lu_gp_id)
 				goto again;
 
-			target_warn("ALUA Logical Unit Group ID: %hu already exists, ignoring request\n",
+			target_warn("ALUA Logical Unit Group ID: %u already exists, ignoring request\n",
 				    lu_gp_id);
 			spin_unlock(&lu_gps_lock);
 			return -EINVAL;
@@ -1669,7 +1671,7 @@ again:
 			if (!tg_pt_gp_id)
 				goto again;
 
-			target_err("ALUA Target Port Group ID: %hu already exists, ignoring request\n",
+			target_err("ALUA Target Port Group ID: %u already exists, ignoring request\n",
 				   tg_pt_gp_id);
 			spin_unlock(&dev->t10_alua.tg_pt_gps_lock);
 			return -EINVAL;
@@ -1924,7 +1926,7 @@ ssize_t core_alua_store_tg_pt_gp_info(
 		 * with the default_tg_pt_gp.
 		 */
 		if (!tg_pt_gp_new) {
-			target_debug("Target_Core_ConfigFS: Moving %s/tpgt_%hu/%s from ALUA Target Port Group: alua/%s, ID: %hu back to default_tg_pt_gp\n",
+			target_debug("Target_Core_ConfigFS: Moving %s/tpgt_%u/%s from ALUA Target Port Group: alua/%s, ID: %u back to default_tg_pt_gp\n",
 				     tpg->se_tpg_tfo->tpg_get_wwn(tpg),
 				     tpg->se_tpg_tfo->tpg_get_tag(tpg),
 				     config_item_name(&lun->lun_group.cg_item),
@@ -1942,7 +1944,7 @@ ssize_t core_alua_store_tg_pt_gp_info(
 
 	target_swap_tg_pt_gp(lun, tg_pt_gp, tg_pt_gp_new);
 	spin_unlock(&lun->lun_tg_pt_gp_lock);
-	target_debug("Target_Core_ConfigFS: %s %s/tpgt_%hu/%s to ALUA Target Port Group: alua/%s, ID: %hu\n",
+	target_debug("Target_Core_ConfigFS: %s %s/tpgt_%u/%s to ALUA Target Port Group: alua/%s, ID: %u\n",
 		     (move) ? "Moving" : "Adding", tpg->se_tpg_tfo->tpg_get_wwn(tpg),
 		     tpg->se_tpg_tfo->tpg_get_tag(tpg), config_item_name(&lun->lun_group.cg_item),
 		     config_item_name(&tg_pt_gp_new->tg_pt_gp_group.cg_item),

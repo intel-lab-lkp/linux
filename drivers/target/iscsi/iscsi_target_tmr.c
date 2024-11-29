@@ -39,7 +39,7 @@ u8 iscsit_tmr_abort_task(
 
 	ref_cmd = iscsit_find_cmd_from_itt(conn, hdr->rtt);
 	if (!ref_cmd) {
-		target_err("Unable to locate RefTaskTag: 0x%08x on CID: %hu.\n", hdr->rtt,
+		target_err("Unable to locate RefTaskTag: 0x%08x on CID: %u.\n", hdr->rtt,
 			   conn->cid);
 		return (iscsi_sna_gte(be32_to_cpu(hdr->refcmdsn), conn->sess->exp_cmd_sn) &&
 			iscsi_sna_lte(be32_to_cpu(hdr->refcmdsn), (u32) atomic_read(&conn->sess->max_cmd_sn))) ?
@@ -111,7 +111,7 @@ u8 iscsit_tmr_task_reassign(
 	struct iscsi_tm *hdr = (struct iscsi_tm *) buf;
 	u64 ret, ref_lun;
 
-	target_debug("Got TASK_REASSIGN TMR ITT: 0x%08x, RefTaskTag: 0x%08x, ExpDataSN: 0x%08x, CID: %hu\n",
+	target_debug("Got TASK_REASSIGN TMR ITT: 0x%08x, RefTaskTag: 0x%08x, ExpDataSN: 0x%08x, CID: %u\n",
 		     hdr->itt, hdr->rtt, hdr->exp_datasn, conn->cid);
 
 	if (conn->sess->sess_ops->ErrorRecoveryLevel != 2) {
@@ -121,7 +121,7 @@ u8 iscsit_tmr_task_reassign(
 
 	ret = iscsit_find_cmd_for_recovery(conn->sess, &ref_cmd, &cr, hdr->rtt);
 	if (ret == -2) {
-		target_err("Command ITT: 0x%08x is still alligent to CID: %hu\n",
+		target_err("Command ITT: 0x%08x is still alligent to CID: %u\n",
 			   ref_cmd->init_task_tag, cr->cid);
 		return ISCSI_TMF_RSP_TASK_ALLEGIANT;
 	} else if (ret == -1) {
@@ -175,7 +175,7 @@ static void iscsit_task_reassign_remove_cmd(
 	ret = iscsit_remove_cmd_from_connection_recovery(cmd, sess);
 	spin_unlock(&cr->conn_recovery_cmd_lock);
 	if (!ret) {
-		target_debug("iSCSI connection recovery successful for CID: %hu on SID: %u\n",
+		target_debug("iSCSI connection recovery successful for CID: %u on SID: %u\n",
 			     cr->cid, sess->sid);
 		iscsit_remove_active_connection_recovery_entry(cr, sess);
 	}
@@ -425,7 +425,7 @@ static int iscsit_task_reassign_complete(
 	if (ret != 0)
 		return ret;
 
-	target_debug("Completed connection reallegiance for Opcode: 0x%02x, ITT: 0x%08x to CID: %hu.\n",
+	target_debug("Completed connection reallegiance for Opcode: 0x%02x, ITT: 0x%08x to CID: %u.\n",
 		     cmd->iscsi_opcode, cmd->init_task_tag, conn->cid);
 
 	return 0;

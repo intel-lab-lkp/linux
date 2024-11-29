@@ -166,6 +166,7 @@ static struct target_fabric_configfs *target_core_get_fabric(
 	mutex_lock(&g_tf_lock);
 	list_for_each_entry(tf, &g_tf_list, tf_list) {
 		const char *cmp_name = tf->tf_ops->fabric_alias;
+
 		if (!cmp_name)
 			cmp_name = tf->tf_ops->fabric_name;
 		if (!strcmp(cmp_name, name)) {
@@ -1840,11 +1841,9 @@ static ssize_t target_pr_res_pr_all_tgt_pts_show(struct config_item *item,
 	if (!dev->dev_pr_res_holder) {
 		len = sprintf(page, "No SPC-3 Reservation holder\n");
 	} else if (dev->dev_pr_res_holder->pr_reg_all_tg_pt) {
-		len = sprintf(page, "SPC-3 Reservation: All Target"
-			" Ports registration\n");
+		len = sprintf(page, "SPC-3 Reservation: All Target Ports registration\n");
 	} else {
-		len = sprintf(page, "SPC-3 Reservation: Single"
-			" Target Port registration\n");
+		len = sprintf(page, "SPC-3 Reservation: Single Target Port registration\n");
 	}
 
 	spin_unlock(&dev->dev_reservation_lock);
@@ -2423,7 +2422,7 @@ static ssize_t target_dev_alua_lu_gp_store(struct config_item *item,
 		 * with NULL
 		 */
 		if (!lu_gp_new) {
-			target_debug("Target_Core_ConfigFS: Releasing %s/%s from ALUA LU Group: core/alua/lu_gps/%s, ID: %hu\n",
+			target_debug("Target_Core_ConfigFS: Releasing %s/%s from ALUA LU Group: core/alua/lu_gps/%s, ID: %u\n",
 				     config_item_name(&hba->hba_group.cg_item),
 				     config_item_name(&dev->dev_group.cg_item),
 				     config_item_name(&lu_gp->lu_gp_group.cg_item),
@@ -2446,7 +2445,7 @@ static ssize_t target_dev_alua_lu_gp_store(struct config_item *item,
 	__core_alua_attach_lu_gp_mem(lu_gp_mem, lu_gp_new);
 	spin_unlock(&lu_gp_mem->lu_gp_mem_lock);
 
-	target_debug("Target_Core_ConfigFS: %s %s/%s to ALUA LU Group: core/alua/lu_gps/%s, ID: %hu\n",
+	target_debug("Target_Core_ConfigFS: %s %s/%s to ALUA LU Group: core/alua/lu_gps/%s, ID: %u\n",
 		     (move) ? "Moving" : "Adding", config_item_name(&hba->hba_group.cg_item),
 		     config_item_name(&dev->dev_group.cg_item),
 		     config_item_name(&lu_gp_new->lu_gp_group.cg_item), lu_gp_new->lu_gp_id);
@@ -2692,7 +2691,7 @@ static ssize_t target_lu_gp_lu_gp_id_store(struct config_item *item,
 	if (ret < 0)
 		return -EINVAL;
 
-	target_debug("Target_Core_ConfigFS: Set ALUA Logical Unit Group: core/alua/lu_gps/%s to ID: %hu\n",
+	target_debug("Target_Core_ConfigFS: Set ALUA Logical Unit Group: core/alua/lu_gps/%s to ID: %u\n",
 		     config_item_name(&alua_lu_gp_cg->cg_item), lu_gp->lu_gp_id);
 
 	return count;
@@ -2792,7 +2791,7 @@ static void target_core_alua_drop_lu_gp(
 	struct t10_alua_lu_gp *lu_gp = container_of(to_config_group(item),
 			struct t10_alua_lu_gp, lu_gp_group);
 
-	target_debug("Target_Core_ConfigFS: Releasing ALUA Logical Unit Group: core/alua/lu_gps/%s, ID: %hu\n",
+	target_debug("Target_Core_ConfigFS: Releasing ALUA Logical Unit Group: core/alua/lu_gps/%s, ID: %u\n",
 		     config_item_name(item), lu_gp->lu_gp_id);
 	/*
 	 * core_alua_free_lu_gp() is called from target_core_alua_lu_gp_ops->release()
@@ -2873,6 +2872,7 @@ static ssize_t target_tg_pt_gp_alua_access_status_show(struct config_item *item,
 		char *page)
 {
 	struct t10_alua_tg_pt_gp *tg_pt_gp = to_tg_pt_gp(item);
+
 	return sprintf(page, "%s\n",
 		core_alua_dump_status(tg_pt_gp->tg_pt_gp_alua_access_status));
 }
@@ -3077,7 +3077,7 @@ static ssize_t target_tg_pt_gp_tg_pt_gp_id_store(struct config_item *item,
 	if (ret < 0)
 		return -EINVAL;
 
-	target_debug("Target_Core_ConfigFS: Set ALUA Target Port Group: core/alua/tg_pt_gps/%s to ID: %hu\n",
+	target_debug("Target_Core_ConfigFS: Set ALUA Target Port Group: core/alua/tg_pt_gps/%s to ID: %u\n",
 		     config_item_name(&alua_tg_pt_gp_cg->cg_item), tg_pt_gp->tg_pt_gp_id);
 
 	return count;
@@ -3209,7 +3209,7 @@ static void target_core_alua_drop_tg_pt_gp(
 	struct t10_alua_tg_pt_gp *tg_pt_gp = container_of(to_config_group(item),
 			struct t10_alua_tg_pt_gp, tg_pt_gp_group);
 
-	target_debug("Target_Core_ConfigFS: Releasing ALUA Target Port Group: alua/tg_pt_gps/%s, ID: %hu\n",
+	target_debug("Target_Core_ConfigFS: Releasing ALUA Target Port Group: alua/tg_pt_gps/%s, ID: %u\n",
 		     config_item_name(item), tg_pt_gp->tg_pt_gp_id);
 	/*
 	 * core_alua_free_tg_pt_gp() is called from target_core_alua_tg_pt_gp_ops->release()

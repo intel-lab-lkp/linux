@@ -214,7 +214,7 @@ static ssize_t target_stat_lu_indx_show(struct config_item *item, char *page)
 static ssize_t target_stat_lu_lun_show(struct config_item *item, char *page)
 {
 	/* FIXME: scsiLuDefaultLun */
-	return snprintf(page, PAGE_SIZE, "%llu\n", (unsigned long long)0);
+	return snprintf(page, PAGE_SIZE, "%llu\n", 0ULL);
 }
 
 static ssize_t target_stat_lu_lu_name_show(struct config_item *item, char *page)

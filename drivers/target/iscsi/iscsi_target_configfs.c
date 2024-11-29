@@ -210,7 +210,7 @@ static struct se_tpg_np *lio_target_call_addnptotpg(
 	if (ret < 0)
 		return ERR_PTR(-EINVAL);
 
-	target_debug("LIO_Target_ConfigFS: REGISTER -> %s TPGT: %hu PORTAL: %s\n",
+	target_debug("LIO_Target_ConfigFS: REGISTER -> %s TPGT: %u PORTAL: %s\n",
 		     config_item_name(&se_tpg->se_tpg_wwn->wwn_group.cg_item), tpg->tpgt, name);
 	/*
 	 * Assume ISCSI_TCP by default.  Other network portals for other
@@ -252,7 +252,7 @@ static void lio_target_call_delnpfromtpg(
 		return;
 
 	se_tpg = &tpg->tpg_se_tpg;
-	target_debug("LIO_Target_ConfigFS: DEREGISTER -> %s TPGT: %hu PORTAL: %pISpc\n",
+	target_debug("LIO_Target_ConfigFS: DEREGISTER -> %s TPGT: %u PORTAL: %pISpc\n",
 		     config_item_name(&se_tpg->se_tpg_wwn->wwn_group.cg_item), tpg->tpgt,
 		     &tpg_np->tpg_np->np_sockaddr);
 

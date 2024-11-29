@@ -20,7 +20,7 @@ struct ft_transport_id {
 	__u8	__resvd1[7];
 	__u8	wwpn[8];
 	__u8	__resvd2[8];
-} __attribute__((__packed__));
+} __packed;
 
 /*
  * Session (remote port).

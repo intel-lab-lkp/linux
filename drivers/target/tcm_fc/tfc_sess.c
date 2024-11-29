@@ -231,6 +231,7 @@ static struct ft_sess *ft_sess_create(struct ft_tport *tport, u32 port_id,
 					     sess, ft_sess_alloc_cb);
 	if (IS_ERR(sess->se_sess)) {
 		int rc = PTR_ERR(sess->se_sess);
+
 		kfree(sess);
 		sess = ERR_PTR(rc);
 	}

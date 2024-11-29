@@ -332,6 +332,7 @@ static int iscsi_target_do_tx_login_io(struct iscsit_conn *conn, struct iscsi_lo
 	 */
 	if (login->login_complete) {
 		int rc = iscsit_start_kthreads(conn);
+
 		if (rc) {
 			iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 					    ISCSI_LOGIN_STATUS_NO_RESOURCES);
@@ -1220,7 +1221,7 @@ get_target:
 		goto out;
 	}
 	conn->tpg_np = tpg_np;
-	target_debug("Located Portal Group Object: %hu\n", conn->tpg->tpgt);
+	target_debug("Located Portal Group Object: %u\n", conn->tpg->tpgt);
 	/*
 	 * Setup crc32c modules from libcrypto
 	 */
@@ -1267,7 +1268,7 @@ get_target:
 	sess->se_sess->se_node_acl = core_tpg_check_initiator_node_acl(
 			&conn->tpg->tpg_se_tpg, i_buf);
 	if (!sess->se_sess->se_node_acl) {
-		target_err("iSCSI Initiator Node: %s is not authorized to access iSCSI target portal group: %hu.\n",
+		target_err("iSCSI Initiator Node: %s is not authorized to access iSCSI target portal group: %u.\n",
 			   i_buf, conn->tpg->tpgt);
 		iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_INITIATOR_ERR,
 				ISCSI_LOGIN_STATUS_TGT_FORBIDDEN);

@@ -237,7 +237,7 @@ static int rd_build_prot_space(struct rd_dev *rd_dev, int prot_length, int block
 	/*
 	 * prot_length=8byte dif data
 	 * tot sg needed = rd_page_count * (PGSZ/block_size) *
-	 * 		   (prot_length/block_size) + pad
+	 *		   (prot_length/block_size) + pad
 	 * PGSZ canceled each other.
 	 */
 	total_sg_needed = (rd_dev->rd_page_count * prot_length / block_size) + 1;
@@ -617,7 +617,7 @@ static int rd_init_prot(struct se_device *dev)
 {
 	struct rd_dev *rd_dev = RD_DEV(dev);
 
-        if (!dev->dev_attrib.pi_prot_type)
+	if (!dev->dev_attrib.pi_prot_type)
 		return 0;
 
 	return rd_build_prot_space(rd_dev, dev->prot_length,

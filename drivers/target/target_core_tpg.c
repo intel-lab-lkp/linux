@@ -207,7 +207,7 @@ static void target_add_node_acl(struct se_node_acl *acl)
 	list_add_tail(&acl->acl_list, &tpg->acl_node_list);
 	mutex_unlock(&tpg->acl_node_mutex);
 
-	target_debug("%s_TPG[%hu] - Added %s ACL with TCQ Depth: %d for %s Initiator Node: %s\n",
+	target_debug("%s_TPG[%u] - Added %s ACL with TCQ Depth: %d for %s Initiator Node: %s\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     acl->dynamic_node_acl ? "DYNAMIC" : "", acl->queue_depth,
 		     tpg->se_tpg_tfo->fabric_name, acl->initiatorname);
@@ -356,7 +356,7 @@ void core_tpg_del_initiator_node_acl(struct se_node_acl *acl)
 	core_tpg_wait_for_nacl_pr_ref(acl);
 	core_free_device_list_for_node(acl, tpg);
 
-	target_debug("%s_TPG[%hu] - Deleted ACL with TCQ Depth: %d for %s Initiator Node: %s\n",
+	target_debug("%s_TPG[%u] - Deleted ACL with TCQ Depth: %d for %s Initiator Node: %s\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     acl->queue_depth, tpg->se_tpg_tfo->fabric_name, acl->initiatorname);
 
@@ -438,7 +438,7 @@ static int target_tpg_register_rtpi(struct se_portal_group *se_tpg)
 	if (se_tpg->rtpi_manual) {
 		ret = xa_insert(&tpg_xa, se_tpg->tpg_rtpi, se_tpg, GFP_KERNEL);
 		if (ret) {
-			target_info("%s_TPG[%hu] - Can not set RTPI %#x, it is already busy",
+			target_info("%s_TPG[%u] - Can not set RTPI %#x, it is already busy",
 				    se_tpg->se_tpg_tfo->fabric_name,
 				    se_tpg->se_tpg_tfo->tpg_get_tag(se_tpg), se_tpg->tpg_rtpi);
 			return -EINVAL;

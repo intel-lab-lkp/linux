@@ -1079,8 +1079,7 @@ void transport_dump_vpd_proto_id(
 		sprintf(buf+len, "IEEE 1394\n");
 		break;
 	case 0x40:
-		sprintf(buf+len, "SCSI Remote Direct Memory Access"
-				" Protocol\n");
+		sprintf(buf + len, "SCSI Remote Direct Memory Access Protocol\n");
 		break;
 	case 0x50:
 		sprintf(buf+len, "Internet SCSI (iSCSI)\n");
@@ -1089,8 +1088,7 @@ void transport_dump_vpd_proto_id(
 		sprintf(buf+len, "SAS Serial SCSI Protocol\n");
 		break;
 	case 0x70:
-		sprintf(buf+len, "Automation/Drive Interface Transport"
-				" Protocol\n");
+		sprintf(buf + len, "Automation/Drive Interface Transport Protocol\n");
 		break;
 	case 0x80:
 		sprintf(buf+len, "AT Attachment Interface ATA/ATAPI\n");
@@ -1115,7 +1113,7 @@ transport_set_vpd_proto_id(struct t10_vpd *vpd, unsigned char *page_83)
 	 *
 	 * from spc3r23.pdf section 7.5.1
 	 */
-	 if (page_83[1] & 0x80) {
+	if (page_83[1] & 0x80) {
 		vpd->protocol_identifier = (page_83[0] & 0xf0);
 		vpd->protocol_identifier_set = 1;
 		transport_dump_vpd_proto_id(vpd, NULL, 0);
@@ -1259,8 +1257,8 @@ int transport_dump_vpd_ident(
 			&vpd->device_identifier[0]);
 		break;
 	default:
-		sprintf(buf, "T10 VPD Device Identifier encoding unsupported:"
-			" 0x%02x", vpd->device_identifier_code_set);
+		sprintf(buf, "T10 VPD Device Identifier encoding unsupported: 0x%02x",
+			vpd->device_identifier_code_set);
 		ret = -EINVAL;
 		break;
 	}
@@ -1341,6 +1339,7 @@ target_check_max_data_sg_nents(struct se_cmd *cmd, struct se_device *dev,
 			cmd->residual_count = (size - mtl);
 		} else if (cmd->se_cmd_flags & SCF_UNDERFLOW_BIT) {
 			u32 orig_dl = size + cmd->residual_count;
+
 			cmd->residual_count = (orig_dl - mtl);
 		} else {
 			cmd->se_cmd_flags |= SCF_UNDERFLOW_BIT;
@@ -1353,6 +1352,7 @@ target_check_max_data_sg_nents(struct se_cmd *cmd, struct se_device *dev,
 		 */
 		if (cmd->prot_length) {
 			u32 sectors = (mtl / dev->dev_attrib.block_size);
+
 			cmd->prot_length = dev->prot_length * sectors;
 		}
 	}

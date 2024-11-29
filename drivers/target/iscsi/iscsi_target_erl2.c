@@ -232,7 +232,7 @@ void iscsit_discard_cr_cmds_by_expstatsn(
 		}
 
 		dropped_count++;
-		target_debug("Dropping Acknowledged ITT: 0x%08x, StatSN: 0x%08x, CID: %hu.\n",
+		target_debug("Dropping Acknowledged ITT: 0x%08x, StatSN: 0x%08x, CID: %u.\n",
 			     cmd->init_task_tag, cmd->stat_sn, cr->cid);
 
 		iscsit_remove_cmd_from_connection_recovery(cmd, sess);
@@ -243,15 +243,15 @@ void iscsit_discard_cr_cmds_by_expstatsn(
 	}
 	spin_unlock(&cr->conn_recovery_cmd_lock);
 
-	target_debug("Dropped %u total acknowledged commands on CID: %hu less than old ExpStatSN: 0x%08x\n",
+	target_debug("Dropped %u total acknowledged commands on CID: %u less than old ExpStatSN: 0x%08x\n",
 		     dropped_count, cr->cid, exp_statsn);
 
 	if (!cr->cmd_count) {
-		target_debug("No commands to be reassigned for failed connection CID: %hu on SID: %u\n",
+		target_debug("No commands to be reassigned for failed connection CID: %u on SID: %u\n",
 			     cr->cid, sess->sid);
 		iscsit_remove_inactive_connection_recovery_entry(cr, sess);
 		iscsit_attach_active_connection_recovery_entry(sess, cr);
-		target_debug("iSCSI connection recovery successful for CID: %hu on SID: %u\n",
+		target_debug("iSCSI connection recovery successful for CID: %u on SID: %u\n",
 			     cr->cid, sess->sid);
 		iscsit_remove_active_connection_recovery_entry(cr, sess);
 	} else {
@@ -275,7 +275,7 @@ int iscsit_discard_unacknowledged_ooo_cmdsns_for_conn(struct iscsit_conn *conn)
 			continue;
 
 		dropped_count++;
-		target_debug("Dropping unacknowledged CmdSN: 0x%08x during connection recovery on CID: %hu\n",
+		target_debug("Dropping unacknowledged CmdSN: 0x%08x during connection recovery on CID: %u\n",
 			     ooo_cmdsn->cmdsn, conn->cid);
 		iscsit_remove_ooo_cmdsn(sess, ooo_cmdsn);
 	}
@@ -294,7 +294,7 @@ int iscsit_discard_unacknowledged_ooo_cmdsns_for_conn(struct iscsit_conn *conn)
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	target_debug("Dropped %u total unacknowledged commands on CID: %hu for ExpCmdSN: 0x%08x.\n",
+	target_debug("Dropped %u total unacknowledged commands on CID: %u for ExpCmdSN: 0x%08x.\n",
 		     dropped_count, conn->cid, sess->exp_cmd_sn);
 	return 0;
 }
@@ -333,7 +333,7 @@ int iscsit_prepare_cmds_for_reallegiance(struct iscsit_conn *conn)
 
 		if ((cmd->iscsi_opcode != ISCSI_OP_SCSI_CMD) &&
 		    (cmd->iscsi_opcode != ISCSI_OP_NOOP_OUT)) {
-			target_debug("Not performing reallegiance on Opcode: 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, CID: %hu\n",
+			target_debug("Not performing reallegiance on Opcode: 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, CID: %u\n",
 				     cmd->iscsi_opcode, cmd->init_task_tag, cmd->cmd_sn, conn->cid);
 
 			list_del_init(&cmd->i_conn_node);
@@ -364,7 +364,7 @@ int iscsit_prepare_cmds_for_reallegiance(struct iscsit_conn *conn)
 		}
 
 		cmd_count++;
-		target_debug("Preparing Opcode: 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, StatSN: 0x%08x, CID: %hu for reallegiance.\n",
+		target_debug("Preparing Opcode: 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, StatSN: 0x%08x, CID: %u for reallegiance.\n",
 			     cmd->iscsi_opcode, cmd->init_task_tag, cmd->cmd_sn, cmd->stat_sn,
 			     conn->cid);
 

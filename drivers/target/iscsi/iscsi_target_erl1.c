@@ -460,7 +460,7 @@ int iscsit_handle_status_snack(
 	if (!begrun) {
 		begrun = conn->exp_statsn;
 	} else if (conn->exp_statsn > begrun) {
-		target_err("Got Status SNACK Begrun: 0x%08x, RunLength: 0x%08x but already got ExpStatSN: 0x%08x on CID: %hu.\n",
+		target_err("Got Status SNACK Begrun: 0x%08x, RunLength: 0x%08x but already got ExpStatSN: 0x%08x on CID: %u.\n",
 			   begrun, runlength, conn->exp_statsn, conn->cid);
 		return 0;
 	}
@@ -1174,7 +1174,7 @@ void iscsit_start_dataout_timer(
 	if (cmd->dataout_timer_flags & ISCSI_TF_RUNNING)
 		return;
 
-	target_debug("Starting DataOUT timer for ITT: 0x%08x on CID: %hu.\n", cmd->init_task_tag,
+	target_debug("Starting DataOUT timer for ITT: 0x%08x on CID: %u.\n", cmd->init_task_tag,
 		     conn->cid);
 
 	cmd->dataout_timer_flags &= ~ISCSI_TF_STOP;

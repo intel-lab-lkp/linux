@@ -1312,7 +1312,7 @@ static int cxgbit_rx_login_pdu(struct cxgbit_sock *csk)
 	login_req = (struct iscsi_login_req *)login->req;
 	memcpy(login_req, pdu_cb->hdr, sizeof(*login_req));
 
-	target_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %hu, Length: %u\n",
+	target_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %u, Length: %u\n",
 		     login_req->flags, login_req->itt, login_req->cmdsn, login_req->exp_statsn,
 		     login_req->cid, pdu_cb->dlen);
 	/*

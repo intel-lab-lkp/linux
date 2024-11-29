@@ -334,6 +334,7 @@ static int iscsit_dataout_check_datasn(
 		data_sn = cmd->data_sn;
 	else {
 		struct iscsi_seq *seq = cmd->seq_ptr;
+
 		data_sn = seq->data_sn;
 	}
 
@@ -866,7 +867,7 @@ static void iscsit_handle_connection_cleanup(struct iscsit_conn *conn)
 	    !atomic_read(&sess->session_fall_back_to_erl0))
 		iscsit_connection_recovery_transport_reset(conn);
 	else {
-		target_debug("Performing cleanup for failed iSCSI Connection ID: %hu from %s\n",
+		target_debug("Performing cleanup for failed iSCSI Connection ID: %u from %s\n",
 			     conn->cid, sess->sess_ops->InitiatorName);
 		iscsit_close_connection(conn);
 	}

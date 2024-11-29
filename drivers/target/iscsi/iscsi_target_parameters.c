@@ -32,7 +32,7 @@ int iscsi_login_rx_data(
 		return -1;
 	}
 
-	return 0 ;
+	return 0;
 }
 
 int iscsi_login_tx_data(
@@ -78,18 +78,18 @@ void iscsi_dump_sess_ops(struct iscsi_sess_ops *sess_ops)
 	target_debug("InitiatorAlias: %s\n", sess_ops->InitiatorAlias);
 	target_debug("TargetName: %s\n", sess_ops->TargetName);
 	target_debug("TargetAlias: %s\n", sess_ops->TargetAlias);
-	target_debug("TargetPortalGroupTag: %hu\n", sess_ops->TargetPortalGroupTag);
-	target_debug("MaxConnections: %hu\n", sess_ops->MaxConnections);
+	target_debug("TargetPortalGroupTag: %u\n", sess_ops->TargetPortalGroupTag);
+	target_debug("MaxConnections: %u\n", sess_ops->MaxConnections);
 	target_debug("InitialR2T: %s\n", (sess_ops->InitialR2T) ? "Yes" : "No");
 	target_debug("ImmediateData: %s\n", (sess_ops->ImmediateData) ? "Yes" : "No");
 	target_debug("MaxBurstLength: %u\n", sess_ops->MaxBurstLength);
 	target_debug("FirstBurstLength: %u\n", sess_ops->FirstBurstLength);
-	target_debug("DefaultTime2Wait: %hu\n", sess_ops->DefaultTime2Wait);
-	target_debug("DefaultTime2Retain: %hu\n", sess_ops->DefaultTime2Retain);
-	target_debug("MaxOutstandingR2T: %hu\n", sess_ops->MaxOutstandingR2T);
+	target_debug("DefaultTime2Wait: %u\n", sess_ops->DefaultTime2Wait);
+	target_debug("DefaultTime2Retain: %u\n", sess_ops->DefaultTime2Retain);
+	target_debug("MaxOutstandingR2T: %u\n", sess_ops->MaxOutstandingR2T);
 	target_debug("DataPDUInOrder: %s\n", (sess_ops->DataPDUInOrder) ? "Yes" : "No");
 	target_debug("DataSequenceInOrder: %s\n", (sess_ops->DataSequenceInOrder) ? "Yes" : "No");
-	target_debug("ErrorRecoveryLevel: %hu\n", sess_ops->ErrorRecoveryLevel);
+	target_debug("ErrorRecoveryLevel: %u\n", sess_ops->ErrorRecoveryLevel);
 	target_debug("SessionType: %s\n", (sess_ops->SessionType) ? "Discovery" : "Normal");
 }
 
@@ -1298,6 +1298,7 @@ static int iscsi_enforce_integrity_rules(
 					&tmpptr, 0);
 			if (FirstBurstLength > MaxBurstLength) {
 				char tmpbuf[11];
+
 				memset(tmpbuf, 0, sizeof(tmpbuf));
 				sprintf(tmpbuf, "%u", MaxBurstLength);
 				if (iscsi_update_param_value(param, tmpbuf))
@@ -1422,8 +1423,7 @@ int iscsi_encode_text_output(
 			*length += 1;
 			output_buf = textbuf + *length;
 			SET_PSTATE_PROPOSER(param);
-			iscsi_check_proposer_for_optional_reply(param,
-							        keys_workaround);
+			iscsi_check_proposer_for_optional_reply(param, keys_workaround);
 			target_debug("Sending key: %s=%s\n", param->name, param->value);
 		}
 	}

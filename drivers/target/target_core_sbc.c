@@ -870,6 +870,7 @@ sbc_parse_cdb(struct se_cmd *cmd, struct exec_cmd_ops *ops)
 	case VARIABLE_LENGTH_CMD:
 	{
 		u16 service_action = get_unaligned_be16(&cdb[8]);
+
 		switch (service_action) {
 		case WRITE_SAME_32:
 			sectors = transport_get_sectors_32(cdb);

@@ -1351,7 +1351,7 @@ static void sbp_sense_mangle(struct sbp_target_request *req)
 
 	WARN_ON(se_cmd->scsi_sense_length < 18);
 
-	switch (sense[0] & 0x7f) { 		/* sfmt */
+	switch (sense[0] & 0x7f) { /* sfmt */
 	case 0x70: /* current, fixed */
 		status[0] = 0 << 6;
 		break;
@@ -1673,6 +1673,7 @@ static char *sbp_get_fabric_wwn(struct se_portal_group *se_tpg)
 static u16 sbp_get_tag(struct se_portal_group *se_tpg)
 {
 	struct sbp_tpg *tpg = container_of(se_tpg, struct sbp_tpg, se_tpg);
+
 	return tpg->tport_tpgt;
 }
 
@@ -2133,6 +2134,7 @@ static ssize_t sbp_tpg_attrib_mgt_orb_timeout_show(struct config_item *item,
 	struct se_portal_group *se_tpg = attrib_to_tpg(item);
 	struct sbp_tpg *tpg = container_of(se_tpg, struct sbp_tpg, se_tpg);
 	struct sbp_tport *tport = tpg->tport;
+
 	return sprintf(page, "%d\n", tport->mgt_orb_timeout);
 }
 
@@ -2168,6 +2170,7 @@ static ssize_t sbp_tpg_attrib_max_reconnect_timeout_show(struct config_item *ite
 	struct se_portal_group *se_tpg = attrib_to_tpg(item);
 	struct sbp_tpg *tpg = container_of(se_tpg, struct sbp_tpg, se_tpg);
 	struct sbp_tport *tport = tpg->tport;
+
 	return sprintf(page, "%d\n", tport->max_reconnect_timeout);
 }
 
@@ -2203,6 +2206,7 @@ static ssize_t sbp_tpg_attrib_max_logins_per_lun_show(struct config_item *item,
 	struct se_portal_group *se_tpg = attrib_to_tpg(item);
 	struct sbp_tpg *tpg = container_of(se_tpg, struct sbp_tpg, se_tpg);
 	struct sbp_tport *tport = tpg->tport;
+
 	return sprintf(page, "%d\n", tport->max_logins_per_lun);
 }
 

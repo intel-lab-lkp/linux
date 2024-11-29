@@ -43,7 +43,7 @@ static enum rq_end_io_ret pscsi_req_done(struct request *, blk_status_t);
 
 /*	pscsi_attach_hba():
  *
- * 	pscsi_get_sh() used scsi_host_lookup() to locate struct Scsi_Host.
+ *	pscsi_get_sh() used scsi_host_lookup() to locate struct Scsi_Host.
  *	from the passed SCSI Host ID.
  */
 static int pscsi_attach_hba(struct se_hba *hba, u32 host_id)

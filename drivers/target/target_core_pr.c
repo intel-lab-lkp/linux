@@ -526,17 +526,17 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 
 			return 0;
 		}
-       } else if (we && registered_nexus) {
-               /*
-                * Reads are allowed for Write Exclusive locks
-                * from all registrants.
-                */
-               if (cmd->data_direction == DMA_FROM_DEVICE) {
+	} else if (we && registered_nexus) {
+		/*
+		 * Reads are allowed for Write Exclusive locks
+		 * from all registrants.
+		 */
+		if (cmd->data_direction == DMA_FROM_DEVICE) {
 			target_debug("Allowing READ CDB: 0x%02x for %s reservation\n", cdb[0],
 				     core_scsi3_pr_dump_type(pr_reg_type));
 
-                       return 0;
-               }
+			return 0;
+		}
 	}
 	target_debug("%s Conflict for %sregistered nexus %s CDB: 0x%2x for %s reservation\n",
 		     transport_dump_cmd_direction(cmd), (registered_nexus) ? "" : "un",
@@ -1357,6 +1357,7 @@ void core_scsi3_free_all_registrations(
 	pr_res_holder = dev->dev_pr_res_holder;
 	if (pr_res_holder != NULL) {
 		struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
+
 		__core_scsi3_complete_pro_release(dev, pr_res_nacl,
 						  pr_res_holder, 0, 0);
 	}
@@ -2236,7 +2237,7 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 	 * a PERSISTENT RESERVE OUT command with RESERVE service action through
 	 * a registered I_T nexus with the following parameters:
 	 *    a) RESERVATION KEY set to the value of the reservation key that is
-	 * 	 registered with the logical unit for the I_T nexus; and
+	 *	 registered with the logical unit for the I_T nexus; and
 	 */
 	if (res_key != pr_reg->pr_res_key) {
 		target_err("SPC-3 PR RESERVE: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
@@ -2279,6 +2280,7 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 		 */
 		if (!is_reservation_holder(pr_res_holder, pr_reg)) {
 			struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
+
 			target_err("SPC-3 PR: Attempted RESERVE from [%s]: %s while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
 				   cmd->se_tfo->fabric_name, se_sess->se_node_acl->initiatorname,
 				   pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
@@ -2298,6 +2300,7 @@ core_scsi3_pro_reserve(struct se_cmd *cmd, int type, int scope, u64 res_key)
 		if ((pr_res_holder->pr_res_type != type) ||
 		    (pr_res_holder->pr_res_scope != scope)) {
 			struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
+
 			target_err("SPC-3 PR: Attempted RESERVE from [%s]: %s trying to change TYPE and/or SCOPE, while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
 				   cmd->se_tfo->fabric_name, se_sess->se_node_acl->initiatorname,
 				   pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
@@ -2514,6 +2517,7 @@ core_scsi3_emulate_pro_release(struct se_cmd *cmd, int type, int scope,
 	if ((pr_res_holder->pr_res_type != type) ||
 	    (pr_res_holder->pr_res_scope != scope)) {
 		struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
+
 		target_err("SPC-3 PR RELEASE: Attempted to release reservation from [%s]: %s with different TYPE and/or SCOPE  while reservation already held by [%s]: %s, returning RESERVATION_CONFLICT\n",
 			   cmd->se_tfo->fabric_name, se_sess->se_node_acl->initiatorname,
 			   pr_res_nacl->se_tpg->se_tpg_tfo->fabric_name,
@@ -2609,7 +2613,7 @@ core_scsi3_emulate_pro_clear(struct se_cmd *cmd, u64 res_key)
 	 * registered I_T nexus with the following parameter:
 	 *
 	 *	a) RESERVATION KEY field set to the value of the reservation key
-	 * 	   that is registered with the logical unit for the I_T nexus.
+	 *	   that is registered with the logical unit for the I_T nexus.
 	 */
 	if (res_key != pr_reg_n->pr_res_key) {
 		target_err("SPC-3 PR REGISTER: Received res_key: 0x%016Lx does not match existing SA REGISTER res_key: 0x%016Lx\n",
@@ -2624,6 +2628,7 @@ core_scsi3_emulate_pro_clear(struct se_cmd *cmd, u64 res_key)
 	pr_res_holder = dev->dev_pr_res_holder;
 	if (pr_res_holder) {
 		struct se_node_acl *pr_res_nacl = pr_res_holder->pr_reg_nacl;
+
 		__core_scsi3_complete_pro_release(dev, pr_res_nacl,
 						  pr_res_holder, 0, 0);
 	}
@@ -3165,7 +3170,7 @@ core_scsi3_emulate_pro_register_and_move(struct se_cmd *cmd, u64 res_key,
 	spin_unlock(&dev->se_port_lock);
 
 	if (!dest_se_tpg || !dest_tf_ops) {
-		target_err("SPC-3 PR REGISTER_AND_MOVE: Unable to locate fabric ops from Relative Target Port Identifier: %hu\n",
+		target_err("SPC-3 PR REGISTER_AND_MOVE: Unable to locate fabric ops from Relative Target Port Identifier: %u\n",
 			   rtpi);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out_put_pr_reg;
@@ -3263,7 +3268,7 @@ after_iport_check:
 	 */
 	dest_se_deve = core_get_se_deve_from_rtpi(dest_node_acl, rtpi);
 	if (!dest_se_deve) {
-		target_err("Unable to locate %s dest_se_deve from RTPI: %hu\n",
+		target_err("Unable to locate %s dest_se_deve from RTPI: %u\n",
 			   dest_tf_ops->fabric_name, rtpi);
 		ret = TCM_INVALID_PARAMETER_LIST;
 		goto out;
@@ -3297,7 +3302,7 @@ after_iport_check:
 	 * The received on I_T Nexus must be the reservation holder.
 	 *
 	 * From spc4r17 section 5.7.8  Table 50 --
-	 * 	Register behaviors for a REGISTER AND MOVE service action
+	 *	Register behaviors for a REGISTER AND MOVE service action
 	 */
 	if (!is_reservation_holder(pr_res_holder, pr_reg)) {
 		target_warn("SPC-3 PR REGISTER_AND_MOVE: Calling I_T Nexus is not reservation holder\n");
@@ -3392,7 +3397,7 @@ after_iport_check:
 		dest_pr_reg->pr_res_generation = pr_tmpl->pr_generation++;
 	spin_unlock(&dev->dev_reservation_lock);
 
-	target_debug("SPC-3 PR [%s] Service Action: REGISTER_AND_MOVE created new reservation holder TYPE: %s on object RTPI: %hu  PRGeneration: 0x%08x\n",
+	target_debug("SPC-3 PR [%s] Service Action: REGISTER_AND_MOVE created new reservation holder TYPE: %s on object RTPI: %u  PRGeneration: 0x%08x\n",
 		     dest_tf_ops->fabric_name, core_scsi3_pr_dump_type(type), rtpi,
 		     dest_pr_reg->pr_res_generation);
 	target_debug("SPC-3 PR Successfully moved reservation from %s Fabric Node: %s%s -> %s Fabric Node: %s %s\n",

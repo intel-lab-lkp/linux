@@ -30,7 +30,7 @@
 #include "target_core_ua.h"
 #include "target_core_xcopy.h"
 
-static struct workqueue_struct *xcopy_wq = NULL;
+static struct workqueue_struct *xcopy_wq;
 
 static sense_reason_t target_parse_xcopy_cmd(struct xcopy_op *xop);
 
@@ -122,7 +122,7 @@ static int target_xcopy_parse_tiddesc_e4(struct se_cmd *se_cmd, struct xcopy_op 
 	 * Extract RELATIVE INITIATOR PORT IDENTIFIER
 	 */
 	ript = get_unaligned_be16(&desc[2]);
-	target_debug("XCOPY 0xe4: RELATIVE INITIATOR PORT IDENTIFIER: %hu\n", ript);
+	target_debug("XCOPY 0xe4: RELATIVE INITIATOR PORT IDENTIFIER: %u\n", ript);
 	/*
 	 * Check for supported code set, association, and designator type
 	 */
@@ -215,7 +215,7 @@ static int target_xcopy_parse_target_descriptors(struct se_cmd *se_cmd,
 		return -EINVAL;
 	}
 	if (tdll > RCR_OP_MAX_TARGET_DESC_COUNT * XCOPY_TARGET_DESC_LEN) {
-		target_err("XCOPY target descriptor supports a maximum two src/dest descriptors, tdll: %hu too large..\n",
+		target_err("XCOPY target descriptor supports a maximum two src/dest descriptors, tdll: %u too large..\n",
 			   tdll);
 		/* spc4r37 6.4.3.4 CSCD DESCRIPTOR LIST LENGTH field */
 		*sense_ret = TCM_TOO_MANY_TARGET_DESCS;
@@ -300,7 +300,7 @@ static int target_xcopy_parse_segdesc_02(struct xcopy_op *xop, unsigned char *p)
 
 	desc_len = get_unaligned_be16(&desc[2]);
 	if (desc_len != 0x18) {
-		target_err("XCOPY segment desc 0x02: Illegal desc_len: %hu\n", desc_len);
+		target_err("XCOPY segment desc 0x02: Illegal desc_len: %u\n", desc_len);
 		return -EINVAL;
 	}
 
@@ -309,7 +309,7 @@ static int target_xcopy_parse_segdesc_02(struct xcopy_op *xop, unsigned char *p)
 
 	if (xop->stdi > XCOPY_CSCD_DESC_ID_LIST_OFF_MAX ||
 	    xop->dtdi > XCOPY_CSCD_DESC_ID_LIST_OFF_MAX) {
-		target_err("XCOPY segment desc 0x02: unsupported CSCD ID > 0x%x; stdi: %hu dtdi: %hu\n",
+		target_err("XCOPY segment desc 0x02: unsupported CSCD ID > 0x%x; stdi: %u dtdi: %u\n",
 			   XCOPY_CSCD_DESC_ID_LIST_OFF_MAX, xop->stdi, xop->dtdi);
 		return -EINVAL;
 	}
@@ -320,7 +320,7 @@ static int target_xcopy_parse_segdesc_02(struct xcopy_op *xop, unsigned char *p)
 	xop->nolb = get_unaligned_be16(&desc[10]);
 	xop->src_lba = get_unaligned_be64(&desc[12]);
 	xop->dst_lba = get_unaligned_be64(&desc[20]);
-	target_debug("XCOPY seg desc 0x02: nolb: %hu src_lba: %llu dst_lba: %llu\n", xop->nolb,
+	target_debug("XCOPY seg desc 0x02: nolb: %u src_lba: %llu dst_lba: %llu\n", xop->nolb,
 		     (unsigned long long)xop->src_lba, (unsigned long long)xop->dst_lba);
 
 	return 0;
@@ -393,7 +393,7 @@ static struct se_node_acl xcopy_pt_nacl;
 
 static int xcopy_pt_get_cmd_state(struct se_cmd *se_cmd)
 {
-        return 0;
+	return 0;
 }
 
 static void xcopy_pt_undepend_remotedev(struct xcopy_op *xop)
@@ -813,7 +813,7 @@ static sense_reason_t target_parse_xcopy_cmd(struct xcopy_op *xop)
 	}
 
 	if (se_cmd->data_length < (XCOPY_HDR_LEN + tdll + sdll + inline_dl)) {
-		target_err("XCOPY parameter truncation: data length %u too small for tdll: %hu sdll: %u inline_dl: %u\n",
+		target_err("XCOPY parameter truncation: data length %u too small for tdll: %u sdll: %u inline_dl: %u\n",
 			   se_cmd->data_length, tdll, sdll, inline_dl);
 		ret = TCM_PARAMETER_LIST_LENGTH_ERROR;
 		goto out;

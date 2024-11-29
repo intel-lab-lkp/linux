@@ -404,6 +404,7 @@ static struct config_group *target_fabric_make_nodeacl(
 
 	if (tf->tf_ops->fabric_init_nodeacl) {
 		int ret = tf->tf_ops->fabric_init_nodeacl(se_nacl, name);
+
 		if (ret) {
 			configfs_remove_default_groups(&se_nacl->acl_fabric_stat_group);
 			core_tpg_del_initiator_node_acl(se_nacl);
@@ -860,7 +861,7 @@ static ssize_t target_fabric_tpg_base_rtpi_store(struct config_item *item,
 		return -EINVAL;
 
 	if (se_tpg->enabled) {
-		target_info("%s_TPG[%hu] - Can not change RTPI on enabled TPG",
+		target_info("%s_TPG[%u] - Can not change RTPI on enabled TPG",
 			    se_tpg->se_tpg_tfo->fabric_name,
 			    se_tpg->se_tpg_tfo->tpg_get_tag(se_tpg));
 		return -EINVAL;

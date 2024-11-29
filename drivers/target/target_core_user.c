@@ -260,8 +260,7 @@ static const struct kernel_param_ops tcmu_global_max_data_area_op = {
 	.get = tcmu_get_global_max_data_area,
 };
 
-module_param_cb(global_max_data_area_mb, &tcmu_global_max_data_area_op, NULL,
-		S_IWUSR | S_IRUGO);
+module_param_cb(global_max_data_area_mb, &tcmu_global_max_data_area_op, NULL, 0644);
 MODULE_PARM_DESC(global_max_data_area_mb,
 		 "Max MBs allowed to be allocated to all the tcmu device's "
 		 "data areas.");
@@ -297,7 +296,7 @@ static const struct kernel_param_ops tcmu_block_netlink_op = {
 	.get = tcmu_get_block_netlink,
 };
 
-module_param_cb(block_netlink, &tcmu_block_netlink_op, NULL, S_IWUSR | S_IRUGO);
+module_param_cb(block_netlink, &tcmu_block_netlink_op, NULL, 0644);
 MODULE_PARM_DESC(block_netlink, "Block new netlink commands.");
 
 static int tcmu_fail_netlink_cmd(struct tcmu_nl_cmd *nl_cmd)
@@ -349,7 +348,7 @@ static const struct kernel_param_ops tcmu_reset_netlink_op = {
 	.set = tcmu_set_reset_netlink,
 };
 
-module_param_cb(reset_netlink, &tcmu_reset_netlink_op, NULL, S_IWUSR);
+module_param_cb(reset_netlink, &tcmu_reset_netlink_op, NULL, 0200);
 MODULE_PARM_DESC(reset_netlink, "Reset netlink commands.");
 
 /* multicast group */
@@ -379,7 +378,7 @@ static int tcmu_genl_cmd_done(struct genl_info *info, int completed_cmd)
 	    !info->attrs[TCMU_ATTR_DEVICE_ID]) {
 		target_err("TCMU_ATTR_CMD_STATUS or TCMU_ATTR_DEVICE_ID not set, doing nothing\n");
 		return -EINVAL;
-        }
+	}
 
 	dev_id = nla_get_u32(info->attrs[TCMU_ATTR_DEVICE_ID]);
 	rc = nla_get_s32(info->attrs[TCMU_ATTR_CMD_STATUS]);
@@ -1360,7 +1359,7 @@ static bool tcmu_handle_completion(struct tcmu_cmd *cmd,
 
 	if (entry->rsp.scsi_status == SAM_STAT_CHECK_CONDITION) {
 		transport_copy_sense_to_cmd(se_cmd, entry->rsp.sense_buffer);
-		if (!read_len_valid )
+		if (!read_len_valid)
 			goto done;
 		else
 			se_cmd->se_cmd_flags |= SCF_TREAT_READ_AS_NORMAL;
@@ -1879,6 +1878,7 @@ static vm_fault_t tcmu_vma_fault(struct vm_fault *vmf)
 	vm_fault_t ret = 0;
 
 	int mi = tcmu_find_mem_index(vmf->vma);
+
 	if (mi < 0)
 		return VM_FAULT_SIGBUS;
 

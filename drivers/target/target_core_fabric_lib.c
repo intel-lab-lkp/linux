@@ -103,7 +103,7 @@ static int srp_get_pr_transport_id(
 	unsigned char *buf)
 {
 	const char *p;
-	unsigned len, count, leading_zero_bytes;
+	unsigned int len, count, leading_zero_bytes;
 	int rc;
 
 	p = nacl->initiatorname;

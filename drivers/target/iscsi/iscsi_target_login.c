@@ -207,6 +207,7 @@ static int iscsi_login_set_conn_values(
 	__be16 cid)
 {
 	int ret;
+
 	conn->sess		= sess;
 	conn->cid		= be16_to_cpu(cid);
 	/*
@@ -230,10 +231,10 @@ __printf(2, 3) int iscsi_change_param_sprintf(
 	va_list args;
 	unsigned char buf[64];
 
-	memset(buf, 0, sizeof buf);
+	memset(buf, 0, sizeof(buf));
 
 	va_start(args, fmt);
-	vsnprintf(buf, sizeof buf, fmt, args);
+	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
 	if (iscsi_change_param_value(buf, conn->param_list, 0) < 0) {
@@ -571,7 +572,7 @@ int iscsi_login_post_auth_non_zero_tsih(
 	 */
 	conn_ptr = iscsit_get_conn_from_cid_rcfr(sess, cid);
 	if (conn_ptr) {
-		target_err("Connection exists with CID %hu for %s, performing connection reinstatement.\n",
+		target_err("Connection exists with CID %u for %s, performing connection reinstatement.\n",
 			   conn_ptr->cid, sess->sess_ops->InitiatorName);
 
 		iscsit_connection_reinstatement_rcfr(conn_ptr);
@@ -591,7 +592,7 @@ int iscsi_login_post_auth_non_zero_tsih(
 		cr = iscsit_get_inactive_connection_recovery_entry(
 				sess, cid);
 		if (cr) {
-			target_debug("Performing implicit logout for connection recovery on CID: %hu\n",
+			target_debug("Performing implicit logout for connection recovery on CID: %u\n",
 				     conn->cid);
 			iscsit_discard_cr_cmds_by_expstatsn(cr, exp_statsn);
 		}
@@ -757,7 +758,7 @@ void iscsi_post_login_handler(
 	target_debug("Moving to TARG_SESS_STATE_LOGGED_IN.\n");
 	sess->session_state = TARG_SESS_STATE_LOGGED_IN;
 
-	target_debug("iSCSI Login successful on CID: %hu from %pISpc to %pISpc,%hu\n", conn->cid,
+	target_debug("iSCSI Login successful on CID: %u from %pISpc to %pISpc,%u\n", conn->cid,
 		     &conn->login_sockaddr, &conn->local_sockaddr, tpg->tpgt);
 
 	spin_lock_bh(&sess->conn_lock);
@@ -776,7 +777,7 @@ void iscsi_post_login_handler(
 	if (tpg->tpg_tiqn)
 		tpg->tpg_tiqn->tiqn_nsessions++;
 
-	target_debug("Incremented number of active iSCSI sessions to %u on iSCSI Target Portal Group: %hu\n",
+	target_debug("Incremented number of active iSCSI sessions to %u on iSCSI Target Portal Group: %u\n",
 		     tpg->nsessions, tpg->tpgt);
 	spin_unlock_bh(&se_tpg->session_lock);
 
@@ -961,7 +962,7 @@ int iscsit_get_login_rx(struct iscsit_conn *conn, struct iscsi_login *login)
 	payload_length	= ntoh24(login_req->dlength);
 	padding = ((-payload_length) & 3);
 
-	target_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %hu, Length: %u\n",
+	target_debug("Got Login Command, Flags 0x%02x, ITT: 0x%08x, CmdSN: 0x%08x, ExpStatSN: 0x%08x, CID: %u, Length: %u\n",
 		     login_req->flags, login_req->itt, login_req->cmdsn, login_req->exp_statsn,
 		     login_req->cid, payload_length);
 	/*
@@ -1304,11 +1305,11 @@ static int __iscsi_target_login_thread(struct iscsi_np *np)
 	/*
 	 * SessionType: Discovery
 	 *
-	 * 	Locates Default Portal
+	 *	Locates Default Portal
 	 *
 	 * SessionType: Normal
 	 *
-	 * 	Locates Target Portal from NP -> Target IQN
+	 *	Locates Target Portal from NP -> Target IQN
 	 */
 	rc = iscsi_target_locate_portal(np, conn, login);
 	if (rc < 0) {

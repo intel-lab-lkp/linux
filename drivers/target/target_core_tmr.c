@@ -359,7 +359,7 @@ int core_tmr_lun_reset(
 	struct se_portal_group *tmr_tpg = NULL;
 	struct se_session *tmr_sess = NULL;
 	bool tas;
-        /*
+	/*
 	 * TASK_ABORTED status bit, this is configurable via ConfigFS
 	 * struct se_device attributes.  spc4r17 section 7.4.6 Control mode page
 	 *

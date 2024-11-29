@@ -595,7 +595,7 @@ int core_dev_add_initiator_node_lun_acl(
 			lun_access_ro, nacl, tpg) < 0)
 		return -EINVAL;
 
-	target_debug("%s_TPG[%hu]_LUN[%llu->%llu] - Added %s ACL for  InitiatorNode: %s\n",
+	target_debug("%s_TPG[%u]_LUN[%llu->%llu] - Added %s ACL for  InitiatorNode: %s\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     lun->unpacked_lun, lacl->mapped_lun, lun_access_ro ? "RO" : "RW",
 		     nacl->initiatorname);
@@ -626,7 +626,7 @@ int core_dev_del_initiator_node_lun_acl(
 		core_disable_device_list_for_node(lun, deve, nacl, tpg);
 	mutex_unlock(&nacl->lun_entry_mutex);
 
-	target_debug("%s_TPG[%hu]_LUN[%llu] - Removed ACL for InitiatorNode: %s Mapped LUN: %llu\n",
+	target_debug("%s_TPG[%u]_LUN[%llu] - Removed ACL for InitiatorNode: %s Mapped LUN: %llu\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     lun->unpacked_lun, nacl->initiatorname, lacl->mapped_lun);
 
@@ -637,7 +637,7 @@ void core_dev_free_initiator_node_lun_acl(
 	struct se_portal_group *tpg,
 	struct se_lun_acl *lacl)
 {
-	target_debug("%s_TPG[%hu] - Freeing ACL for %s InitiatorNode: %s Mapped LUN: %llu\n",
+	target_debug("%s_TPG[%u] - Freeing ACL for %s InitiatorNode: %s Mapped LUN: %llu\n",
 		     tpg->se_tpg_tfo->fabric_name, tpg->se_tpg_tfo->tpg_get_tag(tpg),
 		     tpg->se_tpg_tfo->fabric_name, lacl->se_lun_nacl->initiatorname,
 		     lacl->mapped_lun);

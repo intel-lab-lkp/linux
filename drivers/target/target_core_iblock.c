@@ -731,7 +731,7 @@ iblock_execute_rw(struct se_cmd *cmd, struct scatterlist *sgl, u32 sgl_nents,
 	struct scatterlist *sg;
 	u32 sg_num = sgl_nents;
 	blk_opf_t opf;
-	unsigned bio_cnt;
+	unsigned int bio_cnt;
 	int i, rc;
 	struct sg_mapping_iter prot_miter;
 	unsigned int miter_dir;

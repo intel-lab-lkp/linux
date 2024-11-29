@@ -37,7 +37,7 @@ static LIST_HEAD(ft_wwn_list);
 DEFINE_MUTEX(ft_lport_lock);
 
 unsigned int ft_debug_logging;
-module_param_named(debug_logging, ft_debug_logging, int, S_IRUGO|S_IWUSR);
+module_param_named(debug_logging, ft_debug_logging, int, 0644);
 MODULE_PARM_DESC(debug_logging, "a bit mask of logging levels");
 
 /*

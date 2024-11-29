@@ -1291,7 +1291,7 @@ done:
 
 	if (buf) {
 		len = cpu_to_be32(lun_count * 8);
-		memcpy(buf, &len, min_t(int, sizeof len, cmd->data_length));
+		memcpy(buf, &len, min_t(int, sizeof(len), cmd->data_length));
 		transport_kunmap_data_sg(cmd);
 	}
 

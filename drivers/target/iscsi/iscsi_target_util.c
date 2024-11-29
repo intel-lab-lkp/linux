@@ -383,7 +383,7 @@ struct iscsit_cmd *iscsit_find_cmd_from_itt(
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	target_err("Unable to locate ITT: 0x%08x on CID: %hu", init_task_tag, conn->cid);
+	target_err("Unable to locate ITT: 0x%08x on CID: %u", init_task_tag, conn->cid);
 	return NULL;
 }
 EXPORT_SYMBOL(iscsit_find_cmd_from_itt);
@@ -406,7 +406,7 @@ struct iscsit_cmd *iscsit_find_cmd_from_itt_or_dump(
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	target_err("Unable to locate ITT: 0x%08x on CID: %hu, dumping payload\n", init_task_tag,
+	target_err("Unable to locate ITT: 0x%08x on CID: %u, dumping payload\n", init_task_tag,
 		   conn->cid);
 	if (length)
 		iscsit_dump_data_payload(conn, length, 1);
@@ -430,7 +430,7 @@ struct iscsit_cmd *iscsit_find_cmd_from_ttt(
 	}
 	spin_unlock_bh(&conn->cmd_lock);
 
-	target_err("Unable to locate TTT: 0x%08x on CID: %hu\n", targ_xfer_tag, conn->cid);
+	target_err("Unable to locate TTT: 0x%08x on CID: %u\n", targ_xfer_tag, conn->cid);
 	return NULL;
 }
 
@@ -1197,7 +1197,7 @@ send_datacrc:
 		struct kvec *iov_d = &cmd->iov_data[iov_off];
 
 		tx_sent = tx_data(conn, iov_d, 1, ISCSI_CRC_LEN);
-		if (ISCSI_CRC_LEN != tx_sent) {
+		if (tx_sent != ISCSI_CRC_LEN) {
 			if (tx_sent == -EAGAIN) {
 				target_err("tx_data() returned -EAGAIN\n");
 				goto send_datacrc;
@@ -1301,6 +1301,7 @@ int tx_data(
 
 	while (msg_data_left(&msg)) {
 		int tx_loop = sock_sendmsg(conn->sock, &msg);
+
 		if (tx_loop <= 0) {
 			target_debug("tx_loop: %d total_tx %d\n", tx_loop, total_tx);
 			return tx_loop;
