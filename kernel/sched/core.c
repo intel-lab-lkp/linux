@@ -1341,7 +1341,7 @@ bool sched_can_stop_tick(struct rq *rq)
 	if (scx_enabled() && !scx_can_stop_tick(rq))
 		return false;
 
-	if (rq->cfs.nr_queued > 1)
+	if (rq->cfs.h_nr_queued > 1)
 		return false;
 
 	/*
