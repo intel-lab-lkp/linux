@@ -13,6 +13,8 @@
 #include <linux/delay.h>
 #include <drm/display/drm_dp_aux_bus.h>
 #include <drm/drm_edid.h>
+#include <linux/gpio/consumer.h>
+#include <linux/of_gpio.h>
 
 #include "msm_drv.h"
 #include "msm_kms.h"
@@ -77,6 +79,10 @@ struct msm_dp_display_private {
 	int irq;
 
 	unsigned int id;
+
+	bool ext_gpio;
+	int gpio_num;
+	struct work_struct  gpio_work;
 
 	/* state variables */
 	bool core_initialized;
@@ -1182,6 +1188,42 @@ static irqreturn_t msm_dp_display_irq_handler(int irq, void *dev_id)
 	return ret;
 }
 
+
+static void msm_dp_gpio_work_handler(struct work_struct *work)
+{
+	struct msm_dp_display_private *dp = container_of(work,
+			struct msm_dp_display_private, gpio_work);
+	struct gpio_desc *desc;
+	bool hpd;
+
+	if (dp->ext_gpio) {
+		desc = gpio_to_desc(dp->gpio_num);
+		if (!desc) {
+			pr_err("Failed to get gpio_desc for GPIO %d\n", dp->gpio_num);
+			return;
+		}
+
+		hpd = gpiod_get_value_cansleep(desc);
+		if (hpd)
+			msm_dp_add_event(dp, EV_HPD_PLUG_INT, 0, 0);
+		else
+			msm_dp_add_event(dp, EV_HPD_UNPLUG_INT, 0, 0);
+	}
+}
+
+static irqreturn_t msm_dp_gpio_isr(int unused, void *data)
+{
+	struct msm_dp_display_private *dp = data;
+
+	if (!dp) {
+		DRM_ERROR("NULL data\n");
+		return IRQ_NONE;
+	}
+
+	schedule_work(&dp->gpio_work);
+	return IRQ_HANDLED;
+}
+
 static int msm_dp_display_request_irq(struct msm_dp_display_private *dp)
 {
 	int rc = 0;
@@ -1191,6 +1233,21 @@ static int msm_dp_display_request_irq(struct msm_dp_display_private *dp)
 	if (dp->irq < 0) {
 		DRM_ERROR("failed to get irq\n");
 		return dp->irq;
+	}
+
+	if (dp->ext_gpio) {
+		int edge, gpio_irq;
+
+		gpio_irq = gpio_to_irq(dp->gpio_num);
+		edge = IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING;
+
+		rc = devm_request_threaded_irq(&pdev->dev, gpio_irq, NULL,
+		msm_dp_gpio_isr, edge, "dp_gpio_isr", dp);
+		if (rc < 0) {
+			DRM_ERROR("failed to request ext-gpio IRQ%u: %d\n",
+					gpio_irq, rc);
+			return rc;
+		}
 	}
 
 	rc = devm_request_irq(&pdev->dev, dp->irq, msm_dp_display_irq_handler,
@@ -1308,10 +1365,32 @@ static int msm_dp_display_probe(struct platform_device *pdev)
 		return -EPROBE_DEFER;
 	}
 
+	if (of_find_property(pdev->dev.of_node, "dp-hpd-gpio", NULL)) {
+		dp->ext_gpio = true;
+		dp->gpio_num = of_get_named_gpio(pdev->dev.of_node, "dp-hpd-gpio", 0);
+		if (dp->gpio_num < 0) {
+			dev_err(&pdev->dev, "Failed to get gpio:%d\n", dp->gpio_num);
+			return dp->gpio_num;
+		}
+
+		if (!gpio_is_valid(dp->gpio_num)) {
+			DRM_ERROR("gpio(%d) invalid\n", dp->gpio_num);
+			return -EINVAL;
+		}
+
+		rc = gpio_request(dp->gpio_num, "dp-hpd-gpio");
+		if (rc) {
+			dev_err(&pdev->dev, "Failed to request gpio:%d\n", dp->gpio_num);
+			return rc;
+		}
+		gpio_direction_input(dp->gpio_num);
+	}
+
 	/* setup event q */
 	mutex_init(&dp->event_mutex);
 	init_waitqueue_head(&dp->event_q);
 	spin_lock_init(&dp->event_lock);
+	INIT_WORK(&dp->gpio_work, msm_dp_gpio_work_handler);
 
 	/* Store DP audio handle inside DP display */
 	dp->msm_dp_display.msm_dp_audio = dp->audio;
@@ -1678,6 +1757,10 @@ void msm_dp_bridge_hpd_enable(struct drm_bridge *bridge)
 	msm_dp_catalog_hpd_config_intr(dp->catalog, DP_DP_HPD_INT_MASK, true);
 
 	msm_dp_display->internal_hpd = true;
+
+	if (dp->ext_gpio)
+		schedule_work(&dp->gpio_work);
+
 	mutex_unlock(&dp->event_mutex);
 }
 
