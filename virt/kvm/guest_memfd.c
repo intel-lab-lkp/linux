@@ -102,6 +102,80 @@ static struct folio *kvm_gmem_get_folio(struct inode *inode, pgoff_t index)
 	return filemap_grab_folio(inode->i_mapping, index);
 }
 
+#if defined(CONFIG_KVM_GENERIC_PRIVATE_MEM) && !defined(CONFIG_KVM_AMD_SEV)
+static ssize_t kvm_kmem_gmem_write(struct file *file, const char __user *buf,
+				   size_t count, loff_t *offset)
+{
+	pgoff_t start, end, index;
+	ssize_t ret = 0;
+
+	if (!PAGE_ALIGNED(*offset) || !PAGE_ALIGNED(count))
+		return -EINVAL;
+
+	if (*offset + count > i_size_read(file_inode(file)))
+		return -EINVAL;
+
+	if (!buf)
+		return -EINVAL;
+
+	start = *offset >> PAGE_SHIFT;
+        end = (*offset + count) >> PAGE_SHIFT;
+
+	filemap_invalidate_lock(file->f_mapping);
+
+	for (index = start; index < end; ) {
+		struct folio *folio;
+		void *vaddr;
+		pgoff_t buf_offset = (index - start) << PAGE_SHIFT;
+
+		if (signal_pending(current)) {
+			ret = -EINTR;
+			goto out;
+		}
+
+		folio = kvm_gmem_get_folio(file_inode(file), index);
+		if (IS_ERR(folio)) {
+			ret = -EFAULT;
+			goto out;
+		}
+
+		if (folio_test_hwpoison(folio)) {
+			folio_unlock(folio);
+			folio_put(folio);
+			ret = -EFAULT;
+			goto out;
+		}
+
+		if (folio_test_uptodate(folio)) {
+			folio_unlock(folio);
+			folio_put(folio);
+			ret = -ENOSPC;
+			goto out;
+		}
+
+		folio_unlock(folio);
+
+		vaddr = kmap_local_folio(folio, 0);
+		ret = copy_from_user(vaddr, buf + buf_offset, PAGE_SIZE);
+		if (ret)
+			ret = -EINVAL;
+		kunmap_local(vaddr);
+
+		kvm_gmem_mark_prepared(folio);
+		folio_put(folio);
+
+		index = folio_next_index(folio);
+		*offset += PAGE_SIZE;
+	}
+
+out:
+	filemap_invalidate_unlock(file->f_mapping);
+
+	return ret && start == (*offset >> PAGE_SHIFT) ?
+		ret : *offset - (start << PAGE_SHIFT);
+}
+#endif
+
 static void kvm_gmem_invalidate_begin(struct kvm_gmem *gmem, pgoff_t start,
 				      pgoff_t end)
 {
@@ -308,6 +382,10 @@ static pgoff_t kvm_gmem_get_index(struct kvm_memory_slot *slot, gfn_t gfn)
 }
 
 static struct file_operations kvm_gmem_fops = {
+#if defined(CONFIG_KVM_GENERIC_PRIVATE_MEM) && !defined(CONFIG_KVM_AMD_SEV)
+	.llseek         = default_llseek,
+	.write          = kvm_kmem_gmem_write,
+#endif
 	.open		= generic_file_open,
 	.release	= kvm_gmem_release,
 	.fallocate	= kvm_gmem_fallocate,
@@ -423,6 +501,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	}
 
 	file->f_flags |= O_LARGEFILE;
+	file->f_mode |= FMODE_LSEEK | FMODE_PWRITE;
 
 	inode = file->f_inode;
 	WARN_ON(file->f_mapping != inode->i_mapping);
