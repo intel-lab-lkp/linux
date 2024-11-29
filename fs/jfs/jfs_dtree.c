@@ -1994,6 +1994,9 @@ static int dtSplitRoot(tid_t tid,
 
 		stbl = DT_GETSTBL(rp);
 		for (n = 0; n < rp->header.nextindex; n++) {
+			if (stbl[n] >= ARRAY_SIZE(rp->slot))
+				continue;
+
 			ldtentry = (struct ldtentry *) & rp->slot[stbl[n]];
 			modify_index(tid, ip, le32_to_cpu(ldtentry->index),
 				     rbn, n, &mp, &lblock);
