@@ -944,6 +944,9 @@ enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
 	link_info = &msm_dp_display->panel->link_info;
 
+	if (mode->hdisplay > msm_dp_display->panel->max_dp_width)
+		return MODE_BAD;
+
 	if (drm_mode_is_420_only(&dp->connector->display_info, mode) &&
 	    msm_dp_display->panel->vsc_sdp_supported)
 		mode_pclk_khz /= 2;

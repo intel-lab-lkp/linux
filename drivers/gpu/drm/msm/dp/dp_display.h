@@ -11,6 +11,7 @@
 #include "disp/msm_disp_snapshot.h"
 
 #define DP_MAX_PIXEL_CLK_KHZ	675000
+#define DP_MAX_WIDTH	7680
 
 struct msm_dp {
 	struct drm_device *drm_dev;

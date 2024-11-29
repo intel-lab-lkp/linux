@@ -51,6 +51,7 @@ struct msm_dp_panel {
 	u32 lane_map[DP_MAX_NUM_DP_LANES];
 	u32 max_dp_lanes;
 	u32 max_dp_link_rate;
+	u32 max_dp_width;
 
 	u32 max_bw_code;
 };

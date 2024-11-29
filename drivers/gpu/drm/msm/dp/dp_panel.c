@@ -4,6 +4,7 @@
  */
 
 #include "dp_panel.h"
+#include "dp_display.h"
 #include "dp_utils.h"
 
 #include <drm/drm_connector.h>
@@ -455,6 +456,16 @@ static u32 msm_dp_panel_link_frequencies(struct device_node *of_node)
 	return frequency;
 }
 
+static u32 msm_dp_panel_max_width(struct device_node *of_node)
+{
+	u32 max_width = 0;
+
+	if (of_property_read_u32(of_node, "max-width", &max_width))
+		max_width = DP_MAX_WIDTH;
+
+	return max_width;
+}
+
 static int msm_dp_panel_parse_dt(struct msm_dp_panel *msm_dp_panel)
 {
 	struct msm_dp_panel_private *panel;
@@ -489,6 +500,8 @@ static int msm_dp_panel_parse_dt(struct msm_dp_panel *msm_dp_panel)
 	msm_dp_panel->max_dp_link_rate = msm_dp_panel_link_frequencies(of_node);
 	if (!msm_dp_panel->max_dp_link_rate)
 		msm_dp_panel->max_dp_link_rate = DP_LINK_RATE_HBR2;
+
+	msm_dp_panel->max_dp_width = msm_dp_panel_max_width(of_node);
 
 	return 0;
 }
