@@ -1143,7 +1143,7 @@ static int iscsi_check_value(struct iscsi_param *param, char *value)
 			if (iscsi_check_string_or_list_value(param, value) < 0)
 				return -1;
 		} else {
-			target_err("Huh? 0x%02x\n", param->type);
+			target_err("Unknown parameter: 0x%02x\n", param->type);
 			return -1;
 		}
 
