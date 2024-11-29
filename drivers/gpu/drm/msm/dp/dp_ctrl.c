@@ -1220,7 +1220,7 @@ static void msm_dp_ctrl_clear_training_pattern(struct msm_dp_ctrl_private *ctrl)
 }
 
 static int msm_dp_ctrl_link_train_2(struct msm_dp_ctrl_private *ctrl,
-			int *training_step)
+			int *training_step, bool downgrade)
 {
 	int tries = 0, ret = 0;
 	u8 pattern;
@@ -1242,6 +1242,28 @@ static int msm_dp_ctrl_link_train_2(struct msm_dp_ctrl_private *ctrl,
 		pattern = DP_TRAINING_PATTERN_2;
 		state_ctrl_bit = 2;
 	}
+
+	/*
+	 * DP link training uses the highest allowed pattern by default.
+	 * If it fails, the pattern is downgraded to improve cable and monitor compatibility.
+	 */
+	if (downgrade) {
+		switch (pattern) {
+		case DP_TRAINING_PATTERN_4:
+			pattern = DP_TRAINING_PATTERN_3;
+			state_ctrl_bit = 3;
+			break;
+		case DP_TRAINING_PATTERN_3:
+			pattern = DP_TRAINING_PATTERN_2;
+			state_ctrl_bit = 2;
+			break;
+		default:
+			break;
+		}
+	}
+
+	drm_dbg_dp(ctrl->drm_dev, "pattern(%d) state_ctrl_bit(%d) downgrade(%d)\n",
+		pattern, state_ctrl_bit, downgrade);
 
 	ret = msm_dp_catalog_ctrl_set_pattern_state_bit(ctrl->catalog, state_ctrl_bit);
 	if (ret)
@@ -1311,10 +1333,14 @@ static int msm_dp_ctrl_link_train(struct msm_dp_ctrl_private *ctrl,
 	/* print success info as this is a result of user initiated action */
 	drm_dbg_dp(ctrl->drm_dev, "link training #1 successful\n");
 
-	ret = msm_dp_ctrl_link_train_2(ctrl, training_step);
+	ret = msm_dp_ctrl_link_train_2(ctrl, training_step, false);
 	if (ret) {
-		DRM_ERROR("link training #2 failed. ret=%d\n", ret);
-		goto end;
+		drm_dbg_dp(ctrl->drm_dev, "link training #2 failed, retry downgrade.\n");
+		ret = msm_dp_ctrl_link_train_2(ctrl, training_step, true);
+		if (ret) {
+			DRM_ERROR("link training #2 failed. ret=%d\n", ret);
+			goto end;
+		}
 	}
 
 	/* print success info as this is a result of user initiated action */
