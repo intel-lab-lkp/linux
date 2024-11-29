@@ -280,6 +280,13 @@ static inline struct page *ceph_fscrypt_pagecache_page(struct page *page)
 }
 #endif /* CONFIG_FS_ENCRYPTION */
 
+static inline struct folio *ceph_fscrypt_pagecache_folio(struct page *page)
+{
+	if (fscrypt_is_bounce_page(page))
+		page = fscrypt_pagecache_page(page);
+	return page_folio(page);
+}
+
 static inline loff_t ceph_fscrypt_page_offset(struct page *page)
 {
 	return page_offset(ceph_fscrypt_pagecache_page(page));

@@ -1346,8 +1346,11 @@ new_request:
 			memset(data_pages + i, 0,
 			       locked_pages * sizeof(*pages));
 		} else {
+			struct folio *folio;
+
 			BUG_ON(num_ops != req->r_num_ops);
-			index = pages[i - 1]->index + 1;
+			folio = ceph_fscrypt_pagecache_folio(pages[i - 1]);
+			index = folio->index + 1;
 			/* request message now owns the pages array */
 			pages = NULL;
 		}
