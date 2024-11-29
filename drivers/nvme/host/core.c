@@ -1320,6 +1320,12 @@ static enum rq_end_io_ret nvme_keep_alive_end_io(struct request *rq,
 		dev_err(ctrl->device,
 			"failed nvme_keep_alive_end_io error=%d\n",
 				status);
+		/*
+		 * The driver reports that we lost the connection,
+		 * trigger a recovery.
+		 */
+		if (status == BLK_STS_TRANSPORT)
+			nvme_reset_ctrl(ctrl);
 		return RQ_END_IO_NONE;
 	}
 
