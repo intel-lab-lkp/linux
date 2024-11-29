@@ -923,7 +923,7 @@ bus_devices_fail:
 bus_uevent_fail:
 	kset_unregister(&priv->subsys);
 	/* Above kset_unregister() will kfree @priv */
-	priv = NULL;
+	return retval;
 out:
 	kfree(priv);
 	return retval;
