@@ -598,7 +598,7 @@ extern "C" {
  * compression.
  *
  * The main surface is Y-tiled and is at plane index 0 whereas CCS is linear
- * and at index 1. The clear color is stored at index 2, and the pitch should
+ * and at index 1. The clear color is stored at index 2, and the offset and pitch must
  * be 64 bytes aligned. The clear color structure is 256 bits. The first 128 bits
  * represents Raw Clear Color Red, Green, Blue and Alpha color each represented
  * by 32 bits. The raw clear color is consumed by the 3d engine and generates
@@ -652,7 +652,7 @@ extern "C" {
  * outside of the GEM object in a reserved memory area dedicated for the
  * storage of the CCS data for all RC/RC_CC/MC compressible GEM objects. The
  * main surface pitch is required to be a multiple of four Tile 4 widths. The
- * clear color is stored at plane index 1 and the pitch should be 64 bytes
+ * clear color is stored at plane index 1, and the offset and pitch must be 64 bytes
  * aligned. The format of the 256 bits of clear color data matches the one used
  * for the I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC modifier, see its description
  * for details.
@@ -688,17 +688,18 @@ extern "C" {
  * compression.
  *
  * The main surface is tile4 and is at plane index 0 whereas CCS is linear
- * and at index 1. The clear color is stored at index 2, and the pitch should
- * be ignored. The clear color structure is 256 bits. The first 128 bits
- * represents Raw Clear Color Red, Green, Blue and Alpha color each represented
- * by 32 bits. The raw clear color is consumed by the 3d engine and generates
- * the converted clear color of size 64 bits. The first 32 bits store the Lower
- * Converted Clear Color value and the next 32 bits store the Higher Converted
- * Clear Color value when applicable. The Converted Clear Color values are
- * consumed by the DE. The last 64 bits are used to store Color Discard Enable
- * and Depth Clear Value Valid which are ignored by the DE. A CCS cache line
- * corresponds to an area of 4x1 tiles in the main surface. The main surface
- * pitch is required to be a multiple of 4 tile widths.
+ * and at index 1. The clear color is stored at index 2, and the offset and
+ * pitch must be 64 bytes aligned. The clear color structure is 256 bits.
+ * The first 128 bits represents Raw Clear Color Red, Green, Blue and Alpha
+ * color each represented by 32 bits. The raw clear color is consumed by the
+ * 3d engine and generates the converted clear color of size 64 bits. The
+ * first 32 bits store the Lower Converted Clear Color value and the next 32
+ * bits store the Higher Converted Clear Color value when applicable. The
+ * Converted Clear Color values are consumed by the DE. The last 64 bits are
+ * used to store Color Discard Enable and Depth Clear Value Valid which are
+ * ignored by the DE. A CCS cache line corresponds to an area of 4x1 tiles in
+ * the main surface. The main surface pitch is required to be a multiple of
+ * 4 tile widths.
  */
 #define I915_FORMAT_MOD_4_TILED_MTL_RC_CCS_CC fourcc_mod_code(INTEL, 15)
 
