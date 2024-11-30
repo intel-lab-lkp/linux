@@ -574,6 +574,16 @@ config TCS3414
 	  This driver can also be built as a module.  If so, the module
 	  will be called tcs3414.
 
+config TCS3430
+	tristate "AMS TCS3430 XYZ tristimulus color sensor driver"
+	depends on I2C && PM
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Support for the AMS TCS3430 XYZ tristimulus color sensor.
+
+	  This driver can be built-in or built as a module, called tcs3430.
+
 config TCS3472
 	tristate "TAOS TCS3472 color light-to-digital converter"
 	depends on I2C
