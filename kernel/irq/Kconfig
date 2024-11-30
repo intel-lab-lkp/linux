@@ -154,3 +154,12 @@ config DEPRECATED_IRQ_CPU_ONOFFLINE
 	bool
 	depends on CAVIUM_OCTEON_SOC
 	default CAVIUM_OCTEON_SOC
+
+config GENERIC_IRQ_KEXEC_CLEAR_VM_FORWARD
+	bool "Clear forwarded VM interrupts during kexec"
+	default n
+	help
+	  When enabled, this option allows the kernel to clear the active state
+	  of interrupts that are forwarded to virtual machines (VMs) during a
+	  machine kexec. For interrupts that are not forwarded, if supported,
+	  the kernel will attempt to trigger an End of Interrupt (EOI).
