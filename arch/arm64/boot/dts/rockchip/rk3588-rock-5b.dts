@@ -875,6 +875,7 @@
 };
 
 &usbdp_phy1 {
+	rockchip,dp-lane-mux = <2 3>;
 	status = "okay";
 };
 
