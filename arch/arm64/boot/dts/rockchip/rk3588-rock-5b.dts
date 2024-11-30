@@ -835,6 +835,14 @@
 	status = "okay";
 };
 
+&u2phy0 {
+	status = "okay";
+};
+
+&u2phy0_otg {
+	status = "okay";
+};
+
 &u2phy1 {
 	status = "okay";
 };
@@ -862,6 +870,10 @@
 	status = "okay";
 };
 
+&usbdp_phy0 {
+	status = "okay";
+};
+
 &usbdp_phy1 {
 	status = "okay";
 };
@@ -871,6 +883,11 @@
 };
 
 &usb_host0_ohci {
+	status = "okay";
+};
+
+&usb_host0_xhci {
+	dr_mode = "host";
 	status = "okay";
 };
 
