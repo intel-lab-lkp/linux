@@ -38,10 +38,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32000>;
-};
-
 &tlmm {
 	sdc_default_state: sdc-default-state {
 		clk-pins {
@@ -77,8 +73,4 @@
 
 &usbphy0 {
 	status = "okay";
-};
-
-&xo_board_clk {
-	clock-frequency = <24000000>;
 };
