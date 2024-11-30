@@ -182,6 +182,8 @@ run_test()
 	mc_route_prepare $send_if_name
 	mc_route_prepare $rcv_if_name
 
+	sleep 1
+
 	send_uc_ipv4 $send_if_name $rcv_dmac
 	send_uc_ipv4 $send_if_name $MACVLAN_ADDR
 	send_uc_ipv4 $send_if_name $UNKNOWN_UC_ADDR1
