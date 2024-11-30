@@ -616,7 +616,6 @@ void snd_card_free_when_closed(struct snd_card *card)
 
 	snd_card_disconnect(card);
 	put_device(&card->card_dev);
-	return;
 }
 EXPORT_SYMBOL(snd_card_free_when_closed);
 
