@@ -611,7 +611,7 @@ struct iio_dev {
 	const unsigned long		*available_scan_masks;
 	unsigned int			__private masklength;
 	const unsigned long		*active_scan_mask;
-	bool				scan_timestamp;
+	bool				__private scan_timestamp;
 	struct iio_trigger		*trig;
 	struct iio_poll_func		*pollfunc;
 	struct iio_poll_func		*pollfunc_event;
@@ -908,7 +908,7 @@ int iio_active_scan_mask_index(struct iio_dev *indio_dev);
  */
 static inline bool iio_is_soft_ts_enabled(const struct iio_dev *indio_dev)
 {
-	return indio_dev->scan_timestamp;
+	return ACCESS_PRIVATE(indio_dev, scan_timestamp);
 }
 
 ssize_t iio_format_value(char *buf, unsigned int type, int size, int *vals);
