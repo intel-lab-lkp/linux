@@ -1056,6 +1056,9 @@ static int fuse_copy_pages(struct fuse_copy_state *cs, unsigned nbytes,
 /* Copy a single argument in the request to/from userspace buffer */
 static int fuse_copy_one(struct fuse_copy_state *cs, void *val, unsigned size)
 {
+	if (!val)
+		return -EINVAL;
+
 	while (size) {
 		if (!cs->len) {
 			int err = fuse_copy_fill(cs);
