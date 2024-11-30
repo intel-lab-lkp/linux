@@ -236,6 +236,8 @@ struct kvm_page_fault {
 	/* Outputs of kvm_faultin_pfn.  */
 	unsigned long mmu_seq;
 	kvm_pfn_t pfn;
+	/* pfn copy for kvm_release_pfn_clean(), constant after kvm_faultin_pfn() */
+	kvm_pfn_t faultin_pfn;
 	hva_t hva;
 	bool map_writable;
 
