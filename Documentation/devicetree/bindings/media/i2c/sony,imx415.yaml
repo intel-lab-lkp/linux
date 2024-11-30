@@ -31,6 +31,10 @@ properties:
     description: Input clock (24 MHz, 27 MHz, 37.125 MHz, 72 MHz or 74.25 MHz)
     maxItems: 1
 
+  clock-names:
+    items:
+      - const: inck
+
   avdd-supply:
     description: Analog power supply (2.9 V)
 
@@ -76,6 +80,7 @@ required:
   - compatible
   - reg
   - clocks
+  - clock-names
   - avdd-supply
   - dvdd-supply
   - ovdd-supply
@@ -96,6 +101,7 @@ examples:
             reg = <0x1a>;
             avdd-supply = <&vcc2v9_cam>;
             clocks = <&clock_cam>;
+            clock-names = "inck";
             dvdd-supply = <&vcc1v1_cam>;
             lens-focus = <&vcm>;
             orientation = <2>;
