@@ -624,7 +624,3 @@
 	firmware-name = "qcm2290";
 	status = "okay";
 };
-
-&xo_board {
-	clock-frequency = <38400000>;
-};
