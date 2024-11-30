@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/light/ams,tcs3430.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: AMS TCS3430 XYZ tristimulus color sensor
+
+maintainers:
+  - Paul Kocialkowski <paulk@sys-base.io>
+
+description: |
+  The device supports both interrupt-driven and interrupt-less operation,
+  depending on whether an interrupt property is present in the device-tree.
+
+properties:
+  compatible:
+    const: ams,tcs3430
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+    description: The interrupt is detected on a low level.
+
+  vdd-supply: true
+
+additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - vdd-supply
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        light-sensor@39 {
+          compatible = "ams,tcs3430";
+            reg = <0x39>;
+            interrupt-parent = <&pio>;
+            interrupts = <0 8 IRQ_TYPE_EDGE_FALLING>;
+            vdd-supply = <&reg_vcc_io>;
+        };
+    };
+...
