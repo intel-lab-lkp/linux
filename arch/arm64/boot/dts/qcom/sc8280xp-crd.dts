@@ -868,10 +868,6 @@
 	remote-endpoint = <&pmic_glink_con1_ss>;
 };
 
-&xo_board_clk {
-	clock-frequency = <38400000>;
-};
-
 /* PINCTRL - additions to nodes defined in sc8280xp.dtsi */
 
 &pmc8280_1_gpios {

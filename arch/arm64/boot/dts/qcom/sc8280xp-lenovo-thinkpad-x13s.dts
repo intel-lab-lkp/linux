@@ -1481,10 +1481,6 @@
 	status = "okay";
 };
 
-&xo_board_clk {
-	clock-frequency = <38400000>;
-};
-
 /* PINCTRL */
 
 &lpass_tlmm {
