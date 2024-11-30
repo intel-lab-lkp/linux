@@ -1473,7 +1473,7 @@ static irqreturn_t max1363_trigger_handler(int irq, void *p)
 		d_size = numvals*2;
 	else
 		d_size = numvals;
-	if (indio_dev->scan_timestamp) {
+	if (iio_is_soft_ts_enabled(indio_dev)) {
 		d_size += sizeof(s64);
 		if (d_size % sizeof(s64))
 			d_size += sizeof(s64) - (d_size % sizeof(s64));
