@@ -366,10 +366,6 @@
 	vdd3-supply = <&vreg_l5b_3p1>;
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &ufs_mem_hc {
 	reset-gpios = <&tlmm 210 GPIO_ACTIVE_LOW>;
 	vcc-supply = <&vreg_l17b_2p5>;
@@ -398,8 +394,4 @@
 &usb_dp_qmpphy {
 	vdda-phy-supply = <&vreg_l3e_1p2>;
 	vdda-pll-supply = <&vreg_l3f_0p88>;
-};
-
-&xo_board {
-	clock-frequency = <76800000>;
 };

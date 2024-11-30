@@ -721,10 +721,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
 };
@@ -758,8 +754,4 @@
 
 &usb_dp_qmpphy_out {
 	remote-endpoint = <&pmic_glink_ss_in>;
-};
-
-&xo_board {
-	clock-frequency = <76800000>;
 };

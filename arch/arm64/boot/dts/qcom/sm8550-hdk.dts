@@ -1171,10 +1171,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &swr0 {
 	status = "okay";
 
@@ -1366,8 +1362,4 @@
 
 &usb_dp_qmpphy_out {
 	remote-endpoint = <&pmic_glink_ss_in>;
-};
-
-&xo_board {
-	clock-frequency = <76800000>;
 };

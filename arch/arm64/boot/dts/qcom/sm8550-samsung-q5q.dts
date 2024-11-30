@@ -564,10 +564,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &tlmm {
 	gpio-reserved-ranges = <36 4>, <50 2>;
 };
@@ -586,8 +582,4 @@
 	vdda-phy-supply = <&vreg_l1d_0p88>;
 	vdda-pll-supply = <&vreg_l3e_1p2>;
 	status = "okay";
-};
-
-&xo_board {
-	clock-frequency = <76800000>;
 };
