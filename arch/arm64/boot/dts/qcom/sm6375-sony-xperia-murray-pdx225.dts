@@ -454,7 +454,3 @@
 	vdd-3.3-ch1-supply = <&pm6125_l21>;
 	status = "okay";
 };
-
-&xo_board_clk {
-	clock-frequency = <19200000>;
-};
