@@ -55,14 +55,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32000>;
-};
-
-&xo_board {
-	clock-frequency = <24000000>;
-};
-
 /* PINCTRL */
 &tlmm {
 	gpio_keys_default: gpio-keys-default-state {
