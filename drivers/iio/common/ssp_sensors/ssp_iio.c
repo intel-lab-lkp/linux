@@ -82,7 +82,7 @@ int ssp_common_process_data(struct iio_dev *indio_dev, void *buf,
 	 */
 	memcpy(spd->buffer, buf, len);
 
-	if (indio_dev->scan_timestamp) {
+	if (iio_is_soft_ts_enabled(indio_dev)) {
 		memcpy(&time, &((char *)buf)[len], SSP_TIME_SIZE);
 		calculated_time =
 			timestamp + (int64_t)le32_to_cpu(time) * 1000000;
