@@ -1846,6 +1846,7 @@ const struct nla_policy nda_policy[NDA_MAX+1] = {
 	[NDA_NH_ID]		= { .type = NLA_U32 },
 	[NDA_FLAGS_EXT]		= NLA_POLICY_MASK(NLA_U32, NTF_EXT_MASK),
 	[NDA_FDB_EXT_ATTRS]	= { .type = NLA_NESTED },
+	[NDA_INNER_VLAN]	= { .type = NLA_U16 },
 };
 
 static int neigh_delete(struct sk_buff *skb, struct nlmsghdr *nlh,

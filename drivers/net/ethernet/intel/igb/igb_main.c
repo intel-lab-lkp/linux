@@ -2485,7 +2485,7 @@ static int igb_set_features(struct net_device *netdev,
 
 static int igb_ndo_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 			   struct net_device *dev,
-			   const unsigned char *addr, u16 vid,
+			   const unsigned char *addr, u16 vid, u16 inner_vid,
 			   u16 flags, bool *notified,
 			   struct netlink_ext_ack *extack)
 {
@@ -2498,7 +2498,7 @@ static int igb_ndo_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 			return -ENOMEM;
 	}
 
-	return ndo_dflt_fdb_add(ndm, tb, dev, addr, vid, flags);
+	return ndo_dflt_fdb_add(ndm, tb, dev, addr, vid, inner_vid, flags);
 }
 
 #define IGB_MAX_MAC_HDR_LEN	127

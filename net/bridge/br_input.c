@@ -86,6 +86,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	struct net_bridge *br;
 	bool promisc;
 	u16 vid = 0;
+	u16 inner_vid = 0;
 	u8 state;
 
 	if (!p)
@@ -104,13 +105,13 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	brmctx = &p->br->multicast_ctx;
 	pmctx = &p->multicast_ctx;
-	if (!br_allowed_ingress(p->br, nbp_vlan_group_rcu(p), skb, &vid,
+	if (!br_allowed_ingress(p->br, nbp_vlan_group_rcu(p), skb, &vid, &inner_vid,
 				&state, &vlan))
 		goto out;
 
 	if (p->flags & BR_PORT_LOCKED) {
 		struct net_bridge_fdb_entry *fdb_src =
-			br_fdb_find_rcu(br, eth_hdr(skb)->h_source, vid);
+			br_fdb_find_rcu(br, eth_hdr(skb)->h_source, vid, inner_vid);
 
 		if (!fdb_src) {
 			/* FDB miss. Create locked FDB entry if MAB is enabled
@@ -118,7 +119,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 			 */
 			if (p->flags & BR_PORT_MAB)
 				br_fdb_update(br, p, eth_hdr(skb)->h_source,
-					      vid, BIT(BR_FDB_LOCKED));
+					      vid, inner_vid, BIT(BR_FDB_LOCKED));
 			goto drop;
 		} else if (READ_ONCE(fdb_src->dst) != p ||
 			   test_bit(BR_FDB_LOCAL, &fdb_src->flags)) {
@@ -128,7 +129,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 			/* FDB match, but entry is locked. Refresh it and drop
 			 * the packet.
 			 */
-			br_fdb_update(br, p, eth_hdr(skb)->h_source, vid,
+			br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, inner_vid,
 				      BIT(BR_FDB_LOCKED));
 			goto drop;
 		}
@@ -138,7 +139,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	/* insert into forwarding database after filtering to avoid spoofing */
 	if (p->flags & BR_LEARNING)
-		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, 0);
+		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, inner_vid, 0);
 
 	promisc = !!(br->dev->flags & IFF_PROMISC);
 	local_rcv = promisc;
@@ -164,7 +165,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	if (IS_ENABLED(CONFIG_INET) &&
 	    (skb->protocol == htons(ETH_P_ARP) ||
 	     skb->protocol == htons(ETH_P_RARP))) {
-		br_do_proxy_suppress_arp(skb, br, vid, p);
+		br_do_proxy_suppress_arp(skb, br, vid, inner_vid, p);
 	} else if (IS_ENABLED(CONFIG_IPV6) &&
 		   skb->protocol == htons(ETH_P_IPV6) &&
 		   br_opt_get(br, BROPT_NEIGH_SUPPRESS_ENABLED) &&
@@ -175,7 +176,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 			msg = br_is_nd_neigh_msg(skb, &_msg);
 			if (msg)
-				br_do_suppress_nd(skb, br, vid, p, msg);
+				br_do_suppress_nd(skb, br, vid, inner_vid, p, msg);
 	}
 
 	switch (pkt_type) {
@@ -195,7 +196,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		}
 		break;
 	case BR_PKT_UNICAST:
-		dst = br_fdb_find_rcu(br, eth_hdr(skb)->h_dest, vid);
+		dst = br_fdb_find_rcu(br, eth_hdr(skb)->h_dest, vid, inner_vid);
 		break;
 	default:
 		break;
@@ -232,13 +233,14 @@ static void __br_handle_local_finish(struct sk_buff *skb)
 {
 	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
 	u16 vid = 0;
+	u16 inner_vid = 0;
 
 	/* check if vlan is allowed, to avoid spoofing */
 	if ((p->flags & BR_LEARNING) &&
 	    nbp_state_should_learn(p) &&
 	    !br_opt_get(p->br, BROPT_NO_LL_LEARN) &&
-	    br_should_learn(p, skb, &vid))
-		br_fdb_update(p->br, p, eth_hdr(skb)->h_source, vid, 0);
+	    br_should_learn(p, skb, &vid, &inner_vid))
+		br_fdb_update(p->br, p, eth_hdr(skb)->h_source, vid, inner_vid, 0);
 }
 
 /* note: already called with rcu_read_lock */

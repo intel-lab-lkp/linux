@@ -3583,7 +3583,7 @@ mlxsw_sp_switchdev_vxlan_fdb_add(struct mlxsw_sp *mlxsw_sp,
 	 * device in the bridge's FDB table
 	 */
 	vid = bridge_device->ops->fid_vid(bridge_device, fid);
-	if (br_fdb_find_port(br_dev, vxlan_fdb_info->eth_addr, vid) != dev)
+	if (br_fdb_find_port(br_dev, vxlan_fdb_info->eth_addr, vid, 0) != dev)
 		goto err_br_fdb_find;
 
 	err = mlxsw_sp_port_fdb_tunnel_uc_op(mlxsw_sp, vxlan_fdb_info->eth_addr,

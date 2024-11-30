@@ -1270,6 +1270,7 @@ static const struct nla_policy br_policy[IFLA_BR_MAX + 1] = {
 		NLA_POLICY_EXACT_LEN(sizeof(struct br_boolopt_multi)),
 	[IFLA_BR_FDB_N_LEARNED] = { .type = NLA_REJECT },
 	[IFLA_BR_FDB_MAX_LEARNED] = { .type = NLA_U32 },
+	[IFLA_BR_FDB_INNER_VLAN_ENABLED] = { .type = NLA_U8 },
 };
 
 static int br_changelink(struct net_device *brdev, struct nlattr *tb[],
@@ -1326,9 +1327,22 @@ static int br_changelink(struct net_device *brdev, struct nlattr *tb[],
 		err = br_vlan_filter_toggle(br, vlan_filter, extack);
 		if (err)
 			return err;
+
+		if (!br_opt_get(br, BROPT_VLAN_ENABLED))
+			br_opt_toggle(br, BROPT_FDB_INNER_VLAN_ENABLED, false);
 	}
 
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING
+	if (data[IFLA_BR_FDB_INNER_VLAN_ENABLED]) {
+		u8 val;
+
+		if (!br_opt_get(br, BROPT_VLAN_ENABLED))
+			return -EINVAL;
+
+		val = nla_get_u8(data[IFLA_BR_FDB_INNER_VLAN_ENABLED]);
+		br_opt_toggle(br, BROPT_FDB_INNER_VLAN_ENABLED, !!val);
+	}
+
 	if (data[IFLA_BR_VLAN_PROTOCOL]) {
 		__be16 vlan_proto = nla_get_be16(data[IFLA_BR_VLAN_PROTOCOL]);
 
@@ -1693,7 +1707,9 @@ static int br_fill_info(struct sk_buff *skb, const struct net_device *brdev)
 	    nla_put_u8(skb, IFLA_BR_VLAN_STATS_ENABLED,
 		       br_opt_get(br, BROPT_VLAN_STATS_ENABLED)) ||
 	    nla_put_u8(skb, IFLA_BR_VLAN_STATS_PER_PORT,
-		       br_opt_get(br, BROPT_VLAN_STATS_PER_PORT)))
+		       br_opt_get(br, BROPT_VLAN_STATS_PER_PORT)) ||
+	    nla_put_u8(skb, IFLA_BR_FDB_INNER_VLAN_ENABLED,
+		       br_opt_get(br, BROPT_FDB_INNER_VLAN_ENABLED)))
 		return -EMSGSIZE;
 #endif
 #ifdef CONFIG_BRIDGE_IGMP_SNOOPING

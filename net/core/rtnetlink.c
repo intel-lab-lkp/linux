@@ -4403,7 +4403,7 @@ void rtmsg_ifinfo_newnet(int type, struct net_device *dev, unsigned int change,
 
 static int nlmsg_populate_fdb_fill(struct sk_buff *skb,
 				   struct net_device *dev,
-				   u8 *addr, u16 vid, u32 pid, u32 seq,
+				   u8 *addr, u16 vid, u16 inner_vid, u32 pid, u32 seq,
 				   int type, unsigned int flags,
 				   int nlflags, u16 ndm_state)
 {
@@ -4429,6 +4429,10 @@ static int nlmsg_populate_fdb_fill(struct sk_buff *skb,
 		if (nla_put(skb, NDA_VLAN, sizeof(u16), &vid))
 			goto nla_put_failure;
 
+	if (inner_vid)
+		if (nla_put(skb, NDA_INNER_VLAN, sizeof(u16), &inner_vid))
+			goto nla_put_failure;
+
 	nlmsg_end(skb, nlh);
 	return 0;
 
@@ -4445,7 +4449,7 @@ static inline size_t rtnl_fdb_nlmsg_size(const struct net_device *dev)
 	       0;
 }
 
-static void rtnl_fdb_notify(struct net_device *dev, u8 *addr, u16 vid, int type,
+static void rtnl_fdb_notify(struct net_device *dev, u8 *addr, u16 vid, u16 inner_vid, int type,
 			    u16 ndm_state)
 {
 	struct net *net = dev_net(dev);
@@ -4456,7 +4460,7 @@ static void rtnl_fdb_notify(struct net_device *dev, u8 *addr, u16 vid, int type,
 	if (!skb)
 		goto errout;
 
-	err = nlmsg_populate_fdb_fill(skb, dev, addr, vid,
+	err = nlmsg_populate_fdb_fill(skb, dev, addr, vid, inner_vid,
 				      0, 0, type, NTF_SELF, 0, ndm_state);
 	if (err < 0) {
 		kfree_skb(skb);
@@ -4475,7 +4479,7 @@ errout:
 int ndo_dflt_fdb_add(struct ndmsg *ndm,
 		     struct nlattr *tb[],
 		     struct net_device *dev,
-		     const unsigned char *addr, u16 vid,
+		     const unsigned char *addr, u16 vid, u16 inner_vid,
 		     u16 flags)
 {
 	int err = -EINVAL;
@@ -4493,7 +4497,7 @@ int ndo_dflt_fdb_add(struct ndmsg *ndm,
 		return err;
 	}
 
-	if (vid) {
+	if (vid || inner_vid) {
 		netdev_info(dev, "vlans aren't supported yet for dev_uc|mc_add()\n");
 		return err;
 	}
@@ -4541,7 +4545,7 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct nlattr *tb[NDA_MAX+1];
 	struct net_device *dev;
 	u8 *addr;
-	u16 vid;
+	u16 vid, inner_vid;
 	int err;
 
 	err = nlmsg_parse_deprecated(nlh, sizeof(*ndm), tb, NDA_MAX, NULL,
@@ -4577,6 +4581,10 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err)
 		return err;
 
+	err = fdb_vid_parse(tb[NDA_INNER_VLAN], &inner_vid, extack);
+	if (err)
+		return err;
+
 	err = -EOPNOTSUPP;
 
 	/* Support fdb on master device the net/bridge default case */
@@ -4586,7 +4594,7 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		const struct net_device_ops *ops = br_dev->netdev_ops;
 		bool notified = false;
 
-		err = ops->ndo_fdb_add(ndm, tb, dev, addr, vid,
+		err = ops->ndo_fdb_add(ndm, tb, dev, addr, vid, inner_vid,
 				       nlh->nlmsg_flags, &notified, extack);
 		if (err)
 			goto out;
@@ -4600,15 +4608,15 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 		if (dev->netdev_ops->ndo_fdb_add)
 			err = dev->netdev_ops->ndo_fdb_add(ndm, tb, dev, addr,
-							   vid,
+							   vid, inner_vid,
 							   nlh->nlmsg_flags,
 							   &notified, extack);
 		else
-			err = ndo_dflt_fdb_add(ndm, tb, dev, addr, vid,
+			err = ndo_dflt_fdb_add(ndm, tb, dev, addr, vid, inner_vid,
 					       nlh->nlmsg_flags);
 
 		if (!err && !notified) {
-			rtnl_fdb_notify(dev, addr, vid, RTM_NEWNEIGH,
+			rtnl_fdb_notify(dev, addr, vid, inner_vid, RTM_NEWNEIGH,
 					ndm->ndm_state);
 			ndm->ndm_flags &= ~NTF_SELF;
 		}
@@ -4623,7 +4631,7 @@ out:
 int ndo_dflt_fdb_del(struct ndmsg *ndm,
 		     struct nlattr *tb[],
 		     struct net_device *dev,
-		     const unsigned char *addr, u16 vid)
+		     const unsigned char *addr, u16 vid, u16 inner_vid)
 {
 	int err = -EINVAL;
 
@@ -4655,7 +4663,7 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct net_device *dev;
 	__u8 *addr = NULL;
 	int err;
-	u16 vid;
+	u16 vid, inner_vid;
 
 	if (!netlink_capable(skb, CAP_NET_ADMIN))
 		return -EPERM;
@@ -4694,6 +4702,10 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 		err = fdb_vid_parse(tb[NDA_VLAN], &vid, extack);
 		if (err)
 			return err;
+
+		err = fdb_vid_parse(tb[NDA_INNER_VLAN], &inner_vid, extack);
+		if (err)
+			return err;
 	}
 
 	if (dev->type != ARPHRD_ETHER) {
@@ -4712,7 +4724,7 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 		ops = br_dev->netdev_ops;
 		if (!del_bulk) {
 			if (ops->ndo_fdb_del)
-				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid,
+				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid, inner_vid,
 						       &notified, extack);
 		} else {
 			if (ops->ndo_fdb_del_bulk)
@@ -4732,10 +4744,10 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 		ops = dev->netdev_ops;
 		if (!del_bulk) {
 			if (ops->ndo_fdb_del)
-				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid,
+				err = ops->ndo_fdb_del(ndm, tb, dev, addr, vid, inner_vid,
 						       &notified, extack);
 			else
-				err = ndo_dflt_fdb_del(ndm, tb, dev, addr, vid);
+				err = ndo_dflt_fdb_del(ndm, tb, dev, addr, vid, inner_vid);
 		} else {
 			/* in case err was cleared by NTF_MASTER call */
 			err = -EOPNOTSUPP;
@@ -4745,7 +4757,7 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 		if (!err) {
 			if (!del_bulk && !notified)
-				rtnl_fdb_notify(dev, addr, vid, RTM_DELNEIGH,
+				rtnl_fdb_notify(dev, addr, vid, inner_vid, RTM_DELNEIGH,
 						ndm->ndm_state);
 			ndm->ndm_flags &= ~NTF_SELF;
 		}
@@ -4771,7 +4783,7 @@ static int nlmsg_populate_fdb(struct sk_buff *skb,
 		if (*idx < cb->args[2])
 			goto skip;
 
-		err = nlmsg_populate_fdb_fill(skb, dev, ha->addr, 0,
+		err = nlmsg_populate_fdb_fill(skb, dev, ha->addr, 0, 0,
 					      portid, seq,
 					      RTM_NEWNEIGH, NTF_SELF,
 					      NLM_F_MULTI, NUD_PERMANENT);
@@ -5008,7 +5020,7 @@ out:
 static int valid_fdb_get_strict(const struct nlmsghdr *nlh,
 				struct nlattr **tb, u8 *ndm_flags,
 				int *br_idx, int *brport_idx, u8 **addr,
-				u16 *vid, struct netlink_ext_ack *extack)
+				u16 *vid, u16 *inner_vid, struct netlink_ext_ack *extack)
 {
 	struct ndmsg *ndm;
 	int err, i;
@@ -5057,6 +5069,11 @@ static int valid_fdb_get_strict(const struct nlmsghdr *nlh,
 			if (err)
 				return err;
 			break;
+		case NDA_INNER_VLAN:
+			err = fdb_vid_parse(tb[i], inner_vid, extack);
+			if (err)
+				return err;
+			break;
 		case NDA_VNI:
 			break;
 		default:
@@ -5081,10 +5098,11 @@ static int rtnl_fdb_get(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	int br_idx = 0;
 	u8 *addr = NULL;
 	u16 vid = 0;
+	u16 inner_vid = 0;
 	int err;
 
 	err = valid_fdb_get_strict(nlh, tb, &ndm_flags, &br_idx,
-				   &brport_idx, &addr, &vid, extack);
+				   &brport_idx, &addr, &vid, &inner_vid, extack);
 	if (err < 0)
 		return err;
 
@@ -5152,7 +5170,7 @@ static int rtnl_fdb_get(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 
 	if (br_dev)
 		dev = br_dev;
-	err = ops->ndo_fdb_get(skb, tb, dev, addr, vid,
+	err = ops->ndo_fdb_get(skb, tb, dev, addr, vid, inner_vid,
 			       NETLINK_CB(in_skb).portid,
 			       nlh->nlmsg_seq, extack);
 	if (err)

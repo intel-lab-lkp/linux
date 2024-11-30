@@ -530,10 +530,17 @@ out:
 	return skb;
 }
 
+static u16 get_inner_vid(struct sk_buff *skb)
+{
+	struct vlan_hdr *vhdr = (struct vlan_hdr *)skb->data;
+
+	return ntohs(vhdr->h_vlan_TCI) & VLAN_VID_MASK;
+}
+
 /* Called under RCU */
 static bool __allowed_ingress(const struct net_bridge *br,
 			      struct net_bridge_vlan_group *vg,
-			      struct sk_buff *skb, u16 *vid,
+			      struct sk_buff *skb, u16 *vid, u16 *inner_vid,
 			      u8 *state,
 			      struct net_bridge_vlan **vlan)
 {
@@ -565,10 +572,15 @@ static bool __allowed_ingress(const struct net_bridge *br,
 
 			skb_pull(skb, ETH_HLEN);
 			skb_reset_mac_len(skb);
+			if (br_opt_get(br, BROPT_FDB_INNER_VLAN_ENABLED))
+				*inner_vid = *vid;
 			*vid = 0;
 			tagged = false;
 		} else {
 			tagged = true;
+			if (eth_type_vlan(skb->protocol) &&
+			    br_opt_get(br, BROPT_FDB_INNER_VLAN_ENABLED))
+				*inner_vid = get_inner_vid(skb);
 		}
 	} else {
 		/* Untagged frame */
@@ -640,7 +652,7 @@ drop:
 
 bool br_allowed_ingress(const struct net_bridge *br,
 			struct net_bridge_vlan_group *vg, struct sk_buff *skb,
-			u16 *vid, u8 *state,
+			u16 *vid, u16 *inner_vid, u8 *state,
 			struct net_bridge_vlan **vlan)
 {
 	/* If VLAN filtering is disabled on the bridge, all packets are
@@ -652,7 +664,7 @@ bool br_allowed_ingress(const struct net_bridge *br,
 		return true;
 	}
 
-	return __allowed_ingress(br, vg, skb, vid, state, vlan);
+	return __allowed_ingress(br, vg, skb, vid, inner_vid, state, vlan);
 }
 
 /* Called under RCU. */
@@ -676,7 +688,7 @@ bool br_allowed_egress(struct net_bridge_vlan_group *vg,
 }
 
 /* Called under RCU */
-bool br_should_learn(struct net_bridge_port *p, struct sk_buff *skb, u16 *vid)
+bool br_should_learn(struct net_bridge_port *p, struct sk_buff *skb, u16 *vid, u16 *inner_vid)
 {
 	struct net_bridge_vlan_group *vg;
 	struct net_bridge *br = p->br;
@@ -690,8 +702,18 @@ bool br_should_learn(struct net_bridge_port *p, struct sk_buff *skb, u16 *vid)
 	if (!vg || !vg->num_vlans)
 		return false;
 
-	if (!br_vlan_get_tag(skb, vid) && skb->vlan_proto != br->vlan_proto)
-		*vid = 0;
+	if (!br_vlan_get_tag(skb, vid)) {
+		/* Tagged frame */
+		if (skb->vlan_proto != br->vlan_proto) {
+			if (br_opt_get(br, BROPT_FDB_INNER_VLAN_ENABLED))
+				*inner_vid = *vid;
+			*vid = 0;
+		} else {
+			if (eth_type_vlan(skb->protocol) &&
+			    br_opt_get(br, BROPT_FDB_INNER_VLAN_ENABLED))
+				*inner_vid = get_inner_vid(skb);
+		}
+	}
 
 	if (!*vid) {
 		*vid = br_get_pvid(vg);

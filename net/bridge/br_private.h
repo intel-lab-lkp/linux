@@ -282,6 +282,7 @@ enum {
 struct net_bridge_fdb_key {
 	mac_addr addr;
 	u16 vlan_id;
+	u16 inner_vlan_id;
 };
 
 struct net_bridge_fdb_entry {
@@ -304,6 +305,7 @@ struct net_bridge_fdb_flush_desc {
 	unsigned long			flags_mask;
 	int				port_ifindex;
 	u16				vlan_id;
+	u16				inner_vlan_id;
 };
 
 #define MDB_PG_FLAGS_PERMANENT	BIT(0)
@@ -483,6 +485,7 @@ enum net_bridge_opts {
 	BROPT_VLAN_BRIDGE_BINDING,
 	BROPT_MCAST_VLAN_SNOOPING_ENABLED,
 	BROPT_MST_ENABLED,
+	BROPT_FDB_INNER_VLAN_ENABLED,
 };
 
 struct net_bridge {
@@ -842,27 +845,27 @@ void br_fdb_delete_by_port(struct net_bridge *br,
 			   const struct net_bridge_port *p, u16 vid, int do_all);
 struct net_bridge_fdb_entry *br_fdb_find_rcu(struct net_bridge *br,
 					     const unsigned char *addr,
-					     __u16 vid);
+					     __u16 vid, __u16 inner_vid);
 int br_fdb_test_addr(struct net_device *dev, unsigned char *addr);
 int br_fdb_fillbuf(struct net_bridge *br, void *buf, unsigned long count,
 		   unsigned long off);
 int br_fdb_add_local(struct net_bridge *br, struct net_bridge_port *source,
 		     const unsigned char *addr, u16 vid);
 void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
-		   const unsigned char *addr, u16 vid, unsigned long flags);
+		   const unsigned char *addr, u16 vid, u16 inner_vid, unsigned long flags);
 
 int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
-		  struct net_device *dev, const unsigned char *addr, u16 vid,
+		  struct net_device *dev, const unsigned char *addr, u16 vid, u16 inner_vid,
 		  bool *notified, struct netlink_ext_ack *extack);
 int br_fdb_delete_bulk(struct nlmsghdr *nlh, struct net_device *dev,
 		       struct netlink_ext_ack *extack);
 int br_fdb_add(struct ndmsg *nlh, struct nlattr *tb[], struct net_device *dev,
-	       const unsigned char *addr, u16 vid, u16 nlh_flags,
+	       const unsigned char *addr, u16 vid, u16 inner_vid, u16 nlh_flags,
 	       bool *notified, struct netlink_ext_ack *extack);
 int br_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb,
 		struct net_device *dev, struct net_device *fdev, int *idx);
 int br_fdb_get(struct sk_buff *skb, struct nlattr *tb[], struct net_device *dev,
-	       const unsigned char *addr, u16 vid, u32 portid, u32 seq,
+	       const unsigned char *addr, u16 vid, u16 inner_vid, u32 portid, u32 seq,
 	       struct netlink_ext_ack *extack);
 int br_fdb_sync_static(struct net_bridge *br, struct net_bridge_port *p);
 void br_fdb_unsync_static(struct net_bridge *br, struct net_bridge_port *p);
@@ -1532,11 +1535,11 @@ br_multicast_ctx_options_equal(const struct net_bridge_mcast *brmctx1,
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING
 bool br_allowed_ingress(const struct net_bridge *br,
 			struct net_bridge_vlan_group *vg, struct sk_buff *skb,
-			u16 *vid, u8 *state,
+			u16 *vid, u16 *inner_vid, u8 *state,
 			struct net_bridge_vlan **vlan);
 bool br_allowed_egress(struct net_bridge_vlan_group *vg,
 		       const struct sk_buff *skb);
-bool br_should_learn(struct net_bridge_port *p, struct sk_buff *skb, u16 *vid);
+bool br_should_learn(struct net_bridge_port *p, struct sk_buff *skb, u16 *vid, u16 *inner_vid);
 struct sk_buff *br_handle_vlan(struct net_bridge *br,
 			       const struct net_bridge_port *port,
 			       struct net_bridge_vlan_group *vg,
@@ -1645,7 +1648,7 @@ static inline u16 br_vlan_flags(const struct net_bridge_vlan *v, u16 pvid)
 static inline bool br_allowed_ingress(const struct net_bridge *br,
 				      struct net_bridge_vlan_group *vg,
 				      struct sk_buff *skb,
-				      u16 *vid, u8 *state,
+				      u16 *vid, u16 *inner_vid, u8 *state,
 				      struct net_bridge_vlan **vlan)
 
 {
@@ -1660,7 +1663,7 @@ static inline bool br_allowed_egress(struct net_bridge_vlan_group *vg,
 }
 
 static inline bool br_should_learn(struct net_bridge_port *p,
-				   struct sk_buff *skb, u16 *vid)
+				   struct sk_buff *skb, u16 *vid, u16 *inner_vid)
 {
 	return true;
 }
@@ -2287,9 +2290,9 @@ static inline void br_switchdev_init(struct net_bridge *br)
 /* br_arp_nd_proxy.c */
 void br_recalculate_neigh_suppress_enabled(struct net_bridge *br);
 void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
-			      u16 vid, struct net_bridge_port *p);
+			      u16 vid, u16 inner_vid, struct net_bridge_port *p);
 void br_do_suppress_nd(struct sk_buff *skb, struct net_bridge *br,
-		       u16 vid, struct net_bridge_port *p, struct nd_msg *msg);
+		       u16 vid, u16 inner_vid, struct net_bridge_port *p, struct nd_msg *msg);
 struct nd_msg *br_is_nd_neigh_msg(struct sk_buff *skb, struct nd_msg *m);
 bool br_is_neigh_suppress_enabled(const struct net_bridge_port *p, u16 vid);
 #endif

@@ -1240,7 +1240,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 /* Add static entry (via netlink) */
 static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 			 struct net_device *dev,
-			 const unsigned char *addr, u16 vid, u16 flags,
+			 const unsigned char *addr, u16 vid, u16 inner_vid, u16 flags,
 			 bool *notified, struct netlink_ext_ack *extack)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -1319,7 +1319,7 @@ out:
 /* Delete entry (via netlink) */
 static int vxlan_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 			    struct net_device *dev,
-			    const unsigned char *addr, u16 vid, bool *notified,
+			    const unsigned char *addr, u16 vid, u16 inner_vid, bool *notified,
 			    struct netlink_ext_ack *extack)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -1407,7 +1407,7 @@ static int vxlan_fdb_get(struct sk_buff *skb,
 			 struct nlattr *tb[],
 			 struct net_device *dev,
 			 const unsigned char *addr,
-			 u16 vid, u32 portid, u32 seq,
+			 u16 vid, u16 inner_vid, u32 portid, u32 seq,
 			 struct netlink_ext_ack *extack)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);

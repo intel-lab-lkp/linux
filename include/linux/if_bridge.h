@@ -177,7 +177,7 @@ static inline int br_mst_get_state(const struct net_device *dev, u16 msti,
 #if IS_ENABLED(CONFIG_BRIDGE)
 struct net_device *br_fdb_find_port(const struct net_device *br_dev,
 				    const unsigned char *addr,
-				    __u16 vid);
+				    __u16 vid, __u16 inner_vid);
 void br_fdb_clear_offload(const struct net_device *dev, u16 vid);
 bool br_port_flag_is_set(const struct net_device *dev, unsigned long flag);
 u8 br_port_get_stp_state(const struct net_device *dev);
@@ -186,7 +186,7 @@ clock_t br_get_ageing_time(const struct net_device *br_dev);
 static inline struct net_device *
 br_fdb_find_port(const struct net_device *br_dev,
 		 const unsigned char *addr,
-		 __u16 vid)
+		 __u16 vid, __u16 inner_vid)
 {
 	return NULL;
 }

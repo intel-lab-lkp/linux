@@ -6161,13 +6161,13 @@ ice_set_tx_maxrate(struct net_device *netdev, int queue_index, u32 maxrate)
  */
 static int
 ice_fdb_add(struct ndmsg *ndm, struct nlattr __always_unused *tb[],
-	    struct net_device *dev, const unsigned char *addr, u16 vid,
+	    struct net_device *dev, const unsigned char *addr, u16 vid, u16 inner_vid,
 	    u16 flags, bool *notified,
 	    struct netlink_ext_ack __always_unused *extack)
 {
 	int err;
 
-	if (vid) {
+	if (vid || inner_vid) {
 		netdev_err(dev, "VLANs aren't supported yet for dev_uc|mc_add()\n");
 		return -EINVAL;
 	}
@@ -6203,7 +6203,7 @@ ice_fdb_add(struct ndmsg *ndm, struct nlattr __always_unused *tb[],
 static int
 ice_fdb_del(struct ndmsg *ndm, __always_unused struct nlattr *tb[],
 	    struct net_device *dev, const unsigned char *addr,
-	    __always_unused u16 vid, bool *notified,
+	    __always_unused u16 vid, __always_unused u16 inner_vid, bool *notified,
 	    struct netlink_ext_ack *extack)
 {
 	int err;

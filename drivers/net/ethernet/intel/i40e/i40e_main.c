@@ -13100,7 +13100,7 @@ static int i40e_get_phys_port_id(struct net_device *netdev,
  */
 static int i40e_ndo_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 			    struct net_device *dev,
-			    const unsigned char *addr, u16 vid,
+			    const unsigned char *addr, u16 vid, u16 inner_vid,
 			    u16 flags, bool *notified,
 			    struct netlink_ext_ack *extack)
 {
@@ -13111,7 +13111,7 @@ static int i40e_ndo_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 	if (!test_bit(I40E_FLAG_SRIOV_ENA, pf->flags))
 		return -EOPNOTSUPP;
 
-	if (vid) {
+	if (vid || inner_vid) {
 		pr_info("%s: vlans aren't supported yet for dev_uc|mc_add()\n", dev->name);
 		return -EINVAL;
 	}

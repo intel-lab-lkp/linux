@@ -10609,7 +10609,7 @@ static void mlxsw_sp_rif_fid_fdb_del(struct mlxsw_sp_rif *rif, const char *mac)
 	struct switchdev_notifier_fdb_info info = {};
 	struct net_device *dev;
 
-	dev = br_fdb_find_port(mlxsw_sp_rif_dev(rif), mac, 0);
+	dev = br_fdb_find_port(mlxsw_sp_rif_dev(rif), mac, 0, 0);
 	if (!dev)
 		return;
 
@@ -10657,7 +10657,7 @@ static void mlxsw_sp_rif_vlan_fdb_del(struct mlxsw_sp_rif *rif, const char *mac)
 	struct net_device *dev;
 
 	br_dev = is_vlan_dev(rif_dev) ? vlan_dev_real_dev(rif_dev) : rif_dev;
-	dev = br_fdb_find_port(br_dev, mac, vid);
+	dev = br_fdb_find_port(br_dev, mac, vid, 0);
 	if (!dev)
 		return;
 

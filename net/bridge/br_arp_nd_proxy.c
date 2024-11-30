@@ -123,7 +123,7 @@ static bool br_is_local_ip(struct net_device *dev, __be32 ip)
 }
 
 void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
-			      u16 vid, struct net_bridge_port *p)
+			      u16 vid, u16 inner_vid, struct net_bridge_port *p)
 {
 	struct net_device *dev = br->dev;
 	struct net_device *vlandev = dev;
@@ -197,7 +197,7 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 			return;
 		}
 
-		f = br_fdb_find_rcu(br, n->ha, vid);
+		f = br_fdb_find_rcu(br, n->ha, vid, inner_vid);
 		if (f) {
 			bool replied = false;
 
@@ -397,7 +397,7 @@ static bool br_is_local_ip6(struct net_device *dev, struct in6_addr *addr)
 }
 
 void br_do_suppress_nd(struct sk_buff *skb, struct net_bridge *br,
-		       u16 vid, struct net_bridge_port *p, struct nd_msg *msg)
+		       u16 vid, u16 inner_vid, struct net_bridge_port *p, struct nd_msg *msg)
 {
 	struct net_device *dev = br->dev;
 	struct net_device *vlandev = NULL;
@@ -457,7 +457,7 @@ void br_do_suppress_nd(struct sk_buff *skb, struct net_bridge *br,
 			return;
 		}
 
-		f = br_fdb_find_rcu(br, n->ha, vid);
+		f = br_fdb_find_rcu(br, n->ha, vid, inner_vid);
 		if (f) {
 			bool replied = false;
 

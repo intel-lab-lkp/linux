@@ -1528,7 +1528,7 @@ struct net_device_ops {
 					       struct nlattr *tb[],
 					       struct net_device *dev,
 					       const unsigned char *addr,
-					       u16 vid,
+					       u16 vid, u16 inner_vid,
 					       u16 flags,
 					       bool *notified,
 					       struct netlink_ext_ack *extack);
@@ -1536,7 +1536,7 @@ struct net_device_ops {
 					       struct nlattr *tb[],
 					       struct net_device *dev,
 					       const unsigned char *addr,
-					       u16 vid,
+					       u16 vid, u16 inner_vid,
 					       bool *notified,
 					       struct netlink_ext_ack *extack);
 	int			(*ndo_fdb_del_bulk)(struct nlmsghdr *nlh,
@@ -1551,7 +1551,7 @@ struct net_device_ops {
 					       struct nlattr *tb[],
 					       struct net_device *dev,
 					       const unsigned char *addr,
-					       u16 vid, u32 portid, u32 seq,
+					       u16 vid, u16 inner_vid, u32 portid, u32 seq,
 					       struct netlink_ext_ack *extack);
 	int			(*ndo_mdb_add)(struct net_device *dev,
 					       struct nlattr *tb[],

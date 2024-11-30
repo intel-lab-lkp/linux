@@ -38,6 +38,7 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct net_bridge_vlan *vlan;
 	const unsigned char *dest;
 	u16 vid = 0;
+	u16 inner_vid = 0;
 
 	if (unlikely(reason != SKB_NOT_DROPPED_YET)) {
 		kfree_skb_reason(skb, reason);
@@ -63,7 +64,7 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb_reset_mac_header(skb);
 	skb_pull(skb, ETH_HLEN);
 
-	if (!br_allowed_ingress(br, br_vlan_group_rcu(br), skb, &vid,
+	if (!br_allowed_ingress(br, br_vlan_group_rcu(br), skb, &vid, &inner_vid,
 				&state, &vlan))
 		goto out;
 
@@ -71,7 +72,7 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 	    (eth_hdr(skb)->h_proto == htons(ETH_P_ARP) ||
 	     eth_hdr(skb)->h_proto == htons(ETH_P_RARP)) &&
 	    br_opt_get(br, BROPT_NEIGH_SUPPRESS_ENABLED)) {
-		br_do_proxy_suppress_arp(skb, br, vid, NULL);
+		br_do_proxy_suppress_arp(skb, br, vid, inner_vid, NULL);
 	} else if (IS_ENABLED(CONFIG_IPV6) &&
 		   skb->protocol == htons(ETH_P_IPV6) &&
 		   br_opt_get(br, BROPT_NEIGH_SUPPRESS_ENABLED) &&
@@ -82,7 +83,7 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 
 			msg = br_is_nd_neigh_msg(skb, &_msg);
 			if (msg)
-				br_do_suppress_nd(skb, br, vid, NULL, msg);
+				br_do_suppress_nd(skb, br, vid, inner_vid, NULL, msg);
 	}
 
 	dest = eth_hdr(skb)->h_dest;
@@ -104,7 +105,7 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 			br_multicast_flood(mdst, skb, brmctx, false, true);
 		else
 			br_flood(br, skb, BR_PKT_MULTICAST, false, true, vid);
-	} else if ((dst = br_fdb_find_rcu(br, dest, vid)) != NULL) {
+	} else if ((dst = br_fdb_find_rcu(br, dest, vid, inner_vid)) != NULL) {
 		br_forward(dst->dst, skb, false, true);
 	} else {
 		br_flood(br, skb, BR_PKT_UNICAST, false, true, vid);
@@ -394,7 +395,7 @@ static int br_fill_forward_path(struct net_device_path_ctx *ctx,
 
 	br_vlan_fill_forward_path_pvid(br, ctx, path);
 
-	f = br_fdb_find_rcu(br, ctx->daddr, path->bridge.vlan_id);
+	f = br_fdb_find_rcu(br, ctx->daddr, path->bridge.vlan_id, 0);
 	if (!f)
 		return -1;
 

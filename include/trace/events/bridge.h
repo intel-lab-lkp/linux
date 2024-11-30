@@ -12,15 +12,16 @@
 TRACE_EVENT(br_fdb_add,
 
 	TP_PROTO(struct ndmsg *ndm, struct net_device *dev,
-		 const unsigned char *addr, u16 vid, u16 nlh_flags),
+		 const unsigned char *addr, u16 vid, u16 inner_vid, u16 nlh_flags),
 
-	TP_ARGS(ndm, dev, addr, vid, nlh_flags),
+	TP_ARGS(ndm, dev, addr, vid, inner_vid, nlh_flags),
 
 	TP_STRUCT__entry(
 		__field(u8, ndm_flags)
 		__string(dev, dev->name)
 		__array(unsigned char, addr, ETH_ALEN)
 		__field(u16, vid)
+		__field(u16, inner_vid)
 		__field(u16, nlh_flags)
 	),
 
@@ -28,14 +29,15 @@ TRACE_EVENT(br_fdb_add,
 		__assign_str(dev);
 		memcpy(__entry->addr, addr, ETH_ALEN);
 		__entry->vid = vid;
+		__entry->inner_vid = inner_vid;
 		__entry->nlh_flags = nlh_flags;
 		__entry->ndm_flags = ndm->ndm_flags;
 	),
 
-	TP_printk("dev %s addr %02x:%02x:%02x:%02x:%02x:%02x vid %u nlh_flags %04x ndm_flags %02x",
+	TP_printk("dev %s addr %02x:%02x:%02x:%02x:%02x:%02x vid %u inner_vid %u nlh_flags %04x ndm_flags %02x",
 		  __get_str(dev), __entry->addr[0], __entry->addr[1],
 		  __entry->addr[2], __entry->addr[3], __entry->addr[4],
-		  __entry->addr[5], __entry->vid,
+		  __entry->addr[5], __entry->vid, __entry->inner_vid,
 		  __entry->nlh_flags, __entry->ndm_flags)
 );
 
@@ -95,15 +97,16 @@ TRACE_EVENT(fdb_delete,
 TRACE_EVENT(br_fdb_update,
 
 	TP_PROTO(struct net_bridge *br, struct net_bridge_port *source,
-		 const unsigned char *addr, u16 vid, unsigned long flags),
+		 const unsigned char *addr, u16 vid, u16 inner_vid, unsigned long flags),
 
-	TP_ARGS(br, source, addr, vid, flags),
+	TP_ARGS(br, source, addr, vid, inner_vid, flags),
 
 	TP_STRUCT__entry(
 		__string(br_dev, br->dev->name)
 		__string(dev, source->dev->name)
 		__array(unsigned char, addr, ETH_ALEN)
 		__field(u16, vid)
+		__field(u16, inner_vid)
 		__field(unsigned long, flags)
 	),
 
@@ -112,13 +115,14 @@ TRACE_EVENT(br_fdb_update,
 		__assign_str(dev);
 		memcpy(__entry->addr, addr, ETH_ALEN);
 		__entry->vid = vid;
+		__entry->inner_vid = inner_vid;
 		__entry->flags = flags;
 	),
 
-	TP_printk("br_dev %s source %s addr %02x:%02x:%02x:%02x:%02x:%02x vid %u flags 0x%lx",
+	TP_printk("br_dev %s source %s addr %02x:%02x:%02x:%02x:%02x:%02x vid %u inner_vid %u flags 0x%lx",
 		  __get_str(br_dev), __get_str(dev), __entry->addr[0],
 		  __entry->addr[1], __entry->addr[2], __entry->addr[3],
-		  __entry->addr[4], __entry->addr[5], __entry->vid,
+		  __entry->addr[4], __entry->addr[5], __entry->vid, __entry->inner_vid,
 		  __entry->flags)
 );
 
