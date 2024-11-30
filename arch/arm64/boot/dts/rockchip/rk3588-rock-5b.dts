@@ -870,10 +870,6 @@
 	status = "okay";
 };
 
-&usb_host0_ohci {
-	status = "okay";
-};
-
 &usb_host1_ehci {
 	status = "okay";
 };
