@@ -902,6 +902,15 @@ int iio_active_scan_mask_index(struct iio_dev *indio_dev);
 	for_each_set_bit((chan), (indio_dev)->active_scan_mask, \
 			 iio_get_masklength(indio_dev))
 
+/**
+ * iio_is_soft_ts_enabled - Check if the software timestamp is enabled
+ * @indio_dev: the IIO device
+ */
+static inline bool iio_is_soft_ts_enabled(const struct iio_dev *indio_dev)
+{
+	return indio_dev->scan_timestamp;
+}
+
 ssize_t iio_format_value(char *buf, unsigned int type, int size, int *vals);
 
 int iio_str_to_fixpoint(const char *str, int fract_mult, int *integer,
