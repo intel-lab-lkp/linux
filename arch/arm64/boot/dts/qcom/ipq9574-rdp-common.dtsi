@@ -114,10 +114,6 @@
 	};
 };
 
-&sleep_clk {
-	clock-frequency = <32000>;
-};
-
 &tlmm {
 	spi_0_pins: spi-0-state {
 		pins = "gpio11", "gpio12", "gpio13", "gpio14";
@@ -162,8 +158,4 @@
 
 &usb3 {
 	status = "okay";
-};
-
-&xo_board_clk {
-	clock-frequency = <24000000>;
 };
