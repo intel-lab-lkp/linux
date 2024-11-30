@@ -128,7 +128,7 @@ static void dln2_adc_update_demux(struct dln2_adc *dln2)
 		in_loc += 2;
 	}
 
-	if (indio_dev->scan_timestamp) {
+	if (iio_is_soft_ts_enabled(indio_dev)) {
 		size_t ts_offset = indio_dev->scan_bytes / sizeof(int64_t) - 1;
 
 		dln2->ts_pad_offset = out_loc;
