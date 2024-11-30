@@ -2526,9 +2526,9 @@ static void smc_listen_work(struct work_struct *work)
 	if (!ini->is_smcd) {
 		rc = smc_listen_rdma_finish(new_smc, cclc,
 					    ini->first_contact_local, ini);
-		if (rc)
-			goto out_unlock;
 		mutex_unlock(&smc_server_lgr_pending);
+		if (rc)
+			goto out_decl;
 	}
 	smc_conn_save_peer_info(new_smc, cclc);
 
