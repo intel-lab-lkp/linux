@@ -286,12 +286,12 @@ static void img_ascii_lcd_remove(struct platform_device *pdev)
 }
 
 static struct platform_driver img_ascii_lcd_driver = {
-	.driver = {
+	.driver	= {
 		.name		= "img-ascii-lcd",
 		.of_match_table	= img_ascii_lcd_matches,
 	},
 	.probe	= img_ascii_lcd_probe,
-	.remove_new = img_ascii_lcd_remove,
+	.remove	= img_ascii_lcd_remove,
 };
 module_platform_driver(img_ascii_lcd_driver);
 

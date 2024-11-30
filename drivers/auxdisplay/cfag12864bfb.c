@@ -107,10 +107,10 @@ static void cfag12864bfb_remove(struct platform_device *device)
 }
 
 static struct platform_driver cfag12864bfb_driver = {
-	.probe	= cfag12864bfb_probe,
-	.remove_new = cfag12864bfb_remove,
+	.probe = cfag12864bfb_probe,
+	.remove = cfag12864bfb_remove,
 	.driver = {
-		.name	= CFAG12864BFB_NAME,
+		.name = CFAG12864BFB_NAME,
 	},
 };
 
