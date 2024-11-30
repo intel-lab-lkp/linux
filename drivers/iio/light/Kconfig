@@ -491,6 +491,16 @@ config OPT4001
 	  If built as a dynamically linked module, it will be called
 	  opt4001.
 
+config OPT4048
+	tristate "Texas Instruments OPT4048 XYZ tristimulus color sensor driver"
+	depends on I2C && PM
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	  Support for the Texas Instruments OPT4048 XYZ tristimulus color sensor.
+
+	  This driver can be built-in or built as a module, called opt4048.
+
 config PA12203001
 	tristate "TXC PA12203001 light and proximity sensor"
 	depends on I2C
