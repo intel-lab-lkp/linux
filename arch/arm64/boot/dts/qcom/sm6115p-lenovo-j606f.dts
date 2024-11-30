@@ -305,10 +305,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &tlmm {
 	gpio-reserved-ranges = <14 4>;
 
@@ -381,8 +377,4 @@
 	vdd-3.3-ch0-supply = <&pm6125_l23>;
 	qcom,ath10k-calibration-variant = "Lenovo_P11";
 	status = "okay";
-};
-
-&xo_board {
-	clock-frequency = <19200000>;
 };

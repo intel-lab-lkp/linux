@@ -193,10 +193,6 @@
 	};
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &sdhc_2 {
 	vmmc-supply = <&vreg_l22a>;
 	vqmmc-supply = <&vreg_l5a>;
@@ -253,8 +249,4 @@
 	vdda-pll-supply = <&vreg_l12a>;
 	vdda-phy-dpdm-supply = <&vreg_l15a>;
 	status = "okay";
-};
-
-&xo_board {
-	clock-frequency = <19200000>;
 };

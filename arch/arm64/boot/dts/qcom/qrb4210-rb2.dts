@@ -544,10 +544,6 @@
 	};
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &tlmm {
 	gpio-reserved-ranges = <43 2>, <49 1>, <54 1>,
 			       <56 3>, <61 2>, <64 1>,
@@ -694,8 +690,4 @@
 	firmware-name = "qrb4210";
 
 	status = "okay";
-};
-
-&xo_board {
-	clock-frequency = <19200000>;
 };

@@ -471,10 +471,6 @@
 	status = "okay";
 };
 
-&sleep_clk {
-	clock-frequency = <32764>;
-};
-
 &tlmm {
 	gpio-reserved-ranges = <0 4>, <14 4>;
 
@@ -569,8 +565,4 @@
 	qcom,ath10k-calibration-variant = "Fxtec_QX1050";
 
 	status = "okay";
-};
-
-&xo_board {
-	clock-frequency = <19200000>;
 };
