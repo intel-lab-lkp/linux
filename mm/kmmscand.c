@@ -279,6 +279,39 @@ struct attribute_group kmmscand_attr_group = {
 };
 #endif
 
+void count_kmmscand_mm_scans(void)
+{
+	count_vm_numa_event(KMMSCAND_MM_SCANS);
+}
+void count_kmmscand_vma_scans(void)
+{
+	count_vm_numa_event(KMMSCAND_VMA_SCANS);
+}
+void count_kmmscand_migadded(void)
+{
+	count_vm_numa_event(KMMSCAND_MIGADDED);
+}
+void count_kmmscand_migrated(void)
+{
+	count_vm_numa_event(KMMSCAND_MIGRATED);
+}
+void count_kmmscand_migrate_failed(void)
+{
+	count_vm_numa_event(KMMSCAND_MIGRATE_FAILED);
+}
+void count_kmmscand_slowtier(void)
+{
+	count_vm_numa_event(KMMSCAND_SLOWTIER);
+}
+void count_kmmscand_toptier(void)
+{
+	count_vm_numa_event(KMMSCAND_TOPTIER);
+}
+void count_kmmscand_idlepage(void)
+{
+	count_vm_numa_event(KMMSCAND_IDLEPAGE);
+}
+
 static int kmmscand_has_work(void)
 {
 	return !list_empty(&kmmscand_scan.mm_head);
@@ -500,6 +533,9 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 
 	srcnid = folio_nid(folio);
 
+	if (node_is_toptier(srcnid))
+		count_kmmscand_toptier();
+
 	if (!folio_test_idle(folio) || folio_test_young(folio) ||
 			mmu_notifier_test_young(mm, addr) ||
 			folio_test_referenced(folio) || pte_young(pteval)) {
@@ -511,6 +547,7 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 		info = kzalloc(sizeof(struct kmmscand_migrate_info), GFP_KERNEL);
 		if (info && migrate_list) {
 
+			count_kmmscand_slowtier();
 			info->mm = mm;
 			info->vma = vma;
 			info->folio = folio;
@@ -524,8 +561,10 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 			 * XXX: We are increamenting atomic var under mmap_readlock
 			 */
 			atomic_long_inc(&mm->nr_accessed);
+			count_kmmscand_migadded();
 		}
-	}
+	} else
+		count_kmmscand_idlepage();
 end:
 	folio_set_idle(folio);
 	folio_put(folio);
@@ -631,6 +670,12 @@ static void kmmscand_migrate_folio(void)
 
 			if (info->mm)
 				ret = kmmscand_promote_folio(info);
+
+			/* TBD: encode migrated count here, currently assume folio_nr_pages */
+			if (!ret)
+				count_kmmscand_migrated();
+			else
+				count_kmmscand_migrate_failed();
 
 			kfree(info);
 
@@ -799,6 +844,7 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	for_each_vma(vmi, vma) {
 		/* Count the scanned pages here to decide exit */
 		kmmscand_walk_page_vma(vma);
+		count_kmmscand_vma_scans();
 		scanned_size += vma->vm_end - vma->vm_start;
 		address = vma->vm_end;
 
@@ -821,6 +867,8 @@ static unsigned long kmmscand_scan_mm_slot(void)
 		address = 0;
 
 	update_mmslot_info = true;
+
+	count_kmmscand_mm_scans();
 
 outerloop:
 	/* exit_mmap will destroy ptes after this */
