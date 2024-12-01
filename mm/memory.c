@@ -5590,7 +5590,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 
 	if (unlikely(!pte_same(old_pte, vmf->orig_pte))) {
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		return 0;
+		goto out;
 	}
 
 	pte = pte_modify(old_pte, vma->vm_page_prot);
@@ -5629,17 +5629,18 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 		nid = target_nid;
 		flags |= TNF_MIGRATED;
 		task_numa_fault(last_cpupid, nid, nr_pages, flags);
-		return 0;
+		goto out;
 	}
 
 	flags |= TNF_MIGRATE_FAIL;
 	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
 				       vmf->address, &vmf->ptl);
 	if (unlikely(!vmf->pte))
-		return 0;
+		goto out;
+
 	if (unlikely(!pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		return 0;
+		goto out;
 	}
 out_map:
 	/*
@@ -5656,6 +5657,8 @@ out_map:
 
 	if (nid != NUMA_NO_NODE)
 		task_numa_fault(last_cpupid, nid, nr_pages, flags);
+out:
+	__count_vm_events(NUMA_HF_MIGRATION_OH, jiffies_to_usecs(jiffies - vmf->start_time));
 	return 0;
 }
 
@@ -5858,6 +5861,7 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 		.flags = flags,
 		.pgoff = linear_page_index(vma, address),
 		.gfp_mask = __get_fault_gfp_mask(vma),
+		.start_time = jiffies,
 	};
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long vm_flags = vma->vm_flags;

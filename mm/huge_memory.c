@@ -1250,6 +1250,7 @@ static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 		spin_unlock(vmf->ptl);
 	}
 
+	__count_vm_events(NUMA_HF_MIGRATION_OH, jiffies_to_usecs(jiffies - vmf->start_time));
 	return 0;
 unlock_release:
 	spin_unlock(vmf->ptl);

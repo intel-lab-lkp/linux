@@ -600,6 +600,7 @@ struct vm_fault {
 					 * page table to avoid allocation from
 					 * atomic context.
 					 */
+	unsigned long start_time;
 };
 
 /*
@@ -690,6 +691,8 @@ void count_kmmscand_migrate_failed(void);
 void count_kmmscand_slowtier(void);
 void count_kmmscand_toptier(void);
 void count_kmmscand_idlepage(void);
+void count_kmmscand_scan_oh(long delta);
+void count_kmmscand_migration_oh(long delta);
 #endif
 
 #ifdef CONFIG_NUMA_BALANCING

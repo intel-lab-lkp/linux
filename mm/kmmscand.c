@@ -644,8 +644,10 @@ start_again:
 static void kmmscand_migrate_folio(void)
 {
 	int ret = 0;
+	unsigned long tstart, tend;
 	struct kmmscand_migrate_info *info, *tmp;
 
+	tstart = jiffies;
 	spin_lock(&kmmscand_migrate_lock);
 
 	if (!list_empty(&kmmscand_migrate_list.migrate_head)) {
@@ -691,6 +693,8 @@ dirty_list_handled:
 		}
 	}
 	spin_unlock(&kmmscand_migrate_lock);
+	tend = jiffies;
+	__count_vm_events(KMMSCAND_MIGRATION_OH, jiffies_to_usecs(tend - tstart));
 }
 
 /*
@@ -788,6 +792,8 @@ static unsigned long kmmscand_scan_mm_slot(void)
 
 	unsigned int mm_slot_scan_period;
 	unsigned long now;
+
+	unsigned long tstart, tend;
 	unsigned long mm_slot_next_scan;
 	unsigned long mm_slot_scan_size;
 	unsigned long scanned_size = 0;
@@ -800,6 +806,7 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	struct vm_area_struct *vma = NULL;
 	struct kmmscand_mm_slot *mm_slot;
 
+	tstart  = jiffies;
 	/* Retrieve mm */
 	spin_lock(&kmmscand_mm_lock);
 
@@ -917,6 +924,8 @@ outerloop_mmap_lock:
 	}
 
 	spin_unlock(&kmmscand_mm_lock);
+	tend = jiffies;
+	__count_vm_events(KMMSCAND_SCAN_OH, jiffies_to_usecs(tend - tstart));
 	return total;
 }
 

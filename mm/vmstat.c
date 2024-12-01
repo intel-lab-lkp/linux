@@ -1339,6 +1339,8 @@ const char * const vmstat_text[] = {
 	"numa_hint_faults",
 	"numa_hint_faults_local",
 	"numa_pages_migrated",
+	"numa_task_work_oh",
+	"numa_hf_migration_oh",
 #endif
 #ifdef CONFIG_KMMSCAND
 	"nr_kmmscand_mm_scans",
@@ -1349,6 +1351,8 @@ const char * const vmstat_text[] = {
 	"nr_kmmscand_slowtier",
 	"nr_kmmscand_toptier",
 	"nr_kmmscand_idlepage",
+	"kmmscand_scan_oh",
+	"kmmscand_migration_oh",
 #endif
 #ifdef CONFIG_MIGRATION
 	"pgmigrate_success",

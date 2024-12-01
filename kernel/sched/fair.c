@@ -3299,6 +3299,7 @@ static void task_numa_work(struct callback_head *work)
 	struct vma_iterator vmi;
 	bool vma_pids_skipped;
 	bool vma_pids_forced = false;
+	unsigned long old = jiffies;
 
 	SCHED_WARN_ON(p != container_of(work, struct task_struct, numa_work));
 
@@ -3312,7 +3313,7 @@ static void task_numa_work(struct callback_head *work)
 	 * work.
 	 */
 	if (p->flags & PF_EXITING)
-		return;
+		goto out1;
 
 	if (!mm->numa_next_scan) {
 		mm->numa_next_scan = now +
@@ -3324,7 +3325,7 @@ static void task_numa_work(struct callback_head *work)
 	 */
 	migrate = mm->numa_next_scan;
 	if (time_before(now, migrate))
-		return;
+		goto out1;
 
 	if (p->numa_scan_period == 0) {
 		p->numa_scan_period_max = task_scan_max(p);
@@ -3333,7 +3334,7 @@ static void task_numa_work(struct callback_head *work)
 
 	next_scan = now + msecs_to_jiffies(p->numa_scan_period);
 	if (!try_cmpxchg(&mm->numa_next_scan, &migrate, next_scan))
-		return;
+		goto out1;
 
 	/*
 	 * Delay this task enough that another task of this mm will likely win
@@ -3345,11 +3346,11 @@ static void task_numa_work(struct callback_head *work)
 	pages <<= 20 - PAGE_SHIFT; /* MB in pages */
 	virtpages = pages * 8;	   /* Scan up to this much virtual space */
 	if (!pages)
-		return;
+		goto out1;
 
 
 	if (!mmap_read_trylock(mm))
-		return;
+		goto out1;
 
 	/*
 	 * VMAs are skipped if the current PID has not trapped a fault within
@@ -3526,6 +3527,8 @@ out:
 		u64 diff = p->se.sum_exec_runtime - runtime;
 		p->node_stamp += 32 * diff;
 	}
+out1:
+	__count_vm_events(NUMA_TASK_WORK_OH, jiffies_to_usecs(jiffies - old));
 }
 
 void init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
