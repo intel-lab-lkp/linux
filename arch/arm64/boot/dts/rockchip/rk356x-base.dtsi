@@ -1038,7 +1038,6 @@
 		clocks = <&cru CLK_TRNG_NS>, <&cru HCLK_TRNG_NS>;
 		clock-names = "core", "ahb";
 		resets = <&cru SRST_TRNG_NS>;
-		status = "disabled";
 	};
 
 	i2s0_8ch: i2s@fe400000 {
