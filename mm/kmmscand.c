@@ -4,6 +4,7 @@
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/mmu_notifier.h>
+#include <linux/migrate.h>
 #include <linux/rmap.h>
 #include <linux/pagewalk.h>
 #include <linux/page_ext.h>
@@ -36,7 +37,15 @@ static unsigned long kmmscand_mms_to_scan __read_mostly = KMMSCAND_MMS_TO_SCAN;
 volatile bool kmmscand_scan_enabled = true;
 static bool need_wakeup;
 
+/* mm of the migrating folio entry */
+static struct mm_struct *kmmscand_cur_migrate_mm;
+
+/* Migration list is manipulated underneath because of mm_exit */
+static bool  kmmscand_migration_list_dirty;
+
 static unsigned long kmmscand_sleep_expire;
+#define KMMSCAND_DEFAULT_TARGET_NODE	(0)
+static int kmmscand_target_node = KMMSCAND_DEFAULT_TARGET_NODE;
 
 static DEFINE_SPINLOCK(kmmscand_mm_lock);
 static DEFINE_SPINLOCK(kmmscand_migrate_lock);
@@ -113,6 +122,107 @@ static bool kmmscand_eligible_srcnid(int nid)
 	if (!node_is_toptier(nid))
 		return true;
 	return false;
+}
+
+/*
+ * Do not know what info to pass in the future to make
+ * decision on taget node. Keep it void * now.
+ */
+static int kmmscand_get_target_node(void *data)
+{
+	return kmmscand_target_node;
+}
+
+static int kmmscand_migrate_misplaced_folio_prepare(struct folio *folio,
+		struct vm_area_struct *vma, int node)
+{
+	if (folio_is_file_lru(folio)) {
+		/*
+		 * Do not migrate file folios that are mapped in multiple
+		 * processes with execute permissions as they are probably
+		 * shared libraries.
+		 *
+		 * See folio_likely_mapped_shared() on possible imprecision
+		 * when we cannot easily detect if a folio is shared.
+		 */
+		if (vma && (vma->vm_flags & VM_EXEC) &&
+		    folio_likely_mapped_shared(folio))
+			return -EACCES;
+		/*
+		 * Do not migrate dirty folios as not all filesystems can move
+		 * dirty folios in MIGRATE_ASYNC mode which is a waste of
+		 * cycles.
+		 */
+		if (folio_test_dirty(folio))
+			return -EAGAIN;
+	}
+
+	if (!folio_isolate_lru(folio))
+		return -EAGAIN;
+
+	return 0;
+}
+
+enum kmmscand_migration_err {
+	KMMSCAND_NULL_MM = 1,
+	KMMSCAND_INVALID_FOLIO,
+	KMMSCAND_INVALID_VMA,
+	KMMSCAND_INELIGIBLE_SRC_NODE,
+	KMMSCAND_SAME_SRC_DEST_NODE,
+	KMMSCAND_LRU_ISOLATION_ERR,
+};
+
+static int kmmscand_promote_folio(struct kmmscand_migrate_info *info)
+{
+	unsigned long pfn;
+	struct page *page;
+	struct folio *folio;
+	struct vm_area_struct *vma;
+	int ret;
+
+	int srcnid, destnid;
+
+	if (info->mm == NULL)
+		return KMMSCAND_NULL_MM;
+
+	folio = info->folio;
+
+	/* Check again if the folio is really valid now */
+	if (folio) {
+		pfn = folio_pfn(folio);
+		page = pfn_to_online_page(pfn);
+	}
+
+	if (!page || !folio || !folio_test_lru(folio) ||
+		folio_is_zone_device(folio) || !folio_mapped(folio))
+		return KMMSCAND_INVALID_FOLIO;
+
+	vma = info->vma;
+
+	/* XXX: Need to validate vma here?. vma_lookup() results in 2x regression */
+	if (!vma)
+		return KMMSCAND_INVALID_VMA;
+
+	srcnid = folio_nid(folio);
+
+	/* Do not try to promote pages from regular nodes */
+	if (!kmmscand_eligible_srcnid(srcnid))
+		return KMMSCAND_INELIGIBLE_SRC_NODE;
+
+	destnid = kmmscand_get_target_node(NULL);
+
+	if (srcnid == destnid)
+		return KMMSCAND_SAME_SRC_DEST_NODE;
+
+	folio_get(folio);
+	ret = kmmscand_migrate_misplaced_folio_prepare(folio, vma, destnid);
+	if (ret) {
+		folio_put(folio);
+		return KMMSCAND_LRU_ISOLATION_ERR;
+	}
+	folio_put(folio);
+
+	return  migrate_misplaced_folio(folio, vma, destnid);
 }
 
 static bool folio_idle_clear_pte_refs_one(struct folio *folio,
@@ -266,8 +376,74 @@ static void kmmscand_collect_mm_slot(struct kmmscand_mm_slot *mm_slot)
 	}
 }
 
+static void kmmscand_cleanup_migration_list(struct mm_struct *mm)
+{
+	struct kmmscand_migrate_info *info, *tmp;
+
+start_again:
+	spin_lock(&kmmscand_migrate_lock);
+	if (!list_empty(&kmmscand_migrate_list.migrate_head)) {
+
+		if (mm == READ_ONCE(kmmscand_cur_migrate_mm)) {
+			/* A folio in this mm is being migrated. wait */
+			WRITE_ONCE(kmmscand_migration_list_dirty, true);
+			spin_unlock(&kmmscand_migrate_lock);
+			goto start_again;
+		}
+
+		list_for_each_entry_safe(info, tmp, &kmmscand_migrate_list.migrate_head,
+			migrate_node) {
+			if (info && (info->mm == mm)) {
+				info->mm = NULL;
+				WRITE_ONCE(kmmscand_migration_list_dirty, true);
+			}
+		}
+	}
+	spin_unlock(&kmmscand_migrate_lock);
+}
+
 static void kmmscand_migrate_folio(void)
 {
+	int ret = 0;
+	struct kmmscand_migrate_info *info, *tmp;
+
+	spin_lock(&kmmscand_migrate_lock);
+
+	if (!list_empty(&kmmscand_migrate_list.migrate_head)) {
+		list_for_each_entry_safe(info, tmp, &kmmscand_migrate_list.migrate_head,
+			migrate_node) {
+			if (READ_ONCE(kmmscand_migration_list_dirty)) {
+				kmmscand_migration_list_dirty = false;
+				list_del(&info->migrate_node);
+				/*
+				 * Do not try to migrate this entry because mm might have
+				 * vanished underneath.
+				 */
+				kfree(info);
+				spin_unlock(&kmmscand_migrate_lock);
+				goto dirty_list_handled;
+			}
+
+			list_del(&info->migrate_node);
+			/* Note down the mm of folio entry we are migrating */
+			WRITE_ONCE(kmmscand_cur_migrate_mm, info->mm);
+			spin_unlock(&kmmscand_migrate_lock);
+
+			if (info->mm)
+				ret = kmmscand_promote_folio(info);
+
+			kfree(info);
+
+			spin_lock(&kmmscand_migrate_lock);
+			/* Reset  mm  of folio entry we are migrating */
+			WRITE_ONCE(kmmscand_cur_migrate_mm, NULL);
+			spin_unlock(&kmmscand_migrate_lock);
+dirty_list_handled:
+			//cond_resched();
+			spin_lock(&kmmscand_migrate_lock);
+		}
+	}
+	spin_unlock(&kmmscand_migrate_lock);
 }
 
 static unsigned long kmmscand_scan_mm_slot(void)
@@ -449,6 +625,8 @@ void __kmmscand_exit(struct mm_struct *mm)
 	}
 
 	spin_unlock(&kmmscand_mm_lock);
+
+	kmmscand_cleanup_migration_list(mm);
 
 	if (free) {
 		mm_slot_free(kmmscand_slot_cache, mm_slot);
