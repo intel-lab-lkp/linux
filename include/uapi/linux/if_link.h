@@ -1971,9 +1971,19 @@ enum {
 	IFLA_DSA_CONDUIT,
 	/* Deprecated, use IFLA_DSA_CONDUIT instead */
 	IFLA_DSA_MASTER = IFLA_DSA_CONDUIT,
+	IFLA_DSA_FLAGS,
 	__IFLA_DSA_MAX,
 };
 
 #define IFLA_DSA_MAX	(__IFLA_DSA_MAX - 1)
+
+struct ifla_dsa_flags {
+	__u32   flags;
+	__u32   mask;
+};
+
+enum dsa_flags {
+	DSA_FLAG_OFFLOADING_DISABLED    = 0x1,
+};
 
 #endif /* _UAPI_LINUX_IF_LINK_H */

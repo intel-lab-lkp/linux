@@ -83,9 +83,10 @@ static int dsa_switch_bridge_join(struct dsa_switch *ds,
 				  struct dsa_notifier_bridge_info *info)
 {
 	int err;
+	struct dsa_user_priv *priv = netdev_priv(info->dp->user);
 
 	if (info->dp->ds == ds) {
-		if (!ds->ops->port_bridge_join)
+		if (!ds->ops->port_bridge_join || priv->flags & DSA_FLAG_OFFLOADING_DISABLED)
 			return -EOPNOTSUPP;
 
 		err = ds->ops->port_bridge_join(ds, info->dp->index,

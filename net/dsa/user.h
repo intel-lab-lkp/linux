@@ -33,6 +33,8 @@ struct dsa_user_priv {
 
 	/* TC context */
 	struct list_head	mall_tc_list;
+
+	u32			flags;
 };
 
 void dsa_user_mii_bus_init(struct dsa_switch *ds);
