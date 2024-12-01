@@ -29,6 +29,16 @@ static struct task_struct *kmmscand_thread __read_mostly;
 static DEFINE_MUTEX(kmmscand_mutex);
 
 /*
+ * Total VMA size to cover during scan.
+ * Min: 512MB default: 4GB max: 16GB
+ */
+#define KMMSCAND_SCAN_SIZE_MIN	(512 * 1024 * 1024UL)
+#define KMMSCAND_SCAN_SIZE_MAX	(16 * 1024 * 1024 * 1024UL)
+#define KMMSCAND_SCAN_SIZE	(4 * 1024 * 1024 * 1024UL)
+
+static unsigned long kmmscand_scan_size __read_mostly = KMMSCAND_SCAN_SIZE;
+
+/*
  * Scan period for each mm.
  * Min: 400ms default: 2sec Max: 5sec
  */
@@ -74,6 +84,8 @@ struct kmmscand_mm_slot {
 	unsigned long next_scan;
 	/* Tracks how many useful pages obtained for migration in the last scan */
 	unsigned long scan_delta;
+	/* Determines how much VMA address space to be covered in the scanning */
+	unsigned long scan_size;
 	long address;
 };
 
@@ -484,6 +496,7 @@ dirty_list_handled:
  */
 #define KMMSCAND_IGNORE_SCAN_THR	100
 
+#define SCAN_SIZE_CHANGE_SCALE	1
 /*
  * X : Number of useful pages in the last scan.
  * Y : Number of useful pages found in current scan.
@@ -497,11 +510,22 @@ dirty_list_handled:
  *		Increase scan_period by (2 << SCAN_PERIOD_CHANGE_SCALE).
  *	case 4: (X > 0, Y > 0)
  *		Decrease scan_period by SCAN_PERIOD_TUNE_PERCENT.
+ * Tuning scan_size:
+ * Initial scan_size is 4GB
+ *	case 1: (X = 0, Y = 0)
+ *		Decrease scan_size by (1 << SCAN_SIZE_CHANGE_SCALE).
+ *	case 2: (X = 0, Y > 0)
+ *		scan_size = KMMSCAND_SCAN_SIZE_MAX
+ *  case 3: (X > 0, Y = 0 )
+ *		No change
+ *  case 4: (X > 0, Y > 0)
+ *		Increase scan_size by (1 << SCAN_SIZE_CHANGE_SCALE).
  */
 static inline void kmmscand_update_mmslot_info(struct kmmscand_mm_slot *mm_slot, unsigned long total)
 {
 	unsigned int scan_period;
 	unsigned long now;
+	unsigned long scan_size;
 	unsigned long old_scan_delta;
 
 	/* XXX: Hack to get rid of continuously failing/unmigrateable pages */
@@ -509,6 +533,7 @@ static inline void kmmscand_update_mmslot_info(struct kmmscand_mm_slot *mm_slot,
 		total = 0;
 
 	scan_period = mm_slot->scan_period;
+	scan_size = mm_slot->scan_size;
 
 	old_scan_delta = mm_slot->scan_delta;
 
@@ -522,30 +547,38 @@ static inline void kmmscand_update_mmslot_info(struct kmmscand_mm_slot *mm_slot,
 	if (!old_scan_delta && !total) {
 		scan_period = (100 + SCAN_PERIOD_TUNE_PERCENT) * scan_period;
 		scan_period /= 100;
+		scan_size = scan_size >> SCAN_SIZE_CHANGE_SCALE;
 	} else if (old_scan_delta && total) {
 		scan_period = (100 - SCAN_PERIOD_TUNE_PERCENT) * scan_period;
 		scan_period /= 100;
+		scan_size = scan_size << SCAN_SIZE_CHANGE_SCALE;
 	} else if (old_scan_delta && !total) {
 		scan_period = scan_period << SCAN_PERIOD_CHANGE_SCALE;
 	} else {
 		scan_period = scan_period >> SCAN_PERIOD_CHANGE_SCALE;
+		scan_size = KMMSCAND_SCAN_SIZE_MAX;
 	}
 
 	scan_period = clamp(scan_period, KMMSCAND_SCAN_PERIOD_MIN, KMMSCAND_SCAN_PERIOD_MAX);
+	scan_size = clamp(scan_size, KMMSCAND_SCAN_SIZE_MIN, KMMSCAND_SCAN_SIZE_MAX);
 
 	now = jiffies;
 	mm_slot->next_scan = now + msecs_to_jiffies(scan_period);
 	mm_slot->scan_period = scan_period;
+	mm_slot->scan_size = scan_size;
 	mm_slot->scan_delta = total;
 }
 
 static unsigned long kmmscand_scan_mm_slot(void)
 {
+	bool next_mm = false;
 	bool update_mmslot_info = false;
 
 	unsigned int mm_slot_scan_period;
 	unsigned long now;
 	unsigned long mm_slot_next_scan;
+	unsigned long mm_slot_scan_size;
+	unsigned long scanned_size = 0;
 	unsigned long address;
 	unsigned long folio_nr_access_s, folio_nr_access_e, total = 0;
 
@@ -572,6 +605,7 @@ static unsigned long kmmscand_scan_mm_slot(void)
 
 	mm_slot_next_scan = mm_slot->next_scan;
 	mm_slot_scan_period = mm_slot->scan_period;
+	mm_slot_scan_size = mm_slot->scan_size;
 	mm = slot->mm;
 
 	spin_unlock(&kmmscand_mm_lock);
@@ -579,8 +613,10 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	if (unlikely(!mmap_read_trylock(mm)))
 		goto outerloop_mmap_lock;
 
-	if (unlikely(kmmscand_test_exit(mm)))
+	if (unlikely(kmmscand_test_exit(mm))) {
+		next_mm = true;
 		goto outerloop;
+	}
 
 	now = jiffies;
 	/*
@@ -598,8 +634,20 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	for_each_vma(vmi, vma) {
 		/* Count the scanned pages here to decide exit */
 		kmmscand_walk_page_vma(vma);
-
+		scanned_size += vma->vm_end - vma->vm_start;
 		address = vma->vm_end;
+
+		if (scanned_size >= mm_slot_scan_size) {
+			folio_nr_access_e = atomic_long_read(&mm->nr_accessed);
+			total = folio_nr_access_e - folio_nr_access_s;
+			/* If we had got accessed pages, ignore the current scan_size threshold */
+			if (total > KMMSCAND_IGNORE_SCAN_THR) {
+				mm_slot_scan_size = KMMSCAND_SCAN_SIZE_MAX;
+				continue;
+			}
+			next_mm = true;
+			break;
+		}
 	}
 	folio_nr_access_e = atomic_long_read(&mm->nr_accessed);
 	total = folio_nr_access_e - folio_nr_access_s;
@@ -627,7 +675,7 @@ outerloop_mmap_lock:
 	 * Release the current mm_slot if this mm is about to die, or
 	 * if we scanned all vmas of this mm.
 	 */
-	if (unlikely(kmmscand_test_exit(mm)) || !vma) {
+	if (unlikely(kmmscand_test_exit(mm)) || !vma || next_mm) {
 		/*
 		 * Make sure that if mm_users is reaching zero while
 		 * kmmscand runs here, kmmscand_exit will find
@@ -711,6 +759,7 @@ void __kmmscand_enter(struct mm_struct *mm)
 
 	kmmscand_slot->address = 0;
 	kmmscand_slot->scan_period = kmmscand_mm_scan_period_ms;
+	kmmscand_slot->scan_size = kmmscand_scan_size;
 	kmmscand_slot->next_scan = 0;
 	kmmscand_slot->scan_delta = 0;
 
