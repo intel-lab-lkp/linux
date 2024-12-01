@@ -570,6 +570,7 @@ static const struct export_operations pidfs_export_operations = {
 	.fh_to_dentry	= pidfs_fh_to_dentry,
 	.open		= pidfs_export_open,
 	.permission	= pidfs_export_permission,
+	.flags          = EXPORT_OP_LOCAL_FILE_HANDLE,
 };
 
 static int pidfs_init_inode(struct inode *inode, void *data)
