@@ -19,6 +19,7 @@
 #include <linux/mempolicy.h>
 #include <linux/string.h>
 #include <linux/cleanup.h>
+#include <linux/minmax.h>
 
 #include <asm/pgalloc.h>
 #include "internal.h"
@@ -26,6 +27,16 @@
 
 static struct task_struct *kmmscand_thread __read_mostly;
 static DEFINE_MUTEX(kmmscand_mutex);
+
+/*
+ * Scan period for each mm.
+ * Min: 400ms default: 2sec Max: 5sec
+ */
+#define KMMSCAND_SCAN_PERIOD_MAX	5000U
+#define KMMSCAND_SCAN_PERIOD_MIN	400U
+#define KMMSCAND_SCAN_PERIOD		2000U
+
+static unsigned int kmmscand_mm_scan_period_ms __read_mostly = KMMSCAND_SCAN_PERIOD;
 
 /* How long to pause between two scan and migration cycle */
 static unsigned int kmmscand_scan_sleep_ms __read_mostly = 16;
@@ -58,6 +69,11 @@ static struct kmem_cache *kmmscand_slot_cache __read_mostly;
 
 struct kmmscand_mm_slot {
 	struct mm_slot slot;
+	/* Unit: ms. Determines how aften mm scan should happen. */
+	unsigned int scan_period;
+	unsigned long next_scan;
+	/* Tracks how many useful pages obtained for migration in the last scan */
+	unsigned long scan_delta;
 	long address;
 };
 
@@ -85,6 +101,7 @@ struct kmmscand_migrate_info {
 	struct folio *folio;
 	unsigned long address;
 };
+
 static int kmmscand_has_work(void)
 {
 	return !list_empty(&kmmscand_scan.mm_head);
@@ -324,6 +341,12 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 			spin_lock(&kmmscand_migrate_lock);
 			list_add_tail(&info->migrate_node, &migrate_list->migrate_head);
 			spin_unlock(&kmmscand_migrate_lock);
+
+			/*
+			 * XXX: Should nr_accessed be per vma for finer control?
+			 * XXX: We are increamenting atomic var under mmap_readlock
+			 */
+			atomic_long_inc(&mm->nr_accessed);
 		}
 	}
 end:
@@ -446,11 +469,85 @@ dirty_list_handled:
 	spin_unlock(&kmmscand_migrate_lock);
 }
 
+/*
+ * This is the normal change percentage when old and new delta remain same.
+ * i.e., either both positive or both zero.
+ */
+#define SCAN_PERIOD_TUNE_PERCENT	15
+
+/* This is to change the scan_period aggressively when deltas are different */
+#define SCAN_PERIOD_CHANGE_SCALE	3
+/*
+ * XXX: Hack to prevent unmigrated pages coming again and again while scanning.
+ * Actual fix needs to identify the type of unmigrated pages OR consider migration
+ * failures in next scan.
+ */
+#define KMMSCAND_IGNORE_SCAN_THR	100
+
+/*
+ * X : Number of useful pages in the last scan.
+ * Y : Number of useful pages found in current scan.
+ * Tuning scan_period:
+ *	Initial scan_period is 2s.
+ *	case 1: (X = 0, Y = 0)
+ *		Increase scan_period by SCAN_PERIOD_TUNE_PERCENT.
+ *	case 2: (X = 0, Y > 0)
+ *		Decrease scan_period by (2 << SCAN_PERIOD_CHANGE_SCALE).
+ *	case 3: (X > 0, Y = 0 )
+ *		Increase scan_period by (2 << SCAN_PERIOD_CHANGE_SCALE).
+ *	case 4: (X > 0, Y > 0)
+ *		Decrease scan_period by SCAN_PERIOD_TUNE_PERCENT.
+ */
+static inline void kmmscand_update_mmslot_info(struct kmmscand_mm_slot *mm_slot, unsigned long total)
+{
+	unsigned int scan_period;
+	unsigned long now;
+	unsigned long old_scan_delta;
+
+	/* XXX: Hack to get rid of continuously failing/unmigrateable pages */
+	if (total < KMMSCAND_IGNORE_SCAN_THR)
+		total = 0;
+
+	scan_period = mm_slot->scan_period;
+
+	old_scan_delta = mm_slot->scan_delta;
+
+	/*
+	 * case 1: old_scan_delta and new delta are similar, (slow) TUNE_PERCENT used.
+	 * case 2: old_scan_delta and new delta are different. (fast) CHANGE_SCALE used.
+	 * TBD:
+	 * 1. Further tune scan_period based on delta between last and current scan delta.
+	 * 2. Optimize calculation
+	 */
+	if (!old_scan_delta && !total) {
+		scan_period = (100 + SCAN_PERIOD_TUNE_PERCENT) * scan_period;
+		scan_period /= 100;
+	} else if (old_scan_delta && total) {
+		scan_period = (100 - SCAN_PERIOD_TUNE_PERCENT) * scan_period;
+		scan_period /= 100;
+	} else if (old_scan_delta && !total) {
+		scan_period = scan_period << SCAN_PERIOD_CHANGE_SCALE;
+	} else {
+		scan_period = scan_period >> SCAN_PERIOD_CHANGE_SCALE;
+	}
+
+	scan_period = clamp(scan_period, KMMSCAND_SCAN_PERIOD_MIN, KMMSCAND_SCAN_PERIOD_MAX);
+
+	now = jiffies;
+	mm_slot->next_scan = now + msecs_to_jiffies(scan_period);
+	mm_slot->scan_period = scan_period;
+	mm_slot->scan_delta = total;
+}
+
 static unsigned long kmmscand_scan_mm_slot(void)
 {
 	bool update_mmslot_info = false;
 
+	unsigned int mm_slot_scan_period;
+	unsigned long now;
+	unsigned long mm_slot_next_scan;
 	unsigned long address;
+	unsigned long folio_nr_access_s, folio_nr_access_e, total = 0;
 
 	struct mm_slot *slot;
 	struct mm_struct *mm;
@@ -473,6 +570,8 @@ static unsigned long kmmscand_scan_mm_slot(void)
 		kmmscand_scan.mm_slot = mm_slot;
 	}
 
+	mm_slot_next_scan = mm_slot->next_scan;
+	mm_slot_scan_period = mm_slot->scan_period;
 	mm = slot->mm;
 
 	spin_unlock(&kmmscand_mm_lock);
@@ -483,6 +582,16 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	if (unlikely(kmmscand_test_exit(mm)))
 		goto outerloop;
 
+	now = jiffies;
+	/*
+	 * Dont scan if :
+	 * This is not a first scan AND
+	 * Reaching here before designated next_scan time.
+	 */
+	if (mm_slot_next_scan && time_before(now, mm_slot_next_scan))
+		goto outerloop;
+
+	folio_nr_access_s = atomic_long_read(&mm->nr_accessed);
 
 	vma_iter_init(&vmi, mm, address);
 
@@ -492,6 +601,8 @@ static unsigned long kmmscand_scan_mm_slot(void)
 
 		address = vma->vm_end;
 	}
+	folio_nr_access_e = atomic_long_read(&mm->nr_accessed);
+	total = folio_nr_access_e - folio_nr_access_s;
 
 	if (!vma)
 		address = 0;
@@ -506,8 +617,12 @@ outerloop_mmap_lock:
 	spin_lock(&kmmscand_mm_lock);
 	VM_BUG_ON(kmmscand_scan.mm_slot != mm_slot);
 
-	if (update_mmslot_info)
+
+	if (update_mmslot_info) {
 		mm_slot->address = address;
+		kmmscand_update_mmslot_info(mm_slot, total);
+	}
+
 	/*
 	 * Release the current mm_slot if this mm is about to die, or
 	 * if we scanned all vmas of this mm.
@@ -532,7 +647,7 @@ outerloop_mmap_lock:
 	}
 
 	spin_unlock(&kmmscand_mm_lock);
-	return 0;
+	return total;
 }
 
 static void kmmscand_do_scan(void)
@@ -595,6 +710,10 @@ void __kmmscand_enter(struct mm_struct *mm)
 		return;
 
 	kmmscand_slot->address = 0;
+	kmmscand_slot->scan_period = kmmscand_mm_scan_period_ms;
+	kmmscand_slot->next_scan = 0;
+	kmmscand_slot->scan_delta = 0;
+
 	slot = &kmmscand_slot->slot;
 
 	spin_lock(&kmmscand_mm_lock);

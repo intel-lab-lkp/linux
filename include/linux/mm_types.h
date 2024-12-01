@@ -979,6 +979,10 @@ struct mm_struct {
 		/* numa_scan_seq prevents two threads remapping PTEs. */
 		int numa_scan_seq;
 #endif
+#ifdef CONFIG_KMMSCAND
+		/* Tracks number of pages with PTE A  bit set after scanning. */
+		atomic_long_t nr_accessed;
+#endif
 		/*
 		 * An operation with batched TLB flushing is going on. Anything
 		 * that can move process memory needs to flush the TLB when
