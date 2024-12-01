@@ -668,8 +668,10 @@ static void kmmscand_migrate_folio(void)
 			WRITE_ONCE(kmmscand_cur_migrate_mm, info->mm);
 			spin_unlock(&kmmscand_migrate_lock);
 
-			if (info->mm)
+			if (info->mm) {
 				ret = kmmscand_promote_folio(info);
+				trace_kmem_scan_mm_migrate(info->mm->owner, info->mm, ret);
+			}
 
 			/* TBD: encode migrated count here, currently assume folio_nr_pages */
 			if (!ret)
@@ -828,6 +830,9 @@ static unsigned long kmmscand_scan_mm_slot(void)
 		goto outerloop;
 	}
 
+	if (mm->owner)
+		trace_kmem_scan_mm_start(mm->owner, mm);
+
 	now = jiffies;
 	/*
 	 * Dont scan if :
@@ -867,6 +872,10 @@ static unsigned long kmmscand_scan_mm_slot(void)
 		address = 0;
 
 	update_mmslot_info = true;
+
+	if (mm->owner)
+		trace_kmem_scan_mm_end(mm->owner, mm, address, total,
+					mm_slot_scan_period, mm_slot_scan_size);
 
 	count_kmmscand_mm_scans();
 
@@ -1020,6 +1029,7 @@ void __kmmscand_enter(struct mm_struct *mm)
 	spin_unlock(&kmmscand_mm_lock);
 
 	mmgrab(mm);
+	trace_kmem_mm_enter(mm->owner, mm);
 	if (wakeup)
 		wake_up_interruptible(&kmmscand_wait);
 }

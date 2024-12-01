@@ -9,6 +9,105 @@
 #include <linux/tracepoint.h>
 #include <trace/events/mmflags.h>
 
+TRACE_EVENT(kmem_mm_enter,
+
+	TP_PROTO(struct task_struct *t,
+		 struct mm_struct *mm),
+
+	TP_ARGS(t, mm),
+
+	TP_STRUCT__entry(
+		__array(	char, comm, TASK_COMM_LEN	)
+		__field(	struct mm_struct *, mm		)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, t->comm, TASK_COMM_LEN);
+		__entry->mm = mm;
+	),
+
+	TP_printk("kmmscand: mm_enter comm =%s mm=%p", __entry->comm, __entry->mm)
+);
+
+TRACE_EVENT(kmem_scan_mm_start,
+
+	TP_PROTO(struct task_struct *t,
+		 struct mm_struct *mm),
+
+	TP_ARGS(t, mm),
+
+	TP_STRUCT__entry(
+		__array(	char, comm, TASK_COMM_LEN	)
+		__field(	struct mm_struct *, mm		)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, t->comm, TASK_COMM_LEN);
+		__entry->mm = mm;
+	),
+
+	TP_printk("kmmscand: scan_mm_start comm =%s mm=%p", __entry->comm, __entry->mm)
+);
+
+TRACE_EVENT(kmem_scan_mm_end,
+
+	TP_PROTO(struct task_struct *t,
+		 struct mm_struct *mm,
+		 unsigned long start,
+		 unsigned long total,
+		 unsigned long scan_size,
+		 unsigned long scan_period),
+
+	TP_ARGS(t, mm, start, total, scan_period, scan_size),
+
+	TP_STRUCT__entry(
+		__array(	char, comm, TASK_COMM_LEN	)
+		__field(	struct mm_struct *, mm		)
+		__field(	unsigned long,   start		)
+		__field(	unsigned long,   total		)
+		__field(	unsigned long,   scan_period	)
+		__field(	unsigned long,   scan_size	)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, t->comm, TASK_COMM_LEN);
+		__entry->mm = mm;
+		__entry->start = start;
+		__entry->total = total;
+		__entry->scan_period = scan_period;
+		__entry->scan_size = scan_size;
+	),
+
+	TP_printk("kmmscand: scan_mm_end comm =%s mm=%p, start = %ld, total = %ld, scan_period = %ld, scan_size = %ld",
+			__entry->comm, __entry->mm, __entry->start,
+			__entry->total, __entry->scan_period, __entry->scan_size)
+);
+
+TRACE_EVENT(kmem_scan_mm_migrate,
+
+	TP_PROTO(struct task_struct *t,
+		 struct mm_struct *mm,
+		 int rc),
+
+	TP_ARGS(t, mm, rc),
+
+	TP_STRUCT__entry(
+		__array(	char, comm, TASK_COMM_LEN	)
+		__field(	struct mm_struct *, mm		)
+		__field(	int,   rc			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, t->comm, TASK_COMM_LEN);
+		__entry->mm = mm;
+		__entry->rc = rc;
+	),
+
+	TP_printk("kmmscand: scan_mm_migrate comm =%s mm=%p rc=%d", __entry->comm,
+			__entry->mm, __entry->rc)
+);
+
+
 TRACE_EVENT(kmem_cache_alloc,
 
 	TP_PROTO(unsigned long call_site,
