@@ -57,19 +57,22 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 	((__force unsigned long)(x) <= runtime_const_ptr(USER_PTR_MAX))
 
 /*
- * Masking the user address is an alternative to a conditional
- * user_access_begin that can avoid the fencing. This only works
- * for dense accesses starting at the address.
+ * Bound a user address to the base of the guard page.
+ * This can be used to avoid speculative accesses following access_ok(),
+ * or as an alternative to a conditional user_access_begin.
+ * Both without expensive fencing.
+ * Valid provided the accesses are 'reasonably sequnential'
+ * (no jumps of a page size).
  */
 static inline void __user *mask_user_address(const void __user *ptr)
 {
-	unsigned long mask;
-	asm("cmp %1,%0\n\t"
-	    "sbb %0,%0"
-		:"=r" (mask)
-		:"r" (ptr),
-		 "0" (runtime_const_ptr(USER_PTR_MAX)));
-	return (__force void __user *)(mask | (__force unsigned long)ptr);
+	void __user *bounded = (__force void __user *)runtime_const_ptr(USER_PTR_MAX);
+
+	asm("cmp %0,%1\n\t"
+	    "cmovc %1,%0"
+		:"+r" (bounded)
+		:"r" (ptr));
+	return bounded;
 }
 #define masked_user_access_begin(x) ({				\
 	__auto_type __masked_ptr = (x);				\
