@@ -1672,6 +1672,9 @@ bool uvc_ctrl_status_event_async(struct urb *urb, struct uvc_video_chain *chain,
 	struct uvc_device *dev = chain->dev;
 	struct uvc_ctrl_work *w = &dev->async_ctrl;
 
+	/* Flush the control cache, the data might have changed. */
+	ctrl->loaded = 0;
+
 	if (list_empty(&ctrl->info.mappings))
 		return false;
 
