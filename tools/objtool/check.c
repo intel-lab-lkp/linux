@@ -4934,10 +4934,10 @@ int check(struct objtool_file *file)
 		disas_warned_funcs(file);
 
 	if (opts.stats) {
-		printf("nr_insns_visited: %ld\n", nr_insns_visited);
-		printf("nr_cfi: %ld\n", nr_cfi);
-		printf("nr_cfi_reused: %ld\n", nr_cfi_reused);
-		printf("nr_cfi_cache: %ld\n", nr_cfi_cache);
+		printf("nr_insns_visited: %lu\n", nr_insns_visited);
+		printf("nr_cfi: %lu\n", nr_cfi);
+		printf("nr_cfi_reused: %lu\n", nr_cfi_reused);
+		printf("nr_cfi_cache: %lu\n", nr_cfi_cache);
 	}
 
 out:
