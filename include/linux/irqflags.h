@@ -127,7 +127,7 @@ do {						\
 # define lockdep_irq_work_exit(__work)		do { } while (0)
 #endif
 
-#if defined(CONFIG_TRACE_IRQFLAGS) && !defined(CONFIG_PREEMPT_RT)
+#if defined(CONFIG_TRACE_IRQFLAGS)
 # define lockdep_softirq_enter()		\
 do {						\
 	current->softirq_context++;		\

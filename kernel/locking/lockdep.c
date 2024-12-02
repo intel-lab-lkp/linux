@@ -4626,7 +4626,7 @@ mark_usage(struct task_struct *curr, struct held_lock *hlock, int check)
 				if (!mark_lock(curr, hlock,
 						LOCK_USED_IN_HARDIRQ_READ))
 					return 0;
-			if (curr->softirq_context)
+			if (!IS_ENABLED(CONFIG_PREEMPT_RT) && curr->softirq_context)
 				if (!mark_lock(curr, hlock,
 						LOCK_USED_IN_SOFTIRQ_READ))
 					return 0;
@@ -4634,7 +4634,7 @@ mark_usage(struct task_struct *curr, struct held_lock *hlock, int check)
 			if (lockdep_hardirq_context())
 				if (!mark_lock(curr, hlock, LOCK_USED_IN_HARDIRQ))
 					return 0;
-			if (curr->softirq_context)
+			if (!IS_ENABLED(CONFIG_PREEMPT_RT) && curr->softirq_context)
 				if (!mark_lock(curr, hlock, LOCK_USED_IN_SOFTIRQ))
 					return 0;
 		}
@@ -4675,8 +4675,11 @@ lock_used:
 
 static inline unsigned int task_irq_context(struct task_struct *task)
 {
-	return LOCK_CHAIN_HARDIRQ_CONTEXT * !!lockdep_hardirq_context() +
-	       LOCK_CHAIN_SOFTIRQ_CONTEXT * !!task->softirq_context;
+	if (IS_ENABLED(CONFIG_PREEMPT_RT))
+		return LOCK_CHAIN_HARDIRQ_CONTEXT * !!lockdep_hardirq_context();
+	else
+		return LOCK_CHAIN_HARDIRQ_CONTEXT * !!lockdep_hardirq_context() +
+		       LOCK_CHAIN_SOFTIRQ_CONTEXT * !!task->softirq_context;
 }
 
 static int separate_irq_context(struct task_struct *curr,
