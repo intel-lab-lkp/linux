@@ -666,6 +666,15 @@ bool __weak arch_validate_memory_range(unsigned long long start,
 }
 
 /*
+ * Arch can override the function and return the number of maximum configurable
+ * memory.
+ */
+ssize_t __weak arch_get_memory_max_configurable(void)
+{
+	return 0;
+}
+
+/*
  * Format:
  * echo config_mode,memoryrange,altmap_mode >
  * /sys/bus/memory/devices/configure_memory
@@ -759,6 +768,15 @@ out:
 	return ret ? ret : count;
 }
 static DEVICE_ATTR_WO(configure_memory);
+
+/*
+ * Show the maximum number of configurable memory.
+ */
+static ssize_t max_configurable_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", arch_get_memory_max_configurable());
+}
+static DEVICE_ATTR_RO(max_configurable);
 #endif /* CONFIG_RUNTIME_MEMORY_CONFIGURATION */
 
 /*
@@ -1075,6 +1093,7 @@ static struct attribute *memory_root_attrs[] = {
 #endif
 #ifdef CONFIG_RUNTIME_MEMORY_CONFIGURATION
 	&dev_attr_configure_memory.attr,
+	&dev_attr_max_configurable.attr,
 #endif
 	NULL
 };
