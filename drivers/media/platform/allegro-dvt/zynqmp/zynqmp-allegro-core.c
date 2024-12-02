@@ -31,7 +31,7 @@
 #include <media/videobuf2-dma-contig.h>
 #include <media/videobuf2-v4l2.h>
 
-#include "allegro-mail.h"
+#include "zynqmp-allegro-mail.h"
 #include "nal-h264.h"
 #include "nal-hevc.h"
 

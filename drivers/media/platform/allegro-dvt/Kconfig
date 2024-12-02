@@ -2,8 +2,8 @@
 
 comment "Allegro DVT media platform drivers"
 
-config VIDEO_ALLEGRO_DVT
-	tristate "Allegro DVT Video IP Core"
+config VIDEO_ZYNQMP_ALLEGRO_DVT
+	tristate "Allegro DVT Video IP Core for ZynqMP"
 	depends on V4L_MEM2MEM_DRIVERS
 	depends on VIDEO_DEV
 	depends on ARCH_ZYNQMP || COMPILE_TEST

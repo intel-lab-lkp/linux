@@ -12,7 +12,7 @@
 #include <linux/string.h>
 #include <linux/videodev2.h>
 
-#include "allegro-mail.h"
+#include "zynqmp-allegro-mail.h"
 
 const char *msg_type_name(enum mcu_msg_type type)
 {
