@@ -358,6 +358,29 @@ static inline void *offset_to_ptr(const int *off)
 #define is_const(x) __is_const_zero(0 * (x))
 
 /*
+ * Similar to statically_true() but produces a constant expression
+ *
+ * To be used in conjunction with macros, such as BUILD_BUG_ON_ZERO(),
+ * which require their input to be a constant expression and for which
+ * statically_true() would otherwise fail.
+ *
+ * This is a trade-off: is_const_true() requires all its operands to
+ * be compile time constants. Else, it would always returns false even
+ * on the most trivial cases like:
+ *
+ *   true || non_const_expr
+ *
+ * On the opposite, statically_true() is able to fold more complex
+ * tautologies and will return true on expressions such as:
+ *
+ *   !(non_const_expr * 8 % 4)
+ *
+ * For the general case, statically_true() is better.
+ */
+#define is_const_true(x) __is_const_zero((x) == 0)
+#define is_const_false(x) __is_const_zero((x) != 0)
+
+/*
  * This is needed in functions which generate the stack canary, see
  * arch/x86/kernel/smpboot.c::start_secondary() for an example.
  */
