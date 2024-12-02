@@ -234,7 +234,7 @@ static inline bool __must_check __must_check_overflow(bool overflow)
  * Returns: true if overflow can occur, false otherwise.
  */
 #define overflows_type(n, T)					\
-	__builtin_choose_expr(__is_constexpr(n),		\
+	__builtin_choose_expr(is_const(n),			\
 			      __overflows_type_constexpr(n, T),	\
 			      __overflows_type(n, T))
 
@@ -250,7 +250,7 @@ static inline bool __must_check __must_check_overflow(bool overflow)
  * back to __same_type().
  */
 #define castable_to_type(n, T)						\
-	__builtin_choose_expr(__is_constexpr(n),			\
+	__builtin_choose_expr(is_const(n),				\
 			      !__overflows_type_constexpr(n, T),	\
 			      __same_type(n, T))
 
@@ -352,7 +352,7 @@ static inline size_t __must_check size_sub(size_t minuend, size_t subtrahend)
  * Return: number of bytes needed or SIZE_MAX on overflow.
  */
 #define flex_array_size(p, member, count)				\
-	__builtin_choose_expr(__is_constexpr(count),			\
+	__builtin_choose_expr(is_const(count),				\
 		(count) * sizeof(*(p)->member) + __must_be_array((p)->member),	\
 		size_mul(count, sizeof(*(p)->member) + __must_be_array((p)->member)))
 
@@ -368,7 +368,7 @@ static inline size_t __must_check size_sub(size_t minuend, size_t subtrahend)
  * Return: number of bytes needed or SIZE_MAX on overflow.
  */
 #define struct_size(p, member, count)					\
-	__builtin_choose_expr(__is_constexpr(count),			\
+	__builtin_choose_expr(is_const(count),				\
 		sizeof(*(p)) + flex_array_size(p, member, count),	\
 		size_add(sizeof(*(p)), flex_array_size(p, member, count)))
 
