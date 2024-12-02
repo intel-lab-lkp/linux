@@ -3555,6 +3555,7 @@ ATCPIT100 PWM DRIVER
 M:	Ben Zong-You Xie <ben717@andestech.com>
 S:	Supported
 F:	Documentation/devicetree/bindings/pwm/andestech,atcpit100-pwm.yaml
+F:	drivers/pwm/pwm-atcpit100.c
 
 ATHEROS 71XX/9XXX GPIO DRIVER
 M:	Alban Bedel <albeu@free.fr>

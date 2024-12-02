@@ -66,6 +66,23 @@ config PWM_APPLE
 	  To compile this driver as a module, choose M here: the module
 	  will be called pwm-apple.
 
+config PWM_ATCPIT100
+	tristate "Andes ATCPIT100 PWM support"
+	depends on OF && HAS_IOMEM
+	depends on RISCV || COMPILE_TEST
+	select REGMAP_MMIO
+	help
+	  Generic PWM framework driver for ATCPIT100 on Andes AE350 platform
+
+	  The ATCPIT100 Programmable Interval Timer (PIT) is a set of compact
+	  multi-function timers, which can be used as pulse width
+	  modulators (PWM) as well as simple timers. ATCPIT100 supports up to 4
+	  PIT channels. Each PIT channel can be a simple timer or PWM, or a
+	  combination of timer and PWM.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-atcpit100.
+
 config PWM_ATMEL
 	tristate "Atmel PWM support"
 	depends on ARCH_AT91 || COMPILE_TEST
