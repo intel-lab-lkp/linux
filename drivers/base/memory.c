@@ -431,6 +431,14 @@ static ssize_t phys_device_show(struct device *dev,
 			  arch_get_memory_phys_device(start_pfn));
 }
 
+static ssize_t altmap_show(struct device *dev,
+			   struct device_attribute *attr, char *buf)
+{
+	struct memory_block *mem = to_memory_block(dev);
+
+	return sysfs_emit(buf, "%u\n", mem->altmap ? 1 : 0);
+}
+
 #ifdef CONFIG_MEMORY_HOTREMOVE
 static int print_allowed_zone(char *buf, int len, int nid,
 			      struct memory_group *group,
@@ -492,6 +500,7 @@ static DEVICE_ATTR_RO(phys_index);
 static DEVICE_ATTR_RW(state);
 static DEVICE_ATTR_RO(phys_device);
 static DEVICE_ATTR_RO(removable);
+static DEVICE_ATTR_RO(altmap);
 
 /*
  * Show the memory block size (shared by all memory blocks).
@@ -785,6 +794,7 @@ static struct attribute *memory_memblk_attrs[] = {
 #ifdef CONFIG_MEMORY_HOTREMOVE
 	&dev_attr_valid_zones.attr,
 #endif
+	&dev_attr_altmap.attr,
 	NULL
 };
 
