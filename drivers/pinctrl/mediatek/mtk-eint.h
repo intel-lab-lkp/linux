@@ -1,15 +1,18 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (C) 2014-2018 MediaTek Inc.
+ * Copyright (C) 2014-2024 MediaTek Inc.
  *
  * Author: Maoguang Meng <maoguang.meng@mediatek.com>
- *	   Sean Wang <sean.wang@mediatek.com>
- *
+ * Sean Wang <sean.wang@mediatek.com>
+ * Chhao Chang <ot_chhao.chang@mediatek.com>
  */
 #ifndef __MTK_EINT_H
 #define __MTK_EINT_H
 
 #include <linux/irqdomain.h>
+
+#define MAX_PIN 256
+//#define MTK_EINT_DEBUG
 
 struct mtk_eint_regs {
 	unsigned int	stat;
@@ -30,19 +33,37 @@ struct mtk_eint_regs {
 	unsigned int	dbnc_ctrl;
 	unsigned int	dbnc_set;
 	unsigned int	dbnc_clr;
+	unsigned int	event;
+	unsigned int	event_set;
+	unsigned int	event_clr;
+	unsigned int	raw_stat;
 };
 
-struct mtk_eint_hw {
-	u8		port_mask;
-	u8		ports;
-	unsigned int	ap_num;
-	unsigned int	db_cnt;
-	const unsigned int *db_time;
+struct mtk_eint_ops {
+	void (*ack)(struct irq_data *d);
 };
 
-extern const unsigned int debounce_time_mt2701[];
-extern const unsigned int debounce_time_mt6765[];
-extern const unsigned int debounce_time_mt6795[];
+struct mtk_eint_compatible {
+	struct mtk_eint_ops ops;
+	const struct mtk_eint_regs *regs;
+};
+
+struct mtk_eint_pin {
+	bool enabled;
+	u8 instance;
+	u8 index;
+	bool debounce;
+	bool dual_edge;
+};
+
+struct mtk_eint_instance {
+	const char *name;
+	void __iomem *base;
+	unsigned int number;
+	u16 pin_list[MAX_PIN];
+	unsigned int *wake_mask;
+	unsigned int *cur_mask;
+};
 
 struct mtk_eint;
 
@@ -54,36 +75,57 @@ struct mtk_eint_xt {
 	int (*set_gpio_as_eint)(void *data, unsigned long eint_n);
 };
 
+struct mtk_eint_hw {
+	u8              port_mask;
+	u8              ports;
+	unsigned int    ap_num;
+	unsigned int    db_cnt;
+	const unsigned int *db_time;
+};
+
+extern const unsigned int debounce_time_mt2701[];
+extern const unsigned int debounce_time_mt6765[];
+extern const unsigned int debounce_time_mt6795[];
+
 struct mtk_eint {
 	struct device *dev;
 	void __iomem *base;
 	struct irq_domain *domain;
 	int irq;
 
-	int *dual_edge;
-	u32 *wake_mask;
-	u32 *cur_mask;
-
-	/* Used to fit into various EINT device */
+	/* An array to record the coordinate, index by global EINT ID */
+	struct mtk_eint_pin *pins;
+	/* An array to record the global EINT ID, index by coordinate */
+	struct mtk_eint_instance *instances;
+	unsigned int total_pin_number;
+	unsigned int instance_number;
+	unsigned int dump_target_eint;
+	const struct mtk_eint_compatible *comp;
 	const struct mtk_eint_hw *hw;
 	const struct mtk_eint_regs *regs;
-	u16 num_db_time;
 
 	/* Used to fit into various pinctrl device */
 	void *pctl;
 	const struct mtk_eint_xt *gpio_xlate;
 };
 
-#if IS_ENABLED(CONFIG_EINT_MTK)
+#if (IS_ENABLED(CONFIG_EINT_MTK) || IS_ENABLED(CONFIG_DEVICE_MODULES_EINT_MTK))
 int mtk_eint_do_init(struct mtk_eint *eint);
+int mtk_eint_do_init_v2(struct mtk_eint *eint);
 int mtk_eint_do_suspend(struct mtk_eint *eint);
 int mtk_eint_do_resume(struct mtk_eint *eint);
 int mtk_eint_set_debounce(struct mtk_eint *eint, unsigned long eint_n,
 			  unsigned int debounce);
 int mtk_eint_find_irq(struct mtk_eint *eint, unsigned long eint_n);
+int dump_eint_pin_status(unsigned int eint_num, char *buf, unsigned int buf_size);
 
 #else
 static inline int mtk_eint_do_init(struct mtk_eint *eint)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int mtk_eint_do_init_v2(struct mtk_eint *eint)
 {
 	return -EOPNOTSUPP;
 }
@@ -105,6 +147,11 @@ static inline int mtk_eint_set_debounce(struct mtk_eint *eint, unsigned long ein
 }
 
 static inline int mtk_eint_find_irq(struct mtk_eint *eint, unsigned long eint_n)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int dump_eint_pin_status(unsigned int eint_num)
 {
 	return -EOPNOTSUPP;
 }
