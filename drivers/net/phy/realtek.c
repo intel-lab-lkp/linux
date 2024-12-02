@@ -31,6 +31,7 @@
 #define RTL8211F_PHYCR1				0x18
 #define RTL8211F_PHYCR2				0x19
 #define RTL8211F_INSR				0x1d
+#define RTL8211F_PHYAD0_EN			BIT(13)
 
 #define RTL8211FS_FIBER_ESR			0x0F
 #define RTL8211FS_MODE_MASK			0xC000
@@ -421,12 +422,18 @@ static int rtl8211f_config_init(struct phy_device *phydev)
 	struct device *dev = &phydev->mdio.dev;
 	u16 val_txdly, val_rxdly;
 	int ret;
+	u16 phyad0_disable = 0;
 
+	if (of_property_read_bool(dev->of_node, "realtek,phyad0-disable")) {
+		phyad0_disable = RTL8211F_PHYAD0_EN;
+		dev_dbg(dev, "disabling MDIO address 0 for this phy");
+	}
 	ret = phy_modify_paged_changed(phydev, 0xa43, RTL8211F_PHYCR1,
-				       RTL8211F_ALDPS_PLL_OFF | RTL8211F_ALDPS_ENABLE | RTL8211F_ALDPS_XTAL_OFF,
+				       RTL8211F_ALDPS_PLL_OFF  | RTL8211F_ALDPS_ENABLE |
+				       RTL8211F_ALDPS_XTAL_OFF | phyad0_disable,
 				       priv->phycr1);
 	if (ret < 0) {
-		dev_err(dev, "aldps mode  configuration failed: %pe\n",
+		dev_err(dev, "mode configuration failed: %pe\n",
 			ERR_PTR(ret));
 		return ret;
 	}
