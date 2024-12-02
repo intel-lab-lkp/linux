@@ -139,7 +139,6 @@ enum mwifiex_bss_type {
 	MWIFIEX_BSS_TYPE_STA = 0,
 	MWIFIEX_BSS_TYPE_UAP = 1,
 	MWIFIEX_BSS_TYPE_P2P = 2,
-	MWIFIEX_BSS_TYPE_ANY = 0xff,
 };
 
 enum mwifiex_bss_role {
