@@ -492,7 +492,7 @@
 	({									\
 		u64 __val;							\
 										\
-		if (__is_constexpr((offset)))					\
+		if (is_const(offset))						\
 			__val = read_etm4x_sysreg_const_offset((offset));	\
 		else								\
 			__val = etm4x_sysreg_read((offset), true, (_64bit));	\
