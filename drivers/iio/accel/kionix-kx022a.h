@@ -135,6 +135,11 @@ struct kx022a_data;
  *
  * @name:			name of the device
  * @regmap_config:		pointer to register map configuration
+ * scale_table:			Array of two integer tables containing
+ *				supported scales. Each scale is represented
+ *				a 2 value array. First value being full
+ *				integers, second being NANOs.
+ * scale_table_size:		Amount of values in tables.
  * @channels:			pointer to iio_chan_spec array
  * @num_channels:		number of iio_chan_spec channels
  * @fifo_length:		number of 16-bit samples in a full buffer
