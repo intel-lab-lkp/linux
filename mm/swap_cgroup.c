@@ -12,13 +12,11 @@ struct swap_cgroup {
 };
 
 struct swap_cgroup_ctrl {
-	struct swap_cgroup *map;
+	unsigned short	*map;
 	spinlock_t	lock;
 };
 
 static struct swap_cgroup_ctrl swap_cgroup_ctrl[MAX_SWAPFILES];
-
-#define SC_PER_PAGE	(PAGE_SIZE/sizeof(struct swap_cgroup))
 
 /*
  * SwapCgroup implements "lookup" and "exchange" operations.
@@ -33,18 +31,6 @@ static struct swap_cgroup_ctrl swap_cgroup_ctrl[MAX_SWAPFILES];
  *
  * TODO: we can push these buffers out to HIGHMEM.
  */
-static struct swap_cgroup *lookup_swap_cgroup(swp_entry_t ent,
-					struct swap_cgroup_ctrl **ctrlp)
-{
-	pgoff_t offset = swp_offset(ent);
-	struct swap_cgroup_ctrl *ctrl;
-
-	ctrl = &swap_cgroup_ctrl[swp_type(ent)];
-	if (ctrlp)
-		*ctrlp = ctrl;
-	return &ctrl->map[offset];
-}
-
 /**
  * swap_cgroup_record - record mem_cgroup for a set of swap entries
  * @ent: the first swap entry to be recorded into
@@ -58,20 +44,21 @@ unsigned short swap_cgroup_record(swp_entry_t ent, unsigned short id,
 				  unsigned int nr_ents)
 {
 	struct swap_cgroup_ctrl *ctrl;
-	struct swap_cgroup *sc;
+	unsigned short *map;
 	unsigned short old;
 	unsigned long flags;
 	pgoff_t offset = swp_offset(ent);
 	pgoff_t end = offset + nr_ents;
 
-	sc = lookup_swap_cgroup(ent, &ctrl);
+	ctrl = &swap_cgroup_ctrl[swp_type(ent)];
+	map = ctrl->map;
 
 	spin_lock_irqsave(&ctrl->lock, flags);
-	old = sc->id;
-	for (; offset < end; offset++, sc++) {
-		VM_BUG_ON(sc->id != old);
-		sc->id = id;
-	}
+	old = map[offset];
+	do {
+		VM_BUG_ON(map[offset] != old);
+		map[offset] = id;
+	} while (++offset != end);
 	spin_unlock_irqrestore(&ctrl->lock, flags);
 
 	return old;
@@ -85,20 +72,26 @@ unsigned short swap_cgroup_record(swp_entry_t ent, unsigned short id,
  */
 unsigned short lookup_swap_cgroup_id(swp_entry_t ent)
 {
-	if (mem_cgroup_disabled())
-		return 0;
-	return lookup_swap_cgroup(ent, NULL)->id;
-}
-
-int swap_cgroup_swapon(int type, unsigned long max_pages)
-{
-	struct swap_cgroup *map;
 	struct swap_cgroup_ctrl *ctrl;
 
 	if (mem_cgroup_disabled())
 		return 0;
 
-	map = vcalloc(max_pages, sizeof(struct swap_cgroup));
+	ctrl = &swap_cgroup_ctrl[swp_type(ent)];
+	pgoff_t offset = swp_offset(ent);
+
+	return READ_ONCE(ctrl->map[offset]);
+}
+
+int swap_cgroup_swapon(int type, unsigned long max_pages)
+{
+	void *map;
+	struct swap_cgroup_ctrl *ctrl;
+
+	if (mem_cgroup_disabled())
+		return 0;
+
+	map = vzalloc(max_pages * sizeof(unsigned short));
 	if (!map)
 		goto nomem;
 
@@ -117,7 +110,7 @@ nomem:
 
 void swap_cgroup_swapoff(int type)
 {
-	struct swap_cgroup *map;
+	void *map;
 	struct swap_cgroup_ctrl *ctrl;
 
 	if (mem_cgroup_disabled())
