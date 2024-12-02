@@ -104,7 +104,17 @@ The possible values in this file are:
 
    (spec_rstack_overflow=ibpb-vmexit)
 
+ * 'Mitigation: Reduced Speculation':
 
+   This mitigation gets automatically enabled when the above one "IBPB on
+   VMEXIT" has been selected and the CPU supports the BpSpecReduce bit.
+
+   Currently, the mitigation is automatically enabled when KVM enables
+   virtualization and can incur some cost. If no VMs will run on the system,
+   you can either disable virtualization or set kvm.enable_virt_at_load=0 to
+   enable it only when a VM gets started and thus when really needed. See the
+   text in Documentation/admin-guide/kernel-parameters.txt on this parameter
+   for more details.
 
 In order to exploit vulnerability, an attacker needs to:
 
