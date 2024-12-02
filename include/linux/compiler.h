@@ -317,6 +317,47 @@ static inline void *offset_to_ptr(const int *off)
 #define statically_false(x) (__builtin_constant_p(x) && (x) == 0)
 
 /*
+ * Whether x is the integer constant expression 0 or something else.
+ *
+ * Details:
+ *   - The C11 standard defines in §6.3.2.3.3
+ *       (void *)<integer constant expression with the value 0>
+ *     as a null pointer constant (c.f. the NULL macro).
+ *   - If x evaluates to the integer constant expression 0,
+ *       (void *)(x)
+ *     is a null pointer constant. Else, it is a void * expression.
+ *   - In a ternary expression:
+ *       condition ? operand1 : operand2
+ *     if one of the two operands is of type void * and the other one
+ *     some other pointer type, the C11 standard defines in §6.5.15.6
+ *     the resulting type as below:
+ *       if one operand is a null pointer constant, the result has the
+ *       type of the other operand; otherwise [...] the result type is
+ *       a pointer to an appropriately qualified version of void.
+ *   - As such, in
+ *       0 ? (void *)(x) : (char *)0
+ *     if x is the integer constant expression 0, operand1 is a null
+ *     pointer constant and the resulting type is that of operand2:
+ *     char *. If x is anything else, the type is void *.
+ *   - The (long) cast silences a compiler warning for when x is not 0.
+ *   - Finally, the _Generic() dispatches the resulting type into a
+ *     Boolean.
+ *
+ * Glory to Martin Uecker <Martin.Uecker@med.uni-goettingen.de>
+ */
+#define __is_const_zero(x) \
+	_Generic(0 ? (void *)(long)(x) : (char *)0, char *: 1, void *: 0)
+
+/*
+ * Returns a constant expression while determining if its argument is a
+ * constant expression, most importantly without evaluating the argument.
+ *
+ * If getting a constant expression is not relevant to you, use the more
+ * powerful __builtin_constant_p() instead.
+ */
+#define is_const(x) __is_const_zero(0 * (x))
+
+/*
  * This is needed in functions which generate the stack canary, see
  * arch/x86/kernel/smpboot.c::start_secondary() for an example.
  */
