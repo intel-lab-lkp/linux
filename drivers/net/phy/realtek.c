@@ -32,6 +32,11 @@
 #define RTL8211F_PHYCR2				0x19
 #define RTL8211F_INSR				0x1d
 
+#define RTL8211FS_FIBER_ESR			0x0F
+#define RTL8211FS_MODE_MASK			0xC000
+#define RTL8211FS_MODE_COPPER			0
+#define RTL8211FS_MODE_FIBER			1
+
 #define RTL8211F_LEDCR				0x10
 #define RTL8211F_LEDCR_MODE			BIT(15)
 #define RTL8211F_LEDCR_ACT_TXRX			BIT(4)
@@ -110,6 +115,7 @@ struct rtl821x_priv {
 	u16 phycr1;
 	u16 phycr2;
 	bool has_phycr2;
+	int lastmode;
 	struct clk *clk;
 };
 
@@ -161,6 +167,44 @@ static int rtl821x_probe(struct phy_device *phydev)
 	phydev->priv = priv;
 
 	return 0;
+}
+
+static int rtl8211f_mode(struct phy_device *phydev)
+{
+	u16 val;
+
+	val = __phy_read(phydev, RTL8211FS_FIBER_ESR);
+	val &= RTL8211FS_MODE_MASK;
+
+	if (val)
+		return RTL8211FS_MODE_FIBER;
+	else
+		return RTL8211FS_MODE_COPPER;
+}
+
+static int rtl8211f_config_aneg(struct phy_device *phydev)
+{
+	int ret;
+
+	struct rtl821x_priv *priv = phydev->priv;
+
+	ret = genphy_read_abilities(phydev);
+	if (ret < 0)
+		return ret;
+
+	linkmode_copy(phydev->advertising, phydev->supported);
+
+	if (rtl8211f_mode(phydev) == RTL8211FS_MODE_FIBER) {
+		dev_dbg(&phydev->mdio.dev, "fiber link up");
+		priv->lastmode = RTL8211FS_MODE_FIBER;
+		return genphy_c37_config_aneg(phydev);
+	}
+
+	dev_dbg(&phydev->mdio.dev, "copper link up");
+
+	priv->lastmode = RTL8211FS_MODE_COPPER;
+
+	return genphy_config_aneg(phydev);
 }
 
 static int rtl8201_ack_interrupt(struct phy_device *phydev)
@@ -730,6 +774,26 @@ static int rtlgen_read_status(struct phy_device *phydev)
 	rtlgen_decode_physr(phydev, val);
 
 	return 0;
+}
+
+static int rtl8211f_read_status(struct phy_device *phydev)
+{
+	int ret;
+	struct rtl821x_priv *priv = phydev->priv;
+	bool changed = false;
+
+	if (rtl8211f_mode(phydev) != priv->lastmode) {
+		changed = true;
+		ret = rtl8211f_config_aneg(phydev);
+		if (ret < 0)
+			return ret;
+
+		ret = genphy_restart_aneg(phydev);
+		if (ret < 0)
+			return ret;
+	}
+
+	return genphy_c37_read_status(phydev, &changed);
 }
 
 static int rtlgen_read_mmd(struct phy_device *phydev, int devnum, u16 regnum)
@@ -1375,7 +1439,8 @@ static struct phy_driver realtek_drvs[] = {
 		.name		= "RTL8211F Gigabit Ethernet",
 		.probe		= rtl821x_probe,
 		.config_init	= &rtl8211f_config_init,
-		.read_status	= rtlgen_read_status,
+		.config_aneg	= rtl8211f_config_aneg,
+		.read_status	= rtl8211f_read_status,
 		.config_intr	= &rtl8211f_config_intr,
 		.handle_interrupt = rtl8211f_handle_interrupt,
 		.suspend	= rtl821x_suspend,
