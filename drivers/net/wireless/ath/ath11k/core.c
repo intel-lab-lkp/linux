@@ -37,6 +37,12 @@ bool ath11k_ftm_mode;
 module_param_named(ftm_mode, ath11k_ftm_mode, bool, 0444);
 MODULE_PARM_DESC(ftm_mode, "Boots up in factory test mode");
 
+static bool ath11k_ignore_support_dual_stations;
+module_param_named(ignore_support_dual_stations,
+		   ath11k_ignore_support_dual_stations, bool, 0644);
+MODULE_PARM_DESC(ignore_support_dual_stations,
+		 "Ignore the support for dual stations to support other combinations");
+
 static const struct ath11k_hw_params ath11k_hw_params[] = {
 	{
 		.hw_rev = ATH11K_HW_IPQ8074,
@@ -2294,6 +2300,9 @@ static int ath11k_init_hw_params(struct ath11k_base *ab)
 	}
 
 	ab->hw_params = *hw_params;
+	if (ab->hw_params.support_dual_stations &&
+	    ath11k_ignore_support_dual_stations)
+		ab->hw_params.support_dual_stations  = false;
 
 	ath11k_info(ab, "%s\n", ab->hw_params.name);
 
