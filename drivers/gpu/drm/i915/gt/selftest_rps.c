@@ -1191,9 +1191,11 @@ int live_rps_power(void *arg)
 		}
 
 		max.freq = rps->max_freq;
+		msleep(100);
 		max.power = measure_power_at(rps, &max.freq);
 
 		min.freq = rps->min_freq;
+		msleep(100);
 		min.power = measure_power_at(rps, &min.freq);
 
 		igt_spinner_end(&spin);
