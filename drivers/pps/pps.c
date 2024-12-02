@@ -336,22 +336,22 @@ int pps_register_cdev(struct pps_device *pps)
 	int err;
 	dev_t devt;
 
-	mutex_lock(&pps_idr_lock);
 	/*
 	 * Get new ID for the new PPS source.  After idr_alloc() calling
 	 * the new source will be freely available into the kernel.
 	 */
+	mutex_lock(&pps_idr_lock);
 	err = idr_alloc(&pps_idr, pps, 0, PPS_MAX_SOURCES, GFP_KERNEL);
+	mutex_unlock(&pps_idr_lock);
 	if (err < 0) {
 		if (err == -ENOSPC) {
 			pr_err("%s: too many PPS sources in the system\n",
 			       pps->info.name);
 			err = -EBUSY;
 		}
-		goto out_unlock;
+		return err;
 	}
 	pps->id = err;
-	mutex_unlock(&pps_idr_lock);
 
 	devt = MKDEV(MAJOR(pps_devt), pps->id);
 
@@ -389,7 +389,6 @@ del_cdev:
 free_idr:
 	mutex_lock(&pps_idr_lock);
 	idr_remove(&pps_idr, pps->id);
-out_unlock:
 	mutex_unlock(&pps_idr_lock);
 	return err;
 }
