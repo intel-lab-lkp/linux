@@ -39,6 +39,14 @@ static unsigned long long quirks;
 module_param(quirks, ullong, S_IRUGO);
 MODULE_PARM_DESC(quirks, "Bit flags for quirks to be enabled as default");
 
+static char *compliance_product;
+module_param(compliance_product, charp, 0644);
+MODULE_PARM_DESC(compliance_product, "Product name for compliance comparison");
+
+static char *compliance_vendor;
+module_param(compliance_vendor, charp, 0644);
+MODULE_PARM_DESC(compliance_vendor, "Vendor name for compliance comparison");
+
 static bool td_on_ring(struct xhci_td *td, struct xhci_ring *ring)
 {
 	struct xhci_segment *seg;
@@ -442,13 +450,19 @@ static bool xhci_compliance_mode_recovery_timer_quirk_check(void)
 	if (!dmi_product_name || !dmi_sys_vendor)
 		return false;
 
-	if (!(strstr(dmi_sys_vendor, "Hewlett-Packard")))
+	if (!(strstr(dmi_sys_vendor, "Hewlett-Packard")) && !compliance_vendor)
+		return false;
+
+	if (compliance_vendor && !(strstr(dmi_sys_vendor,
+				  compliance_vendor)))
 		return false;
 
 	if (strstr(dmi_product_name, "Z420") ||
 			strstr(dmi_product_name, "Z620") ||
 			strstr(dmi_product_name, "Z820") ||
-			strstr(dmi_product_name, "Z1 Workstation"))
+			strstr(dmi_product_name, "Z1 Workstation") ||
+			(compliance_product && strstr(dmi_product_name,
+						     compliance_product)))
 		return true;
 
 	return false;
