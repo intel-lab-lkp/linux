@@ -1011,9 +1011,21 @@ void msm_dp_catalog_panel_tpg_enable(struct msm_dp_catalog *msm_dp_catalog,
 	u32 v_sync_width;
 	u32 hsync_ctl;
 	u32 display_hctl;
+	u32 h_sync_width;
+	u32 h_front_porch;
+	u32 h_back_porch;
+	u32 h_active;
+
+	h_active = drm_mode->hdisplay;
+	h_back_porch = drm_mode->htotal - drm_mode->hsync_end;
+	h_sync_width = drm_mode->htotal - (drm_mode->hsync_start + h_back_porch);
+	h_front_porch = drm_mode->hsync_start - drm_mode->hdisplay;
+
+	if (msm_dp_catalog->wide_bus_en)
+		h_active /= 2;
 
 	/* TPG config parameters*/
-	hsync_period = drm_mode->htotal;
+	hsync_period = h_sync_width + h_back_porch + h_active + h_front_porch;
 	vsync_period = drm_mode->vtotal;
 
 	display_v_start = ((drm_mode->vtotal - drm_mode->vsync_start) *
