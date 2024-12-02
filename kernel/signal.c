@@ -1974,10 +1974,11 @@ static inline struct task_struct *posixtimer_get_target(struct k_itimer *tmr)
 
 void posixtimer_send_sigqueue(struct k_itimer *tmr)
 {
+	unsigned long flags, tasklist_flags;
 	struct sigqueue *q = &tmr->sigq;
+	bool tasklist_locked = false;
 	int sig = q->info.si_signo;
 	struct task_struct *t;
-	unsigned long flags;
 	int result;
 
 	guard(rcu)();
@@ -1986,8 +1987,25 @@ void posixtimer_send_sigqueue(struct k_itimer *tmr)
 	if (!t)
 		return;
 
-	if (!likely(lock_task_sighand(t, &flags)))
-		return;
+	if (!likely(lock_task_sighand(t, &flags))) {
+		/*
+		 * The target is exiting, pick another one. This ensures that
+		 * it_sigqueue_seq is updated, otherwise
+		 * posixtimer_deliver_signal() will not rearm the timer.
+		 */
+		bool found = false;
+
+		read_lock_irqsave(&tasklist_lock, tasklist_flags);
+		tasklist_locked = true;
+		do_each_pid_task(tmr->it_pid, tmr->it_pid_type, t) {
+			if (likely(lock_task_sighand(t, &flags))) {
+				found = true;
+				break;
+			}
+		} while_each_pid_task(tmr->it_pid, tmr->it_pid_type, t);
+		if (!likely(found))
+			goto out_tasklist;
+	}
 
 	/*
 	 * Update @tmr::sigqueue_seq for posix timer signals with sighand
@@ -2062,6 +2080,9 @@ void posixtimer_send_sigqueue(struct k_itimer *tmr)
 out:
 	trace_signal_generate(sig, &q->info, t, tmr->it_pid_type != PIDTYPE_PID, result);
 	unlock_task_sighand(t, &flags);
+out_tasklist:
+	if (tasklist_locked)
+		read_unlock_irqrestore(&tasklist_lock, tasklist_flags);
 }
 
 static inline void posixtimer_sig_ignore(struct task_struct *tsk, struct sigqueue *q)
