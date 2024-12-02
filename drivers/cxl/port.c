@@ -89,6 +89,20 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 	return -ENXIO;
 }
 
+static void cxl_sr_update(struct work_struct *w)
+{
+	merge_soft_reserve_resources();
+}
+
+DECLARE_DELAYED_WORK(cxl_sr_work, cxl_sr_update);
+
+static void schedule_soft_reserve_update(void)
+{
+	int timeout = 5 * HZ;
+
+	mod_delayed_work(system_wq, &cxl_sr_work, timeout);
+}
+
 static int cxl_endpoint_port_probe(struct cxl_port *port)
 {
 	struct cxl_endpoint_dvsec_info info = { .port = port };
@@ -140,6 +154,7 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	 */
 	device_for_each_child(&port->dev, root, discover_region);
 
+	schedule_soft_reserve_update();
 	return 0;
 }
 

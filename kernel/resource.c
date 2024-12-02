@@ -30,7 +30,7 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <asm/io.h>
-
+#include <linux/acpi.h>
 
 struct resource ioport_resource = {
 	.name	= "PCI IO",
@@ -48,7 +48,15 @@ struct resource iomem_resource = {
 };
 EXPORT_SYMBOL(iomem_resource);
 
+struct resource srmem_resource = {
+	.name	= "Soft Reserved mem",
+	.start	= 0,
+	.end	= -1,
+	.flags	= IORESOURCE_MEM,
+};
+
 static DEFINE_RWLOCK(resource_lock);
+static DEFINE_RWLOCK(srmem_resource_lock);
 
 static struct resource *next_resource(struct resource *p, bool skip_children)
 {
@@ -1074,6 +1082,151 @@ int adjust_resource(struct resource *res, resource_size_t start,
 	return result;
 }
 EXPORT_SYMBOL(adjust_resource);
+
+static BLOCKING_NOTIFIER_HEAD(soft_reserve_chain);
+
+int register_soft_reserve_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&soft_reserve_chain, nb);
+}
+EXPORT_SYMBOL(register_soft_reserve_notifier);
+
+int unregister_soft_reserve_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&soft_reserve_chain, nb);
+}
+EXPORT_SYMBOL(unregister_soft_reserve_notifier);
+
+static int soft_reserve_notify(unsigned long val, void *v)
+{
+	struct resource *res = v;
+
+	pr_info("Adding Soft Reserve resource %pr\n", res);
+	return blocking_notifier_call_chain(&soft_reserve_chain, val, v);
+}
+
+static void trim_soft_reserve(struct resource *sr_res,
+			      const struct resource *res)
+{
+	struct resource *new_res;
+
+	if (sr_res->start == res->start && sr_res->end == res->end) {
+		release_resource(sr_res);
+		free_resource(sr_res);
+	} else if (sr_res->start == res->start) {
+		WARN_ON(adjust_resource(sr_res, res->end + 1,
+					sr_res->end - res->end));
+	} else if (sr_res->end == res->end) {
+		WARN_ON(adjust_resource(sr_res, sr_res->start,
+					res->start - sr_res->start));
+	} else {
+		/*
+		 * Adjust existing resource to cover the resource
+		 * range prior to the range to be trimmed.
+		 */
+		adjust_resource(sr_res, sr_res->start,
+				res->start - sr_res->start);
+
+		/*
+		 * Add new resource to cover the resource range for
+		 * the range after the range to be trimmed.
+		 */
+		new_res = alloc_resource(GFP_KERNEL);
+		if (!new_res)
+			return;
+
+		*new_res = DEFINE_RES_NAMED(res->end + 1, sr_res->end - res->end,
+					    "Soft Reserved", sr_res->flags);
+		new_res->desc = IORES_DESC_SOFT_RESERVED;
+		insert_resource(&srmem_resource, new_res);
+	}
+}
+
+void trim_soft_reserve_resources(const struct resource *res)
+{
+	struct resource *sr_res;
+
+	write_lock(&srmem_resource_lock);
+	for (sr_res = srmem_resource.child; sr_res; sr_res = sr_res->sibling) {
+		if (resource_contains(sr_res, res)) {
+			trim_soft_reserve(sr_res, res);
+			break;
+		}
+	}
+	write_unlock(&srmem_resource_lock);
+}
+EXPORT_SYMBOL(trim_soft_reserve_resources);
+
+void merge_soft_reserve_resources(void)
+{
+	struct resource *sr_res, *next;
+
+	write_lock(&srmem_resource_lock);
+	for (sr_res = srmem_resource.child; sr_res; sr_res = next) {
+		next = sr_res->sibling;
+
+		release_resource(sr_res);
+		if (insert_resource(&iomem_resource, sr_res))
+			pr_info("Could not add Soft Reserve %pr\n", sr_res);
+		else
+			soft_reserve_notify(0, sr_res);
+	}
+	write_unlock(&srmem_resource_lock);
+}
+EXPORT_SYMBOL(merge_soft_reserve_resources);
+
+struct srmem_arg {
+	struct resource *res;
+	int overlaps;
+};
+
+static int srmem_parse_cfmws(union acpi_subtable_headers *hdr,
+			     void *arg, const unsigned long unused)
+{
+	struct acpi_cedt_cfmws *cfmws;
+	struct srmem_arg *args = arg;
+	struct resource cfmws_res;
+	struct resource *res;
+
+	res = args->res;
+
+	cfmws = (struct acpi_cedt_cfmws *)hdr;
+	cfmws_res = DEFINE_RES_MEM(cfmws->base_hpa,
+				   cfmws->base_hpa + cfmws->window_size);
+
+	if (resource_overlaps(&cfmws_res, res)) {
+		args->overlaps += 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+static bool resource_overlaps_cfmws(struct resource *res)
+{
+	struct srmem_arg arg = {
+		.res = res,
+		.overlaps = 0
+	};
+
+	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, srmem_parse_cfmws, &arg);
+
+	if (arg.overlaps)
+		return true;
+
+	return false;
+}
+
+int insert_soft_reserve_resource(struct resource *res)
+{
+	if (resource_overlaps_cfmws(res)) {
+		pr_info("Reserving Soft Reserve %pr\n", res);
+		return insert_resource(&srmem_resource, res);
+	}
+
+	return insert_resource(&iomem_resource, res);
+}
+EXPORT_SYMBOL(insert_soft_reserve_resource);
 
 static void __init
 __reserve_region_with_split(struct resource *root, resource_size_t start,

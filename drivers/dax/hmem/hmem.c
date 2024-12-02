@@ -5,6 +5,7 @@
 #include <linux/pfn_t.h>
 #include <linux/dax.h>
 #include "../bus.h"
+#include "hmem.h"
 
 static bool region_idle;
 module_param_named(region_idle, region_idle, bool, 0644);
@@ -123,8 +124,22 @@ out_put:
 	return rc;
 }
 
+static int dax_hmem_cb(struct notifier_block *nb, unsigned long action,
+		       void *arg)
+{
+	struct resource *res = arg;
+
+	return hmem_register_device(&hmem_pdev->dev,
+				    phys_to_target_node(res->start), res);
+}
+
+static struct notifier_block hmem_nb = {
+	.notifier_call = dax_hmem_cb
+};
+
 static int dax_hmem_platform_probe(struct platform_device *pdev)
 {
+	register_soft_reserve_notifier(&hmem_nb);
 	return walk_hmem_resources(&pdev->dev, hmem_register_device);
 }
 

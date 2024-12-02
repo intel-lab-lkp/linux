@@ -4,6 +4,7 @@
 #include <linux/module.h>
 #include <linux/dax.h>
 #include <linux/mm.h>
+#include "hmem.h"
 
 static bool nohmem;
 module_param_named(disable, nohmem, bool, 0444);
@@ -16,6 +17,9 @@ static struct resource hmem_active = {
 	.end = -1,
 	.flags = IORESOURCE_MEM,
 };
+
+struct platform_device *hmem_pdev;
+EXPORT_SYMBOL_GPL(hmem_pdev);
 
 int walk_hmem_resources(struct device *host, walk_hmem_fn fn)
 {
@@ -35,7 +39,6 @@ EXPORT_SYMBOL_GPL(walk_hmem_resources);
 
 static void __hmem_register_resource(int target_nid, struct resource *res)
 {
-	struct platform_device *pdev;
 	struct resource *new;
 	int rc;
 
@@ -51,15 +54,15 @@ static void __hmem_register_resource(int target_nid, struct resource *res)
 	if (platform_initialized)
 		return;
 
-	pdev = platform_device_alloc("hmem_platform", 0);
-	if (!pdev) {
+	hmem_pdev = platform_device_alloc("hmem_platform", 0);
+	if (!hmem_pdev) {
 		pr_err_once("failed to register device-dax hmem_platform device\n");
 		return;
 	}
 
-	rc = platform_device_add(pdev);
+	rc = platform_device_add(hmem_pdev);
 	if (rc)
-		platform_device_put(pdev);
+		platform_device_put(hmem_pdev);
 	else
 		platform_initialized = true;
 }

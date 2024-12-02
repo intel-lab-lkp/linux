@@ -14,6 +14,7 @@
 #include <linux/compiler.h>
 #include <linux/minmax.h>
 #include <linux/types.h>
+#include <linux/notifier.h>
 /*
  * Resources are tree-like, allowing
  * nesting etc..
@@ -249,6 +250,11 @@ struct resource *lookup_resource(struct resource *root, resource_size_t start);
 int adjust_resource(struct resource *res, resource_size_t start,
 		    resource_size_t size);
 resource_size_t resource_alignment(struct resource *res);
+extern void trim_soft_reserve_resources(const struct resource *res);
+extern void merge_soft_reserve_resources(void);
+extern int insert_soft_reserve_resource(struct resource *res);
+extern int register_soft_reserve_notifier(struct notifier_block *nb);
+extern int unregister_soft_reserve_notifier(struct notifier_block *nb);
 static inline resource_size_t resource_size(const struct resource *res)
 {
 	return res->end - res->start + 1;
