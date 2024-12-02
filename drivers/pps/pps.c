@@ -357,11 +357,9 @@ int pps_register_cdev(struct pps_device *pps)
 	pps->cdev.owner = pps->info.owner;
 
 	err = cdev_add(&pps->cdev, devt, 1);
-	if (err) {
-		pr_err("%s: failed to add char device %d:%d\n",
-				pps->info.name, MAJOR(pps_devt), pps->id);
+	if (err)
 		goto free_idr;
-	}
+
 	pps->dev = device_create(pps_class, pps->info.dev, devt, pps,
 							"pps%d", pps->id);
 	if (IS_ERR(pps->dev)) {
@@ -387,6 +385,8 @@ del_cdev:
 free_idr:
 	scoped_guard(mutex, &pps_idr_lock)
 		idr_remove(&pps_idr, pps->id);
+	pr_err("%s: failed to add char device %d:%d\n",
+	       pps->info.name, MAJOR(pps_devt), pps->id);
 	return err;
 }
 
