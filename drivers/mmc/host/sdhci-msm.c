@@ -146,6 +146,8 @@
 /* CQHCI vendor specific registers */
 #define CQHCI_VENDOR_CFG1	0xA00
 #define CQHCI_VENDOR_DIS_RST_ON_CQ_EN	(0x3 << 13)
+#define CQE_V5_VENDOR_CFG	0x900
+#define CQHCI_VENDOR_CFG	0x100
 
 struct sdhci_msm_offset {
 	u32 core_hc_mode;
@@ -290,6 +292,7 @@ struct sdhci_msm_host {
 	u32 dll_config;
 	u32 ddr_config;
 	bool vqmmc_enabled;
+	bool cqhci_offset_changed;
 };
 
 static const struct sdhci_msm_offset *sdhci_priv_msm_offset(struct sdhci_host *host)
@@ -2249,11 +2252,20 @@ static int sdhci_msm_start_signal_voltage_switch(struct mmc_host *mmc,
 #define SDHCI_MSM_DUMP(f, x...) \
 	pr_err("%s: " DRIVER_NAME ": " f, mmc_hostname(host->mmc), ## x)
 
+#define DRV_NAME "cqhci"
+#define CQHCI_DUMP(f, x...) \
+	pr_err("%s: " DRV_NAME ": " f, mmc_hostname(host->mmc), ## x)
+
 static void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	const struct sdhci_msm_offset *msm_offset = msm_host->offset;
+	struct cqhci_host *cq_host;
+	int offset = 0;
+
+	if (msm_host->cqhci_offset_changed)
+		offset = CQE_V5_VENDOR_CFG;
 
 	SDHCI_MSM_DUMP("----------- VENDOR REGISTER DUMP -----------\n");
 
@@ -2273,6 +2285,8 @@ static void sdhci_msm_dump_vendor_regs(struct sdhci_host *host)
 		readl_relaxed(host->ioaddr +
 			msm_offset->core_vendor_spec_func2),
 		readl_relaxed(host->ioaddr + msm_offset->core_vendor_spec3));
+	CQHCI_DUMP("Vendor cfg 0x%08x\n",
+		readl_relaxed(cq_host->mmio + CQHCI_VENDOR_CFG + offset));
 }
 
 static const struct sdhci_msm_variant_ops mci_var_ops = {
@@ -2583,6 +2597,14 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 
 	if (core_major == 1 && core_minor >= 0x49)
 		msm_host->updated_ddr_cfg = true;
+
+	/* For SDHC v5.0.0 onwards, ICE 3.0 specific registers are added
+	 * in CQ register space, due to which few CQ registers are
+	 * shifted. Set cqhci_offset_changed boolean to use updated address.
+	 */
+	if (core_major == 1 && core_minor >= 0x6B)
+		msm_host->cqhci_offset_changed = true;
+
 
 	if (core_major == 1 && core_minor >= 0x71)
 		msm_host->uses_tassadar_dll = true;
