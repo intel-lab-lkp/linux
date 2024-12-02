@@ -197,6 +197,65 @@ static const struct file_operations test_active_fops = {
 	.write = msm_dp_test_active_write
 };
 
+static ssize_t msm_dp_tpg_write(struct file *file, const char __user *ubuf,
+				size_t len, loff_t *offp)
+{
+	const struct msm_dp_debug_private *debug;
+	char *input_buffer;
+	int val;
+	int status = 0;
+	struct msm_dp_panel *dp_panel;
+
+	debug = ((struct seq_file *)file->private_data)->private;
+	dp_panel = debug->panel;
+
+	input_buffer = memdup_user_nul(ubuf, len);
+	if (IS_ERR(input_buffer))
+		return PTR_ERR(input_buffer);
+
+	status = kstrtoint(input_buffer, 10, &val);
+	if (status < 0) {
+		kfree(input_buffer);
+		return status;
+	}
+
+	msm_dp_panel_tpg_config(dp_panel, val);
+
+	dp_panel->tpg_enabled = val;
+
+	kfree(input_buffer);
+
+	*offp += len;
+	return len;
+}
+
+static int msm_dp_tpg_show(struct seq_file *f, void *data)
+{
+	struct msm_dp_debug_private *debug = f->private;
+	struct msm_dp_panel *dp_panel = debug->panel;
+
+	if (dp_panel->tpg_enabled)
+		seq_puts(f, "1");
+	else
+		seq_puts(f, "0");
+
+	return 0;
+}
+
+static int msm_dp_tpg_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, msm_dp_tpg_show, inode->i_private);
+}
+
+static const struct file_operations msm_dp_tpg_fops = {
+	.owner = THIS_MODULE,
+	.open = msm_dp_tpg_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = msm_dp_tpg_write
+};
+
 int msm_dp_debug_init(struct device *dev, struct msm_dp_panel *panel,
 		  struct msm_dp_link *link,
 		  struct drm_connector *connector,
@@ -231,6 +290,8 @@ int msm_dp_debug_init(struct device *dev, struct msm_dp_panel *panel,
 		debugfs_create_file("dp_test_type", 0444,
 				    root,
 				    debug, &msm_dp_test_type_fops);
+
+		debugfs_create_file("dp_tpg", 0444, root, debug, &msm_dp_tpg_fops);
 	}
 
 	return 0;

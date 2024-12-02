@@ -50,6 +50,8 @@ struct msm_dp_panel {
 	u32 max_dp_link_rate;
 
 	u32 max_bw_code;
+
+	bool tpg_enabled;
 };
 
 int msm_dp_panel_init_panel_info(struct msm_dp_panel *msm_dp_panel);
