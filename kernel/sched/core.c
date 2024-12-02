@@ -10520,17 +10520,15 @@ static void sched_mm_cid_remote_clear_weight(struct mm_struct *mm, int cpu,
 	sched_mm_cid_remote_clear(mm, pcpu_cid, cpu);
 }
 
-static void task_mm_cid_work(struct callback_head *work)
+static void task_mm_cid_work(struct rcu_head *rhp)
 {
 	unsigned long now = jiffies, old_scan, next_scan;
-	struct task_struct *t = current;
+	struct task_struct *t = container_of(rhp, struct task_struct, rcu);
 	struct cpumask *cidmask;
 	struct mm_struct *mm;
 	int weight, cpu;
 
-	SCHED_WARN_ON(t != container_of(work, struct task_struct, cid_work));
-
-	work->next = work;	/* Prevent double-add */
+	rhp->next = rhp;	/* Prevent double-add */
 	if (t->flags & PF_EXITING)
 		return;
 	mm = t->mm;
@@ -10574,23 +10572,20 @@ void init_sched_mm_cid(struct task_struct *t)
 		if (mm_users == 1)
 			mm->mm_cid_next_scan = jiffies + msecs_to_jiffies(MM_CID_SCAN_DELAY);
 	}
-	t->cid_work.next = &t->cid_work;	/* Protect against double add */
-	init_task_work(&t->cid_work, task_mm_cid_work);
 }
 
 void task_tick_mm_cid(struct rq *rq, struct task_struct *curr)
 {
-	struct callback_head *work = &curr->cid_work;
+	struct rcu_head *rhp = &curr->rcu;
 	unsigned long now = jiffies;
 
 	if (!curr->mm || (curr->flags & (PF_EXITING | PF_KTHREAD)) ||
-	    work->next != work)
+	    rhp->next != rhp)
 		return;
 	if (time_before(now, READ_ONCE(curr->mm->mm_cid_next_scan)))
 		return;
 
-	/* No page allocation under rq lock */
-	task_work_add(curr, work, TWA_RESUME | TWAF_NO_ALLOC);
+	call_rcu(rhp, task_mm_cid_work);
 }
 
 void sched_mm_cid_exit_signals(struct task_struct *t)
