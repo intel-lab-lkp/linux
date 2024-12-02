@@ -504,6 +504,12 @@ static int udf_rmdir(struct inode *dir, struct dentry *dentry)
 	if (ret)
 		goto out;
 
+	if (iter.fi.fileCharacteristics & FID_FILE_CHAR_DELETED) {
+		udf_warn(inode->i_sb,
+			 "tried to rmdir a directory that was already deleted\n");
+		ret = -ENOENT;
+		goto end_rmdir;
+	}
 	ret = -EFSCORRUPTED;
 	tloc = lelb_to_cpu(iter.fi.icb.extLocation);
 	if (udf_get_lb_pblock(dir->i_sb, &tloc, 0) != inode->i_ino)
