@@ -301,15 +301,6 @@ static int pps_cdev_open(struct inode *inode, struct file *file)
 	struct pps_device *pps = container_of(inode->i_cdev,
 						struct pps_device, cdev);
 	file->private_data = pps;
-	kobject_get(&pps->dev->kobj);
-	return 0;
-}
-
-static int pps_cdev_release(struct inode *inode, struct file *file)
-{
-	struct pps_device *pps = container_of(inode->i_cdev,
-						struct pps_device, cdev);
-	kobject_put(&pps->dev->kobj);
 	return 0;
 }
 
@@ -324,14 +315,11 @@ static const struct file_operations pps_cdev_fops = {
 	.compat_ioctl	= pps_cdev_compat_ioctl,
 	.unlocked_ioctl	= pps_cdev_ioctl,
 	.open		= pps_cdev_open,
-	.release	= pps_cdev_release,
 };
 
 static void pps_device_destruct(struct device *dev)
 {
 	struct pps_device *pps = dev_get_drvdata(dev);
-
-	cdev_del(&pps->cdev);
 
 	/* Now we can release the ID for re-use */
 	pr_debug("deallocating pps%d\n", pps->id);
@@ -383,6 +371,10 @@ int pps_register_cdev(struct pps_device *pps)
 		goto del_cdev;
 	}
 
+	cdev_set_parent(&pps->cdev, &pps->dev->kobj);
+	/* Compensate for setting the parent after cdev_add() */
+	get_device(pps->dev);
+
 	/* Override the release function with our own */
 	pps->dev->release = pps_device_destruct;
 
@@ -407,6 +399,7 @@ void pps_unregister_cdev(struct pps_device *pps)
 	pr_debug("unregistering pps%d\n", pps->id);
 	pps->lookup_cookie = NULL;
 	device_destroy(pps_class, pps->dev->devt);
+	cdev_del(&pps->cdev);
 }
 
 /*
