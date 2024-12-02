@@ -85,6 +85,12 @@ struct memory_block {
 #endif
 };
 
+#ifdef CONFIG_RUNTIME_MEMORY_CONFIGURATION
+bool arch_validate_memory_range(unsigned long long start, unsigned long long end);
+ssize_t arch_get_memory_max_configurable(void);
+int memory_create_sysfs_max_configurable(void);
+#endif /* CONFIG_RUNTIME_MEMORY_CONFIGURATION */
+
 int arch_get_memory_phys_device(unsigned long start_pfn);
 unsigned long memory_block_size_bytes(void);
 int set_memory_block_size_order(unsigned int order);

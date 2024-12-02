@@ -576,6 +576,22 @@ config MHP_MEMMAP_ON_MEMORY
 	depends on MEMORY_HOTPLUG && SPARSEMEM_VMEMMAP
 	depends on ARCH_MHP_MEMMAP_ON_MEMORY_ENABLE
 
+config RUNTIME_MEMORY_CONFIGURATION
+	bool "Dynamic configuration and deconfiguration of memory"
+	def_bool n
+	depends on MEMORY_HOTPLUG && SPARSEMEM_VMEMMAP
+	help
+	  This option provides support to perform dynamic configuration and
+	  deconfiguration of memory with altmap or non-altmap support
+	  (/sys/bus/memory/devices/configure_memory). The interface validates
+	  the configuration and deconfiguration of memory ranges against
+	  architecture specific configuration and performs add_memory() with
+	  altmap or non-altmap support and remove_memory() respectively.
+
+	  Say Y here if the architecture supports validating dynamically
+	  (de)configured memory against architecture specific memory
+	  configurations.
+
 endif # MEMORY_HOTPLUG
 
 config ARCH_MHP_MEMMAP_ON_MEMORY_ENABLE

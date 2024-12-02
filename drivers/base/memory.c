@@ -631,6 +631,127 @@ int __weak arch_get_memory_phys_device(unsigned long start_pfn)
 	return 0;
 }
 
+#ifdef CONFIG_RUNTIME_MEMORY_CONFIGURATION
+enum {
+	REMOVE_MEMORY = 0,
+	ADD_MEMORY,
+	MAX_CONFIGURE_MODE
+};
+
+enum {
+	NOALTMAP = 0,
+	ALTMAP,
+	MAX_ALTMAP_MODE
+};
+
+/*
+ * Return true when the memory range is valid.
+ *
+ * Architecture specific code can override the below function and validate the
+ * memory range against its possible memory configurations.
+ */
+bool __weak arch_validate_memory_range(unsigned long long start,
+				       unsigned long long end)
+{
+	return false;
+}
+
+/*
+ * Format:
+ * echo config_mode,memoryrange,altmap_mode >
+ * /sys/bus/memory/devices/configure_memory
+ *
+ * config_mode:
+ *	value: 1 - add_memory, 0 - remove_memory
+ *
+ * range:
+ * 0x<start address>-0x<end address>
+ * Where start address is aligned to memory block size and end address
+ * represents last byte in the range.
+ * example: 0x200000000-0x20fffffff
+ *
+ * altmap_mode:
+ *	value: 1 - altmap support, 0 - no altmap support
+ */
+static ssize_t configure_memory_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	s64 start, end, block_size, range;
+	u32 config_mode, altmap_mode;
+	int num, nid, ret = -EINVAL;
+	struct memory_block *mem;
+
+	num = sscanf(buf, "%u,0x%llx-0x%llx,%u", &config_mode, &start, &end, &altmap_mode);
+	if (num != 4)
+		goto out;
+
+	if (config_mode >= MAX_CONFIGURE_MODE || altmap_mode >= MAX_ALTMAP_MODE)
+		goto out;
+
+	altmap_mode = altmap_mode ? MHP_MEMMAP_ON_MEMORY |
+			MHP_OFFLINE_INACCESSIBLE : MHP_NONE;
+
+	block_size = memory_block_size_bytes();
+
+	if (!IS_ALIGNED(start, block_size) || !IS_ALIGNED(end + 1, block_size))
+		goto out;
+
+	if (start < 0 || end < 0 || start >= end)
+		goto out;
+
+	if (!arch_validate_memory_range(start, end))
+		goto out;
+
+	ret = lock_device_hotplug_sysfs();
+	if (ret)
+		goto out;
+
+	if (config_mode == ADD_MEMORY) {
+		for (range = start; range < end + 1; range += block_size) {
+			mem = find_memory_block(pfn_to_section_nr(PFN_DOWN(range)));
+			if (mem) {
+				pr_info("Memory already configured - (start:0x%llx)\n", range);
+				ret = -EEXIST;
+				put_device(&mem->dev);
+				goto out_unlock;
+			}
+			nid = memory_add_physaddr_to_nid(range);
+			ret = __add_memory(nid, range, block_size, altmap_mode);
+			if (ret) {
+				pr_info("Memory addition failed - (start:0x%llx)\n", range);
+				goto out_unlock;
+			}
+		}
+	} else if (config_mode == REMOVE_MEMORY) {
+		for (range = start; range < end + 1; range += block_size) {
+			mem = find_memory_block(pfn_to_section_nr(PFN_DOWN(range)));
+			if (!mem) {
+				pr_info("Memory not configured - (start:0x%llx)\n", range);
+				ret = -EINVAL;
+				goto out_unlock;
+			}
+			if (mem->state != MEM_OFFLINE) {
+				pr_info("Memory removal failed - (start:0x%llx) not offline\n",
+					range);
+				put_device(&mem->dev);
+				ret = -EBUSY;
+				goto out_unlock;
+			} else {
+				/* drop the ref just got via find_memory_block() */
+				put_device(&mem->dev);
+			}
+			__remove_memory(range, block_size);
+		}
+	}
+out_unlock:
+	unlock_device_hotplug();
+out:
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_WO(configure_memory);
+#endif /* CONFIG_RUNTIME_MEMORY_CONFIGURATION */
+
 /*
  * A reference for the returned memory block device is acquired.
  *
@@ -941,6 +1062,9 @@ static struct attribute *memory_root_attrs[] = {
 	&dev_attr_auto_online_blocks.attr,
 #ifdef CONFIG_CRASH_HOTPLUG
 	&dev_attr_crash_hotplug.attr,
+#endif
+#ifdef CONFIG_RUNTIME_MEMORY_CONFIGURATION
+	&dev_attr_configure_memory.attr,
 #endif
 	NULL
 };
