@@ -586,6 +586,17 @@ generic_hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
  * HPG_vmemmap_optimized - Set when the vmemmap pages of the page are freed.
  * HPG_raw_hwp_unreliable - Set when the hugetlb page has a hwpoison sub-page
  *     that is not tracked by raw_hwp_page list.
+ * HPG_pre_zeroed - page was pre-zeroed, clear_huge_page not needed.
+ *	Synchronization: hugetlb_lock held when set by pre-zero kthread.
+ *	Only valid to read outside hugetlb_lock once the page is off
+ *	the freelist, and HPG_zero_busy is clear. Always cleared when a
+ *	page is put (back) on the freelist.
+ * HPG_zero_busy - page is being zeroed by the pre-zero kthread.
+ *	Synchronization: set and cleared by the pre-zero kthread with
+ *	hugetlb_lock held. Access by others is read-only. Once the page
+ *	is off the freelist, this can only change from set -> clear,
+ *	which the new page owner must wait for. Always cleared
+ *	when a page is put (back) on the freelist.
  */
 enum hugetlb_page_flags {
 	HPG_restore_reserve = 0,
@@ -594,6 +605,8 @@ enum hugetlb_page_flags {
 	HPG_freed,
 	HPG_vmemmap_optimized,
 	HPG_raw_hwp_unreliable,
+	HPG_pre_zeroed,
+	HPG_zero_busy,
 	__NR_HPAGEFLAGS,
 };
 
@@ -653,6 +666,8 @@ HPAGEFLAG(Temporary, temporary)
 HPAGEFLAG(Freed, freed)
 HPAGEFLAG(VmemmapOptimized, vmemmap_optimized)
 HPAGEFLAG(RawHwpUnreliable, raw_hwp_unreliable)
+HPAGEFLAG(PreZeroed, pre_zeroed)
+HPAGEFLAG(ZeroBusy, zero_busy)
 
 #ifdef CONFIG_HUGETLB_PAGE
 
@@ -678,6 +693,19 @@ struct hstate {
 	unsigned int nr_huge_pages_node[MAX_NUMNODES];
 	unsigned int free_huge_pages_node[MAX_NUMNODES];
 	unsigned int surplus_huge_pages_node[MAX_NUMNODES];
+
+	unsigned long free_huge_pages_zero;
+	unsigned int free_huge_pages_zero_node[MAX_NUMNODES];
+
+	/* Wait queue for the prezero thread */
+	wait_queue_head_t hzerod_wait[MAX_NUMNODES];
+	/* Queue to wait for a hugetlb folio that is being prezeroed */
+	wait_queue_head_t dqzero_wait[MAX_NUMNODES];
+	/* Prezero threads (one per node) */
+	struct task_struct *hzerod[MAX_NUMNODES];
+
+	bool prezero_enabled;
+
 	char name[HSTATE_NAME_LEN];
 };
 
@@ -699,6 +727,7 @@ int hugetlb_add_to_page_cache(struct folio *folio, struct address_space *mapping
 			pgoff_t idx);
 void restore_reserve_on_error(struct hstate *h, struct vm_area_struct *vma,
 				unsigned long address, struct folio *folio);
+void clear_hugetlb_folio(struct folio *folio, unsigned long address);
 
 /* arch callback */
 int __init __alloc_bootmem_huge_page(struct hstate *h, int nid);
@@ -1035,6 +1064,9 @@ void hugetlb_unregister_node(struct node *node);
  */
 bool is_raw_hwpoison_page_in_hugepage(struct page *page);
 
+void khzerod_run(int nid);
+void khzerod_stop(int nid);
+
 #else	/* CONFIG_HUGETLB_PAGE */
 struct hstate {};
 
@@ -1238,6 +1270,18 @@ static inline bool hugetlbfs_pagecache_present(
     struct hstate *h, struct vm_area_struct *vma, unsigned long address)
 {
 	return false;
+}
+
+static inline void khzerod_run(int nid)
+{
+}
+
+static inline void khzerod_stop(int nid)
+{
+}
+
+static inline void clear_hugetlb_folio(struct folio *folio, unsigned long address)
+{
 }
 #endif	/* CONFIG_HUGETLB_PAGE */
 
