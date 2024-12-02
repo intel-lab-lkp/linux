@@ -1970,6 +1970,46 @@ static int can_nocow_file_extent(struct btrfs_path *path,
 	return ret < 0 ? ret : can_nocow;
 }
 
+static void cleanup_dirty_folios(struct btrfs_inode *inode,
+				 struct folio *locked_folio,
+				 u64 start, u64 end, int error)
+{
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
+	struct address_space *mapping = inode->vfs_inode.i_mapping;
+	pgoff_t start_index = start >> PAGE_SHIFT;
+	pgoff_t end_index = end >> PAGE_SHIFT;
+	u32 len;
+
+	ASSERT(end + 1 - start < U32_MAX);
+	len = end + 1 - start;
+
+	/*
+	 * Handle the locked folio first.
+	 * btrfs_folio_clamp_*() helpers can handle range out of the folio case.
+	 */
+	btrfs_folio_clamp_clear_dirty(fs_info, locked_folio, start, len);
+	btrfs_folio_clamp_set_writeback(fs_info, locked_folio, start, len);
+	btrfs_folio_clamp_clear_writeback(fs_info, locked_folio, start, len);
+
+	for (pgoff_t index = start_index; index <= end_index; index++) {
+		struct folio *folio;
+
+		/* Already handled at the beginning. */
+		if (index == locked_folio->index)
+			continue;
+		folio = __filemap_get_folio(mapping, index, FGP_LOCK, GFP_NOFS);
+		/* Cache already dropped, no need to do any cleanup. */
+		if (IS_ERR(folio))
+			continue;
+		btrfs_folio_clamp_clear_dirty(fs_info, folio, start, len);
+		btrfs_folio_clamp_set_writeback(fs_info, folio, start, len);
+		btrfs_folio_clamp_clear_writeback(fs_info, folio, start, len);
+		folio_unlock(folio);
+		folio_put(folio);
+	}
+	mapping_set_error(mapping, error);
+}
+
 /*
  * when nowcow writeback call back.  This checks for snapshots or COW copies
  * of the extents that exist in the file, and COWs the file as required.
@@ -2229,6 +2269,22 @@ must_cow:
 	return 0;
 
 error:
+	/*
+	 * We have some range with ordered extent created.
+	 *
+	 * Ordered extents and extent maps will be cleaned up by
+	 * btrfs_mark_ordered_io_finished() later, but we also need to cleanup
+	 * the dirty flags of folios.
+	 *
+	 * Or they can be written back again, but without any EXTENT_DELALLOC flag
+	 * in io tree.
+	 * This will force the writeback to go COW fixup, which is being deprecated.
+	 *
+	 * Also such left-over dirty flags do no follow the error handling protocol.
+	 */
+	if (cur_offset > start)
+		cleanup_dirty_folios(inode, locked_folio, start, cur_offset - 1, ret);
+
 	/*
 	 * If an error happened while a COW region is outstanding, cur_offset
 	 * needs to be reset to cow_start to ensure the COW region is unlocked
