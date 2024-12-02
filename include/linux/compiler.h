@@ -314,6 +314,7 @@ static inline void *offset_to_ptr(const int *off)
  * values to determine that the condition is statically true.
  */
 #define statically_true(x) (__builtin_constant_p(x) && (x))
+#define statically_false(x) (__builtin_constant_p(x) && (x) == 0)
 
 /*
  * This is needed in functions which generate the stack canary, see
