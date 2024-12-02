@@ -803,6 +803,9 @@ static int fuse_copy_do(struct fuse_copy_state *cs, void **val, unsigned *size)
 		void *pgaddr = kmap_local_page(cs->pg);
 		void *buf = pgaddr + cs->offset;
 
+		if (WARN_ON_ONCE(!*val))
+			return -EIO;
+
 		if (cs->write)
 			memcpy(buf, *val, ncpy);
 		else
