@@ -19,8 +19,7 @@
  */
 #define REG_BIT(__n)							\
 	((u32)(BIT(__n) +						\
-	       BUILD_BUG_ON_ZERO(__is_constexpr(__n) &&		\
-				 ((__n) < 0 || (__n) > 31))))
+	       BUILD_BUG_ON_ZERO(is_const_true((__n) < 0 || (__n) > 31))))
 
 /**
  * REG_BIT8() - Prepare a u8 bit value
@@ -32,8 +31,7 @@
  */
 #define REG_BIT8(__n)                                                   \
 	((u8)(BIT(__n) +                                                \
-	       BUILD_BUG_ON_ZERO(__is_constexpr(__n) &&         \
-				 ((__n) < 0 || (__n) > 7))))
+	      BUILD_BUG_ON_ZERO(is_const_true((__n) < 0 || (__n) > 7))))
 
 /**
  * REG_GENMASK() - Prepare a continuous u32 bitmask
@@ -46,9 +44,9 @@
  */
 #define REG_GENMASK(__high, __low)					\
 	((u32)(GENMASK(__high, __low) +					\
-	       BUILD_BUG_ON_ZERO(__is_constexpr(__high) &&	\
-				 __is_constexpr(__low) &&		\
-				 ((__low) < 0 || (__high) > 31 || (__low) > (__high)))))
+	       BUILD_BUG_ON_ZERO(is_const_true((__low) < 0 ||		\
+					       (__high) > 31 ||		\
+					       (__low) > (__high)))))
 
 /**
  * REG_GENMASK64() - Prepare a continuous u64 bitmask
@@ -61,9 +59,9 @@
  */
 #define REG_GENMASK64(__high, __low)					\
 	((u64)(GENMASK_ULL(__high, __low) +				\
-	       BUILD_BUG_ON_ZERO(__is_constexpr(__high) &&		\
-				 __is_constexpr(__low) &&		\
-				 ((__low) < 0 || (__high) > 63 || (__low) > (__high)))))
+	       BUILD_BUG_ON_ZERO(is_const_true((__low) < 0 ||		\
+					       (__high) > 63 ||		\
+					       (__low) > (__high)))))
 
 /**
  * REG_GENMASK8() - Prepare a continuous u8 bitmask
@@ -76,9 +74,9 @@
  */
 #define REG_GENMASK8(__high, __low)                                     \
 	((u8)(GENMASK(__high, __low) +                                  \
-	       BUILD_BUG_ON_ZERO(__is_constexpr(__high) &&      \
-				 __is_constexpr(__low) &&               \
-				 ((__low) < 0 || (__high) > 7 || (__low) > (__high)))))
+	      BUILD_BUG_ON_ZERO(is_const_true((__low) < 0 ||            \
+					      (__high) > 7 ||           \
+					      (__low) > (__high)))))
 
 /*
  * Local integer constant expression version of is_power_of_2().
@@ -97,10 +95,10 @@
  */
 #define REG_FIELD_PREP(__mask, __val)						\
 	((u32)((((typeof(__mask))(__val) << __bf_shf(__mask)) & (__mask)) +	\
-	       BUILD_BUG_ON_ZERO(!__is_constexpr(__mask)) +		\
+	       BUILD_BUG_ON_ZERO(!is_const(__mask)) +				\
 	       BUILD_BUG_ON_ZERO((__mask) == 0 || (__mask) > U32_MAX) +		\
 	       BUILD_BUG_ON_ZERO(!IS_POWER_OF_2((__mask) + (1ULL << __bf_shf(__mask)))) + \
-	       BUILD_BUG_ON_ZERO(__builtin_choose_expr(__is_constexpr(__val), (~((__mask) >> __bf_shf(__mask)) & (__val)), 0))))
+	       BUILD_BUG_ON_ZERO(is_const_true(~((__mask) >> __bf_shf(__mask)) & (__val)))))
 
 /**
  * REG_FIELD_PREP8() - Prepare a u8 bitfield value
@@ -114,10 +112,10 @@
  */
 #define REG_FIELD_PREP8(__mask, __val)                                          \
 	((u8)((((typeof(__mask))(__val) << __bf_shf(__mask)) & (__mask)) +      \
-	       BUILD_BUG_ON_ZERO(!__is_constexpr(__mask)) +             \
+	       BUILD_BUG_ON_ZERO(!is_const(__mask)) +                           \
 	       BUILD_BUG_ON_ZERO((__mask) == 0 || (__mask) > U8_MAX) +          \
 	       BUILD_BUG_ON_ZERO(!IS_POWER_OF_2((__mask) + (1ULL << __bf_shf(__mask)))) + \
-	       BUILD_BUG_ON_ZERO(__builtin_choose_expr(__is_constexpr(__val), (~((__mask) >> __bf_shf(__mask)) & (__val)), 0))))
+	       BUILD_BUG_ON_ZERO(is_const_true(~((__mask) >> __bf_shf(__mask)) & (__val)))))
 
 /**
  * REG_FIELD_GET() - Extract a u32 bitfield value
@@ -154,8 +152,7 @@
  */
 #define REG_BIT16(__n)                                                   \
 	((u16)(BIT(__n) +                                                \
-	       BUILD_BUG_ON_ZERO(__is_constexpr(__n) &&         \
-				 ((__n) < 0 || (__n) > 15))))
+	       BUILD_BUG_ON_ZERO(is_const_true((__n) < 0 || (__n) > 15))))
 
 /**
  * REG_GENMASK16() - Prepare a continuous u8 bitmask
@@ -169,9 +166,9 @@
  */
 #define REG_GENMASK16(__high, __low)                                     \
 	((u16)(GENMASK(__high, __low) +                                  \
-	       BUILD_BUG_ON_ZERO(__is_constexpr(__high) &&      \
-				 __is_constexpr(__low) &&               \
-				 ((__low) < 0 || (__high) > 15 || (__low) > (__high)))))
+	       BUILD_BUG_ON_ZERO(is_const_true((__low) < 0 ||            \
+					       (__high) > 15 ||          \
+					       (__low) > (__high)))))
 
 /**
  * REG_FIELD_PREP16() - Prepare a u16 bitfield value
@@ -186,10 +183,10 @@
  */
 #define REG_FIELD_PREP16(__mask, __val)                                          \
 	((u16)((((typeof(__mask))(__val) << __bf_shf(__mask)) & (__mask)) +      \
-	       BUILD_BUG_ON_ZERO(!__is_constexpr(__mask)) +             \
+	       BUILD_BUG_ON_ZERO(!is_const(__mask)) +                            \
 	       BUILD_BUG_ON_ZERO((__mask) == 0 || (__mask) > U16_MAX) +          \
 	       BUILD_BUG_ON_ZERO(!IS_POWER_OF_2((__mask) + (1ULL << __bf_shf(__mask)))) + \
-	       BUILD_BUG_ON_ZERO(__builtin_choose_expr(__is_constexpr(__val), (~((__mask) >> __bf_shf(__mask)) & (__val)), 0))))
+	       BUILD_BUG_ON_ZERO(is_const_true(~((__mask) >> __bf_shf(__mask)) & (__val)))))
 
 #define __MASKED_FIELD(mask, value) ((mask) << 16 | (value))
 #define _MASKED_FIELD(mask, value) ({					   \
@@ -237,7 +234,7 @@
  *	...
  */
 #define _PICK_EVEN_2RANGES(__index, __c_index, __a, __b, __c, __d)		\
-	(BUILD_BUG_ON_ZERO(!__is_constexpr(__c_index)) +			\
+	(BUILD_BUG_ON_ZERO(!is_const(__c_index)) +				\
 	 ((__index) < (__c_index) ? _PICK_EVEN(__index, __a, __b) :		\
 				   _PICK_EVEN((__index) - (__c_index), __c, __d)))
 
