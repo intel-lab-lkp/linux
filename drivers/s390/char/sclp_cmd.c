@@ -171,11 +171,15 @@ static DEFINE_MUTEX(sclp_mem_mutex);
 static LIST_HEAD(sclp_mem_list);
 static u8 sclp_max_storage_id;
 static DECLARE_BITMAP(sclp_storage_ids, 256);
+static bool runtime_memory_config = IS_ENABLED(CONFIG_RUNTIME_MEMORY_CONFIGURATION);
+static unsigned long long max_standby, max_online;
+static ssize_t max_configurable;
 
 struct memory_increment {
 	struct list_head list;
 	u16 rn;
 	int standby;
+	int boot_standby;
 };
 
 struct assign_storage_sccb {
@@ -390,24 +394,29 @@ static struct notifier_block sclp_mem_nb = {
 	.notifier_call = sclp_mem_notifier,
 };
 
-static void __init align_to_block_size(unsigned long long *start,
-				       unsigned long long *size,
-				       unsigned long long alignment)
+static void align_to_block_size(unsigned long long *start,
+				unsigned long long *size,
+				unsigned long long alignment)
 {
-	unsigned long long start_align, size_align;
+	unsigned long long start_align;
 
 	start_align = roundup(*start, alignment);
-	size_align = rounddown(*start + *size, alignment) - start_align;
-
-	pr_info("Standby memory at 0x%llx (%lluM of %lluM usable)\n",
-		*start, size_align >> 20, *size >> 20);
+	*size = rounddown(*start + *size, alignment) - start_align;
 	*start = start_align;
-	*size = size_align;
+}
+
+static void __init set_max_memory_configuration(void)
+{
+	unsigned long long blocksz = memory_block_size_bytes();
+
+	max_online = roundup(max_online, blocksz);
+	max_configurable = (max_online + max_standby) / blocksz;
 }
 
 static void __init add_memory_merged(u16 rn)
 {
 	unsigned long long start, size, addr, block_size;
+	unsigned long long basesize, basestart;
 	static u16 first_rn, num;
 
 	if (rn && first_rn && (first_rn + num == rn)) {
@@ -423,9 +432,17 @@ static void __init add_memory_merged(u16 rn)
 	if (start + size > ident_map_size)
 		size = ident_map_size - start;
 	block_size = memory_block_size_bytes();
+	basestart = start;
+	basesize = size;
 	align_to_block_size(&start, &size, block_size);
+	pr_info("Standby memory at 0x%llx (%lluM of %lluM usable)\n",
+		basestart, size >> 20, basesize >> 20);
 	if (!size)
 		goto skip_add;
+	if (runtime_memory_config) {
+		max_standby += size;
+		goto skip_add;
+	}
 	for (addr = start; addr < start + size; addr += block_size)
 		add_memory(0, addr, block_size,
 			   MACHINE_HAS_EDAT1 ?
@@ -434,6 +451,48 @@ skip_add:
 	first_rn = rn;
 	num = 1;
 }
+
+#ifdef CONFIG_RUNTIME_MEMORY_CONFIGURATION
+bool arch_validate_memory_range(unsigned long long start, unsigned long long end)
+{
+	unsigned long long incr_start, incr_end, curr = start;
+	struct memory_increment *incr;
+	bool rangefound = false;
+
+	if (start >= ident_map_size || end + 1 > ident_map_size) {
+		pr_info("Memory range (start:0x%llx,end:0x%llx) exceeds max physical memory (0x%lx)\n",
+			start, end, ident_map_size);
+		goto out;
+	}
+
+	list_for_each_entry(incr, &sclp_mem_list, list) {
+		incr_start = rn2addr(incr->rn);
+		incr_end = incr_start + sclp.rzm - 1;
+
+		if (curr != incr_start)
+			continue;
+		/*
+		 * Allow runtime configuration/deconfiguration for only
+		 * standby memory
+		 */
+		if (!incr->boot_standby)
+			goto out;
+		if (incr_end == end) {
+			rangefound = true;
+			goto out;
+		} else {
+			curr = incr_end + 1;
+		}
+	}
+out:
+	return rangefound;
+}
+
+ssize_t arch_get_memory_max_configurable(void)
+{
+	return max_configurable;
+}
+#endif
 
 static void __init sclp_add_standby_memory(void)
 {
@@ -456,6 +515,7 @@ static void __init insert_increment(u16 rn, int standby, int assigned)
 		return;
 	new_incr->rn = rn;
 	new_incr->standby = standby;
+	new_incr->boot_standby = standby;
 	last_rn = 0;
 	prev = &sclp_mem_list;
 	list_for_each_entry(incr, &sclp_mem_list, list) {
@@ -502,6 +562,7 @@ static int __init sclp_detect_standby_memory(void)
 				if (!sccb->entries[i])
 					continue;
 				assigned++;
+				max_online += sclp.rzm;
 				insert_increment(sccb->entries[i] >> 16, 0, 1);
 			}
 			break;
@@ -530,6 +591,7 @@ static int __init sclp_detect_standby_memory(void)
 	if (rc)
 		goto out;
 	sclp_add_standby_memory();
+	set_max_memory_configuration();
 out:
 	free_page((unsigned long) sccb);
 	return rc;
