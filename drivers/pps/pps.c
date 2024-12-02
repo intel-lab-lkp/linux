@@ -361,13 +361,10 @@ int pps_register_cdev(struct pps_device *pps)
 		goto put_dev;
 	cdev_init(&pps->cdev, &pps_cdev_fops);
 	pps->cdev.owner = pps->info.owner;
-	cdev_set_parent(&pps->cdev, &pps->dev.kobj);
-	err = cdev_add(&pps->cdev, devt, 1);
+
+	err = cdev_device_add(&pps->cdev, &pps->dev);
 	if (err)
 		goto put_dev;
-	err = device_add(&pps->dev);
-	if (err)
-		goto del_cdev;
 
 	/* Override the release function with our own */
 	pps->dev.release = pps_device_destruct;
@@ -377,8 +374,6 @@ int pps_register_cdev(struct pps_device *pps)
 
 	return 0;
 
-del_cdev:
-	cdev_del(&pps->cdev);
 put_dev:
 	put_device(&pps->dev);
 	scoped_guard(mutex, &pps_idr_lock)
@@ -392,8 +387,7 @@ void pps_unregister_cdev(struct pps_device *pps)
 {
 	pr_debug("unregistering pps%d\n", pps->id);
 	pps->lookup_cookie = NULL;
-	device_del(&pps->dev);
-	cdev_del(&pps->cdev);
+	cdev_device_del(&pps->cdev, &pps->dev);
 	put_device(&pps->dev);
 }
 
