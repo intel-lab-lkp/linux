@@ -302,6 +302,34 @@ where
         Ok(())
     }
 
+    /// Removes the last element from the [`Vec`] instance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut v = KVec::new();
+    /// v.push(1, GFP_KERNEL)?;
+    /// v.push(2, GFP_KERNEL)?;
+    /// assert_eq!(Some(2), v.pop());
+    /// assert_eq!(Some(1), v.pop());
+    /// assert_eq!(None, v.pop());
+    /// assert!(v.is_empty());
+    /// ```
+    pub fn pop(&mut self) -> Option<T> {
+        if self.len() == 0 {
+            return None;
+        }
+        self.len -= 1;
+
+        // SAFETY:
+        // - `ptr` is valid because there is at least one entry stored.
+        let ptr = unsafe { self.as_mut_ptr().add(self.len) };
+
+        // SAFETY:
+        // - `ptr` is properly aligned and valid for reads.
+        Some(unsafe { core::ptr::read(ptr) })
+    }
+
     /// Creates a new [`Vec`] instance with at least the given capacity.
     ///
     /// # Examples
