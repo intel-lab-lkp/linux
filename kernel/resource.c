@@ -556,55 +556,20 @@ static int __region_intersects(struct resource *parent, resource_size_t start,
 			       size_t size, unsigned long flags,
 			       unsigned long desc)
 {
+	struct resource res;
 	int type = 0; int other = 0;
-	struct resource *p, *dp;
-	struct resource res, o;
-	bool covered;
+	struct resource *p;
 
 	res.start = start;
 	res.end = start + size - 1;
 
 	for (p = parent->child; p ; p = p->sibling) {
-		if (!resource_intersection(p, &res, &o))
-			continue;
-		if (is_type_match(p, flags, desc)) {
-			type++;
-			continue;
-		}
-		/*
-		 * Continue to search in descendant resources as if the
-		 * matched descendant resources cover some ranges of 'p'.
-		 *
-		 * |------------- "CXL Window 0" ------------|
-		 * |-- "System RAM" --|
-		 *
-		 * will behave similar as the following fake resource
-		 * tree when searching "System RAM".
-		 *
-		 * |-- "System RAM" --||-- "CXL Window 0a" --|
-		 */
-		covered = false;
-		for_each_resource(p, dp, false) {
-			if (!resource_overlaps(dp, &res))
-				continue;
-			if (is_type_match(dp, flags, desc)) {
-				type++;
-				/*
-				 * Range from 'o.start' to 'dp->start'
-				 * isn't covered by matched resource.
-				 */
-				if (dp->start > o.start)
-					break;
-				if (dp->end >= o.end) {
-					covered = true;
-					break;
-				}
-				/* Remove covered range */
-				o.start = max(o.start, dp->end + 1);
-			}
-		}
-		if (!covered)
-			other++;
+		bool is_type = (((p->flags & flags) == flags) &&
+				((desc == IORES_DESC_NONE) ||
+				 (desc == p->desc)));
+
+		if (resource_overlaps(p, &res))
+			is_type ? type++ : other++;
 	}
 
 	if (type == 0)
