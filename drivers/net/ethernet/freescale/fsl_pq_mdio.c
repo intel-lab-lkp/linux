@@ -415,7 +415,6 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	struct mii_bus *new_bus;
 	struct device_node *np;
 	struct resource *res;
-	int err;
 
 	data = device_get_match_data(dev);
 	if (!data) {
@@ -465,7 +464,6 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	priv->regs = priv->map + data->mii_offset;
 
 	new_bus->parent = dev;
-	platform_set_drvdata(pdev, new_bus);
 
 	if (data->get_tbipa) {
 		for_each_child_of_node(np, tbi) {
@@ -490,22 +488,7 @@ static int fsl_pq_mdio_probe(struct platform_device *pdev)
 	if (data->ucc_configure)
 		data->ucc_configure(res->start, res->end);
 
-	err = of_mdiobus_register(new_bus, np);
-	if (err) {
-		dev_err(dev, "cannot register %s as MDIO bus\n", new_bus->name);
-		return err;
-	}
-
-	return 0;
-}
-
-
-static void fsl_pq_mdio_remove(struct platform_device *pdev)
-{
-	struct device *device = &pdev->dev;
-	struct mii_bus *bus = dev_get_drvdata(device);
-
-	mdiobus_unregister(bus);
+	return devm_mdiobus_register(dev, new_bus);
 }
 
 static struct platform_driver fsl_pq_mdio_driver = {
@@ -514,7 +497,6 @@ static struct platform_driver fsl_pq_mdio_driver = {
 		.of_match_table = fsl_pq_mdio_match,
 	},
 	.probe = fsl_pq_mdio_probe,
-	.remove = fsl_pq_mdio_remove,
 };
 
 module_platform_driver(fsl_pq_mdio_driver);
