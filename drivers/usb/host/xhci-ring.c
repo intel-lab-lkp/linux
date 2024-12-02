@@ -2450,8 +2450,10 @@ static void process_isoc_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 	switch (trb_comp_code) {
 	case COMP_SUCCESS:
 		/* Don't overwrite status if TD had an error, see xHCI 4.9.1 */
-		if (td->error_mid_td)
+		if (td->error_mid_td) {
+			td->error_mid_td = false;
 			break;
+		}
 		if (remaining) {
 			frame->status = short_framestatus;
 			sum_trbs_for_length = true;
@@ -2466,25 +2468,36 @@ static void process_isoc_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 	case COMP_BANDWIDTH_OVERRUN_ERROR:
 		frame->status = -ECOMM;
 		break;
+	case COMP_USB_TRANSACTION_ERROR:
 	case COMP_BABBLE_DETECTED_ERROR:
 		sum_trbs_for_length = true;
 		fallthrough;
 	case COMP_ISOCH_BUFFER_OVERRUN:
 		frame->status = -EOVERFLOW;
+		if (trb_comp_code == COMP_USB_TRANSACTION_ERROR)
+			frame->status = -EPROTO;
 		if (ep_trb != td->end_trb)
+			td->error_mid_td = true;
+		else
+			td->error_mid_td = false;
+
+		/*
+		 * If an error is detected on the last TRB of the TD,
+		 * wait for the final event.
+		 */
+		if ((xhci->quirks & XHCI_ETRON_HOST) &&
+		    td->urb->dev->speed >= USB_SPEED_SUPER &&
+		    ep_trb == td->end_trb)
 			td->error_mid_td = true;
 		break;
 	case COMP_INCOMPATIBLE_DEVICE_ERROR:
 	case COMP_STALL_ERROR:
 		frame->status = -EPROTO;
 		break;
-	case COMP_USB_TRANSACTION_ERROR:
-		frame->status = -EPROTO;
-		sum_trbs_for_length = true;
-		if (ep_trb != td->end_trb)
-			td->error_mid_td = true;
-		break;
 	case COMP_STOPPED:
+		/* Think of it as the final event if TD had an error */
+		if (td->error_mid_td)
+			td->error_mid_td = false;
 		sum_trbs_for_length = true;
 		break;
 	case COMP_STOPPED_SHORT_PACKET:
@@ -2517,7 +2530,7 @@ static void process_isoc_td(struct xhci_hcd *xhci, struct xhci_virt_ep *ep,
 
 finish_td:
 	/* Don't give back TD yet if we encountered an error mid TD */
-	if (td->error_mid_td && ep_trb != td->end_trb) {
+	if (td->error_mid_td) {
 		xhci_dbg(xhci, "Error mid isoc TD, wait for final completion event\n");
 		td->urb_length_set = true;
 		return;
