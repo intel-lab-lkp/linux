@@ -10553,14 +10553,14 @@ static void task_mm_cid_work(struct callback_head *work)
 		return;
 	cidmask = mm_cidmask(mm);
 	/* Clear cids that were not recently used. */
-	for_each_possible_cpu(cpu)
+	for_each_cpu_from(cpu, cidmask)
 		sched_mm_cid_remote_clear_old(mm, cpu);
 	weight = cpumask_weight(cidmask);
 	/*
 	 * Clear cids that are greater or equal to the cidmask weight to
 	 * recompact it.
 	 */
-	for_each_possible_cpu(cpu)
+	for_each_cpu_from(cpu, cidmask)
 		sched_mm_cid_remote_clear_weight(mm, cpu, weight);
 }
 
