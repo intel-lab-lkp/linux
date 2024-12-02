@@ -412,8 +412,8 @@ static int gfar_alloc_tx_queues(struct gfar_private *priv)
 	int i;
 
 	for (i = 0; i < priv->num_tx_queues; i++) {
-		priv->tx_queue[i] = kzalloc(sizeof(struct gfar_priv_tx_q),
-					    GFP_KERNEL);
+		priv->tx_queue[i] = devm_kzalloc(
+			priv->dev, sizeof(struct gfar_priv_tx_q), GFP_KERNEL);
 		if (!priv->tx_queue[i])
 			return -ENOMEM;
 
@@ -430,8 +430,8 @@ static int gfar_alloc_rx_queues(struct gfar_private *priv)
 	int i;
 
 	for (i = 0; i < priv->num_rx_queues; i++) {
-		priv->rx_queue[i] = kzalloc(sizeof(struct gfar_priv_rx_q),
-					    GFP_KERNEL);
+		priv->rx_queue[i] = devm_kzalloc(
+			priv->dev, sizeof(struct gfar_priv_rx_q), GFP_KERNEL);
 		if (!priv->rx_queue[i])
 			return -ENOMEM;
 
@@ -439,22 +439,6 @@ static int gfar_alloc_rx_queues(struct gfar_private *priv)
 		priv->rx_queue[i]->ndev = priv->ndev;
 	}
 	return 0;
-}
-
-static void gfar_free_tx_queues(struct gfar_private *priv)
-{
-	int i;
-
-	for (i = 0; i < priv->num_tx_queues; i++)
-		kfree(priv->tx_queue[i]);
-}
-
-static void gfar_free_rx_queues(struct gfar_private *priv)
-{
-	int i;
-
-	for (i = 0; i < priv->num_rx_queues; i++)
-		kfree(priv->rx_queue[i]);
 }
 
 static void unmap_group_regs(struct gfar_private *priv)
@@ -687,16 +671,16 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 	err = gfar_alloc_tx_queues(priv);
 	if (err)
-		goto tx_alloc_failed;
+		return err;
 
 	err = gfar_alloc_rx_queues(priv);
 	if (err)
-		goto rx_alloc_failed;
+		return err;
 
 	err = of_property_read_string(np, "model", &model);
 	if (err) {
 		pr_err("Device model property missing, aborting\n");
-		goto rx_alloc_failed;
+		return err;
 	}
 
 	/* Init Rx queue filer rule set linked list */
@@ -805,10 +789,6 @@ static int gfar_of_init(struct platform_device *ofdev, struct net_device **pdev)
 
 err_grp_init:
 	unmap_group_regs(priv);
-rx_alloc_failed:
-	gfar_free_rx_queues(priv);
-tx_alloc_failed:
-	gfar_free_tx_queues(priv);
 	return err;
 }
 
@@ -3348,8 +3328,6 @@ register_fail:
 	if (of_phy_is_fixed_link(np))
 		of_phy_deregister_fixed_link(np);
 	unmap_group_regs(priv);
-	gfar_free_rx_queues(priv);
-	gfar_free_tx_queues(priv);
 	of_node_put(priv->phy_node);
 	of_node_put(priv->tbi_node);
 	return err;
@@ -3367,8 +3345,6 @@ static void gfar_remove(struct platform_device *ofdev)
 		of_phy_deregister_fixed_link(np);
 
 	unmap_group_regs(priv);
-	gfar_free_rx_queues(priv);
-	gfar_free_tx_queues(priv);
 }
 
 #ifdef CONFIG_PM
