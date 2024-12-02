@@ -9914,8 +9914,8 @@ static s64 cpu_weight_nice_read_s64(struct cgroup_subsys_state *css,
 				    struct cftype *cft)
 {
 	unsigned long weight = tg_weight(css_tg(css));
-	int last_delta = INT_MAX;
-	int prio, delta;
+	long last_delta = LONG_MAX, delta;
+	int prio;
 
 	/* find the closest nice value to the current weight */
 	for (prio = 0; prio < ARRAY_SIZE(sched_prio_to_weight); prio++) {
