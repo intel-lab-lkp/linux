@@ -323,9 +323,8 @@ static void pps_device_destruct(struct device *dev)
 
 	/* Now we can release the ID for re-use */
 	pr_debug("deallocating pps%d\n", pps->id);
-	mutex_lock(&pps_idr_lock);
-	idr_remove(&pps_idr, pps->id);
-	mutex_unlock(&pps_idr_lock);
+	scoped_guard(mutex, &pps_idr_lock)
+		idr_remove(&pps_idr, pps->id);
 
 	kfree(dev);
 	kfree(pps);
@@ -340,9 +339,8 @@ int pps_register_cdev(struct pps_device *pps)
 	 * Get new ID for the new PPS source.  After idr_alloc() calling
 	 * the new source will be freely available into the kernel.
 	 */
-	mutex_lock(&pps_idr_lock);
-	err = idr_alloc(&pps_idr, pps, 0, PPS_MAX_SOURCES, GFP_KERNEL);
-	mutex_unlock(&pps_idr_lock);
+	scoped_guard(mutex, &pps_idr_lock)
+		err = idr_alloc(&pps_idr, pps, 0, PPS_MAX_SOURCES, GFP_KERNEL);
 	if (err < 0) {
 		if (err == -ENOSPC) {
 			pr_err("%s: too many PPS sources in the system\n",
@@ -387,9 +385,8 @@ del_cdev:
 	cdev_del(&pps->cdev);
 
 free_idr:
-	mutex_lock(&pps_idr_lock);
-	idr_remove(&pps_idr, pps->id);
-	mutex_unlock(&pps_idr_lock);
+	scoped_guard(mutex, &pps_idr_lock)
+		idr_remove(&pps_idr, pps->id);
 	return err;
 }
 
