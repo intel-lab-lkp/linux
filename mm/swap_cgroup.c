@@ -5,6 +5,15 @@
 
 #include <linux/swapops.h> /* depends on mm.h include */
 
+#define ID_PER_UNIT (sizeof(atomic_t) / sizeof(unsigned short))
+struct swap_cgroup_unit {
+	union {
+		int raw;
+		atomic_t val;
+		unsigned short __id[ID_PER_UNIT];
+	};
+};
+
 static DEFINE_MUTEX(swap_cgroup_mutex);
 
 struct swap_cgroup {
@@ -12,8 +21,10 @@ struct swap_cgroup {
 };
 
 struct swap_cgroup_ctrl {
-	unsigned short	*map;
-	spinlock_t	lock;
+	union {
+		struct swap_cgroup_unit *units;
+		unsigned short *map;
+	};
 };
 
 static struct swap_cgroup_ctrl swap_cgroup_ctrl[MAX_SWAPFILES];
@@ -31,6 +42,24 @@ static struct swap_cgroup_ctrl swap_cgroup_ctrl[MAX_SWAPFILES];
  *
  * TODO: we can push these buffers out to HIGHMEM.
  */
+static unsigned short __swap_cgroup_xchg(void *map,
+					 pgoff_t offset,
+					 unsigned int new_id)
+{
+	unsigned int old_id;
+	struct swap_cgroup_unit *units = map;
+	struct swap_cgroup_unit *unit = &units[offset / ID_PER_UNIT];
+	struct swap_cgroup_unit new, old = { .raw = atomic_read(&unit->val) };
+
+	do {
+		new.raw = old.raw;
+		old_id = old.__id[offset % ID_PER_UNIT];
+		new.__id[offset % ID_PER_UNIT] = new_id;
+	} while (!atomic_try_cmpxchg(&unit->val, &old.raw, new.raw));
+
+	return old_id;
+}
+
 /**
  * swap_cgroup_record - record mem_cgroup for a set of swap entries
  * @ent: the first swap entry to be recorded into
@@ -44,22 +73,19 @@ unsigned short swap_cgroup_record(swp_entry_t ent, unsigned short id,
 				  unsigned int nr_ents)
 {
 	struct swap_cgroup_ctrl *ctrl;
-	unsigned short *map;
-	unsigned short old;
-	unsigned long flags;
 	pgoff_t offset = swp_offset(ent);
 	pgoff_t end = offset + nr_ents;
+	unsigned short old, iter;
+	unsigned short *map;
 
 	ctrl = &swap_cgroup_ctrl[swp_type(ent)];
 	map = ctrl->map;
 
-	spin_lock_irqsave(&ctrl->lock, flags);
-	old = map[offset];
+	old = READ_ONCE(map[offset]);
 	do {
-		VM_BUG_ON(map[offset] != old);
-		map[offset] = id;
+		iter = __swap_cgroup_xchg(map, offset, id);
+		VM_BUG_ON(iter != old);
 	} while (++offset != end);
-	spin_unlock_irqrestore(&ctrl->lock, flags);
 
 	return old;
 }
@@ -85,20 +111,20 @@ unsigned short lookup_swap_cgroup_id(swp_entry_t ent)
 
 int swap_cgroup_swapon(int type, unsigned long max_pages)
 {
-	void *map;
+	struct swap_cgroup_unit *units;
 	struct swap_cgroup_ctrl *ctrl;
 
 	if (mem_cgroup_disabled())
 		return 0;
 
-	map = vzalloc(max_pages * sizeof(unsigned short));
-	if (!map)
+	units = vzalloc(DIV_ROUND_UP(max_pages, ID_PER_UNIT) *
+			sizeof(struct swap_cgroup_unit));
+	if (!units)
 		goto nomem;
 
 	ctrl = &swap_cgroup_ctrl[type];
 	mutex_lock(&swap_cgroup_mutex);
-	ctrl->map = map;
-	spin_lock_init(&ctrl->lock);
+	ctrl->units = units;
 	mutex_unlock(&swap_cgroup_mutex);
 
 	return 0;
