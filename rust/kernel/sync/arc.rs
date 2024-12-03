@@ -26,7 +26,7 @@ use crate::{
 use core::{
     alloc::Layout,
     fmt,
-    marker::{PhantomData, Unsize},
+    marker::PhantomData,
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
     pin::Pin,
@@ -125,6 +125,8 @@ mod std_vendor;
 /// let coerced: Arc<dyn MyTrait> = obj;
 /// # Ok::<(), Error>(())
 /// ```
+#[repr(transparent)]
+#[cfg_attr(CONFIG_RUST_COERCE_POINTEE, derive(core::marker::CoercePointee))]
 pub struct Arc<T: ?Sized> {
     ptr: NonNull<ArcInner<T>>,
     _p: PhantomData<ArcInner<T>>,
@@ -172,10 +174,12 @@ impl<T: ?Sized> ArcInner<T> {
 
 // This is to allow coercion from `Arc<T>` to `Arc<U>` if `T` can be converted to the
 // dynamically-sized type (DST) `U`.
-impl<T: ?Sized + Unsize<U>, U: ?Sized> core::ops::CoerceUnsized<Arc<U>> for Arc<T> {}
+#[cfg(not(CONFIG_RUST_COERCE_POINTEE))]
+impl<T: ?Sized + core::marker::Unsize<U>, U: ?Sized> core::ops::CoerceUnsized<Arc<U>> for Arc<T> {}
 
 // This is to allow `Arc<U>` to be dispatched on when `Arc<T>` can be coerced into `Arc<U>`.
-impl<T: ?Sized + Unsize<U>, U: ?Sized> core::ops::DispatchFromDyn<Arc<U>> for Arc<T> {}
+#[cfg(not(CONFIG_RUST_COERCE_POINTEE))]
+impl<T: ?Sized + core::marker::Unsize<U>, U: ?Sized> core::ops::DispatchFromDyn<Arc<U>> for Arc<T> {}
 
 // SAFETY: It is safe to send `Arc<T>` to another thread when the underlying `T` is `Sync` because
 // it effectively means sharing `&T` (which is safe because `T` is `Sync`); additionally, it needs
@@ -471,6 +475,8 @@ impl<T: ?Sized> From<Pin<UniqueArc<T>>> for Arc<T> {
 /// obj.as_arc_borrow().use_reference();
 /// # Ok::<(), Error>(())
 /// ```
+#[repr(transparent)]
+#[cfg_attr(CONFIG_RUST_COERCE_POINTEE, derive(core::marker::CoercePointee))]
 pub struct ArcBorrow<'a, T: ?Sized + 'a> {
     inner: NonNull<ArcInner<T>>,
     _p: PhantomData<&'a ()>,
@@ -478,7 +484,8 @@ pub struct ArcBorrow<'a, T: ?Sized + 'a> {
 
 // This is to allow `ArcBorrow<U>` to be dispatched on when `ArcBorrow<T>` can be coerced into
 // `ArcBorrow<U>`.
-impl<T: ?Sized + Unsize<U>, U: ?Sized> core::ops::DispatchFromDyn<ArcBorrow<'_, U>>
+#[cfg(not(CONFIG_RUST_COERCE_POINTEE))]
+impl<T: ?Sized + core::marker::Unsize<U>, U: ?Sized> core::ops::DispatchFromDyn<ArcBorrow<'_, U>>
     for ArcBorrow<'_, T>
 {
 }
