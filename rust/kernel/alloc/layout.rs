@@ -7,6 +7,7 @@
 use core::{alloc::Layout, marker::PhantomData};
 
 /// Error when constructing an [`ArrayLayout`].
+#[derive(Debug)]
 pub struct LayoutError;
 
 /// A layout for an array `[T; n]`.
@@ -43,6 +44,19 @@ impl<T> ArrayLayout<T> {
     /// # Errors
     ///
     /// When `len * size_of::<T>()` overflows or when `len * size_of::<T>() > isize::MAX`.
+    ///
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use kernel::alloc::layout::ArrayLayout;
+    ///
+    /// let layout = ArrayLayout::<i32>::new(15);
+    /// assert_eq!(layout.expect("len * size_of::<i32>() does not overflow").len(), 15);
+    ///
+    /// let layout = ArrayLayout::<i32>::new(isize::MAX as usize);
+    /// assert!(layout.is_err());
+    /// ```
     pub const fn new(len: usize) -> Result<Self, LayoutError> {
         match len.checked_mul(core::mem::size_of::<T>()) {
             Some(size) if size <= ISIZE_MAX => {
