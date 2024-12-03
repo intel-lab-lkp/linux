@@ -7546,6 +7546,76 @@ out:
 }
 #endif
 
+/**
+ * scx_bpf_clock_get_ns - Returns a high-performance monotonically
+ * non-decreasing clock for the current CPU. The clock returned is in
+ * nanoseconds.
+ *
+ * It provides the following properties:
+ *
+ * 1) High performance: Many BPF schedulers call bpf_ktime_get_ns() frequently
+ *  to account for execution time and track tasks' runtime properties.
+ *  Unfortunately, in some hardware platforms, bpf_ktime_get_ns() -- which
+ *  eventually reads a hardware timestamp counter -- is neither performant nor
+ *  scalable. scx_bpf_clock_get_ns() aims to provide a high-performance clock
+ *  by using the rq clock in the scheduler core whenever possible.
+ *
+ * 2) High enough resolution for the BPF scheduler use cases: In most BPF
+ *  scheduler use cases, the required clock resolution is lower than the most
+ *  accurate hardware clock (e.g., rdtsc in x86). scx_bpf_clock_get_ns()
+ *  basically uses the rq clock in the scheduler core whenever it is valid.
+ *  It considers that the rq clock is valid from the time the rq clock is
+ *  updated (update_rq_clock) until the rq is unlocked (rq_unpin_lock).
+ *  In addition, it invalidates the rq clock after long operations --
+ *  ops.running() and ops.update_idle().
+ *
+ * 3) Monotonically non-decreasing clock for the same CPU:
+ *  scx_bpf_clock_get_ns() guarantees the clock never goes backward when
+ *  comparing them in the same CPU. On the other hand, when comparing clocks
+ *  in different CPUs, there is no such guarantee -- the clock can go backward.
+ *  It provides a monotonically *non-decreasing* clock so that it would provide
+ *  the same clock values in two different scx_bpf_clock_get_ns() calls in the
+ *  same CPU during the same period of when the rq clock is valid.
+ */
+__bpf_kfunc u64 scx_bpf_clock_get_ns(void)
+{
+	static DEFINE_PER_CPU(u64, prev_clk);
+	struct rq *rq = this_rq();
+	u64 pr_clk, cr_clk;
+
+	preempt_disable();
+	pr_clk = __this_cpu_read(prev_clk);
+
+	/*
+	 * If the rq clock is invalid, start a new rq clock period
+	 * with a fresh sched_clock().
+	 */
+	if (!(rq->scx.flags & SCX_RQ_CLK_VALID)) {
+		cr_clk = sched_clock();
+		scx_rq_clock_update(rq, cr_clk);
+	}
+	/*
+	 * If the rq clock is valid, use the cached rq clock
+	 * whenever the clock does not go backward.
+	 */
+	else {
+		cr_clk = rq->scx.clock;
+		/*
+		 * If the clock goes backward, start a new rq clock period
+		 * with a fresh sched_clock().
+		 */
+		if (pr_clk > cr_clk) {
+			cr_clk = sched_clock();
+			scx_rq_clock_update(rq, cr_clk);
+		}
+	}
+
+	__this_cpu_write(prev_clk, cr_clk);
+	preempt_enable();
+
+	return cr_clk;
+}
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(scx_kfunc_ids_any)
@@ -7577,6 +7647,7 @@ BTF_ID_FLAGS(func, scx_bpf_cpu_rq)
 #ifdef CONFIG_CGROUP_SCHED
 BTF_ID_FLAGS(func, scx_bpf_task_cgroup, KF_RCU | KF_ACQUIRE)
 #endif
+BTF_ID_FLAGS(func, scx_bpf_clock_get_ns)
 BTF_KFUNCS_END(scx_kfunc_ids_any)
 
 static const struct btf_kfunc_id_set scx_kfunc_set_any = {
