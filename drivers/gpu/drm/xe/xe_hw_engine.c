@@ -24,7 +24,8 @@
 #include "xe_gt_printk.h"
 #include "xe_gt_mcr.h"
 #include "xe_gt_topology.h"
-#include "xe_guc_capture.h"
+//#include "xe_guc_capture.h"
+#include "xe_guc_capture_snapshot_types.h"
 #include "xe_hw_engine_group.h"
 #include "xe_hw_fence.h"
 #include "xe_irq.h"
@@ -827,9 +828,9 @@ void xe_hw_engine_handle_irq(struct xe_hw_engine *hwe, u16 intr_vec)
 }
 
 /**
- * xe_hw_engine_snapshot_capture - Take a quick snapshot of the HW Engine.
+ * hw_engine_snapshot_capture - Take a quick snapshot of the HW Engine.
  * @hwe: Xe HW Engine.
- * @q: The exec queue object.
+ * @q: The exec queue object. (can be NULL for debugfs engine-register dump)
  *
  * This can be printed out in a later stage like during dev_coredump
  * analysis.
@@ -837,11 +838,12 @@ void xe_hw_engine_handle_irq(struct xe_hw_engine *hwe, u16 intr_vec)
  * Returns: a Xe HW Engine snapshot object that must be freed by the
  * caller, using `xe_hw_engine_snapshot_free`.
  */
-struct xe_hw_engine_snapshot *
-xe_hw_engine_snapshot_capture(struct xe_hw_engine *hwe, struct xe_exec_queue *q)
+static struct xe_hw_engine_snapshot *
+hw_engine_snapshot_capture(struct xe_hw_engine *hwe, struct xe_exec_queue *q)
 {
 	struct xe_hw_engine_snapshot *snapshot;
-	struct __guc_capture_parsed_output *node;
+	struct xe_guc_capture_snapshot *manual_node;
+	struct xe_guc *guc;
 
 	if (!xe_hw_engine_is_valid(hwe))
 		return NULL;
@@ -865,23 +867,64 @@ xe_hw_engine_snapshot_capture(struct xe_hw_engine *hwe, struct xe_exec_queue *q)
 		return snapshot;
 
 	if (q) {
-		/* If got guc capture, set source to GuC */
-		node = xe_guc_capture_get_matching_and_lock(q);
-		if (node) {
-			struct xe_device *xe = gt_to_xe(hwe->gt);
-			struct xe_devcoredump *coredump = &xe->devcoredump;
+		guc = &q->gt->uc.guc;
+		/* First find the pre-kill manual GuC-Err-Capture node for this job */
+		manual_node = xe_guc_capture_snapshot_get(guc, q,
+							  XE_ENGINE_CAPTURE_SOURCE_MANUAL);
 
-			coredump->snapshot.matched_node = node;
-			xe_gt_dbg(hwe->gt, "Found and locked GuC-err-capture node");
-			return snapshot;
+		/* Next, look for the GuC-Firmware reported node for this job */
+		snapshot->matched_node = xe_guc_capture_snapshot_get(guc, q,
+								     XE_ENGINE_CAPTURE_SOURCE_GUC);
+		if (!snapshot->matched_node) {
+			xe_gt_dbg(hwe->gt, "Can't find GUC-Sourced err-capture node");
+			snapshot->matched_node = manual_node;
+		} else if (manual_node) {
+			/* looks like we don't need the manually-captured node, return it */
+			xe_guc_capture_snapshot_put(guc, manual_node);
 		}
 	}
 
-	/* otherwise, do manual capture */
-	xe_engine_manual_capture(hwe, snapshot);
-	xe_gt_dbg(hwe->gt, "Proceeding with manual engine snapshot");
+	if (!snapshot->matched_node) {
+		guc = &hwe->gt->uc.guc;
+		/*
+		 * Fallback path - do an immediate jobless manual engine capture.
+		 * This will happen when debugfs is triggered to force an engine dump.
+		 */
+		snapshot->matched_node = xe_guc_capture_snapshot_store_and_get_manual_hwe(guc, hwe);
+		xe_gt_dbg(hwe->gt, "Fallback to jobless-manual-err-capture node");
+	}
 
 	return snapshot;
+}
+
+/**
+ * xe_engine_snapshot_capture_for_queue - Take snapshot of associated engine
+ * @q: The exec queue object
+ *
+ * Take snapshot of associated HW Engine
+ *
+ * Returns: None.
+ */
+void
+xe_engine_snapshot_capture_for_queue(struct xe_exec_queue *q)
+{
+	struct xe_device *xe = gt_to_xe(q->gt);
+	struct xe_devcoredump *coredump = &xe->devcoredump;
+	struct xe_hw_engine *hwe;
+	enum xe_hw_engine_id id;
+	u32 adj_logical_mask = q->logical_mask;
+
+	if (IS_SRIOV_VF(xe))
+		return;
+
+	for_each_hw_engine(hwe, q->gt, id) {
+		if (hwe->class != q->hwe->class ||
+		    !(BIT(hwe->logical_instance) & adj_logical_mask)) {
+			coredump->snapshot.hwe[id] = NULL;
+			continue;
+		}
+		coredump->snapshot.hwe[id] = hw_engine_snapshot_capture(hwe, q);
+	}
 }
 
 /**
@@ -898,15 +941,39 @@ void xe_hw_engine_snapshot_free(struct xe_hw_engine_snapshot *snapshot)
 		return;
 
 	gt = snapshot->hwe->gt;
-	/*
-	 * xe_guc_capture_put_matched_nodes is called here and from
-	 * xe_devcoredump_snapshot_free, to cover the 2 calling paths
-	 * of hw_engines - debugfs and devcoredump free.
-	 */
-	xe_guc_capture_put_matched_nodes(&gt->uc.guc);
+	xe_guc_capture_snapshot_put(&gt->uc.guc, snapshot->matched_node);
+	snapshot->matched_node = NULL;
 
 	kfree(snapshot->name);
 	kfree(snapshot);
+}
+
+/**
+ * xe_engine_snapshot_print - Print out a given Xe HW Engine snapshot.
+ * @snapshot: Xe HW Engine snapshot object.
+ * @p: drm_printer where it will be printed out.
+ *
+ * This function prints out a given Xe HW Engine snapshot object.
+ */
+void xe_engine_snapshot_print(struct xe_hw_engine_snapshot *snapshot, struct drm_printer *p)
+{
+	struct xe_gt *gt;
+
+	if (!snapshot)
+		return;
+
+	gt = snapshot->hwe->gt;
+
+	drm_printf(p, "%s (physical), logical instance=%d\n",
+		   snapshot->name ? snapshot->name : "",
+		   snapshot->logical_instance);
+	drm_printf(p, "\tForcewake: domain 0x%x, ref %d\n",
+		   snapshot->forcewake.domain, snapshot->forcewake.ref);
+	drm_printf(p, "\tReserved: %s\n",
+		   str_yes_no(snapshot->kernel_reserved));
+	drm_puts(p, "\n");
+
+	xe_guc_capture_snapshot_print(&gt->uc.guc, snapshot->matched_node, p);
 }
 
 /**
@@ -920,7 +987,7 @@ void xe_hw_engine_print(struct xe_hw_engine *hwe, struct drm_printer *p)
 {
 	struct xe_hw_engine_snapshot *snapshot;
 
-	snapshot = xe_hw_engine_snapshot_capture(hwe, NULL);
+	snapshot = hw_engine_snapshot_capture(hwe, NULL);
 	xe_engine_snapshot_print(snapshot, p);
 	xe_hw_engine_snapshot_free(snapshot);
 }

@@ -152,11 +152,7 @@ struct xe_hw_engine {
 	struct xe_hw_engine_group *hw_engine_group;
 };
 
-enum xe_hw_engine_snapshot_source_id {
-	XE_ENGINE_CAPTURE_SOURCE_MANUAL,
-	XE_ENGINE_CAPTURE_SOURCE_GUC
-};
-
+struct xe_guc_capture_snapshot;
 /**
  * struct xe_hw_engine_snapshot - Hardware engine snapshot
  *
@@ -180,6 +176,13 @@ struct xe_hw_engine_snapshot {
 	u32 mmio_base;
 	/** @kernel_reserved: Engine reserved, can't be used by userspace */
 	bool kernel_reserved;
+	/**
+	 * @matched_node: GuC Capture snapshot:
+	 * The matched capture node for the timedout job
+	 * this single-node tracker works because devcoredump will always only
+	 * produce one hw-engine capture per devcoredump event
+	 */
+	struct xe_guc_capture_snapshot *matched_node;
 };
 
 #endif
