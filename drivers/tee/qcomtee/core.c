@@ -904,8 +904,14 @@ static int __init qcom_tee_object_invoke_init(void)
 	if (ret)
 		goto err_kobject_put;
 
+	ret = qcom_tee_driver_register();
+	if (ret)
+		goto err_remove_group;
+
 	return 0;
 
+err_remove_group:
+	sysfs_remove_group(qcom_tee_object_invoke_kobj, &attr_group);
 err_kobject_put:
 	/* Remove '/sys/firmware/qcom_tee'. */
 	kobject_put(qcom_tee_object_invoke_kobj);
@@ -920,6 +926,8 @@ module_init(qcom_tee_object_invoke_init);
 
 static void __exit qcom_tee_object_invoke_deinit(void)
 {
+	qcom_tee_driver_unregister();
+
 	/* Wait for RELEASE operations for QTEE objects. */
 	qcom_tee_release_destroy();
 	qcom_tee_msg_buffers_destroy();
