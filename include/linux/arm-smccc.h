@@ -607,6 +607,12 @@ asmlinkage void __arm_smccc_hvc(unsigned long a0, unsigned long a1,
 			___res->a0 = SMCCC_RET_NOT_SUPPORTED;		\
 	} while (0)
 
+#define __fail_smccc_1_2(___res)					\
+	do {								\
+		if (___res)						\
+			___res->a0 = SMCCC_RET_NOT_SUPPORTED;		\
+	} while (0)
+
 /*
  * arm_smccc_1_1_invoke() - make an SMCCC v1.1 compliant call
  *
@@ -633,6 +639,37 @@ asmlinkage void __arm_smccc_hvc(unsigned long a0, unsigned long a1,
 			break;						\
 		default:						\
 			__fail_smccc_1_1(__VA_ARGS__);			\
+			method = SMCCC_CONDUIT_NONE;			\
+			break;						\
+		}							\
+		method;							\
+	})
+
+/*
+ * arm_smccc_1_2_invoke() - make an SMCCC v1.2 compliant call
+ *
+ * @args: SMC args are in the a0..a17 fields of the arm_smcc_1_2_regs structure
+ * @res: result values from registers 0 to 17
+ *
+ * This macro will make either an HVC call or an SMC call depending on the
+ * current SMCCC conduit. If no valid conduit is available then -1
+ * (SMCCC_RET_NOT_SUPPORTED) is returned in @res.a0 (if supplied).
+ *
+ * The return value also provides the conduit that was used.
+ */
+#define arm_smccc_1_2_invoke(args, res) ({				\
+		struct arm_smccc_1_2_regs *__args = args;		\
+		struct arm_smccc_1_2_regs *__res = res;			\
+		int method = arm_smccc_1_1_get_conduit();		\
+		switch (method) {					\
+		case SMCCC_CONDUIT_HVC:					\
+			arm_smccc_1_2_hvc(__args, __res);		\
+			break;						\
+		case SMCCC_CONDUIT_SMC:					\
+			arm_smccc_1_2_smc(__args, __res);		\
+			break;						\
+		default:						\
+			__fail_smccc_1_2(__res);			\
 			method = SMCCC_CONDUIT_NONE;			\
 			break;						\
 		}							\
