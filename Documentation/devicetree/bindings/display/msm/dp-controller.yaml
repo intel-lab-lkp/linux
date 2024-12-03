@@ -72,8 +72,8 @@ properties:
 
   assigned-clock-parents:
     items:
-      - description: phy 0 parent
-      - description: phy 1 parent
+      - description: Link clock PLL output provided by PHY block
+      - description: Stream 0 pixel clock PLL output provided by PHY block
 
   phys:
     maxItems: 1
