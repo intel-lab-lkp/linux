@@ -19,7 +19,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/gpio/consumer.h>
-#include <linux/gpio.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <media/v4l2-common.h>
@@ -139,6 +138,8 @@ struct sta2x11_vip {
 
 	void __iomem *iomem;	/* I/O Memory */
 	struct vip_config *config;
+	struct gpio_desc  *gpiod_pwr;
+	struct gpio_desc  *gpiod_reset;
 };
 
 static const unsigned int registers_to_save[AUX_COUNT] = {
@@ -886,18 +887,16 @@ static int sta2x11_vip_init_controls(struct sta2x11_vip *vip)
  * @name: GPIO pin name
  *
  */
-static int vip_gpio_reserve(struct device *dev, int pin, int dir,
-			    const char *name)
+static int vip_gpio_reserve(struct device *dev, struct gpio_desc **pgpiod,
+			int pin, int dir, const char *name)
 {
-	struct gpio_desc *desc = gpio_to_desc(pin);
+	struct gpio_desc *desc;
 	int ret = -ENODEV;
 
-	if (!gpio_is_valid(pin))
-		return ret;
-
-	ret = gpio_request(pin, name);
-	if (ret) {
+	desc = gpiod_get_index(dev, name, pin, GPIOD_ASIS);
+	if (IS_ERR(desc)) {
 		dev_err(dev, "Failed to allocate pin %d (%s)\n", pin, name);
+		ret = PTR_ERR(desc);
 		return ret;
 	}
 
@@ -905,18 +904,21 @@ static int vip_gpio_reserve(struct device *dev, int pin, int dir,
 	if (ret) {
 		dev_err(dev, "Failed to set direction for pin %d (%s)\n",
 			pin, name);
-		gpio_free(pin);
-		return ret;
+		goto err;
 	}
 
 	ret = gpiod_export(desc, false);
 	if (ret) {
 		dev_err(dev, "Failed to export pin %d (%s)\n", pin, name);
-		gpio_free(pin);
-		return ret;
+		goto err;
 	}
 
+	*pgpiod = desc;
 	return 0;
+
+err:
+	gpiod_put(desc);
+	return ret;
 }
 
 /**
@@ -926,15 +928,12 @@ static int vip_gpio_reserve(struct device *dev, int pin, int dir,
  * @name: GPIO pin name
  *
  */
-static void vip_gpio_release(struct device *dev, int pin, const char *name)
+static void vip_gpio_release(struct device *dev, struct gpio_desc *desc,
+			int pin, const char *name)
 {
-	if (gpio_is_valid(pin)) {
-		struct gpio_desc *desc = gpio_to_desc(pin);
-
-		dev_dbg(dev, "releasing pin %d (%s)\n",	pin, name);
-		gpiod_unexport(desc);
-		gpio_free(pin);
-	}
+	dev_dbg(dev, "releasing pin %d (%s)\n",	pin, name);
+	gpiod_unexport(desc);
+	gpiod_put(desc);
 }
 
 /**
@@ -962,6 +961,7 @@ static int sta2x11_vip_init_one(struct pci_dev *pdev,
 	int ret;
 	struct sta2x11_vip *vip;
 	struct vip_config *config;
+	struct gpio_desc  *gpiod_pwr, *gpiod_reset;
 
 	/* Check if hardware support 26-bit DMA */
 	if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(26))) {
@@ -982,30 +982,27 @@ static int sta2x11_vip_init_one(struct pci_dev *pdev,
 	}
 
 	/* Power configuration */
-	ret = vip_gpio_reserve(&pdev->dev, config->pwr_pin, 0,
+	ret = vip_gpio_reserve(&pdev->dev, &gpiod_pwr, config->pwr_pin, 0,
 			       config->pwr_name);
 	if (ret)
 		goto disable;
 
-	ret = vip_gpio_reserve(&pdev->dev, config->reset_pin, 0,
+	ret = vip_gpio_reserve(&pdev->dev, &gpiod_reset, config->reset_pin, 0,
 			       config->reset_name);
-	if (ret) {
-		vip_gpio_release(&pdev->dev, config->pwr_pin,
-				 config->pwr_name);
-		goto disable;
-	}
+	if (ret)
+		goto release_gpio_pwr;
 
-	if (gpio_is_valid(config->pwr_pin)) {
-		/* Datasheet says 5ms between PWR and RST */
-		usleep_range(5000, 25000);
-		gpio_direction_output(config->pwr_pin, 1);
-	}
+	/* Datasheet says 5ms between PWR and RST */
+	usleep_range(5000, 25000);
+	ret = gpiod_direction_output(gpiod_pwr, 1);
+	if (ret)
+		goto release_gpios;
 
-	if (gpio_is_valid(config->reset_pin)) {
-		/* Datasheet says 5ms between PWR and RST */
-		usleep_range(5000, 25000);
-		gpio_direction_output(config->reset_pin, 1);
-	}
+	usleep_range(5000, 25000);
+	ret = gpiod_direction_output(gpiod_reset, 1);
+	if (ret)
+		goto release_gpios;
+
 	usleep_range(5000, 25000);
 
 	/* Allocate a new VIP instance */
@@ -1018,6 +1015,8 @@ static int sta2x11_vip_init_one(struct pci_dev *pdev,
 	vip->std = V4L2_STD_PAL;
 	vip->format = formats_50[0];
 	vip->config = config;
+	vip->gpiod_reset = gpiod_reset;
+	vip->gpiod_pwr = gpiod_pwr;
 	mutex_init(&vip->v4l_lock);
 
 	ret = sta2x11_vip_init_controls(vip);
@@ -1111,8 +1110,9 @@ unreg:
 free_mem:
 	kfree(vip);
 release_gpios:
-	vip_gpio_release(&pdev->dev, config->reset_pin, config->reset_name);
-	vip_gpio_release(&pdev->dev, config->pwr_pin, config->pwr_name);
+	vip_gpio_release(&pdev->dev, gpiod_reset, config->reset_pin, config->reset_name);
+release_gpio_pwr:
+	vip_gpio_release(&pdev->dev, gpiod_pwr, config->pwr_pin, config->pwr_name);
 disable:
 	/*
 	 * do not call pci_disable_device on sta2x11 because it break all
@@ -1150,9 +1150,9 @@ static void sta2x11_vip_remove_one(struct pci_dev *pdev)
 
 	v4l2_device_unregister(&vip->v4l2_dev);
 
-	vip_gpio_release(&pdev->dev, vip->config->pwr_pin,
+	vip_gpio_release(&pdev->dev, vip->gpiod_pwr, vip->config->pwr_pin,
 			 vip->config->pwr_name);
-	vip_gpio_release(&pdev->dev, vip->config->reset_pin,
+	vip_gpio_release(&pdev->dev, vip->gpiod_reset, vip->config->reset_pin,
 			 vip->config->reset_name);
 
 	kfree(vip);
