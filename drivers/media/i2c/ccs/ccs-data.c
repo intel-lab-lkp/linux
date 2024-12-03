@@ -974,6 +974,7 @@ int ccs_data_parse(struct ccs_data_container *ccsdata, const void *data,
 
 out_free:
 	kvfree(bin.base);
+	memset(ccsdata, 0, sizeof(*ccsdata);
 
 	return rval;
 }
