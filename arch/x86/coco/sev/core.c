@@ -1433,6 +1433,31 @@ static enum es_result __vc_handle_msr_caa(struct pt_regs *regs, bool write)
 	return ES_OK;
 }
 
+/*
+ * TSC related accesses should not exit to the hypervisor when a guest is
+ * executing with SecureTSC enabled, so special handling is required for
+ * accesses of MSR_IA32_TSC:
+ *
+ * Writes: Writing to MSR_IA32_TSC can cause subsequent reads
+ *         of the TSC to return undefined values, so ignore all
+ *         writes.
+ * Reads:  Reads of MSR_IA32_TSC should return the current TSC
+ *         value, use the value returned by RDTSC.
+ */
+static enum es_result __vc_handle_msr_tsc(struct pt_regs *regs, bool write)
+{
+	u64 tsc;
+
+	if (write)
+		return ES_OK;
+
+	tsc = rdtsc_ordered();
+	regs->ax = lower_32_bits(tsc);
+	regs->dx = upper_32_bits(tsc);
+
+	return ES_OK;
+}
+
 static enum es_result vc_handle_msr(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 {
 	struct pt_regs *regs = ctxt->regs;
@@ -1444,6 +1469,9 @@ static enum es_result vc_handle_msr(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 
 	if (regs->cx == MSR_SVSM_CAA)
 		return __vc_handle_msr_caa(regs, write);
+
+	if (regs->cx == MSR_IA32_TSC && (sev_status & MSR_AMD64_SNP_SECURE_TSC))
+		return __vc_handle_msr_tsc(regs, write);
 
 	ghcb_set_rcx(ghcb, regs->cx);
 	if (write) {
