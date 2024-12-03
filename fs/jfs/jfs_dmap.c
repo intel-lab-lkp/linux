@@ -1373,6 +1373,11 @@ dbAllocAG(struct bmap * bmp, int agno, s64 nblocks, int l2nb, s64 * results)
 		return (rc);
 	}
 
+	if (!bmp->db_agwidth) {
+		jfs_error(bmp->db_ipbmap->i_sb, "width in dmapctl of the AG is zero\n");
+		return -EIO;
+	}
+
 	/* the buffer for the dmap control page that fully describes the
 	 * allocation group.
 	 */
