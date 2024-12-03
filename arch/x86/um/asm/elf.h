@@ -188,6 +188,9 @@ do {								\
 struct linux_binprm;
 extern int arch_setup_additional_pages(struct linux_binprm *bprm,
 	int uses_interp);
+struct elf_fdpic_params;
+extern int elf_arch_finalize_exec(struct elf_fdpic_params *exec_params,
+				  struct elf_fdpic_params *interp_params);
 
 extern unsigned long um_vdso_addr;
 #define AT_SYSINFO_EHDR 33
