@@ -80,6 +80,12 @@ patternProperties:
     description:
       This is the PCIe control region.
 
+  "^ethernet-mac-syscon@[0-9a-f]+$":
+    type: object
+    $ref: /schemas/mfd/syscon.yaml#
+    description:
+      This is the Ethernet MAC efuse region.
+
 required:
   - compatible
   - reg
