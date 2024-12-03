@@ -1,0 +1,262 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/cpufreq/airoha,en7581-cpufreq.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Airoha EN7581 CPUFreq
+
+maintainers:
+  - Christian Marangi <ansuelsmth@gmail.com>
+
+description: |
+  On newer Airoha SoC, CPU Frequency is scaled indirectly with SMCCC commands
+  to ATF and no clocks are exposed to the OS.
+
+  The SoC have performance state described by ID for each OPP, for this a
+  Power Domain is used that sets the performance state ID according to the
+  required OPPs defined in the CPU OPP tables.
+
+properties:
+  compatible:
+    const: airoha,en7581-cpufreq
+
+  '#clock-cells':
+    const: 0
+
+  '#power-domain-cells':
+    const: 0
+
+  operating-points-v2: true
+
+required:
+  - compatible
+  - '#clock-cells'
+  - '#power-domain-cells'
+  - operating-points-v2
+
+additionalProperties: false
+
+examples:
+  - |
+    / {
+        model = "Airoha EN7581 Evaluation Board";
+        compatible = "airoha,en7581-evb", "airoha,en7581";
+
+        #address-cells = <2>;
+      	#size-cells = <2>;
+
+        cpus {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            cpu0: cpu@0 {
+                device_type = "cpu";
+                compatible = "arm,cortex-a53";
+                reg = <0x0>;
+                operating-points-v2 = <&cpu_opp_table>;
+                enable-method = "psci";
+                clocks = <&cpu_pd>;
+                clock-names = "cpu";
+                power-domains = <&cpu_pd>;
+                power-domain-names = "perf";
+                next-level-cache = <&l2>;
+                #cooling-cells = <2>;
+            };
+
+            cpu1: cpu@1 {
+                device_type = "cpu";
+                compatible = "arm,cortex-a53";
+                reg = <0x1>;
+                operating-points-v2 = <&cpu_opp_table>;
+                enable-method = "psci";
+                clocks = <&cpu_pd>;
+                clock-names = "cpu";
+                power-domains = <&cpu_pd>;
+                power-domain-names = "perf";
+                next-level-cache = <&l2>;
+                #cooling-cells = <2>;
+            };
+
+            cpu2: cpu@2 {
+                device_type = "cpu";
+                compatible = "arm,cortex-a53";
+                reg = <0x2>;
+                operating-points-v2 = <&cpu_opp_table>;
+                enable-method = "psci";
+                clocks = <&cpu_pd>;
+                clock-names = "cpu";
+                power-domains = <&cpu_pd>;
+                power-domain-names = "perf";
+                next-level-cache = <&l2>;
+                #cooling-cells = <2>;
+            };
+
+            cpu3: cpu@3 {
+                device_type = "cpu";
+                compatible = "arm,cortex-a53";
+                reg = <0x3>;
+                operating-points-v2 = <&cpu_opp_table>;
+                enable-method = "psci";
+                clocks = <&cpu_pd>;
+                clock-names = "cpu";
+                power-domains = <&cpu_pd>;
+                power-domain-names = "perf";
+                next-level-cache = <&l2>;
+                #cooling-cells = <2>;
+            };
+        };
+
+        cpu_opp_table: opp-table-cpu {
+            compatible = "operating-points-v2";
+            opp-shared;
+
+            opp-500000000 {
+                opp-hz = /bits/ 64 <500000000>;
+                required-opps = <&smcc_opp0>;
+            };
+
+            opp-550000000 {
+                opp-hz = /bits/ 64 <550000000>;
+                required-opps = <&smcc_opp1>;
+            };
+
+            opp-600000000 {
+                opp-hz = /bits/ 64 <600000000>;
+                required-opps = <&smcc_opp2>;
+            };
+
+            opp-650000000 {
+                opp-hz = /bits/ 64 <650000000>;
+                required-opps = <&smcc_opp3>;
+            };
+
+            opp-7000000000 {
+                opp-hz = /bits/ 64 <700000000>;
+                required-opps = <&smcc_opp4>;
+            };
+
+            opp-7500000000 {
+                opp-hz = /bits/ 64 <750000000>;
+                required-opps = <&smcc_opp5>;
+            };
+
+            opp-8000000000 {
+                opp-hz = /bits/ 64 <800000000>;
+                required-opps = <&smcc_opp6>;
+            };
+
+            opp-8500000000 {
+                opp-hz = /bits/ 64 <850000000>;
+                required-opps = <&smcc_opp7>;
+            };
+
+            opp-9000000000 {
+                opp-hz = /bits/ 64 <900000000>;
+                required-opps = <&smcc_opp8>;
+            };
+
+            opp-9500000000 {
+                opp-hz = /bits/ 64 <950000000>;
+                required-opps = <&smcc_opp9>;
+            };
+
+            opp-10000000000 {
+                opp-hz = /bits/ 64 <1000000000>;
+                required-opps = <&smcc_opp10>;
+            };
+
+            opp-10500000000 {
+                opp-hz = /bits/ 64 <1050000000>;
+                required-opps = <&smcc_opp11>;
+            };
+
+            opp-11000000000 {
+                opp-hz = /bits/ 64 <1100000000>;
+                required-opps = <&smcc_opp12>;
+            };
+
+            opp-11500000000 {
+                opp-hz = /bits/ 64 <1150000000>;
+                required-opps = <&smcc_opp13>;
+            };
+
+            opp-12000000000 {
+                opp-hz = /bits/ 64 <1200000000>;
+                required-opps = <&smcc_opp14>;
+            };
+        };
+
+        cpu_smcc_opp_table: opp-table-smcc {
+            compatible = "operating-points-v2";
+
+            smcc_opp0: opp-0 {
+               opp-level = <0>;
+            };
+
+            smcc_opp1: opp-1 {
+                opp-level = <1>;
+            };
+
+            smcc_opp2: opp-2 {
+               opp-level = <2>;
+            };
+
+            smcc_opp3: opp-3 {
+               opp-level = <3>;
+            };
+
+            smcc_opp4: opp-4 {
+                opp-level = <4>;
+            };
+
+            smcc_opp5: opp-5 {
+                opp-level = <5>;
+            };
+
+            smcc_opp6: opp-6 {
+               opp-level = <6>;
+            };
+
+            smcc_opp7: opp-7 {
+               opp-level = <7>;
+            };
+
+            smcc_opp8: opp-8 {
+                opp-level = <8>;
+            };
+
+            smcc_opp9: opp-9 {
+               opp-level = <9>;
+            };
+
+            smcc_opp10: opp-10 {
+                opp-level = <10>;
+            };
+
+            smcc_opp11: opp-11 {
+                opp-level = <11>;
+            };
+
+            smcc_opp12: opp-12 {
+                opp-level = <12>;
+            };
+
+            smcc_opp13: opp-13 {
+                opp-level = <13>;
+            };
+
+            smcc_opp14: opp-14 {
+                opp-level = <14>;
+            };
+        };
+
+        cpu_pd: power-domain {
+            compatible = "airoha,en7581-cpufreq";
+
+            operating-points-v2 = <&cpu_smcc_opp_table>;
+
+            #power-domain-cells = <0>;
+            #clock-cells = <0>;
+        };
+    };
