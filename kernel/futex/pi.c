@@ -43,8 +43,8 @@ static struct futex_pi_state *alloc_pi_state(void)
 	return pi_state;
 }
 
-static void pi_state_update_owner(struct futex_pi_state *pi_state,
-				  struct task_struct *new_owner)
+void pi_state_update_owner(struct futex_pi_state *pi_state,
+			   struct task_struct *new_owner)
 {
 	struct task_struct *old_owner = pi_state->owner;
 
@@ -854,6 +854,47 @@ static int fixup_pi_state_owner(u32 __user *uaddr, struct futex_q *q,
 	return ret;
 }
 
+bool check_pi_lock_owner(u32 __user *uaddr)
+{
+	u32 our_tid, uval;
+	int ret;
+
+	our_tid = task_pid_vnr(current);
+	do {
+		ret = futex_get_value_locked(&uval, uaddr);
+		switch (ret) {
+		case 0:
+			if ((uval & FUTEX_TID_MASK) == our_tid)
+				return true;
+			return false;
+			break;
+
+		case -EFAULT:
+			ret = fault_in_user_writeable(uaddr);
+			if (ret < 0)
+				return false;
+			break;
+
+		case -EAGAIN:
+			cond_resched();
+			break;
+
+		default:
+			WARN_ON_ONCE(1);
+			return false;
+		}
+
+	} while (1);
+}
+
+void reset_pi_state_owner(struct futex_pi_state *pi_state)
+{
+	raw_spin_lock_irq(&pi_state->pi_mutex.wait_lock);
+	pi_state_update_owner(pi_state, NULL);
+	pi_state->owner = NULL;
+	raw_spin_unlock_irq(&pi_state->pi_mutex.wait_lock);
+}
+
 /**
  * fixup_pi_owner() - Post lock pi_state and corner case management
  * @uaddr:	user address of the futex
@@ -999,6 +1040,7 @@ retry_private:
 	rt_mutex_pre_schedule();
 
 	rt_mutex_init_waiter(&rt_waiter);
+	rt_waiter.hb = hb;
 
 	/*
 	 * On PREEMPT_RT, when hb->lock becomes an rt_mutex, we must not
@@ -1070,6 +1112,37 @@ cleanup:
 	 */
 	rt_mutex_post_schedule();
 no_block:
+	if (!futex_check_hb_valid(hb)) {
+		bool uaddr_owner;
+		/*
+		 * We might got the lock, we might not. We own the outdated internal
+		 * state because the HB changed under us so it might have been all
+		 * for nothing.
+		 * We need to reset the pi_state and its owner because it
+		 * points to current owner of the lock but it is not what new
+		 * lock/ unlock caller will see so it needs a clean up. If we own
+		 * the lock according to uaddr then it has been passed to us by an
+		 * unlock and we got it before the HB changed. Lucky us, we keep
+		 * it. If we were able to steal it or did not get it in the
+		 * first place then we need to try again with the HB in place.
+		 */
+		reset_pi_state_owner(q.pi_state);
+		futex_unqueue_pi(&q);
+		spin_unlock(q.lock_ptr);
+		futex_hash_put(hb);
+
+		uaddr_owner = check_pi_lock_owner(uaddr);
+		if (uaddr_owner) {
+			ret = 0;
+			goto out;
+		}
+
+		if (refill_pi_state_cache()) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		goto retry_private;
+	}
 	/*
 	 * Fixup the pi_state owner and possibly acquire the lock if we
 	 * haven't already.
@@ -1121,6 +1194,7 @@ int futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
 {
 	u32 curval, uval, vpid = task_pid_vnr(current);
 	union futex_key key = FUTEX_KEY_INIT;
+	struct rw_semaphore *futex_hash_lock = NULL;
 	struct futex_hash_bucket *hb;
 	struct futex_q *top_waiter;
 	int ret;
@@ -1128,6 +1202,8 @@ int futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
 	if (!IS_ENABLED(CONFIG_FUTEX_PI))
 		return -ENOSYS;
 
+	if (!(flags & FLAGS_SHARED))
+		futex_hash_lock = &current->mm->futex_hash_lock;
 retry:
 	if (get_user(uval, uaddr))
 		return -EFAULT;
@@ -1233,6 +1309,32 @@ retry_hb:
 	}
 
 	/*
+	 * If the hb changed before the following cmpxchg finished then the
+	 * situtation gets complicated as we don't own the lock anymore but
+	 * there could be an internal state recorded under our name by the
+	 * waiter under a different hb->lock. Also the PI-lock could be snuck in
+	 * userland so there is no guarantee that we get it back.
+	 * To avoid the mess due to this tiny race, ensure that the HB can not
+	 * be resized while the PI lock with no owner is unlocked.
+	 */
+	if (futex_hash_lock) {
+		spin_unlock(&hb->lock);
+		down_read(futex_hash_lock);
+		spin_lock(&hb->lock);
+
+		if (!futex_check_hb_valid(hb)) {
+			spin_unlock(&hb->lock);
+			up_read(futex_hash_lock);
+			futex_hash_put(hb);
+			goto retry;
+		}
+		if (futex_top_waiter(hb, &key)) {
+			up_read(futex_hash_lock);
+			goto retry_hb;
+		}
+	}
+
+	/*
 	 * We have no kernel internal state, i.e. no waiters in the
 	 * kernel. Waiters which are about to queue themselves are stuck
 	 * on hb->lock. So we can safely ignore them. We do neither
@@ -1241,6 +1343,8 @@ retry_hb:
 	 */
 	if ((ret = futex_cmpxchg_value_locked(&curval, uaddr, uval, 0))) {
 		spin_unlock(&hb->lock);
+		if (futex_hash_lock)
+			up_read(futex_hash_lock);
 		futex_hash_put(hb);
 		switch (ret) {
 		case -EFAULT:
@@ -1254,6 +1358,8 @@ retry_hb:
 			return ret;
 		}
 	}
+	if (futex_hash_lock)
+		up_read(futex_hash_lock);
 
 	/*
 	 * If uval has changed, let user space handle it.

@@ -56,6 +56,7 @@ struct rt_mutex_waiter {
 	struct rt_mutex_base	*lock;
 	unsigned int		wake_state;
 	struct ww_acquire_ctx	*ww_ctx;
+	struct futex_hash_bucket *hb;
 };
 
 /**
@@ -100,7 +101,8 @@ extern int __rt_mutex_futex_trylock(struct rt_mutex_base *l);
 extern void rt_mutex_futex_unlock(struct rt_mutex_base *lock);
 extern bool __rt_mutex_futex_unlock(struct rt_mutex_base *lock,
 				struct rt_wake_q_head *wqh);
-
+extern void pi_state_update_owner(struct futex_pi_state *pi_state,
+				  struct task_struct *new_owner);
 extern void rt_mutex_postunlock(struct rt_wake_q_head *wqh);
 
 /*
@@ -216,6 +218,7 @@ static inline void rt_mutex_init_waiter(struct rt_mutex_waiter *waiter)
 	RB_CLEAR_NODE(&waiter->tree.entry);
 	waiter->wake_state = TASK_NORMAL;
 	waiter->task = NULL;
+	waiter->hb = NULL;
 }
 
 static inline void rt_mutex_init_rtlock_waiter(struct rt_mutex_waiter *waiter)

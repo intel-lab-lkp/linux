@@ -378,6 +378,7 @@ int futex_requeue(u32 __user *uaddr1, unsigned int flags1,
 	struct futex_hash_bucket *hb1, *hb2;
 	struct futex_q *this, *next;
 	DEFINE_WAKE_Q(wake_q);
+	struct rw_semaphore *futex_hash_lock = NULL;
 
 	if (nr_wake < 0 || nr_requeue < 0)
 		return -EINVAL;
@@ -429,6 +430,9 @@ int futex_requeue(u32 __user *uaddr1, unsigned int flags1,
 		 */
 		if (refill_pi_state_cache())
 			return -ENOMEM;
+
+		if (!(flags1 & FLAGS_SHARED) || !(flags2 & FLAGS_SHARED))
+			futex_hash_lock = &current->mm->futex_hash_lock;
 	}
 
 retry:
@@ -447,10 +451,12 @@ retry:
 	if (requeue_pi && futex_match(&key1, &key2))
 		return -EINVAL;
 
+retry_private:
+	if (futex_hash_lock)
+		down_read(futex_hash_lock);
 	hb1 = futex_hash(&key1);
 	hb2 = futex_hash(&key2);
 
-retry_private:
 	futex_hb_waiters_inc(hb2);
 	double_lock_hb(hb1, hb2);
 
@@ -464,6 +470,9 @@ retry_private:
 			futex_hb_waiters_dec(hb2);
 			futex_hash_put(hb1);
 			futex_hash_put(hb2);
+
+			if (futex_hash_lock)
+				up_read(futex_hash_lock);
 
 			ret = get_user(curval, uaddr1);
 			if (ret)
@@ -552,6 +561,9 @@ retry_private:
 			futex_hb_waiters_dec(hb2);
 			futex_hash_put(hb1);
 			futex_hash_put(hb2);
+			if (futex_hash_lock)
+				up_read(futex_hash_lock);
+
 			ret = fault_in_user_writeable(uaddr2);
 			if (!ret)
 				goto retry;
@@ -568,6 +580,8 @@ retry_private:
 			futex_hb_waiters_dec(hb2);
 			futex_hash_put(hb1);
 			futex_hash_put(hb2);
+			if (futex_hash_lock)
+				up_read(futex_hash_lock);
 			/*
 			 * Handle the case where the owner is in the middle of
 			 * exiting. Wait for the exit to complete otherwise
@@ -687,6 +701,23 @@ out_unlock:
 	double_unlock_hb(hb1, hb2);
 	wake_up_q(&wake_q);
 	futex_hb_waiters_dec(hb2);
+
+	/*
+	 * If there was no error in the process so far and we woke less than we
+	 * could have and hb changed then we try again in case we missed
+	 * someone.
+	 */
+	if (ret >= 0 &&
+	    !(task_count - nr_wake >= nr_requeue) &&
+	    (!futex_check_hb_valid(hb1) || !futex_check_hb_valid(hb2))) {
+		futex_hash_put(hb1);
+		futex_hash_put(hb2);
+		wake_q_init(&wake_q);
+		goto retry_private;
+	}
+	if (futex_hash_lock)
+		up_read(futex_hash_lock);
+
 	futex_hash_put(hb1);
 	futex_hash_put(hb2);
 	return ret ? ret : task_count;
@@ -783,8 +814,8 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 	struct rt_mutex_waiter rt_waiter;
 	struct futex_hash_bucket *hb;
 	union futex_key key2 = FUTEX_KEY_INIT;
-	struct futex_q q = futex_q_init;
 	struct rt_mutex_base *pi_mutex;
+	struct futex_q q;
 	int res, ret;
 
 	if (!IS_ENABLED(CONFIG_FUTEX_PI))
@@ -799,6 +830,8 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 	to = futex_setup_timer(abs_time, &timeout, flags,
 			       current->timer_slack_ns);
 
+hb_changed_again:
+	q = futex_q_init;
 	/*
 	 * The waiter is allocated on our stack, manipulated by the requeue
 	 * code while we sleep on uaddr.
@@ -841,6 +874,12 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 		spin_lock(&hb->lock);
 		ret = handle_early_requeue_pi_wakeup(hb, &q, to);
 		spin_unlock(&hb->lock);
+
+		if (ret == -EWOULDBLOCK && !futex_check_hb_valid(hb)) {
+			futex_hash_put(hb);
+			goto hb_changed_again;
+		}
+
 		futex_hash_put(hb);
 		break;
 
@@ -865,6 +904,8 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 		break;
 
 	case Q_REQUEUE_PI_DONE:
+		rt_waiter.hb = futex_hb_from_futex_q(&q);
+
 		/* Requeue completed. Current is 'pi_blocked_on' the rtmutex */
 		pi_mutex = &q.pi_state->pi_mutex;
 		ret = rt_mutex_wait_proxy_lock(pi_mutex, to, &rt_waiter);
@@ -876,6 +917,35 @@ int futex_wait_requeue_pi(u32 __user *uaddr, unsigned int flags,
 			ret = 0;
 
 		spin_lock(q.lock_ptr);
+		if (!futex_check_hb_valid(rt_waiter.hb)) {
+			bool uaddr_owner;
+
+			debug_rt_mutex_free_waiter(&rt_waiter);
+			/*
+			 * The HB changed under us after we were requeued on
+			 * uaddr2. We may have acquire the lock on the pi_state
+			 * but this the state that is seen on the current HB.
+			 * However, there could also be an UNLOCK_PI event
+			 * before and we own the lock based on uaddr2.
+			 * Unlock so the next waiter can do the same and
+			 * acquire the PI lock on uaddr2.
+			 */
+			reset_pi_state_owner(q.pi_state);
+
+			futex_unqueue_pi(&q);
+			spin_unlock(q.lock_ptr);
+			futex_hash_put(futex_hb_from_futex_q(&q));
+
+			if (to) {
+				hrtimer_cancel(&to->timer);
+				destroy_hrtimer_on_stack(&to->timer);
+			}
+			uaddr_owner = check_pi_lock_owner(uaddr2);
+			if (uaddr_owner)
+				return 0;
+
+			return futex_lock_pi(uaddr2, flags, abs_time, 0);
+		}
 		debug_rt_mutex_free_waiter(&rt_waiter);
 		/*
 		 * Fixup the pi_state owner and possibly acquire the lock if we

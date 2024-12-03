@@ -205,6 +205,9 @@ futex_setup_timer(ktime_t *time, struct hrtimer_sleeper *timeout,
 extern struct futex_hash_bucket *futex_hash(union futex_key *key);
 extern void futex_hash_put(struct futex_hash_bucket *hb);
 extern void futex_hash_get(struct futex_hash_bucket *hb);
+extern bool futex_check_hb_valid(struct futex_hash_bucket *hb);
+extern bool check_pi_lock_owner(u32 __user *uaddr);
+extern void reset_pi_state_owner(struct futex_pi_state *pi_state);
 
 static inline struct futex_hash_bucket *futex_hb_from_futex_q(struct futex_q *q)
 {

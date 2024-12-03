@@ -180,6 +180,7 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 		return ret;
 	}
 
+again_hb_change:
 	spin_lock(&hb->lock);
 
 	plist_for_each_entry_safe(this, next, &hb->chain, list) {
@@ -200,6 +201,16 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 	}
 
 	spin_unlock(&hb->lock);
+	/*
+	 * If there was no error, we woke less than we could have and the hb
+	 * changed then we try again.
+	 */
+	if (ret > 0 && ret < nr_wake && !futex_check_hb_valid(hb)) {
+		futex_hash_put(hb);
+		hb = futex_hash(&key);
+		if (futex_hb_waiters_pending(hb))
+			goto again_hb_change;
+	}
 	futex_hash_put(hb);
 	wake_up_q(&wake_q);
 	return ret;
@@ -261,7 +272,7 @@ int futex_wake_op(u32 __user *uaddr1, unsigned int flags, u32 __user *uaddr2,
 	union futex_key key1 = FUTEX_KEY_INIT, key2 = FUTEX_KEY_INIT;
 	struct futex_hash_bucket *hb1, *hb2;
 	struct futex_q *this, *next;
-	int ret, op_ret;
+	int ret, op_ret, op_woke;
 	DEFINE_WAKE_Q(wake_q);
 
 retry:
@@ -272,11 +283,19 @@ retry:
 	if (unlikely(ret != 0))
 		return ret;
 
+retry_hash:
 	hb1 = futex_hash(&key1);
 	hb2 = futex_hash(&key2);
 
 retry_private:
 	double_lock_hb(hb1, hb2);
+	if (!futex_check_hb_valid(hb1) || !futex_check_hb_valid(hb2)) {
+		double_unlock_hb(hb1, hb2);
+		futex_hash_put(hb1);
+		futex_hash_put(hb2);
+		goto retry_hash;
+	}
+
 	op_ret = futex_atomic_op_inuser(op, uaddr2);
 	if (unlikely(op_ret < 0)) {
 		double_unlock_hb(hb1, hb2);
@@ -305,6 +324,8 @@ retry_private:
 		goto retry;
 	}
 
+	op_woke = 0;
+retry_wake:
 	plist_for_each_entry_safe(this, next, &hb1->chain, list) {
 		if (futex_match (&this->key, &key1)) {
 			if (this->pi_state || this->rt_waiter) {
@@ -318,7 +339,6 @@ retry_private:
 	}
 
 	if (op_ret > 0) {
-		op_ret = 0;
 		plist_for_each_entry_safe(this, next, &hb2->chain, list) {
 			if (futex_match (&this->key, &key2)) {
 				if (this->pi_state || this->rt_waiter) {
@@ -326,19 +346,31 @@ retry_private:
 					goto out_unlock;
 				}
 				this->wake(&wake_q, this);
-				if (++op_ret >= nr_wake2)
+				if (++op_woke >= nr_wake2)
 					break;
 			}
 		}
-		ret += op_ret;
 	}
 
 out_unlock:
 	double_unlock_hb(hb1, hb2);
+	if (ret >= 0 &&
+	    (!(ret >= nr_wake) || !(op_woke >= nr_wake2)) &&
+	    (!futex_check_hb_valid(hb1) || !futex_check_hb_valid(hb2))) {
+
+		futex_hash_put(hb1);
+		futex_hash_put(hb2);
+		hb1 = futex_hash(&key1);
+		hb2 = futex_hash(&key2);
+		double_lock_hb(hb1, hb2);
+		goto retry_wake;
+	}
+
 	wake_up_q(&wake_q);
+
 	futex_hash_put(hb1);
 	futex_hash_put(hb2);
-	return ret;
+	return ret < 0 ? ret : ret + op_woke;
 }
 
 static long futex_wait_restart(struct restart_block *restart);
