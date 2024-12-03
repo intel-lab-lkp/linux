@@ -971,11 +971,13 @@ int cb_pci_attach(gpib_board_t *board, const gpib_board_config_t *config)
 	switch (cb_priv->pci_chip) {
 	case PCI_CHIP_AMCC_S5933:
 		cb_priv->amcc_iobase = pci_resource_start(cb_priv->pci_device, 0);
-		nec_priv->iobase = (void *)(pci_resource_start(cb_priv->pci_device, 1));
+		nec_priv->iobase = ioremap(pci_resource_start(cb_priv->pci_device, 1),
+					   pci_resource_len(cb_priv->pci_device, 1));
 		cb_priv->fifo_iobase = pci_resource_start(cb_priv->pci_device, 2);
 		break;
 	case PCI_CHIP_QUANCOM:
-		nec_priv->iobase = (void *)(pci_resource_start(cb_priv->pci_device, 0));
+		nec_priv->iobase = ioremap(pci_resource_start(cb_priv->pci_device, 0),
+					   pci_resource_len(cb_priv->pci_device, 0));
 		cb_priv->fifo_iobase = (unsigned long)nec_priv->iobase;
 		break;
 	default:

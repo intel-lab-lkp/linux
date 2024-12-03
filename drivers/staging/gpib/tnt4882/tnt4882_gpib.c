@@ -1400,7 +1400,8 @@ static int ni_isa_attach_common(gpib_board_t *board, const gpib_board_config_t *
 	struct tnt4882_priv *tnt_priv;
 	struct nec7210_priv *nec_priv;
 	int isr_flags = 0;
-	void *iobase;
+	resource_size_t iobase;
+	unsigned long ibbase;
 	int irq;
 
 	board->status = 0;
@@ -1427,18 +1428,19 @@ static int ni_isa_attach_common(gpib_board_t *board, const gpib_board_config_t *
 		if (retval < 0)
 			return retval;
 		tnt_priv->pnp_dev = dev;
-		iobase = (void *)(pnp_port_start(dev, 0));
+		iobase = pnp_port_start(dev, 0);
 		irq = pnp_irq(dev, 0);
 	} else {
-		iobase = config->ibbase;
+		ibbase = (unsigned long)config->ibbase;
+		iobase = ibbase;
 		irq = config->ibirq;
 	}
 	// allocate ioports
-	if (!request_region((unsigned long)(iobase), atgpib_iosize, "atgpib")) {
+	if (!request_region(iobase, atgpib_iosize, "atgpib")) {
 		pr_err("tnt4882: failed to allocate ioports\n");
 		return -1;
 	}
-	nec_priv->iobase = iobase;
+	nec_priv->iobase = ioremap(iobase, pnp_port_len(tnt_priv->pnp_dev, 0));
 
 	// get irq
 	if (request_irq(irq, tnt4882_interrupt, isr_flags, "atgpib", board)) {
