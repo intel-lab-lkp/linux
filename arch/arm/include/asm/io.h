@@ -254,13 +254,6 @@ void __iomem *pci_remap_cfgspace(resource_size_t res_cookie, size_t size);
 #endif
 
 /*
- * String version of IO memory access ops:
- */
-extern void _memcpy_fromio(void *, const volatile void __iomem *, size_t);
-extern void _memcpy_toio(volatile void __iomem *, const void *, size_t);
-extern void _memset_io(volatile void __iomem *, int, size_t);
-
-/*
  *  Memory access primitives
  *  ------------------------
  *
@@ -322,10 +315,6 @@ static inline void memcpy_toio(volatile void __iomem *to, const void *from,
 }
 #define memcpy_toio(to,from,count) memcpy_toio(to,from,count)
 
-#else
-#define memset_io(c,v,l)	_memset_io(c,(v),(l))
-#define memcpy_fromio(a,c,l)	_memcpy_fromio((a),c,(l))
-#define memcpy_toio(c,a,l)	_memcpy_toio(c,(a),(l))
 #endif
 
 #endif	/* readl */
