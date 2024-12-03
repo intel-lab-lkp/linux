@@ -1297,14 +1297,7 @@ static int rtsn_probe(struct platform_device *pdev)
 	ndev->netdev_ops = &rtsn_netdev_ops;
 	ndev->ethtool_ops = &rtsn_ethtool_ops;
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "gptp");
-	if (!res) {
-		dev_err(&pdev->dev, "Can't find gptp resource\n");
-		ret = -EINVAL;
-		goto error_free;
-	}
-
-	priv->ptp_priv->addr = devm_ioremap_resource(&pdev->dev, res);
+	priv->ptp_priv->addr = devm_platform_ioremap_resource_byname(pdev, "gptp");
 	if (IS_ERR(priv->ptp_priv->addr)) {
 		ret = PTR_ERR(priv->ptp_priv->addr);
 		goto error_free;

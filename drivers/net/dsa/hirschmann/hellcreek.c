@@ -1932,7 +1932,6 @@ static int hellcreek_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct hellcreek *hellcreek;
-	struct resource *res;
 	int ret, i;
 
 	hellcreek = devm_kzalloc(dev, sizeof(*hellcreek), GFP_KERNEL);
@@ -1982,23 +1981,11 @@ static int hellcreek_probe(struct platform_device *pdev)
 
 	hellcreek->dev = dev;
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "tsn");
-	if (!res) {
-		dev_err(dev, "No memory region provided!\n");
-		return -ENODEV;
-	}
-
-	hellcreek->base = devm_ioremap_resource(dev, res);
+	hellcreek->base = devm_platform_ioremap_resource_byname(pdev, "tsn");
 	if (IS_ERR(hellcreek->base))
 		return PTR_ERR(hellcreek->base);
 
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ptp");
-	if (!res) {
-		dev_err(dev, "No PTP memory region provided!\n");
-		return -ENODEV;
-	}
-
-	hellcreek->ptp_base = devm_ioremap_resource(dev, res);
+	hellcreek->ptp_base = devm_platform_ioremap_resource_byname(pdev, "ptp");
 	if (IS_ERR(hellcreek->ptp_base))
 		return PTR_ERR(hellcreek->ptp_base);
 
