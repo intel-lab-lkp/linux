@@ -86,6 +86,7 @@ int class_compat_create_link(struct class_compat *cls, struct device *dev,
 			     struct device *device_link);
 void class_compat_remove_link(struct class_compat *cls, struct device *dev,
 			      struct device *device_link);
+struct kobject *class_pseudo_register(const char *name);
 
 void class_dev_iter_init(struct class_dev_iter *iter, const struct class *class,
 			 const struct device *start, const struct device_type *type);

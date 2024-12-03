@@ -579,6 +579,20 @@ struct class_compat *class_compat_register(const char *name)
 EXPORT_SYMBOL_GPL(class_compat_register);
 
 /**
+ * class_pseudo_register - create a pseudo class entry in sysfs
+ * @name: the name of the child
+ *
+ * Helper for creating a pseudo class in sysfs, keeps class_kset private
+ *
+ * Returns: the created kobject
+ */
+struct kobject *class_pseudo_register(const char *name)
+{
+	return kobject_create_and_add(name, &class_kset->kobj);
+}
+EXPORT_SYMBOL_GPL(class_pseudo_register);
+
+/**
  * class_compat_unregister - unregister a compatibility class
  * @cls: the class to unregister
  */
