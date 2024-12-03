@@ -56,4 +56,7 @@ extern void elf_fdpic_arch_lay_out_mm(struct elf_fdpic_params *exec_params,
 				      unsigned long *start_brk);
 #endif
 
+extern int elf_arch_finalize_exec(struct elf_fdpic_params *exec_params,
+				  struct elf_fdpic_params *interp_params);
+
 #endif /* _LINUX_ELF_FDPIC_H */

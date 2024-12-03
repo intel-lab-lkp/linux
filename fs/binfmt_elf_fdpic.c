@@ -175,6 +175,12 @@ static int elf_fdpic_fetch_phdrs(struct elf_fdpic_params *params,
 	return 0;
 }
 
+int __weak elf_arch_finalize_exec(struct elf_fdpic_params *exec_params,
+				  struct elf_fdpic_params *interp_params)
+{
+	return 0;
+}
+
 /*****************************************************************************/
 /*
  * load an fdpic binary into various bits of memory
@@ -456,6 +462,10 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 	ELF_FDPIC_PLAT_INIT(regs, exec_params.map_addr, interp_params.map_addr,
 			    dynaddr);
 #endif
+
+	retval = elf_arch_finalize_exec(&exec_params, &interp_params);
+	if (retval)
+		goto error;
 
 	finalize_exec(bprm);
 	/* everything is now ready... get the userspace context ready to roll */
