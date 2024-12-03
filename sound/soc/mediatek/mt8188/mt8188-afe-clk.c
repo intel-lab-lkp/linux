@@ -587,12 +587,16 @@ int mt8188_afe_enable_reg_rw_clk(struct mtk_base_afe *afe)
 	mt8188_afe_enable_clk(afe, afe_priv->clk[MT8188_CLK_AUD_A1SYS_HP]);
 	mt8188_afe_enable_clk(afe, afe_priv->clk[MT8188_CLK_AUD_A1SYS]);
 
+	mt8188_afe_enable_clk(afe, afe_priv->clk[MT8188_CLK_APMIXED_APLL1]);
+
 	return 0;
 }
 
 int mt8188_afe_disable_reg_rw_clk(struct mtk_base_afe *afe)
 {
 	struct mt8188_afe_private *afe_priv = afe->platform_priv;
+
+	mt8188_afe_disable_clk(afe, afe_priv->clk[MT8188_CLK_APMIXED_APLL1]);
 
 	mt8188_afe_disable_clk(afe, afe_priv->clk[MT8188_CLK_AUD_A1SYS]);
 	mt8188_afe_disable_clk(afe, afe_priv->clk[MT8188_CLK_AUD_A1SYS_HP]);
