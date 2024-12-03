@@ -379,11 +379,14 @@ static int acpi_fan_probe(struct platform_device *pdev)
 				   "device");
 	if (result) {
 		dev_err(&pdev->dev, "Failed to create sysfs link 'device'\n");
-		goto err_end;
+		goto err_unregister;
 	}
 
 	return 0;
 
+err_unregister:
+	sysfs_remove_link(&pdev->dev.kobj, "thermal_cooling");
+	thermal_cooling_device_unregister(cdev);
 err_end:
 	if (fan->acpi4)
 		acpi_fan_delete_attributes(device);
