@@ -121,6 +121,37 @@ static int fsl_ldb_attach(struct drm_bridge *bridge,
 				 bridge, flags);
 }
 
+static int fsl_ldb_atomic_check(struct drm_bridge *bridge,
+				struct drm_bridge_state *bridge_state,
+				struct drm_crtc_state *crtc_state,
+				struct drm_connector_state *connector_state)
+{
+	struct fsl_ldb *fsl_ldb = to_fsl_ldb(bridge);
+	const struct drm_display_mode *mode = &crtc_state->mode;
+	unsigned long requested_freq =
+		fsl_ldb_link_frequency(fsl_ldb, mode->clock);
+	unsigned long freq = clk_round_rate(fsl_ldb->clk, requested_freq);
+	unsigned long configured_freq = clk_get_rate(fsl_ldb->clk);
+
+	if ((freq != configured_freq) && (freq != requested_freq)) {
+		/*
+		 * this will lead to flicker and incomplete lines on
+		 * the attached display, adjust the CRTC clock
+		 * accordingly.
+		 */
+		struct drm_display_mode *adjusted_mode = &crtc_state->adjusted_mode;
+		int pclk = freq / fsl_ldb_link_frequency(fsl_ldb, 1);
+
+		dev_warn(fsl_ldb->dev, "Adjusted pixel clk to match LDB clk (%d kHz -> %d kHz)!\n",
+			 adjusted_mode->clock, pclk);
+
+		adjusted_mode->clock = pclk;
+		adjusted_mode->crtc_clock = pclk;
+	}
+
+	return 0;
+}
+
 static void fsl_ldb_atomic_enable(struct drm_bridge *bridge,
 				  struct drm_bridge_state *old_bridge_state)
 {
@@ -280,6 +311,7 @@ fsl_ldb_mode_valid(struct drm_bridge *bridge,
 
 static const struct drm_bridge_funcs funcs = {
 	.attach = fsl_ldb_attach,
+	.atomic_check = fsl_ldb_atomic_check,
 	.atomic_enable = fsl_ldb_atomic_enable,
 	.atomic_disable = fsl_ldb_atomic_disable,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
