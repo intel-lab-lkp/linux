@@ -126,10 +126,24 @@ static void print_summary(void)
 # define PR_FUTEX_HASH_SET_SLOTS	1
 # define PR_FUTEX_HASH_GET_SLOTS	2
 
+static unsigned int get_cpu_bit(cpu_set_t *set, size_t set_size, unsigned int r_cpu)
+{
+	unsigned int cpu = 0;
+
+	do {
+		if (CPU_ISSET_S(cpu, set_size, set)) {
+			if (!r_cpu)
+				return cpu;
+			r_cpu--;
+		}
+		cpu++;
+	} while (1);
+}
+
 int bench_futex_hash(int argc, const char **argv)
 {
 	int ret = 0;
-	cpu_set_t *cpuset;
+	cpu_set_t *cpuset, cpuset_;
 	struct sigaction act;
 	unsigned int i;
 	pthread_attr_t thread_attr;
@@ -167,8 +181,12 @@ int bench_futex_hash(int argc, const char **argv)
 			err(EXIT_FAILURE, "mlockall");
 	}
 
+	ret = pthread_getaffinity_np(pthread_self(), sizeof(cpuset_), &cpuset_);
+	BUG_ON(ret);
+	nrcpus = CPU_COUNT(&cpuset_);
+
 	if (!params.nthreads) /* default to the number of CPUs */
-		params.nthreads = perf_cpu_map__nr(cpu);
+		params.nthreads = nrcpus;
 
 	worker = calloc(params.nthreads, sizeof(*worker));
 	if (!worker)
@@ -189,10 +207,9 @@ int bench_futex_hash(int argc, const char **argv)
 	pthread_attr_init(&thread_attr);
 	gettimeofday(&bench__start, NULL);
 
-	nrcpus = cpu__max_cpu().cpu;
-	cpuset = CPU_ALLOC(nrcpus);
+	cpuset = CPU_ALLOC(4096);
 	BUG_ON(!cpuset);
-	size = CPU_ALLOC_SIZE(nrcpus);
+	size = CPU_ALLOC_SIZE(4096);
 
 	for (i = 0; i < params.nthreads; i++) {
 		worker[i].tid = i;
@@ -202,7 +219,8 @@ int bench_futex_hash(int argc, const char **argv)
 
 		CPU_ZERO_S(size, cpuset);
 
-		CPU_SET_S(perf_cpu_map__cpu(cpu, i % perf_cpu_map__nr(cpu)).cpu, size, cpuset);
+		CPU_SET_S(get_cpu_bit(&cpuset_, sizeof(cpuset_), i % nrcpus), size, cpuset);
+
 		ret = pthread_attr_setaffinity_np(&thread_attr, size, cpuset);
 		if (ret) {
 			CPU_FREE(cpuset);
