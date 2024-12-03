@@ -1141,9 +1141,11 @@ static int altera_tse_probe(struct platform_device *pdev)
 	struct mii_bus *pcs_bus;
 	struct net_device *ndev;
 	void __iomem *descmap;
+	struct device *dev;
 	int ret = -ENODEV;
 
-	ndev = alloc_etherdev(sizeof(struct altera_tse_private));
+	dev = &pdev->dev;
+	ndev = devm_alloc_etherdev(dev, sizeof(struct altera_tse_private));
 	if (!ndev) {
 		dev_err(&pdev->dev, "Could not allocate network device\n");
 		return -ENODEV;
@@ -1163,7 +1165,7 @@ static int altera_tse_probe(struct platform_device *pdev)
 		/* Get the mapped address to the SGDMA descriptor memory */
 		ret = request_and_map(pdev, "s1", &dma_res, &descmap);
 		if (ret)
-			goto err_free_netdev;
+			return ret;
 
 		/* Start of that memory is for transmit descriptors */
 		priv->tx_dma_desc = descmap;
@@ -1182,26 +1184,24 @@ static int altera_tse_probe(struct platform_device *pdev)
 		if (upper_32_bits(priv->rxdescmem_busaddr)) {
 			dev_dbg(priv->device,
 				"SGDMA bus addresses greater than 32-bits\n");
-			ret = -EINVAL;
-			goto err_free_netdev;
+			return -EINVAL;
 		}
 		if (upper_32_bits(priv->txdescmem_busaddr)) {
 			dev_dbg(priv->device,
 				"SGDMA bus addresses greater than 32-bits\n");
-			ret = -EINVAL;
-			goto err_free_netdev;
+			return -EINVAL;
 		}
 	} else if (priv->dmaops &&
 		   priv->dmaops->altera_dtype == ALTERA_DTYPE_MSGDMA) {
 		ret = request_and_map(pdev, "rx_resp", &dma_res,
 				      &priv->rx_dma_resp);
 		if (ret)
-			goto err_free_netdev;
+			return ret;
 
 		ret = request_and_map(pdev, "tx_desc", &dma_res,
 				      &priv->tx_dma_desc);
 		if (ret)
-			goto err_free_netdev;
+			return ret;
 
 		priv->txdescmem = resource_size(dma_res);
 		priv->txdescmem_busaddr = dma_res->start;
@@ -1209,44 +1209,40 @@ static int altera_tse_probe(struct platform_device *pdev)
 		ret = request_and_map(pdev, "rx_desc", &dma_res,
 				      &priv->rx_dma_desc);
 		if (ret)
-			goto err_free_netdev;
+			return ret;
 
 		priv->rxdescmem = resource_size(dma_res);
 		priv->rxdescmem_busaddr = dma_res->start;
 
-	} else {
-		ret = -ENODEV;
-		goto err_free_netdev;
-	}
+	} else
+		return -ENODEV;
 
 	if (!dma_set_mask(priv->device, DMA_BIT_MASK(priv->dmaops->dmamask))) {
 		dma_set_coherent_mask(priv->device,
 				      DMA_BIT_MASK(priv->dmaops->dmamask));
 	} else if (!dma_set_mask(priv->device, DMA_BIT_MASK(32))) {
 		dma_set_coherent_mask(priv->device, DMA_BIT_MASK(32));
-	} else {
-		ret = -EIO;
-		goto err_free_netdev;
-	}
+	} else
+		return -EIO;
 
 	/* MAC address space */
 	ret = request_and_map(pdev, "control_port", &control_port,
 			      (void __iomem **)&priv->mac_dev);
 	if (ret)
-		goto err_free_netdev;
+		return ret;
 
 	/* xSGDMA Rx Dispatcher address space */
 	ret = request_and_map(pdev, "rx_csr", &dma_res,
 			      &priv->rx_dma_csr);
 	if (ret)
-		goto err_free_netdev;
+		return ret;
 
 
 	/* xSGDMA Tx Dispatcher address space */
 	ret = request_and_map(pdev, "tx_csr", &dma_res,
 			      &priv->tx_dma_csr);
 	if (ret)
-		goto err_free_netdev;
+		return ret;
 
 	memset(&pcs_regmap_cfg, 0, sizeof(pcs_regmap_cfg));
 	memset(&mrc, 0, sizeof(mrc));
@@ -1274,10 +1270,9 @@ static int altera_tse_probe(struct platform_device *pdev)
 	/* Create a regmap for the PCS so that it can be used by the PCS driver */
 	pcs_regmap = devm_regmap_init_mmio(&pdev->dev, priv->pcs_base,
 					   &pcs_regmap_cfg);
-	if (IS_ERR(pcs_regmap)) {
-		ret = PTR_ERR(pcs_regmap);
-		goto err_free_netdev;
-	}
+	if (IS_ERR(pcs_regmap))
+		return PTR_ERR(pcs_regmap);
+
 	mrc.regmap = pcs_regmap;
 	mrc.parent = &pdev->dev;
 	mrc.valid_addr = 0x0;
@@ -1287,31 +1282,27 @@ static int altera_tse_probe(struct platform_device *pdev)
 	priv->rx_irq = platform_get_irq_byname(pdev, "rx_irq");
 	if (priv->rx_irq == -ENXIO) {
 		dev_err(&pdev->dev, "cannot obtain Rx IRQ\n");
-		ret = -ENXIO;
-		goto err_free_netdev;
+		return -ENXIO;
 	}
 
 	/* Tx IRQ */
 	priv->tx_irq = platform_get_irq_byname(pdev, "tx_irq");
 	if (priv->tx_irq == -ENXIO) {
 		dev_err(&pdev->dev, "cannot obtain Tx IRQ\n");
-		ret = -ENXIO;
-		goto err_free_netdev;
+		return -ENXIO;
 	}
 
 	/* get FIFO depths from device tree */
 	if (of_property_read_u32(pdev->dev.of_node, "rx-fifo-depth",
 				 &priv->rx_fifo_depth)) {
 		dev_err(&pdev->dev, "cannot obtain rx-fifo-depth\n");
-		ret = -ENXIO;
-		goto err_free_netdev;
+		return -ENXIO;
 	}
 
 	if (of_property_read_u32(pdev->dev.of_node, "tx-fifo-depth",
 				 &priv->tx_fifo_depth)) {
 		dev_err(&pdev->dev, "cannot obtain tx-fifo-depth\n");
-		ret = -ENXIO;
-		goto err_free_netdev;
+		return -ENXIO;
 	}
 
 	/* get hash filter settings for this instance */
@@ -1354,7 +1345,7 @@ static int altera_tse_probe(struct platform_device *pdev)
 	ret = altera_tse_phy_get_addr_mdio_create(ndev);
 
 	if (ret)
-		goto err_free_netdev;
+		return ret;
 
 	/* initialize netdev */
 	ndev->mem_start = control_port->start;
@@ -1450,8 +1441,6 @@ err_init_pcs:
 err_register_netdev:
 	netif_napi_del(&priv->napi);
 	altera_tse_mdio_destroy(ndev);
-err_free_netdev:
-	free_netdev(ndev);
 	return ret;
 }
 
@@ -1467,8 +1456,6 @@ static void altera_tse_remove(struct platform_device *pdev)
 	unregister_netdev(ndev);
 	phylink_destroy(priv->phylink);
 	lynx_pcs_destroy(priv->pcs);
-
-	free_netdev(ndev);
 }
 
 static const struct altera_dmaops altera_dtype_sgdma = {
