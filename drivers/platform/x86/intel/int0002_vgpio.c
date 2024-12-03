@@ -102,7 +102,7 @@ static void int0002_irq_mask(struct irq_data *data)
 static int int0002_irq_set_wake(struct irq_data *data, unsigned int on)
 {
 	struct gpio_chip *chip = irq_data_get_irq_chip_data(data);
-	struct int0002_data *int0002 = container_of(chip, struct int0002_data, chip);
+	struct int0002_data *int0002 = gpiochip_get_data(chip);
 
 	/*
 	 * Applying of the wakeup flag to our parent IRQ is delayed till system
@@ -211,7 +211,7 @@ static int int0002_probe(struct platform_device *pdev)
 	girq->default_type = IRQ_TYPE_NONE;
 	girq->handler = handle_edge_irq;
 
-	ret = devm_gpiochip_add_data(dev, chip, NULL);
+	ret = devm_gpiochip_add_data(dev, chip, int0002);
 	if (ret) {
 		dev_err(dev, "Error adding gpio chip: %d\n", ret);
 		return ret;
