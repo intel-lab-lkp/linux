@@ -1098,33 +1098,11 @@ static const struct phylink_mac_ops alt_tse_phylink_ops = {
 	.mac_select_pcs = alt_tse_select_pcs,
 };
 
-static int request_and_map(struct platform_device *pdev, const char *name,
-			   struct resource **res, void __iomem **ptr)
+static void __iomem *request_and_map(struct platform_device *pdev,
+				     const char *name, struct resource **res)
 {
-	struct device *device = &pdev->dev;
-	struct resource *region;
-
 	*res = platform_get_resource_byname(pdev, IORESOURCE_MEM, name);
-	if (*res == NULL) {
-		dev_err(device, "resource %s not defined\n", name);
-		return -ENODEV;
-	}
-
-	region = devm_request_mem_region(device, (*res)->start,
-					 resource_size(*res), dev_name(device));
-	if (region == NULL) {
-		dev_err(device, "unable to request %s\n", name);
-		return -EBUSY;
-	}
-
-	*ptr = devm_ioremap(device, region->start,
-				    resource_size(region));
-	if (*ptr == NULL) {
-		dev_err(device, "ioremap of %s failed!", name);
-		return -ENOMEM;
-	}
-
-	return 0;
+	return devm_ioremap_resource(&pdev->dev, *res);
 }
 
 /* Probe Altera TSE MAC device
@@ -1163,9 +1141,9 @@ static int altera_tse_probe(struct platform_device *pdev)
 	if (priv->dmaops &&
 	    priv->dmaops->altera_dtype == ALTERA_DTYPE_SGDMA) {
 		/* Get the mapped address to the SGDMA descriptor memory */
-		ret = request_and_map(pdev, "s1", &dma_res, &descmap);
-		if (ret)
-			return ret;
+		descmap = request_and_map(pdev, "s1", &dma_res);
+		if (IS_ERR(descmap))
+			return PTR_ERR(descmap);
 
 		/* Start of that memory is for transmit descriptors */
 		priv->tx_dma_desc = descmap;
@@ -1193,23 +1171,20 @@ static int altera_tse_probe(struct platform_device *pdev)
 		}
 	} else if (priv->dmaops &&
 		   priv->dmaops->altera_dtype == ALTERA_DTYPE_MSGDMA) {
-		ret = request_and_map(pdev, "rx_resp", &dma_res,
-				      &priv->rx_dma_resp);
-		if (ret)
-			return ret;
+		priv->rx_dma_resp = request_and_map(pdev, "rx_resp", &dma_res);
+		if (IS_ERR(priv->rx_dma_resp))
+			return PTR_ERR(priv->rx_dma_resp);
 
-		ret = request_and_map(pdev, "tx_desc", &dma_res,
-				      &priv->tx_dma_desc);
-		if (ret)
-			return ret;
+		priv->tx_dma_desc = request_and_map(pdev, "tx_desc", &dma_res);
+		if (IS_ERR(priv->tx_dma_desc))
+			return PTR_ERR(priv->tx_dma_desc);
 
 		priv->txdescmem = resource_size(dma_res);
 		priv->txdescmem_busaddr = dma_res->start;
 
-		ret = request_and_map(pdev, "rx_desc", &dma_res,
-				      &priv->rx_dma_desc);
-		if (ret)
-			return ret;
+		priv->rx_dma_desc = request_and_map(pdev, "rx_desc", &dma_res);
+		if (IS_ERR(priv->rx_dma_desc))
+			return PTR_ERR(priv->rx_dma_desc);
 
 		priv->rxdescmem = resource_size(dma_res);
 		priv->rxdescmem_busaddr = dma_res->start;
@@ -1226,23 +1201,19 @@ static int altera_tse_probe(struct platform_device *pdev)
 		return -EIO;
 
 	/* MAC address space */
-	ret = request_and_map(pdev, "control_port", &control_port,
-			      (void __iomem **)&priv->mac_dev);
-	if (ret)
-		return ret;
+	priv->mac_dev = request_and_map(pdev, "control_port", &control_port);
+	if (IS_ERR(priv->mac_dev))
+		return PTR_ERR(priv->mac_dev);
 
 	/* xSGDMA Rx Dispatcher address space */
-	ret = request_and_map(pdev, "rx_csr", &dma_res,
-			      &priv->rx_dma_csr);
-	if (ret)
-		return ret;
-
+	priv->rx_dma_csr = request_and_map(pdev, "rx_csr", &dma_res);
+	if (IS_ERR(priv->rx_dma_csr))
+		return PTR_ERR(priv->rx_dma_csr);
 
 	/* xSGDMA Tx Dispatcher address space */
-	ret = request_and_map(pdev, "tx_csr", &dma_res,
-			      &priv->tx_dma_csr);
-	if (ret)
-		return ret;
+	priv->tx_dma_csr = request_and_map(pdev, "tx_csr", &dma_res);
+	if (IS_ERR(priv->tx_dma_csr))
+		return PTR_ERR(priv->tx_dma_csr);
 
 	memset(&pcs_regmap_cfg, 0, sizeof(pcs_regmap_cfg));
 	memset(&mrc, 0, sizeof(mrc));
@@ -1251,8 +1222,8 @@ static int altera_tse_probe(struct platform_device *pdev)
 	 * address space, but if it's not the case, we fallback to the mdiophy0
 	 * from the MAC's address space
 	 */
-	ret = request_and_map(pdev, "pcs", &pcs_res, &priv->pcs_base);
-	if (ret) {
+	priv->pcs_base = request_and_map(pdev, "pcs", &pcs_res);
+	if (IS_ERR(priv->pcs_base)) {
 		/* If we can't find a dedicated resource for the PCS, fallback
 		 * to the internal PCS, that has a different address stride
 		 */
