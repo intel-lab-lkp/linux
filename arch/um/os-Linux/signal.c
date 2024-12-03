@@ -55,7 +55,15 @@ static void sig_handler_common(int sig, struct siginfo *si, mcontext_t *mc)
 	struct uml_pt_regs r;
 	int save_errno = errno;
 
-	r.is_user = 0;
+#ifndef CONFIG_MMU
+	memset(&r, 0, sizeof(r));
+	/* mark is_user=1 when the IP is from userspace code. */
+	if (mc && (REGS_IP(mc->gregs) > uml_reserved
+		   && REGS_IP(mc->gregs) < high_physmem))
+		r.is_user = 1;
+	else
+#endif
+		r.is_user = 0;
 	if (sig == SIGSEGV) {
 		/* For segfaults, we want the data from the sigcontext. */
 		get_regs_from_mc(&r, mc);
@@ -69,6 +77,12 @@ static void sig_handler_common(int sig, struct siginfo *si, mcontext_t *mc)
 	(*sig_info[sig])(sig, si, &r);
 
 	errno = save_errno;
+
+#ifndef CONFIG_MMU
+	/* force handle signals after rt_sigreturn() */
+	if (r.is_user && sig == SIGSEGV)
+		mc_set_regs_ip_relay(mc);
+#endif
 }
 
 /*
