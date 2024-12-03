@@ -1109,6 +1109,14 @@ out:
 }
 EXPORT_SYMBOL(padata_alloc_shell);
 
+static void __padata_put_pd(struct rcu_head *head)
+{
+	struct parallel_data *pd = container_of(head, struct parallel_data, rcu);
+
+	if (refcount_dec_and_test(&pd->refcnt))
+		padata_free_pd(pd);
+}
+
 /**
  * padata_free_shell - free a padata shell
  *
@@ -1124,9 +1132,8 @@ void padata_free_shell(struct padata_shell *ps)
 	mutex_lock(&ps->pinst->lock);
 	list_del(&ps->list);
 	pd = rcu_dereference_protected(ps->pd, 1);
-	if (refcount_dec_and_test(&pd->refcnt))
-		padata_free_pd(pd);
 	mutex_unlock(&ps->pinst->lock);
+	call_rcu(&pd->rcu, __padata_put_pd);
 
 	kfree(ps);
 }

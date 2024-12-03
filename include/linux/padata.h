@@ -103,6 +103,7 @@ struct parallel_data {
 	int				cpu;
 	struct padata_cpumask		cpumask;
 	struct work_struct		reorder_work;
+	struct rcu_head			rcu;
 	spinlock_t                      ____cacheline_aligned lock;
 };
 
