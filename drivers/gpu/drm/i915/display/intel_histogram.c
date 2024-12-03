@@ -68,6 +68,26 @@ static void intel_histogram_handle_int_work(struct work_struct *work)
 		     DPST_CTL_BIN_REG_FUNC_SEL | DPST_CTL_BIN_REG_MASK, 0);
 	for (retry = 0; retry < HISTOGRAM_BIN_READ_RETRY_COUNT; retry++) {
 		if (intel_histogram_get_data(intel_crtc)) {
+			u32 *data;
+			u32 size;
+			struct drm_histogram *hist;
+
+			size = sizeof(u32) * sizeof(histogram->bin_data);
+			data = kzalloc(sizeof(data) * sizeof(histogram->bin_data), GFP_KERNEL);
+			if (!data)
+				return;
+			memcpy(histogram->bin_data, data, size);
+			hist = kzalloc(sizeof(struct drm_histogram), GFP_KERNEL);
+			if (!hist)
+				return;
+			hist->data_ptr = *data;
+			hist->nr_elements = sizeof(histogram->bin_data);
+
+			drm_property_replace_global_blob(display->drm,
+				&intel_crtc->base.state->histogram_data,
+				sizeof(struct drm_histogram),
+				hist, &intel_crtc->base.base,
+				intel_crtc->base.histogram_data_property);
 			/* Notify user for Histogram rediness */
 			if (kobject_uevent_env(&display->drm->primary->kdev->kobj,
 					       KOBJ_CHANGE, histogram_event))

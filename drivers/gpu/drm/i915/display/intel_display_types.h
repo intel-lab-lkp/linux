@@ -1306,6 +1306,8 @@ struct intel_crtc_state {
 
 	/* LOBF flag */
 	bool has_lobf;
+
+	bool histogram_updated;
 };
 
 enum intel_pipe_crc_source {
