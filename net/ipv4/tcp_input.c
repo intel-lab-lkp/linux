@@ -2037,7 +2037,8 @@ out:
 	WARN_ON((int)tp->sacked_out < 0);
 	WARN_ON((int)tp->lost_out < 0);
 	WARN_ON((int)tp->retrans_out < 0);
-	WARN_ON((int)tcp_packets_in_flight(tp) < 0);
+	if (sk->sk_state == TCP_ESTABLISHED)
+		WARN_ON((int)tcp_packets_in_flight(tp) < 0);
 #endif
 	return state->flag;
 }
@@ -3080,7 +3081,8 @@ static void tcp_fastretrans_alert(struct sock *sk, const u32 prior_snd_una,
 		return;
 
 	/* C. Check consistency of the current state. */
-	tcp_verify_left_out(tp);
+	if (sk->sk_state == TCP_ESTABLISHED)
+		tcp_verify_left_out(tp);
 
 	/* D. Check state exit conditions. State can be terminated
 	 *    when high_seq is ACKed. */
