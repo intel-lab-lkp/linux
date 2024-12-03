@@ -74,6 +74,12 @@ patternProperties:
     description:
       This is the ICSSG control region.
 
+  "^pcie-ctrl@[0-9a-f]+$":
+    type: object
+    $ref: /schemas/mfd/syscon.yaml#
+    description:
+      This is the PCIe control region.
+
 required:
   - compatible
   - reg
