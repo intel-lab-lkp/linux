@@ -436,14 +436,15 @@ static long udmabuf_create(struct miscdevice *device,
 			goto err;
 		}
 
+		inode_lock_shared(memfd->f_inode);
 		ret = check_memfd_seals(memfd);
-		if (ret < 0) {
-			fput(memfd);
-			goto err;
-		}
+		if (ret)
+			goto out_unlock;
 
 		ret = udmabuf_pin_folios(ubuf, memfd, list[i].offset,
 					 list[i].size, folios);
+out_unlock:
+		inode_unlock_shared(memfd->f_inode);
 		fput(memfd);
 		if (ret)
 			goto err;
