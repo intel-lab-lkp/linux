@@ -804,7 +804,6 @@ struct hci_conn_params {
 extern struct list_head hci_dev_list;
 extern struct list_head hci_cb_list;
 extern rwlock_t hci_dev_list_lock;
-extern struct mutex hci_cb_list_lock;
 
 #define hci_dev_set_flag(hdev, nr)             set_bit((nr), (hdev)->dev_flags)
 #define hci_dev_clear_flag(hdev, nr)           clear_bit((nr), (hdev)->dev_flags)
@@ -2029,12 +2028,18 @@ static inline void hci_connect_cfm(struct hci_conn *conn, __u8 status)
 {
 	struct hci_cb *cb;
 
-	mutex_lock(&hci_cb_list_lock);
-	list_for_each_entry(cb, &hci_cb_list, list) {
-		if (cb->connect_cfm)
-			cb->connect_cfm(conn, status);
+	rcu_read_lock();
+	list_for_each_entry_rcu(cb, &hci_cb_list, list) {
+		if (cb->connect_cfm) {
+			struct hci_cb cpy = *cb;
+
+			/* Callback may block so release RCU read lock */
+			rcu_read_unlock();
+			cpy.connect_cfm(conn, status);
+			rcu_read_lock();
+		}
 	}
-	mutex_unlock(&hci_cb_list_lock);
+	rcu_read_unlock();
 
 	if (conn->connect_cfm_cb)
 		conn->connect_cfm_cb(conn, status);
@@ -2044,12 +2049,18 @@ static inline void hci_disconn_cfm(struct hci_conn *conn, __u8 reason)
 {
 	struct hci_cb *cb;
 
-	mutex_lock(&hci_cb_list_lock);
+	rcu_read_lock();
 	list_for_each_entry(cb, &hci_cb_list, list) {
-		if (cb->disconn_cfm)
-			cb->disconn_cfm(conn, reason);
+		if (cb->disconn_cfm) {
+			struct hci_cb cpy = *cb;
+
+			/* Callback may block so release RCU read lock */
+			rcu_read_unlock();
+			cpy.disconn_cfm(conn, reason);
+			rcu_read_lock();
+		}
 	}
-	mutex_unlock(&hci_cb_list_lock);
+	rcu_read_unlock();
 
 	if (conn->disconn_cfm_cb)
 		conn->disconn_cfm_cb(conn, reason);
@@ -2065,12 +2076,18 @@ static inline void hci_auth_cfm(struct hci_conn *conn, __u8 status)
 
 	encrypt = test_bit(HCI_CONN_ENCRYPT, &conn->flags) ? 0x01 : 0x00;
 
-	mutex_lock(&hci_cb_list_lock);
+	rcu_read_lock();
 	list_for_each_entry(cb, &hci_cb_list, list) {
-		if (cb->security_cfm)
-			cb->security_cfm(conn, status, encrypt);
+		if (cb->security_cfm) {
+			struct hci_cb cpy = *cb;
+
+			/* Callback may block so release RCU read lock */
+			rcu_read_unlock();
+			cpy.security_cfm(conn, status, encrypt);
+			rcu_read_lock();
+		}
 	}
-	mutex_unlock(&hci_cb_list_lock);
+	rcu_read_unlock();
 
 	if (conn->security_cfm_cb)
 		conn->security_cfm_cb(conn, status);
@@ -2105,12 +2122,18 @@ static inline void hci_encrypt_cfm(struct hci_conn *conn, __u8 status)
 			conn->sec_level = conn->pending_sec_level;
 	}
 
-	mutex_lock(&hci_cb_list_lock);
+	rcu_read_lock();
 	list_for_each_entry(cb, &hci_cb_list, list) {
-		if (cb->security_cfm)
-			cb->security_cfm(conn, status, encrypt);
+		if (cb->security_cfm) {
+			struct hci_cb cpy = *cb;
+
+			/* Callback may block so release RCU read lock */
+			rcu_read_unlock();
+			cpy.security_cfm(conn, status, encrypt);
+			rcu_read_lock();
+		}
 	}
-	mutex_unlock(&hci_cb_list_lock);
+	rcu_read_unlock();
 
 	if (conn->security_cfm_cb)
 		conn->security_cfm_cb(conn, status);
@@ -2120,12 +2143,18 @@ static inline void hci_key_change_cfm(struct hci_conn *conn, __u8 status)
 {
 	struct hci_cb *cb;
 
-	mutex_lock(&hci_cb_list_lock);
+	rcu_read_lock();
 	list_for_each_entry(cb, &hci_cb_list, list) {
-		if (cb->key_change_cfm)
-			cb->key_change_cfm(conn, status);
+		if (cb->key_change_cfm) {
+			struct hci_cb cpy = *cb;
+
+			/* Callback may block so release RCU read lock */
+			rcu_read_unlock();
+			cpy.key_change_cfm(conn, status);
+			rcu_read_lock();
+		}
 	}
-	mutex_unlock(&hci_cb_list_lock);
+	rcu_read_unlock();
 }
 
 static inline void hci_role_switch_cfm(struct hci_conn *conn, __u8 status,
@@ -2133,12 +2162,18 @@ static inline void hci_role_switch_cfm(struct hci_conn *conn, __u8 status,
 {
 	struct hci_cb *cb;
 
-	mutex_lock(&hci_cb_list_lock);
-	list_for_each_entry(cb, &hci_cb_list, list) {
-		if (cb->role_switch_cfm)
-			cb->role_switch_cfm(conn, status, role);
+	rcu_read_lock();
+	list_for_each_entry_rcu(cb, &hci_cb_list, list) {
+		if (cb->role_switch_cfm) {
+			struct hci_cb cpy = *cb;
+
+			/* Callback may block so release RCU read lock */
+			rcu_read_unlock();
+			cpy.role_switch_cfm(conn, status, role);
+			rcu_read_lock();
+		}
 	}
-	mutex_unlock(&hci_cb_list_lock);
+	rcu_read_unlock();
 }
 
 static inline bool hci_bdaddr_is_rpa(bdaddr_t *bdaddr, u8 addr_type)
