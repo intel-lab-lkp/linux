@@ -52,6 +52,7 @@
 #include <linux/user_namespace.h>
 #include <linux/time_namespace.h>
 #include <linux/binfmts.h>
+#include <linux/futex.h>
 
 #include <linux/sched.h>
 #include <linux/sched/autogroup.h>
@@ -2808,6 +2809,9 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		if (arg3 || arg4 || arg5)
 			return -EINVAL;
 		error = arch_lock_shadow_stack_status(me, arg2);
+		break;
+	case PR_FUTEX_HASH:
+		error = futex_hash_prctl(arg2, arg3, arg4, arg5);
 		break;
 	default:
 		error = -EINVAL;
