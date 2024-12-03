@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/arm/firmware/qcom,tee.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm TEE
+
+maintainers:
+  - Amirreza Zarrabi <quic_azarrabi@quicinc.com>
+
+description: |
+  QTEE is a piece of software provide a Trusted Execution Environment using ARM
+  TrustZone for Qualcomm SoC.
+
+properties:
+  $nodename:
+    const: qcom_tee
+
+  compatible:
+    const: qcom,tee
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    firmware {
+        qcom_tee {
+            compatible = "qcom,tee";
+        };
+    };
