@@ -14,6 +14,7 @@
 #include <sysdep/syscalls.h>
 #include <os.h>
 
+int um_zpoline_enabled;
 /* start of trampoline code area */
 static char *__zpoline_start;
 
@@ -110,6 +111,10 @@ int elf_arch_finalize_exec(struct elf_fdpic_params *exec_params,
 {
 	int err = 0, count = 0;
 	struct mm_struct *mm = current->mm;
+
+	/* zpoline disabled */
+	if (!um_zpoline_enabled)
+		return 0;
 
 	if (down_write_killable(&mm->mmap_lock))
 		return -EINTR;
@@ -221,3 +226,13 @@ static int __init setup_zpoline_trampoline(void)
 	return 0;
 }
 arch_initcall(setup_zpoline_trampoline);
+
+static int __init zpoline_set(char *str)
+{
+	int val = 0;
+
+	get_option(&str, &val);
+	um_zpoline_enabled = val;
+	return 1;
+}
+__setup("zpoline=", zpoline_set);

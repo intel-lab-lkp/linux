@@ -20,6 +20,25 @@
 #include <um_malloc.h>
 #include <sys/ucontext.h>
 #include <timetravel.h>
+#include <init.h>
+
+#ifndef CONFIG_MMU
+static void sigsys_handler(int sig, struct siginfo *si, mcontext_t *mc)
+{
+	struct uml_pt_regs r;
+
+	if (!um_zpoline_enabled) {
+		/* hook syscall via SIGSYS */
+		mc_set_sigsys_hook(mc);
+	} else {
+		/* trap SIGSYS to userspace */
+		get_regs_from_mc(&r, mc);
+		trap_sigsys(&r);
+		/* force handle signals after rt_sigreturn() */
+		mc_set_regs_ip_relay(mc);
+	}
+}
+#endif
 
 void (*sig_info[NSIG])(int, struct siginfo *, struct uml_pt_regs *) = {
 	[SIGTRAP]	= relay_signal,
@@ -178,6 +197,9 @@ static void (*handlers[_NSIG])(int sig, struct siginfo *si, mcontext_t *mc) = {
 	[SIGILL] = sig_handler,
 	[SIGFPE] = sig_handler,
 	[SIGTRAP] = sig_handler,
+#ifndef CONFIG_MMU
+	[SIGSYS] = sigsys_handler,
+#endif
 
 	[SIGIO] = sig_handler,
 	[SIGWINCH] = sig_handler,

@@ -310,3 +310,15 @@ void winch(int sig, struct siginfo *unused_si, struct uml_pt_regs *regs)
 {
 	do_IRQ(WINCH_IRQ, regs);
 }
+
+void trap_sigsys(struct uml_pt_regs *regs)
+{
+	struct task_struct *tsk = current;
+
+	pr_info_ratelimited("%s%s[%d]: sigsys ip %p sp %p\n",
+			    task_pid_nr(tsk) > 1 ? KERN_INFO : KERN_EMERG,
+			    tsk->comm, task_pid_nr(tsk),
+			    (void *)UPT_IP(regs), (void *)UPT_SP(regs));
+
+	force_sig(SIGSYS);
+}

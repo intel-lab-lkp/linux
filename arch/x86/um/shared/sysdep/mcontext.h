@@ -7,6 +7,10 @@
 #define __SYS_SIGCONTEXT_X86_H
 
 extern void get_regs_from_mc(struct uml_pt_regs *, mcontext_t *);
+#ifndef CONFIG_MMU
+extern void mc_set_sigsys_hook(mcontext_t *mc);
+extern void mc_set_regs_ip_relay(mcontext_t *mc);
+#endif
 
 #ifdef __i386__
 
