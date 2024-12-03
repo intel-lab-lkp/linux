@@ -707,26 +707,27 @@ static void kvm_pmu_create_perf_event(struct kvm_pmc *pmc)
 	evtreg = kvm_pmc_read_evtreg(pmc);
 
 	kvm_pmu_stop_counter(pmc);
-	if (pmc->idx == ARMV8_PMU_CYCLE_IDX)
+	if (pmc->idx == ARMV8_PMU_CYCLE_IDX) {
 		eventsel = ARMV8_PMUV3_PERFCTR_CPU_CYCLES;
-	else
+	} else {
 		eventsel = evtreg & kvm_pmu_event_mask(vcpu->kvm);
 
-	/*
-	 * Neither SW increment nor chained events need to be backed
-	 * by a perf event.
-	 */
-	if (eventsel == ARMV8_PMUV3_PERFCTR_SW_INCR ||
-	    eventsel == ARMV8_PMUV3_PERFCTR_CHAIN)
-		return;
+		/*
+		 * If we have a filter in place and that the event isn't
+		 * allowed, do not install a perf event either.
+		 */
+		if (vcpu->kvm->arch.pmu_filter &&
+		    !test_bit(eventsel, vcpu->kvm->arch.pmu_filter))
+			return;
 
-	/*
-	 * If we have a filter in place and that the event isn't allowed, do
-	 * not install a perf event either.
-	 */
-	if (vcpu->kvm->arch.pmu_filter &&
-	    !test_bit(eventsel, vcpu->kvm->arch.pmu_filter))
-		return;
+		/*
+		 * Neither SW increment nor chained events need to be backed
+		 * by a perf event.
+		 */
+		if (eventsel == ARMV8_PMUV3_PERFCTR_SW_INCR ||
+		    eventsel == ARMV8_PMUV3_PERFCTR_CHAIN)
+			return;
+	}
 
 	memset(&attr, 0, sizeof(struct perf_event_attr));
 	attr.type = arm_pmu->pmu.type;
@@ -877,6 +878,8 @@ static u64 compute_pmceid0(struct arm_pmu *pmu)
 
 	/* always support CHAIN */
 	val |= BIT(ARMV8_PMUV3_PERFCTR_CHAIN);
+	/* always support CPU_CYCLES */
+	val |= BIT(ARMV8_PMUV3_PERFCTR_CPU_CYCLES);
 	return val;
 }
 
