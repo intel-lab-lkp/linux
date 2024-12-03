@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <linux/phy.h>
+
 #include "netlink.h"
 #include "common.h"
 #include "bitset.h"
@@ -112,6 +114,19 @@ static int stats_parse_request(struct ethnl_req_info *req_base,
 	return 0;
 }
 
+static void
+ethtool_get_phydev_stats(struct net_device *dev, struct stats_reply_data *data)
+{
+	struct phy_device *phydev = dev->phydev;
+
+	if (!phydev || !phydev->drv || !phydev->drv->get_phy_stats)
+		return;
+
+	mutex_lock(&phydev->lock);
+	phydev->drv->get_phy_stats(phydev, &data->phy_stats);
+	mutex_unlock(&phydev->lock);
+}
+
 static int stats_prepare_data(const struct ethnl_req_info *req_base,
 			      struct ethnl_reply_data *reply_base,
 			      const struct genl_info *info)
@@ -144,6 +159,10 @@ static int stats_prepare_data(const struct ethnl_req_info *req_base,
 	data->mac_stats.src = src;
 	data->ctrl_stats.src = src;
 	data->rmon_stats.src = src;
+
+	if (test_bit(ETHTOOL_STATS_ETH_PHY, req_info->stat_mask) &&
+	    src == ETHTOOL_MAC_STATS_SRC_AGGREGATE)
+		ethtool_get_phydev_stats(dev, data);
 
 	if (test_bit(ETHTOOL_STATS_ETH_PHY, req_info->stat_mask) &&
 	    dev->ethtool_ops->get_eth_phy_stats)

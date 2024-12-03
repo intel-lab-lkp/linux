@@ -94,6 +94,27 @@ static int linkstate_get_link_ext_state(struct net_device *dev,
 	return 0;
 }
 
+static void
+ethtool_get_phydev_stats(struct net_device *dev,
+			 struct linkstate_reply_data *data)
+{
+	struct phy_device *phydev = dev->phydev;
+
+	if (!phydev)
+		return;
+
+	if (dev->phydev)
+		data->link_stats.link_down_events =
+			READ_ONCE(dev->phydev->link_down_events);
+
+	if (!phydev->drv || !phydev->drv->get_link_stats)
+		return;
+
+	mutex_lock(&phydev->lock);
+	phydev->drv->get_link_stats(phydev, &data->link_stats);
+	mutex_unlock(&phydev->lock);
+}
+
 static int linkstate_prepare_data(const struct ethnl_req_info *req_base,
 				  struct ethnl_reply_data *reply_base,
 				  const struct genl_info *info)
@@ -127,9 +148,7 @@ static int linkstate_prepare_data(const struct ethnl_req_info *req_base,
 			   sizeof(data->link_stats) / 8);
 
 	if (req_base->flags & ETHTOOL_FLAG_STATS) {
-		if (dev->phydev)
-			data->link_stats.link_down_events =
-				READ_ONCE(dev->phydev->link_down_events);
+		ethtool_get_phydev_stats(dev, data);
 
 		if (dev->ethtool_ops->get_link_ext_stats)
 			dev->ethtool_ops->get_link_ext_stats(dev,
