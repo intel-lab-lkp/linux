@@ -51,6 +51,18 @@ void arch_switch_to(struct task_struct *to)
 	 * Nothing needs to be done on x86_64.
 	 * The FS_BASE/GS_BASE registers are saved in the ptrace register set.
 	 */
+#ifndef CONFIG_MMU
+	current_top_of_stack = task_top_of_stack(to);
+	current_ptregs = (long)task_pt_regs(to);
+
+	if ((to->thread.regs.regs.gp[FS_BASE / sizeof(unsigned long)] == 0) ||
+	    (to->mm == NULL))
+		return;
+
+	/* this changes the FS on every context switch */
+	arch_prctl(to, ARCH_SET_FS,
+		   (void __user *) to->thread.regs.regs.gp[FS_BASE / sizeof(unsigned long)]);
+#endif
 }
 
 SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,

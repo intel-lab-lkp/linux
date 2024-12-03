@@ -25,7 +25,10 @@
 
 void os_alarm_process(int pid)
 {
+/* !CONFIG_MMU doesn't send alarm signal to other processes */
+#ifdef CONFIG_MMU
 	kill(pid, SIGALRM);
+#endif
 }
 
 void os_kill_process(int pid, int reap_child)
@@ -42,11 +45,14 @@ void os_kill_process(int pid, int reap_child)
 
 void os_kill_ptraced_process(int pid, int reap_child)
 {
+/* !CONFIG_MMU doesn't have ptraced process */
+#ifdef CONFIG_MMU
 	kill(pid, SIGKILL);
 	ptrace(PTRACE_KILL, pid);
 	ptrace(PTRACE_CONT, pid);
 	if (reap_child)
 		CATCH_EINTR(waitpid(pid, NULL, __WALL));
+#endif
 }
 
 /* Don't use the glibc version, which caches the result in TLS. It misses some
