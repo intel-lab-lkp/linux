@@ -86,11 +86,11 @@ extern const int phy_10gbit_features_array[1];
 #define PHY_POLL		-1
 #define PHY_MAC_INTERRUPT	-2
 
-#define PHY_IS_INTERNAL		0x00000001
-#define PHY_RST_AFTER_CLK_EN	0x00000002
-#define PHY_POLL_CABLE_TEST	0x00000004
-#define PHY_ALWAYS_CALL_SUSPEND	0x00000008
-#define MDIO_DEVICE_IS_PHY	0x80000000
+#define PHY_IS_INTERNAL		BIT(0)
+#define PHY_RST_AFTER_CLK_EN	BIT(1)
+#define PHY_POLL_CABLE_TEST	BIT(2)
+#define PHY_ALWAYS_CALL_SUSPEND	BIT(3)
+#define MDIO_DEVICE_IS_PHY	BIT(31)
 
 /**
  * enum phy_interface_t - Interface Mode definitions
