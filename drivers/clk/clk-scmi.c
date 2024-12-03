@@ -61,13 +61,20 @@ static long scmi_clk_round_rate(struct clk_hw *hw, unsigned long rate,
 	struct scmi_clk *clk = to_scmi_clk(hw);
 
 	/*
-	 * We can't figure out what rate it will be, so just return the
+	 * In case we can't figure out what rate it will be when the clock
+	 * describes a list of discrete rates, then just return the
 	 * rate back to the caller. scmi_clk_recalc_rate() will be called
 	 * after the rate is set and we'll know what rate the clock is
 	 * running at then.
 	 */
-	if (clk->info->rate_discrete)
+	if (clk->info->rate_discrete) {
+		ftmp = rate;
+		if (scmi_proto_clk_ops->round_rate &&
+		    !scmi_proto_clk_ops->round_rate(clk->ph, clk->id, &ftmp))
+			return ftmp;
+
 		return rate;
+	}
 
 	fmin = clk->info->range.min_rate;
 	fmax = clk->info->range.max_rate;
@@ -122,9 +129,13 @@ static u8 scmi_clk_get_parent(struct clk_hw *hw)
 static int scmi_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
 {
 	/*
-	 * Suppose all the requested rates are supported, and let firmware
+	 * If not several parents look into supported rates. Otherwise
+	 * suppose all the requested rates are supported, and let firmware
 	 * to handle the left work.
 	 */
+	if (to_scmi_clk(hw)->info->num_parents < 2)
+		req->rate = scmi_clk_round_rate(hw, req->rate, NULL);
+
 	return 0;
 }
 

@@ -999,6 +999,98 @@ static int scmi_clock_config_oem_get(const struct scmi_protocol_handle *ph,
 				    NULL, oem_val, atomic);
 }
 
+static int scmi_clock_round_rate(const struct scmi_protocol_handle *ph,
+				 u32 clk_id, u64 *rate)
+
+{
+	const struct scmi_msg_resp_clock_describe_rates *resp;
+	size_t index_low, index_high, index_tmp, count, i;
+	struct scmi_msg_clock_describe_rates *msg;
+	u64 rate_low, rate_high, target_rate;
+	struct scmi_xfer *xfer;
+	int ret;
+	struct clock_info *ci = ph->get_priv(ph);
+	struct scmi_clock_info *clk = ci->clk + clk_id;
+
+	if (clk_id >= ci->num_clocks ||
+	    WARN_ONCE(!clk->rate_discrete, "Unexpected linear rates"))
+		return -EINVAL;
+
+	target_rate = *rate;
+	index_low = 0;
+	index_high = clk->list.num_rates - 1;
+	rate_low = clk->list.min_rate;
+	rate_high = clk->list.max_rate;
+
+	if (target_rate <= rate_low) {
+		*rate = rate_low;
+		return 0;
+	}
+	if (target_rate >= rate_high) {
+		*rate = rate_high;
+		return 0;
+	}
+
+	ret = ph->xops->xfer_get_init(ph, CLOCK_DESCRIBE_RATES, sizeof(*msg), 0,
+				      &xfer);
+	if (ret)
+		return ret;
+
+	resp = xfer->rx.buf;
+	msg = xfer->tx.buf;
+	msg->id = cpu_to_le32(clk_id);
+
+	while (true) {
+		index_tmp = (index_low + index_high) / 2;
+
+		ph->xops->reset_rx_to_maxsz(ph, xfer);
+		msg->id = cpu_to_le32(clk_id);
+		msg->rate_index = cpu_to_le32(index_tmp);
+
+		ret = ph->xops->do_xfer(ph, xfer);
+		if (!ret && (!RATE_DISCRETE(resp->num_rates_flags) ||
+			     !NUM_RETURNED(resp->num_rates_flags)))
+			ret = -EPROTO;
+		if (ret)
+			break;
+
+		count = NUM_RETURNED(resp->num_rates_flags);
+
+		if (target_rate < RATE_TO_U64(resp->rate[0])) {
+			index_high = index_tmp;
+			rate_high = RATE_TO_U64(resp->rate[0]);
+		} else if (target_rate > RATE_TO_U64(resp->rate[count - 1])) {
+			index_low = index_tmp + count - 1;
+			rate_low = RATE_TO_U64(resp->rate[count - 1]);
+		} else {
+			for (i = 1; i < count; i++)
+				if (target_rate <= RATE_TO_U64(resp->rate[i]))
+					break;
+
+			index_low = index_tmp + i - 1;
+			rate_low = RATE_TO_U64(resp->rate[i - 1]);
+
+			if (i < count) {
+				index_high = index_tmp + i;
+				rate_high = RATE_TO_U64(resp->rate[i]);
+			}
+		}
+
+		if (index_high <= index_low + 1) {
+			if (target_rate - rate_low > rate_high - target_rate)
+				*rate = rate_high;
+			else
+				*rate = rate_low;
+
+			break;
+		}
+	}
+
+	ph->xops->xfer_put(ph, xfer);
+
+	return ret;
+}
+
 static int scmi_clock_count_get(const struct scmi_protocol_handle *ph)
 {
 	struct clock_info *ci = ph->get_priv(ph);
@@ -1027,6 +1119,7 @@ static const struct scmi_clk_proto_ops clk_proto_ops = {
 	.info_get = scmi_clock_info_get,
 	.rate_get = scmi_clock_rate_get,
 	.rate_set = scmi_clock_rate_set,
+	.round_rate = scmi_clock_round_rate,
 	.enable = scmi_clock_enable,
 	.disable = scmi_clock_disable,
 	.state_get = scmi_clock_state_get,
