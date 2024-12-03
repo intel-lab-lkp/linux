@@ -50,30 +50,38 @@ properties:
     maxItems: 1
 
   clocks:
+    minItems: 5
     items:
       - description: AHB clock to enable register access
       - description: Display Port AUX clock
       - description: Display Port Link clock
       - description: Link interface clock between DP and PHY
       - description: Display Port stream 0 Pixel clock
+      - description: Display Port stream 1 Pixel clock
 
   clock-names:
+    minItems: 5
     items:
       - const: core_iface
       - const: core_aux
       - const: ctrl_link
       - const: ctrl_link_iface
       - const: stream_pixel
+      - const: stream_1_pixel
 
   assigned-clocks:
+    minItems: 2
     items:
       - description: link clock source
       - description: stream 0 pixel clock source
+      - description: stream 1 pixel clock source
 
   assigned-clock-parents:
+    minItems: 2
     items:
       - description: Link clock PLL output provided by PHY block
       - description: Stream 0 pixel clock PLL output provided by PHY block
+      - description: Stream 1 pixel clock PLL output provided by PHY block
 
   phys:
     maxItems: 1
@@ -174,6 +182,30 @@ allOf:
           minItems: 5
       required:
         - "#sound-dai-cells"
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,sa8775p-dp
+
+    then:
+      properties:
+        clocks:
+          maxItems: 6
+        clock-names:
+          items:
+            - const: core_iface
+            - const: core_aux
+            - const: ctrl_link
+            - const: ctrl_link_iface
+            - const: stream_pixel
+            - const: stream_1_pixel
+        assigned-clocks:
+          maxItems: 3
+        assigned-clock-parents:
+          maxItems: 3
 
 additionalProperties: false
 
