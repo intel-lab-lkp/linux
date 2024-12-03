@@ -700,16 +700,27 @@ static void kvm_pmu_create_perf_event(struct kvm_pmc *pmc)
 {
 	struct kvm_vcpu *vcpu = kvm_pmc_to_vcpu(pmc);
 	struct arm_pmu *arm_pmu = vcpu->kvm->arch.arm_pmu;
+	struct perf_event_attr attr = {};
 	struct perf_event *event;
-	struct perf_event_attr attr;
 	u64 eventsel, evtreg;
 
 	evtreg = kvm_pmc_read_evtreg(pmc);
 
 	kvm_pmu_stop_counter(pmc);
 	if (pmc->idx == ARMV8_PMU_CYCLE_IDX) {
-		eventsel = ARMV8_PMUV3_PERFCTR_CPU_CYCLES;
+		/*
+		 * Use the common event space for the cycle counter, allowing
+		 * the underlying PMU driver to map it onto hardware in the
+		 * unlikely case the host doesn't actually have PMUv3.
+		 */
+		attr.type = PERF_TYPE_HARDWARE;
+		eventsel = PERF_COUNT_HW_CPU_CYCLES;
 	} else {
+		/*
+		 * Otherwise, treat the event as a raw event for the selected
+		 * PMU.
+		 */
+		attr.type = arm_pmu->pmu.type;
 		eventsel = evtreg & kvm_pmu_event_mask(vcpu->kvm);
 
 		/*
@@ -729,8 +740,6 @@ static void kvm_pmu_create_perf_event(struct kvm_pmc *pmc)
 			return;
 	}
 
-	memset(&attr, 0, sizeof(struct perf_event_attr));
-	attr.type = arm_pmu->pmu.type;
 	attr.size = sizeof(attr);
 	attr.pinned = 1;
 	attr.disabled = !kvm_pmu_counter_is_enabled(pmc);
