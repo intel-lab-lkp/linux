@@ -964,6 +964,7 @@ retry_private:
 			 * - EAGAIN: The user space value changed.
 			 */
 			futex_q_unlock(hb);
+			futex_hash_put(hb);
 			/*
 			 * Handle the case where the owner is in the middle of
 			 * exiting. Wait for the exit to complete otherwise
@@ -1083,10 +1084,12 @@ no_block:
 
 	futex_unqueue_pi(&q);
 	spin_unlock(q.lock_ptr);
+	futex_hash_put(hb);
 	goto out;
 
 out_unlock_put_key:
 	futex_q_unlock(hb);
+	futex_hash_put(hb);
 
 out:
 	if (to) {
@@ -1097,6 +1100,7 @@ out:
 
 uaddr_faulted:
 	futex_q_unlock(hb);
+	futex_hash_put(hb);
 
 	ret = fault_in_user_writeable(uaddr);
 	if (ret)
@@ -1197,6 +1201,7 @@ retry_hb:
 
 		get_pi_state(pi_state);
 		spin_unlock(&hb->lock);
+		futex_hash_put(hb);
 
 		/* drops pi_state->pi_mutex.wait_lock */
 		ret = wake_futex_pi(uaddr, uval, pi_state, rt_waiter);
@@ -1236,6 +1241,7 @@ retry_hb:
 	 */
 	if ((ret = futex_cmpxchg_value_locked(&curval, uaddr, uval, 0))) {
 		spin_unlock(&hb->lock);
+		futex_hash_put(hb);
 		switch (ret) {
 		case -EFAULT:
 			goto pi_faulted;
@@ -1256,6 +1262,7 @@ retry_hb:
 
 out_unlock:
 	spin_unlock(&hb->lock);
+	futex_hash_put(hb);
 	return ret;
 
 pi_retry:

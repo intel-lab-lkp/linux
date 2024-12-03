@@ -40,6 +40,7 @@
 #include <linux/fault-inject.h>
 #include <linux/slab.h>
 #include <linux/prctl.h>
+#include <linux/rcuref.h>
 
 #include "futex.h"
 #include "../locking/rtmutex_common.h"
@@ -56,6 +57,12 @@ static struct {
 #define futex_queues   (__futex_data.queues)
 #define futex_hashsize (__futex_data.hashsize)
 
+struct futex_hash_bucket_private {
+	rcuref_t	users;
+	unsigned int	hash_mask;
+	struct rcu_head rcu;
+	struct futex_hash_bucket queues[];
+};
 
 /*
  * Fault injections for futexes.
@@ -127,17 +134,24 @@ static inline bool futex_key_is_private(union futex_key *key)
  */
 struct futex_hash_bucket *futex_hash(union futex_key *key)
 {
-	struct futex_hash_bucket *fhb;
+	struct futex_hash_bucket_private *hb_p = NULL;
 	u32 hash;
 
-	fhb = current->mm->futex_hash_bucket;
-	if (fhb && futex_key_is_private(key)) {
-		u32 hash_mask = current->mm->futex_hash_mask;
+	if (futex_key_is_private(key)) {
+		guard(rcu)();
+
+		do {
+			hb_p = rcu_dereference(current->mm->futex_hash_bucket);
+		} while (hb_p && !rcuref_get(&hb_p->users));
+	}
+
+	if (hb_p) {
+		u32 hash_mask = hb_p->hash_mask;
 
 		hash = jhash2((void *)&key->private.address,
 			      sizeof(key->private.address) / 4,
 			      key->both.offset);
-		return &fhb[hash & hash_mask];
+		return &hb_p->queues[hash & hash_mask];
 	}
 	hash = jhash2((u32 *)key,
 		      offsetof(typeof(*key), both.offset) / 4,
@@ -145,6 +159,35 @@ struct futex_hash_bucket *futex_hash(union futex_key *key)
 	return &futex_queues[hash & (futex_hashsize - 1)];
 }
 
+static void futex_hash_priv_put(struct futex_hash_bucket_private *hb_p)
+{
+	if (rcuref_put(&hb_p->users))
+		kvfree_rcu(hb_p, rcu);
+}
+
+void futex_hash_put(struct futex_hash_bucket *hb)
+{
+	struct futex_hash_bucket_private *hb_p;
+
+	if (hb->hb_slot == 0)
+		return;
+	hb_p = container_of(hb, struct futex_hash_bucket_private,
+			    queues[hb->hb_slot - 1]);
+	futex_hash_priv_put(hb_p);
+}
+
+void futex_hash_get(struct futex_hash_bucket *hb)
+{
+	struct futex_hash_bucket_private *hb_p;
+
+	if (hb->hb_slot == 0)
+		return;
+
+	hb_p = container_of(hb, struct futex_hash_bucket_private,
+			    queues[hb->hb_slot - 1]);
+	/* The ref needs to be owned by the caller so this can't fail */
+	WARN_ON_ONCE(!rcuref_get(&hb_p->users));
+}
 
 /**
  * futex_setup_timer - set up the sleeping hrtimer.
@@ -599,7 +642,10 @@ retry:
 	 */
 	lock_ptr = READ_ONCE(q->lock_ptr);
 	if (lock_ptr != NULL) {
+		struct futex_hash_bucket *hb;
+
 		spin_lock(lock_ptr);
+		hb = futex_hb_from_futex_q(q);
 		/*
 		 * q->lock_ptr can change between reading it and
 		 * spin_lock(), causing us to take the wrong lock.  This
@@ -622,6 +668,7 @@ retry:
 		BUG_ON(q->pi_state);
 
 		spin_unlock(lock_ptr);
+		futex_hash_put(hb);
 		ret = 1;
 	}
 
@@ -999,6 +1046,7 @@ static void exit_pi_state_list(struct task_struct *curr)
 		if (!refcount_inc_not_zero(&pi_state->refcount)) {
 			raw_spin_unlock_irq(&curr->pi_lock);
 			cpu_relax();
+			futex_hash_put(hb);
 			raw_spin_lock_irq(&curr->pi_lock);
 			continue;
 		}
@@ -1015,6 +1063,7 @@ static void exit_pi_state_list(struct task_struct *curr)
 			/* retain curr->pi_lock for the loop invariant */
 			raw_spin_unlock(&pi_state->pi_mutex.wait_lock);
 			spin_unlock(&hb->lock);
+			futex_hash_put(hb);
 			put_pi_state(pi_state);
 			continue;
 		}
@@ -1027,6 +1076,7 @@ static void exit_pi_state_list(struct task_struct *curr)
 		raw_spin_unlock(&curr->pi_lock);
 		raw_spin_unlock_irq(&pi_state->pi_mutex.wait_lock);
 		spin_unlock(&hb->lock);
+		futex_hash_put(hb);
 
 		rt_mutex_futex_unlock(&pi_state->pi_mutex);
 		put_pi_state(pi_state);
@@ -1147,8 +1197,9 @@ void futex_exit_release(struct task_struct *tsk)
 	futex_cleanup_end(tsk, FUTEX_STATE_DEAD);
 }
 
-static void futex_hash_bucket_init(struct futex_hash_bucket *fhb)
+static void futex_hash_bucket_init(struct futex_hash_bucket *fhb, unsigned int slot)
 {
+	fhb->hb_slot = slot;
 	atomic_set(&fhb->waiters, 0);
 	plist_head_init(&fhb->chain);
 	spin_lock_init(&fhb->lock);
@@ -1156,12 +1207,20 @@ static void futex_hash_bucket_init(struct futex_hash_bucket *fhb)
 
 void futex_hash_free(struct mm_struct *mm)
 {
-	kvfree(mm->futex_hash_bucket);
+	struct futex_hash_bucket_private *hb_p;
+
+	/* own a reference */
+	hb_p = rcu_dereference_check(mm->futex_hash_bucket, true);
+	if (!hb_p)
+		return;
+	WARN_ON(rcuref_read(&hb_p->users) != 1);
+	futex_hash_priv_put(hb_p);
 }
 
 static int futex_hash_allocate(unsigned int hash_slots)
 {
-	struct futex_hash_bucket *fhb;
+	struct futex_hash_bucket_private *hb_p;
+	size_t alloc_size;
 	int i;
 
 	if (current->mm->futex_hash_bucket)
@@ -1179,16 +1238,25 @@ static int futex_hash_allocate(unsigned int hash_slots)
 	if (!is_power_of_2(hash_slots))
 		hash_slots = rounddown_pow_of_two(hash_slots);
 
-	fhb = kvmalloc_array(hash_slots, sizeof(struct futex_hash_bucket), GFP_KERNEL_ACCOUNT);
-	if (!fhb)
+	if (unlikely(check_mul_overflow(hash_slots, sizeof(struct futex_hash_bucket),
+					&alloc_size)))
 		return -ENOMEM;
 
-	current->mm->futex_hash_mask = hash_slots - 1;
+	if (unlikely(check_add_overflow(alloc_size, sizeof(struct futex_hash_bucket_private),
+					&alloc_size)))
+		return -ENOMEM;
+
+	hb_p = kvmalloc(alloc_size, GFP_KERNEL_ACCOUNT);
+	if (!hb_p)
+		return -ENOMEM;
+
+	rcuref_init(&hb_p->users, 1);
+	hb_p->hash_mask = hash_slots - 1;
 
 	for (i = 0; i < hash_slots; i++)
-		futex_hash_bucket_init(&fhb[i]);
+		futex_hash_bucket_init(&hb_p->queues[i], i + 1);
 
-	current->mm->futex_hash_bucket = fhb;
+	rcu_assign_pointer(current->mm->futex_hash_bucket, hb_p);
 	return 0;
 }
 
@@ -1199,8 +1267,12 @@ int futex_hash_allocate_default(void)
 
 static int futex_hash_get_slots(void)
 {
-	if (current->mm->futex_hash_bucket)
-		return current->mm->futex_hash_mask + 1;
+	struct futex_hash_bucket_private *hb_p;
+
+	guard(rcu)();
+	hb_p = rcu_dereference(current->mm->futex_hash_bucket);
+	if (hb_p)
+		return hb_p->hash_mask + 1;
 	return 0;
 }
 
@@ -1243,7 +1315,7 @@ static int __init futex_init(void)
 	futex_hashsize = 1UL << futex_shift;
 
 	for (i = 0; i < futex_hashsize; i++)
-		futex_hash_bucket_init(&futex_queues[i]);
+		futex_hash_bucket_init(&futex_queues[i], 0);
 
 	return 0;
 }

@@ -84,7 +84,7 @@ void futex_hash_free(struct mm_struct *mm);
 
 static inline void futex_mm_init(struct mm_struct *mm)
 {
-	mm->futex_hash_bucket = NULL;
+	rcu_assign_pointer(mm->futex_hash_bucket, NULL);
 }
 
 #else
