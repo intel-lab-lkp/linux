@@ -717,6 +717,12 @@ static void smaps_account(struct mem_size_stats *mss, struct page *page,
 		if (!folio_test_swapbacked(folio) && !dirty &&
 		    !folio_test_dirty(folio))
 			mss->lazyfree += size;
+
+		/*
+		 * Count large pages smaller than PMD size to anonymous_thp
+		 */
+		if (!compound && PageHead(page) && folio_order(folio))
+			mss->anonymous_thp += folio_size(folio);
 	}
 
 	if (folio_test_ksm(folio))
