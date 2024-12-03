@@ -18,7 +18,7 @@
 #define DRIVER_AUTHOR		"NVIDIA Corporation"
 #define DRIVER_DESC		"Mediated device Core Driver"
 
-static struct class_compat *mdev_bus_compat_class;
+static struct kobject *mdev_bus_kobj;
 
 static LIST_HEAD(mdev_list);
 static DEFINE_MUTEX(mdev_list_lock);
@@ -76,7 +76,7 @@ int mdev_register_parent(struct mdev_parent *parent, struct device *dev,
 	if (ret)
 		return ret;
 
-	ret = class_compat_create_link(mdev_bus_compat_class, dev, NULL);
+	ret = sysfs_create_link(mdev_bus_kobj, &dev->kobj, dev_name(dev));
 	if (ret)
 		dev_warn(dev, "Failed to create compatibility class link\n");
 
@@ -98,7 +98,7 @@ void mdev_unregister_parent(struct mdev_parent *parent)
 	dev_info(parent->dev, "MDEV: Unregistering\n");
 
 	down_write(&parent->unreg_sem);
-	class_compat_remove_link(mdev_bus_compat_class, parent->dev, NULL);
+	sysfs_remove_link(mdev_bus_kobj, dev_name(parent->dev));
 	device_for_each_child(parent->dev, NULL, mdev_device_remove_cb);
 	parent_remove_sysfs_files(parent);
 	up_write(&parent->unreg_sem);
@@ -251,8 +251,8 @@ static int __init mdev_init(void)
 	if (ret)
 		return ret;
 
-	mdev_bus_compat_class = class_compat_register("mdev_bus");
-	if (!mdev_bus_compat_class) {
+	mdev_bus_kobj = class_pseudo_register("mdev_bus");
+	if (!mdev_bus_kobj) {
 		bus_unregister(&mdev_bus_type);
 		return -ENOMEM;
 	}
@@ -262,7 +262,7 @@ static int __init mdev_init(void)
 
 static void __exit mdev_exit(void)
 {
-	class_compat_unregister(mdev_bus_compat_class);
+	kobject_put(mdev_bus_kobj);
 	bus_unregister(&mdev_bus_type);
 }
 
