@@ -1524,10 +1524,11 @@ static void nvmet_fatal_error_handler(struct work_struct *work)
 
 struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args)
 {
+	struct nvmet_req *req = args->req;
 	struct nvmet_subsys *subsys;
 	struct nvmet_ctrl *ctrl;
 	u32 kato = args->kato;
-	u8 dhchap_status;
+	u8 dhchap_status = 0;
 	int ret;
 
 	args->status = NVME_SC_CONNECT_INVALID_PARAM | NVME_STATUS_DNR;
@@ -1631,7 +1632,8 @@ struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args)
 	if (args->hostid)
 		uuid_copy(&ctrl->hostid, args->hostid);
 
-	dhchap_status = nvmet_setup_auth(ctrl);
+	if (req)
+		dhchap_status = nvmet_setup_auth(ctrl, req);
 	if (dhchap_status) {
 		pr_err("Failed to setup authentication, dhchap status %u\n",
 		       dhchap_status);
@@ -1646,11 +1648,12 @@ struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args)
 
 	args->status = NVME_SC_SUCCESS;
 
-	pr_info("Created %s controller %d for subsystem %s for NQN %s%s%s.\n",
+	pr_info("Created %s controller %d for subsystem %s for NQN %s%s%s%s.\n",
 		nvmet_is_disc_subsys(ctrl->subsys) ? "discovery" : "nvm",
 		ctrl->cntlid, ctrl->subsys->subsysnqn, ctrl->hostnqn,
 		ctrl->pi_support ? " T10-PI is enabled" : "",
-		nvmet_has_auth(ctrl) ? " with DH-HMAC-CHAP" : "");
+		req && nvmet_has_auth(ctrl, req) ? " with DH-HMAC-CHAP" : "",
+		req && nvmet_queue_tls_keyid(req->sq) ? ", TLS" : "");
 
 	return ctrl;
 
