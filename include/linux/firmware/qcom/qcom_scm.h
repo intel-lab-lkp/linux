@@ -168,4 +168,13 @@ static inline int qcom_scm_qseecom_app_send(u32 app_id,
 
 #endif /* CONFIG_QCOM_QSEECOM */
 
+#ifdef CONFIG_QCOMTEE
+
+int qcom_scm_qtee_invoke_smc(u64 inbuf, u64 inbuf_size, u64 outbuf, u64 outbuf_size,
+			     u64 *result, u64 *response_type, u64 *data);
+int qcom_scm_qtee_callback_response(u64 buf, u64 buf_size, u64 *result, u64 *response_type,
+				    u64 *data);
+
+#endif /* CONFIG_QCOMTEE */
+
 #endif
