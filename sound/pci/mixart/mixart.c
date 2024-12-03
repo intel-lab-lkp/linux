@@ -1320,12 +1320,12 @@ static int snd_mixart_probe(struct pci_dev *pci,
 			idx = index[dev];
 		else
 			idx = index[dev] + i;
-		snprintf(tmpid, sizeof(tmpid), "%s-%d", id[dev] ? id[dev] : "MIXART", i);
+		snprintf(tmpid, sizeof(tmpid), "%s-%u", id[dev] ? id[dev] : "MIXART", i);
 		err = snd_card_new(&pci->dev, idx, tmpid, THIS_MODULE,
 				   0, &card);
 
 		if (err < 0) {
-			dev_err(&pci->dev, "cannot allocate the card %d\n", i);
+			dev_err(&pci->dev, "cannot allocate the card %u\n", i);
 			snd_mixart_free(mgr);
 			return err;
 		}
@@ -1334,7 +1334,7 @@ static int snd_mixart_probe(struct pci_dev *pci,
 		snprintf(card->shortname, sizeof(card->shortname),
 			 "Digigram miXart [PCM #%d]", i);
 		snprintf(card->longname, sizeof(card->longname),
-			"Digigram miXart at 0x%lx & 0x%lx, irq %i [PCM #%d]",
+			"Digigram miXart at 0x%lx & 0x%lx, irq %i [PCM #%u]",
 			mgr->mem[0].phys, mgr->mem[1].phys, mgr->irq, i);
 
 		err = snd_mixart_create(mgr, card, i);
