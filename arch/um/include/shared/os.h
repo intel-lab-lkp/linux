@@ -195,7 +195,13 @@ extern void get_host_cpu_features(
 extern int create_mem_file(unsigned long long len);
 
 /* tlb.c */
+#ifdef CONFIG_MMU
 extern void report_enomem(void);
+#else
+static inline void report_enomem(void)
+{
+}
+#endif
 
 /* process.c */
 extern void os_alarm_process(int pid);

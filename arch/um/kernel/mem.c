@@ -64,7 +64,8 @@ void __init mem_init(void)
 	 * to be turned on.
 	 */
 	brk_end = (unsigned long) UML_ROUND_UP(sbrk(0));
-	map_memory(brk_end, __pa(brk_end), uml_reserved - brk_end, 1, 1, 0);
+	map_memory(brk_end, __pa(brk_end), uml_reserved - brk_end, 1, 1,
+		   !IS_ENABLED(CONFIG_MMU));
 	memblock_free((void *)brk_end, uml_reserved - brk_end);
 	uml_reserved = brk_end;
 
@@ -78,6 +79,7 @@ void __init mem_init(void)
  * Create a page table and place a pointer to it in a middle page
  * directory entry.
  */
+#ifdef CONFIG_MMU
 static void __init one_page_table_init(pmd_t *pmd)
 {
 	if (pmd_none(*pmd)) {
@@ -149,6 +151,12 @@ static void __init fixrange_init(unsigned long start, unsigned long end,
 		j = 0;
 	}
 }
+#else
+static void __init fixrange_init(unsigned long start, unsigned long end,
+				 pgd_t *pgd_base)
+{
+}
+#endif
 
 static void __init fixaddr_user_init( void)
 {
@@ -230,6 +238,7 @@ void *uml_kmalloc(int size, int flags)
 	return kmalloc(size, flags);
 }
 
+#ifdef CONFIG_MMU
 static const pgprot_t protection_map[16] = {
 	[VM_NONE]					= PAGE_NONE,
 	[VM_READ]					= PAGE_READONLY,
@@ -249,3 +258,4 @@ static const pgprot_t protection_map[16] = {
 	[VM_SHARED | VM_EXEC | VM_WRITE | VM_READ]	= PAGE_SHARED
 };
 DECLARE_VM_GET_PAGE_PROT
+#endif
