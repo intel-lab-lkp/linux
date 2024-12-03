@@ -14,6 +14,8 @@
 #include <soc/mscc/ocelot.h>
 #include "ocelot.h"
 
+#define OCELOT_PTP_TX_TSTAMP_TIMEOUT		(5 * HZ)
+
 int ocelot_ptp_gettime64(struct ptp_clock_info *ptp, struct timespec64 *ts)
 {
 	struct ocelot *ocelot = container_of(ptp, struct ocelot, ptp_info);
@@ -603,34 +605,88 @@ int ocelot_get_ts_info(struct ocelot *ocelot, int port,
 }
 EXPORT_SYMBOL(ocelot_get_ts_info);
 
-static int ocelot_port_add_txtstamp_skb(struct ocelot *ocelot, int port,
+static struct sk_buff *ocelot_port_dequeue_ptp_tx_skb(struct ocelot *ocelot,
+						      int port, u8 ts_id,
+						      u32 seqid)
+{
+	struct ocelot_port *ocelot_port = ocelot->ports[port];
+	struct sk_buff *skb, *skb_tmp, *skb_match = NULL;
+	struct ptp_header *hdr;
+
+	spin_lock(&ocelot->ts_id_lock);
+
+	skb_queue_walk_safe(&ocelot_port->tx_skbs, skb, skb_tmp) {
+		if (OCELOT_SKB_CB(skb)->ts_id != ts_id)
+			continue;
+
+		/* Check that the timestamp ID is for the expected PTP
+		 * sequenceId. We don't have to test ptp_parse_header() against
+		 * NULL, because we've pre-validated the packet's ptp_class.
+		 */
+		hdr = ptp_parse_header(skb, OCELOT_SKB_CB(skb)->ptp_class);
+		if (seqid != ntohs(hdr->sequence_id))
+			continue;
+
+		__skb_unlink(skb, &ocelot_port->tx_skbs);
+		ocelot->ptp_skbs_in_flight--;
+		skb_match = skb;
+		break;
+	}
+
+	spin_unlock(&ocelot->ts_id_lock);
+
+	return skb_match;
+}
+
+static int ocelot_port_queue_ptp_tx_skb(struct ocelot *ocelot, int port,
 					struct sk_buff *clone)
 {
 	struct ocelot_port *ocelot_port = ocelot->ports[port];
+	DECLARE_BITMAP(ts_id_in_flight, OCELOT_MAX_PTP_ID);
+	struct sk_buff *skb, *skb_tmp;
 	unsigned long flags;
+	unsigned long n;
 
 	spin_lock_irqsave(&ocelot->ts_id_lock, flags);
 
-	if (ocelot_port->ptp_skbs_in_flight == OCELOT_MAX_PTP_ID ||
-	    ocelot->ptp_skbs_in_flight == OCELOT_PTP_FIFO_SIZE) {
+	/* To get a better chance of acquiring a timestamp ID, first flush the
+	 * stale packets still waiting in the TX timestamping queue. They are
+	 * probably lost.
+	 */
+	skb_queue_walk_safe(&ocelot_port->tx_skbs, skb, skb_tmp) {
+		if (time_before(OCELOT_SKB_CB(skb)->ptp_tx_time +
+				OCELOT_PTP_TX_TSTAMP_TIMEOUT, jiffies)) {
+			dev_warn_ratelimited(ocelot->dev,
+					     "port %d invalidating stale timestamp ID %u which seems lost\n",
+					     port, OCELOT_SKB_CB(skb)->ts_id);
+			__skb_unlink(skb, &ocelot_port->tx_skbs);
+			dev_kfree_skb_any(skb);
+			ocelot->ptp_skbs_in_flight--;
+		} else {
+			__set_bit(OCELOT_SKB_CB(skb)->ts_id, ts_id_in_flight);
+		}
+	}
+
+	if (ocelot->ptp_skbs_in_flight == OCELOT_PTP_FIFO_SIZE) {
 		spin_unlock_irqrestore(&ocelot->ts_id_lock, flags);
 		return -EBUSY;
 	}
 
-	skb_shinfo(clone)->tx_flags |= SKBTX_IN_PROGRESS;
-	/* Store timestamp ID in OCELOT_SKB_CB(clone)->ts_id */
-	OCELOT_SKB_CB(clone)->ts_id = ocelot_port->ts_id;
+	n = find_first_zero_bit(ts_id_in_flight, OCELOT_MAX_PTP_ID);
+	if (n == OCELOT_MAX_PTP_ID) {
+		spin_unlock_irqrestore(&ocelot->ts_id_lock, flags);
+		return -EBUSY;
+	}
 
-	ocelot_port->ts_id++;
-	if (ocelot_port->ts_id == OCELOT_MAX_PTP_ID)
-		ocelot_port->ts_id = 0;
-
-	ocelot_port->ptp_skbs_in_flight++;
+	/* Found an available timestamp ID, use it */
+	OCELOT_SKB_CB(clone)->ts_id = n;
+	OCELOT_SKB_CB(clone)->ptp_tx_time = jiffies;
 	ocelot->ptp_skbs_in_flight++;
-
-	skb_queue_tail(&ocelot_port->tx_skbs, clone);
+	__skb_queue_tail(&ocelot_port->tx_skbs, clone);
 
 	spin_unlock_irqrestore(&ocelot->ts_id_lock, flags);
+
+	dev_dbg_ratelimited(ocelot->dev, "port %d timestamp id %lu\n", port, n);
 
 	return 0;
 }
@@ -687,10 +743,12 @@ int ocelot_port_txtstamp_request(struct ocelot *ocelot, int port,
 		if (!(*clone))
 			return -ENOMEM;
 
-		err = ocelot_port_add_txtstamp_skb(ocelot, port, *clone);
+		/* Store timestamp ID in OCELOT_SKB_CB(clone)->ts_id */
+		err = ocelot_port_queue_ptp_tx_skb(ocelot, port, *clone);
 		if (err)
 			return err;
 
+		skb_shinfo(*clone)->tx_flags |= SKBTX_IN_PROGRESS;
 		OCELOT_SKB_CB(skb)->ptp_cmd = ptp_cmd;
 		OCELOT_SKB_CB(*clone)->ptp_class = ptp_class;
 	}
@@ -726,28 +784,15 @@ static void ocelot_get_hwtimestamp(struct ocelot *ocelot,
 	spin_unlock_irqrestore(&ocelot->ptp_clock_lock, flags);
 }
 
-static bool ocelot_validate_ptp_skb(struct sk_buff *clone, u16 seqid)
-{
-	struct ptp_header *hdr;
-
-	hdr = ptp_parse_header(clone, OCELOT_SKB_CB(clone)->ptp_class);
-	if (WARN_ON(!hdr))
-		return false;
-
-	return seqid == ntohs(hdr->sequence_id);
-}
-
 void ocelot_get_txtstamp(struct ocelot *ocelot)
 {
 	int budget = OCELOT_PTP_QUEUE_SZ;
 
 	while (budget--) {
-		struct sk_buff *skb, *skb_tmp, *skb_match = NULL;
 		struct skb_shared_hwtstamps shhwtstamps;
 		u32 val, id, seqid, txport;
-		struct ocelot_port *port;
+		struct sk_buff *skb_match;
 		struct timespec64 ts;
-		unsigned long flags;
 
 		val = ocelot_read(ocelot, SYS_PTP_STATUS);
 
@@ -762,36 +807,15 @@ void ocelot_get_txtstamp(struct ocelot *ocelot)
 		txport = SYS_PTP_STATUS_PTP_MESS_TXPORT_X(val);
 		seqid = SYS_PTP_STATUS_PTP_MESS_SEQ_ID(val);
 
-		port = ocelot->ports[txport];
-
-		spin_lock(&ocelot->ts_id_lock);
-		port->ptp_skbs_in_flight--;
-		ocelot->ptp_skbs_in_flight--;
-		spin_unlock(&ocelot->ts_id_lock);
-
 		/* Retrieve its associated skb */
-try_again:
-		spin_lock_irqsave(&port->tx_skbs.lock, flags);
-
-		skb_queue_walk_safe(&port->tx_skbs, skb, skb_tmp) {
-			if (OCELOT_SKB_CB(skb)->ts_id != id)
-				continue;
-			__skb_unlink(skb, &port->tx_skbs);
-			skb_match = skb;
-			break;
-		}
-
-		spin_unlock_irqrestore(&port->tx_skbs.lock, flags);
-
-		if (WARN_ON(!skb_match))
-			continue;
-
-		if (!ocelot_validate_ptp_skb(skb_match, seqid)) {
-			dev_err_ratelimited(ocelot->dev,
-					    "port %d received stale TX timestamp for seqid %d, discarding\n",
-					    txport, seqid);
-			dev_kfree_skb_any(skb);
-			goto try_again;
+		skb_match = ocelot_port_dequeue_ptp_tx_skb(ocelot, txport, id,
+							   seqid);
+		if (!skb_match) {
+			dev_warn_ratelimited(ocelot->dev,
+					     "port %d received TX timestamp (seqid %d, ts id %u) for packet previously declared stale\n",
+					     txport, seqid, id);
+			dev_kfree_skb_any(skb_match);
+			goto next_ts;
 		}
 
 		/* Get the h/w timestamp */
@@ -802,7 +826,7 @@ try_again:
 		shhwtstamps.hwtstamp = ktime_set(ts.tv_sec, ts.tv_nsec);
 		skb_complete_tx_timestamp(skb_match, &shhwtstamps);
 
-		/* Next ts */
+next_ts:
 		ocelot_write(ocelot, SYS_PTP_NXT_PTP_NXT, SYS_PTP_NXT);
 	}
 }
