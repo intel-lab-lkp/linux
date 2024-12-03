@@ -1097,7 +1097,8 @@ struct phy_driver {
 	 * must only set statistics which are actually collected by the device.
 	 */
 	void (*get_phy_stats)(struct phy_device *dev,
-			      struct ethtool_eth_phy_stats *eth_stats);
+			      struct ethtool_eth_phy_stats *eth_stats,
+			      struct ethtool_phy_stats *stats);
 	void (*get_link_stats)(struct phy_device *dev,
 			       struct ethtool_link_ext_stats *link_stats);
 	/** @get_sset_count: Number of statistic counters */
