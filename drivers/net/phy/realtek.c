@@ -31,6 +31,7 @@
 #define RTL8211F_PHYCR1				0x18
 #define RTL8211F_PHYCR2				0x19
 #define RTL8211F_INSR				0x1d
+#define RTL8211F_PHYAD0_EN			BIT(13)
 
 #define RTL8211F_LEDCR				0x10
 #define RTL8211F_LEDCR_MODE			BIT(15)
@@ -138,6 +139,17 @@ static int rtl821x_probe(struct phy_device *phydev)
 	if (IS_ERR(priv->clk))
 		return dev_err_probe(dev, PTR_ERR(priv->clk),
 				     "failed to get phy clock\n");
+
+	dev_dbg(dev, "disabling MDIO address 0 for this phy");
+	ret = phy_modify_paged(phydev, 0xa43, RTL8211F_PHYCR1,
+				       RTL8211F_PHYAD0_EN, 0);
+	if (ret < 0) {
+		return dev_err_probe(dev, PTR_ERR(ret),
+				     "disabling MDIO address 0 failed\n");
+	}
+	/* Deny broadcast address as PHY address */
+	if (phydev->mdio.addr == 0)
+		return -ENODEV;
 
 	ret = phy_read_paged(phydev, 0xa43, RTL8211F_PHYCR1);
 	if (ret < 0)
