@@ -90,6 +90,7 @@ extern const int phy_10gbit_features_array[1];
 #define PHY_RST_AFTER_CLK_EN	BIT(1)
 #define PHY_POLL_CABLE_TEST	BIT(2)
 #define PHY_ALWAYS_CALL_SUSPEND	BIT(3)
+#define PHY_POLL_STATS		BIT(4)
 #define MDIO_DEVICE_IS_PHY	BIT(31)
 
 /**
@@ -1101,6 +1102,8 @@ struct phy_driver {
 			      struct ethtool_phy_stats *stats);
 	void (*get_link_stats)(struct phy_device *dev,
 			       struct ethtool_link_ext_stats *link_stats);
+	int (*update_stats)(struct phy_device *dev);
+
 	/** @get_sset_count: Number of statistic counters */
 	int (*get_sset_count)(struct phy_device *dev);
 	/** @get_strings: Names of the statistic counters */
@@ -1590,6 +1593,9 @@ static inline bool phy_polling_mode(struct phy_device *phydev)
 	if (phydev->state == PHY_CABLETEST)
 		if (phydev->drv->flags & PHY_POLL_CABLE_TEST)
 			return true;
+
+	if (phydev->drv->update_stats && phydev->drv->flags & PHY_POLL_STATS)
+		return true;
 
 	return phydev->irq == PHY_POLL;
 }

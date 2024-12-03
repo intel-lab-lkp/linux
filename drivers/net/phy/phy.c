@@ -1347,6 +1347,18 @@ static int phy_enable_interrupts(struct phy_device *phydev)
 }
 
 /**
+ * phy_update_stats - update the PHY statistics
+ * @phydev: target phy_device struct
+ */
+static int phy_update_stats(struct phy_device *phydev)
+{
+	if (!phydev->drv->update_stats)
+		return 0;
+
+	return phydev->drv->update_stats(phydev);
+}
+
+/**
  * phy_request_interrupt - request and enable interrupt for a PHY device
  * @phydev: target phy_device struct
  *
@@ -1415,6 +1427,9 @@ static enum phy_state_work _phy_state_machine(struct phy_device *phydev)
 	case PHY_RUNNING:
 		err = phy_check_link_status(phydev);
 		func = &phy_check_link_status;
+
+		if (!err)
+			err = phy_update_stats(phydev);
 		break;
 	case PHY_CABLETEST:
 		err = phydev->drv->cable_test_get_status(phydev, &finished);
