@@ -21,6 +21,7 @@
 #include <linux/vmalloc.h>
 #include <linux/atomic.h>
 #include <linux/jump_label.h>
+#include <linux/debugfs.h>
 #include <asm/sections.h>
 #include "slab.h"
 
@@ -159,6 +160,8 @@ static inline void check_bogus_address(const unsigned long ptr, unsigned long n,
 		usercopy_abort("null address", NULL, to_user, ptr, n);
 }
 
+static bool bypass_vmalloc_check __read_mostly;
+
 static inline void check_heap_object(const void *ptr, unsigned long n,
 				     bool to_user)
 {
@@ -174,8 +177,13 @@ static inline void check_heap_object(const void *ptr, unsigned long n,
 	}
 
 	if (is_vmalloc_addr(ptr) && !pagefault_disabled()) {
-		struct vmap_area *area = find_vmap_area(addr);
+		struct vmap_area *area;
 
+		 /* Bypass it since searching the kernel VM area is slow */
+		if (bypass_vmalloc_check)
+			return;
+
+		area = find_vmap_area(addr);
 		if (!area)
 			usercopy_abort("vmalloc", "no area", to_user, 0, n);
 
@@ -271,6 +279,9 @@ static int __init set_hardened_usercopy(void)
 {
 	if (enable_checks == false)
 		static_branch_enable(&bypass_usercopy_checks);
+	else
+		debugfs_create_bool("bypass_usercopy_vmalloc_check", 0600,
+				    NULL, &bypass_vmalloc_check);
 	return 1;
 }
 
