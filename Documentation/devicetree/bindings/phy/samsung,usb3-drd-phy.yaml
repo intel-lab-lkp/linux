@@ -51,6 +51,9 @@ properties:
   "#phy-cells":
     const: 1
 
+  orientation-switch:
+    $ref: /schemas/usb/usb-switch.yaml#/properties/orientation-switch
+
   port:
     $ref: /schemas/graph.yaml#/properties/port
     description:
@@ -139,12 +142,18 @@ allOf:
 
       required:
         - reg-names
+        - orientation-switch
+        - port
         - pll-supply
         - dvdd-usb20-supply
         - vddh-usb20-supply
         - vdd33-usb20-supply
         - vdda-usbdp-supply
         - vddh-usbdp-supply
+
+    else:
+      properties:
+        orientation-switch: false
 
   - if:
       properties:
