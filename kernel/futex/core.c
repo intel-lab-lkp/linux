@@ -65,6 +65,8 @@ struct futex_hash_bucket_private {
 	struct futex_hash_bucket queues[];
 };
 
+static unsigned int futex_default_max_buckets;
+
 /*
  * Fault injections for futexes.
  */
@@ -1262,7 +1264,7 @@ bool futex_check_hb_valid(struct futex_hash_bucket *hb)
 	return hb_p_now == hb_p;
 }
 
-static int futex_hash_allocate(unsigned int hash_slots)
+static int futex_hash_allocate(unsigned int hash_slots, bool slots_invariant)
 {
 	struct futex_hash_bucket_private *hb_p, *hb_p_old = NULL;
 	struct mm_struct *mm;
@@ -1274,8 +1276,8 @@ static int futex_hash_allocate(unsigned int hash_slots)
 		hash_slots = 16;
 	if (hash_slots < 2)
 		hash_slots = 2;
-	if (hash_slots > 131072)
-		hash_slots = 131072;
+	if (hash_slots > futex_default_max_buckets)
+		hash_slots = futex_default_max_buckets;
 	if (!is_power_of_2(hash_slots))
 		hash_slots = rounddown_pow_of_two(hash_slots);
 
@@ -1293,7 +1295,7 @@ static int futex_hash_allocate(unsigned int hash_slots)
 
 	rcuref_init(&hb_p->users, 1);
 	hb_p->hash_mask = hash_slots - 1;
-	hb_p->slots_invariant = false;
+	hb_p->slots_invariant = slots_invariant;
 
 	for (i = 0; i < hash_slots; i++)
 		futex_hash_bucket_init(&hb_p->queues[i], i + 1);
@@ -1321,7 +1323,31 @@ static int futex_hash_allocate(unsigned int hash_slots)
 
 int futex_hash_allocate_default(void)
 {
-	return futex_hash_allocate(0);
+	unsigned int threads;
+	unsigned int buckets;
+	unsigned int current_buckets = 0;
+	struct futex_hash_bucket_private *hb_p;
+
+	if (!current->mm)
+		return 0;
+
+	scoped_guard(rcu) {
+		threads = get_nr_threads(current);
+		hb_p = rcu_dereference(current->mm->futex_hash_bucket);
+		if (hb_p) {
+			if (hb_p->slots_invariant)
+				return 0;
+			current_buckets = hb_p->hash_mask + 1;
+		}
+	}
+
+	buckets = roundup_pow_of_two(4 * threads);
+	buckets = max(buckets, 16);
+	buckets = min(buckets, futex_default_max_buckets);
+	if (current_buckets > buckets)
+		return 0;
+
+	return futex_hash_allocate(buckets, buckets == futex_default_max_buckets);
 }
 
 static int futex_hash_get_slots(void)
@@ -1372,7 +1398,7 @@ int futex_hash_prctl(unsigned long arg2, unsigned long arg3,
 
 	switch (arg2) {
 	case PR_FUTEX_HASH_SET_SLOTS:
-		ret = futex_hash_allocate(arg3);
+		ret = futex_hash_allocate(arg3, false);
 		break;
 
 	case PR_FUTEX_HASH_GET_SLOTS:
@@ -1404,6 +1430,7 @@ static int __init futex_init(void)
 #else
 	futex_hashsize = roundup_pow_of_two(256 * num_possible_cpus());
 #endif
+	futex_default_max_buckets = futex_hashsize;
 
 	futex_queues = alloc_large_system_hash("futex", sizeof(*futex_queues),
 					       futex_hashsize, 0, 0,
