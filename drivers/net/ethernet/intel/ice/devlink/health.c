@@ -163,11 +163,10 @@ static int ice_tx_hang_reporter_dump(struct devlink_health_reporter *reporter,
 	struct ice_tx_hang_event *event = priv_ctx;
 	struct sk_buff *skb;
 
-	skb = event->tx_ring->tx_buf->skb;
-
 	if (!event)
 		return 0;
 
+	skb = event->tx_ring->tx_buf->skb;
 	devlink_fmsg_obj_nest_start(fmsg);
 	ICE_DEVLINK_FMSG_PUT_FIELD(fmsg, event, head);
 	ICE_DEVLINK_FMSG_PUT_FIELD(fmsg, event, intr);
