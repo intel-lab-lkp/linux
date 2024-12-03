@@ -96,6 +96,14 @@ static u64 sev_hv_features __ro_after_init;
 /* Secrets page physical address from the CC blob */
 static u64 secrets_pa __ro_after_init;
 
+/*
+ * For Secure TSC guests, the BP fetches TSC_INFO using SNP guest messaging and
+ * initializes snp_tsc_scale and snp_tsc_offset. These values are replicated
+ * across the APs VMSA fields (TSC_SCALE and TSC_OFFSET).
+ */
+static u64 snp_tsc_scale __ro_after_init;
+static u64 snp_tsc_offset __ro_after_init;
+
 /* #VC handler runtime per-CPU data */
 struct sev_es_runtime_data {
 	struct ghcb ghcb_page;
@@ -1276,6 +1284,12 @@ static int wakeup_cpu_via_vmgexit(u32 apic_id, unsigned long start_ip)
 	 */
 	vmsa->vmpl		= snp_vmpl;
 	vmsa->sev_features	= sev_status >> 2;
+
+	/* Populate AP's TSC scale/offset to get accurate TSC values. */
+	if (cc_platform_has(CC_ATTR_GUEST_SNP_SECURE_TSC)) {
+		vmsa->tsc_scale = snp_tsc_scale;
+		vmsa->tsc_offset = snp_tsc_offset;
+	}
 
 	/* Switch the page over to a VMSA page now that it is initialized */
 	ret = snp_set_vmsa(vmsa, caa, apic_id, true);
@@ -3127,3 +3141,105 @@ int snp_send_guest_request(struct snp_msg_desc *mdesc, struct snp_guest_req *req
 }
 EXPORT_SYMBOL_GPL(snp_send_guest_request);
 
+static int __init snp_get_tsc_info(void)
+{
+	struct snp_guest_request_ioctl *rio;
+	struct snp_tsc_info_resp *tsc_resp;
+	struct snp_tsc_info_req *tsc_req;
+	struct snp_msg_desc *mdesc;
+	struct snp_guest_req *req;
+	unsigned char *buf;
+	int rc = -ENOMEM;
+
+	tsc_req = kzalloc(sizeof(*tsc_req), GFP_KERNEL);
+	if (!tsc_req)
+		return rc;
+
+	tsc_resp = kzalloc(sizeof(*tsc_resp), GFP_KERNEL);
+	if (!tsc_resp)
+		goto e_free_tsc_req;
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		goto e_free_tsc_resp;
+
+	rio = kzalloc(sizeof(*rio), GFP_KERNEL);
+	if (!rio)
+		goto e_free_req;
+
+	/*
+	 * The intermediate response buffer is used while decrypting the
+	 * response payload. Make sure that it has enough space to cover
+	 * the authtag.
+	 */
+	buf = kzalloc(SNP_TSC_INFO_RESP_SZ + AUTHTAG_LEN, GFP_KERNEL);
+	if (!buf)
+		goto e_free_rio;
+
+	mdesc = snp_msg_alloc();
+	if (IS_ERR_OR_NULL(mdesc))
+		goto e_free_buf;
+
+	rc = snp_msg_init(mdesc, snp_vmpl);
+	if (rc)
+		goto e_free_mdesc;
+
+	req->msg_version = MSG_HDR_VER;
+	req->msg_type = SNP_MSG_TSC_INFO_REQ;
+	req->vmpck_id = snp_vmpl;
+	req->req_buf = tsc_req;
+	req->req_sz = sizeof(*tsc_req);
+	req->resp_buf = buf;
+	req->resp_sz = sizeof(*tsc_resp) + AUTHTAG_LEN;
+	req->exit_code = SVM_VMGEXIT_GUEST_REQUEST;
+
+	rc = snp_send_guest_request(mdesc, req, rio);
+	if (rc)
+		goto e_request;
+
+	memcpy(tsc_resp, buf, sizeof(*tsc_resp));
+	pr_debug("%s: response status 0x%x scale 0x%llx offset 0x%llx factor 0x%x\n",
+		 __func__, tsc_resp->status, tsc_resp->tsc_scale, tsc_resp->tsc_offset,
+		 tsc_resp->tsc_factor);
+
+	if (tsc_resp->status == 0) {
+		snp_tsc_scale = tsc_resp->tsc_scale;
+		snp_tsc_offset = tsc_resp->tsc_offset;
+	} else {
+		pr_err("Failed to get TSC info, response status 0x%x\n", tsc_resp->status);
+		rc = -EIO;
+	}
+
+e_request:
+	/* The response buffer contains sensitive data, explicitly clear it. */
+	memzero_explicit(buf, sizeof(buf));
+	memzero_explicit(tsc_resp, sizeof(*tsc_resp));
+e_free_mdesc:
+	snp_msg_free(mdesc);
+e_free_buf:
+	kfree(buf);
+e_free_rio:
+	kfree(rio);
+e_free_req:
+	kfree(req);
+ e_free_tsc_resp:
+	kfree(tsc_resp);
+e_free_tsc_req:
+	kfree(tsc_req);
+
+	return rc;
+}
+
+void __init snp_secure_tsc_prepare(void)
+{
+	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP) ||
+	    !cc_platform_has(CC_ATTR_GUEST_SNP_SECURE_TSC))
+		return;
+
+	if (snp_get_tsc_info()) {
+		pr_alert("Unable to retrieve Secure TSC info from ASP\n");
+		sev_es_terminate(SEV_TERM_SET_LINUX, GHCB_TERM_SECURE_TSC);
+	}
+
+	pr_debug("SecureTSC enabled");
+}
