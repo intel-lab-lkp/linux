@@ -223,6 +223,12 @@ struct octep_pfvf_info {
 	u32 mbox_version;
 };
 
+/* Device state */
+enum octep_dev_state {
+	OCTEP_DEV_STATE_OPEN,
+	OCTEP_DEV_STATE_READ_STATS,
+};
+
 /* The Octeon device specific private data structure.
  * Each Octeon device has this structure to represent all its components.
  */
@@ -318,6 +324,8 @@ struct octep_device {
 	atomic_t hb_miss_cnt;
 	/* Task to reset device on heartbeat miss */
 	struct delayed_work hb_task;
+	/* Device state */
+	unsigned long state;
 };
 
 static inline u16 OCTEP_MAJOR_REV(struct octep_device *oct)

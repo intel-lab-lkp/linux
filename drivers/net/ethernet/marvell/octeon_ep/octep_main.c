@@ -733,6 +733,7 @@ static int octep_open(struct net_device *netdev)
 	if (ret > 0)
 		octep_link_up(netdev);
 
+	set_bit(OCTEP_DEV_STATE_OPEN, &oct->state);
 	return 0;
 
 set_queues_err:
@@ -743,6 +744,11 @@ setup_oq_err:
 	octep_free_iqs(oct);
 setup_iq_err:
 	return -1;
+}
+
+static bool octep_drv_busy(struct octep_device *oct)
+{
+	return test_bit(OCTEP_DEV_STATE_READ_STATS, &oct->state);
 }
 
 /**
@@ -758,6 +764,14 @@ static int octep_stop(struct net_device *netdev)
 	struct octep_device *oct = netdev_priv(netdev);
 
 	netdev_info(netdev, "Stopping the device ...\n");
+
+	clear_bit(OCTEP_DEV_STATE_OPEN, &oct->state);
+	/* Make sure device state open is cleared so that no more
+	 * stats fetch can happen intermittently
+	 */
+	smp_mb__after_atomic();
+	while (octep_drv_busy(oct))
+		msleep(20);
 
 	octep_ctrl_net_set_link_status(oct, OCTEP_CTRL_NET_INVALID_VFID, false,
 				       false);
@@ -1001,6 +1015,16 @@ static void octep_get_stats64(struct net_device *netdev,
 					    &oct->iface_rx_stats,
 					    &oct->iface_tx_stats);
 
+	set_bit(OCTEP_DEV_STATE_READ_STATS, &oct->state);
+	/* Make sure read stats state is set, so that ndo_stop
+	 * doesn't clear resources as they are read
+	 */
+	smp_mb__after_atomic();
+	if (!test_bit(OCTEP_DEV_STATE_OPEN, &oct->state)) {
+		clear_bit(OCTEP_DEV_STATE_READ_STATS, &oct->state);
+		return;
+	}
+
 	tx_packets = 0;
 	tx_bytes = 0;
 	rx_packets = 0;
@@ -1022,6 +1046,7 @@ static void octep_get_stats64(struct net_device *netdev,
 	stats->rx_errors = oct->iface_rx_stats.err_pkts;
 	stats->collisions = oct->iface_tx_stats.xscol;
 	stats->tx_fifo_errors = oct->iface_tx_stats.undflw;
+	clear_bit(OCTEP_DEV_STATE_READ_STATS, &oct->state);
 }
 
 /**
@@ -1525,6 +1550,8 @@ static int octep_sriov_disable(struct octep_device *oct)
 
 	pci_disable_sriov(pdev);
 	CFG_GET_ACTIVE_VFS(oct->conf) = 0;
+
+	clear_bit(OCTEP_DEV_STATE_OPEN, &oct->state);
 
 	return 0;
 }
