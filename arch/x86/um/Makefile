@@ -32,6 +32,24 @@ obj-y += syscalls_64.o vdso/
 subarch-y = ../lib/csum-partial_64.o ../lib/memcpy_64.o \
 	../lib/memmove_64.o ../lib/memset_64.o
 
+
+# used by zpoline.c to translate syscall/sysenter instructions
+# note: only in x86_64 w/ !CONFIG_MMU
+ifneq ($(CONFIG_MMU),y)
+inat_tables_script = $(srctree)/arch/x86/tools/gen-insn-attr-x86.awk
+inat_tables_maps = $(srctree)/arch/x86/lib/x86-opcode-map.txt
+quiet_cmd_inat_tables = GEN     $@
+      cmd_inat_tables = $(AWK) -f $(inat_tables_script) $(inat_tables_maps) > $@
+$(obj)/inat-tables.c: $(inat_tables_script) $(inat_tables_maps)
+	$(call cmd,inat_tables)
+targets += inat-tables.c
+$(obj)/../lib/inat.o: $(obj)/inat-tables.c
+subarch-y += ../lib/insn.o ../lib/inat.o
+
+
+obj-y += do_syscall_$(BITS).o entry_$(BITS).o zpoline.o
+endif
+
 endif
 
 subarch-$(CONFIG_MODULES) += ../kernel/module.o
