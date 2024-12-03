@@ -244,8 +244,8 @@ static int scmi_clk_ops_init(struct device *dev, struct scmi_clk *sclk,
 		if (num_rates <= 0)
 			return -EINVAL;
 
-		min_rate = sclk->info->list.rates[0];
-		max_rate = sclk->info->list.rates[num_rates - 1];
+		min_rate = sclk->info->list.min_rate;
+		max_rate = sclk->info->list.max_rate;
 	} else {
 		min_rate = sclk->info->range.min_rate;
 		max_rate = sclk->info->range.max_rate;
