@@ -431,7 +431,8 @@ int futex_requeue(u32 __user *uaddr1, unsigned int flags1,
 		if (refill_pi_state_cache())
 			return -ENOMEM;
 
-		if (!(flags1 & FLAGS_SHARED) || !(flags2 & FLAGS_SHARED))
+		if ((!(flags1 & FLAGS_SHARED) || !(flags2 & FLAGS_SHARED)) &&
+		    !futex_hash_is_invariant())
 			futex_hash_lock = &current->mm->futex_hash_lock;
 	}
 

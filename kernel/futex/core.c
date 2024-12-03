@@ -61,6 +61,7 @@ struct futex_hash_bucket_private {
 	rcuref_t	users;
 	unsigned int	hash_mask;
 	struct rcu_head rcu;
+	bool		slots_invariant;
 	struct futex_hash_bucket queues[];
 };
 
@@ -1266,6 +1267,7 @@ static int futex_hash_allocate(unsigned int hash_slots)
 	struct futex_hash_bucket_private *hb_p, *hb_p_old = NULL;
 	struct mm_struct *mm;
 	size_t alloc_size;
+	int ret = 0;
 	int i;
 
 	if (hash_slots == 0)
@@ -1291,20 +1293,30 @@ static int futex_hash_allocate(unsigned int hash_slots)
 
 	rcuref_init(&hb_p->users, 1);
 	hb_p->hash_mask = hash_slots - 1;
+	hb_p->slots_invariant = false;
 
 	for (i = 0; i < hash_slots; i++)
 		futex_hash_bucket_init(&hb_p->queues[i], i + 1);
 
 	mm = current->mm;
 	scoped_guard(rwsem_write, &mm->futex_hash_lock) {
+
 		hb_p_old = rcu_dereference_check(mm->futex_hash_bucket,
 						 lockdep_is_held(&mm->futex_hash_lock));
-		rcu_assign_pointer(mm->futex_hash_bucket, hb_p);
+		if (hb_p_old && hb_p_old->slots_invariant)
+			ret = -EINVAL;
+		else
+			rcu_assign_pointer(mm->futex_hash_bucket, hb_p);
 	}
+	if (ret) {
+		kvfree(hb_p);
+		return ret;
+	}
+
 	if (hb_p_old)
 		futex_put_old_hb_p(hb_p_old);
 
-	return 0;
+	return ret;
 }
 
 int futex_hash_allocate_default(void)
@@ -1323,6 +1335,36 @@ static int futex_hash_get_slots(void)
 	return 0;
 }
 
+static int futex_hash_set_invariant(void)
+{
+	struct futex_hash_bucket_private *hb_p;
+	struct mm_struct *mm;
+
+	mm = current->mm;
+	guard(rwsem_write)(&mm->futex_hash_lock);
+	hb_p = rcu_dereference_check(mm->futex_hash_bucket,
+				     lockdep_is_held(&mm->futex_hash_lock));
+	if (!hb_p)
+		return -EINVAL;
+	if (hb_p->slots_invariant)
+		return -EALREADY;
+	hb_p->slots_invariant = true;
+	return 0;
+}
+
+bool futex_hash_is_invariant(void)
+{
+	struct futex_hash_bucket_private *hb_p;
+	struct mm_struct *mm;
+
+	mm = current->mm;
+	guard(rcu)();
+	hb_p = rcu_dereference(mm->futex_hash_bucket);
+	if (!hb_p)
+		return -EINVAL;
+	return hb_p->slots_invariant;
+}
+
 int futex_hash_prctl(unsigned long arg2, unsigned long arg3,
 		     unsigned long arg4, unsigned long arg5)
 {
@@ -1335,6 +1377,14 @@ int futex_hash_prctl(unsigned long arg2, unsigned long arg3,
 
 	case PR_FUTEX_HASH_GET_SLOTS:
 		ret = futex_hash_get_slots();
+		break;
+
+	case PR_FUTEX_HASH_SET_INVARIANT:
+		ret = futex_hash_set_invariant();
+		break;
+
+	case PR_FUTEX_HASH_GET_INVARIANT:
+		ret = futex_hash_is_invariant();
 		break;
 
 	default:

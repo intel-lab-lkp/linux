@@ -357,5 +357,7 @@ struct prctl_mm_map {
 #define PR_FUTEX_HASH			77
 # define PR_FUTEX_HASH_SET_SLOTS	1
 # define PR_FUTEX_HASH_GET_SLOTS	2
+# define PR_FUTEX_HASH_SET_INVARIANT	3
+# define PR_FUTEX_HASH_GET_INVARIANT	4
 
 #endif /* _LINUX_PRCTL_H */

@@ -1202,7 +1202,7 @@ int futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
 	if (!IS_ENABLED(CONFIG_FUTEX_PI))
 		return -ENOSYS;
 
-	if (!(flags & FLAGS_SHARED))
+	if (!(flags & FLAGS_SHARED) && !futex_hash_is_invariant())
 		futex_hash_lock = &current->mm->futex_hash_lock;
 retry:
 	if (get_user(uval, uaddr))
