@@ -20,6 +20,7 @@ struct bench_futex_parameters {
 	bool multi; /* lock-pi */
 	bool pi; /* requeue-pi */
 	bool broadcast; /* requeue */
+	unsigned int nbuckets;
 	unsigned int runtime; /* seconds*/
 	unsigned int nthreads;
 	unsigned int nfutexes;
