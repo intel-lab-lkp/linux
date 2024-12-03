@@ -381,6 +381,16 @@ static int params_from_user(struct tee_context *ctx, struct tee_param *params,
 			params[n].u.value.b = ip.b;
 			params[n].u.value.c = ip.c;
 			break;
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_INPUT:
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_OUTPUT:
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_INOUT:
+			params[n].u.membuf.uaddr = u64_to_user_ptr(ip.a);
+			params[n].u.membuf.size = ip.b;
+
+			if (!access_ok(params[n].u.membuf.uaddr, params[n].u.membuf.size))
+				return -EFAULT;
+
+			break;
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_INPUT:
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_OUTPUT:
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_INOUT:
@@ -447,6 +457,11 @@ static int params_to_user(struct tee_ioctl_param __user *uparams,
 			if (put_user(p->u.value.a, &up->a) ||
 			    put_user(p->u.value.b, &up->b) ||
 			    put_user(p->u.value.c, &up->c))
+				return -EFAULT;
+			break;
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_OUTPUT:
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_INOUT:
+			if (put_user((u64)p->u.membuf.size, &up->b))
 				return -EFAULT;
 			break;
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_OUTPUT:
@@ -649,6 +664,12 @@ static int params_to_supp(struct tee_context *ctx,
 			ip.b = p->u.value.b;
 			ip.c = p->u.value.c;
 			break;
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_INPUT:
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_INOUT:
+			ip.a = (u64)p->u.membuf.uaddr;
+			ip.b = p->u.membuf.size;
+			ip.c = 0;
+			break;
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_INPUT:
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_OUTPUT:
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_INOUT:
@@ -750,6 +771,11 @@ static int params_from_supp(struct tee_param *params, size_t num_params,
 			p->u.value.a = ip.a;
 			p->u.value.b = ip.b;
 			p->u.value.c = ip.c;
+			break;
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_OUTPUT:
+		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMBUF_INOUT:
+			p->u.membuf.uaddr = u64_to_user_ptr(ip.a);
+			p->u.membuf.size = ip.b;
 			break;
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_OUTPUT:
 		case TEE_IOCTL_PARAM_ATTR_TYPE_MEMREF_INOUT:
