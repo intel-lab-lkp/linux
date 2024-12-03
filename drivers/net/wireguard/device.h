@@ -53,6 +53,7 @@ struct wg_device {
 	atomic_t handshake_queue_len;
 	unsigned int num_peers, device_update_gen;
 	u32 fwmark;
+	int lowerdev; /* ifindex of lower level device to bind UDP transport */
 	u16 incoming_port;
 };
 

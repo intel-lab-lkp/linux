@@ -25,7 +25,8 @@ static int send4(struct wg_device *wg, struct sk_buff *skb,
 		.daddr = endpoint->addr4.sin_addr.s_addr,
 		.fl4_dport = endpoint->addr4.sin_port,
 		.flowi4_mark = wg->fwmark,
-		.flowi4_proto = IPPROTO_UDP
+		.flowi4_proto = IPPROTO_UDP,
+		.flowi4_oif = wg->lowerdev,
 	};
 	struct rtable *rt = NULL;
 	struct sock *sock;
@@ -110,6 +111,9 @@ static int send6(struct wg_device *wg, struct sk_buff *skb,
 	struct dst_entry *dst = NULL;
 	struct sock *sock;
 	int ret = 0;
+
+	if (wg->lowerdev)
+		fl.flowi6_oif = wg->lowerdev;
 
 	skb_mark_not_on_list(skb);
 	skb->dev = wg->dev;
@@ -360,6 +364,7 @@ int wg_socket_init(struct wg_device *wg, u16 port)
 		.family = AF_INET,
 		.local_ip.s_addr = htonl(INADDR_ANY),
 		.local_udp_port = htons(port),
+		.bind_ifindex = wg->lowerdev,
 		.use_udp_checksums = true
 	};
 #if IS_ENABLED(CONFIG_IPV6)
@@ -369,6 +374,7 @@ int wg_socket_init(struct wg_device *wg, u16 port)
 		.local_ip6 = IN6ADDR_ANY_INIT,
 		.use_udp6_tx_checksums = true,
 		.use_udp6_rx_checksums = true,
+		.bind_ifindex = wg->lowerdev,
 		.ipv6_v6only = true
 	};
 #endif
