@@ -1355,6 +1355,17 @@ struct drm_mode_closefb {
 	__u32 pad;
 };
 
+/**
+ * struct drm_histogram
+ * data_ptr: pointer to the array fo u32 data. This data can be histogram
+ * raw data or image enhanced data
+ * nr_elements: number of elements pointed by the data @data_ptr
+ */
+struct drm_histogram {
+	__u64 data_ptr;
+	__u32 nr_elements;
+};
+
 #if defined(__cplusplus)
 }
 #endif
