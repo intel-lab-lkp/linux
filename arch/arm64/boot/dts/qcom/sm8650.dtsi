@@ -372,6 +372,10 @@
 			interconnects = <&aggre2_noc MASTER_CRYPTO QCOM_ICC_TAG_ALWAYS
 					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
 		};
+
+		qcom_tee {
+			compatible = "qcom,tee";
+		};
 	};
 
 	clk_virt: interconnect-0 {
