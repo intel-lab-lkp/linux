@@ -33,6 +33,9 @@
 #include <asm/pgtable.h>
 #include <asm/sections.h>
 #include <asm/soc.h>
+#ifdef CONFIG_SPARSEMEM
+#include <asm/sparsemem.h>
+#endif
 #include <asm/tlbflush.h>
 
 #include "../kernel/head.h"
@@ -57,6 +60,12 @@ bool pgtable_l4_enabled __ro_after_init = !IS_ENABLED(CONFIG_XIP_KERNEL);
 bool pgtable_l5_enabled __ro_after_init = !IS_ENABLED(CONFIG_XIP_KERNEL);
 EXPORT_SYMBOL(pgtable_l4_enabled);
 EXPORT_SYMBOL(pgtable_l5_enabled);
+#endif
+
+#ifdef CONFIG_SPARSEMEM
+#define RISCV_MEMSTART_ALIGN	(1UL << SECTION_SIZE_BITS)
+#else
+#define RISCV_MEMSTART_ALIGN	PMD_SIZE
 #endif
 
 phys_addr_t phys_ram_base __ro_after_init;
@@ -239,9 +248,13 @@ static void __init setup_bootmem(void)
 	/*
 	 * Make sure we align the start of the memory on a PMD boundary so that
 	 * at worst, we map the linear mapping with PMD mappings.
+	 *
+	 * Also, make sure we align the start of the memory on a SECTION boundary
+	 * when CONFIG_SPARSEMEM_VMEMMAP is enabled to ensure the correctness of
+	 * pfn_to_page().
 	 */
 	if (!IS_ENABLED(CONFIG_XIP_KERNEL))
-		phys_ram_base = memblock_start_of_DRAM() & PMD_MASK;
+		phys_ram_base = round_down(memblock_start_of_DRAM(), RISCV_MEMSTART_ALIGN);
 
 	/*
 	 * In 64-bit, any use of __va/__pa before this point is wrong as we
