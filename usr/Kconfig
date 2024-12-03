@@ -32,6 +32,32 @@ config INITRAMFS_FORCE
 	  and is useful if you cannot or don't want to change the image
 	  your bootloader passes to the kernel.
 
+config INITRAMFS_EXTERNAL_PATH
+	string "External initramfs extraction path"
+	default "/"
+	depends on INITRAMFS_SOURCE!=""
+	depends on !INITRAMFS_FORCE
+	help
+	  This option causes the kernel to extract the initramfs image(s)
+	  provided by the bootloader into a subdirectory under the root
+	  directory. The subdirectory must exist in the built-in initramfs.
+
+	  This enables the built-in initramfs to check the integrity of the
+	  external one.
+
+	  If this option is used, any special nodes (device/fifo/socket) in the
+	  external initramfs are ignored. Symlinks, including ones pointing
+	  outside the subdirectory, are allowed.
+
+	  If your built-in initramfs is not capable of dealing with this, leave
+	  this option set to "/".
+
+config INITRAMFS_EXTERNAL_IS_SUBDIR
+	bool
+	default y
+	depends on INITRAMFS_EXTERNAL_PATH!=""
+	depends on INITRAMFS_EXTERNAL_PATH!="/"
+
 config INITRAMFS_ROOT_UID
 	int "User ID to map to 0 (user root)"
 	depends on INITRAMFS_SOURCE!=""

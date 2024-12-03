@@ -5,6 +5,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
+#include <linux/fs_struct.h>
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/dirent.h>
@@ -355,6 +356,7 @@ static int __init maybe_link(void)
 
 static __initdata struct file *wfile;
 static __initdata loff_t wfile_pos;
+static bool skip_special __initdata;
 
 static int __init do_name(void)
 {
@@ -399,7 +401,7 @@ static int __init do_name(void)
 		dir_add(collected, mtime);
 	} else if (S_ISBLK(mode) || S_ISCHR(mode) ||
 		   S_ISFIFO(mode) || S_ISSOCK(mode)) {
-		if (maybe_link() == 0) {
+		if (!skip_special && maybe_link() == 0) {
 			init_mknod(collected, mode, rdev);
 			init_chown(collected, uid, gid, 0);
 			init_chmod(collected, mode);
@@ -705,6 +707,11 @@ static void __init populate_initrd_image(char *err)
 
 static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 {
+#ifdef CONFIG_INITRAMFS_EXTERNAL_IS_SUBDIR
+	int r;
+	struct path orig_root, sub_root;
+#endif
+
 	/* Load the built in initramfs */
 	char *err = unpack_to_rootfs(__initramfs_start, __initramfs_size);
 	if (err)
@@ -718,6 +725,28 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	else
 		printk(KERN_INFO "Unpacking initramfs...\n");
 
+#ifdef CONFIG_INITRAMFS_EXTERNAL_IS_SUBDIR
+	/*
+	 * Switch the root so that the external initramfs is extracted there.
+	 * Use chroot so that paths under absolute symlinks resolve properly.
+	 */
+	get_fs_root(current->fs, &orig_root);
+
+	/*
+	 * Don't allow the creation of device nodes. Otherwise duplicate entries
+	 * may result in writes to devices.
+	 */
+	skip_special = true;
+
+	r = init_chdir(CONFIG_INITRAMFS_EXTERNAL_PATH);
+	if (r < 0)
+		panic_show_mem("Failed to open switch to external initramfs directory (%s): %d",
+			       CONFIG_INITRAMFS_EXTERNAL_PATH, r);
+	get_fs_pwd(current->fs, &sub_root);
+	set_fs_root(current->fs, &sub_root);
+	path_put(&sub_root);
+#endif
+
 	err = unpack_to_rootfs((char *)initrd_start, initrd_end - initrd_start);
 	if (err) {
 #ifdef CONFIG_BLK_DEV_RAM
@@ -726,6 +755,13 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 		printk(KERN_EMERG "Initramfs unpacking failed: %s\n", err);
 #endif
 	}
+
+#ifdef CONFIG_INITRAMFS_EXTERNAL_IS_SUBDIR
+	/* Restore the original root now that the external initramfs is extracted. */
+	set_fs_root(current->fs, &orig_root);
+	set_fs_pwd(current->fs, &orig_root);
+	path_put(&orig_root);
+#endif
 
 done:
 	security_initramfs_populated();
