@@ -109,12 +109,10 @@ static const struct regmap_config ipq8064_mdio_regmap_config = {
 static int
 ipq8064_mdio_probe(struct platform_device *pdev)
 {
-	struct device_node *np = pdev->dev.of_node;
 	struct ipq8064_mdio *priv;
 	struct resource *res;
 	struct mii_bus *bus;
 	void __iomem *base;
-	int ret;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
@@ -140,19 +138,7 @@ ipq8064_mdio_probe(struct platform_device *pdev)
 	if (IS_ERR(priv->base))
 		return PTR_ERR(priv->base);
 
-	ret = of_mdiobus_register(bus, np);
-	if (ret)
-		return ret;
-
-	platform_set_drvdata(pdev, bus);
-	return 0;
-}
-
-static void ipq8064_mdio_remove(struct platform_device *pdev)
-{
-	struct mii_bus *bus = platform_get_drvdata(pdev);
-
-	mdiobus_unregister(bus);
+	return devm_mdiobus_register(&pdev->dev, bus);
 }
 
 static const struct of_device_id ipq8064_mdio_dt_ids[] = {
@@ -163,7 +149,6 @@ MODULE_DEVICE_TABLE(of, ipq8064_mdio_dt_ids);
 
 static struct platform_driver ipq8064_mdio_driver = {
 	.probe = ipq8064_mdio_probe,
-	.remove = ipq8064_mdio_remove,
 	.driver = {
 		.name = "ipq8064-mdio",
 		.of_match_table = ipq8064_mdio_dt_ids,
