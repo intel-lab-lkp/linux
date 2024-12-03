@@ -365,7 +365,7 @@ OF_EARLYCON_DECLARE(juart, "altr,juart-1.0", altera_jtaguart_earlycon_setup);
 
 static struct uart_driver altera_jtaguart_driver = {
 	.owner		= THIS_MODULE,
-	.driver_name	= "altera_jtaguart",
+	.driver_name	= KBUILD_MODNAME,
 	.dev_name	= "ttyJ",
 	.major		= ALTERA_JTAGUART_MAJOR,
 	.minor		= ALTERA_JTAGUART_MINOR,
@@ -451,7 +451,7 @@ static struct platform_driver altera_jtaguart_platform_driver = {
 	.probe	= altera_jtaguart_probe,
 	.remove = altera_jtaguart_remove,
 	.driver	= {
-		.name		= DRV_NAME,
+		.name		= KBUILD_MODNAME,
 		.of_match_table	= of_match_ptr(altera_jtaguart_match),
 	},
 };
@@ -481,4 +481,4 @@ module_exit(altera_jtaguart_exit);
 MODULE_DESCRIPTION("Altera JTAG UART driver");
 MODULE_AUTHOR("Thomas Chou <thomas@wytron.com.tw>");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("platform:" DRV_NAME);
+MODULE_ALIAS("platform:" KBUILD_MODNAME);
