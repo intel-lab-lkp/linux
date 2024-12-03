@@ -494,6 +494,7 @@ int snp_send_guest_request(struct snp_msg_desc *mdesc, struct snp_guest_req *req
 
 void __init snp_secure_tsc_prepare(void);
 void __init snp_secure_tsc_init(void);
+void __noreturn sev_es_terminate(unsigned int set, unsigned int reason);
 
 #else	/* !CONFIG_AMD_MEM_ENCRYPT */
 
@@ -538,6 +539,7 @@ static inline int snp_send_guest_request(struct snp_msg_desc *mdesc, struct snp_
 					 struct snp_guest_request_ioctl *rio) { return -ENODEV; }
 static inline void __init snp_secure_tsc_prepare(void) { }
 static inline void __init snp_secure_tsc_init(void) { }
+static inline void sev_es_terminate(unsigned int set, unsigned int reason) { }
 
 #endif	/* CONFIG_AMD_MEM_ENCRYPT */
 
