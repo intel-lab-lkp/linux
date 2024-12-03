@@ -11,7 +11,6 @@
 #include <linux/mfd/intel_soc_pmic.h>
 #include <linux/regulator/consumer.h>
 #include <linux/gpio/consumer.h>
-#include <linux/gpio.h>
 #include <linux/platform_device.h>
 #include "../../include/linux/atomisp_platform.h"
 #include "../../include/linux/atomisp_gmin_platform.h"
@@ -85,8 +84,8 @@ struct gmin_subdev {
 	bool v2p8_on;
 	bool v1p2_on;
 
-	int v1p8_gpio;
-	int v2p8_gpio;
+	struct gpio_desc *v1p8_gpiod;
+	struct gpio_desc *v2p8_gpiod;
 
 	u8 pwm_i2c_addr;
 
@@ -549,23 +548,6 @@ static int gmin_subdev_add(struct gmin_subdev *gs)
 		dev_info(dev, "will handle gpio1 via ACPI\n");
 
 	/*
-	 * Those are used only when there is an external regulator apart
-	 * from the PMIC that would be providing power supply, like on the
-	 * two cases below:
-	 *
-	 * The ECS E7 board drives camera 2.8v from an external regulator
-	 * instead of the PMIC.  There's a gmin_CamV2P8 config variable
-	 * that specifies the GPIO to handle this particular case,
-	 * but this needs a broader architecture for handling camera power.
-	 *
-	 * The CHT RVP board drives camera 1.8v from an* external regulator
-	 * instead of the PMIC just like ECS E7 board.
-	 */
-
-	gs->v1p8_gpio = gmin_get_var_int(dev, true, "V1P8GPIO", -1);
-	gs->v2p8_gpio = gmin_get_var_int(dev, true, "V2P8GPIO", -1);
-
-	/*
 	 * FIXME:
 	 *
 	 * The ACPI handling code checks for the _PR? tables in order to
@@ -830,21 +812,23 @@ static int gmin_v1p2_ctrl(struct v4l2_subdev *subdev, int on)
 static int gmin_v1p8_ctrl(struct v4l2_subdev *subdev, int on)
 {
 	struct gmin_subdev *gs = find_gmin_subdev(subdev);
+	struct i2c_client *client = v4l2_get_subdevdata(gs->subdev);
+	struct device *dev = &client->dev;
 	int ret;
 	int value;
 	int reg;
+	int v1p8_gpio;
 
 	if (!gs || gs->v1p8_on == on)
 		return 0;
 
-	if (gs->v1p8_gpio >= 0) {
-		pr_info("atomisp_gmin_platform: 1.8v power on GPIO %d\n",
-			gs->v1p8_gpio);
-		ret = gpio_request(gs->v1p8_gpio, "camera_v1p8_en");
-		if (!ret)
-			ret = gpio_direction_output(gs->v1p8_gpio, 0);
-		if (ret)
+	v1p8_gpio = gmin_get_var_int(dev, true, "V1P8GPIO", -1);
+	if (v1p8_gpio >= 0) {
+		gs->v1p8_gpiod = gpiod_get_index(dev, "camera_v1p8", v1p8_gpio, GPIOD_ASIS);
+		if (IS_ERR(gs->v1p8_gpiod))
 			pr_err("V1P8 GPIO initialization failed\n");
+		else
+			gpiod_direction_output(gs->v1p8_gpiod, 0);
 	}
 
 	gs->v1p8_on = on;
@@ -861,8 +845,8 @@ static int gmin_v1p8_ctrl(struct v4l2_subdev *subdev, int on)
 			goto out; /* Still needed */
 	}
 
-	if (gs->v1p8_gpio >= 0)
-		gpio_set_value(gs->v1p8_gpio, on);
+	if (v1p8_gpio >= 0)
+		gpiod_set_value(gs->v1p8_gpiod, on);
 
 	if (gs->v1p8_reg) {
 		regulator_set_voltage(gs->v1p8_reg, 1800000, 1800000);
@@ -911,21 +895,24 @@ out:
 static int gmin_v2p8_ctrl(struct v4l2_subdev *subdev, int on)
 {
 	struct gmin_subdev *gs = find_gmin_subdev(subdev);
+	struct i2c_client *client = v4l2_get_subdevdata(gs->subdev);
+	struct device *dev = &client->dev;
 	int ret;
 	int value;
 	int reg;
+	int v2p8_gpio;
 
 	if (WARN_ON(!gs))
 		return -ENODEV;
 
-	if (gs->v2p8_gpio >= 0) {
-		pr_info("atomisp_gmin_platform: 2.8v power on GPIO %d\n",
-			gs->v2p8_gpio);
-		ret = gpio_request(gs->v2p8_gpio, "camera_v2p8");
-		if (!ret)
-			ret = gpio_direction_output(gs->v2p8_gpio, 0);
-		if (ret)
+	v2p8_gpio = gmin_get_var_int(dev, true, "V2P8GPIO", -1);
+	if (v2p8_gpio >= 0) {
+		pr_info("atomisp_gmin_platform: 2.8v power on GPIO %d\n", v2p8_gpio);
+		gs->v2p8_gpiod = gpiod_get_index(dev, "camera_v2p8", v2p8_gpio, GPIOD_ASIS);
+		if (IS_ERR(gs->v2p8_gpiod))
 			pr_err("V2P8 GPIO initialization failed\n");
+		else
+			gpiod_direction_output(gs->v2p8_gpiod, 0);
 	}
 
 	if (gs->v2p8_on == on)
@@ -944,8 +931,8 @@ static int gmin_v2p8_ctrl(struct v4l2_subdev *subdev, int on)
 			goto out; /* Still needed */
 	}
 
-	if (gs->v2p8_gpio >= 0)
-		gpio_set_value(gs->v2p8_gpio, on);
+	if (v2p8_gpio >= 0)
+		gpiod_set_value(gs->v2p8_gpiod, on);
 
 	if (gs->v2p8_reg) {
 		regulator_set_voltage(gs->v2p8_reg, 2900000, 2900000);
