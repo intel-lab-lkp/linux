@@ -37,6 +37,17 @@ properties:
   interrupts:
     maxItems: 1
 
+  interrupt-names:
+    Data ready is only available on INT1, but events can use either or
+    both pins.  If not specified, first element assumed to correspond
+    to INT1 and second (where present) to INT2.
+  minItems: 1
+  maxItems: 2
+  items:
+    enum:
+      - INT1
+      - INT2
+
 required:
   - compatible
   - reg
@@ -61,6 +72,7 @@ examples:
             reg = <0x2a>;
             interrupt-parent = <&gpio0>;
             interrupts = <0 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "INT1";
         };
     };
   - |
@@ -79,5 +91,6 @@ examples:
             spi-cpha;
             interrupt-parent = <&gpio0>;
             interrupts = <0 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "INT2";
         };
     };
