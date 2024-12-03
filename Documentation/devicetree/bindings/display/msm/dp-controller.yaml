@@ -55,7 +55,7 @@ properties:
       - description: Display Port AUX clock
       - description: Display Port Link clock
       - description: Link interface clock between DP and PHY
-      - description: Display Port Pixel clock
+      - description: Display Port stream 0 Pixel clock
 
   clock-names:
     items:
@@ -68,7 +68,7 @@ properties:
   assigned-clocks:
     items:
       - description: link clock source
-      - description: pixel clock source
+      - description: stream 0 pixel clock source
 
   assigned-clock-parents:
     items:
