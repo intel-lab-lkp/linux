@@ -87,6 +87,7 @@ struct pv_cpu_ops {
 #endif
 
 	void (*wbinvd)(void);
+	void (*wbnoinvd)(void);
 
 	/* cpuid emulation, mostly so that caps bits can be disabled */
 	void (*cpuid)(unsigned int *eax, unsigned int *ebx,

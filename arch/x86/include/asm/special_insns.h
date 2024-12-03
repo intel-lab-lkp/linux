@@ -117,7 +117,12 @@ static inline void wrpkru(u32 pkru)
 
 static __always_inline void native_wbinvd(void)
 {
-	asm volatile("wbinvd": : :"memory");
+	asm volatile("wbinvd" : : : "memory");
+}
+
+static __always_inline void native_wbnoinvd(void)
+{
+	asm volatile("wbnoinvd" : : : "memory");
 }
 
 static inline unsigned long __read_cr4(void)
@@ -171,6 +176,11 @@ static inline void __write_cr4(unsigned long x)
 static __always_inline void wbinvd(void)
 {
 	native_wbinvd();
+}
+
+static __always_inline void wbnoinvd(void)
+{
+	native_wbnoinvd();
 }
 
 #endif /* CONFIG_PARAVIRT_XXL */

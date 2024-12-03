@@ -121,6 +121,11 @@ noinstr void pv_native_wbinvd(void)
 	native_wbinvd();
 }
 
+noinstr void pv_native_wbnoinvd(void)
+{
+	native_wbnoinvd();
+}
+
 static noinstr void pv_native_safe_halt(void)
 {
 	native_safe_halt();
@@ -149,6 +154,7 @@ struct paravirt_patch_template pv_ops = {
 	.cpu.write_cr0		= native_write_cr0,
 	.cpu.write_cr4		= native_write_cr4,
 	.cpu.wbinvd		= pv_native_wbinvd,
+	.cpu.wbnoinvd		= pv_native_wbnoinvd,
 	.cpu.read_msr		= native_read_msr,
 	.cpu.write_msr		= native_write_msr,
 	.cpu.read_msr_safe	= native_read_msr_safe,
