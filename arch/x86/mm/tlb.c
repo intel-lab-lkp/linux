@@ -759,8 +759,11 @@ static void flush_tlb_func(void *info)
 
 		/* Can only happen on remote CPUs */
 		if (f->mm && f->mm != loaded_mm) {
+			unsigned long next_jiffies = jiffies + HZ;
 			cpumask_clear_cpu(raw_smp_processor_id(), mm_cpumask(f->mm));
 			trace_tlb_flush(TLB_REMOTE_WRONG_CPU, 0);
+			if (time_after(next_jiffies, READ_ONCE(f->mm->context.next_trim_cpumask)))
+				WRITE_ONCE(f->mm->context.next_trim_cpumask, next_jiffies);
 			return;
 		}
 	}
@@ -892,9 +895,27 @@ done:
 			nr_invalidate);
 }
 
-static bool tlb_is_not_lazy(int cpu, void *data)
+static bool should_flush_tlb(int cpu, void *data)
 {
-	return !per_cpu(cpu_tlbstate_shared.is_lazy, cpu);
+	struct flush_tlb_info *info = data;
+
+	/* Lazy TLB will get flushed at the next context switch. */
+	if (per_cpu(cpu_tlbstate_shared.is_lazy, cpu))
+		return false;
+
+	/* No mm means kernel memory flush. */
+	if (!info->mm)
+		return true;
+
+	/* The target mm is loaded, and the CPU is not lazy. */
+	if (per_cpu(cpu_tlbstate.loaded_mm, cpu) == info->mm)
+		return true;
+
+	/* In cpumask, but not the loaded mm? Periodically remove by flushing. */
+	if (time_after(jiffies, info->mm->context.next_trim_cpumask))
+		return true;
+
+	return false;
 }
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state_shared, cpu_tlbstate_shared);
@@ -928,7 +949,7 @@ STATIC_NOPV void native_flush_tlb_multi(const struct cpumask *cpumask,
 	if (info->freed_tables)
 		on_each_cpu_mask(cpumask, flush_tlb_func, (void *)info, true);
 	else
-		on_each_cpu_cond_mask(tlb_is_not_lazy, flush_tlb_func,
+		on_each_cpu_cond_mask(should_flush_tlb, flush_tlb_func,
 				(void *)info, 1, cpumask);
 }
 
