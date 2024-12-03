@@ -3399,6 +3399,8 @@ static int virtnet_tx_resize(struct virtnet_info *vi, struct send_queue *sq,
 	err = virtqueue_resize(sq->vq, ring_num, virtnet_sq_free_unused_buf, &flushed);
 	if (err)
 		netdev_err(vi->dev, "resize tx fail: tx queue index: %d err: %d\n", qindex, err);
+	if (flushed)
+		netdev_tx_reset_queue(netdev_get_tx_queue(vi->dev, qindex));
 
 	virtnet_tx_resume(vi, sq);
 
