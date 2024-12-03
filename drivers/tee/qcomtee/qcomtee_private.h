@@ -44,4 +44,9 @@ int __qcom_tee_object_do_invoke(struct qcom_tee_object_invoke_ctx *oic,
 				struct qcom_tee_object *object, u32 op,	struct qcom_tee_arg *u,
 				int *result);
 
+/* OBJECTS: */
+
+/* (1) Primordial Object. */
+extern struct qcom_tee_object qcom_tee_primordial_object;
+
 #endif /* QCOM_TEE_PRIVATE_H */

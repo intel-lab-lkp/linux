@@ -34,9 +34,11 @@ int qcom_tee_next_arg_type(struct qcom_tee_arg *u, int i, enum qcom_tee_arg_type
 }
 
 /* QTEE expects IDs with QCOM_TEE_MSG_OBJECT_NS_BIT set for object of
- * QCOM_TEE_OBJECT_TYPE_CB_OBJECT type.
+ * QCOM_TEE_OBJECT_TYPE_CB_OBJECT type. The first ID with QCOM_TEE_MSG_OBJECT_NS_BIT set is
+ * reserved for primordial object.
  */
-#define QCOM_TEE_OBJECT_ID_START	(QCOM_TEE_MSG_OBJECT_NS_BIT + 1)
+#define QCOM_TEE_OBJECT_PRIMORDIAL	(QCOM_TEE_MSG_OBJECT_NS_BIT)
+#define QCOM_TEE_OBJECT_ID_START	(QCOM_TEE_OBJECT_PRIMORDIAL + 1)
 #define QCOM_TEE_OBJECT_ID_END		(UINT_MAX)
 
 #define QCOM_TEE_OBJECT_SET(p, type, ...) __QCOM_TEE_OBJECT_SET(p, type, ##__VA_ARGS__, 0UL)
@@ -118,7 +120,8 @@ EXPORT_SYMBOL_GPL(qcom_tee_object_get);
  */
 void qcom_tee_object_put(struct qcom_tee_object *object)
 {
-	if (object != NULL_QCOM_TEE_OBJECT &&
+	if (object != &qcom_tee_primordial_object &&
+	    object != NULL_QCOM_TEE_OBJECT &&
 	    object != ROOT_QCOM_TEE_OBJECT)
 		kref_put(&object->refcount, qcom_tee_object_release);
 }
@@ -208,6 +211,9 @@ static void qcom_tee_object_id_put(unsigned int object_id)
 static struct qcom_tee_object *qcom_tee_local_object_get(unsigned int object_id)
 {
 	struct qcom_tee_object *object;
+
+	if (object_id == QCOM_TEE_OBJECT_PRIMORDIAL)
+		return &qcom_tee_primordial_object;
 
 	/* We trust QTEE does not mess the refcounts.
 	 * It does not issue RELEASE request and qcom_tee_object_get(), simultaneously.
