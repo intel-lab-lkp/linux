@@ -190,6 +190,7 @@ extern void check_host_supports_tls(int *supports_tls, int *tls_min);
 extern void get_host_cpu_features(
 	void (*flags_helper_func)(char *line),
 	void (*cache_helper_func)(char *line));
+extern int host_has_fsgsbase;
 
 /* mem.c */
 extern int create_mem_file(unsigned long long len);
@@ -221,6 +222,8 @@ extern int os_drop_memory(void *addr, int length);
 extern int can_drop_memory(void);
 extern int os_mincore(void *addr, unsigned long len);
 #ifndef CONFIG_MMU
+extern long long host_fs;
+extern int os_arch_prctl(int pid, int option, unsigned long *arg);
 extern int os_setup_seccomp(void);
 #endif
 
