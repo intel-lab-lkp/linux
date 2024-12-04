@@ -155,6 +155,15 @@ config MPENTIUM4
 		-Paxville
 		-Dempsey
 
+config MATOM
+	bool "Intel Atom (Bonnell)"
+	help
+
+	  Select this for the Intel Atom platform. Intel Atom CPUs have an
+	  in-order pipelining architecture and thus can benefit from
+	  accordingly optimized code.
+	  This includes all the 32-bit-only Atom chips such as N2xx and
+	  Z5xx/Z6xx.
 
 config MK6
 	bool "K6/K6-II/K6-III"
@@ -278,14 +287,17 @@ config MCORE2
 	  family in /proc/cpuinfo. Newer ones have 6 and older ones 15
 	  (not a typo)
 
-config MATOM
-	bool "Intel Atom"
+config MSILVERMONT
+	bool "Intel Atom (Silvermont/Goldmont)"
+	depends on X86_64
 	help
-
-	  Select this for the Intel Atom platform. Intel Atom CPUs have an
-	  in-order pipelining architecture and thus can benefit from
-	  accordingly optimized code. Use a recent GCC with specific Atom
-	  support in order to fully benefit from selecting this option.
+	  Select this to optimize for the 64-bit Intel Atom platform
+	  of the 22nm Silvermont microarchitecture and its 14nm
+	  Goldmont shrink (e.g. Atom C2xxx, Atom Z3xxx, Celeron
+	  N2xxx/J1xxx, Pentium N3xxx/J2xxx).
+	  Kernels built with this option are incompatible with very
+	  early Atom CPUs based on the Bonnell microarchitecture,
+	  such as Atom 230/330, D4xx/D5xx, D2xxx, N2xxx or Z2xxx.
 
 config GENERIC_CPU
 	bool "Generic-x86-64"
@@ -318,7 +330,7 @@ config X86_INTERNODE_CACHE_SHIFT
 config X86_L1_CACHE_SHIFT
 	int
 	default "7" if MPENTIUM4 || MPSC
-	default "6" if MK7 || MK8 || MPENTIUMM || MCORE2 || MATOM || MVIAC7 || X86_GENERIC || GENERIC_CPU
+	default "6" if MK7 || MK8 || MPENTIUMM || MCORE2 || MATOM || MSILVERMONT || MVIAC7 || X86_GENERIC || GENERIC_CPU
 	default "4" if MELAN || M486SX || M486 || MGEODEGX1
 	default "5" if MWINCHIP3D || MWINCHIPC6 || MCRUSOE || MEFFICEON || MCYRIXIII || MK6 || MPENTIUMIII || MPENTIUMII || M686 || M586MMX || M586TSC || M586 || MVIAC3_2 || MGEODE_LX
 
