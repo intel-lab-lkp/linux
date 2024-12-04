@@ -183,6 +183,9 @@ else
         cflags-$(CONFIG_MPSC)		+= -march=nocona
         cflags-$(CONFIG_MCORE2)		+= -march=core2
         cflags-$(CONFIG_MSILVERMONT)	+= -march=silvermont
+        cflags-$(CONFIG_MX86_64_V1)	+= -march=x86-64
+        cflags-$(CONFIG_MX86_64_V2)	+= $(call cc-option,-march=x86-64-v2,-march=x86-64)
+        cflags-$(CONFIG_MX86_64_V3)	+= $(call cc-option,-march=x86-64-v3,-march=x86-64)
         cflags-$(CONFIG_GENERIC_CPU)	+= -mtune=generic
         KBUILD_CFLAGS += $(cflags-y)
 
@@ -190,6 +193,9 @@ else
         rustflags-$(CONFIG_MPSC)	+= -Ctarget-cpu=nocona
         rustflags-$(CONFIG_MCORE2)	+= -Ctarget-cpu=core2
         rustflags-$(CONFIG_MSILVERMONT)	+= -Ctarget-cpu=silvermont
+        rustflags-$(CONFIG_MX86_64_V1)	+= -Ctarget-cpu=x86-64
+        rustflags-$(CONFIG_MX86_64_V2)	+= -Ctarget-cpu=x86-64-v2
+        rustflags-$(CONFIG_MX86_64_V3)	+= -Ctarget-cpu=x86-64-v3
         rustflags-$(CONFIG_GENERIC_CPU)	+= -Ztune-cpu=generic
         KBUILD_RUSTFLAGS += $(rustflags-y)
 
