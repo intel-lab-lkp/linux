@@ -15335,7 +15335,8 @@ static int reg_set_min_max(struct bpf_verifier_env *env,
 	return err;
 }
 
-static void mark_ptr_or_null_reg(struct bpf_func_state *state,
+static void mark_ptr_or_null_reg(struct bpf_verifier_env *env,
+				 struct bpf_func_state *state,
 				 struct bpf_reg_state *reg, u32 id,
 				 bool is_null)
 {
@@ -15352,6 +15353,38 @@ static void mark_ptr_or_null_reg(struct bpf_func_state *state,
 		 */
 		if (WARN_ON_ONCE(reg->smin_value || reg->smax_value || !tnum_equals_const(reg->var_off, 0)))
 			return;
+		/* Unlike the MEM_ALLOC and NON_OWN_REF cases explicitly tested
+		 * below, where verifier will set off != 0, we allow users to
+		 * modify offset of PTR_MAYBE_NULL raw_tp args to preserve
+		 * compatibility since they were not marked NULL in older
+		 * kernels. This however means we may see a non-zero offset
+		 * register when marking them non-NULL in verifier state.
+		 * This can happen for the operand of the instruction:
+		 *
+		 * r1 = trusted_or_null_(id=1);
+		 * if r1 == 0 goto X;
+		 *
+		 * or a copy when LLVM produces code like below:
+		 *
+		 * r1 = trusted_or_null_(id=1);
+		 * r3 = r1; // r3 = trusted_or_null(id=1)
+		 * r3 += K; // r3 = trusted_or_null_(id=1, off=K)
+		 * if r1 == 0 goto X; // see r3.off != 0 when unmarking _or_null
+		 *
+		 * The right fix would be more generic: lift the restriction on
+		 * modifying reg->off for PTR_MAYBE_NULL pointers, and only
+		 * enforce it for the instruction operand of a NULL check, while
+		 * allowing non-zero off for other registers, but this is future
+		 * work.
+		 */
+		if (mask_raw_tp_reg_cond(env, reg) && reg->off) {
+			/* We don't reset reg->id back to 0, as it's unexpected
+			 * when PTR_MAYBE_NULL is set. Simply give this reg a
+			 * new id in case user decides to NULL check it again.
+			 */
+			reg->id = ++env->id_gen;
+			return;
+		}
 		if (!(type_is_ptr_alloc_obj(reg->type) || type_is_non_owning_ref(reg->type)) &&
 		    WARN_ON_ONCE(reg->off))
 			return;
@@ -15385,7 +15418,8 @@ static void mark_ptr_or_null_reg(struct bpf_func_state *state,
 /* The logic is similar to find_good_pkt_pointers(), both could eventually
  * be folded together at some point.
  */
-static void mark_ptr_or_null_regs(struct bpf_verifier_state *vstate, u32 regno,
+static void mark_ptr_or_null_regs(struct bpf_verifier_env *env,
+				  struct bpf_verifier_state *vstate, u32 regno,
 				  bool is_null)
 {
 	struct bpf_func_state *state = vstate->frame[vstate->curframe];
@@ -15401,7 +15435,7 @@ static void mark_ptr_or_null_regs(struct bpf_verifier_state *vstate, u32 regno,
 		WARN_ON_ONCE(release_reference_state(state, id));
 
 	bpf_for_each_reg_in_vstate(vstate, state, reg, ({
-		mark_ptr_or_null_reg(state, reg, id, is_null);
+		mark_ptr_or_null_reg(env, state, reg, id, is_null);
 	}));
 }
 
@@ -15827,9 +15861,9 @@ static int check_cond_jmp_op(struct bpf_verifier_env *env,
 		/* Mark all identical registers in each branch as either
 		 * safe or unknown depending R == 0 or R != 0 conditional.
 		 */
-		mark_ptr_or_null_regs(this_branch, insn->dst_reg,
+		mark_ptr_or_null_regs(env, this_branch, insn->dst_reg,
 				      opcode == BPF_JNE);
-		mark_ptr_or_null_regs(other_branch, insn->dst_reg,
+		mark_ptr_or_null_regs(env, other_branch, insn->dst_reg,
 				      opcode == BPF_JEQ);
 	} else if (!try_match_pkt_pointers(insn, dst_reg, &regs[insn->src_reg],
 					   this_branch, other_branch) &&
