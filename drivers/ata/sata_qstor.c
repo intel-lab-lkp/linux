@@ -560,10 +560,9 @@ static int qs_ata_init_one(struct pci_dev *pdev,
 	if ((pci_resource_flags(pdev, QS_MMIO_BAR) & IORESOURCE_MEM) == 0)
 		return -ENODEV;
 
-	rc = pcim_iomap_regions(pdev, 1 << QS_MMIO_BAR, DRV_NAME);
-	if (rc)
-		return rc;
-	host->iomap = pcim_iomap_table(pdev);
+	host->iomap[QS_MMIO_BAR] = pcim_iomap_region(pdev, QS_MMIO_BAR, DRV_NAME);
+	if (IS_ERR(host->iomap[QS_MMIO_BAR]))
+		return PTR_ERR(host->iomap[QS_MMIO_BAR]);
 
 	rc = qs_set_dma_masks(pdev, host->iomap[QS_MMIO_BAR]);
 	if (rc)

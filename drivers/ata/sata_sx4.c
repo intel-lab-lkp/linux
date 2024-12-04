@@ -1390,6 +1390,7 @@ static int pdc_sata_init_one(struct pci_dev *pdev,
 	struct ata_host *host;
 	struct pdc_host_priv *hpriv;
 	int i, rc;
+	void __iomem *io_tmp;
 
 	ata_print_version_once(&pdev->dev, DRV_VERSION);
 
@@ -1406,13 +1407,25 @@ static int pdc_sata_init_one(struct pci_dev *pdev,
 	if (rc)
 		return rc;
 
-	rc = pcim_iomap_regions(pdev, (1 << PDC_MMIO_BAR) | (1 << PDC_DIMM_BAR),
-				DRV_NAME);
+	rc = 0;
+	io_tmp = pcim_iomap_region(pdev, PDC_MMIO_BAR, DRV_NAME);
+	if (IS_ERR(io_tmp))
+		rc = PTR_ERR(io_tmp);
 	if (rc == -EBUSY)
 		pcim_pin_device(pdev);
 	if (rc)
 		return rc;
-	host->iomap = pcim_iomap_table(pdev);
+	host->iomap[PDC_MMIO_BAR] = io_tmp;
+
+	rc = 0;
+	io_tmp = pcim_iomap_region(pdev, PDC_DIMM_BAR, DRV_NAME);
+	if (IS_ERR(io_tmp))
+		rc = PTR_ERR(io_tmp);
+	if (rc == -EBUSY)
+		pcim_pin_device(pdev);
+	if (rc)
+		return rc;
+	host->iomap[PDC_DIMM_BAR] = io_tmp;
 
 	for (i = 0; i < 4; i++) {
 		struct ata_port *ap = host->ports[i];

@@ -199,7 +199,7 @@ static int hpt3x3_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	static const u8 offset_ctl[2] = { 0x36, 0x3E };
 	const struct ata_port_info *ppi[] = { &info, NULL };
 	struct ata_host *host;
-	int i, rc;
+	int i, rc = 0;
 	void __iomem *base;
 
 	hpt3x3_init_chipset(pdev);
@@ -215,17 +215,19 @@ static int hpt3x3_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		return rc;
 
 	/* Everything is relative to BAR4 if we set up this way */
-	rc = pcim_iomap_regions(pdev, 1 << 4, DRV_NAME);
+	base = pcim_iomap_region(pdev, 4, DRV_NAME);
+	if (IS_ERR(base))
+		rc = PTR_ERR(base);
 	if (rc == -EBUSY)
 		pcim_pin_device(pdev);
 	if (rc)
 		return rc;
-	host->iomap = pcim_iomap_table(pdev);
+
 	rc = dma_set_mask_and_coherent(&pdev->dev, ATA_DMA_MASK);
 	if (rc)
 		return rc;
 
-	base = host->iomap[4];	/* Bus mastering base */
+	host->iomap[4] = base;	/* Bus mastering base */
 
 	for (i = 0; i < host->n_ports; i++) {
 		struct ata_port *ap = host->ports[i];

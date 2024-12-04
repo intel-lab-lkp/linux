@@ -702,16 +702,15 @@ static int pdc2027x_init_one(struct pci_dev *pdev,
 	if (rc)
 		return rc;
 
-	rc = pcim_iomap_regions(pdev, 1 << PDC_MMIO_BAR, DRV_NAME);
-	if (rc)
-		return rc;
-	host->iomap = pcim_iomap_table(pdev);
+	mmio_base = pcim_iomap_region(pdev, PDC_MMIO_BAR, DRV_NAME);
+	if (IS_ERR(mmio_base))
+		return PTR_ERR(mmio_base);
+
+	host->iomap[PDC_MMIO_BAR] = mmio_base;
 
 	rc = dma_set_mask_and_coherent(&pdev->dev, ATA_DMA_MASK);
 	if (rc)
 		return rc;
-
-	mmio_base = host->iomap[PDC_MMIO_BAR];
 
 	for (i = 0; i < 2; i++) {
 		struct ata_port *ap = host->ports[i];

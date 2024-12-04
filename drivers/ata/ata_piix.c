@@ -1456,10 +1456,9 @@ static int piix_init_sidpr(struct ata_host *host)
 	    pci_resource_len(pdev, PIIX_SIDPR_BAR) != PIIX_SIDPR_LEN)
 		return 0;
 
-	if (pcim_iomap_regions(pdev, 1 << PIIX_SIDPR_BAR, DRV_NAME))
-		return 0;
-
-	hpriv->sidpr = pcim_iomap_table(pdev)[PIIX_SIDPR_BAR];
+	hpriv->sidpr = pcim_iomap_region(pdev, PIIX_SIDPR_BAR, DRV_NAME);
+	if (IS_ERR(hpriv->sidpr))
+		return PTR_ERR(hpriv->sidpr);
 
 	/* SCR access via SIDPR doesn't work on some configurations.
 	 * Give it a test drive by inhibiting power save modes which

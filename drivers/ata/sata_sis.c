@@ -280,10 +280,10 @@ static int sis_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (!(pi.flags & SIS_FLAG_CFGSCR)) {
 		void __iomem *mmio;
 
-		rc = pcim_iomap_regions(pdev, 1 << SIS_SCR_PCI_BAR, DRV_NAME);
-		if (rc)
-			return rc;
-		mmio = host->iomap[SIS_SCR_PCI_BAR];
+		mmio = pcim_iomap_region(pdev, SIS_SCR_PCI_BAR, DRV_NAME);
+		if (IS_ERR(mmio))
+			return PTR_ERR(mmio);
+		host->iomap[SIS_SCR_PCI_BAR] = mmio;
 
 		host->ports[0]->ioaddr.scr_addr = mmio;
 		host->ports[1]->ioaddr.scr_addr = mmio + port2_start;

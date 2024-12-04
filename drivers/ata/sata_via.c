@@ -457,6 +457,7 @@ static int vt6420_prepare_host(struct pci_dev *pdev, struct ata_host **r_host)
 {
 	const struct ata_port_info *ppi[] = { &vt6420_port_info, NULL };
 	struct ata_host *host;
+	void __iomem *iomem;
 	int rc;
 
 	if (vt6420_hotplug) {
@@ -469,11 +470,12 @@ static int vt6420_prepare_host(struct pci_dev *pdev, struct ata_host **r_host)
 		return rc;
 	*r_host = host;
 
-	rc = pcim_iomap_regions(pdev, 1 << 5, DRV_NAME);
-	if (rc) {
+	iomem = pcim_iomap_region(pdev, 5, DRV_NAME);
+	if (IS_ERR(iomem)) {
 		dev_err(&pdev->dev, "failed to iomap PCI BAR 5\n");
-		return rc;
+		return PTR_ERR(iomem);
 	}
+	host->iomap[5] = iomem;
 
 	host->ports[0]->ioaddr.scr_addr = svia_scr_addr(host->iomap[5], 0);
 	host->ports[1]->ioaddr.scr_addr = svia_scr_addr(host->iomap[5], 1);
@@ -486,6 +488,7 @@ static int vt6421_prepare_host(struct pci_dev *pdev, struct ata_host **r_host)
 	const struct ata_port_info *ppi[] =
 		{ &vt6421_sport_info, &vt6421_sport_info, &vt6421_pport_info };
 	struct ata_host *host;
+	void __iomem *iomem;
 	int i, rc;
 
 	*r_host = host = ata_host_alloc_pinfo(&pdev->dev, ppi, ARRAY_SIZE(ppi));
@@ -494,13 +497,17 @@ static int vt6421_prepare_host(struct pci_dev *pdev, struct ata_host **r_host)
 		return -ENOMEM;
 	}
 
-	rc = pcim_iomap_regions(pdev, 0x3f, DRV_NAME);
-	if (rc) {
-		dev_err(&pdev->dev, "failed to request/iomap PCI BARs (errno=%d)\n",
-			rc);
-		return rc;
+	/* Request and ioremap _all_ PCI BARs. */
+	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
+		iomem = pcim_iomap_region(pdev, i, DRV_NAME);
+		if (IS_ERR(iomem)) {
+			rc = PTR_ERR(iomem);
+			dev_err(&pdev->dev, "failed to request/iomap PCI BARs (errno=%d)\n",
+				rc);
+			return rc;
+		}
+		host->iomap[i] = iomem;
 	}
-	host->iomap = pcim_iomap_table(pdev);
 
 	for (i = 0; i < host->n_ports; i++)
 		vt6421_init_addrs(host->ports[i]);
@@ -519,10 +526,10 @@ static int vt8251_prepare_host(struct pci_dev *pdev, struct ata_host **r_host)
 		return rc;
 	*r_host = host;
 
-	rc = pcim_iomap_regions(pdev, 1 << 5, DRV_NAME);
-	if (rc) {
+	host->iomap[5] = pcim_iomap_region(pdev, 5, DRV_NAME);
+	if (IS_ERR(host->iomap[5])) {
 		dev_err(&pdev->dev, "failed to iomap PCI BAR 5\n");
-		return rc;
+		return PTR_ERR(host->iomap[5]);
 	}
 
 	/* 8251 hosts four sata ports as M/S of the two channels */

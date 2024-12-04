@@ -2353,12 +2353,12 @@ static int nv_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	host->private_data = hpriv;
 
 	/* request and iomap NV_MMIO_BAR */
-	rc = pcim_iomap_regions(pdev, 1 << NV_MMIO_BAR, DRV_NAME);
-	if (rc)
-		return rc;
+	base = pcim_iomap_region(pdev, NV_MMIO_BAR, DRV_NAME);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
 
 	/* configure SCR access */
-	base = host->iomap[NV_MMIO_BAR];
+	host->iomap[NV_MMIO_BAR] = base;
 	host->ports[0]->ioaddr.scr_addr = base + NV_PORT0_SCR_REG_OFFSET;
 	host->ports[1]->ioaddr.scr_addr = base + NV_PORT1_SCR_REG_OFFSET;
 
