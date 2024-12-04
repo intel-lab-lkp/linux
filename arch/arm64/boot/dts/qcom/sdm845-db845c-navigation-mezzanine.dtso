@@ -115,7 +115,8 @@
 
 		port {
 			ov7251_ep: endpoint {
-				data-lanes = <0 1>;
+				clock-lanes = <1>;
+				data-lanes = <0>;
 /*				remote-endpoint = <&csiphy3_ep>; */
 			};
 		};
