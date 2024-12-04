@@ -874,19 +874,6 @@ inet_bhash2_addr_any_hashbucket(const struct sock *sk, const struct net *net, in
 	return &hinfo->bhash2[hash & (hinfo->bhash_size - 1)];
 }
 
-static void inet_update_saddr(struct sock *sk, void *saddr, int family)
-{
-	if (family == AF_INET) {
-		inet_sk(sk)->inet_saddr = *(__be32 *)saddr;
-		sk_rcv_saddr_set(sk, inet_sk(sk)->inet_saddr);
-	}
-#if IS_ENABLED(CONFIG_IPV6)
-	else {
-		sk->sk_v6_rcv_saddr = *(struct in6_addr *)saddr;
-	}
-#endif
-}
-
 static int __inet_bhash2_update_saddr(struct sock *sk, void *saddr, int family, bool reset)
 {
 	struct inet_hashinfo *hinfo = tcp_or_dccp_get_hashinfo(sk);

@@ -14,7 +14,7 @@ int __udp6_lib_err(struct sk_buff *, struct inet6_skb_parm *, u8, u8, int,
 
 int udpv6_init_sock(struct sock *sk);
 int udp_v6_get_port(struct sock *sk, unsigned short snum);
-void udp_v6_rehash(struct sock *sk);
+void udp_v6_set_rcv_saddr(struct sock *sk, void *addr);
 
 int udpv6_getsockopt(struct sock *sk, int level, int optname,
 		     char __user *optval, int __user *optlen);

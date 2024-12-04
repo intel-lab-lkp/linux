@@ -104,10 +104,19 @@ int ip6_datagram_dst_update(struct sock *sk, bool fix_sk_saddr)
 			np->saddr = fl6.saddr;
 
 		if (ipv6_addr_any(&sk->sk_v6_rcv_saddr)) {
-			sk->sk_v6_rcv_saddr = fl6.saddr;
-			inet->inet_rcv_saddr = LOOPBACK4_IPV6;
-			if (sk->sk_prot->rehash)
-				sk->sk_prot->rehash(sk);
+			__be32 v4addr = LOOPBACK4_IPV6;
+
+			if (sk->sk_prot->set_rcv_saddr &&
+			    sk->sk_family == AF_INET)
+				sk->sk_prot->set_rcv_saddr(sk, &v4addr);
+			else
+				inet->inet_rcv_saddr = v4addr;
+
+			if (sk->sk_prot->set_rcv_saddr &&
+			    sk->sk_family == AF_INET6)
+				sk->sk_prot->set_rcv_saddr(sk, &fl6.saddr);
+			else
+				sk->sk_v6_rcv_saddr = fl6.saddr;
 		}
 	}
 
@@ -209,10 +218,15 @@ ipv4_connected:
 
 		if (ipv6_addr_any(&sk->sk_v6_rcv_saddr) ||
 		    ipv6_mapped_addr_any(&sk->sk_v6_rcv_saddr)) {
-			ipv6_addr_set_v4mapped(inet->inet_rcv_saddr,
-					       &sk->sk_v6_rcv_saddr);
-			if (sk->sk_prot->rehash && sk->sk_family == AF_INET6)
-				sk->sk_prot->rehash(sk);
+			struct in6_addr v4mapped;
+
+			ipv6_addr_set_v4mapped(inet->inet_rcv_saddr, &v4mapped);
+
+			if (sk->sk_prot->set_rcv_saddr &&
+			    sk->sk_family == AF_INET6)
+				sk->sk_prot->set_rcv_saddr(sk, &v4mapped);
+			else
+				sk->sk_v6_rcv_saddr = v4mapped;
 		}
 
 		goto out;

@@ -639,9 +639,12 @@ struct sock *__udp4_lib_lookup(const struct net *net, __be32 saddr,
 		int sdif, struct udp_table *udptable, struct sk_buff *skb)
 {
 	unsigned short hnum = ntohs(dport);
-	struct udp_hslot *hslot2;
+	struct udp_hslot *hslot, *hslot2;
 	struct sock *result, *sk;
 	unsigned int hash2;
+
+	hslot = udp_hashslot(udptable, net, hnum);
+	spin_lock_bh(&hslot->lock);
 
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
 	hslot2 = udp_hashslot2(udptable, hash2);
@@ -649,8 +652,8 @@ struct sock *__udp4_lib_lookup(const struct net *net, __be32 saddr,
 	if (udp_has_hash4(hslot2)) {
 		result = udp4_lib_lookup4(net, saddr, sport, daddr, hnum,
 					  dif, sdif, udptable);
-		if (result) /* udp4_lib_lookup4 return sk or NULL */
-			return result;
+		if (result) /* udp4_lib_lookup4() returns sk or NULL */
+			goto done;
 	}
 
 	/* Lookup connected or non-wildcard socket */
@@ -684,6 +687,8 @@ struct sock *__udp4_lib_lookup(const struct net *net, __be32 saddr,
 				  htonl(INADDR_ANY), hnum, dif, sdif,
 				  hslot2, skb);
 done:
+	spin_unlock_bh(&hslot->lock);
+
 	if (IS_ERR(result))
 		return NULL;
 	return result;
@@ -2118,10 +2123,12 @@ int __udp_disconnect(struct sock *sk, int flags)
 	sock_rps_reset_rxhash(sk);
 	sk->sk_bound_dev_if = 0;
 	if (!(sk->sk_userlocks & SOCK_BINDADDR_LOCK)) {
+		if (sk->sk_prot->set_rcv_saddr &&
+		    (sk->sk_userlocks & SOCK_BINDPORT_LOCK)) {
+			sk->sk_prot->set_rcv_saddr(sk, &(__be32){ 0 });
+		}
+
 		inet_reset_saddr(sk);
-		if (sk->sk_prot->rehash &&
-		    (sk->sk_userlocks & SOCK_BINDPORT_LOCK))
-			sk->sk_prot->rehash(sk);
 	}
 
 	if (!(sk->sk_userlocks & SOCK_BINDPORT_LOCK)) {
@@ -2172,25 +2179,37 @@ void udp_lib_unhash(struct sock *sk)
 }
 EXPORT_SYMBOL(udp_lib_unhash);
 
-/*
- * inet_rcv_saddr was changed, we must rehash secondary hash
+/**
+ * udp_lib_set_rcv_saddr() - Set local address and rehash socket atomically
+ * @sk:		Socket changing local address
+ * @addr:	New address, __be32 * or struct in6_addr * depending on family
+ * @hash:	New secondary hash (local port and address) for socket
+ * @hash4:	New 4-tuple hash (local/remote port and address) for socket
+ *
+ * Set local address for socket and rehash it while holding a spinlock on the
+ * primary hash chain (port only). This needs to be atomic to avoid that a
+ * concurrent lookup misses a socket while it's being connected or disconnected.
  */
-void udp_lib_rehash(struct sock *sk, u16 newhash, u16 newhash4)
+void udp_lib_set_rcv_saddr(struct sock *sk, void *addr, u16 hash, u16 hash4)
 {
+	struct udp_hslot *hslot;
+
 	if (sk_hashed(sk)) {
 		struct udp_table *udptable = udp_get_table_prot(sk);
-		struct udp_hslot *hslot, *hslot2, *nhslot2;
+		struct udp_hslot *hslot2, *nhslot2;
 
 		hslot2 = udp_hashslot2(udptable, udp_sk(sk)->udp_portaddr_hash);
-		nhslot2 = udp_hashslot2(udptable, newhash);
-		udp_sk(sk)->udp_portaddr_hash = newhash;
+		nhslot2 = udp_hashslot2(udptable, hash);
+
+		hslot = udp_hashslot(udptable, sock_net(sk),
+				     udp_sk(sk)->udp_port_hash);
+
+		spin_lock_bh(&hslot->lock);
+
+		udp_sk(sk)->udp_portaddr_hash = hash;
 
 		if (hslot2 != nhslot2 ||
 		    rcu_access_pointer(sk->sk_reuseport_cb)) {
-			hslot = udp_hashslot(udptable, sock_net(sk),
-					     udp_sk(sk)->udp_port_hash);
-			/* we must lock primary chain too */
-			spin_lock_bh(&hslot->lock);
 			if (rcu_access_pointer(sk->sk_reuseport_cb))
 				reuseport_detach_sock(sk);
 
@@ -2208,7 +2227,7 @@ void udp_lib_rehash(struct sock *sk, u16 newhash, u16 newhash4)
 			}
 
 			if (udp_hashed4(sk)) {
-				udp_rehash4(udptable, sk, newhash4);
+				udp_rehash4(udptable, sk, hash4);
 
 				if (hslot2 != nhslot2) {
 					spin_lock(&hslot2->lock);
@@ -2220,23 +2239,32 @@ void udp_lib_rehash(struct sock *sk, u16 newhash, u16 newhash4)
 					spin_unlock(&nhslot2->lock);
 				}
 			}
-			spin_unlock_bh(&hslot->lock);
 		}
 	}
-}
-EXPORT_SYMBOL(udp_lib_rehash);
 
-void udp_v4_rehash(struct sock *sk)
+	inet_update_saddr(sk, addr, sk->sk_family);
+
+	if (sk_hashed(sk))
+		spin_unlock_bh(&hslot->lock);
+}
+EXPORT_SYMBOL(udp_lib_set_rcv_saddr);
+
+/**
+ * udp_v4_set_rcv_saddr() - Set local address and new hash for IPv4 socket
+ * @sk:		Socket changing local address
+ * @addr:	New address, pointer to __be32 representation
+ */
+void udp_v4_set_rcv_saddr(struct sock *sk, void *addr)
 {
-	u16 new_hash = ipv4_portaddr_hash(sock_net(sk),
-					  inet_sk(sk)->inet_rcv_saddr,
-					  inet_sk(sk)->inet_num);
-	u16 new_hash4 = udp_ehashfn(sock_net(sk),
-				    sk->sk_rcv_saddr, sk->sk_num,
-				    sk->sk_daddr, sk->sk_dport);
+	u16 hash = ipv4_portaddr_hash(sock_net(sk),
+				      *(__be32 *)addr, inet_sk(sk)->inet_num);
+	u16 hash4 = udp_ehashfn(sock_net(sk),
+				*(__be32 *)addr, sk->sk_num,
+				sk->sk_daddr, sk->sk_dport);
 
-	udp_lib_rehash(sk, new_hash, new_hash4);
+	udp_lib_set_rcv_saddr(sk, addr, hash, hash4);
 }
+EXPORT_SYMBOL(udp_v4_set_rcv_saddr);
 
 static int __udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
@@ -3129,6 +3157,7 @@ struct proto udp_prot = {
 	.close			= udp_lib_close,
 	.pre_connect		= udp_pre_connect,
 	.connect		= udp_connect,
+	.set_rcv_saddr		= udp_v4_set_rcv_saddr,
 	.disconnect		= udp_disconnect,
 	.ioctl			= udp_ioctl,
 	.init			= udp_init_sock,
@@ -3141,7 +3170,6 @@ struct proto udp_prot = {
 	.release_cb		= ip4_datagram_release_cb,
 	.hash			= udp_lib_hash,
 	.unhash			= udp_lib_unhash,
-	.rehash			= udp_v4_rehash,
 	.get_port		= udp_v4_get_port,
 	.put_port		= udp_lib_unhash,
 #ifdef CONFIG_BPF_SYSCALL
