@@ -876,10 +876,13 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	}
 	proto = geni_se_read_proto(&gi2c->se);
 	if (proto != GENI_SE_I2C) {
-		dev_err(dev, "Invalid proto %d\n", proto);
-		geni_se_resources_off(&gi2c->se);
-		clk_disable_unprepare(gi2c->core_clk);
-		return -ENXIO;
+		ret = geni_load_se_firmware(&gi2c->se, GENI_SE_I2C);
+		if (ret) {
+			dev_err(gi2c->se.dev, "i2c firmware load failed ret: %d\n", ret);
+			geni_se_resources_off(&gi2c->se);
+			clk_disable_unprepare(gi2c->core_clk);
+			return ret;
+		}
 	}
 
 	if (desc && desc->no_dma_support)
