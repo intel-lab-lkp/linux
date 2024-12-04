@@ -769,7 +769,7 @@ int pmd_set_huge(pmd_t *pmd, phys_addr_t addr, pgprot_t prot)
 	mtrr_type_lookup(addr, addr + PMD_SIZE, &uniform);
 	if (!uniform) {
 		pr_warn_once("%s: Cannot satisfy [mem %#010llx-%#010llx] with a huge-page mapping due to MTRR override.\n",
-			     __func__, addr, addr + PMD_SIZE);
+			     __func__, (u64)addr, (u64)addr + PMD_SIZE);
 		return 0;
 	}
 
