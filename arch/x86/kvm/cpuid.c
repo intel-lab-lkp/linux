@@ -606,15 +606,10 @@ static __always_inline void kvm_cpu_cap_mask(enum cpuid_leafs leaf, u32 mask)
 
 void kvm_set_cpu_caps(void)
 {
-#ifdef CONFIG_X86_64
 	unsigned int f_gbpages = F(GBPAGES);
 	unsigned int f_lm = F(LM);
 	unsigned int f_xfd = F(XFD);
-#else
-	unsigned int f_gbpages = 0;
-	unsigned int f_lm = 0;
-	unsigned int f_xfd = 0;
-#endif
+
 	memset(kvm_cpu_caps, 0, sizeof(kvm_cpu_caps));
 
 	BUILD_BUG_ON(sizeof(kvm_cpu_caps) - (NKVMCAPINTS * sizeof(*kvm_cpu_caps)) >
@@ -746,7 +741,7 @@ void kvm_set_cpu_caps(void)
 		0 /* Reserved */ | f_lm | F(3DNOWEXT) | F(3DNOW)
 	);
 
-	if (!tdp_enabled && IS_ENABLED(CONFIG_X86_64))
+	if (!tdp_enabled)
 		kvm_cpu_cap_set(X86_FEATURE_GBPAGES);
 
 	kvm_cpu_cap_init_kvm_defined(CPUID_8000_0007_EDX,

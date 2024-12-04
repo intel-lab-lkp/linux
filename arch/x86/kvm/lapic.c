@@ -46,11 +46,7 @@
 #include "hyperv.h"
 #include "smm.h"
 
-#ifndef CONFIG_X86_64
-#define mod_64(x, y) ((x) - (y) * div64_u64(x, y))
-#else
 #define mod_64(x, y) ((x) % (y))
-#endif
 
 /* 14 is the version for Xeon and Pentium 8.4.8*/
 #define APIC_VERSION			0x14UL

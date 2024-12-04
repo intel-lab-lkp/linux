@@ -160,13 +160,8 @@ static_assert(MMIO_SPTE_GEN_LOW_BITS == 8 && MMIO_SPTE_GEN_HIGH_BITS == 11);
  * For VMX EPT, bit 63 is ignored if #VE is disabled. (EPT_VIOLATION_VE=0)
  *              bit 63 is #VE suppress if #VE is enabled. (EPT_VIOLATION_VE=1)
  */
-#ifdef CONFIG_X86_64
 #define SHADOW_NONPRESENT_VALUE	BIT_ULL(63)
 static_assert(!(SHADOW_NONPRESENT_VALUE & SPTE_MMU_PRESENT_MASK));
-#else
-#define SHADOW_NONPRESENT_VALUE	0ULL
-#endif
-
 
 /*
  * True if A/D bits are supported in hardware and are enabled by KVM.  When

@@ -116,21 +116,12 @@ struct kvm_mmu_page {
 	 * isn't properly aligned, etc...
 	 */
 	struct list_head possible_nx_huge_page_link;
-#ifdef CONFIG_X86_32
-	/*
-	 * Used out of the mmu-lock to avoid reading spte values while an
-	 * update is in progress; see the comments in __get_spte_lockless().
-	 */
-	int clear_spte_count;
-#endif
 
 	/* Number of writes since the last time traversal visited this page.  */
 	atomic_t write_flooding_count;
 
-#ifdef CONFIG_X86_64
 	/* Used for freeing the page asynchronously if it is a TDP MMU page. */
 	struct rcu_head rcu_head;
-#endif
 };
 
 extern struct kmem_cache *mmu_page_header_cache;

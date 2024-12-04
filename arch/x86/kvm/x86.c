@@ -112,12 +112,8 @@ EXPORT_SYMBOL_GPL(kvm_host);
  * - enable syscall per default because its emulated by KVM
  * - enable LME and LMA per default on 64 bit KVM
  */
-#ifdef CONFIG_X86_64
 static
 u64 __read_mostly efer_reserved_bits = ~((u64)(EFER_SCE | EFER_LME | EFER_LMA));
-#else
-static u64 __read_mostly efer_reserved_bits = ~((u64)EFER_SCE);
-#endif
 
 static u64 __read_mostly cr4_reserved_bits = CR4_RESERVED_BITS;
 
@@ -318,9 +314,7 @@ static struct kmem_cache *x86_emulator_cache;
 static const u32 msrs_to_save_base[] = {
 	MSR_IA32_SYSENTER_CS, MSR_IA32_SYSENTER_ESP, MSR_IA32_SYSENTER_EIP,
 	MSR_STAR,
-#ifdef CONFIG_X86_64
 	MSR_CSTAR, MSR_KERNEL_GS_BASE, MSR_SYSCALL_MASK, MSR_LSTAR,
-#endif
 	MSR_IA32_TSC, MSR_IA32_CR_PAT, MSR_VM_HSAVE_PA,
 	MSR_IA32_FEAT_CTL, MSR_IA32_BNDCFGS, MSR_TSC_AUX,
 	MSR_IA32_SPEC_CTRL, MSR_IA32_TSX_CTRL,
@@ -1071,10 +1065,8 @@ EXPORT_SYMBOL_GPL(load_pdptrs);
 
 static bool kvm_is_valid_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 {
-#ifdef CONFIG_X86_64
 	if (cr0 & 0xffffffff00000000UL)
 		return false;
-#endif
 
 	if ((cr0 & X86_CR0_NW) && !(cr0 & X86_CR0_CD))
 		return false;
@@ -1134,7 +1126,6 @@ int kvm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 	/* Write to CR0 reserved bits are ignored, even on Intel. */
 	cr0 &= ~CR0_RESERVED_BITS;
 
-#ifdef CONFIG_X86_64
 	if ((vcpu->arch.efer & EFER_LME) && !is_paging(vcpu) &&
 	    (cr0 & X86_CR0_PG)) {
 		int cs_db, cs_l;
@@ -1145,7 +1136,7 @@ int kvm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 		if (cs_l)
 			return 1;
 	}
-#endif
+
 	if (!(vcpu->arch.efer & EFER_LME) && (cr0 & X86_CR0_PG) &&
 	    is_pae(vcpu) && ((cr0 ^ old_cr0) & X86_CR0_PDPTR_BITS) &&
 	    !load_pdptrs(vcpu, kvm_read_cr3(vcpu)))
@@ -1218,12 +1209,10 @@ void kvm_load_host_xsave_state(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_GPL(kvm_load_host_xsave_state);
 
-#ifdef CONFIG_X86_64
 static inline u64 kvm_guest_supported_xfd(struct kvm_vcpu *vcpu)
 {
 	return vcpu->arch.guest_supported_xcr0 & XFEATURE_MASK_USER_DYNAMIC;
 }
-#endif
 
 static int __kvm_set_xcr(struct kvm_vcpu *vcpu, u32 index, u64 xcr)
 {
@@ -1421,13 +1410,12 @@ int kvm_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 {
 	bool skip_tlb_flush = false;
 	unsigned long pcid = 0;
-#ifdef CONFIG_X86_64
+
 	if (kvm_is_cr4_bit_set(vcpu, X86_CR4_PCIDE)) {
 		skip_tlb_flush = cr3 & X86_CR3_PCID_NOFLUSH;
 		cr3 &= ~X86_CR3_PCID_NOFLUSH;
 		pcid = cr3 & X86_CR3_PCID_MASK;
 	}
-#endif
 
 	/* PDPTRs are always reloaded for PAE paging. */
 	if (cr3 == kvm_read_cr3(vcpu) && !is_pae_paging(vcpu))
@@ -2216,7 +2204,6 @@ static int do_set_msr(struct kvm_vcpu *vcpu, unsigned index, u64 *data)
 	return kvm_set_msr_ignored_check(vcpu, index, *data, true);
 }
 
-#ifdef CONFIG_X86_64
 struct pvclock_clock {
 	int vclock_mode;
 	u64 cycle_last;
@@ -2274,13 +2261,6 @@ static s64 get_kvmclock_base_ns(void)
 	/* Count up from boot time, but with the frequency of the raw clock.  */
 	return ktime_to_ns(ktime_add(ktime_get_raw(), pvclock_gtod_data.offs_boot));
 }
-#else
-static s64 get_kvmclock_base_ns(void)
-{
-	/* Master clock not used, so we can just use CLOCK_BOOTTIME.  */
-	return ktime_get_boottime_ns();
-}
-#endif
 
 static void kvm_write_wall_clock(struct kvm *kvm, gpa_t wall_clock, int sec_hi_ofs)
 {
@@ -2382,9 +2362,7 @@ static void kvm_get_time_scale(uint64_t scaled_hz, uint64_t base_hz,
 	*pmultiplier = div_frac(scaled64, tps32);
 }
 
-#ifdef CONFIG_X86_64
 static atomic_t kvm_guest_has_master_clock = ATOMIC_INIT(0);
-#endif
 
 static DEFINE_PER_CPU(unsigned long, cpu_tsc_khz);
 static unsigned long max_tsc_khz;
@@ -2477,16 +2455,13 @@ static u64 compute_guest_tsc(struct kvm_vcpu *vcpu, s64 kernel_ns)
 	return tsc;
 }
 
-#ifdef CONFIG_X86_64
 static inline bool gtod_is_based_on_tsc(int mode)
 {
 	return mode == VDSO_CLOCKMODE_TSC || mode == VDSO_CLOCKMODE_HVCLOCK;
 }
-#endif
 
 static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu, bool new_generation)
 {
-#ifdef CONFIG_X86_64
 	struct kvm_arch *ka = &vcpu->kvm->arch;
 	struct pvclock_gtod_data *gtod = &pvclock_gtod_data;
 
@@ -2512,7 +2487,6 @@ static void kvm_track_tsc_matching(struct kvm_vcpu *vcpu, bool new_generation)
 	trace_kvm_track_tsc(vcpu->vcpu_id, ka->nr_vcpus_matched_tsc,
 			    atomic_read(&vcpu->kvm->online_vcpus),
 		            ka->use_master_clock, gtod->clock.vclock_mode);
-#endif
 }
 
 /*
@@ -2623,14 +2597,13 @@ static void kvm_vcpu_write_tsc_multiplier(struct kvm_vcpu *vcpu, u64 l1_multipli
 
 static inline bool kvm_check_tsc_unstable(void)
 {
-#ifdef CONFIG_X86_64
 	/*
 	 * TSC is marked unstable when we're running on Hyper-V,
 	 * 'TSC page' clocksource is good.
 	 */
 	if (pvclock_gtod_data.clock.vclock_mode == VDSO_CLOCKMODE_HVCLOCK)
 		return false;
-#endif
+
 	return check_tsc_unstable();
 }
 
@@ -2771,8 +2744,6 @@ static inline void adjust_tsc_offset_host(struct kvm_vcpu *vcpu, s64 adjustment)
 				   vcpu->arch.l1_tsc_scaling_ratio);
 	adjust_tsc_offset_guest(vcpu, adjustment);
 }
-
-#ifdef CONFIG_X86_64
 
 static u64 read_tsc(void)
 {
@@ -2941,7 +2912,6 @@ static bool kvm_get_walltime_and_clockread(struct timespec64 *ts,
 
 	return gtod_is_based_on_tsc(do_realtime(ts, tsc_timestamp));
 }
-#endif
 
 /*
  *
@@ -2986,7 +2956,6 @@ static bool kvm_get_walltime_and_clockread(struct timespec64 *ts,
 
 static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 {
-#ifdef CONFIG_X86_64
 	struct kvm_arch *ka = &kvm->arch;
 	int vclock_mode;
 	bool host_tsc_clocksource, vcpus_matched;
@@ -3013,7 +2982,6 @@ static void pvclock_update_vm_gtod_copy(struct kvm *kvm)
 	vclock_mode = pvclock_gtod_data.clock.vclock_mode;
 	trace_kvm_update_master_clock(ka->use_master_clock, vclock_mode,
 					vcpus_matched);
-#endif
 }
 
 static void kvm_make_mclock_inprogress_request(struct kvm *kvm)
@@ -3087,15 +3055,13 @@ static void __get_kvmclock(struct kvm *kvm, struct kvm_clock_data *data)
 	data->flags = 0;
 	if (ka->use_master_clock &&
 	    (static_cpu_has(X86_FEATURE_CONSTANT_TSC) || __this_cpu_read(cpu_tsc_khz))) {
-#ifdef CONFIG_X86_64
 		struct timespec64 ts;
 
 		if (kvm_get_walltime_and_clockread(&ts, &data->host_tsc)) {
 			data->realtime = ts.tv_nsec + NSEC_PER_SEC * ts.tv_sec;
 			data->flags |= KVM_CLOCK_REALTIME | KVM_CLOCK_HOST_TSC;
 		} else
-#endif
-		data->host_tsc = rdtsc();
+			data->host_tsc = rdtsc();
 
 		data->flags |= KVM_CLOCK_TSC_STABLE;
 		hv_clock.tsc_timestamp = ka->master_cycle_now;
@@ -3317,7 +3283,6 @@ static int kvm_guest_time_update(struct kvm_vcpu *v)
  */
 uint64_t kvm_get_wall_clock_epoch(struct kvm *kvm)
 {
-#ifdef CONFIG_X86_64
 	struct pvclock_vcpu_time_info hv_clock;
 	struct kvm_arch *ka = &kvm->arch;
 	unsigned long seq, local_tsc_khz;
@@ -3368,7 +3333,6 @@ uint64_t kvm_get_wall_clock_epoch(struct kvm *kvm)
 		return ts.tv_nsec + NSEC_PER_SEC * ts.tv_sec -
 			__pvclock_read_cycles(&hv_clock, host_tsc);
 	}
-#endif
 	return ktime_get_real_ns() - get_kvmclock_ns(kvm);
 }
 
@@ -4098,7 +4062,6 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			return 1;
 		vcpu->arch.msr_misc_features_enables = data;
 		break;
-#ifdef CONFIG_X86_64
 	case MSR_IA32_XFD:
 		if (!msr_info->host_initiated &&
 		    !guest_cpuid_has(vcpu, X86_FEATURE_XFD))
@@ -4119,7 +4082,6 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 
 		vcpu->arch.guest_fpu.xfd_err = data;
 		break;
-#endif
 	default:
 		if (kvm_pmu_is_valid_msr(vcpu, msr))
 			return kvm_pmu_set_msr(vcpu, msr_info);
@@ -4453,7 +4415,6 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_K7_HWCR:
 		msr_info->data = vcpu->arch.msr_hwcr;
 		break;
-#ifdef CONFIG_X86_64
 	case MSR_IA32_XFD:
 		if (!msr_info->host_initiated &&
 		    !guest_cpuid_has(vcpu, X86_FEATURE_XFD))
@@ -4468,7 +4429,6 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 
 		msr_info->data = vcpu->arch.guest_fpu.xfd_err;
 		break;
-#endif
 	default:
 		if (kvm_pmu_is_valid_msr(vcpu, msr_info->index))
 			return kvm_pmu_get_msr(vcpu, msr_info);
@@ -8380,10 +8340,8 @@ static bool emulator_get_segment(struct x86_emulate_ctxt *ctxt, u16 *selector,
 		var.limit >>= 12;
 	set_desc_limit(desc, var.limit);
 	set_desc_base(desc, (unsigned long)var.base);
-#ifdef CONFIG_X86_64
 	if (base3)
 		*base3 = var.base >> 32;
-#endif
 	desc->type = var.type;
 	desc->s = var.s;
 	desc->dpl = var.dpl;
@@ -8405,9 +8363,7 @@ static void emulator_set_segment(struct x86_emulate_ctxt *ctxt, u16 selector,
 
 	var.selector = selector;
 	var.base = get_desc_base(desc);
-#ifdef CONFIG_X86_64
 	var.base |= ((u64)base3) << 32;
-#endif
 	var.limit = get_desc_limit(desc);
 	if (desc->g)
 		var.limit = (var.limit << 12) | 0xfff;
@@ -9400,7 +9356,6 @@ static void tsc_khz_changed(void *data)
 	__this_cpu_write(cpu_tsc_khz, khz);
 }
 
-#ifdef CONFIG_X86_64
 static void kvm_hyperv_tsc_notifier(void)
 {
 	struct kvm *kvm;
@@ -9428,7 +9383,6 @@ static void kvm_hyperv_tsc_notifier(void)
 
 	mutex_unlock(&kvm_lock);
 }
-#endif
 
 static void __kvmclock_cpufreq_notifier(struct cpufreq_freqs *freq, int cpu)
 {
@@ -9560,7 +9514,6 @@ static void kvm_timer_init(void)
 	}
 }
 
-#ifdef CONFIG_X86_64
 static void pvclock_gtod_update_fn(struct work_struct *work)
 {
 	struct kvm *kvm;
@@ -9614,7 +9567,6 @@ static int pvclock_gtod_notify(struct notifier_block *nb, unsigned long unused,
 static struct notifier_block pvclock_gtod_notifier = {
 	.notifier_call = pvclock_gtod_notify,
 };
-#endif
 
 static inline void kvm_ops_update(struct kvm_x86_init_ops *ops)
 {
@@ -9758,12 +9710,10 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 
 	if (pi_inject_timer == -1)
 		pi_inject_timer = housekeeping_enabled(HK_TYPE_TIMER);
-#ifdef CONFIG_X86_64
 	pvclock_gtod_register_notifier(&pvclock_gtod_notifier);
 
 	if (hypervisor_is_type(X86_HYPER_MS_HYPERV))
 		set_hv_tscchange_cb(kvm_hyperv_tsc_notifier);
-#endif
 
 	kvm_register_perf_callbacks(ops->handle_intel_pt_intr);
 
@@ -9809,10 +9759,9 @@ void kvm_x86_vendor_exit(void)
 {
 	kvm_unregister_perf_callbacks();
 
-#ifdef CONFIG_X86_64
 	if (hypervisor_is_type(X86_HYPER_MS_HYPERV))
 		clear_hv_tscchange_cb();
-#endif
+
 	kvm_lapic_exit();
 
 	if (!boot_cpu_has(X86_FEATURE_CONSTANT_TSC)) {
@@ -9820,11 +9769,10 @@ void kvm_x86_vendor_exit(void)
 					    CPUFREQ_TRANSITION_NOTIFIER);
 		cpuhp_remove_state_nocalls(CPUHP_AP_X86_KVM_CLK_ONLINE);
 	}
-#ifdef CONFIG_X86_64
+
 	pvclock_gtod_unregister_notifier(&pvclock_gtod_notifier);
 	irq_work_sync(&pvclock_irq_work);
 	cancel_work_sync(&pvclock_gtod_work);
-#endif
 	kvm_x86_call(hardware_unsetup)();
 	kvm_mmu_vendor_module_exit();
 	free_percpu(user_return_msrs);
@@ -9839,7 +9787,6 @@ void kvm_x86_vendor_exit(void)
 }
 EXPORT_SYMBOL_GPL(kvm_x86_vendor_exit);
 
-#ifdef CONFIG_X86_64
 static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
 			        unsigned long clock_type)
 {
@@ -9874,7 +9821,6 @@ static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
 
 	return ret;
 }
-#endif
 
 /*
  * kvm_pv_kick_cpu_op:  Kick a vcpu.
@@ -10019,11 +9965,9 @@ unsigned long __kvm_emulate_hypercall(struct kvm_vcpu *vcpu, unsigned long nr,
 		kvm_sched_yield(vcpu, a1);
 		ret = 0;
 		break;
-#ifdef CONFIG_X86_64
 	case KVM_HC_CLOCK_PAIRING:
 		ret = kvm_pv_clock_pairing(vcpu, a0, a1);
 		break;
-#endif
 	case KVM_HC_SEND_IPI:
 		if (!guest_pv_has(vcpu, KVM_FEATURE_PV_SEND_IPI))
 			break;
@@ -11592,7 +11536,6 @@ static void __get_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	regs->rdi = kvm_rdi_read(vcpu);
 	regs->rsp = kvm_rsp_read(vcpu);
 	regs->rbp = kvm_rbp_read(vcpu);
-#ifdef CONFIG_X86_64
 	regs->r8 = kvm_r8_read(vcpu);
 	regs->r9 = kvm_r9_read(vcpu);
 	regs->r10 = kvm_r10_read(vcpu);
@@ -11601,8 +11544,6 @@ static void __get_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	regs->r13 = kvm_r13_read(vcpu);
 	regs->r14 = kvm_r14_read(vcpu);
 	regs->r15 = kvm_r15_read(vcpu);
-#endif
-
 	regs->rip = kvm_rip_read(vcpu);
 	regs->rflags = kvm_get_rflags(vcpu);
 }
@@ -11632,7 +11573,6 @@ static void __set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	kvm_rdi_write(vcpu, regs->rdi);
 	kvm_rsp_write(vcpu, regs->rsp);
 	kvm_rbp_write(vcpu, regs->rbp);
-#ifdef CONFIG_X86_64
 	kvm_r8_write(vcpu, regs->r8);
 	kvm_r9_write(vcpu, regs->r9);
 	kvm_r10_write(vcpu, regs->r10);
@@ -11641,8 +11581,6 @@ static void __set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	kvm_r13_write(vcpu, regs->r13);
 	kvm_r14_write(vcpu, regs->r14);
 	kvm_r15_write(vcpu, regs->r15);
-#endif
-
 	kvm_rip_write(vcpu, regs->rip);
 	kvm_set_rflags(vcpu, regs->rflags | X86_EFLAGS_FIXED);
 

@@ -897,8 +897,6 @@ TRACE_EVENT(kvm_write_tsc_offset,
 		  __entry->previous_tsc_offset, __entry->next_tsc_offset)
 );
 
-#ifdef CONFIG_X86_64
-
 #define host_clocks					\
 	{VDSO_CLOCKMODE_NONE, "none"},			\
 	{VDSO_CLOCKMODE_TSC,  "tsc"}			\
@@ -954,8 +952,6 @@ TRACE_EVENT(kvm_track_tsc,
 		  __entry->nr_vcpus_matched_tsc, __entry->online_vcpus,
 		  __print_symbolic(__entry->host_clock, host_clocks))
 );
-
-#endif /* CONFIG_X86_64 */
 
 /*
  * Tracepoint for PML full VMEXIT.

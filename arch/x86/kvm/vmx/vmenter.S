@@ -20,7 +20,6 @@
 #define VCPU_RSI	__VCPU_REGS_RSI * WORD_SIZE
 #define VCPU_RDI	__VCPU_REGS_RDI * WORD_SIZE
 
-#ifdef CONFIG_X86_64
 #define VCPU_R8		__VCPU_REGS_R8  * WORD_SIZE
 #define VCPU_R9		__VCPU_REGS_R9  * WORD_SIZE
 #define VCPU_R10	__VCPU_REGS_R10 * WORD_SIZE
@@ -29,7 +28,6 @@
 #define VCPU_R13	__VCPU_REGS_R13 * WORD_SIZE
 #define VCPU_R14	__VCPU_REGS_R14 * WORD_SIZE
 #define VCPU_R15	__VCPU_REGS_R15 * WORD_SIZE
-#endif
 
 .macro VMX_DO_EVENT_IRQOFF call_insn call_target
 	/*
@@ -40,7 +38,6 @@
 	push %_ASM_BP
 	mov %_ASM_SP, %_ASM_BP
 
-#ifdef CONFIG_X86_64
 	/*
 	 * Align RSP to a 16-byte boundary (to emulate CPU behavior) before
 	 * creating the synthetic interrupt stack frame for the IRQ/NMI.
@@ -48,7 +45,6 @@
 	and  $-16, %rsp
 	push $__KERNEL_DS
 	push %rbp
-#endif
 	pushf
 	push $__KERNEL_CS
 	\call_insn \call_target
@@ -79,15 +75,10 @@
 SYM_FUNC_START(__vmx_vcpu_run)
 	push %_ASM_BP
 	mov  %_ASM_SP, %_ASM_BP
-#ifdef CONFIG_X86_64
 	push %r15
 	push %r14
 	push %r13
 	push %r12
-#else
-	push %edi
-	push %esi
-#endif
 	push %_ASM_BX
 
 	/* Save @vmx for SPEC_CTRL handling */
@@ -148,7 +139,6 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	mov VCPU_RBP(%_ASM_AX), %_ASM_BP
 	mov VCPU_RSI(%_ASM_AX), %_ASM_SI
 	mov VCPU_RDI(%_ASM_AX), %_ASM_DI
-#ifdef CONFIG_X86_64
 	mov VCPU_R8 (%_ASM_AX),  %r8
 	mov VCPU_R9 (%_ASM_AX),  %r9
 	mov VCPU_R10(%_ASM_AX), %r10
@@ -157,7 +147,7 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	mov VCPU_R13(%_ASM_AX), %r13
 	mov VCPU_R14(%_ASM_AX), %r14
 	mov VCPU_R15(%_ASM_AX), %r15
-#endif
+
 	/* Load guest RAX.  This kills the @regs pointer! */
 	mov VCPU_RAX(%_ASM_AX), %_ASM_AX
 
@@ -210,7 +200,6 @@ SYM_INNER_LABEL_ALIGN(vmx_vmexit, SYM_L_GLOBAL)
 	mov %_ASM_BP, VCPU_RBP(%_ASM_AX)
 	mov %_ASM_SI, VCPU_RSI(%_ASM_AX)
 	mov %_ASM_DI, VCPU_RDI(%_ASM_AX)
-#ifdef CONFIG_X86_64
 	mov %r8,  VCPU_R8 (%_ASM_AX)
 	mov %r9,  VCPU_R9 (%_ASM_AX)
 	mov %r10, VCPU_R10(%_ASM_AX)
@@ -219,7 +208,6 @@ SYM_INNER_LABEL_ALIGN(vmx_vmexit, SYM_L_GLOBAL)
 	mov %r13, VCPU_R13(%_ASM_AX)
 	mov %r14, VCPU_R14(%_ASM_AX)
 	mov %r15, VCPU_R15(%_ASM_AX)
-#endif
 
 	/* Clear return value to indicate VM-Exit (as opposed to VM-Fail). */
 	xor %ebx, %ebx
@@ -244,7 +232,6 @@ SYM_INNER_LABEL_ALIGN(vmx_vmexit, SYM_L_GLOBAL)
 	xor %ebp, %ebp
 	xor %esi, %esi
 	xor %edi, %edi
-#ifdef CONFIG_X86_64
 	xor %r8d,  %r8d
 	xor %r9d,  %r9d
 	xor %r10d, %r10d
@@ -253,7 +240,6 @@ SYM_INNER_LABEL_ALIGN(vmx_vmexit, SYM_L_GLOBAL)
 	xor %r13d, %r13d
 	xor %r14d, %r14d
 	xor %r15d, %r15d
-#endif
 
 	/*
 	 * IMPORTANT: RSB filling and SPEC_CTRL handling must be done before
@@ -281,15 +267,10 @@ SYM_INNER_LABEL_ALIGN(vmx_vmexit, SYM_L_GLOBAL)
 	mov %_ASM_BX, %_ASM_AX
 
 	pop %_ASM_BX
-#ifdef CONFIG_X86_64
 	pop %r12
 	pop %r13
 	pop %r14
 	pop %r15
-#else
-	pop %esi
-	pop %edi
-#endif
 	pop %_ASM_BP
 	RET
 
@@ -325,14 +306,12 @@ SYM_FUNC_START(vmread_error_trampoline)
 	push %_ASM_AX
 	push %_ASM_CX
 	push %_ASM_DX
-#ifdef CONFIG_X86_64
 	push %rdi
 	push %rsi
 	push %r8
 	push %r9
 	push %r10
 	push %r11
-#endif
 
 	/* Load @field and @fault to arg1 and arg2 respectively. */
 	mov 3*WORD_SIZE(%_ASM_BP), %_ASM_ARG2
@@ -343,14 +322,12 @@ SYM_FUNC_START(vmread_error_trampoline)
 	/* Zero out @fault, which will be popped into the result register. */
 	_ASM_MOV $0, 3*WORD_SIZE(%_ASM_BP)
 
-#ifdef CONFIG_X86_64
 	pop %r11
 	pop %r10
 	pop %r9
 	pop %r8
 	pop %rsi
 	pop %rdi
-#endif
 	pop %_ASM_DX
 	pop %_ASM_CX
 	pop %_ASM_AX

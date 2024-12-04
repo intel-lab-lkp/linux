@@ -166,11 +166,7 @@ static inline bool is_protmode(struct kvm_vcpu *vcpu)
 
 static inline bool is_long_mode(struct kvm_vcpu *vcpu)
 {
-#ifdef CONFIG_X86_64
 	return !!(vcpu->arch.efer & EFER_LMA);
-#else
-	return false;
-#endif
 }
 
 static inline bool is_64_bit_mode(struct kvm_vcpu *vcpu)

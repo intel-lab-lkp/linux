@@ -19,11 +19,7 @@
 
 #define X2APIC_MSR(r) (APIC_BASE_MSR + ((r) >> 4))
 
-#ifdef CONFIG_X86_64
 #define MAX_NR_USER_RETURN_MSRS	7
-#else
-#define MAX_NR_USER_RETURN_MSRS	4
-#endif
 
 #define MAX_NR_LOADSTORE_MSRS	8
 
@@ -272,10 +268,8 @@ struct vcpu_vmx {
 	 */
 	struct vmx_uret_msr   guest_uret_msrs[MAX_NR_USER_RETURN_MSRS];
 	bool                  guest_uret_msrs_loaded;
-#ifdef CONFIG_X86_64
 	u64		      msr_host_kernel_gs_base;
 	u64		      msr_guest_kernel_gs_base;
-#endif
 
 	u64		      spec_ctrl;
 	u32		      msr_ia32_umwait_control;
@@ -470,14 +464,10 @@ static inline u8 vmx_get_rvi(void)
 
 #define __KVM_REQUIRED_VMX_VM_ENTRY_CONTROLS				\
 	(VM_ENTRY_LOAD_DEBUG_CONTROLS)
-#ifdef CONFIG_X86_64
 	#define KVM_REQUIRED_VMX_VM_ENTRY_CONTROLS			\
 		(__KVM_REQUIRED_VMX_VM_ENTRY_CONTROLS |			\
 		 VM_ENTRY_IA32E_MODE)
-#else
-	#define KVM_REQUIRED_VMX_VM_ENTRY_CONTROLS			\
-		__KVM_REQUIRED_VMX_VM_ENTRY_CONTROLS
-#endif
+
 #define KVM_OPTIONAL_VMX_VM_ENTRY_CONTROLS				\
 	(VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL |				\
 	 VM_ENTRY_LOAD_IA32_PAT |					\
@@ -489,14 +479,10 @@ static inline u8 vmx_get_rvi(void)
 #define __KVM_REQUIRED_VMX_VM_EXIT_CONTROLS				\
 	(VM_EXIT_SAVE_DEBUG_CONTROLS |					\
 	 VM_EXIT_ACK_INTR_ON_EXIT)
-#ifdef CONFIG_X86_64
 	#define KVM_REQUIRED_VMX_VM_EXIT_CONTROLS			\
 		(__KVM_REQUIRED_VMX_VM_EXIT_CONTROLS |			\
 		 VM_EXIT_HOST_ADDR_SPACE_SIZE)
-#else
-	#define KVM_REQUIRED_VMX_VM_EXIT_CONTROLS			\
-		__KVM_REQUIRED_VMX_VM_EXIT_CONTROLS
-#endif
+
 #define KVM_OPTIONAL_VMX_VM_EXIT_CONTROLS				\
 	      (VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL |			\
 	       VM_EXIT_SAVE_IA32_PAT |					\
@@ -529,15 +515,10 @@ static inline u8 vmx_get_rvi(void)
 	 CPU_BASED_RDPMC_EXITING |					\
 	 CPU_BASED_INTR_WINDOW_EXITING)
 
-#ifdef CONFIG_X86_64
 	#define KVM_REQUIRED_VMX_CPU_BASED_VM_EXEC_CONTROL		\
 		(__KVM_REQUIRED_VMX_CPU_BASED_VM_EXEC_CONTROL |		\
 		 CPU_BASED_CR8_LOAD_EXITING |				\
 		 CPU_BASED_CR8_STORE_EXITING)
-#else
-	#define KVM_REQUIRED_VMX_CPU_BASED_VM_EXEC_CONTROL		\
-		__KVM_REQUIRED_VMX_CPU_BASED_VM_EXEC_CONTROL
-#endif
 
 #define KVM_OPTIONAL_VMX_CPU_BASED_VM_EXEC_CONTROL			\
 	(CPU_BASED_RDTSC_EXITING |					\

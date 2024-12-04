@@ -19,7 +19,6 @@
 #define VCPU_RSI	(SVM_vcpu_arch_regs + __VCPU_REGS_RSI * WORD_SIZE)
 #define VCPU_RDI	(SVM_vcpu_arch_regs + __VCPU_REGS_RDI * WORD_SIZE)
 
-#ifdef CONFIG_X86_64
 #define VCPU_R8		(SVM_vcpu_arch_regs + __VCPU_REGS_R8  * WORD_SIZE)
 #define VCPU_R9		(SVM_vcpu_arch_regs + __VCPU_REGS_R9  * WORD_SIZE)
 #define VCPU_R10	(SVM_vcpu_arch_regs + __VCPU_REGS_R10 * WORD_SIZE)
@@ -28,7 +27,6 @@
 #define VCPU_R13	(SVM_vcpu_arch_regs + __VCPU_REGS_R13 * WORD_SIZE)
 #define VCPU_R14	(SVM_vcpu_arch_regs + __VCPU_REGS_R14 * WORD_SIZE)
 #define VCPU_R15	(SVM_vcpu_arch_regs + __VCPU_REGS_R15 * WORD_SIZE)
-#endif
 
 #define SVM_vmcb01_pa	(SVM_vmcb01 + KVM_VMCB_pa)
 
@@ -101,15 +99,10 @@
 SYM_FUNC_START(__svm_vcpu_run)
 	push %_ASM_BP
 	mov  %_ASM_SP, %_ASM_BP
-#ifdef CONFIG_X86_64
 	push %r15
 	push %r14
 	push %r13
 	push %r12
-#else
-	push %edi
-	push %esi
-#endif
 	push %_ASM_BX
 
 	/*
@@ -157,7 +150,6 @@ SYM_FUNC_START(__svm_vcpu_run)
 	mov VCPU_RBX(%_ASM_DI), %_ASM_BX
 	mov VCPU_RBP(%_ASM_DI), %_ASM_BP
 	mov VCPU_RSI(%_ASM_DI), %_ASM_SI
-#ifdef CONFIG_X86_64
 	mov VCPU_R8 (%_ASM_DI),  %r8
 	mov VCPU_R9 (%_ASM_DI),  %r9
 	mov VCPU_R10(%_ASM_DI), %r10
@@ -166,7 +158,6 @@ SYM_FUNC_START(__svm_vcpu_run)
 	mov VCPU_R13(%_ASM_DI), %r13
 	mov VCPU_R14(%_ASM_DI), %r14
 	mov VCPU_R15(%_ASM_DI), %r15
-#endif
 	mov VCPU_RDI(%_ASM_DI), %_ASM_DI
 
 	/* Enter guest mode */
@@ -186,7 +177,6 @@ SYM_FUNC_START(__svm_vcpu_run)
 	mov %_ASM_BP,   VCPU_RBP(%_ASM_AX)
 	mov %_ASM_SI,   VCPU_RSI(%_ASM_AX)
 	mov %_ASM_DI,   VCPU_RDI(%_ASM_AX)
-#ifdef CONFIG_X86_64
 	mov %r8,  VCPU_R8 (%_ASM_AX)
 	mov %r9,  VCPU_R9 (%_ASM_AX)
 	mov %r10, VCPU_R10(%_ASM_AX)
@@ -195,7 +185,6 @@ SYM_FUNC_START(__svm_vcpu_run)
 	mov %r13, VCPU_R13(%_ASM_AX)
 	mov %r14, VCPU_R14(%_ASM_AX)
 	mov %r15, VCPU_R15(%_ASM_AX)
-#endif
 
 	/* @svm can stay in RDI from now on.  */
 	mov %_ASM_AX, %_ASM_DI
@@ -239,7 +228,6 @@ SYM_FUNC_START(__svm_vcpu_run)
 	xor %ebp, %ebp
 	xor %esi, %esi
 	xor %edi, %edi
-#ifdef CONFIG_X86_64
 	xor %r8d,  %r8d
 	xor %r9d,  %r9d
 	xor %r10d, %r10d
@@ -248,22 +236,16 @@ SYM_FUNC_START(__svm_vcpu_run)
 	xor %r13d, %r13d
 	xor %r14d, %r14d
 	xor %r15d, %r15d
-#endif
 
 	/* "Pop" @spec_ctrl_intercepted.  */
 	pop %_ASM_BX
 
 	pop %_ASM_BX
 
-#ifdef CONFIG_X86_64
 	pop %r12
 	pop %r13
 	pop %r14
 	pop %r15
-#else
-	pop %esi
-	pop %edi
-#endif
 	pop %_ASM_BP
 	RET
 
@@ -293,7 +275,6 @@ SYM_FUNC_END(__svm_vcpu_run)
 #ifdef CONFIG_KVM_AMD_SEV
 
 
-#ifdef CONFIG_X86_64
 #define SEV_ES_GPRS_BASE 0x300
 #define SEV_ES_RBX	(SEV_ES_GPRS_BASE + __VCPU_REGS_RBX * WORD_SIZE)
 #define SEV_ES_RBP	(SEV_ES_GPRS_BASE + __VCPU_REGS_RBP * WORD_SIZE)
@@ -303,7 +284,6 @@ SYM_FUNC_END(__svm_vcpu_run)
 #define SEV_ES_R13	(SEV_ES_GPRS_BASE + __VCPU_REGS_R13 * WORD_SIZE)
 #define SEV_ES_R14	(SEV_ES_GPRS_BASE + __VCPU_REGS_R14 * WORD_SIZE)
 #define SEV_ES_R15	(SEV_ES_GPRS_BASE + __VCPU_REGS_R15 * WORD_SIZE)
-#endif
 
 /**
  * __svm_sev_es_vcpu_run - Run a SEV-ES vCPU via a transition to SVM guest mode

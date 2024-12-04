@@ -86,11 +86,7 @@ static void init_vmcs_shadow_fields(void)
 
 		clear_bit(field, vmx_vmread_bitmap);
 		if (field & 1)
-#ifdef CONFIG_X86_64
 			continue;
-#else
-			entry.offset += sizeof(u32);
-#endif
 		shadow_read_only_fields[j++] = entry;
 	}
 	max_shadow_read_only_fields = j;
@@ -134,11 +130,7 @@ static void init_vmcs_shadow_fields(void)
 		clear_bit(field, vmx_vmwrite_bitmap);
 		clear_bit(field, vmx_vmread_bitmap);
 		if (field & 1)
-#ifdef CONFIG_X86_64
 			continue;
-#else
-			entry.offset += sizeof(u32);
-#endif
 		shadow_read_write_fields[j++] = entry;
 	}
 	max_shadow_read_write_fields = j;
@@ -283,10 +275,8 @@ static void vmx_sync_vmcs_host_state(struct vcpu_vmx *vmx,
 
 	vmx_set_host_fs_gs(dest, src->fs_sel, src->gs_sel, src->fs_base, src->gs_base);
 	dest->ldt_sel = src->ldt_sel;
-#ifdef CONFIG_X86_64
 	dest->ds_sel = src->ds_sel;
 	dest->es_sel = src->es_sel;
-#endif
 }
 
 static void vmx_switch_vmcs(struct kvm_vcpu *vcpu, struct loaded_vmcs *vmcs)
@@ -695,7 +685,6 @@ static inline bool nested_vmx_prepare_msr_bitmap(struct kvm_vcpu *vcpu,
 	 * Always check vmcs01's bitmap to honor userspace MSR filters and any
 	 * other runtime changes to vmcs01's bitmap, e.g. dynamic pass-through.
 	 */
-#ifdef CONFIG_X86_64
 	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1, msr_bitmap_l0,
 					 MSR_FS_BASE, MSR_TYPE_RW);
 
@@ -704,7 +693,7 @@ static inline bool nested_vmx_prepare_msr_bitmap(struct kvm_vcpu *vcpu,
 
 	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1, msr_bitmap_l0,
 					 MSR_KERNEL_GS_BASE, MSR_TYPE_RW);
-#endif
+
 	nested_vmx_set_intercept_for_msr(vmx, msr_bitmap_l1, msr_bitmap_l0,
 					 MSR_IA32_SPEC_CTRL, MSR_TYPE_RW);
 
@@ -2375,11 +2364,9 @@ static void prepare_vmcs02_early(struct vcpu_vmx *vmx, struct loaded_vmcs *vmcs0
 	vmx->nested.l1_tpr_threshold = -1;
 	if (exec_control & CPU_BASED_TPR_SHADOW)
 		vmcs_write32(TPR_THRESHOLD, vmcs12->tpr_threshold);
-#ifdef CONFIG_X86_64
 	else
 		exec_control |= CPU_BASED_CR8_LOAD_EXITING |
 				CPU_BASED_CR8_STORE_EXITING;
-#endif
 
 	/*
 	 * A vmexit (to either L1 hypervisor or L0 userspace) is always needed
@@ -3002,11 +2989,10 @@ static int nested_vmx_check_controls(struct kvm_vcpu *vcpu,
 static int nested_vmx_check_address_space_size(struct kvm_vcpu *vcpu,
 				       struct vmcs12 *vmcs12)
 {
-#ifdef CONFIG_X86_64
 	if (CC(!!(vmcs12->vm_exit_controls & VM_EXIT_HOST_ADDR_SPACE_SIZE) !=
 		!!(vcpu->arch.efer & EFER_LMA)))
 		return -EINVAL;
-#endif
+
 	return 0;
 }
 
@@ -6979,9 +6965,7 @@ static void nested_vmx_setup_exit_ctls(struct vmcs_config *vmcs_conf,
 
 	msrs->exit_ctls_high = vmcs_conf->vmexit_ctrl;
 	msrs->exit_ctls_high &=
-#ifdef CONFIG_X86_64
 		VM_EXIT_HOST_ADDR_SPACE_SIZE |
-#endif
 		VM_EXIT_LOAD_IA32_PAT | VM_EXIT_SAVE_IA32_PAT |
 		VM_EXIT_CLEAR_BNDCFGS;
 	msrs->exit_ctls_high |=
@@ -7002,9 +6986,7 @@ static void nested_vmx_setup_entry_ctls(struct vmcs_config *vmcs_conf,
 
 	msrs->entry_ctls_high = vmcs_conf->vmentry_ctrl;
 	msrs->entry_ctls_high &=
-#ifdef CONFIG_X86_64
 		VM_ENTRY_IA32E_MODE |
-#endif
 		VM_ENTRY_LOAD_IA32_PAT | VM_ENTRY_LOAD_BNDCFGS;
 	msrs->entry_ctls_high |=
 		(VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR | VM_ENTRY_LOAD_IA32_EFER |
@@ -7027,9 +7009,7 @@ static void nested_vmx_setup_cpubased_ctls(struct vmcs_config *vmcs_conf,
 		CPU_BASED_HLT_EXITING | CPU_BASED_INVLPG_EXITING |
 		CPU_BASED_MWAIT_EXITING | CPU_BASED_CR3_LOAD_EXITING |
 		CPU_BASED_CR3_STORE_EXITING |
-#ifdef CONFIG_X86_64
 		CPU_BASED_CR8_LOAD_EXITING | CPU_BASED_CR8_STORE_EXITING |
-#endif
 		CPU_BASED_MOV_DR_EXITING | CPU_BASED_UNCOND_IO_EXITING |
 		CPU_BASED_USE_IO_BITMAPS | CPU_BASED_MONITOR_TRAP_FLAG |
 		CPU_BASED_MONITOR_EXITING | CPU_BASED_RDPMC_EXITING |

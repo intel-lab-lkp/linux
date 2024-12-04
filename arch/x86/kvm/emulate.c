@@ -265,12 +265,6 @@ static void invalidate_registers(struct x86_emulate_ctxt *ctxt)
 #define EFLAGS_MASK (X86_EFLAGS_OF|X86_EFLAGS_SF|X86_EFLAGS_ZF|X86_EFLAGS_AF|\
 		     X86_EFLAGS_PF|X86_EFLAGS_CF)
 
-#ifdef CONFIG_X86_64
-#define ON64(x) x
-#else
-#define ON64(x)
-#endif
-
 /*
  * fastop functions have a special calling convention:
  *
@@ -341,7 +335,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOP1E(op##b, al) \
 	FOP1E(op##w, ax) \
 	FOP1E(op##l, eax) \
-	ON64(FOP1E(op##q, rax))	\
+	FOP1E(op##q, rax) \
 	FOP_END
 
 /* 1-operand, using src2 (for MUL/DIV r/m) */
@@ -350,7 +344,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOP1E(op, cl) \
 	FOP1E(op, cx) \
 	FOP1E(op, ecx) \
-	ON64(FOP1E(op, rcx)) \
+	FOP1E(op, rcx) \
 	FOP_END
 
 /* 1-operand, using src2 (for MUL/DIV r/m), with exceptions */
@@ -359,7 +353,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOP1EEX(op, cl) \
 	FOP1EEX(op, cx) \
 	FOP1EEX(op, ecx) \
-	ON64(FOP1EEX(op, rcx)) \
+	FOP1EEX(op, rcx) \
 	FOP_END
 
 #define FOP2E(op,  dst, src)	   \
@@ -372,7 +366,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOP2E(op##b, al, dl) \
 	FOP2E(op##w, ax, dx) \
 	FOP2E(op##l, eax, edx) \
-	ON64(FOP2E(op##q, rax, rdx)) \
+	FOP2E(op##q, rax, rdx) \
 	FOP_END
 
 /* 2 operand, word only */
@@ -381,7 +375,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOPNOP() \
 	FOP2E(op##w, ax, dx) \
 	FOP2E(op##l, eax, edx) \
-	ON64(FOP2E(op##q, rax, rdx)) \
+	FOP2E(op##q, rax, rdx) \
 	FOP_END
 
 /* 2 operand, src is CL */
@@ -390,7 +384,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOP2E(op##b, al, cl) \
 	FOP2E(op##w, ax, cl) \
 	FOP2E(op##l, eax, cl) \
-	ON64(FOP2E(op##q, rax, cl)) \
+	FOP2E(op##q, rax, cl) \
 	FOP_END
 
 /* 2 operand, src and dest are reversed */
@@ -399,7 +393,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOP2E(op##b, dl, al) \
 	FOP2E(op##w, dx, ax) \
 	FOP2E(op##l, edx, eax) \
-	ON64(FOP2E(op##q, rdx, rax)) \
+	FOP2E(op##q, rdx, rax) \
 	FOP_END
 
 #define FOP3E(op,  dst, src, src2) \
@@ -413,7 +407,7 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop);
 	FOPNOP() \
 	FOP3E(op##w, ax, dx, cl) \
 	FOP3E(op##l, eax, edx, cl) \
-	ON64(FOP3E(op##q, rax, rdx, cl)) \
+	FOP3E(op##q, rax, rdx, cl) \
 	FOP_END
 
 /* Special case for SETcc - 1 instruction per cc */
@@ -1508,7 +1502,6 @@ static int get_descriptor_ptr(struct x86_emulate_ctxt *ctxt,
 
 	addr = dt.address + index * 8;
 
-#ifdef CONFIG_X86_64
 	if (addr >> 32 != 0) {
 		u64 efer = 0;
 
@@ -1516,7 +1509,6 @@ static int get_descriptor_ptr(struct x86_emulate_ctxt *ctxt,
 		if (!(efer & EFER_LMA))
 			addr &= (u32)-1;
 	}
-#endif
 
 	*desc_addr_p = addr;
 	return X86EMUL_CONTINUE;
@@ -2399,7 +2391,6 @@ static int em_syscall(struct x86_emulate_ctxt *ctxt)
 
 	*reg_write(ctxt, VCPU_REGS_RCX) = ctxt->_eip;
 	if (efer & EFER_LMA) {
-#ifdef CONFIG_X86_64
 		*reg_write(ctxt, VCPU_REGS_R11) = ctxt->eflags;
 
 		ops->get_msr(ctxt,
@@ -2410,7 +2401,6 @@ static int em_syscall(struct x86_emulate_ctxt *ctxt)
 		ops->get_msr(ctxt, MSR_SYSCALL_MASK, &msr_data);
 		ctxt->eflags &= ~msr_data;
 		ctxt->eflags |= X86_EFLAGS_FIXED;
-#endif
 	} else {
 		/* legacy mode */
 		ops->get_msr(ctxt, MSR_STAR, &msr_data);
@@ -2575,9 +2565,7 @@ static bool emulator_io_port_access_allowed(struct x86_emulate_ctxt *ctxt,
 	if (desc_limit_scaled(&tr_seg) < 103)
 		return false;
 	base = get_desc_base(&tr_seg);
-#ifdef CONFIG_X86_64
 	base |= ((u64)base3) << 32;
-#endif
 	r = ops->read_std(ctxt, base + 102, &io_bitmap_ptr, 2, NULL, true);
 	if (r != X86EMUL_CONTINUE)
 		return false;
@@ -2612,7 +2600,6 @@ static void string_registers_quirk(struct x86_emulate_ctxt *ctxt)
 	 * Intel CPUs mask the counter and pointers in quite strange
 	 * manner when ECX is zero due to REP-string optimizations.
 	 */
-#ifdef CONFIG_X86_64
 	u32 eax, ebx, ecx, edx;
 
 	if (ctxt->ad_bytes != 4)
@@ -2634,7 +2621,6 @@ static void string_registers_quirk(struct x86_emulate_ctxt *ctxt)
 	case 0xab:	/* stosd/w */
 		*reg_rmw(ctxt, VCPU_REGS_RDI) &= (u32)-1;
 	}
-#endif
 }
 
 static void save_state_to_tss16(struct x86_emulate_ctxt *ctxt,
@@ -3641,11 +3627,9 @@ static int em_lahf(struct x86_emulate_ctxt *ctxt)
 static int em_bswap(struct x86_emulate_ctxt *ctxt)
 {
 	switch (ctxt->op_bytes) {
-#ifdef CONFIG_X86_64
 	case 8:
 		asm("bswap %0" : "+r"(ctxt->dst.val));
 		break;
-#endif
 	default:
 		asm("bswap %0" : "+r"(*(u32 *)&ctxt->dst.val));
 		break;
@@ -4767,12 +4751,10 @@ int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int
 	case X86EMUL_MODE_PROT32:
 		def_op_bytes = def_ad_bytes = 4;
 		break;
-#ifdef CONFIG_X86_64
 	case X86EMUL_MODE_PROT64:
 		def_op_bytes = 4;
 		def_ad_bytes = 8;
 		break;
-#endif
 	default:
 		return EMULATION_FAILED;
 	}
