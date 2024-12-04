@@ -728,7 +728,7 @@ static void __init hpet_select_clockevents(void)
 		if (!(hc->boot_cfg & HPET_TN_FSB_CAP))
 			continue;
 
-		sprintf(hc->name, "hpet%d", i);
+		sprintf(hc->name, "hpet%u", i);
 
 		irq = hpet_assign_irq(hpet_domain, hc, hc->num);
 		if (irq <= 0)
