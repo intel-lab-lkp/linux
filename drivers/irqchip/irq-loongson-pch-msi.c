@@ -158,19 +158,14 @@ static int pch_msi_init_domains(struct pch_msi_data *priv,
 {
 	struct irq_domain *middle_domain;
 
-	middle_domain = irq_domain_create_hierarchy(parent, 0, priv->num_irqs,
-						    domain_handle,
-						    &pch_msi_middle_domain_ops,
-						    priv);
+	middle_domain = msi_create_parent_irq_domain(domain_handle,
+						     &pch_msi_parent_ops,
+						     &pch_msi_middle_domain_ops, 0,
+						     priv->num_irqs, priv, parent);
 	if (!middle_domain) {
 		pr_err("Failed to create the MSI middle domain\n");
 		return -ENOMEM;
 	}
-
-	irq_domain_update_bus_token(middle_domain, DOMAIN_BUS_NEXUS);
-
-	middle_domain->flags |= IRQ_DOMAIN_FLAG_MSI_PARENT;
-	middle_domain->msi_parent_ops = &pch_msi_parent_ops;
 
 	return 0;
 }
