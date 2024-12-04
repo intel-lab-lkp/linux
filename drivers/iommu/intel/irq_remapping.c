@@ -557,20 +557,15 @@ static int intel_setup_irq_remapping(struct intel_iommu *iommu)
 	if (!fn)
 		goto out_free_bitmap;
 
-	iommu->ir_domain =
-		irq_domain_create_hierarchy(arch_get_ir_parent_domain(),
-					    0, INTR_REMAP_TABLE_ENTRIES,
-					    fn, &intel_ir_domain_ops,
-					    iommu);
+	iommu->ir_domain = msi_create_parent_irq_domain(fn, &dmar_msi_parent_ops,
+							&intel_ir_domain_ops,
+							IRQ_DOMAIN_FLAG_ISOLATED_MSI,
+							INTR_REMAP_TABLE_ENTRIES,
+							iommu, arch_get_ir_parent_domain());
 	if (!iommu->ir_domain) {
 		pr_err("IR%d: failed to allocate irqdomain\n", iommu->seq_id);
 		goto out_free_fwnode;
 	}
-
-	irq_domain_update_bus_token(iommu->ir_domain,  DOMAIN_BUS_DMAR);
-	iommu->ir_domain->flags |= IRQ_DOMAIN_FLAG_MSI_PARENT |
-				   IRQ_DOMAIN_FLAG_ISOLATED_MSI;
-	iommu->ir_domain->msi_parent_ops = &dmar_msi_parent_ops;
 
 	ir_table->base = ir_table_base;
 	ir_table->bitmap = bitmap;
@@ -1522,6 +1517,7 @@ static const struct irq_domain_ops intel_ir_domain_ops = {
 
 static const struct msi_parent_ops dmar_msi_parent_ops = {
 	.supported_flags	= X86_VECTOR_MSI_FLAGS_SUPPORTED | MSI_FLAG_MULTI_PCI_MSI,
+	.bus_token		= DOMAIN_BUS_DMAR,
 	.prefix			= "IR-",
 	.init_dev_msi_info	= msi_parent_init_dev_msi_info,
 };
