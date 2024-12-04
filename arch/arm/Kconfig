@@ -1161,8 +1161,7 @@ config ARM_PATCH_IDIV
 	  code to do integer division.
 
 config AEABI
-	bool "Use the ARM EABI to compile the kernel" if !CPU_V7 && \
-		!CPU_V7M && !CPU_V6 && !CPU_V6K && !CC_IS_CLANG
+	bool "Use the ARM EABI to compile the kernel" if CPU_SA110 || CPU_SA1100
 	default y
 	help
 	  The Arm EABI is the default ABI on all modern Linux
@@ -1172,9 +1171,13 @@ config AEABI
 	  Everyone should enable this, as support for OABI user space
 	  was dropped in gcc-4.8 and most distributions after ca. 2013.
 
+	  Support for OABI mode will be removed from the kernel
+	  once Intel StrongARM CPUs are phased out.
+
 config OABI_COMPAT
 	bool "Allow old ABI binaries to run with this kernel (EXPERIMENTAL)"
 	depends on AEABI && !THUMB2_KERNEL
+	depends on CPU_SA110 || CPU_SA1100
 	help
 	  This option preserves the old syscall interface along with the
 	  new (ARM EABI) one. It also provides a compatibility layer to
@@ -1187,11 +1190,8 @@ config OABI_COMPAT
 	  selected, since there is no way yet to sensibly distinguish
 	  between calling conventions during filtering.
 
-	  If you know you'll be using only pure EABI user space then you
-	  can say N here. If this option is not selected and you attempt
-	  to execute a legacy ABI binary then the result will be
-	  UNPREDICTABLE (in fact it can be predicted that it won't work
-	  at all). If in doubt say N.
+	  Support for OABI_COMPAT will be removed from the kernel
+	  once Intel StrongARM CPUs are phased out.
 
 config ARCH_SELECT_MEMORY_MODEL
 	def_bool y
