@@ -24,7 +24,7 @@
 
 #include "of_private.h"
 
-const struct of_device_id of_default_bus_match_table[] = {
+static const struct of_device_id of_default_bus_match_table[] = {
 	{ .compatible = "simple-bus", },
 	{ .compatible = "simple-mfd", },
 	{ .compatible = "isa", },
