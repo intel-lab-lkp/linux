@@ -6167,6 +6167,144 @@ int igc_close(struct net_device *netdev)
 	return 0;
 }
 
+void igc_xdp_open(struct net_device *netdev)
+{
+	struct igc_adapter *adapter = netdev_priv(netdev);
+	struct pci_dev *pdev = adapter->pdev;
+	struct igc_hw *hw = &adapter->hw;
+	int err = 0;
+	int i = 0;
+
+	/* disallow open during test */
+	if (test_bit(__IGC_TESTING, &adapter->state))
+		return;
+
+	pm_runtime_get_sync(&pdev->dev);
+
+	igc_ptp_reset(adapter);
+
+	/* allocate transmit descriptors */
+	err = igc_setup_all_tx_resources(adapter);
+	if (err)
+		goto err_setup_tx;
+
+	/* allocate receive descriptors */
+	err = igc_setup_all_rx_resources(adapter);
+	if (err)
+		goto err_setup_rx;
+
+	igc_setup_tctl(adapter);
+	igc_setup_rctl(adapter);
+	igc_configure_tx(adapter);
+	igc_configure_rx(adapter);
+	igc_rx_fifo_flush_base(&adapter->hw);
+
+	/* call igc_desc_unused which always leaves
+	 * at least 1 descriptor unused to make sure
+	 * next_to_use != next_to_clean
+	 */
+	for (i = 0; i < adapter->num_rx_queues; i++) {
+		struct igc_ring *ring = adapter->rx_ring[i];
+
+		if (ring->xsk_pool)
+			igc_alloc_rx_buffers_zc(ring, igc_desc_unused(ring));
+		else
+			igc_alloc_rx_buffers(ring, igc_desc_unused(ring));
+	}
+
+	err = igc_request_irq(adapter);
+	if (err)
+		goto err_req_irq;
+
+	clear_bit(__IGC_DOWN, &adapter->state);
+
+	for (i = 0; i < adapter->num_q_vectors; i++)
+		napi_enable(&adapter->q_vector[i]->napi);
+
+	/* Clear any pending interrupts. */
+	rd32(IGC_ICR);
+	igc_irq_enable(adapter);
+
+	pm_runtime_put(&pdev->dev);
+
+	netif_tx_start_all_queues(netdev);
+	netif_carrier_on(netdev);
+
+	return;
+
+err_req_irq:
+	igc_release_hw_control(adapter);
+	igc_power_down_phy_copper_base(&adapter->hw);
+	igc_free_all_rx_resources(adapter);
+err_setup_rx:
+	igc_free_all_tx_resources(adapter);
+err_setup_tx:
+	igc_reset(adapter);
+	pm_runtime_put(&pdev->dev);
+}
+
+void igc_xdp_close(struct net_device *netdev)
+{
+	struct igc_adapter *adapter = netdev_priv(netdev);
+	struct pci_dev *pdev = adapter->pdev;
+	struct igc_hw *hw = &adapter->hw;
+	u32 tctl, rctl;
+	int i = 0;
+
+	WARN_ON(test_bit(__IGC_RESETTING, &adapter->state));
+
+	pm_runtime_get_sync(&pdev->dev);
+
+	set_bit(__IGC_DOWN, &adapter->state);
+
+	igc_ptp_suspend(adapter);
+
+	if (pci_device_is_present(pdev)) {
+		/* disable receives in the hardware */
+		rctl = rd32(IGC_RCTL);
+		wr32(IGC_RCTL, rctl & ~IGC_RCTL_EN);
+		/* flush and sleep below */
+	}
+	/* set trans_start so we don't get spurious watchdogs during reset */
+	netif_trans_update(netdev);
+
+	netif_carrier_off(netdev);
+	netif_tx_stop_all_queues(netdev);
+
+	if (pci_device_is_present(pdev)) {
+		/* disable transmits in the hardware */
+		tctl = rd32(IGC_TCTL);
+		tctl &= ~IGC_TCTL_EN;
+		wr32(IGC_TCTL, tctl);
+		/* flush both disables and wait for them to finish */
+		wrfl();
+		usleep_range(10000, 20000);
+
+		igc_irq_disable(adapter);
+	}
+
+	for (i = 0; i < adapter->num_q_vectors; i++) {
+		if (adapter->q_vector[i]) {
+			napi_synchronize(&adapter->q_vector[i]->napi);
+			napi_disable(&adapter->q_vector[i]->napi);
+		}
+	}
+
+	del_timer_sync(&adapter->watchdog_timer);
+	del_timer_sync(&adapter->phy_info_timer);
+
+	igc_disable_all_tx_rings_hw(adapter);
+	igc_clean_all_tx_rings(adapter);
+	igc_clean_all_rx_rings(adapter);
+
+	igc_free_irq(adapter);
+
+	igc_free_all_tx_resources(adapter);
+	igc_free_all_rx_resources(adapter);
+
+	pm_runtime_put_sync(&pdev->dev);
+}
+
 /**
  * igc_ioctl - Access the hwtstamp interface
  * @netdev: network interface device structure

@@ -25,7 +25,7 @@ int igc_xdp_set_prog(struct igc_adapter *adapter, struct bpf_prog *prog,
 
 	need_update = !!adapter->xdp_prog != !!prog;
 	if (if_running && need_update)
-		igc_close(dev);
+		igc_xdp_close(dev);
 
 	old_prog = xchg(&adapter->xdp_prog, prog);
 	if (old_prog)
@@ -37,7 +37,7 @@ int igc_xdp_set_prog(struct igc_adapter *adapter, struct bpf_prog *prog,
 		xdp_features_clear_redirect_target(dev);
 
 	if (if_running && need_update)
-		igc_open(dev);
+		igc_xdp_open(dev);
 
 	return 0;
 }

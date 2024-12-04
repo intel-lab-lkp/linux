@@ -343,6 +343,8 @@ void igc_up(struct igc_adapter *adapter);
 void igc_down(struct igc_adapter *adapter);
 int igc_open(struct net_device *netdev);
 int igc_close(struct net_device *netdev);
+void igc_xdp_open(struct net_device *netdev);
+void igc_xdp_close(struct net_device *netdev);
 int igc_setup_tx_resources(struct igc_ring *ring);
 int igc_setup_rx_resources(struct igc_ring *ring);
 void igc_free_tx_resources(struct igc_ring *ring);
