@@ -26,7 +26,7 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 	int _val, _val2;
 	s32 rem, rem2;
 	u32 mult;
-	u32 neg;
+	bool neg;
 
 	switch (scale_type) {
 	case IIO_VAL_INT:
@@ -95,7 +95,7 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 		 * If only one of the rescaler elements or the schan scale is
 		 * negative, the combined scale is negative.
 		 */
-		if (neg ^ ((rescale->numerator < 0) ^ (rescale->denominator < 0))) {
+		if (neg != (rescale->numerator < 0 || rescale->denominator < 0)) {
 			if (*val)
 				*val = -*val;
 			else
