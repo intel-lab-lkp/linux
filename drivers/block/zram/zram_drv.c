@@ -2327,6 +2327,9 @@ static void zram_reset_device(struct zram *zram)
 	zram->limit_pages = 0;
 
 	if (!init_done(zram)) {
+		/* Backing device could be set before ZRAM initialization. */
+		reset_bdev(zram);
+
 		up_write(&zram->init_lock);
 		return;
 	}
