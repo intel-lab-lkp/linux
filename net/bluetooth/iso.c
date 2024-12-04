@@ -1102,6 +1102,7 @@ static int iso_sock_connect(struct socket *sock, struct sockaddr *addr,
 	return err;
 }
 
+/* This function requires the caller to hold sk lock */
 static int iso_listen_bis(struct sock *sk)
 {
 	struct hci_dev *hdev;
@@ -1128,7 +1129,15 @@ static int iso_listen_bis(struct sock *sk)
 	if (!hdev)
 		return -EHOSTUNREACH;
 
+	/* Prevent sk from being freed whilst unlocked */
+	sock_hold(sk);
+
+	/* To avoid circular locking dependencies,
+	 * hdev should be locked first before sk.
+	 */
+	release_sock(sk);
 	hci_dev_lock(hdev);
+	lock_sock(sk);
 
 	/* Fail if user set invalid QoS */
 	if (iso_pi(sk)->qos_user_set && !check_bcast_qos(&iso_pi(sk)->qos)) {
@@ -1161,7 +1170,13 @@ static int iso_listen_bis(struct sock *sk)
 	hci_dev_put(hdev);
 
 unlock:
+	/* Unlock order should be in reverse from lock order. */
+	release_sock(sk);
 	hci_dev_unlock(hdev);
+	lock_sock(sk);
+
+	sock_put(sk);
+
 	return err;
 }
 
@@ -1417,6 +1432,7 @@ static void iso_conn_defer_accept(struct hci_conn *conn)
 	hci_send_cmd(hdev, HCI_OP_LE_ACCEPT_CIS, sizeof(cp), &cp);
 }
 
+/* This function requires the caller to hold sk lock */
 static void iso_conn_big_sync(struct sock *sk)
 {
 	int err;
@@ -1428,12 +1444,22 @@ static void iso_conn_big_sync(struct sock *sk)
 	if (!hdev)
 		return;
 
+	/* Prevent sk from being freed whilst unlocked */
+	sock_hold(sk);
+
+	/* To avoid circular locking dependencies, hdev should be
+	 * locked first before sk.
+	 */
+	release_sock(sk);
+
 	/* hci_le_big_create_sync requires hdev lock to be held, since
 	 * it enqueues the HCI LE BIG Create Sync command via
 	 * hci_cmd_sync_queue_once, which checks hdev flags that might
 	 * change.
 	 */
 	hci_dev_lock(hdev);
+
+	lock_sock(sk);
 
 	if (!test_and_set_bit(BT_SK_BIG_SYNC, &iso_pi(sk)->flags)) {
 		err = hci_le_big_create_sync(hdev, iso_pi(sk)->conn->hcon,
@@ -1446,7 +1472,12 @@ static void iso_conn_big_sync(struct sock *sk)
 				   err);
 	}
 
+	/* Unlock order should be in reverse from lock order. */
+	release_sock(sk);
 	hci_dev_unlock(hdev);
+	lock_sock(sk);
+
+	sock_put(sk);
 }
 
 static int iso_sock_recvmsg(struct socket *sock, struct msghdr *msg,
