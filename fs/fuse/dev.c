@@ -21,6 +21,7 @@
 #include <linux/swap.h>
 #include <linux/splice.h>
 #include <linux/sched.h>
+#include <linux/sched/sysctl.h>
 
 #define CREATE_TRACE_POINTS
 #include "fuse_trace.h"
@@ -422,6 +423,8 @@ static void request_wait_answer(struct fuse_req *req)
 {
 	struct fuse_conn *fc = req->fm->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
+	/* Prevent hung task timer from firing at us */
+	unsigned long timeout = sysctl_hung_task_timeout_secs * HZ / 2;
 	int err;
 
 	if (!fc->no_interrupt) {
@@ -461,7 +464,12 @@ static void request_wait_answer(struct fuse_req *req)
 	 * Either request is already in userspace, or it was forced.
 	 * Wait it out.
 	 */
-	wait_event(req->waitq, test_bit(FR_FINISHED, &req->flags));
+	if (timeout)
+		while (!wait_event_timeout(req->waitq,
+				test_bit(FR_FINISHED, &req->flags), timeout))
+			;
+	else
+		wait_event(req->waitq, test_bit(FR_FINISHED, &req->flags));
 }
 
 static void __fuse_request_send(struct fuse_req *req)
