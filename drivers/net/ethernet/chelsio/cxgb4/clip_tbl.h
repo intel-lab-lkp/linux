@@ -19,7 +19,7 @@ struct clip_entry {
 	union {
 		struct sockaddr_in addr;
 		struct sockaddr_in6 addr6;
-	};
+	} val, mask;
 };
 
 struct clip_tbl {
@@ -43,3 +43,7 @@ void cxgb4_clip_release(const struct net_device *dev, const u32 *lip, u8 v6);
 int clip_tbl_show(struct seq_file *seq, void *v);
 int cxgb4_update_root_dev_clip(struct net_device *dev);
 void t4_cleanup_clip_tbl(struct adapter *adap);
+int cxgb4_clip_get_filter(const struct net_device *dev, const u32 *lip,
+			  const u32 *lipm, u8 v6);
+void cxgb4_clip_release_filter(const struct net_device *dev, const u32 *lip,
+			       const u32 *lipm, u8 v6);

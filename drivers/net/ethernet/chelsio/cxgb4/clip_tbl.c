@@ -18,6 +18,8 @@
 #include "cxgb4.h"
 #include "clip_tbl.h"
 
+static const u64 clip_ipv6_exact_mask[2] = { ~0, ~0 };
+
 static inline unsigned int ipv4_clip_hash(struct clip_tbl *c, const u32 *key)
 {
 	unsigned int clipt_size_half = c->clipt_size / 2;
@@ -42,36 +44,73 @@ static unsigned int clip_addr_hash(struct clip_tbl *ctbl, const u32 *addr,
 }
 
 static int clip6_get_mbox(const struct net_device *dev,
-			  const struct in6_addr *lip)
+			  const struct in6_addr *lip,
+			  const struct in6_addr *lipm)
 {
 	struct adapter *adap = netdev2adap(dev);
-	struct fw_clip_cmd c;
+	struct fw_clip2_cmd c;
+
+	if (!adap->params.clip2_cmd_support) {
+		struct fw_clip_cmd old_cmd;
+
+		memset(&old_cmd, 0, sizeof(old_cmd));
+		old_cmd.op_to_write = htonl(FW_CMD_OP_V(FW_CLIP_CMD) |
+					    FW_CMD_REQUEST_F | FW_CMD_WRITE_F);
+		old_cmd.alloc_to_len16 = htonl(FW_CLIP_CMD_ALLOC_F |
+					       FW_LEN16(old_cmd));
+		*(__be64 *)&old_cmd.ip_hi = *(__be64 *)(lip->s6_addr);
+		*(__be64 *)&old_cmd.ip_lo = *(__be64 *)(lip->s6_addr + 8);
+
+		return t4_wr_mbox_meat(adap, adap->mbox, &old_cmd,
+				       sizeof(old_cmd), &old_cmd, false);
+	}
 
 	memset(&c, 0, sizeof(c));
-	c.op_to_write = htonl(FW_CMD_OP_V(FW_CLIP_CMD) |
+	c.op_to_write = htonl(FW_CMD_OP_V(FW_CLIP2_CMD) |
 			      FW_CMD_REQUEST_F | FW_CMD_WRITE_F);
 	c.alloc_to_len16 = htonl(FW_CLIP_CMD_ALLOC_F | FW_LEN16(c));
 	*(__be64 *)&c.ip_hi = *(__be64 *)(lip->s6_addr);
 	*(__be64 *)&c.ip_lo = *(__be64 *)(lip->s6_addr + 8);
+	*(__be64 *)&c.ipm_hi = *(__be64 *)(lipm->s6_addr);
+	*(__be64 *)&c.ipm_lo = *(__be64 *)(lipm->s6_addr + 8);
 	return t4_wr_mbox_meat(adap, adap->mbox, &c, sizeof(c), &c, false);
 }
 
 static int clip6_release_mbox(const struct net_device *dev,
-			      const struct in6_addr *lip)
+			      const struct in6_addr *lip,
+			      const struct in6_addr *lipm)
 {
 	struct adapter *adap = netdev2adap(dev);
-	struct fw_clip_cmd c;
+	struct fw_clip2_cmd c;
+
+	if (!adap->params.clip2_cmd_support) {
+		struct fw_clip_cmd old_cmd;
+
+		memset(&old_cmd, 0, sizeof(old_cmd));
+		old_cmd.op_to_write = htonl(FW_CMD_OP_V(FW_CLIP_CMD) |
+					    FW_CMD_REQUEST_F | FW_CMD_WRITE_F);
+		old_cmd.alloc_to_len16 = htonl(FW_CLIP_CMD_FREE_F |
+					       FW_LEN16(old_cmd));
+		*(__be64 *)&old_cmd.ip_hi = *(__be64 *)(lip->s6_addr);
+		*(__be64 *)&old_cmd.ip_lo = *(__be64 *)(lip->s6_addr + 8);
+
+		return t4_wr_mbox_meat(adap, adap->mbox, &old_cmd,
+				       sizeof(old_cmd), &old_cmd, false);
+	}
 
 	memset(&c, 0, sizeof(c));
-	c.op_to_write = htonl(FW_CMD_OP_V(FW_CLIP_CMD) |
-			      FW_CMD_REQUEST_F | FW_CMD_READ_F);
+	c.op_to_write = htonl(FW_CMD_OP_V(FW_CLIP2_CMD) |
+			      FW_CMD_REQUEST_F | FW_CMD_WRITE_F);
 	c.alloc_to_len16 = htonl(FW_CLIP_CMD_FREE_F | FW_LEN16(c));
 	*(__be64 *)&c.ip_hi = *(__be64 *)(lip->s6_addr);
 	*(__be64 *)&c.ip_lo = *(__be64 *)(lip->s6_addr + 8);
+	*(__be64 *)&c.ipm_hi = *(__be64 *)(lipm->s6_addr);
+	*(__be64 *)&c.ipm_lo = *(__be64 *)(lipm->s6_addr + 8);
+
 	return t4_wr_mbox_meat(adap, adap->mbox, &c, sizeof(c), &c, false);
 }
 
-int cxgb4_clip_get(const struct net_device *dev, const u32 *lip, u8 v6)
+static int clip_get(const struct net_device *dev, const u32 *lip, const u32 *lipm, u8 v6)
 {
 	struct adapter *adap = netdev2adap(dev);
 	struct clip_tbl *ctbl = adap->clipt;
@@ -82,17 +121,23 @@ int cxgb4_clip_get(const struct net_device *dev, const u32 *lip, u8 v6)
 
 	if (!ctbl)
 		return 0;
+	if (!lipm)
+		lipm = (const u32 *)clip_ipv6_exact_mask;
 
 	hash = clip_addr_hash(ctbl, addr, v6);
 
 	read_lock_bh(&ctbl->lock);
 	list_for_each_entry(cte, &ctbl->hash_list[hash], list) {
-		if (cte->addr6.sin6_family == AF_INET6 && v6)
-			ret = memcmp(lip, cte->addr6.sin6_addr.s6_addr,
-				     sizeof(struct in6_addr));
-		else if (cte->addr.sin_family == AF_INET && !v6)
-			ret = memcmp(lip, (char *)(&cte->addr.sin_addr),
-				     sizeof(struct in_addr));
+		if (cte->val.addr6.sin6_family == AF_INET6 && v6)
+			ret = (memcmp(lip, &cte->val.addr6.sin6_addr.s6_addr,
+				      sizeof(struct in6_addr)) ||
+			       memcmp(lipm, &cte->mask.addr6.sin6_addr.s6_addr,
+				      sizeof(struct in6_addr)));
+		else if (cte->val.addr.sin_family == AF_INET && !v6)
+			ret = (memcmp(lip, (char *)(&cte->val.addr.sin_addr),
+				      sizeof(struct in_addr)) ||
+			       memcmp(lipm, (char *)(&cte->mask.addr.sin_addr),
+				      sizeof(struct in_addr)));
 		if (!ret) {
 			ce = cte;
 			read_unlock_bh(&ctbl->lock);
@@ -112,22 +157,29 @@ int cxgb4_clip_get(const struct net_device *dev, const u32 *lip, u8 v6)
 		atomic_dec(&ctbl->nfree);
 		list_add_tail(&ce->list, &ctbl->hash_list[hash]);
 		if (v6) {
-			ce->addr6.sin6_family = AF_INET6;
-			memcpy(ce->addr6.sin6_addr.s6_addr,
+			ce->val.addr6.sin6_family = AF_INET6;
+			ce->mask.addr6.sin6_family = AF_INET6;
+			memcpy(ce->val.addr6.sin6_addr.s6_addr,
 			       lip, sizeof(struct in6_addr));
-			ret = clip6_get_mbox(dev, (const struct in6_addr *)lip);
+			memcpy(ce->mask.addr6.sin6_addr.s6_addr,
+			       lipm, sizeof(struct in6_addr));
+			ret = clip6_get_mbox(dev, (const struct in6_addr *)lip,
+					     (const struct in6_addr *)lipm);
 			if (ret) {
 				write_unlock_bh(&ctbl->lock);
 				dev_err(adap->pdev_dev,
 					"CLIP FW cmd failed with error %d, "
 					"Connections using %pI6c won't be "
 					"offloaded",
-					ret, ce->addr6.sin6_addr.s6_addr);
+					ret, ce->val.addr6.sin6_addr.s6_addr);
 				return ret;
 			}
 		} else {
-			ce->addr.sin_family = AF_INET;
-			memcpy((char *)(&ce->addr.sin_addr), lip,
+			ce->val.addr.sin_family = AF_INET;
+			ce->mask.addr.sin_family = AF_INET;
+			memcpy((char *)(&ce->val.addr.sin_addr), lip,
+			       sizeof(struct in_addr));
+			memcpy((char *)(&ce->mask.addr.sin_addr), lipm,
 			       sizeof(struct in_addr));
 		}
 	} else {
@@ -141,9 +193,20 @@ int cxgb4_clip_get(const struct net_device *dev, const u32 *lip, u8 v6)
 	refcount_set(&ce->refcnt, 1);
 	return 0;
 }
+
+int cxgb4_clip_get(const struct net_device *dev, const u32 *lip, u8 v6)
+{
+	return clip_get(dev, lip, NULL, v6);
+}
 EXPORT_SYMBOL(cxgb4_clip_get);
 
-void cxgb4_clip_release(const struct net_device *dev, const u32 *lip, u8 v6)
+int cxgb4_clip_get_filter(const struct net_device *dev, const u32 *lip,
+			  const u32 *lipm, u8 v6)
+{
+	return clip_get(dev, lip, lipm, v6);
+}
+
+static void clip_release(const struct net_device *dev, const u32 *lip, const u32 *lipm, u8 v6)
 {
 	struct adapter *adap = netdev2adap(dev);
 	struct clip_tbl *ctbl = adap->clipt;
@@ -154,17 +217,23 @@ void cxgb4_clip_release(const struct net_device *dev, const u32 *lip, u8 v6)
 
 	if (!ctbl)
 		return;
+	if (!lipm)
+		lipm = (const u32 *)clip_ipv6_exact_mask;
 
 	hash = clip_addr_hash(ctbl, addr, v6);
 
 	read_lock_bh(&ctbl->lock);
 	list_for_each_entry(cte, &ctbl->hash_list[hash], list) {
-		if (cte->addr6.sin6_family == AF_INET6 && v6)
-			ret = memcmp(lip, cte->addr6.sin6_addr.s6_addr,
-				     sizeof(struct in6_addr));
-		else if (cte->addr.sin_family == AF_INET && !v6)
-			ret = memcmp(lip, (char *)(&cte->addr.sin_addr),
-				     sizeof(struct in_addr));
+		if (cte->val.addr6.sin6_family == AF_INET6 && v6)
+			ret = (memcmp(lip, &cte->val.addr6.sin6_addr.s6_addr,
+				      sizeof(struct in6_addr)) ||
+			       memcmp(lipm, &cte->mask.addr6.sin6_addr.s6_addr,
+				      sizeof(struct in6_addr)));
+		else if (cte->val.addr.sin_family == AF_INET && !v6)
+			ret = (memcmp(lip, (char *)(&cte->val.addr.sin_addr),
+				      sizeof(struct in_addr)) ||
+			       memcmp(lipm, (char *)(&cte->mask.addr.sin_addr),
+				      sizeof(struct in_addr)));
 		if (!ret) {
 			ce = cte;
 			read_unlock_bh(&ctbl->lock);
@@ -182,12 +251,24 @@ found:
 		list_add_tail(&ce->list, &ctbl->ce_free_head);
 		atomic_inc(&ctbl->nfree);
 		if (v6)
-			clip6_release_mbox(dev, (const struct in6_addr *)lip);
+			clip6_release_mbox(dev, (const struct in6_addr *)lip,
+					   (const struct in6_addr *)lipm);
 	}
 	spin_unlock_bh(&ce->lock);
 	write_unlock_bh(&ctbl->lock);
 }
+
+void cxgb4_clip_release(const struct net_device *dev, const u32 *lip, u8 v6)
+{
+	return clip_release(dev, lip, NULL, v6);
+}
 EXPORT_SYMBOL(cxgb4_clip_release);
+
+void cxgb4_clip_release_filter(const struct net_device *dev, const u32 *lip,
+			       const u32 *lipm, u8 v6)
+{
+	return clip_release(dev, lip, lipm, v6);
+}
 
 /* Retrieves IPv6 addresses from a root device (bond, vlan) associated with
  * a physical device.
@@ -252,17 +333,18 @@ int clip_tbl_show(struct seq_file *seq, void *v)
 	struct adapter *adapter = seq->private;
 	struct clip_tbl *ctbl = adapter->clipt;
 	struct clip_entry *ce;
-	char ip[60];
+	char ip[96];
 	int i;
 
 	read_lock_bh(&ctbl->lock);
 
-	seq_puts(seq, "IP Address                  Users\n");
+	seq_printf(seq, "%-83s   %s\n", "IP Address / IP Mask", "Users");
 	for (i = 0 ; i < ctbl->clipt_size;  ++i) {
 		list_for_each_entry(ce, &ctbl->hash_list[i], list) {
 			ip[0] = '\0';
-			sprintf(ip, "%pISc", &ce->addr);
-			seq_printf(seq, "%-25s   %u\n", ip,
+			sprintf(ip, "%pISc / %pISc", &ce->val.addr,
+				&ce->mask.addr);
+			seq_printf(seq, "%-83s   %d\n", ip,
 				   refcount_read(&ce->refcnt));
 		}
 	}

@@ -847,6 +847,7 @@ enum fw_cmd_opcodes {
 	FW_SCHED_CMD                   = 0x24,
 	FW_DEVLOG_CMD                  = 0x25,
 	FW_CLIP_CMD                    = 0x28,
+	FW_CLIP2_CMD                   = 0x29,
 	FW_PTP_CMD                     = 0x3e,
 	FW_HMA_CMD                     = 0x3f,
 	FW_LASTC2E_CMD                 = 0x40,
@@ -1226,6 +1227,16 @@ enum fw_memtype_cf {
 	FW_MEMTYPE_CF_HMA		= 0x7,
 };
 
+struct fw_clip2_cmd {
+	__be32 op_to_write;
+	__be32 alloc_to_len16;
+	__be64 ip_hi;
+	__be64 ip_lo;
+	__be64 ipm_hi;
+	__be64 ipm_lo;
+	__be32 r4[2];
+};
+
 struct fw_caps_config_cmd {
 	__be32 op_to_write;
 	__be32 cfvalid_to_len16;
@@ -1331,6 +1342,7 @@ enum fw_params_param_dev {
 	FW_PARAMS_PARAM_DEV_DBQ_TIMERTICK = 0x2A,
 	FW_PARAMS_PARAM_DEV_NUM_TM_CLASS = 0x2B,
 	FW_PARAMS_PARAM_DEV_FILTER = 0x2E,
+	FW_PARAMS_PARAM_DEV_CLIP2_CMD = 0x2F,
 	FW_PARAMS_PARAM_DEV_KTLS_HW = 0x31,
 };
 

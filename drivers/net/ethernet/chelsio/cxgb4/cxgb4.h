@@ -487,6 +487,7 @@ struct adapter_params {
 	u8 mps_bg_map[MAX_NPORTS];	/* MPS Buffer Group Map */
 	bool write_w_imm_support;       /* FW supports WRITE_WITH_IMMEDIATE */
 	bool write_cmpl_support;        /* FW supports WRITE_CMPL */
+	bool clip2_cmd_support;
 };
 
 /* State needed to monitor the forward progress of SGE Ingress DMA activities

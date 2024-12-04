@@ -5137,6 +5137,9 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 			      1, params, val);
 	adap->params.viid_smt_extn_support = (ret == 0 && val[0] != 0);
 
+	params[0] = FW_PARAM_DEV(CLIP2_CMD);
+	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 1, params, val);
+	adap->params.clip2_cmd_support = (!ret && val[0]);
 	/*
 	 * Get device capabilities so we can determine what resources we need
 	 * to manage.

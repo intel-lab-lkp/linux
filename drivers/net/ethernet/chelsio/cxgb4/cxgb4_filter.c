@@ -993,9 +993,10 @@ void clear_filter(struct adapter *adap, struct filter_entry *f)
 		t4_free_encap_mac_filt(adap, pi->viid,
 				       f->fs.val.ovlan & 0x1ff, 0);
 
-	if ((f->fs.hash || is_t6(adap->params.chip)) && f->fs.type)
-		cxgb4_clip_release(f->dev, (const u32 *)&f->fs.val.lip, 1);
-
+	if ((f->fs.hash || is_t6(adap->params.chip)) && f->fs.type) {
+		cxgb4_clip_release_filter(f->dev, (const u32 *)&f->fs.val.lip,
+					  (const u32 *)&f->fs.mask.lip, 1);
+	}
 	/* The zeroing of the filter rule below clears the filter valid,
 	 * pending, locked flags, l2t pointer, etc. so it's all we need for
 	 * this operation.
@@ -1463,7 +1464,13 @@ static int cxgb4_set_hash_filter(struct net_device *dev,
 
 	size = sizeof(struct cpl_t6_act_open_req);
 	if (f->fs.type) {
-		ret = cxgb4_clip_get(f->dev, (const u32 *)&f->fs.val.lip, 1);
+		struct ch_filter_specification *fs = &f->fs;
+
+		ret = cxgb4_clip_get_filter(f->dev,
+					    (const u32 *)&fs->val.lip,
+					    (const u32 *)&fs->mask.lip,
+					    1);
+
 		if (ret)
 			goto free_mps;
 
@@ -1494,7 +1501,8 @@ static int cxgb4_set_hash_filter(struct net_device *dev,
 	return 0;
 
 free_clip:
-	cxgb4_clip_release(f->dev, (const u32 *)&f->fs.val.lip, 1);
+	cxgb4_clip_release_filter(f->dev, (const u32 *)&f->fs.val.lip,
+				  (const u32 *)&f->fs.mask.lip, 1);
 
 free_mps:
 	if (f->fs.val.encap_vld && f->fs.val.ovlan_vld)
@@ -1666,7 +1674,10 @@ int __cxgb4_set_filter(struct net_device *dev, int ftid,
 	if (is_t6(adapter->params.chip) && fs->type &&
 	    ipv6_addr_type((const struct in6_addr *)fs->val.lip) !=
 	    IPV6_ADDR_ANY) {
-		ret = cxgb4_clip_get(dev, (const u32 *)&fs->val.lip, 1);
+		ret = cxgb4_clip_get_filter(dev,
+					    (const u32 *)&fs->val.lip,
+					    (const u32 *)&fs->mask.lip,
+					    1);
 		if (ret)
 			goto free_tid;
 	}
