@@ -13054,11 +13054,35 @@ static void kvm_mmu_slot_apply_flags(struct kvm *kvm,
 	bool log_dirty_pages = new_flags & KVM_MEM_LOG_DIRTY_PAGES;
 
 	/*
+	 * When toggling KVM Userfault on, zap all sptes so that userfault-ness
+	 * will be respected at refault time. All new faults will only install
+	 * small sptes. Therefore, when toggling it off, recover hugepages.
+	 *
+	 * For MOVE and DELETE, there will be nothing to do, as the old
+	 * mappings will have already been deleted by
+	 * kvm_arch_flush_shadow_memslot().
+	 *
+	 * For CREATE, no mappings will have been created yet.
+	 */
+	if ((old_flags ^ new_flags) & KVM_MEM_USERFAULT &&
+	    (change == KVM_MR_FLAGS_ONLY)) {
+		if (old_flags & KVM_MEM_USERFAULT)
+			kvm_mmu_recover_huge_pages(kvm, new);
+		else
+			kvm_arch_flush_shadow_memslot(kvm, old);
+	}
+
+	/*
+	 * Nothing more to do if dirty logging isn't being toggled.
+	 */
+	if (!((old_flags ^ new_flags) & KVM_MEM_LOG_DIRTY_PAGES))
+		return;
+
+	/*
 	 * Update CPU dirty logging if dirty logging is being toggled.  This
 	 * applies to all operations.
 	 */
-	if ((old_flags ^ new_flags) & KVM_MEM_LOG_DIRTY_PAGES)
-		kvm_mmu_update_cpu_dirty_logging(kvm, log_dirty_pages);
+	kvm_mmu_update_cpu_dirty_logging(kvm, log_dirty_pages);
 
 	/*
 	 * Nothing more to do for RO slots (which can't be dirtied and can't be
@@ -13076,14 +13100,6 @@ static void kvm_mmu_slot_apply_flags(struct kvm *kvm,
 	 *		kvm_arch_flush_shadow_memslot().
 	 */
 	if ((change != KVM_MR_FLAGS_ONLY) || (new_flags & KVM_MEM_READONLY))
-		return;
-
-	/*
-	 * READONLY and non-flags changes were filtered out above, and the only
-	 * other flag is LOG_DIRTY_PAGES, i.e. something is wrong if dirty
-	 * logging isn't being toggled on or off.
-	 */
-	if (WARN_ON_ONCE(!((old_flags ^ new_flags) & KVM_MEM_LOG_DIRTY_PAGES)))
 		return;
 
 	if (!log_dirty_pages) {
