@@ -1314,7 +1314,7 @@ struct page *f2fs_new_inode_page(struct inode *inode)
 struct page *f2fs_new_node_page(struct dnode_of_data *dn, unsigned int ofs)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dn->inode);
-	struct node_info new_ni;
+	struct node_info new_ni = { .flag = 0 };
 	struct page *page;
 	int err;
 
