@@ -421,7 +421,20 @@ static int vm_module_tags_populate(void)
 				__free_page(next_page[i]);
 			return -ENOMEM;
 		}
+
+		kasan_poison_vmalloc((void *)module_tags.start_addr,
+				     vm_module_tags->nr_pages << PAGE_SHIFT);
+
 		vm_module_tags->nr_pages += nr;
+
+		/*
+		 * Mark the pages as accessible, now that they are mapped.
+		 * With hardware tag-based KASAN, marking is skipped for
+		 * non-VM_ALLOC mappings, see __kasan_unpoison_vmalloc().
+		 */
+		kasan_unpoison_vmalloc((void *)module_tags.start_addr,
+				       vm_module_tags->nr_pages << PAGE_SHIFT,
+				       KASAN_VMALLOC_PROT_NORMAL);
 	}
 
 	return 0;
