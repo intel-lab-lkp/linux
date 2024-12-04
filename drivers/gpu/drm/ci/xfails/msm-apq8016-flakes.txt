@@ -1,0 +1,5 @@
+# Board Name: msm-apq8016-db410c
+# Failure Rate: 100
+# IGT Version: 1.28-ga73311079
+# Linux Version: 6.12.0-rc2
+kms_cursor_legacy@torture-bo
