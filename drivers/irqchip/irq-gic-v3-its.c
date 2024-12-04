@@ -5114,19 +5114,15 @@ static int its_init_domain(struct its_node *its)
 	info->ops = &its_msi_domain_ops;
 	info->data = its;
 
-	inner_domain = irq_domain_create_hierarchy(its_parent,
-						   its->msi_domain_flags, 0,
-						   its->fwnode_handle, &its_domain_ops,
-						   info);
+	inner_domain = msi_create_parent_irq_domain(its->fwnode_handle,
+						    &gic_v3_its_msi_parent_ops,
+						    &its_domain_ops,
+						    its->msi_domain_flags, 0,
+						    info, its_parent);
 	if (!inner_domain) {
 		kfree(info);
 		return -ENOMEM;
 	}
-
-	irq_domain_update_bus_token(inner_domain, DOMAIN_BUS_NEXUS);
-
-	inner_domain->msi_parent_ops = &gic_v3_its_msi_parent_ops;
-	inner_domain->flags |= IRQ_DOMAIN_FLAG_MSI_PARENT;
 
 	return 0;
 }

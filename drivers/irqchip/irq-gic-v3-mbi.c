@@ -211,14 +211,13 @@ static int mbi_allocate_domain(struct irq_domain *parent)
 {
 	struct irq_domain *nexus_domain;
 
-	nexus_domain = irq_domain_create_hierarchy(parent, 0, 0, parent->fwnode,
-						   &mbi_domain_ops, NULL);
+	nexus_domain = msi_create_parent_irq_domain(parent->fwnode,
+						    &gic_v3_mbi_msi_parent_ops,
+						    &mbi_domain_ops,
+						    0, 0, NULL, parent);
 	if (!nexus_domain)
 		return -ENOMEM;
 
-	irq_domain_update_bus_token(nexus_domain, DOMAIN_BUS_NEXUS);
-	nexus_domain->flags |= IRQ_DOMAIN_FLAG_MSI_PARENT;
-	nexus_domain->msi_parent_ops = &gic_v3_mbi_msi_parent_ops;
 	return 0;
 }
 
