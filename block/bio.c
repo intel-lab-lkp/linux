@@ -89,7 +89,7 @@ static struct bio_slab *create_bio_slab(unsigned int size)
 	if (!bslab)
 		return NULL;
 
-	snprintf(bslab->name, sizeof(bslab->name), "bio-%d", size);
+	snprintf(bslab->name, sizeof(bslab->name), "bio-%u", size);
 	bslab->slab = kmem_cache_create(bslab->name, size,
 			ARCH_KMALLOC_MINALIGN,
 			SLAB_HWCACHE_ALIGN | SLAB_TYPESAFE_BY_RCU, NULL);
