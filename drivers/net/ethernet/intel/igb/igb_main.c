@@ -128,6 +128,7 @@ static void igb_set_uta(struct igb_adapter *adapter, bool set);
 static irqreturn_t igb_intr(int irq, void *);
 static irqreturn_t igb_intr_msi(int irq, void *);
 static irqreturn_t igb_msix_other(int irq, void *);
+static irqreturn_t igb_msix_other_threaded(int irq, void *);
 static irqreturn_t igb_msix_ring(int irq, void *);
 #ifdef CONFIG_IGB_DCA
 static void igb_update_dca(struct igb_q_vector *);
@@ -148,7 +149,6 @@ static void igb_rar_set_index(struct igb_adapter *, u32);
 static void igb_ping_all_vfs(struct igb_adapter *);
 static void igb_msg_task_irq_safe(struct igb_adapter *adapter);
 static void igb_msg_task_preemptible_safe(struct igb_adapter *adapter);
-static void igb_msg_task(struct igb_adapter *);
 static void igb_vmm_control(struct igb_adapter *);
 static int igb_set_vf_mac(struct igb_adapter *, int, unsigned char *);
 static void igb_flush_mac_table(struct igb_adapter *);
@@ -914,8 +914,9 @@ static int igb_request_msix(struct igb_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	int i, err = 0, vector = 0, free_vector = 0;
 
-	err = request_irq(adapter->msix_entries[vector].vector,
-			  igb_msix_other, 0, netdev->name, adapter);
+	err = request_threaded_irq(adapter->msix_entries[vector].vector,
+				   igb_msix_other, igb_msix_other_threaded,
+				   IRQF_NO_THREAD, netdev->name, adapter);
 	if (err)
 		goto err_out;
 
@@ -7156,9 +7157,27 @@ static irqreturn_t igb_msix_other(int irq, void *data)
 		igb_check_wvbr(adapter);
 	}
 
-	/* Check for a mailbox event */
+	/* Check for a mailbox event (interrupt safe part) */
 	if (icr & E1000_ICR_VMMB)
-		igb_msg_task(adapter);
+		igb_msg_task_irq_safe(adapter);
+
+	adapter->test_icr = icr;
+
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		return igb_msix_other_threaded(irq, data);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t igb_msix_other_threaded(int irq, void *data)
+{
+	struct igb_adapter *adapter = data;
+	struct e1000_hw *hw = &adapter->hw;
+	u32 icr = adapter->test_icr;
+
+	/* Check for a mailbox event (preempible safe part) */
+	if (icr & E1000_ICR_VMMB)
+		igb_msg_task_preemptible_safe(adapter);
 
 	if (icr & E1000_ICR_LSC) {
 		hw->mac.get_link_status = 1;
@@ -8202,12 +8221,6 @@ static void igb_msg_task_preemptible_safe(struct igb_adapter *adapter)
 			igb_rcv_msg_from_vf(adapter, vf);
 	}
 	vfs_spin_unlock_irqrestore(adapter, flags);
-}
-
-static __always_inline void igb_msg_task(struct igb_adapter *adapter)
-{
-	igb_msg_task_irq_safe(adapter);
-	igb_msg_task_preemptible_safe(adapter);
 }
 
 /**
