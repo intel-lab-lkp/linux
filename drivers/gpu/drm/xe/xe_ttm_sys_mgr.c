@@ -11,6 +11,7 @@
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_range_manager.h>
 #include <drm/ttm/ttm_tt.h>
+#include <drm/drm_drv.h>
 
 #include "xe_bo.h"
 #include "xe_gt.h"
@@ -111,6 +112,10 @@ int xe_ttm_sys_mgr_init(struct xe_device *xe)
 	gtt_size = (u64)si.totalram * si.mem_unit;
 	/* TTM limits allocation of all TTM devices by 50% of system memory */
 	gtt_size /= 2;
+
+	man->cg = drmm_cgroup_register_region(&xe->drm, "mapped", gtt_size);
+	if (IS_ERR(man->cg))
+		return PTR_ERR(man->cg);
 
 	man->use_tt = true;
 	man->func = &xe_ttm_sys_mgr_func;
