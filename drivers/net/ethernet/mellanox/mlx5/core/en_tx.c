@@ -32,6 +32,7 @@
 
 #include <linux/tcp.h>
 #include <linux/if_vlan.h>
+#include <linux/iommu-dma.h>
 #include <net/geneve.h>
 #include <net/dsfield.h>
 #include "en.h"
@@ -268,6 +269,10 @@ static void mlx5e_sq_xmit_prepare(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 				  struct mlx5e_tx_attr *attr)
 {
 	struct mlx5e_sq_stats *stats = sq->stats;
+
+	/* Don't require 2 IOMMU TLB entries, if one is sufficient */
+	if (use_dma_iommu(sq->pdev) && skb->truesize <= PAGE_SIZE)
+		skb_linearize(skb);
 
 	if (skb_is_gso(skb)) {
 		int hopbyhop;
