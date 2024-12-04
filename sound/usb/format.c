@@ -142,7 +142,7 @@ static u64 parse_audio_format_i_type(struct snd_usb_audio *chip,
 		pcm_formats |= SNDRV_PCM_FMTBIT_A_LAW;
 	if (format & BIT(UAC_FORMAT_TYPE_I_MULAW))
 		pcm_formats |= SNDRV_PCM_FMTBIT_MU_LAW;
-	if (format & ~0x3f) {
+	if (format & ~0x10000003F) {
 		usb_audio_info(chip,
 			 "%u:%d : unsupported format bits %#llx\n",
 			 fp->iface, fp->altsetting, format);
