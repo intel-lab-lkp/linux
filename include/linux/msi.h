@@ -594,6 +594,13 @@ struct irq_domain *msi_create_irq_domain(struct fwnode_handle *fwnode,
 					 struct msi_domain_info *info,
 					 struct irq_domain *parent);
 
+struct irq_domain *msi_create_parent_irq_domain(struct fwnode_handle *fwnode,
+						const struct msi_parent_ops *msi_parent_ops,
+						const struct irq_domain_ops *ops,
+						unsigned long flags, unsigned long size,
+						void *host_data,
+						struct irq_domain *parent);
+
 bool msi_create_device_irq_domain(struct device *dev, unsigned int domid,
 				  const struct msi_domain_template *template,
 				  unsigned int hwsize, void *domain_data,
