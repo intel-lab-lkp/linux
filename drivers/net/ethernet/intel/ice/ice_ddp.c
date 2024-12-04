@@ -2388,6 +2388,8 @@ int ice_cfg_tx_topo(struct ice_hw *hw, const void *buf, u32 len)
 	int status;
 	u8 flags;
 
+	static_assert(ICE_PKG_BUF_SIZE == ICE_AQ_MAX_BUF_LEN);
+
 	if (!buf || !len)
 		return -EINVAL;
 
@@ -2482,7 +2484,6 @@ int ice_cfg_tx_topo(struct ice_hw *hw, const void *buf, u32 len)
 	}
 
 	/* Get the new topology buffer, reuse current topo copy mem */
-	static_assert(ICE_PKG_BUF_SIZE == ICE_AQ_MAX_BUF_LEN);
 	new_topo = topo;
 	memcpy(new_topo, (u8 *)section + offset, size);
 
