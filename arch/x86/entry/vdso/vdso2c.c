@@ -114,8 +114,8 @@ static void fail(const char *format, ...)
 	vfprintf(stderr, format, ap);
 	if (outfilename)
 		unlink(outfilename);
-	exit(1);
 	va_end(ap);
+	exit(1);
 }
 
 /*
