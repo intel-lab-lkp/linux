@@ -8,6 +8,7 @@
  * Author: Peter Rosin <peda@axentia.se>
  */
 
+#include <linux/bits.h>
 #include <linux/err.h>
 #include <linux/gcd.h>
 #include <linux/mod_devicetable.h>
@@ -62,7 +63,7 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 		if (scale_type == IIO_VAL_FRACTIONAL)
 			tmp = *val2;
 		else
-			tmp = ULL(1) << *val2;
+			tmp = BIT_ULL(*val2);
 
 		rem2 = *val % (int)tmp;
 		*val = *val / (int)tmp;
