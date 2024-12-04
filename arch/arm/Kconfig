@@ -1400,12 +1400,15 @@ config ARCH_WANT_FLAT_DTB_INSTALL
 
 config ATAGS
 	bool "Support for the traditional ATAGS boot data passing"
-	default y
+	depends on EXPERT
 	help
-	  This is the traditional way of passing data to the kernel at boot
-	  time. If you are solely relying on the flattened device tree (or
-	  the ARM_ATAG_DTB_COMPAT option) then you may unselect this option
-	  to remove ATAGS support from your kernel binary.
+	  This is the traditional way of passing data to the kernel at
+	  boot but is now only used by a few of the oldest ARMv4 and
+	  ARMv5 machines.  Users that still rely on ATAGS should plan
+	  on migrating to devicetree based booting.
+
+	  Support for ATAGS will be removed when the last machine using
+	  it is either converted to DT or removed.
 
 config DEPRECATED_PARAM_STRUCT
 	bool "Provide old way to pass kernel parameters"
