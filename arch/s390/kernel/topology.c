@@ -299,6 +299,11 @@ void store_topology(struct sysinfo_15_1_x *info)
 	stsi(info, 15, 1, topology_mnest_limit());
 }
 
+int cpu_parked(int cpu)
+{
+	return smp_cpu_get_polarization(cpu) == POLARIZATION_VL;
+}
+
 static void __arch_update_dedicated_flag(void *arg)
 {
 	if (topology_cpu_dedicated(smp_processor_id()))

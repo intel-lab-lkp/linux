@@ -99,6 +99,9 @@ static inline int numa_node_id(void)
 
 #endif /* CONFIG_NUMA */
 
+#define arch_cpu_parked cpu_parked
+int cpu_parked(int cpu);
+
 #include <asm-generic/topology.h>
 
 #endif /* _ASM_S390_TOPOLOGY_H */
