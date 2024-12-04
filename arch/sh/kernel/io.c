@@ -95,17 +95,3 @@ void memcpy_toio(volatile void __iomem *to, const void *from, unsigned long coun
 	mb();
 }
 EXPORT_SYMBOL(memcpy_toio);
-
-/*
- * "memset" on IO memory space.
- * This needs to be optimized.
- */
-void memset_io(volatile void __iomem *dst, int c, unsigned long count)
-{
-        while (count) {
-                count--;
-                writeb(c, dst);
-                dst++;
-        }
-}
-EXPORT_SYMBOL(memset_io);
