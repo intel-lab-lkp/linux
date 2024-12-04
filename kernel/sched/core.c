@@ -2435,7 +2435,7 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 
 	/* Non kernel threads are not allowed during either online or offline. */
 	if (!(p->flags & PF_KTHREAD))
-		return cpu_active(cpu);
+		return !arch_cpu_parked(cpu) && cpu_active(cpu);
 
 	/* KTHREAD_IS_PER_CPU is always allowed. */
 	if (kthread_is_per_cpu(p))
@@ -2443,6 +2443,10 @@ static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 
 	/* Regular kernel threads don't get to stay during offline. */
 	if (cpu_dying(cpu))
+		return false;
+
+	/* CPU should be avoided at the moment */
+	if (arch_cpu_parked(cpu))
 		return false;
 
 	/* But are allowed during online. */
@@ -3920,6 +3924,10 @@ static inline bool ttwu_queue_cond(struct task_struct *p, int cpu)
 	 * optimization less meaningful. Skip if on SCX.
 	 */
 	if (task_on_scx(p))
+		return false;
+
+	/* The task should not be queued onto a parked CPU. */
+	if (arch_cpu_parked(cpu))
 		return false;
 
 	/*
