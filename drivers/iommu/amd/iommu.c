@@ -3807,6 +3807,7 @@ static struct irq_chip amd_ir_chip = {
 
 static const struct msi_parent_ops amdvi_msi_parent_ops = {
 	.supported_flags	= X86_VECTOR_MSI_FLAGS_SUPPORTED | MSI_FLAG_MULTI_PCI_MSI,
+	.bus_token		= DOMAIN_BUS_AMDVI,
 	.prefix			= "IR-",
 	.init_dev_msi_info	= msi_parent_init_dev_msi_info,
 };
@@ -3818,17 +3819,14 @@ int amd_iommu_create_irq_domain(struct amd_iommu *iommu)
 	fn = irq_domain_alloc_named_id_fwnode("AMD-IR", iommu->index);
 	if (!fn)
 		return -ENOMEM;
-	iommu->ir_domain = irq_domain_create_hierarchy(arch_get_ir_parent_domain(), 0, 0,
-						       fn, &amd_ir_domain_ops, iommu);
+	iommu->ir_domain = msi_create_parent_irq_domain(fn, &amdvi_msi_parent_ops,
+							&amd_ir_domain_ops,
+							IRQ_DOMAIN_FLAG_ISOLATED_MSI, 0,
+							iommu, arch_get_ir_parent_domain());
 	if (!iommu->ir_domain) {
 		irq_domain_free_fwnode(fn);
 		return -ENOMEM;
 	}
-
-	irq_domain_update_bus_token(iommu->ir_domain,  DOMAIN_BUS_AMDVI);
-	iommu->ir_domain->flags |= IRQ_DOMAIN_FLAG_MSI_PARENT |
-				   IRQ_DOMAIN_FLAG_ISOLATED_MSI;
-	iommu->ir_domain->msi_parent_ops = &amdvi_msi_parent_ops;
 
 	return 0;
 }
