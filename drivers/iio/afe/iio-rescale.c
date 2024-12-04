@@ -23,6 +23,7 @@
 int rescale_process_scale(struct rescale *rescale, int scale_type,
 			  int *val, int *val2)
 {
+	struct s32_fract *fract = &rescale->fract;
 	s64 tmp;
 	int _val, _val2;
 	s32 rem, rem2;
@@ -31,10 +32,10 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 
 	switch (scale_type) {
 	case IIO_VAL_INT:
-		*val *= rescale->numerator;
-		if (rescale->denominator == 1)
+		*val *= fract->numerator;
+		if (fract->denominator == 1)
 			return scale_type;
-		*val2 = rescale->denominator;
+		*val2 = fract->denominator;
 		return IIO_VAL_FRACTIONAL;
 	case IIO_VAL_FRACTIONAL:
 		/*
@@ -42,8 +43,8 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 		 * potential accuracy loss (for in kernel consumers) by
 		 * keeping a fractional representation.
 		 */
-		if (!check_mul_overflow(*val, rescale->numerator, &_val) &&
-		    !check_mul_overflow(*val2, rescale->denominator, &_val2)) {
+		if (!check_mul_overflow(*val, fract->numerator, &_val) &&
+		    !check_mul_overflow(*val2, fract->denominator, &_val2)) {
 			*val = _val;
 			*val2 = _val2;
 			return IIO_VAL_FRACTIONAL;
@@ -51,8 +52,8 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 		fallthrough;
 	case IIO_VAL_FRACTIONAL_LOG2:
 		tmp = (s64)*val * 1000000000LL;
-		tmp = div_s64(tmp, rescale->denominator);
-		tmp *= rescale->numerator;
+		tmp = div_s64(tmp, fract->denominator);
+		tmp *= fract->numerator;
 
 		tmp = div_s64_rem(tmp, 1000000000LL, &rem);
 		*val = tmp;
@@ -84,11 +85,11 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 		 */
 		neg = *val < 0 || *val2 < 0;
 
-		tmp = (s64)abs(*val) * abs(rescale->numerator);
-		*val = div_s64_rem(tmp, abs(rescale->denominator), &rem);
+		tmp = (s64)abs(*val) * abs(fract->numerator);
+		*val = div_s64_rem(tmp, abs(fract->denominator), &rem);
 
-		tmp = (s64)rem * mult + (s64)abs(*val2) * abs(rescale->numerator);
-		tmp = div_s64(tmp, abs(rescale->denominator));
+		tmp = (s64)rem * mult + (s64)abs(*val2) * abs(fract->numerator);
+		tmp = div_s64(tmp, abs(fract->denominator));
 
 		*val += div_s64_rem(tmp, mult, val2);
 
@@ -96,7 +97,7 @@ int rescale_process_scale(struct rescale *rescale, int scale_type,
 		 * If only one of the rescaler elements or the schan scale is
 		 * negative, the combined scale is negative.
 		 */
-		if (neg != (rescale->numerator < 0 || rescale->denominator < 0)) {
+		if (neg != (fract->numerator < 0 || fract->denominator < 0)) {
 			if (*val)
 				*val = -*val;
 			else
@@ -323,6 +324,7 @@ static int rescale_configure_channel(struct device *dev,
 static int rescale_current_sense_amplifier_props(struct device *dev,
 						 struct rescale *rescale)
 {
+	struct s32_fract *fract = &rescale->fract;
 	u32 sense;
 	u32 gain_mult = 1;
 	u32 gain_div = 1;
@@ -345,16 +347,16 @@ static int rescale_current_sense_amplifier_props(struct device *dev,
 	 * numerator/denominator from overflowing.
 	 */
 	factor = gcd(sense, 1000000);
-	rescale->numerator = 1000000 / factor;
-	rescale->denominator = sense / factor;
+	fract->numerator = 1000000 / factor;
+	fract->denominator = sense / factor;
 
-	factor = gcd(rescale->numerator, gain_mult);
-	rescale->numerator /= factor;
-	rescale->denominator *= gain_mult / factor;
+	factor = gcd(fract->numerator, gain_mult);
+	fract->numerator /= factor;
+	fract->denominator *= gain_mult / factor;
 
-	factor = gcd(rescale->denominator, gain_div);
-	rescale->numerator *= gain_div / factor;
-	rescale->denominator /= factor;
+	factor = gcd(fract->denominator, gain_div);
+	fract->numerator *= gain_div / factor;
+	fract->denominator /= factor;
 
 	return 0;
 }
@@ -362,6 +364,7 @@ static int rescale_current_sense_amplifier_props(struct device *dev,
 static int rescale_current_sense_shunt_props(struct device *dev,
 					     struct rescale *rescale)
 {
+	struct s32_fract *fract = &rescale->fract;
 	u32 shunt;
 	u32 factor;
 	int ret;
@@ -374,8 +377,8 @@ static int rescale_current_sense_shunt_props(struct device *dev,
 	}
 
 	factor = gcd(shunt, 1000000);
-	rescale->numerator = 1000000 / factor;
-	rescale->denominator = shunt / factor;
+	fract->numerator = 1000000 / factor;
+	fract->denominator = shunt / factor;
 
 	return 0;
 }
@@ -383,26 +386,25 @@ static int rescale_current_sense_shunt_props(struct device *dev,
 static int rescale_voltage_divider_props(struct device *dev,
 					 struct rescale *rescale)
 {
+	struct s32_fract *fract = &rescale->fract;
 	int ret;
 	u32 factor;
 
-	ret = device_property_read_u32(dev, "output-ohms",
-				       &rescale->denominator);
+	ret = device_property_read_u32(dev, "output-ohms", &fract->denominator);
 	if (ret) {
 		dev_err(dev, "failed to read output-ohms: %d\n", ret);
 		return ret;
 	}
 
-	ret = device_property_read_u32(dev, "full-ohms",
-				       &rescale->numerator);
+	ret = device_property_read_u32(dev, "full-ohms", &fract->numerator);
 	if (ret) {
 		dev_err(dev, "failed to read full-ohms: %d\n", ret);
 		return ret;
 	}
 
-	factor = gcd(rescale->numerator, rescale->denominator);
-	rescale->numerator /= factor;
-	rescale->denominator /= factor;
+	factor = gcd(fract->numerator, fract->denominator);
+	fract->numerator /= factor;
+	fract->denominator /= factor;
 
 	return 0;
 }
@@ -410,6 +412,7 @@ static int rescale_voltage_divider_props(struct device *dev,
 static int rescale_temp_sense_rtd_props(struct device *dev,
 					struct rescale *rescale)
 {
+	struct s32_fract *fract = &rescale->fract;
 	u32 factor;
 	u32 alpha;
 	u32 iexc;
@@ -440,8 +443,8 @@ static int rescale_temp_sense_rtd_props(struct device *dev,
 
 	tmp = r0 * iexc * alpha / 1000000;
 	factor = gcd(tmp, 1000000);
-	rescale->numerator = 1000000 / factor;
-	rescale->denominator = tmp / factor;
+	fract->numerator = 1000000 / factor;
+	fract->denominator = tmp / factor;
 
 	rescale->offset = -1 * ((r0 * iexc) / 1000);
 
@@ -451,6 +454,7 @@ static int rescale_temp_sense_rtd_props(struct device *dev,
 static int rescale_temp_transducer_props(struct device *dev,
 					 struct rescale *rescale)
 {
+	struct s32_fract *fract = &rescale->fract;
 	s32 offset = 0;
 	s32 sense = 1;
 	s32 alpha;
@@ -464,11 +468,10 @@ static int rescale_temp_transducer_props(struct device *dev,
 		return ret;
 	}
 
-	rescale->numerator = 1000000;
-	rescale->denominator = alpha * sense;
+	fract->numerator = 1000000;
+	fract->denominator = alpha * sense;
 
-	rescale->offset = div_s64((s64)offset * rescale->denominator,
-				  rescale->numerator);
+	rescale->offset = div_s64((s64)offset * fract->denominator, fract->numerator);
 
 	return 0;
 }
@@ -550,15 +553,15 @@ static int rescale_probe(struct platform_device *pdev)
 	rescale = iio_priv(indio_dev);
 
 	rescale->cfg = device_get_match_data(dev);
-	rescale->numerator = 1;
-	rescale->denominator = 1;
+	rescale->fract.numerator = 1;
+	rescale->fract.denominator = 1;
 	rescale->offset = 0;
 
 	ret = rescale->cfg->props(dev, rescale);
 	if (ret)
 		return ret;
 
-	if (!rescale->numerator || !rescale->denominator) {
+	if (!rescale->fract.numerator || !rescale->fract.denominator) {
 		dev_err(dev, "invalid scaling factor.\n");
 		return -EINVAL;
 	}
