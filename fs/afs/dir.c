@@ -488,7 +488,6 @@ static int afs_dir_iterate_contents(struct inode *dir, struct dir_context *ctx)
 	struct afs_vnode *dvnode = AFS_FS_I(dir);
 	struct iov_iter iter;
 	unsigned long long i_size = i_size_read(dir);
-	int ret = 0;
 
 	/* Round the file position up to the next entry boundary */
 	ctx->pos = round_up(ctx->pos, sizeof(union afs_xdr_dirent));
@@ -502,9 +501,7 @@ static int afs_dir_iterate_contents(struct inode *dir, struct dir_context *ctx)
 	iterate_folioq(&iter, iov_iter_count(&iter), dvnode, ctx,
 		       afs_dir_iterate_step);
 
-	if (ret == -ESTALE)
-		afs_invalidate_dir(dvnode, afs_dir_invalid_iter_stale);
-	return ret;
+	return 0;
 }
 
 /*
