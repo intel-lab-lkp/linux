@@ -40,13 +40,14 @@ comment "ARM1136 platforms"
 
 config SOC_IMX31
 	bool "i.MX31 support"
-	select CPU_V6
+	select CPU_ARM1136R0
 	select MXC_AVIC
 	help
 	  This enables support for Freescale i.MX31 processor
 
 config SOC_IMX35
 	bool "i.MX35 support"
+	select CPU_ARM1136R1
 	select MXC_AVIC
 	help
 	  This enables support for Freescale i.MX35 processor

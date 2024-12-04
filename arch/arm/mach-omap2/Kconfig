@@ -9,7 +9,7 @@ config ARCH_OMAP2
 	bool "TI OMAP2"
 	depends on ARCH_MULTI_V6
 	select ARCH_OMAP2PLUS
-	select CPU_V6
+	select CPU_ARM1136R0
 	select OMAP_HWMOD
 	select SOC_HAS_OMAP2_SDRC
 
