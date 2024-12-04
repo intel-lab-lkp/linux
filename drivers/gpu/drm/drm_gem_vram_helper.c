@@ -925,6 +925,7 @@ EXPORT_SYMBOL(drm_vram_mm_debugfs_init);
 static int drm_vram_mm_init(struct drm_vram_mm *vmm, struct drm_device *dev,
 			    uint64_t vram_base, size_t vram_size)
 {
+	struct ttm_resource_manager *man;
 	int ret;
 
 	vmm->vram_base = vram_base;
@@ -939,8 +940,20 @@ static int drm_vram_mm_init(struct drm_vram_mm *vmm, struct drm_device *dev,
 
 	ret = ttm_range_man_init(&vmm->bdev, TTM_PL_VRAM,
 				 false, vram_size >> PAGE_SHIFT);
-	if (ret)
+	if (ret) {
+		ttm_device_fini(&vmm->bdev);
 		return ret;
+	}
+
+	man = ttm_manager_type(&vmm->bdev, TTM_PL_VRAM);
+	man->cg = drmm_register_region(dev, "vram", size);
+	if (IS_ERR(man->cg)) {
+		ret = PTR_ERR(man->cg);
+
+		ttm_range_man_fini(&vmm->bdev, TTM_PL_VRAM);
+		ttm_device_fini(&vmm->bdev);
+		return ret;
+	}
 
 	return 0;
 }
