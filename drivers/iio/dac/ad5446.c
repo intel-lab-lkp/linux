@@ -537,12 +537,12 @@ static int ad5446_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id ad5446_i2c_ids[] = {
-	{"ad5301", ID_AD5602},
-	{"ad5311", ID_AD5612},
-	{"ad5321", ID_AD5622},
-	{"ad5602", ID_AD5602},
-	{"ad5612", ID_AD5612},
-	{"ad5622", ID_AD5622},
+	{ .name = "ad5301", .driver_data = ID_AD5602, },
+	{ .name = "ad5311", .driver_data = ID_AD5612, },
+	{ .name = "ad5321", .driver_data = ID_AD5622, },
+	{ .name = "ad5602", .driver_data = ID_AD5602, },
+	{ .name = "ad5612", .driver_data = ID_AD5612, },
+	{ .name = "ad5622", .driver_data = ID_AD5622, },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, ad5446_i2c_ids);

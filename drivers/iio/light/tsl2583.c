@@ -919,9 +919,9 @@ static DEFINE_RUNTIME_DEV_PM_OPS(tsl2583_pm_ops, tsl2583_suspend,
 				 tsl2583_resume, NULL);
 
 static const struct i2c_device_id tsl2583_idtable[] = {
-	{ "tsl2580", 0 },
-	{ "tsl2581", 1 },
-	{ "tsl2583", 2 },
+	{ .name = "tsl2580", .driver_data = 0, },
+	{ .name = "tsl2581", .driver_data = 1, },
+	{ .name = "tsl2583", .driver_data = 2, },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, tsl2583_idtable);

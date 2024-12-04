@@ -28,8 +28,8 @@ static int fxls8962af_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id fxls8962af_id[] = {
-	{ "fxls8962af", fxls8962af },
-	{ "fxls8964af", fxls8964af },
+	{ .name = "fxls8962af", .driver_data = fxls8962af, },
+	{ .name = "fxls8964af", .driver_data = fxls8964af, },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, fxls8962af_id);

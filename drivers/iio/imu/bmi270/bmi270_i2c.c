@@ -32,8 +32,8 @@ static int bmi270_i2c_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id bmi270_i2c_id[] = {
-	{ "bmi260", (kernel_ulong_t)&bmi260_chip_info },
-	{ "bmi270", (kernel_ulong_t)&bmi270_chip_info },
+	{ .name = "bmi260", .driver_data = (kernel_ulong_t)&bmi260_chip_info, },
+	{ .name = "bmi270", .driver_data = (kernel_ulong_t)&bmi270_chip_info, },
 	{ }
 };
 

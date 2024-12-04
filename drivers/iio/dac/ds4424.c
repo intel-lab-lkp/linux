@@ -291,8 +291,8 @@ static void ds4424_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ds4424_id[] = {
-	{ "ds4422", ID_DS4422 },
-	{ "ds4424", ID_DS4424 },
+	{ .name = "ds4422", .driver_data = ID_DS4422, },
+	{ .name = "ds4424", .driver_data = ID_DS4424, },
 	{ }
 };
 

@@ -253,7 +253,7 @@ static const struct i2c_device_id bmc150_accel_id[] = {
 	{"bma255"},
 	{"bma280"},
 	{"bmc150_accel"},
-	{"bmc156_accel", BOSCH_BMC156},
+	{ .name = "bmc156_accel", .driver_data = BOSCH_BMC156, },
 	{"bmi055_accel"},
 	{}
 };

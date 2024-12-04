@@ -203,9 +203,9 @@ static int adc081c_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id adc081c_id[] = {
-	{ "adc081c", (kernel_ulong_t)&adcxx1c_models[ADC081C] },
-	{ "adc101c", (kernel_ulong_t)&adcxx1c_models[ADC101C] },
-	{ "adc121c", (kernel_ulong_t)&adcxx1c_models[ADC121C] },
+	{ .name = "adc081c", .driver_data = (kernel_ulong_t)&adcxx1c_models[ADC081C], },
+	{ .name = "adc101c", .driver_data = (kernel_ulong_t)&adcxx1c_models[ADC101C], },
+	{ .name = "adc121c", .driver_data = (kernel_ulong_t)&adcxx1c_models[ADC121C], },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, adc081c_id);
