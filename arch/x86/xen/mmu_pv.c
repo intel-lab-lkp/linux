@@ -2202,7 +2202,7 @@ void __init xen_init_mmu_ops(void)
 }
 
 /* Protected by xen_reservation_lock. */
-#define MAX_CONTIG_ORDER 9 /* 2MB */
+#define MAX_CONTIG_ORDER 10 /* 4MB */
 static unsigned long discontig_frames[1<<MAX_CONTIG_ORDER];
 
 #define VOID_PTE (mfn_pte(0, __pgprot(0)))
