@@ -67,6 +67,7 @@ extern struct file *fget(unsigned int fd);
 extern struct file *fget_raw(unsigned int fd);
 extern struct file *fget_task(struct task_struct *task, unsigned int fd);
 extern struct file *fget_task_next(struct task_struct *task, unsigned int *fd);
+extern void __f_lock_pos(struct file *file);
 extern void __f_unlock_pos(struct file *);
 
 struct fd fdget(unsigned int fd);

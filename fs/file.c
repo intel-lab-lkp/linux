@@ -1181,6 +1181,11 @@ static inline bool file_needs_f_pos_lock(struct file *file)
 		(file_count(file) > 1 || file->f_op->iterate_shared);
 }
 
+void __f_lock_pos(struct file *f)
+{
+	mutex_lock(&f->f_pos_lock);
+}
+
 struct fd fdget_pos(unsigned int fd)
 {
 	struct fd f = fdget(fd);
@@ -1188,7 +1193,7 @@ struct fd fdget_pos(unsigned int fd)
 
 	if (file && file_needs_f_pos_lock(file)) {
 		f.word |= FDPUT_POS_UNLOCK;
-		mutex_lock(&file->f_pos_lock);
+		__f_lock_pos(file);
 	}
 	return f;
 }
