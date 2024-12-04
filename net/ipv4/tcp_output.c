@@ -2274,7 +2274,7 @@ static bool tcp_tso_should_defer(struct sock *sk, struct sk_buff *skb,
 	head = tcp_rtx_queue_head(sk);
 	if (!head)
 		goto send_now;
-	delta = tp->tcp_clock_cache - head->tstamp;
+	delta = tp->tcp_clock_cache - head->skb_mstamp_ns;
 	/* If next ACK is likely to come too late (half srtt), do not defer */
 	if ((s64)(delta - (u64)NSEC_PER_USEC * (tp->srtt_us >> 4)) < 0)
 		goto send_now;
