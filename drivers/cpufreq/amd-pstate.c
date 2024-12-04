@@ -1655,11 +1655,14 @@ static int amd_pstate_epp_cpu_online(struct cpufreq_policy *policy)
 	return 0;
 }
 
-static void amd_pstate_epp_offline(struct cpufreq_policy *policy)
+static int amd_pstate_epp_cpu_offline(struct cpufreq_policy *policy)
 {
 	struct amd_cpudata *cpudata = policy->driver_data;
 	int min_perf;
 	u64 value;
+
+	if (cpudata->suspended)
+		return 0;
 
 	min_perf = READ_ONCE(cpudata->lowest_perf);
 	value = READ_ONCE(cpudata->cppc_req_cached);
@@ -1670,18 +1673,6 @@ static void amd_pstate_epp_offline(struct cpufreq_policy *policy)
 	amd_pstate_set_epp(cpudata, AMD_CPPC_EPP_BALANCE_POWERSAVE);
 
 	mutex_unlock(&amd_pstate_limits_lock);
-}
-
-static int amd_pstate_epp_cpu_offline(struct cpufreq_policy *policy)
-{
-	struct amd_cpudata *cpudata = policy->driver_data;
-
-	pr_debug("AMD CPU Core %d going offline\n", cpudata->cpu);
-
-	if (cpudata->suspended)
-		return 0;
-
-	amd_pstate_epp_offline(policy);
 
 	return 0;
 }
