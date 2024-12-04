@@ -100,6 +100,7 @@ dik_show_trace(unsigned long *sp, const char *loglvl)
 		if (!is_kernel_text(tmp))
 			continue;
 		printk("%s[<%lx>] %pSR\n", loglvl, tmp, (void *)tmp);
+		i++;
 		if (i > 40) {
 			printk("%s ...", loglvl);
 			break;
