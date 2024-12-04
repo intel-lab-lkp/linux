@@ -229,16 +229,14 @@ static int mvebu_gicp_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	inner_domain = irq_domain_create_hierarchy(parent_domain, 0,
-						   gicp->spi_cnt,
-						   of_node_to_fwnode(node),
-						   &gicp_domain_ops, gicp);
+	inner_domain = msi_create_parent_irq_domain(of_node_to_fwnode(node),
+						    &gicp_msi_parent_ops,
+						    &gicp_domain_ops,
+						    0, gicp->spi_cnt, gicp,
+						    parent_domain);
 	if (!inner_domain)
 		return -ENOMEM;
 
-	irq_domain_update_bus_token(inner_domain, DOMAIN_BUS_GENERIC_MSI);
-	inner_domain->flags |= IRQ_DOMAIN_FLAG_MSI_PARENT;
-	inner_domain->msi_parent_ops = &gicp_msi_parent_ops;
 	return 0;
 }
 
