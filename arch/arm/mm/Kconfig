@@ -410,6 +410,8 @@ config CPU_ARM1136R0
 	help
 	  These early revisions of ARM1136 lack support for the
 	  ARMv6k extensions for multiprocessing.
+	  Support for this revision is scheduled for removal
+	  from the kernel in early 2026.
 
 config CPU_ARM1136R1
 	bool
