@@ -2504,7 +2504,7 @@ intel_dp_compute_config_link_bpp_limits(struct intel_dp *intel_dp,
 	return true;
 }
 
-static void
+void
 intel_dp_dsc_compute_pipe_bpp_limits(struct intel_dp *intel_dp,
 				     struct link_config_limits *limits)
 {

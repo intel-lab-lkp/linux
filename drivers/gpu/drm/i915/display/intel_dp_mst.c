@@ -365,14 +365,10 @@ static int mst_stream_dsc_compute_link_config(struct intel_dp *intel_dp,
 	int i, num_bpc;
 	u8 dsc_bpc[3] = {};
 	int min_bpp, max_bpp, sink_min_bpp, sink_max_bpp;
-	int dsc_max_bpc, dsc_min_bpc;
 	int min_compressed_bpp, max_compressed_bpp;
 
-	dsc_max_bpc = intel_dp_dsc_max_src_input_bpc(display);
-	dsc_min_bpc = intel_dp_dsc_min_src_input_bpc();
-
-	max_bpp = min(dsc_max_bpc * 3, limits->pipe.max_bpp);
-	min_bpp = max(dsc_min_bpc * 3, limits->pipe.min_bpp);
+	max_bpp = limits->pipe.max_bpp;
+	min_bpp = limits->pipe.min_bpp;
 
 	num_bpc = drm_dp_dsc_sink_supported_input_bpcs(connector->dp.dsc_dpcd,
 						       dsc_bpc);
@@ -573,6 +569,9 @@ mst_stream_compute_config_limits(struct intel_dp *intel_dp,
 	limits->pipe.max_bpp = min(crtc_state->pipe_bpp, 24);
 
 	intel_dp_test_compute_config(intel_dp, crtc_state, limits);
+
+	if (dsc)
+		intel_dp_dsc_compute_pipe_bpp_limits(intel_dp, limits);
 
 	if (!intel_dp_compute_config_link_bpp_limits(intel_dp,
 						     crtc_state,
