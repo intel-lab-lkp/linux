@@ -1163,19 +1163,14 @@ config ARM_PATCH_IDIV
 config AEABI
 	bool "Use the ARM EABI to compile the kernel" if !CPU_V7 && \
 		!CPU_V7M && !CPU_V6 && !CPU_V6K && !CC_IS_CLANG
-	default CPU_V7 || CPU_V7M || CPU_V6 || CPU_V6K || CC_IS_CLANG
+	default y
 	help
-	  This option allows for the kernel to be compiled using the latest
-	  ARM ABI (aka EABI).  This is only useful if you are using a user
-	  space environment that is also compiled with EABI.
+	  The Arm EABI is the default ABI on all modern Linux
+	  distributions, replacing the obsolete and "OABI" that was
+	  commonly used on ARMv4 distributions before ca. 2013.
 
-	  Since there are major incompatibilities between the legacy ABI and
-	  EABI, especially with regard to structure member alignment, this
-	  option also changes the kernel syscall calling convention to
-	  disambiguate both ABIs and allow for backward compatibility support
-	  (selected with CONFIG_OABI_COMPAT).
-
-	  To use this you need GCC version 4.0.0 or later.
+	  Everyone should enable this, as support for OABI user space
+	  was dropped in gcc-4.8 and most distributions after ca. 2013.
 
 config OABI_COMPAT
 	bool "Allow old ABI binaries to run with this kernel (EXPERIMENTAL)"
