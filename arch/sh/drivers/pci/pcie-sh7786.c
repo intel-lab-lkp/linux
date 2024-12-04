@@ -219,7 +219,7 @@ static int __init pcie_clk_init(struct sh7786_pcie_port *port)
 	 * on. clock lookups don't help us much at this point, since no
 	 * dev_id is available this early. Lame.
 	 */
-	snprintf(fclk_name, sizeof(fclk_name), "pcie%d_fck", port->index);
+	snprintf(fclk_name, sizeof(fclk_name), "pcie%u_fck", port->index);
 
 	port->fclk = clk_get(NULL, fclk_name);
 	if (IS_ERR(port->fclk)) {
