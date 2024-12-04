@@ -229,6 +229,14 @@
 		snps,blen = <0 0 64 32 0 0 0>;
 	};
 
+	sdhci_clk: sdhci-clock {
+		compatible = "fixed-factor-clock";
+		clocks = <&clk CLK_EMMC_SDIO>;
+		#clock-cells = <0>;
+		clock-div = <4>;
+		clock-mult = <1>;
+	};
+
 	soc {
 		compatible = "simple-bus";
 		interrupt-parent = <&plic>;
@@ -328,7 +336,7 @@
 			compatible = "thead,th1520-dwcmshc";
 			reg = <0xff 0xe7080000 0x0 0x10000>;
 			interrupts = <62 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&clk CLK_EMMC_SDIO>;
+			clocks = <&sdhci_clk>;
 			clock-names = "core";
 			status = "disabled";
 		};
@@ -337,7 +345,7 @@
 			compatible = "thead,th1520-dwcmshc";
 			reg = <0xff 0xe7090000 0x0 0x10000>;
 			interrupts = <64 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&clk CLK_EMMC_SDIO>;
+			clocks = <&sdhci_clk>;
 			clock-names = "core";
 			status = "disabled";
 		};
@@ -346,7 +354,7 @@
 			compatible = "thead,th1520-dwcmshc";
 			reg = <0xff 0xe70a0000 0x0 0x10000>;
 			interrupts = <71 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&clk CLK_EMMC_SDIO>;
+			clocks = <&sdhci_clk>;
 			clock-names = "core";
 			status = "disabled";
 		};
