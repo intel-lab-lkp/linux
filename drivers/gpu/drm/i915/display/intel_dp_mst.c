@@ -574,6 +574,7 @@ mst_stream_compute_config_limits(struct intel_dp *intel_dp,
 		intel_dp_dsc_compute_pipe_bpp_limits(intel_dp, limits);
 
 	if (!intel_dp_compute_config_link_bpp_limits(intel_dp,
+						     connector,
 						     crtc_state,
 						     dsc,
 						     limits))
