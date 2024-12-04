@@ -6872,6 +6872,15 @@ static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 		return;
 
 	hci_dev_lock(hdev);
+
+	if (ev->status) {
+		while ((conn = hci_conn_hash_lookup_big_state(hdev,
+							      ev->handle,
+							      BT_BOUND)))
+			hci_conn_failed(conn, ev->status);
+		goto unlock;
+	}
+
 	rcu_read_lock();
 
 	/* Connect all BISes that are bound to the BIG */
@@ -6885,26 +6894,18 @@ static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 					__le16_to_cpu(ev->bis_handle[i++])))
 			continue;
 
-		if (!ev->status) {
-			conn->state = BT_CONNECTED;
-			set_bit(HCI_CONN_BIG_CREATED, &conn->flags);
-			rcu_read_unlock();
-			hci_debugfs_create_conn(conn);
-			hci_conn_add_sysfs(conn);
-			hci_iso_setup_path(conn);
-			rcu_read_lock();
-			continue;
-		}
-
-		hci_connect_cfm(conn, ev->status);
+		conn->state = BT_CONNECTED;
+		set_bit(HCI_CONN_BIG_CREATED, &conn->flags);
 		rcu_read_unlock();
-		hci_conn_del(conn);
+		hci_debugfs_create_conn(conn);
+		hci_conn_add_sysfs(conn);
+		hci_iso_setup_path(conn);
 		rcu_read_lock();
 	}
 
 	rcu_read_unlock();
 
-	if (!ev->status && !i)
+	if (!i)
 		/* If no BISes have been connected for the BIG,
 		 * terminate. This is in case all bound connections
 		 * have been closed before the BIG creation
@@ -6913,6 +6914,7 @@ static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 		hci_cmd_sync_queue(hdev, hci_iso_term_big_sync,
 				   UINT_PTR(ev->handle), NULL);
 
+unlock:
 	hci_dev_unlock(hdev);
 }
 
