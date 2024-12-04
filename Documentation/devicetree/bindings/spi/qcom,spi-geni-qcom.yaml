@@ -66,6 +66,15 @@ properties:
   reg:
     maxItems: 1
 
+  qcom,load-firmware:
+    type: boolean
+    description: Optional property to load SE (serial engine) Firmware from protocol driver.
+
+  qcom,xfer-mode:
+    description: Value 1,2 and 3 represents FIFO, CPU DMA and GSI DMA mode respectively.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1, 2, 3]
+
 required:
   - compatible
   - clocks
@@ -97,6 +106,8 @@ examples:
         interconnects = <&qup_virt MASTER_QUP_CORE_0 0 &qup_virt SLAVE_QUP_CORE_0 0>,
                         <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_QUP_0 0>;
         interconnect-names = "qup-core", "qup-config";
+        qcom,load-firmware;
+        qcom,xfer-mode = <1>;
     };
 
   - |
