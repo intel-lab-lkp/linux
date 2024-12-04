@@ -2406,6 +2406,18 @@ static bool cxl_region_update_coordinates(struct cxl_region *cxlr, int nid)
 	return true;
 }
 
+int cxl_region_nid(struct cxl_region *cxlr)
+{
+	struct cxl_region_params *p = &cxlr->params;
+	struct resource *res;
+
+	guard(rwsem_read)(&cxl_region_rwsem);
+	res = p->res;
+	if (!res)
+		return NUMA_NO_NODE;
+	return phys_to_target_node(res->start);
+}
+
 static int cxl_region_perf_attrs_callback(struct notifier_block *nb,
 					  unsigned long action, void *arg)
 {
