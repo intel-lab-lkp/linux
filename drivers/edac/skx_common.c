@@ -235,19 +235,55 @@ int skx_get_src_id(struct skx_dev *d, int off, u8 *id)
 }
 EXPORT_SYMBOL_GPL(skx_get_src_id);
 
-int skx_get_node_id(struct skx_dev *d, u8 *id)
+int skx_check_dup_src_ids(int off)
 {
-	u32 reg;
+	u8 id;
+	struct skx_dev *d;
+	int rc;
+	DECLARE_BITMAP(id_map, 8);
 
-	if (pci_read_config_dword(d->util_all, 0xf4, &reg)) {
-		skx_printk(KERN_ERR, "Failed to read node id\n");
-		return -ENODEV;
+	bitmap_zero(id_map, 8);
+
+	/*
+	 * The 3-bit source IDs in PCI configuration space registers are limited
+	 * to 8 unique IDs, and each ID is local to a clump (UPI/QPI domain).
+	 */
+	list_for_each_entry(d, &dev_edac_list, list) {
+		rc = skx_get_src_id(d, off, &id);
+		if (rc < 0)
+			return rc;
+
+		if (test_bit(id, id_map))
+			return 1;
+
+		set_bit(id, id_map);
 	}
 
-	*id = GET_BITFIELD(reg, 0, 2);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(skx_get_node_id);
+EXPORT_SYMBOL_GPL(skx_check_dup_src_ids);
+
+int skx_get_pkg_id(struct skx_dev *d, u8 *id)
+{
+	int node;
+	int cpu;
+
+	node = pcibus_to_node(d->util_all->bus);
+	if (numa_valid_node(node)) {
+		for_each_cpu(cpu, cpumask_of_pcibus(d->util_all->bus)) {
+			struct cpuinfo_x86 *c = &cpu_data(cpu);
+
+			if (c->initialized && cpu_to_node(cpu) == node) {
+				*id = c->topo.pkg_id;
+				return 0;
+			}
+		}
+	}
+
+	skx_printk(KERN_ERR, "Failed to get package ID from NUMA information\n");
+	return -ENODEV;
+}
+EXPORT_SYMBOL_GPL(skx_get_pkg_id);
 
 static int get_width(u32 mtr)
 {
@@ -507,7 +543,7 @@ int skx_register_mci(struct skx_imc *imc, struct pci_dev *pdev,
 	pvt->imc = imc;
 
 	mci->ctl_name = kasprintf(GFP_KERNEL, "%s#%d IMC#%d", ctl_name,
-				  imc->node_id, imc->lmc);
+				  imc->src_id, imc->lmc);
 	if (!mci->ctl_name) {
 		rc = -ENOMEM;
 		goto fail0;

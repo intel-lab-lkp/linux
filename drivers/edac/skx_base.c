@@ -600,8 +600,9 @@ static int __init skx_init(void)
 	const struct munit *m;
 	const char *owner;
 	int rc = 0, i, off[3] = {0xd0, 0xd4, 0xd8};
-	u8 mc = 0, src_id, node_id;
+	u8 mc = 0, src_id;
 	struct skx_dev *d;
+	int dup_src_ids = 0;
 
 	edac_dbg(2, "\n");
 
@@ -646,19 +647,23 @@ static int __init skx_init(void)
 		}
 	}
 
+	rc = dup_src_ids = skx_check_dup_src_ids(0xf0);
+	if (rc < 0)
+		goto fail;
+
 	list_for_each_entry(d, skx_edac_list, list) {
-		rc = skx_get_src_id(d, 0xf0, &src_id);
+		if (dup_src_ids)
+			rc = skx_get_pkg_id(d, &src_id);
+		else
+			rc = skx_get_src_id(d, 0xf0, &src_id);
 		if (rc < 0)
 			goto fail;
-		rc = skx_get_node_id(d, &node_id);
-		if (rc < 0)
-			goto fail;
-		edac_dbg(2, "src_id=%d node_id=%d\n", src_id, node_id);
+
+		edac_dbg(2, "src_id = %d\n", src_id);
 		for (i = 0; i < SKX_NUM_IMC; i++) {
 			d->imc[i].mc = mc++;
 			d->imc[i].lmc = i;
 			d->imc[i].src_id = src_id;
-			d->imc[i].node_id = node_id;
 			rc = skx_register_mci(&d->imc[i], d->imc[i].chan[0].cdev,
 					      "Skylake Socket", EDAC_MOD_STR,
 					      skx_get_dimm_config, cfg);
