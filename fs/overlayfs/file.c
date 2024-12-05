@@ -653,6 +653,25 @@ static int ovl_flush(struct file *file, fl_owner_t id)
 	return err;
 }
 
+static unsigned long ovl_get_unmapped_area(struct file *file,
+		unsigned long addr, unsigned long len, unsigned long pgoff,
+		unsigned long flags)
+{
+	struct file *realfile;
+	const struct cred *old_cred;
+	unsigned long ret;
+
+	realfile = ovl_real_file(file);
+	if (IS_ERR(realfile))
+		return PTR_ERR(realfile);
+
+	old_cred = ovl_override_creds(file_inode(file)->i_sb);
+	ret = get_unmapped_area(realfile, addr, len, pgoff, flags);
+	ovl_revert_creds(old_cred);
+
+	return ret;
+}
+
 const struct file_operations ovl_file_operations = {
 	.open		= ovl_open,
 	.release	= ovl_release,
@@ -661,6 +680,7 @@ const struct file_operations ovl_file_operations = {
 	.write_iter	= ovl_write_iter,
 	.fsync		= ovl_fsync,
 	.mmap		= ovl_mmap,
+	.get_unmapped_area = ovl_get_unmapped_area,
 	.fallocate	= ovl_fallocate,
 	.fadvise	= ovl_fadvise,
 	.flush		= ovl_flush,
