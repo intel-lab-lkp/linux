@@ -37,6 +37,11 @@ properties:
   interrupts:
     maxItems: 1
 
+  interrupt-names:
+    description: Use either INT1 or INT2 for events, or ignore events.
+    items:
+      - enum: [INT1, INT2]
+
 required:
   - compatible
   - reg
@@ -61,6 +66,7 @@ examples:
             reg = <0x2a>;
             interrupt-parent = <&gpio0>;
             interrupts = <0 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "INT1";
         };
     };
   - |
@@ -79,5 +85,6 @@ examples:
             spi-cpha;
             interrupt-parent = <&gpio0>;
             interrupts = <0 IRQ_TYPE_LEVEL_HIGH>;
+            interrupt-names = "INT2";
         };
     };
