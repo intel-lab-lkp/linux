@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mailbox/qcom,tmelite-qmp.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm TMELITE IPCC channel
+
+maintainers:
+  - Sricharan Ramabadhran <quic_srichara@quicinc.com>
+
+description:
+  This binding describes the component responsible for communication
+  between the TME-L server based subsystems (Q6) and the TME-L client
+  (APPSS/BTSS/AUDIOSS), used for security services like secure image
+  authentication, enable/disable efuses, crypto services. Each client
+  in the   SoC has its own block of message RAM and IRQ for communication
+  with the TME-L SS. The protocol used to communicate in the message RAM
+  is known as Qualcomm Messaging Protocol (QMP).
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - qcom,ipq5424-tmelite-qmp
+      - const: qcom,tmelite-qmp
+
+  reg:
+    maxItems: 1
+    description:
+      The base address and size of the message RAM for this client's
+      communication with the TMELITE core
+
+  interrupts:
+    maxItems: 1
+    description:
+      Should specify the TMELITE message IRQ for this client
+
+  mboxes:
+    maxItems: 1
+    description:
+      Reference to the mailbox representing the outgoing doorbell in APCS for
+      this client, as described in mailbox/mailbox.txt
+
+  "#mbox-cells":
+    const: 2
+    description:
+      The first cell is the client-id, and the second cell is the signal-id.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - mboxes
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    tmel_qmp: qmp@32090000 {
+           compatible = "qcom,ipq5424-tmelite-qmp", "qcom,tmelite-qmp";
+           reg = <0x32090000 0x2000>;
+           interrupts = <GIC_SPI 126 IRQ_TYPE_EDGE_RISING>;
+           mboxes = <&apcs_glb 20>;
+           #mbox-cells = <2>;
+    };
+
+...
