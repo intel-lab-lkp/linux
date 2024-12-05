@@ -157,7 +157,9 @@ struct mipi_config {
 	u16 dphy_param_valid:1;
 	u16 eot_pkt_disabled:1;
 	u16 enable_clk_stop:1;
-	u16 rsvd7:13;
+	u16 blanking_packets_during_bllp:1;			/* 219+ */
+	u16 lp_clock_during_lpm:1;				/* 219+ */
+	u16 rsvd7:11;
 
 	u32 hs_tx_timeout;
 	u32 lp_rx_timeout;
