@@ -215,20 +215,22 @@ static void check_vendor_extension(u64 paddr,
 {
 	int	offset = v5param->vendor_extension;
 	struct	vendor_error_type_extension *v;
+	void __iomem *p;
 	u32	sbdf;
 
 	if (!offset)
 		return;
-	v = acpi_os_map_iomem(paddr + offset, sizeof(*v));
-	if (!v)
+	p = acpi_os_map_iomem(paddr + offset, sizeof(*v));
+	if (!p)
 		return;
+	v = __io_virt(p);
 	get_oem_vendor_struct(paddr, offset, v);
 	sbdf = v->pcie_sbdf;
 	sprintf(vendor_dev, "%x:%x:%x.%x vendor_id=%x device_id=%x rev_id=%x\n",
 		sbdf >> 24, (sbdf >> 16) & 0xff,
 		(sbdf >> 11) & 0x1f, (sbdf >> 8) & 0x7,
 		 v->vendor_id, v->device_id, v->rev_id);
-	acpi_os_unmap_iomem(v, sizeof(*v));
+	acpi_os_unmap_iomem(p, sizeof(*v));
 }
 
 static void *einj_get_parameter_address(void)
@@ -253,9 +255,11 @@ static void *einj_get_parameter_address(void)
 	}
 	if (pa_v5) {
 		struct set_error_type_with_address *v5param;
+		void __iomem *p;
 
-		v5param = acpi_os_map_iomem(pa_v5, sizeof(*v5param));
-		if (v5param) {
+		p = acpi_os_map_iomem(pa_v5, sizeof(*v5param));
+		if (p) {
+			v5param = __io_virt(p);
 			acpi5 = 1;
 			check_vendor_extension(pa_v5, v5param);
 			return v5param;
@@ -263,12 +267,14 @@ static void *einj_get_parameter_address(void)
 	}
 	if (param_extension && pa_v4) {
 		struct einj_parameter *v4param;
+		void __iomem *p;
 
-		v4param = acpi_os_map_iomem(pa_v4, sizeof(*v4param));
-		if (!v4param)
+		p = acpi_os_map_iomem(pa_v4, sizeof(*v4param));
+		if (!p)
 			return NULL;
+		v4param = __io_virt(p);
 		if (v4param->reserved1 || v4param->reserved2) {
-			acpi_os_unmap_iomem(v4param, sizeof(*v4param));
+			acpi_os_unmap_iomem(p, sizeof(*v4param));
 			return NULL;
 		}
 		return v4param;
@@ -325,6 +331,7 @@ static int __einj_error_trigger(u64 trigger_paddr, u32 type,
 	u32 table_size;
 	int rc = -EIO;
 	struct acpi_generic_address *trigger_param_region = NULL;
+	void __iomem *p;
 
 	r = request_mem_region(trigger_paddr, sizeof(*trigger_tab),
 			       "APEI EINJ Trigger Table");
@@ -335,11 +342,12 @@ static int __einj_error_trigger(u64 trigger_paddr, u32 type,
 			    sizeof(*trigger_tab) - 1);
 		goto out;
 	}
-	trigger_tab = ioremap_cache(trigger_paddr, sizeof(*trigger_tab));
-	if (!trigger_tab) {
+	p = ioremap_cache(trigger_paddr, sizeof(*trigger_tab));
+	if (!p) {
 		pr_err("Failed to map trigger table!\n");
 		goto out_rel_header;
 	}
+	trigger_tab = __io_virt(p);
 	rc = einj_check_trigger_header(trigger_tab);
 	if (rc) {
 		pr_warn(FW_BUG "Invalid trigger error action table.\n");
@@ -361,12 +369,13 @@ static int __einj_error_trigger(u64 trigger_paddr, u32 type,
 		       (unsigned long long)trigger_paddr + table_size - 1);
 		goto out_rel_header;
 	}
-	iounmap(trigger_tab);
-	trigger_tab = ioremap_cache(trigger_paddr, table_size);
-	if (!trigger_tab) {
+	iounmap(p);
+	p = ioremap_cache(trigger_paddr, table_size);
+	if (!p) {
 		pr_err("Failed to map trigger table!\n");
 		goto out_rel_entry;
 	}
+	trigger_tab = __io_virt(p);
 	trigger_entry = (struct acpi_whea_header *)
 		((char *)trigger_tab + sizeof(struct acpi_einj_trigger));
 	apei_resources_init(&trigger_resources);
@@ -424,8 +433,8 @@ out_rel_entry:
 out_rel_header:
 	release_mem_region(trigger_paddr, sizeof(*trigger_tab));
 out:
-	if (trigger_tab)
-		iounmap(trigger_tab);
+	if (p)
+		iounmap(p);
 
 	return rc;
 }
@@ -860,7 +869,7 @@ static void __exit einj_remove(struct platform_device *pdev)
 			sizeof(struct set_error_type_with_address) :
 			sizeof(struct einj_parameter);
 
-		acpi_os_unmap_iomem(einj_param, size);
+		acpi_os_unmap_iomem((void __iomem *)einj_param, size);
 		if (vendor_errors.size)
 			acpi_os_unmap_memory(vendor_errors.data, vendor_errors.size);
 	}
