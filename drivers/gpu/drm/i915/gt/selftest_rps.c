@@ -478,8 +478,11 @@ int live_rps_control(void *arg)
 			min, max, ktime_to_ns(min_dt), ktime_to_ns(max_dt));
 
 		if (limit == rps->min_freq) {
-			pr_err("%s: GPU throttled to minimum!\n",
-			       engine->name);
+			u32 throttle = intel_uncore_read(gt->uncore,
+							 intel_gt_perf_limit_reasons_reg(gt));
+
+			pr_err("%s: GPU throttled to minimum frequency with reasons 0x%08x\n",
+			       engine->name, throttle & GT0_PERF_LIMIT_REASONS_MASK);
 			show_pstate_limits(rps);
 			err = -ENODEV;
 			break;
