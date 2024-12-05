@@ -411,8 +411,16 @@ struct alienfx_priv {
 	u8 lighting_control_state;
 };
 
+struct alienfx_ops {
+	int (*upd_led)(struct alienfx_priv *priv, struct wmi_device *wdev,
+		       u8 location);
+	int (*upd_brightness)(struct alienfx_priv *priv, struct wmi_device *wdev,
+			      u8 brightness);
+};
+
 struct alienfx_platdata {
 	struct wmi_device *wdev;
+	struct alienfx_ops ops;
 };
 
 static struct platform_profile_handler pp_handler;
@@ -420,6 +428,32 @@ static enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
 
 static u8 interface;
 static struct wmi_driver *preferred_wmi_driver;
+
+static acpi_status alienware_wmi_command(struct wmi_device *wdev, u32 method_id,
+					 void *in_args, size_t in_size, u32 *out_data)
+{
+	acpi_status ret;
+	union acpi_object *obj;
+	struct acpi_buffer in = { in_size,  in_args };
+	struct acpi_buffer out = {  ACPI_ALLOCATE_BUFFER, NULL };
+
+	if (out_data) {
+		ret = wmidev_evaluate_method(wdev, 0, method_id, &in, &out);
+		if (ACPI_FAILURE(ret))
+			goto out_free_ptr;
+
+		obj = (union acpi_object *) out.pointer;
+
+		if (obj && obj->type == ACPI_TYPE_INTEGER)
+			*out_data = (u32) obj->integer.value;
+	} else {
+		ret = wmidev_evaluate_method(wdev, 0, method_id, &in, NULL);
+	}
+
+out_free_ptr:
+	kfree(out.pointer);
+	return ret;
+}
 
 /*
  * Helpers used for zone control
@@ -1178,11 +1212,48 @@ static void alienfx_wmi_exit(struct wmi_device *wdev)
 /*
  * Legacy WMI device
  */
+static int legacy_wmi_update_led(struct alienfx_priv *priv,
+				 struct wmi_device *wdev, u8 location)
+{
+	acpi_status status;
+	struct acpi_buffer input;
+	struct legacy_led_args legacy_args;
+
+	legacy_args.colors = priv->colors[location];
+	legacy_args.brightness = priv->global_brightness;
+	legacy_args.state = priv->lighting_control_state;
+
+	input.length = sizeof(legacy_args);
+	input.pointer = &legacy_args;
+
+	if (legacy_args.state == LEGACY_RUNNING)
+		status = alienware_wmi_command(wdev, location + 1, &legacy_args,
+					       sizeof(legacy_args), NULL);
+	else
+		status = wmi_evaluate_method(LEGACY_POWER_CONTROL_GUID, 0,
+					     location + 1, &input, NULL);
+
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
+}
+
+static int legacy_wmi_update_brightness(struct alienfx_priv *priv,
+					struct wmi_device *wdev, u8 brightness)
+{
+	return legacy_wmi_update_led(priv, wdev, 0);
+}
+
 static int legacy_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	int ret = 0;
 	struct alienfx_platdata pdata = {
 		.wdev = wdev,
+		.ops = {
+			.upd_led = legacy_wmi_update_led,
+			.upd_brightness = legacy_wmi_update_brightness,
+		},
 	};
 
 	if (quirks->num_zones > 0)
@@ -1219,11 +1290,50 @@ static struct wmi_driver alienware_legacy_wmi_driver = {
 /*
  * WMAX WMI device
  */
+static int wmax_wmi_update_led(struct alienfx_priv *priv,
+			       struct wmi_device *wdev, u8 location)
+{
+	acpi_status status;
+	struct wmax_led_args in_args = {
+		.led_mask = 1 << location,
+		.colors = priv->colors[location],
+		.state = priv->lighting_control_state,
+	};
+
+	status = alienware_wmi_command(wdev, WMAX_METHOD_ZONE_CONTROL,
+				       &in_args, sizeof(in_args), NULL);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
+}
+
+static int wmax_wmi_update_brightness(struct alienfx_priv *priv,
+				      struct wmi_device *wdev, u8 brightness)
+{
+	acpi_status status;
+	struct wmax_brightness_args in_args = {
+		.led_mask = 0xFF,
+		.percentage = brightness,
+	};
+
+	status = alienware_wmi_command(wdev, WMAX_METHOD_BRIGHTNESS, &in_args,
+				       sizeof(in_args), NULL);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
+}
+
 static int wmax_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	int ret = 0;
 	struct alienfx_platdata pdata = {
 		.wdev = wdev,
+		.ops = {
+			.upd_led = wmax_wmi_update_led,
+			.upd_brightness = wmax_wmi_update_brightness,
+		},
 	};
 
 	if (quirks->thermal)
