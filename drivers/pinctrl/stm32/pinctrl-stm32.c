@@ -1738,10 +1738,16 @@ int __maybe_unused stm32_pinctrl_resume(struct device *dev)
 {
 	struct stm32_pinctrl *pctl = dev_get_drvdata(dev);
 	struct stm32_pinctrl_group *g = pctl->groups;
-	int i;
+	int i, j, ret;
 
-	for (i = 0; i < pctl->nbanks; i++)
-		clk_enable(pctl->banks[i].clk);
+	for (i = 0; i < pctl->nbanks; i++) {
+		ret = clk_enable(pctl->banks[i].clk);
+		if (ret) {
+			for (j = 0; j < i; j++)
+				clk_disable(pctl->banks[j].clk);
+			return ret;
+		}
+	}
 
 	for (i = 0; i < pctl->ngroups; i++, g++)
 		stm32_pinctrl_restore_gpio_regs(pctl, g->pin);
