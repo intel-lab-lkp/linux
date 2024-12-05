@@ -301,6 +301,9 @@ Contributing new tests (details)
 
    e.g: tools/testing/selftests/android/config
 
+ * Use TEST_CONFIG_DEPS to specify required config options to be enabled 
+   before a test is allowed to run or compile.
+
  * Create a .gitignore file inside test directory and add all generated objects
    in it.
 
