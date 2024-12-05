@@ -249,6 +249,7 @@ static void init_space_info(struct btrfs_fs_info *info,
 	INIT_LIST_HEAD(&space_info->priority_tickets);
 	space_info->clamp = 1;
 	btrfs_update_space_info_chunk_size(space_info, calc_chunk_size(info, flags));
+	space_info->subgroup_id = SUB_GROUP_PRIMARY;
 
 	if (btrfs_is_zoned(info))
 		space_info->bg_reclaim_threshold = BTRFS_DEFAULT_ZONED_RECLAIM_THRESH;
@@ -265,6 +266,20 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 		return -ENOMEM;
 
 	init_space_info(info, space_info, flags);
+
+	if (btrfs_is_zoned(info) && (flags & BTRFS_BLOCK_GROUP_DATA)) {
+		struct btrfs_space_info *reloc = kzalloc(sizeof(*reloc), GFP_NOFS);
+
+		if (!reloc)
+			return -ENOMEM;
+		init_space_info(info, reloc, flags);
+		space_info->sub_group[SUB_GROUP_DATA_RELOC] = reloc;
+		reloc->parent = space_info;
+		reloc->subgroup_id = SUB_GROUP_DATA_RELOC;
+
+		ret = btrfs_sysfs_add_space_info_type(info, reloc);
+		ASSERT(!ret);
+	}
 
 	ret = btrfs_sysfs_add_space_info_type(info, space_info);
 	if (ret)
@@ -561,8 +576,9 @@ static void __btrfs_dump_space_info(const struct btrfs_fs_info *fs_info,
 	lockdep_assert_held(&info->lock);
 
 	/* The free space could be negative in case of overcommit */
-	btrfs_info(fs_info, "space_info %s has %lld free, is %sfull",
-		   flag_str,
+	btrfs_info(fs_info,
+		   "space_info %s (sub-group id %d) has %lld free, is %sfull",
+		   flag_str, info->subgroup_id,
 		   (s64)(info->total_bytes - btrfs_space_info_used(info, true)),
 		   info->full ? "" : "not ");
 	btrfs_info(fs_info,
