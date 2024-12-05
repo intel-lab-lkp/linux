@@ -10,6 +10,13 @@
 pte_t __pte(unsigned long pteval)
 {
 	pte_t pte;
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		pte.ptes[i] = pteval;
+		if (__pte_present(pteval) && !__pte_napot(pteval))
+			pteval += 1 << _PAGE_HWPFN_SHIFT;
+	}
 
 	return pte;
 }
@@ -18,6 +25,16 @@ EXPORT_SYMBOL(__pte);
 pgd_t __pgd(unsigned long pgdval)
 {
 	pgd_t pgd;
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		pgd.pgds[i] = pgdval;
+		if (__pgd_leaf(pgdval))
+			pgdval += (1 << (PGDIR_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__pgd_present(pgdval))
+			pgdval += 1 << _PAGE_HWPFN_SHIFT;
+	}
 
 	return pgd;
 }
@@ -27,6 +44,16 @@ EXPORT_SYMBOL(__pgd);
 p4d_t __p4d(unsigned long p4dval)
 {
 	p4d_t p4d;
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		p4d.p4ds[i] = p4dval;
+		if (__p4d_leaf(p4dval))
+			p4dval += (1 << (P4D_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__p4d_present(p4dval))
+			p4dval += 1 << _PAGE_HWPFN_SHIFT;
+	}
 
 	return p4d;
 }
@@ -35,6 +62,16 @@ EXPORT_SYMBOL(__p4d);
 pud_t __pud(unsigned long pudval)
 {
 	pud_t pud;
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		pud.puds[i] = pudval;
+		if (__pud_leaf(pudval))
+			pudval += (1 << (PUD_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__pud_present(pudval))
+			pudval += 1 << _PAGE_HWPFN_SHIFT;
+	}
 
 	return pud;
 }
@@ -43,6 +80,16 @@ EXPORT_SYMBOL(__pud);
 pmd_t __pmd(unsigned long pmdval)
 {
 	pmd_t pmd;
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		pmd.pmds[i] = pmdval;
+		if (__pmd_leaf(pmdval))
+			pmdval += (1 << (PMD_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__pmd_present(pmdval))
+			pmdval += 1 << _PAGE_HWPFN_SHIFT;
+	}
 
 	return pmd;
 }

@@ -204,9 +204,14 @@ static inline u64 riscv_page_io(void)
 					  _PAGE_USER | _PAGE_GLOBAL |	\
 					  _PAGE_MTMASK))
 
+static inline int __pud_present(unsigned long pudval)
+{
+	return pudval & _PAGE_PRESENT;
+}
+
 static inline int pud_present(pud_t pud)
 {
-	return (pud_val(pud) & _PAGE_PRESENT);
+	return __pud_present(pud_val(pud));
 }
 
 static inline int pud_none(pud_t pud)
@@ -219,11 +224,16 @@ static inline int pud_bad(pud_t pud)
 	return !pud_present(pud);
 }
 
-#define pud_leaf	pud_leaf
+static inline bool __pud_leaf(unsigned long pudval)
+{
+	return __pud_present(pudval) && (pudval & _PAGE_LEAF);
+}
+
 static inline bool pud_leaf(pud_t pud)
 {
-	return pud_present(pud) && (pud_val(pud) & _PAGE_LEAF);
+	return __pud_leaf(pud_val(pud));
 }
+#define pud_leaf	pud_leaf
 
 static inline int pud_user(pud_t pud)
 {
@@ -321,13 +331,29 @@ static inline int p4d_none(p4d_t p4d)
 	return 0;
 }
 
+static inline int __p4d_present(unsigned long p4dval)
+{
+	return p4dval & _PAGE_PRESENT;
+}
+
 static inline int p4d_present(p4d_t p4d)
 {
 	if (pgtable_l4_enabled)
-		return (p4d_val(p4d) & _PAGE_PRESENT);
+		return __p4d_present(p4d_val(p4d));
 
 	return 1;
 }
+
+static inline int __p4d_leaf(unsigned long p4dval)
+{
+	return 0;
+}
+
+static inline int p4d_leaf(p4d_t p4d)
+{
+	return __p4d_leaf(p4d_val(p4d));
+}
+#define p4d_leaf	p4d_leaf
 
 static inline int p4d_bad(p4d_t p4d)
 {
@@ -388,10 +414,15 @@ static inline int pgd_none(pgd_t pgd)
 	return 0;
 }
 
+static inline int __pgd_present(unsigned long pgdval)
+{
+	return pgdval & _PAGE_PRESENT;
+}
+
 static inline int pgd_present(pgd_t pgd)
 {
 	if (pgtable_l5_enabled)
-		return (pgd_val(pgd) & _PAGE_PRESENT);
+		return __pgd_present(pgd_val(pgd));
 
 	return 1;
 }

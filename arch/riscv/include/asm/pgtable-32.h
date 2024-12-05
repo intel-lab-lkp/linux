@@ -37,4 +37,9 @@
 static const __maybe_unused int pgtable_l4_enabled;
 static const __maybe_unused int pgtable_l5_enabled;
 
+static inline int __pgd_present(unsigned long pgdval)
+{
+	return pgdval & _PAGE_PRESENT;
+}
+
 #endif /* _ASM_RISCV_PGTABLE_32_H */

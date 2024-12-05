@@ -220,8 +220,19 @@ static inline unsigned long satp_pfn(unsigned long satp)
 	return hwpfn_to_pfn(hwpfn);
 }
 
+static inline int __pgd_leaf(unsigned long pgdval)
+{
+	return __pgd_present(pgdval) && (pgdval & _PAGE_LEAF);
+}
+
+static inline int pgd_leaf(pgd_t pgd)
+{
+	return __pgd_leaf(pgd_val(pgd));
+}
+#define pgd_leaf	pgd_leaf
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-static inline int pmd_present(pmd_t pmd)
+static inline int __pmd_present(unsigned long pmdval)
 {
 	/*
 	 * Checking for _PAGE_LEAF is needed too because:
@@ -229,14 +240,19 @@ static inline int pmd_present(pmd_t pmd)
 	 * the present bit, in this situation, pmd_present() and
 	 * pmd_trans_huge() still needs to return true.
 	 */
-	return (pmd_val(pmd) & (_PAGE_PRESENT | _PAGE_PROT_NONE | _PAGE_LEAF));
+	return (pmdval & (_PAGE_PRESENT | _PAGE_PROT_NONE | _PAGE_LEAF));
 }
 #else
-static inline int pmd_present(pmd_t pmd)
+static inline int __pmd_present(unsigned long pmdval)
 {
-	return (pmd_val(pmd) & (_PAGE_PRESENT | _PAGE_PROT_NONE));
+	return (pmdval & (_PAGE_PRESENT | _PAGE_PROT_NONE));
 }
 #endif
+
+static inline int pmd_present(pmd_t pmd)
+{
+	return __pmd_present(pmd_val(pmd));
+}
 
 static inline int pmd_none(pmd_t pmd)
 {
@@ -248,11 +264,16 @@ static inline int pmd_bad(pmd_t pmd)
 	return !pmd_present(pmd) || (pmd_val(pmd) & _PAGE_LEAF);
 }
 
-#define pmd_leaf	pmd_leaf
+static inline bool __pmd_leaf(unsigned long pmdval)
+{
+	return __pmd_present(pmdval) && (pmdval & _PAGE_LEAF);
+}
+
 static inline bool pmd_leaf(pmd_t pmd)
 {
-	return pmd_present(pmd) && (pmd_val(pmd) & _PAGE_LEAF);
+	return __pmd_leaf(pmd_val(pmd));
 }
+#define pmd_leaf	pmd_leaf
 
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 {
@@ -306,9 +327,14 @@ static __always_inline bool has_svnapot(void)
 	return riscv_has_extension_likely(RISCV_ISA_EXT_SVNAPOT);
 }
 
+static inline unsigned long __pte_napot(unsigned long val)
+{
+	return val & _PAGE_NAPOT;
+}
+
 static inline unsigned long pte_napot(pte_t pte)
 {
-	return pte_val(pte) & _PAGE_NAPOT;
+	return __pte_napot(pte_val(pte));
 }
 
 static inline pte_t pte_mknapot(pte_t pte, unsigned int order)
@@ -324,9 +350,14 @@ static inline pte_t pte_mknapot(pte_t pte, unsigned int order)
 
 static __always_inline bool has_svnapot(void) { return false; }
 
-static inline unsigned long pte_napot(pte_t pte)
+static inline unsigned long __pte_napot(unsigned long pteval)
 {
 	return 0;
+}
+
+static inline unsigned long pte_napot(pte_t pte)
+{
+	return __pte_napot(pte_val(pte));
 }
 
 #endif /* CONFIG_RISCV_ISA_SVNAPOT */
@@ -356,9 +387,14 @@ static inline pte_t pfn_pte(unsigned long pfn, pgprot_t prot)
 
 #define mk_pte(page, prot)       pfn_pte(page_to_pfn(page), prot)
 
+static inline int __pte_present(unsigned long pteval)
+{
+	return (pteval & (_PAGE_PRESENT | _PAGE_PROT_NONE));
+}
+
 static inline int pte_present(pte_t pte)
 {
-	return (pte_val(pte) & (_PAGE_PRESENT | _PAGE_PROT_NONE));
+	return __pte_present(pte_val(pte));
 }
 
 #define pte_accessible pte_accessible
