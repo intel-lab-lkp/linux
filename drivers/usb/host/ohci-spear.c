@@ -80,7 +80,9 @@ static int spear_ohci_hcd_drv_probe(struct platform_device *pdev)
 	sohci_p = to_spear_ohci(hcd);
 	sohci_p->clk = usbh_clk;
 
-	clk_prepare_enable(sohci_p->clk);
+	retval = clk_prepare_enable(sohci_p->clk);
+	if (retval)
+		goto err_put_hcd;
 
 	retval = usb_add_hcd(hcd, irq, 0);
 	if (retval == 0) {
@@ -103,8 +105,7 @@ static void spear_ohci_hcd_drv_remove(struct platform_device *pdev)
 	struct spear_ohci *sohci_p = to_spear_ohci(hcd);
 
 	usb_remove_hcd(hcd);
-	if (sohci_p->clk)
-		clk_disable_unprepare(sohci_p->clk);
+	clk_disable_unprepare(sohci_p->clk);
 
 	usb_put_hcd(hcd);
 }
@@ -137,12 +138,15 @@ static int spear_ohci_hcd_drv_resume(struct platform_device *dev)
 	struct usb_hcd *hcd = platform_get_drvdata(dev);
 	struct ohci_hcd	*ohci = hcd_to_ohci(hcd);
 	struct spear_ohci *sohci_p = to_spear_ohci(hcd);
+	int ret;
 
 	if (time_before(jiffies, ohci->next_statechange))
 		msleep(5);
 	ohci->next_statechange = jiffies;
 
-	clk_prepare_enable(sohci_p->clk);
+	ret = clk_prepare_enable(sohci_p->clk);
+	if (ret)
+		return ret;
 	ohci_resume(hcd, false);
 	return 0;
 }
