@@ -64,10 +64,34 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
         [],
     )
 
+    # alloc only for std/proc_macros/macros
+    append_crate(
+        "alloc",
+        sysroot_src / "alloc" / "src" / "lib.rs",
+        ["core"],
+        is_workspace_member=False,
+    )
+
+    # std only for proc_macros/macros
+    append_crate(
+        "std",
+        sysroot_src / "std" / "src" / "lib.rs",
+        ["core", "alloc"],
+        is_workspace_member=False,
+    )
+
+    # proc_macro for macros crate
+    append_crate(
+        "proc_macro",
+        sysroot_src / "proc_macro" / "src" / "lib.rs",
+        ["std", "core"],
+        is_workspace_member=False,
+    )
+
     append_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
-        [],
+        ["std", "proc_macro"],
         is_proc_macro=True,
     )
     crates[-1]["proc_macro_dylib_path"] = f"{objtree}/rust/libmacros.so"
