@@ -231,7 +231,7 @@ static int xcs_resume(struct intel_engine_cs *engine)
 	set_pp_dir(engine);
 
 	/* First wake the ring up to an empty/idle ring */
-	for ((kt) = ktime_get() + (2 * NSEC_PER_MSEC);
+	for ((kt) = ktime_get() + (50 * NSEC_PER_MSEC);
 			ktime_before(ktime_get(), (kt)); cpu_relax()) {
 		/*
 		 * In case of resets fails because engine resumes from
