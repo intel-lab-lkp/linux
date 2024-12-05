@@ -270,7 +270,7 @@ Ordering of commit tags
 To have a uniform view of the commit tags, the tip maintainers use the
 following tag ordering scheme:
 
- - Fixes: 12+char-SHA1 ("sub/sys: Original subject line")
+ - Fixes: 16+char-SHA1 ("sub/sys: Original subject line")
 
    A Fixes tag should be added even for changes which do not need to be
    backported to stable kernels, i.e. when addressing a recently introduced
@@ -284,7 +284,7 @@ following tag ordering scheme:
 
      Commit
 
-       abcdef012345678 ("x86/xxx: Replace foo with bar")
+       abcdef0123456789 ("x86/xxx: Replace foo with bar")
 
      left an unused instance of variable foo around. Remove it.
 
@@ -295,7 +295,7 @@ following tag ordering scheme:
      The recent replacement of foo with bar left an unused instance of
      variable foo around. Remove it.
 
-     Fixes: abcdef012345678 ("x86/xxx: Replace foo with bar")
+     Fixes: abcdef0123456789 ("x86/xxx: Replace foo with bar")
      Signed-off-by: J.Dev <j.dev@mail>
 
    The latter puts the information about the patch into the focus and

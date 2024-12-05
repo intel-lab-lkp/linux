@@ -31,7 +31,7 @@ The important bits (aka "The TL;DR")
       list in CC) containing a paragraph like the following, which tells regzbot
       when the issue started to happen::
 
-       #regzbot ^introduced: 1f2e3d4c5b6a
+       #regzbot ^introduced: 1f2e3d4c5b6a7980
 
     * When forwarding reports from a bug tracker to the regressions list (see
       above), include a paragraph like the following::
@@ -82,7 +82,7 @@ When doing either, consider making the Linux kernel regression tracking bot
 "regzbot" immediately start tracking the issue:
 
  * For mailed reports, check if the reporter included a "regzbot command" like
-   ``#regzbot introduced: 1f2e3d4c5b6a``. If not, send a reply (with the
+   ``#regzbot introduced: 1f2e3d4c5b6a7980``. If not, send a reply (with the
    regressions list in CC) with a paragraph like the following:::
 
        #regzbot ^introduced: v5.13..v5.14-rc1
@@ -100,7 +100,7 @@ When doing either, consider making the Linux kernel regression tracking bot
  * When forwarding a regression reported to a bug tracker, include a paragraph
    with these regzbot commands::
 
-       #regzbot introduced: 1f2e3d4c5b6a
+       #regzbot introduced: 1f2e3d4c5b6a7980
        #regzbot from: Some N. Ice Human <some.human@example.com>
        #regzbot monitor: http://some.bugtracker.example.com/ticket?id=123456789
 

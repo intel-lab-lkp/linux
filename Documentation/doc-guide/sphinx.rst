@@ -441,8 +441,8 @@ Referencing commits
 References to git commits are automatically hyperlinked given that they are
 written in one of these formats::
 
-    commit 72bf4f1767f0
-    commit 72bf4f1767f0 ("net: do not leave an empty skb in write queue")
+    commit 72bf4f1767f03869
+    commit 72bf4f1767f03869 ("net: do not leave an empty skb in write queue")
 
 .. _sphinx_kfigure:
 

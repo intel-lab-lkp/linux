@@ -106,7 +106,7 @@ Example::
 	platform_set_drvdata(), but left the variable "dev" unused,
 	delete it.
 
-You should also be sure to use at least the first twelve characters of the
+You should also be sure to use at least the first sixteen characters of the
 SHA-1 ID.  The kernel repository holds a *lot* of objects, making
 collisions with shorter IDs a real possibility.  Bear in mind that, even if
 there is no collision with your six-character ID now, that condition may
@@ -143,25 +143,25 @@ also track such tags and take certain actions. Private bug trackers and
 invalid URLs are forbidden.
 
 If your patch fixes a bug in a specific commit, e.g. you found an issue using
-``git bisect``, please use the 'Fixes:' tag with at least the first 12
+``git bisect``, please use the 'Fixes:' tag with at least the first 16
 characters of the SHA-1 ID, and the one line summary.  Do not split the tag
 across multiple lines, tags are exempt from the "wrap at 75 columns" rule in
 order to simplify parsing scripts.  For example::
 
-	Fixes: 54a4f0239f2e ("KVM: MMU: make kvm_mmu_zap_page() return the number of pages it actually freed")
+	Fixes: 54a4f0239f2e98bc ("KVM: MMU: make kvm_mmu_zap_page() return the number of pages it actually freed")
 
 The following ``git config`` settings can be used to add a pretty format for
 outputting the above style in the ``git log`` or ``git show`` commands::
 
 	[core]
-		abbrev = 12
+		abbrev = 16
 	[pretty]
 		fixes = Fixes: %h (\"%s\")
 
 An example call::
 
-	$ git log -1 --pretty=fixes 54a4f0239f2e
-	Fixes: 54a4f0239f2e ("KVM: MMU: make kvm_mmu_zap_page() return the number of pages it actually freed")
+	$ git log -1 --pretty=fixes 54a4f0239f2e98bc
+	Fixes: 54a4f0239f2e98bc ("KVM: MMU: make kvm_mmu_zap_page() return the number of pages it actually freed")
 
 .. _split_changes:
 

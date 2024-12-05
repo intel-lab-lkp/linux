@@ -599,7 +599,7 @@ Commit message
 
   **GIT_COMMIT_ID**
     The proper way to reference a commit id is:
-    commit <12+ chars of sha1> ("<title line>")
+    commit <16+ chars of sha1> ("<title line>")
 
     An example may be::
 

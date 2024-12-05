@@ -1246,13 +1246,13 @@ sub git_commit_info {
 #		git rev-list --remotes | grep -i "^$1" |
 #		while read line ; do
 #		    git log --format='%H %s' -1 $line |
-#		    echo "commit $(cut -c 1-12,41-)"
+#		    echo "commit $(cut -c 1-16,41-)"
 #		done
 	} elsif ($lines[0] =~ /^fatal: ambiguous argument '$commit': unknown revision or path not in the working tree\./ ||
 		 $lines[0] =~ /^fatal: bad object $commit/) {
 		$id = undef;
 	} else {
-		$id = substr($lines[0], 0, 12);
+		$id = substr($lines[0], 0, 16);
 		$desc = substr($lines[0], 41);
 	}
 
@@ -1320,7 +1320,7 @@ for my $filename (@ARGV) {
 	if ($filename eq '-') {
 		$vname = 'Your patch';
 	} elsif ($git) {
-		$vname = "Commit " . substr($filename, 0, 12) . ' ("' . $git_commits{$filename} . '")';
+		$vname = "Commit " . substr($filename, 0, 16) . ' ("' . $git_commits{$filename} . '")';
 	} else {
 		$vname = $filename;
 	}
@@ -3230,17 +3230,17 @@ sub process {
 			my $tag_case = not ($tag eq "Fixes:");
 			my $tag_space = not ($line =~ /^fixes:? [0-9a-f]{5,40} ($balanced_parens)/i);
 
-			my $id_length = not ($orig_commit =~ /^[0-9a-f]{12,40}$/i);
+			my $id_length = not ($orig_commit =~ /^[0-9a-f]{16,40}$/i);
 			my $id_case = not ($orig_commit !~ /[A-F]/);
 
-			my $id = "0123456789ab";
+			my $id = "0123456789abcdef";
 			my ($cid, $ctitle) = git_commit_info($orig_commit, $id,
 							     $title);
 
 			if ($ctitle ne $title || $tag_case || $tag_space ||
 			    $id_length || $id_case || !$title_has_quotes) {
 				if (WARN("BAD_FIXES_TAG",
-				     "Please use correct Fixes: style 'Fixes: <12+ chars of sha1> (\"<title line>\")' - ie: 'Fixes: $cid (\"$ctitle\")'\n" . $herecurr) &&
+				     "Please use correct Fixes: style 'Fixes: <16+ chars of sha1> (\"<title line>\")' - ie: 'Fixes: $cid (\"$ctitle\")'\n" . $herecurr) &&
 				    $fix) {
 					$fixed[$fixlinenr] = "Fixes: $cid (\"$ctitle\")";
 				}
@@ -3330,7 +3330,7 @@ sub process {
 
 # Check for git id commit length and improperly formed commit descriptions
 # A correctly formed commit description is:
-#    commit <SHA-1 hash length 12+ chars> ("Complete commit subject")
+#    commit <SHA-1 hash length 16+ chars> ("Complete commit subject")
 # with the commit subject '("' prefix and '")' suffix
 # This is a fairly compilicated block as it tests for what appears to be
 # bare SHA-1 hash with  minimum length of 5.  It also avoids several types of
@@ -3343,16 +3343,16 @@ sub process {
 		    $line !~ /^This reverts commit [0-9a-f]{7,40}/ &&
 		    (($line =~ /\bcommit\s+[0-9a-f]{5,}\b/i ||
 		      ($line =~ /\bcommit\s*$/i && defined($rawlines[$linenr]) && $rawlines[$linenr] =~ /^\s*[0-9a-f]{5,}\b/i)) ||
-		     ($line =~ /(?:\s|^)[0-9a-f]{12,40}(?:[\s"'\(\[]|$)/i &&
-		      $line !~ /[\<\[][0-9a-f]{12,40}[\>\]]/i &&
-		      $line !~ /\bfixes:\s*[0-9a-f]{12,40}/i))) {
+		     ($line =~ /(?:\s|^)[0-9a-f]{16,40}(?:[\s"'\(\[]|$)/i &&
+		      $line !~ /[\<\[][0-9a-f]{16,40}[\>\]]/i &&
+		      $line !~ /\bfixes:\s*[0-9a-f]{16,40}/i))) {
 			my $init_char = "c";
 			my $orig_commit = "";
 			my $short = 1;
 			my $long = 0;
 			my $case = 1;
 			my $space = 1;
-			my $id = '0123456789ab';
+			my $id = '0123456789abcdef';
 			my $orig_desc = "commit description";
 			my $description = "";
 			my $herectx = $herecurr;
@@ -3383,11 +3383,11 @@ sub process {
 			if ($input =~ /\b(c)ommit\s+([0-9a-f]{5,})\b/i) {
 				$init_char = $1;
 				$orig_commit = lc($2);
-				$short = 0 if ($input =~ /\bcommit\s+[0-9a-f]{12,40}/i);
+				$short = 0 if ($input =~ /\bcommit\s+[0-9a-f]{16,40}/i);
 				$long = 1 if ($input =~ /\bcommit\s+[0-9a-f]{41,}/i);
 				$space = 0 if ($input =~ /\bcommit [0-9a-f]/i);
 				$case = 0 if ($input =~ /\b[Cc]ommit\s+[0-9a-f]{5,40}[^A-F]/);
-			} elsif ($input =~ /\b([0-9a-f]{12,40})\b/i) {
+			} elsif ($input =~ /\b([0-9a-f]{16,40})\b/i) {
 				$orig_commit = lc($1);
 			}
 
@@ -3398,7 +3398,7 @@ sub process {
 			    ($short || $long || $space || $case || ($orig_desc ne $description) || !$has_quotes) &&
 			    $last_git_commit_id_linenr != $linenr - 1) {
 				ERROR("GIT_COMMIT_ID",
-				      "Please use git commit description style 'commit <12+ chars of sha1> (\"<title line>\")' - ie: '${init_char}ommit $id (\"$description\")'\n" . $herectx);
+				      "Please use git commit description style 'commit <16+ chars of sha1> (\"<title line>\")' - ie: '${init_char}ommit $id (\"$description\")'\n" . $herectx);
 			}
 			#don't report the next line if this line ends in commit and the sha1 hash is the next line
 			$last_git_commit_id_linenr = $linenr if ($line =~ /\bcommit\s*$/i);
