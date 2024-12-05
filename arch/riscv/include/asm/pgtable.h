@@ -351,6 +351,26 @@ static inline pgd_t pte_pgd(pte_t pte)
 	return (pgd_t)pte;
 }
 
+static inline pte_t pte_set_flag(pte_t pte, unsigned long flag)
+{
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++)
+		pte.ptes[i] |= flag;
+
+	return pte;
+}
+
+static inline pte_t pte_clear_flag(pte_t pte, unsigned long flag)
+{
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++)
+		pte.ptes[i] &= (~flag);
+
+	return pte;
+}
+
 #else /* CONFIG_RISCV_USE_SW_PAGE */
 
 static inline pte_t pmd_pte(pmd_t pmd)
@@ -391,6 +411,16 @@ static inline p4d_t pte_p4d(pte_t pte)
 static inline pgd_t pte_pgd(pte_t pte)
 {
 	return __pgd(pte_val(pte));
+}
+
+static inline pte_t pte_set_flag(pte_t pte, unsigned long flag)
+{
+	return __pte(pte_val(pte) | flag);
+}
+
+static inline pte_t pte_clear_flag(pte_t pte, unsigned long flag)
+{
+	return __pte(pte_val(pte) & (~flag));
 }
 
 #endif /* CONFIG_RISCV_USE_SW_PAGE */
@@ -537,46 +567,46 @@ static inline int pte_devmap(pte_t pte)
 
 static inline pte_t pte_wrprotect(pte_t pte)
 {
-	return __pte(pte_val(pte) & ~(_PAGE_WRITE));
+	return pte_clear_flag(pte, _PAGE_WRITE);
 }
 
 /* static inline pte_t pte_mkread(pte_t pte) */
 
 static inline pte_t pte_mkwrite_novma(pte_t pte)
 {
-	return __pte(pte_val(pte) | _PAGE_WRITE);
+	return pte_set_flag(pte, _PAGE_WRITE);
 }
 
 /* static inline pte_t pte_mkexec(pte_t pte) */
 
 static inline pte_t pte_mkdirty(pte_t pte)
 {
-	return __pte(pte_val(pte) | _PAGE_DIRTY);
+	return pte_set_flag(pte, _PAGE_DIRTY);
 }
 
 static inline pte_t pte_mkclean(pte_t pte)
 {
-	return __pte(pte_val(pte) & ~(_PAGE_DIRTY));
+	return pte_clear_flag(pte, _PAGE_DIRTY);
 }
 
 static inline pte_t pte_mkyoung(pte_t pte)
 {
-	return __pte(pte_val(pte) | _PAGE_ACCESSED);
+	return pte_set_flag(pte, _PAGE_ACCESSED);
 }
 
 static inline pte_t pte_mkold(pte_t pte)
 {
-	return __pte(pte_val(pte) & ~(_PAGE_ACCESSED));
+	return pte_clear_flag(pte, _PAGE_ACCESSED);
 }
 
 static inline pte_t pte_mkspecial(pte_t pte)
 {
-	return __pte(pte_val(pte) | _PAGE_SPECIAL);
+	return pte_set_flag(pte, _PAGE_SPECIAL);
 }
 
 static inline pte_t pte_mkdevmap(pte_t pte)
 {
-	return __pte(pte_val(pte) | _PAGE_DEVMAP);
+	return pte_set_flag(pte, _PAGE_DEVMAP);
 }
 
 static inline pte_t pte_mkhuge(pte_t pte)
@@ -612,7 +642,7 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 
 	ALT_THEAD_PMA(newprot_val);
 
-	return __pte((pte_val(pte) & _PAGE_CHG_MASK) | newprot_val);
+	return pte_set_flag(pte_clear_flag(pte, ~_PAGE_CHG_MASK), newprot_val);
 }
 
 #define pgd_ERROR(e) \
@@ -1017,12 +1047,12 @@ static inline int pte_swp_exclusive(pte_t pte)
 
 static inline pte_t pte_swp_mkexclusive(pte_t pte)
 {
-	return __pte(pte_val(pte) | _PAGE_SWP_EXCLUSIVE);
+	return pte_set_flag(pte, _PAGE_SWP_EXCLUSIVE);
 }
 
 static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 {
-	return __pte(pte_val(pte) & ~_PAGE_SWP_EXCLUSIVE);
+	return pte_clear_flag(pte, _PAGE_SWP_EXCLUSIVE);
 }
 
 #ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
