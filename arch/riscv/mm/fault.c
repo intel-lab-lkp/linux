@@ -133,7 +133,7 @@ static inline void vmalloc_fault(struct pt_regs *regs, int code, unsigned long a
 	 * of a task switch.
 	 */
 	index = pgd_index(addr);
-	pfn = csr_read(CSR_SATP) & SATP_PPN;
+	pfn = satp_pfn(csr_read(CSR_SATP));
 	pgd = (pgd_t *)pfn_to_virt(pfn) + index;
 	pgd_k = init_mm.pgd + index;
 
