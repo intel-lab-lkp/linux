@@ -163,12 +163,16 @@ static int stm32_pwm_lp_get_state(struct pwm_chip *chip,
 	unsigned long rate = clk_get_rate(priv->clk);
 	u32 val, presc, prd;
 	u64 tmp;
+	int ret;
 
 	regmap_read(priv->regmap, STM32_LPTIM_CR, &val);
 	state->enabled = !!FIELD_GET(STM32_LPTIM_ENABLE, val);
 	/* Keep PWM counter clock refcount in sync with PWM initial state */
-	if (state->enabled)
-		clk_enable(priv->clk);
+	if (state->enabled) {
+		ret = clk_enable(priv->clk);
+		if (ret)
+			return ret;
+	}
 
 	regmap_read(priv->regmap, STM32_LPTIM_CFGR, &val);
 	presc = FIELD_GET(STM32_LPTIM_PRESC, val);
