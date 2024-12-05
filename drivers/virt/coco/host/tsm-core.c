@@ -2,13 +2,16 @@
 /* Copyright(c) 2024 Intel Corporation. All rights reserved. */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#define dev_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/tsm.h>
+#include <linux/pci.h>
 #include <linux/rwsem.h>
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/cleanup.h>
 #include <linux/pci-tsm.h>
+#include <linux/pci-ide.h>
 
 static DECLARE_RWSEM(tsm_core_rwsem);
 static struct class *tsm_class;
@@ -99,6 +102,20 @@ void tsm_unregister(struct tsm_subsys *subsys)
 	tsm_subsys = NULL;
 }
 EXPORT_SYMBOL_GPL(tsm_unregister);
+
+/* must be invoked between tsm_register / tsm_unregister */
+int tsm_register_ide_stream(struct pci_dev *pdev, struct pci_ide *ide)
+{
+	return sysfs_create_link(&tsm_subsys->dev.kobj, &pdev->dev.kobj,
+				 ide->name);
+}
+EXPORT_SYMBOL_GPL(tsm_register_ide_stream);
+
+void tsm_unregister_ide_stream(struct pci_ide *ide)
+{
+	sysfs_remove_link(&tsm_subsys->dev.kobj, ide->name);
+}
+EXPORT_SYMBOL_GPL(tsm_unregister_ide_stream);
 
 static void tsm_release(struct device *dev)
 {
