@@ -187,6 +187,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
 /// ```
 /// # mod ex {
 /// # use kernel::prelude::*;
+/// # use kernel::str;
 /// kernel::sync::global_lock! {
 ///     // SAFETY: Initialized in module initializer before first use.
 ///     unsafe(uninit) static MY_COUNTER: Mutex<u32> = 0;
@@ -199,7 +200,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
 /// }
 ///
 /// impl kernel::Module for MyModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init(_name: &'static str::CStr, _module: &'static ThisModule) -> Result<Self> {
 ///         // SAFETY: Called exactly once.
 ///         unsafe { MY_COUNTER.init() };
 ///
@@ -216,6 +217,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
 /// # mod ex {
 /// # use kernel::prelude::*;
 /// use kernel::sync::{GlobalGuard, GlobalLockedBy};
+/// # use kernel::str;
 ///
 /// kernel::sync::global_lock! {
 ///     // SAFETY: Initialized in module initializer before first use.
@@ -239,7 +241,7 @@ impl<T: ?Sized, B: GlobalLockBackend> GlobalLockedBy<T, B> {
 /// }
 ///
 /// impl kernel::Module for MyModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init(_name: &'static str::CStr, _module: &'static ThisModule) -> Result<Self> {
 ///         // SAFETY: Called exactly once.
 ///         unsafe { MY_MUTEX.init() };
 ///
