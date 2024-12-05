@@ -97,7 +97,21 @@ TEST_GEN_PROGS := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_PROGS))
 TEST_GEN_PROGS_EXTENDED := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_PROGS_EXTENDED))
 TEST_GEN_FILES := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_FILES))
 
-all: $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES) \
+KDIR ?= /lib/modules/$(shell uname -r)/build
+
+define CHECK_CONFIG_DEPS
+    $(if $(wildcard $(KDIR)/scripts/config),
+        $(eval MISSING_FLAGS := $(filter-out 1,$(foreach cfg,$(TEST_CONFIG_DEPS),\
+            $(shell cd $(KDIR) && scripts/config --state $(cfg) | grep -q '^\(y\|m\)$$' && echo 1 || echo $(cfg))))),
+        $(info Skipping CHECK_GEN_REQ: $(KDIR)/scripts/config not found)
+    )
+    $(if $(MISSING_FLAGS),$(error Missing required config flags: $(MISSING_FLAGS)))
+endef
+
+check_config_deps:
+	$(call CHECK_CONFIG_DEPS)
+
+all: check_config_deps $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES) \
 	$(if $(TEST_GEN_MODS_DIR),gen_mods_dir)
 
 define RUN_TESTS
@@ -228,4 +242,4 @@ $(OUTPUT)/%:%.S
 	$(LINK.S) $^ $(LDLIBS) -o $@
 endif
 
-.PHONY: run_tests all clean install emit_tests gen_mods_dir clean_mods_dir
+.PHONY: run_tests all clean install emit_tests gen_mods_dir clean_mods_dir check_config_deps
