@@ -110,10 +110,32 @@ struct awcc_priv {
 acpi_status alienware_wmi_command(struct wmi_device *wdev, u32 method_id,
 				  void *in_args, size_t in_size, u32 *out_data);
 
+#if IS_ENABLED(CONFIG_ALIENWARE_ALIENFX)
 int alienfx_wmi_init(struct alienfx_platdata *pdata);
 void alienfx_wmi_exit(struct wmi_device *wdev);
+#else
+int inline alienfx_wmi_init(struct alienfx_platdata *pdata)
+{
+	return 0;
+}
 
+void inline alienfx_wmi_exit(struct wmi_device *wdev)
+{
+}
+#endif
+
+#if IS_ENABLED(CONFIG_ALIENWARE_AWCC)
 int create_thermal_profile(struct wmi_device *wdev, bool has_gmode);
 void remove_thermal_profile(void);
+#else
+int inline create_thermal_profile(struct wmi_device *wdev, bool has_gmode)
+{
+	return 0;
+}
+
+void inline remove_thermal_profile(void)
+{
+}
+#endif
 
 #endif

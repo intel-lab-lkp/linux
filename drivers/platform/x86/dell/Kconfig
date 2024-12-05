@@ -18,15 +18,30 @@ config ALIENWARE_WMI
 	tristate "Alienware Special feature control"
 	default m
 	depends on ACPI
+	depends on ACPI_WMI
+	help
+	 This is a driver for controlling Alienware WMI driven
+	 features.
+
+config ALIENWARE_ALIENFX
+	bool "Alienware AlienFX backend"
+	default y
 	depends on LEDS_CLASS
 	depends on NEW_LEDS
-	depends on ACPI_WMI
+	depends on ALIENWARE_WMI
+	help
+	 It exposes an interface for controlling the AlienFX zones on
+	 Alienware machines that don't contain a dedicated AlienFX
+	 USB MCU such as the X51 and X51-R2.
+
+config ALIENWARE_AWCC
+	bool "Alienware AWCC backend"
+	default y
+	depends on ALIENWARE_WMI
 	select ACPI_PLATFORM_PROFILE
 	help
-	 This is a driver for controlling Alienware BIOS driven
-	 features.  It exposes an interface for controlling the AlienFX
-	 zones on Alienware machines that don't contain a dedicated AlienFX
-	 USB MCU such as the X51 and X51-R2.
+	 Provides thermal control features on Alienware and Dell's
+	 GSeries laptops with a WMI device with UID "AWCC".
 
 config DCDBAS
 	tristate "Dell Systems Management Base Driver"

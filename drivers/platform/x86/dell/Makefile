@@ -4,10 +4,10 @@
 # Dell x86 Platform-Specific Drivers
 #
 
-obj-$(CONFIG_ALIENWARE_WMI)		+= alienware-wmi.o
-alienware-wmi-objs			:= alienware-wmi-base.o
-alienware-wmi-y				+= alienware-wmi-alienfx.o
-alienware-wmi-y				+= alienware-wmi-awcc.o
+obj-$(CONFIG_ALIENWARE_WMI)			+= alienware-wmi.o
+alienware-wmi-objs				:= alienware-wmi-base.o
+alienware-wmi-$(CONFIG_ALIENWARE_ALIENFX)	+= alienware-wmi-alienfx.o
+alienware-wmi-$(CONFIG_ALIENWARE_AWCC)		+= alienware-wmi-awcc.o
 obj-$(CONFIG_DCDBAS)			+= dcdbas.o
 obj-$(CONFIG_DELL_LAPTOP)		+= dell-laptop.o
 obj-$(CONFIG_DELL_RBTN)			+= dell-rbtn.o
