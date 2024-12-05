@@ -465,8 +465,12 @@ static inline void pci_npem_remove(struct pci_dev *dev) { }
 
 #ifdef CONFIG_PCI_IDE
 void pci_ide_init(struct pci_dev *dev);
+void pci_init_host_bridge_ide(struct pci_host_bridge *bridge);
 #else
 static inline void pci_ide_init(struct pci_dev *dev) { }
+static inline void pci_init_host_bridge_ide(struct pci_host_bridge *bridge)
+{
+}
 #endif
 
 #ifdef CONFIG_PCI_TSM
