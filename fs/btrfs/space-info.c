@@ -1323,15 +1323,11 @@ static const enum btrfs_flush_state data_flush_states[] = {
 	ALLOC_CHUNK_FORCE,
 };
 
-static void btrfs_async_reclaim_data_space(struct work_struct *work)
+static void do_async_reclaim_data_space(struct btrfs_space_info *space_info)
 {
-	struct btrfs_fs_info *fs_info;
-	struct btrfs_space_info *space_info;
+	struct btrfs_fs_info *fs_info = space_info->fs_info;
 	u64 last_tickets_id;
 	enum btrfs_flush_state flush_state = 0;
-
-	fs_info = container_of(work, struct btrfs_fs_info, async_data_reclaim_work);
-	space_info = fs_info->data_sinfo;
 
 	spin_lock(&space_info->lock);
 	if (list_empty(&space_info->tickets)) {
@@ -1398,6 +1394,16 @@ aborted_fs:
 	maybe_fail_all_tickets(fs_info, space_info);
 	space_info->flush = 0;
 	spin_unlock(&space_info->lock);
+}
+
+static void btrfs_async_reclaim_data_space(struct work_struct *work)
+{
+	struct btrfs_fs_info *fs_info;
+	struct btrfs_space_info *space_info;
+
+	fs_info = container_of(work, struct btrfs_fs_info, async_data_reclaim_work);
+	space_info = fs_info->data_sinfo;
+	do_async_reclaim_data_space(space_info);
 }
 
 void btrfs_init_async_reclaim_work(struct btrfs_fs_info *fs_info)
