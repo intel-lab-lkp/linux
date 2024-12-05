@@ -26,3 +26,14 @@ Description:
 		streams can be returned to the available secure streams pool by
 		invoking the tsm/disconnect flow. The link points to the
 		endpoint PCI device at domain:DDDDD bus:BB device:DD function:F.
+
+What:		pciDDDDD:BB/available_secure_streams
+Date:		December, 2024
+Contact:	linux-pci@vger.kernel.org
+Description:
+		(RO) When a host-bridge has root ports that support PCIe IDE
+		(link encryption and integrity protection) there may be a
+		limited number of streams that can be used for establishing new
+		secure links. This attribute decrements upon secure link setup,
+		and increments upon secure link teardown. The in-use stream
+		count is determined by counting stream symlinks.
