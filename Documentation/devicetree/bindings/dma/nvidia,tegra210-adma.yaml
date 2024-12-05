@@ -29,7 +29,24 @@ properties:
           - const: nvidia,tegra186-adma
 
   reg:
-    maxItems: 1
+    description: |
+     The 'page' region describes the address space of the page
+     used for accessing the DMA channel registers. The 'global'
+     region describes the address space of the global DMA registers.
+     In the absence of the 'reg-names' property, there must be a
+     single entry that covers the address space of the global DMA
+     registers and the DMA channel registers.
+     minItems: 1
+     maxItems: 2
+
+  reg-names:
+    oneOf:
+      - enum:
+          - page
+          - global
+      - items:
+          - const: page
+          - const: global
 
   interrupts:
     description: |
