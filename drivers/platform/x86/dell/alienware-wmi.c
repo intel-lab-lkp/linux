@@ -409,6 +409,14 @@ struct wmax_u32_args {
 	u8 arg3;
 };
 
+struct alienfx_priv {
+	struct platform_device *pdev;
+	struct led_classdev global_led;
+	struct color_platform colors[4];
+	u8 global_brightness;
+	u8 lighting_control_state;
+};
+
 static struct platform_device *platform_device;
 static struct platform_zone *zone_data;
 static struct platform_profile_handler pp_handler;
@@ -1121,6 +1129,32 @@ static void remove_thermal_profile(void)
 /*
  * Platform Driver
  */
+static int alienfx_probe(struct platform_device *pdev)
+{
+	struct alienfx_priv *priv;
+	struct led_classdev *leds;
+
+	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
+	platform_set_drvdata(pdev, priv);
+
+	priv->pdev = pdev;
+
+	if (interface == WMAX)
+		priv->lighting_control_state = WMAX_RUNNING;
+	else if (interface == LEGACY)
+		priv->lighting_control_state = LEGACY_RUNNING;
+
+	leds = &priv->global_led;
+	leds->name = "alienware::global_brightness";
+	leds->brightness_set = global_led_set;
+	leds->brightness_get = global_led_get;
+	leds->max_brightness = 0x0F;
+
+	priv->global_brightness = priv->global_led.max_brightness;
+
+	return 0;
+}
+
 static const struct attribute_group *alienfx_groups[] = {
 	&zone_attribute_group,
 	&hdmi_attribute_group,
@@ -1134,6 +1168,7 @@ static struct platform_driver platform_driver = {
 		.name = "alienware-wmi",
 		.dev_groups = alienfx_groups,
 	},
+	.probe = alienfx_probe,
 };
 
 static int __init alienware_wmi_init(void)
