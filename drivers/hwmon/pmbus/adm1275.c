@@ -477,14 +477,14 @@ static int adm1275_read_byte_data(struct i2c_client *client, int page, int reg)
 }
 
 static const struct i2c_device_id adm1275_id[] = {
-	{ "adm1075", adm1075 },
-	{ "adm1272", adm1272 },
-	{ "adm1275", adm1275 },
-	{ "adm1276", adm1276 },
-	{ "adm1278", adm1278 },
-	{ "adm1281", adm1281 },
-	{ "adm1293", adm1293 },
-	{ "adm1294", adm1294 },
+	{ .name = "adm1075", .driver_data = adm1075 },
+	{ .name = "adm1272", .driver_data = adm1272 },
+	{ .name = "adm1275", .driver_data = adm1275 },
+	{ .name = "adm1276", .driver_data = adm1276 },
+	{ .name = "adm1278", .driver_data = adm1278 },
+	{ .name = "adm1281", .driver_data = adm1281 },
+	{ .name = "adm1293", .driver_data = adm1293 },
+	{ .name = "adm1294", .driver_data = adm1294 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, adm1275_id);

@@ -956,8 +956,8 @@ static int sht3x_probe(struct i2c_client *client)
 
 /* device ID table */
 static const struct i2c_device_id sht3x_ids[] = {
-	{"sht3x", sht3x},
-	{"sts3x", sts3x},
+	{ .name = "sht3x", .driver_data = sht3x },
+	{ .name = "sts3x", .driver_data = sts3x },
 	{}
 };
 

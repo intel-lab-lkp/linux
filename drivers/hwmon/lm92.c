@@ -414,8 +414,8 @@ static int lm92_probe(struct i2c_client *client)
 
 /* .driver_data is limit register resolution */ 
 static const struct i2c_device_id lm92_id[] = {
-	{ "lm92", 13 },
-	{ "max6635", 9 },
+	{ .name = "lm92", .driver_data = 13 },
+	{ .name = "max6635", .driver_data = 9 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lm92_id);

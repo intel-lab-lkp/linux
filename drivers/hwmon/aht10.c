@@ -51,9 +51,9 @@
 enum aht10_variant { aht10, aht20 };
 
 static const struct i2c_device_id aht10_id[] = {
-	{ "aht10", aht10 },
-	{ "aht20", aht20 },
-	{ },
+	{ .name = "aht10", .driver_data = aht10 },
+	{ .name = "aht20", .driver_data = aht20 },
+	{ }
 };
 MODULE_DEVICE_TABLE(i2c, aht10_id);
 
