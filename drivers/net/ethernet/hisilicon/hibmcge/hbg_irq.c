@@ -83,45 +83,72 @@ static irqreturn_t hbg_irq_handle(int irq_num, void *p)
 static const char *irq_names_map[HBG_VECTOR_NUM] = { "tx", "rx",
 						     "err", "mdio" };
 
+static void hbg_free_irq_vectors(void *data)
+{
+	pci_free_irq_vectors(data);
+}
+
 int hbg_irq_init(struct hbg_priv *priv)
 {
 	struct hbg_vector *vectors = &priv->vectors;
 	struct device *dev = &priv->pdev->dev;
-	int ret, id;
+	int ret, id[HBG_VECTOR_NUM - 1];
 	u32 i;
 
 	/* used pcim_enable_device(),  so the vectors become device managed */
 	ret = pci_alloc_irq_vectors(priv->pdev, HBG_VECTOR_NUM, HBG_VECTOR_NUM,
 				    PCI_IRQ_MSI | PCI_IRQ_MSIX);
-	if (ret < 0)
-		return dev_err_probe(dev, ret, "failed to allocate vectors\n");
+	if (ret < 0) {
+		dev_err(dev, "failed to allocate vectors\n");
+		return ret;
+	}
 
-	if (ret != HBG_VECTOR_NUM)
-		return dev_err_probe(dev, -EINVAL,
-				     "requested %u MSI, but allocated %d MSI\n",
-				     HBG_VECTOR_NUM, ret);
+	if (ret != HBG_VECTOR_NUM) {
+		dev_err(dev, "requested %u MSI, but allocated %d MSI\n",
+			HBG_VECTOR_NUM, ret);
+		ret = -EINVAL;
+		goto err_free_irq_vectors;
+	}
 
 	/* mdio irq not requested, so the number of requested interrupts
 	 * is HBG_VECTOR_NUM - 1.
 	 */
 	for (i = 0; i < HBG_VECTOR_NUM - 1; i++) {
-		id = pci_irq_vector(priv->pdev, i);
-		if (id < 0)
-			return dev_err_probe(dev, id, "failed to get irq id\n");
+		id[i] = pci_irq_vector(priv->pdev, i);
+		if (id[i] < 0) {
+			dev_err(dev, "failed to get irq id\n");
+			ret = id[i];
+			goto err_free_irqs;
+		}
 
 		snprintf(vectors->name[i], sizeof(vectors->name[i]), "%s-%s-%s",
 			 dev_driver_string(dev), pci_name(priv->pdev),
 			 irq_names_map[i]);
 
-		ret = devm_request_irq(dev, id, hbg_irq_handle, 0,
+		ret = devm_request_irq(dev, id[i], hbg_irq_handle, 0,
 				       vectors->name[i], priv);
-		if (ret)
-			return dev_err_probe(dev, ret,
-					     "failed to request irq: %s\n",
-					     irq_names_map[i]);
+		if (ret) {
+			dev_err(dev, "failed to request irq: %s\n",
+				irq_names_map[i]);
+			goto err_free_irqs;
+		}
+	}
+
+	ret = devm_add_action_or_reset(dev, hbg_free_irq_vectors, priv->pdev);
+	if (ret) {
+		dev_err(dev, "Failed adding devres to free irq vectors\n");
+		goto err_free_irqs;
 	}
 
 	vectors->info_array = hbg_irqs;
 	vectors->info_array_len = ARRAY_SIZE(hbg_irqs);
 	return 0;
+
+err_free_irqs:
+	while (i-- > 0)
+		devm_free_irq(dev, id[i], priv);
+err_free_irq_vectors:
+	pci_free_irq_vectors(priv->pdev);
+
+	return ret;
 }
