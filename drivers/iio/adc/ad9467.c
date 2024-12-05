@@ -900,7 +900,6 @@ static struct iio_info ad9467_info = {
 	.write_raw = ad9467_write_raw,
 	.update_scan_mode = ad9467_update_scan_mode,
 	.debugfs_reg_access = ad9467_reg_access,
-	.read_avail = ad9467_read_avail,
 };
 
 static int ad9467_scale_fill(struct ad9467_state *st)
