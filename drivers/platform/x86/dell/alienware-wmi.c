@@ -431,6 +431,7 @@ struct alienfx_platdata {
 	bool hdmi_mux;
 	bool amplifier;
 	bool deepslp;
+	u8 running_code;
 };
 
 static u8 interface;
@@ -576,18 +577,18 @@ static ssize_t lighting_control_state_store(struct device *dev,
 					    const char *buf, size_t count)
 {
 	struct alienfx_priv *priv;
+	struct alienfx_platdata *pdata;
 	u8 val;
 
 	priv = dev_get_drvdata(dev);
+	pdata = dev_get_platdata(dev);
 
 	if (strcmp(buf, "booting\n") == 0)
 		val = LEGACY_BOOTING;
 	else if (strcmp(buf, "suspend\n") == 0)
 		val = LEGACY_SUSPEND;
-	else if (interface == LEGACY)
-		val = LEGACY_RUNNING;
 	else
-		val = WMAX_RUNNING;
+		val = pdata->running_code;
 
 	priv->lighting_control_state = val;
 	pr_debug("alienware-wmi: updated control state to %d\n",
@@ -1249,6 +1250,7 @@ static int legacy_wmi_probe(struct wmi_device *wdev, const void *context)
 		.hdmi_mux = quirks->hdmi_mux,
 		.amplifier = quirks->amplifier,
 		.deepslp = quirks->deepslp,
+		.running_code = LEGACY_RUNNING,
 	};
 
 	if (quirks->num_zones > 0)
@@ -1333,6 +1335,7 @@ static int wmax_wmi_probe(struct wmi_device *wdev, const void *context)
 		.hdmi_mux = quirks->hdmi_mux,
 		.amplifier = quirks->amplifier,
 		.deepslp = quirks->deepslp,
+		.running_code = WMAX_RUNNING,
 	};
 
 	if (quirks->thermal)
