@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2024 Linaro Ltd.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/firmware/samsung,exynos-acpm-ipc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Samsung exynos ACPM mailbox protocol
+
+maintainers:
+  - Tudor Ambarus <tudor.ambarus@linaro.org>
+
+description: |
+  ACPM (Alive Clock and Power Manager) is a firmware that operates on the
+  APM (Active Power Management) module that handles overall power management
+  activities. ACPM and masters regard each other as independent hardware
+  component and communicate with each other using mailbox messages and
+  shared memory.
+
+  This binding is intended to define the interface the firmware implementing
+  ACPM provides for OSPM in the device tree.
+
+properties:
+  $nodename:
+    const: acpm_ipc
+
+  compatible:
+    const: google,gs101-acpm-ipc
+
+  mboxes:
+    description:
+      List of phandle and mailbox channel specifiers.
+    maxItems: 1
+
+  shmem:
+    description:
+      List of phandle pointing to the shared memory (SHM) area. The memory
+      contains channels configuration data and the TX/RX ring buffers that
+      are used for passing messages to/from the ACPM firmware.
+    maxItems: 1
+
+  initdata-base:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Base address of the configuration data in the shared memory.
+
+additionalProperties: false
+
+required:
+  - compatible
+  - mboxes
+  - shmem
+  - initdata-base
+
+examples:
+  - |
+    firmware {
+        acpm_ipc: acpm_ipc {
+            compatible = "google,gs101-acpm-ipc";
+            mboxes = <&ap2apm_mailbox 0>;
+            shmem = <&apm_sram>;
+            initdata-base = <0xa000>;
+        };
+    };
