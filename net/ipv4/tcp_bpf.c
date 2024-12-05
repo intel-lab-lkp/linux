@@ -19,9 +19,6 @@ void tcp_eat_skb(struct sock *sk, struct sk_buff *skb)
 	if (!skb || !skb->len || !sk_is_tcp(sk))
 		return;
 
-	if (skb_bpf_strparser(skb))
-		return;
-
 	tcp = tcp_sk(sk);
 	copied = tcp->copied_seq + skb->len;
 	WRITE_ONCE(tcp->copied_seq, copied);
@@ -578,6 +575,50 @@ out_err:
 	return copied > 0 ? copied : err;
 }
 
+static void sock_replace_proto_ops(struct sock *sk,
+				   const struct proto_ops *proto_ops)
+{
+	if (sk->sk_socket)
+		WRITE_ONCE(sk->sk_socket->ops, proto_ops);
+}
+
+/* The tcp_bpf_read_sock() is an alternative implementation
+ * of tcp_read_sock(), except that it does not update copied_seq.
+ */
+static int tcp_bpf_read_sock(struct sock *sk, read_descriptor_t *desc,
+			     sk_read_actor_t recv_actor)
+{
+	struct sk_buff *skb;
+	int copied = 0;
+
+	if (sk->sk_state == TCP_LISTEN)
+		return -ENOTCONN;
+
+	while ((skb = skb_peek(&sk->sk_receive_queue)) != NULL) {
+		u8 tcp_flags;
+		int used;
+
+		WARN_ON_ONCE(!skb_set_owner_sk_safe(skb, sk));
+		tcp_flags = TCP_SKB_CB(skb)->tcp_flags;
+		used = recv_actor(desc, skb, 0, skb->len);
+		/* strparser clone and consume all input skb
+		 * even in waiting head or body status
+		 */
+		tcp_eat_recv_skb(sk, skb);
+		if (used <= 0) {
+			if (!copied)
+				copied = used;
+			break;
+		}
+		copied += used;
+		if (!desc->count)
+			break;
+		if (tcp_flags & TCPHDR_FIN)
+			break;
+	}
+	return copied;
+}
+
 enum {
 	TCP_BPF_IPV4,
 	TCP_BPF_IPV6,
@@ -595,6 +636,10 @@ enum {
 static struct proto *tcpv6_prot_saved __read_mostly;
 static DEFINE_SPINLOCK(tcpv6_prot_lock);
 static struct proto tcp_bpf_prots[TCP_BPF_NUM_PROTS][TCP_BPF_NUM_CFGS];
+/* we do not use 'const' here because it will be polluted later.
+ * It may cause const check warning by script, just ignore it.
+ */
+static struct proto_ops tcp_bpf_proto_ops[TCP_BPF_NUM_PROTS];
 
 static void tcp_bpf_rebuild_protos(struct proto prot[TCP_BPF_NUM_CFGS],
 				   struct proto *base)
@@ -615,6 +660,13 @@ static void tcp_bpf_rebuild_protos(struct proto prot[TCP_BPF_NUM_CFGS],
 	prot[TCP_BPF_TXRX].recvmsg		= tcp_bpf_recvmsg_parser;
 }
 
+static void tcp_bpf_rebuild_proto_ops(struct proto_ops *ops,
+				      const struct proto_ops *base)
+{
+	*ops		= *base;
+	ops->read_sock	= tcp_bpf_read_sock;
+}
+
 static void tcp_bpf_check_v6_needs_rebuild(struct proto *ops)
 {
 	if (unlikely(ops != smp_load_acquire(&tcpv6_prot_saved))) {
@@ -626,6 +678,19 @@ static void tcp_bpf_check_v6_needs_rebuild(struct proto *ops)
 		spin_unlock_bh(&tcpv6_prot_lock);
 	}
 }
+
+static int __init tcp_bpf_build_proto_ops(void)
+{
+	/* We update ops separately for further scalability
+	 * although v4 and v6 use same ops.
+	 */
+	tcp_bpf_rebuild_proto_ops(&tcp_bpf_proto_ops[TCP_BPF_IPV4],
+				  &inet_stream_ops);
+	tcp_bpf_rebuild_proto_ops(&tcp_bpf_proto_ops[TCP_BPF_IPV6],
+				  &inet_stream_ops);
+	return 0;
+}
+late_initcall(tcp_bpf_build_proto_ops);
 
 static int __init tcp_bpf_v4_build_proto(void)
 {
@@ -648,6 +713,7 @@ int tcp_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore)
 {
 	int family = sk->sk_family == AF_INET6 ? TCP_BPF_IPV6 : TCP_BPF_IPV4;
 	int config = psock->progs.msg_parser   ? TCP_BPF_TX   : TCP_BPF_BASE;
+	bool strp = psock->progs.stream_verdict && psock->progs.stream_parser;
 
 	if (psock->progs.stream_verdict || psock->progs.skb_verdict) {
 		config = (config == TCP_BPF_TX) ? TCP_BPF_TXRX : TCP_BPF_RX;
@@ -666,6 +732,7 @@ int tcp_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore)
 			sk->sk_write_space = psock->saved_write_space;
 			/* Pairs with lockless read in sk_clone_lock() */
 			sock_replace_proto(sk, psock->sk_proto);
+			sock_replace_proto_ops(sk, psock->sk_proto_ops);
 		}
 		return 0;
 	}
@@ -679,6 +746,10 @@ int tcp_bpf_update_proto(struct sock *sk, struct sk_psock *psock, bool restore)
 
 	/* Pairs with lockless read in sk_clone_lock() */
 	sock_replace_proto(sk, &tcp_bpf_prots[family][config]);
+
+	if (strp)
+		sock_replace_proto_ops(sk, &tcp_bpf_proto_ops[family]);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tcp_bpf_update_proto);
