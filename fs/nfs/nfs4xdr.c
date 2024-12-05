@@ -6637,11 +6637,16 @@ static int nfs4_xdr_dec_open(struct rpc_rqst *rqstp, struct xdr_stream *xdr,
 	status = decode_getfh(xdr, &res->fh);
 	if (status)
 		goto out;
-	if (res->access_request)
-		decode_access(xdr, &res->access_supported, &res->access_result);
-	decode_getfattr(xdr, res->f_attr, res->server);
+	if (res->access_request) {
+		status = decode_access(xdr, &res->access_supported, &res->access_result);
+		if (status)
+			goto out;
+	}
+	status = decode_getfattr(xdr, res->f_attr, res->server);
+	if (status)
+		goto out;
 	if (res->lg_res)
-		decode_layoutget(xdr, rqstp, res->lg_res);
+		status = decode_layoutget(xdr, rqstp, res->lg_res);
 out:
 	return status;
 }
@@ -6691,11 +6696,16 @@ static int nfs4_xdr_dec_open_noattr(struct rpc_rqst *rqstp,
 	status = decode_open(xdr, res);
 	if (status)
 		goto out;
-	if (res->access_request)
-		decode_access(xdr, &res->access_supported, &res->access_result);
-	decode_getfattr(xdr, res->f_attr, res->server);
+	if (res->access_request) {
+		status = decode_access(xdr, &res->access_supported, &res->access_result);
+		if (status)
+			goto out;
+	}
+	status = decode_getfattr(xdr, res->f_attr, res->server);
+	if (status)
+		goto out;
 	if (res->lg_res)
-		decode_layoutget(xdr, rqstp, res->lg_res);
+		status = decode_layoutget(xdr, rqstp, res->lg_res);
 out:
 	return status;
 }
