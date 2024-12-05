@@ -12175,7 +12175,6 @@ ISCSI
 M:	Lee Duncan <lduncan@suse.com>
 M:	Chris Leech <cleech@redhat.com>
 M:	Mike Christie <michael.christie@oracle.com>
-L:	open-iscsi@googlegroups.com
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 W:	www.open-iscsi.com
