@@ -189,6 +189,8 @@ static void test_tagged_addr_abi_sysctl(void)
 {
 	char value;
 	int fd;
+	int ret;
+	char *err_pwrite_msg = "failed to write to /proc/sys/abi/tagged_addr_disabled\n";
 
 	ksft_print_msg("Testing tagged address ABI sysctl\n");
 
@@ -200,18 +202,32 @@ static void test_tagged_addr_abi_sysctl(void)
 	}
 
 	value = '1';
-	pwrite(fd, &value, 1, 0);
+	ret = pwrite(fd, &value, 1, 0);
+	if (ret != 1) {
+		ksft_test_result_skip(err_pwrite_msg);
+		goto err_pwrite;
+	}
+
 	ksft_test_result(set_tagged_addr_ctrl(min_pmlen, true) == -EINVAL,
 			 "sysctl disabled\n");
 
 	value = '0';
-	pwrite(fd, &value, 1, 0);
+	ret = pwrite(fd, &value, 1, 0);
+	if (ret != 1)
+		goto err_pwrite;
+
 	ksft_test_result(set_tagged_addr_ctrl(min_pmlen, true) == 0,
 			 "sysctl enabled\n");
 
 	set_tagged_addr_ctrl(0, false);
 
 	close(fd);
+
+	return;
+
+err_pwrite:
+	close(fd);
+	ksft_test_result_fail(err_pwrite_msg);
 }
 
 static void test_tagged_addr_abi_pmlen(int pmlen)
