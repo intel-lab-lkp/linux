@@ -277,6 +277,29 @@
 		ranges = <0x0 0x0 0x2039000 0x40000>;
 	};
 
+	firmware {
+		acpm_ipc: acpm_ipc {
+			compatible = "google,gs101-acpm-ipc";
+			mboxes = <&ap2apm_mailbox 0
+				  &ap2apm_mailbox 1
+				  &ap2apm_mailbox 2
+				  &ap2apm_mailbox 3
+				  &ap2apm_mailbox 4
+				  &ap2apm_mailbox 5
+				  &ap2apm_mailbox 6
+				  &ap2apm_mailbox 7
+				  &ap2apm_mailbox 8
+				  &ap2apm_mailbox 9
+				  &ap2apm_mailbox 10
+				  &ap2apm_mailbox 11
+				  &ap2apm_mailbox 12
+				  &ap2apm_mailbox 13
+				  &ap2apm_mailbox 14>;
+			shmem = <&apm_sram>;
+			initdata-base = <0xa000>;
+		};
+	};
+
 	soc: soc@0 {
 		compatible = "simple-bus";
 		#address-cells = <1>;
