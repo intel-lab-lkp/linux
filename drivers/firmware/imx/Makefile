@@ -2,3 +2,5 @@
 obj-$(CONFIG_IMX_DSP)		+= imx-dsp.o
 obj-$(CONFIG_IMX_SCU)		+= imx-scu.o misc.o imx-scu-irq.o rm.o imx-scu-soc.o seco.o
 obj-${CONFIG_IMX_SCMI_MISC_DRV}	+= sm-misc.o
+obj-$(CONFIG_SECVIO_SC)		+= imx-scu-secvio.o
+obj-$(CONFIG_DEBUG_FS)		+= imx-scu-secvio-debugfs.o

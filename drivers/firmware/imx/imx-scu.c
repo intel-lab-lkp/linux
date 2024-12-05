@@ -339,6 +339,10 @@ static int imx_scu_probe(struct platform_device *pdev)
 		dev_warn(dev,
 			"failed to enable general irq channel: %d\n", ret);
 
+	ret = imx_scu_secvio_init(dev);
+	if (ret)
+		dev_warn(dev, "failed to initialize secvio: %d\n", ret);
+
 	dev_info(dev, "NXP i.MX SCU Initialized\n");
 
 	return devm_of_platform_populate(dev);
