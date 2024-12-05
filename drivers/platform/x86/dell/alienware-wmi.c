@@ -378,7 +378,6 @@ struct color_platform {
 
 struct platform_zone {
 	u8 location;
-	struct device_attribute *attr;
 	struct color_platform colors;
 };
 
@@ -411,15 +410,9 @@ struct wmax_u32_args {
 };
 
 static struct platform_device *platform_device;
-static struct device_attribute *zone_dev_attrs;
-static struct attribute **zone_attrs;
 static struct platform_zone *zone_data;
 static struct platform_profile_handler pp_handler;
 static enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
-
-static struct attribute_group zone_attribute_group = {
-	.name = "rgb_zones",
-};
 
 static u8 interface;
 static u8 lighting_control_state;
@@ -450,20 +443,6 @@ static int parse_rgb(const char *buf, struct color_platform *colors)
 		 repackager.cp.red, repackager.cp.green, repackager.cp.blue);
 	*colors = repackager.cp;
 	return 0;
-}
-
-static struct platform_zone *match_zone(struct device_attribute *attr)
-{
-	u8 zone;
-
-	for (zone = 0; zone < quirks->num_zones; zone++) {
-		if ((struct device_attribute *)zone_data[zone].attr == attr) {
-			pr_debug("alienware-wmi: matched zone location: %d\n",
-				 zone_data[zone].location);
-			return &zone_data[zone];
-		}
-	}
-	return NULL;
 }
 
 /*
@@ -510,12 +489,10 @@ static int alienware_update_led(struct platform_zone *zone)
 }
 
 static ssize_t zone_show(struct device *dev, struct device_attribute *attr,
-			 char *buf)
+			 char *buf, u8 location)
 {
 	struct platform_zone *target_zone;
-	target_zone = match_zone(attr);
-	if (target_zone == NULL)
-		return sprintf(buf, "red: -1, green: -1, blue: -1\n");
+	target_zone = &zone_data[location];
 	return sprintf(buf, "red: %d, green: %d, blue: %d\n",
 		       target_zone->colors.red,
 		       target_zone->colors.green, target_zone->colors.blue);
@@ -523,21 +500,43 @@ static ssize_t zone_show(struct device *dev, struct device_attribute *attr,
 }
 
 static ssize_t zone_set(struct device *dev, struct device_attribute *attr,
-			const char *buf, size_t count)
+			const char *buf, size_t count, u8 location)
 {
 	struct platform_zone *target_zone;
 	int ret;
-	target_zone = match_zone(attr);
-	if (target_zone == NULL) {
-		pr_err("alienware-wmi: invalid target zone\n");
-		return 1;
-	}
+	target_zone = &zone_data[location];
 	ret = parse_rgb(buf, &target_zone->colors);
 	if (ret)
 		return ret;
 	ret = alienware_update_led(target_zone);
 	return ret ? ret : count;
 }
+
+#define ALIENWARE_ZONE_SHOW_FUNC(_num)					\
+	static ssize_t zone0##_num##_show(struct device *dev,		\
+					struct device_attribute *attr,	\
+					char *buf)			\
+	{								\
+		return zone_show(dev, attr, buf, _num);			\
+	}
+
+#define ALIENWARE_ZONE_STORE_FUNC(_num)					\
+	static ssize_t zone0##_num##_store(struct device *dev,		\
+					struct device_attribute *attr,	\
+					const char *buf, size_t count)	\
+	{								\
+		return zone_set(dev, attr, buf, count, _num);		\
+	}
+
+#define ALIENWARE_ZONE_ATTR(_num)					\
+	ALIENWARE_ZONE_SHOW_FUNC(_num)					\
+	ALIENWARE_ZONE_STORE_FUNC(_num)					\
+	static DEVICE_ATTR_RW(zone0##_num)
+
+ALIENWARE_ZONE_ATTR(0);
+ALIENWARE_ZONE_ATTR(1);
+ALIENWARE_ZONE_ATTR(2);
+ALIENWARE_ZONE_ATTR(3);
 
 /*
  * Lighting control state device attribute (Global)
@@ -576,6 +575,33 @@ static ssize_t lighting_control_state_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(lighting_control_state);
+
+static umode_t zone_attr_visible(struct kobject *kobj,
+				 struct attribute *attr, int n)
+{
+	return n < quirks->num_zones + 1 ? 0644 : 0;
+}
+
+static bool zone_group_visible(struct kobject *kobj)
+{
+	return quirks->num_zones > 0;
+}
+DEFINE_SYSFS_GROUP_VISIBLE(zone);
+
+static struct attribute *zone_attrs[] = {
+	&dev_attr_lighting_control_state.attr,
+	&dev_attr_zone00.attr,
+	&dev_attr_zone01.attr,
+	&dev_attr_zone02.attr,
+	&dev_attr_zone03.attr,
+	NULL
+};
+
+static struct attribute_group zone_attribute_group = {
+	.name = "rgb_zones",
+	.is_visible = SYSFS_GROUP_VISIBLE(zone),
+	.attrs = zone_attrs,
+};
 
 /*
  * LED Brightness (Global)
@@ -624,7 +650,6 @@ static struct led_classdev global_led = {
 static int alienware_zone_init(struct platform_device *dev)
 {
 	u8 zone;
-	char *name;
 
 	if (interface == WMAX) {
 		lighting_control_state = WMAX_RUNNING;
@@ -634,65 +659,22 @@ static int alienware_zone_init(struct platform_device *dev)
 	global_led.max_brightness = 0x0F;
 	global_brightness = global_led.max_brightness;
 
-	/*
-	 *      - zone_dev_attrs num_zones + 1 is for individual zones and then
-	 *        null terminated
-	 *      - zone_attrs num_zones + 2 is for all attrs in zone_dev_attrs +
-	 *        the lighting control + null terminated
-	 *      - zone_data num_zones is for the distinct zones
-	 */
-	zone_dev_attrs =
-	    kcalloc(quirks->num_zones + 1, sizeof(struct device_attribute),
-		    GFP_KERNEL);
-	if (!zone_dev_attrs)
-		return -ENOMEM;
-
-	zone_attrs =
-	    kcalloc(quirks->num_zones + 2, sizeof(struct attribute *),
-		    GFP_KERNEL);
-	if (!zone_attrs)
-		return -ENOMEM;
-
 	zone_data =
 	    kcalloc(quirks->num_zones, sizeof(struct platform_zone),
 		    GFP_KERNEL);
 	if (!zone_data)
 		return -ENOMEM;
 
-	for (zone = 0; zone < quirks->num_zones; zone++) {
-		name = kasprintf(GFP_KERNEL, "zone%02hhX", zone);
-		if (name == NULL)
-			return 1;
-		sysfs_attr_init(&zone_dev_attrs[zone].attr);
-		zone_dev_attrs[zone].attr.name = name;
-		zone_dev_attrs[zone].attr.mode = 0644;
-		zone_dev_attrs[zone].show = zone_show;
-		zone_dev_attrs[zone].store = zone_set;
+	for (zone = 0; zone < 4; zone++)
 		zone_data[zone].location = zone;
-		zone_attrs[zone] = &zone_dev_attrs[zone].attr;
-		zone_data[zone].attr = &zone_dev_attrs[zone];
-	}
-	zone_attrs[quirks->num_zones] = &dev_attr_lighting_control_state.attr;
-	zone_attribute_group.attrs = zone_attrs;
 
-	led_classdev_register(&dev->dev, &global_led);
-
-	return sysfs_create_group(&dev->dev.kobj, &zone_attribute_group);
+	return led_classdev_register(&dev->dev, &global_led);
 }
 
 static void alienware_zone_exit(struct platform_device *dev)
 {
-	u8 zone;
-
-	sysfs_remove_group(&dev->dev.kobj, &zone_attribute_group);
 	led_classdev_unregister(&global_led);
-	if (zone_dev_attrs) {
-		for (zone = 0; zone < quirks->num_zones; zone++)
-			kfree(zone_dev_attrs[zone].attr.name);
-	}
-	kfree(zone_dev_attrs);
 	kfree(zone_data);
-	kfree(zone_attrs);
 }
 
 static acpi_status alienware_wmax_command(void *in_args, size_t in_size,
@@ -1140,6 +1122,7 @@ static void remove_thermal_profile(void)
  * Platform Driver
  */
 static const struct attribute_group *alienfx_groups[] = {
+	&zone_attribute_group,
 	&hdmi_attribute_group,
 	&amplifier_attribute_group,
 	&deepsleep_attribute_group,
