@@ -147,6 +147,18 @@ static inline unsigned long __page_val_to_pfn(unsigned long val);
 #include <asm/pgtable-32.h>
 #endif /* CONFIG_64BIT */
 
+#define __PMD_SHIFT	(PMD_SHIFT - (PAGE_SHIFT - HW_PAGE_SHIFT))
+#define __PMD_SIZE	(_AC(1, UL) << __PMD_SHIFT)
+
+#define __PUD_SHIFT	(PUD_SHIFT - (PAGE_SHIFT - HW_PAGE_SHIFT))
+#define __PUD_SIZE	(_AC(1, UL) << __PUD_SHIFT)
+
+#define __P4D_SHIFT	(P4D_SHIFT - (PAGE_SHIFT - HW_PAGE_SHIFT))
+#define __P4D_SIZE	(_AC(1, UL) << __P4D_SHIFT)
+
+#define __PGD_SHIFT	(PGD_SHIFT - (PAGE_SHIFT - HW_PAGE_SHIFT))
+#define __PGD_SIZE	(_AC(1, UL) << __PGD_SHIFT)
+
 #include <linux/page_table_check.h>
 
 #ifdef CONFIG_XIP_KERNEL

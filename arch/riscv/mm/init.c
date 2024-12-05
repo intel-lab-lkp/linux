@@ -695,15 +695,15 @@ static uintptr_t __meminit best_map_size(phys_addr_t pa, uintptr_t va, phys_addr
 		return PAGE_SIZE;
 
 	if (pgtable_l5_enabled &&
-	    !(pa & (P4D_SIZE - 1)) && !(va & (P4D_SIZE - 1)) && size >= P4D_SIZE)
+	    !(pa & (__P4D_SIZE - 1)) && !(va & (P4D_SIZE - 1)) && size >= P4D_SIZE)
 		return P4D_SIZE;
 
 	if (pgtable_l4_enabled &&
-	    !(pa & (PUD_SIZE - 1)) && !(va & (PUD_SIZE - 1)) && size >= PUD_SIZE)
+	    !(pa & (__PUD_SIZE - 1)) && !(va & (PUD_SIZE - 1)) && size >= PUD_SIZE)
 		return PUD_SIZE;
 
 	if (IS_ENABLED(CONFIG_64BIT) &&
-	    !(pa & (PMD_SIZE - 1)) && !(va & (PMD_SIZE - 1)) && size >= PMD_SIZE)
+	    !(pa & (__PMD_SIZE - 1)) && !(va & (PMD_SIZE - 1)) && size >= PMD_SIZE)
 		return PMD_SIZE;
 
 	return PAGE_SIZE;
@@ -937,17 +937,33 @@ static void __init create_kernel_page_table(pgd_t *pgdir,
 				   PMD_SIZE, PAGE_KERNEL);
 }
 #else
+
+#ifdef CONFIG_RISCV_64K_PAGES
+/* TODO: better implementation */
+#define KERNEL_MAP_STEP			PAGE_SIZE
+#else
+#define KERNEL_MAP_STEP			PMD_SIZE
+#endif
+
 static void __init create_kernel_page_table(pgd_t *pgdir, bool early)
 {
 	uintptr_t va, end_va;
 
 	end_va = kernel_map.virt_addr + kernel_map.size;
-	for (va = kernel_map.virt_addr; va < end_va; va += PMD_SIZE)
-		create_pgd_mapping(pgdir, va,
-				   kernel_map.phys_addr + (va - kernel_map.virt_addr),
-				   PMD_SIZE,
-				   early ?
-					PAGE_KERNEL_EXEC : pgprot_from_va(va));
+	if (early)
+		for (va = kernel_map.virt_addr; va < end_va; va += PMD_SIZE)
+			create_pgd_mapping(pgdir, va,
+					   kernel_map.phys_addr + (va - kernel_map.virt_addr),
+					   PMD_SIZE,
+					   early ?
+						PAGE_KERNEL_EXEC : pgprot_from_va(va));
+	else
+		for (va = kernel_map.virt_addr; va < end_va; va += KERNEL_MAP_STEP)
+			create_pgd_mapping(pgdir, va,
+					   kernel_map.phys_addr + (va - kernel_map.virt_addr),
+					   KERNEL_MAP_STEP,
+					   early ?
+						PAGE_KERNEL_EXEC : pgprot_from_va(va));
 }
 #endif
 
@@ -1138,7 +1154,7 @@ asmlinkage void __init setup_vm(uintptr_t dtb_pa)
 
 	/* Sanity check alignment and size */
 	BUG_ON((PAGE_OFFSET % PGDIR_SIZE) != 0);
-	BUG_ON((kernel_map.phys_addr % PMD_SIZE) != 0);
+	BUG_ON((kernel_map.phys_addr % __PMD_SIZE) != 0);
 
 #ifdef CONFIG_64BIT
 	/*
