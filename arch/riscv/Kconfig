@@ -289,6 +289,16 @@ config PAGE_OFFSET
 	default 0xc0000000 if 32BIT
 	default 0xff60000000000000 if 64BIT
 
+config RISCV_HW_PAGE_SHIFT
+	int
+	default 12
+
+config RISCV_USE_SW_PAGE
+	bool
+	depends on 64BIT
+	depends on RISCV_HW_PAGE_SHIFT != PAGE_SHIFT
+	default n
+
 config KASAN_SHADOW_OFFSET
 	hex
 	depends on KASAN_GENERIC

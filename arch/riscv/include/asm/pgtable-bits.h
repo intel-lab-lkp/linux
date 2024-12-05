@@ -31,7 +31,8 @@
 /* Used for swap PTEs only. */
 #define _PAGE_SWP_EXCLUSIVE _PAGE_ACCESSED
 
-#define _PAGE_PFN_SHIFT 10
+#define _PAGE_HWPFN_SHIFT	10
+#define _PAGE_PFN_SHIFT		(_PAGE_HWPFN_SHIFT + (PAGE_SHIFT - HW_PAGE_SHIFT))
 
 /*
  * when all of R/W/X are zero, the PTE is a pointer to the next level
