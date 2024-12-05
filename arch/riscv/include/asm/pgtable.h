@@ -553,6 +553,29 @@ static inline int pte_huge(pte_t pte)
 	return pte_present(pte) && (pte_val(pte) & _PAGE_LEAF);
 }
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+static inline int pte_dirty(pte_t pte)
+{
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++)
+		if (pte.ptes[i] & _PAGE_DIRTY)
+			return 1;
+
+	return 0;
+}
+
+static inline int pte_young(pte_t pte)
+{
+	unsigned int i;
+
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++)
+		if (pte.ptes[i] & _PAGE_ACCESSED)
+			return 1;
+
+	return 0;
+}
+#else
 static inline int pte_dirty(pte_t pte)
 {
 	return pte_val(pte) & _PAGE_DIRTY;
@@ -562,6 +585,7 @@ static inline int pte_young(pte_t pte)
 {
 	return pte_val(pte) & _PAGE_ACCESSED;
 }
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
 
 static inline int pte_special(pte_t pte)
 {
