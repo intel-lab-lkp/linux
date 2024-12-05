@@ -646,11 +646,14 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 	/* Update all bands and find the one hit with the highest rate. */
 	for (i = 0; i < meter->n_bands; ++i) {
 		long long int max_bucket_size;
+		u32 result;
 
 		band = &meter->bands[i];
 		max_bucket_size = band->burst_size * 1000LL;
 
-		band->bucket += delta_ms * band->rate;
+		WARN_ON(check_mul_overflow(delta_ms, band->rate, &result));
+		band->bucket += result;
+
 		if (band->bucket > max_bucket_size)
 			band->bucket = max_bucket_size;
 
