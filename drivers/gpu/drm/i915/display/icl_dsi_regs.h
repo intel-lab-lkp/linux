@@ -203,7 +203,7 @@
 #define  VIDEO_MODE_SYNC_PULSE		(0x3 << 28)
 #define  TE_SOURCE_GPIO			(1 << 27)
 #define  LINK_READY			(1 << 20)
-#define  PIX_FMT_MASK			(0x3 << 16)
+#define  PIX_FMT_MASK			(0x7 << 16)
 #define  PIX_FMT_SHIFT			16
 #define  PIX_FMT_RGB565			(0x0 << 16)
 #define  PIX_FMT_RGB666_PACKED		(0x1 << 16)
