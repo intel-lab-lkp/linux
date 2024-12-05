@@ -167,7 +167,6 @@ config RISCV
 	select HAVE_LD_DEAD_CODE_DATA_ELIMINATION if !LD_IS_LLD
 	select HAVE_MOVE_PMD
 	select HAVE_MOVE_PUD
-	select HAVE_PAGE_SIZE_4KB
 	select HAVE_PCI
 	select HAVE_PERF_EVENTS
 	select HAVE_PERF_REGS
@@ -884,6 +883,28 @@ config RISCV_BOOT_SPINWAIT
 	  hart to enter Linux.
 
 	  If unsure what to do here, say N.
+
+choice
+	prompt "Page size"
+	default RISCV_4K_PAGES
+	help
+	  Page size (translation granule) configuration.
+
+config RISCV_4K_PAGES
+	bool "4KB"
+	select HAVE_PAGE_SIZE_4KB
+	help
+	  This feature enables 4KB pages support.
+
+config RISCV_64K_PAGES
+	bool "64KB"
+	depends on RISCV_ISA_SVNAPOT && 64BIT
+	select HAVE_PAGE_SIZE_64KB
+	select RISCV_USE_SW_PAGE
+	help
+	  This feature enables 64KB pages support.
+
+endchoice
 
 config ARCH_SUPPORTS_KEXEC
 	def_bool y
