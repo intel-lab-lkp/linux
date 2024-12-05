@@ -14,5 +14,6 @@ TEST_PROGS := \
 	test-kprobe.sh
 
 TEST_FILES := settings
+TEST_CONFIG_DEPS := CONFIG_LIVEPATCH CONFIG_DYNAMIC_DEBUG
 
 include ../lib.mk
