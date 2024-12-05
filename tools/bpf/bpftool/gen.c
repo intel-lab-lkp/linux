@@ -1896,6 +1896,11 @@ static int do_object(int argc, char **argv)
 	while (argc) {
 		file = GET_ARG();
 
+		if (!strcmp(file, output_file)) {
+			p_err("Input/Output file couldn't be same.");
+			goto out;
+		}
+
 		err = bpf_linker__add_file(linker, file, NULL);
 		if (err) {
 			p_err("failed to link '%s': %s (%d)", file, strerror(errno), errno);
