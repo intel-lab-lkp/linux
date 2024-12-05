@@ -427,6 +427,10 @@ struct alienfx_ops {
 struct alienfx_platdata {
 	struct wmi_device *wdev;
 	struct alienfx_ops ops;
+	u8 num_zones;
+	bool hdmi_mux;
+	bool amplifier;
+	bool deepslp;
 };
 
 static u8 interface;
@@ -597,12 +601,24 @@ static DEVICE_ATTR_RW(lighting_control_state);
 static umode_t zone_attr_visible(struct kobject *kobj,
 				 struct attribute *attr, int n)
 {
-	return n < quirks->num_zones + 1 ? 0644 : 0;
+	struct device *dev;
+	struct alienfx_platdata *pdata;
+
+	dev = container_of(kobj, struct device, kobj);
+	pdata = dev_get_platdata(dev);
+
+	return n < pdata->num_zones + 1 ? 0644 : 0;
 }
 
 static bool zone_group_visible(struct kobject *kobj)
 {
-	return quirks->num_zones > 0;
+	struct device *dev;
+	struct alienfx_platdata *pdata;
+
+	dev = container_of(kobj, struct device, kobj);
+	pdata = dev_get_platdata(dev);
+
+	return pdata->num_zones > 0;
 }
 DEFINE_SYSFS_GROUP_VISIBLE(zone);
 
@@ -737,7 +753,13 @@ static DEVICE_ATTR(source, S_IRUGO | S_IWUSR, show_hdmi_source,
 
 static bool hdmi_group_visible(struct kobject *kobj)
 {
-	return quirks->hdmi_mux;
+	struct device *dev;
+	struct alienfx_platdata *pdata;
+
+	dev = container_of(kobj, struct device, kobj);
+	pdata = dev_get_platdata(dev);
+
+	return pdata->hdmi_mux;
 }
 DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(hdmi);
 
@@ -786,7 +808,13 @@ static DEVICE_ATTR(status, S_IRUGO, show_amplifier_status, NULL);
 
 static bool amplifier_group_visible(struct kobject *kobj)
 {
-	return quirks->amplifier;
+	struct device *dev;
+	struct alienfx_platdata *pdata;
+
+	dev = container_of(kobj, struct device, kobj);
+	pdata = dev_get_platdata(dev);
+
+	return pdata->amplifier;
 }
 DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(amplifier);
 
@@ -862,7 +890,13 @@ static DEVICE_ATTR(deepsleep, S_IRUGO | S_IWUSR, show_deepsleep_status, toggle_d
 
 static bool deepsleep_group_visible(struct kobject *kobj)
 {
-	return quirks->deepslp;
+	struct device *dev;
+	struct alienfx_platdata *pdata;
+
+	dev = container_of(kobj, struct device, kobj);
+	pdata = dev_get_platdata(dev);
+
+	return pdata->deepslp;
 }
 DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(deepsleep);
 
@@ -1211,6 +1245,10 @@ static int legacy_wmi_probe(struct wmi_device *wdev, const void *context)
 			.upd_led = legacy_wmi_update_led,
 			.upd_brightness = legacy_wmi_update_brightness,
 		},
+		.num_zones = quirks->num_zones,
+		.hdmi_mux = quirks->hdmi_mux,
+		.amplifier = quirks->amplifier,
+		.deepslp = quirks->deepslp,
 	};
 
 	if (quirks->num_zones > 0)
@@ -1291,6 +1329,10 @@ static int wmax_wmi_probe(struct wmi_device *wdev, const void *context)
 			.upd_led = wmax_wmi_update_led,
 			.upd_brightness = wmax_wmi_update_brightness,
 		},
+		.num_zones = quirks->num_zones,
+		.hdmi_mux = quirks->hdmi_mux,
+		.amplifier = quirks->amplifier,
+		.deepslp = quirks->deepslp,
 	};
 
 	if (quirks->thermal)
