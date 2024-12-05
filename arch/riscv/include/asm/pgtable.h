@@ -130,7 +130,7 @@
 #include <asm/compat.h>
 
 #define __page_val_to_hwpfn(_val)  (((_val) & _PAGE_HW_PFN_MASK) >> _PAGE_HWPFN_SHIFT)
-#define __page_val_to_pfn(_val)  (((_val) & _PAGE_PFN_MASK) >> _PAGE_PFN_SHIFT)
+static inline unsigned long __page_val_to_pfn(unsigned long val);
 
 #ifdef CONFIG_64BIT
 #include <asm/pgtable-64.h>
@@ -470,14 +470,41 @@ static inline unsigned long pte_napot(pte_t pte)
 	return __pte_napot(pte_val(pte));
 }
 
-static inline pte_t pte_mknapot(pte_t pte, unsigned int order)
+static inline unsigned long __pte_mknapot(unsigned long pteval,
+					  unsigned int order)
 {
 	int pos = order - 1 + _PAGE_PFN_SHIFT;
 	unsigned long napot_bit = BIT(pos);
-	unsigned long napot_mask = ~GENMASK(pos, _PAGE_PFN_SHIFT);
+	unsigned long napot_mask = ~GENMASK(pos, _PAGE_HWPFN_SHIFT);
 
-	return __pte((pte_val(pte) & napot_mask) | napot_bit | _PAGE_NAPOT);
+	BUG_ON(__pte_napot(pteval));
+	pteval = (pteval & napot_mask) | napot_bit | _PAGE_NAPOT;
+
+	return pteval;
 }
+
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+static inline pte_t pte_mknapot(pte_t pte, unsigned int order)
+{
+	unsigned long pteval = pte_val(pte);
+	unsigned int i;
+
+	pteval = __pte_mknapot(pteval, order);
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++)
+		pte.ptes[i] = pteval;
+
+	return pte;
+}
+#else
+static inline pte_t pte_mknapot(pte_t pte, unsigned int order)
+{
+	unsigned long pteval = pte_val(pte);
+
+	pte_val(pte) = __pte_mknapot(pteval, order);
+
+	return pte;
+}
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
 
 #else
 
@@ -495,15 +522,20 @@ static inline unsigned long pte_napot(pte_t pte)
 
 #endif /* CONFIG_RISCV_ISA_SVNAPOT */
 
+static inline unsigned long __page_val_to_pfn(unsigned long pteval)
+{
+	unsigned long res = __page_val_to_hwpfn(pteval);
+
+	if (has_svnapot() && __pte_napot(pteval))
+		res = res & (res - 1UL);
+
+	return hwpfn_to_pfn(res);
+}
+
 /* Yields the page frame number (PFN) of a page table entry */
 static inline unsigned long pte_pfn(pte_t pte)
 {
-	unsigned long res  = __page_val_to_pfn(pte_val(pte));
-
-	if (has_svnapot() && pte_napot(pte))
-		res = res & (res - 1UL);
-
-	return res;
+	return __page_val_to_pfn(pte_val(pte));
 }
 
 #define pte_page(x)     pfn_to_page(pte_pfn(x))

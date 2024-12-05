@@ -124,12 +124,23 @@ enum napot_cont_order {
 	NAPOT_ORDER_MAX,
 };
 
+#define NAPOT_PAGE_ORDER_BASE							\
+	((NAPOT_CONT_ORDER_BASE >= (PAGE_SHIFT - HW_PAGE_SHIFT)) ?		\
+	 (NAPOT_CONT_ORDER_BASE - (PAGE_SHIFT - HW_PAGE_SHIFT)) : 1)
+#define NAPOT_PAGE_ORDER_MAX							\
+	((NAPOT_ORDER_MAX > (PAGE_SHIFT - HW_PAGE_SHIFT)) ?			\
+	 (NAPOT_ORDER_MAX - (PAGE_SHIFT - HW_PAGE_SHIFT)) :			\
+	 NAPOT_PAGE_ORDER_BASE)
+
 #define for_each_napot_order(order)						\
-	for (order = NAPOT_CONT_ORDER_BASE; order < NAPOT_ORDER_MAX; order++)
+	for (order = NAPOT_PAGE_ORDER_BASE;					\
+		order < NAPOT_PAGE_ORDER_MAX; order++)
 #define for_each_napot_order_rev(order)						\
-	for (order = NAPOT_ORDER_MAX - 1;					\
-	     order >= NAPOT_CONT_ORDER_BASE; order--)
-#define napot_cont_order(val)	(__builtin_ctzl((pte_val(val) >> _PAGE_PFN_SHIFT) << 1))
+	for (order = NAPOT_PAGE_ORDER_MAX - 1;					\
+		order >= NAPOT_PAGE_ORDER_BASE; order--)
+#define napot_cont_order(val)							\
+	(__builtin_ctzl((pte_val(val) >> _PAGE_HWPFN_SHIFT) << 1) -		\
+		(PAGE_SHIFT - HW_PAGE_SHIFT))
 
 #define napot_cont_shift(order)	((order) + PAGE_SHIFT)
 #define napot_cont_size(order)	BIT(napot_cont_shift(order))
@@ -137,7 +148,7 @@ enum napot_cont_order {
 #define napot_pte_num(order)	BIT(order)
 
 #ifdef CONFIG_RISCV_ISA_SVNAPOT
-#define HUGE_MAX_HSTATE		(2 + (NAPOT_ORDER_MAX - NAPOT_CONT_ORDER_BASE))
+#define HUGE_MAX_HSTATE		(2 + (NAPOT_ORDER_MAX - NAPOT_PAGE_ORDER_BASE))
 #else
 #define HUGE_MAX_HSTATE		2
 #endif

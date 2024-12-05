@@ -212,7 +212,7 @@ pte_t arch_make_huge_pte(pte_t entry, unsigned int shift, vm_flags_t flags)
 			break;
 		}
 	}
-	if (order == NAPOT_ORDER_MAX)
+	if (order == NAPOT_PAGE_ORDER_MAX)
 		entry = pte_mkhuge(entry);
 
 	return entry;
@@ -405,7 +405,8 @@ static __init int napot_hugetlbpages_init(void)
 		unsigned long order;
 
 		for_each_napot_order(order)
-			hugetlb_add_hstate(order);
+			if (napot_cont_shift(order) > PAGE_SHIFT)
+				hugetlb_add_hstate(order);
 	}
 	return 0;
 }
@@ -426,7 +427,7 @@ static bool __hugetlb_valid_size(unsigned long size)
 		return true;
 	else if (IS_ENABLED(CONFIG_64BIT) && size == PUD_SIZE)
 		return true;
-	else if (is_napot_size(size))
+	else if (is_napot_size(size) && size > PAGE_SIZE)
 		return true;
 	else
 		return false;
