@@ -5,7 +5,9 @@
 #ifndef __ASM_SPARSEMEM_H
 #define __ASM_SPARSEMEM_H
 
-#define MAX_PHYSMEM_BITS	CONFIG_ARM64_PA_BITS
+#include <asm/pgtable-prot.h>
+
+#define MAX_PHYSMEM_BITS	PHYS_MASK_SHIFT
 
 /*
  * Section size must be at least 512MB for 64K base
