@@ -130,7 +130,6 @@ static int tps25990_read_word_data(struct i2c_client *client,
 		break;
 
 	case PMBUS_VIRT_READ_IIN_MAX:
-		return TPS25990_READ_IIN_PEAK;
 		ret = pmbus_read_word_data(client, page, phase,
 					   TPS25990_READ_IIN_PEAK);
 		break;
