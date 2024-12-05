@@ -220,6 +220,18 @@ static inline unsigned long satp_pfn(unsigned long satp)
 	return hwpfn_to_pfn(hwpfn);
 }
 
+static inline unsigned long __pte_pgprot(unsigned long pteval)
+{
+	unsigned long prot_mask = GENMASK(_PAGE_HWPFN_SHIFT - 1, 0);
+
+	return pteval & prot_mask;
+}
+
+static inline pgprot_t pte_pgprot(pte_t pte)
+{
+	return __pgprot(__pte_pgprot(pte_val(pte)));
+}
+
 static inline int __pgd_leaf(unsigned long pgdval)
 {
 	return __pgd_present(pgdval) && (pgdval & _PAGE_LEAF);
@@ -733,6 +745,150 @@ static inline pgd_t pgdp_get(pgd_t *pgdp)
 	return *pgdp;
 }
 #define pgdp_get	pgdp_get
+
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+static inline pte_t ptep_get_lockless(pte_t *ptep)
+{
+	unsigned long pteval;
+	pte_t pte;
+	int i;
+
+retry:
+	pteval = READ_ONCE(ptep->ptes[0]);
+	pte = *ptep;
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		if (__page_val_to_pfn(pteval) !=
+		    __page_val_to_pfn(pte.ptes[i]))
+			goto retry;
+		if ((__pte_pgprot(pteval) | _PAGE_DIRTY | _PAGE_ACCESSED) !=
+		    (__pte_pgprot(pte.ptes[i]) | _PAGE_DIRTY | _PAGE_ACCESSED))
+			goto retry;
+
+		if (__pte_present(pteval) && !__pte_napot(pteval))
+			pteval += 1 << _PAGE_HWPFN_SHIFT;
+	}
+
+	return pte;
+}
+#define ptep_get_lockless	ptep_get_lockless
+
+static inline pmd_t pmdp_get_lockless(pmd_t *pmdp)
+{
+	unsigned long pmdval;
+	pmd_t pmd;
+	int i;
+
+retry:
+	pmdval = READ_ONCE(pmdp->pmds[0]);
+	pmd = *pmdp;
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		if (__page_val_to_pfn(pmdval) !=
+		    __page_val_to_pfn(pmd.pmds[i]))
+			goto retry;
+		if ((__pte_pgprot(pmdval) | _PAGE_DIRTY | _PAGE_ACCESSED) !=
+		    (__pte_pgprot(pmd.pmds[i]) | _PAGE_DIRTY | _PAGE_ACCESSED))
+			goto retry;
+
+		if (__pmd_leaf(pmdval))
+			pmdval += (1 << (PMD_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__pmd_present(pmdval))
+			pmdval += 1 << _PAGE_HWPFN_SHIFT;
+	}
+
+	return pmd;
+}
+#define pmdp_get_lockless	pmdp_get_lockless
+
+static inline void pmdp_get_lockless_sync(void)
+{
+}
+
+static inline pud_t pudp_get_lockless(pud_t *pudp)
+{
+	unsigned long pudval;
+	pud_t pud;
+	int i;
+
+retry:
+	pudval = READ_ONCE(pudp->puds[0]);
+	pud = *pudp;
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		if (__page_val_to_pfn(pudval) !=
+		    __page_val_to_pfn(pud.puds[i]))
+			goto retry;
+		if ((__pte_pgprot(pudval) | _PAGE_DIRTY | _PAGE_ACCESSED) !=
+		    (__pte_pgprot(pud.puds[i]) | _PAGE_DIRTY | _PAGE_ACCESSED))
+			goto retry;
+
+		if (__pud_leaf(pudval))
+			pudval += (1 << (PUD_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__pud_present(pudval))
+			pudval += 1 << _PAGE_HWPFN_SHIFT;
+	}
+
+	return pud;
+}
+#define pudp_get_lockless	pudp_get_lockless
+
+static inline p4d_t p4dp_get_lockless(p4d_t *p4dp)
+{
+	unsigned long p4dval;
+	p4d_t p4d;
+	int i;
+
+retry:
+	p4dval = READ_ONCE(p4dp->p4ds[0]);
+	p4d = *p4dp;
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		if (__page_val_to_pfn(p4dval) !=
+		    __page_val_to_pfn(p4d.p4ds[i]))
+			goto retry;
+		if ((__pte_pgprot(p4dval) | _PAGE_DIRTY | _PAGE_ACCESSED) !=
+		    (__pte_pgprot(p4d.p4ds[i]) | _PAGE_DIRTY | _PAGE_ACCESSED))
+			goto retry;
+
+		if (__p4d_leaf(p4dval))
+			p4dval += (1 << (P4D_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__p4d_present(p4dval))
+			p4dval += 1 << _PAGE_HWPFN_SHIFT;
+	}
+
+	return p4d;
+}
+#define p4dp_get_lockless	p4dp_get_lockless
+
+static inline pgd_t pgdp_get_lockless(pgd_t *pgdp)
+{
+	unsigned long pgdval;
+	pgd_t pgd;
+	int i;
+
+retry:
+	pgdval = READ_ONCE(pgdp->pgds[0]);
+	pgd = *pgdp;
+	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
+		if (__page_val_to_pfn(pgdval) !=
+		    __page_val_to_pfn(pgd.pgds[i]))
+			goto retry;
+		if ((__pte_pgprot(pgdval) | _PAGE_DIRTY | _PAGE_ACCESSED) !=
+		    (__pte_pgprot(pgd.pgds[i]) | _PAGE_DIRTY | _PAGE_ACCESSED))
+			goto retry;
+
+		if (__pgd_leaf(pgdval))
+			pgdval += (1 << (PGDIR_SHIFT - PAGE_SHIFT)) <<
+					_PAGE_HWPFN_SHIFT;
+		else if (__pgd_present(pgdval))
+			pgdval += 1 << _PAGE_HWPFN_SHIFT;
+	}
+
+	return pgd;
+}
+#define pgdp_get_lockless	pgdp_get_lockless
+
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
 
 void flush_icache_pte(struct mm_struct *mm, pte_t pte);
 

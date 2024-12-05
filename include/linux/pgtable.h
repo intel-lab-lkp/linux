@@ -598,6 +598,27 @@ static inline void pmdp_get_lockless_sync(void)
 }
 #endif
 
+#ifndef pudp_get_lockless
+static inline pud_t pudp_get_lockless(pud_t *pudp)
+{
+	return pudp_get(pudp);
+}
+#endif
+
+#ifndef p4dp_get_lockless
+static inline p4d_t p4dp_get_lockless(p4d_t *p4dp)
+{
+	return p4dp_get(p4dp);
+}
+#endif
+
+#ifndef pgdp_get_lockless
+static inline pgd_t pgdp_get_lockless(pgd_t *pgdp)
+{
+	return pgdp_get(pgdp);
+}
+#endif
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #ifndef __HAVE_ARCH_PMDP_HUGE_GET_AND_CLEAR
 static inline pmd_t pmdp_huge_get_and_clear(struct mm_struct *mm,
