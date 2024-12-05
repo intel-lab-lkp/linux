@@ -16,19 +16,8 @@
 #include <linux/dmi.h>
 #include <linux/leds.h>
 #include <linux/wmi.h>
+#include "alienware-wmi.h"
 
-#define LEGACY_CONTROL_GUID		"A90597CE-A997-11DA-B012-B622A1EF5492"
-#define LEGACY_POWER_CONTROL_GUID	"A80593CE-A997-11DA-B012-B622A1EF5492"
-#define WMAX_CONTROL_GUID		"A70591CE-A997-11DA-B012-B622A1EF5492"
-
-#define WMAX_METHOD_HDMI_SOURCE		0x1
-#define WMAX_METHOD_HDMI_STATUS		0x2
-#define WMAX_METHOD_BRIGHTNESS		0x3
-#define WMAX_METHOD_ZONE_CONTROL	0x4
-#define WMAX_METHOD_HDMI_CABLE		0x5
-#define WMAX_METHOD_AMPLIFIER_CABLE	0x6
-#define WMAX_METHOD_DEEP_SLEEP_CONTROL	0x0B
-#define WMAX_METHOD_DEEP_SLEEP_STATUS	0x0C
 #define WMAX_METHOD_THERMAL_INFORMATION	0x14
 #define WMAX_METHOD_THERMAL_CONTROL	0x15
 #define WMAX_METHOD_GAME_SHIFT_STATUS	0x25
@@ -54,18 +43,6 @@ enum INTERFACE_FLAGS {
 	WMAX,
 };
 
-enum LEGACY_CONTROL_STATES {
-	LEGACY_RUNNING = 1,
-	LEGACY_BOOTING = 0,
-	LEGACY_SUSPEND = 3,
-};
-
-enum WMAX_CONTROL_STATES {
-	WMAX_RUNNING = 0xFF,
-	WMAX_BOOTING = 0,
-	WMAX_SUSPEND = 3,
-};
-
 enum WMAX_THERMAL_INFORMATION_OPERATIONS {
 	WMAX_OPERATION_SYS_DESCRIPTION		= 0x02,
 	WMAX_OPERATION_LIST_IDS			= 0x03,
@@ -84,20 +61,6 @@ enum WMAX_GAME_SHIFT_STATUS_OPERATIONS {
 enum WMAX_THERMAL_TABLES {
 	WMAX_THERMAL_TABLE_BASIC		= 0x90,
 	WMAX_THERMAL_TABLE_USTT			= 0xA0,
-};
-
-enum wmax_thermal_mode {
-	THERMAL_MODE_USTT_BALANCED,
-	THERMAL_MODE_USTT_BALANCED_PERFORMANCE,
-	THERMAL_MODE_USTT_COOL,
-	THERMAL_MODE_USTT_QUIET,
-	THERMAL_MODE_USTT_PERFORMANCE,
-	THERMAL_MODE_USTT_LOW_POWER,
-	THERMAL_MODE_BASIC_QUIET,
-	THERMAL_MODE_BASIC_BALANCED,
-	THERMAL_MODE_BASIC_BALANCED_PERFORMANCE,
-	THERMAL_MODE_BASIC_PERFORMANCE,
-	THERMAL_MODE_LAST,
 };
 
 static const enum platform_profile_option wmax_mode_to_platform_profile[THERMAL_MODE_LAST] = {
@@ -369,32 +332,9 @@ static const struct dmi_system_id alienware_quirks[] __initconst = {
 	{}
 };
 
-struct color_platform {
-	u8 blue;
-	u8 green;
-	u8 red;
-} __packed;
-
-struct wmax_brightness_args {
-	u32 led_mask;
-	u32 percentage;
-};
-
 struct wmax_basic_args {
 	u8 arg;
 };
-
-struct legacy_led_args {
-	struct color_platform colors;
-	u8 brightness;
-	u8 state;
-} __packed;
-
-struct wmax_led_args {
-	u32 led_mask;
-	struct color_platform colors;
-	u8 state;
-} __packed;
 
 struct wmax_u32_args {
 	u8 operation;
@@ -403,43 +343,11 @@ struct wmax_u32_args {
 	u8 arg3;
 };
 
-struct awcc_priv {
-	struct wmi_device *wdev;
-	struct platform_profile_handler pp_handler;
-	enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
-	bool has_gmode;
-};
-
-struct alienfx_priv {
-	struct platform_device *pdev;
-	struct led_classdev global_led;
-	struct color_platform colors[4];
-	u8 global_brightness;
-	u8 lighting_control_state;
-};
-
-struct alienfx_ops {
-	int (*upd_led)(struct alienfx_priv *priv, struct wmi_device *wdev,
-		       u8 location);
-	int (*upd_brightness)(struct alienfx_priv *priv, struct wmi_device *wdev,
-			      u8 brightness);
-};
-
-struct alienfx_platdata {
-	struct wmi_device *wdev;
-	struct alienfx_ops ops;
-	u8 num_zones;
-	bool hdmi_mux;
-	bool amplifier;
-	bool deepslp;
-	u8 running_code;
-};
-
 static u8 interface;
 static struct wmi_driver *preferred_wmi_driver;
 
-static acpi_status alienware_wmi_command(struct wmi_device *wdev, u32 method_id,
-					 void *in_args, size_t in_size, u32 *out_data)
+acpi_status alienware_wmi_command(struct wmi_device *wdev, u32 method_id,
+				  void *in_args, size_t in_size, u32 *out_data)
 {
 	acpi_status ret;
 	union acpi_object *obj;
@@ -1071,7 +979,7 @@ static int thermal_profile_set(struct platform_profile_handler *pprof,
 				    priv->supported_thermal_profiles[profile]);
 }
 
-static int create_thermal_profile(struct wmi_device *wdev, bool has_gmode)
+int create_thermal_profile(struct wmi_device *wdev, bool has_gmode)
 {
 	struct awcc_priv *priv;
 	u32 out_data;
@@ -1130,7 +1038,7 @@ static int create_thermal_profile(struct wmi_device *wdev, bool has_gmode)
 	return platform_profile_register(&priv->pp_handler);
 }
 
-static void remove_thermal_profile(void)
+void remove_thermal_profile(void)
 {
 	platform_profile_remove();
 }
@@ -1180,7 +1088,7 @@ static struct platform_driver platform_driver = {
 	.probe = alienfx_probe,
 };
 
-static int alienfx_wmi_init(struct alienfx_platdata *pdata)
+int alienfx_wmi_init(struct alienfx_platdata *pdata)
 {
 	struct platform_device *pdev;
 
@@ -1192,7 +1100,7 @@ static int alienfx_wmi_init(struct alienfx_platdata *pdata)
 	return PTR_ERR_OR_ZERO(pdev);
 }
 
-static void alienfx_wmi_exit(struct wmi_device *wdev)
+void alienfx_wmi_exit(struct wmi_device *wdev)
 {
 	struct platform_device *pdev;
 
