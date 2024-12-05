@@ -11,7 +11,7 @@
 #include <linux/const.h>
 
 /* Size of region mapped by a page global directory */
-#define PGDIR_SHIFT     22
+#define PGDIR_SHIFT     (10 + PAGE_SHIFT)
 #define PGDIR_SIZE      (_AC(1, UL) << PGDIR_SHIFT)
 #define PGDIR_MASK      (~(PGDIR_SIZE - 1))
 

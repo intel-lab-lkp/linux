@@ -13,9 +13,9 @@
 extern bool pgtable_l4_enabled;
 extern bool pgtable_l5_enabled;
 
-#define PGDIR_SHIFT_L3  30
-#define PGDIR_SHIFT_L4  39
-#define PGDIR_SHIFT_L5  48
+#define PGDIR_SHIFT_L3  (9 + 9 + PAGE_SHIFT)
+#define PGDIR_SHIFT_L4  (9 + PGDIR_SHIFT_L3)
+#define PGDIR_SHIFT_L5  (9 + PGDIR_SHIFT_L4)
 #define PGDIR_SHIFT     (pgtable_l5_enabled ? PGDIR_SHIFT_L5 : \
 		(pgtable_l4_enabled ? PGDIR_SHIFT_L4 : PGDIR_SHIFT_L3))
 /* Size of region mapped by a page global directory */
@@ -23,20 +23,20 @@ extern bool pgtable_l5_enabled;
 #define PGDIR_MASK      (~(PGDIR_SIZE - 1))
 
 /* p4d is folded into pgd in case of 4-level page table */
-#define P4D_SHIFT_L3   30
-#define P4D_SHIFT_L4   39
-#define P4D_SHIFT_L5   39
+#define P4D_SHIFT_L3   (9 + 9 + PAGE_SHIFT)
+#define P4D_SHIFT_L4   (9 + P4D_SHIFT_L3)
+#define P4D_SHIFT_L5   (9 + P4D_SHIFT_L3)
 #define P4D_SHIFT      (pgtable_l5_enabled ? P4D_SHIFT_L5 : \
 		(pgtable_l4_enabled ? P4D_SHIFT_L4 : P4D_SHIFT_L3))
 #define P4D_SIZE       (_AC(1, UL) << P4D_SHIFT)
 #define P4D_MASK       (~(P4D_SIZE - 1))
 
 /* pud is folded into pgd in case of 3-level page table */
-#define PUD_SHIFT      30
+#define PUD_SHIFT      (9 + 9 + PAGE_SHIFT)
 #define PUD_SIZE       (_AC(1, UL) << PUD_SHIFT)
 #define PUD_MASK       (~(PUD_SIZE - 1))
 
-#define PMD_SHIFT       21
+#define PMD_SHIFT       (9 + PAGE_SHIFT)
 /* Size of region mapped by a page middle directory */
 #define PMD_SIZE        (_AC(1, UL) << PMD_SHIFT)
 #define PMD_MASK        (~(PMD_SIZE - 1))

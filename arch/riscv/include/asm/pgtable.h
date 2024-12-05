@@ -30,11 +30,26 @@
 /* Number of entries in the page table */
 #define PTRS_PER_PTE    (PAGE_SIZE / sizeof(pte_t))
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+
+/*
+ * PGDIR_SHIFT grows as PAGE_SIZE grows. To avoid va exceeds limitation, pgd
+ * index bits should be cut. Thus we use HW_PAGE_SIZE instead.
+ */
+#define __PTRS_PER_PGD	(HW_PAGE_SIZE / sizeof(pgd_t))
+#define pgd_index(a)	(((a) >> PGDIR_SHIFT) & (__PTRS_PER_PGD - 1))
+
+#define KERN_VIRT_SIZE          ((__PTRS_PER_PGD / 2 * PGDIR_SIZE) / 2)
+
+#else
+
 /*
  * Half of the kernel address space (1/4 of the entries of the page global
  * directory) is for the direct mapping.
  */
 #define KERN_VIRT_SIZE          ((PTRS_PER_PGD / 2 * PGDIR_SIZE) / 2)
+
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
 
 #define VMALLOC_SIZE     (KERN_VIRT_SIZE >> 1)
 #define VMALLOC_END      PAGE_OFFSET
@@ -1304,7 +1319,11 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
  * Similarly for SV57, bits 63–57 must be equal to bit 56.
  */
 #ifdef CONFIG_64BIT
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+#define TASK_SIZE_64	(PGDIR_SIZE * __PTRS_PER_PGD / 2)
+#else
 #define TASK_SIZE_64	(PGDIR_SIZE * PTRS_PER_PGD / 2)
+#endif
 #define TASK_SIZE_MAX	LONG_MAX
 
 #ifdef CONFIG_COMPAT
