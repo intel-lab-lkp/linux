@@ -27,7 +27,7 @@ static void local_flush_tlb_range_threshold_asid(unsigned long start,
 	}
 
 	for (i = 0; i < nr_ptes_in_range; ++i) {
-		local_flush_tlb_page_asid(start, asid);
+		local_flush_tlb_page_asid(start, stride, asid);
 		start += stride;
 	}
 }
@@ -36,7 +36,7 @@ static inline void local_flush_tlb_range_asid(unsigned long start,
 		unsigned long size, unsigned long stride, unsigned long asid)
 {
 	if (size <= stride)
-		local_flush_tlb_page_asid(start, asid);
+		local_flush_tlb_page_asid(start, stride, asid);
 	else if (size == FLUSH_TLB_MAX_SIZE)
 		local_flush_tlb_all_asid(asid);
 	else
@@ -126,14 +126,7 @@ void flush_tlb_mm_range(struct mm_struct *mm,
 			  start, end - start, page_size);
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
-{
-	__flush_tlb_range(mm_cpumask(vma->vm_mm), get_mm_asid(vma->vm_mm),
-			  addr, PAGE_SIZE, PAGE_SIZE);
-}
-
-void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
-		     unsigned long end)
+static inline unsigned long local_flush_tlb_page_size(struct vm_area_struct *vma)
 {
 	unsigned long stride_size;
 
@@ -161,6 +154,24 @@ void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 		}
 	}
 
+	return stride_size;
+}
+
+void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
+{
+	unsigned long page_size;
+
+	page_size = local_flush_tlb_page_size(vma);
+	__flush_tlb_range(mm_cpumask(vma->vm_mm), get_mm_asid(vma->vm_mm),
+			  addr, page_size, page_size);
+}
+
+void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+		     unsigned long end)
+{
+	unsigned long stride_size;
+
+	stride_size = local_flush_tlb_page_size(vma);
 	__flush_tlb_range(mm_cpumask(vma->vm_mm), get_mm_asid(vma->vm_mm),
 			  start, end - start, stride_size);
 }

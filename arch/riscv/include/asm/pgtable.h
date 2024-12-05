@@ -701,7 +701,7 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 	 * the extra traps reduce performance.  So, eagerly SFENCE.VMA.
 	 */
 	while (nr--)
-		local_flush_tlb_page(address + nr * PAGE_SIZE);
+		local_flush_tlb_page(address + nr * PAGE_SIZE, PAGE_SIZE);
 
 svvptc:;
 	/*
@@ -719,9 +719,12 @@ svvptc:;
 static inline void update_mmu_cache_pmd(struct vm_area_struct *vma,
 		unsigned long address, pmd_t *pmdp)
 {
-	pte_t *ptep = (pte_t *)pmdp;
+	asm goto(ALTERNATIVE("nop", "j %l[svvptc]", 0, RISCV_ISA_EXT_SVVPTC, 1)
+		 : : : : svvptc);
 
-	update_mmu_cache(vma, address, ptep);
+	local_flush_tlb_page(address, PMD_SIZE);
+
+svvptc:;
 }
 
 #define __HAVE_ARCH_PTE_SAME

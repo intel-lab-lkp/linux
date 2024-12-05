@@ -29,18 +29,32 @@ static inline void local_flush_tlb_all_asid(unsigned long asid)
 }
 
 /* Flush one page from local TLB */
-static inline void local_flush_tlb_page(unsigned long addr)
+static inline void local_flush_tlb_page(unsigned long addr,
+					unsigned long page_size)
 {
-	ALT_SFENCE_VMA_ADDR(addr);
+	unsigned int i;
+	unsigned long hw_page_num = 1 << (PAGE_SHIFT - HW_PAGE_SHIFT);
+	unsigned long hw_page_size = page_size >> (PAGE_SHIFT - HW_PAGE_SHIFT);
+
+	for (i = 0; i < hw_page_num; i++, addr += hw_page_size)
+		ALT_SFENCE_VMA_ADDR(addr);
 }
 
 static inline void local_flush_tlb_page_asid(unsigned long addr,
+					     unsigned long page_size,
 					     unsigned long asid)
 {
-	if (asid != FLUSH_TLB_NO_ASID)
-		ALT_SFENCE_VMA_ADDR_ASID(addr, asid);
-	else
-		local_flush_tlb_page(addr);
+	unsigned int i;
+	unsigned long hw_page_num, hw_page_size;
+
+	if (asid != FLUSH_TLB_NO_ASID) {
+		hw_page_num = 1 << (PAGE_SHIFT - HW_PAGE_SHIFT);
+		hw_page_size = page_size >> (PAGE_SHIFT - HW_PAGE_SHIFT);
+
+		for (i = 0; i < hw_page_num; i++, addr += hw_page_size)
+			ALT_SFENCE_VMA_ADDR_ASID(addr, asid);
+	} else
+		local_flush_tlb_page(addr, page_size);
 }
 
 void flush_tlb_all(void);

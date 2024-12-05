@@ -118,7 +118,7 @@ static inline void vmalloc_fault(struct pt_regs *regs, int code, unsigned long a
 	pmd_t *pmd_k;
 	pte_t *pte_k;
 	int index;
-	unsigned long pfn;
+	unsigned long pfn, page_size;
 
 	/* User mode accesses just cause a SIGSEGV */
 	if (user_mode(regs))
@@ -154,8 +154,10 @@ static inline void vmalloc_fault(struct pt_regs *regs, int code, unsigned long a
 		no_context(regs, addr);
 		return;
 	}
-	if (pud_leaf(pudp_get(pud_k)))
+	if (pud_leaf(pudp_get(pud_k))) {
+		page_size = PUD_SIZE;
 		goto flush_tlb;
+	}
 
 	/*
 	 * Since the vmalloc area is global, it is unnecessary
@@ -166,8 +168,10 @@ static inline void vmalloc_fault(struct pt_regs *regs, int code, unsigned long a
 		no_context(regs, addr);
 		return;
 	}
-	if (pmd_leaf(pmdp_get(pmd_k)))
+	if (pmd_leaf(pmdp_get(pmd_k))) {
+		page_size = PMD_SIZE;
 		goto flush_tlb;
+	}
 
 	/*
 	 * Make sure the actual PTE exists as well to
@@ -180,6 +184,7 @@ static inline void vmalloc_fault(struct pt_regs *regs, int code, unsigned long a
 		no_context(regs, addr);
 		return;
 	}
+	page_size = PAGE_SIZE;
 
 	/*
 	 * The kernel assumes that TLBs don't cache invalid
@@ -188,7 +193,7 @@ static inline void vmalloc_fault(struct pt_regs *regs, int code, unsigned long a
 	 * necessary even after writing invalid entries.
 	 */
 flush_tlb:
-	local_flush_tlb_page(addr);
+	local_flush_tlb_page(addr, page_size);
 }
 
 static inline bool access_error(unsigned long cause, struct vm_area_struct *vma)
