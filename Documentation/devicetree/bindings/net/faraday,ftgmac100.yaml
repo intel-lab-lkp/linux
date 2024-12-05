@@ -21,6 +21,7 @@ properties:
               - aspeed,ast2400-mac
               - aspeed,ast2500-mac
               - aspeed,ast2600-mac
+              - aspeed,ast2700-mac
           - const: faraday,ftgmac100
 
   reg:
@@ -33,7 +34,7 @@ properties:
     minItems: 1
     items:
       - description: MAC IP clock
-      - description: RMII RCLK gate for AST2500/2600
+      - description: RMII RCLK gate for AST2500/2600/2700
 
   clock-names:
     minItems: 1
@@ -72,6 +73,20 @@ required:
   - interrupts
 
 unevaluatedProperties: false
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: aspeed,ast2700-mac
+then:
+  properties:
+    resets:
+      maxItems: 1
+      items:
+        - description: MAC IP reset for AST2700
+  required:
+    - resets
 
 examples:
   - |
