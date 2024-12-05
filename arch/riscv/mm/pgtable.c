@@ -11,6 +11,12 @@ pte_t __pte(unsigned long pteval)
 {
 	pte_t pte;
 	unsigned int i;
+	unsigned int order;
+
+	if (has_svnapot() && __pte_present(pteval) && !__pte_napot(pteval))
+		for_each_napot_order(order)
+			if (napot_cont_shift(order) == PAGE_SHIFT)
+				pteval = __pte_mknapot(pteval, order);
 
 	for (i = 0; i < HW_PAGES_PER_PAGE; i++) {
 		pte.ptes[i] = pteval;

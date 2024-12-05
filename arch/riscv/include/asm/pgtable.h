@@ -483,13 +483,27 @@ static inline unsigned long __pte_mknapot(unsigned long pteval,
 	return pteval;
 }
 
+static inline unsigned long __pte_denapot(unsigned long pteval)
+{
+	unsigned long prot_mask = ~(_PAGE_HW_PFN_MASK | _PAGE_NAPOT);
+	unsigned long res;
+
+	if (!__pte_napot(pteval))
+		return pteval;
+	res = __page_val_to_hwpfn(pteval);
+	res = res & (res - 1UL);
+	pteval = (res << _PAGE_HWPFN_SHIFT) | (pteval & prot_mask);
+
+	return pteval;
+}
+
 #ifdef CONFIG_RISCV_USE_SW_PAGE
 static inline pte_t pte_mknapot(pte_t pte, unsigned int order)
 {
 	unsigned long pteval = pte_val(pte);
 	unsigned int i;
 
-	pteval = __pte_mknapot(pteval, order);
+	pteval = __pte_denapot(pteval);
 	for (i = 0; i < HW_PAGES_PER_PAGE; i++)
 		pte.ptes[i] = pteval;
 
