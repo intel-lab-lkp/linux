@@ -367,28 +367,6 @@ static int _ieee80211_set_active_links(struct ieee80211_sub_if_data *sdata,
 		}
 	}
 
-	for_each_set_bit(link_id, &rem, IEEE80211_MLD_MAX_NUM_LINKS) {
-		struct ieee80211_link_data *link;
-
-		link = sdata_dereference(sdata->link[link_id], sdata);
-
-		ieee80211_teardown_tdls_peers(link);
-
-		__ieee80211_link_release_channel(link, true);
-
-		/*
-		 * If CSA is (still) active while the link is deactivated,
-		 * just schedule the channel switch work for the time we
-		 * had previously calculated, and we'll take the process
-		 * from there.
-		 */
-		if (link->conf->csa_active)
-			wiphy_delayed_work_queue(local->hw.wiphy,
-						 &link->u.mgd.csa.switch_work,
-						 link->u.mgd.csa.time -
-						 jiffies);
-	}
-
 	for_each_set_bit(link_id, &add, IEEE80211_MLD_MAX_NUM_LINKS) {
 		struct ieee80211_link_data *link;
 
@@ -456,6 +434,28 @@ static int _ieee80211_set_active_links(struct ieee80211_sub_if_data *sdata,
 		 * not switched yet...
 		 */
 		__ieee80211_sta_recalc_aggregates(sta, active_links);
+	}
+
+	for_each_set_bit(link_id, &rem, IEEE80211_MLD_MAX_NUM_LINKS) {
+		struct ieee80211_link_data *link;
+
+		link = sdata_dereference(sdata->link[link_id], sdata);
+
+		ieee80211_teardown_tdls_peers(link);
+
+		__ieee80211_link_release_channel(link, true);
+
+		/*
+		 * If CSA is (still) active while the link is deactivated,
+		 * just schedule the channel switch work for the time we
+		 * had previously calculated, and we'll take the process
+		 * from there.
+		 */
+		if (link->conf->csa_active)
+			wiphy_delayed_work_queue(local->hw.wiphy,
+						 &link->u.mgd.csa.switch_work,
+						 link->u.mgd.csa.time -
+						 jiffies);
 	}
 
 	for_each_set_bit(link_id, &add, IEEE80211_MLD_MAX_NUM_LINKS) {
