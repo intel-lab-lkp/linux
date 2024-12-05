@@ -704,6 +704,36 @@ static inline void set_pte(pte_t *ptep, pte_t pteval)
 	WRITE_ONCE(*ptep, pteval);
 }
 
+static inline pte_t ptep_get(pte_t *ptep)
+{
+	return *ptep;
+}
+#define ptep_get	ptep_get
+
+static inline pmd_t pmdp_get(pmd_t *pmdp)
+{
+	return *pmdp;
+}
+#define pmdp_get	pmdp_get
+
+static inline pud_t pudp_get(pud_t *pudp)
+{
+	return *pudp;
+}
+#define pudp_get	pudp_get
+
+static inline p4d_t p4dp_get(p4d_t *p4dp)
+{
+	return *p4dp;
+}
+#define p4dp_get	p4dp_get
+
+static inline pgd_t pgdp_get(pgd_t *pgdp)
+{
+	return *pgdp;
+}
+#define pgdp_get	pgdp_get
+
 void flush_icache_pte(struct mm_struct *mm, pte_t pte);
 
 static inline void __set_pte_at(struct mm_struct *mm, pte_t *ptep, pte_t pteval)
