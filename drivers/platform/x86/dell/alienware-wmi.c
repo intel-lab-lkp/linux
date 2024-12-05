@@ -15,6 +15,7 @@
 #include <linux/platform_profile.h>
 #include <linux/dmi.h>
 #include <linux/leds.h>
+#include <linux/wmi.h>
 
 #define LEGACY_CONTROL_GUID		"A90597CE-A997-11DA-B012-B622A1EF5492"
 #define LEGACY_POWER_CONTROL_GUID	"A80593CE-A997-11DA-B012-B622A1EF5492"
@@ -39,8 +40,6 @@
 MODULE_AUTHOR("Mario Limonciello <mario.limonciello@outlook.com>");
 MODULE_DESCRIPTION("Alienware special feature control");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("wmi:" LEGACY_CONTROL_GUID);
-MODULE_ALIAS("wmi:" WMAX_CONTROL_GUID);
 
 static bool force_platform_profile;
 module_param_unsafe(force_platform_profile, bool, 0);
@@ -410,6 +409,10 @@ struct alienfx_priv {
 	struct color_platform colors[4];
 	u8 global_brightness;
 	u8 lighting_control_state;
+};
+
+struct alienfx_platdata {
+	struct wmi_device *wdev;
 };
 
 static struct platform_device *platform_device;
@@ -1148,6 +1151,114 @@ static struct platform_driver platform_driver = {
 		.dev_groups = alienfx_groups,
 	},
 	.probe = alienfx_probe,
+};
+
+static int alienfx_wmi_init(struct alienfx_platdata *pdata)
+{
+	struct platform_device *pdev;
+
+	pdev = platform_create_bundle(&platform_driver, alienfx_probe, NULL, 0,
+				      pdata, sizeof(*pdata));
+
+	dev_set_drvdata(&pdata->wdev->dev, pdev);
+
+	return PTR_ERR_OR_ZERO(pdev);
+}
+
+static void alienfx_wmi_exit(struct wmi_device *wdev)
+{
+	struct platform_device *pdev;
+
+	pdev = dev_get_drvdata(&wdev->dev);
+
+	platform_device_unregister(pdev);
+	platform_driver_unregister(&platform_driver);
+}
+
+/*
+ * Legacy WMI device
+ */
+static int legacy_wmi_probe(struct wmi_device *wdev, const void *context)
+{
+	int ret = 0;
+	struct alienfx_platdata pdata = {
+		.wdev = wdev,
+	};
+
+	if (quirks->num_zones > 0)
+		ret = alienfx_wmi_init(&pdata);
+
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static void legacy_wmi_remove(struct wmi_device *wdev)
+{
+	if (quirks->num_zones > 0)
+		alienfx_wmi_exit(wdev);
+}
+
+static struct wmi_device_id alienware_legacy_device_id_table[] = {
+	{ LEGACY_CONTROL_GUID, NULL },
+	{ },
+};
+MODULE_DEVICE_TABLE(wmi, alienware_legacy_device_id_table);
+
+static struct wmi_driver alienware_legacy_wmi_driver = {
+	.driver = {
+		.name = "alienware-wmi-alienfx",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+	},
+	.id_table = alienware_legacy_device_id_table,
+	.probe = legacy_wmi_probe,
+	.remove = legacy_wmi_remove,
+};
+
+/*
+ * WMAX WMI device
+ */
+static int wmax_wmi_probe(struct wmi_device *wdev, const void *context)
+{
+	int ret = 0;
+	struct alienfx_platdata pdata = {
+		.wdev = wdev,
+	};
+
+	if (quirks->thermal)
+		ret = create_thermal_profile();
+	else if (quirks->num_zones > 0)
+		ret = alienfx_wmi_init(&pdata);
+
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static void wmax_wmi_remove(struct wmi_device *wdev)
+{
+	if (quirks->thermal)
+		remove_thermal_profile();
+	else if (quirks->num_zones > 0)
+		alienfx_wmi_exit(wdev);
+}
+
+static struct wmi_device_id alienware_wmax_device_id_table[] = {
+	{ WMAX_CONTROL_GUID, NULL },
+	{ },
+};
+MODULE_DEVICE_TABLE(wmi, alienware_wmax_device_id_table);
+
+static struct wmi_driver alienware_wmax_wmi_driver = {
+	.driver = {
+		.name = "alienware-wmi-wmax",
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+	},
+	.id_table = alienware_wmax_device_id_table,
+	.probe = wmax_wmi_probe,
+	.remove = wmax_wmi_remove,
 };
 
 static int __init alienware_wmi_init(void)
