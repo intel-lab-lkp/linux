@@ -82,6 +82,8 @@ struct intel_dsi {
 	/* eot for MIPI_EOT_DISABLE register */
 	u8 eotp_pkt;
 	u8 clock_stop;
+	bool blanking_packets_during_bllp;
+	bool lp_clock_during_lpm;
 
 	u8 escape_clk_div;
 	u8 dual_link;

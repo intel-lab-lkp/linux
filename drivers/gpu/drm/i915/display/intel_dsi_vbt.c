@@ -777,6 +777,8 @@ bool intel_dsi_vbt_init(struct intel_dsi *intel_dsi, u16 panel_id)
 
 	intel_dsi->eotp_pkt = mipi_config->eot_pkt_disabled ? 0 : 1;
 	intel_dsi->clock_stop = mipi_config->enable_clk_stop ? 1 : 0;
+	intel_dsi->blanking_packets_during_bllp = mipi_config->blanking_packets_during_bllp;
+	intel_dsi->lp_clock_during_lpm = mipi_config->lp_clock_during_lpm;
 	intel_dsi->lane_count = mipi_config->lane_cnt + 1;
 	intel_dsi->pixel_format =
 		vbt_to_dsi_pixel_format(mipi_config->videomode_color_format);

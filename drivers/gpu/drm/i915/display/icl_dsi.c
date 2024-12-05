@@ -704,6 +704,16 @@ gen11_dsi_configure_transcoder(struct intel_encoder *encoder,
 		else
 			tmp |= EOTP_DISABLED;
 
+		if (is_vid_mode(intel_dsi) && intel_dsi->blanking_packets_during_bllp)
+			tmp |= BLANKING_PACKET_ENABLE;
+		else
+			tmp &= BLANKING_PACKET_ENABLE;
+
+		if (intel_dsi->lp_clock_during_lpm)
+			tmp |= LP_CLOCK_DURING_LPM;
+		else
+			tmp &= LP_CLOCK_DURING_LPM;
+
 		/* enable link calibration if freq > 1.5Gbps */
 		if (afe_clk(encoder, pipe_config) >= 1500 * 1000) {
 			tmp &= ~LINK_CALIBRATION_MASK;
