@@ -466,11 +466,14 @@ static inline void pci_npem_remove(struct pci_dev *dev) { }
 #ifdef CONFIG_PCI_IDE
 void pci_ide_init(struct pci_dev *dev);
 void pci_init_host_bridge_ide(struct pci_host_bridge *bridge);
+extern struct attribute_group pci_ide_attr_group;
+#define PCI_IDE_ATTR_GROUP (&pci_ide_attr_group)
 #else
 static inline void pci_ide_init(struct pci_dev *dev) { }
 static inline void pci_init_host_bridge_ide(struct pci_host_bridge *bridge)
 {
 }
+#define PCI_IDE_ATTR_GROUP NULL
 #endif
 
 #ifdef CONFIG_PCI_TSM

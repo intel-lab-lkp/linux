@@ -604,6 +604,7 @@ struct pci_host_bridge {
 #ifdef CONFIG_PCI_IDE			/* track IDE stream id allocation */
 	DECLARE_BITMAP(ide_stream_ids, PCI_IDE_SEL_CTL_ID_MAX + 1);
 	struct resource ide_stream_res; /* track ide stream address association */
+	int nr_ide_streams;
 #endif
 	u8 (*swizzle_irq)(struct pci_dev *, u8 *); /* Platform IRQ swizzler */
 	int (*map_irq)(const struct pci_dev *, u8, u8);
@@ -653,6 +654,14 @@ struct pci_host_bridge *pci_find_host_bridge(struct pci_bus *bus);
 void pci_set_host_bridge_release(struct pci_host_bridge *bridge,
 				 void (*release_fn)(struct pci_host_bridge *),
 				 void *release_data);
+
+#ifdef CONFIG_PCI_IDE
+void pci_set_nr_ide_streams(struct pci_host_bridge *hb, int nr);
+#else
+static inline void pci_set_nr_ide_streams(struct pci_host_bridge *hb, int nr)
+{
+}
+#endif
 
 int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge);
 
