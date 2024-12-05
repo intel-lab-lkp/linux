@@ -5,10 +5,13 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 
-static inline pte_t mk_huge_pte(struct page *page, pgprot_t pgprot)
+#ifndef __HAVE_ARCH_MK_HUGE_PTE
+static inline pte_t mk_huge_pte(struct vm_area_struct *vma, struct page *page,
+				pgprot_t pgprot)
 {
 	return mk_pte(page, pgprot);
 }
+#endif
 
 static inline unsigned long huge_pte_write(pte_t pte)
 {

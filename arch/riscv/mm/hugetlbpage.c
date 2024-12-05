@@ -2,6 +2,27 @@
 #include <linux/hugetlb.h>
 #include <linux/err.h>
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+pte_t mk_huge_pte(struct vm_area_struct *vma, struct page *page, pgprot_t pgprot)
+{
+	pte_t pte;
+	unsigned int shift = huge_page_shift(hstate_vma(vma));
+
+	if (shift == PGDIR_SHIFT)
+		pte = pgd_pte(pfn_pgd(page_to_pfn(page), pgprot));
+	else if (shift == P4D_SHIFT)
+		pte = p4d_pte(pfn_p4d(page_to_pfn(page), pgprot));
+	else if (shift == PUD_SHIFT)
+		pte = pud_pte(pfn_pud(page_to_pfn(page), pgprot));
+	else if (shift == PMD_SHIFT)
+		pte = pmd_pte(pfn_pmd(page_to_pfn(page), pgprot));
+	else
+		pte = pfn_pte(page_to_pfn(page), pgprot);
+
+	return pte;
+}
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
+
 #ifdef CONFIG_RISCV_ISA_SVNAPOT
 pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
 {
@@ -74,7 +95,7 @@ pte_t *huge_pte_alloc(struct mm_struct *mm,
 
 out:
 	if (pte) {
-		pte_t pteval = ptep_get_lockless(pte);
+		pte_t pteval = ptep_get(pte);
 
 		WARN_ON_ONCE(pte_present(pteval) && !pte_huge(pteval));
 	}

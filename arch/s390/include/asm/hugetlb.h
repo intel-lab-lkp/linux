@@ -79,7 +79,7 @@ static inline void huge_ptep_set_wrprotect(struct mm_struct *mm,
 	__set_huge_pte_at(mm, addr, ptep, pte_wrprotect(pte));
 }
 
-static inline pte_t mk_huge_pte(struct page *page, pgprot_t pgprot)
+static inline pte_t mk_huge_pte(struct vm_area_struct *vma, struct page *page, pgprot_t pgprot)
 {
 	return mk_pte(page, pgprot);
 }

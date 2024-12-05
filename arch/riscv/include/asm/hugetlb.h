@@ -51,6 +51,11 @@ pte_t arch_make_huge_pte(pte_t entry, unsigned int shift, vm_flags_t flags);
 
 #endif /*CONFIG_RISCV_ISA_SVNAPOT*/
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+#define __HAVE_ARCH_MK_HUGE_PTE
+pte_t mk_huge_pte(struct vm_area_struct *vma, struct page *page, pgprot_t pgprot);
+#endif
+
 #include <asm-generic/hugetlb.h>
 
 #endif /* _ASM_RISCV_HUGETLB_H */
