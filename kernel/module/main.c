@@ -2857,7 +2857,7 @@ static noinline int do_init_module(struct module *mod)
 	rcu_assign_pointer(mod->kallsyms, &mod->core_kallsyms);
 #endif
 	ret = module_enable_rodata_ro_after_init(mod);
-	if (ret)
+	if (WARN_ON_ONCE(ret))
 		pr_warn("%s: module_enable_rodata_ro_after_init() returned %d, "
 			"ro_after_init data might still be writable\n",
 			mod->name, ret);

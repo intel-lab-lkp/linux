@@ -58,7 +58,10 @@ int module_enable_rodata_ro(const struct module *mod)
 	if (ret)
 		return ret;
 
-	return 0;
+	ret = module_set_memory(mod, MOD_RO_AFTER_INIT, set_memory_ro);
+	if (ret)
+		return ret;
+	return module_set_memory(mod, MOD_RO_AFTER_INIT, set_memory_rw);
 }
 
 int module_enable_rodata_ro_after_init(const struct module *mod)
