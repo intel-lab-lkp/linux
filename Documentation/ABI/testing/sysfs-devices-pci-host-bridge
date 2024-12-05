@@ -1,0 +1,28 @@
+What:		/sys/devices/pciDDDDD:BB
+		/sys/devices/.../pciDDDDD:BB
+Date:		December, 2024
+Contact:	linux-pci@vger.kernel.org
+Description:
+		A PCI host bridge device parents a PCI bus device topology. PCI
+		controllers may also parent host bridges. The DDDDD:BB format
+		convey the PCI domain number and the bus number for root ports
+		of the host bridge.
+
+What:		pciDDDDD:BB/firmware_node
+Date:		December, 2024
+Contact:	linux-pci@vger.kernel.org
+Description:
+		(RO) Symlink to the platform firmware device object "companion"
+		of the host bridge. For example, an ACPI device with an _HID of
+		PNP0A08 (/sys/devices/LNXSYSTM:00/LNXSYBUS:00/PNP0A08:00).
+
+What:		pciDDDDD:BB/streamN:DDDDD:BB:DD:F
+Date:		December, 2024
+Contact:	linux-pci@vger.kernel.org
+Description:
+		(RO) When a host-bridge has established a secure connection,
+		typically PCIe IDE, between a host-bridge an endpoint, this
+		symlink appears. The primary function is to account how many
+		streams can be returned to the available secure streams pool by
+		invoking the tsm/disconnect flow. The link points to the
+		endpoint PCI device at domain:DDDDD bus:BB device:DD function:F.
