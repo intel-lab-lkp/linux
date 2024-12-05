@@ -253,6 +253,7 @@ config ARCH_MMAP_RND_COMPAT_BITS_MIN
 # max bits determined by the following formula:
 #  VA_BITS - PAGE_SHIFT - 3
 config ARCH_MMAP_RND_BITS_MAX
+	default 20 if 64BIT && RISCV_64K_PAGES # SV39 based
 	default 24 if 64BIT # SV39 based
 	default 17
 
