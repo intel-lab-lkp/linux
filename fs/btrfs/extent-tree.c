@@ -4342,6 +4342,8 @@ static noinline int find_free_extent(struct btrfs_root *root,
 		btrfs_err(fs_info, "No space info for %llu", ffe_ctl->flags);
 		return -ENOSPC;
 	}
+	if (btrfs_is_zoned(fs_info) && ffe_ctl->for_data_reloc)
+		space_info = space_info->sub_group[SUB_GROUP_DATA_RELOC];
 
 	ret = prepare_allocation(fs_info, ffe_ctl, space_info, ins);
 	if (ret < 0)
@@ -4361,6 +4363,7 @@ static noinline int find_free_extent(struct btrfs_root *root,
 		 * picked out then we don't care that the block group is cached.
 		 */
 		if (block_group && block_group_bits(block_group, ffe_ctl->flags) &&
+		    block_group->space_info == space_info &&
 		    block_group->cached != BTRFS_CACHE_NO) {
 			down_read(&space_info->groups_sem);
 			if (list_empty(&block_group->list) ||

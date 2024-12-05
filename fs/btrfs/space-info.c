@@ -337,7 +337,9 @@ void btrfs_add_bg_to_space_info(struct btrfs_fs_info *info,
 
 	factor = btrfs_bg_type_to_factor(block_group->flags);
 
-	found = btrfs_find_space_info(info, block_group->flags);
+	found = block_group->space_info;
+	if (!found)
+		found = btrfs_find_space_info(info, block_group->flags);
 	ASSERT(found);
 	spin_lock(&found->lock);
 	found->total_bytes += block_group->length;
