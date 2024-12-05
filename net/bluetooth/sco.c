@@ -319,7 +319,8 @@ static int sco_connect(struct sock *sk)
 	else
 		type = SCO_LINK;
 
-	if (sco_pi(sk)->setting == BT_VOICE_TRANSPARENT &&
+	if ((sco_pi(sk)->setting == BT_VOICE_TRANSPARENT ||
+	     sco_pi(sk)->setting == BT_VOICE_TRANSPARENT_16BIT) &&
 	    (!lmp_transp_capable(hdev) || !lmp_esco_capable(hdev))) {
 		err = -EOPNOTSUPP;
 		goto unlock;
@@ -922,6 +923,7 @@ static int sco_sock_setsockopt(struct socket *sock, int level, int optname,
 
 		/* Explicitly check for these values */
 		if (voice.setting != BT_VOICE_TRANSPARENT &&
+		    voice.setting != BT_VOICE_TRANSPARENT_16BIT &&
 		    voice.setting != BT_VOICE_CVSD_16BIT) {
 			err = -EINVAL;
 			break;
@@ -935,7 +937,8 @@ static int sco_sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 		if (enhanced_sync_conn_capable(hdev) &&
-		    voice.setting == BT_VOICE_TRANSPARENT)
+		    (voice.setting == BT_VOICE_TRANSPARENT ||
+		     voice.setting == BT_VOICE_TRANSPARENT_16BIT))
 			sco_pi(sk)->codec.id = BT_CODEC_TRANSPARENT;
 		hci_dev_put(hdev);
 		break;
