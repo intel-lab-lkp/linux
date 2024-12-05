@@ -128,6 +128,19 @@ config SAMPLE_RPMSG_CLIENT
 	  to communicate with an AMP-configured remote processor over
 	  the rpmsg bus.
 
+config SAMPLE_LIST
+	tristate "Build list implementation sample"
+	depends on PROC_FS
+	help
+	  Build a sample list module that creates a proc entry
+	  /proc/sample_list and registers read/write file operations.
+
+	  Each write to the proc will copy the buffer
+	  and store it in a data structure.
+
+	  Each read from the proc will populate the read buffer with
+	  list entries, up to the read length (buffer size).
+
 config SAMPLE_LIVEPATCH
 	tristate "Build live patching samples -- loadable modules only"
 	depends on LIVEPATCH && m
