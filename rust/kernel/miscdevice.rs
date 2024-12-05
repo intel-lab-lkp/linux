@@ -10,11 +10,13 @@
 
 use crate::{
     bindings,
+    device::Device,
     error::{to_result, Error, Result, VTABLE_DEFAULT_ERROR},
     prelude::*,
     str::CStr,
     types::{ForeignOwnable, Opaque},
 };
+
 use core::{
     ffi::{c_int, c_long, c_uint, c_ulong},
     marker::PhantomData,
@@ -83,6 +85,13 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
     /// Returns a raw pointer to the misc device.
     pub fn as_raw(&self) -> *mut bindings::miscdevice {
         self.inner.get()
+    }
+
+    /// Returns a pointer to the current Device
+    pub fn device(&self) -> &Device {
+        // SAFETY: This is only accessible after a successful register() which always
+        // initialises this_device with a valid device.
+        unsafe { Device::as_ref((*self.as_raw()).this_device) }
     }
 }
 
