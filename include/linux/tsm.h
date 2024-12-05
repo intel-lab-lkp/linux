@@ -116,4 +116,8 @@ struct tsm_subsys *tsm_register(struct device *parent,
 				const struct attribute_group **groups,
 				const struct pci_tsm_ops *ops);
 void tsm_unregister(struct tsm_subsys *subsys);
+struct pci_dev;
+struct pci_ide;
+int tsm_register_ide_stream(struct pci_dev *pdev, struct pci_ide *ide);
+void tsm_unregister_ide_stream(struct pci_ide *ide);
 #endif /* __TSM_H */
