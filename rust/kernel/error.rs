@@ -4,9 +4,10 @@
 //!
 //! C header: [`include/uapi/asm-generic/errno-base.h`](srctree/include/uapi/asm-generic/errno-base.h)
 
-use crate::{alloc::AllocError, str::CStr};
-
-use core::alloc::LayoutError;
+use crate::{
+    alloc::{layout::LayoutError, AllocError},
+    str::CStr,
+};
 
 use core::fmt;
 use core::num::NonZeroI32;
@@ -219,6 +220,12 @@ impl From<Utf8Error> for Error {
 
 impl From<LayoutError> for Error {
     fn from(_: LayoutError) -> Error {
+        code::ENOMEM
+    }
+}
+
+impl From<core::alloc::LayoutError> for Error {
+    fn from(_: core::alloc::LayoutError) -> Error {
         code::ENOMEM
     }
 }
