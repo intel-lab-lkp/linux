@@ -233,28 +233,54 @@ static int expand_fdtable(struct files_struct *files, unsigned int nr)
 	__acquires(files->file_lock)
 {
 	struct fdtable *new_fdt, *cur_fdt;
+	int err = 0;
 
+	BUG_ON(files->resize_in_progress);
+	files->resize_in_progress = true;
 	spin_unlock(&files->file_lock);
 	new_fdt = alloc_fdtable(nr + 1);
 
-	/* make sure all fd_install() have seen resize_in_progress
-	 * or have finished their rcu_read_lock_sched() section.
+	/*
+	 * Synchronize against the lockless fd_install().
+	 *
+	 * All work in that routine is enclosed with RCU sched section.
+	 *
+	 * We published ->resize_in_progress = true with the unlock above,
+	 * which makes new arrivals bail to locked operation.
+	 *
+	 * Now we only need to wait for CPUs which did not observe the flag to
+	 * leave and make sure their store to the fd table got published.
+	 *
+	 * We do it with synchronize_rcu(), which both waits for all sections to
+	 * finish (taking care of the first part) and guarantees all CPUs issued a
+	 * full fence (taking care of the second part).
+	 *
+	 * Note we know there is nobody to wait for if we are dealing with a
+	 * single-threaded process.
 	 */
 	if (atomic_read(&files->count) > 1)
 		synchronize_rcu();
 
 	spin_lock(&files->file_lock);
-	if (IS_ERR(new_fdt))
-		return PTR_ERR(new_fdt);
+	if (IS_ERR(new_fdt)) {
+		err = PTR_ERR(new_fdt);
+		goto out;
+	}
 	cur_fdt = files_fdtable(files);
 	BUG_ON(nr < cur_fdt->max_fds);
 	copy_fdtable(new_fdt, cur_fdt);
 	rcu_assign_pointer(files->fdt, new_fdt);
 	if (cur_fdt != &files->fdtab)
 		call_rcu(&cur_fdt->rcu, free_fdtable_rcu);
-	/* coupled with smp_rmb() in fd_install() */
+
+	/*
+	 * Publish everything before we unset ->resize_in_progress, see above
+	 * for an explanation.
+	 */
 	smp_wmb();
-	return 0;
+out:
+	files->resize_in_progress = false;
+	return err;
 }
 
 /*
@@ -290,9 +316,7 @@ repeat:
 		return -EMFILE;
 
 	/* All good, so we try */
-	files->resize_in_progress = true;
 	error = expand_fdtable(files, nr);
-	files->resize_in_progress = false;
 
 	wake_up_all(&files->resize_wait);
 	return error;
@@ -629,13 +653,18 @@ EXPORT_SYMBOL(put_unused_fd);
 
 void fd_install(unsigned int fd, struct file *file)
 {
-	struct files_struct *files = current->files;
+	struct files_struct *files;
 	struct fdtable *fdt;
 
 	if (WARN_ON_ONCE(unlikely(file->f_mode & FMODE_BACKING)))
 		return;
 
+	/*
+	 * Synchronized with expand_fdtable(), see that routine for an
+	 * explanation.
+	 */
 	rcu_read_lock_sched();
+	files = READ_ONCE(current->files);
 
 	if (unlikely(files->resize_in_progress)) {
 		rcu_read_unlock_sched();
@@ -646,8 +675,7 @@ void fd_install(unsigned int fd, struct file *file)
 		spin_unlock(&files->file_lock);
 		return;
 	}
-	/* coupled with smp_wmb() in expand_fdtable() */
-	smp_rmb();
+
 	fdt = rcu_dereference_sched(files->fdt);
 	BUG_ON(fdt->fd[fd] != NULL);
 	rcu_assign_pointer(fdt->fd[fd], file);
