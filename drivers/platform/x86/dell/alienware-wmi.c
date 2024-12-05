@@ -415,11 +415,11 @@ struct alienfx_platdata {
 	struct wmi_device *wdev;
 };
 
-static struct platform_device *platform_device;
 static struct platform_profile_handler pp_handler;
 static enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
 
 static u8 interface;
+static struct wmi_driver *preferred_wmi_driver;
 
 /*
  * Helpers used for zone control
@@ -1263,15 +1263,12 @@ static struct wmi_driver alienware_wmax_wmi_driver = {
 
 static int __init alienware_wmi_init(void)
 {
-	int ret;
-
-	if (wmi_has_guid(LEGACY_CONTROL_GUID))
-		interface = LEGACY;
-	else if (wmi_has_guid(WMAX_CONTROL_GUID))
+	if (wmi_has_guid(WMAX_CONTROL_GUID)) {
 		interface = WMAX;
-	else {
-		pr_warn("alienware-wmi: No known WMI GUID found\n");
-		return -ENODEV;
+		preferred_wmi_driver = &alienware_wmax_wmi_driver;
+	} else {
+		interface = LEGACY;
+		preferred_wmi_driver = &alienware_legacy_wmi_driver;
 	}
 
 	dmi_check_system(alienware_quirks);
@@ -1288,43 +1285,14 @@ static int __init alienware_wmi_init(void)
 			pr_warn("force_gmode requires platform profile support\n");
 	}
 
-	ret = platform_driver_register(&platform_driver);
-	if (ret)
-		goto fail_platform_driver;
-	platform_device = platform_device_alloc("alienware-wmi", PLATFORM_DEVID_NONE);
-	if (!platform_device) {
-		ret = -ENOMEM;
-		goto fail_platform_device1;
-	}
-	ret = platform_device_add(platform_device);
-	if (ret)
-		goto fail_platform_device2;
-
-	if (quirks->thermal) {
-		ret = create_thermal_profile();
-		if (ret)
-			goto fail_prep_thermal_profile;
-	}
-
-	return 0;
-
-fail_prep_thermal_profile:
-	platform_device_del(platform_device);
-fail_platform_device2:
-	platform_device_put(platform_device);
-fail_platform_device1:
-	platform_driver_unregister(&platform_driver);
-fail_platform_driver:
-	return ret;
+	return wmi_driver_register(preferred_wmi_driver);
 }
 
 module_init(alienware_wmi_init);
 
 static void __exit alienware_wmi_exit(void)
 {
-	remove_thermal_profile();
-	platform_device_unregister(platform_device);
-	platform_driver_unregister(&platform_driver);
+	wmi_driver_unregister(preferred_wmi_driver);
 }
 
 module_exit(alienware_wmi_exit);
