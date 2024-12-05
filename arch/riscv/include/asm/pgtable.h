@@ -309,6 +309,50 @@ static inline unsigned long pmd_page_vaddr(pmd_t pmd)
 	return (unsigned long)pfn_to_virt(__page_val_to_pfn(pmd_val(pmd)));
 }
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+
+static inline pte_t pmd_pte(pmd_t pmd)
+{
+	return (pte_t)pmd;
+}
+
+static inline pte_t pud_pte(pud_t pud)
+{
+	return (pte_t)pud;
+}
+
+static inline pte_t p4d_pte(p4d_t p4d)
+{
+	return (pte_t)p4d;
+}
+
+static inline pte_t pgd_pte(pgd_t pgd)
+{
+	return (pte_t)pgd;
+}
+
+static inline pmd_t pte_pmd(pte_t pte)
+{
+	return (pmd_t)pte;
+}
+
+static inline pud_t pte_pud(pte_t pte)
+{
+	return (pud_t)pte;
+}
+
+static inline p4d_t pte_p4d(pte_t pte)
+{
+	return (p4d_t)pte;
+}
+
+static inline pgd_t pte_pgd(pte_t pte)
+{
+	return (pgd_t)pte;
+}
+
+#else /* CONFIG_RISCV_USE_SW_PAGE */
+
 static inline pte_t pmd_pte(pmd_t pmd)
 {
 	return __pte(pmd_val(pmd));
@@ -318,6 +362,38 @@ static inline pte_t pud_pte(pud_t pud)
 {
 	return __pte(pud_val(pud));
 }
+
+static inline pte_t p4d_pte(p4d_t p4d)
+{
+	return __pte(p4d_val(p4d));
+}
+
+static inline pte_t pgd_pte(pgd_t pgd)
+{
+	return __pte(pgd_val(pgd));
+}
+
+static inline pmd_t pte_pmd(pte_t pte)
+{
+	return __pmd(pte_val(pte));
+}
+
+static inline pud_t pte_pud(pte_t pte)
+{
+	return __pud(pte_val(pte));
+}
+
+static inline p4d_t pte_p4d(pte_t pte)
+{
+	return __p4d(pte_val(pte));
+}
+
+static inline pgd_t pte_pgd(pte_t pte)
+{
+	return __pgd(pte_val(pte));
+}
+
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
 
 #ifdef CONFIG_RISCV_ISA_SVNAPOT
 #include <asm/cpufeature.h>
@@ -728,11 +804,6 @@ static inline pgprot_t pgprot_writecombine(pgprot_t _prot)
 /*
  * THP functions
  */
-static inline pmd_t pte_pmd(pte_t pte)
-{
-	return __pmd(pte_val(pte));
-}
-
 static inline pmd_t pmd_mkhuge(pmd_t pmd)
 {
 	return pmd;
