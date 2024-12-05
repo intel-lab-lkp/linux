@@ -1748,6 +1748,17 @@ static void wa_list_apply(const struct i915_wa_list *wal)
 				intel_gt_mcr_read_any_fw(gt, wa->mcr_reg) :
 				intel_uncore_read_fw(uncore, wa->reg);
 
+			if ((val ^ wa->set) & wa->read) { 
+				if (wa->is_mcr)
+					intel_gt_mcr_multicast_write_fw(gt, wa->mcr_reg, val);
+				else
+					intel_uncore_write_fw(uncore, wa->reg, val);
+			}
+
+			val = wa->is_mcr ?
+				intel_gt_mcr_read_any_fw(gt, wa->mcr_reg) :
+				intel_uncore_read_fw(uncore, wa->reg);
+
 			wa_verify(gt, wa, val, wal->name, "application");
 		}
 	}
