@@ -682,14 +682,18 @@ static acpi_status alienware_wmax_command(void *in_args, size_t in_size,
 static ssize_t show_hdmi_cable(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
+	struct alienfx_platdata *pdata;
 	acpi_status status;
 	u32 out_data;
 	struct wmax_basic_args in_args = {
 		.arg = 0,
 	};
-	status =
-	    alienware_wmax_command(&in_args, sizeof(in_args),
-				   WMAX_METHOD_HDMI_CABLE, &out_data);
+
+	pdata = dev_get_platdata(dev);
+
+	status = alienware_wmi_command(pdata->wdev, WMAX_METHOD_HDMI_CABLE,
+				       &in_args, sizeof(in_args), &out_data);
+
 	if (ACPI_SUCCESS(status)) {
 		if (out_data == 0)
 			return sysfs_emit(buf, "[unconnected] connected unknown\n");
@@ -703,14 +707,17 @@ static ssize_t show_hdmi_cable(struct device *dev,
 static ssize_t show_hdmi_source(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
+	struct alienfx_platdata *pdata;
 	acpi_status status;
 	u32 out_data;
 	struct wmax_basic_args in_args = {
 		.arg = 0,
 	};
-	status =
-	    alienware_wmax_command(&in_args, sizeof(in_args),
-				   WMAX_METHOD_HDMI_STATUS, &out_data);
+
+	pdata = dev_get_platdata(dev);
+
+	status = alienware_wmi_command(pdata->wdev, WMAX_METHOD_HDMI_STATUS,
+				       &in_args, sizeof(in_args), &out_data);
 
 	if (ACPI_SUCCESS(status)) {
 		if (out_data == 1)
@@ -726,8 +733,12 @@ static ssize_t toggle_hdmi_source(struct device *dev,
 				  struct device_attribute *attr,
 				  const char *buf, size_t count)
 {
+	struct alienfx_platdata *pdata;
 	acpi_status status;
 	struct wmax_basic_args args;
+
+	pdata = dev_get_platdata(dev);
+
 	if (strcmp(buf, "gpu\n") == 0)
 		args.arg = 1;
 	else if (strcmp(buf, "input\n") == 0)
@@ -736,8 +747,8 @@ static ssize_t toggle_hdmi_source(struct device *dev,
 		args.arg = 3;
 	pr_debug("alienware-wmi: setting hdmi to %d : %s", args.arg, buf);
 
-	status = alienware_wmax_command(&args, sizeof(args),
-					WMAX_METHOD_HDMI_SOURCE, NULL);
+	status = alienware_wmi_command(pdata->wdev, WMAX_METHOD_HDMI_SOURCE,
+				       &args, sizeof(args), NULL);
 
 	if (ACPI_FAILURE(status))
 		pr_err("alienware-wmi: HDMI toggle failed: results: %u\n",
@@ -775,14 +786,17 @@ static const struct attribute_group hdmi_attribute_group = {
 static ssize_t show_amplifier_status(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
+	struct alienfx_platdata *pdata;
 	acpi_status status;
 	u32 out_data;
 	struct wmax_basic_args in_args = {
 		.arg = 0,
 	};
-	status =
-	    alienware_wmax_command(&in_args, sizeof(in_args),
-				   WMAX_METHOD_AMPLIFIER_CABLE, &out_data);
+
+	pdata = dev_get_platdata(dev);
+
+	status = alienware_wmi_command(pdata->wdev, WMAX_METHOD_AMPLIFIER_CABLE,
+				       &in_args, sizeof(in_args), &out_data);
 	if (ACPI_SUCCESS(status)) {
 		if (out_data == 0)
 			return sysfs_emit(buf, "[unconnected] connected unknown\n");
@@ -819,13 +833,17 @@ static const struct attribute_group amplifier_attribute_group = {
 static ssize_t show_deepsleep_status(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
+	struct alienfx_platdata *pdata;
 	acpi_status status;
 	u32 out_data;
 	struct wmax_basic_args in_args = {
 		.arg = 0,
 	};
-	status = alienware_wmax_command(&in_args, sizeof(in_args),
-					WMAX_METHOD_DEEP_SLEEP_STATUS, &out_data);
+
+	pdata = dev_get_platdata(dev);
+
+	status = alienware_wmi_command(pdata->wdev, WMAX_METHOD_DEEP_SLEEP_STATUS,
+				       &in_args, sizeof(in_args), &out_data);
 	if (ACPI_SUCCESS(status)) {
 		if (out_data == 0)
 			return sysfs_emit(buf, "[disabled] s5 s5_s4\n");
@@ -842,8 +860,11 @@ static ssize_t toggle_deepsleep(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
 {
+	struct alienfx_platdata *pdata;
 	acpi_status status;
 	struct wmax_basic_args args;
+
+	pdata = dev_get_platdata(dev);
 
 	if (strcmp(buf, "disabled\n") == 0)
 		args.arg = 0;
@@ -853,8 +874,8 @@ static ssize_t toggle_deepsleep(struct device *dev,
 		args.arg = 2;
 	pr_debug("alienware-wmi: setting deep sleep to %d : %s", args.arg, buf);
 
-	status = alienware_wmax_command(&args, sizeof(args),
-					WMAX_METHOD_DEEP_SLEEP_CONTROL, NULL);
+	status = alienware_wmi_command(pdata->wdev, WMAX_METHOD_DEEP_SLEEP_CONTROL,
+				       &args, sizeof(args), NULL);
 
 	if (ACPI_FAILURE(status))
 		pr_err("alienware-wmi: deep sleep control failed: results: %u\n",
