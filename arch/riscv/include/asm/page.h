@@ -63,6 +63,36 @@ void clear_page(void *page);
  * Use struct definitions to apply C type checking
  */
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+
+#define HW_PAGES_PER_PAGE	(1 << (PAGE_SHIFT - HW_PAGE_SHIFT))
+
+struct page_table_entry {
+	union {
+		unsigned long pgds[HW_PAGES_PER_PAGE];
+		unsigned long p4ds[HW_PAGES_PER_PAGE];
+		unsigned long puds[HW_PAGES_PER_PAGE];
+		unsigned long pmds[HW_PAGES_PER_PAGE];
+		unsigned long ptes[HW_PAGES_PER_PAGE];
+	};
+};
+
+/* Page Global Directory entry */
+typedef struct page_table_entry pgd_t;
+
+/* Page Table entry */
+typedef struct page_table_entry pte_t;
+
+#define pte_val(x)	((x).ptes[0])
+#define pgd_val(x)	((x).pgds[0])
+
+pte_t __pte(unsigned long pteval);
+pgd_t __pgd(unsigned long pgdval);
+#define __pte		__pte
+#define __pgd		__pgd
+
+#else /* CONFIG_RISCV_USE_SW_PAGE */
+
 /* Page Global Directory entry */
 typedef struct {
 	unsigned long pgd;
@@ -73,18 +103,21 @@ typedef struct {
 	unsigned long pte;
 } pte_t;
 
+#define pte_val(x)	((x).pte)
+#define pgd_val(x)	((x).pgd)
+
+#define __pte(x)	((pte_t) { (x) })
+#define __pgd(x)	((pgd_t) { (x) })
+
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
+
 typedef struct {
 	unsigned long pgprot;
 } pgprot_t;
 
 typedef struct page *pgtable_t;
 
-#define pte_val(x)	((x).pte)
-#define pgd_val(x)	((x).pgd)
 #define pgprot_val(x)	((x).pgprot)
-
-#define __pte(x)	((pte_t) { (x) })
-#define __pgd(x)	((pgd_t) { (x) })
 #define __pgprot(x)	((pgprot_t) { (x) })
 
 #ifdef CONFIG_64BIT

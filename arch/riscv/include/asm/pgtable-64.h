@@ -41,6 +41,35 @@ extern bool pgtable_l5_enabled;
 #define PMD_SIZE        (_AC(1, UL) << PMD_SHIFT)
 #define PMD_MASK        (~(PMD_SIZE - 1))
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+
+/* Page 4th Directory entry */
+typedef struct page_table_entry p4d_t;
+
+#define p4d_val(x)	((x).p4ds[0])
+p4d_t __p4d(unsigned long p4dval);
+#define __p4d		__p4d
+#define PTRS_PER_P4D	(PAGE_SIZE / sizeof(p4d_t))
+
+/* Page Upper Directory entry */
+typedef struct page_table_entry pud_t;
+
+#define pud_val(x)      ((x).puds[0])
+pud_t __pud(unsigned long pudval);
+#define __pud		__pud
+#define PTRS_PER_PUD    (PAGE_SIZE / sizeof(pud_t))
+
+/* Page Middle Directory entry */
+typedef struct page_table_entry pmd_t;
+
+#define pmd_val(x)      ((x).pmds[0])
+pmd_t __pmd(unsigned long pmdval);
+#define __pmd		__pmd
+
+#define PTRS_PER_PMD    (PAGE_SIZE / sizeof(pmd_t))
+
+#else /* CONFIG_RISCV_USE_SW_PAGE */
+
 /* Page 4th Directory entry */
 typedef struct {
 	unsigned long p4d;
@@ -68,6 +97,8 @@ typedef struct {
 #define __pmd(x)        ((pmd_t) { (x) })
 
 #define PTRS_PER_PMD    (PAGE_SIZE / sizeof(pmd_t))
+
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
 
 /*
  * rv64 PTE format:
@@ -98,7 +129,7 @@ enum napot_cont_order {
 #define for_each_napot_order_rev(order)						\
 	for (order = NAPOT_ORDER_MAX - 1;					\
 	     order >= NAPOT_CONT_ORDER_BASE; order--)
-#define napot_cont_order(val)	(__builtin_ctzl((val.pte >> _PAGE_PFN_SHIFT) << 1))
+#define napot_cont_order(val)	(__builtin_ctzl((pte_val(val) >> _PAGE_PFN_SHIFT) << 1))
 
 #define napot_cont_shift(order)	((order) + PAGE_SHIFT)
 #define napot_cont_size(order)	BIT(napot_cont_shift(order))
@@ -279,7 +310,7 @@ static inline void set_p4d(p4d_t *p4dp, p4d_t p4d)
 	if (pgtable_l4_enabled)
 		WRITE_ONCE(*p4dp, p4d);
 	else
-		set_pud((pud_t *)p4dp, (pud_t){ p4d_val(p4d) });
+		set_pud((pud_t *)p4dp, __pud(p4d_val(p4d)));
 }
 
 static inline int p4d_none(p4d_t p4d)
@@ -327,7 +358,7 @@ static inline pud_t *p4d_pgtable(p4d_t p4d)
 	if (pgtable_l4_enabled)
 		return (pud_t *)pfn_to_virt(__page_val_to_pfn(p4d_val(p4d)));
 
-	return (pud_t *)pud_pgtable((pud_t) { p4d_val(p4d) });
+	return (pud_t *)pud_pgtable(__pud(p4d_val(p4d)));
 }
 #define p4d_page_vaddr(p4d)	((unsigned long)p4d_pgtable(p4d))
 
@@ -346,7 +377,7 @@ static inline void set_pgd(pgd_t *pgdp, pgd_t pgd)
 	if (pgtable_l5_enabled)
 		WRITE_ONCE(*pgdp, pgd);
 	else
-		set_p4d((p4d_t *)pgdp, (p4d_t){ pgd_val(pgd) });
+		set_p4d((p4d_t *)pgdp, __p4d(pgd_val(pgd)));
 }
 
 static inline int pgd_none(pgd_t pgd)
@@ -384,7 +415,7 @@ static inline p4d_t *pgd_pgtable(pgd_t pgd)
 	if (pgtable_l5_enabled)
 		return (p4d_t *)pfn_to_virt(__page_val_to_pfn(pgd_val(pgd)));
 
-	return (p4d_t *)p4d_pgtable((p4d_t) { pgd_val(pgd) });
+	return (p4d_t *)p4d_pgtable(__p4d(pgd_val(pgd)));
 }
 #define pgd_page_vaddr(pgd)	((unsigned long)pgd_pgtable(pgd))
 

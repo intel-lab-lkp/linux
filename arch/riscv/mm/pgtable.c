@@ -5,6 +5,52 @@
 #include <linux/kernel.h>
 #include <linux/pgtable.h>
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+
+pte_t __pte(unsigned long pteval)
+{
+	pte_t pte;
+
+	return pte;
+}
+EXPORT_SYMBOL(__pte);
+
+pgd_t __pgd(unsigned long pgdval)
+{
+	pgd_t pgd;
+
+	return pgd;
+}
+EXPORT_SYMBOL(__pgd);
+
+#ifdef CONFIG_64BIT
+p4d_t __p4d(unsigned long p4dval)
+{
+	p4d_t p4d;
+
+	return p4d;
+}
+EXPORT_SYMBOL(__p4d);
+
+pud_t __pud(unsigned long pudval)
+{
+	pud_t pud;
+
+	return pud;
+}
+EXPORT_SYMBOL(__pud);
+
+pmd_t __pmd(unsigned long pmdval)
+{
+	pmd_t pmd;
+
+	return pmd;
+}
+EXPORT_SYMBOL(__pmd);
+#endif /* CONFIG_64BIT */
+
+#endif /* CONFIG_RISCV_USE_SW_PAGE */
+
 int ptep_set_access_flags(struct vm_area_struct *vma,
 			  unsigned long address, pte_t *ptep,
 			  pte_t entry, int dirty)

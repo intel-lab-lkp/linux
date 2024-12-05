@@ -574,6 +574,25 @@ static inline void __set_pte_at(struct mm_struct *mm, pte_t *ptep, pte_t pteval)
 
 #define PFN_PTE_SHIFT		_PAGE_PFN_SHIFT
 
+#ifdef CONFIG_RISCV_USE_SW_PAGE
+static inline pte_t pte_advance_pfn(pte_t pte, unsigned long nr)
+{
+	unsigned int i;
+
+	if (pte_present(pte) && !pte_napot(pte))
+		for (i = 0; i < HW_PAGES_PER_PAGE; i++)
+			pte.ptes[i] += nr << _PAGE_PFN_SHIFT;
+
+	return pte;
+}
+#else
+static inline pte_t pte_advance_pfn(pte_t pte, unsigned long nr)
+{
+	return __pte(pte_val(pte) + (nr << _PAGE_PFN_SHIFT));
+}
+#endif
+#define pte_advance_pfn		pte_advance_pfn
+
 static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 		pte_t *ptep, pte_t pteval, unsigned int nr)
 {
@@ -584,7 +603,7 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 		if (--nr == 0)
 			break;
 		ptep++;
-		pte_val(pteval) += 1 << _PAGE_PFN_SHIFT;
+		pteval = pte_advance_pfn(pteval, 1);
 	}
 }
 #define set_ptes set_ptes
@@ -882,7 +901,7 @@ extern pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
 	  ((offset) << __SWP_OFFSET_SHIFT) })
 
 #define __pte_to_swp_entry(pte)	((swp_entry_t) { pte_val(pte) })
-#define __swp_entry_to_pte(x)	((pte_t) { (x).val })
+#define __swp_entry_to_pte(x)	(__pte((x).val))
 
 static inline int pte_swp_exclusive(pte_t pte)
 {
