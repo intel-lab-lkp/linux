@@ -128,9 +128,15 @@ int ptep_test_and_clear_young(struct vm_area_struct *vma,
 			      unsigned long address,
 			      pte_t *ptep)
 {
-	if (!pte_young(ptep_get(ptep)))
-		return 0;
-	return test_and_clear_bit(_PAGE_ACCESSED_OFFSET, &pte_val(*ptep));
+	int r = 1;
+	pte_t pte = ptep_get(ptep);
+
+	if (!pte_young(pte))
+		r = 0;
+	else
+		set_pte(ptep, pte_mkold(pte));
+
+	return r;
 }
 EXPORT_SYMBOL_GPL(ptep_test_and_clear_young);
 

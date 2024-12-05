@@ -242,7 +242,7 @@ static inline int pud_user(pud_t pud)
 
 static inline void set_pud(pud_t *pudp, pud_t pud)
 {
-	WRITE_ONCE(*pudp, pud);
+	*pudp = pud;
 }
 
 static inline void pud_clear(pud_t *pudp)
@@ -318,7 +318,7 @@ static inline unsigned long _pmd_pfn(pmd_t pmd)
 static inline void set_p4d(p4d_t *p4dp, p4d_t p4d)
 {
 	if (pgtable_l4_enabled)
-		WRITE_ONCE(*p4dp, p4d);
+		*p4dp = p4d;
 	else
 		set_pud((pud_t *)p4dp, __pud(p4d_val(p4d)));
 }
@@ -401,7 +401,7 @@ pud_t *pud_offset(p4d_t *p4d, unsigned long address);
 static inline void set_pgd(pgd_t *pgdp, pgd_t pgd)
 {
 	if (pgtable_l5_enabled)
-		WRITE_ONCE(*pgdp, pgd);
+		*pgdp = pgd;
 	else
 		set_p4d((p4d_t *)pgdp, __p4d(pgd_val(pgd)));
 }

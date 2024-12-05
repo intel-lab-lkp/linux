@@ -289,7 +289,7 @@ static inline bool pmd_leaf(pmd_t pmd)
 
 static inline void set_pmd(pmd_t *pmdp, pmd_t pmd)
 {
-	WRITE_ONCE(*pmdp, pmd);
+	*pmdp = pmd;
 }
 
 static inline void pmd_clear(pmd_t *pmdp)
@@ -713,7 +713,7 @@ static inline int pte_same(pte_t pte_a, pte_t pte_b)
  */
 static inline void set_pte(pte_t *ptep, pte_t pteval)
 {
-	WRITE_ONCE(*ptep, pteval);
+	*ptep = pteval;
 }
 
 static inline pte_t ptep_get(pte_t *ptep)
@@ -953,10 +953,9 @@ extern int ptep_test_and_clear_young(struct vm_area_struct *vma, unsigned long a
 static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 				       unsigned long address, pte_t *ptep)
 {
-	pte_t pte = __pte(atomic_long_xchg((atomic_long_t *)ptep, 0));
-
+	pte_t pte = ptep_get(ptep);
+	pte_clear(mm, address, ptep);
 	page_table_check_pte_clear(mm, pte);
-
 	return pte;
 }
 
@@ -964,7 +963,8 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 static inline void ptep_set_wrprotect(struct mm_struct *mm,
 				      unsigned long address, pte_t *ptep)
 {
-	atomic_long_and(~(unsigned long)_PAGE_WRITE, (atomic_long_t *)ptep);
+	pte_t old_pte = ptep_get(ptep);
+	set_pte(ptep, pte_wrprotect(old_pte));
 }
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
@@ -1170,8 +1170,9 @@ static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 static inline pmd_t pmdp_huge_get_and_clear(struct mm_struct *mm,
 					unsigned long address, pmd_t *pmdp)
 {
-	pmd_t pmd = __pmd(atomic_long_xchg((atomic_long_t *)pmdp, 0));
+	pmd_t pmd = pmdp_get(pmdp);
 
+	pmd_clear(pmdp);
 	page_table_check_pmd_clear(mm, pmd);
 
 	return pmd;
@@ -1188,8 +1189,12 @@ static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 				unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
+	pmd_t old_pmd = pmdp_get(pmdp);
+
 	page_table_check_pmd_set(vma->vm_mm, pmdp, pmd);
-	return __pmd(atomic_long_xchg((atomic_long_t *)pmdp, pmd_val(pmd)));
+	set_pmd(pmdp, pmd);
+
+	return old_pmd;
 }
 
 #define pmdp_collapse_flush pmdp_collapse_flush

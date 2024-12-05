@@ -447,7 +447,7 @@ again:
 			break;
 		}
 
-		pud = READ_ONCE(*pudp);
+		pud = pudp_get_lockless(pudp);
 		if (pud_none(pud))
 			continue;
 
