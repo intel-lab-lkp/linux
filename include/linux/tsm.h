@@ -111,7 +111,9 @@ struct tsm_report_ops {
 int tsm_report_register(const struct tsm_report_ops *ops, void *priv);
 int tsm_report_unregister(const struct tsm_report_ops *ops);
 struct tsm_subsys;
+struct pci_tsm_ops;
 struct tsm_subsys *tsm_register(struct device *parent,
-				const struct attribute_group **groups);
+				const struct attribute_group **groups,
+				const struct pci_tsm_ops *ops);
 void tsm_unregister(struct tsm_subsys *subsys);
 #endif /* __TSM_H */

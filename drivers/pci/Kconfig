@@ -124,6 +124,19 @@ config PCI_ATS
 config PCI_IDE
 	bool
 
+config PCI_TSM
+	bool "TEE Security Manager for PCI Device Security"
+	select PCI_IDE
+	help
+	  The TEE (Trusted Execution Environment) Device Interface
+	  Security Protocol (TDISP) defines a "TSM" as a platform agent
+	  that manages device authentication, link encryption, link
+	  integrity protection, and assignment of PCI device functions
+	  (virtual or physical) to confidential computing VMs that can
+	  access (DMA) guest private memory.
+
+	  Enable a platform TSM driver to use this capability.
+
 config PCI_DOE
 	bool
 
