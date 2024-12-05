@@ -240,7 +240,7 @@ static int al_mc_edac_probe(struct platform_device *pdev)
 
 	ret = devm_add_action_or_reset(&pdev->dev, devm_al_mc_edac_free, mci);
 	if (ret)
-		return ret;
+		goto free;
 
 	platform_set_drvdata(pdev, mci);
 	al_mc = mci->pvt_info;
@@ -288,12 +288,12 @@ static int al_mc_edac_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev,
 			"fail to add memory controller device (%d)\n",
 			ret);
-		return ret;
+		goto free;
 	}
 
 	ret = devm_add_action_or_reset(&pdev->dev, devm_al_mc_edac_del, &pdev->dev);
 	if (ret)
-		return ret;
+		goto free;
 
 	if (al_mc->irq_ue > 0) {
 		ret = devm_request_irq(&pdev->dev,
@@ -306,7 +306,7 @@ static int al_mc_edac_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev,
 				"failed to request UE IRQ %d (%d)\n",
 				al_mc->irq_ue, ret);
-			return ret;
+			goto free;
 		}
 	}
 
@@ -321,11 +321,15 @@ static int al_mc_edac_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev,
 				"failed to request CE IRQ %d (%d)\n",
 				al_mc->irq_ce, ret);
-			return ret;
+			goto free;
 		}
 	}
 
 	return 0;
+
+free:
+	edac_mc_free(mci);
+	return ret;
 }
 
 static const struct of_device_id al_mc_edac_of_match[] = {
