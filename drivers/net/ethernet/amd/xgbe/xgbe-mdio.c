@@ -1264,7 +1264,7 @@ static int __xgbe_phy_config_aneg(struct xgbe_prv_data *pdata, bool set_mode)
 	/* Disable and stop any in progress auto-negotiation */
 	xgbe_an_disable_all(pdata);
 
-	/* Clear any auto-negotitation interrupts */
+	/* Clear any auto-negotiation interrupts */
 	xgbe_an_clear_interrupts_all(pdata);
 
 	pdata->an_result = XGBE_AN_READY;
