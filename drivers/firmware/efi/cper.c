@@ -364,7 +364,7 @@ static void cper_print_mem(const char *pfx, const struct cper_sec_mem_err *mem,
 		return;
 	}
 	if (mem->validation_bits & CPER_MEM_VALID_ERROR_STATUS)
-		printk("%s error_status: %s (0x%016llx)\n",
+		printk("%s""error_status: %s (0x%016llx)\n",
 		       pfx, cper_mem_err_status_str(mem->error_status),
 		       mem->error_status);
 	if (mem->validation_bits & CPER_MEM_VALID_PA)
