@@ -321,9 +321,7 @@ static ssize_t nvm_version_show(struct device *dev,
 	if (!mutex_trylock(&rt->tb->lock))
 		return restart_syscall();
 
-	if (!rt->nvm)
-		ret = -EAGAIN;
-	else if (rt->no_nvm_upgrade)
+	if (rt->no_nvm_upgrade)
 		ret = -EOPNOTSUPP;
 	else
 		ret = sysfs_emit(buf, "%x.%x\n", rt->nvm->major, rt->nvm->minor);
@@ -342,6 +340,18 @@ static ssize_t vendor_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(vendor);
 
+static umode_t retimer_is_visible(struct kobject *kobj,
+				      struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct tb_retimer *rt = tb_to_retimer(dev);
+
+	if (!rt->nvm)
+		return 0;
+	return attr->mode;
+
+}
+
 static struct attribute *retimer_attrs[] = {
 	&dev_attr_device.attr,
 	&dev_attr_nvm_authenticate.attr,
@@ -351,6 +361,7 @@ static struct attribute *retimer_attrs[] = {
 };
 
 static const struct attribute_group retimer_group = {
+	.is_visible = retimer_is_visible,
 	.attrs = retimer_attrs,
 };
 
