@@ -1416,6 +1416,23 @@ static int mv88e6393x_port_policy_write_all(struct mv88e6xxx_chip *chip,
 	return 0;
 }
 
+static int mv88e6393x_port_policy_write_user(struct mv88e6xxx_chip *chip,
+					     u16 pointer, u8 data)
+{
+	int err, port;
+
+	for (port = 0; port < mv88e6xxx_num_ports(chip); port++) {
+		if (!dsa_is_user_port(chip->ds, port))
+			continue;
+
+		err = mv88e6393x_port_policy_write(chip, port, pointer, data);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 int mv88e6393x_set_egress_port(struct mv88e6xxx_chip *chip,
 			       enum mv88e6xxx_egress_direction direction,
 			       int port)
@@ -1457,26 +1474,28 @@ int mv88e6393x_port_mgmt_rsvd2cpu(struct mv88e6xxx_chip *chip)
 	int err;
 
 	/* Consider the frames with reserved multicast destination
-	 * addresses matching 01:80:c2:00:00:00 and
-	 * 01:80:c2:00:00:02 as MGMT.
+	 * addresses matching 01:80:c2:00:00:00 and 01:80:c2:00:00:02
+	 * as MGMT when received on user ports. Forward as normal on
+	 * CPU/DSA ports, to support bridges with non-zero
+	 * group_fwd_masks.
 	 */
 	ptr = MV88E6393X_PORT_POLICY_MGMT_CTL_PTR_01C280000000XLO;
-	err = mv88e6393x_port_policy_write_all(chip, ptr, 0xff);
+	err = mv88e6393x_port_policy_write_user(chip, ptr, 0xff);
 	if (err)
 		return err;
 
 	ptr = MV88E6393X_PORT_POLICY_MGMT_CTL_PTR_01C280000000XHI;
-	err = mv88e6393x_port_policy_write_all(chip, ptr, 0xff);
+	err = mv88e6393x_port_policy_write_user(chip, ptr, 0xff);
 	if (err)
 		return err;
 
 	ptr = MV88E6393X_PORT_POLICY_MGMT_CTL_PTR_01C280000002XLO;
-	err = mv88e6393x_port_policy_write_all(chip, ptr, 0xff);
+	err = mv88e6393x_port_policy_write_user(chip, ptr, 0xff);
 	if (err)
 		return err;
 
 	ptr = MV88E6393X_PORT_POLICY_MGMT_CTL_PTR_01C280000002XHI;
-	err = mv88e6393x_port_policy_write_all(chip, ptr, 0xff);
+	err = mv88e6393x_port_policy_write_user(chip, ptr, 0xff);
 	if (err)
 		return err;
 
