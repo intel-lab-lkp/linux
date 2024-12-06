@@ -37,15 +37,14 @@ struct \(of_device_id \| i2c_device_id \| platform_device_id\) arr[] = {
 	...,
 	{
 	.var = E,
--	}
-+	},
-+	{ }
+	},
++	{ /* sentinel */ }
 };
 |
 struct \(of_device_id \| i2c_device_id \| platform_device_id\) arr[] = {
 	...,
 	{ ..., E, ... },
-+	{ },
++	{ /* sentinel */ }
 };
 )
 
