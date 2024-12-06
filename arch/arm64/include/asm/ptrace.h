@@ -214,8 +214,15 @@ static inline void forget_syscall(struct pt_regs *regs)
 		(regs)->pmr == GIC_PRIO_IRQON :				\
 		true)
 
+/*
+ * Used by the GICv3 driver, can be removed once arch/arm implements
+ * regs_irqs_disabled() directly.
+ */
 #define interrupts_enabled(regs)			\
 	(!((regs)->pstate & PSR_I_BIT) && irqs_priority_unmasked(regs))
+
+#define regs_irqs_disabled(regs)			\
+	(((regs)->pstate & PSR_I_BIT) || (!irqs_priority_unmasked(regs)))
 
 #define fast_interrupts_enabled(regs) \
 	(!((regs)->pstate & PSR_F_BIT))
