@@ -406,7 +406,6 @@ static int merge_tests(struct btrfs_trans_handle *trans,
 				 PTR_ERR(head));
 		else
 			test_err("failed to find delayed ref head");
-		head = NULL;
 		goto out;
 	}
 
@@ -457,7 +456,6 @@ static int merge_tests(struct btrfs_trans_handle *trans,
 				 PTR_ERR(head));
 		else
 			test_err("failed to find delayed ref head");
-		head = NULL;
 		goto out;
 	}
 
@@ -590,7 +588,6 @@ static int merge_tests(struct btrfs_trans_handle *trans,
 				 PTR_ERR(head));
 		else
 			test_err("failed to find delayed ref head");
-		head = NULL;
 		ret = -EINVAL;
 		goto out;
 	}
@@ -662,7 +659,6 @@ static int merge_tests(struct btrfs_trans_handle *trans,
 		else
 			test_err("failed to find delayed ref head");
 		ret = -EINVAL;
-		head = NULL;
 		goto out;
 	}
 
@@ -747,7 +743,6 @@ static int merge_tests(struct btrfs_trans_handle *trans,
 				 PTR_ERR(head));
 		else
 			test_err("failed to find delayed ref head");
-		head = NULL;
 		ret = -EINVAL;
 		goto out;
 	}
@@ -769,7 +764,7 @@ static int merge_tests(struct btrfs_trans_handle *trans,
 	}
 	ret = 0;
 out:
-	if (head)
+	if (!IS_ERR_OR_NULL(head))
 		btrfs_unselect_ref_head(&trans->transaction->delayed_refs, head);
 	btrfs_destroy_delayed_refs(trans->transaction);
 	return ret;
