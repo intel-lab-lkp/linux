@@ -59,8 +59,11 @@ int mv88e6xxx_read(struct mv88e6xxx_chip *chip, int addr, int reg, u16 *val)
 	assert_reg_lock(chip);
 
 	err = mv88e6xxx_smi_read(chip, addr, reg, val);
-	if (err)
+	if (err) {
+		dev_err_ratelimited(chip->dev, "Failed to read from 0x%02x/0x%02x: %d",
+				    addr, reg, err);
 		return err;
+	}
 
 	dev_dbg(chip->dev, "<- addr: 0x%.2x reg: 0x%.2x val: 0x%.4x\n",
 		addr, reg, *val);
@@ -75,17 +78,19 @@ int mv88e6xxx_write(struct mv88e6xxx_chip *chip, int addr, int reg, u16 val)
 	assert_reg_lock(chip);
 
 	err = mv88e6xxx_smi_write(chip, addr, reg, val);
-	if (err)
+	if (err) {
+		dev_err_ratelimited(chip->dev, "Failed to write 0x%04x to 0x%02x/0x%02x: %d",
+				    val, addr, reg, err);
 		return err;
-
+	}
 	dev_dbg(chip->dev, "-> addr: 0x%.2x reg: 0x%.2x val: 0x%.4x\n",
 		addr, reg, val);
 
 	return 0;
 }
 
-int mv88e6xxx_wait_mask(struct mv88e6xxx_chip *chip, int addr, int reg,
-			u16 mask, u16 val)
+static int _mv88e6xxx_wait_mask(struct mv88e6xxx_chip *chip, int addr, int reg,
+				u16 mask, u16 val, u16 *last)
 {
 	const unsigned long timeout = jiffies + msecs_to_jiffies(50);
 	u16 data;
@@ -117,15 +122,51 @@ int mv88e6xxx_wait_mask(struct mv88e6xxx_chip *chip, int addr, int reg,
 	if ((data & mask) == val)
 		return 0;
 
-	dev_err(chip->dev, "Timeout while waiting for switch\n");
+	if (last)
+		*last = data;
+
 	return -ETIMEDOUT;
+}
+
+int mv88e6xxx_wait_mask(struct mv88e6xxx_chip *chip, int addr, int reg,
+			u16 mask, u16 val)
+{
+	u16 last;
+	int err;
+
+	err = _mv88e6xxx_wait_mask(chip, addr, reg, mask, val, &last);
+	if (!err)
+		return 0;
+
+	dev_err(chip->dev,
+		"%s waiting for 0x%02x/0x%02x to match 0x%04x (mask:0x%04x last:0x%04x)\n",
+		(err == -ETIMEDOUT) ? "Timed out" : "Failed",
+		addr, reg, val, mask, last);
+	return err;
+}
+
+static int _mv88e6xxx_wait_bit(struct mv88e6xxx_chip *chip, int addr, int reg,
+			       int bit, int val, u16 *last)
+{
+	return _mv88e6xxx_wait_mask(chip, addr, reg, BIT(bit),
+				   val ? BIT(bit) : 0x0000, last);
 }
 
 int mv88e6xxx_wait_bit(struct mv88e6xxx_chip *chip, int addr, int reg,
 		       int bit, int val)
 {
-	return mv88e6xxx_wait_mask(chip, addr, reg, BIT(bit),
-				   val ? BIT(bit) : 0x0000);
+	u16 last;
+	int err;
+
+	err = _mv88e6xxx_wait_bit(chip, addr, reg, bit, val, &last);
+	if (!err)
+		return 0;
+
+	dev_err(chip->dev,
+		"%s waiting for bit %d in 0x%02x/0x%02x to %s (last:0x%04x)\n",
+		(err == -ETIMEDOUT) ? "Timed out" : "Failed",
+		bit, addr, reg, val ? "set" : "clear", last);
+	return err;
 }
 
 struct mii_bus *mv88e6xxx_default_mdio_bus(struct mv88e6xxx_chip *chip)
