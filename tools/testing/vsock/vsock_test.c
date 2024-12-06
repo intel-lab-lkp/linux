@@ -1552,6 +1552,67 @@ static void test_stream_msgzcopy_leak_errq_server(const struct test_opts *opts)
 	close(fd);
 }
 
+static void test_stream_msgzcopy_leak_zcskb_client(const struct test_opts *opts)
+{
+	char buf[1024] = { 0 };
+	ssize_t optmem_max;
+	int fd, res;
+	FILE *f;
+
+	f = fopen("/proc/sys/net/core/optmem_max", "r");
+	if (!f) {
+		perror("fopen(optmem_max)");
+		exit(EXIT_FAILURE);
+	}
+
+	if (fscanf(f, "%zd", &optmem_max) != 1 || optmem_max > ~0U / 2) {
+		fprintf(stderr, "fscanf(optmem_max) failed\n");
+		exit(EXIT_FAILURE);
+	}
+
+	fclose(f);
+
+	fd = vsock_stream_connect(opts->peer_cid, opts->peer_port);
+	if (fd < 0) {
+		perror("connect");
+		exit(EXIT_FAILURE);
+	}
+
+	enable_so_zerocopy_check(fd);
+
+	/* The idea is to fail virtio_transport_init_zcopy_skb() by hitting
+	 * core.sysctl_optmem_max (sysctl net.core.optmem_max) limit check in
+	 * sock_omalloc().
+	 */
+	optmem_max *= 2;
+	errno = 0;
+	do {
+		res = send(fd, buf, sizeof(buf), MSG_ZEROCOPY);
+		optmem_max -= res;
+	} while (res > 0 && optmem_max > 0);
+
+	if (errno != ENOMEM) {
+		fprintf(stderr, "expected ENOMEM on send()\n");
+		exit(EXIT_FAILURE);
+	}
+
+	close(fd);
+}
+
+static void test_stream_msgzcopy_leak_zcskb_server(const struct test_opts *opts)
+{
+	int fd;
+
+	fd = vsock_stream_accept(VMADDR_CID_ANY, opts->peer_port, NULL);
+	if (fd < 0) {
+		perror("accept");
+		exit(EXIT_FAILURE);
+	}
+
+	vsock_wait_remote_close(fd);
+	close(fd);
+}
+
 static struct test_case test_cases[] = {
 	{
 		.name = "SOCK_STREAM connection reset",
@@ -1691,6 +1752,11 @@ static struct test_case test_cases[] = {
 		.name = "SOCK_STREAM MSG_ZEROCOPY leak MSG_ERRQUEUE",
 		.run_client = test_stream_msgzcopy_leak_errq_client,
 		.run_server = test_stream_msgzcopy_leak_errq_server,
+	},
+	{
+		.name = "SOCK_STREAM MSG_ZEROCOPY leak completion skb",
+		.run_client = test_stream_msgzcopy_leak_zcskb_client,
+		.run_server = test_stream_msgzcopy_leak_zcskb_server,
 	},
 	{},
 };
