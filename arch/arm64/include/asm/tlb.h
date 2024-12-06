@@ -10,10 +10,14 @@
 
 #include <linux/pagemap.h>
 #include <linux/swap.h>
+#include <linux/kpkeys.h>
 
 static inline void __tlb_remove_table(void *_table)
 {
-	free_page_and_swap_cache((struct page *)_table);
+	struct page *page = (struct page *)_table;
+
+	kpkeys_unprotect_pgtable_memory((unsigned long)page_address(page), 1);
+	free_page_and_swap_cache(page);
 }
 
 #define tlb_flush tlb_flush
