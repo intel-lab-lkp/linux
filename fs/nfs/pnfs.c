@@ -386,10 +386,7 @@ pnfs_clear_layoutreturn_info(struct pnfs_layout_hdr *lo)
 
 static void pnfs_clear_layoutreturn_waitbit(struct pnfs_layout_hdr *lo)
 {
-	clear_bit_unlock(NFS_LAYOUT_RETURN, &lo->plh_flags);
-	clear_bit(NFS_LAYOUT_RETURN_LOCK, &lo->plh_flags);
-	smp_mb__after_atomic();
-	wake_up_bit(&lo->plh_flags, NFS_LAYOUT_RETURN);
+	clear_and_wake_up_bit(NFS_LAYOUT_RETURN, &lo->plh_flags);
 	rpc_wake_up(&NFS_SERVER(lo->plh_inode)->roc_rpcwaitq);
 }
 
@@ -471,9 +468,6 @@ pnfs_mark_layout_stateid_invalid(struct pnfs_layout_hdr *lo,
 	pnfs_clear_layoutreturn_info(lo);
 	pnfs_free_returned_lsegs(lo, lseg_list, &range, 0);
 	set_bit(NFS_LAYOUT_DRAIN, &lo->plh_flags);
-	if (test_bit(NFS_LAYOUT_RETURN, &lo->plh_flags) &&
-	    !test_and_set_bit(NFS_LAYOUT_RETURN_LOCK, &lo->plh_flags))
-		pnfs_clear_layoutreturn_waitbit(lo);
 	return !list_empty(&lo->plh_segs);
 }
 
@@ -1310,9 +1304,8 @@ pnfs_prepare_layoutreturn(struct pnfs_layout_hdr *lo,
 	/* Serialise LAYOUTGET/LAYOUTRETURN */
 	if (atomic_read(&lo->plh_outstanding) != 0)
 		return false;
-	if (test_and_set_bit(NFS_LAYOUT_RETURN_LOCK, &lo->plh_flags))
+	if (test_and_set_bit(NFS_LAYOUT_RETURN, &lo->plh_flags))
 		return false;
-	set_bit(NFS_LAYOUT_RETURN, &lo->plh_flags);
 	pnfs_get_layout_hdr(lo);
 	nfs4_stateid_copy(stateid, &lo->plh_stateid);
 	*cred = get_cred(lo->plh_lc_cred);
@@ -1454,7 +1447,7 @@ _pnfs_return_layout(struct inode *ino)
 	/* Reference matched in nfs4_layoutreturn_release */
 	pnfs_get_layout_hdr(lo);
 	/* Is there an outstanding layoutreturn ? */
-	if (test_bit(NFS_LAYOUT_RETURN_LOCK, &lo->plh_flags)) {
+	if (test_bit(NFS_LAYOUT_RETURN, &lo->plh_flags)) {
 		spin_unlock(&ino->i_lock);
 		if (wait_on_bit(&lo->plh_flags, NFS_LAYOUT_RETURN,
 					TASK_UNINTERRUPTIBLE))
@@ -1564,7 +1557,7 @@ retry:
 		goto out_noroc;
 	}
 	pnfs_get_layout_hdr(lo);
-	if (test_bit(NFS_LAYOUT_RETURN_LOCK, &lo->plh_flags)) {
+	if (test_bit(NFS_LAYOUT_RETURN, &lo->plh_flags)) {
 		spin_unlock(&ino->i_lock);
 		rcu_read_unlock();
 		wait_on_bit(&lo->plh_flags, NFS_LAYOUT_RETURN,
