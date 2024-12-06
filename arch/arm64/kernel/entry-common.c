@@ -109,9 +109,6 @@ void raw_irqentry_exit_cond_resched(void)
 #ifdef CONFIG_PREEMPT_DYNAMIC
 	if (!static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched))
 		return;
-#else
-	if (!IS_ENABLED(CONFIG_PREEMPTION))
-		return;
 #endif
 
 	if (!preempt_count()) {
@@ -142,7 +139,8 @@ static __always_inline void __exit_to_kernel_mode(struct pt_regs *regs,
 			return;
 		}
 
-		raw_irqentry_exit_cond_resched();
+		if (IS_ENABLED(CONFIG_PREEMPTION))
+			raw_irqentry_exit_cond_resched();
 
 		trace_hardirqs_on();
 	} else {
