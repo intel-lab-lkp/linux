@@ -139,6 +139,9 @@ void debugfs_create_file_size(const char *name, umode_t mode,
 
 struct dentry *debugfs_create_dir(const char *name, struct dentry *parent);
 
+struct dentry *debugfs_create_devm_dir(struct device *dev, const char *name,
+				       struct dentry *parent);
+
 struct dentry *debugfs_create_symlink(const char *name, struct dentry *parent,
 				      const char *dest);
 
@@ -282,6 +285,13 @@ static inline void debugfs_create_file_size(const char *name, umode_t mode,
 
 static inline struct dentry *debugfs_create_dir(const char *name,
 						struct dentry *parent)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline struct dentry *debugfs_create_devm_dir(struct device *dev,
+						     const char *name,
+						     struct dentry *parent)
 {
 	return ERR_PTR(-ENODEV);
 }

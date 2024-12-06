@@ -610,6 +610,42 @@ struct dentry *debugfs_create_dir(const char *name, struct dentry *parent)
 }
 EXPORT_SYMBOL_GPL(debugfs_create_dir);
 
+static void debugfs_remove_devm(void *dentry_rwa)
+{
+	struct dentry *dentry = dentry_rwa;
+
+	debugfs_remove(dentry);
+}
+
+/**
+ * debugfs_create_devm_dir - Managed debugfs_create_dir()
+ * @dev: Device that owns the action
+ * @name: a pointer to a string containing the name of the directory to
+ *        create.
+ * @parent: a pointer to the parent dentry for this file.  This should be a
+ *          directory dentry if set.  If this parameter is NULL, then the
+ *          directory will be created in the root of the debugfs filesystem.
+ * Managed debugfs_create_dir(). dentry will automatically be remove on
+ * driver detach.
+ */
+struct dentry *debugfs_create_devm_dir(struct device *dev, const char *name,
+				       struct dentry *parent)
+{
+	struct dentry *dentry;
+	int ret;
+
+	dentry = debugfs_create_dir(name, parent);
+	if (IS_ERR(dentry))
+		return dentry;
+
+	ret = devm_add_action_or_reset(dev, debugfs_remove_devm, dentry);
+	if (ret)
+		ERR_PTR(ret);
+
+	return dentry;
+}
+EXPORT_SYMBOL_GPL(debugfs_create_devm_dir);
+
 /**
  * debugfs_create_automount - create automount point in the debugfs filesystem
  * @name: a pointer to a string containing the name of the file to create.
