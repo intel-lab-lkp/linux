@@ -33,6 +33,11 @@ struct imx8_soc_data {
 	int (*soc_revision)(u32 *socrev, u64 *socuid);
 };
 
+struct imx8m_soc_priv {
+	struct soc_device *soc_dev;
+	struct platform_device *cpufreq_dev;
+};
+
 #ifdef CONFIG_HAVE_ARM_SMCCC
 static u32 imx8mq_soc_revision_from_atf(void)
 {
@@ -198,13 +203,17 @@ static int imx8m_soc_probe(struct platform_device *pdev)
 	const struct imx8_soc_data *data;
 	struct device *dev = &pdev->dev;
 	const struct of_device_id *id;
-	struct soc_device *soc_dev;
+	struct imx8m_soc_priv *priv;
 	u32 soc_rev = 0;
 	u64 soc_uid = 0;
 	int ret;
 
 	soc_dev_attr = devm_kzalloc(dev, sizeof(*soc_dev_attr), GFP_KERNEL);
 	if (!soc_dev_attr)
+		return -ENOMEM;
+
+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
 		return -ENOMEM;
 
 	soc_dev_attr->family = "Freescale i.MX";
@@ -235,21 +244,34 @@ static int imx8m_soc_probe(struct platform_device *pdev)
 	if (!soc_dev_attr->serial_number)
 		return -ENOMEM;
 
-	soc_dev = soc_device_register(soc_dev_attr);
-	if (IS_ERR(soc_dev))
-		return PTR_ERR(soc_dev);
+	priv->soc_dev = soc_device_register(soc_dev_attr);
+	if (IS_ERR(priv->soc_dev))
+		return PTR_ERR(priv->soc_dev);
 
 	pr_info("SoC: %s revision %s\n", soc_dev_attr->soc_id,
 		soc_dev_attr->revision);
 
 	if (IS_ENABLED(CONFIG_ARM_IMX_CPUFREQ_DT))
-		platform_device_register_simple("imx-cpufreq-dt", -1, NULL, 0);
+		priv->cpufreq_dev = platform_device_register_simple("imx-cpufreq-dt", -1, NULL, 0);
+
+	platform_set_drvdata(pdev, priv);
 
 	return 0;
 }
 
+static void imx8m_soc_remove(struct platform_device *pdev)
+{
+	struct imx8m_soc_priv *priv = platform_get_drvdata(pdev);
+
+	if (!IS_ERR(priv->cpufreq_dev))
+		platform_device_unregister(priv->cpufreq_dev);
+
+	soc_device_unregister(priv->soc_dev);
+}
+
 static struct platform_driver imx8m_soc_driver = {
 	.probe = imx8m_soc_probe,
+	.remove	= imx8m_soc_remove,
 	.driver = {
 		.name = "imx8m-soc",
 	},
