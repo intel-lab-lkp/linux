@@ -126,19 +126,6 @@ void __cpuidle default_idle_call(void)
 	instrumentation_end();
 }
 
-static int call_cpuidle_s2idle(struct cpuidle_driver *drv,
-			       struct cpuidle_device *dev)
-{
-	int ret;
-
-	if (current_clr_polling_and_test())
-		return -EBUSY;
-
-	ret = cpuidle_enter_s2idle(drv, dev);
-	__current_set_polling();
-	return ret;
-}
-
 /**
  * cpuidle_idle_call - the main idle function
  *
@@ -184,10 +171,12 @@ static void cpuidle_idle_call(void)
 		u64 max_latency_ns;
 
 		if (idle_should_enter_s2idle()) {
-
-			entered_state = call_cpuidle_s2idle(drv, dev);
-			if (entered_state > 0)
-				goto exit_idle;
+			if (!current_clr_polling_and_test()) {
+				entered_state = cpuidle_enter_s2idle(drv, dev);
+				__current_set_polling();
+				if (entered_state > 0)
+					goto exit_idle;
+			}
 
 			max_latency_ns = U64_MAX;
 		} else {
