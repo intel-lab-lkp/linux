@@ -28,12 +28,38 @@ static bool pgdir_is_page_size(void)
 	return false;
 }
 
+static pgd_t *pgd_page_alloc(gfp_t gfp)
+{
+	unsigned long addr;
+	int ret;
+
+	addr = __get_free_page(gfp);
+	if (!addr)
+		return NULL;
+
+	ret = kpkeys_protect_pgtable_memory(addr, 1);
+	if (ret) {
+		free_page(addr);
+		return NULL;
+	}
+
+	return (pgd_t *)addr;
+}
+
+static void pgd_page_free(pgd_t *pgd)
+{
+	unsigned long addr = (unsigned long)pgd;
+
+	kpkeys_unprotect_pgtable_memory(addr, 1);
+	free_page(addr);
+}
+
 pgd_t *pgd_alloc(struct mm_struct *mm)
 {
 	gfp_t gfp = GFP_PGTABLE_USER;
 
 	if (pgdir_is_page_size())
-		return (pgd_t *)__get_free_page(gfp);
+		return pgd_page_alloc(gfp);
 	else
 		return kmem_cache_alloc(pgd_cache, gfp);
 }
@@ -41,7 +67,7 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 void pgd_free(struct mm_struct *mm, pgd_t *pgd)
 {
 	if (pgdir_is_page_size())
-		free_page((unsigned long)pgd);
+		pgd_page_free(pgd);
 	else
 		kmem_cache_free(pgd_cache, pgd);
 }
