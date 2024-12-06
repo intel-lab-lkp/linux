@@ -465,6 +465,7 @@
 
 /* These apply for core versions 1.94a and later */
 #define DWC3_DCTL_NYET_THRES(n)		(((n) & 0xf) << 20)
+#define DWC3_DCTL_NYET_THRES_MASK	DWC3_DCTL_NYET_THRES(0xf)
 
 #define DWC3_DCTL_KEEP_CONNECT		BIT(19)
 #define DWC3_DCTL_L1_HIBER_EN		BIT(18)
