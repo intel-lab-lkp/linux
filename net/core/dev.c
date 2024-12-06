@@ -6849,6 +6849,8 @@ void __netif_napi_del(struct napi_struct *napi)
 		return;
 
 	if (napi->config) {
+		if (napi->irq > 0)
+			irq_set_affinity_notifier(napi->irq, NULL);
 		napi->index = -1;
 		napi->config = NULL;
 	}
@@ -11190,7 +11192,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 {
 	struct net_device *dev;
 	size_t napi_config_sz;
-	unsigned int maxqs;
+	unsigned int maxqs, i;
 
 	BUG_ON(strlen(name) >= sizeof(dev->name));
 
@@ -11286,6 +11288,9 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	dev->napi_config = kvzalloc(napi_config_sz, GFP_KERNEL_ACCOUNT);
 	if (!dev->napi_config)
 		goto free_all;
+	for (i = 0; i < maxqs; i++)
+		cpumask_copy(&dev->napi_config[i].affinity_mask,
+			     cpu_online_mask);
 
 	strscpy(dev->name, name);
 	dev->name_assign_type = name_assign_type;

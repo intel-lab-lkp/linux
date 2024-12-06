@@ -350,6 +350,7 @@ struct napi_config {
 	u64 gro_flush_timeout;
 	u64 irq_suspend_timeout;
 	u32 defer_hard_irqs;
+	cpumask_t affinity_mask;
 	unsigned int napi_id;
 };
 
@@ -393,6 +394,7 @@ struct napi_struct {
 	int			irq;
 	int			index;
 	struct napi_config	*config;
+	struct irq_affinity_notify affinity_notify;
 };
 
 enum {
@@ -2666,10 +2668,30 @@ static inline void *netdev_priv(const struct net_device *dev)
 void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 			  enum netdev_queue_type type,
 			  struct napi_struct *napi);
+static inline void
+netif_napi_affinity_notify(struct irq_affinity_notify *notify,
+			   const cpumask_t *mask)
+{
+	struct napi_struct *napi =
+		container_of(notify, struct napi_struct, affinity_notify);
+
+	if (napi->config)
+		cpumask_copy(&napi->config->affinity_mask, mask);
+}
+
+static inline void
+netif_napi_affinity_release(struct kref __always_unused *ref) {}
 
 static inline void netif_napi_set_irq(struct napi_struct *napi, int irq)
 {
 	napi->irq = irq;
+
+	if (irq > 0 && napi->config) {
+		napi->affinity_notify.notify = netif_napi_affinity_notify;
+		napi->affinity_notify.release = netif_napi_affinity_release;
+		irq_set_affinity_notifier(irq, &napi->affinity_notify);
+		irq_set_affinity(irq, &napi->config->affinity_mask);
+	}
 }
 
 /* Default NAPI poll() weight
