@@ -375,7 +375,8 @@ struct lruvec_stats {
 	long state_pending[NR_MEMCG_NODE_STAT_ITEMS];
 };
 
-unsigned long lruvec_page_state(struct lruvec *lruvec, enum node_stat_item idx)
+static unsigned long __lruvec_page_state(struct lruvec *lruvec,
+		enum node_stat_item idx, bool local)
 {
 	struct mem_cgroup_per_node *pn;
 	long x;
@@ -389,7 +390,8 @@ unsigned long lruvec_page_state(struct lruvec *lruvec, enum node_stat_item idx)
 		return 0;
 
 	pn = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
-	x = READ_ONCE(pn->lruvec_stats->state[i]);
+	x = local ? READ_ONCE(pn->lruvec_stats->state_local[i]) :
+		    READ_ONCE(pn->lruvec_stats->state[i]);
 #ifdef CONFIG_SMP
 	if (x < 0)
 		x = 0;
@@ -397,27 +399,16 @@ unsigned long lruvec_page_state(struct lruvec *lruvec, enum node_stat_item idx)
 	return x;
 }
 
+
+unsigned long lruvec_page_state(struct lruvec *lruvec, enum node_stat_item idx)
+{
+	return __lruvec_page_state(lruvec, idx, false);
+}
+
 unsigned long lruvec_page_state_local(struct lruvec *lruvec,
 				      enum node_stat_item idx)
 {
-	struct mem_cgroup_per_node *pn;
-	long x;
-	int i;
-
-	if (mem_cgroup_disabled())
-		return node_page_state(lruvec_pgdat(lruvec), idx);
-
-	i = memcg_stats_index(idx);
-	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, idx))
-		return 0;
-
-	pn = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
-	x = READ_ONCE(pn->lruvec_stats->state_local[i]);
-#ifdef CONFIG_SMP
-	if (x < 0)
-		x = 0;
-#endif
-	return x;
+	return __lruvec_page_state(lruvec, idx, true);
 }
 
 /* Subset of vm_event_item to report for memcg event stats */
@@ -651,7 +642,7 @@ static void flush_memcg_stats_dwork(struct work_struct *w)
 	queue_delayed_work(system_unbound_wq, &stats_flush_dwork, FLUSH_TIME);
 }
 
-unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx)
+static unsigned long __memcg_page_state(struct mem_cgroup *memcg, int idx, bool local)
 {
 	long x;
 	int i = memcg_stats_index(idx);
@@ -659,12 +650,19 @@ unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx)
 	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, idx))
 		return 0;
 
-	x = READ_ONCE(memcg->vmstats->state[i]);
+	x = local ? READ_ONCE(memcg->vmstats->state_local[i]) :
+		    READ_ONCE(memcg->vmstats->state[i]);
+
 #ifdef CONFIG_SMP
 	if (x < 0)
 		x = 0;
 #endif
 	return x;
+}
+
+unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx)
+{
+	return __memcg_page_state(memcg, idx, false);
 }
 
 static int memcg_page_state_unit(int item);
@@ -709,18 +707,7 @@ void __mod_memcg_state(struct mem_cgroup *memcg, enum memcg_stat_item idx,
 /* idx can be of type enum memcg_stat_item or node_stat_item. */
 unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
 {
-	long x;
-	int i = memcg_stats_index(idx);
-
-	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, idx))
-		return 0;
-
-	x = READ_ONCE(memcg->vmstats->state_local[i]);
-#ifdef CONFIG_SMP
-	if (x < 0)
-		x = 0;
-#endif
-	return x;
+	return __memcg_page_state(memcg, idx, true);
 }
 
 static void __mod_memcg_lruvec_state(struct lruvec *lruvec,
@@ -859,24 +846,25 @@ void __count_memcg_events(struct mem_cgroup *memcg, enum vm_event_item idx,
 	memcg_stats_unlock();
 }
 
-unsigned long memcg_events(struct mem_cgroup *memcg, int event)
+static unsigned long __memcg_events(struct mem_cgroup *memcg, int event, bool local)
 {
 	int i = memcg_events_index(event);
 
 	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, event))
 		return 0;
 
-	return READ_ONCE(memcg->vmstats->events[i]);
+	return local ? READ_ONCE(memcg->vmstats->events_local[i]) :
+		    READ_ONCE(memcg->vmstats->events[i]);
+}
+
+unsigned long memcg_events(struct mem_cgroup *memcg, int event)
+{
+	return __memcg_events(memcg, event, false);
 }
 
 unsigned long memcg_events_local(struct mem_cgroup *memcg, int event)
 {
-	int i = memcg_events_index(event);
-
-	if (WARN_ONCE(BAD_STAT_IDX(i), "%s: missing stat item %d\n", __func__, event))
-		return 0;
-
-	return READ_ONCE(memcg->vmstats->events_local[i]);
+	return __memcg_events(memcg, event, true);
 }
 
 struct mem_cgroup *mem_cgroup_from_task(struct task_struct *p)
