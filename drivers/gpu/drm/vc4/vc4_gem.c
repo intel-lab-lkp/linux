@@ -578,19 +578,6 @@ vc4_update_bo_seqnos(struct vc4_exec_info *exec, uint64_t seqno)
 	}
 }
 
-static void
-vc4_unlock_bo_reservations(struct drm_device *dev,
-			   struct vc4_exec_info *exec,
-			   struct ww_acquire_ctx *acquire_ctx)
-{
-	int i;
-
-	for (i = 0; i < exec->bo_count; i++)
-		dma_resv_unlock(exec->bo[i]->resv);
-
-	ww_acquire_fini(acquire_ctx);
-}
-
 /* Takes the reservation lock on all the BOs being referenced, so that
  * at queue submit time we can update the reservations.
  *
@@ -603,54 +590,12 @@ vc4_lock_bo_reservations(struct drm_device *dev,
 			 struct vc4_exec_info *exec,
 			 struct ww_acquire_ctx *acquire_ctx)
 {
-	int contended_lock = -1;
 	int i, ret;
 	struct drm_gem_object *bo;
 
-	ww_acquire_init(acquire_ctx, &reservation_ww_class);
-
-retry:
-	if (contended_lock != -1) {
-		bo = exec->bo[contended_lock];
-		ret = dma_resv_lock_slow_interruptible(bo->resv, acquire_ctx);
-		if (ret) {
-			ww_acquire_done(acquire_ctx);
-			return ret;
-		}
-	}
-
-	for (i = 0; i < exec->bo_count; i++) {
-		if (i == contended_lock)
-			continue;
-
-		bo = exec->bo[i];
-
-		ret = dma_resv_lock_interruptible(bo->resv, acquire_ctx);
-		if (ret) {
-			int j;
-
-			for (j = 0; j < i; j++) {
-				bo = exec->bo[j];
-				dma_resv_unlock(bo->resv);
-			}
-
-			if (contended_lock != -1 && contended_lock >= i) {
-				bo = exec->bo[contended_lock];
-
-				dma_resv_unlock(bo->resv);
-			}
-
-			if (ret == -EDEADLK) {
-				contended_lock = i;
-				goto retry;
-			}
-
-			ww_acquire_done(acquire_ctx);
-			return ret;
-		}
-	}
-
-	ww_acquire_done(acquire_ctx);
+	ret = drm_gem_lock_reservations(exec->bo, exec->bo_count, acquire_ctx);
+	if (ret)
+		return ret;
 
 	/* Reserve space for our shared (read-only) fence references,
 	 * before we commit the CL to the hardware.
@@ -660,7 +605,8 @@ retry:
 
 		ret = dma_resv_reserve_fences(bo->resv, 1);
 		if (ret) {
-			vc4_unlock_bo_reservations(dev, exec, acquire_ctx);
+			drm_gem_unlock_reservations(exec->bo, exec->bo_count,
+						    acquire_ctx);
 			return ret;
 		}
 	}
@@ -708,7 +654,7 @@ vc4_queue_submit(struct drm_device *dev, struct vc4_exec_info *exec,
 
 	vc4_update_bo_seqnos(exec, seqno);
 
-	vc4_unlock_bo_reservations(dev, exec, acquire_ctx);
+	drm_gem_unlock_reservations(exec->bo, exec->bo_count, acquire_ctx);
 
 	list_add_tail(&exec->head, &vc4->bin_job_list);
 
