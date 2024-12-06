@@ -248,7 +248,7 @@ static void xprt_clear_locked(struct rpc_xprt *xprt)
 {
 	xprt->snd_task = NULL;
 	if (!test_bit(XPRT_CLOSE_WAIT, &xprt->state))
-		clear_bit_unlock(XPRT_LOCKED, &xprt->state);
+		clear_and_wake_up_bit(XPRT_LOCKED, &xprt->state);
 	else
 		queue_work(xprtiod_workqueue, &xprt->task_cleanup);
 }
@@ -744,7 +744,6 @@ static void xprt_autoclose(struct work_struct *work)
 	clear_bit(XPRT_CLOSE_WAIT, &xprt->state);
 	xprt->ops->close(xprt);
 	xprt_release_write(xprt, NULL);
-	wake_up_bit(&xprt->state, XPRT_LOCKED);
 	memalloc_nofs_restore(pflags);
 }
 
@@ -911,7 +910,6 @@ void xprt_unlock_connect(struct rpc_xprt *xprt, void *cookie)
 	xprt_schedule_autodisconnect(xprt);
 out:
 	spin_unlock(&xprt->transport_lock);
-	wake_up_bit(&xprt->state, XPRT_LOCKED);
 }
 EXPORT_SYMBOL_GPL(xprt_unlock_connect);
 
