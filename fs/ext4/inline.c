@@ -668,9 +668,6 @@ int ext4_try_to_write_inline_data(struct address_space *mapping,
 	struct folio *folio;
 	struct ext4_iloc iloc;
 
-	if (pos + len > ext4_get_max_inline_size(inode))
-		goto convert;
-
 	ret = ext4_get_inode_loc(inode, &iloc);
 	if (ret)
 		return ret;
