@@ -374,6 +374,17 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		if (!file_mmap_ok(file, inode, pgoff, len))
 			return -EOVERFLOW;
 
+		if (is_exec_sealed(seals)) {
+			/* No new executable mappings if the file is exec sealed. */
+			if (prot & PROT_EXEC)
+				return -EACCES;
+			/*
+			 * Prevent an initially non-executable mapping from
+			 * later becoming executable via mprotect().
+			 */
+			vm_flags &= ~VM_MAYEXEC;
+		}
+
 		flags_mask = LEGACY_MAP_MASK;
 		if (file->f_op->fop_flags & FOP_MMAP_SYNC)
 			flags_mask |= MAP_SYNC;
