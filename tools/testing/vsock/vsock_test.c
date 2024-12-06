@@ -1474,6 +1474,45 @@ static void test_stream_cred_upd_on_set_rcvlowat(const struct test_opts *opts)
 	test_stream_credit_update_test(opts, false);
 }
 
+#define ACCEPTQ_LEAK_RACE_TIMEOUT 2 /* seconds */
+
+static void test_stream_leak_acceptq_client(const struct test_opts *opts)
+{
+	struct sockaddr_vm addr = {
+		.svm_family = AF_VSOCK,
+		.svm_port = opts->peer_port,
+		.svm_cid = opts->peer_cid
+	};
+	time_t tout;
+	int fd;
+
+	tout = current_nsec() + ACCEPTQ_LEAK_RACE_TIMEOUT * NSEC_PER_SEC;
+	do {
+		control_writeulong(1);
+
+		fd = socket(AF_VSOCK, SOCK_STREAM, 0);
+		if (fd < 0) {
+			perror("socket");
+			exit(EXIT_FAILURE);
+		}
+
+		connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+		close(fd);
+	} while (current_nsec() < tout);
+
+	control_writeulong(0);
+}
+
+static void test_stream_leak_acceptq_server(const struct test_opts *opts)
+{
+	int fd;
+
+	while (control_readulong()) {
+		fd = vsock_stream_listen(VMADDR_CID_ANY, opts->peer_port);
+		close(fd);
+	}
+}
+
 static struct test_case test_cases[] = {
 	{
 		.name = "SOCK_STREAM connection reset",
@@ -1603,6 +1642,11 @@ static struct test_case test_cases[] = {
 		.name = "SOCK_SEQPACKET ioctl(SIOCOUTQ) 0 unsent bytes",
 		.run_client = test_seqpacket_unsent_bytes_client,
 		.run_server = test_seqpacket_unsent_bytes_server,
+	},
+	{
+		.name = "SOCK_STREAM leak accept queue",
+		.run_client = test_stream_leak_acceptq_client,
+		.run_server = test_stream_leak_acceptq_server,
 	},
 	{},
 };
