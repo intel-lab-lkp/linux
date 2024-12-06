@@ -1516,6 +1516,8 @@ int of_parse_phandle_with_args_map(const struct device_node *np,
 			ret = of_property_read_u32(new, cells_name, &new_size);
 			if (ret)
 				goto put;
+			/* Restore preseted error code */
+			ret = -EINVAL;
 
 			/* Check for malformed properties */
 			if (WARN_ON(new_size > MAX_PHANDLE_ARGS))
