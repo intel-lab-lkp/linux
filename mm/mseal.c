@@ -158,6 +158,14 @@ static int apply_mm_seal(unsigned long start, unsigned long end)
 	return 0;
 }
 
+static inline int can_do_mseal(unsigned long flags)
+{
+	if (flags)
+		return -EINVAL;
+
+	return 0;
+}
+
 /*
  * mseal(2) seals the VM's meta data from
  * selected syscalls.
