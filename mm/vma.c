@@ -414,7 +414,7 @@ void remove_vma(struct vm_area_struct *vma, bool unreachable)
 		fput(vma->vm_file);
 	mpol_put(vma_policy(vma));
 	if (unreachable)
-		__vm_area_free(vma);
+		vm_area_free_unreachable(vma);
 	else
 		vm_area_free(vma);
 }
