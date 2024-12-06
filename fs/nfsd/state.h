@@ -249,7 +249,9 @@ struct nfsd4_slot {
 #define NFSD4_SLOT_CACHETHIS	(1 << 1)
 #define NFSD4_SLOT_INITIALIZED	(1 << 2)
 #define NFSD4_SLOT_CACHED	(1 << 3)
+#define NFSD4_SLOT_REUSED	(1 << 4)
 	u8	sl_flags;
+	u8	sl_generation;
 	char	sl_data[];
 };
 
@@ -331,6 +333,8 @@ struct nfsd4_session {
 	struct list_head	se_conns;
 	u32			se_cb_seq_nr[NFSD_BC_SLOT_TABLE_SIZE];
 	struct xarray		se_slots;	/* forward channel slots */
+	u8			se_slot_gen;
+	u32			se_target_maxslots;
 };
 
 /* formatted contents of nfs4_sessionid */
