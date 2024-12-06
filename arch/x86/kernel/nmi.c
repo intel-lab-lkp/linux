@@ -40,8 +40,12 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/nmi.h>
 
+/*
+ * An emergency handler can be set in any context
+ */
 struct nmi_desc {
 	raw_spinlock_t lock;
+	nmi_handler_t emerg_handler;	/* Emergency handler */
 	struct list_head head;
 };
 
@@ -132,8 +136,21 @@ static void nmi_check_duration(struct nmiaction *action, u64 duration)
 static int nmi_handle(unsigned int type, struct pt_regs *regs)
 {
 	struct nmi_desc *desc = nmi_to_desc(type);
+	nmi_handler_t ehandler;
 	struct nmiaction *a;
 	int handled=0;
+
+	/*
+	 * Call the emergency handler first, if set
+	 *
+	 * In the case of crash_nmi_callback() emergency handler, it will
+	 * return in the case of the crashing CPU to enable it to complete
+	 * other necessary crashing actions ASAP. There is no need to run
+	 * other handlers in this case.
+	 */
+	ehandler = READ_ONCE(desc->emerg_handler);
+	if (ehandler)
+		return ehandler(type, regs);
 
 	rcu_read_lock();
 
@@ -223,6 +240,34 @@ void unregister_nmi_handler(unsigned int type, const char *name)
 	}
 }
 EXPORT_SYMBOL_GPL(unregister_nmi_handler);
+
+/**
+ * set_emergency_nmi_handler - Set emergency handler
+ * @type:    NMI type
+ * @handler: the emergency handler to be stored
+ * Return: 0 if success, -EEXIST if a handler had been stored
+ *
+ * Atomically set an emergency NMI handler which, if set, will be invoked
+ * before all the other handlers in the linked list. If a NULL handler is
+ * passed in, it will clear it.
+ */
+int set_emergency_nmi_handler(unsigned int type, nmi_handler_t handler)
+{
+	struct nmi_desc *desc = nmi_to_desc(type);
+	nmi_handler_t orig = NULL;
+
+	if (!handler) {
+		orig = READ_ONCE(desc->emerg_handler);
+		WARN_ON_ONCE(!orig);
+	}
+
+	if (try_cmpxchg(&desc->emerg_handler, &orig, handler))
+		return 0;
+	if (WARN_ON_ONCE(orig == handler))
+		return 0;
+	WARN_ONCE(1, "%s: failed to set emergency NMI handler!\n", __func__);
+	return -EEXIST;
+}
 
 static void
 pci_serr_error(unsigned char reason, struct pt_regs *regs)
