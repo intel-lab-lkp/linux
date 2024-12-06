@@ -129,6 +129,15 @@ int ext4_get_max_inline_size(struct inode *inode)
 	return max_inline_size + EXT4_MIN_INLINE_DATA_SIZE;
 }
 
+static void ext4_update_inline_off_size(struct inode *inode,
+					struct ext4_inode *raw_inode,
+					struct ext4_xattr_entry *entry)
+{
+	EXT4_I(inode)->i_inline_off = (u16)((void *)entry - (void *)raw_inode);
+	EXT4_I(inode)->i_inline_size = EXT4_MIN_INLINE_DATA_SIZE +
+			le32_to_cpu(entry->e_value_size);
+}
+
 /*
  * this function does not take xattr_sem, which is OK because it is
  * currently only used in a code path coming form ext4_iget, before
@@ -163,10 +172,8 @@ int ext4_find_inline_data_nolock(struct inode *inode)
 			error = -EFSCORRUPTED;
 			goto out;
 		}
-		EXT4_I(inode)->i_inline_off = (u16)((void *)is.s.here -
-					(void *)ext4_raw_inode(&is.iloc));
-		EXT4_I(inode)->i_inline_size = EXT4_MIN_INLINE_DATA_SIZE +
-				le32_to_cpu(is.s.here->e_value_size);
+		ext4_update_inline_off_size(inode, ext4_raw_inode(&is.iloc),
+					    is.s.here);
 	}
 out:
 	brelse(is.iloc.bh);
@@ -354,9 +361,8 @@ static int ext4_create_inline_data(handle_t *handle,
 	memset((void *)ext4_raw_inode(&is.iloc)->i_block,
 		0, EXT4_MIN_INLINE_DATA_SIZE);
 
-	EXT4_I(inode)->i_inline_off = (u16)((void *)is.s.here -
-				      (void *)ext4_raw_inode(&is.iloc));
-	EXT4_I(inode)->i_inline_size = len + EXT4_MIN_INLINE_DATA_SIZE;
+	ext4_update_inline_off_size(inode, ext4_raw_inode(&is.iloc), is.s.here);
+
 	ext4_clear_inode_flag(inode, EXT4_INODE_EXTENTS);
 	ext4_set_inode_flag(inode, EXT4_INODE_INLINE_DATA);
 	get_bh(is.iloc.bh);
@@ -420,10 +426,7 @@ static int ext4_update_inline_data(handle_t *handle, struct inode *inode,
 	if (error)
 		goto out;
 
-	EXT4_I(inode)->i_inline_off = (u16)((void *)is.s.here -
-				      (void *)ext4_raw_inode(&is.iloc));
-	EXT4_I(inode)->i_inline_size = EXT4_MIN_INLINE_DATA_SIZE +
-				le32_to_cpu(is.s.here->e_value_size);
+	ext4_update_inline_off_size(inode, ext4_raw_inode(&is.iloc), is.s.here);
 	ext4_set_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
 	get_bh(is.iloc.bh);
 	error = ext4_mark_iloc_dirty(handle, inode, &is.iloc);
