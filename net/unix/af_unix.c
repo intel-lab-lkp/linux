@@ -2302,19 +2302,17 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 
 		/* Only send the fds in the first buffer */
 		err = unix_scm_to_skb(&scm, skb, !fds_sent);
-		if (err < 0) {
-			kfree_skb(skb);
-			goto out_err;
-		}
+		if (err < 0)
+			goto out_free;
+
 		fds_sent = true;
 
 		if (unlikely(msg->msg_flags & MSG_SPLICE_PAGES)) {
 			err = skb_splice_from_iter(skb, &msg->msg_iter, size,
 						   sk->sk_allocation);
-			if (err < 0) {
-				kfree_skb(skb);
-				goto out_err;
-			}
+			if (err < 0)
+				goto out_free;
+
 			size = err;
 			refcount_add(size, &sk->sk_wmem_alloc);
 		} else {
@@ -2322,17 +2320,15 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 			skb->data_len = data_len;
 			skb->len = size;
 			err = skb_copy_datagram_from_iter(skb, 0, &msg->msg_iter, size);
-			if (err) {
-				kfree_skb(skb);
-				goto out_err;
-			}
+			if (err)
+				goto out_free;
 		}
 
 		unix_state_lock(other);
 
 		if (sock_flag(other, SOCK_DEAD) ||
 		    (other->sk_shutdown & RCV_SHUTDOWN))
-			goto pipe_err_free;
+			goto out_pipe;
 
 		maybe_add_creds(skb, sock, other);
 		scm_stat_add(other, skb);
@@ -2355,12 +2351,13 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 
 	return sent;
 
-pipe_err_free:
+out_pipe:
 	unix_state_unlock(other);
-	kfree_skb(skb);
-	if (sent == 0 && !(msg->msg_flags&MSG_NOSIGNAL))
+	if (!sent && !(msg->msg_flags & MSG_NOSIGNAL))
 		send_sig(SIGPIPE, current, 0);
 	err = -EPIPE;
+out_free:
+	kfree_skb(skb);
 out_err:
 	scm_destroy(&scm);
 	return sent ? : err;
