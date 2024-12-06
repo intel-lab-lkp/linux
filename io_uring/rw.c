@@ -272,14 +272,14 @@ static inline void io_meta_restore(struct io_async_rw *io, struct kiocb *kiocb)
 }
 
 static int io_prep_rw_pi(struct io_kiocb *req, struct io_rw *rw, int ddir,
-			 u64 attr_ptr, u64 attr_type_mask)
+			 u64 *attr_ptr)
 {
 	struct io_uring_attr_pi pi_attr;
 	struct io_async_rw *io;
 	int ret;
 
-	if (copy_from_user(&pi_attr, u64_to_user_ptr(attr_ptr),
-	    sizeof(pi_attr)))
+	if (copy_from_user(&pi_attr, u64_to_user_ptr(*attr_ptr),
+			   sizeof(pi_attr)))
 		return -EFAULT;
 
 	if (pi_attr.rsvd)
@@ -295,6 +295,7 @@ static int io_prep_rw_pi(struct io_kiocb *req, struct io_rw *rw, int ddir,
 		return ret;
 	rw->kiocb.ki_flags |= IOCB_HAS_METADATA;
 	io_meta_save_state(io);
+	*attr_ptr += sizeof(pi_attr);
 	return ret;
 }
 
@@ -335,8 +336,7 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 	if (attr_type_mask) {
 		u64 attr_ptr;
 
-		/* only PI attribute is supported currently */
-		if (attr_type_mask != IORING_RW_ATTR_FLAG_PI)
+		if (attr_type_mask & ~IORING_RW_ATTR_FLAGS_SUPPORTED)
 			return -EINVAL;
 
 		attr_ptr = READ_ONCE(sqe->attr_ptr);
