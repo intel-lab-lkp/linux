@@ -123,7 +123,14 @@ struct io_uring_attr_pi {
 	__u64	rsvd;
 };
 
-#define IORING_RW_ATTR_FLAGS_SUPPORTED (IORING_RW_ATTR_FLAG_PI)
+#define IORING_RW_ATTR_FLAG_WRITE_STREAM (1U << 1)
+struct io_uring_write_stream {
+	__u16	write_stream;
+	__u8	rsvd[6];
+};
+
+#define IORING_RW_ATTR_FLAGS_SUPPORTED (IORING_RW_ATTR_FLAG_PI | 	\
+					IORING_RW_ATTR_FLAG_WRITE_STREAM)
 
 /*
  * If sqe->file_index is set to this for opcodes that instantiate a new

@@ -299,6 +299,22 @@ static int io_prep_rw_pi(struct io_kiocb *req, struct io_rw *rw, int ddir,
 	return ret;
 }
 
+static int io_prep_rw_write_stream(struct io_rw *rw, u64 *attr_ptr)
+{
+	struct io_uring_write_stream write_stream;
+
+	if (copy_from_user(&write_stream, u64_to_user_ptr(*attr_ptr),
+			   sizeof(write_stream)))
+		return -EFAULT;
+
+	if (!memchr_inv(write_stream.rsvd, 0, sizeof(write_stream.rsvd)))
+		return -EINVAL;
+
+	rw->kiocb.ki_write_stream = write_stream.write_stream;
+	*attr_ptr += sizeof(write_stream);
+	return 0;
+}
+
 static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 		      int ddir, bool do_import)
 {
@@ -340,7 +356,17 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 			return -EINVAL;
 
 		attr_ptr = READ_ONCE(sqe->attr_ptr);
-		ret = io_prep_rw_pi(req, rw, ddir, attr_ptr, attr_type_mask);
+		if (attr_type_mask & IORING_RW_ATTR_FLAG_PI) {
+			ret = io_prep_rw_pi(req, rw, ddir, &attr_ptr);
+			if (ret)
+				return ret;
+		}
+
+		if (attr_type_mask & IORING_RW_ATTR_FLAG_WRITE_STREAM) {
+			ret = io_prep_rw_write_stream(rw, &attr_ptr);
+			if (ret)
+				return ret;
+		}
 	}
 	return ret;
 }
