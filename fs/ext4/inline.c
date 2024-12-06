@@ -133,7 +133,12 @@ static void ext4_update_inline_off_size(struct inode *inode,
 					struct ext4_inode *raw_inode,
 					struct ext4_xattr_entry *entry)
 {
-	EXT4_I(inode)->i_inline_off = (u16)((void *)entry - (void *)raw_inode);
+	struct ext4_xattr_ibody_header *header;
+	void *off;
+
+	header = IHDR(inode, raw_inode);
+	off = (void *)IFIRST(header) + le16_to_cpu(entry->e_value_offs);
+	EXT4_I(inode)->i_inline_off = (u16)(off - (void *)raw_inode);
 	EXT4_I(inode)->i_inline_size = EXT4_MIN_INLINE_DATA_SIZE +
 			le32_to_cpu(entry->e_value_size);
 }
@@ -184,8 +189,6 @@ static int ext4_read_inline_data(struct inode *inode, void *buffer,
 				 unsigned int len,
 				 struct ext4_iloc *iloc)
 {
-	struct ext4_xattr_entry *entry;
-	struct ext4_xattr_ibody_header *header;
 	int cp_len = 0;
 	struct ext4_inode *raw_inode;
 
@@ -205,14 +208,7 @@ static int ext4_read_inline_data(struct inode *inode, void *buffer,
 	if (!len)
 		goto out;
 
-	header = IHDR(inode, raw_inode);
-	entry = (struct ext4_xattr_entry *)((void *)raw_inode +
-					    EXT4_I(inode)->i_inline_off);
-	len = min_t(unsigned int, len,
-		    (unsigned int)le32_to_cpu(entry->e_value_size));
-
-	memcpy(buffer,
-	       (void *)IFIRST(header) + le16_to_cpu(entry->e_value_offs), len);
+	memcpy(buffer, (void *)raw_inode + EXT4_I(inode)->i_inline_off, len);
 	cp_len += len;
 
 out:
@@ -273,8 +269,6 @@ out:
 static void ext4_write_inline_data(struct inode *inode, struct ext4_iloc *iloc,
 				   void *buffer, loff_t pos, unsigned int len)
 {
-	struct ext4_xattr_entry *entry;
-	struct ext4_xattr_ibody_header *header;
 	struct ext4_inode *raw_inode;
 	int cp_len = 0;
 
@@ -301,11 +295,8 @@ static void ext4_write_inline_data(struct inode *inode, struct ext4_iloc *iloc,
 		return;
 
 	pos -= EXT4_MIN_INLINE_DATA_SIZE;
-	header = IHDR(inode, raw_inode);
-	entry = (struct ext4_xattr_entry *)((void *)raw_inode +
-					    EXT4_I(inode)->i_inline_off);
 
-	memcpy((void *)IFIRST(header) + le16_to_cpu(entry->e_value_offs) + pos,
+	memcpy((void *)raw_inode + EXT4_I(inode)->i_inline_off + pos,
 	       buffer, len);
 }
 
@@ -1085,16 +1076,12 @@ static int ext4_add_dirent_to_inline(handle_t *handle,
 static void *ext4_get_inline_xattr_pos(struct inode *inode,
 				       struct ext4_iloc *iloc)
 {
-	struct ext4_xattr_entry *entry;
-	struct ext4_xattr_ibody_header *header;
+	struct ext4_inode *raw_inode;
 
 	BUG_ON(!EXT4_I(inode)->i_inline_off);
 
-	header = IHDR(inode, ext4_raw_inode(iloc));
-	entry = (struct ext4_xattr_entry *)((void *)ext4_raw_inode(iloc) +
-					    EXT4_I(inode)->i_inline_off);
-
-	return (void *)IFIRST(header) + le16_to_cpu(entry->e_value_offs);
+	raw_inode = ext4_raw_inode(iloc);
+	return (void *)raw_inode + EXT4_I(inode)->i_inline_off;
 }
 
 /* Set the final de to cover the whole block. */
