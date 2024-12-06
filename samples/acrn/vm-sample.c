@@ -34,7 +34,6 @@ int is_running = 1;
 
 void vm_exit(int sig)
 {
-	sig = sig;
 
 	is_running = 0;
 	ioctl(hsm_fd, ACRN_IOCTL_PAUSE_VM, vmid);
@@ -50,8 +49,6 @@ int main(int argc, char **argv)
 	struct acrn_io_request *io_req;
 	struct acrn_ioreq_notify __attribute__((aligned(8))) notify;
 
-	argc = argc;
-	argv = argv;
 
 	ret = posix_memalign(&guest_memory, 4096, GUEST_MEMORY_SIZE);
 	if (ret < 0) {
