@@ -187,23 +187,6 @@ int mv88e6xxx_port_sync_link(struct mv88e6xxx_chip *chip, int port, unsigned int
 	int err = 0;
 	int link;
 
-	if (isup)
-		link = LINK_FORCED_UP;
-	else
-		link = LINK_FORCED_DOWN;
-
-	if (ops->port_set_link)
-		err = ops->port_set_link(chip, port, link);
-
-	return err;
-}
-
-int mv88e6185_port_sync_link(struct mv88e6xxx_chip *chip, int port, unsigned int mode, bool isup)
-{
-	const struct mv88e6xxx_ops *ops = chip->info->ops;
-	int err = 0;
-	int link;
-
 	if (mode == MLO_AN_INBAND)
 		link = LINK_UNFORCED;
 	else if (isup)
