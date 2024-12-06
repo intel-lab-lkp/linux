@@ -2022,9 +2022,8 @@ static int pnfs_prepare_to_retry_layoutget(struct pnfs_layout_hdr *lo)
 	 * reference
 	 */
 	pnfs_layoutcommit_inode(lo->plh_inode, false);
-	return wait_on_bit_action(&lo->plh_flags, NFS_LAYOUT_RETURN,
-				   nfs_wait_bit_killable,
-				   TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
+	return wait_on_bit(&lo->plh_flags, NFS_LAYOUT_RETURN,
+			   TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
 }
 
 static void nfs_layoutget_begin(struct pnfs_layout_hdr *lo)
@@ -3319,9 +3318,8 @@ pnfs_layoutcommit_inode(struct inode *inode, bool sync)
 	if (test_and_set_bit(NFS_INO_LAYOUTCOMMITTING, &nfsi->flags)) {
 		if (!sync)
 			goto out;
-		status = wait_on_bit_lock_action(&nfsi->flags,
+		status = wait_on_bit_lock(&nfsi->flags,
 				NFS_INO_LAYOUTCOMMITTING,
-				nfs_wait_bit_killable,
 				TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
 		if (status)
 			goto out;
@@ -3368,7 +3366,6 @@ pnfs_layoutcommit_inode(struct inode *inode, bool sync)
 			goto out_unlock;
 		}
 	}
-
 
 	status = nfs4_proc_layoutcommit(data, sync);
 out:

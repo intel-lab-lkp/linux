@@ -72,15 +72,6 @@ nfs_fattr_to_ino_t(struct nfs_fattr *fattr)
 	return nfs_fileid_to_ino_t(fattr->fileid);
 }
 
-int nfs_wait_bit_killable(struct wait_bit_key *key, int mode)
-{
-	schedule();
-	if (signal_pending_state(mode, current))
-		return -ERESTARTSYS;
-	return 0;
-}
-EXPORT_SYMBOL_GPL(nfs_wait_bit_killable);
-
 /**
  * nfs_compat_user_ino64 - returns the user-visible inode number
  * @fileid: 64-bit fileid
@@ -1419,9 +1410,8 @@ int nfs_clear_invalid_mapping(struct address_space *mapping)
 	 * the bit lock here if it looks like we're going to be doing that.
 	 */
 	for (;;) {
-		ret = wait_on_bit_action(bitlock, NFS_INO_INVALIDATING,
-					 nfs_wait_bit_killable,
-					 TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
+		ret = wait_on_bit(bitlock, NFS_INO_INVALIDATING,
+				  TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
 		if (ret)
 			goto out;
 		smp_rmb(); /* pairs with smp_wmb() below */
