@@ -83,6 +83,12 @@ impl<'a> ModInfoBuilder<'a> {
         self.emit_base(field, content, false)
     }
 
+    fn emit_arr_str(&mut self, field: &str, arr_content: &Vec<String>) {
+        for content in arr_content {
+            self.emit(field, content);
+        }
+    }
+
     fn emit(&mut self, field: &str, content: &str) {
         self.emit_only_builtin(field, content);
         self.emit_only_loadable(field, content);
@@ -95,12 +101,30 @@ struct ModuleInfo {
     license: String,
     name: String,
     author: Option<String>,
+    authors: Option<Vec<String>>,
     description: Option<String>,
     alias: Option<Vec<String>>,
     firmware: Option<Vec<String>>,
 }
 
 impl ModuleInfo {
+    fn coexist(arr: &mut Vec<String>, cannot_coexist: &[&str]) -> bool {
+        let mut found: bool = false;
+
+        for cc in cannot_coexist {
+
+            for key in &mut *arr {
+                if cc == key {
+                    if found {
+                        return true;
+                    }
+                    found = true;
+                }
+            }
+        }
+        return false;
+    }
+
     fn parse(it: &mut token_stream::IntoIter) -> Self {
         let mut info = ModuleInfo::default();
 
@@ -108,6 +132,7 @@ impl ModuleInfo {
             "type",
             "name",
             "author",
+            "authors",
             "description",
             "license",
             "alias",
@@ -136,6 +161,7 @@ impl ModuleInfo {
                 "type" => info.type_ = expect_ident(it),
                 "name" => info.name = expect_string_ascii(it),
                 "author" => info.author = Some(expect_string(it)),
+                "authors" => info.authors = Some(expect_string_array(it)),
                 "description" => info.description = Some(expect_string(it)),
                 "license" => info.license = expect_string_ascii(it),
                 "alias" => info.alias = Some(expect_string_array(it)),
@@ -152,6 +178,16 @@ impl ModuleInfo {
         }
 
         expect_end(it);
+
+        const CANNOT_COEXIST: &[&[&str]] = &[
+            &["author", "authors"]
+        ];
+
+        for cannot_coexist in CANNOT_COEXIST {
+            if Self::coexist(&mut seen_keys, cannot_coexist) {
+                panic!("keys {:?} coexist", cannot_coexist);
+            }
+        }
 
         for key in REQUIRED_KEYS {
             if !seen_keys.iter().any(|e| e == key) {
@@ -183,6 +219,9 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
     let info = ModuleInfo::parse(&mut it);
 
     let mut modinfo = ModInfoBuilder::new(info.name.as_ref());
+    if let Some(authors) = info.authors {
+        modinfo.emit_arr_str("author", &authors);
+    }
     if let Some(author) = info.author {
         modinfo.emit("author", &author);
     }
@@ -191,9 +230,7 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
     }
     modinfo.emit("license", &info.license);
     if let Some(aliases) = info.alias {
-        for alias in aliases {
-            modinfo.emit("alias", &alias);
-        }
+        modinfo.emit_arr_str("alias", &aliases);
     }
     if let Some(firmware) = info.firmware {
         for fw in firmware {
