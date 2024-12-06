@@ -997,6 +997,18 @@ static inline blk_status_t nvme_setup_rw(struct nvme_ns *ns,
 	if (req->cmd_flags & REQ_RAHEAD)
 		dsmgmt |= NVME_RW_DSM_FREQ_PREFETCH;
 
+	if (op == nvme_cmd_write && ns->head->nr_plids) {
+		u16 write_stream = req->bio->bi_write_stream;
+
+		if (WARN_ON_ONCE(write_stream > ns->head->nr_plids))
+			return BLK_STS_INVAL;
+
+		if (write_stream) {
+			dsmgmt |= ns->head->plids[write_stream - 1] << 16;
+			control |= NVME_RW_DTYPE_DPLCMT;
+		}
+	}
+
 	if (req->cmd_flags & REQ_ATOMIC && !nvme_valid_atomic_write(req))
 		return BLK_STS_INVAL;
 
@@ -2194,11 +2206,12 @@ out:
 
 static int nvme_query_fdp_info(struct nvme_ns *ns, struct nvme_ns_info *info)
 {
+	struct nvme_fdp_ruh_status_desc *ruhsd;
 	struct nvme_ns_head *head = ns->head;
 	struct nvme_fdp_ruh_status *ruhs;
 	struct nvme_fdp_config fdp;
 	struct nvme_command c = {};
-	int size, ret;
+	int size, ret, i;
 
 	ret = nvme_get_features(ns->ctrl, NVME_FEAT_FDP, info->endgid, NULL, 0,
 				&fdp);
@@ -2230,6 +2243,19 @@ static int nvme_query_fdp_info(struct nvme_ns *ns, struct nvme_ns_info *info)
 	head->nr_plids = le16_to_cpu(ruhs->nruhsd);
 	if (!head->nr_plids)
 		goto free;
+
+	head->nr_plids = min(head->nr_plids, NVME_MAX_PLIDS);
+	head->plids = kcalloc(head->nr_plids, sizeof(head->plids),
+			      GFP_KERNEL);
+	if (!head->plids) {
+		ret = -ENOMEM;
+		goto free;
+	}
+
+	for (i = 0; i < head->nr_plids; i++) {
+		ruhsd = &ruhs->ruhsd[i];
+		head->plids[i] = le16_to_cpu(ruhsd->pid);
+	}
 
 	kfree(ruhs);
 	return 0;
@@ -2285,6 +2311,10 @@ static int nvme_update_ns_info_block(struct nvme_ns *ns,
 				"FDP failure status:0x%x\n", ret);
 		if (ret < 0)
 			goto out;
+	} else {
+		ns->head->nr_plids = 0;
+		kfree(ns->head->plids);
+		ns->head->plids = NULL;
 	}
 
 	blk_mq_freeze_queue(ns->disk->queue);
