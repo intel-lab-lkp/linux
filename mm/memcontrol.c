@@ -1280,15 +1280,14 @@ void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
 	unsigned long *lru_size;
 	long size;
 
-	if (mem_cgroup_disabled())
+	if (mem_cgroup_disabled() || !nr_pages)
 		return;
 
 	mz = container_of(lruvec, struct mem_cgroup_per_node, lruvec);
 	lru_size = &mz->lru_zone_size[zid][lru];
 
-	if (nr_pages < 0)
-		*lru_size += nr_pages;
 
+	*lru_size += nr_pages;
 	size = *lru_size;
 	if (WARN_ONCE(size < 0,
 		"%s(%p, %d, %d): lru_size %ld\n",
@@ -1296,9 +1295,6 @@ void mem_cgroup_update_lru_size(struct lruvec *lruvec, enum lru_list lru,
 		VM_BUG_ON(1);
 		*lru_size = 0;
 	}
-
-	if (nr_pages > 0)
-		*lru_size += nr_pages;
 }
 
 /**
