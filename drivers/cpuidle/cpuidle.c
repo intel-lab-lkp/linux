@@ -237,7 +237,7 @@ noinstr int cpuidle_enter_state(struct cpuidle_device *dev,
 		broadcast = false;
 	}
 
-	polling = target_state->flags & CPUIDLE_FLAG_MWAIT;
+	polling = target_state->flags & (CPUIDLE_FLAG_MWAIT | CPUIDLE_FLAG_POLLING);
 
 	/*
 	 * If the target state doesn't poll on need_resched(), this is
