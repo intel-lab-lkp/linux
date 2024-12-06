@@ -10847,6 +10847,7 @@ static void nfs4_disable_swap(struct inode *inode)
 
 	set_bit(NFS4CLNT_RUN_MANAGER, &clp->cl_state);
 	clear_bit(NFS4CLNT_MANAGER_AVAILABLE, &clp->cl_state);
+	smp_mb__after_atomic();
 	wake_up_var(&clp->cl_state);
 }
 

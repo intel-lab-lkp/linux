@@ -1207,6 +1207,7 @@ void nfs4_schedule_state_manager(struct nfs_client *clp)
 		swapon = !test_and_set_bit(NFS4CLNT_MANAGER_AVAILABLE,
 					   &clp->cl_state);
 		if (!swapon) {
+			smp_mb__after_atomic();
 			wake_up_var(&clp->cl_state);
 			return;
 		}
