@@ -953,6 +953,7 @@ static int do_dump(int argc, char **argv)
 		NEXT_ARG();
 	} else if (is_prefix(src, "file")) {
 		const char sysfs_prefix[] = "/sys/kernel/btf/";
+		char *end;
 
 		if (!base_btf &&
 		    strncmp(*argv, sysfs_prefix, sizeof(sysfs_prefix) - 1) == 0 &&
@@ -967,6 +968,17 @@ static int do_dump(int argc, char **argv)
 			goto done;
 		}
 		NEXT_ARG();
+
+		if (argc && is_prefix(*argv, "root_id")) {
+			NEXT_ARG();
+			root_type_ids[root_type_cnt++] = strtoul(*argv, &end, 0);
+			if (*end) {
+				err = -1;
+				p_err("can't parse %s as root ID", *argv);
+				goto done;
+			}
+			NEXT_ARG();
+		}
 	} else {
 		err = -1;
 		p_err("unrecognized BTF source specifier: '%s'", src);
