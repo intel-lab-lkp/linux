@@ -60,8 +60,25 @@ static int mv88e6185_g1_wait_ppu_polling(struct mv88e6xxx_chip *chip)
 static int mv88e6352_g1_wait_ppu_polling(struct mv88e6xxx_chip *chip)
 {
 	int bit = __bf_shf(MV88E6352_G1_STS_PPU_STATE);
+	int err, i;
 
-	return mv88e6xxx_g1_wait_bit(chip, MV88E6XXX_G1_STS, bit, 1);
+	for (i = 0; i < 20; i++) {
+		err = _mv88e6xxx_wait_bit(chip, chip->info->global1_addr,
+					  MV88E6XXX_G1_STS, bit, 1, NULL);
+		if (err != -ETIMEDOUT)
+			break;
+	}
+
+	if (err) {
+		dev_err(chip->dev, "PPU did not come online: %d\n", err);
+		return err;
+	}
+
+	if (i)
+		dev_warn(chip->dev,
+			 "PPU was slow to come online, retried %d times\n", i);
+
+	return 0;
 }
 
 static int mv88e6xxx_g1_wait_init_ready(struct mv88e6xxx_chip *chip)

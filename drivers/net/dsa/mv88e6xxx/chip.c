@@ -145,8 +145,8 @@ int mv88e6xxx_wait_mask(struct mv88e6xxx_chip *chip, int addr, int reg,
 	return err;
 }
 
-static int _mv88e6xxx_wait_bit(struct mv88e6xxx_chip *chip, int addr, int reg,
-			       int bit, int val, u16 *last)
+int _mv88e6xxx_wait_bit(struct mv88e6xxx_chip *chip, int addr, int reg,
+			int bit, int val, u16 *last)
 {
 	return _mv88e6xxx_wait_mask(chip, addr, reg, BIT(bit),
 				   val ? BIT(bit) : 0x0000, last);
