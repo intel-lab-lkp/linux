@@ -111,6 +111,9 @@ page is aligned according to the 'align/alignment' parameter. Note the size of
 the allocated fragment is not aligned, the caller needs to provide an aligned
 fragsz if there is an alignment requirement for the size of the fragment.
 
+Depending on different use cases, callers expecting to deal with va, page or
+both va and page may call alloc, refill or alloc_refill API accordingly.
+
 There is a use case that needs minimum memory in order for forward progress, but
 more performant if more memory is available. By using the prepare and commit
 related API, the caller calls prepare API to requests the minimum memory it
@@ -123,6 +126,9 @@ uses, or not do so if deciding to not use any memory.
 		 __page_frag_alloc_align page_frag_alloc_align page_frag_alloc
 		 page_frag_alloc_abort __page_frag_refill_prepare_align
 		 page_frag_refill_prepare_align page_frag_refill_prepare
+		 __page_frag_alloc_refill_prepare_align
+		 page_frag_alloc_refill_prepare_align
+		 page_frag_alloc_refill_prepare
 
 .. kernel-doc:: mm/page_frag_cache.c
    :identifiers: page_frag_cache_drain page_frag_free page_frag_alloc_abort_ref
@@ -185,6 +191,45 @@ Refill Preparation & committing API
     copy = mem_schedule(copy);
     if (!copy)
         goto wait_for_space;
+
+    if (merge) {
+        skb_frag_size_add(&skb_shinfo(skb)->frags[i - 1], copy);
+        page_frag_refill_commit_noref(nc, pfrag, copy);
+    } else {
+        skb_fill_page_desc(skb, i, pfrag->page, pfrag->offset, copy);
+        page_frag_refill_commit(nc, pfrag, copy);
+    }
+
+
+Alloc_Refill Preparation & committing API
+-----------------------------------------
+
+.. code-block:: c
+
+    struct page_frag page_frag, *pfrag;
+    bool merge = true;
+    void *va;
+
+    pfrag = &page_frag;
+    va = page_frag_alloc_refill_prepare(nc, 32U, pfrag, GFP_KERNEL);
+    if (!va)
+        goto wait_for_space;
+
+    copy = min_t(unsigned int, copy, pfrag->size);
+    if (!skb_can_coalesce(skb, i, pfrag->page, pfrag->offset)) {
+        if (i >= max_skb_frags)
+            goto new_segment;
+
+        merge = false;
+    }
+
+    copy = mem_schedule(copy);
+    if (!copy)
+        goto wait_for_space;
+
+    err = copy_from_iter_full_nocache(va, copy, iter);
+    if (err)
+        goto do_error;
 
     if (merge) {
         skb_frag_size_add(&skb_shinfo(skb)->frags[i - 1], copy);
