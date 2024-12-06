@@ -1296,6 +1296,12 @@ void bdev_statx(struct path *path, struct kstat *stat,
 		stat->result_mask |= STATX_DIOALIGN;
 	}
 
+	if ((request_mask & STATX_WRITE_STREAM) &&
+	    bdev_max_write_streams(bdev)) {
+		stat->write_stream_max = bdev_max_write_streams(bdev);
+		stat->result_mask |= STATX_WRITE_STREAM;
+	}
+
 	if (request_mask & STATX_WRITE_ATOMIC && bdev_can_atomic_write(bdev)) {
 		struct request_queue *bd_queue = bdev->bd_queue;
 
