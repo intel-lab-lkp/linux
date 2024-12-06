@@ -606,7 +606,7 @@ static int usb_gpib_command(gpib_board_t *board,
 }
 
 /**
- * disable_eos() - Disable END on eos byte (END on EOI only)
+ * usb_gpib_disable_eos() - Disable END on eos byte (END on EOI only)
  *
  * @board:    the gpib_board data area for this gpib interface
  *
@@ -622,7 +622,7 @@ static void usb_gpib_disable_eos(gpib_board_t *board)
 }
 
 /**
- * enable_eos() - Enable END for reads when eos byte is received.
+ * usb_gpib_enable_eos() - Enable END for reads when eos byte is received.
  *
  * @board:    the gpib_board data area for this gpib interface
  * @eos_byte: the 'eos' byte
@@ -645,7 +645,7 @@ static int usb_gpib_enable_eos(gpib_board_t *board,
 }
 
 /**
- * go_to_standby() - De-assert ATN
+ * usb_gpib_go_to_standby() - De-assert ATN
  *
  * @board:    the gpib_board data area for this gpib interface
  */
@@ -662,7 +662,7 @@ static int usb_gpib_go_to_standby(gpib_board_t *board)
 }
 
 /**
- * interface_clear() - Assert or de-assert IFC
+ * usb_gpib_interface_clear() - Assert or de-assert IFC
  *
  * @board:    the gpib_board data area for this gpib interface
  * assert:    1: assert IFC;  0: de-assert IFC
