@@ -201,3 +201,24 @@ void page_frag_free(void *addr)
 		free_unref_page(page, compound_order(page));
 }
 EXPORT_SYMBOL(page_frag_free);
+
+/**
+ * page_frag_alloc_abort_ref - Abort the reference of allocated fragment.
+ * @nc: page_frag cache to which the page fragment is aborted back
+ * @va: virtual address of page fragment to be aborted
+ * @fragsz: size of the page fragment to be aborted
+ *
+ * It is expected to be called from the same context as the allocation API.
+ * Mostly used for error handling cases to abort the reference of allocated
+ * fragment if the fragment has been referenced for other usages, to avoid the
+ * atomic operation of page_frag_free() API.
+ */
+void page_frag_alloc_abort_ref(struct page_frag_cache *nc, void *va,
+			       unsigned int fragsz)
+{
+	VM_BUG_ON(va + fragsz !=
+		  encoded_page_decode_virt(nc->encoded_page) + nc->offset);
+
+	nc->pagecnt_bias++;
+}
+EXPORT_SYMBOL(page_frag_alloc_abort_ref);
