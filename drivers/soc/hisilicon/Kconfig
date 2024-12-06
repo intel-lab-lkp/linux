@@ -21,6 +21,17 @@ config KUNPENG_HCCS
 	  health status and port information of HCCS, or reducing system
 	  power consumption on Kunpeng SoC.
 
+config KUNPENG_HBMCACHE
+	tristate "HBM cache memory device"
+	depends on ACPI
+	help
+	  This driver provids methods to control the power of High Bandwidth
+	  Memory (HBM) cache device in Kunpeng SoC. Use HBM as a cache can
+	  take advantage of the high bandwidth of HBM in normal memory access.
+
+	  To compile the driver as a module, choose M here:
+	  the module will be called kunpeng_hbmcache.
+
 config KUNPENG_HBMDEV
 	bool "add extra support for hbm memory device"
 	depends on ACPI_HOTPLUG_MEMORY
