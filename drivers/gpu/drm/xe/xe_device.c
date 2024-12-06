@@ -41,7 +41,6 @@
 #include "xe_hw_engine_group.h"
 #include "xe_hwmon.h"
 #include "xe_irq.h"
-#include "xe_memirq.h"
 #include "xe_mmio.h"
 #include "xe_module.h"
 #include "xe_oa.h"
@@ -680,9 +679,6 @@ int xe_device_probe(struct xe_device *xe)
 		err = xe_ggtt_init_early(tile->mem.ggtt);
 		if (err)
 			return err;
-		err = xe_memirq_init(&tile->memirq);
-		if (err)
-			return err;
 	}
 
 	for_each_gt(gt, xe, id) {
@@ -701,10 +697,6 @@ int xe_device_probe(struct xe_device *xe)
 	err = xe_display_init_noirq(xe);
 	if (err)
 		return err;
-
-	err = xe_irq_install(xe);
-	if (err)
-		goto err;
 
 	err = probe_has_flat_ccs(xe);
 	if (err)
@@ -738,6 +730,10 @@ int xe_device_probe(struct xe_device *xe)
 		if (err)
 			goto err;
 	}
+
+	err = xe_irq_install(xe);
+	if (err)
+		goto err;
 
 	for_each_gt(gt, xe, id) {
 		last_gt = id;
