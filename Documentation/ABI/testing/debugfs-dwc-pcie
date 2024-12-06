@@ -1,0 +1,143 @@
+What:		/sys/kernel/debug/dwc_pcie_<dev>/rasdes_debug/lane_detect
+Date:		December 2024
+Contact:	Shradha Todi <shradha.t@samsung.com>
+Description:	(RW) Write the lane number to be checked for detection.	Read
+		will dump whether PHY indicates receiver detection on the
+		selected lane.
+
+What:		/sys/kernel/debug/dwc_pcie_<dev>/rasdes_debug/rx_valid
+Date:		December 2024
+Contact:	Shradha Todi <shradha.t@samsung.com>
+Description:	(RW) Write the lane number to be checked as valid or invalid. Read
+		will dump the status of PIPE RXVALID signal of the selected lane.
+
+What:		/sys/kernel/debug/dwc_pcie_<dev>/rasdes_event_counters/<event>/counter_enable
+Date:		December 2024
+Contact:	Shradha Todi <shradha.t@samsung.com>
+Description:	rasdes_event_counters is the directory which can be used to collect
+		statistical data about the number of times a certain event has occurred
+		in the controller. The list of possible events are:
+
+		1) EBUF Overflow
+		2) EBUF Underrun
+		3) Decode Error
+		4) Running Disparity Error
+		5) SKP OS Parity Error
+		6) SYNC Header Error
+		7) Rx Valid De-assertion
+		8) CTL SKP OS Parity Error
+		9) 1st Retimer Parity Error
+		10) 2nd Retimer Parity Error
+		11) Margin CRC and Parity Error
+		12) Detect EI Infer
+		13) Receiver Error
+		14) RX Recovery Req
+		15) N_FTS Timeout
+		16) Framing Error
+		17) Deskew Error
+		18) Framing Error In L0
+		19) Deskew Uncompleted Error
+		20) Bad TLP
+		21) LCRC Error
+		22) Bad DLLP
+		23) Replay Number Rollover
+		24) Replay Timeout
+		25) Rx Nak DLLP
+		26) Tx Nak DLLP
+		27) Retry TLP
+		28) FC Timeout
+		29) Poisoned TLP
+		30) ECRC Error
+		31) Unsupported Request
+		32) Completer Abort
+		33) Completion Timeout
+		34) EBUF SKP Add
+		35) EBUF SKP Del
+
+		counter_enable is RW. Write 1 to enable the event counter and write 0 to
+		disable the event counter. Read will dump whether the counter is currently
+		enabled	or disabled.
+
+What:		/sys/kernel/debug/dwc_pcie_<dev>/rasdes_event_counters/<event>/counter_value
+Date:		December 2024
+Contact:	Shradha Todi <shradha.t@samsung.com>
+Description:	(RO) Read will dump the current value of the event counter. To reset the counter,
+		we can disable and re-enable the counter.
+
+What:		/sys/kernel/debug/dwc_pcie_<dev>/rasdes_event_counters/<event>/lane_select
+Date:		December 2024
+Contact:	Shradha Todi <shradha.t@samsung.com>
+Description:	(RW) Some lanes in the event list are lane specific events. These include
+		events 1) - 11) and 34) - 35).
+		Write lane number for which counter needs to be enabled/disabled/dumped.
+		Read will dump the current selected lane number.
+
+What:		/sys/kernel/debug/dwc_pcie_<dev>/rasdes_err_inj/<error>
+Date:		December 2024
+Contact:	Shradha Todi <shradha.t@samsung.com>
+Description:	rasdes_err_inj is the directory which can be used to inject errors in the
+		system. The possible errors that can be injected are:
+
+		1) TLP LCRC error injection TX Path - tx_lcrc
+		2) 16b CRC error injection of ACK/NAK DLLP - b16_crc_dllp
+		3) 16b CRC error injection of Update-FC DLLP - b16_crc_upd_fc
+		4) TLP ECRC error injection TX Path - tx_ecrc
+		5) TLP's FCRC error injection TX Path - fcrc_tlp
+		6) Parity error of TSOS - parity_tsos
+		7) Parity error on SKPOS - parity_skpos
+		8) LCRC error injection RX Path - rx_lcrc
+		9) ECRC error injection RX Path - rx_ecrc
+		10) TLPs SEQ# error - tlp_err_seq
+		11) DLLPS ACK/NAK SEQ# error - ack_nak_dllp_seq
+		12) ACK/NAK DLLPs transmission block - ack_nak_dllp
+		13) UpdateFC DLLPs transmission block - upd_fc_dllp
+		14) Always transmission for NAK DLLP - nak_dllp
+		15) Invert SYNC header - inv_sync_hdr_sym
+		16) COM/PAD TS1 order set - com_pad_ts1
+		17) COM/PAD TS2 order set - com_pad_ts2
+		18) COM/FTS FTS order set - com_fts
+		19) COM/IDL E-idle order set - com_idl
+		20) END/EDB symbol - end_edb
+		21) STP/SDP symbol - stp_sdp
+		22) COM/SKP SKP order set - com_skp
+		23) Posted TLP Header credit value control - posted_tlp_hdr
+		24) Non-Posted TLP Header credit value control - non_post_tlp_hdr
+		25) Completion TLP Header credit value control - cmpl_tlp_hdr
+		26) Posted TLP Data credit value control - posted_tlp_data
+		27) Non-Posted TLP Data credit value control - non_post_tlp_data
+		28) Completion TLP Data credit value control - cmpl_tlp_data
+		29) Generates duplicate TLPs - duplicate_dllp
+		30) Generates Nullified TLPs - nullified_tlp
+
+		Each of the possible errors are WO files. Write to the file will prepare
+		controller to inject the respective error in the next transmission of data.
+		Parameter required to write will change in the following ways:
+
+		i) Errors 9) - 10) are sequence errors. The write command for these will be
+
+			echo <count> <diff> > /sys/kernel/debug/dwc_pcie_<dev>/rasdes_err_inj/<error>
+
+			<count>
+				Number of errors to be injected
+			<diff>
+				The difference to add or subtract from natural sequence number to
+				generate sequence error. Range (-4095 : 4095)
+
+		ii) Errors 23) - 28) are credit value error insertions. Write command:
+
+			echo <count> <diff> <vc> > /sys/kernel/debug/dwc_pcie_<dev>/rasdes_err_inj/<error>
+
+			<count>
+				Number of errors to be injected
+			<diff>
+				The difference to add or subtract from UpdateFC credit value.
+				Range (-4095 : 4095)
+			<vc>
+				Target VC number
+
+		iii) All other errors. Write command:
+
+			echo <count> > /sys/kernel/debug/dwc_pcie_<dev>/rasdes_err_inj/<error>
+
+			<count>
+				Number of errors to be injected
