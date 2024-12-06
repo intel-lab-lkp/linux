@@ -212,6 +212,51 @@ out:
 	return cp_len;
 }
 
+static int ext4_read_inline_data_from_inode(struct inode *inode, void **buffer,
+					    size_t *len,
+					    struct ext4_iloc *iloc,
+					    int *has_inline_data)
+{
+	struct ext4_xattr_ibody_find is = {
+		.s = { .not_found = -ENODATA, },
+	};
+	struct ext4_xattr_info i = {
+		.name_index = EXT4_XATTR_INDEX_SYSTEM,
+		.name = EXT4_XATTR_SYSTEM_DATA,
+	};
+	int ret;
+
+	ret = ext4_get_inode_loc(inode, &is.iloc);
+	if (ret)
+		goto out;
+
+	ret = ext4_xattr_ibody_find(inode, &i, &is);
+	if (ret)
+		goto out;
+
+	if (!ext4_has_inline_data(inode)) {
+		if (has_inline_data)
+			*has_inline_data = 0;
+		goto out;
+	}
+
+	if (!*len)
+		*len = ext4_get_inline_size(inode);
+	if (!*buffer) {
+		*buffer = kmalloc(*len, GFP_NOFS);
+		if (!*buffer) {
+			ret = -ENOMEM;
+			goto out;
+		}
+	}
+
+	ret = ext4_read_inline_data(inode, *buffer, *len, &is.iloc);
+
+out:
+	*iloc = is.iloc;
+	return ret;
+}
+
 /*
  * write the buffer to the inline inode.
  * If 'create' is set, we don't need to do the extra copy in the xattr
@@ -492,14 +537,10 @@ static int ext4_read_inline_folio(struct inode *inode, struct folio *folio)
 		goto out;
 	}
 
-	ret = ext4_get_inode_loc(inode, &iloc);
-	if (ret)
-		goto out;
-
 	len = min_t(size_t, ext4_get_inline_size(inode), i_size_read(inode));
 	BUG_ON(len > PAGE_SIZE);
 	kaddr = kmap_local_folio(folio, 0);
-	ret = ext4_read_inline_data(inode, kaddr, len, &iloc);
+	ret = ext4_read_inline_data_from_inode(inode, &kaddr, &len, &iloc, NULL);
 	kaddr = folio_zero_tail(folio, len, kaddr + len);
 	kunmap_local(kaddr);
 	folio_mark_uptodate(folio);
@@ -1333,32 +1374,16 @@ int ext4_inlinedir_to_tree(struct file *dir_file,
 	int pos;
 	struct ext4_dir_entry_2 *de;
 	struct inode *inode = file_inode(dir_file);
-	int ret, inline_size = 0;
+	int ret;
+	size_t inline_size = 0;
 	struct ext4_iloc iloc;
 	void *dir_buf = NULL;
 	struct ext4_dir_entry_2 fake;
 	struct fscrypt_str tmp_str;
 
-	ret = ext4_get_inode_loc(inode, &iloc);
-	if (ret)
-		return ret;
-
 	down_read(&EXT4_I(inode)->xattr_sem);
-	if (!ext4_has_inline_data(inode)) {
-		up_read(&EXT4_I(inode)->xattr_sem);
-		*has_inline_data = 0;
-		goto out;
-	}
-
-	inline_size = ext4_get_inline_size(inode);
-	dir_buf = kmalloc(inline_size, GFP_NOFS);
-	if (!dir_buf) {
-		ret = -ENOMEM;
-		up_read(&EXT4_I(inode)->xattr_sem);
-		goto out;
-	}
-
-	ret = ext4_read_inline_data(inode, dir_buf, inline_size, &iloc);
+	ret = ext4_read_inline_data_from_inode(inode, &dir_buf, &inline_size,
+					       &iloc, has_inline_data);
 	up_read(&EXT4_I(inode)->xattr_sem);
 	if (ret < 0)
 		goto out;
@@ -1452,32 +1477,16 @@ int ext4_read_inline_dir(struct file *file,
 	struct ext4_dir_entry_2 *de;
 	struct super_block *sb;
 	struct inode *inode = file_inode(file);
-	int ret, inline_size = 0;
+	int ret;
+	size_t inline_size = 0;
 	struct ext4_iloc iloc;
 	void *dir_buf = NULL;
 	int dotdot_offset, dotdot_size, extra_offset, extra_size;
 	struct dir_private_info *info = file->private_data;
 
-	ret = ext4_get_inode_loc(inode, &iloc);
-	if (ret)
-		return ret;
-
 	down_read(&EXT4_I(inode)->xattr_sem);
-	if (!ext4_has_inline_data(inode)) {
-		up_read(&EXT4_I(inode)->xattr_sem);
-		*has_inline_data = 0;
-		goto out;
-	}
-
-	inline_size = ext4_get_inline_size(inode);
-	dir_buf = kmalloc(inline_size, GFP_NOFS);
-	if (!dir_buf) {
-		ret = -ENOMEM;
-		up_read(&EXT4_I(inode)->xattr_sem);
-		goto out;
-	}
-
-	ret = ext4_read_inline_data(inode, dir_buf, inline_size, &iloc);
+	ret = ext4_read_inline_data_from_inode(inode, &dir_buf, &inline_size,
+					       &iloc, has_inline_data);
 	up_read(&EXT4_I(inode)->xattr_sem);
 	if (ret < 0)
 		goto out;
@@ -1577,12 +1586,9 @@ out:
 void *ext4_read_inline_link(struct inode *inode)
 {
 	struct ext4_iloc iloc;
-	int ret, inline_size;
+	int ret;
+	size_t inline_size;
 	void *link;
-
-	ret = ext4_get_inode_loc(inode, &iloc);
-	if (ret)
-		return ERR_PTR(ret);
 
 	ret = -ENOMEM;
 	inline_size = ext4_get_inline_size(inode);
@@ -1590,13 +1596,15 @@ void *ext4_read_inline_link(struct inode *inode)
 	if (!link)
 		goto out;
 
-	ret = ext4_read_inline_data(inode, link, inline_size, &iloc);
+	down_read(&EXT4_I(inode)->xattr_sem);
+	ret = ext4_read_inline_data_from_inode(inode, &link, &inline_size, &iloc, NULL);
 	if (ret < 0) {
 		kfree(link);
 		goto out;
 	}
 	nd_terminate_link(link, inode->i_size, ret);
 out:
+	up_read(&EXT4_I(inode)->xattr_sem);
 	if (ret < 0)
 		link = ERR_PTR(ret);
 	brelse(iloc.bh);
