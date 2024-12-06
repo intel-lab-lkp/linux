@@ -361,17 +361,14 @@ EXPORT_SYMBOL_GPL(rpc_wait_for_completion_task);
 static void rpc_make_runnable(struct workqueue_struct *wq,
 		struct rpc_task *task)
 {
-	bool need_wakeup = !rpc_test_and_set_running(task);
-
-	rpc_clear_queued(task);
-	if (!need_wakeup)
-		return;
-	if (RPC_IS_ASYNC(task)) {
+	if (rpc_test_and_set_running(task))
+		rpc_clear_queued(task);
+	else if (RPC_IS_ASYNC(task)) {
+		rpc_clear_queued(task);
 		INIT_WORK(&task->u.tk_work, rpc_async_schedule);
 		queue_work(wq, &task->u.tk_work);
 	} else {
-		smp_mb__after_atomic();
-		wake_up_bit(&task->tk_runstate, RPC_TASK_QUEUED);
+		rpc_clear_and_wake_queued(task);
 	}
 }
 

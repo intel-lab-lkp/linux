@@ -168,6 +168,8 @@ enum {
 #define RPC_IS_QUEUED(t)	test_bit(RPC_TASK_QUEUED, &(t)->tk_runstate)
 #define rpc_set_queued(t)	set_bit(RPC_TASK_QUEUED, &(t)->tk_runstate)
 #define rpc_clear_queued(t)	clear_bit(RPC_TASK_QUEUED, &(t)->tk_runstate)
+#define rpc_clear_and_wake_queued(t)	clear_and_wake_up_bit(RPC_TASK_QUEUED,	\
+							      &(t)->tk_runstate)
 
 #define RPC_IS_ACTIVATED(t)	test_bit(RPC_TASK_ACTIVE, &(t)->tk_runstate)
 
