@@ -1967,7 +1967,6 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg,
 	struct scm_cookie scm;
 	struct sk_buff *skb;
 	int data_len = 0;
-	int sk_locked;
 	long timeo;
 	int err;
 
@@ -2059,7 +2058,6 @@ lookup:
 	}
 
 restart:
-	sk_locked = 0;
 	unix_state_lock(other);
 restart_locked:
 
@@ -2082,8 +2080,7 @@ restart_locked:
 			goto out_sock_put;
 		}
 
-		if (!sk_locked)
-			unix_state_lock(sk);
+		unix_state_lock(sk);
 
 		if (unix_peer(sk) == other) {
 			unix_peer(sk) = NULL;
@@ -2136,26 +2133,20 @@ restart_locked:
 			goto restart;
 		}
 
-		if (!sk_locked) {
-			unix_state_unlock(other);
-			unix_state_double_lock(sk, other);
-		}
+		unix_state_unlock(other);
+		unix_state_double_lock(sk, other);
 
 		if (unix_peer(sk) != other ||
-		    unix_dgram_peer_wake_me(sk, other)) {
+		    unix_dgram_peer_wake_me(sk, other))
 			err = -EAGAIN;
-			sk_locked = 1;
-			goto out_unlock;
-		}
 
-		if (!sk_locked) {
-			sk_locked = 1;
-			goto restart_locked;
-		}
-	}
-
-	if (unlikely(sk_locked))
 		unix_state_unlock(sk);
+
+		if (err)
+			goto out_unlock;
+
+		goto restart_locked;
+	}
 
 	if (sock_flag(other, SOCK_RCVTSTAMP))
 		__net_timestamp(skb);
@@ -2169,8 +2160,6 @@ restart_locked:
 	return len;
 
 out_unlock:
-	if (sk_locked)
-		unix_state_unlock(sk);
 	unix_state_unlock(other);
 out_sock_put:
 	sock_put(other);
