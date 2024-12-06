@@ -33,6 +33,7 @@
 #define STEP_12_5_MV		12500
 #define STEP_6_25_MV		6250
 
+#define BULK_GPIO_COUNT		3
 struct gpio_desc;
 
 enum sec_device_type {
@@ -77,10 +78,10 @@ int sec_irq_resume(struct sec_pmic_dev *sec_pmic);
 struct sec_platform_data {
 	struct sec_regulator_data	*regulators;
 	struct sec_opmode_data		*opmode;
+	struct gpio_desc			*buck_gpios[3];
+	struct gpio_desc			*buck_ds[3];
 	int				num_regulators;
 
-	int				buck_gpios[3];
-	int				buck_ds[3];
 	unsigned int			buck2_voltage[8];
 	bool				buck2_gpiodvs;
 	unsigned int			buck3_voltage[8];
