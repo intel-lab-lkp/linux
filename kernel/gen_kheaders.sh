@@ -84,8 +84,12 @@ for f in $dir_list;
 done | cpio --quiet -pdu $cpio_dir >/dev/null 2>&1
 
 # Remove comments except SDPX lines
-find $cpio_dir -type f -print0 |
+# Use a temporary file to store directory contents to prevent find/xargs from
+# seeing temporary files created by perl.
+find $cpio_dir -type f -print0 > "${cpio_dir}.contents.txt"
+cat "${cpio_dir}.contents.txt" | \
 	xargs -0 -P8 -n1 perl -pi -e 'BEGIN {undef $/;}; s/\/\*((?!SPDX).)*?\*\///smg;'
+rm -f "${cpio_dir}.contents.txt"
 
 # Create archive and try to normalize metadata for reproducibility.
 tar "${KBUILD_BUILD_TIMESTAMP:+--mtime=$KBUILD_BUILD_TIMESTAMP}" \
