@@ -223,7 +223,7 @@ __snd_vortex_probe(struct pci_dev *pci, const struct pci_device_id *pci_id)
 	// Card details needed in snd_vortex_midi
 	strcpy(card->driver, CARD_NAME_SHORT);
 	sprintf(card->shortname, "Aureal Vortex %s", CARD_NAME_SHORT);
-	sprintf(card->longname, "%s at 0x%lx irq %i",
+	sprintf(card->longname, "%s at 0x%lx irq %u",
 		card->shortname, chip->io, chip->irq);
 
 	// (4) Alloc components.
