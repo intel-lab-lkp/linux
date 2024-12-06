@@ -800,7 +800,7 @@ static int gpiochip_setup_dev(struct gpio_device *gdev)
 
 	ret = gcdev_register(gdev, gpio_devt);
 	if (ret)
-		return ret;
+		goto err_put_device;
 
 	ret = gpiochip_sysfs_register(gdev);
 	if (ret)
@@ -813,6 +813,8 @@ static int gpiochip_setup_dev(struct gpio_device *gdev)
 
 err_remove_device:
 	gcdev_unregister(gdev);
+err_put_device:
+	gpio_device_put(gdev);
 	return ret;
 }
 
@@ -1124,11 +1126,6 @@ err_remove_from_list:
 	scoped_guard(mutex, &gpio_devices_lock)
 		list_del_rcu(&gdev->list);
 	synchronize_srcu(&gpio_devices_srcu);
-	if (gdev->dev.release) {
-		/* release() has been registered by gpiochip_setup_dev() */
-		gpio_device_put(gdev);
-		goto err_print_message;
-	}
 err_free_label:
 	kfree_const(gdev->label);
 err_free_descs:
@@ -1139,7 +1136,6 @@ err_free_ida:
 	ida_free(&gpio_ida, gdev->id);
 err_free_gdev:
 	kfree(gdev);
-err_print_message:
 	/* failures here can mean systems won't boot... */
 	if (ret != -EPROBE_DEFER) {
 		pr_err("%s: GPIOs %d..%d (%s) failed to register, %d\n", __func__,
