@@ -2275,9 +2275,6 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 		}
 	}
 
-	if (READ_ONCE(sk->sk_shutdown) & SEND_SHUTDOWN)
-		goto pipe_err;
-
 	while (sent < len) {
 		size = len - sent;
 
@@ -2361,7 +2358,6 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 pipe_err_free:
 	unix_state_unlock(other);
 	kfree_skb(skb);
-pipe_err:
 	if (sent == 0 && !(msg->msg_flags&MSG_NOSIGNAL))
 		send_sig(SIGPIPE, current, 0);
 	err = -EPIPE;
