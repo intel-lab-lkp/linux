@@ -10,12 +10,17 @@ struct mnt_namespace;
 struct fs_struct;
 struct user_namespace;
 struct ns_common;
+struct vfsmount;
 
 extern struct mnt_namespace *copy_mnt_ns(unsigned long, struct mnt_namespace *,
 		struct user_namespace *, struct fs_struct *);
 extern void put_mnt_ns(struct mnt_namespace *ns);
 DEFINE_FREE(put_mnt_ns, struct mnt_namespace *, if (!IS_ERR_OR_NULL(_T)) put_mnt_ns(_T))
 extern struct ns_common *from_mnt_ns(struct mnt_namespace *);
+
+/* Gets namespace from mount.  Release with mnt_ns_release(). */
+extern struct mnt_namespace *get_ns_from_mnt(struct vfsmount *mnt);
+extern void mnt_ns_release(struct mnt_namespace *ns);
 
 extern const struct file_operations proc_mounts_operations;
 extern const struct file_operations proc_mountinfo_operations;

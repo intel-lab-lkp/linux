@@ -549,8 +549,10 @@ static void restore_mounts(struct list_head *to_restore)
 			mp = parent->mnt_mp;
 			parent = parent->mnt_parent;
 		}
-		if (parent != mnt->mnt_parent)
+		if (parent != mnt->mnt_parent) {
+			/* FIXME: does this need to trigger a MOVE fsnotify event */
 			mnt_change_mountpoint(parent, mp, mnt);
+		}
 	}
 }
 

@@ -139,12 +139,13 @@ static void mnt_ns_tree_add(struct mnt_namespace *ns)
 	rb_add(&ns->mnt_ns_tree_node, &mnt_ns_tree, mnt_ns_less);
 }
 
-static void mnt_ns_release(struct mnt_namespace *ns)
+void mnt_ns_release(struct mnt_namespace *ns)
 {
 	lockdep_assert_not_held(&mnt_ns_tree_lock);
 
 	/* keep alive for {list,stat}mount() */
 	if (refcount_dec_and_test(&ns->passive)) {
+		fsnotify_mntns_delete(ns);
 		put_user_ns(ns->user_ns);
 		kfree(ns);
 	}
@@ -1119,7 +1120,16 @@ static inline struct mount *node_to_mount(struct rb_node *node)
 	return node ? rb_entry(node, struct mount, mnt_node) : NULL;
 }
 
-static void mnt_add_to_ns(struct mnt_namespace *ns, struct mount *mnt)
+static void queue_notify(struct mnt_namespace *ns, struct mount *m, struct list_head *notif)
+{
+	/* Optimize the case where there are no watches */
+	if (ns->n_fsnotify_marks)
+		list_add_tail(&m->to_notify, notif);
+	else
+		m->prev_ns = m->mnt_ns;
+}
+
+static void __mnt_add_to_ns(struct mnt_namespace *ns, struct mount *mnt)
 {
 	struct rb_node **link = &ns->mounts.rb_node;
 	struct rb_node *parent = NULL;
@@ -1138,10 +1148,37 @@ static void mnt_add_to_ns(struct mnt_namespace *ns, struct mount *mnt)
 	mnt->mnt.mnt_flags |= MNT_ONRB;
 }
 
+static void mnt_add_to_ns(struct mnt_namespace *ns, struct mount *mnt, struct list_head *notif)
+{
+	__mnt_add_to_ns(ns, mnt);
+	queue_notify(ns, mnt, notif);
+}
+
+static void notify_mounts(struct list_head *head)
+{
+	struct mount *p;
+
+	while (!list_empty(head)) {
+		p = list_first_entry(head, struct mount, to_notify);
+		if (!p->prev_ns && p->mnt_ns) {
+			fsnotify_mnt_attach(p->mnt_ns, &p->mnt);
+		} else if (p->prev_ns && !p->mnt_ns) {
+			fsnotify_mnt_detach(p->prev_ns, &p->mnt);
+		} else if (p->prev_ns == p->mnt_ns) {
+			fsnotify_mnt_move(p->mnt_ns, &p->mnt);
+		} else	{
+			fsnotify_mnt_detach(p->prev_ns, &p->mnt);
+			fsnotify_mnt_attach(p->mnt_ns, &p->mnt);
+		}
+		p->prev_ns = p->mnt_ns;
+		list_del_init(&p->to_notify);
+	}
+}
+
 /*
  * vfsmount lock must be held for write
  */
-static void commit_tree(struct mount *mnt)
+static void commit_tree(struct mount *mnt, struct list_head *notif)
 {
 	struct mount *parent = mnt->mnt_parent;
 	struct mount *m;
@@ -1155,7 +1192,7 @@ static void commit_tree(struct mount *mnt)
 		m = list_first_entry(&head, typeof(*m), mnt_list);
 		list_del(&m->mnt_list);
 
-		mnt_add_to_ns(n, m);
+		mnt_add_to_ns(n, m, notif);
 	}
 	n->nr_mounts += n->pending_mounts;
 	n->pending_mounts = 0;
@@ -1752,7 +1789,7 @@ static bool disconnect_mount(struct mount *mnt, enum umount_tree_flags how)
  * mount_lock must be held
  * namespace_sem must be held for write
  */
-static void umount_tree(struct mount *mnt, enum umount_tree_flags how)
+static void umount_tree(struct mount *mnt, struct list_head *notif, enum umount_tree_flags how)
 {
 	LIST_HEAD(tmp_list);
 	struct mount *p;
@@ -1785,11 +1822,12 @@ static void umount_tree(struct mount *mnt, enum umount_tree_flags how)
 		list_del_init(&p->mnt_expire);
 		list_del_init(&p->mnt_list);
 		ns = p->mnt_ns;
+		p->mnt_ns = NULL;
 		if (ns) {
 			ns->nr_mounts--;
 			__touch_mnt_namespace(ns);
+			queue_notify(ns, p, notif);
 		}
-		p->mnt_ns = NULL;
 		if (how & UMOUNT_SYNC)
 			p->mnt.mnt_flags |= MNT_SYNC_UMOUNT;
 
@@ -1809,7 +1847,7 @@ static void umount_tree(struct mount *mnt, enum umount_tree_flags how)
 	}
 }
 
-static void shrink_submounts(struct mount *mnt);
+static void shrink_submounts(struct mount *mnt, struct list_head *notif);
 
 static int do_umount_root(struct super_block *sb)
 {
@@ -1837,6 +1875,7 @@ static int do_umount_root(struct super_block *sb)
 static int do_umount(struct mount *mnt, int flags)
 {
 	struct super_block *sb = mnt->mnt.mnt_sb;
+	LIST_HEAD(notif);
 	int retval;
 
 	retval = security_sb_umount(&mnt->mnt, flags);
@@ -1914,20 +1953,21 @@ static int do_umount(struct mount *mnt, int flags)
 	if (flags & MNT_DETACH) {
 		if (mnt->mnt.mnt_flags & MNT_ONRB ||
 		    !list_empty(&mnt->mnt_list))
-			umount_tree(mnt, UMOUNT_PROPAGATE);
+			umount_tree(mnt, &notif, UMOUNT_PROPAGATE);
 		retval = 0;
 	} else {
-		shrink_submounts(mnt);
+		shrink_submounts(mnt, &notif);
 		retval = -EBUSY;
 		if (!propagate_mount_busy(mnt, 2)) {
 			if (mnt->mnt.mnt_flags & MNT_ONRB ||
 			    !list_empty(&mnt->mnt_list))
-				umount_tree(mnt, UMOUNT_PROPAGATE|UMOUNT_SYNC);
+				umount_tree(mnt, &notif, UMOUNT_PROPAGATE|UMOUNT_SYNC);
 			retval = 0;
 		}
 	}
 out:
 	unlock_mount_hash();
+	notify_mounts(&notif);
 	namespace_unlock();
 	return retval;
 }
@@ -1946,6 +1986,7 @@ void __detach_mounts(struct dentry *dentry)
 {
 	struct mountpoint *mp;
 	struct mount *mnt;
+	LIST_HEAD(notif);
 
 	namespace_lock();
 	lock_mount_hash();
@@ -1960,11 +2001,12 @@ void __detach_mounts(struct dentry *dentry)
 			umount_mnt(mnt);
 			hlist_add_head(&mnt->mnt_umount, &unmounted);
 		}
-		else umount_tree(mnt, UMOUNT_CONNECTED);
+		else umount_tree(mnt, &notif, UMOUNT_CONNECTED);
 	}
 	put_mountpoint(mp);
 out_unlock:
 	unlock_mount_hash();
+	notify_mounts(&notif);
 	namespace_unlock();
 }
 
@@ -2172,7 +2214,7 @@ struct mount *copy_tree(struct mount *src_root, struct dentry *dentry,
 out:
 	if (res) {
 		lock_mount_hash();
-		umount_tree(res, UMOUNT_SYNC);
+		umount_tree(res, NULL, UMOUNT_SYNC);
 		unlock_mount_hash();
 	}
 	return dst_mnt;
@@ -2201,16 +2243,19 @@ static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *, bool);
 void dissolve_on_fput(struct vfsmount *mnt)
 {
 	struct mnt_namespace *ns;
+	LIST_HEAD(notif);
+
 	namespace_lock();
 	lock_mount_hash();
 	ns = real_mount(mnt)->mnt_ns;
 	if (ns) {
 		if (is_anon_ns(ns))
-			umount_tree(real_mount(mnt), UMOUNT_CONNECTED);
+			umount_tree(real_mount(mnt), &notif, UMOUNT_CONNECTED);
 		else
 			ns = NULL;
 	}
 	unlock_mount_hash();
+	notify_mounts(&notif);
 	namespace_unlock();
 	if (ns)
 		free_mnt_ns(ns);
@@ -2218,10 +2263,13 @@ void dissolve_on_fput(struct vfsmount *mnt)
 
 void drop_collected_mounts(struct vfsmount *mnt)
 {
+	LIST_HEAD(notif);
+
 	namespace_lock();
 	lock_mount_hash();
-	umount_tree(real_mount(mnt), 0);
+	umount_tree(real_mount(mnt), &notif,  0);
 	unlock_mount_hash();
+	notify_mounts(&notif);
 	namespace_unlock();
 }
 
@@ -2452,6 +2500,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 {
 	struct user_namespace *user_ns = current->nsproxy->mnt_ns->user_ns;
 	HLIST_HEAD(tree_list);
+	LIST_HEAD(notif);
 	struct mnt_namespace *ns = top_mnt->mnt_ns;
 	struct mountpoint *smp;
 	struct mount *child, *dest_mnt, *p;
@@ -2499,6 +2548,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 			dest_mp = smp;
 		unhash_mnt(source_mnt);
 		attach_mnt(source_mnt, top_mnt, dest_mp, beneath);
+		queue_notify(source_mnt->mnt_ns, source_mnt, &notif);
 		touch_mnt_namespace(source_mnt->mnt_ns);
 	} else {
 		if (source_mnt->mnt_ns) {
@@ -2513,7 +2563,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 			mnt_set_mountpoint_beneath(source_mnt, top_mnt, smp);
 		else
 			mnt_set_mountpoint(dest_mnt, dest_mp, source_mnt);
-		commit_tree(source_mnt);
+		commit_tree(source_mnt, &notif);
 	}
 
 	hlist_for_each_entry_safe(child, n, &tree_list, mnt_hash) {
@@ -2527,10 +2577,11 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 		if (child->mnt_parent->mnt_ns->user_ns != user_ns)
 			lock_mnt_tree(child);
 		child->mnt.mnt_flags &= ~MNT_LOCKED;
-		commit_tree(child);
+		commit_tree(child, &notif);
 	}
 	put_mountpoint(smp);
 	unlock_mount_hash();
+	notify_mounts(&notif);
 
 	return 0;
 
@@ -2538,7 +2589,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 	while (!hlist_empty(&tree_list)) {
 		child = hlist_entry(tree_list.first, struct mount, mnt_hash);
 		child->mnt_parent->mnt_ns->pending_mounts = 0;
-		umount_tree(child, UMOUNT_SYNC);
+		umount_tree(child, NULL, UMOUNT_SYNC);
 	}
 	unlock_mount_hash();
 	cleanup_group_ids(source_mnt, NULL);
@@ -2788,7 +2839,7 @@ static int do_loopback(struct path *path, const char *old_name,
 	err = graft_tree(mnt, parent, mp);
 	if (err) {
 		lock_mount_hash();
-		umount_tree(mnt, UMOUNT_SYNC);
+		umount_tree(mnt, NULL, UMOUNT_SYNC);
 		unlock_mount_hash();
 	}
 out2:
@@ -2818,7 +2869,7 @@ static struct file *open_detached_copy(struct path *path, bool recursive)
 
 	lock_mount_hash();
 	for (p = mnt; p; p = next_mnt(p, mnt)) {
-		mnt_add_to_ns(ns, p);
+		mnt_add_to_ns(ns, p, NULL);
 		ns->nr_mounts++;
 	}
 	ns->root = mnt;
@@ -3603,6 +3654,7 @@ void mark_mounts_for_expiry(struct list_head *mounts)
 {
 	struct mount *mnt, *next;
 	LIST_HEAD(graveyard);
+	LIST_HEAD(notif);
 
 	if (list_empty(mounts))
 		return;
@@ -3625,9 +3677,10 @@ void mark_mounts_for_expiry(struct list_head *mounts)
 	while (!list_empty(&graveyard)) {
 		mnt = list_first_entry(&graveyard, struct mount, mnt_expire);
 		touch_mnt_namespace(mnt->mnt_ns);
-		umount_tree(mnt, UMOUNT_PROPAGATE|UMOUNT_SYNC);
+		umount_tree(mnt, &notif, UMOUNT_PROPAGATE|UMOUNT_SYNC);
 	}
 	unlock_mount_hash();
+	notify_mounts(&notif);
 	namespace_unlock();
 }
 
@@ -3685,7 +3738,7 @@ resume:
  *
  * mount_lock must be held for write
  */
-static void shrink_submounts(struct mount *mnt)
+static void shrink_submounts(struct mount *mnt, struct list_head *notif)
 {
 	LIST_HEAD(graveyard);
 	struct mount *m;
@@ -3696,7 +3749,7 @@ static void shrink_submounts(struct mount *mnt)
 			m = list_first_entry(&graveyard, struct mount,
 						mnt_expire);
 			touch_mnt_namespace(m->mnt_ns);
-			umount_tree(m, UMOUNT_PROPAGATE|UMOUNT_SYNC);
+			umount_tree(m, notif, UMOUNT_PROPAGATE|UMOUNT_SYNC);
 		}
 	}
 }
@@ -3964,7 +4017,7 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 	p = old;
 	q = new;
 	while (p) {
-		mnt_add_to_ns(new_ns, q);
+		mnt_add_to_ns(new_ns, q, NULL);
 		new_ns->nr_mounts++;
 		if (new_fs) {
 			if (&p->mnt == new_fs->root.mnt) {
@@ -4010,7 +4063,7 @@ struct dentry *mount_subtree(struct vfsmount *m, const char *name)
 	}
 	ns->root = mnt;
 	ns->nr_mounts++;
-	mnt_add_to_ns(ns, mnt);
+	mnt_add_to_ns(ns, mnt, NULL);
 
 	err = vfs_path_lookup(m->mnt_root, m,
 			name, LOOKUP_FOLLOW|LOOKUP_AUTOMOUNT, &path);
@@ -4188,7 +4241,7 @@ SYSCALL_DEFINE3(fsmount, int, fs_fd, unsigned int, flags,
 	mnt = real_mount(newmount.mnt);
 	ns->root = mnt;
 	ns->nr_mounts = 1;
-	mnt_add_to_ns(ns, mnt);
+	mnt_add_to_ns(ns, mnt, NULL);
 	mntget(newmount.mnt);
 
 	/* Attach to an apparent O_PATH fd with a note that we need to unmount
@@ -4414,6 +4467,8 @@ SYSCALL_DEFINE2(pivot_root, const char __user *, new_root,
 	list_del_init(&new_mnt->mnt_expire);
 	put_mountpoint(root_mp);
 	unlock_mount_hash();
+	fsnotify_mnt_move(root_mnt->mnt_ns, &root_mnt->mnt);
+	fsnotify_mnt_move(new_mnt->mnt_ns, &new_mnt->mnt);
 	chroot_fs_refs(&root, &new);
 	error = 0;
 out4:
@@ -5627,7 +5682,7 @@ static void __init init_mount_tree(void)
 	m = real_mount(mnt);
 	ns->root = m;
 	ns->nr_mounts = 1;
-	mnt_add_to_ns(ns, m);
+	mnt_add_to_ns(ns, m, NULL);
 	init_task.nsproxy->mnt_ns = ns;
 	get_mnt_ns(ns);
 
@@ -5863,6 +5918,19 @@ static struct ns_common *mntns_get(struct task_struct *task)
 		get_mnt_ns(to_mnt_ns(ns));
 	}
 	task_unlock(task);
+
+	return ns;
+}
+
+struct mnt_namespace *get_ns_from_mnt(struct vfsmount *mnt)
+{
+	struct mnt_namespace *ns;
+
+	read_seqlock_excl(&mount_lock);
+	ns = real_mount(mnt)->mnt_ns;
+	if (ns)
+		refcount_inc(&ns->passive);
+	read_sequnlock_excl(&mount_lock);
 
 	return ns;
 }
