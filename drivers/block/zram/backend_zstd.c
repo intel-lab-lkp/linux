@@ -7,6 +7,12 @@
 
 #include "backend_zstd.h"
 
+#ifdef CONFIG_ZRAM_DEFAULT_ZSTD_LEVEL
+#define ZRAM_DEFAULT_ZSTD_LEVEL CONFIG_ZRAM_DEFAULT_ZSTD_LEVEL
+#else
+#define ZRAM_DEFAULT_ZSTD_LEVEL zstd_default_clevel()
+#endif
+
 struct zstd_ctx {
 	zstd_cctx *cctx;
 	zstd_dctx *dctx;
@@ -68,7 +74,7 @@ static int zstd_setup_params(struct zcomp_params *params)
 
 	params->drv_data = zp;
 	if (params->level == ZCOMP_PARAM_NO_LEVEL)
-		params->level = zstd_default_clevel();
+		params->level = ZRAM_DEFAULT_ZSTD_LEVEL;
 
 	zp->cprm = zstd_get_params(params->level, PAGE_SIZE);
 

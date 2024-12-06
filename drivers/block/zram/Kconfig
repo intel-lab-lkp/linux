@@ -32,6 +32,16 @@ config ZRAM_BACKEND_ZSTD
 	select ZSTD_COMPRESS
 	select ZSTD_DECOMPRESS
 
+config ZRAM_DEFAULT_ZSTD_LEVEL
+	int "Default zstd compression level"
+	depends on ZRAM_BACKEND_ZSTD
+	range 1 22
+	default 3
+	help
+	  Sets the default compression level for zstd compression in zram.
+	  The value can range from 1 (fastest) to 22 (maximum compression).
+	  If not set, the system uses the zstd default (typically 3).
+
 config ZRAM_BACKEND_DEFLATE
 	bool "deflate compression support"
 	depends on ZRAM
