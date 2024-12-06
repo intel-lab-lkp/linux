@@ -274,14 +274,6 @@ void rpc_destroy_wait_queue(struct rpc_wait_queue *queue)
 }
 EXPORT_SYMBOL_GPL(rpc_destroy_wait_queue);
 
-static int rpc_wait_bit_killable(struct wait_bit_key *key, int mode)
-{
-	schedule();
-	if (signal_pending_state(mode, current))
-		return -ERESTARTSYS;
-	return 0;
-}
-
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG) || IS_ENABLED(CONFIG_TRACEPOINTS)
 static void rpc_task_set_debuginfo(struct rpc_task *task)
 {
@@ -343,7 +335,7 @@ static int rpc_complete_task(struct rpc_task *task)
 int rpc_wait_for_completion_task(struct rpc_task *task)
 {
 	return out_of_line_wait_on_bit(&task->tk_runstate, RPC_TASK_ACTIVE,
-			rpc_wait_bit_killable, TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
+			bit_wait, TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
 }
 EXPORT_SYMBOL_GPL(rpc_wait_for_completion_task);
 
@@ -982,12 +974,12 @@ static void __rpc_execute(struct rpc_task *task)
 		/* sync task: sleep here */
 		trace_rpc_task_sync_sleep(task, task->tk_action);
 		status = out_of_line_wait_on_bit(&task->tk_runstate,
-				RPC_TASK_QUEUED, rpc_wait_bit_killable,
+				RPC_TASK_QUEUED, bit_wait,
 				TASK_KILLABLE|TASK_FREEZABLE);
 		if (status < 0) {
 			/*
 			 * When a sync task receives a signal, it exits with
-			 * -ERESTARTSYS. In order to catch any callbacks that
+			 * -EINTR. In order to catch any callbacks that
 			 * clean up after sleeping on some queue, we don't
 			 * break the loop here, but go around once more.
 			 */
