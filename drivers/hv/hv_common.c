@@ -278,10 +278,33 @@ static void hv_kmsg_dump_register(void)
 	}
 }
 
+static void __init hv_get_partition_id(void)
+{
+	struct hv_get_partition_id *output_page;
+	u64 status;
+	unsigned long flags;
+
+	local_irq_save(flags);
+	output_page = *this_cpu_ptr(hyperv_pcpu_output_arg);
+	status = hv_do_hypercall(HVCALL_GET_PARTITION_ID, NULL, output_page);
+	if (!hv_result_success(status)) {
+		local_irq_restore(flags);
+		WARN(true, "Failed to get partition ID: %lld\n", status);
+		return;
+	}
+	hv_current_partition_id = output_page->partition_id;
+	local_irq_restore(flags);
+}
+
 int __init hv_common_init(void)
 {
 	int i;
 	union hv_hypervisor_version_info version;
+
+	if (ms_hyperv.priv_high & HV_ACCESS_PARTITION_ID)
+		hv_get_partition_id();
+
+	WARN_ON(hv_root_partition && hv_current_partition_id == HV_PARTITION_ID_SELF);
 
 	/* Get information about the Hyper-V host version */
 	if (!hv_get_hypervisor_version(&version))
