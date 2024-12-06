@@ -77,17 +77,10 @@ static noinstr irqentry_state_t enter_from_kernel_mode(struct pt_regs *regs)
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 DEFINE_STATIC_KEY_TRUE(sk_dynamic_irqentry_exit_cond_resched);
-#define need_irq_preemption() \
-	(static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched))
-#else
-#define need_irq_preemption()	(IS_ENABLED(CONFIG_PREEMPTION))
 #endif
 
 static inline bool arm64_need_resched(void)
 {
-	if (!need_irq_preemption())
-		return false;
-
 	/*
 	 * DAIF.DA are cleared at the start of IRQ/FIQ handling, and when GIC
 	 * priority masking is used the GIC irqchip driver will clear DAIF.IF
@@ -109,6 +102,22 @@ static inline bool arm64_need_resched(void)
 		return false;
 
 	return true;
+}
+
+void raw_irqentry_exit_cond_resched(void)
+{
+#ifdef CONFIG_PREEMPT_DYNAMIC
+	if (!static_branch_unlikely(&sk_dynamic_irqentry_exit_cond_resched))
+		return;
+#else
+	if (!IS_ENABLED(CONFIG_PREEMPTION))
+		return;
+#endif
+
+	if (!preempt_count()) {
+		if (need_resched() && arm64_need_resched())
+			preempt_schedule_irq();
+	}
 }
 
 /*
@@ -133,10 +142,7 @@ static __always_inline void __exit_to_kernel_mode(struct pt_regs *regs,
 			return;
 		}
 
-		if (!preempt_count() && need_resched()) {
-			if (arm64_need_resched())
-				preempt_schedule_irq();
-		}
+		raw_irqentry_exit_cond_resched();
 
 		trace_hardirqs_on();
 	} else {
