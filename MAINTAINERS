@@ -10339,6 +10339,12 @@ F:	Documentation/ABI/testing/sysfs-devices-platform-kunpeng_hccs
 F:	drivers/soc/hisilicon/kunpeng_hccs.c
 F:	drivers/soc/hisilicon/kunpeng_hccs.h
 
+HISILICON KUNPENG SOC KUNPENG HBMDEV DRIVER
+M:	Zhang Zekun <zhangzekun11@huawei.com>
+S:	Maintained
+F:	drivers/soc/hisilicon/kunpeng_hbm.h
+F:	drivers/soc/hisilicon/kunpeng_hbmdev.c
+
 HISILICON LPC BUS DRIVER
 M:	Jay Fang <f.fangjian@huawei.com>
 S:	Maintained

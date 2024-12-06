@@ -21,4 +21,16 @@ config KUNPENG_HCCS
 	  health status and port information of HCCS, or reducing system
 	  power consumption on Kunpeng SoC.
 
+config KUNPENG_HBMDEV
+	bool "add extra support for hbm memory device"
+	depends on ACPI_HOTPLUG_MEMORY
+	select ACPI_CONTAINER
+	help
+	  The driver provides methods for userpace to control the power
+	  of HBM memory devices on Kunpeng soc, which can help to save
+	  energy. The functionality of the driver would require dedicated
+	  BIOS configuration.
+
+	  If not sure, say N.
+
 endmenu
