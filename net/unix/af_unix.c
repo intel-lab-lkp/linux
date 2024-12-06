@@ -1994,6 +1994,14 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg,
 							    NULL);
 		if (err)
 			goto out;
+
+		if ((test_bit(SOCK_PASSCRED, &sock->flags) ||
+		     test_bit(SOCK_PASSPIDFD, &sock->flags)) &&
+		    !READ_ONCE(u->addr)) {
+			err = unix_autobind(sk);
+			if (err)
+				goto out;
+		}
 	} else {
 		sunaddr = NULL;
 		other = unix_peer_get(sk);
@@ -2001,14 +2009,6 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg,
 			err = -ENOTCONN;
 			goto out;
 		}
-	}
-
-	if ((test_bit(SOCK_PASSCRED, &sock->flags) ||
-	     test_bit(SOCK_PASSPIDFD, &sock->flags)) &&
-	    !READ_ONCE(u->addr)) {
-		err = unix_autobind(sk);
-		if (err)
-			goto out;
 	}
 
 	if (len > READ_ONCE(sk->sk_sndbuf) - 32) {
