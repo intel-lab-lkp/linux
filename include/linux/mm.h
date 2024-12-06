@@ -31,6 +31,7 @@
 #include <linux/kasan.h>
 #include <linux/memremap.h>
 #include <linux/slab.h>
+#include <linux/kpkeys.h>
 
 struct mempolicy;
 struct anon_vma;
@@ -2895,7 +2896,19 @@ static inline bool pagetable_is_reserved(struct ptdesc *pt)
  */
 static inline struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order)
 {
-	struct page *page = alloc_pages_noprof(gfp | __GFP_COMP, order);
+	struct page *page;
+	int ret;
+
+	page = alloc_pages_noprof(gfp | __GFP_COMP, order);
+	if (!page)
+		return NULL;
+
+	ret = kpkeys_protect_pgtable_memory((unsigned long)page_address(page),
+					    1 << order);
+	if (ret) {
+		__free_pages(page, order);
+		return NULL;
+	}
 
 	return page_ptdesc(page);
 }
@@ -2911,8 +2924,11 @@ static inline struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int orde
 static inline void pagetable_free(struct ptdesc *pt)
 {
 	struct page *page = ptdesc_page(pt);
+	unsigned int order = compound_order(page);
 
-	__free_pages(page, compound_order(page));
+	kpkeys_unprotect_pgtable_memory((unsigned long)page_address(page),
+					1 << order);
+	__free_pages(page, order);
 }
 
 #if defined(CONFIG_SPLIT_PTE_PTLOCKS)
