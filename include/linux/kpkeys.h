@@ -4,12 +4,14 @@
 
 #include <linux/bug.h>
 #include <linux/cleanup.h>
+#include <linux/jump_label.h>
 #include <linux/set_memory.h>
 
 #define KPKEYS_LVL_DEFAULT	0
+#define KPKEYS_LVL_PGTABLES	1
 
 #define KPKEYS_LVL_MIN		KPKEYS_LVL_DEFAULT
-#define KPKEYS_LVL_MAX		KPKEYS_LVL_DEFAULT
+#define KPKEYS_LVL_MAX		KPKEYS_LVL_PGTABLES
 
 #define KPKEYS_GUARD(_name, set_level, restore_pkey_reg)		\
 	__DEFINE_CLASS_IS_CONDITIONAL(_name, false);			\
@@ -63,5 +65,68 @@ static inline bool arch_kpkeys_enabled(void)
 }
 
 #endif /* CONFIG_ARCH_HAS_KPKEYS */
+
+#ifdef CONFIG_KPKEYS_HARDENED_PGTABLES
+
+DECLARE_STATIC_KEY_FALSE(kpkeys_hardened_pgtables_enabled);
+
+/*
+ * Use guard(kpkeys_hardened_pgtables)() to temporarily grant write access
+ * to page tables.
+ */
+KPKEYS_GUARD(kpkeys_hardened_pgtables,
+	     static_branch_unlikely(&kpkeys_hardened_pgtables_enabled) ?
+		     kpkeys_set_level(KPKEYS_LVL_PGTABLES) :
+		     KPKEYS_PKEY_REG_INVAL,
+	     _T != KPKEYS_PKEY_REG_INVAL ?
+		     kpkeys_restore_pkey_reg(_T) :
+		     (void)0)
+
+static inline int kpkeys_protect_pgtable_memory(unsigned long addr, int numpages)
+{
+	int ret = 0;
+
+	if (static_branch_unlikely(&kpkeys_hardened_pgtables_enabled))
+		ret = set_memory_pkey(addr, numpages, KPKEYS_PKEY_PGTABLES);
+
+	WARN_ON(ret);
+	return ret;
+}
+
+static inline int kpkeys_unprotect_pgtable_memory(unsigned long addr, int numpages)
+{
+	int ret = 0;
+
+	if (static_branch_unlikely(&kpkeys_hardened_pgtables_enabled))
+		ret = set_memory_pkey(addr, numpages, KPKEYS_PKEY_DEFAULT);
+
+	WARN_ON(ret);
+	return ret;
+}
+
+/*
+ * Enables kpkeys_hardened_pgtables and switches existing kernel page tables to
+ * a privileged pkey (KPKEYS_PKEY_PGTABLES).
+ *
+ * Should be called as early as possible by architecture code, after (k)pkeys
+ * are initialised and before any user task is spawned.
+ */
+void kpkeys_hardened_pgtables_enable(void);
+
+#else /* CONFIG_KPKEYS_HARDENED_PGTABLES */
+
+KPKEYS_GUARD(kpkeys_hardened_pgtables, 0, (void)_T)
+
+static inline int kpkeys_protect_pgtable_memory(unsigned long addr, int numpages)
+{
+	return 0;
+}
+static inline int kpkeys_unprotect_pgtable_memory(unsigned long addr, int numpages)
+{
+	return 0;
+}
+static inline void kpkeys_hardened_pgtables_enable(void) {}
+
+#endif /* CONFIG_KPKEYS_HARDENED_PGTABLES */
 
 #endif /* _LINUX_KPKEYS_H */
