@@ -172,5 +172,6 @@ void syscall_exit_to_user_mode_work(struct pt_regs *regs);
  * compelling architectural reason to use the separate functions.
  */
 void syscall_exit_to_user_mode(struct pt_regs *regs);
+void syscall_exit_to_user_mode_prepare(struct pt_regs *regs);
 
 #endif
