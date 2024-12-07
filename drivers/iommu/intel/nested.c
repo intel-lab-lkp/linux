@@ -217,6 +217,12 @@ intel_iommu_domain_alloc_nested(struct device *dev, struct iommu_domain *parent,
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
+	domain->qi_batch = kzalloc(sizeof(struct qi_batch), GFP_KERNEL);
+	if (!domain->qi_batch) {
+		kfree(domain);
+		return ERR_PTR(-ENOMEM);
+	}
+
 	domain->use_first_level = true;
 	domain->s2_domain = s2_domain;
 	domain->s1_cfg = vtd;

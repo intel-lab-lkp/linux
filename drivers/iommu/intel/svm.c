@@ -165,6 +165,12 @@ struct iommu_domain *intel_svm_domain_alloc(struct device *dev,
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
+	domain->qi_batch = kzalloc(sizeof(struct qi_batch), GFP_KERNEL);
+	if (!domain->qi_batch) {
+		kfree(domain);
+		return ERR_PTR(-ENOMEM);
+	}
+
 	domain->domain.ops = &intel_svm_domain_ops;
 	domain->use_first_level = true;
 	INIT_LIST_HEAD(&domain->dev_pasids);
@@ -175,6 +181,7 @@ struct iommu_domain *intel_svm_domain_alloc(struct device *dev,
 	domain->notifier.ops = &intel_mmuops;
 	ret = mmu_notifier_register(&domain->notifier, mm);
 	if (ret) {
+		kfree(domain->qi_batch);
 		kfree(domain);
 		return ERR_PTR(ret);
 	}

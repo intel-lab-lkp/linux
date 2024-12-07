@@ -3277,6 +3277,12 @@ static struct dmar_domain *paging_domain_alloc(struct device *dev, bool first_st
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
+	domain->qi_batch = kzalloc(sizeof(struct qi_batch), GFP_KERNEL);
+	if (!domain->qi_batch) {
+		kfree(domain);
+		return ERR_PTR(-ENOMEM);
+	}
+
 	INIT_LIST_HEAD(&domain->devices);
 	INIT_LIST_HEAD(&domain->dev_pasids);
 	INIT_LIST_HEAD(&domain->cache_tags);
@@ -3319,6 +3325,7 @@ static struct dmar_domain *paging_domain_alloc(struct device *dev, bool first_st
 	/* always allocate the top pgd */
 	domain->pgd = iommu_alloc_page_node(domain->nid, GFP_KERNEL);
 	if (!domain->pgd) {
+		kfree(domain->qi_batch);
 		kfree(domain);
 		return ERR_PTR(-ENOMEM);
 	}
