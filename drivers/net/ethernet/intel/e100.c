@@ -2722,10 +2722,12 @@ static void e100_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_TEST:
-		memcpy(data, e100_gstrings_test, sizeof(e100_gstrings_test));
+		for (int i = 0; i < E100_TEST_LEN; i++)
+			ethtool_puts(&data, e100_gstrings_test[i]);
 		break;
 	case ETH_SS_STATS:
-		memcpy(data, e100_gstrings_stats, sizeof(e100_gstrings_stats));
+		for (int i = 0; i < E100_STATS_LEN; i++)
+			ethtool_puts(&data, e100_gstrings_stats[i]);
 		break;
 	}
 }
