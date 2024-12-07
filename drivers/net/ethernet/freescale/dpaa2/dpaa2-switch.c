@@ -781,12 +781,13 @@ static int dpaa2_switch_fdb_dump_nl(struct fdb_dump_entry *entry,
 				    struct ethsw_dump_ctx *dump)
 {
 	int is_dynamic = entry->type & DPSW_FDB_ENTRY_DINAMIC;
+	struct ndo_fdb_dump_context *ctx = (void *)dump->cb->ctx;
 	u32 portid = NETLINK_CB(dump->cb->skb).portid;
 	u32 seq = dump->cb->nlh->nlmsg_seq;
 	struct nlmsghdr *nlh;
 	struct ndmsg *ndm;
 
-	if (dump->idx < dump->cb->args[2])
+	if (dump->idx < ctx->fdb_idx)
 		goto skip;
 
 	nlh = nlmsg_put(dump->skb, portid, seq, RTM_NEWNEIGH,
