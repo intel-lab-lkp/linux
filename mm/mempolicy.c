@@ -109,6 +109,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/printk.h>
 #include <linux/swapops.h>
+#include <linux/pagemap.h>
 
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
