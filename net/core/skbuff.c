@@ -5553,6 +5553,9 @@ static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb, int tstype
 	case SCM_TSTAMP_SND:
 		op = BPF_SOCK_OPS_TS_SW_OPT_CB;
 		break;
+	case SCM_TSTAMP_ACK:
+		op = BPF_SOCK_OPS_TS_ACK_OPT_CB;
+		break;
 	default:
 		return;
 	}
@@ -5632,9 +5635,9 @@ static bool skb_tstamp_is_set(const struct sk_buff *skb, int tstype, bool bpf_mo
 			return true;
 		return false;
 	case SCM_TSTAMP_ACK:
-		if (TCP_SKB_CB(skb)->txstamp_ack)
-			return true;
-		return false;
+		flag = bpf_mode ? TCP_SKB_CB(skb)->txstamp_ack_bpf :
+				  TCP_SKB_CB(skb)->txstamp_ack;
+		return !!flag;
 	}
 
 	return false;
