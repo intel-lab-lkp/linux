@@ -1189,6 +1189,7 @@ static int bandgap_omap_cpu_notifier(struct notifier_block *nb,
 				  unsigned long cmd, void *v)
 {
 	struct ti_bandgap *bgp;
+	int ret;
 
 	bgp = container_of(nb, struct ti_bandgap, nb);
 
@@ -1206,8 +1207,11 @@ static int bandgap_omap_cpu_notifier(struct notifier_block *nb,
 	case CPU_CLUSTER_PM_EXIT:
 		if (bgp->is_suspended)
 			break;
-		if (TI_BANDGAP_HAS(bgp, CLK_CTRL))
-			clk_enable(bgp->fclock);
+		if (TI_BANDGAP_HAS(bgp, CLK_CTRL)) {
+			ret = clk_enable(bgp->fclock);
+			if (ret)
+				return NOTIFY_BAD;
+		}
 		ti_bandgap_power(bgp, true);
 		ti_bandgap_restore_ctxt(bgp);
 		break;
