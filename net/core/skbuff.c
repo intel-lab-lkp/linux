@@ -5539,8 +5539,12 @@ err:
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
-static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb, int tstype)
+static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb,
+				struct skb_shared_hwtstamps *hwtstamps,
+				int tstype)
 {
+	struct timespec64 tstamp;
+	u32 args[2] = {0, 0};
 	int op;
 
 	if (!sk)
@@ -5552,6 +5556,11 @@ static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb, int tstype
 		break;
 	case SCM_TSTAMP_SND:
 		op = BPF_SOCK_OPS_TS_SW_OPT_CB;
+		if (hwtstamps) {
+			tstamp = ktime_to_timespec64(hwtstamps->hwtstamp);
+			args[0] = tstamp.tv_sec;
+			args[1] = tstamp.tv_nsec;
+		}
 		break;
 	case SCM_TSTAMP_ACK:
 		op = BPF_SOCK_OPS_TS_ACK_OPT_CB;
@@ -5560,7 +5569,7 @@ static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb, int tstype
 		return;
 	}
 
-	bpf_skops_tx_timestamping(sk, skb, op);
+	bpf_skops_tx_timestamping(sk, skb, op, 2, args);
 }
 
 static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
@@ -5651,7 +5660,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, false)))
 		skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
 	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
-		__skb_tstamp_tx_bpf(sk, orig_skb, tstype);
+		__skb_tstamp_tx_bpf(sk, orig_skb, hwtstamps, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
 
@@ -5662,7 +5671,7 @@ void skb_tstamp_tx(struct sk_buff *orig_skb,
 
 	skb_tstamp_tx_output(orig_skb, NULL, hwtstamps, orig_skb->sk, tstype);
 	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
-		__skb_tstamp_tx_bpf(orig_skb->sk, orig_skb, tstype);
+		__skb_tstamp_tx_bpf(orig_skb->sk, orig_skb, hwtstamps, tstype);
 }
 EXPORT_SYMBOL_GPL(skb_tstamp_tx);
 

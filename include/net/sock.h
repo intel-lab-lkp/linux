@@ -2921,9 +2921,11 @@ int sock_set_timestamping(struct sock *sk, int optname,
 
 void sock_enable_timestamps(struct sock *sk);
 #if defined(CONFIG_CGROUP_BPF) && defined(CONFIG_BPF_SYSCALL)
-void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op);
+void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op,
+			       u32 nargs, u32 *args);
 #else
-static inline void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op)
+static inline void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op,
+					     u32 nargs, u32 *args)
 {
 }
 #endif

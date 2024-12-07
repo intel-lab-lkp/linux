@@ -942,7 +942,8 @@ int sock_set_timestamping(struct sock *sk, int optname,
 }
 
 #if defined(CONFIG_CGROUP_BPF) && defined(CONFIG_BPF_SYSCALL)
-void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op)
+void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op,
+			       u32 nargs, u32 *args)
 {
 	struct bpf_sock_ops_kern sock_ops;
 
@@ -952,6 +953,7 @@ void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op)
 	sock_ops.op = op;
 	sock_ops.is_fullsock = 1;
 	sock_ops.sk = sk;
+	memcpy(sock_ops.args, args, nargs * sizeof(*args));
 	__cgroup_bpf_run_filter_sock_ops(sk, &sock_ops, CGROUP_SOCK_OPS);
 }
 #endif
