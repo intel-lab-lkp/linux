@@ -5550,6 +5550,9 @@ static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb, int tstype
 	case SCM_TSTAMP_SCHED:
 		op = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
 		break;
+	case SCM_TSTAMP_SND:
+		op = BPF_SOCK_OPS_TS_SW_OPT_CB;
+		break;
 	default:
 		return;
 	}
@@ -5624,7 +5627,8 @@ static bool skb_tstamp_is_set(const struct sk_buff *skb, int tstype, bool bpf_mo
 			return true;
 		return false;
 	case SCM_TSTAMP_SND:
-		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_SW_TSTAMP))
+		flag = bpf_mode ? SKBTX_BPF : SKBTX_SW_TSTAMP;
+		if (unlikely(skb_shinfo(skb)->tx_flags & flag))
 			return true;
 		return false;
 	case SCM_TSTAMP_ACK:
@@ -5651,8 +5655,11 @@ EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
 void skb_tstamp_tx(struct sk_buff *orig_skb,
 		   struct skb_shared_hwtstamps *hwtstamps)
 {
-	return skb_tstamp_tx_output(orig_skb, NULL, hwtstamps, orig_skb->sk,
-				    SCM_TSTAMP_SND);
+	int tstype = SCM_TSTAMP_SND;
+
+	skb_tstamp_tx_output(orig_skb, NULL, hwtstamps, orig_skb->sk, tstype);
+	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
+		__skb_tstamp_tx_bpf(orig_skb->sk, orig_skb, tstype);
 }
 EXPORT_SYMBOL_GPL(skb_tstamp_tx);
 
