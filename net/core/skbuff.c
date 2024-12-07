@@ -5544,7 +5544,7 @@ static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb,
 				int tstype)
 {
 	struct timespec64 tstamp;
-	u32 args[2] = {0, 0};
+	u32 args[3] = {0, 0, 0};
 	int op;
 
 	if (!sk)
@@ -5569,7 +5569,10 @@ static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb,
 		return;
 	}
 
-	bpf_skops_tx_timestamping(sk, skb, op, 2, args);
+	if (sk_is_tcp(sk))
+		args[2] = skb_shinfo(skb)->tskey;
+
+	bpf_skops_tx_timestamping(sk, skb, op, 3, args);
 }
 
 static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
