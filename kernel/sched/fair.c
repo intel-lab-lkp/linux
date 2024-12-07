@@ -6682,7 +6682,8 @@ static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 	list_for_each_entry_rcu(tg, &task_groups, list) {
 		struct cfs_rq *cfs_rq = tg->cfs_rq[cpu_of(rq)];
 
-		if (!cfs_rq->runtime_enabled)
+		/* Only unthrottle the CPU being hotplugged */
+		if (!cfs_rq->runtime_enabled || cpumask_test_cpu(cpu_of(rq), cpu_active_mask))
 			continue;
 
 		/*
