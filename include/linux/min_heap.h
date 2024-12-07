@@ -240,6 +240,16 @@ bool __min_heap_full_inline(min_heap_char *heap)
 #define min_heap_full_inline(_heap)	\
 	__min_heap_full_inline((min_heap_char *)_heap)
 
+/* Check if the heap is empty. */
+static __always_inline
+bool __min_heap_empty_inline(min_heap_char *heap)
+{
+	return !heap->nr;
+}
+
+#define min_heap_empty_inline(_heap)	\
+	__min_heap_empty_inline(container_of(&(_heap)->nr))
+
 /* Sift the element at pos down the heap. */
 static __always_inline
 void __min_heap_sift_down_inline(min_heap_char *heap, int pos, size_t elem_size,
@@ -417,6 +427,7 @@ bool __min_heap_del_inline(min_heap_char *heap, size_t elem_size, size_t idx,
 void __min_heap_init(min_heap_char *heap, void *data, int size);
 void *__min_heap_peek(struct min_heap_char *heap);
 bool __min_heap_full(min_heap_char *heap);
+bool __min_heap_empty(min_heap_char *heap);
 void __min_heap_sift_down(min_heap_char *heap, int pos, size_t elem_size,
 			  const struct min_heap_callbacks *func, void *args);
 void __min_heap_sift_up(min_heap_char *heap, size_t elem_size, size_t idx,
@@ -438,6 +449,8 @@ bool __min_heap_del(min_heap_char *heap, size_t elem_size, size_t idx,
 	(__minheap_cast(_heap) __min_heap_peek((min_heap_char *)_heap))
 #define min_heap_full(_heap)	\
 	__min_heap_full((min_heap_char *)_heap)
+#define min_heap_empty(_heap)	\
+	__min_heap_empty(container_of(&(_heap)->nr))
 #define min_heap_sift_down(_heap, _pos, _func, _args)	\
 	__min_heap_sift_down((min_heap_char *)_heap, _pos, __minheap_obj_size(_heap), _func, _args)
 #define min_heap_sift_up(_heap, _idx, _func, _args)	\
