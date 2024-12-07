@@ -113,7 +113,7 @@
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
 #include <linux/uaccess.h>
-
+#include <linux/pagemap.h>
 #include "internal.h"
 
 /* Internal flags */
