@@ -5659,7 +5659,8 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 {
 	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, false)))
 		skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
-	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) &&
+	    unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
 		__skb_tstamp_tx_bpf(sk, orig_skb, hwtstamps, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
@@ -5670,7 +5671,8 @@ void skb_tstamp_tx(struct sk_buff *orig_skb,
 	int tstype = SCM_TSTAMP_SND;
 
 	skb_tstamp_tx_output(orig_skb, NULL, hwtstamps, orig_skb->sk, tstype);
-	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) &&
+	    unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
 		__skb_tstamp_tx_bpf(orig_skb->sk, orig_skb, hwtstamps, tstype);
 }
 EXPORT_SYMBOL_GPL(skb_tstamp_tx);
