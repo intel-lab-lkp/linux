@@ -428,6 +428,21 @@ struct pmc_dev {
 	struct pmc_info *regmap_list;
 };
 
+/**
+ * struct pmc_dev_info - Structure to keep pmc device info
+ * @func:		function number of the primary pmc
+ * @map:		pointer to a pmc_reg_map struct that contains platform
+ *			specific attributes of the primary pmc
+ * @suspend:		Function to perform platform specific suspend
+ * @resume:		Function to perform platform specific resume
+ */
+struct pmc_dev_info {
+	u8 func;
+	const struct pmc_reg_map *map;
+	void (*suspend)(struct pmc_dev *pmcdev);
+	int (*resume)(struct pmc_dev *pmcdev);
+};
+
 enum pmc_index {
 	PMC_IDX_MAIN,
 	PMC_IDX_SOC = PMC_IDX_MAIN,
