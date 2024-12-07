@@ -5539,6 +5539,24 @@ err:
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
+static void __skb_tstamp_tx_bpf(struct sock *sk, struct sk_buff *skb, int tstype)
+{
+	int op;
+
+	if (!sk)
+		return;
+
+	switch (tstype) {
+	case SCM_TSTAMP_SCHED:
+		op = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
+		break;
+	default:
+		return;
+	}
+
+	bpf_skops_tx_timestamping(sk, skb, op);
+}
+
 static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 				 const struct sk_buff *ack_skb,
 				 struct skb_shared_hwtstamps *hwtstamps,
@@ -5595,11 +5613,14 @@ static void skb_tstamp_tx_output(struct sk_buff *orig_skb,
 	__skb_complete_tx_timestamp(skb, sk, tstype, opt_stats);
 }
 
-static bool skb_tstamp_is_set(const struct sk_buff *skb, int tstype)
+static bool skb_tstamp_is_set(const struct sk_buff *skb, int tstype, bool bpf_mode)
 {
+	int flag;
+
 	switch (tstype) {
 	case SCM_TSTAMP_SCHED:
-		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_SCHED_TSTAMP))
+		flag = bpf_mode ? SKBTX_BPF : SKBTX_SCHED_TSTAMP;
+		if (unlikely(skb_shinfo(skb)->tx_flags & flag))
 			return true;
 		return false;
 	case SCM_TSTAMP_SND:
@@ -5620,8 +5641,10 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		     struct skb_shared_hwtstamps *hwtstamps,
 		     struct sock *sk, int tstype)
 {
-	if (unlikely(skb_tstamp_is_set(orig_skb, tstype)))
+	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, false)))
 		skb_tstamp_tx_output(orig_skb, ack_skb, hwtstamps, sk, tstype);
+	if (unlikely(skb_tstamp_is_set(orig_skb, tstype, true)))
+		__skb_tstamp_tx_bpf(sk, orig_skb, tstype);
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
 
