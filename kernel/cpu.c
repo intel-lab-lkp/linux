@@ -1268,7 +1268,6 @@ void clear_tasks_mm_cpumask(int cpu)
 static int take_cpu_down(void *_param)
 {
 	struct cpuhp_cpu_state *st = this_cpu_ptr(&cpuhp_state);
-	enum cpuhp_state target = max((int)st->target, CPUHP_AP_OFFLINE);
 	int err, cpu = smp_processor_id();
 
 	/* Ensure this CPU doesn't handle any more interrupts. */
@@ -1284,8 +1283,9 @@ static int take_cpu_down(void *_param)
 
 	/*
 	 * Invoke the former CPU_DYING callbacks. DYING must not fail!
+	 * Regardless of st->target, it must run through to CPUHP_AP_OFFLINE.
 	 */
-	cpuhp_invoke_callback_range_nofail(false, cpu, st, target);
+	cpuhp_invoke_callback_range_nofail(false, cpu, st, CPUHP_AP_OFFLINE);
 
 	/* Park the stopper thread */
 	stop_machine_park(cpu);
@@ -1592,15 +1592,15 @@ void smp_shutdown_nonboot_cpus(unsigned int primary_cpu)
 void notify_cpu_starting(unsigned int cpu)
 {
 	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
-	enum cpuhp_state target = min((int)st->target, CPUHP_AP_ONLINE);
 
 	rcutree_report_cpu_starting(cpu);	/* Enables RCU usage on this CPU. */
 	cpumask_set_cpu(cpu, &cpus_booted_once_mask);
 
 	/*
 	 * STARTING must not fail!
+	 * Regardless of st->target, it must run through to CPUHP_AP_ONLINE.
 	 */
-	cpuhp_invoke_callback_range_nofail(true, cpu, st, target);
+	cpuhp_invoke_callback_range_nofail(true, cpu, st, CPUHP_AP_ONLINE);
 }
 
 /*
