@@ -27,7 +27,7 @@ BTF COMMANDS
 | **bpftool** **btf dump** *BTF_SRC* [**format** *FORMAT*]
 | **bpftool** **btf help**
 |
-| *BTF_SRC* := { **id** *BTF_ID* | **prog** *PROG* | **map** *MAP* [{**key** | **value** | **kv** | **all**}] | **file** *FILE* }
+| *BTF_SRC* := { **id** *BTF_ID* | **prog** *PROG* | **map** *MAP* [{**key** | **value** | **kv** | **all**}] | **file** *FILE* [**root_id** *ROOT_ID*] }
 | *FORMAT* := { **raw** | **c** [**unsorted**] }
 | *MAP* := { **id** *MAP_ID* | **pinned** *FILE* }
 | *PROG* := { **id** *PROG_ID* | **pinned** *FILE* | **tag** *PROG_TAG* | **name** *PROG_NAME* }
@@ -60,7 +60,8 @@ bpftool btf dump *BTF_SRC*
 
     When specifying *FILE*, an ELF file is expected, containing .BTF section
     with well-defined BTF binary format data, typically produced by clang or
-    pahole.
+    pahole. You can choose to dump a single type and all its dependent types
+    by providing an optional *ROOT_ID*.
 
     **format** option can be used to override default (raw) output format. Raw
     (**raw**) or C-syntax (**c**) output formats are supported. With C-style
