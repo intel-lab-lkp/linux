@@ -204,7 +204,7 @@ void blkdev_show(struct seq_file *seqf, off_t offset)
  *    then the function returns zero on success, or a negative error code
  *  - if any unused major number was requested with @major = 0 parameter
  *    then the return value is the allocated major number in range
- *    [1..BLKDEV_MAJOR_MAX-1] or a negative error code otherwise
+ *    [1..BLKDEV_MAJOR_HASH_SIZE-1] or a negative error code otherwise
  *
  * See Documentation/admin-guide/devices.txt for the list of allocated
  * major numbers.
