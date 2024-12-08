@@ -571,6 +571,6 @@ MODULE_DESCRIPTION("HID driver for UC-Logic devices not fully compliant with HID
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("HID driver for UC-Logic devices not fully compliant with HID standard");
 
-#ifdef CONFIG_HID_KUNIT_TEST
+#if IS_ENABLED(CONFIG_HID_KUNIT_TEST)
 #include "hid-uclogic-core-test.c"
 #endif

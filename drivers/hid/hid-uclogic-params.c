@@ -1860,6 +1860,6 @@ cleanup:
 	return rc;
 }
 
-#ifdef CONFIG_HID_KUNIT_TEST
+#if IS_ENABLED(CONFIG_HID_KUNIT_TEST)
 #include "hid-uclogic-params-test.c"
 #endif
