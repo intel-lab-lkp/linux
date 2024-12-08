@@ -920,6 +920,14 @@ config CC_STRINGOP_OVERFLOW
 	bool
 	default y if CC_IS_GCC && !CC_NO_STRINGOP_OVERFLOW
 
+# Currently, disable -Wstringop-overread for gcc-13+ and FORTIFY_SOURCE globally.
+config GCC13_NO_STRINGOP_OVERREAD
+	def_bool y
+
+config CC_NO_STRINGOP_OVERREAD
+	bool
+	default y if CC_IS_GCC && GCC_VERSION >= 130000 && GCC13_NO_STRINGOP_OVERREAD && FORTIFY_SOURCE
+
 #
 # For architectures that know their GCC __int128 support is sound
 #
