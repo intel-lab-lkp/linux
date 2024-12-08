@@ -129,6 +129,9 @@ static int disk_report_zones_cb(struct blk_zone *zone, unsigned int idx,
 	if (disk->zone_wplugs_hash)
 		disk_zone_wplug_sync_wp_offset(disk, zone);
 
+	if (!args->user_cb)
+		return 0;
+
 	return args->user_cb(zone, idx, args->user_data);
 }
 
@@ -661,6 +664,16 @@ static void disk_zone_wplug_sync_wp_offset(struct gendisk *disk,
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 
 	disk_put_zone_wplug(zwplug);
+}
+
+static int disk_zone_sync_wp_offset(struct gendisk *disk, sector_t sector)
+{
+	struct disk_report_zones_cb_args args = {
+		.disk = disk,
+	};
+
+	return disk->fops->report_zones(disk, sector, 1,
+					disk_report_zones_cb, &args);
 }
 
 static bool blk_zone_wplug_handle_reset_or_finish(struct bio *bio,
@@ -1719,6 +1732,48 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(blk_revalidate_disk_zones);
+
+/**
+ * blkdev_issue_zone_zeroout - zero-fill a block range in a zone
+ * @bdev:	blockdev to write
+ * @sector:	start sector
+ * @nr_sects:	number of sectors to write
+ * @gfp_mask:	memory allocation flags (for bio_alloc)
+ *
+ * Description:
+ *  Zero-fill a block range in a zone (@sector must be equal to the zone write
+ *  pointer), handling potential errors due to the (initially unknown) lack of
+ *  hardware offload (See blkdev_issue_zeroout()).
+ */
+int blkdev_issue_zone_zeroout(struct block_device *bdev, sector_t sector,
+		sector_t nr_sects, gfp_t gfp_mask)
+{
+	int ret;
+
+	if (WARN_ON_ONCE(!bdev_is_zoned(bdev)))
+		return -EIO;
+
+	ret = blkdev_issue_zeroout(bdev, sector, nr_sects, gfp_mask,
+				   BLKDEV_ZERO_NOFALLBACK);
+	if (ret != -EOPNOTSUPP)
+		return ret;
+
+	/*
+	 * The failed call to blkdev_issue_zeroout() advanced the zone write
+	 * pointer. Undo this using a report zone to update the zone write
+	 * pointer to the correct current value.
+	 */
+	ret = disk_zone_sync_wp_offset(bdev->bd_disk, sector);
+	if (ret != 1)
+		return ret < 0 ? ret : -EIO;
+
+	/*
+	 * Retry without BLKDEV_ZERO_NOFALLBACK to force the fallback to a
+	 * regular write with zero-pages.
+	 */
+	return blkdev_issue_zeroout(bdev, sector, nr_sects, gfp_mask, 0);
+}
+EXPORT_SYMBOL(blkdev_issue_zone_zeroout);
 
 #ifdef CONFIG_BLK_DEBUG_FS
 
