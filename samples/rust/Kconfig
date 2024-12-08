@@ -37,4 +37,12 @@ config SAMPLE_RUST_HOSTPROGS
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_KOBJECT
+	bool "Build kobject example in Rust"
+	help
+	  This config option allows to build kobject
+	  exampel written in Rust.
+
+	  If unsure, say N.
+
 endif # SAMPLES_RUST
