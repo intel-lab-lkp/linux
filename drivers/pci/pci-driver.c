@@ -511,6 +511,14 @@ static void pci_device_shutdown(struct device *dev)
 		drv->shutdown(pci_dev);
 
 	/*
+	 * If driver already changed device's power state, it can mean the
+	 * wakeup setting is in place, or a workaround is used. Hence keep it
+	 * as is.
+	 */
+	if (!kexec_in_progress && pci_dev->current_state == PCI_D0)
+		pci_prepare_to_sleep(pci_dev);
+
+	/*
 	 * If this is a kexec reboot, turn off Bus Master bit on the
 	 * device to tell it to not continue to do DMA. Don't touch
 	 * devices in D3cold or unknown states.
