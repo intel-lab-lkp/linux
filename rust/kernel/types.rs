@@ -517,3 +517,20 @@ pub type NotThreadSafe = PhantomData<*mut ()>;
 /// [`NotThreadSafe`]: type@NotThreadSafe
 #[allow(non_upper_case_globals)]
 pub const NotThreadSafe: NotThreadSafe = PhantomData;
+
+/// Mode represents file permissions.
+///
+/// TODO: add link to header files.
+pub struct Mode(bindings::umode_t);
+
+impl Mode {
+    /// Creates [`Mode`] from the number.
+    pub const fn from_u16(num: u16) -> Self {
+        Self(num)
+    }
+
+    /// Returns [`Mode`] as an number.
+    pub const fn as_u16(&self) -> u16 {
+        self.0
+    }
+}
