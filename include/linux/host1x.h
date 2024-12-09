@@ -1,6 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
-/*
- * Copyright (c) 2009-2013, NVIDIA Corporation. All rights reserved.
+/* SPDX-License-Identifier: GPL-2.0-only
+ * SPDX-FileCopyrightText: Copyright (c) 2009-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  */
 
 #ifndef __LINUX_HOST1X_H
@@ -20,6 +19,13 @@ enum host1x_class {
 	HOST1X_CLASS_GR3D = 0x60,
 	HOST1X_CLASS_NVDEC = 0xF0,
 	HOST1X_CLASS_NVDEC1 = 0xF5,
+};
+
+enum host1x_actmon_wmark_event {
+	HOST1X_ACTMON_AVG_WMARK_BELOW,
+	HOST1X_ACTMON_AVG_WMARK_ABOVE,
+	HOST1X_ACTMON_CONSEC_WMARK_BELOW,
+	HOST1X_ACTMON_CONSEC_WMARK_ABOVE,
 };
 
 struct host1x;
@@ -63,6 +69,8 @@ static inline void host1x_bo_cache_destroy(struct host1x_bo_cache *cache)
  * @late_exit: host1x client late tear down code
  * @suspend: host1x client suspend code
  * @resume: host1x client resume code
+ * @get_rate: host1x client get clock rate code
+ * @actmon_event: host1x client actmon event handling code in threaded interrupt context
  */
 struct host1x_client_ops {
 	int (*early_init)(struct host1x_client *client);
@@ -71,7 +79,12 @@ struct host1x_client_ops {
 	int (*late_exit)(struct host1x_client *client);
 	int (*suspend)(struct host1x_client *client);
 	int (*resume)(struct host1x_client *client);
+	unsigned long (*get_rate)(struct host1x_client *client);
+	void (*actmon_event)(struct host1x_client *client,
+			     enum host1x_actmon_wmark_event event);
 };
+
+struct host1x_actmon;
 
 /**
  * struct host1x_client - host1x client structure
@@ -88,6 +101,7 @@ struct host1x_client_ops {
  * @usecount: reference count for this structure
  * @lock: mutex for mutually exclusive concurrency
  * @cache: host1x buffer object cache
+ * @actmon: unit actmon for this host1x client
  */
 struct host1x_client {
 	struct list_head list;
@@ -108,6 +122,8 @@ struct host1x_client {
 	struct mutex lock;
 
 	struct host1x_bo_cache cache;
+
+	struct host1x_actmon *actmon;
 };
 
 /*
@@ -493,5 +509,13 @@ static inline void host1x_memory_context_put(struct host1x_memory_context *cd)
 {
 }
 #endif
+
+int host1x_actmon_register(struct host1x_client *client);
+void host1x_actmon_unregister(struct host1x_client *client);
+void host1x_actmon_enable(struct host1x_client *client);
+void host1x_actmon_disable(struct host1x_client *client);
+void host1x_actmon_update_client_rate(struct host1x_client *client,
+				      unsigned long rate,
+				      u32 *weight);
 
 #endif

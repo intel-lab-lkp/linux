@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Tegra host1x driver
+ * SPDX-FileCopyrightText: Copyright (c) 2010-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
- * Copyright (c) 2010-2013, NVIDIA Corporation.
+ * Tegra host1x driver
  */
 
 #include <linux/clk.h>
@@ -45,6 +45,11 @@
 void host1x_common_writel(struct host1x *host1x, u32 v, u32 r)
 {
 	writel(v, host1x->common_regs + r);
+}
+
+u32 host1x_common_readl(struct host1x *host1x, u32 r)
+{
+	return readl(host1x->common_regs + r);
 }
 
 void host1x_hypervisor_writel(struct host1x *host1x, u32 v, u32 r)
@@ -265,6 +270,23 @@ static const struct host1x_sid_entry tegra234_sid_table[] = {
 	},
 };
 
+static const struct host1x_actmon_entry tegra234_actmon_table[] = {
+	{
+		.classid = HOST1X_CLASS_VIC,
+		.name = "vic",
+		.irq = 3,
+		.offset = 0x10000,
+		.num_modules = 1,
+	},
+	{
+		.classid = HOST1X_CLASS_NVDEC,
+		.name = "nvdec",
+		.irq = 4,
+		.offset = 0x20000,
+		.num_modules = 1,
+	},
+};
+
 static const struct host1x_info host1x08_info = {
 	.nb_channels = 63,
 	.nb_pts = 1024,
@@ -276,8 +298,11 @@ static const struct host1x_info host1x08_info = {
 	.has_wide_gather = true,
 	.has_hypervisor = true,
 	.has_common = true,
+	.has_actmon = true,
 	.num_sid_entries = ARRAY_SIZE(tegra234_sid_table),
 	.sid_table = tegra234_sid_table,
+	.num_actmon_entries = ARRAY_SIZE(tegra234_actmon_table),
+	.actmon_table = tegra234_actmon_table,
 	.streamid_vm_table = { 0x1004, 128 },
 	.classid_vm_table = { 0x1404, 25 },
 	.mmio_vm_table = { 0x1504, 25 },
@@ -535,6 +560,14 @@ static int host1x_probe(struct platform_device *pdev)
 			if (IS_ERR(host->common_regs))
 				return PTR_ERR(host->common_regs);
 		}
+
+		if (host->info->has_actmon) {
+			host->actmon_regs = devm_platform_ioremap_resource_byname(pdev, "actmon");
+			if (IS_ERR(host->actmon_regs)) {
+				dev_warn(&pdev->dev, "failed to get actmon resource\n");
+				host->actmon_regs = NULL;
+			}
+		}
 	} else {
 		host->regs = devm_platform_ioremap_resource(pdev, 0);
 		if (IS_ERR(host->regs))
@@ -566,8 +599,12 @@ static int host1x_probe(struct platform_device *pdev)
 		host->num_syncpt_irqs = 1;
 	}
 
+	host->general_irq = platform_get_irq_byname_optional(pdev, "host1x");
+
 	mutex_init(&host->devices_lock);
 	INIT_LIST_HEAD(&host->devices);
+	mutex_init(&host->actmons_lock);
+	INIT_LIST_HEAD(&host->actmons);
 	INIT_LIST_HEAD(&host->list);
 	host->dev = &pdev->dev;
 
@@ -583,6 +620,12 @@ static int host1x_probe(struct platform_device *pdev)
 			return err;
 	}
 
+	err = host1x_hw_intr_init_host_general(host);
+	if (err) {
+		dev_err(&pdev->dev, "failed to init general interrupt handler: %d\n", err);
+		return err;
+	}
+
 	host->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(host->clk)) {
 		err = PTR_ERR(host->clk);
@@ -591,6 +634,14 @@ static int host1x_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "failed to get clock: %d\n", err);
 
 		return err;
+	}
+
+	if (host->info->has_actmon) {
+		host->actmon_clk = devm_clk_get(&pdev->dev, "actmon");
+		if (IS_ERR(host->actmon_clk)) {
+			dev_warn(&pdev->dev, "failed to get actmon clock\n");
+			host->actmon_clk = NULL;
+		}
 	}
 
 	err = host1x_get_resets(host);
@@ -699,6 +750,7 @@ static int __maybe_unused host1x_runtime_suspend(struct device *dev)
 	struct host1x *host = dev_get_drvdata(dev);
 	int err;
 
+	host1x_hw_intr_disable_general_intrs(host);
 	host1x_channel_stop_all(host);
 	host1x_intr_stop(host);
 	host1x_syncpt_save(host);
@@ -714,6 +766,7 @@ static int __maybe_unused host1x_runtime_suspend(struct device *dev)
 	}
 
 	clk_disable_unprepare(host->clk);
+	clk_disable_unprepare(host->actmon_clk);
 	reset_control_bulk_release(host->nresets, host->resets);
 
 	return 0;
@@ -722,6 +775,7 @@ resume_host1x:
 	host1x_setup_virtualization_tables(host);
 	host1x_syncpt_restore(host);
 	host1x_intr_start(host);
+	host1x_hw_intr_enable_general_intrs(host);
 
 	return err;
 }
@@ -730,6 +784,12 @@ static int __maybe_unused host1x_runtime_resume(struct device *dev)
 {
 	struct host1x *host = dev_get_drvdata(dev);
 	int err;
+
+	err = clk_prepare_enable(host->actmon_clk);
+	if (err) {
+		dev_err(dev, "failed to enable actmon clock: %d\n", err);
+		goto disable_host1x_clk;
+	}
 
 	err = reset_control_bulk_acquire(host->nresets, host->resets);
 	if (err) {
@@ -746,16 +806,19 @@ static int __maybe_unused host1x_runtime_resume(struct device *dev)
 	err = reset_control_bulk_deassert(host->nresets, host->resets);
 	if (err < 0) {
 		dev_err(dev, "failed to deassert reset: %d\n", err);
-		goto disable_clk;
+		goto disable_actmon_clk;
 	}
 
 	host1x_setup_virtualization_tables(host);
 	host1x_syncpt_restore(host);
 	host1x_intr_start(host);
+	host1x_hw_intr_enable_general_intrs(host);
 
 	return 0;
 
-disable_clk:
+disable_actmon_clk:
+	clk_disable_unprepare(host->actmon_clk);
+disable_host1x_clk:
 	clk_disable_unprepare(host->clk);
 release_reset:
 	reset_control_bulk_release(host->nresets, host->resets);

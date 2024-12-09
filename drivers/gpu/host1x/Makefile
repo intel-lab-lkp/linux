@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 host1x-y = \
+	actmon.o \
 	bus.o \
 	syncpt.o \
 	dev.o \
