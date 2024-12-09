@@ -159,7 +159,7 @@ struct kyber_queue_data {
 
 	/*
 	 * Async request percentage, converted to per-word depth for
-	 * sbitmap_get_shallow().
+	 * sbitmap_queue_get_shallow().
 	 */
 	unsigned int async_depth;
 
