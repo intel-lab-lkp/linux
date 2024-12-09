@@ -84,6 +84,14 @@ static int tqmx86_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	return !!(tqmx86_gpio_read(gpio, TQMX86_GPIOD) & BIT(offset));
 }
 
+static void _tqmx86_gpio_set(struct tqmx86_gpio_data *gpio, unsigned int offset,
+			     int value)
+	__must_hold(&gpio->spinlock)
+{
+	__assign_bit(offset, gpio->output, value);
+	tqmx86_gpio_write(gpio, bitmap_get_value8(gpio->output, 0), TQMX86_GPIOD);
+}
+
 static void tqmx86_gpio_set(struct gpio_chip *chip, unsigned int offset,
 			    int value)
 {
@@ -91,40 +99,50 @@ static void tqmx86_gpio_set(struct gpio_chip *chip, unsigned int offset,
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&gpio->spinlock, flags);
-	__assign_bit(offset, gpio->output, value);
-	tqmx86_gpio_write(gpio, bitmap_get_value8(gpio->output, 0), TQMX86_GPIOD);
+	_tqmx86_gpio_set(gpio, offset, value);
 	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
 }
 
 static int tqmx86_gpio_direction_input(struct gpio_chip *chip,
 				       unsigned int offset)
 {
-	/* Direction cannot be changed. Validate is an input. */
-	if (BIT(offset) & TQMX86_DIR_INPUT_MASK)
-		return 0;
-	else
-		return -EINVAL;
+	struct tqmx86_gpio_data *gpio = gpiochip_get_data(chip);
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&gpio->spinlock, flags);
+	tqmx86_gpio_clrsetbits(gpio, BIT(offset), 0, TQMX86_GPIODD);
+	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
+
+	return 0;
 }
 
 static int tqmx86_gpio_direction_output(struct gpio_chip *chip,
 					unsigned int offset,
 					int value)
 {
-	/* Direction cannot be changed, validate is an output */
-	if (BIT(offset) & TQMX86_DIR_INPUT_MASK)
-		return -EINVAL;
+	struct tqmx86_gpio_data *gpio = gpiochip_get_data(chip);
+	unsigned long flags;
 
-	tqmx86_gpio_set(chip, offset, value);
+	raw_spin_lock_irqsave(&gpio->spinlock, flags);
+	_tqmx86_gpio_set(gpio, offset, value);
+	tqmx86_gpio_clrsetbits(gpio, 0, BIT(offset), TQMX86_GPIODD);
+	raw_spin_unlock_irqrestore(&gpio->spinlock, flags);
+
 	return 0;
 }
 
 static int tqmx86_gpio_get_direction(struct gpio_chip *chip,
 				     unsigned int offset)
 {
-	if (TQMX86_DIR_INPUT_MASK & BIT(offset))
-		return GPIO_LINE_DIRECTION_IN;
+	struct tqmx86_gpio_data *gpio = gpiochip_get_data(chip);
+	u8 val;
 
-	return GPIO_LINE_DIRECTION_OUT;
+	val = tqmx86_gpio_read(gpio, TQMX86_GPIODD);
+
+	if (val & BIT(offset))
+		return GPIO_LINE_DIRECTION_OUT;
+
+	return GPIO_LINE_DIRECTION_IN;
 }
 
 static void tqmx86_gpio_irq_config(struct tqmx86_gpio_data *gpio, int hwirq)
