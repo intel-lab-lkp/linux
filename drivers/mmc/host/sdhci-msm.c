@@ -1835,6 +1835,11 @@ static int sdhci_msm_ice_init(struct sdhci_msm_host *msm_host,
 
 	msm_host->ice = ice;
 
+	if (qcom_ice_using_hwkm(ice)) {
+		dev_warn(dev, "HWKM mode unsupported; disabling inline encryption support\n");
+		return 0;
+	}
+
 	/* Initialize the blk_crypto_profile */
 
 	caps.reg_val = cpu_to_le32(cqhci_readl(cq_host, CQHCI_CCAP));
