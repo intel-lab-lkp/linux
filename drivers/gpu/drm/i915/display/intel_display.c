@@ -93,6 +93,7 @@
 #include "intel_fifo_underrun.h"
 #include "intel_frontbuffer.h"
 #include "intel_hdmi.h"
+#include "intel_histogram.h"
 #include "intel_hotplug.h"
 #include "intel_link_bw.h"
 #include "intel_lvds.h"
@@ -4604,6 +4605,12 @@ static int intel_crtc_atomic_check(struct intel_atomic_state *state,
 	if (ret)
 		return ret;
 
+	if (crtc_state->histogram_updated) {
+		ret = intel_histogram_atomic_check(crtc);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -6822,6 +6829,10 @@ int intel_atomic_check(struct drm_device *dev,
 		if (new_crtc_state->uapi.scaling_filter !=
 		    old_crtc_state->uapi.scaling_filter)
 			new_crtc_state->uapi.mode_changed = true;
+
+		if (new_crtc_state->uapi.histogram_enable |=
+		    old_crtc_state->uapi.histogram_enable)
+			new_crtc_state->histogram_updated = true;
 	}
 
 	intel_vrr_check_modeset(state);
@@ -7888,6 +7899,12 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		 */
 		old_crtc_state->dsb_color_vblank = fetch_and_zero(&new_crtc_state->dsb_color_vblank);
 		old_crtc_state->dsb_commit = fetch_and_zero(&new_crtc_state->dsb_commit);
+
+		if (new_crtc_state->histogram_updated)
+			intel_histogram_update(crtc, crtc->base.state->histogram_enable);
+		if (new_crtc_state->uapi.histogram_iet_updated)
+			intel_histogram_set_iet_lut(crtc,
+						    new_crtc_state->uapi.histogram_iet);
 	}
 
 	/* Underruns don't always raise interrupts, so check manually */
