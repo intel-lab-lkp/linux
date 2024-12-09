@@ -4311,8 +4311,9 @@
 			compatible = "nvidia,tegra234-host1x";
 			reg = <0x0 0x13e00000 0x0 0x10000>,
 			      <0x0 0x13e10000 0x0 0x10000>,
-			      <0x0 0x13e40000 0x0 0x10000>;
-			reg-names = "common", "hypervisor", "vm";
+			      <0x0 0x13e40000 0x0 0x10000>,
+			      <0x0 0x13ef0000 0x0 0x60000>;
+			reg-names = "common", "hypervisor", "vm", "actmon";
 			interrupts = <GIC_SPI 448 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 449 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 450 IRQ_TYPE_LEVEL_HIGH>,
@@ -4324,8 +4325,9 @@
 				     <GIC_SPI 263 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "syncpt0", "syncpt1", "syncpt2", "syncpt3", "syncpt4",
 					  "syncpt5", "syncpt6", "syncpt7", "host1x";
-			clocks = <&bpmp TEGRA234_CLK_HOST1X>;
-			clock-names = "host1x";
+			clocks = <&bpmp TEGRA234_CLK_HOST1X>,
+				 <&bpmp TEGRA234_CLK_ACTMON>;
+			clock-names = "host1x", "actmon";
 
 			#address-cells = <2>;
 			#size-cells = <2>;
