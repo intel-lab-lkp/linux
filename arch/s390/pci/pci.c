@@ -116,6 +116,21 @@ int pci_proc_domain(struct pci_bus *bus)
 }
 EXPORT_SYMBOL_GPL(pci_proc_domain);
 
+static u64 zpci_get_iota_region_flag(struct zpci_dev *zdev)
+{
+	switch (zdev->origin_type) {
+	case ZPCI_TABLE_TYPE_RTX:
+		return ZPCI_IOTA_RTTO_FLAG;
+	case ZPCI_TABLE_TYPE_RSX:
+		return ZPCI_IOTA_RSTO_FLAG;
+	case ZPCI_TABLE_TYPE_RFX:
+		return ZPCI_IOTA_RFTO_FLAG;
+	default:
+		WARN_ONCE(1, "Invalid IOMMU table (%x)\n", zdev->origin_type);
+		return 0;
+	}
+}
+
 /* Modify PCI: Register I/O address translation parameters */
 int zpci_register_ioat(struct zpci_dev *zdev, u8 dmaas,
 		       u64 base, u64 limit, u64 iota, u8 *status)
@@ -131,7 +146,7 @@ int zpci_register_ioat(struct zpci_dev *zdev, u8 dmaas,
 		fib.pal = limit + (1 << 12);
 	else
 		fib.pal = limit;
-	fib.iota = iota | ZPCI_IOTA_RTTO_FLAG;
+	fib.iota = iota | zpci_get_iota_region_flag(zdev);
 	fib.gd = zdev->gisa;
 	cc = zpci_mod_fc(req, &fib, status);
 	if (cc)
