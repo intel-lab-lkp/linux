@@ -283,6 +283,48 @@ static void set_task_reclaim_state(struct task_struct *task,
 	task->reclaim_state = rs;
 }
 
+/**
+ * find_folios_written_back - Find and move the written back folios to a new list.
+ * @list: filios list
+ * @clean: the written back folios list
+ * @skip: whether skip to move the written back folios to clean list.
+ */
+static inline void find_folios_written_back(struct list_head *list,
+		struct list_head *clean, bool skip)
+{
+	struct folio *folio;
+	struct folio *next;
+
+	list_for_each_entry_safe_reverse(folio, next, list, lru) {
+		if (!folio_evictable(folio)) {
+			list_del(&folio->lru);
+			folio_putback_lru(folio);
+			continue;
+		}
+
+		if (folio_test_reclaim(folio) &&
+		    (folio_test_dirty(folio) || folio_test_writeback(folio))) {
+			/* restore LRU_REFS_FLAGS cleared by isolate_folio() */
+			if (lru_gen_enabled() && folio_test_workingset(folio))
+				folio_set_referenced(folio);
+			continue;
+		}
+
+		if (skip || folio_test_active(folio) || folio_test_referenced(folio) ||
+		    folio_mapped(folio) || folio_test_locked(folio) ||
+		    folio_test_dirty(folio) || folio_test_writeback(folio)) {
+			/* don't add rejected folios to the oldest generation */
+			if (lru_gen_enabled())
+				set_mask_bits(&folio->flags, LRU_REFS_MASK | LRU_REFS_FLAGS,
+					      BIT(PG_active));
+			continue;
+		}
+
+		/* retry folios that may have missed folio_rotate_reclaimable() */
+		list_move(&folio->lru, clean);
+	}
+}
+
 /*
  * flush_reclaim_state(): add pages reclaimed outside of LRU-based reclaim to
  * scan_control->nr_reclaimed.
@@ -1907,6 +1949,25 @@ static int current_may_throttle(void)
 	return !(current->flags & PF_LOCAL_THROTTLE);
 }
 
+static inline void acc_reclaimed_stat(struct reclaim_stat *stat,
+		struct reclaim_stat *curr)
+{
+	int i;
+
+	stat->nr_dirty += curr->nr_dirty;
+	stat->nr_unqueued_dirty += curr->nr_unqueued_dirty;
+	stat->nr_congested += curr->nr_congested;
+	stat->nr_writeback += curr->nr_writeback;
+	stat->nr_immediate += curr->nr_immediate;
+	stat->nr_pageout += curr->nr_pageout;
+	stat->nr_ref_keep += curr->nr_ref_keep;
+	stat->nr_unmap_fail += curr->nr_unmap_fail;
+	stat->nr_lazyfree_fail += curr->nr_lazyfree_fail;
+	stat->nr_demoted += curr->nr_demoted;
+	for (i = 0; i < ANON_AND_FILE; i++)
+		stat->nr_activate[i] = curr->nr_activate[i];
+}
+
 /*
  * shrink_inactive_list() is a helper for shrink_node().  It returns the number
  * of reclaimed pages
@@ -1916,14 +1977,16 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 		enum lru_list lru)
 {
 	LIST_HEAD(folio_list);
+	LIST_HEAD(clean_list);
 	unsigned long nr_scanned;
 	unsigned int nr_reclaimed = 0;
 	unsigned long nr_taken;
-	struct reclaim_stat stat;
+	struct reclaim_stat stat, curr;
 	bool file = is_file_lru(lru);
 	enum vm_event_item item;
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	bool stalled = false;
+	bool skip_retry = false;
 
 	while (unlikely(too_many_isolated(pgdat, file, sc))) {
 		if (stalled)
@@ -1957,10 +2020,20 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	if (nr_taken == 0)
 		return 0;
 
-	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false);
+	memset(&stat, 0, sizeof(stat));
+retry:
+	nr_reclaimed += shrink_folio_list(&folio_list, pgdat, sc, &curr, false);
+	find_folios_written_back(&folio_list, &clean_list, skip_retry);
+	acc_reclaimed_stat(&stat, &curr);
 
 	spin_lock_irq(&lruvec->lru_lock);
 	move_folios_to_lru(lruvec, &folio_list);
+	if (!list_empty(&clean_list)) {
+		list_splice_init(&clean_list, &folio_list);
+		skip_retry = true;
+		spin_unlock_irq(&lruvec->lru_lock);
+		goto retry;
+	}
 
 	__mod_lruvec_state(lruvec, PGDEMOTE_KSWAPD + reclaimer_offset(),
 					stat.nr_demoted);
@@ -4567,8 +4640,6 @@ static int evict_folios(struct lruvec *lruvec, struct scan_control *sc, int swap
 	int reclaimed;
 	LIST_HEAD(list);
 	LIST_HEAD(clean);
-	struct folio *folio;
-	struct folio *next;
 	enum vm_event_item item;
 	struct reclaim_stat stat;
 	struct lru_gen_mm_walk *walk;
@@ -4597,34 +4668,7 @@ retry:
 			scanned, reclaimed, &stat, sc->priority,
 			type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
 
-	list_for_each_entry_safe_reverse(folio, next, &list, lru) {
-		if (!folio_evictable(folio)) {
-			list_del(&folio->lru);
-			folio_putback_lru(folio);
-			continue;
-		}
-
-		if (folio_test_reclaim(folio) &&
-		    (folio_test_dirty(folio) || folio_test_writeback(folio))) {
-			/* restore LRU_REFS_FLAGS cleared by isolate_folio() */
-			if (folio_test_workingset(folio))
-				folio_set_referenced(folio);
-			continue;
-		}
-
-		if (skip_retry || folio_test_active(folio) || folio_test_referenced(folio) ||
-		    folio_mapped(folio) || folio_test_locked(folio) ||
-		    folio_test_dirty(folio) || folio_test_writeback(folio)) {
-			/* don't add rejected folios to the oldest generation */
-			set_mask_bits(&folio->flags, LRU_REFS_MASK | LRU_REFS_FLAGS,
-				      BIT(PG_active));
-			continue;
-		}
-
-		/* retry folios that may have missed folio_rotate_reclaimable() */
-		list_move(&folio->lru, &clean);
-	}
-
+	find_folios_written_back(&list, &clean, skip_retry);
 	spin_lock_irq(&lruvec->lru_lock);
 
 	move_folios_to_lru(lruvec, &list);
