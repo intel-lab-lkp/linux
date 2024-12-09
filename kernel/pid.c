@@ -131,6 +131,8 @@ void free_pid(struct pid *pid)
 	int i;
 	unsigned long flags;
 
+	pidfs_remove_pid(pid);
+
 	spin_lock_irqsave(&pidmap_lock, flags);
 	for (i = 0; i <= pid->level; i++) {
 		struct upid *upid = pid->numbers + i;
@@ -152,7 +154,6 @@ void free_pid(struct pid *pid)
 		}
 
 		idr_remove(&ns->idr, upid->nr);
-		pidfs_remove_pid(pid);
 	}
 	spin_unlock_irqrestore(&pidmap_lock, flags);
 
@@ -249,16 +250,6 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 		tmp = tmp->parent;
 	}
 
-	/*
-	 * ENOMEM is not the most obvious choice especially for the case
-	 * where the child subreaper has already exited and the pid
-	 * namespace denies the creation of any new processes. But ENOMEM
-	 * is what we have exposed to userspace for a long time and it is
-	 * documented behavior for pid namespaces. So we can't easily
-	 * change it even if there were an error code better suited.
-	 */
-	retval = -ENOMEM;
-
 	get_pid_ns(ns);
 	refcount_set(&pid->count, 1);
 	spin_lock_init(&pid->lock);
@@ -269,12 +260,23 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	INIT_HLIST_HEAD(&pid->inodes);
 
 	upid = pid->numbers + ns->level;
-	idr_preload(GFP_KERNEL);
-	spin_lock_irq(&pidmap_lock);
-	if (!(ns->pid_allocated & PIDNS_ADDING))
-		goto out_unlock;
+
 	retval = pidfs_add_pid(pid);
 	if (retval)
+		goto out_free;
+
+	/*
+	 * ENOMEM is not the most obvious choice especially for the case
+	 * where the child subreaper has already exited and the pid
+	 * namespace denies the creation of any new processes. But ENOMEM
+	 * is what we have exposed to userspace for a long time and it is
+	 * documented behavior for pid namespaces. So we can't easily
+	 * change it even if there were an error code better suited.
+	 */
+	retval = -ENOMEM;
+
+	spin_lock_irq(&pidmap_lock);
+	if (!(ns->pid_allocated & PIDNS_ADDING))
 		goto out_unlock;
 	for ( ; upid >= pid->numbers; --upid) {
 		/* Make the PID visible to find_pid_ns. */
@@ -282,13 +284,11 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 		upid->ns->pid_allocated++;
 	}
 	spin_unlock_irq(&pidmap_lock);
-	idr_preload_end();
 
 	return pid;
 
 out_unlock:
 	spin_unlock_irq(&pidmap_lock);
-	idr_preload_end();
 	put_pid_ns(ns);
 
 out_free:
