@@ -56,7 +56,7 @@ int of_overlay_fdt_apply_kunit(struct kunit *test, void *overlay_fdt,
 		return -ENOMEM;
 
 	ret = of_overlay_fdt_apply(overlay_fdt, overlay_fdt_size,
-				   ovcs_id, NULL);
+				   ovcs_id, NULL, NULL);
 	if (ret)
 		return ret;
 

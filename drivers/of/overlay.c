@@ -964,6 +964,10 @@ out:
  * @overlay_fdt_size:	number of bytes in @overlay_fdt
  * @ret_ovcs_id:	pointer for returning created changeset id
  * @base:		pointer for the target node to apply overlay
+ * @export_symbols_name:
+ *			Name of the export symbol subnode of the @base node to
+ *			provide extra symbols. Those extra symbols are used in
+ *			the overlay symbols resolution.
  *
  * Creates and applies an overlay changeset.
  *
@@ -979,7 +983,8 @@ out:
  */
 
 int of_overlay_fdt_apply(const void *overlay_fdt, u32 overlay_fdt_size,
-			 int *ret_ovcs_id, const struct device_node *base)
+			 int *ret_ovcs_id, const struct device_node *base,
+			 const char *export_symbols_name)
 {
 	void *new_fdt;
 	void *new_fdt_align;

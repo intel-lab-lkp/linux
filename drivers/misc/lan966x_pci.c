@@ -128,7 +128,8 @@ static int lan966x_pci_load_overlay(struct lan966x_pci *data)
 	u32 dtbo_size = __dtbo_lan966x_pci_end - __dtbo_lan966x_pci_begin;
 	void *dtbo_start = __dtbo_lan966x_pci_begin;
 
-	return of_overlay_fdt_apply(dtbo_start, dtbo_size, &data->ovcs_id, dev_of_node(data->dev));
+	return of_overlay_fdt_apply(dtbo_start, dtbo_size, &data->ovcs_id,
+				    dev_of_node(data->dev), NULL);
 }
 
 static void lan966x_pci_unload_overlay(struct lan966x_pci *data)
