@@ -1944,35 +1944,39 @@ static u32 nfsd4_get_drc_mem(struct nfsd4_channel_attrs *ca, struct nfsd_net *nn
 {
 	u32 slotsize = slot_bytes(ca);
 	u32 num = ca->maxreqs;
-	unsigned long avail, total_avail;
-	unsigned int scale_factor;
 
 	spin_lock(&nfsd_drc_lock);
-	if (nfsd_drc_max_mem > nfsd_drc_mem_used)
+	if (nfsd_drc_max_mem > nfsd_drc_mem_used) {
+		unsigned long avail, total_avail;
+		unsigned int scale_factor;
+
 		total_avail = nfsd_drc_max_mem - nfsd_drc_mem_used;
-	else
+		avail = min_t(unsigned long,
+			      NFSD_MAX_MEM_PER_SESSION, total_avail);
+		/*
+		 * Never use more than a fraction of the remaining memory,
+		 * unless it's the only way to give this client a slot.
+		 * The chosen fraction is either 1/8 or 1/number of threads,
+		 * whichever is smaller.  This ensures there are adequate
+		 * slots to support multiple clients per thread.
+		 * Give the client one slot even if that would require
+		 * over-allocation--it is better than failure.
+		 */
+		scale_factor = max_t(unsigned int,
+				     8, nn->nfsd_serv->sv_nrthreads);
+
+		avail = clamp_t(unsigned long, avail, slotsize,
+				total_avail/scale_factor);
+		num = min_t(int, num, avail / slotsize);
+		num = max_t(int, num, 1);
+	} else {
 		/* We have handed out more space than we chose in
 		 * set_max_drc() to allow.  That isn't really a
 		 * problem as long as that doesn't make us think we
 		 * have lots more due to integer overflow.
 		 */
-		total_avail = 0;
-	avail = min((unsigned long)NFSD_MAX_MEM_PER_SESSION, total_avail);
-	/*
-	 * Never use more than a fraction of the remaining memory,
-	 * unless it's the only way to give this client a slot.
-	 * The chosen fraction is either 1/8 or 1/number of threads,
-	 * whichever is smaller.  This ensures there are adequate
-	 * slots to support multiple clients per thread.
-	 * Give the client one slot even if that would require
-	 * over-allocation--it is better than failure.
-	 */
-	scale_factor = max_t(unsigned int, 8, nn->nfsd_serv->sv_nrthreads);
-
-	avail = clamp_t(unsigned long, avail, slotsize,
-			total_avail/scale_factor);
-	num = min_t(int, num, avail / slotsize);
-	num = max_t(int, num, 1);
+		num = 1;
+	}
 	nfsd_drc_mem_used += num * slotsize;
 	spin_unlock(&nfsd_drc_lock);
 
