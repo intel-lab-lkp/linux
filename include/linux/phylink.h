@@ -187,6 +187,7 @@ void phylink_limit_mac_speed(struct phylink_config *config, u32 max_speed);
  * @mac_finish: finish a major reconfiguration of the interface.
  * @mac_link_down: take the link down.
  * @mac_link_up: allow the link to come up.
+ * @mac_validate_tx_lpi: validate LPI configuration.
  * @mac_disable_tx_lpi: disable LPI.
  * @mac_enable_tx_lpi: enable and configure LPI.
  *
@@ -209,6 +210,8 @@ struct phylink_mac_ops {
 			    struct phy_device *phy, unsigned int mode,
 			    phy_interface_t interface, int speed, int duplex,
 			    bool tx_pause, bool rx_pause);
+	int (*mac_validate_tx_lpi)(struct phylink_config *config,
+				   struct ethtool_keee *e);
 	void (*mac_disable_tx_lpi)(struct phylink_config *config);
 	void (*mac_enable_tx_lpi)(struct phylink_config *config, u32 timer,
 				  bool tx_clk_stop);
@@ -406,6 +409,18 @@ void mac_link_down(struct phylink_config *config, unsigned int mode,
 void mac_link_up(struct phylink_config *config, struct phy_device *phy,
 		 unsigned int mode, phy_interface_t interface,
 		 int speed, int duplex, bool tx_pause, bool rx_pause);
+
+/**
+ * mac_validate_tx_lpi() - validate the LPI parameters in EEE
+ * @config: a pointer to a &struct phylink_config.
+ * @e: EEE configuration to be validated.
+ *
+ * Validate the LPI configuration parameters in @e, returning an appropriate
+ * error. This will be called prior to any changes being made, and must not
+ * make any changes to existing configuration. Returns zero on success.
+ */
+int (*mac_validate_tx_lpi)(struct phylink_config *config,
+			   struct ethtool_keee *e);
 
 /**
  * mac_disable_tx_lpi() - disable LPI generation at the MAC

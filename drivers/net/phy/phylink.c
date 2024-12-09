@@ -1570,6 +1570,14 @@ static const char *phylink_pause_to_str(int pause)
 	}
 }
 
+static int phylink_validate_tx_lpi(struct phylink *pl, struct ethtool_keee *eee)
+{
+	if (!pl->mac_ops->mac_validate_tx_lpi)
+		return 0;
+
+	return pl->mac_ops->mac_validate_tx_lpi(pl->config, eee);
+}
+
 static void phylink_deactivate_lpi(struct phylink *pl)
 {
 	if (pl->mac_enable_tx_lpi) {
@@ -3170,7 +3178,7 @@ EXPORT_SYMBOL_GPL(phylink_ethtool_get_eee);
 int phylink_ethtool_set_eee(struct phylink *pl, struct ethtool_keee *eee)
 {
 	bool mac_eee = pl->mac_supports_eee;
-	int ret = -EOPNOTSUPP;
+	int ret;
 
 	ASSERT_RTNL();
 
@@ -3186,6 +3194,12 @@ int phylink_ethtool_set_eee(struct phylink *pl, struct ethtool_keee *eee)
 		phylink_dbg(pl, "LPI timer limited to %uus\n",
 			    eee->tx_lpi_timer);
 	}
+
+	ret = phylink_validate_tx_lpi(pl, eee);
+	if (ret)
+		return ret;
+
+	ret = -EOPNOTSUPP;
 
 	if (pl->phydev) {
 		ret = phy_ethtool_set_eee(pl->phydev, eee);
