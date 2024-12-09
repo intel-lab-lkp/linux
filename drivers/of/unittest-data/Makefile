@@ -34,6 +34,7 @@ obj-$(CONFIG_OF_OVERLAY) += overlay.dtbo.o \
 			    overlay_gpio_04a.dtbo.o \
 			    overlay_gpio_04b.dtbo.o \
 			    overlay_pci_node.dtbo.o \
+			    overlay_export_symbols.dtbo.o \
 			    overlay_bad_unresolved.dtbo.o
 
 # enable creation of __symbols__ node
@@ -66,6 +67,10 @@ DTC_FLAGS_testcases += -Wno-interrupts_property \
 #			  overlay_bad_add_dup_prop.dtbo \
 #			  overlay_bad_phandle.dtbo \
 #			  overlay_bad_symbol.dtbo \
+#
+# Also overlay_export_symbols_ovl.dtbo is designed to be applied to a specific
+# node and cannot be applied statically with fdtoverlay
+
 
 apply_static_overlay_1 := overlay_0.dtbo \
 			  overlay_1.dtbo \

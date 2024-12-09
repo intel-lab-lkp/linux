@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target-path="";
+		__overlay__ {
+			ovl_node {
+				ref-base = <&test_export_base>;
+				ref-node = <&test_export_node>;
+			};
+		};
+	};
+};

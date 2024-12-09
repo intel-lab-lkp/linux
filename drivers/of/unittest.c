@@ -4043,6 +4043,69 @@ err_unlock:
 	mutex_unlock(&of_mutex);
 }
 
+OVERLAY_INFO_EXTERN(overlay_export_symbols);
+
+static __init void of_unittest_export_symbols(const char *prefix,
+					      const char *base_full_path)
+{
+	const struct overlay_info ovl = OVERLAY_INFO(overlay_export_symbols, 0, 0);
+	struct device_node *ovl_node;
+	struct device_node *base;
+	struct device_node *node;
+	struct device_node *ref;
+	int ovcs_id;
+	u32 size;
+	int ret;
+
+	base = of_find_node_by_path(base_full_path);
+	if (unittest(base, "%s: Get base (%s) failed\n", prefix, base_full_path))
+		return;
+
+	node = of_get_child_by_name(base, "node");
+	if (unittest(base, "%s: Get node from %pOF failed\n", prefix, base))
+		goto end_put_base;
+
+	size = ovl.dtbo_end - ovl.dtbo_begin;
+	ret = of_overlay_fdt_apply(ovl.dtbo_begin, size, &ovcs_id, base, "export-symbols");
+	if (unittest(!ret, "%s: Apply '%s' failed (%d)\n", prefix, ovl.name, ret))
+		goto end_put_node;
+
+	ovl_node = of_get_child_by_name(base, "ovl_node");
+	if (unittest(ovl_node, "%s: Get ovl_node from %pOF failed\n", prefix, base))
+		goto end_remove_overlay;
+
+	ref = of_parse_phandle(ovl_node, "ref-base", 0);
+	if (unittest(ref, "%s: Parse 'ref-base' from %pOF failed\n", prefix, ovl_node))
+		goto end_put_ovl_node;
+	unittest(ref == base,
+		 "%s: Node from 'ref-base' phandle mismatches (got %pOF, expected %pOF)\n",
+		 prefix, ref, base);
+	of_node_put(ref);
+
+	ref = of_parse_phandle(ovl_node, "ref-node", 0);
+	if (unittest(ref, "%s: Parse 'ref-node' from %pOF failed\n", prefix, ovl_node))
+		goto end_put_ovl_node;
+	unittest(ref == node,
+		 "%s: Node from 'ref-node' phandle mismatches (got %pOF, expected %pOF)\n",
+		 prefix, ref, node);
+	of_node_put(ref);
+
+end_put_ovl_node:
+	of_node_put(ovl_node);
+end_remove_overlay:
+	of_overlay_remove(&ovcs_id);
+end_put_node:
+	of_node_put(node);
+end_put_base:
+	of_node_put(base);
+}
+
+static __init void of_unittest_overlay_export_symbols(void)
+{
+	of_unittest_export_symbols("base0", "/testcase-data/test-export-symbols/base0");
+	of_unittest_export_symbols("base1", "/testcase-data/test-export-symbols/base1");
+}
+
 static int of_unittest_pci_dev_num;
 static int of_unittest_pci_child_num;
 
@@ -4281,6 +4344,7 @@ static int __init of_unittest(void)
 	of_unittest_overlay();
 	of_unittest_lifecycle();
 	of_unittest_pci_node();
+	of_unittest_overlay_export_symbols();
 
 	/* Double check linkage after removing testcase data */
 	of_unittest_check_tree_linkage();
