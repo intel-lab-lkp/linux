@@ -2112,20 +2112,35 @@ static void
 lan78xx_get_regs(struct net_device *netdev, struct ethtool_regs *regs,
 		 void *buf)
 {
-	u32 *data = buf;
-	int i, j;
 	struct lan78xx_net *dev = netdev_priv(netdev);
+	u32 *data = buf;
+	int i, j, ret;
 
 	/* Read Device/MAC registers */
-	for (i = 0; i < ARRAY_SIZE(lan78xx_regs); i++)
-		lan78xx_read_reg(dev, lan78xx_regs[i], &data[i]);
+	for (i = 0; i < ARRAY_SIZE(lan78xx_regs); i++) {
+		ret = lan78xx_read_reg(dev, lan78xx_regs[i], &data[i]);
+		if (ret < 0) {
+			netdev_warn(dev->net,
+				    "failed to read register 0x%08x\n",
+				    lan78xx_regs[i]);
+			return;
+		}
+	}
 
 	if (!netdev->phydev)
 		return;
 
 	/* Read PHY registers */
-	for (j = 0; j < 32; i++, j++)
-		data[i] = phy_read(netdev->phydev, j);
+	for (j = 0; j < 32; i++, j++) {
+		ret = phy_read(netdev->phydev, j);
+		if (ret < 0) {
+			netdev_warn(dev->net,
+				    "failed to read PHY register 0x%02x\n", j);
+			return;
+		}
+
+		data[i] = ret;
+	}
 }
 
 static const struct ethtool_ops lan78xx_ethtool_ops = {
