@@ -801,7 +801,10 @@ void blk_request_module(dev_t devt)
 {
 	unsigned int major = MAJOR(devt);
 	struct blk_major_name **n;
+	int retry = 0;
+	int error;
 
+retry:
 	mutex_lock(&major_names_lock);
 	for (n = &major_names[major_to_index(major)]; *n; n = &(*n)->next) {
 		if ((*n)->major == major && (*n)->probe) {
@@ -812,9 +815,16 @@ void blk_request_module(dev_t devt)
 	}
 	mutex_unlock(&major_names_lock);
 
-	if (request_module("block-major-%d-%d", MAJOR(devt), MINOR(devt)) > 0)
-		/* Make old-style 2.4 aliases work */
-		request_module("block-major-%d", MAJOR(devt));
+	if (retry++)
+		return;
+
+	error = request_module("block-major-%d-%d", MAJOR(devt), MINOR(devt));
+	if (!error)
+		goto retry;
+
+	/* Make old-style 2.4 aliases work */
+	if (error > 0 && !request_module("block-major-%d", MAJOR(devt)))
+		goto retry;
 }
 #endif /* CONFIG_BLOCK_LEGACY_AUTOLOAD */
 
