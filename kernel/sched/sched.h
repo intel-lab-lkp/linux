@@ -754,6 +754,7 @@ enum scx_rq_flags {
 	SCX_RQ_BAL_PENDING	= 1 << 2, /* balance hasn't run yet */
 	SCX_RQ_BAL_KEEP		= 1 << 3, /* balance decided to keep current */
 	SCX_RQ_BYPASSING	= 1 << 4,
+	SCX_RQ_CLK_VALID	= 1 << 5, /* RQ clock is fresh and valid */
 
 	SCX_RQ_IN_WAKEUP	= 1 << 16,
 	SCX_RQ_IN_BALANCE	= 1 << 17,
@@ -766,9 +767,11 @@ struct scx_rq {
 	unsigned long		ops_qseq;
 	u64			extra_enq_flags;	/* see move_task_to_local_dsq() */
 	u32			nr_running;
-	u32			flags;
 	u32			cpuperf_target;		/* [0, SCHED_CAPACITY_SCALE] */
 	bool			cpu_released;
+	u32			flags;
+	u64			clock;			/* current per-rq clock -- see scx_bpf_now_ns() */
+	u64			prev_clock;		/* previous per-rq clock -- see scx_bpf_now_ns() */
 	cpumask_var_t		cpus_to_kick;
 	cpumask_var_t		cpus_to_kick_if_idle;
 	cpumask_var_t		cpus_to_preempt;
@@ -1725,9 +1728,28 @@ DECLARE_STATIC_KEY_FALSE(__scx_switched_all);	/* all fair class tasks on SCX */
 
 #define scx_enabled()		static_branch_unlikely(&__scx_ops_enabled)
 #define scx_switched_all()	static_branch_unlikely(&__scx_switched_all)
+
+static inline void scx_rq_clock_update(struct rq *rq, u64 clock)
+{
+	if (scx_enabled()) {
+		rq->scx.prev_clock = rq->scx.clock;
+		rq->scx.clock = clock;
+		rq->scx.flags |= SCX_RQ_CLK_VALID;
+	}
+}
+
+static inline void scx_rq_clock_stale(struct rq *rq)
+{
+	if (scx_enabled())
+		rq->scx.flags &= ~SCX_RQ_CLK_VALID;
+}
+
 #else /* !CONFIG_SCHED_CLASS_EXT */
 #define scx_enabled()		false
 #define scx_switched_all()	false
+
+static inline void scx_rq_clock_update(struct rq *rq, u64 clock) {}
+static inline void scx_rq_clock_stale(struct rq *rq) {}
 #endif /* !CONFIG_SCHED_CLASS_EXT */
 
 /*
