@@ -189,6 +189,8 @@ struct zpci_dev {
 	struct kvm_zdev *kzdev;
 	struct mutex kzdev_lock;
 	spinlock_t dom_lock;		/* protect s390_domain change */
+	u64 max_table_size;
+	u8 origin_type;
 };
 
 static inline bool zdev_enabled(struct zpci_dev *zdev)

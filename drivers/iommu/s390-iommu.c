@@ -31,6 +31,7 @@ struct s390_domain {
 	unsigned long		*dma_table;
 	spinlock_t		list_lock;
 	struct rcu_head		rcu;
+	u8			origin_type;
 };
 
 static struct iommu_domain blocking_domain;
@@ -331,6 +332,7 @@ static bool s390_iommu_capable(struct device *dev, enum iommu_cap cap)
 
 static struct iommu_domain *s390_domain_alloc_paging(struct device *dev)
 {
+	struct zpci_dev *zdev = to_zpci_dev(dev);
 	struct s390_domain *s390_domain;
 
 	s390_domain = kzalloc(sizeof(*s390_domain), GFP_KERNEL);
@@ -344,7 +346,8 @@ static struct iommu_domain *s390_domain_alloc_paging(struct device *dev)
 	}
 	s390_domain->domain.geometry.force_aperture = true;
 	s390_domain->domain.geometry.aperture_start = 0;
-	s390_domain->domain.geometry.aperture_end = ZPCI_TABLE_SIZE_RT - 1;
+	s390_domain->domain.geometry.aperture_end = zdev->max_table_size;
+	s390_domain->origin_type = zdev->origin_type;
 
 	spin_lock_init(&s390_domain->list_lock);
 	INIT_LIST_HEAD_RCU(&s390_domain->devices);
@@ -450,9 +453,9 @@ static void s390_iommu_get_resv_regions(struct device *dev,
 		list_add_tail(&region->list, list);
 	}
 
-	if (zdev->end_dma < ZPCI_TABLE_SIZE_RT - 1) {
+	if (zdev->end_dma < zdev->max_table_size) {
 		region = iommu_alloc_resv_region(zdev->end_dma + 1,
-						 ZPCI_TABLE_SIZE_RT - zdev->end_dma - 1,
+						 zdev->max_table_size - zdev->end_dma,
 						 0, IOMMU_RESV_RESERVED, GFP_KERNEL);
 		if (!region)
 			return;
@@ -470,11 +473,11 @@ static struct iommu_device *s390_iommu_probe_device(struct device *dev)
 	zdev = to_zpci_dev(dev);
 
 	if (zdev->start_dma > zdev->end_dma ||
-	    zdev->start_dma > ZPCI_TABLE_SIZE_RT - 1)
+	    zdev->start_dma > zdev->max_table_size)
 		return ERR_PTR(-EINVAL);
 
-	if (zdev->end_dma > ZPCI_TABLE_SIZE_RT - 1)
-		zdev->end_dma = ZPCI_TABLE_SIZE_RT - 1;
+	if (zdev->end_dma > zdev->max_table_size)
+		zdev->end_dma = zdev->max_table_size;
 
 	if (zdev->tlb_refresh)
 		dev->iommu->shadow_on_flush = 1;
@@ -732,6 +735,8 @@ int zpci_init_iommu(struct zpci_dev *zdev)
 			     ZPCI_TABLE_SIZE_RT - zdev->start_dma,
 			     zdev->end_dma - zdev->start_dma + 1);
 	zdev->end_dma = zdev->start_dma + aperture_size - 1;
+	zdev->origin_type = ZPCI_TABLE_TYPE_RTX;
+	zdev->max_table_size = ZPCI_TABLE_SIZE_RT - 1;
 
 	return 0;
 
