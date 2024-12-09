@@ -128,7 +128,7 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 		goto err3;
 	}
 
-	cxl->efx_region = cxl_create_region(cxl->cxlrd, cxl->cxled);
+	cxl->efx_region = cxl_create_region(cxl->cxlrd, cxl->cxled, true);
 	if (!cxl->efx_region) {
 		pci_err(pci_dev, "CXL accel create region failed");
 		rc = PTR_ERR(cxl->efx_region);
