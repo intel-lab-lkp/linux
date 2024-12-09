@@ -643,7 +643,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 
 	if ((queue->flags & NFQA_CFG_F_SECCTX) && entskb->sk) {
 		seclen = nfqnl_get_sk_secctx(entskb, &ctx);
-		if (seclen >= 0)
+		if (seclen > 0)
 			size += nla_total_size(seclen);
 	}
 
@@ -810,7 +810,7 @@ nfqnl_build_packet_message(struct net *net, struct nfqnl_instance *queue,
 	}
 
 	nlh->nlmsg_len = skb->len;
-	if (seclen >= 0)
+	if (seclen > 0)
 		security_release_secctx(&ctx);
 	return skb;
 
@@ -819,7 +819,7 @@ nla_put_failure:
 	kfree_skb(skb);
 	net_err_ratelimited("nf_queue: error creating packet message\n");
 nlmsg_failure:
-	if (seclen >= 0)
+	if (seclen > 0)
 		security_release_secctx(&ctx);
 	return NULL;
 }
