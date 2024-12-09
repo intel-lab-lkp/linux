@@ -175,6 +175,7 @@ struct ksz_device {
 	u32 chip_id;
 	u8 chip_rev;
 	int cpu_port;			/* port connected to CPU */
+	unsigned int led_mode;
 	int phy_port_cnt;
 	phy_interface_t compat_interface;
 	bool synclko_125;

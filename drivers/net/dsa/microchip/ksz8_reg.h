@@ -589,6 +589,7 @@
 /* 88x3 specific */
 
 #define REG_SW_INSERT_SRC_PVID		0xC2
+#define REG_SW_PWR_MGMT_LED_MODE	0xC3
 
 /* PME */
 

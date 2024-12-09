@@ -5090,6 +5090,8 @@ int ksz_switch_register(struct ksz_device *dev)
 			}
 			of_node_put(ports);
 		}
+		of_property_read_u32(dev->dev->of_node, "microchip,led-mode", &dev->led_mode);
+
 		dev->synclko_125 = of_property_read_bool(dev->dev->of_node,
 							 "microchip,synclko-125");
 		dev->synclko_disable = of_property_read_bool(dev->dev->of_node,

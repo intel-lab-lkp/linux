@@ -1898,6 +1898,15 @@ int ksz8_setup(struct dsa_switch *ds)
 	regmap_update_bits(ksz_regmap_8(dev), REG_SW_CTRL_1,
 			   SW_AGGR_BACKOFF, SW_AGGR_BACKOFF);
 
+	/* Configure LED mode */
+	if (dev->led_mode > 3)
+		dev_warn(dev->dev, "Invalid LED mode %d, supported modes 0..3.\n",
+			 dev->led_mode);
+	else if (!ksz_is_8895_family(dev))
+		ksz_cfg(dev,
+			ksz_is_ksz88x3(dev) ? REG_SW_PWR_MGMT_LED_MODE : REG_SW_CTRL_9,
+			dev->led_mode << 4, true);
+
 	/*
 	 * Make sure unicast VLAN boundary is set as default and
 	 * enable no excessive collision drop.
