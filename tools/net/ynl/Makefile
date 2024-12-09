@@ -1,5 +1,16 @@
 # SPDX-License-Identifier: GPL-2.0
 
+include ../../scripts/Makefile.arch
+
+INSTALL	?= install
+prefix  ?= /usr
+ifeq ($(LP64), 1)
+  libdir_relative = lib64
+else
+  libdir_relative = lib
+endif
+libdir  ?= $(prefix)/$(libdir_relative)
+
 SUBDIRS = lib generated samples
 
 all: $(SUBDIRS) libynl.a
@@ -23,5 +34,15 @@ clean distclean:
 	rm -f libynl.a
 	rm -rf pyynl/__pycache__
 	rm -rf pyynl/lib/__pycache__
+	rm -rf pyynl.egg-info
+	rm -rf build
 
-.PHONY: all clean distclean $(SUBDIRS)
+install: libynl.a
+	@echo -e "\tINSTALL libynl.a"
+	@$(INSTALL) -d $(DESTDIR)$(libdir)
+	@$(INSTALL) -m 0644 libynl.a $(DESTDIR)$(libdir)/libynl.a
+	@echo -e "\tINSTALL pyynl"
+	@pip install --prefix=$(DESTDIR)$(prefix) .
+	@make -C generated install
+
+.PHONY: all clean distclean install $(SUBDIRS)
