@@ -7543,6 +7543,78 @@ out:
 }
 #endif
 
+/**
+ * scx_bpf_now_ns - Returns a high-performance monotonically non-decreasing
+ * clock for the current CPU. The clock returned is in nanoseconds.
+ *
+ * It provides the following properties:
+ *
+ * 1) High performance: Many BPF schedulers call bpf_ktime_get_ns() frequently
+ *  to account for execution time and track tasks' runtime properties.
+ *  Unfortunately, in some hardware platforms, bpf_ktime_get_ns() -- which
+ *  eventually reads a hardware timestamp counter -- is neither performant nor
+ *  scalable. scx_bpf_now_ns() aims to provide a high-performance clock by
+ *  using the rq clock in the scheduler core whenever possible.
+ *
+ * 2) High enough resolution for the BPF scheduler use cases: In most BPF
+ *  scheduler use cases, the required clock resolution is lower than the most
+ *  accurate hardware clock (e.g., rdtsc in x86). scx_bpf_now_ns() basically
+ *  uses the rq clock in the scheduler core whenever it is valid. It considers
+ *  that the rq clock is valid from the time the rq clock is updated
+ *  (update_rq_clock) until the rq is unlocked (rq_unpin_lock).
+ *
+ * 3) Monotonically non-decreasing clock for the same CPU: scx_bpf_now_ns()
+ *  guarantees the clock never goes backward when comparing them in the same
+ *  CPU. On the other hand, when comparing clocks in different CPUs, there
+ *  is no such guarantee -- the clock can go backward. It provides a
+ *  monotonically *non-decreasing* clock so that it would provide the same
+ *  clock values in two different scx_bpf_now_ns() calls in the same CPU
+ *  during the same period of when the rq clock is valid.
+ */
+__bpf_kfunc u64 scx_bpf_now_ns(void)
+{
+	struct rq *rq;
+	u64 clock;
+
+	preempt_disable();
+
+	/*
+	 * If the rq clock is valid, use the cached rq clock
+	 * whenever the clock does not go backward.
+	 */
+	rq = this_rq();
+	clock = rq->scx.clock;
+
+	if (!(rq->scx.flags & SCX_RQ_CLK_VALID) ||
+	    (rq->scx.prev_clock >= clock)) {
+		/*
+		 * If the rq clock is invalid or goes backward,
+		 * start a new rq clock period with a fresh sched_clock_cpu().
+		 *
+		 * The cached rq clock can go backward because there is a
+		 * race with a timer interrupt. Suppose that a timer interrupt
+		 * occurred while running scx_bpf_now_ns() *after* reading the
+		 * rq clock and *before* comparing the if condition. The timer
+		 * interrupt will eventually call a BPF scheduler's ops.tick(),
+		 * and the BPF scheduler can call scx_bpf_now_ns(). Since the
+		 * scheduler core updates the rq clock before calling
+		 * ops.tick(), the scx_bpf_now_ns() call will get the fresh
+		 * clock. After handling the timer interrupt, the interrupted
+		 * scx_bpf_now_ns() will be resumed, so the if condition will
+		 * be compared. In this case, the clock, which was read before
+		 * the timer interrupt, will be the same as rq->scx.prev_clock.
+		 * When such a case is detected, start a new rq clock period
+		 * with a fresh sched_clock_cpu().
+		 */
+		clock = sched_clock_cpu(cpu_of(rq));
+		scx_rq_clock_update(rq, clock);
+	}
+
+	preempt_enable();
+
+	return clock;
+}
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(scx_kfunc_ids_any)
@@ -7574,6 +7646,7 @@ BTF_ID_FLAGS(func, scx_bpf_cpu_rq)
 #ifdef CONFIG_CGROUP_SCHED
 BTF_ID_FLAGS(func, scx_bpf_task_cgroup, KF_RCU | KF_ACQUIRE)
 #endif
+BTF_ID_FLAGS(func, scx_bpf_now_ns)
 BTF_KFUNCS_END(scx_kfunc_ids_any)
 
 static const struct btf_kfunc_id_set scx_kfunc_set_any = {
