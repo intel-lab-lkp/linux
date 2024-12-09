@@ -2894,6 +2894,12 @@ intel_program_dpkgc_latency(struct intel_atomic_state *state)
 			display->sagv.block_time_us;
 	}
 
+	/* Wa_22020432604 */
+	if (DISPLAY_VER(i915) == 30) {
+		latency += added_wake_time;
+		added_wake_time = 0;
+	}
+
 	clear = LNL_ADDED_WAKE_TIME_MASK | LNL_PKG_C_LATENCY_MASK;
 	val = REG_FIELD_PREP(LNL_PKG_C_LATENCY_MASK, latency) |
 		REG_FIELD_PREP(LNL_ADDED_WAKE_TIME_MASK, added_wake_time);
