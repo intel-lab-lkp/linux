@@ -123,6 +123,10 @@ struct kernel_mapping {
 extern struct kernel_mapping kernel_map;
 extern phys_addr_t phys_ram_base;
 
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+extern unsigned long vmemmap_start_pfn;
+#endif
+
 #define is_kernel_mapping(x)	\
 	((x) >= kernel_map.virt_addr && (x) < (kernel_map.virt_addr + kernel_map.size))
 

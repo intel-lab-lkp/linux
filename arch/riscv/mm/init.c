@@ -32,6 +32,9 @@
 #include <asm/numa.h>
 #include <asm/pgtable.h>
 #include <asm/sections.h>
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+#include <asm/sparsemem.h>
+#endif
 #include <asm/soc.h>
 #include <asm/tlbflush.h>
 
@@ -61,6 +64,13 @@ EXPORT_SYMBOL(pgtable_l5_enabled);
 
 phys_addr_t phys_ram_base __ro_after_init;
 EXPORT_SYMBOL(phys_ram_base);
+
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+#define VMEMMAP_ADDR_ALIGN	(1ULL << SECTION_SIZE_BITS)
+
+unsigned long vmemmap_start_pfn __ro_after_init;
+EXPORT_SYMBOL(vmemmap_start_pfn);
+#endif
 
 unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)]
 							__page_aligned_bss;
@@ -242,6 +252,11 @@ static void __init setup_bootmem(void)
 	 */
 	if (!IS_ENABLED(CONFIG_XIP_KERNEL))
 		phys_ram_base = memblock_start_of_DRAM() & PMD_MASK;
+
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+	if (!IS_ENABLED(CONFIG_XIP_KERNEL))
+		vmemmap_start_pfn = round_down(phys_ram_base, VMEMMAP_ADDR_ALIGN) >> PAGE_SHIFT;
+#endif
 
 	/*
 	 * In 64-bit, any use of __va/__pa before this point is wrong as we
@@ -1101,6 +1116,9 @@ asmlinkage void __init setup_vm(uintptr_t dtb_pa)
 	kernel_map.xiprom_sz = (uintptr_t)(&_exiprom) - (uintptr_t)(&_xiprom);
 
 	phys_ram_base = CONFIG_PHYS_RAM_BASE;
+#ifdef CONFIG_SPARSEMEM_VMEMMAP
+	vmemmap_start_pfn = round_down(phys_ram_base, VMEMMAP_ADDR_ALIGN) >> PAGE_SHIFT;
+#endif
 	kernel_map.phys_addr = (uintptr_t)CONFIG_PHYS_RAM_BASE;
 	kernel_map.size = (uintptr_t)(&_end) - (uintptr_t)(&_start);
 
