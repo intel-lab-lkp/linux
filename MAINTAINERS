@@ -14115,7 +14115,7 @@ R:	Sebastian Krzyszkowiak <sebastian.krzyszkowiak@puri.sm>
 R:	Purism Kernel Team <kernel@puri.sm>
 L:	linux-pm@vger.kernel.org
 S:	Maintained
-F:	Documentation/devicetree/bindings/power/supply/maxim,max17042.yaml
+F:	Documentation/devicetree/bindings/power/supply/maxim,max17042*.yaml
 F:	drivers/power/supply/max17042_battery.c
 
 MAXIM MAX20086 CAMERA POWER PROTECTOR DRIVER
