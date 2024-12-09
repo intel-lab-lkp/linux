@@ -68,7 +68,7 @@
 		};
 	};
 
-	fan {
+	pwm-fan {
 		compatible = "pwm-fan";
 		#cooling-cells = <2>;
 		cooling-levels = <0 64 128 192 255>;
