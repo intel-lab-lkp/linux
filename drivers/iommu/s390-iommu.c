@@ -953,12 +953,24 @@ int zpci_init_iommu(struct zpci_dev *zdev)
 		goto out_sysfs;
 
 	zdev->start_dma = PAGE_ALIGN(zdev->start_dma);
-	aperture_size = min3(s390_iommu_aperture,
-			     ZPCI_TABLE_SIZE_RT - zdev->start_dma,
-			     zdev->end_dma - zdev->start_dma + 1);
+	aperture_size = min(s390_iommu_aperture,
+			    zdev->end_dma - zdev->start_dma + 1);
+	if (aperture_size <= (ZPCI_TABLE_SIZE_RT - zdev->start_dma)) {
+		zdev->origin_type = ZPCI_TABLE_TYPE_RTX;
+		zdev->max_table_size = ZPCI_TABLE_SIZE_RT - 1;
+	} else if (aperture_size <= (ZPCI_TABLE_SIZE_RS - zdev->start_dma) &&
+		  (zdev->dtsm & ZPCI_IOTA_DT_RS)) {
+		zdev->origin_type = ZPCI_TABLE_TYPE_RSX;
+		zdev->max_table_size = ZPCI_TABLE_SIZE_RS - 1;
+	} else if (zdev->dtsm & ZPCI_IOTA_DT_RF) {
+		zdev->origin_type = ZPCI_TABLE_TYPE_RFX;
+		zdev->max_table_size = U64_MAX;
+	} else {
+		/* Assume RTX available */
+		zdev->origin_type = ZPCI_TABLE_TYPE_RTX;
+		zdev->max_table_size = ZPCI_TABLE_SIZE_RT - 1;
+	}
 	zdev->end_dma = zdev->start_dma + aperture_size - 1;
-	zdev->origin_type = ZPCI_TABLE_TYPE_RTX;
-	zdev->max_table_size = ZPCI_TABLE_SIZE_RT - 1;
 
 	return 0;
 
