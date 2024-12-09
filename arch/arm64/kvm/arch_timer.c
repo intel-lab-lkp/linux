@@ -1199,7 +1199,16 @@ static void kvm_arm_timer_write(struct kvm_vcpu *vcpu,
 		break;
 
 	case TIMER_REG_CTL:
-		timer_set_ctl(timer, val & ~ARCH_TIMER_CTRL_IT_STAT);
+		struct timer_map map;
+
+		val &= ~ARCH_TIMER_CTRL_IT_STAT;
+		get_timer_map(vcpu, &map);
+		/* Set ISTATUS bit for emulated timers, if timer expired. */
+		if (timer == map.emul_vtimer || timer == map.emul_ptimer) {
+			if (!kvm_timer_compute_delta(timer))
+				val |= ARCH_TIMER_CTRL_IT_STAT;
+		}
+		timer_set_ctl(timer, val);
 		break;
 
 	case TIMER_REG_CVAL:
