@@ -1342,6 +1342,8 @@ struct devlink_ops {
 	int (*flash_update)(struct devlink *devlink,
 			    struct devlink_flash_update_params *params,
 			    struct netlink_ext_ack *extack);
+	int (*lock_firmware)(struct devlink *devlink,
+				   struct netlink_ext_ack *extack);
 	/**
 	 * @trap_init: Trap initialization function.
 	 *

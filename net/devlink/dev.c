@@ -1440,3 +1440,16 @@ free_msg:
 	nlmsg_free(msg);
 	return err;
 }
+
+int devlink_nl_lock_firmware_doit(struct sk_buff *skb, struct genl_info *info)
+{
+	struct devlink *devlink = info->user_ptr[0];
+	int ret;
+
+	if (!devlink->ops->lock_firmware)
+		return -EOPNOTSUPP;
+
+	ret = devlink->ops->lock_firmware(devlink, info->extack);
+
+	return ret;
+}
