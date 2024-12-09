@@ -10,12 +10,12 @@
 #include <asm/asm-offsets.h>
 
 #ifdef CONFIG_PPC64
-#define SAVE_30GPRS(base) SAVE_GPRS(2, 31, base)
-#define REST_30GPRS(base) REST_GPRS(2, 31, base)
+#define SAVE_NEEDED_GPRS(base) SAVE_GPRS(2, 12, base); SAVE_GPRS(14, 31, base)
+#define REST_NEEDED_GPRS(base) REST_GPRS(2, 12, base); REST_GPRS(14, 31, base)
 #define TEMPLATE_FOR_IMM_LOAD_INSNS	nop; nop; nop; nop; nop
 #else
-#define SAVE_30GPRS(base) stmw	r2, GPR2(base)
-#define REST_30GPRS(base) lmw	r2, GPR2(base)
+#define SAVE_NEEDED_GPRS(base) stmw	r2, GPR2(base)
+#define REST_NEEDED_GPRS(base) lmw	r2, GPR2(base)
 #define TEMPLATE_FOR_IMM_LOAD_INSNS	nop; nop; nop
 #endif
 
@@ -45,7 +45,7 @@ optprobe_template_entry:
 	/* Save the previous SP into stack */
 	addi	r0,r1,INT_FRAME_SIZE
 	PPC_STL	r0,GPR1(r1)
-	SAVE_30GPRS(r1)
+	SAVE_NEEDED_GPRS(r1)
 	/* Save SPRS */
 	mfmsr	r5
 	PPC_STL	r5,_MSR(r1)
@@ -123,7 +123,7 @@ optprobe_template_call_emulate:
 	PPC_LL	r5,_CCR(r1)
 	mtcr	r5
 	REST_GPR(0,r1)
-	REST_30GPRS(r1)
+	REST_NEEDED_GPRS(r1)
 	/* Restore the previous SP */
 	addi	r1,r1,INT_FRAME_SIZE
 
