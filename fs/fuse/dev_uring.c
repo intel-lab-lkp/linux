@@ -168,6 +168,7 @@ void fuse_uring_destruct(struct fuse_conn *fc)
 
 	for (qid = 0; qid < ring->nr_queues; qid++) {
 		struct fuse_ring_queue *queue = ring->queues[qid];
+		struct fuse_ring_ent *ent, *next;
 
 		if (!queue)
 			continue;
@@ -176,6 +177,12 @@ void fuse_uring_destruct(struct fuse_conn *fc)
 		WARN_ON(!list_empty(&queue->ent_w_req_queue));
 		WARN_ON(!list_empty(&queue->ent_commit_queue));
 		WARN_ON(!list_empty(&queue->ent_in_userspace));
+
+		list_for_each_entry_safe(ent, next, &queue->ent_released,
+					 list) {
+			list_del_init(&ent->list);
+			kfree(ent);
+		}
 
 		kfree(queue->fpq.processing);
 		kfree(queue);
@@ -262,6 +269,7 @@ static struct fuse_ring_queue *fuse_uring_create_queue(struct fuse_ring *ring,
 	INIT_LIST_HEAD(&queue->ent_in_userspace);
 	INIT_LIST_HEAD(&queue->fuse_req_queue);
 	INIT_LIST_HEAD(&queue->fuse_req_bg_queue);
+	INIT_LIST_HEAD(&queue->ent_released);
 
 	queue->fpq.processing = pq;
 	fuse_pqueue_init(&queue->fpq);
@@ -294,24 +302,27 @@ static void fuse_uring_stop_fuse_req_end(struct fuse_ring_ent *ent)
 /*
  * Release a request/entry on connection tear down
  */
-static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent,
-					 bool need_cmd_done)
+static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent)
 {
-	/*
-	 * fuse_request_end() might take other locks like fi->lock and
-	 * can lead to lock ordering issues
-	 */
-	lockdep_assert_not_held(&ent->queue->lock);
+	struct fuse_ring_queue *queue = ent->queue;
 
-	if (need_cmd_done)
+	if (ent->need_cmd_done)
 		io_uring_cmd_done(ent->cmd, -ENOTCONN, 0,
 				  IO_URING_F_UNLOCKED);
 
 	if (ent->fuse_req)
 		fuse_uring_stop_fuse_req_end(ent);
 
-	list_del_init(&ent->list);
-	kfree(ent);
+	/*
+	 * The entry must not be freed immediately, due to access of direct
+	 * pointer access of entries through IO_URING_F_CANCEL - there is a risk
+	 * of race between daemon termination (which triggers IO_URING_F_CANCEL
+	 * and accesses entries without checking the list state first
+	 */
+	spin_lock(&queue->lock);
+	list_move(&ent->list, &queue->ent_released);
+	ent->state = FRRS_RELEASED;
+	spin_unlock(&queue->lock);
 }
 
 static void fuse_uring_stop_list_entries(struct list_head *head,
@@ -331,15 +342,15 @@ static void fuse_uring_stop_list_entries(struct list_head *head,
 			continue;
 		}
 
+		ent->need_cmd_done = ent->state != FRRS_USERSPACE;
+		ent->state = FRRS_TEARDOWN;
 		list_move(&ent->list, &to_teardown);
 	}
 	spin_unlock(&queue->lock);
 
 	/* no queue lock to avoid lock order issues */
 	list_for_each_entry_safe(ent, next, &to_teardown, list) {
-		bool need_cmd_done = ent->state != FRRS_USERSPACE;
-
-		fuse_uring_entry_teardown(ent, need_cmd_done);
+		fuse_uring_entry_teardown(ent);
 		queue_refs = atomic_dec_return(&ring->queue_refs);
 
 		WARN_ON_ONCE(queue_refs < 0);
@@ -445,6 +456,49 @@ void fuse_uring_stop_queues(struct fuse_ring *ring)
 	} else {
 		wake_up_all(&ring->stop_waitq);
 	}
+}
+
+/*
+ * Handle IO_URING_F_CANCEL, typically should come on daemon termination.
+ *
+ * Releasing the last entry should trigger fuse_dev_release() if
+ * the daemon was terminated
+ */
+static int fuse_uring_cancel(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	struct fuse_ring_ent *ent = fuse_uring_cmd_to_ring_ent(cmd);
+	struct fuse_ring_queue *queue;
+	bool need_cmd_done = false;
+	int ret = 0;
+
+	/*
+	 * direct access on ent - it must not be destructed as long as
+	 * IO_URING_F_CANCEL might come up
+	 */
+	queue = ent->queue;
+	spin_lock(&queue->lock);
+	if (ent->state == FRRS_WAIT) {
+		ent->state = FRRS_USERSPACE;
+		list_move(&ent->list, &queue->ent_in_userspace);
+		need_cmd_done = true;
+	}
+	spin_unlock(&queue->lock);
+
+	if (need_cmd_done) {
+		io_uring_cmd_done(cmd, -ENOTCONN, 0, issue_flags);
+	} else {
+		/* io-uring handles resending */
+		ret = -EAGAIN;
+	}
+
+	return ret;
+}
+
+static void fuse_uring_prepare_cancel(struct io_uring_cmd *cmd, int issue_flags,
+				      struct fuse_ring_ent *ring_ent)
+{
+	fuse_uring_cmd_set_ring_ent(cmd, ring_ent);
+	io_uring_cmd_mark_cancelable(cmd, issue_flags);
 }
 
 /*
@@ -841,6 +895,7 @@ static int fuse_uring_commit_fetch(struct io_uring_cmd *cmd, int issue_flags,
 	spin_unlock(&queue->lock);
 
 	/* without the queue lock, as other locks are taken */
+	fuse_uring_prepare_cancel(ring_ent->cmd, issue_flags, ring_ent);
 	fuse_uring_commit(ring_ent, issue_flags);
 
 	/*
@@ -889,6 +944,8 @@ static void _fuse_uring_register(struct fuse_ring_ent *ring_ent,
 	struct fuse_ring *ring = queue->ring;
 	struct fuse_conn *fc = ring->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
+
+	fuse_uring_prepare_cancel(ring_ent->cmd, issue_flags, ring_ent);
 
 	spin_lock(&queue->lock);
 	fuse_uring_ent_avail(ring_ent, queue);
@@ -1039,6 +1096,9 @@ int __maybe_unused fuse_uring_cmd(struct io_uring_cmd *cmd,
 		return -EOPNOTSUPP;
 	}
 
+	if ((unlikely(issue_flags & IO_URING_F_CANCEL)))
+		return fuse_uring_cancel(cmd, issue_flags);
+
 	/* This extra SQE size holds struct fuse_uring_cmd_req */
 	if (!(issue_flags & IO_URING_F_SQE128))
 		return -EINVAL;
@@ -1170,7 +1230,6 @@ void fuse_uring_queue_fuse_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 
 	if (ring_ent) {
 		struct io_uring_cmd *cmd = ring_ent->cmd;
-
 		err = -EIO;
 		if (WARN_ON_ONCE(ring_ent->state != FRRS_FUSE_REQ))
 			goto err;
