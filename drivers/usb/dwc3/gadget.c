@@ -3273,8 +3273,10 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 				&& dwc->has_lpm_erratum,
 				"LPM Erratum not available on dwc3 revisions < 2.40a\n");
 
-		if (dwc->has_lpm_erratum && dwc->revision >= DWC3_REVISION_240A)
+		if (dwc->has_lpm_erratum && dwc->revision >= DWC3_REVISION_240A) {
+			reg &= ~DWC3_DCTL_NYET_THRES_MASK;
 			reg |= DWC3_DCTL_NYET_THRES(dwc->lpm_nyet_threshold);
+		}
 
 		dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 	} else {
