@@ -1355,6 +1355,30 @@ struct drm_mode_closefb {
 	__u32 pad;
 };
 
+/**
+ * struct drm_histogram
+ * @data_ptr: pointer to the array of bins which is of type integer. This
+ *	      is the histogram data termed as pixel count.
+ * @nr_elements: number of elements pointed by the data @data_ptr
+ */
+struct drm_histogram {
+	__u64 data_ptr;
+	__u32 nr_elements;
+};
+
+/**
+ * struct drm_iet
+ * @data_ptr: pointer to the array of bins which is of type integer. This
+ *	      is the image enhanced data, termed as pixel factor.
+ * @nr_elements: number of elements pointed by the data @data_ptr
+ * @reserved: reserved for future use
+ */
+struct drm_iet {
+	__u64 data_ptr;
+	__u32 nr_elements;
+	__u32 reserved;
+};
+
 #if defined(__cplusplus)
 }
 #endif
