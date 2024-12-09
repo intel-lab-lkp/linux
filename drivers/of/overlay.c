@@ -887,6 +887,10 @@ static void free_overlay_changeset(struct overlay_changeset *ovcs)
  * of_overlay_apply() - Create and apply an overlay changeset
  * @ovcs:	overlay changeset
  * @base:	point to the target node to apply overlay
+ * @export_symbols_name:
+ *		Name of the export symbol subnode of the @base node to
+ *		provide extra symbols. Those extra symbols are used in
+ *		the overlay symbols resolution.
  *
  * Creates and applies an overlay changeset.
  *
@@ -911,11 +915,24 @@ static void free_overlay_changeset(struct overlay_changeset *ovcs)
  */
 
 static int of_overlay_apply(struct overlay_changeset *ovcs,
-			    const struct device_node *base)
+			    const struct device_node *base,
+			    const char *export_symbols_name)
 {
+	struct device_node *export_symbols = NULL;
 	int ret = 0, ret_revert, ret_tmp;
 
-	ret = of_resolve_phandles(ovcs->overlay_root, NULL);
+	if (base && export_symbols_name) {
+		export_symbols = of_get_child_by_name(base, export_symbols_name);
+		if (!export_symbols) {
+			pr_err("overlay get export symbols '%s' from %pOF failed\n",
+			       export_symbols_name, base);
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	ret = of_resolve_phandles(ovcs->overlay_root, export_symbols);
+	of_node_put(export_symbols);
 	if (ret)
 		goto out;
 
@@ -1055,7 +1072,7 @@ int of_overlay_fdt_apply(const void *overlay_fdt, u32 overlay_fdt_size,
 	}
 	ovcs->overlay_mem = overlay_mem;
 
-	ret = of_overlay_apply(ovcs, base);
+	ret = of_overlay_apply(ovcs, base, export_symbols_name);
 	/*
 	 * If of_overlay_apply() error, calling free_overlay_changeset() may
 	 * result in a memory leak if the apply partly succeeded, so do NOT
