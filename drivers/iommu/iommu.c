@@ -715,6 +715,11 @@ void iommu_set_dma_strict(void)
 		iommu_def_domain_type = IOMMU_DOMAIN_DMA;
 }
 
+bool iommu_dma_is_strict(void)
+{
+	return iommu_dma_strict;
+}
+
 static ssize_t iommu_group_attr_show(struct kobject *kobj,
 				     struct attribute *__attr, char *buf)
 {
