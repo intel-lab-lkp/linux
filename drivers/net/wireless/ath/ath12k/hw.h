@@ -222,6 +222,8 @@ struct ath12k_hw_params {
 	u32 iova_mask;
 
 	bool needs_m3_fw;
+	const struct ce_ie_addr *ce_ie_addr;
+	const struct ce_remap *ce_remap;
 };
 
 struct ath12k_hw_ops {
