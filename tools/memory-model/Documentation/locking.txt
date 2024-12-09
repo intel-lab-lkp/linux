@@ -151,7 +151,7 @@ Ordering Provided by a Lock to CPUs Not Holding That Lock
 It is not necessarily the case that accesses ordered by locking will be
 seen as ordered by CPUs not holding that lock.  Consider this example:
 
-	/* See Z6.0+pooncelock+pooncelock+pombonce.litmus. */
+	/* See Z6.0+pooncelock+pooncelock+spin_lock+pombonce.litmus. */
 	void CPU0(void)
 	{
 		spin_lock(&mylock);
@@ -184,7 +184,7 @@ ordering properties.
 Ordering can be extended to CPUs not holding the lock by careful use
 of smp_mb__after_spinlock():
 
-	/* See Z6.0+pooncelock+poonceLock+pombonce.litmus. */
+	/* See Z6.0+pooncelock+pooncelock+smp_mb__after_spinlock+pombonce.litmus. */
 	void CPU0(void)
 	{
 		spin_lock(&mylock);
