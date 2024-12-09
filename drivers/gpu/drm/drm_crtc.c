@@ -939,3 +939,87 @@ int drm_crtc_create_scaling_filter_property(struct drm_crtc *crtc,
 	return 0;
 }
 EXPORT_SYMBOL(drm_crtc_create_scaling_filter_property);
+
+/**
+ * drm_crtc_create_histogram_property: create histogram properties
+ *
+ * @crtc: pointer tot he struct drm_crtc.
+ *
+ * The property HISTOGRAM_ENABLE allows user to enable/disable the
+ * histogram feature in the hardware. Upon KMD enabling by writing to the
+ * hardware registers, a histogram is generated. Histogram is composed of
+ * 'n' bins with each bin being an integer(pixel count).
+ * An event HISTOGRAM will be sent to the user. User upon recieving this
+ * event user can read the hardware generated histogram using crtc property
+ * HISTOGRAM_DATA. User can use this histogram data, apply various
+ * equilization techniques to come up with a pixel factor. This pixel
+ * factor is an array of integer with 'n+1' elements. This is fed back to
+ * the KMD by crtc property HISTOGRAM_IET. KMD will write this IET data
+ * back to the hardware to see the enhancement/equilization done to the
+ * images on that pipe.
+ * The crtc property HISTOGRAM_DATA and HISTOGRAM_IET is of type blob.
+ *
+ * For crtc property HISTOGRAM_DATA,
+ * the blob data pointer will be the address of the struct drm_histogram.
+ * struct drm_histogram {
+ *         u64 data_ptr;
+ *         u32 nr_elements;
+ * }
+ * Histogram is composed of @nr_elements of bins with each bin being an
+ * integer value, referred to as pixel_count.
+ * The element @data_ptr holds the address of histogam.
+ * Sample:
+ * Historgram[0] = 2050717
+ * Historgram[1] = 244619
+ * Historgram[2] = 173368
+ * ....
+ * Historgram[31] = 21631
+ *
+ * For crtc_property HISTOGRAM_IET,
+ * the blob data pointer will be the address of the struct drm_iet.
+ *  struct drm_iet {
+ *         u64 data_ptr;
+ *         u32 nr_elements;
+ * }
+ * ImageEnhancemenT(IET) is composed of @nr_elements of bins with each bin
+ * being an integer value, referred to as pixel factor.
+ * The element @data_ptr holds the addess of pixel factor.
+ * Sample:
+ * Pixel Factor[0] = 1023
+ * Pixel Factor[1] = 695
+ * Pixel Factor[2] = 1023
+ * ....
+ * Pixel Factor[32] = 512
+ *
+ * RETURNS:
+ * Zero for success or -errno
+ */
+int drm_crtc_create_histogram_property(struct drm_crtc *crtc)
+{
+	struct drm_property *prop;
+
+	prop = drm_property_create_bool(crtc->dev, DRM_MODE_PROP_ATOMIC,
+					"HISTOGRAM_ENABLE");
+	if (!prop)
+		return -ENOMEM;
+	drm_object_attach_property(&crtc->base, prop, 0);
+	crtc->histogram_enable_property = prop;
+
+	prop = drm_property_create(crtc->dev, DRM_MODE_PROP_ATOMIC |
+				   DRM_MODE_PROP_IMMUTABLE | DRM_MODE_PROP_BLOB,
+				   "HISTOGRAM_DATA", 0);
+	if (!prop)
+		return -ENOMEM;
+	drm_object_attach_property(&crtc->base, prop, 0);
+	crtc->histogram_data_property = prop;
+
+	prop = drm_property_create(crtc->dev, DRM_MODE_PROP_ATOMIC |
+				   DRM_MODE_PROP_BLOB, "HISTOGRAM_IET", 0);
+	if (!prop)
+		return -ENOMEM;
+	drm_object_attach_property(&crtc->base, prop, 0);
+	crtc->histogram_iet_property = prop;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_crtc_create_histogram_property);

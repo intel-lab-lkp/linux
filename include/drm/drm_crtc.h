@@ -1374,5 +1374,6 @@ static inline struct drm_crtc *drm_crtc_find(struct drm_device *dev,
 
 int drm_crtc_create_scaling_filter_property(struct drm_crtc *crtc,
 					    unsigned int supported_filters);
+int drm_crtc_create_histogram_property(struct drm_crtc *crtc);
 
 #endif /* __DRM_CRTC_H__ */
