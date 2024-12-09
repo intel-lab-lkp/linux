@@ -87,7 +87,7 @@ config MAC8390
 
 config MCF8390
 	tristate "ColdFire NS8390 based Ethernet support"
-	depends on COLDFIRE
+	depends on COLDFIRE && HAS_IOPORT
 	select CRC32
 	help
 	  This driver is for Ethernet devices using an NS8390-compatible
