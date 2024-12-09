@@ -250,10 +250,9 @@ static void ip6_dev_free(struct net_device *dev)
 	dst_cache_destroy(&t->dst_cache);
 }
 
-static int ip6_tnl_create2(struct net_device *dev)
+static int ip6_tnl_create2(struct net *net, struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
-	struct net *net = dev_net(dev);
 	struct ip6_tnl_net *ip6n = net_generic(net, ip6_tnl_net_id);
 	int err;
 
@@ -308,7 +307,7 @@ static struct ip6_tnl *ip6_tnl_create(struct net *net, struct __ip6_tnl_parm *p)
 	t = netdev_priv(dev);
 	t->parms = *p;
 	t->net = dev_net(dev);
-	err = ip6_tnl_create2(dev);
+	err = ip6_tnl_create2(net, dev);
 	if (err < 0)
 		goto failed_free;
 
@@ -2002,11 +2001,12 @@ static void ip6_tnl_netlink_parms(struct nlattr *data[],
 		parms->fwmark = nla_get_u32(data[IFLA_IPTUN_FWMARK]);
 }
 
-static int ip6_tnl_newlink(struct net *src_net, struct net_device *dev,
-			   struct nlattr *tb[], struct nlattr *data[],
-			   struct netlink_ext_ack *extack)
+static int ip6_tnl_newlink(struct rtnl_newlink_params *params)
 {
-	struct net *net = dev_net(dev);
+	struct net_device *dev = params->dev;
+	struct nlattr **tb = params->tb;
+	struct nlattr **data = params->data;
+	struct net *net = params->link_net ? : dev_net(dev);
 	struct ip6_tnl_net *ip6n = net_generic(net, ip6_tnl_net_id);
 	struct ip_tunnel_encap ipencap;
 	struct ip6_tnl *nt, *t;
@@ -2031,7 +2031,7 @@ static int ip6_tnl_newlink(struct net *src_net, struct net_device *dev,
 			return -EEXIST;
 	}
 
-	err = ip6_tnl_create2(dev);
+	err = ip6_tnl_create2(net, dev);
 	if (!err && tb[IFLA_MTU])
 		ip6_tnl_change_mtu(dev, nla_get_u32(tb[IFLA_MTU]));
 
