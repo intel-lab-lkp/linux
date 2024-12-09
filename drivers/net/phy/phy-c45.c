@@ -234,15 +234,11 @@ static int genphy_c45_baset1_an_config_aneg(struct phy_device *phydev)
 		return -EOPNOTSUPP;
 	}
 
-	adv_l |= linkmode_adv_to_mii_t1_adv_l_t(phydev->advertising);
-
-	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_T1_ADV_L,
-				     adv_l_mask, adv_l);
-	if (ret < 0)
-		return ret;
-	if (ret > 0)
-		changed = 1;
-
+	/* Ref. 802.3-2022 : Section 45.2.7.22
+	 * The Base Page value is transferred to mr_adv_ability when register
+	 * 7.514 is written.
+	 * Therefore, registers 7.515 and 7.516 should be written before 7.514.
+	 */
 	adv_m |= linkmode_adv_to_mii_t1_adv_m_t(phydev->advertising);
 
 	ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN, MDIO_AN_T1_ADV_M,
@@ -251,6 +247,23 @@ static int genphy_c45_baset1_an_config_aneg(struct phy_device *phydev)
 		return ret;
 	if (ret > 0)
 		changed = 1;
+
+	adv_l |= linkmode_adv_to_mii_t1_adv_l_t(phydev->advertising);
+
+	if (changed) {
+		ret = phy_write_mmd(phydev, MDIO_MMD_AN, MDIO_AN_T1_ADV_L,
+				    adv_l);
+		if (ret < 0)
+			return ret;
+	} else {
+		ret = phy_modify_mmd_changed(phydev, MDIO_MMD_AN,
+					     MDIO_AN_T1_ADV_L,
+					     adv_l_mask, adv_l);
+		if (ret < 0)
+			return ret;
+		if (ret > 0)
+			changed = 1;
+	}
 
 	return changed;
 }
@@ -418,11 +431,14 @@ EXPORT_SYMBOL_GPL(genphy_c45_aneg_done);
 int genphy_c45_read_link(struct phy_device *phydev)
 {
 	u32 mmd_mask = MDIO_DEVS_PMAPMD;
+	u16 reg = MDIO_CTRL1;
 	int val, devad;
 	bool link = true;
 
 	if (phydev->c45_ids.mmds_present & MDIO_DEVS_AN) {
-		val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_CTRL1);
+		if (genphy_c45_baset1_able(phydev))
+			reg = MDIO_AN_T1_CTRL;
+		val = phy_read_mmd(phydev, MDIO_MMD_AN, reg);
 		if (val < 0)
 			return val;
 
