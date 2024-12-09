@@ -2218,11 +2218,12 @@ retry:
 
 	/*
 	 * Prevent unbounded recursion when reclaim operations need to
-	 * allocate memory. This might exceed the limits temporarily,
-	 * but we prefer facilitating memory reclaim and getting back
-	 * under the limit over triggering OOM kills in these cases.
+	 * allocate memory, or the process is exiting. This might exceed
+	 * the limits temporarily, but we prefer facilitating memory reclaim
+	 * and getting back under the limit over triggering OOM kills in
+	 * these cases.
 	 */
-	if (unlikely(current->flags & PF_MEMALLOC))
+	if (unlikely(current->flags & (PF_MEMALLOC | PF_EXITING)))
 		goto force;
 
 	if (unlikely(task_in_memcg_oom(current)))
