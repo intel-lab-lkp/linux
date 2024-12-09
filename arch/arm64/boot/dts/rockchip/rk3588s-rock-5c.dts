@@ -861,10 +861,6 @@
 	status = "okay";
 };
 
-&usbdp_phy0 {
-	status = "okay";
-};
-
 &usb_host0_ehci {
 	status = "okay";
 };
@@ -886,11 +882,15 @@
 	status = "okay";
 };
 
-&vop_mmu {
+&usbdp_phy0 {
 	status = "okay";
 };
 
 &vop {
+	status = "okay";
+};
+
+&vop_mmu {
 	status = "okay";
 };
 
