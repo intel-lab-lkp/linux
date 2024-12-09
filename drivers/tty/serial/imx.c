@@ -2691,8 +2691,9 @@ static void imx_uart_save_context(struct imx_port *sport)
 static void imx_uart_enable_wakeup(struct imx_port *sport, bool on)
 {
 	u32 ucr3;
+	unsigned long flags;
 
-	uart_port_lock(&sport->port);
+	uart_port_lock_irqsave(&sport->port, &flags);
 
 	ucr3 = imx_uart_readl(sport, UCR3);
 	if (on) {
@@ -2714,7 +2715,7 @@ static void imx_uart_enable_wakeup(struct imx_port *sport, bool on)
 		imx_uart_writel(sport, ucr1, UCR1);
 	}
 
-	uart_port_unlock(&sport->port);
+	uart_port_unlock_irqrestore(&sport->port, flags);
 }
 
 static int imx_uart_suspend_noirq(struct device *dev)
