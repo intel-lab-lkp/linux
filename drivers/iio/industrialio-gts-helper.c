@@ -160,16 +160,108 @@ static void iio_gts_purge_avail_scale_table(struct iio_gts *gts)
 	gts->num_avail_all_scales = 0;
 }
 
+static int scale_eq(int *sc1, int *sc2)
+{
+	return sc1[0] == sc2[0] && sc1[1] == sc2[1];
+}
+
+static int scale_smaller(int *sc1, int *sc2)
+{
+	if (sc1[0] != sc2[0])
+		return sc1[0] < sc2[0];
+
+	/* If integer parts are equal, fixp parts */
+	return sc1[1] < sc2[1];
+}
+
+static int do_combined_scaletable(struct iio_gts *gts, size_t scale_bytes)
+{
+	int t_idx, i, new_idx;
+	int **scales = gts->per_time_avail_scale_tables;
+	int *all_scales = kcalloc(gts->num_itime, scale_bytes, GFP_KERNEL);
+
+	if (!all_scales)
+		return -ENOMEM;
+
+	t_idx = gts->num_itime - 1;
+	memcpy(all_scales, scales[t_idx], scale_bytes);
+	new_idx = gts->num_hwgain * 2;
+
+	while (t_idx-- > 0) {
+		for (i = 0; i < gts->num_hwgain ; i++) {
+			int *candidate = &scales[t_idx][i * 2];
+			int chk;
+
+			if (scale_smaller(candidate, &all_scales[new_idx - 2])) {
+				all_scales[new_idx] = candidate[0];
+				all_scales[new_idx + 1] = candidate[1];
+				new_idx += 2;
+
+				continue;
+			}
+			for (chk = 0; chk < new_idx; chk += 2)
+				if (!scale_smaller(candidate, &all_scales[chk]))
+					break;
+
+
+			if (scale_eq(candidate, &all_scales[chk]))
+				continue;
+
+			memmove(&all_scales[chk + 2], &all_scales[chk],
+				(new_idx - chk) * sizeof(int));
+			all_scales[chk] = candidate[0];
+			all_scales[chk + 1] = candidate[1];
+			new_idx += 2;
+		}
+	}
+
+	gts->num_avail_all_scales = new_idx / 2;
+	gts->avail_all_scales_table = all_scales;
+
+	return 0;
+}
+
+static void iio_gts_free_int_table_array(int **arr, int num_tables)
+{
+	int i;
+
+	for (i = 0; i < num_tables; i++)
+		kfree(arr[i]);
+
+	kfree(arr);
+}
+
+static int iio_gts_alloc_int_table_array(int ***arr, int num_tables, int num_table_items)
+{
+	int i, **tmp;
+
+	tmp = kcalloc(num_tables, sizeof(**arr), GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	for (i = 0; i < num_tables; i++) {
+		tmp[i] = kcalloc(num_table_items, sizeof(int), GFP_KERNEL);
+		if (!tmp[i])
+			goto err_free;
+	}
+
+	*arr = tmp;
+
+	return 0;
+err_free:
+	iio_gts_free_int_table_array(tmp, i);
+
+	return -ENOMEM;
+}
+
 static int iio_gts_gain_cmp(const void *a, const void *b)
 {
 	return *(int *)a - *(int *)b;
 }
 
-static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
+static int fill_and_sort_scaletables(struct iio_gts *gts, int **gains, int **scales)
 {
-	int i, j, new_idx, time_idx, ret = 0;
-	int *all_gains;
-	size_t gain_bytes;
+	int i, j, ret;
 
 	for (i = 0; i < gts->num_itime; i++) {
 		/*
@@ -189,73 +281,59 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 		}
 	}
 
-	gain_bytes = array_size(gts->num_hwgain, sizeof(int));
-	all_gains = kcalloc(gts->num_itime, gain_bytes, GFP_KERNEL);
-	if (!all_gains)
-		return -ENOMEM;
+	return 0;
+}
 
-	/*
-	 * We assume all the gains for same integration time were unique.
-	 * It is likely the first time table had greatest time multiplier as
-	 * the times are in the order of preference and greater times are
-	 * usually preferred. Hence we start from the last table which is likely
-	 * to have the smallest total gains.
-	 */
-	time_idx = gts->num_itime - 1;
-	memcpy(all_gains, gains[time_idx], gain_bytes);
-	new_idx = gts->num_hwgain;
+static void compute_per_time_gains(struct iio_gts *gts, int **gains)
+{
+	int i, j;
 
-	while (time_idx-- > 0) {
-		for (j = 0; j < gts->num_hwgain; j++) {
-			int candidate = gains[time_idx][j];
-			int chk;
-
-			if (candidate > all_gains[new_idx - 1]) {
-				all_gains[new_idx] = candidate;
-				new_idx++;
-
-				continue;
-			}
-			for (chk = 0; chk < new_idx; chk++)
-				if (candidate <= all_gains[chk])
-					break;
-
-			if (candidate == all_gains[chk])
-				continue;
-
-			memmove(&all_gains[chk + 1], &all_gains[chk],
-				(new_idx - chk) * sizeof(int));
-			all_gains[chk] = candidate;
-			new_idx++;
-		}
+	for (i = 0; i < gts->num_itime; i++) {
+		for (j = 0; j < gts->num_hwgain; j++)
+			gains[i][j] = gts->hwgain_table[j].gain *
+				      gts->itime_table[i].mul;
 	}
+}
 
-	gts->avail_all_scales_table = kcalloc(new_idx, 2 * sizeof(int),
-					      GFP_KERNEL);
-	if (!gts->avail_all_scales_table) {
-		ret = -ENOMEM;
-		goto free_out;
-	}
-	gts->num_avail_all_scales = new_idx;
+static int compute_per_time_tables(struct iio_gts *gts, int **scales)
+{
+	int **per_time_gains;
+	int ret;
 
-	for (i = 0; i < gts->num_avail_all_scales; i++) {
-		ret = iio_gts_total_gain_to_scale(gts, all_gains[i],
-					&gts->avail_all_scales_table[i * 2],
-					&gts->avail_all_scales_table[i * 2 + 1]);
+	ret = iio_gts_alloc_int_table_array(&per_time_gains, gts->num_itime,
+					    gts->num_hwgain);
+	if (ret)
+		return ret;
 
-		if (ret) {
-			kfree(gts->avail_all_scales_table);
-			gts->num_avail_all_scales = 0;
-			goto free_out;
-		}
-	}
+	compute_per_time_gains(gts, per_time_gains);
 
-free_out:
-	kfree(all_gains);
+	ret = fill_and_sort_scaletables(gts, per_time_gains, scales);
+
+	iio_gts_free_int_table_array(per_time_gains, gts->num_itime);
 
 	return ret;
 }
 
+static int **create_per_time_scales(struct iio_gts *gts)
+{
+	int **per_time_scales, ret;
+
+	ret = iio_gts_alloc_int_table_array(&per_time_scales, gts->num_itime,
+					    gts->num_hwgain * 2);
+	if (ret)
+		return ERR_PTR(ret);
+
+	ret = compute_per_time_tables(gts, per_time_scales);
+	if (ret)
+		goto err_out;
+
+	return per_time_scales;
+
+err_out:
+	iio_gts_free_int_table_array(per_time_scales, gts->num_itime);
+
+	return ERR_PTR(ret);
+}
 /**
  * iio_gts_build_avail_scale_table - create tables of available scales
  * @gts:	Gain time scale descriptor
@@ -275,55 +353,25 @@ free_out:
  */
 static int iio_gts_build_avail_scale_table(struct iio_gts *gts)
 {
-	int **per_time_gains, **per_time_scales, i, j, ret = -ENOMEM;
+	int ret, scale_bytes;
+	int **per_time_scales;
 
-	per_time_gains = kcalloc(gts->num_itime, sizeof(*per_time_gains), GFP_KERNEL);
-	if (!per_time_gains)
-		return ret;
+	if (unlikely(check_mul_overflow(gts->num_hwgain, 2 * sizeof(int), &scale_bytes)))
+		return -EOVERFLOW;
 
-	per_time_scales = kcalloc(gts->num_itime, sizeof(*per_time_scales), GFP_KERNEL);
-	if (!per_time_scales)
-		goto free_gains;
+	per_time_scales = create_per_time_scales(gts);
+	if (IS_ERR(per_time_scales))
+		return PTR_ERR(per_time_scales);
 
-	for (i = 0; i < gts->num_itime; i++) {
-		per_time_scales[i] = kcalloc(gts->num_hwgain, 2 * sizeof(int),
-					     GFP_KERNEL);
-		if (!per_time_scales[i])
-			goto err_free_out;
-
-		per_time_gains[i] = kcalloc(gts->num_hwgain, sizeof(int),
-					    GFP_KERNEL);
-		if (!per_time_gains[i]) {
-			kfree(per_time_scales[i]);
-			goto err_free_out;
-		}
-
-		for (j = 0; j < gts->num_hwgain; j++)
-			per_time_gains[i][j] = gts->hwgain_table[j].gain *
-					       gts->itime_table[i].mul;
-	}
-
-	ret = gain_to_scaletables(gts, per_time_gains, per_time_scales);
-	if (ret)
-		goto err_free_out;
-
-	for (i = 0; i < gts->num_itime; i++)
-		kfree(per_time_gains[i]);
-	kfree(per_time_gains);
 	gts->per_time_avail_scale_tables = per_time_scales;
 
-	return 0;
-
-err_free_out:
-	for (i--; i >= 0; i--) {
-		kfree(per_time_scales[i]);
-		kfree(per_time_gains[i]);
+	ret = do_combined_scaletable(gts, scale_bytes);
+	if (ret) {
+		iio_gts_free_int_table_array(per_time_scales, gts->num_itime);
+		return ret;
 	}
-	kfree(per_time_scales);
-free_gains:
-	kfree(per_time_gains);
 
-	return ret;
+	return 0;
 }
 
 static void iio_gts_us_to_int_micro(int *time_us, int *int_micro_times,
