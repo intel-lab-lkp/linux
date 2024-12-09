@@ -224,6 +224,7 @@ struct ath12k_hw_params {
 	bool needs_m3_fw;
 	const struct ce_ie_addr *ce_ie_addr;
 	const struct ce_remap *ce_remap;
+	u32 bdf_addr;
 };
 
 struct ath12k_hw_ops {
