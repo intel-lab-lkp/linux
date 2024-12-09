@@ -93,6 +93,14 @@ config CRYPTO_LIB_CURVE25519
 	  fulfilled by either the generic implementation or an arch-specific
 	  one, if one is available and enabled.
 
+config CRYPTO_LIB_CURVE25519_KUNIT_TEST
+	tristate "KUnit tests for curve25519" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	select CRYPTO_LIB_CURVE25519
+	help
+	  Enable this option to run KUnit tests for the curve25519 library.
+
 config CRYPTO_LIB_DES
 	tristate
 
