@@ -1781,7 +1781,7 @@ static inline void rq_unpin_lock(struct rq *rq, struct rq_flags *rf)
 	if (rq->clock_update_flags > RQCF_ACT_SKIP)
 		rf->clock_update_flags = RQCF_UPDATED;
 #endif
-
+	scx_rq_clock_stale(rq);
 	lockdep_unpin_lock(__rq_lockp(rq), rf->cookie);
 }
 
