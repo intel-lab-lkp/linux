@@ -1488,6 +1488,10 @@ static bool dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_rt_entity *rt_se = &p->rt;
 
 	update_curr_rt(rq);
+
+	if (!task_current(rq, p))
+		update_stats_wait_end_rt(rt_rq_of_se(rt_se), rt_se);
+
 	dequeue_rt_entity(rt_se, flags);
 
 	dequeue_pushable_task(rq, p);
