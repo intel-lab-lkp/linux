@@ -644,7 +644,9 @@ static int j721e_pcie_suspend_noirq(struct device *dev)
 	struct j721e_pcie *pcie = dev_get_drvdata(dev);
 
 	if (pcie->mode == PCI_MODE_RC) {
-		gpiod_set_value_cansleep(pcie->reset_gpio, 0);
+		if (pcie->reset_gpio)
+			gpiod_set_value_cansleep(pcie->reset_gpio, 0);
+
 		clk_disable_unprepare(pcie->refclk);
 	}
 
