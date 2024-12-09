@@ -160,19 +160,6 @@ void efi_set_u64_split(u64 data, u32 *lo, u32 *hi)
  */
 #define EFI_100NSEC_PER_USEC	((u64)10)
 
-/*
- * An efi_boot_memmap is used by efi_get_memory_map() to return the
- * EFI memory map in a dynamically allocated buffer.
- *
- * The buffer allocated for the EFI memory map includes extra room for
- * a minimum of EFI_MMAP_NR_SLACK_SLOTS additional EFI memory descriptors.
- * This facilitates the reuse of the EFI memory map buffer when a second
- * call to ExitBootServices() is needed because of intervening changes to
- * the EFI memory map. Other related structures, e.g. x86 e820ext, need
- * to factor in this headroom requirement as well.
- */
-#define EFI_MMAP_NR_SLACK_SLOTS	8
-
 typedef struct efi_generic_dev_path efi_device_path_protocol_t;
 
 union efi_device_path_to_text_protocol {
@@ -1059,7 +1046,7 @@ void efi_apply_loadoptions_quirk(const void **load_options, u32 *load_options_si
 char *efi_convert_cmdline(efi_loaded_image_t *image);
 
 efi_status_t efi_get_memory_map(struct efi_boot_memmap **map,
-				bool install_cfg_tbl);
+				bool install_cfg_tbl, unsigned int *n);
 
 efi_status_t efi_allocate_pages(unsigned long size, unsigned long *addr,
 				unsigned long max);

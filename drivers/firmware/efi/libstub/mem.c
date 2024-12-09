@@ -13,19 +13,26 @@
  *			configuration table
  *
  * Retrieve the UEFI memory map. The allocated memory leaves room for
- * up to EFI_MMAP_NR_SLACK_SLOTS additional memory map entries.
+ * up to CONFIG_EFI_MAX_NR_MMAP_SLACK_SLOTS additional memory map entries.
  *
  * Return:	status code
  */
 efi_status_t efi_get_memory_map(struct efi_boot_memmap **map,
-				bool install_cfg_tbl)
+				bool install_cfg_tbl,
+				unsigned int *n)
 {
 	int memtype = install_cfg_tbl ? EFI_ACPI_RECLAIM_MEMORY
 				      : EFI_LOADER_DATA;
 	efi_guid_t tbl_guid = LINUX_EFI_BOOT_MEMMAP_GUID;
+	unsigned int nr = CONFIG_EFI_MIN_NR_MMAP_SLACK_SLOTS;
 	struct efi_boot_memmap *m, tmp;
 	efi_status_t status;
 	unsigned long size;
+
+	BUILD_BUG_ON(!is_power_of_2(CONFIG_EFI_MIN_NR_MMAP_SLACK_SLOTS) ||
+		     !is_power_of_2(CONFIG_EFI_MAX_NR_MMAP_SLACK_SLOTS) ||
+		     CONFIG_EFI_MIN_NR_MMAP_SLACK_SLOTS >=
+		     CONFIG_EFI_MAX_NR_MMAP_SLACK_SLOTS);
 
 	tmp.map_size = 0;
 	status = efi_bs_call(get_memory_map, &tmp.map_size, NULL, &tmp.map_key,
@@ -33,11 +40,19 @@ efi_status_t efi_get_memory_map(struct efi_boot_memmap **map,
 	if (status != EFI_BUFFER_TOO_SMALL)
 		return EFI_LOAD_ERROR;
 
-	size = tmp.map_size + tmp.desc_size * EFI_MMAP_NR_SLACK_SLOTS;
-	status = efi_bs_call(allocate_pool, memtype, sizeof(*m) + size,
-			     (void **)&m);
+	do {
+		size = tmp.map_size + tmp.desc_size * nr;
+		status = efi_bs_call(allocate_pool, memtype, sizeof(*m) + size,
+				     (void **)&m);
+		nr <<= 1;
+	} while (status == EFI_BUFFER_TOO_SMALL &&
+		 nr <= CONFIG_EFI_MAX_NR_MMAP_SLACK_SLOTS);
+
 	if (status != EFI_SUCCESS)
 		return status;
+
+	if (n)
+		*n = nr;
 
 	if (install_cfg_tbl) {
 		/*

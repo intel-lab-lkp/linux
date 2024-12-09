@@ -155,6 +155,29 @@ config EFI_TEST
 	  Say Y here to enable the runtime services support via /dev/efi_test.
 	  If unsure, say N.
 
+#
+# An efi_boot_memmap is used by efi_get_memory_map() to return the
+# EFI memory map in a dynamically allocated buffer.
+#
+# The buffer allocated for the EFI memory map includes extra room for
+# a range of [EFI_MIN_NR_MMAP_SLACK_SLOTS, EFI_MAX_NR_MMAP_SLACK_SLOTS]
+# additional EFI memory descriptors. This facilitates the reuse of the
+# EFI memory map buffer when a second call to ExitBootServices() is
+# needed because of intervening changes to the EFI memory map. Other
+# related structures, e.g. x86 e820ext, need to factor in this headroom
+# requirement as well.
+#
+
+config EFI_MIN_NR_MMAP_SLACK_SLOTS
+	int
+	depends on EFI
+	default 8
+
+config EFI_MAX_NR_MMAP_SLACK_SLOTS
+	int
+	depends on EFI
+	default 64
+
 config EFI_DEV_PATH_PARSER
 	bool
 

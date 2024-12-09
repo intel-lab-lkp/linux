@@ -740,15 +740,15 @@ static efi_status_t allocate_e820(struct boot_params *params,
 	struct efi_boot_memmap *map;
 	efi_status_t status;
 	__u32 nr_desc;
+	__u32 nr;
 
-	status = efi_get_memory_map(&map, false);
+	status = efi_get_memory_map(&map, false, &nr);
 	if (status != EFI_SUCCESS)
 		return status;
 
 	nr_desc = map->map_size / map->desc_size;
-	if (nr_desc > ARRAY_SIZE(params->e820_table) - EFI_MMAP_NR_SLACK_SLOTS) {
-		u32 nr_e820ext = nr_desc - ARRAY_SIZE(params->e820_table) +
-				 EFI_MMAP_NR_SLACK_SLOTS;
+	if (nr_desc > ARRAY_SIZE(params->e820_table) - nr) {
+		u32 nr_e820ext = nr_desc - ARRAY_SIZE(params->e820_table) + nr;
 
 		status = alloc_e820ext(nr_e820ext, e820ext, e820ext_size);
 	}

@@ -432,7 +432,7 @@ efi_status_t efi_exit_boot_services(void *handle, void *priv,
 	if (efi_disable_pci_dma)
 		efi_pci_disable_bridge_busmaster();
 
-	status = efi_get_memory_map(&map, true);
+	status = efi_get_memory_map(&map, true, NULL);
 	if (status != EFI_SUCCESS)
 		return status;
 
