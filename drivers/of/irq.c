@@ -310,6 +310,12 @@ int of_irq_parse_raw(const __be32 *addr, struct of_phandle_args *out_irq)
 		addrsize = (imap - match_array) - intsize;
 
 		if (ipar == newpar) {
+			/*
+			 * Has got @ipar's refcount, but the refcount was
+			 * got again by of_irq_parse_imap_parent() via its
+			 * alias @newpair.
+			 */
+			of_node_put(ipar);
 			pr_debug("%pOF interrupt-map entry to self\n", ipar);
 			return 0;
 		}
