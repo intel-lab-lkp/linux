@@ -329,16 +329,34 @@ static inline int dname_external(const struct dentry *dentry)
 
 void take_dentry_name_snapshot(struct name_snapshot *name, struct dentry *dentry)
 {
-	spin_lock(&dentry->d_lock);
+	unsigned seq;
+
+	rcu_read_lock();
+retry:
+	seq = read_seqcount_begin(&dentry->d_seq);
 	name->name = dentry->d_name;
-	if (unlikely(dname_external(dentry))) {
-		atomic_inc(&external_name(dentry)->u.count);
-	} else {
-		memcpy(name->inline_name, dentry->d_iname,
-		       dentry->d_name.len + 1);
+	if (read_seqcount_retry(&dentry->d_seq, seq))
+		goto retry;
+	// ->name and ->len are at least consistent with each other, so if
+	// ->name points to dentry->d_iname, ->len is below DNAME_INLINE_LEN
+	if (likely(name->name.name == dentry->d_iname)) {
+		memcpy(name->inline_name, dentry->d_iname, name->name.len + 1);
 		name->name.name = name->inline_name;
+		if (read_seqcount_retry(&dentry->d_seq, seq))
+			goto retry;
+	} else {
+		struct external_name *p;
+		p = container_of(name->name.name, struct external_name, name[0]);
+		// get a valid reference
+		if (unlikely(!atomic_inc_not_zero(&p->u.count)))
+			goto retry;
+		if (read_seqcount_retry(&dentry->d_seq, seq)) {
+			if (unlikely(atomic_dec_and_test(&p->u.count)))
+				kfree_rcu(p, u.head);
+			goto retry;
+		}
 	}
-	spin_unlock(&dentry->d_lock);
+	rcu_read_unlock();
 }
 EXPORT_SYMBOL(take_dentry_name_snapshot);
 
