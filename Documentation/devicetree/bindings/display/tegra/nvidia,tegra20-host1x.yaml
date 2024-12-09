@@ -32,11 +32,11 @@ properties:
 
   reg:
     minItems: 1
-    maxItems: 3
+    maxItems: 4
 
   reg-names:
     minItems: 1
-    maxItems: 3
+    maxItems: 4
 
   interrupts:
     minItems: 1
@@ -60,12 +60,12 @@ properties:
     maxItems: 1
 
   clocks:
-    description: Must contain one entry, for the module clock. See
-      ../clocks/clock-bindings.txt for details.
+    minItems: 1
+    maxItems: 2
 
   clock-names:
-    items:
-      - const: host1x
+    minItems: 1
+    maxItems: 2
 
   resets:
     minItems: 1 # MC reset is optional on Tegra186 and later
@@ -132,6 +132,15 @@ allOf:
           items:
             - const: syncpt
             - const: host1x
+
+        clocks:
+          items:
+            - description: host1x clock
+
+        clock-names:
+          items:
+            - const: host1x
+
       required:
         - resets
         - reset-names
@@ -170,6 +179,14 @@ allOf:
             - const: syncpt
             - const: host1x
 
+        clocks:
+          items:
+            - description: host1x clock
+
+        clock-names:
+          items:
+            - const: host1x
+
         iommu-map:
           description: Specification of stream IDs available for memory context device
             use. Should be a mapping of IDs 0..n to IOMMU entries corresponding to
@@ -195,16 +212,20 @@ allOf:
     then:
       properties:
         reg-names:
+          minItems: 3
           items:
             - const: common
             - const: hypervisor
             - const: vm
+            - const: actmon
 
         reg:
+          minItems: 3
           items:
             - description: region used by host1x server
             - description: region used by the hypervisor
             - description: region assigned to the virtual machine
+            - description: region used for configuring actmon for host1x clients
 
         interrupts:
           items:
@@ -229,6 +250,18 @@ allOf:
             - const: syncpt6
             - const: syncpt7
             - const: host1x
+
+        clocks:
+          minItems: 1
+          items:
+            - description: host1x clock
+            - description: actmon clock
+
+        clock-names:
+          minItems: 1
+          items:
+            - const: host1x
+            - const: actmon
 
         iommu-map:
           description: Specification of stream IDs available for memory context device
