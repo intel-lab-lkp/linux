@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2022, NVIDIA Corporation.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -22,8 +22,21 @@
 #include "riscv.h"
 #include "vic.h"
 
-#define NVDEC_FALCON_DEBUGINFO			0x1094
+#define NVDEC_FW_MTHD_ADDR_ACTMON_ACTIVE_MASK	0xCAU
+#define NVDEC_FW_MTHD_ADDR_ACTMON_ACTIVE_BORPS	0xCBU
+#define NVDEC_FW_MTHD_ADDR_ACTMON_ACTIVE_WEIGHT	0xC9U
+#define NVDEC_FALCON_UCLASS_METHOD_OFFSET       0x40
+#define NVDEC_FALCON_UCLASS_METHOD_DATA         0x44
+#define NVDEC_FALCON_DEBUGINFO                  0x1094
 #define NVDEC_TFBIF_TRANSCFG			0x2c44
+#define NVDEC_TFBIF_ACTMON_ACTIVE_MASK		0x2c4c
+#define NVDEC_TFBIF_ACTMON_ACTIVE_BORPS		0x2c50
+#define NVDEC_TFBIF_ACTMON_ACTIVE_WEIGHT	0x2c54
+
+#define NVDEC_TFBIF_ACTMON_ACTIVE_MASK_STARVED	BIT(0)
+#define NVDEC_TFBIF_ACTMON_ACTIVE_MASK_STALLED	BIT(1)
+#define NVDEC_TFBIF_ACTMON_ACTIVE_MASK_DELAYED	BIT(2)
+#define NVDEC_TFBIF_ACTMON_ACTIVE_BORPS_ACTIVE	BIT(7)
 
 struct nvdec_config {
 	const char *firmware;
@@ -306,6 +319,56 @@ cleanup:
 	return err;
 }
 
+static void nvdec_actmon_reg_init(struct nvdec *nvdec)
+{
+	if (nvdec->config->has_riscv) {
+		nvdec_writel(nvdec,
+			     NVDEC_FW_MTHD_ADDR_ACTMON_ACTIVE_MASK,
+			     NVDEC_FALCON_UCLASS_METHOD_OFFSET);
+		nvdec_writel(nvdec,
+			     NVDEC_TFBIF_ACTMON_ACTIVE_MASK_DELAYED |
+			     NVDEC_TFBIF_ACTMON_ACTIVE_MASK_STALLED |
+			     NVDEC_TFBIF_ACTMON_ACTIVE_MASK_STARVED,
+			     NVDEC_FALCON_UCLASS_METHOD_DATA);
+		nvdec_writel(nvdec,
+			     NVDEC_FW_MTHD_ADDR_ACTMON_ACTIVE_BORPS,
+			     NVDEC_FALCON_UCLASS_METHOD_OFFSET);
+		nvdec_writel(nvdec,
+			     NVDEC_TFBIF_ACTMON_ACTIVE_BORPS_ACTIVE,
+			     NVDEC_FALCON_UCLASS_METHOD_DATA);
+	} else {
+		nvdec_writel(nvdec,
+			     NVDEC_TFBIF_ACTMON_ACTIVE_MASK_DELAYED |
+			     NVDEC_TFBIF_ACTMON_ACTIVE_MASK_STALLED |
+			     NVDEC_TFBIF_ACTMON_ACTIVE_MASK_STARVED,
+			     NVDEC_TFBIF_ACTMON_ACTIVE_MASK);
+		nvdec_writel(nvdec,
+			     NVDEC_TFBIF_ACTMON_ACTIVE_BORPS_ACTIVE,
+			     NVDEC_TFBIF_ACTMON_ACTIVE_BORPS);
+	}
+}
+
+static void nvdec_count_weight_init(struct nvdec *nvdec, unsigned long rate)
+{
+	const struct nvdec_config *config = nvdec->config;
+	struct host1x_client *client = &nvdec->client.base;
+	u32 weight;
+
+	host1x_actmon_update_client_rate(client, rate, &weight);
+
+	if (!weight)
+		return;
+
+	if (!config->has_riscv) {
+		nvdec_writel(nvdec, weight, NVDEC_TFBIF_ACTMON_ACTIVE_WEIGHT);
+	} else {
+		nvdec_writel(nvdec,
+			     NVDEC_FW_MTHD_ADDR_ACTMON_ACTIVE_WEIGHT,
+			     NVDEC_FALCON_UCLASS_METHOD_OFFSET);
+		nvdec_writel(nvdec, weight, NVDEC_FALCON_UCLASS_METHOD_DATA);
+	}
+}
+
 static __maybe_unused int nvdec_runtime_resume(struct device *dev)
 {
 	struct nvdec *nvdec = dev_get_drvdata(dev);
@@ -331,6 +394,10 @@ static __maybe_unused int nvdec_runtime_resume(struct device *dev)
 			goto disable;
 	}
 
+	nvdec_actmon_reg_init(nvdec);
+	nvdec_count_weight_init(nvdec, clk_get_rate(nvdec->clks[0].clk));
+	host1x_actmon_enable(&nvdec->client.base);
+
 	return 0;
 
 disable:
@@ -345,6 +412,8 @@ static __maybe_unused int nvdec_runtime_suspend(struct device *dev)
 	host1x_channel_stop(nvdec->channel);
 
 	clk_bulk_disable_unprepare(nvdec->num_clks, nvdec->clks);
+
+	host1x_actmon_disable(&nvdec->client.base);
 
 	return 0;
 }
@@ -532,12 +601,20 @@ static int nvdec_probe(struct platform_device *pdev)
 		goto exit_falcon;
 	}
 
+	err = host1x_actmon_register(&nvdec->client.base);
+	if (err < 0) {
+		dev_info(&pdev->dev, "failed to register host1x actmon: %d\n", err);
+		goto exit_client;
+	}
+
 	pm_runtime_enable(dev);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_set_autosuspend_delay(dev, 500);
 
 	return 0;
 
+exit_client:
+	host1x_client_unregister(&nvdec->client.base);
 exit_falcon:
 	falcon_exit(&nvdec->falcon);
 
@@ -549,6 +626,7 @@ static void nvdec_remove(struct platform_device *pdev)
 	struct nvdec *nvdec = platform_get_drvdata(pdev);
 
 	pm_runtime_disable(&pdev->dev);
+	host1x_actmon_unregister(&nvdec->client.base);
 	host1x_client_unregister(&nvdec->client.base);
 	falcon_exit(&nvdec->falcon);
 }
