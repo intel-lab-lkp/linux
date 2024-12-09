@@ -33,7 +33,9 @@ struct eeprom_data {
 	u16 address_mask;
 	u8 num_address_bytes;
 	u8 idx_write_cnt;
+	bool latch;
 	bool read_only;
+	u8 *buffer_latch;
 	u8 buffer[];
 };
 
@@ -49,6 +51,11 @@ static int i2c_slave_eeprom_slave_cb(struct i2c_client *client,
 
 	switch (event) {
 	case I2C_SLAVE_WRITE_RECEIVED:
+		if (eeprom->latch) {
+			spin_lock(&eeprom->buffer_lock);
+			memcpy(eeprom->buffer_latch, eeprom->buffer, eeprom->bin.size);
+			spin_unlock(&eeprom->buffer_lock);
+		}
 		if (eeprom->idx_write_cnt < eeprom->num_address_bytes) {
 			if (eeprom->idx_write_cnt == 0)
 				eeprom->buffer_idx = 0;
@@ -69,7 +76,10 @@ static int i2c_slave_eeprom_slave_cb(struct i2c_client *client,
 		fallthrough;
 	case I2C_SLAVE_READ_REQUESTED:
 		spin_lock(&eeprom->buffer_lock);
-		*val = eeprom->buffer[eeprom->buffer_idx & eeprom->address_mask];
+		if (eeprom->latch)
+			*val = eeprom->buffer_latch[eeprom->buffer_idx & eeprom->address_mask];
+		else
+			*val = eeprom->buffer[eeprom->buffer_idx & eeprom->address_mask];
 		spin_unlock(&eeprom->buffer_lock);
 		/*
 		 * Do not increment buffer_idx here, because we don't know if
@@ -151,6 +161,17 @@ static int i2c_slave_eeprom_probe(struct i2c_client *client)
 	eeprom = devm_kzalloc(&client->dev, sizeof(struct eeprom_data) + size, GFP_KERNEL);
 	if (!eeprom)
 		return -ENOMEM;
+
+	if (of_property_read_bool(client->adapter->dev.of_node, "use-latch")) {
+		dev_info(&client->dev, "Using latch mode");
+		eeprom->latch = true;
+		eeprom->buffer_latch = devm_kzalloc(&client->dev, size, GFP_KERNEL);
+		if (!eeprom->buffer_latch)
+			return -ENOMEM;
+	} else {
+		eeprom->buffer_latch = NULL;
+		eeprom->latch = false;
+	}
 
 	eeprom->num_address_bytes = flag_addr16 ? 2 : 1;
 	eeprom->address_mask = size - 1;
