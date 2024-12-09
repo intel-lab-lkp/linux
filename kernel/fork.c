@@ -524,6 +524,7 @@ static void vma_copy(const struct vm_area_struct *src, struct vm_area_struct *de
 	 * will be reinitialized.
 	 */
 	data_race(memcpy(dest, src, sizeof(*dest)));
+	INIT_LIST_HEAD(&dest->anon_vma_chain);
 }
 
 #endif /* CONFIG_PER_VMA_LOCK */
