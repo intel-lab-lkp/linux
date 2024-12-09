@@ -20939,6 +20939,7 @@ T:	git://git.kernel.org/pub/scm/linux/kernel/git/tj/sched_ext.git
 F:	include/linux/sched/ext.h
 F:	kernel/sched/ext.h
 F:	kernel/sched/ext.c
+F:	kernel/sched/ext_idle.c
 F:	tools/sched_ext/
 F:	tools/testing/selftests/sched_ext
 
