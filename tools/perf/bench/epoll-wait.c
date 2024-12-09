@@ -420,7 +420,7 @@ static int cmpworker(const void *p1, const void *p2)
 
 	struct worker *w1 = (struct worker *) p1;
 	struct worker *w2 = (struct worker *) p2;
-	return w1->tid > w2->tid;
+	return w1->tid > w2->tid ? 1 : -1;
 }
 
 int bench_epoll_wait(int argc, const char **argv)
