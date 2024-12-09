@@ -247,7 +247,16 @@ static inline bool vma_can_userfault(struct vm_area_struct *vma,
 	    vma_is_shmem(vma);
 }
 
-extern int dup_userfaultfd(struct vm_area_struct *, struct list_head *);
+int __dup_userfaultfd(struct vm_area_struct *, struct list_head *);
+static inline int dup_userfaultfd(struct vm_area_struct *vma,
+				  struct list_head *fcs)
+{
+	if (likely(!vma->vm_userfaultfd_ctx.ctx))
+		return 0;
+
+	return __dup_userfaultfd(vma, fcs);
+}
+
 extern void dup_userfaultfd_complete(struct list_head *);
 void dup_userfaultfd_fail(struct list_head *);
 
