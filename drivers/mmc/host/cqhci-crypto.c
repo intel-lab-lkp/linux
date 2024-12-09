@@ -28,15 +28,12 @@ cqhci_host_from_crypto_profile(struct blk_crypto_profile *profile)
 	return mmc_from_crypto_profile(profile)->cqe_private;
 }
 
-static int cqhci_crypto_program_key(struct cqhci_host *cq_host,
-				    const union cqhci_crypto_cfg_entry *cfg,
-				    int slot)
+static void cqhci_crypto_program_key(struct cqhci_host *cq_host,
+				     const union cqhci_crypto_cfg_entry *cfg,
+				     int slot)
 {
 	u32 slot_offset = cq_host->crypto_cfg_register + slot * sizeof(*cfg);
 	int i;
-
-	if (cq_host->ops->program_key)
-		return cq_host->ops->program_key(cq_host, cfg, slot);
 
 	/* Clear CFGE */
 	cqhci_writel(cq_host, 0, slot_offset + 16 * sizeof(cfg->reg_val[0]));
@@ -52,7 +49,6 @@ static int cqhci_crypto_program_key(struct cqhci_host *cq_host,
 	/* Write dword 16, which includes the new value of CFGE */
 	cqhci_writel(cq_host, le32_to_cpu(cfg->reg_val[16]),
 		     slot_offset + 16 * sizeof(cfg->reg_val[0]));
-	return 0;
 }
 
 static int cqhci_crypto_keyslot_program(struct blk_crypto_profile *profile,
@@ -69,7 +65,6 @@ static int cqhci_crypto_keyslot_program(struct blk_crypto_profile *profile,
 	int i;
 	int cap_idx = -1;
 	union cqhci_crypto_cfg_entry cfg = {};
-	int err;
 
 	BUILD_BUG_ON(CQHCI_CRYPTO_KEY_SIZE_INVALID != 0);
 	for (i = 0; i < cq_host->crypto_capabilities.num_crypto_cap; i++) {
@@ -96,10 +91,10 @@ static int cqhci_crypto_keyslot_program(struct blk_crypto_profile *profile,
 		memcpy(cfg.crypto_key, key->raw, key->size);
 	}
 
-	err = cqhci_crypto_program_key(cq_host, &cfg, slot);
+	cqhci_crypto_program_key(cq_host, &cfg, slot);
 
 	memzero_explicit(&cfg, sizeof(cfg));
-	return err;
+	return 0;
 }
 
 static int cqhci_crypto_clear_keyslot(struct cqhci_host *cq_host, int slot)
@@ -110,7 +105,8 @@ static int cqhci_crypto_clear_keyslot(struct cqhci_host *cq_host, int slot)
 	 */
 	union cqhci_crypto_cfg_entry cfg = {};
 
-	return cqhci_crypto_program_key(cq_host, &cfg, slot);
+	cqhci_crypto_program_key(cq_host, &cfg, slot);
+	return 0;
 }
 
 static int cqhci_crypto_keyslot_evict(struct blk_crypto_profile *profile,
@@ -177,6 +173,9 @@ int cqhci_crypto_init(struct cqhci_host *cq_host)
 	    !(cqhci_readl(cq_host, CQHCI_CAP) & CQHCI_CAP_CS))
 		goto out;
 
+	if (cq_host->ops->uses_custom_crypto_profile)
+		goto profile_initialized;
+
 	cq_host->crypto_capabilities.reg_val =
 			cpu_to_le32(cqhci_readl(cq_host, CQHCI_CCAP));
 
@@ -225,9 +224,11 @@ int cqhci_crypto_init(struct cqhci_host *cq_host)
 			cq_host->crypto_cap_array[cap_idx].sdus_mask * 512;
 	}
 
+profile_initialized:
+
 	/* Clear all the keyslots so that we start in a known state. */
 	for (slot = 0; slot < num_keyslots; slot++)
-		cqhci_crypto_clear_keyslot(cq_host, slot);
+		profile->ll_ops.keyslot_evict(profile, NULL, slot);
 
 	/* CQHCI crypto requires the use of 128-bit task descriptors. */
 	cq_host->caps |= CQHCI_TASK_DESC_SZ_128;
