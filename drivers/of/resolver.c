@@ -222,11 +222,33 @@ static int get_phandle_from_symbols_node(const struct device_node *tree_symbols,
 	const char *refpath;
 	int err;
 
+	if (!tree_symbols)
+		return -ENOENT;
+
 	err = of_property_read_string(tree_symbols, symbol_name, &refpath);
 	if (err)
 		return err;
 
 	refnode = of_find_node_by_path(refpath);
+	if (!refnode)
+		return -ENOENT;
+
+	*phandle = refnode->phandle;
+	of_node_put(refnode);
+
+	return 0;
+}
+
+static int get_phandle_from_export_node(const struct device_node *export_symbols,
+					const char *symbol_name,
+					phandle *phandle)
+{
+	struct device_node *refnode;
+
+	if (!export_symbols)
+		return -ENOENT;
+
+	refnode = of_parse_phandle(export_symbols, symbol_name, 0);
 	if (!refnode)
 		return -ENOENT;
 
@@ -320,7 +342,7 @@ int of_resolve_phandles(struct device_node *overlay, const struct device_node *e
 	}
 
 	tree_symbols = of_find_node_by_path("/__symbols__");
-	if (!tree_symbols) {
+	if (!tree_symbols && !export_symbols) {
 		pr_err("no symbols in root of device tree.\n");
 		err = -EINVAL;
 		goto out;
@@ -332,10 +354,13 @@ int of_resolve_phandles(struct device_node *overlay, const struct device_node *e
 		if (!of_prop_cmp(prop->name, "name"))
 			continue;
 
-		err = get_phandle_from_symbols_node(tree_symbols, prop->name,
-						    &phandle);
+		err = get_phandle_from_export_node(export_symbols, prop->name,
+						   &phandle);
+		if (err)
+			err = get_phandle_from_symbols_node(tree_symbols, prop->name,
+							    &phandle);
 		if (err) {
-			pr_err("node label '%s' not found or invalid in live devicetree symbols table\n",
+			pr_err("node label '%s' not found or invalid in live devicetree symbols or export tables\n",
 			       prop->name);
 			goto out;
 		}
