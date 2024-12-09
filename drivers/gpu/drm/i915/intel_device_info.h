@@ -97,7 +97,7 @@ enum intel_platform {
  * it is fine for the same bit to be used on multiple parent platforms.
  */
 
-#define INTEL_SUBPLATFORM_BITS (3)
+#define INTEL_SUBPLATFORM_BITS (4)
 #define INTEL_SUBPLATFORM_MASK (BIT(INTEL_SUBPLATFORM_BITS) - 1)
 
 /* HSW/BDW/SKL/KBL/CFL */
@@ -131,6 +131,7 @@ enum intel_platform {
 #define INTEL_SUBPLATFORM_ARL_H	0
 #define INTEL_SUBPLATFORM_ARL_U	1
 #define INTEL_SUBPLATFORM_ARL_S	2
+#define INTEL_SUBPLATFORM_MTL_U	3
 
 enum intel_ppgtt_type {
 	INTEL_PPGTT_NONE = I915_GEM_PPGTT_NONE,

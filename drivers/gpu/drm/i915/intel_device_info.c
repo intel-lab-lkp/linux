@@ -212,6 +212,10 @@ static const u16 subplatform_arl_s_ids[] = {
 	INTEL_ARL_S_IDS(ID),
 };
 
+static const u16 subplatform_mtl_u_ids[] = {
+	INTEL_MTL_U_IDS(ID),
+};
+
 static bool find_devid(u16 id, const u16 *p, unsigned int num)
 {
 	for (; num; num--, p++) {
@@ -278,6 +282,9 @@ static void intel_device_info_subplatform_init(struct drm_i915_private *i915)
 	} else if (find_devid(devid, subplatform_arl_s_ids,
 			      ARRAY_SIZE(subplatform_arl_s_ids))) {
 		mask = BIT(INTEL_SUBPLATFORM_ARL_S);
+	} else if (find_devid(devid, subplatform_mtl_u_ids,
+			      ARRAY_SIZE(subplatform_mtl_u_ids))) {
+		mask = BIT(INTEL_SUBPLATFORM_MTL_U);
 	}
 
 	GEM_BUG_ON(mask & ~INTEL_SUBPLATFORM_MASK);
