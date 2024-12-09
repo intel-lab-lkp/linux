@@ -81,9 +81,9 @@ do_syscall:
 	stp	x27, x28, [sp, #96]
 
 	// Set SVCR if we're doing SME
-	cbz	x1, 1f
 	adrp	x2, svcr_in
 	ldr	x2, [x2, :lo12:svcr_in]
+	cbz	x1, 1f
 	msr	S3_3_C4_C2_2, x2
 1:
 
