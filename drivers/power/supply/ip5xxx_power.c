@@ -541,7 +541,7 @@ static int ip5xxx_battery_set_property(struct power_supply *psy,
 {
 	struct ip5xxx *ip5xxx = power_supply_get_drvdata(psy);
 	unsigned int rval;
-	int ret, vmax;
+	int ret, vmax = 0;
 
 	ret = ip5xxx_initialize(psy);
 	if (ret)
