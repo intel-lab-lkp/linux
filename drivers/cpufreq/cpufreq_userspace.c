@@ -21,6 +21,30 @@ struct userspace_policy {
 	struct mutex mutex;
 };
 
+static int cpufreq_userspace_target_freq(struct cpufreq_policy *policy,
+			unsigned int target_freq, unsigned int relation)
+{
+	int ret;
+
+	if (policy->fast_switch_enabled) {
+		unsigned int idx;
+
+		target_freq = clamp_val(target_freq, policy->min, policy->max);
+
+		if (!policy->freq_table)
+			return target_freq;
+
+		idx = cpufreq_frequency_table_target(policy, target_freq, relation);
+		policy->cached_resolved_idx = idx;
+		policy->cached_target_freq = target_freq;
+		ret = !cpufreq_driver_fast_switch(policy, policy->freq_table[idx].frequency);
+	} else {
+		ret = __cpufreq_driver_target(policy, target_freq, relation);
+	}
+
+	return ret;
+}
+
 /**
  * cpufreq_set - set the CPU frequency
  * @policy: pointer to policy struct where freq is being set
@@ -41,7 +65,7 @@ static int cpufreq_set(struct cpufreq_policy *policy, unsigned int freq)
 
 	userspace->setspeed = freq;
 
-	ret = __cpufreq_driver_target(policy, freq, CPUFREQ_RELATION_L);
+	ret = cpufreq_userspace_target_freq(policy, freq, CPUFREQ_RELATION_L);
  err:
 	mutex_unlock(&userspace->mutex);
 	return ret;
@@ -62,6 +86,8 @@ static int cpufreq_userspace_policy_init(struct cpufreq_policy *policy)
 
 	mutex_init(&userspace->mutex);
 
+	cpufreq_enable_fast_switch(policy);
+
 	policy->governor_data = userspace;
 	return 0;
 }
@@ -72,6 +98,7 @@ static int cpufreq_userspace_policy_init(struct cpufreq_policy *policy)
  */
 static void cpufreq_userspace_policy_exit(struct cpufreq_policy *policy)
 {
+	cpufreq_disable_fast_switch(policy);
 	kfree(policy->governor_data);
 	policy->governor_data = NULL;
 }
@@ -112,13 +139,13 @@ static void cpufreq_userspace_policy_limits(struct cpufreq_policy *policy)
 		 policy->cpu, policy->min, policy->max, policy->cur, userspace->setspeed);
 
 	if (policy->max < userspace->setspeed)
-		__cpufreq_driver_target(policy, policy->max,
+		cpufreq_userspace_target_freq(policy, policy->max,
 					CPUFREQ_RELATION_H);
 	else if (policy->min > userspace->setspeed)
-		__cpufreq_driver_target(policy, policy->min,
+		cpufreq_userspace_target_freq(policy, policy->min,
 					CPUFREQ_RELATION_L);
 	else
-		__cpufreq_driver_target(policy, userspace->setspeed,
+		cpufreq_userspace_target_freq(policy, userspace->setspeed,
 					CPUFREQ_RELATION_L);
 
 	mutex_unlock(&userspace->mutex);
