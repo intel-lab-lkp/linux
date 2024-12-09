@@ -341,9 +341,11 @@ static int tahvo_usb_probe(struct platform_device *pdev)
 
 	mutex_init(&tu->serialize);
 
-	tu->ick = devm_clk_get(&pdev->dev, "usb_l4_ick");
-	if (!IS_ERR(tu->ick))
-		clk_enable(tu->ick);
+	tu->ick = devm_clk_get_enabled(&pdev->dev, "usb_l4_ick");
+	if (!IS_ERR(tu->ick)) {
+		dev_err(&pdev->dev, "failed to get and enable clock\n");
+		return PTR_ERR(tu->ick);
+	}
 
 	/*
 	 * Set initial state, so that we generate kevents only on state changes.
@@ -353,15 +355,14 @@ static int tahvo_usb_probe(struct platform_device *pdev)
 	tu->extcon = devm_extcon_dev_allocate(&pdev->dev, tahvo_cable);
 	if (IS_ERR(tu->extcon)) {
 		dev_err(&pdev->dev, "failed to allocate memory for extcon\n");
-		ret = PTR_ERR(tu->extcon);
-		goto err_disable_clk;
+		return PTR_ERR(tu->extcon);
 	}
 
 	ret = devm_extcon_dev_register(&pdev->dev, tu->extcon);
 	if (ret) {
 		dev_err(&pdev->dev, "could not register extcon device: %d\n",
 			ret);
-		goto err_disable_clk;
+		return ret;
 	}
 
 	/* Set the initial cable state. */
@@ -384,7 +385,7 @@ static int tahvo_usb_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(&pdev->dev, "cannot register USB transceiver: %d\n",
 			ret);
-		goto err_disable_clk;
+		return ret;
 	}
 
 	dev_set_drvdata(&pdev->dev, tu);
@@ -405,9 +406,6 @@ static int tahvo_usb_probe(struct platform_device *pdev)
 
 err_remove_phy:
 	usb_remove_phy(&tu->phy);
-err_disable_clk:
-	if (!IS_ERR(tu->ick))
-		clk_disable(tu->ick);
 
 	return ret;
 }
@@ -418,8 +416,6 @@ static void tahvo_usb_remove(struct platform_device *pdev)
 
 	free_irq(tu->irq, tu);
 	usb_remove_phy(&tu->phy);
-	if (!IS_ERR(tu->ick))
-		clk_disable(tu->ick);
 }
 
 static struct platform_driver tahvo_usb_driver = {
