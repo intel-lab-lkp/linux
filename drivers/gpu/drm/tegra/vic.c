@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015, NVIDIA Corporation.
+ * SPDX-FileCopyrightText: Copyright (c) 2015-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -302,6 +302,28 @@ cleanup:
 	return err;
 }
 
+static void vic_actmon_reg_init(struct vic *vic)
+{
+	vic_writel(vic,
+		   VIC_TFBIF_ACTMON_ACTIVE_MASK_STARVED |
+		   VIC_TFBIF_ACTMON_ACTIVE_MASK_STALLED |
+		   VIC_TFBIF_ACTMON_ACTIVE_MASK_DELAYED,
+		   NV_PVIC_TFBIF_ACTMON_ACTIVE_MASK);
+	vic_writel(vic,
+		   VIC_TFBIF_ACTMON_ACTIVE_BORPS_ACTIVE,
+		   NV_PVIC_TFBIF_ACTMON_ACTIVE_BORPS);
+}
+
+static void vic_count_weight_init(struct vic *vic, unsigned long rate)
+{
+	struct host1x_client *client = &vic->client.base;
+	u32 weight = 0;
+
+	host1x_actmon_update_client_rate(client, rate, &weight);
+
+	if (weight)
+		vic_writel(vic, weight, NV_PVIC_TFBIF_ACTMON_ACTIVE_WEIGHT);
+}
 
 static int __maybe_unused vic_runtime_resume(struct device *dev)
 {
@@ -328,6 +350,10 @@ static int __maybe_unused vic_runtime_resume(struct device *dev)
 	if (err < 0)
 		goto assert;
 
+	vic_actmon_reg_init(vic);
+	vic_count_weight_init(vic, clk_get_rate(vic->clk));
+	host1x_actmon_enable(&vic->client.base);
+
 	return 0;
 
 assert:
@@ -351,6 +377,8 @@ static int __maybe_unused vic_runtime_suspend(struct device *dev)
 	usleep_range(2000, 4000);
 
 	clk_disable_unprepare(vic->clk);
+
+	host1x_actmon_disable(&vic->client.base);
 
 	return 0;
 }
@@ -520,12 +548,20 @@ static int vic_probe(struct platform_device *pdev)
 		goto exit_falcon;
 	}
 
+	err = host1x_actmon_register(&vic->client.base);
+	if (err < 0) {
+		dev_info(&pdev->dev, "failed to register host1x actmon: %d\n", err);
+		goto exit_client;
+	}
+
 	pm_runtime_enable(dev);
 	pm_runtime_use_autosuspend(dev);
 	pm_runtime_set_autosuspend_delay(dev, 500);
 
 	return 0;
 
+exit_client:
+	host1x_client_unregister(&vic->client.base);
 exit_falcon:
 	falcon_exit(&vic->falcon);
 
@@ -537,6 +573,7 @@ static void vic_remove(struct platform_device *pdev)
 	struct vic *vic = platform_get_drvdata(pdev);
 
 	pm_runtime_disable(&pdev->dev);
+	host1x_actmon_unregister(&vic->client.base);
 	host1x_client_unregister(&vic->client.base);
 	falcon_exit(&vic->falcon);
 }
