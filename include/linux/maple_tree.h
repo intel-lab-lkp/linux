@@ -268,10 +268,22 @@ struct maple_tree {
 #define DEFINE_MTREE(name)						\
 	struct maple_tree name = MTREE_INIT(name, 0)
 
-#define mtree_lock(mt)		spin_lock((&(mt)->ma_lock))
+static __always_inline void mtree_lock(struct maple_tree *mt)
+{
+	if (mt->ma_flags & MT_FLAGS_LOCK_IRQ)
+		spin_lock_irq(&mt->ma_lock);
+	else
+		spin_lock(&mt->ma_lock);
+}
+static __always_inline void mtree_unlock(struct maple_tree *mt)
+{
+	if (mt->ma_flags & MT_FLAGS_LOCK_IRQ)
+		spin_unlock_irq(&mt->ma_lock);
+	else
+		spin_unlock(&mt->ma_lock);
+}
 #define mtree_lock_nested(mas, subclass) \
 		spin_lock_nested((&(mt)->ma_lock), subclass)
-#define mtree_unlock(mt)	spin_unlock((&(mt)->ma_lock))
 
 /*
  * The Maple Tree squeezes various bits in at various points which aren't
