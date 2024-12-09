@@ -1899,7 +1899,7 @@ static int __init unittest_data_add(void)
 	 */
 	of_overlay_mutex_lock();
 
-	rc = of_resolve_phandles(unittest_data_node);
+	rc = of_resolve_phandles(unittest_data_node, NULL);
 	if (rc) {
 		pr_err("%s: Failed to resolve phandles (rc=%i)\n", __func__, rc);
 		of_overlay_mutex_unlock();
@@ -3794,7 +3794,7 @@ static __init void of_unittest_overlay_high_level(void)
 	 * because kmalloc() was not yet available.
 	 */
 	of_overlay_mutex_lock();
-	of_resolve_phandles(overlay_base_root);
+	of_resolve_phandles(overlay_base_root, NULL);
 	of_overlay_mutex_unlock();
 
 

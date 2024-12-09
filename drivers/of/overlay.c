@@ -915,7 +915,7 @@ static int of_overlay_apply(struct overlay_changeset *ovcs,
 {
 	int ret = 0, ret_revert, ret_tmp;
 
-	ret = of_resolve_phandles(ovcs->overlay_root);
+	ret = of_resolve_phandles(ovcs->overlay_root, NULL);
 	if (ret)
 		goto out;
 

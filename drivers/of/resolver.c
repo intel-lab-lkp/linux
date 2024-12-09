@@ -239,7 +239,8 @@ static int get_phandle_from_symbols_node(const struct device_node *tree_symbols,
 /**
  * of_resolve_phandles - Relocate and resolve overlay against live tree
  *
- * @overlay:	Pointer to devicetree overlay to relocate and resolve
+ * @overlay:		Pointer to devicetree overlay to relocate and resolve
+ * @export_symbols:	Pointer to devicetree export symbols node.
  *
  * Modify (relocate) values of local phandles in @overlay to a range that
  * does not conflict with the live expanded devicetree.  Update references
@@ -259,6 +260,10 @@ static int get_phandle_from_symbols_node(const struct device_node *tree_symbols,
  * corresponding to that symbol in the live tree.  Update the references in
  * the overlay with the phandle values in the live tree.
  *
+ * @export_symbols can be use in this references update. The resolver tries
+ * first to find a match in the @export_symbols. If not found, it uses the
+ * "__symbol__" node in the live tree.
+ *
  * @overlay must be detached.
  *
  * Resolving and applying @overlay to the live expanded devicetree must be
@@ -269,7 +274,7 @@ static int get_phandle_from_symbols_node(const struct device_node *tree_symbols,
  *
  * Return: %0 on success or a negative error value on error.
  */
-int of_resolve_phandles(struct device_node *overlay)
+int of_resolve_phandles(struct device_node *overlay, const struct device_node *export_symbols)
 {
 	struct device_node *child, *local_fixups, *overlay_fixups;
 	struct device_node *tree_symbols;
