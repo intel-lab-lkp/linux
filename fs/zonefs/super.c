@@ -791,7 +791,7 @@ static int zonefs_readdir_zgroup(struct file *file,
 	int fname_len;
 	char *fname;
 	ino_t ino;
-	int f;
+	unsigned int f;
 
 	/*
 	 * The size of zone group directories is equal to the number
