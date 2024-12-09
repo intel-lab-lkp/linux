@@ -73,6 +73,7 @@ Contents:
    l2tp
    lapb-module
    mac80211-injection
+   memory-provider
    mctp
    mpls-sysctl
    mptcp
