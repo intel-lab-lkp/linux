@@ -61,6 +61,9 @@
 	FN(FQ_BAND_LIMIT)		\
 	FN(FQ_HORIZON_LIMIT)		\
 	FN(FQ_FLOW_LIMIT)		\
+	FN(CAKE_CONGESTED)		\
+	FN(CAKE_FLOOD)			\
+	FN(CAKE_OVERLIMIT)		\
 	FN(CPU_BACKLOG)			\
 	FN(XDP)				\
 	FN(TC_INGRESS)			\
@@ -329,6 +332,21 @@ enum skb_drop_reason {
 	 * exceeds its limits.
 	 */
 	SKB_DROP_REASON_FQ_FLOW_LIMIT,
+	/**
+	 * @SKB_DROP_REASON_CAKE_CONGESTED: dropped by the CAKE qdisc AQM
+	 * algorithm due to congestion.
+	 */
+	SKB_DROP_REASON_CAKE_CONGESTED,
+	/**
+	 * @SKB_DROP_REASON_CAKE_FLOOD: dropped by the flood protection part of
+	 * CAKE qdisc AQM algorithm (BLUE).
+	 */
+	SKB_DROP_REASON_CAKE_FLOOD,
+	/**
+	 * @SKB_DROP_REASON_CAKE_OVERLIMIT: dropped by CAKE qdisc when a qdisc
+	 * instance exceeds its total buffer size limit.
+	 */
+	SKB_DROP_REASON_CAKE_OVERLIMIT,
 	/**
 	 * @SKB_DROP_REASON_CPU_BACKLOG: failed to enqueue the skb to the per CPU
 	 * backlog queue. This can be caused by backlog queue full (see
