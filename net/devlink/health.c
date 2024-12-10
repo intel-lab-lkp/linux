@@ -1270,7 +1270,7 @@ void devlink_fmsg_dump_skb(struct devlink_fmsg *fmsg, const struct sk_buff *skb)
 			 has_trans ? skb_network_header_len(skb) : -1);
 	devlink_fmsg_put(fmsg, "transport hdr",
 			 has_trans ? skb->transport_header : -1);
-	devlink_fmsg_put(fmsg, "csum", skb->csum);
+	devlink_fmsg_put(fmsg, "csum", (__force u32)skb->csum);
 	devlink_fmsg_put(fmsg, "csum_ip_summed", (u8)skb->ip_summed);
 	devlink_fmsg_put(fmsg, "csum_complete_sw", !!skb->csum_complete_sw);
 	devlink_fmsg_put(fmsg, "csum_valid", !!skb->csum_valid);
