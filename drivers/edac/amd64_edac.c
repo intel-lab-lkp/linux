@@ -3362,7 +3362,7 @@ static bool dct_ecc_enabled(struct amd64_pvt *pvt)
 
 static bool umc_ecc_enabled(struct amd64_pvt *pvt)
 {
-	u8 umc_en_mask = 0, ecc_en_mask = 0;
+	int umc_en_mask = 0, ecc_en_mask = 0;
 	u16 nid = pvt->mc_node_id;
 	struct amd64_umc *umc;
 	u8 ecc_en = 0, i;
