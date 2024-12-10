@@ -1254,7 +1254,8 @@ out:
 struct etr_buf *tmc_etr_get_buffer(struct coresight_device *csdev,
 				   enum cs_mode mode, void *data)
 {
-	struct perf_output_handle *handle = data;
+	struct cs_sink_data *sink_data = (struct cs_sink_data *)data;
+	struct perf_output_handle *handle = sink_data->handle;
 	struct etr_perf_buffer *etr_perf;
 
 	switch (mode) {
@@ -1648,7 +1649,8 @@ static int tmc_enable_etr_sink_perf(struct coresight_device *csdev, void *data)
 	pid_t pid;
 	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
-	struct perf_output_handle *handle = data;
+	struct cs_sink_data *sink_data = (struct cs_sink_data *)data;
+	struct perf_output_handle *handle = sink_data->handle;
 	struct etr_perf_buffer *etr_perf = etm_perf_sink_config(handle);
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);

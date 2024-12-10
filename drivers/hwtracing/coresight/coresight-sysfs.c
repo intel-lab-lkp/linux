@@ -168,6 +168,7 @@ int coresight_enable_sysfs(struct coresight_device *csdev)
 	int cpu, ret = 0;
 	struct coresight_device *sink;
 	struct list_head *path;
+	struct cs_sink_data *sink_data;
 	enum coresight_dev_subtype_source subtype;
 	u32 hash;
 
@@ -209,7 +210,14 @@ int coresight_enable_sysfs(struct coresight_device *csdev)
 		goto out;
 	}
 
-	ret = coresight_enable_path(path, CS_MODE_SYSFS, NULL);
+	sink_data = kzalloc(sizeof(*sink_data), GFP_KERNEL);
+	if (!sink_data) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	sink_data->traceid = coresight_read_traceid(path, CS_MODE_SYSFS, NULL);
+	sink_data->sink = sink;
+	ret = coresight_enable_path(path, CS_MODE_SYSFS, sink_data);
 	if (ret)
 		goto err_path;
 
@@ -246,15 +254,17 @@ int coresight_enable_sysfs(struct coresight_device *csdev)
 		break;
 	}
 
+	kfree(sink_data);
 out:
 	mutex_unlock(&coresight_mutex);
 	return ret;
 
 err_source:
-	coresight_disable_path(path);
+	coresight_disable_path(path, sink_data);
 
 err_path:
 	coresight_release_path(path);
+	kfree(sink_data);
 	goto out;
 }
 EXPORT_SYMBOL_GPL(coresight_enable_sysfs);
@@ -263,6 +273,7 @@ void coresight_disable_sysfs(struct coresight_device *csdev)
 {
 	int cpu, ret;
 	struct list_head *path = NULL;
+	struct cs_sink_data *sink_data = NULL;
 	u32 hash;
 
 	mutex_lock(&coresight_mutex);
@@ -272,6 +283,10 @@ void coresight_disable_sysfs(struct coresight_device *csdev)
 		goto out;
 
 	if (!coresight_disable_source_sysfs(csdev, NULL))
+		goto out;
+
+	sink_data = kzalloc(sizeof(*sink_data), GFP_KERNEL);
+	if (!sink_data)
 		goto out;
 
 	switch (csdev->subtype.source_subtype) {
@@ -297,8 +312,11 @@ void coresight_disable_sysfs(struct coresight_device *csdev)
 		break;
 	}
 
-	coresight_disable_path(path);
+	sink_data->sink = coresight_find_activated_sysfs_sink(csdev);
+	sink_data->traceid = coresight_read_traceid(path, CS_MODE_SYSFS, NULL);
+	coresight_disable_path(path, sink_data);
 	coresight_release_path(path);
+	kfree(sink_data);
 
 out:
 	mutex_unlock(&coresight_mutex);

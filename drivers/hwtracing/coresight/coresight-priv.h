@@ -105,6 +105,15 @@ struct cs_buffers {
 	void			**data_pages;
 };
 
+/**
+ * struct cs_sink_data - data used by coresight_enable_path/coresight_disable_path
+ */
+struct cs_sink_data {
+	struct perf_output_handle	*handle;
+	struct coresight_device		*sink;
+	u8				traceid;
+};
+
 static inline void coresight_insert_barrier_packet(void *buf)
 {
 	if (buf)
@@ -129,9 +138,11 @@ static inline void CS_UNLOCK(void __iomem *addr)
 	} while (0);
 }
 
-void coresight_disable_path(struct list_head *path);
+void coresight_disable_path(struct list_head *path, void *sink_data);
 int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 			  void *sink_data);
+int coresight_read_traceid(struct list_head *path, enum cs_mode mode,
+			   struct coresight_trace_id_map *id_map);
 struct coresight_device *coresight_get_sink(struct list_head *path);
 struct coresight_device *coresight_get_sink_by_id(u32 id);
 struct coresight_device *
