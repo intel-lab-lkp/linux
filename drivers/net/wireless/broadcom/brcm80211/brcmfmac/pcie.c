@@ -963,6 +963,7 @@ static irqreturn_t brcmf_pcie_isr_thread(int irq, void *arg)
 
 static int brcmf_pcie_request_irq(struct brcmf_pciedev_info *devinfo)
 {
+	int ret;
 	struct pci_dev *pdev = devinfo->pdev;
 	struct brcmf_bus *bus = dev_get_drvdata(&pdev->dev);
 
@@ -970,16 +971,21 @@ static int brcmf_pcie_request_irq(struct brcmf_pciedev_info *devinfo)
 
 	brcmf_dbg(PCIE, "Enter\n");
 
-	pci_enable_msi(pdev);
-	if (request_threaded_irq(pdev->irq, brcmf_pcie_quick_check_isr,
-				 brcmf_pcie_isr_thread, IRQF_SHARED,
-				 "brcmf_pcie_intr", devinfo)) {
+	ret = pci_enable_msi(pdev);
+	if (ret)
+		return ret;
+
+	ret = request_threaded_irq(pdev->irq, brcmf_pcie_quick_check_isr,
+				   brcmf_pcie_isr_thread, IRQF_SHARED,
+				   "brcmf_pcie_intr", devinfo);
+	if (ret) {
 		pci_disable_msi(pdev);
 		brcmf_err(bus, "Failed to request IRQ %d\n", pdev->irq);
-		return -EIO;
+	} else {
+		devinfo->irq_allocated = true;
 	}
-	devinfo->irq_allocated = true;
-	return 0;
+
+	return ret;
 }
 
 
