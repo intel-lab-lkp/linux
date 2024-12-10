@@ -10,6 +10,7 @@
 #include <linux/seq_buf.h>
 #include <linux/seq_file.h>
 #include <linux/vmalloc.h>
+#include <linux/math.h>
 
 #define ALLOCINFO_FILE_NAME		"allocinfo"
 #define MODULE_ALLOC_TAG_VMAP_SIZE	(100000UL * sizeof(struct alloc_tag))
@@ -422,6 +423,17 @@ static int vm_module_tags_populate(void)
 			return -ENOMEM;
 		}
 		vm_module_tags->nr_pages += nr;
+
+		/*
+		 * Kasan allocates 1 byte of shadow for every 8 bytes of data.
+		 * When kasan_alloc_module_shadow allocates shadow memory,
+		 * it does so in units of pages.
+		 * Therefore, here we need to align to MODULE_ALIGN.
+		 */
+		if ((phys_end & (MODULE_ALIGN - 1)) == 0)
+			kasan_alloc_module_shadow((void *)phys_end,
+						  round_up(nr << PAGE_SHIFT, MODULE_ALIGN),
+						  GFP_KERNEL);
 	}
 
 	/*
