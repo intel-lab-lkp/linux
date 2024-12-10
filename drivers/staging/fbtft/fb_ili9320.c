@@ -35,7 +35,7 @@ static int init_display(struct fbtft_par *par)
 	par->fbtftops.reset(par);
 
 	devcode = read_devicecode(par);
-	if ((devcode != 0x0000) && (devcode != 0x9320))
+	if (devcode != 0x0000 && devcode != 0x9320)
 		dev_warn(par->info->device,
 			 "Unrecognized Device code: 0x%04X (expected 0x9320)\n",
 			devcode);
