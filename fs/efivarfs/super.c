@@ -184,6 +184,26 @@ static struct dentry *efivarfs_alloc_dentry(struct dentry *parent, char *name)
 	return ERR_PTR(-ENOMEM);
 }
 
+bool efivarfs_variable_is_present(efi_char16_t *variable_name,
+				  efi_guid_t *vendor, void *data)
+{
+	char *name = efivar_get_utf8name(variable_name, vendor);
+	struct super_block *sb = data;
+	struct dentry *dentry;
+	struct qstr qstr;
+
+	if (!name)
+		return true;
+
+	qstr.name = name;
+	qstr.len = strlen(name);
+	dentry = d_hash_and_lookup(sb->s_root, &qstr);
+	kfree(name);
+	if (dentry)
+		dput(dentry);
+	return dentry != NULL;
+}
+
 static int efivarfs_callback(efi_char16_t *name16, efi_guid_t vendor,
 			     unsigned long name_size, void *data,
 			     struct list_head *list)
