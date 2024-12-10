@@ -64,6 +64,26 @@ void iio_channel_release(struct iio_channel *chan);
  */
 struct iio_channel *devm_iio_channel_get(struct device *dev,
 					 const char *consumer_channel);
+
+/**
+ * devm_iio_channel_get_sys() - Resource managed version of
+				iio_channel_get_sys().
+ * @dev:		Pointer to consumer device. Device name must match
+ *			the name of the device as provided in the iio_map
+ *			with which the desired provider to consumer mapping
+ *			was registered.
+ * @consumer_channel:	Unique name to identify the channel on the consumer
+ *			side. This typically describes the channels use within
+ *			the consumer. E.g. 'battery_voltage'
+ *
+ * Returns a pointer to negative errno if it is not able to get the iio channel
+ * otherwise returns valid pointer for iio channel.
+ *
+ * The allocated iio channel is automatically released when the device is
+ * unbound.
+ */
+struct iio_channel *devm_iio_channel_get_sys(struct device *dev,
+					     const char *consumer_channel);
 /**
  * iio_channel_get_all() - get all channels associated with a client
  * @dev:		Pointer to consumer device.

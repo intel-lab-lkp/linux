@@ -418,6 +418,24 @@ struct iio_channel *devm_iio_channel_get(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(devm_iio_channel_get);
 
+struct iio_channel *devm_iio_channel_get_sys(struct device *dev,
+					     const char *channel_name)
+{
+	struct iio_channel *channel;
+	int ret;
+
+	channel = iio_channel_get_sys(NULL, channel_name);
+	if (IS_ERR(channel))
+		return channel;
+
+	ret = devm_add_action_or_reset(dev, devm_iio_channel_free, channel);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return channel;
+}
+EXPORT_SYMBOL_GPL(devm_iio_channel_get_sys);
+
 struct iio_channel *devm_fwnode_iio_channel_get_by_name(struct device *dev,
 							struct fwnode_handle *fwnode,
 							const char *channel_name)
