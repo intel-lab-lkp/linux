@@ -150,7 +150,7 @@ static bool spi_mem_check_buswidth(struct spi_mem *mem,
 		return false;
 
 	if (op->dummy.nbytes &&
-	    spi_check_buswidth_req(mem, op->dummy.buswidth, true))
+	    spi_check_buswidth_req(mem, op->dummy.buswidth, false))
 		return false;
 
 	if (op->data.dir != SPI_MEM_NO_DATA &&
