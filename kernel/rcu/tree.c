@@ -2559,13 +2559,19 @@ static void rcu_do_batch(struct rcu_data *rdp)
 		debug_rcu_head_unqueue(rhp);
 
 		rcu_lock_acquire(&rcu_callback_map);
-		trace_rcu_invoke_callback(rcu_state.name, rhp);
 
 		f = rhp->func;
-		debug_rcu_head_callback(rhp);
-		WRITE_ONCE(rhp->func, (rcu_callback_t)0L);
-		f(rhp);
 
+		/* This is temporary, it will be removed when migration is over. */
+		if (__is_kvfree_rcu_offset((unsigned long) f)) {
+			trace_rcu_invoke_kvfree_callback("", rhp, (unsigned long) f);
+			kvfree((void *) rhp - (unsigned long) f);
+		} else {
+			trace_rcu_invoke_callback(rcu_state.name, rhp);
+			debug_rcu_head_callback(rhp);
+			WRITE_ONCE(rhp->func, (rcu_callback_t)0L);
+			f(rhp);
+		}
 		rcu_lock_release(&rcu_callback_map);
 
 		/*
@@ -3787,6 +3793,16 @@ void kvfree_call_rcu(struct rcu_head *head, void *ptr)
 	struct kfree_rcu_cpu *krcp;
 	bool success;
 
+	if (head) {
+		call_rcu(head, (rcu_callback_t) ((void *) head - ptr));
+	} else {
+		synchronize_rcu();
+		kvfree(ptr);
+	}
+
+	/* Disconnect the rest. */
+	return;
+
 	/*
 	 * Please note there is a limitation for the head-less
 	 * variant, that is why there is a clear rule for such
@@ -3870,6 +3886,9 @@ void kvfree_rcu_barrier(void)
 	struct kfree_rcu_cpu *krcp;
 	bool queued;
 	int i, cpu;
+
+	/* Temporary. */
+	rcu_barrier();
 
 	/*
 	 * Firstly we detach objects and queue them over an RCU-batch
