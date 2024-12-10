@@ -78,8 +78,9 @@ static unsigned int __read_mostly sysctl_hung_task_all_cpu_backtrace;
  * Should we panic (and reboot, if panic_timeout= is set) when a
  * hung task is detected:
  */
-static unsigned int __read_mostly sysctl_hung_task_panic =
+unsigned int __read_mostly sysctl_hung_task_panic =
 	IS_ENABLED(CONFIG_BOOTPARAM_HUNG_TASK_PANIC);
+EXPORT_SYMBOL_GPL(sysctl_hung_task_panic);
 
 static int
 hung_task_panic(struct notifier_block *this, unsigned long event, void *ptr)

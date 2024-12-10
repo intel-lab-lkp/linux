@@ -21,6 +21,8 @@
 #include <linux/swap.h>
 #include <linux/splice.h>
 #include <linux/sched.h>
+#include <linux/completion.h>
+#include <linux/sched/sysctl.h>
 
 #define CREATE_TRACE_POINTS
 #include "fuse_trace.h"
@@ -418,18 +420,56 @@ static int queue_interrupt(struct fuse_req *req)
 	return 0;
 }
 
+/*
+ * Prevent hung task timer from firing at us
+ * Periodically poll the request waiting list on a per-connection basis
+ * and abort if the oldest request exceed the timeout. The oldest request
+ * is the first element on the list by definition
+ */
+void fuse_wait_answer_timeout(struct work_struct *wk)
+{
+	unsigned long hang_check_timer = sysctl_hung_task_timeout_secs * (HZ / 2);
+	struct fuse_conn *fc = container_of(wk, struct fuse_conn, work.work);
+	struct fuse_req *req;
+
+	spin_lock(&fc->lock);
+	req = list_first_entry_or_null(&fc->req_waiting, struct fuse_req, timeout_list);
+	if (req && time_after(jiffies, req->wait_start + hang_check_timer)) {
+		spin_unlock(&fc->lock);
+		fuse_abort_conn(fc);
+		return;
+	}
+
+	/* Keep the ball rolling but don't re-arm when only one req is pending */
+	if (atomic_read(&fc->num_waiting) != 1)
+		queue_delayed_work(system_wq, &fc->work, hang_check_timer);
+	spin_unlock(&fc->lock);
+}
+
 static void request_wait_answer(struct fuse_req *req)
 {
+	unsigned long hang_check_timer = sysctl_hung_task_timeout_secs * (HZ / 2);
+	unsigned int hang_check = sysctl_hung_task_panic;
 	struct fuse_conn *fc = req->fm->fc;
 	struct fuse_iqueue *fiq = &fc->iq;
 	int err;
+
+	if (hang_check) {
+		spin_lock(&fc->lock);
+		/* Get the ball rolling if we are the first request */
+		if (atomic_read(&fc->num_waiting) == 1)
+			queue_delayed_work(system_wq, &fc->work, hang_check_timer);
+		req->wait_start = jiffies;
+		list_add_tail(&req->timeout_list, &fc->req_waiting);
+		spin_unlock(&fc->lock);
+	}
 
 	if (!fc->no_interrupt) {
 		/* Any signal may interrupt this */
 		err = wait_event_interruptible(req->waitq,
 					test_bit(FR_FINISHED, &req->flags));
 		if (!err)
-			return;
+			goto out;
 
 		set_bit(FR_INTERRUPTED, &req->flags);
 		/* matches barrier in fuse_dev_do_read() */
@@ -443,7 +483,7 @@ static void request_wait_answer(struct fuse_req *req)
 		err = wait_event_killable(req->waitq,
 					test_bit(FR_FINISHED, &req->flags));
 		if (!err)
-			return;
+			goto out;
 
 		spin_lock(&fiq->lock);
 		/* Request is not yet in userspace, bail out */
@@ -452,7 +492,7 @@ static void request_wait_answer(struct fuse_req *req)
 			spin_unlock(&fiq->lock);
 			__fuse_put_request(req);
 			req->out.h.error = -EINTR;
-			return;
+			goto out;
 		}
 		spin_unlock(&fiq->lock);
 	}
@@ -462,6 +502,16 @@ static void request_wait_answer(struct fuse_req *req)
 	 * Wait it out.
 	 */
 	wait_event(req->waitq, test_bit(FR_FINISHED, &req->flags));
+
+out:
+	if (hang_check) {
+		spin_lock(&fc->lock);
+		/* Stop the timeout check if we are the last request */
+		if (atomic_read(&fc->num_waiting) == 1)
+			cancel_delayed_work_sync(&fc->work);
+		list_del(&req->timeout_list);
+		spin_unlock(&fc->lock);
+	}
 }
 
 static void __fuse_request_send(struct fuse_req *req)

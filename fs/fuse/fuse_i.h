@@ -438,6 +438,12 @@ struct fuse_req {
 
 	/** fuse_mount this request belongs to */
 	struct fuse_mount *fm;
+
+	/** Entry on req_waiting list */
+	struct list_head timeout_list;
+
+	/** Wait start time in jiffies */
+	unsigned long wait_start;
 };
 
 struct fuse_iqueue;
@@ -923,6 +929,12 @@ struct fuse_conn {
 	/** IDR for backing files ids */
 	struct idr backing_files_map;
 #endif
+
+	/** Request wait timeout */
+	struct delayed_work work;
+
+	/** List of request waiting for answer */
+	struct list_head req_waiting;
 };
 
 /*
@@ -1190,6 +1202,8 @@ void fuse_request_end(struct fuse_req *req);
 /* Abort all requests */
 void fuse_abort_conn(struct fuse_conn *fc);
 void fuse_wait_aborted(struct fuse_conn *fc);
+/* Connection timeout */
+void fuse_wait_answer_timeout(struct work_struct *wk);
 
 /**
  * Invalidate inode attributes
