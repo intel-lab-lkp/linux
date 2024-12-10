@@ -388,6 +388,21 @@
 			compatible = "samsung,exynos8895-pmu",
 				     "samsung,exynos7-pmu", "syscon";
 			reg = <0x16480000 0x10000>;
+
+			poweroff: syscon-poweroff {
+				compatible = "syscon-poweroff";
+				regmap = <&pmu_system_controller>;
+				offset = <0x330c>; /* PS_HOLD_CONTROL */
+				mask = <0x100>; /* reset value */
+			};
+
+			reboot: syscon-reboot {
+				compatible = "syscon-reboot";
+				regmap = <&pmu_system_controller>;
+				offset = <0x400>; /* SWRESET */
+				mask = <0x1>; /* SWRESET_SYSTEM */
+				value = <0x1>; /* reset value */
+			};
 		};
 
 		pinctrl_alive: pinctrl@164b0000 {
