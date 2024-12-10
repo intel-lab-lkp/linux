@@ -575,7 +575,7 @@ struct cfg80211_mgmt_registration {
 
 	bool multicast_rx;
 
-	u8 match[];
+	u8 match[] __counted_by(match_len);
 };
 
 static void cfg80211_mgmt_registrations_update(struct wireless_dev *wdev)
@@ -710,8 +710,8 @@ int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 	if (update_multicast) {
 		kfree(nreg);
 	} else {
-		memcpy(nreg->match, match_data, match_len);
 		nreg->match_len = match_len;
+		memcpy(nreg->match, match_data, match_len);
 		nreg->nlportid = snd_portid;
 		nreg->frame_type = cpu_to_le16(frame_type);
 		nreg->wdev = wdev;
