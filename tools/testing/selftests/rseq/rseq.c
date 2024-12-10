@@ -142,6 +142,16 @@ unsigned int get_rseq_kernel_feature_size(void)
 		return ORIG_RSEQ_FEATURE_SIZE;
 }
 
+static void set_default_rseq_size(void)
+{
+	unsigned int rseq_kernel_feature_size = get_rseq_kernel_feature_size();
+
+	if (rseq_kernel_feature_size < ORIG_RSEQ_ALLOC_SIZE)
+		rseq_size = rseq_kernel_feature_size;
+	else
+		rseq_size = ORIG_RSEQ_ALLOC_SIZE;
+}
+
 int rseq_register_current_thread(void)
 {
 	int rc;
@@ -219,12 +229,7 @@ void rseq_init(void)
 			fallthrough;
 		case ORIG_RSEQ_ALLOC_SIZE:
 		{
-			unsigned int rseq_kernel_feature_size = get_rseq_kernel_feature_size();
-
-			if (rseq_kernel_feature_size < ORIG_RSEQ_ALLOC_SIZE)
-				rseq_size = rseq_kernel_feature_size;
-			else
-				rseq_size = ORIG_RSEQ_ALLOC_SIZE;
+			set_default_rseq_size();
 			break;
 		}
 		default:
@@ -239,8 +244,10 @@ void rseq_init(void)
 		rseq_size = 0;
 		return;
 	}
+
 	rseq_offset = (void *)&__rseq_abi - rseq_thread_pointer();
 	rseq_flags = 0;
+	set_default_rseq_size();
 }
 
 static __attribute__((destructor))
