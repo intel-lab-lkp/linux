@@ -222,7 +222,7 @@ STATIC bool
 xlog_grant_head_wake(
 	struct xlog		*log,
 	struct xlog_grant_head	*head,
-	int			*free_bytes)
+	uint64_t		*free_bytes)
 {
 	struct xlog_ticket	*tic;
 	int			need_bytes;
@@ -302,7 +302,7 @@ xlog_grant_head_check(
 	struct xlog_ticket	*tic,
 	int			*need_bytes)
 {
-	int			free_bytes;
+	uint64_t		free_bytes;
 	int			error = 0;
 
 	ASSERT(!xlog_in_recovery(log));
@@ -1088,7 +1088,7 @@ xfs_log_space_wake(
 	struct xfs_mount	*mp)
 {
 	struct xlog		*log = mp->m_log;
-	int			free_bytes;
+	uint64_t		free_bytes;
 
 	if (xlog_is_shutdown(log))
 		return;
