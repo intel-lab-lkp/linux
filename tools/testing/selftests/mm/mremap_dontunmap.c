@@ -224,6 +224,44 @@ static void mremap_dontunmap_simple_fixed()
 	ksft_test_result_pass("%s\n", __func__);
 }
 
+// This test validates MREMAP_DONTUNMAP using a newaddr hint without
+// MREMAP_FIXED.
+static void mremap_dontunmap_simple_newaddr_hint()
+{
+	unsigned long num_pages = 5;
+
+	// This dest hint is intentionally not aligned.
+	void *new_addr_hint = (void*)0x999900010;
+
+	void *source_mapping =
+	    mmap(NULL, num_pages * page_size, PROT_READ | PROT_WRITE,
+		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	BUG_ON(source_mapping == MAP_FAILED, "mmap");
+	memset(source_mapping, 'a', num_pages * page_size);
+
+	void *remapped_mapping =
+	    mremap(source_mapping, num_pages * page_size, num_pages * page_size,
+		   MREMAP_DONTUNMAP | MREMAP_MAYMOVE,
+		   new_addr_hint);
+	BUG_ON(remapped_mapping == MAP_FAILED, "mremap");
+
+	// And the source mapping will have had its ptes dropped.
+	BUG_ON(check_region_contains_byte
+	       (source_mapping, num_pages * page_size, 0) != 0,
+	       "source should have no ptes");
+
+	// And the remapped area will be filled with 'a's.
+	BUG_ON(check_region_contains_byte
+	       (remapped_mapping, num_pages * page_size, 'a') != 0,
+	       "dest should have remapped content");
+
+	BUG_ON(munmap(source_mapping, num_pages * page_size) == -1,
+	       "unable to unmap source mapping");
+	BUG_ON(munmap(remapped_mapping, num_pages * page_size) == -1,
+	       "unable to unmap source mapping");
+	ksft_test_result_pass("%s\n", __func__);
+}
+
 // This test validates that we can MREMAP_DONTUNMAP for a portion of an
 // existing mapping.
 static void mremap_dontunmap_partial_mapping()
@@ -348,7 +386,7 @@ int main(void)
 		ksft_finished();
 	}
 
-	ksft_set_plan(5);
+	ksft_set_plan(6);
 
 	// Keep a page sized buffer around for when we need it.
 	page_buffer =
@@ -359,6 +397,7 @@ int main(void)
 	mremap_dontunmap_simple();
 	mremap_dontunmap_simple_shmem();
 	mremap_dontunmap_simple_fixed();
+	mremap_dontunmap_simple_newaddr_hint();
 	mremap_dontunmap_partial_mapping();
 	mremap_dontunmap_partial_mapping_overwrite();
 
