@@ -79,6 +79,8 @@ static DECLARE_RWSEM(namespace_sem);
 static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
 static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */
 static DEFINE_RWLOCK(mnt_ns_tree_lock);
+static seqcount_rwlock_t mnt_ns_tree_seqcount = SEQCNT_RWLOCK_ZERO(mnt_ns_tree_seqcount, &mnt_ns_tree_lock);
+
 static struct rb_root mnt_ns_tree = RB_ROOT; /* protected by mnt_ns_tree_lock */
 
 struct mount_kattr {
@@ -105,17 +107,6 @@ EXPORT_SYMBOL_GPL(fs_kobj);
  */
 __cacheline_aligned_in_smp DEFINE_SEQLOCK(mount_lock);
 
-static int mnt_ns_cmp(u64 seq, const struct mnt_namespace *ns)
-{
-	u64 seq_b = ns->seq;
-
-	if (seq < seq_b)
-		return -1;
-	if (seq > seq_b)
-		return 1;
-	return 0;
-}
-
 static inline struct mnt_namespace *node_to_mnt_ns(const struct rb_node *node)
 {
 	if (!node)
@@ -123,19 +114,41 @@ static inline struct mnt_namespace *node_to_mnt_ns(const struct rb_node *node)
 	return rb_entry(node, struct mnt_namespace, mnt_ns_tree_node);
 }
 
-static bool mnt_ns_less(struct rb_node *a, const struct rb_node *b)
+static int mnt_ns_cmp(struct rb_node *a, const struct rb_node *b)
 {
 	struct mnt_namespace *ns_a = node_to_mnt_ns(a);
 	struct mnt_namespace *ns_b = node_to_mnt_ns(b);
 	u64 seq_a = ns_a->seq;
+	u64 seq_b = ns_b->seq;
 
-	return mnt_ns_cmp(seq_a, ns_b) < 0;
+	if (seq_a < seq_b)
+		return -1;
+	if (seq_a > seq_b)
+		return 1;
+	return 0;
+}
+
+static inline void mnt_ns_tree_write_lock(void)
+{
+	write_lock(&mnt_ns_tree_lock);
+	write_seqcount_begin(&mnt_ns_tree_seqcount);
+}
+
+static inline void mnt_ns_tree_write_unlock(void)
+{
+	write_seqcount_end(&mnt_ns_tree_seqcount);
+	write_unlock(&mnt_ns_tree_lock);
 }
 
 static void mnt_ns_tree_add(struct mnt_namespace *ns)
 {
-	guard(write_lock)(&mnt_ns_tree_lock);
-	rb_add(&ns->mnt_ns_tree_node, &mnt_ns_tree, mnt_ns_less);
+	struct rb_node *node;
+
+	mnt_ns_tree_write_lock();
+	node = rb_find_add_rcu(&ns->mnt_ns_tree_node, &mnt_ns_tree, mnt_ns_cmp);
+	mnt_ns_tree_write_unlock();
+
+	WARN_ON_ONCE(node);
 }
 
 static void mnt_ns_release(struct mnt_namespace *ns)
@@ -150,15 +163,24 @@ static void mnt_ns_release(struct mnt_namespace *ns)
 }
 DEFINE_FREE(mnt_ns_release, struct mnt_namespace *, if (_T) mnt_ns_release(_T))
 
+static void mnt_ns_release_rcu(struct rcu_head *rcu)
+{
+	struct mnt_namespace *mnt_ns;
+
+	mnt_ns = container_of(rcu, struct mnt_namespace, mnt_ns_rcu);
+	mnt_ns_release(mnt_ns);
+}
+
 static void mnt_ns_tree_remove(struct mnt_namespace *ns)
 {
 	/* remove from global mount namespace list */
 	if (!is_anon_ns(ns)) {
-		guard(write_lock)(&mnt_ns_tree_lock);
+		mnt_ns_tree_write_lock();
 		rb_erase(&ns->mnt_ns_tree_node, &mnt_ns_tree);
+		mnt_ns_tree_write_unlock();
 	}
 
-	mnt_ns_release(ns);
+	call_rcu(&ns->mnt_ns_rcu, mnt_ns_release_rcu);
 }
 
 /*
@@ -168,23 +190,23 @@ static void mnt_ns_tree_remove(struct mnt_namespace *ns)
 static struct mnt_namespace *mnt_ns_find_id_at(u64 mnt_ns_id)
 {
 	struct rb_node *node = mnt_ns_tree.rb_node;
-	struct mnt_namespace *ret = NULL;
+	struct mnt_namespace *mnt_ns = NULL;
 
-	lockdep_assert_held(&mnt_ns_tree_lock);
+	lockdep_assert(rcu_read_lock_held());
 
 	while (node) {
 		struct mnt_namespace *n = node_to_mnt_ns(node);
 
 		if (mnt_ns_id <= n->seq) {
-			ret = node_to_mnt_ns(node);
+			mnt_ns = node_to_mnt_ns(node);
 			if (mnt_ns_id == n->seq)
 				break;
-			node = node->rb_left;
+			node = rcu_dereference_raw(node->rb_left);
 		} else {
-			node = node->rb_right;
+			node = rcu_dereference_raw(node->rb_right);
 		}
 	}
-	return ret;
+	return mnt_ns;
 }
 
 /*
@@ -194,18 +216,35 @@ static struct mnt_namespace *mnt_ns_find_id_at(u64 mnt_ns_id)
  * namespace the @namespace_sem must first be acquired. If the namespace has
  * already shut down before acquiring @namespace_sem, {list,stat}mount() will
  * see that the mount rbtree of the namespace is empty.
+ *
+ * Note the lookup is lockless protected by a sequence counter. We only
+ * need to guard against false negatives as false positives aren't
+ * possible. So if we didn't find a mount namespace and the sequence
+ * counter has changed we need to retry. If the sequence counter is
+ * still the same we know the search actually failed.
  */
 static struct mnt_namespace *lookup_mnt_ns(u64 mnt_ns_id)
 {
-       struct mnt_namespace *ns;
+	struct mnt_namespace *ns;
+	unsigned int seq;
 
-       guard(read_lock)(&mnt_ns_tree_lock);
-       ns = mnt_ns_find_id_at(mnt_ns_id);
-       if (!ns || ns->seq != mnt_ns_id)
-               return NULL;
+	guard(rcu)();
+	do {
+		seq = read_seqcount_begin(&mnt_ns_tree_seqcount);
+		ns = mnt_ns_find_id_at(mnt_ns_id);
+		if (ns)
+			break;
+	} while (read_seqcount_retry(&mnt_ns_tree_seqcount, seq));
 
-       refcount_inc(&ns->passive);
-       return ns;
+	if (!ns || ns->seq != mnt_ns_id)
+		return NULL;
+
+	/*
+	* The last reference count is put with after RCU delay so we
+	* don't need to use refcount_inc_not_zero().
+	*/
+	refcount_inc(&ns->passive);
+	return ns;
 }
 
 static inline void lock_mount_hash(void)
