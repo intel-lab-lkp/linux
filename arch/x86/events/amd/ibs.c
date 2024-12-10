@@ -586,6 +586,15 @@ static int perf_ibs_check_period(struct perf_event *event, u64 value)
 	return 0;
 }
 
+static u64 perf_ibs_adjust_period(struct perf_event *event, u64 period)
+{
+	struct perf_ibs *perf_ibs = container_of(event->pmu, struct perf_ibs, pmu);
+
+	period &= ~0xFULL;
+
+	return period < perf_ibs->min_period ? perf_ibs->min_period : period;
+}
+
 /*
  * We need to initialize with empty group if all attributes in the
  * group are dynamic.
@@ -719,6 +728,7 @@ static struct perf_ibs perf_ibs_fetch = {
 		.stop		= perf_ibs_stop,
 		.read		= perf_ibs_read,
 		.check_period	= perf_ibs_check_period,
+		.adjust_period	= perf_ibs_adjust_period,
 	},
 	.msr			= MSR_AMD64_IBSFETCHCTL,
 	.config_mask		= IBS_FETCH_MAX_CNT | IBS_FETCH_RAND_EN,
@@ -744,6 +754,7 @@ static struct perf_ibs perf_ibs_op = {
 		.stop		= perf_ibs_stop,
 		.read		= perf_ibs_read,
 		.check_period	= perf_ibs_check_period,
+		.adjust_period	= perf_ibs_adjust_period,
 	},
 	.msr			= MSR_AMD64_IBSOPCTL,
 	.config_mask		= IBS_OP_MAX_CNT,
