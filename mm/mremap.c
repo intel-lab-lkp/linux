@@ -912,16 +912,6 @@ static unsigned long mremap_to(unsigned long addr, unsigned long old_len,
 	unsigned long ret;
 	unsigned long map_flags = 0;
 
-	if (offset_in_page(new_addr))
-		return -EINVAL;
-
-	if (new_len > TASK_SIZE || new_addr > TASK_SIZE - new_len)
-		return -EINVAL;
-
-	/* Ensure the old/new locations do not overlap */
-	if (addr + old_len > new_addr && new_addr + new_len > addr)
-		return -EINVAL;
-
 	/*
 	 * move_vma() need us to stay 4 maps below the threshold, otherwise
 	 * it will bail out at the very beginning.
@@ -940,6 +930,25 @@ static unsigned long mremap_to(unsigned long addr, unsigned long old_len,
 		return -ENOMEM;
 
 	if (flags & MREMAP_FIXED) {
+		/*
+		 * Two non-mutually exclusive paths can land in mremap_to, MREMAP_FIXED
+		 * and MREMAP_DONTUNMAP which are called from mremap(). In the case of
+		 * MREMAP_FIXED we must validate the new_addr to ensure that the new
+		 * address is valid. In the case of MREMAP_DONTUNMAP without MREMAP_FIXED
+		 * a new address is specified as a hint, just like it would be in the
+		 * case of mmap. In this second case we don't need to perform any checks
+		 * because get_unmapped_area() will align new_addr, just like it would in
+		 * the case of mmap.
+		 */
+		if (offset_in_page(new_addr))
+			return -EINVAL;
+
+		if (new_len > TASK_SIZE || new_addr > TASK_SIZE - new_len)
+			return -EINVAL;
+
+		/* Ensure the old/new locations do not overlap */
+		if (addr + old_len > new_addr && new_addr + new_len > addr)
+			return -EINVAL;
 		/*
 		 * In mremap_to().
 		 * VMA is moved to dst address, and munmap dst first.
