@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0 OR MIT
 /**************************************************************************
  *
- * Copyright 2009 - 2023 VMware, Inc., Palo Alto, CA., USA
+ * Copyright (c) 2009-2024 Broadcom. All Rights Reserved.
+ * The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -614,28 +615,77 @@ static int vmw_resources_reserve(struct vmw_sw_context *sw_context)
 	return ret;
 }
 
-/**
- * vmw_cmd_res_check - Check that a resource is present and if so, put it on the
- * resource validate list unless it's already there.
- *
- * @dev_priv: Pointer to a device private structure.
- * @sw_context: Pointer to the software context.
- * @res_type: Resource type.
- * @dirty: Whether to change dirty status.
- * @converter: User-space visible type specific information.
- * @id_loc: Pointer to the location in the command buffer currently being parsed
- * from where the user-space resource id handle is located.
- * @p_res: Pointer to pointer to resource validation node. Populated on
- * exit.
- */
 static int
-vmw_cmd_res_check(struct vmw_private *dev_priv,
-		  struct vmw_sw_context *sw_context,
-		  enum vmw_res_type res_type,
-		  u32 dirty,
-		  const struct vmw_user_resource_conv *converter,
-		  uint32_t *id_loc,
-		  struct vmw_resource **p_res)
+vmw_cmd_cmdbuf_surface_check(struct vmw_private *dev_priv,
+			     struct vmw_sw_context *sw_context,
+			     u32 dirty,
+			     uint32_t *id_loc,
+			     struct vmw_resource **p_res)
+{
+	struct vmw_res_cache_entry *rcache =
+		&sw_context->res_cache[vmw_res_surface];
+	struct vmw_resource *res;
+	int ret = 0;
+	bool needs_unref = false;
+	uint32 handle;
+
+	res = vmw_cmdbuf_res_lookup(sw_context->man, vmw_cmdbuf_res_surface,
+				    *id_loc);
+	if (!IS_ERR(res)) {
+		kref_get(&res->kref);
+		needs_unref = true;
+		handle = vmw_res_to_cmdbuf_srf(res)->base.handle;
+	} else {
+		VMW_DEBUG_USER("Could not find resource 0x%08x.\n", *id_loc);
+		return -EINVAL;
+	}
+
+	if (likely(rcache->valid_handle && handle == rcache->handle)) {
+		res = rcache->res;
+		if (dirty)
+			vmw_validation_res_set_dirty(sw_context->ctx,
+						     rcache->private, dirty);
+	} else {
+		unsigned int size =
+			vmw_execbuf_res_size(dev_priv, vmw_res_surface);
+
+		ret = vmw_validation_preload_res(sw_context->ctx, size);
+		if (unlikely(ret != 0))
+			goto cmdbuf_check_done;
+
+		ret = vmw_execbuf_res_val_add(sw_context, res, dirty,
+					      vmw_val_add_flag_none);
+		if (unlikely(ret != 0))
+			goto cmdbuf_check_done;
+
+		if (rcache->valid && rcache->res == res) {
+			rcache->valid_handle = true;
+			rcache->handle = handle;
+		}
+	}
+
+	ret = vmw_resource_relocation_add(sw_context, res,
+					  vmw_ptr_diff(sw_context->buf_start,
+						       id_loc),
+					  vmw_res_rel_normal);
+	if (p_res)
+		*p_res = res;
+
+cmdbuf_check_done:
+	if (needs_unref)
+		vmw_resource_unreference(&res);
+
+	return ret;
+}
+
+static int
+vmw_cmd_gen_res_check(struct vmw_private *dev_priv,
+		      struct vmw_sw_context *sw_context,
+		      enum vmw_res_type res_type,
+		      u32 dirty,
+		      const struct vmw_user_resource_conv *converter,
+		      uint32_t *id_loc,
+		      struct vmw_resource **p_res)
 {
 	struct vmw_res_cache_entry *rcache = &sw_context->res_cache[res_type];
 	struct vmw_resource *res;
@@ -696,6 +746,40 @@ res_check_done:
 		vmw_resource_unreference(&res);
 
 	return ret;
+}
+
+/**
+ * vmw_cmd_res_check - Check that a resource is present and if so, put it on the
+ * resource validate list unless it's already there.
+ *
+ * @dev_priv: Pointer to a device private structure.
+ * @sw_context: Pointer to the software context.
+ * @res_type: Resource type.
+ * @dirty: Whether to change dirty status.
+ * @converter: User-space visible type specific information. This is optional,
+ * it is not used for userspace managed surfaces.
+ * @id_loc: Pointer to the location in the command buffer currently being parsed
+ * from where the user-space resource id handle is located.
+ * @p_res: Pointer to pointer to resource validation node. Populated on
+ * exit.
+ */
+static int
+vmw_cmd_res_check(struct vmw_private *dev_priv,
+		  struct vmw_sw_context *sw_context,
+		  enum vmw_res_type res_type,
+		  u32 dirty,
+		  const struct vmw_user_resource_conv *converter,
+		  uint32_t *id_loc,
+		  struct vmw_resource **p_res)
+{
+	if (res_type == vmw_res_surface &&
+		(*id_loc < VMWGFX_NUM_GB_SURFACE + 1)) {
+		return vmw_cmd_cmdbuf_surface_check(dev_priv, sw_context, dirty,
+						    id_loc, p_res);
+	} else {
+		return vmw_cmd_gen_res_check(dev_priv, sw_context, res_type,
+					     dirty, converter, id_loc, p_res);
+	}
 }
 
 /**
@@ -1758,6 +1842,15 @@ static int vmw_cmd_switch_backup(struct vmw_private *dev_priv,
 				VMW_RES_DIRTY_NONE, converter, res_id, &res);
 	if (ret)
 		return ret;
+
+	/**
+	 * Userspace managed surface can be unbound by putting SVGA_ID_INVALID
+	 * as mob id, so this particular case is valid.
+	 */
+	if ((res_type == vmw_res_surface) &&
+	    (*res_id < VMWGFX_NUM_GB_SURFACE + 1) &&
+	    (*buf_id == SVGA_ID_INVALID))
+		return 0;
 
 	return vmw_cmd_res_switch_backup(dev_priv, sw_context, res, buf_id,
 					 backup_offset);
@@ -3212,6 +3305,95 @@ static int vmw_cmd_dispatch_indirect(struct vmw_private *dev_priv,
 				 &cmd->body.argsBufferSid, NULL);
 }
 
+static inline int
+vmw_cmd_get_expected_surface_version(struct vmw_private *dev_priv,
+				     uint32 array_size,
+				     uint32 *cmd_id)
+{
+	if (array_size > 0) {
+		if (has_sm5_context(dev_priv))
+			*cmd_id = SVGA_3D_CMD_DEFINE_GB_SURFACE_V4;
+		else if (has_sm4_1_context(dev_priv))
+			*cmd_id = SVGA_3D_CMD_DEFINE_GB_SURFACE_V3;
+		else if (has_sm4_context(dev_priv))
+			*cmd_id = SVGA_3D_CMD_DEFINE_GB_SURFACE_V2;
+	} else if (array_size == 0)
+		*cmd_id = SVGA_3D_CMD_DEFINE_GB_SURFACE;
+	else
+		return -EINVAL;
+	return 0;
+}
+
+static int vmw_cmd_define_gb_surface_v4(struct vmw_private *dev_priv,
+					struct vmw_sw_context *sw_context,
+					SVGA3dCmdHeader *header)
+{
+	VMW_DECLARE_CMD_VAR(*cmd, SVGA3dCmdDefineGBSurface_v4);
+	uint32 expected_cmd_id;
+	struct vmw_surface_metadata metadata = {0};
+	int ret;
+
+	cmd = container_of(header, typeof(*cmd), header);
+
+	ret = vmw_cmd_get_expected_surface_version(dev_priv,
+						   cmd->body.arraySize,
+						   &expected_cmd_id);
+	if (ret || (expected_cmd_id != header->id))
+		return -EINVAL;
+
+	if (cmd->body.sid >= VMWGFX_NUM_GB_SURFACE)
+		return -EINVAL;
+
+	metadata.flags = cmd->body.surfaceFlags;
+	metadata.format = cmd->body.format;
+	metadata.mip_levels[0] = cmd->body.numMipLevels;
+	metadata.multisample_count = cmd->body.multisampleCount;
+	metadata.multisample_pattern = cmd->body.multisamplePattern;
+	metadata.quality_level = cmd->body.qualityLevel;
+	metadata.autogen_filter = cmd->body.autogenFilter;
+	metadata.array_size = cmd->body.arraySize;
+	metadata.buffer_byte_stride = cmd->body.bufferByteStride;
+	metadata.num_sizes = 1;
+	metadata.base_size.width = cmd->body.size.width;
+	metadata.base_size.height = cmd->body.size.height;
+	metadata.base_size.depth = cmd->body.size.depth;
+
+	ret = vmw_cmdbuf_surface_define(dev_priv, sw_context, &metadata,
+					cmd->body.sid);
+	if (unlikely(ret))
+		return ret;
+
+	ret = vmw_cmd_res_check(dev_priv, sw_context, vmw_res_surface,
+				VMW_RES_DIRTY_NONE, NULL, &cmd->body.sid, NULL);
+
+	return ret;
+}
+
+static int vmw_cmd_destroy_gb_surface(struct vmw_private *dev_priv,
+				      struct vmw_sw_context *sw_context,
+				      SVGA3dCmdHeader *header)
+{
+	VMW_DECLARE_CMD_VAR(*cmd, SVGA3dCmdDestroyGBSurface);
+	int ret;
+
+	cmd = container_of(header, typeof(*cmd), header);
+
+	if (cmd->body.sid >= VMWGFX_NUM_GB_SURFACE)
+		return -EINVAL;
+
+	ret = vmw_cmd_res_check(dev_priv, sw_context, vmw_res_surface,
+				VMW_RES_DIRTY_NONE, NULL, &cmd->body.sid, NULL);
+	if (unlikely(ret))
+		return ret;
+
+	ret = vmw_cmdbuf_surface_destroy(dev_priv, sw_context, cmd->body.sid);
+	if (unlikely(ret))
+		return ret;
+
+	return 0;
+}
+
+
 static int vmw_cmd_check_not_3d(struct vmw_private *dev_priv,
 				struct vmw_sw_context *sw_context,
 				void *buf, uint32_t *size)
@@ -3350,8 +3532,8 @@ static const struct vmw_cmd_entry vmw_cmd_entries[SVGA_3D_CMD_MAX] = {
 		    false, false, true),
 	VMW_CMD_DEF(SVGA_3D_CMD_DEFINE_GB_SURFACE, &vmw_cmd_invalid,
 		    false, false, true),
-	VMW_CMD_DEF(SVGA_3D_CMD_DESTROY_GB_SURFACE, &vmw_cmd_invalid,
-		    false, false, true),
+	VMW_CMD_DEF(SVGA_3D_CMD_DESTROY_GB_SURFACE, &vmw_cmd_destroy_gb_surface,
+		    true, false, true),
 	VMW_CMD_DEF(SVGA_3D_CMD_BIND_GB_SURFACE, &vmw_cmd_bind_gb_surface,
 		    true, false, true),
 	VMW_CMD_DEF(SVGA_3D_CMD_COND_BIND_GB_SURFACE, &vmw_cmd_invalid,
@@ -3602,6 +3784,8 @@ static const struct vmw_cmd_entry vmw_cmd_entries[SVGA_3D_CMD_MAX] = {
 	VMW_CMD_DEF(SVGA_3D_CMD_DX_DISPATCH, &vmw_cmd_sm5, true, false, true),
 	VMW_CMD_DEF(SVGA_3D_CMD_DX_DISPATCH_INDIRECT,
 		    &vmw_cmd_dispatch_indirect, true, false, true),
+	VMW_CMD_DEF(SVGA_3D_CMD_DEFINE_GB_SURFACE_V4,
+		    &vmw_cmd_define_gb_surface_v4, true, false, true),
 	VMW_CMD_DEF(SVGA_3D_CMD_DX_SET_CS_UA_VIEWS, &vmw_cmd_set_cs_uav, true,
 		    false, true),
 	VMW_CMD_DEF(SVGA_3D_CMD_DX_DEFINE_DEPTHSTENCIL_VIEW_V2,
@@ -3612,8 +3796,6 @@ static const struct vmw_cmd_entry vmw_cmd_entries[SVGA_3D_CMD_MAX] = {
 		    &vmw_cmd_dx_bind_streamoutput, true, false, true),
 	VMW_CMD_DEF(SVGA_3D_CMD_DX_DEFINE_RASTERIZER_STATE_V2,
 		    &vmw_cmd_dx_so_define, true, false, true),
-	VMW_CMD_DEF(SVGA_3D_CMD_DEFINE_GB_SURFACE_V4,
-		    &vmw_cmd_invalid, false, false, true),
 };
 
 bool vmw_cmd_describe(const void *buf, u32 *size, char const **cmd)
