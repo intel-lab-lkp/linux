@@ -26,6 +26,7 @@
 	dev_dbg(&(vdev)->pdev->dev, fmt, ##args)
 
 struct versal_pci_device;
+struct comm_chan_device;
 
 struct axlf_header {
 	__u64				length;
@@ -69,6 +70,7 @@ struct versal_pci_device {
 	struct pci_dev			*pdev;
 
 	struct fpga_device		*fdev;
+	struct comm_chan_device         *ccdev;
 	struct firmware_device		*fwdev;
 	struct device			*device;
 

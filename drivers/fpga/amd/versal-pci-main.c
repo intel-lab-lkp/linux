@@ -8,6 +8,7 @@
 #include <linux/pci.h>
 
 #include "versal-pci.h"
+#include "versal-pci-comm-chan.h"
 
 #define DRV_NAME			"amd-versal-pci"
 
@@ -238,6 +239,7 @@ static void versal_pci_device_teardown(struct versal_pci_device *vdev)
 {
 	versal_pci_fpga_fini(vdev->fdev);
 	versal_pci_fw_upload_fini(vdev->fwdev);
+	versal_pci_comm_chan_fini(vdev->ccdev);
 }
 
 static int versal_pci_device_setup(struct versal_pci_device *vdev)
@@ -251,15 +253,23 @@ static int versal_pci_device_setup(struct versal_pci_device *vdev)
 		return ret;
 	}
 
+	vdev->ccdev = versal_pci_comm_chan_init(vdev);
+	if (IS_ERR(vdev->ccdev)) {
+		ret = PTR_ERR(vdev->ccdev);
+		vdev_err(vdev, "Failed to init comms channel, err %d", ret);
+		goto upload_fini;
+	}
+
 	vdev->fdev = versal_pci_fpga_init(vdev);
 	if (IS_ERR(vdev->fdev)) {
 		ret = PTR_ERR(vdev->fdev);
 		vdev_err(vdev, "Failed to init FPGA manager, err %d", ret);
-		goto upload_fini;
+		goto comm_chan_fini;
 	}
 
 	return 0;
-
+comm_chan_fini:
+	versal_pci_comm_chan_fini(vdev->ccdev);
 upload_fini:
 	versal_pci_fw_upload_fini(vdev->fwdev);
 
