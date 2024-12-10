@@ -101,7 +101,10 @@ properties:
   max-speed: true
 
   firmware-name:
-    description: specify the name of nvm firmware to load
+    description:
+      If one item is present, specify the name of the NVM firmware to load.
+      If two items are present, the first item specifies the name of the NVM,
+      and the second specifies the name of the rampatch firmware to load.
 
   local-bd-address: true
 
