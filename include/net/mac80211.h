@@ -1276,7 +1276,9 @@ struct ieee80211_tx_info {
 			u8 ampdu_ack_len;
 			u8 ampdu_len;
 			u8 antenna;
-			u8 pad;
+			/* link ID which transmitted + 1 (0 means default or unknown) */
+			u8 tx_link_id:4;
+			u8 pad:4;
 			u16 tx_time;
 			u8 flags;
 			u8 pad2;
