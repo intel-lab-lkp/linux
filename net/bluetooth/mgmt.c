@@ -5519,9 +5519,16 @@ static void mgmt_remove_adv_monitor_complete(struct hci_dev *hdev,
 {
 	struct mgmt_rp_remove_adv_monitor rp;
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_cp_remove_adv_monitor *cp = cmd->param;
+	struct mgmt_cp_remove_adv_monitor *cp;
+
+	// if executing while device is closing down, status could
+	// be invalid as pending cmd could be removed by __mgmt_power_off
+	// so exit early.
+	if (status == -EINVAL || cmd != pending_find(MGMT_OP_REMOVE_ADV_MONITOR, hdev))
+		return;
 
 	hci_dev_lock(hdev);
+	cp = cmd->param;
 
 	rp.monitor_handle = cp->monitor_handle;
 
@@ -5540,6 +5547,10 @@ static void mgmt_remove_adv_monitor_complete(struct hci_dev *hdev,
 static int mgmt_remove_adv_monitor_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
+
+	if (cmd != pending_find(MGMT_OP_REMOVE_ADV_MONITOR, hdev))
+		return -EINVAL;
+
 	struct mgmt_cp_remove_adv_monitor *cp = cmd->param;
 	u16 handle = __le16_to_cpu(cp->monitor_handle);
 
@@ -9544,8 +9555,11 @@ void __mgmt_power_off(struct hci_dev *hdev)
 	 */
 	if (hci_dev_test_flag(hdev, HCI_UNREGISTER))
 		match.mgmt_status = MGMT_STATUS_INVALID_INDEX;
-	else
+	else {
+		match.mgmt_status = MGMT_STATUS_BUSY;
+		mgmt_pending_foreach(MGMT_OP_REMOVE_ADV_MONITOR, hdev, cmd_status_rsp, &match);
 		match.mgmt_status = MGMT_STATUS_NOT_POWERED;
+	}
 
 	mgmt_pending_foreach(0, hdev, cmd_complete_rsp, &match);
 

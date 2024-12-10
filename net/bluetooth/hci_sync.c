@@ -5197,6 +5197,9 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 	 */
 	drain_workqueue(hdev->workqueue);
 
+	/* flush cmd  work */
+	flush_work(&hdev->cmd_work);
+
 	hci_dev_lock(hdev);
 
 	hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
@@ -5234,8 +5237,6 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 		clear_bit(HCI_INIT, &hdev->flags);
 	}
 
-	/* flush cmd  work */
-	flush_work(&hdev->cmd_work);
 
 	/* Drop queues */
 	skb_queue_purge(&hdev->rx_q);
