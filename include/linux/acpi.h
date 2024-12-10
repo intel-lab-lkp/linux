@@ -787,6 +787,12 @@ const char *acpi_get_subsystem_id(acpi_handle handle);
 #define acpi_dev_hid_uid_match(adev, hid2, uid2)	(adev && false)
 
 struct fwnode_handle;
+struct acpi_device;
+
+static inline acpi_handle acpi_device_handle(struct acpi_device *adev)
+{
+	return NULL;
+}
 
 static inline bool acpi_dev_found(const char *hid)
 {
