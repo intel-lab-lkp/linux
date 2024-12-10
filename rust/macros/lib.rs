@@ -32,6 +32,7 @@ use proc_macro::TokenStream;
 ///
 /// ```
 /// use kernel::prelude::*;
+/// use kernel::str;
 ///
 /// module!{
 ///     type: MyModule,
@@ -45,7 +46,7 @@ use proc_macro::TokenStream;
 /// struct MyModule(i32);
 ///
 /// impl kernel::Module for MyModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init(_name: &'static str::CStr, _module: &'static ThisModule) -> Result<Self> {
 ///         let foo: i32 = 42;
 ///         pr_info!("I contain:  {}\n", foo);
 ///         Ok(Self(foo))
@@ -65,6 +66,7 @@ use proc_macro::TokenStream;
 ///
 /// ```
 /// use kernel::prelude::*;
+/// use kernel::str;
 ///
 /// module!{
 ///     type: MyDeviceDriverModule,
@@ -78,7 +80,7 @@ use proc_macro::TokenStream;
 /// struct MyDeviceDriverModule;
 ///
 /// impl kernel::Module for MyDeviceDriverModule {
-///     fn init(_module: &'static ThisModule) -> Result<Self> {
+///     fn init(_name: &'static str::CStr, _module: &'static ThisModule) -> Result<Self> {
 ///         Ok(Self)
 ///     }
 /// }
