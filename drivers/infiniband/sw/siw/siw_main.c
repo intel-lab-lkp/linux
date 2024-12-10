@@ -287,7 +287,6 @@ static struct siw_device *siw_device_create(struct net_device *netdev)
 		return NULL;
 
 	base_dev = &sdev->base_dev;
-	sdev->netdev = netdev;
 
 	if (netdev->addr_len) {
 		memcpy(sdev->raw_gid, netdev->dev_addr,
@@ -354,6 +353,10 @@ static struct siw_device *siw_device_create(struct net_device *netdev)
 	atomic_set(&sdev->num_mr, 0);
 	atomic_set(&sdev->num_pd, 0);
 
+	sdev->ifinfo.max_mtu = ib_mtu_int_to_enum(netdev->max_mtu);
+	sdev->ifinfo.mtu = ib_mtu_int_to_enum(READ_ONCE(netdev->mtu));
+	sdev->ifinfo.ifindex = netdev->ifindex;
+
 	sdev->numa_node = dev_to_node(&netdev->dev);
 	spin_lock_init(&sdev->lock);
 
@@ -381,12 +384,12 @@ static int siw_netdev_event(struct notifier_block *nb, unsigned long event,
 
 	switch (event) {
 	case NETDEV_UP:
-		sdev->state = IB_PORT_ACTIVE;
+		sdev->ifinfo.state = IB_PORT_ACTIVE;
 		siw_port_event(sdev, 1, IB_EVENT_PORT_ACTIVE);
 		break;
 
 	case NETDEV_DOWN:
-		sdev->state = IB_PORT_DOWN;
+		sdev->ifinfo.state = IB_PORT_DOWN;
 		siw_port_event(sdev, 1, IB_EVENT_PORT_ERR);
 		break;
 
@@ -406,10 +409,13 @@ static int siw_netdev_event(struct notifier_block *nb, unsigned long event,
 	case NETDEV_CHANGEADDR:
 		siw_port_event(sdev, 1, IB_EVENT_LID_CHANGE);
 		break;
+
+	case NETDEV_CHANGEMTU:
+		sdev->ifinfo.mtu = ib_mtu_int_to_enum(READ_ONCE(netdev->mtu));
+		break;
 	/*
 	 * Todo: Below netdev events are currently not handled.
 	 */
-	case NETDEV_CHANGEMTU:
 	case NETDEV_CHANGE:
 		break;
 
@@ -444,9 +450,9 @@ static int siw_newlink(const char *basedev_name, struct net_device *netdev)
 		dev_dbg(&netdev->dev, "siw: new device\n");
 
 		if (netif_running(netdev) && netif_carrier_ok(netdev))
-			sdev->state = IB_PORT_ACTIVE;
+			sdev->ifinfo.state = IB_PORT_ACTIVE;
 		else
-			sdev->state = IB_PORT_DOWN;
+			sdev->ifinfo.state = IB_PORT_DOWN;
 
 		ib_mark_name_assigned_by_user(&sdev->base_dev);
 		rv = siw_device_register(sdev, basedev_name);

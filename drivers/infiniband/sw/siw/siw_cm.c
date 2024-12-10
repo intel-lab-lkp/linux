@@ -1780,7 +1780,7 @@ int siw_create_listen(struct iw_cm_id *id, int backlog)
 
 		/* For wildcard addr, limit binding to current device only */
 		if (ipv4_is_zeronet(laddr->sin_addr.s_addr))
-			s->sk->sk_bound_dev_if = sdev->netdev->ifindex;
+			s->sk->sk_bound_dev_if = sdev->ifinfo.ifindex;
 
 		rv = s->ops->bind(s, (struct sockaddr *)laddr,
 				  sizeof(struct sockaddr_in));
@@ -1798,7 +1798,7 @@ int siw_create_listen(struct iw_cm_id *id, int backlog)
 
 		/* For wildcard addr, limit binding to current device only */
 		if (ipv6_addr_any(&laddr->sin6_addr))
-			s->sk->sk_bound_dev_if = sdev->netdev->ifindex;
+			s->sk->sk_bound_dev_if = sdev->ifinfo.ifindex;
 
 		rv = s->ops->bind(s, (struct sockaddr *)laddr,
 				  sizeof(struct sockaddr_in6));

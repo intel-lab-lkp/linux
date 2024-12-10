@@ -69,15 +69,18 @@ struct siw_pd {
 
 struct siw_device {
 	struct ib_device base_dev;
-	struct net_device *netdev;
 	struct siw_dev_cap attrs;
 
 	u32 vendor_part_id;
+	struct {
+		int ifindex;
+		enum ib_port_state state;
+		enum ib_mtu mtu;
+		enum ib_mtu max_mtu;
+	} ifinfo;
+
 	int numa_node;
 	char raw_gid[ETH_ALEN];
-
-	/* physical port state (only one port per device) */
-	enum ib_port_state state;
 
 	spinlock_t lock;
 
