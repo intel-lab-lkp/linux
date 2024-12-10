@@ -23,7 +23,7 @@ SND_SOC_DAILINK_DEF(acp6x_pdm,
 
 SND_SOC_DAILINK_DEF(dmic_codec,
 		    DAILINK_COMP_ARRAY(COMP_CODEC("dmic-codec.0",
-						  "dmic-hifi")));
+							      "dmic-hifi")));
 
 SND_SOC_DAILINK_DEF(pdm_platform,
 		    DAILINK_COMP_ARRAY(COMP_PLATFORM("acp_yc_pdm_dma.0")));
@@ -583,13 +583,12 @@ static int acp6x_probe(struct platform_device *pdev)
 
 	if (is_dmic_enable && wov_en)
 		platform_set_drvdata(pdev, &acp6x_card);
-	else
-		return 0;
-
-	/* check for any DMI overrides */
-	dmi_id = dmi_first_match(yc_acp_quirk_table);
-	if (dmi_id)
-		platform_set_drvdata(pdev, dmi_id->driver_data);
+	else {
+		/* check for any DMI overrides */
+		dmi_id = dmi_first_match(yc_acp_quirk_table);
+		if (dmi_id)
+			platform_set_drvdata(pdev, dmi_id->driver_data);
+	}
 
 	card = platform_get_drvdata(pdev);
 	if (!card)
@@ -601,8 +600,8 @@ static int acp6x_probe(struct platform_device *pdev)
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret) {
 		return dev_err_probe(&pdev->dev, ret,
-				"snd_soc_register_card(%s) failed\n",
-				card->name);
+				     "snd_soc_register_card(%s) failed\n",
+				     card->name);
 	}
 	return 0;
 }
