@@ -520,6 +520,7 @@ static inline struct avc_node *avc_search_node(u32 ssid, u32 tsid, u16 tclass)
 
 	hvalue = avc_hash(ssid, tsid, tclass);
 	head = &selinux_avc.avc_cache.slots[hvalue];
+	rcu_read_lock();
 	hlist_for_each_entry_rcu(node, head, list) {
 		if (ssid == node->ae.ssid &&
 		    tclass == node->ae.tclass &&
@@ -528,6 +529,7 @@ static inline struct avc_node *avc_search_node(u32 ssid, u32 tsid, u16 tclass)
 			break;
 		}
 	}
+	rcu_read_unlock();
 
 	return ret;
 }
