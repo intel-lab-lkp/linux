@@ -545,35 +545,35 @@ EXPORT_SYMBOL_GPL(da9052_regmap_config);
 static int da9052_clear_fault_log(struct da9052 *da9052)
 {
 	int ret = 0;
-	int fault_log = 0;
+	int *fault_log = &da9052->fault_log;
 
-	fault_log = da9052_reg_read(da9052, DA9052_FAULTLOG_REG);
-	if (fault_log < 0) {
+	*fault_log = da9052_reg_read(da9052, DA9052_FAULTLOG_REG);
+	if (*fault_log < 0) {
 		dev_err(da9052->dev,
-			"Cannot read FAULT_LOG %d\n", fault_log);
-		return fault_log;
+			"Cannot read FAULT_LOG %d\n", *fault_log);
+		return *fault_log;
 	}
 
-	if (fault_log) {
-		if (fault_log & DA9052_FAULTLOG_TWDERROR)
+	if (*fault_log) {
+		if (*fault_log & DA9052_FAULTLOG_TWDERROR)
 			dev_dbg(da9052->dev,
 				"Fault log entry detected: TWD_ERROR\n");
-		if (fault_log & DA9052_FAULTLOG_VDDFAULT)
+		if (*fault_log & DA9052_FAULTLOG_VDDFAULT)
 			dev_dbg(da9052->dev,
 				"Fault log entry detected: VDD_FAULT\n");
-		if (fault_log & DA9052_FAULTLOG_VDDSTART)
+		if (*fault_log & DA9052_FAULTLOG_VDDSTART)
 			dev_dbg(da9052->dev,
 				"Fault log entry detected: VDD_START\n");
-		if (fault_log & DA9052_FAULTLOG_TEMPOVER)
+		if (*fault_log & DA9052_FAULTLOG_TEMPOVER)
 			dev_dbg(da9052->dev,
 				"Fault log entry detected: TEMP_OVER\n");
-		if (fault_log & DA9052_FAULTLOG_KEYSHUT)
+		if (*fault_log & DA9052_FAULTLOG_KEYSHUT)
 			dev_dbg(da9052->dev,
 				"Fault log entry detected: KEY_SHUT\n");
-		if (fault_log & DA9052_FAULTLOG_NSDSET)
+		if (*fault_log & DA9052_FAULTLOG_NSDSET)
 			dev_dbg(da9052->dev,
 				"Fault log entry detected: nSD_SHUT\n");
-		if (fault_log & DA9052_FAULTLOG_WAITSET)
+		if (*fault_log & DA9052_FAULTLOG_WAITSET)
 			dev_dbg(da9052->dev,
 				"Fault log entry detected: WAIT_SHUT\n");
 
