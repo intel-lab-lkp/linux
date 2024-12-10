@@ -422,6 +422,9 @@ static int vm_module_tags_populate(void)
 			return -ENOMEM;
 		}
 		vm_module_tags->nr_pages += nr;
+
+		if ((phys_end & (MODULE_ALIGN - 1)) == 0)
+			kasan_alloc_module_shadow((void *)phys_end, nr << PAGE_SHIFT, GFP_KERNEL);
 	}
 
 	/*
