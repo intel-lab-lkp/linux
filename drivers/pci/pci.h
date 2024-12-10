@@ -374,6 +374,9 @@ static inline int pcie_dev_speed_mbps(enum pci_bus_speed speed)
 }
 
 const char *pci_speed_string(enum pci_bus_speed speed);
+const char *pci_power_budget_scale_string(u8 num);
+const char *pci_power_budget_alt_encode_string(u8 num);
+const char *pci_power_budget_rail_string(u8 num);
 enum pci_bus_speed pcie_get_speed_cap(struct pci_dev *dev);
 enum pcie_link_width pcie_get_width_cap(struct pci_dev *dev);
 void __pcie_print_link_status(struct pci_dev *dev, bool verbose);

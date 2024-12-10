@@ -842,11 +842,12 @@
 #define PCI_PWR_DSR		0x04	/* Data Select Register */
 #define PCI_PWR_DATA		0x08	/* Data Register */
 #define  PCI_PWR_DATA_BASE(x)	((x) & 0xff)	    /* Base Power */
-#define  PCI_PWR_DATA_SCALE(x)	(((x) >> 8) & 3)    /* Data Scale */
+#define  PCI_PWR_DATA_SCALE(x)	(((x) >> 8) & 3)    /* Data Scale[1:0] */
 #define  PCI_PWR_DATA_PM_SUB(x)	(((x) >> 10) & 7)   /* PM Sub State */
 #define  PCI_PWR_DATA_PM_STATE(x) (((x) >> 13) & 3) /* PM State */
 #define  PCI_PWR_DATA_TYPE(x)	(((x) >> 15) & 7)   /* Type */
 #define  PCI_PWR_DATA_RAIL(x)	(((x) >> 18) & 7)   /* Power Rail */
+#define  PCI_PWR_DATA_SCALE_UP(x)	(((x) >> 21) & 1)    /* Data Scale[2] */
 #define PCI_PWR_CAP		0x0c	/* Capability */
 #define  PCI_PWR_CAP_BUDGET(x)	((x) & 1)	/* Included in system budget */
 #define PCI_EXT_CAP_PWR_SIZEOF	0x10

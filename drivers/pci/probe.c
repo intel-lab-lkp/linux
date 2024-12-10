@@ -748,6 +748,72 @@ void pcie_update_link_speed(struct pci_bus *bus, u16 linksta)
 }
 EXPORT_SYMBOL_GPL(pcie_update_link_speed);
 
+const char *pci_power_budget_rail_string(u8 num)
+{
+	/* Indexed by the rail number */
+	static const char *rail_strings[] = {
+	    "Power(12V)",		/* 0x00 */
+	    "Power(3.3V)",		/* 0x01 */
+	    "Power(1.5Vor1.8V)",		/* 0x02 */
+	    "Power(48V)",		/* 0x03 */
+	    "Power(5V)",		/* 0x04 */
+	    "Thermal",			/* 0x05 */
+	};
+
+	if (num < ARRAY_SIZE(rail_strings))
+		return rail_strings[num];
+	return "Unknown";
+}
+EXPORT_SYMBOL_GPL(pci_power_budget_rail_string);
+
+const char *pci_power_budget_scale_string(u8 num)
+{
+	/* Indexed by the scale number */
+	static const char *scale_strings[] = {
+	    "x1.0",		/* 0x00 */
+	    "x0.1",		/* 0x01 */
+	    "x0.01",		/* 0x02 */
+	    "x0.001",		/* 0x03 */
+	    "x10",		/* 0x04 */
+	    "x100",			/* 0x05 */
+	};
+
+	if (num < ARRAY_SIZE(scale_strings))
+		return scale_strings[num];
+	return "Unknown";
+}
+EXPORT_SYMBOL_GPL(pci_power_budget_scale_string);
+
+const char *pci_power_budget_alt_encode_string(u8 num)
+{
+	u8 n;
+	n = num & 0x0f;
+	/* Indexed by the Base Power number */
+	static const char *Power_strings[] = {
+	    "> 239 W and ≤ 250 W Slot Power Limit",		/* 0xF0 */
+	    "> 250 W and ≤ 275 W Slot Power Limit",		/* 0xF1 */
+	    "> 275 W and ≤ 300 W Slot Power Limit",		/* 0xF2 */
+	    "> 300 W and ≤ 325 W Slot Power Limit",		/* 0xF3 */
+	    "> 325 W and ≤ 350 W Slot Power Limit",		/* 0xF4 */
+	    "> 350 W and ≤ 375 W Slot Power Limit",		/* 0xF5 */
+	    "> 375 W and ≤ 400 W Slot Power Limit",		/* 0xF6 */
+	    "> 400 W and ≤ 425 W Slot Power Limit",		/* 0xF7 */
+	    "> 425 W and ≤ 450 W Slot Power Limit",		/* 0xF8 */
+	    "> 450 W and ≤ 475 W Slot Power Limit",		/* 0xF9 */
+	    "> 475 W and ≤ 500 W Slot Power Limit",		/* 0xFA */
+	    "> 500 W and ≤ 525 W Slot Power Limit",		/* 0xFB */
+	    "> 525 W and ≤ 550 W Slot Power Limit",		/* 0xFC */
+	    "> 550 W and ≤ 575 W Slot Power Limit",		/* 0xFD */
+	    "> 575 W and ≤ 600 W Slot Power Limit",		/* 0xFE */
+	    "Greater than 600 W",		/* 0xFF */
+	};
+
+	if (n < ARRAY_SIZE(Power_strings))
+		return Power_strings[n];
+	return "Unknown";
+}
+EXPORT_SYMBOL_GPL(pci_power_budget_alt_encode_string);
+
 static unsigned char agp_speeds[] = {
 	AGP_UNKNOWN,
 	AGP_1X,
