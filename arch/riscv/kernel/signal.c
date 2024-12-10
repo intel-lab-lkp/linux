@@ -203,22 +203,18 @@ static long restore_sigcontext(struct pt_regs *regs,
 	return err;
 }
 
-static size_t get_rt_frame_size(bool cal_all)
+static size_t get_rt_frame_size(struct pt_regs *regs)
 {
 	struct rt_sigframe __user *frame;
-	size_t frame_size;
+	size_t frame_size = sizeof(*frame);
 	size_t total_context_size = 0;
 
-	frame_size = sizeof(*frame);
-
-	if (has_vector()) {
-		if (cal_all || riscv_v_vstate_query(task_pt_regs(current)))
-			total_context_size += riscv_v_sc_size;
-	}
+	if (has_vector() && riscv_v_vstate_query(regs))
+		total_context_size += riscv_v_sc_size;
 
 	frame_size += total_context_size;
-
 	frame_size = round_up(frame_size, 16);
+
 	return frame_size;
 }
 
@@ -228,7 +224,7 @@ SYSCALL_DEFINE0(rt_sigreturn)
 	struct rt_sigframe __user *frame;
 	struct task_struct *task;
 	sigset_t set;
-	size_t frame_size = get_rt_frame_size(false);
+	size_t frame_size = get_rt_frame_size(regs);
 
 	/* Always make any pending restarted system calls return -EINTR */
 	current->restart_block.fn = do_no_restart_syscall;
@@ -318,7 +314,7 @@ static int setup_rt_frame(struct ksignal *ksig, sigset_t *set,
 	struct rt_sigframe __user *frame;
 	long err = 0;
 	unsigned long __maybe_unused addr;
-	size_t frame_size = get_rt_frame_size(false);
+	size_t frame_size = get_rt_frame_size(regs);
 
 	frame = get_sigframe(ksig, regs, frame_size);
 	if (!access_ok(frame, frame_size))
@@ -465,19 +461,33 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 void init_rt_signal_env(void);
 void __init init_rt_signal_env(void)
 {
-	riscv_v_sc_size = sizeof(struct __riscv_ctx_hdr) +
-			  sizeof(struct __sc_riscv_v_state) + riscv_v_vsize;
+	struct rt_sigframe __user *frame;
+	size_t frame_size = sizeof(*frame);
+
+	/*
+	 * init_rt_signal_env() is called before applying alternative patch. Do not use
+	 * __riscv_has_extension_likely()/__riscv_has_extension_unlikely() to check the
+	 * availiablity of an extension in this function.
+	 */
+	if (__riscv_isa_extension_available(NULL, RISCV_ISA_EXT_v)) {
+		riscv_v_sc_size = sizeof(struct __riscv_ctx_hdr) +
+				  sizeof(struct __sc_riscv_v_state) + riscv_v_vsize;
+		frame_size += riscv_v_sc_size;
+	}
+
+	frame_size = round_up(frame_size, 16);
+
 	/*
 	 * Determine the stack space required for guaranteed signal delivery.
 	 * The signal_minsigstksz will be populated into the AT_MINSIGSTKSZ entry
 	 * in the auxiliary array at process startup.
 	 */
-	signal_minsigstksz = get_rt_frame_size(true);
+	signal_minsigstksz = frame_size;
 }
 
 #ifdef CONFIG_DYNAMIC_SIGFRAME
 bool sigaltstack_size_valid(size_t ss_size)
 {
-	return ss_size > get_rt_frame_size(false);
+	return ss_size > get_rt_frame_size(current_pt_regs());
 }
 #endif /* CONFIG_DYNAMIC_SIGFRAME */
