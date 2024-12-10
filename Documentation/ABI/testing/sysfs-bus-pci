@@ -572,3 +572,65 @@ Description:
 		enclosure-specific indications "specific0" to "specific7",
 		hence the corresponding led class devices are unavailable if
 		the DSM interface is used.
+
+What:		/sys/bus/pci/devices/.../power_budget
+Date:		December 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This file provides information about the PCIe power budget
+		for the device. It is a read-only file that outputs the values
+		of the Power Budgeting Data Register for each power state as a
+		series of 32-bit hexadecimal values. Each line represents a
+		single Power Budgeting Data register entry, containing the
+		power budget for a specific power state.
+
+		The specific interpretation of these values depends on the
+		device and the PCIe specification. Refer to the PCIe
+		specification for detailed information about the Power
+		Budgeting Data register, including the encoding	of power
+		states and the interpretation of Base Power and Data Scale.
+
+What:		/sys/bus/pci/devices/.../power_budget/power_budget_data_select
+Date:		December 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This is an 8-bit read/write register that selects the DWORD of 
+		power budgeting data that will be displayed in the
+		Power Budgeting Data. The value starts at zero and incrementing
+		the index value selects the next DWORD.
+
+What:		/sys/bus/pci/devices/.../power_budget/power_budget_power
+Date:		December 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This file provides the power consumption calculated by
+		multiplying the base power by the data scale.
+
+
+What:		/sys/bus/pci/devices/.../power_budget/power_budget_pm_state
+Date:		December 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This file specifies the power management state of the operating
+		condition.
+
+What:		/sys/bus/pci/devices/.../power_budget/power_budget_pm_substate
+Date:		December 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This file specifies the power management sub state of the
+		operating condition.
+
+What:		/sys/bus/pci/devices/.../power_budget/power_budget_type
+Date:		December 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This file specifies the type of the operating condition.
+
+
+What:		/sys/bus/pci/devices/.../power_budget/power_budget_rail
+Date:		December 2024
+Contact:	Kobayashi Daisuke <kobayashi.da-06@fujitsu.com>
+Description:
+		This file Specifies the thermal load or power rail of the
+		operating condition.

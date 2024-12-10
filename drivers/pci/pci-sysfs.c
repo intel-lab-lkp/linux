@@ -238,6 +238,155 @@ static ssize_t current_link_width_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(current_link_width);
 
+static ssize_t power_budget_data_select_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t count)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int pos;
+	u8 val;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	if (kstrtou8(buf, 0, &val) < 0)
+		return -EINVAL;
+
+	pci_write_config_byte(pci_dev, pos + PCI_PWR_DSR, val);
+
+	return count;
+}
+
+static ssize_t power_budget_data_select_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int pos, err;
+	u8 data;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	err = pci_read_config_byte(pci_dev, pos + PCI_PWR_DSR, &data);
+	if (err)
+		return -EINVAL;
+
+	return sysfs_emit(buf, "%u\n", data);
+}
+
+static DEVICE_ATTR_RW(power_budget_data_select);
+
+static ssize_t power_budget_power_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int pos, err;
+	u32 data;
+	u8 base, scale_up, scale_low, scale;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	err = pci_read_config_dword(pci_dev, pos + PCI_PWR_DATA, &data);
+	if (err)
+		return -EINVAL;
+
+	base = PCI_PWR_DATA_BASE(data);
+	scale_up = PCI_PWR_DATA_SCALE_UP(data);
+	scale_low = PCI_PWR_DATA_SCALE(data);
+	scale = scale_up << 2 | scale_low;
+	if (scale == 0 && base >= 0xF0)
+		return sysfs_emit(buf, "%s\n",pci_power_budget_alt_encode_string(data));
+
+	return sysfs_emit(buf, "%u%s\n", base, pci_power_budget_scale_string(scale));
+}
+static DEVICE_ATTR_RO(power_budget_power);
+
+static ssize_t power_budget_pm_state_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int pos, err;
+	u32 data;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	err = pci_read_config_dword(pci_dev, pos + PCI_PWR_DATA, &data);
+	if (err)
+		return -EINVAL;
+
+	return sysfs_emit(buf, "D%u\n", PCI_PWR_DATA_PM_STATE(data));
+}
+static DEVICE_ATTR_RO(power_budget_pm_state);
+
+static ssize_t power_budget_pm_substate_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int pos, err;
+	u8 substate;
+	u32 data;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	err = pci_read_config_dword(pci_dev, pos + PCI_PWR_DATA, &data);
+	if (err)
+		return -EINVAL;
+	
+	substate = PCI_PWR_DATA_PM_SUB(data);
+	if (substate == 0)
+		return sysfs_emit(buf, "Default Sub State\n");
+
+	return sysfs_emit(buf, "Device Specific Sub State\n");
+}
+static DEVICE_ATTR_RO(power_budget_pm_substate);
+
+static ssize_t power_budget_type_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int pos, err;
+	u32 data;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	err = pci_read_config_dword(pci_dev, pos + PCI_PWR_DATA, &data);
+	if (err)
+		return -EINVAL;
+	
+	return sysfs_emit(buf, "%u\n", PCI_PWR_DATA_TYPE(data));
+}
+static DEVICE_ATTR_RO(power_budget_type);
+
+static ssize_t power_budget_rail_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct pci_dev *pci_dev = to_pci_dev(dev);
+	int pos, err;
+	u32 data;
+
+	pos = pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_PWR);
+	if (!pos)
+		return -EINVAL;
+
+	err = pci_read_config_dword(pci_dev, pos + PCI_PWR_DATA, &data);
+	if (err)
+		return -EINVAL;
+
+	return sysfs_emit(buf, "%s\n", 
+				pci_power_budget_rail_string(PCI_PWR_DATA_RAIL(data)));
+}
+static DEVICE_ATTR_RO(power_budget_rail);
+
 static ssize_t secondary_bus_number_show(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -633,6 +782,16 @@ static struct attribute *pcie_dev_attrs[] = {
 	&dev_attr_current_link_width.attr,
 	&dev_attr_max_link_width.attr,
 	&dev_attr_max_link_speed.attr,
+	NULL,
+};
+
+static struct attribute *pcie_pbec_attrs[] = {
+	&dev_attr_power_budget_data_select.attr,
+	&dev_attr_power_budget_power.attr,
+	&dev_attr_power_budget_pm_state.attr,
+	&dev_attr_power_budget_pm_substate.attr,
+	&dev_attr_power_budget_rail.attr,
+	&dev_attr_power_budget_type.attr,
 	NULL,
 };
 
@@ -1610,6 +1769,19 @@ static umode_t pcie_dev_attrs_are_visible(struct kobject *kobj,
 	return 0;
 }
 
+static umode_t pcie_pbec_attrs_are_visible(struct kobject *kobj,
+					  struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (pci_is_pcie(pdev) && 
+		pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_PWR))
+		return a->mode;
+
+	return 0;
+}
+
 static const struct attribute_group pci_dev_group = {
 	.attrs = pci_dev_attrs,
 };
@@ -1652,6 +1824,12 @@ static const struct attribute_group pcie_dev_attr_group = {
 	.is_visible = pcie_dev_attrs_are_visible,
 };
 
+static const struct attribute_group pcie_pbec_attr_group = {
+	.name = "power_budget",
+	.attrs = pcie_pbec_attrs,
+	.is_visible = pcie_pbec_attrs_are_visible,
+};
+
 const struct attribute_group *pci_dev_attr_groups[] = {
 	&pci_dev_attr_group,
 	&pci_dev_hp_attr_group,
@@ -1661,6 +1839,7 @@ const struct attribute_group *pci_dev_attr_groups[] = {
 #endif
 	&pci_bridge_attr_group,
 	&pcie_dev_attr_group,
+	&pcie_pbec_attr_group,
 #ifdef CONFIG_PCIEAER
 	&aer_stats_attr_group,
 #endif
