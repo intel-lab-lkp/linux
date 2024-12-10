@@ -487,7 +487,14 @@ static bool sc16is7xx_regmap_precious(struct device *dev, unsigned int reg)
 
 static bool sc16is7xx_regmap_noinc(struct device *dev, unsigned int reg)
 {
-	return reg == SC16IS7XX_RHR_REG;
+	switch (reg >> SC16IS7XX_REG_SHIFT) {
+	case SC16IS7XX_RHR_REG:
+		return true;
+	default:
+		break;
+	}
+
+	return false;
 }
 
 /*
