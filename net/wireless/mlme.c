@@ -639,7 +639,7 @@ int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 				struct netlink_ext_ack *extack)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
-	struct cfg80211_mgmt_registration *reg, *nreg;
+	struct cfg80211_mgmt_registration *reg;
 	int err = 0;
 	u16 mgmt_type;
 	bool update_multicast = false;
@@ -680,10 +680,6 @@ int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 		return -EINVAL;
 	}
 
-	nreg = kzalloc(sizeof(*reg) + match_len, GFP_KERNEL);
-	if (!nreg)
-		return -ENOMEM;
-
 	spin_lock_bh(&rdev->mgmt_registrations_lock);
 
 	list_for_each_entry(reg, &wdev->mgmt_registrations, list) {
@@ -707,9 +703,14 @@ int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 	if (err)
 		goto out;
 
-	if (update_multicast) {
-		kfree(nreg);
-	} else {
+	if (!update_multicast) {
+		struct cfg80211_mgmt_registration *nreg =
+			kmalloc(sizeof(*reg) + match_len, GFP_KERNEL);
+
+		if (!nreg) {
+			err = -ENOMEM;
+			goto out;
+		}
 		nreg->match_len = match_len;
 		memcpy(nreg->match, match_data, match_len);
 		nreg->nlportid = snd_portid;
@@ -726,7 +727,6 @@ int cfg80211_mlme_register_mgmt(struct wireless_dev *wdev, u32 snd_portid,
 	return 0;
 
  out:
-	kfree(nreg);
 	spin_unlock_bh(&rdev->mgmt_registrations_lock);
 
 	return err;
