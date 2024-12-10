@@ -27,6 +27,7 @@ struct vhost_work {
 };
 
 struct vhost_worker {
+	struct task_struct *kthread_task;
 	struct vhost_task	*vtsk;
 	struct vhost_dev	*dev;
 	/* Used to serialize device wide flushing with worker swapping. */
@@ -36,6 +37,8 @@ struct vhost_worker {
 	u32			id;
 	int			attachment_cnt;
 	bool			killed;
+	int (*task_wakeup)(struct vhost_worker *worker);
+	int (*task_stop)(struct vhost_worker *worker);
 };
 
 /* Poll a file (eventfd or socket) */

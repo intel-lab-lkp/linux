@@ -721,14 +721,38 @@ static void vhost_workers_free(struct vhost_dev *dev)
 	xa_destroy(&dev->worker_xa);
 }
 
+static int vhost_task_wakeup_fn(struct vhost_worker *worker)
+{
+	vhost_task_wake(worker->vtsk);
+	return 0;
+}
+
+static int vhost_kthread_wakeup_fn(struct vhost_worker *worker)
+{
+	return wake_up_process(worker->kthread_task);
+}
+
+static int vhost_task_stop_fn(struct vhost_worker *worker)
+{
+	vhost_task_stop(worker->vtsk);
+	return 0;
+}
+
+static int vhost_kthread_stop_fn(struct vhost_worker *worker)
+{
+	return kthread_stop(worker->kthread_task);
+}
+
 static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
 {
 	struct vhost_worker *worker;
-	struct vhost_task *vtsk;
+	struct vhost_task *vtsk = NULL;
+	struct task_struct *task = NULL;
 	char name[TASK_COMM_LEN];
 	int ret;
 	u32 id;
 
+	/* Allocate resources for the worker */
 	worker = kzalloc(sizeof(*worker), GFP_KERNEL_ACCOUNT);
 	if (!worker)
 		return NULL;
@@ -736,27 +760,59 @@ static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
 	worker->dev = dev;
 	snprintf(name, sizeof(name), "vhost-%d", current->pid);
 
-	vtsk = vhost_task_create(vhost_run_work_list, vhost_worker_killed,
-				 worker, name);
-	if (!vtsk)
-		goto free_worker;
-
 	mutex_init(&worker->mutex);
 	init_llist_head(&worker->work_list);
 	worker->kcov_handle = kcov_common_handle();
-	worker->vtsk = vtsk;
 
-	vhost_task_start(vtsk);
+	if (dev->inherit_owner) {
+		/*
+		 * If inherit_owner is true we use vhost_tasks to create
+		 * the worker so all settings/limits like cgroups, NPROC,
+		 * scheduler, etc are inherited from the owner. If false,
+		 * we use kthreads and only attach to the same cgroups
+		 * as the owner for compat with older kernels.
+		 */
+		vtsk = vhost_task_create(vhost_run_work_list,
+					 vhost_worker_killed, worker, name);
+		if (!vtsk)
+			goto free_worker;
 
-	ret = xa_alloc(&dev->worker_xa, &id, worker, xa_limit_32b, GFP_KERNEL);
-	if (ret < 0)
-		goto stop_worker;
+		worker->vtsk = vtsk;
+		worker->task_wakeup = vhost_task_wakeup_fn;
+		worker->task_stop = vhost_task_stop_fn;
+
+		vhost_task_start(vtsk);
+		ret = xa_alloc(&dev->worker_xa, &id, worker, xa_limit_32b,
+			       GFP_KERNEL);
+		if (ret < 0)
+			goto stop_worker;
+	} else {
+		/* Create and start a kernel thread */
+		task = kthread_create(vhost_run_work_kthread_list, worker,
+				      "vhost-%d", current->pid);
+		if (IS_ERR(task)) {
+			ret = PTR_ERR(task);
+			goto free_worker;
+		}
+		worker->kthread_task = task;
+		worker->task_wakeup = vhost_kthread_wakeup_fn;
+		worker->task_stop = vhost_kthread_stop_fn;
+
+		wake_up_process(task);
+		ret = xa_alloc(&dev->worker_xa, &id, worker, xa_limit_32b,
+			       GFP_KERNEL);
+		if (ret < 0)
+			goto stop_worker;
+
+		ret = vhost_attach_task_to_cgroups(worker);
+		if (ret)
+			goto stop_worker;
+	}
+
 	worker->id = id;
-
 	return worker;
-
 stop_worker:
-	vhost_task_stop(vtsk);
+	worker->task_stop(worker);
 free_worker:
 	kfree(worker);
 	return NULL;
