@@ -513,6 +513,18 @@ Field	1	P1
 Field	0	P0
 EndSysreg
 
+Sysreg	SPMSELR_EL0	2	3	9	12	5
+Res0	63:10
+Field	9:4	SYSPMUSEL
+Res0	3:2
+UnsignedEnum	1:0	BANK
+	0b00	BANK_0
+	0b01	BANK_1
+	0b10	BANK_2
+	0b11	BANK_3
+EndEnum
+EndSysreg
+
 Sysreg	SPMOVSSET_EL0	2	3	9	14	3
 Field	63	P63
 Field	62	P62
