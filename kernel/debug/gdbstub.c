@@ -34,13 +34,14 @@
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
 #include <linux/unaligned.h>
+#include <linux/vmcore_info.h>
 #include "debug_core.h"
 
 #define KGDB_MAX_THREAD_QUERY 17
 
 /* Our I/O buffers. */
 static char			remcom_in_buffer[BUFMAX];
-static char			remcom_out_buffer[BUFMAX];
+static char			remcom_out_buffer[MAX(VMCOREINFO_BYTES*3, BUFMAX)];
 static int			gdbstub_use_prev_in_buf;
 static int			gdbstub_prev_in_buf_pos;
 
@@ -766,6 +767,13 @@ static void gdb_cmd_query(struct kgdb_state *ks)
 		}
 
 		*(--ptr) = '\0';
+		break;
+
+	case 'l':
+		if (memcmp(remcom_in_buffer + 1, "linux.vmcoreinfo", 16) == 0) {
+			remcom_out_buffer[0] = 'Q';
+			kgdb_mem2ebin(vmcoreinfo_data, remcom_out_buffer + 1, vmcoreinfo_size);
+		}
 		break;
 
 	case 'C':
