@@ -281,7 +281,7 @@
 	bus-width = <4>;
 	no-sdio;
 	no-mmc;
-	cd-gpios = <&sysgpio 41 GPIO_ACTIVE_LOW>;
+	cd-gpios = <&sysgpio GPI_SYS_SDIO1_CD GPIO_ACTIVE_LOW>;
 	disable-wp;
 	cap-sd-highspeed;
 	post-power-on-delay-ms = <200>;
