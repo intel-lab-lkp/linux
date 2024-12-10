@@ -590,14 +590,18 @@ static int rockchip_pd_power(struct rockchip_pm_domain *pd, bool power_on)
 			rockchip_pmu_save_qos(pd);
 
 			/* if powering down, idle request to NIU first */
-			rockchip_pmu_set_idle_request(pd, true);
+			ret = rockchip_pmu_set_idle_request(pd, true);
+			if (ret < 0)
+				return ret;
 		}
 
 		rockchip_do_pmu_set_power_domain(pd, power_on);
 
 		if (power_on) {
 			/* if powering up, leave idle mode */
-			rockchip_pmu_set_idle_request(pd, false);
+			ret = rockchip_pmu_set_idle_request(pd, false);
+			if (ret < 0)
+				return ret;
 
 			rockchip_pmu_restore_qos(pd);
 		}
