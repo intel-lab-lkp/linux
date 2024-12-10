@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <syscall.h>
 #include <sys/mman.h>
 #include <time.h>
 #include <stdbool.h>
@@ -268,6 +269,115 @@ out:
 		ksft_test_result_pass("%s\n", test_name);
 	else
 		ksft_test_result_fail("%s\n", test_name);
+}
+
+/*
+ * This test validates that mremap(2) with MREMAP_MAYMOVE uses the new
+ * address as a hint.
+ */
+static void mremap_maymove_hint(FILE *maps_fp, unsigned long page_size)
+{
+	char *test_name = "mremap MAY_MOVE with hint";
+	void *mapping_a, *mapping_b, *mapping_c, *remapped, *hint;
+	intptr_t base_map_addr = 0x8FF00000;
+
+#if !defined(__i386__) && !defined(__x86_64__)
+	/*
+	 * This test is written with knowledge about the architecture specific behavior of
+	 * get_unmapped_area(). For that reason this specific test is only applicable to x86.
+	 */
+	ksft_test_result_skip("%s\n", test_name);
+	return;
+#endif
+
+	/*
+	 * To validate the behavior we'll use the following layout:
+	 *
+	 * | mapping a |                   |   mapping b    |   mapping c   |
+	 * | 1 page    | 10 pages unmapped | 2 pages mapped | 1 page mapped |
+	 *
+	 * To guarantee we can get this layout we'll do a single mmap and then
+	 * munmap and mprotect accordingly, this will prevent the test from being
+	 * flaky.
+	 *
+	 * We'll attempt to resize mapping b to 3 pages using MAYMOVE, because
+	 * mapping c is beyond it it'll have to be moved. We will use mapping a
+	 * as the hint to validate it lands just beyond it. The final result:
+	 *
+	 * | mapping a |                  | mapping b      |                  |   mapping c   |
+	 * | 1 page    | 2 pages unmapped | 3 pages mapped | 7 pages unampped | 1 page mapped |
+	 *
+	 */
+	mapping_a = mmap((void*)base_map_addr, 14 * page_size, PROT_READ | PROT_WRITE,
+		     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+	if (mapping_a == MAP_FAILED) {
+		ksft_print_msg("mmap failed: %s\n", strerror(errno));
+		goto out_fail;
+	}
+
+	mapping_b = (void*)((intptr_t)mapping_a + 11*page_size);
+	mapping_c = (void*)((intptr_t)mapping_a + 13*page_size);
+
+	/* unmap the 10 pages after mapping a */
+	munmap((void*)((intptr_t)(mapping_a) + page_size), 10*page_size);
+
+	/* make mapping a and c PROT_NONE to complete the vma splitting */
+	mprotect(mapping_a, page_size, PROT_NONE);
+	mprotect(mapping_c, page_size, PROT_NONE);
+
+	/*
+	 * Validate the split: mapping a, b, and c are mapped with a gap after 'a'.
+	 */
+	if (!is_range_mapped(maps_fp, (unsigned long)mapping_a,
+				  (unsigned long)(mapping_a + page_size))) {
+		ksft_print_msg("mapping 'a' was not mapped at %p\n", mapping_a);
+		goto out_fail;
+	}
+
+	if (is_range_mapped(maps_fp, (unsigned long)mapping_a + page_size,
+				  (unsigned long)mapping_a + 10*page_size)) {
+		ksft_print_msg("unmapped area after mapping 'a' not found\n");
+		goto out_fail;
+	}
+
+	if (!is_range_mapped(maps_fp, (unsigned long)mapping_b,
+				  (unsigned long)(mapping_b + 2*page_size))) {
+		ksft_print_msg("mapping 'b' was not mapped at %p\n", mapping_b);
+		goto out_fail;
+	}
+
+	if (!is_range_mapped(maps_fp, (unsigned long)mapping_c,
+				  (unsigned long)(mapping_c + page_size))) {
+		ksft_print_msg("mapping 'c' was not mapped at %p\n", mapping_c);
+		goto out_fail;
+	}
+
+	/*
+	 * Now try to mremap mapping 'b' using a hint, it will be increased in size
+	 * so that the VMA must be moved. Bypass the glibc wrapper of mremap(2) becuase
+	 * it will attempt to 0 the hint unless MREMAP_DONTUNMAP is set, for reference:
+	 * https://sourceware.org/git/?p=glibc.git;a=commitdiff;h=6c40cb0e9f893d49dc7caee580a055de53562206;hp=54252394c25ddf0062e288d4a6ab7a885f8ae009
+	 */
+	hint = (void*)((intptr_t)mapping_a + 3*page_size);
+	remapped = (void*)syscall(SYS_mremap, mapping_b, 2*page_size, 3*page_size, MREMAP_MAYMOVE, hint);
+	if ((intptr_t)remapped != (intptr_t)hint) {
+		if (remapped == MAP_FAILED)
+			ksft_print_msg("remap of 'b' failed %s\n", strerror(errno));
+		else
+			ksft_print_msg("mapping 'b' was unexpectedly remapped from %p to %p. expected: %p\n",
+				mapping_b, remapped, hint);
+		goto out_fail;
+	}
+
+	munmap(mapping_a, page_size);
+	munmap(remapped, 3 * page_size);
+	munmap(mapping_c, page_size);
+	ksft_test_result_pass("%s\n", test_name);
+	return;
+
+out_fail:
+	ksft_test_result_fail("%s\n", test_name);
 }
 
 /*
@@ -721,7 +831,7 @@ int main(int argc, char **argv)
 	char *rand_addr;
 	size_t rand_size;
 	int num_expand_tests = 2;
-	int num_misc_tests = 2;
+	int num_misc_tests = 3;
 	struct test test_cases[MAX_TEST] = {};
 	struct test perf_test_cases[MAX_PERF_TEST];
 	int page_size;
@@ -843,6 +953,7 @@ int main(int argc, char **argv)
 
 	mremap_expand_merge(maps_fp, page_size);
 	mremap_expand_merge_offset(maps_fp, page_size);
+	mremap_maymove_hint(maps_fp, page_size);
 
 	fclose(maps_fp);
 
