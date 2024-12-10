@@ -1397,6 +1397,7 @@ static void delete_endpoint(void *data)
 {
 	struct cxl_memdev *cxlmd = data;
 	struct cxl_port *endpoint = cxlmd->endpoint;
+	struct device *parent = cxlmd->dev.parent;
 	struct device *host = endpoint_host(endpoint);
 
 	scoped_guard(device, host) {
@@ -1407,6 +1408,8 @@ static void delete_endpoint(void *data)
 		}
 		cxlmd->endpoint = NULL;
 	}
+	if (sysfs_update_groups(&parent->kobj, cxlmd->mem_groups))
+		dev_info(parent, "CXL.mem sysfs attributes removed\n");
 	put_device(&endpoint->dev);
 	put_device(host);
 }

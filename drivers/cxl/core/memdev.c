@@ -616,8 +616,10 @@ static void detach_memdev(struct work_struct *work)
 
 static struct lock_class_key cxl_memdev_key;
 
-static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
-					   const struct file_operations *fops)
+static struct cxl_memdev *
+cxl_memdev_alloc(struct cxl_dev_state *cxlds,
+		 const struct file_operations *fops,
+		 const struct attribute_group **mem_groups)
 {
 	struct cxl_memdev *cxlmd;
 	struct device *dev;
@@ -633,6 +635,7 @@ static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
 		goto err;
 	cxlmd->id = rc;
 	cxlmd->depth = -1;
+	cxlmd->mem_groups = mem_groups;
 
 	dev = &cxlmd->dev;
 	device_initialize(dev);
@@ -1017,15 +1020,16 @@ static const struct file_operations cxl_memdev_fops = {
 	.llseek = noop_llseek,
 };
 
-struct cxl_memdev *devm_cxl_add_memdev(struct device *host,
-				       struct cxl_dev_state *cxlds)
+struct cxl_memdev *
+devm_cxl_add_memdev(struct device *host, struct cxl_dev_state *cxlds,
+		    const struct attribute_group **mem_groups)
 {
 	struct cxl_memdev *cxlmd;
 	struct device *dev;
 	struct cdev *cdev;
 	int rc;
 
-	cxlmd = cxl_memdev_alloc(cxlds, &cxl_memdev_fops);
+	cxlmd = cxl_memdev_alloc(cxlds, &cxl_memdev_fops, mem_groups);
 	if (IS_ERR(cxlmd))
 		return cxlmd;
 

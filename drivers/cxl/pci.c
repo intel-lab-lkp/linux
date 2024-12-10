@@ -885,8 +885,25 @@ static umode_t cxl_rcd_visible(struct kobject *kobj, struct attribute *a, int n)
 	struct device *dev = kobj_to_dev(kobj);
 	struct pci_dev *pdev = to_pci_dev(dev);
 
-	if (is_cxl_restricted(pdev))
+	if (is_cxl_restricted(pdev)) {
+		struct cxl_dev_state *cxlds = dev_get_drvdata(dev);
+		struct cxl_memdev *cxlmd = cxlds->cxlmd;
+		struct cxl_dport *dport;
+
+		if (!cxlmd->endpoint)
+			return 0;
+
+		struct cxl_port *root __free(put_cxl_port) =
+			cxl_mem_find_port(cxlmd, &dport);
+
+		if (!root)
+			return 0;
+
+		if (!dport->regs.rcd_pcie_cap)
+			return 0;
+
 		return a->mode;
+	}
 
 	return 0;
 }
@@ -993,7 +1010,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		return rc;
 
-	cxlmd = devm_cxl_add_memdev(&pdev->dev, cxlds);
+	cxlmd = devm_cxl_add_memdev(&pdev->dev, cxlds, cxl_rcd_groups);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
 

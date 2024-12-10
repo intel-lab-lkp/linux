@@ -50,6 +50,7 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 {
 	struct cxl_port *parent_port = parent_dport->port;
 	struct cxl_port *endpoint, *iter, *down;
+	struct device *parent;
 	int rc;
 
 	/*
@@ -69,6 +70,13 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 				     parent_dport);
 	if (IS_ERR(endpoint))
 		return PTR_ERR(endpoint);
+
+	parent = cxlmd->dev.parent;
+	rc = sysfs_update_groups(&parent->kobj, cxlmd->mem_groups);
+	if (rc) {
+		dev_err(parent, "CXL.mem sysfs attributes removed\n");
+		return rc;
+	}
 
 	rc = cxl_endpoint_autoremove(cxlmd, endpoint);
 	if (rc)

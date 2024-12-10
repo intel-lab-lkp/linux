@@ -43,6 +43,7 @@
  * @cxl_nvb: coordinate removal of @cxl_nvd if present
  * @cxl_nvd: optional bridge to an nvdimm if the device supports pmem
  * @endpoint: connection to the CXL port topology for this memory device
+ * @mem_groups: host device groups that change visibility based on cxl_mem attach
  * @id: id number of this memdev instance.
  * @depth: endpoint port depth
  */
@@ -54,6 +55,7 @@ struct cxl_memdev {
 	struct cxl_nvdimm_bridge *cxl_nvb;
 	struct cxl_nvdimm *cxl_nvd;
 	struct cxl_port *endpoint;
+	const struct attribute_group **mem_groups;
 	int id;
 	int depth;
 };
@@ -87,8 +89,9 @@ static inline bool is_cxl_endpoint(struct cxl_port *port)
 	return is_cxl_memdev(port->uport_dev);
 }
 
-struct cxl_memdev *devm_cxl_add_memdev(struct device *host,
-				       struct cxl_dev_state *cxlds);
+struct cxl_memdev *
+devm_cxl_add_memdev(struct device *host, struct cxl_dev_state *cxlds,
+		    const struct attribute_group **mem_groups);
 int devm_cxl_sanitize_setup_notifier(struct device *host,
 				     struct cxl_memdev *cxlmd);
 struct cxl_memdev_state;
