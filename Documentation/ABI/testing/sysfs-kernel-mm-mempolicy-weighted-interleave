@@ -23,3 +23,27 @@ Description:	Weight configuration interface for nodeN
 		Writing an empty string or `0` will reset the weight to the
 		system default. The system default may be set by the kernel
 		or drivers at boot or during hotplug events.
+
+What:		/sys/kernel/mm/mempolicy/weighted_interleave/max_node_weight
+Date:		December 2024
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Weight limiting / scaling interface
+
+		The maximum interleave weight for a memory node. When it is
+		updated, any previous changes to interleave weights (i.e. via
+		the nodeN sysfs interfaces) are ignored, and new weights are
+		calculated using ACPI-reported bandwidths and scaled.
+
+		It is possible for weights to be greater than max_node_weight if
+		the nodeN interfaces are directly modified to be greater.
+
+		Minimum weight: 1
+		Default value: 32
+		Maximum weight: 255
+
+		Writing an empty string will set the value to be the default
+		(32). Writing a value outside the valid range  will return
+		EINVAL and will not re-trigger a weight scaling.
+
+		Setting max_node_weight to 1 is equivalent to unweighted
+		interleave.
