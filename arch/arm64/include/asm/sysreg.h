@@ -686,6 +686,10 @@
 #define TLBI_CRm_RNS	6	/* Range, Non-Sharable */
 #define TLBI_CRm_nRNS	7	/* non-Range, Non-Sharable */
 
+#define OP_TSB_CSYNC			0xD503225F
+#define OP_DC_CIVAPS			sys_insn(2, 0, 7, 15, 1)
+#define OP_DC_CIGDVAPS			sys_insn(2, 0, 7, 15, 5)
+
 #define OP_TLBI_VMALLE1OS		sys_insn(1, 0, 8, 1, 0)
 #define OP_TLBI_VAE1OS			sys_insn(1, 0, 8, 1, 1)
 #define OP_TLBI_ASIDE1OS		sys_insn(1, 0, 8, 1, 2)
