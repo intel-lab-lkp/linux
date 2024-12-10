@@ -1109,6 +1109,9 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 			goto out;
 	}
 
+	if (!(flags & MREMAP_FIXED))
+		new_addr = round_hint_to_min(new_addr);
+
 	if (flags & (MREMAP_FIXED | MREMAP_DONTUNMAP)) {
 		ret = mremap_to(addr, old_len, new_addr, new_len,
 				&locked, flags, &uf, &uf_unmap_early,
