@@ -1707,28 +1707,28 @@ DEFINE_EVENT(ext4__map_blocks_exit, ext4_ind_map_blocks_exit,
 );
 
 TRACE_EVENT(ext4_ext_load_extent,
-	TP_PROTO(struct inode *inode, ext4_lblk_t lblk, ext4_fsblk_t pblk),
+	TP_PROTO(struct inode *inode, ext4_fsblk_t pblk, unsigned long IP),
 
-	TP_ARGS(inode, lblk, pblk),
+	TP_ARGS(inode, pblk, IP),
 
 	TP_STRUCT__entry(
 		__field(	dev_t,		dev		)
 		__field(	ino_t,		ino		)
 		__field(	ext4_fsblk_t,	pblk		)
-		__field(	ext4_lblk_t,	lblk		)
+		__field(	unsigned long,	ip		)
 	),
 
 	TP_fast_assign(
 		__entry->dev    = inode->i_sb->s_dev;
 		__entry->ino    = inode->i_ino;
 		__entry->pblk	= pblk;
-		__entry->lblk	= lblk;
+		__entry->ip	= IP;
 	),
 
-	TP_printk("dev %d,%d ino %lu lblk %u pblk %llu",
+	TP_printk("dev %d,%d ino %lu pblk %llu caller %pS",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  (unsigned long) __entry->ino,
-		  __entry->lblk, __entry->pblk)
+		  __entry->pblk, (void *)__entry->ip)
 );
 
 TRACE_EVENT(ext4_load_inode,
