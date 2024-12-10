@@ -1349,15 +1349,15 @@ static int rcsi2_init_common_v4m(struct rcar_csi2 *priv, unsigned int mbps)
 	static const struct phtw_value step2[] = {
 		{ .data = 0x00, .code = 0x00 },
 		{ .data = 0x80, .code = 0xe0 },
-		{ .data = 0x01, .code = 0xe1 },
+		{ .data = 0x31, .code = 0xe1 },
 		{ .data = 0x06, .code = 0x00 },
-		{ .data = 0x0f, .code = 0x11 },
+		{ .data = 0x11, .code = 0x11 },
 		{ .data = 0x08, .code = 0x00 },
-		{ .data = 0x0f, .code = 0x11 },
+		{ .data = 0x11, .code = 0x11 },
 		{ .data = 0x0a, .code = 0x00 },
-		{ .data = 0x0f, .code = 0x11 },
+		{ .data = 0x11, .code = 0x11 },
 		{ .data = 0x0c, .code = 0x00 },
-		{ .data = 0x0f, .code = 0x11 },
+		{ .data = 0x11, .code = 0x11 },
 		{ .data = 0x01, .code = 0x00 },
 		{ .data = 0x31, .code = 0xaa },
 		{ .data = 0x05, .code = 0x00 },
@@ -1368,6 +1368,11 @@ static int rcsi2_init_common_v4m(struct rcar_csi2 *priv, unsigned int mbps)
 		{ .data = 0x05, .code = 0x09 },
 		{ .data = 0x0b, .code = 0x00 },
 		{ .data = 0x05, .code = 0x09 },
+	};
+
+	static const struct phtw_value step3[] = {
+		{ .data = 0x01, .code = 0x00 },
+		{ .data = 0x06, .code = 0xab },
 	};
 
 	if (priv->info->hsfreqrange) {
@@ -1400,7 +1405,7 @@ static int rcsi2_init_common_v4m(struct rcar_csi2 *priv, unsigned int mbps)
 			return ret;
 	}
 
-	return ret;
+	return rcsi2_phtw_write_array(priv, step3, ARRAY_SIZE(step3));
 }
 
 static int rcsi2_start_receiver_v4m(struct rcar_csi2 *priv,
