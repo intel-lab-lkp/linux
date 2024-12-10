@@ -343,14 +343,14 @@ static int axp20x_ac_power_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	if (axp_data->acin_adc) {
-		power->acin_v = devm_iio_channel_get(&pdev->dev, "acin_v");
+		power->acin_v = devm_iio_channel_get_sys(&pdev->dev, "acin_v");
 		if (IS_ERR(power->acin_v)) {
 			if (PTR_ERR(power->acin_v) == -ENODEV)
 				return -EPROBE_DEFER;
 			return PTR_ERR(power->acin_v);
 		}
 
-		power->acin_i = devm_iio_channel_get(&pdev->dev, "acin_i");
+		power->acin_i = devm_iio_channel_get_sys(&pdev->dev, "acin_i");
 		if (IS_ERR(power->acin_i)) {
 			if (PTR_ERR(power->acin_i) == -ENODEV)
 				return -EPROBE_DEFER;

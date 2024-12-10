@@ -906,23 +906,23 @@ static const struct power_supply_desc axp717_batt_ps_desc = {
 static int axp209_bat_cfg_iio_channels(struct platform_device *pdev,
 				       struct axp20x_batt_ps *axp_batt)
 {
-	axp_batt->batt_v = devm_iio_channel_get(&pdev->dev, "batt_v");
+	axp_batt->batt_v = devm_iio_channel_get_sys(&pdev->dev, "batt_v");
 	if (IS_ERR(axp_batt->batt_v)) {
 		if (PTR_ERR(axp_batt->batt_v) == -ENODEV)
 			return -EPROBE_DEFER;
 		return PTR_ERR(axp_batt->batt_v);
 	}
 
-	axp_batt->batt_chrg_i = devm_iio_channel_get(&pdev->dev,
-							"batt_chrg_i");
+	axp_batt->batt_chrg_i = devm_iio_channel_get_sys(&pdev->dev,
+							 "batt_chrg_i");
 	if (IS_ERR(axp_batt->batt_chrg_i)) {
 		if (PTR_ERR(axp_batt->batt_chrg_i) == -ENODEV)
 			return -EPROBE_DEFER;
 		return PTR_ERR(axp_batt->batt_chrg_i);
 	}
 
-	axp_batt->batt_dischrg_i = devm_iio_channel_get(&pdev->dev,
-							   "batt_dischrg_i");
+	axp_batt->batt_dischrg_i = devm_iio_channel_get_sys(&pdev->dev,
+							    "batt_dischrg_i");
 	if (IS_ERR(axp_batt->batt_dischrg_i)) {
 		if (PTR_ERR(axp_batt->batt_dischrg_i) == -ENODEV)
 			return -EPROBE_DEFER;
@@ -935,15 +935,15 @@ static int axp209_bat_cfg_iio_channels(struct platform_device *pdev,
 static int axp717_bat_cfg_iio_channels(struct platform_device *pdev,
 				       struct axp20x_batt_ps *axp_batt)
 {
-	axp_batt->batt_v = devm_iio_channel_get(&pdev->dev, "batt_v");
+	axp_batt->batt_v = devm_iio_channel_get_sys(&pdev->dev, "batt_v");
 	if (IS_ERR(axp_batt->batt_v)) {
 		if (PTR_ERR(axp_batt->batt_v) == -ENODEV)
 			return -EPROBE_DEFER;
 		return PTR_ERR(axp_batt->batt_v);
 	}
 
-	axp_batt->batt_chrg_i = devm_iio_channel_get(&pdev->dev,
-							"batt_chrg_i");
+	axp_batt->batt_chrg_i = devm_iio_channel_get_sys(&pdev->dev,
+							 "batt_chrg_i");
 	if (IS_ERR(axp_batt->batt_chrg_i)) {
 		if (PTR_ERR(axp_batt->batt_chrg_i) == -ENODEV)
 			return -EPROBE_DEFER;

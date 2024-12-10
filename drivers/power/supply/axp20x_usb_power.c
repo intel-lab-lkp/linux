@@ -577,14 +577,14 @@ static int axp717_usb_power_prop_writeable(struct power_supply *psy,
 static int axp20x_configure_iio_channels(struct platform_device *pdev,
 					 struct axp20x_usb_power *power)
 {
-	power->vbus_v = devm_iio_channel_get(&pdev->dev, "vbus_v");
+	power->vbus_v = devm_iio_channel_get_sys(&pdev->dev, "vbus_v");
 	if (IS_ERR(power->vbus_v)) {
 		if (PTR_ERR(power->vbus_v) == -ENODEV)
 			return -EPROBE_DEFER;
 		return PTR_ERR(power->vbus_v);
 	}
 
-	power->vbus_i = devm_iio_channel_get(&pdev->dev, "vbus_i");
+	power->vbus_i = devm_iio_channel_get_sys(&pdev->dev, "vbus_i");
 	if (IS_ERR(power->vbus_i)) {
 		if (PTR_ERR(power->vbus_i) == -ENODEV)
 			return -EPROBE_DEFER;
@@ -597,7 +597,7 @@ static int axp20x_configure_iio_channels(struct platform_device *pdev,
 static int axp717_configure_iio_channels(struct platform_device *pdev,
 					 struct axp20x_usb_power *power)
 {
-	power->vbus_v = devm_iio_channel_get(&pdev->dev, "vbus_v");
+	power->vbus_v = devm_iio_channel_get_sys(&pdev->dev, "vbus_v");
 	if (IS_ERR(power->vbus_v)) {
 		if (PTR_ERR(power->vbus_v) == -ENODEV)
 			return -EPROBE_DEFER;
