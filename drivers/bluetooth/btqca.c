@@ -272,6 +272,27 @@ int qca_send_pre_shutdown_cmd(struct hci_dev *hdev)
 }
 EXPORT_SYMBOL_GPL(qca_send_pre_shutdown_cmd);
 
+static bool qca_get_alt_nvm_path(char *path, size_t max_size)
+{
+	char fwname[64];
+	const char *suffix;
+
+	suffix = strrchr(path, '.');
+
+	/* nvm file name has a suffix, replace with .bin */
+	if (suffix && suffix != path && *(suffix + 1) != '\0' && strchr(suffix, '/') == NULL) {
+		strscpy(fwname, path, suffix - path + 1);
+		snprintf(fwname + (suffix - path), sizeof(fwname) - (suffix - path), ".bin");
+		/* If nvm file is already the default one, return false to skip the retry. */
+		if (strcmp(fwname, path) == 0)
+			return false;
+
+		snprintf(path, max_size, "%s", fwname);
+		return true;
+	}
+	return false;
+}
+
 static int qca_tlv_check_data(struct hci_dev *hdev,
 			       struct qca_fw_config *config,
 			       u8 *fw_data, size_t fw_size,
@@ -564,6 +585,19 @@ static int qca_download_firmware(struct hci_dev *hdev,
 					   config->fwname, ret);
 				return ret;
 			}
+		}
+		/* For nvm, if desired nvm file is not present and it's not the
+		 * default nvm file(ends with .bin), try to load the default nvm.
+		 */
+		else if (config->type == TLV_TYPE_NVM &&
+			 qca_get_alt_nvm_path(config->fwname, sizeof(config->fwname))) {
+			bt_dev_info(hdev, "QCA Downloading %s", config->fwname);
+			ret = request_firmware(&fw, config->fwname, &hdev->dev);
+			if (ret) {
+				bt_dev_err(hdev, "QCA Failed to request file: %s (%d)",
+					   config->fwname, ret);
+				return ret;
+			}
 		} else {
 			bt_dev_err(hdev, "QCA Failed to request file: %s (%d)",
 				   config->fwname, ret);
@@ -730,6 +764,26 @@ static inline void qca_get_nvm_name_generic(struct qca_fw_config *cfg,
 			 "qca/%snv%02x.b%02x", stem, rom_ver, bid);
 }
 
+static void qca_get_nvm_name_by_board(char *fwname, size_t max_size,
+		const char *firmware_name, struct qca_btsoc_version ver,
+		enum qca_btsoc_type soc_type, u16 bid)
+{
+	const char *variant;
+
+	/* Set the variant to empty by default */
+	variant = "";
+	/* hsp gf chip */
+	if (soc_type == QCA_WCN6855) {
+		if ((le32_to_cpu(ver.soc_id) & QCA_HSP_GF_SOC_MASK) == QCA_HSP_GF_SOC_ID)
+			variant = "g";
+	}
+
+	if (bid == 0x0 || bid == 0xffff)
+		snprintf(fwname, max_size, "qca/%s%s.bin", firmware_name, variant);
+	else
+		snprintf(fwname, max_size, "qca/%s%s.b%02x", firmware_name, variant, bid);
+}
+
 int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		   enum qca_btsoc_type soc_type, struct qca_btsoc_version ver,
 		   const char *firmware_name)
@@ -739,6 +793,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	u8 rom_ver = 0;
 	u32 soc_ver;
 	u16 boardid = 0;
+	const char *suffix;
 
 	bt_dev_dbg(hdev, "QCA setup on UART");
 
@@ -816,8 +871,16 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	/* Download NVM configuration */
 	config.type = TLV_TYPE_NVM;
 	if (firmware_name) {
-		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/%s", firmware_name);
+		/* The firmware name has suffix, use it directly */
+		suffix = strrchr(firmware_name, '.');
+		if (suffix && suffix != firmware_name &&
+			*(suffix + 1) != '\0' && strchr(suffix, '/') == NULL) {
+			snprintf(config.fwname, sizeof(config.fwname), "qca/%s", firmware_name);
+		} else {
+			qca_read_fw_board_id(hdev, &boardid);
+			qca_get_nvm_name_by_board(config.fwname, sizeof(config.fwname),
+				 firmware_name, ver, soc_type, boardid);
+		}
 	} else {
 		switch (soc_type) {
 		case QCA_WCN3990:
