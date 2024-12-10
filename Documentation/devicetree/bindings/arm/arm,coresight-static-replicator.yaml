@@ -39,6 +39,12 @@ properties:
         description: Input connection from CoreSight Trace bus
         $ref: /schemas/graph.yaml#/properties/port
 
+  label:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      Define the label which can describe what kind of HW or system the
+      coresight device belongs to.
+
   out-ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
