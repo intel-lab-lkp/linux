@@ -257,6 +257,20 @@ config X86_GENERIC
 	  This is really intended for distributors who need more
 	  generic optimizations.
 
+config X86_64_NATIVE
+	bool "Build with -march=native optimization"
+	depends on X86_64
+	help
+	  Make it possible to have a slightly better optimized kernel for
+	  the machine it is built on, by passing -march=native instead
+	  the more generic -march=x86-64 option.  This lets compilers
+	  use extensions to the x86-64 instruction set that were not
+	  present in the original AMD Opteron and Intel Pentium4 CPUs,
+	  and schedule instructions for the pipeline model.
+
+	  Select this option only when building a kernel to run locally,
+	  as it may be incompatible with any other processor.
+
 #
 # Define implied options from the CPU selection here
 config X86_INTERNODE_CACHE_SHIFT
