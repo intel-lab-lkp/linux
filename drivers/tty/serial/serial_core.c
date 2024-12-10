@@ -2126,8 +2126,6 @@ void uart_console_write(struct uart_port *port, const char *s,
 	unsigned int i;
 
 	for (i = 0; i < count; i++, s++) {
-		if (*s == '\n')
-			putchar(port, '\r');
 		putchar(port, *s);
 	}
 }
@@ -2722,8 +2720,6 @@ static void uart_poll_put_char(struct tty_driver *driver, int line, char ch)
 	if (!port)
 		return;
 
-	if (ch == '\n')
-		port->ops->poll_put_char(port, '\r');
 	port->ops->poll_put_char(port, ch);
 	uart_port_deref(port);
 }
