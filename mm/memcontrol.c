@@ -5472,4 +5472,50 @@ static int __init mem_cgroup_swap_init(void)
 }
 subsys_initcall(mem_cgroup_swap_init);
 
+/**
+ * obj_cgroup_charge_vmalloc - Charge vmalloc memory
+ * @objcgp: Pointer to an object cgroup
+ * @nr_pages: Number of pages
+ * @gfp: Memory allocation flags
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int obj_cgroup_charge_vmalloc(struct obj_cgroup **objcgp,
+		unsigned int nr_pages, gfp_t gfp)
+{
+	struct obj_cgroup *objcg;
+	int err;
+
+	if (mem_cgroup_disabled() || !(gfp & __GFP_ACCOUNT))
+		return 0;
+
+	objcg = current_obj_cgroup();
+	if (!objcg)
+		return 0;
+
+	err = obj_cgroup_charge_pages(objcg, gfp, nr_pages);
+	if (err)
+		return err;
+	obj_cgroup_get(objcg);
+	mod_memcg_state(obj_cgroup_memcg(objcg), MEMCG_VMALLOC, nr_pages);
+	*objcgp = objcg;
+
+	return 0;
+}
+
+/**
+ * obj_cgroup_uncharge_vmalloc - Uncharge vmalloc memory
+ * @objcg: The object cgroup
+ * @nr_pages: Number of pages
+ */
+void obj_cgroup_uncharge_vmalloc(struct obj_cgroup *objcg,
+		unsigned int nr_pages)
+{
+	if (!objcg)
+		return;
+	mod_memcg_state(objcg->memcg, MEMCG_VMALLOC, 0L - nr_pages);
+	obj_cgroup_uncharge_pages(objcg, nr_pages);
+	obj_cgroup_put(objcg);
+}
+
 #endif /* CONFIG_SWAP */
