@@ -54,6 +54,7 @@
 #define TCSR_CAPTURE_0_VALID		BIT(0)
 
 struct mvpp2_tai {
+	struct device *dev;
 	struct ptp_clock_info caps;
 	struct ptp_clock *ptp_clock;
 	void __iomem *base;
@@ -303,7 +304,8 @@ static long mvpp22_tai_aux_work(struct ptp_clock_info *ptp)
 {
 	struct mvpp2_tai *tai = ptp_to_tai(ptp);
 
-	mvpp22_tai_gettimex64(ptp, &tai->stamp, NULL);
+	if (mvpp22_tai_gettimex64(ptp, &tai->stamp, NULL) < 0)
+		  dev_warn_once(tai->dev, "PTP timestamps are unreliable");
 
 	return msecs_to_jiffies(2000);
 }
@@ -401,6 +403,7 @@ int mvpp22_tai_probe(struct device *dev, struct mvpp2 *priv)
 
 	spin_lock_init(&tai->lock);
 
+	tai->dev = dev;
 	tai->base = priv->iface_base;
 
 	/* The step size consists of three registers - a 16-bit nanosecond step
