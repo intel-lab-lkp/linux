@@ -9,6 +9,8 @@
 
 #include "versal-pci.h"
 #include "versal-pci-comm-chan.h"
+#include "versal-pci-rm-service.h"
+#include "versal-pci-rm-queue.h"
 
 #define DRV_NAME			"amd-versal-pci"
 
@@ -18,22 +20,55 @@
 static int versal_pci_fpga_write_init(struct fpga_manager *mgr, struct fpga_image_info *info,
 				      const char *buf, size_t count)
 {
-	/* TODO */
-	return 0;
+	struct fpga_device *fdev = mgr->priv;
+	struct fw_tnx *tnx = &fdev->fw;
+	int ret;
+
+	ret = rm_queue_create_cmd(fdev->vdev->rdev, tnx->opcode, &tnx->cmd);
+	if (ret) {
+		fdev->state = FPGA_MGR_STATE_WRITE_INIT_ERR;
+		return ret;
+	}
+
+	fdev->state = FPGA_MGR_STATE_WRITE_INIT;
+	return ret;
 }
 
 static int versal_pci_fpga_write(struct fpga_manager *mgr, const char *buf,
 				 size_t count)
 {
-	/* TODO */
-	return 0;
+	struct fpga_device *fdev = mgr->priv;
+	int ret;
+
+	ret = rm_queue_data_init(fdev->fw.cmd, buf, count);
+	if (ret) {
+		fdev->state = FPGA_MGR_STATE_WRITE_ERR;
+		rm_queue_destory_cmd(fdev->fw.cmd);
+		return ret;
+	}
+
+	fdev->state = FPGA_MGR_STATE_WRITE;
+	return ret;
 }
 
 static int versal_pci_fpga_write_complete(struct fpga_manager *mgr,
 					  struct fpga_image_info *info)
 {
-	/* TODO */
-	return 0;
+	struct fpga_device *fdev = mgr->priv;
+	int ret;
+
+	ret = rm_queue_send_cmd(fdev->fw.cmd, RM_CMD_WAIT_DOWNLOAD_TIMEOUT);
+	if (ret) {
+		fdev->state = FPGA_MGR_STATE_WRITE_COMPLETE_ERR;
+		vdev_err(fdev->vdev, "Send cmd failed:%d, cid:%d", ret, fdev->fw.id);
+	} else {
+		fdev->state = FPGA_MGR_STATE_WRITE_COMPLETE;
+	}
+
+	rm_queue_data_fini(fdev->fw.cmd);
+	rm_queue_destory_cmd(fdev->fw.cmd);
+	memset(&fdev->fw, 0, sizeof(fdev->fw));
+	return ret;
 }
 
 static enum fpga_mgr_states versal_pci_fpga_state(struct fpga_manager *mgr)
@@ -97,10 +132,20 @@ static struct fpga_device *versal_pci_fpga_init(struct versal_pci_device *vdev)
 		return ERR_PTR(ret);
 	}
 
-	/* Place holder for rm_queue_get_fw_id(vdev->rdev) */
+	ret = rm_queue_get_fw_id(vdev->rdev);
+	if (ret) {
+		vdev_warn(vdev, "Failed to get fw_id");
+		ret = -EINVAL;
+		goto unregister_fpga_mgr;
+	}
 	versal_pci_uuid_parse(vdev, &vdev->intf_uuid);
 
 	return fdev;
+
+unregister_fpga_mgr:
+	fpga_mgr_unregister(fdev->mgr);
+
+	return ERR_PTR(ret);
 }
 
 static int versal_pci_program_axlf(struct versal_pci_device *vdev, char *data, size_t size)
@@ -161,31 +206,84 @@ int versal_pci_load_xclbin(struct versal_pci_device *vdev, uuid_t *xuuid)
 static enum fw_upload_err versal_pci_fw_prepare(struct fw_upload *fw_upload, const u8 *data,
 						u32 size)
 {
-	/* TODO */
+	struct firmware_device *fwdev = fw_upload->dd_handle;
+	struct axlf *xsabin = (struct axlf *)data;
+	int ret;
+
+	ret = memcmp(xsabin->magic, VERSAL_XCLBIN_MAGIC_ID, sizeof(VERSAL_XCLBIN_MAGIC_ID));
+	if (ret) {
+		vdev_err(fwdev->vdev, "Invalid device firmware");
+		return FW_UPLOAD_ERR_INVALID_SIZE;
+	}
+
+	/* Firmware size should never be over 1G and less than size of struct axlf */
+	if (!size || size != xsabin->header.length || size < sizeof(*xsabin) ||
+	    size > 1024 * 1024 * 1024) {
+		vdev_err(fwdev->vdev, "Invalid device firmware size");
+		return FW_UPLOAD_ERR_INVALID_SIZE;
+	}
+
+	ret = rm_queue_create_cmd(fwdev->vdev->rdev, RM_QUEUE_OP_LOAD_FW,
+				  &fwdev->cmd);
+	if (ret)
+		return FW_UPLOAD_ERR_RW_ERROR;
+
+	uuid_copy(&fwdev->uuid, &xsabin->header.uuid);
 	return FW_UPLOAD_ERR_NONE;
 }
 
 static enum fw_upload_err versal_pci_fw_write(struct fw_upload *fw_upload, const u8 *data,
 					      u32 offset, u32 size, u32 *written)
 {
-	/* TODO */
+	struct firmware_device *fwdev = fw_upload->dd_handle;
+	int ret;
+
+	ret = rm_queue_data_init(fwdev->cmd, data, size);
+	if (ret)
+		return FW_UPLOAD_ERR_RW_ERROR;
+
+	*written = size;
 	return FW_UPLOAD_ERR_NONE;
 }
 
 static enum fw_upload_err versal_pci_fw_poll_complete(struct fw_upload *fw_upload)
 {
-	/* TODO */
+	struct firmware_device *fwdev = fw_upload->dd_handle;
+	int ret;
+
+	vdev_info(fwdev->vdev, "Programming device firmware: %pUb", &fwdev->uuid);
+
+	ret = rm_queue_send_cmd(fwdev->cmd, RM_CMD_WAIT_DOWNLOAD_TIMEOUT);
+	if (ret) {
+		vdev_err(fwdev->vdev, "Send cmd failedi:%d, cid %d", ret, fwdev->id);
+		return FW_UPLOAD_ERR_HW_ERROR;
+	}
+
+	vdev_info(fwdev->vdev, "Successfully programmed device firmware: %pUb",
+		  &fwdev->uuid);
 	return FW_UPLOAD_ERR_NONE;
 }
 
 static void versal_pci_fw_cancel(struct fw_upload *fw_upload)
 {
-	/* TODO */
+	struct firmware_device *fwdev = fw_upload->dd_handle;
+
+	vdev_warn(fwdev->vdev, "canceled");
+	rm_queue_withdraw_cmd(fwdev->cmd);
 }
 
 static void versal_pci_fw_cleanup(struct fw_upload *fw_upload)
 {
-	/* TODO */
+	struct firmware_device *fwdev = fw_upload->dd_handle;
+
+	if (!fwdev->cmd)
+		return;
+
+	rm_queue_data_fini(fwdev->cmd);
+	rm_queue_destory_cmd(fwdev->cmd);
+
+	fwdev->cmd = NULL;
+	fwdev->id = 0;
 }
 
 static const struct fw_upload_ops versal_pci_fw_ops = {
@@ -240,23 +338,31 @@ static void versal_pci_device_teardown(struct versal_pci_device *vdev)
 	versal_pci_fpga_fini(vdev->fdev);
 	versal_pci_fw_upload_fini(vdev->fwdev);
 	versal_pci_comm_chan_fini(vdev->ccdev);
+	versal_pci_rm_fini(vdev->rdev);
 }
 
 static int versal_pci_device_setup(struct versal_pci_device *vdev)
 {
 	int ret;
 
+	vdev->rdev = versal_pci_rm_init(vdev);
+	if (IS_ERR(vdev->rdev)) {
+		ret = PTR_ERR(vdev->rdev);
+		vdev_err(vdev, "Failed to init remote queue, err %d", ret);
+		return ret;
+	}
+
 	vdev->fwdev = versal_pci_fw_upload_init(vdev);
 	if (IS_ERR(vdev->fwdev)) {
 		ret = PTR_ERR(vdev->fwdev);
 		vdev_err(vdev, "Failed to init FW uploader, err %d", ret);
-		return ret;
+		goto rm_fini;
 	}
 
 	vdev->ccdev = versal_pci_comm_chan_init(vdev);
 	if (IS_ERR(vdev->ccdev)) {
 		ret = PTR_ERR(vdev->ccdev);
-		vdev_err(vdev, "Failed to init comms channel, err %d", ret);
+		vdev_err(vdev, "Failed to init comm channel, err %d", ret);
 		goto upload_fini;
 	}
 
@@ -272,7 +378,8 @@ comm_chan_fini:
 	versal_pci_comm_chan_fini(vdev->ccdev);
 upload_fini:
 	versal_pci_fw_upload_fini(vdev->fwdev);
-
+rm_fini:
+	versal_pci_rm_fini(vdev->rdev);
 	return ret;
 }
 

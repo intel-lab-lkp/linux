@@ -27,6 +27,7 @@
 
 struct versal_pci_device;
 struct comm_chan_device;
+struct rm_cmd;
 
 struct axlf_header {
 	__u64				length;
@@ -69,6 +70,7 @@ struct firmware_device {
 struct versal_pci_device {
 	struct pci_dev			*pdev;
 
+	struct rm_device		*rdev;
 	struct fpga_device		*fdev;
 	struct comm_chan_device         *ccdev;
 	struct firmware_device		*fwdev;

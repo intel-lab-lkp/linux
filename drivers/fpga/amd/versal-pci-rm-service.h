@@ -206,4 +206,24 @@ struct rm_device {
 	__u32			firewall_tripped;
 };
 
+/* rm service init api */
+struct rm_device *versal_pci_rm_init(struct versal_pci_device *vdev);
+void versal_pci_rm_fini(struct rm_device *rdev);
+
+/* rm services APIs */
+int rm_queue_create_cmd(struct rm_device *rdev, enum rm_queue_opcode opcode,
+			struct rm_cmd **cmd_ptr);
+void rm_queue_destory_cmd(struct rm_cmd *cmd);
+
+int rm_queue_data_init(struct rm_cmd *cmd, const char *buffer, ssize_t size);
+void rm_queue_data_fini(struct rm_cmd *cmd);
+int rm_queue_get_fw_id(struct rm_device *rdev);
+int rm_queue_boot_apu(struct rm_device *rdev);
+
+/* rm bar register operation APIs */
+u32 rm_reg_read(struct rm_device *rdev, u32 offset);
+void rm_reg_write(struct rm_device *rdev, u32 offset, const u32 value);
+void rm_bulk_reg_read(struct rm_device *rdev, u32 offset, u32 *value, size_t size);
+void rm_bulk_reg_write(struct rm_device *rdev, u32 offset, const void *value, size_t size);
+
 #endif	/* __RM_SERVICE_H */
