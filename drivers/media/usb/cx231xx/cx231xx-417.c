@@ -1538,17 +1538,24 @@ static int vidioc_s_std(struct file *file, void *priv, v4l2_std_id id)
 	return 0;
 }
 
-static int vidioc_s_ctrl(struct file *file, void *priv,
-				struct v4l2_control *ctl)
+static int cx231xx_s_ext_ctrls(struct file *file, void *priv,
+			       struct v4l2_ext_controls *ctls)
 {
 	struct cx231xx *dev = video_drvdata(file);
+	struct v4l2_control ctl;
 	struct v4l2_subdev *sd;
+	unsigned int i;
 
-	dprintk(3, "enter vidioc_s_ctrl()\n");
+	dprintk(3, "enter vidioc_s_ext_ctrl()\n");
 	/* Update the A/V core */
-	v4l2_device_for_each_subdev(sd, &dev->v4l2_dev)
-		v4l2_s_ctrl(NULL, sd->ctrl_handler, ctl);
-	dprintk(3, "exit vidioc_s_ctrl()\n");
+	for (i = 0; i < ctls->count; i++) {
+		ctl.id = ctls->controls[i].id;
+		ctl.value = ctls->controls[i].value;
+		v4l2_device_for_each_subdev(sd, &dev->v4l2_dev)
+			v4l2_s_ctrl(NULL, sd->ctrl_handler, &ctl);
+		ctls->controls[i].value = ctl.value;
+	}
+	dprintk(3, "exit vidioc_s_ext_ctrl()\n");
 	return 0;
 }
 
@@ -1627,7 +1634,7 @@ static const struct v4l2_ioctl_ops mpeg_ioctl_ops = {
 	.vidioc_enum_input	 = cx231xx_enum_input,
 	.vidioc_g_input		 = cx231xx_g_input,
 	.vidioc_s_input		 = cx231xx_s_input,
-	.vidioc_s_ctrl		 = vidioc_s_ctrl,
+	.vidioc_s_ext_ctrls	 = cx231xx_s_ext_ctrls,
 	.vidioc_g_pixelaspect	 = vidioc_g_pixelaspect,
 	.vidioc_g_selection	 = vidioc_g_selection,
 	.vidioc_querycap	 = cx231xx_querycap,
