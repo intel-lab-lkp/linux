@@ -385,6 +385,95 @@ void auxiliary_driver_unregister(struct auxiliary_driver *auxdrv)
 }
 EXPORT_SYMBOL_GPL(auxiliary_driver_unregister);
 
+static DEFINE_IDA(auxiliary_device_ida);
+
+static void auxiliary_device_release(struct device *dev)
+{
+	struct auxiliary_device *auxdev = to_auxiliary_dev(dev);
+
+	ida_free(&auxiliary_device_ida, auxdev->id);
+	kfree(auxdev);
+}
+
+static struct auxiliary_device *auxiliary_device_create(struct device *dev,
+							const char *name,
+							void *platform_data)
+{
+	struct auxiliary_device *auxdev;
+	int ret;
+
+	auxdev = kzalloc(sizeof(*auxdev), GFP_KERNEL);
+	if (!auxdev)
+		return ERR_PTR(-ENOMEM);
+
+	ret = ida_alloc(&auxiliary_device_ida, GFP_KERNEL);
+	if (ret < 0)
+		goto auxdev_free;
+
+	auxdev->id = ret;
+	auxdev->name = name;
+	auxdev->dev.parent = dev;
+	auxdev->dev.platform_data = platform_data;
+	auxdev->dev.release = auxiliary_device_release;
+	device_set_of_node_from_dev(&auxdev->dev, dev);
+
+	ret = auxiliary_device_init(auxdev);
+	if (ret)
+		goto ida_free;
+
+	ret = __auxiliary_device_add(auxdev, dev->driver->name);
+	if (ret) {
+		auxiliary_device_uninit(auxdev);
+		return ERR_PTR(ret);
+	}
+
+	return auxdev;
+
+ida_free:
+	ida_free(&auxiliary_device_ida, auxdev->id);
+auxdev_free:
+	kfree(auxdev);
+	return ERR_PTR(ret);
+}
+
+static void auxiliary_device_destroy(void *_auxdev)
+{
+	struct auxiliary_device *auxdev = _auxdev;
+
+	auxiliary_device_delete(auxdev);
+	auxiliary_device_uninit(auxdev);
+}
+
+/**
+ * devm_auxiliary_device_create - create a device on the auxiliary bus
+ * @dev: parent device
+ * @name: auxiliary bus driver name
+ * @platform_data: auxiliary bus device platform data
+ *
+ * Device managed helper to create an auxiliary bus device.
+ * The parent device KBUILD_MODNAME is automatically inserted before the
+ * provided name for the modname parameter of the auxiliary device created.
+ */
+struct auxiliary_device *devm_auxiliary_device_create(struct device *dev,
+						      const char *name,
+						      void *platform_data)
+{
+	struct auxiliary_device *auxdev;
+	int ret;
+
+	auxdev = auxiliary_device_create(dev, name, platform_data);
+	if (IS_ERR(auxdev))
+		return auxdev;
+
+	ret = devm_add_action_or_reset(dev, auxiliary_device_destroy,
+				       auxdev);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return auxdev;
+}
+EXPORT_SYMBOL_GPL(devm_auxiliary_device_create);
+
 void __init auxiliary_bus_init(void)
 {
 	WARN_ON(bus_register(&auxiliary_bus_type));
