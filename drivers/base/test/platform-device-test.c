@@ -15,7 +15,7 @@ struct test_priv {
 	struct device *dev;
 };
 
-static int platform_device_devm_init(struct kunit *test)
+static int platform_device_init(struct kunit *test)
 {
 	struct test_priv *priv;
 
@@ -203,7 +203,7 @@ static void probed_platform_device_devm_register_get_unregister_with_devm_test(s
 	platform_driver_unregister(&fake_driver);
 }
 
-static struct kunit_case platform_device_devm_tests[] = {
+static struct kunit_case platform_device_tests[] = {
 	KUNIT_CASE(platform_device_devm_register_unregister_test),
 	KUNIT_CASE(platform_device_devm_register_get_unregister_with_devm_test),
 	KUNIT_CASE(probed_platform_device_devm_register_unregister_test),
@@ -211,13 +211,13 @@ static struct kunit_case platform_device_devm_tests[] = {
 	{}
 };
 
-static struct kunit_suite platform_device_devm_test_suite = {
-	.name = "platform-device-devm",
-	.init = platform_device_devm_init,
-	.test_cases = platform_device_devm_tests,
+static struct kunit_suite platform_device_test_suite = {
+	.name = "platform-device",
+	.init = platform_device_init,
+	.test_cases = platform_device_tests,
 };
 
-kunit_test_suite(platform_device_devm_test_suite);
+kunit_test_suite(platform_device_test_suite);
 
 MODULE_DESCRIPTION("Test module for platform devices");
 MODULE_AUTHOR("Maxime Ripard <mripard@kernel.org>");
