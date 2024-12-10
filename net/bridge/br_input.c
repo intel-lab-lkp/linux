@@ -72,6 +72,46 @@ static int br_pass_frame_up(struct sk_buff *skb, bool promisc)
 		       br_netif_receive_skb);
 }
 
+static int br_fdb_locked_learn(struct net_bridge_port *p, struct sk_buff *skb,
+			       u16 vid, bool mark)
+{
+	struct net_bridge *br = p->br;
+
+	if (p->flags & BR_PORT_LOCKED) {
+		struct net_bridge_fdb_entry *fdb_src =
+			br_fdb_find_rcu(br, eth_hdr(skb)->h_source, vid);
+		if (!fdb_src) {
+			/* FDB miss. Create locked FDB entry if MAB is enabled
+			 * and drop the packet.
+			 */
+			if (p->flags & BR_PORT_MAB)
+				br_fdb_update(br, p, eth_hdr(skb)->h_source,
+					      vid, BIT(BR_FDB_LOCKED));
+			return NET_RX_DROP;
+		} else if (READ_ONCE(fdb_src->dst) != p ||
+			   test_bit(BR_FDB_LOCAL, &fdb_src->flags)) {
+			/* FDB mismatch. Drop the packet without roaming. */
+			return NET_RX_DROP;
+		} else if (test_bit(BR_FDB_LOCKED, &fdb_src->flags)) {
+			/* FDB match, but entry is locked. Refresh it and drop
+			 * the packet.
+			 */
+			br_fdb_update(br, p, eth_hdr(skb)->h_source, vid,
+				      BIT(BR_FDB_LOCKED));
+			return NET_RX_DROP;
+		}
+	}
+
+	if (mark)
+		nbp_switchdev_frame_mark(p, skb);
+
+	/* insert into forwarding database after filtering to avoid spoofing */
+	if (p->flags & BR_LEARNING)
+		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, 0);
+
+	return NET_RX_SUCCESS;
+}
+
 /* note: already called with rcu_read_lock */
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
@@ -108,37 +148,8 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 				&state, &vlan))
 		goto out;
 
-	if (p->flags & BR_PORT_LOCKED) {
-		struct net_bridge_fdb_entry *fdb_src =
-			br_fdb_find_rcu(br, eth_hdr(skb)->h_source, vid);
-
-		if (!fdb_src) {
-			/* FDB miss. Create locked FDB entry if MAB is enabled
-			 * and drop the packet.
-			 */
-			if (p->flags & BR_PORT_MAB)
-				br_fdb_update(br, p, eth_hdr(skb)->h_source,
-					      vid, BIT(BR_FDB_LOCKED));
-			goto drop;
-		} else if (READ_ONCE(fdb_src->dst) != p ||
-			   test_bit(BR_FDB_LOCAL, &fdb_src->flags)) {
-			/* FDB mismatch. Drop the packet without roaming. */
-			goto drop;
-		} else if (test_bit(BR_FDB_LOCKED, &fdb_src->flags)) {
-			/* FDB match, but entry is locked. Refresh it and drop
-			 * the packet.
-			 */
-			br_fdb_update(br, p, eth_hdr(skb)->h_source, vid,
-				      BIT(BR_FDB_LOCKED));
-			goto drop;
-		}
-	}
-
-	nbp_switchdev_frame_mark(p, skb);
-
-	/* insert into forwarding database after filtering to avoid spoofing */
-	if (p->flags & BR_LEARNING)
-		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, 0);
+	if (br_fdb_locked_learn(p, skb, vid, true) == NET_RX_DROP)
+		goto drop;
 
 	promisc = !!(br->dev->flags & IFF_PROMISC);
 	local_rcv = promisc;
@@ -234,11 +245,10 @@ static void __br_handle_local_finish(struct sk_buff *skb)
 	u16 vid = 0;
 
 	/* check if vlan is allowed, to avoid spoofing */
-	if ((p->flags & BR_LEARNING) &&
-	    nbp_state_should_learn(p) &&
+	if (nbp_state_should_learn(p) &&
 	    !br_opt_get(p->br, BROPT_NO_LL_LEARN) &&
 	    br_should_learn(p, skb, &vid))
-		br_fdb_update(p->br, p, eth_hdr(skb)->h_source, vid, 0);
+		br_fdb_locked_learn(p, skb, vid, false);
 }
 
 /* note: already called with rcu_read_lock */
