@@ -6774,7 +6774,11 @@ void __noreturn do_task_dead(void)
 	__schedule(SM_NONE);
 	BUG();
 
-	/* Avoid "noreturn function does return" - but don't continue if BUG() is a NOP: */
+	/*
+	 * Don't continue if BUG() is a NOP to avoid "noreturn function
+	 * does return" and dump stack for this case.
+	 */
+	dump_stack();
 	for (;;)
 		cpu_relax();
 }
