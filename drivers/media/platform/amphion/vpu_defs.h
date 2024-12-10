@@ -134,6 +134,7 @@ struct vpu_dec_codec_info {
 	u32 decoded_height;
 	struct v4l2_fract frame_rate;
 	u32 dsp_asp_ratio;
+	u32 profile_idc;
 	u32 level_idc;
 	u32 bit_depth_luma;
 	u32 bit_depth_chroma;

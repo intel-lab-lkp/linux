@@ -889,7 +889,8 @@ static void vpu_malone_unpack_seq_hdr(struct vpu_rpc_event *pkt,
 	info->frame_rate.numerator = 1000;
 	info->frame_rate.denominator = pkt->data[8];
 	info->dsp_asp_ratio = pkt->data[9];
-	info->level_idc = pkt->data[10];
+	info->profile_idc = (pkt->data[10] >> 8) & 0xff;
+	info->level_idc = pkt->data[10] & 0xff;
 	info->bit_depth_luma = pkt->data[13];
 	info->bit_depth_chroma = pkt->data[14];
 	info->chroma_fmt = pkt->data[15];
