@@ -113,6 +113,8 @@ static int vmw_surface_dirty_sync(struct vmw_resource *res);
 static void vmw_surface_dirty_range_add(struct vmw_resource *res, size_t start,
 					size_t end);
 static int vmw_surface_clean(struct vmw_resource *res);
+static void vmw_cmdbuf_surface_commit_notify(struct vmw_resource *res,
+					     enum vmw_cmdbuf_res_state state);
 
 static const struct vmw_user_resource_conv user_surface_conv = {
 	.object_type = VMW_RES_SURFACE,
@@ -165,6 +167,7 @@ static const struct vmw_res_func vmw_gb_cmdbuf_surface_func = {
 	.type_name = "guest backed command buffer managed surface",
 	.domain = VMW_BO_DOMAIN_MOB,
 	.busy_domain = VMW_BO_DOMAIN_MOB,
+	.commit_notify = vmw_cmdbuf_surface_commit_notify,
 };
 
 /*
@@ -2405,6 +2408,46 @@ static void vmw_cmdbuf_surface_base_release(struct ttm_base_object **p_base)
 
 	*p_base = NULL;
 	vmw_resource_unreference(&res);
+}
+
+
+static void vmw_cmdbuf_surface_hw_destroy(struct vmw_resource *res)
+{
+	struct vmw_private *dev_priv = res->dev_priv;
+	struct vmw_cmdbuf_surface *surface;
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdDestroyGBSurface body;
+	} *cmd;
+
+	if (res->id == -1)
+		return;
+
+	surface = vmw_res_to_cmdbuf_srf(res);
+	mutex_lock(&dev_priv->binding_mutex);
+	vmw_view_surface_list_destroy(dev_priv, &surface->surface.view_list);
+	vmw_binding_res_list_scrub(&res->binding_head);
+
+	cmd = VMW_CMD_RESERVE(dev_priv, sizeof(*cmd));
+	if (unlikely(!cmd)) {
+		mutex_unlock(&dev_priv->binding_mutex);
+		return;
+	}
+
+	cmd->header.id = SVGA_3D_CMD_DESTROY_GB_SURFACE;
+	cmd->header.size = sizeof(cmd->body);
+	cmd->body.sid = res->id;
+	vmw_cmd_commit(dev_priv, sizeof(*cmd));
+	mutex_unlock(&dev_priv->binding_mutex);
+}
+
+static void vmw_cmdbuf_surface_commit_notify(struct vmw_resource *res,
+					     enum vmw_cmdbuf_res_state state)
+{
+	if (state == VMW_CMDBUF_RES_ADD)
+		res->hw_destroy = vmw_cmdbuf_surface_hw_destroy;
+	else
+		res->hw_destroy = NULL;
 }
 
 
