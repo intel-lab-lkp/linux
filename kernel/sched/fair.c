@@ -6704,25 +6704,30 @@ static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 	rq_clock_start_loop_update(rq);
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(tg, &task_groups, list) {
-		struct cfs_rq *cfs_rq = tg->cfs_rq[cpu_of(rq)];
+	/* Traverse the thread group list only for inactive rq */
+	if (!cpumask_test_cpu(cpu_of(rq), cpu_active_mask)) {
+		list_for_each_entry_rcu(tg, &task_groups, list) {
+			struct cfs_rq *cfs_rq = tg->cfs_rq[cpu_of(rq)];
 
-		if (!cfs_rq->runtime_enabled)
-			continue;
+			if (!cfs_rq->runtime_enabled)
+				continue;
 
-		/*
-		 * clock_task is not advancing so we just need to make sure
-		 * there's some valid quota amount
-		 */
-		cfs_rq->runtime_remaining = 1;
-		/*
-		 * Offline rq is schedulable till CPU is completely disabled
-		 * in take_cpu_down(), so we prevent new cfs throttling here.
-		 */
-		cfs_rq->runtime_enabled = 0;
+			/*
+			 * Offline rq is schedulable till CPU is completely disabled
+			 * in take_cpu_down(), so we prevent new cfs throttling here.
+			 */
+			cfs_rq->runtime_enabled = 0;
 
-		if (cfs_rq_throttled(cfs_rq))
+			if (!cfs_rq_throttled(cfs_rq))
+				continue;
+
+			/*
+			 * clock_task is not advancing so we just need to make sure
+			 * there's some valid quota amount
+			 */
+			cfs_rq->runtime_remaining = 1;
 			unthrottle_cfs_rq(cfs_rq);
+		}
 	}
 	rcu_read_unlock();
 
