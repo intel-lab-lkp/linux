@@ -350,7 +350,12 @@ struct napi_config {
 	u64 gro_flush_timeout;
 	u64 irq_suspend_timeout;
 	u32 defer_hard_irqs;
+	cpumask_t affinity_mask;
 	unsigned int napi_id;
+};
+
+enum {
+	NAPIF_F_IRQ_AFFINITY		= BIT(0)
 };
 
 /*
@@ -394,6 +399,7 @@ struct napi_struct {
 	unsigned long		irq_flags;
 	int			index;
 	struct napi_config	*config;
+	struct irq_affinity_notify affinity_notify;
 };
 
 enum {
