@@ -1197,6 +1197,12 @@ static int i915_dsc_fec_support_show(struct seq_file *m, void *data)
 								      DP_DSC_YCbCr444)));
 		seq_printf(m, "DSC_Sink_BPP_Precision: %d\n",
 			   drm_dp_dsc_sink_bpp_incr(connector->dp.dsc_dpcd));
+		if (intel_dp_is_edp(intel_dp))
+			seq_printf(m, "DSC_Sink_Max_Slice_Count: %d\n",
+				   drm_dp_dsc_sink_max_slice_count((connector->dp.dsc_dpcd), true));
+		else
+			seq_printf(m, "DSC_Sink_Max_Slice_Count: %d\n",
+				   drm_dp_dsc_sink_max_slice_count((connector->dp.dsc_dpcd), false));
 		seq_printf(m, "Force_DSC_Enable: %s\n",
 			   str_yes_no(intel_dp->force_dsc_en));
 		if (!intel_dp_is_edp(intel_dp))
