@@ -765,11 +765,12 @@ int pud_set_huge(pud_t *pud, phys_addr_t addr, pgprot_t prot)
 int pmd_set_huge(pmd_t *pmd, phys_addr_t addr, pgprot_t prot)
 {
 	u8 uniform;
+	struct resource res = DEFINE_RES_MEM(addr, PMD_SIZE);
 
 	mtrr_type_lookup(addr, addr + PMD_SIZE, &uniform);
 	if (!uniform) {
-		pr_warn_once("%s: Cannot satisfy [mem %#010llx-%#010llx] with a huge-page mapping due to MTRR override.\n",
-			     __func__, addr, addr + PMD_SIZE);
+		pr_warn_once("%s: Cannot satisfy %pR with a huge-page mapping due to MTRR override.\n",
+			     __func__, &res);
 		return 0;
 	}
 
