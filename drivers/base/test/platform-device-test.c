@@ -2,7 +2,9 @@
 
 #include <kunit/resource.h>
 
+#include <linux/device/bus.h>
 #include <linux/device.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 
 #define DEVICE_NAME "test"
@@ -203,11 +205,37 @@ static void probed_platform_device_devm_register_get_unregister_with_devm_test(s
 	platform_driver_unregister(&fake_driver);
 }
 
+static void platform_device_find_by_null_test(struct kunit *test)
+{
+	struct platform_device *pdev;
+	int ret;
+
+	pdev = platform_device_alloc(DEVICE_NAME, PLATFORM_DEVID_NONE);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, pdev);
+
+	ret = platform_device_add(pdev);
+	KUNIT_ASSERT_EQ(test, ret, 0);
+
+	KUNIT_EXPECT_PTR_EQ(test, of_find_device_by_node(NULL), NULL);
+
+	KUNIT_EXPECT_PTR_EQ(test, bus_find_device_by_of_node(&platform_bus_type, NULL), NULL);
+	KUNIT_EXPECT_PTR_EQ(test, bus_find_device_by_fwnode(&platform_bus_type, NULL), NULL);
+	KUNIT_EXPECT_PTR_EQ(test, bus_find_device_by_acpi_dev(&platform_bus_type, NULL), NULL);
+
+	KUNIT_EXPECT_FALSE(test, device_match_of_node(&pdev->dev, NULL));
+	KUNIT_EXPECT_FALSE(test, device_match_fwnode(&pdev->dev, NULL));
+	KUNIT_EXPECT_FALSE(test, device_match_acpi_dev(&pdev->dev, NULL));
+	KUNIT_EXPECT_FALSE(test, device_match_acpi_handle(&pdev->dev, NULL));
+
+	platform_device_unregister(pdev);
+}
+
 static struct kunit_case platform_device_tests[] = {
 	KUNIT_CASE(platform_device_devm_register_unregister_test),
 	KUNIT_CASE(platform_device_devm_register_get_unregister_with_devm_test),
 	KUNIT_CASE(probed_platform_device_devm_register_unregister_test),
 	KUNIT_CASE(probed_platform_device_devm_register_get_unregister_with_devm_test),
+	KUNIT_CASE(platform_device_find_by_null_test),
 	{}
 };
 
