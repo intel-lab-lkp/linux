@@ -1358,6 +1358,21 @@ void ocfs2_refresh_inode(struct inode *inode,
 	spin_unlock(&OCFS2_I(inode)->ip_lock);
 }
 
+static int has_extents(struct ocfs2_dinode *di)
+{
+	/* inodes flagged with other stuff in id2 */
+	if (di->i_flags & (OCFS2_SUPER_BLOCK_FL | OCFS2_LOCAL_ALLOC_FL |
+			   OCFS2_CHAIN_FL | OCFS2_DEALLOC_FL))
+		return 0;
+	/* i_flags doesn't indicate when id2 is a fast symlink */
+	if (S_ISLNK(di->i_mode) && di->i_size && di->i_clusters == 0)
+		return 0;
+	if (di->i_dyn_features & OCFS2_INLINE_DATA_FL)
+		return 0;
+
+	return 1;
+}
+
 int ocfs2_validate_inode_block(struct super_block *sb,
 			       struct buffer_head *bh)
 {
@@ -1385,6 +1400,15 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 	 */
 
 	rc = -EINVAL;
+
+	if (has_extents(di) && le16_to_cpu(di->id2.i_list.l_next_free_rec) >
+	    le16_to_cpu(di->id2.i_list.l_count)) {
+		rc = ocfs2_error(sb, "corrupted dinode #%llu: next_free_rec is %u, count is %u\n",
+				 (unsigned long long)bh->b_blocknr,
+				 le16_to_cpu(di->id2.i_list.l_next_free_rec),
+				 le16_to_cpu(di->id2.i_list.l_count));
+		goto bail;
+	}
 
 	if (!OCFS2_IS_VALID_DINODE(di)) {
 		rc = ocfs2_error(sb, "Invalid dinode #%llu: signature = %.*s\n",
@@ -1483,6 +1507,16 @@ static int ocfs2_filecheck_validate_inode_block(struct super_block *sb,
 		rc = -OCFS2_FILECHECK_ERR_GENERATION;
 	}
 
+	if (has_extents(di) && le16_to_cpu(di->id2.i_list.l_next_free_rec) >
+	    le16_to_cpu(di->id2.i_list.l_count)) {
+		mlog(ML_ERROR,
+		     "Filecheck: invalid dinode #%llu: l_next_free_rec is %u, l_count is %u\n",
+		     (unsigned long long)bh->b_blocknr,
+		     le16_to_cpu(di->id2.i_list.l_next_free_rec),
+		     le16_to_cpu(di->id2.i_list.l_count));
+		rc = -OCFS2_FILECHECK_ERR_FAILED;
+	}
+
 bail:
 	return rc;
 }
@@ -1545,6 +1579,16 @@ static int ocfs2_filecheck_repair_inode_block(struct super_block *sb,
 		     "Filecheck: reset dinode #%llu: fs_generation to %u\n",
 		     (unsigned long long)bh->b_blocknr,
 		     le32_to_cpu(di->i_fs_generation));
+	}
+
+	if (has_extents(di) && le16_to_cpu(di->id2.i_list.l_next_free_rec) >
+	    le16_to_cpu(di->id2.i_list.l_count)) {
+		di->id2.i_list.l_next_free_rec = di->id2.i_list.l_count;
+		changed = 1;
+		mlog(ML_ERROR,
+		     "Filecheck: reset dinode #%llu: l_next_free_rec to %u\n",
+		     (unsigned long long)bh->b_blocknr,
+		     le16_to_cpu(di->id2.i_list.l_next_free_rec));
 	}
 
 	if (changed || ocfs2_validate_meta_ecc(sb, bh->b_data, &di->i_check)) {
