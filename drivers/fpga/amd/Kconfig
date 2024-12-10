@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config AMD_VERSAL_PCI
+	tristate "AMD Versal PCIe Management Driver"
+	select FW_LOADER
+	select FW_UPLOAD
+	depends on FPGA
+	depends on HAS_IOMEM
+	depends on PCI
+	help
+	  AMD Versal PCIe Management Driver provides management services to
+	  download firmware, program bitstream, and communicate with the User
+	  function.
+
+	  If "M" is selected, the driver module will be versal-pci
