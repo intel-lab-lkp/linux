@@ -4676,7 +4676,7 @@ int e1000e_open(struct net_device *netdev)
 	else
 		irq = adapter->pdev->irq;
 
-	netif_napi_set_irq(&adapter->napi, irq);
+	netif_napi_set_irq(&adapter->napi, irq, 0);
 	napi_enable(&adapter->napi);
 	netif_queue_set_napi(netdev, 0, NETDEV_QUEUE_TYPE_RX, &adapter->napi);
 	netif_queue_set_napi(netdev, 0, NETDEV_QUEUE_TYPE_TX, &adapter->napi);

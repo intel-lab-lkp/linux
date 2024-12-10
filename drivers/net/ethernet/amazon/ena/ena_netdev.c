@@ -1712,7 +1712,7 @@ static int ena_request_io_irq(struct ena_adapter *adapter)
 	for (i = 0; i < io_queue_count; i++) {
 		irq_idx = ENA_IO_IRQ_IDX(i);
 		irq = &adapter->irq_tbl[irq_idx];
-		netif_napi_set_irq(&adapter->ena_napi[i].napi, irq->vector);
+		netif_napi_set_irq(&adapter->ena_napi[i].napi, irq->vector, 0);
 	}
 
 	return rc;
