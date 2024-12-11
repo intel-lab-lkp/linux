@@ -19,14 +19,15 @@
 #include <linux/ipc_namespace.h>
 #include <linux/time_namespace.h>
 #include <linux/utsname.h>
+#include <linux/maple_tree.h>
 #include <net/net_namespace.h>
 
 #include "internal.h"
 #include "mount.h"
 
-static DEFINE_IDR(pidfs_ino_idr);
-
-static u32 pidfs_ino_upper_32_bits = 0;
+static struct maple_tree pidfs_ino_mtree = MTREE_INIT(pidfs_ino_mtree,
+						      MT_FLAGS_ALLOC_RANGE |
+						      MT_FLAGS_LOCK_IRQ);
 
 #if BITS_PER_LONG == 32
 /*
@@ -34,8 +35,6 @@ static u32 pidfs_ino_upper_32_bits = 0;
  * the higher 32 bits are the generation number. The starting
  * value for the inode number and the generation number is one.
  */
-static u32 pidfs_ino_lower_32_bits = 1;
-
 static inline unsigned long pidfs_ino(u64 ino)
 {
 	return lower_32_bits(ino);
@@ -48,8 +47,6 @@ static inline u32 pidfs_gen(u64 ino)
 }
 
 #else
-
-static u32 pidfs_ino_lower_32_bits = 0;
 
 /* On 64 bit simply return ino. */
 static inline unsigned long pidfs_ino(u64 ino)
@@ -65,36 +62,69 @@ static inline u32 pidfs_gen(u64 ino)
 #endif
 
 /*
- * Construct an inode number for struct pid in a way that we can use the
- * lower 32bit to lookup struct pid independent of any pid numbers that
- * could be leaked into userspace (e.g., via file handle encoding).
+ * Create an inode number for struct pid that can be used to lookup
+ * struct pid indepdendent of any real pid numbers that could be leaked
+ * into userspace (e.g., by file handle encoding via
+ * name_to_handle_at(2).
+ *
+ * On 64bit BITS_PER_LONG is 64 and the inode number is unique because
+ * we allocate cyclically using ULONG_MAX for the maple tree.
+ *
+ * On 32bit BITS_PER_LONG is 32 and the inode number isn't trivially
+ * unique as the maple tree wraps around at UINT_MAX. To combat this we
+ * construct 64bit inode number. The lower 32bit are used to lookup
+ * struct pid in the maple tree. The upper 32bit are a counter that is
+ * incremented when the maple tree wraps around.
+ *
+ * This isn't perfect of course. On 32bit it is theoretically possible
+ * to create a densely populated maple tree. For example, assume that
+ * all entries in the maple tree are allocated up to UINT_MAX. If the
+ * user controls some entry in the middle and the last entry they can
+ * alternately free the middle entry and the last entry and thus
+ * overflow the upper 32bit counter.
+ *
+ * For 32bit we simply accept the very low possibility of overflowing
+ * the upper 32bit counter and log an info message when that happens.
+ * From that point on the inode number for struct pid isn't guaranteed
+ * to be unique anymore for the systems lifetime.
  */
 int pidfs_add_pid(struct pid *pid)
 {
-	u32 upper;
-	int lower;
+	static unsigned long lower_next = 0;
+	static u32 pidfs_ino_upper_32_bits = 0;
+	unsigned long lower;
+	int ret;
+	MA_STATE(mas, &pidfs_ino_mtree, 0, 0);
 
         /*
 	 * Inode numbering for pidfs start at 2. This avoids collisions
 	 * with the root inode which is 1 for pseudo filesystems.
          */
-	lower = idr_alloc_cyclic(&pidfs_ino_idr, pid, 2, 0, GFP_ATOMIC);
-	if (lower >= 0 && lower < pidfs_ino_lower_32_bits)
-		pidfs_ino_upper_32_bits++;
-	upper = pidfs_ino_upper_32_bits;
-	pidfs_ino_lower_32_bits = lower;
-	if (lower < 0)
-		return lower;
+	mtree_lock(&pidfs_ino_mtree);
+	ret = mas_alloc_cyclic(&mas, &lower, pid, 2, ULONG_MAX, &lower_next,
+			       GFP_KERNEL);
+	if (ret < 0)
+		goto out_unlock;
 
-	pid->ino = ((u64)upper << 32) | lower;
+#if BITS_PER_LONG == 32
+	if (ret == 1) {
+		if (wrapping_assign_add(pidfs_ino_upper_32_bits, 1) == 0)
+			pr_info("pidfs: generation number wrapped around\n");
+		ret = 0;
+	}
+#endif
+	pid->ino = ((u64)pidfs_ino_upper_32_bits << 32) | lower;
 	pid->stashed = NULL;
-	return 0;
+
+out_unlock:
+	mtree_unlock(&pidfs_ino_mtree);
+	return ret;
 }
 
 /* The idr number to remove is the lower 32 bits of the inode. */
 void pidfs_remove_pid(struct pid *pid)
 {
-	idr_remove(&pidfs_ino_idr, lower_32_bits(pid->ino));
+	mtree_erase(&pidfs_ino_mtree, pidfs_ino(pid->ino));
 }
 
 #ifdef CONFIG_PROC_FS
@@ -522,7 +552,7 @@ static struct pid *pidfs_ino_get_pid(u64 ino)
 
 	guard(rcu)();
 
-	pid = idr_find(&pidfs_ino_idr, lower_32_bits(pid_ino));
+	pid = mtree_load(&pidfs_ino_mtree, pid_ino);
 	if (!pid)
 		return NULL;
 
