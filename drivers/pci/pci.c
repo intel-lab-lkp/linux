@@ -5034,8 +5034,21 @@ static int pci_dev_reset_slot_function(struct pci_dev *dev, bool probe)
 
 static u16 cxl_port_dvsec(struct pci_dev *dev)
 {
+	if (!pcie_is_cxl(dev))
+		return 0;
+
 	return pci_find_dvsec_capability(dev, PCI_VENDOR_ID_CXL,
 					 PCI_DVSEC_CXL_PORT);
+}
+
+bool pcie_is_cxl_port(struct pci_dev *dev)
+{
+	if ((pci_pcie_type(dev) != PCI_EXP_TYPE_ROOT_PORT) &&
+	    (pci_pcie_type(dev) != PCI_EXP_TYPE_UPSTREAM) &&
+	    (pci_pcie_type(dev) != PCI_EXP_TYPE_DOWNSTREAM))
+		return false;
+
+	return cxl_port_dvsec(dev);
 }
 
 static bool cxl_sbr_masked(struct pci_dev *dev)
