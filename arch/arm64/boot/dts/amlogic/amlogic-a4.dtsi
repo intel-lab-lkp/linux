@@ -5,6 +5,7 @@
 
 #include "amlogic-a4-common.dtsi"
 #include <dt-bindings/power/amlogic,a4-pwrc.h>
+#include <dt-bindings/pinctrl/amlogic,pinctrl.h>
 / {
 	cpus {
 		#address-cells = <2>;
@@ -45,6 +46,151 @@
 		pwrc: power-controller {
 			compatible = "amlogic,a4-pwrc";
 			#power-domain-cells = <1>;
+		};
+	};
+};
+
+&apb {
+	periphs_pinctrl: pinctrl@4000 {
+		compatible = "amlogic,pinctrl";
+		reg = <0x0 0x4000 0x0 0x0050>,
+		      <0x0 0x40c0 0x0 0x0220>;
+		reg-names = "mux", "gpio";
+		#address-cells = <2>;
+		#size-cells = <2>;
+
+		gpiob: gpiob {
+			gpio-controller;
+			#gpio-cells = <2>;
+			npins = <14>;
+			bank-index = <AMLOGIC_GPIO_B>;
+			reg-mux-offset = <0>;
+			reg-gpio-offset = <0x60>;
+			bank-name = "GPIOB";
+		};
+
+		gpiod: gpiod {
+			gpio-controller;
+			#gpio-cells = <2>;
+			npins = <16>;
+			bank-index = <AMLOGIC_GPIO_D>;
+			reg-mux-offset = <0x10>;
+			reg-gpio-offset = <0x30>;
+			bank-name = "GPIOD";
+		};
+
+		gpioe: gpioe {
+			gpio-controller;
+			#gpio-cells = <2>;
+			npins = <2>;
+			bank-index = <AMLOGIC_GPIO_E>;
+			reg-mux-offset = <0x12>;
+			reg-gpio-offset = <0x40>;
+			bank-name = "GPIOE";
+		};
+
+		gpiot: gpiot {
+			gpio-controller;
+			#gpio-cells = <2>;
+			npins = <23>;
+			bank-index = <AMLOGIC_GPIO_T>;
+			reg-mux-offset = <0xb>;
+			reg-gpio-offset = <0x20>;
+			bank-name = "GPIOT";
+		};
+
+		gpiox: gpiox {
+			gpio-controller;
+			#gpio-cells = <2>;
+			npins = <18>;
+			bank-index = <AMLOGIC_GPIO_X>;
+			reg-mux-offset = <0x3>;
+			reg-gpio-offset = <0x10>;
+			bank-name = "GPIOX";
+		};
+
+		func-uart-a {
+			uart_a_default: uart-a-pins1{
+				pinmux= <AML_PINMUX(AMLOGIC_GPIO_X, 11, AF1)>,
+					<AML_PINMUX(AMLOGIC_GPIO_X, 12, AF1)>,
+					<AML_PINMUX(AMLOGIC_GPIO_X, 13, AF1)>,
+					<AML_PINMUX(AMLOGIC_GPIO_X, 13, AF1)>;
+			};
+
+			uart-a-pins2{
+				pinmux= <AML_PINMUX(AMLOGIC_GPIO_D, 2, AF3)>,
+					<AML_PINMUX(AMLOGIC_GPIO_D, 3, AF3)>;
+				bias-pull-up;
+				drive-strength-microamp = <4000>;
+			};
+		};
+
+		func-uart-b {
+			uart_b_default: uart-b-default{
+				pinmux= <AML_PINMUX(AMLOGIC_GPIO_E, 0, AF3)>,
+					<AML_PINMUX(AMLOGIC_GPIO_E, 1, AF3)>;
+				bias-pull-up;
+				drive-strength-microamp = <4000>;
+			};
+		};
+
+		func-uart-d {
+			uart_d_default: uart-d-pins1{
+				pinmux= <AML_PINMUX(AMLOGIC_GPIO_T, 18, AF4)>,
+					<AML_PINMUX(AMLOGIC_GPIO_T, 19, AF4)>;
+				bias-pull-up;
+				drive-strength-microamp = <4000>;
+			};
+
+			uart-d-pins2{
+				pinmux= <AML_PINMUX(AMLOGIC_GPIO_T, 7, AF2)>,
+					<AML_PINMUX(AMLOGIC_GPIO_T, 8, AF2)>,
+					<AML_PINMUX(AMLOGIC_GPIO_T, 9, AF2)>,
+					<AML_PINMUX(AMLOGIC_GPIO_T, 10, AF2)>;
+				bias-pull-up;
+				drive-strength-microamp = <4000>;
+			};
+		};
+
+		func-uart-e {
+			uart_e_default: uart-e-pins{
+				pinmux= <AML_PINMUX(AMLOGIC_GPIO_T, 14, AF3)>,
+					<AML_PINMUX(AMLOGIC_GPIO_T, 15, AF3)>,
+					<AML_PINMUX(AMLOGIC_GPIO_T, 16, AF3)>,
+					<AML_PINMUX(AMLOGIC_GPIO_T, 17, AF3)>;
+				bias-pull-up;
+				drive-strength-microamp = <4000>;
+			};
+		};
+	};
+
+	aobus_pinctrl: pinctrl@8e700 {
+		compatible = "amlogic,pinctrl";
+		reg = <0x0 0x8e700 0x0 0x04>,
+		      <0x0 0x8e704 0x0 0x60>;
+		reg-names = "mux", "gpio";
+		#address-cells = <2>;
+		#size-cells = <2>;
+
+		gpioao: gpioao {
+			gpio-controller;
+			#gpio-cells = <2>;
+			npins = <7>;
+			bank-index = <AMLOGIC_GPIO_AO>;
+			reg-mux-offset = <0>;
+			reg-gpio-offset = <0>;
+			bank-name = "GPIOAO";
+		};
+
+		test_n: gpiotestn {
+			gpio-controller;
+			#gpio-cells = <2>;
+			npins = <1>;
+			bank-index = <AMLOGIC_GPIO_TEST_N>;
+			reg-mux-offset = <0>;
+			bit-mux-offset = <28>;
+			reg-gpio-offset = <0x10>;
+			bank-name = "TEST_N";
 		};
 	};
 };
