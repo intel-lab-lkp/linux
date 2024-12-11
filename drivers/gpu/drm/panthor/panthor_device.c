@@ -475,6 +475,7 @@ int panthor_device_resume(struct device *dev)
 		ret = drm_WARN_ON(&ptdev->base, panthor_fw_resume(ptdev));
 		if (!ret) {
 			panthor_sched_resume(ptdev);
+			panthor_perf_resume(ptdev);
 		} else {
 			panthor_mmu_suspend(ptdev);
 			panthor_gpu_suspend(ptdev);
@@ -543,6 +544,7 @@ int panthor_device_suspend(struct device *dev)
 	    drm_dev_enter(&ptdev->base, &cookie)) {
 		cancel_work_sync(&ptdev->reset.work);
 
+		panthor_perf_suspend(ptdev);
 		/* We prepare everything as if we were resetting the GPU.
 		 * The end of the reset will happen in the resume path though.
 		 */
@@ -561,6 +563,7 @@ int panthor_device_suspend(struct device *dev)
 			panthor_mmu_resume(ptdev);
 			drm_WARN_ON(&ptdev->base, panthor_fw_resume(ptdev));
 			panthor_sched_resume(ptdev);
+			panthor_perf_resume(ptdev);
 			drm_dev_exit(cookie);
 		}
 
