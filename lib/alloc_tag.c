@@ -10,6 +10,7 @@
 #include <linux/seq_buf.h>
 #include <linux/seq_file.h>
 #include <linux/vmalloc.h>
+#include <linux/math.h>
 
 #define ALLOCINFO_FILE_NAME		"allocinfo"
 #define MODULE_ALLOC_TAG_VMAP_SIZE	(100000UL * sizeof(struct alloc_tag))
@@ -404,6 +405,9 @@ static int vm_module_tags_populate(void)
 	unsigned long phys_end = ALIGN_DOWN(module_tags.start_addr, PAGE_SIZE) +
 				 (vm_module_tags->nr_pages << PAGE_SHIFT);
 	unsigned long new_end = module_tags.start_addr + module_tags.size;
+	unsigned long phys_idx = (vm_module_tags->nr_pages +
+				 (2 << KASAN_SHADOW_SCALE_SHIFT) - 1) >> KASAN_SHADOW_SCALE_SHIFT;
+	unsigned long new_idx = 0;
 
 	if (phys_end < new_end) {
 		struct page **next_page = vm_module_tags->pages + vm_module_tags->nr_pages;
@@ -421,7 +425,26 @@ static int vm_module_tags_populate(void)
 				__free_page(next_page[i]);
 			return -ENOMEM;
 		}
+
 		vm_module_tags->nr_pages += nr;
+
+		new_idx = (vm_module_tags->nr_pages +
+			  (2 << KASAN_SHADOW_SCALE_SHIFT) - 1) >> KASAN_SHADOW_SCALE_SHIFT;
+
+		/*
+		 * Kasan allocates 1 byte of shadow for every 8 bytes of data.
+		 * When kasan_alloc_module_shadow allocates shadow memory,
+		 * its unit of allocation is a page.
+		 * Therefore, here we need to align to MODULE_ALIGN.
+		 *
+		 * For every KASAN_SHADOW_SCALE_SHIFT, a shadow page is allocated.
+		 * So, we determine whether to allocate based on whether the
+		 * number of pages falls within the scope of the same KASAN_SHADOW_SCALE_SHIFT.
+		 */
+		if (phys_idx != new_idx)
+			kasan_alloc_module_shadow((void *)round_up(phys_end, MODULE_ALIGN),
+						  (new_idx - phys_idx) * MODULE_ALIGN,
+						  GFP_KERNEL);
 	}
 
 	/*
