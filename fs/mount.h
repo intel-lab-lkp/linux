@@ -16,7 +16,10 @@ struct mnt_namespace {
 	u64 event;
 	unsigned int		nr_mounts; /* # of mounts in the namespace */
 	unsigned int		pending_mounts;
-	struct rb_node		mnt_ns_tree_node; /* node in the mnt_ns_tree */
+	union {
+		struct rb_node	mnt_ns_tree_node; /* node in the mnt_ns_tree */
+		struct rcu_head mnt_ns_rcu;
+	};
 	refcount_t		passive; /* number references not pinning @mounts */
 } __randomize_layout;
 
