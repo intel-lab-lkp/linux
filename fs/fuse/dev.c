@@ -21,6 +21,8 @@
 #include <linux/swap.h>
 #include <linux/splice.h>
 #include <linux/sched.h>
+#include <linux/completion.h>
+#include <linux/sched/sysctl.h>
 
 #define CREATE_TRACE_POINTS
 #include "fuse_trace.h"
@@ -45,14 +47,104 @@ static struct fuse_dev *fuse_get_dev(struct file *file)
 	return READ_ONCE(file->private_data);
 }
 
+static bool request_expired(struct fuse_conn *fc, struct fuse_req *req,
+		int timeout)
+{
+	return time_after(jiffies, req->create_time + timeout);
+}
+
+/*
+ * Prevent hung task timer from firing at us
+ * Check if any requests aren't being completed by the specified request
+ * timeout. To do so, we:
+ * - check the fiq pending list
+ * - check the bg queue
+ * - check the fpq io and processing lists
+ *
+ * To make this fast, we only check against the head request on each list since
+ * these are generally queued in order of creation time (eg newer requests get
+ * queued to the tail). We might miss a few edge cases (eg requests transitioning
+ * between lists, re-sent requests at the head of the pending list having a
+ * later creation time than other requests on that list, etc.) but that is fine
+ * since if the request never gets fulfilled, it will eventually be caught.
+ */
+void fuse_check_timeout(struct work_struct *wk)
+{
+	unsigned long hang_check_timer = sysctl_hung_task_timeout_secs * (HZ / 2);
+	struct fuse_conn *fc = container_of(wk, struct fuse_conn, work.work);
+	struct fuse_iqueue *fiq = &fc->iq;
+	struct fuse_req *req;
+	struct fuse_dev *fud;
+	struct fuse_pqueue *fpq;
+	bool expired = false;
+	int i;
+
+	spin_lock(&fiq->lock);
+	req = list_first_entry_or_null(&fiq->pending, struct fuse_req, list);
+	if (req)
+		expired = request_expired(fc, req, hang_check_timer);
+	spin_unlock(&fiq->lock);
+	if (expired)
+		goto abort_conn;
+
+	spin_lock(&fc->bg_lock);
+	req = list_first_entry_or_null(&fc->bg_queue, struct fuse_req, list);
+	if (req)
+		expired = request_expired(fc, req, hang_check_timer);
+	spin_unlock(&fc->bg_lock);
+	if (expired)
+		goto abort_conn;
+
+	spin_lock(&fc->lock);
+	if (!fc->connected) {
+		spin_unlock(&fc->lock);
+		return;
+	}
+	list_for_each_entry(fud, &fc->devices, entry) {
+		fpq = &fud->pq;
+		spin_lock(&fpq->lock);
+		req = list_first_entry_or_null(&fpq->io, struct fuse_req, list);
+		if (req && request_expired(fc, req, hang_check_timer))
+			goto fpq_abort;
+
+		for (i = 0; i < FUSE_PQ_HASH_SIZE; i++) {
+			req = list_first_entry_or_null(&fpq->processing[i], struct fuse_req, list);
+			if (req && request_expired(fc, req, hang_check_timer))
+				goto fpq_abort;
+		}
+		spin_unlock(&fpq->lock);
+	}
+	/* Keep the ball rolling */
+	if (atomic_read(&fc->num_waiting) != 0)
+		queue_delayed_work(system_wq, &fc->work, hang_check_timer);
+	spin_unlock(&fc->lock);
+	return;
+
+fpq_abort:
+	spin_unlock(&fpq->lock);
+	spin_unlock(&fc->lock);
+abort_conn:
+	fuse_abort_conn(fc);
+}
+
 static void fuse_request_init(struct fuse_mount *fm, struct fuse_req *req)
 {
+	struct fuse_conn *fc = fm->fc;
 	INIT_LIST_HEAD(&req->list);
 	INIT_LIST_HEAD(&req->intr_entry);
 	init_waitqueue_head(&req->waitq);
 	refcount_set(&req->count, 1);
 	__set_bit(FR_PENDING, &req->flags);
 	req->fm = fm;
+	req->create_time = jiffies;
+
+	if (sysctl_hung_task_panic) {
+		spin_lock(&fc->lock);
+		/* Get the ball rolling */
+		queue_delayed_work(system_wq, &fc->work,
+				sysctl_hung_task_timeout_secs * (HZ / 2));
+		spin_unlock(&fc->lock);
+	}
 }
 
 static struct fuse_req *fuse_request_alloc(struct fuse_mount *fm, gfp_t flags)
@@ -198,6 +290,14 @@ static void fuse_put_request(struct fuse_req *req)
 		if (test_bit(FR_WAITING, &req->flags)) {
 			__clear_bit(FR_WAITING, &req->flags);
 			fuse_drop_waiting(fc);
+		}
+
+		if (sysctl_hung_task_panic) {
+			spin_lock(&fc->lock);
+			/* Stop the timeout check if we are the last request */
+			if (atomic_read(&fc->num_waiting) == 0)
+				cancel_delayed_work_sync(&fc->work);
+			spin_unlock(&fc->lock);
 		}
 
 		fuse_request_free(req);

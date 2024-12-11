@@ -23,6 +23,7 @@
 #include <linux/exportfs.h>
 #include <linux/posix_acl.h>
 #include <linux/pid_namespace.h>
+#include <linux/completion.h>
 #include <uapi/linux/magic.h>
 
 MODULE_AUTHOR("Miklos Szeredi <miklos@szeredi.hu>");
@@ -964,6 +965,7 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	INIT_LIST_HEAD(&fc->entry);
 	INIT_LIST_HEAD(&fc->devices);
 	atomic_set(&fc->num_waiting, 0);
+	INIT_DELAYED_WORK(&fc->work, fuse_check_timeout);
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
 	atomic64_set(&fc->khctr, 0);
@@ -1015,6 +1017,7 @@ void fuse_conn_put(struct fuse_conn *fc)
 		if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 			fuse_backing_files_free(fc);
 		call_rcu(&fc->rcu, delayed_release);
+		cancel_delayed_work_sync(&fc->work);
 	}
 }
 EXPORT_SYMBOL_GPL(fuse_conn_put);

@@ -5,11 +5,15 @@
 #include <linux/types.h>
 
 #ifdef CONFIG_DETECT_HUNG_TASK
-/* used for hung_task and block/ */
+/* used for hung_task, block/ and fuse */
 extern unsigned long sysctl_hung_task_timeout_secs;
+extern unsigned int sysctl_hung_task_panic;
 #else
 /* Avoid need for ifdefs elsewhere in the code */
-enum { sysctl_hung_task_timeout_secs = 0 };
+enum {
+	sysctl_hung_task_timeout_secs = 0,
+	sysctl_hung_task_panic = 0,
+};
 #endif
 
 enum sched_tunable_scaling {
