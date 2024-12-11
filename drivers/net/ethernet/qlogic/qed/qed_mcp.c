@@ -3387,7 +3387,7 @@ int qed_mcp_nvm_info_populate(struct qed_hwfn *p_hwfn)
 	}
 out:
 	/* Update hwfn's nvm_info */
-	if (nvm_info.num_images) {
+	if (nvm_info.num_images && rc != -EOPNOTSUPP) {
 		p_hwfn->nvm_info.num_images = nvm_info.num_images;
 		kfree(p_hwfn->nvm_info.image_att);
 		p_hwfn->nvm_info.image_att = nvm_info.image_att;
