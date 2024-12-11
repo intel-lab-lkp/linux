@@ -513,4 +513,19 @@ static inline int ext4_should_dioread_nolock(struct inode *inode)
 	return 1;
 }
 
+static inline int ext4_should_use_extsize(struct inode *inode)
+{
+	if (!S_ISREG(inode->i_mode))
+		return 0;
+	if (!(ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)))
+		return 0;
+	return (ext4_inode_get_extsize(EXT4_I(inode)) > 0);
+}
+
+static inline int ext4_should_use_unwrit_extents(struct inode *inode)
+{
+	return (ext4_should_dioread_nolock(inode) ||
+		ext4_should_use_extsize(inode));
+}
+
 #endif	/* _EXT4_JBD2_H */

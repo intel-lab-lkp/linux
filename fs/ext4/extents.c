@@ -3889,15 +3889,24 @@ errout:
 
 static struct ext4_ext_path *
 ext4_ext_handle_unwritten_extents(handle_t *handle, struct inode *inode,
-			struct ext4_map_blocks *map,
+			struct ext4_map_blocks *orig_map,
+			struct ext4_map_blocks *extsize_map,
 			struct ext4_ext_path *path, int flags,
 			unsigned int *allocated, ext4_fsblk_t newblock)
 {
+	struct ext4_map_blocks *map;
 	int err = 0;
 
-	ext_debug(inode, "logical block %llu, max_blocks %u, flags 0x%x, allocated %u\n",
-		  (unsigned long long)map->m_lblk, map->m_len, flags,
-		  *allocated);
+	if (flags & EXT4_GET_BLOCKS_EXTSIZE) {
+		BUG_ON(extsize_map == NULL);
+		map = extsize_map;
+	} else
+		map = orig_map;
+
+	ext_debug(
+		inode,
+		"logical block %llu, max_blocks %u, flags 0x%x, allocated %u\n",
+		(unsigned long long)map->m_lblk, map->m_len, flags, *allocated);
 	ext4_ext_show_leaf(inode, path);
 
 	/*
@@ -3906,13 +3915,14 @@ ext4_ext_handle_unwritten_extents(handle_t *handle, struct inode *inode,
 	 */
 	flags |= EXT4_GET_BLOCKS_METADATA_NOFAIL;
 
-	trace_ext4_ext_handle_unwritten_extents(inode, map, flags,
-						*allocated, newblock);
+	trace_ext4_ext_handle_unwritten_extents(inode, map, flags, *allocated,
+						newblock);
 
 	/* get_block() before submitting IO, split the extent */
 	if (flags & EXT4_GET_BLOCKS_PRE_IO) {
+		/* Split should always happen based on original mapping */
 		path = ext4_split_convert_extents(
-			handle, inode, map->m_lblk, map->m_len, path,
+			handle, inode, orig_map->m_lblk, orig_map->m_len, path,
 			flags | EXT4_GET_BLOCKS_CONVERT, allocated);
 		if (IS_ERR(path))
 			return path;
@@ -3927,11 +3937,19 @@ ext4_ext_handle_unwritten_extents(handle_t *handle, struct inode *inode,
 			err = -EFSCORRUPTED;
 			goto errout;
 		}
+
+		/*
+		 * For extsize case we need to adjust lblk to start of split
+		 * extent because the m_len will be set to len of split extent.
+		 * No change for non extsize case
+		 */
+		map->m_lblk = orig_map->m_lblk;
 		map->m_flags |= EXT4_MAP_UNWRITTEN;
 		goto out;
 	}
 	/* IO end_io complete, convert the filled extent to written */
 	if (flags & EXT4_GET_BLOCKS_CONVERT) {
+		BUG_ON(map == extsize_map);
 		path = ext4_convert_unwritten_extents_endio(handle, inode,
 							    map, path);
 		if (IS_ERR(path))
@@ -4189,7 +4207,8 @@ insert_hole:
  * return < 0, error case.
  */
 int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
-			struct ext4_map_blocks *map, int flags)
+			struct ext4_map_blocks *orig_map,
+			struct ext4_map_blocks *extsize_map, int flags)
 {
 	struct ext4_ext_path *path = NULL;
 	struct ext4_extent newex, *ex, ex2;
@@ -4200,6 +4219,17 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	unsigned int allocated_clusters = 0;
 	struct ext4_allocation_request ar;
 	ext4_lblk_t cluster_offset;
+	struct ext4_map_blocks *map;
+#ifdef CONFIG_EXT4_DEBUG
+	struct ext4_ext_path *test_path = NULL;
+#endif
+
+	if (flags & EXT4_GET_BLOCKS_EXTSIZE) {
+		BUG_ON(extsize_map == NULL);
+		map = extsize_map;
+	} else
+		map = orig_map;
+
 
 	ext_debug(inode, "blocks %u/%u requested\n", map->m_lblk, map->m_len);
 	trace_ext4_ext_map_blocks_enter(inode, map->m_lblk, map->m_len, flags);
@@ -4256,6 +4286,7 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 			 */
 			if ((!ext4_ext_is_unwritten(ex)) &&
 			    (flags & EXT4_GET_BLOCKS_CONVERT_UNWRITTEN)) {
+				BUG_ON(map == extsize_map);
 				path = convert_initialized_extent(handle,
 					inode, map, path, &allocated);
 				if (IS_ERR(path))
@@ -4272,8 +4303,8 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 			}
 
 			path = ext4_ext_handle_unwritten_extents(
-				handle, inode, map, path, flags,
-				&allocated, newblock);
+				handle, inode, orig_map, extsize_map, path,
+				flags, &allocated, newblock);
 			if (IS_ERR(path))
 				err = PTR_ERR(path);
 			goto out;
@@ -4306,6 +4337,7 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	 */
 	if (cluster_offset && ex &&
 	    get_implied_cluster_alloc(inode->i_sb, map, ex, path)) {
+		BUG_ON(map == extsize_map);
 		ar.len = allocated = map->m_len;
 		newblock = map->m_pblk;
 		goto got_allocated_blocks;
@@ -4325,6 +4357,7 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	 * cluster we can use. */
 	if ((sbi->s_cluster_ratio > 1) && err &&
 	    get_implied_cluster_alloc(inode->i_sb, map, &ex2, path)) {
+		BUG_ON(map == extsize_map);
 		ar.len = allocated = map->m_len;
 		newblock = map->m_pblk;
 		err = 0;
@@ -4379,6 +4412,8 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		ar.flags |= EXT4_MB_DELALLOC_RESERVED;
 	if (flags & EXT4_GET_BLOCKS_METADATA_NOFAIL)
 		ar.flags |= EXT4_MB_USE_RESERVED;
+	if (flags & EXT4_GET_BLOCKS_EXTSIZE)
+		ar.flags |= EXT4_MB_HINT_ALIGNED;
 	newblock = ext4_mb_new_blocks(handle, &ar, &err);
 	if (!newblock)
 		goto out;
@@ -4400,9 +4435,114 @@ got_allocated_blocks:
 		map->m_flags |= EXT4_MAP_UNWRITTEN;
 	}
 
-	path = ext4_ext_insert_extent(handle, inode, path, &newex, flags);
-	if (IS_ERR(path)) {
-		err = PTR_ERR(path);
+	if ((flags & EXT4_GET_BLOCKS_EXTSIZE) &&
+	    (flags & EXT4_GET_BLOCKS_PRE_IO)) {
+		/*
+		 * With EXTSIZE and PRE-IO (direct io case) we have to be careful
+		 * because we want to insert the complete extent but split only the
+		 * originally requested range.
+		 *
+		 * Below are the different (S)cenarios and the (A)ction we take:
+		 *
+		 * S1: New extent covers the original range completely/partially.
+		 * A1: Insert new extent, allow merges. Then split the original
+		 * range from this. Adjust the length of split if new extent only
+		 * partially covers original.
+		 *
+		 * S2: New extent doesn't cover original range at all
+		 * A2: Just insert this range and return. Rest is handled in
+		 * ext4_map_blocks()
+		 * NOTE: We can handle this as an error with EAGAIN in future.
+		 */
+		ext4_lblk_t newex_lblk = le32_to_cpu(newex.ee_block);
+		loff_t newex_len = ext4_ext_get_actual_len(&newex);
+
+		if (in_range(orig_map->m_lblk, newex_lblk, newex_len)) {
+			/* S1 */
+			loff_t split_len = 0;
+
+			BUG_ON(!ext4_ext_is_unwritten(&newex));
+
+			if (newex_lblk + newex_len >=
+			    orig_map->m_lblk + (loff_t)orig_map->m_len)
+				split_len = orig_map->m_len;
+			else
+				split_len = newex_len -
+					    (orig_map->m_lblk - newex_lblk);
+
+			path = ext4_ext_insert_extent(
+				handle, inode, path, &newex,
+				(flags & ~EXT4_GET_BLOCKS_PRE_IO));
+			if (IS_ERR(path)) {
+				err = PTR_ERR(path);
+				goto insert_error;
+			}
+
+			/*
+			 * Update path before split
+			 * NOTE: This might no longer be needed with recent
+			 * changes in ext4_ext_insert_extent()
+			 */
+			path = ext4_find_extent(inode, orig_map->m_lblk, path, 0);
+			if (IS_ERR(path)) {
+				err = PTR_ERR(path);
+				goto insert_error;
+			}
+
+			/*
+			 * GET_BLOCKS_CONVERT is needed to make sure split
+			 * extent is marked unwritten although the flags itself
+			 * means that the extent should be converted to written.
+			 *
+			 * TODO: This is because ext4_split_convert_extents()
+			 * doesn't respect the flags at all but fixing this
+			 * needs more involved design changes.
+			 */
+			path = ext4_split_convert_extents(
+				handle, inode, orig_map->m_lblk, split_len,
+				path, flags | EXT4_GET_BLOCKS_CONVERT, NULL);
+			if (IS_ERR(path)) {
+				err = PTR_ERR(path);
+				goto insert_error;
+			}
+
+#ifdef CONFIG_EXT4_DEBUG
+			test_path = ext4_find_extent(inode, orig_map->m_lblk,
+						     NULL, 0);
+			if (!IS_ERR(test_path)) {
+				/* Confirm we've correctly split and marked the extent unwritten */
+				struct ext4_extent *test_ex =
+					test_path[ext_depth(inode)].p_ext;
+				WARN_ON(!ext4_ext_is_unwritten(test_ex));
+				WARN_ON(test_ex->ee_block != orig_map->m_lblk);
+				WARN_ON(ext4_ext_get_actual_len(test_ex) !=
+					orig_map->m_len);
+				kfree(test_path);
+			}
+#endif
+		} else {
+			/* S2 */
+			BUG_ON(orig_map->m_lblk < newex_lblk + newex_len);
+
+			path = ext4_ext_insert_extent(
+				handle, inode, path, &newex,
+				(flags & ~EXT4_GET_BLOCKS_PRE_IO));
+			if (IS_ERR(path)) {
+				err = PTR_ERR(path);
+				goto insert_error;
+			}
+		}
+	} else {
+		path = ext4_ext_insert_extent(handle, inode, path, &newex,
+					      flags);
+		if (IS_ERR(path)) {
+			err = PTR_ERR(path);
+			goto insert_error;
+		}
+	}
+
+insert_error:
+	if (err) {
 		if (allocated_clusters) {
 			int fb_flags = 0;
 
@@ -4797,6 +4937,9 @@ long ext4_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	flags = EXT4_GET_BLOCKS_CREATE_UNWRIT_EXT;
 
 	inode_lock(inode);
+
+	if (ext4_should_use_extsize(inode))
+		flags |= EXT4_GET_BLOCKS_EXTSIZE;
 
 	/*
 	 * We only support preallocation for extent-based files only

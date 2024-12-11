@@ -434,7 +434,7 @@ static void ext4_map_blocks_es_recheck(handle_t *handle,
 	 */
 	down_read(&EXT4_I(inode)->i_data_sem);
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
-		retval = ext4_ext_map_blocks(handle, inode, map, 0);
+		retval = ext4_ext_map_blocks(handle, inode, map, NULL, 0);
 	} else {
 		retval = ext4_ind_map_blocks(handle, inode, map, 0);
 	}
@@ -459,15 +459,33 @@ static void ext4_map_blocks_es_recheck(handle_t *handle,
 #endif /* ES_AGGRESSIVE_TEST */
 
 static int ext4_map_query_blocks(handle_t *handle, struct inode *inode,
-				 struct ext4_map_blocks *map)
+				 struct ext4_map_blocks *orig_map,
+				 struct ext4_map_blocks *extsize_map,
+				 bool should_extsize)
 {
 	unsigned int status;
 	int retval;
+	struct ext4_map_blocks *map;
+
+	if (should_extsize) {
+		BUG_ON(extsize_map == NULL);
+		map = extsize_map;
+	} else
+		map = orig_map;
 
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
-		retval = ext4_ext_map_blocks(handle, inode, map, 0);
-	else
+		if (should_extsize) {
+			retval = ext4_ext_map_blocks(handle, inode, orig_map,
+						     map,
+						     EXT4_GET_BLOCKS_EXTSIZE);
+		} else {
+			retval = ext4_ext_map_blocks(handle, inode, map, NULL,
+						     0);
+		}
+	else {
+		BUG_ON(should_extsize);
 		retval = ext4_ind_map_blocks(handle, inode, map, 0);
+	}
 
 	if (retval <= 0)
 		return retval;
@@ -488,11 +506,20 @@ static int ext4_map_query_blocks(handle_t *handle, struct inode *inode,
 }
 
 static int ext4_map_create_blocks(handle_t *handle, struct inode *inode,
-				  struct ext4_map_blocks *map, int flags)
+				  struct ext4_map_blocks *orig_map,
+				  struct ext4_map_blocks *extsize_map, int flags,
+				  bool should_extsize)
 {
 	struct extent_status es;
 	unsigned int status;
 	int err, retval = 0;
+	struct ext4_map_blocks *map;
+
+	if (should_extsize) {
+		BUG_ON(extsize_map == NULL);
+		map = extsize_map;
+	} else
+		map = orig_map;
 
 	/*
 	 * We pass in the magic EXT4_GET_BLOCKS_DELALLOC_RESERVE
@@ -513,8 +540,15 @@ static int ext4_map_create_blocks(handle_t *handle, struct inode *inode,
 	 * changed the inode type in between.
 	 */
 	if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
-		retval = ext4_ext_map_blocks(handle, inode, map, flags);
+		if (should_extsize) {
+			retval = ext4_ext_map_blocks(handle, inode, orig_map,
+						     map, flags);
+		} else {
+			retval = ext4_ext_map_blocks(handle, inode, map, NULL,
+						     flags);
+		}
 	} else {
+		BUG_ON(should_extsize);
 		retval = ext4_ind_map_blocks(handle, inode, map, flags);
 
 		/*
@@ -569,6 +603,80 @@ static int ext4_map_create_blocks(handle_t *handle, struct inode *inode,
 	return retval;
 }
 
+/**
+ * Extsize hint will change the mapped range and hence we'll end up mapping more.
+ * To not confuse the caller, adjust the struct ext4_map_blocks to reflect the
+ * original mapping requested by them.
+ *
+ * @cur_map:		The block mapping we are working with (for sanity check)
+ * @orig_map:		The originally requested mapping
+ * @extsize_map:	The mapping after adjusting for extsize hint
+ * @flags		Get block flags (for sanity check)
+ *
+ * This function assumes that the orig_mlblk is contained within the mapping
+ * held in extsize_map. Caller must make sure this is true.
+ */
+static inline unsigned int ext4_extsize_adjust_map(struct ext4_map_blocks *cur_map,
+					   struct ext4_map_blocks *orig_map,
+					   struct ext4_map_blocks *extsize_map,
+					   int flags)
+{
+	__u64 map_end = (__u64)extsize_map->m_lblk + extsize_map->m_len;
+
+	BUG_ON(cur_map != extsize_map || !(flags & EXT4_GET_BLOCKS_EXTSIZE));
+
+	orig_map->m_len = min(orig_map->m_len, map_end - orig_map->m_lblk);
+	orig_map->m_pblk =
+		extsize_map->m_pblk + (orig_map->m_lblk - extsize_map->m_lblk);
+	orig_map->m_flags = extsize_map->m_flags;
+
+	return orig_map->m_len;
+}
+
+/**
+ * ext4_error_adjust_map - Adjust map returned upon error in ext4_map_blocks()
+ *
+ * @cur_map: current map we are working with
+ * @orig_map: original map that would be returned to the user.
+ *
+ * Most of the callers of ext4_map_blocks() ignore the map on error, however
+ * some use it for debug logging. In this case, they log state of the map just
+ * before the error, hence this function ensures that map returned to caller is
+ * the one we were working with when error happened. Mostly useful when extsize
+ * hints are enabled.
+ */
+static inline void ext4_error_adjust_map(struct ext4_map_blocks *cur_map,
+					 struct ext4_map_blocks *orig_map)
+{
+	if (cur_map != orig_map)
+		memcpy(orig_map, cur_map, sizeof(*cur_map));
+}
+
+/*
+ * This functions resets the mapping to it's original state after it has been
+ * modified due to extent size hint and drops the extsize hint. To be used
+ * incase we want to fallback from extsize based aligned allocation to normal
+ * allocation
+ *
+ * @map:		The block mapping where lblk and len have been modified
+ *			because	of extsize hint
+ * @flags:		The get_block flags
+ * @orig_mlblk:		The originally requested logical block to map
+ * @orig_mlen:		The originally requested len to map
+ * @orig_flags:		The originally requested get_block flags
+ */
+static inline void ext4_extsize_reset_map(struct ext4_map_blocks *map,
+					  int *flags, ext4_lblk_t orig_mlblk,
+					  unsigned int orig_mlen,
+					  int orig_flags)
+{
+	/* Drop the extsize hint from original flags */
+	*flags = orig_flags & ~EXT4_GET_BLOCKS_EXTSIZE;
+	map->m_lblk = orig_mlblk;
+	map->m_len = orig_mlen;
+	map->m_flags = 0;
+}
+
 /*
  * The ext4_map_blocks() function tries to look up the requested blocks,
  * and returns if the blocks are already mapped.
@@ -593,30 +701,110 @@ static int ext4_map_create_blocks(handle_t *handle, struct inode *inode,
  * It returns the error in case of allocation failure.
  */
 int ext4_map_blocks(handle_t *handle, struct inode *inode,
-		    struct ext4_map_blocks *map, int flags)
+		    struct ext4_map_blocks *orig_map, int flags)
 {
 	struct extent_status es;
 	int retval;
 	int ret = 0;
-#ifdef ES_AGGRESSIVE_TEST
-	struct ext4_map_blocks orig_map;
 
-	memcpy(&orig_map, map, sizeof(*map));
+	ext4_lblk_t orig_mlblk, extsize_mlblk;
+	unsigned int orig_mlen, extsize_mlen;
+	int orig_flags;
+
+	struct ext4_map_blocks *map = NULL;
+	struct ext4_map_blocks extsize_map = {0};
+
+	__u32 extsize = ext4_inode_get_extsize(EXT4_I(inode));
+	bool should_extsize = false;
+
+#ifdef ES_AGGRESSIVE_TEST
+	struct ext4_map_blocks test_map;
+
+	memcpy(&test_map, map, sizeof(*map));
 #endif
 
-	map->m_flags = 0;
-	ext_debug(inode, "flag 0x%x, max_blocks %u, logical block %lu\n",
-		  flags, map->m_len, (unsigned long) map->m_lblk);
+	orig_map->m_flags = 0;
+	ext_debug(inode, "flag 0x%x, max_blocks %u, logical block %lu\n", flags,
+		  orig_map->m_len, (unsigned long)orig_map->m_lblk);
 
 	/*
 	 * ext4_map_blocks returns an int, and m_len is an unsigned int
 	 */
-	if (unlikely(map->m_len > INT_MAX))
-		map->m_len = INT_MAX;
+	if (unlikely(orig_map->m_len > INT_MAX))
+		orig_map->m_len = INT_MAX;
 
 	/* We can handle the block number less than EXT_MAX_BLOCKS */
-	if (unlikely(map->m_lblk >= EXT_MAX_BLOCKS))
+	if (unlikely(orig_map->m_lblk >= EXT_MAX_BLOCKS))
 		return -EFSCORRUPTED;
+
+	orig_mlblk = orig_map->m_lblk;
+	orig_mlen = orig_map->m_len;
+	orig_flags = flags;
+
+set_map:
+	should_extsize = (extsize && (flags & EXT4_GET_BLOCKS_CREATE) &&
+			       (flags & EXT4_GET_BLOCKS_EXTSIZE));
+	if (should_extsize) {
+		/*
+		 * We adjust the extent size here but we still return the
+		 * original lblk and len while returning to keep the behavior
+		 * compatible.
+		 */
+		int len, align;
+		/*
+		 * NOTE: Should we import EXT_UNWRITTEN_MAX_LEN from
+		 * ext4_extents.h here?
+		 */
+		int max_unwrit_len = ((1UL << 15) - 1);
+		loff_t end;
+
+		align = orig_map->m_lblk % extsize;
+		len = orig_map->m_len + align;
+
+		extsize_map.m_lblk = orig_map->m_lblk - align;
+		extsize_map.m_len =
+			max_t(unsigned int, roundup_pow_of_two(len), extsize);
+
+		/*
+		 * For now allocations beyond EOF don't use extsize hints so
+		 * that we can avoid dealing with extra blocks allocated past
+		 * EOF. We have inode lock since extsize allocations are
+		 * non-delalloc so i_size can be accessed safely
+		 */
+		end = (extsize_map.m_lblk + (loff_t)extsize_map.m_len) << inode->i_blkbits;
+		if (end > inode->i_size) {
+			flags = orig_flags & ~EXT4_GET_BLOCKS_EXTSIZE;
+			goto set_map;
+		}
+
+		/* Fallback to normal allocation if we go beyond max len */
+		if (extsize_map.m_len >= max_unwrit_len) {
+			flags = orig_flags & ~EXT4_GET_BLOCKS_EXTSIZE;
+			goto set_map;
+		}
+
+		/*
+		 * We are allocating more than requested. We'll have to convert
+		 * the extent to unwritten and then convert only the part
+		 * requested to written. For now we are using the same flow as
+		 * dioread nolock to achieve this. Hence the caller has to pass
+		 * CREATE_UNWRIT with EXTSIZE
+		 */
+		if (!(flags | EXT4_GET_BLOCKS_CREATE_UNWRIT_EXT)) {
+			WARN_ON(true);
+
+			/* Fallback to non extsize allocation */
+			flags = orig_flags & ~EXT4_GET_BLOCKS_EXTSIZE;
+			goto set_map;
+		}
+
+		extsize_mlblk = extsize_map.m_lblk;
+		extsize_mlen = extsize_map.m_len;
+
+		extsize_map.m_flags = orig_map->m_flags;
+		map = &extsize_map;
+	} else
+		map = orig_map;
 
 	/* Lookup extent status tree firstly */
 	if (!(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_FC_REPLAY) &&
@@ -647,7 +835,7 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 			return retval;
 #ifdef ES_AGGRESSIVE_TEST
 		ext4_map_blocks_es_recheck(handle, inode, map,
-					   &orig_map, flags);
+					   &test_map, flags);
 #endif
 		goto found;
 	}
@@ -663,19 +851,60 @@ int ext4_map_blocks(handle_t *handle, struct inode *inode,
 	 * file system block.
 	 */
 	down_read(&EXT4_I(inode)->i_data_sem);
-	retval = ext4_map_query_blocks(handle, inode, map);
+	if (should_extsize) {
+		BUG_ON(map != &extsize_map);
+		retval = ext4_map_query_blocks(handle, inode, orig_map, map,
+					       should_extsize);
+	} else {
+		BUG_ON(map != orig_map);
+		retval = ext4_map_query_blocks(handle, inode, map, NULL,
+					       should_extsize);
+	}
 	up_read((&EXT4_I(inode)->i_data_sem));
 
 found:
 	if (retval > 0 && map->m_flags & EXT4_MAP_MAPPED) {
 		ret = check_block_validity(inode, map);
-		if (ret != 0)
+		if (ret != 0) {
+			ext4_error_adjust_map(map, orig_map);
 			return ret;
+		}
 	}
 
 	/* If it is only a block(s) look up */
-	if ((flags & EXT4_GET_BLOCKS_CREATE) == 0)
+	if ((flags & EXT4_GET_BLOCKS_CREATE) == 0) {
+		BUG_ON(flags & EXT4_GET_BLOCKS_EXTSIZE);
 		return retval;
+	}
+
+	/* Handle some special cases when extsize based allocation is needed */
+	if (retval >= 0 && flags & EXT4_GET_BLOCKS_EXTSIZE) {
+		bool orig_in_range =
+			in_range(orig_mlblk, (__u64)map->m_lblk, map->m_len);
+		/*
+		 * Special case: if the extsize range is mapped already and
+		 * covers the original start, we return it.
+		 */
+		if (map->m_flags & EXT4_MAP_MAPPED && orig_in_range) {
+			/*
+			 * We don't use EXTSIZE with CONVERT_UNWRITTEN so
+			 * we can directly return the written extent
+			 */
+			return ext4_extsize_adjust_map(map, orig_map, &extsize_map, flags);
+		}
+
+		/*
+		 * Fallback case: if the found mapping (or hole) doesn't cover
+		 * the extsize required, then just fall back to normal
+		 * allocation to keep things simple.
+		 */
+
+		if (map->m_lblk != extsize_mlblk ||
+		    map->m_len != extsize_mlen) {
+			flags = orig_flags & ~EXT4_GET_BLOCKS_EXTSIZE;
+			goto set_map;
+		}
+	}
 
 	/*
 	 * Returns if the blocks have already allocated
@@ -699,12 +928,22 @@ found:
 	 * with create == 1 flag.
 	 */
 	down_write(&EXT4_I(inode)->i_data_sem);
-	retval = ext4_map_create_blocks(handle, inode, map, flags);
+	if (should_extsize) {
+		BUG_ON(map != &extsize_map);
+		retval = ext4_map_create_blocks(handle, inode, orig_map, map, flags,
+						should_extsize);
+	} else {
+		BUG_ON(map != orig_map);
+		retval = ext4_map_create_blocks(handle, inode, map, NULL, flags,
+					       should_extsize);
+	}
 	up_write((&EXT4_I(inode)->i_data_sem));
 	if (retval > 0 && map->m_flags & EXT4_MAP_MAPPED) {
 		ret = check_block_validity(inode, map);
-		if (ret != 0)
+		if (ret != 0) {
+			ext4_error_adjust_map(map, orig_map);
 			return ret;
+		}
 
 		/*
 		 * Inodes with freshly allocated blocks where contents will be
@@ -726,16 +965,38 @@ found:
 			else
 				ret = ext4_jbd2_inode_add_write(handle, inode,
 						start_byte, length);
-			if (ret)
+			if (ret) {
+				ext4_error_adjust_map(map, orig_map);
 				return ret;
+			}
 		}
 	}
 	if (retval > 0 && (map->m_flags & EXT4_MAP_UNWRITTEN ||
 				map->m_flags & EXT4_MAP_MAPPED))
 		ext4_fc_track_range(handle, inode, map->m_lblk,
 					map->m_lblk + map->m_len - 1);
-	if (retval < 0)
+
+	if (retval > 0 && flags & EXT4_GET_BLOCKS_EXTSIZE) {
+		/*
+		 * In the rare case that we have a short allocation and orig
+		 * lblk doesn't lie in mapped range just try to retry with
+		 * actual allocation. This is not ideal but this should be an
+		 * edge case near ENOSPC.
+		 *
+		 * NOTE: This has a side effect that blocks are allocated but
+		 * not used. Can we avoid that?
+		 */
+		if (!in_range(orig_mlblk, (__u64)map->m_lblk, map->m_len)) {
+			flags = orig_flags & ~EXT4_GET_BLOCKS_EXTSIZE;
+			goto set_map;
+		}
+		return ext4_extsize_adjust_map(map, orig_map, &extsize_map, flags);
+	}
+
+	if (retval < 0) {
+		ext4_error_adjust_map(map, orig_map);
 		ext_debug(inode, "failed with err %d\n", retval);
+	}
 	return retval;
 }
 
@@ -771,18 +1032,20 @@ static int _ext4_get_block(struct inode *inode, sector_t iblock,
 {
 	struct ext4_map_blocks map;
 	int ret = 0;
+	unsigned int orig_mlen = bh->b_size >> inode->i_blkbits;
 
 	if (ext4_has_inline_data(inode))
 		return -ERANGE;
 
 	map.m_lblk = iblock;
-	map.m_len = bh->b_size >> inode->i_blkbits;
+	map.m_len = orig_mlen;
 
 	ret = ext4_map_blocks(ext4_journal_current_handle(), inode, &map,
 			      flags);
 	if (ret > 0) {
 		map_bh(bh, inode->i_sb, map.m_pblk);
 		ext4_update_bh_state(bh, map.m_flags);
+		WARN_ON(map.m_len != orig_mlen);
 		bh->b_size = inode->i_sb->s_blocksize * map.m_len;
 		ret = 0;
 	} else if (ret == 0) {
@@ -808,11 +1071,14 @@ int ext4_get_block_unwritten(struct inode *inode, sector_t iblock,
 			     struct buffer_head *bh_result, int create)
 {
 	int ret = 0;
+	int flags = EXT4_GET_BLOCKS_CREATE_UNWRIT_EXT;
+
+	if (ext4_should_use_extsize(inode))
+		flags |= EXT4_GET_BLOCKS_EXTSIZE;
 
 	ext4_debug("ext4_get_block_unwritten: inode %lu, create flag %d\n",
 		   inode->i_ino, create);
-	ret = _ext4_get_block(inode, iblock, bh_result,
-			       EXT4_GET_BLOCKS_CREATE_UNWRIT_EXT);
+	ret = _ext4_get_block(inode, iblock, bh_result, flags);
 
 	/*
 	 * If the buffer is marked unwritten, mark it as new to make sure it is
@@ -1162,7 +1428,8 @@ static int ext4_write_begin(struct file *file, struct address_space *mapping,
 	from = pos & (PAGE_SIZE - 1);
 	to = from + len;
 
-	if (ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
+	if (!ext4_should_use_extsize(inode) &&
+	    ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
 		ret = ext4_try_to_write_inline_data(mapping, inode, pos, len,
 						    foliop);
 		if (ret < 0)
@@ -1210,7 +1477,7 @@ retry_journal:
 	/* In case writeback began while the folio was unlocked */
 	folio_wait_stable(folio);
 
-	if (ext4_should_dioread_nolock(inode))
+	if (ext4_should_use_unwrit_extents(inode))
 		ret = ext4_block_write_begin(handle, folio, pos, len,
 					     ext4_get_block_unwritten);
 	else
@@ -1800,7 +2067,7 @@ found:
 	if (ext4_has_inline_data(inode))
 		retval = 0;
 	else
-		retval = ext4_map_query_blocks(NULL, inode, map);
+		retval = ext4_map_query_blocks(NULL, inode, map, NULL, false);
 	up_read(&EXT4_I(inode)->i_data_sem);
 	if (retval)
 		return retval < 0 ? retval : 0;
@@ -1823,7 +2090,7 @@ add_delayed:
 			goto found;
 		}
 	} else if (!ext4_has_inline_data(inode)) {
-		retval = ext4_map_query_blocks(NULL, inode, map);
+		retval = ext4_map_query_blocks(NULL, inode, map, NULL, false);
 		if (retval) {
 			up_write(&EXT4_I(inode)->i_data_sem);
 			return retval < 0 ? retval : 0;
@@ -2197,6 +2464,7 @@ static int mpage_map_one_extent(handle_t *handle, struct mpage_da_data *mpd)
 	struct ext4_map_blocks *map = &mpd->map;
 	int get_blocks_flags;
 	int err, dioread_nolock;
+	int extsize = ext4_should_use_extsize(inode);
 
 	trace_ext4_da_write_pages_extent(inode, map);
 	/*
@@ -2215,11 +2483,14 @@ static int mpage_map_one_extent(handle_t *handle, struct mpage_da_data *mpd)
 	dioread_nolock = ext4_should_dioread_nolock(inode);
 	if (dioread_nolock)
 		get_blocks_flags |= EXT4_GET_BLOCKS_IO_CREATE_EXT;
+	if (extsize)
+		get_blocks_flags |= EXT4_GET_BLOCKS_PRE_IO;
 
 	err = ext4_map_blocks(handle, inode, map, get_blocks_flags);
 	if (err < 0)
 		return err;
-	if (dioread_nolock && (map->m_flags & EXT4_MAP_UNWRITTEN)) {
+	if ((extsize || dioread_nolock) &&
+	    (map->m_flags & EXT4_MAP_UNWRITTEN)) {
 		if (!mpd->io_submit.io_end->handle &&
 		    ext4_handle_valid(handle)) {
 			mpd->io_submit.io_end->handle = handle->h_rsv_handle;
@@ -2642,10 +2913,11 @@ static int ext4_do_writepages(struct mpage_da_data *mpd)
 	}
 	mpd->journalled_more_data = 0;
 
-	if (ext4_should_dioread_nolock(inode)) {
+	if (ext4_should_use_unwrit_extents(inode)) {
 		/*
-		 * We may need to convert up to one extent per block in
-		 * the page and we may dirty the inode.
+		 * For extsize allocation or dioread_nolock, we may need to
+		 * convert up to one extent per block in the page and we may
+		 * dirty the inode.
 		 */
 		rsv_blocks = 1 + ext4_chunk_trans_blocks(inode,
 						PAGE_SIZE >> inode->i_blkbits);
@@ -2920,7 +3192,8 @@ static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 
 	index = pos >> PAGE_SHIFT;
 
-	if (ext4_nonda_switch(inode->i_sb) || ext4_verity_in_progress(inode)) {
+	if (ext4_nonda_switch(inode->i_sb) || ext4_verity_in_progress(inode) ||
+	    ext4_should_use_extsize(inode)) {
 		*fsdata = (void *)FALL_BACK_TO_NONDELALLOC;
 		return ext4_write_begin(file, mapping, pos,
 					len, foliop, fsdata);
@@ -3367,11 +3640,18 @@ retry:
 	 * can complete at any point during the I/O and subsequently push the
 	 * i_disksize out to i_size. This could be beyond where direct I/O is
 	 * happening and thus expose allocated blocks to direct I/O reads.
+	 *
+	 * NOTE for extsize hints: We only support it for writes inside
+	 * EOF (for now) to not have to deal with blocks past EOF
 	 */
 	else if (((loff_t)map->m_lblk << blkbits) >= i_size_read(inode))
 		m_flags = EXT4_GET_BLOCKS_CREATE;
-	else if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS))
+	else if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
 		m_flags = EXT4_GET_BLOCKS_IO_CREATE_EXT;
+
+		if (ext4_should_use_extsize(inode))
+			m_flags |= EXT4_GET_BLOCKS_EXTSIZE;
+	}
 
 	ret = ext4_map_blocks(handle, inode, map, m_flags);
 
@@ -6200,7 +6480,7 @@ vm_fault_t ext4_page_mkwrite(struct vm_fault *vmf)
 	}
 	folio_unlock(folio);
 	/* OK, we need to fill the hole... */
-	if (ext4_should_dioread_nolock(inode))
+	if (ext4_should_use_unwrit_extents(inode))
 		get_block = ext4_get_block_unwritten;
 	else
 		get_block = ext4_get_block;

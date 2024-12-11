@@ -722,6 +722,7 @@ enum {
 #define EXT4_GET_BLOCKS_IO_SUBMIT		0x0400
 	/* Caller is in the atomic contex, find extent if it has been cached */
 #define EXT4_GET_BLOCKS_CACHED_NOWAIT		0x0800
+#define EXT4_GET_BLOCKS_EXTSIZE			0x1000
 
 /*
  * The bit position of these flags must not overlap with any of the
@@ -3696,7 +3697,8 @@ struct ext4_extent;
 extern void ext4_ext_tree_init(handle_t *handle, struct inode *inode);
 extern int ext4_ext_index_trans_blocks(struct inode *inode, int extents);
 extern int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
-			       struct ext4_map_blocks *map, int flags);
+			       struct ext4_map_blocks *orig_map,
+			       struct ext4_map_blocks *extsize_map, int flags);
 extern int ext4_ext_truncate(handle_t *, struct inode *);
 extern int ext4_ext_remove_space(struct inode *inode, ext4_lblk_t start,
 				 ext4_lblk_t end);
