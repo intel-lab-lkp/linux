@@ -21,6 +21,7 @@
 #include "panthor_gem.h"
 #include "panthor_gpu.h"
 #include "panthor_mmu.h"
+#include "panthor_perf.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
 
@@ -1417,6 +1418,9 @@ int panthor_fw_init(struct panthor_device *ptdev)
 		goto err_unplug_fw;
 
 	panthor_fw_init_global_iface(ptdev);
+
+	panthor_perf_info_init(ptdev);
+
 	return 0;
 
 err_unplug_fw:

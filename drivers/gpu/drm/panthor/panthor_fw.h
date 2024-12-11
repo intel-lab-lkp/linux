@@ -5,6 +5,7 @@
 #define __PANTHOR_MCU_H__
 
 #include <linux/types.h>
+#include <linux/spinlock.h>
 
 struct panthor_device;
 struct panthor_kernel_bo;
@@ -197,8 +198,11 @@ struct panthor_fw_global_control_iface {
 	u32 output_va;
 	u32 group_num;
 	u32 group_stride;
+#define GLB_PERFCNT_FW_SIZE(x) ((((x) >> 16) << 8))
 	u32 perfcnt_size;
 	u32 instr_features;
+#define PERFCNT_FEATURES_MD_SIZE(x) ((x) & GENMASK(3, 0))
+	u32 perfcnt_features;
 };
 
 struct panthor_fw_global_input_iface {
