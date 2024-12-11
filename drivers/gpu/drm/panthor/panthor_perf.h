@@ -31,4 +31,6 @@ int panthor_perf_session_sample(struct panthor_file *pfile, struct panthor_perf 
 		u32 sid, u64 user_data);
 void panthor_perf_session_destroy(struct panthor_file *pfile, struct panthor_perf *perf);
 
+void panthor_perf_report_irq(struct panthor_device *ptdev, u32 status);
+
 #endif /* __PANTHOR_PERF_H__ */

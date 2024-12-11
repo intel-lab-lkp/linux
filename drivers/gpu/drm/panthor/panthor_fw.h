@@ -199,9 +199,10 @@ struct panthor_fw_global_control_iface {
 	u32 group_num;
 	u32 group_stride;
 #define GLB_PERFCNT_FW_SIZE(x) ((((x) >> 16) << 8))
+#define GLB_PERFCNT_HW_SIZE(x) (((x) & GENMASK(15, 0)) << 8)
 	u32 perfcnt_size;
 	u32 instr_features;
-#define PERFCNT_FEATURES_MD_SIZE(x) ((x) & GENMASK(3, 0))
+#define PERFCNT_FEATURES_MD_SIZE(x) (((x) & GENMASK(3, 0)) << 8)
 	u32 perfcnt_features;
 };
 
@@ -211,7 +212,7 @@ struct panthor_fw_global_input_iface {
 #define GLB_CFG_ALLOC_EN			BIT(2)
 #define GLB_CFG_POWEROFF_TIMER			BIT(3)
 #define GLB_PROTM_ENTER				BIT(4)
-#define GLB_PERFCNT_EN				BIT(5)
+#define GLB_PERFCNT_ENABLE			BIT(5)
 #define GLB_PERFCNT_SAMPLE			BIT(6)
 #define GLB_COUNTER_EN				BIT(7)
 #define GLB_PING				BIT(8)
@@ -234,7 +235,6 @@ struct panthor_fw_global_input_iface {
 	u32 doorbell_req;
 	u32 reserved1;
 	u32 progress_timer;
-
 #define GLB_TIMER_VAL(x)			((x) & GENMASK(30, 0))
 #define GLB_TIMER_SOURCE_GPU_COUNTER		BIT(31)
 	u32 poweroff_timer;
@@ -244,6 +244,9 @@ struct panthor_fw_global_input_iface {
 	u64 perfcnt_base;
 	u32 perfcnt_extract;
 	u32 reserved3[3];
+#define GLB_PRFCNT_CONFIG_SIZE(x) ((x) & GENMASK(7, 0))
+#define GLB_PRFCNT_CONFIG_SET(x) (((x) & GENMASK(1, 0)) << 8)
+#define GLB_PRFCNT_METADATA_ENABLE BIT(10)
 	u32 perfcnt_config;
 	u32 perfcnt_csg_select;
 	u32 perfcnt_fw_enable;

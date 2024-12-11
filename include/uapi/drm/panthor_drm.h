@@ -441,8 +441,11 @@ enum drm_panthor_perf_feat_flags {
  * enum drm_panthor_perf_block_type - Performance counter supported block types.
  */
 enum drm_panthor_perf_block_type {
+	/** DRM_PANTHOR_PERF_BLOCK_METADATA: Internal use only. */
+	DRM_PANTHOR_PERF_BLOCK_METADATA = 0,
+
 	/** @DRM_PANTHOR_PERF_BLOCK_FW: The FW counter block. */
-	DRM_PANTHOR_PERF_BLOCK_FW = 1,
+	DRM_PANTHOR_PERF_BLOCK_FW,
 
 	/** @DRM_PANTHOR_PERF_BLOCK_CSG: A CSG counter block. */
 	DRM_PANTHOR_PERF_BLOCK_CSG,
