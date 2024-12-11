@@ -751,10 +751,21 @@ int btrfs_cow_block(struct btrfs_trans_handle *trans,
 	 * Also We don't care about the error, as it's handled internally.
 	 */
 	btrfs_qgroup_trace_subtree_after_cow(trans, root, buf);
+	/*
+	 * When we are called from btrfs_search_slot() for example, we are
+	 * not holding an extra reference on @buf so btrfs_force_cow_block()
+	 * does a free_extent_buffer_stale() on the last reference and schedules
+	 * the extent buffer release with RCU, so we can trigger a
+	 * use-after-free in the trace_btrfs_cow_block() call below in case
+	 * preemption is enabled (CONFIG_PREEMPT=y). So grab an extra reference
+	 * to prevent that.
+	 */
+	atomic_inc(&buf->refs);
 	ret = btrfs_force_cow_block(trans, root, buf, parent, parent_slot,
 				    cow_ret, search_start, 0, nest);
 
 	trace_btrfs_cow_block(root, buf, *cow_ret);
+	free_extent_buffer_stale(buf);
 
 	return ret;
 }
