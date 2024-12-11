@@ -353,4 +353,7 @@ struct prctl_mm_map {
  */
 #define PR_LOCK_SHADOW_STACK_STATUS      76
 
+/* Block resolution of "../" in paths, returning -EPERM instead */
+#define PR_SET_PATH_TRAVERSAL_BLOCK      77
+
 #endif /* _LINUX_PRCTL_H */

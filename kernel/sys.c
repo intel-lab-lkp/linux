@@ -2809,6 +2809,11 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 			return -EINVAL;
 		error = arch_lock_shadow_stack_status(me, arg2);
 		break;
+	case PR_SET_PATH_TRAVERSAL_BLOCK:
+		if ((arg2 > 1) || arg3 || arg4 || arg5)
+			return -EINVAL;
+		current->deny_path_traversal = !!arg2;
+		break;
 	default:
 		error = -EINVAL;
 		break;

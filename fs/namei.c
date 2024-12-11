@@ -2431,6 +2431,13 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 
 		switch(lastword) {
 		case LAST_WORD_IS_DOTDOT:
+			/*
+			 * Deny .. in resolution if the process has indicated
+			 * it wants to protect against path traversal
+			 * vulnerabilities
+			 */
+			if (unlikely(current->deny_path_traversal))
+				return -EPERM;
 			nd->last_type = LAST_DOTDOT;
 			nd->state |= ND_JUMPED;
 			break;
