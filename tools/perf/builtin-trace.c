@@ -185,6 +185,7 @@ struct trace {
 	} stats;
 	unsigned int		max_stack;
 	unsigned int		min_stack;
+	unsigned long		sample_period_ms;
 	int			raw_augmented_syscalls_args_size;
 	bool			raw_augmented_syscalls;
 	bool			fd_path_disabled;
@@ -5219,6 +5220,7 @@ int cmd_trace(int argc, const char **argv)
 		     "start"),
 	OPT_BOOLEAN(0, "force-btf", &trace.force_btf, "Prefer btf_dump general pretty printer"
 		       "to customized ones"),
+	OPT_ULONG(0, "syscall-period", &trace.sample_period_ms, "syscall sampling period in ms"),
 	OPTS_EVSWITCH(&trace.evswitch),
 	OPT_END()
 	};
@@ -5325,6 +5327,9 @@ int cmd_trace(int argc, const char **argv)
 			if (prog != trace.skel->progs.sys_enter && prog != trace.skel->progs.sys_exit)
 				bpf_program__set_autoattach(prog, /*autoattach=*/false);
 		}
+
+		if (trace.sample_period_ms)
+			trace.skel->rodata->sample_period = trace.sample_period_ms * NSEC_PER_MSEC;
 
 		err = augmented_raw_syscalls_bpf__load(trace.skel);
 

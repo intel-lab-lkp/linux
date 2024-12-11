@@ -113,6 +113,22 @@ struct pids_filtered {
 	__uint(max_entries, 64);
 } pids_filtered SEC(".maps");
 
+struct sample_timestamp {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__type(key, int);
+	__type(value, __u64);
+	__uint(max_entries, 1);
+} sample_timestamp SEC(".maps");
+
+struct sample_filtered {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__type(key, pid_t);
+	__type(value, bool);
+	__uint(max_entries, MAX_CPUS);
+} sample_filtered SEC(".maps");
+
+const volatile __u64 sample_period;
+
 struct augmented_args_payload {
 	struct syscall_enter_args args;
 	struct augmented_arg arg, arg2; // We have to reserve space for two arguments (rename, etc)
@@ -428,6 +444,44 @@ static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
 	return bpf_map_lookup_elem(pids, &pid) != NULL;
 }
 
+static bool sample_filter__allow_enter(__u64 timestamp, pid_t pid)
+{
+	int idx = 0;
+	__u64 *prev_ts;
+	bool ok = true;
+
+	/* default behavior */
+	if (sample_period == 0)
+		return true;
+
+	prev_ts = bpf_map_lookup_elem(&sample_timestamp, &idx);
+
+	if (prev_ts) {
+		if ((*prev_ts + sample_period) > timestamp)
+			return false;
+		*prev_ts = timestamp;
+	} else {
+		bpf_map_update_elem(&sample_timestamp, &idx, &timestamp, BPF_ANY);
+	}
+
+	bpf_map_update_elem(&sample_filtered, &pid, &ok, BPF_ANY);
+
+	return true;
+}
+
+static bool sample_filter__allow_exit(pid_t pid)
+{
+	/* default behavior */
+	if (sample_period == 0)
+		return true;
+
+	if (!bpf_map_lookup_elem(&sample_filtered, &pid))
+		return false;
+
+	bpf_map_delete_elem(&sample_filtered, &pid);
+	return true;
+}
+
 static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 {
 	bool augmented, do_output = false;
@@ -526,7 +580,9 @@ static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 SEC("tp/raw_syscalls/sys_enter")
 int sys_enter(struct syscall_enter_args *args)
 {
+	pid_t pid = getpid();
 	struct augmented_args_payload *augmented_args;
+
 	/*
 	 * We start len, the amount of data that will be in the perf ring
 	 * buffer, if this is not filtered out by one of pid_filter__has(),
@@ -537,7 +593,10 @@ int sys_enter(struct syscall_enter_args *args)
 	 * initial, non-augmented raw_syscalls:sys_enter payload.
 	 */
 
-	if (pid_filter__has(&pids_filtered, getpid()))
+	if (pid_filter__has(&pids_filtered, pid))
+		return 0;
+
+	if (!sample_filter__allow_enter(bpf_ktime_get_ns(), pid))
 		return 0;
 
 	augmented_args = augmented_args_payload();
@@ -561,9 +620,13 @@ int sys_enter(struct syscall_enter_args *args)
 SEC("tp/raw_syscalls/sys_exit")
 int sys_exit(struct syscall_exit_args *args)
 {
+	pid_t pid = getpid();
 	struct syscall_exit_args exit_args;
 
-	if (pid_filter__has(&pids_filtered, getpid()))
+	if (pid_filter__has(&pids_filtered, pid))
+		return 0;
+
+	if (!sample_filter__allow_exit(pid))
 		return 0;
 
 	bpf_probe_read_kernel(&exit_args, sizeof(exit_args), args);

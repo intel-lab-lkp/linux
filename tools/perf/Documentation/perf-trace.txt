@@ -241,6 +241,12 @@ the thread executes on the designated CPUs. Default is to monitor all CPUs.
 	printing using the existing 'perf trace' syscall arg beautifiers to map integer
 	arguments to strings (pid to comm, syscall id to syscall name, etc).
 
+--syscall-period::
+	Trace a system call in the given period (in msec).  This implements
+	sampling for syscalls in order to reduce the monitoring overhead.
+	For example, setting the sysall period to 100 (msec) means it will
+	sample a syscall and next one after 100 msec.
+
 
 PAGEFAULTS
 ----------
