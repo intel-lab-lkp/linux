@@ -96,6 +96,13 @@ properties:
       - master
       - slave
 
+  ti,gpio2-clk-out:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+       DP83822 PHY only.
+       Muxing option for GPIO2 pin. See dt-bindings/net/ti-dp83822.h for
+       applicable values. When omitted, the PHY's default will be left as is.
+
 required:
   - reg
 
