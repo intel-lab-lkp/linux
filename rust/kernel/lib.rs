@@ -67,6 +67,8 @@ pub mod tracepoint;
 pub mod transmute;
 pub mod types;
 pub mod uaccess;
+#[cfg(CONFIG_UIO)]
+pub mod uio;
 pub mod workqueue;
 
 #[doc(hidden)]
