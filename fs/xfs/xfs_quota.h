@@ -173,7 +173,7 @@ static inline void xfs_trans_mod_dquot_byino(struct xfs_trans *tp,
 		struct xfs_inode *ip, uint field, int64_t delta)
 {
 }
-#define xfs_trans_apply_dquot_deltas(tp, a)
+#define xfs_trans_apply_dquot_deltas(tp)
 #define xfs_trans_unreserve_and_mod_dquots(tp, a)
 static inline int xfs_trans_reserve_quota_nblks(struct xfs_trans *tp,
 		struct xfs_inode *ip, int64_t dblocks, int64_t rblocks,
