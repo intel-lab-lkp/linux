@@ -50,6 +50,7 @@ config GPIB_CEC_PCI
 	tristate "CEC PCI board"
 	depends on PCI
 	depends on HAS_IOPORT
+	depends on 64BIT || !PHYS_ADDR_T_64BIT
 	select GPIB_COMMON
 	select GPIB_NEC7210
 	help
@@ -64,6 +65,7 @@ config GPIB_NI_PCI_ISA
 	depends on ISA_BUS || PCI || PCMCIA
 	select GPIB_COMMON
 	select GPIB_NEC7210
+	depends on 64BIT || !PHYS_ADDR_T_64BIT
 	help
 	  Enable support for National Instruments boards based
 	  on TNT4882 chips:
@@ -85,6 +87,7 @@ config GPIB_CB7210
        tristate "Measurement Computing compatible boards"
 	depends on HAS_IOPORT
 	depends on ISA_BUS || PCI || PCMCIA
+	depends on 64BIT || !PHYS_ADDR_T_64BIT
        select GPIB_COMMON
 	select GPIB_NEC7210
        help
@@ -176,6 +179,7 @@ config GPIB_INES
 	depends on HAS_IOPORT
        select GPIB_COMMON
        select GPIB_NEC7210
+       depends on 64BIT || !PHYS_ADDR_T_64BIT
        help
          GPIB driver for Ines compatible boards
 	 Ines
