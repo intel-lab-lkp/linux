@@ -14,10 +14,16 @@ amdgpu/amd_plane@mpo-scale-nv12,Fail
 amdgpu/amd_plane@mpo-scale-p010,Fail
 amdgpu/amd_plane@mpo-scale-rgb,Crash
 amdgpu/amd_plane@mpo-swizzle-toggle,Fail
-amdgpu/amd_uvd_dec@amdgpu_uvd_decode,Fail
+amdgpu/amd_uvd_dec@amdgpu_uvd_decode,Crash
 kms_addfb_basic@bad-pitch-65536,Fail
 kms_addfb_basic@bo-too-small,Fail
 kms_addfb_basic@too-high,Fail
+kms_async_flips@alternate-sync-async-flip,Fail
+kms_async_flips@alternate-sync-async-flip-atomic,Fail
+kms_async_flips@test-cursor,Fail
+kms_async_flips@test-cursor-atomic,Fail
+kms_async_flips@test-time-stamp,Fail
+kms_async_flips@test-time-stamp-atomic,Fail
 kms_atomic_transition@plane-all-modeset-transition-internal-panels,Fail
 kms_atomic_transition@plane-all-transition,Fail
 kms_atomic_transition@plane-all-transition-nonblocking,Fail
@@ -31,6 +37,8 @@ kms_cursor_crc@cursor-size-change,Fail
 kms_cursor_crc@cursor-sliding-64x21,Fail
 kms_cursor_crc@cursor-sliding-64x64,Fail
 kms_cursor_edge_walk@64x64-left-edge,Fail
+kms_display_modes@extended-mode-basic,Fail
+kms_display_modes@mst-extended-mode-negative,Fail
 kms_flip@flip-vs-modeset-vs-hang,Fail
 kms_flip@flip-vs-panning-vs-hang,Fail
 kms_lease@lease-uevent,Fail

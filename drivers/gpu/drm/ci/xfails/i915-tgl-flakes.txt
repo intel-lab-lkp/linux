@@ -1,0 +1,6 @@
+# Board Name: acer-cp514-2h-1130g7-volteer
+# Bug Report:
+# Failure Rate: 50
+# IGT Version: 1.29-g33adea9eb
+# Linux Version: 6.13.0-rc2
+core_hotunplug@unplug-rescan

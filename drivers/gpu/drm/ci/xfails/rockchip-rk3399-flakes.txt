@@ -74,3 +74,45 @@ kms_bw@linear-tiling-2-displays-2160x1440p
 # IGT Version: 1.28-ga73311079
 # Linux Version: 6.11.0-rc5
 kms_flip@flip-vs-expired-vblank
+
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report:
+# Failure Rate: 100
+# IGT Version: 1.29-g33adea9eb
+# Linux Version: 6.13.0-rc2
+kms_bw@linear-tiling-1-displays-2160x1440p
+
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report:
+# Failure Rate: 100
+# IGT Version: 1.29-g33adea9eb
+# Linux Version: 6.13.0-rc2
+kms_plane_multiple@tiling-none
+
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report:
+# Failure Rate: 100
+# IGT Version: 1.29-g33adea9eb
+# Linux Version: 6.13.0-rc2
+kms_bw@linear-tiling-1-displays-1920x1080p
+
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report:
+# Failure Rate: 50
+# IGT Version: 1.29-g33adea9eb
+# Linux Version: 6.13.0-rc2
+kms_plane@plane-position-hole-dpms
+
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report:
+# Failure Rate: 50
+# IGT Version: 1.29-g33adea9eb
+# Linux Version: 6.13.0-rc2
+kms_flip@flip-vs-absolute-wf_vblank
+
+# Board Name: hp-11A-G6-EE-grunt
+# Bug Report:
+# Failure Rate: 50
+# IGT Version: 1.29-g33adea9eb
+# Linux Version: 6.13.0-rc2
+kms_flip@flip-vs-blocking-wf-vblank
