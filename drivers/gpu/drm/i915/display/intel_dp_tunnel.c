@@ -793,7 +793,7 @@ int intel_dp_tunnel_mgr_init(struct intel_display *display)
 	drm_connector_list_iter_end(&connector_list_iter);
 
 	tunnel_mgr = drm_dp_tunnel_mgr_create(display->drm, dp_connectors);
-	if (IS_ERR(tunnel_mgr))
+	if (IS_ERR_OR_NULL(tunnel_mgr))
 		return PTR_ERR(tunnel_mgr);
 
 	display->dp_tunnel_mgr = tunnel_mgr;
