@@ -57,6 +57,14 @@
 			#size-cells = <0>;
 			status = "disabled";
 		};
+
+		mdio0: mdio@ca00 {
+			compatible = "realtek,rtl9301-mdio";
+			reg = <0xca00 0x200>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
 	};
 };
 
