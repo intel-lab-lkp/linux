@@ -258,6 +258,37 @@ char *kgdb_mem2hex(char *mem, char *buf, int count)
 }
 
 /*
+ * Convert memory to binary format for GDB remote protocol
+ * transmission, escaping special characters ($, #, and }).
+ */
+char *kgdb_mem2ebin(char *mem, char *buf, int count)
+{
+	char *tmp;
+	int err;
+
+	tmp = buf + count;
+
+	err = copy_from_kernel_nofault(tmp, mem, count);
+	if (err)
+		return NULL;
+	while (count > 0) {
+		unsigned char c = *tmp;
+
+		if (c == 0x7d || c == 0x23 || c == 0x24) {
+			*buf++ = 0x7d;
+			*buf++ = c ^ 0x20;
+		} else {
+			*buf++ = c;
+		}
+		count -= 1;
+		tmp += 1;
+	}
+	*buf = 0;
+
+	return buf;
+}
+
+/*
  * Convert the hex array pointed to by buf into binary to be placed in
  * mem.  Return a pointer to the character AFTER the last byte
  * written.  May return an error.
