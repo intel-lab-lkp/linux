@@ -21,6 +21,7 @@
 
 #include "../pci.h"
 #include "portdrv.h"
+#include "p2p_link.h"
 
 /*
  * The PCIe Capability Interrupt Message Number (PCIe r3.1, sec 7.8.2) must
@@ -714,7 +715,9 @@ static int pcie_portdrv_probe(struct pci_dev *dev,
 		pm_runtime_put_autosuspend(&dev->dev);
 		pm_runtime_allow(&dev->dev);
 	}
-
+#ifdef CONFIG_PCIE_P2P_LINK
+	p2p_link_sysfs_update_group(dev);
+#endif
 	return 0;
 }
 

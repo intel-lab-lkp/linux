@@ -155,3 +155,12 @@ config PCIE_EDR
 	  the PCI Firmware Specification r3.2.  Enable this if you want to
 	  support hybrid DPC model which uses both firmware and OS to
 	  implement DPC.
+
+config PCIE_P2P_LINK
+	bool "PCI Express P2P link detection support"
+	depends on PCIEPORTBUS
+	help
+	  This option enables the PCIe port driver to export sysfs entries
+	  for Inter switch P2P links detected on the PCIe upstream ports.
+	  This option enables user space libraries to detect optimal paths
+	  for data transfers between endpoints connected to PCIe switches.

@@ -583,3 +583,17 @@ Description:
 		enclosure-specific indications "specific0" to "specific7",
 		hence the corresponding led class devices are unavailable if
 		the DSM interface is used.
+
+What:		/sys/bus/pci/devices/.../p2p_link/links
+Date:		September 2024
+Contact:	Shivasharan S <shivasharan.srikanteshwara@broadcom.com>
+Description:
+		This file appears on PCIe upstream ports which supports an
+		internal P2P link.
+		Reading this attribute will provide the list of other upstream
+		ports on the system which have an internal P2P link available
+		between the two ports.
+Users:
+		Userspace applications interested in determining a optimal P2P
+		link for data transfers between devices connected to the PCIe
+		switches.
