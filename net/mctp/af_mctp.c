@@ -383,6 +383,9 @@ static int mctp_ioctl_tag_copy_from_user(struct net *net, unsigned long arg,
 		ctl->tag = ctl_compat.tag;
 	}
 
+	if (ctl->net == MCTP_NET_ANY)
+		ctl->net = mctp_default_net(net);
+
 	if (ctl->flags)
 		return -EINVAL;
 
