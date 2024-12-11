@@ -95,10 +95,12 @@ static void alloc_tag_to_text(struct seq_buf *out, struct codetag *ct)
 	struct alloc_tag_counters counter = alloc_tag_read(tag);
 	s64 bytes = counter.bytes;
 
-	seq_buf_printf(out, "%12lli %8llu ", bytes, counter.calls);
-	codetag_to_text(out, ct);
-	seq_buf_putc(out, ' ');
-	seq_buf_putc(out, '\n');
+	if (bytes || counter.calls) {
+		seq_buf_printf(out, "%12lli %8llu ", bytes, counter.calls);
+		codetag_to_text(out, ct);
+		seq_buf_putc(out, ' ');
+		seq_buf_putc(out, '\n');
+	}
 }
 
 static int allocinfo_show(struct seq_file *m, void *arg)
