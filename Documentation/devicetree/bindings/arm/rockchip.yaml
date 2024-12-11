@@ -895,7 +895,7 @@ properties:
           - const: radxa,rock-5b
           - const: rockchip,rk3588
 
-      - description: Radxa ROCK 5C
+      - description: Radxa ROCK 5C/5C Lite
         items:
           - const: radxa,rock-5c
           - const: rockchip,rk3588s
