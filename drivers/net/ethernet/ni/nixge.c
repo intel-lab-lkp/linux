@@ -603,64 +603,64 @@ static int nixge_recv(struct net_device *ndev, int budget)
 	u32 size = 0;
 
 	cur_p = &priv->rx_bd_v[priv->rx_bd_ci];
+	if (priv->rx_bd_v) {
+		while ((cur_p->status & XAXIDMA_BD_STS_COMPLETE_MASK &&
+			budget > packets)) {
+			tail_p = priv->rx_bd_p + sizeof(*priv->rx_bd_v) *
+				 priv->rx_bd_ci;
 
-	while ((cur_p->status & XAXIDMA_BD_STS_COMPLETE_MASK &&
-		budget > packets)) {
-		tail_p = priv->rx_bd_p + sizeof(*priv->rx_bd_v) *
-			 priv->rx_bd_ci;
+			skb = (struct sk_buff *)(uintptr_t)
+				nixge_hw_dma_bd_get_addr(cur_p, sw_id_offset);
 
-		skb = (struct sk_buff *)(uintptr_t)
-			nixge_hw_dma_bd_get_addr(cur_p, sw_id_offset);
+			length = cur_p->status & XAXIDMA_BD_STS_ACTUAL_LEN_MASK;
+			if (length > NIXGE_MAX_JUMBO_FRAME_SIZE)
+				length = NIXGE_MAX_JUMBO_FRAME_SIZE;
 
-		length = cur_p->status & XAXIDMA_BD_STS_ACTUAL_LEN_MASK;
-		if (length > NIXGE_MAX_JUMBO_FRAME_SIZE)
-			length = NIXGE_MAX_JUMBO_FRAME_SIZE;
+			dma_unmap_single(ndev->dev.parent,
+					 nixge_hw_dma_bd_get_addr(cur_p, phys),
+					 NIXGE_MAX_JUMBO_FRAME_SIZE,
+					 DMA_FROM_DEVICE);
 
-		dma_unmap_single(ndev->dev.parent,
-				 nixge_hw_dma_bd_get_addr(cur_p, phys),
-				 NIXGE_MAX_JUMBO_FRAME_SIZE,
-				 DMA_FROM_DEVICE);
+			skb_put(skb, length);
 
-		skb_put(skb, length);
+			skb->protocol = eth_type_trans(skb, ndev);
+			skb_checksum_none_assert(skb);
 
-		skb->protocol = eth_type_trans(skb, ndev);
-		skb_checksum_none_assert(skb);
+			/* For now mark them as CHECKSUM_NONE since
+			 * we don't have offload capabilities
+			 */
+			skb->ip_summed = CHECKSUM_NONE;
 
-		/* For now mark them as CHECKSUM_NONE since
-		 * we don't have offload capabilities
-		 */
-		skb->ip_summed = CHECKSUM_NONE;
+			napi_gro_receive(&priv->napi, skb);
 
-		napi_gro_receive(&priv->napi, skb);
+			size += length;
+			packets++;
 
-		size += length;
-		packets++;
+			new_skb = netdev_alloc_skb_ip_align(ndev,
+							    NIXGE_MAX_JUMBO_FRAME_SIZE);
+			if (!new_skb)
+				return packets;
 
-		new_skb = netdev_alloc_skb_ip_align(ndev,
-						    NIXGE_MAX_JUMBO_FRAME_SIZE);
-		if (!new_skb)
-			return packets;
+			cur_phys = dma_map_single(ndev->dev.parent, new_skb->data,
+						  NIXGE_MAX_JUMBO_FRAME_SIZE,
+						  DMA_FROM_DEVICE);
+			if (dma_mapping_error(ndev->dev.parent, cur_phys)) {
+				/* FIXME: bail out and clean up */
+				netdev_err(ndev, "Failed to map ...\n");
+			}
+			nixge_hw_dma_bd_set_phys(cur_p, cur_phys);
+			cur_p->cntrl = NIXGE_MAX_JUMBO_FRAME_SIZE;
+			cur_p->status = 0;
+			nixge_hw_dma_bd_set_offset(cur_p, (uintptr_t)new_skb);
 
-		cur_phys = dma_map_single(ndev->dev.parent, new_skb->data,
-					  NIXGE_MAX_JUMBO_FRAME_SIZE,
-					  DMA_FROM_DEVICE);
-		if (dma_mapping_error(ndev->dev.parent, cur_phys)) {
-			/* FIXME: bail out and clean up */
-			netdev_err(ndev, "Failed to map ...\n");
+			++priv->rx_bd_ci;
+			priv->rx_bd_ci %= RX_BD_NUM;
+			cur_p = &priv->rx_bd_v[priv->rx_bd_ci];
 		}
-		nixge_hw_dma_bd_set_phys(cur_p, cur_phys);
-		cur_p->cntrl = NIXGE_MAX_JUMBO_FRAME_SIZE;
-		cur_p->status = 0;
-		nixge_hw_dma_bd_set_offset(cur_p, (uintptr_t)new_skb);
-
-		++priv->rx_bd_ci;
-		priv->rx_bd_ci %= RX_BD_NUM;
-		cur_p = &priv->rx_bd_v[priv->rx_bd_ci];
 	}
 
 	ndev->stats.rx_packets += packets;
 	ndev->stats.rx_bytes += size;
-
 	if (tail_p)
 		nixge_dma_write_desc_reg(priv, XAXIDMA_RX_TDESC_OFFSET, tail_p);
 
