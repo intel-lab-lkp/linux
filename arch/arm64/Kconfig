@@ -1127,6 +1127,170 @@ config ARM64_ERRATUM_3194386
 
 	  If unsure, say Y.
 
+config ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	bool
+
+config ARM64_ERRATUM_3696250
+	bool "Neoverse-N2: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Neoverse-N2 cores (r0p0, r0p1, r0p2, r0p3) declare
+	  break-before-make level 2 support, but changing the block size
+	  without utilising a break-before-make sequence, or mis-programming
+	  the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696244
+	bool "Cortex-A710/Cortex-X2: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Cortex-A710 and Cortex-X2 cores (r0p0, r1p0, r2p0, r2p1)
+	  declare break-before-make level 2 support, but changing the block
+	  size without utilising a break-before-make sequence, or
+	  mis-programming the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696297
+	bool "Cortex-A76/Neoverse-N1: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  This option adds a workaround for ARM Cortex-A76/Neoverse-N1 erratum
+	  3696297.
+
+	  Affected Cortex-A76 and Neoverse-N1 cores (r0p0, r1p0, r2p0, r3p0,
+	  r3p1, r4p0, r4p1) declare break-before-make level 2 support, but
+	  changing the block size without utilising a break-before-make sequence,
+	  or mis-programming the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696294
+	bool "Cortex-A77: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  This option adds a workaround for ARM Cortex-A77 erratum 3696294.
+
+	  Affected Cortex-A77 cores (r0p0, r1p0, r1p1) declare break-before-make
+	  level 2 support, but changing the block size without utilising a
+	  break-before-make sequence, or mis-programming the contiguous hint
+	  bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696239
+	bool "Cortex-X3: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Cortex-X3 cores (r0p0, r1p0, r1p1, r1p2) declare
+	  break-before-make level 2 support, but changing the block size
+	  without utilising a break-before-make sequence, or mis-programming
+	  the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696242
+	bool "Neoverse-V2: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Neoverse-V2 cores (r0p0, r0p1, r0p2) declare
+	  break-before-make level 2 support, but changing the block size
+	  without utilising a break-before-make sequence, or mis-programming
+	  the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696285
+	bool "Neoverse-V1: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Neoverse-V1 cores (r0p0, r1p0, r1p1, r1p2) declare
+	  break-before-make level 2 support, but changing the block size
+	  without utilising a break-before-make sequence, or mis-programming
+	  the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696287
+	bool "Cortex-A78/Cortex-X1: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Cortex-A78 and Cortex-X1 cores (r0p0, r1p0, r1p1, r1p2)
+	  declare break-before-make level 2 support, but changing the block
+	  size without utilising a break-before-make sequence, or
+	  mis-programming the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696291
+	bool "Cortex-A78C: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Cortex-A78C cores (r0p0, r0p1, r0p2) declare
+	  break-before-make level 2 support, but changing the block size
+	  without utilising a break-before-make sequence, or mis-programming
+	  the contiguous hint bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3696292
+	bool "Cortex-A78C: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Cortex-A78C cores (r0p1, r0p2) declare break-before-make
+	  level 2 support, but changing the block size without utilising a
+	  break-before-make sequence, or mis-programming the contiguous hint
+	  bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3056274
+	bool "Cortex-X925: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Cortex-X925 cores (r0p0, r0p1) declare break-before-make
+	  level 2 support, but changing the block size without utilising a
+	  break-before-make sequence, or mis-programming the contiguous hint
+	  bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3043263
+	bool "Cortex-X4: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Cortex-X4 cores (r0p0, r0p1, r0p2) declare break-before-make
+	  level 2 support, but changing the block size without utilising a
+	  break-before-make sequence, or mis-programming the contiguous hint
+	  bit can lead to a livelock.
+
+	  If unsure, say Y.
+
+config ARM64_ERRATUM_3053180
+	bool "Neoverse-V3: workaround for broken BBM level 2 support"
+	default y
+	select ARM64_WORKAROUND_BROKEN_BBML2_SUPPORT
+	help
+	  Affected Neoverse-V3 cores (r0p0, r0p1) declare break-before-make
+	  level 2 support, but changing the block size without utilising a
+	  break-before-make sequence, or mis-programming the contiguous hint
+	  bit can lead to a livelock.
+
+	  If unsure, say Y.
+
 config CAVIUM_ERRATUM_22375
 	bool "Cavium erratum 22375, 24313"
 	default y
