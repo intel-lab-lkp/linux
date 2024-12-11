@@ -1354,9 +1354,10 @@ out_free_dentry:
 	kfree(interp_elf_ex);
 	kfree(interp_elf_phdata);
 out_free_file:
-	exe_file_allow_write_access(interpreter);
-	if (interpreter)
+	if (interpreter) {
+		exe_file_allow_write_access(interpreter);
 		fput(interpreter);
+	}
 out_free_ph:
 	kfree(elf_phdata);
 	goto out;
