@@ -189,9 +189,13 @@ test_hybrid() {
 
   if [ "$pmus" -ne "$cycles_events" ]
   then
-    echo "hybrid test [Found $pmus PMUs but $cycles_events cycles events. Failed]"
-    err=1
-    return
+     # If virtualized the software task-clock event will be used.
+     if ! perf stat -- true 2>&1 | grep -q "task-clock"
+     then
+       echo "hybrid test [Found $pmus PMUs but $cycles_events cycles events. Failed]"
+       err=1
+       return
+     fi
   fi
   echo "hybrid test [Success]"
 }
