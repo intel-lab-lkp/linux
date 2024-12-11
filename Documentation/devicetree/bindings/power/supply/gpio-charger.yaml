@@ -58,6 +58,10 @@ properties:
             charge-current-limit-gpios property. Bit 1 second to last
             GPIO and so on.
 
+  charge-current-limit-default:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Default charge current limit in uA.
+
 required:
   - compatible
 
