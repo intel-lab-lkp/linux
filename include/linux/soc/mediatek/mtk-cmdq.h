@@ -52,6 +52,7 @@ struct cmdq_operand {
 
 struct cmdq_client_reg {
 	u8 subsys;
+	u32 pa_base;
 	u16 offset;
 	u16 size;
 };
