@@ -3436,6 +3436,12 @@ static int phylink_sfp_config_phy(struct phylink *pl, struct phy_device *phy)
 	int ret;
 
 	linkmode_copy(support, phy->supported);
+	if (linkmode_empty(support)) {
+		phylink_err(pl, "PHY %s (id 0x%.8lx) supports no link modes. Maybe its specific PHY driver not loaded?\n",
+			    phydev_name(phy), (unsigned long)phy->phy_id);
+		phylink_err(pl, "Common drivers for PHYs on SFP modules are CONFIG_BCM84881_PHY and CONFIG_MARVELL_PHY.\n");
+		return -EINVAL;
+	}
 
 	memset(&config, 0, sizeof(config));
 	linkmode_copy(config.advertising, phy->advertising);
