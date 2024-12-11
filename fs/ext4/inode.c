@@ -4931,6 +4931,20 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		}
 	}
 
+	ret = ext4_inode_xattr_get_extsize(&ei->vfs_inode);
+	if (ret >= 0) {
+		ei->i_extsize = ret;
+	} else if (ret == -ENODATA) {
+		/* extsize is not set */
+		ei->i_extsize = 0;
+	} else {
+		ext4_error_inode(
+			inode, function, line, 0,
+			"iget: error while retrieving extsize from xattr: %ld", ret);
+		ret = -EFSCORRUPTED;
+		goto bad_inode;
+	}
+
 	EXT4_INODE_GET_CTIME(inode, raw_inode);
 	EXT4_INODE_GET_ATIME(inode, raw_inode);
 	EXT4_INODE_GET_MTIME(inode, raw_inode);
@@ -6240,4 +6254,79 @@ out_error:
 	folio_unlock(folio);
 	ext4_journal_stop(handle);
 	goto out;
+}
+
+/*
+ * Returns positive extsize if set, 0 if not set else error
+ */
+ext4_grpblk_t ext4_inode_xattr_get_extsize(struct inode *inode)
+{
+	char *buf;
+	int size, ret = 0;
+	ext4_grpblk_t extsize = 0;
+
+	size = ext4_xattr_get(inode, EXT4_XATTR_INDEX_SYSTEM, "extsize", NULL, 0);
+
+	if (size == -ENODATA || size == 0) {
+		return 0;
+	} else if (size < 0) {
+		ret = size;
+		goto exit;
+	}
+
+	buf = (char *)kmalloc(size + 1, GFP_KERNEL);
+	if (!buf) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	size = ext4_xattr_get(inode, EXT4_XATTR_INDEX_SYSTEM, "extsize", buf,
+			      size);
+	if (size == -ENODATA)
+		/* No extsize is set */
+		extsize = 0;
+	else if (size < 0)
+		ret = size;
+	else {
+		buf[size] = '\0';
+		ret = kstrtoint(buf, 10, &extsize);
+	}
+
+	kfree(buf);
+exit:
+	if (ret)
+		return ret;
+	return extsize;
+}
+
+int ext4_inode_xattr_set_extsize(struct inode *inode, ext4_grpblk_t extsize)
+{
+	int err = 0;
+	/* max value of extsize should fit within 11 chars */
+	char extsize_str[11];
+
+	err = snprintf(extsize_str, 10, "%u", extsize);
+	if (err < 0)
+		return err;
+
+	/* Try to replace the xattr if it exists, else try to create it */
+	err = ext4_xattr_set(inode, EXT4_XATTR_INDEX_SYSTEM, "extsize",
+			     extsize_str, strlen(extsize_str), XATTR_REPLACE);
+
+	if (err == -ENODATA)
+		err = ext4_xattr_set(inode, EXT4_XATTR_INDEX_SYSTEM, "extsize",
+				     extsize_str, strlen(extsize_str),
+				     XATTR_CREATE);
+
+	return err;
+}
+
+ext4_grpblk_t ext4_inode_get_extsize(struct ext4_inode_info *ei)
+{
+	return ei->i_extsize;
+}
+
+void ext4_inode_set_extsize(struct ext4_inode_info *ei, ext4_grpblk_t extsize)
+{
+	ei->i_extsize = extsize;
 }

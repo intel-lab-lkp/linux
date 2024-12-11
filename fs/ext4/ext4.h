@@ -1170,6 +1170,8 @@ struct ext4_inode_info {
 	__u32 i_csum_seed;
 
 	kprojid_t i_projid;
+	/* The extentsize hint for the inode in blocks */
+	ext4_grpblk_t i_extsize;
 };
 
 /*
@@ -3031,6 +3033,10 @@ extern void ext4_da_update_reserve_space(struct inode *inode,
 					int used, int quota_claim);
 extern int ext4_issue_zeroout(struct inode *inode, ext4_lblk_t lblk,
 			      ext4_fsblk_t pblk, ext4_lblk_t len);
+int ext4_inode_xattr_get_extsize(struct inode *inode);
+int ext4_inode_xattr_set_extsize(struct inode *inode, ext4_grpblk_t extsize);
+ext4_grpblk_t ext4_inode_get_extsize(struct ext4_inode_info *ei);
+void ext4_inode_set_extsize(struct ext4_inode_info *ei, ext4_grpblk_t extsize);
 
 /* indirect.c */
 extern int ext4_ind_map_blocks(handle_t *handle, struct inode *inode,

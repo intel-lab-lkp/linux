@@ -708,6 +708,93 @@ flags_out:
 	return err;
 }
 
+static u32 ext4_ioctl_getextsize(struct inode *inode)
+{
+	ext4_grpblk_t extsize;
+
+	extsize = ext4_inode_get_extsize(EXT4_I(inode));
+
+	return (u32) extsize << inode->i_blkbits;
+}
+
+
+static int ext4_ioctl_setextsize(struct inode *inode, u32 extsize, u32 xflags)
+{
+	int err;
+	ext4_grpblk_t extsize_blks = extsize >> inode->i_blkbits;
+	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
+	int blksize = 1 << inode->i_blkbits;
+	char *msg = NULL;
+
+	if (!S_ISREG(inode->i_mode)) {
+		msg = "Cannot set extsize on non regular file";
+		err = -EOPNOTSUPP;
+		goto error;
+	}
+
+	/*
+	 *  We are okay with a non-zero i_size as long as there is no data.
+	 */
+	if (ext4_has_inline_data(inode) ||
+	    READ_ONCE(EXT4_I(inode)->i_disksize) ||
+	    EXT4_I(inode)->i_reserved_data_blocks) {
+		msg = "Cannot set extsize on file with data";
+		err = -EINVAL;
+		goto error;
+	}
+
+	if (extsize % blksize) {
+		msg = "extsize must be multiple of blocksize";
+		err = -EINVAL;
+		goto error;
+	}
+
+	if (sbi->s_cluster_ratio > 1) {
+		msg = "Can't use extsize hint with bigalloc";
+		err = -EINVAL;
+		goto error;
+	}
+
+	if ((xflags & FS_XFLAG_EXTSIZE) && extsize == 0) {
+		msg = "fsx_extsize can't be 0 if FS_XFLAG_EXTSIZE is passed";
+		err = -EINVAL;
+		goto error;
+	}
+
+	if (extsize_blks > sbi->s_blocks_per_group) {
+		msg = "extsize cannot exceed number of bytes in block group";
+		err = -EINVAL;
+		goto error;
+	}
+
+	if (extsize && !is_power_of_2(extsize_blks)) {
+		msg = "extsize must be either power-of-2 in fs blocks or 0";
+		err = -EINVAL;
+		goto error;
+	}
+
+	if (!ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
+		msg = "extsize can't be set on non-extent based files";
+		err = -EINVAL;
+		goto error;
+	}
+
+	/* update the extsize in inode xattr */
+	err = ext4_inode_xattr_set_extsize(inode, extsize_blks);
+	if (err < 0)
+		return err;
+
+	/* Update the new extsize in the in-core inode */
+	ext4_inode_set_extsize(EXT4_I(inode), extsize_blks);
+	return 0;
+
+error:
+	if (msg)
+		ext4_warning_inode(inode, "%s\n", msg);
+
+	return err;
+}
+
 #ifdef CONFIG_QUOTA
 static int ext4_ioctl_setproject(struct inode *inode, __u32 projid)
 {
@@ -985,6 +1072,7 @@ int ext4_fileattr_get(struct dentry *dentry, struct fileattr *fa)
 	struct inode *inode = d_inode(dentry);
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	u32 flags = ei->i_flags & EXT4_FL_USER_VISIBLE;
+	u32 extsize = 0;
 
 	if (S_ISREG(inode->i_mode))
 		flags &= ~FS_PROJINHERIT_FL;
@@ -992,6 +1080,13 @@ int ext4_fileattr_get(struct dentry *dentry, struct fileattr *fa)
 	fileattr_fill_flags(fa, flags);
 	if (ext4_has_feature_project(inode->i_sb))
 		fa->fsx_projid = from_kprojid(&init_user_ns, ei->i_projid);
+
+	extsize = ext4_ioctl_getextsize(inode);
+	/* Flag is only set if extsize is non zero */
+	if (extsize > 0) {
+		fa->fsx_extsize = extsize;
+		fa->fsx_xflags |= FS_XFLAG_EXTSIZE;
+	}
 
 	return 0;
 }
@@ -1022,6 +1117,33 @@ int ext4_fileattr_set(struct mnt_idmap *idmap,
 	if (err)
 		goto out;
 	err = ext4_ioctl_setproject(inode, fa->fsx_projid);
+	if (err)
+		goto out;
+
+	if (fa->fsx_xflags & FS_XFLAG_EXTSIZE) {
+		err = ext4_ioctl_setextsize(inode, fa->fsx_extsize,
+					    fa->fsx_xflags);
+		if (err)
+			goto out;
+	} else if (fa->fsx_extsize == 0) {
+		/*
+		 * Even when user explicitly passes extsize=0 the flag is cleared in
+		 * fileattr_set_prepare().
+		 */
+		if (ext4_inode_get_extsize(EXT4_I(inode)) != 0) {
+			err = ext4_ioctl_setextsize(inode, fa->fsx_extsize,
+						    fa->fsx_xflags);
+			if (err)
+				goto out;
+		}
+
+	} else {
+		/* Unexpected usage, reset extsize to 0 */
+		err = ext4_ioctl_setextsize(inode, 0, fa->fsx_xflags);
+		if (err)
+			goto out;
+		fa->fsx_xflags = 0;
+	}
 out:
 	return err;
 }
