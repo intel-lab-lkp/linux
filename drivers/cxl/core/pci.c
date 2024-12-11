@@ -841,8 +841,38 @@ static bool cxl_port_error_detected(struct pci_dev *pdev)
 	return __cxl_handle_ras(&pdev->dev, ras_base);
 }
 
+static const struct cxl_error_handlers cxl_port_error_handlers = {
+	.error_detected	= cxl_port_error_detected,
+	.cor_error_detected = cxl_port_cor_error_detected,
+};
+
+static void cxl_assign_port_error_handlers(struct pci_dev *pdev)
+{
+	struct pci_driver *pdrv;
+
+	if (!pdev || !pdev->driver)
+		return;
+
+	pdrv = pdev->driver;
+	pdrv->cxl_err_handler = &cxl_port_error_handlers;
+}
+
+static void cxl_clear_port_error_handlers(void *data)
+{
+	struct pci_dev *pdev = data;
+	struct pci_driver *pdrv;
+
+	if (!pdev || !pdev->driver)
+		return;
+
+	pdrv = pdev->driver;
+	pdrv->cxl_err_handler = NULL;
+}
+
 void cxl_uport_init_ras_reporting(struct cxl_port *port)
 {
+	struct pci_dev *pdev = to_pci_dev(port->uport_dev);
+
 	/* uport may have more than 1 downstream EP. Check if already mapped. */
 	if (port->uport_regs.ras)
 		return;
@@ -853,6 +883,9 @@ void cxl_uport_init_ras_reporting(struct cxl_port *port)
 		dev_err(&port->dev, "Failed to map RAS capability.\n");
 		return;
 	}
+
+	cxl_assign_port_error_handlers(pdev);
+	devm_add_action_or_reset(port->uport_dev, cxl_clear_port_error_handlers, pdev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_uport_init_ras_reporting, CXL);
 
@@ -864,6 +897,7 @@ void cxl_dport_init_ras_reporting(struct cxl_dport *dport)
 {
 	struct device *dport_dev = dport->dport_dev;
 	struct pci_host_bridge *host_bridge = to_pci_host_bridge(dport_dev);
+	struct pci_dev *pdev = to_pci_dev(dport_dev);
 
 	dport->reg_map.host = dport_dev;
 	if (dport->rch && host_bridge->native_aer) {
@@ -880,6 +914,12 @@ void cxl_dport_init_ras_reporting(struct cxl_dport *dport)
 		dev_err(dport_dev, "Failed to map RAS capability.\n");
 		return;
 	}
+
+	if (dport->rch)
+		return;
+
+	cxl_assign_port_error_handlers(pdev);
+	devm_add_action_or_reset(dport_dev, cxl_clear_port_error_handlers, pdev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dport_init_ras_reporting, CXL);
 
