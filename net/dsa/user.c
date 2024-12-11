@@ -1725,6 +1725,46 @@ static int dsa_user_setup_ft_block(struct dsa_switch *ds, int port,
 	return conduit->netdev_ops->ndo_setup_tc(conduit, TC_SETUP_FT, type_data);
 }
 
+static int dsa_user_setup_qdisc(struct net_device *dev,
+				enum tc_setup_type type, void *type_data)
+{
+	struct dsa_port *dp = dsa_user_to_port(dev);
+	struct dsa_switch *ds = dp->ds;
+	struct net_device *conduit;
+	int ret = -EOPNOTSUPP;
+
+	conduit = dsa_port_to_conduit(dsa_to_port(ds, dp->index));
+	if (conduit->netdev_ops->ndo_setup_tc_conduit) {
+		ret = conduit->netdev_ops->ndo_setup_tc_conduit(conduit,
+								dp->index,
+								type,
+								type_data);
+		if (ret && ret != -EOPNOTSUPP) {
+			netdev_err(dev,
+				   "qdisc offload failed on conduit %s: %d\n",
+				   conduit->name, ret);
+			return ret;
+		}
+	}
+
+	/* Try to offload the requested qdisc via user port. This is necessary
+	 * if the traffic is forwarded by the hw dsa switch.
+	 */
+	if (ds->ops->port_setup_tc) {
+		int err;
+
+		err = ds->ops->port_setup_tc(ds, dp->index, type, type_data);
+		if (err != -EOPNOTSUPP) {
+			if (err)
+				netdev_err(dev, "qdisc offload failed: %d\n",
+					   err);
+			ret = err;
+		}
+	}
+
+	return ret;
+}
+
 static int dsa_user_setup_tc(struct net_device *dev, enum tc_setup_type type,
 			     void *type_data)
 {
@@ -1737,13 +1777,8 @@ static int dsa_user_setup_tc(struct net_device *dev, enum tc_setup_type type,
 	case TC_SETUP_FT:
 		return dsa_user_setup_ft_block(ds, dp->index, type_data);
 	default:
-		break;
+		return dsa_user_setup_qdisc(dev, type, type_data);
 	}
-
-	if (!ds->ops->port_setup_tc)
-		return -EOPNOTSUPP;
-
-	return ds->ops->port_setup_tc(ds, dp->index, type, type_data);
 }
 
 static int dsa_user_get_rxnfc(struct net_device *dev,
