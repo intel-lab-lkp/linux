@@ -348,7 +348,9 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	ptp->dev.groups = ptp->pin_attr_groups;
 	ptp->dev.release = ptp_clock_release;
 	dev_set_drvdata(&ptp->dev, ptp);
-	dev_set_name(&ptp->dev, "ptp%d", ptp->index);
+	err = dev_set_name(&ptp->dev, "ptp%d", ptp->index);
+	if (err)
+		goto no_pps;
 
 	/* Create a posix clock and link it to the device. */
 	err = posix_clock_register(&ptp->clock, &ptp->dev);
