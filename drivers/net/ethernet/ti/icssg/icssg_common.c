@@ -872,7 +872,6 @@ void prueth_emac_stop(struct prueth_emac *emac)
 		return;
 	}
 
-	emac->fw_running = 0;
 	if (!emac->is_sr1)
 		rproc_shutdown(prueth->txpru[slice]);
 	rproc_shutdown(prueth->rtu[slice]);

@@ -440,7 +440,6 @@ static int prueth_emac_start(struct prueth *prueth, struct prueth_emac *emac)
 		goto halt_pru;
 	}
 
-	emac->fw_running = 1;
 	return 0;
 
 halt_pru:
