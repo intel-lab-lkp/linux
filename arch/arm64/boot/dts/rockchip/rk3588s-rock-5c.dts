@@ -425,6 +425,10 @@
 	status = "okay";
 };
 
+&pd_gpu {
+	domain-supply = <&vdd_gpu_s0>;
+};
+
 &pinctrl {
 	leds {
 		led_pins: led-pins {
