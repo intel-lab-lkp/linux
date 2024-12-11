@@ -39,6 +39,7 @@
 #include <linux/compat.h>
 #include <linux/migrate.h>
 #include <linux/ramfs.h>
+#include <linux/pagemap.h>
 #include <linux/percpu-refcount.h>
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
