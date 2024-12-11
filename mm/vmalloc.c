@@ -3374,7 +3374,6 @@ void vfree(const void *addr)
 		struct page *page = vm->pages[i];
 
 		BUG_ON(!page);
-		mod_memcg_page_state(page, MEMCG_VMALLOC, -1);
 		/*
 		 * High-order allocs for huge vmallocs are split, so
 		 * can be freed as an array of order-0 allocations
@@ -3384,6 +3383,7 @@ void vfree(const void *addr)
 	}
 	if (!(vm->flags & VM_MAP_PUT_PAGES))
 		atomic_long_sub(vm->nr_pages, &nr_vmalloc_pages);
+	obj_cgroup_uncharge_vmalloc(vm->objcg, vm->nr_pages);
 	kvfree(vm->pages);
 	kfree(vm);
 }
@@ -3537,6 +3537,9 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 	struct page *page;
 	int i;
 
+	/* Accounting handled in caller */
+	gfp &= ~__GFP_ACCOUNT;
+
 	/*
 	 * For order-0 pages we make use of bulk allocator, if
 	 * the page array is partly or not at all populated due
@@ -3670,12 +3673,9 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		node, page_order, nr_small_pages, area->pages);
 
 	atomic_long_add(area->nr_pages, &nr_vmalloc_pages);
-	if (gfp_mask & __GFP_ACCOUNT) {
-		int i;
-
-		for (i = 0; i < area->nr_pages; i++)
-			mod_memcg_page_state(area->pages[i], MEMCG_VMALLOC, 1);
-	}
+	ret = obj_cgroup_charge_vmalloc(&area->objcg, gfp_mask, area->nr_pages);
+	if (ret)
+		goto fail;
 
 	/*
 	 * If not enough pages were obtained to accomplish an

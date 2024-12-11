@@ -1698,6 +1698,10 @@ static inline struct obj_cgroup *get_obj_cgroup_from_current(void)
 
 int obj_cgroup_charge(struct obj_cgroup *objcg, gfp_t gfp, size_t size);
 void obj_cgroup_uncharge(struct obj_cgroup *objcg, size_t size);
+int obj_cgroup_charge_vmalloc(struct obj_cgroup **objcgp,
+		unsigned int nr_pages, gfp_t gfp);
+void obj_cgroup_uncharge_vmalloc(struct obj_cgroup *objcgp,
+		unsigned int nr_pages);
 
 extern struct static_key_false memcg_bpf_enabled_key;
 static inline bool memcg_bpf_enabled(void)
@@ -1778,6 +1782,9 @@ static inline void __memcg_kmem_uncharge_page(struct page *page, int order)
 {
 }
 
+/* Must be macros to avoid dereferencing objcg in vm_struct */
+#define obj_cgroup_charge_vmalloc(objcgp, nr_pages, gfp)	0
+#define obj_cgroup_uncharge_vmalloc(objcg, nr_pages)	do { } while (0)
 static inline struct obj_cgroup *get_obj_cgroup_from_folio(struct folio *folio)
 {
 	return NULL;

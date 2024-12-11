@@ -60,6 +60,9 @@ struct vm_struct {
 #endif
 	unsigned int		nr_pages;
 	phys_addr_t		phys_addr;
+#ifdef CONFIG_MEMCG
+	struct obj_cgroup	*objcg;
+#endif
 	const void		*caller;
 };
 
