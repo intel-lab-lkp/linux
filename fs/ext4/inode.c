@@ -756,7 +756,6 @@ set_map:
 		 * ext4_extents.h here?
 		 */
 		int max_unwrit_len = ((1UL << 15) - 1);
-		loff_t end;
 
 		align = orig_map->m_lblk % extsize;
 		len = orig_map->m_len + align;
@@ -764,18 +763,6 @@ set_map:
 		extsize_map.m_lblk = orig_map->m_lblk - align;
 		extsize_map.m_len =
 			max_t(unsigned int, roundup_pow_of_two(len), extsize);
-
-		/*
-		 * For now allocations beyond EOF don't use extsize hints so
-		 * that we can avoid dealing with extra blocks allocated past
-		 * EOF. We have inode lock since extsize allocations are
-		 * non-delalloc so i_size can be accessed safely
-		 */
-		end = (extsize_map.m_lblk + (loff_t)extsize_map.m_len) << inode->i_blkbits;
-		if (end > inode->i_size) {
-			flags = orig_flags & ~EXT4_GET_BLOCKS_EXTSIZE;
-			goto set_map;
-		}
 
 		/* Fallback to normal allocation if we go beyond max len */
 		if (extsize_map.m_len >= max_unwrit_len) {
@@ -3641,10 +3628,13 @@ retry:
 	 * i_disksize out to i_size. This could be beyond where direct I/O is
 	 * happening and thus expose allocated blocks to direct I/O reads.
 	 *
-	 * NOTE for extsize hints: We only support it for writes inside
-	 * EOF (for now) to not have to deal with blocks past EOF
+	 * NOTE: For extsize hint based EOF allocations, we still need
+	 * IO_CREATE_EXT flag because we will be allocating more than the write
+	 * hence the extra blocks need to be marked unwritten and split before
+	 * the I/O.
 	 */
-	else if (((loff_t)map->m_lblk << blkbits) >= i_size_read(inode))
+	else if (((loff_t)map->m_lblk << blkbits) >= i_size_read(inode) &&
+		 !ext4_should_use_extsize(inode))
 		m_flags = EXT4_GET_BLOCKS_CREATE;
 	else if (ext4_test_inode_flag(inode, EXT4_INODE_EXTENTS)) {
 		m_flags = EXT4_GET_BLOCKS_IO_CREATE_EXT;
