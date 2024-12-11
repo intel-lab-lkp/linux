@@ -120,6 +120,10 @@ config OVPN
 	depends on NET && INET
 	select DST_CACHE
 	select NET_UDP_TUNNEL
+	select CRYPTO
+	select CRYPTO_AES
+	select CRYPTO_GCM
+	select CRYPTO_CHACHA20POLY1305
 	help
 	  This module enhances the performance of the OpenVPN userspace software
 	  by offloading the data channel processing to kernelspace.
