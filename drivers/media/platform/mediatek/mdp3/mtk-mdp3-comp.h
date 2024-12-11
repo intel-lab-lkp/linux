@@ -9,9 +9,25 @@
 
 #include "mtk-mdp3-cmdq.h"
 
-#define MM_REG_WRITE_MASK(cmd, id, base, ofst, val, mask, ...)	\
-	cmdq_pkt_write_mask(&((cmd)->pkt), id,			\
-		(base) + (ofst), (val), (mask), ##__VA_ARGS__)
+#define MM_REG_WRITE_MASK(cmd, id, base, ofst, val, mask, ...)				\
+do {											\
+	typeof(cmd) (_cmd) = (cmd);							\
+	typeof(id) (_id) = (id);							\
+	typeof(base) (_base) = (base);							\
+	typeof(ofst) (_ofst) = (ofst);							\
+	typeof(val) (_val) = (val);							\
+	typeof(mask) (_mask) = (mask);							\
+	if (cmdq_subsys_is_valid(((struct cmdq_client *)_cmd->pkt.cl)->chan, _id)) {	\
+		cmdq_pkt_write_mask(&_cmd->pkt, _id, _base + _ofst, _val,		\
+				    _mask, ##__VA_ARGS__);				\
+	} else {									\
+		/* only MMIO access, no need to check mminfro_offset */			\
+		cmdq_pkt_assign(&_cmd->pkt, 0, CMDQ_ADDR_HIGH(_base));			\
+		cmdq_pkt_write_s_mask_value(&_cmd->pkt, 0,				\
+					    CMDQ_ADDR_LOW(_base + _ofst), _val,		\
+					    _mask, ##__VA_ARGS__);			\
+	}										\
+} while (0)
 
 #define MM_REG_WRITE(cmd, id, base, ofst, val, mask, ...)	\
 do {								\
@@ -49,11 +65,20 @@ do {								\
 	cmdq_pkt_set_event(&((c)->pkt), (e));			\
 } while (0)
 
-#define MM_REG_POLL_MASK(cmd, id, base, ofst, val, _mask, ...)	\
-do {								\
-	typeof(_mask) (_m) = (_mask);				\
-	cmdq_pkt_poll_mask(&((cmd)->pkt), id,			\
-		(base) + (ofst), (val), (_m), ##__VA_ARGS__);	\
+#define MM_REG_POLL_MASK(cmd, id, base, ofst, val, _mask, ...)				\
+do {											\
+	typeof(cmd) (_cmd) = (cmd);							\
+	typeof(id) (_id) = (id);							\
+	typeof(base) (_base) = (base);							\
+	typeof(ofst) (_ofst) = (ofst);							\
+	typeof(val) (_val) = (val);							\
+	typeof(_mask) (_m) = (_mask);							\
+	if (cmdq_subsys_is_valid(((struct cmdq_client *)_cmd->pkt.cl)->chan, _id))	\
+		cmdq_pkt_poll_mask(&_cmd->pkt, _id, _base + _ofst, _val,		\
+				   _m, ##__VA_ARGS__);					\
+	else										\
+		cmdq_pkt_poll_addr(&_cmd->pkt, _base + _ofst, _val,			\
+				   _m, ##__VA_ARGS__);					\
 } while (0)
 
 #define MM_REG_POLL(cmd, id, base, ofst, val, mask, ...)	\
