@@ -998,7 +998,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 	s64 delta;
 	u64 irq;
 
-	if (static_branch_likely(&psi_disabled))
+	if (static_branch_likely(&psi_disabled) || !irqtime_enabled())
 		return;
 
 	if (!curr->pid)
@@ -1286,7 +1286,7 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 	bool privileged;
 	u32 window_us;
 
-	if (static_branch_likely(&psi_disabled))
+	if (static_branch_likely(&psi_disabled) || !irqtime_enabled())
 		return ERR_PTR(-EOPNOTSUPP);
 
 	/*
