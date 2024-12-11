@@ -44,10 +44,10 @@
 			pr_info("%s:%s - " frm, NAME, __func__, ## __VA_ARGS__); } \
 	while (0)
 
-#define LINVAL gpiod_get_value(DAV),		\
-		gpiod_get_value(NRFD),		\
-		gpiod_get_value(NDAC),		\
-		gpiod_get_value(SRQ)
+#define LINVAL (gpiod_get_value(DAV),       \
+		gpiod_get_value(NRFD),              \
+		gpiod_get_value(NDAC),              \
+		gpiod_get_value(SRQ))
 #define LINFMT "DAV: %d	 NRFD:%d  NDAC: %d SRQ: %d"
 
 #include "gpibP.h"
