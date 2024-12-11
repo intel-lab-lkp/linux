@@ -787,8 +787,12 @@ static void iwl_mvm_handle_per_phy_stats(struct iwl_mvm *mvm,
 	for (i = 0; i < NUM_PHY_CTX; i++) {
 		if (!mvm->phy_ctxts[i].ref)
 			continue;
+		mvm->phy_ctxts[i].channel_load =
+			le32_to_cpu(per_phy[i].channel_load);
 		mvm->phy_ctxts[i].channel_load_by_us =
 			le32_to_cpu(per_phy[i].channel_load_by_us);
+		mvm->phy_ctxts[i].channel_load_not_by_us =
+			le32_to_cpu(per_phy[i].channel_load_not_by_us);
 	}
 }
 

@@ -1062,6 +1062,49 @@ static ssize_t iwl_dbgfs_fw_system_stats_read(struct file *file,
 			 "accu_radio_stats.tx_time %lld\n",
 			 mvm->accu_radio_stats.tx_time);
 
+	pos += scnprintf(pos, endpos - pos,
+			 "mvmvif.esr_disable_reason: 0x%x\n",
+			 mvmvif->esr_disable_reason);
+	pos += scnprintf(pos, endpos - pos,
+			 "mvmvif.link_selection_res: 0x%x\n",
+			 mvmvif->link_selection_res);
+	pos += scnprintf(pos, endpos - pos,
+			 "mvmvif.primary_link: %d\n",
+			 mvmvif->primary_link);
+	pos += scnprintf(pos, endpos - pos,
+			 "mvmvif.link_selection_primary: %d\n",
+			 mvmvif->link_selection_primary);
+	pos += scnprintf(pos, endpos - pos,
+			 "mvmvif.last_esr_exit: ts: %lu  reason: 0x%x\n",
+			 mvmvif->last_esr_exit.ts, mvmvif->last_esr_exit.reason);
+	pos += scnprintf(pos, endpos - pos,
+			 "mvmvif.esr_active: %d\n",
+			 mvmvif->esr_active);
+	pos += scnprintf(pos, endpos - pos,
+			 "mvmvif.esr_active: %d\n",
+			 mvmvif->esr_active);
+	for (i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
+		struct iwl_mvm_link_sel_data *d = &mvm->link_sel_data[i];
+
+		if (d->link_id == -1 || !d->chandef)
+			continue;
+
+		pos += scnprintf(pos, endpos - pos,
+				 "link-sel-data[%d] link-id: %d freq: %d signal: %d grade: %d  chan-load: %d  load-by-us: %d punc-penalty: %d\n",
+				 i, d->link_id, d->center_freq1, d->signal, d->grade,
+				 d->chan_load, d->channel_load_by_us,
+				 d->puncturing_penalty);
+	}
+	for (i = 0; i < NUM_PHY_CTX; i++) {
+		if (!mvm->phy_ctxts[i].ref)
+			continue;
+		pos += scnprintf(pos, endpos - pos,
+				 "phy-ctxtx[%d] channel-load: %d  load-by-us: %d  not-by-us: %d\n",
+				 i, mvm->phy_ctxts[i].channel_load,
+				 mvm->phy_ctxts[i].channel_load_by_us,
+				 mvm->phy_ctxts[i].channel_load_not_by_us);
+	}
+
 release_send_out:
 	mutex_unlock(&mvm->mutex);
 

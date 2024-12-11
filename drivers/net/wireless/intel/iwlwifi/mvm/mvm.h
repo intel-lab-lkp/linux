@@ -102,7 +102,9 @@ struct iwl_mvm_phy_ctxt {
 	/* track for RLC config command */
 	u32 center_freq1;
 	bool rlc_disabled;
+	u32 channel_load;
 	u32 channel_load_by_us;
+	u32 channel_load_not_by_us;
 };
 
 struct iwl_mvm_time_event_data {
@@ -992,6 +994,18 @@ struct iwl_mvm_acs_survey {
 	struct iwl_mvm_acs_survey_channel channels[] __counted_by(n_channels);
 };
 
+struct iwl_mvm_link_sel_data {
+	u8 link_id;
+	const struct cfg80211_chan_def *chandef;
+	/* so we don't have to reference maybe stale chandef in debugfs */
+	u32 center_freq1;
+	s32 signal;
+	u16 grade;
+	u16 chan_load; /* reported by AP BSS Load IE */
+	u16 channel_load_by_us; /* reported by firmware */
+	u16 puncturing_penalty; /* driver calculates */
+};
+
 struct iwl_mvm {
 	/* for logger access */
 	struct device *dev;
@@ -1173,6 +1187,8 @@ struct iwl_mvm {
 	struct ieee80211_vif __rcu *vif_id_to_mac[NUM_MAC_INDEX_DRIVER];
 
 	struct ieee80211_bss_conf __rcu *link_id_to_link_conf[IWL_FW_MAX_LINK_ID + 1];
+
+	struct iwl_mvm_link_sel_data link_sel_data[IEEE80211_MLD_MAX_NUM_LINKS];
 
 	/* -1 for always, 0 for never, >0 for that many times */
 	s8 fw_restart;
@@ -2123,13 +2139,6 @@ int iwl_mvm_disable_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 void iwl_mvm_select_links(struct iwl_mvm *mvm, struct ieee80211_vif *vif);
 u8 iwl_mvm_get_primary_link(struct ieee80211_vif *vif);
 u8 iwl_mvm_get_other_link(struct ieee80211_vif *vif, u8 link_id);
-
-struct iwl_mvm_link_sel_data {
-	u8 link_id;
-	const struct cfg80211_chan_def *chandef;
-	s32 signal;
-	u16 grade;
-};
 
 #if IS_ENABLED(CONFIG_IWLWIFI_KUNIT_TESTS)
 unsigned int iwl_mvm_get_link_grade(struct ieee80211_bss_conf *link_conf);
