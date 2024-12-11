@@ -353,7 +353,7 @@ static int mctp_getsockopt(struct socket *sock, int level, int optname,
 /* helpers for reading/writing the tag ioc, handling compatibility across the
  * two versions, and some basic API error checking
  */
-static int mctp_ioctl_tag_copy_from_user(unsigned long arg,
+static int mctp_ioctl_tag_copy_from_user(struct net *net, unsigned long arg,
 					 struct mctp_ioc_tag_ctl2 *ctl,
 					 bool tagv2)
 {
@@ -376,7 +376,7 @@ static int mctp_ioctl_tag_copy_from_user(unsigned long arg,
 
 	if (!tagv2) {
 		/* compat, using defaults for new fields */
-		ctl->net = MCTP_INITIAL_DEFAULT_NET;
+		ctl->net = mctp_default_net(net);
 		ctl->peer_addr = ctl_compat.peer_addr;
 		ctl->local_addr = MCTP_ADDR_ANY;
 		ctl->flags = ctl_compat.flags;
@@ -431,7 +431,7 @@ static int mctp_ioctl_alloctag(struct mctp_sock *msk, bool tagv2,
 	u8 tag;
 	int rc;
 
-	rc = mctp_ioctl_tag_copy_from_user(arg, &ctl, tagv2);
+	rc = mctp_ioctl_tag_copy_from_user(net, arg, &ctl, tagv2);
 	if (rc)
 		return rc;
 
@@ -475,7 +475,7 @@ static int mctp_ioctl_droptag(struct mctp_sock *msk, bool tagv2,
 	int rc;
 	u8 tag;
 
-	rc = mctp_ioctl_tag_copy_from_user(arg, &ctl, tagv2);
+	rc = mctp_ioctl_tag_copy_from_user(net, arg, &ctl, tagv2);
 	if (rc)
 		return rc;
 
