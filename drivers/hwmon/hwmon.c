@@ -946,7 +946,10 @@ __hwmon_device_register(struct device *dev, const char *name, void *drvdata,
 	hdev->of_node = tdev ? tdev->of_node : NULL;
 	hwdev->chip = chip;
 	dev_set_drvdata(hdev, drvdata);
-	dev_set_name(hdev, HWMON_ID_FORMAT, id);
+	err = dev_set_name(hdev, HWMON_ID_FORMAT, id);
+	if (err)
+		goto free_hwmon;
+
 	err = device_register(hdev);
 	if (err) {
 		put_device(hdev);
