@@ -751,6 +751,9 @@ struct gpio_pin_range {
 int gpiochip_add_pin_range(struct gpio_chip *gc, const char *pinctl_name,
 			   unsigned int gpio_offset, unsigned int pin_offset,
 			   unsigned int npins);
+int gpiochip_add_pinlist_range(struct gpio_chip *gc, const char *pinctl_name,
+			       unsigned int gpio_offset, unsigned int const *pins,
+			       unsigned int npins);
 int gpiochip_add_pingroup_range(struct gpio_chip *gc,
 			struct pinctrl_dev *pctldev,
 			unsigned int gpio_offset, const char *pin_group);
@@ -765,6 +768,15 @@ gpiochip_add_pin_range(struct gpio_chip *gc, const char *pinctl_name,
 {
 	return 0;
 }
+
+static inline int
+gpiochip_add_pinlist_range(struct gpio_chip *gc, const char *pinctl_name,
+			   unsigned int gpio_offset, unsigned int const *pins,
+			   unsigned int npins)
+{
+	return 0;
+}
+
 static inline int
 gpiochip_add_pingroup_range(struct gpio_chip *gc,
 			struct pinctrl_dev *pctldev,
