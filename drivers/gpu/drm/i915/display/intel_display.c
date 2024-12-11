@@ -7193,7 +7193,7 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 
 	if (!modeset &&
 	    intel_crtc_needs_color_update(new_crtc_state) &&
-	    !new_crtc_state->use_dsb)
+	    (!new_crtc_state->use_dsb || !new_crtc_state->dsb_color_vblank))
 		intel_color_commit_noarm(NULL, new_crtc_state);
 
 	if (!new_crtc_state->use_dsb)

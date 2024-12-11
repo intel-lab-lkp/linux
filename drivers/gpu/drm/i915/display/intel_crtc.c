@@ -429,10 +429,12 @@ static void intel_crtc_vblank_work(struct kthread_work *base)
 	struct intel_crtc_state *crtc_state =
 		container_of(work, typeof(*crtc_state), vblank_work);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_display *display = to_intel_display(crtc_state);
 
 	trace_intel_crtc_vblank_work_start(crtc);
 
-	intel_color_load_luts(crtc_state);
+	if (DISPLAY_VER(display) < 30)
+		intel_color_load_luts(crtc_state);
 
 	if (crtc_state->uapi.event) {
 		spin_lock_irq(&crtc->base.dev->event_lock);

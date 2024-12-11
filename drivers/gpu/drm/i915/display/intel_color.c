@@ -1890,6 +1890,16 @@ static void chv_load_luts(const struct intel_crtc_state *crtc_state)
 			  crtc_state->cgm_mode);
 }
 
+static void ptl_color_commit_noarm(struct intel_dsb *dsb,
+				   const struct intel_crtc_state *crtc_state)
+{
+	icl_load_csc_matrix(dsb, crtc_state);
+	if (crtc_state->preload_luts || intel_crtc_needs_modeset(crtc_state) || dsb)
+		return;
+
+	icl_load_luts(crtc_state);
+}
+
 void intel_color_load_luts(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -1957,6 +1967,9 @@ void intel_color_prepare_commit(struct intel_atomic_state *state,
 		return;
 
 	if (!crtc_state->pre_csc_lut && !crtc_state->post_csc_lut)
+		return;
+
+	if (DISPLAY_VER(display) >= 30)
 		return;
 
 	crtc_state->dsb_color_vblank = intel_dsb_prepare(state, crtc, INTEL_DSB_1, 1024);
@@ -3821,6 +3834,17 @@ static const struct intel_color_funcs i9xx_color_funcs = {
 	.get_config = i9xx_get_config,
 };
 
+static const struct intel_color_funcs ptl_color_funcs = {
+	.color_check = icl_color_check,
+	.color_commit_noarm = ptl_color_commit_noarm,
+	.color_commit_arm = icl_color_commit_arm,
+	.load_luts = icl_load_luts,
+	.read_luts = icl_read_luts,
+	.lut_equal = icl_lut_equal,
+	.read_csc = icl_read_csc,
+	.get_config = skl_get_config,
+};
+
 static const struct intel_color_funcs tgl_color_funcs = {
 	.color_check = icl_color_check,
 	.color_commit_noarm = icl_color_commit_noarm,
@@ -3968,7 +3992,9 @@ void intel_color_init_hooks(struct intel_display *display)
 		else
 			display->funcs.color = &i9xx_color_funcs;
 	} else {
-		if (DISPLAY_VER(display) >= 12)
+		if (DISPLAY_VER(display) >= 30)
+			display->funcs.color = &ptl_color_funcs;
+		else if (DISPLAY_VER(display) >= 12)
 			display->funcs.color = &tgl_color_funcs;
 		else if (DISPLAY_VER(display) == 11)
 			display->funcs.color = &icl_color_funcs;
