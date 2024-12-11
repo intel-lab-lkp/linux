@@ -26,6 +26,10 @@ the currently possible format options:
      drm-cycles-panthor:     94439687187
      drm-maxfreq-panthor:    1000000000 Hz
      drm-curfreq-panthor:    1000000000 Hz
+     drm-total-internal:     10396 KiB
+     drm-shared-internal:    0
+     drm-active-internal:    10396 KiB
+     drm-resident-internal:  10396 KiB
      drm-total-memory:       16480 KiB
      drm-shared-memory:      0
      drm-active-memory:      16200 KiB
@@ -44,3 +48,13 @@ driver by writing into the appropriate sysfs node::
 
 Where `N` is a bit mask where cycle and timestamp sampling are respectively
 enabled by the first and second bits.
+
+Possible `drm-*-internal` key names are: `total`, `active` and `resident`.
+These values convey the sizes of the internal driver-owned shmem BO's that
+aren't exposed to user-space through a DRM handle, like queue ring buffers,
+sync object arrays and heap chunks. Because they are all allocated and pinned
+at creation time, `drm-resident-internal` and `drm-total-internal` should always
+be equal. `drm-active-internal` shows the size of kernel BO's associated with
+VM's and groups currently being scheduled for execution by the GPU.
+`drm-shared-memory` is unused at present, but in the future it might stand for
+the size of the Firmware regions, since they do not belong to an open file context.
