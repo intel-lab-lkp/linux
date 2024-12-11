@@ -141,3 +141,21 @@ void p2p_link_sysfs_update_group(struct pci_dev *pdev)
 
 	sysfs_update_group(&pdev->dev.kobj, &pcie_port_p2p_link_attr_group);
 }
+
+/*
+ * pcie_port_is_p2p_link_available: Determine if a P2P link is available
+ * between the two upstream bridges. The serial number of the two devices
+ * will be compared and if they are same then it is considered that the P2P
+ * link is available.
+ *
+ * Return value: true if inter switch P2P is available, return false otherwise.
+ */
+bool pcie_port_is_p2p_link_available(struct pci_dev *a, struct pci_dev *b)
+{
+	if (!pcie_port_is_p2p_supported(a) || !pcie_port_is_p2p_supported(b))
+		return false;
+
+	/* the above check validates DSN is valid for both devices */
+	return pci_get_dsn(a) == pci_get_dsn(b);
+}
+EXPORT_SYMBOL_GPL(pcie_port_is_p2p_link_available);

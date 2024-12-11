@@ -21,7 +21,12 @@
 #ifdef CONFIG_PCIE_P2P_LINK
 void p2p_link_sysfs_update_group(struct pci_dev *pdev);
 
+bool pcie_port_is_p2p_link_available(struct pci_dev *a, struct pci_dev *b);
 #else
 static inline void p2p_link_sysfs_update_group(struct pci_dev *pdev) { }
+static inline bool pcie_port_is_p2p_link_available(struct pci_dev *a, struct pci_dev *b)
+{
+	return false;
+}
 #endif
 #endif /* _P2P_LINK_H_ */
