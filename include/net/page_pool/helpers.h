@@ -115,22 +115,22 @@ static inline struct page *page_pool_dev_alloc_frag(struct page_pool *pool,
 	return page_pool_alloc_frag(pool, offset, size, gfp);
 }
 
-static inline struct page *page_pool_alloc(struct page_pool *pool,
-					   unsigned int *offset,
-					   unsigned int *size, gfp_t gfp)
+static inline netmem_ref
+page_pool_alloc_best_fit_netmem(struct page_pool *pool, unsigned int *offset,
+				unsigned int *size, gfp_t gfp)
 {
 	unsigned int max_size = PAGE_SIZE << pool->p.order;
-	struct page *page;
+	netmem_ref netmem;
 
 	if ((*size << 1) > max_size) {
 		*size = max_size;
 		*offset = 0;
-		return page_pool_alloc_pages(pool, gfp);
+		return page_pool_alloc_netmem(pool, gfp);
 	}
 
-	page = page_pool_alloc_frag(pool, offset, *size, gfp);
-	if (unlikely(!page))
-		return NULL;
+	netmem = page_pool_alloc_frag_netmem(pool, offset, *size, gfp);
+	if (unlikely(!netmem))
+		return 0;
 
 	/* There is very likely not enough space for another fragment, so append
 	 * the remaining size to the current fragment to avoid truesize
@@ -141,7 +141,25 @@ static inline struct page *page_pool_alloc(struct page_pool *pool,
 		pool->frag_offset = max_size;
 	}
 
-	return page;
+	return netmem;
+}
+
+static inline netmem_ref
+page_pool_dev_alloc_best_fit_netmem(struct page_pool *pool,
+				    unsigned int *offset,
+				    unsigned int *size)
+{
+	gfp_t gfp = GFP_ATOMIC | __GFP_NOWARN;
+
+	return page_pool_alloc_best_fit_netmem(pool, offset, size, gfp);
+}
+
+static inline struct page *page_pool_alloc(struct page_pool *pool,
+					   unsigned int *offset,
+					   unsigned int *size, gfp_t gfp)
+{
+	return netmem_to_page(page_pool_alloc_best_fit_netmem(pool, offset,
+							      size, gfp));
 }
 
 /**
@@ -438,6 +456,16 @@ static inline void page_pool_dma_sync_for_cpu(const struct page_pool *pool,
 				      page_pool_get_dma_addr(page),
 				      offset + pool->p.offset, dma_sync_size,
 				      page_pool_get_dma_dir(pool));
+}
+
+static inline void
+page_pool_dma_sync_for_cpu_netmem(const struct page_pool *pool,
+				  netmem_ref netmem, u32 offset,
+				  u32 dma_sync_size)
+{
+	if (!netmem_is_net_iov(netmem))
+		page_pool_dma_sync_for_cpu(pool, netmem_to_page(netmem),
+					   offset, dma_sync_size);
 }
 
 static inline bool page_pool_put(struct page_pool *pool)
