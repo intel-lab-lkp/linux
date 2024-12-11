@@ -219,6 +219,7 @@ struct ufs_qcom_host {
 
 struct ufs_qcom_drvdata {
 	unsigned int quirks;
+	bool no_phy_retention;
 };
 
 static inline u32
