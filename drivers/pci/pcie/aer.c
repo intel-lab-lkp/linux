@@ -1024,6 +1024,8 @@ static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 			err_handler->error_detected(dev, pci_channel_io_normal);
 		else if (info->severity == AER_FATAL)
 			err_handler->error_detected(dev, pci_channel_io_frozen);
+
+		cxl_do_recovery(dev);
 	}
 out:
 	device_unlock(&dev->dev);
@@ -1048,6 +1050,8 @@ static void cxl_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 			pdrv->cxl_err_handler->cor_error_detected(dev);
 
 		pcie_clear_device_status(dev);
+	} else {
+		cxl_do_recovery(dev);
 	}
 }
 
