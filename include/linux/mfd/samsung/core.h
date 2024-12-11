@@ -79,8 +79,8 @@ struct sec_platform_data {
 	struct sec_opmode_data		*opmode;
 	int				num_regulators;
 
-	int				buck_gpios[3];
-	int				buck_ds[3];
+	struct gpio_desc		*buck_gpios[3];
+	struct gpio_desc		*buck_ds[3];
 	unsigned int			buck2_voltage[8];
 	bool				buck2_gpiodvs;
 	unsigned int			buck3_voltage[8];
