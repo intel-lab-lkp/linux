@@ -227,19 +227,21 @@ static void clear_log_create_vm_done(struct kvm_vm *vm)
 	vm_enable_cap(vm, KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2, manual_caps);
 }
 
-static void dirty_log_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
+static bool dirty_log_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
 					  void *bitmap, uint32_t num_pages,
 					  uint32_t *unused)
 {
 	kvm_vm_get_dirty_log(vcpu->vm, slot, bitmap);
+	return true;
 }
 
-static void clear_log_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
+static bool clear_log_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
 					  void *bitmap, uint32_t num_pages,
 					  uint32_t *unused)
 {
 	kvm_vm_get_dirty_log(vcpu->vm, slot, bitmap);
 	kvm_vm_clear_dirty_log(vcpu->vm, slot, bitmap, 0, num_pages);
+	return true;
 }
 
 /* Should only be called after a GUEST_SYNC */
@@ -350,7 +352,7 @@ static void dirty_ring_continue_vcpu(void)
 	sem_post(&sem_vcpu_cont);
 }
 
-static void dirty_ring_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
+static bool dirty_ring_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
 					   void *bitmap, uint32_t num_pages,
 					   uint32_t *ring_buf_idx)
 {
@@ -373,6 +375,10 @@ static void dirty_ring_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
 				       slot, bitmap, num_pages,
 				       ring_buf_idx);
 
+	/* Retry if no entries were collected */
+	if (count == 0)
+		return false;
+
 	cleared = kvm_vm_reset_dirty_ring(vcpu->vm);
 
 	/*
@@ -389,6 +395,7 @@ static void dirty_ring_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
 	}
 
 	pr_info("Iteration %ld collected %u pages\n", iteration, count);
+	return true;
 }
 
 static void dirty_ring_after_vcpu_run(struct kvm_vcpu *vcpu, int ret, int err)
@@ -424,7 +431,7 @@ struct log_mode {
 	/* Hook when the vm creation is done (before vcpu creation) */
 	void (*create_vm_done)(struct kvm_vm *vm);
 	/* Hook to collect the dirty pages into the bitmap provided */
-	void (*collect_dirty_pages) (struct kvm_vcpu *vcpu, int slot,
+	bool (*collect_dirty_pages)(struct kvm_vcpu *vcpu, int slot,
 				     void *bitmap, uint32_t num_pages,
 				     uint32_t *ring_buf_idx);
 	/* Hook to call when after each vcpu run */
@@ -488,7 +495,7 @@ static void log_mode_create_vm_done(struct kvm_vm *vm)
 		mode->create_vm_done(vm);
 }
 
-static void log_mode_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
+static bool log_mode_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
 					 void *bitmap, uint32_t num_pages,
 					 uint32_t *ring_buf_idx)
 {
@@ -496,7 +503,7 @@ static void log_mode_collect_dirty_pages(struct kvm_vcpu *vcpu, int slot,
 
 	TEST_ASSERT(mode->collect_dirty_pages != NULL,
 		    "collect_dirty_pages() is required for any log mode!");
-	mode->collect_dirty_pages(vcpu, slot, bitmap, num_pages, ring_buf_idx);
+	return mode->collect_dirty_pages(vcpu, slot, bitmap, num_pages, ring_buf_idx);
 }
 
 static void log_mode_after_vcpu_run(struct kvm_vcpu *vcpu, int ret, int err)
@@ -783,9 +790,11 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	while (iteration < p->iterations) {
 		/* Give the vcpu thread some time to dirty some pages */
 		usleep(p->interval * 1000);
-		log_mode_collect_dirty_pages(vcpu, TEST_MEM_SLOT_INDEX,
+
+		if (!log_mode_collect_dirty_pages(vcpu, TEST_MEM_SLOT_INDEX,
 					     bmap, host_num_pages,
-					     &ring_buf_idx);
+					     &ring_buf_idx))
+			continue;
 
 		/*
 		 * See vcpu_sync_stop_requested definition for details on why
