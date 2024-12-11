@@ -1449,7 +1449,7 @@ static int amd_pstate_epp_cpu_init(struct cpufreq_policy *policy)
 		return -ENOMEM;
 
 	cpudata->cpu = policy->cpu;
-	cpudata->epp_policy = 0;
+	cpudata->epp_policy = CPUFREQ_POLICY_UNKNOWN;
 
 	ret = amd_pstate_init_perf(cpudata);
 	if (ret)
