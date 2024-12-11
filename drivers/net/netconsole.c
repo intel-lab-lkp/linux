@@ -113,7 +113,7 @@ static struct console netconsole_ext;
  *		remote_port	(read-write)
  *		local_ip	(read-write)
  *		remote_ip	(read-write)
- *		local_mac	(read-only)
+ *		local_mac	(read-write)
  *		remote_mac	(read-write)
  */
 struct netconsole_target {
@@ -211,6 +211,8 @@ static struct netconsole_target *alloc_and_init(void)
 
 	nt->np.name = "netconsole";
 	strscpy(nt->np.dev_name, "eth0", IFNAMSIZ);
+	/* the "don't use" or N/A value for this field */
+	eth_broadcast_addr(nt->np.local_mac);
 	nt->np.local_port = 6665;
 	nt->np.remote_port = 6666;
 	eth_broadcast_addr(nt->np.remote_mac);
@@ -360,10 +362,7 @@ static ssize_t remote_ip_show(struct config_item *item, char *buf)
 
 static ssize_t local_mac_show(struct config_item *item, char *buf)
 {
-	struct net_device *dev = to_target(item)->np.dev;
-	static const u8 bcast[ETH_ALEN] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-
-	return sysfs_emit(buf, "%pM\n", dev ? dev->dev_addr : bcast);
+	return sysfs_emit(buf, "%pM\n", to_target(item)->np.local_mac);
 }
 
 static ssize_t remote_mac_show(struct config_item *item, char *buf)
@@ -511,9 +510,39 @@ static ssize_t dev_name_store(struct config_item *item, const char *buf,
 
 	strscpy(nt->np.dev_name, buf, IFNAMSIZ);
 	trim_newline(nt->np.dev_name, IFNAMSIZ);
+	/* the "don't use" or N/A value for this field */
+	eth_broadcast_addr(nt->np.local_mac);
 
 	mutex_unlock(&dynamic_netconsole_mutex);
 	return strnlen(buf, count);
+}
+
+static ssize_t local_mac_store(struct config_item *item, const char *buf,
+			       size_t count)
+{
+	struct netconsole_target *nt = to_target(item);
+	u8 local_mac[ETH_ALEN];
+	ssize_t ret = -EINVAL;
+
+	mutex_lock(&dynamic_netconsole_mutex);
+	if (nt->enabled) {
+		pr_err("target (%s) is enabled, disable to update parameters\n",
+		       config_item_name(&nt->group.cg_item));
+		goto out_unlock;
+	}
+
+	if (!mac_pton(buf, local_mac))
+		goto out_unlock;
+	if (buf[3 * ETH_ALEN - 1] && buf[3 * ETH_ALEN - 1] != '\n')
+		goto out_unlock;
+	memcpy(nt->np.local_mac, local_mac, ETH_ALEN);
+	/* force use of local_mac for device lookup */
+	nt->np.dev_name[0] = '\0';
+
+	ret = strnlen(buf, count);
+out_unlock:
+	mutex_unlock(&dynamic_netconsole_mutex);
+	return ret;
 }
 
 static ssize_t local_port_store(struct config_item *item, const char *buf,
@@ -839,7 +868,7 @@ CONFIGFS_ATTR(, local_port);
 CONFIGFS_ATTR(, remote_port);
 CONFIGFS_ATTR(, local_ip);
 CONFIGFS_ATTR(, remote_ip);
-CONFIGFS_ATTR_RO(, local_mac);
+CONFIGFS_ATTR(, local_mac);
 CONFIGFS_ATTR(, remote_mac);
 CONFIGFS_ATTR(, release);
 
@@ -1001,8 +1030,9 @@ static int netconsole_netdev_event(struct notifier_block *this,
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	bool stopped = false;
 
-	if (!(event == NETDEV_CHANGENAME || event == NETDEV_UNREGISTER ||
-	      event == NETDEV_RELEASE || event == NETDEV_JOIN))
+	if (!(event == NETDEV_CHANGENAME || event == NETDEV_CHANGEADDR ||
+	      event == NETDEV_UNREGISTER || event == NETDEV_RELEASE ||
+	      event == NETDEV_JOIN))
 		goto done;
 
 	mutex_lock(&target_cleanup_list_lock);
@@ -1013,6 +1043,10 @@ static int netconsole_netdev_event(struct notifier_block *this,
 			switch (event) {
 			case NETDEV_CHANGENAME:
 				strscpy(nt->np.dev_name, dev->name, IFNAMSIZ);
+				break;
+			case NETDEV_CHANGEADDR:
+				memcpy(nt->np.local_mac, dev->dev_addr,
+				       ETH_ALEN);
 				break;
 			case NETDEV_RELEASE:
 			case NETDEV_JOIN:

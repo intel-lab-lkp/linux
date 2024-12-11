@@ -45,7 +45,7 @@ following format::
 	r             if present, prepend kernel version (release) to the message
 	src-port      source for UDP packets (defaults to 6665)
 	src-ip        source IP to use (interface address)
-	dev           network interface (eth0)
+	dev           network interface name (eth0) or MAC address
 	tgt-port      port for logging agent (6666)
 	tgt-ip        IP address for logging agent
 	tgt-macaddr   ethernet MAC address for logging agent (broadcast)
@@ -61,6 +61,10 @@ or::
 or using IPv6::
 
  insmod netconsole netconsole=@/,@fd00:1:2:3::1/
+
+or using a MAC address to select the egress interface::
+
+   linux netconsole=4444@10.0.0.1/ab:cd:ef:12:34:56,9353@10.0.0.2/12:34:56:78:9a:bc
 
 It also supports logging to multiple remote agents by specifying
 parameters for the multiple agents separated by semicolons and the
@@ -133,7 +137,7 @@ The interface exposes these parameters of a netconsole target to userspace:
 	remote_port	Remote agent's UDP port			(read-write)
 	local_ip	Source IP address to use		(read-write)
 	remote_ip	Remote agent's IP address		(read-write)
-	local_mac	Local interface's MAC address		(read-only)
+	local_mac	Local interface's MAC address		(read-write)
 	remote_mac	Remote agent's MAC address		(read-write)
 	==============  =================================       ============
 

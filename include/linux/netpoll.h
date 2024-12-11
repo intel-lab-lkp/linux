@@ -25,7 +25,14 @@ union inet_addr {
 struct netpoll {
 	struct net_device *dev;
 	netdevice_tracker dev_tracker;
+	/*
+	 * Either dev_name or local_mac can be used to specify the local
+	 * interface - dev_name will be used if it is nonempty, else
+	 * local_mac is used. Once netpoll_setup returns successfully,
+	 * both fields are populated.
+	 */
 	char dev_name[IFNAMSIZ];
+	u8 local_mac[ETH_ALEN];
 	const char *name;
 
 	union inet_addr local_ip, remote_ip;
