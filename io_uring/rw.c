@@ -316,6 +316,7 @@ static int io_prep_rw(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 	}
 	rw->kiocb.dio_complete = NULL;
 	rw->kiocb.ki_flags = 0;
+	rw->kiocb.ki_write_stream = READ_ONCE(sqe->write_stream);
 
 	rw->addr = READ_ONCE(sqe->addr);
 	rw->len = READ_ONCE(sqe->len);
