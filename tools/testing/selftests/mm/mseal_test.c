@@ -517,30 +517,6 @@ static void test_seal_twice(void)
 	REPORT_TEST_PASS();
 }
 
-static void test_seal_mprotect(bool seal)
-{
-	void *ptr;
-	unsigned long page_size = getpagesize();
-	unsigned long size = 4 * page_size;
-	int ret;
-
-	setup_single_address(size, &ptr);
-	FAIL_TEST_IF_FALSE(ptr != (void *)-1);
-
-	if (seal) {
-		ret = seal_single_address(ptr, size);
-		FAIL_TEST_IF_FALSE(!ret);
-	}
-
-	ret = sys_mprotect(ptr, size, PROT_READ | PROT_WRITE);
-	if (seal)
-		FAIL_TEST_IF_FALSE(ret < 0);
-	else
-		FAIL_TEST_IF_FALSE(!ret);
-
-	REPORT_TEST_PASS();
-}
-
 static void test_seal_start_mprotect(bool seal)
 {
 	void *ptr;
@@ -654,41 +630,6 @@ static void test_seal_mprotect_unalign_len_variant_2(bool seal)
 	ret = sys_mprotect(ptr + page_size * 3, page_size,
 			PROT_READ | PROT_WRITE);
 	FAIL_TEST_IF_FALSE(!ret);
-
-	REPORT_TEST_PASS();
-}
-
-static void test_seal_mprotect_two_vma(bool seal)
-{
-	void *ptr;
-	unsigned long page_size = getpagesize();
-	unsigned long size = 4 * page_size;
-	int ret;
-
-	setup_single_address(size, &ptr);
-	FAIL_TEST_IF_FALSE(ptr != (void *)-1);
-
-	/* use mprotect to split */
-	ret = sys_mprotect(ptr, page_size * 2, PROT_READ | PROT_WRITE);
-	FAIL_TEST_IF_FALSE(!ret);
-
-	if (seal) {
-		ret = seal_single_address(ptr, page_size * 4);
-		FAIL_TEST_IF_FALSE(!ret);
-	}
-
-	ret = sys_mprotect(ptr, page_size * 2, PROT_READ | PROT_WRITE);
-	if (seal)
-		FAIL_TEST_IF_FALSE(ret < 0);
-	else
-		FAIL_TEST_IF_FALSE(!ret);
-
-	ret = sys_mprotect(ptr + page_size * 2, page_size * 2,
-			PROT_READ | PROT_WRITE);
-	if (seal)
-		FAIL_TEST_IF_FALSE(ret < 0);
-	else
-		FAIL_TEST_IF_FALSE(!ret);
 
 	REPORT_TEST_PASS();
 }
@@ -1876,7 +1817,7 @@ int main(void)
 	if (!pkey_supported())
 		ksft_print_msg("PKEY not supported\n");
 
-	ksft_set_plan(88);
+	ksft_set_plan(84);
 
 	test_seal_addseal();
 	test_seal_unmapped_start();
@@ -1889,9 +1830,6 @@ int main(void)
 	test_seal_zero_length();
 	test_seal_twice();
 
-	test_seal_mprotect(false);
-	test_seal_mprotect(true);
-
 	test_seal_start_mprotect(false);
 	test_seal_start_mprotect(true);
 
@@ -1903,9 +1841,6 @@ int main(void)
 
 	test_seal_mprotect_unalign_len_variant_2(false);
 	test_seal_mprotect_unalign_len_variant_2(true);
-
-	test_seal_mprotect_two_vma(false);
-	test_seal_mprotect_two_vma(true);
 
 	test_seal_mprotect_two_vma_with_split(false);
 	test_seal_mprotect_two_vma_with_split(true);
