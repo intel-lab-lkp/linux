@@ -552,9 +552,12 @@ struct powercap_zone *powercap_register_zone(
 	power_zone->dev_attr_groups[0] = &power_zone->dev_zone_attr_group;
 	power_zone->dev_attr_groups[1] = NULL;
 	power_zone->dev.groups = power_zone->dev_attr_groups;
-	dev_set_name(&power_zone->dev, "%s:%x",
+	result = dev_set_name(&power_zone->dev, "%s:%x",
 					dev_name(power_zone->dev.parent),
 					power_zone->id);
+	if (result)
+		goto err_dev_ret;
+
 	result = device_register(&power_zone->dev);
 	if (result) {
 		put_device(&power_zone->dev);
