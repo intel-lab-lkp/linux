@@ -3395,6 +3395,10 @@ static int selinux_path_notify(const struct path *path, u64 mask,
 	case FSNOTIFY_OBJ_TYPE_INODE:
 		perm = FILE__WATCH;
 		break;
+	case FSNOTIFY_OBJ_TYPE_MNTNS:
+		/* FIXME: Is this correct??? */
+		perm = FILE__WATCH;
+		break;
 	default:
 		return -EINVAL;
 	}

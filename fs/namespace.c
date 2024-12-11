@@ -79,6 +79,7 @@ static struct kmem_cache *mnt_cache __ro_after_init;
 static DECLARE_RWSEM(namespace_sem);
 static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
 static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */
+LIST_HEAD(notify_list); /* protected by namespace_sem */
 static DEFINE_RWLOCK(mnt_ns_tree_lock);
 static struct rb_root mnt_ns_tree = RB_ROOT; /* protected by mnt_ns_tree_lock */
 
@@ -145,6 +146,7 @@ static void mnt_ns_release(struct mnt_namespace *ns)
 
 	/* keep alive for {list,stat}mount() */
 	if (refcount_dec_and_test(&ns->passive)) {
+		fsnotify_mntns_delete(ns);
 		put_user_ns(ns->user_ns);
 		kfree(ns);
 	}
@@ -1136,6 +1138,8 @@ static void mnt_add_to_ns(struct mnt_namespace *ns, struct mount *mnt)
 	rb_link_node(&mnt->mnt_node, parent, link);
 	rb_insert_color(&mnt->mnt_node, &ns->mounts);
 	mnt->mnt.mnt_flags |= MNT_ONRB;
+
+	add_notify(mnt);
 }
 
 /*
@@ -1683,17 +1687,53 @@ int may_umount(struct vfsmount *mnt)
 
 EXPORT_SYMBOL(may_umount);
 
+static void notify_mount(struct mount *p)
+{
+	if (!p->prev_ns && p->mnt_ns) {
+		fsnotify_mnt_attach(p->mnt_ns, &p->mnt);
+	} else if (p->prev_ns && !p->mnt_ns) {
+		fsnotify_mnt_detach(p->prev_ns, &p->mnt);
+	} else if (p->prev_ns == p->mnt_ns) {
+		fsnotify_mnt_move(p->mnt_ns, &p->mnt);
+	} else {
+		fsnotify_mnt_detach(p->prev_ns, &p->mnt);
+		fsnotify_mnt_attach(p->mnt_ns, &p->mnt);
+	}
+	p->prev_ns = p->mnt_ns;
+}
+
 static void namespace_unlock(void)
 {
 	struct hlist_head head;
 	struct hlist_node *p;
-	struct mount *m;
+	struct mount *m, *tmp;
 	LIST_HEAD(list);
+	bool notify = !list_empty(&notify_list);
 
 	hlist_move_list(&unmounted, &head);
 	list_splice_init(&ex_mountpoints, &list);
 
-	up_write(&namespace_sem);
+	/*
+	 * No point blocking out concurrent readers while notifications are
+	 * sent. This will also allow statmount()/listmount() to run
+	 * concurrently.
+	 */
+	if (unlikely(notify))
+		downgrade_write(&namespace_sem);
+
+	/*
+	 * Notify about mounts that were added/reparented/remain connected after
+	 * unmount.
+	 */
+	list_for_each_entry_safe(m, tmp, &notify_list, to_notify) {
+		notify_mount(m);
+		list_del_init(&m->to_notify);
+	}
+
+	if (unlikely(notify))
+		up_read(&namespace_sem);
+	else
+		up_write(&namespace_sem);
 
 	shrink_dentry_list(&list);
 
@@ -1806,6 +1846,7 @@ static void umount_tree(struct mount *mnt, enum umount_tree_flags how)
 		change_mnt_propagation(p, MS_PRIVATE);
 		if (disconnect)
 			hlist_add_head(&p->mnt_umount, &unmounted);
+		add_notify(p);
 	}
 }
 
@@ -2097,16 +2138,24 @@ struct mnt_namespace *__lookup_next_mnt_ns(struct mnt_namespace *mntns, bool pre
 	}
 }
 
+struct mnt_namespace *mnt_ns_from_dentry(struct dentry *dentry)
+{
+	if (!is_mnt_ns_file(dentry))
+		return NULL;
+
+	return to_mnt_ns(get_proc_ns(dentry->d_inode));
+}
+
 static bool mnt_ns_loop(struct dentry *dentry)
 {
 	/* Could bind mounting the mount namespace inode cause a
 	 * mount namespace loop?
 	 */
-	struct mnt_namespace *mnt_ns;
-	if (!is_mnt_ns_file(dentry))
+	struct mnt_namespace *mnt_ns = mnt_ns_from_dentry(dentry);
+
+	if (!mnt_ns)
 		return false;
 
-	mnt_ns = to_mnt_ns(get_proc_ns(dentry->d_inode));
 	return current->nsproxy->mnt_ns->seq >= mnt_ns->seq;
 }
 
@@ -2499,6 +2548,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 			dest_mp = smp;
 		unhash_mnt(source_mnt);
 		attach_mnt(source_mnt, top_mnt, dest_mp, beneath);
+		add_notify(source_mnt);
 		touch_mnt_namespace(source_mnt->mnt_ns);
 	} else {
 		if (source_mnt->mnt_ns) {
@@ -4414,6 +4464,8 @@ SYSCALL_DEFINE2(pivot_root, const char __user *, new_root,
 	list_del_init(&new_mnt->mnt_expire);
 	put_mountpoint(root_mp);
 	unlock_mount_hash();
+	add_notify(root_mnt);
+	add_notify(new_mnt);
 	chroot_fs_refs(&root, &new);
 	error = 0;
 out4:
