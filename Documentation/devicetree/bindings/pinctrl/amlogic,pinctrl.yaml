@@ -1,0 +1,150 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/amlogic,pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic pinmux controller
+
+maintainers:
+  - Xianwei Zhao <xianwei.zhao@amlogic.com>
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+properties:
+  compatible:
+    const: amlogic,pinctrl
+
+  reg:
+    minItems: 2
+
+  reg-names:
+    items:
+      - const: mux
+      - const: gpio
+
+  "#address-cells":
+    const: 2
+
+  "#size-cells":
+    const: 2
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - "#address-cells"
+  - "#size-cells"
+
+patternProperties:
+  "^gpio[a-z]":
+    type: object
+
+    properties:
+      gpio-controller: true
+
+      "#gpio-cells":
+        const: 2
+
+      bank-name:
+        $ref: /schemas/types.yaml#/definitions/string
+
+      npins:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 1
+        maximum: 32
+
+      bank-index:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 29
+
+      reg-mux-offset:
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      bit-mux-offset:
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      reg-gpio-offset:
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+    required:
+      - gpio-controller
+      - "#gpio-cells"
+      - npins
+      - bank-index
+      - reg-mux-offset
+      - reg-gpio-offset
+      - bank-name
+
+    additionalProperties: false
+    unevaluatedProperties: false
+
+  "^func-[0-9a-z]":
+    type: object
+    additionalProperties:
+      type: object
+      allOf:
+        - $ref: pincfg-node.yaml#
+        - $ref: pinmux-node.yaml#
+
+additionalProperties: false
+
+examples:
+  - |
+    apb {
+      #address-cells = <2>;
+      #size-cells = <2>;
+      periphs_pinctrl: pinctrl@8e700 {
+        compatible = "amlogic,pinctrl";
+        #address-cells = <2>;
+        #size-cells = <2>;
+        reg = <0x0 0x8e700 0x0 0x04>,
+              <0x0 0x8e704 0x0 0x60>;
+        reg-names = "mux", "gpio";
+
+        gpiob {
+          gpio-controller;
+          #gpio-cells = <2>;
+          npins = <10>;
+          bank-index = <1>;
+          reg-mux-offset = <0x14>;
+          bit-mux-offset = <0x14>;
+          reg-gpio-offset = <0x30>;
+          bank-name = "GPIOB";
+        };
+
+        gpioe {
+          gpio-controller;
+          #gpio-cells = <2>;
+          npins = <10>;
+          bank-index = <5>;
+          reg-mux-offset = <0x14>;
+          reg-gpio-offset = <0x30>;
+          bank-name = "GPIOE";
+        };
+
+        func-uart-b {
+          uart-b-default{
+            pinmux = <3>;
+            bias-pull-up;
+            drive-strength-microamp = <4000>;
+          };
+
+          uart-c-default{
+            pinmux = <4>;
+            bias-pull-up;
+            drive-strength-microamp = <4000>;
+          };
+        };
+
+        func-uart-c {
+          uart-c-default{
+            pinmux = <3>;
+            bias-pull-up;
+            drive-strength-microamp = <4000>;
+          };
+        };
+      };
+    };
