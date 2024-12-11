@@ -865,6 +865,20 @@ static __always_inline bool system_supports_mpam_hcr(void)
 	return alternative_has_cap_unlikely(ARM64_MPAM_HCR);
 }
 
+static inline bool system_supports_bbml2(void)
+{
+	/* currently, BBM is only relied on by code touching the userspace page
+	 * tables, and as such we are guaranteed that caps have been finalised.
+	 *
+	 * if later we want to use BBM for kernel mappings, particularly early
+	 * in the kernel, this may return 0 even if BBML2 is actually supported,
+	 * which means unnecessary break-before-make sequences, but is still
+	 * correct
+	 */
+
+	return alternative_has_cap_unlikely(ARM64_HAS_BBML2);
+}
+
 int do_emulate_mrs(struct pt_regs *regs, u32 sys_reg, u32 rt);
 bool try_emulate_mrs(struct pt_regs *regs, u32 isn);
 

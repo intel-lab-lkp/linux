@@ -844,6 +844,31 @@ static int do_tag_check_fault(unsigned long far, unsigned long esr,
 	return 0;
 }
 
+static int do_conflict_abort(unsigned long far, unsigned long esr,
+			     struct pt_regs *regs)
+{
+	if (!system_supports_bbml2())
+		return do_bad(far, esr, regs);
+
+	/* if we receive a TLB conflict abort, we know that there are multiple
+	 * TLB entries that translate the same address range. the minimum set
+	 * of invalidations to clear these entries is implementation defined.
+	 * the maximum set is defined as either tlbi(vmalls12e1) or tlbi(alle1).
+	 *
+	 * if el2 is enabled and stage 2 translation enabled, this may be
+	 * raised as a stage 2 abort. if el2 is enabled but stage 2 translation
+	 * disabled, or if el2 is disabled, it will be raised as a stage 1
+	 * abort.
+	 *
+	 * local_flush_tlb_all() does a tlbi(vmalle1), which is enough to
+	 * handle a stage 1 abort.
+	 */
+
+	local_flush_tlb_all();
+
+	return 0;
+}
+
 static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGKILL, SI_KERNEL,	"ttbr address size fault"	},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"level 1 address size fault"	},
@@ -893,7 +918,7 @@ static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 45"			},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 46"			},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 47"			},
-	{ do_bad,		SIGKILL, SI_KERNEL,	"TLB conflict abort"		},
+	{ do_conflict_abort,	SIGKILL, SI_KERNEL,	"TLB conflict abort"		},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"Unsupported atomic hardware update fault"	},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 50"			},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 51"			},
