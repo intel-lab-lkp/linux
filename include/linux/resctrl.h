@@ -119,6 +119,18 @@ struct rdt_mon_domain {
 };
 
 /**
+ * struct mon_config_info - Monitoring event configuratiin details
+ * @d:			Domain for the event
+ * @evtid:		Event type
+ * @mon_config:		Event configuration value
+ */
+struct mon_config_info {
+	struct rdt_mon_domain *d;
+	enum resctrl_event_id evtid;
+	u32 mon_config;
+};
+
+/**
  * struct resctrl_cache - Cache allocation related data
  * @cbm_len:		Length of the cache bit mask
  * @min_cbm_bits:	Minimum number of consecutive bits to be set.
@@ -351,6 +363,10 @@ void resctrl_arch_reset_rmid(struct rdt_resource *r, struct rdt_mon_domain *d,
  * This can be called from any CPU.
  */
 void resctrl_arch_reset_rmid_all(struct rdt_resource *r, struct rdt_mon_domain *d);
+
+void resctrl_arch_mon_event_config_set(void *info);
+u32 resctrl_arch_mon_event_config_get(struct rdt_mon_domain *d,
+				      enum resctrl_event_id eventid);
 
 extern unsigned int resctrl_rmid_realloc_threshold;
 extern unsigned int resctrl_rmid_realloc_limit;
