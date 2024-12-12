@@ -3,6 +3,9 @@
 
 #define pr_fmt(fmt) "mpam: resctrl: " fmt
 
+#undef KBUILD_MODNAME
+#define KBUILD_MODNAME "mpam"
+
 #include <linux/arm_mpam.h>
 #include <linux/cacheinfo.h>
 #include <linux/cpu.h>
@@ -10,6 +13,7 @@
 #include <linux/errno.h>
 #include <linux/limits.h>
 #include <linux/list.h>
+#include <linux/moduleparam.h>
 #include <linux/printk.h>
 #include <linux/rculist.h>
 #include <linux/resctrl.h>
@@ -157,6 +161,24 @@ static bool mpam_resctrl_hide_cdp(enum resctrl_res_level rid)
 }
 
 static unsigned int partid_per_closid = 1;
+
+static int mpam_resctrl_partid_per_closid_set(const char *val,
+					      const struct kernel_param *kp)
+{
+	/*
+	 * 16 in an arbitrary maximum, sufficient for experimentation
+	 * but not ridiculously large:
+	 */
+	return param_set_uint_minmax(val, kp, 1, 16);
+}
+
+static const struct kernel_param_ops mpam_resctrl_partid_per_closid_ops  = {
+	.set = mpam_resctrl_partid_per_closid_set,
+	.get = param_get_uint,
+};
+
+device_param_cb(partid_per_closid, &mpam_resctrl_partid_per_closid_ops,
+		&partid_per_closid, 0444);
 
 static unsigned int mpam_num_pmg(void)
 {
