@@ -146,9 +146,9 @@ static void ice_gnss_read(struct kthread_work *work)
 
 	count = gnss_insert_raw(pf->gnss_dev, buf, i);
 	if (count != i)
-		dev_warn(ice_pf_to_dev(pf),
-			 "gnss_insert_raw ret=%d size=%d\n",
-			 count, i);
+		dev_dbg(ice_pf_to_dev(pf),
+			"gnss_insert_raw ret=%d size=%d\n",
+			count, i);
 	delay = ICE_GNSS_TIMER_DELAY_TIME;
 free_buf:
 	free_page((unsigned long)buf);
