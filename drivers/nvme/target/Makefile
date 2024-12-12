@@ -8,6 +8,7 @@ obj-$(CONFIG_NVME_TARGET_RDMA)		+= nvmet-rdma.o
 obj-$(CONFIG_NVME_TARGET_FC)		+= nvmet-fc.o
 obj-$(CONFIG_NVME_TARGET_FCLOOP)	+= nvme-fcloop.o
 obj-$(CONFIG_NVME_TARGET_TCP)		+= nvmet-tcp.o
+obj-$(CONFIG_NVME_TARGET_PCI_EP)	+= nvmet-pciep.o
 
 nvmet-y		+= core.o configfs.o admin-cmd.o fabrics-cmd.o \
 			discovery.o io-cmd-file.o io-cmd-bdev.o pr.o
@@ -20,4 +21,5 @@ nvmet-rdma-y	+= rdma.o
 nvmet-fc-y	+= fc.o
 nvme-fcloop-y	+= fcloop.o
 nvmet-tcp-y	+= tcp.o
+nvmet-pciep-y	+= pci-ep.o
 nvmet-$(CONFIG_TRACING)	+= trace.o
