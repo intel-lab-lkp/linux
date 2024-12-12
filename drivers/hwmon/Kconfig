@@ -507,6 +507,17 @@ config SENSORS_CROS_EC
 	  This driver can also be built as a module. If so, the module
 	  will be called cros_ec_hwmon.
 
+config SENSORS_D3323AA
+	tristate "Nicera Pyroelectric IR sensors"
+	depends on GPIOLIB && OF
+	select BITREVERSE
+	help
+	  This driver provide support for Nicera D3-323-AA Pyroelectric IR
+	  sensor.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called d3-323-aa.
+
 config SENSORS_DRIVETEMP
 	tristate "Hard disk drives with temperature sensors"
 	depends on SCSI && ATA
