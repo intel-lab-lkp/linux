@@ -1092,6 +1092,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 			phy_init_eee(phy, !(priv->plat->flags &
 				STMMAC_FLAG_RX_CLK_RUNS_IN_LPI)) >= 0;
 		priv->eee_enabled = stmmac_eee_init(priv);
+		priv->tx_lpi_timer = phy->eee_cfg.tx_lpi_timer;
 		priv->tx_lpi_enabled = priv->eee_enabled;
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
@@ -1188,6 +1189,15 @@ static int stmmac_init_phy(struct net_device *dev)
 	} else {
 		fwnode_handle_put(phy_fwnode);
 		ret = phylink_fwnode_phy_connect(priv->phylink, fwnode, 0);
+	}
+
+	if (ret == 0) {
+		struct ethtool_keee eee;
+
+		if (phylink_ethtool_get_eee(priv->phylink, &eee)) {
+			eee.tx_lpi_timer = priv->tx_lpi_timer;
+			phylink_ethtool_set_eee(priv->phylink, &eee);
+		}
 	}
 
 	if (!priv->plat->pmt) {
@@ -3442,10 +3452,6 @@ static int stmmac_hw_setup(struct net_device *dev, bool ptp_register)
 
 	priv->eee_tw_timer = STMMAC_DEFAULT_TWT_LS;
 
-	/* Convert the timer from msec to usec */
-	if (!priv->tx_lpi_timer)
-		priv->tx_lpi_timer = eee_timer * 1000;
-
 	if (priv->use_riwt) {
 		u32 queue;
 
@@ -3911,6 +3917,10 @@ static int __stmmac_open(struct net_device *dev,
 	int mode = priv->plat->phy_interface;
 	u32 chan;
 	int ret;
+
+	/* Initialise the tx lpi timer, converting from msec to usec */
+	if (!priv->tx_lpi_timer)
+		priv->tx_lpi_timer = eee_timer * 1000;
 
 	ret = pm_runtime_resume_and_get(priv->device);
 	if (ret < 0)
