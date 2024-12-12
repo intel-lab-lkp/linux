@@ -1967,8 +1967,8 @@ static int resctrl_config_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
 	return ret;
 }
 
-static bool mbm_cntr_assigned(struct rdt_resource *r, struct rdt_mon_domain *d,
-			      struct rdtgroup *rdtgrp, enum resctrl_event_id evtid)
+bool mbm_cntr_assigned(struct rdt_resource *r, struct rdt_mon_domain *d,
+		       struct rdtgroup *rdtgrp, enum resctrl_event_id evtid)
 {
 	int cntr_id;
 

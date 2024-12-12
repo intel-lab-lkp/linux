@@ -527,6 +527,12 @@ void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 	/* When picking a CPU from cpu_mask, ensure it can't race with cpuhp */
 	lockdep_assert_cpus_held();
 
+	if (resctrl_arch_mbm_cntr_assign_enabled(r) && is_mbm_event(evtid) &&
+	    !mbm_cntr_assigned(r, d, rdtgrp, evtid)) {
+		rr->err = -ENOENT;
+		return;
+	}
+
 	/*
 	 * Setup the parameters to pass to mon_event_count() to read the data.
 	 */
@@ -618,6 +624,8 @@ checkresult:
 		seq_puts(m, "Error\n");
 	else if (rr.err == -EINVAL)
 		seq_puts(m, "Unavailable\n");
+	else if (rr.err == -ENOENT)
+		seq_puts(m, "Unassigned\n");
 	else
 		seq_printf(m, "%llu\n", rr.val);
 
