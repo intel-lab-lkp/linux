@@ -39,7 +39,7 @@
 #define FUSE_NOWRITE INT_MIN
 
 /** It could be as large as PATH_MAX, but would that have any uses? */
-#define FUSE_NAME_MAX 1024
+#define FUSE_NAME_MAX (3 * 1024)
 
 /** Number of dentries for each connection in the control filesystem */
 #define FUSE_CTL_NUM_DENTRIES 5
