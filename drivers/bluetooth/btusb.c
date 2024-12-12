@@ -3645,6 +3645,32 @@ static const struct file_operations force_poll_sync_fops = {
 	.llseek		= default_llseek,
 };
 
+static ssize_t isoc_alt_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	struct btusb_data *data = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", data->isoc_altsetting);
+}
+
+static ssize_t isoc_alt_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct btusb_data *data = dev_get_drvdata(dev);
+	int alt;
+	int ret;
+
+	if (kstrtoint(buf, 10, &alt))
+		return -EINVAL;
+
+	ret = btusb_switch_alt_setting(data->hdev, alt);
+	return ret < 0 ? ret : count;
+}
+
+static DEVICE_ATTR_RW(isoc_alt);
+
 static int btusb_probe(struct usb_interface *intf,
 		       const struct usb_device_id *id)
 {
@@ -4032,6 +4058,10 @@ static int btusb_probe(struct usb_interface *intf,
 	debugfs_create_file("force_poll_sync", 0644, hdev->debugfs, data,
 			    &force_poll_sync_fops);
 
+	err = device_create_file(&intf->dev, &dev_attr_isoc_alt);
+	if (err)
+		goto out_free_dev;
+
 	return 0;
 
 out_free_dev:
@@ -4052,6 +4082,8 @@ static void btusb_disconnect(struct usb_interface *intf)
 		return;
 
 	hdev = data->hdev;
+	device_remove_file(&intf->dev, &dev_attr_isoc_alt);
+
 	usb_set_intfdata(data->intf, NULL);
 
 	if (data->isoc)
