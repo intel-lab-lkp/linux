@@ -25,13 +25,44 @@
 
 int hinic3_alloc_rxqs(struct net_device *netdev)
 {
-	/* Completed by later submission due to LoC limit. */
-	return -EFAULT;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	struct pci_dev *pdev = nic_dev->pdev;
+	u16 num_rxqs = nic_dev->max_qps;
+	struct hinic3_rxq *rxq;
+	u64 rxq_size;
+	u16 q_id;
+
+	rxq_size = num_rxqs * sizeof(*nic_dev->rxqs);
+	if (!rxq_size) {
+		dev_err(hwdev->dev, "Cannot allocate zero size rxqs\n");
+		return -EINVAL;
+	}
+
+	nic_dev->rxqs = kzalloc(rxq_size, GFP_KERNEL);
+	if (!nic_dev->rxqs)
+		return -ENOMEM;
+
+	for (q_id = 0; q_id < num_rxqs; q_id++) {
+		rxq = &nic_dev->rxqs[q_id];
+		rxq->netdev = netdev;
+		rxq->dev = &pdev->dev;
+		rxq->q_id = q_id;
+		rxq->buf_len = nic_dev->rx_buff_len;
+		rxq->rx_buff_shift = ilog2(nic_dev->rx_buff_len);
+		rxq->dma_rx_buff_size = nic_dev->dma_rx_buff_size;
+		rxq->q_depth = nic_dev->q_params.rq_depth;
+		rxq->q_mask = nic_dev->q_params.rq_depth - 1;
+	}
+
+	return 0;
 }
 
 void hinic3_free_rxqs(struct net_device *netdev)
 {
-	/* Completed by later submission due to LoC limit. */
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+
+	kfree(nic_dev->rxqs);
 }
 
 static int rx_alloc_mapped_page(struct net_device *netdev, struct hinic3_rx_info *rx_info)
@@ -61,6 +92,29 @@ static int rx_alloc_mapped_page(struct net_device *netdev, struct hinic3_rx_info
 	rx_info->page_offset = 0;
 
 	return 0;
+}
+
+/* Associate fixed completion element to every wqe in the rq. Every rq wqe will
+ * always post completion to the same place.
+ */
+static void rq_associate_cqes(struct hinic3_rxq *rxq)
+{
+	struct hinic3_queue_pages *qpages;
+	struct hinic3_rq_wqe *rq_wqe;
+	dma_addr_t cqe_dma;
+	int cqe_len;
+	u32 i;
+
+	/* unit of cqe length is 16B */
+	cqe_len = sizeof(struct hinic3_rq_cqe) >> HINIC3_CQE_SIZE_SHIFT;
+	qpages = &rxq->rq->wq.qpages;
+
+	for (i = 0; i < rxq->q_depth; i++) {
+		rq_wqe = get_q_element(qpages, i, NULL);
+		cqe_dma = rxq->cqe_start_paddr + i * sizeof(struct hinic3_rq_cqe);
+		rq_wqe->cqe_hi_addr = upper_32_bits(cqe_dma);
+		rq_wqe->cqe_lo_addr = lower_32_bits(cqe_dma);
+	}
 }
 
 static void rq_wqe_buff_set(struct hinic3_io_queue *rq, uint32_t wqe_idx,
@@ -104,6 +158,48 @@ static u32 hinic3_rx_fill_buffers(struct hinic3_rxq *rxq)
 	}
 
 	return i;
+}
+
+static u32 hinic3_rx_alloc_buffers(struct net_device *netdev, u32 rq_depth,
+				   struct hinic3_rx_info *rx_info_arr)
+{
+	u32 free_wqebbs = rq_depth - 1;
+	u32 idx;
+	int err;
+
+	for (idx = 0; idx < free_wqebbs; idx++) {
+		err = rx_alloc_mapped_page(netdev, &rx_info_arr[idx]);
+		if (err)
+			break;
+	}
+
+	return idx;
+}
+
+static void hinic3_rx_free_buffers(struct net_device *netdev, u32 q_depth,
+				   struct hinic3_rx_info *rx_info_arr)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_rx_info *rx_info;
+	u32 i;
+
+	/* Free all the Rx ring sk_buffs */
+	for (i = 0; i < q_depth; i++) {
+		rx_info = &rx_info_arr[i];
+
+		if (rx_info->buf_dma_addr) {
+			dma_unmap_page(&nic_dev->pdev->dev,
+				       rx_info->buf_dma_addr,
+				       nic_dev->dma_rx_buff_size,
+				       DMA_FROM_DEVICE);
+			rx_info->buf_dma_addr = 0;
+		}
+
+		if (rx_info->page) {
+			__free_pages(rx_info->page, nic_dev->page_order);
+			rx_info->page = NULL;
+		}
+	}
 }
 
 static void hinic3_reuse_rx_page(struct hinic3_rxq *rxq,
@@ -353,6 +449,119 @@ static int recv_one_pkt(struct hinic3_rxq *rxq, struct hinic3_rq_cqe *rx_cqe,
 		netif_receive_skb(skb);
 	} else {
 		napi_gro_receive(&rxq->irq_cfg->napi, skb);
+	}
+
+	return 0;
+}
+
+int hinic3_alloc_rxqs_res(struct net_device *netdev, u16 num_rq,
+			  u32 rq_depth, struct hinic3_dyna_rxq_res *rxqs_res)
+{
+	u64 cqe_mem_size = sizeof(struct hinic3_rq_cqe) * rq_depth;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_dyna_rxq_res *rqres;
+	u32 pkt_idx;
+	int idx, i;
+	u64 size;
+
+	for (idx = 0; idx < num_rq; idx++) {
+		rqres = &rxqs_res[idx];
+		size = sizeof(*rqres->rx_info) * rq_depth;
+		rqres->rx_info = kzalloc(size, GFP_KERNEL);
+		if (!rqres->rx_info)
+			goto err_out;
+
+		rqres->cqe_start_vaddr = dma_alloc_coherent(&nic_dev->pdev->dev, cqe_mem_size,
+							    &rqres->cqe_start_paddr,
+							    GFP_KERNEL);
+		if (!rqres->cqe_start_vaddr) {
+			kfree(rqres->rx_info);
+			goto err_out;
+		}
+
+		pkt_idx = hinic3_rx_alloc_buffers(netdev, rq_depth, rqres->rx_info);
+		if (!pkt_idx) {
+			dma_free_coherent(&nic_dev->pdev->dev, cqe_mem_size,
+					  rqres->cqe_start_vaddr,
+					  rqres->cqe_start_paddr);
+			kfree(rqres->rx_info);
+			netdev_err(netdev, "Failed to alloc rxq%d rx buffers\n", idx);
+			goto err_out;
+		}
+		rqres->next_to_alloc = (u16)pkt_idx;
+	}
+	return 0;
+
+err_out:
+	for (i = 0; i < idx; i++) {
+		rqres = &rxqs_res[i];
+
+		hinic3_rx_free_buffers(netdev, rq_depth, rqres->rx_info);
+		dma_free_coherent(&nic_dev->pdev->dev, cqe_mem_size,
+				  rqres->cqe_start_vaddr,
+				  rqres->cqe_start_paddr);
+		kfree(rqres->rx_info);
+	}
+
+	return -ENOMEM;
+}
+
+void hinic3_free_rxqs_res(struct net_device *netdev, u16 num_rq,
+			  u32 rq_depth, struct hinic3_dyna_rxq_res *rxqs_res)
+{
+	u64 cqe_mem_size = sizeof(struct hinic3_rq_cqe) * rq_depth;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_dyna_rxq_res *rqres;
+	int idx;
+
+	for (idx = 0; idx < num_rq; idx++) {
+		rqres = &rxqs_res[idx];
+
+		hinic3_rx_free_buffers(netdev, rq_depth, rqres->rx_info);
+		dma_free_coherent(&nic_dev->pdev->dev, cqe_mem_size,
+				  rqres->cqe_start_vaddr,
+				  rqres->cqe_start_paddr);
+		kfree(rqres->rx_info);
+	}
+}
+
+int hinic3_configure_rxqs(struct net_device *netdev, u16 num_rq,
+			  u32 rq_depth, struct hinic3_dyna_rxq_res *rxqs_res)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_dyna_rxq_res *rqres;
+	struct irq_info *msix_entry;
+	struct hinic3_rxq *rxq;
+	u16 q_id;
+	u32 pkts;
+
+	for (q_id = 0; q_id < num_rq; q_id++) {
+		rxq = &nic_dev->rxqs[q_id];
+		rqres = &rxqs_res[q_id];
+		msix_entry = &nic_dev->qps_irq_info[q_id];
+
+		rxq->irq_id = msix_entry->irq_id;
+		rxq->msix_entry_idx = msix_entry->msix_entry_idx;
+		rxq->next_to_update = 0;
+		rxq->next_to_alloc = rqres->next_to_alloc;
+		rxq->q_depth = rq_depth;
+		rxq->delta = rxq->q_depth;
+		rxq->q_mask = rxq->q_depth - 1;
+		rxq->cons_idx = 0;
+
+		rxq->cqe_arr = rqres->cqe_start_vaddr;
+		rxq->cqe_start_paddr = rqres->cqe_start_paddr;
+		rxq->rx_info = rqres->rx_info;
+
+		rxq->rq = &nic_dev->nic_io->rq[rxq->q_id];
+
+		rq_associate_cqes(rxq);
+
+		pkts = hinic3_rx_fill_buffers(rxq);
+		if (!pkts) {
+			netdev_err(netdev, "Failed to fill Rx buffer\n");
+			return -ENOMEM;
+		}
 	}
 
 	return 0;

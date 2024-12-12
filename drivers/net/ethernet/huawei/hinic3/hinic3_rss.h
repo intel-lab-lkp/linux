@@ -6,6 +6,8 @@
 
 #include <linux/netdevice.h>
 
+int hinic3_rss_init(struct net_device *netdev);
+void hinic3_rss_deinit(struct net_device *netdev);
 void hinic3_try_to_enable_rss(struct net_device *netdev);
 void hinic3_clear_rss_config(struct net_device *netdev);
 

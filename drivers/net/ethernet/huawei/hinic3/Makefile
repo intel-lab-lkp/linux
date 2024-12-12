@@ -11,6 +11,7 @@ hinic3-objs := hinic3_hwdev.o \
 	       hinic3_eqs.o \
 	       hinic3_queue_common.o \
 	       hinic3_mbox.o \
+	       hinic3_mgmt.o \
 	       hinic3_hw_comm.o \
 	       hinic3_wq.o \
 	       hinic3_cmdq.o \

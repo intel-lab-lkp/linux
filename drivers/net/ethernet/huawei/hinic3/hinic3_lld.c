@@ -6,6 +6,7 @@
 #include "hinic3_lld.h"
 #include "hinic3_hwdev.h"
 #include "hinic3_hw_cfg.h"
+#include "hinic3_pci_id_tbl.h"
 #include "hinic3_mgmt.h"
 
 #define HINIC3_VF_PCI_CFG_REG_BAR  0
@@ -307,6 +308,7 @@ static void hinic3_func_deinit(struct pci_dev *pdev)
 {
 	struct hinic3_pcidev *pci_adapter = pci_get_drvdata(pdev);
 
+	hinic3_flush_mgmt_workq(pci_adapter->hwdev);
 	hinic3_detach_aux_devices(pci_adapter->hwdev);
 	hinic3_free_hwdev(pci_adapter->hwdev);
 }
@@ -378,7 +380,7 @@ static void hinic3_remove(struct pci_dev *pdev)
 }
 
 static const struct pci_device_id hinic3_pci_table[] = {
-	/* Completed by later submission due to LoC limit. */
+	{PCI_VDEVICE(HUAWEI, PCI_DEV_ID_HINIC3_VF), 0},
 	{0, 0}
 
 };

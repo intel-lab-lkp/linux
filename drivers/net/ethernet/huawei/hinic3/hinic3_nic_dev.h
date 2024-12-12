@@ -36,6 +36,11 @@ struct nic_rss_type {
 	u8 udp_ipv4;
 };
 
+struct nic_rss_indirect_tbl_set {
+	u32 rsvd[4];
+	u16 entry[NIC_RSS_INDIR_SIZE];
+};
+
 struct hinic3_irq {
 	struct net_device  *netdev;
 	u16                msix_entry_idx;

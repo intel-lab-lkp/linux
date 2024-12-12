@@ -45,6 +45,12 @@ static int nic_feature_nego(struct hinic3_hwdev *hwdev, u8 opcode, u64 *s_featur
 	return 0;
 }
 
+int hinic3_get_nic_feature_from_hw(struct hinic3_nic_dev *nic_dev)
+{
+	return nic_feature_nego(nic_dev->hwdev, HINIC3_CMD_OP_GET,
+				&nic_dev->nic_io->feature_cap, 1);
+}
+
 int hinic3_set_nic_feature_to_hw(struct hinic3_nic_dev *nic_dev)
 {
 	return nic_feature_nego(nic_dev->hwdev, HINIC3_CMD_OP_SET,
@@ -87,6 +93,19 @@ static int hinic3_set_function_table(struct hinic3_hwdev *hwdev, u32 cfg_bitmap,
 	}
 
 	return 0;
+}
+
+int hinic3_init_function_table(struct hinic3_nic_dev *nic_dev)
+{
+	struct hinic3_nic_io *nic_io = nic_dev->nic_io;
+	struct hinic3_func_tbl_cfg func_tbl_cfg;
+	u32 cfg_bitmap;
+
+	func_tbl_cfg.mtu = 0x3FFF; /* default, max mtu */
+	func_tbl_cfg.rx_wqe_buf_size = nic_io->rx_buff_len;
+
+	cfg_bitmap = BIT(FUNC_CFG_INIT) | BIT(FUNC_CFG_MTU) | BIT(FUNC_CFG_RX_BUF_SIZE);
+	return hinic3_set_function_table(nic_dev->hwdev, cfg_bitmap, &func_tbl_cfg);
 }
 
 int hinic3_set_port_mtu(struct net_device *netdev, u16 new_mtu)
@@ -231,6 +250,60 @@ int hinic3_update_mac(struct hinic3_hwdev *hwdev, const u8 *old_mac, u8 *new_mac
 	return 0;
 }
 
+int hinic3_set_ci_table(struct hinic3_hwdev *hwdev, struct hinic3_sq_attr *attr)
+{
+	struct hinic3_cmd_cons_idx_attr cons_idx_attr;
+	u32 out_size = sizeof(cons_idx_attr);
+	int err;
+
+	memset(&cons_idx_attr, 0, sizeof(cons_idx_attr));
+	cons_idx_attr.func_idx = hinic3_global_func_id(hwdev);
+	cons_idx_attr.dma_attr_off  = attr->dma_attr_off;
+	cons_idx_attr.pending_limit = attr->pending_limit;
+	cons_idx_attr.coalescing_time  = attr->coalescing_time;
+
+	if (attr->intr_en) {
+		cons_idx_attr.intr_en = attr->intr_en;
+		cons_idx_attr.intr_idx = attr->intr_idx;
+	}
+
+	cons_idx_attr.l2nic_sqn = attr->l2nic_sqn;
+	cons_idx_attr.ci_addr = attr->ci_dma_base;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SQ_CI_ATTR_SET,
+				     &cons_idx_attr, sizeof(cons_idx_attr),
+				     &cons_idx_attr, &out_size);
+	if (err || !out_size || cons_idx_attr.msg_head.status) {
+		dev_err(hwdev->dev,
+			"Failed to set ci attribute table, err: %d, status: 0x%x, out_size: 0x%x\n",
+			err, cons_idx_attr.msg_head.status, out_size);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int hinic3_flush_qps_res(struct hinic3_hwdev *hwdev)
+{
+	struct hinic3_cmd_clear_qp_resource sq_res;
+	u32 out_size = sizeof(sq_res);
+	int err;
+
+	memset(&sq_res, 0, sizeof(sq_res));
+	sq_res.func_id = hinic3_global_func_id(hwdev);
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_CLEAR_QP_RESOURCE,
+				     &sq_res, sizeof(sq_res), &sq_res,
+				     &out_size);
+	if (err || !out_size || sq_res.msg_head.status) {
+		dev_err(hwdev->dev, "Failed to clear sq resources, err: %d, status: 0x%x, out size: 0x%x\n",
+			err, sq_res.msg_head.status, out_size);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 int hinic3_force_drop_tx_pkt(struct hinic3_hwdev *hwdev)
 {
 	struct hinic3_force_pkt_drop pkt_drop;
@@ -251,4 +324,72 @@ int hinic3_force_drop_tx_pkt(struct hinic3_hwdev *hwdev)
 	}
 
 	return pkt_drop.msg_head.status;
+}
+
+int hinic3_sync_dcb_state(struct hinic3_hwdev *hwdev, u8 op_code, u8 state)
+{
+	struct hinic3_cmd_set_dcb_state dcb_state;
+	u32 out_size = sizeof(dcb_state);
+	int err;
+
+	memset(&dcb_state, 0, sizeof(dcb_state));
+	dcb_state.op_code = op_code;
+	dcb_state.state = state;
+	dcb_state.func_id = hinic3_global_func_id(hwdev);
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_QOS_DCB_STATE,
+				     &dcb_state, sizeof(dcb_state), &dcb_state, &out_size);
+	if (err || dcb_state.head.status || !out_size) {
+		dev_err(hwdev->dev,
+			"Failed to set dcb state, err: %d, status: 0x%x, out size: 0x%x\n",
+			err, dcb_state.head.status, out_size);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int hinic3_get_link_status(struct hinic3_hwdev *hwdev, bool *link_status_up)
+{
+	struct mag_cmd_get_link_status get_link;
+	u32 out_size = sizeof(get_link);
+	int err;
+
+	memset(&get_link, 0, sizeof(get_link));
+	get_link.port_id = hinic3_physical_port_id(hwdev);
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, HINIC3_MOD_HILINK,
+				       MAG_CMD_GET_LINK_STATUS, &get_link,
+				       sizeof(get_link), &get_link, &out_size, 0);
+	if (err || !out_size || get_link.head.status) {
+		dev_err(hwdev->dev, "Failed to get link state, err: %d, status: 0x%x, out size: 0x%x\n",
+			err, get_link.head.status, out_size);
+		return -EIO;
+	}
+
+	*link_status_up = !!get_link.status;
+
+	return 0;
+}
+
+int hinic3_set_vport_enable(struct hinic3_hwdev *hwdev, u16 func_id, bool enable)
+{
+	struct hinic3_vport_state en_state;
+	u32 out_size = sizeof(en_state);
+	int err;
+
+	memset(&en_state, 0, sizeof(en_state));
+	en_state.func_id = func_id;
+	en_state.state = enable ? 1 : 0;
+
+	err = l2nic_msg_to_mgmt_sync(hwdev, HINIC3_NIC_CMD_SET_VPORT_ENABLE,
+				     &en_state, sizeof(en_state),
+				     &en_state, &out_size);
+	if (err || !out_size || en_state.msg_head.status) {
+		dev_err(hwdev->dev, "Failed to set vport state, err: %d, status: 0x%x, out size: 0x%x\n",
+			err, en_state.msg_head.status, out_size);
+		return -EINVAL;
+	}
+
+	return 0;
 }
