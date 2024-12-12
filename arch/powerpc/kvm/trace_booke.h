@@ -135,25 +135,11 @@ TRACE_EVENT(kvm_booke206_ref_release,
 		__entry->pfn, __entry->flags)
 );
 
-#ifdef CONFIG_SPE_POSSIBLE
-#define kvm_trace_symbol_irqprio_spe \
-	{BOOKE_IRQPRIO_SPE_UNAVAIL, "SPE_UNAVAIL"}, \
-	{BOOKE_IRQPRIO_SPE_FP_DATA, "SPE_FP_DATA"}, \
-	{BOOKE_IRQPRIO_SPE_FP_ROUND, "SPE_FP_ROUND"},
-#else
-#define kvm_trace_symbol_irqprio_spe
-#endif
-
-#ifdef CONFIG_PPC_E500MC
 #define kvm_trace_symbol_irqprio_e500mc \
 	{BOOKE_IRQPRIO_ALTIVEC_UNAVAIL, "ALTIVEC_UNAVAIL"}, \
 	{BOOKE_IRQPRIO_ALTIVEC_ASSIST, "ALTIVEC_ASSIST"},
-#else
-#define kvm_trace_symbol_irqprio_e500mc
-#endif
 
 #define kvm_trace_symbol_irqprio \
-	kvm_trace_symbol_irqprio_spe \
 	kvm_trace_symbol_irqprio_e500mc \
 	{BOOKE_IRQPRIO_DATA_STORAGE, "DATA_STORAGE"}, \
 	{BOOKE_IRQPRIO_INST_STORAGE, "INST_STORAGE"}, \

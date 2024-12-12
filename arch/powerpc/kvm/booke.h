@@ -21,15 +21,8 @@
 #define BOOKE_IRQPRIO_ALIGNMENT 2
 #define BOOKE_IRQPRIO_PROGRAM 3
 #define BOOKE_IRQPRIO_FP_UNAVAIL 4
-#ifdef CONFIG_SPE_POSSIBLE
-#define BOOKE_IRQPRIO_SPE_UNAVAIL 5
-#define BOOKE_IRQPRIO_SPE_FP_DATA 6
-#define BOOKE_IRQPRIO_SPE_FP_ROUND 7
-#endif
-#ifdef CONFIG_PPC_E500MC
 #define BOOKE_IRQPRIO_ALTIVEC_UNAVAIL 5
 #define BOOKE_IRQPRIO_ALTIVEC_ASSIST 6
-#endif
 #define BOOKE_IRQPRIO_SYSCALL 8
 #define BOOKE_IRQPRIO_AP_UNAVAIL 9
 #define BOOKE_IRQPRIO_DTLB_MISS 10
@@ -59,7 +52,6 @@
 			  (1 << BOOKE_IRQPRIO_WATCHDOG) | \
 			  (1 << BOOKE_IRQPRIO_CRITICAL))
 
-extern unsigned long kvmppc_booke_handlers;
 extern unsigned long kvmppc_booke_handler_addr[];
 
 void kvmppc_set_msr(struct kvm_vcpu *vcpu, u32 new_msr);

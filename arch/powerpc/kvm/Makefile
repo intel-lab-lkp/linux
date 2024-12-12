@@ -11,20 +11,6 @@ common-objs-y += powerpc.o emulate_loadstore.o
 obj-$(CONFIG_KVM_EXIT_TIMING) += timing.o
 obj-$(CONFIG_KVM_BOOK3S_HANDLER) += book3s_exports.o
 
-AFLAGS_booke_interrupts.o := -I$(objtree)/$(obj)
-
-kvm-e500-objs := \
-	$(common-objs-y) \
-	emulate.o \
-	booke.o \
-	booke_emulate.o \
-	booke_interrupts.o \
-	e500.o \
-	e500_mmu.o \
-	e500_mmu_host.o \
-	e500_emulate.o
-kvm-objs-$(CONFIG_KVM_E500V2) := $(kvm-e500-objs)
-
 kvm-e500mc-objs := \
 	$(common-objs-y) \
 	emulate.o \
@@ -127,7 +113,6 @@ kvm-objs-$(CONFIG_KVM_MPIC) += mpic.o
 
 kvm-y += $(kvm-objs-m) $(kvm-objs-y)
 
-obj-$(CONFIG_KVM_E500V2) += kvm.o
 obj-$(CONFIG_KVM_E500MC) += kvm.o
 obj-$(CONFIG_KVM_BOOK3S_64) += kvm.o
 obj-$(CONFIG_KVM_BOOK3S_32) += kvm.o

@@ -46,10 +46,6 @@ struct tlbe_priv {
 	struct tlbe_ref ref;
 };
 
-#ifdef CONFIG_KVM_E500V2
-struct vcpu_id_table;
-#endif
-
 struct kvmppc_e500_tlb_params {
 	int entries, ways, sets;
 };
@@ -88,13 +84,6 @@ struct kvmppc_vcpu_e500 {
 	/* Minimum and maximum address mapped my TLB1 */
 	unsigned long tlb1_min_eaddr;
 	unsigned long tlb1_max_eaddr;
-
-#ifdef CONFIG_KVM_E500V2
-	u32 pid[E500_PID_NUM];
-
-	/* vcpu id table */
-	struct vcpu_id_table *idt;
-#endif
 };
 
 static inline struct kvmppc_vcpu_e500 *to_e500(struct kvm_vcpu *vcpu)
@@ -139,12 +128,6 @@ int kvmppc_get_one_reg_e500_tlb(struct kvm_vcpu *vcpu, u64 id,
 				union kvmppc_one_reg *val);
 int kvmppc_set_one_reg_e500_tlb(struct kvm_vcpu *vcpu, u64 id,
 			       union kvmppc_one_reg *val);
-
-#ifdef CONFIG_KVM_E500V2
-unsigned int kvmppc_e500_get_sid(struct kvmppc_vcpu_e500 *vcpu_e500,
-				 unsigned int as, unsigned int gid,
-				 unsigned int pr, int avoid_recursion);
-#endif
 
 /* TLB helper functions */
 static inline unsigned int
@@ -257,13 +240,6 @@ static inline int tlbe_is_host_safe(const struct kvm_vcpu *vcpu,
 	if (!get_tlb_v(tlbe))
 		return 0;
 
-#ifndef CONFIG_KVM_BOOKE_HV
-	/* Does it match current guest AS? */
-	/* XXX what about IS != DS? */
-	if (get_tlb_ts(tlbe) != !!(vcpu->arch.shared->msr & MSR_IS))
-		return 0;
-#endif
-
 	gpa = get_tlb_raddr(tlbe);
 	if (!gfn_to_memslot(vcpu->kvm, gpa >> PAGE_SHIFT))
 		/* Mapping is not for RAM. */
@@ -283,7 +259,6 @@ void kvmppc_e500_tlbil_one(struct kvmppc_vcpu_e500 *vcpu_e500,
 			   struct kvm_book3e_206_tlb_entry *gtlbe);
 void kvmppc_e500_tlbil_all(struct kvmppc_vcpu_e500 *vcpu_e500);
 
-#ifdef CONFIG_KVM_BOOKE_HV
 #define kvmppc_e500_get_tlb_stid(vcpu, gtlbe)       get_tlb_tid(gtlbe)
 #define get_tlbmiss_tid(vcpu)           get_cur_pid(vcpu)
 #define get_tlb_sts(gtlbe)              (gtlbe->mas1 & MAS1_TS)
@@ -306,21 +281,6 @@ static inline int get_lpid(struct kvm_vcpu *vcpu)
 {
 	return get_thread_specific_lpid(vcpu->kvm->arch.lpid);
 }
-#else
-unsigned int kvmppc_e500_get_tlb_stid(struct kvm_vcpu *vcpu,
-				      struct kvm_book3e_206_tlb_entry *gtlbe);
-
-static inline unsigned int get_tlbmiss_tid(struct kvm_vcpu *vcpu)
-{
-	struct kvmppc_vcpu_e500 *vcpu_e500 = to_e500(vcpu);
-	unsigned int tidseld = (vcpu->arch.shared->mas4 >> 16) & 0xf;
-
-	return vcpu_e500->pid[tidseld];
-}
-
-/* Force TS=1 for all guest mappings. */
-#define get_tlb_sts(gtlbe)              (MAS1_TS)
-#endif /* !BOOKE_HV */
 
 static inline bool has_feature(const struct kvm_vcpu *vcpu,
 			       enum vcpu_ftr ftr)

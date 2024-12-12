@@ -163,30 +163,6 @@ int kvmppc_booke_emulate_mtspr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 		debug_inst = true;
 		vcpu->arch.dbg_reg.iac2 = spr_val;
 		break;
-#if CONFIG_PPC_ADV_DEBUG_IACS > 2
-	case SPRN_IAC3:
-		/*
-		 * If userspace is debugging guest then guest
-		 * can not access debug registers.
-		 */
-		if (vcpu->guest_debug)
-			break;
-
-		debug_inst = true;
-		vcpu->arch.dbg_reg.iac3 = spr_val;
-		break;
-	case SPRN_IAC4:
-		/*
-		 * If userspace is debugging guest then guest
-		 * can not access debug registers.
-		 */
-		if (vcpu->guest_debug)
-			break;
-
-		debug_inst = true;
-		vcpu->arch.dbg_reg.iac4 = spr_val;
-		break;
-#endif
 	case SPRN_DAC1:
 		/*
 		 * If userspace is debugging guest then guest
@@ -296,9 +272,7 @@ int kvmppc_booke_emulate_mtspr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 
 	case SPRN_IVPR:
 		vcpu->arch.ivpr = spr_val;
-#ifdef CONFIG_KVM_BOOKE_HV
 		mtspr(SPRN_GIVPR, spr_val);
-#endif
 		break;
 	case SPRN_IVOR0:
 		vcpu->arch.ivor[BOOKE_IRQPRIO_CRITICAL] = spr_val;
@@ -308,9 +282,7 @@ int kvmppc_booke_emulate_mtspr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 		break;
 	case SPRN_IVOR2:
 		vcpu->arch.ivor[BOOKE_IRQPRIO_DATA_STORAGE] = spr_val;
-#ifdef CONFIG_KVM_BOOKE_HV
 		mtspr(SPRN_GIVOR2, spr_val);
-#endif
 		break;
 	case SPRN_IVOR3:
 		vcpu->arch.ivor[BOOKE_IRQPRIO_INST_STORAGE] = spr_val;
@@ -329,9 +301,7 @@ int kvmppc_booke_emulate_mtspr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 		break;
 	case SPRN_IVOR8:
 		vcpu->arch.ivor[BOOKE_IRQPRIO_SYSCALL] = spr_val;
-#ifdef CONFIG_KVM_BOOKE_HV
 		mtspr(SPRN_GIVOR8, spr_val);
-#endif
 		break;
 	case SPRN_IVOR9:
 		vcpu->arch.ivor[BOOKE_IRQPRIO_AP_UNAVAIL] = spr_val;
@@ -357,14 +327,10 @@ int kvmppc_booke_emulate_mtspr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 	case SPRN_MCSR:
 		vcpu->arch.mcsr &= ~spr_val;
 		break;
-#if defined(CONFIG_64BIT)
 	case SPRN_EPCR:
 		kvmppc_set_epcr(vcpu, spr_val);
-#ifdef CONFIG_KVM_BOOKE_HV
 		mtspr(SPRN_EPCR, vcpu->arch.shadow_epcr);
-#endif
 		break;
-#endif
 	default:
 		emulated = EMULATE_FAIL;
 	}
@@ -411,14 +377,6 @@ int kvmppc_booke_emulate_mfspr(struct kvm_vcpu *vcpu, int sprn, ulong *spr_val)
 	case SPRN_IAC2:
 		*spr_val = vcpu->arch.dbg_reg.iac2;
 		break;
-#if CONFIG_PPC_ADV_DEBUG_IACS > 2
-	case SPRN_IAC3:
-		*spr_val = vcpu->arch.dbg_reg.iac3;
-		break;
-	case SPRN_IAC4:
-		*spr_val = vcpu->arch.dbg_reg.iac4;
-		break;
-#endif
 	case SPRN_DAC1:
 		*spr_val = vcpu->arch.dbg_reg.dac1;
 		break;
@@ -497,11 +455,9 @@ int kvmppc_booke_emulate_mfspr(struct kvm_vcpu *vcpu, int sprn, ulong *spr_val)
 	case SPRN_MCSR:
 		*spr_val = vcpu->arch.mcsr;
 		break;
-#if defined(CONFIG_64BIT)
 	case SPRN_EPCR:
 		*spr_val = vcpu->arch.epcr;
 		break;
-#endif
 
 	default:
 		emulated = EMULATE_FAIL;

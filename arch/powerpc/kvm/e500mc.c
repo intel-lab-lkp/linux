@@ -202,10 +202,7 @@ int kvmppc_core_vcpu_setup(struct kvm_vcpu *vcpu)
 	struct kvmppc_vcpu_e500 *vcpu_e500 = to_e500(vcpu);
 
 	vcpu->arch.shadow_epcr = SPRN_EPCR_DSIGS | SPRN_EPCR_DGTMI | \
-				 SPRN_EPCR_DUVD;
-#ifdef CONFIG_64BIT
-	vcpu->arch.shadow_epcr |= SPRN_EPCR_ICM;
-#endif
+				 SPRN_EPCR_DUVD | SPRN_EPCR_ICM;
 	vcpu->arch.shadow_msrp = MSRP_UCLEP | MSRP_PMMP;
 
 	vcpu->arch.pvr = mfspr(SPRN_PVR);

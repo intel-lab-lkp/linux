@@ -50,16 +50,6 @@ static inline u32 e500_shadow_mas3_attrib(u32 mas3, int usermode)
 	/* Mask off reserved bits. */
 	mas3 &= MAS3_ATTRIB_MASK;
 
-#ifndef CONFIG_KVM_BOOKE_HV
-	if (!usermode) {
-		/* Guest is in supervisor mode,
-		 * so we need to translate guest
-		 * supervisor permissions into user permissions. */
-		mas3 &= ~E500_TLB_USER_PERM_MASK;
-		mas3 |= (mas3 & E500_TLB_SUPER_PERM_MASK) << 1;
-	}
-	mas3 |= E500_TLB_SUPER_PERM_MASK;
-#endif
 	return mas3;
 }
 
@@ -78,16 +68,12 @@ static inline void __write_host_tlbe(struct kvm_book3e_206_tlb_entry *stlbe,
 	mtspr(SPRN_MAS2, (unsigned long)stlbe->mas2);
 	mtspr(SPRN_MAS3, (u32)stlbe->mas7_3);
 	mtspr(SPRN_MAS7, (u32)(stlbe->mas7_3 >> 32));
-#ifdef CONFIG_KVM_BOOKE_HV
 	mtspr(SPRN_MAS8, MAS8_TGS | get_thread_specific_lpid(lpid));
-#endif
 	asm volatile("isync; tlbwe" : : : "memory");
 
-#ifdef CONFIG_KVM_BOOKE_HV
 	/* Must clear mas8 for other host tlbwe's */
 	mtspr(SPRN_MAS8, 0);
 	isync();
-#endif
 	local_irq_restore(flags);
 
 	trace_kvm_booke206_stlb_write(mas0, stlbe->mas8, stlbe->mas1,
@@ -152,34 +138,6 @@ static void write_stlbe(struct kvmppc_vcpu_e500 *vcpu_e500,
 	write_host_tlbe(vcpu_e500, stlbsel, sesel, stlbe);
 	preempt_enable();
 }
-
-#ifdef CONFIG_KVM_E500V2
-/* XXX should be a hook in the gva2hpa translation */
-void kvmppc_map_magic(struct kvm_vcpu *vcpu)
-{
-	struct kvmppc_vcpu_e500 *vcpu_e500 = to_e500(vcpu);
-	struct kvm_book3e_206_tlb_entry magic;
-	ulong shared_page = ((ulong)vcpu->arch.shared) & PAGE_MASK;
-	unsigned int stid;
-	kvm_pfn_t pfn;
-
-	pfn = (kvm_pfn_t)virt_to_phys((void *)shared_page) >> PAGE_SHIFT;
-	get_page(pfn_to_page(pfn));
-
-	preempt_disable();
-	stid = kvmppc_e500_get_sid(vcpu_e500, 0, 0, 0, 0);
-
-	magic.mas1 = MAS1_VALID | MAS1_TS | MAS1_TID(stid) |
-		     MAS1_TSIZE(BOOK3E_PAGESZ_4K);
-	magic.mas2 = vcpu->arch.magic_page_ea | MAS2_M;
-	magic.mas7_3 = ((u64)pfn << PAGE_SHIFT) |
-		       MAS3_SW | MAS3_SR | MAS3_UW | MAS3_UR;
-	magic.mas8 = 0;
-
-	__write_host_tlbe(&magic, MAS0_TLBSEL(1) | MAS0_ESEL(tlbcam_index), 0);
-	preempt_enable();
-}
-#endif
 
 void inval_gtlbe_on_host(struct kvmppc_vcpu_e500 *vcpu_e500, int tlbsel,
 			 int esel)
@@ -616,7 +574,6 @@ void kvmppc_mmu_map(struct kvm_vcpu *vcpu, u64 eaddr, gpa_t gpaddr,
 	}
 }
 
-#ifdef CONFIG_KVM_BOOKE_HV
 int kvmppc_load_last_inst(struct kvm_vcpu *vcpu,
 		enum instruction_fetch_type type, unsigned long *instr)
 {
@@ -646,11 +603,7 @@ int kvmppc_load_last_inst(struct kvm_vcpu *vcpu,
 	mas1 = mfspr(SPRN_MAS1);
 	mas2 = mfspr(SPRN_MAS2);
 	mas3 = mfspr(SPRN_MAS3);
-#ifdef CONFIG_64BIT
 	mas7_mas3 = mfspr(SPRN_MAS7_MAS3);
-#else
-	mas7_mas3 = ((u64)mfspr(SPRN_MAS7) << 32) | mas3;
-#endif
 	local_irq_restore(flags);
 
 	/*
@@ -706,13 +659,6 @@ int kvmppc_load_last_inst(struct kvm_vcpu *vcpu,
 
 	return EMULATE_DONE;
 }
-#else
-int kvmppc_load_last_inst(struct kvm_vcpu *vcpu,
-		enum instruction_fetch_type type, unsigned long *instr)
-{
-	return EMULATE_AGAIN;
-}
-#endif
 
 /************* MMU Notifiers *************/
 

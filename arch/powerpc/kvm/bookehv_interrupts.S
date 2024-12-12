@@ -18,13 +18,9 @@
 #include <asm/asm-offsets.h>
 #include <asm/bitsperlong.h>
 
-#ifdef CONFIG_64BIT
 #include <asm/exception-64e.h>
 #include <asm/hw_irq.h>
 #include <asm/irqflags.h>
-#else
-#include "../kernel/head_booke.h" /* for THREAD_NORMSAVE() */
-#endif
 
 #define LONGBYTES		(BITS_PER_LONG / 8)
 
@@ -155,7 +151,6 @@ END_BTB_FLUSH_SECTION
 	b	kvmppc_resume_host
 .endm
 
-#ifdef CONFIG_64BIT
 /* Exception types */
 #define EX_GEN			1
 #define EX_GDBELL		2
@@ -273,99 +268,6 @@ kvm_handler BOOKE_INTERRUPT_DEBUG, EX_PARAMS(CRIT), \
 	SPRN_CSRR0, SPRN_CSRR1, 0
 kvm_handler BOOKE_INTERRUPT_LRAT_ERROR, EX_PARAMS(GEN), \
 	SPRN_SRR0, SPRN_SRR1, (NEED_EMU | NEED_DEAR | NEED_ESR)
-#else
-/*
- * For input register values, see arch/powerpc/include/asm/kvm_booke_hv_asm.h
- */
-.macro kvm_handler intno srr0, srr1, flags
-_GLOBAL(kvmppc_handler_\intno\()_\srr1)
-	PPC_LL	r11, THREAD_KVM_VCPU(r10)
-	PPC_STL r3, VCPU_GPR(R3)(r11)
-	mfspr	r3, SPRN_SPRG_RSCRATCH0
-	PPC_STL	r4, VCPU_GPR(R4)(r11)
-	PPC_LL	r4, THREAD_NORMSAVE(0)(r10)
-	PPC_STL	r5, VCPU_GPR(R5)(r11)
-	PPC_STL	r13, VCPU_CR(r11)
-	mfspr	r5, \srr0
-	PPC_STL	r3, VCPU_GPR(R10)(r11)
-	PPC_LL	r3, THREAD_NORMSAVE(2)(r10)
-	PPC_STL	r6, VCPU_GPR(R6)(r11)
-	PPC_STL	r4, VCPU_GPR(R11)(r11)
-	mfspr	r6, \srr1
-	PPC_STL	r7, VCPU_GPR(R7)(r11)
-	PPC_STL	r8, VCPU_GPR(R8)(r11)
-	PPC_STL	r9, VCPU_GPR(R9)(r11)
-	PPC_STL r3, VCPU_GPR(R13)(r11)
-	mfctr	r7
-	PPC_STL	r12, VCPU_GPR(R12)(r11)
-	PPC_STL	r7, VCPU_CTR(r11)
-	mr	r4, r11
-	kvm_handler_common \intno, \srr0, \flags
-.endm
-
-.macro kvm_lvl_handler intno scratch srr0, srr1, flags
-_GLOBAL(kvmppc_handler_\intno\()_\srr1)
-	mfspr	r10, SPRN_SPRG_THREAD
-	PPC_LL	r11, THREAD_KVM_VCPU(r10)
-	PPC_STL r3, VCPU_GPR(R3)(r11)
-	mfspr	r3, \scratch
-	PPC_STL	r4, VCPU_GPR(R4)(r11)
-	PPC_LL	r4, GPR9(r8)
-	PPC_STL	r5, VCPU_GPR(R5)(r11)
-	PPC_STL	r9, VCPU_CR(r11)
-	mfspr	r5, \srr0
-	PPC_STL	r3, VCPU_GPR(R8)(r11)
-	PPC_LL	r3, GPR10(r8)
-	PPC_STL	r6, VCPU_GPR(R6)(r11)
-	PPC_STL	r4, VCPU_GPR(R9)(r11)
-	mfspr	r6, \srr1
-	PPC_LL	r4, GPR11(r8)
-	PPC_STL	r7, VCPU_GPR(R7)(r11)
-	PPC_STL r3, VCPU_GPR(R10)(r11)
-	mfctr	r7
-	PPC_STL	r12, VCPU_GPR(R12)(r11)
-	PPC_STL r13, VCPU_GPR(R13)(r11)
-	PPC_STL	r4, VCPU_GPR(R11)(r11)
-	PPC_STL	r7, VCPU_CTR(r11)
-	mr	r4, r11
-	kvm_handler_common \intno, \srr0, \flags
-.endm
-
-kvm_lvl_handler BOOKE_INTERRUPT_CRITICAL, \
-	SPRN_SPRG_RSCRATCH_CRIT, SPRN_CSRR0, SPRN_CSRR1, 0
-kvm_lvl_handler BOOKE_INTERRUPT_MACHINE_CHECK, \
-	SPRN_SPRG_RSCRATCH_MC, SPRN_MCSRR0, SPRN_MCSRR1, 0
-kvm_handler BOOKE_INTERRUPT_DATA_STORAGE, \
-	SPRN_SRR0, SPRN_SRR1, (NEED_EMU | NEED_DEAR | NEED_ESR)
-kvm_handler BOOKE_INTERRUPT_INST_STORAGE, SPRN_SRR0, SPRN_SRR1, NEED_ESR
-kvm_handler BOOKE_INTERRUPT_EXTERNAL, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_ALIGNMENT, \
-	SPRN_SRR0, SPRN_SRR1, (NEED_DEAR | NEED_ESR)
-kvm_handler BOOKE_INTERRUPT_PROGRAM, SPRN_SRR0, SPRN_SRR1, (NEED_ESR | NEED_EMU)
-kvm_handler BOOKE_INTERRUPT_FP_UNAVAIL, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_SYSCALL, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_AP_UNAVAIL, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_DECREMENTER, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_FIT, SPRN_SRR0, SPRN_SRR1, 0
-kvm_lvl_handler BOOKE_INTERRUPT_WATCHDOG, \
-	SPRN_SPRG_RSCRATCH_CRIT, SPRN_CSRR0, SPRN_CSRR1, 0
-kvm_handler BOOKE_INTERRUPT_DTLB_MISS, \
-	SPRN_SRR0, SPRN_SRR1, (NEED_EMU | NEED_DEAR | NEED_ESR)
-kvm_handler BOOKE_INTERRUPT_ITLB_MISS, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_PERFORMANCE_MONITOR, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_DOORBELL, SPRN_SRR0, SPRN_SRR1, 0
-kvm_lvl_handler BOOKE_INTERRUPT_DOORBELL_CRITICAL, \
-	SPRN_SPRG_RSCRATCH_CRIT, SPRN_CSRR0, SPRN_CSRR1, 0
-kvm_handler BOOKE_INTERRUPT_HV_PRIV, SPRN_SRR0, SPRN_SRR1, NEED_EMU
-kvm_handler BOOKE_INTERRUPT_HV_SYSCALL, SPRN_SRR0, SPRN_SRR1, 0
-kvm_handler BOOKE_INTERRUPT_GUEST_DBELL, SPRN_GSRR0, SPRN_GSRR1, 0
-kvm_lvl_handler BOOKE_INTERRUPT_GUEST_DBELL_CRIT, \
-	SPRN_SPRG_RSCRATCH_CRIT, SPRN_CSRR0, SPRN_CSRR1, 0
-kvm_lvl_handler BOOKE_INTERRUPT_DEBUG, \
-	SPRN_SPRG_RSCRATCH_CRIT, SPRN_CSRR0, SPRN_CSRR1, 0
-kvm_lvl_handler BOOKE_INTERRUPT_DEBUG, \
-	SPRN_SPRG_RSCRATCH_DBG, SPRN_DSRR0, SPRN_DSRR1, 0
-#endif
 
 /* Registers:
  *  SPRG_SCRATCH0: guest r10
@@ -382,17 +284,13 @@ _GLOBAL(kvmppc_resume_host)
 	PPC_STL	r5, VCPU_LR(r4)
 	mfspr	r7, SPRN_SPRG5
 	stw	r3, VCPU_VRSAVE(r4)
-#ifdef CONFIG_64BIT
 	PPC_LL	r3, PACA_SPRG_VDSO(r13)
-#endif
 	mfspr	r5, SPRN_SPRG9
 	PPC_STD(r6, VCPU_SHARED_SPRG4, r11)
 	mfspr	r8, SPRN_SPRG6
 	PPC_STD(r7, VCPU_SHARED_SPRG5, r11)
 	mfspr	r9, SPRN_SPRG7
-#ifdef CONFIG_64BIT
 	mtspr	SPRN_SPRG_VDSO_WRITE, r3
-#endif
 	PPC_STD(r5, VCPU_SPRG9, r4)
 	PPC_STD(r8, VCPU_SHARED_SPRG6, r11)
 	mfxer	r3
