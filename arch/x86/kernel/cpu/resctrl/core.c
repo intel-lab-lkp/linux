@@ -145,7 +145,7 @@ u32 resctrl_arch_system_num_rmid_idx(void)
  * is always 20 on hsw server parts. The minimum cache bitmask length
  * allowed for HSW server is always 2 bits. Hardcode all of them.
  */
-static inline void cache_alloc_hsw_probe(void)
+static inline __init void cache_alloc_hsw_probe(void)
 {
 	struct rdt_hw_resource *hw_res = &rdt_resources_all[RDT_RESOURCE_L3];
 	struct rdt_resource *r  = &hw_res->r_resctrl;
@@ -275,7 +275,7 @@ static __init bool __rdt_get_mem_config_amd(struct rdt_resource *r)
 	return true;
 }
 
-static void rdt_get_cache_alloc_cfg(int idx, struct rdt_resource *r)
+static __init void rdt_get_cache_alloc_cfg(int idx, struct rdt_resource *r)
 {
 	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
 	union cpuid_0x10_1_eax eax;
@@ -294,7 +294,7 @@ static void rdt_get_cache_alloc_cfg(int idx, struct rdt_resource *r)
 	r->alloc_capable = true;
 }
 
-static void rdt_get_cdp_config(int level)
+static __init void rdt_get_cdp_config(int level)
 {
 	/*
 	 * By default, CDP is disabled. CDP can be enabled by mount parameter
@@ -304,12 +304,12 @@ static void rdt_get_cdp_config(int level)
 	rdt_resources_all[level].r_resctrl.cdp_capable = true;
 }
 
-static void rdt_get_cdp_l3_config(void)
+static __init void rdt_get_cdp_l3_config(void)
 {
 	rdt_get_cdp_config(RDT_RESOURCE_L3);
 }
 
-static void rdt_get_cdp_l2_config(void)
+static __init void rdt_get_cdp_l2_config(void)
 {
 	rdt_get_cdp_config(RDT_RESOURCE_L2);
 }
