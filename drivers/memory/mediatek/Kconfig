@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config HAVE_MTK_MC
+	bool "MediaTek Memory Controller support"
+	help
+	  This option allows to enable MediaTek memory controller drivers,
+	  which may include controllers for DRAM or others.
+	  Select Y here if you need support for MediaTek memory controller.
+	  If you don't need, select N.
+
+if HAVE_MTK_MC
+
+config MTK_DRAMC
+	tristate "MediaTek DRAMC driver"
+	depends on HAVE_MTK_MC
+	help
+	  This option selects the MediaTek DRAMC driver, which provides
+	  an interface for reporting the current data rate of DRAM.
+	  Select Y here if you need support for the MediaTek DRAMC driver.
+	  If you don't need, select N.
+
+endif
