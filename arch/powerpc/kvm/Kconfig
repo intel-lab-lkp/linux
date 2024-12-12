@@ -27,11 +27,6 @@ config KVM
 config KVM_BOOK3S_HANDLER
 	bool
 
-config KVM_BOOK3S_32_HANDLER
-	bool
-	select KVM_BOOK3S_HANDLER
-	select KVM_MMIO
-
 config KVM_BOOK3S_64_HANDLER
 	bool
 	select KVM_BOOK3S_HANDLER
@@ -43,23 +38,6 @@ config KVM_BOOK3S_PR_POSSIBLE
 
 config KVM_BOOK3S_HV_POSSIBLE
 	bool
-
-config KVM_BOOK3S_32
-	tristate "KVM support for PowerPC book3s_32 processors"
-	depends on PPC_BOOK3S_32 && !SMP && !PTE_64BIT
-	depends on !CONTEXT_TRACKING_USER
-	select KVM
-	select KVM_BOOK3S_32_HANDLER
-	select KVM_BOOK3S_PR_POSSIBLE
-	select PPC_FPU
-	help
-	  Support running unmodified book3s_32 guest kernels
-	  in virtual machines on book3s_32 host processors.
-
-	  This module provides access to the hardware capabilities through
-	  a character device node named /dev/kvm.
-
-	  If unsure, say N.
 
 config KVM_BOOK3S_64
 	tristate "KVM support for PowerPC book3s_64 processors"

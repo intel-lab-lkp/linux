@@ -11,19 +11,8 @@
 #include <asm/asm-compat.h>
 #include <asm/feature-fixups.h>
 
-#if defined(CONFIG_PPC_BOOK3S_64)
-
 #define GET_SHADOW_VCPU(reg)    \
 	mr	reg, r13
-
-#elif defined(CONFIG_PPC_BOOK3S_32)
-
-#define GET_SHADOW_VCPU(reg)    			\
-	tophys(reg, r2);       			\
-	lwz     reg, (THREAD + THREAD_KVM_SVCPU)(reg);	\
-	tophys(reg, reg)
-
-#endif
 
 /* Disable for nested KVM */
 #define USE_QUICK_LAST_INST
@@ -31,11 +20,7 @@
 
 /* Get helper functions for subarch specific functionality */
 
-#if defined(CONFIG_PPC_BOOK3S_64)
 #include "book3s_64_slb.S"
-#elif defined(CONFIG_PPC_BOOK3S_32)
-#include "book3s_32_sr.S"
-#endif
 
 /******************************************************************************
  *                                                                            *
@@ -81,7 +66,6 @@ kvmppc_handler_trampoline_enter:
 	/* Switch to guest segment. This is subarch specific. */
 	LOAD_GUEST_SEGMENTS
 
-#ifdef CONFIG_PPC_BOOK3S_64
 BEGIN_FTR_SECTION
 	/* Save host FSCR */
 	mfspr	r8, SPRN_FSCR
@@ -107,8 +91,6 @@ END_FTR_SECTION_IFSET(CPU_FTR_ARCH_207S)
 	ori     r0, r0, 0x80		/* XXX HID5_dcbz32 = 0x80 */
 	mtspr   SPRN_HID5,r0
 no_dcbz32_on:
-
-#endif /* CONFIG_PPC_BOOK3S_64 */
 
 	/* Enter guest */
 
@@ -170,13 +152,11 @@ kvmppc_interrupt_pr:
 	 * HSTATE.SCRATCH0 = guest R12
 	 * HSTATE.SCRATCH2 = guest R9
 	 */
-#ifdef CONFIG_PPC64
 	/* Match 32-bit entry */
 	ld	r9,HSTATE_SCRATCH2(r13)
 	rotldi	r12, r12, 32		  /* Flip R12 halves for stw */
 	stw	r12, HSTATE_SCRATCH1(r13) /* CR is now in the low half */
 	srdi	r12, r12, 32		  /* shift trap into low half */
-#endif
 
 .global kvmppc_handler_trampoline_exit
 kvmppc_handler_trampoline_exit:
@@ -209,7 +189,6 @@ kvmppc_handler_trampoline_exit:
 	PPC_LL	r2, HSTATE_HOST_R2(r13)
 
 	/* Save guest PC and MSR */
-#ifdef CONFIG_PPC64
 BEGIN_FTR_SECTION
 	andi.	r0, r12, 0x2
 	cmpwi	cr1, r0, 0
@@ -219,7 +198,7 @@ BEGIN_FTR_SECTION
 	andi.	r12,r12,0x3ffd
 	b	2f
 END_FTR_SECTION_IFSET(CPU_FTR_HVMODE)
-#endif
+
 1:	mfsrr0	r3
 	mfsrr1	r4
 2:
@@ -265,7 +244,6 @@ END_FTR_SECTION_IFSET(CPU_FTR_HVMODE)
 	beq	ld_last_prev_inst
 	cmpwi	r12, BOOK3S_INTERRUPT_ALIGNMENT
 	beq-	ld_last_inst
-#ifdef CONFIG_PPC64
 BEGIN_FTR_SECTION
 	cmpwi	r12, BOOK3S_INTERRUPT_H_EMUL_ASSIST
 	beq-	ld_last_inst
@@ -274,7 +252,6 @@ BEGIN_FTR_SECTION
 	cmpwi	r12, BOOK3S_INTERRUPT_FAC_UNAVAIL
 	beq-	ld_last_inst
 END_FTR_SECTION_IFSET(CPU_FTR_ARCH_207S)
-#endif
 
 	b	no_ld_last_inst
 
@@ -317,7 +294,6 @@ no_ld_last_inst:
 	/* Switch back to host MMU */
 	LOAD_HOST_SEGMENTS
 
-#ifdef CONFIG_PPC_BOOK3S_64
 
 	lbz	r5, HSTATE_RESTORE_HID5(r13)
 	cmpwi	r5, 0
@@ -341,8 +317,6 @@ no_fscr_save:
 	ld	r8, HSTATE_HOST_FSCR(r13)
 	mtspr	SPRN_FSCR, r8
 END_FTR_SECTION_IFSET(CPU_FTR_ARCH_207S)
-
-#endif /* CONFIG_PPC_BOOK3S_64 */
 
 	/*
 	 * For some interrupts, we need to call the real Linux
@@ -386,13 +360,11 @@ END_FTR_SECTION_IFSET(CPU_FTR_ARCH_207S)
 #endif
 	PPC_LL	r8, HSTATE_VMHANDLER(r13)
 
-#ifdef CONFIG_PPC64
 BEGIN_FTR_SECTION
 	beq	cr1, 1f
 	mtspr	SPRN_HSRR1, r6
 	mtspr	SPRN_HSRR0, r8
 END_FTR_SECTION_IFSET(CPU_FTR_HVMODE)
-#endif
 1:	/* Restore host msr -> SRR1 */
 	mtsrr1	r6
 	/* Load highmem handler address */

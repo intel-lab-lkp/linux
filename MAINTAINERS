@@ -12494,7 +12494,7 @@ L:	linuxppc-dev@lists.ozlabs.org
 L:	kvm@vger.kernel.org
 S:	Maintained (Book3S 64-bit HV)
 S:	Odd fixes (Book3S 64-bit PR)
-S:	Orphan (Book3E and 32-bit)
+S:	Orphan (Book3E)
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/powerpc/linux.git topic/ppc-kvm
 F:	arch/powerpc/include/asm/kvm*
 F:	arch/powerpc/include/uapi/asm/kvm*

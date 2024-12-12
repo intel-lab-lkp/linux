@@ -1163,11 +1163,9 @@ static void kvmppc_complete_mmio_load(struct kvm_vcpu *vcpu)
 
 	if (vcpu->arch.mmio_sign_extend) {
 		switch (run->mmio.len) {
-#ifdef CONFIG_PPC64
 		case 4:
 			gpr = (s64)(s32)gpr;
 			break;
-#endif
 		case 2:
 			gpr = (s64)(s16)gpr;
 			break;

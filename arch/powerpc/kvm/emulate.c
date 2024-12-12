@@ -229,9 +229,7 @@ int kvmppc_emulate_instruction(struct kvm_vcpu *vcpu)
 		switch (get_xop(inst)) {
 
 		case OP_31_XOP_TRAP:
-#ifdef CONFIG_64BIT
 		case OP_31_XOP_TRAP_64:
-#endif
 #ifdef CONFIG_PPC_BOOK3S
 			kvmppc_core_queue_program(vcpu, SRR1_PROGTRAP);
 #else

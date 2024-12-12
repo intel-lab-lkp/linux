@@ -14,19 +14,12 @@
 #include <asm/exception-64s.h>
 #include <asm/asm-compat.h>
 
-#if defined(CONFIG_PPC_BOOK3S_64)
 #ifdef CONFIG_PPC64_ELF_ABI_V2
 #define FUNC(name) 		name
 #else
 #define FUNC(name) 		GLUE(.,name)
 #endif
 #define GET_SHADOW_VCPU(reg)    addi	reg, r13, PACA_SVCPU
-
-#elif defined(CONFIG_PPC_BOOK3S_32)
-#define FUNC(name)		name
-#define GET_SHADOW_VCPU(reg)	lwz     reg, (THREAD + THREAD_KVM_SVCPU)(r2)
-
-#endif /* CONFIG_PPC_BOOK3S_64 */
 
 #define VCPU_LOAD_NVGPRS(vcpu) \
 	PPC_LL	r14, VCPU_GPR(R14)(vcpu); \
@@ -89,7 +82,6 @@ kvm_start_lightweight:
 	nop
 	REST_GPR(3, r1)
 
-#ifdef CONFIG_PPC_BOOK3S_64
 	/* Get the dcbz32 flag */
 	PPC_LL	r0, VCPU_HFLAGS(r3)
 	rldicl	r0, r0, 0, 63		/* r3 &= 1 */
@@ -118,7 +110,6 @@ sprg3_little_endian:
 
 after_sprg3_load:
 	mtspr	SPRN_SPRG3, r4
-#endif /* CONFIG_PPC_BOOK3S_64 */
 
 	PPC_LL	r4, VCPU_SHADOW_MSR(r3)	/* get shadow_msr */
 
@@ -157,14 +148,12 @@ after_sprg3_load:
 	bl	FUNC(kvmppc_copy_from_svcpu)
 	nop
 
-#ifdef CONFIG_PPC_BOOK3S_64
 	/*
 	 * Reload kernel SPRG3 value.
 	 * No need to save guest value as usermode can't modify SPRG3.
 	 */
 	ld	r3, PACA_SPRG_VDSO(r13)
 	mtspr	SPRN_SPRG_VDSO_WRITE, r3
-#endif /* CONFIG_PPC_BOOK3S_64 */
 
 	/* R7 = vcpu */
 	PPC_LL	r7, GPR3(r1)

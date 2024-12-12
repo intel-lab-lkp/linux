@@ -36,21 +36,14 @@ struct kvmppc_sid_map {
 #define SID_MAP_NUM     (1 << SID_MAP_BITS)
 #define SID_MAP_MASK    (SID_MAP_NUM - 1)
 
-#ifdef CONFIG_PPC_BOOK3S_64
 #define SID_CONTEXTS	1
-#else
-#define SID_CONTEXTS	128
-#define VSID_POOL_SIZE	(SID_CONTEXTS * 16)
-#endif
 
 struct hpte_cache {
 	struct hlist_node list_pte;
 	struct hlist_node list_pte_long;
 	struct hlist_node list_vpte;
 	struct hlist_node list_vpte_long;
-#ifdef CONFIG_PPC_BOOK3S_64
 	struct hlist_node list_vpte_64k;
-#endif
 	struct rcu_head rcu_head;
 	u64 host_vpn;
 	u64 pfn;
@@ -112,14 +105,9 @@ struct kvmppc_vcpu_book3s {
 	u64 hior;
 	u64 msr_mask;
 	u64 vtb;
-#ifdef CONFIG_PPC_BOOK3S_32
-	u32 vsid_pool[VSID_POOL_SIZE];
-	u32 vsid_next;
-#else
 	u64 proto_vsid_first;
 	u64 proto_vsid_max;
 	u64 proto_vsid_next;
-#endif
 	int context_id[SID_CONTEXTS];
 
 	bool hior_explicit;		/* HIOR is set by ioctl, not PVR */
@@ -128,9 +116,7 @@ struct kvmppc_vcpu_book3s {
 	struct hlist_head hpte_hash_pte_long[HPTEG_HASH_NUM_PTE_LONG];
 	struct hlist_head hpte_hash_vpte[HPTEG_HASH_NUM_VPTE];
 	struct hlist_head hpte_hash_vpte_long[HPTEG_HASH_NUM_VPTE_LONG];
-#ifdef CONFIG_PPC_BOOK3S_64
 	struct hlist_head hpte_hash_vpte_64k[HPTEG_HASH_NUM_VPTE_64K];
-#endif
 	int hpte_cache_count;
 	spinlock_t mmu_lock;
 };
@@ -391,12 +377,7 @@ static inline struct kvmppc_vcpu_book3s *to_book3s(struct kvm_vcpu *vcpu)
 
 /* Also add subarch specific defines */
 
-#ifdef CONFIG_KVM_BOOK3S_32_HANDLER
-#include <asm/kvm_book3s_32.h>
-#endif
-#ifdef CONFIG_KVM_BOOK3S_64_HANDLER
 #include <asm/kvm_book3s_64.h>
-#endif
 
 static inline void kvmppc_set_gpr(struct kvm_vcpu *vcpu, int num, ulong val)
 {

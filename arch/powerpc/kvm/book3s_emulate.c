@@ -351,7 +351,6 @@ int kvmppc_core_emulate_op_pr(struct kvm_vcpu *vcpu,
 			vcpu->arch.mmu.tlbie(vcpu, addr, large);
 			break;
 		}
-#ifdef CONFIG_PPC_BOOK3S_64
 		case OP_31_XOP_FAKE_SC1:
 		{
 			/* SC 1 papr hypercalls */
@@ -378,7 +377,6 @@ int kvmppc_core_emulate_op_pr(struct kvm_vcpu *vcpu,
 			emulated = EMULATE_EXIT_USER;
 			break;
 		}
-#endif
 		case OP_31_XOP_EIOIO:
 			break;
 		case OP_31_XOP_SLBMTE:
@@ -762,7 +760,6 @@ int kvmppc_core_emulate_mtspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 	case SPRN_GQR7:
 		to_book3s(vcpu)->gqr[sprn - SPRN_GQR0] = spr_val;
 		break;
-#ifdef CONFIG_PPC_BOOK3S_64
 	case SPRN_FSCR:
 		kvmppc_set_fscr(vcpu, spr_val);
 		break;
@@ -811,7 +808,6 @@ int kvmppc_core_emulate_mtspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 
 		break;
 #endif
-#endif
 	case SPRN_ICTC:
 	case SPRN_THRM1:
 	case SPRN_THRM2:
@@ -829,7 +825,6 @@ int kvmppc_core_emulate_mtspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 	case SPRN_WPAR_GEKKO:
 	case SPRN_MSSSR0:
 	case SPRN_DABR:
-#ifdef CONFIG_PPC_BOOK3S_64
 	case SPRN_MMCRS:
 	case SPRN_MMCRA:
 	case SPRN_MMCR0:
@@ -839,7 +834,6 @@ int kvmppc_core_emulate_mtspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong spr_val)
 	case SPRN_UAMOR:
 	case SPRN_IAMR:
 	case SPRN_AMR:
-#endif
 		break;
 unprivileged:
 	default:
@@ -943,7 +937,6 @@ int kvmppc_core_emulate_mfspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong *spr_val
 	case SPRN_GQR7:
 		*spr_val = to_book3s(vcpu)->gqr[sprn - SPRN_GQR0];
 		break;
-#ifdef CONFIG_PPC_BOOK3S_64
 	case SPRN_FSCR:
 		*spr_val = vcpu->arch.fscr;
 		break;
@@ -979,7 +972,6 @@ int kvmppc_core_emulate_mfspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong *spr_val
 		tm_disable();
 		break;
 #endif
-#endif
 	case SPRN_THRM1:
 	case SPRN_THRM2:
 	case SPRN_THRM3:
@@ -995,7 +987,6 @@ int kvmppc_core_emulate_mfspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong *spr_val
 	case SPRN_WPAR_GEKKO:
 	case SPRN_MSSSR0:
 	case SPRN_DABR:
-#ifdef CONFIG_PPC_BOOK3S_64
 	case SPRN_MMCRS:
 	case SPRN_MMCRA:
 	case SPRN_MMCR0:
@@ -1006,7 +997,6 @@ int kvmppc_core_emulate_mfspr_pr(struct kvm_vcpu *vcpu, int sprn, ulong *spr_val
 	case SPRN_UAMOR:
 	case SPRN_IAMR:
 	case SPRN_AMR:
-#endif
 		*spr_val = 0;
 		break;
 	default:
@@ -1038,35 +1028,8 @@ u32 kvmppc_alignment_dsisr(struct kvm_vcpu *vcpu, unsigned int inst)
 
 ulong kvmppc_alignment_dar(struct kvm_vcpu *vcpu, unsigned int inst)
 {
-#ifdef CONFIG_PPC_BOOK3S_64
 	/*
 	 * Linux's fix_alignment() assumes that DAR is valid, so can we
 	 */
 	return vcpu->arch.fault_dar;
-#else
-	ulong dar = 0;
-	ulong ra = get_ra(inst);
-	ulong rb = get_rb(inst);
-
-	switch (get_op(inst)) {
-	case OP_LFS:
-	case OP_LFD:
-	case OP_STFD:
-	case OP_STFS:
-		if (ra)
-			dar = kvmppc_get_gpr(vcpu, ra);
-		dar += (s32)((s16)inst);
-		break;
-	case 31:
-		if (ra)
-			dar = kvmppc_get_gpr(vcpu, ra);
-		dar += kvmppc_get_gpr(vcpu, rb);
-		break;
-	default:
-		printk(KERN_INFO "KVM: Unaligned instruction 0x%x\n", inst);
-		break;
-	}
-
-	return dar;
-#endif
 }

@@ -898,12 +898,9 @@ bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 
 int kvmppc_core_init_vm(struct kvm *kvm)
 {
-
-#ifdef CONFIG_PPC64
 	INIT_LIST_HEAD_RCU(&kvm->arch.spapr_tce_tables);
 	INIT_LIST_HEAD(&kvm->arch.rtas_tokens);
 	mutex_init(&kvm->arch.rtas_token_lock);
-#endif
 
 	return kvm->arch.kvm_ops->init_vm(kvm);
 }
@@ -912,10 +909,8 @@ void kvmppc_core_destroy_vm(struct kvm *kvm)
 {
 	kvm->arch.kvm_ops->destroy_vm(kvm);
 
-#ifdef CONFIG_PPC64
 	kvmppc_rtas_tokens_free(kvm);
 	WARN_ON(!list_empty(&kvm->arch.spapr_tce_tables));
-#endif
 
 #ifdef CONFIG_KVM_XICS
 	/*
@@ -1069,10 +1064,6 @@ static int kvmppc_book3s_init(void)
 	r = kvm_init(sizeof(struct kvm_vcpu), 0, THIS_MODULE);
 	if (r)
 		return r;
-#ifdef CONFIG_KVM_BOOK3S_32_HANDLER
-	r = kvmppc_book3s_init_pr();
-#endif
-
 #ifdef CONFIG_KVM_XICS
 #ifdef CONFIG_KVM_XIVE
 	if (xics_on_xive()) {
@@ -1089,17 +1080,8 @@ static int kvmppc_book3s_init(void)
 
 static void kvmppc_book3s_exit(void)
 {
-#ifdef CONFIG_KVM_BOOK3S_32_HANDLER
-	kvmppc_book3s_exit_pr();
-#endif
 	kvm_exit();
 }
 
 module_init(kvmppc_book3s_init);
 module_exit(kvmppc_book3s_exit);
-
-/* On 32bit this is our one and only kernel module */
-#ifdef CONFIG_KVM_BOOK3S_32_HANDLER
-MODULE_ALIAS_MISCDEV(KVM_MINOR);
-MODULE_ALIAS("devname:kvm");
-#endif

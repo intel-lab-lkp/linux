@@ -113,11 +113,9 @@ struct kvmppc_host_state {
 	u64 dec_expires;
 	struct kvm_split_mode *kvm_split_mode;
 #endif
-#ifdef CONFIG_PPC_BOOK3S_64
 	u64 cfar;
 	u64 ppr;
 	u64 host_fscr;
-#endif
 };
 
 struct kvmppc_book3s_shadow_vcpu {
@@ -134,20 +132,12 @@ struct kvmppc_book3s_shadow_vcpu {
 	u32 fault_dsisr;
 	u32 last_inst;
 
-#ifdef CONFIG_PPC_BOOK3S_32
-	u32     sr[16];			/* Guest SRs */
-
-	struct kvmppc_host_state hstate;
-#endif
-
-#ifdef CONFIG_PPC_BOOK3S_64
 	u8 slb_max;			/* highest used guest slb entry */
 	struct  {
 		u64     esid;
 		u64     vsid;
 	} slb[64];			/* guest SLB */
 	u64 shadow_fscr;
-#endif
 };
 
 #endif /*__ASSEMBLY__ */
