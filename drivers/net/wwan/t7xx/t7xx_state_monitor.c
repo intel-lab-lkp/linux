@@ -108,7 +108,8 @@ static void fsm_finish_command(struct t7xx_fsm_ctl *ctl, struct t7xx_fsm_command
 {
 	if (cmd->flag & FSM_CMD_FLAG_WAIT_FOR_COMPLETION) {
 		*cmd->ret = result;
-		complete_all(cmd->done);
+		if (cmd->done)
+			complete_all(cmd->done);
 	}
 
 	kfree(cmd);
@@ -503,8 +504,10 @@ int t7xx_fsm_append_cmd(struct t7xx_fsm_ctl *ctl, enum t7xx_fsm_cmd_state cmd_id
 
 		wait_ret = wait_for_completion_timeout(&done,
 						       msecs_to_jiffies(FSM_CMD_TIMEOUT_MS));
-		if (!wait_ret)
+		if (!wait_ret) {
+			cmd->done = NULL;
 			return -ETIMEDOUT;
+		}
 
 		return ret;
 	}
