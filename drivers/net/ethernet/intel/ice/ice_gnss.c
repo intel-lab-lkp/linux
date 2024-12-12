@@ -88,10 +88,10 @@ static void ice_gnss_read(struct kthread_work *work)
 	unsigned long delay = ICE_GNSS_POLL_DATA_DELAY_TIME;
 	unsigned int i, bytes_read, data_len, count;
 	struct ice_aqc_link_topo_addr link_topo;
+	char buf[ICE_MAX_I2C_DATA_SIZE];
 	struct ice_pf *pf;
 	struct ice_hw *hw;
 	__be16 data_len_b;
-	char *buf = NULL;
 	u8 i2c_params;
 	int err = 0;
 
@@ -121,16 +121,6 @@ static void ice_gnss_read(struct kthread_work *work)
 		goto requeue;
 
 	/* The u-blox has data_len bytes for us to read */
-
-	data_len = min_t(typeof(data_len), data_len, PAGE_SIZE);
-
-	buf = (char *)get_zeroed_page(GFP_KERNEL);
-	if (!buf) {
-		err = -ENOMEM;
-		goto requeue;
-	}
-
-	/* Read received data */
 	for (i = 0; i < data_len; i += bytes_read) {
 		unsigned int bytes_left = data_len - i;
 
@@ -139,19 +129,18 @@ static void ice_gnss_read(struct kthread_work *work)
 
 		err = ice_aq_read_i2c(hw, link_topo, ICE_GNSS_UBX_I2C_BUS_ADDR,
 				      cpu_to_le16(ICE_GNSS_UBX_EMPTY_DATA),
-				      bytes_read, &buf[i], NULL);
+				      bytes_read, buf, NULL);
 		if (err)
-			goto free_buf;
+			goto requeue;
+
+		count = gnss_insert_raw(pf->gnss_dev, buf, bytes_read);
+		if (count != bytes_read)
+			dev_dbg(ice_pf_to_dev(pf),
+				"gnss_insert_raw ret=%d size=%d\n",
+				count, bytes_read);
 	}
 
-	count = gnss_insert_raw(pf->gnss_dev, buf, i);
-	if (count != i)
-		dev_dbg(ice_pf_to_dev(pf),
-			"gnss_insert_raw ret=%d size=%d\n",
-			count, i);
 	delay = ICE_GNSS_TIMER_DELAY_TIME;
-free_buf:
-	free_page((unsigned long)buf);
 requeue:
 	kthread_queue_delayed_work(gnss->kworker, &gnss->read_work, delay);
 	if (err)
