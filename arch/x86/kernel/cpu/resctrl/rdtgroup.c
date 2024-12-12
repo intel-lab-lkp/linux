@@ -1686,6 +1686,34 @@ unsigned int mon_event_config_index_get(u32 evtid)
 	}
 }
 
+struct cntr_config {
+	struct rdt_resource *r;
+	struct rdt_mon_domain *d;
+	enum resctrl_event_id evtid;
+	u32 rmid;
+	u32 closid;
+	u32 cntr_id;
+	u32 val;
+	bool assign;
+};
+
+static void resctrl_abmc_config_one_amd(void *info)
+{
+	struct cntr_config *config = info;
+	union l3_qos_abmc_cfg abmc_cfg = { 0 };
+
+	abmc_cfg.split.cfg_en = 1;
+	abmc_cfg.split.cntr_en = config->assign ? 1 : 0;
+	abmc_cfg.split.cntr_id = config->cntr_id;
+	abmc_cfg.split.bw_src = config->rmid;
+	abmc_cfg.split.bw_type = config->val;
+
+	wrmsrl(MSR_IA32_L3_QOS_ABMC_CFG, abmc_cfg.full);
+
+	resctrl_arch_reset_rmid(config->r, config->d, config->closid,
+				config->rmid, config->evtid);
+}
+
 static int mbm_config_show(struct seq_file *s, struct rdt_resource *r, u32 evtid)
 {
 	struct rdt_mon_domain *dom;
@@ -1867,6 +1895,36 @@ static ssize_t mbm_local_bytes_config_write(struct kernfs_open_file *of,
 	cpus_read_unlock();
 
 	return ret ?: nbytes;
+}
+
+/*
+ * Send an IPI to the domain to assign the counter to RMID, event pair.
+ */
+int resctrl_arch_config_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
+			     enum resctrl_event_id evtid, u32 rmid, u32 closid,
+			     u32 cntr_id, bool assign)
+{
+	struct rdt_hw_mon_domain *hw_dom = resctrl_to_arch_mon_dom(d);
+	struct cntr_config config = { 0 };
+
+	config.r = r;
+	config.d = d;
+	config.evtid = evtid;
+	config.rmid = rmid;
+	config.closid = closid;
+	config.cntr_id = cntr_id;
+
+	/* Update the event configuration from the domain */
+	if (evtid == QOS_L3_MBM_TOTAL_EVENT_ID)
+		config.val = hw_dom->mbm_total_cfg;
+	else
+		config.val = hw_dom->mbm_local_cfg;
+
+	config.assign = assign;
+
+	smp_call_function_any(&d->hdr.cpu_mask, resctrl_abmc_config_one_amd, &config, 1);
+
+	return 0;
 }
 
 /* rdtgroup information files for one cache resource. */
