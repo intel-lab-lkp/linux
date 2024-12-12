@@ -245,16 +245,6 @@ struct vc4_dev {
 struct vc4_bo {
 	struct drm_gem_dma_object base;
 
-	/* seqno of the last job to render using this BO. */
-	uint64_t seqno;
-
-	/* seqno of the last job to use the RCL to write to this BO.
-	 *
-	 * Note that this doesn't include binner overflow memory
-	 * writes.
-	 */
-	uint64_t write_seqno;
-
 	bool t_format;
 
 	/* List entry for the BO's position in either
@@ -644,9 +634,6 @@ struct vc4_exec_info {
 
 	/* Sequence number for this bin/render job. */
 	uint64_t seqno;
-
-	/* Latest write_seqno of any BO that binning depends on. */
-	uint64_t bin_dep_seqno;
 
 	struct dma_fence *fence;
 
