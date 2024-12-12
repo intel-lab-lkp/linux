@@ -1,0 +1,129 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+# Copyright (c) 2024 MediaTek Inc.
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/memory-controllers/mediatek,common-dramc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Common DRAMC (DRAM Controller)
+
+maintainers:
+  - Crystal Guo <crystal.guo@mediatek.com>
+
+description: |
+  The DRAM controller of MediaTek SoC provides an interface to
+  get the current data rate of DRAM.
+
+properties:
+  compatible:
+    const: mediatek,common-dramc
+
+  reg:
+    minItems: 9
+    items:
+      - description: DRAMC_AO_CHA_BASE
+      - description: DRAMC_AO_CHB_BASE
+      - description: DRAMC_AO_CHC_BASE
+      - description: DRAMC_AO_CHD_BASE
+      - description: DRAMC_NAO_CHA_BASE
+      - description: DRAMC_NAO_CHB_BASE
+      - description: DRAMC_NAO_CHC_BASE
+      - description: DRAMC_NAO_CHD_BASE
+      - description: DDRPHY_AO_CHA_BASE
+      - description: DDRPHY_AO_CHB_BASE
+      - description: DDRPHY_AO_CHC_BASE
+      - description: DDRPHY_AO_CHD_BASE
+      - description: DDRPHY_NAO_CHA_BASE
+      - description: DDRPHY_NAO_CHB_BASE
+      - description: DDRPHY_NAO_CHC_BASE
+      - description: DDRPHY_NAO_CHD_BASE
+      - description: SLEEP_BASE
+
+  support-ch-cnt:
+    maxItems: 1
+
+  fmeter-version:
+    maxItems: 1
+    description:
+      Fmeter version for calculating dram data rate
+
+  crystal-freq:
+    maxItems: 1
+    description:
+      Reference clock rate in MHz
+
+  shu-of:
+    maxItems: 1
+
+  pll-id: true
+  shu-lv: true
+  sdmpcw: true
+  posdiv: true
+  fbksel: true
+  dqsopen: true
+  async-ca: true
+  dq-ser-mode: true
+
+required:
+  - compatible
+  - reg
+  - support-ch-cnt
+  - fmeter-version
+  - crystal-freq
+  - pll-id
+  - shu-lv
+  - shu-of
+  - sdmpcw
+  - posdiv
+  - fbksel
+  - dqsopen
+  - async-ca
+  - dq-ser-mode
+
+additionalProperties: false
+
+examples:
+  - |
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        dramc: dramc@10230000 {
+            compatible = "mediatek,common-dramc";
+            reg = <0 0x10230000 0 0x2000>, /* DRAMC_AO_CHA_BASE */
+                <0 0x10240000 0 0x2000>, /* DRAMC_AO_CHB_BASE */
+                <0 0x10250000 0 0x2000>, /* DRAMC_AO_CHC_BASE */
+                <0 0x10260000 0 0x2000>, /* DRAMC_AO_CHD_BASE */
+                <0 0x10234000 0 0x1000>, /* DRAMC_NAO_CHA_BASE */
+                <0 0x10244000 0 0x1000>, /* DRAMC_NAO_CHB_BASE */
+                <0 0x10254000 0 0x1000>, /* DRAMC_NAO_CHC_BASE */
+                <0 0x10264000 0 0x1000>, /* DRAMC_NAO_CHD_BASE */
+                <0 0x10238000 0 0x2000>, /* DDRPHY_AO_CHA_BASE */
+                <0 0x10248000 0 0x2000>, /* DDRPHY_AO_CHB_BASE */
+                <0 0x10258000 0 0x2000>, /* DDRPHY_AO_CHC_BASE */
+                <0 0x10268000 0 0x2000>, /* DDRPHY_AO_CHD_BASE */
+                <0 0x10236000 0 0x2000>, /* DDRPHY_NAO_CHA_BASE */
+                <0 0x10246000 0 0x2000>, /* DDRPHY_NAO_CHB_BASE */
+                <0 0x10256000 0 0x2000>, /* DDRPHY_NAO_CHC_BASE */
+                <0 0x10266000 0 0x2000>, /* DDRPHY_NAO_CHD_BASE */
+                <0 0x10006000 0 0x1000>; /* SLEEP_BASE */
+            support-ch-cnt = <4>;
+            fmeter-version = <1>;
+            crystal-freq = <26>;
+            pll-id = <0x0e98 0x02000000 25>;
+            shu-lv = <0x0e98 0x0000c000 14>;
+            shu-of = <0x700>;
+            sdmpcw = <0x0908 0x0007fff8 3>,
+                <0x0928 0x0007fff8 3>;
+            posdiv = <0x090c 0x00003800 11>,
+                <0x092c 0x00003800 11>;
+            fbksel = <0x0910 0x00000040 6>,
+                <0x0910 0x00000040 6>;
+            dqsopen = <0x0d94 0x04000000 26>,
+                <0x0d94 0x04000000 26>;
+            async-ca = <0x0d08 0x00000001 0>,
+                <0x0d08 0x00000001 0>;
+            dq-ser-mode = <0x0dc4 0x00000018 3>,
+                <0x0dc4 0x00000018 3>;
+        };
+    };
