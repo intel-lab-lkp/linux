@@ -258,13 +258,7 @@ static u32 imsic_mrif_topei(struct imsic_mrif *mrif, u32 nr_eix, u32 nr_msis)
 		eix = &mrif->eix[ei];
 		eipend[0] = imsic_mrif_atomic_read(mrif, &eix->eie[0]) &
 			    imsic_mrif_atomic_read(mrif, &eix->eip[0]);
-#ifdef CONFIG_32BIT
-		eipend[1] = imsic_mrif_atomic_read(mrif, &eix->eie[1]) &
-			    imsic_mrif_atomic_read(mrif, &eix->eip[1]);
-		if (!eipend[0] && !eipend[1])
-#else
 		if (!eipend[0])
-#endif
 			continue;
 
 		imin = ei * BITS_PER_TYPE(u64);
@@ -296,10 +290,8 @@ static int imsic_mrif_isel_check(u32 nr_eix, unsigned long isel)
 	default:
 		return -ENOENT;
 	}
-#ifndef CONFIG_32BIT
 	if (num & 0x1)
 		return -EINVAL;
-#endif
 	if ((num / 2) >= nr_eix)
 		return -EINVAL;
 
@@ -337,13 +329,9 @@ static int imsic_mrif_rmw(struct imsic_mrif *mrif, u32 nr_eix,
 			return -EINVAL;
 		eix = &mrif->eix[num / 2];
 
-#ifndef CONFIG_32BIT
 		if (num & 0x1)
 			return -EINVAL;
 		ei = (pend) ? &eix->eip[0] : &eix->eie[0];
-#else
-		ei = (pend) ? &eix->eip[num & 0x1] : &eix->eie[num & 0x1];
-#endif
 
 		/* Bit0 of EIP0 or EIE0 is read-only */
 		if (!num)
@@ -395,10 +383,6 @@ static void imsic_vsfile_local_read(void *data)
 			eix = &mrif->eix[i];
 			eix->eip[0] = imsic_eix_swap(IMSIC_EIP0 + i * 2, 0);
 			eix->eie[0] = imsic_eix_swap(IMSIC_EIE0 + i * 2, 0);
-#ifdef CONFIG_32BIT
-			eix->eip[1] = imsic_eix_swap(IMSIC_EIP0 + i * 2 + 1, 0);
-			eix->eie[1] = imsic_eix_swap(IMSIC_EIE0 + i * 2 + 1, 0);
-#endif
 		}
 	} else {
 		mrif->eidelivery = imsic_vs_csr_read(IMSIC_EIDELIVERY);
@@ -407,10 +391,6 @@ static void imsic_vsfile_local_read(void *data)
 			eix = &mrif->eix[i];
 			eix->eip[0] = imsic_eix_read(IMSIC_EIP0 + i * 2);
 			eix->eie[0] = imsic_eix_read(IMSIC_EIE0 + i * 2);
-#ifdef CONFIG_32BIT
-			eix->eip[1] = imsic_eix_read(IMSIC_EIP0 + i * 2 + 1);
-			eix->eie[1] = imsic_eix_read(IMSIC_EIE0 + i * 2 + 1);
-#endif
 		}
 	}
 
@@ -469,10 +449,8 @@ static void imsic_vsfile_local_rw(void *data)
 		break;
 	case IMSIC_EIP0 ... IMSIC_EIP63:
 	case IMSIC_EIE0 ... IMSIC_EIE63:
-#ifndef CONFIG_32BIT
 		if (idata->isel & 0x1)
 			break;
-#endif
 		if (idata->write)
 			imsic_eix_write(idata->isel, idata->val);
 		else
@@ -536,10 +514,6 @@ static void imsic_vsfile_local_clear(int vsfile_hgei, u32 nr_eix)
 	for (i = 0; i < nr_eix; i++) {
 		imsic_eix_write(IMSIC_EIP0 + i * 2, 0);
 		imsic_eix_write(IMSIC_EIE0 + i * 2, 0);
-#ifdef CONFIG_32BIT
-		imsic_eix_write(IMSIC_EIP0 + i * 2 + 1, 0);
-		imsic_eix_write(IMSIC_EIE0 + i * 2 + 1, 0);
-#endif
 	}
 
 	csr_write(CSR_HSTATUS, old_hstatus);
@@ -573,10 +547,6 @@ static void imsic_vsfile_local_update(int vsfile_hgei, u32 nr_eix,
 		eix = &mrif->eix[i];
 		imsic_eix_set(IMSIC_EIP0 + i * 2, eix->eip[0]);
 		imsic_eix_set(IMSIC_EIE0 + i * 2, eix->eie[0]);
-#ifdef CONFIG_32BIT
-		imsic_eix_set(IMSIC_EIP0 + i * 2 + 1, eix->eip[1]);
-		imsic_eix_set(IMSIC_EIE0 + i * 2 + 1, eix->eie[1]);
-#endif
 	}
 	imsic_vs_csr_write(IMSIC_EITHRESHOLD, mrif->eithreshold);
 	imsic_vs_csr_write(IMSIC_EIDELIVERY, mrif->eidelivery);
@@ -667,10 +637,6 @@ static void imsic_swfile_update(struct kvm_vcpu *vcpu,
 		eix = &mrif->eix[i];
 		imsic_mrif_atomic_or(smrif, &seix->eip[0], eix->eip[0]);
 		imsic_mrif_atomic_or(smrif, &seix->eie[0], eix->eie[0]);
-#ifdef CONFIG_32BIT
-		imsic_mrif_atomic_or(smrif, &seix->eip[1], eix->eip[1]);
-		imsic_mrif_atomic_or(smrif, &seix->eie[1], eix->eie[1]);
-#endif
 	}
 
 	imsic_swfile_extirq_update(vcpu);

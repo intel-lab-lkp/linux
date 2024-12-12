@@ -66,33 +66,6 @@ static inline unsigned long aia_hvictl_value(bool ext_irq_pending)
 	return hvictl;
 }
 
-#ifdef CONFIG_32BIT
-void kvm_riscv_vcpu_aia_flush_interrupts(struct kvm_vcpu *vcpu)
-{
-	struct kvm_vcpu_aia_csr *csr = &vcpu->arch.aia_context.guest_csr;
-	unsigned long mask, val;
-
-	if (!kvm_riscv_aia_available())
-		return;
-
-	if (READ_ONCE(vcpu->arch.irqs_pending_mask[1])) {
-		mask = xchg_acquire(&vcpu->arch.irqs_pending_mask[1], 0);
-		val = READ_ONCE(vcpu->arch.irqs_pending[1]) & mask;
-
-		csr->hviph &= ~mask;
-		csr->hviph |= val;
-	}
-}
-
-void kvm_riscv_vcpu_aia_sync_interrupts(struct kvm_vcpu *vcpu)
-{
-	struct kvm_vcpu_aia_csr *csr = &vcpu->arch.aia_context.guest_csr;
-
-	if (kvm_riscv_aia_available())
-		csr->vsieh = ncsr_read(CSR_VSIEH);
-}
-#endif
-
 bool kvm_riscv_vcpu_aia_has_interrupts(struct kvm_vcpu *vcpu, u64 mask)
 {
 	int hgei;
@@ -100,12 +73,6 @@ bool kvm_riscv_vcpu_aia_has_interrupts(struct kvm_vcpu *vcpu, u64 mask)
 
 	if (!kvm_riscv_aia_available())
 		return false;
-
-#ifdef CONFIG_32BIT
-	if (READ_ONCE(vcpu->arch.irqs_pending[1]) &
-	    (vcpu->arch.aia_context.guest_csr.vsieh & upper_32_bits(mask)))
-		return true;
-#endif
 
 	seip = vcpu->arch.guest_csr.vsie;
 	seip &= (unsigned long)mask;
@@ -128,9 +95,6 @@ void kvm_riscv_vcpu_aia_update_hvip(struct kvm_vcpu *vcpu)
 	if (!kvm_riscv_aia_available())
 		return;
 
-#ifdef CONFIG_32BIT
-	ncsr_write(CSR_HVIPH, vcpu->arch.aia_context.guest_csr.hviph);
-#endif
 	ncsr_write(CSR_HVICTL, aia_hvictl_value(!!(csr->hvip & BIT(IRQ_VS_EXT))));
 }
 
@@ -147,22 +111,10 @@ void kvm_riscv_vcpu_aia_load(struct kvm_vcpu *vcpu, int cpu)
 		nacl_csr_write(nsh, CSR_VSISELECT, csr->vsiselect);
 		nacl_csr_write(nsh, CSR_HVIPRIO1, csr->hviprio1);
 		nacl_csr_write(nsh, CSR_HVIPRIO2, csr->hviprio2);
-#ifdef CONFIG_32BIT
-		nacl_csr_write(nsh, CSR_VSIEH, csr->vsieh);
-		nacl_csr_write(nsh, CSR_HVIPH, csr->hviph);
-		nacl_csr_write(nsh, CSR_HVIPRIO1H, csr->hviprio1h);
-		nacl_csr_write(nsh, CSR_HVIPRIO2H, csr->hviprio2h);
-#endif
 	} else {
 		csr_write(CSR_VSISELECT, csr->vsiselect);
 		csr_write(CSR_HVIPRIO1, csr->hviprio1);
 		csr_write(CSR_HVIPRIO2, csr->hviprio2);
-#ifdef CONFIG_32BIT
-		csr_write(CSR_VSIEH, csr->vsieh);
-		csr_write(CSR_HVIPH, csr->hviph);
-		csr_write(CSR_HVIPRIO1H, csr->hviprio1h);
-		csr_write(CSR_HVIPRIO2H, csr->hviprio2h);
-#endif
 	}
 }
 
@@ -179,22 +131,10 @@ void kvm_riscv_vcpu_aia_put(struct kvm_vcpu *vcpu)
 		csr->vsiselect = nacl_csr_read(nsh, CSR_VSISELECT);
 		csr->hviprio1 = nacl_csr_read(nsh, CSR_HVIPRIO1);
 		csr->hviprio2 = nacl_csr_read(nsh, CSR_HVIPRIO2);
-#ifdef CONFIG_32BIT
-		csr->vsieh = nacl_csr_read(nsh, CSR_VSIEH);
-		csr->hviph = nacl_csr_read(nsh, CSR_HVIPH);
-		csr->hviprio1h = nacl_csr_read(nsh, CSR_HVIPRIO1H);
-		csr->hviprio2h = nacl_csr_read(nsh, CSR_HVIPRIO2H);
-#endif
 	} else {
 		csr->vsiselect = csr_read(CSR_VSISELECT);
 		csr->hviprio1 = csr_read(CSR_HVIPRIO1);
 		csr->hviprio2 = csr_read(CSR_HVIPRIO2);
-#ifdef CONFIG_32BIT
-		csr->vsieh = csr_read(CSR_VSIEH);
-		csr->hviph = csr_read(CSR_HVIPH);
-		csr->hviprio1h = csr_read(CSR_HVIPRIO1H);
-		csr->hviprio2h = csr_read(CSR_HVIPRIO2H);
-#endif
 	}
 }
 
@@ -226,10 +166,6 @@ int kvm_riscv_vcpu_aia_set_csr(struct kvm_vcpu *vcpu,
 	if (kvm_riscv_aia_available()) {
 		((unsigned long *)csr)[reg_num] = val;
 
-#ifdef CONFIG_32BIT
-		if (reg_num == KVM_REG_RISCV_CSR_AIA_REG(siph))
-			WRITE_ONCE(vcpu->arch.irqs_pending_mask[1], 0);
-#endif
 	}
 
 	return 0;
@@ -282,19 +218,8 @@ static u8 aia_get_iprio8(struct kvm_vcpu *vcpu, unsigned int irq)
 		hviprio = ncsr_read(CSR_HVIPRIO1);
 		break;
 	case 1:
-#ifndef CONFIG_32BIT
 		hviprio = ncsr_read(CSR_HVIPRIO2);
 		break;
-#else
-		hviprio = ncsr_read(CSR_HVIPRIO1H);
-		break;
-	case 2:
-		hviprio = ncsr_read(CSR_HVIPRIO2);
-		break;
-	case 3:
-		hviprio = ncsr_read(CSR_HVIPRIO2H);
-		break;
-#endif
 	default:
 		return 0;
 	}
@@ -315,19 +240,8 @@ static void aia_set_iprio8(struct kvm_vcpu *vcpu, unsigned int irq, u8 prio)
 		hviprio = ncsr_read(CSR_HVIPRIO1);
 		break;
 	case 1:
-#ifndef CONFIG_32BIT
 		hviprio = ncsr_read(CSR_HVIPRIO2);
 		break;
-#else
-		hviprio = ncsr_read(CSR_HVIPRIO1H);
-		break;
-	case 2:
-		hviprio = ncsr_read(CSR_HVIPRIO2);
-		break;
-	case 3:
-		hviprio = ncsr_read(CSR_HVIPRIO2H);
-		break;
-#endif
 	default:
 		return;
 	}
@@ -340,19 +254,8 @@ static void aia_set_iprio8(struct kvm_vcpu *vcpu, unsigned int irq, u8 prio)
 		ncsr_write(CSR_HVIPRIO1, hviprio);
 		break;
 	case 1:
-#ifndef CONFIG_32BIT
 		ncsr_write(CSR_HVIPRIO2, hviprio);
 		break;
-#else
-		ncsr_write(CSR_HVIPRIO1H, hviprio);
-		break;
-	case 2:
-		ncsr_write(CSR_HVIPRIO2, hviprio);
-		break;
-	case 3:
-		ncsr_write(CSR_HVIPRIO2H, hviprio);
-		break;
-#endif
 	default:
 		return;
 	}
@@ -366,10 +269,8 @@ static int aia_rmw_iprio(struct kvm_vcpu *vcpu, unsigned int isel,
 	unsigned long old_val;
 	u8 prio;
 
-#ifndef CONFIG_32BIT
 	if (isel & 0x1)
 		return KVM_INSN_ILLEGAL_TRAP;
-#endif
 
 	nirqs = 4 * (BITS_PER_LONG / 32);
 	first_irq = (isel - ISELECT_IPRIO0) * 4;
@@ -577,12 +478,6 @@ void kvm_riscv_aia_enable(void)
 	csr_write(CSR_HVICTL, aia_hvictl_value(false));
 	csr_write(CSR_HVIPRIO1, 0x0);
 	csr_write(CSR_HVIPRIO2, 0x0);
-#ifdef CONFIG_32BIT
-	csr_write(CSR_HVIPH, 0x0);
-	csr_write(CSR_HIDELEGH, 0x0);
-	csr_write(CSR_HVIPRIO1H, 0x0);
-	csr_write(CSR_HVIPRIO2H, 0x0);
-#endif
 
 	/* Enable per-CPU SGEI interrupt */
 	enable_percpu_irq(hgei_parent_irq,

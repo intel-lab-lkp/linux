@@ -35,11 +35,7 @@ static int kvm_sbi_ext_pmu_handler(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		ret = kvm_riscv_vcpu_pmu_ctr_info(vcpu, cp->a0, retdata);
 		break;
 	case SBI_EXT_PMU_COUNTER_CFG_MATCH:
-#if defined(CONFIG_32BIT)
-		temp = ((uint64_t)cp->a5 << 32) | cp->a4;
-#else
 		temp = cp->a4;
-#endif
 		/*
 		 * This can fail if perf core framework fails to create an event.
 		 * No need to forward the error to userspace and exit the guest.
@@ -50,11 +46,7 @@ static int kvm_sbi_ext_pmu_handler(struct kvm_vcpu *vcpu, struct kvm_run *run,
 						       cp->a2, cp->a3, temp, retdata);
 		break;
 	case SBI_EXT_PMU_COUNTER_START:
-#if defined(CONFIG_32BIT)
-		temp = ((uint64_t)cp->a4 << 32) | cp->a3;
-#else
 		temp = cp->a3;
-#endif
 		ret = kvm_riscv_vcpu_pmu_ctr_start(vcpu, cp->a0, cp->a1, cp->a2,
 						   temp, retdata);
 		break;

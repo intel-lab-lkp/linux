@@ -19,15 +19,9 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
-#ifdef CONFIG_64BIT
 static unsigned long gstage_mode __ro_after_init = (HGATP_MODE_SV39X4 << HGATP_MODE_SHIFT);
 static unsigned long gstage_pgd_levels __ro_after_init = 3;
 #define gstage_index_bits	9
-#else
-static unsigned long gstage_mode __ro_after_init = (HGATP_MODE_SV32X4 << HGATP_MODE_SHIFT);
-static unsigned long gstage_pgd_levels __ro_after_init = 2;
-#define gstage_index_bits	10
-#endif
 
 #define gstage_pgd_xbits	2
 #define gstage_pgd_size	(1UL << (HGATP_PAGE_SHIFT + gstage_pgd_xbits))
@@ -739,7 +733,6 @@ void kvm_riscv_gstage_update_hgatp(struct kvm_vcpu *vcpu)
 
 void __init kvm_riscv_gstage_mode_detect(void)
 {
-#ifdef CONFIG_64BIT
 	/* Try Sv57x4 G-stage mode */
 	csr_write(CSR_HGATP, HGATP_MODE_SV57X4 << HGATP_MODE_SHIFT);
 	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV57X4) {
@@ -758,7 +751,6 @@ skip_sv48x4_test:
 
 	csr_write(CSR_HGATP, 0);
 	kvm_riscv_local_hfence_gvma_all();
-#endif
 }
 
 unsigned long __init kvm_riscv_gstage_mode(void)

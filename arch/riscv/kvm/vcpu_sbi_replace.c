@@ -26,11 +26,7 @@ static int kvm_sbi_ext_time_handler(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	}
 
 	kvm_riscv_vcpu_pmu_incr_fw(vcpu, SBI_PMU_FW_SET_TIMER);
-#if __riscv_xlen == 32
-	next_cycle = ((u64)cp->a1 << 32) | (u64)cp->a0;
-#else
 	next_cycle = (u64)cp->a0;
-#endif
 	kvm_riscv_vcpu_timer_next_event(vcpu, next_cycle);
 
 	return 0;

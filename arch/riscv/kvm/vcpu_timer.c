@@ -71,12 +71,7 @@ static int kvm_riscv_vcpu_timer_cancel(struct kvm_vcpu_timer *t)
 
 static int kvm_riscv_vcpu_update_vstimecmp(struct kvm_vcpu *vcpu, u64 ncycles)
 {
-#if defined(CONFIG_32BIT)
-	ncsr_write(CSR_VSTIMECMP, ncycles & 0xFFFFFFFF);
-	ncsr_write(CSR_VSTIMECMPH, ncycles >> 32);
-#else
 	ncsr_write(CSR_VSTIMECMP, ncycles);
-#endif
 	return 0;
 }
 
@@ -288,12 +283,7 @@ static void kvm_riscv_vcpu_update_timedelta(struct kvm_vcpu *vcpu)
 {
 	struct kvm_guest_timer *gt = &vcpu->kvm->arch.timer;
 
-#if defined(CONFIG_32BIT)
-	ncsr_write(CSR_HTIMEDELTA, (u32)(gt->time_delta));
-	ncsr_write(CSR_HTIMEDELTAH, (u32)(gt->time_delta >> 32));
-#else
 	ncsr_write(CSR_HTIMEDELTA, gt->time_delta);
-#endif
 }
 
 void kvm_riscv_vcpu_timer_restore(struct kvm_vcpu *vcpu)
@@ -305,12 +295,7 @@ void kvm_riscv_vcpu_timer_restore(struct kvm_vcpu *vcpu)
 	if (!t->sstc_enabled)
 		return;
 
-#if defined(CONFIG_32BIT)
-	ncsr_write(CSR_VSTIMECMP, (u32)t->next_cycles);
-	ncsr_write(CSR_VSTIMECMPH, (u32)(t->next_cycles >> 32));
-#else
 	ncsr_write(CSR_VSTIMECMP, t->next_cycles);
-#endif
 
 	/* timer should be enabled for the remaining operations */
 	if (unlikely(!t->init_done))
@@ -326,12 +311,7 @@ void kvm_riscv_vcpu_timer_sync(struct kvm_vcpu *vcpu)
 	if (!t->sstc_enabled)
 		return;
 
-#if defined(CONFIG_32BIT)
 	t->next_cycles = ncsr_read(CSR_VSTIMECMP);
-	t->next_cycles |= (u64)ncsr_read(CSR_VSTIMECMPH) << 32;
-#else
-	t->next_cycles = ncsr_read(CSR_VSTIMECMP);
-#endif
 }
 
 void kvm_riscv_vcpu_timer_save(struct kvm_vcpu *vcpu)

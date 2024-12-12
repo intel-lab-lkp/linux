@@ -78,11 +78,7 @@
 
 #define INSN_LEN(insn)		(INSN_IS_16BIT(insn) ? 2 : 4)
 
-#ifdef CONFIG_64BIT
 #define LOG_REGBYTES		3
-#else
-#define LOG_REGBYTES		2
-#endif
 #define REGBYTES		(1 << LOG_REGBYTES)
 
 #define SH_RD			7
@@ -522,19 +518,16 @@ int kvm_riscv_vcpu_mmio_load(struct kvm_vcpu *vcpu, struct kvm_run *run,
 	} else if ((insn & INSN_MASK_LBU) == INSN_MATCH_LBU) {
 		len = 1;
 		shift = 8 * (sizeof(ulong) - len);
-#ifdef CONFIG_64BIT
 	} else if ((insn & INSN_MASK_LD) == INSN_MATCH_LD) {
 		len = 8;
 		shift = 8 * (sizeof(ulong) - len);
 	} else if ((insn & INSN_MASK_LWU) == INSN_MATCH_LWU) {
 		len = 4;
-#endif
 	} else if ((insn & INSN_MASK_LH) == INSN_MATCH_LH) {
 		len = 2;
 		shift = 8 * (sizeof(ulong) - len);
 	} else if ((insn & INSN_MASK_LHU) == INSN_MATCH_LHU) {
 		len = 2;
-#ifdef CONFIG_64BIT
 	} else if ((insn & INSN_MASK_C_LD) == INSN_MATCH_C_LD) {
 		len = 8;
 		shift = 8 * (sizeof(ulong) - len);
@@ -543,7 +536,6 @@ int kvm_riscv_vcpu_mmio_load(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		   ((insn >> SH_RD) & 0x1f)) {
 		len = 8;
 		shift = 8 * (sizeof(ulong) - len);
-#endif
 	} else if ((insn & INSN_MASK_C_LW) == INSN_MATCH_C_LW) {
 		len = 4;
 		shift = 8 * (sizeof(ulong) - len);
@@ -645,13 +637,10 @@ int kvm_riscv_vcpu_mmio_store(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		len = 4;
 	} else if ((insn & INSN_MASK_SB) == INSN_MATCH_SB) {
 		len = 1;
-#ifdef CONFIG_64BIT
 	} else if ((insn & INSN_MASK_SD) == INSN_MATCH_SD) {
 		len = 8;
-#endif
 	} else if ((insn & INSN_MASK_SH) == INSN_MATCH_SH) {
 		len = 2;
-#ifdef CONFIG_64BIT
 	} else if ((insn & INSN_MASK_C_SD) == INSN_MATCH_C_SD) {
 		len = 8;
 		data64 = GET_RS2S(insn, &vcpu->arch.guest_context);
@@ -659,7 +648,6 @@ int kvm_riscv_vcpu_mmio_store(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		   ((insn >> SH_RD) & 0x1f)) {
 		len = 8;
 		data64 = GET_RS2C(insn, &vcpu->arch.guest_context);
-#endif
 	} else if ((insn & INSN_MASK_C_SW) == INSN_MATCH_C_SW) {
 		len = 4;
 		data32 = GET_RS2S(insn, &vcpu->arch.guest_context);

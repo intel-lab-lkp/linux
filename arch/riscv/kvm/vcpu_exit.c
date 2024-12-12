@@ -107,11 +107,7 @@ unsigned long kvm_riscv_vcpu_unpriv_read(struct kvm_vcpu *vcpu,
 			".option push\n"
 			".option norvc\n"
 			"add %[ttmp], %[taddr], 0\n"
-#ifdef CONFIG_64BIT
 			HLV_D(%[val], %[addr])
-#else
-			HLV_W(%[val], %[addr])
-#endif
 			".option pop"
 		: [val] "=&r" (val),
 		  [taddr] "+&r" (taddr), [ttmp] "+&r" (ttmp)
