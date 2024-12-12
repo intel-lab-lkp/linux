@@ -37,6 +37,7 @@ struct tcpci {
 	unsigned int alert_mask;
 
 	bool controls_vbus;
+	bool set_alert_mask;
 
 	struct tcpc_dev tcpc;
 	struct tcpci_data *data;
@@ -700,7 +701,10 @@ static int tcpci_init(struct tcpc_dev *tcpc)
 
 	tcpci->alert_mask = reg;
 
-	return tcpci_write16(tcpci, TCPC_ALERT_MASK, reg);
+	if (tcpci->set_alert_mask)
+		ret = tcpci_write16(tcpci, TCPC_ALERT_MASK, reg);
+
+	return ret;
 }
 
 irqreturn_t tcpci_irq(struct tcpci *tcpci)
@@ -931,12 +935,20 @@ static int tcpci_probe(struct i2c_client *client)
 					_tcpci_irq,
 					IRQF_SHARED | IRQF_ONESHOT,
 					dev_name(&client->dev), chip);
-	if (err < 0) {
-		tcpci_unregister_port(chip->tcpci);
-		return err;
-	}
+	if (err < 0)
+		goto unregister_port;
 
+	/* Enable the interrupt on chip at last */
+	err = tcpci_write16(chip->tcpci, TCPC_ALERT_MASK, chip->tcpci->alert_mask);
+	if (err < 0)
+		goto unregister_port;
+
+	chip->tcpci->set_alert_mask = true;
 	return 0;
+
+unregister_port:
+	tcpci_unregister_port(chip->tcpci);
+	return err;
 }
 
 static void tcpci_remove(struct i2c_client *client)
