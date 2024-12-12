@@ -2926,7 +2926,20 @@ int ext4_xattr_delete_inode(handle_t *handle, struct inode *inode,
 	struct ext4_iloc iloc = { .bh = NULL };
 	struct ext4_xattr_entry *entry;
 	struct inode *ea_inode;
-	int error;
+	int error = 0;
+
+	/*
+	 * We are the only ones holding inode reference. The xattr_sem should
+	 * better be unlocked! We could as well just not acquire xattr_sem at
+	 * all but this makes the code more futureproof. OTOH we need trylock
+	 * here to avoid false-positive warning from lockdep about reclaim
+	 * circular dependency.
+	 */
+	if (WARN_ON_ONCE(!down_write_trylock(&EXT4_I(inode)->xattr_sem)))
+		return error;
+
+	if (!EXT4_I(inode)->i_file_acl)
+		goto cleanup;
 
 	error = ext4_journal_ensure_credits(handle, extra_credits,
 			ext4_free_metadata_revoke_credits(inode->i_sb, 1));
@@ -3015,6 +3028,7 @@ int ext4_xattr_delete_inode(handle_t *handle, struct inode *inode,
 cleanup:
 	brelse(iloc.bh);
 	brelse(bh);
+	up_write(&EXT4_I(inode)->xattr_sem);
 	return error;
 }
 
