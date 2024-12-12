@@ -407,6 +407,8 @@ static int vm_module_tags_populate(void)
 
 	if (phys_end < new_end) {
 		struct page **next_page = vm_module_tags->pages + vm_module_tags->nr_pages;
+		unsigned long old_shadow_end = ALIGN(phys_end, MODULE_ALIGN);
+		unsigned long new_shadow_end = ALIGN(new_end, MODULE_ALIGN);
 		unsigned long more_pages;
 		unsigned long nr;
 
@@ -421,7 +423,19 @@ static int vm_module_tags_populate(void)
 				__free_page(next_page[i]);
 			return -ENOMEM;
 		}
+
 		vm_module_tags->nr_pages += nr;
+
+		/*
+		 * Kasan allocates 1 byte of shadow for every 8 bytes of data.
+		 * When kasan_alloc_module_shadow allocates shadow memory,
+		 * its unit of allocation is a page.
+		 * Therefore, here we need to align to MODULE_ALIGN.
+		 */
+		if (old_shadow_end < new_shadow_end)
+			kasan_alloc_module_shadow((void *)old_shadow_end,
+						  new_shadow_end - old_shadow_end,
+						  GFP_KERNEL);
 	}
 
 	/*
