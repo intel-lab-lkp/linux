@@ -2144,6 +2144,7 @@ static const struct pmbus_sensor_attr temp_attributes[] = {
 	{
 		.reg = PMBUS_READ_TEMPERATURE_1,
 		.class = PSC_TEMPERATURE,
+		.label = "tempA",
 		.paged = true,
 		.update = true,
 		.compare = true,
@@ -2156,6 +2157,7 @@ static const struct pmbus_sensor_attr temp_attributes[] = {
 	}, {
 		.reg = PMBUS_READ_TEMPERATURE_2,
 		.class = PSC_TEMPERATURE,
+		.label = "tempB",
 		.paged = true,
 		.update = true,
 		.compare = true,
@@ -2168,6 +2170,7 @@ static const struct pmbus_sensor_attr temp_attributes[] = {
 	}, {
 		.reg = PMBUS_READ_TEMPERATURE_3,
 		.class = PSC_TEMPERATURE,
+		.label = "tempC",
 		.paged = true,
 		.update = true,
 		.compare = true,
@@ -2281,6 +2284,17 @@ static int pmbus_add_fan_attributes(struct i2c_client *client,
 					     page, 0xff, pmbus_fan_registers[f],
 					     PSC_FAN, true, true, true) == NULL)
 				return -ENOMEM;
+
+			/*
+			 * Add fan label.
+			 * Assuming paged attributes while passing page index
+			 */
+			ret = pmbus_add_label(data, "fan", index, "fan",
+					      page + 1, 0xff);
+			if (ret) {
+				dev_err(data->dev, "Fan label add failed ret=%d\n", ret);
+				return ret;
+			}
 
 			/* Fan control */
 			if (pmbus_check_word_register(client, page,
