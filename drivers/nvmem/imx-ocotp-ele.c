@@ -5,6 +5,8 @@
  * Copyright 2023 NXP
  */
 
+#include <dt-bindings/nvmem/fsl,imx93-ocotp.h>
+#include <dt-bindings/nvmem/fsl,imx95-ocotp.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -27,6 +29,7 @@ struct ocotp_map_entry {
 };
 
 struct ocotp_devtype_data {
+	const struct ocotp_access_gates *access_gates;
 	u32 reg_off;
 	char *name;
 	u32 size;
@@ -36,11 +39,26 @@ struct ocotp_devtype_data {
 	struct ocotp_map_entry entry[];
 };
 
+#define OCOTP_MAX_NUM_GATE_WORDS 4
+#define IMX93_OCOTP_NUM_GATES 17
+#define IMX95_OCOTP_NUM_GATES 36
+
+struct ocotp_access_gates {
+	u32 num_words;
+	u32 words[OCOTP_MAX_NUM_GATE_WORDS];
+	u32 num_gates;
+	struct access_gate {
+		u32 word;
+		u32 mask;
+	} gates[];
+};
+
 struct imx_ocotp_priv {
 	struct device *dev;
 	void __iomem *base;
 	struct nvmem_config config;
 	struct mutex lock;
+	u32 value[OCOTP_MAX_NUM_GATE_WORDS];
 	const struct ocotp_devtype_data *data;
 };
 
@@ -131,6 +149,100 @@ static void imx_ocotp_fixup_dt_cell_info(struct nvmem_device *nvmem,
 	cell->read_post_process = imx_ocotp_cell_pp;
 }
 
+static int imx_ele_ocotp_check_access(struct platform_device *pdev, u32 id)
+{
+	struct imx_ocotp_priv *priv = platform_get_drvdata(pdev);
+	const struct ocotp_access_gates *access_gates = priv->data->access_gates;
+	u32 word, mask;
+
+	if (id >= access_gates->num_gates) {
+		dev_err(&pdev->dev, "Index %d too large\n", id);
+		return -EACCES;
+	}
+
+	word = access_gates->gates[id].word;
+	mask = access_gates->gates[id].mask;
+
+	dev_dbg(&pdev->dev, "id:%d word:%d mask:0x%08x\n", id, word, mask);
+	/* true means not allow access */
+	if (priv->value[word] & mask)
+		return -EACCES;
+
+	return 0;
+}
+
+static int imx_ele_ocotp_grant_access(struct platform_device *pdev, struct device_node *parent)
+{
+	struct device_node *child;
+	struct device *dev = &pdev->dev;
+
+	for_each_available_child_of_node(parent, child) {
+		struct of_phandle_iterator it;
+		int err;
+		u32 id;
+
+		of_for_each_phandle(&it, err, child, "access-controllers",
+				    "#access-controller-cells", 0) {
+			struct of_phandle_args provider_args;
+			struct device_node *provider = it.node;
+
+			if (err) {
+				dev_err(dev, "Unable to get access-controllers property for node %s\n, err: %d",
+					child->full_name, err);
+				of_node_put(provider);
+				return err;
+			}
+
+			/* Only support one cell */
+			if (of_phandle_iterator_args(&it, provider_args.args, 1) != 1) {
+				dev_err(dev, "wrong args count\n");
+				return -EINVAL;
+			}
+
+			id = provider_args.args[0];
+
+			dev_dbg(dev, "Checking node: %s gate: %d\n", child->full_name, id);
+
+			if (imx_ele_ocotp_check_access(pdev, id)) {
+				of_detach_node(child);
+				dev_err(dev, "%s: Not granted, device driver will not be probed\n",
+					child->full_name);
+			}
+		}
+
+		imx_ele_ocotp_grant_access(pdev, child);
+	}
+
+	return 0;
+}
+
+static int imx_ele_ocotp_access_control(struct platform_device *pdev)
+{
+	struct imx_ocotp_priv *priv = platform_get_drvdata(pdev);
+	struct device_node *soc __free(device_node) = of_find_node_by_path("/soc");
+	const struct ocotp_access_gates *access_gates = priv->data->access_gates;
+	void __iomem *reg = priv->base + priv->data->reg_off;
+	u32 off;
+	int i;
+
+	if (!priv->data->access_gates)
+		return 0;
+
+	if (!soc)
+		soc = of_find_node_by_path("/soc@0");
+
+	/* This should never happen */
+	WARN_ON(!soc);
+
+	for (i = 0; i < access_gates->num_words; i++) {
+		off = access_gates->words[i] << 2;
+		priv->value[i] = readl(reg + off);
+		dev_dbg(&pdev->dev, "word:%d 0x%08x\n", access_gates->words[i], priv->value[i]);
+	}
+
+	return imx_ele_ocotp_grant_access(pdev, soc);
+}
+
 static int imx_ele_ocotp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -161,14 +273,43 @@ static int imx_ele_ocotp_probe(struct platform_device *pdev)
 	priv->config.fixup_dt_cell_info = imx_ocotp_fixup_dt_cell_info;
 	mutex_init(&priv->lock);
 
+	platform_set_drvdata(pdev, priv);
+
 	nvmem = devm_nvmem_register(dev, &priv->config);
 	if (IS_ERR(nvmem))
 		return PTR_ERR(nvmem);
 
-	return 0;
+
+	return imx_ele_ocotp_access_control(pdev);
 }
 
+static const struct ocotp_access_gates imx93_access_gates = {
+	.num_words = 3,
+	.words = {19, 20, 21},
+	.num_gates = IMX93_OCOTP_NUM_GATES,
+	.gates = {
+		[IMX93_OCOTP_NPU_GATE]		= { .word = 19, .mask = BIT(13) },
+		[IMX93_OCOTP_A550_GATE]		= { .word = 19, .mask = BIT(14) },
+		[IMX93_OCOTP_A551_GATE]		= { .word = 19, .mask = BIT(15) },
+		[IMX93_OCOTP_M33_GATE]		= { .word = 19, .mask = BIT(24) },
+		[IMX93_OCOTP_CAN1_FD_GATE]	= { .word = 19, .mask = BIT(28) },
+		[IMX93_OCOTP_CAN2_FD_GATE]	= { .word = 19, .mask = BIT(29) },
+		[IMX93_OCOTP_CAN1_GATE]		= { .word = 19, .mask = BIT(30) },
+		[IMX93_OCOTP_CAN2_GATE]		= { .word = 19, .mask = BIT(31) },
+		[IMX93_OCOTP_USB1_GATE]		= { .word = 20, .mask = BIT(3) },
+		[IMX93_OCOTP_USB2_GATE]		= { .word = 20, .mask = BIT(4) },
+		[IMX93_OCOTP_ENET1_GATE]	= { .word = 20, .mask = BIT(5) },
+		[IMX93_OCOTP_ENET2_GATE]	= { .word = 20, .mask = BIT(6) },
+		[IMX93_OCOTP_PXP_GATE]		= { .word = 20, .mask = BIT(10) },
+		[IMX93_OCOTP_MIPI_CSI1_GATE]	= { .word = 20, .mask = BIT(17) },
+		[IMX93_OCOTP_MIPI_DSI1_GATE]	= { .word = 20, .mask = BIT(19) },
+		[IMX93_OCOTP_LVDS1_GATE]	= { .word = 20, .mask = BIT(24) },
+		[IMX93_OCOTP_ADC1_GATE]		= { .word = 21, .mask = BIT(7) },
+	},
+};
+
 static const struct ocotp_devtype_data imx93_ocotp_data = {
+	.access_gates = &imx93_access_gates,
 	.reg_off = 0x8000,
 	.reg_read = imx_ocotp_reg_read,
 	.size = 2048,
@@ -183,7 +324,51 @@ static const struct ocotp_devtype_data imx93_ocotp_data = {
 	},
 };
 
+static const struct ocotp_access_gates imx95_access_gates = {
+	.num_words = 3,
+	.words = {17, 18, 19},
+	.num_gates = IMX95_OCOTP_NUM_GATES,
+	.gates = {
+		[IMX95_OCOTP_CANFD1_GATE]	= { .word = 17, .mask = BIT(20) },
+		[IMX95_OCOTP_CANFD2_GATE]	= { .word = 17, .mask = BIT(21) },
+		[IMX95_OCOTP_CANFD3_GATE]	= { .word = 17, .mask = BIT(22) },
+		[IMX95_OCOTP_CANFD4_GATE]	= { .word = 17, .mask = BIT(23) },
+		[IMX95_OCOTP_CANFD5_GATE]	= { .word = 17, .mask = BIT(24) },
+		[IMX95_OCOTP_CAN1_GATE]	= { .word = 17, .mask = BIT(25) },
+		[IMX95_OCOTP_CAN2_GATE]	= { .word = 17, .mask = BIT(26) },
+		[IMX95_OCOTP_CAN3_GATE]	= { .word = 17, .mask = BIT(27) },
+		[IMX95_OCOTP_CAN4_GATE]	= { .word = 17, .mask = BIT(28) },
+		[IMX95_OCOTP_CAN5_GATE]	= { .word = 17, .mask = BIT(29) },
+		[IMX95_OCOTP_NPU_GATE]		= { .word = 18, .mask = BIT(0) },
+		[IMX95_OCOTP_A550_GATE]	= { .word = 18, .mask = BIT(1) },
+		[IMX95_OCOTP_A551_GATE]	= { .word = 18, .mask = BIT(2) },
+		[IMX95_OCOTP_A552_GATE]	= { .word = 18, .mask = BIT(3) },
+		[IMX95_OCOTP_A553_GATE]	= { .word = 18, .mask = BIT(4) },
+		[IMX95_OCOTP_A554_GATE]	= { .word = 18, .mask = BIT(5) },
+		[IMX95_OCOTP_A555_GATE]	= { .word = 18, .mask = BIT(6) },
+		[IMX95_OCOTP_M7_GATE]		= { .word = 18, .mask = BIT(9) },
+		[IMX95_OCOTP_DCSS_GATE]	= { .word = 18, .mask = BIT(22) },
+		[IMX95_OCOTP_LVDS1_GATE]	= { .word = 18, .mask = BIT(27) },
+		[IMX95_OCOTP_ISP_GATE]		= { .word = 18, .mask = BIT(29) },
+		[IMX95_OCOTP_USB1_GATE]	= { .word = 19, .mask = BIT(2) },
+		[IMX95_OCOTP_USB2_GATE]	= { .word = 19, .mask = BIT(3) },
+		[IMX95_OCOTP_NETC_GATE]	= { .word = 19, .mask = BIT(4) },
+		[IMX95_OCOTP_PCIE1_GATE]	= { .word = 19, .mask = BIT(6) },
+		[IMX95_OCOTP_PCIE2_GATE]	= { .word = 19, .mask = BIT(7) },
+		[IMX95_OCOTP_ADC1_GATE]	= { .word = 19, .mask = BIT(8) },
+		[IMX95_OCOTP_EARC_RX_GATE]	= { .word = 19, .mask = BIT(11) },
+		[IMX95_OCOTP_GPU3D_GATE]	= { .word = 19, .mask = BIT(16) },
+		[IMX95_OCOTP_VPU_GATE]		= { .word = 19, .mask = BIT(17) },
+		[IMX95_OCOTP_JPEG_ENC_GATE]	= { .word = 19, .mask = BIT(18) },
+		[IMX95_OCOTP_JPEG_DEC_GATE]	= { .word = 19, .mask = BIT(19) },
+		[IMX95_OCOTP_MIPI_CSI1_GATE]	= { .word = 19, .mask = BIT(21) },
+		[IMX95_OCOTP_MIPI_CSI2_GATE]	= { .word = 19, .mask = BIT(22) },
+		[IMX95_OCOTP_MIPI_DSI1_GATE]	= { .word = 19, .mask = BIT(23) },
+	}
+};
+
 static const struct ocotp_devtype_data imx95_ocotp_data = {
+	.access_gates = &imx95_access_gates,
 	.reg_off = 0x8000,
 	.reg_read = imx_ocotp_reg_read,
 	.size = 2048,
