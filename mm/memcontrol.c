@@ -5371,6 +5371,18 @@ bool mem_cgroup_zswap_writeback_enabled(struct mem_cgroup *memcg)
 	if (!zswap_is_enabled())
 		return true;
 
+	/*
+	 * Always allow exiting tasks to push data to swap. A process in
+	 * the middle of exit cannot get OOM killed, but may need to push
+	 * uncompressible data to swap in order to get the cgroup memory
+	 * use below the limit, and make progress with the exit.
+	 */
+	if (unlikely(current->flags & PF_EXITING)) {
+		struct mm_struct *mm = READ_ONCE(current->mm);
+		if (mm && mm_match_cgroup(mm, memcg))
+			return true;
+	}
+
 	for (; memcg; memcg = parent_mem_cgroup(memcg))
 		if (!READ_ONCE(memcg->zswap_writeback))
 			return false;
