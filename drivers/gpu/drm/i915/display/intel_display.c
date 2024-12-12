@@ -2473,6 +2473,36 @@ static int intel_crtc_compute_pipe_src(struct intel_crtc_state *crtc_state)
 	return 0;
 }
 
+/*
+ * The x-coordinate for Primary should be calculated in such a way
+ * that it remains consistent whether the pipes are joined or not.
+ * This means we need to consider the full width of the display even
+ * when the pipes are joined. The x-coordinate for secondaries is 0
+ * because it starts at the leftmost point of its own display area,
+ * ensuring that the framebuffer is centered within Pipe B’s portion
+ * of the overall display.
+ */
+static int intel_crtc_compute_pfit(struct intel_atomic_state *state,
+				   struct intel_crtc_state *crtc_state)
+{
+	struct drm_display_mode *mode = &crtc_state->hw.pipe_mode;
+	struct drm_rect area;
+
+	if (!crtc_state->pch_pfit.enabled)
+		return 0;
+
+	drm_rect_init(&area, 0, 0,
+		      mode->crtc_hdisplay,
+		      mode->crtc_vdisplay);
+
+	if (!drm_rect_intersect(&crtc_state->pch_pfit.dst, &area))
+		return -EINVAL;
+
+	drm_rect_translate(&crtc_state->pch_pfit.dst, -area.x1, -area.y1);
+
+	return 0;
+}
+
 static int intel_crtc_compute_pipe_mode(struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
@@ -2536,6 +2566,10 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 		return ret;
 
 	ret = intel_crtc_compute_pipe_mode(crtc_state);
+	if (ret)
+		return ret;
+
+	ret = intel_crtc_compute_pfit(state, crtc_state);
 	if (ret)
 		return ret;
 
@@ -4587,6 +4621,13 @@ copy_joiner_crtc_state_modeset(struct intel_atomic_state *state,
 	if (primary_crtc_state->dp_tunnel_ref.tunnel)
 		drm_dp_tunnel_ref_get(primary_crtc_state->dp_tunnel_ref.tunnel,
 				      &secondary_crtc_state->dp_tunnel_ref);
+
+	if (secondary_crtc_state->pch_pfit.enabled) {
+		struct drm_rect *dst = &secondary_crtc_state->pch_pfit.dst;
+		int y = dst->y1;
+
+		drm_rect_translate_to(dst, 0, y);
+	}
 
 	copy_joiner_crtc_state_nomodeset(state, secondary_crtc);
 
