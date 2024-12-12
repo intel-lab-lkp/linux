@@ -2444,6 +2444,13 @@ static int intel_crtc_compute_pipe_src(struct intel_crtc_state *crtc_state)
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
+	int pipe_src_w, pipe_src_h;
+
+	drm_mode_get_hv_timing(&crtc_state->hw.mode,
+			       &pipe_src_w, &pipe_src_h);
+
+	drm_rect_init(&crtc_state->pipe_src, 0, 0,
+		      pipe_src_w, pipe_src_h);
 
 	intel_joiner_compute_pipe_src(crtc_state);
 
@@ -4739,10 +4746,12 @@ intel_modeset_pipe_config(struct intel_atomic_state *state,
 	 * computation to clearly distinguish it from the adjusted mode, which
 	 * can be changed by the connectors in the below retry loop.
 	 */
-	drm_mode_get_hv_timing(&crtc_state->hw.mode,
-			       &pipe_src_w, &pipe_src_h);
-	drm_rect_init(&crtc_state->pipe_src, 0, 0,
-		      pipe_src_w, pipe_src_h);
+	if (HAS_GMCH(i915)) {
+		drm_mode_get_hv_timing(&crtc_state->hw.mode,
+				       &pipe_src_w, &pipe_src_h);
+		drm_rect_init(&crtc_state->pipe_src, 0, 0,
+			      pipe_src_w, pipe_src_h);
+	}
 
 	for_each_new_connector_in_state(&state->base, connector, connector_state, i) {
 		struct intel_encoder *encoder =
