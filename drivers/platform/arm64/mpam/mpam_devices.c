@@ -3120,6 +3120,29 @@ static void mpam_extend_config(struct mpam_class *class, struct mpam_config *cfg
 	}
 }
 
+#define maybe_update_config(cfg, feature, newcfg, member, changes) do { \
+	if (mpam_has_feature(feature, newcfg) &&			\
+	    (newcfg)->member != (cfg)->member) {			\
+		(cfg)->member = (newcfg)->member;			\
+		mpam_set_feature(feature, cfg);				\
+									\
+		(changes) |= (feature);					\
+	}								\
+} while (0)
+
+static mpam_features_t mpam_update_config(struct mpam_config *cfg,
+					  const struct mpam_config *newcfg)
+{
+	mpam_features_t changes = 0;
+
+	maybe_update_config(cfg, mpam_feat_cpor_part, newcfg, cpbm, changes);
+	maybe_update_config(cfg, mpam_feat_mbw_part, newcfg, mbw_pbm, changes);
+	maybe_update_config(cfg, mpam_feat_mbw_max, newcfg, mbw_max, changes);
+	maybe_update_config(cfg, mpam_feat_mbw_min, newcfg, mbw_min, changes);
+
+	return changes;
+}
+
 /* TODO: split into write_config/sync_config */
 /* TODO: add config_dirty bitmap to drive sync_config */
 int mpam_apply_config(struct mpam_component *comp, u16 partid,
