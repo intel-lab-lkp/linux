@@ -20754,6 +20754,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/rng/samsung,exynos4-rng.yaml
 F:	drivers/crypto/exynos-rng.c
 
+SAMSUNG EXYNOS SPEEDY SERIAL HOST CONTROLLER DRIVER
+M:	Markuss Broks <markuss.broks@gmail.com>
+L:	linux-samsung-soc@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/soc/samsung/exynos-speedy.yaml
+F:	drivers/soc/samsung/exynos-speedy.c
+
 SAMSUNG EXYNOS TRUE RANDOM NUMBER GENERATOR (TRNG) DRIVER
 M:	Łukasz Stelmach <l.stelmach@samsung.com>
 L:	linux-samsung-soc@vger.kernel.org
