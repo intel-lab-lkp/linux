@@ -80,6 +80,7 @@ struct bam_async_desc {
 enum bam_reg {
 	BAM_CTRL,
 	BAM_REVISION,
+	BAM_SW_VERSION,
 	BAM_NUM_PIPES,
 	BAM_DESC_CNT_TRSHLD,
 	BAM_IRQ_SRCS,
@@ -114,6 +115,7 @@ struct reg_offset_data {
 static const struct reg_offset_data bam_v1_3_reg_info[] = {
 	[BAM_CTRL]		= { 0x0F80, 0x00, 0x00, 0x00 },
 	[BAM_REVISION]		= { 0x0F84, 0x00, 0x00, 0x00 },
+	[BAM_SW_VERSION]	= { 0x0F88, 0x00, 0x00, 0x00 },
 	[BAM_NUM_PIPES]		= { 0x0FBC, 0x00, 0x00, 0x00 },
 	[BAM_DESC_CNT_TRSHLD]	= { 0x0F88, 0x00, 0x00, 0x00 },
 	[BAM_IRQ_SRCS]		= { 0x0F8C, 0x00, 0x00, 0x00 },
@@ -143,6 +145,7 @@ static const struct reg_offset_data bam_v1_3_reg_info[] = {
 static const struct reg_offset_data bam_v1_4_reg_info[] = {
 	[BAM_CTRL]		= { 0x0000, 0x00, 0x00, 0x00 },
 	[BAM_REVISION]		= { 0x0004, 0x00, 0x00, 0x00 },
+	[BAM_SW_VERSION]	= { 0x0008, 0x00, 0x00, 0x00 },
 	[BAM_NUM_PIPES]		= { 0x003C, 0x00, 0x00, 0x00 },
 	[BAM_DESC_CNT_TRSHLD]	= { 0x0008, 0x00, 0x00, 0x00 },
 	[BAM_IRQ_SRCS]		= { 0x000C, 0x00, 0x00, 0x00 },
@@ -172,6 +175,7 @@ static const struct reg_offset_data bam_v1_4_reg_info[] = {
 static const struct reg_offset_data bam_v1_7_reg_info[] = {
 	[BAM_CTRL]		= { 0x00000, 0x00, 0x00, 0x00 },
 	[BAM_REVISION]		= { 0x01000, 0x00, 0x00, 0x00 },
+	[BAM_SW_VERSION]	= { 0x01004, 0x00, 0x00, 0x00 },
 	[BAM_NUM_PIPES]		= { 0x01008, 0x00, 0x00, 0x00 },
 	[BAM_DESC_CNT_TRSHLD]	= { 0x00008, 0x00, 0x00, 0x00 },
 	[BAM_IRQ_SRCS]		= { 0x03010, 0x00, 0x00, 0x00 },
@@ -390,6 +394,7 @@ struct bam_device {
 	bool controlled_remotely;
 	bool powered_remotely;
 	u32 active_channels;
+	u32 bam_sw_version;
 
 	const struct reg_offset_data *layout;
 
@@ -1297,6 +1302,9 @@ static int bam_dma_probe(struct platform_device *pdev)
 		dev_err(bdev->dev, "failed to prepare/enable clock\n");
 		return ret;
 	}
+
+	bdev->bam_sw_version = readl_relaxed(bam_addr(bdev, 0, BAM_SW_VERSION));
+	dev_info(bdev->dev, "BAM software version:0x%08x\n", bdev->bam_sw_version);
 
 	ret = bam_init(bdev);
 	if (ret)
