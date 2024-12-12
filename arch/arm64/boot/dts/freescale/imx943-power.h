@@ -1,0 +1,41 @@
+/* SPDX-License-Identifier: (GPL-2.0 OR MIT) */
+/*
+ *  Copyright 2024 NXP
+ */
+
+#ifndef __IMX943_POWER_H__
+#define __IMX943_POWER_H__
+
+#define IMX943_PD_ANA		0
+#define IMX943_PD_AON		1
+#define IMX943_PD_BBSM		2
+#define IMX943_PD_M71		3
+#define IMX943_PD_CCMSRCGPC	4
+#define IMX943_PD_A55C0		5
+#define IMX943_PD_A55C1		6
+#define IMX943_PD_A55C2		7
+#define IMX943_PD_A55C3		8
+#define IMX943_PD_A55P		9
+#define IMX943_PD_DDR		10
+#define IMX943_PD_DISPLAY	11
+#define IMX943_PD_M70		12
+#define IMX943_PD_HSIO_TOP	13
+#define IMX943_PD_HSIO_WAON	14
+#define IMX943_PD_NETC		15
+#define IMX943_PD_NOC		16
+#define IMX943_PD_NPU		17
+#define IMX943_PD_WAKEUP	18
+
+#define IMX943_PERF_M33		0
+#define IMX943_PERF_M33S	1
+#define IMX943_PERF_WAKEUP	2
+#define IMX943_PERF_M70		3
+#define IMX943_PERF_M71		4
+#define IMX943_PERF_DRAM	5
+#define IMX943_PERF_HSIO	6
+#define IMX943_PERF_NPU		7
+#define IMX943_PERF_NOC		8
+#define IMX943_PERF_A55		9
+#define IMX943_PERF_DISP	10
+
+#endif
