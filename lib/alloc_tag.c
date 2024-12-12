@@ -209,6 +209,10 @@ void pgalloc_tag_swap(struct folio *new, struct folio *old)
 		return;
 	}
 
+	/* clear tags before swap */
+	set_codetag_empty(&ref_old);
+	set_codetag_empty(&ref_new);
+
 	/* swap tags */
 	__alloc_tag_ref_set(&ref_old, tag_new);
 	update_page_tag_ref(handle_old, &ref_old);
