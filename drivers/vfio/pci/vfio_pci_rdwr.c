@@ -236,10 +236,9 @@ ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 	struct pci_dev *pdev = vdev->pdev;
 	loff_t pos = *ppos & VFIO_PCI_OFFSET_MASK;
 	int bar = VFIO_PCI_OFFSET_TO_INDEX(*ppos);
-	size_t x_start = 0, x_end = 0;
+	size_t x_start, x_end;
 	resource_size_t end;
 	void __iomem *io;
-	struct resource *res = &vdev->pdev->resource[bar];
 	ssize_t done;
 
 	if (pci_resource_start(pdev, bar))
@@ -253,41 +252,43 @@ ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 	count = min(count, (size_t)(end - pos));
 
 	if (bar == PCI_ROM_RESOURCE) {
+		if (iswrite)
+			return -EINVAL;
 		/*
 		 * The ROM can fill less space than the BAR, so we start the
 		 * excluded range at the end of the actual ROM.  This makes
 		 * filling large ROM BARs much faster.
 		 */
 		io = pci_map_rom(pdev, &x_start);
-		if (!io) {
-			done = -ENOMEM;
-			goto out;
-		}
+		if (!io)
+			return -ENOMEM;
 		x_end = end;
+
+		done = vfio_pci_core_do_io_rw(vdev, 1, io, buf, pos,
+					      count, x_start, x_end, 0);
+
+		pci_unmap_rom(pdev, io);
 	} else {
-		int ret = vfio_pci_core_setup_barmap(vdev, bar);
-		if (ret) {
-			done = ret;
-			goto out;
-		}
+		done = vfio_pci_core_setup_barmap(vdev, bar);
+		if (done)
+			return done;
 
 		io = vdev->barmap[bar];
-	}
 
-	if (bar == vdev->msix_bar) {
-		x_start = vdev->msix_offset;
-		x_end = vdev->msix_offset + vdev->msix_size;
-	}
+		if (bar == vdev->msix_bar) {
+			x_start = vdev->msix_offset;
+			x_end = vdev->msix_offset + vdev->msix_size;
+		} else {
+			x_start = 0;
+			x_end = 0;
+		}
 
-	done = vfio_pci_core_do_io_rw(vdev, res->flags & IORESOURCE_MEM, io, buf, pos,
+		done = vfio_pci_core_do_io_rw(vdev, pci_resource_flags(pdev, bar) & IORESOURCE_MEM, io, buf, pos,
 				      count, x_start, x_end, iswrite);
-
-	if (done >= 0)
-		*ppos += done;
-
-	if (bar == PCI_ROM_RESOURCE)
-		pci_unmap_rom(pdev, io);
+	}
 out:
+	if (done > 0)
+		*ppos += done;
 	return done;
 }
 
