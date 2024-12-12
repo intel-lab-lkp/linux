@@ -46,10 +46,12 @@ install_linux_image () {
 		cp System.map "${pdir}/usr/lib/uml/modules/${KERNELRELEASE}/System.map"
 		cp ${KCONFIG_CONFIG} "${pdir}/usr/share/doc/${pname}/config"
 		gzip "${pdir}/usr/share/doc/${pname}/config"
+		initrd_wanted=No
 	else
 		mkdir -p "${pdir}/boot"
 		cp System.map "${pdir}/boot/System.map-${KERNELRELEASE}"
 		cp ${KCONFIG_CONFIG} "${pdir}/boot/config-${KERNELRELEASE}"
+		initrd_wanted=$(if_enabled_echo CONFIG_BLK_DEV_INITRD Yes No)
 	fi
 
 	# Not all arches have the same installed path in debian
@@ -82,7 +84,7 @@ install_linux_image () {
 		export DEB_MAINT_PARAMS="\$*"
 
 		# Tell initramfs builder whether it's wanted
-		export INITRD=$(if_enabled_echo CONFIG_BLK_DEV_INITRD Yes No)
+		export INITRD=${initrd_wanted}
 
 		# run-parts will error out if one of its directory arguments does not
 		# exist, so filter the list of hook directories accordingly.
