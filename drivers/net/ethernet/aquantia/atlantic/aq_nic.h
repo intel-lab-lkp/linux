@@ -189,7 +189,7 @@ int aq_nic_get_regs(struct aq_nic_s *self, struct ethtool_regs *regs, void *p);
 int aq_nic_get_regs_count(struct aq_nic_s *self);
 u64 *aq_nic_get_stats(struct aq_nic_s *self, u64 *data);
 int aq_nic_stop(struct aq_nic_s *self);
-void aq_nic_deinit(struct aq_nic_s *self, bool link_down);
+void aq_nic_deinit(struct aq_nic_s *self, bool link_down, bool keep_rings);
 void aq_nic_set_power(struct aq_nic_s *self);
 void aq_nic_free_hot_resources(struct aq_nic_s *self);
 void aq_nic_free_vectors(struct aq_nic_s *self);

@@ -132,6 +132,16 @@ int aq_vec_ring_alloc(struct aq_vec_s *self, struct aq_nic_s *aq_nic,
 	unsigned int i = 0U;
 	int err = 0;
 
+	if (self && self->tx_rings == aq_nic_cfg->tcs && self->rx_rings == aq_nic_cfg->tcs) {
+		/* Correct rings already allocated, nothing to do here */
+		return 0;
+	} else if (self && (self->tx_rings > 0 || self->rx_rings > 0)) {
+		/* Allocated rings are different, free rings and reallocate */
+		pr_notice("%s: cannot reuse rings, have %d, need %d, reallocating", __func__,
+			  self->tx_rings, aq_nic_cfg->tcs);
+		aq_vec_ring_free(self);
+	}
+
 	for (i = 0; i < aq_nic_cfg->tcs; ++i) {
 		const unsigned int idx_ring = AQ_NIC_CFG_TCVEC2RING(aq_nic_cfg,
 								    i, idx);

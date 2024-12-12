@@ -390,7 +390,7 @@ static int aq_suspend_common(struct device *dev)
 	if (netif_running(nic->ndev))
 		aq_nic_stop(nic);
 
-	aq_nic_deinit(nic, !nic->aq_hw->aq_nic_cfg->wol);
+	aq_nic_deinit(nic, !nic->aq_hw->aq_nic_cfg->wol, true);
 	aq_nic_set_power(nic);
 
 	rtnl_unlock();
@@ -426,7 +426,7 @@ static int atl_resume_common(struct device *dev)
 
 err_exit:
 	if (ret < 0)
-		aq_nic_deinit(nic, true);
+		aq_nic_deinit(nic, true, false);
 
 	rtnl_unlock();
 

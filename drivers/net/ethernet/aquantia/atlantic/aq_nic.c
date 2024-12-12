@@ -1422,7 +1422,7 @@ void aq_nic_set_power(struct aq_nic_s *self)
 		}
 }
 
-void aq_nic_deinit(struct aq_nic_s *self, bool link_down)
+void aq_nic_deinit(struct aq_nic_s *self, bool link_down, bool keep_rings)
 {
 	struct aq_vec_s *aq_vec = NULL;
 	unsigned int i = 0U;
@@ -1433,7 +1433,8 @@ void aq_nic_deinit(struct aq_nic_s *self, bool link_down)
 	for (i = 0U; i < self->aq_vecs; i++) {
 		aq_vec = self->aq_vec[i];
 		aq_vec_deinit(aq_vec);
-		aq_vec_ring_free(aq_vec);
+		if (!keep_rings)
+			aq_vec_ring_free(aq_vec);
 	}
 
 	aq_ptp_unregister(self);
@@ -1499,7 +1500,7 @@ void aq_nic_shutdown(struct aq_nic_s *self)
 		if (err < 0)
 			goto err_exit;
 	}
-	aq_nic_deinit(self, !self->aq_hw->aq_nic_cfg->wol);
+	aq_nic_deinit(self, !self->aq_hw->aq_nic_cfg->wol, false);
 	aq_nic_set_power(self);
 
 err_exit:

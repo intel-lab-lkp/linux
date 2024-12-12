@@ -84,7 +84,7 @@ int aq_ndev_open(struct net_device *ndev)
 
 err_exit:
 	if (err < 0)
-		aq_nic_deinit(aq_nic, true);
+		aq_nic_deinit(aq_nic, true, false);
 
 	return err;
 }
@@ -95,7 +95,7 @@ int aq_ndev_close(struct net_device *ndev)
 	int err = 0;
 
 	err = aq_nic_stop(aq_nic);
-	aq_nic_deinit(aq_nic, true);
+	aq_nic_deinit(aq_nic, true, false);
 
 	return err;
 }
