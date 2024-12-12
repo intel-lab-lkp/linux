@@ -26,7 +26,6 @@ static inline void _kvm_read_sse_reg(int reg, sse128_t *data)
 	case 5: asm("movdqa %%xmm5, %0" : "=m"(*data)); break;
 	case 6: asm("movdqa %%xmm6, %0" : "=m"(*data)); break;
 	case 7: asm("movdqa %%xmm7, %0" : "=m"(*data)); break;
-#ifdef CONFIG_X86_64
 	case 8: asm("movdqa %%xmm8, %0" : "=m"(*data)); break;
 	case 9: asm("movdqa %%xmm9, %0" : "=m"(*data)); break;
 	case 10: asm("movdqa %%xmm10, %0" : "=m"(*data)); break;
@@ -35,7 +34,6 @@ static inline void _kvm_read_sse_reg(int reg, sse128_t *data)
 	case 13: asm("movdqa %%xmm13, %0" : "=m"(*data)); break;
 	case 14: asm("movdqa %%xmm14, %0" : "=m"(*data)); break;
 	case 15: asm("movdqa %%xmm15, %0" : "=m"(*data)); break;
-#endif
 	default: BUG();
 	}
 }
@@ -51,7 +49,6 @@ static inline void _kvm_write_sse_reg(int reg, const sse128_t *data)
 	case 5: asm("movdqa %0, %%xmm5" : : "m"(*data)); break;
 	case 6: asm("movdqa %0, %%xmm6" : : "m"(*data)); break;
 	case 7: asm("movdqa %0, %%xmm7" : : "m"(*data)); break;
-#ifdef CONFIG_X86_64
 	case 8: asm("movdqa %0, %%xmm8" : : "m"(*data)); break;
 	case 9: asm("movdqa %0, %%xmm9" : : "m"(*data)); break;
 	case 10: asm("movdqa %0, %%xmm10" : : "m"(*data)); break;
@@ -60,7 +57,6 @@ static inline void _kvm_write_sse_reg(int reg, const sse128_t *data)
 	case 13: asm("movdqa %0, %%xmm13" : : "m"(*data)); break;
 	case 14: asm("movdqa %0, %%xmm14" : : "m"(*data)); break;
 	case 15: asm("movdqa %0, %%xmm15" : : "m"(*data)); break;
-#endif
 	default: BUG();
 	}
 }

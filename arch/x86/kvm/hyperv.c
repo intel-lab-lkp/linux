@@ -2532,14 +2532,11 @@ int kvm_hv_hypercall(struct kvm_vcpu *vcpu)
 		return 1;
 	}
 
-#ifdef CONFIG_X86_64
 	if (is_64_bit_hypercall(vcpu)) {
 		hc.param = kvm_rcx_read(vcpu);
 		hc.ingpa = kvm_rdx_read(vcpu);
 		hc.outgpa = kvm_r8_read(vcpu);
-	} else
-#endif
-	{
+	} else {
 		hc.param = ((u64)kvm_rdx_read(vcpu) << 32) |
 			    (kvm_rax_read(vcpu) & 0xffffffff);
 		hc.ingpa = ((u64)kvm_rbx_read(vcpu) << 32) |

@@ -140,9 +140,7 @@ module_param(dump_invalid_vmcs, bool, 0644);
 /* Guest_tsc -> host_tsc conversion requires 64-bit division.  */
 static int __read_mostly cpu_preemption_timer_multi;
 static bool __read_mostly enable_preemption_timer = 1;
-#ifdef CONFIG_X86_64
 module_param_named(preemption_timer, enable_preemption_timer, bool, S_IRUGO);
-#endif
 
 extern bool __read_mostly allow_smaller_maxphyaddr;
 module_param(allow_smaller_maxphyaddr, bool, S_IRUGO);
@@ -172,13 +170,11 @@ static u32 vmx_possible_passthrough_msrs[MAX_POSSIBLE_PASSTHROUGH_MSRS] = {
 	MSR_IA32_PRED_CMD,
 	MSR_IA32_FLUSH_CMD,
 	MSR_IA32_TSC,
-#ifdef CONFIG_X86_64
 	MSR_FS_BASE,
 	MSR_GS_BASE,
 	MSR_KERNEL_GS_BASE,
 	MSR_IA32_XFD,
 	MSR_IA32_XFD_ERR,
-#endif
 	MSR_IA32_SYSENTER_CS,
 	MSR_IA32_SYSENTER_ESP,
 	MSR_IA32_SYSENTER_EIP,
@@ -1108,12 +1104,10 @@ static bool update_transition_efer(struct vcpu_vmx *vmx)
 	 * LMA and LME handled by hardware; SCE meaningless outside long mode.
 	 */
 	ignore_bits |= EFER_SCE;
-#ifdef CONFIG_X86_64
 	ignore_bits |= EFER_LMA | EFER_LME;
 	/* SCE is meaningful only in long mode on Intel */
 	if (guest_efer & EFER_LMA)
 		ignore_bits &= ~(u64)EFER_SCE;
-#endif
 
 	/*
 	 * On EPT, we can't emulate NX, so we must switch EFER atomically.
@@ -1146,35 +1140,6 @@ static bool update_transition_efer(struct vcpu_vmx *vmx)
 
 	return true;
 }
-
-#ifdef CONFIG_X86_32
-/*
- * On 32-bit kernels, VM exits still load the FS and GS bases from the
- * VMCS rather than the segment table.  KVM uses this helper to figure
- * out the current bases to poke them into the VMCS before entry.
- */
-static unsigned long segment_base(u16 selector)
-{
-	struct desc_struct *table;
-	unsigned long v;
-
-	if (!(selector & ~SEGMENT_RPL_MASK))
-		return 0;
-
-	table = get_current_gdt_ro();
-
-	if ((selector & SEGMENT_TI_MASK) == SEGMENT_LDT) {
-		u16 ldt_selector = kvm_read_ldt();
-
-		if (!(ldt_selector & ~SEGMENT_RPL_MASK))
-			return 0;
-
-		table = (struct desc_struct *)segment_base(ldt_selector);
-	}
-	v = get_desc_base(&table[selector >> 3]);
-	return v;
-}
-#endif
 
 static inline bool pt_can_write_msr(struct vcpu_vmx *vmx)
 {
@@ -1282,9 +1247,7 @@ void vmx_prepare_switch_to_guest(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	struct vmcs_host_state *host_state;
-#ifdef CONFIG_X86_64
 	int cpu = raw_smp_processor_id();
-#endif
 	unsigned long fs_base, gs_base;
 	u16 fs_sel, gs_sel;
 	int i;
@@ -1320,7 +1283,6 @@ void vmx_prepare_switch_to_guest(struct kvm_vcpu *vcpu)
 	 */
 	host_state->ldt_sel = kvm_read_ldt();
 
-#ifdef CONFIG_X86_64
 	savesegment(ds, host_state->ds_sel);
 	savesegment(es, host_state->es_sel);
 
@@ -1339,12 +1301,6 @@ void vmx_prepare_switch_to_guest(struct kvm_vcpu *vcpu)
 	}
 
 	wrmsrl(MSR_KERNEL_GS_BASE, vmx->msr_guest_kernel_gs_base);
-#else
-	savesegment(fs, fs_sel);
-	savesegment(gs, gs_sel);
-	fs_base = segment_base(fs_sel);
-	gs_base = segment_base(gs_sel);
-#endif
 
 	vmx_set_host_fs_gs(host_state, fs_sel, gs_sel, fs_base, gs_base);
 	vmx->guest_state_loaded = true;
@@ -1361,35 +1317,24 @@ static void vmx_prepare_switch_to_host(struct vcpu_vmx *vmx)
 
 	++vmx->vcpu.stat.host_state_reload;
 
-#ifdef CONFIG_X86_64
 	rdmsrl(MSR_KERNEL_GS_BASE, vmx->msr_guest_kernel_gs_base);
-#endif
 	if (host_state->ldt_sel || (host_state->gs_sel & 7)) {
 		kvm_load_ldt(host_state->ldt_sel);
-#ifdef CONFIG_X86_64
 		load_gs_index(host_state->gs_sel);
-#else
-		loadsegment(gs, host_state->gs_sel);
-#endif
 	}
 	if (host_state->fs_sel & 7)
 		loadsegment(fs, host_state->fs_sel);
-#ifdef CONFIG_X86_64
 	if (unlikely(host_state->ds_sel | host_state->es_sel)) {
 		loadsegment(ds, host_state->ds_sel);
 		loadsegment(es, host_state->es_sel);
 	}
-#endif
 	invalidate_tss_limit();
-#ifdef CONFIG_X86_64
 	wrmsrl(MSR_KERNEL_GS_BASE, vmx->msr_host_kernel_gs_base);
-#endif
 	load_fixmap_gdt(raw_smp_processor_id());
 	vmx->guest_state_loaded = false;
 	vmx->guest_uret_msrs_loaded = false;
 }
 
-#ifdef CONFIG_X86_64
 static u64 vmx_read_guest_kernel_gs_base(struct vcpu_vmx *vmx)
 {
 	preempt_disable();
@@ -1407,7 +1352,6 @@ static void vmx_write_guest_kernel_gs_base(struct vcpu_vmx *vmx, u64 data)
 	preempt_enable();
 	vmx->msr_guest_kernel_gs_base = data;
 }
-#endif
 
 static void grow_ple_window(struct kvm_vcpu *vcpu)
 {
@@ -1498,7 +1442,7 @@ void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu,
 			    (unsigned long)&get_cpu_entry_area(cpu)->tss.x86_tss);
 		vmcs_writel(HOST_GDTR_BASE, (unsigned long)gdt);   /* 22.2.4 */
 
-		if (IS_ENABLED(CONFIG_IA32_EMULATION) || IS_ENABLED(CONFIG_X86_32)) {
+		if (IS_ENABLED(CONFIG_IA32_EMULATION)) {
 			/* 22.2.3 */
 			vmcs_writel(HOST_IA32_SYSENTER_ESP,
 				    (unsigned long)(cpu_entry_stack(cpu) + 1));
@@ -1750,7 +1694,6 @@ static int skip_emulated_instruction(struct kvm_vcpu *vcpu)
 
 		orig_rip = kvm_rip_read(vcpu);
 		rip = orig_rip + instr_len;
-#ifdef CONFIG_X86_64
 		/*
 		 * We need to mask out the high 32 bits of RIP if not in 64-bit
 		 * mode, but just finding out that we are in 64-bit mode is
@@ -1758,7 +1701,7 @@ static int skip_emulated_instruction(struct kvm_vcpu *vcpu)
 		 */
 		if (unlikely(((rip ^ orig_rip) >> 31) == 3) && !is_64_bit_mode(vcpu))
 			rip = (u32)rip;
-#endif
+
 		kvm_rip_write(vcpu, rip);
 	} else {
 		if (!kvm_emulate_instruction(vcpu, EMULTYPE_SKIP))
@@ -1891,7 +1834,6 @@ static void vmx_setup_uret_msr(struct vcpu_vmx *vmx, unsigned int msr,
  */
 static void vmx_setup_uret_msrs(struct vcpu_vmx *vmx)
 {
-#ifdef CONFIG_X86_64
 	bool load_syscall_msrs;
 
 	/*
@@ -1904,7 +1846,6 @@ static void vmx_setup_uret_msrs(struct vcpu_vmx *vmx)
 	vmx_setup_uret_msr(vmx, MSR_STAR, load_syscall_msrs);
 	vmx_setup_uret_msr(vmx, MSR_LSTAR, load_syscall_msrs);
 	vmx_setup_uret_msr(vmx, MSR_SYSCALL_MASK, load_syscall_msrs);
-#endif
 	vmx_setup_uret_msr(vmx, MSR_EFER, update_transition_efer(vmx));
 
 	vmx_setup_uret_msr(vmx, MSR_TSC_AUX,
@@ -2019,7 +1960,6 @@ int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	u32 index;
 
 	switch (msr_info->index) {
-#ifdef CONFIG_X86_64
 	case MSR_FS_BASE:
 		msr_info->data = vmcs_readl(GUEST_FS_BASE);
 		break;
@@ -2029,7 +1969,6 @@ int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_KERNEL_GS_BASE:
 		msr_info->data = vmx_read_guest_kernel_gs_base(vmx);
 		break;
-#endif
 	case MSR_EFER:
 		return kvm_get_msr_common(vcpu, msr_info);
 	case MSR_IA32_TSX_CTRL:
@@ -2166,10 +2105,8 @@ int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 static u64 nested_vmx_truncate_sysenter_addr(struct kvm_vcpu *vcpu,
 						    u64 data)
 {
-#ifdef CONFIG_X86_64
 	if (!guest_cpuid_has(vcpu, X86_FEATURE_LM))
 		return (u32)data;
-#endif
 	return (unsigned long)data;
 }
 
@@ -2206,7 +2143,6 @@ int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_EFER:
 		ret = kvm_set_msr_common(vcpu, msr_info);
 		break;
-#ifdef CONFIG_X86_64
 	case MSR_FS_BASE:
 		vmx_segment_cache_clear(vmx);
 		vmcs_writel(GUEST_FS_BASE, data);
@@ -2236,7 +2172,6 @@ int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			vmx_update_exception_bitmap(vcpu);
 		}
 		break;
-#endif
 	case MSR_IA32_SYSENTER_CS:
 		if (is_guest_mode(vcpu))
 			get_vmcs12(vcpu)->guest_sysenter_cs = data;
@@ -2621,12 +2556,6 @@ static int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	if (!IS_ENABLED(CONFIG_KVM_INTEL_PROVE_VE))
 		_cpu_based_2nd_exec_control &= ~SECONDARY_EXEC_EPT_VIOLATION_VE;
 
-#ifndef CONFIG_X86_64
-	if (!(_cpu_based_2nd_exec_control &
-				SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES))
-		_cpu_based_exec_control &= ~CPU_BASED_TPR_SHADOW;
-#endif
-
 	if (!(_cpu_based_exec_control & CPU_BASED_TPR_SHADOW))
 		_cpu_based_2nd_exec_control &= ~(
 				SECONDARY_EXEC_APIC_REGISTER_VIRT |
@@ -2734,7 +2663,6 @@ static int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	if (vmx_basic_vmcs_size(basic_msr) > PAGE_SIZE)
 		return -EIO;
 
-#ifdef CONFIG_X86_64
 	/*
 	 * KVM expects to be able to shove all legal physical addresses into
 	 * VMCS fields for 64-bit kernels, and per the SDM, "This bit is always
@@ -2742,7 +2670,6 @@ static int setup_vmcs_config(struct vmcs_config *vmcs_conf,
 	 */
 	if (basic_msr & VMX_BASIC_32BIT_PHYS_ADDR_ONLY)
 		return -EIO;
-#endif
 
 	/* Require Write-Back (WB) memory type for VMCS accesses. */
 	if (vmx_basic_vmcs_mem_type(basic_msr) != X86_MEMTYPE_WB)
@@ -3149,21 +3076,14 @@ int vmx_set_efer(struct kvm_vcpu *vcpu, u64 efer)
 		return 0;
 
 	vcpu->arch.efer = efer;
-#ifdef CONFIG_X86_64
 	if (efer & EFER_LMA)
 		vm_entry_controls_setbit(vmx, VM_ENTRY_IA32E_MODE);
 	else
 		vm_entry_controls_clearbit(vmx, VM_ENTRY_IA32E_MODE);
-#else
-	if (KVM_BUG_ON(efer & EFER_LMA, vcpu->kvm))
-		return 1;
-#endif
 
 	vmx_setup_uret_msrs(vmx);
 	return 0;
 }
-
-#ifdef CONFIG_X86_64
 
 static void enter_lmode(struct kvm_vcpu *vcpu)
 {
@@ -3186,8 +3106,6 @@ static void exit_lmode(struct kvm_vcpu *vcpu)
 {
 	vmx_set_efer(vcpu, vcpu->arch.efer & ~EFER_LMA);
 }
-
-#endif
 
 void vmx_flush_tlb_all(struct kvm_vcpu *vcpu)
 {
@@ -3328,14 +3246,12 @@ void vmx_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 	vcpu->arch.cr0 = cr0;
 	kvm_register_mark_available(vcpu, VCPU_EXREG_CR0);
 
-#ifdef CONFIG_X86_64
 	if (vcpu->arch.efer & EFER_LME) {
 		if (!old_cr0_pg && (cr0 & X86_CR0_PG))
 			enter_lmode(vcpu);
 		else if (old_cr0_pg && !(cr0 & X86_CR0_PG))
 			exit_lmode(vcpu);
 	}
-#endif
 
 	if (enable_ept && !enable_unrestricted_guest) {
 		/*
@@ -4342,7 +4258,6 @@ void vmx_set_constant_host_state(struct vcpu_vmx *vmx)
 	vmx->loaded_vmcs->host_state.cr4 = cr4;
 
 	vmcs_write16(HOST_CS_SELECTOR, __KERNEL_CS);  /* 22.2.4 */
-#ifdef CONFIG_X86_64
 	/*
 	 * Load null selectors, so we can avoid reloading them in
 	 * vmx_prepare_switch_to_host(), in case userspace uses
@@ -4350,10 +4265,6 @@ void vmx_set_constant_host_state(struct vcpu_vmx *vmx)
 	 */
 	vmcs_write16(HOST_DS_SELECTOR, 0);
 	vmcs_write16(HOST_ES_SELECTOR, 0);
-#else
-	vmcs_write16(HOST_DS_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
-	vmcs_write16(HOST_ES_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
-#endif
 	vmcs_write16(HOST_SS_SELECTOR, __KERNEL_DS);  /* 22.2.4 */
 	vmcs_write16(HOST_TR_SELECTOR, GDT_ENTRY_TSS*8);  /* 22.2.4 */
 
@@ -4370,7 +4281,7 @@ void vmx_set_constant_host_state(struct vcpu_vmx *vmx)
 	 * vmx_vcpu_load_vmcs loads it with the per-CPU entry stack (and may
 	 * have already done so!).
 	 */
-	if (!IS_ENABLED(CONFIG_IA32_EMULATION) && !IS_ENABLED(CONFIG_X86_32))
+	if (!IS_ENABLED(CONFIG_IA32_EMULATION))
 		vmcs_writel(HOST_IA32_SYSENTER_ESP, 0);
 
 	rdmsrl(MSR_IA32_SYSENTER_EIP, tmpl);
@@ -4504,14 +4415,13 @@ static u32 vmx_exec_control(struct vcpu_vmx *vmx)
 	if (!cpu_need_tpr_shadow(&vmx->vcpu))
 		exec_control &= ~CPU_BASED_TPR_SHADOW;
 
-#ifdef CONFIG_X86_64
 	if (exec_control & CPU_BASED_TPR_SHADOW)
 		exec_control &= ~(CPU_BASED_CR8_LOAD_EXITING |
 				  CPU_BASED_CR8_STORE_EXITING);
 	else
 		exec_control |= CPU_BASED_CR8_STORE_EXITING |
 				CPU_BASED_CR8_LOAD_EXITING;
-#endif
+
 	/* No need to intercept CR3 access or INVPLG when using EPT. */
 	if (enable_ept)
 		exec_control &= ~(CPU_BASED_CR3_LOAD_EXITING |
@@ -7449,19 +7359,6 @@ fastpath_t vmx_vcpu_run(struct kvm_vcpu *vcpu, bool force_immediate_exit)
 	if (vmx->host_debugctlmsr)
 		update_debugctlmsr(vmx->host_debugctlmsr);
 
-#ifndef CONFIG_X86_64
-	/*
-	 * The sysexit path does not restore ds/es, so we must set them to
-	 * a reasonable value ourselves.
-	 *
-	 * We can't defer this to vmx_prepare_switch_to_host() since that
-	 * function may be executed in interrupt context, which saves and
-	 * restore segments around it, nullifying its effect.
-	 */
-	loadsegment(ds, __USER_DS);
-	loadsegment(es, __USER_DS);
-#endif
-
 	pt_guest_exit(vmx);
 
 	kvm_load_host_xsave_state(vcpu);
@@ -7571,11 +7468,9 @@ int vmx_vcpu_create(struct kvm_vcpu *vcpu)
 	bitmap_fill(vmx->shadow_msr_intercept.write, MAX_POSSIBLE_PASSTHROUGH_MSRS);
 
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_TSC, MSR_TYPE_R);
-#ifdef CONFIG_X86_64
 	vmx_disable_intercept_for_msr(vcpu, MSR_FS_BASE, MSR_TYPE_RW);
 	vmx_disable_intercept_for_msr(vcpu, MSR_GS_BASE, MSR_TYPE_RW);
 	vmx_disable_intercept_for_msr(vcpu, MSR_KERNEL_GS_BASE, MSR_TYPE_RW);
-#endif
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_SYSENTER_CS, MSR_TYPE_RW);
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_SYSENTER_ESP, MSR_TYPE_RW);
 	vmx_disable_intercept_for_msr(vcpu, MSR_IA32_SYSENTER_EIP, MSR_TYPE_RW);
@@ -8099,7 +7994,6 @@ int vmx_check_intercept(struct kvm_vcpu *vcpu,
 	return X86EMUL_UNHANDLEABLE;
 }
 
-#ifdef CONFIG_X86_64
 /* (a << shift) / divisor, return 1 if overflow otherwise 0 */
 static inline int u64_shl_div_u64(u64 a, unsigned int shift,
 				  u64 divisor, u64 *result)
@@ -8162,7 +8056,6 @@ void vmx_cancel_hv_timer(struct kvm_vcpu *vcpu)
 {
 	to_vmx(vcpu)->hv_deadline_tsc = -1;
 }
-#endif
 
 void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu)
 {
@@ -8356,9 +8249,7 @@ static __init void vmx_setup_user_return_msrs(void)
 	 * into hardware and is here purely for emulation purposes.
 	 */
 	const u32 vmx_uret_msrs_list[] = {
-	#ifdef CONFIG_X86_64
 		MSR_SYSCALL_MASK, MSR_LSTAR, MSR_CSTAR,
-	#endif
 		MSR_EFER, MSR_TSC_AUX, MSR_STAR,
 		MSR_IA32_TSX_CTRL,
 	};

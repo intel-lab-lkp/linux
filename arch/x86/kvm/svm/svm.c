@@ -89,14 +89,12 @@ static const struct svm_direct_access_msrs {
 	{ .index = MSR_IA32_SYSENTER_CS,		.always = true  },
 	{ .index = MSR_IA32_SYSENTER_EIP,		.always = false },
 	{ .index = MSR_IA32_SYSENTER_ESP,		.always = false },
-#ifdef CONFIG_X86_64
 	{ .index = MSR_GS_BASE,				.always = true  },
 	{ .index = MSR_FS_BASE,				.always = true  },
 	{ .index = MSR_KERNEL_GS_BASE,			.always = true  },
 	{ .index = MSR_LSTAR,				.always = true  },
 	{ .index = MSR_CSTAR,				.always = true  },
 	{ .index = MSR_SYSCALL_MASK,			.always = true  },
-#endif
 	{ .index = MSR_IA32_SPEC_CTRL,			.always = false },
 	{ .index = MSR_IA32_PRED_CMD,			.always = false },
 	{ .index = MSR_IA32_FLUSH_CMD,			.always = false },
@@ -288,11 +286,7 @@ static void svm_flush_tlb_current(struct kvm_vcpu *vcpu);
 
 static int get_npt_level(void)
 {
-#ifdef CONFIG_X86_64
 	return pgtable_l5_enabled() ? PT64_ROOT_5LEVEL : PT64_ROOT_4LEVEL;
-#else
-	return PT32E_ROOT_LEVEL;
-#endif
 }
 
 int svm_set_efer(struct kvm_vcpu *vcpu, u64 efer)
@@ -1860,7 +1854,6 @@ void svm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 	u64 hcr0 = cr0;
 	bool old_paging = is_paging(vcpu);
 
-#ifdef CONFIG_X86_64
 	if (vcpu->arch.efer & EFER_LME) {
 		if (!is_paging(vcpu) && (cr0 & X86_CR0_PG)) {
 			vcpu->arch.efer |= EFER_LMA;
@@ -1874,7 +1867,6 @@ void svm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 				svm->vmcb->save.efer &= ~(EFER_LMA | EFER_LME);
 		}
 	}
-#endif
 	vcpu->arch.cr0 = cr0;
 
 	if (!npt_enabled) {
@@ -2871,7 +2863,6 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_STAR:
 		msr_info->data = svm->vmcb01.ptr->save.star;
 		break;
-#ifdef CONFIG_X86_64
 	case MSR_LSTAR:
 		msr_info->data = svm->vmcb01.ptr->save.lstar;
 		break;
@@ -2890,7 +2881,6 @@ static int svm_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	case MSR_SYSCALL_MASK:
 		msr_info->data = svm->vmcb01.ptr->save.sfmask;
 		break;
-#endif
 	case MSR_IA32_SYSENTER_CS:
 		msr_info->data = svm->vmcb01.ptr->save.sysenter_cs;
 		break;
@@ -3102,7 +3092,6 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_STAR:
 		svm->vmcb01.ptr->save.star = data;
 		break;
-#ifdef CONFIG_X86_64
 	case MSR_LSTAR:
 		svm->vmcb01.ptr->save.lstar = data;
 		break;
@@ -3121,7 +3110,6 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 	case MSR_SYSCALL_MASK:
 		svm->vmcb01.ptr->save.sfmask = data;
 		break;
-#endif
 	case MSR_IA32_SYSENTER_CS:
 		svm->vmcb01.ptr->save.sysenter_cs = data;
 		break;
@@ -5323,14 +5311,6 @@ static __init int svm_hardware_setup(void)
 		kvm_enable_efer_bits(EFER_SVME | EFER_LMSLE);
 	}
 
-	/*
-	 * KVM's MMU doesn't support using 2-level paging for itself, and thus
-	 * NPT isn't supported if the host is using 2-level paging since host
-	 * CR4 is unchanged on VMRUN.
-	 */
-	if (!IS_ENABLED(CONFIG_X86_64) && !IS_ENABLED(CONFIG_X86_PAE))
-		npt_enabled = false;
-
 	if (!boot_cpu_has(X86_FEATURE_NPT))
 		npt_enabled = false;
 
@@ -5378,8 +5358,7 @@ static __init int svm_hardware_setup(void)
 
 	if (vls) {
 		if (!npt_enabled ||
-		    !boot_cpu_has(X86_FEATURE_V_VMSAVE_VMLOAD) ||
-		    !IS_ENABLED(CONFIG_X86_64)) {
+		    !boot_cpu_has(X86_FEATURE_V_VMSAVE_VMLOAD)) {
 			vls = false;
 		} else {
 			pr_info("Virtual VMLOAD VMSAVE supported\n");

@@ -39,9 +39,7 @@ struct vmcs_host_state {
 	unsigned long rsp;
 
 	u16           fs_sel, gs_sel, ldt_sel;
-#ifdef CONFIG_X86_64
 	u16           ds_sel, es_sel;
-#endif
 };
 
 struct vmcs_controls_shadow {

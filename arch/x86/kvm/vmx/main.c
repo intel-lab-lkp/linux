@@ -134,10 +134,8 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 	.pi_update_irte = vmx_pi_update_irte,
 	.pi_start_assignment = vmx_pi_start_assignment,
 
-#ifdef CONFIG_X86_64
 	.set_hv_timer = vmx_set_hv_timer,
 	.cancel_hv_timer = vmx_cancel_hv_timer,
-#endif
 
 	.setup_mce = vmx_setup_mce,
 

@@ -305,11 +305,7 @@ typedef void (*fastop_t)(struct fastop *);
  * also uses _eip, RIP cannot be a register operand nor can it be an operand in
  * a ModRM or SIB byte.
  */
-#ifdef CONFIG_X86_64
 #define NR_EMULATOR_GPRS	16
-#else
-#define NR_EMULATOR_GPRS	8
-#endif
 
 struct x86_emulate_ctxt {
 	void *vcpu;
@@ -501,11 +497,7 @@ enum x86_intercept {
 };
 
 /* Host execution mode. */
-#if defined(CONFIG_X86_32)
-#define X86EMUL_MODE_HOST X86EMUL_MODE_PROT32
-#elif defined(CONFIG_X86_64)
 #define X86EMUL_MODE_HOST X86EMUL_MODE_PROT64
-#endif
 
 int x86_decode_insn(struct x86_emulate_ctxt *ctxt, void *insn, int insn_len, int emulation_type);
 bool x86_page_table_writing_insn(struct x86_emulate_ctxt *ctxt);
