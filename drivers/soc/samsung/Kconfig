@@ -49,6 +49,19 @@ config EXYNOS_PMU_ARM_DRIVERS
 	bool "Exynos PMU ARMv7-specific driver extensions" if COMPILE_TEST
 	depends on EXYNOS_PMU
 
+config EXYNOS_SPEEDY
+	tristate "Exynos SPEEDY host controller driver"
+	depends on ARCH_EXYNOS || COMPILE_TEST
+	depends on OF
+	depends on REGMAP_MMIO
+	help
+	  Enable support for Exynos SPEEDY host controller block.
+	  SPEEDY is a 1 wire proprietary Samsung serial bus, found in
+	  modern Samsung Exynos SoCs, like Exynos8895 and newer.
+
+	  Select this if you have a Samsung Exynos device which uses
+	  SPEEDY bus.
+
 config SAMSUNG_PM_CHECK
 	bool "S3C2410 PM Suspend Memory CRC"
 	depends on PM && (ARCH_S3C64XX || ARCH_S5PV210)
