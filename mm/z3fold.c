@@ -30,6 +30,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/page-flags.h>
+#include <linux/pagemap.h>
 #include <linux/migrate.h>
 #include <linux/node.h>
 #include <linux/compaction.h>
