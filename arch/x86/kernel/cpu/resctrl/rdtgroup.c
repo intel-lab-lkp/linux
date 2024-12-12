@@ -1704,26 +1704,26 @@ u32 resctrl_arch_mon_event_config_get(struct rdt_mon_domain *d,
 	return INVALID_CONFIG_VALUE;
 }
 
-void resctrl_arch_mon_event_config_set(void *info)
+void resctrl_arch_mon_event_config_set(struct rdt_mon_domain *d,
+				       enum resctrl_event_id eventid, u32 val)
 {
-	struct mon_config_info *mon_info = info;
 	struct rdt_hw_mon_domain *hw_dom;
 	unsigned int index;
 
-	index = mon_event_config_index_get(mon_info->evtid);
+	index = mon_event_config_index_get(eventid);
 	if (index == INVALID_CONFIG_INDEX)
 		return;
 
-	wrmsr(MSR_IA32_EVT_CFG_BASE + index, mon_info->mon_config, 0);
+	wrmsr(MSR_IA32_EVT_CFG_BASE + index, val, 0);
 
-	hw_dom = resctrl_to_arch_mon_dom(mon_info->d);
+	hw_dom = resctrl_to_arch_mon_dom(d);
 
-	switch (mon_info->evtid) {
+	switch (eventid) {
 	case QOS_L3_MBM_TOTAL_EVENT_ID:
-		hw_dom->mbm_total_cfg = mon_info->mon_config;
+		hw_dom->mbm_total_cfg = val;
 		break;
 	case QOS_L3_MBM_LOCAL_EVENT_ID:
-		hw_dom->mbm_local_cfg = mon_info->mon_config;
+		hw_dom->mbm_local_cfg = val;
 		break;
 	default:
 		break;
@@ -1825,6 +1825,54 @@ static int mbm_local_bytes_config_show(struct kernfs_open_file *of,
 	return 0;
 }
 
+/*
+ * Review the cntr_cfg domain configuration. If a matching assignment is found,
+ * update the counter assignment accordingly. This is within the IPI Context,
+ * so call resctrl_abmc_config_one_amd directly.
+ */
+static void resctrl_arch_update_cntr(struct rdt_resource *r, struct rdt_mon_domain *d,
+				     enum resctrl_event_id evtid, u32 val)
+{
+	struct cntr_config config;
+	struct rdtgroup *rdtgrp;
+	struct mbm_state *m;
+	u32 cntr_id;
+
+	for (cntr_id = 0; cntr_id < r->mon.num_mbm_cntrs; cntr_id++) {
+		rdtgrp = d->cntr_cfg[cntr_id].rdtgrp;
+		if (rdtgrp && d->cntr_cfg[cntr_id].evtid == evtid) {
+			memset(&config, 0, sizeof(struct cntr_config));
+			config.r = r;
+			config.d = d;
+			config.evtid = evtid;
+			config.rmid = rdtgrp->mon.rmid;
+			config.closid = rdtgrp->closid;
+			config.cntr_id = cntr_id;
+			config.val = val;
+			config.assign = 1;
+
+			resctrl_abmc_config_one_amd(&config);
+
+			m = get_mbm_state(d, rdtgrp->closid, rdtgrp->mon.rmid, evtid);
+			if (m)
+				memset(m, 0, sizeof(struct mbm_state));
+		}
+	}
+}
+
+static void resctrl_mon_event_config_set(void *info)
+{
+	struct mon_config_info *mon_info = info;
+	struct rdt_mon_domain *d = mon_info->d;
+	struct rdt_resource *r = mon_info->r;
+
+	resctrl_arch_mon_event_config_set(d, mon_info->evtid, mon_info->mon_config);
+
+	/* Check if assignments needs to be updated */
+	if (resctrl_arch_mbm_cntr_assign_enabled(r))
+		resctrl_arch_update_cntr(r, d, mon_info->evtid,
+					 mon_info->mon_config);
+}
 
 static void mbm_config_write_domain(struct rdt_resource *r,
 				    struct rdt_mon_domain *d, u32 evtid, u32 val)
@@ -1840,6 +1888,7 @@ static void mbm_config_write_domain(struct rdt_resource *r,
 	if (config_val == INVALID_CONFIG_VALUE || config_val == val)
 		return;
 
+	mon_info.r = r;
 	mon_info.d = d;
 	mon_info.evtid = evtid;
 	mon_info.mon_config = val;
@@ -1851,7 +1900,7 @@ static void mbm_config_write_domain(struct rdt_resource *r,
 	 * on one CPU is observed by all the CPUs in the domain.
 	 */
 	smp_call_function_any(&d->hdr.cpu_mask,
-			      resctrl_arch_mon_event_config_set,
+			      resctrl_mon_event_config_set,
 			      &mon_info, 1);
 
 	/*

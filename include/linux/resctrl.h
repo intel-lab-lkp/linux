@@ -137,6 +137,7 @@ struct rdt_mon_domain {
  * @mon_config:		Event configuration value
  */
 struct mon_config_info {
+	struct rdt_resource *r;
 	struct rdt_mon_domain *d;
 	enum resctrl_event_id evtid;
 	u32 mon_config;
@@ -376,7 +377,8 @@ void resctrl_arch_reset_rmid(struct rdt_resource *r, struct rdt_mon_domain *d,
  */
 void resctrl_arch_reset_rmid_all(struct rdt_resource *r, struct rdt_mon_domain *d);
 
-void resctrl_arch_mon_event_config_set(void *info);
+void resctrl_arch_mon_event_config_set(struct rdt_mon_domain *d,
+				       enum resctrl_event_id eventid, u32 val);
 u32 resctrl_arch_mon_event_config_get(struct rdt_mon_domain *d,
 				      enum resctrl_event_id eventid);
 
