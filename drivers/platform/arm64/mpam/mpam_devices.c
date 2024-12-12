@@ -3158,6 +3158,12 @@ int mpam_apply_config(struct mpam_component *comp, u16 partid,
 
 	mpam_extend_config(comp->class, cfg);
 
+	pr_info("mpam_apply_config(): comp %d partid %d cfg={0x%x: 0x%lx, 0x%lx, %u, %u}\n",
+		comp->comp_id, partid, cfg->features,
+		(unsigned long)cfg->cpbm,
+		(unsigned long)cfg->mbw_pbm,
+		cfg->mbw_min, cfg->mbw_max);
+
 	if (!mpam_update_config(&comp->cfg[partid], cfg))
 		return 0;
 
