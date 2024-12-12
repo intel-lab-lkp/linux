@@ -702,4 +702,22 @@ static inline void kvm_vcpu_enable_ptrauth(struct kvm_vcpu *vcpu)
 {
 	vcpu_set_flag(vcpu, GUEST_HAS_PTRAUTH);
 }
+
+static inline bool kvm_is_realm(struct kvm *kvm)
+{
+	if (static_branch_unlikely(&kvm_rme_is_available) && kvm)
+		return kvm->arch.is_realm;
+	return false;
+}
+
+static inline enum realm_state kvm_realm_state(struct kvm *kvm)
+{
+	return READ_ONCE(kvm->arch.realm.state);
+}
+
+static inline bool vcpu_is_rec(struct kvm_vcpu *vcpu)
+{
+	return false;
+}
+
 #endif /* __ARM64_KVM_EMULATE_H__ */
