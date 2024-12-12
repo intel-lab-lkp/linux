@@ -9078,7 +9078,7 @@ out:
 }
 
 struct btrfs_encoded_read_private {
-	wait_queue_head_t wait;
+	struct completion *sync_read;
 	void *uring_ctx;
 	atomic_t pending;
 	blk_status_t status;
@@ -9090,23 +9090,22 @@ static void btrfs_encoded_read_endio(struct btrfs_bio *bbio)
 
 	if (bbio->bio.bi_status) {
 		/*
-		 * The memory barrier implied by the atomic_dec_return() here
-		 * pairs with the memory barrier implied by the
-		 * atomic_dec_return() or io_wait_event() in
-		 * btrfs_encoded_read_regular_fill_pages() to ensure that this
-		 * write is observed before the load of status in
-		 * btrfs_encoded_read_regular_fill_pages().
+		 * The memory barrier implied by the
+		 * atomic_dec_and_test() here pairs with the memory
+		 * barrier implied by the atomic_dec_and_test() in
+		 * btrfs_encoded_read_regular_fill_pages() to ensure
+		 * that this write is observed before the load of
+		 * status in btrfs_encoded_read_regular_fill_pages().
 		 */
 		WRITE_ONCE(priv->status, bbio->bio.bi_status);
 	}
 	if (atomic_dec_and_test(&priv->pending)) {
-		int err = blk_status_to_errno(READ_ONCE(priv->status));
-
 		if (priv->uring_ctx) {
+			int err = blk_status_to_errno(READ_ONCE(priv->status));
 			btrfs_uring_read_extent_endio(priv->uring_ctx, err);
 			kfree(priv);
 		} else {
-			wake_up(&priv->wait);
+			complete(priv->sync_read);
 		}
 	}
 	bio_put(&bbio->bio);
@@ -9117,16 +9116,21 @@ int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 					  struct page **pages, void *uring_ctx)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	struct btrfs_encoded_read_private *priv;
+	struct completion sync_read;
+	struct btrfs_encoded_read_private sync_priv, *priv;
 	unsigned long i = 0;
 	struct btrfs_bio *bbio;
-	int ret;
 
-	priv = kmalloc(sizeof(struct btrfs_encoded_read_private), GFP_NOFS);
-	if (!priv)
-		return -ENOMEM;
+	if (uring_ctx) {
+		priv = kmalloc(sizeof(struct btrfs_encoded_read_private), GFP_NOFS);
+		if (!priv)
+			return -ENOMEM;
+	} else {
+		priv = &sync_priv;
+		init_completion(&sync_read);
+		priv->sync_read = &sync_read;
+	}
 
-	init_waitqueue_head(&priv->wait);
 	atomic_set(&priv->pending, 1);
 	priv->status = 0;
 	priv->uring_ctx = uring_ctx;
@@ -9158,23 +9162,23 @@ int btrfs_encoded_read_regular_fill_pages(struct btrfs_inode *inode,
 	atomic_inc(&priv->pending);
 	btrfs_submit_bbio(bbio, 0);
 
-	if (uring_ctx) {
-		if (atomic_dec_return(&priv->pending) == 0) {
-			ret = blk_status_to_errno(READ_ONCE(priv->status));
-			btrfs_uring_read_extent_endio(uring_ctx, ret);
+	if (atomic_dec_and_test(&priv->pending)) {
+		if (uring_ctx) {
+			int err = blk_status_to_errno(READ_ONCE(priv->status));
+			btrfs_uring_read_extent_endio(uring_ctx, err);
 			kfree(priv);
-			return ret;
+			return err;
+		} else {
+			complete(&sync_read);
 		}
-
-		return -EIOCBQUEUED;
-	} else {
-		if (atomic_dec_return(&priv->pending) != 0)
-			io_wait_event(priv->wait, !atomic_read(&priv->pending));
-		/* See btrfs_encoded_read_endio() for ordering. */
-		ret = blk_status_to_errno(READ_ONCE(priv->status));
-		kfree(priv);
-		return ret;
 	}
+
+	if (uring_ctx)
+		return -EIOCBQUEUED;
+
+	wait_for_completion_io(&sync_read);
+	/* See btrfs_encoded_read_endio() for ordering. */
+	return blk_status_to_errno(READ_ONCE(priv->status));
 }
 
 ssize_t btrfs_encoded_read_regular(struct kiocb *iocb, struct iov_iter *iter,
