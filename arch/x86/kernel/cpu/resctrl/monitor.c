@@ -575,8 +575,8 @@ void free_rmid(u32 closid, u32 rmid)
 		list_add_tail(&entry->list, &rmid_free_lru);
 }
 
-static struct mbm_state *get_mbm_state(struct rdt_mon_domain *d, u32 closid,
-				       u32 rmid, enum resctrl_event_id evtid)
+struct mbm_state *get_mbm_state(struct rdt_mon_domain *d, u32 closid,
+				u32 rmid, enum resctrl_event_id evtid)
 {
 	u32 idx = resctrl_arch_rmid_idx_encode(closid, rmid);
 
