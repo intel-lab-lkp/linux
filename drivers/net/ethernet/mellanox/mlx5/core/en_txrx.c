@@ -49,10 +49,18 @@ static inline bool mlx5e_channel_no_affinity_change(struct mlx5e_channel *c)
 static void mlx5e_handle_tx_dim(struct mlx5e_txqsq *sq)
 {
 	struct mlx5e_sq_stats *stats = sq->stats;
-	struct dim_sample dim_sample = {};
+	struct dim_sample dim_sample;
+	u16 nevents;
 
 	if (unlikely(!test_bit(MLX5E_SQ_STATE_DIM, &sq->state)))
 		return;
+
+	if (sq->dim->state == DIM_MEASURE_IN_PROGRESS) {
+		nevents = BIT_GAP(BITS_PER_TYPE(u16), sq->cq.event_ctr,
+						  sq->dim->start_sample.event_ctr);
+		if (nevents < DIM_NEVENTS)
+			return;
+	}
 
 	dim_update_sample(sq->cq.event_ctr, stats->packets, stats->bytes, &dim_sample);
 	net_dim(sq->dim, &dim_sample);
@@ -61,10 +69,18 @@ static void mlx5e_handle_tx_dim(struct mlx5e_txqsq *sq)
 static void mlx5e_handle_rx_dim(struct mlx5e_rq *rq)
 {
 	struct mlx5e_rq_stats *stats = rq->stats;
-	struct dim_sample dim_sample = {};
+	struct dim_sample dim_sample;
+	u16 nevents;
 
 	if (unlikely(!test_bit(MLX5E_RQ_STATE_DIM, &rq->state)))
 		return;
+
+	if (rq->dim->state == DIM_MEASURE_IN_PROGRESS) {
+		nevents = BIT_GAP(BITS_PER_TYPE(u16), rq->cq.event_ctr,
+						  rq->dim->start_sample.event_ctr);
+		if (nevents < DIM_NEVENTS)
+			return;
+	}
 
 	dim_update_sample(rq->cq.event_ctr, stats->packets, stats->bytes, &dim_sample);
 	net_dim(rq->dim, &dim_sample);
