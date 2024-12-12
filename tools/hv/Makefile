@@ -2,7 +2,7 @@
 # Makefile for Hyper-V tools
 include ../scripts/Makefile.include
 
-ARCH := $(shell uname -m 2>/dev/null)
+ARCH ?= $(shell uname -m 2>/dev/null)
 sbindir ?= /usr/sbin
 libexecdir ?= /usr/libexec
 sharedstatedir ?= /var/lib
@@ -20,17 +20,25 @@ override CFLAGS += -O2 -Wall -g -D_GNU_SOURCE -I$(OUTPUT)include
 override CFLAGS += -Wno-address-of-packed-member
 
 ALL_TARGETS := hv_kvp_daemon hv_vss_daemon
-ifneq ($(ARCH), aarch64)
+ifeq ($(ARCH), x86_64)
 ALL_TARGETS += hv_fcopy_uio_daemon
 endif
 ALL_PROGRAMS := $(patsubst %,$(OUTPUT)%,$(ALL_TARGETS))
 
 ALL_SCRIPTS := hv_get_dhcp_info.sh hv_get_dns_info.sh hv_set_ifconfig.sh
 
-all: $(ALL_PROGRAMS)
+all: info $(ALL_PROGRAMS)
 
 export srctree OUTPUT CC LD CFLAGS
 include $(srctree)/tools/build/Makefile.include
+
+info:
+	@echo "---------------------"
+	@echo "Building for:"
+	@echo "CC $(CC)"
+	@echo "LD $(LD)"
+	@echo "ARCH $(ARCH)"
+	@echo "---------------------"
 
 HV_KVP_DAEMON_IN := $(OUTPUT)hv_kvp_daemon-in.o
 $(HV_KVP_DAEMON_IN): FORCE
