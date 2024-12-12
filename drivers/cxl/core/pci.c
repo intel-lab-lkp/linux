@@ -203,9 +203,11 @@ int cxl_await_media_ready(struct cxl_dev_state *cxlds)
 			return rc;
 	}
 
-	md_status = readq(cxlds->regs.memdev + CXLMDEV_STATUS_OFFSET);
-	if (!CXLMDEV_READY(md_status))
-		return -EIO;
+	if (cxlds->regs.memdev) {
+		md_status = readq(cxlds->regs.memdev + CXLMDEV_STATUS_OFFSET);
+		if (!CXLMDEV_READY(md_status))
+			return -EIO;
+	}
 
 	return 0;
 }
