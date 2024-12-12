@@ -712,4 +712,5 @@ struct mbm_state *get_mbm_state(struct rdt_mon_domain *d, u32 closid,
 				u32 rmid, enum resctrl_event_id evtid);
 bool mbm_cntr_assigned(struct rdt_resource *r, struct rdt_mon_domain *d,
 		       struct rdtgroup *rdtgrp, enum resctrl_event_id evtid);
+void resctrl_arch_mbm_cntr_assign_set_one(struct rdt_resource *r);
 #endif /* _ASM_X86_RESCTRL_INTERNAL_H */
