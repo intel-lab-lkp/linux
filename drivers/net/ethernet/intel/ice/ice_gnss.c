@@ -85,7 +85,6 @@ static void ice_gnss_read(struct kthread_work *work)
 {
 	struct gnss_serial *gnss = container_of(work, struct gnss_serial,
 						read_work.work);
-	unsigned long delay = ICE_GNSS_POLL_DATA_DELAY_TIME;
 	unsigned int i, bytes_read, data_len, count;
 	struct ice_aqc_link_topo_addr link_topo;
 	char buf[ICE_MAX_I2C_DATA_SIZE];
@@ -140,9 +139,9 @@ static void ice_gnss_read(struct kthread_work *work)
 				count, bytes_read);
 	}
 
-	delay = ICE_GNSS_TIMER_DELAY_TIME;
 requeue:
-	kthread_queue_delayed_work(gnss->kworker, &gnss->read_work, delay);
+	kthread_queue_delayed_work(gnss->kworker, &gnss->read_work,
+				   ICE_GNSS_POLL_DATA_DELAY_TIME);
 	if (err)
 		dev_dbg(ice_pf_to_dev(pf), "GNSS failed to read err=%d\n", err);
 }
