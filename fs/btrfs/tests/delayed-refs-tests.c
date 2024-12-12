@@ -978,7 +978,6 @@ out:
 
 int btrfs_test_delayed_refs(u32 sectorsize, u32 nodesize)
 {
-	struct btrfs_transaction transaction;
 	struct btrfs_trans_handle trans;
 	struct btrfs_fs_info *fs_info;
 	int ret;
@@ -991,8 +990,10 @@ int btrfs_test_delayed_refs(u32 sectorsize, u32 nodesize)
 		return -ENOMEM;
 	}
 	btrfs_init_dummy_trans(&trans, fs_info);
-	btrfs_init_dummy_transaction(&transaction, fs_info);
-	trans.transaction = &transaction;
+	trans.transaction = kmalloc(sizeof(*trans.transaction), GFP_KERNEL);
+	if (!trans.transaction)
+		goto out;
+	btrfs_init_dummy_transaction(trans.transaction, fs_info);
 
 	ret = simple_tests(&trans);
 	if (!ret) {
@@ -1007,6 +1008,8 @@ int btrfs_test_delayed_refs(u32 sectorsize, u32 nodesize)
 
 	if (!ret)
 		ret = select_delayed_refs_test(&trans);
+	kfree(trans.transaction);
+out:
 	btrfs_free_dummy_fs_info(fs_info);
 	return ret;
 }
