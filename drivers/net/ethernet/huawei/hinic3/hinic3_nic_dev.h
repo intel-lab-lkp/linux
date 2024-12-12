@@ -96,5 +96,7 @@ struct hinic3_nic_dev {
 };
 
 void hinic3_set_netdev_ops(struct net_device *netdev);
+int hinic3_qps_irq_init(struct net_device *netdev);
+void hinic3_qps_irq_deinit(struct net_device *netdev);
 
 #endif

@@ -7,6 +7,8 @@
 #include <linux/types.h>
 #include <linux/bits.h>
 
+#define MGMT_MSG_CMD_OP_SET   1
+#define MGMT_MSG_CMD_OP_GET   0
 #define MGMT_CMD_UNSUPPORTED  0xFF
 
 struct mgmt_msg_head {
@@ -52,6 +54,20 @@ enum hinic3_mgmt_cmd {
 	COMM_MGMT_CMD_SET_DMA_ATTR            = 25,
 };
 
+struct comm_cmd_msix_config {
+	struct mgmt_msg_head head;
+	u16                  func_id;
+	u8                   opcode;
+	u8                   rsvd1;
+	u16                  msix_index;
+	u8                   pending_cnt;
+	u8                   coalesce_timer_cnt;
+	u8                   resend_timer_cnt;
+	u8                   lli_timer_cnt;
+	u8                   lli_credit_cnt;
+	u8                   rsvd2[5];
+};
+
 enum func_reset_type_bits {
 	RESET_TYPE_FLUSH        = BIT(0),
 	RESET_TYPE_MQM          = BIT(1),
@@ -80,6 +96,33 @@ struct comm_cmd_feature_nego {
 	u8                   opcode;
 	u8                   rsvd;
 	u64                  s_feature[COMM_MAX_FEATURE_QWORD];
+};
+
+enum hinic3_cmdq_type {
+	HINIC3_CMDQ_SYNC = 0,
+	HINIC3_MAX_CMDQ_TYPES = 4
+};
+
+struct comm_cmd_ceq_ctrl_reg {
+	struct mgmt_msg_head head;
+	u16                  func_id;
+	u16                  q_id;
+	u32                  ctrl0;
+	u32                  ctrl1;
+	u32                  rsvd1;
+};
+
+struct cmdq_ctxt_info {
+	u64 curr_wqe_page_pfn;
+	u64 wq_block_pfn;
+};
+
+struct comm_cmd_cmdq_ctxt {
+	struct mgmt_msg_head  head;
+	u16                   func_id;
+	u8                    cmdq_id;
+	u8                    rsvd1[5];
+	struct cmdq_ctxt_info ctxt;
 };
 
 #endif

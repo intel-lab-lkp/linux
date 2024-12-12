@@ -51,3 +51,48 @@ void hinic3_dma_free_coherent_align(struct device *dev,
 	dma_free_coherent(dev, mem_align->real_size,
 			  mem_align->ori_vaddr, mem_align->ori_paddr);
 }
+
+int hinic3_wait_for_timeout(void *priv_data, wait_cpl_handler handler,
+			    u32 wait_total_ms, u32 wait_once_us)
+{
+	/* Take 9/10 * wait_once_us as the minimum sleep time of usleep_range */
+	u32 usleep_min = wait_once_us - wait_once_us / 10;
+	enum hinic3_wait_return ret;
+	unsigned long end;
+
+	end = jiffies + msecs_to_jiffies(wait_total_ms);
+	do {
+		ret = handler(priv_data);
+		if (ret == WAIT_PROCESS_CPL)
+			return 0;
+
+		/* Sleep more than 20ms using msleep is accurate */
+		if (wait_once_us >= 20 * USEC_PER_MSEC)
+			msleep(wait_once_us / USEC_PER_MSEC);
+		else
+			usleep_range(usleep_min, wait_once_us);
+	} while (time_before(jiffies, end));
+
+	ret = handler(priv_data);
+	if (ret == WAIT_PROCESS_CPL)
+		return 0;
+
+	return -ETIMEDOUT;
+}
+
+/* Data provided to/by cmdq is arranged in structs with little endian fields but
+ * every dword (32bits) should be swapped since HW swaps it again when it
+ * copies it from/to host memory. This is a mandatory swap regardless of the
+ * CPU endianness.
+ */
+void cmdq_buf_swab32(void *data, int len)
+{
+	int i, chunk_sz = sizeof(u32);
+	int data_len = len;
+	u32 *mem = data;
+
+	data_len = data_len / chunk_sz;
+
+	for (i = 0; i < data_len; i++)
+		mem[i] = swab32(mem[i]);
+}

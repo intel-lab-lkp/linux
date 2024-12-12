@@ -42,6 +42,9 @@ struct hinic3_wq {
 	__be64                    *wq_block_vaddr;
 } ____cacheline_aligned;
 
+#define WQ_IS_0_LEVEL_CLA(wq) \
+	((wq)->qpages.num_pages == 1)
+
 /* Get number of elements in work queue that are in-use. */
 static inline u16 hinic3_wq_get_used(const struct hinic3_wq *wq)
 {
@@ -66,6 +69,15 @@ static inline void hinic3_wq_put_wqebbs(struct hinic3_wq *wq, u16 num_wqebbs)
 	wq->cons_idx += num_wqebbs;
 }
 
+static inline u64 hinic3_wq_get_first_wqe_page_addr(const struct hinic3_wq *wq)
+{
+	return wq->qpages.pages[0].align_paddr;
+}
+
+int hinic3_wq_create(struct hinic3_hwdev *hwdev, struct hinic3_wq *wq, u32 q_depth,
+		     u16 wqebb_size);
+void hinic3_wq_destroy(struct hinic3_hwdev *hwdev, struct hinic3_wq *wq);
+void hinic3_wq_reset(struct hinic3_wq *wq);
 void hinic3_wq_get_multi_wqebbs(struct hinic3_wq *wq,
 				u16 num_wqebbs, u16 *prod_idx,
 				struct hinic3_sq_bufdesc **first_wqebb,
