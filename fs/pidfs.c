@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/anon_inodes.h>
+#include <linux/exportfs.h>
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/cgroup.h>
@@ -18,10 +19,113 @@
 #include <linux/ipc_namespace.h>
 #include <linux/time_namespace.h>
 #include <linux/utsname.h>
+#include <linux/maple_tree.h>
 #include <net/net_namespace.h>
 
 #include "internal.h"
 #include "mount.h"
+
+static struct maple_tree pidfs_ino_mtree = MTREE_INIT(pidfs_ino_mtree,
+						      MT_FLAGS_ALLOC_RANGE |
+						      MT_FLAGS_LOCK_IRQ);
+
+#if BITS_PER_LONG == 32
+/*
+ * On 32 bit systems the lower 32 bits are the inode number and
+ * the higher 32 bits are the generation number. The starting
+ * value for the inode number and the generation number is one.
+ */
+static inline unsigned long pidfs_ino(u64 ino)
+{
+	return lower_32_bits(ino);
+}
+
+/* On 32 bit the generation number are the upper 32 bits. */
+static inline u32 pidfs_gen(u64 ino)
+{
+	return upper_32_bits(ino);
+}
+
+#else
+
+/* On 64 bit simply return ino. */
+static inline unsigned long pidfs_ino(u64 ino)
+{
+	return ino;
+}
+
+/* On 64 bit the generation number is 1. */
+static inline u32 pidfs_gen(u64 ino)
+{
+	return 1;
+}
+#endif
+
+/*
+ * Create an inode number for struct pid that can be used to lookup
+ * struct pid indepdendent of any real pid numbers that could be leaked
+ * into userspace (e.g., by file handle encoding via
+ * name_to_handle_at(2).
+ *
+ * On 64bit BITS_PER_LONG is 64 and the inode number is unique because
+ * we allocate cyclically using ULONG_MAX for the maple tree.
+ *
+ * On 32bit BITS_PER_LONG is 32 and the inode number isn't trivially
+ * unique as the maple tree wraps around at UINT_MAX. To combat this we
+ * construct 64bit inode number. The lower 32bit are used to lookup
+ * struct pid in the maple tree. The upper 32bit are a counter that is
+ * incremented when the maple tree wraps around.
+ *
+ * This isn't perfect of course. On 32bit it is theoretically possible
+ * to create a densely populated maple tree. For example, assume that
+ * all entries in the maple tree are allocated up to UINT_MAX. If the
+ * user controls some entry in the middle and the last entry they can
+ * alternately free the middle entry and the last entry and thus
+ * overflow the upper 32bit counter.
+ *
+ * For 32bit we simply accept the very low possibility of overflowing
+ * the upper 32bit counter and log an info message when that happens.
+ * From that point on the inode number for struct pid isn't guaranteed
+ * to be unique anymore for the systems lifetime.
+ */
+int pidfs_add_pid(struct pid *pid)
+{
+	static unsigned long lower_next = 0;
+	static u32 pidfs_ino_upper_32_bits = 0;
+	unsigned long lower;
+	int ret;
+	MA_STATE(mas, &pidfs_ino_mtree, 0, 0);
+
+        /*
+	 * Inode numbering for pidfs start at 2. This avoids collisions
+	 * with the root inode which is 1 for pseudo filesystems.
+         */
+	mtree_lock(&pidfs_ino_mtree);
+	ret = mas_alloc_cyclic(&mas, &lower, pid, 2, ULONG_MAX, &lower_next,
+			       GFP_KERNEL);
+	if (ret < 0)
+		goto out_unlock;
+
+#if BITS_PER_LONG == 32
+	if (ret == 1) {
+		if (wrapping_assign_add(pidfs_ino_upper_32_bits, 1) == 0)
+			pr_info("pidfs: generation number wrapped around\n");
+		ret = 0;
+	}
+#endif
+	pid->ino = ((u64)pidfs_ino_upper_32_bits << 32) | lower;
+	pid->stashed = NULL;
+
+out_unlock:
+	mtree_unlock(&pidfs_ino_mtree);
+	return ret;
+}
+
+/* The idr number to remove is the lower 32 bits of the inode. */
+void pidfs_remove_pid(struct pid *pid)
+{
+	mtree_erase(&pidfs_ino_mtree, pidfs_ino(pid->ino));
+}
 
 #ifdef CONFIG_PROC_FS
 /**
@@ -190,6 +294,27 @@ static long pidfd_info(struct task_struct *task, unsigned int cmd, unsigned long
 	return 0;
 }
 
+static bool pidfs_ioctl_valid(unsigned int cmd)
+{
+	switch (cmd) {
+	case FS_IOC_GETVERSION:
+	case PIDFD_GET_CGROUP_NAMESPACE:
+	case PIDFD_GET_INFO:
+	case PIDFD_GET_IPC_NAMESPACE:
+	case PIDFD_GET_MNT_NAMESPACE:
+	case PIDFD_GET_NET_NAMESPACE:
+	case PIDFD_GET_PID_FOR_CHILDREN_NAMESPACE:
+	case PIDFD_GET_TIME_NAMESPACE:
+	case PIDFD_GET_TIME_FOR_CHILDREN_NAMESPACE:
+	case PIDFD_GET_UTS_NAMESPACE:
+	case PIDFD_GET_USER_NAMESPACE:
+	case PIDFD_GET_PID_NAMESPACE:
+		return true;
+	}
+
+	return false;
+}
+
 static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct task_struct *task __free(put_task) = NULL;
@@ -197,6 +322,17 @@ static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct pid *pid = pidfd_pid(file);
 	struct ns_common *ns_common = NULL;
 	struct pid_namespace *pid_ns;
+
+	if (!pidfs_ioctl_valid(cmd))
+		return -ENOIOCTLCMD;
+
+	if (cmd == FS_IOC_GETVERSION) {
+		if (!arg)
+			return -EINVAL;
+
+		__u32 __user *argp = (__u32 __user *)arg;
+		return put_user(file_inode(file)->i_generation, argp);
+	}
 
 	task = get_pid_task(pid, PIDTYPE_PID);
 	if (!task)
@@ -318,40 +454,6 @@ struct pid *pidfd_pid(const struct file *file)
 
 static struct vfsmount *pidfs_mnt __ro_after_init;
 
-#if BITS_PER_LONG == 32
-/*
- * Provide a fallback mechanism for 32-bit systems so processes remain
- * reliably comparable by inode number even on those systems.
- */
-static DEFINE_IDA(pidfd_inum_ida);
-
-static int pidfs_inum(struct pid *pid, unsigned long *ino)
-{
-	int ret;
-
-	ret = ida_alloc_range(&pidfd_inum_ida, RESERVED_PIDS + 1,
-			      UINT_MAX, GFP_ATOMIC);
-	if (ret < 0)
-		return -ENOSPC;
-
-	*ino = ret;
-	return 0;
-}
-
-static inline void pidfs_free_inum(unsigned long ino)
-{
-	if (ino > 0)
-		ida_free(&pidfd_inum_ida, ino);
-}
-#else
-static inline int pidfs_inum(struct pid *pid, unsigned long *ino)
-{
-	*ino = pid->ino;
-	return 0;
-}
-#define pidfs_free_inum(ino) ((void)(ino))
-#endif
-
 /*
  * The vfs falls back to simple_setattr() if i_op->setattr() isn't
  * implemented. Let's reject it completely until we have a clean
@@ -403,7 +505,6 @@ static void pidfs_evict_inode(struct inode *inode)
 
 	clear_inode(inode);
 	put_pid(pid);
-	pidfs_free_inum(inode->i_ino);
 }
 
 static const struct super_operations pidfs_sops = {
@@ -427,19 +528,130 @@ static const struct dentry_operations pidfs_dentry_operations = {
 	.d_prune	= stashed_dentry_prune,
 };
 
+static int pidfs_encode_fh(struct inode *inode, u32 *fh, int *max_len,
+			   struct inode *parent)
+{
+	const struct pid *pid = inode->i_private;
+
+	if (*max_len < 2) {
+		*max_len = 2;
+		return FILEID_INVALID;
+	}
+
+	*max_len = 2;
+	*(u64 *)fh = pid->ino;
+	return FILEID_KERNFS;
+}
+
+/* Find a struct pid based on the inode number. */
+static struct pid *pidfs_ino_get_pid(u64 ino)
+{
+	unsigned long pid_ino = pidfs_ino(ino);
+	u32 gen = pidfs_gen(ino);
+	struct pid *pid;
+
+	guard(rcu)();
+
+	pid = mtree_load(&pidfs_ino_mtree, pid_ino);
+	if (!pid)
+		return NULL;
+
+	if (pidfs_ino(pid->ino) != pid_ino)
+		return NULL;
+
+	if (pidfs_gen(pid->ino) != gen)
+		return NULL;
+
+	/* Within our pid namespace hierarchy? */
+	if (pid_vnr(pid) == 0)
+		return NULL;
+
+	return get_pid(pid);
+}
+
+static struct dentry *pidfs_fh_to_dentry(struct super_block *sb,
+					 struct fid *fid, int fh_len,
+					 int fh_type)
+{
+	int ret;
+	u64 pid_ino;
+	struct path path;
+	struct pid *pid;
+
+	if (fh_len < 2)
+		return NULL;
+
+	switch (fh_type) {
+	case FILEID_KERNFS:
+		pid_ino = *(u64 *)fid;
+		break;
+	default:
+		return NULL;
+	}
+
+	pid = pidfs_ino_get_pid(pid_ino);
+	if (!pid)
+		return NULL;
+
+	ret = path_from_stashed(&pid->stashed, pidfs_mnt, pid, &path);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	mntput(path.mnt);
+	return path.dentry;
+}
+
+/*
+ * Make sure that we reject any nonsensical flags that users pass via
+ * open_by_handle_at(). Note that PIDFD_THREAD is defined as O_EXCL, and
+ * PIDFD_NONBLOCK as O_NONBLOCK.
+ */
+#define VALID_FILE_HANDLE_OPEN_FLAGS \
+	(O_RDONLY | O_WRONLY | O_RDWR | O_NONBLOCK | O_CLOEXEC | O_EXCL)
+
+static int pidfs_export_permission(struct handle_to_path_ctx *ctx,
+				   unsigned int oflags)
+{
+	if (oflags & ~(VALID_FILE_HANDLE_OPEN_FLAGS | O_LARGEFILE))
+		return -EINVAL;
+
+	/*
+	 * pidfd_ino_get_pid() will verify that the struct pid is part
+	 * of the caller's pid namespace hierarchy. No further
+	 * permission checks are needed.
+	 */
+	return 0;
+}
+
+static struct file *pidfs_export_open(struct path *path, unsigned int oflags)
+{
+	/*
+	 * Clear O_LARGEFILE as open_by_handle_at() forces it and raise
+	 * O_RDWR as pidfds always are.
+	 */
+	oflags &= ~O_LARGEFILE;
+	return dentry_open(path, oflags | O_RDWR, current_cred());
+}
+
+static const struct export_operations pidfs_export_operations = {
+	.encode_fh	= pidfs_encode_fh,
+	.fh_to_dentry	= pidfs_fh_to_dentry,
+	.open		= pidfs_export_open,
+	.permission	= pidfs_export_permission,
+};
+
 static int pidfs_init_inode(struct inode *inode, void *data)
 {
+	const struct pid *pid = data;
+
 	inode->i_private = data;
 	inode->i_flags |= S_PRIVATE;
 	inode->i_mode |= S_IRWXU;
 	inode->i_op = &pidfs_inode_operations;
 	inode->i_fop = &pidfs_file_operations;
-	/*
-	 * Inode numbering for pidfs start at RESERVED_PIDS + 1. This
-	 * avoids collisions with the root inode which is 1 for pseudo
-	 * filesystems.
-	 */
-	return pidfs_inum(data, &inode->i_ino);
+	inode->i_ino = pidfs_ino(pid->ino);
+	inode->i_generation = pidfs_gen(pid->ino);
+	return 0;
 }
 
 static void pidfs_put_data(void *data)
@@ -462,6 +674,7 @@ static int pidfs_init_fs_context(struct fs_context *fc)
 		return -ENOMEM;
 
 	ctx->ops = &pidfs_sops;
+	ctx->eops = &pidfs_export_operations;
 	ctx->dops = &pidfs_dentry_operations;
 	fc->s_fs_info = (void *)&pidfs_stashed_ops;
 	return 0;
