@@ -1065,7 +1065,7 @@ fail:
 }
 
 #ifdef CONFIG_EFI_HANDOVER_PROTOCOL
-void efi_handover_entry(efi_handle_t handle, efi_system_table_t *sys_table_arg,
+static void  efi_handover_entry(efi_handle_t handle, efi_system_table_t *sys_table_arg,
 			struct boot_params *boot_params)
 {
 	memset(_bss, 0, _ebss - _bss);
