@@ -216,7 +216,7 @@ static bool cgroup_reclaim(struct scan_control *sc)
  */
 static bool root_reclaim(struct scan_control *sc)
 {
-	return !sc->target_mem_cgroup || mem_cgroup_is_root(sc->target_mem_cgroup);
+	return !sc->target_mem_cgroup;
 }
 
 /**
