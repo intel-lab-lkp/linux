@@ -1990,6 +1990,20 @@ static void mbm_cntr_free(struct rdt_resource *r, struct rdt_mon_domain *d,
 	}
 }
 
+static int mbm_cntr_get(struct rdt_resource *r, struct rdt_mon_domain *d,
+			struct rdtgroup *rdtgrp, enum resctrl_event_id evtid)
+{
+	int cntr_id;
+
+	for (cntr_id = 0; cntr_id < r->mon.num_mbm_cntrs; cntr_id++) {
+		if (d->cntr_cfg[cntr_id].rdtgrp == rdtgrp &&
+		    d->cntr_cfg[cntr_id].evtid == evtid)
+			return cntr_id;
+	}
+
+	return -EINVAL;
+}
+
 /*
  * Assign a hardware counter to event @evtid of group @rdtgrp.
  * Counter will be assigned to all the domains if rdt_mon_domain is NULL
@@ -2034,6 +2048,44 @@ out_done_assign:
 	if (ret)
 		mbm_cntr_free(r, d, rdtgrp, evtid);
 
+	return ret;
+}
+
+/*
+ * Unassign a hardware counter associated with @evtid from the domain and
+ * the group. Unassign the counters from all the domains if rdt_mon_domain
+ * is NULL else unassign from the specific domain.
+ */
+int rdtgroup_unassign_cntr_event(struct rdt_resource *r, struct rdtgroup *rdtgrp,
+				 struct rdt_mon_domain *d, enum resctrl_event_id evtid)
+{
+	int cntr_id, ret = 0;
+
+	if (!d) {
+		list_for_each_entry(d, &r->mon_domains, hdr.list) {
+			if (!mbm_cntr_assigned(r, d, rdtgrp, evtid))
+				continue;
+
+			cntr_id = mbm_cntr_get(r, d, rdtgrp, evtid);
+
+			ret = resctrl_config_cntr(r, d, evtid, rdtgrp->mon.rmid,
+						  rdtgrp->closid, cntr_id, false);
+			if (!ret)
+				mbm_cntr_free(r, d, rdtgrp, evtid);
+		}
+	} else {
+		if (!mbm_cntr_assigned(r, d, rdtgrp, evtid))
+			goto out_done_unassign;
+
+		cntr_id = mbm_cntr_get(r, d, rdtgrp, evtid);
+
+		ret = resctrl_config_cntr(r, d, evtid, rdtgrp->mon.rmid,
+					  rdtgrp->closid, cntr_id, false);
+		if (!ret)
+			mbm_cntr_free(r, d, rdtgrp, evtid);
+	}
+
+out_done_unassign:
 	return ret;
 }
 
