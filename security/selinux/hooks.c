@@ -4715,8 +4715,10 @@ static int selinux_socket_bind(struct socket *sock, struct sockaddr *address, in
 	if (err)
 		goto out;
 
+	/* IPV6_ADDRFORM can change sk->sk_family under us. */
+	family = READ_ONCE(sk->sk_family);
+
 	/* If PF_INET or PF_INET6, check name_bind permission for the port. */
-	family = sk->sk_family;
 	if (family == PF_INET || family == PF_INET6) {
 		char *addrp;
 		struct common_audit_data ad;
