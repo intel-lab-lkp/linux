@@ -71,22 +71,17 @@ SYM_CODE_START_NOALIGN(relocate_kernel)
 	movq	kexec_pa_table_page(%rip), %r9
 	movq	%r9, %cr3
 
-	/* Save %rsp and CRs. */
-	movq    %rsp, saved_rsp(%rip)
-	movq	%rax, saved_cr3(%rip)
-	movq	%cr0, %rax
-	movq	%rax, saved_cr0(%rip)
-	/* Leave CR4 in %r13 to enable the right paging mode later. */
-	movq	%cr4, %r13
-	movq	%r13, saved_cr4(%rip)
-
-	/* save indirection list for jumping back */
-	movq	%rdi, pa_backup_pages_map(%rip)
+	/*
+	 * The control page still might not be writable because the original
+	 * kernel PTE may have had the _PAGE_GLOBAL bit set. Don't write to
+	 * it except through the *identmap* address.
+	 */
 
 	/* Save the preserve_context to %r11 as swap_pages clobbers %rcx. */
 	movq	%rcx, %r11
 
 	/* setup a new stack at the end of the physical control page */
+	movq	%rsp, %rbp
 	lea	PAGE_SIZE(%rsi), %rsp
 
 	/* jump to identity mapped page */
@@ -99,6 +94,19 @@ SYM_CODE_END(relocate_kernel)
 
 SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	UNWIND_HINT_END_OF_STACK
+
+	/* Save original %rsp and CRs. */
+	movq    %rbp, saved_rsp(%rip)
+	movq	%rax, saved_cr3(%rip)
+	movq	%cr0, %rax
+	movq	%rax, saved_cr0(%rip)
+	/* Leave CR4 in %r13 to enable the right paging mode later. */
+	movq	%cr4, %r13
+	movq	%r13, saved_cr4(%rip)
+
+	/* save indirection list for jumping back */
+	movq	%rdi, pa_backup_pages_map(%rip)
+
 	/*
 	 * %rdi	indirection page
 	 * %rdx start address
@@ -142,7 +150,7 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	 *  - Machine check exception on TDX guest, if it was enabled before.
 	 *    Clearing MCE might not be allowed in TDX guests, depending on setup.
 	 *
-	 * Use R13 that contains the original CR4 value, read in relocate_kernel().
+	 * Use R13 that contains the original CR4 value
 	 * PAE is always set in the original CR4.
 	 */
 	andl	$(X86_CR4_PAE | X86_CR4_LA57), %r13d
