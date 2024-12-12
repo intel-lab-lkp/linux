@@ -264,7 +264,7 @@ static unsigned long calculate_psi_aligned_address(unsigned long start,
 
 static void qi_batch_flush_descs(struct intel_iommu *iommu, struct qi_batch *batch)
 {
-	if (!iommu || !batch->index)
+	if (!iommu || !batch || !batch->index)
 		return;
 
 	qi_submit_sync(iommu, batch->descs, batch->index, 0);
