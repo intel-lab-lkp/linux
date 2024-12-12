@@ -4294,6 +4294,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	struct swap_info_struct *si = NULL;
 	rmap_t rmap_flags = RMAP_NONE;
 	bool need_clear_cache = false;
+	bool map_zero_pfn = false;
 	bool exclusive = false;
 	swp_entry_t entry;
 	pte_t pte;
@@ -4364,6 +4365,39 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	swapcache = folio;
 
 	if (!folio) {
+		/* Use the zero-page for reads */
+		if (!(vmf->flags & FAULT_FLAG_WRITE) &&
+		    !mm_forbids_zeropage(vma->vm_mm) &&
+		    __swap_count(entry) == 1)  {
+			swap_zeromap_batch(entry, 1, &map_zero_pfn);
+			if (map_zero_pfn) {
+				if (swapcache_prepare(entry, 1)) {
+					add_wait_queue(&swapcache_wq, &wait);
+					schedule_timeout_uninterruptible(1);
+					remove_wait_queue(&swapcache_wq, &wait);
+					goto out;
+				}
+				nr_pages = 1;
+				need_clear_cache = true;
+				pte = pte_mkspecial(pfn_pte(my_zero_pfn(vmf->address),
+						vma->vm_page_prot));
+				vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
+						&vmf->ptl);
+				if (unlikely(!vmf->pte || !pte_same(ptep_get(vmf->pte),
+						vmf->orig_pte)))
+					goto unlock;
+
+				page = pfn_to_page(my_zero_pfn(vmf->address));
+				arch_swap_restore(entry, page_folio(page));
+				swap_free_nr(entry, 1);
+				add_mm_counter(vma->vm_mm, MM_SWAPENTS, -1);
+				set_ptes(vma->vm_mm, vmf->address, vmf->pte, pte, 1);
+				arch_do_swap_page_nr(vma->vm_mm, vma, vmf->address, pte, pte, 1);
+				update_mmu_cache_range(vmf, vma, vmf->address, vmf->pte, 1);
+				goto unlock;
+			}
+		}
+
 		if (data_race(si->flags & SWP_SYNCHRONOUS_IO) &&
 		    __swap_count(entry) == 1) {
 			/* skip swapcache */
