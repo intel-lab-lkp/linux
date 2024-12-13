@@ -7,6 +7,15 @@
 #include <linux/uaccess.h>
 #include "optee_private.h"
 
+/*
+ * OP-TEE supplicant timeout, the user-space supplicant may get
+ * crashed or killed while servicing an RPC call. This will just lead
+ * to OP-TEE client hung indefinitely just waiting for supplicant to
+ * serve requests which isn't expected. It is rather expected to fail
+ * gracefully with a timeout which is long enough.
+ */
+#define SUPP_TIMEOUT	(msecs_to_jiffies(10000))
+
 struct optee_supp_req {
 	struct list_head link;
 
@@ -52,8 +61,10 @@ void optee_supp_release(struct optee_supp *supp)
 
 	/* Abort all queued requests */
 	list_for_each_entry_safe(req, req_tmp, &supp->reqs, link) {
-		list_del(&req->link);
-		req->in_queue = false;
+		if (req->in_queue) {
+			list_del(&req->link);
+			req->in_queue = false;
+		}
 		req->ret = TEEC_ERROR_COMMUNICATION;
 		complete(&req->c);
 	}
@@ -82,6 +93,7 @@ u32 optee_supp_thrd_req(struct tee_context *ctx, u32 func, size_t num_params,
 	struct optee_supp_req *req;
 	bool interruptable;
 	u32 ret;
+	int res = 1;
 
 	/*
 	 * Return in case there is no supplicant available and
@@ -108,28 +120,28 @@ u32 optee_supp_thrd_req(struct tee_context *ctx, u32 func, size_t num_params,
 	/* Tell an eventual waiter there's a new request */
 	complete(&supp->reqs_c);
 
-	/*
-	 * Wait for supplicant to process and return result, once we've
-	 * returned from wait_for_completion(&req->c) successfully we have
-	 * exclusive access again.
-	 */
-	while (wait_for_completion_interruptible(&req->c)) {
+	/* Wait for supplicant to process and return result */
+	while (res) {
+		res = wait_for_completion_interruptible_timeout(&req->c,
+								SUPP_TIMEOUT);
+		/* Check if supplicant served the request */
+		if (res > 0)
+			break;
+
 		mutex_lock(&supp->mutex);
+		/*
+		 * There's no supplicant available and since the supp->mutex
+		 * currently is held none can become available until the mutex
+		 * released again.
+		 *
+		 * Interrupting an RPC to supplicant is only allowed as a way
+		 * of slightly improving the user experience in case the
+		 * supplicant hasn't been started yet. During normal operation
+		 * the supplicant will serve all requests in a timely manner and
+		 * interrupting then wouldn't make sense.
+		 */
 		interruptable = !supp->ctx;
-		if (interruptable) {
-			/*
-			 * There's no supplicant available and since the
-			 * supp->mutex currently is held none can
-			 * become available until the mutex released
-			 * again.
-			 *
-			 * Interrupting an RPC to supplicant is only
-			 * allowed as a way of slightly improving the user
-			 * experience in case the supplicant hasn't been
-			 * started yet. During normal operation the supplicant
-			 * will serve all requests in a timely manner and
-			 * interrupting then wouldn't make sense.
-			 */
+		if (interruptable || (res == 0)) {
 			if (req->in_queue) {
 				list_del(&req->link);
 				req->in_queue = false;
@@ -141,6 +153,8 @@ u32 optee_supp_thrd_req(struct tee_context *ctx, u32 func, size_t num_params,
 			req->ret = TEEC_ERROR_COMMUNICATION;
 			break;
 		}
+		if (res == 0)
+			req->ret = TEE_ERROR_TIMEOUT;
 	}
 
 	ret = req->ret;
