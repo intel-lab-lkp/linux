@@ -1833,6 +1833,11 @@ static int sdhci_msm_ice_init(struct sdhci_msm_host *msm_host,
 	if (IS_ERR_OR_NULL(ice))
 		return PTR_ERR_OR_ZERO(ice);
 
+	if (qcom_ice_using_hwkm(ice)) {
+		dev_warn(dev, "HWKM mode unsupported; disabling inline encryption support\n");
+		return 0;
+	}
+
 	msm_host->ice = ice;
 
 	/* Initialize the blk_crypto_profile */
