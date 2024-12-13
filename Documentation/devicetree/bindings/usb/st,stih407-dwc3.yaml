@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/st,stih407-dwc3.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ST DWC3 glue logic
+
+description:
+  This binding describes the parameters for the dwc3-st driver,
+  which controls the glue logic used to configure the DWC3 core on
+  STiH407-based platforms.
+
+maintainers:
+  - Mauro Carvalho Chehab <mchehab@kernel.org>
+
+properties:
+  compatible:
+    const: st,stih407-dwc3
+
+  reg:
+    # minItems: 2
+    items:
+      - description: Glue logic base address.
+      - description: USB syscfg ctrl register offset.
+
+  reg-names:
+    # minItems: 2
+    items:
+      - const: reg-glue
+      - const: syscfg-reg
+
+  st,syscon:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to system configuration node which.
+
+  resets:
+    maxItems: 2
+
+  reset-names:
+    items:
+      - const: powerdown
+      - const: softreset
+
+  st,syscfg:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  pinctrl-names:
+    items:
+      - const: default
+
+  pinctrl-0:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: |
+      Pin control group
+      See: Documentation/devicetree/bindings/pinctrl/pinctrl-bindings.txt
+
+  ranges:
+    description: Valid 1:1 translation between child's and parent's address space.
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - resets
+  - reset-names
+  - pinctrl-names
+  - pinctrl-0
+  - ranges
+
+additionalProperties: false
+
+patternProperties:
+  "^usb@[0-9a-f]+$":
+    type: object
+    description: DWC3 core sub-node
+    $ref: snps,dwc3.yaml#
+    unevaluatedProperties: false
+    properties:
+      dr_mode:
+        enum:
+          - host
+          - device
+        description: |
+          Specifies the operating mode. The default value "otg" is not
+          supported by this SoC. Valid values are "host" or "device".
+          See: Documentation/devicetree/bindings/usb/usb-drd.yaml
+
+examples:
+  - |
+    #include <dt-bindings/phy/phy.h>
+    #include <dt-bindings/reset/stih407-resets.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    st_dwc3: dwc3@8f94000 {
+        compatible	= "st,stih407-dwc3";
+        reg		= <0x08f94000 0x1000>, <0x110 0x4>;
+        reg-names	= "reg-glue", "syscfg-reg";
+        st,syscfg	= <&syscfg_core>;
+        resets		= <&powerdown STIH407_USB3_POWERDOWN>,
+              <&softreset STIH407_MIPHY2_SOFTRESET>;
+        reset-names	= "powerdown", "softreset";
+        #address-cells	= <1>;
+        #size-cells	= <1>;
+        pinctrl-names	= "default";
+        pinctrl-0	= <&pinctrl_usb3>;
+        ranges;
+
+        dwc3: usb@9900000 {
+            compatible	= "snps,dwc3";
+            reg		= <0x09900000 0x100000>;
+            interrupts	= <GIC_SPI 155 IRQ_TYPE_NONE>;
+            dr_mode		= "host";
+            phy-names	= "usb2-phy", "usb3-phy";
+            phys		= <&usb2_picophy2>, <&phy_port2 PHY_TYPE_USB3>;
+        };
+    };
