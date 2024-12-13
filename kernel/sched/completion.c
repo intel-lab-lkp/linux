@@ -30,6 +30,13 @@ void complete_on_current_cpu(struct completion *x)
 	return complete_with_flags(x, WF_CURRENT_CPU);
 }
 
+static void complete_ipi(void *arg)
+{
+	struct completion *x = arg;
+
+	complete_with_flags(x, 0);
+}
+
 /**
  * complete: - signals a single thread waiting on this completion
  * @x:  holds the state of this particular completion
@@ -44,7 +51,23 @@ void complete_on_current_cpu(struct completion *x)
  */
 void complete(struct completion *x)
 {
-	complete_with_flags(x, 0);
+	int cpu = get_cpu();
+
+	/* The scheduler might queue an ignored hrtimer. Defer the wake up
+	 * to an online CPU instead.
+	 */
+	if (unlikely(cpu_is_offline(cpu))) {
+		int target;
+
+		target = cpumask_any_and(housekeeping_cpumask(HK_TYPE_RCU),
+					 cpu_online_mask);
+
+		smp_call_function_single(target, complete_ipi, x, 1);
+		put_cpu();
+	} else {
+		put_cpu();
+		complete_with_flags(x, 0);
+	}
 }
 EXPORT_SYMBOL(complete);
 
