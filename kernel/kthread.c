@@ -1124,7 +1124,7 @@ kthread_create_worker_on_cpu(int cpu, unsigned int flags,
 	struct kthread_worker *worker;
 
 	worker = kthread_create_worker_on_node(flags, cpu_to_node(cpu), namefmt, cpu);
-	if (worker)
+	if (!IS_ERR(worker))
 		kthread_bind(worker->task, cpu);
 
 	return worker;
