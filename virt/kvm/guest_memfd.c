@@ -375,6 +375,159 @@ static void kvm_gmem_init_mount(void)
 	kvm_gmem_mnt->mnt_flags |= MNT_NOEXEC;
 }
 
+#ifdef CONFIG_KVM_GMEM_MAPPABLE
+/*
+ * An enum of the valid states that describe who can map a folio.
+ * Bit 0: if set guest cannot map the page
+ * Bit 1: if set host cannot map the page
+ */
+enum folio_mappability {
+	KVM_GMEM_ALL_MAPPABLE	= 0b00,	/* Mappable by host and guest. */
+	KVM_GMEM_GUEST_MAPPABLE	= 0b10, /* Mappable only by guest. */
+	KVM_GMEM_NONE_MAPPABLE	= 0b11, /* Not mappable, transient state. */
+};
+
+/*
+ * Marks the range [start, end) as mappable by both the host and the guest.
+ * Usually called when guest shares memory with the host.
+ */
+static int gmem_set_mappable(struct inode *inode, pgoff_t start, pgoff_t end)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	void *xval = xa_mk_value(KVM_GMEM_ALL_MAPPABLE);
+	pgoff_t i;
+	int r = 0;
+
+	filemap_invalidate_lock(inode->i_mapping);
+	for (i = start; i < end; i++) {
+		r = xa_err(xa_store(mappable_offsets, i, xval, GFP_KERNEL));
+		if (r)
+			break;
+	}
+	filemap_invalidate_unlock(inode->i_mapping);
+
+	return r;
+}
+
+/*
+ * Marks the range [start, end) as not mappable by the host. If the host doesn't
+ * have any references to a particular folio, then that folio is marked as
+ * mappable by the guest.
+ *
+ * However, if the host still has references to the folio, then the folio is
+ * marked and not mappable by anyone. Marking it is not mappable allows it to
+ * drain all references from the host, and to ensure that the hypervisor does
+ * not transition the folio to private, since the host still might access it.
+ *
+ * Usually called when guest unshares memory with the host.
+ */
+static int gmem_clear_mappable(struct inode *inode, pgoff_t start, pgoff_t end)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	void *xval_guest = xa_mk_value(KVM_GMEM_GUEST_MAPPABLE);
+	void *xval_none = xa_mk_value(KVM_GMEM_NONE_MAPPABLE);
+	pgoff_t i;
+	int r = 0;
+
+	filemap_invalidate_lock(inode->i_mapping);
+	for (i = start; i < end; i++) {
+		struct folio *folio;
+		int refcount = 0;
+
+		folio = filemap_lock_folio(inode->i_mapping, i);
+		if (!IS_ERR(folio)) {
+			refcount = folio_ref_count(folio);
+		} else {
+			r = PTR_ERR(folio);
+			if (WARN_ON_ONCE(r != -ENOENT))
+				break;
+
+			folio = NULL;
+		}
+
+		/* +1 references are expected because of filemap_lock_folio(). */
+		if (folio && refcount > folio_nr_pages(folio) + 1) {
+			/*
+			 * Outstanding references, the folio cannot be faulted
+			 * in by anyone until they're dropped.
+			 */
+			r = xa_err(xa_store(mappable_offsets, i, xval_none, GFP_KERNEL));
+		} else {
+			/*
+			 * No outstanding references. Transition the folio to
+			 * guest mappable immediately.
+			 */
+			r = xa_err(xa_store(mappable_offsets, i, xval_guest, GFP_KERNEL));
+		}
+
+		if (folio) {
+			folio_unlock(folio);
+			folio_put(folio);
+		}
+
+		if (WARN_ON_ONCE(r))
+			break;
+	}
+	filemap_invalidate_unlock(inode->i_mapping);
+
+	return r;
+}
+
+static bool gmem_is_mappable(struct inode *inode, pgoff_t pgoff)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	unsigned long r;
+
+	r = xa_to_value(xa_load(mappable_offsets, pgoff));
+
+	return (r == KVM_GMEM_ALL_MAPPABLE);
+}
+
+static bool gmem_is_guest_mappable(struct inode *inode, pgoff_t pgoff)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	unsigned long r;
+
+	r = xa_to_value(xa_load(mappable_offsets, pgoff));
+
+	return (r == KVM_GMEM_ALL_MAPPABLE || r == KVM_GMEM_GUEST_MAPPABLE);
+}
+
+int kvm_slot_gmem_set_mappable(struct kvm_memory_slot *slot, gfn_t start, gfn_t end)
+{
+	struct inode *inode = file_inode(slot->gmem.file);
+	pgoff_t start_off = slot->gmem.pgoff + start - slot->base_gfn;
+	pgoff_t end_off = start_off + end - start;
+
+	return gmem_set_mappable(inode, start_off, end_off);
+}
+
+int kvm_slot_gmem_clear_mappable(struct kvm_memory_slot *slot, gfn_t start, gfn_t end)
+{
+	struct inode *inode = file_inode(slot->gmem.file);
+	pgoff_t start_off = slot->gmem.pgoff + start - slot->base_gfn;
+	pgoff_t end_off = start_off + end - start;
+
+	return gmem_clear_mappable(inode, start_off, end_off);
+}
+
+bool kvm_slot_gmem_is_mappable(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	struct inode *inode = file_inode(slot->gmem.file);
+	unsigned long pgoff = slot->gmem.pgoff + gfn - slot->base_gfn;
+
+	return gmem_is_mappable(inode, pgoff);
+}
+
+bool kvm_slot_gmem_is_guest_mappable(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	struct inode *inode = file_inode(slot->gmem.file);
+	unsigned long pgoff = slot->gmem.pgoff + gfn - slot->base_gfn;
+
+	return gmem_is_guest_mappable(inode, pgoff);
+}
+#endif /* CONFIG_KVM_GMEM_MAPPABLE */
+
 static struct file_operations kvm_gmem_fops = {
 	.open		= generic_file_open,
 	.release	= kvm_gmem_release,
