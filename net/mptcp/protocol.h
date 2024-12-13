@@ -208,9 +208,6 @@ enum mptcp_addr_signal_status {
 	MPTCP_RM_ADDR_SIGNAL,
 };
 
-/* max value of mptcp_addr_info.id */
-#define MPTCP_PM_MAX_ADDR_ID		U8_MAX
-
 struct mptcp_pm_data {
 	struct mptcp_addr_info local;
 	struct mptcp_addr_info remote;
