@@ -116,6 +116,8 @@ static const struct dwc_pcie_pmu_vsec_id dwc_pcie_pmu_vsec_ids[] = {
 	  .vsec_id = 0x02, .vsec_rev = 0x4 },
 	{ .vendor_id = PCI_VENDOR_ID_QCOM,
 	  .vsec_id = 0x02, .vsec_rev = 0x4 },
+	{ .vendor_id = PCI_VENDOR_ID_ROCKCHIP,
+	  .vsec_id = 0x02, .vsec_rev = 0x4 },
 	{} /* terminator */
 };
 
@@ -264,11 +266,26 @@ static const struct attribute_group *dwc_pcie_attr_groups[] = {
 	NULL
 };
 
+static void dwc_pcie_pmu_lane_event_enable_for_rk(struct pci_dev *pdev,
+						  u16 ras_des_offset,
+						  bool enable)
+{
+	if (enable)
+		pci_write_config_dword(pdev, ras_des_offset + DWC_PCIE_EVENT_CNT_CTL,
+				DWC_PCIE_CNT_ENABLE | DWC_PCIE_PER_EVENT_ON);
+	else
+		pci_clear_and_set_config_dword(pdev, ras_des_offset + DWC_PCIE_EVENT_CNT_CTL,
+				DWC_PCIE_CNT_ENABLE, DWC_PCIE_PER_EVENT_ON);
+}
+
 static void dwc_pcie_pmu_lane_event_enable(struct dwc_pcie_pmu *pcie_pmu,
 					   bool enable)
 {
 	struct pci_dev *pdev = pcie_pmu->pdev;
 	u16 ras_des_offset = pcie_pmu->ras_des_offset;
+
+	if (pdev->vendor == PCI_VENDOR_ID_ROCKCHIP)
+		return dwc_pcie_pmu_lane_event_enable_for_rk(pdev, ras_des_offset, enable);
 
 	if (enable)
 		pci_clear_and_set_config_dword(pdev,
@@ -295,8 +312,13 @@ static u64 dwc_pcie_pmu_read_lane_event_counter(struct perf_event *event)
 {
 	struct dwc_pcie_pmu *pcie_pmu = to_dwc_pcie_pmu(event->pmu);
 	struct pci_dev *pdev = pcie_pmu->pdev;
+	int event_id = DWC_PCIE_EVENT_ID(event);
 	u16 ras_des_offset = pcie_pmu->ras_des_offset;
 	u32 val;
+
+	if (pdev->vendor == PCI_VENDOR_ID_ROCKCHIP)
+		pci_write_config_dword(pdev, ras_des_offset + DWC_PCIE_EVENT_CNT_CTL,
+				       event_id << 16);
 
 	pci_read_config_dword(pdev, ras_des_offset + DWC_PCIE_EVENT_CNT_DATA, &val);
 
