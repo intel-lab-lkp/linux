@@ -184,7 +184,7 @@ int qcom_ice_program_key(struct qcom_ice *ice, unsigned int slot,
 		dev_err_ratelimited(dev, "Incorrect key size\n");
 		return -EINVAL;
 	}
-	memcpy(key.bytes, blk_key->raw, AES_256_XTS_KEY_SIZE);
+	memcpy(key.bytes, blk_key->bytes, AES_256_XTS_KEY_SIZE);
 
 	/* The SCM call requires that the key words are encoded in big endian */
 	for (i = 0; i < ARRAY_SIZE(key.words); i++)
