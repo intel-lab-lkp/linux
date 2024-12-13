@@ -1393,7 +1393,9 @@
 
 		pmu_system_controller: system-controller@17460000 {
 			compatible = "google,gs101-pmu", "syscon";
-			reg = <0x17460000 0x10000>;
+			reg = <0x17460000 0x10000>,
+			      <0x17470000 0x10000>;
+			reg-names = "pmu", "pmu-intr-gen";
 
 			poweroff: syscon-poweroff {
 				compatible = "syscon-poweroff";
