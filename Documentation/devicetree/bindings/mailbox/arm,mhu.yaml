@@ -63,6 +63,16 @@ properties:
       - description: high-priority non-secure
       - description: Secure
 
+  interrupt-names:
+    minItems: 2
+    items:
+      - const: mhu-lpri-rx
+      - const: mhu-hpri-rx
+      - const: mhu-si-rx
+
+  mbox-name:
+    maxItems: 1
+
   clocks:
     maxItems: 1
 
