@@ -153,6 +153,7 @@
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
 
+static void sock_inuse_add(const struct net *net, int val);
 static void sock_def_write_space_wfree(struct sock *sk);
 static void sock_def_write_space(struct sock *sk);
 
@@ -3885,6 +3886,11 @@ int sock_prot_inuse_get(struct net *net, struct proto *prot)
 }
 EXPORT_SYMBOL_GPL(sock_prot_inuse_get);
 
+static void sock_inuse_add(const struct net *net, int val)
+{
+	this_cpu_add(net->core.prot_inuse->all, val);
+}
+
 int sock_inuse_get(struct net *net)
 {
 	int cpu, res = 0;
@@ -3944,6 +3950,10 @@ static void release_proto_idx(struct proto *prot)
 		clear_bit(prot->inuse_idx, proto_inuse_idx);
 }
 #else
+static void sock_inuse_add(const struct net *net, int val)
+{
+}
+
 static inline int assign_proto_idx(struct proto *prot)
 {
 	return 0;
