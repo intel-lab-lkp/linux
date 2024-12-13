@@ -7,6 +7,7 @@
  */
 
 #include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
 #include <linux/module.h>
@@ -21,6 +22,7 @@ struct gen_74x164_chip {
 	struct gpio_chip	gpio_chip;
 	struct mutex		lock;
 	struct gpio_desc	*gpiod_oe;
+	struct gpio_desc	*gpiod_latch;
 	u32			registers;
 	/*
 	 * Since the registers are chained, every byte sent will make
@@ -34,8 +36,20 @@ struct gen_74x164_chip {
 
 static int __gen_74x164_write_config(struct gen_74x164_chip *chip)
 {
-	return spi_write(to_spi_device(chip->gpio_chip.parent), chip->buffer,
+	int ret;
+
+	ret = spi_write(to_spi_device(chip->gpio_chip.parent), chip->buffer,
 			 chip->registers);
+	if (ret)
+		return ret;
+
+	if (chip->gpiod_latch) {
+		gpiod_set_value_cansleep(chip->gpiod_latch, 1);
+		udelay(1);
+		gpiod_set_value_cansleep(chip->gpiod_latch, 0);
+	}
+
+	return 0;
 }
 
 static int gen_74x164_get_value(struct gpio_chip *gc, unsigned offset)
@@ -126,6 +140,11 @@ static int gen_74x164_probe(struct spi_device *spi)
 						 GPIOD_OUT_LOW);
 	if (IS_ERR(chip->gpiod_oe))
 		return PTR_ERR(chip->gpiod_oe);
+
+	chip->gpiod_latch = devm_gpiod_get_optional(&spi->dev, "latch",
+						    GPIOD_OUT_LOW);
+	if (IS_ERR(chip->gpiod_latch))
+		return PTR_ERR(chip->gpiod_latch);
 
 	spi_set_drvdata(spi, chip);
 
