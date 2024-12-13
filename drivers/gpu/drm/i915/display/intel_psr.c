@@ -26,6 +26,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_debugfs.h>
+#include <drm/drm_vblank.h>
 
 #include "i915_drv.h"
 #include "i915_reg.h"
@@ -44,6 +45,7 @@
 #include "intel_psr.h"
 #include "intel_psr_regs.h"
 #include "intel_snps_phy.h"
+#include "intel_vblank.h"
 #include "skl_universal_plane.h"
 
 /**
@@ -3116,9 +3118,22 @@ static void intel_psr_configure_full_frame_update(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
 	enum transcoder cpu_transcoder = intel_dp->psr.transcoder;
+	struct intel_crtc *crtc = intel_crtc_for_pipe(display, intel_dp->psr.pipe);
+	struct intel_crtc_state *crtc_state = to_intel_crtc_state(crtc->base.state);
+	struct intel_vblank_evade_ctx evade;
 
 	if (!intel_dp->psr.psr2_sel_fetch_enabled)
 		return;
+
+	intel_vblank_evade_init(crtc_state, crtc_state, &evade);
+
+	drm_crtc_vblank_get(&crtc->base);
+
+	local_irq_disable();
+
+	intel_vblank_evade(&evade);
+
+	drm_crtc_vblank_put(&crtc->base);
 
 	intel_de_write(display,
 		       PSR2_MAN_TRK_CTL(display, cpu_transcoder),
@@ -3126,6 +3141,8 @@ static void intel_psr_configure_full_frame_update(struct intel_dp *intel_dp)
 		       man_trk_ctl_partial_frame_bit_get(display) |
 		       man_trk_ctl_single_full_frame_bit_get(display) |
 		       man_trk_ctl_continuos_full_frame(display));
+
+	local_irq_enable();
 }
 
 static void _psr_invalidate_handle(struct intel_dp *intel_dp)
