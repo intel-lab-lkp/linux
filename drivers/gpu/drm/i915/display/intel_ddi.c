@@ -2600,6 +2600,8 @@ static void mtl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 	if (!is_mst)
 		intel_dp_set_power(intel_dp, DP_SET_POWER_D0);
 
+	intel_dp_lttpr_wake_timeout_setup(intel_dp);
+
 	intel_dp_configure_protocol_converter(intel_dp, crtc_state);
 	if (!is_mst)
 		intel_dp_sink_enable_decompression(state,
