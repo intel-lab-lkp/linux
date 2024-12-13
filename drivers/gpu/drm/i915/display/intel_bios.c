@@ -2151,19 +2151,22 @@ parse_compression_parameters(struct intel_display *display)
 
 	list_for_each_entry(devdata, &display->vbt.display_devices, node) {
 		const struct child_device_config *child = &devdata->child;
+		char port_name = port_name(intel_bios_encoder_port(devdata));
 
 		if (!child->compression_enable)
 			continue;
 
 		if (!params) {
 			drm_dbg_kms(display->drm,
-				    "VBT: compression params not available\n");
+				    "Port %c VBT indicates compression but params not available\n",
+				    port_name);
 			continue;
 		}
 
 		if (child->compression_method_cps) {
 			drm_dbg_kms(display->drm,
-				    "VBT: CPS compression not supported\n");
+				    "Port %c VBT indicates unsupported CPS compression\n",
+				    port_name);
 			continue;
 		}
 
@@ -2171,6 +2174,9 @@ parse_compression_parameters(struct intel_display *display)
 
 		devdata->dsc = kmemdup(&params->data[index],
 				       sizeof(*devdata->dsc), GFP_KERNEL);
+
+		drm_dbg_kms(display->drm, "Port %c VBT DSC index %d\n",
+			    port_name, index);
 	}
 }
 
@@ -3612,6 +3618,11 @@ bool intel_bios_get_dsc_params(struct intel_encoder *encoder,
 		if (dsi_dvo_port_to_port(display, child->dvo_port) == encoder->port) {
 			if (!devdata->dsc)
 				return false;
+
+			drm_dbg_kms(display->drm,
+				    "[ENCODER:%d:%s] Found port %c VBT DSC parameters\n",
+				    encoder->base.base.id, encoder->base.name,
+				    port_name(encoder->port));
 
 			fill_dsc(crtc_state, devdata->dsc, dsc_max_bpc);
 
