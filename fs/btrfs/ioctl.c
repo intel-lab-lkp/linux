@@ -4754,6 +4754,11 @@ static void btrfs_uring_read_finished(struct io_uring_cmd *cmd, unsigned int iss
 	/* The inode lock has already been acquired in btrfs_uring_read_extent.  */
 	btrfs_lockdep_inode_acquire(inode, i_rwsem);
 
+	if (unlikely(issue_flags & IO_URING_F_TASK_DEAD)) {
+		ret = -ECANCELED;
+		goto out;
+	}
+
 	if (priv->err) {
 		ret = priv->err;
 		goto out;
