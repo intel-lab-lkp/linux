@@ -1283,7 +1283,8 @@ static u32 uvc_get_ctrl_bitmap(struct uvc_control *ctrl,
 static int __uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 	struct uvc_control *ctrl,
 	struct uvc_control_mapping *mapping,
-	struct v4l2_queryctrl *v4l2_ctrl)
+	struct v4l2_queryctrl *v4l2_ctrl,
+	bool can_fail)
 {
 	struct uvc_control_mapping *master_map = NULL;
 	struct uvc_control *master_ctrl = NULL;
@@ -1307,17 +1308,28 @@ static int __uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 	if (master_ctrl && (master_ctrl->info.flags & UVC_CTRL_FLAG_GET_CUR)) {
 		s32 val;
 		int ret = __uvc_ctrl_get(chain, master_ctrl, master_map, &val);
-		if (ret < 0)
-			return ret;
 
-		if (val != mapping->master_manual)
-				v4l2_ctrl->flags |= V4L2_CTRL_FLAG_INACTIVE;
+		if (ret < 0) {
+			dev_warn_ratelimited(&chain->dev->udev->dev,
+					     "UVC non compliance: Error %d querying master control %x\n",
+					      ret, master_map->id);
+			if (can_fail)
+				return ret;
+		} else if (val != mapping->master_manual) {
+			v4l2_ctrl->flags |= V4L2_CTRL_FLAG_INACTIVE;
+		}
 	}
 
 	if (!ctrl->cached) {
 		int ret = uvc_ctrl_populate_cache(chain, ctrl);
-		if (ret < 0)
-			return ret;
+
+		if (ret < 0) {
+			dev_warn_ratelimited(&chain->dev->udev->dev,
+					     "UVC non compliance: Error %d populating cache of control %x\n",
+					     ret, mapping->id);
+			if (can_fail)
+				return ret;
+		}
 	}
 
 	if (ctrl->info.flags & UVC_CTRL_FLAG_GET_DEF) {
@@ -1420,7 +1432,8 @@ int uvc_query_v4l2_ctrl(struct uvc_video_chain *chain,
 			goto done;
 	}
 
-	ret = __uvc_query_v4l2_ctrl(chain, ctrl, mapping, v4l2_ctrl);
+	ret = __uvc_query_v4l2_ctrl(chain, ctrl, mapping, v4l2_ctrl,
+				    !(v4l2_ctrl->id & V4L2_CTRL_FLAG_NEXT_CTRL));
 done:
 	mutex_unlock(&chain->ctrl_mutex);
 	return ret;
@@ -1513,7 +1526,7 @@ static void uvc_ctrl_fill_event(struct uvc_video_chain *chain,
 {
 	struct v4l2_queryctrl v4l2_ctrl;
 
-	__uvc_query_v4l2_ctrl(chain, ctrl, mapping, &v4l2_ctrl);
+	__uvc_query_v4l2_ctrl(chain, ctrl, mapping, &v4l2_ctrl, true);
 
 	memset(ev, 0, sizeof(*ev));
 	ev->type = V4L2_EVENT_CTRL;
