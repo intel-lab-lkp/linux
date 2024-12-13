@@ -190,6 +190,11 @@ properties:
           - const: firefly,firefly-rk3399
           - const: rockchip,rk3399
 
+      - description: Firefly ITX-3588J
+        items:
+          - const: firefly,itx-3588j
+          - const: rockchip,rk3588
+
       - description: Firefly ROC-RK3308-CC
         items:
           - const: firefly,roc-rk3308-cc
