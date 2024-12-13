@@ -1392,7 +1392,7 @@ int __init kvm_timer_hyp_init(bool has_gic)
 
 	if (has_gic) {
 		err = irq_set_vcpu_affinity(host_vtimer_irq,
-					    kvm_get_running_vcpus());
+					    (void *)(uintptr_t)kvm_get_running_vcpus());
 		if (err) {
 			kvm_err("kvm_arch_timer: error setting vcpu affinity\n");
 			goto out_free_vtimer_irq;
@@ -1416,7 +1416,7 @@ int __init kvm_timer_hyp_init(bool has_gic)
 
 		if (has_gic) {
 			err = irq_set_vcpu_affinity(host_ptimer_irq,
-						    kvm_get_running_vcpus());
+						    (void *)(uintptr_t)kvm_get_running_vcpus());
 			if (err) {
 				kvm_err("kvm_arch_timer: error setting vcpu affinity\n");
 				goto out_free_ptimer_irq;
