@@ -50,7 +50,7 @@
 #define PP_ALLOC_CACHE_REFILL	64
 struct pp_alloc_cache {
 	u32 count;
-	netmem_ref cache[PP_ALLOC_CACHE_SIZE];
+	struct page_pool_item *list;
 
 	/* Keep batched refilled pages here to avoid doing the atomic operation
 	 * for each page.
