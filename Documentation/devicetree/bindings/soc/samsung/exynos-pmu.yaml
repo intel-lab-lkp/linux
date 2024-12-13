@@ -73,7 +73,11 @@ properties:
           - const: syscon
 
   reg:
-    maxItems: 1
+    minItems: 1
+    maxItems: 2
+
+  reg-names:
+    maxItems: 2
 
   '#clock-cells':
     const: 1
@@ -185,6 +189,29 @@ allOf:
     else:
       properties:
         dp-phy: false
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - google,gs101-pmu
+    then:
+      properties:
+        reg:
+          items:
+            - description: PMU register region
+            - description: PMU Interrupt Generation register region
+        reg-names:
+          items:
+            - const: pmu
+            - const: pmu-intr-gen
+    else:
+      properties:
+        reg:
+          maxItems: 1
+        reg-name:
+          maxItems: 1
 
 examples:
   - |
