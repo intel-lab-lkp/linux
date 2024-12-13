@@ -6,6 +6,7 @@
 // Exynos - CPU PMU(Power Management Unit) support
 
 #include <linux/arm-smccc.h>
+#include <linux/cpuhotplug.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/mfd/core.h>
@@ -32,6 +33,7 @@ struct exynos_pmu_context {
 	struct device *dev;
 	const struct exynos_pmu_data *pmu_data;
 	struct regmap *pmureg;
+	void __iomem *pmuintrgen_base;
 };
 
 void __iomem *pmu_base_addr;
@@ -221,7 +223,8 @@ static const struct regmap_config regmap_smccfg = {
 };
 
 static const struct exynos_pmu_data gs101_pmu_data = {
-	.pmu_secure = true
+	.pmu_secure = true,
+	.pmu_cpuhp = true,
 };
 
 /*
@@ -325,6 +328,52 @@ struct regmap *exynos_get_pmu_regmap_by_phandle(struct device_node *np,
 }
 EXPORT_SYMBOL_GPL(exynos_get_pmu_regmap_by_phandle);
 
+/*
+ * CPU_INFORM register hint values which are used by
+ * EL3 firmware (el3mon).
+ */
+#define CPU_INFORM_CLEAR	0
+#define CPU_INFORM_C2		1
+
+static int cpuhp_pmu_online(unsigned int cpu)
+{
+	void __iomem *base = pmu_context->pmuintrgen_base;
+	u32 reg;
+	u32 mask;
+
+	/* clear cpu inform hint */
+	regmap_write(pmu_context->pmureg, GS101_CPU_INFORM(cpu),
+		     CPU_INFORM_CLEAR);
+
+	mask = (1 << cpu);
+
+	writel(((0 << cpu) & mask), base + GS101_GRP2_INTR_BID_ENABLE);
+
+	reg = readl(base + GS101_GRP2_INTR_BID_UPEND) & mask;
+	writel(reg & mask, base + GS101_GRP2_INTR_BID_CLEAR);
+
+	return 0;
+}
+
+static int cpuhp_pmu_offline(unsigned int cpu)
+{
+	void __iomem *base = pmu_context->pmuintrgen_base;
+	u32 reg, mask;
+
+	/* set cpu inform hint */
+	regmap_write(pmu_context->pmureg, GS101_CPU_INFORM(cpu),
+		     CPU_INFORM_C2);
+
+	writel((1 << cpu), base + GS101_GRP2_INTR_BID_ENABLE);
+
+	mask = ((1 << cpu) | (1 << (cpu+8)));
+
+	reg = readl(base + GS101_GRP1_INTR_BID_UPEND) & mask;
+	writel(reg & mask, base + GS101_GRP1_INTR_BID_CLEAR);
+
+	return 0;
+}
+
 static int exynos_pmu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -376,6 +425,28 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 
 	pmu_context->pmureg = regmap;
 	pmu_context->dev = dev;
+
+	if (pmu_context->pmu_data && pmu_context->pmu_data->pmu_cpuhp) {
+
+		pmu_context->pmuintrgen_base =
+			devm_platform_ioremap_resource_byname(pdev, "pmu-intr-gen");
+		/*
+		 * To maintain support for older DTs that didn't specify pmu-intr-gen
+		 * register region, just issue a warning rather than fail to probe.
+		 */
+		if (IS_ERR(pmu_context->pmuintrgen_base)) {
+			dev_warn(&pdev->dev,
+				 "failed to map pmu-intr-gen registers\n");
+		} else {
+			cpuhp_setup_state(CPUHP_BP_PREPARE_DYN,
+					"soc/exynos-pmu:prepare",
+					cpuhp_pmu_online, NULL);
+
+			cpuhp_setup_state(CPUHP_AP_ONLINE_DYN,
+					"soc/exynos-pmu:online",
+					NULL, cpuhp_pmu_offline);
+		}
+	}
 
 	if (pmu_context->pmu_data && pmu_context->pmu_data->pmu_init)
 		pmu_context->pmu_data->pmu_init();
