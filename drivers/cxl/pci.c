@@ -839,8 +839,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_dbg(&pdev->dev, "Failed to map RAS capability.\n");
 
-	rc = cxl_await_media_ready(cxlds);
-	if (rc == 0)
+	if (!cxl_await_range_active(cxlds) && !cxl_media_ready(cxlds))
 		cxlds->media_ready = true;
 	else
 		dev_warn(&pdev->dev, "Media not active (%d)\n", rc);

@@ -878,7 +878,8 @@ enum {
 int cxl_internal_send_cmd(struct cxl_memdev_state *mds,
 			  struct cxl_mbox_cmd *cmd);
 int cxl_dev_state_identify(struct cxl_memdev_state *mds);
-int cxl_await_media_ready(struct cxl_dev_state *cxlds);
+int cxl_await_range_active(struct cxl_dev_state *cxlds);
+int cxl_media_ready(struct cxl_dev_state *cxlds);
 int cxl_enumerate_cmds(struct cxl_memdev_state *mds);
 int cxl_mem_create_range_info(struct cxl_memdev_state *mds);
 struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev);
