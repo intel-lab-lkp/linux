@@ -1286,6 +1286,7 @@ sub get_maintainer_role {
 
     my $role = "unknown";
     my $subsystem = get_subsystem_name($index);
+    my $substatus = "";
 
     for ($i = $start + 1; $i < $end; $i++) {
 	my $tv = $typevalue[$i];
@@ -1299,21 +1300,10 @@ sub get_maintainer_role {
     }
 
     $role = lc($role);
-    if      ($role eq "supported") {
-	$role = "supporter";
-    } elsif ($role eq "maintained") {
-	$role = "maintainer";
-    } elsif ($role eq "odd fixes") {
-	$role = "odd fixer";
-    } elsif ($role eq "orphan") {
-	$role = "orphan minder";
-    } elsif ($role eq "obsolete") {
-	$role = "obsolete minder";
-    } elsif ($role eq "buried alive in reporters") {
-	$role = "chief penguin";
+    if ($role ne "maintained") {
+	$substatus = " [" . $role . "]";
     }
-
-    return $role . ":" . $subsystem;
+    return "maintainer:" . $subsystem . $substatus;
 }
 
 sub get_list_role {
