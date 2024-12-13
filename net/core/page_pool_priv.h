@@ -37,7 +37,8 @@ static inline bool page_pool_set_dma_addr(struct page *page, dma_addr_t addr)
 
 #if defined(CONFIG_PAGE_POOL)
 bool page_pool_set_pp_info(struct page_pool *pool, netmem_ref netmem);
-void page_pool_clear_pp_info(struct page_pool *pool, netmem_ref netmem);
+void page_pool_clear_pp_info(struct page_pool *pool, netmem_ref netmem,
+			     bool destroyed);
 int page_pool_check_memory_provider(struct net_device *dev,
 				    struct netdev_rx_queue *rxq);
 #else
@@ -47,7 +48,8 @@ static inline bool page_pool_set_pp_info(struct page_pool *pool,
 	return true;
 }
 static inline void page_pool_clear_pp_info(struct page_pool *pool,
-					   netmem_ref netmem)
+					   netmem_ref netmem,
+					   bool destroyed)
 {
 }
 static inline int page_pool_check_memory_provider(struct net_device *dev,
