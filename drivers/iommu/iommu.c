@@ -602,19 +602,43 @@ err_put_group:
 int iommu_probe_device(struct device *dev)
 {
 	const struct iommu_ops *ops;
+	struct iommu_group *group;
 	int ret;
 
 	mutex_lock(&iommu_probe_device_lock);
 	ret = __iommu_probe_device(dev, NULL);
 	mutex_unlock(&iommu_probe_device_lock);
 	if (ret)
-		return ret;
+		goto err_out;
+
+	group = iommu_group_get(dev);
+	if (!group) {
+		ret = -ENODEV;
+		goto err_release;
+	}
+
+	mutex_lock(&group->mutex);
+	if (!group->default_domain) {
+		ret = iommu_setup_default_domain(group, 0);
+		if (ret)
+			goto err_unlock;
+	}
+	mutex_unlock(&group->mutex);
+	iommu_group_put(group);
 
 	ops = dev_iommu_ops(dev);
 	if (ops->probe_finalize)
 		ops->probe_finalize(dev);
 
 	return 0;
+
+err_unlock:
+	mutex_unlock(&group->mutex);
+	iommu_group_put(group);
+err_release:
+	iommu_release_device(dev);
+err_out:
+	return ret;
 }
 
 static void __iommu_group_free_device(struct iommu_group *group,
