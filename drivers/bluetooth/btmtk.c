@@ -1371,6 +1371,9 @@ int btmtk_usb_setup(struct hci_dev *hdev)
 			return err;
 		}
 
+		/* Apply common HCI quirks for MediaTek chipset */
+		set_bit(HCI_QUIRK_SIMULTANEOUS_DISCOVERY, &hdev->quirks);
+
 		hci_set_msft_opcode(hdev, 0xFD30);
 		hci_set_aosp_capable(hdev);
 
