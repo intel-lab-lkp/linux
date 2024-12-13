@@ -836,6 +836,9 @@ attribute-sets:
       -
         name: tx-err
         type: uint
+      -
+        name: tx-onestep-pkts-unconfirmed
+        type: uint
   -
     name: tsinfo
     attr-cnt-name: __ethtool-a-tsinfo-cnt
