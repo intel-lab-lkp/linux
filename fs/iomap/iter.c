@@ -25,7 +25,7 @@ static inline void iomap_iter_reset_iomap(struct iomap_iter *iter)
  * iterating" case needs to distinguish between (count = 0) meaning we are done
  * and (count = 0 && stale) meaning we need to remap the entire remaining range.
  */
-static inline int iomap_iter_advance(struct iomap_iter *iter, s64 count)
+int iomap_iter_advance(struct iomap_iter *iter, s64 count)
 {
 	bool stale = iter->iomap.flags & IOMAP_F_STALE;
 	int ret = 1;
@@ -36,7 +36,7 @@ static inline int iomap_iter_advance(struct iomap_iter *iter, s64 count)
 		return -EIO;
 	iter->pos += count;
 	iter->len -= count;
-	if (!iter->len || (!count && !stale))
+	if (!iter->len || (!count && !stale && iomap_length(iter)))
 		ret = 0;
 
 	return ret;
@@ -48,6 +48,8 @@ static inline void iomap_iter_done(struct iomap_iter *iter)
 	WARN_ON_ONCE(iter->iomap.length == 0);
 	WARN_ON_ONCE(iter->iomap.offset + iter->iomap.length <= iter->pos);
 	WARN_ON_ONCE(iter->iomap.flags & IOMAP_F_STALE);
+
+	iter->iter_spos = iter->pos;
 
 	trace_iomap_iter_dstmap(iter->inode, &iter->iomap);
 	if (iter->srcmap.type != IOMAP_HOLE)
@@ -74,10 +76,23 @@ int iomap_iter(struct iomap_iter *iter, const struct iomap_ops *ops)
 	int ret;
 
 	if (iter->iomap.length && ops->iomap_end) {
-		ret = ops->iomap_end(iter->inode, iter->pos, iomap_length(iter),
-				iter->processed > 0 ? iter->processed : 0,
-				iter->flags, &iter->iomap);
-		if (ret < 0 && !iter->processed)
+		ssize_t processed = iter->processed > 0 ? iter->processed : 0;
+		u64 olen = iter->len;
+
+		/*
+		 * If processed is zero, the op may have advanced the iter
+		 * itself. Update the processed and original length bytes based
+		 * on how far ->pos has advanced.
+		 */
+		if (!processed) {
+			processed = iter->pos - iter->iter_spos;
+			olen += processed;
+		}
+
+		ret = ops->iomap_end(iter->inode, iter->iter_spos,
+				__iomap_length(iter, iter->iter_spos, olen),
+				processed, iter->flags, &iter->iomap);
+		if (ret < 0 && !processed)
 			return ret;
 	}
 
