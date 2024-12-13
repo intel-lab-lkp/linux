@@ -1017,32 +1017,37 @@ static void coresight_remove_conns(struct coresight_device *csdev)
 }
 
 /**
- * coresight_timeout - loop until a bit has changed to a specific register
- *			state.
+ * coresight_timeout_retval - loop until a bit has changed to a specific register
+ *			      state. Return final register value
  * @csa: coresight device access for the device
  * @offset: Offset of the register from the base of the device.
  * @position: the position of the bit of interest.
  * @value: the value the bit should have.
+ * @rval:  the last read value of the register being tested.
  *
  * Return: 0 as soon as the bit has taken the desired state or -EAGAIN if
  * TIMEOUT_US has elapsed, which ever happens first.
  */
-int coresight_timeout(struct csdev_access *csa, u32 offset,
-		      int position, int value)
+int coresight_timeout_retval(struct csdev_access *csa, u32 offset,
+			     int position, int value, u32 *rval)
 {
-	int i;
-	u32 val;
+	int i, rc = -EAGAIN;
+	u32 val = 0;
 
 	for (i = TIMEOUT_US; i > 0; i--) {
 		val = csdev_access_read32(csa, offset);
 		/* waiting on the bit to go from 0 to 1 */
 		if (value) {
-			if (val & BIT(position))
-				return 0;
+			if (val & BIT(position)) {
+				rc = 0;
+				goto return_rval;
+			}
 		/* waiting on the bit to go from 1 to 0 */
 		} else {
-			if (!(val & BIT(position)))
-				return 0;
+			if (!(val & BIT(position))) {
+				rc = 0;
+				goto return_rval;
+			}
 		}
 
 		/*
@@ -1054,7 +1059,30 @@ int coresight_timeout(struct csdev_access *csa, u32 offset,
 			udelay(1);
 	}
 
-	return -EAGAIN;
+return_rval:
+	*rval = val;
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(coresight_timeout_retval);
+
+/**
+ * coresight_timeout - loop until a bit has changed to a specific register
+ *		       state
+ * @csa: coresight device access for the device
+ * @offset: Offset of the register from the base of the device.
+ * @position: the position of the bit of interest.
+ * @value: the value the bit should have.
+ *
+ * Return: 0 as soon as the bit has taken the desired state or -EAGAIN if
+ * TIMEOUT_US has elapsed, which ever happens first.
+ */
+int coresight_timeout(struct csdev_access *csa, u32 offset,
+		      int position, int value)
+{
+	u32 rval = 0;
+
+	return coresight_timeout_retval(csa, offset, position, value, &rval);
 }
 EXPORT_SYMBOL_GPL(coresight_timeout);
 
