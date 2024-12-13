@@ -37,6 +37,7 @@
 #include <linux/page_idle.h>
 #include <linux/local_lock.h>
 #include <linux/buffer_head.h>
+#include <linux/kvm_host.h>
 
 #include "internal.h"
 
@@ -102,6 +103,9 @@ static void free_typed_folio(struct folio *folio)
 		return;
 	case PGTY_offline:
 		/* Nothing to do, it's offline. */
+		return;
+	case PGTY_guestmem:
+		kvm_gmem_handle_folio_put(folio);
 		return;
 	default:
 		WARN_ON_ONCE(1);
