@@ -10520,28 +10520,15 @@ static void sched_mm_cid_remote_clear_weight(struct mm_struct *mm, int cpu,
 
 void task_mm_cid_work(struct work_struct *work)
 {
-	unsigned long now = jiffies, old_scan, next_scan;
 	struct cpumask *cidmask;
 	struct delayed_work *delayed_work = container_of(work, struct delayed_work, work);
 	struct mm_struct *mm = container_of(delayed_work, struct mm_struct, mm_cid_work);
 	int weight, cpu;
 
-	old_scan = READ_ONCE(mm->mm_cid_next_scan);
-	next_scan = now + msecs_to_jiffies(MM_CID_SCAN_DELAY);
-	if (!old_scan) {
-		unsigned long res;
-
-		res = cmpxchg(&mm->mm_cid_next_scan, old_scan, next_scan);
-		if (res != old_scan)
-			old_scan = res;
-		else
-			old_scan = next_scan;
-	}
-	if (time_before(now, old_scan))
-		goto out;
-	if (!try_cmpxchg(&mm->mm_cid_next_scan, &old_scan, next_scan))
-		goto out;
 	cidmask = mm_cidmask(mm);
+	/* Nothing to clear for now */
+	if (cpumask_empty(cidmask))
+		goto out;
 	/* Clear cids that were not recently used. */
 	for_each_possible_cpu(cpu)
 		sched_mm_cid_remote_clear_old(mm, cpu);

@@ -829,12 +829,6 @@ struct mm_struct {
 		 * runqueue locks.
 		 */
 		struct mm_cid __percpu *pcpu_cid;
-		/*
-		 * @mm_cid_next_scan: Next mm_cid scan (in jiffies).
-		 *
-		 * When the next mm_cid scan is due (in jiffies).
-		 */
-		unsigned long mm_cid_next_scan;
 		/**
 		 * @nr_cpus_allowed: Number of CPUs allowed for mm.
 		 *
@@ -1228,7 +1222,6 @@ static inline int mm_alloc_cid_noprof(struct mm_struct *mm, struct task_struct *
 		return -ENOMEM;
 	mm_init_cid(mm, p);
 	INIT_DELAYED_WORK(&mm->mm_cid_work, task_mm_cid_work);
-	mm->mm_cid_next_scan = jiffies + msecs_to_jiffies(MM_CID_SCAN_DELAY);
 	schedule_delayed_work(&mm->mm_cid_work,
 			      msecs_to_jiffies(MM_CID_SCAN_DELAY));
 	return 0;
