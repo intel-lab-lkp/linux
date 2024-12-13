@@ -258,6 +258,7 @@ static int socfpga_set_phy_mode_common(int phymode, u32 *val)
 	case PHY_INTERFACE_MODE_MII:
 	case PHY_INTERFACE_MODE_GMII:
 	case PHY_INTERFACE_MODE_SGMII:
+	case PHY_INTERFACE_MODE_1000BASEX:
 		*val = SYSMGR_EMACGRP_CTRL_PHYSEL_ENUM_GMII_MII;
 		break;
 	case PHY_INTERFACE_MODE_RMII:
@@ -300,6 +301,7 @@ static int socfpga_gen5_set_phy_mode(struct socfpga_dwmac *dwmac)
 	if (dwmac->f2h_ptp_ref_clk ||
 	    phymode == PHY_INTERFACE_MODE_MII ||
 	    phymode == PHY_INTERFACE_MODE_GMII ||
+	    phymode == PHY_INTERFACE_MODE_1000BASEX ||
 	    phymode == PHY_INTERFACE_MODE_SGMII) {
 		regmap_read(sys_mgr_base_addr, SYSMGR_FPGAGRP_MODULE_REG,
 			    &module);
@@ -321,7 +323,8 @@ static int socfpga_gen5_set_phy_mode(struct socfpga_dwmac *dwmac)
 	 */
 	reset_control_deassert(dwmac->stmmac_ocp_rst);
 	reset_control_deassert(dwmac->stmmac_rst);
-	if (phymode == PHY_INTERFACE_MODE_SGMII)
+	if (phymode == PHY_INTERFACE_MODE_SGMII ||
+	    phymode == PHY_INTERFACE_MODE_1000BASEX)
 		socfpga_sgmii_config(dwmac, true);
 
 	return 0;
@@ -356,6 +359,7 @@ static int socfpga_gen10_set_phy_mode(struct socfpga_dwmac *dwmac)
 	if (dwmac->f2h_ptp_ref_clk ||
 	    phymode == PHY_INTERFACE_MODE_MII ||
 	    phymode == PHY_INTERFACE_MODE_GMII ||
+	    phymode == PHY_INTERFACE_MODE_1000BASEX ||
 	    phymode == PHY_INTERFACE_MODE_SGMII) {
 		ctrl |= SYSMGR_GEN10_EMACGRP_CTRL_PTP_REF_CLK_MASK;
 		regmap_read(sys_mgr_base_addr, SYSMGR_FPGAINTF_EMAC_REG,
@@ -374,7 +378,8 @@ static int socfpga_gen10_set_phy_mode(struct socfpga_dwmac *dwmac)
 	 */
 	reset_control_deassert(dwmac->stmmac_ocp_rst);
 	reset_control_deassert(dwmac->stmmac_rst);
-	if (phymode == PHY_INTERFACE_MODE_SGMII)
+	if (phymode == PHY_INTERFACE_MODE_SGMII ||
+	    phymode == PHY_INTERFACE_MODE_1000BASEX)
 		socfpga_sgmii_config(dwmac, true);
 	return 0;
 }
