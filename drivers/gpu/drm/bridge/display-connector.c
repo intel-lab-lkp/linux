@@ -332,8 +332,11 @@ static int display_connector_probe(struct platform_device *pdev)
 		int ret;
 
 		ret = display_connector_get_supply(pdev, conn, "dp-pwr");
-		if (ret < 0)
-			return dev_err_probe(&pdev->dev, ret, "failed to get DP PWR regulator\n");
+		if (ret < 0) {
+			ret = dev_err_probe(&pdev->dev, ret,
+					    "failed to get DP PWR regulator\n");
+			goto err_put;
+		}
 	}
 
 	/* enable DDC */
@@ -345,19 +348,24 @@ static int display_connector_probe(struct platform_device *pdev)
 
 		if (IS_ERR(conn->ddc_en)) {
 			dev_err(&pdev->dev, "Couldn't get ddc-en gpio\n");
-			return PTR_ERR(conn->ddc_en);
+			ret = PTR_ERR(conn->ddc_en);
+			goto err_put;
 		}
 
 		ret = display_connector_get_supply(pdev, conn, "hdmi-pwr");
-		if (ret < 0)
-			return dev_err_probe(&pdev->dev, ret, "failed to get HDMI +5V Power regulator\n");
+		if (ret < 0) {
+			ret = dev_err_probe(
+				&pdev->dev, ret,
+				"failed to get HDMI +5V Power regulator\n");
+			goto err_put;
+		}
 	}
 
 	if (conn->supply) {
 		ret = regulator_enable(conn->supply);
 		if (ret) {
 			dev_err(&pdev->dev, "failed to enable PWR regulator: %d\n", ret);
-			return ret;
+			goto err_put;
 		}
 	}
 
@@ -383,6 +391,11 @@ static int display_connector_probe(struct platform_device *pdev)
 	drm_bridge_add(&conn->bridge);
 
 	return 0;
+
+err_put:
+	if (conn->bridge.ddc)
+		i2c_put_adapter(conn->bridge.ddc);
+	return ret;
 }
 
 static void display_connector_remove(struct platform_device *pdev)
