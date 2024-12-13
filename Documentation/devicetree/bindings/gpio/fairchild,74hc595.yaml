@@ -14,6 +14,7 @@ properties:
     enum:
       - fairchild,74hc595
       - nxp,74lvc594
+      - onnn,74hc595a
 
   reg:
     maxItems: 1
