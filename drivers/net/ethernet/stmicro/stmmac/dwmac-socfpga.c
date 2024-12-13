@@ -425,6 +425,17 @@ static int socfpga_dwmac_pcs_init(struct stmmac_priv *priv)
 		return PTR_ERR(pcs);
 
 	priv->hw->phylink_pcs = pcs;
+
+	/* Having a Lynx PCS means we can use SGMII and 1000BaseX. Phylink's
+	 * supported_interface is populated according to what's found in
+	 * devicetree, but as we can dynamically switch between both modes at
+	 * runtime, make sure both modes are marked as supported
+	 */
+	__set_bit(PHY_INTERFACE_MODE_1000BASEX,
+		  priv->phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_SGMII,
+		  priv->phylink_config.supported_interfaces);
+
 	return 0;
 }
 
