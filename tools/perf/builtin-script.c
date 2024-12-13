@@ -386,6 +386,8 @@ static int evsel_script__fprintf(struct evsel_script *es, FILE *fp)
 
 static inline int output_type(unsigned int type)
 {
+	struct perf_pmu *pmu;
+
 	switch (type) {
 	case PERF_TYPE_SYNTH:
 		return OUTPUT_TYPE_SYNTH;
@@ -393,6 +395,10 @@ static inline int output_type(unsigned int type)
 		if (type < PERF_TYPE_MAX)
 			return type;
 	}
+
+	pmu = perf_pmus__find_by_type(type);
+	if (pmu && pmu->is_core)
+		return PERF_TYPE_RAW;
 
 	return OUTPUT_TYPE_OTHER;
 }
