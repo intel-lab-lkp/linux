@@ -1343,15 +1343,12 @@ static inline int iomap_zero_iter_flush_and_stale(struct iomap_iter *i)
 
 static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 {
-	loff_t pos = iter->pos;
-	loff_t length = iomap_length(iter);
-	loff_t written = 0;
-
 	do {
 		struct folio *folio;
 		int status;
 		size_t offset;
-		size_t bytes = min_t(u64, SIZE_MAX, length);
+		size_t bytes = min_t(u64, SIZE_MAX, iomap_length(iter));
+		loff_t pos = iter->pos;
 		bool ret;
 
 		status = iomap_write_begin(iter, pos, bytes, &folio);
@@ -1374,14 +1371,12 @@ static loff_t iomap_zero_iter(struct iomap_iter *iter, bool *did_zero)
 		if (WARN_ON_ONCE(!ret))
 			return -EIO;
 
-		pos += bytes;
-		length -= bytes;
-		written += bytes;
-	} while (length > 0);
+		iomap_iter_advance(iter, bytes);
+	} while (iomap_length(iter) > 0);
 
 	if (did_zero)
 		*did_zero = true;
-	return written;
+	return 0;
 }
 
 int
