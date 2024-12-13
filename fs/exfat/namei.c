@@ -331,7 +331,7 @@ static int exfat_find_empty_entry(struct inode *inode,
 	while ((dentry = exfat_search_empty_slot(sb, &hint_femp, p_dir,
 					num_entries, es)) < 0) {
 		if (dentry == -EIO)
-			break;
+			return -EIO;
 
 		if (exfat_check_max_dentries(inode))
 			return -ENOSPC;
