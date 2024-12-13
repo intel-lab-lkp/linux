@@ -4010,6 +4010,7 @@
 
 		gic: interrupt-controller@f400000 {
 			compatible = "arm,gic-v3";
+			#address-cells = <0>;
 			reg = <0x0 0x0f400000 0x0 0x010000>, /* GICD */
 			      <0x0 0x0f440000 0x0 0x200000>; /* GICR */
 			interrupt-parent = <&gic>;
