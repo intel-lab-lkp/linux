@@ -251,6 +251,14 @@
 #define  ADLP_PSR2_MAN_TRK_CTL_SF_SINGLE_FULL_FRAME		REG_BIT(14)
 #define  ADLP_PSR2_MAN_TRK_CTL_SF_CONTINUOS_FULL_FRAME		REG_BIT(13)
 
+#define _LNL_SFF_CTL_A						0x60918
+#define LNL_SFF_CTL(dev_priv, tran)				_MMIO_TRANS2(dev_priv, tran, _LNL_SFF_CTL_A)
+#define  LNL_SFF_CTL_SF_SINGLE_FULL_FRAME			REG_BIT(1)
+
+#define _LNL_CFF_CTL_A						0x6091c
+#define LNL_CFF_CTL(dev_priv, tran)				_MMIO_TRANS2(dev_priv, tran, _LNL_CFF_CTL_A)
+#define  LNL_CFF_CTL_SF_CONTINUOUS_FULL_FRAME			REG_BIT(1)
+
 /* PSR2 Early transport */
 #define _PIPE_SRCSZ_ERLY_TPT_A	0x70074
 #define _PIPE_SRCSZ_ERLY_TPT_B	0x71074
