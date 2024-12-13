@@ -199,6 +199,7 @@ config RISCV
 	select PCI_DOMAINS_GENERIC if PCI
 	select PCI_ECAM if (ACPI && PCI)
 	select PCI_MSI if PCI
+	select PCI_MSI_ARCH_FALLBACKS if PCI
 	select RISCV_ALTERNATIVE if !XIP_KERNEL
 	select RISCV_APLIC
 	select RISCV_IMSIC
