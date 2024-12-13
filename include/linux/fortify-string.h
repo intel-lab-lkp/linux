@@ -630,7 +630,16 @@ __FORTIFY_INLINE bool fortify_memcpy_chk(__kernel_size_t size,
 		  __fortify_size,					\
 		  "field \"" #p "\" at " FILE_LINE,			\
 		  __p_size_field);					\
-	__underlying_##op(p, q, __fortify_size);			\
+	if (__builtin_constant_p(__fortify_size)) {			\
+		/* Pass through compile-time value for real warnings. */\
+		__underlying_##op(p, q, __fortify_size);		\
+	} else {							\
+		/* Hide the run-time size from compile-time value */	\
+		/* range tracking to silence false positives. */	\
+		size_t ___fortify_size = __fortify_size;		\
+		OPTIMIZER_HIDE_VAR(___fortify_size);			\
+		__underlying_##op(p, q, ___fortify_size);		\
+	}								\
 })
 
 /*
