@@ -1096,9 +1096,17 @@ int run_unpack_ex(struct runs_tree *run, struct ntfs_sb_info *sbi, CLST ino,
 
 		/* Looks like volume is corrupted. */
 		ntfs_set_state(sbi, NTFS_DIRTY_ERROR);
+		struct rw_semaphore *lock =
+			is_mounted(sbi) ? &sbi->mft.ni->file.run_lock :
+					  NULL;
+		if (zone && lock)
+			down_read(lock);
 
-		if (!down_write_trylock(&wnd->rw_lock))
+		if (!down_write_trylock(&wnd->rw_lock)) {
+			if (zone && lock)
+				up_read(lock);
 			continue;
+		}
 
 		if (zone) {
 			/*
@@ -1112,16 +1120,12 @@ int run_unpack_ex(struct runs_tree *run, struct ntfs_sb_info *sbi, CLST ino,
 		err = wnd_set_used_safe(wnd, lcn, len, &done);
 		if (zone) {
 			/* Restore zone. Lock mft run. */
-			struct rw_semaphore *lock =
-				is_mounted(sbi) ? &sbi->mft.ni->file.run_lock :
-						  NULL;
-			if (lock)
-				down_read(lock);
 			ntfs_refresh_zone(sbi);
-			if (lock)
-				up_read(lock);
 		}
 		up_write(&wnd->rw_lock);
+		if (zone && lock)
+			up_read(lock);
+
 		if (err)
 			return err;
 	}
