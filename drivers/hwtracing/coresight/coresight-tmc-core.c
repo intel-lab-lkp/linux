@@ -34,25 +34,36 @@ DEFINE_CORESIGHT_DEVLIST(etb_devs, "tmc_etb");
 DEFINE_CORESIGHT_DEVLIST(etf_devs, "tmc_etf");
 DEFINE_CORESIGHT_DEVLIST(etr_devs, "tmc_etr");
 
+#define TMC_WAIT_READY_FMT_STR "timeout while waiting for TMC to be Ready [STS=0x%04x]\n"
+
 int tmc_wait_for_tmcready(struct tmc_drvdata *drvdata)
 {
 	struct coresight_device *csdev = drvdata->csdev;
 	struct csdev_access *csa = &csdev->access;
+	u32 tmc_sts = 0;
 
 	/* Ensure formatter, unformatter and hardware fifo are empty */
-	if (coresight_timeout(csa, TMC_STS, TMC_STS_TMCREADY_BIT, 1)) {
-		dev_err(&csdev->dev,
-			"timeout while waiting for TMC to be Ready\n");
+	if (coresight_timeout_retval(csa, TMC_STS, TMC_STS_TMCREADY_BIT, 1,
+				     &tmc_sts)) {
+		dev_err(&csdev->dev, TMC_WAIT_READY_FMT_STR, tmc_sts);
 		return -EBUSY;
 	}
 	return 0;
 }
 
-void tmc_flush_and_stop(struct tmc_drvdata *drvdata)
+int tmc_flush_and_stop(struct tmc_drvdata *drvdata)
 {
 	struct coresight_device *csdev = drvdata->csdev;
 	struct csdev_access *csa = &csdev->access;
-	u32 ffcr;
+	u32 ffcr, ffsr, tmc_sts;
+	int rc = 0;
+
+	/* note any MemErr present when stopping TMC */
+	tmc_sts = readl_relaxed(drvdata->base + TMC_STS);
+	if (tmc_sts & TMC_STS_MEMERR)
+		dev_err(&csdev->dev,
+			"MemErr detected before Manual Flush; STS[0x%02x]\n",
+			tmc_sts);
 
 	ffcr = readl_relaxed(drvdata->base + TMC_FFCR);
 	ffcr |= TMC_FFCR_STOP_ON_FLUSH;
@@ -60,12 +71,22 @@ void tmc_flush_and_stop(struct tmc_drvdata *drvdata)
 	ffcr |= BIT(TMC_FFCR_FLUSHMAN_BIT);
 	writel_relaxed(ffcr, drvdata->base + TMC_FFCR);
 	/* Ensure flush completes */
-	if (coresight_timeout(csa, TMC_FFCR, TMC_FFCR_FLUSHMAN_BIT, 0)) {
+	if (coresight_timeout_retval(csa, TMC_FFCR, TMC_FFCR_FLUSHMAN_BIT, 0,
+				     &ffcr)) {
+		ffsr = readl_relaxed(drvdata->base + TMC_FFSR);
 		dev_err(&csdev->dev,
-		"timeout while waiting for completion of Manual Flush\n");
+			"timeout while waiting for completion of Manual Flush\n");
+		dev_err(&csdev->dev,
+			"regs: FFCR[0x%02x] FFSR[0x%02x] STS[0x%02x]\n",
+			ffcr, ffsr, tmc_sts);
+		rc = -EBUSY;
 	}
 
-	tmc_wait_for_tmcready(drvdata);
+	if (tmc_wait_for_tmcready(drvdata)) {
+		dev_err(&csdev->dev, "TMC ready error after Manual flush\n");
+		rc = -EBUSY;
+	}
+	return rc;
 }
 
 void tmc_enable_hw(struct tmc_drvdata *drvdata)
