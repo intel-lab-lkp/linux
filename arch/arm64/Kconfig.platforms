@@ -250,6 +250,11 @@ config ARCH_NPCM
 	  General support for NPCM8xx BMC (Arbel).
 	  Nuvoton NPCM8xx BMC based on the Cortex A35.
 
+config ARCH_MORELLO
+	bool "Arm Morello System Development Platform"
+	help
+	  Enables support for Arm Morello System Development Platform
+
 config ARCH_PENSANDO
 	bool "AMD Pensando Platforms"
 	help
