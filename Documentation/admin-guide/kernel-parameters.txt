@@ -4654,11 +4654,10 @@
 				Format:
 				<ACS flags>@<pci_dev>[; ...]
 				Specify one or more PCI devices (in the format
-				specified above) optionally prepended with flags
-				and separated by semicolons. The respective
-				capabilities will be enabled, disabled or
-				unchanged based on what is specified in
-				flags.
+				specified above) prepended with flags and separated
+				by semicolons. The respective capabilities will be
+				enabled, disabled or unchanged based on what is
+				specified in flags.
 
 				ACS Flags is defined as follows:
 				  bit-0 : ACS Source Validation
@@ -4673,7 +4672,7 @@
 				  '1' – force enabled
 				  'x' – unchanged
 				For example,
-				  pci=config_acs=10x
+				  pci=config_acs=10x@pci:0:0
 				would configure all devices that support
 				ACS to enable P2P Request Redirect, disable
 				Translation Blocking, and leave Source
