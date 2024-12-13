@@ -577,7 +577,10 @@ intel_ddi_transcoder_func_reg_val_get(struct intel_encoder *encoder,
 			temp |= TRANS_DDI_MST_TRANSPORT_SELECT(master);
 		}
 	} else {
-		temp |= TRANS_DDI_MODE_SELECT_DP_SST;
+		if (intel_dp_is_uhbr(crtc_state))
+			temp |= TRANS_DDI_MODE_SELECT_FDI_OR_128B132B;
+		else
+			temp |= TRANS_DDI_MODE_SELECT_DP_SST;
 		temp |= DDI_PORT_WIDTH(crtc_state->lane_count);
 	}
 
