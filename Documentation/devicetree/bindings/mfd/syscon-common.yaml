@@ -59,6 +59,16 @@ allOf:
         compatible:
           minItems: 3
           maxItems: 5
+  - if:
+      properties:
+        compatible:
+          contains:
+            const:
+              - google,gs101-pmu
+  then:
+    properties:
+      reg:
+        maxItems: 2
 
 additionalProperties: true
 
