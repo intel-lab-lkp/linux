@@ -84,7 +84,9 @@ static void __tmc_etb_disable_hw(struct tmc_drvdata *drvdata)
 {
 	CS_UNLOCK(drvdata->base);
 
-	tmc_flush_and_stop(drvdata);
+	if (tmc_flush_and_stop(drvdata))
+		dev_err(&drvdata->csdev->dev,
+			"Flush and stop error disabling ETB\n");
 	/*
 	 * When operating in sysFS mode the content of the buffer needs to be
 	 * read before the TMC is disabled.
@@ -146,7 +148,9 @@ static void tmc_etf_disable_hw(struct tmc_drvdata *drvdata)
 
 	CS_UNLOCK(drvdata->base);
 
-	tmc_flush_and_stop(drvdata);
+	if (tmc_flush_and_stop(drvdata))
+		dev_err(&drvdata->csdev->dev,
+			"Flush and stop error disabling ETF\n");
 	tmc_disable_hw(drvdata);
 	coresight_disclaim_device_unlocked(csdev);
 	CS_LOCK(drvdata->base);
@@ -496,7 +500,9 @@ static unsigned long tmc_update_etf_buffer(struct coresight_device *csdev,
 
 	CS_UNLOCK(drvdata->base);
 
-	tmc_flush_and_stop(drvdata);
+	if (tmc_flush_and_stop(drvdata))
+		dev_err(&drvdata->csdev->dev,
+			"Flush and stop error updating perf buffer\n");
 
 	read_ptr = tmc_read_rrp(drvdata);
 	write_ptr = tmc_read_rwp(drvdata);
