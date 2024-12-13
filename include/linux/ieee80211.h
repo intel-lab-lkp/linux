@@ -2764,7 +2764,7 @@ static inline bool ieee80211_he_capa_size_ok(const u8 *data, u8 len)
 #define IEEE80211_6GHZ_CTRL_REG_SP_AP		1
 #define IEEE80211_6GHZ_CTRL_REG_VLP_AP		2
 #define IEEE80211_6GHZ_CTRL_REG_INDOOR_LPI_AP	3
-#define IEEE80211_6GHZ_CTRL_REG_INDOOR_SP_AP	4
+#define IEEE80211_6GHZ_CTRL_REG_INDOOR_SP_AP	8
 
 /**
  * struct ieee80211_he_6ghz_oper - HE 6 GHz operation Information field
@@ -2782,7 +2782,7 @@ struct ieee80211_he_6ghz_oper {
 #define		IEEE80211_HE_6GHZ_OPER_CTRL_CHANWIDTH_80MHZ	2
 #define		IEEE80211_HE_6GHZ_OPER_CTRL_CHANWIDTH_160MHZ	3
 #define IEEE80211_HE_6GHZ_OPER_CTRL_DUP_BEACON	0x4
-#define IEEE80211_HE_6GHZ_OPER_CTRL_REG_INFO	0x38
+#define IEEE80211_HE_6GHZ_OPER_CTRL_REG_INFO	0x78
 	u8 control;
 	u8 ccfs0;
 	u8 ccfs1;
