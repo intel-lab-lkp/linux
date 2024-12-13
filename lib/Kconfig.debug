@@ -563,6 +563,17 @@ config NOINSTR_VALIDATION
 	select OBJTOOL
 	default y
 
+config VMLINUX_OBJTOOL_STRICT
+	bool "Strict objtool on vmlinux"
+	default n
+	# Conditions when we run objtool on vmlinux
+	depends on NOINSTR_VALIDATION || LTO_CLANG || X86_KERNEL_IBT
+	help
+	  Fail the build when objtool produces warnings on vmlinux.
+
+	  By default, objtool just prints warnings to the terminal without
+	  causing a build failure. This config changes that for vmlinux.
+
 config VMLINUX_MAP
 	bool "Generate vmlinux.map file when linking"
 	depends on EXPERT
