@@ -124,7 +124,13 @@ out_unlock:
 /* The idr number to remove is the lower 32 bits of the inode. */
 void pidfs_remove_pid(struct pid *pid)
 {
-	mtree_erase(&pidfs_ino_mtree, pidfs_ino(pid->ino));
+	unsigned long pid_ino = pidfs_ino(pid->ino);
+	unsigned long flags;
+	MA_STATE(mas, &pidfs_ino_mtree, pid_ino, pid_ino);
+
+	spin_lock_irqsave(&pidfs_ino_mtree.ma_lock, flags);
+	mas_erase(&mas);
+	spin_unlock_irqrestore(&pidfs_ino_mtree.ma_lock, flags);
 }
 
 #ifdef CONFIG_PROC_FS
