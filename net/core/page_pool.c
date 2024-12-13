@@ -867,7 +867,7 @@ void page_pool_put_netmem_bulk(struct page_pool *pool, netmem_ref *data,
 		netmem_ref netmem = netmem_compound_head(data[i]);
 
 		/* It is not the last user for the page frag case */
-		if (!page_pool_is_last_ref(netmem))
+		if (!page_pool_unref_and_test(netmem))
 			continue;
 
 		netmem = __page_pool_put_page(pool, netmem, -1, allow_direct);
