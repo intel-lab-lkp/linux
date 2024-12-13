@@ -38,6 +38,7 @@ struct opts {
 	bool sec_address;
 	bool stats;
 	bool verbose;
+	bool fail_on_warn;
 };
 
 extern struct opts opts;
