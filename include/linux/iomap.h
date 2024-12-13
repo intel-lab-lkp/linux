@@ -236,13 +236,19 @@ int iomap_iter(struct iomap_iter *iter, const struct iomap_ops *ops);
  *
  * Returns the length that the operation applies to for the current iteration.
  */
-static inline u64 iomap_length(const struct iomap_iter *iter)
+static inline u64 __iomap_length(const struct iomap_iter *iter, loff_t pos,
+		u64 len)
 {
 	u64 end = iter->iomap.offset + iter->iomap.length;
 
 	if (iter->srcmap.type != IOMAP_HOLE)
 		end = min(end, iter->srcmap.offset + iter->srcmap.length);
-	return min(iter->len, end - iter->pos);
+	return min(len, end - pos);
+}
+
+static inline u64 iomap_length(const struct iomap_iter *iter)
+{
+	return __iomap_length(iter, iter->pos, iter->len);
 }
 
 /**
