@@ -583,4 +583,11 @@ out_err:
 	goto out;
 }
 
-DEFINE_SUITE("Track with sched_switch", switch_tracking);
+struct test_case tests__switch_tracking[] = {
+        TEST_CASE_EXCLUSIVE("Track with sched_switch", switch_tracking),
+        {       .name = NULL, }
+};
+struct test_suite suite__switch_tracking = {
+        .desc = "Track with sched_switch",
+        .test_cases = tests__switch_tracking,
+};
