@@ -930,6 +930,9 @@ _bpftool()
                         format)
                             COMPREPLY=( $( compgen -W "c raw" -- "$cur" ) )
                             ;;
+                        root_id)
+                            return 0;
+                            ;;
                         c)
                             COMPREPLY=( $( compgen -W "unsorted" -- "$cur" ) )
                             ;;
@@ -937,13 +940,13 @@ _bpftool()
                             # emit extra options
                             case ${words[3]} in
                                 id|file)
-                                    _bpftool_once_attr 'format'
+                                    _bpftool_once_attr 'format root_id'
                                     ;;
                                 map|prog)
                                     if [[ ${words[3]} == "map" ]] && [[ $cword == 6 ]]; then
                                         COMPREPLY+=( $( compgen -W "key value kv all" -- "$cur" ) )
                                     fi
-                                    _bpftool_once_attr 'format'
+                                    _bpftool_once_attr 'format root_id'
                                     ;;
                                 *)
                                     ;;
