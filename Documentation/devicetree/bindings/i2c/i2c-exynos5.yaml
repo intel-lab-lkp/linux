@@ -25,6 +25,7 @@ properties:
           - samsung,exynos5250-hsi2c    # Exynos5250 and Exynos5420
           - samsung,exynos5260-hsi2c    # Exynos5260
           - samsung,exynos7-hsi2c       # Exynos7
+          - samsung,exynos8895-hsi2c
           - samsung,exynosautov9-hsi2c
       - items:
           - enum:
@@ -94,9 +95,28 @@ allOf:
         - clock-names
 
     else:
-      properties:
-        clocks:
-          maxItems: 1
+      if:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - samsung,exynos8895-hsi2c
+
+      then:
+        properties:
+          clocks:
+            maxItems: 2
+
+          clock-names:
+            maxItems: 2
+
+        required:
+          - clock-names
+
+      else:
+        properties:
+          clocks:
+            maxItems: 1
 
 unevaluatedProperties: false
 
