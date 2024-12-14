@@ -256,9 +256,34 @@ static int connect_variant(const int sock_fd,
 	return connect_variant_addrlen(sock_fd, srv, get_addrlen(srv, false));
 }
 
+static int set_msg_dest(struct msghdr *msg,
+			const struct service_fixture *const srv,
+			const bool minimal_addrlen)
+{
+	switch (srv->protocol.domain) {
+	case AF_UNSPEC:
+	case AF_INET:
+		msg->msg_name = (void *)&srv->ipv4_addr;
+		break;
+	case AF_INET6:
+		msg->msg_name = (void *)&srv->ipv6_addr;
+		break;
+	case AF_UNIX:
+		msg->msg_name = (void *)&srv->unix_addr;
+		break;
+	default:
+		errno = -EAFNOSUPPORT;
+		return -errno;
+	}
+
+	msg->msg_namelen = get_addrlen(srv, minimal_addrlen);
+	return 0;
+}
+
 FIXTURE(protocol)
 {
-	struct service_fixture srv0, srv1, srv2, unspec_any0, unspec_srv0;
+	struct service_fixture srv0, srv1, srv2;
+	struct service_fixture unspec_any0, unspec_srv0, unspec_srv1;
 };
 
 FIXTURE_VARIANT(protocol)
@@ -281,6 +306,7 @@ FIXTURE_SETUP(protocol)
 	ASSERT_EQ(0, set_service(&self->srv2, variant->prot, 2));
 
 	ASSERT_EQ(0, set_service(&self->unspec_srv0, prot_unspec, 0));
+	ASSERT_EQ(0, set_service(&self->unspec_srv1, prot_unspec, 1));
 
 	ASSERT_EQ(0, set_service(&self->unspec_any0, prot_unspec, 0));
 	self->unspec_any0.ipv4_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -919,6 +945,258 @@ TEST_F(protocol, connect_unspec)
 	EXPECT_EQ(0, close(bind_fd));
 }
 
+TEST_F(protocol, sendmsg)
+{
+	const struct timeval read_timeout = {
+		.tv_sec = 0,
+		.tv_usec = 100000,
+	};
+	const bool sandboxed = variant->sandbox == UDP_SANDBOX &&
+			       variant->prot.type == SOCK_DGRAM &&
+			       (variant->prot.domain == AF_INET ||
+				variant->prot.domain == AF_INET6);
+	int srv1_fd, srv0_fd, client_fd;
+	char read_buf[1] = { 0 };
+	struct iovec testmsg_contents = { 0 };
+	struct msghdr testmsg = { 0 };
+
+	if (variant->prot.type != SOCK_DGRAM)
+		return;
+
+	disable_caps(_metadata);
+
+	/* Prepare one server socket to be denied */
+	ASSERT_EQ(0, set_service(&self->srv0, variant->prot, 0));
+	srv0_fd = socket_variant(&self->srv0);
+	ASSERT_LE(0, srv0_fd);
+	ASSERT_EQ(0, bind_variant(srv0_fd, &self->srv0));
+
+	/* Prepare one server socket on specific port to be allowed */
+	ASSERT_EQ(0, set_service(&self->srv1, variant->prot, 1));
+	srv1_fd = socket_variant(&self->srv1);
+	ASSERT_LE(0, srv1_fd);
+	ASSERT_EQ(0, bind_variant(srv1_fd, &self->srv1));
+
+	/* Arbitrary value just to not block other tests indefinitely */
+	EXPECT_EQ(0, setsockopt(srv1_fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout,
+				sizeof(read_timeout)));
+	EXPECT_EQ(0, setsockopt(srv0_fd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout,
+				sizeof(read_timeout)));
+
+	client_fd = socket_variant(&self->srv0);
+	ASSERT_LE(0, client_fd);
+
+	if (sandboxed) {
+		const struct landlock_ruleset_attr ruleset_attr = {
+			.handled_access_net = LANDLOCK_ACCESS_NET_SENDTO_UDP |
+					      LANDLOCK_ACCESS_NET_BIND_UDP,
+		};
+		const struct landlock_net_port_attr allow_one_server = {
+			.allowed_access = LANDLOCK_ACCESS_NET_SENDTO_UDP,
+			.port = self->srv1.port,
+		};
+		const int ruleset_fd = landlock_create_ruleset(
+			&ruleset_attr, sizeof(ruleset_attr), 0);
+		ASSERT_LE(0, ruleset_fd);
+		ASSERT_EQ(0,
+			  landlock_add_rule(ruleset_fd, LANDLOCK_RULE_NET_PORT,
+					    &allow_one_server, 0));
+		enforce_ruleset(_metadata, ruleset_fd);
+		EXPECT_EQ(0, close(ruleset_fd));
+	}
+
+	testmsg_contents.iov_len = 1;
+	testmsg.msg_iov = &testmsg_contents;
+	testmsg.msg_iovlen = 1;
+
+	/* Without bind nor explicit address+port */
+	EXPECT_EQ(-1, write(client_fd, "A", 1));
+	if (variant->prot.domain == AF_UNIX) {
+		EXPECT_EQ(ENOTCONN, errno);
+	} else {
+		EXPECT_EQ(EDESTADDRREQ, errno);
+	}
+
+	/* With non-NULL but too small explicit address */
+	testmsg_contents.iov_base = "B";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->srv0, false));
+	testmsg.msg_namelen = get_addrlen(&self->srv0, true) - 1;
+	EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+	EXPECT_EQ(EINVAL, errno);
+
+	/* With minimal explicit address length and denied port */
+	testmsg_contents.iov_base = "C";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->srv0, true));
+	if (self->srv0.protocol.domain == AF_UNIX) {
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(EINVAL, errno);
+	} else if (sandboxed) {
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(EACCES, errno);
+	} else {
+		EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(1, read(srv0_fd, read_buf, 1));
+		EXPECT_EQ(read_buf[0], 'C');
+	}
+
+	/* With minimal explicit address length and allowed port */
+	testmsg_contents.iov_base = "D";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->srv1, true));
+	if (self->srv0.protocol.domain == AF_UNIX) {
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(EINVAL, errno);
+	} else {
+		EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(1, read(srv1_fd, read_buf, 1));
+		EXPECT_EQ(read_buf[0], 'D');
+	}
+
+	/* With explicit denied port */
+	testmsg_contents.iov_base = "E";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->srv0, false));
+	if (sandboxed) {
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(EACCES, errno);
+		EXPECT_EQ(-1, read(srv0_fd, read_buf, 1));
+		EXPECT_EQ(EAGAIN, errno);
+	} else {
+		EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+		{
+			TH_LOG("sendmsg failed: %s", strerror(errno));
+		}
+		EXPECT_EQ(1, read(srv0_fd, read_buf, 1));
+		EXPECT_EQ(read_buf[0], 'E');
+	}
+
+	/* With explicit allowed port */
+	testmsg_contents.iov_base = "F";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->srv1, false));
+	EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+	{
+		TH_LOG("sendmsg failed: %s", strerror(errno));
+	}
+	EXPECT_EQ(1, read(srv1_fd, read_buf, 1));
+	EXPECT_EQ(read_buf[0], 'F');
+
+	/*
+	 * With an explicit (AF_UNSPEC, port), should be equivalent to
+	 * (AF_INET, port) in IPv4, and to not specifying a destination
+	 * in IPv6 (which fails since the socket is not connected).
+	 */
+	testmsg_contents.iov_base = "G";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->unspec_srv0, false));
+	if (sandboxed || variant->prot.domain != AF_INET) {
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		if (variant->prot.domain == AF_INET) {
+			EXPECT_EQ(EACCES, errno);
+		} else if (variant->prot.domain == AF_UNIX) {
+			EXPECT_EQ(EINVAL, errno);
+		} else {
+			EXPECT_EQ(EDESTADDRREQ, errno);
+		}
+	} else {
+		EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+		{
+			TH_LOG("sendmsg failed: %s", strerror(errno));
+		}
+		EXPECT_EQ(1, read(srv0_fd, read_buf, 1));
+		EXPECT_EQ(read_buf[0], 'G');
+	}
+	testmsg_contents.iov_base = "H";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->unspec_srv1, false));
+	if (variant->prot.domain == AF_INET) {
+		EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+		{
+			TH_LOG("sendmsg failed: %s", strerror(errno));
+		}
+		EXPECT_EQ(1, read(srv1_fd, read_buf, 1));
+		EXPECT_EQ(read_buf[0], 'H');
+	} else {
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		if (variant->prot.domain == AF_INET6) {
+			EXPECT_EQ(EDESTADDRREQ, errno);
+		} else {
+			EXPECT_EQ(EINVAL, errno);
+		}
+	}
+
+	/* Without address, connect()ed to an allowed address+port */
+	testmsg.msg_name = NULL;
+	testmsg.msg_namelen = 0;
+	testmsg_contents.iov_base = "I";
+	ASSERT_EQ(0, connect_variant(client_fd, &self->srv1));
+	EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+	{
+		TH_LOG("sendmsg failed: %s", strerror(errno));
+	}
+	EXPECT_EQ(1, read(srv1_fd, read_buf, 1));
+	EXPECT_EQ(read_buf[0], 'I');
+
+	/* Without address, connect()ed to a denied address+port */
+	testmsg.msg_name = NULL;
+	testmsg.msg_namelen = 0;
+	testmsg_contents.iov_base = "J";
+	ASSERT_EQ(0, connect_variant(client_fd, &self->srv0));
+	EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+	{
+		TH_LOG("sendmsg failed: %s", strerror(errno));
+	}
+	EXPECT_EQ(1, read(srv0_fd, read_buf, 1));
+	EXPECT_EQ(read_buf[0], 'J');
+
+	/*
+	 * Sending to AF_UNSPEC should be equivalent to not specifying an
+	 * address (in IPv6 only) and falling back to the connected address
+	 */
+	testmsg_contents.iov_base = "K";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->unspec_srv0, false));
+	if (sandboxed && variant->prot.domain == AF_INET) {
+		/* IPv4 -> parsed as srv0 which is denied */
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(EACCES, errno);
+	} else if (variant->prot.domain == AF_UNIX) {
+		/* Unix socket don't accept AF_UNSPEC */
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(EINVAL, errno);
+	} else {
+		/*
+		 * IPv6 -> parsed as "no address" so it uses the connected
+		 * one srv1 which is allowed
+		 */
+		EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+		{
+			TH_LOG("sendmsg failed: %s", strerror(errno));
+		}
+		EXPECT_EQ(1, read(srv0_fd, read_buf, 1));
+		EXPECT_EQ(read_buf[0], 'K');
+	}
+
+	testmsg_contents.iov_base = "L";
+	EXPECT_EQ(0, set_msg_dest(&testmsg, &self->unspec_srv1, false));
+	if (variant->prot.domain == AF_UNIX) {
+		EXPECT_EQ(-1, sendmsg(client_fd, &testmsg, 0));
+		EXPECT_EQ(EINVAL, errno);
+	} else {
+		EXPECT_EQ(1, sendmsg(client_fd, &testmsg, 0))
+		{
+			TH_LOG("sendmsg failed: %s", strerror(errno));
+		}
+
+		if (variant->prot.domain == AF_INET) {
+			/* IPv4 -> parsed as srv1 */
+			EXPECT_EQ(1, read(srv1_fd, read_buf, 1));
+		} else {
+			/*
+			 * IPv6 -> parsed as "no address" so it uses the
+			 * connected one, srv0
+			 */
+			EXPECT_EQ(1, read(srv0_fd, read_buf, 1));
+		}
+
+		EXPECT_EQ(read_buf[0], 'L');
+	}
+}
+
 FIXTURE(ipv4)
 {
 	struct service_fixture srv0, srv1;
@@ -1295,13 +1573,14 @@ FIXTURE_TEARDOWN(mini)
 
 /* clang-format off */
 
-#define ACCESS_LAST LANDLOCK_ACCESS_NET_CONNECT_UDP
+#define ACCESS_LAST LANDLOCK_ACCESS_NET_SENDTO_UDP
 
 #define ACCESS_ALL ( \
 	LANDLOCK_ACCESS_NET_BIND_TCP | \
 	LANDLOCK_ACCESS_NET_CONNECT_TCP | \
 	LANDLOCK_ACCESS_NET_BIND_UDP | \
-	LANDLOCK_ACCESS_NET_CONNECT_UDP)
+	LANDLOCK_ACCESS_NET_CONNECT_UDP | \
+	LANDLOCK_ACCESS_NET_SENDTO_UDP)
 
 /* clang-format on */
 
