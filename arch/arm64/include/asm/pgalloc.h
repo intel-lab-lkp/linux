@@ -100,8 +100,6 @@ static inline void p4d_free(struct mm_struct *mm, p4d_t *p4d)
 	if (pgtable_l5_enabled())
 		__p4d_free(mm, p4d);
 }
-
-#define __p4d_free_tlb(tlb, p4d, addr)  p4d_free((tlb)->mm, p4d)
 #else
 static inline void __pgd_populate(pgd_t *pgdp, phys_addr_t p4dp, pgdval_t prot)
 {
