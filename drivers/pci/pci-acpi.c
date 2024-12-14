@@ -126,16 +126,38 @@ bool pci_acpi_preserve_config(struct pci_host_bridge *host_bridge)
 		union acpi_object *obj;
 
 		/*
-		 * Evaluate the "PCI Boot Configuration" _DSM Function.  If it
-		 * exists and returns 0, we must preserve any PCI resource
-		 * assignments made by firmware for this host bridge.
+		 * Per PCI Firmware r3.2, released Jan 26, 2015,
+		 * DSM_PCI_PRESERVE_BOOT_CONFIG Revision ID is 1.
+		 * But PCI Firmware r3.3, released Jan 20, 2021,
+		 * changed sec 4.6.5 to say
+		 * "lowest valid Revision ID value: 2". So try revision 1
+		 * first for old platform, then try revision 2.
 		 */
-		obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(&host_bridge->dev),
-					      &pci_acpi_dsm_guid,
-					      1, DSM_PCI_PRESERVE_BOOT_CONFIG,
-					      NULL, ACPI_TYPE_INTEGER);
-		if (obj && obj->integer.value == 0)
-			return true;
+		if (acpi_check_dsm(ACPI_HANDLE(&host_bridge->dev), &pci_acpi_dsm_guid, 1,
+			    1ULL << DSM_PCI_PRESERVE_BOOT_CONFIG)) {
+			/*
+			 * Evaluate the "PCI Boot Configuration" _DSM Function.  If it
+			 * exists and returns 0, we must preserve any PCI resource
+			 * assignments made by firmware for this host bridge.
+			 */
+			obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(&host_bridge->dev),
+							  &pci_acpi_dsm_guid,
+						  1, DSM_PCI_PRESERVE_BOOT_CONFIG,
+						  NULL, ACPI_TYPE_INTEGER);
+			if (obj && obj->integer.value == 0)
+				return true;
+		}
+
+		if (acpi_check_dsm(ACPI_HANDLE(&host_bridge->dev), &pci_acpi_dsm_guid, 2,
+			    1ULL << DSM_PCI_PRESERVE_BOOT_CONFIG)) {
+			obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(&host_bridge->dev),
+							  &pci_acpi_dsm_guid,
+						  2, DSM_PCI_PRESERVE_BOOT_CONFIG,
+						  NULL, ACPI_TYPE_INTEGER);
+			if (obj && obj->integer.value == 0)
+				return true;
+		}
+
 		ACPI_FREE(obj);
 	}
 
