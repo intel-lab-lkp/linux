@@ -8,6 +8,8 @@
 
 #define __HAVE_ARCH_PTE_ALLOC_ONE
 #define __HAVE_ARCH_PGD_FREE
+#define __HAVE_ARCH_P4D_ALLOC_ONE
+#define __HAVE_ARCH_P4D_FREE
 #include <asm-generic/pgalloc.h>
 
 static inline int  __paravirt_pgd_alloc(struct mm_struct *mm) { return 0; }
@@ -149,20 +151,16 @@ static inline void pgd_populate_safe(struct mm_struct *mm, pgd_t *pgd, p4d_t *p4
 
 static inline p4d_t *p4d_alloc_one(struct mm_struct *mm, unsigned long addr)
 {
-	gfp_t gfp = GFP_KERNEL_ACCOUNT;
+	if (!pgtable_l5_enabled())
+		return NULL;
 
-	if (mm == &init_mm)
-		gfp &= ~__GFP_ACCOUNT;
-	return (p4d_t *)get_zeroed_page(gfp);
+	return __p4d_alloc_one(mm, addr);
 }
 
 static inline void p4d_free(struct mm_struct *mm, p4d_t *p4d)
 {
-	if (!pgtable_l5_enabled())
-		return;
-
-	BUG_ON((unsigned long)p4d & (PAGE_SIZE-1));
-	free_page((unsigned long)p4d);
+	if (pgtable_l5_enabled())
+		return __p4d_free(mm, p4d);
 }
 
 extern void ___p4d_free_tlb(struct mmu_gather *tlb, p4d_t *p4d);
