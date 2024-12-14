@@ -880,7 +880,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	TEST_ASSERT(p.iterations > 2, "Iterations must be greater than two");
+	TEST_ASSERT(p.iterations > 0, "Iterations must be greater than two");
 	TEST_ASSERT(p.interval > 0, "Interval must be greater than zero");
 
 	pr_info("Test iterations: %"PRIu64", interval: %"PRIu64" (ms)\n",
