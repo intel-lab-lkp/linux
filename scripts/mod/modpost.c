@@ -502,6 +502,9 @@ static int parse_elf(struct elf_info *info, const char *filename)
 			info->modinfo_len = sechdrs[i].sh_size;
 		} else if (!strcmp(secname, ".export_symbol")) {
 			info->export_symbol_secndx = i;
+		} else if (!strcmp(secname, ".no_trim_symbol")) {
+			info->no_trim_symbol = (void *)hdr + sechdrs[i].sh_offset;
+			info->no_trim_symbol_len = sechdrs[i].sh_size;
 		}
 
 		if (sechdrs[i].sh_type == SHT_SYMTAB) {
@@ -1443,6 +1446,29 @@ static char *remove_dot(char *s)
 }
 
 /*
+ * Keep symbols recorded in the .no_trim_symbol section. This is necessary to
+ * prevent CONFIG_TRIM_UNUSED_KSYMS from dropping EXPORT_SYMBOL because
+ * symbol_get() relies on the symbol being present in the ksymtab for lookups.
+ */
+static void keep_no_trim_symbols(const struct elf_info *info)
+{
+	unsigned long size = info->no_trim_symbol_len;
+
+	for (char *s = info->no_trim_symbol; s; s = next_string(s , &size)) {
+		struct symbol *sym;
+
+		/*
+		 * find_symbol() returns NULL if the symbol is exported by
+		 * another module that has not been parsed yet. This is OK
+		 * because sym->used will be set to true later in this case.
+		 */
+		sym = find_symbol(s);
+		if (sym)
+			sym->used = true;
+	}
+}
+
+/*
  * The CRCs are recorded in .*.cmd files in the form of:
  * #SYMVER <name> <crc>
  */
@@ -1600,6 +1626,7 @@ static void read_symbols(const char *modname)
 					sizeof(mod->srcversion) - 1);
 	}
 
+	keep_no_trim_symbols(&info);
 	parse_elf_finish(&info);
 
 	if (modversions) {
