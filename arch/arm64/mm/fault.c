@@ -863,7 +863,7 @@ static const struct fault_info fault_info[] = {
 	{ do_page_fault,	SIGSEGV, SEGV_ACCERR,	"level 3 permission fault"	},
 	{ do_sea,		SIGBUS,  BUS_OBJERR,	"synchronous external abort"	},
 	{ do_tag_check_fault,	SIGSEGV, SEGV_MTESERR,	"synchronous tag check fault"	},
-	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 18"			},
+	{ do_sea,		SIGKILL, SI_KERNEL,	"level -2 (translation table walk)"	},
 	{ do_sea,		SIGKILL, SI_KERNEL,	"level -1 (translation table walk)"	},
 	{ do_sea,		SIGKILL, SI_KERNEL,	"level 0 (translation table walk)"	},
 	{ do_sea,		SIGKILL, SI_KERNEL,	"level 1 (translation table walk)"	},
