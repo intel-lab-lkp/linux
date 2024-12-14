@@ -10,6 +10,8 @@
 #include <linux/net.h>
 #include <linux/socket.h>
 #include <net/ipv6.h>
+#include <net/transp_v6.h>
+#include <net/ip.h>
 
 #include "common.h"
 #include "cred.h"
@@ -155,6 +157,27 @@ static int current_check_access_socket(struct socket *const sock,
 	return -EACCES;
 }
 
+static int check_access_port(const struct landlock_ruleset *const dom,
+			     access_mask_t access_request, __be16 port)
+{
+	layer_mask_t layer_masks[LANDLOCK_NUM_ACCESS_NET] = {};
+	const struct landlock_rule *rule;
+	const struct landlock_id id = {
+		.key.data = (__force uintptr_t)port,
+		.type = LANDLOCK_KEY_NET_PORT,
+	};
+	BUILD_BUG_ON(sizeof(port) > sizeof(id.key.data));
+
+	rule = landlock_find_rule(dom, id);
+	access_request = landlock_init_layer_masks(
+		dom, access_request, &layer_masks, LANDLOCK_KEY_NET_PORT);
+	if (landlock_unmask_layers(rule, access_request, &layer_masks,
+				   ARRAY_SIZE(layer_masks)))
+		return 0;
+
+	return -EACCES;
+}
+
 static int hook_socket_bind(struct socket *const sock,
 			    struct sockaddr *const address, const int addrlen)
 {
@@ -190,9 +213,74 @@ static int hook_socket_connect(struct socket *const sock,
 					   access_request);
 }
 
+static int hook_socket_sendmsg(struct socket *const sock,
+			       struct msghdr *const msg, const int size)
+{
+	const struct landlock_ruleset *const dom =
+		landlock_get_applicable_domain(landlock_get_current_domain(),
+					       any_net);
+	const struct sockaddr *address = (const struct sockaddr *)msg->msg_name;
+	const int addrlen = msg->msg_namelen;
+	__be16 port;
+
+	if (!dom)
+		return 0;
+	if (WARN_ON_ONCE(dom->num_layers < 1))
+		return -EACCES;
+	/*
+	 * If there is no explicit address in the message, we have no
+	 * policy to enforce here because either:
+	 * - the socket was previously connect()ed, so the appropriate
+	 *   access check has already been done back then;
+	 * - the socket is unconnected, so we can let the networking stack
+	 *   reply -EDESTADDRREQ
+	 */
+	if (!address)
+		return 0;
+
+	if (!sk_is_udp(sock->sk))
+		return 0;
+
+	/* Checks for minimal header length to safely read sa_family. */
+	if (addrlen < offsetofend(typeof(*address), sa_family))
+		return -EINVAL;
+
+	switch (address->sa_family) {
+	case AF_UNSPEC:
+		/*
+		 * Parsed as "no address" in udpv6_sendmsg(), which means
+		 * we fall back into the case checked earlier: policy was
+		 * enforced at connect() time, nothing to enforce here.
+		 */
+		if (sock->sk->sk_prot == &udpv6_prot)
+			return 0;
+		/* Parsed as "AF_INET" in udp_sendmsg() */
+		fallthrough;
+	case AF_INET:
+		if (addrlen < sizeof(struct sockaddr_in))
+			return -EINVAL;
+		port = ((struct sockaddr_in *)address)->sin_port;
+		break;
+
+#if IS_ENABLED(CONFIG_IPV6)
+	case AF_INET6:
+		if (addrlen < SIN6_LEN_RFC2133)
+			return -EINVAL;
+		port = ((struct sockaddr_in6 *)address)->sin6_port;
+		break;
+#endif /* IS_ENABLED(CONFIG_IPV6) */
+
+	default:
+		return -EAFNOSUPPORT;
+	}
+
+	return check_access_port(dom, LANDLOCK_ACCESS_NET_SENDTO_UDP, port);
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(socket_bind, hook_socket_bind),
 	LSM_HOOK_INIT(socket_connect, hook_socket_connect),
+	LSM_HOOK_INIT(socket_sendmsg, hook_socket_sendmsg),
 };
 
 __init void landlock_add_net_hooks(void)

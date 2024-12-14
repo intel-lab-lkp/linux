@@ -295,6 +295,19 @@ struct landlock_net_port_attr {
  *   every time), or for servers that want to filter which client address
  *   they want to receive datagrams from (e.g. creating a client-specific
  *   socket)
+ * - %LANDLOCK_ACCESS_NET_SENDTO_UDP: send datagrams with an explicit
+ *   destination address set to the given remote port. This access right
+ *   is checked in sendto(), sendmsg() and sendmmsg() when the destination
+ *   address passed is not NULL. This access right is not required when
+ *   sending datagrams without an explicit destination (via a connected
+ *   socket, e.g. with send()). Sending datagrams with explicit addresses
+ *   induces a non-negligible overhead, so calling connect() once and for
+ *   all should be preferred. When not possible and sending many datagrams,
+ *   using sendmmsg() may reduce the access control overhead.
+ *
+ * Blocking an application from sending UDP traffic requires adding both
+ * %LANDLOCK_ACCESS_NET_SENDTO_UDP and %LANDLOCK_ACCESS_NET_CONNECT_UDP
+ * to the handled access rights list.
  *
  * Note that binding on port 0 means binding to an ephemeral
  * kernel-assigned port, in the range configured in
@@ -306,6 +319,7 @@ struct landlock_net_port_attr {
 #define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
 #define LANDLOCK_ACCESS_NET_BIND_UDP			(1ULL << 2)
 #define LANDLOCK_ACCESS_NET_CONNECT_UDP			(1ULL << 3)
+#define LANDLOCK_ACCESS_NET_SENDTO_UDP			(1ULL << 4)
 /* clang-format on */
 
 /**
