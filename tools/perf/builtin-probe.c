@@ -391,7 +391,7 @@ static int perf_add_probe_events(struct perf_probe_event *pevs, int npevs)
 	}
 
 	/* Note that it is possible to skip all events because of blacklist */
-	if (event) {
+	if (event && !probe_conf.no_advice) {
 #ifndef HAVE_LIBTRACEEVENT
 		pr_info("\nperf is not linked with libtraceevent, to use the new probe you can use tracefs:\n\n");
 		pr_info("\tcd /sys/kernel/tracing/\n");
@@ -577,6 +577,8 @@ __cmd_probe(int argc, const char **argv)
 		   "directory", "path to kernel source"),
 	OPT_BOOLEAN('\0', "no-inlines", &probe_conf.no_inlines,
 		"Don't search inlined functions"),
+	OPT_BOOLEAN('\0', "no-advice", &probe_conf.no_advice,
+		"Don't provide any advice after a new event is created."),
 	OPT__DRY_RUN(&probe_event_dry_run),
 	OPT_INTEGER('\0', "max-probes", &probe_conf.max_probes,
 		 "Set how many probe points can be found for a probe."),

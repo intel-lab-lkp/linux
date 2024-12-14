@@ -14,6 +14,7 @@ struct probe_conf {
 	bool	show_location_range;
 	bool	force_add;
 	bool	no_inlines;
+	bool	no_advice;
 	bool	cache;
 	bool	bootconfig;
 	int	max_probes;
