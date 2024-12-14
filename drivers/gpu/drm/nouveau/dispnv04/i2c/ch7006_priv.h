@@ -29,7 +29,8 @@
 
 #include <drm/drm_encoder_slave.h>
 #include <drm/drm_probe_helper.h>
-#include <drm/i2c/ch7006.h>
+
+#include <i2c/ch7006.h>
 
 typedef int64_t fixed;
 #define fixed1 (1LL << 32)
