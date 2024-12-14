@@ -119,12 +119,15 @@ struct landlock_net_port_attr {
 	 *
 	 * It should be noted that port 0 passed to :manpage:`bind(2)` will bind
 	 * to an available port from the ephemeral port range.  This can be
-	 * configured with the ``/proc/sys/net/ipv4/ip_local_port_range`` sysctl
-	 * (also used for IPv6).
+	 * configured globally with the
+	 * ``/proc/sys/net/ipv4/ip_local_port_range`` sysctl (also used for
+	 * IPv6), and, within that first range, on a per-socket basis using
+	 * ``setsockopt(IP_LOCAL_PORT_RANGE)``.
 	 *
-	 * A Landlock rule with port 0 and the ``LANDLOCK_ACCESS_NET_BIND_TCP``
-	 * right means that requesting to bind on port 0 is allowed and it will
-	 * automatically translate to binding on the related port range.
+	 * A Landlock rule with port 0 and the %LANDLOCK_ACCESS_NET_BIND_TCP
+	 * or %LANDLOCK_ACCESS_NET_BIND_UDP right means that requesting to
+	 * bind on port 0 is allowed and it will automatically translate to
+	 * binding on the ephemeral port range.
 	 */
 	__u64 port;
 };
@@ -267,18 +270,42 @@ struct landlock_net_port_attr {
  * Network flags
  * ~~~~~~~~~~~~~~~~
  *
- * These flags enable to restrict a sandboxed process to a set of network
- * actions. This is supported since the Landlock ABI version 4.
+ * These flags enable to restrict which network-related actions a sandboxed
+ * process can take. TCP support was added in Landlock ABI version 4, and UDP
+ * support in version 7.
  *
- * The following access rights apply to TCP port numbers:
+ * TCP access rights:
  *
- * - %LANDLOCK_ACCESS_NET_BIND_TCP: Bind a TCP socket to a local port.
- * - %LANDLOCK_ACCESS_NET_CONNECT_TCP: Connect an active TCP socket to
- *   a remote port.
+ * - %LANDLOCK_ACCESS_NET_BIND_TCP: bind sockets to the given local port,
+ *   for servers that will listen() on that port, or for clients that want
+ *   to open connections with that specific source port instead of using a
+ *   kernel-assigned random ephemeral one
+ * - %LANDLOCK_ACCESS_NET_CONNECT_TCP: connect client sockets to servers
+ *   listening on that remote port
+ *
+ * UDP access rights:
+ *
+ * - %LANDLOCK_ACCESS_NET_BIND_UDP: bind sockets to the given local port,
+ *   for servers that will listen() on that port, or for clients that want
+ *   to send datagrams with that specific source port instead of using a
+ *   kernel-assigned random ephemeral one
+ * - %LANDLOCK_ACCESS_NET_CONNECT_UDP: connect sockets to the given remote
+ *   port, either for clients that will send datagrams to that destination
+ *   (and want to send them faster without specifying an explicit address
+ *   every time), or for servers that want to filter which client address
+ *   they want to receive datagrams from (e.g. creating a client-specific
+ *   socket)
+ *
+ * Note that binding on port 0 means binding to an ephemeral
+ * kernel-assigned port, in the range configured in
+ * ``/proc/sys/net/ipv4/ip_local_port_range`` globally (and, within that
+ * range, on a per-socket basis with ``setsockopt(IP_LOCAL_PORT_RANGE)``).
  */
 /* clang-format off */
 #define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)
 #define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
+#define LANDLOCK_ACCESS_NET_BIND_UDP			(1ULL << 2)
+#define LANDLOCK_ACCESS_NET_CONNECT_UDP			(1ULL << 3)
 /* clang-format on */
 
 /**

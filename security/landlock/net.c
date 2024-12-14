@@ -63,10 +63,6 @@ static int current_check_access_socket(struct socket *const sock,
 	if (WARN_ON_ONCE(dom->num_layers < 1))
 		return -EACCES;
 
-	/* Checks if it's a (potential) TCP socket. */
-	if (sock->type != SOCK_STREAM)
-		return 0;
-
 	/* Checks for minimal header length to safely read sa_family. */
 	if (addrlen < offsetofend(typeof(*address), sa_family))
 		return -EINVAL;
@@ -94,17 +90,19 @@ static int current_check_access_socket(struct socket *const sock,
 	/* Specific AF_UNSPEC handling. */
 	if (address->sa_family == AF_UNSPEC) {
 		/*
-		 * Connecting to an address with AF_UNSPEC dissolves the TCP
-		 * association, which have the same effect as closing the
-		 * connection while retaining the socket object (i.e., the file
-		 * descriptor).  As for dropping privileges, closing
-		 * connections is always allowed.
-		 *
-		 * For a TCP access control system, this request is legitimate.
+		 * Connecting to an address with AF_UNSPEC dissolves the
+		 * remote association while retaining the socket object
+		 * (i.e., the file descriptor). For TCP, it has the same
+		 * effect as closing the connection. For UDP, it removes
+		 * any preset destination for future datagrams.
+		 * Like dropping privileges, these actions are always
+		 * allowed: access control is performed when bind()ing or
+		 * connect()ing.
 		 * Let the network stack handle potential inconsistencies and
 		 * return -EINVAL if needed.
 		 */
-		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP)
+		if (access_request == LANDLOCK_ACCESS_NET_CONNECT_TCP ||
+		    access_request == LANDLOCK_ACCESS_NET_CONNECT_UDP)
 			return 0;
 
 		/*
@@ -118,7 +116,8 @@ static int current_check_access_socket(struct socket *const sock,
 		 * checks, but it is safer to return a proper error and test
 		 * consistency thanks to kselftest.
 		 */
-		if (access_request == LANDLOCK_ACCESS_NET_BIND_TCP) {
+		if (access_request == LANDLOCK_ACCESS_NET_BIND_TCP ||
+		    access_request == LANDLOCK_ACCESS_NET_BIND_UDP) {
 			/* addrlen has already been checked for AF_UNSPEC. */
 			const struct sockaddr_in *const sockaddr =
 				(struct sockaddr_in *)address;
@@ -159,16 +158,36 @@ static int current_check_access_socket(struct socket *const sock,
 static int hook_socket_bind(struct socket *const sock,
 			    struct sockaddr *const address, const int addrlen)
 {
+	access_mask_t access_request;
+
+	/* Checks if it's a (potential) TCP socket. */
+	if (sock->type == SOCK_STREAM)
+		access_request = LANDLOCK_ACCESS_NET_BIND_TCP;
+	else if (sk_is_udp(sock->sk))
+		access_request = LANDLOCK_ACCESS_NET_BIND_UDP;
+	else
+		return 0;
+
 	return current_check_access_socket(sock, address, addrlen,
-					   LANDLOCK_ACCESS_NET_BIND_TCP);
+					   access_request);
 }
 
 static int hook_socket_connect(struct socket *const sock,
 			       struct sockaddr *const address,
 			       const int addrlen)
 {
+	access_mask_t access_request;
+
+	/* Checks if it's a (potential) TCP socket. */
+	if (sock->type == SOCK_STREAM)
+		access_request = LANDLOCK_ACCESS_NET_CONNECT_TCP;
+	else if (sk_is_udp(sock->sk))
+		access_request = LANDLOCK_ACCESS_NET_CONNECT_UDP;
+	else
+		return 0;
+
 	return current_check_access_socket(sock, address, addrlen,
-					   LANDLOCK_ACCESS_NET_CONNECT_TCP);
+					   access_request);
 }
 
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
