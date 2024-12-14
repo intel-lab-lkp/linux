@@ -841,13 +841,31 @@ enum bhb_mitigation_bits {
 };
 static unsigned long system_bhb_mitigations;
 
+static const struct midr_range spectre_bhb_firmware_mitigated_list[] = {
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A73),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A75),
+	{},
+};
+
+static const struct midr_range spectre_bhb_safe_list[] = {
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A35),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A53),
+	MIDR_ALL_VERSIONS(MIDR_CORTEX_A55),
+	{},
+};
+
 /*
  * This must be called with SCOPE_LOCAL_CPU for each type of CPU, before any
  * SCOPE_SYSTEM call will give the right answer.
+ *
+ * NOTE: Unknown CPUs are reported as affected. In order to make this work
+ * and still keep the list short, only handle CPUs where:
+ * - supports_csv2p3() returned false
+ * - supports_clearbhb() returned false.
  */
 u8 spectre_bhb_loop_affected(int scope)
 {
-	u8 k = 0;
+	u8 k;
 	static u8 max_bhb_k;
 
 	if (scope == SCOPE_LOCAL_CPU) {
@@ -886,6 +904,16 @@ u8 spectre_bhb_loop_affected(int scope)
 			k = 11;
 		else if (is_midr_in_range_list(read_cpuid_id(), spectre_bhb_k8_list))
 			k =  8;
+		else if (is_midr_in_range_list(read_cpuid_id(), spectre_bhb_safe_list) ||
+			 is_midr_in_range_list(read_cpuid_id(), spectre_bhb_firmware_mitigated_list))
+			k =  0;
+		else {
+			WARN_ONCE(true,
+				 "Unrecognized CPU %#010x, assuming Spectre BHB vulnerable\n",
+				 read_cpuid_id());
+			/* Hopefully k = 32 handles the worst case for unknown CPUs */
+			k = 32;
+		}
 
 		max_bhb_k = max(max_bhb_k, k);
 	} else {
@@ -916,24 +944,26 @@ static enum mitigation_state spectre_bhb_get_cpu_fw_mitigation_state(void)
 	}
 }
 
+/*
+ * NOTE: Unknown CPUs are reported as affected. In order to make this work
+ * and still keep the list short, only handle CPUs where:
+ * - supports_csv2p3() returned false
+ * - supports_clearbhb() returned false.
+ * - spectre_bhb_loop_affected() returned 0.
+ */
 static bool is_spectre_bhb_fw_affected(int scope)
 {
 	static bool system_affected;
 	enum mitigation_state fw_state;
 	bool has_smccc = arm_smccc_1_1_get_conduit() != SMCCC_CONDUIT_NONE;
-	static const struct midr_range spectre_bhb_firmware_mitigated_list[] = {
-		MIDR_ALL_VERSIONS(MIDR_CORTEX_A73),
-		MIDR_ALL_VERSIONS(MIDR_CORTEX_A75),
-		{},
-	};
 	bool cpu_in_list = is_midr_in_range_list(read_cpuid_id(),
-					 spectre_bhb_firmware_mitigated_list);
+						 spectre_bhb_safe_list);
 
 	if (scope != SCOPE_LOCAL_CPU)
 		return system_affected;
 
 	fw_state = spectre_bhb_get_cpu_fw_mitigation_state();
-	if (cpu_in_list || (has_smccc && fw_state == SPECTRE_MITIGATED)) {
+	if (!cpu_in_list || (has_smccc && fw_state == SPECTRE_MITIGATED)) {
 		system_affected = true;
 		return true;
 	}
