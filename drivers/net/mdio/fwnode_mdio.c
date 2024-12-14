@@ -56,6 +56,7 @@ fwnode_find_mii_timestamper(struct fwnode_handle *fwnode)
 	if (arg.args_count != 1)
 		return ERR_PTR(-EINVAL);
 
+	of_node_put(arg.np);
 	return register_mii_timestamper(arg.np, arg.args[0]);
 }
 
