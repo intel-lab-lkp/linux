@@ -1178,6 +1178,7 @@ static int ipu_add_client_devices(struct ipu_soc *ipu, unsigned long ipu_base)
 			ret = platform_device_add(pdev);
 		if (ret) {
 			platform_device_put(pdev);
+			of_node_put(of_node);
 			goto err_register;
 		}
 	}
@@ -1185,6 +1186,8 @@ static int ipu_add_client_devices(struct ipu_soc *ipu, unsigned long ipu_base)
 	return 0;
 
 err_register:
+	while (--i >= 0)
+		of_node_put(client_reg[i].pdata.of_node);
 	platform_device_unregister_children(to_platform_device(dev));
 
 	return ret;
