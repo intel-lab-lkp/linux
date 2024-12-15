@@ -273,6 +273,7 @@ static int felix_tag_8021q_vlan_add(struct dsa_switch *ds, int port, u16 vid,
 	struct dsa_port *dp = dsa_to_port(ds, port);
 	struct dsa_port *cpu_dp;
 	int err;
+	bool tagging_enabled;
 
 	/* tag_8021q.c assumes we are implementing this via port VLAN
 	 * membership, which we aren't. So we don't need to add any VCAP filter
@@ -281,9 +282,11 @@ static int felix_tag_8021q_vlan_add(struct dsa_switch *ds, int port, u16 vid,
 	if (!dsa_port_is_user(dp))
 		return 0;
 
+	tagging_enabled = dsa_port_is_vlan_filtering(dp);
+
 	dsa_switch_for_each_cpu_port(cpu_dp, ds) {
 		err = felix_tag_8021q_vlan_add_rx(ds, port, cpu_dp->index, vid,
-						  dsa_port_is_vlan_filtering(dp));
+						  tagging_enabled);
 		if (err)
 			return err;
 	}
@@ -291,6 +294,8 @@ static int felix_tag_8021q_vlan_add(struct dsa_switch *ds, int port, u16 vid,
 	err = felix_tag_8021q_vlan_add_tx(ds, port, vid);
 	if (err)
 		goto add_tx_failed;
+
+	dp->not_tagged = !tagging_enabled;
 
 	return 0;
 
@@ -319,6 +324,8 @@ static int felix_tag_8021q_vlan_del(struct dsa_switch *ds, int port, u16 vid)
 	err = felix_tag_8021q_vlan_del_tx(ds, port, vid);
 	if (err)
 		goto del_tx_failed;
+
+	dp->not_tagged = 0;
 
 	return 0;
 
