@@ -978,7 +978,7 @@ if ($codespell) {
 	}
 }
 
-$misspellings = join("|", sort keys %spelling_fix) if keys %spelling_fix;
+$misspellings = join("|", map{quotemeta($_)} sort keys %spelling_fix) if keys %spelling_fix;
 
 sub read_words {
 	my ($wordsRef, $file) = @_;
