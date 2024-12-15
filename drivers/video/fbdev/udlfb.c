@@ -1480,7 +1480,7 @@ static ssize_t metrics_reset_store(struct device *fbdev,
 
 static const struct bin_attribute edid_attr = {
 	.attr.name = "edid",
-	.attr.mode = 0666,
+	.attr.mode = 0644,
 	.size = EDID_LENGTH,
 	.read = edid_show,
 	.write = edid_store
