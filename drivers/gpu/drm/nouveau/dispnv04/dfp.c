@@ -171,7 +171,7 @@ static struct drm_encoder *get_tmds_slave(struct drm_encoder *encoder)
 	list_for_each_entry(slave, &dev->mode_config.encoder_list, head) {
 		struct dcb_output *slave_dcb = nouveau_encoder(slave)->dcb;
 
-		if (slave_dcb->type == DCB_OUTPUT_TMDS && get_slave_funcs(slave) &&
+		if (slave_dcb->type == DCB_OUTPUT_TMDS && get_encoder_i2c_funcs(slave) &&
 		    slave_dcb->tmdsconf.slave_addr == dcb->tmdsconf.slave_addr)
 			return slave;
 	}
@@ -473,7 +473,7 @@ static void nv04_dfp_commit(struct drm_encoder *encoder)
 	/* Init external transmitters */
 	slave_encoder = get_tmds_slave(encoder);
 	if (slave_encoder)
-		get_slave_funcs(slave_encoder)->mode_set(
+		get_encoder_i2c_funcs(slave_encoder)->mode_set(
 			slave_encoder, &nv_encoder->mode, &nv_encoder->mode);
 
 	helper->dpms(encoder, DRM_MODE_DPMS_ON);
@@ -614,8 +614,8 @@ static void nv04_dfp_destroy(struct drm_encoder *encoder)
 {
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 
-	if (get_slave_funcs(encoder))
-		get_slave_funcs(encoder)->destroy(encoder);
+	if (get_encoder_i2c_funcs(encoder))
+		get_encoder_i2c_funcs(encoder)->destroy(encoder);
 
 	drm_encoder_cleanup(encoder);
 	kfree(nv_encoder);
@@ -649,7 +649,7 @@ static void nv04_tmds_slave_init(struct drm_encoder *encoder)
 	if (type < 0)
 		return;
 
-	drm_i2c_encoder_init(dev, to_encoder_slave(encoder),
+	nouveau_i2c_encoder_init(dev, to_encoder_i2c(encoder),
 			     &bus->i2c, &info[type].dev);
 }
 
