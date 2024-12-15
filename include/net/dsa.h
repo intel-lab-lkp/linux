@@ -289,6 +289,13 @@ struct dsa_port {
 
 	u8			setup:1;
 
+	/* Use this to mark a switch port as "untagged", to avoid
+	 * dsa_software_vlan_untag() do a VLAN untagging on it if
+	 * ds->untag_bridge_pvid or ds->untag_vlan_aware_bridge_pvid is set to
+	 * true
+	 */
+	u8			not_tagged:1;
+
 	struct device_node	*dn;
 	unsigned int		ageing_time;
 

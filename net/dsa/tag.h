@@ -155,6 +155,10 @@ static inline struct sk_buff *dsa_software_vlan_untag(struct sk_buff *skb)
 	if (!br)
 		return skb;
 
+	/* This switch port is not tagged, no need for untagging */
+	if (dp->not_tagged)
+		return skb;
+
 	/* Move VLAN tag from data to hwaccel */
 	if (!skb_vlan_tag_present(skb)) {
 		skb = skb_vlan_untag(skb);
