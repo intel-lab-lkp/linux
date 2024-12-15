@@ -773,6 +773,7 @@ genric||generic
 gerenal||general
 geting||getting
 globel||global
+gpl-2.0+||GPL-2.0-or-later
 grabing||grabbing
 grahical||graphical
 grahpical||graphical
