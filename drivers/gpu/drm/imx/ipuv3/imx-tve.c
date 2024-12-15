@@ -525,6 +525,13 @@ static const struct component_ops imx_tve_ops = {
 	.bind	= imx_tve_bind,
 };
 
+static void imx_tve_release_ddc(void *data)
+{
+	struct imx_tve *tve = data;
+
+	put_device(&tve->ddc->dev);
+}
+
 static int imx_tve_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -546,6 +553,9 @@ static int imx_tve_probe(struct platform_device *pdev)
 	if (ddc_node) {
 		tve->ddc = of_find_i2c_adapter_by_node(ddc_node);
 		of_node_put(ddc_node);
+		ret = devm_add_action_or_reset(dev, imx_tve_release_ddc, tve);
+		if (ret)
+			return ret;
 	}
 
 	tve->mode = of_get_tve_mode(np);
