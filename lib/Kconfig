@@ -659,7 +659,6 @@ config UCS2_STRING
 # generic vdso
 #
 source "lib/vdso/Kconfig"
-source "lib/vdso_kernel/Kconfig"
 
 source "lib/fonts/Kconfig"
 
