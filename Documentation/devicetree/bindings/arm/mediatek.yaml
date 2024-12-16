@@ -224,6 +224,14 @@ properties:
               - google,pico-sku2
           - const: google,pico
           - const: mediatek,mt8183
+      - description: Google Skitty (HP Chromebook G1m 11 inch)
+        items:
+          - const: google,skitty-sku1
+          - const: google,skitty-sku2
+          - const: google,skitty-sku3
+          - const: google,skitty-sku4
+          - const: google,skitty
+          - const: mediatek,mt8186
       - description: Google Willow (Acer Chromebook 311 C722/C722T)
         items:
           - enum:
