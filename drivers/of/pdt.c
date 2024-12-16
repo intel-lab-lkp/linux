@@ -21,6 +21,8 @@
 
 static struct of_pdt_ops *of_pdt_prom_ops __initdata;
 
+void of_alias_scan(void * (*dt_alloc)(u64 size, u64 align));
+
 #if defined(CONFIG_SPARC)
 unsigned int of_pdt_unique_id __initdata;
 
