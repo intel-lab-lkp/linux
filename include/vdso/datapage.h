@@ -128,8 +128,6 @@ struct vdso_time_data {
 	struct arch_vdso_time_data arch_data;
 };
 
-#define vdso_data vdso_time_data
-
 /**
  * struct vdso_rng_data - vdso RNG state information
  * @generation:	counter representing the number of RNG reseeds
@@ -149,10 +147,7 @@ struct vdso_rng_data {
  * With the hidden visibility, the compiler simply generates a PC-relative
  * relocation, and this is what we need.
  */
-#ifndef CONFIG_GENERIC_VDSO_DATA_STORE
-extern struct vdso_time_data _vdso_data[CS_BASES] __attribute__((visibility("hidden")));
-extern struct vdso_time_data _timens_data[CS_BASES] __attribute__((visibility("hidden")));
-#else
+#ifdef CONFIG_GENERIC_VDSO_DATA_STORE
 extern const struct vdso_time_data vdso_u_time_data[CS_BASES] __attribute__((visibility("hidden")));
 extern const struct vdso_time_data vdso_u_timens_data[CS_BASES] __attribute__((visibility("hidden")));
 extern const struct vdso_rng_data vdso_u_rng_data __attribute__((visibility("hidden")));
@@ -162,14 +157,6 @@ extern struct vdso_time_data *vdso_k_time_data;
 extern struct vdso_rng_data *vdso_k_rng_data;
 extern struct vdso_arch_data *vdso_k_arch_data;
 #endif
-
-/**
- * union vdso_data_store - Generic vDSO data page
- */
-union vdso_data_store {
-	struct vdso_time_data	data[CS_BASES];
-	u8			page[1U << CONFIG_PAGE_SHIFT];
-};
 
 #ifdef CONFIG_GENERIC_VDSO_DATA_STORE
 
@@ -185,24 +172,16 @@ enum vdso_pages {
 	VDSO_NR_PAGES
 };
 
-static __always_inline struct vdso_time_data *__arch_get_vdso_k_time_data(void)
-{
-	return vdso_k_time_data;
-}
-#define __arch_get_k_vdso_data __arch_get_vdso_k_time_data
-
 static __always_inline const struct vdso_time_data *__arch_get_vdso_u_time_data(void)
 {
 	return vdso_u_time_data;
 }
-#define __arch_get_vdso_data __arch_get_vdso_u_time_data
 
 #ifdef CONFIG_TIME_NS
 static __always_inline const struct vdso_time_data *__arch_get_vdso_u_timens_data(void)
 {
 	return vdso_u_timens_data;
 }
-#define __arch_get_timens_vdso_data(vd) __arch_get_vdso_u_timens_data()
 #endif /* CONFIG_TIME_NS */
 
 #ifdef CONFIG_VDSO_GETRANDOM
@@ -224,7 +203,6 @@ static __always_inline const struct vdso_arch_data *__arch_get_vdso_u_arch_data(
 /*
  * The generic vDSO implementation requires that gettimeofday.h
  * provides:
- * - __arch_get_vdso_data(): to get the vdso datapage.
  * - __arch_get_hw_counter(): to get the hw counter based on the
  *   clock_mode.
  * - gettimeofday_fallback(): fallback for gettimeofday.

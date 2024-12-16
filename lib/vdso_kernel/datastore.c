@@ -11,7 +11,10 @@
 /*
  * The vDSO data page.
  */
-static union vdso_data_store vdso_time_data_store __page_aligned_data;
+static union {
+	struct vdso_time_data	data[CS_BASES];
+	u8			page[PAGE_SIZE];
+} vdso_time_data_store __page_aligned_data;
 struct vdso_time_data *vdso_k_time_data = vdso_time_data_store.data;
 static_assert(sizeof(vdso_time_data_store) == PAGE_SIZE);
 
@@ -120,8 +123,3 @@ int vdso_join_timens(struct task_struct *task, struct time_namespace *ns)
 	return 0;
 }
 #endif
-
-struct vdso_time_data *arch_get_vdso_data(void *vvar_page)
-{
-	return (struct vdso_time_data *)vvar_page;
-}
