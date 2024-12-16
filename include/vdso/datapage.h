@@ -152,7 +152,6 @@ struct vdso_rng_data {
 #ifndef CONFIG_GENERIC_VDSO_DATA_STORE
 extern struct vdso_time_data _vdso_data[CS_BASES] __attribute__((visibility("hidden")));
 extern struct vdso_time_data _timens_data[CS_BASES] __attribute__((visibility("hidden")));
-extern struct vdso_rng_data _vdso_rng_data __attribute__((visibility("hidden")));
 #else
 extern const struct vdso_time_data vdso_u_time_data[CS_BASES] __attribute__((visibility("hidden")));
 extern const struct vdso_time_data vdso_u_timens_data[CS_BASES] __attribute__((visibility("hidden")));
@@ -211,13 +210,6 @@ static __always_inline const struct vdso_rng_data *__arch_get_vdso_u_rng_data(vo
 {
 	return &vdso_u_rng_data;
 }
-#define __arch_get_vdso_rng_data __arch_get_vdso_u_rng_data
-
-static __always_inline struct vdso_rng_data *__arch_get_vdso_k_rng_data(void)
-{
-	return vdso_k_rng_data;
-}
-#define __arch_get_k_vdso_rng_data __arch_get_vdso_k_rng_data
 #endif /* CONFIG_VDSO_GETRANDOM */
 
 #endif /* CONFIG_GENERIC_VDSO_DATA_STORE */
