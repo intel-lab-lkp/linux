@@ -44,14 +44,14 @@ properties:
       values of 2k, 4k or 8k. If set to 0 it will be off. If this node is not
       mentioned or if the value is unknown, then micbias resistor is set to
       4k.
-    enum: [ 0, 2, 4, 8 ]
+    enum: [0, 2, 4, 8]
 
   micbias-voltage-m-volts:
     description: The bias voltage to be used in mVolts. The voltage can take
       values from 1.25V to 3V by 250mV steps. If this node is not mentioned
       or the value is unknown, then the value is set to 1.25V.
     $ref: /schemas/types.yaml#/definitions/uint32
-    enum: [ 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000 ]
+    enum: [1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000]
 
   lrclk-strength:
     description: |
@@ -64,7 +64,7 @@ properties:
         2 =		3.33 mA		5.74 mA		8.03  mA
         3 =		4.99 mA		8.61 mA		12.05 mA
     $ref: /schemas/types.yaml#/definitions/uint32
-    enum: [ 0, 1, 2, 3 ]
+    enum: [0, 1, 2, 3]
 
   sclk-strength:
     description: |
@@ -77,11 +77,19 @@ properties:
         2 =		3.33 mA		5.74 mA		8.03  mA
         3 =		4.99 mA		8.61 mA		12.05 mA
     $ref: /schemas/types.yaml#/definitions/uint32
-    enum: [ 0, 1, 2, 3 ]
+    enum: [0, 1, 2, 3]
 
   port:
     $ref: audio-graph-port.yaml#
     unevaluatedProperties: false
+
+  mclk-rate:
+    description: |
+      Master clock rate in Hz. This property specifies the frequency
+      of the master clock provided to the codec slave.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 8000000
+    maximum: 27000000
 
 required:
   - compatible
@@ -108,6 +116,7 @@ examples:
             micbias-voltage-m-volts = <2250>;
             VDDA-supply = <&reg_3p3v>;
             VDDIO-supply = <&reg_3p3v>;
+            mclk-rate = <12288000>;
         };
     };
 ...
