@@ -2773,7 +2773,8 @@ void *sock_kmalloc(struct sock *sk, int size, gfp_t priority)
 	int optmem_max = READ_ONCE(sock_net(sk)->core.sysctl_optmem_max);
 
 	if ((unsigned int)size <= optmem_max &&
-	    atomic_read(&sk->sk_omem_alloc) + size < optmem_max) {
+	    atomic_read(&sk->sk_omem_alloc) + size < optmem_max &&
+	    size <= PAGE_SIZE << MAX_PAGE_ORDER) {
 		void *mem;
 		/* First do the add, to avoid the race if kmalloc
 		 * might sleep.
