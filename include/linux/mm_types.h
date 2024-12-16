@@ -829,12 +829,6 @@ struct mm_struct {
 		 * runqueue locks.
 		 */
 		struct mm_cid __percpu *pcpu_cid;
-		/*
-		 * @mm_cid_next_scan: Next mm_cid scan (in jiffies).
-		 *
-		 * When the next mm_cid scan is due (in jiffies).
-		 */
-		unsigned long mm_cid_next_scan;
 		/**
 		 * @nr_cpus_allowed: Number of CPUs allowed for mm.
 		 *
@@ -857,6 +851,7 @@ struct mm_struct {
 		 * mm nr_cpus_allowed updates.
 		 */
 		raw_spinlock_t cpus_allowed_lock;
+		struct delayed_work mm_cid_work;
 #endif
 #ifdef CONFIG_MMU
 		atomic_long_t pgtables_bytes;	/* size of all page tables */
@@ -1145,10 +1140,15 @@ static inline void vma_iter_init(struct vma_iterator *vmi,
 
 #ifdef CONFIG_SCHED_MM_CID
 
+#define SCHED_MM_CID_PERIOD_NS	(100ULL * 1000000)	/* 100ms */
+#define MM_CID_SCAN_DELAY	100			/* 100ms */
+
 enum mm_cid_state {
 	MM_CID_UNSET = -1U,		/* Unset state has lazy_put flag set. */
 	MM_CID_LAZY_PUT = (1U << 31),
 };
+
+extern void task_mm_cid_work(struct work_struct *work);
 
 static inline bool mm_cid_is_unset(int cid)
 {
@@ -1222,12 +1222,16 @@ static inline int mm_alloc_cid_noprof(struct mm_struct *mm, struct task_struct *
 	if (!mm->pcpu_cid)
 		return -ENOMEM;
 	mm_init_cid(mm, p);
+	INIT_DELAYED_WORK(&mm->mm_cid_work, task_mm_cid_work);
+	schedule_delayed_work(&mm->mm_cid_work,
+			      msecs_to_jiffies(MM_CID_SCAN_DELAY));
 	return 0;
 }
 #define mm_alloc_cid(...)	alloc_hooks(mm_alloc_cid_noprof(__VA_ARGS__))
 
 static inline void mm_destroy_cid(struct mm_struct *mm)
 {
+	disable_delayed_work_sync(&mm->mm_cid_work);
 	free_percpu(mm->pcpu_cid);
 	mm->pcpu_cid = NULL;
 }
