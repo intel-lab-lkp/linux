@@ -96,10 +96,19 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 	 */
 	cxl_set_media_ready(cxl->cxlds);
 
+	cxl->cxlmd = devm_cxl_add_memdev(&pci_dev->dev, cxl->cxlds);
+	if (IS_ERR(cxl->cxlmd)) {
+		pci_err(pci_dev, "CXL accel memdev creation failed");
+		rc = PTR_ERR(cxl->cxlmd);
+		goto err_memdev;
+	}
+
 	probe_data->cxl = cxl;
 
 	return 0;
 
+err_memdev:
+	cxl_release_resource(cxl->cxlds, CXL_RES_RAM);
 err_resource_set:
 	kfree(cxl->cxlds);
 err_state:
