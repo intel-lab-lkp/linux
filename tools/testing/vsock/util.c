@@ -486,8 +486,7 @@ void list_tests(const struct test_case *test_cases)
 	exit(EXIT_FAILURE);
 }
 
-void skip_test(struct test_case *test_cases, size_t test_cases_len,
-	       const char *test_id_str)
+static unsigned long parse_test_id(const char *test_id_str, size_t test_cases_len)
 {
 	unsigned long test_id;
 	char *endptr = NULL;
@@ -505,7 +504,24 @@ void skip_test(struct test_case *test_cases, size_t test_cases_len,
 		exit(EXIT_FAILURE);
 	}
 
+	return test_id;
+}
+
+void skip_test(struct test_case *test_cases, size_t test_cases_len,
+	       const char *test_id_str)
+{
+	unsigned long test_id = parse_test_id(test_id_str, test_cases_len);
 	test_cases[test_id].skip = true;
+}
+
+void pick_test(struct test_case *test_cases, size_t test_cases_len,
+	       const char *test_id_str)
+{
+	unsigned long i, test_id;
+
+	test_id = parse_test_id(test_id_str, test_cases_len);
+	for (i = 0; i < test_cases_len; ++i)
+		test_cases[i].skip = (i != test_id);
 }
 
 unsigned long hash_djb2(const void *data, size_t len)

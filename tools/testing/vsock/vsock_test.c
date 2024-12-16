@@ -1645,6 +1645,11 @@ static const struct option longopts[] = {
 		.val = 's',
 	},
 	{
+		.name = "test",
+		.has_arg = required_argument,
+		.val = 't',
+	},
+	{
 		.name = "help",
 		.has_arg = no_argument,
 		.val = '?',
@@ -1681,6 +1686,7 @@ static void usage(void)
 		"  --peer-cid <cid>       CID of the other side\n"
 		"  --peer-port <port>     AF_VSOCK port used for the test [default: %d]\n"
 		"  --list                 List of tests that will be executed\n"
+		"  --test <test_id>       Single test ID to be executed\n"
 		"  --skip <test_id>       Test ID to skip;\n"
 		"                         use multiple --skip options to skip more tests\n",
 		DEFAULT_PEER_PORT
@@ -1735,6 +1741,10 @@ int main(int argc, char **argv)
 			break;
 		case 's':
 			skip_test(test_cases, ARRAY_SIZE(test_cases) - 1,
+				  optarg);
+			break;
+		case 't':
+			pick_test(test_cases, ARRAY_SIZE(test_cases) - 1,
 				  optarg);
 			break;
 		case '?':
