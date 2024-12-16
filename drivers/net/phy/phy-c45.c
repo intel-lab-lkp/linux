@@ -418,11 +418,14 @@ EXPORT_SYMBOL_GPL(genphy_c45_aneg_done);
 int genphy_c45_read_link(struct phy_device *phydev)
 {
 	u32 mmd_mask = MDIO_DEVS_PMAPMD;
+	u16 reg = MDIO_CTRL1;
 	int val, devad;
 	bool link = true;
 
 	if (phydev->c45_ids.mmds_present & MDIO_DEVS_AN) {
-		val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_CTRL1);
+		if (genphy_c45_baset1_able(phydev))
+			reg = MDIO_AN_T1_CTRL;
+		val = phy_read_mmd(phydev, MDIO_MMD_AN, reg);
 		if (val < 0)
 			return val;
 
