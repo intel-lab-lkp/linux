@@ -3498,7 +3498,7 @@ EXPORT_SYMBOL(tcp_tx_delay_enabled);
 static void tcp_enable_tx_delay(void)
 {
 	if (!static_branch_unlikely(&tcp_tx_delay_enabled)) {
-		static int __tcp_tx_delay_enabled = 0;
+		static int __tcp_tx_delay_enabled;
 
 		if (cmpxchg(&__tcp_tx_delay_enabled, 0, 1) == 0) {
 			static_branch_enable(&tcp_tx_delay_enabled);
